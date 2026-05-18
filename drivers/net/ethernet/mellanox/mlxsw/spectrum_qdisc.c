@@ -2316,6 +2316,49 @@ int mlxsw_sp_setup_tc_block_qevent_mark(struct mlxsw_sp_port *mlxsw_sp_port,
 					      action_mask);
 }
 
+bool mlxsw_sp_qdisc_has_prio_ets(struct mlxsw_sp_port *mlxsw_sp_port)
+{
+	struct mlxsw_sp_qdisc_state *qdisc_state = mlxsw_sp_port->qdisc;
+	struct mlxsw_sp_qdisc *root_qdisc;
+	bool found;
+
+	mutex_lock(&qdisc_state->lock);
+	root_qdisc = &qdisc_state->root_qdisc;
+	found = root_qdisc->ops &&
+		    (root_qdisc->ops->type == MLXSW_SP_QDISC_PRIO ||
+		     root_qdisc->ops->type == MLXSW_SP_QDISC_ETS);
+	mutex_unlock(&qdisc_state->lock);
+
+	return found;
+}
+
+static struct mlxsw_sp_qdisc *
+mlxsw_sp_qdisc_walk_cb_find_subgroup_tbf(struct mlxsw_sp_qdisc *qdisc,
+					 void *data)
+{
+	struct mlxsw_sp_port *mlxsw_sp_port = (struct mlxsw_sp_port *)data;
+
+	if (qdisc->ops && qdisc->ops->type == MLXSW_SP_QDISC_TBF &&
+	    mlxsw_sp_qdisc_tbf_hr(mlxsw_sp_port, qdisc) ==
+	    MLXSW_REG_QEEC_HR_SUBGROUP)
+		return qdisc;
+	return NULL;
+}
+
+bool mlxsw_sp_qdisc_has_tbf_subgroup(struct mlxsw_sp_port *mlxsw_sp_port)
+{
+	struct mlxsw_sp_qdisc_state *qdisc_state = mlxsw_sp_port->qdisc;
+	bool found;
+
+	mutex_lock(&qdisc_state->lock);
+	found = mlxsw_sp_qdisc_walk(&qdisc_state->root_qdisc,
+				    mlxsw_sp_qdisc_walk_cb_find_subgroup_tbf,
+				    mlxsw_sp_port) != NULL;
+	mutex_unlock(&qdisc_state->lock);
+
+	return found;
+}
+
 int mlxsw_sp_tc_qdisc_init(struct mlxsw_sp_port *mlxsw_sp_port)
 {
 	struct mlxsw_sp_qdisc_state *qdisc_state;

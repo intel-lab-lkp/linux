@@ -151,6 +151,11 @@ static int mlxsw_sp_dcbnl_ieee_setets(struct net_device *dev,
 	struct mlxsw_sp_port *mlxsw_sp_port = netdev_priv(dev);
 	int err;
 
+	if (mlxsw_sp_qdisc_has_prio_ets(mlxsw_sp_port)) {
+		netdev_err(dev, "ETS configuration is controlled by offloaded qdisc\n");
+		return -EBUSY;
+	}
+
 	err = mlxsw_sp_port_ets_validate(mlxsw_sp_port, ets);
 	if (err)
 		return err;
@@ -449,6 +454,11 @@ static int mlxsw_sp_dcbnl_ieee_setmaxrate(struct net_device *dev,
 	struct mlxsw_sp_port *mlxsw_sp_port = netdev_priv(dev);
 	struct ieee_maxrate *my_maxrate = mlxsw_sp_port->dcb.maxrate;
 	int err, i;
+
+	if (mlxsw_sp_qdisc_has_tbf_subgroup(mlxsw_sp_port)) {
+		netdev_err(dev, "maxrate is controlled by offloaded qdisc\n");
+		return -EBUSY;
+	}
 
 	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++) {
 		err = mlxsw_sp_port_ets_maxrate_set(mlxsw_sp_port,
