@@ -391,9 +391,25 @@ static inline struct ib_mad_recv_buf *get_next_seg(struct list_head *rmpp_list,
 	return container_of(seg->list.next, struct ib_mad_recv_buf, list);
 }
 
+/*
+ * Cap the per-RMPP-transaction in-flight window. find_seg_location()
+ * walks the rmpp_recv list reverse to find each insertion point, so the
+ * aggregate cost across an attacker-paced reordered window is O(N^2)
+ * under spin_lock_irqsave(&rmpp_recv->lock) in kworker context. The
+ * default recv_queue_size of 512 yields window=64, which keeps that
+ * cost in the noise; tuned configurations (recv_queue_size up to 8192)
+ * push window to 1024 and the per-port kworker measurably stalls under
+ * a low-bandwidth burst from any unauthenticated peer on QP1 GMP. Cap
+ * window at IB_MAD_RMPP_MAX_WINDOW so the bug class is structurally
+ * defused regardless of recv_queue_size tuning.
+ */
+#define IB_MAD_RMPP_MAX_WINDOW 64
+
 static inline int window_size(struct ib_mad_agent_private *agent)
 {
-	return max(agent->qp_info->recv_queue.max_active >> 3, 1);
+	int wsize = agent->qp_info->recv_queue.max_active >> 3;
+
+	return clamp(wsize, 1, IB_MAD_RMPP_MAX_WINDOW);
 }
 
 static struct ib_mad_recv_buf *find_seg_location(struct list_head *rmpp_list,
