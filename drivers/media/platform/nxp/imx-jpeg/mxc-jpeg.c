@@ -3004,7 +3004,7 @@ static int mxc_jpeg_probe(struct platform_device *pdev)
 	jpeg->dec_vdev->fops = &mxc_jpeg_fops;
 	jpeg->dec_vdev->ioctl_ops = &mxc_jpeg_ioctl_ops;
 	jpeg->dec_vdev->minor = -1;
-	jpeg->dec_vdev->release = video_device_release;
+	jpeg->dec_vdev->release = video_device_release_empty;
 	jpeg->dec_vdev->lock = &jpeg->lock; /* lock for ioctl serialization */
 	jpeg->dec_vdev->v4l2_dev = &jpeg->v4l2_dev;
 	jpeg->dec_vdev->vfl_dir = VFL_DIR_M2M;
@@ -3023,6 +3023,8 @@ static int mxc_jpeg_probe(struct platform_device *pdev)
 		dev_err(dev, "failed to register video device\n");
 		goto err_vdev_register;
 	}
+	jpeg->dec_vdev->release = video_device_release;
+
 	if (mode == MXC_JPEG_ENCODE)
 		v4l2_info(&jpeg->v4l2_dev,
 			  "encoder device registered as /dev/video%d (%d,%d)\n",
