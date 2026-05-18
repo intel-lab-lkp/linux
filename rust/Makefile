@@ -427,6 +427,10 @@ bindgen_extra_c_flags += -enable-trivial-auto-var-init-zero-knowing-it-will-be-r
 endif
 endif
 
+ifdef CONFIG_GCC_PLUGIN_LATENT_ENTROPY
+bindgen_extra_c_flags += $(DISABLE_LATENT_ENTROPY_PLUGIN)
+endif
+
 bindgen_c_flags = $(filter-out $(bindgen_skip_c_flags), $(c_flags)) \
 	$(bindgen_extra_c_flags)
 endif
