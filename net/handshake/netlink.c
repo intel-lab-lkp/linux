@@ -159,8 +159,13 @@ int handshake_nl_done_doit(struct sk_buff *skb, struct genl_info *info)
 	trace_handshake_cmd_done(net, req, sock->sk, fd);
 
 	status = -EIO;
-	if (info->attrs[HANDSHAKE_A_DONE_STATUS])
-		status = nla_get_u32(info->attrs[HANDSHAKE_A_DONE_STATUS]);
+	if (info->attrs[HANDSHAKE_A_DONE_STATUS]) {
+		u32 val = nla_get_u32(info->attrs[HANDSHAKE_A_DONE_STATUS]);
+
+		/* Values above MAX_ERRNO would overflow on negation. */
+		if (val <= MAX_ERRNO)
+			status = -(int)val;
+	}
 
 	handshake_complete(req, status, info);
 	sockfd_put(sock);
