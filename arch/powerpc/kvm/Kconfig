@@ -82,6 +82,7 @@ config KVM_BOOK3S_64_HV
 	select KVM_BOOK3S_HV_POSSIBLE
 	select KVM_BOOK3S_HV_PMU
 	select CMA
+	select VPA_PMU if HV_PERF_CTRS
 	help
 	  Support running unmodified book3s_64 guest kernels in
 	  virtual machines on POWER7 and newer processors that have
