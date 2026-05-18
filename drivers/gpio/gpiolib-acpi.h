@@ -63,6 +63,9 @@ struct gpio_desc *acpi_request_own_gpiod(struct gpio_chip *chip,
 void acpi_gpiochip_request_regions(struct acpi_gpio_chip *achip);
 void acpi_gpiochip_free_regions(struct acpi_gpio_chip *achip);
 
+void acpi_gpio_chip_dh(acpi_handle handle, void *data);
+bool acpi_gpio_irq_is_wake(struct device *parent,
+			   const struct acpi_resource_gpio *agpio);
 #ifdef CONFIG_ACPI
 void acpi_gpiochip_add(struct gpio_chip *chip);
 void acpi_gpiochip_remove(struct gpio_chip *chip);
