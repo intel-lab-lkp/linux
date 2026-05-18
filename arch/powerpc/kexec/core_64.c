@@ -164,12 +164,11 @@ static void kexec_smp_down(void *arg)
 	/* NOTREACHED */
 }
 
-static void kexec_prepare_cpus_wait(int wait_state)
+static void kexec_prepare_cpus_wait(int wait_state, int my_cpu)
 {
-	int my_cpu, i, notified=-1;
+	int i, notified = -1;
 
 	hw_breakpoint_disable();
-	my_cpu = get_cpu();
 	/* Make sure each CPU has at least made it to the state we need.
 	 *
 	 * FIXME: There is a (slim) chance of a problem if not all of the CPUs
@@ -246,6 +245,8 @@ static void wake_offline_cpus(void)
 
 static void kexec_prepare_cpus(void)
 {
+	int my_cpu;
+
 	wake_offline_cpus();
 	smp_call_function(kexec_smp_down, NULL, /* wait */0);
 	local_irq_disable();
@@ -254,7 +255,8 @@ static void kexec_prepare_cpus(void)
 	mb(); /* make sure IRQs are disabled before we say they are */
 	get_paca()->kexec_state = KEXEC_STATE_IRQS_OFF;
 
-	kexec_prepare_cpus_wait(KEXEC_STATE_IRQS_OFF);
+	my_cpu = get_cpu();
+	kexec_prepare_cpus_wait(KEXEC_STATE_IRQS_OFF, my_cpu);
 	/* we are sure every CPU has IRQs off at this point */
 	kexec_all_irq_disabled = 1;
 
@@ -262,13 +264,12 @@ static void kexec_prepare_cpus(void)
 	 * Before removing MMU mappings make sure all CPUs have entered real
 	 * mode:
 	 */
-	kexec_prepare_cpus_wait(KEXEC_STATE_REAL_MODE);
+	kexec_prepare_cpus_wait(KEXEC_STATE_REAL_MODE, my_cpu);
+	put_cpu();
 
 	/* after we tell the others to go down */
 	if (ppc_md.kexec_cpu_down)
 		ppc_md.kexec_cpu_down(0, 0);
-
-	put_cpu();
 }
 
 #else /* ! SMP */
