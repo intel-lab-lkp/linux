@@ -272,10 +272,10 @@ static void acpi_gpio_set_debounce_timeout(struct gpio_desc *desc,
 			   acpi_debounce, ret);
 }
 
-static struct gpio_desc *acpi_request_own_gpiod(struct gpio_chip *chip,
-						struct acpi_resource_gpio *agpio,
-						unsigned int index,
-						const char *label)
+struct gpio_desc *acpi_request_own_gpiod(struct gpio_chip *chip,
+					 struct acpi_resource_gpio *agpio,
+					 unsigned int index,
+					 const char *label)
 {
 	int polarity = GPIO_ACTIVE_HIGH;
 	enum gpiod_flags flags = acpi_gpio_to_gpiod_flags(agpio, polarity);
@@ -1169,7 +1169,7 @@ out:
 	return status;
 }
 
-static void acpi_gpiochip_request_regions(struct acpi_gpio_chip *achip)
+void acpi_gpiochip_request_regions(struct acpi_gpio_chip *achip)
 {
 	struct gpio_chip *chip = achip->chip;
 	acpi_handle handle = ACPI_HANDLE(chip->parent);
@@ -1185,7 +1185,7 @@ static void acpi_gpiochip_request_regions(struct acpi_gpio_chip *achip)
 			"Failed to install GPIO OpRegion handler\n");
 }
 
-static void acpi_gpiochip_free_regions(struct acpi_gpio_chip *achip)
+void acpi_gpiochip_free_regions(struct acpi_gpio_chip *achip)
 {
 	struct gpio_chip *chip = achip->chip;
 	acpi_handle handle = ACPI_HANDLE(chip->parent);
