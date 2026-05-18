@@ -2411,6 +2411,10 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 		chandef = &chanctx_conf->def;
 	else if (local->emulate_chanctx)
 		chandef = &local->hw.conf.chandef;
+	else if (list_is_singular(&local->chanctx_list))
+		chandef = &list_first_entry(&local->chanctx_list,
+					    struct ieee80211_chanctx,
+					    list)->conf.def;
 	else
 		goto fail_rcu;
 
