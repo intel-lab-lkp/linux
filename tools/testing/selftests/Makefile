@@ -84,6 +84,7 @@ TARGETS += net/packetdrill
 TARGETS += net/ppp
 TARGETS += net/rds
 TARGETS += net/tcp_ao
+TARGETS += net/tcp_repair
 TARGETS += nolibc
 TARGETS += nsfs
 TARGETS += pci_endpoint
