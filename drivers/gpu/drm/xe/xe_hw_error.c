@@ -275,7 +275,7 @@ static void gt_hw_error_handler(struct xe_tile *tile, const enum hardware_error 
 	if (hw_err == HARDWARE_ERROR_NONFATAL) {
 		atomic_inc(&info[error_id].counter);
 		log_hw_error(tile, info[error_id].name, severity);
-		return;
+		goto notify;
 	}
 
 	for (i = 0; i < PVC_GT_VECTOR_LEN(hw_err); i++) {
@@ -332,6 +332,9 @@ static void gt_hw_error_handler(struct xe_tile *tile, const enum hardware_error 
 
 		xe_mmio_write32(mmio, ERR_STAT_GT_VECTOR_REG(hw_err, i), vector);
 	}
+
+notify:
+	xe_drm_ras_event(xe, error_id, severity, GFP_ATOMIC);
 }
 
 static void soc_slave_ieh_handler(struct xe_tile *tile, const enum hardware_error hw_err, u32 error_id)
@@ -413,6 +416,8 @@ static void soc_hw_error_handler(struct xe_tile *tile, const enum hardware_error
 		log_soc_error(tile, pvc_master_global_err_reg, severity, regbit, error_id);
 
 	xe_mmio_write32(mmio, SOC_GLOBAL_ERR_STAT_REG(master, hw_err), master_global_errstat);
+
+	xe_drm_ras_event(xe, error_id, severity, GFP_ATOMIC);
 
 unmask_gsysevtctl:
 	for (i = 0; i < XE_SOC_NUM_IEH; i++)
