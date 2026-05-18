@@ -4939,6 +4939,9 @@ static void tcpm_reset_port(struct tcpm_port *port)
 
 static void tcpm_detach(struct tcpm_port *port)
 {
+	if (port->tcpc->set_low_power_mode)
+		port->tcpc->set_low_power_mode(port->tcpc, true);
+
 	if (tcpm_port_is_disconnected(port))
 		port->hard_reset_count = 0;
 
@@ -5181,6 +5184,8 @@ static void run_state_machine(struct tcpm_port *port)
 			tcpm_set_state(port, SNK_UNATTACHED, PD_T_DRP_SNK);
 		break;
 	case SRC_ATTACH_WAIT:
+		if (port->tcpc->set_low_power_mode)
+			port->tcpc->set_low_power_mode(port->tcpc, false);
 		if (tcpm_port_is_debug_source(port))
 			tcpm_set_state(port, DEBUG_ACC_ATTACHED,
 				       port->timings.cc_debounce_time);
@@ -5439,6 +5444,8 @@ static void run_state_machine(struct tcpm_port *port)
 			tcpm_set_state(port, SRC_UNATTACHED, PD_T_DRP_SRC);
 		break;
 	case SNK_ATTACH_WAIT:
+		if (port->tcpc->set_low_power_mode)
+			port->tcpc->set_low_power_mode(port->tcpc, false);
 		if (tcpm_port_is_debug_sink(port))
 			tcpm_set_state(port, DEBUG_ACC_ATTACHED,
 				       PD_T_CC_DEBOUNCE);
@@ -7488,6 +7495,9 @@ swap_unlock:
 static void tcpm_init(struct tcpm_port *port)
 {
 	enum typec_cc_status cc1, cc2;
+
+	if (port->tcpc->set_low_power_mode)
+		port->tcpc->set_low_power_mode(port->tcpc, false);
 
 	port->tcpc->init(port->tcpc);
 

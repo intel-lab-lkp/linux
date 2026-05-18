@@ -82,6 +82,9 @@ enum tcpm_transmit_type {
  *		Optional; if supported by hardware, called to start dual-role
  *		toggling or single-role connection detection. Toggling stops
  *		automatically if a connection is established.
+ * @set_low_power_mode:
+ *		Optional; if supported by hardware, called to enter or exit
+ *		low power mode.
  * @try_role:	Optional; called to set a preferred role
  * @pd_transmit:Called to transmit PD message
  * @set_bist_data: Turn on/off bist data mode for compliance testing
@@ -155,6 +158,7 @@ struct tcpc_dev {
 	int (*start_toggling)(struct tcpc_dev *dev,
 			      enum typec_port_type port_type,
 			      enum typec_cc_status cc);
+	void (*set_low_power_mode)(struct tcpc_dev *dev, bool enable);
 	int (*try_role)(struct tcpc_dev *dev, int role);
 	int (*pd_transmit)(struct tcpc_dev *dev, enum tcpm_transmit_type type,
 			   const struct pd_message *msg, unsigned int negotiated_rev);
