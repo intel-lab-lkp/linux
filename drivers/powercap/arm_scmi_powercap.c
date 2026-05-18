@@ -36,6 +36,7 @@ struct scmi_powercap_zone {
 
 struct scmi_powercap_root {
 	unsigned int num_zones;
+	bool enabled;
 	struct scmi_powercap_zone *spzones;
 	struct list_head *registered_zones;
 	struct list_head scmi_zones;
@@ -276,6 +277,127 @@ static int instance_root_release(struct powercap_zone *pz)
 	return 0;
 }
 
+static int instance_root_read_children_enable_state(struct scmi_powercap_root *pr,
+						    bool *mode)
+{
+	struct scmi_powercap_zone *child;
+	bool enabled;
+	int i, ret;
+
+	if (!pr || !mode)
+		return -EINVAL;
+
+	*mode = true;
+
+	for (i = 0; i < pr->num_zones; i++) {
+		child = &pr->spzones[i];
+
+		if (!child->registered || child->invalid)
+			continue;
+		if (child->info->parent_id != SCMI_POWERCAP_ROOT_ZONE_ID)
+			continue;
+
+		ret = powercap_ops->cap_enable_get(child->ph, child->info->id, &enabled);
+		if (ret)
+			return ret;
+
+		if (!enabled) {
+			*mode = false;
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
+static int instance_root_set_enable_state(struct powercap_zone *pz, bool enable)
+{
+	struct scmi_powercap_zone *child;
+	struct scmi_powercap_root *pr = to_scmi_powercap_root(pz);
+	int i, ret;
+	bool *prev_state;
+
+	if (!pz)
+		return -EINVAL;
+
+	prev_state = kcalloc(pr->num_zones, sizeof(*prev_state), GFP_KERNEL);
+	if (!prev_state)
+		return -ENOMEM;
+
+	for (i = 0; i < pr->num_zones; i++) {
+		child = &pr->spzones[i];
+
+		if (!child->registered || child->invalid)
+			continue;
+		if (child->info->parent_id != SCMI_POWERCAP_ROOT_ZONE_ID)
+			continue;
+
+		ret = powercap_ops->cap_enable_get(child->ph, child->info->id,
+						   &prev_state[i]);
+
+		if (ret)
+			goto revert;
+
+		if (prev_state[i] == enable)
+			continue;
+
+		ret = powercap_ops->cap_enable_set(child->ph, child->info->id, enable);
+
+		if (ret) {
+			dev_err(child->dev, "failed to %s zone %s: %d\n",
+				enable ? "enable" : "disable",
+				child->info->name, ret);
+			goto revert;
+		}
+	}
+
+	kfree(prev_state);
+	return 0;
+
+revert:
+	while (--i >= 0) {
+		child = &pr->spzones[i];
+
+		if (!child->registered || child->invalid)
+			continue;
+		if (child->info->parent_id != SCMI_POWERCAP_ROOT_ZONE_ID)
+			continue;
+		if (!child->info->cpli[0].cap_config)
+			continue;
+		if (prev_state[i] == enable)
+			continue;
+
+		powercap_ops->cap_enable_set(child->ph, child->info->id,
+					     prev_state[i]);
+	}
+
+	kfree(prev_state);
+	return ret;
+}
+
+static int instance_root_set_enable(struct powercap_zone *pz, bool mode)
+{
+	struct scmi_powercap_root *pr = to_scmi_powercap_root(pz);
+	int ret;
+
+	ret = instance_root_set_enable_state(pz, mode);
+	if (!ret)
+		pr->enabled = mode;
+
+	return ret;
+}
+
+static int instance_root_get_enable(struct powercap_zone *pz, bool *mode)
+{
+	struct scmi_powercap_root *pr = to_scmi_powercap_root(pz);
+
+	if (!pz || !mode)
+		return -EINVAL;
+
+	*mode = pr->enabled;
+	return 0;
+}
+
 static int instance_root_get_power_uw(struct powercap_zone *pz, u64 *power_uw)
 {
 	struct scmi_powercap_root *pr = to_scmi_powercap_root(pz);
@@ -324,6 +446,8 @@ static const struct powercap_zone_ops instance_root_ops = {
 	.get_max_power_range_uw = scmi_powercap_get_max_power_range_uw,
 	.get_power_uw = instance_root_get_power_uw,
 	.release = instance_root_release,
+	.set_enable = instance_root_set_enable,
+	.get_enable = instance_root_get_enable,
 };
 
 static const struct powercap_zone_constraint_ops instance_root_const_ops = {
@@ -597,6 +721,10 @@ static int scmi_powercap_probe(struct scmi_device *sdev)
 	 * recursively starting from the root domains.
 	 */
 	ret = scmi_zones_register(dev, pr);
+	if (ret)
+		return ret;
+
+	ret = instance_root_read_children_enable_state(pr, &pr->enabled);
 	if (ret)
 		return ret;
 
