@@ -155,6 +155,20 @@ static void lan9645x_xmit_get_vlan_info(struct sk_buff *skb,
 					     LAN9645X_IFH_TAG_TYPE_C;
 }
 
+static void lan9645x_offload_fwd_mark(struct sk_buff *skb, u32 cpuq)
+{
+	u32 cpu_redir;
+
+	/* IGMP/MLD are trapped to CPU, and must be forwarded by the stack */
+	cpu_redir = BIT(LAN9645X_CPUQ_IGMP) | BIT(LAN9645X_CPUQ_MLD);
+	if (cpuq & cpu_redir) {
+		skb->offload_fwd_mark = 0;
+		return;
+	}
+
+	dsa_default_offload_fwd_mark(skb);
+}
+
 static struct sk_buff *lan9645x_xmit(struct sk_buff *skb,
 				     struct net_device *ndev)
 {
@@ -195,7 +209,7 @@ static struct sk_buff *lan9645x_xmit(struct sk_buff *skb,
 static struct sk_buff *lan9645x_rcv(struct sk_buff *skb,
 				    struct net_device *ndev)
 {
-	u32 src_port, qos_class, vlan_tci, tag_type, popcnt, etype_ofs;
+	u32 src_port, qos_class, vlan_tci, tag_type, popcnt, etype_ofs, cpuq;
 	struct dsa_port *dp;
 	u32 ifh_gap_len = 0;
 	u16 vlan_tpid;
@@ -218,6 +232,7 @@ static struct sk_buff *lan9645x_rcv(struct sk_buff *skb,
 	tag_type = lan9645x_ifh_get(ifh, IFH_TAG_TYPE, IFH_TAG_TYPE_SZ);
 	vlan_tci = lan9645x_ifh_get(ifh, IFH_TCI, IFH_TCI_SZ);
 	qos_class = lan9645x_ifh_get(ifh, IFH_QOS_CLASS, IFH_QOS_CLASS_SZ);
+	cpuq = lan9645x_ifh_get(ifh, IFH_CPUQ, IFH_CPUQ_SZ);
 
 	/* Set skb->data at start of real header
 	 *
@@ -260,7 +275,7 @@ static struct sk_buff *lan9645x_rcv(struct sk_buff *skb,
 		return NULL;
 	}
 
-	dsa_default_offload_fwd_mark(skb);
+	lan9645x_offload_fwd_mark(skb, cpuq);
 
 	skb->priority = qos_class;
 
