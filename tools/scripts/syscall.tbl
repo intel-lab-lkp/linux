@@ -298,8 +298,6 @@
 244	csky	set_thread_area			sys_set_thread_area
 245	csky	cacheflush			sys_cacheflush
 
-244	nios2	cacheflush			sys_cacheflush
-
 244	or1k	or1k_atomic			sys_or1k_atomic
 
 258	riscv	riscv_hwprobe			sys_riscv_hwprobe

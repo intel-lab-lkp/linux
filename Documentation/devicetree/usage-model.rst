@@ -66,9 +66,8 @@ a dtb could be wrapped up with the kernel image to support booting
 existing non-DT aware firmware.
 
 Some time later, FDT infrastructure was generalized to be usable by
-all architectures.  At the time of this writing, 6 mainlined
-architectures (arm, microblaze, mips, powerpc, sparc, and x86) and 1
-out of mainline (nios) have some level of DT support.
+all architectures.  At the time of this writing, most mainlined
+architectures have some level of DT support.
 
 2. Data Model
 -------------

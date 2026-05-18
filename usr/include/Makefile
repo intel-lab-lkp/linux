@@ -50,7 +50,7 @@ no-header-test += xen/privcmd.h
 
 # More headers are broken in some architectures
 
-ifneq ($(filter arc openrisc xtensa nios2, $(UAPI_ARCH)),)
+ifneq ($(filter arc openrisc xtensa, $(UAPI_ARCH)),)
 no-header-test += linux/bpf_perf_event.h
 endif
 
@@ -147,10 +147,6 @@ uses-libc += scsi/fc/fc_els.h
 
 ifeq ($(UAPI_ARCH),hexagon)
 uses-libc += asm/sigcontext.h
-endif
-
-ifeq ($(UAPI_ARCH),nios2)
-uses-libc += asm/ptrace.h
 endif
 
 ifeq ($(UAPI_ARCH),s390)

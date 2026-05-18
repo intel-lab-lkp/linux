@@ -18,7 +18,7 @@ if NET_VENDOR_DAVICOM
 
 config DM9000
 	tristate "DM9000 support"
-	depends on ARM || MIPS || COLDFIRE || NIOS2 || COMPILE_TEST
+	depends on ARM || MIPS || COLDFIRE || COMPILE_TEST
 	select CRC32
 	select MII
 	help

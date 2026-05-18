@@ -8333,8 +8333,8 @@ Kernel parameters
 			It can also be used to decrease the size and leave more room
 			for directly mapped kernel RAM. Note that this parameter does
 			not exist on many other platforms (including arm64, alpha,
-			loongarch, arc, csky, hexagon, microblaze, mips, nios2, openrisc,
-			parisc, m64k, powerpc, riscv, sh, um, xtensa, s390, sparc).
+			loongarch, arc, csky, hexagon, microblaze, mips, openrisc,
+			parisc, m68k, powerpc, riscv, sh, um, xtensa, s390, sparc).
 
 	vmcp_cma=nn[MG]	[KNL,S390,EARLY]
 			Sets the memory size reserved for contiguous memory

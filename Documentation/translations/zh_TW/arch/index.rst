@@ -18,7 +18,6 @@ TODOList:
 
 * arm/index
 * m68k/index
-* nios2/index
 * powerpc/index
 * s390/index
 * sh/index

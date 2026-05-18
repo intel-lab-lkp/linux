@@ -3038,6 +3038,10 @@ S: Zum Schiersteiner Grund 2
 S: 55127 Mainz
 S: Germany
 
+N: Dinh Nguyen
+E: dinguyen@kernel.org
+D: Altera Nios II architecture support
+
 N: Gustavo Niemeyer
 E: niemeyer@conectiva.com
 W: https://moin.conectiva.com.br/GustavoNiemeyer

@@ -16,7 +16,6 @@
     |        m68k: |  N/A |
     |  microblaze: |  N/A |
     |        mips: | TODO |
-    |       nios2: |  N/A |
     |    openrisc: |  N/A |
     |      parisc: | TODO |
     |     powerpc: | TODO |

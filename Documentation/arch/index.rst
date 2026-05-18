@@ -15,7 +15,6 @@ implementation.
    loongarch/index
    m68k/index
    mips/index
-   nios2/index
    openrisc/index
    parisc/index
    powerpc/index

@@ -18896,12 +18896,6 @@ L:	linux-input@vger.kernel.org
 S:	Maintained
 F:	drivers/hid/hid-nintendo*
 
-NIOS2 ARCHITECTURE
-M:	Dinh Nguyen <dinguyen@kernel.org>
-S:	Maintained
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux.git
-F:	arch/nios2/
-
 NITRO ENCLAVES (NE)
 M:	Alexandru Ciobotaru <alcioa@amazon.com>
 R:	The AWS Nitro Enclaves Team <aws-nitro-enclaves-devel@amazon.com>

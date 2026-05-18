@@ -220,11 +220,7 @@ int ibonline(struct gpib_board *board)
 		board->interface->detach(board);
 		return retval;
 	}
-	/*
-	 * nios2nommu on 2.6.11 uclinux kernel has weird problems
-	 * with autospoll thread causing huge slowdowns
-	 */
-#ifndef CONFIG_NIOS2
+
 	board->autospoll_task = kthread_run(&autospoll_thread, board,
 					    "gpib%d_autospoll_kthread", board->minor);
 	if (IS_ERR(board->autospoll_task)) {
@@ -232,7 +228,7 @@ int ibonline(struct gpib_board *board)
 		board->interface->detach(board);
 		return PTR_ERR(board->autospoll_task);
 	}
-#endif
+
 	board->online = 1;
 	dev_dbg(board->gpib_dev, "board online\n");
 

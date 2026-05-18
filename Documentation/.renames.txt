@@ -846,9 +846,6 @@ networking/skfp networking/device_drivers/fddi/skfp
 nfc/index driver-api/nfc/index
 nfc/nfc-hci driver-api/nfc/nfc-hci
 nfc/nfc-pn544 driver-api/nfc/nfc-pn544
-nios2/features arch/nios2/features
-nios2/index arch/nios2/index
-nios2/nios2 arch/nios2/nios2
 nvdimm/btt driver-api/nvdimm/btt
 nvdimm/index driver-api/nvdimm/index
 nvdimm/nvdimm driver-api/nvdimm/nvdimm

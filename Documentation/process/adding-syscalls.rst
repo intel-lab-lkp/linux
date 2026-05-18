@@ -262,7 +262,6 @@ following architectures no longer requires modifications to
  - csky
  - hexagon
  - loongarch
- - nios2
  - openrisc
  - riscv
 

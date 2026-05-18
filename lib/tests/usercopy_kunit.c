@@ -25,7 +25,6 @@
 #if BITS_PER_LONG == 64 || (!(defined(CONFIG_ARM) && !defined(MMU)) && \
 			    !defined(CONFIG_M68K) &&		\
 			    !defined(CONFIG_MICROBLAZE) &&	\
-			    !defined(CONFIG_NIOS2) &&		\
 			    !defined(CONFIG_PPC32) &&		\
 			    !defined(CONFIG_SPARC32) &&		\
 			    !defined(CONFIG_SUPERH))

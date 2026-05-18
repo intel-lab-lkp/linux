@@ -396,11 +396,11 @@ comment "I2C system bus drivers (mostly embedded / system-on-chip)"
 
 config I2C_ALTERA
 	tristate "Altera Soft IP I2C"
-	depends on ARCH_INTEL_SOCFPGA || NIOS2 || COMPILE_TEST
+	depends on ARCH_INTEL_SOCFPGA || COMPILE_TEST
 	depends on OF
 	help
 	  If you say yes to this option, support will be included for the
-	  Altera Soft IP I2C interfaces on SoCFPGA and Nios2 architectures.
+	  Altera Soft IP I2C interfaces on the SoCFPGA architecture.
 
 	  This driver can also be built as a module.  If so, the module
 	  will be called i2c-altera.
