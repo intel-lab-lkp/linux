@@ -826,14 +826,27 @@ static void erdma_destroy_mtt(struct erdma_dev *dev, struct erdma_mtt *mtt)
 static int erdma_mem_init(struct erdma_dev *dev, struct erdma_mem *mem,
 			  struct erdma_mem_init_attr *attr)
 {
+	struct ib_umem_dmabuf *umem_dmabuf;
 	int ret = 0;
 
-	mem->umem =
-		ib_umem_get(&dev->ibdev, attr->start, attr->len, attr->access);
-	if (IS_ERR(mem->umem)) {
-		ret = PTR_ERR(mem->umem);
-		mem->umem = NULL;
-		return ret;
+	if (attr->flags & ERDMA_MEM_FLAG_DMABUF) {
+		umem_dmabuf = ib_umem_dmabuf_get_pinned(&dev->ibdev,
+							attr->start, attr->len,
+							attr->fd, attr->access);
+		if (IS_ERR(umem_dmabuf)) {
+			ret = PTR_ERR(umem_dmabuf);
+			mem->umem = NULL;
+			return ret;
+		}
+		mem->umem = &umem_dmabuf->umem;
+	} else {
+		mem->umem = ib_umem_get(&dev->ibdev, attr->start, attr->len,
+					attr->access);
+		if (IS_ERR(mem->umem)) {
+			ret = PTR_ERR(mem->umem);
+			mem->umem = NULL;
+			return ret;
+		}
 	}
 
 	mem->va = attr->virt;
@@ -1239,9 +1252,10 @@ int erdma_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sg, int sg_nents,
 	return num;
 }
 
-struct ib_mr *erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len,
-				u64 virt, int access, struct ib_dmah *dmah,
-				struct ib_udata *udata)
+static struct ib_mr *
+_erdma_reg_user_mr(struct ib_pd *ibpd, struct ib_udata *udata,
+		   struct ib_dmah *dmah, u64 start, u64 len, u64 virt,
+		   int access, int fd, bool dmabuf)
 {
 	struct erdma_dev *dev = to_edev(ibpd->device);
 	struct erdma_mem_init_attr attr = {};
@@ -1259,6 +1273,10 @@ struct ib_mr *erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len,
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 
+	if (dmabuf)
+		attr.flags |= ERDMA_MEM_FLAG_DMABUF;
+
+	attr.fd = fd;
 	attr.len = len;
 	attr.virt = virt;
 	attr.start = start;
@@ -1274,8 +1292,6 @@ struct ib_mr *erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len,
 
 	mr->ibmr.lkey = mr->ibmr.rkey = stag;
 	mr->ibmr.pd = ibpd;
-	mr->mem.va = virt;
-	mr->mem.len = len;
 	mr->access = ERDMA_MR_ACC_LR | to_erdma_access_flags(access);
 	mr->valid = 1;
 	mr->type = ERDMA_MR_TYPE_NORMAL;
@@ -1297,6 +1313,23 @@ err_out_free:
 	kfree(mr);
 
 	return ERR_PTR(ret);
+}
+
+struct ib_mr *erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len,
+				u64 virt, int access, struct ib_dmah *dmah,
+				struct ib_udata *udata)
+{
+	return _erdma_reg_user_mr(ibpd, udata, dmah, start, len, virt, access,
+				  0, false);
+}
+
+struct ib_mr *erdma_reg_user_mr_dmabuf(struct ib_pd *ibpd, u64 start, u64 len,
+				       u64 virt, int fd, int access,
+				       struct ib_dmah *dmah,
+				       struct uverbs_attr_bundle *attrs)
+{
+	return _erdma_reg_user_mr(ibpd, &attrs->driver_udata, dmah, start, len,
+				  virt, access, fd, true);
 }
 
 int erdma_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
