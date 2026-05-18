@@ -483,6 +483,38 @@ test_stat_pid() {
   wait $pid 2>/dev/null || true
 }
 
+test_stat_delay() {
+  echo "stat -D test"
+  if ! perf stat -D 1000 -e duration_time sleep 2 > "${stat_output}" 2>&1
+  then
+    echo "stat -D test [Failed - command failed]"
+    cat "${stat_output}"
+    err=1
+    return
+  fi
+
+  duration=$(grep "duration_time" "${stat_output}" | awk '{print $1}' | tr -d ',')
+  if [ -z "$duration" ]
+  then
+    echo "stat -D test [Failed - failed to find duration_time in output]"
+    cat "${stat_output}"
+    err=1
+    return
+  fi
+
+  # duration is in ns. We expect it to be ~1s (1,000,000,000 ns) because
+  # sleep 2 runs for 2s, and we delay by 1s, so measured window is 1s.
+  # If it includes delay, it will be > 2s (2,000,000,000 ns).
+  if [ "$duration" -gt 1500000000 ]
+  then
+    echo "stat -D test [Failed - duration_time ($duration ns) includes delay]"
+    cat "${stat_output}"
+    err=1
+    return
+  fi
+  echo "stat -D test [Success]"
+}
+
 test_default_stat
 test_null_stat
 test_offline_cpu_stat
@@ -498,6 +530,7 @@ test_stat_no_aggr
 test_stat_detailed
 test_stat_repeat
 test_stat_pid
+test_stat_delay
 
 cleanup
 exit $err
