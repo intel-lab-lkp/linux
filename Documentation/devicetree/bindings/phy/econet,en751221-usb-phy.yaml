@@ -1,0 +1,128 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+# Copyright (C) 2024 EcoNet
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/econet,en751221-usb-phy.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: EcoNet EN751221 USB PHY
+
+maintainers:
+  - Caleb James DeLisle <cjd@cjdns.fr>
+
+description: |
+  USB PHY controller found on EcoNet EN751221 SoCs as well as on EN751627 and
+  EN7528. These devices generally have two ports, one of which is a USB 3.0,
+  and the other is USB 2.0. The USB 3.0 port is driven by one of two PHY
+  blocks, depending on whether the connected device has negotiated USB 3.0 or
+  2.0. These PHYs are also used on other EcoNet silicon in varying
+  configurations, such as only port 0 (the USB 3.0 port), or only port 1 (the
+  USB 2.0 port).
+
+properties:
+  compatible:
+    enum:
+      - econet,en751221-usb-phy
+      - econet,en751627-usb-phy
+      - econet,en7528-usb-phy
+
+  reg:
+    maxItems: 1
+
+  "#address-cells": true
+  "#size-cells": true
+  ranges: true
+
+  clocks:
+    maxItems: 1
+    description: |
+      Crystal oscillator clock source. EcoNet devices run at either 20Mhz or
+      25Mhz. 25Mhz devices require additional tuning in the USB 3.0 PHY.
+
+  clock-names:
+    items:
+      - const: xtal
+
+patternProperties:
+  "^usb-phy@[0-9a-f]+$":
+    type: object
+    description: USB 2.0 or 3.0 PHY sub-node.
+
+    properties:
+      compatible:
+        enum:
+          - econet,usb2-phy
+          - econet,usb3-phy
+
+      reg:
+        maxItems: 1
+
+      resets:
+        maxItems: 1
+
+      econet,usb-port-id:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1]
+        description: |
+          Physical port number. Since USB 3.0 requires a second PHY for the 2.0
+          fallback, multiple PHYs can map to the same physical port.
+
+      "#phy-cells":
+        const: 0
+
+    required:
+      - compatible
+      - reg
+      - econet,usb-port-id
+      - "#phy-cells"
+
+    additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - "#address-cells"
+  - "#size-cells"
+  - ranges
+  - clocks
+  - clock-names
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/reset/econet,en751221-scu.h>
+
+    usb-phy@1fa80000 {
+      compatible = "econet,en751221-usb-phy";
+      reg = <0x1fa80000 0x700>;
+      #address-cells = <1>;
+      #size-cells = <1>;
+      ranges;
+      clocks = <&xtalclk>;
+      clock-names = "xtal";
+
+      usb-phy@1fa80800 {
+          compatible = "econet,usb2-phy";
+          reg = <0x1fa80800 0x100>;
+          resets = <&scuclk EN751221_USB_PHY_P0_RST>;
+          econet,usb-port-id = <0>;
+          #phy-cells = <0>;
+      };
+
+      usb-phy@1fa80900 {
+          compatible = "econet,usb3-phy";
+          reg = <0x1fa80900 0x700>;
+          resets = <&scuclk EN751221_USB_PHY_P0_RST>;
+          econet,usb-port-id = <0>;
+          #phy-cells = <0>;
+      };
+
+      usb-phy@1fa81000 {
+          compatible = "econet,usb2-phy";
+          reg = <0x1fa81000 0x100>;
+          resets = <&scuclk EN751221_USB_PHY_P1_RST>;
+          econet,usb-port-id = <1>;
+          #phy-cells = <0>;
+      };
+    };
