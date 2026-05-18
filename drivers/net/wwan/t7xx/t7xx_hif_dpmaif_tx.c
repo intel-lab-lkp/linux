@@ -460,6 +460,9 @@ static int t7xx_dpmaif_tx_hw_push_thread(void *arg)
 				break;
 		}
 
+		if (dpmaif_ctrl->state != DPMAIF_STATE_PWRON)
+			continue;
+
 		ret = pm_runtime_resume_and_get(dpmaif_ctrl->dev);
 		if (ret < 0 && ret != -EACCES)
 			return ret;
