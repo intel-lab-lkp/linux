@@ -1501,6 +1501,7 @@ static int __init omap_vout_create_video_devices(struct platform_device *pdev)
 		/* Register the Video device with V4L2
 		 */
 		vfd = vout->vfd;
+		vfd->release = video_device_release_empty;
 		if (video_register_device(vfd, VFL_TYPE_VIDEO, -1) < 0) {
 			dev_err(&pdev->dev,
 				": Could not register Video for Linux device\n");
@@ -1508,6 +1509,7 @@ static int __init omap_vout_create_video_devices(struct platform_device *pdev)
 			ret = -ENODEV;
 			goto error2;
 		}
+		vfd->release = video_device_release;
 		video_set_drvdata(vfd, vout);
 
 		dev_info(&pdev->dev,
