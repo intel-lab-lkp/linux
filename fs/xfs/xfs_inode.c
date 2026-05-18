@@ -4,6 +4,7 @@
  * All Rights Reserved.
  */
 #include <linux/iversion.h>
+#include <linux/xarray.h>
 
 #include "xfs_platform.h"
 #include "xfs_fs.h"
@@ -2853,6 +2854,7 @@ xfs_inode_reload_unlinked_bucket(
 	struct xfs_buf		*agibp;
 	struct xfs_agi		*agi;
 	struct xfs_perag	*pag;
+	struct xarray		seen_aginos;
 	xfs_agnumber_t		agno = XFS_INO_TO_AGNO(mp, ip->i_ino);
 	xfs_agino_t		agino = XFS_INO_TO_AGINO(mp, ip->i_ino);
 	xfs_agino_t		prev_agino, next_agino;
@@ -2866,6 +2868,8 @@ xfs_inode_reload_unlinked_bucket(
 	xfs_perag_put(pag);
 	if (error)
 		return error;
+
+	xa_init(&seen_aginos);
 
 	/*
 	 * We've taken ILOCK_SHARED and the AGI buffer lock to stabilize the
@@ -2890,6 +2894,30 @@ xfs_inode_reload_unlinked_bucket(
 	next_agino = be32_to_cpu(agi->agi_unlinked[bucket]);
 	while (next_agino != NULLAGINO) {
 		struct xfs_inode	*next_ip = NULL;
+
+		/*
+		 * The on-disk unlinked list is corrupt if it points outside this
+		 * AG, into another bucket, or back to an inode that we already
+		 * saw during this reload walk.
+		 */
+		if (!xfs_verify_agino(pag, next_agino) ||
+		    next_agino % XFS_AGI_UNLINKED_BUCKETS != bucket) {
+			xfs_buf_mark_corrupt(agibp);
+			xfs_ag_mark_sick(pag, XFS_SICK_AG_AGI);
+			error = -EFSCORRUPTED;
+			break;
+		}
+
+		if (xa_load(&seen_aginos, next_agino)) {
+			xfs_buf_mark_corrupt(agibp);
+			xfs_ag_mark_sick(pag, XFS_SICK_AG_AGI);
+			error = -EFSCORRUPTED;
+			break;
+		}
+		error = xa_err(xa_store(&seen_aginos, next_agino,
+					xa_mk_value(1), GFP_NOFS));
+		if (error)
+			break;
 
 		/* Found this caller's inode, set its backlink. */
 		if (next_agino == agino) {
@@ -2925,6 +2953,7 @@ next_inode:
 	}
 
 out_agibp:
+	xa_destroy(&seen_aginos);
 	xfs_trans_brelse(tp, agibp);
 	/* Should have found this inode somewhere in the iunlinked bucket. */
 	if (!error && !foundit)

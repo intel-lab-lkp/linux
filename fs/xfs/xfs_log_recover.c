@@ -3,6 +3,8 @@
  * Copyright (c) 2000-2006 Silicon Graphics, Inc.
  * All Rights Reserved.
  */
+#include <linux/xarray.h>
+
 #include "xfs_platform.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
@@ -28,6 +30,7 @@
 #include "xfs_ag.h"
 #include "xfs_quota.h"
 #include "xfs_reflink.h"
+#include "xfs_health.h"
 
 #define BLK_AVG(blk1, blk2)	((blk1+blk2) >> 1)
 
@@ -2726,11 +2729,31 @@ xlog_recover_iunlink_bucket(
 	struct xfs_mount	*mp = pag_mount(pag);
 	struct xfs_inode	*prev_ip = NULL;
 	struct xfs_inode	*ip;
+	struct xarray		seen_aginos;
 	xfs_agino_t		prev_agino, agino;
 	int			error = 0;
 
+	xa_init(&seen_aginos);
+
 	agino = be32_to_cpu(agi->agi_unlinked[bucket]);
 	while (agino != NULLAGINO) {
+		if (!xfs_verify_agino(pag, agino) ||
+		    agino % XFS_AGI_UNLINKED_BUCKETS != bucket) {
+			xfs_ag_mark_sick(pag, XFS_SICK_AG_AGI);
+			error = -EFSCORRUPTED;
+			break;
+		}
+
+		if (xa_load(&seen_aginos, agino)) {
+			xfs_ag_mark_sick(pag, XFS_SICK_AG_AGI);
+			error = -EFSCORRUPTED;
+			break;
+		}
+		error = xa_err(xa_store(&seen_aginos, agino, xa_mk_value(1),
+					GFP_NOFS));
+		if (error)
+			break;
+
 		error = xfs_iget(mp, NULL, xfs_agino_to_ino(pag, agino), 0, 0,
 				&ip);
 		if (error)
@@ -2771,8 +2794,9 @@ xlog_recover_iunlink_bucket(
 
 		error2 = xfs_inodegc_flush(mp);
 		if (error2 && !error)
-			return error2;
+			error = error2;
 	}
+	xa_destroy(&seen_aginos);
 	return error;
 }
 
