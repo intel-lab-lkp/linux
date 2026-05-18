@@ -32,32 +32,32 @@ static void enetc_msg_task(struct work_struct *work)
 {
 	struct enetc_pf *pf = container_of(work, struct enetc_pf, msg_task);
 	struct enetc_hw *hw = &pf->si->hw;
-	unsigned long mr_mask;
+	u32 mr_status;
 	int i;
 
-	for (;;) {
-		mr_mask = enetc_rd(hw, ENETC_PSIMSGRR) & ENETC_PSIMSGRR_MR_MASK;
-		if (!mr_mask) {
-			/* re-arm MR interrupts, w1c the IDR reg */
-			enetc_wr(hw, ENETC_PSIIDR, ENETC_PSIIER_MR_MASK);
-			enetc_msg_enable_mr_int(hw);
-			return;
-		}
+	mr_status = enetc_rd(hw, ENETC_PSIMSGRR) & ENETC_PSIMSGRR_MR_MASK;
+	if (!mr_status)
+		goto out;
 
-		for (i = 0; i < pf->num_vfs; i++) {
-			u32 psimsgrr;
-			u16 msg_code;
+	for (i = 0; i < pf->num_vfs; i++) {
+		u32 psimsgrr;
+		u16 msg_code;
 
-			if (!(ENETC_PSIMSGRR_MR(i) & mr_mask))
-				continue;
+		if (!(ENETC_PSIMSGRR_MR(i) & mr_status))
+			continue;
 
-			enetc_msg_handle_rxmsg(pf, i, &msg_code);
+		enetc_msg_handle_rxmsg(pf, i, &msg_code);
 
-			psimsgrr = ENETC_SIMSGSR_SET_MC(msg_code);
-			psimsgrr |= ENETC_PSIMSGRR_MR(i); /* w1c */
-			enetc_wr(hw, ENETC_PSIMSGRR, psimsgrr);
-		}
+		/* w1c to clear the corresponding VF MR bit */
+		enetc_wr(hw, ENETC_PSIIDR, ENETC_PSIIDR_MR(i));
+
+		psimsgrr = ENETC_SIMSGSR_SET_MC(msg_code);
+		psimsgrr |= ENETC_PSIMSGRR_MR(i); /* w1c */
+		enetc_wr(hw, ENETC_PSIMSGRR, psimsgrr);
 	}
+
+out:
+	enetc_msg_enable_mr_int(hw);
 }
 
 /* Init */
