@@ -1169,42 +1169,6 @@ out:
 	return status;
 }
 
-void acpi_gpiochip_request_regions(struct acpi_gpio_chip *achip)
-{
-	struct gpio_chip *chip = achip->chip;
-	acpi_handle handle = ACPI_HANDLE(chip->parent);
-	acpi_status status;
-
-	INIT_LIST_HEAD(&achip->conns);
-	mutex_init(&achip->conn_lock);
-	status = acpi_install_address_space_handler(handle, ACPI_ADR_SPACE_GPIO,
-						    acpi_gpio_adr_space_handler,
-						    NULL, achip);
-	if (ACPI_FAILURE(status))
-		dev_err(chip->parent,
-			"Failed to install GPIO OpRegion handler\n");
-}
-
-void acpi_gpiochip_free_regions(struct acpi_gpio_chip *achip)
-{
-	struct gpio_chip *chip = achip->chip;
-	acpi_handle handle = ACPI_HANDLE(chip->parent);
-	struct acpi_gpio_connection *conn, *tmp;
-	acpi_status status;
-
-	status = acpi_remove_address_space_handler(handle, ACPI_ADR_SPACE_GPIO,
-						   acpi_gpio_adr_space_handler);
-	if (ACPI_FAILURE(status)) {
-		dev_err(chip->parent,
-			"Failed to remove GPIO OpRegion handler\n");
-	}
-
-	list_for_each_entry_safe_reverse(conn, tmp, &achip->conns, node) {
-		gpiochip_free_own_desc(conn->desc);
-		list_del(&conn->node);
-		kfree(conn);
-	}
-}
 
 void acpi_gpiochip_add(struct gpio_chip *chip)
 {
