@@ -288,6 +288,16 @@ vmw_vkms_enable_vblank(struct drm_crtc *crtc)
 
 	drm_calc_timestamping_constants(crtc, &crtc->mode);
 
+	/*
+	 * DEFENSIVE CHECK:
+	 * drm_calc_timestamping_constants() can calculate a framedur_ns
+	 * of 0 if user-space provides a malicious mode with a huge
+	 * crtc_clock and small htotal/vtotal due to integer division
+	 * truncation. Prevent hrtimer interrupt storms by refusing such modes.
+	 */
+	if (WARN_ON_ONCE(vblank->framedur_ns == 0))
+		return -EINVAL;
+
 	hrtimer_setup(&du->vkms.timer, &vmw_vkms_vblank_simulate, CLOCK_MONOTONIC,
 		      HRTIMER_MODE_REL);
 	du->vkms.period_ns = ktime_set(0, vblank->framedur_ns);
