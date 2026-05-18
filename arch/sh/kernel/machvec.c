@@ -8,6 +8,7 @@
  *  Copyright (C) 2002 - 2007 Paul Mundt
  */
 #include <linux/init.h>
+#include <linux/minmax.h>
 #include <linux/string.h>
 #include <asm/machvec.h>
 #include <asm/sections.h>
@@ -35,29 +36,21 @@ static struct sh_machine_vector * __init get_mv_byname(const char *name)
 	return NULL;
 }
 
-static unsigned int __initdata machvec_selected;
+static bool machvec_selected __initdata;
 
 static int __init early_parse_mv(char *from)
 {
-	char mv_name[MV_NAME_SIZE] = "";
+	char mv_name[MV_NAME_SIZE];
 	char *mv_end;
-	char *mv_comma;
-	int mv_len;
 	struct sh_machine_vector *mvp;
 
 	mv_end = strchr(from, ' ');
-	if (mv_end == NULL)
-		mv_end = from + strlen(from);
+	if (mv_end)
+		strscpy(mv_name, from, min(mv_end - from + 1, MV_NAME_SIZE));
+	else
+		strscpy(mv_name, from);
 
-	mv_comma = strchr(from, ',');
-	mv_len = mv_end - from;
-	if (mv_len > (MV_NAME_SIZE-1))
-		mv_len = MV_NAME_SIZE-1;
-	memcpy(mv_name, from, mv_len);
-	mv_name[mv_len] = '\0';
-	from = mv_end;
-
-	machvec_selected = 1;
+	machvec_selected = true;
 
 	/* Boot with the generic vector */
 	if (strcmp(mv_name, "generic") == 0)
@@ -71,8 +64,8 @@ static int __init early_parse_mv(char *from)
 		pr_cont("\n\n");
 		panic("Failed to select machvec '%s' -- halting.\n",
 		      mv_name);
-	} else
-		sh_mv = *mvp;
+	}
+	sh_mv = *mvp;
 
 	return 0;
 }
