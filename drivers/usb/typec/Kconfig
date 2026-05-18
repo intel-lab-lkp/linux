@@ -100,6 +100,23 @@ config TYPEC_STUSB160X
 	  If you choose to build this driver as a dynamically linked module, the
 	  module will be called stusb160x.ko.
 
+config TYPEC_QCOM_PMI8998
+	tristate "Qualcomm PMI8998 USB Type-C role-switch driver"
+	depends on ARCH_QCOM || COMPILE_TEST
+	depends on SPMI
+	select USB_ROLE_SWITCH
+	help
+	  Say Y or M here to enable the role-switch driver for the USB
+	  Type-C detection block integrated in the Qualcomm PMI8998 PMIC.
+	  This is the part used on SDM845 phones such as the OnePlus 6/6T,
+	  Xiaomi Poco F1 and SHIFT 6mq. The driver reports the
+	  hardware-detected role through the USB role switch class so the
+	  USB DRD controller (e.g. dwc3) can flip between peripheral and
+	  host on cable orientation change.
+
+	  If you choose to build this driver as a dynamically linked module,
+	  the module will be called qcom_pmi8998_typec.ko.
+
 config TYPEC_WUSB3801
 	tristate "Willsemi WUSB3801 Type-C port controller driver"
 	depends on I2C
