@@ -1185,7 +1185,7 @@ int mtk_mdp_register_m2m_device(struct mtk_mdp_dev *mdp)
 	mdp->vdev->device_caps = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
 	mdp->vdev->fops = &mtk_mdp_m2m_fops;
 	mdp->vdev->ioctl_ops = &mtk_mdp_m2m_ioctl_ops;
-	mdp->vdev->release = video_device_release;
+	mdp->vdev->release = video_device_release_empty;
 	mdp->vdev->lock = &mdp->lock;
 	mdp->vdev->vfl_dir = VFL_DIR_M2M;
 	mdp->vdev->v4l2_dev = &mdp->v4l2_dev;
@@ -1205,6 +1205,7 @@ int mtk_mdp_register_m2m_device(struct mtk_mdp_dev *mdp)
 		dev_err(dev, "failed to register video device\n");
 		goto err_vdev_register;
 	}
+	mdp->vdev->release = video_device_release;
 
 	v4l2_info(&mdp->v4l2_dev, "driver registered as /dev/video%d",
 		  mdp->vdev->num);
@@ -1213,7 +1214,8 @@ int mtk_mdp_register_m2m_device(struct mtk_mdp_dev *mdp)
 err_vdev_register:
 	v4l2_m2m_release(mdp->m2m_dev);
 err_m2m_init:
-	video_device_release(mdp->vdev);
+	video_device_release(mdp->vdev)
+	mdp->vdev = NULL;
 err_video_alloc:
 
 	return ret;
