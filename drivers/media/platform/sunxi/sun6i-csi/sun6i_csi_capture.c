@@ -213,7 +213,7 @@ struct sun6i_csi_capture_format *sun6i_csi_capture_format_find(u32 pixelformat)
 /* RAW formats need an exact match between pixel and mbus formats. */
 static const
 struct sun6i_csi_capture_format_match sun6i_csi_capture_format_matches[] = {
-	/* YUV420 */
+	/* YUV422 */
 	{
 		.pixelformat	= V4L2_PIX_FMT_YUYV,
 		.mbus_code	= MEDIA_BUS_FMT_YUYV8_2X8,
@@ -325,6 +325,51 @@ static bool sun6i_csi_capture_format_match(u32 pixelformat, u32 mbus_code)
 	}
 
 	return false;
+}
+
+static bool
+sun6i_csi_capture_format_check(const struct sun6i_csi_capture_format *capture_format,
+			       const struct sun6i_csi_bridge_format *bridge_format)
+{
+	const struct v4l2_format_info *format_info;
+	u32 pixelformat = capture_format->pixelformat;
+	u32 mbus_code = bridge_format->mbus_code;
+	bool match;
+
+	format_info = v4l2_format_info(pixelformat);
+
+	/* Some raw formats like JPEG are not listed: try a direct match. */
+	if (!format_info)
+		return sun6i_csi_capture_format_match(pixelformat, mbus_code);
+
+	if (format_info->pixel_enc == V4L2_PIXEL_ENC_BAYER &&
+	    bridge_format->input_format != SUN6I_CSI_INPUT_FMT_RAW)
+		return false;
+
+	if (format_info->pixel_enc == V4L2_PIXEL_ENC_RGB &&
+	    bridge_format->input_format != SUN6I_CSI_INPUT_FMT_RAW)
+		return false;
+
+	if (format_info->pixel_enc == V4L2_PIXEL_ENC_YUV) {
+		if (bridge_format->input_format != SUN6I_CSI_INPUT_FMT_YUV420 &&
+		    bridge_format->input_format != SUN6I_CSI_INPUT_FMT_YUV422)
+			return false;
+
+		/* YUV420 input can't produce YUV422 output. */
+		if (bridge_format->input_format == SUN6I_CSI_INPUT_FMT_YUV420 &&
+		    format_info->vdiv == 1)
+			return false;
+	}
+
+	/* With raw input mode, we need a 1:1 match between input and output. */
+	if (bridge_format->input_format == SUN6I_CSI_INPUT_FMT_RAW ||
+	    capture_format->input_format_raw) {
+		match = sun6i_csi_capture_format_match(pixelformat, mbus_code);
+		if (!match)
+			return false;
+	}
+
+	return true;
 }
 
 /* Capture */
@@ -915,13 +960,11 @@ static int sun6i_csi_capture_link_validate(struct media_link *link)
 	const struct sun6i_csi_capture_format *capture_format;
 	const struct sun6i_csi_bridge_format *bridge_format;
 	unsigned int capture_width, capture_height;
-	const struct v4l2_format_info *format_info;
 	struct v4l2_subdev_format src_fmt = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 		.pad = link->source->index
 	};
 	u32 pixelformat, capture_field;
-	bool match;
 	int ret;
 
 	sun6i_csi_capture_dimensions(csi_dev, &capture_width, &capture_height);
@@ -950,44 +993,12 @@ static int sun6i_csi_capture_link_validate(struct media_link *link)
 		return -EINVAL;
 	}
 
-	format_info = v4l2_format_info(pixelformat);
-	/* Some formats are not listed. */
-	if (!format_info)
-		return 0;
-
-	if (format_info->pixel_enc == V4L2_PIXEL_ENC_BAYER &&
-	    bridge_format->input_format != SUN6I_CSI_INPUT_FMT_RAW)
-		goto invalid;
-
-	if (format_info->pixel_enc == V4L2_PIXEL_ENC_RGB &&
-	    bridge_format->input_format != SUN6I_CSI_INPUT_FMT_RAW)
-		goto invalid;
-
-	if (format_info->pixel_enc == V4L2_PIXEL_ENC_YUV) {
-		if (bridge_format->input_format != SUN6I_CSI_INPUT_FMT_YUV420 &&
-		    bridge_format->input_format != SUN6I_CSI_INPUT_FMT_YUV422)
-			goto invalid;
-
-		/* YUV420 input can't produce YUV422 output. */
-		if (bridge_format->input_format == SUN6I_CSI_INPUT_FMT_YUV420 &&
-		    format_info->vdiv == 1)
-			goto invalid;
-	}
-
-	/* With raw input mode, we need a 1:1 match between input and output. */
-	if (bridge_format->input_format == SUN6I_CSI_INPUT_FMT_RAW ||
-	    capture_format->input_format_raw) {
-		match = sun6i_csi_capture_format_match(pixelformat,
-						       src_fmt.format.code);
-		if (!match)
-			goto invalid;
+	if (!sun6i_csi_capture_format_check(capture_format, bridge_format)) {
+		v4l2_err(v4l2_dev, "invalid input/output format combination\n");
+		return -EINVAL;
 	}
 
 	return 0;
-
-invalid:
-	v4l2_err(v4l2_dev, "invalid input/output format combination\n");
-	return -EINVAL;
 }
 
 static const struct media_entity_operations sun6i_csi_capture_media_ops = {
