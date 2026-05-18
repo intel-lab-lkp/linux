@@ -1767,7 +1767,7 @@ static int delta_register_device(struct delta_dev *delta)
 
 	vdev->fops = &delta_fops;
 	vdev->ioctl_ops = &delta_ioctl_ops;
-	vdev->release = video_device_release;
+	vdev->release = video_device_release_empty;
 	vdev->lock = &delta->lock;
 	vdev->vfl_dir = VFL_DIR_M2M;
 	vdev->device_caps = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_M2M;
@@ -1781,6 +1781,7 @@ static int delta_register_device(struct delta_dev *delta)
 			DELTA_PREFIX);
 		goto err_vdev_release;
 	}
+	vdev->release = video_device_release;
 
 	delta->vdev = vdev;
 	video_set_drvdata(vdev, delta);
