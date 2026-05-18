@@ -674,16 +674,45 @@ static void validate_encoder_possible_crtcs(struct drm_encoder *encoder)
 	     encoder->possible_crtcs, crtc_mask);
 }
 
-void drm_mode_config_validate(struct drm_device *dev)
+static int plane_alpha_require_blend_mode(struct drm_plane *plane)
+{
+	struct drm_device *dev = plane->dev;
+	const struct drm_format_info *fmt;
+	u32 i;
+
+	/* blend mode property supported, no need to check anything */
+	if (plane->blend_mode_property)
+		return 0;
+
+	if (plane->alpha_property) {
+		drm_err(dev, "[PLANE:%d:%s] alpha property exposed but blend mode not setup",
+			plane->base.id, plane->name);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < plane->format_count; i++) {
+		fmt = drm_format_info(plane->format_types[i]);
+		if (fmt->has_alpha) {
+			drm_err(dev, "[PLANE:%d:%s] pixel format with alpha exposed but blend mode not setup",
+				plane->base.id, plane->name);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+int drm_mode_config_validate(struct drm_device *dev)
 {
 	struct drm_encoder *encoder;
 	struct drm_crtc *crtc;
 	struct drm_plane *plane;
 	u32 primary_with_crtc = 0, cursor_with_crtc = 0;
 	unsigned int num_primary = 0;
+	int ret = 0;
 
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
-		return;
+		return ret;
 
 	drm_for_each_encoder(encoder, dev)
 		fixup_encoder_possible_clones(encoder);
@@ -732,9 +761,13 @@ void drm_mode_config_validate(struct drm_device *dev)
 	drm_for_each_plane(plane, dev) {
 		if (plane->type == DRM_PLANE_TYPE_PRIMARY)
 			num_primary++;
+
+		ret |= plane_alpha_require_blend_mode(plane);
 	}
 
 	WARN(num_primary != dev->mode_config.num_crtc,
 	     "Must have as many primary planes as there are CRTCs, but have %u primary planes and %u CRTCs",
 	     num_primary, dev->mode_config.num_crtc);
+
+	return ret;
 }
