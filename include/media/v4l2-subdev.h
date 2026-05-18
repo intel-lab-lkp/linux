@@ -8,6 +8,7 @@
 #ifndef _V4L2_SUBDEV_H
 #define _V4L2_SUBDEV_H
 
+#include <linux/cleanup.h>
 #include <linux/types.h>
 #include <linux/v4l2-subdev.h>
 #include <media/media-entity.h>
@@ -1777,6 +1778,39 @@ int __v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 int v4l2_subdev_get_frame_desc_passthrough(struct v4l2_subdev *sd,
 					   unsigned int pad,
 					   struct v4l2_mbus_frame_desc *fd);
+
+/**
+ * v4l2_subdev_get_frame_desc() - Get a frame descriptor for a pad
+ * @sd: The sub-device
+ * @pad: The number of the pad in @sd from which to obtain the frame descriptor
+ * @type: The type of the frame descriptor
+ *
+ * Obtain a frame descriptor from a sub-device. If the sub-device supports the
+ * get_frame_desc pad operation, its result is returned, just like calling it
+ * directly using v4l2_subdev_call(). If the sub-device driver does not support
+ * it, then a frame descriptor containing a single entry is created using the
+ * information from the sub-device format for types
+ * V4L2_MBUS_FRAME_DESC_TYPE_CSI2 and V4L2_MBUS_FRAME_DESC_TYPE_PARALLEL.
+ *
+ * The caller is required to set @desc->type to the expected bus type.
+ *
+ * The caller is required to release the memory of the frame descriptor entries
+ * for each frame descriptor obtained by calling this function using
+ * v4l2_subdev_free_frame_desc().
+ *
+ * Return: The frame descriptor on success or a negative error code on failure.
+ */
+struct v4l2_mbus_frame_desc *
+v4l2_subdev_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+			   enum v4l2_mbus_frame_desc_type type);
+
+/**
+ * v4l2_subdev_free_frame_desc() - Release the memory of a frame descriptor
+ * @desc: A pointer to a frame descriptor
+ *
+ * Release the frame descriptor.
+ */
+void v4l2_subdev_free_frame_desc(struct v4l2_mbus_frame_desc *desc);
 
 #endif /* CONFIG_VIDEO_V4L2_SUBDEV_API */
 
