@@ -234,7 +234,8 @@ retry:
 		ret = tcp_sendmsg_locked(sk, &msghdr, size);
 		if (ret < 0) {
 			emsg->offset = offset - sg->offset;
-			skmsg->sg.start += done;
+			while (done--)
+				sk_msg_iter_var_next(skmsg->sg.start);
 			return ret;
 		}
 
@@ -247,6 +248,7 @@ retry:
 		done++;
 		put_page(p);
 		sk_mem_uncharge(sk, sg->length);
+		skmsg->sg.size -= sg->length;
 		sg = sg_next(sg);
 	} while (sg);
 
