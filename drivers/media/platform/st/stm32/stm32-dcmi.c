@@ -1990,7 +1990,7 @@ static int dcmi_probe(struct platform_device *pdev)
 	dcmi->vdev->v4l2_dev = &dcmi->v4l2_dev;
 	dcmi->vdev->queue = &dcmi->queue;
 	strscpy(dcmi->vdev->name, KBUILD_MODNAME, sizeof(dcmi->vdev->name));
-	dcmi->vdev->release = video_device_release;
+	dcmi->vdev->release = video_device_release_empty;
 	dcmi->vdev->ioctl_ops = &dcmi_ioctl_ops;
 	dcmi->vdev->lock = &dcmi->lock;
 	dcmi->vdev->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING |
@@ -2012,6 +2012,7 @@ static int dcmi_probe(struct platform_device *pdev)
 		dev_err(dcmi->dev, "Failed to register video device\n");
 		goto err_media_entity_cleanup;
 	}
+	dcmi->vdev->release = video_device_release;
 
 	dev_dbg(dcmi->dev, "Device registered as %s\n",
 		video_device_node_name(dcmi->vdev));
