@@ -3,6 +3,23 @@
 config IOMMU_IOVA
 	tristate
 
+config IOMMU_IOVA_KUNIT_TEST
+	tristate "KUnit tests for the IOVA allocator" if !KUNIT_ALL_TESTS
+	depends on IOMMU_IOVA && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Enable kunit tests for the IOVA allocator. The tests exercise
+	  basic allocation and free, size-aligned allocation, top-down
+	  ordering, the limit_pfn-aware 32-bit augmentation, aligned
+	  allocations in fragmented domains, and randomly-fragmented
+	  stress scenarios. Each test verifies that the augmented
+	  rbtree invariants remain consistent throughout.
+
+	  Run with:
+	    tools/testing/kunit/kunit.py run --kunitconfig=drivers/iommu
+
+	  If unsure, say N here.
+
 # IOMMU_API always gets selected by whoever wants it.
 config IOMMU_API
 	bool
