@@ -47,17 +47,23 @@ void drm_buddy_print(struct gpu_buddy *mm, struct drm_printer *p)
 		   mm->chunk_size >> 10, mm->size >> 20, mm->avail >> 20, mm->clear_avail >> 20);
 
 	for (order = mm->max_order; order >= 0; order--) {
-		u64 count = mm->free_scoreboard[order];
-		u64 free = count * (mm->chunk_size << order);
+		u64 free_count = mm->free_scoreboard[order];
+		u64 used_count = mm->used_scoreboard[order];
+		u64 block_size = mm->chunk_size << order;
+		u64 free = free_count * block_size;
+		u64 used = used_count * block_size;
 
 		drm_printf(p, "order-%2d ", order);
 
-		if (free < SZ_1M)
-			drm_printf(p, "free: %8llu KiB", free >> 10);
+		if (block_size < SZ_1M)
+			drm_printf(p, "free: %8llu KiB, used: %8llu KiB",
+				   free >> 10, used >> 10);
 		else
-			drm_printf(p, "free: %8llu MiB", free >> 20);
+			drm_printf(p, "free: %8llu MiB, used: %8llu MiB",
+				   free >> 20, used >> 20);
 
-		drm_printf(p, ", blocks: %llu\n", count);
+		drm_printf(p, ", free_blocks: %llu, used_blocks: %llu\n",
+			   free_count, used_count);
 	}
 }
 EXPORT_SYMBOL(drm_buddy_print);
