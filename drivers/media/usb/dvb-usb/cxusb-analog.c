@@ -1654,7 +1654,7 @@ static int cxusb_medion_register_analog_video(struct dvb_usb_device *dvbdev)
 	cxdev->videodev->vfl_dir = VFL_DIR_RX;
 	cxdev->videodev->ioctl_ops = &cxusb_video_ioctl;
 	cxdev->videodev->tvnorms = V4L2_STD_ALL;
-	cxdev->videodev->release = cxusb_medion_videodev_release;
+	cxdev->videodev->release = video_device_release_empty;
 	cxdev->videodev->lock = &cxdev->dev_lock;
 	video_set_drvdata(cxdev->videodev, dvbdev);
 
@@ -1664,6 +1664,7 @@ static int cxusb_medion_register_analog_video(struct dvb_usb_device *dvbdev)
 			"video device register failed, ret = %d\n", ret);
 		goto ret_vrelease;
 	}
+	cxdev->videodev->release = cxusb_medion_videodev_release;
 
 	return 0;
 
