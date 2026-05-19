@@ -621,11 +621,6 @@ static int __init kho_parse_scratch_size(char *p)
 	scratch_size_pernode = sizes[2];
 	scratch_scale = 0;
 
-	pr_notice("scratch areas: lowmem: %lluMiB global: %lluMiB pernode: %lldMiB\n",
-		  (u64)(scratch_size_lowmem >> 20),
-		  (u64)(scratch_size_global >> 20),
-		  (u64)(scratch_size_pernode >> 20));
-
 	return 0;
 }
 early_param("kho_scratch", kho_parse_scratch_size);
@@ -691,6 +686,10 @@ static void __init kho_reserve_scratch(void)
 		goto err_disable_kho;
 	}
 
+	pr_notice("scratch areas: lowmem: %lluMiB global: %lluMiB\n",
+		  (u64)(scratch_size_lowmem >> 20),
+		  (u64)(scratch_size_global >> 20));
+
 	/*
 	 * reserve scratch area in low memory for lowmem allocations in the
 	 * next kernel
@@ -725,6 +724,9 @@ static void __init kho_reserve_scratch(void)
 	 */
 	for_each_node_state(nid, N_MEMORY) {
 		size = scratch_size_node(nid);
+
+		pr_notice("scratch_areas: nid %d: %lluMiB\n", nid, size >> 20);
+
 		addr = memblock_alloc_range_nid(size, CMA_MIN_ALIGNMENT_BYTES,
 						0, MEMBLOCK_ALLOC_ACCESSIBLE,
 						nid, true);
