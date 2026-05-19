@@ -72,6 +72,7 @@ struct qcom_pas {
 	struct clk *aggre2_clk;
 
 	struct regulator *cx_supply;
+	struct regulator *mx_supply;
 	struct regulator *px_supply;
 
 	struct device *proxy_pds[3];
@@ -299,10 +300,16 @@ static int qcom_pas_start(struct rproc *rproc)
 			goto disable_aggre2_clk;
 	}
 
+	if (pas->mx_supply) {
+		ret = regulator_enable(pas->mx_supply);
+		if (ret)
+			goto disable_cx_supply;
+	}
+
 	if (pas->px_supply) {
 		ret = regulator_enable(pas->px_supply);
 		if (ret)
-			goto disable_cx_supply;
+			goto disable_mx_supply;
 	}
 
 	if (pas->dtb_pas_id) {
@@ -365,6 +372,9 @@ unmap_dtb_carveout:
 disable_px_supply:
 	if (pas->px_supply)
 		regulator_disable(pas->px_supply);
+disable_mx_supply:
+	if (pas->mx_supply)
+		regulator_disable(pas->mx_supply);
 disable_cx_supply:
 	if (pas->cx_supply)
 		regulator_disable(pas->cx_supply);
@@ -389,6 +399,8 @@ static void qcom_pas_handover(struct qcom_q6v5 *q6v5)
 
 	if (pas->px_supply)
 		regulator_disable(pas->px_supply);
+	if (pas->mx_supply)
+		regulator_disable(pas->mx_supply);
 	if (pas->cx_supply)
 		regulator_disable(pas->cx_supply);
 	clk_disable_unprepare(pas->aggre2_clk);
@@ -533,7 +545,7 @@ static const struct rproc_ops qcom_pas_minidump_ops = {
 
 static int qcom_pas_init_clock(struct qcom_pas *pas)
 {
-	pas->xo = devm_clk_get(pas->dev, "xo");
+	pas->xo = devm_clk_get_optional(pas->dev, "xo");
 	if (IS_ERR(pas->xo))
 		return dev_err_probe(pas->dev, PTR_ERR(pas->xo),
 				     "failed to get xo clock");
@@ -558,6 +570,14 @@ static int qcom_pas_init_regulator(struct qcom_pas *pas)
 
 	if (pas->cx_supply)
 		regulator_set_load(pas->cx_supply, 100000);
+
+	pas->mx_supply = devm_regulator_get_optional(pas->dev, "mx");
+	if (IS_ERR(pas->mx_supply)) {
+		if (PTR_ERR(pas->mx_supply) == -ENODEV)
+			pas->mx_supply = NULL;
+		else
+			return PTR_ERR(pas->mx_supply);
+	}
 
 	pas->px_supply = devm_regulator_get_optional(pas->dev, "px");
 	if (IS_ERR(pas->px_supply)) {
@@ -1530,8 +1550,22 @@ static const struct qcom_pas_data sm8750_mpss_resource = {
 	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
 };
 
+static const struct qcom_pas_data ipq9650_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mbn",
+	.dtb_firmware_name = "cdsp_dtb.mbn",
+	.pas_id = 18,
+	.dtb_pas_id = 0x25,
+	.auto_boot = false,
+	.load_state = "cdsp",
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.ssctl_id = 0x17,
+};
+
 static const struct of_device_id qcom_pas_of_match[] = {
 	{ .compatible = "qcom,eliza-adsp-pas", .data = &sm8550_adsp_resource },
+	{ .compatible = "qcom,ipq9650-cdsp-pas", .data = &ipq9650_cdsp_resource },
 	{ .compatible = "qcom,milos-adsp-pas", .data = &sm8550_adsp_resource },
 	{ .compatible = "qcom,milos-cdsp-pas", .data = &milos_cdsp_resource },
 	{ .compatible = "qcom,milos-mpss-pas", .data = &sm8450_mpss_resource },
