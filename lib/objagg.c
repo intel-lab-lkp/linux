@@ -28,7 +28,7 @@ struct objagg_hints_node {
 	struct objagg_hints_node *parent;
 	unsigned int root_id;
 	struct objagg_obj_stats_info stats_info;
-	unsigned long obj[];
+	u8 obj[];
 };
 
 static struct objagg_hints_node *
@@ -66,7 +66,7 @@ struct objagg_obj {
 				* including nested objects
 				*/
 	struct objagg_obj_stats stats;
-	unsigned long obj[];
+	u8 obj[];
 };
 
 static unsigned int objagg_obj_ref_inc(struct objagg_obj *objagg_obj)
@@ -369,8 +369,7 @@ static struct objagg_obj *objagg_obj_create(struct objagg *objagg, void *obj)
 	struct objagg_obj *objagg_obj;
 	int err;
 
-	objagg_obj = kzalloc(sizeof(*objagg_obj) + objagg->ops->obj_size,
-			     GFP_KERNEL);
+	objagg_obj = kzalloc_flex(*objagg_obj, obj, objagg->ops->obj_size);
 	if (!objagg_obj)
 		return ERR_PTR(-ENOMEM);
 	objagg_obj_ref_inc(objagg_obj);
@@ -657,7 +656,7 @@ objagg_hints_node_create(struct objagg_hints *objagg_hints,
 	struct objagg_hints_node *hnode;
 	int err;
 
-	hnode = kzalloc(sizeof(*hnode) + obj_size, GFP_KERNEL);
+	hnode = kzalloc_flex(*hnode, obj, obj_size);
 	if (!hnode)
 		return ERR_PTR(-ENOMEM);
 	memcpy(hnode->obj, &objagg_obj->obj, obj_size);
@@ -705,9 +704,9 @@ struct objagg_tmp_node {
 };
 
 struct objagg_tmp_graph {
-	struct objagg_tmp_node *nodes;
 	unsigned long nodes_count;
 	unsigned long *edges;
+	struct objagg_tmp_node nodes[] __counted_by(nodes_count);
 };
 
 static int objagg_tmp_graph_edge_index(struct objagg_tmp_graph *graph,
@@ -786,13 +785,10 @@ static struct objagg_tmp_graph *objagg_tmp_graph_create(struct objagg *objagg)
 	struct objagg_obj *objagg_obj;
 	int i, j;
 
-	graph = kzalloc_obj(*graph);
+	graph = kzalloc_flex(*graph, nodes, nodes_count);
 	if (!graph)
 		return NULL;
 
-	graph->nodes = kzalloc_objs(*graph->nodes, nodes_count);
-	if (!graph->nodes)
-		goto err_nodes_alloc;
 	graph->nodes_count = nodes_count;
 
 	graph->edges = bitmap_zalloc(nodes_count * nodes_count, GFP_KERNEL);
@@ -825,8 +821,6 @@ static struct objagg_tmp_graph *objagg_tmp_graph_create(struct objagg *objagg)
 	return graph;
 
 err_edges_alloc:
-	kfree(graph->nodes);
-err_nodes_alloc:
 	kfree(graph);
 	return NULL;
 }
@@ -834,7 +828,6 @@ err_nodes_alloc:
 static void objagg_tmp_graph_destroy(struct objagg_tmp_graph *graph)
 {
 	bitmap_free(graph->edges);
-	kfree(graph->nodes);
 	kfree(graph);
 }
 
