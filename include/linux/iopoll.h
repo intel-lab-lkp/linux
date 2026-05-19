@@ -19,9 +19,11 @@
  *
  * @op: Operation
  * @cond: Break condition
- * @sleep_us: Maximum time to sleep between operations in us (0 tight-loops).
- *            Please read usleep_range() function description for details and
- *            limitations.
+ * @sleep_us: Maximum time to sleep or delay between operations in us
+ *            (0 tight-loops). Please read usleep_range() and udelay()
+ *            function descriptions for details and limitations.
+ *            This macro will delay until 1/10 of a timer tick after
+ *            it is called, and will then start sleeping.
  * @timeout_us: Timeout in us, 0 means never timeout
  * @sleep_before_op: if it is true, sleep @sleep_us before operation.
  *
@@ -35,11 +37,18 @@
 ({ \
 	u64 __timeout_us = (timeout_us); \
 	unsigned long __sleep_us = (sleep_us); \
-	ktime_t __timeout = ktime_add_us(ktime_get(), __timeout_us); \
+	ktime_t __start_time = ktime_get(); \
+	u64 __delay_timeout_us = 100000/HZ; \
+	ktime_t __delay_timeout = ktime_add_us(__start_time, __delay_timeout_us); \
+	ktime_t __timeout = ktime_add_us(__start_time, __timeout_us); \
 	int ___ret; \
 	might_sleep_if((__sleep_us) != 0); \
-	if ((sleep_before_op) && __sleep_us) \
-		usleep_range((__sleep_us >> 2) + 1, __sleep_us); \
+	if ((sleep_before_op) && __sleep_us) { \
+		if (__sleep_us <= __delay_timeout_us) \
+			udelay(__sleep_us); \
+		else \
+			usleep_range((__sleep_us >> 2) + 1, __sleep_us); \
+	} \
 	for (;;) { \
 		bool __expired = __timeout_us && \
 			ktime_compare(ktime_get(), __timeout) > 0; \
@@ -54,8 +63,13 @@
 			___ret = -ETIMEDOUT; \
 			break; \
 		} \
-		if (__sleep_us) \
-			usleep_range((__sleep_us >> 2) + 1, __sleep_us); \
+		if (__sleep_us) { \
+			if (__sleep_us <= __delay_timeout_us && \
+			    ktime_compare(ktime_get(), __delay_timeout) < 0) \
+				udelay(__sleep_us); \
+			else \
+				usleep_range((__sleep_us >> 2) + 1, __sleep_us); \
+		} \
 		cpu_relax(); \
 	} \
 	___ret; \
