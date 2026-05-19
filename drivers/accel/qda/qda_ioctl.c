@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 #include <drm/drm_ioctl.h>
+#include <drm/drm_print.h>
 #include <drm/qda_accel.h>
 #include "qda_drv.h"
 #include "qda_fastrpc.h"
@@ -178,6 +179,10 @@ static int fastrpc_invoke(int type, struct drm_device *dev, void *data,
 	if (err)
 		goto err_context_free;
 
+	err = qda_fastrpc_return_result(ctx, (char __user *)data);
+	if (err)
+		goto err_context_free;
+
 	fastrpc_context_put_id(ctx, qdev);
 	kref_put(&ctx->refcount, qda_fastrpc_context_free);
 	return 0;
@@ -216,6 +221,37 @@ int qda_ioctl_init_create(struct drm_device *dev, void *data, struct drm_file *f
 int qda_release_dsp_process(struct qda_dev *qdev, struct drm_file *file_priv)
 {
 	return fastrpc_invoke(FASTRPC_RMID_INIT_RELEASE, &qdev->drm_dev, NULL, file_priv);
+}
+
+/**
+ * qda_ioctl_mmap() - Map memory to DSP address space
+ * @dev: DRM device structure
+ * @data: User-space data (struct drm_qda_mem_map)
+ * @file_priv: DRM file private data
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int qda_ioctl_mmap(struct drm_device *dev, void *data, struct drm_file *file_priv)
+{
+	struct drm_qda_mem_map *map_req;
+
+	if (!data)
+		return -EINVAL;
+
+	map_req = (struct drm_qda_mem_map *)data;
+
+	if (map_req->pad)
+		return -EINVAL;
+
+	switch (map_req->request) {
+	case QDA_MAP_REQUEST_LEGACY:
+		return fastrpc_invoke(FASTRPC_RMID_INIT_MMAP, dev, data, file_priv);
+	case QDA_MAP_REQUEST_ATTR:
+		return fastrpc_invoke(FASTRPC_RMID_INIT_MEM_MAP, dev, data, file_priv);
+	default:
+		drm_err(dev, "Invalid map request type: %u\n", map_req->request);
+		return -EINVAL;
+	}
 }
 
 /**

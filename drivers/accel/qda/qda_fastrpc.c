@@ -524,6 +524,44 @@ int qda_fastrpc_invoke_unpack(struct fastrpc_invoke_context *ctx,
 	return err;
 }
 
+static int fastrpc_return_result_mem_map(struct fastrpc_invoke_context *ctx, char __user *argp)
+{
+	struct drm_qda_mem_map margs;
+	struct fastrpc_map_rsp_msg *rsp_msg;
+
+	rsp_msg = ctx->rsp;
+
+	memcpy(&margs, argp, sizeof(margs));
+
+	margs.vaddrout = rsp_msg->vaddrout;
+
+	memcpy(argp, &margs, sizeof(margs));
+	return 0;
+}
+
+/**
+ * qda_fastrpc_return_result() - Return invocation result to user-space
+ * @ctx: FastRPC invocation context
+ * @argp: User-space pointer to write result into
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int qda_fastrpc_return_result(struct fastrpc_invoke_context *ctx, char __user *argp)
+{
+	int err = 0;
+
+	switch (ctx->type) {
+	case FASTRPC_RMID_INIT_MMAP:
+	case FASTRPC_RMID_INIT_MEM_MAP:
+		err = fastrpc_return_result_mem_map(ctx, argp);
+		break;
+	default:
+		break;
+	}
+
+	return err;
+}
+
 static void setup_create_process_args(struct drm_qda_fastrpc_invoke_args *args,
 				      struct fastrpc_create_process_inbuf *inbuf,
 				      struct drm_qda_init_create *init,
@@ -559,6 +597,37 @@ static void setup_single_arg(struct drm_qda_fastrpc_invoke_args *args, const voi
 	args[0].ptr = (u64)(uintptr_t)ptr;
 	args[0].length = size;
 	args[0].fd = -1;
+}
+
+/*
+ * setup_mmap_pages() - Resolve a DMA-BUF fd to a physical page descriptor
+ *
+ * Imports the DMA-BUF fd as a GEM object to obtain the IOMMU-mapped
+ * dma_addr, fills in the fastrpc_phy_page entry, then releases the extra
+ * GEM object reference.  The handle table keeps the object alive.
+ */
+static int setup_mmap_pages(struct fastrpc_invoke_context *ctx, int dmabuf_fd,
+			    struct fastrpc_phy_page *pages)
+{
+	struct drm_gem_object *gem_obj;
+	struct qda_gem_obj *qda_gem_obj;
+	int err;
+
+	if (dmabuf_fd <= 0) {
+		pages->addr = 0;
+		pages->size = 0;
+		return 0;
+	}
+
+	err = get_gem_obj_from_dmabuf_fd(ctx, dmabuf_fd, &gem_obj);
+	if (err)
+		return err;
+
+	qda_gem_obj = to_qda_gem_obj(gem_obj);
+	setup_pages_from_gem_obj(qda_gem_obj, pages);
+
+	drm_gem_object_put(gem_obj);
+	return 0;
 }
 
 static int fastrpc_prepare_args_release_process(struct fastrpc_invoke_context *ctx)
@@ -656,6 +725,168 @@ err_free_args:
 	return err;
 }
 
+static int fastrpc_prepare_args_map(struct fastrpc_invoke_context *ctx, char __user *argp)
+{
+	struct drm_qda_mem_map margs;
+	struct drm_qda_fastrpc_invoke_args *args;
+	void *req, *rsp;
+	struct fastrpc_map_req_msg *req_msg;
+	struct fastrpc_map_rsp_msg *rsp_msg;
+	int err;
+
+	memcpy(&margs, argp, sizeof(margs));
+
+	args = kzalloc_objs(*args, 3);
+	if (!args)
+		return -ENOMEM;
+
+	req = kzalloc_obj(*req_msg);
+	if (!req) {
+		err = -ENOMEM;
+		goto err_free_args;
+	}
+	req_msg = (struct fastrpc_map_req_msg *)req;
+
+	rsp = kzalloc_obj(*rsp_msg);
+	if (!rsp) {
+		err = -ENOMEM;
+		goto err_free_req;
+	}
+	rsp_msg = (struct fastrpc_map_rsp_msg *)rsp;
+
+	ctx->input_pages = kzalloc_objs(*ctx->input_pages, 1);
+	if (!ctx->input_pages) {
+		err = -ENOMEM;
+		goto err_free_rsp;
+	}
+
+	req_msg->remote_session_id = ctx->remote_session_id;
+	req_msg->flags = margs.flags;
+	req_msg->vaddr = margs.vaddrin;
+	req_msg->num = sizeof(*ctx->input_pages);
+
+	args[0].ptr = (u64)(uintptr_t)req;
+	args[0].length = sizeof(*req_msg);
+	args[0].fd = -1;
+
+	/* Resolve DMA-BUF fd to physical page descriptor */
+	err = setup_mmap_pages(ctx, margs.fd, ctx->input_pages);
+	if (err)
+		goto err_free_input_pages;
+
+	args[1].ptr = (u64)(uintptr_t)ctx->input_pages;
+	args[1].length = sizeof(*ctx->input_pages);
+	args[1].fd = -1;
+
+	args[2].ptr = (u64)(uintptr_t)rsp;
+	args[2].length = sizeof(*rsp_msg);
+	args[2].fd = -1;
+
+	ctx->sc = FASTRPC_SCALARS(FASTRPC_RMID_INIT_MMAP, 2, 1);
+	ctx->args = args;
+	ctx->req = req;
+	ctx->rsp = rsp;
+	ctx->handle = FASTRPC_INIT_HANDLE;
+
+	return 0;
+
+err_free_input_pages:
+	kfree(ctx->input_pages);
+	ctx->input_pages = NULL;
+err_free_rsp:
+	kfree(rsp);
+err_free_req:
+	kfree(req);
+err_free_args:
+	kfree(args);
+	return err;
+}
+
+static int fastrpc_prepare_args_mem_map_attr(struct fastrpc_invoke_context *ctx, char __user *argp)
+{
+	struct drm_qda_mem_map margs;
+	struct drm_qda_fastrpc_invoke_args *args;
+	void *req, *rsp;
+	struct fastrpc_mem_map_req_msg *req_msg;
+	struct fastrpc_map_rsp_msg *rsp_msg;
+	int err;
+
+	memcpy(&margs, argp, sizeof(margs));
+
+	args = kzalloc_objs(*args, 4);
+	if (!args)
+		return -ENOMEM;
+
+	req = kzalloc_obj(*req_msg);
+	if (!req) {
+		err = -ENOMEM;
+		goto err_free_args;
+	}
+	req_msg = (struct fastrpc_mem_map_req_msg *)req;
+
+	rsp = kzalloc_obj(*rsp_msg);
+	if (!rsp) {
+		err = -ENOMEM;
+		goto err_free_req;
+	}
+	rsp_msg = (struct fastrpc_map_rsp_msg *)rsp;
+
+	ctx->input_pages = kzalloc_objs(*ctx->input_pages, 1);
+	if (!ctx->input_pages) {
+		err = -ENOMEM;
+		goto err_free_rsp;
+	}
+
+	req_msg->remote_session_id = ctx->remote_session_id;
+	req_msg->fd       = margs.fd;		/* DMA-BUF fd forwarded to DSP */
+	req_msg->offset   = margs.offset;
+	req_msg->flags    = margs.flags;
+	req_msg->vaddrin  = margs.vaddrin;
+	req_msg->num      = sizeof(*ctx->input_pages);
+	req_msg->data_len = 0;
+
+	args[0].ptr = (u64)(uintptr_t)req;
+	args[0].length = sizeof(*req_msg);
+	args[0].fd = -1;
+
+	/* Resolve DMA-BUF fd to physical page descriptor */
+	err = setup_mmap_pages(ctx, margs.fd, ctx->input_pages);
+	if (err)
+		goto err_free_input_pages;
+
+	args[1].ptr = (u64)(uintptr_t)ctx->input_pages;
+	args[1].length = sizeof(*ctx->input_pages);
+	args[1].fd = -1;
+
+	/* args[2] is a zero-length handle-only entry required by the DSP protocol */
+	args[2].ptr = (u64)(uintptr_t)ctx->input_pages;
+	args[2].length = 0;
+	args[2].fd = -1;
+
+	args[3].ptr = (u64)(uintptr_t)rsp;
+	args[3].length = sizeof(*rsp_msg);
+	args[3].fd = -1;
+
+	ctx->sc = FASTRPC_SCALARS(FASTRPC_RMID_INIT_MEM_MAP, 3, 1);
+	ctx->args = args;
+	ctx->req = req;
+	ctx->rsp = rsp;
+	ctx->handle = FASTRPC_INIT_HANDLE;
+
+	return 0;
+
+err_free_input_pages:
+	kfree(ctx->input_pages);
+	ctx->input_pages = NULL;
+err_free_rsp:
+	kfree(rsp);
+err_free_req:
+	kfree(req);
+err_free_args:
+	kfree(args);
+	return err;
+}
+
 static int fastrpc_prepare_args_invoke(struct fastrpc_invoke_context *ctx, char __user *argp)
 {
 	struct drm_qda_invoke_args invoke_args;
@@ -707,6 +938,12 @@ int qda_fastrpc_prepare_args(struct fastrpc_invoke_context *ctx, char __user *ar
 	case FASTRPC_RMID_INIT_CREATE_ATTR:
 		ctx->pd = QDA_USER_PD;
 		err = fastrpc_prepare_args_init_create(ctx, argp);
+		break;
+	case FASTRPC_RMID_INIT_MMAP:
+		err = fastrpc_prepare_args_map(ctx, argp);
+		break;
+	case FASTRPC_RMID_INIT_MEM_MAP:
+		err = fastrpc_prepare_args_mem_map_attr(ctx, argp);
 		break;
 	case FASTRPC_RMID_INVOKE_DYNAMIC:
 		err = fastrpc_prepare_args_invoke(ctx, argp);
