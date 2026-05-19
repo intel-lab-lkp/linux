@@ -134,6 +134,32 @@ void nvme_mpath_start_freeze(struct nvme_subsystem *subsys)
 			blk_freeze_queue_start(h->disk->queue);
 }
 
+bool nvme_failed_bio(struct bio *bio)
+{
+	unsigned long flags;
+	struct nvme_ns *ns;
+
+	if (!(bio->bi_opf & REQ_NVME_MPATH))
+		return false;
+	if (!blk_path_error(bio->bi_status))
+		return false;
+
+	ns = bio->bi_bdev->bd_disk->queue->queuedata;
+	if (test_bit(NVME_NS_READY, &ns->flags))
+		return false;
+	nvme_mpath_clear_current_path(ns);
+
+	bio->bi_status = BLK_STS_OK;
+	bio_set_dev(bio, ns->head->disk->part0);
+
+	spin_lock_irqsave(&ns->head->requeue_lock, flags);
+	bio_list_add(&ns->head->requeue_list, bio);
+	spin_unlock_irqrestore(&ns->head->requeue_lock, flags);
+
+	kblockd_schedule_work(&ns->head->requeue_work);
+	return true;
+}
+
 void nvme_failover_req(struct request *req)
 {
 	struct nvme_ns *ns = req->q->queuedata;

@@ -371,12 +371,6 @@ void submit_bio(struct bio *bio);
 
 extern void bio_endio(struct bio *);
 
-static inline void bio_io_error(struct bio *bio)
-{
-	bio->bi_status = BLK_STS_IOERR;
-	bio_endio(bio);
-}
-
 static inline void bio_wouldblock_error(struct bio *bio)
 {
 	bio_set_flag(bio, BIO_QUIET);

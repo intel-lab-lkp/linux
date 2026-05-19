@@ -1686,7 +1686,23 @@ struct block_device_operations {
 	 * driver.
 	 */
 	int (*alternative_gpt_sector)(struct gendisk *disk, sector_t *sector);
+	bool (*failed_bio)(struct bio *bio);
 };
+
+static inline void bio_io_error(struct bio *bio)
+{
+	bio->bi_status = BLK_STS_IOERR;
+
+	if (bio->bi_bdev) {
+		const struct block_device_operations *ops =
+			bio->bi_bdev->bd_disk->fops;
+
+		if (ops->failed_bio && ops->failed_bio(bio))
+			return;
+	}
+
+	bio_endio(bio);
+}
 
 #ifdef CONFIG_COMPAT
 extern int blkdev_compat_ptr_ioctl(struct block_device *, blk_mode_t,
