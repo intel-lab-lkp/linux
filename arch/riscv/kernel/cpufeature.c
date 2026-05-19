@@ -35,6 +35,8 @@
 static bool any_cpu_has_zicboz;
 static bool any_cpu_has_zicbop;
 static bool any_cpu_has_zicbom;
+bool riscv_hw_pte_ad_updating_enabled __read_mostly;
+EXPORT_SYMBOL_GPL(riscv_hw_pte_ad_updating_enabled);
 
 unsigned long elf_hwcap __read_mostly;
 
@@ -287,15 +289,74 @@ static int riscv_ext_zvfbfwma_validate(const struct riscv_isa_ext_data *data,
 	return -EPROBE_DEFER;
 }
 
-static int riscv_ext_svadu_validate(const struct riscv_isa_ext_data *data,
-				    const unsigned long *isa_bitmap)
+static void riscv_set_hw_pte_ad_updating(bool enabled)
 {
-	/* SVADE has already been detected, use SVADE only */
-	if (__riscv_isa_extension_available(isa_bitmap, RISCV_ISA_EXT_SVADE))
-		return -EOPNOTSUPP;
+	WRITE_ONCE(riscv_hw_pte_ad_updating_enabled, enabled);
+}
+
+static int riscv_hw_pte_ad_updating_starting(unsigned int cpu)
+{
+	int ret;
+
+	ret = sbi_fwft_set(SBI_FWFT_PTE_AD_HW_UPDATING, 1, 0);
+	if (ret) {
+		if (ret != -EOPNOTSUPP)
+			pr_err("CPU%u failed to enable hardware PTE A/D updating: %d\n",
+			       cpu, ret);
+		return ret;
+	}
 
 	return 0;
 }
+
+static int riscv_hw_pte_ad_updating_dying(unsigned int cpu)
+{
+	int ret;
+
+	ret = sbi_fwft_set(SBI_FWFT_PTE_AD_HW_UPDATING, 0, 0);
+	if (ret)
+		pr_warn("CPU%u failed to disable hardware PTE A/D updating: %d\n",
+			cpu, ret);
+
+	return 0;
+}
+
+static int __init riscv_hw_pte_ad_updating_init(void)
+{
+	bool has_svade, has_svadu;
+	int state;
+
+	has_svade = riscv_has_extension_unlikely(RISCV_ISA_EXT_SVADE);
+	has_svadu = riscv_has_extension_unlikely(RISCV_ISA_EXT_SVADU);
+
+	if (!has_svadu)
+		return 0;
+
+	if (!has_svade) {
+		riscv_set_hw_pte_ad_updating(true);
+		pr_info("riscv: hardware PTE A/D updating enabled\n");
+		return 0;
+	}
+
+	state = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
+				  "riscv/pte-ad:starting",
+				  riscv_hw_pte_ad_updating_starting,
+				  riscv_hw_pte_ad_updating_dying);
+	if (state < 0) {
+		pr_info("riscv: leave PTE A/D updates software-managed (%d)\n",
+			state);
+		return 0;
+	}
+
+	/*
+	 * A successful CPUHP_AP_ONLINE_DYN registration means the startup
+	 * callback has already succeeded on all online CPUs.
+	 */
+	riscv_set_hw_pte_ad_updating(true);
+	pr_info("riscv: hardware PTE A/D updating enabled\n");
+	return 0;
+}
+arch_initcall(riscv_hw_pte_ad_updating_init);
 
 static int riscv_cfilp_validate(const struct riscv_isa_ext_data *data,
 				const unsigned long *isa_bitmap)
@@ -584,7 +645,7 @@ const struct riscv_isa_ext_data riscv_isa_ext[] = {
 	__RISCV_ISA_EXT_SUPERSET(ssnpm, RISCV_ISA_EXT_SSNPM, riscv_xlinuxenvcfg_exts),
 	__RISCV_ISA_EXT_DATA(sstc, RISCV_ISA_EXT_SSTC),
 	__RISCV_ISA_EXT_DATA(svade, RISCV_ISA_EXT_SVADE),
-	__RISCV_ISA_EXT_DATA_VALIDATE(svadu, RISCV_ISA_EXT_SVADU, riscv_ext_svadu_validate),
+	__RISCV_ISA_EXT_DATA(svadu, RISCV_ISA_EXT_SVADU),
 	__RISCV_ISA_EXT_DATA(svinval, RISCV_ISA_EXT_SVINVAL),
 	__RISCV_ISA_EXT_DATA(svnapot, RISCV_ISA_EXT_SVNAPOT),
 	__RISCV_ISA_EXT_DATA(svpbmt, RISCV_ISA_EXT_SVPBMT),

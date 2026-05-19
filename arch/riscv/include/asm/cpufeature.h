@@ -128,6 +128,12 @@ struct riscv_isa_ext_data {
 extern const struct riscv_isa_ext_data riscv_isa_ext[];
 extern const size_t riscv_isa_ext_count;
 extern bool riscv_isa_fallback;
+extern bool riscv_hw_pte_ad_updating_enabled;
+
+static __always_inline bool riscv_has_hw_pte_ad_updating(void)
+{
+	return READ_ONCE(riscv_hw_pte_ad_updating_enabled);
+}
 
 unsigned long riscv_isa_extension_base(const unsigned long *isa_bitmap);
 static __always_inline bool riscv_cpu_has_extension_likely(int cpu, const unsigned long ext)
