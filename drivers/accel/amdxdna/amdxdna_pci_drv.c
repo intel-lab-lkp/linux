@@ -15,6 +15,7 @@
 #include <linux/pci.h>
 
 #include "amdxdna_ctx.h"
+#include "amdxdna_debugfs.h"
 #include "amdxdna_gem.h"
 #include "amdxdna_pci_drv.h"
 #include "amdxdna_pm.h"
@@ -318,6 +319,8 @@ static int amdxdna_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		XDNA_ERR(xdna, "DRM register failed, ret %d", ret);
 		goto failed_sysfs_fini;
 	}
+
+	amdxdna_debugfs_init(xdna);
 
 	return 0;
 
