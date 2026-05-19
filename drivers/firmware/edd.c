@@ -708,6 +708,8 @@ edd_device_register(struct edd_device *edev, int i)
 	if (!error) {
 		edd_populate_dir(edev);
 		kobject_uevent(&edev->kobj, KOBJ_ADD);
+	} else {
+		kobject_put(&edev->kobj);
 	}
 	return error;
 }
