@@ -37,6 +37,8 @@ struct xe_ttm_vram_mgr {
 	struct mutex lock;
 	/** @mem_type: The TTM memory type */
 	u32 mem_type;
+	/** @offline_mode: debugfs hook for setting page offline mode */
+	u64 offline_mode;
 };
 
 /**
