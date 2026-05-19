@@ -2784,13 +2784,13 @@ void btrfs_zoned_reserve_data_reloc_bg(struct btrfs_fs_info *fs_info)
 again:
 	bg_list = &space_info->block_groups[index];
 	list_for_each_entry(bg, bg_list, list) {
-		if (bg->alloc_offset != 0)
-			continue;
-
-		if (first) {
+		if (first && bg->alloc_offset == 0) {
 			first = false;
 			continue;
 		}
+
+		if (bg->alloc_offset != 0)
+			continue;
 
 		if (space_info == data_sinfo) {
 			/* Migrate the block group to the data relocation space_info. */
