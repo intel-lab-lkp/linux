@@ -541,7 +541,7 @@ static struct gcov_node *new_node(struct gcov_node *parent,
 {
 	struct gcov_node *node;
 
-	node = kzalloc(sizeof(struct gcov_node) + strlen(name) + 1, GFP_KERNEL);
+	node = kzalloc_flex(*node, name, strlen(name) + 1);
 	if (!node)
 		goto err_nomem;
 	if (info) {
