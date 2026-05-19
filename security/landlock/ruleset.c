@@ -137,7 +137,7 @@ create_rule(const struct landlock_id id,
 	new_rule->num_layers = new_num_layers;
 	/* Copies the original layer stack. */
 	memcpy(new_rule->layers, layers,
-	       flex_array_size(new_rule, layers, num_layers));
+	       sizeof(struct landlock_layer) * num_layers);
 	if (new_layer)
 		/* Adds a copy of @new_layer on the layer stack. */
 		new_rule->layers[new_rule->num_layers - 1] = *new_layer;
