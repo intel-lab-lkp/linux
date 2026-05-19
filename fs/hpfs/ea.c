@@ -236,14 +236,8 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, const char *key,
 		}
 		pos += ea->namelen + ea_valuelen(ea) + 5;
 	}
-	if (!le16_to_cpu(fnode->ea_offs)) {
-		/*if (le16_to_cpu(fnode->ea_size_s)) {
-			hpfs_error(s, "fnode %08x: ea_size_s == %03x, ea_offs == 0",
-				inode->i_ino, le16_to_cpu(fnode->ea_size_s));
-			return;
-		}*/
+	if (!le16_to_cpu(fnode->ea_offs))
 		fnode->ea_offs = cpu_to_le16(0xc4);
-	}
 	if (le16_to_cpu(fnode->ea_offs) < 0xc4 || le16_to_cpu(fnode->ea_offs) + le16_to_cpu(fnode->acl_size_s) + le16_to_cpu(fnode->ea_size_s) > 0x200) {
 		hpfs_error(s, "fnode %08llx: ea_offs == %03x, ea_size_s == %03x",
 			inode->i_ino,
@@ -295,24 +289,6 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, const char *key,
 			if (hpfs_alloc_if_possible(s, le32_to_cpu(fnode->ea_secno) + len)) {
 				len++;
 			} else {
-				/* Aargh... don't know how to create ea anodes :-( */
-				/*struct buffer_head *bh;
-				struct anode *anode;
-				anode_secno a_s;
-				if (!(anode = hpfs_alloc_anode(s, fno, &a_s, &bh)))
-					goto bail;
-				anode->up = cpu_to_le32(fno);
-				anode->btree.fnode_parent = 1;
-				anode->btree.n_free_nodes--;
-				anode->btree.n_used_nodes++;
-				anode->btree.first_free = cpu_to_le16(le16_to_cpu(anode->btree.first_free) + 12);
-				anode->u.external[0].disk_secno = cpu_to_le32(le32_to_cpu(fnode->ea_secno));
-				anode->u.external[0].file_secno = cpu_to_le32(0);
-				anode->u.external[0].length = cpu_to_le32(len);
-				mark_buffer_dirty(bh);
-				brelse(bh);
-				fnode->flags |= FNODE_anode;
-				fnode->ea_secno = cpu_to_le32(a_s);*/
 				secno new_sec;
 				int i;
 				if (!(new_sec = hpfs_alloc_sector(s, fno, 1, 1 - ((pos + 511) >> 9))))
