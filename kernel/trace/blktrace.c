@@ -2025,11 +2025,11 @@ static ssize_t blk_trace_mask2str(char *buf, int mask)
 
 	for (i = 0; i < ARRAY_SIZE(mask_maps); i++) {
 		if (mask & mask_maps[i].mask) {
-			p += sprintf(p, "%s%s",
+			p += sysfs_emit_at(buf, p - buf, "%s%s",
 				    (p == buf) ? "" : ",", mask_maps[i].str);
 		}
 	}
-	*p++ = '\n';
+	p += sysfs_emit_at(buf, p - buf, "\n");
 
 	return p - buf;
 }
@@ -2048,20 +2048,20 @@ static ssize_t sysfs_blk_trace_attr_show(struct device *dev,
 	bt = rcu_dereference_protected(q->blk_trace,
 				       lockdep_is_held(&q->debugfs_mutex));
 	if (attr == &dev_attr_enable) {
-		ret = sprintf(buf, "%u\n", !!bt);
+		ret = sysfs_emit(buf, "%u\n", !!bt);
 		goto out_unlock_bdev;
 	}
 
 	if (bt == NULL)
-		ret = sprintf(buf, "disabled\n");
+		ret = sysfs_emit(buf, "disabled\n");
 	else if (attr == &dev_attr_act_mask)
 		ret = blk_trace_mask2str(buf, bt->act_mask);
 	else if (attr == &dev_attr_pid)
-		ret = sprintf(buf, "%u\n", bt->pid);
+		ret = sysfs_emit(buf, "%u\n", bt->pid);
 	else if (attr == &dev_attr_start_lba)
-		ret = sprintf(buf, "%llu\n", bt->start_lba);
+		ret = sysfs_emit(buf, "%llu\n", bt->start_lba);
 	else if (attr == &dev_attr_end_lba)
-		ret = sprintf(buf, "%llu\n", bt->end_lba);
+		ret = sysfs_emit(buf, "%llu\n", bt->end_lba);
 
 out_unlock_bdev:
 	blk_debugfs_unlock_nomemrestore(q);
