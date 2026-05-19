@@ -370,10 +370,6 @@ int devmem_is_allowed(unsigned long pfn)
 }
 #endif /* CONFIG_STRICT_DEVMEM */
 
-/*
- * This is defined in kernel/resource.c but only powerpc needs to export it, for
- * the EHEA driver. Drop this when drivers/net/ethernet/ibm/ehea is removed.
- */
 EXPORT_SYMBOL_GPL(walk_system_ram_range);
 
 #ifdef CONFIG_EXECMEM
