@@ -270,6 +270,9 @@ void __init fdt_scan_reserved_mem_late(void)
 		return;
 	}
 
+	if (!total_reserved_mem_cnt)
+		return;
+
 	/* Attempt dynamic allocation of a new reserved_mem array */
 	alloc_reserved_mem_array();
 
