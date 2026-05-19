@@ -15,7 +15,6 @@
 #include <linux/module.h>
 #include <linux/mount.h>
 #include <linux/namei.h>
-#include <linux/sched.h>
 #include <linux/cred.h>
 
 #define dprintk(fmt, args...) pr_debug(fmt, ##args)
@@ -310,9 +309,10 @@ static int get_name(const struct path *path, char *name, struct dentry *child)
 	 * Open the directory ...
 	 */
 	file = dentry_open(path, O_RDONLY, cred);
-	error = PTR_ERR(file);
-	if (IS_ERR(file))
+	if (IS_ERR(file)) {
+		error = PTR_ERR(file);
 		goto out;
+	}
 
 	error = -EINVAL;
 	if (!file->f_op->iterate_shared)
@@ -524,9 +524,10 @@ exportfs_decode_fh_raw(struct vfsmount *mnt, struct fid *fid, int fh_len,
 				fh_len, fileid_type);
 		if (!target_dir)
 			goto err_result;
-		err = PTR_ERR(target_dir);
-		if (IS_ERR(target_dir))
+		if (IS_ERR(target_dir)) {
+			err = PTR_ERR(target_dir);
 			goto err_result;
+		}
 
 		/*
 		 * And as usual we need to make sure the parent directory is
