@@ -786,7 +786,6 @@ static int poll_hpc(void *data)
 {
 	struct slot myslot;
 	struct slot *pslot = NULL;
-	int rc;
 	int poll_state = POLL_LATCH_REGISTER;
 	u8 oldlatchlow = 0x00;
 	u8 curlatchlow = 0x00;
@@ -810,7 +809,7 @@ static int poll_hpc(void *data)
 				if (pslot->ctrl->ctlr_relative_id == ctrl_count) {
 					ctrl_count++;
 					if (READ_SLOT_LATCH(pslot->ctrl)) {
-						rc = ibmphp_hpc_readslot(pslot,
+						ibmphp_hpc_readslot(pslot,
 									  READ_SLOTLATCHLOWREG,
 									  &curlatchlow);
 						if (oldlatchlow != curlatchlow)
@@ -829,7 +828,7 @@ static int poll_hpc(void *data)
 				// make a copy of the old status
 				memcpy((void *) &myslot, (void *) pslot,
 					sizeof(struct slot));
-				rc = ibmphp_hpc_readslot(pslot, READ_ALLSTAT, NULL);
+				ibmphp_hpc_readslot(pslot, READ_ALLSTAT, NULL);
 				if ((myslot.status != pslot->status)
 				    || (myslot.ext_status != pslot->ext_status))
 					process_changeinstatus(pslot, &myslot);
@@ -842,7 +841,7 @@ static int poll_hpc(void *data)
 				if (pslot->ctrl->ctlr_relative_id == ctrl_count) {
 					ctrl_count++;
 					if (READ_SLOT_LATCH(pslot->ctrl))
-						rc = ibmphp_hpc_readslot(pslot,
+						ibmphp_hpc_readslot(pslot,
 									  READ_SLOTLATCHLOWREG,
 									  &curlatchlow);
 				}
