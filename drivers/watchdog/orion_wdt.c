@@ -21,7 +21,6 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 
 /* RSTOUT mask register physical address for Orion5x, Kirkwood and Dove */
 #define ORION_RSTOUT_MASK_OFFSET	0x20108
@@ -554,7 +553,6 @@ static int orion_wdt_get_regs(struct platform_device *pdev,
 static int orion_wdt_probe(struct platform_device *pdev)
 {
 	struct orion_watchdog *dev;
-	const struct of_device_id *match;
 	unsigned int wdt_max_duration;	/* (seconds) */
 	int ret, irq;
 
@@ -563,15 +561,14 @@ static int orion_wdt_probe(struct platform_device *pdev)
 	if (!dev)
 		return -ENOMEM;
 
-	match = of_match_device(orion_wdt_of_match_table, &pdev->dev);
-	if (!match)
+	dev->data = of_device_get_match_data(&pdev->dev);
+	if (!dev->data)
 		/* Default legacy match */
-		match = &orion_wdt_of_match_table[0];
+		dev->data = orion_wdt_of_match_table[0].data;
 
 	dev->wdt.info = &orion_wdt_info;
 	dev->wdt.ops = &orion_wdt_ops;
 	dev->wdt.min_timeout = 1;
-	dev->data = match->data;
 
 	ret = orion_wdt_get_regs(pdev, dev);
 	if (ret)
