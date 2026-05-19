@@ -328,7 +328,8 @@ static int show_xbc(const char *path, bool list)
 		xbc_show_compact_tree();
 	ret = 0;
 out:
-	free(buf);
+	if (buf)
+		free(buf);
 
 	return ret;
 }
@@ -360,7 +361,8 @@ static int delete_xbc(const char *path)
 	} /* Ignore if there is no boot config in initrd */
 
 	close(fd);
-	free(buf);
+	if (buf)
+		free(buf);
 
 	return ret;
 }
