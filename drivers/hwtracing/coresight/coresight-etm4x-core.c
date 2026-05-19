@@ -542,9 +542,11 @@ static int etm4_enable_hw(struct etmv4_drvdata *drvdata)
 	etm4x_relaxed_write32(csa, config->vissctlr, TRCVISSCTLR);
 	if (drvdata->nr_pe_cmp)
 		etm4x_relaxed_write32(csa, config->vipcssctlr, TRCVIPCSSCTLR);
-	for (i = 0; i < drvdata->nrseqstate - 1; i++)
-		etm4x_relaxed_write32(csa, config->seq_ctrl[i], TRCSEQEVRn(i));
+
 	if (drvdata->nrseqstate) {
+		for (i = 0; i < drvdata->nrseqstate - 1; i++)
+			etm4x_relaxed_write32(csa, config->seq_ctrl[i], TRCSEQEVRn(i));
+
 		etm4x_relaxed_write32(csa, config->seq_rst, TRCSEQRSTEVR);
 		etm4x_relaxed_write32(csa, config->seq_state, TRCSEQSTR);
 	}
@@ -1896,10 +1898,10 @@ static int etm4_cpu_save(struct coresight_device *csdev)
 	if (drvdata->nr_pe_cmp)
 		state->trcvipcssctlr = etm4x_read32(csa, TRCVIPCSSCTLR);
 
-	for (i = 0; i < drvdata->nrseqstate - 1; i++)
-		state->trcseqevr[i] = etm4x_read32(csa, TRCSEQEVRn(i));
-
 	if (drvdata->nrseqstate) {
+		for (i = 0; i < drvdata->nrseqstate - 1; i++)
+			state->trcseqevr[i] = etm4x_read32(csa, TRCSEQEVRn(i));
+
 		state->trcseqrstevr = etm4x_read32(csa, TRCSEQRSTEVR);
 		state->trcseqstr = etm4x_read32(csa, TRCSEQSTR);
 	}
@@ -2009,10 +2011,10 @@ static void etm4_cpu_restore(struct coresight_device *csdev)
 	if (drvdata->nr_pe_cmp)
 		etm4x_relaxed_write32(csa, state->trcvipcssctlr, TRCVIPCSSCTLR);
 
-	for (i = 0; i < drvdata->nrseqstate - 1; i++)
-		etm4x_relaxed_write32(csa, state->trcseqevr[i], TRCSEQEVRn(i));
-
 	if (drvdata->nrseqstate) {
+		for (i = 0; i < drvdata->nrseqstate - 1; i++)
+			etm4x_relaxed_write32(csa, state->trcseqevr[i], TRCSEQEVRn(i));
+
 		etm4x_relaxed_write32(csa, state->trcseqrstevr, TRCSEQRSTEVR);
 		etm4x_relaxed_write32(csa, state->trcseqstr, TRCSEQSTR);
 	}
