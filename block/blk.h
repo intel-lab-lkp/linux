@@ -407,6 +407,22 @@ static inline bool bio_may_need_split(struct bio *bio,
 	return bv->bv_len + bv->bv_offset > lim->max_fast_segment_size;
 }
 
+static inline void bio_check_ro(struct bio *bio)
+{
+	if (op_is_write(bio_op(bio)) && bdev_read_only(bio->bi_bdev)) {
+		if (op_is_flush(bio->bi_opf) && !bio_sectors(bio))
+			return;
+
+		if (bdev_test_flag(bio->bi_bdev, BD_RO_WARNED))
+			return;
+
+		bdev_set_flag(bio->bi_bdev, BD_RO_WARNED);
+
+		pr_warn("Trying to write to read-only block-device %pg\n",
+			bio->bi_bdev);
+	}
+}
+
 /**
  * __bio_split_to_limits - split a bio to fit the queue limits
  * @bio:     bio to be split
@@ -423,6 +439,8 @@ static inline bool bio_may_need_split(struct bio *bio,
 static inline struct bio *__bio_split_to_limits(struct bio *bio,
 		const struct queue_limits *lim, unsigned int *nr_segs)
 {
+	bio_check_ro(bio);
+
 	if (unlikely(bio_end_sector(bio) > bdev_nr_sectors(bio->bi_bdev) +
 					   bio->bi_bdev->bd_start_sect)) {
 		pr_info_ratelimited("%s: attempt to access beyond end of device\n"
@@ -435,24 +453,75 @@ static inline struct bio *__bio_split_to_limits(struct bio *bio,
 	}
 
 	switch (bio_op(bio)) {
-	case REQ_OP_READ:
 	case REQ_OP_WRITE:
+		if (bio->bi_opf & REQ_ATOMIC) {
+			if (bio->bi_iter.bi_size > lim->atomic_write_unit_max ||
+			    bio->bi_iter.bi_size % lim->atomic_write_unit_min)
+				goto invalid;
+		}
+		fallthrough;
+	case REQ_OP_READ:
 		if (bio_may_need_split(bio, lim))
 			return bio_split_rw(bio, lim, nr_segs);
 		*nr_segs = 1;
 		return bio;
 	case REQ_OP_ZONE_APPEND:
+		/* Only applicable to zoned block devices */
+		if (!(lim->features & BLK_FEAT_ZONED))
+			goto not_supported;
+
+		/* The bio sector must point to the start of a sequential zone */
+		if (!bdev_is_zone_start(bio->bi_bdev, bio->bi_iter.bi_sector))
+			goto invalid;
+
+		/*
+		 * Not allowed to cross zone boundaries. Otherwise, the BIO
+		 * will be split and could result in non-contiguous sectors
+		 * being written in different zones.
+		 */
+		if (bio_sectors(bio) > lim->chunk_sectors)
+			goto invalid;
+
+		/* Make sure the BIO is small enough and will not get split */
+		if (bio_sectors(bio) > lim->max_zone_append_sectors)
+			goto invalid;
+
+		bio->bi_opf |= REQ_NOMERGE;
 		return bio_split_zone_append(bio, lim, nr_segs);
 	case REQ_OP_DISCARD:
+		if (!lim->max_discard_sectors)
+			goto not_supported;
+		return bio_split_discard(bio, lim, nr_segs);
 	case REQ_OP_SECURE_ERASE:
+		if (!lim->max_secure_erase_sectors)
+			goto not_supported;
 		return bio_split_discard(bio, lim, nr_segs);
 	case REQ_OP_WRITE_ZEROES:
+		if (!lim->max_write_zeroes_sectors)
+			goto not_supported;
 		return bio_split_write_zeroes(bio, lim, nr_segs);
-	default:
-		/* other operations can't be split */
+	case REQ_OP_ZONE_RESET:
+	case REQ_OP_ZONE_OPEN:
+	case REQ_OP_ZONE_CLOSE:
+	case REQ_OP_ZONE_FINISH:
+	case REQ_OP_ZONE_RESET_ALL:
+		if (!(lim->features & BLK_FEAT_ZONED))
+			goto not_supported;
 		*nr_segs = 0;
 		return bio;
+	default:
+		WARN_ON_ONCE(1);
+		goto not_supported;
 	}
+
+invalid:
+	bio->bi_status = BLK_STS_INVAL;
+	bio_endio(bio);
+	return NULL;
+not_supported:
+	bio->bi_status = BLK_STS_NOTSUPP;
+	bio_endio(bio);
+	return NULL;
 ioerr:
 	bio_io_error(bio);
 	return NULL;

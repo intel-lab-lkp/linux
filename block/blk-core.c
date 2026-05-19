@@ -519,25 +519,6 @@ static int __init fail_make_request_debugfs(void)
 late_initcall(fail_make_request_debugfs);
 #endif /* CONFIG_FAIL_MAKE_REQUEST */
 
-static inline void bio_check_ro(struct bio *bio)
-{
-	if (op_is_write(bio_op(bio)) && bdev_read_only(bio->bi_bdev)) {
-		if (op_is_flush(bio->bi_opf) && !bio_sectors(bio))
-			return;
-
-		if (bdev_test_flag(bio->bi_bdev, BD_RO_WARNED))
-			return;
-
-		bdev_set_flag(bio->bi_bdev, BD_RO_WARNED);
-
-		/*
-		 * Use ioctl to set underlying disk of raid/dm to read-only
-		 * will trigger this.
-		 */
-		pr_warn("Trying to write to read-only block-device %pg\n",
-			bio->bi_bdev);
-	}
-}
 
 int should_fail_bio(struct bio *bio)
 {
@@ -564,39 +545,6 @@ static int blk_partition_remap(struct bio *bio)
 	}
 	bio_set_flag(bio, BIO_REMAPPED);
 	return 0;
-}
-
-/*
- * Check write append to a zoned block device.
- */
-static inline blk_status_t blk_check_zone_append(struct request_queue *q,
-						 struct bio *bio)
-{
-	int nr_sectors = bio_sectors(bio);
-
-	/* Only applicable to zoned block devices */
-	if (!bdev_is_zoned(bio->bi_bdev))
-		return BLK_STS_NOTSUPP;
-
-	/* The bio sector must point to the start of a sequential zone */
-	if (!bdev_is_zone_start(bio->bi_bdev, bio->bi_iter.bi_sector))
-		return BLK_STS_INVAL;
-
-	/*
-	 * Not allowed to cross zone boundaries. Otherwise, the BIO will be
-	 * split and could result in non-contiguous sectors being written in
-	 * different zones.
-	 */
-	if (nr_sectors > q->limits.chunk_sectors)
-		return BLK_STS_INVAL;
-
-	/* Make sure the BIO is small enough and will not get split */
-	if (nr_sectors > q->limits.max_zone_append_sectors)
-		return BLK_STS_INVAL;
-
-	bio->bi_opf |= REQ_NOMERGE;
-
-	return BLK_STS_OK;
 }
 
 static void __submit_bio(struct bio *bio)
@@ -731,18 +679,6 @@ void submit_bio_noacct_nocheck(struct bio *bio, bool split)
 	}
 }
 
-static blk_status_t blk_validate_atomic_write_op_size(struct request_queue *q,
-						 struct bio *bio)
-{
-	if (bio->bi_iter.bi_size > queue_atomic_write_unit_max_bytes(q))
-		return BLK_STS_INVAL;
-
-	if (bio->bi_iter.bi_size % queue_atomic_write_unit_min_bytes(q))
-		return BLK_STS_INVAL;
-
-	return BLK_STS_OK;
-}
-
 /**
  * submit_bio_noacct - re-submit a bio to the block device layer for I/O
  * @bio:  The bio describing the location in memory and on the device.
@@ -755,7 +691,6 @@ static blk_status_t blk_validate_atomic_write_op_size(struct request_queue *q,
 void submit_bio_noacct(struct bio *bio)
 {
 	struct block_device *bdev = bio->bi_bdev;
-	struct request_queue *q = bdev_get_queue(bdev);
 	blk_status_t status = BLK_STS_IOERR;
 
 	might_sleep();
@@ -776,7 +711,6 @@ void submit_bio_noacct(struct bio *bio)
 
 	if (should_fail_bio(bio))
 		goto end_io;
-	bio_check_ro(bio);
 	if (!bio_flagged(bio, BIO_REMAPPED)) {
 		if (bdev_is_partition(bdev) &&
 		    unlikely(blk_partition_remap(bio)))
@@ -798,58 +732,6 @@ void submit_bio_noacct(struct bio *bio)
 				goto end_io;
 			}
 		}
-	}
-
-	switch (bio_op(bio)) {
-	case REQ_OP_READ:
-		break;
-	case REQ_OP_WRITE:
-		if (bio->bi_opf & REQ_ATOMIC) {
-			status = blk_validate_atomic_write_op_size(q, bio);
-			if (status != BLK_STS_OK)
-				goto end_io;
-		}
-		break;
-	case REQ_OP_FLUSH:
-		/*
-		 * REQ_OP_FLUSH can't be submitted through bios, it is only
-		 * synthetized in struct request by the flush state machine.
-		 */
-		goto not_supported;
-	case REQ_OP_DISCARD:
-		if (!bdev_max_discard_sectors(bdev))
-			goto not_supported;
-		break;
-	case REQ_OP_SECURE_ERASE:
-		if (!bdev_max_secure_erase_sectors(bdev))
-			goto not_supported;
-		break;
-	case REQ_OP_ZONE_APPEND:
-		status = blk_check_zone_append(q, bio);
-		if (status != BLK_STS_OK)
-			goto end_io;
-		break;
-	case REQ_OP_WRITE_ZEROES:
-		if (!q->limits.max_write_zeroes_sectors)
-			goto not_supported;
-		break;
-	case REQ_OP_ZONE_RESET:
-	case REQ_OP_ZONE_OPEN:
-	case REQ_OP_ZONE_CLOSE:
-	case REQ_OP_ZONE_FINISH:
-	case REQ_OP_ZONE_RESET_ALL:
-		if (!bdev_is_zoned(bio->bi_bdev))
-			goto not_supported;
-		break;
-	case REQ_OP_DRV_IN:
-	case REQ_OP_DRV_OUT:
-		/*
-		 * Driver private operations are only used with passthrough
-		 * requests.
-		 */
-		fallthrough;
-	default:
-		goto not_supported;
 	}
 
 	if (blk_throtl_bio(bio))
