@@ -12,6 +12,7 @@
 #include <drm/ttm/ttm_range_manager.h>
 
 #include "xe_bo.h"
+#include "xe_configfs.h"
 #include "xe_device.h"
 #include "xe_exec_queue.h"
 #include "xe_lrc.h"
@@ -735,6 +736,7 @@ int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, unsigned long addr)
 	struct xe_ttm_vram_mgr *vram_mgr;
 	struct xe_vram_region *vr;
 	struct gpu_buddy *mm;
+        bool policy;
 
 	vr = xe_ttm_vram_addr_to_region(xe, addr);
 	if (!vr) {
@@ -749,6 +751,14 @@ int xe_ttm_vram_handle_addr_fault(struct xe_device *xe, unsigned long addr)
 	scoped_guard(mutex, &vram_mgr->lock) {
 		if (xe_ttm_vram_page_already_processed(vram_mgr, addr))
 			return -EEXIST;
+	}
+
+	policy = xe_configfs_get_bad_page_reservation(to_pci_dev(xe->drm.dev));
+	if (!policy) {
+		drm_err(&xe->drm, "0x%lx is reported as corrupted address by HW\n",
+			addr);
+		/* Let RAS report to FW to drop addr from SRAM queue */
+		return -EOPNOTSUPP;
 	}
 
 	/* Reserve page at address */
