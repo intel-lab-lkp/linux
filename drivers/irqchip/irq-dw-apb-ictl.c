@@ -30,7 +30,7 @@
 /* irq domain of the primary interrupt controller. */
 static struct irq_domain *dw_apb_ictl_irq_domain;
 
-static void __irq_entry dw_apb_ictl_handle_irq(struct pt_regs *regs)
+static void dw_apb_ictl_handle_irq(struct pt_regs *regs)
 {
 	struct irq_domain *d = dw_apb_ictl_irq_domain;
 	int n;
