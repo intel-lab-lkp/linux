@@ -12,6 +12,8 @@ cleanup_probe_vfs_getname() {
 
 add_probe_vfs_getname() {
 	add_probe_verbose=$1
+	do_getname=0
+
 	if [ $had_vfs_getname -eq 1 ] ; then
 		result_initname_re="[[:space:]]+([[:digit:]]+)[[:space:]]+initname.*"
 		line=$(perf probe -L getname_flags 2>&1 | grep -E "$result_initname_re" | sed -r "s/$result_initname_re/\1/")
@@ -29,11 +31,23 @@ add_probe_vfs_getname() {
 		fi
 
 		if [ -z "$line" ] ; then
+			do_getname=1
+			result_iname_re="[[:space:]]+([[:digit:]]+)[[:space:]]+initname\(result\);"
+			line=$(perf probe -L do_getname 2>&1 | grep -E "$result_iname_re" | sed -r "s/$result_iname_re/\1/")
+		fi
+
+		if [ -z "$line" ] ; then
 			echo "Could not find probeable line"
 			return 2
 		fi
 
-		perf probe -q       "vfs_getname=getname_flags:${line} pathname=result->name:string" || \
+		if [ "$do_getname" -eq 1 ]
+		then
+			param="vfs_getname=do_getname:${line} pathname=result->iname:string"
+			perf probe -q "$param" || perf probe $add_probe_verbose "$param" || return 1
+			return 0
+		fi
+		perf probe -q "vfs_getname=getname_flags:${line} pathname=result->name:string" || \
 		perf probe $add_probe_verbose "vfs_getname=getname_flags:${line} pathname=filename:ustring" || return 1
 	fi
 }
