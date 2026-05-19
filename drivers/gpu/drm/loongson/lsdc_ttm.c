@@ -554,7 +554,7 @@ int lsdc_ttm_init(struct lsdc_device *ldev)
 
 	ret = ttm_range_man_init(&ldev->bdev, TTM_PL_VRAM, false, num_vram_pages);
 	if (unlikely(ret))
-		return ret;
+		goto err_vram;
 
 	drm_info(ddev, "VRAM: %lu pages ready\n", num_vram_pages);
 
@@ -565,11 +565,17 @@ int lsdc_ttm_init(struct lsdc_device *ldev)
 
 	ret = ttm_range_man_init(&ldev->bdev, TTM_PL_TT, true, num_gtt_pages);
 	if (unlikely(ret))
-		return ret;
+		goto err_gtt;
 
 	drm_info(ddev, "GTT: %lu pages ready\n", num_gtt_pages);
 
 	return drmm_add_action_or_reset(ddev, lsdc_ttm_fini, ldev);
+
+err_gtt:
+	ttm_range_man_fini(&ldev->bdev, TTM_PL_VRAM);
+err_vram:
+	ttm_device_fini(&ldev->bdev);
+	return ret;
 }
 
 void lsdc_ttm_debugfs_init(struct lsdc_device *ldev)
