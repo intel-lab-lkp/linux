@@ -1027,9 +1027,10 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 	void *p = msg->front.iov_base;
 	void *e = p + msg->front.iov_len;
 	struct ceph_mds_snap_head *h;
-	int num_split_inos, num_split_realms;
+	u32 num_split_inos, num_split_realms;
 	__le64 *split_inos = NULL, *split_realms = NULL;
-	int i;
+	size_t split_inos_bytes, split_realms_bytes, split_bytes;
+	u32 i;
 	int locked_rwsem = 0;
 	bool close_sessions = false;
 
@@ -1048,6 +1049,24 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 	trace_len = le32_to_cpu(h->trace_len);
 	p += sizeof(*h);
 
+	/*
+	 * Validate that the two MDS-supplied counts cannot wrap when
+	 * multiplied by sizeof(u64), and that the two arrays together
+	 * fit in the remaining front buffer before any of the pointer
+	 * bumps below.  Without this, a malformed (or malicious) snap
+	 * message can cause 'p += sizeof(u64) * num_split_inos' to land
+	 * at an attacker-chosen offset via the size_t * int widening,
+	 * bypassing ceph_decode_need() and making the subsequent
+	 * 'ri = p; ri->created' read out of bounds.
+	 */
+	split_inos_bytes   = array_size(num_split_inos,   sizeof(u64));
+	split_realms_bytes = array_size(num_split_realms, sizeof(u64));
+	if (split_inos_bytes == SIZE_MAX || split_realms_bytes == SIZE_MAX ||
+	    check_add_overflow(split_inos_bytes, split_realms_bytes,
+			       &split_bytes) ||
+	    (size_t)(e - p) < split_bytes)
+		goto bad;
+
 	doutc(cl, "from mds%d op %s split %llx tracelen %d\n", mds,
 	      ceph_snap_op_name(op), split, trace_len);
 
@@ -1064,9 +1083,9 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 		 * child.
 		 */
 		split_inos = p;
-		p += sizeof(u64) * num_split_inos;
+		p += split_inos_bytes;
 		split_realms = p;
-		p += sizeof(u64) * num_split_realms;
+		p += split_realms_bytes;
 		ceph_decode_need(&p, e, sizeof(*ri), bad);
 		/* we will peek at realm info here, but will _not_
 		 * advance p, as the realm update will occur below in
@@ -1144,8 +1163,8 @@ skip_inode:
 		 * positioned at the start of realm info, as expected by
 		 * ceph_update_snap_trace().
 		 */
-		p += sizeof(u64) * num_split_inos;
-		p += sizeof(u64) * num_split_realms;
+		p += split_inos_bytes;
+		p += split_realms_bytes;
 	}
 
 	/*
