@@ -198,6 +198,8 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, const char *key,
 	unsigned char h[4];
 	struct extended_attribute *ea;
 	struct extended_attribute *ea_end = fnode_end_ea(fnode);
+	const size_t key_len = strlen(key);
+
 	for (ea = fnode_ea(fnode); ea < ea_end; ea = next_ea(ea))
 		if (!strcmp(ea->name, key)) {
 			if (ea_indirect(ea)) {
@@ -245,15 +247,16 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, const char *key,
 		return;
 	}
 	if ((le16_to_cpu(fnode->ea_size_s) || !le32_to_cpu(fnode->ea_size_l)) &&
-	     le16_to_cpu(fnode->ea_offs) + le16_to_cpu(fnode->acl_size_s) + le16_to_cpu(fnode->ea_size_s) + strlen(key) + size + 5 <= 0x200) {
+	     le16_to_cpu(fnode->ea_offs) + le16_to_cpu(fnode->acl_size_s) +
+	     le16_to_cpu(fnode->ea_size_s) + key_len + size + 5 <= 0x200) {
 		ea = fnode_end_ea(fnode);
 		*(char *)ea = 0;
-		ea->namelen = strlen(key);
+		ea->namelen = key_len;
 		ea->valuelen_lo = size;
 		ea->valuelen_hi = size >> 8;
 		strcpy(ea->name, key);
 		memcpy(ea_data(ea), data, size);
-		fnode->ea_size_s = cpu_to_le16(le16_to_cpu(fnode->ea_size_s) + strlen(key) + size + 5);
+		fnode->ea_size_s = cpu_to_le16(le16_to_cpu(fnode->ea_size_s) + key_len + size + 5);
 		goto ret;
 	}
 	/* Most the code here is 99.9993422% unused. I hope there are no bugs.
@@ -275,7 +278,7 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, const char *key,
 		mark_buffer_dirty(bh);
 		brelse(bh);
 	}
-	pos = le32_to_cpu(fnode->ea_size_l) + 5 + strlen(key) + size;
+	pos = le32_to_cpu(fnode->ea_size_l) + 5 + key_len + size;
 	len = (le32_to_cpu(fnode->ea_size_l) + 511) >> 9;
 	if (pos >= 30000) goto bail;
 	while (((pos + 511) >> 9) > len) {
@@ -325,7 +328,7 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, const char *key,
 		}
 	}
 	h[0] = 0;
-	h[1] = strlen(key);
+	h[1] = key_len;
 	h[2] = size & 0xff;
 	h[3] = size >> 8;
 	if (hpfs_ea_write(s, le32_to_cpu(fnode->ea_secno), fnode_in_anode(fnode), le32_to_cpu(fnode->ea_size_l), 4, h)) goto bail;
@@ -333,7 +336,7 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, const char *key,
 	if (hpfs_ea_write(s, le32_to_cpu(fnode->ea_secno), fnode_in_anode(fnode), le32_to_cpu(fnode->ea_size_l) + 5 + h[1], size, data)) goto bail;
 	fnode->ea_size_l = cpu_to_le32(pos);
 	ret:
-	hpfs_i(inode)->i_ea_size += 5 + strlen(key) + size;
+	hpfs_i(inode)->i_ea_size += 5 + key_len + size;
 	return;
 	bail:
 	if (le32_to_cpu(fnode->ea_secno))
