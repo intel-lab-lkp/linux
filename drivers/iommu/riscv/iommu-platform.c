@@ -71,6 +71,21 @@ static int riscv_iommu_platform_probe(struct platform_device *pdev)
 	iommu->irqs_count = RISCV_IOMMU_INTR_COUNT;
 
 	igs = FIELD_GET(RISCV_IOMMU_CAPABILITIES_IGS, iommu->caps);
+
+	/*
+	 * IGS=BOTH means the IOMMU supports either MSI or WSI;
+	 * the spec leaves the choice to software. Use the firmware-described
+	 * wired interrupt resources as the trigger:
+	 *   - DT  : "interrupts" property present, no "msi-parent"  -> WSI
+	 *   - ACPI: DSDT _CRS Interrupt() present  -> WSI
+	 * Otherwise default to the MSI path.
+	 */
+	if (igs == RISCV_IOMMU_CAPABILITIES_IGS_BOTH &&
+	    platform_irq_count(pdev) > 0) {
+		dev_info(dev, "firmware describes wired IRQs; preferring WSI on IGS=BOTH\n");
+		igs = RISCV_IOMMU_CAPABILITIES_IGS_WSI;
+	}
+
 	switch (igs) {
 	case RISCV_IOMMU_CAPABILITIES_IGS_BOTH:
 	case RISCV_IOMMU_CAPABILITIES_IGS_MSI:
