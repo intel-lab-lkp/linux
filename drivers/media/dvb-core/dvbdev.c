@@ -152,6 +152,18 @@ int dvb_generic_open(struct inode *inode, struct file *file)
 }
 EXPORT_SYMBOL(dvb_generic_open);
 
+void __dvb_generic_release(struct inode *inode, struct file *file)
+{
+	struct dvb_device *dvbdev = file->private_data;
+
+	if ((file->f_flags & O_ACCMODE) == O_RDONLY)
+		dvbdev->readers++;
+	else
+		dvbdev->writers++;
+	dvbdev->users++;
+}
+EXPORT_SYMBOL(__dvb_generic_release);
+
 int dvb_generic_release(struct inode *inode, struct file *file)
 {
 	struct dvb_device *dvbdev = file->private_data;
@@ -159,12 +171,7 @@ int dvb_generic_release(struct inode *inode, struct file *file)
 	if (!dvbdev)
 		return -ENODEV;
 
-	if ((file->f_flags & O_ACCMODE) == O_RDONLY)
-		dvbdev->readers++;
-	else
-		dvbdev->writers++;
-
-	dvbdev->users++;
+	__dvb_generic_release(inode, file);
 
 	dvb_device_put(dvbdev);
 

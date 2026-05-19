@@ -343,6 +343,18 @@ int dvb_create_media_graph(struct dvb_adapter *adap,
  */
 int dvb_generic_open(struct inode *inode, struct file *file);
 
+/*
+ * __dvb_generic_release - Undo dvb_generic_open() counters WITHOUT
+ *      dropping the device reference.
+ *
+ * @inode: pointer to &struct inode.
+ * @file: pointer to &struct file.
+ *
+ * Used in cases where the caller handles dvb_device_put() and ensures
+ * that dvbdev is valid.
+ */
+void __dvb_generic_release(struct inode *inode, struct file *file);
+
 /**
  * dvb_generic_release - Digital TV close function, used by DVB devices
  *
