@@ -49,9 +49,11 @@
 #define MAX_SMI_ADDR	0x1f
 
 #define RTL9300_NUM_BUSES		4
+#define RTL9300_NUM_PORTS		28
 
 struct rtl_mdio_info {
 	u8 num_buses;
+	u8 num_ports;
 };
 
 struct rtl_mdio_priv {
@@ -78,7 +80,7 @@ static int rtl_mdio_phy_to_port(struct mii_bus *bus, int phy_id)
 
 	priv = chan->priv;
 
-	for_each_set_bit(i, priv->valid_ports, MAX_PORTS)
+	for_each_set_bit(i, priv->valid_ports, priv->info->num_ports)
 		if (priv->smi_bus[i] == chan->mdio_bus &&
 		    priv->smi_addr[i] == phy_id)
 			return i;
@@ -323,7 +325,7 @@ static int rtl9300_mdiobus_init(struct rtl_mdio_priv *priv)
 	int i, err;
 
 	/* Associate the port with the SMI interface and PHY */
-	for_each_set_bit(i, priv->valid_ports, MAX_PORTS) {
+	for_each_set_bit(i, priv->valid_ports, priv->info->num_ports) {
 		int pos;
 
 		pos = (i % 6) * 5;
@@ -444,7 +446,7 @@ static int rtl_mdiobus_map_ports(struct device *dev)
 		if (err)
 			return err;
 
-		if (pn >= MAX_PORTS)
+		if (pn >= priv->info->num_ports)
 			return dev_err_probe(dev, -EINVAL, "illegal port number %d\n", pn);
 
 		if (test_bit(pn, priv->valid_ports))
@@ -509,6 +511,7 @@ static int rtl_mdiobus_probe(struct platform_device *pdev)
 
 static const struct rtl_mdio_info rtl9300_mdio_info = {
 	.num_buses = RTL9300_NUM_BUSES,
+	.num_ports = RTL9300_NUM_PORTS,
 };
 
 static const struct of_device_id rtl_mdio_ids[] = {
