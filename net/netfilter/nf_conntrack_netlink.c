@@ -3546,7 +3546,7 @@ ctnetlink_alloc_expect(const struct nlattr * const cda[], struct nf_conn *ct,
 		return ERR_PTR(-EOPNOTSUPP);
 
 	helper = rcu_dereference(help->helper);
-	if (!helper)
+	if (!helper || !nf_ct_helper_alive(helper))
 		return ERR_PTR(-EOPNOTSUPP);
 
 	if (cda[CTA_EXPECT_CLASS]) {

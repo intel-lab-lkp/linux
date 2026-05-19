@@ -25,7 +25,7 @@ int nf_ct_helper(struct sk_buff *skb, struct nf_conn *ct,
 		return NF_ACCEPT;
 
 	helper = rcu_dereference(help->helper);
-	if (!helper)
+	if (!helper || !nf_ct_helper_alive(helper))
 		return NF_ACCEPT;
 
 	if (helper->tuple.src.l3num != NFPROTO_UNSPEC &&
