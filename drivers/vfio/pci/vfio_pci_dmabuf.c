@@ -19,7 +19,24 @@ struct vfio_pci_dma_buf {
 	u32 nr_ranges;
 	struct kref kref;
 	struct completion comp;
-	u8 revoked : 1;
+	/*
+	 * TPH metadata published by VFIO_DEVICE_FEATURE_DMA_BUF_TPH and
+	 * consumed by the @get_tph dma-buf callback.
+	 *
+	 * @tph_flags is the publish/consume gate: writers populate
+	 * @steering_tag, @steering_tag_ext and @ph first, then store
+	 * @tph_flags with smp_store_release(); readers do
+	 * smp_load_acquire(&tph_flags) before accessing the value fields.
+	 * @tph_flags == 0 means "TPH not set". Writers publish a non-zero
+	 * value only once per dma-buf and serialize via vdev->memory_lock;
+	 * readers stay lockless to avoid AB-BA against the dma_resv_lock held
+	 * by importers.
+	 */
+	u32 tph_flags;
+	u16 steering_tag_ext;
+	u8 steering_tag;
+	u8 ph;
+	bool revoked;
 };
 
 static int vfio_pci_dma_buf_attach(struct dma_buf *dmabuf,
@@ -69,6 +86,36 @@ vfio_pci_dma_buf_map(struct dma_buf_attachment *attachment,
 	return ret;
 }
 
+static int vfio_pci_dma_buf_get_tph(struct dma_buf *dmabuf, u16 *steering_tag,
+				    u8 *ph, u8 st_width)
+{
+	struct vfio_pci_dma_buf *priv = dmabuf->priv;
+	u32 flags;
+
+	/* Pair with the smp_store_release() in VFIO_DEVICE_FEATURE_DMA_BUF_TPH. */
+	flags = smp_load_acquire(&priv->tph_flags);
+	if (!flags)
+		return -EOPNOTSUPP;
+
+	switch (st_width) {
+	case 8:
+		if (!(flags & VFIO_DMA_BUF_TPH_ST))
+			return -EOPNOTSUPP;
+		*steering_tag = priv->steering_tag;
+		break;
+	case 16:
+		if (!(flags & VFIO_DMA_BUF_TPH_ST_EXT))
+			return -EOPNOTSUPP;
+		*steering_tag = priv->steering_tag_ext;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	*ph = priv->ph;
+	return 0;
+}
+
 static void vfio_pci_dma_buf_unmap(struct dma_buf_attachment *attachment,
 				   struct sg_table *sgt,
 				   enum dma_data_direction dir)
@@ -84,16 +131,17 @@ static void vfio_pci_dma_buf_unmap(struct dma_buf_attachment *attachment,
 static void vfio_pci_dma_buf_release(struct dma_buf *dmabuf)
 {
 	struct vfio_pci_dma_buf *priv = dmabuf->priv;
+	struct vfio_pci_core_device *vdev = READ_ONCE(priv->vdev);
 
 	/*
 	 * Either this or vfio_pci_dma_buf_cleanup() will remove from the list.
 	 * The refcount prevents both.
 	 */
-	if (priv->vdev) {
-		down_write(&priv->vdev->memory_lock);
+	if (vdev) {
+		down_write(&vdev->memory_lock);
 		list_del_init(&priv->dmabufs_elm);
-		up_write(&priv->vdev->memory_lock);
-		vfio_device_put_registration(&priv->vdev->vdev);
+		up_write(&vdev->memory_lock);
+		vfio_device_put_registration(&vdev->vdev);
 	}
 	kfree(priv->phys_vec);
 	kfree(priv);
@@ -101,6 +149,7 @@ static void vfio_pci_dma_buf_release(struct dma_buf *dmabuf)
 
 static const struct dma_buf_ops vfio_pci_dmabuf_ops = {
 	.attach = vfio_pci_dma_buf_attach,
+	.get_tph = vfio_pci_dma_buf_get_tph,
 	.map_dma_buf = vfio_pci_dma_buf_map,
 	.unmap_dma_buf = vfio_pci_dma_buf_unmap,
 	.release = vfio_pci_dma_buf_release,
@@ -269,7 +318,7 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 		goto err_free_priv;
 	}
 
-	priv->vdev = vdev;
+	WRITE_ONCE(priv->vdev, vdev);
 	priv->nr_ranges = get_dma_buf.nr_ranges;
 	priv->size = length;
 	ret = vdev->pci_ops->get_dmabuf_phys(vdev, &priv->provider,
@@ -331,6 +380,77 @@ err_free_ranges:
 	return ret;
 }
 
+int vfio_pci_core_feature_dma_buf_tph(struct vfio_pci_core_device *vdev,
+				      u32 flags,
+				      struct vfio_device_feature_dma_buf_tph __user *arg,
+				      size_t argsz)
+{
+	struct vfio_device_feature_dma_buf_tph set_tph;
+	struct vfio_pci_dma_buf *priv;
+	struct dma_buf *dmabuf;
+	int ret;
+
+	ret = vfio_check_feature(flags, argsz, VFIO_DEVICE_FEATURE_SET,
+				 sizeof(set_tph));
+	if (ret != 1)
+		return ret;
+
+	if (copy_from_user(&set_tph, arg, sizeof(set_tph)))
+		return -EFAULT;
+
+	if (set_tph.flags & ~(VFIO_DMA_BUF_TPH_ST | VFIO_DMA_BUF_TPH_ST_EXT))
+		return -EINVAL;
+
+	if (!set_tph.flags)
+		return -EINVAL;
+
+	/* PCIe TLP Processing Hint is a 2-bit field. */
+	if (set_tph.ph & ~0x3)
+		return -EINVAL;
+
+	dmabuf = dma_buf_get(set_tph.dmabuf_fd);
+	if (IS_ERR(dmabuf))
+		return PTR_ERR(dmabuf);
+
+	if (dmabuf->ops != &vfio_pci_dmabuf_ops) {
+		ret = -EINVAL;
+		goto out_put;
+	}
+
+	priv = dmabuf->priv;
+	down_write(&vdev->memory_lock);
+	if (READ_ONCE(priv->vdev) != vdev) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	/*
+	 * TPH metadata is write-once per dma-buf so that lockless readers only
+	 * have to observe a single release-published transition from 0 -> flags.
+	 */
+	if (READ_ONCE(priv->tph_flags)) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
+	priv->steering_tag = set_tph.steering_tag;
+	priv->steering_tag_ext = set_tph.steering_tag_ext;
+	priv->ph = set_tph.ph;
+	/*
+	 * Publish the TPH values before the gate flag, so that lockless
+	 * readers in vfio_pci_dma_buf_get_tph() see fully-initialized
+	 * fields once they observe a non-zero tph_flags.
+	 */
+	smp_store_release(&priv->tph_flags, set_tph.flags);
+	ret = 0;
+
+out_unlock:
+	up_write(&vdev->memory_lock);
+out_put:
+	dma_buf_put(dmabuf);
+	return ret;
+}
+
 void vfio_pci_dma_buf_move(struct vfio_pci_core_device *vdev, bool revoked)
 {
 	struct vfio_pci_dma_buf *priv;
@@ -388,7 +508,7 @@ void vfio_pci_dma_buf_cleanup(struct vfio_pci_core_device *vdev)
 
 		dma_resv_lock(priv->dmabuf->resv, NULL);
 		list_del_init(&priv->dmabufs_elm);
-		priv->vdev = NULL;
+		WRITE_ONCE(priv->vdev, NULL);
 		priv->revoked = true;
 		dma_buf_invalidate_mappings(priv->dmabuf);
 		dma_resv_wait_timeout(priv->dmabuf->resv,
