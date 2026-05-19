@@ -1184,6 +1184,7 @@ static int gpio_v2_line_flags_validate(u64 flags)
 static int gpio_v2_line_config_validate(struct gpio_v2_line_config *lc,
 					unsigned int num_lines)
 {
+	struct gpio_v2_line_config_attribute *attr;
 	unsigned int i;
 	u64 flags;
 	int ret;
@@ -1193,6 +1194,13 @@ static int gpio_v2_line_config_validate(struct gpio_v2_line_config *lc,
 
 	if (!mem_is_zero(lc->padding, sizeof(lc->padding)))
 		return -EINVAL;
+
+	for (i = 0; i < GPIO_V2_LINE_NUM_ATTRS_MAX; i++) {
+		attr = &lc->attrs[i];
+
+		if (!mem_is_zero(&attr->attr.padding, sizeof(attr->attr.padding)))
+			return -EINVAL;
+	}
 
 	for (i = 0; i < num_lines; i++) {
 		flags = gpio_v2_line_config_flags(lc, i);
