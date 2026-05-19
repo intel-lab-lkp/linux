@@ -39,6 +39,7 @@ enum memcg_stat_item {
 	MEMCG_ZSWAP_B,
 	MEMCG_ZSWAPPED,
 	MEMCG_ZSWAP_INCOMP,
+	MEMCG_DMEM,
 	MEMCG_NR_STAT,
 };
 
@@ -1872,6 +1873,21 @@ static inline bool mem_cgroup_zswap_writeback_enabled(struct mem_cgroup *memcg)
 }
 #endif
 
+#if defined(CONFIG_MEMCG) && defined(CONFIG_CGROUP_DMEM)
+bool mem_cgroup_dmem_charge(struct cgroup *cgrp, unsigned int nr_pages,
+			    gfp_t gfp_mask);
+void mem_cgroup_dmem_uncharge(struct cgroup *cgrp, unsigned int nr_pages);
+#else
+static inline bool mem_cgroup_dmem_charge(struct cgroup *cgrp,
+					  unsigned int nr_pages, gfp_t gfp_mask)
+{
+	return true;
+}
+static inline void mem_cgroup_dmem_uncharge(struct cgroup *cgrp,
+					    unsigned int nr_pages)
+{
+}
+#endif
 
 /* Cgroup v1-related declarations */
 

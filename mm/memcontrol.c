@@ -433,6 +433,7 @@ static const unsigned int memcg_stat_items[] = {
 	MEMCG_ZSWAP_B,
 	MEMCG_ZSWAPPED,
 	MEMCG_ZSWAP_INCOMP,
+	MEMCG_DMEM,
 };
 
 #define NR_MEMCG_NODE_STAT_ITEMS ARRAY_SIZE(memcg_node_stat_items)
@@ -1605,6 +1606,9 @@ static const struct memory_stat memory_stats[] = {
 	{ "pgrefill",			PGREFILL		},
 #ifdef CONFIG_NUMA_BALANCING
 	{ "pgpromote_success",		PGPROMOTE_SUCCESS	},
+#endif
+#ifdef CONFIG_CGROUP_DMEM
+	{ "dmem",			MEMCG_DMEM		},
 #endif
 };
 
@@ -5908,6 +5912,67 @@ static struct cftype zswap_files[] = {
 	{ }	/* terminate */
 };
 #endif /* CONFIG_ZSWAP */
+
+#ifdef CONFIG_CGROUP_DMEM
+/**
+ * mem_cgroup_dmem_charge - charge memcg for a dmem pool allocation
+ * @cgrp: cgroup of the dmem pool
+ * @nr_pages: number of pages to charge
+ * @gfp_mask: reclaim mode
+ *
+ * Charges @nr_pages to @memcg. Returns %true if the charge fit within
+ * @memcg's configured limit, %false if it doesn't.
+ */
+bool mem_cgroup_dmem_charge(struct cgroup *cgrp, unsigned int nr_pages,
+			    gfp_t gfp_mask)
+{
+	struct cgroup_subsys_state *mem_css;
+	struct mem_cgroup *memcg;
+
+	/* CGROUP_DMEM and MEMCG guarantees this cannot be NULL. */
+	mem_css = cgroup_get_e_css(cgrp, &memory_cgrp_subsys);
+
+	/* Use the memcg, if any, of the dmem cgroup. */
+	memcg = mem_cgroup_from_css(mem_css);
+	if (!memcg || mem_cgroup_is_root(memcg)) {
+		css_put(mem_css);
+		return false;
+	}
+
+	if (try_charge_memcg(memcg, gfp_mask, nr_pages)) {
+		css_put(mem_css);
+		return false;
+	}
+
+	mod_memcg_state(memcg, MEMCG_DMEM, nr_pages);
+	css_put(mem_css);
+	return true;
+}
+
+/**
+ * mem_cgroup_dmem_uncharge - uncharge memcg from a dmem pool allocation
+ * @cgrp: cgroup of the dmem pool
+ * @nr_pages: number of pages to uncharge
+ */
+void mem_cgroup_dmem_uncharge(struct cgroup *cgrp, unsigned int nr_pages)
+{
+	struct cgroup_subsys_state *mem_css;
+	struct mem_cgroup *memcg;
+
+	/* CGROUP_DMEM and MEMCG guarantees this cannot be NULL. */
+	mem_css = cgroup_get_e_css(cgrp, &memory_cgrp_subsys);
+
+	memcg = mem_cgroup_from_css(mem_css);
+	if (!memcg || mem_cgroup_is_root(memcg)) {
+		css_put(mem_css);
+		return;
+	}
+
+	mod_memcg_state(memcg, MEMCG_DMEM, -nr_pages);
+	refill_stock(memcg, nr_pages);
+	css_put(mem_css);
+}
+#endif /* CONFIG_CGROUP_DMEM */
 
 static int __init mem_cgroup_swap_init(void)
 {
