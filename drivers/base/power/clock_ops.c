@@ -422,12 +422,10 @@ void pm_clk_destroy(struct device *dev)
 {
 	struct pm_subsys_data *psd = dev_to_psd(dev);
 	struct pm_clock_entry *ce, *c;
-	struct list_head list;
+	LIST_HEAD(list);
 
 	if (!psd)
 		return;
-
-	INIT_LIST_HEAD(&list);
 
 	pm_clk_list_lock(psd);
 

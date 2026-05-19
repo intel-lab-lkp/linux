@@ -1257,11 +1257,10 @@ out:
  */
 void dpm_complete(pm_message_t state)
 {
-	struct list_head list;
+	LIST_HEAD(list);
 
 	trace_suspend_resume(TPS("dpm_complete"), state.event, true);
 
-	INIT_LIST_HEAD(&list);
 	mutex_lock(&dpm_list_mtx);
 	while (!list_empty(&dpm_prepared_list)) {
 		struct device *dev = to_device(dpm_prepared_list.prev);
