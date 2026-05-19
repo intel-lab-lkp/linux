@@ -2863,7 +2863,8 @@ static int sof_ipc4_control_load_volume(struct snd_sof_dev *sdev, struct snd_sof
 	scontrol->size = struct_size(control_data, chanv, scontrol->num_channels);
 
 	/* scontrol->ipc_control_data will be freed in sof_control_unload */
-	scontrol->ipc_control_data = kzalloc(scontrol->size, GFP_KERNEL);
+	scontrol->ipc_control_data = kzalloc_flex(*control_data, chanv,
+						  scontrol->num_channels);
 	if (!scontrol->ipc_control_data)
 		return -ENOMEM;
 
@@ -2905,7 +2906,8 @@ static int sof_ipc4_control_load_enum(struct snd_sof_dev *sdev, struct snd_sof_c
 	scontrol->size = struct_size(control_data, chanv, scontrol->num_channels);
 
 	/* scontrol->ipc_control_data will be freed in sof_control_unload */
-	scontrol->ipc_control_data = kzalloc(scontrol->size, GFP_KERNEL);
+	scontrol->ipc_control_data = kzalloc_flex(*control_data, chanv,
+						  scontrol->num_channels);
 	if (!scontrol->ipc_control_data)
 		return -ENOMEM;
 
