@@ -1486,7 +1486,14 @@ void kvm_lose_fpu(struct kvm_vcpu *vcpu)
 
 int kvm_vcpu_ioctl_interrupt(struct kvm_vcpu *vcpu, struct kvm_interrupt *irq)
 {
-	int intr = (int)irq->irq;
+	int vector, intr = (int)irq->irq;
+
+	vector = intr;
+	if (intr < 0)
+		vector = -intr;
+
+	if (vector >= EXCCODE_INT_NUM)
+		return -EINVAL;
 
 	if (intr > 0)
 		kvm_queue_irq(vcpu, intr);
