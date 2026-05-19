@@ -59,11 +59,11 @@ static int primes[] = {251, 509, 1021, 2039, 4093,
 
 struct ip_vs_mh_state {
 	struct rcu_head			rcu_head;
-	struct ip_vs_mh_lookup		*lookup;
 	struct ip_vs_mh_dest_setup	*dest_setup;
 	hsiphash_key_t			hash1, hash2;
 	int				gcd;
 	int				rshift;
+	struct ip_vs_mh_lookup		lookup[];
 };
 
 static inline void generate_hash_secret(hsiphash_key_t *hash1,
@@ -372,7 +372,6 @@ static void ip_vs_mh_state_free(struct rcu_head *head)
 	struct ip_vs_mh_state *s;
 
 	s = container_of(head, struct ip_vs_mh_state, rcu_head);
-	kfree(s->lookup);
 	kfree(s);
 }
 
@@ -382,15 +381,9 @@ static int ip_vs_mh_init_svc(struct ip_vs_service *svc)
 	struct ip_vs_mh_state *s;
 
 	/* Allocate the MH table for this service */
-	s = kzalloc_obj(*s);
+	s = kzalloc_flex(*s, lookup, IP_VS_MH_TAB_SIZE);
 	if (!s)
 		return -ENOMEM;
-
-	s->lookup = kzalloc_objs(struct ip_vs_mh_lookup, IP_VS_MH_TAB_SIZE);
-	if (!s->lookup) {
-		kfree(s);
-		return -ENOMEM;
-	}
 
 	generate_hash_secret(&s->hash1, &s->hash2);
 	s->gcd = ip_vs_mh_gcd_weight(svc);
