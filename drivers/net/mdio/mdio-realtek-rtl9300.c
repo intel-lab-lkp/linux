@@ -48,7 +48,7 @@
 #define MAX_SMI_BUSSES  4
 #define MAX_SMI_ADDR	0x1f
 
-struct rtl9300_mdio_priv {
+struct rtl_mdio_priv {
 	struct regmap *regmap;
 	struct mutex lock; /* protect HW access */
 	DECLARE_BITMAP(valid_ports, MAX_PORTS);
@@ -58,15 +58,15 @@ struct rtl9300_mdio_priv {
 	struct mii_bus *bus[MAX_SMI_BUSSES];
 };
 
-struct rtl9300_mdio_chan {
-	struct rtl9300_mdio_priv *priv;
+struct rtl_mdio_chan {
+	struct rtl_mdio_priv *priv;
 	u8 mdio_bus;
 };
 
-static int rtl9300_mdio_phy_to_port(struct mii_bus *bus, int phy_id)
+static int rtl_mdio_phy_to_port(struct mii_bus *bus, int phy_id)
 {
-	struct rtl9300_mdio_chan *chan = bus->priv;
-	struct rtl9300_mdio_priv *priv;
+	struct rtl_mdio_chan *chan = bus->priv;
+	struct rtl_mdio_priv *priv;
 	int i;
 
 	priv = chan->priv;
@@ -79,7 +79,7 @@ static int rtl9300_mdio_phy_to_port(struct mii_bus *bus, int phy_id)
 	return -ENOENT;
 }
 
-static int rtl9300_mdio_wait_ready(struct rtl9300_mdio_priv *priv)
+static int rtl_mdio_wait_ready(struct rtl_mdio_priv *priv)
 {
 	struct regmap *regmap = priv->regmap;
 	u32 val;
@@ -92,8 +92,8 @@ static int rtl9300_mdio_wait_ready(struct rtl9300_mdio_priv *priv)
 
 static int rtl9300_mdio_read_c22(struct mii_bus *bus, int phy_id, int regnum)
 {
-	struct rtl9300_mdio_chan *chan = bus->priv;
-	struct rtl9300_mdio_priv *priv;
+	struct rtl_mdio_chan *chan = bus->priv;
+	struct rtl_mdio_priv *priv;
 	struct regmap *regmap;
 	int port;
 	u32 val;
@@ -102,12 +102,12 @@ static int rtl9300_mdio_read_c22(struct mii_bus *bus, int phy_id, int regnum)
 	priv = chan->priv;
 	regmap = priv->regmap;
 
-	port = rtl9300_mdio_phy_to_port(bus, phy_id);
+	port = rtl_mdio_phy_to_port(bus, phy_id);
 	if (port < 0)
 		return port;
 
 	mutex_lock(&priv->lock);
-	err = rtl9300_mdio_wait_ready(priv);
+	err = rtl_mdio_wait_ready(priv);
 	if (err)
 		goto out_err;
 
@@ -123,7 +123,7 @@ static int rtl9300_mdio_read_c22(struct mii_bus *bus, int phy_id, int regnum)
 	if (err)
 		goto out_err;
 
-	err = rtl9300_mdio_wait_ready(priv);
+	err = rtl_mdio_wait_ready(priv);
 	if (err)
 		goto out_err;
 
@@ -141,8 +141,8 @@ out_err:
 
 static int rtl9300_mdio_write_c22(struct mii_bus *bus, int phy_id, int regnum, u16 value)
 {
-	struct rtl9300_mdio_chan *chan = bus->priv;
-	struct rtl9300_mdio_priv *priv;
+	struct rtl_mdio_chan *chan = bus->priv;
+	struct rtl_mdio_priv *priv;
 	struct regmap *regmap;
 	int port;
 	u32 val;
@@ -151,12 +151,12 @@ static int rtl9300_mdio_write_c22(struct mii_bus *bus, int phy_id, int regnum, u
 	priv = chan->priv;
 	regmap = priv->regmap;
 
-	port = rtl9300_mdio_phy_to_port(bus, phy_id);
+	port = rtl_mdio_phy_to_port(bus, phy_id);
 	if (port < 0)
 		return port;
 
 	mutex_lock(&priv->lock);
-	err = rtl9300_mdio_wait_ready(priv);
+	err = rtl_mdio_wait_ready(priv);
 	if (err)
 		goto out_err;
 
@@ -196,8 +196,8 @@ out_err:
 
 static int rtl9300_mdio_read_c45(struct mii_bus *bus, int phy_id, int dev_addr, int regnum)
 {
-	struct rtl9300_mdio_chan *chan = bus->priv;
-	struct rtl9300_mdio_priv *priv;
+	struct rtl_mdio_chan *chan = bus->priv;
+	struct rtl_mdio_priv *priv;
 	struct regmap *regmap;
 	int port;
 	u32 val;
@@ -206,12 +206,12 @@ static int rtl9300_mdio_read_c45(struct mii_bus *bus, int phy_id, int dev_addr, 
 	priv = chan->priv;
 	regmap = priv->regmap;
 
-	port = rtl9300_mdio_phy_to_port(bus, phy_id);
+	port = rtl_mdio_phy_to_port(bus, phy_id);
 	if (port < 0)
 		return port;
 
 	mutex_lock(&priv->lock);
-	err = rtl9300_mdio_wait_ready(priv);
+	err = rtl_mdio_wait_ready(priv);
 	if (err)
 		goto out_err;
 
@@ -231,7 +231,7 @@ static int rtl9300_mdio_read_c45(struct mii_bus *bus, int phy_id, int dev_addr, 
 	if (err)
 		goto out_err;
 
-	err = rtl9300_mdio_wait_ready(priv);
+	err = rtl_mdio_wait_ready(priv);
 	if (err)
 		goto out_err;
 
@@ -250,8 +250,8 @@ out_err:
 static int rtl9300_mdio_write_c45(struct mii_bus *bus, int phy_id, int dev_addr,
 				  int regnum, u16 value)
 {
-	struct rtl9300_mdio_chan *chan = bus->priv;
-	struct rtl9300_mdio_priv *priv;
+	struct rtl_mdio_chan *chan = bus->priv;
+	struct rtl_mdio_priv *priv;
 	struct regmap *regmap;
 	int port;
 	u32 val;
@@ -260,12 +260,12 @@ static int rtl9300_mdio_write_c45(struct mii_bus *bus, int phy_id, int dev_addr,
 	priv = chan->priv;
 	regmap = priv->regmap;
 
-	port = rtl9300_mdio_phy_to_port(bus, phy_id);
+	port = rtl_mdio_phy_to_port(bus, phy_id);
 	if (port < 0)
 		return port;
 
 	mutex_lock(&priv->lock);
-	err = rtl9300_mdio_wait_ready(priv);
+	err = rtl_mdio_wait_ready(priv);
 	if (err)
 		goto out_err;
 
@@ -307,7 +307,7 @@ out_err:
 	return err;
 }
 
-static int rtl9300_mdiobus_init(struct rtl9300_mdio_priv *priv)
+static int rtl9300_mdiobus_init(struct rtl_mdio_priv *priv)
 {
 	u32 glb_ctrl_mask = 0, glb_ctrl_val = 0;
 	struct regmap *regmap = priv->regmap;
@@ -350,10 +350,10 @@ static int rtl9300_mdiobus_init(struct rtl9300_mdio_priv *priv)
 	return 0;
 }
 
-static int rtl9300_mdiobus_probe_one(struct device *dev, struct rtl9300_mdio_priv *priv,
-				     struct fwnode_handle *node)
+static int rtl_mdiobus_probe_one(struct device *dev, struct rtl_mdio_priv *priv,
+				 struct fwnode_handle *node)
 {
-	struct rtl9300_mdio_chan *chan;
+	struct rtl_mdio_chan *chan;
 	struct mii_bus *bus;
 	u32 mdio_bus;
 	int err;
@@ -404,9 +404,9 @@ static int rtl9300_mdiobus_probe_one(struct device *dev, struct rtl9300_mdio_pri
  * ethernet-ports node and build a mapping of the switch port to MDIO bus/addr
  * based on the phy-handle.
  */
-static int rtl9300_mdiobus_map_ports(struct device *dev)
+static int rtl_mdiobus_map_ports(struct device *dev)
 {
-	struct rtl9300_mdio_priv *priv = dev_get_drvdata(dev);
+	struct rtl_mdio_priv *priv = dev_get_drvdata(dev);
 	struct device *parent = dev->parent;
 	int err;
 
@@ -462,10 +462,10 @@ static int rtl9300_mdiobus_map_ports(struct device *dev)
 	return 0;
 }
 
-static int rtl9300_mdiobus_probe(struct platform_device *pdev)
+static int rtl_mdiobus_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct rtl9300_mdio_priv *priv;
+	struct rtl_mdio_priv *priv;
 	int err;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
@@ -482,12 +482,12 @@ static int rtl9300_mdiobus_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, priv);
 
-	err = rtl9300_mdiobus_map_ports(dev);
+	err = rtl_mdiobus_map_ports(dev);
 	if (err)
 		return err;
 
 	device_for_each_child_node_scoped(dev, child) {
-		err = rtl9300_mdiobus_probe_one(dev, priv, child);
+		err = rtl_mdiobus_probe_one(dev, priv, child);
 		if (err)
 			return err;
 	}
@@ -499,21 +499,21 @@ static int rtl9300_mdiobus_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct of_device_id rtl9300_mdio_ids[] = {
+static const struct of_device_id rtl_mdio_ids[] = {
 	{ .compatible = "realtek,rtl9301-mdio" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, rtl9300_mdio_ids);
+MODULE_DEVICE_TABLE(of, rtl_mdio_ids);
 
-static struct platform_driver rtl9300_mdio_driver = {
-	.probe = rtl9300_mdiobus_probe,
+static struct platform_driver rtl_mdio_driver = {
+	.probe = rtl_mdiobus_probe,
 	.driver = {
 		.name = "mdio-rtl9300",
-		.of_match_table = rtl9300_mdio_ids,
+		.of_match_table = rtl_mdio_ids,
 	},
 };
 
-module_platform_driver(rtl9300_mdio_driver);
+module_platform_driver(rtl_mdio_driver);
 
 MODULE_DESCRIPTION("RTL9300 MDIO driver");
 MODULE_LICENSE("GPL");
