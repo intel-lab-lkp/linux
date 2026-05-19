@@ -680,6 +680,7 @@ class YnlFamily(SpecFamily):
     Notification API:
 
       ynl.ntf_subscribe(mcast_name)      -- join a multicast group
+      ynl.ntf_listen()                   -- bind socket for unicast notifications
       ynl.check_ntf()                    -- drain pending notifications
       ynl.poll_ntf(duration=None)        -- yield notifications
 
@@ -747,6 +748,10 @@ class YnlFamily(SpecFamily):
         self.sock.bind((0, 0))
         self.sock.setsockopt(Netlink.SOL_NETLINK, Netlink.NETLINK_ADD_MEMBERSHIP,
                              mcast_id)
+
+    def ntf_listen(self):
+        """Bind socket for receiving unicast notifications."""
+        self.sock.bind((0, 0))
 
     def set_recv_dbg(self, enabled):
         self._recv_dbg = enabled
