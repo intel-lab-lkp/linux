@@ -624,11 +624,24 @@ static int coresight_sink_by_id(struct device *dev, const void *data)
 struct coresight_device *coresight_get_sink_by_id(u32 id)
 {
 	struct device *dev = NULL;
+	struct coresight_device *csdev;
 
 	dev = bus_find_device(&coresight_bustype, NULL, &id,
 			      coresight_sink_by_id);
+	if (!dev)
+		return NULL;
 
-	return dev ? to_coresight_device(dev) : NULL;
+	csdev = to_coresight_device(dev);
+
+	/*
+	 * bus_find_device() returns a device with its reference count
+	 * incremented. coresight_get_sink_by_id() only performs a lookup;
+	 * the CoreSight path code takes the references it needs when the
+	 * path is built, so drop the lookup reference here.
+	 */
+	put_device(dev);
+
+	return csdev;
 }
 
 /**
