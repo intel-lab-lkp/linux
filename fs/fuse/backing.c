@@ -89,6 +89,9 @@ static int fuse_backing_id_free(int id, void *p, void *data)
 	struct fuse_backing *fb = p;
 
 	WARN_ON_ONCE(refcount_read(&fb->count) != 1);
+
+	trace_fuse_backing_close((struct fuse_conn *)data, fb);
+
 	fuse_backing_free(fb);
 	return 0;
 }
@@ -163,6 +166,8 @@ int fuse_backing_open(struct fuse_conn *fc, struct fuse_backing_map *map)
 		fb = NULL;
 		goto out;
 	}
+
+	trace_fuse_backing_open(fc, fb);
 out:
 	pr_debug("%s: fb=0x%p, ret=%i\n", __func__, fb, res);
 
@@ -215,6 +220,8 @@ int fuse_backing_close(struct fuse_conn *fc, int backing_id)
 	err = fuse_backing_id_remove(fc, backing_id, fb);
 	if (err)
 		goto out_fb;
+
+	trace_fuse_backing_close(fc, fb);
 
 	/* drop the backing id cache's refcount */
 	fuse_backing_put(fb);

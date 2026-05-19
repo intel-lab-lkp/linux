@@ -124,6 +124,39 @@ TRACE_EVENT(fuse_request_end,
 		  __entry->unique, __entry->len, __entry->error)
 );
 
+#ifdef CONFIG_FUSE_BACKING
+DECLARE_EVENT_CLASS(fuse_backing_class,
+	TP_PROTO(const struct fuse_conn *fc, const struct fuse_backing *fb),
+
+	TP_ARGS(fc, fb),
+
+	TP_STRUCT__entry(
+		__field(dev_t,			connection)
+		__field(int,			id)
+		__field(unsigned long,		ino)
+	),
+
+	TP_fast_assign(
+		struct inode *inode = file_inode(fb->file);
+
+		__entry->connection	=	fc->dev;
+		__entry->id		=	fb->id;
+		__entry->ino		=	inode->i_ino;
+	),
+
+	TP_printk("connection %u id %d ino 0x%lx",
+		  __entry->connection,
+		  __entry->id,
+		  __entry->ino)
+);
+#define DEFINE_FUSE_BACKING_EVENT(name)		\
+DEFINE_EVENT(fuse_backing_class, name,		\
+	TP_PROTO(const struct fuse_conn *fc, const struct fuse_backing *fb), \
+	TP_ARGS(fc, fb))
+DEFINE_FUSE_BACKING_EVENT(fuse_backing_open);
+DEFINE_FUSE_BACKING_EVENT(fuse_backing_close);
+#endif /* CONFIG_FUSE_BACKING */
+
 #endif /* _TRACE_FUSE_H */
 
 #undef TRACE_INCLUDE_PATH
