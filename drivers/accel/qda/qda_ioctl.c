@@ -109,6 +109,7 @@ static int fastrpc_invoke(int type, struct drm_device *dev, void *data,
 	struct drm_gem_object *gem_obj;
 	int err;
 	size_t hdr_size;
+	size_t initmem_size = FASTRPC_INIT_FILELEN_MAX;
 
 	ctx = qda_fastrpc_context_alloc();
 	if (IS_ERR(ctx))
@@ -123,6 +124,27 @@ static int fastrpc_invoke(int type, struct drm_device *dev, void *data,
 	ctx->type = type;
 	ctx->file_priv = file_priv;
 	ctx->remote_session_id = qda_file_priv->remote_session_id;
+
+	if (type == FASTRPC_RMID_INIT_CREATE) {
+		struct drm_gem_object *initmem_gem_obj;
+
+		if (qda_file_priv->init_mem_gem_obj) {
+			drm_gem_object_put(&qda_file_priv->init_mem_gem_obj->base);
+			qda_file_priv->init_mem_gem_obj = NULL;
+		}
+
+		initmem_gem_obj = qda_gem_create_object(dev, qdev->iommu_mgr,
+							initmem_size, file_priv);
+		if (IS_ERR(initmem_gem_obj)) {
+			err = PTR_ERR(initmem_gem_obj);
+			goto err_context_free;
+		}
+
+		ctx->init_mem_gem_obj = to_qda_gem_obj(initmem_gem_obj);
+		qda_file_priv->init_mem_gem_obj = ctx->init_mem_gem_obj;
+	} else if (type == FASTRPC_RMID_INIT_RELEASE) {
+		ctx->init_mem_gem_obj = qda_file_priv->init_mem_gem_obj;
+	}
 
 	err = qda_fastrpc_prepare_args(ctx, (char __user *)data);
 	if (err)
@@ -161,9 +183,39 @@ static int fastrpc_invoke(int type, struct drm_device *dev, void *data,
 	return 0;
 
 err_context_free:
+	if (type == FASTRPC_RMID_INIT_RELEASE && !err && qda_file_priv->init_mem_gem_obj) {
+		drm_gem_object_put(&qda_file_priv->init_mem_gem_obj->base);
+		qda_file_priv->init_mem_gem_obj = NULL;
+	}
+
 	fastrpc_context_put_id(ctx, qdev);
 	kref_put(&ctx->refcount, qda_fastrpc_context_free);
 	return err;
+}
+
+/**
+ * qda_ioctl_init_create() - Create a DSP process
+ * @dev: DRM device structure
+ * @data: User-space data (struct drm_qda_init_create)
+ * @file_priv: DRM file private data
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int qda_ioctl_init_create(struct drm_device *dev, void *data, struct drm_file *file_priv)
+{
+	return fastrpc_invoke(FASTRPC_RMID_INIT_CREATE, dev, data, file_priv);
+}
+
+/**
+ * qda_release_dsp_process() - Release DSP process resources for a file
+ * @qdev: QDA device structure
+ * @file_priv: DRM file private data
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int qda_release_dsp_process(struct qda_dev *qdev, struct drm_file *file_priv)
+{
+	return fastrpc_invoke(FASTRPC_RMID_INIT_RELEASE, &qdev->drm_dev, NULL, file_priv);
 }
 
 /**

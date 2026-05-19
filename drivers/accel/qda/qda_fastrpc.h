@@ -128,6 +128,27 @@ struct fastrpc_invoke_buf {
 };
 
 /**
+ * struct fastrpc_create_process_inbuf - Input buffer for process creation
+ *
+ * This structure defines the input buffer format for creating a new
+ * process on the remote DSP.
+ */
+struct fastrpc_create_process_inbuf {
+	/** @remote_session_id: Client identifier for the session */
+	int remote_session_id;
+	/** @namelen: Length of the process name string including NUL terminator */
+	u32 namelen;
+	/** @filelen: Length of the ELF shell file in bytes */
+	u32 filelen;
+	/** @pageslen: Number of physical page descriptors */
+	u32 pageslen;
+	/** @attrs: Process attribute flags */
+	u32 attrs;
+	/** @siglen: Length of the signature data in bytes */
+	u32 siglen;
+};
+
+/**
  * struct fastrpc_msg - FastRPC wire message for remote invocations
  *
  * Sent to the remote processor via RPMsg. This is the exact layout
@@ -153,10 +174,6 @@ struct fastrpc_msg {
 
 /**
  * struct qda_msg - FastRPC message with kernel-internal bookkeeping
- *
- * The wire-format portion is kept in the embedded @fastrpc member (must
- * be first) so that &qda_msg->fastrpc can be passed directly to
- * rpmsg_send() without a copy.
  */
 struct qda_msg {
 	/**
@@ -245,7 +262,7 @@ struct fastrpc_invoke_context {
 	struct qda_gem_obj *msg_gem_obj;
 	/** @file_priv: DRM file private data */
 	struct drm_file *file_priv;
-	/** @init_mem_gem_obj: GEM object for protection domain init memory */
+	/** @init_mem_gem_obj: GEM object for PD initialization memory */
 	struct qda_gem_obj *init_mem_gem_obj;
 	/** @req: Pointer to kernel-internal request buffer */
 	void *req;
@@ -256,10 +273,22 @@ struct fastrpc_invoke_context {
 };
 
 /* Remote Method ID table - identifies initialization and control operations */
+#define FASTRPC_RMID_INIT_RELEASE	1	/* Release DSP process */
+#define FASTRPC_RMID_INIT_CREATE	6	/* Create DSP process */
+#define FASTRPC_RMID_INIT_CREATE_ATTR	7	/* Create DSP process with attributes */
 #define FASTRPC_RMID_INVOKE_DYNAMIC	0xFFFFFFFF	/* Dynamic method invocation */
 
 /* Common handle for initialization operations */
 #define FASTRPC_INIT_HANDLE		0x1
+
+/* Protection Domain (PD) identifiers */
+#define QDA_ROOT_PD		(0)
+#define QDA_USER_PD		(1)
+
+/* Number of arguments for process creation */
+#define FASTRPC_CREATE_PROCESS_NARGS	6
+/* Maximum initialization file size (4 MB) */
+#define FASTRPC_INIT_FILELEN_MAX	(4 * 1024 * 1024)
 
 void qda_fastrpc_context_free(struct kref *ref);
 struct fastrpc_invoke_context *qda_fastrpc_context_alloc(void);

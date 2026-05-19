@@ -28,6 +28,8 @@ struct qda_file_priv {
 	struct qda_dev *qda_dev;
 	/** @assigned_iommu_dev: IOMMU device assigned to this process */
 	struct qda_iommu_device *assigned_iommu_dev;
+	/** @init_mem_gem_obj: GEM object for PD initialization memory */
+	struct qda_gem_obj *init_mem_gem_obj;
 	/** @pid: Process ID for tracking */
 	pid_t pid;
 	/** @remote_session_id: Unique session identifier */
@@ -82,5 +84,8 @@ int qda_init_device(struct qda_dev *qdev);
 void qda_deinit_device(struct qda_dev *qdev);
 int qda_register_device(struct qda_dev *qdev);
 void qda_unregister_device(struct qda_dev *qdev);
+
+/* DSP process / protection domain management */
+int qda_release_dsp_process(struct qda_dev *qdev, struct drm_file *file_priv);
 
 #endif /* __QDA_DRV_H__ */

@@ -36,6 +36,13 @@ static int qda_open(struct drm_device *dev, struct drm_file *file)
 static void qda_postclose(struct drm_device *dev, struct drm_file *file)
 {
 	struct qda_file_priv *qda_file_priv = file->driver_priv;
+	int idx;
+
+	/* Only send the DSP release message while the device is accessible */
+	if (drm_dev_enter(dev, &idx)) {
+		qda_release_dsp_process(qda_file_priv->qda_dev, file);
+		drm_dev_exit(idx);
+	}
 
 	if (qda_file_priv->assigned_iommu_dev) {
 		struct qda_iommu_device *iommu_dev = qda_file_priv->assigned_iommu_dev;
@@ -59,6 +66,7 @@ static const struct drm_ioctl_desc qda_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QDA_QUERY, qda_ioctl_query, 0),
 	DRM_IOCTL_DEF_DRV(QDA_GEM_CREATE, qda_ioctl_gem_create, 0),
 	DRM_IOCTL_DEF_DRV(QDA_GEM_MMAP_OFFSET, qda_ioctl_gem_mmap_offset, 0),
+	DRM_IOCTL_DEF_DRV(QDA_REMOTE_SESSION_CREATE, qda_ioctl_init_create, 0),
 	DRM_IOCTL_DEF_DRV(QDA_REMOTE_INVOKE, qda_ioctl_invoke, 0),
 };
 
