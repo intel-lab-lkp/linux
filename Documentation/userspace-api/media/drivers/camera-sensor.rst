@@ -49,34 +49,77 @@ depends on the type of the device.
 Raw camera sensors
 ~~~~~~~~~~~~~~~~~~
 
-Instead of a high level parameter such as frame interval, the frame interval is
-a result of the configuration of a number of camera sensor implementation
-specific parameters. Luckily, these parameters tend to be the same for more or
-less all modern raw camera sensors.
+Instead of a high level parameter such as frame interval, the frame interval on
+a raw camera sensor is determined by a number of sensor-specific parameters.
+These parameters tend to be common across most modern raw camera sensors.
 
-The frame interval is calculated using the following equation::
+The pixel array is the full grid of photosensitive elements on the camera
+sensor. A subregion of it is selected by the analogue crop. The cropped image
+may then be subject to binning (averaging of an NxN block) and subsampling
+which further reduce the image dimensions. The resulting image is then read out
+by the ADC (analogue-to-digital converter) line by line. After ADC readout,
+optional digital crop or scaling may further reduce the image dimensions, see
+:ref:`VIDIOC_SUBDEV_G_SELECTION <VIDIOC_SUBDEV_G_SELECTION>`.
 
-	frame interval = (analogue crop width + horizontal blanking) *
-			 (analogue crop height + vertical blanking) / pixel rate
+The sensor scales the input clock to a (usually) fixed pixel readout rate. Thus
+the frame interval is determined by two fundamental timing registers: **line
+length in pixels (LLP)** and **frame length in lines (FLL)**.
 
-The formula is bus independent and is applicable for raw timing parameters on
-large variety of devices beyond camera sensors. Devices that have no analogue
-crop, use the full source image size, i.e. pixel array size.
+LLP is the total number of pixels per line, including both the active readout
+width and horizontal blanking. FLL is the total number of lines per frame,
+including both the active readout height and vertical blanking. These two
+parameters allow controlling the total time taken to read out an image by
+adjusting the blanking intervals.
 
-Horizontal and vertical blanking are specified by ``V4L2_CID_HBLANK`` and
-``V4L2_CID_VBLANK``, respectively. The unit of the ``V4L2_CID_HBLANK`` control
-is pixels and the unit of the ``V4L2_CID_VBLANK`` is lines. The pixel rate in
-the sensor's **pixel array** is specified by ``V4L2_CID_PIXEL_RATE`` in the same
-sub-device. The unit of that control is pixels per second.
+These registers may go by other names for different sensors, like HMAX and
+VMAX, or HTOTAL and VTOTAL, or similar. They are exposed to userspace
+applications through the horizontal and vertical blanking controls.
 
-Register list-based drivers need to implement read-only sub-device nodes for the
-purpose. Devices that are not register list based need these to configure the
-device's internal processing pipeline.
+For some sensors the value for the horizontal timing (LLP/HMAX/HTOTAL) may be
+in cycles of an internal clock, where multiple pixels are read out per cycle.
+In such cases the driver should handle this scaling internally, ensuring the
+userspace control for the horizontal blanking is always in units of pixels.
 
-The first entity in the linear pipeline is the pixel array. The pixel array may
-be followed by other entities that are there to allow configuring binning,
-skipping, scaling or digital crop, see :ref:`VIDIOC_SUBDEV_G_SELECTION
-<VIDIOC_SUBDEV_G_SELECTION>`.
+So the frame interval can be calculated as::
+
+        frame interval = (LLP * FLL) / pixel rate
+
+See the note below on how applications can map this to the blanking and pixel
+rate controls:
+
+.. note::
+
+	Horizontal and vertical blanking are specified by :ref:`V4L2_CID_HBLANK
+	<v4l2-cid-hblank>` and :ref:`V4L2_CID_VBLANK <v4l2-cid-vblank>`,
+	respectively. The unit of ``HBLANK`` is pixels, and the unit of
+	``VBLANK`` is lines.
+
+	The pixel rate in the sensor's pixel array is specified by
+	:ref:`V4L2_CID_PIXEL_RATE <v4l2-cid-pixel-rate>`, in units of pixels
+	per second.
+
+	Sensor drivers are required to implement sub-device nodes that expose
+	these controls. They can be read-only or configurable depending on the
+	device.
+
+	For most raw sensors the blanking is defined relative to the size of
+	the image being sent out to the host over the bus (source pad format)::
+
+                LLP = output width + horizontal blanking
+                FLL = output height + vertical blanking
+
+        For CCS-compliant raw sensors (that use the CCS driver), the blanking
+        controls are defined relative to the analogue crop rectangle::
+
+                LLP = analogue crop width + horizontal blanking
+                FLL = analogue crop height + vertical blanking
+
+Some sensors may lower the minimum allowed values for LLP and/or FLL when
+binning or subsampling, thus increasing the effective frame rate.
+
+The driver shall update the minimum and maximum values of the blanking controls
+so that the resulting LLP and FLL registers are programmed within the range
+permitted by the sensor hardware for the current mode.
 
 USB cameras etc. devices
 ~~~~~~~~~~~~~~~~~~~~~~~~

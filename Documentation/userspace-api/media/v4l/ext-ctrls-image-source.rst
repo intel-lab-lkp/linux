@@ -21,12 +21,16 @@ Image Source Control IDs
 ``V4L2_CID_IMAGE_SOURCE_CLASS (class)``
     The IMAGE_SOURCE class descriptor.
 
+.. _v4l2-cid-vblank:
+
 ``V4L2_CID_VBLANK (integer)``
     Vertical blanking. The idle period after every frame during which no
     image data is produced. The unit of vertical blanking is a line.
     Every line has length of the image width plus horizontal blanking at
     the pixel rate defined by ``V4L2_CID_PIXEL_RATE`` control in the
     same sub-device.
+
+.. _v4l2-cid-hblank:
 
 ``V4L2_CID_HBLANK (integer)``
     Horizontal blanking. The idle period after every line of image data
