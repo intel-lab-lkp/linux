@@ -1534,6 +1534,49 @@ struct vfio_device_feature_dma_buf {
  */
 #define VFIO_DEVICE_FEATURE_MIG_PRECOPY_INFOv2  12
 
+/**
+ * Upon VFIO_DEVICE_FEATURE_GET, provide FMB passthrough for VFIO zPCI devices.
+ *
+ * Upon VFIO_DEVICE_FEATURE_SET, only the flags field is read while the
+ * remainder of the structure is ignored. This allows the driver to enable or
+ * disable the FMB while also leaving reserved bits for future flag expansion.
+ * All reserved fields should be zero for future compatibility.
+ */
+#define VFIO_DEVICE_FEATURE_ZPCI_FMB 13
+#define VFIO_DEVICE_FEATURE_ZPCI_FMB_FLAGS_ENABLED	0x1
+
+struct vfio_device_feature_zpci_fmb {
+	__u64 flags;
+	__u32 format:	8;
+	__u32 fmt_ind:	24;
+	__u32 samples;
+	__u64 last_update;
+	__u64 ld_ops;
+	__u64 st_ops;
+	__u64 stb_ops;
+	__u64 rpcit_ops;
+	union {
+		struct {
+			__u64 dma_rbytes;
+			__u64 dma_wbytes;
+		} fmt0;
+		struct {
+			__u64 rx_bytes;
+			__u64 rx_packets;
+			__u64 tx_bytes;
+			__u64 tx_packets;
+		} fmt1;
+		struct {
+			__u64 consumed_work_units;
+			__u64 max_work_units;
+		} fmt2;
+		struct {
+			__u64 tx_bytes;
+		} fmt3;
+	};
+	__u64 reserved[16];
+};
+
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**
