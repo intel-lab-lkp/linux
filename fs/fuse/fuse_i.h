@@ -103,10 +103,24 @@ struct fuse_submount_lookup {
 	struct fuse_forget_link *forget;
 };
 
+struct fuse_conn;
+struct fuse_backing;
+
+/** Operations for subsystems that want to use a backing file */
+struct fuse_backing_ops {
+	int (*may_admin)(struct fuse_conn *fc, uint32_t flags);
+	int (*may_open)(struct fuse_conn *fc, struct file *file);
+	int (*may_close)(struct fuse_conn *fc, const struct fuse_backing *fb);
+	unsigned int type;
+	int id_start;
+	int id_end;
+};
+
 /** Container for data related to mapping to backing file */
 struct fuse_backing {
 	struct file *file;
 	struct cred *cred;
+	const struct fuse_backing_ops *ops;
 
 	/** refcount */
 	refcount_t count;
@@ -976,7 +990,7 @@ struct fuse_conn {
 	/* New writepages go into this bucket */
 	struct fuse_sync_bucket __rcu *curr_bucket;
 
-#ifdef CONFIG_FUSE_PASSTHROUGH
+#ifdef CONFIG_FUSE_BACKING
 	/** IDR for backing files ids */
 	struct idr backing_files_map;
 #endif
@@ -1547,10 +1561,12 @@ void fuse_file_release(struct inode *inode, struct fuse_file *ff,
 		       unsigned int open_flags, fl_owner_t id, bool isdir);
 
 /* backing.c */
-#ifdef CONFIG_FUSE_PASSTHROUGH
+#ifdef CONFIG_FUSE_BACKING
 struct fuse_backing *fuse_backing_get(struct fuse_backing *fb);
 void fuse_backing_put(struct fuse_backing *fb);
-struct fuse_backing *fuse_backing_lookup(struct fuse_conn *fc, int backing_id);
+struct fuse_backing *fuse_backing_lookup(struct fuse_conn *fc,
+					 const struct fuse_backing_ops *ops,
+					 int backing_id);
 #else
 
 static inline struct fuse_backing *fuse_backing_get(struct fuse_backing *fb)
@@ -1604,6 +1620,10 @@ static inline struct file *fuse_file_passthrough(struct fuse_file *ff)
 	return NULL;
 #endif
 }
+
+#ifdef CONFIG_FUSE_PASSTHROUGH
+extern const struct fuse_backing_ops fuse_passthrough_backing_ops;
+#endif
 
 ssize_t fuse_passthrough_read_iter(struct kiocb *iocb, struct iov_iter *iter);
 ssize_t fuse_passthrough_write_iter(struct kiocb *iocb, struct iov_iter *iter);
