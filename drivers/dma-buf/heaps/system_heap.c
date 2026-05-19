@@ -409,7 +409,7 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 	struct dma_buf *dmabuf;
 	struct sg_table *table;
 	struct scatterlist *sg;
-	struct list_head pages;
+	LIST_HEAD(pages);
 	struct page *page, *tmp_page;
 	int i, ret = -ENOMEM;
 
@@ -423,7 +423,6 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 	buffer->len = len;
 	buffer->cc_shared = cc_shared;
 
-	INIT_LIST_HEAD(&pages);
 	i = 0;
 	while (size_remaining > 0) {
 		/*
