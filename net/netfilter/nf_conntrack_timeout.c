@@ -44,12 +44,7 @@ static int untimeout(struct nf_conn *ct, void *timeout)
 
 void nf_ct_untimeout(struct net *net, struct nf_ct_timeout *timeout)
 {
-	struct nf_ct_iter_data iter_data = {
-		.net	= net,
-		.data	= timeout,
-	};
-
-	nf_ct_iterate_cleanup_net(untimeout, &iter_data);
+	nf_ct_iterate_destroy_net(net, untimeout, timeout);
 }
 EXPORT_SYMBOL_GPL(nf_ct_untimeout);
 
