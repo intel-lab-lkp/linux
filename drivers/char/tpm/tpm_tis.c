@@ -101,6 +101,10 @@ module_param(force, bool, 0444);
 MODULE_PARM_DESC(force, "Force device probe rather than using ACPI entry");
 #endif
 
+static bool settle;
+module_param(settle, bool, 0444);
+MODULE_PARM_DESC(settle, "Add settle time after relinquish");
+
 #if defined(CONFIG_PNP) && defined(CONFIG_ACPI)
 static int has_hid(struct acpi_device *dev, const char *hid)
 {
@@ -241,6 +245,9 @@ static int tpm_tis_init(struct device *dev, struct tpm_info *tpm_info)
 
 	if (itpm || is_itpm(ACPI_COMPANION(dev)))
 		set_bit(TPM_TIS_ITPM_WORKAROUND, &phy->priv.flags);
+
+	if (settle)
+		set_bit(TPM_TIS_SETTLE_AFTER_RELINQUISH, &phy->priv.flags);
 
 	return tpm_tis_core_init(dev, &phy->priv, irq, &tpm_tcg,
 				 ACPI_HANDLE(dev));

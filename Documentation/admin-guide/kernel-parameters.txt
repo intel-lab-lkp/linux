@@ -7651,6 +7651,13 @@ Kernel parameters
 			defined by Trusted Computing Group (TCG) see
 			https://trustedcomputinggroup.org/resource/pc-client-platform-tpm-profile-ptp-specification/
 
+	tpm_tis.settle= [HW,TPM]
+			Format: <bool>
+			When enabled, this adds a delay after locality is
+			relinquished. Some TPMs will fail to grant locality if
+			requested immediately after being relinquished. This
+			causes the probe to fail.
+
 	tp_printk	[FTRACE]
 			Have the tracepoints sent to printk as well as the
 			tracing ring buffer. This is useful for early boot up
