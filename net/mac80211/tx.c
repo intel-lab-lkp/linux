@@ -2407,12 +2407,18 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 				rcu_dereference(tmp_sdata->vif.bss_conf.chanctx_conf);
 	}
 
-	if (chanctx_conf)
+	if (chanctx_conf) {
 		chandef = &chanctx_conf->def;
-	else if (local->emulate_chanctx)
-		chandef = &local->hw.conf.chandef;
-	else
-		goto fail_rcu;
+	} else {
+		struct ieee80211_chanctx *ctx;
+
+		ctx = list_first_or_null_rcu(&local->chanctx_list,
+					     struct ieee80211_chanctx, list);
+		if (!ctx ||
+		    rcu_access_pointer(ctx->list.next) != &local->chanctx_list)
+			goto fail_rcu;
+		chandef = &ctx->conf.def;
+	}
 
 	/*
 	 * If driver/HW supports IEEE80211_CHAN_CAN_MONITOR we still
