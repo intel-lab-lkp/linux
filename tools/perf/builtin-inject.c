@@ -2519,6 +2519,17 @@ static int __cmd_inject(struct perf_inject *inject)
 			}
 		}
 
+		if (inject->aslr) {
+			struct evsel *evsel;
+
+			evlist__for_each_entry(session->evlist, evsel) {
+				evsel__reset_sample_bit(evsel, REGS_USER);
+				evsel__reset_sample_bit(evsel, REGS_INTR);
+				evsel->core.attr.sample_regs_user = 0;
+				evsel->core.attr.sample_regs_intr = 0;
+			}
+		}
+
 
 
 		session->header.data_offset = output_data_offset;
@@ -2783,7 +2794,18 @@ int cmd_inject(int argc, const char **argv)
 		struct evsel *evsel;
 
 		evlist__for_each_entry(inject.session->evlist, evsel) {
+			ret = aslr_tool__cache_orig_attrs(tool, evsel);
+			if (ret) {
+				pr_err("Failed to cache original attributes: %d\n", ret);
+				goto out_delete;
+			}
+
+			/* Strip the registers and unknown flags natively inside memory! */
 			evsel->core.attr.sample_type &= ASLR_SUPPORTED_SAMPLE_TYPE;
+			evsel__reset_sample_bit(evsel, REGS_USER);
+			evsel__reset_sample_bit(evsel, REGS_INTR);
+			evsel->core.attr.sample_regs_user = 0;
+			evsel->core.attr.sample_regs_intr = 0;
 
 			if (evsel->core.attr.type == PERF_TYPE_BREAKPOINT)
 				evsel->core.attr.bp_addr = 0;
