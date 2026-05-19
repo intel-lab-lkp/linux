@@ -3446,6 +3446,13 @@ static void reserve_highatomic_pageblock(struct page *page, int order,
 	unsigned long max_managed;
 
 	/*
+	 * Don't reserve a pageblock for lower orders.
+	 * Order 1-3 allocs should not capture a huge page size block.
+	 */
+	if (order <= PAGE_ALLOC_COSTLY_ORDER)
+		return;
+
+	/*
 	 * The number reserved as: minimum is 1 pageblock, maximum is
 	 * roughly 1% of a zone. But if 1% of a zone falls below a
 	 * pageblock size, then don't reserve any pageblocks.
