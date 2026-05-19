@@ -90,7 +90,7 @@ static const struct vs_formats vs_formats_with_yuv444 = {
 
 static struct vs_chip_identity vs_chip_identities[] = {
 	{
-		.model = 0x8200,
+		.model = VSDC_MODEL_DC8200,
 		.revision = 0x5720,
 		.customer_id = ~0U,
 
@@ -98,7 +98,7 @@ static struct vs_chip_identity vs_chip_identities[] = {
 		.formats = &vs_formats_no_yuv444,
 	},
 	{
-		.model = 0x8200,
+		.model = VSDC_MODEL_DC8200,
 		.revision = 0x5721,
 		.customer_id = 0x30B,
 
@@ -106,7 +106,7 @@ static struct vs_chip_identity vs_chip_identities[] = {
 		.formats = &vs_formats_no_yuv444,
 	},
 	{
-		.model = 0x8200,
+		.model = VSDC_MODEL_DC8200,
 		.revision = 0x5720,
 		.customer_id = 0x310,
 
@@ -114,11 +114,19 @@ static struct vs_chip_identity vs_chip_identities[] = {
 		.formats = &vs_formats_with_yuv444,
 	},
 	{
-		.model = 0x8200,
+		.model = VSDC_MODEL_DC8200,
 		.revision = 0x5720,
 		.customer_id = 0x311,
 
 		.display_count = 2,
+		.formats = &vs_formats_no_yuv444,
+	},
+	{
+		.model = VSDC_MODEL_DCU_LITE,
+		.revision = 0x5560,
+		.customer_id = 0x305,
+
+		.display_count = 1,
 		.formats = &vs_formats_no_yuv444,
 	},
 };

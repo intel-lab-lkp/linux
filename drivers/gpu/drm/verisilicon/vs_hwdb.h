@@ -9,6 +9,9 @@
 #include <linux/regmap.h>
 #include <linux/types.h>
 
+#define VSDC_MODEL_DC8200 0x8200
+#define VSDC_MODEL_DCU_LITE 0x0
+
 struct vs_formats {
 	const u32 *array;
 	unsigned int num;
