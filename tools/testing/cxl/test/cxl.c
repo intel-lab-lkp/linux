@@ -497,7 +497,8 @@ static int populate_cedt(void)
 		struct acpi_cedt_cfmws *window = mock_cfmws[i];
 
 		cfmws_elc_update(window, i);
-		res = alloc_mock_res(window->window_size, SZ_256M);
+		res = alloc_mock_res(window->window_size,
+				     max_t(int, SZ_256M, PMD_SIZE));
 		if (!res)
 			return -ENOMEM;
 		window->base_hpa = res->range.start;
