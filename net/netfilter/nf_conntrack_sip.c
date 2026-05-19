@@ -1227,6 +1227,9 @@ static int process_invite_response(struct sk_buff *skb, unsigned int protoff,
 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
 	struct nf_ct_sip_master *ct_sip_info = nfct_help_data(ct);
 
+	if (!ct_sip_info)
+		return NF_DROP;
+
 	if ((code >= 100 && code <= 199) ||
 	    (code >= 200 && code <= 299))
 		return process_sdp(skb, protoff, dataoff, dptr, datalen, cseq);
@@ -1243,6 +1246,9 @@ static int process_update_response(struct sk_buff *skb, unsigned int protoff,
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
 	struct nf_ct_sip_master *ct_sip_info = nfct_help_data(ct);
+
+	if (!ct_sip_info)
+		return NF_DROP;
 
 	if ((code >= 100 && code <= 199) ||
 	    (code >= 200 && code <= 299))
@@ -1261,6 +1267,9 @@ static int process_prack_response(struct sk_buff *skb, unsigned int protoff,
 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
 	struct nf_ct_sip_master *ct_sip_info = nfct_help_data(ct);
 
+	if (!ct_sip_info)
+		return NF_DROP;
+
 	if ((code >= 100 && code <= 199) ||
 	    (code >= 200 && code <= 299))
 		return process_sdp(skb, protoff, dataoff, dptr, datalen, cseq);
@@ -1278,6 +1287,9 @@ static int process_invite_request(struct sk_buff *skb, unsigned int protoff,
 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
 	struct nf_ct_sip_master *ct_sip_info = nfct_help_data(ct);
 	unsigned int ret;
+
+	if (!ct_sip_info)
+		return NF_DROP;
 
 	flush_expectations(ct, true);
 	ret = process_sdp(skb, protoff, dataoff, dptr, datalen, cseq);
@@ -1320,6 +1332,9 @@ static int process_register_request(struct sk_buff *skb, unsigned int protoff,
 	u8 proto;
 	unsigned int expires = 0;
 	int ret;
+
+	if (!ct_sip_info)
+		return NF_DROP;
 
 	/* Expected connections can not register again. */
 	if (ct->status & IPS_EXPECTED)
@@ -1420,6 +1435,9 @@ static int process_register_response(struct sk_buff *skb, unsigned int protoff,
 	unsigned int matchoff, matchlen, coff = 0;
 	unsigned int expires = 0;
 	int in_contact = 0, ret;
+
+	if (!ct_sip_info)
+		return NF_DROP;
 
 	/* According to RFC 3261, "UAs MUST NOT send a new registration until
 	 * they have received a final response from the registrar for the
@@ -1549,6 +1567,9 @@ static int process_sip_request(struct sk_buff *skb, unsigned int protoff,
 	unsigned int cseq, i;
 	union nf_inet_addr addr;
 	__be16 port;
+
+	if (!ct_sip_info)
+		return NF_DROP;
 
 	/* Many Cisco IP phones use a high source port for SIP requests, but
 	 * listen for the response on port 5060.  If we are the local

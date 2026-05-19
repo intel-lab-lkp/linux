@@ -76,6 +76,9 @@ static int get_tpkt_data(struct sk_buff *skb, unsigned int protoff,
 	int tpktlen;
 	int tpktoff;
 
+	if (!info)
+		return 0;
+
 	/* Get TCP header */
 	th = skb_header_pointer(skb, protoff, sizeof(_tcph), &_tcph);
 	if (th == NULL)
@@ -1215,6 +1218,9 @@ static int expect_q931(struct sk_buff *skb, struct nf_conn *ct,
 	union nf_inet_addr addr;
 	struct nf_conntrack_expect *exp;
 
+	if (!info)
+		return -1;
+
 	/* Look for the first related address */
 	for (i = 0; i < count; i++) {
 		if (get_h225_addr(ct, *data, &taddr[i], &addr, &port) &&
@@ -1328,6 +1334,9 @@ static int process_rrq(struct sk_buff *skb, struct nf_conn *ct,
 	const struct nfct_h323_nat_hooks *nathook;
 	int ret;
 
+	if (!info)
+		return -1;
+
 	pr_debug("nf_ct_ras: RRQ\n");
 
 	ret = expect_q931(skb, ct, ctinfo, protoff, data,
@@ -1365,6 +1374,9 @@ static int process_rcf(struct sk_buff *skb, struct nf_conn *ct,
 	int dir = CTINFO2DIR(ctinfo);
 	int ret;
 	struct nf_conntrack_expect *exp;
+
+	if (!info)
+		return -1;
 
 	pr_debug("nf_ct_ras: RCF\n");
 
@@ -1416,6 +1428,9 @@ static int process_urq(struct sk_buff *skb, struct nf_conn *ct,
 	int dir = CTINFO2DIR(ctinfo);
 	int ret;
 
+	if (!info)
+		return -1;
+
 	pr_debug("nf_ct_ras: URQ\n");
 
 	nathook = rcu_dereference(nfct_h323_nat_hook);
@@ -1449,6 +1464,9 @@ static int process_arq(struct sk_buff *skb, struct nf_conn *ct,
 	int dir = CTINFO2DIR(ctinfo);
 	__be16 port;
 	union nf_inet_addr addr;
+
+	if (!info)
+		return 0;
 
 	pr_debug("nf_ct_ras: ARQ\n");
 

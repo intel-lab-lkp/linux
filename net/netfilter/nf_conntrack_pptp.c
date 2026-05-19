@@ -164,6 +164,9 @@ static void pptp_destroy_siblings(struct nf_conn *ct)
 	const struct nf_ct_pptp_master *ct_pptp_info = nfct_help_data(ct);
 	struct nf_conntrack_tuple t;
 
+	if (!ct_pptp_info)
+		return;
+
 	nf_ct_gre_keymap_destroy(ct);
 
 	/* try original (pns->pac) tuple */
@@ -260,6 +263,9 @@ pptp_inbound_pkt(struct sk_buff *skb, unsigned int protoff,
 	const struct nf_nat_pptp_hook *hook;
 	u_int16_t msg;
 	__be16 cid = 0, pcid = 0;
+
+	if (!info)
+		return NF_DROP;
 
 	msg = ntohs(ctlh->messageType);
 	pr_debug("inbound control message %s\n", pptp_msg_name(msg));
@@ -388,6 +394,9 @@ pptp_outbound_pkt(struct sk_buff *skb, unsigned int protoff,
 	u_int16_t msg;
 	__be16 cid = 0, pcid = 0;
 
+	if (!info)
+		return NF_DROP;
+
 	msg = ntohs(ctlh->messageType);
 	pr_debug("outbound control message %s\n", pptp_msg_name(msg));
 
@@ -505,6 +514,9 @@ conntrack_pptp_help(struct sk_buff *skb, unsigned int protoff,
 	int oldsstate, oldcstate;
 	int ret;
 	u_int16_t msg;
+
+	if (!info)
+		return NF_DROP;
 
 #if IS_ENABLED(CONFIG_NF_NAT)
 	if (!nf_ct_is_confirmed(ct) && (ct->status & IPS_NAT_MASK)) {
