@@ -35,7 +35,7 @@ struct iblock_dev {
 	struct file *ibd_bdev_file;
 	bool ibd_readonly;
 	bool ibd_exclusive;
-	struct iblock_dev_plug *ibd_plug;
+	struct iblock_dev_plug ibd_plug[];
 } ____cacheline_aligned;
 
 #endif /* TARGET_CORE_IBLOCK_H */

@@ -59,24 +59,16 @@ static struct se_device *iblock_alloc_device(struct se_hba *hba, const char *nam
 {
 	struct iblock_dev *ib_dev = NULL;
 
-	ib_dev = kzalloc_obj(struct iblock_dev);
+	ib_dev = kzalloc_flex(*ib_dev, ibd_plug, nr_cpu_ids);
 	if (!ib_dev) {
 		pr_err("Unable to allocate struct iblock_dev\n");
 		return NULL;
 	}
 	ib_dev->ibd_exclusive = true;
 
-	ib_dev->ibd_plug = kzalloc_objs(*ib_dev->ibd_plug, nr_cpu_ids);
-	if (!ib_dev->ibd_plug)
-		goto free_dev;
-
 	pr_debug( "IBLOCK: Allocated ib_dev for %s\n", name);
 
 	return &ib_dev->dev;
-
-free_dev:
-	kfree(ib_dev);
-	return NULL;
 }
 
 static bool iblock_configure_unmap(struct se_device *dev)
@@ -189,7 +181,6 @@ static void iblock_dev_call_rcu(struct rcu_head *p)
 	struct se_device *dev = container_of(p, struct se_device, rcu_head);
 	struct iblock_dev *ib_dev = IBLOCK_DEV(dev);
 
-	kfree(ib_dev->ibd_plug);
 	kfree(ib_dev);
 }
 
