@@ -1256,8 +1256,8 @@ void ipc_imem_cleanup(struct iosm_imem *ipc_imem)
 	ipc_imem_device_ipc_uninit(ipc_imem);
 	ipc_imem_channel_reset(ipc_imem);
 
-	ipc_protocol_deinit(ipc_imem->ipc_protocol);
 	ipc_task_deinit(ipc_imem->ipc_task);
+	ipc_protocol_deinit(ipc_imem->ipc_protocol);
 
 	kfree(ipc_imem->ipc_task);
 	kfree(ipc_imem->mmio);
