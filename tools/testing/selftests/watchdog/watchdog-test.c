@@ -5,8 +5,6 @@
 * - Tests Magic Close - CONFIG_WATCHDOG_NOWAYOUT
 * - Could be tested against softdog driver on systems that
 *   don't have watchdog hardware.
-* - TODO:
-* - Enhance test to add coverage for WDIOC_GETTEMP.
 *
 * Reference: Documentation/watchdog/watchdog-api.rst
  */
@@ -27,11 +25,12 @@
 
 int fd;
 const char v = 'V';
-static const char sopts[] = "bdehp:st:Tn:NLf:i";
+static const char sopts[] = "bdeghp:st:Tn:NLf:i";
 static const struct option lopts[] = {
 	{"bootstatus",          no_argument, NULL, 'b'},
 	{"disable",             no_argument, NULL, 'd'},
 	{"enable",              no_argument, NULL, 'e'},
+	{"gettemp",             no_argument, NULL, 'g'},
 	{"help",                no_argument, NULL, 'h'},
 	{"pingrate",      required_argument, NULL, 'p'},
 	{"status",              no_argument, NULL, 's'},
@@ -87,6 +86,7 @@ static void usage(char *progname)
 	printf(" -b, --bootstatus\tGet last boot status (Watchdog/POR)\n");
 	printf(" -d, --disable\t\tTurn off the watchdog timer\n");
 	printf(" -e, --enable\t\tTurn on the watchdog timer\n");
+	printf(" -g, --gettemp\t\tGet current temperature (Fahrenheit)\n");
 	printf(" -h, --help\t\tPrint the help message\n");
 	printf(" -p, --pingrate=P\tSet ping rate to P seconds (default %d)\n",
 	       DEFAULT_PING_RATE);
@@ -221,6 +221,17 @@ int main(int argc, char *argv[])
 				print_boot_status(flags);
 			else
 				printf("WDIOC_GETBOOTSTATUS error '%s'\n", strerror(errno));
+			break;
+		case 'g':
+			oneshot = 1;
+			temperature = 0;
+			ret = ioctl(fd, WDIOC_GETTEMP, &temperature);
+			if (ret)
+				printf("WDIOC_GETTEMP error '%s'\n",
+				       strerror(errno));
+			else
+				printf("Watchdog temperature is: %d F\n",
+				       temperature);
 			break;
 		case 'd':
 			flags = WDIOS_DISABLECARD;
