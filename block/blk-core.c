@@ -604,7 +604,7 @@ static inline blk_status_t blk_check_zone_append(struct request_queue *q,
 
 	/* The bio sector must point to the start of a sequential zone */
 	if (!bdev_is_zone_start(bio->bi_bdev, bio->bi_iter.bi_sector))
-		return BLK_STS_IOERR;
+		return BLK_STS_INVAL;
 
 	/*
 	 * Not allowed to cross zone boundaries. Otherwise, the BIO will be
@@ -612,11 +612,11 @@ static inline blk_status_t blk_check_zone_append(struct request_queue *q,
 	 * different zones.
 	 */
 	if (nr_sectors > q->limits.chunk_sectors)
-		return BLK_STS_IOERR;
+		return BLK_STS_INVAL;
 
 	/* Make sure the BIO is small enough and will not get split */
 	if (nr_sectors > q->limits.max_zone_append_sectors)
-		return BLK_STS_IOERR;
+		return BLK_STS_INVAL;
 
 	bio->bi_opf |= REQ_NOMERGE;
 
