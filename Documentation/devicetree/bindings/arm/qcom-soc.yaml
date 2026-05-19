@@ -22,58 +22,150 @@ description: |
 
 select:
   properties:
+    # Select all nodes which have SoC-based compatibles, but not the root
+    # "/" node, because its front compatibles do not follow any SoC patterns
+    $nodename:
+      pattern: "[^/]"
     compatible:
-      oneOf:
-        - pattern: "^qcom,.*(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sar|sc|sd[amx]|sm|x1[ep])[0-9]+.*$"
-        - pattern: "^qcom,.*(eliza|kaanapali|glymur|hawi|mahua|milos|shikra).*$"
+      contains:
+        oneOf:
+          - pattern: "^qcom,.*(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sar|sc|sd[amx]|sm|x1[ep])[0-9]+.*$"
+          - pattern: "^qcom,.*(eliza|kaanapali|glymur|hawi|mahua|milos|shikra).*$"
   required:
     - compatible
 
 properties:
   compatible:
-    oneOf:
-      # Preferred naming style for compatibles of SoC components:
-      - pattern: "^qcom,(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm|x1[ep])[0-9]+(pro)?-.*$"
-      - pattern: "^qcom,sar[0-9]+[a-z]?-.*$"
-      - pattern: "^qcom,(sa|sc)8[0-9]+[a-z][a-z]?-.*$"
-      - pattern: "^qcom,(eliza|kaanapali|glymur|hawi|mahua|milos|shikra)-.*$"
+    # SoC specific compatibles can appear alone or be followed by another SoC
+    # specific compatible or generic fallbacks, therefore check for compatible
+    # should use ideally:
+    #
+    #   minItems: 1
+    #   items:
+    #     - oneOf:
+    #         - pattern: ...
+    #         - pattern: ...
+    #     - {}
+    #     - {}
+    #
+    # but that is not allowed by dtschema ("oneOf" cannot be used as an item
+    # for a compatible).  Work around this by defining schema for all items,
+    # but drawback is that we need also to list all known generic fallbacks
+    # like "syscon" etc.
+    minItems: 1
+    maxItems: 4
+    items:
+      # Use anyOf, because soundcards will match few patterns
+      anyOf:
+        # Preferred naming style for compatibles of SoC components:
+        - pattern: "^qcom,(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm|x1[ep])[0-9]+(pro)?-.*$"
+        - pattern: "^qcom,sar[0-9]+[a-z]?-.*$"
+        - pattern: "^qcom,(sa|sc)8[0-9]+[a-z][a-z]?-.*$"
+        - pattern: "^qcom,(eliza|kaanapali|glymur|hawi|mahua|milos|shikra)-.*$"
 
-      # Legacy namings - variations of existing patterns/compatibles are OK,
-      # but do not add completely new entries to these:
-      - pattern: "^qcom,[ak]pss-wdt-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm|x1[ep])[0-9]+.*$"
-        # qcom,apss-wdt with codenames
-      - pattern: "^qcom,apss-wdt-[a-z]+$"
-      - pattern: "^qcom,kpss-gcc-(apq|ipq|mdm|msm)[0-9]+.*$"
-      - pattern: "^qcom,gcc-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm)[0-9]+.*$"
-      - pattern: "^qcom,mmcc-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm)[0-9]+.*$"
-      - pattern: "^qcom,pcie-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm|x1[ep])[0-9]+.*$"
-      - pattern: "^qcom,rpm-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm)[0-9]+.*$"
-      - pattern: "^qcom,rpmcc-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm)[0-9]+.*$"
-      - pattern: "^qcom,scm-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sar?|sc|sd[amx]|sm|x1[ep])[0-9]+.*$"
-        # qcom,scm with codenames
-      - pattern: "^qcom,scm-[a-z]+$"
-      - pattern: "^qcom,tcsr-(apq|ipq|mdm|msm)[0-9]+.*$"
-      - pattern: "^qcom,usb-hs-phy-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm|x1[ep])[0-9]+.*$"
-      - enum:
-          - qcom,dsi-ctrl-6g-qcm2290
-          - qcom,gpucc-sdm630
-          - qcom,gpucc-sdm660
-          - qcom,lcc-apq8064
-          - qcom,lcc-ipq8064
-          - qcom,lcc-mdm9615
-          - qcom,lcc-msm8960
-          - qcom,lpass-cpu-apq8016
-          - qcom,usb-ss-ipq4019-phy
-          - qcom,usb-hs-ipq4019-phy
-          - qcom,vqmmc-ipq4019-regulator
+        # Legacy namings - variations of existing patterns/compatibles are OK,
+        # but do not add completely new entries to these:
+        - pattern: "^qcom,[ak]pss-wdt-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm|x1[ep])[0-9]+.*$"
+          # qcom,apss-wdt with codenames
+        - pattern: "^qcom,apss-wdt-[a-z]+$"
+        - pattern: "^qcom,kpss-gcc-(apq|ipq|mdm|msm)[0-9]+.*$"
+        - pattern: "^qcom,gcc-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm)[0-9]+.*$"
+        - pattern: "^qcom,mmcc-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm)[0-9]+.*$"
+        - pattern: "^qcom,pcie-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm|x1[ep])[0-9]+.*$"
+        - pattern: "^qcom,rpm-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm)[0-9]+.*$"
+        - pattern: "^qcom,rpmcc-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm)[0-9]+.*$"
+        - pattern: "^qcom,scm-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sar?|sc|sd[amx]|sm|x1[ep])[0-9]+.*$"
+          # qcom,scm with codenames
+        - pattern: "^qcom,scm-[a-z]+$"
+        - pattern: "^qcom,tcsr-(apq|ipq|mdm|msm)[0-9]+.*$"
+        - pattern: "^qcom,usb-hs-phy-(apq|ipq|mdm|msm|qcm|qcs|q[dr]u|sa|sc|sd[amx]|sm|x1[ep])[0-9]+.*$"
 
-      # Legacy compatibles with wild-cards - list cannot grow with new bindings:
-      - enum:
-          - qcom,ipq806x-ahci
-          - qcom,ipq806x-gmac
-          - qcom,ipq806x-nand
-          - qcom,ipq806x-sata-phy
-          - qcom,ipq806x-usb-phy-ss
-          - qcom,ipq806x-usb-phy-hs
+        - enum:
+            - qcom,dsi-ctrl-6g-qcm2290
+            - qcom,gpucc-sdm630
+            - qcom,gpucc-sdm660
+            - qcom,lcc-apq8064
+            - qcom,lcc-ipq8064
+            - qcom,lcc-mdm9615
+            - qcom,lcc-msm8960
+            - qcom,lpass-cpu-apq8016
+            - qcom,usb-ss-ipq4019-phy
+            - qcom,usb-hs-ipq4019-phy
+            - qcom,vqmmc-ipq4019-regulator
+
+        # Legacy compatibles with wild-cards - list cannot grow with new bindings:
+        - enum:
+            - qcom,ipq806x-ahci
+            - qcom,ipq806x-gmac
+            - qcom,ipq806x-nand
+            - qcom,ipq806x-sata-phy
+            - qcom,ipq806x-usb-phy-ss
+            - qcom,ipq806x-usb-phy-hs
+
+        # Schema matches also sound card nodes and its front compatibles can be anything
+        - pattern: "^.*,.*sndcard$"
+
+        # List all used generic fallbacks. The list can grow, but in practice
+        # it is not expected, because specific compatibles are preferred for
+        # fallbacks as well.
+        - enum:
+            - arm,gic-v3
+            - arm,mmu-500
+            - generic-ahci
+            - jedec,ufs-2.0
+            - mmio-sram
+            - qcom,adreno-smmu
+            - qcom,aoss-qmp
+            - qcom,cpr
+            - qcom,cpufreq-epss
+            - qcom,cpufreq-hw
+            - qcom,dcc
+            - qcom,dwc3
+            - qcom,epss-l3
+            - qcom,eud
+            - qcom,glink-smd-rpm
+            - qcom,inline-crypto-engine
+            - qcom,ipcc
+            - qcom,kpss-gcc
+            - qcom,kpss-timer
+            - qcom,kpss-wdt
+            - qcom,mdp5
+            - qcom,mdss-dsi-ctrl
+            - qcom,msm-iommu-v1
+            - qcom,msm-iommu-v2
+            - qcom,msm-timer
+            - qcom,osm-l3
+            - qcom,pcie2-phy
+            - qcom,pdc
+            - qcom,pmic-glink
+            - qcom,qce
+            - qcom,qfprom
+            - qcom,qspi-v1
+            - qcom,qusb2-v2-phy
+            - qcom,rpm-proc
+            - qcom,rpmh-rsc
+            - qcom,rpmcc
+            - qcom,saw2
+            - qcom,scm
+            - qcom,sdhci-msm-v4
+            - qcom,sdhci-msm-v5
+            - qcom,sec-qfprom
+            - qcom,smd-rpm
+            - qcom,smmu-500
+            - qcom,smmu-v2
+            - qcom,snps-dwc3
+            - qcom,ssc-block-bus
+            - qcom,tcsr-mutex
+            - qcom,trng
+            - qcom,tsens-v0_1
+            - qcom,tsens-v1
+            - qcom,tsens-v2
+            - qcom,ufshc
+            - qcom,usb-hs-phy
+            - qcom,usb-snps-hs-5nm-phy
+            - qcom,usb-snps-hs-7nm-phy
+            - simple-mfd
+            - snps,dwmac
+            - syscon
 
 additionalProperties: true
