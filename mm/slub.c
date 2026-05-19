@@ -6168,7 +6168,7 @@ static int sysfs_slab_add(struct kmem_cache *s)
 	s->kobj.kset = kset;
 	err = kobject_init_and_add(&s->kobj, &slab_ktype, NULL, "%s", name);
 	if (err)
-		goto out;
+		goto out_put_kobj;
 
 	err = sysfs_create_group(&s->kobj, &slab_attr_group);
 	if (err)
@@ -6182,6 +6182,9 @@ out:
 	if (!unmergeable)
 		kfree(name);
 	return err;
+out_put_kobj:
+	kobject_put(&s->kobj);
+	goto out;
 out_del_kobj:
 	kobject_del(&s->kobj);
 	goto out;
