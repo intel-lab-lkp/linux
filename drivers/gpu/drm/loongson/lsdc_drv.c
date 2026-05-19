@@ -139,7 +139,7 @@ static int lsdc_mode_config_init(struct drm_device *ddev,
 	ddev->mode_config.preferred_depth = 24;
 	ddev->mode_config.prefer_shadow = 1;
 
-	ddev->mode_config.cursor_width = descp->hw_cursor_h;
+	ddev->mode_config.cursor_width = descp->hw_cursor_w;
 	ddev->mode_config.cursor_height = descp->hw_cursor_h;
 
 	ddev->mode_config.helper_private = &lsdc_mode_config_helper_funcs;
