@@ -467,9 +467,7 @@ void ivpu_ipc_irq_work_fn(struct work_struct *work)
 	struct ivpu_device *vdev = container_of(work, struct ivpu_device, irq_ipc_work);
 	struct ivpu_ipc_info *ipc = vdev->ipc;
 	struct ivpu_ipc_rx_msg *rx_msg, *r;
-	struct list_head cb_msg_list;
-
-	INIT_LIST_HEAD(&cb_msg_list);
+	LIST_HEAD(cb_msg_list);
 
 	spin_lock_irq(&ipc->cons_lock);
 	list_splice_tail_init(&ipc->cb_msg_list, &cb_msg_list);

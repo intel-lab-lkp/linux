@@ -2752,7 +2752,7 @@ void hl_vm_ctx_fini(struct hl_ctx *ctx)
 	struct hl_vm_hash_node *hnode;
 	struct hl_vm *vm = &hdev->vm;
 	struct hlist_node *tmp_node;
-	struct list_head free_list;
+	LIST_HEAD(free_list);
 	struct hl_mem_in args;
 	int i;
 
@@ -2784,8 +2784,6 @@ void hl_vm_ctx_fini(struct hl_ctx *ctx)
 	hl_mmu_invalidate_cache(hdev, true, MMU_OP_PHYS_PACK);
 
 	mutex_unlock(&hdev->mmu_lock);
-
-	INIT_LIST_HEAD(&free_list);
 
 	spin_lock(&vm->idr_lock);
 	idr_for_each_entry(&vm->phys_pg_pack_handles, phys_pg_list, i)
