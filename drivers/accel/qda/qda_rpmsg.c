@@ -5,6 +5,7 @@
 #include <linux/rpmsg.h>
 #include <drm/drm_print.h>
 
+#include "qda_cb.h"
 #include "qda_drv.h"
 #include "qda_rpmsg.h"
 
@@ -34,6 +35,7 @@ static void qda_rpmsg_remove(struct rpmsg_device *rpdev)
 {
 	struct qda_dev *qdev = dev_get_drvdata(&rpdev->dev);
 
+	qda_cb_unpopulate(qdev);
 	drm_dev_unplug(&qdev->drm_dev);
 	qdev->rpdev = NULL;
 	qda_unregister_device(qdev);
@@ -59,9 +61,17 @@ static int qda_rpmsg_probe(struct rpmsg_device *rpdev)
 	}
 	qdev->dsp_name = label;
 
-	ret = qda_register_device(qdev);
-	if (ret)
+	ret = qda_cb_populate(qdev, rpdev->dev.of_node);
+	if (ret) {
+		dev_err(qdev->dev, "Failed to populate child devices: %d\n", ret);
 		return ret;
+	}
+
+	ret = qda_register_device(qdev);
+	if (ret) {
+		qda_cb_unpopulate(qdev);
+		return ret;
+	}
 
 	drm_info(&qdev->drm_dev, "QDA RPMsg probe complete for %s\n", qdev->dsp_name);
 	return 0;
