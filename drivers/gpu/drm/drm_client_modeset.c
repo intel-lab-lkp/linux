@@ -1310,7 +1310,7 @@ int drm_client_modeset_wait_for_vblank(struct drm_client_dev *client, unsigned i
 {
 	struct drm_device *dev = client->dev;
 	struct drm_crtc *crtc;
-	int ret;
+	int ret = 0;
 
 	/*
 	 * Rate-limit update frequency to vblank. If there's a DRM master
@@ -1326,15 +1326,24 @@ int drm_client_modeset_wait_for_vblank(struct drm_client_dev *client, unsigned i
 	 * Only wait for a vblank event if the CRTC is enabled, otherwise
 	 * just don't do anything, not even report an error.
 	 */
+	if (drm_drv_uses_atomic_modeset(dev)) {
+		if (!crtc->state || !crtc->state->active)
+			goto out;
+	} else {
+		if (!crtc->enabled)
+			goto out;
+	}
+
 	ret = drm_crtc_vblank_get(crtc);
 	if (!ret) {
 		drm_crtc_wait_one_vblank(crtc);
 		drm_crtc_vblank_put(crtc);
 	}
 
+out:
 	drm_master_internal_release(dev);
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL(drm_client_modeset_wait_for_vblank);
 
