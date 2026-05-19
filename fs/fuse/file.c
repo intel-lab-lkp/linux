@@ -3199,11 +3199,12 @@ static const struct address_space_operations fuse_file_aops  = {
 	.direct_IO	= fuse_direct_IO,
 };
 
-void fuse_init_file_inode(struct inode *inode, unsigned int flags)
+void fuse_init_file_inode(struct inode *inode, struct fuse_attr *attr)
 {
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	struct fuse_conn *fc = get_fuse_conn(inode);
 
+	fuse_init_common(inode);
 	inode->i_fop = &fuse_file_operations;
 	inode->i_data.a_ops = &fuse_file_aops;
 	if (fc->writeback_cache)
@@ -3217,5 +3218,5 @@ void fuse_init_file_inode(struct inode *inode, unsigned int flags)
 	init_waitqueue_head(&fi->direct_io_waitq);
 
 	if (IS_ENABLED(CONFIG_FUSE_DAX))
-		fuse_dax_inode_init(inode, flags);
+		fuse_dax_inode_init(inode, attr->flags);
 }
