@@ -353,30 +353,30 @@ impl Vbios {
         }
 
         // Using all the images, setup the falcon data pointer in Fwsec.
-        if let (Some(second), Some(first), Some(pci_at)) =
+        let (Some(second), Some(first), Some(pci_at)) =
             (second_fwsec_image, first_fwsec_image, pci_at_image)
-        {
-            let fwsec_image = FwSecBiosImage::new(pci_at, first, second)
-                .inspect_err(|e| dev_err!(dev, "Falcon data setup failed: {:?}\n", e))?;
-
-            if cfg!(debug_assertions) {
-                // Print the desc header for debugging
-                let desc = fwsec_image.header()?;
-                dev_dbg!(
-                    fwsec_image.base.dev,
-                    "PmuLookupTableEntry desc: {:#?}\n",
-                    desc
-                );
-            }
-
-            Ok(Vbios { fwsec_image })
-        } else {
+        else {
             dev_err!(
                 dev,
                 "Missing required images for falcon data setup, skipping\n"
             );
-            Err(EINVAL)
+            return Err(EINVAL);
+        };
+
+        let fwsec_image = FwSecBiosImage::new(pci_at, first, second)
+            .inspect_err(|e| dev_err!(dev, "Falcon data setup failed: {:?}\n", e))?;
+
+        if cfg!(debug_assertions) {
+            // Print the desc header for debugging
+            let desc = fwsec_image.header()?;
+            dev_dbg!(
+                fwsec_image.base.dev,
+                "PmuLookupTableEntry desc: {:#?}\n",
+                desc
+            );
         }
+
+        Ok(Vbios { fwsec_image })
     }
 
     pub(crate) fn fwsec_image(&self) -> &FwSecBiosImage {
