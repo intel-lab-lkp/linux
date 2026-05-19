@@ -62,8 +62,9 @@ static ssize_t nr_pe_cmp_show(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 
-	val = drvdata->nr_pe_cmp;
+	val = caps->nr_pe_cmp;
 	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(nr_pe_cmp);
@@ -74,8 +75,9 @@ static ssize_t nr_addr_cmp_show(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 
-	val = drvdata->nr_addr_cmp;
+	val = caps->nr_addr_cmp;
 	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(nr_addr_cmp);
@@ -86,8 +88,9 @@ static ssize_t nr_cntr_show(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 
-	val = drvdata->nr_cntr;
+	val = caps->nr_cntr;
 	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(nr_cntr);
@@ -98,8 +101,9 @@ static ssize_t nr_ext_inp_show(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 
-	val = drvdata->nr_ext_inp;
+	val = caps->nr_ext_inp;
 	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(nr_ext_inp);
@@ -110,8 +114,9 @@ static ssize_t numcidc_show(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 
-	val = drvdata->numcidc;
+	val = caps->numcidc;
 	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(numcidc);
@@ -122,8 +127,9 @@ static ssize_t numvmidc_show(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 
-	val = drvdata->numvmidc;
+	val = caps->numvmidc;
 	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(numvmidc);
@@ -134,8 +140,9 @@ static ssize_t nrseqstate_show(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 
-	val = drvdata->nrseqstate;
+	val = caps->nrseqstate;
 	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(nrseqstate);
@@ -146,8 +153,9 @@ static ssize_t nr_resource_show(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 
-	val = drvdata->nr_resource;
+	val = caps->nr_resource;
 	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(nr_resource);
@@ -158,8 +166,9 @@ static ssize_t nr_ss_cmp_show(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 
-	val = drvdata->nr_ss_cmp;
+	val = caps->nr_ss_cmp;
 	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(nr_ss_cmp);
@@ -171,6 +180,7 @@ static ssize_t reset_store(struct device *dev,
 	int i;
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
@@ -200,7 +210,7 @@ static ssize_t reset_store(struct device *dev,
 	config->stall_ctrl = 0x0;
 
 	/* Reset trace synchronization period  to 2^8 = 256 bytes*/
-	if (drvdata->syncpr == false)
+	if (!caps->syncpr)
 		config->syncfreq = 0x8;
 
 	/*
@@ -209,7 +219,7 @@ static ssize_t reset_store(struct device *dev,
 	 * each trace run.
 	 */
 	config->vinst_ctrl = FIELD_PREP(TRCVICTLR_EVENT_MASK, 0x01);
-	if (drvdata->nr_addr_cmp > 0) {
+	if (caps->nr_addr_cmp > 0) {
 		config->mode |= ETM_MODE_VIEWINST_STARTSTOP;
 		/* SSSTATUS, bit[9] */
 		config->vinst_ctrl |= TRCVICTLR_SSSTATUS;
@@ -223,7 +233,7 @@ static ssize_t reset_store(struct device *dev,
 	config->vipcssctlr = 0x0;
 
 	/* Disable seq events */
-	for (i = 0; i < drvdata->nrseqstate-1; i++)
+	for (i = 0; i < caps->nrseqstate - 1; i++)
 		config->seq_ctrl[i] = 0x0;
 	config->seq_rst = 0x0;
 	config->seq_state = 0x0;
@@ -232,38 +242,38 @@ static ssize_t reset_store(struct device *dev,
 	config->ext_inp = 0x0;
 
 	config->cntr_idx = 0x0;
-	for (i = 0; i < drvdata->nr_cntr; i++) {
+	for (i = 0; i < caps->nr_cntr; i++) {
 		config->cntrldvr[i] = 0x0;
 		config->cntr_ctrl[i] = 0x0;
 		config->cntr_val[i] = 0x0;
 	}
 
 	config->res_idx = 0x0;
-	for (i = 2; i < 2 * drvdata->nr_resource; i++)
+	for (i = 2; i < 2 * caps->nr_resource; i++)
 		config->res_ctrl[i] = 0x0;
 
 	config->ss_idx = 0x0;
-	for (i = 0; i < drvdata->nr_ss_cmp; i++) {
+	for (i = 0; i < caps->nr_ss_cmp; i++) {
 		config->ss_ctrl[i] = 0x0;
 		config->ss_pe_cmp[i] = 0x0;
 	}
 
 	config->addr_idx = 0x0;
-	for (i = 0; i < drvdata->nr_addr_cmp * 2; i++) {
+	for (i = 0; i < caps->nr_addr_cmp * 2; i++) {
 		config->addr_val[i] = 0x0;
 		config->addr_acc[i] = 0x0;
 		config->addr_type[i] = ETM_ADDR_TYPE_NONE;
 	}
 
 	config->ctxid_idx = 0x0;
-	for (i = 0; i < drvdata->numcidc; i++)
+	for (i = 0; i < caps->numcidc; i++)
 		config->ctxid_pid[i] = 0x0;
 
 	config->ctxid_mask0 = 0x0;
 	config->ctxid_mask1 = 0x0;
 
 	config->vmid_idx = 0x0;
-	for (i = 0; i < drvdata->numvmidc; i++)
+	for (i = 0; i < caps->numvmidc; i++)
 		config->vmid_val[i] = 0x0;
 	config->vmid_mask0 = 0x0;
 	config->vmid_mask1 = 0x0;
@@ -297,6 +307,7 @@ static ssize_t mode_store(struct device *dev,
 {
 	unsigned long val, mode;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
@@ -305,7 +316,7 @@ static ssize_t mode_store(struct device *dev,
 	raw_spin_lock(&drvdata->spinlock);
 	config->mode = val & ETMv4_MODE_ALL;
 
-	if (drvdata->instrp0 == true) {
+	if (caps->instrp0) {
 		/* start by clearing instruction P0 field */
 		config->cfg  &= ~TRCCONFIGR_INSTP0_LOAD_STORE;
 		if (config->mode & ETM_MODE_LOAD)
@@ -323,45 +334,44 @@ static ssize_t mode_store(struct device *dev,
 	}
 
 	/* bit[3], Branch broadcast mode */
-	if ((config->mode & ETM_MODE_BB) && (drvdata->trcbb == true))
+	if ((config->mode & ETM_MODE_BB) && (caps->trcbb))
 		config->cfg |= TRCCONFIGR_BB;
 	else
 		config->cfg &= ~TRCCONFIGR_BB;
 
 	/* bit[4], Cycle counting instruction trace bit */
 	if ((config->mode & ETMv4_MODE_CYCACC) &&
-		(drvdata->trccci == true))
+		(caps->trccci == true))
 		config->cfg |= TRCCONFIGR_CCI;
 	else
 		config->cfg &= ~TRCCONFIGR_CCI;
 
 	/* bit[6], Context ID tracing bit */
-	if ((config->mode & ETMv4_MODE_CTXID) && (drvdata->ctxid_size))
+	if ((config->mode & ETMv4_MODE_CTXID) && (caps->ctxid_size))
 		config->cfg |= TRCCONFIGR_CID;
 	else
 		config->cfg &= ~TRCCONFIGR_CID;
 
-	if ((config->mode & ETM_MODE_VMID) && (drvdata->vmid_size))
+	if ((config->mode & ETM_MODE_VMID) && (caps->vmid_size))
 		config->cfg |= TRCCONFIGR_VMID;
 	else
 		config->cfg &= ~TRCCONFIGR_VMID;
 
 	/* bits[10:8], Conditional instruction tracing bit */
 	mode = ETM_MODE_COND(config->mode);
-	if (drvdata->trccond == true) {
+	if (caps->trccond) {
 		config->cfg &= ~TRCCONFIGR_COND_MASK;
 		config->cfg |= mode << __bf_shf(TRCCONFIGR_COND_MASK);
 	}
 
 	/* bit[11], Global timestamp tracing bit */
-	if ((config->mode & ETMv4_MODE_TIMESTAMP) && (drvdata->ts_size))
+	if ((config->mode & ETMv4_MODE_TIMESTAMP) && (caps->ts_size))
 		config->cfg |= TRCCONFIGR_TS;
 	else
 		config->cfg &= ~TRCCONFIGR_TS;
 
 	/* bit[12], Return stack enable bit */
-	if ((config->mode & ETM_MODE_RETURNSTACK) &&
-					(drvdata->retstack == true))
+	if ((config->mode & ETM_MODE_RETURNSTACK) && (caps->retstack))
 		config->cfg |= TRCCONFIGR_RS;
 	else
 		config->cfg &= ~TRCCONFIGR_RS;
@@ -375,31 +385,29 @@ static ssize_t mode_store(struct device *dev,
 	 * Always set the low bit for any requested mode. Valid combos are
 	 * 0b00, 0b01 and 0b11.
 	 */
-	if (mode && drvdata->q_support)
+	if (mode && caps->q_support)
 		config->cfg |= TRCCONFIGR_QE_W_COUNTS;
 	/*
 	 * if supported, Q elements with and without instruction
 	 * counts are enabled
 	 */
-	if ((mode & BIT(1)) && (drvdata->q_support & BIT(1)))
+	if ((mode & BIT(1)) && (caps->q_support & BIT(1)))
 		config->cfg |= TRCCONFIGR_QE_WO_COUNTS;
 
 	/* bit[11], AMBA Trace Bus (ATB) trigger enable bit */
-	if ((config->mode & ETM_MODE_ATB_TRIGGER) &&
-	    (drvdata->atbtrig == true))
+	if ((config->mode & ETM_MODE_ATB_TRIGGER) && (caps->atbtrig))
 		config->eventctrl1 |= TRCEVENTCTL1R_ATB;
 	else
 		config->eventctrl1 &= ~TRCEVENTCTL1R_ATB;
 
 	/* bit[12], Low-power state behavior override bit */
-	if ((config->mode & ETM_MODE_LPOVERRIDE) &&
-	    (drvdata->lpoverride == true))
+	if ((config->mode & ETM_MODE_LPOVERRIDE) && (caps->lpoverride))
 		config->eventctrl1 |= TRCEVENTCTL1R_LPOVERRIDE;
 	else
 		config->eventctrl1 &= ~TRCEVENTCTL1R_LPOVERRIDE;
 
 	/* bit[8], Instruction stall bit */
-	if ((config->mode & ETM_MODE_ISTALL_EN) && (drvdata->stallctl == true))
+	if ((config->mode & ETM_MODE_ISTALL_EN) && (caps->stallctl))
 		config->stall_ctrl |= TRCSTALLCTLR_ISTALL;
 	else
 		config->stall_ctrl &= ~TRCSTALLCTLR_ISTALL;
@@ -411,8 +419,7 @@ static ssize_t mode_store(struct device *dev,
 		config->stall_ctrl &= ~TRCSTALLCTLR_INSTPRIORITY;
 
 	/* bit[13], Trace overflow prevention bit */
-	if ((config->mode & ETM_MODE_NOOVERFLOW) &&
-		(drvdata->nooverflow == true))
+	if ((config->mode & ETM_MODE_NOOVERFLOW) && (caps->nooverflow))
 		config->stall_ctrl |= TRCSTALLCTLR_NOOVERFLOW;
 	else
 		config->stall_ctrl &= ~TRCSTALLCTLR_NOOVERFLOW;
@@ -430,8 +437,7 @@ static ssize_t mode_store(struct device *dev,
 		config->vinst_ctrl &= ~TRCVICTLR_TRCRESET;
 
 	/* bit[11], Whether a trace unit must trace a system error exception */
-	if ((config->mode & ETM_MODE_TRACE_ERR) &&
-		(drvdata->trc_error == true))
+	if ((config->mode & ETM_MODE_TRACE_ERR) && (caps->trc_error))
 		config->vinst_ctrl |= TRCVICTLR_TRCERR;
 	else
 		config->vinst_ctrl &= ~TRCVICTLR_TRCERR;
@@ -463,13 +469,14 @@ static ssize_t pe_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
 
 	raw_spin_lock(&drvdata->spinlock);
-	if (val > drvdata->nr_pe) {
+	if (val > caps->nr_pe) {
 		raw_spin_unlock(&drvdata->spinlock);
 		return -EINVAL;
 	}
@@ -498,13 +505,14 @@ static ssize_t event_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
 
 	raw_spin_lock(&drvdata->spinlock);
-	switch (drvdata->nr_event) {
+	switch (caps->nr_event) {
 	case 0x0:
 		/* EVENT0, bits[7:0] */
 		config->eventctrl0 = val & 0xFF;
@@ -547,6 +555,7 @@ static ssize_t event_instren_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
@@ -555,7 +564,7 @@ static ssize_t event_instren_store(struct device *dev,
 	raw_spin_lock(&drvdata->spinlock);
 	/* start by clearing all instruction event enable bits */
 	config->eventctrl1 &= ~TRCEVENTCTL1R_INSTEN_MASK;
-	switch (drvdata->nr_event) {
+	switch (caps->nr_event) {
 	case 0x0:
 		/* generate Event element for event 1 */
 		config->eventctrl1 |= val & TRCEVENTCTL1R_INSTEN_1;
@@ -603,11 +612,12 @@ static ssize_t event_ts_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if (!drvdata->ts_size)
+	if (!caps->ts_size)
 		return -EINVAL;
 
 	config->ts_ctrl = val & ETMv4_EVENT_MASK;
@@ -633,11 +643,12 @@ static ssize_t syncfreq_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if (drvdata->syncpr == true)
+	if (caps->syncpr)
 		return -EINVAL;
 
 	config->syncfreq = val & ETMv4_SYNC_MASK;
@@ -663,6 +674,7 @@ static ssize_t cyc_threshold_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
@@ -670,7 +682,7 @@ static ssize_t cyc_threshold_store(struct device *dev,
 
 	/* mask off max threshold before checking min value */
 	val &= ETM_CYC_THRESHOLD_MASK;
-	if (val < drvdata->ccitmin)
+	if (val < caps->ccitmin)
 		return -EINVAL;
 
 	config->ccctlr = val;
@@ -696,13 +708,14 @@ static ssize_t bb_ctrl_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if (drvdata->trcbb == false)
+	if (!caps->trcbb)
 		return -EINVAL;
-	if (!drvdata->nr_addr_cmp)
+	if (!caps->nr_addr_cmp)
 		return -EINVAL;
 
 	/*
@@ -768,6 +781,7 @@ static ssize_t s_exlevel_vinst_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
@@ -777,7 +791,7 @@ static ssize_t s_exlevel_vinst_store(struct device *dev,
 	/* clear all EXLEVEL_S bits  */
 	config->vinst_ctrl &= ~TRCVICTLR_EXLEVEL_S_MASK;
 	/* enable instruction tracing for corresponding exception level */
-	val &= drvdata->s_ex_level;
+	val &= caps->s_ex_level;
 	config->vinst_ctrl |= val << __bf_shf(TRCVICTLR_EXLEVEL_S_MASK);
 	raw_spin_unlock(&drvdata->spinlock);
 	return size;
@@ -803,6 +817,7 @@ static ssize_t ns_exlevel_vinst_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
@@ -812,7 +827,7 @@ static ssize_t ns_exlevel_vinst_store(struct device *dev,
 	/* clear EXLEVEL_NS bits  */
 	config->vinst_ctrl &= ~TRCVICTLR_EXLEVEL_NS_MASK;
 	/* enable instruction tracing for corresponding exception level */
-	val &= drvdata->ns_ex_level;
+	val &= caps->ns_ex_level;
 	config->vinst_ctrl |= val << __bf_shf(TRCVICTLR_EXLEVEL_NS_MASK);
 	raw_spin_unlock(&drvdata->spinlock);
 	return size;
@@ -837,11 +852,12 @@ static ssize_t addr_idx_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if (val >= drvdata->nr_addr_cmp * 2)
+	if (val >= caps->nr_addr_cmp * 2)
 		return -EINVAL;
 
 	/*
@@ -1060,6 +1076,7 @@ static ssize_t addr_start_store(struct device *dev,
 	u8 idx;
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
@@ -1067,7 +1084,7 @@ static ssize_t addr_start_store(struct device *dev,
 
 	raw_spin_lock(&drvdata->spinlock);
 	idx = config->addr_idx;
-	if (!drvdata->nr_addr_cmp) {
+	if (!caps->nr_addr_cmp) {
 		raw_spin_unlock(&drvdata->spinlock);
 		return -EINVAL;
 	}
@@ -1115,6 +1132,7 @@ static ssize_t addr_stop_store(struct device *dev,
 	u8 idx;
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
@@ -1122,7 +1140,7 @@ static ssize_t addr_stop_store(struct device *dev,
 
 	raw_spin_lock(&drvdata->spinlock);
 	idx = config->addr_idx;
-	if (!drvdata->nr_addr_cmp) {
+	if (!caps->nr_addr_cmp) {
 		raw_spin_unlock(&drvdata->spinlock);
 		return -EINVAL;
 	}
@@ -1167,6 +1185,7 @@ static ssize_t addr_ctxtype_store(struct device *dev,
 	u8 idx;
 	char str[10] = "";
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (strlen(buf) >= 10)
@@ -1181,13 +1200,13 @@ static ssize_t addr_ctxtype_store(struct device *dev,
 		config->addr_acc[idx] &= ~TRCACATRn_CONTEXTTYPE_MASK;
 	else if (!strcmp(str, "ctxid")) {
 		/* 0b01 The trace unit performs a Context ID */
-		if (drvdata->numcidc) {
+		if (caps->numcidc) {
 			config->addr_acc[idx] |= TRCACATRn_CONTEXTTYPE_CTXID;
 			config->addr_acc[idx] &= ~TRCACATRn_CONTEXTTYPE_VMID;
 		}
 	} else if (!strcmp(str, "vmid")) {
 		/* 0b10 The trace unit performs a VMID */
-		if (drvdata->numvmidc) {
+		if (caps->numvmidc) {
 			config->addr_acc[idx] &= ~TRCACATRn_CONTEXTTYPE_CTXID;
 			config->addr_acc[idx] |= TRCACATRn_CONTEXTTYPE_VMID;
 		}
@@ -1196,9 +1215,9 @@ static ssize_t addr_ctxtype_store(struct device *dev,
 		 * 0b11 The trace unit performs a Context ID
 		 * comparison and a VMID
 		 */
-		if (drvdata->numcidc)
+		if (caps->numcidc)
 			config->addr_acc[idx] |= TRCACATRn_CONTEXTTYPE_CTXID;
-		if (drvdata->numvmidc)
+		if (caps->numvmidc)
 			config->addr_acc[idx] |= TRCACATRn_CONTEXTTYPE_VMID;
 	}
 	raw_spin_unlock(&drvdata->spinlock);
@@ -1230,14 +1249,15 @@ static ssize_t addr_context_store(struct device *dev,
 	u8 idx;
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if ((drvdata->numcidc <= 1) && (drvdata->numvmidc <= 1))
+	if ((caps->numcidc <= 1) && (caps->numvmidc <= 1))
 		return -EINVAL;
-	if (val >=  (drvdata->numcidc >= drvdata->numvmidc ?
-		     drvdata->numcidc : drvdata->numvmidc))
+	if (val >=  (caps->numcidc >= caps->numvmidc ?
+		     caps->numcidc : caps->numvmidc))
 		return -EINVAL;
 
 	raw_spin_lock(&drvdata->spinlock);
@@ -1348,9 +1368,10 @@ static ssize_t vinst_pe_cmp_start_stop_show(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
-	if (!drvdata->nr_pe_cmp)
+	if (!caps->nr_pe_cmp)
 		return -EINVAL;
 	val = config->vipcssctlr;
 	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
@@ -1361,11 +1382,12 @@ static ssize_t vinst_pe_cmp_start_stop_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if (!drvdata->nr_pe_cmp)
+	if (!caps->nr_pe_cmp)
 		return -EINVAL;
 
 	raw_spin_lock(&drvdata->spinlock);
@@ -1393,13 +1415,14 @@ static ssize_t seq_idx_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
-	if (!drvdata->nrseqstate)
+	if (!caps->nrseqstate)
 		return -ENOTSUPP;
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if (val >= drvdata->nrseqstate - 1)
+	if (val >= caps->nrseqstate - 1)
 		return -EINVAL;
 
 	/*
@@ -1431,11 +1454,12 @@ static ssize_t seq_state_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if (val >= drvdata->nrseqstate)
+	if (val >= caps->nrseqstate)
 		return -EINVAL;
 
 	config->seq_state = val;
@@ -1498,11 +1522,12 @@ static ssize_t seq_reset_event_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if (!(drvdata->nrseqstate))
+	if (!(caps->nrseqstate))
 		return -EINVAL;
 
 	config->seq_rst = val & ETMv4_EVENT_MASK;
@@ -1528,11 +1553,12 @@ static ssize_t cntr_idx_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if (val >= drvdata->nr_cntr)
+	if (val >= caps->nr_cntr)
 		return -EINVAL;
 
 	/*
@@ -1676,6 +1702,7 @@ static ssize_t res_idx_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
@@ -1684,7 +1711,7 @@ static ssize_t res_idx_store(struct device *dev,
 	 * Resource selector pair 0 is always implemented and reserved,
 	 * namely an idx with 0 and 1 is illegal.
 	 */
-	if ((val < 2) || (val >= 2 * drvdata->nr_resource))
+	if ((val < 2) || (val >= 2 * caps->nr_resource))
 		return -EINVAL;
 
 	/*
@@ -1758,11 +1785,12 @@ static ssize_t sshot_idx_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if (val >= drvdata->nr_ss_cmp)
+	if (val >= caps->nr_ss_cmp)
 		return -EINVAL;
 
 	raw_spin_lock(&drvdata->spinlock);
@@ -1876,11 +1904,12 @@ static ssize_t ctxid_idx_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if (val >= drvdata->numcidc)
+	if (val >= caps->numcidc)
 		return -EINVAL;
 
 	/*
@@ -1924,6 +1953,7 @@ static ssize_t ctxid_pid_store(struct device *dev,
 	u8 idx;
 	unsigned long pid;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	/*
@@ -1943,7 +1973,7 @@ static ssize_t ctxid_pid_store(struct device *dev,
 	 * ctxid comparator is implemented and ctxid is greater than 0 bits
 	 * in length
 	 */
-	if (!drvdata->ctxid_size || !drvdata->numcidc)
+	if (!caps->ctxid_size || !caps->numcidc)
 		return -EINVAL;
 	if (kstrtoul(buf, 16, &pid))
 		return -EINVAL;
@@ -1985,6 +2015,7 @@ static ssize_t ctxid_masks_store(struct device *dev,
 	u8 i, j, maskbyte;
 	unsigned long val1, val2, mask;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 	int nr_inputs;
 
@@ -2000,11 +2031,11 @@ static ssize_t ctxid_masks_store(struct device *dev,
 	 * ctxid comparator is implemented and ctxid is greater than 0 bits
 	 * in length
 	 */
-	if (!drvdata->ctxid_size || !drvdata->numcidc)
+	if (!caps->ctxid_size || !caps->numcidc)
 		return -EINVAL;
 	/* one mask if <= 4 comparators, two for up to 8 */
 	nr_inputs = sscanf(buf, "%lx %lx", &val1, &val2);
-	if ((drvdata->numcidc > 4) && (nr_inputs != 2))
+	if ((caps->numcidc > 4) && (nr_inputs != 2))
 		return -EINVAL;
 
 	raw_spin_lock(&drvdata->spinlock);
@@ -2012,7 +2043,7 @@ static ssize_t ctxid_masks_store(struct device *dev,
 	 * each byte[0..3] controls mask value applied to ctxid
 	 * comparator[0..3]
 	 */
-	switch (drvdata->numcidc) {
+	switch (caps->numcidc) {
 	case 0x1:
 		/* COMP0, bits[7:0] */
 		config->ctxid_mask0 = val1 & 0xFF;
@@ -2059,7 +2090,7 @@ static ssize_t ctxid_masks_store(struct device *dev,
 	 * of ctxid comparator0 value (corresponding to byte 0) register.
 	 */
 	mask = config->ctxid_mask0;
-	for (i = 0; i < drvdata->numcidc; i++) {
+	for (i = 0; i < caps->numcidc; i++) {
 		/* mask value of corresponding ctxid comparator */
 		maskbyte = mask & ETMv4_EVENT_MASK;
 		/*
@@ -2102,11 +2133,12 @@ static ssize_t vmid_idx_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
-	if (val >= drvdata->numvmidc)
+	if (val >= caps->numvmidc)
 		return -EINVAL;
 
 	/*
@@ -2147,6 +2179,7 @@ static ssize_t vmid_val_store(struct device *dev,
 {
 	unsigned long val;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 
 	/*
@@ -2160,7 +2193,7 @@ static ssize_t vmid_val_store(struct device *dev,
 	 * only implemented when vmid tracing is enabled, i.e. at least one
 	 * vmid comparator is implemented and at least 8 bit vmid size
 	 */
-	if (!drvdata->vmid_size || !drvdata->numvmidc)
+	if (!caps->vmid_size || !caps->numvmidc)
 		return -EINVAL;
 	if (kstrtoul(buf, 16, &val))
 		return -EINVAL;
@@ -2200,6 +2233,7 @@ static ssize_t vmid_masks_store(struct device *dev,
 	u8 i, j, maskbyte;
 	unsigned long val1, val2, mask;
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	const struct etmv4_caps *caps = &drvdata->caps;
 	struct etmv4_config *config = &drvdata->config;
 	int nr_inputs;
 
@@ -2214,11 +2248,11 @@ static ssize_t vmid_masks_store(struct device *dev,
 	 * only implemented when vmid tracing is enabled, i.e. at least one
 	 * vmid comparator is implemented and at least 8 bit vmid size
 	 */
-	if (!drvdata->vmid_size || !drvdata->numvmidc)
+	if (!caps->vmid_size || !caps->numvmidc)
 		return -EINVAL;
 	/* one mask if <= 4 comparators, two for up to 8 */
 	nr_inputs = sscanf(buf, "%lx %lx", &val1, &val2);
-	if ((drvdata->numvmidc > 4) && (nr_inputs != 2))
+	if ((caps->numvmidc > 4) && (nr_inputs != 2))
 		return -EINVAL;
 
 	raw_spin_lock(&drvdata->spinlock);
@@ -2227,7 +2261,7 @@ static ssize_t vmid_masks_store(struct device *dev,
 	 * each byte[0..3] controls mask value applied to vmid
 	 * comparator[0..3]
 	 */
-	switch (drvdata->numvmidc) {
+	switch (caps->numvmidc) {
 	case 0x1:
 		/* COMP0, bits[7:0] */
 		config->vmid_mask0 = val1 & 0xFF;
@@ -2275,7 +2309,7 @@ static ssize_t vmid_masks_store(struct device *dev,
 	 * of vmid comparator0 value (corresponding to byte 0) register.
 	 */
 	mask = config->vmid_mask0;
-	for (i = 0; i < drvdata->numvmidc; i++) {
+	for (i = 0; i < caps->numvmidc; i++) {
 		/* mask value of corresponding vmid comparator */
 		maskbyte = mask & ETMv4_EVENT_MASK;
 		/*
