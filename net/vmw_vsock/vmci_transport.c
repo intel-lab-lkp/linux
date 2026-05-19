@@ -1161,10 +1161,17 @@ vmci_transport_recv_connecting_server(struct sock *listener,
 		}
 		break;
 	default:
-		/* Close and cleanup the connection. */
+		/* Close and cleanup the connection.  Peer RST is treated like
+		 * any other unexpected packet type in this state so that the
+		 * pending socket follows the same cleanup path as other
+		 * handshake failures, instead of being left on the pending
+		 * list for vsock_pending_work() to find later (which races
+		 * with subsequent packets and was the source of a UAF when
+		 * the cleanup work observed an inconsistent ref count).
+		 */
 		vmci_transport_send_reset(pending, pkt);
 		skerr = EPROTO;
-		err = pkt->type == VMCI_TRANSPORT_PACKET_TYPE_RST ? 0 : -EINVAL;
+		err = -EINVAL;
 		goto destroy;
 	}
 
