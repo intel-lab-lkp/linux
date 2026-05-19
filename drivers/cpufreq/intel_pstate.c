@@ -2986,8 +2986,10 @@ static int intel_cpufreq_cpu_offline(struct cpufreq_policy *policy)
 	 */
 	if (hwp_active)
 		intel_pstate_hwp_offline(cpu);
-	else
+	else {
 		intel_pstate_set_min_pstate(cpu);
+		policy->cur = cpu->pstate.min_freq;
+	}
 
 	intel_pstate_exit_perf_limits(policy);
 
