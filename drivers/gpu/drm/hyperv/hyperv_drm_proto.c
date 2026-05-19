@@ -420,13 +420,23 @@ static int hyperv_get_supported_resolution(struct hv_device *hdev)
 	return 0;
 }
 
-static void hyperv_receive_sub(struct hv_device *hdev)
+static void hyperv_receive_sub(struct hv_device *hdev, u32 bytes_recvd)
 {
 	struct hyperv_drm_device *hv = hv_get_drvdata(hdev);
 	struct synthvid_msg *msg;
+	size_t hdr_size;
 
 	if (!hv)
 		return;
+
+	hdr_size = sizeof(struct pipe_msg_hdr) +
+		   sizeof(struct synthvid_msg_hdr);
+	if (bytes_recvd < hdr_size) {
+		drm_err_ratelimited(&hv->dev,
+				    "synthvid packet too small for header: %u\n",
+				    bytes_recvd);
+		return;
+	}
 
 	msg = (struct synthvid_msg *)hv->recv_buf;
 
@@ -434,12 +444,57 @@ static void hyperv_receive_sub(struct hv_device *hdev)
 	if (msg->vid_hdr.type == SYNTHVID_VERSION_RESPONSE ||
 	    msg->vid_hdr.type == SYNTHVID_RESOLUTION_RESPONSE ||
 	    msg->vid_hdr.type == SYNTHVID_VRAM_LOCATION_ACK) {
-		memcpy(hv->init_buf, msg, VMBUS_MAX_PACKET_SIZE);
+		size_t need = hdr_size;
+
+		switch (msg->vid_hdr.type) {
+		case SYNTHVID_VERSION_RESPONSE:
+			need += sizeof(struct synthvid_version_resp);
+			break;
+		case SYNTHVID_RESOLUTION_RESPONSE:
+			/*
+			 * The resolution response is variable length: the host
+			 * fills resolution_count entries, not the full
+			 * SYNTHVID_MAX_RESOLUTION_COUNT array. Require the fixed
+			 * prefix first so resolution_count can be read, then
+			 * demand exactly the count-sized array.
+			 */
+			need += offsetof(struct synthvid_supported_resolution_resp,
+					 supported_resolution);
+			if (bytes_recvd < need)
+				break;
+			if (msg->resolution_resp.resolution_count >
+			    SYNTHVID_MAX_RESOLUTION_COUNT) {
+				drm_err_ratelimited(&hv->dev,
+						    "synthvid resolution count too large: %u\n",
+						    msg->resolution_resp.resolution_count);
+				return;
+			}
+			need += msg->resolution_resp.resolution_count *
+				sizeof(struct hvd_screen_info);
+			break;
+		case SYNTHVID_VRAM_LOCATION_ACK:
+			need += sizeof(struct synthvid_vram_location_ack);
+			break;
+		}
+		if (bytes_recvd < need) {
+			drm_err_ratelimited(&hv->dev,
+					    "synthvid packet too small for type %u: %u < %zu\n",
+					    msg->vid_hdr.type, bytes_recvd, need);
+			return;
+		}
+		memcpy(hv->init_buf, msg, bytes_recvd);
 		complete(&hv->wait);
 		return;
 	}
 
 	if (msg->vid_hdr.type == SYNTHVID_FEATURE_CHANGE) {
+		if (bytes_recvd < hdr_size +
+		    sizeof(struct synthvid_feature_change)) {
+			drm_err_ratelimited(&hv->dev,
+					    "synthvid feature change packet too small: %u\n",
+					    bytes_recvd);
+			return;
+		}
 		hv->dirt_needed = msg->feature_chg.is_dirt_needed;
 		if (hv->dirt_needed)
 			hyperv_hide_hw_ptr(hv->hdev);
@@ -464,9 +519,9 @@ static void hyperv_receive(void *ctx)
 		ret = vmbus_recvpacket(hdev->channel, recv_buf,
 				       VMBUS_MAX_PACKET_SIZE,
 				       &bytes_recvd, &req_id);
-		if (bytes_recvd > 0 &&
+		if (!ret && bytes_recvd > 0 &&
 		    recv_buf->pipe_hdr.type == PIPE_MSG_DATA)
-			hyperv_receive_sub(hdev);
+			hyperv_receive_sub(hdev, bytes_recvd);
 	} while (bytes_recvd > 0 && ret == 0);
 }
 
