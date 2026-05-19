@@ -26,6 +26,23 @@ config QCOM_COMMAND_DB
 	  resource on a RPM-hardened platform must use this database to get
 	  SoC specific identifier and information for the shared resources.
 
+config QCOM_CDSP_POWER
+	tristate "Qualcomm CDSP Power Management driver"
+	depends on ARCH_QCOM || COMPILE_TEST
+	depends on QCOM_SMEM
+	depends on REGULATOR
+	help
+	  This driver manages power for the CDSP (Compute DSP) subsystem on
+	  Qualcomm platforms. It handles DCVS (Dynamic Clock and Voltage Scaling)
+	  for voltage scaling via SMEM/SMP2P, and LPM (Low Power Mode) for power
+	  collapse/restore via MPM handshake.
+
+	  The driver coordinates with the cdsp_rproc driver for shared regulator
+	  access and provides runtime voltage scaling and power management for
+	  the CDSP subsystem.
+
+	  Say M here if you want to include support for CDSP power management.
+
 config QCOM_GENI_SE
 	tristate "QCOM GENI Serial Engine Driver"
 	depends on ARCH_QCOM || COMPILE_TEST
