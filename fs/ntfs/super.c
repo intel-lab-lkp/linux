@@ -17,7 +17,6 @@
 
 #include "sysctl.h"
 #include "logfile.h"
-#include "quota.h"
 #include "index.h"
 #include "ntfs.h"
 #include "ea.h"
@@ -240,8 +239,7 @@ static int ntfs_reconfigure(struct fs_context *fc)
 	 * flags are set.  Also, empty the logfile journal as it would become
 	 * stale as soon as something is written to the volume and mark the
 	 * volume dirty so that chkdsk is run if the volume is not umounted
-	 * cleanly.  Finally, mark the quotas out of date so Windows rescans
-	 * the volume on boot and updates them.
+	 * cleanly.
 	 *
 	 * When remounting read-only, mark the volume clean if no volume errors
 	 * have occurred.
@@ -270,12 +268,6 @@ static int ntfs_reconfigure(struct fs_context *fc)
 		}
 		if (vol->logfile_ino && !ntfs_empty_logfile(vol->logfile_ino)) {
 			ntfs_error(sb, "Failed to empty journal LogFile%s",
-					es);
-			NVolSetErrors(vol);
-			return -EROFS;
-		}
-		if (!ntfs_mark_quotas_out_of_date(vol)) {
-			ntfs_error(sb, "Failed to mark quotas out of date%s",
 					es);
 			NVolSetErrors(vol);
 			return -EROFS;
@@ -413,6 +405,7 @@ int ntfs_write_volume_label(struct ntfs_volume *vol, char *label)
 {
 	struct ntfs_inode *vol_ni = NTFS_I(vol->vol_ino);
 	struct ntfs_attr_search_ctx *ctx;
+	char *new_label;
 	__le16 *uname;
 	int uname_len, ret;
 
@@ -425,7 +418,7 @@ int ntfs_write_volume_label(struct ntfs_volume *vol, char *label)
 		return uname_len;
 	}
 
-	if (uname_len  > NTFS_MAX_LABEL_LEN) {
+	if (uname_len > NTFS_MAX_LABEL_LEN) {
 		ntfs_error(vol->sb,
 			   "Volume label is too long (max %d characters).",
 			   NTFS_MAX_LABEL_LEN);
@@ -433,11 +426,22 @@ int ntfs_write_volume_label(struct ntfs_volume *vol, char *label)
 		return -EINVAL;
 	}
 
+	/*
+	 * Allocate the in-memory label copy up front. If kstrdup() fails we
+	 * bail out before touching on-disk metadata, so the in-memory label
+	 * and the on-disk label stay in sync.
+	 */
+	new_label = kstrdup(label, GFP_KERNEL);
+	if (!new_label) {
+		kvfree(uname);
+		return -ENOMEM;
+	}
+
 	mutex_lock(&vol_ni->mrec_lock);
 	ctx = ntfs_attr_get_search_ctx(vol_ni, NULL);
 	if (!ctx) {
 		ret = -ENOMEM;
-		goto  out;
+		goto out;
 	}
 
 	if (!ntfs_attr_lookup(AT_VOLUME_NAME, NULL, 0, 0, 0, NULL, 0,
@@ -450,12 +454,14 @@ int ntfs_write_volume_label(struct ntfs_volume *vol, char *label)
 out:
 	mutex_unlock(&vol_ni->mrec_lock);
 	kvfree(uname);
-	mark_inode_dirty_sync(vol->vol_ino);
 
 	if (ret >= 0) {
 		kfree(vol->volume_label);
-		vol->volume_label = kstrdup(label, GFP_KERNEL);
+		vol->volume_label = new_label;
+		mark_inode_dirty_sync(vol->vol_ino);
 		ret = 0;
+	} else {
+		kfree(new_label);
 	}
 	return ret;
 }
@@ -979,6 +985,13 @@ mft_unmap_out:
 			    ntfs_is_baad_recordp((__le32 *)kmirr))
 				bytes = vol->mft_record_size;
 		}
+		/* Compare the two records. */
+		if (memcmp(kmft, kmirr, bytes)) {
+			ntfs_error(sb,
+				   "$MFT and $MFTMirr record %i do not match.  Run chkdsk.",
+				   i);
+			goto mm_unmap_out;
+		}
 		kmft += vol->mft_record_size;
 		kmirr += vol->mft_record_size;
 	} while (++i < vol->mftmirr_size);
@@ -1152,73 +1165,6 @@ unm_iput_out:
 iput_out:
 	iput(vi);
 	return ret;
-}
-
-/*
- * load_and_init_quota - load and setup the quota file for a volume if present
- * @vol:	ntfs super block describing device whose quota file to load
- *
- * Return 'true' on success or 'false' on error.  If $Quota is not present, we
- * leave vol->quota_ino as NULL and return success.
- */
-static bool load_and_init_quota(struct ntfs_volume *vol)
-{
-	static const __le16 Quota[7] = { cpu_to_le16('$'),
-			cpu_to_le16('Q'), cpu_to_le16('u'),
-			cpu_to_le16('o'), cpu_to_le16('t'),
-			cpu_to_le16('a'), 0 };
-	static __le16 Q[3] = { cpu_to_le16('$'),
-			cpu_to_le16('Q'), 0 };
-	struct ntfs_name *name = NULL;
-	u64 mref;
-	struct inode *tmp_ino;
-
-	ntfs_debug("Entering.");
-	/*
-	 * Find the inode number for the quota file by looking up the filename
-	 * $Quota in the extended system files directory $Extend.
-	 */
-	inode_lock(vol->extend_ino);
-	mref = ntfs_lookup_inode_by_name(NTFS_I(vol->extend_ino), Quota, 6,
-			&name);
-	inode_unlock(vol->extend_ino);
-	kfree(name);
-	if (IS_ERR_MREF(mref)) {
-		/*
-		 * If the file does not exist, quotas are disabled and have
-		 * never been enabled on this volume, just return success.
-		 */
-		if (MREF_ERR(mref) == -ENOENT) {
-			ntfs_debug("$Quota not present.  Volume does not have quotas enabled.");
-			/*
-			 * No need to try to set quotas out of date if they are
-			 * not enabled.
-			 */
-			NVolSetQuotaOutOfDate(vol);
-			return true;
-		}
-		/* A real error occurred. */
-		ntfs_error(vol->sb, "Failed to find inode number for $Quota.");
-		return false;
-	}
-	/* Get the inode. */
-	tmp_ino = ntfs_iget(vol->sb, MREF(mref));
-	if (IS_ERR(tmp_ino)) {
-		if (!IS_ERR(tmp_ino))
-			iput(tmp_ino);
-		ntfs_error(vol->sb, "Failed to load $Quota.");
-		return false;
-	}
-	vol->quota_ino = tmp_ino;
-	/* Get the $Q index allocation attribute. */
-	tmp_ino = ntfs_index_iget(vol->quota_ino, Q, 2);
-	if (IS_ERR(tmp_ino)) {
-		ntfs_error(vol->sb, "Failed to load $Quota/$Q index.");
-		return false;
-	}
-	vol->quota_q_ino = tmp_ino;
-	ntfs_debug("Done.");
-	return true;
 }
 
 /*
@@ -1638,18 +1584,6 @@ get_ctx_vol_failed:
 		ntfs_error(sb, "Failed to load $Extend.");
 		goto iput_sec_err_out;
 	}
-	/* Find the quota file, load it if present, and set it up. */
-	if (!load_and_init_quota(vol) &&
-	    vol->on_errors == ON_ERRORS_REMOUNT_RO) {
-		static const char *es1 = "Failed to load $Quota";
-		static const char *es2 = ".  Run chkdsk.";
-
-		sb->s_flags |= SB_RDONLY;
-		ntfs_error(sb, "%s.  Mounting read-only%s", es1, es2);
-		/* This will prevent a read-write remount. */
-		NVolSetErrors(vol);
-	}
-
 	return true;
 
 iput_sec_err_out:
@@ -1671,7 +1605,7 @@ iput_attrdef_err_out:
 iput_upcase_err_out:
 	vol->upcase_len = 0;
 	mutex_lock(&ntfs_lock);
-	if (vol->upcase == default_upcase) {
+	if (vol->upcase && vol->upcase == default_upcase) {
 		ntfs_nr_upcase_users--;
 		vol->upcase = NULL;
 	}
@@ -1701,7 +1635,7 @@ static void ntfs_volume_free(struct ntfs_volume *vol)
 	 * the number of upcase users if we are a user.
 	 */
 	mutex_lock(&ntfs_lock);
-	if (vol->upcase == default_upcase) {
+	if (vol->upcase && vol->upcase == default_upcase) {
 		ntfs_nr_upcase_users--;
 		vol->upcase = NULL;
 	}
@@ -1747,10 +1681,6 @@ static void ntfs_put_super(struct super_block *sb)
 
 	/* NTFS 3.0+ specific. */
 	if (vol->major_ver >= 3) {
-		if (vol->quota_q_ino)
-			ntfs_commit_inode(vol->quota_q_ino);
-		if (vol->quota_ino)
-			ntfs_commit_inode(vol->quota_ino);
 		if (vol->extend_ino)
 			ntfs_commit_inode(vol->extend_ino);
 		if (vol->secure_ino)
@@ -1799,14 +1729,6 @@ static void ntfs_put_super(struct super_block *sb)
 
 	/* NTFS 3.0+ specific clean up. */
 	if (vol->major_ver >= 3) {
-		if (vol->quota_q_ino) {
-			iput(vol->quota_q_ino);
-			vol->quota_q_ino = NULL;
-		}
-		if (vol->quota_ino) {
-			iput(vol->quota_ino);
-			vol->quota_ino = NULL;
-		}
 		if (vol->extend_ino) {
 			iput(vol->extend_ino);
 			vol->extend_ino = NULL;
@@ -2455,14 +2377,6 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	vol->vol_ino = NULL;
 	/* NTFS 3.0+ specific clean up. */
 	if (vol->major_ver >= 3) {
-		if (vol->quota_q_ino) {
-			iput(vol->quota_q_ino);
-			vol->quota_q_ino = NULL;
-		}
-		if (vol->quota_ino) {
-			iput(vol->quota_ino);
-			vol->quota_ino = NULL;
-		}
 		if (vol->extend_ino) {
 			iput(vol->extend_ino);
 			vol->extend_ino = NULL;
@@ -2494,7 +2408,7 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	}
 	vol->upcase_len = 0;
 	mutex_lock(&ntfs_lock);
-	if (vol->upcase == default_upcase) {
+	if (vol->upcase && vol->upcase == default_upcase) {
 		ntfs_nr_upcase_users--;
 		vol->upcase = NULL;
 	}
