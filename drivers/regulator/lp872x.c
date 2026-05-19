@@ -796,24 +796,24 @@ static const struct regmap_config lp872x_regmap_config = {
 #define LP872X_VALID_OPMODE	(REGULATOR_MODE_FAST | REGULATOR_MODE_NORMAL)
 
 static struct of_regulator_match lp8720_matches[] = {
-	{ .name = "ldo1", .driver_data = (void *)LP8720_ID_LDO1, },
-	{ .name = "ldo2", .driver_data = (void *)LP8720_ID_LDO2, },
-	{ .name = "ldo3", .driver_data = (void *)LP8720_ID_LDO3, },
-	{ .name = "ldo4", .driver_data = (void *)LP8720_ID_LDO4, },
-	{ .name = "ldo5", .driver_data = (void *)LP8720_ID_LDO5, },
-	{ .name = "buck", .driver_data = (void *)LP8720_ID_BUCK, },
+	{ .name = "ldo1", .driver_data = (void *)LP8720_ID_LDO1 },
+	{ .name = "ldo2", .driver_data = (void *)LP8720_ID_LDO2 },
+	{ .name = "ldo3", .driver_data = (void *)LP8720_ID_LDO3 },
+	{ .name = "ldo4", .driver_data = (void *)LP8720_ID_LDO4 },
+	{ .name = "ldo5", .driver_data = (void *)LP8720_ID_LDO5 },
+	{ .name = "buck", .driver_data = (void *)LP8720_ID_BUCK },
 };
 
 static struct of_regulator_match lp8725_matches[] = {
-	{ .name = "ldo1", .driver_data = (void *)LP8725_ID_LDO1, },
-	{ .name = "ldo2", .driver_data = (void *)LP8725_ID_LDO2, },
-	{ .name = "ldo3", .driver_data = (void *)LP8725_ID_LDO3, },
-	{ .name = "ldo4", .driver_data = (void *)LP8725_ID_LDO4, },
-	{ .name = "ldo5", .driver_data = (void *)LP8725_ID_LDO5, },
-	{ .name = "lilo1", .driver_data = (void *)LP8725_ID_LILO1, },
-	{ .name = "lilo2", .driver_data = (void *)LP8725_ID_LILO2, },
-	{ .name = "buck1", .driver_data = (void *)LP8725_ID_BUCK1, },
-	{ .name = "buck2", .driver_data = (void *)LP8725_ID_BUCK2, },
+	{ .name = "ldo1", .driver_data = (void *)LP8725_ID_LDO1 },
+	{ .name = "ldo2", .driver_data = (void *)LP8725_ID_LDO2 },
+	{ .name = "ldo3", .driver_data = (void *)LP8725_ID_LDO3 },
+	{ .name = "ldo4", .driver_data = (void *)LP8725_ID_LDO4 },
+	{ .name = "ldo5", .driver_data = (void *)LP8725_ID_LDO5 },
+	{ .name = "lilo1", .driver_data = (void *)LP8725_ID_LILO1 },
+	{ .name = "lilo2", .driver_data = (void *)LP8725_ID_LILO2 },
+	{ .name = "buck1", .driver_data = (void *)LP8725_ID_BUCK1 },
+	{ .name = "buck2", .driver_data = (void *)LP8725_ID_BUCK2 },
 };
 
 static struct lp872x_platform_data
@@ -935,8 +935,8 @@ static const struct of_device_id lp872x_dt_ids[] __maybe_unused = {
 MODULE_DEVICE_TABLE(of, lp872x_dt_ids);
 
 static const struct i2c_device_id lp872x_ids[] = {
-	{"lp8720", LP8720},
-	{"lp8725", LP8725},
+	{ .name = "lp8720", .driver_data = LP8720 },
+	{ .name = "lp8725", .driver_data = LP8725 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, lp872x_ids);
