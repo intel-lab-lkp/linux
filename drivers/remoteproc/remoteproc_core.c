@@ -1308,6 +1308,7 @@ static int rproc_start(struct rproc *rproc, const struct firmware *fw)
 		goto stop_rproc;
 	}
 
+	rproc->subdevs_started = true;
 	rproc->state = RPROC_RUNNING;
 
 	dev_info(dev, "remote processor %s is now up\n", rproc->name);
@@ -1712,7 +1713,8 @@ static int rproc_stop(struct rproc *rproc, bool crashed)
 		return -EINVAL;
 
 	/* Stop any subdevices for the remote processor */
-	rproc_stop_subdevices(rproc, crashed);
+	if (rproc->subdevs_started)
+		rproc_stop_subdevices(rproc, crashed);
 
 	/* the installed resource table is no longer accessible */
 	ret = rproc_reset_rsc_table_on_stop(rproc);
