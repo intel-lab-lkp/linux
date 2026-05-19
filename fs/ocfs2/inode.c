@@ -1494,6 +1494,124 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 		goto bail;
 	}
 
+	/*
+	 * Reject dinodes whose i_mode does not name one of the seven
+	 * canonical POSIX file types, or whose mode carries bits outside
+	 * S_IFMT | 07777.  ocfs2_populate_inode() copies i_mode verbatim
+	 * into inode->i_mode and then dispatches via switch (mode & S_IFMT)
+	 * to file/dir/symlink/special_file iops; an unrecognised type
+	 * falls into ocfs2_special_file_iops with init_special_inode(),
+	 * which interprets i_rdev.  Constrain the type byte here so the
+	 * dispatch only ever sees a value mkfs.ocfs2 / VFS can produce.
+	 */
+	{
+		u16 mode = le16_to_cpu(di->i_mode);
+
+		if (mode & ~(S_IFMT | 07777)) {
+			rc = ocfs2_error(sb,
+					 "Invalid dinode #%llu: mode 0%o has bits outside S_IFMT|07777\n",
+					 (unsigned long long)bh->b_blocknr,
+					 mode);
+			goto bail;
+		}
+
+		switch (mode & S_IFMT) {
+		case S_IFREG:
+		case S_IFDIR:
+		case S_IFLNK:
+		case S_IFCHR:
+		case S_IFBLK:
+		case S_IFIFO:
+		case S_IFSOCK:
+			break;
+		default:
+			rc = ocfs2_error(sb,
+					 "Invalid dinode #%llu: mode 0%o has unknown file type\n",
+					 (unsigned long long)bh->b_blocknr,
+					 mode);
+			goto bail;
+		}
+	}
+
+	/*
+	 * id1.dev1.i_rdev is the device-number arm of the id1 union and
+	 * is only meaningful for character and block device inodes.  For
+	 * any other regular user-visible file type the on-disk value
+	 * must be zero.  ocfs2_populate_inode() currently runs
+	 *
+	 *     inode->i_rdev = huge_decode_dev(le64_to_cpu(fe->id1.dev1.i_rdev));
+	 *
+	 * unconditionally, before the S_IFMT switch decides whether the
+	 * inode is a special file.  As a result, an i_rdev value present
+	 * on a non-device inode is silently published into the in-core
+	 * inode; a subsequent forced re-read or in-core mode mutation
+	 * (cluster peer with raw write access to the shared LUN,
+	 * on-disk corruption, or a separately forged dinode) can then
+	 * expose the attacker-controlled device number to
+	 * init_special_inode() without ever showing an unusual i_mode
+	 * at validation time.
+	 *
+	 * System inodes (OCFS2_SYSTEM_FL) legitimately use the bitmap1
+	 * and journal1 arms of the same union (allocator i_used /
+	 * i_total counters and the journal ij_flags /
+	 * ij_recovery_generation pair); those bytes are not an i_rdev
+	 * and must not be checked here.  Restrict the cross-check to
+	 * non-system inodes, which is the full attacker-controllable
+	 * surface.
+	 */
+	if (!(le32_to_cpu(di->i_flags) & OCFS2_SYSTEM_FL) &&
+	    !S_ISCHR(le16_to_cpu(di->i_mode)) &&
+	    !S_ISBLK(le16_to_cpu(di->i_mode)) &&
+	    di->id1.dev1.i_rdev != 0) {
+		rc = ocfs2_error(sb,
+				 "Invalid dinode #%llu: non-device mode 0%o with i_rdev %llu\n",
+				 (unsigned long long)bh->b_blocknr,
+				 le16_to_cpu(di->i_mode),
+				 (unsigned long long)le64_to_cpu(di->id1.dev1.i_rdev));
+		goto bail;
+	}
+
+	/*
+	 * On a non-sparse volume, a regular file with non-zero i_size
+	 * and zero i_clusters that is not marked as inline data is
+	 * structurally malformed: the extent map declares no allocated
+	 * clusters yet the size header claims the file has content.
+	 * ocfs2_populate_inode() would still publish i_size to VFS and
+	 * leave the extent state inconsistent for any later read or
+	 * truncate.  This is the shape an attacker who keeps the rest
+	 * of the extent list intact (to satisfy the inline-data,
+	 * refcount, chain-list, and per-field validators above) would
+	 * produce when forging only the inode header to publish a
+	 * synthetic file size on a victim node.  It is also the shape
+	 * on-disk corruption of the i_clusters field produces.
+	 *
+	 * The check opts out on sparse-alloc volumes, where the
+	 * extend path (ocfs2_extend_file -> ocfs2_zero_extend ->
+	 * ocfs2_simple_size_update) legitimately grows i_size without
+	 * allocating clusters.  On non-sparse volumes the equivalent
+	 * path (ocfs2_extend_no_holes) journals clusters first and
+	 * i_size second, and truncate-down floors i_clusters at
+	 * ocfs2_clusters_for_bytes(new_i_size) which is >= 1 whenever
+	 * new_i_size > 0, so the rejected shape never appears on disk.
+	 *
+	 * Skip system inodes (OCFS2_SYSTEM_FL) and the inline-data
+	 * fast path (handled below).  Symlinks legitimately keep
+	 * i_clusters == 0 with non-zero i_size (fast symlinks), so
+	 * restrict to S_IFREG.
+	 */
+	if (!ocfs2_sparse_alloc(OCFS2_SB(sb)) &&
+	    S_ISREG(le16_to_cpu(di->i_mode)) &&
+	    !(le32_to_cpu(di->i_flags) & OCFS2_SYSTEM_FL) &&
+	    !(le16_to_cpu(di->i_dyn_features) & OCFS2_INLINE_DATA_FL) &&
+	    le64_to_cpu(di->i_size) != 0 &&
+	    le32_to_cpu(di->i_clusters) == 0) {
+		rc = ocfs2_error(sb,
+				 "Invalid dinode #%llu: regular file i_size %llu with i_clusters 0 and no inline-data flag on non-sparse volume\n",
+				 (unsigned long long)bh->b_blocknr,
+				 (unsigned long long)le64_to_cpu(di->i_size));
+		goto bail;
+	}
+
 	if (le16_to_cpu(di->i_dyn_features) & OCFS2_INLINE_DATA_FL) {
 		struct ocfs2_inline_data *data = &di->id2.i_data;
 
