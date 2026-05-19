@@ -232,7 +232,7 @@ struct etm_drvdata {
 	struct csdev_access		csa;
 	struct clk			*atclk;
 	struct coresight_device		*csdev;
-	spinlock_t			spinlock;
+	raw_spinlock_t			spinlock;
 	int				cpu;
 	int				port_size;
 	u8				arch;
