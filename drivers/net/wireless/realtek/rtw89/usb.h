@@ -87,6 +87,8 @@ struct rtw89_usb {
 
 	struct sk_buff_head tx_queue[RTW89_TXCH_NUM];
 	atomic_t tx_inflight[RTW89_TXCH_NUM];
+
+	u32 echo_sum;
 };
 
 static inline struct rtw89_usb *rtw89_usb_priv(struct rtw89_dev *rtwdev)

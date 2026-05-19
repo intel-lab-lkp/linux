@@ -1059,6 +1059,43 @@ static void rtw89_usb_intf_deinit(struct rtw89_dev *rtwdev,
 	usb_set_intfdata(intf, NULL);
 }
 
+static ssize_t echo_sum_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	struct usb_interface *intf = to_usb_interface(dev);
+	struct ieee80211_hw *hw = usb_get_intfdata(intf);
+	struct rtw89_usb *rtwusb;
+
+	if (!hw)
+		return -ENODEV;
+
+	rtwusb = rtw89_usb_priv(hw->priv);
+
+	return sysfs_emit(buf, "%u\n", rtwusb->echo_sum);
+}
+
+static ssize_t echo_sum_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct usb_interface *intf = to_usb_interface(dev);
+	struct ieee80211_hw *hw = usb_get_intfdata(intf);
+	struct rtw89_usb *rtwusb;
+	int a, b;
+
+	if (!hw)
+		return -ENODEV;
+
+	if (sscanf(buf, "%d %d", &a, &b) != 2)
+		return -EINVAL;
+
+	rtwusb = rtw89_usb_priv(hw->priv);
+	rtwusb->echo_sum = a + b;
+
+	return count;
+}
+static DEVICE_ATTR_ADMIN_RW(echo_sum);
+
 static ssize_t hw_info_show(struct device *dev,
 			    struct device_attribute *attr, char *buf)
 {
@@ -1089,6 +1126,7 @@ static ssize_t hw_info_show(struct device *dev,
 static DEVICE_ATTR_RO(hw_info);
 
 static struct attribute *rtw89_usb_attrs[] = {
+	&dev_attr_echo_sum.attr,
 	&dev_attr_hw_info.attr,
 	NULL,
 };
