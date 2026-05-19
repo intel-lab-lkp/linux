@@ -1,0 +1,138 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/soc/qcom/qcom,cdsp-power.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm CDSP Power Management
+
+maintainers:
+  - Vignesh Viswanathan <vignesh.viswanathan@oss.qualcomm.com>
+
+description:
+  The CDSP Power Management driver provides power management services for the
+  Qualcomm Compute DSP (CDSP) subsystem. It handles Dynamic Clock and Voltage
+  Scaling (DCVS) requests via SMEM, manages Low Power Mode (LPM) transitions
+  via MPM handshake, and provides virtual regulators that are consumed by the
+  CDSP remoteproc driver.
+
+properties:
+  compatible:
+    const: qcom,cdsp-power
+
+  reg:
+    items:
+      - description: MPM (Modem Power Manager) register region
+      - description: RSCC (RSC Configuration) register region
+
+  reg-names:
+    items:
+      - const: mpm
+      - const: rscc
+
+  interrupts-extended:
+    items:
+      - description: LPM (Low Power Mode) interrupt from MPM
+      - description: DCVS (Dynamic Clock and Voltage Scaling) interrupt from IPCC
+
+  interrupt-names:
+    items:
+      - const: lpm
+      - const: dcvs
+
+  mboxes:
+    maxItems: 1
+    description: IPCC mailbox channel for sending DCVS responses to CDSP
+
+  qcom,smem-item:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      SMEM item ID used for DCVS communication channel between APSS and CDSP.
+      This is a platform-specific value that identifies the shared memory region.
+
+  vdd-cx-supply:
+    description:
+      Phandle to the CX voltage regulator. This is the actual hardware regulator
+      (e.g., from MP8899 PMIC) that supplies power to the CDSP CX rail.
+
+  vdd-mx-supply:
+    description:
+      Phandle to the MX voltage regulator. This is the actual hardware regulator
+      (e.g., from MP8899 PMIC) that supplies power to the CDSP MX rail. Optional
+      on boards where MX rail is always-on or not present.
+
+  regulators:
+    type: object
+    description:
+      Virtual regulators provided by this driver for consumption by the CDSP
+      remoteproc driver. These virtual regulators pass through enable/disable
+      requests to the actual hardware regulators (vdd-cx-supply, vdd-mx-supply).
+
+    properties:
+      cdsp-vdd-cx:
+        type: object
+        $ref: /schemas/regulator/regulator.yaml#
+        description: Virtual CX regulator for CDSP
+        unevaluatedProperties: false
+
+      cdsp-vdd-mx:
+        type: object
+        $ref: /schemas/regulator/regulator.yaml#
+        description: Virtual MX regulator for CDSP
+        unevaluatedProperties: false
+
+    additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - interrupts-extended
+  - interrupt-names
+  - mboxes
+  - qcom,smem-item
+  - vdd-cx-supply
+  - regulators
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/mailbox/qcom-ipcc.h>
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        cdsp_power: cdsp-power@4ae000 {
+            compatible = "qcom,cdsp-power";
+            reg = <0x0 0x004ae000 0x0 0x1000>,
+                  <0x0 0x26018018 0x0 0x4>;
+            reg-names = "mpm", "rscc";
+
+            interrupts-extended = <&intc GIC_SPI 65 IRQ_TYPE_EDGE_RISING 0>,
+                                  <&ipcc IPCC_CLIENT_CDSP
+                                         IPCC_MPROC_SIGNAL_PING
+                                         IRQ_TYPE_EDGE_RISING>;
+            interrupt-names = "lpm", "dcvs";
+
+            mboxes = <&ipcc IPCC_CLIENT_CDSP IPCC_MPROC_SIGNAL_PING>;
+
+            qcom,smem-item = <503>;
+
+            vdd-cx-supply = <&ipq9650_s2>;
+            vdd-mx-supply = <&ipq9650_s4>;
+
+            regulators {
+                cdsp_vdd_cx: cdsp-vdd-cx {
+                    regulator-name = "cdsp-vdd-cx";
+                };
+
+                cdsp_vdd_mx: cdsp-vdd-mx {
+                    regulator-name = "cdsp-vdd-mx";
+                };
+            };
+        };
+    };
