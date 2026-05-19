@@ -326,6 +326,7 @@ static void lsdc_pci_remove(struct pci_dev *pdev)
 	struct drm_device *ddev = pci_get_drvdata(pdev);
 
 	drm_dev_unregister(ddev);
+	vga_client_unregister(pdev);
 	drm_atomic_helper_shutdown(ddev);
 }
 
