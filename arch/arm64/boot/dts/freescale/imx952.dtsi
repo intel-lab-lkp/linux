@@ -349,6 +349,7 @@
 				clocks = <&scmi_clk IMX952_CLK_BUSWAKEUP>;
 				timeout-sec = <40>;
 				status = "disabled";
+				bootph-all;
 			};
 
 			tpm3: pwm@42100000 {

@@ -1283,6 +1283,7 @@
 				timeout-sec = <40>;
 				fsl,ext-reset-output;
 				status = "disabled";
+				bootph-all;
 			};
 		};
 
