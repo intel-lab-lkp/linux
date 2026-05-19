@@ -3182,7 +3182,8 @@ void blk_mq_submit_bio(struct bio *bio)
 	 * have to be done with queue usage counter held.
 	 */
 	if (unlikely(bio_unaligned(bio, q))) {
-		bio_io_error(bio);
+		bio->bi_status = BLK_STS_INVAL;
+		bio_endio(bio);
 		goto queue_exit;
 	}
 
