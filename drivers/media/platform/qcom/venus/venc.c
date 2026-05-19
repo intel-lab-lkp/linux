@@ -1579,7 +1579,7 @@ static int venc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	strscpy(vdev->name, "qcom-venus-encoder", sizeof(vdev->name));
-	vdev->release = video_device_release;
+	vdev->release = video_device_release_empty;
 	vdev->fops = &venc_fops;
 	vdev->ioctl_ops = &venc_ioctl_ops;
 	vdev->vfl_dir = VFL_DIR_M2M;
@@ -1590,6 +1590,7 @@ static int venc_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_vdev_release;
 
+	vdev->release = video_device_release;
 	core->vdev_enc = vdev;
 	core->dev_enc = dev;
 
