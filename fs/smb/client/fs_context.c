@@ -1051,6 +1051,7 @@ static void smb3_sync_ses_chan_max(struct cifs_ses *ses, unsigned int max_channe
 static int smb3_reconfigure(struct fs_context *fc)
 {
 	struct smb3_fs_context *ctx = smb3_fc2context(fc);
+	struct smb3_fs_context *tmp_ctx; /* used for copy of ctx to cifs_sb->ctx */
 	struct dentry *root = fc->root;
 	struct cifs_sb_info *cifs_sb = CIFS_SB(root->d_sb);
 	struct cifs_ses *ses = cifs_sb_master_tcon(cifs_sb)->ses;
@@ -1174,13 +1175,19 @@ static int smb3_reconfigure(struct fs_context *fc)
 	ctx->rsize = rsize ? CIFS_ALIGN_RSIZE(fc, rsize) : cifs_sb->ctx->rsize;
 	ctx->wsize = wsize ? CIFS_ALIGN_WSIZE(fc, wsize) : cifs_sb->ctx->wsize;
 
-	smb3_cleanup_fs_context_contents(cifs_sb->ctx);
-	rc = smb3_fs_context_dup(cifs_sb->ctx, ctx);
-	smb3_update_mnt_flags(cifs_sb);
+	tmp_ctx = kzalloc_obj(*tmp_ctx, GFP_KERNEL);
+	if (!tmp_ctx)
+		return -ENOMEM;
+	rc = smb3_fs_context_dup(tmp_ctx, ctx);
+	if (!rc) {
+		smb3_cleanup_fs_context_contents(cifs_sb->ctx);
+		memcpy(cifs_sb->ctx, tmp_ctx, sizeof(*tmp_ctx));
+		smb3_update_mnt_flags(cifs_sb);
 #ifdef CONFIG_CIFS_DFS_UPCALL
-	if (!rc)
 		rc = dfs_cache_remount_fs(cifs_sb);
 #endif
+	}
+	kfree(tmp_ctx);
 
 	return rc;
 }
