@@ -47,13 +47,16 @@
 #define MAX_PORTS       28
 #define MAX_SMI_BUSSES  4
 #define MAX_SMI_ADDR	0x1f
+#define RAW_PAGE(x)	((x) - 1)
 
 #define RTL9300_NUM_BUSES		4
+#define RTL9300_NUM_PAGES		4096
 #define RTL9300_NUM_PORTS		28
 
 struct rtl_mdio_info {
 	u8 num_buses;
 	u8 num_ports;
+	u16 num_pages;
 };
 
 struct rtl_mdio_priv {
@@ -126,7 +129,7 @@ static int rtl9300_mdio_read_c22(struct mii_bus *bus, int phy_id, int regnum)
 
 	val = FIELD_PREP(PHY_CTRL_REG_ADDR, regnum) |
 	      FIELD_PREP(PHY_CTRL_PARK_PAGE, 0x1f) |
-	      FIELD_PREP(PHY_CTRL_MAIN_PAGE, 0xfff) |
+	      FIELD_PREP(PHY_CTRL_MAIN_PAGE, RAW_PAGE(priv->info->num_pages)) |
 	      PHY_CTRL_READ | PHY_CTRL_TYPE_C22 | PHY_CTRL_CMD;
 	err = regmap_write(regmap, SMI_ACCESS_PHY_CTRL_1, val);
 	if (err)
@@ -179,7 +182,7 @@ static int rtl9300_mdio_write_c22(struct mii_bus *bus, int phy_id, int regnum, u
 
 	val = FIELD_PREP(PHY_CTRL_REG_ADDR, regnum) |
 	      FIELD_PREP(PHY_CTRL_PARK_PAGE, 0x1f) |
-	      FIELD_PREP(PHY_CTRL_MAIN_PAGE, 0xfff) |
+	      FIELD_PREP(PHY_CTRL_MAIN_PAGE, RAW_PAGE(priv->info->num_pages)) |
 	      PHY_CTRL_WRITE | PHY_CTRL_TYPE_C22 | PHY_CTRL_CMD;
 	err = regmap_write(regmap, SMI_ACCESS_PHY_CTRL_1, val);
 	if (err)
@@ -512,6 +515,7 @@ static int rtl_mdiobus_probe(struct platform_device *pdev)
 static const struct rtl_mdio_info rtl9300_mdio_info = {
 	.num_buses = RTL9300_NUM_BUSES,
 	.num_ports = RTL9300_NUM_PORTS,
+	.num_pages = RTL9300_NUM_PAGES,
 };
 
 static const struct of_device_id rtl_mdio_ids[] = {
