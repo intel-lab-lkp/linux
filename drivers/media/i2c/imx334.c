@@ -109,6 +109,7 @@
 /* CSI2 HW configuration */
 #define IMX334_LINK_FREQ_891M		891000000
 #define IMX334_LINK_FREQ_445M		445500000
+#define IMX334_LINK_FREQ_222M		222500000
 #define IMX334_NUM_DATA_LANES		4
 
 #define IMX334_REG_MIN			0x00
@@ -209,6 +210,8 @@ struct imx334 {
 	};
 	u32 vblank;
 	const struct imx334_mode *cur_mode;
+	const struct imx334_mode *new_supported_modes;
+	int new_modes_size;
 	unsigned long link_freq_bitmap;
 	u32 cur_code;
 };
@@ -216,6 +219,7 @@ struct imx334 {
 static const s64 link_freq[] = {
 	IMX334_LINK_FREQ_891M,
 	IMX334_LINK_FREQ_445M,
+	IMX334_LINK_FREQ_222M,
 };
 
 /* Sensor common mode registers values */
@@ -486,6 +490,45 @@ static const struct imx334_mode supported_modes[] = {
 			.num_of_regs = ARRAY_SIZE(mode_640x480_regs),
 			.regs = mode_640x480_regs,
 		},
+	}, {
+		.width = 1920,
+		.height = 1080,
+		.hblank = 2480,
+		.vblank = 1170,
+		.vblank_min = 45,
+		.vblank_max = 132840,
+		.pclk = 297000000,
+		.link_freq_idx = 2,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(mode_1920x1080_regs),
+			.regs = mode_1920x1080_regs,
+		},
+	}, {
+		.width = 1280,
+		.height = 720,
+		.hblank = 2480,
+		.vblank = 1170,
+		.vblank_min = 45,
+		.vblank_max = 132840,
+		.pclk = 297000000,
+		.link_freq_idx = 2,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(mode_1280x720_regs),
+			.regs = mode_1280x720_regs,
+		},
+	}, {
+		.width = 640,
+		.height = 480,
+		.hblank = 2480,
+		.vblank = 1170,
+		.vblank_min = 45,
+		.vblank_max = 132840,
+		.pclk = 297000000,
+		.link_freq_idx = 2,
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(mode_640x480_regs),
+			.regs = mode_640x480_regs,
+		},
 	},
 };
 
@@ -685,7 +728,7 @@ static int imx334_enum_frame_size(struct v4l2_subdev *sd,
 	struct imx334 *imx334 = to_imx334(sd);
 	u32 code;
 
-	if (fsize->index >= ARRAY_SIZE(supported_modes))
+	if (fsize->index >= imx334->new_modes_size)
 		return -EINVAL;
 
 	code = imx334_get_format_code(imx334, fsize->code);
@@ -693,9 +736,9 @@ static int imx334_enum_frame_size(struct v4l2_subdev *sd,
 	if (fsize->code != code)
 		return -EINVAL;
 
-	fsize->min_width = supported_modes[fsize->index].width;
+	fsize->min_width = imx334->new_supported_modes[fsize->index].width;
 	fsize->max_width = fsize->min_width;
-	fsize->min_height = supported_modes[fsize->index].height;
+	fsize->min_height = imx334->new_supported_modes[fsize->index].height;
 	fsize->max_height = fsize->min_height;
 
 	return 0;
@@ -748,8 +791,8 @@ static int imx334_set_pad_format(struct v4l2_subdev *sd,
 	const struct imx334_mode *mode;
 	int ret = 0;
 
-	mode = v4l2_find_nearest_size(supported_modes,
-				      ARRAY_SIZE(supported_modes),
+	mode = v4l2_find_nearest_size(imx334->new_supported_modes,
+				      imx334->new_modes_size,
 				      width, height,
 				      fmt->format.width, fmt->format.height);
 
@@ -854,6 +897,9 @@ static int imx334_enable_streams(struct v4l2_subdev *sd,
 		goto err_rpm_put;
 	}
 
+	if (link_freq[imx334->cur_mode->link_freq_idx] == IMX334_LINK_FREQ_222M)
+		cci_write(imx334->cci, IMX334_REG_INCKSEL2, 0x0a, NULL);
+
 	/* Start streaming */
 	ret = cci_write(imx334->cci, IMX334_REG_MODE_SELECT,
 			IMX334_MODE_STREAMING, NULL);
@@ -906,6 +952,55 @@ static int imx334_detect(struct imx334 *imx334)
 			IMX334_ID, val);
 		return -ENXIO;
 	}
+
+	return 0;
+}
+
+/**
+ * imx334_update_supported_mode_array() - Search for the supported
+ *                                        modes add them in the new list
+ * @imx334: pointer to imx334 device
+ *
+ * Return: 0 if successful, error code otherwise.
+ */
+static int imx334_update_supported_mode_array(struct imx334 *imx334)
+{
+	int i, j, size = 0;
+	struct imx334_mode *temp_ptr;
+
+	for (i = 0; i < ARRAY_SIZE(link_freq); i++) {
+		if (imx334->link_freq_bitmap & (1 << i)) {
+			for (j = 0; j < ARRAY_SIZE(supported_modes); j++) {
+				if (supported_modes[j].link_freq_idx == i)
+					size++;
+			}
+		}
+	}
+
+	if (!size)
+		return -EINVAL;
+
+	imx334->new_modes_size = size;
+
+	size = 0;
+
+	temp_ptr = devm_kmalloc(imx334->dev, imx334->new_modes_size * sizeof(struct imx334_mode),
+				GFP_KERNEL);
+	if (!temp_ptr)
+		return -ENOMEM;
+
+	for (i = 0; i < ARRAY_SIZE(link_freq); i++) {
+		if (imx334->link_freq_bitmap & (1 << i)) {
+			for (j = 0; j < ARRAY_SIZE(supported_modes); j++) {
+				if (supported_modes[j].link_freq_idx == i) {
+					temp_ptr[size] = supported_modes[j];
+					size++;
+				}
+			}
+		}
+	}
+
+	imx334->new_supported_modes = temp_ptr;
 
 	return 0;
 }
@@ -968,6 +1063,11 @@ static int imx334_parse_hw_config(struct imx334 *imx334)
 				       bus_cfg.nr_of_link_frequencies,
 				       link_freq, ARRAY_SIZE(link_freq),
 				       &imx334->link_freq_bitmap);
+
+	if (ret)
+		goto done_endpoint_free;
+
+	ret = imx334_update_supported_mode_array(imx334);
 
 done_endpoint_free:
 	v4l2_fwnode_endpoint_free(&bus_cfg);
@@ -1164,7 +1264,7 @@ static int imx334_probe(struct i2c_client *client)
 	}
 
 	/* Set default mode to max resolution */
-	imx334->cur_mode = &supported_modes[__ffs(imx334->link_freq_bitmap)];
+	imx334->cur_mode = &imx334->new_supported_modes[__ffs(imx334->link_freq_bitmap)];
 	imx334->cur_code = imx334_mbus_codes[0];
 	imx334->vblank = imx334->cur_mode->vblank;
 
