@@ -2877,15 +2877,15 @@ u8 GetHalDefVar8723B(struct adapter *padapter, enum hal_def_variable variable, v
 
 			rtw_write32(padapter, REG_HMEBOX_DBG_2_8723B, cmd);
 			msleep(10);
-			rtw_read32(padapter, 0x2F0);	// info 1
+			rtw_read32(padapter, 0x2F0);	/* info 1 */
 
 			cmd = 0x40000400 | mac_id;
 			rtw_write32(padapter, REG_HMEBOX_DBG_2_8723B, cmd);
 			msleep(10);
-			rtw_read32(padapter, 0x2F0);	// info 1
-			rtw_read32(padapter, 0x2F4);	// info 2
-			rtw_read32(padapter, 0x2F8);	// rate mask 1
-			rtw_read32(padapter, 0x2FC);	// rate mask 2
+			rtw_read32(padapter, 0x2F0);	/* info 1 */
+			rtw_read32(padapter, 0x2F4);	/* info 2 */
+			rtw_read32(padapter, 0x2F8);	/* rate mask 1 */
+			rtw_read32(padapter, 0x2FC);	/* rate mask 2 */
 		}
 		break;
 
