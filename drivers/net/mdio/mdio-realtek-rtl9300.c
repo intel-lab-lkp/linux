@@ -26,7 +26,7 @@
 #define   GLB_CTRL_INTF_SEL(intf)	BIT(16 + (intf))
 #define SMI_PORT0_15_POLLING_SEL	0xca08
 #define SMI_ACCESS_PHY_CTRL_0		0xcb70
-#define SMI_ACCESS_PHY_CTRL_1		0xcb74
+#define RTL9300_SMI_ACCESS_PHY_CTRL_1	0xcb74
 #define   PHY_CTRL_REG_ADDR		GENMASK(24, 20)
 #define   PHY_CTRL_PARK_PAGE		GENMASK(19, 15)
 #define   PHY_CTRL_MAIN_PAGE		GENMASK(14, 3)
@@ -54,6 +54,7 @@
 #define RTL9300_NUM_PORTS		28
 
 struct rtl_mdio_cmd_regs {
+	u32 c22_data;
 	u32 c45_data;
 };
 
@@ -99,12 +100,12 @@ static int rtl_mdio_phy_to_port(struct mii_bus *bus, int phy_id)
 static int rtl_mdio_wait_ready(struct rtl_mdio_priv *priv)
 {
 	struct regmap *regmap = priv->regmap;
-	u32 val;
+	u32 cmd_reg, val;
 
+	cmd_reg = priv->info->cmd_regs.c22_data; /* shared command/C22 register */
 	lockdep_assert_held(&priv->lock);
 
-	return regmap_read_poll_timeout(regmap, SMI_ACCESS_PHY_CTRL_1,
-					val, !(val & PHY_CTRL_CMD), 10, 1000);
+	return regmap_read_poll_timeout(regmap, cmd_reg, val, !(val & PHY_CTRL_CMD), 10, 1000);
 }
 
 static int rtl9300_mdio_read_c22(struct mii_bus *bus, int phy_id, int regnum)
@@ -112,12 +113,13 @@ static int rtl9300_mdio_read_c22(struct mii_bus *bus, int phy_id, int regnum)
 	struct rtl_mdio_chan *chan = bus->priv;
 	struct rtl_mdio_priv *priv;
 	struct regmap *regmap;
+	u32 cmd_reg, val;
 	int port;
-	u32 val;
 	int err;
 
 	priv = chan->priv;
 	regmap = priv->regmap;
+	cmd_reg = priv->info->cmd_regs.c22_data; /* shared command/C22 register */
 
 	port = rtl_mdio_phy_to_port(bus, phy_id);
 	if (port < 0)
@@ -136,7 +138,7 @@ static int rtl9300_mdio_read_c22(struct mii_bus *bus, int phy_id, int regnum)
 	      FIELD_PREP(PHY_CTRL_PARK_PAGE, 0x1f) |
 	      FIELD_PREP(PHY_CTRL_MAIN_PAGE, RAW_PAGE(priv->info->num_pages)) |
 	      PHY_CTRL_READ | PHY_CTRL_TYPE_C22 | PHY_CTRL_CMD;
-	err = regmap_write(regmap, SMI_ACCESS_PHY_CTRL_1, val);
+	err = regmap_write(regmap, cmd_reg, val);
 	if (err)
 		goto out_err;
 
@@ -161,12 +163,13 @@ static int rtl9300_mdio_write_c22(struct mii_bus *bus, int phy_id, int regnum, u
 	struct rtl_mdio_chan *chan = bus->priv;
 	struct rtl_mdio_priv *priv;
 	struct regmap *regmap;
+	u32 cmd_reg, val;
 	int port;
-	u32 val;
 	int err;
 
 	priv = chan->priv;
 	regmap = priv->regmap;
+	cmd_reg = priv->info->cmd_regs.c22_data; /* shared command/C22 register */
 
 	port = rtl_mdio_phy_to_port(bus, phy_id);
 	if (port < 0)
@@ -189,12 +192,11 @@ static int rtl9300_mdio_write_c22(struct mii_bus *bus, int phy_id, int regnum, u
 	      FIELD_PREP(PHY_CTRL_PARK_PAGE, 0x1f) |
 	      FIELD_PREP(PHY_CTRL_MAIN_PAGE, RAW_PAGE(priv->info->num_pages)) |
 	      PHY_CTRL_WRITE | PHY_CTRL_TYPE_C22 | PHY_CTRL_CMD;
-	err = regmap_write(regmap, SMI_ACCESS_PHY_CTRL_1, val);
+	err = regmap_write(regmap, cmd_reg, val);
 	if (err)
 		goto out_err;
 
-	err = regmap_read_poll_timeout(regmap, SMI_ACCESS_PHY_CTRL_1,
-				       val, !(val & PHY_CTRL_CMD), 10, 100);
+	err = regmap_read_poll_timeout(regmap, cmd_reg, val, !(val & PHY_CTRL_CMD), 10, 100);
 	if (err)
 		goto out_err;
 
@@ -216,12 +218,13 @@ static int rtl9300_mdio_read_c45(struct mii_bus *bus, int phy_id, int dev_addr, 
 	struct rtl_mdio_chan *chan = bus->priv;
 	struct rtl_mdio_priv *priv;
 	struct regmap *regmap;
+	u32 cmd_reg, val;
 	int port;
-	u32 val;
 	int err;
 
 	priv = chan->priv;
 	regmap = priv->regmap;
+	cmd_reg = priv->info->cmd_regs.c22_data; /* shared command/C22 register */
 
 	port = rtl_mdio_phy_to_port(bus, phy_id);
 	if (port < 0)
@@ -243,8 +246,7 @@ static int rtl9300_mdio_read_c45(struct mii_bus *bus, int phy_id, int dev_addr, 
 	if (err)
 		goto out_err;
 
-	err = regmap_write(regmap, SMI_ACCESS_PHY_CTRL_1,
-			   PHY_CTRL_READ | PHY_CTRL_TYPE_C45 | PHY_CTRL_CMD);
+	err = regmap_write(regmap, cmd_reg, PHY_CTRL_READ | PHY_CTRL_TYPE_C45 | PHY_CTRL_CMD);
 	if (err)
 		goto out_err;
 
@@ -270,12 +272,13 @@ static int rtl9300_mdio_write_c45(struct mii_bus *bus, int phy_id, int dev_addr,
 	struct rtl_mdio_chan *chan = bus->priv;
 	struct rtl_mdio_priv *priv;
 	struct regmap *regmap;
+	u32 cmd_reg, val;
 	int port;
-	u32 val;
 	int err;
 
 	priv = chan->priv;
 	regmap = priv->regmap;
+	cmd_reg = priv->info->cmd_regs.c22_data; /* shared command/C22 register */
 
 	port = rtl_mdio_phy_to_port(bus, phy_id);
 	if (port < 0)
@@ -301,13 +304,11 @@ static int rtl9300_mdio_write_c45(struct mii_bus *bus, int phy_id, int dev_addr,
 	if (err)
 		goto out_err;
 
-	err = regmap_write(regmap, SMI_ACCESS_PHY_CTRL_1,
-			   PHY_CTRL_TYPE_C45 | PHY_CTRL_WRITE | PHY_CTRL_CMD);
+	err = regmap_write(regmap, cmd_reg, PHY_CTRL_TYPE_C45 | PHY_CTRL_WRITE | PHY_CTRL_CMD);
 	if (err)
 		goto out_err;
 
-	err = regmap_read_poll_timeout(regmap, SMI_ACCESS_PHY_CTRL_1,
-				       val, !(val & PHY_CTRL_CMD), 10, 100);
+	err = regmap_read_poll_timeout(regmap, cmd_reg, val, !(val & PHY_CTRL_CMD), 10, 100);
 	if (err)
 		goto out_err;
 
@@ -519,6 +520,7 @@ static int rtl_mdiobus_probe(struct platform_device *pdev)
 
 static const struct rtl_mdio_info rtl9300_mdio_info = {
 	.cmd_regs = {
+		.c22_data = RTL9300_SMI_ACCESS_PHY_CTRL_1,
 		.c45_data = RTL9300_SMI_ACCESS_PHY_CTRL_3,
 	},
 	.num_buses = RTL9300_NUM_BUSES,
