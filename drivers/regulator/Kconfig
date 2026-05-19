@@ -870,6 +870,17 @@ config REGULATOR_MP886X
 	help
 	  This driver supports the MP8869 voltage regulator.
 
+config REGULATOR_MP8899
+	tristate "MPS MP8899 regulator driver"
+	depends on I2C && OF
+	select REGMAP_I2C
+	help
+	  Say y here to support the MP8899 PMIC voltage regulators. This driver
+	  supports the MP8899 quad buck converters with I2C interface.
+
+	  Say M here if you want to include support for the regulator as a
+	  module. The module will be named "mp8899".
+
 config REGULATOR_MPQ7920
 	tristate "Monolithic MPQ7920 PMIC"
 	depends on I2C && OF
