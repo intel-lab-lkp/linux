@@ -237,13 +237,13 @@ struct vcnl4000_chip_spec {
 };
 
 static const struct i2c_device_id vcnl4000_id[] = {
-	{ "cm36672p", CM36672P },
-	{ "cm36686", VCNL4040 },
-	{ "vcnl4000", VCNL4000 },
-	{ "vcnl4010", VCNL4010 },
-	{ "vcnl4020", VCNL4010 },
-	{ "vcnl4040", VCNL4040 },
-	{ "vcnl4200", VCNL4200 },
+	{ .name = "cm36672p", .driver_data = CM36672P },
+	{ .name = "cm36686", .driver_data = VCNL4040 },
+	{ .name = "vcnl4000", .driver_data = VCNL4000 },
+	{ .name = "vcnl4010", .driver_data = VCNL4010 },
+	{ .name = "vcnl4020", .driver_data = VCNL4010 },
+	{ .name = "vcnl4040", .driver_data = VCNL4040 },
+	{ .name = "vcnl4200", .driver_data = VCNL4200 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, vcnl4000_id);
