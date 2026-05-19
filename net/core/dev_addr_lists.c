@@ -1275,7 +1275,8 @@ static void netif_rx_mode_run(struct net_device *dev)
 		err = netif_addr_lists_snapshot(dev, &uc_snap, &mc_snap,
 						&uc_ref, &mc_ref);
 		if (err) {
-			netdev_WARN(dev, "failed to sync uc/mc addresses\n");
+			net_err_ratelimited("%s: failed to sync uc/mc addresses\n",
+					    netdev_name(dev));
 			netif_addr_unlock_bh(dev);
 			return;
 		}
