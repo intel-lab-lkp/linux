@@ -150,7 +150,7 @@ intel_pmdemand_update_phys_mask(struct intel_display *display,
 				struct intel_pmdemand_state *pmdemand_state,
 				bool set_bit)
 {
-	enum phy phy;
+	unsigned int phy;
 
 	if (DISPLAY_VER(display) < 14)
 		return;
