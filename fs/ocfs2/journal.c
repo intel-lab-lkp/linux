@@ -243,6 +243,7 @@ void ocfs2_recovery_exit(struct ocfs2_super *osb)
 	/* XXX: Should we bug if there are dirty entries? */
 
 	kfree(rm);
+	osb->recovery_map = NULL;
 }
 
 static int __ocfs2_recovery_map_test(struct ocfs2_super *osb,
@@ -1224,6 +1225,9 @@ static int ocfs2_recovery_completed(struct ocfs2_super *osb)
 {
 	int empty;
 	struct ocfs2_recovery_map *rm = osb->recovery_map;
+
+	if (!rm)
+		return 1;
 
 	spin_lock(&osb->osb_lock);
 	empty = (rm->rm_used == 0);
