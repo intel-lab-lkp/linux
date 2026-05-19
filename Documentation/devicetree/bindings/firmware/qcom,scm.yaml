@@ -127,6 +127,13 @@ properties:
           - description: offset of the download mode control register
     description: TCSR hardware block
 
+  sram:
+    description:
+      Phandle to a region in always-on SRAM used to store the download
+      mode value for boot firmware to read before DDR is initialised on
+      the next warm reset.
+    maxItems: 1
+
 allOf:
   # Clocks
   - if:
@@ -245,5 +252,14 @@ examples:
                      <&gcc GCC_CRYPTO_AXI_CLK>,
                      <&gcc GCC_CRYPTO_AHB_CLK>;
             clock-names = "core", "bus", "iface";
+        };
+    };
+
+  - |
+    firmware {
+        scm {
+            compatible = "qcom,scm-kaanapali", "qcom,scm";
+            sram = <&minidump_config>;
+            #reset-cells = <1>;
         };
     };
