@@ -7495,6 +7495,12 @@ S:	Maintained
 F:	Documentation/admin-guide/media/mgb4.rst
 F:	drivers/media/pci/mgb4/
 
+AVMATRIX HWS DRIVER
+M:	Ben Hoff <hoff.benjamin.k@gmail.com>
+L:	linux-media@vger.kernel.org
+S:	Maintained
+F:	drivers/media/pci/hws/
+
 DIOLAN U2C-12 I2C DRIVER
 M:	Guenter Roeck <linux@roeck-us.net>
 L:	linux-i2c@vger.kernel.org
