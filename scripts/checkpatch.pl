@@ -3712,6 +3712,21 @@ sub process {
 			}
 		}
 
+# check for uppercase N/Y/M used as Kconfig tristate literals
+		if ($realfile =~ /Kconfig/ &&
+		    $line =~ /^\+\s*(?:default|def_bool|def_tristate|select|imply|depends\s+on|visible\s+if|range|if)\s+(.+)$/) {
+			my $expr = $1;
+			$expr =~ s/"[^"]*"//g;		# strip "quoted strings"
+			$expr =~ s/'[^']*'//g;		# strip 'quoted strings'
+			$expr =~ s/#.*//;		# strip inline comments
+			$expr =~ s/\$\([^)]*\)//g;	# strip $(macro) expansions
+			for my $tok (split /[^A-Za-z0-9_]+/, $expr) {
+				next unless ($tok eq 'Y' || $tok eq 'M' || $tok eq 'N');
+				WARN("KCONFIG_TRISTATE_UPPERCASE",
+				     "'$tok' is probably not what you want here; Kconfig tristate literals are always lowercase ('n', 'y', 'm')\n" . $herecurr);
+			}
+		}
+
 # check MAINTAINERS entries
 		if ($realfile =~ /^MAINTAINERS$/) {
 # check MAINTAINERS entries for the right form
