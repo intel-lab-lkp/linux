@@ -1059,6 +1059,41 @@ static void rtw89_usb_intf_deinit(struct rtw89_dev *rtwdev,
 	usb_set_intfdata(intf, NULL);
 }
 
+static ssize_t hw_info_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	struct usb_interface *intf = to_usb_interface(dev);
+	struct ieee80211_hw *hw;
+	struct rtw89_dev *rtwdev;
+	struct rtw89_efuse *efuse;
+	ssize_t ret;
+
+	device_lock(dev);
+
+	hw = usb_get_intfdata(intf);
+	if (!hw) {
+		device_unlock(dev);
+		return -ENODEV;
+	}
+
+	rtwdev = hw->priv;
+	efuse = &rtwdev->efuse;
+
+	ret = sysfs_emit(buf, "SN: %*ph\nUUID: %*ph\n",
+			 (int)sizeof(efuse->sn), efuse->sn,
+			 (int)sizeof(efuse->uuid), efuse->uuid);
+
+	device_unlock(dev);
+	return ret;
+}
+static DEVICE_ATTR_RO(hw_info);
+
+static struct attribute *rtw89_usb_attrs[] = {
+	&dev_attr_hw_info.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(rtw89_usb);
+
 int rtw89_usb_probe(struct usb_interface *intf,
 		    const struct usb_device_id *id)
 {
@@ -1118,10 +1153,16 @@ int rtw89_usb_probe(struct usb_interface *intf,
 		goto err_core_deinit;
 	}
 
+	ret = sysfs_create_groups(&intf->dev.kobj, rtw89_usb_groups);
+	if (ret) {
+		rtw89_err(rtwdev, "failed to create sysfs groups: %d\n", ret);
+		goto err_core_deinit;
+	}
+
 	ret = rtw89_core_register(rtwdev);
 	if (ret) {
 		rtw89_err(rtwdev, "failed to register core\n");
-		goto err_core_deinit;
+		goto err_remove_sysfs;
 	}
 
 	rtw89_usb_start_rx(rtwdev);
@@ -1130,6 +1171,8 @@ int rtw89_usb_probe(struct usb_interface *intf,
 
 	return 0;
 
+err_remove_sysfs:
+	sysfs_remove_groups(&intf->dev.kobj, rtw89_usb_groups);
 err_core_deinit:
 	rtw89_core_deinit(rtwdev);
 err_deinit_rx:
@@ -1154,12 +1197,18 @@ void rtw89_usb_disconnect(struct usb_interface *intf)
 	if (!hw)
 		return;
 
+	/* Clear intfdata immediately so any concurrent sysfs show waiting on
+	 * device_lock will see NULL and bail out safely.
+	 */
+	usb_set_intfdata(intf, NULL);
+
 	rtwdev = hw->priv;
 	rtwusb = rtw89_usb_priv(rtwdev);
 
 	rtw89_usb_cancel_rx_bufs(rtwusb);
 	rtw89_usb_cancel_tx_bufs(rtwusb);
 
+	sysfs_remove_groups(&intf->dev.kobj, rtw89_usb_groups);
 	rtw89_core_unregister(rtwdev);
 	rtw89_core_deinit(rtwdev);
 	rtw89_usb_deinit_rx(rtwdev);
