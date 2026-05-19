@@ -348,9 +348,9 @@ static ssize_t show_label(struct device *dev,
 	struct temp_data *tdata = container_of(devattr, struct temp_data, sd_attrs[ATTR_LABEL]);
 
 	if (is_pkg_temp_data(tdata))
-		return sprintf(buf, "Package id %u\n", pdata->pkg_id);
+		return sysfs_emit(buf, "Package id %u\n", pdata->pkg_id);
 
-	return sprintf(buf, "Core %u\n", tdata->cpu_core_id);
+	return sysfs_emit(buf, "Core %u\n", tdata->cpu_core_id);
 }
 
 static ssize_t show_crit_alarm(struct device *dev,
@@ -364,7 +364,7 @@ static ssize_t show_crit_alarm(struct device *dev,
 	rdmsr_on_cpu(tdata->cpu, tdata->status_reg, &eax, &edx);
 	mutex_unlock(&tdata->update_lock);
 
-	return sprintf(buf, "%d\n", (eax >> 5) & 1);
+	return sysfs_emit(buf, "%d\n", (eax >> 5) & 1);
 }
 
 static ssize_t show_tjmax(struct device *dev,
@@ -377,7 +377,7 @@ static ssize_t show_tjmax(struct device *dev,
 	tjmax = get_tjmax(tdata, dev);
 	mutex_unlock(&tdata->update_lock);
 
-	return sprintf(buf, "%d\n", tjmax);
+	return sysfs_emit(buf, "%d\n", tjmax);
 }
 
 static ssize_t show_ttarget(struct device *dev,
@@ -392,7 +392,7 @@ static ssize_t show_ttarget(struct device *dev,
 
 	if (ttarget < 0)
 		return ttarget;
-	return sprintf(buf, "%d\n", ttarget);
+	return sysfs_emit(buf, "%d\n", ttarget);
 }
 
 static ssize_t show_temp(struct device *dev,
@@ -419,7 +419,7 @@ static ssize_t show_temp(struct device *dev,
 	}
 
 	mutex_unlock(&tdata->update_lock);
-	return sprintf(buf, "%d\n", tdata->temp);
+	return sysfs_emit(buf, "%d\n", tdata->temp);
 }
 
 static int create_core_attrs(struct temp_data *tdata, struct device *dev)
