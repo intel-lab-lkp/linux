@@ -21782,6 +21782,13 @@ F:	Documentation/networking/device_drivers/ethernet/freescale/dpaa2/overview.rst
 F:	drivers/bus/fsl-mc/
 F:	include/uapi/linux/fsl_mc.h
 
+PW Locks
+M:	Leonardo Bras <leobras.c@gmail.com>
+S:	Supported
+F:	Documentation/locking/pwlocks.rst
+F:	include/linux/pwlocks.h
+F:	kernel/pwlocks.c
+
 QT1010 MEDIA DRIVER
 L:	linux-media@vger.kernel.org
 S:	Orphan
