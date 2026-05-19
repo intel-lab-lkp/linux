@@ -1300,12 +1300,28 @@ static void nfc_llcp_recv_snl(struct nfc_llcp_local *local,
 	sdres_tlvs_len = 0;
 
 	while (offset < tlv_len) {
-		type = tlv[0];
+		if (offset + 2 > tlv_len) {
+			pr_err("Truncated TLV header at offset %u\n", offset);
+			goto exit;
+		}
+
+		type   = tlv[0];
 		length = tlv[1];
+
+		if (offset + 2 + length > tlv_len) {
+			pr_err("TLV length %u overflows buffer at offset %u\n",
+			       length, offset);
+			goto exit;
+		}
 
 		switch (type) {
 		case LLCP_TLV_SDREQ:
-			tid = tlv[2];
+			if (length < 1) {
+				pr_err("SDREQ TLV length %u too short\n", length);
+				goto exit;
+			}
+
+			tid          = tlv[2];
 			service_name = (char *) &tlv[3];
 			service_name_len = length - 1;
 
@@ -1369,6 +1385,9 @@ add_snl:
 			break;
 
 		case LLCP_TLV_SDRES:
+			if (length < 2)
+				break;
+
 			mutex_lock(&local->sdreq_lock);
 
 			pr_debug("LLCP_TLV_SDRES: searching tid %d\n", tlv[2]);
