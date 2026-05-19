@@ -332,6 +332,9 @@ static void nf_nat_sip_expected(struct nf_conn *ct,
 	int range_set_for_snat = 0;
 	struct nf_nat_range2 range;
 
+	if (!help)
+		return;
+
 	/* This must be a fresh one. */
 	BUG_ON(ct->status & IPS_NAT_DONE_MASK);
 

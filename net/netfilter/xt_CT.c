@@ -223,6 +223,7 @@ out:
 
 err4:
 	help = nfct_help(ct);
+	WARN_ON_ONCE(help);
 	xt_ct_put_helper(help);
 err3:
 	nf_ct_tmpl_free(ct);
