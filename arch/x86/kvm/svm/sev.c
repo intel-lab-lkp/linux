@@ -114,7 +114,7 @@ static __always_inline void kvm_lockdep_assert_sev_lock_held(struct kvm *kvm)
 	 * Querying SEV+ support is safe if there are no other references, i.e.
 	 * if concurrent initialization of SEV+ is impossible.
 	 */
-	if (!refcount_read(&kvm->users_count))
+	if (!refcount_read(&kvm->rc.users_count))
 		return;
 
 	/*
