@@ -528,22 +528,28 @@ int btrfs_get_dev_zone_info(struct btrfs_device *device, bool populate_cache)
 	}
 
 	if (unlikely(nactive > zone_info->max_active_zones)) {
-		if (bdev_max_active_zones(bdev) == 0) {
-			zone_info->max_active_zones = 0;
-			goto validate;
+		if (bdev_max_active_zones(bdev) > 0) {
+			btrfs_err(device->fs_info,
+					"zoned: %u active zones on %s exceeds max_active_zones %u",
+					nactive, rcu_dereference(device->name),
+					zone_info->max_active_zones);
+			ret = -EIO;
+			goto out;
 		}
-		btrfs_err(device->fs_info,
-				"zoned: %u active zones on %s exceeds max_active_zones %u",
-				nactive, rcu_dereference(device->name),
-				zone_info->max_active_zones);
-		ret = -EIO;
-		goto out;
-	}
-	atomic_set(&zone_info->active_zones_left,
-			zone_info->max_active_zones - nactive);
-	set_bit(BTRFS_FS_ACTIVE_ZONE_TRACKING, &fs_info->flags);
 
-validate:
+		/*
+		 * This is for backwards compatibility with old filesystems that
+		 * have a lot of active zones because the device doesn't report
+		 * a maximum number of zones and we previously didn't care for
+		 * the limit,
+		 */
+		zone_info->max_active_zones = 0;
+	} else {
+		atomic_set(&zone_info->active_zones_left,
+				zone_info->max_active_zones - nactive);
+		set_bit(BTRFS_FS_ACTIVE_ZONE_TRACKING, &fs_info->flags);
+	}
+
 	/* Validate superblock log */
 	nr_zones = BTRFS_NR_SB_LOG_ZONES;
 	for (i = 0; i < BTRFS_SUPER_MIRROR_MAX; i++) {
