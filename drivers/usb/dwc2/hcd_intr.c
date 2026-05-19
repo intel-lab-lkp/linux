@@ -515,7 +515,7 @@ void dwc2_hcd_save_data_toggle(struct dwc2_hsotg *hsotg,
 	u32 pid = (hctsiz & TSIZ_SC_MC_PID_MASK) >> TSIZ_SC_MC_PID_SHIFT;
 
 	if (chan->ep_type != USB_ENDPOINT_XFER_CONTROL) {
-		if (WARN(!chan || !chan->qh,
+		if (WARN(!chan->qh,
 			 "chan->qh must be specified for non-control eps\n"))
 			return;
 
