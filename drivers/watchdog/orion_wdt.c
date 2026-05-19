@@ -81,14 +81,9 @@ static int orion_wdt_clock_init(struct platform_device *pdev,
 {
 	int ret;
 
-	dev->clk = clk_get(&pdev->dev, NULL);
+	dev->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(dev->clk))
 		return PTR_ERR(dev->clk);
-	ret = clk_prepare_enable(dev->clk);
-	if (ret) {
-		clk_put(dev->clk);
-		return ret;
-	}
 
 	dev->clk_rate = clk_get_rate(dev->clk);
 	return 0;
@@ -99,14 +94,9 @@ static int armada370_wdt_clock_init(struct platform_device *pdev,
 {
 	int ret;
 
-	dev->clk = clk_get(&pdev->dev, NULL);
+	dev->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(dev->clk))
 		return PTR_ERR(dev->clk);
-	ret = clk_prepare_enable(dev->clk);
-	if (ret) {
-		clk_put(dev->clk);
-		return ret;
-	}
 
 	/* Setup watchdog input clock */
 	atomic_io_modify(dev->reg + TIMER_CTRL,
@@ -122,14 +112,11 @@ static int armada375_wdt_clock_init(struct platform_device *pdev,
 {
 	int ret;
 
-	dev->clk = of_clk_get_by_name(pdev->dev.of_node, "fixed");
-	if (!IS_ERR(dev->clk)) {
-		ret = clk_prepare_enable(dev->clk);
-		if (ret) {
-			clk_put(dev->clk);
-			return ret;
-		}
+	dev->clk = devm_clk_get_optional_enabled(&pdev->dev, "fixed");
+	if (IS_ERR(dev->clk))
+		return PTR_ERR(dev->clk);
 
+	if (dev->clk) {
 		atomic_io_modify(dev->reg + TIMER_CTRL,
 				WDT_AXP_FIXED_ENABLE_BIT,
 				WDT_AXP_FIXED_ENABLE_BIT);
@@ -139,15 +126,9 @@ static int armada375_wdt_clock_init(struct platform_device *pdev,
 	}
 
 	/* Mandatory fallback for proper devicetree backward compatibility */
-	dev->clk = clk_get(&pdev->dev, NULL);
+	dev->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(dev->clk))
 		return PTR_ERR(dev->clk);
-
-	ret = clk_prepare_enable(dev->clk);
-	if (ret) {
-		clk_put(dev->clk);
-		return ret;
-	}
 
 	atomic_io_modify(dev->reg + TIMER_CTRL,
 			WDT_A370_RATIO_MASK(WDT_A370_RATIO_SHIFT),
@@ -163,14 +144,9 @@ static int armadaxp_wdt_clock_init(struct platform_device *pdev,
 	int ret;
 	u32 val;
 
-	dev->clk = of_clk_get_by_name(pdev->dev.of_node, "fixed");
+	dev->clk = devm_clk_get_enabled(&pdev->dev, "fixed");
 	if (IS_ERR(dev->clk))
 		return PTR_ERR(dev->clk);
-	ret = clk_prepare_enable(dev->clk);
-	if (ret) {
-		clk_put(dev->clk);
-		return ret;
-	}
 
 	/* Fix the wdt and timer1 clock frequency to 25MHz */
 	val = WDT_AXP_FIXED_ENABLE_BIT | TIMER1_FIXED_ENABLE_BIT;
@@ -615,7 +591,7 @@ static int orion_wdt_probe(struct platform_device *pdev)
 				       pdev->name, dev);
 		if (ret < 0) {
 			dev_err(&pdev->dev, "failed to request IRQ\n");
-			goto disable_clk;
+			return ret;
 		}
 	}
 
@@ -627,34 +603,19 @@ static int orion_wdt_probe(struct platform_device *pdev)
 				       0, pdev->name, dev);
 		if (ret < 0) {
 			dev_err(&pdev->dev, "failed to request IRQ\n");
-			goto disable_clk;
+			return ret;
 		}
 	}
 
 
 	watchdog_set_nowayout(&dev->wdt, nowayout);
-	ret = watchdog_register_device(&dev->wdt);
+	ret = devm_watchdog_register_device(&pdev->dev, &dev->wdt);
 	if (ret)
-		goto disable_clk;
+		return ret;
 
 	pr_info("Initial timeout %d sec%s\n",
 		dev->wdt.timeout, nowayout ? ", nowayout" : "");
 	return 0;
-
-disable_clk:
-	clk_disable_unprepare(dev->clk);
-	clk_put(dev->clk);
-	return ret;
-}
-
-static void orion_wdt_remove(struct platform_device *pdev)
-{
-	struct watchdog_device *wdt_dev = platform_get_drvdata(pdev);
-	struct orion_watchdog *dev = watchdog_get_drvdata(wdt_dev);
-
-	watchdog_unregister_device(wdt_dev);
-	clk_disable_unprepare(dev->clk);
-	clk_put(dev->clk);
 }
 
 static void orion_wdt_shutdown(struct platform_device *pdev)
@@ -665,7 +626,6 @@ static void orion_wdt_shutdown(struct platform_device *pdev)
 
 static struct platform_driver orion_wdt_driver = {
 	.probe		= orion_wdt_probe,
-	.remove		= orion_wdt_remove,
 	.shutdown	= orion_wdt_shutdown,
 	.driver		= {
 		.name	= "orion_wdt",
