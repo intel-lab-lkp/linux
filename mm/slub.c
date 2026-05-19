@@ -50,6 +50,7 @@
 #include <linux/irq_work.h>
 #include <linux/kprobes.h>
 #include <linux/debugfs.h>
+#include <linux/pwlocks.h>
 #include <trace/events/kmem.h>
 
 #include "internal.h"
@@ -129,7 +130,7 @@
  *   For debug caches, all allocations are forced to go through a list_lock
  *   protected region to serialize against concurrent validation.
  *
- *   cpu_sheaves->lock (local_trylock)
+ *   cpu_sheaves->lock (pw_trylock)
  *
  *   This lock protects fastpath operations on the percpu sheaves. On !RT it
  *   only disables preemption and does no atomic operations. As long as the main
@@ -157,7 +158,7 @@
  *   Interrupts are disabled as part of list_lock or barn lock operations, or
  *   around the slab_lock operation, in order to make the slab allocator safe
  *   to use in the context of an irq.
- *   Preemption is disabled as part of local_trylock operations.
+ *   Preemption is disabled as part of pw_trylock operations.
  *   kmalloc_nolock() and kfree_nolock() are safe in NMI context but see
  *   their limitations.
  *
@@ -418,7 +419,7 @@ struct slab_sheaf {
 };
 
 struct slub_percpu_sheaves {
-	local_trylock_t lock;
+	pw_trylock_t lock;
 	struct slab_sheaf *main; /* never NULL when unlocked */
 	struct slab_sheaf *spare; /* empty or full, may be NULL */
 	struct slab_sheaf *rcu_free; /* for batching kfree_rcu() */
@@ -484,7 +485,7 @@ static nodemask_t slab_barn_nodes;
 static struct workqueue_struct *flushwq;
 
 struct slub_flush_work {
-	struct work_struct work;
+	struct pw_struct pw;
 	struct kmem_cache *s;
 	bool skip;
 };
@@ -2845,16 +2846,14 @@ static void __kmem_cache_free_bulk(struct kmem_cache *s, size_t size, void **p);
  *
  * Returns how many objects are remaining to be flushed
  */
-static unsigned int __sheaf_flush_main_batch(struct kmem_cache *s)
+static unsigned int __sheaf_flush_main_batch(struct kmem_cache *s, int cpu)
 {
 	struct slub_percpu_sheaves *pcs;
 	unsigned int batch, remaining;
 	void *objects[PCS_BATCH_MAX];
 	struct slab_sheaf *sheaf;
 
-	lockdep_assert_held(this_cpu_ptr(&s->cpu_sheaves->lock));
-
-	pcs = this_cpu_ptr(s->cpu_sheaves);
+	pcs = per_cpu_ptr(s->cpu_sheaves, cpu);
 	sheaf = pcs->main;
 
 	batch = min(PCS_BATCH_MAX, sheaf->size);
@@ -2864,7 +2863,7 @@ static unsigned int __sheaf_flush_main_batch(struct kmem_cache *s)
 
 	remaining = sheaf->size;
 
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock(&s->cpu_sheaves->lock, cpu);
 
 	__kmem_cache_free_bulk(s, batch, &objects[0]);
 
@@ -2873,14 +2872,14 @@ static unsigned int __sheaf_flush_main_batch(struct kmem_cache *s)
 	return remaining;
 }
 
-static void sheaf_flush_main(struct kmem_cache *s)
+static void sheaf_flush_main(struct kmem_cache *s, int cpu)
 {
 	unsigned int remaining;
 
 	do {
-		local_lock(&s->cpu_sheaves->lock);
+		pw_lock(&s->cpu_sheaves->lock, cpu);
 
-		remaining = __sheaf_flush_main_batch(s);
+		remaining = __sheaf_flush_main_batch(s, cpu);
 
 	} while (remaining);
 }
@@ -2894,11 +2893,13 @@ static bool sheaf_try_flush_main(struct kmem_cache *s)
 	bool ret = false;
 
 	do {
-		if (!local_trylock(&s->cpu_sheaves->lock))
+		if (!pw_trylock_local(&s->cpu_sheaves->lock))
 			return ret;
 
 		ret = true;
-		remaining = __sheaf_flush_main_batch(s);
+
+		pw_lockdep_assert_held(&s->cpu_sheaves->lock);
+		remaining = __sheaf_flush_main_batch(s, smp_processor_id());
 
 	} while (remaining);
 
@@ -2975,13 +2976,13 @@ static void rcu_free_sheaf_nobarn(struct rcu_head *head)
  * flushing operations are rare so let's keep it simple and flush to slabs
  * directly, skipping the barn
  */
-static void pcs_flush_all(struct kmem_cache *s)
+static void pcs_flush_all(struct kmem_cache *s, int cpu)
 {
 	struct slub_percpu_sheaves *pcs;
 	struct slab_sheaf *spare, *rcu_free;
 
-	local_lock(&s->cpu_sheaves->lock);
-	pcs = this_cpu_ptr(s->cpu_sheaves);
+	pw_lock(&s->cpu_sheaves->lock, cpu);
+	pcs = per_cpu_ptr(s->cpu_sheaves, cpu);
 
 	spare = pcs->spare;
 	pcs->spare = NULL;
@@ -2989,7 +2990,7 @@ static void pcs_flush_all(struct kmem_cache *s)
 	rcu_free = pcs->rcu_free;
 	pcs->rcu_free = NULL;
 
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock(&s->cpu_sheaves->lock, cpu);
 
 	if (spare) {
 		sheaf_flush_unused(s, spare);
@@ -2999,7 +3000,7 @@ static void pcs_flush_all(struct kmem_cache *s)
 	if (rcu_free)
 		call_rcu(&rcu_free->rcu_head, rcu_free_sheaf_nobarn);
 
-	sheaf_flush_main(s);
+	sheaf_flush_main(s, cpu);
 }
 
 static void __pcs_flush_all_cpu(struct kmem_cache *s, unsigned int cpu)
@@ -3949,13 +3950,13 @@ static void flush_cpu_sheaves(struct work_struct *w)
 {
 	struct kmem_cache *s;
 	struct slub_flush_work *sfw;
+	int cpu = pw_get_cpu(w);
 
-	sfw = container_of(w, struct slub_flush_work, work);
-
+	sfw = &per_cpu(slub_flush, cpu);
 	s = sfw->s;
 
 	if (cache_has_sheaves(s))
-		pcs_flush_all(s);
+		pcs_flush_all(s, cpu);
 }
 
 static void flush_all_cpus_locked(struct kmem_cache *s)
@@ -3972,17 +3973,17 @@ static void flush_all_cpus_locked(struct kmem_cache *s)
 			sfw->skip = true;
 			continue;
 		}
-		INIT_WORK(&sfw->work, flush_cpu_sheaves);
+		INIT_PW(&sfw->pw, flush_cpu_sheaves, cpu);
 		sfw->skip = false;
 		sfw->s = s;
-		queue_work_on(cpu, flushwq, &sfw->work);
+		pw_queue_on(cpu, flushwq, &sfw->pw);
 	}
 
 	for_each_online_cpu(cpu) {
 		sfw = &per_cpu(slub_flush, cpu);
 		if (sfw->skip)
 			continue;
-		flush_work(&sfw->work);
+		pw_flush(&sfw->pw);
 	}
 
 	mutex_unlock(&flush_lock);
@@ -4001,17 +4002,18 @@ static void flush_rcu_sheaf(struct work_struct *w)
 	struct slab_sheaf *rcu_free;
 	struct slub_flush_work *sfw;
 	struct kmem_cache *s;
+	int cpu = pw_get_cpu(w);
 
-	sfw = container_of(w, struct slub_flush_work, work);
+	sfw = &per_cpu(slub_flush, cpu);
 	s = sfw->s;
 
-	local_lock(&s->cpu_sheaves->lock);
-	pcs = this_cpu_ptr(s->cpu_sheaves);
+	pw_lock(&s->cpu_sheaves->lock, cpu);
+	pcs = per_cpu_ptr(s->cpu_sheaves, cpu);
 
 	rcu_free = pcs->rcu_free;
 	pcs->rcu_free = NULL;
 
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock(&s->cpu_sheaves->lock, cpu);
 
 	if (rcu_free)
 		call_rcu(&rcu_free->rcu_head, rcu_free_sheaf_nobarn);
@@ -4036,14 +4038,14 @@ void flush_rcu_sheaves_on_cache(struct kmem_cache *s)
 		 * sure the __kfree_rcu_sheaf() finished its call_rcu()
 		 */
 
-		INIT_WORK(&sfw->work, flush_rcu_sheaf);
+		INIT_PW(&sfw->pw, flush_rcu_sheaf, cpu);
 		sfw->s = s;
-		queue_work_on(cpu, flushwq, &sfw->work);
+		pw_queue_on(cpu, flushwq, &sfw->pw);
 	}
 
 	for_each_online_cpu(cpu) {
 		sfw = &per_cpu(slub_flush, cpu);
-		flush_work(&sfw->work);
+		pw_flush(&sfw->pw);
 	}
 
 	mutex_unlock(&flush_lock);
@@ -4596,11 +4598,11 @@ __pcs_replace_empty_main(struct kmem_cache *s, struct slub_percpu_sheaves *pcs, 
 	struct node_barn *barn;
 	bool allow_spin;
 
-	lockdep_assert_held(this_cpu_ptr(&s->cpu_sheaves->lock));
+	pw_lockdep_assert_held(&s->cpu_sheaves->lock);
 
 	/* Bootstrap or debug cache, back off */
 	if (unlikely(!cache_has_sheaves(s))) {
-		local_unlock(&s->cpu_sheaves->lock);
+		pw_unlock_local(&s->cpu_sheaves->lock);
 		return NULL;
 	}
 
@@ -4611,7 +4613,7 @@ __pcs_replace_empty_main(struct kmem_cache *s, struct slub_percpu_sheaves *pcs, 
 
 	barn = get_barn(s);
 	if (!barn) {
-		local_unlock(&s->cpu_sheaves->lock);
+		pw_unlock_local(&s->cpu_sheaves->lock);
 		return NULL;
 	}
 
@@ -4636,7 +4638,7 @@ __pcs_replace_empty_main(struct kmem_cache *s, struct slub_percpu_sheaves *pcs, 
 		}
 	}
 
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock_local(&s->cpu_sheaves->lock);
 	pcs = NULL;
 
 	if (!allow_spin)
@@ -4662,7 +4664,7 @@ __pcs_replace_empty_main(struct kmem_cache *s, struct slub_percpu_sheaves *pcs, 
 	full = empty;
 	empty = NULL;
 
-	if (!local_trylock(&s->cpu_sheaves->lock))
+	if (!pw_trylock_local(&s->cpu_sheaves->lock))
 		goto barn_put;
 	pcs = this_cpu_ptr(s->cpu_sheaves);
 
@@ -4740,7 +4742,7 @@ void *alloc_from_pcs(struct kmem_cache *s, gfp_t gfp, int node)
 		return NULL;
 	}
 
-	if (!local_trylock(&s->cpu_sheaves->lock))
+	if (!pw_trylock_local(&s->cpu_sheaves->lock))
 		return NULL;
 
 	pcs = this_cpu_ptr(s->cpu_sheaves);
@@ -4760,7 +4762,7 @@ void *alloc_from_pcs(struct kmem_cache *s, gfp_t gfp, int node)
 		 * the current allocation or previous freeing process.
 		 */
 		if (page_to_nid(virt_to_page(object)) != node) {
-			local_unlock(&s->cpu_sheaves->lock);
+			pw_unlock_local(&s->cpu_sheaves->lock);
 			stat(s, ALLOC_NODE_MISMATCH);
 			return NULL;
 		}
@@ -4768,7 +4770,7 @@ void *alloc_from_pcs(struct kmem_cache *s, gfp_t gfp, int node)
 
 	pcs->main->size--;
 
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock_local(&s->cpu_sheaves->lock);
 
 	stat(s, ALLOC_FASTPATH);
 
@@ -4785,7 +4787,7 @@ unsigned int alloc_from_pcs_bulk(struct kmem_cache *s, gfp_t gfp, size_t size,
 	unsigned int batch;
 
 next_batch:
-	if (!local_trylock(&s->cpu_sheaves->lock))
+	if (!pw_trylock_local(&s->cpu_sheaves->lock))
 		return allocated;
 
 	pcs = this_cpu_ptr(s->cpu_sheaves);
@@ -4796,7 +4798,7 @@ next_batch:
 		struct node_barn *barn;
 
 		if (unlikely(!cache_has_sheaves(s))) {
-			local_unlock(&s->cpu_sheaves->lock);
+			pw_unlock_local(&s->cpu_sheaves->lock);
 			return allocated;
 		}
 
@@ -4807,7 +4809,7 @@ next_batch:
 
 		barn = get_barn(s);
 		if (!barn) {
-			local_unlock(&s->cpu_sheaves->lock);
+			pw_unlock_local(&s->cpu_sheaves->lock);
 			return allocated;
 		}
 
@@ -4822,7 +4824,7 @@ next_batch:
 
 		stat(s, BARN_GET_FAIL);
 
-		local_unlock(&s->cpu_sheaves->lock);
+		pw_unlock_local(&s->cpu_sheaves->lock);
 
 		/*
 		 * Once full sheaves in barn are depleted, let the bulk
@@ -4840,7 +4842,7 @@ do_alloc:
 	main->size -= batch;
 	memcpy(p, main->objects + main->size, batch * sizeof(void *));
 
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock_local(&s->cpu_sheaves->lock);
 
 	stat_add(s, ALLOC_FASTPATH, batch);
 
@@ -5024,7 +5026,7 @@ kmem_cache_prefill_sheaf(struct kmem_cache *s, gfp_t gfp, unsigned int size)
 		return sheaf;
 	}
 
-	local_lock(&s->cpu_sheaves->lock);
+	pw_lock_local(&s->cpu_sheaves->lock);
 	pcs = this_cpu_ptr(s->cpu_sheaves);
 
 	if (pcs->spare) {
@@ -5043,7 +5045,7 @@ kmem_cache_prefill_sheaf(struct kmem_cache *s, gfp_t gfp, unsigned int size)
 			stat(s, BARN_GET_FAIL);
 	}
 
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock_local(&s->cpu_sheaves->lock);
 
 
 	if (!sheaf)
@@ -5087,7 +5089,7 @@ void kmem_cache_return_sheaf(struct kmem_cache *s, gfp_t gfp,
 		return;
 	}
 
-	local_lock(&s->cpu_sheaves->lock);
+	pw_lock_local(&s->cpu_sheaves->lock);
 	pcs = this_cpu_ptr(s->cpu_sheaves);
 	barn = get_barn(s);
 
@@ -5097,7 +5099,7 @@ void kmem_cache_return_sheaf(struct kmem_cache *s, gfp_t gfp,
 		stat(s, SHEAF_RETURN_FAST);
 	}
 
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock_local(&s->cpu_sheaves->lock);
 
 	if (!sheaf)
 		return;
@@ -5634,7 +5636,7 @@ static void __pcs_install_empty_sheaf(struct kmem_cache *s,
 		struct slub_percpu_sheaves *pcs, struct slab_sheaf *empty,
 		struct node_barn *barn)
 {
-	lockdep_assert_held(this_cpu_ptr(&s->cpu_sheaves->lock));
+	pw_lockdep_assert_held(&s->cpu_sheaves->lock);
 
 	/* This is what we expect to find if nobody interrupted us. */
 	if (likely(!pcs->spare)) {
@@ -5685,17 +5687,17 @@ __pcs_replace_full_main(struct kmem_cache *s, struct slub_percpu_sheaves *pcs,
 	bool put_fail;
 
 restart:
-	lockdep_assert_held(this_cpu_ptr(&s->cpu_sheaves->lock));
+	pw_lockdep_assert_held(&s->cpu_sheaves->lock);
 
 	/* Bootstrap or debug cache, back off */
 	if (unlikely(!cache_has_sheaves(s))) {
-		local_unlock(&s->cpu_sheaves->lock);
+		pw_unlock_local(&s->cpu_sheaves->lock);
 		return NULL;
 	}
 
 	barn = get_barn(s);
 	if (!barn) {
-		local_unlock(&s->cpu_sheaves->lock);
+		pw_unlock_local(&s->cpu_sheaves->lock);
 		return NULL;
 	}
 
@@ -5732,7 +5734,7 @@ restart:
 		stat(s, BARN_PUT_FAIL);
 
 		pcs->spare = NULL;
-		local_unlock(&s->cpu_sheaves->lock);
+		pw_unlock_local(&s->cpu_sheaves->lock);
 
 		sheaf_flush_unused(s, to_flush);
 		empty = to_flush;
@@ -5748,7 +5750,7 @@ restart:
 	put_fail = true;
 
 alloc_empty:
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock_local(&s->cpu_sheaves->lock);
 
 	/*
 	 * alloc_empty_sheaf() doesn't support !allow_spin and it's
@@ -5768,7 +5770,7 @@ alloc_empty:
 	if (!sheaf_try_flush_main(s))
 		return NULL;
 
-	if (!local_trylock(&s->cpu_sheaves->lock))
+	if (!pw_trylock_local(&s->cpu_sheaves->lock))
 		return NULL;
 
 	pcs = this_cpu_ptr(s->cpu_sheaves);
@@ -5784,7 +5786,7 @@ alloc_empty:
 	return pcs;
 
 got_empty:
-	if (!local_trylock(&s->cpu_sheaves->lock)) {
+	if (!pw_trylock_local(&s->cpu_sheaves->lock)) {
 		barn_put_empty_sheaf(barn, empty);
 		return NULL;
 	}
@@ -5804,7 +5806,7 @@ bool free_to_pcs(struct kmem_cache *s, void *object, bool allow_spin)
 {
 	struct slub_percpu_sheaves *pcs;
 
-	if (!local_trylock(&s->cpu_sheaves->lock))
+	if (!pw_trylock_local(&s->cpu_sheaves->lock))
 		return false;
 
 	pcs = this_cpu_ptr(s->cpu_sheaves);
@@ -5818,7 +5820,7 @@ bool free_to_pcs(struct kmem_cache *s, void *object, bool allow_spin)
 
 	pcs->main->objects[pcs->main->size++] = object;
 
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock_local(&s->cpu_sheaves->lock);
 
 	stat(s, FREE_FASTPATH);
 
@@ -5905,7 +5907,7 @@ bool __kfree_rcu_sheaf(struct kmem_cache *s, void *obj)
 
 	lock_map_acquire_try(&kfree_rcu_sheaf_map);
 
-	if (!local_trylock(&s->cpu_sheaves->lock))
+	if (!pw_trylock_local(&s->cpu_sheaves->lock))
 		goto fail;
 
 	pcs = this_cpu_ptr(s->cpu_sheaves);
@@ -5917,7 +5919,7 @@ bool __kfree_rcu_sheaf(struct kmem_cache *s, void *obj)
 
 		/* Bootstrap or debug cache, fall back */
 		if (unlikely(!cache_has_sheaves(s))) {
-			local_unlock(&s->cpu_sheaves->lock);
+			pw_unlock_local(&s->cpu_sheaves->lock);
 			goto fail;
 		}
 
@@ -5929,7 +5931,7 @@ bool __kfree_rcu_sheaf(struct kmem_cache *s, void *obj)
 
 		barn = get_barn(s);
 		if (!barn) {
-			local_unlock(&s->cpu_sheaves->lock);
+			pw_unlock_local(&s->cpu_sheaves->lock);
 			goto fail;
 		}
 
@@ -5940,14 +5942,14 @@ bool __kfree_rcu_sheaf(struct kmem_cache *s, void *obj)
 			goto do_free;
 		}
 
-		local_unlock(&s->cpu_sheaves->lock);
+		pw_unlock_local(&s->cpu_sheaves->lock);
 
 		empty = alloc_empty_sheaf(s, GFP_NOWAIT);
 
 		if (!empty)
 			goto fail;
 
-		if (!local_trylock(&s->cpu_sheaves->lock)) {
+		if (!pw_trylock_local(&s->cpu_sheaves->lock)) {
 			barn_put_empty_sheaf(barn, empty);
 			goto fail;
 		}
@@ -5978,13 +5980,13 @@ do_free:
 	}
 
 	/*
-	 * we flush before local_unlock to make sure a racing
+	 * we flush before pw_unlock_local to make sure a racing
 	 * flush_all_rcu_sheaves() doesn't miss this sheaf
 	 */
 	if (rcu_sheaf)
 		call_rcu(&rcu_sheaf->rcu_head, rcu_free_sheaf);
 
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock_local(&s->cpu_sheaves->lock);
 
 	stat(s, FREE_RCU_SHEAF);
 	lock_map_release(&kfree_rcu_sheaf_map);
@@ -6089,7 +6091,7 @@ next_remote_batch:
 		goto flush_remote;
 
 next_batch:
-	if (!local_trylock(&s->cpu_sheaves->lock))
+	if (!pw_trylock_local(&s->cpu_sheaves->lock))
 		goto fallback;
 
 	pcs = this_cpu_ptr(s->cpu_sheaves);
@@ -6132,7 +6134,7 @@ do_free:
 	memcpy(main->objects + main->size, p, batch * sizeof(void *));
 	main->size += batch;
 
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock_local(&s->cpu_sheaves->lock);
 
 	stat_add(s, FREE_FASTPATH, batch);
 
@@ -6148,7 +6150,7 @@ do_free:
 	return;
 
 no_empty:
-	local_unlock(&s->cpu_sheaves->lock);
+	pw_unlock_local(&s->cpu_sheaves->lock);
 
 	/*
 	 * if we depleted all empty sheaves in the barn or there are too
@@ -7561,7 +7563,7 @@ static int init_percpu_sheaves(struct kmem_cache *s)
 
 		pcs = per_cpu_ptr(s->cpu_sheaves, cpu);
 
-		local_trylock_init(&pcs->lock);
+		pw_trylock_init(&pcs->lock);
 
 		/*
 		 * Bootstrap sheaf has zero size so fast-path allocation fails.
