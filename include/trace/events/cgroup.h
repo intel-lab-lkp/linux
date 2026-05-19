@@ -206,15 +206,16 @@ DEFINE_EVENT(cgroup_event, cgroup_notify_frozen,
 
 DECLARE_EVENT_CLASS(cgroup_rstat,
 
-	TP_PROTO(struct cgroup *cgrp, int cpu, bool contended),
+	TP_PROTO(struct cgroup *cgrp, int cpu, const char *type, bool contended),
 
-	TP_ARGS(cgrp, cpu, contended),
+	TP_ARGS(cgrp, cpu, type, contended),
 
 	TP_STRUCT__entry(
 		__field(	int,		root			)
 		__field(	int,		level			)
 		__field(	u64,		id			)
 		__field(	int,		cpu			)
+		__string(	type,		type			)
 		__field(	bool,		contended		)
 	),
 
@@ -223,12 +224,13 @@ DECLARE_EVENT_CLASS(cgroup_rstat,
 		__entry->id = cgroup_id(cgrp);
 		__entry->level = cgrp->level;
 		__entry->cpu = cpu;
+		__assign_str(type);
 		__entry->contended = contended;
 	),
 
-	TP_printk("root=%d id=%llu level=%d cpu=%d lock contended:%d",
+	TP_printk("root=%d id=%llu level=%d cpu=%d lock-type=%s lock contended:%d",
 		  __entry->root, __entry->id, __entry->level,
-		  __entry->cpu, __entry->contended)
+		  __entry->cpu, __get_str(type), __entry->contended)
 );
 
 /*
@@ -238,23 +240,23 @@ DECLARE_EVENT_CLASS(cgroup_rstat,
  */
 DEFINE_EVENT(cgroup_rstat, cgroup_rstat_lock_contended,
 
-	TP_PROTO(struct cgroup *cgrp, int cpu, bool contended),
+	TP_PROTO(struct cgroup *cgrp, int cpu, const char *type, bool contended),
 
-	TP_ARGS(cgrp, cpu, contended)
+	TP_ARGS(cgrp, cpu, type, contended)
 );
 
 DEFINE_EVENT(cgroup_rstat, cgroup_rstat_locked,
 
-	TP_PROTO(struct cgroup *cgrp, int cpu, bool contended),
+	TP_PROTO(struct cgroup *cgrp, int cpu, const char *type, bool contended),
 
-	TP_ARGS(cgrp, cpu, contended)
+	TP_ARGS(cgrp, cpu, type, contended)
 );
 
 DEFINE_EVENT(cgroup_rstat, cgroup_rstat_unlock,
 
-	TP_PROTO(struct cgroup *cgrp, int cpu, bool contended),
+	TP_PROTO(struct cgroup *cgrp, int cpu, const char *type, bool contended),
 
-	TP_ARGS(cgrp, cpu, contended)
+	TP_ARGS(cgrp, cpu, type, contended)
 );
 
 #endif /* _TRACE_CGROUP_H */

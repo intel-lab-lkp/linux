@@ -10,7 +10,7 @@
 
 #include <trace/events/cgroup.h>
 
-static DEFINE_SPINLOCK(rstat_base_lock);
+static DEFINE_RWLOCK(rstat_base_lock);
 static DEFINE_PER_CPU(struct llist_head, rstat_backlog_list);
 
 static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu);
@@ -38,7 +38,7 @@ static struct cgroup_rstat_base_cpu *cgroup_rstat_base_cpu(
 	return per_cpu_ptr(cgrp->rstat_base_cpu, cpu);
 }
 
-static spinlock_t *ss_rstat_lock(struct cgroup_subsys *ss)
+static rwlock_t *ss_rstat_lock(struct cgroup_subsys *ss)
 {
 	if (ss)
 		return &ss->rstat_ss_lock;
@@ -366,32 +366,45 @@ __bpf_hook_end();
  * number processed last.
  */
 static inline void __css_rstat_lock(struct cgroup_subsys_state *css,
-		int cpu_in_loop)
+				    int cpu_in_loop, bool write)
 	__acquires(ss_rstat_lock(css->ss))
 {
+	const char *type = write ? "write" : "read";
 	struct cgroup *cgrp = css->cgroup;
-	spinlock_t *lock;
+	rwlock_t *lock;
 	bool contended;
 
 	lock = ss_rstat_lock(css->ss);
-	contended = !spin_trylock_irq(lock);
+
+	local_irq_disable();
+	contended = write ? !write_trylock(lock) : !read_trylock(lock);
 	if (contended) {
-		trace_cgroup_rstat_lock_contended(cgrp, cpu_in_loop, contended);
-		spin_lock_irq(lock);
+		local_irq_enable();
+		trace_cgroup_rstat_lock_contended(cgrp, cpu_in_loop, type, contended);
+		if (write)
+			write_lock_irq(lock);
+		else
+			read_lock_irq(lock);
 	}
-	trace_cgroup_rstat_locked(cgrp, cpu_in_loop, contended);
+
+	trace_cgroup_rstat_locked(cgrp, cpu_in_loop, type, contended);
 }
 
 static inline void __css_rstat_unlock(struct cgroup_subsys_state *css,
-				      int cpu_in_loop)
+				      int cpu_in_loop, bool write)
 	__releases(ss_rstat_lock(css->ss))
 {
+	const char *type = write ? "write" : "read";
 	struct cgroup *cgrp = css->cgroup;
-	spinlock_t *lock;
+	rwlock_t *lock;
 
 	lock = ss_rstat_lock(css->ss);
-	trace_cgroup_rstat_unlock(cgrp, cpu_in_loop, false);
-	spin_unlock_irq(lock);
+	trace_cgroup_rstat_unlock(cgrp, cpu_in_loop, type, false);
+
+	if (write)
+		write_unlock_irq(lock);
+	else
+		read_unlock_irq(lock);
 }
 
 /**
@@ -424,7 +437,7 @@ __bpf_kfunc void css_rstat_flush(struct cgroup_subsys_state *css)
 		struct cgroup_subsys_state *pos;
 
 		/* Reacquire for each CPU to avoid disabling IRQs too long */
-		__css_rstat_lock(css, cpu);
+		__css_rstat_lock(css, cpu, true);
 		pos = css_rstat_updated_list(css, cpu);
 		for (; pos; pos = pos->rstat_flush_next) {
 			if (is_self) {
@@ -434,7 +447,7 @@ __bpf_kfunc void css_rstat_flush(struct cgroup_subsys_state *css)
 			} else
 				pos->ss->css_rstat_flush(pos, cpu);
 		}
-		__css_rstat_unlock(css, cpu);
+		__css_rstat_unlock(css, cpu, true);
 		if (!cond_resched())
 			cpu_relax();
 	}
@@ -535,7 +548,7 @@ int __init ss_rstat_init(struct cgroup_subsys *ss)
 			return -ENOMEM;
 	}
 
-	spin_lock_init(ss_rstat_lock(ss));
+	rwlock_init(ss_rstat_lock(ss));
 	for_each_possible_cpu(cpu)
 		init_llist_head(ss_lhead_cpu(ss, cpu));
 
@@ -727,11 +740,11 @@ void cgroup_base_stat_cputime_show(struct seq_file *seq)
 
 	if (cgroup_parent(cgrp)) {
 		css_rstat_flush(&cgrp->self);
-		__css_rstat_lock(&cgrp->self, -1);
+		__css_rstat_lock(&cgrp->self, -1, false);
 		bstat = cgrp->bstat;
 		cputime_adjust(&cgrp->bstat.cputime, &cgrp->prev_cputime,
 			       &bstat.cputime.utime, &bstat.cputime.stime);
-		__css_rstat_unlock(&cgrp->self, -1);
+		__css_rstat_unlock(&cgrp->self, -1, false);
 	} else {
 		root_cgroup_cputime(&bstat);
 	}

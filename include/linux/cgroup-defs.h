@@ -865,7 +865,7 @@ struct cgroup_subsys {
 	 */
 	unsigned int depends_on;
 
-	spinlock_t rstat_ss_lock;
+	rwlock_t rstat_ss_lock;
 	struct llist_head __percpu *lhead; /* lockless update list head */
 };
 
