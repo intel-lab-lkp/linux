@@ -349,10 +349,16 @@ SECTIONS
 	_edata = .;
 
 	/* start of zero-init region */
-	BSS_SECTION(SBSS_ALIGN, 0, 0)
+	BSS_SECTION(SBSS_ALIGN, 0, PAGE_SIZE)
 	__pi___bss_start = __bss_start;
 
-	. = ALIGN(PAGE_SIZE);
+	/* fixmap BSS starts here - preceding data/BSS is omitted from the linear map */
+	.fixmap_pgdir : ALIGN(PAGE_SIZE) {
+		*(.fixmap_bss)
+	}
+	ASSERT(ADDR(.fixmap_pgdir) == __bss_stop, ".fixmap_pgdir should follow BSS")
+
+
 	__pi_init_pg_dir = .;
 	. += INIT_DIR_SIZE;
 	__pi_init_pg_end = .;
