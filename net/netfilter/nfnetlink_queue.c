@@ -412,6 +412,20 @@ next_hook:
 	nf_queue_entry_free(entry);
 }
 
+static bool nf_ct_drop_template(const struct nf_queue_entry *entry)
+{
+#if IS_ENABLED(CONFIG_NF_CONNTRACK)
+	struct nf_conn *ct = (void *)skb_nfct(entry->skb);
+
+	if (!ct || !nf_ct_is_template(ct))
+		return false;
+
+	if (nf_ct_is_dying(ct))
+		return true;
+#endif
+	return false;
+}
+
 /* return true if the entry has an unconfirmed conntrack attached that isn't owned by us
  * exclusively.
  */
@@ -467,6 +481,9 @@ static void nfqnl_reinject(struct nf_queue_entry *entry, unsigned int verdict)
 			break;
 		}
 	}
+
+	if (nf_ct_drop_template(entry))
+		verdict = NF_DROP;
 
 	if (verdict != NF_DROP && entry->nf_ct_is_unconfirmed) {
 		/* If first queued segment was already reinjected then
@@ -1076,6 +1093,9 @@ nfqnl_enqueue_packet(struct nf_queue_entry *entry, unsigned int queuenum)
 		skb->protocol = htons(ETH_P_IPV6);
 		break;
 	}
+
+	if (nf_ct_drop_template(entry))
+		return -EINVAL;
 
 	/* Check if someone already holds another reference to
 	 * unconfirmed ct.  If so, we cannot queue the skb:
