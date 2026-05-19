@@ -1366,4 +1366,306 @@ struct mxl862xx_rmon_port_cnt {
 	__le64 tx_good_bytes;
 } __packed;
 
+/**
+ * enum mxl862xx_xpcs_if_mode - XPCS interface mode
+ * @MXL862XX_XPCS_IF_SGMII: SGMII
+ * @MXL862XX_XPCS_IF_1000BASEX: 1000BASE-X
+ * @MXL862XX_XPCS_IF_2500BASEX: 2500BASE-X
+ * @MXL862XX_XPCS_IF_USXGMII: USXGMII (single or quad)
+ * @MXL862XX_XPCS_IF_10GBASER: 10GBASE-R
+ * @MXL862XX_XPCS_IF_10GKR: 10GBASE-KR
+ * @MXL862XX_XPCS_IF_5GBASER: 5GBASE-R
+ * @MXL862XX_XPCS_IF_QSGMII: QSGMII
+ */
+enum mxl862xx_xpcs_if_mode {
+	MXL862XX_XPCS_IF_SGMII = 0,
+	MXL862XX_XPCS_IF_1000BASEX = 1,
+	MXL862XX_XPCS_IF_2500BASEX = 2,
+	MXL862XX_XPCS_IF_USXGMII = 3,
+	MXL862XX_XPCS_IF_10GBASER = 4,
+	MXL862XX_XPCS_IF_10GKR = 5,
+	MXL862XX_XPCS_IF_5GBASER = 6,
+	MXL862XX_XPCS_IF_QSGMII = 7,
+};
+
+/**
+ * enum mxl862xx_xpcs_neg_mode - PCS negotiation mode
+ * @MXL862XX_XPCS_NEG_NONE: no inband negotiation
+ * @MXL862XX_XPCS_NEG_INBAND_AN_OFF: inband selected but AN disabled
+ * @MXL862XX_XPCS_NEG_INBAND_AN_ON: inband with AN enabled
+ */
+enum mxl862xx_xpcs_neg_mode {
+	MXL862XX_XPCS_NEG_NONE = 0,
+	MXL862XX_XPCS_NEG_INBAND_AN_OFF = 1,
+	MXL862XX_XPCS_NEG_INBAND_AN_ON = 2,
+};
+
+/**
+ * enum mxl862xx_xpcs_role - PCS protocol role
+ * @MXL862XX_XPCS_ROLE_MAC: local end is MAC side (TX_CONFIG = 0)
+ * @MXL862XX_XPCS_ROLE_PHY: local end is PHY side (TX_CONFIG = 1)
+ *
+ * Selects the role the XPCS plays in protocols that have an asymmetric
+ * AN code word (Cisco SGMII / QSGMII / USXGMII). Drives
+ * VR_MII_AN_CTRL.TX_CONFIG: 0 means the local end receives the partner's
+ * AN word, 1 means it sources one. Ignored for symmetric protocols
+ * (1000BASE-X, 2500BASE-X, 10GBASE-R/KR).
+ */
+enum mxl862xx_xpcs_role {
+	MXL862XX_XPCS_ROLE_MAC = 0,
+	MXL862XX_XPCS_ROLE_PHY = 1,
+};
+
+/**
+ * enum mxl862xx_xpcs_usx_lane_mode - USXGMII lane mode
+ * @MXL862XX_XPCS_USX_SINGLE: single USXGMII lane
+ * @MXL862XX_XPCS_USX_QUAD: quad USXGMII (4 ports per lane)
+ */
+enum mxl862xx_xpcs_usx_lane_mode {
+	MXL862XX_XPCS_USX_SINGLE = 0,
+	MXL862XX_XPCS_USX_QUAD = 1,
+};
+
+/**
+ * union mxl862xx_xpcs_an_word - XPCS AN code word, tagged by interface mode
+ * @cl37: 16-bit base-page word exchanged over the CL37 hardware AN path
+ *        (SR_MII_AN_ADV on write, SR_MII_LP_BABL on read). Carries the
+ *        802.3 CL37 base page for 1000BASE-X/2500BASE-X and the Cisco
+ *        SGMII config word for SGMII/QSGMII.
+ * @usx: USXGMII 16-bit AN code word, MDIO_USXGMII_* layout
+ * @cl73: CL73 48-bit base page (10GBASE-KR), three 16-bit registers per
+ *        802.3 Annex 28C
+ * @cl73.adv1: CL73 SR_AN_ADV1 / SR_AN_LP_ABL1
+ * @cl73.adv2: CL73 SR_AN_ADV2 / SR_AN_LP_ABL2
+ * @cl73.adv3: CL73 SR_AN_ADV3 / SR_AN_LP_ABL3
+ *
+ * The host picks the right member based on the interface field of the
+ * surrounding struct (and, for the asymmetric protocols, on the role).
+ */
+union mxl862xx_xpcs_an_word {
+	__le16 cl37;
+	__le16 usx;
+	struct {
+		__le16 adv1;
+		__le16 adv2;
+		__le16 adv3;
+	} cl73;
+} __packed;
+
+/**
+ * enum mxl862xx_xpcs_speed - PCS speed values
+ * @MXL862XX_XPCS_SPEED_UNKNOWN: unknown speed
+ * @MXL862XX_XPCS_SPEED_10: 10 Mbps
+ * @MXL862XX_XPCS_SPEED_100: 100 Mbps
+ * @MXL862XX_XPCS_SPEED_1000: 1000 Mbps
+ * @MXL862XX_XPCS_SPEED_2500: 2500 Mbps
+ * @MXL862XX_XPCS_SPEED_5000: 5000 Mbps
+ * @MXL862XX_XPCS_SPEED_10000: 10000 Mbps
+ */
+enum mxl862xx_xpcs_speed {
+	MXL862XX_XPCS_SPEED_UNKNOWN = 0,
+	MXL862XX_XPCS_SPEED_10 = 10,
+	MXL862XX_XPCS_SPEED_100 = 100,
+	MXL862XX_XPCS_SPEED_1000 = 1000,
+	MXL862XX_XPCS_SPEED_2500 = 2500,
+	MXL862XX_XPCS_SPEED_5000 = 5000,
+	MXL862XX_XPCS_SPEED_10000 = 10000,
+};
+
+/**
+ * enum mxl862xx_xpcs_duplex - PCS duplex mode
+ * @MXL862XX_XPCS_DUPLEX_HALF: half duplex
+ * @MXL862XX_XPCS_DUPLEX_FULL: full duplex
+ */
+enum mxl862xx_xpcs_duplex {
+	MXL862XX_XPCS_DUPLEX_HALF = 0,
+	MXL862XX_XPCS_DUPLEX_FULL = 1,
+};
+
+/**
+ * enum mxl862xx_xpcs_loopback_mode - XPCS loopback mode
+ * @MXL862XX_XPCS_LB_DISABLE: disable all loopback
+ * @MXL862XX_XPCS_LB_PCS_SERIAL: PCS TX-to-RX serial loopback
+ * @MXL862XX_XPCS_LB_PCS_PARALLEL: PCS RX-to-TX parallel loopback
+ * @MXL862XX_XPCS_LB_PMA_SERIAL: PMA TX-to-RX serial loopback
+ * @MXL862XX_XPCS_LB_PMA_PARALLEL: PMA RX-to-TX parallel loopback
+ */
+enum mxl862xx_xpcs_loopback_mode {
+	MXL862XX_XPCS_LB_DISABLE = 0,
+	MXL862XX_XPCS_LB_PCS_SERIAL = 1,
+	MXL862XX_XPCS_LB_PCS_PARALLEL = 2,
+	MXL862XX_XPCS_LB_PMA_SERIAL = 3,
+	MXL862XX_XPCS_LB_PMA_PARALLEL = 4,
+};
+
+/**
+ * enum mxl862xx_xpcs_reset_type - XPCS reset type
+ * @MXL862XX_XPCS_RESET_VR: vendor-specific reset (fast)
+ * @MXL862XX_XPCS_RESET_SOFT: PCS soft reset
+ * @MXL862XX_XPCS_RESET_HARD: full hardware reset
+ */
+enum mxl862xx_xpcs_reset_type {
+	MXL862XX_XPCS_RESET_VR = 0,
+	MXL862XX_XPCS_RESET_SOFT = 1,
+	MXL862XX_XPCS_RESET_HARD = 2,
+};
+
+/**
+ * struct mxl862xx_xpcs_pcs_cfg - PCS configuration parameters
+ * @port_id: XPCS port index (0-3)
+ * @interface: PCS interface mode. See &enum mxl862xx_xpcs_if_mode
+ * @neg_mode: PCS negotiation mode. See &enum mxl862xx_xpcs_neg_mode
+ * @permit_pause: Allow pause to MAC
+ * @usx_lane_mode: USXGMII lane mode.
+ *                 See &enum mxl862xx_xpcs_usx_lane_mode
+ * @role: PCS protocol role. See &enum mxl862xx_xpcs_role
+ * @__rsv: reserved
+ * @advertising: AN code word the local end transmits. The active union
+ *               member is selected by @interface (and, for the asymmetric
+ *               protocols, by @role). Ignored when the local end does
+ *               not transmit an AN word (role=MAC for SGMII/QSGMII/
+ *               USXGMII, 10GBASE-R, 5GBASE-R) or when @neg_mode is not
+ *               INBAND_AN_ON. Pass all-zero to keep the firmware default
+ *               advertisement.
+ * @result: Firmware result. >0 means the host must follow with an AN
+ *          restart, 0 means no host follow-up is needed, <0 is an errno.
+ */
+struct mxl862xx_xpcs_pcs_cfg {
+	u8 port_id:2;
+	u8 interface:6; /* enum mxl862xx_xpcs_if_mode */
+	u8 neg_mode:2; /* enum mxl862xx_xpcs_neg_mode */
+	u8 permit_pause:1;
+	u8 usx_lane_mode:2; /* enum mxl862xx_xpcs_usx_lane_mode */
+	u8 role:1; /* enum mxl862xx_xpcs_role */
+	u8 __rsv:2;
+	union mxl862xx_xpcs_an_word advertising;
+	__le16 result;
+} __packed;
+
+/**
+ * struct mxl862xx_xpcs_pcs_state - PCS link state
+ * @port_id: XPCS port index (0-3) (input)
+ * @interface: PCS interface mode (input).
+ *             See &enum mxl862xx_xpcs_if_mode
+ * @usx_lane_mode: USX lane mode (input)
+ * @usx_subport: USX sub-port 0-3 (input)
+ * @link: Link up (1) / down (0) (output)
+ * @an_complete: Auto-negotiation complete (output)
+ * @duplex: Duplex mode (output). See &enum mxl862xx_xpcs_duplex
+ * @pcs_fault: PCS fault (output)
+ * @pause: Pause negotiation result, bit 0 symmetric, bit 1 asymmetric
+ *         (output)
+ * @lp_eee_cap: Link partner supports EEE (output)
+ * @lp_eee_cs_cap: Link partner supports EEE clock-stop (output)
+ * @__rsv: reserved
+ * @__pad: padding
+ * @speed: Resolved speed (output). See &enum mxl862xx_xpcs_speed
+ * @lpa: Link partner ability word (output). Same union as
+ *       &union mxl862xx_xpcs_an_word; the host picks the member based on
+ *       @interface.
+ */
+struct mxl862xx_xpcs_pcs_state {
+	u8 port_id:2;
+	u8 interface:6; /* enum mxl862xx_xpcs_if_mode */
+	u8 usx_lane_mode:2; /* enum mxl862xx_xpcs_usx_lane_mode */
+	u8 usx_subport:2;
+	u8 link:1;
+	u8 an_complete:1;
+	u8 duplex:1; /* enum mxl862xx_xpcs_duplex */
+	u8 pcs_fault:1;
+	u8 pause:2;
+	u8 lp_eee_cap:1;
+	u8 lp_eee_cs_cap:1;
+	u8 __rsv:4;
+	u8 __pad;
+	__le16 speed; /* enum mxl862xx_xpcs_speed */
+	union mxl862xx_xpcs_an_word lpa;
+} __packed;
+
+/**
+ * struct mxl862xx_xpcs_pcs_disable - PCS disable parameters
+ * @port_id: XPCS port index
+ * @__pad: padding
+ * @result: Firmware result. 0 on success, <0 on error.
+ *
+ * Asserts IDDQ + PHY + XPCS resets to power down the SERDES when the
+ * port is admin-down or no module is plugged in. The next PCS config
+ * implicitly powers it back up and reprograms the desired interface.
+ */
+struct mxl862xx_xpcs_pcs_disable {
+	u8 port_id;
+	u8 __pad;
+	__le16 result;
+} __packed;
+
+/**
+ * struct mxl862xx_xpcs_an_restart - AN restart parameters
+ * @port_id: XPCS port index (0-3)
+ * @interface: PCS interface mode. See &enum mxl862xx_xpcs_if_mode
+ * @usx_lane_mode: USX lane mode
+ * @__rsv: reserved
+ * @result: Firmware result. 0 on success, <0 on error.
+ *
+ * Restarts auto-negotiation on the given XPCS port. The SERDES must
+ * already be configured.
+ */
+struct mxl862xx_xpcs_an_restart {
+	u8 port_id:2;
+	u8 interface:6; /* enum mxl862xx_xpcs_if_mode */
+	u8 usx_lane_mode:2; /* enum mxl862xx_xpcs_usx_lane_mode */
+	u8 __rsv:6;
+	__le16 result;
+} __packed;
+
+/**
+ * struct mxl862xx_xpcs_pcs_link_up - PCS link-up parameters
+ * @port_id: XPCS port index (0-3)
+ * @interface: PCS interface mode. See &enum mxl862xx_xpcs_if_mode
+ * @duplex: Duplex mode. See &enum mxl862xx_xpcs_duplex
+ * @usx_lane_mode: USX lane mode (USXGMII only; ignored otherwise).
+ *                 See &enum mxl862xx_xpcs_usx_lane_mode
+ * @usx_subport: USX sub-port 0-3 (QUSXGMII only; ignored otherwise)
+ * @__rsv0: reserved
+ * @speed: Resolved speed. See &enum mxl862xx_xpcs_speed
+ * @result: Firmware result. 0 on success, <0 is errno.
+ *
+ * Called once per link-up event after the host has resolved the
+ * line-side speed/duplex (from the PHY's read_status, from a preceding
+ * PCS get-state, or from a fixed-link description).
+ */
+struct mxl862xx_xpcs_pcs_link_up {
+	u8 port_id:2;
+	u8 interface:6; /* enum mxl862xx_xpcs_if_mode */
+	u8 duplex:1; /* enum mxl862xx_xpcs_duplex */
+	u8 usx_lane_mode:2; /* enum mxl862xx_xpcs_usx_lane_mode */
+	u8 usx_subport:2;
+	u8 __rsv0:3;
+	__le16 speed; /* enum mxl862xx_xpcs_speed */
+	__le16 result;
+} __packed;
+
+/**
+ * struct mxl862xx_xpcs_loopback_cfg - loopback control
+ * @port_id: XPCS port index
+ * @mode: loopback mode. See &enum mxl862xx_xpcs_loopback_mode
+ * @result: firmware result
+ */
+struct mxl862xx_xpcs_loopback_cfg {
+	u8 port_id;
+	u8 mode; /* enum mxl862xx_xpcs_loopback_mode */
+	__le16 result;
+} __packed;
+
+/**
+ * struct mxl862xx_xpcs_reset_cfg - XPCS reset
+ * @port_id: XPCS port index
+ * @reset_type: reset type. See &enum mxl862xx_xpcs_reset_type
+ * @result: firmware result
+ */
+struct mxl862xx_xpcs_reset_cfg {
+	u8 port_id;
+	u8 reset_type; /* enum mxl862xx_xpcs_reset_type */
+	__le16 result;
+} __packed;
+
 #endif /* __MXL862XX_API_H */
