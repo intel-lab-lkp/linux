@@ -65,6 +65,10 @@ struct rtl_mdio_info {
 	u8 num_buses;
 	u8 num_ports;
 	u16 num_pages;
+	int (*read_c22)(struct mii_bus *bus, int phy_id, int regnum);
+	int (*read_c45)(struct mii_bus *bus, int phy_id, int dev_addr, int regnum);
+	int (*write_c22)(struct mii_bus *bus, int phy_id, int regnum, u16 value);
+	int (*write_c45)(struct mii_bus *bus, int phy_id, int dev_addr, int regnum, u16 value);
 };
 
 struct rtl_mdio_priv {
@@ -404,11 +408,11 @@ static int rtl_mdiobus_probe_one(struct device *dev, struct rtl_mdio_priv *priv,
 
 	bus->name = "Realtek Switch MDIO Bus";
 	if (priv->smi_bus_is_c45[mdio_bus]) {
-		bus->read_c45 = rtl9300_mdio_read_c45;
-		bus->write_c45 =  rtl9300_mdio_write_c45;
+		bus->read_c45 = priv->info->read_c45;
+		bus->write_c45 = priv->info->write_c45;
 	} else {
-		bus->read = rtl9300_mdio_read_c22;
-		bus->write = rtl9300_mdio_write_c22;
+		bus->read = priv->info->read_c22;
+		bus->write = priv->info->write_c22;
 	}
 	bus->parent = dev;
 	chan = bus->priv;
@@ -534,6 +538,10 @@ static const struct rtl_mdio_info rtl9300_mdio_info = {
 	.num_buses = RTL9300_NUM_BUSES,
 	.num_ports = RTL9300_NUM_PORTS,
 	.num_pages = RTL9300_NUM_PAGES,
+	.read_c22 = rtl9300_mdio_read_c22,
+	.read_c45 = rtl9300_mdio_read_c45,
+	.write_c22 = rtl9300_mdio_write_c22,
+	.write_c45 = rtl9300_mdio_write_c45,
 };
 
 static const struct of_device_id rtl_mdio_ids[] = {
