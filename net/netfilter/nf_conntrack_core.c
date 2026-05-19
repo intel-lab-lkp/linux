@@ -2388,6 +2388,54 @@ void nf_ct_iterate_cleanup_net(int (*iter)(struct nf_conn *i, void *data),
 }
 EXPORT_SYMBOL_GPL(nf_ct_iterate_cleanup_net);
 
+static void
+nf_ct_iterate_destroy_finish(int (*iter)(struct nf_conn *i, void *data),
+			     struct nf_ct_iter_data *iter_data)
+{
+	/* a skb w. unconfirmed conntrack could have been reinjected just
+	 * before we called nf_queue_nf_hook_drop().
+	 *
+	 * This makes sure its inserted into conntrack table.
+	 */
+	synchronize_net();
+
+	nf_ct_ext_bump_genid();
+	nf_ct_iterate_cleanup(iter, iter_data);
+
+	/* Another cpu might be in a rcu read section with
+	 * rcu protected pointer cleared in iter callback
+	 * or hidden via nf_ct_ext_bump_genid() above.
+	 *
+	 * Wait until those are done.
+	 */
+	synchronize_rcu();
+}
+
+/**
+ * nf_ct_iterate_destroy_net - destroy unconfirmed conntracks and iterate table in netns
+ * @iter: callback to invoke for each conntrack
+ * @data: data to pass to @iter
+ *
+ * Like nf_ct_iterate_cleanup, but first marks conntracks on the
+ * unconfirmed list as dying (so they will not be inserted into
+ * main table).
+ *
+ * Can only be called for netns.
+ */
+void
+nf_ct_iterate_destroy_net(struct net *net,
+			  int (*iter)(struct nf_conn *i, void *data), void *data)
+{
+	struct nf_ct_iter_data iter_data = {
+		.net	= net,
+		.data	= data,
+	};
+
+	nf_queue_nf_hook_drop(net);
+
+	nf_ct_iterate_destroy_finish(iter, &iter_data);
+}
+
 /**
  * nf_ct_iterate_destroy - destroy unconfirmed conntracks and iterate table
  * @iter: callback to invoke for each conntrack
@@ -2402,7 +2450,9 @@ EXPORT_SYMBOL_GPL(nf_ct_iterate_cleanup_net);
 void
 nf_ct_iterate_destroy(int (*iter)(struct nf_conn *i, void *data), void *data)
 {
-	struct nf_ct_iter_data iter_data = {};
+	struct nf_ct_iter_data iter_data = {
+		.data	= data,
+	};
 	struct net *net;
 
 	down_read(&net_rwsem);
@@ -2422,24 +2472,7 @@ nf_ct_iterate_destroy(int (*iter)(struct nf_conn *i, void *data), void *data)
 	 */
 	net_ns_barrier();
 
-	/* a skb w. unconfirmed conntrack could have been reinjected just
-	 * before we called nf_queue_nf_hook_drop().
-	 *
-	 * This makes sure its inserted into conntrack table.
-	 */
-	synchronize_net();
-
-	nf_ct_ext_bump_genid();
-	iter_data.data = data;
-	nf_ct_iterate_cleanup(iter, &iter_data);
-
-	/* Another cpu might be in a rcu read section with
-	 * rcu protected pointer cleared in iter callback
-	 * or hidden via nf_ct_ext_bump_genid() above.
-	 *
-	 * Wait until those are done.
-	 */
-	synchronize_rcu();
+	nf_ct_iterate_destroy_finish(iter, &iter_data);
 }
 EXPORT_SYMBOL_GPL(nf_ct_iterate_destroy);
 
