@@ -6,10 +6,12 @@
 #ifndef __QDA_DRV_H__
 #define __QDA_DRV_H__
 
+#include <linux/atomic.h>
 #include <linux/device.h>
 #include <linux/list.h>
 #include <linux/rpmsg.h>
 #include <linux/types.h>
+#include <linux/xarray.h>
 #include <drm/drm_device.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_file.h>
@@ -28,6 +30,8 @@ struct qda_file_priv {
 	struct qda_iommu_device *assigned_iommu_dev;
 	/** @pid: Process ID for tracking */
 	pid_t pid;
+	/** @remote_session_id: Unique session identifier */
+	u32 remote_session_id;
 };
 
 /**
@@ -51,8 +55,12 @@ struct qda_dev {
 	struct mutex import_lock;
 	/** @current_import_file_priv: Current file_priv during prime import */
 	struct drm_file *current_import_file_priv;
+	/** @ctx_xa: XArray for FastRPC context management */
+	struct xarray ctx_xa;
 	/** @dsp_name: Name of the DSP domain (e.g. "cdsp", "adsp") */
 	const char *dsp_name;
+	/** @remote_session_id_counter: Atomic counter for unique session IDs */
+	atomic_t remote_session_id_counter;
 };
 
 /**

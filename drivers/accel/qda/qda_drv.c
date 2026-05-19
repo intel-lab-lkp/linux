@@ -26,6 +26,8 @@ static int qda_open(struct drm_device *dev, struct drm_file *file)
 
 	qda_file_priv->pid = current->pid;
 	qda_file_priv->qda_dev = qda_dev_from_drm(dev);
+	qda_file_priv->remote_session_id =
+		atomic_inc_return(&qda_file_priv->qda_dev->remote_session_id_counter);
 	file->driver_priv = qda_file_priv;
 
 	return 0;
@@ -57,6 +59,7 @@ static const struct drm_ioctl_desc qda_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QDA_QUERY, qda_ioctl_query, 0),
 	DRM_IOCTL_DEF_DRV(QDA_GEM_CREATE, qda_ioctl_gem_create, 0),
 	DRM_IOCTL_DEF_DRV(QDA_GEM_MMAP_OFFSET, qda_ioctl_gem_mmap_offset, 0),
+	DRM_IOCTL_DEF_DRV(QDA_REMOTE_INVOKE, qda_ioctl_invoke, 0),
 };
 
 static const struct drm_driver qda_drm_driver = {
@@ -93,6 +96,17 @@ static void cleanup_memory_manager(struct qda_dev *qdev)
 	}
 }
 
+static void cleanup_device_resources(struct qda_dev *qdev)
+{
+	xa_destroy(&qdev->ctx_xa);
+}
+
+static void init_device_resources(struct qda_dev *qdev)
+{
+	atomic_set(&qdev->remote_session_id_counter, 0);
+	xa_init_flags(&qdev->ctx_xa, XA_FLAGS_ALLOC1);
+}
+
 static int init_memory_manager(struct qda_dev *qdev)
 {
 	qdev->iommu_mgr = kzalloc_obj(*qdev->iommu_mgr);
@@ -106,6 +120,7 @@ void qda_deinit_device(struct qda_dev *qdev)
 {
 	mutex_destroy(&qdev->import_lock);
 	cleanup_memory_manager(qdev);
+	cleanup_device_resources(qdev);
 }
 
 int qda_init_device(struct qda_dev *qdev)
@@ -114,10 +129,12 @@ int qda_init_device(struct qda_dev *qdev)
 
 	mutex_init(&qdev->import_lock);
 	qdev->current_import_file_priv = NULL;
+	init_device_resources(qdev);
 
 	ret = init_memory_manager(qdev);
 	if (ret) {
 		drm_err(&qdev->drm_dev, "Failed to initialize memory manager: %d\n", ret);
+		cleanup_device_resources(qdev);
 		mutex_destroy(&qdev->import_lock);
 	}
 

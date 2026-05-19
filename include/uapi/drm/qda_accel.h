@@ -21,6 +21,8 @@ extern "C" {
 #define DRM_QDA_QUERY		0x00
 #define DRM_QDA_GEM_CREATE		0x01
 #define DRM_QDA_GEM_MMAP_OFFSET	0x02
+/* Command numbers 0x03-0x06 reserved for INIT_ATTACH, INIT_CREATE, MAP, MUNMAP */
+#define DRM_QDA_REMOTE_INVOKE		0x07
 
 /*
  * QDA IOCTL definitions
@@ -35,6 +37,8 @@ extern "C" {
 					  struct drm_qda_gem_create)
 #define DRM_IOCTL_QDA_GEM_MMAP_OFFSET	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_GEM_MMAP_OFFSET, \
 					  struct drm_qda_gem_mmap_offset)
+#define DRM_IOCTL_QDA_REMOTE_INVOKE	DRM_IOWR(DRM_COMMAND_BASE + DRM_QDA_REMOTE_INVOKE, \
+					  struct drm_qda_invoke_args)
 
 /**
  * struct drm_qda_query - Device information query structure
@@ -76,6 +80,41 @@ struct drm_qda_gem_mmap_offset {
 	__u64 offset;
 	__u32 handle;
 	__u32 pad;
+};
+
+/**
+ * struct drm_qda_fastrpc_invoke_args - FastRPC invocation argument descriptor
+ * @ptr: Pointer to argument data (user virtual address)
+ * @length: Length of the argument data in bytes
+ * @fd: DMA-BUF file descriptor for buffer arguments, -1/0 for scalar arguments
+ * @attr: Argument attributes and flags
+ *
+ * This structure describes a single argument passed to a FastRPC invocation.
+ * Arguments can be either scalar values or buffer references (via DMA-BUF fd).
+ */
+struct drm_qda_fastrpc_invoke_args {
+	__u64 ptr;
+	__u64 length;
+	__s32 fd;
+	__u32 attr;
+};
+
+/**
+ * struct drm_qda_invoke_args - Dynamic FastRPC invocation parameters
+ * @handle: Remote handle to invoke on the DSP
+ * @sc: FastRPC scalars value encoding the number of in/out buffers
+ * @args: User-space pointer to array of drm_qda_fastrpc_invoke_args descriptors;
+ *        the fd field in each entry must be a DMA-BUF fd (or -1/0 for
+ *        inline scalar buffers)
+ *
+ * This structure is used with DRM_IOCTL_QDA_REMOTE_INVOKE to perform a
+ * dynamic remote procedure call on the DSP. The args pointer must reference
+ * an array of REMOTE_SCALARS_LENGTH(sc) drm_qda_fastrpc_invoke_args entries.
+ */
+struct drm_qda_invoke_args {
+	__u32 handle;
+	__u32 sc;
+	__u64 args;
 };
 
 #if defined(__cplusplus)
