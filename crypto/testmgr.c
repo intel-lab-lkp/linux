@@ -3210,6 +3210,123 @@ static int test_skcipher(int enc, const struct cipher_test_suite *suite,
 	return 0;
 }
 
+/*
+ * For algorithms that advertise CRYPTO_ALG_SKCIPHER_MULTI_DATA_UNIT,
+ * verify that one request batching N data units produces the same
+ * ciphertext as N back-to-back single-data-unit requests with IVs
+ * derived from the original IV by adding the data-unit index (treated
+ * as a 128-bit little-endian counter).
+ *
+ * This is a self-comparison: it does not depend on test-vector
+ * authoritativeness, only on the algorithm being internally consistent
+ * between its single-DU and multi-DU paths.
+ */
+#define TEST_MDU_NR_UNITS	4
+static int test_skcipher_multi_du(struct crypto_skcipher *tfm,
+				  unsigned int du_size)
+{
+	const char *driver = crypto_skcipher_driver_name(tfm);
+	const unsigned int ivsize = crypto_skcipher_ivsize(tfm);
+	const unsigned int total = du_size * TEST_MDU_NR_UNITS;
+	struct skcipher_request *req = NULL;
+	struct scatterlist sg_in, sg_out;
+	DECLARE_CRYPTO_WAIT(wait);
+	u8 iv_orig[16] = {0};
+	u8 iv_work[16];
+	u8 *plain = NULL, *batched = NULL, *unit = NULL;
+	unsigned int i;
+	int err;
+
+	if (ivsize != 16)
+		return 0;
+
+	plain = kmalloc(total, GFP_KERNEL);
+	batched = kmalloc(total, GFP_KERNEL);
+	unit = kmalloc(total, GFP_KERNEL);
+	req = skcipher_request_alloc(tfm, GFP_KERNEL);
+	if (!plain || !batched || !unit || !req) {
+		err = -ENOMEM;
+		goto out;
+	}
+
+	get_random_bytes(plain, total);
+	get_random_bytes(iv_orig, ivsize);
+
+	/* Pass 1: one batched encrypt with data_unit_size set. */
+	err = crypto_skcipher_set_data_unit_size(tfm, du_size);
+	if (err) {
+		pr_err("alg: skcipher: %s set_data_unit_size(%u) failed: %d\n",
+		       driver, du_size, err);
+		goto out;
+	}
+	memcpy(batched, plain, total);
+	memcpy(iv_work, iv_orig, ivsize);
+	sg_init_one(&sg_in, batched, total);
+	sg_out = sg_in;
+	skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG |
+				      CRYPTO_TFM_REQ_MAY_SLEEP,
+				      crypto_req_done, &wait);
+	skcipher_request_set_crypt(req, &sg_in, &sg_out, total, iv_work);
+	err = crypto_wait_req(crypto_skcipher_encrypt(req), &wait);
+	if (err) {
+		pr_err("alg: skcipher: %s multi-DU batched encrypt failed: %d\n",
+		       driver, err);
+		goto out_clear_du;
+	}
+
+	/* Pass 2: TEST_MDU_NR_UNITS single-DU encrypts with derived IVs. */
+	err = crypto_skcipher_set_data_unit_size(tfm, 0);
+	if (err)
+		goto out;
+	memcpy(unit, plain, total);
+	memcpy(iv_work, iv_orig, ivsize);
+	for (i = 0; i < TEST_MDU_NR_UNITS; i++) {
+		sg_init_one(&sg_in, unit + i * du_size, du_size);
+		sg_out = sg_in;
+		skcipher_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG |
+					      CRYPTO_TFM_REQ_MAY_SLEEP,
+					      crypto_req_done, &wait);
+		skcipher_request_set_crypt(req, &sg_in, &sg_out, du_size,
+					   iv_work);
+		err = crypto_wait_req(crypto_skcipher_encrypt(req), &wait);
+		if (err) {
+			pr_err("alg: skcipher: %s single-DU[%u] encrypt failed: %d\n",
+			       driver, i, err);
+			goto out;
+		}
+		/* Increment iv_work as a 128-bit little-endian counter. */
+		{
+			__le64 lo_le, hi_le;
+			u64 lo;
+
+			memcpy(&lo_le, iv_work, 8);
+			memcpy(&hi_le, iv_work + 8, 8);
+			lo = le64_to_cpu(lo_le) + 1;
+			lo_le = cpu_to_le64(lo);
+			memcpy(iv_work, &lo_le, 8);
+			if (lo == 0) {
+				hi_le = cpu_to_le64(le64_to_cpu(hi_le) + 1);
+				memcpy(iv_work + 8, &hi_le, 8);
+			}
+		}
+	}
+
+	if (memcmp(batched, unit, total) != 0) {
+		pr_err("alg: skcipher: %s multi-DU mismatch (du=%u, n=%u)\n",
+		       driver, du_size, TEST_MDU_NR_UNITS);
+		err = -EINVAL;
+	}
+
+out_clear_du:
+	(void)crypto_skcipher_set_data_unit_size(tfm, 0);
+out:
+	skcipher_request_free(req);
+	kfree(unit);
+	kfree(batched);
+	kfree(plain);
+	return err;
+}
+
 static int alg_test_skcipher(const struct alg_test_desc *desc,
 			     const char *driver, u32 type, u32 mask)
 {
@@ -3257,6 +3374,18 @@ static int alg_test_skcipher(const struct alg_test_desc *desc,
 	err = test_skcipher(DECRYPT, suite, req, tsgls);
 	if (err)
 		goto out;
+
+	if (crypto_skcipher_supports_multi_data_unit(tfm)) {
+		static const unsigned int du_sizes[] = { 512, 1024, 2048, 4096 };
+		unsigned int j;
+
+		for (j = 0; j < ARRAY_SIZE(du_sizes); j++) {
+			err = test_skcipher_multi_du(tfm, du_sizes[j]);
+			if (err)
+				goto out;
+			cond_resched();
+		}
+	}
 
 	err = test_skcipher_vs_generic_impl(desc->generic_driver, req, tsgls);
 out:
