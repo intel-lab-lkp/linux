@@ -21,6 +21,40 @@
  */
 #define CRYPTO_ALG_SKCIPHER_REQSIZE_LARGE CRYPTO_ALG_OPTIONAL_KEY
 
+/**
+ * skcipher_walk_data_units - dispatch a request as one body call per data unit
+ * @req: the caller's skcipher request
+ * @body: the algorithm's single-data-unit encrypt or decrypt function
+ *
+ * When tfm->data_unit_size is zero this is a tail call into @body with
+ * @req unchanged.  Otherwise the request is split into
+ * cryptlen / data_unit_size sub-ranges and @body is called once per
+ * sub-range with req->cryptlen, req->src, req->dst, and req->iv adjusted
+ * for that sub-range.  The IV passed to data unit n is the caller-
+ * supplied IV plus n, where + is a 128-bit little-endian add — this
+ * matches the convention documented in
+ * crypto_skcipher_set_data_unit_size().
+ *
+ * Many single-data-unit XTS bodies modify the IV buffer in place during
+ * processing (the tweak is walked block by block).  This helper saves
+ * the caller's IV before each call and rewrites the next data unit's
+ * IV from the saved value, so the body always sees a fresh per-DU IV
+ * regardless of any in-place mutation it performs.
+ *
+ * The body MUST run to completion synchronously.  Drivers that use this
+ * helper therefore advertise CRYPTO_ALG_SKCIPHER_MULTI_DATA_UNIT only
+ * for synchronous configurations.
+ *
+ * After the call returns, the contents of req->iv are unspecified per
+ * the documented contract.  src/dst/cryptlen are restored to the
+ * caller's values to keep skcipher request post-conditions intact.
+ *
+ * Return: 0 on success, or the body's negative errno on the first
+ *	   data unit that returned non-zero.
+ */
+int skcipher_walk_data_units(struct skcipher_request *req,
+			     int (*body)(struct skcipher_request *));
+
 struct aead_request;
 struct rtattr;
 

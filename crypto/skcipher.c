@@ -432,13 +432,119 @@ out:
 }
 EXPORT_SYMBOL_GPL(crypto_skcipher_setkey);
 
+int crypto_skcipher_set_data_unit_size(struct crypto_skcipher *tfm,
+				       unsigned int data_unit_size)
+{
+	unsigned int blocksize;
+
+	if (!data_unit_size) {
+		tfm->data_unit_size = 0;
+		return 0;
+	}
+
+	if (!crypto_skcipher_supports_multi_data_unit(tfm))
+		return -EOPNOTSUPP;
+
+	blocksize = crypto_skcipher_blocksize(tfm);
+	if (data_unit_size < blocksize || data_unit_size % blocksize)
+		return -EINVAL;
+
+	tfm->data_unit_size = data_unit_size;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(crypto_skcipher_set_data_unit_size);
+
+static int crypto_skcipher_check_data_unit_size(struct crypto_skcipher *tfm,
+						struct skcipher_request *req)
+{
+	unsigned int du = tfm->data_unit_size;
+
+	if (likely(!du))
+		return 0;
+	if (req->cryptlen % du)
+		return -EINVAL;
+	return 0;
+}
+
+/*
+ * Increment a 16-byte little-endian counter held in @iv.  See
+ * crypto_skcipher_set_data_unit_size() for the convention.
+ */
+static inline void skcipher_iv_inc_le128(u8 *iv)
+{
+	__le64 lo_le, hi_le;
+	u64 lo;
+
+	memcpy(&lo_le, iv, 8);
+	memcpy(&hi_le, iv + 8, 8);
+	lo = le64_to_cpu(lo_le) + 1;
+	lo_le = cpu_to_le64(lo);
+	memcpy(iv, &lo_le, 8);
+	if (unlikely(lo == 0)) {
+		hi_le = cpu_to_le64(le64_to_cpu(hi_le) + 1);
+		memcpy(iv + 8, &hi_le, 8);
+	}
+}
+
+int skcipher_walk_data_units(struct skcipher_request *req,
+			     int (*body)(struct skcipher_request *))
+{
+	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
+	const unsigned int du = tfm->data_unit_size;
+	const unsigned int total = req->cryptlen;
+	struct scatterlist *orig_src = req->src;
+	struct scatterlist *orig_dst = req->dst;
+	struct scatterlist src_sg[2], dst_sg[2];
+	u8 iv_save[16];
+	unsigned int off;
+	int err = 0;
+
+	if (likely(!du))
+		return body(req);
+
+	/*
+	 * Registration of an algorithm advertising
+	 * CRYPTO_ALG_SKCIPHER_MULTI_DATA_UNIT enforces ivsize == 16
+	 * (see skcipher_prepare_alg_common()), so this is purely
+	 * defensive against algorithm-registration bugs.
+	 */
+	if (WARN_ON_ONCE(crypto_skcipher_ivsize(tfm) != 16))
+		return -EINVAL;
+
+	memcpy(iv_save, req->iv, 16);
+
+	for (off = 0; off < total; off += du) {
+		req->cryptlen = du;
+		req->src = scatterwalk_ffwd(src_sg, orig_src, off);
+		req->dst = (orig_src == orig_dst) ? req->src :
+			   scatterwalk_ffwd(dst_sg, orig_dst, off);
+
+		err = body(req);
+		if (err)
+			break;
+
+		skcipher_iv_inc_le128(iv_save);
+		memcpy(req->iv, iv_save, 16);
+	}
+
+	req->src = orig_src;
+	req->dst = orig_dst;
+	req->cryptlen = total;
+	return err;
+}
+EXPORT_SYMBOL_GPL(skcipher_walk_data_units);
+
 int crypto_skcipher_encrypt(struct skcipher_request *req)
 {
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct skcipher_alg *alg = crypto_skcipher_alg(tfm);
+	int err;
 
 	if (crypto_skcipher_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)
 		return -ENOKEY;
+	err = crypto_skcipher_check_data_unit_size(tfm, req);
+	if (err)
+		return err;
 	if (alg->co.base.cra_type != &crypto_skcipher_type)
 		return crypto_lskcipher_encrypt_sg(req);
 	return alg->encrypt(req);
@@ -449,9 +555,13 @@ int crypto_skcipher_decrypt(struct skcipher_request *req)
 {
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct skcipher_alg *alg = crypto_skcipher_alg(tfm);
+	int err;
 
 	if (crypto_skcipher_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)
 		return -ENOKEY;
+	err = crypto_skcipher_check_data_unit_size(tfm, req);
+	if (err)
+		return err;
 	if (alg->co.base.cra_type != &crypto_skcipher_type)
 		return crypto_lskcipher_decrypt_sg(req);
 	return alg->decrypt(req);
@@ -676,6 +786,16 @@ int skcipher_prepare_alg_common(struct skcipher_alg_common *alg)
 	if (alg->ivsize > PAGE_SIZE / 8 || alg->chunksize > PAGE_SIZE / 8 ||
 	    alg->statesize > PAGE_SIZE / 2 ||
 	    (alg->ivsize + alg->statesize) > PAGE_SIZE / 2)
+		return -EINVAL;
+
+	/*
+	 * Algorithms advertising multi-data-unit support must use the
+	 * 16-byte little-endian counter convention documented in
+	 * crypto_skcipher_set_data_unit_size(); see also
+	 * skcipher_walk_data_units().
+	 */
+	if ((base->cra_flags & CRYPTO_ALG_SKCIPHER_MULTI_DATA_UNIT) &&
+	    alg->ivsize != 16)
 		return -EINVAL;
 
 	if (!alg->chunksize)
