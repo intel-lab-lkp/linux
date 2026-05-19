@@ -345,24 +345,37 @@ static int devfreq_set_governor(struct devfreq *df,
 				 __func__, df->governor->name, ret);
 			return ret;
 		}
+		module_put(old_gov->owner);
 	}
 
 	/* Start the new governor */
+	if (!try_module_get(new_gov->owner)) {
+		df->governor = NULL;
+		return -EINVAL;
+	}
+
 	df->governor = new_gov;
 	ret = df->governor->event_handler(df, DEVFREQ_GOV_START, NULL);
 	if (ret) {
 		dev_warn(dev, "%s: Governor %s not started(%d)\n",
 			 __func__, df->governor->name, ret);
+		module_put(new_gov->owner);
 
 		/* Restore previous governor */
 		df->governor = old_gov;
 		if (!df->governor)
 			return ret;
 
+		if (!try_module_get(old_gov->owner)) {
+			df->governor = NULL;
+			return -EINVAL;
+		}
+
 		ret = df->governor->event_handler(df, DEVFREQ_GOV_START, NULL);
 		if (ret) {
 			dev_err(dev, "%s: restore Governor %s failed (%d)\n",
 				__func__, df->governor->name, ret);
+			module_put(old_gov->owner);
 			df->governor = NULL;
 			return ret;
 		}
@@ -1040,9 +1053,11 @@ int devfreq_remove_device(struct devfreq *devfreq)
 
 	devfreq_cooling_unregister(devfreq->cdev);
 
-	if (devfreq->governor)
+	if (devfreq->governor) {
 		devfreq->governor->event_handler(devfreq,
 						 DEVFREQ_GOV_STOP, NULL);
+		module_put(devfreq->governor->owner);
+	}
 	device_unregister(&devfreq->dev);
 
 	return 0;

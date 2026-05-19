@@ -12,6 +12,7 @@
 #define __LINUX_DEVFREQ_DEVFREQ_H__
 
 #include <linux/devfreq.h>
+struct module;
 
 #define DEVFREQ_NAME_LEN			16
 
@@ -53,6 +54,15 @@
  * @name:		Governor's name
  * @attrs:		Governor's sysfs attribute flags
  * @flags:		Governor's feature flags
+ * @owner:		Optional, module that owns this governor.
+ *			When set (typically to THIS_MODULE), the devfreq core
+ *			takes a reference on @owner while this governor is in
+ *			use so that the governor module cannot be removed,
+ *			except by a forced unload. Governors that are bundled
+ *			into a device driver module must leave @owner NULL: the
+ *			device's lifetime already pins that module, and setting
+ *			@owner would create a self-reference that prevents the
+ *			driver from being unloaded.
  * @get_target_freq:	Returns desired operating frequency for the device.
  *			Basically, get_target_freq will run
  *			devfreq_dev_profile.get_dev_status() to get the
@@ -70,6 +80,7 @@ struct devfreq_governor {
 	const char name[DEVFREQ_NAME_LEN];
 	const u64 attrs;
 	const u64 flags;
+	struct module *owner;
 	int (*get_target_freq)(struct devfreq *this, unsigned long *freq);
 	int (*event_handler)(struct devfreq *devfreq,
 				unsigned int event, void *data);
