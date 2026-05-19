@@ -35,7 +35,7 @@
 #include <linux/uio.h>
 #include <linux/hugetlb.h>
 #include <linux/page_idle.h>
-#include <linux/local_lock.h>
+#include <linux/pwlocks.h>
 #include <linux/buffer_head.h>
 
 #include "internal.h"
@@ -52,7 +52,7 @@ struct cpu_fbatches {
 	 * The following folio batches are grouped together because they are protected
 	 * by disabling preemption (and interrupts remain enabled).
 	 */
-	local_lock_t lock;
+	pw_lock_t lock;
 	struct folio_batch lru_add;
 	struct folio_batch lru_deactivate_file;
 	struct folio_batch lru_deactivate;
@@ -61,14 +61,11 @@ struct cpu_fbatches {
 	struct folio_batch lru_activate;
 #endif
 	/* Protecting the following batches which require disabling interrupts */
-	local_lock_t lock_irq;
+	pw_lock_t lock_irq;
 	struct folio_batch lru_move_tail;
 };
 
-static DEFINE_PER_CPU(struct cpu_fbatches, cpu_fbatches) = {
-	.lock = INIT_LOCAL_LOCK(lock),
-	.lock_irq = INIT_LOCAL_LOCK(lock_irq),
-};
+static DEFINE_PER_CPU(struct cpu_fbatches, cpu_fbatches);
 
 static void __page_cache_release(struct folio *folio, struct lruvec **lruvecp,
 		unsigned long *flagsp)
@@ -187,18 +184,18 @@ static void __folio_batch_add_and_move(struct folio_batch __percpu *fbatch,
 	folio_get(folio);
 
 	if (disable_irq)
-		local_lock_irqsave(&cpu_fbatches.lock_irq, flags);
+		pw_lock_local_irqsave(&cpu_fbatches.lock_irq, flags);
 	else
-		local_lock(&cpu_fbatches.lock);
+		pw_lock_local(&cpu_fbatches.lock);
 
 	if (!folio_batch_add(this_cpu_ptr(fbatch), folio) ||
 			!folio_may_be_lru_cached(folio) || lru_cache_disabled())
 		folio_batch_move_lru(this_cpu_ptr(fbatch), move_fn);
 
 	if (disable_irq)
-		local_unlock_irqrestore(&cpu_fbatches.lock_irq, flags);
+		pw_unlock_local_irqrestore(&cpu_fbatches.lock_irq, flags);
 	else
-		local_unlock(&cpu_fbatches.lock);
+		pw_unlock_local(&cpu_fbatches.lock);
 }
 
 #define folio_batch_add_and_move(folio, op)		\
@@ -363,7 +360,7 @@ static void __lru_cache_activate_folio(struct folio *folio)
 	struct folio_batch *fbatch;
 	int i;
 
-	local_lock(&cpu_fbatches.lock);
+	pw_lock_local(&cpu_fbatches.lock);
 	fbatch = this_cpu_ptr(&cpu_fbatches.lru_add);
 
 	/*
@@ -385,7 +382,7 @@ static void __lru_cache_activate_folio(struct folio *folio)
 		}
 	}
 
-	local_unlock(&cpu_fbatches.lock);
+	pw_unlock_local(&cpu_fbatches.lock);
 }
 
 #ifdef CONFIG_LRU_GEN
@@ -659,9 +656,9 @@ void lru_add_drain_cpu(int cpu)
 		unsigned long flags;
 
 		/* No harm done if a racing interrupt already did this */
-		local_lock_irqsave(&cpu_fbatches.lock_irq, flags);
+		pw_lock_irqsave(&cpu_fbatches.lock_irq, flags, cpu);
 		folio_batch_move_lru(fbatch, lru_move_tail);
-		local_unlock_irqrestore(&cpu_fbatches.lock_irq, flags);
+		pw_unlock_irqrestore(&cpu_fbatches.lock_irq, flags, cpu);
 	}
 
 	fbatch = &fbatches->lru_deactivate_file;
@@ -739,9 +736,9 @@ void folio_mark_lazyfree(struct folio *folio)
 
 void lru_add_drain(void)
 {
-	local_lock(&cpu_fbatches.lock);
+	pw_lock_local(&cpu_fbatches.lock);
 	lru_add_drain_cpu(smp_processor_id());
-	local_unlock(&cpu_fbatches.lock);
+	pw_unlock_local(&cpu_fbatches.lock);
 	mlock_drain_local();
 }
 
@@ -751,30 +748,30 @@ void lru_add_drain(void)
  * the same cpu. It shouldn't be a problem in !SMP case since
  * the core is only one and the locks will disable preemption.
  */
-static void lru_add_mm_drain(void)
+static void lru_add_mm_drain(int cpu)
 {
-	local_lock(&cpu_fbatches.lock);
-	lru_add_drain_cpu(smp_processor_id());
-	local_unlock(&cpu_fbatches.lock);
-	mlock_drain_local();
+	pw_lock(&cpu_fbatches.lock, cpu);
+	lru_add_drain_cpu(cpu);
+	pw_unlock(&cpu_fbatches.lock, cpu);
+	mlock_drain_cpu(cpu);
 }
 
 void lru_add_drain_cpu_zone(struct zone *zone)
 {
-	local_lock(&cpu_fbatches.lock);
+	pw_lock_local(&cpu_fbatches.lock);
 	lru_add_drain_cpu(smp_processor_id());
 	drain_local_pages(zone);
-	local_unlock(&cpu_fbatches.lock);
+	pw_unlock_local(&cpu_fbatches.lock);
 	mlock_drain_local();
 }
 
 #ifdef CONFIG_SMP
 
-static DEFINE_PER_CPU(struct work_struct, lru_add_drain_work);
+static DEFINE_PER_CPU(struct pw_struct, lru_add_drain_pw);
 
-static void lru_add_drain_per_cpu(struct work_struct *dummy)
+static void lru_add_drain_per_cpu(struct work_struct *w)
 {
-	lru_add_mm_drain();
+	lru_add_mm_drain(pw_get_cpu(w));
 }
 
 static DEFINE_PER_CPU(struct work_struct, bh_add_drain_work);
@@ -889,12 +886,12 @@ static inline void __lru_add_drain_all(bool force_all_cpus)
 	cpumask_clear(&has_mm_work);
 	cpumask_clear(&has_bh_work);
 	for_each_online_cpu(cpu) {
-		struct work_struct *mm_work = &per_cpu(lru_add_drain_work, cpu);
+		struct pw_struct *mm_pw = &per_cpu(lru_add_drain_pw, cpu);
 		struct work_struct *bh_work = &per_cpu(bh_add_drain_work, cpu);
 
 		if (cpu_needs_mm_drain(cpu)) {
-			INIT_WORK(mm_work, lru_add_drain_per_cpu);
-			queue_work_on(cpu, mm_percpu_wq, mm_work);
+			INIT_PW(mm_pw, lru_add_drain_per_cpu, cpu);
+			pw_queue_on(cpu, mm_percpu_wq, mm_pw);
 			__cpumask_set_cpu(cpu, &has_mm_work);
 		}
 
@@ -906,7 +903,7 @@ static inline void __lru_add_drain_all(bool force_all_cpus)
 	}
 
 	for_each_cpu(cpu, &has_mm_work)
-		flush_work(&per_cpu(lru_add_drain_work, cpu));
+		pw_flush(&per_cpu(lru_add_drain_pw, cpu));
 
 	for_each_cpu(cpu, &has_bh_work)
 		flush_work(&per_cpu(bh_add_drain_work, cpu));
@@ -956,7 +953,7 @@ void lru_cache_disable(void)
 #ifdef CONFIG_SMP
 	__lru_add_drain_all(true);
 #else
-	lru_add_mm_drain();
+	lru_add_mm_drain(smp_processor_id());
 	invalidate_bh_lrus_cpu();
 #endif
 }
@@ -1163,6 +1160,7 @@ static const struct ctl_table swap_sysctl_table[] = {
 void __init swap_setup(void)
 {
 	unsigned long megs = PAGES_TO_MB(totalram_pages());
+	unsigned int cpu;
 
 	/* Use a smaller cluster for small-memory machines */
 	if (megs < 16)
@@ -1175,4 +1173,11 @@ void __init swap_setup(void)
 	 */
 
 	register_sysctl_init("vm", swap_sysctl_table);
+
+	for_each_possible_cpu(cpu) {
+		struct cpu_fbatches *fbatches = &per_cpu(cpu_fbatches, cpu);
+
+		pw_lock_init(&fbatches->lock);
+		pw_lock_init(&fbatches->lock_irq);
+	}
 }

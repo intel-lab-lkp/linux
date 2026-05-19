@@ -25,17 +25,16 @@
 #include <linux/memcontrol.h>
 #include <linux/mm_inline.h>
 #include <linux/secretmem.h>
+#include <linux/pwlocks.h>
 
 #include "internal.h"
 
 struct mlock_fbatch {
-	local_lock_t lock;
+	pw_lock_t lock;
 	struct folio_batch fbatch;
 };
 
-static DEFINE_PER_CPU(struct mlock_fbatch, mlock_fbatch) = {
-	.lock = INIT_LOCAL_LOCK(lock),
-};
+static DEFINE_PER_CPU(struct mlock_fbatch, mlock_fbatch);
 
 bool can_do_mlock(void)
 {
@@ -209,18 +208,29 @@ static void mlock_folio_batch(struct folio_batch *fbatch)
 	folios_put(fbatch);
 }
 
+void mlock_drain_cpu(int cpu)
+{
+	struct folio_batch *fbatch;
+
+	pw_lock(&mlock_fbatch.lock, cpu);
+	fbatch = per_cpu_ptr(&mlock_fbatch.fbatch, cpu);
+	if (folio_batch_count(fbatch))
+		mlock_folio_batch(fbatch);
+	pw_unlock(&mlock_fbatch.lock, cpu);
+}
+
 void mlock_drain_local(void)
 {
 	struct folio_batch *fbatch;
 
-	local_lock(&mlock_fbatch.lock);
+	pw_lock_local(&mlock_fbatch.lock);
 	fbatch = this_cpu_ptr(&mlock_fbatch.fbatch);
 	if (folio_batch_count(fbatch))
 		mlock_folio_batch(fbatch);
-	local_unlock(&mlock_fbatch.lock);
+	pw_unlock_local(&mlock_fbatch.lock);
 }
 
-void mlock_drain_remote(int cpu)
+void mlock_drain_offline(int cpu)
 {
 	struct folio_batch *fbatch;
 
@@ -243,7 +253,7 @@ void mlock_folio(struct folio *folio)
 {
 	struct folio_batch *fbatch;
 
-	local_lock(&mlock_fbatch.lock);
+	pw_lock_local(&mlock_fbatch.lock);
 	fbatch = this_cpu_ptr(&mlock_fbatch.fbatch);
 
 	if (!folio_test_set_mlocked(folio)) {
@@ -257,7 +267,7 @@ void mlock_folio(struct folio *folio)
 	if (!folio_batch_add(fbatch, mlock_lru(folio)) ||
 	    !folio_may_be_lru_cached(folio) || lru_cache_disabled())
 		mlock_folio_batch(fbatch);
-	local_unlock(&mlock_fbatch.lock);
+	pw_unlock_local(&mlock_fbatch.lock);
 }
 
 /**
@@ -269,7 +279,7 @@ void mlock_new_folio(struct folio *folio)
 	struct folio_batch *fbatch;
 	int nr_pages = folio_nr_pages(folio);
 
-	local_lock(&mlock_fbatch.lock);
+	pw_lock_local(&mlock_fbatch.lock);
 	fbatch = this_cpu_ptr(&mlock_fbatch.fbatch);
 	folio_set_mlocked(folio);
 
@@ -280,7 +290,7 @@ void mlock_new_folio(struct folio *folio)
 	if (!folio_batch_add(fbatch, mlock_new(folio)) ||
 	    !folio_may_be_lru_cached(folio) || lru_cache_disabled())
 		mlock_folio_batch(fbatch);
-	local_unlock(&mlock_fbatch.lock);
+	pw_unlock_local(&mlock_fbatch.lock);
 }
 
 /**
@@ -291,7 +301,7 @@ void munlock_folio(struct folio *folio)
 {
 	struct folio_batch *fbatch;
 
-	local_lock(&mlock_fbatch.lock);
+	pw_lock_local(&mlock_fbatch.lock);
 	fbatch = this_cpu_ptr(&mlock_fbatch.fbatch);
 	/*
 	 * folio_test_clear_mlocked(folio) must be left to __munlock_folio(),
@@ -301,7 +311,7 @@ void munlock_folio(struct folio *folio)
 	if (!folio_batch_add(fbatch, folio) ||
 	    !folio_may_be_lru_cached(folio) || lru_cache_disabled())
 		mlock_folio_batch(fbatch);
-	local_unlock(&mlock_fbatch.lock);
+	pw_unlock_local(&mlock_fbatch.lock);
 }
 
 static inline unsigned int folio_mlock_step(struct folio *folio,
@@ -829,3 +839,18 @@ void user_shm_unlock(size_t size, struct ucounts *ucounts)
 	spin_unlock(&shmlock_user_lock);
 	put_ucounts(ucounts);
 }
+
+int __init mlock_init(void)
+{
+	unsigned int cpu;
+
+	for_each_possible_cpu(cpu) {
+		struct mlock_fbatch *fbatch = &per_cpu(mlock_fbatch, cpu);
+
+		pw_lock_init(&fbatch->lock);
+	}
+
+	return 0;
+}
+
+module_init(mlock_init);
