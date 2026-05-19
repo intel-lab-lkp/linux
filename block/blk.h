@@ -423,6 +423,17 @@ static inline bool bio_may_need_split(struct bio *bio,
 static inline struct bio *__bio_split_to_limits(struct bio *bio,
 		const struct queue_limits *lim, unsigned int *nr_segs)
 {
+	if (unlikely(bio_end_sector(bio) > bdev_nr_sectors(bio->bi_bdev) +
+					   bio->bi_bdev->bd_start_sect)) {
+		pr_info_ratelimited("%s: attempt to access beyond end of device\n"
+				    "%pg: rw=%d, sector=%llu, nr_sectors = %u limit=%llu\n",
+				    current->comm, bio->bi_bdev, bio->bi_opf,
+				    bio->bi_iter.bi_sector, bio_sectors(bio),
+				    bdev_nr_sectors(bio->bi_bdev) +
+					bio->bi_bdev->bd_start_sect);
+		goto ioerr;
+	}
+
 	switch (bio_op(bio)) {
 	case REQ_OP_READ:
 	case REQ_OP_WRITE:
@@ -442,6 +453,9 @@ static inline struct bio *__bio_split_to_limits(struct bio *bio,
 		*nr_segs = 0;
 		return bio;
 	}
+ioerr:
+	bio_io_error(bio);
+	return NULL;
 }
 
 /**

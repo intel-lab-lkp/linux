@@ -548,30 +548,6 @@ int should_fail_bio(struct bio *bio)
 ALLOW_ERROR_INJECTION(should_fail_bio, ERRNO);
 
 /*
- * Check whether this bio extends beyond the end of the device or partition.
- * This may well happen - the kernel calls bread() without checking the size of
- * the device, e.g., when mounting a file system.
- */
-static inline int bio_check_eod(struct bio *bio)
-{
-	sector_t maxsector = bdev_nr_sectors(bio->bi_bdev);
-	unsigned int nr_sectors = bio_sectors(bio);
-
-	if (nr_sectors &&
-	    (nr_sectors > maxsector ||
-	     bio->bi_iter.bi_sector > maxsector - nr_sectors)) {
-		if (!maxsector)
-			return -EIO;
-		pr_info_ratelimited("%s: attempt to access beyond end of device\n"
-				    "%pg: rw=%d, sector=%llu, nr_sectors = %u limit=%llu\n",
-				    current->comm, bio->bi_bdev, bio->bi_opf,
-				    bio->bi_iter.bi_sector, nr_sectors, maxsector);
-		return -EIO;
-	}
-	return 0;
-}
-
-/*
  * Remap block n of partition p to block n+start(p) of the disk.
  */
 static int blk_partition_remap(struct bio *bio)
@@ -802,8 +778,6 @@ void submit_bio_noacct(struct bio *bio)
 		goto end_io;
 	bio_check_ro(bio);
 	if (!bio_flagged(bio, BIO_REMAPPED)) {
-		if (unlikely(bio_check_eod(bio)))
-			goto end_io;
 		if (bdev_is_partition(bdev) &&
 		    unlikely(blk_partition_remap(bio)))
 			goto end_io;
