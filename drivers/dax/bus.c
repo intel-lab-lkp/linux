@@ -637,7 +637,7 @@ struct dax_region *alloc_dax_region(struct device *parent, int region_id,
 		unsigned long flags)
 {
 	struct dax_region *dax_region;
-	int rc;
+	struct resource *conflict;
 
 	/*
 	 * The DAX core assumes that it can store its private data in
@@ -670,10 +670,11 @@ struct dax_region *alloc_dax_region(struct device *parent, int region_id,
 		.flags = IORESOURCE_MEM | flags,
 	};
 
-	rc = request_resource(&dax_regions, &dax_region->res);
-	if (rc) {
-		dev_dbg(parent, "dax_region resource conflict for %pR\n",
-			&dax_region->res);
+	conflict = request_resource_conflict(&dax_regions, &dax_region->res);
+	if (conflict) {
+		dev_err(parent,
+			"dax_region: can't claim %pR: address conflict with %s %pR\n",
+			&dax_region->res, conflict->name, conflict);
 		goto err_res;
 	}
 
