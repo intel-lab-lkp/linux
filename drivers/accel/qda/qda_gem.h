@@ -22,12 +22,20 @@ struct qda_gem_obj {
 	struct drm_gem_object base;
 	/** @iommu_dev: IOMMU context bank device that performed the allocation */
 	struct qda_iommu_device *iommu_dev;
+	/** @dma_buf: Reference to imported dma_buf */
+	struct dma_buf *dma_buf;
+	/** @attachment: DMA buf attachment */
+	struct dma_buf_attachment *attachment;
+	/** @sgt: Scatter-gather table */
+	struct sg_table *sgt;
 	/** @virt: Kernel virtual address of the allocated DMA memory */
 	void *virt;
 	/** @dma_addr: DMA address (with SID encoded in upper 32 bits) */
 	dma_addr_t dma_addr;
 	/** @size: Size of the buffer in bytes */
 	size_t size;
+	/** @is_imported: True if buffer is imported, false if allocated */
+	bool is_imported;
 };
 
 /**

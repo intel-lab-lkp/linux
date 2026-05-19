@@ -47,6 +47,10 @@ struct qda_dev {
 	struct list_head cb_devs;
 	/** @iommu_mgr: IOMMU/memory manager instance */
 	struct qda_memory_manager *iommu_mgr;
+	/** @import_lock: Lock protecting prime import context */
+	struct mutex import_lock;
+	/** @current_import_file_priv: Current file_priv during prime import */
+	struct drm_file *current_import_file_priv;
 	/** @dsp_name: Name of the DSP domain (e.g. "cdsp", "adsp") */
 	const char *dsp_name;
 };

@@ -202,6 +202,41 @@ static struct qda_iommu_device *get_or_assign_iommu_device(struct qda_memory_man
 	return NULL;
 }
 
+static int qda_memory_manager_map_imported(struct qda_memory_manager *mem_mgr,
+					   struct qda_gem_obj *gem_obj,
+					   struct qda_iommu_device *iommu_dev)
+{
+	struct scatterlist *sg;
+	dma_addr_t dma_addr;
+
+	if (!gem_obj->is_imported || !gem_obj->sgt || !iommu_dev) {
+		drm_err(gem_obj->base.dev, "Invalid parameters for imported buffer mapping\n");
+		return -EINVAL;
+	}
+
+	sg = gem_obj->sgt->sgl;
+	if (!sg) {
+		drm_err(gem_obj->base.dev, "Invalid scatter-gather list for imported buffer\n");
+		return -EINVAL;
+	}
+
+	gem_obj->iommu_dev = iommu_dev;
+
+	/*
+	 * After dma_buf_map_attachment_unlocked(), sg_dma_address() returns the
+	 * IOMMU virtual address, not the physical address. The IOMMU maps the
+	 * entire buffer as a contiguous range in the IOMMU address space even if
+	 * the underlying physical memory is non-contiguous. Therefore the first
+	 * sg entry's DMA address is the start of the complete contiguous
+	 * IOMMU-mapped range and is sufficient to describe the buffer to the DSP.
+	 */
+	dma_addr = sg_dma_address(sg);
+	dma_addr += ((u64)iommu_dev->sid << 32);
+	gem_obj->dma_addr = dma_addr;
+
+	return 0;
+}
+
 /**
  * qda_memory_manager_alloc() - Allocate memory for a GEM object
  * @mem_mgr: Pointer to memory manager
@@ -237,7 +272,11 @@ int qda_memory_manager_alloc(struct qda_memory_manager *mem_mgr, struct qda_gem_
 		return -ENOMEM;
 	}
 
-	ret = qda_dma_alloc(selected_dev, gem_obj, size);
+	if (gem_obj->is_imported)
+		ret = qda_memory_manager_map_imported(mem_mgr, gem_obj, selected_dev);
+	else
+		ret = qda_dma_alloc(selected_dev, gem_obj, size);
+
 	if (ret) {
 		drm_err(gem_obj->base.dev, "Allocation failed: size=%zu, device_id=%u, ret=%d\n",
 			size, selected_dev->id, ret);
@@ -259,6 +298,12 @@ void qda_memory_manager_free(struct qda_memory_manager *mem_mgr, struct qda_gem_
 {
 	if (!gem_obj || !gem_obj->iommu_dev) {
 		pr_debug("qda: Invalid gem_obj or iommu_dev for free\n");
+		return;
+	}
+
+	if (gem_obj->is_imported) {
+		drm_dbg_driver(gem_obj->base.dev,
+			       "Freed imported buffer tracking (no DMA free needed)\n");
 		return;
 	}
 

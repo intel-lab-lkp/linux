@@ -7,10 +7,12 @@
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_ioctl.h>
+#include <drm/drm_prime.h>
 #include <drm/drm_print.h>
 #include <drm/qda_accel.h>
 
 #include "qda_drv.h"
+#include "qda_prime.h"
 #include "qda_ioctl.h"
 #include "qda_rpmsg.h"
 
@@ -64,6 +66,8 @@ static const struct drm_driver qda_drm_driver = {
 	.postclose = qda_postclose,
 	.ioctls = qda_ioctls,
 	.num_ioctls = ARRAY_SIZE(qda_ioctls),
+	.gem_prime_import = qda_gem_prime_import,
+	.prime_fd_to_handle = qda_prime_fd_to_handle,
 	.name = QDA_DRIVER_NAME,
 	.desc = "Qualcomm DSP Accelerator Driver",
 };
@@ -100,6 +104,7 @@ static int init_memory_manager(struct qda_dev *qdev)
 
 void qda_deinit_device(struct qda_dev *qdev)
 {
+	mutex_destroy(&qdev->import_lock);
 	cleanup_memory_manager(qdev);
 }
 
@@ -107,9 +112,14 @@ int qda_init_device(struct qda_dev *qdev)
 {
 	int ret;
 
+	mutex_init(&qdev->import_lock);
+	qdev->current_import_file_priv = NULL;
+
 	ret = init_memory_manager(qdev);
-	if (ret)
+	if (ret) {
 		drm_err(&qdev->drm_dev, "Failed to initialize memory manager: %d\n", ret);
+		mutex_destroy(&qdev->import_lock);
+	}
 
 	return ret;
 }

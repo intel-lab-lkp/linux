@@ -9,6 +9,7 @@
 #include "qda_gem.h"
 #include "qda_memory_manager.h"
 #include "qda_memory_dma.h"
+#include "qda_prime.h"
 
 static void setup_vma_flags(struct vm_area_struct *vma)
 {
@@ -25,8 +26,20 @@ void qda_gem_free_object(struct drm_gem_object *gem_obj)
 	struct qda_gem_obj *qda_gem_obj = to_qda_gem_obj(gem_obj);
 	struct qda_dev *qdev = qda_dev_from_drm(gem_obj->dev);
 
-	if (qda_gem_obj->virt && qdev->iommu_mgr)
-		qda_memory_manager_free(qdev->iommu_mgr, qda_gem_obj);
+	if (qda_gem_obj->is_imported) {
+		if (qda_gem_obj->attachment && qda_gem_obj->sgt)
+			dma_buf_unmap_attachment_unlocked(qda_gem_obj->attachment,
+							  qda_gem_obj->sgt, DMA_BIDIRECTIONAL);
+		if (qda_gem_obj->attachment)
+			dma_buf_detach(qda_gem_obj->dma_buf, qda_gem_obj->attachment);
+		if (qda_gem_obj->dma_buf)
+			dma_buf_put(qda_gem_obj->dma_buf);
+		if (qda_gem_obj->iommu_dev && qdev->iommu_mgr)
+			qda_memory_manager_free(qdev->iommu_mgr, qda_gem_obj);
+	} else {
+		if (qda_gem_obj->virt && qdev->iommu_mgr)
+			qda_memory_manager_free(qdev->iommu_mgr, qda_gem_obj);
+	}
 
 	drm_gem_object_release(gem_obj);
 	kfree(qda_gem_obj);
@@ -43,6 +56,10 @@ int qda_gem_mmap_obj(struct drm_gem_object *drm_obj, struct vm_area_struct *vma)
 {
 	struct qda_gem_obj *qda_gem_obj = to_qda_gem_obj(drm_obj);
 	int ret;
+
+	/* Imported dma-buf objects must be mmap'd through the exporter, not the importer */
+	if (qda_gem_obj->is_imported)
+		return -EINVAL;
 
 	/* Reset vm_pgoff for DMA mmap */
 	vma->vm_pgoff = 0;
@@ -143,6 +160,10 @@ struct drm_gem_object *qda_gem_create_object(struct drm_device *drm_dev,
 	qda_gem_obj = qda_gem_alloc_object(drm_dev, aligned_size);
 	if (IS_ERR(qda_gem_obj))
 		return ERR_CAST(qda_gem_obj);
+	qda_gem_obj->is_imported = false;
+	qda_gem_obj->dma_buf = NULL;
+	qda_gem_obj->attachment = NULL;
+	qda_gem_obj->sgt = NULL;
 
 	ret = qda_memory_manager_alloc(iommu_mgr, qda_gem_obj, file_priv);
 	if (ret) {
