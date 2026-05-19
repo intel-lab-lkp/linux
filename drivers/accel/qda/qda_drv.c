@@ -57,6 +57,40 @@ struct qda_dev *qda_alloc_device(struct device *dev)
 	return qdev;
 }
 
+static void cleanup_memory_manager(struct qda_dev *qdev)
+{
+	if (qdev->iommu_mgr) {
+		qda_memory_manager_exit(qdev->iommu_mgr);
+		kfree(qdev->iommu_mgr);
+		qdev->iommu_mgr = NULL;
+	}
+}
+
+static int init_memory_manager(struct qda_dev *qdev)
+{
+	qdev->iommu_mgr = kzalloc_obj(*qdev->iommu_mgr);
+	if (!qdev->iommu_mgr)
+		return -ENOMEM;
+
+	return qda_memory_manager_init(qdev->iommu_mgr);
+}
+
+void qda_deinit_device(struct qda_dev *qdev)
+{
+	cleanup_memory_manager(qdev);
+}
+
+int qda_init_device(struct qda_dev *qdev)
+{
+	int ret;
+
+	ret = init_memory_manager(qdev);
+	if (ret)
+		drm_err(&qdev->drm_dev, "Failed to initialize memory manager: %d\n", ret);
+
+	return ret;
+}
+
 void qda_unregister_device(struct qda_dev *qdev)
 {
 	drm_dev_unregister(&qdev->drm_dev);

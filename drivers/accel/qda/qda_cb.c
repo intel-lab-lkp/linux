@@ -8,11 +8,42 @@
 #include <linux/slab.h>
 #include <drm/drm_print.h>
 #include "qda_drv.h"
+#include "qda_memory_manager.h"
 #include "qda_cb.h"
+
+static int qda_cb_setup_device(struct qda_dev *qdev, struct device *cb_dev, u32 sid)
+{
+	struct qda_iommu_device *iommu_dev;
+	int rc;
+
+	drm_dbg_driver(&qdev->drm_dev, "Setting up CB device %s\n", dev_name(cb_dev));
+
+	iommu_dev = kzalloc_obj(*iommu_dev);
+	if (!iommu_dev)
+		return -ENOMEM;
+
+	iommu_dev->dev = cb_dev;
+	iommu_dev->qdev = qdev;
+	iommu_dev->sid = sid;
+
+	rc = qda_memory_manager_register_device(qdev->iommu_mgr, iommu_dev);
+	if (rc) {
+		drm_err(&qdev->drm_dev, "Failed to register IOMMU device: %d\n", rc);
+		kfree(iommu_dev);
+		return rc;
+	}
+
+	dev_set_drvdata(cb_dev, iommu_dev);
+
+	drm_dbg_driver(&qdev->drm_dev, "CB device setup complete - SID: %u\n", sid);
+
+	return 0;
+}
 
 int qda_create_cb_device(struct qda_dev *qdev, struct device_node *cb_node)
 {
 	struct device *cb_dev;
+	int ret;
 	u32 sid = 0;
 	char name[64];
 	struct qda_cb_dev *entry;
@@ -28,6 +59,13 @@ int qda_create_cb_device(struct qda_dev *qdev, struct device_node *cb_node)
 		drm_err(&qdev->drm_dev, "Failed to create CB device for SID %u: %ld\n",
 			sid, PTR_ERR(cb_dev));
 		return PTR_ERR(cb_dev);
+	}
+
+	ret = qda_cb_setup_device(qdev, cb_dev, sid);
+	if (ret) {
+		drm_err(&qdev->drm_dev, "CB device setup failed: %d\n", ret);
+		device_unregister(cb_dev);
+		return ret;
 	}
 
 	entry = kzalloc_obj(*entry);
@@ -80,6 +118,7 @@ int qda_cb_populate(struct qda_dev *qdev, struct device_node *parent_node)
 void qda_destroy_cb_device(struct device *cb_dev)
 {
 	struct iommu_group *group;
+	struct qda_iommu_device *iommu_dev;
 
 	if (!cb_dev) {
 		pr_debug("qda: NULL CB device passed to destroy\n");
@@ -87,6 +126,14 @@ void qda_destroy_cb_device(struct device *cb_dev)
 	}
 
 	dev_dbg(cb_dev, "Destroying CB device %s\n", dev_name(cb_dev));
+
+	iommu_dev = dev_get_drvdata(cb_dev);
+	if (iommu_dev && iommu_dev->qdev && iommu_dev->qdev->iommu_mgr) {
+		dev_dbg(cb_dev, "Unregistering IOMMU device for %s\n",
+			dev_name(cb_dev));
+		qda_memory_manager_unregister_device(iommu_dev->qdev->iommu_mgr,
+						     iommu_dev);
+	}
 
 	group = iommu_group_get(cb_dev);
 	if (group) {

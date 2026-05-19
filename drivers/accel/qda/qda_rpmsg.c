@@ -39,6 +39,7 @@ static void qda_rpmsg_remove(struct rpmsg_device *rpdev)
 	drm_dev_unplug(&qdev->drm_dev);
 	qdev->rpdev = NULL;
 	qda_unregister_device(qdev);
+	qda_deinit_device(qdev);
 	dev_info(qdev->dev, "RPMsg device removed\n");
 }
 
@@ -61,14 +62,20 @@ static int qda_rpmsg_probe(struct rpmsg_device *rpdev)
 	}
 	qdev->dsp_name = label;
 
+	ret = qda_init_device(qdev);
+	if (ret)
+		return ret;
+
 	ret = qda_cb_populate(qdev, rpdev->dev.of_node);
 	if (ret) {
 		dev_err(qdev->dev, "Failed to populate child devices: %d\n", ret);
+		qda_deinit_device(qdev);
 		return ret;
 	}
 
 	ret = qda_register_device(qdev);
 	if (ret) {
+		qda_deinit_device(qdev);
 		qda_cb_unpopulate(qdev);
 		return ret;
 	}
