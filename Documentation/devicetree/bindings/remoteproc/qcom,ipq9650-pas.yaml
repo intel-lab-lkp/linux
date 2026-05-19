@@ -1,0 +1,136 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/remoteproc/qcom,ipq9650-pas.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm IPQ9650 Peripheral Authentication Service
+
+maintainers:
+  - Vignesh Viswanathan <vignesh.viswanathan@oss.qualcomm.com>
+
+description:
+  Qualcomm IPQ9650 SoC Peripheral Authentication Service loads and boots
+  firmware on the Qualcomm CDSP Hexagon core.
+
+properties:
+  compatible:
+    enum:
+      - qcom,ipq9650-cdsp-pas
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 6
+
+  interrupt-names:
+    maxItems: 6
+
+  memory-region:
+    items:
+      - description: Memory region for main Firmware authentication
+      - description: Memory region for Devicetree Firmware authentication
+
+  firmware-name:
+    items:
+      - description: Firmware name of the Hexagon core
+      - description: Firmware name of the Hexagon Devicetree
+
+  qcom,smem-states:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description: States used by the AP to signal the Hexagon core
+    items:
+      - description: Stop the modem
+
+  qcom,smem-state-names:
+    description: The names of the state bits used for SMP2P output
+    items:
+      - const: stop
+
+  glink-edge:
+    $ref: /schemas/remoteproc/qcom,glink-edge.yaml#
+    description:
+      Qualcomm G-Link subnode which represents communication edge, channels
+      and devices related to the CDSP.
+    unevaluatedProperties: false
+
+  smd-edge: false
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - interrupt-names
+  - memory-region
+  - qcom,smem-states
+  - qcom,smem-state-names
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          enum:
+            - qcom,ipq9650-cdsp-pas
+    then:
+      properties:
+        interrupts:
+          items:
+            - description: Watchdog interrupt
+            - description: Fatal interrupt
+            - description: Ready interrupt
+            - description: Handover interrupt
+            - description: Stop acknowledge interrupt
+            - description: Shutdown acknowledge interrupt
+        interrupt-names:
+          items:
+            - const: wdog
+            - const: fatal
+            - const: ready
+            - const: handover
+            - const: stop-ack
+            - const: shutdown-ack
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/mailbox/qcom-ipcc.h>
+
+    remoteproc@24000000 {
+        compatible = "qcom,ipq9650-cdsp-pas";
+        reg = <0x24000000 0x10000>;
+
+        interrupts-extended = <&intc GIC_SPI 447 IRQ_TYPE_EDGE_RISING 0>,
+                              <&smp2p_cdsp_in 0 IRQ_TYPE_EDGE_RISING>,
+                              <&smp2p_cdsp_in 1 IRQ_TYPE_EDGE_RISING>,
+                              <&smp2p_cdsp_in 2 IRQ_TYPE_EDGE_RISING>,
+                              <&smp2p_cdsp_in 3 IRQ_TYPE_EDGE_RISING>,
+                              <&smp2p_cdsp_in 7 IRQ_TYPE_EDGE_RISING>;
+        interrupt-names = "wdog",
+                          "fatal",
+                          "ready",
+                          "handover",
+                          "stop-ack",
+                          "shutdown-ack";
+
+        memory-region = <&cdsp_mem>, <&cdsp_dtb_mem>;
+
+        qcom,smem-states = <&smp2p_cdsp_out 0>;
+        qcom,smem-state-names = "stop";
+
+        glink-edge {
+            interrupts-extended = <&ipcc IPCC_CLIENT_CDSP
+                                         IPCC_MPROC_SIGNAL_GLINK_QMP
+                                         IRQ_TYPE_EDGE_RISING>;
+            mboxes = <&ipcc IPCC_CLIENT_CDSP
+                            IPCC_MPROC_SIGNAL_GLINK_QMP>;
+
+            label = "cdsp";
+            qcom,remote-pid = <5>;
+
+            /* ... */
+        };
+    };
