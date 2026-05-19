@@ -183,6 +183,7 @@ static int lsdc_get_dedicated_vram(struct lsdc_device *ldev,
 	ldev->vram_size = size;
 	ldev->gpu = pdev_gpu;
 
+	pci_dev_put(pdev_gpu);
 	drm_info(ddev, "Dedicated vram start: 0x%llx, size: %uMiB\n",
 		 (u64)base, (u32)(size >> 20));
 
