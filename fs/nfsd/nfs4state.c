@@ -4288,6 +4288,20 @@ nfsd4_destroy_session(struct svc_rqst *r, struct nfsd4_compound_state *cstate,
 
 	nfsd4_probe_callback_sync(ses->se_client);
 
+	/*
+	 * The inflight drain inside nfsd4_probe_callback_sync() guarantees
+	 * that no backchannel RPC still references @ses.  Clear the client's
+	 * cached backchannel session pointer so any callback that races in
+	 * after this point (e.g. via a freshly re-established backchannel)
+	 * cannot dereference the about-to-be-freed session.  The matching
+	 * READ_ONCE() NULL checks live in nfsd41_cb_get_slot(),
+	 * nfsd41_cb_release_slot() and nfsd4_cb_sequence_done().
+	 */
+	spin_lock(&ses->se_client->cl_lock);
+	if (ses->se_client->cl_cb_session == ses)
+		WRITE_ONCE(ses->se_client->cl_cb_session, NULL);
+	spin_unlock(&ses->se_client->cl_lock);
+
 	spin_lock(&nn->client_lock);
 	status = nfs_ok;
 out_put_session:

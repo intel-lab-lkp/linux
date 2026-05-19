@@ -1742,17 +1742,19 @@ TRACE_EVENT(nfsd_cb_seq_status,
 	),
 	TP_fast_assign(
 		const struct nfs4_client *clp = cb->cb_clp;
-		const struct nfsd4_session *session = clp->cl_cb_session;
-		const struct nfsd4_sessionid *sid =
-			(struct nfsd4_sessionid *)&session->se_sessionid;
+		const struct nfsd4_session *session =
+			READ_ONCE(clp->cl_cb_session);
+		const struct nfsd4_sessionid *sid = session ?
+			(struct nfsd4_sessionid *)&session->se_sessionid :
+			NULL;
 
 		__entry->task_id = task->tk_pid;
 		__entry->client_id = task->tk_client ?
 				     task->tk_client->cl_clid : -1;
-		__entry->cl_boot = sid->clientid.cl_boot;
-		__entry->cl_id = sid->clientid.cl_id;
-		__entry->seqno = sid->sequence;
-		__entry->reserved = sid->reserved;
+		__entry->cl_boot = sid ? sid->clientid.cl_boot : 0;
+		__entry->cl_id = sid ? sid->clientid.cl_id : 0;
+		__entry->seqno = sid ? sid->sequence : 0;
+		__entry->reserved = sid ? sid->reserved : 0;
 		__entry->tk_status = task->tk_status;
 		__entry->seq_status = cb->cb_seq_status;
 	),
@@ -1782,18 +1784,21 @@ TRACE_EVENT(nfsd_cb_free_slot,
 	),
 	TP_fast_assign(
 		const struct nfs4_client *clp = cb->cb_clp;
-		const struct nfsd4_session *session = clp->cl_cb_session;
-		const struct nfsd4_sessionid *sid =
-			(struct nfsd4_sessionid *)&session->se_sessionid;
+		const struct nfsd4_session *session =
+			READ_ONCE(clp->cl_cb_session);
+		const struct nfsd4_sessionid *sid = session ?
+			(struct nfsd4_sessionid *)&session->se_sessionid :
+			NULL;
 
 		__entry->task_id = task->tk_pid;
 		__entry->client_id = task->tk_client ?
 				     task->tk_client->cl_clid : -1;
-		__entry->cl_boot = sid->clientid.cl_boot;
-		__entry->cl_id = sid->clientid.cl_id;
-		__entry->seqno = sid->sequence;
-		__entry->reserved = sid->reserved;
-		__entry->slot_seqno = session->se_cb_seq_nr[cb->cb_held_slot];
+		__entry->cl_boot = sid ? sid->clientid.cl_boot : 0;
+		__entry->cl_id = sid ? sid->clientid.cl_id : 0;
+		__entry->seqno = sid ? sid->sequence : 0;
+		__entry->reserved = sid ? sid->reserved : 0;
+		__entry->slot_seqno = session ?
+			session->se_cb_seq_nr[cb->cb_held_slot] : 0;
 	),
 	TP_printk(SUNRPC_TRACE_TASK_SPECIFIER
 		" sessionid=%08x:%08x:%08x:%08x new slot seqno=%u",
