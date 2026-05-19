@@ -122,6 +122,8 @@ struct fuse_backing {
 	struct cred *cred;
 	const struct fuse_backing_ops *ops;
 
+	int id;
+
 	/** refcount */
 	refcount_t count;
 	struct rcu_head rcu;

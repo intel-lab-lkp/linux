@@ -40,15 +40,22 @@ void fuse_backing_files_init(struct fuse_conn *fc)
 
 static int fuse_backing_id_alloc(struct fuse_conn *fc, struct fuse_backing *fb)
 {
+	const unsigned long max =
+		fb->ops->id_end > 0 ? fb->ops->id_end - 1 : INT_MAX;
 	int id;
 
 	WARN_ON_ONCE(fb->ops->id_start < 1);
+	fb->id = fb->ops->id_start;
 
 	idr_preload(GFP_KERNEL);
 	spin_lock(&fc->lock);
 	/* FIXME: xarray might be space inefficient */
-	id = idr_alloc_cyclic(&fc->backing_files_map, fb, fb->ops->id_start,
-			      fb->ops->id_end, GFP_ATOMIC);
+	id = idr_alloc_u32(&fc->backing_files_map, fb, &fb->id, max,
+			   GFP_ATOMIC);
+	if (id < 0)
+		fb->id = -1;
+	else
+		id = fb->id;
 	spin_unlock(&fc->lock);
 	idr_preload_end();
 
@@ -147,6 +154,7 @@ int fuse_backing_open(struct fuse_conn *fc, struct fuse_backing_map *map)
 	fb->file = file;
 	fb->cred = prepare_creds();
 	fb->ops = ops;
+	fb->id = -1;
 	refcount_set(&fb->count, 1);
 
 	res = fuse_backing_id_alloc(fc, fb);
