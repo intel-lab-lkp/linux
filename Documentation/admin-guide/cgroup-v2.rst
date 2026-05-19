@@ -2828,6 +2828,29 @@ DMEM Interface Files
 	  drm/0000:03:00.0/vram0 12550144
 	  drm/0000:03:00.0/stolen 8650752
 
+  dmem.memcg
+	A readwrite nested-keyed file that exists only on the root
+	cgroup. It configures whether allocations in a dmem region
+	should also be charged to the memory controller.
+
+	Upon the first charge to a region, its setting can no longer be changed
+	and is reported as "[true|false] (locked)".
+
+	Charges to the memory controller are visible in ``memory.stat`` as the
+	``dmem`` entry, reported in bytes.
+
+	An example read output follows::
+
+	  drm/0000:03:00.0/vram0 false
+	  drm/0000:03:00.0/stolen false (locked)
+
+	Writing uses the same nested-keyed format::
+
+	  echo "drm/0000:03:00.0/vram0 true" > dmem.memcg
+
+	This file is only available when the kernel is built with
+	``CONFIG_MEMCG``.
+
 HugeTLB
 -------
 

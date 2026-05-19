@@ -17,6 +17,14 @@
 #include <linux/refcount.h>
 #include <linux/rculist.h>
 #include <linux/slab.h>
+#include <linux/memcontrol.h>
+
+enum dmem_memcg_status {
+	DMEM_MEMCG_OFF,
+	DMEM_MEMCG_ON,
+	DMEM_MEMCG_LOCKED_OFF,
+	DMEM_MEMCG_LOCKED_ON,
+};
 
 struct dmem_cgroup_region {
 	/**
@@ -51,6 +59,14 @@ struct dmem_cgroup_region {
 	 * No new pools should be added to the region afterwards.
 	 */
 	bool unregistered;
+
+	/**
+	 * @memcg_status: Whether allocation in this region should charge memcg.
+	 * DMEM_MEMCG_OFF/DMEM_MEMCG_ON or
+	 * DMEM_MEMCG_LOCKED_OFF/DMEM_MEMCG_LOCKED_ON, frozen after first allocation.
+	 * Transitions to a locked state are one-way.
+	 */
+	atomic_t memcg_status;
 };
 
 struct dmemcg_state {
@@ -609,6 +625,34 @@ get_cg_pool_unlocked(struct dmemcg_state *cg, struct dmem_cgroup_region *region)
 	return pool;
 }
 
+static bool apply_memcg_charge(atomic_t *status)
+{
+	int state = atomic_read(status);
+
+	for (;;) {
+		switch (state) {
+		case DMEM_MEMCG_OFF:
+			state = atomic_cmpxchg(status, DMEM_MEMCG_OFF,
+					       DMEM_MEMCG_LOCKED_OFF);
+			if (state != DMEM_MEMCG_OFF)
+				continue;
+			return false;
+		case DMEM_MEMCG_LOCKED_OFF:
+			return false;
+		case DMEM_MEMCG_ON:
+			state = atomic_cmpxchg(status, DMEM_MEMCG_ON,
+					       DMEM_MEMCG_LOCKED_ON);
+			if (state != DMEM_MEMCG_ON)
+				continue;
+			return true;
+		case DMEM_MEMCG_LOCKED_ON:
+			return true;
+		}
+		WARN_ONCE(1, "Invalid memcg_status (%#x).\n", state);
+		return false;
+	}
+}
+
 /**
  * dmem_cgroup_uncharge() - Uncharge a pool.
  * @pool: Pool to uncharge.
@@ -624,6 +668,12 @@ void dmem_cgroup_uncharge(struct dmem_cgroup_pool_state *pool, u64 size)
 		return;
 
 	page_counter_uncharge(&pool->cnt, size);
+
+	if (atomic_read(&pool->region->memcg_status) == DMEM_MEMCG_LOCKED_ON &&
+	    !WARN_ON_ONCE(size > (u64)UINT_MAX << PAGE_SHIFT))
+		mem_cgroup_dmem_uncharge(pool->cs->css.cgroup,
+					 PAGE_ALIGN(size) >> PAGE_SHIFT);
+
 	css_put(&pool->cs->css);
 	dmemcg_pool_put(pool);
 }
@@ -655,6 +705,8 @@ int dmem_cgroup_try_charge(struct dmem_cgroup_region *region, u64 size,
 	struct dmemcg_state *cg;
 	struct dmem_cgroup_pool_state *pool;
 	struct page_counter *fail;
+	unsigned long nr_pages = PAGE_ALIGN(size) >> PAGE_SHIFT;
+	bool charge_memcg;
 	int ret;
 
 	*ret_pool = NULL;
@@ -670,7 +722,28 @@ int dmem_cgroup_try_charge(struct dmem_cgroup_region *region, u64 size,
 	pool = get_cg_pool_unlocked(cg, region);
 	if (IS_ERR(pool)) {
 		ret = PTR_ERR(pool);
-		goto err;
+		goto err_css_put;
+	}
+
+	charge_memcg = apply_memcg_charge(&region->memcg_status);
+	if (charge_memcg) {
+		/* mem_cgroup_dmem_charge limitation from try_charge_memcg */
+		if (size > (u64)UINT_MAX << PAGE_SHIFT) {
+			ret = -EINVAL;
+			dmemcg_pool_put(pool);
+			goto err_css_put;
+		}
+
+		if (!mem_cgroup_dmem_charge(pool->cs->css.cgroup, nr_pages,
+					    GFP_KERNEL)) {
+			/*
+			 * No dmem_cgroup_state_evict_valuable() could help,
+			 * there's no ret_limit_pool to return.
+			 */
+			ret = -ENOMEM;
+			dmemcg_pool_put(pool);
+			goto err_css_put;
+		}
 	}
 
 	if (!page_counter_try_charge(&pool->cnt, size, &fail)) {
@@ -681,14 +754,17 @@ int dmem_cgroup_try_charge(struct dmem_cgroup_region *region, u64 size,
 		}
 		dmemcg_pool_put(pool);
 		ret = -EAGAIN;
-		goto err;
+		goto err_uncharge_memcg;
 	}
 
 	/* On success, reference from get_current_dmemcs is transferred to *ret_pool */
 	*ret_pool = pool;
 	return 0;
 
-err:
+err_uncharge_memcg:
+	if (charge_memcg)
+		mem_cgroup_dmem_uncharge(pool->cs->css.cgroup, nr_pages);
+err_css_put:
 	css_put(&cg->css);
 	return ret;
 }
@@ -845,6 +921,71 @@ static ssize_t dmem_cgroup_region_max_write(struct kernfs_open_file *of,
 	return dmemcg_limit_write(of, buf, nbytes, off, set_resource_max);
 }
 
+#ifdef CONFIG_MEMCG
+static int dmem_cgroup_memcg_show(struct seq_file *sf, void *v)
+{
+	struct dmem_cgroup_region *region;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(region, &dmem_cgroup_regions, region_node) {
+		int state = atomic_read(&region->memcg_status);
+
+		seq_printf(sf, "%s %s\n", region->name,
+			   state == DMEM_MEMCG_ON ? "true" :
+			   state == DMEM_MEMCG_OFF ? "false" :
+			   state == DMEM_MEMCG_LOCKED_ON ? "true (locked)" :
+			   state == DMEM_MEMCG_LOCKED_OFF ? "false (locked)" :
+			   "(invalid)");
+	}
+	rcu_read_unlock();
+	return 0;
+}
+
+static ssize_t dmem_cgroup_memcg_write(struct kernfs_open_file *of, char *buf,
+				       size_t nbytes, loff_t off)
+{
+	while (buf) {
+		struct dmem_cgroup_region *region;
+		char *options, *name;
+		bool flag;
+
+		options = buf;
+		buf = strchr(buf, '\n');
+		if (buf)
+			*buf++ = '\0';
+
+		options = strstrip(options);
+		if (!options[0])
+			continue;
+
+		name = strsep(&options, " \t");
+		if (!name[0])
+			continue;
+
+		if (!options || !options[0])
+			return -EINVAL;
+
+		if (kstrtobool(options, &flag))
+			return -EINVAL;
+
+		rcu_read_lock();
+		region = dmemcg_get_region_by_name(name);
+		rcu_read_unlock();
+		if (!region)
+			return -ENODEV;
+
+		atomic_cmpxchg(&region->memcg_status,
+			       flag ? DMEM_MEMCG_OFF : DMEM_MEMCG_ON,
+			       flag ? DMEM_MEMCG_ON : DMEM_MEMCG_OFF);
+		/* Continue if a region is already locked. */
+
+		kref_put(&region->ref, dmemcg_free_region);
+	}
+
+	return nbytes;
+}
+#endif
+
 static struct cftype files[] = {
 	{
 		.name = "capacity",
@@ -873,6 +1014,14 @@ static struct cftype files[] = {
 		.seq_show = dmem_cgroup_region_max_show,
 		.flags = CFTYPE_NOT_ON_ROOT,
 	},
+#ifdef CONFIG_MEMCG
+	{
+		.name = "memcg",
+		.write = dmem_cgroup_memcg_write,
+		.seq_show = dmem_cgroup_memcg_show,
+		.flags = CFTYPE_ONLY_ON_ROOT,
+	},
+#endif
 	{ } /* Zero entry terminates. */
 };
 
@@ -882,4 +1031,7 @@ struct cgroup_subsys dmem_cgrp_subsys = {
 	.css_offline	= dmemcs_offline,
 	.legacy_cftypes	= files,
 	.dfl_cftypes	= files,
+#ifdef CONFIG_MEMCG
+	.depends_on	= 1 << memory_cgrp_id,
+#endif
 };
