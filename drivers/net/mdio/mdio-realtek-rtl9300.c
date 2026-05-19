@@ -25,7 +25,7 @@
 #define SMI_GLB_CTRL			0xca00
 #define   GLB_CTRL_INTF_SEL(intf)	BIT(16 + (intf))
 #define SMI_PORT0_15_POLLING_SEL	0xca08
-#define SMI_ACCESS_PHY_CTRL_0		0xcb70
+#define RTL9300_SMI_ACCESS_PHY_CTRL_0	0xcb70
 #define RTL9300_SMI_ACCESS_PHY_CTRL_1	0xcb74
 #define   PHY_CTRL_REG_ADDR		GENMASK(24, 20)
 #define   PHY_CTRL_PARK_PAGE		GENMASK(19, 15)
@@ -57,6 +57,7 @@ struct rtl_mdio_cmd_regs {
 	u32 c22_data;
 	u32 c45_data;
 	u32 io_data;
+	u32 mask_low;
 };
 
 struct rtl_mdio_info {
@@ -183,7 +184,7 @@ static int rtl9300_mdio_write_c22(struct mii_bus *bus, int phy_id, int regnum, u
 	if (err)
 		goto out_err;
 
-	err = regmap_write(regmap, SMI_ACCESS_PHY_CTRL_0, BIT(port));
+	err = regmap_write(regmap, priv->info->cmd_regs.mask_low, BIT(port));
 	if (err)
 		goto out_err;
 
@@ -294,7 +295,7 @@ static int rtl9300_mdio_write_c45(struct mii_bus *bus, int phy_id, int dev_addr,
 	if (err)
 		goto out_err;
 
-	err = regmap_write(regmap, SMI_ACCESS_PHY_CTRL_0, BIT(port));
+	err = regmap_write(regmap, priv->info->cmd_regs.mask_low, BIT(port));
 	if (err)
 		goto out_err;
 
@@ -528,6 +529,7 @@ static const struct rtl_mdio_info rtl9300_mdio_info = {
 		.c22_data = RTL9300_SMI_ACCESS_PHY_CTRL_1,
 		.c45_data = RTL9300_SMI_ACCESS_PHY_CTRL_3,
 		.io_data = RTL9300_SMI_ACCESS_PHY_CTRL_2,
+		.mask_low = RTL9300_SMI_ACCESS_PHY_CTRL_0,
 	},
 	.num_buses = RTL9300_NUM_BUSES,
 	.num_ports = RTL9300_NUM_PORTS,
