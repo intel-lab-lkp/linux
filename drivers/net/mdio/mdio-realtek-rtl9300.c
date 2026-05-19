@@ -39,7 +39,7 @@
 #define SMI_ACCESS_PHY_CTRL_2		0xcb78
 #define   PHY_CTRL_INDATA		GENMASK(31, 16)
 #define   PHY_CTRL_DATA			GENMASK(15, 0)
-#define SMI_ACCESS_PHY_CTRL_3		0xcb7c
+#define RTL9300_SMI_ACCESS_PHY_CTRL_3	0xcb7c
 #define   PHY_CTRL_MMD_DEVAD		GENMASK(20, 16)
 #define   PHY_CTRL_MMD_REG		GENMASK(15, 0)
 #define SMI_PORT0_5_ADDR_CTRL		0xcb80
@@ -53,7 +53,12 @@
 #define RTL9300_NUM_PAGES		4096
 #define RTL9300_NUM_PORTS		28
 
+struct rtl_mdio_cmd_regs {
+	u32 c45_data;
+};
+
 struct rtl_mdio_info {
+	struct rtl_mdio_cmd_regs cmd_regs;
 	u8 num_buses;
 	u8 num_ports;
 	u16 num_pages;
@@ -234,7 +239,7 @@ static int rtl9300_mdio_read_c45(struct mii_bus *bus, int phy_id, int dev_addr, 
 
 	val = FIELD_PREP(PHY_CTRL_MMD_DEVAD, dev_addr) |
 	      FIELD_PREP(PHY_CTRL_MMD_REG, regnum);
-	err = regmap_write(regmap, SMI_ACCESS_PHY_CTRL_3, val);
+	err = regmap_write(regmap, priv->info->cmd_regs.c45_data, val);
 	if (err)
 		goto out_err;
 
@@ -292,7 +297,7 @@ static int rtl9300_mdio_write_c45(struct mii_bus *bus, int phy_id, int dev_addr,
 
 	val = FIELD_PREP(PHY_CTRL_MMD_DEVAD, dev_addr) |
 	      FIELD_PREP(PHY_CTRL_MMD_REG, regnum);
-	err = regmap_write(regmap, SMI_ACCESS_PHY_CTRL_3, val);
+	err = regmap_write(regmap, priv->info->cmd_regs.c45_data, val);
 	if (err)
 		goto out_err;
 
@@ -513,6 +518,9 @@ static int rtl_mdiobus_probe(struct platform_device *pdev)
 }
 
 static const struct rtl_mdio_info rtl9300_mdio_info = {
+	.cmd_regs = {
+		.c45_data = RTL9300_SMI_ACCESS_PHY_CTRL_3,
+	},
 	.num_buses = RTL9300_NUM_BUSES,
 	.num_ports = RTL9300_NUM_PORTS,
 	.num_pages = RTL9300_NUM_PAGES,
