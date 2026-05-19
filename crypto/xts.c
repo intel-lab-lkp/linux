@@ -258,7 +258,7 @@ static int xts_init_crypt(struct skcipher_request *req,
 	return 0;
 }
 
-static int xts_encrypt(struct skcipher_request *req)
+static int xts_encrypt_one(struct skcipher_request *req)
 {
 	struct xts_request_ctx *rctx = skcipher_request_ctx(req);
 	struct skcipher_request *subreq = &rctx->subreq;
@@ -275,7 +275,7 @@ static int xts_encrypt(struct skcipher_request *req)
 	return xts_cts_final(req, crypto_skcipher_encrypt);
 }
 
-static int xts_decrypt(struct skcipher_request *req)
+static int xts_decrypt_one(struct skcipher_request *req)
 {
 	struct xts_request_ctx *rctx = skcipher_request_ctx(req);
 	struct skcipher_request *subreq = &rctx->subreq;
@@ -290,6 +290,16 @@ static int xts_decrypt(struct skcipher_request *req)
 		return err;
 
 	return xts_cts_final(req, crypto_skcipher_decrypt);
+}
+
+static int xts_encrypt(struct skcipher_request *req)
+{
+	return skcipher_walk_data_units(req, xts_encrypt_one);
+}
+
+static int xts_decrypt(struct skcipher_request *req)
+{
+	return skcipher_walk_data_units(req, xts_decrypt_one);
 }
 
 static int xts_init_tfm(struct crypto_skcipher *tfm)
@@ -426,6 +436,17 @@ static int xts_create(struct crypto_template *tmpl, struct rtattr **tb)
 	inst->alg.base.cra_blocksize = XTS_BLOCK_SIZE;
 	inst->alg.base.cra_alignmask = alg->base.cra_alignmask |
 				       (__alignof__(u64) - 1);
+
+	/*
+	 * Advertise multi-data-unit support only when the inner cipher is
+	 * synchronous.  The dispatcher in skcipher_walk_data_units() calls
+	 * the single-DU body in a loop and assumes synchronous completion;
+	 * supporting async would require a per-DU callback chain, which
+	 * the slow software template does not need.
+	 */
+	if (!(alg->base.cra_flags & CRYPTO_ALG_ASYNC))
+		inst->alg.base.cra_flags |=
+			CRYPTO_ALG_SKCIPHER_MULTI_DATA_UNIT;
 
 	inst->alg.ivsize = XTS_BLOCK_SIZE;
 	inst->alg.min_keysize = alg->min_keysize * 2;
