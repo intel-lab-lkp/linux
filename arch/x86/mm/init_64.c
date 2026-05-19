@@ -1024,7 +1024,12 @@ static void __meminit free_pagetable(struct page *page, int order)
 		free_reserved_pages(page, nr_pages);
 #endif
 	} else {
-		pagetable_free(page_ptdesc(page));
+		/*
+		 * Use __free_pages() to honor @order: vmemmap PMD leaves
+		 * freed here are not compound pages, so pagetable_free()
+		 * would lose leak 511 of 512 pages per 2 MB chunk.
+		 */
+		__free_pages(page, order);
 	}
 }
 
