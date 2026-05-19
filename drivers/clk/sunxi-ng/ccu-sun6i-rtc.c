@@ -9,7 +9,6 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 
 #include <linux/clk/sunxi-ng.h>
 
@@ -353,14 +352,12 @@ int sun6i_rtc_ccu_probe(struct device *dev, void __iomem *reg)
 {
 	const struct sun6i_rtc_match_data *data;
 	struct clk *ext_osc32k_clk = NULL;
-	const struct of_device_id *match;
 
 	/* This driver is only used for newer variants of the hardware. */
-	match = of_match_device(sun6i_rtc_ccu_match, dev);
-	if (!match)
+	data = of_device_get_match_data(dev);
+	if (!data)
 		return 0;
 
-	data = match->data;
 	have_iosc_calibration = data->have_iosc_calibration;
 
 	if (data->have_ext_osc32k) {
