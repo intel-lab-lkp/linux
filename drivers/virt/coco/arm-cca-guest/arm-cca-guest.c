@@ -107,8 +107,15 @@ static int arm_cca_report_new(struct tsm_report *report, void *data)
 	 * instead of simply calling get_cpu() because of the need to
 	 * allocate outblob based on the returned value from the 'init'
 	 * call and that cannot be done in an atomic context.
+	 *
+	 * While migrate_disable() would pin the task to the current CPU,
+	 * this path should not block CPU hotplug events. Therefore, we
+	 * snapshot the current CPU ID and accept that
+	 * smp_call_function_single() may fail if the CPU goes offline.
+	 * Any resulting error is propagated to user-space, which is
+	 * expected to handle it.
 	 */
-	cpu = smp_processor_id();
+	cpu = raw_smp_processor_id();
 
 	info.challenge = desc->inblob;
 	info.challenge_size = desc->inblob_len;
