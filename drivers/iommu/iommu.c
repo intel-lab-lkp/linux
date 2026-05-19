@@ -26,6 +26,7 @@
 #include <linux/bitops.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
+#include <linux/qda_compute_bus.h>
 #include <linux/fsl/mc.h>
 #include <linux/module.h>
 #include <linux/cc_platform.h>
@@ -199,6 +200,9 @@ static const struct bus_type * const iommu_buses[] = {
 #endif
 #ifdef CONFIG_CDX_BUS
 	&cdx_bus_type,
+#endif
+#ifdef CONFIG_DRM_ACCEL_QDA_COMPUTE_BUS
+	&qda_cb_bus_type,
 #endif
 };
 
