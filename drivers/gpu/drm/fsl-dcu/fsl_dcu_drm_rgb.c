@@ -92,18 +92,12 @@ static int fsl_dcu_attach_panel(struct fsl_dcu_drm_device *fsl_dev,
 		return ret;
 
 	drm_connector_helper_add(connector, &connector_helper_funcs);
-	ret = drm_connector_register(connector);
+	ret = drm_connector_attach_encoder(connector, encoder);
 	if (ret < 0)
 		goto err_cleanup;
 
-	ret = drm_connector_attach_encoder(connector, encoder);
-	if (ret < 0)
-		goto err_sysfs;
-
 	return 0;
 
-err_sysfs:
-	drm_connector_unregister(connector);
 err_cleanup:
 	drm_connector_cleanup(connector);
 	return ret;
