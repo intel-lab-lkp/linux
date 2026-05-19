@@ -256,6 +256,79 @@ static struct geneve_dev *geneve_lookup_skb(struct geneve_sock *gs,
 	return NULL;
 }
 
+/*
+ * Look for GRO hint in the genenve options; if not found or does not pass basic
+ * sanitization return 0, otherwise the offset WRT the geneve hdr start.
+ */
+static unsigned int
+geneve_opt_gro_hint_off(const struct genevehdr *gh, __be16 *type,
+			unsigned int *gh_len)
+{
+	struct geneve_opt *opt = (void *)(gh + 1);
+	unsigned int id, opt_len = gh->opt_len;
+	struct geneve_opt_gro_hint *gro_hint;
+
+	while (opt_len >= (GENEVE_OPT_GRO_HINT_SIZE >> 2)) {
+		if (opt->opt_class == htons(GENEVE_OPT_NETDEV_CLASS) &&
+		    opt->type == GENEVE_OPT_GRO_HINT_TYPE &&
+		    opt->length == GENEVE_OPT_GRO_HINT_LEN)
+			goto found;
+
+		/* check for bad opt len */
+		if (opt->length + 1 >= opt_len)
+			return 0;
+
+		/* next opt */
+		opt_len -= opt->length + 1;
+		opt = ((void *)opt) + ((opt->length + 1) << 2);
+	}
+	return 0;
+
+found:
+	gro_hint = (struct geneve_opt_gro_hint *)opt->opt_data;
+
+	/*
+	 * Sanitize the hinted hdrs: the nested transport is UDP and must fit
+	 * the overall hinted hdr size.
+	 */
+	if (gro_hint->nested_tp_offset + sizeof(struct udphdr) >
+	    gro_hint->nested_hdr_len)
+		return 0;
+
+	if (gro_hint->nested_nh_offset +
+	    (gro_hint->nested_is_v6 ? sizeof(struct ipv6hdr) :
+				      sizeof(struct iphdr)) >
+	    gro_hint->nested_tp_offset)
+		return 0;
+
+	/* Allow only supported L2. */
+	id = gro_hint->inner_proto_id;
+	if (id >= ARRAY_SIZE(proto_id_map))
+		return 0;
+
+	*type = proto_id_map[id];
+	*gh_len += gro_hint->nested_hdr_len;
+
+	return (void *)gro_hint - (void *)gh;
+}
+
+static const struct geneve_opt_gro_hint *
+geneve_opt_gro_hint(const struct genevehdr *gh, unsigned int hint_off)
+{
+	return (const struct geneve_opt_gro_hint *)((void *)gh + hint_off);
+}
+
+static unsigned int
+geneve_sk_gro_hint_off(const struct sock *sk, const struct genevehdr *gh,
+		       __be16 *type, unsigned int *gh_len)
+{
+	const struct geneve_sock *gs = rcu_dereference_sk_user_data(sk);
+
+	if (!gs || !gs->gro_hint)
+		return 0;
+	return geneve_opt_gro_hint_off(gh, type, gh_len);
+}
+
 /* geneve receive/decap routine */
 static void geneve_rx(struct geneve_dev *geneve, struct geneve_sock *gs,
 		      struct sk_buff *skb, const struct genevehdr *gnvh)
@@ -298,6 +371,21 @@ static void geneve_rx(struct geneve_dev *geneve, struct geneve_sock *gs,
 
 	if (tun_dst)
 		skb_dst_set(skb, &tun_dst->dst);
+
+	if (skb->encapsulation) {
+		unsigned int len = 0, hint_off;
+		__be16 p;
+
+		hint_off = geneve_sk_gro_hint_off(gs->sock->sk, gnvh, &p, &len);
+		if (hint_off) {
+			const struct geneve_opt_gro_hint *gro_hint;
+
+			gro_hint = geneve_opt_gro_hint(gnvh, hint_off);
+			skb_set_transport_header(skb, gro_hint->nested_tp_offset);
+		}
+	} else {
+		skb_unset_transport_header(skb);
+	}
 
 	if (gnvh->proto_type == htons(ETH_P_TEB)) {
 		skb_reset_mac_header(skb);
@@ -407,79 +495,6 @@ static int geneve_hlen(const struct genevehdr *gh)
 	return sizeof(*gh) + gh->opt_len * 4;
 }
 
-/*
- * Look for GRO hint in the genenve options; if not found or does not pass basic
- * sanitization return 0, otherwise the offset WRT the geneve hdr start.
- */
-static unsigned int
-geneve_opt_gro_hint_off(const struct genevehdr *gh, __be16 *type,
-			unsigned int *gh_len)
-{
-	struct geneve_opt *opt = (void *)(gh + 1);
-	unsigned int id, opt_len = gh->opt_len;
-	struct geneve_opt_gro_hint *gro_hint;
-
-	while (opt_len >= (GENEVE_OPT_GRO_HINT_SIZE >> 2)) {
-		if (opt->opt_class == htons(GENEVE_OPT_NETDEV_CLASS) &&
-		    opt->type == GENEVE_OPT_GRO_HINT_TYPE &&
-		    opt->length == GENEVE_OPT_GRO_HINT_LEN)
-			goto found;
-
-		/* check for bad opt len */
-		if (opt->length + 1 >= opt_len)
-			return 0;
-
-		/* next opt */
-		opt_len -= opt->length + 1;
-		opt = ((void *)opt) + ((opt->length + 1) << 2);
-	}
-	return 0;
-
-found:
-	gro_hint = (struct geneve_opt_gro_hint *)opt->opt_data;
-
-	/*
-	 * Sanitize the hinted hdrs: the nested transport is UDP and must fit
-	 * the overall hinted hdr size.
-	 */
-	if (gro_hint->nested_tp_offset + sizeof(struct udphdr) >
-	    gro_hint->nested_hdr_len)
-		return 0;
-
-	if (gro_hint->nested_nh_offset +
-	    (gro_hint->nested_is_v6 ? sizeof(struct ipv6hdr) :
-				      sizeof(struct iphdr)) >
-	    gro_hint->nested_tp_offset)
-		return 0;
-
-	/* Allow only supported L2. */
-	id = gro_hint->inner_proto_id;
-	if (id >= ARRAY_SIZE(proto_id_map))
-		return 0;
-
-	*type = proto_id_map[id];
-	*gh_len += gro_hint->nested_hdr_len;
-
-	return (void *)gro_hint - (void *)gh;
-}
-
-static const struct geneve_opt_gro_hint *
-geneve_opt_gro_hint(const struct genevehdr *gh, unsigned int hint_off)
-{
-	return (const struct geneve_opt_gro_hint *)((void *)gh + hint_off);
-}
-
-static unsigned int
-geneve_sk_gro_hint_off(const struct sock *sk, const struct genevehdr *gh,
-		       __be16 *type, unsigned int *gh_len)
-{
-	const struct geneve_sock *gs = rcu_dereference_sk_user_data(sk);
-
-	if (!gs || !gs->gro_hint)
-		return 0;
-	return geneve_opt_gro_hint_off(gh, type, gh_len);
-}
-
 /* Validate the packet headers pointed by data WRT the provided hint */
 static bool
 geneve_opt_gro_hint_validate(void *data,
@@ -585,10 +600,10 @@ static int geneve_post_decap_hint(const struct sock *sk, struct sk_buff *skb,
 		return 0;
 
 	gro_hint = geneve_opt_gro_hint(*geneveh, hint_off);
-	if (unlikely(!pskb_may_pull(skb, gro_hint->nested_hdr_len)))
+	if (unlikely(skb_ensure_writable(skb, gro_hint->nested_hdr_len)))
 		return -ENOMEM;
 
-	*geneveh = geneve_hdr(skb);
+	*geneveh = (struct genevehdr *)(skb->data - gh_len);
 	gro_hint = geneve_opt_gro_hint(*geneveh, hint_off);
 
 	/*
@@ -612,9 +627,6 @@ static int geneve_post_decap_hint(const struct sock *sk, struct sk_buff *skb,
 	 */
 	skb->encapsulation = 1;
 
-	/* GSO expect a valid transpor header, move it to the current one. */
-	skb_set_transport_header(skb, gro_hint->nested_tp_offset);
-
 	/* Adjust the nested IP{6} hdr to actual GSO len. */
 	if (gro_hint->nested_is_v6) {
 		ipv6h->payload_len = htons(total_len - sizeof(*ipv6h));
@@ -629,7 +641,7 @@ static int geneve_post_decap_hint(const struct sock *sk, struct sk_buff *skb,
 	}
 
 	/* Adjust the nested UDP header len and checksum. */
-	uh = udp_hdr(skb);
+	uh = (struct udphdr *)(skb->data + gro_hint->nested_tp_offset);
 	uh->len = htons(skb->len - gro_hint->nested_tp_offset);
 	if (uh->check) {
 		len = skb->len - gro_hint->nested_nh_offset;
@@ -691,7 +703,7 @@ static int geneve_udp_encap_recv(struct sock *sk, struct sk_buff *skb)
 	 * After hint processing, the transport header points to the inner one
 	 * and we can't use anymore on geneve_hdr().
 	 */
-	geneveh = geneve_hdr(skb);
+	geneveh = (struct genevehdr *)(skb->data - (sizeof(struct genevehdr) + opts_len));
 	if (geneve_post_decap_hint(sk, skb, sizeof(struct genevehdr) +
 				   opts_len, &geneveh)) {
 		DEV_STATS_INC(geneve->dev, rx_errors);
