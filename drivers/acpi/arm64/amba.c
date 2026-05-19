@@ -39,7 +39,7 @@ static int amba_handler_attach(struct acpi_device *adev,
 	struct acpi_device *parent = acpi_dev_parent(adev);
 	struct amba_device *dev;
 	struct resource_entry *rentry;
-	struct list_head resource_list;
+	LIST_HEAD(resource_list);
 	bool address_found = false;
 	int irq_no = 0;
 	int ret;
@@ -55,7 +55,6 @@ static int amba_handler_attach(struct acpi_device *adev,
 		return -ENOMEM;
 	}
 
-	INIT_LIST_HEAD(&resource_list);
 	ret = acpi_dev_get_resources(adev, &resource_list, NULL, NULL);
 	if (ret < 0)
 		goto err_free;

@@ -615,7 +615,7 @@ static int acpi_lpss_create_device(struct acpi_device *adev,
 	const struct lpss_device_desc *dev_desc;
 	struct lpss_private_data *pdata;
 	struct resource_entry *rentry;
-	struct list_head resource_list;
+	LIST_HEAD(resource_list);
 	struct platform_device *pdev;
 	int ret;
 
@@ -627,7 +627,6 @@ static int acpi_lpss_create_device(struct acpi_device *adev,
 	if (!pdata)
 		return -ENOMEM;
 
-	INIT_LIST_HEAD(&resource_list);
 	ret = acpi_dev_get_memory_resources(adev, &resource_list);
 	if (ret < 0)
 		goto err_out;

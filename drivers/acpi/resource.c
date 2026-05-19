@@ -1118,11 +1118,10 @@ EXPORT_SYMBOL_GPL(acpi_dev_filter_resource_type);
 
 static int acpi_dev_consumes_res(struct acpi_device *adev, struct resource *res)
 {
-	struct list_head resource_list;
+	LIST_HEAD(resource_list);
 	struct resource_entry *rentry;
 	int ret, found = 0;
 
-	INIT_LIST_HEAD(&resource_list);
 	ret = acpi_dev_get_resources(adev, &resource_list, NULL, NULL);
 	if (ret < 0)
 		return 0;

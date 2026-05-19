@@ -1738,7 +1738,7 @@ static bool acpi_is_indirect_io_slave(struct acpi_device *device)
 
 static bool acpi_device_enumeration_by_parent(struct acpi_device *device)
 {
-	struct list_head resource_list;
+	LIST_HEAD(resource_list);
 	bool is_serial_bus_slave = false;
 	static const struct acpi_device_id ignore_serial_bus_ids[] = {
 	/*
@@ -1792,7 +1792,6 @@ static bool acpi_device_enumeration_by_parent(struct acpi_device *device)
 	if (!acpi_match_device_ids(device, ignore_serial_bus_ids))
 		return false;
 
-	INIT_LIST_HEAD(&resource_list);
 	acpi_dev_get_resources(device, &resource_list,
 			       acpi_check_serial_bus_slave,
 			       &is_serial_bus_slave);
