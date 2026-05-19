@@ -1246,6 +1246,7 @@ void nfsd4_probe_callback_sync(struct nfs4_client *clp)
 {
 	nfsd4_probe_callback(clp);
 	flush_workqueue(clp->cl_callback_wq);
+	nfsd41_cb_inflight_wait_complete(clp);
 }
 
 void nfsd4_change_callback(struct nfs4_client *clp, struct nfs4_cb_conn *conn)
