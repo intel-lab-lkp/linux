@@ -20,6 +20,8 @@ $(vdso_S_objects): $(obj)/%.S: $(src)/%.S
 $(vdso_c_objects): $(obj)/%.c: $(src)/%.c
 	$(Q)cp $< $@
 
+clean-files := $(notdir $(vdso_c_sources)) $(notdir $(vdso_S_sources))
+
 # Include the main VDSO Makefile which contains all the build rules and sources
 # The VDSO_CFI_BUILD variable will be passed to it to enable CFI compilation
 include $(src)/Makefile
