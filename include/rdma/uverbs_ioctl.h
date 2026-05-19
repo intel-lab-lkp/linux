@@ -856,6 +856,10 @@ ib_uverbs_get_ucontext(const struct uverbs_attr_bundle *attrs)
 	return ib_uverbs_get_ucontext_file(attrs->ufile);
 }
 
+int _ib_copy_validate_udata_in(struct ib_udata *udata, void *req,
+			       size_t kernel_size, size_t minimum_size);
+int _ib_respond_udata(struct ib_udata *udata, const void *src, size_t len);
+
 #if IS_ENABLED(CONFIG_INFINIBAND_USER_ACCESS)
 int uverbs_get_flags64(u64 *to, const struct uverbs_attr_bundle *attrs_bundle,
 		       size_t idx, u64 allowed_bits);
@@ -897,10 +901,6 @@ int _uverbs_get_const_unsigned(u64 *to,
 			       size_t idx, u64 upper_bound, u64 *def_val);
 int uverbs_copy_to_struct_or_zero(const struct uverbs_attr_bundle *bundle,
 				  size_t idx, const void *from, size_t size);
-
-int _ib_copy_validate_udata_in(struct ib_udata *udata, void *req,
-			       size_t kernel_size, size_t minimum_size);
-int _ib_respond_udata(struct ib_udata *udata, const void *src, size_t len);
 #else
 static inline int
 uverbs_get_flags64(u64 *to, const struct uverbs_attr_bundle *attrs_bundle,
@@ -954,19 +954,6 @@ static inline int
 _uverbs_get_const_unsigned(u64 *to,
 			   const struct uverbs_attr_bundle *attrs_bundle,
 			   size_t idx, u64 upper_bound, u64 *def_val)
-{
-	return -EINVAL;
-}
-
-static inline int _ib_copy_validate_udata_in(struct ib_udata *udata, void *req,
-					     size_t kernel_size,
-					     size_t minimum_size)
-{
-	return -EINVAL;
-}
-
-static inline int _ib_respond_udata(struct ib_udata *udata, const void *src,
-				    size_t len)
 {
 	return -EINVAL;
 }
