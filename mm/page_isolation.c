@@ -43,6 +43,7 @@ bool page_is_unmovable(struct zone *zone, struct page *page,
 	 */
 	if (PageHuge(page) || PageCompound(page)) {
 		struct folio *folio = page_folio(page);
+		unsigned long idx, nr_pages;
 
 		if (folio_test_hugetlb(folio)) {
 			struct hstate *h;
@@ -55,14 +56,21 @@ bool page_is_unmovable(struct zone *zone, struct page *page,
 			 * use folio_hstate() directly.
 			 */
 			h = size_to_hstate(folio_size(folio));
-			if (h && !hugepage_migration_supported(h))
+			if (!h || !hugepage_migration_supported(h))
 				return true;
 
+			nr_pages = pages_per_huge_page(h);
 		} else if (!folio_test_lru(folio)) {
 			return true;
+		} else {
+			nr_pages = folio_nr_pages(folio);
 		}
 
-		*step = folio_nr_pages(folio) - folio_page_idx(folio, page);
+		idx = folio_page_idx(folio, page);
+		if (idx >= nr_pages)
+			return true;
+
+		*step = nr_pages - idx;
 		return false;
 	}
 
