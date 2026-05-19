@@ -22302,7 +22302,7 @@ lpfc_read_object(struct lpfc_hba *phba, char *rdobject, uint32_t *datap,
 		pcmd->virt = lpfc_mbuf_alloc(phba, MEM_PRI, &pcmd->phys);
 	if (!pcmd || !pcmd->virt) {
 		kfree(pcmd);
-		mempool_free(mbox, phba->mbox_mem_pool);
+		lpfc_sli4_mbox_cmd_free(phba, mbox);
 		return -ENOMEM;
 	}
 	memset((void *)pcmd->virt, 0, LPFC_BPL_SIZE);
