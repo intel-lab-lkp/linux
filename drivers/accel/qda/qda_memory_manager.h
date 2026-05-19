@@ -7,8 +7,15 @@
 #define __QDA_MEMORY_MANAGER_H__
 
 #include <linux/device.h>
+#include <linux/mutex.h>
+#include <linux/refcount.h>
+#include <linux/spinlock.h>
 #include <linux/xarray.h>
-#include "qda_drv.h"
+#include <drm/drm_file.h>
+
+/* Forward declarations */
+struct qda_dev;
+struct qda_gem_obj;
 
 /**
  * struct qda_iommu_device - IOMMU device instance for memory management
@@ -21,10 +28,18 @@ struct qda_iommu_device {
 	struct device *dev;
 	/** @qdev: Back-pointer to the parent QDA device */
 	struct qda_dev *qdev;
+	/** @assigned_file_priv: DRM file private data for the assigned process */
+	struct drm_file *assigned_file_priv;
 	/** @id: Unique identifier assigned by the memory manager XArray */
 	u32 id;
 	/** @sid: Stream ID for IOMMU transactions */
 	u32 sid;
+	/** @assigned_pid: Process ID of the process assigned to this device */
+	pid_t assigned_pid;
+	/** @refcount: Reference counter for device */
+	refcount_t refcount;
+	/** @lock: Spinlock protecting concurrent access to device */
+	spinlock_t lock;
 };
 
 /**
@@ -36,6 +51,8 @@ struct qda_iommu_device {
 struct qda_memory_manager {
 	/** @device_xa: XArray storing all registered IOMMU devices */
 	struct xarray device_xa;
+	/** @process_assignment_lock: Mutex protecting process-to-device assignments */
+	struct mutex process_assignment_lock;
 };
 
 int qda_memory_manager_init(struct qda_memory_manager *mem_mgr);
@@ -45,5 +62,14 @@ int qda_memory_manager_register_device(struct qda_memory_manager *mem_mgr,
 				       struct qda_iommu_device *iommu_dev);
 void qda_memory_manager_unregister_device(struct qda_memory_manager *mem_mgr,
 					  struct qda_iommu_device *iommu_dev);
+
+int qda_memory_manager_assign_device(struct qda_memory_manager *mem_mgr,
+				     struct drm_file *file_priv);
+
+int qda_memory_manager_alloc(struct qda_memory_manager *mem_mgr,
+			     struct qda_gem_obj *gem_obj,
+			     struct drm_file *file_priv);
+void qda_memory_manager_free(struct qda_memory_manager *mem_mgr,
+			     struct qda_gem_obj *gem_obj);
 
 #endif /* __QDA_MEMORY_MANAGER_H__ */

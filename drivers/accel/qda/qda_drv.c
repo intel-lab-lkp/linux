@@ -22,6 +22,7 @@ static int qda_open(struct drm_device *dev, struct drm_file *file)
 	if (!qda_file_priv)
 		return -ENOMEM;
 
+	qda_file_priv->pid = current->pid;
 	qda_file_priv->qda_dev = qda_dev_from_drm(dev);
 	file->driver_priv = qda_file_priv;
 
@@ -31,6 +32,18 @@ static int qda_open(struct drm_device *dev, struct drm_file *file)
 static void qda_postclose(struct drm_device *dev, struct drm_file *file)
 {
 	struct qda_file_priv *qda_file_priv = file->driver_priv;
+
+	if (qda_file_priv->assigned_iommu_dev) {
+		struct qda_iommu_device *iommu_dev = qda_file_priv->assigned_iommu_dev;
+		unsigned long flags;
+
+		if (refcount_dec_and_test(&iommu_dev->refcount)) {
+			spin_lock_irqsave(&iommu_dev->lock, flags);
+			iommu_dev->assigned_pid = 0;
+			iommu_dev->assigned_file_priv = NULL;
+			spin_unlock_irqrestore(&iommu_dev->lock, flags);
+		}
+	}
 
 	kfree(qda_file_priv);
 	file->driver_priv = NULL;

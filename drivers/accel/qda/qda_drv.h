@@ -24,6 +24,10 @@
 struct qda_file_priv {
 	/** @qda_dev: Back-pointer to device structure */
 	struct qda_dev *qda_dev;
+	/** @assigned_iommu_dev: IOMMU device assigned to this process */
+	struct qda_iommu_device *assigned_iommu_dev;
+	/** @pid: Process ID for tracking */
+	pid_t pid;
 };
 
 /**
