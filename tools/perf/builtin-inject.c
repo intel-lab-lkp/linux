@@ -8,6 +8,7 @@
  */
 #include "builtin.h"
 
+#include "util/aslr.h"
 #include "util/color.h"
 #include "util/dso.h"
 #include "util/vdso.h"
@@ -124,6 +125,7 @@ struct perf_inject {
 	bool			in_place_update_dry_run;
 	bool			copy_kcore_dir;
 	bool			convert_callchain;
+	bool			aslr;
 	const char		*input_name;
 	struct perf_data	output;
 	u64			bytes_written;
@@ -2267,6 +2269,56 @@ static int output_fd(struct perf_inject *inject)
 	return inject->in_place_update ? -1 : perf_data__fd(&inject->output);
 }
 
+/*
+ * To prevent recursive read-to-write lock upgrades self-deadlocks and concurrent
+ * reader data corruptions, we must completely avoid mutating map boundaries
+ * during runtime event processing. Since maps__mutate_mapping() requires the
+ * write lock to safely protect concurrent searches in other threads, we force-load
+ * all host and guest kernel and module maps up-front at session startup under
+ * a clean single-threaded context, permanently bypassing lazy dynamic loading.
+ */
+static int machine__load_kernel_maps(struct machine *machine)
+{
+	struct maps *kmaps = machine__kernel_maps(machine);
+	int err;
+
+	if (!kmaps)
+		return 0;
+
+	err = maps__load_maps(kmaps);
+	if (!err) {
+		pr_debug("ASLR: Loaded %u kernel/module maps up front for machine pid %d:\n",
+			 maps__nr_maps(kmaps), machine->pid);
+		if (verbose > 0)
+			maps__fprintf(kmaps, stderr);
+	}
+	return err;
+}
+
+/*
+ * Scans and force-loads all registered host and guest machine kernel and
+ * module maps up front before event processing starts.
+ */
+static int perf_inject__load_kernel_maps(struct perf_inject *inject)
+{
+	struct machine *machine;
+	struct rb_node *nd;
+	int err = 0;
+
+	/* Load host kernel maps up front */
+	if (machine__load_kernel_maps(&inject->session->machines.host) < 0)
+		err = -1;
+
+	/* Load all guest machines kernel maps up front */
+	for (nd = rb_first_cached(&inject->session->machines.guests); nd; nd = rb_next(nd)) {
+		machine = rb_entry(nd, struct machine, rb_node);
+		if (machine__load_kernel_maps(machine) < 0)
+			err = -1;
+	}
+
+	return err;
+}
+
 static int __cmd_inject(struct perf_inject *inject)
 {
 	int ret = -EINVAL;
@@ -2399,6 +2451,13 @@ static int __cmd_inject(struct perf_inject *inject)
 	if (!inject->output.is_pipe && !inject->in_place_update)
 		lseek(fd, output_data_offset, SEEK_SET);
 
+	if (inject->aslr) {
+		if (perf_inject__load_kernel_maps(inject) < 0) {
+			pr_err("Failed to load host or guest kernel maps up front\n");
+			return -EINVAL;
+		}
+	}
+
 	ret = perf_session__process_events(session);
 	if (ret)
 		return ret;
@@ -2459,6 +2518,8 @@ static int __cmd_inject(struct perf_inject *inject)
 				evsel->core.attr.exclude_callchain_user = 0;
 			}
 		}
+
+
 
 		session->header.data_offset = output_data_offset;
 		session->header.data_size = inject->bytes_written;
@@ -2569,6 +2630,8 @@ int cmd_inject(int argc, const char **argv)
 			     unwind__option),
 		OPT_BOOLEAN(0, "convert-callchain", &inject.convert_callchain,
 			    "Generate callchains using DWARF and drop register/stack data"),
+		OPT_BOOLEAN(0, "aslr", &inject.aslr,
+			    "Remap virtual memory addresses similar to ASLR"),
 		OPT_END()
 	};
 	const char * const inject_usage[] = {
@@ -2576,6 +2639,7 @@ int cmd_inject(int argc, const char **argv)
 		NULL
 	};
 	bool ordered_events;
+	struct perf_tool *tool = &inject.tool;
 
 	if (!inject.itrace_synth_opts.set) {
 		/* Disable eager loading of kernel symbols that adds overhead to perf inject. */
@@ -2595,6 +2659,11 @@ int cmd_inject(int argc, const char **argv)
 	 */
 	if (argc)
 		usage_with_options(inject_usage, options);
+
+	if (inject.aslr && inject.convert_callchain) {
+		pr_err("Error: --aslr and --convert-callchain are mutually exclusive features.\n");
+		return -EINVAL;
+	}
 
 	if (inject.strip && !inject.itrace_synth_opts.set) {
 		pr_err("--strip option requires --itrace option\n");
@@ -2689,17 +2758,37 @@ int cmd_inject(int argc, const char **argv)
 	inject.tool.schedstat_domain	= perf_event__repipe_op2_synth;
 	inject.tool.dont_split_sample_group = true;
 	inject.tool.merge_deferred_callchains = false;
-	inject.session = __perf_session__new(&data, &inject.tool,
+	if (inject.aslr) {
+		tool = aslr_tool__new(&inject.tool);
+		if (!tool) {
+			ret = -ENOMEM;
+			goto out_close_output;
+		}
+	}
+	inject.session = __perf_session__new(&data, tool,
 					     /*trace_event_repipe=*/inject.output.is_pipe,
 					     /*host_env=*/NULL);
 
 	if (IS_ERR(inject.session)) {
 		ret = PTR_ERR(inject.session);
+		if (inject.aslr)
+			aslr_tool__delete(tool);
 		goto out_close_output;
 	}
 
 	if (zstd_init(&(inject.session->zstd_data), 0) < 0)
 		pr_warning("Decompression initialization failed.\n");
+
+	if (inject.aslr) {
+		struct evsel *evsel;
+
+		evlist__for_each_entry(inject.session->evlist, evsel) {
+			evsel->core.attr.sample_type &= ASLR_SUPPORTED_SAMPLE_TYPE;
+
+			if (evsel->core.attr.type == PERF_TYPE_BREAKPOINT)
+				evsel->core.attr.bp_addr = 0;
+		}
+	}
 
 	/* Save original section info before feature bits change */
 	ret = save_section_info(&inject);
@@ -2794,6 +2883,8 @@ out_delete:
 	strlist__delete(inject.known_build_ids);
 	zstd_fini(&(inject.session->zstd_data));
 	perf_session__delete(inject.session);
+	if (inject.aslr)
+		aslr_tool__delete(tool);
 out_close_output:
 	if (!inject.in_place_update)
 		perf_data__close(&inject.output);
