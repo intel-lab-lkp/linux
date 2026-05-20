@@ -316,6 +316,13 @@ enum {
  * preempt_disable() - see "Memory allocation" in
  * Documentation/core-api/real-time/differences.rst for more info.
  *
+ * %GFP_ATOMIC_RT is similar to %GFP_ATOMIC with the addition that it can also
+ * be used in context where preemption and/or interrupt is disabled under
+ * PREEMPT_RT, but not in NMI or hardirq contexts. The allocation is more
+ * likely to fail under PREEMPT_RT due to the spin_trylock() nature of lock
+ * acquisition. So the caller must be ready to handle memory allocation failure
+ * gracefully.
+ *
  * %GFP_KERNEL is typical for kernel-internal allocations. The caller requires
  * %ZONE_NORMAL or a lower zone for direct access but can direct reclaim.
  *
@@ -387,5 +394,11 @@ enum {
 #define GFP_TRANSHUGE_LIGHT	((GFP_HIGHUSER_MOVABLE | __GFP_COMP | \
 			 __GFP_NOMEMALLOC | __GFP_NOWARN) & ~__GFP_RECLAIM)
 #define GFP_TRANSHUGE	(GFP_TRANSHUGE_LIGHT | __GFP_DIRECT_RECLAIM)
+
+#ifdef CONFIG_PREEMPT_RT
+# define GFP_ATOMIC_RT	__GFP_HIGH
+#else
+# define GFP_ATOMIC_RT	GFP_ATOMIC
+#endif
 
 #endif /* __LINUX_GFP_TYPES_H */
