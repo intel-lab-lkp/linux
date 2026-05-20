@@ -58,6 +58,7 @@ struct fbnic_fw_cap {
 	u8	need_bmc_macda_sync	: 1;
 	u8	all_multi		: 1;
 	u8	link_speed;
+	u8	max_link_speed;
 	u8	link_fec;
 	u32	anti_rollback_version;
 };
@@ -241,6 +242,8 @@ enum {
 	FBNIC_FW_CAP_RESP_STORED_CMRT_COMMIT_STR	= 0x10,
 	FBNIC_FW_CAP_RESP_UEFI_VERSION			= 0x11,
 	FBNIC_FW_CAP_RESP_UEFI_COMMIT_STR		= 0x12,
+	FBNIC_FW_CAP_RESP_FW_MAX_LINK_SPEED		= 0x13,
+	/* 0x14 reserved */
 	FBNIC_FW_CAP_RESP_ANTI_ROLLBACK_VERSION		= 0x15,
 	FBNIC_FW_CAP_RESP_MSG_MAX
 };
