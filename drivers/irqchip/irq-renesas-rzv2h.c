@@ -865,7 +865,7 @@ static int rzv2h_icu_probe_common(struct platform_device *pdev, struct device_no
 
 	ret = rzv2h_icu_setup_irqs(pdev, irq_domain);
 	if (ret)
-		goto pm_put;
+		goto unregister_syscore;
 
 	/*
 	 * coccicheck complains about a missing put_device call before returning, but it's a false
@@ -873,6 +873,9 @@ static int rzv2h_icu_probe_common(struct platform_device *pdev, struct device_no
 	 */
 	return 0;
 
+unregister_syscore:
+	unregister_syscore(&rzv2h_irqc_syscore);
+	irq_domain_remove(irq_domain);
 pm_put:
 	pm_runtime_put_sync(dev);
 	return ret;
