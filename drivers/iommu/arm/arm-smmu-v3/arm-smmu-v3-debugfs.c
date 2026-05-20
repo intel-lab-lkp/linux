@@ -10,6 +10,7 @@
  *     ├── stream_table
  *         ├── <sid>/                                # Stream ID
  *             ├── ste                               # Stream Table Entry
+ *             ├── cd                                 # Context Descriptor
  *             ├── <dev_name>                         # Symlink to device sysfs directory
  *
  * The capabilities file provides detailed information about:
@@ -25,6 +26,12 @@
  * - STE validity and configuration
  * - Stage 1 and Stage 2 context pointers
  * - Raw STE data
+ *
+ * CD Information Displayed:
+ * - T0SZ: Input address space size configuration
+ * - EPD0/EPD1: Stage 1 translation enable flags
+ * - TTBR0: Stage 1 translation table base address
+ * - Raw Data: Complete CD structure in hexadecimal format
  *
  * Copyright (C) 2026 HiSilicon Limited.
  * Author: Qinxin Xia <xiaqinxin@huawei.com>
@@ -304,6 +311,97 @@ static const struct file_operations smmu_debugfs_ste_fops = {
 };
 
 /**
+ * smmu_debug_dump_cd() - Dump a single Context Descriptor
+ * @seq: seq_file to write to
+ * @cd: pointer to the Context Descriptor to dump
+ */
+static void smmu_debug_dump_cd(struct seq_file *seq, struct arm_smmu_cd *cd)
+{
+	u64 data;
+	int i;
+
+	/* CD 0 */
+	data = le64_to_cpu(cd->data[0]);
+	seq_printf(seq, "  T0SZ: 0x%llx\n", data & CTXDESC_CD_0_TCR_T0SZ);
+	seq_printf(seq, "  EPD0: %s\n", data & CTXDESC_CD_0_TCR_EPD0 ? "Yes" : "No");
+	seq_printf(seq, "  EPD1: %s\n", data & CTXDESC_CD_0_TCR_EPD1 ? "Yes" : "No");
+
+	/* CD 1 */
+	data = le64_to_cpu(cd->data[1]);
+	seq_printf(seq, "  TTBR0: 0x%016llx\n", data & CTXDESC_CD_1_TTB0_MASK);
+
+	/* Display raw CD data */
+	seq_puts(seq, "  Raw Data:\n");
+	for (i = 0; i < CTXDESC_CD_DWORDS; i++)
+		seq_printf(seq, "    CD[%d]: 0x%016llx\n", i,
+			   le64_to_cpu(cd->data[i]));
+}
+
+static int smmu_debugfs_cd_show(struct seq_file *seq, void *unused)
+{
+	struct device *dev = seq->private;
+	struct arm_smmu_master *master;
+	u32 max_ssids, ssid;
+
+	guard(mutex)(&arm_smmu_asid_lock);
+
+	master = dev_iommu_priv_get(dev);
+	if (!master) {
+		seq_puts(seq, "No master data\n");
+		return 0;
+	}
+
+	max_ssids = 1 << master->ssid_bits;
+	seq_printf(seq, "Context Descriptors for device (max SSIDs: %u):\n",
+		   max_ssids);
+
+	for (ssid = 0; ssid < max_ssids; ssid++) {
+		struct arm_smmu_cd *cd = arm_smmu_get_cd_ptr(master, ssid);
+
+		if (cd && (le64_to_cpu(cd->data[0]) & CTXDESC_CD_0_V)) {
+			seq_printf(seq, "\n--- SSID %u ---\n", ssid);
+			smmu_debug_dump_cd(seq, cd);
+		}
+	}
+
+	return 0;
+}
+
+static int smmu_debugfs_cd_open(struct inode *inode, struct file *file)
+{
+	struct device *dev = inode->i_private;
+	int ret;
+
+	if (!dev || !get_device(dev))
+		return -ENODEV;
+
+	ret = single_open(file, smmu_debugfs_cd_show, dev);
+	if (ret)
+		put_device(dev);
+
+	return ret;
+}
+
+static int smmu_debugfs_cd_release(struct inode *inode, struct file *file)
+{
+	struct seq_file *seq = file->private_data;
+	struct device *dev = seq->private;
+
+	single_release(inode, file);
+	if (dev)
+		put_device(dev);
+	return 0;
+}
+
+static const struct file_operations smmu_debugfs_cd_fops = {
+	.owner   = THIS_MODULE,
+	.open    = smmu_debugfs_cd_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = smmu_debugfs_cd_release,
+};
+
+/**
  * arm_smmu_debugfs_create_stream_table() - Create debugfs entries for stream table
  * @smmu: SMMU device
  * @dev: device to create entries for
@@ -373,6 +471,9 @@ int arm_smmu_debugfs_create_stream_table(struct arm_smmu_device *smmu,
 				kfree(full_path);
 			}
 		}
+
+		/* Create CD file to dump all valid Context Descriptors */
+		debugfs_create_file("cd", 0444, dev_dir, dev, &smmu_debugfs_cd_fops);
 	}
 
 	kfree(path);
