@@ -1784,6 +1784,11 @@ static struct folio *shmem_swapin_cluster(swp_entry_t swap, gfp_t gfp,
 	pgoff_t ilx;
 	struct folio *folio;
 
+	/* swap_cluster_readahead might cross the mapping boundary and
+	 * allocate pages for other mappings. We have to skip KASAN.
+	 */
+	gfp |= __GFP_SKIP_KASAN;
+
 	mpol = shmem_get_pgoff_policy(info, index, 0, &ilx);
 	folio = swap_cluster_readahead(swap, gfp, mpol, ilx);
 	mpol_cond_put(mpol);
