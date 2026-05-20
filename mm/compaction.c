@@ -1503,6 +1503,21 @@ static bool suitable_migration_target(struct compact_control *cc,
 	if (cc->ignore_block_suitable)
 		return true;
 
+	/*
+	 * Tainted superpageblocks reserve some headroom for non-movable
+	 * allocations.  Don't spill compaction migration into that reserve --
+	 * doing so erodes the headroom the allocator was holding to avoid
+	 * tainting fresh clean SPBs.  Clean SPBs (no reserve) stay eligible.
+	 */
+	if (cc->zone->nr_superpageblocks) {
+		struct superpageblock *sb =
+			pfn_to_superpageblock(cc->zone, page_to_pfn(page));
+
+		if (sb && spb_get_category(sb) == SB_TAINTED &&
+		    sb->nr_free <= spb_tainted_reserve(sb))
+			return false;
+	}
+
 	/* If the block is MIGRATE_MOVABLE or MIGRATE_CMA, allow migration */
 	if (is_migrate_movable(get_pageblock_migratetype(page)))
 		return true;
