@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR BSD-3-Clause)
 /*
- * Copyright 2024 NXP
+ * Copyright 2024, 2026 NXP
  *
  * Authors: Ciprian Marian Costea <ciprianmarian.costea@oss.nxp.com>
  *          Ghennadi Procopciuc <ghennadi.procopciuc@oss.nxp.com>
@@ -199,6 +199,39 @@
 			bias-pull-up;
 		};
 	};
+
+	usbotg_pins: usbotg-pins {
+		usbotg-grp0 {
+			pinmux = <0x3802>, <0x3812>,
+				<0x3822>, <0x3832>,
+				<0x3842>, <0x3852>,
+				<0x3862>, <0x3872>,
+				<0x37f2>, <0x3882>,
+				<0x3892>;
+		};
+
+		usbotg-grp1 {
+			pinmux = <0x3e1>, <0x3f1>,
+				<0x401>, <0x411>,
+				<0xbc1>, <0xbd1>,
+				<0xbe1>, <0x701>;
+			output-enable;
+			input-enable;
+			slew-rate = <208>;
+		};
+
+		usbotg-grp2 {
+			pinmux = <0xb80>, <0xb90>, <0xbb0>;
+			input-enable;
+			slew-rate = <208>;
+		};
+
+		usbotg-grp3 {
+			pinmux = <0xba1>;
+			output-enable;
+			slew-rate = <208>;
+		};
+	};
 };
 
 &can0 {
@@ -255,5 +288,16 @@
 	pinctrl-names = "default", "gpio";
 	pinctrl-0 = <&i2c4_pins>;
 	pinctrl-1 = <&i2c4_gpio_pins>;
+	status = "okay";
+};
+
+&usbmisc {
+	status = "okay";
+};
+
+&usbotg {
+	pinctrl-names = "default";
+	pinctrl-0 = <&usbotg_pins>;
+	phys = <&usbphynop>;
 	status = "okay";
 };
