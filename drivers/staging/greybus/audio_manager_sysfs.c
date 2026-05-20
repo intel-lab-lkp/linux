@@ -44,7 +44,7 @@ static ssize_t manager_sysfs_remove_store(struct kobject *kobj,
 
 	int num = kstrtoint(buf, 10, &id);
 
-	if (num != 1)
+	if (num != 0)
 		return -EINVAL;
 
 	num = gb_audio_manager_remove(id);
@@ -65,7 +65,7 @@ static ssize_t manager_sysfs_dump_store(struct kobject *kobj,
 
 	int num = kstrtoint(buf, 10, &id);
 
-	if (num == 1) {
+	if (num == 0) {
 		num = gb_audio_manager_dump_module(id);
 		if (num)
 			return num;
