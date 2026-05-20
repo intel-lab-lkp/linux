@@ -881,6 +881,57 @@ static void string_bench_strrchr(struct kunit *test)
 	STRING_BENCH_BUF(test, buf, len, strrchr, buf, '\0');
 }
 
+static void string_test_memchr(struct kunit *test)
+{
+	char *buf;
+	size_t max_len = 128;
+	size_t off, len, match_pos;
+	char *res;
+	char target = 0x88;
+
+	buf = kunit_kzalloc(test, max_len + 64, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buf);
+
+	memset(buf, 'A', max_len + 64);
+
+	for (off = 0; off < 16; off++) {
+		for (len = 1; len < max_len; len++) {
+			match_pos = len / 2;
+			buf[off + match_pos] = target;
+
+			res = memchr(buf + off, target, len);
+			KUNIT_EXPECT_PTR_EQ_MSG(test, res, buf + off + match_pos,
+						"Failed at:%zu len:%zu pos:%zu", off, len,
+						 match_pos);
+
+			buf[off + match_pos] = 'A';
+		}
+	}
+
+	memset(buf, 'A', max_len);
+	buf[10] = 'B';
+	buf[20] = 'B';
+	res = memchr(buf, 'B', max_len);
+	KUNIT_EXPECT_PTR_EQ(test, res, &buf[10]);
+
+	buf[50] = (char)0xFF;
+	res = memchr(buf, 0xFF, max_len);
+	KUNIT_EXPECT_PTR_EQ(test, res, &buf[50]);
+
+	buf[60] = '\0';
+	res = memchr(buf, '\0', max_len);
+	KUNIT_EXPECT_PTR_EQ(test, res, &buf[60]);
+
+	buf[max_len - 1] = 'Z';
+	res = memchr(buf, 'Z', max_len);
+	KUNIT_EXPECT_PTR_EQ(test, res, &buf[max_len - 1]);
+}
+
+static void string_bench_memchr(struct kunit *test)
+{
+	STRING_BENCH_BUF(test, buf, len, memchr, buf, '\0', len);
+}
+
 static struct kunit_case string_test_cases[] = {
 	KUNIT_CASE(string_test_memset16),
 	KUNIT_CASE(string_test_memset32),
@@ -910,6 +961,8 @@ static struct kunit_case string_test_cases[] = {
 	KUNIT_CASE(string_bench_strnlen),
 	KUNIT_CASE(string_bench_strchr),
 	KUNIT_CASE(string_bench_strrchr),
+	KUNIT_CASE(string_test_memchr),
+	KUNIT_CASE(string_bench_memchr),
 	{}
 };
 
