@@ -1039,6 +1039,7 @@ struct superpageblock {
 	struct work_struct	defrag_work;
 	struct irq_work		defrag_irq_work;
 	bool			defrag_active;
+	unsigned long		defrag_cursor;
 	/*
 	 * Back-off state after a no-op defrag pass: defer the next attempt
 	 * until either nr_free_pages has grown by at least pageblock_nr_pages

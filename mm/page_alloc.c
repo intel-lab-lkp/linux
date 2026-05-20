@@ -8288,17 +8288,13 @@ static void evacuate_pageblock(struct zone *zone, unsigned long start_pfn,
  * - Skip superpageblocks with no movable pages (nothing to evacuate)
  */
 
-/* Target free space: 3 pageblocks worth of free pages */
-#define SPB_DEFRAG_FREE_PAGES_TARGET	(3UL * pageblock_nr_pages)
-
 /**
  * spb_needs_defrag - Check if a superpageblock needs defragmentation
  * @sb: superpageblock to check (may be NULL)
  *
- * Returns false for NULL, non-tainted, or clean superpageblocks.
- * A tainted superpageblock needs defrag if it has movable pages that can
- * be evacuated AND free space is running low (1 or fewer free
- * pageblocks, or less than 2 pageblocks worth of free pages).
+ * Defrag here is the per-SPB tainted-pool evacuation worker. Clean SPBs
+ * are handled by standard compaction (kcompactd) and do not return true
+ * from this predicate.
  */
 /*
  * Cooldown between defrag attempts that made no progress, in seconds.
@@ -8312,14 +8308,11 @@ static bool spb_needs_defrag(struct superpageblock *sb)
 	if (!sb)
 		return false;
 
-	if (spb_get_category(sb) != SB_TAINTED)
-		return false;
-
 	/*
 	 * Back off if the previous pass made no progress: do not retry until
 	 * either the cooldown elapses or free pages have grown by at least a
 	 * pageblock's worth (a hint that there might be new material to
-	 * consolidate or evacuate).
+	 * evacuate).
 	 */
 	if (sb->defrag_last_no_progress_jiffies &&
 	    time_before(jiffies, sb->defrag_last_no_progress_jiffies +
@@ -8330,21 +8323,24 @@ static bool spb_needs_defrag(struct superpageblock *sb)
 
 	/*
 	 * Tainted superpageblocks: evacuate movable pages to concentrate
-	 * unmovable/reclaimable allocations.  Migration targets are
-	 * allocated system-wide, so no internal free space is needed.
-	 * Maintain the tainted reserve so unmovable claims always
-	 * find room in existing tainted superpageblocks.
+	 * unmovable/reclaimable allocations.  Maintain the tainted reserve
+	 * so unmovable claims always find room in existing tainted
+	 * superpageblocks.
 	 */
-	return sb->nr_movable > 0 &&
-	       sb->nr_free < SPB_TAINTED_RESERVE;
+	if (spb_get_category(sb) == SB_TAINTED)
+		return sb->nr_movable > 0 &&
+		       sb->nr_free < SPB_TAINTED_RESERVE;
+
+	/* Clean SPBs: kcompactd handles consolidation; nothing to do here. */
+	return false;
 }
 
 /**
- * spb_defrag_done - Check if defrag target has been reached
+ * spb_defrag_done - Check if defrag should stop
  * @sb: superpageblock being defragmented
  *
- * Stop defragmenting when the superpageblock has enough free space
- * or there are no more movable pages to evacuate.
+ * Only meaningful for tainted SPBs.  Clean SPBs never reach this from
+ * the SPB defrag worker (spb_needs_defrag returns false for them).
  */
 static bool spb_defrag_done(struct superpageblock *sb)
 {
@@ -8353,49 +8349,112 @@ static bool spb_defrag_done(struct superpageblock *sb)
 	 * the reserve of free pageblocks is restored, or until there
 	 * are no more movable pages to evacuate.
 	 */
-	return !sb->nr_movable ||
-	       sb->nr_free >= SPB_TAINTED_RESERVE;
+	if (spb_get_category(sb) == SB_TAINTED)
+		return !sb->nr_movable ||
+		       sb->nr_free >= SPB_TAINTED_RESERVE;
+
+	/* Clean SPBs should not be handled here. */
+	return true;
 }
 
-/**
- * spb_defrag_superpageblock - evacuate movable pages from a tainted superpageblock
- * @sb: the tainted superpageblock to defragment
- *
- * Find any pageblock with movable pages (PB_has_movable) and evacuate
- * them, leaving only unmovable, reclaimable, and free pages behind.
- * Stop when the free space target is reached.
- */
-static void spb_defrag_superpageblock(struct superpageblock *sb)
+static void spb_clear_skip_bits(struct superpageblock *sb)
 {
 	unsigned long pfn, end_pfn;
 	struct zone *zone = sb->zone;
-
-	if (!sb->nr_movable)
-		return;
 
 	end_pfn = sb->start_pfn + SUPERPAGEBLOCK_NR_PAGES;
 
 	for (pfn = sb->start_pfn; pfn < end_pfn; pfn += pageblock_nr_pages) {
 		struct page *page;
 
-		if (spb_defrag_done(sb))
-			return;
-
 		if (!pfn_valid(pfn))
+			continue;
+		if (!zone_spans_pfn(zone, pfn))
 			continue;
 
 		page = pfn_to_page(pfn);
+		clear_pageblock_skip(page);
+	}
+}
 
-		/* Skip pageblocks without movable pages */
+/**
+ * spb_defrag_tainted - evacuate movable pages from a tainted superpageblock
+ * @sb: the tainted superpageblock to defragment
+ *
+ * Find any pageblock with movable pages (PB_has_movable) and evacuate
+ * them, leaving only unmovable, reclaimable, and free pages behind.
+ * Stop when the free space target is reached.
+ */
+static void spb_defrag_tainted(struct superpageblock *sb)
+{
+	unsigned long pfn, end_pfn, start_pfn, cursor;
+	struct zone *zone = sb->zone;
+	bool wrapped = false;
+
+	if (!sb->nr_movable)
+		return;
+
+	start_pfn = sb->start_pfn;
+	end_pfn = start_pfn + SUPERPAGEBLOCK_NR_PAGES;
+
+	cursor = sb->defrag_cursor;
+	if (cursor < start_pfn || cursor >= end_pfn) {
+		cursor = start_pfn;
+		spb_clear_skip_bits(sb);
+	}
+
+	pfn = cursor;
+
+	while (pfn < end_pfn) {
+		struct page *page;
+
+		if (spb_defrag_done(sb))
+			goto out;
+
+		if (!pfn_valid(pfn))
+			goto next;
+
+		if (!zone_spans_pfn(zone, pfn))
+			goto next;
+
+		page = pfn_to_page(pfn);
+
 		if (!get_pfnblock_bit(page, pfn, PB_has_movable))
-			continue;
+			goto next;
 
-		/* Skip if fully free -- nothing to evacuate */
 		if (get_pfnblock_bit(page, pfn, PB_all_free))
-			continue;
+			goto next;
+
+		if (get_pageblock_skip(page))
+			goto next;
 
 		evacuate_pageblock(zone, pfn, true);
+next:
+		pfn += pageblock_nr_pages;
+		if (pfn >= end_pfn && !wrapped) {
+			spb_clear_skip_bits(sb);
+			pfn = start_pfn;
+			wrapped = true;
+		}
+		if (wrapped && pfn > cursor)
+			break;
 	}
+out:
+	sb->defrag_cursor = pfn;
+}
+
+/**
+ * spb_defrag_superpageblock - defragment a tainted superpageblock
+ * @sb: the superpageblock to defragment
+ *
+ * Tainted SPBs are evacuated by spb_defrag_tainted.  Clean SPBs are
+ * handled by standard compaction (kcompactd) and never reach this
+ * dispatcher (spb_needs_defrag returns false for them).
+ */
+static void spb_defrag_superpageblock(struct superpageblock *sb)
+{
+	if (spb_get_category(sb) == SB_TAINTED)
+		spb_defrag_tainted(sb);
 }
 
 static void spb_defrag_work_fn(struct work_struct *work)
@@ -8455,10 +8514,12 @@ static void spb_defrag_irq_work_fn(struct irq_work *work)
  * @sb: superpageblock whose counters just changed
  *
  * Called from counter update paths (under zone->lock). If the
- * superpageblock is tainted and running low on free space, schedule
- * irq_work to queue defrag work outside the allocator's lock context.
- * The irq_work handler is set up by pageblock_evacuate_init();
- * before that runs, defrag_irq_work.func is NULL and we skip.
+ * superpageblock needs defragmentation -- either evacuation of movable
+ * pages from a tainted superpageblock, or internal compaction of a
+ * clean superpageblock -- schedule irq_work to queue defrag work outside
+ * the allocator's lock context. The irq_work handler is set up by
+ * pageblock_evacuate_init(); before that runs, defrag_irq_work.func
+ * is NULL and we skip.
  */
 static void spb_maybe_start_defrag(struct superpageblock *sb)
 {
