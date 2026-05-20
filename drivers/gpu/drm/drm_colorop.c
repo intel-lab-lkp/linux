@@ -523,14 +523,14 @@ static void __drm_colorop_state_reset(struct drm_colorop_state *colorop_state,
 	if (colorop->lut1d_interpolation_property) {
 		if(!drm_object_property_get_default_value(&colorop->base,
 							  colorop->lut1d_interpolation_property,
-							  &val));
+							  &val))
 			colorop_state->lut1d_interpolation = val;
 	}
 
 	if (colorop->lut3d_interpolation_property) {
 		if(!drm_object_property_get_default_value(&colorop->base,
 							  colorop->lut3d_interpolation_property,
-							  &val);
+							  &val))
 			colorop_state->lut3d_interpolation = val;
 	}
 }
