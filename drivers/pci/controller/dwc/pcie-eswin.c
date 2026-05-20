@@ -182,7 +182,7 @@ static int eswin_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct eswin_pcie *pcie = to_eswin_pcie(pci);
-	struct eswin_pcie_port *port, *tmp;
+	struct eswin_pcie_port *port;
 	u32 val;
 	int ret;
 
@@ -252,10 +252,6 @@ err_perst:
 	reset_control_bulk_assert(ESWIN_NUM_RSTS, pcie->resets);
 err_deassert:
 	clk_bulk_disable_unprepare(pcie->num_clks, pcie->clks);
-	list_for_each_entry_safe(port, tmp, &pcie->ports, list) {
-		reset_control_put(port->perst);
-		list_del(&port->list);
-	}
 
 	return ret;
 }
@@ -347,18 +343,17 @@ static int eswin_pcie_probe(struct platform_device *pdev)
 	ret = dw_pcie_host_init(&pci->pp);
 	if (ret) {
 		dev_err(dev, "Failed to init host\n");
-		goto err_init;
+		goto err_pm_runtime_put;
 	}
 
 	return 0;
 
 err_pm_runtime_put:
+	pm_runtime_put(dev);
 	list_for_each_entry_safe(port, tmp, &pcie->ports, list) {
 		reset_control_put(port->perst);
 		list_del(&port->list);
 	}
-err_init:
-	pm_runtime_put(dev);
 
 	return ret;
 }
