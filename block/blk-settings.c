@@ -814,6 +814,10 @@ int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 
 	t->max_hw_zone_append_sectors = min(t->max_hw_zone_append_sectors,
 					b->max_hw_zone_append_sectors);
+	t->max_open_zones = min_not_zero(t->max_open_zones,
+				       b->max_open_zones);
+	t->max_active_zones = min_not_zero(t->max_active_zones,
+					 b->max_active_zones);
 
 	t->seg_boundary_mask = min_not_zero(t->seg_boundary_mask,
 					    b->seg_boundary_mask);
@@ -921,6 +925,8 @@ int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 	t->zone_write_granularity = max(t->zone_write_granularity,
 					b->zone_write_granularity);
 	if (!(t->features & BLK_FEAT_ZONED)) {
+		t->max_open_zones = 0;
+		t->max_active_zones = 0;
 		t->zone_write_granularity = 0;
 		t->max_zone_append_sectors = 0;
 	}
