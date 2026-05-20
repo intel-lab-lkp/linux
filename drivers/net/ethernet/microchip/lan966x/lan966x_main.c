@@ -7,6 +7,7 @@
 #include <linux/ip.h>
 #include <linux/of.h>
 #include <linux/of_net.h>
+#include <linux/pci.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
@@ -49,6 +50,9 @@ struct lan966x_main_io_resource {
 static const struct lan966x_main_io_resource lan966x_main_iomap[] =  {
 	{ TARGET_CPU,                   0xc0000, 0 }, /* 0xe00c0000 */
 	{ TARGET_FDMA,                  0xc0400, 0 }, /* 0xe00c0400 */
+#if IS_ENABLED(CONFIG_MCHP_LAN966X_PCI)
+	{ TARGET_PCIE_DBI,             0x400000, 0 }, /* 0xe0400000 */
+#endif
 	{ TARGET_ORG,                         0, 1 }, /* 0xe2000000 */
 	{ TARGET_GCB,                    0x4000, 1 }, /* 0xe2004000 */
 	{ TARGET_QS,                     0x8000, 1 }, /* 0xe2008000 */
@@ -1100,6 +1104,13 @@ static int lan966x_reset_switch(struct lan966x *lan966x)
 
 static const struct lan966x_fdma_ops *lan966x_get_fdma_ops(struct device *dev)
 {
+#if IS_ENABLED(CONFIG_MCHP_LAN966X_PCI)
+	for (struct device *p = dev->parent; p; p = p->parent) {
+		if (dev_is_pci(p))
+			return &lan966x_fdma_pci_ops;
+	}
+#endif
+
 	return &lan966x_fdma_ops;
 }
 
