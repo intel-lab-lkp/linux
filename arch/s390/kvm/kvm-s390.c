@@ -630,6 +630,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_S390_USER_OPEREXEC:
 	case KVM_CAP_S390_KEYOP:
 	case KVM_CAP_S390_VSIE_ESAMODE:
+	case KVM_CAP_PRE_FAULT_MEMORY:
 		r = 1;
 		break;
 	case KVM_CAP_SET_GUEST_DEBUG2:
@@ -5734,6 +5735,46 @@ out:
 		pr_warn("failed to commit memory region\n");
 	kvm_s390_free_mmu_cache(mc);
 	return;
+}
+
+/**
+ * kvm_arch_vcpu_pre_fault_memory() -- pre-fault and link gmap dat tables
+ * @vcpu: the vcpu that shall appear to have generated the fault-in.
+ * @range: the range that needs to be faulted in.
+ *
+ * The given range is faulted in and the corresponding gmap page tables are
+ * created, as if the given vCPU had performed a read operation. If the range
+ * ends outside of a memslot, only the part inside the memslot is faulted in.
+ * If the range starts outside any memslots, an error is returned. An error is
+ * also returned for UCONTROL VMs, which should instead use the
+ * KVM_S390_VCPU_FAULT ioctl.
+ *
+ * Return:
+ * * %-ENOENT if the range lies outside of a memslot.
+ * * %-EINVAL in case of invalid state (for example if the VM is UCONTROL)
+ * * %-EIO if other errors happen while faulting-in the page (considered a
+ *   bug, will trigger a warning in the caller).
+ * * other error codes < 0 in case of other errors.
+ * * otherwise a number > 0 of bytes that have been faulted in successfully.
+ */
+long kvm_arch_vcpu_pre_fault_memory(struct kvm_vcpu *vcpu, struct kvm_pre_fault_memory *range)
+{
+	unsigned long i;
+	int rc;
+
+	if (kvm_is_ucontrol(vcpu->kvm))
+		return -EINVAL;
+
+	for (i = 0; i < range->size; i += PAGE_SIZE) {
+		rc = kvm_s390_faultin_gfn_simple(vcpu, NULL, gpa_to_gfn(range->gpa + i), false);
+		if (rc == PGM_ADDRESSING)
+			return i ? i : -ENOENT;
+		if (rc == -EINTR)
+			return i ? i : -EINTR;
+		if (rc)
+			return -EIO;
+	}
+	return i;
 }
 
 /**
