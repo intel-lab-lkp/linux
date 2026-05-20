@@ -76,6 +76,14 @@ static void __iomem * __init xdbc_map_pci_mmio(u32 bus, u32 dev, u32 func)
 
 	sz64 = 1ULL << __ffs64(sz64);
 
+	/*
+	 * Check that size does not exceed fixed boot-time mappings
+	 * dictated by NR_FIX_BTMAPS. early_ioremap() will WARN_ON()
+	 * and not map memory in those cases.
+	 */
+	if (sz64 > (NR_FIX_BTMAPS << PAGE_SHIFT))
+		sz64 = NR_FIX_BTMAPS << PAGE_SHIFT;
+
 	/* Check if the mem space is enabled: */
 	byte = read_pci_config_byte(bus, dev, func, PCI_COMMAND);
 	if (!(byte & PCI_COMMAND_MEMORY)) {
