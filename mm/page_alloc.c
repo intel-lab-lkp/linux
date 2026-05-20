@@ -2799,9 +2799,21 @@ static struct page *try_to_claim_block(struct zone *zone, struct page *page,
 		  int block_type, unsigned int alloc_flags,
 		  bool from_tainted_spb);
 
+/*
+ * Snapshot of tainted-SPB state observed while __rmqueue_smallest walks the
+ * free lists. Lets the caller (currently __rmqueue) decide whether to refuse
+ * a fragmenting fallback when an existing tainted SPB could absorb the demand
+ * once it is evacuated.
+ */
+struct spb_tainted_walk {
+	bool saw_free_pages;	/* tainted SPB has any free pages, any order */
+	bool saw_free_pb;	/* tainted SPB has at least one free pageblock */
+	bool saw_below_reserve;	/* tainted SPB has nr_free <= spb_tainted_reserve */
+};
+
 static __always_inline
 struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
-						int migratetype)
+				int migratetype, struct spb_tainted_walk *walk)
 {
 	unsigned int current_order;
 	struct free_area *area;
@@ -2850,6 +2862,20 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 
 		list_for_each_entry(sb,
 			&zone->spb_lists[cat][full], list) {
+			/*
+			 * Snapshot tainted-SPB capacity before the
+			 * nr_free_pages skip: an SPB with a free pageblock
+			 * but nothing on the requested-MT freelist still
+			 * counts as "could absorb this allocation after evac".
+			 */
+			if (walk && cat == SB_TAINTED) {
+				if (sb->nr_free_pages)
+					walk->saw_free_pages = true;
+				if (sb->nr_free)
+					walk->saw_free_pb = true;
+				if (sb->nr_free <= spb_tainted_reserve(sb))
+					walk->saw_below_reserve = true;
+			}
 			if (!sb->nr_free_pages)
 				continue;
 			/* Try whole pageblock (or larger) first for PCP buddy */
@@ -2975,6 +3001,16 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 		}
 	}
 
+	/*
+	 * About to fall through to Pass 3 (empty SPBs) or Pass 4 fallback,
+	 * which risks tainting a clean SPB. If the tainted-SPB walk above
+	 * showed that some tainted SPB is below its reserve threshold of
+	 * free pageblocks, kick deferred evacuation so future allocations
+	 * have a movable-evicted home in an already-tainted SPB.
+	 */
+	if (walk && walk->saw_below_reserve)
+		queue_spb_evacuate(zone, order, migratetype);
+
 	/* Pass 3: whole pageblock from empty superpageblocks */
 	list_for_each_entry(sb, &zone->spb_empty, list) {
 		if (!sb->nr_free_pages)
@@ -3098,7 +3134,7 @@ static inline bool noncompatible_cross_type(int start_type, int fallback_type)
 static __always_inline struct page *__rmqueue_cma_fallback(struct zone *zone,
 					unsigned int order)
 {
-	return __rmqueue_smallest(zone, order, MIGRATE_CMA);
+	return __rmqueue_smallest(zone, order, MIGRATE_CMA, NULL);
 }
 #else
 static inline struct page *__rmqueue_cma_fallback(struct zone *zone,
@@ -3573,7 +3609,7 @@ try_to_claim_block(struct zone *zone, struct page *page,
 	if (sb)
 		spb_update_list(sb);
 #endif
-	return __rmqueue_smallest(zone, order, start_type);
+	return __rmqueue_smallest(zone, order, start_type, NULL);
 }
 
 /*
@@ -3920,7 +3956,28 @@ static __always_inline struct page *
 __rmqueue(struct zone *zone, unsigned int order, int migratetype,
 	  unsigned int alloc_flags, enum rmqueue_mode *mode)
 {
+	struct spb_tainted_walk walk = { };
+	struct spb_tainted_walk *walkp = NULL;
 	struct page *page;
+
+	/*
+	 * Track tainted-SPB state for non-movable, non-CMA callers that
+	 * signaled they have a cheap fallback (atomic shape or explicit
+	 * NORETRY). We use that to refuse a fragmenting CLAIM/STEAL when a
+	 * tainted SPB still has free pageblocks waiting to be evacuated.
+	 *
+	 * Force *mode back to RMQUEUE_NORMAL so the walk + refusal check
+	 * runs on every call. rmqueue_bulk Phase 3 chains many __rmqueue
+	 * calls reusing *mode; without this reset, a single successful
+	 * RMQUEUE_CLAIM/STEAL on the first iteration would let every
+	 * subsequent iteration skip the case RMQUEUE_NORMAL block and taint
+	 * additional clean SPBs unchecked.
+	 */
+	if (migratetype != MIGRATE_MOVABLE && !is_migrate_cma(migratetype) &&
+	    (alloc_flags & ALLOC_HIGHORDER_OPTIONAL)) {
+		walkp = &walk;
+		*mode = RMQUEUE_NORMAL;
+	}
 
 	if (IS_ENABLED(CONFIG_CMA)) {
 		/*
@@ -3948,9 +4005,22 @@ __rmqueue(struct zone *zone, unsigned int order, int migratetype,
 	 */
 	switch (*mode) {
 	case RMQUEUE_NORMAL:
-		page = __rmqueue_smallest(zone, order, migratetype);
+		page = __rmqueue_smallest(zone, order, migratetype, walkp);
 		if (page)
 			return page;
+		/*
+		 * Refuse to fragment a clean SPB when a tainted SPB already
+		 * holds free pages or a free pageblock that could absorb
+		 * this allocation after evacuation. The caller has a cheap
+		 * fallback (lower-order retry, vmalloc, single-page fragment,
+		 * drop the packet, etc.) -- better that than tainting fresh
+		 * capacity. Pre-Pass-3 evac trigger in __rmqueue_smallest
+		 * already kicked deferred eviction.
+		 */
+		if (walkp && (walk.saw_free_pages || walk.saw_free_pb)) {
+			count_vm_event(SPB_HIGHORDER_REFUSED);
+			return NULL;
+		}
 		fallthrough;
 	case RMQUEUE_CMA:
 		if (alloc_flags & ALLOC_CMA) {
@@ -5073,7 +5143,8 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 			spin_lock_irqsave(&zone->lock, flags);
 		}
 		if (alloc_flags & ALLOC_HIGHATOMIC)
-			page = __rmqueue_smallest(zone, order, MIGRATE_HIGHATOMIC);
+			page = __rmqueue_smallest(zone, order,
+						  MIGRATE_HIGHATOMIC, NULL);
 		if (!page) {
 			enum rmqueue_mode rmqm = RMQUEUE_NORMAL;
 
@@ -5086,7 +5157,9 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 			 * high-order atomic allocation in the future.
 			 */
 			if (!page && (alloc_flags & (ALLOC_OOM|ALLOC_NON_BLOCK)))
-				page = __rmqueue_smallest(zone, order, MIGRATE_HIGHATOMIC);
+				page = __rmqueue_smallest(zone, order,
+							  MIGRATE_HIGHATOMIC,
+							  NULL);
 
 			if (!page) {
 				spin_unlock_irqrestore(&zone->lock, flags);
@@ -6434,6 +6507,36 @@ gfp_to_alloc_flags(gfp_t gfp_mask, unsigned int order)
 
 	if (defrag_mode)
 		alloc_flags |= ALLOC_NOFRAGMENT;
+
+	/*
+	 * Mark callers that have a cheap fallback if the page allocator returns
+	 * NULL, so __rmqueue can refuse to taint a clean SPB when an existing
+	 * tainted SPB still has free pageblocks waiting to be evacuated.
+	 *
+	 * Two shapes qualify:
+	 *
+	 *  1. Explicit fallback declaration: __GFP_NORETRY without
+	 *     __GFP_RETRY_MAYFAIL. Used by THP, slab high-order refill,
+	 *     skb_page_frag_refill on full sockets, etc.
+	 *
+	 *  2. Atomic-context shape: no __GFP_DIRECT_RECLAIM, no __GFP_NOMEMALLOC,
+	 *     no __GFP_NOFAIL. These callers (GFP_ATOMIC, GFP_NOWAIT, including
+	 *     ALLOC_HIGHATOMIC consumers) have implicit fallbacks: drop the
+	 *     packet, demote the slab order, return ENOMEM up the slowpath,
+	 *     retry from process context with GFP_KERNEL, etc. ALLOC_HIGHATOMIC
+	 *     callers also get a second crack at the dedicated MIGRATE_HIGHATOMIC
+	 *     reserve in rmqueue_buddy after __rmqueue returns NULL.
+	 *     Tainting a 1 GiB SPB to satisfy any of them is a long-lived
+	 *     fragmentation event for short-lived data.
+	 *
+	 * __GFP_MEMALLOC (reclaim recursion) and __GFP_NOFAIL (declared cannot
+	 * fail) are excluded -- they must succeed even at the cost of taint.
+	 */
+	if ((gfp_mask & __GFP_NORETRY) && !(gfp_mask & __GFP_RETRY_MAYFAIL))
+		alloc_flags |= ALLOC_HIGHORDER_OPTIONAL;
+	else if (!(gfp_mask & (__GFP_DIRECT_RECLAIM | __GFP_NOMEMALLOC |
+			       __GFP_NOFAIL)))
+		alloc_flags |= ALLOC_HIGHORDER_OPTIONAL;
 
 	return alloc_flags;
 }

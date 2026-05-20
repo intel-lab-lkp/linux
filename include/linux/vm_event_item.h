@@ -76,6 +76,11 @@ enum vm_event_item { PGPGIN, PGPGOUT, PSWPIN, PSWPOUT,
 		CMA_ALLOC_SUCCESS,
 		CMA_ALLOC_FAIL,
 #endif
+		SPB_HIGHORDER_REFUSED,	/*
+					 * refused fragmenting fallback to keep
+					 * a clean SPB clean when a tainted SPB
+					 * still has free pageblocks
+					 */
 		UNEVICTABLE_PGCULLED,	/* culled to noreclaim list */
 		UNEVICTABLE_PGSCANNED,	/* scanned for reclaimability */
 		UNEVICTABLE_PGRESCUED,	/* rescued from noreclaim list */
