@@ -2927,7 +2927,7 @@ static int allocate_vpe_l1_table(void)
 	if (val & GICR_VPROPBASER_4_1_VALID)
 		goto out;
 
-	gic_data_rdist()->vpe_table_mask = kzalloc_obj(cpumask_t, GFP_ATOMIC);
+	gic_data_rdist()->vpe_table_mask = kzalloc_obj(cpumask_t, GFP_ATOMIC_RT);
 	if (!gic_data_rdist()->vpe_table_mask)
 		return -ENOMEM;
 
@@ -3271,6 +3271,8 @@ out:
 		 */
 		gic_rdists->has_rvpeid = false;
 		gic_rdists->has_vlpis = false;
+		pr_warn("GICv3: CPU%d: direct injection of virtual interrupt disabled\n",
+			smp_processor_id());
 	}
 
 	/* Make sure the GIC has seen the above */
