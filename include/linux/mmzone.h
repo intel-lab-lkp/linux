@@ -22,6 +22,7 @@
 #include <linux/mm_types.h>
 #include <linux/page-flags.h>
 #include <linux/local_lock.h>
+#include <linux/irq_work_types.h>
 #include <linux/zswap.h>
 #include <linux/sizes.h>
 #include <asm/page.h>
@@ -1540,6 +1541,9 @@ typedef struct pglist_data {
 	wait_queue_head_t kcompactd_wait;
 	struct task_struct *kcompactd;
 	bool proactive_compact_trigger;
+	struct workqueue_struct *evacuate_wq;
+	struct llist_head evacuate_pending;
+	struct irq_work evacuate_irq_work;
 #endif
 	/*
 	 * This is a per-node reserve of pages that are not available
