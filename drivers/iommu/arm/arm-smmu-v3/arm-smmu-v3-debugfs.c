@@ -10,6 +10,7 @@
  *     ├── stream_table
  *         ├── <sid>/                                # Stream ID
  *             ├── ste                               # Stream Table Entry
+ *             ├── <dev_name>                         # Symlink to device sysfs directory
  *
  * The capabilities file provides detailed information about:
  * - translation stage support (Stage1/Stage2)
@@ -31,6 +32,7 @@
 
 #include <linux/cleanup.h>
 #include <linux/debugfs.h>
+#include <linux/kobject.h>
 #include <linux/slab.h>
 #include "arm-smmu-v3.h"
 
@@ -314,6 +316,7 @@ int arm_smmu_debugfs_create_stream_table(struct arm_smmu_device *smmu,
 	struct dentry *stream_dir, *dev_dir;
 	struct arm_smmu_master *master;
 	struct ste_context *ctx;
+	char *path = NULL, *full_path;
 	char name[64];
 	u32 sid;
 	int i;
@@ -338,6 +341,9 @@ int arm_smmu_debugfs_create_stream_table(struct arm_smmu_device *smmu,
 	if (!master || !master->num_streams)
 		return -ENODEV;
 
+	/* Get device sysfs path once, reuse for all streams */
+	path = kobject_get_path(&dev->kobj, GFP_KERNEL);
+
 	for (i = 0; i < master->num_streams; i++) {
 		sid = master->streams[i].id;
 		snprintf(name, sizeof(name), "%u", sid);
@@ -357,8 +363,19 @@ int arm_smmu_debugfs_create_stream_table(struct arm_smmu_device *smmu,
 		spin_unlock(&smmu->debugfs->stream_lock);
 		debugfs_create_file("ste", 0444, dev_dir, ctx,
 				    &smmu_debugfs_ste_fops);
+
+		/* Create a symlink to the device's sysfs directory */
+		if (path) {
+			full_path = kasprintf(GFP_KERNEL, "/sys%s", path);
+			if (full_path) {
+				debugfs_create_symlink(dev_name(dev), dev_dir,
+						       full_path);
+				kfree(full_path);
+			}
+		}
 	}
 
+	kfree(path);
 	return 0;
 }
 
