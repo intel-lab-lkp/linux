@@ -1575,41 +1575,51 @@ static int frag_show(struct seq_file *m, void *arg)
 static void pagetypeinfo_showfree_print(struct seq_file *m,
 					pg_data_t *pgdat, struct zone *zone)
 {
+	unsigned long counts[MIGRATE_TYPES][NR_PAGE_ORDERS] = { };
+	bool overflow[MIGRATE_TYPES][NR_PAGE_ORDERS] = { };
+	unsigned long sb_idx, nr_sbs = zone->nr_superpageblocks;
 	int order, mtype;
+
+	/*
+	 * Free pages live on per-superpageblock free lists. Walk the SPBs,
+	 * accumulating per (migratetype, order) counts. The 100000 cap per
+	 * cell limits time under zone->lock; this is a debugging interface,
+	 * knowing there is "a lot" of one size is sufficient. zone->lock is
+	 * dropped between SPBs, so concurrent memory hotplug may produce
+	 * inconsistent counts -- acceptable for a debug-only interface.
+	 */
+	for (sb_idx = 0; sb_idx < nr_sbs; sb_idx++) {
+		struct superpageblock *sb = &zone->superpageblocks[sb_idx];
+
+		for (order = 0; order < NR_PAGE_ORDERS; order++) {
+			struct free_area *area = &sb->free_area[order];
+			struct list_head *curr;
+
+			for (mtype = 0; mtype < MIGRATE_TYPES; mtype++) {
+				if (overflow[mtype][order])
+					continue;
+				list_for_each(curr, &area->free_list[mtype]) {
+					if (++counts[mtype][order] >= 100000) {
+						overflow[mtype][order] = true;
+						break;
+					}
+				}
+			}
+		}
+		spin_unlock_irq(&zone->lock);
+		cond_resched();
+		spin_lock_irq(&zone->lock);
+	}
 
 	for (mtype = 0; mtype < MIGRATE_TYPES; mtype++) {
 		seq_printf(m, "Node %4d, zone %8s, type %12s ",
 					pgdat->node_id,
 					zone->name,
 					migratetype_names[mtype]);
-		for (order = 0; order < NR_PAGE_ORDERS; ++order) {
-			unsigned long freecount = 0;
-			struct free_area *area;
-			struct list_head *curr;
-			bool overflow = false;
-
-			area = &(zone->free_area[order]);
-
-			list_for_each(curr, &area->free_list[mtype]) {
-				/*
-				 * Cap the free_list iteration because it might
-				 * be really large and we are under a spinlock
-				 * so a long time spent here could trigger a
-				 * hard lockup detector. Anyway this is a
-				 * debugging tool so knowing there is a handful
-				 * of pages of this order should be more than
-				 * sufficient.
-				 */
-				if (++freecount >= 100000) {
-					overflow = true;
-					break;
-				}
-			}
-			seq_printf(m, "%s%6lu ", overflow ? ">" : "", freecount);
-			spin_unlock_irq(&zone->lock);
-			cond_resched();
-			spin_lock_irq(&zone->lock);
-		}
+		for (order = 0; order < NR_PAGE_ORDERS; order++)
+			seq_printf(m, "%s%6lu ",
+				   overflow[mtype][order] ? ">" : "",
+				   counts[mtype][order]);
 		seq_putc(m, '\n');
 	}
 }

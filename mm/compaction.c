@@ -979,6 +979,12 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 					low_pfn += (1UL << order) - 1;
 					nr_scanned += (1UL << order) - 1;
 				}
+				/*
+				 * Skipped a movable page; clearing
+				 * PB_has_movable here would orphan SPB type
+				 * counters (debugfs invariant 1).
+				 */
+				movable_skipped = true;
 				goto isolate_fail;
 			}
 			/* for alloc_contig case */
@@ -1058,6 +1064,12 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 					low_pfn += (1UL << order) - 1;
 					nr_scanned += (1UL << order) - 1;
 				}
+				/*
+				 * Skipped a movable compound page; clearing
+				 * PB_has_movable here would orphan SPB type
+				 * counters (debugfs invariant 1).
+				 */
+				movable_skipped = true;
 				goto isolate_fail;
 			}
 		}
@@ -1083,6 +1095,12 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 				movable_skipped = true;
 			}
 
+			/*
+			 * Non-LRU non-movable_ops page: still occupies the
+			 * pageblock, so clearing PB_has_movable here would
+			 * orphan SPB type counters (debugfs invariant 1).
+			 */
+			movable_skipped = true;
 			goto isolate_fail;
 		}
 
@@ -1320,12 +1338,9 @@ isolate_abort:
 		 * isolated (pinned, writeback, dirty, etc.), leave the
 		 * flag set so a future migration attempt can try again.
 		 */
-		if (!nr_isolated && !movable_skipped && valid_page &&
-		    get_pfnblock_bit(valid_page, pageblock_start_pfn(start_pfn),
-				     PB_has_movable))
-			clear_pfnblock_bit(valid_page,
-					   pageblock_start_pfn(start_pfn),
-					   PB_has_movable);
+		if (!nr_isolated && !movable_skipped && valid_page)
+			superpageblock_clear_has_movable(cc->zone,
+							valid_page);
 	}
 
 	trace_mm_compaction_isolate_migratepages(start_pfn, low_pfn,
@@ -1873,6 +1888,15 @@ again:
 		prep_compound_page(&dst->page, order);
 	cc->nr_freepages -= 1 << order;
 	cc->nr_migratepages -= 1 << order;
+
+	/*
+	 * Compaction isolates free pages via __isolate_free_page, which
+	 * bypasses page_del_and_expand and its PB_has_* tracking.  The
+	 * destination will hold movable pages after migration, so mark
+	 * PB_has_movable on the destination pageblock now.
+	 */
+	superpageblock_set_has_movable(cc->zone, &dst->page);
+
 	return page_rmappable_folio(&dst->page);
 }
 

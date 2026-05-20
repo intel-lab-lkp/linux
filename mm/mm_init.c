@@ -1523,15 +1523,26 @@ static void __meminit init_one_superpageblock(struct superpageblock *sb,
 	unsigned long sb_end = start_pfn + SUPERPAGEBLOCK_NR_PAGES;
 	unsigned long pb_start = max(start_pfn, zone_start);
 	unsigned long pb_end = min(sb_end, zone_end);
+	int order, t;
 	u16 actual_pbs;
 
 	sb->nr_unmovable = 0;
 	sb->nr_reclaimable = 0;
 	sb->nr_movable = 0;
 	sb->nr_free = 0;
+	sb->nr_free_pages = 0;
 	INIT_LIST_HEAD(&sb->list);
 	sb->start_pfn = start_pfn;
 	sb->zone = zone;
+
+	/* Initialize per-superpageblock free areas */
+	for (order = 0; order < NR_PAGE_ORDERS; order++) {
+		struct free_area *area = &sb->free_area[order];
+
+		for (t = 0; t < MIGRATE_TYPES; t++)
+			INIT_LIST_HEAD(&area->free_list[t]);
+		area->nr_free = 0;
+	}
 
 	/*
 	 * Start with all pageblock slots as reserved.
@@ -1561,6 +1572,22 @@ static void __meminit init_one_superpageblock(struct superpageblock *sb,
 	}
 }
 
+/*
+ * Initialize the per-zone SPB list heads. Called from boot
+ * (setup_superpageblocks) and from memory hotplug
+ * (resize_zone_superpageblocks) the first time SPBs are set up
+ * for a zone.
+ */
+static void __meminit init_zone_spb_lists(struct zone *zone)
+{
+	int cat, full;
+
+	INIT_LIST_HEAD(&zone->spb_empty);
+	for (cat = 0; cat < __NR_SB_CATEGORIES; cat++)
+		for (full = 0; full < __NR_SB_FULLNESS; full++)
+			INIT_LIST_HEAD(&zone->spb_lists[cat][full]);
+}
+
 static void __init setup_superpageblocks(struct zone *zone)
 {
 	unsigned long zone_start = zone->zone_start_pfn;
@@ -1568,17 +1595,22 @@ static void __init setup_superpageblocks(struct zone *zone)
 	unsigned long sb_base, nr_superpageblocks;
 	size_t alloc_size;
 	unsigned long i;
-	int cat, full;
 
 	zone->superpageblocks = NULL;
 	zone->nr_superpageblocks = 0;
 	zone->superpageblock_base_pfn = 0;
 
 	/* Fullness lists steer allocations to preferred superpageblocks */
-	INIT_LIST_HEAD(&zone->spb_empty);
-	for (cat = 0; cat < __NR_SB_CATEGORIES; cat++)
-		for (full = 0; full < __NR_SB_FULLNESS; full++)
-			INIT_LIST_HEAD(&zone->spb_lists[cat][full]);
+	init_zone_spb_lists(zone);
+
+	/*
+	 * Warn if pages have already been freed into this zone's
+	 * free_area before superpageblocks are set up -- those pages
+	 * would become stranded because __rmqueue_smallest only
+	 * searches per-superpageblock free lists.
+	 */
+	for (i = 0; i < NR_PAGE_ORDERS; i++)
+		WARN_ON_ONCE(zone->free_area[i].nr_free);
 
 	if (!zone->spanned_pages)
 		return;
@@ -1619,8 +1651,10 @@ static void __init setup_superpageblocks(struct zone *zone)
  * the full zone span, copies existing superpageblocks (fixing up list heads),
  * and initializes new superpageblocks for the added range.
  *
- * Must be called under mem_hotplug_lock (write).  No concurrent
- * allocations can occur since the hotplugged pages are not yet online.
+ * Must be called under mem_hotplug_lock (write).  The hot-added pages
+ * themselves are not yet online, but allocations on previously-online
+ * pages within the same zone can still race the superpageblock-array
+ * swap; the function takes zone->lock for that critical section.
  */
 void __meminit resize_zone_superpageblocks(struct zone *zone)
 {
@@ -1634,6 +1668,7 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 	size_t alloc_size;
 	unsigned long i;
 	int nid = zone_to_nid(zone);
+	unsigned long flags;
 
 	if (!zone->spanned_pages)
 		return;
@@ -1648,6 +1683,18 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 	    new_nr_sbs == zone->nr_superpageblocks)
 		return;
 
+	/*
+	 * First time superpageblocks are being set up for this zone
+	 * (memory hot-added to a previously-empty zone, e.g. CXL bringing
+	 * a memoryless node online): the SPB fullness/category list heads
+	 * are still zero-initialized from the zone struct allocation.
+	 * setup_superpageblocks() runs only at boot via __init, so do that
+	 * piece of init here for the hotplug path. Subsequent calls for
+	 * the same zone will skip this -- superpageblocks is non-NULL.
+	 */
+	if (!zone->superpageblocks)
+		init_zone_spb_lists(zone);
+
 	alloc_size = new_nr_sbs * sizeof(struct superpageblock);
 	new_sbs = kvmalloc_node(alloc_size, GFP_KERNEL | __GFP_ZERO, nid);
 	if (!new_sbs) {
@@ -1655,6 +1702,37 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 			alloc_size, zone->name);
 		return;
 	}
+
+	/* Initialize new superpageblocks (not from old array) first, outside lock */
+	if (zone->superpageblocks) {
+		old_offset = (zone->superpageblock_base_pfn - new_sb_base) >>
+			     SUPERPAGEBLOCK_ORDER;
+	} else {
+		old_offset = 0;
+	}
+
+	for (i = 0; i < new_nr_sbs; i++) {
+		struct superpageblock *sb = &new_sbs[i];
+		bool is_old = false;
+
+		if (zone->superpageblocks &&
+		    i >= old_offset &&
+		    i < old_offset + zone->nr_superpageblocks)
+			is_old = true;
+
+		if (is_old)
+			continue;
+
+		init_one_superpageblock(sb, zone,
+					new_sb_base + (i << SUPERPAGEBLOCK_ORDER),
+					zone_start, zone_end);
+	}
+
+	/*
+	 * Take zone->lock for the copy+fixup+swap to prevent concurrent
+	 * allocations from traversing free lists while we relocate them.
+	 */
+	spin_lock_irqsave(&zone->lock, flags);
 
 	/*
 	 * Copy existing superpageblocks to their new position.
@@ -1669,39 +1747,39 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 		       zone->nr_superpageblocks * sizeof(struct superpageblock));
 
 		/*
-		 * Fix up list_head pointers that were self-referencing
-		 * (empty lists) or pointing into the old array.
+		 * Fix up all list_head pointers: both the SPB category list
+		 * and every free_area[order].free_list[migratetype]. Pages on
+		 * buddy free lists have buddy_list.prev/next pointing at the
+		 * old array's list heads -- those must be updated to point at
+		 * the new array.
 		 */
 		for (i = old_offset; i < old_offset + zone->nr_superpageblocks; i++) {
 			struct superpageblock *sb = &new_sbs[i];
+			struct superpageblock *old_sb =
+				&zone->superpageblocks[i - old_offset];
+			int order, mt;
 
-			if (list_empty(&sb->list))
+			/* Fix up sb->list (zone category/fullness list) */
+			if (list_empty(&old_sb->list))
 				INIT_LIST_HEAD(&sb->list);
 			else
-				list_replace(&zone->superpageblocks[i - old_offset].list,
-					     &sb->list);
+				list_replace(&old_sb->list, &sb->list);
+
+			/* Fix up all free_area list heads */
+			for (order = 0; order < NR_PAGE_ORDERS; order++) {
+				for (mt = 0; mt < MIGRATE_TYPES; mt++) {
+					struct list_head *old_list =
+						&old_sb->free_area[order].free_list[mt];
+					struct list_head *new_list =
+						&sb->free_area[order].free_list[mt];
+
+					if (list_empty(old_list))
+						INIT_LIST_HEAD(new_list);
+					else
+						list_replace(old_list, new_list);
+				}
+			}
 		}
-	}
-
-	/* Initialize new superpageblocks (slots not covered by old array) */
-	for (i = 0; i < new_nr_sbs; i++) {
-		struct superpageblock *sb = &new_sbs[i];
-		bool is_old = false;
-
-		if (zone->superpageblocks) {
-			old_offset = (zone->superpageblock_base_pfn - new_sb_base) >>
-				     SUPERPAGEBLOCK_ORDER;
-			if (i >= old_offset &&
-			    i < old_offset + zone->nr_superpageblocks)
-				is_old = true;
-		}
-
-		if (is_old)
-			continue;
-
-		init_one_superpageblock(sb, zone,
-					new_sb_base + (i << SUPERPAGEBLOCK_ORDER),
-					zone_start, zone_end);
 	}
 
 	/*
@@ -1739,6 +1817,8 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 	zone->nr_superpageblocks = new_nr_sbs;
 	zone->superpageblock_base_pfn = new_sb_base;
 	zone->spb_kvmalloced = true;
+
+	spin_unlock_irqrestore(&zone->lock, flags);
 
 	/*
 	 * The boot-time array was allocated with memblock_alloc, which
