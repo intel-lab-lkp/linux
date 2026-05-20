@@ -11,7 +11,7 @@
 #define XE_SYSCTRL_EVENT_DATA_LEN		59
 
 /* Modify as needed */
-#define XE_SYSCTRL_EVENT_FLOOD			16
+#define XE_SYSCTRL_FLOOD			16
 
 /**
  * enum xe_sysctrl_event - Events reported by System Controller
