@@ -128,7 +128,7 @@
 #else /* MARCH_HAS_Z196_FEATURES */
 
 #define arch_this_cpu_add(pcp, val, op1, op2, szcast)			\
-{									\
+do {									\
 	typedef typeof(pcp) pcp_op_T__; 				\
 	pcp_op_T__ val__ = (val);					\
 	pcp_op_T__ old__, *ptr__;					\
@@ -149,7 +149,7 @@
 			: "cc");					\
 	}								\
 	preempt_enable_notrace();					\
-}
+} while (0)
 
 #define this_cpu_add_4(pcp, val) arch_this_cpu_add(pcp, val, "laa", "asi", int)
 #define this_cpu_add_8(pcp, val) arch_this_cpu_add(pcp, val, "laag", "agsi", long)
@@ -174,7 +174,7 @@
 #define this_cpu_add_return_8(pcp, val) arch_this_cpu_add_return(pcp, val, "laag")
 
 #define arch_this_cpu_to_op(pcp, val, op)				\
-{									\
+do {									\
 	typedef typeof(pcp) pcp_op_T__; 				\
 	pcp_op_T__ val__ = (val);					\
 	pcp_op_T__ old__, *ptr__;					\
@@ -186,7 +186,7 @@
 		: [val__] "d" (val__)					\
 		: "cc");						\
 	preempt_enable_notrace();					\
-}
+} while (0)
 
 #define this_cpu_and_4(pcp, val)	arch_this_cpu_to_op(pcp, val, "lan")
 #define this_cpu_and_8(pcp, val)	arch_this_cpu_to_op(pcp, val, "lang")
