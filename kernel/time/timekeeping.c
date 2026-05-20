@@ -2336,6 +2336,8 @@ static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 	if (likely(tk->ntp_tick == ntp_tl)) {
 		mult = tk->tkr_mono.mult - tk->ntp_err_mult;
 	} else {
+		if (unlikely(!tk->cycle_interval))
+			return;
 		tk->ntp_tick = ntp_tl;
 		mult = div64_u64(tk->ntp_tick >> tk->ntp_error_shift,
 				 tk->cycle_interval);
