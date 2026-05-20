@@ -494,6 +494,7 @@ struct intel_display {
 		u8 vblank_enabled;
 
 		int vblank_enable_count;
+		bool last_vblank_status_notified;
 
 		struct work_struct vblank_notify_work;
 
