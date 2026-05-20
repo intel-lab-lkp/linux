@@ -917,8 +917,12 @@ static int __uverbs_cleanup_ufile(struct ib_uverbs_file *ufile,
 		 * racing with a lookup_get.
 		 */
 		WARN_ON(uverbs_try_lock_object(obj, UVERBS_LOOKUP_WRITE));
-		if (reason == RDMA_REMOVE_DRIVER_FAILURE)
+		if (reason == RDMA_REMOVE_DRIVER_FAILURE) {
 			obj->object = NULL;
+			if (obj->uapi_object->type_class == &uverbs_idr_class)
+				ib_rdmacg_uncharge(&obj->cg_obj, ib_dev,
+						   RDMACG_RESOURCE_HCA_OBJECT);
+		}
 		if (!uverbs_destroy_uobject(obj, reason, &attrs))
 			ret = 0;
 		else
