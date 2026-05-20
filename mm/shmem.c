@@ -3273,6 +3273,20 @@ shmem_write_end(const struct kiocb *iocb, struct address_space *mapping,
 	return copied;
 }
 
+static size_t copy_zero_to_iter(size_t bytes, struct iov_iter *i)
+{
+	struct folio *zero = largest_zero_folio();
+	unsigned long nr, ret, written = 0;
+
+	do {
+		nr = min(bytes - written, folio_size(zero));
+		ret = copy_folio_to_iter(zero, 0, nr, i);
+		written += ret;
+	} while (written < bytes && ret == nr);
+
+	return written;
+}
+
 static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct file *file = iocb->ki_filp;
@@ -3367,7 +3381,7 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 			 * clear_user() not so much, that it is noticeably
 			 * faster to copy the zero page instead of clearing.
 			 */
-			ret = copy_page_to_iter(ZERO_PAGE(0), offset, nr, to);
+			ret = copy_zero_to_iter(nr, to);
 		} else {
 			/*
 			 * But submitting the same page twice in a row to
