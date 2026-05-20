@@ -142,6 +142,31 @@ struct displayid_formula_timing_block {
 	struct displayid_formula_timings_9 timings[];
 } __packed;
 
+/*
+ * DisplayID v2.x Display Parameters Data Block (tag 0x21).
+ *
+ * Per VESA DisplayID v2.1a, Section 4.2.6, Table 4-14:
+ * Offset 0x1E (payload byte 27) contains Native Color Depth and
+ * Display Device Technology fields.
+ *   bits [2:0] = Native Color Depth
+ *   bit  [3]   = RESERVED
+ *   bits [6:4] = Display Device Technology
+ *     000b = not specified, 001b = LCD, 010b = OLED, others reserved
+ *   bit  [7]   = Display Device Theme Preference
+ */
+#define DISPLAYID_DISPLAY_PARAMS_DEVICE_TECH	GENMASK(6, 4)
+
+struct displayid_display_params_block {
+	struct displayid_block base;
+	u8 payload[27];
+	u8 device_tech_byte; /* bits [6:4] = Display Device Technology */
+	u8 reserved;
+} __packed;
+
+#define DISPLAYID_DISPLAY_PARAMS_MIN_LEN	\
+	(sizeof(struct displayid_display_params_block) -	\
+	 sizeof(struct displayid_block))
+
 #define DISPLAYID_VESA_MSO_OVERLAP	GENMASK(3, 0)
 #define DISPLAYID_VESA_MSO_MODE		GENMASK(6, 5)
 
