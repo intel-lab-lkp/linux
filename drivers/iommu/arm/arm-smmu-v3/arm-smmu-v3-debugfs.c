@@ -7,6 +7,9 @@
  * └── smmu<ioaddr>/
  *     ├── capabilities    # SMMU feature capabilities and configuration
  *     ├── registers       # SMMU Key registers
+ *     ├── stream_table
+ *         ├── <sid>/                                # Stream ID
+ *             ├── ste                               # Stream Table Entry
  *
  * The capabilities file provides detailed information about:
  * - translation stage support (Stage1/Stage2)
@@ -16,6 +19,11 @@
  * The registers display provides crucial visibility into:
  * - CR0, CR1, CR2 control registers
  * - Command and Event queue pointers
+ *
+ * The STE Information Displayed:
+ * - STE validity and configuration
+ * - Stage 1 and Stage 2 context pointers
+ * - Raw STE data
  *
  * Copyright (C) 2026 HiSilicon Limited.
  * Author: Qinxin Xia <xiaqinxin@huawei.com>
@@ -175,6 +183,231 @@ static const struct file_operations smmu_debugfs_registers_fops = {
 };
 
 /**
+ * smmu_debugfs_ste_show() - Dump STE details to seq_file
+ * @seq: seq_file to write to
+ * @unused: unused parameter
+ *
+ * Errors are reported via seq_puts, the function always returns 0
+ */
+static int smmu_debugfs_ste_show(struct seq_file *seq, void *unused)
+{
+	struct ste_context *ctx = seq->private;
+	struct arm_smmu_master *master = ctx->master;
+	struct arm_smmu_device *smmu;
+	struct arm_smmu_ste *ste;
+	u32 sid, cfg;
+	int i;
+
+	if (!master) {
+		seq_puts(seq, "No SMMU master data\n");
+		return 0;
+	}
+
+	smmu = master->smmu;
+	guard(mutex)(&smmu->streams_mutex);
+
+	sid = ctx->sid;
+
+	if (!arm_smmu_sid_in_range(smmu, sid)) {
+		seq_printf(seq, "Invalid Stream ID: %u (max %u)\n",
+			   sid, (1 << smmu->sid_bits) - 1);
+		return 0;
+	}
+
+	ste = arm_smmu_get_step_for_sid(smmu, sid);
+	if (!ste) {
+		seq_printf(seq, "STE not available for SID %u\n", sid);
+		return 0;
+	}
+
+	seq_printf(seq, "STE for Stream ID %u\n", sid);
+	seq_printf(seq, "  Valid: %s\n",
+		   le64_to_cpu(ste->data[0]) & STRTAB_STE_0_V ? "Yes" : "No");
+
+	seq_puts(seq, "  Config: ");
+
+	cfg = FIELD_GET(STRTAB_STE_0_CFG, le64_to_cpu(ste->data[0]));
+
+	switch (cfg) {
+	case STRTAB_STE_0_CFG_BYPASS:
+		seq_puts(seq, "BYPASS\n");
+		break;
+	case STRTAB_STE_0_CFG_S1_TRANS:
+		seq_puts(seq, "only S1_TRANS\n");
+		break;
+	case STRTAB_STE_0_CFG_S2_TRANS:
+		seq_puts(seq, "only S2_TRANS\n");
+		break;
+	case STRTAB_STE_0_CFG_NESTED:
+		seq_puts(seq, "S1+S2_TRANS\n");
+		break;
+	case STRTAB_STE_0_CFG_ABORT:
+		seq_puts(seq, "ABORT\n");
+		break;
+	default:
+		seq_puts(seq, "UNKNOWN\n");
+	}
+
+	if (cfg == STRTAB_STE_0_CFG_S1_TRANS || cfg == STRTAB_STE_0_CFG_NESTED) {
+		seq_printf(seq, "  S1ContextPtr: 0x%016llx\n",
+			   le64_to_cpu(ste->data[0]) & STRTAB_STE_0_S1CTXPTR_MASK);
+	}
+
+	if (cfg == STRTAB_STE_0_CFG_S2_TRANS || cfg == STRTAB_STE_0_CFG_NESTED) {
+		seq_printf(seq, "  S2TTB: 0x%016llx\n",
+			   le64_to_cpu(ste->data[3]) & STRTAB_STE_3_S2TTB_MASK);
+	}
+
+	/* Display raw STE data */
+	seq_puts(seq, "  Raw Data:\n");
+	for (i = 0; i < STRTAB_STE_DWORDS; i++)
+		seq_printf(seq, "    STE[%d]: 0x%016llx\n", i,
+			   le64_to_cpu(ste->data[i]));
+
+	return 0;
+}
+
+static int smmu_debugfs_ste_open(struct inode *inode, struct file *file)
+{
+	struct ste_context *ctx = inode->i_private;
+	int ret;
+
+	if (!ctx || !get_device(ctx->master->dev))
+		return -ENODEV;
+
+	ret = single_open(file, smmu_debugfs_ste_show, ctx);
+	if (ret)
+		put_device(ctx->master->dev);
+
+	return ret;
+}
+
+static int smmu_debugfs_ste_release(struct inode *inode, struct file *file)
+{
+	struct seq_file *seq = file->private_data;
+	struct ste_context *ctx = seq->private;
+
+	single_release(inode, file);
+	if (ctx)
+		put_device(ctx->master->dev);
+	return 0;
+}
+
+static const struct file_operations smmu_debugfs_ste_fops = {
+	.owner   = THIS_MODULE,
+	.open    = smmu_debugfs_ste_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = smmu_debugfs_ste_release,
+};
+
+/**
+ * arm_smmu_debugfs_create_stream_table() - Create debugfs entries for stream table
+ * @smmu: SMMU device
+ * @dev: device to create entries for
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int arm_smmu_debugfs_create_stream_table(struct arm_smmu_device *smmu,
+					 struct device *dev)
+{
+	struct dentry *stream_dir, *dev_dir;
+	struct arm_smmu_master *master;
+	struct ste_context *ctx;
+	char name[64];
+	u32 sid;
+	int i;
+
+	if (!smmu->debugfs)
+		return -ENODEV;
+
+	scoped_guard(mutex, &arm_smmu_debugfs_lock) {
+		if (!smmu->debugfs->stream_dir) {
+			stream_dir = debugfs_create_dir("stream_table",
+							smmu->debugfs->smmu_dir);
+			if (IS_ERR(stream_dir))
+				return PTR_ERR(stream_dir);
+
+			smmu->debugfs->stream_dir = stream_dir;
+		} else {
+			stream_dir = smmu->debugfs->stream_dir;
+		}
+	}
+
+	master = dev_iommu_priv_get(dev);
+	if (!master || !master->num_streams)
+		return -ENODEV;
+
+	for (i = 0; i < master->num_streams; i++) {
+		sid = master->streams[i].id;
+		snprintf(name, sizeof(name), "%u", sid);
+		dev_dir = debugfs_create_dir(name, stream_dir);
+		if (IS_ERR(dev_dir))
+			continue;
+
+		/* Create STE file */
+		ctx = kzalloc_obj(*ctx);
+		if (!ctx)
+			continue;
+
+		ctx->master = master;
+		ctx->sid = sid;
+		spin_lock(&smmu->debugfs->stream_lock);
+		list_add_tail(&ctx->node, &smmu->debugfs->stream_list);
+		spin_unlock(&smmu->debugfs->stream_lock);
+		debugfs_create_file("ste", 0444, dev_dir, ctx,
+				    &smmu_debugfs_ste_fops);
+	}
+
+	return 0;
+}
+
+/**
+ * arm_smmu_debugfs_remove_stream_table() - Remove debugfs entries for stream table
+ * @smmu: SMMU device
+ * @dev: device to remove entries for
+ *
+ * This function removes the debugfs directories created by
+ * arm_smmu_debugfs_create_stream_table().
+ */
+void arm_smmu_debugfs_remove_stream_table(struct arm_smmu_device *smmu,
+					  struct device *dev)
+{
+	struct dentry *stream_dir, *dev_dir;
+	struct arm_smmu_master *master;
+	struct ste_context *ctx, *tmp;
+	char name[64];
+	int i;
+
+	/* Check if stream_table directory exists */
+	if (!smmu->debugfs || !smmu->debugfs->stream_dir)
+		return;
+
+	stream_dir = smmu->debugfs->stream_dir;
+	master = dev_iommu_priv_get(dev);
+	if (!master)
+		return;
+
+	/* Remove directories for each stream ID */
+	for (i = 0; i < master->num_streams; i++) {
+		snprintf(name, sizeof(name), "%u", master->streams[i].id);
+		dev_dir = debugfs_lookup(name, stream_dir);
+		debugfs_remove_recursive(dev_dir);
+		dput(dev_dir);
+	}
+
+	/* Free stream context */
+	spin_lock(&smmu->debugfs->stream_lock);
+	list_for_each_entry_safe(ctx, tmp, &smmu->debugfs->stream_list, node) {
+		if (ctx->master->dev == dev) {
+			list_del(&ctx->node);
+			kfree(ctx);
+		}
+	}
+	spin_unlock(&smmu->debugfs->stream_lock);
+}
+
+/**
  * arm_smmu_debugfs_setup() - Initialize debugfs for SMMU device
  * @smmu: SMMU device to setup debugfs for
  * @name: SMMU device name
@@ -215,6 +448,8 @@ int arm_smmu_debugfs_setup(struct arm_smmu_device *smmu, const char *name)
 	}
 
 	debugfs->smmu_dir = smmu_dir;
+	INIT_LIST_HEAD(&debugfs->stream_list);
+	spin_lock_init(&debugfs->stream_lock);
 	smmu->debugfs = debugfs;
 
 	/* Create capabilities file */

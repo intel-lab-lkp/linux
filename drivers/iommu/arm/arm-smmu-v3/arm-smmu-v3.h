@@ -821,12 +821,29 @@ struct arm_smmu_impl_ops {
 };
 
 #ifdef CONFIG_ARM_SMMU_V3_DEBUGFS
+struct ste_context {
+	struct arm_smmu_master		*master;
+	u32				sid;
+	struct list_head		node;
+};
+
 struct arm_smmu_debugfs {
+	struct list_head stream_list;
+	spinlock_t stream_lock;
 	struct dentry *smmu_dir;
+	struct dentry *stream_dir;
 };
 
 int arm_smmu_debugfs_setup(struct arm_smmu_device *smmu, const char *name);
 void arm_smmu_debugfs_remove(struct arm_smmu_device *smmu);
+int arm_smmu_debugfs_create_stream_table(struct arm_smmu_device *smmu,
+					 struct device *dev);
+void arm_smmu_debugfs_remove_stream_table(struct arm_smmu_device *smmu,
+					  struct device *dev);
+
+struct arm_smmu_ste *
+arm_smmu_get_step_for_sid(struct arm_smmu_device *smmu, u32 sid);
+bool arm_smmu_sid_in_range(struct arm_smmu_device *smmu, u32 sid);
 #endif
 
 /* An SMMUv3 instance */
