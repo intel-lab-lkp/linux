@@ -958,21 +958,27 @@ static int stratix10_rsu_probe(struct platform_device *pdev)
 			   0, rsu_dcmf_version_callback);
 	if (ret) {
 		dev_err(dev, "Error, getting DCMF version %i\n", ret);
+		stratix10_svc_remove_async_client(priv->chan);
 		stratix10_svc_free_channel(priv->chan);
+		return ret;
 	}
 
 	ret = rsu_send_msg(priv, COMMAND_RSU_DCMF_STATUS,
 			   0, rsu_dcmf_status_callback);
 	if (ret) {
 		dev_err(dev, "Error, getting DCMF status %i\n", ret);
+		stratix10_svc_remove_async_client(priv->chan);
 		stratix10_svc_free_channel(priv->chan);
+		return ret;
 	}
 
 	ret = rsu_send_msg(priv, COMMAND_RSU_MAX_RETRY, 0,
 			   rsu_max_retry_callback);
 	if (ret) {
 		dev_err(dev, "Error, getting RSU max retry %i\n", ret);
+		stratix10_svc_remove_async_client(priv->chan);
 		stratix10_svc_free_channel(priv->chan);
+		return ret;
 	}
 
 	/* get QSPI device info from firmware */
@@ -989,16 +995,19 @@ static int stratix10_rsu_probe(struct platform_device *pdev)
 				 rsu_async_get_spt_table_callback);
 	if (ret) {
 		dev_err(dev, "Error, getting SPT table %i\n", ret);
+		stratix10_svc_remove_async_client(priv->chan);
 		stratix10_svc_free_channel(priv->chan);
+		return ret;
 	}
 
-	return ret;
+	return 0;
 }
 
 static void stratix10_rsu_remove(struct platform_device *pdev)
 {
 	struct stratix10_rsu_priv *priv = platform_get_drvdata(pdev);
 
+	stratix10_svc_remove_async_client(priv->chan);
 	stratix10_svc_free_channel(priv->chan);
 }
 
