@@ -15,7 +15,13 @@ description:
 
 properties:
   compatible:
-    const: cypress,cypd4226
+    oneOf:
+      - enum:
+          - cypress,cypd6129
+          - cypress,cypd4226
+      - items:
+          - const: cypress,cypd6129
+          - const: cypress,cypd4226
 
   '#address-cells':
     const: 1
@@ -63,10 +69,42 @@ examples:
   - |
     #include <dt-bindings/interrupt-controller/arm-gic.h>
     i2c {
-      #address-cells = <1>;
-      #size-cells = <0>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        #interrupt-cells = <2>;
 
-      typec@8 {
+        typec@8 {
+            compatible = "cypress,cypd6129";
+            reg = <0x08>;
+            interrupt-parent = <&node>;
+            interrupts = <GPIO IRQ_TYPE_LEVEL_LOW>;
+            firmware-name = "ccg_primary.cyacd2";
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            connector@0 {
+                compatible = "usb-c-connector";
+                reg = <0>;
+                label = "USB-C";
+                data-role = "dual";
+
+                ports {
+                    #address-cells = <1>;
+                    #size-cells = <0>;
+
+                    port@0 {
+                        reg = <0>;
+                        endpoint {
+                            remote-endpoint = <&usb_role_switch0>;
+                        };
+                    };
+                };
+            };
+        };
+    };
+
+  - |
+    typec@8 {
         compatible = "cypress,cypd4226";
         reg = <0x08>;
         interrupts = <2 IRQ_TYPE_LEVEL_LOW>;
@@ -74,20 +112,19 @@ examples:
         #address-cells = <1>;
         #size-cells = <0>;
         connector@0 {
-          compatible = "usb-c-connector";
-          reg = <0>;
-          label = "USB-C";
-          data-role = "dual";
-          ports {
-            #address-cells = <1>;
-            #size-cells = <0>;
-            port@0 {
-              reg = <0>;
-              endpoint {
-                remote-endpoint = <&usb_role_switch0>;
-              };
+            compatible = "usb-c-connector";
+            reg = <0>;
+            label = "USB-C";
+            data-role = "dual";
+            ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+                port@0 {
+                    reg = <0>;
+                    endpoint {
+                        remote-endpoint = <&usb_role_switch0>;
+                    };
+                };
             };
-          };
         };
-      };
     };
