@@ -1127,7 +1127,7 @@ static int mpu3050_trigger_probe(struct iio_dev *indio_dev, int irq)
 	mpu3050->trig->ops = &mpu3050_trigger_ops;
 	iio_trigger_set_drvdata(mpu3050->trig, indio_dev);
 
-	ret = iio_trigger_register(mpu3050->trig);
+	ret = devm_iio_trigger_register(&indio_dev->dev, mpu3050->trig);
 	if (ret)
 		goto err_iio_trigger;
 
