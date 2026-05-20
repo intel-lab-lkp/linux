@@ -1596,8 +1596,10 @@ static void svc_release_rqst(struct svc_rqst *rqstp)
 {
 	const struct svc_procedure *procp = rqstp->rq_procinfo;
 
-	if (procp && procp->pc_release)
+	if (procp && procp->pc_release) {
 		procp->pc_release(rqstp);
+		rqstp->rq_procinfo = NULL;
+	}
 }
 
 /**
