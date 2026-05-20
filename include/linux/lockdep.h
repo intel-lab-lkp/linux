@@ -10,6 +10,7 @@
 #ifndef __LINUX_LOCKDEP_H
 #define __LINUX_LOCKDEP_H
 
+#include <linux/cleanup.h>
 #include <linux/lockdep_types.h>
 #include <linux/smp.h>
 #include <asm/percpu.h>
@@ -552,6 +553,8 @@ do {									\
 #define lock_map_acquire_tryread(l)		lock_acquire_shared_recursive(l, 0, 1, NULL, _THIS_IP_)
 #define lock_map_release(l)			lock_release(l, _THIS_IP_)
 #define lock_map_sync(l)			lock_sync(l, 0, 0, 1, NULL, _THIS_IP_)
+
+DEFINE_GUARD(lock_map_acquire, struct lockdep_map *, lock_map_acquire(_T), lock_map_release(_T))
 
 #ifdef CONFIG_PROVE_LOCKING
 # define might_lock(lock)						\
