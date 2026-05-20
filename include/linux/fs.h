@@ -390,7 +390,7 @@ struct kiocb {
 	 * waitqueue associated with completing the read.
 	 * Valid IFF IOCB_WAITQ is set.
 	 */
-	struct wait_page_queue	*ki_waitq;
+	struct wait_folio_queue	*ki_waitq;
 };
 
 static inline bool is_sync_kiocb(struct kiocb *kiocb)

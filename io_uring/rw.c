@@ -763,14 +763,14 @@ static ssize_t loop_rw_iter(int ddir, struct io_rw *rw, struct iov_iter *iter)
 static int io_async_buf_func(struct wait_queue_entry *wait, unsigned mode,
 			     int sync, void *arg)
 {
-	struct wait_page_queue *wpq;
+	struct wait_folio_queue *wfq;
 	struct io_kiocb *req = wait->private;
 	struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
-	struct wait_page_key *key = arg;
+	struct wait_folio_key *key = arg;
 
-	wpq = container_of(wait, struct wait_page_queue, wait);
+	wfq = container_of(wait, struct wait_folio_queue, wait);
 
-	if (!wake_page_match(wpq, key))
+	if (!wake_folio_match(wfq, key))
 		return 0;
 
 	rw->kiocb.ki_flags &= ~IOCB_WAITQ;
@@ -783,7 +783,7 @@ static int io_async_buf_func(struct wait_queue_entry *wait, unsigned mode,
  * This controls whether a given IO request should be armed for async page
  * based retry. If we return false here, the request is handed to the async
  * worker threads for retry. If we're doing buffered reads on a regular file,
- * we prepare a private wait_page_queue entry and retry the operation. This
+ * we prepare a private wait_folio_queue entry and retry the operation. This
  * will either succeed because the page is now uptodate and unlocked, or it
  * will register a callback when the page is unlocked at IO completion. Through
  * that callback, io_uring uses task_work to setup a retry of the operation.
@@ -794,7 +794,7 @@ static int io_async_buf_func(struct wait_queue_entry *wait, unsigned mode,
 static bool io_rw_should_retry(struct io_kiocb *req)
 {
 	struct io_async_rw *io = req->async_data;
-	struct wait_page_queue *wait = &io->wpq;
+	struct wait_folio_queue *wait = &io->wfq;
 	struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
 	struct kiocb *kiocb = &rw->kiocb;
 
@@ -897,7 +897,7 @@ static int io_rw_init_file(struct io_kiocb *req, fmode_t mode, int rw_type)
 			return -EINVAL;
 
 		/*
-		 * We have a union of meta fields with wpq used for buffered-io
+		 * We have a union of meta fields with wfq used for buffered-io
 		 * in io_async_rw, so fail it here.
 		 */
 		if (!(file->f_flags & O_DIRECT))

@@ -6,26 +6,26 @@
 #include <linux/page-flags.h>
 #include <linux/wait.h>
 
-struct wait_page_key {
+struct wait_folio_key {
 	struct folio *folio;
 	int bit_nr;
-	int page_match;
+	int folio_match;
 };
 
-struct wait_page_queue {
+struct wait_folio_queue {
 	struct folio *folio;
 	int bit_nr;
 	wait_queue_entry_t wait;
 };
 
-static inline bool wake_page_match(struct wait_page_queue *wait_page,
-		struct wait_page_key *key)
+static inline bool wake_folio_match(struct wait_folio_queue *wait_folio,
+		struct wait_folio_key *key)
 {
-	if (wait_page->folio != key->folio)
+	if (wait_folio->folio != key->folio)
 		return false;
-	key->page_match = 1;
+	key->folio_match = 1;
 
-	if (wait_page->bit_nr != key->bit_nr)
+	if (wait_folio->bit_nr != key->bit_nr)
 		return false;
 
 	return true;

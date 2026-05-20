@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include <linux/folio_wait.h>
 #include <linux/io_uring_types.h>
-#include <linux/pagemap.h>
 
 struct io_meta_state {
 	u32			seed;
@@ -19,11 +19,11 @@ struct io_async_rw {
 		unsigned			buf_group;
 
 		/*
-		 * wpq is for buffered io, while meta fields are used with
+		 * wfq is for buffered io, while meta fields are used with
 		 * direct io
 		 */
 		union {
-			struct wait_page_queue		wpq;
+			struct wait_folio_queue		wfq;
 			struct {
 				struct uio_meta			meta;
 				struct io_meta_state		meta_state;

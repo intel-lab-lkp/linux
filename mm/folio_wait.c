@@ -20,20 +20,20 @@
 #include "internal.h"
 
 /*
- * In order to wait for pages to become available there must be waitqueues
- * associated with pages. By using a hash table of waitqueues where the bucket
+ * In order to wait for folios to become available there must be waitqueues
+ * associated with folios. By using a hash table of waitqueues where the bucket
  * discipline is to maintain all waiters on the same queue and wake all when any
- * of the pages become available, and for the woken contexts to check to be
- * sure the appropriate page became available, this saves space at a cost of
+ * of the folios become available, and for the woken contexts to check to be
+ * sure the appropriate folio became available, this saves space at a cost of
  * "thundering herd" phenomena during rare hash collisions.
  */
-#define PAGE_WAIT_TABLE_BITS 8
-#define PAGE_WAIT_TABLE_SIZE (1 << PAGE_WAIT_TABLE_BITS)
-static wait_queue_head_t folio_wait_table[PAGE_WAIT_TABLE_SIZE] __cacheline_aligned;
+#define FOLIO_WAIT_TABLE_BITS 8
+#define FOLIO_WAIT_TABLE_SIZE (1 << FOLIO_WAIT_TABLE_BITS)
+static wait_queue_head_t folio_wait_table[FOLIO_WAIT_TABLE_SIZE] __cacheline_aligned;
 
 static wait_queue_head_t *folio_waitqueue(struct folio *folio)
 {
-	return &folio_wait_table[hash_ptr(folio, PAGE_WAIT_TABLE_BITS)];
+	return &folio_wait_table[hash_ptr(folio, FOLIO_WAIT_TABLE_BITS)];
 }
 
 /* How many times do we accept lock stealing from under a waiter? */
@@ -53,14 +53,14 @@ void __init folio_wait_init(void)
 {
 	int i;
 
-	for (i = 0; i < PAGE_WAIT_TABLE_SIZE; i++)
+	for (i = 0; i < FOLIO_WAIT_TABLE_SIZE; i++)
 		init_waitqueue_head(&folio_wait_table[i]);
 
 	register_sysctl_init("vm", folio_wait_sysctl_table);
 }
 
 /*
- * The page wait code treats the "wait->flags" somewhat unusually, because
+ * The folio wait code treats the "wait->flags" somewhat unusually, because
  * we have multiple different kinds of waits, not just the usual "exclusive"
  * one.
  *
@@ -92,13 +92,13 @@ void __init folio_wait_init(void)
  *	WQ_FLAG_WOKEN, we set WQ_FLAG_DONE to let the waiter easily see that
  *	it now has the lock.
  */
-static int wake_page_function(wait_queue_entry_t *wait, unsigned int mode, int sync, void *arg)
+static int wake_folio_function(wait_queue_entry_t *wait, unsigned int mode, int sync, void *arg)
 {
 	unsigned int flags;
-	struct wait_page_key *key = arg;
-	struct wait_page_queue *wait_page = container_of(wait, struct wait_page_queue, wait);
+	struct wait_folio_key *key = arg;
+	struct wait_folio_queue *wait_folio = container_of(wait, struct wait_folio_queue, wait);
 
-	if (!wake_page_match(wait_page, key))
+	if (!wake_folio_match(wait_folio, key))
 		return 0;
 
 	/*
@@ -143,26 +143,26 @@ static int wake_page_function(wait_queue_entry_t *wait, unsigned int mode, int s
 static void folio_wake_bit(struct folio *folio, int bit_nr)
 {
 	wait_queue_head_t *q = folio_waitqueue(folio);
-	struct wait_page_key key;
+	struct wait_folio_key key;
 	unsigned long flags;
 
 	key.folio = folio;
 	key.bit_nr = bit_nr;
-	key.page_match = 0;
+	key.folio_match = 0;
 
 	spin_lock_irqsave(&q->lock, flags);
 	__wake_up_locked_key(q, TASK_NORMAL, &key);
 
 	/*
-	 * It's possible to miss clearing waiters here, when we woke our page
-	 * waiters, but the hashed waitqueue has waiters for other pages on it.
+	 * It's possible to miss clearing waiters here, when we woke our folio
+	 * waiters, but the hashed waitqueue has waiters for other folios on it.
 	 * That's okay, it's a rare case. The next waker will clear it.
 	 *
 	 * Note that, depending on the page pool (buddy, hugetlb, ZONE_DEVICE,
 	 * other), the flag may be cleared in the course of freeing the page;
 	 * but that is not required for correctness.
 	 */
-	if (!waitqueue_active(q) || !key.page_match)
+	if (!waitqueue_active(q) || !key.folio_match)
 		folio_clear_waiters(folio);
 
 	spin_unlock_irqrestore(&q->lock, flags);
@@ -180,13 +180,13 @@ void folio_wake_writeback(struct folio *folio)
  * A choice of three behaviors for folio_wait_bit_common():
  */
 enum behavior {
-	EXCLUSIVE,	/* Hold ref to page and take the bit when woken, like
+	EXCLUSIVE,	/* Hold ref to folio and take the bit when woken, like
 			 * __folio_lock() waiting on then setting PG_locked.
 			 */
-	SHARED,		/* Hold ref to page and check the bit when woken, like
+	SHARED,		/* Hold ref to folio and check the bit when woken, like
 			 * folio_wait_writeback() waiting on PG_writeback.
 			 */
-	DROP,		/* Drop ref to page before wait, no check when woken,
+	DROP,		/* Drop ref to folio before wait, no check when woken,
 			 * like folio_put_wait_locked() on PG_locked.
 			 */
 };
@@ -212,8 +212,8 @@ static inline int folio_wait_bit_common(struct folio *folio, int bit_nr,
 {
 	wait_queue_head_t *q = folio_waitqueue(folio);
 	int unfairness = sysctl_page_lock_unfairness;
-	struct wait_page_queue wait_page;
-	wait_queue_entry_t *wait = &wait_page.wait;
+	struct wait_folio_queue wait_folio;
+	wait_queue_entry_t *wait = &wait_folio.wait;
 	bool thrashing = false;
 	unsigned long pflags;
 	bool in_thrashing;
@@ -226,9 +226,9 @@ static inline int folio_wait_bit_common(struct folio *folio, int bit_nr,
 	}
 
 	init_wait(wait);
-	wait->func = wake_page_function;
-	wait_page.folio = folio;
-	wait_page.bit_nr = bit_nr;
+	wait->func = wake_folio_function;
+	wait_folio.folio = folio;
+	wait_folio.bit_nr = bit_nr;
 
 repeat:
 	wait->flags = 0;
@@ -239,7 +239,7 @@ repeat:
 	}
 
 	/*
-	 * Do one last check whether we can get the page bit synchronously.
+	 * Do one last check whether we can get the folio bit synchronously.
 	 *
 	 * Do the folio_set_waiters() marking before that to let any waker we
 	 * _just_ missed know they need to wake us up (otherwise they'll never
@@ -256,7 +256,7 @@ repeat:
 
 	/*
 	 * From now on, all the logic will be based on the WQ_FLAG_WOKEN and
-	 * WQ_FLAG_DONE flag, to see whether the page bit testing has already
+	 * WQ_FLAG_DONE flag, to see whether the folio bit testing has already
 	 * been done by the wake function.
 	 *
 	 * We can drop our reference to the folio.
@@ -359,8 +359,8 @@ repeat:
 void softleaf_entry_wait_on_locked(softleaf_t entry, spinlock_t *ptl)
 	__releases(ptl)
 {
-	struct wait_page_queue wait_page;
-	wait_queue_entry_t *wait = &wait_page.wait;
+	struct wait_folio_queue wait_folio;
+	wait_queue_entry_t *wait = &wait_folio.wait;
 	bool thrashing = false;
 	unsigned long pflags;
 	bool in_thrashing;
@@ -375,9 +375,9 @@ void softleaf_entry_wait_on_locked(softleaf_t entry, spinlock_t *ptl)
 	}
 
 	init_wait(wait);
-	wait->func = wake_page_function;
-	wait_page.folio = folio;
-	wait_page.bit_nr = PG_locked;
+	wait->func = wake_folio_function;
+	wait_folio.folio = folio;
+	wait_folio.bit_nr = PG_locked;
 	wait->flags = 0;
 
 	spin_lock_irq(&q->lock);
@@ -439,7 +439,7 @@ EXPORT_SYMBOL(folio_wait_bit_killable);
  * @folio: The folio to wait for.
  * @state: The sleep state (TASK_KILLABLE, TASK_UNINTERRUPTIBLE, etc).
  *
- * The caller should hold a reference on @folio. They expect the page to become
+ * The caller should hold a reference on @folio. They expect the folio to become
  * unlocked relatively soon, but do not wish to hold up migration (for example)
  * by holding the reference while waiting for the folio to come unlocked. After
  * this function returns, the caller should not dereference @folio.
@@ -455,7 +455,7 @@ int folio_put_wait_locked(struct folio *folio, int state)
  * folio_unlock - Unlock a locked folio.
  * @folio: The folio.
  *
- * Unlocks the folio and wakes up any thread sleeping on the page lock.
+ * Unlocks the folio and wakes up any thread sleeping on the folio lock.
  *
  * Context: May be called from interrupt or process context. May not be called
  * from NMI context.
@@ -639,7 +639,7 @@ int __folio_lock_killable(struct folio *folio)
 }
 EXPORT_SYMBOL_GPL(__folio_lock_killable);
 
-int __folio_lock_async(struct folio *folio, struct wait_page_queue *wait)
+int __folio_lock_async(struct folio *folio, struct wait_folio_queue *wait)
 {
 	struct wait_queue_head *q = folio_waitqueue(folio);
 	int ret;
