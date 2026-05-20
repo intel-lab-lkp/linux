@@ -20,14 +20,12 @@
 #include "internal.h"
 
 /*
- * In order to wait for pages to become available there must be
- * waitqueues associated with pages. By using a hash table of
- * waitqueues where the bucket discipline is to maintain all
- * waiters on the same queue and wake all when any of the pages
- * become available, and for the woken contexts to check to be
- * sure the appropriate page became available, this saves space
- * at a cost of "thundering herd" phenomena during rare hash
- * collisions.
+ * In order to wait for pages to become available there must be waitqueues
+ * associated with pages. By using a hash table of waitqueues where the bucket
+ * discipline is to maintain all waiters on the same queue and wake all when any
+ * of the pages become available, and for the woken contexts to check to be
+ * sure the appropriate page became available, this saves space at a cost of
+ * "thundering herd" phenomena during rare hash collisions.
  */
 #define PAGE_WAIT_TABLE_BITS 8
 #define PAGE_WAIT_TABLE_SIZE (1 << PAGE_WAIT_TABLE_BITS)
@@ -70,44 +68,42 @@ void __init folio_wait_init(void)
  *
  *  (a) no special bits set:
  *
- *	We're just waiting for the bit to be released, and when a waker
- *	calls the wakeup function, we set WQ_FLAG_WOKEN and wake it up,
- *	and remove it from the wait queue.
+ *	We're just waiting for the bit to be released, and when a waker calls
+ *	the wakeup function, we set WQ_FLAG_WOKEN and wake it up, and remove
+ *	it from the wait queue.
  *
  *	Simple and straightforward.
  *
  *  (b) WQ_FLAG_EXCLUSIVE:
  *
- *	The waiter is waiting to get the lock, and only one waiter should
- *	be woken up to avoid any thundering herd behavior. We'll set the
+ *	The waiter is waiting to get the lock, and only one waiter should be
+ *	woken up to avoid any thundering herd behavior. We'll set the
  *	WQ_FLAG_WOKEN bit, wake it up, and remove it from the wait queue.
  *
  *	This is the traditional exclusive wait.
  *
  *  (c) WQ_FLAG_EXCLUSIVE | WQ_FLAG_CUSTOM:
  *
- *	The waiter is waiting to get the bit, and additionally wants the
- *	lock to be transferred to it for fair lock behavior. If the lock
- *	cannot be taken, we stop walking the wait queue without waking
- *	the waiter.
+ *	The waiter is waiting to get the bit, and additionally wants the lock
+ *	to be transferred to it for fair lock behavior. If the lock cannot be
+ *	taken, we stop walking the wait queue without waking the waiter.
  *
  *	This is the "fair lock handoff" case, and in addition to setting
- *	WQ_FLAG_WOKEN, we set WQ_FLAG_DONE to let the waiter easily see
- *	that it now has the lock.
+ *	WQ_FLAG_WOKEN, we set WQ_FLAG_DONE to let the waiter easily see that
+ *	it now has the lock.
  */
-static int wake_page_function(wait_queue_entry_t *wait, unsigned mode, int sync, void *arg)
+static int wake_page_function(wait_queue_entry_t *wait, unsigned int mode, int sync, void *arg)
 {
 	unsigned int flags;
 	struct wait_page_key *key = arg;
-	struct wait_page_queue *wait_page
-		= container_of(wait, struct wait_page_queue, wait);
+	struct wait_page_queue *wait_page = container_of(wait, struct wait_page_queue, wait);
 
 	if (!wake_page_match(wait_page, key))
 		return 0;
 
 	/*
-	 * If it's a lock handoff wait, we get the bit for it, and
-	 * stop walking (and do not wake it up) if we can't.
+	 * If it's a lock handoff wait, we get the bit for it, and stop walking
+	 * (and do not wake it up) if we can't.
 	 */
 	flags = wait->flags;
 	if (flags & WQ_FLAG_EXCLUSIVE) {
@@ -121,26 +117,24 @@ static int wake_page_function(wait_queue_entry_t *wait, unsigned mode, int sync,
 	}
 
 	/*
-	 * We are holding the wait-queue lock, but the waiter that
-	 * is waiting for this will be checking the flags without
-	 * any locking.
+	 * We are holding the wait-queue lock, but the waiter that is waiting
+	 * for this will be checking the flags without any locking.
 	 *
-	 * So update the flags atomically, and wake up the waiter
-	 * afterwards to avoid any races. This store-release pairs
-	 * with the load-acquire in folio_wait_bit_common().
+	 * So update the flags atomically, and wake up the waiter afterwards to
+	 * avoid any races. This store-release pairs with the load-acquire in
+	 * folio_wait_bit_common().
 	 */
 	smp_store_release(&wait->flags, flags | WQ_FLAG_WOKEN);
 	wake_up_state(wait->private, mode);
 
 	/*
-	 * Ok, we have successfully done what we're waiting for,
-	 * and we can unconditionally remove the wait entry.
+	 * Ok, we have successfully done what we're waiting for, and we can
+	 * unconditionally remove the wait entry.
 	 *
-	 * Note that this pairs with the "finish_wait()" in the
-	 * waiter, and has to be the absolute last thing we do.
-	 * After this list_del_init(&wait->entry) the wait entry
-	 * might be de-allocated and the process might even have
-	 * exited.
+	 * Note that this pairs with the "finish_wait()" in the waiter, and has
+	 * to be the absolute last thing we do. After this
+	 * list_del_init(&wait->entry) the wait entry might be de-allocated and
+	 * the process might even have exited.
 	 */
 	list_del_init_careful(&wait->entry);
 	return (flags & WQ_FLAG_EXCLUSIVE) != 0;
@@ -198,11 +192,10 @@ enum behavior {
 };
 
 /*
- * Attempt to check (or get) the folio flag, and mark us done
- * if successful.
+ * Attempt to check (or get) the folio flag, and mark as done if successful.
  */
 static inline bool folio_trylock_flag(struct folio *folio, int bit_nr,
-					struct wait_queue_entry *wait)
+		struct wait_queue_entry *wait)
 {
 	if (wait->flags & WQ_FLAG_EXCLUSIVE) {
 		if (test_and_set_bit(bit_nr, &folio->flags.f))
@@ -246,18 +239,14 @@ repeat:
 	}
 
 	/*
-	 * Do one last check whether we can get the
-	 * page bit synchronously.
+	 * Do one last check whether we can get the page bit synchronously.
 	 *
-	 * Do the folio_set_waiters() marking before that
-	 * to let any waker we _just_ missed know they
-	 * need to wake us up (otherwise they'll never
-	 * even go to the slow case that looks at the
-	 * page queue), and add ourselves to the wait
-	 * queue if we need to sleep.
+	 * Do the folio_set_waiters() marking before that to let any waker we
+	 * _just_ missed know they need to wake us up (otherwise they'll never
+	 * even go to the slow case that looks at the wait queue), and add
+	 * ourselves to the wait queue if we need to sleep.
 	 *
-	 * This part needs to be done under the queue
-	 * lock to avoid races.
+	 * This part needs to be done under the queue lock to avoid races.
 	 */
 	spin_lock_irq(&q->lock);
 	folio_set_waiters(folio);
@@ -266,9 +255,8 @@ repeat:
 	spin_unlock_irq(&q->lock);
 
 	/*
-	 * From now on, all the logic will be based on
-	 * the WQ_FLAG_WOKEN and WQ_FLAG_DONE flag, to
-	 * see whether the page bit testing has already
+	 * From now on, all the logic will be based on the WQ_FLAG_WOKEN and
+	 * WQ_FLAG_DONE flag, to see whether the page bit testing has already
 	 * been done by the wake function.
 	 *
 	 * We can drop our reference to the folio.
@@ -277,10 +265,9 @@ repeat:
 		folio_put(folio);
 
 	/*
-	 * Note that until the "finish_wait()", or until
-	 * we see the WQ_FLAG_WOKEN flag, we need to
-	 * be very careful with the 'wait->flags', because
-	 * we may race with a waker that sets them.
+	 * Note that until the "finish_wait()", or until we see the
+	 * WQ_FLAG_WOKEN flag, we need to be very careful with the
+	 * 'wait->flags', because we may race with a waker that sets them.
 	 */
 	for (;;) {
 		unsigned int flags;
@@ -306,8 +293,8 @@ repeat:
 			break;
 
 		/*
-		 * Otherwise, if we're getting the lock, we need to
-		 * try to get it ourselves.
+		 * Otherwise, if we're getting the lock, we need to try to get
+		 * it ourselves.
 		 *
 		 * And if that fails, we'll have to retry this all.
 		 */
@@ -333,13 +320,13 @@ repeat:
 
 	/*
 	 * NOTE! The wait->flags weren't stable until we've done the
-	 * 'finish_wait()', and we could have exited the loop above due
-	 * to a signal, and had a wakeup event happen after the signal
-	 * test but before the 'finish_wait()'.
+	 * 'finish_wait()', and we could have exited the loop above due to a
+	 * signal, and had a wakeup event happen after the signal test but
+	 * before the 'finish_wait()'.
 	 *
-	 * So only after the finish_wait() can we reliably determine
-	 * if we got woken up or not, so we can now figure out the final
-	 * return value based on that state without races.
+	 * So only after the finish_wait() can we reliably determine if we got
+	 * woken up or not, so we can now figure out the final return value
+	 * based on that state without races.
 	 *
 	 * Also note that WQ_FLAG_WOKEN is sufficient for a non-exclusive
 	 * waiter, but an exclusive one requires WQ_FLAG_DONE.
@@ -452,11 +439,10 @@ EXPORT_SYMBOL(folio_wait_bit_killable);
  * @folio: The folio to wait for.
  * @state: The sleep state (TASK_KILLABLE, TASK_UNINTERRUPTIBLE, etc).
  *
- * The caller should hold a reference on @folio.  They expect the page to
- * become unlocked relatively soon, but do not wish to hold up migration
- * (for example) by holding the reference while waiting for the folio to
- * come unlocked.  After this function returns, the caller should not
- * dereference @folio.
+ * The caller should hold a reference on @folio. They expect the page to become
+ * unlocked relatively soon, but do not wish to hold up migration (for example)
+ * by holding the reference while waiting for the folio to come unlocked. After
+ * this function returns, the caller should not dereference @folio.
  *
  * Return: 0 if the folio was unlocked or -EINTR if interrupted by a signal.
  */
@@ -471,8 +457,8 @@ int folio_put_wait_locked(struct folio *folio, int state)
  *
  * Unlocks the folio and wakes up any thread sleeping on the page lock.
  *
- * Context: May be called from interrupt or process context.  May not be
- * called from NMI context.
+ * Context: May be called from interrupt or process context. May not be called
+ * from NMI context.
  */
 void folio_unlock(struct folio *folio)
 {
@@ -490,14 +476,13 @@ EXPORT_SYMBOL(folio_unlock);
  * @folio: The folio.
  * @success: True if all reads completed successfully.
  *
- * When all reads against a folio have completed, filesystems should
- * call this function to let the pagecache know that no more reads
- * are outstanding.  This will unlock the folio and wake up any thread
- * sleeping on the lock.  The folio will also be marked uptodate if all
- * reads succeeded.
+ * When all reads against a folio have completed, filesystems should call this
+ * function to let the pagecache know that no more reads are outstanding. This
+ * will unlock the folio and wake up any thread sleeping on the lock. The folio
+ * will also be marked uptodate if all reads succeeded.
  *
- * Context: May be called from interrupt or process context.  May not be
- * called from NMI context.
+ * Context: May be called from interrupt or process context. May not be called
+ * from NMI context.
  */
 void folio_end_read(struct folio *folio, bool success)
 {
@@ -577,13 +562,12 @@ EXPORT_SYMBOL(folio_wait_private_2_killable);
  * folio_wait_writeback - Wait for a folio to finish writeback.
  * @folio: The folio to wait for.
  *
- * If the folio is currently being written back to storage, wait for the
- * I/O to complete.
+ * If the folio is currently being written back to storage, wait for the I/O to
+ * complete.
  *
- * Context: Sleeps.  Must be called in process context and with
- * no spinlocks held.  Caller should hold a reference on the folio.
- * If the folio is not locked, writeback may start again after writeback
- * has finished.
+ * Context: Sleeps. Must be called in process context and with no spinlocks
+ * held. Caller should hold a reference on the folio. If the folio is not
+ * locked, writeback may start again after writeback has finished.
  */
 void folio_wait_writeback(struct folio *folio)
 {
@@ -598,13 +582,12 @@ EXPORT_SYMBOL_GPL(folio_wait_writeback);
  * folio_wait_writeback_killable - Wait for a folio to finish writeback.
  * @folio: The folio to wait for.
  *
- * If the folio is currently being written back to storage, wait for the
- * I/O to complete or a fatal signal to arrive.
+ * If the folio is currently being written back to storage, wait for the I/O to
+ * complete or a fatal signal to arrive.
  *
- * Context: Sleeps.  Must be called in process context and with
- * no spinlocks held.  Caller should hold a reference on the folio.
- * If the folio is not locked, writeback may start again after writeback
- * has finished.
+ * Context: Sleeps. Must be called in process context and with no spinlocks
+ * held. Caller should hold a reference on the folio. If the folio is not
+ * locked, writeback may start again after writeback has finished.
  * Return: 0 on success, -EINTR if we get a fatal signal while waiting.
  */
 int folio_wait_writeback_killable(struct folio *folio)
@@ -623,14 +606,13 @@ EXPORT_SYMBOL_GPL(folio_wait_writeback_killable);
  * folio_wait_stable() - wait for writeback to finish, if necessary.
  * @folio: The folio to wait on.
  *
- * This function determines if the given folio is related to a backing
- * device that requires folio contents to be held stable during writeback.
- * If so, then it will wait for any pending writeback to complete.
+ * This function determines if the given folio is related to a backing device
+ * that requires folio contents to be held stable during writeback. If so, then
+ * it will wait for any pending writeback to complete.
  *
- * Context: Sleeps.  Must be called in process context and with
- * no spinlocks held.  Caller should hold a reference on the folio.
- * If the folio is not locked, writeback may start again after writeback
- * has finished.
+ * Context: Sleeps. Must be called in process context and with no spinlocks
+ * held. Caller should hold a reference on the folio. If the folio is not
+ * locked, writeback may start again after writeback has finished.
  */
 void folio_wait_stable(struct folio *folio)
 {
@@ -670,10 +652,9 @@ int __folio_lock_async(struct folio *folio, struct wait_page_queue *wait)
 	folio_set_waiters(folio);
 	ret = !folio_trylock(folio);
 	/*
-	 * If we were successful now, we know we're still on the
-	 * waitqueue as we're still under the lock. This means it's
-	 * safe to remove and return success, we know the callback
-	 * isn't going to trigger.
+	 * If we were successful now, we know we're still on the waitqueue as
+	 * we're still under the lock. This means it's safe to remove and
+	 * return success, we know the callback isn't going to trigger.
 	 */
 	if (!ret)
 		__remove_wait_queue(q, &wait->wait);
