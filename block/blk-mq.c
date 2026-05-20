@@ -3739,6 +3739,50 @@ static bool blk_mq_hctx_has_requests(struct blk_mq_hw_ctx *hctx)
 	return data.has_rq;
 }
 
+static bool blk_mq_hctx_can_offline_hk_cpu(struct blk_mq_hw_ctx *hctx,
+					   unsigned int this_cpu)
+{
+	const struct cpumask *hk_mask = housekeeping_cpumask(HK_TYPE_IO_QUEUE);
+	int cpu, fallback_isolated_cpu = -1;
+
+	/*
+	 * If the CPU being offlined is not a housekeeping CPU,
+	 * offlining it will not strand isolated CPUs. Allow it.
+	 */
+	if (!cpumask_test_cpu(this_cpu, hk_mask))
+		return true;
+	/*
+	 * Iterate over all online CPUs and manually check their mapping.
+	 * We cannot use hctx->cpumask here because blk_mq_map_swqueue()
+	 * intentionally strips isolated CPUs from it to prevent kworker
+	 * routing.
+	 */
+	for_each_online_cpu(cpu) {
+		struct blk_mq_hw_ctx *h;
+
+		if (cpu == this_cpu)
+			continue;
+
+		h = blk_mq_map_queue_type(hctx->queue, hctx->type, cpu);
+		if (h != hctx)
+			continue;
+
+		if (cpumask_test_cpu(cpu, hk_mask))
+			return true;
+
+		if (fallback_isolated_cpu == -1)
+			fallback_isolated_cpu = cpu;
+	}
+
+	if (fallback_isolated_cpu != -1) {
+		pr_warn("blk-mq: trying to offline hctx%d but online isolated CPU %d is still mapped to it\n",
+			hctx->queue_num, fallback_isolated_cpu);
+		return false;
+	}
+
+	return true;
+}
+
 static bool blk_mq_hctx_has_online_cpu(struct blk_mq_hw_ctx *hctx,
 		unsigned int this_cpu)
 {
@@ -3770,6 +3814,11 @@ static int blk_mq_hctx_notify_offline(unsigned int cpu, struct hlist_node *node)
 	struct blk_mq_hw_ctx *hctx = hlist_entry_safe(node,
 			struct blk_mq_hw_ctx, cpuhp_online);
 	int ret = 0;
+
+	if (housekeeping_enabled(HK_TYPE_IO_QUEUE)) {
+		if (!blk_mq_hctx_can_offline_hk_cpu(hctx, cpu))
+			return -EINVAL;
+	}
 
 	if (!hctx->nr_ctx || blk_mq_hctx_has_online_cpu(hctx, cpu))
 		return 0;
