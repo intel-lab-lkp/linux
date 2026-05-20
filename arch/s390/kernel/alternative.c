@@ -28,6 +28,7 @@ struct alt_debug {
 	unsigned long facilities[MAX_FACILITY_BIT / BITS_PER_LONG];
 	unsigned long mfeatures[MAX_MFEATURE_BIT / BITS_PER_LONG];
 	int spec;
+	int percpu;
 };
 
 static struct alt_debug __bootdata_preserved(alt_debug);
@@ -48,8 +49,18 @@ static void alternative_dump(u8 *old, u8 *new, unsigned int len, unsigned int ty
 	a_debug("[%d/%3d] %016lx: %s -> %s\n", type, data, kptr, oinsn, ninsn);
 }
 
+struct insn_siy {
+	u64	opc1 : 8;
+	u64	i2   : 8;
+	u64	b1   : 4;
+	u64	dl1  : 12;
+	u64	dh1  : 8;
+	u64	opc2 : 8;
+} __packed;
+
 void __apply_alternatives(struct alt_instr *start, struct alt_instr *end, unsigned int ctx)
 {
+	struct insn_siy insn_siy;
 	struct alt_debug *d;
 	struct alt_instr *a;
 	bool debug, replace;
@@ -63,6 +74,8 @@ void __apply_alternatives(struct alt_instr *start, struct alt_instr *end, unsign
 	for (a = start; a < end; a++) {
 		if (!(a->ctx & ctx))
 			continue;
+		old = (u8 *)&a->instr_offset + a->instr_offset;
+		new = (u8 *)&a->repl_offset + a->repl_offset;
 		switch (a->type) {
 		case ALT_TYPE_FACILITY:
 			replace = test_facility(a->data);
@@ -76,14 +89,22 @@ void __apply_alternatives(struct alt_instr *start, struct alt_instr *end, unsign
 			replace = nobp_enabled();
 			debug = d->spec;
 			break;
+		case ALT_TYPE_PERCPU:
+			replace = true;
+			insn_siy = *(struct insn_siy *)old;
+			if (test_machine_feature(MFEATURE_LOWCORE))
+				insn_siy = *(struct insn_siy *)new;
+			insn_siy.i2 = insn_siy.b1;
+			insn_siy.b1 = 0;
+			new = (u8 *)&insn_siy;
+			debug = d->percpu;
+			break;
 		default:
 			replace = false;
 			debug = false;
 		}
 		if (!replace)
 			continue;
-		old = (u8 *)&a->instr_offset + a->instr_offset;
-		new = (u8 *)&a->repl_offset + a->repl_offset;
 		if (debug)
 			alternative_dump(old, new, a->instrlen, a->type, a->data);
 		s390_kernel_write(old, new, a->instrlen);
