@@ -1090,7 +1090,7 @@ static inline void set_buddy_order(struct page *page, unsigned int order)
  * - Set when Phase 0/1 restore or acquire whole pageblocks.
  * - Propagated to split remainders in pcp_rmqueue_smallest().
  * - Set on freed pages from owned blocks routed to the owner PCP.
- * - NOT set for Phase 2/3 fragments or zone-owned frees.
+ * - NOT set for Phase 3 fragments or zone-owned frees.
  * - The merge pass in free_pcppages_bulk() only processes
  *   PagePCPBuddy pages, ensuring it never touches pages on
  *   another CPU's PCP list.
@@ -3871,15 +3871,15 @@ __rmqueue(struct zone *zone, unsigned int order, int migratetype,
  * under a single hold of the lock, for efficiency.  Add them to the
  * freelist of @pcp.
  *
- * When @pcp is non-NULL and @count > 1 (normal pageset), uses a four-phase
+ * When @pcp is non-NULL and @count > 1 (normal pageset), uses a multi-phase
  * approach:
- *   Phase 0: Recover previously owned, partially drained blocks.
- *   Phase 1: Acquire whole pageblocks, claim ownership, set PagePCPBuddy.
- *            These pages are eligible for PCP-level buddy merging.
- *   Phase 2: Grab sub-pageblock fragments of the same migratetype.
- *   Phase 3: Fall back to __rmqueue() with migratetype fallback.
- *   Phase 2/3 pages are cached for batching only -- no ownership claim,
- *   no PagePCPBuddy, no PCP-level merging.
+ *   Phase 0:   Recover previously owned, partially drained blocks.
+ *   Phase 1:   Acquire whole pageblocks, claim ownership, set PagePCPBuddy.
+ *              These pages are eligible for PCP-level buddy merging.
+ *   Phase 2:   Adopt partial pageblocks from tainted SPBs (non-movable only).
+ *              Claims ownership so Pass 0 can recover buddy entries later.
+ *   Phase 3:   Fall back to __rmqueue() with migratetype fallback.
+ *              No ownership claim, no PagePCPBuddy, no PCP-level merging.
  *
  * When @pcp is NULL or @count <= 1 (boot pageset), acquires individual
  * pages of the requested order directly.
@@ -3897,7 +3897,7 @@ static bool rmqueue_bulk(struct zone *zone, unsigned int order,
 	int cpu = smp_processor_id();
 	unsigned long refilled = 0;
 	unsigned long flags;
-	int o;
+	unsigned int o;
 
 	if (unlikely(alloc_flags & ALLOC_TRYLOCK)) {
 		if (!spin_trylock_irqsave(&zone->lock, flags))
@@ -4007,11 +4007,114 @@ static bool rmqueue_bulk(struct zone *zone, unsigned int order,
 		goto out;
 
 	/*
-	 * Phase 2 was removed: it swept zone free lists for sub-pageblock
-	 * fragments, which are always empty when superpageblocks are enabled.
-	 * Phase 3's __rmqueue() -> __rmqueue_smallest() properly searches
-	 * per-superpageblock free lists at all orders.
+	 * Phase 2: Adopt partial pageblocks from tainted SPBs.
+	 *
+	 * Phase 1 only grabs whole free pageblocks. When a tainted SPB
+	 * has partially-used pageblocks with free sub-pageblock buddy
+	 * entries, Phase 1 can't use them. Phase 3 can find them via
+	 * __rmqueue_smallest, but without ownership or PCPBuddy marking,
+	 * so they fragment further on drain.
+	 *
+	 * This phase bridges the gap: find a sub-pageblock free entry
+	 * in a tainted SPB and claim ownership of its pageblock. Pass 0
+	 * will pick up remaining buddy entries on subsequent refills.
+	 *
+	 * Only for unmovable/reclaimable -- movable should use clean SPBs.
 	 */
+	if (migratetype != MIGRATE_MOVABLE &&
+	    !is_migrate_cma(migratetype)) {
+		enum sb_fullness full;
+
+		for (full = SB_FULL; full < __NR_SB_FULLNESS; full++) {
+			struct superpageblock *sb;
+
+			list_for_each_entry(sb,
+				&zone->spb_lists[SB_TAINTED][full], list) {
+				struct page *page;
+				int found_order = -1;
+				bool claim_pb;
+
+				if (sb->nr_free_pages < pageblock_nr_pages / 4)
+					continue;
+
+				/*
+				 * Find a sub-pageblock free entry for our
+				 * migratetype, starting from the largest order.
+				 *
+				 * Use a post-decrement loop so the unsigned
+				 * counter cannot underflow when @order is 0;
+				 * the previous signed counter relied on the
+				 * mixed signed/unsigned comparison wrapping
+				 * to a huge value, which UBSAN flagged and
+				 * which let the loop walk free_area[-1].
+				 */
+				for (o = pageblock_order; o-- > order; ) {
+					struct free_area *area;
+
+					area = &sb->free_area[o];
+					page = get_page_from_free_area(
+						area, migratetype);
+					if (page) {
+						found_order = o;
+						break;
+					}
+				}
+				if (found_order < 0)
+					continue;
+
+				/*
+				 * Found a free fragment in a tainted SPB. Take
+				 * it from the buddy.
+				 *
+				 * If the source pageblock is unowned, claim it:
+				 * mark our pages PagePCPBuddy and register the
+				 * block on owned_blocks so Pass 0 can recover
+				 * remaining fragments on future refills.
+				 *
+				 * If the source pageblock is already owned by
+				 * some CPU (us or another), take the page as a
+				 * plain non-PCPBuddy fragment -- the same way
+				 * Phase 3 / __rmqueue_smallest would. Setting
+				 * PagePCPBuddy here would let two CPUs hold
+				 * PCPBuddy pages from the same pageblock, and
+				 * the PCP merge pass could then corrupt the
+				 * other CPU's PCP list.
+				 *
+				 * Set PB_has_<migratetype> either way (bypasses
+				 * page_del_and_expand which normally does the
+				 * PB_has tracking); idempotent if already set.
+				 */
+				pbd = pfn_to_pageblock(page,
+						       page_to_pfn(page));
+				claim_pb = (pbd->cpu == 0);
+
+				del_page_from_free_list(page, zone,
+							found_order,
+							migratetype);
+				__spb_set_has_type(page, migratetype);
+				if (claim_pb) {
+					set_pcpblock_owner(page, cpu);
+					__SetPagePCPBuddy(page);
+				}
+				pcp_enqueue_tail(pcp, page, migratetype,
+						 found_order);
+				refilled += 1 << found_order;
+
+				/*
+				 * Register for Phase 0 recovery so future
+				 * drains from this pageblock can be swept
+				 * back efficiently. Only meaningful when we
+				 * actually claimed ownership above.
+				 */
+				if (claim_pb && list_empty(&pbd->cpu_node))
+					list_add(&pbd->cpu_node,
+						 &pcp->owned_blocks);
+
+				if (refilled >= pages_needed)
+					goto out;
+			}
+		}
+	}
 
 	/*
 	 * Phase 3: Last resort. Use __rmqueue() which does
