@@ -5469,6 +5469,7 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 	resource_size_t ioaddr;
 	struct arm_smmu_device *smmu;
 	struct device *dev = &pdev->dev;
+	char name[32];
 
 	smmu = devm_kzalloc(dev, sizeof(*smmu), GFP_KERNEL);
 	if (!smmu)
@@ -5496,6 +5497,7 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 	ioaddr = res->start;
+	snprintf(name, sizeof(name), "smmu3.%pa", &ioaddr);
 
 	/*
 	 * Don't map the IMPLEMENTATION DEFINED regions, since they may contain
@@ -5548,6 +5550,12 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 	/* Check for RMRs and install bypass STEs if any */
 	arm_smmu_rmr_install_bypass_ste(smmu);
 
+#ifdef CONFIG_ARM_SMMU_V3_DEBUGFS
+	ret = arm_smmu_debugfs_setup(smmu, name);
+	if (ret)
+		dev_warn(dev, "Failed to create debugfs!\n");
+#endif
+
 	/* Reset the device */
 	ret = arm_smmu_device_reset(smmu);
 	if (ret)
@@ -5555,7 +5563,7 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 
 	/* And we're up. Go go go! */
 	ret = iommu_device_sysfs_add(&smmu->iommu, dev, NULL,
-				     "smmu3.%pa", &ioaddr);
+				     "%s", name);
 	if (ret)
 		goto err_disable;
 
@@ -5570,6 +5578,9 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 err_free_sysfs:
 	iommu_device_sysfs_remove(&smmu->iommu);
 err_disable:
+#ifdef CONFIG_ARM_SMMU_V3_DEBUGFS
+	arm_smmu_debugfs_remove(smmu);
+#endif
 	arm_smmu_device_disable(smmu);
 err_free_iopf:
 	iopf_queue_free(smmu->evtq.iopf);
@@ -5582,6 +5593,9 @@ static void arm_smmu_device_remove(struct platform_device *pdev)
 
 	iommu_device_unregister(&smmu->iommu);
 	iommu_device_sysfs_remove(&smmu->iommu);
+#ifdef CONFIG_ARM_SMMU_V3_DEBUGFS
+	arm_smmu_debugfs_remove(smmu);
+#endif
 	arm_smmu_device_disable(smmu);
 	iopf_queue_free(smmu->evtq.iopf);
 	ida_destroy(&smmu->vmid_map);

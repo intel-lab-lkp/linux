@@ -93,6 +93,17 @@ config IOMMU_DEBUGFS
 	  debug/iommu directory, and then populate a subdirectory with
 	  entries as required.
 
+config ARM_SMMU_V3_DEBUGFS
+	bool "ARM SMMUv3 DebugFS support"
+	depends on ARM_SMMU_V3 && IOMMU_DEBUGFS
+	help
+	  Expose ARM SMMUv3 internal state via debugfs for debugging and
+	  diagnostics. This creates /sys/kernel/debug/iommu/arm_smmu_v3/
+	  with detailed information about SMMU configuration, stream tables,
+	  and context descriptors.
+
+	  Say N unless you are debugging SMMU issues.
+
 choice
 	prompt "IOMMU default domain type"
 	depends on IOMMU_API

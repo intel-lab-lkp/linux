@@ -820,6 +820,15 @@ struct arm_smmu_impl_ops {
 			  const struct iommu_user_data *user_data);
 };
 
+#ifdef CONFIG_ARM_SMMU_V3_DEBUGFS
+struct arm_smmu_debugfs {
+	struct dentry *smmu_dir;
+};
+
+int arm_smmu_debugfs_setup(struct arm_smmu_device *smmu, const char *name);
+void arm_smmu_debugfs_remove(struct arm_smmu_device *smmu);
+#endif
+
 /* An SMMUv3 instance */
 struct arm_smmu_device {
 	struct device			*dev;
@@ -890,6 +899,10 @@ struct arm_smmu_device {
 
 	struct rb_root			streams;
 	struct mutex			streams_mutex;
+
+#ifdef CONFIG_ARM_SMMU_V3_DEBUGFS
+	struct arm_smmu_debugfs		*debugfs;
+#endif
 };
 
 struct arm_smmu_stream {
