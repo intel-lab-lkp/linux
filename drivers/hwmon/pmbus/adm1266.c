@@ -359,6 +359,7 @@ static int adm1266_firmware_revision_read(struct seq_file *s, void *pdata)
 	u8 buf[I2C_SMBUS_BLOCK_MAX];
 	int ret;
 
+	guard(pmbus_lock)(client);
 	ret = i2c_smbus_read_block_data(client, ADM1266_IC_DEVICE_REV, buf);
 	if (ret < 0)
 		return ret;
