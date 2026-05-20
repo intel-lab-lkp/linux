@@ -1296,6 +1296,36 @@ static inline struct superpageblock *pfn_to_superpageblock(struct zone *zone,
 	return &zone->superpageblocks[idx];
 }
 
+/**
+ * spb_get_category - Determine if a superpageblock is clean or tainted
+ * @sb: superpageblock to classify
+ *
+ * A superpageblock is clean if it contains only free and movable pageblocks.
+ * Any unmovable, reclaimable, or reserved pageblocks make it tainted.
+ */
+static inline enum sb_category spb_get_category(struct superpageblock *sb)
+{
+	if (sb->nr_unmovable || sb->nr_reclaimable || sb->nr_reserved)
+		return SB_TAINTED;
+	return SB_CLEAN;
+}
+
+/*
+ * Minimum free-pageblock reserve a tainted SPB tries to maintain so the
+ * allocator can satisfy non-movable allocations without tainting fresh
+ * clean SPBs.  Used by spb_tainted_reserve() as a floor for the per-SPB
+ * reserve; the page allocator and compaction both consult
+ * spb_tainted_reserve() to decide when a tainted SPB has so few free
+ * pageblocks left that movable allocations should look elsewhere.
+ * Scale with SPB size: reserve ~3% of pageblocks (minimum 4).
+ */
+#define SPB_TAINTED_RESERVE_MIN	4
+
+static inline u16 spb_tainted_reserve(const struct superpageblock *sb)
+{
+	return max_t(u16, SPB_TAINTED_RESERVE_MIN, sb->total_pageblocks / 32);
+}
+
 enum pgdat_flags {
 	PGDAT_WRITEBACK,		/* reclaim scanning has recently found
 					 * many pages under writeback

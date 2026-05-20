@@ -673,22 +673,8 @@ void superpageblock_set_has_movable(struct zone *zone, struct page *page)
 }
 #endif /* CONFIG_COMPACTION */
 
-/**
- * spb_get_category - Determine if a superpageblock is clean or tainted
- * @sb: superpageblock to classify
- *
- * A superpageblock is clean if it contains only free and movable pageblocks.
- * Any unmovable, reclaimable, or reserved pageblocks make it tainted.
- * Reserved pageblocks (memory holes) taint the superpageblock because it
- * can never be used for 1GB hugepages, making it a better home for
- * unmovable/reclaimable allocations.
- */
-static inline enum sb_category spb_get_category(struct superpageblock *sb)
-{
-	if (sb->nr_unmovable || sb->nr_reclaimable || sb->nr_reserved)
-		return SB_TAINTED;
-	return SB_CLEAN;
-}
+/* spb_get_category() lives in <linux/mmzone.h> for shared use with
+ * mm/compaction.c. */
 
 /**
  * sb_get_fullness - Determine the fullness bucket for a superpageblock
@@ -2700,13 +2686,10 @@ static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags
  *
  * Scale with SPB size: reserve ~3% of pageblocks (minimum 4).
  * For a 512-pageblock SPB this gives 16 reserved pageblocks.
+ *
+ * SPB_TAINTED_RESERVE_MIN and spb_tainted_reserve() live in
+ * <linux/mmzone.h> for shared use with mm/compaction.c.
  */
-#define SPB_TAINTED_RESERVE_MIN	4
-
-static inline u16 spb_tainted_reserve(const struct superpageblock *sb)
-{
-	return max_t(u16, SPB_TAINTED_RESERVE_MIN, sb->total_pageblocks / 32);
-}
 
 /*
  * spb_tainted_can_serve_smaller - could a smaller-order @migratetype alloc
