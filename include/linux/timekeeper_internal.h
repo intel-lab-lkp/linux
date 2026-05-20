@@ -84,8 +84,6 @@ struct tk_read_base {
  * @cycle_interval:		Number of clock cycles in one NTP interval
  * @xtime_interval:		Number of clock shifted nano seconds in one NTP
  *				interval.
- * @xtime_remainder:		Shifted nano seconds left over when rounding
- *				@cycle_interval
  * @raw_interval:		Shifted raw nano seconds accumulated per NTP interval.
  * @next_leap_ktime:		CLOCK_MONOTONIC time value of a pending leap-second
  * @ntp_tick:			The ntp_tick_length() value currently being
@@ -178,7 +176,6 @@ struct timekeeper {
 
 	u64			cycle_interval;
 	u64			xtime_interval;
-	s64			xtime_remainder;
 	u64			raw_interval;
 
 	ktime_t			next_leap_ktime;

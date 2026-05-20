@@ -360,7 +360,6 @@ static void tk_setup_internals(struct timekeeper *tk, struct clocksource *clock)
 
 	/* Go back from cycles -> shifted ns */
 	tk->xtime_interval = interval * clock->mult;
-	tk->xtime_remainder = ntpinterval - tk->xtime_interval;
 	tk->raw_interval = interval * clock->mult;
 
 	 /* if changing clocks, convert xtime_nsec shift units */
@@ -2337,8 +2336,8 @@ static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 		mult = tk->tkr_mono.mult - tk->ntp_err_mult;
 	} else {
 		tk->ntp_tick = ntp_tl;
-		mult = div64_u64((tk->ntp_tick >> tk->ntp_error_shift) -
-				 tk->xtime_remainder, tk->cycle_interval);
+		mult = div64_u64(tk->ntp_tick >> tk->ntp_error_shift,
+				 tk->cycle_interval);
 	}
 
 	/*
@@ -2463,8 +2462,7 @@ static u64 logarithmic_accumulation(struct timekeeper *tk, u64 offset,
 
 	/* Accumulate error between NTP and clock interval */
 	tk->ntp_error += tk->ntp_tick << shift;
-	tk->ntp_error -= (tk->xtime_interval + tk->xtime_remainder) <<
-						(tk->ntp_error_shift + shift);
+	tk->ntp_error -= tk->xtime_interval << (tk->ntp_error_shift + shift);
 
 	return offset;
 }
