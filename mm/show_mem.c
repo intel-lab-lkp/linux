@@ -367,16 +367,31 @@ static void show_free_areas(unsigned int filter, nodemask_t *nodemask, int max_z
 
 		spin_lock_irqsave(&zone->lock, flags);
 		for (order = 0; order < NR_PAGE_ORDERS; order++) {
-			struct free_area *area = &zone->free_area[order];
+			unsigned long sb_idx;
+			unsigned long nr_lists = zone->nr_superpageblocks ? : 1;
 			int type;
 
-			nr[order] = area->nr_free;
+			nr[order] = zone->free_area[order].nr_free;
 			total += nr[order] << order;
 
+			/*
+			 * Collect the migratetypes present at this order. After
+			 * the SPB rework, free pages live on per-superpageblock
+			 * free lists, so check each SPB. Stop early once all
+			 * migratetypes have been observed.
+			 */
 			types[order] = 0;
-			for (type = 0; type < MIGRATE_TYPES; type++) {
-				if (!free_area_empty(area, type))
-					types[order] |= 1 << type;
+			for (sb_idx = 0; sb_idx < nr_lists; sb_idx++) {
+				struct free_area *area = zone->nr_superpageblocks ?
+					&zone->superpageblocks[sb_idx].free_area[order] :
+					&zone->free_area[order];
+
+				for (type = 0; type < MIGRATE_TYPES; type++) {
+					if (!free_area_empty(area, type))
+						types[order] |= 1 << type;
+				}
+				if (types[order] == (1 << MIGRATE_TYPES) - 1)
+					break;
 			}
 		}
 		spin_unlock_irqrestore(&zone->lock, flags);
