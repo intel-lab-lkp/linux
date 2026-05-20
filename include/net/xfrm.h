@@ -162,6 +162,10 @@ struct xfrm_dev_offload {
 	 */
 	struct net_device	*real_dev;
 	unsigned long		offload_handle;
+	/* Private state owned by dev in this structure when that device is an
+	 * upper device. Lower drivers must not use this directly.
+	 */
+	void __rcu		*upper_priv;
 	u8			dir : 2;
 	u8			type : 2;
 	u8			flags : 2;
@@ -1700,6 +1704,37 @@ struct xfrm_state *xfrm_state_lookup_byspi(struct net *net, __be32 spi,
 int xfrm_state_check_expire(struct xfrm_state *x);
 void xfrm_state_update_stats(struct net *net);
 #ifdef CONFIG_XFRM_OFFLOAD
+/*
+ * Return the hardware offload handle lower_dev should use for x. States
+ * installed directly on lower_dev use xso.offload_handle. States owned by an
+ * upper device are resolved through the owner's xdo_dev_state_lower_handle().
+ * Bonding uses that callback for replicated XFRM states because it installs the
+ * state on each slave and keeps the per-slave hardware handles internally.
+ */
+static inline unsigned long
+xfrm_dev_state_lower_handle(struct xfrm_state *x, struct net_device *lower_dev)
+{
+	struct xfrm_dev_offload *xdo = &x->xso;
+	struct net_device *real_dev = READ_ONCE(xdo->real_dev);
+	struct net_device *dev = READ_ONCE(xdo->dev);
+	unsigned long offload_handle = READ_ONCE(xdo->offload_handle);
+
+	if (!dev || !lower_dev)
+		return 0;
+
+	if (dev == lower_dev)
+		return offload_handle;
+
+	if (dev->xfrmdev_ops && dev->xfrmdev_ops->xdo_dev_state_lower_handle)
+		return dev->xfrmdev_ops->xdo_dev_state_lower_handle(dev, x,
+								    lower_dev);
+
+	if (real_dev == lower_dev)
+		return offload_handle;
+
+	return 0;
+}
+
 static inline void xfrm_dev_state_update_stats(struct xfrm_state *x)
 {
 	struct xfrm_dev_offload *xdo = &x->xso;
@@ -1711,6 +1746,12 @@ static inline void xfrm_dev_state_update_stats(struct xfrm_state *x)
 
 }
 #else
+static inline unsigned long
+xfrm_dev_state_lower_handle(struct xfrm_state *x, struct net_device *lower_dev)
+{
+	return 0;
+}
+
 static inline void xfrm_dev_state_update_stats(struct xfrm_state *x) {}
 #endif
 void xfrm_state_insert(struct xfrm_state *x);
@@ -2089,15 +2130,18 @@ static inline void xfrm_dev_state_advance_esn(struct xfrm_state *x)
 static inline bool xfrm_dst_offload_ok(struct dst_entry *dst)
 {
 	struct xfrm_state *x = dst->xfrm;
+	bool has_offload_state;
 	struct xfrm_dst *xdst;
 
 	if (!x || !x->type_offload)
 		return false;
 
 	xdst = (struct xfrm_dst *) dst;
-	if (!x->xso.offload_handle && !xdst->child->xfrm)
+	has_offload_state = x->xso.offload_handle ||
+			    rcu_access_pointer(x->xso.upper_priv);
+	if (!has_offload_state && !xdst->child->xfrm)
 		return true;
-	if (x->xso.offload_handle && (x->xso.dev == xfrm_dst_path(dst)->dev) &&
+	if (has_offload_state && (x->xso.dev == xfrm_dst_path(dst)->dev) &&
 	    !xdst->child->xfrm)
 		return true;
 

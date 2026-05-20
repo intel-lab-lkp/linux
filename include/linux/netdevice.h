@@ -1033,6 +1033,16 @@ struct netdev_bpf {
 #define XDP_WAKEUP_TX (1 << 1)
 
 #ifdef CONFIG_XFRM_OFFLOAD
+/*
+ * xfrmdev_ops.flags values.
+ *
+ * XFRMDEV_OPS_F_LOWER_HANDLE marks a lower driver whose datapath gets XFRM
+ * hardware handles with xfrm_dev_state_lower_handle(). This is required when
+ * the XFRM state is owned by an upper device because xso.offload_handle may
+ * not contain the handle for the current lower device.
+ */
+#define XFRMDEV_OPS_F_LOWER_HANDLE	BIT(0)
+
 struct xfrmdev_ops {
 	int	(*xdo_dev_state_add)(struct net_device *dev,
 				     struct xfrm_state *x,
@@ -1048,6 +1058,23 @@ struct xfrmdev_ops {
 	int	(*xdo_dev_policy_add) (struct xfrm_policy *x, struct netlink_ext_ack *extack);
 	void	(*xdo_dev_policy_delete) (struct xfrm_policy *x);
 	void	(*xdo_dev_policy_free) (struct xfrm_policy *x);
+	/*
+	 * Resolve the offload handle for lower_dev when this upper device
+	 * owns the XFRM state. This belongs in xfrmdev_ops because the
+	 * resolver is an XFRM offload operation of the device that owns the
+	 * state. Keeping the dispatch here avoids a bonding-specific dependency
+	 * in the XFRM helper.
+	 *
+	 * Upper devices like bonding may implement this callback when they
+	 * keep the lower-device handle mapping. Lower devices must leave it
+	 * NULL because they do not own that map. Lower drivers advertise
+	 * that their datapath calls the resolver with
+	 * XFRMDEV_OPS_F_LOWER_HANDLE instead.
+	 */
+	unsigned long (*xdo_dev_state_lower_handle)(struct net_device *dev,
+						    struct xfrm_state *x,
+						    struct net_device *lower_dev);
+	u32	flags;
 };
 #endif
 
