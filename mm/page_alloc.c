@@ -3073,6 +3073,23 @@ static int fallbacks[MIGRATE_PCPTYPES][MIGRATE_PCPTYPES - 1] = {
 	[MIGRATE_RECLAIMABLE] = { MIGRATE_UNMOVABLE,   MIGRATE_MOVABLE   },
 };
 
+/*
+ * UNMOVABLE and RECLAIMABLE allocations should not share the same
+ * pageblock. Their free pages are interchangeable on the buddy free
+ * lists (alike_pages == 0 between them), so once a PB holds both
+ * types the buddy can no longer tell them apart and any sticky
+ * UNMOVABLE pinhole prevents the RECLAIMABLE pages from coalescing
+ * into useful higher-order chunks when they drain back. MOVABLE may
+ * mix with either, since MOVABLE pages can be migrated out.
+ */
+static inline bool noncompatible_cross_type(int start_type, int fallback_type)
+{
+	return (start_type == MIGRATE_UNMOVABLE &&
+		fallback_type == MIGRATE_RECLAIMABLE) ||
+	       (start_type == MIGRATE_RECLAIMABLE &&
+		fallback_type == MIGRATE_UNMOVABLE);
+}
+
 #ifdef CONFIG_CMA
 static __always_inline struct page *__rmqueue_cma_fallback(struct zone *zone,
 					unsigned int order)
@@ -3450,11 +3467,10 @@ try_to_claim_block(struct zone *zone, struct page *page,
 		   bool from_tainted_spb)
 {
 	int free_pages, movable_pages, alike_pages;
-	unsigned long start_pfn;
 #ifdef CONFIG_COMPACTION
-	struct page *start_page;
 	struct superpageblock *sb;
 #endif
+	unsigned long start_pfn;
 
 	/*
 	 * Don't steal from pageblocks that are isolated for
@@ -3512,32 +3528,48 @@ try_to_claim_block(struct zone *zone, struct page *page,
 	 * allocations. Inside a tainted SPB the protection is unnecessary:
 	 * fragmentation has already been accepted at the SPB level, and
 	 * relabeling is much cheaper than tainting a fresh clean SPB.
+	 *
+	 * UNMOVABLE<->RECLAIMABLE cross-type claims override these rules:
+	 * once mixed, sticky pinholes of one type prevent the other from
+	 * coalescing into useful higher-order free chunks even after drain.
+	 * Only relabel a fully-free PB in that case, regardless of whether
+	 * the SPB is tainted.
 	 */
-	if (from_tainted_spb ||
-	    free_pages + alike_pages >= (1 << (pageblock_order-1)) ||
-			page_group_by_mobility_disabled) {
-		__move_freepages_block(zone, start_pfn, block_type, start_type);
-		set_pageblock_migratetype(pfn_to_page(start_pfn), start_type);
-#ifdef CONFIG_COMPACTION
-		/*
-		 * Track actual page contents in pageblock flags and
-		 * update superpageblock counters so the SPB moves to
-		 * the correct fullness list for steering.
-		 */
-		start_page = pfn_to_page(start_pfn);
-		__spb_set_has_type(start_page, start_type);
-		if (block_type != start_type)
-			__spb_set_has_type(start_page, block_type);
-
-		sb = pfn_to_superpageblock(zone, start_pfn);
-		if (sb)
-			spb_update_list(sb);
-
-#endif
-		return __rmqueue_smallest(zone, order, start_type);
+	if (noncompatible_cross_type(start_type, block_type)) {
+		if (free_pages != pageblock_nr_pages)
+			return NULL;
+	} else if (!from_tainted_spb &&
+		   free_pages + alike_pages < (1 << (pageblock_order-1)) &&
+		   !page_group_by_mobility_disabled) {
+		return NULL;
 	}
 
-	return NULL;
+	__move_freepages_block(zone, start_pfn, block_type, start_type);
+	set_pageblock_migratetype(pfn_to_page(start_pfn), start_type);
+#ifdef CONFIG_COMPACTION
+	/*
+	 * Track actual page contents in pageblock flags and update
+	 * superpageblock counters so the SPB moves to the correct
+	 * fullness list for steering.
+	 *
+	 * For cross-type UNMOVABLE<->RECLAIMABLE relabel (which by the
+	 * predicate above only fires on a fully-free PB), the inherited
+	 * PB_has_<block_type> bit is stale -- there are no in-use pages
+	 * of that type. Clear it so the resulting PB is unmixed.
+	 */
+	__spb_set_has_type(pfn_to_page(start_pfn), start_type);
+	if (block_type != start_type) {
+		if (noncompatible_cross_type(start_type, block_type))
+			__spb_clear_has_type(pfn_to_page(start_pfn), block_type);
+		else
+			__spb_set_has_type(pfn_to_page(start_pfn), block_type);
+	}
+
+	sb = pfn_to_superpageblock(zone, start_pfn);
+	if (sb)
+		spb_update_list(sb);
+#endif
+	return __rmqueue_smallest(zone, order, start_type);
 }
 
 /*
@@ -3561,6 +3593,13 @@ try_to_claim_block(struct zone *zone, struct page *page,
 #define SB_SEARCH_EMPTY		(1 << 1)
 #define SB_SEARCH_FALLBACK	(1 << 2)
 #define SB_SEARCH_ALL		(SB_SEARCH_PREFERRED | SB_SEARCH_EMPTY | SB_SEARCH_FALLBACK)
+/*
+ * Skip UNMOVABLE<->RECLAIMABLE cross-type fallback. Used by the steal
+ * path to prevent landing single foreign-type pages into a PB labeled
+ * with the other non-movable type -- a steal does not relabel the PB
+ * so cross-type stealing creates permanent mixing.
+ */
+#define SB_SKIP_CROSS_TYPE	(1 << 3)
 
 static struct page *
 __rmqueue_sb_find_fallback(struct zone *zone, unsigned int order,
@@ -3597,6 +3636,10 @@ __rmqueue_sb_find_fallback(struct zone *zone, unsigned int order,
 					int fmt = fallbacks[start_migratetype][i];
 					struct page *page;
 
+					if ((search_cats & SB_SKIP_CROSS_TYPE) &&
+					    noncompatible_cross_type(start_migratetype, fmt))
+						continue;
+
 					page = get_page_from_free_area(area,
 								       fmt);
 					if (page) {
@@ -3617,6 +3660,10 @@ __rmqueue_sb_find_fallback(struct zone *zone, unsigned int order,
 			for (i = 0; i < MIGRATE_PCPTYPES - 1; i++) {
 				int fmt = fallbacks[start_migratetype][i];
 				struct page *page;
+
+				if ((search_cats & SB_SKIP_CROSS_TYPE) &&
+				    noncompatible_cross_type(start_migratetype, fmt))
+					continue;
 
 				page = get_page_from_free_area(area,
 							       fmt);
@@ -3645,6 +3692,10 @@ __rmqueue_sb_find_fallback(struct zone *zone, unsigned int order,
 				for (i = 0; i < MIGRATE_PCPTYPES - 1; i++) {
 					int fmt = fallbacks[start_migratetype][i];
 					struct page *page;
+
+					if ((search_cats & SB_SKIP_CROSS_TYPE) &&
+					    noncompatible_cross_type(start_migratetype, fmt))
+						continue;
 
 					page = get_page_from_free_area(area,
 								       fmt);
@@ -3782,11 +3833,18 @@ __rmqueue_steal(struct zone *zone, int order, int start_migratetype,
 	/*
 	 * When ALLOC_NOFRAG_TAINTED_OK is set, only steal from tainted
 	 * SPBs to avoid tainting clean ones. Otherwise search all categories.
+	 *
+	 * Always skip UNMOVABLE<->RECLAIMABLE cross-type fallback. The steal
+	 * path takes a single page without relabeling its PB, so a cross-type
+	 * steal would land an UNMOVABLE page in a RECLAIMABLE-labeled PB
+	 * (or vice versa) and create permanent mixing. Falling through to
+	 * MIGRATE_MOVABLE (the second fallback) is preferable.
 	 */
 	if (alloc_flags & ALLOC_NOFRAG_TAINTED_OK)
 		search_cats = SB_SEARCH_PREFERRED;
 	else
 		search_cats = SB_SEARCH_PREFERRED | SB_SEARCH_FALLBACK;
+	search_cats |= SB_SKIP_CROSS_TYPE;
 
 	/*
 	 * Search per-superpageblock free lists for fallback migratetypes.
