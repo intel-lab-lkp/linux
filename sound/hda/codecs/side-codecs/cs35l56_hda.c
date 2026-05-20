@@ -1025,7 +1025,7 @@ static int cs35l56_hda_read_acpi(struct cs35l56_hda *cs35l56, int hid, int id)
 	u32 values[HDA_MAX_COMPONENTS];
 	char hid_string[8];
 	struct acpi_device *adev;
-	const char *property, *sub;
+	const char *property;
 	int i, ret;
 
 	/*
@@ -1047,7 +1047,9 @@ static int cs35l56_hda_read_acpi(struct cs35l56_hda *cs35l56, int hid, int id)
 	/* Initialize things that could be overwritten by a fixup */
 	cs35l56->index = -1;
 
-	sub = acpi_get_subsystem_id(ACPI_HANDLE(cs35l56->base.dev));
+	const char *sub __free(kfree) = acpi_get_subsystem_id(ACPI_HANDLE(cs35l56->base.dev));
+	const char *system_name __free(kfree) = NULL;
+
 	ret = cs35l56_hda_apply_platform_fixups(cs35l56, sub, &id);
 	if (ret)
 		return ret;
@@ -1095,11 +1097,10 @@ static int cs35l56_hda_read_acpi(struct cs35l56_hda *cs35l56, int hid, int id)
 		ret = cirrus_scodec_get_speaker_id(cs35l56->base.dev, cs35l56->index,
 						   cs35l56->num_amps, -1);
 		if (ret == -ENOENT) {
-			cs35l56->system_name = sub;
+			system_name = no_free_ptr(sub);
 		} else if (ret >= 0) {
-			cs35l56->system_name = kasprintf(GFP_KERNEL, "%s-spkid%d", sub, ret);
-			kfree(sub);
-			if (!cs35l56->system_name)
+			system_name = kasprintf(GFP_KERNEL, "%s-spkid%d", sub, ret);
+			if (!system_name)
 				return -ENOMEM;
 		} else {
 			return ret;
@@ -1118,12 +1119,14 @@ static int cs35l56_hda_read_acpi(struct cs35l56_hda *cs35l56, int hid, int id)
 		 * line and reset all the amps
 		 */
 		if (ret != -EBUSY)
-			return dev_err_probe(cs35l56->base.dev, ret, "Failed to get reset GPIO\n");
+			return dev_err_probe(cs35l56->base.dev, ret,
+					     "Failed to get reset GPIO\n");
 
 		dev_info(cs35l56->base.dev, "Reset GPIO busy, assume shared reset\n");
 		cs35l56->base.reset_gpio = NULL;
 	}
 
+	cs35l56->system_name = no_free_ptr(system_name);
 	return 0;
 
 err:
