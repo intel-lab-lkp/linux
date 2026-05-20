@@ -8,6 +8,7 @@
 #include <linux/slab.h>
 #include <linux/cpu.h>
 #include <linux/group_cpus.h>
+#include <linux/sched/isolation.h>
 
 static void default_calc_sets(struct irq_affinity *affd, unsigned int affvecs)
 {
@@ -25,8 +26,10 @@ static void default_calc_sets(struct irq_affinity *affd, unsigned int affvecs)
 struct irq_affinity_desc *
 irq_create_affinity_masks(unsigned int nvecs, struct irq_affinity *affd)
 {
-	unsigned int affvecs, curvec, usedvecs, i;
+	unsigned int affvecs, curvec, usedvecs, i, j;
 	struct irq_affinity_desc *masks = NULL;
+	const struct cpumask *hk_mask = housekeeping_cpumask(HK_TYPE_IO_QUEUE);
+	bool hk_enabled = housekeeping_enabled(HK_TYPE_IO_QUEUE);
 
 	/*
 	 * Determine the number of vectors which need interrupt affinities
@@ -70,19 +73,29 @@ irq_create_affinity_masks(unsigned int nvecs, struct irq_affinity *affd)
 	 */
 	for (i = 0, usedvecs = 0; i < affd->nr_sets; i++) {
 		unsigned int nr_masks, this_vecs = affd->set_size[i];
-		struct cpumask *result = group_cpus_evenly(this_vecs, &nr_masks);
+		struct cpumask *result;
+		const struct cpumask *mask;
 
+		if (hk_enabled)
+			mask = hk_mask;
+		else
+			mask = cpu_possible_mask;
+
+		result = group_mask_cpus_evenly(this_vecs, mask,
+						&nr_masks);
 		if (!result) {
 			kfree(masks);
 			return NULL;
 		}
-
-		for (int j = 0; j < nr_masks; j++)
+		for (j = 0; j < nr_masks; j++)
 			cpumask_copy(&masks[curvec + j].mask, &result[j]);
+		for (j = nr_masks; j < this_vecs; j++)
+			cpumask_copy(&masks[curvec + j].mask, mask);
+
 		kfree(result);
 
-		curvec += nr_masks;
-		usedvecs += nr_masks;
+		curvec += this_vecs;
+		usedvecs += this_vecs;
 	}
 
 	/* Fill out vectors at the end that don't need affinity */
@@ -115,10 +128,12 @@ unsigned int irq_calc_affinity_vectors(unsigned int minvec, unsigned int maxvec,
 	if (resv > minvec)
 		return 0;
 
-	if (affd->calc_sets)
+	if (housekeeping_enabled(HK_TYPE_IO_QUEUE))
+		set_vecs = cpumask_weight(housekeeping_cpumask(HK_TYPE_IO_QUEUE));
+	else if (affd->calc_sets)
 		set_vecs = maxvec - resv;
 	else
 		set_vecs = cpumask_weight(cpu_possible_mask);
 
-	return resv + min(set_vecs, maxvec - resv);
+	return max(minvec, resv + min(set_vecs, maxvec - resv));
 }
