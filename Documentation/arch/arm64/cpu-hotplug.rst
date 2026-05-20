@@ -47,8 +47,9 @@ ever have can be described at boot. There are no power-domain considerations
 as such devices are emulated.
 
 CPU Hotplug on virtual systems is supported. It is distinct from physical
-CPU Hotplug as all resources are described as ``present``, but CPUs may be
-marked as disabled by firmware. Only the CPU's online/offline behaviour is
+CPU Hotplug as all resources are described in the static configuration tables,
+but vCPUs that are not enabled at boot are not marked as ``present`` by the
+kernel until they are hotplugged. Only the CPU's online/offline behaviour is
 influenced by firmware. An example is where a virtual machine boots with a
 single CPU, and additional CPUs are added once a cloud orchestrator deploys
 the workload.
@@ -68,8 +69,10 @@ redistributors.
 
 CPUs described as ``online capable`` but not ``enabled`` can be set to enabled
 by the DSDT's Processor object's _STA method. On virtual systems the _STA method
-must always report the CPU as ``present``. Changes to the firmware policy can
-be notified to the OS via device-check or eject-request.
+must report the CPU as ``present`` when it is activated by the firmware.
+The kernel will then set the vCPU as ``present`` dynamically during the hotplug
+configuration process. Changes can be notified to the OS via device-check or
+eject-request.
 
 CPUs described as ``enabled`` in the static table, should not have their _STA
 modified dynamically by firmware. Soft-restart features such as kexec will
