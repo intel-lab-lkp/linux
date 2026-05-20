@@ -3628,7 +3628,8 @@ static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 	case MTIOCTOP:
 		break;
 	default:
-		return st_common_ioctl(STp, STm, file, cmd_in, arg);
+		retval = st_common_ioctl(STp, STm, file, cmd_in, arg);
+		goto out;
 	}
 
 	cmd_type = _IOC_TYPE(cmd_in);
