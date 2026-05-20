@@ -28,6 +28,7 @@
 #include <linux/ctype.h>
 #include <linux/hdmi.h>
 #include <linux/notifier.h>
+#include <linux/workqueue.h>
 #include <drm/drm_mode_object.h>
 #include <drm/drm_util.h>
 #include <drm/drm_property.h>
@@ -1359,6 +1360,36 @@ struct drm_connector_hdmi_funcs {
 	const struct drm_edid *(*read_edid)(struct drm_connector *connector);
 
 	/**
+	 * @scrambler_src_enable:
+	 *
+	 * This callback is invoked through @drm_scdc_start_scrambling during
+	 * a commit to setup SCDC scrambling and high TMDS clock ratio on
+	 * source side.
+	 *
+	 * The @scrambler_src_enable callback is mandatory if HDMI 2.0 is
+	 * to be supported.
+	 *
+	 * Returns:
+	 * 0 on success, a negative error code otherwise
+	 */
+	int (*scrambler_src_enable)(struct drm_connector *connector);
+
+	/**
+	 * @scrambler_src_disable:
+	 *
+	 * This callback is invoked through @drm_scdc_stop_scrambling during
+	 * a commit to disable SCDC scrambling and high TMDS clock ratio on
+	 * source side.
+	 *
+	 * The @scrambler_src_disable callback is mandatory if HDMI 2.0 is
+	 * to be supported.
+	 *
+	 * Returns:
+	 * 0 on success, a negative error code otherwise
+	 */
+	int (*scrambler_src_disable)(struct drm_connector *connector);
+
+	/**
 	 * @avi:
 	 *
 	 * Set of callbacks for handling the AVI InfoFrame. These callbacks are
@@ -1943,6 +1974,27 @@ struct drm_connector_hdmi {
 	 * supported by the controller.
 	 */
 	unsigned long supported_formats;
+
+	/**
+	 * @scrambler_enabled: Tracks whether HDMI 2.0 scrambler is currently enabled.
+	 */
+	bool scrambler_enabled;
+
+	/**
+	 * @scdc_work: Work item currently used to monitor sink-side scrambling
+	 * status and retry setup if the sink resets it.
+	 */
+	struct delayed_work scdc_work;
+
+	/** @scdc_cb: Callback to be invoked as part of @scdc_work.
+	 *
+	 * Currently used to monitor sink-side scrambling status and retry
+	 * setup if the sink resets it.
+	 *
+	 * This is assigned by the framework when making use of
+	 * drm_scdc_start_scrambling() helper.
+	 */
+	void (*scdc_cb)(struct drm_connector *connector);
 
 	/**
 	 * @funcs: HDMI connector Control Functions
