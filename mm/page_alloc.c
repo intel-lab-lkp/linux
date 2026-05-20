@@ -2659,6 +2659,24 @@ static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags
  */
 #define SPB_TAINTED_RESERVE	4
 
+/*
+ * On systems with many superpageblocks, we can afford to "write off"
+ * tainted superpageblocks by aggressively packing unmovable/reclaimable
+ * allocations into them -- even sub-pageblock fragments -- to keep clean
+ * superpageblocks clean for future 1GB hugepage and contiguous allocations.
+ *
+ * On small systems (few superpageblocks), each SPB represents a large
+ * fraction of total memory. Aggressively claiming sub-pageblock movable
+ * fragments from tainted SPBs would destroy MOVABLE capacity that the
+ * system can't afford to lose, with little benefit since there are too
+ * few SPBs to meaningfully separate movable from unmovable anyway.
+ *
+ * This threshold controls the crossover: above it, prefer concentrating
+ * non-movable allocations in tainted SPBs at any granularity; below it,
+ * only claim whole free pageblocks from tainted SPBs.
+ */
+#define SPB_AGGRESSIVE_THRESHOLD	8
+
 /**
  * sb_preferred_for_movable - Find the fullest clean superpageblock for movable
  * @zone: zone to search
@@ -3585,6 +3603,7 @@ __rmqueue_claim(struct zone *zone, int order, int start_migratetype,
 {
 	int current_order;
 	int min_order = order;
+	int nofrag_min_order = order;
 	struct page *page;
 	int fallback_mt;
 	static const unsigned int cat_search[] = {
@@ -3598,9 +3617,18 @@ __rmqueue_claim(struct zone *zone, int order, int start_migratetype,
 	 * Do not steal pages from freelists belonging to other pageblocks
 	 * i.e. orders < pageblock_order. If there are no local zones free,
 	 * the zonelists will be reiterated without ALLOC_NOFRAGMENT.
+	 *
+	 * Only apply this restriction to empty and clean superpageblocks.
+	 * Claiming within already-tainted superpageblocks does not cause
+	 * new fragmentation, and skipping them wastes free space that
+	 * could prevent tainting clean superpageblocks.
+	 *
+	 * When ALLOC_NOFRAGMENT is set, skip empty and clean superpageblocks
+	 * entirely to avoid tainting them. The slowpath will try reclaim and
+	 * compaction first, and only drop ALLOC_NOFRAGMENT as a last resort.
 	 */
 	if (order < pageblock_order && alloc_flags & ALLOC_NOFRAGMENT)
-		min_order = pageblock_order;
+		nofrag_min_order = pageblock_order;
 
 	/*
 	 * Find the largest available free page in a fallback migratetype.
@@ -3610,6 +3638,31 @@ __rmqueue_claim(struct zone *zone, int order, int start_migratetype,
 	 * ones.
 	 */
 	for (c = 0; c < ARRAY_SIZE(cat_search); c++) {
+		/*
+		 * When avoiding fragmentation, do not search clean/empty
+		 * superpageblocks for fallback pages. Tainting a clean SPB
+		 * is the worst outcome -- better to fail and let the slowpath
+		 * try reclaim and compaction in already-tainted SPBs first.
+		 */
+		if ((alloc_flags & ALLOC_NOFRAGMENT) &&
+		    cat_search[c] != SB_SEARCH_PREFERRED)
+			continue;
+
+		/*
+		 * For the preferred category (tainted SPBs for non-movable),
+		 * search all orders down to the allocation order on systems
+		 * with enough superpageblocks that we can afford to write off
+		 * tainted ones. These SPBs are already tainted, so sub-pageblock
+		 * stealing doesn't cause additional fragmentation.
+		 *
+		 * On small systems, keep the pageblock_order floor to preserve
+		 * MOVABLE capacity within tainted SPBs -- see comment at
+		 * SPB_AGGRESSIVE_THRESHOLD.
+		 */
+		min_order = (cat_search[c] == SB_SEARCH_PREFERRED &&
+			     zone->nr_superpageblocks > SPB_AGGRESSIVE_THRESHOLD) ?
+			    order : nofrag_min_order;
+
 		for (current_order = MAX_PAGE_ORDER;
 		     current_order >= min_order; --current_order) {
 			if (!should_try_claim_block(current_order,
@@ -3881,8 +3934,18 @@ static bool rmqueue_bulk(struct zone *zone, unsigned int order,
 	 * For movable allocations, prefer pageblocks from the
 	 * fullest clean superpageblock to pack allocations and
 	 * preserve empty superpageblocks for 1GB hugepages.
+	 *
+	 * For non-movable allocations, force ALLOC_NOFRAGMENT so
+	 * __rmqueue cannot steal a whole pageblock out of a clean
+	 * SPB. Stealing is the worst possible outcome for a bulk
+	 * refill: a single network or slab burst can taint dozens
+	 * of clean pageblocks. Phase 2 will adopt sub-pageblock
+	 * fragments from tainted SPBs before Phase 3 falls back to
+	 * the original alloc_flags (which may eventually steal at
+	 * the requested order, a much smaller fragmentation event).
 	 */
 	while (refilled + pageblock_nr_pages <= pages_needed) {
+		unsigned int p1_alloc_flags = alloc_flags;
 		struct page *page = NULL;
 
 		if (migratetype == MIGRATE_MOVABLE) {
@@ -3892,11 +3955,14 @@ static bool rmqueue_bulk(struct zone *zone, unsigned int order,
 			if (sb)
 				page = __rmqueue_from_sb(zone, pageblock_order,
 							 migratetype, sb);
+		} else if (!is_migrate_cma(migratetype)) {
+			p1_alloc_flags = (p1_alloc_flags | ALLOC_NOFRAGMENT) &
+					 ~ALLOC_NOFRAG_TAINTED_OK;
 		}
 		if (!page)
 			page = __rmqueue(zone, pageblock_order,
 					 migratetype,
-					 alloc_flags, &rmqm);
+					 p1_alloc_flags, &rmqm);
 		if (!page)
 			break;
 
