@@ -164,6 +164,8 @@ struct kwork_class {
 			  char *buf, int len);
 };
 
+void work_exit(struct kwork_work *work);
+
 struct trace_kwork_handler {
 	int (*raise_event)(struct perf_kwork *kwork,
 			   struct kwork_class *class,
