@@ -962,6 +962,9 @@ struct task_struct {
 	struct mm_struct		*mm;
 	struct mm_struct		*active_mm;
 
+	/* Exec-time state outliving exit_mm(); see <linux/sched/exec_state.h>. */
+	struct task_exec_state __rcu	*exec_state;
+
 	int				exit_state;
 	int				exit_code;
 	int				exit_signal;

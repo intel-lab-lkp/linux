@@ -1,0 +1,31 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _LINUX_SCHED_EXEC_STATE_H
+#define _LINUX_SCHED_EXEC_STATE_H
+
+#include <linux/init.h>
+#include <linux/rcupdate.h>
+#include <linux/refcount.h>
+#include <linux/sched/coredump.h>
+#include <linux/user_namespace.h>
+
+struct task_exec_state {
+	refcount_t		count;
+	enum task_dumpable	dumpable;
+	struct user_namespace	*user_ns;
+	struct rcu_head		rcu;
+};
+
+struct task_exec_state *alloc_task_exec_state(void);
+void put_task_exec_state(struct task_exec_state *es);
+struct task_exec_state *task_exec_state_rcu(const struct task_struct *tsk);
+struct task_exec_state *task_exec_state_replace(struct task_struct *tsk,
+						struct task_exec_state *exec_state);
+void task_exec_state_set_dumpable(enum task_dumpable value);
+enum task_dumpable task_exec_state_get_dumpable(struct task_struct *task);
+void copy_exec_state(struct task_struct *tsk);
+void __init exec_state_init(void);
+
+DEFINE_FREE(put_task_exec_state, struct task_exec_state *,
+	    if (_T) put_task_exec_state(_T))
+
+#endif /* _LINUX_SCHED_EXEC_STATE_H */
