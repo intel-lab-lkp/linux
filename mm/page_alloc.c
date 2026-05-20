@@ -2327,6 +2327,9 @@ static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags
 		clear_page_pfmemalloc(page);
 }
 
+/* Bounded scan limit when searching free lists for tainted superpageblock pages */
+#define SPB_SCAN_LIMIT 8
+
 /*
  * Go through the free lists for the given migratetype and remove
  * the smallest available page from the freelists
@@ -2694,6 +2697,7 @@ try_to_claim_block(struct zone *zone, struct page *page,
 {
 	int free_pages, movable_pages, alike_pages;
 	unsigned long start_pfn;
+	struct superpageblock *sb;
 #ifdef CONFIG_COMPACTION
 	struct page *start_page;
 #endif
@@ -2726,7 +2730,12 @@ try_to_claim_block(struct zone *zone, struct page *page,
 				clear_pfnblock_bit(pb_page, pb_pfn, PB_all_free);
 				superpageblock_pb_now_used(pb_page);
 			}
+			__spb_set_has_type(pb_page, start_type);
 		}
+		/* Single list update after all pageblocks processed */
+		sb = pfn_to_superpageblock(zone, page_to_pfn(page));
+		if (sb)
+			spb_update_list(sb);
 
 		del_page_from_free_list(page, zone, current_order, block_type);
 		change_pageblock_range(page, current_order, start_type);
@@ -2771,29 +2780,24 @@ try_to_claim_block(struct zone *zone, struct page *page,
 		set_pageblock_migratetype(pfn_to_page(start_pfn), start_type);
 #ifdef CONFIG_COMPACTION
 		/*
-		 * Track actual page contents in pageblock flags.
-		 * Mark the pageblock with the type being allocated, and
-		 * if unmovable/reclaimable pages are being placed into a
-		 * pageblock that already has movable pages, queue async
-		 * evacuation of the movable pages.
+		 * Track actual page contents in pageblock flags and
+		 * update superpageblock counters so the SPB moves to
+		 * the correct fullness list for steering.
 		 */
 		start_page = pfn_to_page(start_pfn);
-		if (start_type == MIGRATE_UNMOVABLE) {
-			set_pfnblock_bit(start_page, start_pfn,
-					 PB_has_unmovable);
-			if (get_pfnblock_bit(start_page, start_pfn,
-					     PB_has_movable))
-				queue_pageblock_evacuate(zone, start_pfn);
-		} else if (start_type == MIGRATE_RECLAIMABLE) {
-			set_pfnblock_bit(start_page, start_pfn,
-					 PB_has_reclaimable);
-			if (get_pfnblock_bit(start_page, start_pfn,
-					     PB_has_movable))
-				queue_pageblock_evacuate(zone, start_pfn);
-		} else if (start_type == MIGRATE_MOVABLE) {
-			set_pfnblock_bit(start_page, start_pfn,
-					 PB_has_movable);
-		}
+		__spb_set_has_type(start_page, start_type);
+		if (block_type != start_type)
+			__spb_set_has_type(start_page, block_type);
+
+		sb = pfn_to_superpageblock(zone, start_pfn);
+		if (sb)
+			spb_update_list(sb);
+
+		if ((start_type == MIGRATE_UNMOVABLE ||
+		     start_type == MIGRATE_RECLAIMABLE) &&
+		    get_pfnblock_bit(start_page, start_pfn,
+				     PB_has_movable))
+			queue_pageblock_evacuate(zone, start_pfn);
 #endif
 		return __rmqueue_smallest(zone, order, start_type);
 	}
@@ -2847,6 +2851,38 @@ __rmqueue_claim(struct zone *zone, int order, int start_migratetype,
 			break;
 
 		page = get_page_from_free_area(area, fallback_mt);
+
+		/*
+		 * For unmovable/reclaimable stealing, prefer pages from
+		 * tainted superpageblocks (already contaminated) to keep clean
+		 * superpageblocks clean for future 1GB allocations.
+		 */
+		if (start_migratetype != MIGRATE_MOVABLE &&
+		    zone->superpageblocks && page) {
+			struct superpageblock *sb;
+			struct page *alt;
+			int scanned = 0;
+
+			sb = pfn_to_superpageblock(zone, page_to_pfn(page));
+			if (sb && spb_get_category(sb) == SB_CLEAN) {
+				list_for_each_entry(alt,
+						    &area->free_list[fallback_mt],
+						    buddy_list) {
+					struct superpageblock *asb;
+
+					if (++scanned > SPB_SCAN_LIMIT)
+						break;
+					asb = pfn_to_superpageblock(zone,
+							page_to_pfn(alt));
+					if (asb && spb_get_category(asb) ==
+					    SB_TAINTED) {
+						page = alt;
+						break;
+					}
+				}
+			}
+		}
+
 		page = try_to_claim_block(zone, page, current_order, order,
 					  start_migratetype, fallback_mt,
 					  alloc_flags);
@@ -2867,6 +2903,7 @@ __rmqueue_claim(struct zone *zone, int order, int start_migratetype,
 static __always_inline struct page *
 __rmqueue_steal(struct zone *zone, int order, int start_migratetype)
 {
+	struct superpageblock *sb;
 	struct free_area *area;
 	int current_order;
 	struct page *page;
@@ -2881,6 +2918,27 @@ __rmqueue_steal(struct zone *zone, int order, int start_migratetype)
 
 		page = get_page_from_free_area(area, fallback_mt);
 		page_del_and_expand(zone, page, order, current_order, fallback_mt);
+
+		/*
+		 * page_del_and_expand recorded PB_has_<fallback_mt> for the
+		 * source free list type. Also record the actual allocation
+		 * type so evacuation and defrag can find these pages.
+		 *
+		 * For example, a MOVABLE allocation stealing from an
+		 * UNMOVABLE free list must set PB_has_movable so the
+		 * pageblock is visible to evacuate_pageblock() and
+		 * spb_defrag_tainted(). __spb_set_has_type is idempotent:
+		 * it only increments the SPB counter on the 0->1 bit
+		 * transition.
+		 */
+		if (fallback_mt != start_migratetype) {
+			__spb_set_has_type(page, start_migratetype);
+			sb = pfn_to_superpageblock(zone,
+						   page_to_pfn(page));
+			if (sb)
+				spb_update_list(sb);
+		}
+
 		trace_mm_page_alloc_extfrag(page, order, current_order,
 					    start_migratetype, fallback_mt);
 		return page;
