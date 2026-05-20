@@ -795,6 +795,7 @@ static const struct ib_device_ops hns_roce_dev_restrack_ops = {
 
 static int hns_roce_register_device(struct hns_roce_dev *hr_dev)
 {
+	struct hns_roce_v2_priv *priv = hr_dev->priv;
 	struct hns_roce_ib_iboe *iboe = NULL;
 	struct device *dev = hr_dev->dev;
 	struct ib_device *ib_dev = NULL;
@@ -838,7 +839,8 @@ static int hns_roce_register_device(struct hns_roce_dev *hr_dev)
 
 	dma_set_max_seg_size(dev, SZ_2G);
 
-	if (hr_dev->caps.flags & HNS_ROCE_CAP_FLAG_BOND) {
+	if (hr_dev->caps.flags & HNS_ROCE_CAP_FLAG_BOND &&
+	    priv->handle->rinfo.reset_state != HNS_ROCE_STATE_RST_INIT) {
 		ret = hns_roce_alloc_bond_grp(hr_dev);
 		if (ret) {
 			dev_err(dev, "failed to alloc bond_grp for bus %u, ret = %d\n",
