@@ -6,11 +6,16 @@
  * /sys/kernel/debug/iommu/arm_smmu_v3/
  * └── smmu<ioaddr>/
  *     ├── capabilities    # SMMU feature capabilities and configuration
+ *     ├── registers       # SMMU Key registers
  *
  * The capabilities file provides detailed information about:
  * - translation stage support (Stage1/Stage2)
  * - System coherency, ATS, and PRI feature availability
  * - Stream table size and command/event queue depths
+ *
+ * The registers display provides crucial visibility into:
+ * - CR0, CR1, CR2 control registers
+ * - Command and Event queue pointers
  *
  * Copyright (C) 2026 HiSilicon Limited.
  * Author: Qinxin Xia <xiaqinxin@huawei.com>
@@ -96,6 +101,80 @@ static const struct file_operations smmu_debugfs_capabilities_fops = {
 };
 
 /**
+ * smmu_debugfs_registers_show() - Display SMMU register values
+ * @seq: seq_file to write to
+ * @unused: unused parameter
+ *
+ * Errors are reported via seq_puts, the function always returns 0
+ */
+static int smmu_debugfs_registers_show(struct seq_file *seq, void *unused)
+{
+	struct arm_smmu_device *smmu = seq->private;
+	void __iomem *base;
+
+	if (!smmu || !smmu->base) {
+		seq_puts(seq, "SMMU not available\n");
+		return 0;
+	}
+
+	base = smmu->base;
+
+	seq_puts(seq, "SMMUv3 Key Registers:\n");
+
+	/* 32-bit control registers */
+	seq_printf(seq, "CR0: 0x%08x\n", readl_relaxed(base + ARM_SMMU_CR0));
+	seq_printf(seq, "CR1: 0x%08x\n", readl_relaxed(base + ARM_SMMU_CR1));
+	seq_printf(seq, "CR2: 0x%08x\n", readl_relaxed(base + ARM_SMMU_CR2));
+
+	/* 32-bit queue pointer registers */
+	seq_printf(seq, "CMDQ_PROD: 0x%08x\n",
+		   readl_relaxed(base + ARM_SMMU_CMDQ_PROD));
+	seq_printf(seq, "CMDQ_CONS: 0x%08x\n",
+		   readl_relaxed(base + ARM_SMMU_CMDQ_CONS));
+	seq_printf(seq, "EVTQ_PROD: 0x%08x\n",
+		   smmu->page1 ? readl_relaxed(smmu->page1 + ARM_SMMU_EVTQ_PROD) : 0);
+	seq_printf(seq, "EVTQ_CONS: 0x%08x\n",
+		   smmu->page1 ? readl_relaxed(smmu->page1 + ARM_SMMU_EVTQ_CONS) : 0);
+
+	return 0;
+}
+
+static int smmu_debugfs_registers_open(struct inode *inode, struct file *file)
+{
+	struct arm_smmu_device *smmu = inode->i_private;
+	int ret;
+
+	if (!smmu || !get_device(smmu->dev))
+		return -ENODEV;
+
+	ret = single_open(file, smmu_debugfs_registers_show, smmu);
+	if (ret)
+		put_device(smmu->dev);
+
+	return ret;
+}
+
+static int smmu_debugfs_registers_release(struct inode *inode, struct file *file)
+{
+	struct seq_file *seq = file->private_data;
+	struct arm_smmu_device *smmu = seq->private;
+
+	single_release(inode, file);
+	if (smmu)
+		put_device(smmu->dev);
+
+	return 0;
+}
+
+static const struct file_operations smmu_debugfs_registers_fops = {
+	.owner   = THIS_MODULE,
+	.open    = smmu_debugfs_registers_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = smmu_debugfs_registers_release,
+};
+
+/**
  * arm_smmu_debugfs_setup() - Initialize debugfs for SMMU device
  * @smmu: SMMU device to setup debugfs for
  * @name: SMMU device name
@@ -141,6 +220,9 @@ int arm_smmu_debugfs_setup(struct arm_smmu_device *smmu, const char *name)
 	/* Create capabilities file */
 	debugfs_create_file("capabilities", 0444, smmu_dir, smmu,
 			    &smmu_debugfs_capabilities_fops);
+
+	debugfs_create_file("registers", 0444, smmu_dir, smmu,
+			    &smmu_debugfs_registers_fops);
 
 	dev_dbg(smmu->dev, "debugfs initialized for %s\n", name);
 	return 0;
