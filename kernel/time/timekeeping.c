@@ -2380,6 +2380,8 @@ static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 			return;
 		tk->ntp_tick = ntp_tl;
 		tk->skew_delta = skew;
+		tk->ntp_status = ntp_get_status();
+		tk->ntp_time_state = ntp_get_time_state();
 		mult = div64_u64((tk->ntp_tick + skew) >> tk->ntp_error_shift,
 				  tk->cycle_interval);
 	}

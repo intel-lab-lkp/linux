@@ -185,6 +185,8 @@ struct timekeeper {
 	u32			ntp_err_mult;
 	u32			skip_second_overflow;
 	s64			skew_delta;
+	int			ntp_status;
+	int			ntp_time_state;
 	s32			tai_offset;
 };
 

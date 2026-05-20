@@ -365,6 +365,13 @@ s64 ntp_get_skew_delta(unsigned int tkid)
 	return tk_ntp_data[tkid].skew_delta;
 }
 
+s64 ntp_get_time_offset_ns(unsigned int tkid)
+{
+	return shift_right(tk_ntp_data[tkid].time_offset * NTP_INTERVAL_FREQ,
+			   NTP_SCALE_SHIFT);
+}
+EXPORT_SYMBOL_GPL(ntp_get_time_offset_ns);
+
 s64 ntp_drain_time_offset(unsigned int tkid, s64 amount)
 {
 	struct ntp_data *ntpdata = &tk_ntp_data[tkid];
@@ -668,6 +675,18 @@ static inline bool ntp_synced(void)
 {
 	return !(tk_ntp_data[TIMEKEEPER_CORE].time_status & STA_UNSYNC);
 }
+
+int ntp_get_status(void)
+{
+	return tk_ntp_data[TIMEKEEPER_CORE].time_status;
+}
+EXPORT_SYMBOL_GPL(ntp_get_status);
+
+int ntp_get_time_state(void)
+{
+	return tk_ntp_data[TIMEKEEPER_CORE].time_state;
+}
+EXPORT_SYMBOL_GPL(ntp_get_time_state);
 
 /*
  * If we have an externally synchronized Linux clock, then update RTC clock

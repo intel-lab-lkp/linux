@@ -221,4 +221,11 @@ config POSIX_AUX_CLOCKS
 	  and other clock domains, which are not correlated to the TAI/NTP
 	  notion of time.
 
+config VMCLOCK_HOST
+	tristate "VMClock host time provider (/dev/vmclock_host)"
+	depends on X86_TSC || ARM64
+	help
+	  Expose the host NTP-disciplined clock as a vmclock page via
+	  /dev/vmclock_host for VMMs to relay precision time to guests.
+
 endmenu
