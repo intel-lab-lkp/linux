@@ -10,6 +10,9 @@
 
 #include "iommu-priv.h"
 
+/* Whether pasid is to be allocated from the global PASID space */
+#define IOMMU_PASID_GLOBAL_ANY IOMMU_NO_PASID
+
 static DEFINE_MUTEX(iommu_sva_lock);
 static bool iommu_sva_present;
 static LIST_HEAD(iommu_sva_mms);
@@ -17,10 +20,11 @@ static struct iommu_domain *iommu_sva_domain_alloc(struct device *dev,
 						   struct mm_struct *mm);
 
 /* Allocate a PASID for the mm within range (inclusive) */
-static struct iommu_mm_data *iommu_alloc_mm_data(struct mm_struct *mm, struct device *dev)
+static struct iommu_mm_data *iommu_alloc_mm_data(struct mm_struct *mm,
+						 struct device *dev,
+						 ioasid_t pasid)
 {
 	struct iommu_mm_data *iommu_mm;
-	ioasid_t pasid;
 
 	lockdep_assert_held(&iommu_sva_lock);
 
@@ -30,8 +34,27 @@ static struct iommu_mm_data *iommu_alloc_mm_data(struct mm_struct *mm, struct de
 	iommu_mm = mm->iommu_mm;
 	/* Is a PASID already associated with this mm? */
 	if (iommu_mm) {
+		if ((pasid == IOMMU_PASID_GLOBAL_ANY && !iommu_mm->pasid_global) ||
+		    (pasid != IOMMU_PASID_GLOBAL_ANY && iommu_mm->pasid_global))
+			return ERR_PTR(-EBUSY);
+
+		if (!iommu_mm->pasid_global) {
+			if (list_empty(&iommu_mm->sva_domains))
+				iommu_mm->pasid = pasid;
+
+			if (pasid != iommu_mm->pasid) {
+				/*
+				 * Currently, a process simultaneously doing
+				 * SVA with multiple devices with different
+				 * PASIDs is not supported.
+				 */
+				return ERR_PTR(-ENOSPC);
+			}
+		}
+
 		if (iommu_mm->pasid >= dev->iommu->max_pasids)
 			return ERR_PTR(-EOVERFLOW);
+
 		return iommu_mm;
 	}
 
@@ -39,37 +62,30 @@ static struct iommu_mm_data *iommu_alloc_mm_data(struct mm_struct *mm, struct de
 	if (!iommu_mm)
 		return ERR_PTR(-ENOMEM);
 
-	pasid = iommu_alloc_global_pasid(dev);
-	if (pasid == IOMMU_PASID_INVALID) {
-		kfree(iommu_mm);
-		return ERR_PTR(-ENOSPC);
+	if (pasid == IOMMU_PASID_GLOBAL_ANY) {
+		pasid = iommu_alloc_global_pasid(dev);
+		if (pasid == IOMMU_PASID_INVALID) {
+			kfree(iommu_mm);
+			return ERR_PTR(-ENOSPC);
+		}
+		iommu_mm->pasid_global = true;
+	} else {
+		if (pasid >= dev->iommu->max_pasids) {
+			kfree(iommu_mm);
+			return ERR_PTR(-EOVERFLOW);
+		}
+		iommu_mm->pasid_global = false;
 	}
 	iommu_mm->pasid = pasid;
 	iommu_mm->mm = mm;
 	INIT_LIST_HEAD(&iommu_mm->sva_domains);
-	/*
-	 * Make sure the write to mm->iommu_mm is not reordered in front of
-	 * initialization to iommu_mm fields. If it does, readers may see a
-	 * valid iommu_mm with uninitialized values.
-	 */
-	smp_store_release(&mm->iommu_mm, iommu_mm);
+
 	return iommu_mm;
 }
 
-/**
- * iommu_sva_bind_device() - Bind a process address space to a device
- * @dev: the device
- * @mm: the mm to bind, caller must hold a reference to mm_users
- *
- * Create a bond between device and address space, allowing the device to
- * access the mm using the PASID returned by iommu_sva_get_pasid(). If a
- * bond already exists between @device and @mm, an additional internal
- * reference is taken. Caller must call iommu_sva_unbind_device()
- * to release each reference.
- *
- * On error, returns an ERR_PTR value.
- */
-struct iommu_sva *iommu_sva_bind_device(struct device *dev, struct mm_struct *mm)
+static struct iommu_sva *iommu_sva_bind_device_internal(struct device *dev,
+							struct mm_struct *mm,
+							ioasid_t pasid)
 {
 	struct iommu_group *group = dev->iommu_group;
 	struct iommu_attach_handle *attach_handle;
@@ -84,7 +100,7 @@ struct iommu_sva *iommu_sva_bind_device(struct device *dev, struct mm_struct *mm
 	mutex_lock(&iommu_sva_lock);
 
 	/* Allocate mm->pasid if necessary. */
-	iommu_mm = iommu_alloc_mm_data(mm, dev);
+	iommu_mm = iommu_alloc_mm_data(mm, dev, pasid);
 	if (IS_ERR(iommu_mm)) {
 		ret = PTR_ERR(iommu_mm);
 		goto out_unlock;
@@ -96,7 +112,7 @@ struct iommu_sva *iommu_sva_bind_device(struct device *dev, struct mm_struct *mm
 		handle = container_of(attach_handle, struct iommu_sva, handle);
 		if (attach_handle->domain->mm != mm) {
 			ret = -EBUSY;
-			goto out_unlock;
+			goto out_free_iommu_mm;
 		}
 		refcount_inc(&handle->users);
 		mutex_unlock(&iommu_sva_lock);
@@ -105,17 +121,17 @@ struct iommu_sva *iommu_sva_bind_device(struct device *dev, struct mm_struct *mm
 
 	if (PTR_ERR(attach_handle) != -ENOENT) {
 		ret = PTR_ERR(attach_handle);
-		goto out_unlock;
+		goto out_free_iommu_mm;
 	}
 
 	handle = kzalloc_obj(*handle);
 	if (!handle) {
 		ret = -ENOMEM;
-		goto out_unlock;
+		goto out_free_iommu_mm;
 	}
 
 	/* Search for an existing domain. */
-	list_for_each_entry(domain, &mm->iommu_mm->sva_domains, next) {
+	list_for_each_entry(domain, &iommu_mm->sva_domains, next) {
 		ret = iommu_attach_device_pasid(domain, dev, iommu_mm->pasid,
 						&handle->handle);
 		if (!ret) {
@@ -143,6 +159,15 @@ struct iommu_sva *iommu_sva_bind_device(struct device *dev, struct mm_struct *mm
 		list_add(&iommu_mm->mm_list_elm, &iommu_sva_mms);
 	}
 	list_add(&domain->next, &iommu_mm->sva_domains);
+	if (!mm->iommu_mm) {
+		/*
+		 * Make sure the write to mm->iommu_mm is not reordered in
+		 * front of initialization to iommu_mm fields. If it does,
+		 * readers may see a valid iommu_mm with uninitialized values.
+		 */
+		smp_store_release(&mm->iommu_mm, iommu_mm);
+	}
+
 out:
 	refcount_set(&handle->users, 1);
 	mutex_unlock(&iommu_sva_lock);
@@ -153,11 +178,65 @@ out_free_domain:
 	iommu_domain_free(domain);
 out_free_handle:
 	kfree(handle);
+out_free_iommu_mm:
+	if (!mm->iommu_mm) {
+		if (iommu_mm->pasid_global)
+			iommu_free_global_pasid(iommu_mm->pasid);
+		kfree(iommu_mm);
+	}
 out_unlock:
 	mutex_unlock(&iommu_sva_lock);
 	return ERR_PTR(ret);
 }
+
+/**
+ * iommu_sva_bind_device() - Bind a process address space to a device
+ * @dev: the device
+ * @mm: the mm to bind, caller must hold a reference to mm_users
+ *
+ * Create a bond between device and address space, allowing the device to
+ * access the mm using the PASID returned by iommu_sva_get_pasid(). If a
+ * bond already exists between @device and @mm, an additional internal
+ * reference is taken. Caller must call iommu_sva_unbind_device()
+ * to release each reference.
+ *
+ * On error, returns an ERR_PTR value.
+ */
+struct iommu_sva *iommu_sva_bind_device(struct device *dev, struct mm_struct *mm)
+{
+	return iommu_sva_bind_device_internal(dev, mm, IOMMU_PASID_GLOBAL_ANY);
+}
 EXPORT_SYMBOL_GPL(iommu_sva_bind_device);
+
+/**
+ * iommu_sva_bind_device_pasid() - Bind a process address space to a device
+ * with a designated pasid
+ * @dev: the device
+ * @mm: the mm to bind, caller must hold a reference to mm_users
+ * @pasid: the pasid to assign to the bond
+ *
+ * Create a bond between device and address space, allowing the device to
+ * access the mm using the PASID returned by iommu_sva_get_pasid(). If a
+ * bond already exists between @device and @mm, an additional internal
+ * reference is taken. Caller must call iommu_sva_unbind_device()
+ * to release each reference.
+ *
+ * It is the caller's responsibility to maintain the PASID space for @pasid.
+ * After the bond is created, the process for @mm will not be able to execute
+ * ENQCMD or similar instructions at EL0. To allow those instructions at EL0,
+ * iommu_sva_bind_device() must be used instead.
+ *
+ * On error, returns an ERR_PTR value.
+ */
+struct iommu_sva *iommu_sva_bind_device_pasid(struct device *dev,
+					      struct mm_struct *mm,
+					      ioasid_t pasid)
+{
+	if (pasid == IOMMU_PASID_GLOBAL_ANY)
+		return ERR_PTR(-EINVAL);
+	return iommu_sva_bind_device_internal(dev, mm, pasid);
+}
+EXPORT_SYMBOL_GPL(iommu_sva_bind_device_pasid);
 
 /**
  * iommu_sva_unbind_device() - Remove a bond created with iommu_sva_bind_device
@@ -198,9 +277,12 @@ EXPORT_SYMBOL_GPL(iommu_sva_unbind_device);
 
 u32 iommu_sva_get_pasid(struct iommu_sva *handle)
 {
-	struct iommu_domain *domain = handle->handle.domain;
+	struct iommu_mm_data *iommu_mm = handle->handle.domain->mm->iommu_mm;
 
-	return mm_get_enqcmd_pasid(domain->mm);
+	if (!iommu_mm)
+		return IOMMU_PASID_INVALID;
+
+	return iommu_mm->pasid;
 }
 EXPORT_SYMBOL_GPL(iommu_sva_get_pasid);
 
@@ -211,7 +293,8 @@ void mm_pasid_drop(struct mm_struct *mm)
 	if (!iommu_mm)
 		return;
 
-	iommu_free_global_pasid(iommu_mm->pasid);
+	if (iommu_mm->pasid_global)
+		iommu_free_global_pasid(iommu_mm->pasid);
 	kfree(iommu_mm);
 }
 

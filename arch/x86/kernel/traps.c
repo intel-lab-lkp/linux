@@ -857,13 +857,12 @@ static bool try_fixup_enqcmd_gp(void)
 		return false;
 
 	/*
-	 * If the mm has not been allocated a
-	 * PASID, the #GP can not be fixed up.
+	 * If the mm has not been allocated a PASID or ENQCMD has been
+	 * disallowed, the #GP can not be fixed up.
 	 */
-	if (!mm_valid_pasid(current->mm))
-		return false;
-
 	pasid = mm_get_enqcmd_pasid(current->mm);
+	if (pasid == IOMMU_PASID_INVALID)
+		return false;
 
 	/*
 	 * Did this thread already have its PASID activated?

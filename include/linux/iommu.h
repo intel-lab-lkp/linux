@@ -1140,6 +1140,7 @@ struct iommu_sva {
 
 struct iommu_mm_data {
 	u32			pasid;
+	bool			pasid_global;
 	struct mm_struct	*mm;
 	struct list_head	sva_domains;
 	struct list_head	mm_list_elm;
@@ -1626,7 +1627,7 @@ static inline u32 mm_get_enqcmd_pasid(struct mm_struct *mm)
 {
 	struct iommu_mm_data *iommu_mm = READ_ONCE(mm->iommu_mm);
 
-	if (!iommu_mm)
+	if (!iommu_mm || !iommu_mm->pasid_global)
 		return IOMMU_PASID_INVALID;
 	return iommu_mm->pasid;
 }
@@ -1634,12 +1635,23 @@ static inline u32 mm_get_enqcmd_pasid(struct mm_struct *mm)
 void mm_pasid_drop(struct mm_struct *mm);
 struct iommu_sva *iommu_sva_bind_device(struct device *dev,
 					struct mm_struct *mm);
+struct iommu_sva *iommu_sva_bind_device_pasid(struct device *dev,
+					      struct mm_struct *mm,
+					      ioasid_t pasid);
 void iommu_sva_unbind_device(struct iommu_sva *handle);
 u32 iommu_sva_get_pasid(struct iommu_sva *handle);
 void iommu_sva_invalidate_kva_range(unsigned long start, unsigned long end);
 #else
 static inline struct iommu_sva *
 iommu_sva_bind_device(struct device *dev, struct mm_struct *mm)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+static inline struct iommu_sva *
+iommu_sva_bind_device_pasid(struct device *dev,
+			    struct mm_struct *mm,
+			    ioasid_t pasid)
 {
 	return ERR_PTR(-ENODEV);
 }
