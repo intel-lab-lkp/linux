@@ -236,7 +236,9 @@ static struct dentry *ntfs_lookup(struct inode *dir_ino, struct dentry *dent,
 	}
 	ntfs_error(vol->sb, "ntfs_lookup_ino_by_name() failed with error code %i.",
 			-MREF_ERR(mref));
-	return ERR_PTR(MREF_ERR(mref));
+	if (MREF_ERR(mref))
+		return ERR_PTR(MREF_ERR(mref));
+	return NULL;
 handle_name:
 	{
 		struct mft_record *m;
