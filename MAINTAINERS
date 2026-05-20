@@ -16781,6 +16781,7 @@ S:	Maintained
 W:	http://www.linux-mm.org
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/akpm/mm
 F:	include/linux/folio_batch.h
+F:	include/linux/folio_wait.h
 F:	include/linux/gfp.h
 F:	include/linux/gfp_types.h
 F:	include/linux/highmem.h
@@ -16802,6 +16803,7 @@ F:	kernel/fork.c
 F:	mm/Kconfig
 F:	mm/debug.c
 F:	mm/folio-compat.c
+F:	mm/folio_wait.c
 F:	mm/highmem.c
 F:	mm/init-mm.c
 F:	mm/internal.h
