@@ -584,7 +584,6 @@ static int riic_i2c_probe(struct platform_device *pdev)
 					     irq_desc->name);
 	}
 
-
 	adap = &riic->adapter;
 	i2c_set_adapdata(adap, riic);
 	strscpy(adap->name, "Renesas RIIC adapter", sizeof(adap->name));
