@@ -81,6 +81,15 @@ config PSTORE_RAM
 
 	  For more information, see Documentation/admin-guide/ramoops.rst.
 
+config PSTORE_KHO
+	tristate "Preserve logs over kexec"
+	depends on PSTORE
+	depends on KEXEC_HANDOVER
+	help
+	  A pstore backend for preserving dmesg over KHO (kexec handover).
+
+	  It supports preservation of only 1 dmesg file.
+
 config PSTORE_ZONE
 	tristate
 	depends on PSTORE
