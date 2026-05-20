@@ -245,8 +245,10 @@ auth_domain_lookup(char *name, struct auth_domain *new)
 	spin_lock(&auth_domain_lock);
 
 	hlist_for_each_entry(hp, head, hash) {
-		if (strcmp(hp->name, name)==0) {
-			kref_get(&hp->ref);
+		if (strcmp(hp->name, name) == 0) {
+			if (!kref_get_unless_zero(&hp->ref))
+				continue;
+
 			spin_unlock(&auth_domain_lock);
 			return hp;
 		}
