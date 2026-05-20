@@ -2048,6 +2048,13 @@ static netdev_features_t bond_fix_features(struct net_device *dev,
 	struct list_head *iter;
 	netdev_features_t mask;
 	struct slave *slave;
+#ifdef CONFIG_XFRM_OFFLOAD
+	netdev_features_t lag_xfrm_features = BOND_XFRM_FEATURES;
+	bool ab_xfrm = BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP;
+	bool lag_xfrm_ok = true;
+	bool lag_xfrm = bond_mode_can_use_lag_xfrm(bond);
+	int lag_xfrm_slaves = 0;
+#endif /* CONFIG_XFRM_OFFLOAD */
 
 	mask = features;
 	features = netdev_base_features(features);
@@ -2056,11 +2063,233 @@ static netdev_features_t bond_fix_features(struct net_device *dev,
 		features = netdev_increment_features(features,
 						     slave->dev->features,
 						     mask);
+#ifdef CONFIG_XFRM_OFFLOAD
+		if (lag_xfrm && (mask & BOND_XFRM_FEATURES) &&
+		    netif_running(slave->dev)) {
+			netdev_features_t slave_xfrm_features;
+			netdev_features_t slave_xfrm_enableable;
+			netdev_features_t missing;
+
+			slave_xfrm_features = slave->dev->features &
+					      BOND_XFRM_FEATURES;
+			slave_xfrm_enableable = slave->dev->hw_features &
+						mask & BOND_XFRM_FEATURES;
+			slave_xfrm_features |= slave_xfrm_enableable;
+			missing = (BOND_XFRM_FEATURES & mask) &
+				  ~slave_xfrm_features;
+			if (missing)
+				slave_dbg(dev, slave->dev,
+					  "missing LAG XFRM feature(s) %pNF\n",
+					  &missing);
+			lag_xfrm_features &= slave_xfrm_features;
+
+			if (!(slave_xfrm_features & NETIF_F_HW_ESP) ||
+			    !bond_ipsec_lag_slave_has_ops(slave->dev)) {
+				slave_dbg(dev, slave->dev,
+					  "missing LAG XFRM offload ops\n");
+				lag_xfrm_ok = false;
+			}
+			lag_xfrm_slaves++;
+		}
+#endif /* CONFIG_XFRM_OFFLOAD */
 	}
 	features = netdev_add_tso_features(features, mask);
 
+#ifdef CONFIG_XFRM_OFFLOAD
+	if (!ab_xfrm && !lag_xfrm)
+		features &= ~BOND_XFRM_FEATURES;
+	else if (lag_xfrm && (!lag_xfrm_ok || !lag_xfrm_slaves))
+		features &= ~BOND_XFRM_FEATURES;
+	else if (lag_xfrm)
+		features = (features & ~BOND_XFRM_FEATURES) |
+			   (lag_xfrm_features & mask);
+	if (!(features & NETIF_F_HW_ESP))
+		features &= ~(NETIF_F_HW_ESP_TX_CSUM | NETIF_F_GSO_ESP);
+#endif /* CONFIG_XFRM_OFFLOAD */
+
 	return features;
 }
+
+#ifdef CONFIG_XFRM_OFFLOAD
+static int bond_set_slave_xfrm_features(struct bonding *bond,
+					struct slave *slave,
+					netdev_features_t features)
+{
+	struct net_device *real_dev = slave->dev;
+	netdev_features_t xfrm_features;
+	netdev_features_t mutable;
+	bool notifier_ctx;
+	int err = 0;
+
+	mutable = real_dev->hw_features & BOND_XFRM_FEATURES;
+	if (!mutable)
+		return 0;
+
+	xfrm_features = features & BOND_XFRM_FEATURES;
+
+	notifier_ctx = bond->notifier_ctx;
+	bond->notifier_ctx = true;
+	netdev_lock_ops(real_dev);
+	real_dev->wanted_features &= ~mutable;
+	real_dev->wanted_features |= xfrm_features & mutable;
+	err = __netdev_update_features(real_dev);
+	if (err)
+		netdev_features_change(real_dev);
+	netdev_unlock_ops(real_dev);
+	bond->notifier_ctx = notifier_ctx;
+
+	return err < 0 ? err : 0;
+}
+
+static void bond_restore_slave_xfrm_features(struct bonding *bond,
+					     netdev_features_t features)
+{
+	struct list_head *iter;
+	struct slave *slave;
+
+	bond_for_each_slave(bond, slave, iter) {
+		if (!netif_running(slave->dev))
+			continue;
+
+		bond_set_slave_xfrm_features(bond, slave, features);
+	}
+}
+
+static void bond_sync_slave_xfrm_features(struct bonding *bond,
+					  struct slave *slave)
+{
+	netdev_features_t requested = bond->dev->wanted_features;
+	netdev_features_t old_wanted = slave->dev->wanted_features;
+	netdev_features_t available;
+	netdev_features_t missing;
+	int err;
+
+	if (!bond_mode_can_use_lag_xfrm(bond))
+		return;
+
+	if (!netif_running(slave->dev))
+		return;
+
+	requested &= BOND_XFRM_FEATURES;
+	if (!requested)
+		return;
+
+	available = slave->dev->features | slave->dev->hw_features;
+	missing = requested & ~available;
+	if ((requested & NETIF_F_HW_ESP) &&
+	    !bond_ipsec_lag_slave_has_ops(slave->dev))
+		missing |= NETIF_F_HW_ESP;
+	if (missing)
+		goto disable_missing;
+
+	err = bond_set_slave_xfrm_features(bond, slave, requested);
+	missing = requested & ~slave->dev->features;
+	if (err && !missing)
+		missing = requested;
+	if (!missing)
+		return;
+
+	bond_set_slave_xfrm_features(bond, slave, old_wanted);
+
+disable_missing:
+	if (missing & NETIF_F_HW_ESP)
+		missing |= BOND_XFRM_FEATURES;
+	slave_warn(bond->dev, slave->dev,
+		   "disabling XFRM feature(s) %pNF after slave enable failed\n",
+		   &missing);
+	bond->dev->wanted_features &= ~missing;
+}
+
+static int bond_set_features(struct net_device *dev, netdev_features_t features)
+{
+	struct bonding *bond = netdev_priv(dev);
+	netdev_features_t changed;
+	netdev_features_t enabled;
+	struct list_head *iter;
+	struct slave *slave;
+	int err = 0;
+
+	if (!bond_mode_can_use_lag_xfrm(bond))
+		return 0;
+
+	changed = (dev->features ^ features) & BOND_XFRM_FEATURES;
+	if (!changed)
+		return 0;
+
+	enabled = features & BOND_XFRM_FEATURES;
+	if (enabled) {
+		int targets = 0;
+
+		bond_for_each_slave(bond, slave, iter) {
+			netdev_features_t available;
+			netdev_features_t missing;
+
+			if (!netif_running(slave->dev))
+				continue;
+
+			available = slave->dev->features | slave->dev->hw_features;
+			missing = enabled & ~available;
+			if ((enabled & NETIF_F_HW_ESP) &&
+			    !bond_ipsec_lag_slave_has_ops(slave->dev))
+				missing |= NETIF_F_HW_ESP;
+			if (missing) {
+				slave_warn(dev, slave->dev,
+					   "missing XFRM feature(s) %pNF\n",
+					   &missing);
+				return -EOPNOTSUPP;
+			}
+			targets++;
+		}
+		if (!targets)
+			return -EOPNOTSUPP;
+	}
+
+	if ((dev->features & NETIF_F_HW_ESP) &&
+	    !(features & NETIF_F_HW_ESP)) {
+		bond_ipsec_lag_begin_flush(bond);
+		xfrm_dev_state_flush(dev_net(dev), dev, true);
+	}
+
+	bond_for_each_slave(bond, slave, iter) {
+		if (!netif_running(slave->dev))
+			continue;
+
+		err = bond_set_slave_xfrm_features(bond, slave, features);
+		if (err)
+			break;
+	}
+	if (err) {
+		bond_restore_slave_xfrm_features(bond, dev->features);
+		if ((dev->features & NETIF_F_HW_ESP) &&
+		    !(features & NETIF_F_HW_ESP))
+			bond_ipsec_lag_end_flush(bond);
+		return err;
+	}
+
+	bond_for_each_slave(bond, slave, iter) {
+		netdev_features_t missing = enabled & ~slave->dev->features;
+
+		if (!netif_running(slave->dev))
+			continue;
+
+		if (missing) {
+			slave_warn(dev, slave->dev,
+				   "failed to enable XFRM feature(s) %pNF\n",
+				   &missing);
+			bond_restore_slave_xfrm_features(bond, dev->features);
+			if ((dev->features & NETIF_F_HW_ESP) &&
+			    !(features & NETIF_F_HW_ESP))
+				bond_ipsec_lag_end_flush(bond);
+			return -EOPNOTSUPP;
+		}
+	}
+
+	if (features & NETIF_F_HW_ESP)
+		bond_ipsec_lag_end_flush(bond);
+
+	return 0;
+}
+#endif /* CONFIG_XFRM_OFFLOAD */
 
 static int bond_header_create(struct sk_buff *skb, struct net_device *bond_dev,
 			      unsigned short type, const void *daddr,
@@ -6510,6 +6739,9 @@ static const struct net_device_ops bond_netdev_ops = {
 	.ndo_add_slave		= bond_enslave,
 	.ndo_del_slave		= bond_release,
 	.ndo_fix_features	= bond_fix_features,
+#ifdef CONFIG_XFRM_OFFLOAD
+	.ndo_set_features	= bond_set_features,
+#endif /* CONFIG_XFRM_OFFLOAD */
 	.ndo_features_check	= passthru_features_check,
 	.ndo_get_xmit_slave	= bond_xmit_get_slave,
 	.ndo_sk_get_lower_dev	= bond_sk_get_lower_dev,

@@ -885,7 +885,7 @@ static bool bond_set_xfrm_features(struct bonding *bond)
 
 	if (BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP)
 		bond->dev->wanted_features |= BOND_XFRM_FEATURES;
-	else
+	else if (!bond_mode_can_use_lag_xfrm(bond))
 		bond->dev->wanted_features &= ~BOND_XFRM_FEATURES;
 
 	return true;
