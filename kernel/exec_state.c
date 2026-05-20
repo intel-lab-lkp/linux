@@ -8,6 +8,7 @@
 #include <linux/sched/exec_state.h>
 #include <linux/sched/signal.h>
 #include <linux/slab.h>
+#include <linux/user_namespace.h>
 
 static struct kmem_cache *task_exec_state_cachep;
 
@@ -15,6 +16,7 @@ static void __free_task_exec_state(struct rcu_head *rcu)
 {
 	struct task_exec_state *es = container_of(rcu, struct task_exec_state, rcu);
 
+	put_user_ns(es->user_ns);
 	kmem_cache_free(task_exec_state_cachep, es);
 }
 
@@ -24,7 +26,7 @@ void put_task_exec_state(struct task_exec_state *es)
 		call_rcu(&es->rcu, __free_task_exec_state);
 }
 
-struct task_exec_state *alloc_task_exec_state(void)
+struct task_exec_state *alloc_task_exec_state(struct user_namespace *user_ns)
 {
 	struct task_exec_state *es;
 
@@ -33,6 +35,7 @@ struct task_exec_state *alloc_task_exec_state(void)
 		return NULL;
 	refcount_set(&es->count, 1);
 	es->dumpable = TASK_DUMPABLE_OFF;
+	es->user_ns = get_user_ns(user_ns);
 	return es;
 }
 

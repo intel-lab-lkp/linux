@@ -8,6 +8,8 @@
 #include <linux/sched/coredump.h>
 #include <linux/user_namespace.h>
 
+struct user_namespace;
+
 struct task_exec_state {
 	refcount_t		count;
 	enum task_dumpable	dumpable;
@@ -15,13 +17,11 @@ struct task_exec_state {
 	struct rcu_head		rcu;
 };
 
-struct task_exec_state *alloc_task_exec_state(void);
+struct task_exec_state *alloc_task_exec_state(struct user_namespace *user_ns);
 void put_task_exec_state(struct task_exec_state *es);
 struct task_exec_state *task_exec_state_rcu(const struct task_struct *tsk);
 struct task_exec_state *task_exec_state_replace(struct task_struct *tsk,
 						struct task_exec_state *exec_state);
-void task_exec_state_set_dumpable(enum task_dumpable value);
-enum task_dumpable task_exec_state_get_dumpable(struct task_struct *task);
 void copy_exec_state(struct task_struct *tsk);
 void __init exec_state_init(void);
 
