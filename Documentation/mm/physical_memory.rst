@@ -483,6 +483,19 @@ General
   ``present_pages`` should use ``get_online_mems()`` to get a stable value. It
   is initialized by ``calculate_node_totalpages()``.
 
+``pages_with_online_memmap``
+  Tracks pages within the zone that have an online memory map (present pages
+  and memory holes whose memory map has been initialized). When
+  ``spanned_pages`` == ``pages_with_online_memmap``, ``pfn_to_page()`` can be
+  performed without further checks on any PFN within the zone span.
+
+  Note: this counter may temporarily undercount when pages with an online
+  memory map exist outside the current zone span. This can only happen during
+  boot, when initializing the memory map of pages that do not fall into any
+  zone span. Growing the zone to cover such pages and later shrinking it back
+  may result in a "too small" value. This is safe: it merely prevents
+  detecting a contiguous zone.
+
 ``present_early_pages``
   The present pages existing within the zone located on memory available since
   early boot, excluding hotplugged memory. Defined only when
