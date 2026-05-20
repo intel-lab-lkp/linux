@@ -9,6 +9,7 @@
  */
 
 #include <linux/bcd.h>
+#include <linux/bitfield.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
 #include <linux/kstrtox.h>
@@ -48,6 +49,7 @@ enum ds_type {
 	mcp794xx,
 	rx_8025,
 	rx_8130,
+	rx_8901,
 	last_ds_type /* always last */
 	/* rs5c372 too?  different address... */
 };
@@ -129,6 +131,18 @@ enum ds_type {
 #define RX8130_REG_CONTROL1_INIEN	BIT(4)
 #define RX8130_REG_CONTROL1_CHGEN	BIT(5)
 
+#define RX8901_REG_INTF			0x0e
+#define RX8901_REG_INTF_VLF		BIT(1)
+#define RX8901_REG_PWSW_CFG		0x37
+#define RX8901_REG_PWSW_CFG_SWSEL	GENMASK(3, 2)
+#define RX8901_REG_PWSW_CFG_VBATLDETEN	BIT(4)
+#define RX8901_REG_PWSW_CFG_INIEN	BIT(6)
+#define RX8901_REG_PWSW_CFG_CHGEN	BIT(7)
+#define RX8901_REG_BUF_INTF		0x46
+#define RX8901_REG_BUF_INTF_VBATLF	BIT(3)
+#define RX8901_SWSEL_PRIMARY_BACKUP	0x1
+#define RX8901_SWSEL_PRIMARY		0x2
+
 #define MCP794XX_REG_CONTROL		0x07
 #	define MCP794XX_BIT_ALM0_EN	0x10
 #	define MCP794XX_BIT_ALM1_EN	0x20
@@ -192,8 +206,8 @@ struct chip_desc {
 	irq_handler_t		irq_handler;
 	const struct rtc_class_ops *rtc_ops;
 	u16			trickle_charger_reg;
-	u8			(*do_trickle_setup)(struct ds1307 *, u32,
-						    bool);
+	int			(*do_trickle_setup)(struct ds1307 *ds1307, u32 ohms,
+						    bool diode);
 	/* Does the RTC require trickle-resistor-ohms to select the value of
 	 * the resistor between Vcc and Vbackup?
 	 */
@@ -216,6 +230,7 @@ static int ds1307_get_time(struct device *dev, struct rtc_time *t)
 
 	if (ds1307->type == rx_8130) {
 		unsigned int regflag;
+
 		ret = regmap_read(ds1307->regmap, RX8130_REG_FLAG, &regflag);
 		if (ret) {
 			dev_err(dev, "%s error %d\n", "read", ret);
@@ -223,6 +238,19 @@ static int ds1307_get_time(struct device *dev, struct rtc_time *t)
 		}
 
 		if (regflag & RX8130_REG_FLAG_VLF) {
+			dev_warn_once(dev, "oscillator failed, set time!\n");
+			return -EINVAL;
+		}
+	} else if (ds1307->type == rx_8901) {
+		unsigned int regflag;
+
+		ret = regmap_read(ds1307->regmap, RX8901_REG_INTF, &regflag);
+		if (ret) {
+			dev_dbg(dev, "%s error %d\n", "read", ret);
+			return ret;
+		}
+
+		if (regflag & RX8901_REG_INTF_VLF) {
 			dev_warn_once(dev, "oscillator failed, set time!\n");
 			return -EINVAL;
 		}
@@ -307,7 +335,7 @@ static int ds1307_get_time(struct device *dev, struct rtc_time *t)
 	tmp = regs[DS1307_REG_HOUR] & 0x3f;
 	t->tm_hour = bcd2bin(tmp);
 	/* rx8130 is bit position, not BCD */
-	if (ds1307->type == rx_8130)
+	if (ds1307->type == rx_8130 || ds1307->type == rx_8901)
 		t->tm_wday = fls(regs[DS1307_REG_WDAY] & 0x7f) - 1;
 	else
 		t->tm_wday = bcd2bin(regs[DS1307_REG_WDAY] & 0x07) - 1;
@@ -358,7 +386,7 @@ static int ds1307_set_time(struct device *dev, struct rtc_time *t)
 	regs[DS1307_REG_MIN] = bin2bcd(t->tm_min);
 	regs[DS1307_REG_HOUR] = bin2bcd(t->tm_hour);
 	/* rx8130 is bit position, not BCD */
-	if (ds1307->type == rx_8130)
+	if (ds1307->type == rx_8130 || ds1307->type == rx_8901)
 		regs[DS1307_REG_WDAY] = 1 << t->tm_wday;
 	else
 		regs[DS1307_REG_WDAY] = bin2bcd(t->tm_wday + 1);
@@ -422,10 +450,131 @@ static int ds1307_set_time(struct device *dev, struct rtc_time *t)
 			dev_err(dev, "%s error %d\n", "write", result);
 			return result;
 		}
+	} else if (ds1307->type == rx_8901) {
+		/*
+		 * clear Voltage Loss Flag as data is available now (writing 1
+		 * to the other bits in the INTF register has no effect)
+		 */
+		result = regmap_write(ds1307->regmap, RX8901_REG_INTF,
+				      0xff ^ RX8901_REG_INTF_VLF);
+		if (result) {
+			dev_dbg(dev, "%s error %d\n", "write", result);
+			return result;
+		}
 	}
 
 	return 0;
 }
+
+#ifdef CONFIG_RTC_INTF_DEV
+static int rx8901_ioctl(struct device *dev, unsigned int cmd, unsigned long arg)
+{
+	struct ds1307 *ds1307 = dev_get_drvdata(dev);
+	unsigned int regflag, tmp = 0;
+	int ret = 0;
+
+	switch (cmd) {
+	case RTC_VL_READ:
+		ret = regmap_read(ds1307->regmap, RX8901_REG_INTF, &regflag);
+		if (ret)
+			return ret;
+
+		if (regflag & RX8901_REG_INTF_VLF)
+			tmp |= RTC_VL_DATA_INVALID;
+
+		ret = regmap_read(ds1307->regmap, RX8901_REG_BUF_INTF, &regflag);
+		if (ret)
+			return ret;
+
+		if (regflag & RX8901_REG_BUF_INTF_VBATLF)
+			tmp |= RTC_VL_BACKUP_LOW;
+
+		return put_user(tmp, (unsigned int __user *)arg);
+	default:
+		return -ENOIOCTLCMD;
+	}
+	return ret;
+}
+
+static int rx8901_param_get(struct device *dev, struct rtc_param *param)
+{
+	struct ds1307 *ds1307 = dev_get_drvdata(dev);
+	unsigned int regflag;
+	int ret;
+
+	switch (param->param) {
+	case RTC_PARAM_BACKUP_SWITCH_MODE:
+		ret = regmap_read(ds1307->regmap, RX8901_REG_PWSW_CFG, &regflag);
+		if (ret)
+			return ret;
+
+		if (regflag & RX8901_REG_PWSW_CFG_INIEN) {
+			param->uvalue = RTC_BSM_LEVEL;
+		} else {
+			unsigned int swsel = FIELD_GET(RX8901_REG_PWSW_CFG_SWSEL, regflag);
+
+			if (swsel == RX8901_SWSEL_PRIMARY_BACKUP)
+				param->uvalue = RTC_BSM_DIRECT;
+			else
+				param->uvalue = RTC_BSM_DISABLED;
+		}
+
+		break;
+
+	default:
+		return -EINVAL;
+	}
+	return ret;
+}
+
+static int rx8901_param_set(struct device *dev, struct rtc_param *param)
+{
+	struct ds1307 *ds1307 = dev_get_drvdata(dev);
+	unsigned int regmask;
+	unsigned int regval;
+	int ret;
+
+	switch (param->param) {
+	case RTC_PARAM_BACKUP_SWITCH_MODE:
+
+		switch (param->uvalue) {
+		case RTC_BSM_DISABLED:
+			/* Only main power supply is used */
+			regmask = RX8901_REG_PWSW_CFG_INIEN |
+				  RX8901_REG_PWSW_CFG_SWSEL;
+			regval = FIELD_PREP(RX8901_REG_PWSW_CFG_SWSEL,
+					    RX8901_SWSEL_PRIMARY) |
+				 FIELD_PREP(RX8901_REG_PWSW_CFG_INIEN, 0);
+			break;
+		case RTC_BSM_DIRECT:
+			/* Main and battery power supply is put in parallel (default) */
+			regmask = RX8901_REG_PWSW_CFG_INIEN |
+				  RX8901_REG_PWSW_CFG_SWSEL;
+			regval = FIELD_PREP(RX8901_REG_PWSW_CFG_SWSEL,
+					    RX8901_SWSEL_PRIMARY_BACKUP) |
+				 FIELD_PREP(RX8901_REG_PWSW_CFG_INIEN, 0);
+			break;
+		case RTC_BSM_LEVEL:
+			/* Enable auto power switching between main and backup power supply */
+			regmask = RX8901_REG_PWSW_CFG_INIEN;
+			regval = FIELD_PREP(RX8901_REG_PWSW_CFG_INIEN, 1);
+			break;
+		default:
+			return -EINVAL;
+		}
+		ret = regmap_update_bits(ds1307->regmap, RX8901_REG_PWSW_CFG, regmask, regval);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return ret;
+}
+#else
+#define rx8901_ioctl NULL
+#define rx8901_param_get NULL
+#define rx8901_param_set NULL
+#endif
 
 static int ds1337_read_alarm(struct device *dev, struct rtc_wkalrm *t)
 {
@@ -533,7 +682,7 @@ static int ds1307_alarm_irq_enable(struct device *dev, unsigned int enabled)
 				  enabled ? DS1337_BIT_A1IE : 0);
 }
 
-static u8 do_trickle_setup_ds1339(struct ds1307 *ds1307, u32 ohms, bool diode)
+static int do_trickle_setup_ds1339(struct ds1307 *ds1307, u32 ohms, bool diode)
 {
 	u8 setup = (diode) ? DS1307_TRICKLE_CHARGER_DIODE :
 		DS1307_TRICKLE_CHARGER_NO_DIODE;
@@ -558,12 +707,32 @@ static u8 do_trickle_setup_ds1339(struct ds1307 *ds1307, u32 ohms, bool diode)
 	return setup;
 }
 
-static u8 do_trickle_setup_rx8130(struct ds1307 *ds1307, u32 ohms, bool diode)
+static int do_trickle_setup_rx8130(struct ds1307 *ds1307, u32 ohms, bool diode)
 {
 	/* make sure that the backup battery is enabled */
 	u8 setup = RX8130_REG_CONTROL1_INIEN;
 	if (diode)
 		setup |= RX8130_REG_CONTROL1_CHGEN;
+
+	return setup;
+}
+
+static int do_trickle_setup_rx8901(struct ds1307 *ds1307, u32 ohms __always_unused, bool diode)
+{
+	int ret;
+	unsigned int setup;
+
+	ret = regmap_read(ds1307->regmap, RX8901_REG_PWSW_CFG, &setup);
+	if (ret) {
+		dev_err(ds1307->dev, "Failed to read PWSW_CFG register\n");
+		return ret;
+	}
+
+	/* Enable low battery voltage detection */
+	setup |= RX8901_REG_PWSW_CFG_VBATLDETEN;
+
+	if (diode)
+		setup |= RX8901_REG_PWSW_CFG_CHGEN;
 
 	return setup;
 }
@@ -960,6 +1129,14 @@ static const struct rtc_class_ops rx8130_rtc_ops = {
 	.alarm_irq_enable = rx8130_alarm_irq_enable,
 };
 
+static const struct rtc_class_ops rx8901_rtc_ops = {
+	.read_time      = ds1307_get_time,
+	.set_time       = ds1307_set_time,
+	.ioctl          = rx8901_ioctl,
+	.param_get      = rx8901_param_get,
+	.param_set      = rx8901_param_set,
+};
+
 static const struct rtc_class_ops mcp794xx_rtc_ops = {
 	.read_time      = ds1307_get_time,
 	.set_time       = ds1307_set_time,
@@ -1040,6 +1217,12 @@ static const struct chip_desc chips[last_ds_type] = {
 		.trickle_charger_reg = RX8130_REG_CONTROL1,
 		.do_trickle_setup = &do_trickle_setup_rx8130,
 	},
+	[rx_8901] = {
+		.offset		= 0x0,
+		.rtc_ops = &rx8901_rtc_ops,
+		.trickle_charger_reg = RX8901_REG_PWSW_CFG,
+		.do_trickle_setup = &do_trickle_setup_rx8901,
+	},
 	[m41t0] = {
 		.rtc_ops	= &m41txx_rtc_ops,
 	},
@@ -1081,6 +1264,7 @@ static const struct i2c_device_id ds1307_id[] = {
 	{ "rx8025", rx_8025 },
 	{ "isl12057", ds_1337 },
 	{ "rx8130", rx_8130 },
+	{ "rx8901", rx_8901 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ds1307_id);
@@ -1157,6 +1341,10 @@ static const struct of_device_id ds1307_of_match[] = {
 	{
 		.compatible = "epson,rx8130",
 		.data = (void *)rx_8130
+	},
+	{
+		.compatible = "epson,rx8901",
+		.data = (void *)rx_8901
 	},
 	{ }
 };
@@ -1292,7 +1480,7 @@ static int ds1307_nvram_write(void *priv, unsigned int offset, void *val,
 
 /*----------------------------------------------------------------------*/
 
-static u8 ds1307_trickle_init(struct ds1307 *ds1307,
+static int ds1307_trickle_init(struct ds1307 *ds1307,
 			      const struct chip_desc *chip)
 {
 	u32 ohms, chargeable;
@@ -1745,7 +1933,7 @@ static int ds1307_probe(struct i2c_client *client)
 	bool			ds1307_can_wakeup_device = false;
 	unsigned char		regs[8];
 	struct ds1307_platform_data *pdata = dev_get_platdata(&client->dev);
-	u8			trickle_charger_setup = 0;
+	int			trickle_charger_setup = 0;
 
 	ds1307 = devm_kzalloc(&client->dev, sizeof(struct ds1307), GFP_KERNEL);
 	if (!ds1307)
@@ -1781,12 +1969,15 @@ static int ds1307_probe(struct i2c_client *client)
 	else if (pdata->trickle_charger_setup)
 		trickle_charger_setup = pdata->trickle_charger_setup;
 
+	if (trickle_charger_setup < 0)
+		return trickle_charger_setup;
+
 	if (trickle_charger_setup && chip->trickle_charger_reg) {
 		dev_dbg(ds1307->dev,
 			"writing trickle charger info 0x%x to 0x%x\n",
 			trickle_charger_setup, chip->trickle_charger_reg);
 		regmap_write(ds1307->regmap, chip->trickle_charger_reg,
-			     trickle_charger_setup);
+			     (u8)trickle_charger_setup);
 	}
 
 /*
@@ -1988,6 +2179,13 @@ static int ds1307_probe(struct i2c_client *client)
 		} else {
 			dev_dbg(ds1307->dev, "got IRQ %d\n", client->irq);
 		}
+	}
+
+	switch (ds1307->type) {
+	case rx_8901:
+		set_bit(RTC_FEATURE_BACKUP_SWITCH_MODE, ds1307->rtc->features);
+		break;
+	default:
 	}
 
 	ds1307->rtc->ops = chip->rtc_ops ?: &ds13xx_rtc_ops;
