@@ -923,7 +923,7 @@ static long tap_ioctl(struct file *file, unsigned int cmd,
 	unsigned int __user *up = argp;
 	unsigned short u;
 	int __user *sp = argp;
-	struct sockaddr_storage ss;
+	struct sockaddr_storage ss = {};
 	int s;
 	int ret;
 
