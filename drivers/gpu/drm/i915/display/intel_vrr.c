@@ -66,7 +66,18 @@ bool intel_vrr_is_capable(struct intel_connector *connector)
 		if (drm_dp_is_branch(intel_dp->dpcd))
 			return false;
 
-		if (!drm_dp_sink_can_do_video_without_timing_msa(intel_dp->dpcd))
+		/*
+		 * DP Sink is capable of VRR video timings if either:
+		 *  - DPCD MSA_TIMING_PAR_IGNORED (DPCD 0x07 bit 6) is set,
+		 *    indicating the sink accepts variable VTotal updates without
+		 *    re-transmitted MSA timing (legacy Adaptive-Sync path), or
+		 *  - the sink advertises Adaptive-Sync SDP support in DPCD
+		 *    DPRX_FEATURE_ENUMERATION_LIST_CONT_1 (0x2214 bit 0), in which
+		 *    case the variable-frame info is carried by the AS-SDP packet
+		 *    (DP 2.0 path).
+		 */
+		if (!drm_dp_sink_can_do_video_without_timing_msa(intel_dp->dpcd) &&
+		    !intel_dp->as_sdp_supported)
 			return false;
 
 		break;
