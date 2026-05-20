@@ -834,9 +834,27 @@ static void __init init_unavailable_range(unsigned long spfn,
 {
 	unsigned long pfn;
 	u64 pgcnt = 0;
+	pg_data_t *pgdat = NODE_DATA(node);
+	int zid = zone;
 
 	for_each_valid_pfn(pfn, spfn, epfn) {
-		__init_single_page(pfn_to_page(pfn), pfn, zone, node);
+		/*
+		 * The caller's zone may not match the PFN when unavailable
+		 * ranges straddle zone boundaries.  Look up the correct zone
+		 * so page->flags encodes the right zone for page_zone().
+		 */
+		if (!zone_spans_pfn(&pgdat->node_zones[zid], pfn)) {
+			int z;
+
+			for (z = 0; z < MAX_NR_ZONES; z++) {
+				if (zone_spans_pfn(&pgdat->node_zones[z], pfn)) {
+					zid = z;
+					break;
+				}
+			}
+		}
+
+		__init_single_page(pfn_to_page(pfn), pfn, zid, node);
 		__SetPageReserved(pfn_to_page(pfn));
 		pgcnt++;
 	}
