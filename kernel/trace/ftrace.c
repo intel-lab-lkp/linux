@@ -1082,10 +1082,7 @@ struct ftrace_func_probe {
  * it all the time. These are in a read only section such that if
  * anyone does try to modify it, it will cause an exception.
  */
-static const struct hlist_head empty_buckets[1];
-static const struct ftrace_hash empty_hash = {
-	.buckets = (struct hlist_head *)empty_buckets,
-};
+static const struct ftrace_hash empty_hash = {};
 #define EMPTY_HASH	((struct ftrace_hash *)&empty_hash)
 
 struct ftrace_ops global_ops = {
@@ -1295,7 +1292,6 @@ void free_ftrace_hash(struct ftrace_hash *hash)
 	if (!hash || hash == EMPTY_HASH)
 		return;
 	ftrace_hash_clear(hash);
-	kfree(hash->buckets);
 	kfree(hash);
 }
 
@@ -1333,19 +1329,10 @@ EXPORT_SYMBOL_GPL(ftrace_free_filter);
 struct ftrace_hash *alloc_ftrace_hash(int size_bits)
 {
 	struct ftrace_hash *hash;
-	int size;
 
-	hash = kzalloc_obj(*hash);
+	hash = kzalloc_flex(*hash, buckets, BIT(size_bits));
 	if (!hash)
 		return NULL;
-
-	size = 1 << size_bits;
-	hash->buckets = kzalloc_objs(*hash->buckets, size);
-
-	if (!hash->buckets) {
-		kfree(hash);
-		return NULL;
-	}
 
 	hash->size_bits = size_bits;
 

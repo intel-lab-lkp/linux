@@ -1000,10 +1000,10 @@ enum {
 
 struct ftrace_hash {
 	unsigned long		size_bits;
-	struct hlist_head	*buckets;
 	unsigned long		count;
 	unsigned long		flags;
 	struct rcu_head		rcu;
+	struct hlist_head	buckets[];
 };
 
 struct ftrace_func_entry *
