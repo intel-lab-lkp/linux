@@ -505,6 +505,7 @@ xprt_rdma_alloc_slot(struct rpc_xprt *xprt, struct rpc_task *task)
 	req = rpcrdma_buffer_get(&r_xprt->rx_buf);
 	if (!req)
 		goto out_sleep;
+	kref_init(&req->rl_kref);
 	task->tk_rqstp = &req->rl_slot;
 	task->tk_status = 0;
 	return;
@@ -520,6 +521,7 @@ out_sleep:
 	if (req) {
 		struct rpc_rqst *rqst = &req->rl_slot;
 
+		kref_init(&req->rl_kref);
 		if (!xprt_wake_up_backlog(xprt, rqst)) {
 			memset(rqst, 0, sizeof(*rqst));
 			rpcrdma_buffer_put(&r_xprt->rx_buf, req);
@@ -540,10 +542,7 @@ xprt_rdma_free_slot(struct rpc_xprt *xprt, struct rpc_rqst *rqst)
 		container_of(xprt, struct rpcrdma_xprt, rx_xprt);
 
 	rpcrdma_reply_put(&r_xprt->rx_buf, rpcr_to_rdmar(rqst));
-	if (!xprt_wake_up_backlog(xprt, rqst)) {
-		memset(rqst, 0, sizeof(*rqst));
-		rpcrdma_buffer_put(&r_xprt->rx_buf, rpcr_to_rdmar(rqst));
-	}
+	rpcrdma_req_put(rpcr_to_rdmar(rqst));
 }
 
 static bool rpcrdma_check_regbuf(struct rpcrdma_xprt *r_xprt,
@@ -716,7 +715,7 @@ void xprt_rdma_print_stats(struct rpc_xprt *xprt, struct seq_file *seq)
 		   r_xprt->rx_stats.mrs_allocated,
 		   r_xprt->rx_stats.local_inv_needed,
 		   r_xprt->rx_stats.empty_sendctx_q,
-		   r_xprt->rx_stats.reply_waits_for_send);
+		   0LU); /* Was reply_waits_for_send */
 }
 
 static int

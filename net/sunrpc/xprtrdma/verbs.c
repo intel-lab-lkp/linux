@@ -65,6 +65,8 @@
 
 static int rpcrdma_sendctxs_create(struct rpcrdma_xprt *r_xprt);
 static void rpcrdma_sendctxs_destroy(struct rpcrdma_xprt *r_xprt);
+static unsigned long rpcrdma_sendctx_next(struct rpcrdma_buffer *buf,
+					  unsigned long item);
 static void rpcrdma_sendctx_put_locked(struct rpcrdma_xprt *r_xprt,
 				       struct rpcrdma_sendctx *sc);
 static int rpcrdma_reqs_setup(struct rpcrdma_xprt *r_xprt);
@@ -605,6 +607,23 @@ static void rpcrdma_sendctxs_destroy(struct rpcrdma_xprt *r_xprt)
 
 	if (!buf->rb_sc_ctxs)
 		return;
+
+	/* Release any Send-side kref still held by sendctxs the HCA
+	 * never signaled: orphans left by a rpcrdma_prepare_send_sges()
+	 * failure, and entries past rb_sc_tail whose unsignaled Sends
+	 * never had a later signaled completion to drive the ring walk.
+	 * Without this drain those reqs would stay off rb_send_bufs and
+	 * their slots would be leaked across reconnect.
+	 */
+	for (i = rpcrdma_sendctx_next(buf, buf->rb_sc_tail);
+	     i != rpcrdma_sendctx_next(buf, buf->rb_sc_head);
+	     i = rpcrdma_sendctx_next(buf, i)) {
+		struct rpcrdma_sendctx *sc = buf->rb_sc_ctxs[i];
+
+		if (sc && sc->sc_req)
+			rpcrdma_sendctx_unmap(sc);
+	}
+
 	for (i = 0; i <= buf->rb_sc_last; i++)
 		kfree(buf->rb_sc_ctxs[i]);
 	kfree(buf->rb_sc_ctxs);
@@ -1081,7 +1100,8 @@ int rpcrdma_buffer_create(struct rpcrdma_xprt *r_xprt)
 	INIT_LIST_HEAD(&buf->rb_all_reps);
 
 	rc = -ENOMEM;
-	for (i = 0; i < r_xprt->rx_xprt.max_reqs; i++) {
+	for (i = 0; i < r_xprt->rx_xprt.max_reqs +
+			(r_xprt->rx_xprt.max_reqs >> 3); i++) {
 		struct rpcrdma_req *req;
 
 		req = rpcrdma_req_create(r_xprt,

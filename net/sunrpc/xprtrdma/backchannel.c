@@ -159,9 +159,7 @@ void xprt_rdma_bc_free_rqst(struct rpc_rqst *rqst)
 	rpcrdma_rep_put(&r_xprt->rx_buf, rep);
 	req->rl_reply = NULL;
 
-	spin_lock(&xprt->bc_pa_lock);
-	list_add_tail(&rqst->rq_bc_pa_list, &xprt->bc_pa_list);
-	spin_unlock(&xprt->bc_pa_lock);
+	rpcrdma_req_put(req);
 	xprt_put(xprt);
 }
 
@@ -179,6 +177,7 @@ static struct rpc_rqst *rpcrdma_bc_rqst_get(struct rpcrdma_xprt *r_xprt)
 		goto create_req;
 	list_del(&rqst->rq_bc_pa_list);
 	spin_unlock(&xprt->bc_pa_lock);
+	kref_init(&rpcr_to_rdmar(rqst)->rl_kref);
 	return rqst;
 
 create_req:
@@ -203,6 +202,7 @@ create_req:
 	rqst->rq_xprt = xprt;
 	__set_bit(RPC_BC_PA_IN_USE, &rqst->rq_bc_pa_state);
 	xdr_buf_init(&rqst->rq_snd_buf, rdmab_data(req->rl_sendbuf), size);
+	kref_init(&req->rl_kref);
 	return rqst;
 }
 

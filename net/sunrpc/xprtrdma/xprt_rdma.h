@@ -427,7 +427,6 @@ struct rpcrdma_stats {
 	/* accessed when receiving a reply */
 	unsigned long long	total_rdma_reply;
 	unsigned long long	fixup_copy_count;
-	unsigned long		reply_waits_for_send;
 	unsigned long		local_inv_needed;
 	unsigned long		nomsg_call_count;
 	unsigned long		bcall_count;
@@ -580,6 +579,7 @@ int rpcrdma_prepare_send_sges(struct rpcrdma_xprt *r_xprt,
 			      struct rpcrdma_req *req, u32 hdrlen,
 			      struct xdr_buf *xdr,
 			      enum rpcrdma_chunktype rtype);
+void rpcrdma_req_put(struct rpcrdma_req *req);
 void rpcrdma_sendctx_unmap(struct rpcrdma_sendctx *sc);
 int rpcrdma_marshal_req(struct rpcrdma_xprt *r_xprt, struct rpc_rqst *rqst);
 void rpcrdma_set_max_header_sizes(struct rpcrdma_ep *ep);
