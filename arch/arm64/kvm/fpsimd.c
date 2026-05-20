@@ -29,6 +29,20 @@ void kvm_arch_vcpu_load_fp(struct kvm_vcpu *vcpu)
 		return;
 
 	/*
+	 * Avoid needless save/restore of the guest's common
+	 * FPSIMD/SVE/SME regs during transitions between L1/L2.
+	 *
+	 * These transitions only happens in a non-preemptible context
+	 * where the host regs have already been saved and unbound. The
+	 * live registers are either free or owned by the guest.
+	 */
+	if (vcpu_get_flag(vcpu, IN_NESTED_ERET) ||
+	    vcpu_get_flag(vcpu, IN_NESTED_EXCEPTION)) {
+		WARN_ON_ONCE(host_owns_fp_regs());
+		return;
+	}
+
+	/*
 	 * Ensure that any host FPSIMD/SVE/SME state is saved and unbound such
 	 * that the host kernel is responsible for restoring this state upon
 	 * return to userspace, and the hyp code doesn't need to save anything.
@@ -101,6 +115,15 @@ void kvm_arch_vcpu_ctxsync_fp(struct kvm_vcpu *vcpu)
 void kvm_arch_vcpu_put_fp(struct kvm_vcpu *vcpu)
 {
 	unsigned long flags;
+
+	/*
+	 * See comment in kvm_arch_vcpu_load_fp().
+	 */
+	if (vcpu_get_flag(vcpu, IN_NESTED_ERET) ||
+	    vcpu_get_flag(vcpu, IN_NESTED_EXCEPTION)) {
+		WARN_ON_ONCE(host_owns_fp_regs());
+		return;
+	}
 
 	local_irq_save(flags);
 
