@@ -112,6 +112,7 @@ struct riic_dev {
 	void __iomem *base;
 	u8 *buf;
 	struct i2c_msg *msg;
+	int *irqs;
 	int bytes_left;
 	int err;
 	int is_last;
@@ -165,6 +166,20 @@ static int riic_bus_barrier(struct riic_dev *riic)
 	return 0;
 }
 
+static void riic_abort_xfer(struct riic_dev *riic)
+{
+	/*
+	 * Disable interrupts. Read back registers to confirm writes have
+	 * fully propagated.
+	 */
+	riic_writeb(riic, 0, RIIC_ICIER);
+	riic_readb(riic, RIIC_ICIER);
+
+	/* Synchronize IRQs */
+	for (unsigned int i = 0; i < riic->info->num_irqs; i++)
+		synchronize_irq(riic->irqs[i]);
+}
+
 static int riic_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 {
 	struct riic_dev *riic = i2c_get_adapdata(adap);
@@ -196,8 +211,10 @@ static int riic_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		riic_writeb(riic, start_bit, RIIC_ICCR2);
 
 		time_left = wait_for_completion_timeout(&riic->msg_done, riic->adapter.timeout);
-		if (time_left == 0)
+		if (time_left == 0) {
+			riic_abort_xfer(riic);
 			riic->err = -ETIMEDOUT;
+		}
 
 		if (riic->err)
 			break;
@@ -543,16 +560,20 @@ static int riic_i2c_probe(struct platform_device *pdev)
 
 	riic->info = of_device_get_match_data(dev);
 
+	riic->irqs = devm_kcalloc(&pdev->dev, riic->info->num_irqs,
+				  sizeof(*riic->irqs), GFP_KERNEL);
+	if (!riic->irqs)
+		return -ENOMEM;
+
 	for (i = 0; i < riic->info->num_irqs; i++) {
 		const struct riic_irq_desc *irq_desc;
-		int irq;
 
 		irq_desc = &riic->info->irqs[i];
-		irq = platform_get_irq(pdev, irq_desc->res_num);
-		if (irq < 0)
-			return irq;
+		riic->irqs[i] = platform_get_irq(pdev, irq_desc->res_num);
+		if (riic->irqs[i] < 0)
+			return riic->irqs[i];
 
-		ret = devm_request_irq(dev, irq, irq_desc->isr, 0, irq_desc->name, riic);
+		ret = devm_request_irq(dev, riic->irqs[i], irq_desc->isr, 0, irq_desc->name, riic);
 		if (ret)
 			return dev_err_probe(dev, ret, "failed to request irq %s\n",
 					     irq_desc->name);
