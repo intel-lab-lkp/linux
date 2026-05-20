@@ -391,9 +391,18 @@ static inline struct ib_mad_recv_buf *get_next_seg(struct list_head *rmpp_list,
 	return container_of(seg->list.next, struct ib_mad_recv_buf, list);
 }
 
+/*
+ * find_seg_location() is linear in the number of queued segments.
+ * Keep the RMPP window at the default size so a larger receive queue
+ * does not also enlarge the reordered DATA insertion walk.
+ */
+#define IB_MAD_RMPP_MAX_WINDOW 64
+
 static inline int window_size(struct ib_mad_agent_private *agent)
 {
-	return max(agent->qp_info->recv_queue.max_active >> 3, 1);
+	int wsize = agent->qp_info->recv_queue.max_active >> 3;
+
+	return clamp(wsize, 1, IB_MAD_RMPP_MAX_WINDOW);
 }
 
 static struct ib_mad_recv_buf *find_seg_location(struct list_head *rmpp_list,
