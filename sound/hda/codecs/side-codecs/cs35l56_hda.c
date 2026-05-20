@@ -1050,7 +1050,7 @@ static int cs35l56_hda_read_acpi(struct cs35l56_hda *cs35l56, int hid, int id)
 	sub = acpi_get_subsystem_id(ACPI_HANDLE(cs35l56->base.dev));
 	ret = cs35l56_hda_apply_platform_fixups(cs35l56, sub, &id);
 	if (ret)
-		return ret;
+		goto err_free_sub;
 
 	if (cs35l56->index == -1) {
 		property = "cirrus,dev-index";
@@ -1102,7 +1102,7 @@ static int cs35l56_hda_read_acpi(struct cs35l56_hda *cs35l56, int hid, int id)
 			if (!cs35l56->system_name)
 				return -ENOMEM;
 		} else {
-			return ret;
+			goto err_free_sub;
 		}
 	}
 
@@ -1117,8 +1117,11 @@ static int cs35l56_hda_read_acpi(struct cs35l56_hda *cs35l56, int hid, int id)
 		 * If RESET is shared the first amp to probe will grab the reset
 		 * line and reset all the amps
 		 */
-		if (ret != -EBUSY)
-			return dev_err_probe(cs35l56->base.dev, ret, "Failed to get reset GPIO\n");
+		if (ret != -EBUSY) {
+			ret = dev_err_probe(cs35l56->base.dev, ret,
+					    "Failed to get reset GPIO\n");
+			goto err_free_system_name;
+		}
 
 		dev_info(cs35l56->base.dev, "Reset GPIO busy, assume shared reset\n");
 		cs35l56->base.reset_gpio = NULL;
@@ -1126,9 +1129,19 @@ static int cs35l56_hda_read_acpi(struct cs35l56_hda *cs35l56, int hid, int id)
 
 	return 0;
 
+err_free_system_name:
+	kfree(cs35l56->system_name);
+	cs35l56->system_name = NULL;
+
+	return ret;
+
 err:
 	if (ret != -ENODEV)
 		dev_err(cs35l56->base.dev, "Failed property %s: %d\n", property, ret);
+
+err_free_sub:
+	if (!IS_ERR(sub))
+		kfree(sub);
 
 	return ret;
 }
