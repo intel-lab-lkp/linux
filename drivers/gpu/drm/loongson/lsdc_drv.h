@@ -269,7 +269,6 @@ struct lsdc_device {
 	/* @descp: features description of the DC variant */
 	const struct lsdc_desc *descp;
 	struct pci_dev *dc;
-	struct pci_dev *gpu;
 
 	struct loongson_gfxpll *gfxpll;
 
