@@ -8,7 +8,7 @@
 #include <linux/mm.h>
 #include <linux/swap.h>
 #include <linux/leafops.h>
-#include <linux/pagemap.h>
+#include <linux/folio_wait.h>
 #include <linux/wait.h>
 #include <linux/hash.h>
 #include <linux/sysctl.h>
