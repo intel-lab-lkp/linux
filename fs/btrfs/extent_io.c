@@ -620,24 +620,33 @@ static void end_bbio_data_read(struct btrfs_bio *bbio)
 }
 
 /*
- * Populate every free slot in a provided array with folios using GFP_NOFS.
+ * Populate every free slot in a provided array with folios using
+ * GFP_NOFS plus optional caller-supplied flags.
  *
- * @nr_folios:   number of folios to allocate
- * @order:	 the order of the folios to be allocated
- * @folio_array: the array to fill with folios; any existing non-NULL entries in
- *		 the array will be skipped
+ * @nr_folios:    number of folios to allocate
+ * @order:	  folio order
+ * @folio_array:  array to fill with folios; non-NULL entries are skipped
+ * @extra_gfp:    extra GFP flags OR'd into GFP_NOFS. The only value used
+ *                today is __GFP_MOVABLE, which the extent-buffer real-mapping
+ *                path (alloc_extent_buffer) passes when the resulting folios
+ *                will be attached to btree_inode->i_mapping (added to LRU,
+ *                served by the btree_migrate_folio aops). Pass 0 for
+ *                everything else; folios allocated by other callers stay in
+ *                driver-owned arrays, never reach LRU and never register
+ *                movable_ops, so they cannot satisfy the __GFP_MOVABLE
+ *                migrability contract.
  *
  * Return: 0        if all folios were able to be allocated;
  *         -ENOMEM  otherwise, the partially allocated folios would be freed and
  *                  the array slots zeroed
  */
 int btrfs_alloc_folio_array(unsigned int nr_folios, unsigned int order,
-			    struct folio **folio_array)
+			    struct folio **folio_array, gfp_t extra_gfp)
 {
 	for (int i = 0; i < nr_folios; i++) {
 		if (folio_array[i])
 			continue;
-		folio_array[i] = folio_alloc(GFP_NOFS, order);
+		folio_array[i] = folio_alloc(GFP_NOFS | extra_gfp, order);
 		if (!folio_array[i])
 			goto error;
 	}
@@ -652,21 +661,27 @@ error:
 }
 
 /*
- * Populate every free slot in a provided array with pages, using GFP_NOFS.
+ * Populate every free slot in a provided array with pages, using GFP_NOFS
+ * plus optional caller-supplied flags.
  *
- * @nr_pages:   number of pages to allocate
- * @page_array: the array to fill with pages; any existing non-null entries in
- *		the array will be skipped
- * @nofail:	whether using __GFP_NOFAIL flag
+ * @nr_pages:    number of pages to allocate
+ * @page_array:  array to fill; non-NULL entries are skipped
+ * @nofail:      whether to use __GFP_NOFAIL
+ * @extra_gfp:   extra GFP flags OR'd into the base mask. The only value used
+ *               today is __GFP_MOVABLE, which the extent-buffer real-mapping
+ *               path passes when the resulting pages will be attached to
+ *               btree_inode->i_mapping. See btrfs_alloc_folio_array() for
+ *               the full migrability rationale.
  *
  * Return: 0        if all pages were able to be allocated;
  *         -ENOMEM  otherwise, the partially allocated pages would be freed and
  *                  the array slots zeroed
  */
 int btrfs_alloc_page_array(unsigned int nr_pages, struct page **page_array,
-			   bool nofail)
+			   bool nofail, gfp_t extra_gfp)
 {
-	const gfp_t gfp = nofail ? (GFP_NOFS | __GFP_NOFAIL) : GFP_NOFS;
+	const gfp_t gfp = (nofail ? (GFP_NOFS | __GFP_NOFAIL) : GFP_NOFS) |
+			  extra_gfp;
 	unsigned int allocated;
 
 	for (allocated = 0; allocated < nr_pages;) {
@@ -689,14 +704,23 @@ int btrfs_alloc_page_array(unsigned int nr_pages, struct page **page_array,
  * Populate needed folios for the extent buffer.
  *
  * For now, the folios populated are always in order 0 (aka, single page).
+ *
+ * @movable: pass true only when the resulting pages will be attached to
+ *           btree_inode->i_mapping (the alloc_extent_buffer real path).
+ *           Cloned/dummy extent buffers (EXTENT_BUFFER_UNMAPPED) leave
+ *           folio->mapping NULL, never enter the LRU, and never get the
+ *           btree_migrate_folio aops, so __GFP_MOVABLE would violate the
+ *           page-allocator's migrability contract for them.
  */
-static int alloc_eb_folio_array(struct extent_buffer *eb, bool nofail)
+static int alloc_eb_folio_array(struct extent_buffer *eb, bool nofail,
+				bool movable)
 {
 	struct page *page_array[INLINE_EXTENT_BUFFER_PAGES] = { 0 };
 	int num_pages = num_extent_pages(eb);
 	int ret;
 
-	ret = btrfs_alloc_page_array(num_pages, page_array, nofail);
+	ret = btrfs_alloc_page_array(num_pages, page_array, nofail,
+				     movable ? __GFP_MOVABLE : 0);
 	if (ret < 0)
 		return ret;
 
@@ -3097,7 +3121,7 @@ struct extent_buffer *btrfs_clone_extent_buffer(const struct extent_buffer *src)
 	 */
 	set_bit(EXTENT_BUFFER_UNMAPPED, &new->bflags);
 
-	ret = alloc_eb_folio_array(new, false);
+	ret = alloc_eb_folio_array(new, false, false);
 	if (ret)
 		goto release_eb;
 
@@ -3138,7 +3162,7 @@ struct extent_buffer *alloc_dummy_extent_buffer(struct btrfs_fs_info *fs_info,
 	if (!eb)
 		return NULL;
 
-	ret = alloc_eb_folio_array(eb, false);
+	ret = alloc_eb_folio_array(eb, false, false);
 	if (ret)
 		goto release_eb;
 
@@ -3491,8 +3515,13 @@ struct extent_buffer *alloc_extent_buffer(struct btrfs_fs_info *fs_info,
 	}
 
 reallocate:
-	/* Allocate all pages first. */
-	ret = alloc_eb_folio_array(eb, true);
+	/*
+	 * Allocate all pages first. These will be attached to
+	 * btree_inode->i_mapping below (added to LRU, served by
+	 * btree_migrate_folio), so request __GFP_MOVABLE so the
+	 * page allocator places them in MOVABLE pageblocks.
+	 */
+	ret = alloc_eb_folio_array(eb, true, true);
 	if (ret < 0) {
 		btrfs_free_folio_state(prealloc);
 		goto out;
