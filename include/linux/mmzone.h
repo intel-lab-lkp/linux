@@ -1020,6 +1020,7 @@ struct superpageblock {
 	u16			nr_movable;
 	u16			nr_reserved;	/* holes, firmware, etc. */
 	u16			total_pageblocks; /* zone-clipped total */
+	bool			contig_allocated; /* all pages held by contig alloc */
 
 	/* Total free pages across all per-superpageblock free lists */
 	unsigned long		nr_free_pages;
@@ -1107,6 +1108,7 @@ struct zone {
 
 	/* Superpageblock fullness lists for allocation steering */
 	struct list_head	spb_empty;	/* completely free superpageblocks */
+	struct list_head	spb_isolated;	/* fully isolated (1GB contig alloc) */
 	struct list_head	spb_lists[__NR_SB_CATEGORIES][__NR_SB_FULLNESS];
 
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
