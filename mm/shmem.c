@@ -3292,10 +3292,13 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file_inode(file);
 	struct address_space *mapping = inode->i_mapping;
+	struct folio_batch fbatch;
 	pgoff_t index;
 	unsigned long offset;
 	int error = 0;
 	ssize_t retval = 0;
+
+	folio_batch_init(&fbatch);
 
 	for (;;) {
 		struct folio *folio = NULL;
@@ -3309,18 +3312,38 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 			break;
 
 		index = iocb->ki_pos >> PAGE_SHIFT;
-		error = shmem_get_folio(inode, index, 0, &folio, SGP_READ);
-		if (error) {
-			if (error == -EINVAL)
-				error = 0;
-			break;
-		}
-		if (folio) {
-			folio_unlock(folio);
+fetch:
+		folio = folio_batch_next(&fbatch);
+		if (!folio) {
+			pgoff_t start = index;
+			pgoff_t end = (iocb->ki_pos + to->count - 1) >> PAGE_SHIFT;
 
+			if (folio_batch_count(&fbatch)) {
+				for (int i = 0; i < folio_batch_count(&fbatch); i++)
+					folio_put(fbatch.folios[i]);
+				folio_batch_reinit(&fbatch);
+			}
+
+			filemap_get_folios_contig(inode->i_mapping, &start, end, &fbatch);
+			if (folio_batch_count(&fbatch))
+				goto fetch;
+
+			error = shmem_get_folio(inode, index, 0, &folio, SGP_READ);
+			if (unlikely(error)) {
+				if (error == -EINVAL)
+					error = 0;
+				break;
+			}
+			if (folio) {
+				folio_unlock(folio);
+				folio_batch_add(&fbatch, folio);
+				fbatch.i++;
+			}
+		}
+
+		if (folio) {
 			page = folio_file_page(folio, index);
 			if (PageHWPoison(page)) {
-				folio_put(folio);
 				error = -EIO;
 				break;
 			}
@@ -3335,11 +3358,9 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		 * are called without i_rwsem protection against truncate
 		 */
 		i_size = i_size_read(inode);
-		if (unlikely(iocb->ki_pos >= i_size)) {
-			if (folio)
-				folio_put(folio);
+		if (unlikely(iocb->ki_pos >= i_size))
 			break;
-		}
+
 		end_offset = min_t(loff_t, i_size, iocb->ki_pos + to->count);
 		if (folio && likely(!fallback_page_copy))
 			fsize = folio_size(folio);
@@ -3348,7 +3369,7 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		offset = iocb->ki_pos & (fsize - 1);
 		nr = min_t(loff_t, end_offset - iocb->ki_pos, fsize - offset);
 
-		if (folio) {
+		if (folio && folio_test_uptodate(folio)) {
 			/*
 			 * If users can be writing to this page using arbitrary
 			 * virtual addresses, take care about potential aliasing
@@ -3374,7 +3395,6 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 				ret = copy_folio_to_iter(folio, offset, nr, to);
 			else
 				ret = copy_page_to_iter(page, offset, nr, to);
-			folio_put(folio);
 		} else if (user_backed_iter(to)) {
 			/*
 			 * Copy to user tends to be so well optimized, but
@@ -3403,6 +3423,8 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		cond_resched();
 	}
 
+	for (int i = 0; i < folio_batch_count(&fbatch); i++)
+		folio_put(fbatch.folios[i]);
 	file_accessed(file);
 	return retval ? retval : error;
 }
