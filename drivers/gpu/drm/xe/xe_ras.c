@@ -224,8 +224,74 @@ static enum xe_ras_recovery_action handle_core_compute_errors(struct xe_device *
 	return XE_RAS_RECOVERY_ACTION_RECOVERED;
 }
 
+#ifdef CONFIG_PCIEAER
+static bool pcie_slot_is_hotplug_capable(struct pci_dev *usp)
+{
+	struct pci_dev *root_port = pci_upstream_bridge(usp);
+	u32 sltcap;
+	u16 flags;
+
+	if (!root_port)
+		return false;
+
+	/*
+	 * Per PCIe spec, the Slot Capabilities register contents are
+	 * undefined unless the Slot Implemented bit in the PCI Express
+	 * Capabilities register is set. Check it before reading SLTCAP.
+	 */
+	if (pcie_capability_read_word(root_port, PCI_EXP_FLAGS, &flags))
+		return false;
+
+	if (!(flags & PCI_EXP_FLAGS_SLOT))
+		return false;
+
+	if (pcie_capability_read_dword(root_port, PCI_EXP_SLTCAP, &sltcap))
+		return false;
+
+	return (sltcap & (PCI_EXP_SLTCAP_HPC | PCI_EXP_SLTCAP_PCP)) ==
+		(PCI_EXP_SLTCAP_HPC | PCI_EXP_SLTCAP_PCP);
+}
+
+static void pcie_suppress_surprise_link_down(struct pci_dev *usp)
+{
+	u32 aer_uncorr_mask;
+	u16 aer_cap;
+
+	aer_cap = usp->aer_cap;
+	if (!aer_cap) {
+		dev_dbg(&usp->dev,
+			"AER capability not present; cannot mask Surprise Link Down for cold reset\n");
+		return;
+	}
+
+	pci_read_config_dword(usp, aer_cap + PCI_ERR_UNCOR_MASK, &aer_uncorr_mask);
+	aer_uncorr_mask |= PCI_ERR_UNC_SURPDN;
+	pci_write_config_dword(usp, aer_cap + PCI_ERR_UNCOR_MASK, aer_uncorr_mask);
+	dev_dbg(&usp->dev, "Non-hotplug slot: Surprise Link Down masked for cold reset\n");
+}
+#endif /* CONFIG_PCIEAER */
+
 static void punit_error_handler(struct xe_device *xe)
 {
+#ifdef CONFIG_PCIEAER
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+	struct pci_dev *vsp, *usp;
+
+	/*
+	 * Device Hierarchy:
+	 *
+	 * Root Port --> Upstream Switch Port (USP) --> Virtual Switch Port (VSP) --> SGunit
+	 *
+	 * Cold reset power-cycles the slot, dropping the PCIe link. On a non-hotplug
+	 * slot this triggers a spurious Surprise Link Down AER event on the USP.
+	 * Suppress it if the slot is not hotplug capable.
+	 */
+	vsp = pci_upstream_bridge(pdev);
+	usp = vsp ? pci_upstream_bridge(vsp) : NULL;
+
+	if (usp && !pcie_slot_is_hotplug_capable(usp))
+		pcie_suppress_surprise_link_down(usp);
+#endif
 	xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_COLD_RESET);
 	xe_device_declare_wedged(xe);
 }
