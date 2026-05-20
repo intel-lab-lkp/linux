@@ -29,6 +29,7 @@
 #include <linux/hex.h>
 #include <linux/kernel.h>
 #include <linux/kallsyms.h>
+#include <linux/lockdep.h>
 #include <linux/math64.h>
 #include <linux/uaccess.h>
 #include <linux/ioport.h>
@@ -862,6 +863,14 @@ static noinline_for_stack
 char *restricted_pointer(char *buf, char *end, const void *ptr,
 			 struct printf_spec spec)
 {
+	/*
+	 * has_capability_noaudit() may use spinlocks.
+	 * Make sure %pK is only used from valid contexts.
+	 */
+	static DEFINE_WAIT_ASSERT_MAP(vsprintf_restricted_pointer_map, LD_WAIT_CONFIG);
+
+	guard(lock_map_acquire)(&vsprintf_restricted_pointer_map);
+
 	switch (kptr_restrict) {
 	case 0:
 		/* Handle as %p, hash and do _not_ leak addresses. */
