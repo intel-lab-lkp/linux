@@ -1244,7 +1244,7 @@ static int sel_make_bools(struct selinux_policy *newpolicy, struct dentry *bool_
 	char **names, *page;
 	u32 i, num;
 
-	page = (char *)get_zeroed_page(GFP_KERNEL);
+	page = kzalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!page)
 		return -ENOMEM;
 
@@ -1290,7 +1290,7 @@ static int sel_make_bools(struct selinux_policy *newpolicy, struct dentry *bool_
 		ret = sel_attach_file(bool_dir, names[i], inode);
 	}
 out:
-	free_page((unsigned long)page);
+	kfree(page);
 	return ret;
 }
 
@@ -1349,14 +1349,14 @@ static ssize_t sel_read_avc_hash_stats(struct file *filp, char __user *buf,
 	char *page;
 	ssize_t length;
 
-	page = (char *)__get_free_page(GFP_KERNEL);
+	page = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!page)
 		return -ENOMEM;
 
 	length = avc_get_hash_stats(page);
 	if (length >= 0)
 		length = simple_read_from_buffer(buf, count, ppos, page, length);
-	free_page((unsigned long)page);
+	kfree(page);
 
 	return length;
 }
@@ -1367,7 +1367,7 @@ static ssize_t sel_read_sidtab_hash_stats(struct file *filp, char __user *buf,
 	char *page;
 	ssize_t length;
 
-	page = (char *)__get_free_page(GFP_KERNEL);
+	page = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!page)
 		return -ENOMEM;
 
@@ -1375,7 +1375,7 @@ static ssize_t sel_read_sidtab_hash_stats(struct file *filp, char __user *buf,
 	if (length >= 0)
 		length = simple_read_from_buffer(buf, count, ppos, page,
 						length);
-	free_page((unsigned long)page);
+	kfree(page);
 
 	return length;
 }
