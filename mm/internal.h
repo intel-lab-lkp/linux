@@ -1103,10 +1103,12 @@ void init_cma_reserved_pageblock(struct page *page);
 
 #ifdef CONFIG_COMPACTION
 void init_superpageblock_defrag(struct superpageblock *sb);
+void init_pgdat_spb_state(pg_data_t *pgdat);
 void superpageblock_clear_has_movable(struct zone *zone, struct page *page);
 void superpageblock_set_has_movable(struct zone *zone, struct page *page);
 #else
 static inline void init_superpageblock_defrag(struct superpageblock *sb) {}
+static inline void init_pgdat_spb_state(pg_data_t *pgdat) {}
 static inline void superpageblock_clear_has_movable(struct zone *zone,
 						    struct page *page) {}
 static inline void superpageblock_set_has_movable(struct zone *zone,

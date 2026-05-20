@@ -1670,6 +1670,18 @@ typedef struct pglist_data {
 	struct workqueue_struct *evacuate_wq;
 	struct llist_head spb_evac_pending;
 	struct irq_work spb_evac_irq_work;
+
+	/*
+	 * SPB-driven slab reclaim: single work item per pgdat (shrink_slab
+	 * is node-scoped, so one work in-flight per node is the max).
+	 * queue_work() gives us single-flight semantics for free -- fresh
+	 * triggers no-op while a pass is in progress.
+	 *
+	 * irq_work defers the queue_work() call outside the allocator's
+	 * lock context to avoid pool->lock vs hrtimer_bases.lock inversion.
+	 */
+	struct irq_work spb_slab_shrink_irq_work;
+	struct work_struct spb_slab_shrink_work;
 #endif
 	/*
 	 * This is a per-node reserve of pages that are not available

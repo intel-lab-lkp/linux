@@ -1695,6 +1695,14 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 	if (!zone->superpageblocks)
 		init_zone_spb_lists(zone);
 
+	/*
+	 * Lazily initialize pgdat-level SPB state (evacuate_wq, evac llist,
+	 * shrink work). pageblock_evacuate_init() is a late_initcall and
+	 * only walks for_each_online_node, so a node that gets its first
+	 * memory via hotplug needs this here. Idempotent.
+	 */
+	init_pgdat_spb_state(zone->zone_pgdat);
+
 	alloc_size = new_nr_sbs * sizeof(struct superpageblock);
 	new_sbs = kvmalloc_node(alloc_size, GFP_KERNEL | __GFP_ZERO, nid);
 	if (!new_sbs) {

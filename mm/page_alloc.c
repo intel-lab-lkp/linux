@@ -743,6 +743,7 @@ static bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
 				  int migratetype);
 static void queue_spb_evacuate(struct zone *zone, unsigned int order,
 			       int migratetype);
+static void queue_spb_slab_shrink(struct zone *zone);
 #else
 static inline void spb_maybe_start_defrag(struct superpageblock *sb) {}
 static inline bool spb_needs_defrag(struct superpageblock *sb) { return false; }
@@ -753,6 +754,7 @@ static inline bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
 }
 static inline void queue_spb_evacuate(struct zone *zone, unsigned int order,
 				      int migratetype) {}
+static inline void queue_spb_slab_shrink(struct zone *zone) {}
 #endif
 
 #ifdef CONFIG_CONTIG_ALLOC
@@ -2707,6 +2709,47 @@ static inline u16 spb_tainted_reserve(const struct superpageblock *sb)
 }
 
 /*
+ * High-water threshold for proactively kicking the slab shrinker. When a
+ * non-movable allocation consumes from a tainted SPB whose total free
+ * pages have fallen below spb_tainted_reserve worth of pages, queue a
+ * shrink so we start freeing slab memory before the SPB is exhausted.
+ *
+ * Compared against nr_free_pages rather than nr_free (whole pageblocks):
+ * sub-pageblock allocations and fragmented free space don't move the
+ * pageblock count, but they do consume the SPB's freeable capacity, and
+ * we can't assume slab reclaim will produce whole pageblocks either.
+ */
+static inline bool spb_below_shrink_high_water(const struct superpageblock *sb)
+{
+	return sb->nr_free_pages <
+		(unsigned long)spb_tainted_reserve(sb) * pageblock_nr_pages;
+}
+
+/*
+ * spb_react_to_tainted_alloc - kick reclaim machinery on a tainted-SPB alloc.
+ *
+ * Called from each PASS_1/2/2B/2C/2D success path after a successful
+ * allocation against a tainted SPB. If the SPB is below its shrink
+ * high-water mark, queue the SPB-driven slab shrink and try to start
+ * the per-SPB defrag worker. Both have their own cooldown gates inside,
+ * so this is cheap to call on every such allocation.
+ *
+ * Skips quickly when the SPB is not tainted (e.g. movable allocation
+ * landing on a clean SPB) or when the high-water mark hasn't been
+ * crossed.
+ */
+static inline void spb_react_to_tainted_alloc(struct superpageblock *sb,
+					      struct zone *zone)
+{
+	if (spb_get_category(sb) != SB_TAINTED)
+		return;
+	if (!spb_below_shrink_high_water(sb))
+		return;
+	queue_spb_slab_shrink(zone);
+	spb_maybe_start_defrag(sb);
+}
+
+/*
  * On systems with many superpageblocks, we can afford to "write off"
  * tainted superpageblocks by aggressively packing unmovable/reclaimable
  * allocations into them -- even sub-pageblock fragments -- to keep clean
@@ -2891,6 +2934,8 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 				page_del_and_expand(zone, page,
 					order, current_order,
 					migratetype);
+				if (cat == SB_TAINTED)
+					spb_react_to_tainted_alloc(sb, zone);
 				trace_mm_page_alloc_zone_locked(
 					page, order, migratetype,
 					pcp_allowed_order(order) &&
@@ -2910,6 +2955,8 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					page_del_and_expand(zone, page,
 						order, current_order,
 						migratetype);
+					if (cat == SB_TAINTED)
+						spb_react_to_tainted_alloc(sb, zone);
 					trace_mm_page_alloc_zone_locked(
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
@@ -2955,6 +3002,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 					page = claim_whole_block(zone, page,
 						current_order, order,
 						migratetype, MIGRATE_MOVABLE);
+					spb_react_to_tainted_alloc(sb, zone);
 					trace_mm_page_alloc_zone_locked(
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
@@ -2992,6 +3040,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 						0, true);
 					if (!page)
 						continue;
+					spb_react_to_tainted_alloc(sb, zone);
 					trace_mm_page_alloc_zone_locked(
 						page, order, migratetype,
 						pcp_allowed_order(order) &&
@@ -3075,6 +3124,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 							opposite_mt);
 						__spb_set_has_type(page,
 							migratetype);
+						spb_react_to_tainted_alloc(sb, zone);
 						trace_mm_page_alloc_zone_locked(
 							page, order, migratetype,
 							pcp_allowed_order(order) &&
@@ -3146,6 +3196,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 							MIGRATE_MOVABLE);
 						__spb_set_has_type(page,
 							migratetype);
+						spb_react_to_tainted_alloc(sb, zone);
 						trace_mm_page_alloc_zone_locked(
 							page, order, migratetype,
 							pcp_allowed_order(order) &&
@@ -3163,9 +3214,34 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 	 * showed that some tainted SPB is below its reserve threshold of
 	 * free pageblocks, kick deferred evacuation so future allocations
 	 * have a movable-evicted home in an already-tainted SPB.
+	 *
+	 * Queue slab shrink alongside evacuation: even when movable evac
+	 * succeeds, shrinking slab in parallel keeps headroom available
+	 * for the next burst, when the movable supply may have run out.
 	 */
-	if (walk && walk->saw_below_reserve)
+	if (walk && walk->saw_below_reserve) {
 		queue_spb_evacuate(zone, order, migratetype);
+		queue_spb_slab_shrink(zone);
+	}
+
+	/*
+	 * Last-chance defrag trigger before tainting a fresh clean SPB.
+	 * Walk the tainted-SPB list and try to wake the per-SPB defrag
+	 * worker on each. Catches SPBs that are stuck in expired-cooldown
+	 * state because no allocator activity has touched them recently
+	 * (the routine event-driven trigger from spb_update_list only
+	 * fires on bucket transitions, not on every alloc). Once the
+	 * cooldown has expired, spb_maybe_start_defrag() will requeue
+	 * work; otherwise the gate inside spb_needs_defrag() no-ops
+	 * cheaply. Bounded by nr_tainted_spbs and only runs when we are
+	 * already on the slow path of fragmenting the clean pool.
+	 */
+	for (full = SB_FULL; full < __NR_SB_FULLNESS; full++) {
+		list_for_each_entry(sb,
+			&zone->spb_lists[SB_TAINTED][full], list) {
+			spb_maybe_start_defrag(sb);
+		}
+	}
 
 	/* Pass 3: whole pageblock from empty superpageblocks */
 	list_for_each_entry(sb, &zone->spb_empty, list) {
@@ -4001,12 +4077,17 @@ __rmqueue_claim(struct zone *zone, int order, int start_migratetype,
 			 * for a non-movable allocation -- this taints a fresh
 			 * SPB.  Defer an evacuation pass over the tainted pool
 			 * so subsequent allocations can reclaim freed
-			 * pageblocks instead of repeating this fallback.
+			 * pageblocks instead of repeating this fallback. Also
+			 * kick a slab shrink so the tainted pool gets fresh
+			 * headroom (movable evac alone can't free pages held
+			 * by slab).
 			 */
 			if (cat_search[c] != SB_SEARCH_PREFERRED &&
-			    start_migratetype != MIGRATE_MOVABLE)
+			    start_migratetype != MIGRATE_MOVABLE) {
 				queue_spb_evacuate(zone, order,
 						   start_migratetype);
+				queue_spb_slab_shrink(zone);
+			}
 
 			page = try_to_claim_block(zone, page, current_order,
 						  order, start_migratetype,
@@ -9302,6 +9383,133 @@ static void queue_spb_evacuate(struct zone *zone, unsigned int order,
 }
 
 /*
+ * SPB-driven slab reclaim.
+ *
+ * When tainted SPBs run low on free pageblocks under sustained
+ * non-movable pressure (slab inode/dentry/page-table caches), the
+ * pageblock-evacuation worker can only consolidate *movable* pages out
+ * of tainted SPBs. Non-movable slab content stays put, so once the
+ * movable supply is drained the only way to recover headroom in a
+ * tainted SPB is to shrink the slab caches whose pages live there.
+ *
+ * shrink_slab() is node-scoped, so one work item per pgdat is enough:
+ * a single embedded work_struct. queue_work() returns false if the work
+ * is already queued/running, so we get single-flight for free -- fresh
+ * triggers no-op until the in-flight pass completes.
+ *
+ * shrink_slab() itself is location-agnostic -- it walks all registered
+ * shrinkers and frees objects whose backing pages may live in any
+ * zone or SPB. That is fine here because any slab page reclaimed
+ * frees space the next allocation can reuse without tainting a fresh
+ * SPB. We pass the pgdat's nid so node-aware shrinkers prefer caches
+ * local to the pressured node.
+ */
+
+/*
+ * Per-invocation budget: walk shrinkers from DEF_PRIORITY (scan 1/4096
+ * of each cache) down toward 0 (full scan), stopping when shrinkers
+ * report no more progress or we have freed a pageblock-sized chunk.
+ * The trigger frequency is what controls overall reclaim rate; this
+ * loop just bounds latency per worker run.
+ */
+#define SPB_SLAB_SHRINK_TARGET_OBJS	(pageblock_nr_pages * 4UL)
+
+static void spb_slab_shrink_work_fn(struct work_struct *work)
+{
+	pg_data_t *pgdat = container_of(work, pg_data_t,
+					spb_slab_shrink_work);
+	int nid = pgdat->node_id;
+	unsigned long freed = 0;
+	int prio = DEF_PRIORITY;
+
+	count_vm_event(SPB_SLAB_SHRINK_RAN);
+
+	while (freed < SPB_SLAB_SHRINK_TARGET_OBJS && prio >= 0) {
+		unsigned long delta = 0;
+		struct mem_cgroup *memcg;
+
+		/*
+		 * Walk the memcg hierarchy starting at the root, the same
+		 * pattern shrink_one_node uses for global slab reclaim.
+		 * Some cgroups may not be present on the node that is
+		 * being shrunk, but many allocators will use any memory.
+		 */
+		memcg = mem_cgroup_iter(NULL, NULL, NULL);
+		do {
+			delta += shrink_slab(GFP_KERNEL, nid, memcg, prio);
+		} while ((memcg = mem_cgroup_iter(NULL, memcg, NULL)) != NULL);
+
+		if (!delta)
+			break;
+		freed += delta;
+		/*
+		 * Increase aggressiveness each round; DEF_PRIORITY scans
+		 * a small slice of each cache, prio 0 scans the whole
+		 * thing. Most workloads find enough at one or two
+		 * iterations below DEF_PRIORITY.
+		 */
+		prio--;
+	}
+}
+
+/**
+ * spb_slab_shrink_irq_work_fn - IRQ work callback to safely queue slab shrink
+ * @work: the irq_work embedded in pg_data_t
+ *
+ * queue_work() can create a lock ordering issue when called from inside
+ * the page allocator under hrtimer_bases.lock (via debug_objects_fill_pool
+ * allocations during hrtimer re-enqueue), because pool->lock depends on
+ * hrtimer_bases.lock through the scheduler path. Use irq_work to defer
+ * the queue_work() call to a safe context, matching the pattern used by
+ * spb_evac_irq_work_fn and spb_defrag_irq_work_fn.
+ */
+static void spb_slab_shrink_irq_work_fn(struct irq_work *work)
+{
+	pg_data_t *pgdat = container_of(work, struct pglist_data,
+					spb_slab_shrink_irq_work);
+
+	if (pgdat->evacuate_wq &&
+	    queue_work(pgdat->evacuate_wq, &pgdat->spb_slab_shrink_work))
+		count_vm_event(SPB_SLAB_SHRINK_QUEUED);
+}
+
+/**
+ * queue_spb_slab_shrink - schedule deferred slab shrink for SPB pressure
+ * @zone: zone whose tainted-SPB pool is running low
+ *
+ * Single-flight via queue_work(): if the work is already queued or
+ * running, it returns false and we no-op. There is no time-based
+ * throttle -- the rate at which fresh shrink runs can fire is bounded
+ * by how fast the worker completes (one full pass freeing up to
+ * SPB_SLAB_SHRINK_TARGET_OBJS objects).
+ *
+ * Callable from any context: the irq_work deferral ensures that
+ * queue_work() runs outside the allocator's lock context, avoiding
+ * pool->lock vs hrtimer_bases.lock ordering issues.
+ *
+ * Pairs with queue_spb_evacuate: evacuation moves movable pages out
+ * of tainted SPBs to free up whole pageblocks; this shrinks slab to
+ * free up the remaining (non-movable) pages. We queue both because
+ * even when movable evacuation succeeds, shrinking slab in parallel
+ * keeps headroom available for the next burst, when movable supply
+ * may have run out.
+ */
+static void queue_spb_slab_shrink(struct zone *zone)
+{
+	pg_data_t *pgdat = zone->zone_pgdat;
+
+	if (!pgdat->spb_slab_shrink_irq_work.func)
+		return;
+
+	/* Defer queue_work() to irq context to keep pool->lock acquisition
+	 * out of the allocator's lock context (avoids pool->lock vs
+	 * hrtimer_bases.lock inversion via debug_objects_fill_pool).
+	 * No throttle here: queue_work()'s built-in single-flight semantics
+	 * absorb per-alloc bursts at near-zero cost. */
+	irq_work_queue(&pgdat->spb_slab_shrink_irq_work);
+}
+
+/*
  * Background superpageblock defragmentation.
  *
  * Evacuate movable pageblocks from tainted superpageblocks to consolidate
@@ -9562,6 +9770,42 @@ static void spb_maybe_start_defrag(struct superpageblock *sb)
 	}
 }
 
+/**
+ * init_pgdat_spb_state - allocate evacuate_wq and initialize SPB work structs
+ * @pgdat: node being initialized
+ *
+ * Idempotent: returns immediately if pgdat->evacuate_wq is already set
+ * (a previous call succeeded). Best-effort: if alloc_workqueue() fails,
+ * pgdat->evacuate_wq stays NULL and SPB defrag/shrink for this node is
+ * disabled (the runtime callers all check for NULL evacuate_wq).
+ *
+ * Called from pageblock_evacuate_init() at boot for every online node, and
+ * lazily from resize_zone_superpageblocks() when memory hotplug brings up
+ * a node whose pgdat-level SPB state was never initialized (because the
+ * node was empty at boot -- late_initcall only walks for_each_online_node).
+ */
+void init_pgdat_spb_state(pg_data_t *pgdat)
+{
+	char name[32];
+
+	if (pgdat->evacuate_wq)
+		return;
+
+	snprintf(name, sizeof(name), "kevacuate/%d", pgdat->node_id);
+	pgdat->evacuate_wq = alloc_workqueue(name, WQ_MEM_RECLAIM, 1);
+	if (!pgdat->evacuate_wq) {
+		pr_warn("Failed to create evacuate workqueue for node %d\n",
+			pgdat->node_id);
+		return;
+	}
+
+	init_llist_head(&pgdat->spb_evac_pending);
+	init_irq_work(&pgdat->spb_evac_irq_work, spb_evac_irq_work_fn);
+	init_irq_work(&pgdat->spb_slab_shrink_irq_work,
+		      spb_slab_shrink_irq_work_fn);
+	INIT_WORK(&pgdat->spb_slab_shrink_work, spb_slab_shrink_work_fn);
+}
+
 static int __init pageblock_evacuate_init(void)
 {
 	int nid, i;
@@ -9571,22 +9815,14 @@ static int __init pageblock_evacuate_init(void)
 	for (i = 0; i < NR_SPB_EVAC_REQUESTS; i++)
 		llist_add(&spb_evac_pool[i].free_node, &spb_evac_freelist);
 
-	/* Create a per-pgdat workqueue */
+	/* Initialize per-pgdat SPB workqueue and work structs */
 	for_each_online_node(nid) {
 		pg_data_t *pgdat = NODE_DATA(nid);
-		char name[32];
 		int z;
 
-		snprintf(name, sizeof(name), "kevacuate/%d", nid);
-		pgdat->evacuate_wq = alloc_workqueue(name, WQ_MEM_RECLAIM, 1);
-		if (!pgdat->evacuate_wq) {
-			pr_warn("Failed to create evacuate workqueue for node %d\n", nid);
+		init_pgdat_spb_state(pgdat);
+		if (!pgdat->evacuate_wq)
 			continue;
-		}
-
-		init_llist_head(&pgdat->spb_evac_pending);
-		init_irq_work(&pgdat->spb_evac_irq_work,
-			      spb_evac_irq_work_fn);
 
 		/* Initialize per-superpageblock defrag work structs */
 		for (z = 0; z < MAX_NR_ZONES; z++) {
@@ -9596,12 +9832,8 @@ static int __init pageblock_evacuate_init(void)
 			if (!zone->superpageblocks)
 				continue;
 
-			for (j = 0; j < zone->nr_superpageblocks; j++) {
-				INIT_WORK(&zone->superpageblocks[j].defrag_work,
-					  spb_defrag_work_fn);
-				init_irq_work(&zone->superpageblocks[j].defrag_irq_work,
-					      spb_defrag_irq_work_fn);
-			}
+			for (j = 0; j < zone->nr_superpageblocks; j++)
+				init_superpageblock_defrag(&zone->superpageblocks[j]);
 		}
 	}
 
@@ -9797,6 +10029,15 @@ static bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
 		if (n)
 			did_evacuate = true;
 	}
+
+	/*
+	 * Always kick a slab shrink after an evacuation pass -- even when
+	 * MOV evacuation succeeded. Slab content stranded inside tainted
+	 * SPBs can only be freed by shrinking the cache; doing it now keeps
+	 * headroom available for the next burst, when the MOV supply may
+	 * have run out and evac alone would have nothing to do.
+	 */
+	queue_spb_slab_shrink(zone);
 
 	return did_evacuate;
 }
