@@ -39,6 +39,7 @@ static void __init moxart_of_pll_clk_init(struct device_node *node)
 		pr_err("%pOF: of_clk_get failed\n", node);
 		return;
 	}
+	clk_put(ref_clk);
 
 	hw = clk_hw_register_fixed_factor(NULL, name, parent_name, 0, mul, 1);
 	if (IS_ERR(hw)) {
@@ -83,6 +84,7 @@ static void __init moxart_of_apb_clk_init(struct device_node *node)
 		pr_err("%pOF: of_clk_get failed\n", node);
 		return;
 	}
+	clk_put(pll_clk);
 
 	hw = clk_hw_register_fixed_factor(NULL, name, parent_name, 0, 1, div);
 	if (IS_ERR(hw)) {
