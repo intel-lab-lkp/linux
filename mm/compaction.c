@@ -867,6 +867,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 	bool skip_on_failure = false;
 	unsigned long next_skip_pfn = 0;
 	bool skip_updated = false;
+	bool movable_skipped = false;
 	int ret = 0;
 
 	cc->migrate_pfn = low_pfn;
@@ -1079,6 +1080,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 					folio = page_folio(page);
 					goto isolate_success;
 				}
+				movable_skipped = true;
 			}
 
 			goto isolate_fail;
@@ -1246,6 +1248,7 @@ isolate_fail_put:
 			lruvec_unlock_irqrestore(locked, flags);
 			locked = NULL;
 		}
+		movable_skipped = true;
 		folio_put(folio);
 
 isolate_fail:
@@ -1309,6 +1312,20 @@ isolate_abort:
 		if (!cc->no_set_skip_hint && valid_page && !skip_updated)
 			set_pageblock_skip(valid_page);
 		update_cached_migrate(cc, low_pfn);
+
+		/*
+		 * Full pageblock scanned with no movable pages isolated.
+		 * Only clear PB_has_movable if no movable pages were
+		 * seen at all. If movable pages exist but could not be
+		 * isolated (pinned, writeback, dirty, etc.), leave the
+		 * flag set so a future migration attempt can try again.
+		 */
+		if (!nr_isolated && !movable_skipped && valid_page &&
+		    get_pfnblock_bit(valid_page, pageblock_start_pfn(start_pfn),
+				     PB_has_movable))
+			clear_pfnblock_bit(valid_page,
+					   pageblock_start_pfn(start_pfn),
+					   PB_has_movable);
 	}
 
 	trace_mm_compaction_isolate_migratepages(start_pfn, low_pfn,

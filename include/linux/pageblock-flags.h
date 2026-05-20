@@ -20,6 +20,15 @@ enum pageblock_bits {
 	PB_migrate_2,
 	PB_compact_skip,/* If set the block is skipped by compaction */
 
+	/*
+	 * Track actual page contents independent of the intended migratetype.
+	 * Set at allocation time; cleared on full pageblock free or when
+	 * migration confirms no pages of that type remain.
+	 */
+	PB_has_unmovable,
+	PB_has_reclaimable,
+	PB_has_movable,
+
 #ifdef CONFIG_MEMORY_ISOLATION
 	/*
 	 * Pageblock isolation is represented with a separate bit, so that
