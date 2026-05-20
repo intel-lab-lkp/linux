@@ -1240,6 +1240,8 @@ pm_err:
 	cs_dsp_remove(&cs35l56->cs_dsp);
 err:
 	gpiod_set_value_cansleep(cs35l56->base.reset_gpio, 0);
+	kfree(cs35l56->system_name);
+	cs35l56->system_name = NULL;
 
 	return ret;
 }
