@@ -487,10 +487,14 @@ static int max77620_read_es_version(struct max77620_chip *chip)
 static void max77620_pm_power_off(void)
 {
 	struct max77620_chip *chip = max77620_scratch;
+	struct i2c_client *client = to_i2c_client(chip->dev);
 
-	regmap_update_bits(chip->rmap, MAX77620_REG_ONOFFCNFG1,
-			   MAX77620_ONOFFCNFG1_SFT_RST,
-			   MAX77620_ONOFFCNFG1_SFT_RST);
+	/*
+	 * Atomic context: IRQs disabled. Use raw I2C write, bypassing
+	 * regmap locking entirely.
+	 */
+	i2c_smbus_write_byte_data(client, MAX77620_REG_ONOFFCNFG1,
+				  MAX77620_ONOFFCNFG1_SFT_RST);
 }
 
 static int max77620_probe(struct i2c_client *client)
