@@ -871,6 +871,8 @@ char *restricted_pointer(char *buf, char *end, const void *ptr,
 
 	guard(lock_map_acquire)(&vsprintf_restricted_pointer_map);
 
+	lockdep_assert(in_task());
+
 	switch (kptr_restrict) {
 	case 0:
 		/* Handle as %p, hash and do _not_ leak addresses. */
