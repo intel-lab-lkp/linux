@@ -3055,7 +3055,8 @@ extern int generic_write_check_limits(struct file *file, loff_t pos,
 extern int generic_file_rw_checks(struct file *file_in, struct file *file_out);
 ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *to,
 		ssize_t already_read);
-extern ssize_t generic_file_read_iter(struct kiocb *, struct iov_iter *);
+ssize_t generic_file_read_iter(struct kiocb *, struct iov_iter *);
+int kiocb_write_and_wait(struct kiocb *iocb, size_t count);
 extern ssize_t __generic_file_write_iter(struct kiocb *, struct iov_iter *);
 extern ssize_t generic_file_write_iter(struct kiocb *, struct iov_iter *);
 extern ssize_t generic_file_direct_write(struct kiocb *, struct iov_iter *);
