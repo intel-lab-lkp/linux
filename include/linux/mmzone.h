@@ -1034,6 +1034,23 @@ struct superpageblock {
 	 */
 	struct free_area	free_area[NR_PAGE_ORDERS];
 
+#ifdef CONFIG_COMPACTION
+	/* Background defragmentation work for this superpageblock */
+	struct work_struct	defrag_work;
+	struct irq_work		defrag_irq_work;
+	bool			defrag_active;
+	/*
+	 * Back-off state after a no-op defrag pass: defer the next attempt
+	 * until either nr_free_pages has grown by at least pageblock_nr_pages
+	 * or a cooldown elapses, so allocator hot paths cannot re-arm
+	 * defrag_work many times per second on an SB that cannot make progress.
+	 * defrag_last_no_progress_jiffies == 0 means the previous pass made
+	 * progress (or no pass has run yet).
+	 */
+	unsigned long		defrag_last_no_progress_jiffies;
+	unsigned long		defrag_last_no_progress_pages;
+#endif
+
 	/* Identity */
 	unsigned long		start_pfn;
 	struct zone		*zone;
@@ -1632,8 +1649,6 @@ typedef struct pglist_data {
 	struct task_struct *kcompactd;
 	bool proactive_compact_trigger;
 	struct workqueue_struct *evacuate_wq;
-	struct llist_head evacuate_pending;
-	struct irq_work evacuate_irq_work;
 #endif
 	/*
 	 * This is a per-node reserve of pages that are not available

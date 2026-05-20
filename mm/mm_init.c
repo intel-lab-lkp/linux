@@ -1726,6 +1726,14 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 		init_one_superpageblock(sb, zone,
 					new_sb_base + (i << SUPERPAGEBLOCK_ORDER),
 					zone_start, zone_end);
+		/*
+		 * Boot-time defrag work init in pageblock_evacuate_init()
+		 * is a late_initcall and only walks SPBs that exist at
+		 * that point. Newly hot-added SPBs need their work structs
+		 * initialized here, mirroring the reinit loop above for
+		 * copied SPBs.
+		 */
+		init_superpageblock_defrag(sb);
 	}
 
 	/*
@@ -1779,6 +1787,9 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 						list_replace(old_list, new_list);
 				}
 			}
+
+			/* Reinitialize defrag work structs (contain stale pointers) */
+			init_superpageblock_defrag(sb);
 		}
 	}
 
