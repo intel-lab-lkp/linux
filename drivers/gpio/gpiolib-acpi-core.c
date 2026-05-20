@@ -1083,6 +1083,46 @@ int acpi_dev_gpio_irq_wake_get_by(struct acpi_device *adev, const char *con_id, 
 }
 EXPORT_SYMBOL_GPL(acpi_dev_gpio_irq_wake_get_by);
 
+static void acpi_gpiochip_free_connection_list(struct list_head *list)
+{
+	struct acpi_gpio_connection *conn;
+	struct acpi_gpio_connection *tmp;
+
+	list_for_each_entry_safe_reverse(conn, tmp, list, node) {
+		gpiochip_free_own_desc(conn->desc);
+		list_del(&conn->node);
+		kfree(conn);
+	}
+}
+
+static void acpi_gpiochip_free_all_connections(struct acpi_gpio_chip *achip)
+{
+	guard(mutex)(&achip->conn_lock);
+
+	acpi_gpiochip_free_connection_list(&achip->conns);
+}
+
+static struct acpi_gpio_connection *
+acpi_gpiochip_find_conn(struct acpi_gpio_chip *achip,
+			struct list_head *new_conns, unsigned int pin)
+{
+	struct acpi_gpio_connection *conn;
+
+	list_for_each_entry(conn, &achip->conns, node) {
+		if (conn->pin == pin)
+			return conn;
+	}
+
+	if (new_conns) {
+		list_for_each_entry(conn, new_conns, node) {
+			if (conn->pin == pin)
+				return conn;
+		}
+	}
+
+	return NULL;
+}
+
 static acpi_status
 acpi_gpio_adr_space_handler(u32 function, acpi_physical_address address,
 			    u32 bits, u64 *value, void *handler_context,
@@ -1090,11 +1130,16 @@ acpi_gpio_adr_space_handler(u32 function, acpi_physical_address address,
 {
 	struct acpi_gpio_chip *achip = region_context;
 	struct gpio_chip *chip = achip->chip;
+	struct acpi_gpio_connection *other;
+	struct acpi_gpio_connection *conn;
 	struct acpi_resource_gpio *agpio;
 	struct acpi_resource *ares;
 	u16 pin_index = address;
+	LIST_HEAD(new_conns);
 	acpi_status status;
 	int length;
+	u16 shift;
+	u16 word;
 	int i;
 
 	status = acpi_buffer_to_resource(achip->conn_info.connection,
@@ -1118,20 +1163,15 @@ acpi_gpio_adr_space_handler(u32 function, acpi_physical_address address,
 	length = min(agpio->pin_table_length, pin_index + bits);
 	for (i = pin_index; i < length; ++i) {
 		unsigned int pin = agpio->pin_table[i];
-		struct acpi_gpio_connection *conn;
 		struct gpio_desc *desc;
-		u16 word, shift;
-		bool found;
+		bool found = false;
 
 		mutex_lock(&achip->conn_lock);
 
-		found = false;
-		list_for_each_entry(conn, &achip->conns, node) {
-			if (conn->pin == pin) {
-				found = true;
-				desc = conn->desc;
-				break;
-			}
+		conn = acpi_gpiochip_find_conn(achip, &new_conns, pin);
+		if (conn) {
+			desc = conn->desc;
+			found = true;
 		}
 
 		/*
@@ -1152,34 +1192,62 @@ acpi_gpio_adr_space_handler(u32 function, acpi_physical_address address,
 			}
 		}
 
+		mutex_unlock(&achip->conn_lock);
+
 		if (!found) {
 			desc = acpi_request_own_gpiod(chip, agpio, i, "ACPI:OpRegion");
 			if (IS_ERR(desc)) {
-				mutex_unlock(&achip->conn_lock);
+				/*
+				 * In case of concurrent handler execution, if
+				 * another thread has already requested the same
+				 * GPIO pin, this call might fail with -EBUSY.
+				 * Acquire the lock and re-check both lists. If
+				 * the other thread has added it in the meantime,
+				 * we use that one.
+				 */
+				if (PTR_ERR(desc) == -EBUSY) {
+					mutex_lock(&achip->conn_lock);
+					conn = acpi_gpiochip_find_conn(achip, &new_conns, pin);
+					if (conn) {
+						desc = conn->desc;
+						found = true;
+					}
+					mutex_unlock(&achip->conn_lock);
+					if (found)
+						goto use_existing;
+				}
 				status = AE_ERROR;
-				goto out;
+				goto err_free_new_conns;
 			}
 
 			conn = kzalloc_obj(*conn);
 			if (!conn) {
 				gpiochip_free_own_desc(desc);
-				mutex_unlock(&achip->conn_lock);
 				status = AE_NO_MEMORY;
-				goto out;
+				goto err_free_new_conns;
 			}
 
 			conn->pin = pin;
 			conn->desc = desc;
-			list_add_tail(&conn->node, &achip->conns);
+
+			mutex_lock(&achip->conn_lock);
+			/*
+			 * Re-check both lists again before adding to local
+			 * new_conns, as another thread could have completed
+			 * and spliced its list while conn_lock was released.
+			 */
+			other = acpi_gpiochip_find_conn(achip, &new_conns, pin);
+			if (other) {
+				gpiochip_free_own_desc(conn->desc);
+				kfree(conn);
+				desc = other->desc;
+			} else {
+				list_add_tail(&conn->node, &new_conns);
+			}
+			mutex_unlock(&achip->conn_lock);
 		}
 
-		mutex_unlock(&achip->conn_lock);
-
-		/*
-		 * For the cases when OperationRegion() consists of more than
-		 * 64 bits calculate the word and bit shift to use that one to
-		 * access the value.
-		 */
+use_existing:
 		word = i / 64;
 		shift = i % 64;
 
@@ -1193,9 +1261,19 @@ acpi_gpio_adr_space_handler(u32 function, acpi_physical_address address,
 		}
 	}
 
+	mutex_lock(&achip->conn_lock);
+	list_splice_tail(&new_conns, &achip->conns);
+	mutex_unlock(&achip->conn_lock);
+
+	status = AE_OK;
+
 out:
 	ACPI_FREE(ares);
 	return status;
+
+err_free_new_conns:
+	acpi_gpiochip_free_connection_list(&new_conns);
+	goto out;
 }
 
 static void acpi_gpiochip_request_regions(struct acpi_gpio_chip *achip)
@@ -1218,22 +1296,15 @@ static void acpi_gpiochip_free_regions(struct acpi_gpio_chip *achip)
 {
 	struct gpio_chip *chip = achip->chip;
 	acpi_handle handle = ACPI_HANDLE(chip->parent);
-	struct acpi_gpio_connection *conn, *tmp;
 	acpi_status status;
 
 	status = acpi_remove_address_space_handler(handle, ACPI_ADR_SPACE_GPIO,
 						   acpi_gpio_adr_space_handler);
-	if (ACPI_FAILURE(status)) {
+	if (ACPI_FAILURE(status))
 		dev_err(chip->parent,
 			"Failed to remove GPIO OpRegion handler\n");
-		return;
-	}
 
-	list_for_each_entry_safe_reverse(conn, tmp, &achip->conns, node) {
-		gpiochip_free_own_desc(conn->desc);
-		list_del(&conn->node);
-		kfree(conn);
-	}
+	acpi_gpiochip_free_all_connections(achip);
 }
 
 void acpi_gpiochip_add(struct gpio_chip *chip)
