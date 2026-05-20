@@ -5,6 +5,8 @@
 #define _FBNIC_MAC_H_
 
 #include <linux/types.h>
+#include <linux/leds.h>
+#include <uapi/linux/uleds.h>
 
 struct fbnic_dev;
 
@@ -33,6 +35,27 @@ struct fbnic_dev;
 	FBNIC_MAC_RXB_PS_TO_MS(FIELD_MAX(FBNIC_RXB_PAUSE_STORM_THLD_TIME))
 
 #define FBNIC_MAX_JUMBO_FRAME_SIZE	9742
+#define FBNIC_NUM_LEDS			3
+
+struct fbnic_led_cdev {
+	char name[LED_MAX_NAME_SIZE];
+	struct led_classdev led;
+	struct fbnic_dev *fbd;
+	u32 enabled_modes;
+	u8 strobe_mode;
+};
+
+enum {
+	FBNIC_STROBE_DISABLED = 0,
+	FBNIC_STROBE_ON = 1,
+	FBNIC_STROBE_OFF = 2,
+};
+
+enum {
+	FBNIC_LED_ACTIVITY = 0,
+	FBNIC_LED_LINK_AMBER,
+	FBNIC_LED_LINK_BLUE,
+};
 
 /* States loosely based on section 136.8.11.7.5 of IEEE 802.3-2022 Ethernet
  * Standard.  These are needed to track the state of the PHY as it has a delay
@@ -56,6 +79,13 @@ enum {
 	FBNIC_LINK_EVENT_NONE	= 0,
 	FBNIC_LINK_EVENT_UP	= 1,
 	FBNIC_LINK_EVENT_DOWN	= 2,
+};
+
+enum {
+	FBNIC_LED_STROBE_INIT,
+	FBNIC_LED_ON,
+	FBNIC_LED_OFF,
+	FBNIC_LED_RESTORE,
 };
 
 /* Treat the FEC bits as a bitmask laid out as follows:
@@ -91,6 +121,29 @@ enum fbnic_sensor_id {
 	FBNIC_SENSOR_VOLTAGE,		/* Voltage in millivolts */
 };
 
+#define FBNIC_SIG_LED_ACTIVITY_DEFAULT			\
+	FIELD_PREP(FBNIC_SIG_LED_BLINK_RATE_MASK,	\
+		   FBNIC_SIG_LED_BLINK_RATE_5HZ)
+#define FBNIC_SIG_LED_ACTIVITY_ON			\
+	FIELD_PREP(FBNIC_SIG_LED_OVERRIDE_EN,		\
+		   FBNIC_SIG_LED_OVERRIDE_ACTIVITY)
+/* override_en=1 with override_val=0 forces the activity LED off
+ * while preserving the default blink rate setting
+ */
+#define FBNIC_SIG_LED_ACTIVITY_OFF			\
+	(FBNIC_SIG_LED_ACTIVITY_DEFAULT |		\
+	FBNIC_SIG_LED_ACTIVITY_ON)
+#define FBNIC_SIG_LED_AMBER_ON				\
+	(FIELD_PREP(FBNIC_SIG_LED_OVERRIDE_EN,		\
+		    FBNIC_SIG_LED_OVERRIDE_AMBER) |	\
+	FIELD_PREP(FBNIC_SIG_LED_OVERRIDE_VAL,		\
+		    FBNIC_SIG_LED_OVERRIDE_AMBER))
+#define FBNIC_SIG_LED_BLUE_ON				\
+	(FIELD_PREP(FBNIC_SIG_LED_OVERRIDE_EN,		\
+		    FBNIC_SIG_LED_OVERRIDE_BLUE) |	\
+	FIELD_PREP(FBNIC_SIG_LED_OVERRIDE_VAL,		\
+		    FBNIC_SIG_LED_OVERRIDE_BLUE))
+
 /* This structure defines the interface hooks for the MAC. The MAC hooks
  * will be configured as a const struct provided with a set of function
  * pointers.
@@ -112,6 +165,8 @@ enum fbnic_sensor_id {
  *	Configure MAC for link down event
  * void (*link_up)(struct fbnic_dev *fbd, bool tx_pause, bool rx_pause);
  *	Configure MAC for link up event;
+ * void (*set_led_state)(struct fbnic_dev *fbd, int state);
+ *	Configure MAC for physical identification states
  *
  */
 struct fbnic_mac {
@@ -139,10 +194,17 @@ struct fbnic_mac {
 	void (*link_up)(struct fbnic_dev *fbd, bool tx_pause, bool rx_pause);
 
 	int (*get_sensor)(struct fbnic_dev *fbd, int id, long *val);
+	void (*set_led_state)(struct fbnic_dev *fbd, int state);
 };
 
 int fbnic_mac_init(struct fbnic_dev *fbd);
 void fbnic_mac_get_fw_settings(struct fbnic_dev *fbd, u8 *aui, u8 *fec);
+u32 fbnic_led_get_link_speed_mode(struct fbnic_dev *fbd);
+u32 fbnic_get_link_speed(u8 link_speed);
+void fbnic_led_set_modes_ocp(struct fbnic_dev *fbd);
+void fbnic_led_update_csr(struct fbnic_dev *fbd);
+void fbnic_led_link_up(struct fbnic_dev *fbd);
+void fbnic_led_link_down(struct fbnic_dev *fbd);
 int fbnic_mac_ps_protect_to_config(struct fbnic_dev *fbd, u16 timeout);
 void fbnic_mac_ps_protect_handler(struct fbnic_dev *fbd);
 bool fbnic_mac_check_tx_pause(struct fbnic_dev *fbd);

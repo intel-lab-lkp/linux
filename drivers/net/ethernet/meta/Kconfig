@@ -35,4 +35,12 @@ config FBNIC
 	  To compile this driver as a module, choose M here. The module
 	  will be called fbnic.  MSI-X interrupt support is required.
 
+config FBNIC_LEDS
+	def_bool LEDS_TRIGGER_NETDEV
+	depends on FBNIC && LEDS_CLASS
+	depends on LEDS_CLASS=y || FBNIC=m
+	help
+	  Optional support for controlling the NIC LEDs with the netdev
+	  LED trigger.
+
 endif # NET_VENDOR_META

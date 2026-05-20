@@ -623,6 +623,53 @@ static bool fbnic_pmd_update_state(struct fbnic_dev *fbd, bool signal_detect)
 	return false;
 }
 
+u32 fbnic_get_link_speed(u8 link_speed)
+{
+	switch (link_speed) {
+	case FBNIC_FW_LINK_MODE_25CR:
+		return SPEED_25000;
+	case FBNIC_FW_LINK_MODE_50CR2:
+	case FBNIC_FW_LINK_MODE_50CR:
+		return SPEED_50000;
+	case FBNIC_FW_LINK_MODE_100CR2:
+		return SPEED_100000;
+	default:
+		return 0;
+	}
+}
+
+static void fbnic_set_led_state(struct fbnic_dev *fbd, int state)
+{
+	mutex_lock(&fbd->led_mutex);
+
+	/* alternating amber,blue IDs device every half second */
+	switch (state) {
+	case FBNIC_LED_OFF: /* amber on, blue off */
+		fbd->leds[FBNIC_LED_LINK_AMBER].strobe_mode = FBNIC_STROBE_ON;
+		fbd->leds[FBNIC_LED_LINK_BLUE].strobe_mode = FBNIC_STROBE_OFF;
+		break;
+	case FBNIC_LED_ON: /* amber off, blue on */
+		fbd->leds[FBNIC_LED_LINK_AMBER].strobe_mode = FBNIC_STROBE_OFF;
+		fbd->leds[FBNIC_LED_LINK_BLUE].strobe_mode = FBNIC_STROBE_ON;
+		break;
+	case FBNIC_LED_RESTORE:
+		fbd->leds[FBNIC_LED_LINK_AMBER].strobe_mode =
+			FBNIC_STROBE_DISABLED;
+		fbd->leds[FBNIC_LED_LINK_BLUE].strobe_mode =
+			FBNIC_STROBE_DISABLED;
+		break;
+	case FBNIC_LED_STROBE_INIT: /* a no-op */
+		/* Initialization is a no-op; LED toggling happens on ON/OFF */
+		goto out_unlock;
+	default:
+		goto out_unlock;
+	}
+
+	fbnic_led_update_csr(fbd);
+out_unlock:
+	mutex_unlock(&fbd->led_mutex);
+}
+
 static bool fbnic_mac_get_link(struct fbnic_dev *fbd, u8 aui, u8 fec)
 {
 	bool link;
@@ -967,6 +1014,7 @@ static const struct fbnic_mac fbnic_mac_asic = {
 	.link_down = fbnic_mac_link_down_asic,
 	.link_up = fbnic_mac_link_up_asic,
 	.get_sensor = fbnic_mac_get_sensor_asic,
+	.set_led_state = fbnic_set_led_state,
 };
 
 /**
@@ -985,6 +1033,197 @@ int fbnic_mac_init(struct fbnic_dev *fbd)
 	fbd->mac->init_regs(fbd);
 
 	return 0;
+}
+
+/**
+ * __fbnic_led_get_link_speed_mode - Get link speed mode
+ * @curr_speed: ethtool speed
+ *
+ * Return: netdev trigger bit on success, 0 if link speed is not supported
+ *
+ * Convert ethtool speed to mode bit using parameter
+ */
+static u32
+__fbnic_led_get_link_speed_mode(u32 curr_speed)
+{
+	switch (curr_speed) {
+	case SPEED_25000:
+		return BIT(TRIGGER_NETDEV_LINK_25000);
+	case SPEED_50000:
+		return BIT(TRIGGER_NETDEV_LINK_50000);
+	case SPEED_100000:
+		return BIT(TRIGGER_NETDEV_LINK_100000);
+	default:
+		return 0;
+	}
+}
+
+/**
+ * fbnic_led_get_link_speed_mode - Get link speed mode
+ * @fbd: FBNIC Device pointer
+ *
+ * Return: Link speed mode on success, 0 if link speed is not supported
+ *
+ * For the current link speed, this function returns trigger mode bit
+ */
+u32 fbnic_led_get_link_speed_mode(struct fbnic_dev *fbd)
+{
+	u32 curr_speed = fbnic_get_link_speed(fbd->fw_cap.link_speed);
+
+	return __fbnic_led_get_link_speed_mode(curr_speed);
+}
+
+/**
+ * fbnic_led_set_modes_ocp - Set LED state based on OCP link speed
+ * @fbd: FBNIC Device pointer
+ *
+ * Set LED state based on OCP link speed. This function sets up the
+ * LED state based on the current link speed while accounting for the
+ * OCP specs. Called from fbnic_led_link_up() on link state changes.
+ */
+void fbnic_led_set_modes_ocp(struct fbnic_dev *fbd)
+{
+	u32 speed_mode, curr_speed, max_speed;
+
+	lockdep_assert_held(&fbd->led_mutex);
+
+	/* Turn on the activity LED independent of the link speed */
+	fbd->leds[FBNIC_LED_ACTIVITY].enabled_modes = BIT(TRIGGER_NETDEV_TX) |
+						      BIT(TRIGGER_NETDEV_RX);
+	fbd->leds[FBNIC_LED_LINK_BLUE].enabled_modes = 0;
+	fbd->leds[FBNIC_LED_LINK_AMBER].enabled_modes = 0;
+
+	curr_speed = fbnic_get_link_speed(fbd->fw_cap.link_speed);
+	if (!curr_speed) {
+		dev_warn(fbd->dev,
+			 "Unsupported link speed detected.\n");
+		goto bail;
+	}
+
+	/* can't be zero */
+	speed_mode = __fbnic_led_get_link_speed_mode(curr_speed);
+
+	/* need max_speed for amber/blue leds values */
+	max_speed = fbnic_get_link_speed(fbd->fw_cap.max_link_speed);
+	if (!max_speed) {
+		dev_warn(fbd->dev,
+			 "Unsupported max link speed detected.\n");
+		goto bail;
+	}
+
+	/* Set the LED modes according to OCP specs */
+	if (curr_speed < max_speed)
+		fbd->leds[FBNIC_LED_LINK_AMBER].enabled_modes = speed_mode;
+	else
+		fbd->leds[FBNIC_LED_LINK_BLUE].enabled_modes = speed_mode;
+
+bail:
+	/* sync csr with above changes */
+	fbnic_led_update_csr(fbd);
+}
+
+static u32 fbnic_led_get_current_mode(struct fbnic_dev *fbd)
+{
+	u32 modes = BIT(TRIGGER_NETDEV_RX) | BIT(TRIGGER_NETDEV_TX);
+
+	if (fbd->led_link_up) {
+		modes |= BIT(TRIGGER_NETDEV_LINK);
+		modes |= fbnic_led_get_link_speed_mode(fbd);
+	}
+
+	return modes;
+}
+
+/**
+ * fbnic_led_get_state - Get current LED state
+ * @fbd: FBNIC Device pointer
+ * @led_idx: LED index
+ *
+ * Get current LED state. This function returns the current LED state
+ * based on the currently configured enabled modes. If current configured
+ * modes are not set, it returns LED_OFF.
+ */
+static int fbnic_led_get_state(struct fbnic_dev *fbd, int led_idx)
+{
+	u8 strobe_mode = fbd->leds[led_idx].strobe_mode;
+	int led_state = LED_OFF;
+	u32 mask;
+
+	if (strobe_mode == FBNIC_STROBE_ON)
+		return LED_ON;
+	if (strobe_mode == FBNIC_STROBE_OFF)
+		return LED_OFF;
+
+	mask = fbnic_led_get_current_mode(fbd);
+	led_state = (mask & fbd->leds[led_idx].enabled_modes) ?
+			LED_ON : LED_OFF;
+
+	return led_state;
+}
+
+/**
+ * fbnic_led_update_csr - Update LED CSR
+ * @fbd: FBNIC Device pointer
+ *
+ * This function updates the LED CSR. This should be called every time
+ * the link speed changes, or when the enabled modes are changed via
+ * the linux LED API.
+ */
+void fbnic_led_update_csr(struct fbnic_dev *fbd)
+{
+	u32 led_csr = FBNIC_SIG_LED_ACTIVITY_OFF;
+	int led_state;
+
+	lockdep_assert_held(&fbd->led_mutex);
+
+	led_state = fbnic_led_get_state(fbd, FBNIC_LED_ACTIVITY);
+	if (led_state == LED_ON)
+		led_csr = FBNIC_SIG_LED_ACTIVITY_DEFAULT;
+
+	led_state = fbnic_led_get_state(fbd, FBNIC_LED_LINK_AMBER);
+	if (led_state == LED_ON)
+		led_csr |= FBNIC_SIG_LED_AMBER_ON;
+
+	led_state = fbnic_led_get_state(fbd, FBNIC_LED_LINK_BLUE);
+	if (led_state == LED_ON)
+		led_csr |= FBNIC_SIG_LED_BLUE_ON;
+
+	dev_dbg(fbd->dev, "writing led_csr %x\n", led_csr);
+	wr32(fbd, FBNIC_SIG_LED, led_csr);
+}
+
+/**
+ * fbnic_led_link_up - Update LED state on link up
+ * @fbd: FBNIC Device pointer
+ *
+ * Called from phylink mac_link_up callback. Sets the internal link state
+ * and configures LED modes according to OCP specs based on current link speed.
+ */
+void fbnic_led_link_up(struct fbnic_dev *fbd)
+{
+	mutex_lock(&fbd->led_mutex);
+
+	fbd->led_link_up = true;
+	fbnic_led_set_modes_ocp(fbd);
+
+	mutex_unlock(&fbd->led_mutex);
+}
+
+/**
+ * fbnic_led_link_down - Update LED state on link down
+ * @fbd: FBNIC Device pointer
+ *
+ * Called from phylink mac_link_down callback. Clears the internal link state
+ * and updates the LED CSR to reflect link-down condition.
+ */
+void fbnic_led_link_down(struct fbnic_dev *fbd)
+{
+	mutex_lock(&fbd->led_mutex);
+
+	fbd->led_link_up = false;
+	fbnic_led_update_csr(fbd);
+
+	mutex_unlock(&fbd->led_mutex);
 }
 
 int fbnic_mac_ps_protect_to_config(struct fbnic_dev *fbd, u16 timeout_ms)

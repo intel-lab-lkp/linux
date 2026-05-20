@@ -2005,6 +2005,64 @@ fbnic_get_rmon_stats(struct net_device *netdev,
 	*ranges = fbnic_rmon_ranges;
 }
 
+/**
+ * fbnic_set_phys_id - Used to strobe the MAC LEDs in a recognizable pattern
+ * @netdev: Interface/port to strobe the LEDs for
+ * @phys_id_state: State requested by the call
+ *
+ * This function can really be broken down into two parts. There are the
+ * ACTIVE/INACTIVE states which really are meant to be defining the start
+ * and stop of the LED strobing. There is also the ON/OFF states which are
+ * used to provide us with a way of telling us that we should be turning
+ * the LED on and/or off.
+ *
+ * We translate these calls and pass them off to the MAC layer. They will
+ * be used to initialize a strobe, then on and off will be used to cycle
+ * between the patterns, and finally we will restore the original LED state.
+ *
+ * We will return 2 when we are requested to go active. This will tell the
+ * call that it will need to call back to turn on/off the LED twice every
+ * second.
+ *
+ * Return: blink in half second intervals on success, negative value on failure
+ */
+static int fbnic_set_phys_id(struct net_device *netdev,
+			     enum ethtool_phys_id_state phys_id_state)
+{
+	struct fbnic_net *fbn = netdev_priv(netdev);
+	struct fbnic_dev *fbd = fbn->fbd;
+	const struct fbnic_mac *mac;
+	int cycle_interval = 0;
+	int state;
+
+	mac = fbd->mac;
+
+	if (!mac || !mac->set_led_state)
+		return -EOPNOTSUPP;
+
+	switch (phys_id_state) {
+	case ETHTOOL_ID_ACTIVE:
+		state = FBNIC_LED_STROBE_INIT;
+		cycle_interval = 2;
+		break;
+	case ETHTOOL_ID_INACTIVE:
+		state = FBNIC_LED_RESTORE;
+		break;
+	case ETHTOOL_ID_ON:
+		state = FBNIC_LED_ON;
+		break;
+	case ETHTOOL_ID_OFF:
+		state = FBNIC_LED_OFF;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	mac->set_led_state(fbd, state);
+
+	return cycle_interval;
+}
+
 static void fbnic_get_link_ext_stats(struct net_device *netdev,
 				     struct ethtool_link_ext_stats *stats)
 {
@@ -2062,6 +2120,7 @@ static const struct ethtool_ops fbnic_ethtool_ops = {
 	.get_eth_mac_stats		= fbnic_get_eth_mac_stats,
 	.get_eth_ctrl_stats		= fbnic_get_eth_ctrl_stats,
 	.get_rmon_stats			= fbnic_get_rmon_stats,
+	.set_phys_id			= fbnic_set_phys_id,
 };
 
 void fbnic_set_ethtool_ops(struct net_device *dev)

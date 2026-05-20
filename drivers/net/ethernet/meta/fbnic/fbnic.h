@@ -97,6 +97,11 @@ struct fbnic_dev {
 
 	struct fbnic_fw_log fw_log;
 
+	/* Used to synchronize updates to LED state and CSR */
+	struct mutex led_mutex;
+	bool led_link_up;
+	struct fbnic_led_cdev leds[FBNIC_NUM_LEDS];
+
 	/* MDIO bus for PHYs */
 	struct mii_bus *mdio_bus;
 
@@ -242,6 +247,14 @@ void fbnic_dbg_init(void);
 void fbnic_dbg_exit(void);
 
 void fbnic_rpc_reset_valid_entries(struct fbnic_dev *fbd);
+
+#if IS_ENABLED(CONFIG_FBNIC_LEDS)
+int fbnic_led_init(struct fbnic_dev *fbd);
+void fbnic_led_exit(struct fbnic_dev *fbd);
+#else
+static inline int fbnic_led_init(struct fbnic_dev *fbd) { return 0; }
+static inline void fbnic_led_exit(struct fbnic_dev *fbd) {}
+#endif
 
 int fbnic_mdiobus_create(struct fbnic_dev *fbd);
 

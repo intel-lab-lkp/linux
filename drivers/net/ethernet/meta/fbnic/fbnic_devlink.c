@@ -622,6 +622,8 @@ void fbnic_devlink_free(struct fbnic_dev *fbd)
 {
 	struct devlink *devlink = priv_to_devlink(fbd);
 
+	mutex_destroy(&fbd->led_mutex);
+
 	devlink_free(devlink);
 }
 
@@ -650,6 +652,8 @@ struct fbnic_dev *fbnic_devlink_alloc(struct pci_dev *pdev)
 	fbd->relaxed_ord = pcie_relaxed_ordering_enabled(pdev);
 
 	fbd->mac_addr_boundary = FBNIC_RPC_TCAM_MACDA_DEFAULT_BOUNDARY;
+
+	mutex_init(&fbd->led_mutex);
 
 	return fbd;
 }

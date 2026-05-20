@@ -154,6 +154,7 @@ fbnic_phylink_mac_link_down(struct phylink_config *config, unsigned int mode,
 	struct fbnic_dev *fbd = fbn->fbd;
 
 	fbd->mac->link_down(fbd);
+	fbnic_led_link_down(fbd);
 
 	fbn->link_down_events++;
 }
@@ -172,6 +173,7 @@ fbnic_phylink_mac_link_up(struct phylink_config *config,
 	fbnic_config_drop_mode(fbn, tx_pause);
 
 	fbd->mac->link_up(fbd, tx_pause, rx_pause);
+	fbnic_led_link_up(fbd);
 }
 
 static const struct phylink_mac_ops fbnic_phylink_mac_ops = {
