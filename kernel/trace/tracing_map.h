@@ -13,7 +13,7 @@
 #define TRACING_MAP_VARS_MAX		16
 #define TRACING_MAP_SORT_KEYS_MAX	2
 
-typedef int (*tracing_map_cmp_fn_t) (void *val_a, void *val_b);
+typedef int (*tracing_map_cmp_fn_t) (const void *val_a, const void *val_b);
 
 /*
  * This is an overview of the tracing_map data structures and how they
@@ -137,11 +137,11 @@ struct tracing_map_field {
 
 struct tracing_map_elt {
 	struct tracing_map		*map;
-	struct tracing_map_field	*fields;
 	atomic64_t			*vars;
 	bool				*var_set;
 	void				*key;
 	void				*private_data;
+	struct tracing_map_field	fields[];
 };
 
 struct tracing_map_entry {
@@ -260,8 +260,8 @@ tracing_map_lookup(struct tracing_map *map, void *key);
 
 extern tracing_map_cmp_fn_t tracing_map_cmp_num(int field_size,
 						int field_is_signed);
-extern int tracing_map_cmp_string(void *val_a, void *val_b);
-extern int tracing_map_cmp_none(void *val_a, void *val_b);
+extern int tracing_map_cmp_string(const void *val_a, const void *val_b);
+extern int tracing_map_cmp_none(const void *val_a, const void *val_b);
 
 extern void tracing_map_update_sum(struct tracing_map_elt *elt,
 				   unsigned int i, u64 n);
