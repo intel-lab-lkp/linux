@@ -403,6 +403,20 @@ void ntp_set_time_offset(unsigned int tkid, s64 offset_ns)
 	ntpdata->time_adjust = 0;
 }
 
+void ntp_set_tick_length(unsigned int tkid, u64 tick_length)
+{
+	struct ntp_data *ntpdata = &tk_ntp_data[tkid];
+	u64 base;
+
+	/* Compute the nominal second length (without frequency adjustment) */
+	base = (u64)(ntpdata->tick_usec * NSEC_PER_USEC * USER_HZ)
+		<< NTP_SCALE_SHIFT;
+	base += ntpdata->ntp_tick_adj;
+
+	ntpdata->time_freq = (s64)(tick_length * NTP_INTERVAL_FREQ - base);
+	ntp_update_frequency(ntpdata);
+}
+
 /**
  * ntp_get_next_leap - Returns the next leapsecond in CLOCK_REALTIME ktime_t
  * @tkid:	Timekeeper ID

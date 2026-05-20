@@ -2324,6 +2324,44 @@ static __always_inline void timekeeping_apply_adjustment(struct timekeeper *tk,
  * Adjust the timekeeper's multiplier to the correct frequency
  * and also to reduce the accumulated error value.
  */
+
+#include <linux/timekeeping_reference.h>
+
+
+int timekeeping_set_reference(const struct tk_reference *ref)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	u64 new_tl, delta, ref_frac;
+	s64 ref_err;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&tk_core.lock, flags);
+
+	if (tk->cs_id != ref->cs_id) {
+		raw_spin_unlock_irqrestore(&tk_core.lock, flags);
+		return -ENODEV;
+	}
+
+	new_tl = mul_u64_u64_shr(ref->period_frac_sec,
+			(u64)tk->cycle_interval * NSEC_PER_SEC,
+			32 + ref->period_shift);
+	ntp_set_tick_length(tk->id, new_tl);
+
+	/* Compute phase offset at cycle_last and set time_offset to slew */
+	delta = tk->tkr_mono.cycle_last - ref->counter_value;
+	ref_frac = mul_u64_u64_shr(delta, ref->period_frac_sec,
+				   ref->period_shift) + ref->time_frac_sec;
+	ref_err = (s64)mul_u64_u64_shr(ref_frac,
+			(u64)NSEC_PER_SEC << tk->tkr_mono.shift, 64) -
+		  (s64)tk->tkr_mono.xtime_nsec;
+	ntp_set_time_offset(tk->id, ref_err >> tk->tkr_mono.shift);
+	tk->ntp_error = 0;
+
+	raw_spin_unlock_irqrestore(&tk_core.lock, flags);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(timekeeping_set_reference);
+
 static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 {
 	u64 ntp_tl = ntp_tick_length(tk->id);
