@@ -2691,8 +2691,16 @@ static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags
  * fewer than this many free pageblocks, ensuring that unmovable claims
  * always find room in existing tainted superpageblocks instead of spilling
  * into clean ones.
+ *
+ * Scale with SPB size: reserve ~3% of pageblocks (minimum 4).
+ * For a 512-pageblock SPB this gives 16 reserved pageblocks.
  */
-#define SPB_TAINTED_RESERVE	4
+#define SPB_TAINTED_RESERVE_MIN	4
+
+static inline u16 spb_tainted_reserve(const struct superpageblock *sb)
+{
+	return max_t(u16, SPB_TAINTED_RESERVE_MIN, sb->total_pageblocks / 32);
+}
 
 /*
  * On systems with many superpageblocks, we can afford to "write off"
@@ -3005,7 +3013,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 				 * with few free pageblocks to reserve space
 				 * for future unmovable/reclaimable claims.
 				 */
-				if (sb->nr_free <= SPB_TAINTED_RESERVE)
+				if (sb->nr_free <= spb_tainted_reserve(sb))
 					continue;
 				for (current_order = order;
 				     current_order < NR_PAGE_ORDERS;
@@ -3582,7 +3590,7 @@ __rmqueue_sb_find_fallback(struct zone *zone, unsigned int order,
 					&sb->free_area[order];
 
 				if (movable && cat == SB_TAINTED &&
-				    sb->nr_free <= SPB_TAINTED_RESERVE)
+				    sb->nr_free <= spb_tainted_reserve(sb))
 					continue;
 
 				for (i = 0; i < MIGRATE_PCPTYPES - 1; i++) {
@@ -3631,7 +3639,7 @@ __rmqueue_sb_find_fallback(struct zone *zone, unsigned int order,
 					&sb->free_area[order];
 
 				if (movable && cat == SB_TAINTED &&
-				    sb->nr_free <= SPB_TAINTED_RESERVE)
+				    sb->nr_free <= spb_tainted_reserve(sb))
 					continue;
 
 				for (i = 0; i < MIGRATE_PCPTYPES - 1; i++) {
@@ -6744,9 +6752,33 @@ retry:
 
 	/*
 	 * Reclaim and compaction have been tried but could not free enough
-	 * pages in already-tainted superpageblocks. Drop NOFRAGMENT as a
-	 * last resort to allow claiming from clean/empty SPBs and stealing
-	 * across migratetype boundaries. This is better than OOM-killing.
+	 * pages in already-tainted superpageblocks. Before dropping
+	 * NOFRAGMENT, try targeted evacuation of movable pages from
+	 * tainted SPBs to create free pageblocks for unmovable claims.
+	 */
+	if ((alloc_flags & ALLOC_NOFRAGMENT) &&
+	    (ac->migratetype == MIGRATE_UNMOVABLE ||
+	     ac->migratetype == MIGRATE_RECLAIMABLE)) {
+		struct zoneref *z;
+		struct zone *zone;
+
+		for_each_zone_zonelist_nodemask(zone, z, ac->zonelist,
+					       ac->highest_zoneidx,
+					       ac->nodemask) {
+			if (spb_evacuate_for_order(zone, order,
+						  ac->migratetype)) {
+				page = get_page_from_freelist(gfp_mask, order,
+							     alloc_flags, ac);
+				if (page)
+					goto got_pg;
+			}
+		}
+	}
+
+	/*
+	 * Targeted evacuation could not free enough either. Drop
+	 * NOFRAGMENT as a last resort to allow claiming from clean/empty
+	 * SPBs. This is better than OOM-killing.
 	 */
 	if (alloc_flags & ALLOC_NOFRAGMENT) {
 		alloc_flags &= ~ALLOC_NOFRAGMENT;
@@ -8819,7 +8851,7 @@ static bool spb_needs_defrag(struct superpageblock *sb)
 	 */
 	if (spb_get_category(sb) == SB_TAINTED)
 		return sb->nr_movable > 0 &&
-		       sb->nr_free < SPB_TAINTED_RESERVE;
+		       sb->nr_free < spb_tainted_reserve(sb);
 
 	/* Clean SPBs: kcompactd handles consolidation; nothing to do here. */
 	return false;
@@ -8841,7 +8873,7 @@ static bool spb_defrag_done(struct superpageblock *sb)
 	 */
 	if (spb_get_category(sb) == SB_TAINTED)
 		return !sb->nr_movable ||
-		       sb->nr_free >= SPB_TAINTED_RESERVE;
+		       sb->nr_free >= spb_tainted_reserve(sb);
 
 	/* Clean SPBs should not be handled here. */
 	return true;
@@ -9076,6 +9108,184 @@ void init_superpageblock_defrag(struct superpageblock *sb)
 {
 	INIT_WORK(&sb->defrag_work, spb_defrag_work_fn);
 	init_irq_work(&sb->defrag_irq_work, spb_defrag_irq_work_fn);
+}
+
+/*
+ * Maximum tainted superpageblock candidates per spb_evacuate_for_order call.
+ * Collected under zone->lock, then evacuated without it. Larger than the
+ * contig-allocation candidate cap because evacuation runs from the slowpath
+ * after reclaim/compaction failed: we need a meaningful chance of freeing a
+ * non-MOV-claimable pageblock before the slowpath escalates to dropping
+ * ALLOC_NOFRAGMENT (which lets __rmqueue_claim taint clean SPBs). Sized to
+ * scan a meaningful fraction of a typical tainted-pool population.
+ */
+#define SPB_EVACUATE_MAX_CANDIDATES 16
+
+/*
+ * Maximum pageblocks to evacuate per candidate SPB inside
+ * spb_evacuate_for_order. Each evacuation triggers page migration which is
+ * O(pages_per_pageblock) wall-clock cost, so this caps per-call latency.
+ * Bumped from 3 to 8 to free more capacity per slowpath escalation pass.
+ * Combined cap: SPB_EVACUATE_MAX_CANDIDATES * SPB_EVACUATE_MAX_PB_PER_SB
+ * pageblocks per call (16 * 8 = 128 = 256 MiB on x86 max migration budget).
+ */
+#define SPB_EVACUATE_MAX_PB_PER_SB 8
+
+/**
+ * sb_collect_evacuate_candidates - Find tainted SPBs for targeted evacuation
+ * @zone: zone to search (must hold zone->lock)
+ * @sb_pfns: output array of tainted superpageblock start PFNs
+ * @max: maximum candidates to collect
+ *
+ * Walk the per-zone tainted SPB lists and collect the start PFNs of
+ * superpageblocks that still hold movable pages, up to @max entries.
+ * The caller (spb_evacuate_for_order) drops zone->lock before actually
+ * evacuating each candidate.
+ *
+ * Returns number of candidate superpageblock PFNs found.
+ */
+static int sb_collect_evacuate_candidates(struct zone *zone,
+					  unsigned long *sb_pfns, int max)
+{
+	struct superpageblock *sb;
+	int full, n = 0;
+
+	lockdep_assert_held(&zone->lock);
+
+	for (full = 0; full < __NR_SB_FULLNESS; full++) {
+		list_for_each_entry(sb, &zone->spb_lists[SB_TAINTED][full],
+				    list) {
+			if (!sb->nr_movable)
+				continue;
+
+			sb_pfns[n++] = sb->start_pfn;
+			if (n >= max)
+				return n;
+		}
+	}
+	return n;
+}
+
+/*
+ * Evacuate MOV content out of any pageblock in the given range that has it.
+ *
+ * The previous version filtered on the source pageblock's migratetype tag,
+ * which made evacuation blind to MOV stragglers living in PBs whose tag did
+ * not match the current allocation's requesting type:
+ *
+ *   - PASS_2C / PASS_2D borrows set PB_has_<requesting_mt> on a MOV-tagged
+ *     PB without changing the tag. The borrowed pages return to the MOV
+ *     free list when freed, so a MOV-tagged PB can host non-MOV PB_has bits
+ *     and MOV content simultaneously.
+ *
+ *   - When __spb_set_has_type adds a non-MOV bit on a PB, the PB tag is not
+ *     re-evaluated. PBs accumulate has-bits over time without their tag
+ *     necessarily reflecting current content.
+ *
+ * Drop the migratetype tag filter and accept any PB with PB_has_movable set.
+ * Skip only the cases whose semantics forbid touching them here:
+ *   - MIGRATE_ISOLATE     under quarantine
+ *   - CMA                 own allocator
+ *   - MIGRATE_HIGHATOMIC  reserve, evac would race the reservation logic
+ *
+ * Returns number of pageblocks evacuated.
+ */
+static int evacuate_pb_range(struct zone *zone, unsigned long start_pfn,
+			     unsigned long end_pfn, int max)
+{
+	unsigned long pfn;
+	int nr_evacuated = 0;
+
+	for (pfn = start_pfn; pfn < end_pfn; pfn += pageblock_nr_pages) {
+		struct page *page;
+		int pb_mt;
+
+		if (!pfn_valid(pfn))
+			continue;
+
+		if (!zone_spans_pfn(zone, pfn))
+			continue;
+
+		page = pfn_to_page(pfn);
+
+		if (!get_pfnblock_bit(page, pfn, PB_has_movable))
+			continue;
+
+		pb_mt = get_pfnblock_migratetype(page, pfn);
+		if (is_migrate_isolate(pb_mt) ||
+		    is_migrate_cma(pb_mt) ||
+		    pb_mt == MIGRATE_HIGHATOMIC)
+			continue;
+
+		evacuate_pageblock(zone, pfn, true);
+		if (++nr_evacuated >= max)
+			break;
+	}
+	return nr_evacuated;
+}
+
+/**
+ * spb_evacuate_for_order - Targeted evacuation of movable pages from
+ *                         tainted superpageblocks
+ * @zone: zone to work on
+ * @order: allocation order that failed
+ * @migratetype: requesting migratetype (informational; the evacuation
+ *               loop itself is migratetype-independent)
+ *
+ * Collect tainted superpageblocks with movable content under zone->lock,
+ * then drop the lock and walk each candidate's pageblocks, evacuating
+ * any PB that has PB_has_movable set and does not have a special tag
+ * (ISOLATE, CMA, HIGHATOMIC). PBs that are pure MOV become empty whole
+ * pageblocks for Pass 2 / claim_whole_block on retry; mixed PBs lose
+ * their MOV stragglers so future allocations of the dominant type stop
+ * competing with MOV residue.
+ *
+ * Returns true if evacuation was performed (caller should retry allocation).
+ */
+static bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
+				  int migratetype)
+{
+	unsigned long sb_pfns[SPB_EVACUATE_MAX_CANDIDATES];
+	unsigned long flags;
+	int nr_sbs, i;
+	unsigned int attempts = 0;
+	bool did_evacuate = false;
+
+	/*
+	 * Single-pass evacuation: collect candidate tainted SPBs (anything
+	 * with MOV content), then walk each one's pageblocks evacuating MOV
+	 * content from any non-special PB. evacuate_pb_range filters by
+	 * PB_has_movable, so this is a no-op on PBs that have no MOV content.
+	 *
+	 * Two effects accumulate:
+	 *   - PBs that are pure MOV become empty -> free MOV pageblock,
+	 *     claimable by Pass 2 / claim_whole_block on the retry.
+	 *   - PBs that are mixed (e.g., UNMOV + MOV stragglers) lose the MOV
+	 *     stragglers, so future allocations of the dominant type can use
+	 *     the PB without competing with the MOV residue.
+	 *
+	 * The previous two-phase design tried to do these separately and
+	 * filtered evacuation by source PB tag. That left MOV content
+	 * stranded in PBs whose tag did not match either phase, and gave up
+	 * after one phase even though the other phase could have helped.
+	 */
+	spin_lock_irqsave(&zone->lock, flags);
+	nr_sbs = sb_collect_evacuate_candidates(zone, sb_pfns,
+						SPB_EVACUATE_MAX_CANDIDATES);
+	spin_unlock_irqrestore(&zone->lock, flags);
+
+	for (i = 0; i < nr_sbs; i++) {
+		unsigned long end_pfn = sb_pfns[i] + SUPERPAGEBLOCK_NR_PAGES;
+		int n;
+
+		n = evacuate_pb_range(zone, sb_pfns[i], end_pfn,
+				      SPB_EVACUATE_MAX_PB_PER_SB);
+		attempts += n;
+		if (n)
+			did_evacuate = true;
+	}
+
+	return did_evacuate;
 }
 #endif /* CONFIG_COMPACTION */
 
@@ -9655,112 +9865,6 @@ static struct page *spb_try_alloc_contig(struct zone *zone,
 	return NULL;
 }
 
-/**
- * sb_collect_evacuate_candidates - Find pageblocks for targeted evacuation
- * @zone: zone to search (must hold zone->lock)
- * @migratetype: desired migratetype (MIGRATE_UNMOVABLE or MIGRATE_RECLAIMABLE)
- * @sb_pfns: output array of tainted superpageblock start PFNs
- * @max: maximum candidates to collect
- *
- * Find tainted superpageblocks containing pageblocks of the desired migratetype
- * that also have movable pages to evacuate. Evacuating movable pages from
- * these pageblocks creates buddy coalescing opportunities for high-order
- * allocations of the desired migratetype.
- *
- * Returns number of candidate superpageblock PFNs found.
- */
-static int sb_collect_evacuate_candidates(struct zone *zone, int migratetype,
-					  unsigned long *sb_pfns, int max)
-{
-	struct superpageblock *sb;
-	int full, n = 0;
-
-	lockdep_assert_held(&zone->lock);
-
-	for (full = 0; full < __NR_SB_FULLNESS; full++) {
-		list_for_each_entry(sb, &zone->spb_lists[SB_TAINTED][full],
-				    list) {
-			bool has_matching;
-
-			if (!sb->nr_movable)
-				continue;
-
-			if (migratetype == MIGRATE_UNMOVABLE)
-				has_matching = sb->nr_unmovable > 0;
-			else if (migratetype == MIGRATE_RECLAIMABLE)
-				has_matching = sb->nr_reclaimable > 0;
-			else
-				continue;
-
-			if (!has_matching)
-				continue;
-
-			sb_pfns[n++] = sb->start_pfn;
-			if (n >= max)
-				return n;
-		}
-	}
-	return n;
-}
-
-/**
- * spb_evacuate_for_order - Targeted evacuation of movable pages from
- *                         unmovable/reclaimable pageblocks
- * @zone: zone to work on
- * @order: allocation order that failed
- * @migratetype: desired migratetype (MIGRATE_UNMOVABLE or MIGRATE_RECLAIMABLE)
- *
- * Instead of blind compaction, use superpageblock metadata to find pageblocks
- * of the right migratetype in tainted superpageblocks and evacuate their
- * movable pages. This creates buddy coalescing opportunities within
- * the pageblock, enabling higher-order allocations.
- *
- * Returns true if evacuation was performed (caller should retry allocation).
- */
-static bool spb_evacuate_for_order(struct zone *zone, unsigned int order,
-				  int migratetype)
-{
-	unsigned long sb_pfns[SPB_CONTIG_MAX_CANDIDATES];
-	unsigned long flags;
-	int nr_sbs, i;
-	bool did_evacuate = false;
-
-	spin_lock_irqsave(&zone->lock, flags);
-	nr_sbs = sb_collect_evacuate_candidates(zone, migratetype,
-						sb_pfns,
-						SPB_CONTIG_MAX_CANDIDATES);
-	spin_unlock_irqrestore(&zone->lock, flags);
-
-	for (i = 0; i < nr_sbs && !did_evacuate; i++) {
-		unsigned long pfn, end_pfn;
-
-		end_pfn = sb_pfns[i] + SUPERPAGEBLOCK_NR_PAGES;
-		for (pfn = sb_pfns[i]; pfn < end_pfn;
-		     pfn += pageblock_nr_pages) {
-			struct page *page;
-
-			if (!pfn_valid(pfn))
-				continue;
-
-			/* Superpageblocks can straddle zone boundaries. */
-			if (!zone_spans_pfn(zone, pfn))
-				continue;
-
-			page = pfn_to_page(pfn);
-
-			if (get_pfnblock_migratetype(page, pfn) != migratetype)
-				continue;
-
-			if (!get_pfnblock_bit(page, pfn, PB_has_movable))
-				continue;
-
-			evacuate_pageblock(zone, pfn, true);
-			did_evacuate = true;
-			break;
-		}
-	}
-	return did_evacuate;
-}
 #endif /* CONFIG_COMPACTION */
 
 /**
