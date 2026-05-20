@@ -19,6 +19,24 @@
 
 #include "kvm_mm.h"
 
+static inline bool gpc_uhva_in_range(struct gfn_to_pfn_cache *gpc,
+			      unsigned long start, unsigned long end)
+{
+	return gpc->uhva >= start && gpc->uhva < end;
+}
+
+static inline bool gpc_should_invalidate(struct gfn_to_pfn_cache *gpc,
+				  unsigned long start, unsigned long end)
+{
+	if (!gpc_uhva_in_range(gpc, start, end))
+		return false;
+
+	if (kvm_gpc_is_hva_active(gpc))
+		return true;
+
+	return gpc->valid && !is_error_noslot_pfn(gpc->pfn);
+}
+
 /*
  * MMU notifier 'invalidate_range_start' hook.
  */
@@ -32,8 +50,7 @@ void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm, unsigned long start,
 		read_lock_irq(&gpc->lock);
 
 		/* Only a single page so no need to care about length */
-		if (gpc->valid && !is_error_noslot_pfn(gpc->pfn) &&
-		    gpc->uhva >= start && gpc->uhva < end) {
+		if (gpc_should_invalidate(gpc, start, end)) {
 			read_unlock_irq(&gpc->lock);
 
 			/*
@@ -45,9 +62,11 @@ void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm, unsigned long start,
 			 */
 
 			write_lock_irq(&gpc->lock);
-			if (gpc->valid && !is_error_noslot_pfn(gpc->pfn) &&
-			    gpc->uhva >= start && gpc->uhva < end)
+			if (gpc_should_invalidate(gpc, start, end)) {
+				if (kvm_gpc_is_hva_active(gpc))
+					gpc->hva_invalidate_seq++;
 				gpc->valid = false;
+			}
 			write_unlock_irq(&gpc->lock);
 			continue;
 		}
@@ -124,8 +143,11 @@ static void gpc_unmap(kvm_pfn_t pfn, void *khva)
 #endif
 }
 
-static inline bool mmu_notifier_retry_cache(struct kvm *kvm, unsigned long mmu_seq)
+static inline bool mmu_notifier_retry_cache(struct gfn_to_pfn_cache *gpc,
+					    unsigned long mmu_seq, unsigned long hva_seq)
 {
+	struct kvm *kvm = gpc->kvm;
+
 	/*
 	 * mn_active_invalidate_count acts for all intents and purposes
 	 * like mmu_invalidate_in_progress here; but the latter cannot
@@ -149,7 +171,10 @@ static inline bool mmu_notifier_retry_cache(struct kvm *kvm, unsigned long mmu_s
 	 * new (incremented) value of mmu_invalidate_seq is observed.
 	 */
 	smp_rmb();
-	return kvm->mmu_invalidate_seq != mmu_seq;
+	if (kvm->mmu_invalidate_seq != mmu_seq)
+		return true;
+
+	return gpc->hva_invalidate_seq != hva_seq;
 }
 
 static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
@@ -159,6 +184,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 	kvm_pfn_t new_pfn = KVM_PFN_ERR_FAULT;
 	void *new_khva = NULL;
 	unsigned long mmu_seq;
+	unsigned long hva_seq;
 	struct page *page;
 
 	struct kvm_follow_pfn kfp = {
@@ -182,6 +208,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 
 	do {
 		mmu_seq = gpc->kvm->mmu_invalidate_seq;
+		hva_seq = gpc->hva_invalidate_seq;
 		smp_rmb();
 
 		write_unlock_irq(&gpc->lock);
@@ -232,7 +259,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 		 * attempting to refresh.
 		 */
 		WARN_ON_ONCE(gpc->valid);
-	} while (mmu_notifier_retry_cache(gpc->kvm, mmu_seq));
+	} while (mmu_notifier_retry_cache(gpc, mmu_seq, hva_seq));
 
 	gpc->valid = true;
 	gpc->pfn = new_pfn;
@@ -391,6 +418,7 @@ void kvm_gpc_init(struct gfn_to_pfn_cache *gpc, struct kvm *kvm)
 	gpc->pfn = KVM_PFN_ERR_FAULT;
 	gpc->gpa = INVALID_GPA;
 	gpc->uhva = KVM_HVA_ERR_BAD;
+	gpc->hva_invalidate_seq = 0;
 	gpc->active = gpc->valid = false;
 }
 

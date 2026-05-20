@@ -85,6 +85,7 @@ struct gfn_to_pfn_cache {
 	u64 generation;
 	gpa_t gpa;
 	unsigned long uhva;
+	unsigned long hva_invalidate_seq;
 	struct kvm_memory_slot *memslot;
 	struct kvm *kvm;
 	struct list_head list;
