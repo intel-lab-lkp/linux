@@ -329,7 +329,7 @@ static void ntp_update_offset(struct ntp_data *ntpdata, long offset)
 
 	ntpdata->time_freq   = max(freq_adj, -MAXFREQ_SCALED);
 
-	ntpdata->time_offset = div_s64(offset64 << NTP_SCALE_SHIFT, NTP_INTERVAL_FREQ);
+	ntp_set_time_offset(ntpdata - tk_ntp_data, offset64);
 }
 
 static void __ntp_clear(struct ntp_data *ntpdata)
@@ -388,6 +388,24 @@ s64 ntp_drain_time_offset(unsigned int tkid, s64 amount)
 
 	ntpdata->time_offset -= amount;
 	return 0;
+}
+
+/**
+ * ntp_set_time_offset - Set the NTP time offset (phase correction)
+ * @tkid:	Timekeeper ID
+ * @offset_ns:	Desired offset in nanoseconds
+ *
+ * Converts nanoseconds to internal time_offset units and stores it.
+ * Also clears time_adjust since a new offset supersedes any pending
+ * adjtime() slew.
+ */
+void ntp_set_time_offset(unsigned int tkid, s64 offset_ns)
+{
+	struct ntp_data *ntpdata = &tk_ntp_data[tkid];
+
+	ntpdata->time_offset = div_s64((s64)offset_ns << NTP_SCALE_SHIFT,
+				       NTP_INTERVAL_FREQ);
+	ntpdata->time_adjust = 0;
 }
 
 /**
@@ -498,26 +516,22 @@ int second_overflow(unsigned int tkid, time64_t secs)
 	/* Check PPS signal */
 	pps_dec_valid(ntpdata);
 
-	if (!ntpdata->time_adjust)
-		goto out;
+	/*
+	 * Fold any pending time_adjust (from adjtime()) into time_offset.
+	 * This used to inflate tick_length directly; now it uses the same
+	 * per-tick skew mechanism as NTP's time_offset. Rate-limited to
+	 * MAX_TICKADJ (500µs) per second.
+	 */
+	if (ntpdata->time_adjust) {
+		long adj = clamp(ntpdata->time_adjust,
+				 (long)-MAX_TICKADJ, (long)MAX_TICKADJ);
 
-	if (ntpdata->time_adjust > MAX_TICKADJ) {
-		ntpdata->time_adjust -= MAX_TICKADJ;
-		ntpdata->tick_length += MAX_TICKADJ_SCALED;
-		goto out;
+		ntpdata->time_adjust -= adj;
+		ntpdata->time_offset += div_s64(
+			(s64)adj * NSEC_PER_USEC << NTP_SCALE_SHIFT,
+			NTP_INTERVAL_FREQ);
 	}
 
-	if (ntpdata->time_adjust < -MAX_TICKADJ) {
-		ntpdata->time_adjust += MAX_TICKADJ;
-		ntpdata->tick_length -= MAX_TICKADJ_SCALED;
-		goto out;
-	}
-
-	ntpdata->tick_length += (s64)(ntpdata->time_adjust * NSEC_PER_USEC / NTP_INTERVAL_FREQ)
-				<< NTP_SCALE_SHIFT;
-	ntpdata->time_adjust = 0;
-
-out:
 	return leap;
 }
 
