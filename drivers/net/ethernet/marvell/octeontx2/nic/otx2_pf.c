@@ -2154,6 +2154,7 @@ EXPORT_SYMBOL(otx2_open);
 int otx2_stop(struct net_device *netdev)
 {
 	struct otx2_nic *pf = netdev_priv(netdev);
+	struct otx2_dev_stats *old_stats, *dev;
 	struct otx2_cq_poll *cq_poll = NULL;
 	struct otx2_qset *qset = &pf->qset;
 	int qidx, vec, wrk;
@@ -2199,6 +2200,26 @@ int otx2_stop(struct net_device *netdev)
 	for (wrk = 0; wrk < pf->qset.cq_cnt; wrk++)
 		cancel_delayed_work_sync(&pf->refill_wrk[wrk].pool_refill_work);
 	devm_kfree(pf->dev, pf->refill_wrk);
+
+	/* Read final HW counters and accumulate */
+	dev = &pf->hw.dev_stats;
+	old_stats = &pf->hw.old_stats;
+	otx2_get_dev_stats(pf);
+
+	/* Accumulate old stats */
+	old_stats->rx_bytes     += dev->rx_bytes;
+	old_stats->rx_drops     += dev->rx_drops;
+	old_stats->rx_bcast_frames      += dev->rx_bcast_frames;
+	old_stats->rx_mcast_frames      += dev->rx_mcast_frames;
+	old_stats->rx_ucast_frames      += dev->rx_ucast_frames;
+	old_stats->rx_frames            += dev->rx_frames;
+
+	old_stats->tx_bytes             += dev->tx_bytes;
+	old_stats->tx_drops             += dev->tx_drops;
+	old_stats->tx_bcast_frames      += dev->tx_bcast_frames;
+	old_stats->tx_mcast_frames      += dev->tx_mcast_frames;
+	old_stats->tx_ucast_frames      += dev->tx_ucast_frames;
+	old_stats->tx_frames            += dev->tx_frames;
 
 	otx2_free_hw_resources(pf);
 	otx2_free_cints(pf, pf->hw.cint_cnt);
