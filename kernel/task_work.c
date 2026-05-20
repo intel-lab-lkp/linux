@@ -143,6 +143,57 @@ task_work_cancel_match(struct task_struct *task,
 	return work;
 }
 
+/**
+ * task_work_cancel_match_all - cancel all pending works matching @match
+ * @task: the task which should execute the work
+ * @match: match function to call
+ * @data: data to be passed in to match function
+ *
+ * Removes all currently queued matching works in one traversal.  The returned
+ * callbacks are linked through ->next in their original queue order.  This is
+ * useful for teardown paths that need to cancel many callbacks of the same
+ * class without repeatedly rescanning the whole task_work list under
+ * task->pi_lock.
+ *
+ * RETURNS:
+ * The first found work or NULL if not found.
+ */
+struct callback_head *
+task_work_cancel_match_all(struct task_struct *task,
+			   bool (*match)(struct callback_head *, void *data),
+			   void *data)
+{
+	struct callback_head **pprev = &task->task_works;
+	struct callback_head *work, *next;
+	struct callback_head *head = NULL, **tail = &head;
+	unsigned long flags;
+
+	if (likely(!task_work_pending(task)))
+		return NULL;
+
+	raw_spin_lock_irqsave(&task->pi_lock, flags);
+	work = READ_ONCE(*pprev);
+	while (work && work != &work_exited) {
+		next = READ_ONCE(work->next);
+		if (!match(work, data)) {
+			pprev = &work->next;
+			work = next;
+			continue;
+		}
+
+		if (!try_cmpxchg(pprev, &work, next))
+			continue;
+
+		work->next = NULL;
+		*tail = work;
+		tail = &work->next;
+		work = next;
+	}
+	raw_spin_unlock_irqrestore(&task->pi_lock, flags);
+
+	return head;
+}
+
 static bool task_work_func_match(struct callback_head *cb, void *data)
 {
 	return cb->func == data;

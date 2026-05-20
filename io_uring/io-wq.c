@@ -234,13 +234,15 @@ static void io_worker_exit(struct io_worker *worker)
 	struct io_wq *wq = worker->wq;
 	struct io_wq_acct *acct = io_wq_get_acct(worker);
 
-	while (1) {
-		struct callback_head *cb = task_work_cancel_match(wq->task,
-						io_task_worker_match, worker);
-
-		if (!cb)
-			break;
-		io_worker_cancel_cb(worker);
+	if (test_bit(0, &worker->create_state)) {
+		/*
+		 * create_state is exclusively owned via test_and_set_bit_lock,
+		 * so at most one create_work can be pending per worker — a
+		 * single cancel attempt is sufficient here.
+		 */
+		if (task_work_cancel_match(wq->task, io_task_worker_match,
+					   worker))
+			io_worker_cancel_cb(worker);
 	}
 
 	io_worker_release(worker);
@@ -1320,11 +1322,13 @@ void io_wq_exit_start(struct io_wq *wq)
 
 static void io_wq_cancel_tw_create(struct io_wq *wq)
 {
-	struct callback_head *cb;
+	struct callback_head *cb, *next;
 
-	while ((cb = task_work_cancel_match(wq->task, io_task_work_match, wq)) != NULL) {
+	cb = task_work_cancel_match_all(wq->task, io_task_work_match, wq);
+	while (cb) {
 		struct io_worker *worker;
 
+		next = cb->next;
 		worker = container_of(cb, struct io_worker, create_work);
 		io_worker_cancel_cb(worker);
 		/*
@@ -1333,6 +1337,7 @@ static void io_wq_cancel_tw_create(struct io_wq *wq)
 		 */
 		if (cb->func == create_worker_cont)
 			kfree(worker);
+		cb = next;
 	}
 }
 
