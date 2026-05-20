@@ -424,8 +424,7 @@ static int pcibios_init_resource(int busnr, struct pci_sys_data *sys)
 	return 0;
 }
 
-static void pcibios_init_hw(struct device *parent, struct hw_pci *hw,
-			    struct list_head *head)
+static void pcibios_init_hw(struct hw_pci *hw, struct list_head *head)
 {
 	struct pci_sys_data *sys = NULL;
 	int ret;
@@ -466,7 +465,6 @@ static void pcibios_init_hw(struct device *parent, struct hw_pci *hw,
 			else {
 				list_splice_init(&sys->resources,
 						 &bridge->windows);
-				bridge->dev.parent = parent;
 				bridge->sysdata = sys;
 				bridge->busnr = sys->busnr;
 				bridge->ops = hw->ops;
@@ -492,7 +490,7 @@ static void pcibios_init_hw(struct device *parent, struct hw_pci *hw,
 	}
 }
 
-void pci_common_init_dev(struct device *parent, struct hw_pci *hw)
+void pci_common_init(struct hw_pci *hw)
 {
 	struct pci_sys_data *sys;
 	LIST_HEAD(head);
@@ -500,7 +498,7 @@ void pci_common_init_dev(struct device *parent, struct hw_pci *hw)
 	pci_add_flags(PCI_REASSIGN_ALL_BUS);
 	if (hw->preinit)
 		hw->preinit();
-	pcibios_init_hw(parent, hw, &head);
+	pcibios_init_hw(hw, &head);
 	if (hw->postinit)
 		hw->postinit();
 
