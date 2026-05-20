@@ -15,6 +15,7 @@
 #include <linux/page_counter.h>
 #include <linux/parser.h>
 #include <linux/refcount.h>
+#include <linux/resume_user_mode.h>
 #include <linux/rculist.h>
 #include <linux/slab.h>
 
@@ -157,6 +158,12 @@ set_resource_low(struct dmem_cgroup_pool_state *pool, u64 val)
 }
 
 static void
+set_resource_high(struct dmem_cgroup_pool_state *pool, u64 val)
+{
+	page_counter_set_high(&pool->cnt, val);
+}
+
+static void
 set_resource_max(struct dmem_cgroup_pool_state *pool, u64 val)
 {
 	page_counter_set_max(&pool->cnt, val);
@@ -165,6 +172,11 @@ set_resource_max(struct dmem_cgroup_pool_state *pool, u64 val)
 static u64 get_resource_low(struct dmem_cgroup_pool_state *pool)
 {
 	return pool ? READ_ONCE(pool->cnt.low) : 0;
+}
+
+static u64 get_resource_high(struct dmem_cgroup_pool_state *pool)
+{
+	return pool ? READ_ONCE(pool->cnt.high) : 0;
 }
 
 static u64 get_resource_min(struct dmem_cgroup_pool_state *pool)
@@ -186,6 +198,7 @@ static void reset_all_resource_limits(struct dmem_cgroup_pool_state *rpool)
 {
 	set_resource_min(rpool, 0);
 	set_resource_low(rpool, 0);
+	set_resource_high(rpool, PAGE_COUNTER_MAX);
 	set_resource_max(rpool, PAGE_COUNTER_MAX);
 }
 
@@ -685,6 +698,9 @@ int dmem_cgroup_try_charge(struct dmem_cgroup_region *region, u64 size,
 		goto err;
 	}
 
+	if (page_counter_read(&pool->cnt) > READ_ONCE(pool->cnt.high))
+		set_notify_resume(current);
+
 	/* On success, reference from get_current_dmemcs is transferred to *ret_pool */
 	*ret_pool = pool;
 	return 0;
@@ -835,13 +851,24 @@ static ssize_t dmem_cgroup_region_low_write(struct kernfs_open_file *of,
 	return dmemcg_limit_write(of, buf, nbytes, off, set_resource_low);
 }
 
+static int dmem_cgroup_region_high_show(struct seq_file *sf, void *v)
+{
+	return dmemcg_limit_show(sf, v, get_resource_high);
+}
+
+static ssize_t dmem_cgroup_region_high_write(struct kernfs_open_file *of,
+					  char *buf, size_t nbytes, loff_t off)
+{
+	return dmemcg_limit_write(of, buf, nbytes, off, set_resource_high);
+}
+
 static int dmem_cgroup_region_max_show(struct seq_file *sf, void *v)
 {
 	return dmemcg_limit_show(sf, v, get_resource_max);
 }
 
 static ssize_t dmem_cgroup_region_max_write(struct kernfs_open_file *of,
-				      char *buf, size_t nbytes, loff_t off)
+					  char *buf, size_t nbytes, loff_t off)
 {
 	return dmemcg_limit_write(of, buf, nbytes, off, set_resource_max);
 }
@@ -869,6 +896,12 @@ static struct cftype files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 	},
 	{
+		.name = "high",
+		.write = dmem_cgroup_region_high_write,
+		.seq_show = dmem_cgroup_region_high_show,
+		.flags = CFTYPE_NOT_ON_ROOT,
+	},
+	{
 		.name = "max",
 		.write = dmem_cgroup_region_max_write,
 		.seq_show = dmem_cgroup_region_max_show,
@@ -876,6 +909,31 @@ static struct cftype files[] = {
 	},
 	{ } /* Zero entry terminates. */
 };
+
+void __dmem_cgroup_handle_over_high(void)
+{
+	struct dmemcg_state *dmemcs;
+	struct dmem_cgroup_pool_state *pool;
+
+	dmemcs = css_to_dmemcs(task_get_css(current, dmem_cgrp_id));
+	if (!dmemcs)
+		return;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(pool, &dmemcs->pools, css_node) {
+		unsigned long usage, high;
+
+		usage = page_counter_read(&pool->cnt);
+		high = READ_ONCE(pool->cnt.high);
+
+		if (usage > high)
+			schedule_timeout_killable(HZ / 10);
+	}
+	rcu_read_unlock();
+
+	css_put(&dmemcs->css);
+}
+EXPORT_SYMBOL_GPL(__dmem_cgroup_handle_over_high);
 
 struct cgroup_subsys dmem_cgrp_subsys = {
 	.css_alloc	= dmemcs_alloc,

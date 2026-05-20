@@ -8,6 +8,7 @@
 #include <linux/memcontrol.h>
 #include <linux/rseq.h>
 #include <linux/blk-cgroup.h>
+#include <linux/cgroup_dmem.h>
 
 /**
  * set_notify_resume - cause resume_user_mode_work() to be called
@@ -58,6 +59,7 @@ static inline void resume_user_mode_work(struct pt_regs *regs)
 
 	mem_cgroup_handle_over_high(GFP_KERNEL);
 	blkcg_maybe_throttle_current();
+	dmem_cgroup_handle_over_high();
 
 	rseq_handle_slowpath(regs);
 }

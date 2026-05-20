@@ -21,6 +21,13 @@ int dmem_cgroup_try_charge(struct dmem_cgroup_region *region, u64 size,
 			   struct dmem_cgroup_pool_state **ret_pool,
 			   struct dmem_cgroup_pool_state **ret_limit_pool);
 void dmem_cgroup_uncharge(struct dmem_cgroup_pool_state *pool, u64 size);
+void __dmem_cgroup_handle_over_high(void);
+
+static inline void dmem_cgroup_handle_over_high(void)
+{
+	__dmem_cgroup_handle_over_high();
+}
+
 bool dmem_cgroup_state_evict_valuable(struct dmem_cgroup_pool_state *limit_pool,
 				      struct dmem_cgroup_pool_state *test_pool,
 				      bool ignore_low, bool *ret_hit_low);
@@ -49,6 +56,9 @@ static inline int dmem_cgroup_try_charge(struct dmem_cgroup_region *region, u64 
 }
 
 static inline void dmem_cgroup_uncharge(struct dmem_cgroup_pool_state *pool, u64 size)
+{ }
+
+static inline void dmem_cgroup_handle_over_high(void)
 { }
 
 static inline
