@@ -941,9 +941,18 @@ static void __init memmap_init(void)
 			if (!populated_zone(zone))
 				continue;
 
-			if (mirrored_kernelcore && j == ZONE_MOVABLE &&
-			    memblock_is_mirror(r))
-				continue;
+			if (mirrored_kernelcore) {
+				/*
+				 * Avoid double initialization of PFNs that overlap
+				 * between Normal and Movable zones.
+				 */
+				if (j == ZONE_NORMAL && !memblock_is_mirror(r) &&
+				    zone_movable_pfn[nid])
+					continue;
+
+				if (j == ZONE_MOVABLE && memblock_is_mirror(r))
+					continue;
+			}
 
 			memmap_init_zone_range(zone, start_pfn, end_pfn,
 					       &hole_pfn);
