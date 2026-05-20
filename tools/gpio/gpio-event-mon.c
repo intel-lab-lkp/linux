@@ -41,7 +41,7 @@ int monitor_device(const char *device_name,
 	if (ret < 0)
 		return -ENOMEM;
 
-	cfd = open(chrdev_name, 0);
+	cfd = open(chrdev_name, O_RDONLY);
 	if (cfd == -1) {
 		ret = -errno;
 		fprintf(stderr, "Failed to open %s\n", chrdev_name);
