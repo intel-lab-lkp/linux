@@ -143,6 +143,15 @@ andx_again:
 			conn->ops->set_rsp_status(work, STATUS_ACCESS_DENIED);
 			return SERVER_HANDLER_ABORT;
 		}
+	} else if (work->sess && work->sess->sign &&
+		   command != SMB2_NEGOTIATE_HE &&
+		   command != SMB2_SESSION_SETUP_HE &&
+		   command != SMB2_OPLOCK_BREAK_HE) {
+		/* MS-SMB2 3.3.5.2.4: Session.SigningRequired==TRUE,
+		 * reject unsigned non-exempt request.
+		 */
+		conn->ops->set_rsp_status(work, STATUS_ACCESS_DENIED);
+		return SERVER_HANDLER_ABORT;
 	}
 
 	ret = cmds->proc(work);
