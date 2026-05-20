@@ -67,7 +67,7 @@ static struct tdmr_info_list tdx_tdmr_list;
 /* All TDX-usable memory regions.  Protected by mem_hotplug_lock. */
 static LIST_HEAD(tdx_memlist);
 
-static struct tdx_sys_info tdx_sysinfo __ro_after_init;
+static struct tdx_sys_info tdx_sysinfo;
 
 static DEFINE_RAW_SPINLOCK(sysinit_lock);
 
@@ -1313,6 +1313,10 @@ int tdx_module_run_update(void)
 	ret = seamcall_prerr(TDH_SYS_UPDATE, &args);
 	if (ret)
 		return ret;
+
+	/* Shouldn't fail as the update has succeeded. */
+	ret = get_tdx_sys_info_version(&tdx_sysinfo.version);
+	WARN_ON_ONCE(ret);
 
 	tdx_module_state.initialized = true;
 	return 0;
