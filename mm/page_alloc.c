@@ -2709,6 +2709,101 @@ static inline u16 spb_tainted_reserve(const struct superpageblock *sb)
 }
 
 /*
+ * spb_tainted_can_serve_smaller - could a smaller-order @migratetype alloc
+ * be satisfied from any tainted SPB of @zone (now or after evac/reclaim)?
+ *
+ * "Yes" if either:
+ *   - some tainted SPB has nr_movable > 0 (MOV content exists; reclaim or
+ *     compaction/evac can free pageblocks at any order the caller's
+ *     order-decrement fallback might want, including orders >= the original
+ *     requested order -- e.g. four THPs in the SPB can yield an order-7
+ *     buddy for an order-7 unmovable alloc once the THPs are migrated), OR
+ *   - some tainted SPB has a free buddy on the requesting migratetype's
+ *     own list at an order < @order (a smaller PASS_1 retry would
+ *     succeed directly), OR
+ *   - some tainted SPB has a free buddy on the opposite non-MOV list at
+ *     an order < @order (PASS_2C borrow at the smaller order would
+ *     succeed) -- only meaningful for UNMOV/RECL allocs.
+ *
+ * Used by the get_page_from_freelist relax sequence to discriminate
+ * "the caller has an order-decrement fallback that the tainted pool can
+ * eventually serve" from "the alloc must escalate to dropping
+ * ALLOC_NOFRAGMENT and tainting a clean SPB".
+ *
+ * Walks zone->spb_lists[SB_TAINTED][*] under zone->lock: spb_update_list()
+ * mutates these same lists under zone->lock, so a lockless walk would race
+ * with list-cursor reassignment (list_move from a concurrent allocator
+ * caller could splice the cursor onto a different list and turn the walk
+ * into an infinite loop or crash on a corrupted list_head). Sister function
+ * tainted_pool_has_free() takes zone->lock for the same reason; match its
+ * lock discipline. Bounded by the tainted SPB count plus a constant amount
+ * of work per SPB.
+ */
+static bool spb_tainted_can_serve_smaller(struct zone *zone,
+					  unsigned int order,
+					  int migratetype)
+{
+	struct superpageblock *sb;
+	unsigned long flags;
+	bool found = false;
+	int full;
+	unsigned int o;
+	int opposite_mt = -1;
+
+	if (order == 0)
+		return false;
+
+	if (migratetype == MIGRATE_UNMOVABLE)
+		opposite_mt = MIGRATE_RECLAIMABLE;
+	else if (migratetype == MIGRATE_RECLAIMABLE)
+		opposite_mt = MIGRATE_UNMOVABLE;
+
+	spin_lock_irqsave(&zone->lock, flags);
+	for (full = 0; full < __NR_SB_FULLNESS && !found; full++) {
+		list_for_each_entry(sb, &zone->spb_lists[SB_TAINTED][full],
+				    list) {
+			/*
+			 * MOV content can be reclaimed (LRU folios) or
+			 * migrated (compaction / spb_evacuate_for_order),
+			 * making the SPB able to host a smaller (or even
+			 * same-order) non-MOV alloc on the retry. Cheap
+			 * counter check, covers most real cases.
+			 */
+			if (sb->nr_movable > 0) {
+				found = true;
+				break;
+			}
+
+			if (!sb->nr_free_pages)
+				continue;
+
+			/*
+			 * No MOV content but there might be a same-mt or
+			 * opposite-non-MOV buddy at a smaller order that a
+			 * PASS_1 retry / PASS_2C borrow could serve.
+			 */
+			for (o = 0; o < order; o++) {
+				struct free_area *area = &sb->free_area[o];
+
+				if (!list_empty(&area->free_list[migratetype])) {
+					found = true;
+					break;
+				}
+				if (opposite_mt >= 0 &&
+				    !list_empty(&area->free_list[opposite_mt])) {
+					found = true;
+					break;
+				}
+			}
+			if (found)
+				break;
+		}
+	}
+	spin_unlock_irqrestore(&zone->lock, flags);
+	return found;
+}
+
+/*
  * High-water threshold for proactively kicking the slab shrinker. When a
  * non-movable allocation consumes from a tainted SPB whose total free
  * pages have fallen below spb_tainted_reserve worth of pages, queue a
@@ -6303,8 +6398,35 @@ try_this_zone:
 	 */
 	if (no_fallback && !defrag_mode &&
 	    !(gfp_mask & __GFP_DIRECT_RECLAIM)) {
+		struct zone *pref = zonelist_zone(ac->preferred_zoneref);
+
 		if (gfp_mask & __GFP_NORETRY)
 			return NULL;
+
+		/*
+		 * Best-effort high-order callers convention: stripping
+		 * __GFP_DIRECT_RECLAIM, setting __GFP_NOWARN, omitting
+		 * __GFP_NOFAIL, and asking for a high order indicates the
+		 * caller has an order-decrement fallback (kvmalloc's
+		 * vmalloc fallback, vmalloc's order-decrement loop,
+		 * alloc_skb_with_frags's order-decrement loop, ...).
+		 *
+		 * If the tainted-SPB pool already has a free buddy at any
+		 * lower order on a free list a smaller retry could use,
+		 * refuse this attempt so the caller's order-decrement
+		 * uses that sub-pageblock space instead of forcing us to
+		 * drop ALLOC_NOFRAGMENT and taint a clean SPB.
+		 *
+		 * Same intent as adding __GFP_NORETRY at every such
+		 * caller, but applied centrally so we cover both existing
+		 * and future callers without per-call-site fixes.
+		 */
+		if (order > 0 && (gfp_mask & __GFP_NOWARN) &&
+		    !(gfp_mask & __GFP_NOFAIL) &&
+		    spb_tainted_can_serve_smaller(pref, order,
+						  ac->migratetype))
+			return NULL;
+
 		if (!(alloc_flags & ALLOC_NOFRAG_TAINTED_OK)) {
 			alloc_flags |= ALLOC_NOFRAG_TAINTED_OK;
 			goto retry;
