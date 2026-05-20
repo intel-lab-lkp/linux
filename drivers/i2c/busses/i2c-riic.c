@@ -222,7 +222,7 @@ static int riic_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		start_bit = ICCR2_RS;
 	}
 
- out:
+out:
 	pm_runtime_put_autosuspend(dev);
 
 	return riic->err ?: num;
