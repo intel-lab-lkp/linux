@@ -1482,6 +1482,8 @@ bool free_pages_prepare(struct page *page, unsigned int order)
 	return __free_pages_prepare(page, order, FPI_NONE);
 }
 
+static void absorb_remote_frees(struct per_cpu_pages *pcp);
+
 /*
  * Free PCP pages to zone buddy. First does a bottom-up merge pass
  * over PagePCPBuddy entries under pcp->lock only (already held by
@@ -1501,6 +1503,13 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 	unsigned int order;
 	struct page *page;
 	int mt, pindex;
+
+	/*
+	 * Pull in any pages remotely freed to our pageblocks before the
+	 * merge pass -- they participate in merging just like locally
+	 * freed pages.
+	 */
+	absorb_remote_frees(pcp);
 
 	/*
 	 * Ensure proper count is passed which otherwise would stuck in the
@@ -1597,6 +1606,45 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 }
 
 /*
+ * Absorb pages remotely freed into this CPU's pageblocks. Remote freers
+ * push pages onto pcp->free_llist lock-free (no remote PCP lock taken);
+ * the owning CPU pulls them onto its PCP buddy lists here, where they
+ * become eligible for normal merging on the next free_pcppages_bulk()
+ * pass.
+ *
+ * Called with pcp->lock held. Must be cheap on the empty path; the
+ * llist_empty() check is the fast-path bail-out.
+ */
+static void absorb_remote_frees(struct per_cpu_pages *pcp)
+{
+	struct llist_node *node;
+	struct page *p, *tmp;
+	int absorbed = 0;
+
+	if (likely(llist_empty(&pcp->free_llist)))
+		return;
+
+	node = llist_del_all(&pcp->free_llist);
+	llist_for_each_entry_safe(p, tmp, node, pcp_llist) {
+		unsigned long pfn = page_to_pfn(p);
+		unsigned int order = pcp_buddy_order(p);
+		int mt = pbd_migratetype(pfn_to_pageblock(p, pfn));
+
+		if (unlikely(mt >= MIGRATE_PCPTYPES))
+			mt = MIGRATE_MOVABLE;
+
+		/*
+		 * Pages on the llist came from pageblocks owned by this CPU
+		 * (that's how the freer picked our llist), so they are
+		 * eligible for PCP-buddy merging.
+		 */
+		__SetPagePCPBuddy(p);
+		pcp_enqueue(pcp, p, mt, order);
+		absorbed += 1 << order;
+	}
+}
+
+/*
  * Search PCP free lists for a page of at least the requested order.
  * If found at a higher order, split and place remainders on PCP lists.
  * Returns NULL if nothing available on the PCP.
@@ -1605,6 +1653,8 @@ static struct page *pcp_rmqueue_smallest(struct per_cpu_pages *pcp,
 					 int migratetype, unsigned int order)
 {
 	unsigned int high;
+
+	absorb_remote_frees(pcp);
 
 	for (high = order; high <= pageblock_order; high++) {
 		struct list_head *list;
@@ -2884,6 +2934,7 @@ static void drain_pages_zone(unsigned int cpu, struct zone *zone)
 
 	do {
 		pcp_spin_lock_nopin(pcp);
+		absorb_remote_frees(pcp);
 		count = pcp->count;
 		if (count) {
 			int to_drain = min(count,
@@ -3247,11 +3298,22 @@ static void __free_frozen_pages(struct page *page, unsigned int order,
 	}
 
 	/*
-	 * Route page to the owning CPU's PCP for merging, or to
-	 * the local PCP for batching (zone-owned pages). Zone-owned
-	 * pages are cached without PagePCPBuddy -- the merge pass
-	 * skips them, so they're inert on any PCP list and drain
-	 * individually to zone buddy.
+	 * Route the page based on pageblock ownership:
+	 *
+	 *  - owner_cpu == this CPU (or no owner): take the local PCP
+	 *    lock with spin_trylock and enqueue normally. The trylock
+	 *    fails only on rare local self re-entry (IRQ/NMI fires
+	 *    while the interrupted task already holds the lock) or
+	 *    while a remote drain is active; either way, fall back to
+	 *    free_one_page (or the zone-llist for FPI_TRYLOCK). No
+	 *    irqsave: the trylock cannot block on self, and remote
+	 *    CPUs never take this pcp->lock (they go via free_llist),
+	 *    so an interruption cannot deadlock against another freer.
+	 *
+	 *  - owner_cpu != this CPU: lock-free push onto the owner's
+	 *    free_llist. The owner absorbs the page into its PCP buddy
+	 *    lists at its next alloc/drain. No remote PCP lock taken,
+	 *    so no cross-CPU contention.
 	 *
 	 * Ownership is stable here: it can only change when the
 	 * pageblock is complete -- either fully free in zone buddy
@@ -3259,31 +3321,46 @@ static void __free_frozen_pages(struct page *page, unsigned int order,
 	 * Since we hold this page, neither can happen.
 	 */
 	owner_cpu = pbd->cpu - 1;
-	cache_cpu = owner_cpu;
-	if (cache_cpu < 0)
-		cache_cpu = raw_smp_processor_id();
+	cache_cpu = raw_smp_processor_id();
 
-	pcp = per_cpu_ptr(zone->per_cpu_pageset, cache_cpu);
-	if (unlikely(fpi_flags & FPI_TRYLOCK) || !in_task()) {
+	if (owner_cpu < 0 || owner_cpu == cache_cpu) {
+		pcp = per_cpu_ptr(zone->per_cpu_pageset, cache_cpu);
+
 		if (!spin_trylock(&pcp->lock)) {
+			if (fpi_flags & FPI_TRYLOCK)
+				add_page_to_zone_llist(zone, page, order);
+			else
+				free_one_page(zone, page, pfn, order, fpi_flags);
+			return;
+		}
+
+		if (unlikely(pcp->flags & PCPF_CPU_DEAD)) {
+			spin_unlock(&pcp->lock);
 			free_one_page(zone, page, pfn, order, fpi_flags);
 			return;
 		}
-	} else {
-		spin_lock(&pcp->lock);
+
+		if (free_frozen_page_commit(zone, pcp, page, migratetype,
+					    order, fpi_flags,
+					    owner_cpu == cache_cpu))
+			spin_unlock(&pcp->lock);
+		/* If commit returned false, pcp was already unlocked
+		 * (migration or trylock failure inside the batched-free
+		 * loop). */
+		return;
 	}
 
-	if (unlikely(pcp->flags & PCPF_CPU_DEAD)) {
-		spin_unlock(&pcp->lock);
+	/* Remote owner: lock-free llist hand-off. */
+	pcp = per_cpu_ptr(zone->per_cpu_pageset, owner_cpu);
+
+	if (unlikely(READ_ONCE(pcp->flags) & PCPF_CPU_DEAD)) {
 		free_one_page(zone, page, pfn, order, fpi_flags);
 		return;
 	}
 
-	if (free_frozen_page_commit(zone, pcp, page, migratetype, order,
-				    fpi_flags, cache_cpu == owner_cpu))
-		spin_unlock(&pcp->lock);
-	/* If commit returned false, pcp was already unlocked (migration or
-	 * trylock failure inside the batched-free loop). */
+	set_pcp_order(page, order);
+	llist_add(&page->pcp_llist, &pcp->free_llist);
+	__count_vm_events(PGFREE, 1 << order);
 }
 
 void free_frozen_pages(struct page *page, unsigned int order)
@@ -3335,60 +3412,78 @@ void free_unref_folios(struct folio_batch *folios)
 		struct zone *zone = folio_zone(folio);
 		unsigned long pfn = folio_pfn(folio);
 		unsigned int order = (unsigned long)folio->private;
+		struct per_cpu_pages *remote_pcp;
 		struct pageblock_data *pbd;
 		int migratetype;
-		int owner_cpu, cache_cpu;
+		int owner_cpu;
 
 		folio->private = NULL;
 		pbd = pfn_to_pageblock(&folio->page, pfn);
 		migratetype = pbd_migratetype(pbd);
 		owner_cpu = pbd->cpu - 1;
-		cache_cpu = owner_cpu;
-		if (cache_cpu < 0)
-			cache_cpu = raw_smp_processor_id();
 
-		/*
-		 * Re-lock needed if zone changed, page is isolate,
-		 * or target CPU changed.
-		 */
-		if (zone != locked_zone ||
-		    is_migrate_isolate(migratetype) ||
-		    cache_cpu != locked_cpu) {
+		/* Isolated pages always go directly to the zone buddy. */
+		if (unlikely(is_migrate_isolate(migratetype))) {
 			if (pcp) {
 				spin_unlock(&pcp->lock);
+				pcp = NULL;
 				locked_zone = NULL;
 				locked_cpu = -1;
-				pcp = NULL;
 			}
+			free_one_page(zone, &folio->page, pfn,
+				      order, FPI_NONE);
+			continue;
+		}
 
-			/*
-			 * Free isolated pages directly to the
-			 * allocator, see comment in free_frozen_pages.
-			 */
-			if (is_migrate_isolate(migratetype)) {
+		if (locked_cpu < 0)
+			locked_cpu = raw_smp_processor_id();
+
+		/*
+		 * Remote owner: lock-free push onto the owner's free_llist.
+		 * Drop any local PCP lock first; the remote llist needs no
+		 * lock and the next folio may belong to a different owner.
+		 */
+		if (owner_cpu >= 0 && owner_cpu != locked_cpu) {
+			if (pcp) {
+				spin_unlock(&pcp->lock);
+				pcp = NULL;
+				locked_zone = NULL;
+			}
+			remote_pcp = per_cpu_ptr(zone->per_cpu_pageset,
+						 owner_cpu);
+			if (unlikely(READ_ONCE(remote_pcp->flags) &
+				     PCPF_CPU_DEAD)) {
 				free_one_page(zone, &folio->page, pfn,
 					      order, FPI_NONE);
 				continue;
 			}
+			set_pcp_order(&folio->page, order);
+			llist_add(&folio->page.pcp_llist,
+				  &remote_pcp->free_llist);
+			__count_vm_events(PGFREE, 1 << order);
+			trace_mm_page_free_batched(&folio->page);
+			continue;
+		}
 
-			pcp = per_cpu_ptr(zone->per_cpu_pageset,
-					  cache_cpu);
-			/*
-			 * Use trylock when not in task context (IRQ,
-			 * softirq) to avoid spinning with IRQs
-			 * disabled. In task context, spin -- brief
-			 * contention on a per-CPU lock beats the
-			 * unbatched zone->lock fallback.
-			 */
-			if (!in_task()) {
-				if (unlikely(!spin_trylock(&pcp->lock))) {
-					pcp = NULL;
-					free_one_page(zone, &folio->page, pfn,
-						      order, FPI_NONE);
-					continue;
-				}
-			} else {
-				spin_lock(&pcp->lock);
+		/*
+		 * Local owner (or unowned): take the local PCP lock with
+		 * spin_trylock. On failure (rare local re-entry or a remote
+		 * drain in progress) fall back to the zone buddy. No
+		 * irqsave -- trylock cannot block on self, and remote
+		 * CPUs never take this pcp->lock (they go via free_llist).
+		 */
+		if (zone != locked_zone) {
+			if (pcp) {
+				spin_unlock(&pcp->lock);
+				pcp = NULL;
+				locked_zone = NULL;
+			}
+			pcp = per_cpu_ptr(zone->per_cpu_pageset, locked_cpu);
+			if (!spin_trylock(&pcp->lock)) {
+				pcp = NULL;
+				free_one_page(zone, &folio->page, pfn,
+					      order, FPI_NONE);
+				continue;
 			}
 			if (unlikely(pcp->flags & PCPF_CPU_DEAD)) {
 				spin_unlock(&pcp->lock);
@@ -3398,7 +3493,6 @@ void free_unref_folios(struct folio_batch *folios)
 				continue;
 			}
 			locked_zone = zone;
-			locked_cpu = cache_cpu;
 		}
 
 		/*
@@ -3411,7 +3505,7 @@ void free_unref_folios(struct folio_batch *folios)
 		trace_mm_page_free_batched(&folio->page);
 		if (!free_frozen_page_commit(zone, pcp, &folio->page,
 				migratetype, order, FPI_NONE,
-				cache_cpu == owner_cpu)) {
+				owner_cpu == locked_cpu)) {
 			pcp = NULL;
 			locked_zone = NULL;
 			locked_cpu = -1;
@@ -6361,6 +6455,7 @@ static void per_cpu_pages_init(struct per_cpu_pages *pcp, struct per_cpu_zonesta
 	for (pindex = 0; pindex < NR_PCP_LISTS; pindex++)
 		INIT_LIST_HEAD(&pcp->lists[pindex]);
 	INIT_LIST_HEAD(&pcp->owned_blocks);
+	init_llist_head(&pcp->free_llist);
 
 	/*
 	 * Set batch and high values safe for a boot pageset. A true percpu
@@ -6581,19 +6676,38 @@ static int page_alloc_cpu_dead(unsigned int cpu)
 		drain_pages_zone(cpu, zone);
 
 		/*
-		 * Drain released all pages. Reinitialize the
-		 * owned-blocks list -- any remaining entries are
-		 * stale (fragments that merged in zone buddy and
-		 * cleared ownership, but weren't removed from
-		 * the list because __free_one_page doesn't hold
-		 * pcp->lock).
+		 * drain_pages_zone iterates absorb_remote_frees +
+		 * free_pcppages_bulk until both pcp->count and the
+		 * remote-free llist are empty. A remote freer that
+		 * read PCPF_CPU_DEAD as clear *before* the flag was set
+		 * above and does llist_add *after* the drain exits will
+		 * leave a few pages on the dead PCP's free_llist; they
+		 * are harmless and absorbed when the CPU comes back
+		 * online (any first alloc/free runs absorb_remote_frees).
 		 *
-		 * Hold zone lock to prevent racing with other
-		 * CPUs doing list_del_init on stale entries
-		 * from this list during their Phase 1.
+		 * Drain released all pages. Tear down the owned-blocks
+		 * list cleanly: walk each entry and list_del_init() it
+		 * before INIT_LIST_HEAD on the head. INIT_LIST_HEAD
+		 * alone would leave stale entries with prev/next
+		 * pointing at the (now self-pointing) head, so a future
+		 * clear_pcpblock_owner -> list_del_init on a stale
+		 * pbd->cpu_node would corrupt the list head it walks
+		 * back through. Detaching each entry first makes the
+		 * subsequent list_del_init a safe self-loop no-op.
+		 *
+		 * Hold zone lock to serialize with concurrent Phase 0
+		 * iteration on this same list from other CPUs (which
+		 * also hold zone->lock).
 		 */
 		pcp_spin_lock_nopin(pcp);
 		spin_lock_irqsave(&zone->lock, zflags);
+		while (!list_empty(&pcp->owned_blocks)) {
+			struct pageblock_data *pbd =
+				list_first_entry(&pcp->owned_blocks,
+						 struct pageblock_data,
+						 cpu_node);
+			list_del_init(&pbd->cpu_node);
+		}
 		INIT_LIST_HEAD(&pcp->owned_blocks);
 		spin_unlock_irqrestore(&zone->lock, zflags);
 		pcp_spin_unlock_nopin(pcp);
@@ -6632,6 +6746,11 @@ static int page_alloc_cpu_online(unsigned int cpu)
 		pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
 		pcp_spin_lock_nopin(pcp);
 		pcp->flags &= ~PCPF_CPU_DEAD;
+		/*
+		 * Pull in any pages that landed on the free_llist while
+		 * the CPU was down (rare race in page_alloc_cpu_dead).
+		 */
+		absorb_remote_frees(pcp);
 		pcp_spin_unlock_nopin(pcp);
 
 		zone_pcp_update(zone, 1);

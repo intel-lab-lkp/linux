@@ -843,6 +843,15 @@ struct per_cpu_pages {
 	/* Pageblocks owned by this CPU, for fragment recovery */
 	struct list_head owned_blocks;
 
+	/*
+	 * Pages remotely freed by other CPUs into pageblocks owned by
+	 * this CPU. Lock-free push by remote freers via llist_add(); the
+	 * owning CPU drains and merges them into its PCP buddy lists at
+	 * convenient moments (start of pcp_rmqueue_smallest, drain
+	 * paths) under pcp->lock.
+	 */
+	struct llist_head free_llist;
+
 	/* Lists of pages, one per migrate type stored on the pcp-lists */
 	struct list_head lists[NR_PCP_LISTS];
 } ____cacheline_aligned_in_smp;
