@@ -26,8 +26,7 @@
 /**
  * struct ntp_data - Structure holding all NTP related state
  * @tick_usec:		USER_HZ period in microseconds
- * @tick_length:	Adjusted tick length
- * @tick_length_base:	Base value for @tick_length
+ * @tick_length:	Tick length in ns << NTP_SCALE_SHIFT
  * @time_state:		State of the clock synchronization
  * @time_status:	Clock status bits
  * @time_offset:	Time adjustment in nanoseconds
@@ -59,7 +58,6 @@
 struct ntp_data {
 	unsigned long		tick_usec;
 	u64			tick_length;
-	u64			tick_length_base;
 	int			time_state;
 	int			time_status;
 	s64			time_offset;
@@ -246,8 +244,7 @@ static inline void pps_fill_timex(struct ntp_data *ntpdata, struct __kernel_time
 #endif /* CONFIG_NTP_PPS */
 
 /*
- * Update tick_length and tick_length_base, based on tick_usec, ntp_tick_adj and
- * time_freq:
+ * Update tick_length based on tick_usec, ntp_tick_adj and time_freq:
  */
 static void ntp_update_frequency(struct ntp_data *ntpdata)
 {
@@ -264,8 +261,7 @@ static void ntp_update_frequency(struct ntp_data *ntpdata)
 	 * Don't wait for the next second_overflow, apply the change to the
 	 * tick length immediately:
 	 */
-	ntpdata->tick_length		+= new_base - ntpdata->tick_length_base;
-	ntpdata->tick_length_base	 = new_base;
+	ntpdata->tick_length	 = new_base;
 }
 
 static inline s64 ntp_update_offset_fll(struct ntp_data *ntpdata, s64 offset64, long secs)
@@ -342,7 +338,6 @@ static void __ntp_clear(struct ntp_data *ntpdata)
 
 	ntp_update_frequency(ntpdata);
 
-	ntpdata->tick_length	= ntpdata->tick_length_base;
 	ntpdata->time_offset	= 0;
 
 	ntpdata->ntp_next_leap_sec = TIME64_MAX;
@@ -502,7 +497,6 @@ int second_overflow(unsigned int tkid, time64_t secs)
 	}
 
 	/* Compute the phase adjustment for the next second */
-	ntpdata->tick_length	 = ntpdata->tick_length_base;
 
 	/*
 	 * Set the per-tick skew rate for the tick code. This is in the
