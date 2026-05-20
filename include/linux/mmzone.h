@@ -2259,6 +2259,10 @@ void sparse_init_early_section(int nid, struct page *map, unsigned long pnum,
  * there is actual usable memory at that @pfn. The struct page may
  * represent a hole or an unusable page frame.
  *
+ * Note that this function returns 0 for PFNs that fall into
+ * invalid subsections as part of early sections, even though there would
+ * currently be a memmap allocated (that should not be touched).
+ *
  * Return: 1 for PFNs that have memory map entries and 0 otherwise
  */
 static inline int pfn_valid(unsigned long pfn)
@@ -2283,11 +2287,7 @@ static inline int pfn_valid(unsigned long pfn)
 		rcu_read_unlock_sched();
 		return 0;
 	}
-	/*
-	 * Traditionally early sections always returned pfn_valid() for
-	 * the entire section-sized span.
-	 */
-	ret = early_section(ms) || pfn_section_valid(ms, pfn);
+	ret = pfn_section_valid(ms, pfn);
 	rcu_read_unlock_sched();
 
 	return ret;
@@ -2303,8 +2303,7 @@ static inline unsigned long first_valid_pfn(unsigned long pfn, unsigned long end
 	while (nr <= __highest_present_section_nr && pfn < end_pfn) {
 		struct mem_section *ms = __pfn_to_section(pfn);
 
-		if (valid_section(ms) &&
-		    (early_section(ms) || pfn_section_first_valid(ms, &pfn))) {
+		if (valid_section(ms) && pfn_section_first_valid(ms, &pfn)) {
 			rcu_read_unlock_sched();
 			return pfn;
 		}

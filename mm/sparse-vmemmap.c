@@ -771,8 +771,8 @@ static void section_deactivate(unsigned long pfn, unsigned long nr_pages,
 	}
 
 	/*
-	 * The memmap of early sections is always fully populated. See
-	 * section_activate() and pfn_valid() .
+	 * The memmap of early sections is currently always fully populated. See
+	 * section_activate().
 	 */
 	if (!section_is_early) {
 		memmap_pages_add(-1L * (DIV_ROUND_UP(nr_pages * sizeof(struct page), PAGE_SIZE)));
