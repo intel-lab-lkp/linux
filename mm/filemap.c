@@ -1210,6 +1210,14 @@ static void folio_wake_bit(struct folio *folio, int bit_nr)
 }
 
 /*
+ * Wake waiters on PG_writeback for @folio.
+ */
+static void folio_wake_writeback(struct folio *folio)
+{
+	folio_wake_bit(folio, PG_writeback);
+}
+
+/*
  * A choice of three behaviors for folio_wait_bit_common():
  */
 enum behavior {
@@ -1664,7 +1672,7 @@ void folio_end_writeback_no_dropbehind(struct folio *folio)
 	}
 
 	if (__folio_end_writeback(folio))
-		folio_wake_bit(folio, PG_writeback);
+		folio_wake_writeback(folio);
 
 	acct_reclaim_writeback(folio);
 }
