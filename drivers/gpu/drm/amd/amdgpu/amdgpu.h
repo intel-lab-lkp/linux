@@ -455,16 +455,6 @@ struct amdgpu_fpriv {
 
 	/** GPU partition selection */
 	uint32_t		xcp_id;
-
-	/**
-	 * @kfd_sigbus_delay_ms: Per-fd KFD SIGBUS delivery option (set via
-	 * DRM_IOCTL_AMDGPU_USER_OPTIONS / AMDGPU_USER_OPTIONS_OP_KFD_SIGBUS_DELAY).
-	 *
-	 *   0          - send SIGBUS immediately (default)
-	 *   0xFFFF - suppress SIGBUS delivery
-	 *   other      - delay SIGBUS delivery by this many milliseconds
-	 */
-	atomic_t		kfd_sigbus_delay_ms;
 };
 
 int amdgpu_file_to_fpriv(struct file *filp, struct amdgpu_fpriv **fpriv);
@@ -1477,8 +1467,6 @@ int amdgpu_enable_vblank_kms(struct drm_crtc *crtc);
 void amdgpu_disable_vblank_kms(struct drm_crtc *crtc);
 int amdgpu_info_ioctl(struct drm_device *dev, void *data,
 		      struct drm_file *filp);
-int amdgpu_user_options_ioctl(struct drm_device *dev, void *data,
-			      struct drm_file *filp);
 
 /*
  * functions used by amdgpu_encoder.c
