@@ -865,16 +865,17 @@ static int alx_request_msix(struct alx_priv *alx)
 		vector++;
 
 		if (np->txq && np->rxq)
-			sprintf(np->irq_lbl, "%s-TxRx-%u", netdev->name,
-				np->txq->queue_idx);
+			snprintf(np->irq_lbl, sizeof(np->irq_lbl), "%s-TxRx-%u",
+				 netdev->name, np->txq->queue_idx);
 		else if (np->txq)
-			sprintf(np->irq_lbl, "%s-tx-%u", netdev->name,
-				np->txq->queue_idx);
+			snprintf(np->irq_lbl, sizeof(np->irq_lbl), "%s-tx-%u",
+				 netdev->name, np->txq->queue_idx);
 		else if (np->rxq)
-			sprintf(np->irq_lbl, "%s-rx-%u", netdev->name,
-				np->rxq->queue_idx);
+			snprintf(np->irq_lbl, sizeof(np->irq_lbl), "%s-rx-%u",
+				 netdev->name, np->rxq->queue_idx);
 		else
-			sprintf(np->irq_lbl, "%s-unused", netdev->name);
+			snprintf(np->irq_lbl, sizeof(np->irq_lbl), "%s-unused",
+				 netdev->name);
 
 		np->vec_idx = vector;
 		err = request_irq(pci_irq_vector(alx->hw.pdev, vector),
