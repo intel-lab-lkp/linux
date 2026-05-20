@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/qemu,pvpanic-mmio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: QEMU PVPANIC MMIO device
+
+description:
+  QEMU provides a pvpanic MMIO interface for guest panic notification.
+
+maintainers:
+  - Peng Hao <peng.hao2@zte.com.cn>
+
+properties:
+  compatible:
+    const: qemu,pvpanic-mmio
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    pvpanic@9060000 {
+      compatible = "qemu,pvpanic-mmio";
+      reg = <0x0 0x9060000 0x0 0x2>;
+    };
