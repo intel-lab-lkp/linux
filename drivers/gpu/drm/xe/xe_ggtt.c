@@ -20,6 +20,8 @@
 #include "regs/xe_regs.h"
 #include "xe_assert.h"
 #include "xe_bo.h"
+#include "xe_device.h"
+#include "xe_force_wake.h"
 #include "xe_gt_printk.h"
 #include "xe_gt_types.h"
 #include "xe_map.h"
@@ -272,9 +274,18 @@ static void xe_ggtt_clear(struct xe_ggtt *ggtt, u64 start, u64 size)
 	else
 		scratch_pte = 0;
 
-	while (start < end) {
-		ggtt->pt_ops->ggtt_set_pte(ggtt, start, scratch_pte);
-		start += XE_PAGE_SIZE;
+	/*
+	 * GSM (mapped at tile->mmio.regs + SZ_8M) is not in an always-on
+	 * power domain. Hold FORCEWAKE for the PTE write batch to keep
+	 * the GT awake; on LNL GuC autonomously enters RC6 via
+	 * GUCRC_FIRMWARE_CONTROL and writeq() to GSM hangs if the GT
+	 * is asleep.
+	 */
+	xe_with_force_wake(fw_ref, gt_to_fw(ggtt->tile->primary_gt), XE_FW_GT) {
+		while (start < end) {
+			ggtt->pt_ops->ggtt_set_pte(ggtt, start, scratch_pte);
+			start += XE_PAGE_SIZE;
+		}
 	}
 }
 
@@ -769,10 +780,19 @@ struct xe_ggtt_node *xe_ggtt_insert_node_transform(struct xe_ggtt *ggtt,
 	if (ret)
 		goto err_unlock;
 
-	if (transform)
-		transform(ggtt, node, pte_flags, ggtt->pt_ops->ggtt_set_pte, arg);
-	else
-		xe_ggtt_map_bo(ggtt, node, bo, pte_flags);
+	/*
+	 * Hold FORCEWAKE for the PTE write batch. xe_pm_runtime_get_noresume()
+	 * upstack only prevents D3, not RC6: GuC may have placed the GT into
+	 * RC6 autonomously (GUCRC_FIRMWARE_CONTROL on LNL), and writeq() to
+	 * GSM hangs if the GT is asleep. Triggers most often from the display
+	 * framebuffer pin path on LNL/Wayland.
+	 */
+	xe_with_force_wake(fw_ref, gt_to_fw(ggtt->tile->primary_gt), XE_FW_GT) {
+		if (transform)
+			transform(ggtt, node, pte_flags, ggtt->pt_ops->ggtt_set_pte, arg);
+		else
+			xe_ggtt_map_bo(ggtt, node, bo, pte_flags);
+	}
 
 	mutex_unlock(&ggtt->lock);
 	return node;
@@ -844,7 +864,10 @@ static int __xe_ggtt_insert_bo_at(struct xe_ggtt *ggtt, struct xe_bo *bo,
 		u16 pat_index = xe_cache_pat_idx(tile_to_xe(ggtt->tile), cache_mode);
 		u64 pte = ggtt->pt_ops->pte_encode_flags(bo, pat_index);
 
-		xe_ggtt_map_bo(ggtt, bo->ggtt_node[tile_id], bo, pte);
+		/* See xe_ggtt_insert_node_transform()/xe_ggtt_clear() */
+		xe_with_force_wake(fw_ref, gt_to_fw(ggtt->tile->primary_gt), XE_FW_GT) {
+			xe_ggtt_map_bo(ggtt, bo->ggtt_node[tile_id], bo, pte);
+		}
 	}
 	mutex_unlock(&ggtt->lock);
 
