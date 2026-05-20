@@ -6,8 +6,9 @@
 #include <linux/ethtool_netlink.h>
 #include <linux/phy_link_topology.h>
 #include <linux/pm_runtime.h>
-#include "netlink.h"
+
 #include "module_fw.h"
+#include "netlink.h"
 
 static struct genl_family ethtool_genl_family;
 
@@ -79,6 +80,12 @@ static void ethnl_sock_priv_destroy(void *priv)
 	default:
 		break;
 	}
+}
+
+u32 ethnl_bcast_seq_next(void)
+{
+	ASSERT_RTNL();
+	return ++ethnl_bcast_seq;
 }
 
 int ethnl_ops_begin(struct net_device *dev)
@@ -405,6 +412,7 @@ ethnl_default_requests[__ETHTOOL_MSG_USER_CNT] = {
 	[ETHTOOL_MSG_PSE_GET]		= &ethnl_pse_request_ops,
 	[ETHTOOL_MSG_PSE_SET]		= &ethnl_pse_request_ops,
 	[ETHTOOL_MSG_RSS_GET]		= &ethnl_rss_request_ops,
+	[ETHTOOL_MSG_RSS_SET]		= &ethnl_rss_request_ops,
 	[ETHTOOL_MSG_PLCA_GET_CFG]	= &ethnl_plca_cfg_request_ops,
 	[ETHTOOL_MSG_PLCA_SET_CFG]	= &ethnl_plca_cfg_request_ops,
 	[ETHTOOL_MSG_PLCA_GET_STATUS]	= &ethnl_plca_status_request_ops,
@@ -413,6 +421,7 @@ ethnl_default_requests[__ETHTOOL_MSG_USER_CNT] = {
 	[ETHTOOL_MSG_TSCONFIG_GET]	= &ethnl_tsconfig_request_ops,
 	[ETHTOOL_MSG_TSCONFIG_SET]	= &ethnl_tsconfig_request_ops,
 	[ETHTOOL_MSG_PHY_GET]		= &ethnl_phy_request_ops,
+	[ETHTOOL_MSG_MSE_GET]		= &ethnl_mse_request_ops,
 };
 
 static struct ethnl_dump_ctx *ethnl_dump_context(struct netlink_callback *cb)
@@ -453,7 +462,8 @@ static int ethnl_default_parse(struct ethnl_req_info *req_info,
 		return ret;
 
 	if (request_ops->parse_request) {
-		ret = request_ops->parse_request(req_info, tb, info->extack);
+		ret = request_ops->parse_request(req_info, info, tb,
+						 info->extack);
 		if (ret < 0)
 			goto err_dev;
 	}
@@ -953,6 +963,7 @@ ethnl_default_notify_ops[ETHTOOL_MSG_KERNEL_MAX + 1] = {
 	[ETHTOOL_MSG_PLCA_NTF]		= &ethnl_plca_cfg_request_ops,
 	[ETHTOOL_MSG_MM_NTF]		= &ethnl_mm_request_ops,
 	[ETHTOOL_MSG_RSS_NTF]		= &ethnl_rss_request_ops,
+	[ETHTOOL_MSG_RSS_CREATE_NTF]	= &ethnl_rss_request_ops,
 };
 
 /* default notification handler */
@@ -1060,6 +1071,7 @@ static const ethnl_notify_handler_t ethnl_notify_handlers[] = {
 	[ETHTOOL_MSG_PLCA_NTF]		= ethnl_default_notify,
 	[ETHTOOL_MSG_MM_NTF]		= ethnl_default_notify,
 	[ETHTOOL_MSG_RSS_NTF]		= ethnl_default_notify,
+	[ETHTOOL_MSG_RSS_CREATE_NTF]	= ethnl_default_notify,
 };
 
 void ethnl_notify(struct net_device *dev, unsigned int cmd,
@@ -1503,6 +1515,36 @@ static const struct genl_ops ethtool_genl_ops[] = {
 		.doit	= ethnl_default_set_doit,
 		.policy = ethnl_tsconfig_set_policy,
 		.maxattr = ARRAY_SIZE(ethnl_tsconfig_set_policy) - 1,
+	},
+	{
+		.cmd	= ETHTOOL_MSG_RSS_SET,
+		.flags	= GENL_UNS_ADMIN_PERM,
+		.doit	= ethnl_default_set_doit,
+		.policy = ethnl_rss_set_policy,
+		.maxattr = ARRAY_SIZE(ethnl_rss_set_policy) - 1,
+	},
+	{
+		.cmd	= ETHTOOL_MSG_RSS_CREATE_ACT,
+		.flags	= GENL_UNS_ADMIN_PERM,
+		.doit	= ethnl_rss_create_doit,
+		.policy	= ethnl_rss_create_policy,
+		.maxattr = ARRAY_SIZE(ethnl_rss_create_policy) - 1,
+	},
+	{
+		.cmd	= ETHTOOL_MSG_RSS_DELETE_ACT,
+		.flags	= GENL_UNS_ADMIN_PERM,
+		.doit	= ethnl_rss_delete_doit,
+		.policy	= ethnl_rss_delete_policy,
+		.maxattr = ARRAY_SIZE(ethnl_rss_delete_policy) - 1,
+	},
+	{
+		.cmd	= ETHTOOL_MSG_MSE_GET,
+		.doit	= ethnl_default_doit,
+		.start	= ethnl_perphy_start,
+		.dumpit	= ethnl_perphy_dumpit,
+		.done	= ethnl_perphy_done,
+		.policy = ethnl_mse_get_policy,
+		.maxattr = ARRAY_SIZE(ethnl_mse_get_policy) - 1,
 	},
 };
 

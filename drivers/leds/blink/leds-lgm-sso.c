@@ -25,7 +25,7 @@
 #define LED_BLINK_H8_0			0x0
 #define LED_BLINK_H8_1			0x4
 #define GET_FREQ_OFFSET(pin, src)	(((pin) * 6) + ((src) * 2))
-#define GET_SRC_OFFSET(pinc)		(((pin) * 6) + 4)
+#define GET_SRC_OFFSET(pin) 		(((pin) * 6) + 4)
 
 #define DUTY_CYCLE(x)			(0x8 + ((x) * 4))
 #define SSO_CON0			0x2B0
@@ -471,7 +471,7 @@ static int sso_gpio_gc_init(struct device *dev, struct sso_led_priv *priv)
 	gc->get_direction       = sso_gpio_get_dir;
 	gc->direction_output    = sso_gpio_dir_out;
 	gc->get                 = sso_gpio_get;
-	gc->set_rv              = sso_gpio_set;
+	gc->set                 = sso_gpio_set;
 
 	gc->label               = "lgm-sso";
 	gc->base                = -1;
@@ -807,8 +807,6 @@ static int intel_sso_led_probe(struct platform_device *pdev)
 		return ret;
 
 	priv->fpid_clkrate = clk_get_rate(priv->clocks[1].clk);
-
-	priv->mmap = syscon_node_to_regmap(dev->of_node);
 
 	priv->mmap = syscon_node_to_regmap(dev->of_node);
 	if (IS_ERR(priv->mmap)) {

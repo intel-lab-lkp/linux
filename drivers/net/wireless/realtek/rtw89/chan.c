@@ -7,6 +7,7 @@
 #include "debug.h"
 #include "fw.h"
 #include "mac.h"
+#include "phy.h"
 #include "ps.h"
 #include "sar.h"
 #include "util.h"
@@ -56,6 +57,28 @@ static enum rtw89_subband rtw89_get_subband_type(enum rtw89_band band,
 		case 225 ... 253:
 			return RTW89_CH_6G_BAND_IDX7;
 		}
+	}
+}
+
+static enum rtw89_tx_comp_band rtw89_get_tx_comp_band(enum rtw89_band band,
+						      u8 center_chan)
+{
+	switch (band) {
+	default:
+	case RTW89_BAND_2G:
+		return RTW89_TX_COMP_BAND_2GHZ;
+	case RTW89_BAND_5G:
+		if (center_chan < 149)
+			return RTW89_TX_COMP_BAND_5GHZ_L;
+		else
+			return RTW89_TX_COMP_BAND_5GHZ_H;
+	case RTW89_BAND_6G:
+		if (center_chan < 65)
+			return RTW89_TX_COMP_BAND_5GHZ_H;
+		else if (center_chan < 193)
+			return RTW89_TX_COMP_BAND_6GHZ_M;
+		else
+			return RTW89_TX_COMP_BAND_6GHZ_UH;
 	}
 }
 
@@ -122,10 +145,53 @@ void rtw89_chan_create(struct rtw89_chan *chan, u8 center_chan, u8 primary_chan,
 
 	chan->freq = center_freq;
 	chan->subband_type = rtw89_get_subband_type(band, center_chan);
+	chan->tx_comp_band = rtw89_get_tx_comp_band(band, center_chan);
 	chan->pri_ch_idx = rtw89_get_primary_chan_idx(bandwidth, center_freq,
 						      primary_freq);
 	chan->pri_sb_idx = rtw89_get_primary_sb_idx(center_chan, primary_chan,
 						    bandwidth);
+}
+
+static void _rtw89_chan_update_punctured(struct rtw89_dev *rtwdev,
+					 struct rtw89_vif_link *rtwvif_link,
+					 const struct cfg80211_chan_def *chandef)
+{
+	struct ieee80211_bss_conf *bss_conf;
+
+	if (rtwvif_link->wifi_role != RTW89_WIFI_ROLE_STATION &&
+	    rtwvif_link->wifi_role != RTW89_WIFI_ROLE_P2P_CLIENT)
+		return;
+
+	rcu_read_lock();
+
+	bss_conf = rtw89_vif_rcu_dereference_link(rtwvif_link, true);
+	if (!bss_conf->eht_support) {
+		rcu_read_unlock();
+		return;
+	}
+
+	rcu_read_unlock();
+
+	rtw89_chip_h2c_punctured_cmac_tbl(rtwdev, rtwvif_link, chandef->punctured);
+}
+
+static void rtw89_chan_update_punctured(struct rtw89_dev *rtwdev,
+					enum rtw89_chanctx_idx idx,
+					const struct cfg80211_chan_def *chandef)
+{
+	struct rtw89_vif_link *rtwvif_link;
+	struct rtw89_vif *rtwvif;
+	unsigned int link_id;
+
+	rtw89_for_each_rtwvif(rtwdev, rtwvif) {
+		rtw89_vif_for_each_link(rtwvif, rtwvif_link, link_id) {
+			if (!rtwvif_link->chanctx_assigned ||
+			    rtwvif_link->chanctx_idx != idx)
+				continue;
+
+			_rtw89_chan_update_punctured(rtwdev, rtwvif_link, chandef);
+		}
+	}
 }
 
 bool rtw89_assign_entity_chan(struct rtw89_dev *rtwdev,
@@ -210,7 +276,6 @@ void rtw89_config_roc_chandef(struct rtw89_dev *rtwdev,
 		}
 
 		hal->roc_chandef = *chandef;
-		hal->roc_link_index = rtw89_vif_link_inst_get_index(rtwvif_link);
 	} else {
 		cur = atomic_cmpxchg(&hal->roc_chanctx_idx, idx,
 				     RTW89_CHANCTX_IDLE);
@@ -238,6 +303,7 @@ void rtw89_entity_init(struct rtw89_dev *rtwdev)
 {
 	struct rtw89_hal *hal = &rtwdev->hal;
 	struct rtw89_entity_mgnt *mgnt = &hal->entity_mgnt;
+	int i, j;
 
 	hal->entity_pause = false;
 	bitmap_zero(hal->entity_map, NUM_OF_RTW89_CHANCTX);
@@ -245,6 +311,13 @@ void rtw89_entity_init(struct rtw89_dev *rtwdev)
 	atomic_set(&hal->roc_chanctx_idx, RTW89_CHANCTX_IDLE);
 
 	INIT_LIST_HEAD(&mgnt->active_list);
+
+	for (i = 0; i < RTW89_MAX_INTERFACE_NUM; i++) {
+		for (j = 0; j < __RTW89_MLD_MAX_LINK_NUM; j++)
+			mgnt->chanctx_tbl[i][j] = RTW89_CHANCTX_IDLE;
+	}
+
+	hal->entity_force_hw = RTW89_PHY_NUM;
 
 	rtw89_config_default_chandef(rtwdev);
 }
@@ -298,8 +371,8 @@ static void rtw89_normalize_link_chanctx(struct rtw89_dev *rtwdev,
 	if (unlikely(!rtwvif_link->chanctx_assigned))
 		return;
 
-	cur = rtw89_vif_get_link_inst(rtwvif, 0);
-	if (!cur || !cur->chanctx_assigned)
+	cur = rtw89_get_designated_link(rtwvif);
+	if (unlikely(!cur) || !cur->chanctx_assigned)
 		return;
 
 	if (cur == rtwvif_link)
@@ -308,15 +381,30 @@ static void rtw89_normalize_link_chanctx(struct rtw89_dev *rtwdev,
 	rtw89_swap_chanctx(rtwdev, rtwvif_link->chanctx_idx, cur->chanctx_idx);
 }
 
+static u8 rtw89_entity_role_get_index(struct rtw89_dev *rtwdev)
+{
+	enum rtw89_entity_mode mode;
+
+	mode = rtw89_get_entity_mode(rtwdev);
+	switch (mode) {
+	default:
+		WARN(1, "Invalid ent mode: %d\n", mode);
+		fallthrough;
+	case RTW89_ENTITY_MODE_SCC_OR_SMLD:
+	case RTW89_ENTITY_MODE_MCC:
+		return 0;
+	case RTW89_ENTITY_MODE_MCC_PREPARE:
+		return 1;
+	}
+}
+
 const struct rtw89_chan *__rtw89_mgnt_chan_get(struct rtw89_dev *rtwdev,
 					       const char *caller_message,
-					       u8 link_index)
+					       u8 link_index, bool nullchk)
 {
 	struct rtw89_hal *hal = &rtwdev->hal;
 	struct rtw89_entity_mgnt *mgnt = &hal->entity_mgnt;
 	enum rtw89_chanctx_idx chanctx_idx;
-	enum rtw89_chanctx_idx roc_idx;
-	enum rtw89_entity_mode mode;
 	u8 role_index;
 
 	lockdep_assert_wiphy(rtwdev->hw->wiphy);
@@ -327,36 +415,18 @@ const struct rtw89_chan *__rtw89_mgnt_chan_get(struct rtw89_dev *rtwdev,
 		goto dflt;
 	}
 
-	mode = rtw89_get_entity_mode(rtwdev);
-	switch (mode) {
-	case RTW89_ENTITY_MODE_SCC_OR_SMLD:
-	case RTW89_ENTITY_MODE_MCC:
-		role_index = 0;
-		break;
-	case RTW89_ENTITY_MODE_MCC_PREPARE:
-		role_index = 1;
-		break;
-	default:
-		WARN(1, "Invalid ent mode: %d\n", mode);
-		goto dflt;
-	}
+	role_index = rtw89_entity_role_get_index(rtwdev);
 
 	chanctx_idx = mgnt->chanctx_tbl[role_index][link_index];
 	if (chanctx_idx == RTW89_CHANCTX_IDLE)
 		goto dflt;
 
-	roc_idx = atomic_read(&hal->roc_chanctx_idx);
-	if (roc_idx != RTW89_CHANCTX_IDLE) {
-		/* ROC is ongoing (given ROC runs on @hal->roc_link_index).
-		 * If @link_index is the same, get the ongoing ROC chanctx.
-		 */
-		if (link_index == hal->roc_link_index)
-			chanctx_idx = roc_idx;
-	}
-
 	return rtw89_chan_get(rtwdev, chanctx_idx);
 
 dflt:
+	if (unlikely(nullchk))
+		return NULL;
+
 	rtw89_debug(rtwdev, RTW89_DBG_CHAN,
 		    "%s (%s): prefetch NULL on link index %u\n",
 		    __func__, caller_message ?: "", link_index);
@@ -365,11 +435,42 @@ dflt:
 }
 EXPORT_SYMBOL(__rtw89_mgnt_chan_get);
 
+bool rtw89_entity_check_hw(struct rtw89_dev *rtwdev, enum rtw89_phy_idx phy_idx)
+{
+	switch (rtwdev->mlo_dbcc_mode) {
+	case MLO_2_PLUS_0_1RF:
+		return phy_idx == RTW89_PHY_0;
+	case MLO_0_PLUS_2_1RF:
+		return phy_idx == RTW89_PHY_1;
+	default:
+		return false;
+	}
+}
+
+void rtw89_entity_force_hw(struct rtw89_dev *rtwdev, enum rtw89_phy_idx phy_idx)
+{
+	rtwdev->hal.entity_force_hw = phy_idx;
+
+	if (phy_idx != RTW89_PHY_NUM)
+		rtw89_debug(rtwdev, RTW89_DBG_CHAN, "%s: %d\n", __func__, phy_idx);
+	else
+		rtw89_debug(rtwdev, RTW89_DBG_CHAN, "%s: (none)\n", __func__);
+}
+
 static enum rtw89_mlo_dbcc_mode
 rtw89_entity_sel_mlo_dbcc_mode(struct rtw89_dev *rtwdev, u8 active_hws)
 {
 	if (rtwdev->chip->chip_gen != RTW89_CHIP_BE)
 		return MLO_DBCC_NOT_SUPPORT;
+
+	switch (rtwdev->hal.entity_force_hw) {
+	case RTW89_PHY_0:
+		return MLO_2_PLUS_0_1RF;
+	case RTW89_PHY_1:
+		return MLO_0_PLUS_2_1RF;
+	default:
+		break;
+	}
 
 	switch (active_hws) {
 	case BIT(0):
@@ -382,10 +483,28 @@ rtw89_entity_sel_mlo_dbcc_mode(struct rtw89_dev *rtwdev, u8 active_hws)
 	}
 }
 
-static
-void rtw89_entity_recalc_mlo_dbcc_mode(struct rtw89_dev *rtwdev, u8 active_hws)
+static void rtw89_entity_recalc_mlo_dbcc_mode(struct rtw89_dev *rtwdev)
 {
+	struct rtw89_entity_mgnt *mgnt = &rtwdev->hal.entity_mgnt;
 	enum rtw89_mlo_dbcc_mode mode;
+	struct rtw89_vif *role;
+	u8 active_hws = 0;
+	u8 ridx;
+
+	ridx = rtw89_entity_role_get_index(rtwdev);
+	role = mgnt->active_roles[ridx];
+	if (role) {
+		struct rtw89_vif_link *link;
+		int i;
+
+		for (i = 0; i < role->links_inst_valid_num; i++) {
+			link = rtw89_vif_get_link_inst(role, i);
+			if (!link || !link->chanctx_assigned)
+				continue;
+
+			active_hws |= BIT(i);
+		}
+	}
 
 	mode = rtw89_entity_sel_mlo_dbcc_mode(rtwdev, active_hws);
 	rtwdev->mlo_dbcc_mode = mode;
@@ -399,7 +518,6 @@ static void rtw89_entity_recalc_mgnt_roles(struct rtw89_dev *rtwdev)
 	struct rtw89_entity_mgnt *mgnt = &hal->entity_mgnt;
 	struct rtw89_vif_link *link;
 	struct rtw89_vif *role;
-	u8 active_hws = 0;
 	u8 pos = 0;
 	int i, j;
 
@@ -414,8 +532,8 @@ static void rtw89_entity_recalc_mgnt_roles(struct rtw89_dev *rtwdev)
 	}
 
 	/* To be consistent with legacy behavior, expect the first active role
-	 * which uses RTW89_CHANCTX_0 to put at position 0, and make its first
-	 * link instance take RTW89_CHANCTX_0. (normalizing)
+	 * which uses RTW89_CHANCTX_0 to put at position 0 and its designated
+	 * link take RTW89_CHANCTX_0. (normalizing)
 	 */
 	list_for_each_entry(role, &mgnt->active_list, mgnt_entry) {
 		for (i = 0; i < role->links_inst_valid_num; i++) {
@@ -448,13 +566,10 @@ fill:
 				continue;
 
 			mgnt->chanctx_tbl[pos][i] = link->chanctx_idx;
-			active_hws |= BIT(i);
 		}
 
 		mgnt->active_roles[pos++] = role;
 	}
-
-	rtw89_entity_recalc_mlo_dbcc_mode(rtwdev, active_hws);
 }
 
 enum rtw89_entity_mode rtw89_entity_recalc(struct rtw89_dev *rtwdev)
@@ -524,6 +639,9 @@ enum rtw89_entity_mode rtw89_entity_recalc(struct rtw89_dev *rtwdev)
 		return rtw89_get_entity_mode(rtwdev);
 
 	rtw89_set_entity_mode(rtwdev, mode);
+
+	rtw89_entity_recalc_mlo_dbcc_mode(rtwdev);
+
 	return mode;
 }
 
@@ -999,6 +1117,11 @@ static void rtw89_mcc_assign_pattern(struct rtw89_dev *rtwdev,
 	*pattern = *new;
 	memset(&pattern->courtesy, 0, sizeof(pattern->courtesy));
 
+	if (RTW89_MCC_REQ_COURTESY(pattern, aux) && aux->is_gc)
+		aux->ignore_bcn = true;
+	else
+		aux->ignore_bcn = false;
+
 	if (RTW89_MCC_REQ_COURTESY(pattern, aux) && rtw89_mcc_can_courtesy(ref, aux)) {
 		crtz = &pattern->courtesy.ref;
 		ref->crtz = crtz;
@@ -1012,6 +1135,11 @@ static void rtw89_mcc_assign_pattern(struct rtw89_dev *rtwdev,
 	} else {
 		ref->crtz = NULL;
 	}
+
+	if (RTW89_MCC_REQ_COURTESY(pattern, ref) && ref->is_gc)
+		ref->ignore_bcn = true;
+	else
+		ref->ignore_bcn = false;
 
 	if (RTW89_MCC_REQ_COURTESY(pattern, ref) && rtw89_mcc_can_courtesy(aux, ref)) {
 		crtz = &pattern->courtesy.aux;
@@ -1115,7 +1243,7 @@ static int __rtw89_mcc_calc_pattern_strict(struct rtw89_dev *rtwdev,
 	struct rtw89_mcc_role *ref = &mcc->role_ref;
 	struct rtw89_mcc_role *aux = &mcc->role_aux;
 	struct rtw89_mcc_config *config = &mcc->config;
-	u16 min_tob = RTW89_MCC_EARLY_RX_BCN_TIME;
+	u16 min_tob = RTW89_MCC_EARLY_RX_BCN_TIME + RTW89_MCC_SWITCH_CH_TIME;
 	u16 min_toa = RTW89_MCC_MIN_RX_BCN_TIME;
 	u16 bcn_ofst = config->beacon_offset;
 	s16 upper_toa_ref, lower_toa_ref;
@@ -1271,11 +1399,11 @@ static int __rtw89_mcc_calc_pattern_anchor(struct rtw89_dev *rtwdev,
 	u16 bcn_ofst = config->beacon_offset;
 	bool small_bcn_ofst;
 
-	if (bcn_ofst < RTW89_MCC_MIN_RX_BCN_TIME)
+	if (bcn_ofst < RTW89_MCC_MIN_RX_BCN_WITH_SWITCH_CH_TIME)
 		small_bcn_ofst = true;
 	else if (bcn_ofst < aux->duration - aux->limit.max_toa)
 		small_bcn_ofst = true;
-	else if (mcc_intvl - bcn_ofst < RTW89_MCC_MIN_RX_BCN_TIME)
+	else if (mcc_intvl - bcn_ofst < RTW89_MCC_MIN_RX_BCN_WITH_SWITCH_CH_TIME)
 		small_bcn_ofst = false;
 	else
 		return -EPERM;
@@ -2170,6 +2298,7 @@ static void rtw89_mcc_handle_beacon_noa(struct rtw89_dev *rtwdev, bool enable)
 	rtw89_p2p_noa_renew(rtwvif_go);
 
 	if (enable) {
+		duration += RTW89_MCC_SWITCH_CH_TIME;
 		noa_desc.start_time = cpu_to_le32(start_time);
 		noa_desc.interval = cpu_to_le32(ieee80211_tu_to_usec(interval));
 		noa_desc.duration = cpu_to_le32(ieee80211_tu_to_usec(duration));
@@ -2253,15 +2382,6 @@ static int rtw89_mcc_start(struct rtw89_dev *rtwdev)
 	else
 		mcc->mode = RTW89_MCC_MODE_GC_STA;
 
-	if (rtw89_mcc_ignore_bcn(rtwdev, ref)) {
-		rtw89_fw_h2c_set_bcn_fltr_cfg(rtwdev, aux->rtwvif_link, false);
-	} else if (rtw89_mcc_ignore_bcn(rtwdev, aux)) {
-		rtw89_fw_h2c_set_bcn_fltr_cfg(rtwdev, ref->rtwvif_link, false);
-	} else {
-		rtw89_fw_h2c_set_bcn_fltr_cfg(rtwdev, ref->rtwvif_link, true);
-		rtw89_fw_h2c_set_bcn_fltr_cfg(rtwdev, aux->rtwvif_link, true);
-	}
-
 	rtw89_debug(rtwdev, RTW89_DBG_CHAN, "MCC sel mode: %d\n", mcc->mode);
 
 	mcc->group = RTW89_MCC_DFLT_GROUP;
@@ -2269,6 +2389,15 @@ static int rtw89_mcc_start(struct rtw89_dev *rtwdev)
 	ret = rtw89_mcc_fill_config(rtwdev);
 	if (ret)
 		return ret;
+
+	if (rtw89_mcc_ignore_bcn(rtwdev, ref) || aux->ignore_bcn) {
+		rtw89_fw_h2c_set_bcn_fltr_cfg(rtwdev, aux->rtwvif_link, false);
+	} else if (rtw89_mcc_ignore_bcn(rtwdev, aux) || ref->ignore_bcn) {
+		rtw89_fw_h2c_set_bcn_fltr_cfg(rtwdev, ref->rtwvif_link, false);
+	} else {
+		rtw89_fw_h2c_set_bcn_fltr_cfg(rtwdev, ref->rtwvif_link, true);
+		rtw89_fw_h2c_set_bcn_fltr_cfg(rtwdev, aux->rtwvif_link, true);
+	}
 
 	if (rtw89_concurrent_via_mrc(rtwdev))
 		ret = __mrc_fw_start(rtwdev, false);
@@ -2281,6 +2410,7 @@ static int rtw89_mcc_start(struct rtw89_dev *rtwdev)
 	rtw89_chanctx_notify(rtwdev, RTW89_CHANCTX_STATE_MCC_START);
 
 	rtw89_mcc_start_beacon_noa(rtwdev);
+	rtw89_phy_dig_suspend(rtwdev);
 
 	rtw89_mcc_prepare(rtwdev, true);
 	return 0;
@@ -2333,15 +2463,23 @@ static void rtw89_mcc_stop(struct rtw89_dev *rtwdev,
 	struct rtw89_hal *hal = &rtwdev->hal;
 	struct rtw89_mcc_info *mcc = &rtwdev->mcc;
 	struct rtw89_mcc_role *ref = &mcc->role_ref;
+	struct rtw89_mcc_role *aux = &mcc->role_aux;
 	struct rtw89_mcc_stop_sel sel = {
 		.hint.target = pause ? pause->trigger : NULL,
 	};
+	bool rsn_scan;
 	int ret;
 
 	if (!pause) {
 		wiphy_delayed_work_cancel(rtwdev->hw->wiphy, &rtwdev->chanctx_work);
 		bitmap_zero(hal->changes, NUM_OF_RTW89_CHANCTX_CHANGES);
 	}
+
+	rsn_scan = pause && pause->rsn == RTW89_CHANCTX_PAUSE_REASON_HW_SCAN;
+	if (rsn_scan && ref->is_go)
+		sel.hint.target = ref->rtwvif_link;
+	else if (rsn_scan && aux->is_go)
+		sel.hint.target = aux->rtwvif_link;
 
 	/* by default, stop at ref */
 	rtw89_iterate_mcc_roles(rtwdev, rtw89_mcc_stop_sel_iterator, &sel);
@@ -2371,6 +2509,8 @@ static void rtw89_mcc_stop(struct rtw89_dev *rtwdev,
 	rtw89_chanctx_notify(rtwdev, RTW89_CHANCTX_STATE_MCC_STOP);
 
 	rtw89_mcc_stop_beacon_noa(rtwdev);
+	rtw89_fw_h2c_mcc_dig(rtwdev, RTW89_CHANCTX_0, 0, 0, false);
+	rtw89_phy_dig_resume(rtwdev, true);
 
 	rtw89_mcc_prepare(rtwdev, false);
 }
@@ -2378,7 +2518,11 @@ static void rtw89_mcc_stop(struct rtw89_dev *rtwdev,
 static int rtw89_mcc_update(struct rtw89_dev *rtwdev)
 {
 	struct rtw89_mcc_info *mcc = &rtwdev->mcc;
+	bool old_ref_ignore_bcn = mcc->role_ref.ignore_bcn;
+	bool old_aux_ignore_bcn = mcc->role_aux.ignore_bcn;
 	struct rtw89_mcc_config *config = &mcc->config;
+	struct rtw89_mcc_role *ref = &mcc->role_ref;
+	struct rtw89_mcc_role *aux = &mcc->role_aux;
 	struct rtw89_mcc_config old_cfg = *config;
 	bool courtesy_changed;
 	bool sync_changed;
@@ -2392,6 +2536,11 @@ static int rtw89_mcc_update(struct rtw89_dev *rtwdev)
 	ret = rtw89_mcc_fill_config(rtwdev);
 	if (ret)
 		return ret;
+
+	if (old_ref_ignore_bcn != ref->ignore_bcn)
+		rtw89_fw_h2c_set_bcn_fltr_cfg(rtwdev, ref->rtwvif_link, !ref->ignore_bcn);
+	else if (old_aux_ignore_bcn != aux->ignore_bcn)
+		rtw89_fw_h2c_set_bcn_fltr_cfg(rtwdev, aux->rtwvif_link, !aux->ignore_bcn);
 
 	if (memcmp(&old_cfg.pattern.courtesy, &config->pattern.courtesy,
 		   sizeof(old_cfg.pattern.courtesy)) == 0)
@@ -2428,24 +2577,127 @@ static int rtw89_mcc_update(struct rtw89_dev *rtwdev)
 	return 0;
 }
 
+static int rtw89_mcc_search_gc_iterator(struct rtw89_dev *rtwdev,
+					struct rtw89_mcc_role *mcc_role,
+					unsigned int ordered_idx,
+					void *data)
+{
+	struct rtw89_mcc_role **role = data;
+
+	if (mcc_role->is_gc)
+		*role = mcc_role;
+
+	return 0;
+}
+
+static struct rtw89_mcc_role *rtw89_mcc_get_gc_role(struct rtw89_dev *rtwdev)
+{
+	struct rtw89_mcc_info *mcc = &rtwdev->mcc;
+	struct rtw89_mcc_role *role = NULL;
+
+	if (mcc->mode != RTW89_MCC_MODE_GC_STA)
+		return NULL;
+
+	rtw89_iterate_mcc_roles(rtwdev, rtw89_mcc_search_gc_iterator, &role);
+
+	return role;
+}
+
+void rtw89_mcc_gc_detect_beacon_work(struct wiphy *wiphy, struct wiphy_work *work)
+{
+	struct rtw89_vif_link *rtwvif_link = container_of(work, struct rtw89_vif_link,
+							  mcc_gc_detect_beacon_work.work);
+	struct ieee80211_vif *vif = rtwvif_link_to_vif(rtwvif_link);
+	enum rtw89_entity_mode mode;
+	struct rtw89_dev *rtwdev;
+
+	lockdep_assert_wiphy(wiphy);
+
+	rtwdev = rtwvif_link->rtwvif->rtwdev;
+
+	mode = rtw89_get_entity_mode(rtwdev);
+	if (mode != RTW89_ENTITY_MODE_MCC)
+		return;
+
+	if (READ_ONCE(rtwvif_link->sync_bcn_tsf) > rtwvif_link->last_sync_bcn_tsf)
+		rtwvif_link->detect_bcn_count = 0;
+	else
+		rtwvif_link->detect_bcn_count++;
+
+	if (rtwvif_link->detect_bcn_count < RTW89_MCC_DETECT_BCN_MAX_TRIES)
+		rtw89_chanctx_proceed(rtwdev, NULL);
+	else
+		ieee80211_connection_loss(vif);
+}
+
+bool rtw89_mcc_detect_go_bcn(struct rtw89_dev *rtwdev,
+			     struct rtw89_vif_link *rtwvif_link)
+{
+	enum rtw89_entity_mode mode = rtw89_get_entity_mode(rtwdev);
+	struct rtw89_chanctx_pause_parm pause_parm = {
+		.rsn = RTW89_CHANCTX_PAUSE_REASON_GC_BCN_LOSS,
+		.trigger = rtwvif_link,
+	};
+	struct ieee80211_bss_conf *bss_conf;
+	struct rtw89_mcc_role *role;
+	u16 bcn_int;
+
+	if (mode != RTW89_ENTITY_MODE_MCC)
+		return false;
+
+	role = rtw89_mcc_get_gc_role(rtwdev);
+	if (!role)
+		return false;
+
+	if (role->rtwvif_link != rtwvif_link)
+		return false;
+
+	rtw89_debug(rtwdev, RTW89_DBG_CHAN,
+		    "MCC GC beacon loss, pause MCC to detect GO beacon\n");
+
+	rcu_read_lock();
+
+	bss_conf = rtw89_vif_rcu_dereference_link(rtwvif_link, true);
+	bcn_int = bss_conf->beacon_int;
+
+	rcu_read_unlock();
+
+	rtw89_chanctx_pause(rtwdev, &pause_parm);
+	rtwvif_link->last_sync_bcn_tsf = READ_ONCE(rtwvif_link->sync_bcn_tsf);
+	wiphy_delayed_work_queue(rtwdev->hw->wiphy,
+				 &rtwvif_link->mcc_gc_detect_beacon_work,
+				 usecs_to_jiffies(ieee80211_tu_to_usec(bcn_int)));
+
+	return true;
+}
+
 static void rtw89_mcc_detect_connection(struct rtw89_dev *rtwdev,
 					struct rtw89_mcc_role *role)
 {
+	struct rtw89_vif_link *rtwvif_link = role->rtwvif_link;
 	struct ieee80211_vif *vif;
+	bool start_detect;
 	int ret;
 
 	ret = rtw89_core_send_nullfunc(rtwdev, role->rtwvif_link, true, false,
 				       RTW89_MCC_PROBE_TIMEOUT);
-	if (ret)
+	if (ret &&
+	    READ_ONCE(rtwvif_link->sync_bcn_tsf) == rtwvif_link->last_sync_bcn_tsf)
 		role->probe_count++;
 	else
 		role->probe_count = 0;
 
+	rtwvif_link->last_sync_bcn_tsf = READ_ONCE(rtwvif_link->sync_bcn_tsf);
 	if (role->probe_count < RTW89_MCC_PROBE_MAX_TRIES)
 		return;
 
 	rtw89_debug(rtwdev, RTW89_DBG_CHAN,
-		    "MCC <macid %d> can not detect AP\n", role->rtwvif_link->mac_id);
+		    "MCC <macid %d> can not detect AP/GO\n", role->rtwvif_link->mac_id);
+
+	start_detect = rtw89_mcc_detect_go_bcn(rtwdev, role->rtwvif_link);
+	if (start_detect)
+		return;
+
 	vif = rtwvif_link_to_vif(role->rtwvif_link);
 	ieee80211_connection_loss(vif);
 }
@@ -2461,9 +2713,9 @@ static void rtw89_mcc_track(struct rtw89_dev *rtwdev)
 	u16 bcn_ofst;
 	u16 diff;
 
-	if (rtw89_mcc_ignore_bcn(rtwdev, ref))
+	if (rtw89_mcc_ignore_bcn(rtwdev, ref) || aux->ignore_bcn)
 		rtw89_mcc_detect_connection(rtwdev, aux);
-	else if (rtw89_mcc_ignore_bcn(rtwdev, aux))
+	else if (rtw89_mcc_ignore_bcn(rtwdev, aux) || ref->ignore_bcn)
 		rtw89_mcc_detect_connection(rtwdev, ref);
 
 	if (mcc->mode != RTW89_MCC_MODE_GC_STA)
@@ -2622,6 +2874,30 @@ static void rtw89_mcc_update_limit(struct rtw89_dev *rtwdev)
 	rtw89_iterate_mcc_roles(rtwdev, rtw89_mcc_upd_lmt_iterator, NULL);
 }
 
+static int rtw89_mcc_get_links_iterator(struct rtw89_dev *rtwdev,
+					struct rtw89_mcc_role *mcc_role,
+					unsigned int ordered_idx,
+					void *data)
+{
+	struct rtw89_mcc_links_info *info = data;
+
+	info->links[ordered_idx] = mcc_role->rtwvif_link;
+	return 0;
+}
+
+void rtw89_mcc_get_links(struct rtw89_dev *rtwdev, struct rtw89_mcc_links_info *info)
+{
+	enum rtw89_entity_mode mode;
+
+	memset(info, 0, sizeof(*info));
+
+	mode = rtw89_get_entity_mode(rtwdev);
+	if (unlikely(mode != RTW89_ENTITY_MODE_MCC))
+		return;
+
+	rtw89_iterate_mcc_roles(rtwdev, rtw89_mcc_get_links_iterator, info);
+}
+
 void rtw89_chanctx_work(struct wiphy *wiphy, struct wiphy_work *work)
 {
 	struct rtw89_dev *rtwdev = container_of(work, struct rtw89_dev,
@@ -2690,6 +2966,7 @@ void rtw89_queue_chanctx_change(struct rtw89_dev *rtwdev,
 		return;
 	case RTW89_ENTITY_MODE_MCC_PREPARE:
 		delay = ieee80211_tu_to_usec(RTW89_CHANCTX_TIME_MCC_PREPARE);
+		rtw89_phy_dig_suspend(rtwdev);
 		break;
 	case RTW89_ENTITY_MODE_MCC:
 		delay = ieee80211_tu_to_usec(RTW89_CHANCTX_TIME_MCC);
@@ -3088,6 +3365,9 @@ void rtw89_chanctx_ops_change(struct rtw89_dev *rtwdev,
 		rtw89_config_entity_chandef(rtwdev, idx, &ctx->def);
 		rtw89_set_channel(rtwdev);
 	}
+
+	if (changed & IEEE80211_CHANCTX_CHANGE_PUNCTURING)
+		rtw89_chan_update_punctured(rtwdev, idx, &ctx->def);
 }
 
 int rtw89_chanctx_ops_assign_vif(struct rtw89_dev *rtwdev,
@@ -3230,6 +3510,8 @@ assign:
 			  __func__, ret);
 		return ret;
 	}
+
+	_rtw89_chan_update_punctured(rtwdev, rtwvif_link, &new_ctx->def);
 
 	return 0;
 }

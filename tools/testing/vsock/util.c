@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <sys/epoll.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <linux/sockios.h>
 
@@ -101,28 +102,39 @@ void vsock_wait_remote_close(int fd)
 	close(epollfd);
 }
 
+/* Wait until ioctl gives an expected int value.
+ * Return false if the op is not supported.
+ */
+bool vsock_ioctl_int(int fd, unsigned long op, int expected)
+{
+	int actual, ret;
+	char name[32];
+
+	snprintf(name, sizeof(name), "ioctl(%lu)", op);
+
+	timeout_begin(TIMEOUT);
+	do {
+		ret = ioctl(fd, op, &actual);
+		if (ret < 0) {
+			if (errno == EOPNOTSUPP || errno == ENOTTY)
+				break;
+
+			perror(name);
+			exit(EXIT_FAILURE);
+		}
+		timeout_check(name);
+	} while (actual != expected);
+	timeout_end();
+
+	return ret >= 0;
+}
+
 /* Wait until transport reports no data left to be sent.
  * Return false if transport does not implement the unsent_bytes() callback.
  */
 bool vsock_wait_sent(int fd)
 {
-	int ret, sock_bytes_unsent;
-
-	timeout_begin(TIMEOUT);
-	do {
-		ret = ioctl(fd, SIOCOUTQ, &sock_bytes_unsent);
-		if (ret < 0) {
-			if (errno == EOPNOTSUPP)
-				break;
-
-			perror("ioctl(SIOCOUTQ)");
-			exit(EXIT_FAILURE);
-		}
-		timeout_check("SIOCOUTQ");
-	} while (sock_bytes_unsent != 0);
-	timeout_end();
-
-	return !ret;
+	return vsock_ioctl_int(fd, SIOCOUTQ, 0);
 }
 
 /* Create socket <type>, bind to <cid, port>.
@@ -332,7 +344,9 @@ void send_buf(int fd, const void *buf, size_t len, int flags,
 		ret = send(fd, buf + nwritten, len - nwritten, flags);
 		timeout_check("send");
 
-		if (ret == 0 || (ret < 0 && errno != EINTR))
+		if (ret < 0 && errno == EINTR)
+			continue;
+		if (ret <= 0)
 			break;
 
 		nwritten += ret;
@@ -367,7 +381,13 @@ void send_buf(int fd, const void *buf, size_t len, int flags,
 	}
 }
 
+#define RECV_PEEK_RETRY_USEC (10 * 1000)
+
 /* Receive bytes in a buffer and check the return value.
+ *
+ * When MSG_PEEK is set, recv() is retried until it returns at least
+ * expected_ret bytes. The function returns on error, EOF, or timeout
+ * as usual.
  *
  * expected_ret:
  *  <0 Negative errno (for testing errors)
@@ -384,8 +404,19 @@ void recv_buf(int fd, void *buf, size_t len, int flags, ssize_t expected_ret)
 		ret = recv(fd, buf + nread, len - nread, flags);
 		timeout_check("recv");
 
-		if (ret == 0 || (ret < 0 && errno != EINTR))
+		if (ret < 0 && errno == EINTR)
+			continue;
+		if (ret <= 0)
 			break;
+
+		if (flags & MSG_PEEK) {
+			if (ret >= expected_ret) {
+				nread = ret;
+				break;
+			}
+			timeout_usleep(RECV_PEEK_RETRY_USEC);
+			continue;
+		}
 
 		nread += ret;
 	} while (nread < len);
@@ -499,6 +530,18 @@ void run_tests(const struct test_case *test_cases,
 
 		printf("ok\n");
 	}
+
+	printf("All tests have been executed. Waiting other peer...");
+	fflush(stdout);
+
+	/*
+	 * Final full barrier, to ensure that all tests have been run and
+	 * that even the last one has been successful on both sides.
+	 */
+	control_writeln("COMPLETED");
+	control_expectln("COMPLETED");
+
+	printf("ok\n");
 }
 
 void list_tests(const struct test_case *test_cases)
@@ -744,7 +787,6 @@ void setsockopt_ull_check(int fd, int level, int optname,
 fail:
 	fprintf(stderr, "%s  val %llu\n", errmsg, val);
 	exit(EXIT_FAILURE);
-;
 }
 
 /* Set "int" socket option and check that it's indeed set */

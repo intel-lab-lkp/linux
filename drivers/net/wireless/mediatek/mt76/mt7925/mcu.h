@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: ISC */
+/* SPDX-License-Identifier: BSD-3-Clause-Clear */
 /* Copyright (C) 2023 MediaTek Inc. */
 
 #ifndef __MT7925_MCU_H
@@ -152,6 +152,14 @@ enum {
 	UNI_EVENT_SCAN_DONE_NLO = 3,
 };
 
+enum {
+	UNI_CMD_RSSI_MONITOR_SET = 0,
+};
+
+enum {
+	UNI_EVENT_RSSI_MONITOR_INFO = 0,
+};
+
 enum connac3_mcu_cipher_type {
 	CONNAC3_CIPHER_NONE = 0,
 	CONNAC3_CIPHER_WEP40 = 1,
@@ -269,7 +277,7 @@ struct scan_ie_tlv {
 	__le16 ies_len;
 	u8 band;
 	u8 pad;
-	u8 ies[MT76_CONNAC_SCAN_IE_LEN];
+	u8 ies[];
 };
 
 struct scan_misc_tlv {
@@ -673,7 +681,8 @@ int mt7925_mcu_cancel_hw_scan(struct mt76_phy *phy,
 			      struct ieee80211_vif *vif);
 int mt7925_mcu_sched_scan_req(struct mt76_phy *phy,
 			      struct ieee80211_vif *vif,
-			      struct cfg80211_sched_scan_request *sreq);
+			      struct cfg80211_sched_scan_request *sreq,
+			      struct ieee80211_scan_ies *ies);
 int mt7925_mcu_sched_scan_enable(struct mt76_phy *phy,
 				 struct ieee80211_vif *vif,
 				 bool enable);
@@ -684,6 +693,13 @@ int mt7925_mcu_add_bss_info(struct mt792x_phy *phy,
 			    struct ieee80211_bss_conf *link_conf,
 			    struct ieee80211_link_sta *link_sta,
 			    int enable);
+int mt7925_mcu_add_bss_info_sta(struct mt792x_phy *phy,
+				struct ieee80211_chanctx_conf *ctx,
+				struct ieee80211_bss_conf *link_conf,
+				struct ieee80211_link_sta *link_sta,
+				u16 bmc_tx_wlan_idx,
+				u16 sta_wlan_idx,
+				int enable);
 int mt7925_mcu_set_timing(struct mt792x_phy *phy,
 			  struct ieee80211_bss_conf *link_conf);
 int mt7925_mcu_set_deep_sleep(struct mt792x_dev *dev, bool enable);

@@ -7,8 +7,10 @@
 #define _XE_PCODE_H_
 
 #include <linux/types.h>
-struct xe_tile;
+
+struct drm_device;
 struct xe_device;
+struct xe_tile;
 
 void xe_pcode_init(struct xe_tile *tile);
 int xe_pcode_probe_early(struct xe_device *xe);
