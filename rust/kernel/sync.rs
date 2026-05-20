@@ -31,6 +31,7 @@ pub use lock::spinlock::{new_spinlock, SpinLock, SpinLockGuard};
 pub use locked_by::LockedBy;
 pub use refcount::Refcount;
 pub use set_once::SetOnce;
+pub use rcu::Callback;
 
 /// Represents a lockdep class.
 ///
