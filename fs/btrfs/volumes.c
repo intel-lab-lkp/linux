@@ -5972,6 +5972,26 @@ struct btrfs_chunk_map *btrfs_alloc_chunk_map(int num_stripes, gfp_t gfp)
 	return map;
 }
 
+/*
+ * For single data stripe RAID56, it's completely RAID1/RAID1C3, as data,
+ * P/Q stripes all match each other, and rotation makes no difference anymore.
+ *
+ * So we still keep the on-disk chunk/bg type, but in memory we change the
+ * chunk map type directly to RAID1/RAID1C3
+ */
+static void change_single_data_raid56_map(struct btrfs_chunk_map *map)
+{
+	if ((map->type & BTRFS_BLOCK_GROUP_RAID56_MASK) == 0)
+		return;
+	if (nr_data_stripes(map) > 1)
+		return;
+	if (map->type & BTRFS_BLOCK_GROUP_RAID5)
+		map->type |= BTRFS_BLOCK_GROUP_RAID1;
+	else
+		map->type |= BTRFS_BLOCK_GROUP_RAID1C3;
+	map->type &= ~BTRFS_BLOCK_GROUP_RAID56_MASK;
+}
+
 static struct btrfs_block_group *create_chunk(struct btrfs_trans_handle *trans,
 			struct alloc_chunk_ctl *ctl,
 			struct btrfs_device_info *devices_info)
@@ -5995,6 +6015,7 @@ static struct btrfs_block_group *create_chunk(struct btrfs_trans_handle *trans,
 	map->io_width = BTRFS_STRIPE_LEN;
 	map->sub_stripes = ctl->sub_stripes;
 	map->num_stripes = ctl->num_stripes;
+	change_single_data_raid56_map(map);
 
 	for (int i = 0; i < ctl->ndevs; i++) {
 		for (int j = 0; j < ctl->dev_stripes; j++) {
@@ -6173,7 +6194,7 @@ int btrfs_chunk_alloc_add_chunk_item(struct btrfs_trans_handle *trans,
 	btrfs_set_stack_chunk_length(chunk, bg->length);
 	btrfs_set_stack_chunk_owner(chunk, BTRFS_EXTENT_TREE_OBJECTID);
 	btrfs_set_stack_chunk_stripe_len(chunk, BTRFS_STRIPE_LEN);
-	btrfs_set_stack_chunk_type(chunk, map->type);
+	btrfs_set_stack_chunk_type(chunk, bg->flags);
 	btrfs_set_stack_chunk_num_stripes(chunk, map->num_stripes);
 	btrfs_set_stack_chunk_io_align(chunk, BTRFS_STRIPE_LEN);
 	btrfs_set_stack_chunk_io_width(chunk, BTRFS_STRIPE_LEN);
@@ -7568,6 +7589,7 @@ static int read_one_chunk(struct btrfs_key *key, struct extent_buffer *leaf,
 	 */
 	map->sub_stripes = btrfs_raid_array[index].sub_stripes;
 	map->verified_stripes = 0;
+	change_single_data_raid56_map(map);
 
 	if (num_stripes > 0)
 		map->stripe_size = btrfs_calc_stripe_length(map);
