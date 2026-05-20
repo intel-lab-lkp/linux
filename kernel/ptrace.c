@@ -13,6 +13,7 @@
 #include <linux/sched.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/coredump.h>
+#include <linux/sched/exec_state.h>
 #include <linux/sched/task.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
@@ -35,6 +36,31 @@
 #include <linux/syscall_user_dispatch.h>
 
 #include <asm/syscall.h>	/* for syscall_get_* */
+
+/**
+ * ptracer_access_allowed - may current peek/poke @tsk's address space?
+ * @tsk: tracee
+ *
+ * Per-access check used by ptrace_access_vm() and architecture-specific
+ * tag/register accessors.  Returns true iff current is the registered
+ * ptracer of @tsk and either @tsk is owner-dumpable or current holds
+ * CAP_SYS_PTRACE in @tsk's exec namespace.  Stricter than the up-front
+ * ptrace_may_access() check at attach time; this re-validates on every
+ * memory access so privilege changes are observed promptly.
+ */
+bool ptracer_access_allowed(struct task_struct *tsk)
+{
+	const struct task_exec_state *es;
+
+	if (!tsk->ptrace)
+		return false;
+	if (current != tsk->parent)
+		return false;
+	guard(rcu)();
+	es = task_exec_state_rcu(tsk);
+	return READ_ONCE(es->dumpable) == TASK_DUMPABLE_OWNER ||
+	       ptracer_capable(tsk, es->user_ns);
+}
 
 /*
  * Access another process' address space via ptrace.
