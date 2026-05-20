@@ -56,6 +56,8 @@
 #include <linux/delayacct.h>
 #include <linux/cacheinfo.h>
 #include <linux/pgalloc_tag.h>
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
 #include <asm/div64.h>
 #include "internal.h"
 #include "shuffle.h"
@@ -514,7 +516,157 @@ static void __spb_set_has_type(struct page *page, int migratetype)
 }
 
 /**
- * set_pageblock_migratetype - Set the migratetype of a pageblock
+ * spb_get_category - Determine if a superpageblock is clean or tainted
+ * @sb: superpageblock to classify
+ *
+ * A superpageblock is clean if it contains only free and movable pageblocks.
+ * Any unmovable, reclaimable, or reserved pageblocks make it tainted.
+ * Reserved pageblocks (memory holes) taint the superpageblock because it
+ * can never be used for 1GB hugepages, making it a better home for
+ * unmovable/reclaimable allocations.
+ */
+static inline enum sb_category spb_get_category(struct superpageblock *sb)
+{
+	if (sb->nr_unmovable || sb->nr_reclaimable || sb->nr_reserved)
+		return SB_TAINTED;
+	return SB_CLEAN;
+}
+
+/**
+ * sb_get_fullness - Determine the fullness bucket for a superpageblock
+ * @sb: superpageblock to classify
+ * @cat: the category (CLEAN or TAINTED) of this superpageblock
+ *
+ * For clean SPBs, fullness is based on total usage (total - nr_free).
+ * For tainted SPBs, fullness is based only on unmovable + reclaimable
+ * pageblocks, since those are what we're trying to concentrate.
+ * Uses SUPERPAGEBLOCK_NR_PAGEBLOCKS as divisor so that partial
+ * superpageblocks at zone boundaries are preferred over whole ones.
+ */
+static inline enum sb_fullness sb_get_fullness(struct superpageblock *sb,
+					       enum sb_category cat)
+{
+	unsigned int used, total = sb->total_pageblocks;
+	unsigned int quarter = SUPERPAGEBLOCK_NR_PAGEBLOCKS / 4;
+
+	if (!total)
+		return SB_FULL;
+
+	if (cat == SB_TAINTED)
+		used = sb->nr_unmovable + sb->nr_reclaimable;
+	else
+		used = total - sb->nr_free;
+
+	if (used >= total)
+		return SB_FULL;
+
+	if (used >= 3 * quarter)
+		return SB_FULL_75;
+	if (used >= 2 * quarter)
+		return SB_FULL_50;
+	if (used >= quarter)
+		return SB_FULL_25;
+	return SB_ALMOST_EMPTY;
+}
+
+/**
+ * spb_update_list - Move a superpageblock to the correct fullness list
+ * @sb: superpageblock to reclassify
+ *
+ * Called after counters change. Removes from current list (if any)
+ * and adds to the appropriate list based on current fullness and
+ * taint status.
+ */
+static void spb_update_list(struct superpageblock *sb)
+{
+	struct zone *zone = sb->zone;
+	enum sb_category cat;
+	enum sb_fullness full;
+
+	list_del_init(&sb->list);
+
+	if (sb->nr_free == SUPERPAGEBLOCK_NR_PAGEBLOCKS) {
+		list_add_tail(&sb->list, &zone->spb_empty);
+		return;
+	}
+
+	cat = spb_get_category(sb);
+	full = sb_get_fullness(sb, cat);
+	list_add_tail(&sb->list, &zone->spb_lists[cat][full]);
+}
+
+/**
+ * superpageblock_pb_now_free - A pageblock just became fully free in buddy
+ * @page: page in the pageblock
+ *
+ * When buddy coalescing reconstructs a complete pageblock-order page,
+ * increment nr_free. Type counters are handled separately in
+ * mark_pageblock_free().
+ */
+static void superpageblock_pb_now_free(struct page *page)
+{
+	unsigned long pfn = page_to_pfn(page);
+	struct superpageblock *sb = pfn_to_superpageblock(page_zone(page), pfn);
+
+	if (!sb)
+		return;
+
+	sb->nr_free++;
+
+	spb_update_list(sb);
+}
+
+/**
+ * superpageblock_pb_now_used - A fully-free pageblock just got its first allocation
+ * @page: page in the pageblock
+ *
+ * When allocating from an order >= pageblock_order free page, decrement
+ * nr_free. Type counters are handled separately by __spb_set_has_type()
+ * at allocation time.
+ */
+static void superpageblock_pb_now_used(struct page *page)
+{
+	unsigned long pfn = page_to_pfn(page);
+	struct superpageblock *sb = pfn_to_superpageblock(page_zone(page), pfn);
+
+	if (!sb)
+		return;
+
+	if (sb->nr_free)
+		sb->nr_free--;
+
+	spb_update_list(sb);
+}
+
+/**
+ * superpageblock_range_now_used - Mark a multi-pageblock free range as no longer free
+ * @page: first page of the range (must be pageblock-aligned)
+ * @order: order of the range (must be >= pageblock_order)
+ *
+ * When a free page of order >= pageblock_order is removed from buddy outside
+ * the normal allocation path (e.g. __isolate_free_page, memory hotplug,
+ * HW poison takeoff), every constituent pageblock leaves its PB_all_free
+ * state. Walk the range, clear PB_all_free, and decrement nr_free for each
+ * affected pageblock. PB_has_* bits are not touched: the pages are not being
+ * allocated to a specific migratetype here. They will be re-established by
+ * mark_pageblock_free() if the pages later return to buddy and coalesce.
+ */
+static void superpageblock_range_now_used(struct page *page, unsigned int order)
+{
+	unsigned long pfn = page_to_pfn(page);
+	unsigned long end_pfn = pfn + (1UL << order);
+
+	for (; pfn < end_pfn; pfn += pageblock_nr_pages) {
+		struct page *pb_page = pfn_to_page(pfn);
+
+		if (get_pfnblock_bit(pb_page, pfn, PB_all_free)) {
+			clear_pfnblock_bit(pb_page, pfn, PB_all_free);
+			superpageblock_pb_now_used(pb_page);
+		}
+	}
+}
+
+/** set_pageblock_migratetype - Set the migratetype of a pageblock
  * @page: The page within the block of interest
  * @migratetype: migratetype to set
  */
@@ -577,6 +729,7 @@ void __meminit init_pageblock_migratetype(struct page *page,
 		if (sb->nr_reserved)
 			sb->nr_reserved--;
 		__spb_set_has_type(page, migratetype);
+		spb_update_list(sb);
 	}
 }
 
@@ -1015,6 +1168,11 @@ static void mark_pageblock_free(struct page *page, unsigned long pfn)
 	clear_pfnblock_bit(page, pfn, PB_has_unmovable);
 	clear_pfnblock_bit(page, pfn, PB_has_reclaimable);
 	clear_pfnblock_bit(page, pfn, PB_has_movable);
+
+	if (!get_pfnblock_bit(page, pfn, PB_all_free)) {
+		set_pfnblock_bit(page, pfn, PB_all_free);
+		superpageblock_pb_now_free(page);
+	}
 }
 
 /*
@@ -1063,7 +1221,8 @@ static inline void __free_one_page(struct page *page,
 
 	/*
 	 * When freeing a whole pageblock, clear stale PCP ownership
-	 * and actual-contents tracking flags up front.  The in-loop
+	 * and actual-contents tracking flags up front, and mark it
+	 * as fully free for superpageblock accounting.  The in-loop
 	 * check only fires when sub-pageblock pages merge *up to*
 	 * pageblock_order, not when entering at pageblock_order
 	 * directly.
@@ -2006,6 +2165,20 @@ static __always_inline void page_del_and_expand(struct zone *zone,
 {
 	int nr_pages = 1 << high;
 
+	/*
+	 * If we're splitting a page that spans at least a full pageblock,
+	 * the allocated pageblock transitions from fully-free to in-use.
+	 * Clear PB_all_free and update superpageblock accounting.
+	 */
+	if (high >= pageblock_order) {
+		unsigned long pfn = page_to_pfn(page);
+
+		if (get_pfnblock_bit(page, pfn, PB_all_free)) {
+			clear_pfnblock_bit(page, pfn, PB_all_free);
+			superpageblock_pb_now_used(page);
+		}
+	}
+
 	__del_page_from_free_list(page, zone, high, migratetype);
 	nr_pages -= expand(zone, page, low, high, migratetype);
 	account_freepages(zone, -nr_pages, migratetype);
@@ -2535,6 +2708,25 @@ try_to_claim_block(struct zone *zone, struct page *page,
 	/* Take ownership for orders >= pageblock_order */
 	if (current_order >= pageblock_order) {
 		unsigned int nr_added;
+		unsigned long pb_pfn;
+
+		/*
+		 * Clear PB_all_free for pageblocks being claimed.
+		 * This path bypasses page_del_and_expand(), so we
+		 * must handle the free→used transition here.
+		 * Use block_type (the original migratetype) because
+		 * that's what was decremented when PB_all_free was set.
+		 */
+		for (pb_pfn = page_to_pfn(page);
+		     pb_pfn < page_to_pfn(page) + (1 << current_order);
+		     pb_pfn += pageblock_nr_pages) {
+			struct page *pb_page = pfn_to_page(pb_pfn);
+
+			if (get_pfnblock_bit(pb_page, pb_pfn, PB_all_free)) {
+				clear_pfnblock_bit(pb_page, pb_pfn, PB_all_free);
+				superpageblock_pb_now_used(pb_page);
+			}
+		}
 
 		del_page_from_free_list(page, zone, current_order, block_type);
 		change_pageblock_range(page, current_order, start_type);
@@ -3650,6 +3842,14 @@ int __isolate_free_page(struct page *page, unsigned int order)
 	}
 
 	del_page_from_free_list(page, zone, order, mt);
+
+	/*
+	 * The free page is leaving buddy. For order >= pageblock_order, every
+	 * constituent pageblock had PB_all_free set; clear those bits and
+	 * decrement nr_free so the SPB pageblock-level counter stays in sync.
+	 */
+	if (order >= pageblock_order)
+		superpageblock_range_now_used(page, order);
 
 	/*
 	 * Set the pageblock if the isolated page is at least half of a
@@ -8163,6 +8363,8 @@ unsigned long __offline_isolated_pages(unsigned long start_pfn,
 		BUG_ON(!PageBuddy(page));
 		VM_WARN_ON(get_pageblock_migratetype(page) != MIGRATE_ISOLATE);
 		order = buddy_order(page);
+		if (order >= pageblock_order)
+			superpageblock_range_now_used(page, order);
 		del_page_from_free_list(page, zone, order, MIGRATE_ISOLATE);
 		pfn += (1 << order);
 	}
@@ -8254,6 +8456,25 @@ bool take_page_off_buddy(struct page *page)
 
 			del_page_from_free_list(page_head, zone, page_order,
 						migratetype);
+			/*
+			 * break_down_buddy_pages() re-adds every non-target
+			 * pageblock to buddy at order >= pageblock_order, so
+			 * those keep their PB_all_free state. Only the target's
+			 * pageblock loses its fully-free status -- clear that
+			 * one bit and decrement the SPB nr_free counter.
+			 */
+			if (page_order >= pageblock_order) {
+				unsigned long pfn_pb = ALIGN_DOWN(pfn,
+							pageblock_nr_pages);
+				struct page *pb_page = pfn_to_page(pfn_pb);
+
+				if (get_pfnblock_bit(pb_page, pfn_pb,
+						     PB_all_free)) {
+					clear_pfnblock_bit(pb_page, pfn_pb,
+							   PB_all_free);
+					superpageblock_pb_now_used(pb_page);
+				}
+			}
 			break_down_buddy_pages(zone, page_head, page, 0,
 						page_order, migratetype);
 			SetPageHWPoisonTakenOff(page);
@@ -8558,3 +8779,73 @@ struct page *alloc_pages_nolock_noprof(gfp_t gfp_flags, int nid, unsigned int or
 	return page;
 }
 EXPORT_SYMBOL_GPL(alloc_pages_nolock_noprof);
+
+#ifdef CONFIG_DEBUG_FS
+static const char * const sb_fullness_names[] = {
+	"full", "75pct", "50pct", "25pct", "almost_empty"
+};
+
+static const char * const sb_category_names[] = {
+	"clean", "tainted"
+};
+
+static int superpageblock_debugfs_show(struct seq_file *m, void *v)
+{
+	struct zone *zone;
+	int cat, full;
+
+	for_each_populated_zone(zone) {
+		unsigned long i;
+		int empty_count = 0;
+		struct superpageblock *sb;
+
+		if (!zone->superpageblocks)
+			continue;
+
+		seq_printf(m, "Node %d, zone %8s: %lu superpageblocks, base_pfn=0x%lx\n",
+			   zone->zone_pgdat->node_id, zone->name,
+			   zone->nr_superpageblocks, zone->superpageblock_base_pfn);
+
+		list_for_each_entry(sb, &zone->spb_empty, list)
+			empty_count++;
+		if (empty_count)
+			seq_printf(m, "  empty: %d\n", empty_count);
+
+		for (cat = 0; cat < __NR_SB_CATEGORIES; cat++) {
+			for (full = 0; full < __NR_SB_FULLNESS; full++) {
+				int count = 0;
+
+				list_for_each_entry(sb,
+					&zone->spb_lists[cat][full], list)
+					count++;
+				if (count)
+					seq_printf(m, "  %s/%s: %d\n",
+						   sb_category_names[cat],
+						   sb_fullness_names[full],
+						   count);
+			}
+		}
+
+		/* Per-superpageblock detail */
+		for (i = 0; i < zone->nr_superpageblocks; i++) {
+			sb = &zone->superpageblocks[i];
+			seq_printf(m, "  sb[%lu] pfn=0x%lx: unmov=%u recl=%u mov=%u rsv=%u free=%u total=%u\n",
+				   i, sb->start_pfn,
+				   sb->nr_unmovable, sb->nr_reclaimable,
+				   sb->nr_movable, sb->nr_reserved,
+				   sb->nr_free, sb->total_pageblocks);
+		}
+	}
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(superpageblock_debugfs);
+
+static int __init superpageblock_debugfs_init(void)
+{
+	debugfs_create_file("superpageblocks", 0444, NULL, NULL,
+			    &superpageblock_debugfs_fops);
+	return 0;
+}
+late_initcall(superpageblock_debugfs_init);
+#endif /* CONFIG_DEBUG_FS */

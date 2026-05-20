@@ -28,6 +28,7 @@ enum pageblock_bits {
 	PB_has_unmovable,
 	PB_has_reclaimable,
 	PB_has_movable,
+	PB_all_free,	/* All pages in pageblock are free in buddy */
 
 #ifdef CONFIG_MEMORY_ISOLATION
 	/*
