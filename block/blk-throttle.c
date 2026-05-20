@@ -1649,7 +1649,7 @@ static void tg_flush_bios(struct throtl_grp *tg)
 	 */
 	tg_update_disptime(tg);
 
-	throtl_schedule_pending_timer(sq, jiffies + 1);
+	throtl_schedule_next_dispatch(sq->parent_sq, true);
 }
 
 static void throtl_pd_offline(struct blkg_policy_data *pd)
