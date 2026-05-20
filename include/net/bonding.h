@@ -203,9 +203,24 @@ struct bond_up_slave {
  */
 #define BOND_LINK_NOCHANGE -1
 
+/* XFRM offload state tracked by bonding for one xfrm_state. */
 struct bond_ipsec {
 	struct list_head list;
 	struct xfrm_state *xs;
+	struct list_head inst_list;
+	struct rcu_head rcu;
+	bool replicated;
+};
+
+/* Per-lower-device instance of a replicated LAG XFRM state. */
+struct bond_ipsec_inst {
+	struct list_head list;
+	struct net_device *real_dev;
+	netdevice_tracker dev_tracker;
+	unsigned long lower_handle;
+	struct rcu_head rcu;
+	bool added;
+	bool deleted;
 };
 
 /*
@@ -259,8 +274,9 @@ struct bonding {
 	struct rtnl_link_stats64 bond_stats;
 #ifdef CONFIG_XFRM_OFFLOAD
 	struct list_head ipsec_list;
-	/* protecting ipsec_list */
+	/* protecting ipsec_list and ipsec_lag_blocked */
 	struct mutex ipsec_lock;
+	bool ipsec_lag_blocked;
 #endif /* CONFIG_XFRM_OFFLOAD */
 	struct bpf_prog *xdp_prog;
 };
@@ -323,6 +339,13 @@ static inline bool bond_mode_can_use_xmit_hash(const struct bonding *bond)
 		BOND_MODE(bond) == BOND_MODE_XOR ||
 		BOND_MODE(bond) == BOND_MODE_TLB ||
 		BOND_MODE(bond) == BOND_MODE_ALB);
+}
+
+static inline bool bond_mode_can_use_lag_xfrm(const struct bonding *bond)
+{
+	return (BOND_MODE(bond) == BOND_MODE_8023AD ||
+		BOND_MODE(bond) == BOND_MODE_XOR) &&
+	       bond->params.xmit_policy == BOND_XMIT_POLICY_LAYER34;
 }
 
 static inline bool bond_mode_uses_xmit_hash(const struct bonding *bond)
@@ -712,6 +735,10 @@ void bond_slave_arr_work_rearm(struct bonding *bond, unsigned long delay);
 void bond_peer_notify_work_rearm(struct bonding *bond, unsigned long delay);
 void bond_work_init_all(struct bonding *bond);
 void bond_work_cancel_all(struct bonding *bond);
+#if IS_ENABLED(CONFIG_XFRM_OFFLOAD)
+void bond_ipsec_lag_begin_flush(struct bonding *bond);
+void bond_ipsec_lag_end_flush(struct bonding *bond);
+#endif
 
 #ifdef CONFIG_PROC_FS
 void bond_create_proc_entry(struct bonding *bond);

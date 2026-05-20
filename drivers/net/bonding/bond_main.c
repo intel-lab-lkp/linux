@@ -455,6 +455,432 @@ static struct net_device *bond_ipsec_dev(struct xfrm_state *xs)
 	return slave->dev;
 }
 
+static void bond_ipsec_inst_rcu_free(struct rcu_head *rcu)
+{
+	struct bond_ipsec_inst *inst;
+
+	inst = container_of(rcu, struct bond_ipsec_inst, rcu);
+	netdev_put(inst->real_dev, &inst->dev_tracker);
+	kfree(inst);
+}
+
+static void bond_ipsec_rcu_free(struct rcu_head *rcu)
+{
+	struct bond_ipsec *ipsec;
+
+	ipsec = container_of(rcu, struct bond_ipsec, rcu);
+	kfree(ipsec);
+}
+
+static bool bond_ipsec_slave_has_xfrm_ops(struct net_device *real_dev)
+{
+	const struct xfrmdev_ops *ops;
+
+	if (!real_dev || netif_is_bond_master(real_dev))
+		return false;
+
+	ops = real_dev->xfrmdev_ops;
+	if (!ops)
+		return false;
+
+	return ops->xdo_dev_state_add && ops->xdo_dev_state_delete;
+}
+
+static bool bond_ipsec_lag_slave_has_ops(struct net_device *real_dev)
+{
+	return bond_ipsec_slave_has_xfrm_ops(real_dev) &&
+	       real_dev->xfrmdev_ops->flags & XFRMDEV_OPS_F_LOWER_HANDLE;
+}
+
+static bool bond_ipsec_lag_slave_ok(struct net_device *real_dev)
+{
+	return (real_dev->features & NETIF_F_HW_ESP) &&
+	       bond_ipsec_lag_slave_has_ops(real_dev);
+}
+
+static void bond_ipsec_lag_free_instances(struct bond_ipsec *ipsec)
+{
+	struct bond_ipsec_inst *inst, *tmp;
+
+	list_for_each_entry_safe(inst, tmp, &ipsec->inst_list, list) {
+		list_del_rcu(&inst->list);
+		call_rcu(&inst->rcu, bond_ipsec_inst_rcu_free);
+	}
+}
+
+static void bond_ipsec_lag_call_inst(struct xfrm_state *xs,
+				     struct bond_ipsec_inst *inst,
+				     bool delete_state,
+				     bool free_state)
+{
+	unsigned long bond_handle = xs->xso.offload_handle;
+	struct net_device *bond_real_dev = xs->xso.real_dev;
+	const struct xfrmdev_ops *ops = inst->real_dev->xfrmdev_ops;
+
+	if (!inst->lower_handle)
+		return;
+
+	if (!ops)
+		return;
+
+	xs->xso.real_dev = inst->real_dev;
+	xs->xso.offload_handle = inst->lower_handle;
+	if (delete_state) {
+		WRITE_ONCE(inst->added, false);
+		if (!inst->deleted && ops->xdo_dev_state_delete) {
+			ops->xdo_dev_state_delete(inst->real_dev, xs);
+			xs->xso.offload_handle = inst->lower_handle;
+			inst->deleted = true;
+		}
+	}
+	if (free_state && ops->xdo_dev_state_free)
+		ops->xdo_dev_state_free(inst->real_dev, xs);
+	if (free_state)
+		inst->lower_handle = 0;
+
+	xs->xso.real_dev = bond_real_dev;
+	xs->xso.offload_handle = bond_handle;
+}
+
+static void bond_ipsec_lag_call_state(struct xfrm_state *xs,
+				      struct bond_ipsec *ipsec,
+				      bool delete_state,
+				      bool free_state)
+{
+	struct bond_ipsec_inst *inst;
+
+	list_for_each_entry_reverse(inst, &ipsec->inst_list, list) {
+		bond_ipsec_lag_call_inst(xs, inst, delete_state, free_state);
+	}
+}
+
+static int bond_ipsec_lag_add_inst(struct xfrm_state *xs,
+				   struct bond_ipsec_inst *inst,
+				   struct netlink_ext_ack *extack)
+{
+	unsigned long bond_handle = xs->xso.offload_handle;
+	struct net_device *bond_real_dev = xs->xso.real_dev;
+	const struct xfrmdev_ops *ops;
+	int err;
+
+	if (!bond_ipsec_lag_slave_ok(inst->real_dev))
+		return -EOPNOTSUPP;
+
+	ops = inst->real_dev->xfrmdev_ops;
+	xs->xso.real_dev = inst->real_dev;
+	xs->xso.offload_handle = 0;
+	err = ops->xdo_dev_state_add(inst->real_dev, xs, extack);
+	if (err)
+		goto out;
+
+	inst->lower_handle = xs->xso.offload_handle;
+	if (!inst->lower_handle) {
+		err = -EINVAL;
+		NL_SET_ERR_MSG_MOD(extack, "Slave did not return an IPsec offload handle");
+		if (ops->xdo_dev_state_delete)
+			ops->xdo_dev_state_delete(inst->real_dev, xs);
+		if (ops->xdo_dev_state_free)
+			ops->xdo_dev_state_free(inst->real_dev, xs);
+		goto out;
+	}
+
+	inst->deleted = false;
+	inst->added = true;
+
+out:
+	xs->xso.real_dev = bond_real_dev;
+	xs->xso.offload_handle = bond_handle;
+	return err;
+}
+
+static int bond_ipsec_lag_add_sa(struct net_device *bond_dev,
+				 struct xfrm_state *xs,
+				 struct netlink_ext_ack *extack)
+{
+	struct bonding *bond = netdev_priv(bond_dev);
+	struct bond_ipsec_inst *inst;
+	struct bond_ipsec *ipsec;
+	struct list_head *iter;
+	struct slave *slave;
+	int err = 0;
+	int count = 0;
+
+	if (xs->xso.type != XFRM_DEV_OFFLOAD_CRYPTO) {
+		NL_SET_ERR_MSG_MOD(extack, "LAG supports only XFRM crypto offload");
+		return -EOPNOTSUPP;
+	}
+
+	if (xs->props.flags & XFRM_STATE_ESN) {
+		NL_SET_ERR_MSG_MOD(extack, "LAG does not support XFRM ESN offload");
+		return -EOPNOTSUPP;
+	}
+
+	ipsec = kmalloc_obj(*ipsec);
+	if (!ipsec)
+		return -ENOMEM;
+
+	ipsec->xs = xs;
+	ipsec->replicated = true;
+	INIT_LIST_HEAD(&ipsec->list);
+	INIT_LIST_HEAD(&ipsec->inst_list);
+
+	/* Serialize with slave down/remove and LAG eligibility changes so they
+	 * cannot miss lower SAs installed before this state is published.
+	 */
+	mutex_lock(&bond->ipsec_lock);
+	if (bond->ipsec_lag_blocked) {
+		err = -EAGAIN;
+		NL_SET_ERR_MSG_MOD(extack, "Bond LAG XFRM state add is blocked");
+		goto err_free_unlock;
+	}
+	if (!(bond_dev->features & NETIF_F_HW_ESP)) {
+		err = -EOPNOTSUPP;
+		NL_SET_ERR_MSG_MOD(extack, "Bond IPsec offload is disabled");
+		goto err_free_unlock;
+	}
+	if (!bond_mode_can_use_lag_xfrm(bond)) {
+		err = -EAGAIN;
+		NL_SET_ERR_MSG_MOD(extack, "Bond LAG XFRM eligibility changed");
+		goto err_free_unlock;
+	}
+	rcu_read_lock();
+	bond_for_each_slave_rcu(bond, slave, iter) {
+		struct net_device *real_dev = slave->dev;
+
+		if (!netif_running(real_dev))
+			continue;
+
+		if (!bond_ipsec_lag_slave_ok(real_dev)) {
+			err = -EOPNOTSUPP;
+			break;
+		}
+
+		inst = kzalloc_obj(*inst, GFP_ATOMIC);
+		if (!inst) {
+			err = -ENOMEM;
+			break;
+		}
+
+		inst->real_dev = real_dev;
+		netdev_hold(real_dev, &inst->dev_tracker, GFP_ATOMIC);
+		list_add_tail(&inst->list, &ipsec->inst_list);
+		count++;
+	}
+	rcu_read_unlock();
+
+	if (!err && !count)
+		err = -ENODEV;
+	if (err) {
+		if (err == -EOPNOTSUPP)
+			NL_SET_ERR_MSG_MOD(extack, "Not all slaves support IPsec offload");
+		goto err_free_unlock;
+	}
+
+	list_for_each_entry(inst, &ipsec->inst_list, list) {
+		err = bond_ipsec_lag_add_inst(xs, inst, extack);
+		if (err)
+			goto err_delete;
+	}
+
+	xs->xso.real_dev = NULL;
+	xs->xso.offload_handle = 0;
+	if (!bond_mode_can_use_lag_xfrm(bond)) {
+		err = -EAGAIN;
+		NL_SET_ERR_MSG_MOD(extack, "Bond LAG XFRM eligibility changed");
+		goto err_delete;
+	}
+	rcu_assign_pointer(xs->xso.upper_priv, ipsec);
+	list_add(&ipsec->list, &bond->ipsec_list);
+	mutex_unlock(&bond->ipsec_lock);
+
+	return 0;
+
+err_delete:
+	bond_ipsec_lag_call_state(xs, ipsec, true, true);
+	xs->xso.real_dev = NULL;
+	xs->xso.offload_handle = 0;
+	RCU_INIT_POINTER(xs->xso.upper_priv, NULL);
+err_free_unlock:
+	mutex_unlock(&bond->ipsec_lock);
+	bond_ipsec_lag_free_instances(ipsec);
+	kfree(ipsec);
+	return err;
+}
+
+static void bond_ipsec_lag_flush_pending(struct bonding *bond)
+{
+	struct bond_ipsec *ipsec, *tmp;
+
+	/* Caller must hold ipsec_lock to serialize with LAG SA add. */
+	list_for_each_entry_safe(ipsec, tmp, &bond->ipsec_list, list) {
+		struct xfrm_dev_offload *xso;
+		struct xfrm_state *xs;
+		struct net *net;
+		bool pending;
+
+		if (!ipsec->replicated)
+			continue;
+
+		xs = ipsec->xs;
+		net = xs_net(xs);
+		spin_lock_bh(&net->xfrm.xfrm_state_lock);
+		pending = hlist_unhashed(&xs->bydst) &&
+			  xs->km.state != XFRM_STATE_DEAD;
+		spin_unlock_bh(&net->xfrm.xfrm_state_lock);
+		if (!pending)
+			continue;
+
+		xso = &xs->xso;
+		list_del(&ipsec->list);
+		RCU_INIT_POINTER(xso->upper_priv, NULL);
+		bond_ipsec_lag_call_state(xs, ipsec, true, true);
+		bond_ipsec_lag_free_instances(ipsec);
+		call_rcu(&ipsec->rcu, bond_ipsec_rcu_free);
+
+		xso->real_dev = NULL;
+		xso->offload_handle = 0;
+		if (xso->dev == bond->dev) {
+			WRITE_ONCE(xso->dev, NULL);
+			xso->dir = 0;
+			xso->type = XFRM_DEV_OFFLOAD_UNSPECIFIED;
+			netdev_put(bond->dev, &xso->dev_tracker);
+			xfrm_unset_type_offload(xs);
+		}
+	}
+}
+
+void bond_ipsec_lag_begin_flush(struct bonding *bond)
+{
+	mutex_lock(&bond->ipsec_lock);
+	bond->ipsec_lag_blocked = true;
+	bond_ipsec_lag_flush_pending(bond);
+	mutex_unlock(&bond->ipsec_lock);
+}
+
+void bond_ipsec_lag_end_flush(struct bonding *bond)
+{
+	mutex_lock(&bond->ipsec_lock);
+	bond->ipsec_lag_blocked = false;
+	mutex_unlock(&bond->ipsec_lock);
+}
+
+static void bond_ipsec_lag_remove_slave(struct bonding *bond,
+					struct net_device *real_dev)
+{
+	struct bond_ipsec_inst *inst, *tmp;
+	struct bond_ipsec *ipsec;
+	bool removed = false;
+
+	if (!bond_mode_can_use_lag_xfrm(bond))
+		return;
+
+	mutex_lock(&bond->ipsec_lock);
+	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
+		if (!ipsec->replicated)
+			continue;
+
+		list_for_each_entry(inst, &ipsec->inst_list, list) {
+			if (inst->real_dev != real_dev)
+				continue;
+
+			WRITE_ONCE(inst->added, false);
+			removed = true;
+		}
+	}
+	if (!removed)
+		goto out;
+
+	synchronize_net();
+
+	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
+		if (!ipsec->replicated)
+			continue;
+
+		list_for_each_entry_safe(inst, tmp, &ipsec->inst_list, list) {
+			if (inst->real_dev != real_dev)
+				continue;
+
+			bond_ipsec_lag_call_inst(ipsec->xs, inst, true, true);
+			list_del_rcu(&inst->list);
+			call_rcu(&inst->rcu, bond_ipsec_inst_rcu_free);
+		}
+	}
+out:
+	mutex_unlock(&bond->ipsec_lock);
+}
+
+static int bond_ipsec_lag_add_slave(struct bonding *bond,
+				    struct slave *slave,
+				    struct netlink_ext_ack *extack)
+{
+	struct net_device *real_dev = slave->dev;
+	struct bond_ipsec_inst *inst;
+	struct bond_ipsec *ipsec;
+	bool have_states = false;
+	bool slave_ok;
+	int err = 0;
+
+	if (!bond_mode_can_use_lag_xfrm(bond) || !netif_running(real_dev))
+		return 0;
+
+	slave_ok = bond_ipsec_lag_slave_ok(real_dev);
+
+	mutex_lock(&bond->ipsec_lock);
+	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
+		bool found = false;
+
+		if (!ipsec->replicated)
+			continue;
+		have_states = true;
+
+		if (ipsec->xs->km.state == XFRM_STATE_DEAD)
+			continue;
+
+		if (!slave_ok) {
+			err = -EOPNOTSUPP;
+			break;
+		}
+
+		list_for_each_entry(inst, &ipsec->inst_list, list) {
+			if (inst->real_dev == real_dev) {
+				found = true;
+				break;
+			}
+		}
+		if (found)
+			continue;
+
+		inst = kzalloc_obj(*inst, GFP_KERNEL);
+		if (!inst) {
+			err = -ENOMEM;
+			break;
+		}
+
+		inst->real_dev = real_dev;
+		netdev_hold(real_dev, &inst->dev_tracker, GFP_KERNEL);
+
+		err = bond_ipsec_lag_add_inst(ipsec->xs, inst, extack);
+		if (err) {
+			netdev_put(real_dev, &inst->dev_tracker);
+			kfree(inst);
+			break;
+		}
+
+		list_add_tail_rcu(&inst->list, &ipsec->inst_list);
+	}
+	mutex_unlock(&bond->ipsec_lock);
+
+	if (err && have_states) {
+		slave_warn(bond->dev, real_dev,
+			   "failed to replicate IPsec SA, flushing bond states\n");
+		bond_ipsec_lag_begin_flush(bond);
+		xfrm_dev_state_flush(dev_net(bond->dev), bond->dev, true);
+		bond_ipsec_lag_end_flush(bond);
+	}
+
+	return err;
+}
+
 /**
  * bond_ipsec_add_sa - program device with a security association
  * @bond_dev: pointer to the bond net device
@@ -475,8 +901,15 @@ static int bond_ipsec_add_sa(struct net_device *bond_dev,
 	if (!bond_dev)
 		return -EINVAL;
 
-	rcu_read_lock();
 	bond = netdev_priv(bond_dev);
+	if (bond_mode_can_use_lag_xfrm(bond))
+		return bond_ipsec_lag_add_sa(bond_dev, xs, extack);
+	if (BOND_MODE(bond) != BOND_MODE_ACTIVEBACKUP) {
+		NL_SET_ERR_MSG_MOD(extack, "Bond mode does not support IPsec offload");
+		return -EOPNOTSUPP;
+	}
+
+	rcu_read_lock();
 	slave = rcu_dereference(bond->curr_active_slave);
 	real_dev = slave ? slave->dev : NULL;
 	netdev_hold(real_dev, &tracker, GFP_ATOMIC);
@@ -504,7 +937,9 @@ static int bond_ipsec_add_sa(struct net_device *bond_dev,
 	if (!err) {
 		xs->xso.real_dev = real_dev;
 		ipsec->xs = xs;
+		ipsec->replicated = false;
 		INIT_LIST_HEAD(&ipsec->list);
+		INIT_LIST_HEAD(&ipsec->inst_list);
 		mutex_lock(&bond->ipsec_lock);
 		list_add(&ipsec->list, &bond->ipsec_list);
 		mutex_unlock(&bond->ipsec_lock);
@@ -523,6 +958,9 @@ static void bond_ipsec_add_sa_all(struct bonding *bond)
 	struct bond_ipsec *ipsec;
 	struct slave *slave;
 
+	if (BOND_MODE(bond) != BOND_MODE_ACTIVEBACKUP)
+		return;
+
 	slave = rtnl_dereference(bond->curr_active_slave);
 	real_dev = slave ? slave->dev : NULL;
 	if (!real_dev)
@@ -540,6 +978,9 @@ static void bond_ipsec_add_sa_all(struct bonding *bond)
 	}
 
 	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
+		if (ipsec->replicated)
+			continue;
+
 		/* If new state is added before ipsec_lock acquired */
 		if (ipsec->xs->xso.real_dev == real_dev)
 			continue;
@@ -568,6 +1009,19 @@ out:
 	mutex_unlock(&bond->ipsec_lock);
 }
 
+static struct bond_ipsec *bond_ipsec_find(struct bonding *bond,
+					  struct xfrm_state *xs)
+{
+	struct bond_ipsec *ipsec;
+
+	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
+		if (ipsec->xs == xs)
+			return ipsec;
+	}
+
+	return NULL;
+}
+
 /**
  * bond_ipsec_del_sa - clear out this specific SA
  * @bond_dev: pointer to the bond net device
@@ -577,8 +1031,24 @@ static void bond_ipsec_del_sa(struct net_device *bond_dev,
 			      struct xfrm_state *xs)
 {
 	struct net_device *real_dev;
+	struct bond_ipsec *ipsec;
+	struct bonding *bond;
 
-	if (!bond_dev || !xs->xso.real_dev)
+	if (!bond_dev)
+		return;
+
+	bond = netdev_priv(bond_dev);
+
+	mutex_lock(&bond->ipsec_lock);
+	ipsec = bond_ipsec_find(bond, xs);
+	if (ipsec && ipsec->replicated) {
+		bond_ipsec_lag_call_state(xs, ipsec, true, false);
+		mutex_unlock(&bond->ipsec_lock);
+		return;
+	}
+	mutex_unlock(&bond->ipsec_lock);
+
+	if (!xs->xso.real_dev)
 		return;
 
 	real_dev = xs->xso.real_dev;
@@ -600,6 +1070,9 @@ static void bond_ipsec_del_sa_all(struct bonding *bond)
 	struct bond_ipsec *ipsec;
 	struct slave *slave;
 
+	if (BOND_MODE(bond) != BOND_MODE_ACTIVEBACKUP)
+		return;
+
 	slave = rtnl_dereference(bond->curr_active_slave);
 	real_dev = slave ? slave->dev : NULL;
 	if (!real_dev)
@@ -607,6 +1080,9 @@ static void bond_ipsec_del_sa_all(struct bonding *bond)
 
 	mutex_lock(&bond->ipsec_lock);
 	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
+		if (ipsec->replicated)
+			continue;
+
 		if (!ipsec->xs->xso.real_dev)
 			continue;
 
@@ -647,23 +1123,33 @@ static void bond_ipsec_free_sa(struct net_device *bond_dev,
 	bond = netdev_priv(bond_dev);
 
 	mutex_lock(&bond->ipsec_lock);
-	if (!xs->xso.real_dev)
+	ipsec = bond_ipsec_find(bond, xs);
+	if (ipsec && ipsec->replicated) {
+		list_del(&ipsec->list);
+		RCU_INIT_POINTER(xs->xso.upper_priv, NULL);
+		bond_ipsec_lag_call_state(xs, ipsec, false, true);
+		bond_ipsec_lag_free_instances(ipsec);
+		call_rcu(&ipsec->rcu, bond_ipsec_rcu_free);
+		xs->xso.real_dev = NULL;
+		xs->xso.offload_handle = 0;
 		goto out;
+	}
 
 	real_dev = xs->xso.real_dev;
+	if (!real_dev)
+		goto free_ipsec;
 
 	xs->xso.real_dev = NULL;
 	if (real_dev->xfrmdev_ops &&
 	    real_dev->xfrmdev_ops->xdo_dev_state_free)
 		real_dev->xfrmdev_ops->xdo_dev_state_free(real_dev, xs);
-out:
-	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
-		if (ipsec->xs == xs) {
-			list_del(&ipsec->list);
-			kfree(ipsec);
-			break;
-		}
+
+free_ipsec:
+	if (ipsec) {
+		list_del(&ipsec->list);
+		kfree(ipsec);
 	}
+out:
 	mutex_unlock(&bond->ipsec_lock);
 }
 
@@ -674,7 +1160,17 @@ out:
  **/
 static bool bond_ipsec_offload_ok(struct sk_buff *skb, struct xfrm_state *xs)
 {
+	struct net_device *bond_dev = xs->xso.dev;
 	struct net_device *real_dev;
+	struct bonding *bond;
+
+	if (!bond_dev)
+		return false;
+
+	bond = netdev_priv(bond_dev);
+	if (bond_mode_can_use_lag_xfrm(bond))
+		return xs->xso.type == XFRM_DEV_OFFLOAD_CRYPTO &&
+		       rcu_access_pointer(xs->xso.upper_priv);
 
 	rcu_read_lock();
 	real_dev = bond_ipsec_dev(xs);
@@ -735,6 +1231,47 @@ out:
 	rcu_read_unlock();
 }
 
+/*
+ * xdo_dev_state_lower_handle implementation for bond-owned XFRM states.
+ * lower_dev is the slave selected by the lower driver datapath. Replicated LAG
+ * state is resolved from the bond private instance list. Single-lower
+ * active-backup state is resolved from xso.real_dev/offload_handle here because
+ * xfrm_dev_state_lower_handle() delegates all bond-owned lookups to bonding.
+ */
+static unsigned long bond_ipsec_lower_handle(struct net_device *bond_dev,
+					     struct xfrm_state *xs,
+					     struct net_device *lower_dev)
+{
+	struct bonding *bond = netdev_priv(bond_dev);
+	struct bond_ipsec_inst *inst;
+	struct bond_ipsec *ipsec;
+	unsigned long handle = 0;
+
+	if (BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP) {
+		struct net_device *real_dev = READ_ONCE(xs->xso.real_dev);
+
+		return real_dev == lower_dev ? READ_ONCE(xs->xso.offload_handle) : 0;
+	}
+	if (!bond_mode_can_use_lag_xfrm(bond))
+		return 0;
+
+	rcu_read_lock();
+	ipsec = rcu_dereference(xs->xso.upper_priv);
+	if (!ipsec || !ipsec->replicated || ipsec->xs != xs)
+		goto out;
+
+	list_for_each_entry_rcu(inst, &ipsec->inst_list, list) {
+		if (READ_ONCE(inst->added) && inst->real_dev == lower_dev) {
+			handle = inst->lower_handle;
+			break;
+		}
+	}
+
+out:
+	rcu_read_unlock();
+	return handle;
+}
+
 static const struct xfrmdev_ops bond_xfrmdev_ops = {
 	.xdo_dev_state_add = bond_ipsec_add_sa,
 	.xdo_dev_state_delete = bond_ipsec_del_sa,
@@ -742,7 +1279,25 @@ static const struct xfrmdev_ops bond_xfrmdev_ops = {
 	.xdo_dev_offload_ok = bond_ipsec_offload_ok,
 	.xdo_dev_state_advance_esn = bond_advance_esn_state,
 	.xdo_dev_state_update_stats = bond_xfrm_update_stats,
+	.xdo_dev_state_lower_handle = bond_ipsec_lower_handle,
 };
+#else
+static void bond_ipsec_lag_remove_slave(struct bonding *bond,
+					struct net_device *real_dev)
+{
+}
+
+static int bond_ipsec_lag_add_slave(struct bonding *bond,
+				    struct slave *slave,
+				    struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+
+static void bond_sync_slave_xfrm_features(struct bonding *bond,
+					  struct slave *slave)
+{
+}
 #endif /* CONFIG_XFRM_OFFLOAD */
 
 /*------------------------------- Link status -------------------------------*/
@@ -6006,10 +6561,11 @@ void bond_setup(struct net_device *bond_dev)
 	bond_dev->priv_flags &= ~(IFF_XMIT_DST_RELEASE | IFF_TX_SKB_SHARING);
 
 #ifdef CONFIG_XFRM_OFFLOAD
-	/* set up xfrm device ops (only supported in active-backup right now) */
+	/* set up xfrm device ops */
 	bond_dev->xfrmdev_ops = &bond_xfrmdev_ops;
 	INIT_LIST_HEAD(&bond->ipsec_list);
 	mutex_init(&bond->ipsec_lock);
+	bond->ipsec_lag_blocked = false;
 #endif /* CONFIG_XFRM_OFFLOAD */
 
 	/* don't acquire bond device's netif_tx_lock when transmitting */
