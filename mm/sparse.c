@@ -216,7 +216,8 @@ static void __init memblocks_present(void)
 
 static unsigned long usemap_size(void)
 {
-	return BITS_TO_LONGS(SECTION_BLOCKFLAGS_BITS) * sizeof(unsigned long);
+	return (1UL << (PFN_SECTION_SHIFT - pageblock_order)) *
+		sizeof(struct pageblock_data);
 }
 
 size_t mem_section_usage_size(void)
