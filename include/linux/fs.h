@@ -1171,6 +1171,12 @@ static inline void i_size_write(struct inode *inode, loff_t i_size)
 #endif
 }
 
+static inline unsigned long dir_pages(const struct inode *inode)
+{
+	return (unsigned long)(inode->i_size + PAGE_SIZE - 1) >>
+			       PAGE_SHIFT;
+}
+
 static inline unsigned iminor(const struct inode *inode)
 {
 	return MINOR(inode->i_rdev);

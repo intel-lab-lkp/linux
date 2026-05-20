@@ -1356,12 +1356,6 @@ static inline size_t readahead_batch_length(const struct readahead_control *rac)
 	return rac->_batch_count * PAGE_SIZE;
 }
 
-static inline unsigned long dir_pages(const struct inode *inode)
-{
-	return (unsigned long)(inode->i_size + PAGE_SIZE - 1) >>
-			       PAGE_SHIFT;
-}
-
 /**
  * folio_mkwrite_check_truncate - check if folio was truncated
  * @folio: the folio to check
