@@ -2330,6 +2330,73 @@ static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags
 /* Bounded scan limit when searching free lists for tainted superpageblock pages */
 #define SPB_SCAN_LIMIT 8
 
+/**
+ * sb_preferred_for_movable - Find the fullest clean superpageblock for movable
+ * @zone: zone to search
+ *
+ * Walk spb_lists[CLEAN] from nearly full toward emptiest -- pack movable
+ * allocations into already-partial superpageblocks before starting new ones.
+ * Skip SB_FULL since those have no free pageblocks.
+ * Returns NULL if no suitable superpageblock found.
+ */
+static struct superpageblock *sb_preferred_for_movable(struct zone *zone)
+{
+	int full;
+	struct superpageblock *sb;
+
+	for (full = SB_FULL_75; full < __NR_SB_FULLNESS; full++) {
+		list_for_each_entry(sb, &zone->spb_lists[SB_CLEAN][full], list) {
+			if (sb->nr_free)
+				return sb;
+		}
+	}
+	/* Fall back to empty superpageblocks -- no clean partials available */
+	return NULL;
+}
+
+/**
+ * __rmqueue_from_sb - Try to allocate a page from a specific superpageblock
+ * @zone: zone to allocate from
+ * @order: allocation order
+ * @migratetype: type to allocate
+ * @sb: preferred superpageblock
+ *
+ * Scan the free list at the given order for a page within the superpageblock's
+ * PFN range. Bounded scan to avoid excessive latency. Returns NULL if
+ * no suitable page found.
+ */
+static struct page *__rmqueue_from_sb(struct zone *zone, unsigned int order,
+				      int migratetype, struct superpageblock *sb)
+{
+	unsigned int current_order;
+	unsigned long sb_start = sb->start_pfn;
+	unsigned long sb_end = sb_start + (1UL << SUPERPAGEBLOCK_ORDER);
+	struct free_area *area;
+	struct page *page;
+	int scanned;
+
+	for (current_order = order; current_order < NR_PAGE_ORDERS;
+	     ++current_order) {
+		area = &zone->free_area[current_order];
+		scanned = 0;
+
+		list_for_each_entry(page, &area->free_list[migratetype],
+				    buddy_list) {
+			unsigned long pfn = page_to_pfn(page);
+
+			if (pfn >= sb_start && pfn < sb_end) {
+				page_del_and_expand(zone, page, order,
+						    current_order,
+						    migratetype);
+				return page;
+			}
+			if (++scanned >= SPB_SCAN_LIMIT)
+				break;
+		}
+	}
+	return NULL;
+}
+
 /*
  * Go through the free lists for the given migratetype and remove
  * the smallest available page from the freelists
@@ -3119,12 +3186,26 @@ static bool rmqueue_bulk(struct zone *zone, unsigned int order,
 	 * small zones, pages_needed can be less than a whole
 	 * pageblock; skip to smaller blocks or individual pages to
 	 * avoid overshooting the PCP high watermark.
+	 *
+	 * For movable allocations, prefer pageblocks from the
+	 * fullest clean superpageblock to pack allocations and
+	 * preserve empty superpageblocks for 1GB hugepages.
 	 */
 	while (refilled + pageblock_nr_pages <= pages_needed) {
-		struct page *page;
+		struct page *page = NULL;
 
-		page = __rmqueue(zone, pageblock_order,
-				 migratetype, alloc_flags, &rmqm);
+		if (migratetype == MIGRATE_MOVABLE) {
+			struct superpageblock *sb;
+
+			sb = sb_preferred_for_movable(zone);
+			if (sb)
+				page = __rmqueue_from_sb(zone, pageblock_order,
+							 migratetype, sb);
+		}
+		if (!page)
+			page = __rmqueue(zone, pageblock_order,
+					 migratetype,
+					 alloc_flags, &rmqm);
 		if (!page)
 			break;
 
@@ -5842,6 +5923,8 @@ unsigned long alloc_pages_bulk_noprof(gfp_t gfp, int preferred_nid,
 	if (!prepare_alloc_pages(gfp, 0, preferred_nid, nodemask, &ac, &alloc_gfp, &alloc_flags))
 		goto out;
 	gfp = alloc_gfp;
+
+	alloc_flags |= alloc_flags_nofragment(zonelist_zone(ac.preferred_zoneref), gfp);
 
 	/* Find an allowed local zone that meets the low watermark. */
 	z = ac.preferred_zoneref;
