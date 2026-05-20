@@ -9650,6 +9650,7 @@ static struct saved_alias *alias_list;
 int sysfs_slab_alias(struct kmem_cache *s, const char *name)
 {
 	struct saved_alias *al;
+	const char *al_name;
 
 	if (slab_state == FULL) {
 		/*
@@ -9668,8 +9669,27 @@ int sysfs_slab_alias(struct kmem_cache *s, const char *name)
 	if (!al)
 		return -ENOMEM;
 
+	al_name = kstrdup_const(name, GFP_KERNEL);
+	if (!al_name) {
+		kfree(al);
+		return -ENOMEM;
+	}
+
+	if (strchr(al_name, '/')) {
+		char *n;
+
+		n = kstrdup(al_name, GFP_KERNEL);
+		kfree_const(al_name);
+		if (!n) {
+			kfree(al);
+			return -ENOMEM;
+		}
+
+		al_name = strreplace(n, '/', '_');
+	}
+
 	al->s = s;
-	al->name = name;
+	al->name = al_name;
 	al->next = alias_list;
 	alias_list = al;
 	kmsan_unpoison_memory(al, sizeof(*al));
@@ -9707,6 +9727,7 @@ static int __init slab_sysfs_init(void)
 		if (err)
 			pr_err("SLUB: Unable to add boot slab alias %s to sysfs\n",
 			       al->name);
+		kfree_const(al->name);
 		kfree(al);
 	}
 
