@@ -368,9 +368,16 @@ static int fbnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		dev_err(&pdev->dev, "Netdev registration failed: %d\n", err);
 		goto ifm_destroy_ptp;
 	}
+	err = fbnic_led_init(fbd);
+	if (err) {
+		dev_err(&pdev->dev, "led init failed: %d\n", err);
+		goto led_init_fail;
+	}
 
 	return 0;
 
+led_init_fail:
+	fbnic_netdev_unregister(netdev);
 ifm_destroy_ptp:
 	fbnic_ptp_destroy(fbd);
 ifm_free_netdev:
@@ -408,6 +415,7 @@ static void fbnic_remove(struct pci_dev *pdev)
 	if (!fbnic_init_failure(fbd)) {
 		struct net_device *netdev = fbd->netdev;
 
+		fbnic_led_exit(fbd);
 		fbnic_netdev_unregister(netdev);
 		cancel_delayed_work_sync(&fbd->service_task);
 		fbnic_ptp_destroy(fbd);

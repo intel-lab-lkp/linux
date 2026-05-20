@@ -26,3 +26,5 @@ fbnic-y := fbnic_csr.o \
 	   fbnic_tlv.o \
 	   fbnic_txrx.o \
 # End of objects
+
+fbnic-$(CONFIG_FBNIC_LEDS) += fbnic_led.o
