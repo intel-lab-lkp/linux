@@ -27,6 +27,7 @@
 #include <uapi/linux/vmclock-abi.h>
 
 #include <linux/ptp_clock_kernel.h>
+#include <linux/timekeeping_reference.h>
 
 #ifdef CONFIG_X86
 #include <asm/pvclock.h>
@@ -48,6 +49,7 @@ struct vmclock_state {
 	wait_queue_head_t disrupt_wait;
 	struct ptp_clock_info ptp_clock_info;
 	struct ptp_clock *ptp_clock;
+	struct timer_list cmp_timer;
 	enum clocksource_ids cs_id, sys_cs_id;
 	int index;
 	char *name;
@@ -334,6 +336,92 @@ static const struct ptp_clock_info ptp_vmclock_info = {
 	.getcrosststamp = ptp_vmclock_getcrosststamp,
 };
 
+static void vmclock_cmp_timer_fn(struct timer_list *t)
+{
+	struct vmclock_state *st = container_of(t, struct vmclock_state, cmp_timer);
+	struct vmclock_abi *clk = st->clk;
+	struct system_time_snapshot snap;
+	unsigned __int128 product;
+	u64 delta, ref_frac, ref_ns, sys_ns;
+	s64 diff;
+	u32 seq;
+
+	do {
+		seq = le32_to_cpu(READ_ONCE(clk->seq_count));
+		if (seq & 1)
+			goto rearm;
+		/* Pairs with the smp_wmb() in the vmclock page writer */
+		smp_rmb();
+
+		ktime_get_snapshot(&snap);
+		if (snap.cs_id != st->cs_id)
+			goto rearm;
+
+		delta = snap.cycles - le64_to_cpu(clk->counter_value);
+		product = (unsigned __int128)delta *
+			  le64_to_cpu(clk->counter_period_frac_sec);
+		product >>= clk->counter_period_shift;
+		product += le64_to_cpu(clk->time_frac_sec);
+		ref_frac = (u64)product;
+		ref_ns = mul_u64_u64_shr(ref_frac, NSEC_PER_SEC, 64);
+		ref_ns += (le64_to_cpu(clk->time_sec) +
+			   (u64)(product >> 64)) * NSEC_PER_SEC;
+		/* Pairs with the smp_wmb() in the vmclock page writer */
+		smp_rmb();
+		if (seq != le32_to_cpu(READ_ONCE(clk->seq_count)))
+			goto rearm;
+	} while (0);
+
+	sys_ns = ktime_to_ns(snap.real) -
+		 (s64)(int16_t)le16_to_cpu(clk->tai_offset_sec) * NSEC_PER_SEC;
+	diff = (s64)(ref_ns - sys_ns);
+	pr_info("vmclock_cmp: diff=%lldns tsc=%llx\n", diff, snap.cycles);
+
+rearm:
+	mod_timer(&st->cmp_timer, jiffies + msecs_to_jiffies(500));
+}
+
+static void vmclock_set_tk_reference(struct vmclock_state *st)
+{
+	struct vmclock_abi *clk = st->clk;
+	struct tk_reference ref = {
+		.cs_id = st->cs_id,
+		.counter_value = le64_to_cpu(clk->counter_value),
+		.time_sec = le64_to_cpu(clk->time_sec),
+		.time_frac_sec = le64_to_cpu(clk->time_frac_sec),
+		.period_frac_sec = le64_to_cpu(clk->counter_period_frac_sec),
+		.period_shift = clk->counter_period_shift,
+	};
+
+	/* Convert TAI to UTC for comparison with xtime_sec */
+	if (clk->time_type == VMCLOCK_TIME_TAI &&
+	    (le64_to_cpu(clk->flags) & VMCLOCK_FLAG_TAI_OFFSET_VALID))
+		ref.time_sec += (int16_t)le16_to_cpu(clk->tai_offset_sec);
+
+	if (clk->clock_status != VMCLOCK_STATUS_UNRELIABLE) {
+		/* Step clock if far from reference */
+		struct timespec64 now, vmtime;
+		unsigned __int128 product;
+		u64 cycles = get_cycles();
+		u64 delta_cycles = cycles - ref.counter_value;
+		s64 delta_ns;
+
+		product = (unsigned __int128)delta_cycles * ref.period_frac_sec;
+		product >>= ref.period_shift;
+		product += ref.time_frac_sec;
+		vmtime.tv_sec = ref.time_sec + (u64)(product >> 64);
+		vmtime.tv_nsec = mul_u64_u64_shr((u64)product,
+						  NSEC_PER_SEC, 64);
+
+		ktime_get_real_ts64(&now);
+		delta_ns = timespec64_to_ns(&vmtime) - timespec64_to_ns(&now);
+		if (delta_ns > 100000000 || delta_ns < -100000000)
+			do_settimeofday64(&vmtime);
+
+		timekeeping_set_reference(&ref);
+	}
+}
+
 static struct ptp_clock *vmclock_ptp_register(struct device *dev,
 					      struct vmclock_state *st)
 {
@@ -525,6 +613,7 @@ vmclock_acpi_notification_handler(acpi_handle __always_unused handle,
 	struct device *device = dev;
 	struct vmclock_state *st = device->driver_data;
 
+	vmclock_set_tk_reference(st);
 	wake_up_interruptible(&st->disrupt_wait);
 }
 
@@ -580,6 +669,7 @@ static irqreturn_t vmclock_of_irq_handler(int __always_unused irq, void *_st)
 {
 	struct vmclock_state *st = _st;
 
+	vmclock_set_tk_reference(st);
 	wake_up_interruptible(&st->disrupt_wait);
 	return IRQ_HANDLED;
 }
@@ -751,7 +841,12 @@ static int vmclock_probe(struct platform_device *pdev)
 			st->ptp_clock = NULL;
 			return ret;
 		}
+		if (st->ptp_clock)
+			vmclock_set_tk_reference(st);
 	}
+
+	timer_setup(&st->cmp_timer, vmclock_cmp_timer_fn, 0);
+	mod_timer(&st->cmp_timer, jiffies + msecs_to_jiffies(500));
 
 	if (!st->miscdev.minor && !st->ptp_clock) {
 		/* Neither miscdev nor PTP registered */
