@@ -6853,10 +6853,8 @@ static int virtnet_probe(struct virtio_device *vdev)
 				rss_max_indirection_table_length));
 	}
 	vi->rss_hdr = devm_kzalloc(&vdev->dev, virtnet_rss_hdr_size(vi), GFP_KERNEL);
-	if (!vi->rss_hdr) {
-		err = -ENOMEM;
+	if (!vi->rss_hdr)
 		goto free;
-	}
 
 	if (vi->has_rss || vi->has_rss_hash_report) {
 		key_sz = virtio_cread8(vdev, offsetof(struct virtio_net_config, rss_max_key_size));
