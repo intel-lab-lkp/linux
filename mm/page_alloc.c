@@ -457,6 +457,62 @@ void clear_pfnblock_bit(const struct page *page, unsigned long pfn,
 	clear_bit(pb_bit, get_pfnblock_flags_word(page, pfn));
 }
 
+/*
+ * Map migratetype to PB_has_* bit index. Returns -1 for types that
+ * don't have a tracking bit (e.g. MIGRATE_ISOLATE).
+ */
+static inline int migratetype_to_has_bit(int migratetype)
+{
+	switch (migratetype) {
+	case MIGRATE_UNMOVABLE:
+	case MIGRATE_HIGHATOMIC:
+		return PB_has_unmovable;
+	case MIGRATE_RECLAIMABLE:
+		return PB_has_reclaimable;
+	case MIGRATE_MOVABLE:
+#ifdef CONFIG_CMA
+	case MIGRATE_CMA:
+#endif
+		return PB_has_movable;
+	default:
+		return -1;
+	}
+}
+
+/*
+ * __spb_set_has_type - set PB_has_* and increment type counter
+ *
+ * Idempotent: only increments the counter on the 0→1 bit transition.
+ */
+static void __spb_set_has_type(struct page *page, int migratetype)
+{
+	unsigned long pfn = page_to_pfn(page);
+	struct superpageblock *sb = pfn_to_superpageblock(page_zone(page), pfn);
+	int bit;
+
+	if (!sb)
+		return;
+
+	bit = migratetype_to_has_bit(migratetype);
+	if (bit < 0)
+		return;
+
+	if (!get_pfnblock_bit(page, pfn, bit)) {
+		set_pfnblock_bit(page, pfn, bit);
+		switch (bit) {
+		case PB_has_unmovable:
+			sb->nr_unmovable++;
+			break;
+		case PB_has_reclaimable:
+			sb->nr_reclaimable++;
+			break;
+		case PB_has_movable:
+			sb->nr_movable++;
+			break;
+		}
+	}
+}
+
 /**
  * set_pageblock_migratetype - Set the migratetype of a pageblock
  * @page: The page within the block of interest
@@ -490,6 +546,7 @@ void __meminit init_pageblock_migratetype(struct page *page,
 {
 	unsigned long pfn = page_to_pfn(page);
 	struct pageblock_data *pbd;
+	struct superpageblock *sb;
 	unsigned long flags;
 
 	if (unlikely(page_group_by_mobility_disabled &&
@@ -513,6 +570,14 @@ void __meminit init_pageblock_migratetype(struct page *page,
 	pbd = pfn_to_pageblock(page, pfn);
 	pbd->block_pfn = pfn;
 	INIT_LIST_HEAD(&pbd->cpu_node);
+
+	/* Transition from reserved (boot default) to initial migratetype */
+	sb = pfn_to_superpageblock(page_zone(page), pfn);
+	if (sb) {
+		if (sb->nr_reserved)
+			sb->nr_reserved--;
+		__spb_set_has_type(page, migratetype);
+	}
 }
 
 #ifdef CONFIG_DEBUG_VM

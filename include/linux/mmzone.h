@@ -974,6 +974,43 @@ enum zone_type {
 
 #define ASYNC_AND_SYNC 2
 
+/*
+ * Superpageblock: 1GB (PUD-sized) region for anti-fragmentation tracking.
+ *
+ * Groups pageblocks to steer unmovable/reclaimable allocations into
+ * already-tainted superpageblocks, preserving clean superpageblocks for 1GB
+ * hugepage allocation.
+ *
+ * SUPERPAGEBLOCK_ORDER derived from PUD geometry:
+ *   x86_64: PUD_SHIFT=30, PAGE_SHIFT=12 → order 18 → 1GB
+ *   Each superpageblock contains SUPERPAGEBLOCK_NR_PAGEBLOCKS pageblocks
+ *   (512 on x86_64 with 2MB pageblocks).
+ */
+#define SUPERPAGEBLOCK_ORDER	(PUD_SHIFT - PAGE_SHIFT)
+#define SUPERPAGEBLOCK_NR_PAGES	(1UL << SUPERPAGEBLOCK_ORDER)
+
+/*
+ * SUPERPAGEBLOCK_NR_PAGEBLOCKS depends on pageblock_order which may be
+ * variable (CONFIG_HUGETLB_PAGE_SIZE_VARIABLE).
+ */
+#define SUPERPAGEBLOCK_NR_PAGEBLOCKS (1UL << (SUPERPAGEBLOCK_ORDER - pageblock_order))
+
+struct superpageblock {
+	/* Pageblock counts by current migratetype */
+	u16			nr_free;
+	u16			nr_unmovable;
+	u16			nr_reclaimable;
+	u16			nr_movable;
+	u16			nr_reserved;	/* holes, firmware, etc. */
+
+	/* For organizing superpageblocks by fullness category */
+	struct list_head	list;
+
+	/* Identity */
+	unsigned long		start_pfn;
+	struct zone		*zone;
+};
+
 struct zone {
 	/* Read-mostly fields */
 
@@ -1015,6 +1052,11 @@ struct zone {
 	 */
 	struct pageblock_data	*pageblock_data;
 #endif /* CONFIG_SPARSEMEM */
+
+	/* Superpageblock array for 1GB anti-fragmentation tracking */
+	struct superpageblock	*superpageblocks;
+	unsigned long		nr_superpageblocks;
+	unsigned long		superpageblock_base_pfn; /* 1GB-aligned base */
 
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
 	unsigned long		zone_start_pfn;
@@ -1158,6 +1200,21 @@ struct zone {
 	struct page *vmemmap_tails[NR_VMEMMAP_TAILS];
 #endif
 } ____cacheline_internodealigned_in_smp;
+
+static inline struct superpageblock *pfn_to_superpageblock(struct zone *zone,
+						   unsigned long pfn)
+{
+	unsigned long idx;
+
+	if (!zone->superpageblocks)
+		return NULL;
+
+	idx = (pfn - zone->superpageblock_base_pfn) >> SUPERPAGEBLOCK_ORDER;
+	if (idx >= zone->nr_superpageblocks)
+		return NULL;
+
+	return &zone->superpageblocks[idx];
+}
 
 enum pgdat_flags {
 	PGDAT_WRITEBACK,		/* reclaim scanning has recently found
