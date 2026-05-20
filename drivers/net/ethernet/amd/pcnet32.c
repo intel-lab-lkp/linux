@@ -1220,13 +1220,12 @@ static void pcnet32_rx_entry(struct net_device *dev,
 		struct sk_buff *newskb;
 		dma_addr_t new_dma_addr;
 
-		newskb = netdev_alloc_skb(dev, PKT_BUF_SKB);
+		newskb = napi_alloc_skb(&lp->napi, PKT_BUF_SIZE);
 		/*
 		 * map the new buffer, if mapping fails, drop the packet and
 		 * reuse the old buffer
 		 */
 		if (newskb) {
-			skb_reserve(newskb, NET_IP_ALIGN);
 			new_dma_addr = dma_map_single(&lp->pci_dev->dev,
 						      newskb->data,
 						      PKT_BUF_SIZE,
@@ -1251,14 +1250,13 @@ static void pcnet32_rx_entry(struct net_device *dev,
 		} else
 			skb = NULL;
 	} else
-		skb = netdev_alloc_skb(dev, pkt_len + NET_IP_ALIGN);
+		skb = napi_alloc_skb(&lp->napi, pkt_len);
 
 	if (!skb) {
 		dev->stats.rx_dropped++;
 		return;
 	}
 	if (!rx_in_place) {
-		skb_reserve(skb, NET_IP_ALIGN);
 		skb_put(skb, pkt_len);	/* Make room */
 		dma_sync_single_for_cpu(&lp->pci_dev->dev,
 					lp->rx_dma_addr[entry], pkt_len,
@@ -1272,7 +1270,7 @@ static void pcnet32_rx_entry(struct net_device *dev,
 	}
 	dev->stats.rx_bytes += skb->len;
 	skb->protocol = eth_type_trans(skb, dev);
-	netif_receive_skb(skb);
+	napi_gro_receive(&lp->napi, skb);
 	dev->stats.rx_packets++;
 }
 
