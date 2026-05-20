@@ -63,6 +63,7 @@ struct ntp_data {
 	int			time_state;
 	int			time_status;
 	s64			time_offset;
+	s64			skew_delta;
 	long			time_constant;
 	long			time_maxerror;
 	long			time_esterror;
@@ -364,6 +365,31 @@ u64 ntp_tick_length(unsigned int tkid)
 	return tk_ntp_data[tkid].tick_length;
 }
 
+s64 ntp_get_skew_delta(unsigned int tkid)
+{
+	return tk_ntp_data[tkid].skew_delta;
+}
+
+s64 ntp_drain_time_offset(unsigned int tkid, s64 amount)
+{
+	struct ntp_data *ntpdata = &tk_ntp_data[tkid];
+
+	/* Only drain if amount and time_offset have the same sign */
+	if (!amount || (amount > 0) != (ntpdata->time_offset > 0))
+		return amount;
+
+	/* Clamp: don't overshoot zero */
+	if (abs(amount) > abs(ntpdata->time_offset)) {
+		s64 undrained = amount - ntpdata->time_offset;
+
+		ntpdata->time_offset = 0;
+		return undrained;
+	}
+
+	ntpdata->time_offset -= amount;
+	return 0;
+}
+
 /**
  * ntp_get_next_leap - Returns the next leapsecond in CLOCK_REALTIME ktime_t
  * @tkid:	Timekeeper ID
@@ -460,9 +486,14 @@ int second_overflow(unsigned int tkid, time64_t secs)
 	/* Compute the phase adjustment for the next second */
 	ntpdata->tick_length	 = ntpdata->tick_length_base;
 
+	/*
+	 * Set the per-tick skew rate for the tick code. This is in the
+	 * same units as tick_length (ns << NTP_SCALE_SHIFT), and is
+	 * rounded to a multiple of NTP_INTERVAL_FREQ so that the per-tick
+	 * division in the tick code is exact.
+	 */
 	delta			 = ntp_offset_chunk(ntpdata, ntpdata->time_offset);
-	ntpdata->time_offset	-= delta;
-	ntpdata->tick_length	+= delta;
+	ntpdata->skew_delta	 = delta - delta % NTP_INTERVAL_FREQ;
 
 	/* Check PPS signal */
 	pps_dec_valid(ntpdata);

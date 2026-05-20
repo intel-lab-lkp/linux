@@ -2327,20 +2327,23 @@ static __always_inline void timekeeping_apply_adjustment(struct timekeeper *tk,
 static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 {
 	u64 ntp_tl = ntp_tick_length(tk->id);
+	s64 skew = ntp_get_skew_delta(tk->id);
 	u32 mult;
 
 	/*
-	 * Determine the multiplier from the current NTP tick length.
-	 * Avoid expensive division when the tick length doesn't change.
+	 * Determine the multiplier from the current NTP tick length plus
+	 * skew_delta. The skew biases mult so that ±1 dithering can deliver
+	 * the time_offset slew rate. Recompute when either changes.
 	 */
-	if (likely(tk->ntp_tick == ntp_tl)) {
+	if (likely(tk->ntp_tick == ntp_tl && tk->skew_delta == skew)) {
 		mult = tk->tkr_mono.mult - tk->ntp_err_mult;
 	} else {
 		if (unlikely(!tk->cycle_interval))
 			return;
 		tk->ntp_tick = ntp_tl;
-		mult = div64_u64(tk->ntp_tick >> tk->ntp_error_shift,
-				 tk->cycle_interval);
+		tk->skew_delta = skew;
+		mult = div64_u64((tk->ntp_tick + skew) >> tk->ntp_error_shift,
+				  tk->cycle_interval);
 	}
 
 	/*
@@ -2466,6 +2469,22 @@ static u64 logarithmic_accumulation(struct timekeeper *tk, u64 offset,
 	/* Accumulate error between NTP and clock interval */
 	tk->ntp_error += tk->ntp_tick << shift;
 	tk->ntp_error -= tk->xtime_interval << (tk->ntp_error_shift + shift);
+
+	/*
+	 * During clock skew driven by ntpdata->time_offset, transfer a
+	 * *portion* of the requested total delta into ntp_error from
+	 * time_offset each tick. The second_overflow() function sets
+	 * the rate of skew, and the value of 'mult' has been selected
+	 * in order to allow the dithering to keep ntp_error around zero
+	 * even while this adjustment is being applied.
+	 */
+	if (tk->skew_delta) {
+		s64 drain = div_s64(tk->skew_delta << shift,
+				    NTP_INTERVAL_FREQ);
+
+		tk->ntp_error += (tk->skew_delta << shift) -
+				 ntp_drain_time_offset(tk->id, drain);
+	}
 
 	return offset;
 }
