@@ -1,8 +1,7 @@
 * QEMU PVPANIC MMIO Configuration bindings
 
 QEMU's emulation / virtualization targets provide the following PVPANIC
-MMIO Configuration interface on the "virt" machine.
-type:
+MMIO configuration interface on the "virt" machine with:
 
 - a read-write, 16-bit wide data register.
 
