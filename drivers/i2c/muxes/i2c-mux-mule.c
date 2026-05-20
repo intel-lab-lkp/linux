@@ -90,8 +90,7 @@ static int mule_i2c_mux_probe(struct platform_device *pdev)
 
 	ret = devm_add_action_or_reset(mux_dev, mule_i2c_mux_remove, muxc);
 	if (ret)
-		return dev_err_probe(mux_dev, ret,
-				     "Failed to register mux remove\n");
+		return ret;
 
 	/* Create device adapters */
 	for_each_child_of_node_scoped(mux_dev->of_node, dev) {
