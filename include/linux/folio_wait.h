@@ -178,4 +178,8 @@ void folio_end_private_2(struct folio *folio);
 void folio_wait_private_2(struct folio *folio);
 int folio_wait_private_2_killable(struct folio *folio);
 
+void folio_wait_writeback(struct folio *folio);
+int folio_wait_writeback_killable(struct folio *folio);
+void folio_wait_stable(struct folio *folio);
+
 #endif /* _LINUX_FOLIO_WAIT_H */
