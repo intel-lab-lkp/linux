@@ -662,7 +662,7 @@ static void netwinder_restart(enum reboot_mode mode, const char *cmd)
 }
 
 /* LEDs */
-#if defined(CONFIG_NEW_LEDS) && defined(CONFIG_LEDS_CLASS)
+#ifdef CONFIG_LEDS_CLASS
 struct netwinder_led {
 	struct led_classdev     cdev;
 	u8                      mask;

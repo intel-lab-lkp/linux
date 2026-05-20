@@ -18,7 +18,7 @@
 #include "common.h"
 
 /* LEDs */
-#if defined(CONFIG_NEW_LEDS) && defined(CONFIG_LEDS_CLASS)
+#ifdef CONFIG_LEDS_CLASS
 #define XBUS_AMBER_L	BIT(0)
 #define XBUS_GREEN_L	BIT(1)
 #define XBUS_RED_L	BIT(2)
