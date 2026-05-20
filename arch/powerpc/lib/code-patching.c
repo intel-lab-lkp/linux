@@ -60,7 +60,7 @@ struct patch_context {
 
 static DEFINE_PER_CPU(struct patch_context, cpu_patching_context);
 
-static int map_patch_area(void *addr, unsigned long text_poke_addr);
+static int map_patch_area(unsigned long text_poke_addr);
 static void unmap_patch_area(unsigned long addr);
 
 static bool mm_patch_enabled(void)
@@ -117,7 +117,7 @@ static int text_area_cpu_up(unsigned int cpu)
 
 	// Map/unmap the area to ensure all page tables are pre-allocated
 	addr = (unsigned long)area->addr;
-	err = map_patch_area(empty_zero_page, addr);
+	err = map_patch_area(addr);
 	if (err)
 		return err;
 
@@ -236,11 +236,10 @@ static unsigned long get_patch_pfn(void *addr)
 /*
  * This can be called for kernel text or a module.
  */
-static int map_patch_area(void *addr, unsigned long text_poke_addr)
+static int map_patch_area(unsigned long text_poke_addr)
 {
-	unsigned long pfn = get_patch_pfn(addr);
-
-	return map_kernel_page(text_poke_addr, (pfn << PAGE_SHIFT), PAGE_KERNEL);
+	return map_kernel_page(text_poke_addr, __pa_symbol(empty_zero_page),
+			       PAGE_KERNEL_RO);
 }
 
 static void unmap_patch_area(unsigned long addr)
