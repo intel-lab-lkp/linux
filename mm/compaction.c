@@ -874,6 +874,27 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 	cc->migrate_pfn = low_pfn;
 
 	/*
+	 * Fast-path: a tainted SPB with no movable content has nothing to
+	 * migrate from this pageblock.  Bail out immediately and let the
+	 * caller move on to the next pageblock; the caller will re-enter
+	 * this function for each subsequent pageblock in the SPB and bail
+	 * the same way, so the whole SPB is effectively skipped without
+	 * any per-page scan work.
+	 */
+	if (cc->zone->nr_superpageblocks) {
+		struct superpageblock *sb =
+			pfn_to_superpageblock(cc->zone, low_pfn);
+
+		if (sb && spb_get_category(sb) == SB_TAINTED &&
+		    sb->nr_movable == 0) {
+			unsigned long sb_end =
+				ALIGN(low_pfn + 1, SUPERPAGEBLOCK_NR_PAGES);
+			cc->migrate_pfn = min(sb_end, end_pfn);
+			return 0;
+		}
+	}
+
+	/*
 	 * Ensure that there are not too many pages isolated from the LRU
 	 * list by either parallel reclaimers or compaction. If there are,
 	 * delay for some time until fewer pages are isolated
