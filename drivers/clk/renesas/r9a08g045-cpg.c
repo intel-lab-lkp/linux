@@ -53,13 +53,6 @@
 /* PLL 1/4/6 configuration registers macro. */
 #define G3S_PLL146_CONF(clk1, clk2, setting)	((clk1) << 22 | (clk2) << 12 | (setting))
 
-#define DEF_G3S_MUX(_name, _id, _conf, _parent_names, _mux_flags, _clk_flags) \
-	DEF_TYPE(_name, _id, CLK_TYPE_MUX, .conf = (_conf), \
-		 .parent_names = (_parent_names), \
-		 .num_parents = ARRAY_SIZE((_parent_names)), \
-		 .mux_flags = CLK_MUX_HIWORD_MASK | (_mux_flags), \
-		 .flag = (_clk_flags))
-
 enum clk_ids {
 	/* Core Clock Outputs exported to DT */
 	LAST_DT_CORE_CLK = R9A08G045_SWD,
