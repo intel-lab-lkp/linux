@@ -80,9 +80,18 @@ static int f2fs_xattr_generic_get(const struct xattr_handler *handler,
 			     buffer, size, NULL);
 }
 
-static int f2fs_xattr_fadvise_set(struct inode *inode, const void *value)
+static int f2fs_xattr_fadvise_set(struct inode *inode, const void *value,
+				  size_t size)
 {
 	unsigned int new_fadvise;
+
+	if (!value) {
+		f2fs_remove_ino_entry(F2FS_I_SB(inode),
+				      inode->i_ino, LARGE_FOLIO_INO);
+		return 0;
+	}
+	if (size != sizeof(new_fadvise))
+		return -EINVAL;
 
 	new_fadvise = *(unsigned int *)value;
 
@@ -116,7 +125,7 @@ static int f2fs_xattr_generic_set(const struct xattr_handler *handler,
 	}
 	if (handler->flags == F2FS_XATTR_INDEX_USER &&
 	    !strcmp(name, "fadvise"))
-		return f2fs_xattr_fadvise_set(inode, value);
+		return f2fs_xattr_fadvise_set(inode, value, size);
 
 	return f2fs_setxattr(inode, handler->flags, name,
 					value, size, NULL, flags);
