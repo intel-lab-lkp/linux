@@ -510,7 +510,14 @@ qla2x00_dfs_fce_write(struct file *file, const char __user *buffer,
 		return PTR_ERR(buf);
 	}
 
-	enable = kstrtoul(buf, 0, 0);
+	rc = kstrtoul(buf, 0, &enable);
+	if (rc) {
+		ql_dbg(ql_dbg_user, vha, 0xd03d,
+		    "fail to parse user input.");
+		rc = -EINVAL;
+		goto out_free;
+	}
+
 	rc = count;
 
 	mutex_lock(&ha->fce_mutex);
