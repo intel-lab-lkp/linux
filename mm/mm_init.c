@@ -1837,6 +1837,14 @@ void __meminit resize_zone_superpageblocks(struct zone *zone)
 	zone->superpageblock_base_pfn = new_sb_base;
 	zone->spb_kvmalloced = true;
 
+	/*
+	 * Invalidate PASS_1 hints under zone->lock so that no
+	 * concurrent allocator (also entering __rmqueue_smallest under
+	 * zone->lock) can dereference an old SPB pointer that is about
+	 * to be freed below.
+	 */
+	spb_invalidate_warm_hints(zone);
+
 	spin_unlock_irqrestore(&zone->lock, flags);
 
 	/*
