@@ -3104,6 +3104,18 @@ skip_mac_set:
 			bpf_prog_inc(bond->xdp_prog);
 	}
 
+#ifdef CONFIG_XFRM_OFFLOAD
+	if ((bond_dev->wanted_features & BOND_XFRM_FEATURES) &&
+	    bond_mode_can_use_lag_xfrm(bond)) {
+		bond_sync_slave_xfrm_features(bond, new_slave);
+		bond->notifier_ctx = true;
+		netdev_compute_master_upper_features(bond->dev, true);
+		bond->notifier_ctx = false;
+	}
+#endif /* CONFIG_XFRM_OFFLOAD */
+
+	bond_ipsec_lag_add_slave(bond, new_slave, extack);
+
 	/* broadcast mode uses the all_slaves to loop through slaves. */
 	if (bond_mode_can_use_xmit_hash(bond) ||
 	    BOND_MODE(bond) == BOND_MODE_BROADCAST)
@@ -3222,6 +3234,9 @@ static int __bond_release_one(struct net_device *bond_dev,
 	}
 
 	bond_set_slave_inactive_flags(slave, BOND_SLAVE_NOTIFY_NOW);
+	if (bond_mode_can_use_xmit_hash(bond) ||
+	    BOND_MODE(bond) == BOND_MODE_BROADCAST)
+		bond_update_slave_arr(bond, slave);
 
 	bond_sysfs_slave_del(slave);
 
@@ -3239,8 +3254,10 @@ static int __bond_release_one(struct net_device *bond_dev,
 			slave_warn(bond_dev, slave_dev, "failed to unload XDP program\n");
 	}
 
-	/* unregister rx_handler early so bond_handle_frame wouldn't be called
-	 * for this slave anymore.
+	bond_ipsec_lag_remove_slave(bond, slave_dev);
+
+	/* unregister rx_handler after lower IPsec state is gone so RX cannot
+	 * bypass the bond while a bond-owned SA is still installed.
 	 */
 	netdev_rx_handler_unregister(slave_dev);
 
@@ -4758,8 +4775,13 @@ static int bond_slave_netdev_event(unsigned long event,
 
 		if (BOND_MODE(bond) == BOND_MODE_8023AD)
 			bond_3ad_adapter_speed_duplex_changed(slave);
-		fallthrough;
-	case NETDEV_DOWN:
+		bond_sync_slave_xfrm_features(bond, slave);
+		if (bond_mode_can_use_lag_xfrm(bond)) {
+			bond->notifier_ctx = true;
+			netdev_compute_master_upper_features(bond->dev, true);
+			bond->notifier_ctx = false;
+		}
+		bond_ipsec_lag_add_slave(bond, slave, NULL);
 		/* Refresh slave-array if applicable!
 		 * If the setup does not use miimon or arpmon (mode-specific!),
 		 * then these events will not cause the slave-array to be
@@ -4770,6 +4792,19 @@ static int bond_slave_netdev_event(unsigned long event,
 		 */
 		if (bond_mode_can_use_xmit_hash(bond))
 			bond_update_slave_arr(bond, NULL);
+		break;
+	case NETDEV_DOWN:
+		/* Refresh slave-array before deleting IPsec state so no new
+		 * TX path picks this slave after its offload handle is hidden.
+		 */
+		if (bond_mode_can_use_xmit_hash(bond))
+			bond_update_slave_arr(bond, slave);
+		bond_ipsec_lag_remove_slave(bond, slave_dev);
+		if (bond_mode_can_use_lag_xfrm(bond)) {
+			bond->notifier_ctx = true;
+			netdev_compute_master_upper_features(bond->dev, true);
+			bond->notifier_ctx = false;
+		}
 		break;
 	case NETDEV_CHANGEMTU:
 		/* TODO: Should slaves be allowed to
@@ -4809,10 +4844,12 @@ static int bond_slave_netdev_event(unsigned long event,
 		break;
 	case NETDEV_FEAT_CHANGE:
 		if (!bond->notifier_ctx) {
+			bond_sync_slave_xfrm_features(bond, slave);
 			bond->notifier_ctx = true;
 			netdev_compute_master_upper_features(bond->dev, true);
 			bond->notifier_ctx = false;
 		}
+		bond_ipsec_lag_add_slave(bond, slave, NULL);
 		break;
 	case NETDEV_RESEND_IGMP:
 		/* Propagate to master device */

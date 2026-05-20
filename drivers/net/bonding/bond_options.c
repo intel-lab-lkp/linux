@@ -17,6 +17,7 @@
 
 #include <net/bonding.h>
 #include <net/ndisc.h>
+#include <net/xfrm.h>
 
 static int bond_option_active_slave_set(struct bonding *bond,
 					const struct bond_opt_value *newval);
@@ -894,6 +895,13 @@ static bool bond_set_xfrm_features(struct bonding *bond)
 static int bond_option_mode_set(struct bonding *bond,
 				const struct bond_opt_value *newval)
 {
+#if IS_ENABLED(CONFIG_XFRM_OFFLOAD)
+	bool old_ab_xfrm = BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP;
+	bool old_lag_xfrm = bond_mode_can_use_lag_xfrm(bond);
+	bool new_lag_xfrm;
+	bool flush_lag_xfrm = false;
+#endif
+
 	if (bond->xdp_prog && !bond_xdp_check(bond, newval->value))
 		return -EOPNOTSUPP;
 
@@ -918,7 +926,25 @@ static int bond_option_mode_set(struct bonding *bond,
 
 	/* don't cache arp_validate between modes */
 	bond->params.arp_validate = BOND_ARP_VALIDATE_NONE;
+
 	bond->params.mode = newval->value;
+
+#if IS_ENABLED(CONFIG_XFRM_OFFLOAD)
+	new_lag_xfrm = bond_mode_can_use_lag_xfrm(bond);
+	if (old_ab_xfrm && new_lag_xfrm)
+		bond->dev->wanted_features &= ~BOND_XFRM_FEATURES;
+	if (old_lag_xfrm && !new_lag_xfrm) {
+		bond_ipsec_lag_begin_flush(bond);
+		flush_lag_xfrm = true;
+	}
+
+	if (flush_lag_xfrm) {
+		if (bond->dev->reg_state == NETREG_REGISTERED)
+			xfrm_dev_state_flush(dev_net(bond->dev), bond->dev,
+					     true);
+		bond_ipsec_lag_end_flush(bond);
+	}
+#endif
 
 	/* When changing mode, the bond device is down, we may reduce
 	 * the bond_bcast_neigh_enabled in bond_close() if broadcast_neighbor
@@ -1575,11 +1601,42 @@ static int bond_option_fail_over_mac_set(struct bonding *bond,
 static int bond_option_xmit_hash_policy_set(struct bonding *bond,
 					    const struct bond_opt_value *newval)
 {
+#if IS_ENABLED(CONFIG_XFRM_OFFLOAD)
+	bool old_lag_xfrm = bond_mode_can_use_lag_xfrm(bond);
+	bool new_lag_xfrm;
+	bool flush_lag_xfrm = false;
+#endif
+
 	if (bond->xdp_prog && !__bond_xdp_check(BOND_MODE(bond), newval->value))
 		return -EOPNOTSUPP;
 	netdev_dbg(bond->dev, "Setting xmit hash policy to %s (%llu)\n",
 		   newval->string, newval->value);
+
 	bond->params.xmit_policy = newval->value;
+
+#if IS_ENABLED(CONFIG_XFRM_OFFLOAD)
+	new_lag_xfrm = bond_mode_can_use_lag_xfrm(bond);
+	if (old_lag_xfrm && !new_lag_xfrm) {
+		bond_ipsec_lag_begin_flush(bond);
+		flush_lag_xfrm = true;
+	}
+
+	if (flush_lag_xfrm) {
+		if (bond->dev->reg_state == NETREG_REGISTERED)
+			xfrm_dev_state_flush(dev_net(bond->dev), bond->dev,
+					     true);
+		bond_ipsec_lag_end_flush(bond);
+	}
+#endif
+
+	if (bond->dev->reg_state == NETREG_REGISTERED) {
+		bool update = false;
+
+		update |= bond_set_xfrm_features(bond);
+
+		if (update)
+			netdev_update_features(bond->dev);
+	}
 
 	return 0;
 }
