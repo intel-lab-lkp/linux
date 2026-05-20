@@ -5226,7 +5226,7 @@ static struct request *__bfq_dispatch_request(struct blk_mq_hw_ctx *hctx)
 		goto exit;
 
 	bfqq = bfq_select_queue(bfqd);
-	if (!bfqq)
+	if (!bfqq || !bfqq->next_rq)
 		goto exit;
 
 	rq = bfq_dispatch_rq_from_bfqq(bfqd, bfqq);
