@@ -378,25 +378,24 @@ int commit_creds(struct cred *new)
 
 	get_cred(new); /* we will require a ref for the subj creds too */
 
-	/* dumpability changes */
+	/*
+	 * Lower dumpability on euid/egid/fsuid/fsgid/capability changes.
+	 * Long-running daemons launched as root (sshd, dbus-daemon,
+	 * polkitd, NetworkManager, postfix workers, ...) rely on this to
+	 * shed /proc visibility and same-uid ptrace exposure of
+	 * root-acquired secrets when they setresuid() to a service uid.
+	 *
+	 * exec_state is shared across the whole fork subtree of the
+	 * establishing execve(), so this write is observed by every task
+	 * still sharing the same exec_state.
+	 */
 	if (!uid_eq(old->euid, new->euid) ||
 	    !gid_eq(old->egid, new->egid) ||
 	    !uid_eq(old->fsuid, new->fsuid) ||
 	    !gid_eq(old->fsgid, new->fsgid) ||
 	    !cred_cap_issubset(old, new)) {
-		if (task->mm)
-			task_exec_state_set_dumpable(suid_dumpable);
+		task_exec_state_set_dumpable(suid_dumpable);
 		task->pdeath_signal = 0;
-		/*
-		 * If a task drops privileges and becomes nondumpable,
-		 * the dumpability change must become visible before
-		 * the credential change; otherwise, a __ptrace_may_access()
-		 * racing with this change may be able to attach to a task it
-		 * shouldn't be able to attach to (as if the task had dropped
-		 * privileges without becoming nondumpable).
-		 * Pairs with a read barrier in __ptrace_may_access().
-		 */
-		smp_wmb();
 	}
 
 	/* alter the thread keyring */
