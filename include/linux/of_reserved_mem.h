@@ -8,6 +8,7 @@
 struct of_phandle_args;
 struct reserved_mem_ops;
 struct resource;
+struct crash_mem;
 
 struct reserved_mem {
 	const char			*name;
@@ -47,6 +48,9 @@ int of_reserved_mem_region_to_resource(const struct device_node *np,
 int of_reserved_mem_region_to_resource_byname(const struct device_node *np,
 					      const char *name, struct resource *res);
 int of_reserved_mem_region_count(const struct device_node *np);
+
+unsigned int of_reserved_mem_kdump_nr_ranges(void);
+int of_reserved_mem_kdump_exclude(struct crash_mem *cmem);
 
 #else
 
@@ -89,6 +93,16 @@ static inline int of_reserved_mem_region_to_resource_byname(const struct device_
 }
 
 static inline int of_reserved_mem_region_count(const struct device_node *np)
+{
+	return 0;
+}
+
+static inline unsigned int of_reserved_mem_kdump_nr_ranges(void)
+{
+	return 0;
+}
+
+static inline int of_reserved_mem_kdump_exclude(struct crash_mem *cmem)
 {
 	return 0;
 }
