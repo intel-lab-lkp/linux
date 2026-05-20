@@ -567,13 +567,18 @@ static int riic_i2c_probe(struct platform_device *pdev)
 
 	for (i = 0; i < riic->info->num_irqs; i++) {
 		const struct riic_irq_desc *irq_desc;
+		char *irqname;
 
 		irq_desc = &riic->info->irqs[i];
 		riic->irqs[i] = platform_get_irq(pdev, irq_desc->res_num);
 		if (riic->irqs[i] < 0)
 			return riic->irqs[i];
 
-		ret = devm_request_irq(dev, riic->irqs[i], irq_desc->isr, 0, irq_desc->name, riic);
+		irqname = devm_kasprintf(dev, GFP_KERNEL, "%s:%s", dev_name(dev), irq_desc->name);
+		if (!irqname)
+			return -ENOMEM;
+
+		ret = devm_request_irq(dev, riic->irqs[i], irq_desc->isr, 0, irqname, riic);
 		if (ret)
 			return dev_err_probe(dev, ret, "failed to request irq %s\n",
 					     irq_desc->name);
