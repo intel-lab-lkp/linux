@@ -802,17 +802,10 @@ enum zone_watermarks {
 };
 
 /*
- * One per migratetype for each PAGE_ALLOC_COSTLY_ORDER. Two additional lists
- * are added for THP. One PCP list is used by GPF_MOVABLE, and the other PCP list
- * is used by GFP_UNMOVABLE and GFP_RECLAIMABLE.
+ * One per migratetype for page orders up to and including PAGE_BLOCK_MAX_ORDER.
  */
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
-#define NR_PCP_THP 2
-#else
-#define NR_PCP_THP 0
-#endif
-#define NR_LOWORDER_PCP_LISTS (MIGRATE_PCPTYPES * (PAGE_ALLOC_COSTLY_ORDER + 1))
-#define NR_PCP_LISTS (NR_LOWORDER_PCP_LISTS + NR_PCP_THP)
+#define NR_PCP_ORDERS (PAGE_BLOCK_MAX_ORDER + 1)
+#define NR_PCP_LISTS (MIGRATE_PCPTYPES * NR_PCP_ORDERS)
 
 /*
  * Flags used in pcp->flags field.
@@ -825,9 +818,13 @@ enum zone_watermarks {
  * draining PCP for consecutive high-order pages freeing without
  * allocation if data cache slice of CPU is large enough.  To reduce
  * zone lock contention and keep cache-hot pages reusing.
+ *
+ * PCPF_CPU_DEAD: CPU is offline.  Don't enqueue freed pages; fall
+ * back to zone buddy instead.
  */
 #define	PCPF_PREV_FREE_HIGH_ORDER	BIT(0)
 #define	PCPF_FREE_HIGH_BATCH		BIT(1)
+#define	PCPF_CPU_DEAD			BIT(2)
 
 struct per_cpu_pages {
 	spinlock_t lock;	/* Protects lists field */
@@ -842,6 +839,9 @@ struct per_cpu_pages {
 	u8 expire;		/* When 0, remote pagesets are drained */
 #endif
 	short free_count;	/* consecutive free count */
+
+	/* Pageblocks owned by this CPU, for fragment recovery */
+	struct list_head owned_blocks;
 
 	/* Lists of pages, one per migrate type stored on the pcp-lists */
 	struct list_head lists[NR_PCP_LISTS];
@@ -1991,6 +1991,9 @@ static inline unsigned long section_nr_to_pfn(unsigned long sec)
 
 struct pageblock_data {
 	unsigned long flags;
+	int cpu;			/* PCP ownership: owning cpu + 1, or 0 for zone-owned */
+	unsigned long block_pfn;	/* first PFN of pageblock */
+	struct list_head cpu_node;	/* per-CPU owned-blocks list */
 };
 
 struct mem_section_usage {
