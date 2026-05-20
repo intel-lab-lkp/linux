@@ -2068,6 +2068,12 @@ int nvmem_device_read(struct nvmem_device *nvmem,
 	if (!nvmem)
 		return -EINVAL;
 
+	if (!IS_ALIGNED(offset, nvmem->stride))
+		return -EINVAL;
+
+	if (!IS_ALIGNED(bytes, nvmem->word_size))
+		return -EINVAL;
+
 	rc = nvmem_reg_read(nvmem, offset, buf, bytes);
 
 	if (rc)
@@ -2094,6 +2100,12 @@ int nvmem_device_write(struct nvmem_device *nvmem,
 	int rc;
 
 	if (!nvmem)
+		return -EINVAL;
+
+	if (!IS_ALIGNED(offset, nvmem->stride))
+		return -EINVAL;
+
+	if (!IS_ALIGNED(bytes, nvmem->word_size))
 		return -EINVAL;
 
 	rc = nvmem_reg_write(nvmem, offset, buf, bytes);
