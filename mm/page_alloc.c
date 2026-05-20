@@ -477,6 +477,32 @@ static inline int migratetype_to_has_bit(int migratetype)
 	}
 }
 
+#ifdef CONFIG_DEBUG_VM
+static void spb_debug_check(struct superpageblock *sb, const char *caller)
+{
+	u16 total = sb->total_pageblocks;
+
+	VM_WARN_ONCE(sb->nr_free > total,
+		     "%s: nr_free %u > total %u (zone=%s sb=%lu)\n",
+		     caller, sb->nr_free, total, sb->zone->name,
+		     (unsigned long)(sb - sb->zone->superpageblocks));
+	VM_WARN_ONCE(sb->nr_unmovable > total,
+		     "%s: nr_unmovable %u > total %u (zone=%s sb=%lu)\n",
+		     caller, sb->nr_unmovable, total, sb->zone->name,
+		     (unsigned long)(sb - sb->zone->superpageblocks));
+	VM_WARN_ONCE(sb->nr_reclaimable > total,
+		     "%s: nr_reclaimable %u > total %u (zone=%s sb=%lu)\n",
+		     caller, sb->nr_reclaimable, total, sb->zone->name,
+		     (unsigned long)(sb - sb->zone->superpageblocks));
+	VM_WARN_ONCE(sb->nr_movable > total,
+		     "%s: nr_movable %u > total %u (zone=%s sb=%lu)\n",
+		     caller, sb->nr_movable, total, sb->zone->name,
+		     (unsigned long)(sb - sb->zone->superpageblocks));
+}
+#else
+static inline void spb_debug_check(struct superpageblock *sb, const char *caller) {}
+#endif
+
 /*
  * __spb_set_has_type - set PB_has_* and increment type counter
  *
@@ -508,6 +534,7 @@ static void __spb_set_has_type(struct page *page, int migratetype)
 			sb->nr_movable++;
 			break;
 		}
+		spb_debug_check(sb, "__spb_set_has_type");
 	}
 }
 
@@ -545,6 +572,7 @@ static void __spb_clear_has_type(struct page *page, int migratetype)
 				sb->nr_movable--;
 			break;
 		}
+		spb_debug_check(sb, "__spb_clear_has_type");
 	}
 }
 
@@ -778,6 +806,7 @@ static void superpageblock_pb_now_free(struct page *page)
 		return;
 
 	sb->nr_free++;
+	spb_debug_check(sb, "pb_now_free");
 
 	spb_update_list(sb);
 }
@@ -800,6 +829,7 @@ static void superpageblock_pb_now_used(struct page *page)
 
 	if (sb->nr_free)
 		sb->nr_free--;
+	spb_debug_check(sb, "pb_now_used");
 
 	spb_update_list(sb);
 }
@@ -1265,7 +1295,9 @@ static inline void __add_to_free_list(struct page *page, struct zone *zone,
 	struct free_area *area = pfn_sb_free_area(zone, pfn, order, &sb);
 	int nr_pages = 1 << order;
 
-	VM_WARN_ONCE(get_pageblock_migratetype(page) != migratetype,
+	VM_WARN_ONCE(get_pageblock_migratetype(page) != migratetype &&
+		     !is_migrate_isolate(get_pageblock_migratetype(page)) &&
+		     !is_migrate_cma(get_pageblock_migratetype(page)),
 		     "page type is %d, passed migratetype is %d (nr=%d)\n",
 		     get_pageblock_migratetype(page), migratetype, nr_pages);
 
@@ -1299,7 +1331,8 @@ static inline void move_to_free_list(struct page *page, struct zone *zone,
 	int nr_pages = 1 << order;
 
 	/* Free page moving can fail, so it happens before the type update */
-	VM_WARN_ONCE(get_pageblock_migratetype(page) != old_mt,
+	VM_WARN_ONCE(get_pageblock_migratetype(page) != old_mt &&
+		     !is_migrate_cma(get_pageblock_migratetype(page)),
 		     "page type is %d, passed migratetype is %d (nr=%d)\n",
 		     get_pageblock_migratetype(page), old_mt, nr_pages);
 
@@ -1324,7 +1357,9 @@ static inline void __del_page_from_free_list(struct page *page, struct zone *zon
 	struct free_area *area = pfn_sb_free_area(zone, pfn, order, &sb);
 	int nr_pages = 1 << order;
 
-        VM_WARN_ONCE(get_pageblock_migratetype(page) != migratetype,
+	VM_WARN_ONCE(get_pageblock_migratetype(page) != migratetype &&
+		     !is_migrate_isolate(get_pageblock_migratetype(page)) &&
+		     !is_migrate_cma(get_pageblock_migratetype(page)),
 		     "page type is %d, passed migratetype is %d (nr=%d)\n",
 		     get_pageblock_migratetype(page), migratetype, nr_pages);
 
