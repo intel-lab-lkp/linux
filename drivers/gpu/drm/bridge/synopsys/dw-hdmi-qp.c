@@ -461,6 +461,23 @@ static void dw_hdmi_qp_set_sample_rate(struct dw_hdmi_qp *hdmi, unsigned long lo
 	n = dw_hdmi_qp_find_n(hdmi, tmds_char_rate, sample_rate);
 	cts = dw_hdmi_qp_find_cts(hdmi, tmds_char_rate, sample_rate);
 
+	/*
+	 * When no CTS table entry exists for the given TMDS rate, compute
+	 * CTS from N rather than letting the hardware auto-measure.  The
+	 * auto-CTS circuit produces incorrect audio timing at out-of-table
+	 * rates (e.g. 185.625 MHz, 297 MHz, 594 MHz), causing strict HDMI
+	 * sinks to mute audio.  Computed CTS = (TMDS * N) / (128 * Fs) per
+	 * HDMI spec; the standard override path then supplies it on the
+	 * wire.  Mirrors hdmi_set_clk_regenerator() in the legacy dw-hdmi
+	 * driver.
+	 */
+	if (!cts && n) {
+		u64 computed = (u64)tmds_char_rate * n;
+
+		do_div(computed, 128ULL * sample_rate);
+		cts = (unsigned int)computed;
+	}
+
 	dw_hdmi_qp_set_cts_n(hdmi, cts, n);
 }
 
