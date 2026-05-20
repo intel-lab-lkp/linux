@@ -1057,6 +1057,7 @@ struct zone {
 	struct superpageblock	*superpageblocks;
 	unsigned long		nr_superpageblocks;
 	unsigned long		superpageblock_base_pfn; /* 1GB-aligned base */
+	bool			spb_kvmalloced; /* true if from kvmalloc (hotplug) */
 
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
 	unsigned long		zone_start_pfn;

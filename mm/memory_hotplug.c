@@ -752,6 +752,10 @@ void move_pfn_range_to_zone(struct zone *zone, unsigned long start_pfn,
 	resize_zone_range(zone, start_pfn, nr_pages);
 	resize_pgdat_range(pgdat, start_pfn, nr_pages);
 
+	/* Grow superpageblock array to cover the new zone span */
+	if (!zone_is_zone_device(zone))
+		resize_zone_superpageblocks(zone);
+
 	/*
 	 * Subsection population requires care in pfn_to_online_page().
 	 * Set the taint to enable the slow path detection of
