@@ -5,6 +5,7 @@
 #include "debug.h"
 #include "event.h"
 #include "evsel.h"
+#include "evlist.h"
 #include "machine.h"
 #include "map.h"
 #include "thread.h"
@@ -16,6 +17,7 @@
 #include <internal/lib.h>  /* page_size */
 #include <linux/compiler.h>
 #include <linux/zalloc.h>
+#include <errno.h>
 #include <inttypes.h>
 #include <unistd.h>
 
@@ -43,6 +45,22 @@ struct aslr_mapping {
 	u64 remap_start;
 };
 
+struct aslr_evsel_priv {
+	u64 orig_sample_type;
+	u64 orig_sample_regs_user;
+	u64 orig_sample_regs_intr;
+};
+
+static size_t evsel_hash(long key, void *ctx __maybe_unused)
+{
+	return (size_t)key;
+}
+
+static bool evsel_equal(long key1, long key2, void *ctx __maybe_unused)
+{
+	return key1 == key2;
+}
+
 struct aslr_tool {
 	/** @tool: The tool implemented here and a pointer to a delegate to process the data. */
 	struct delegate_tool tool;
@@ -54,6 +72,11 @@ struct aslr_tool {
 	struct hashmap remap_addresses;
 	/** @top_addresses: mapping from process to max remapped address. */
 	struct hashmap top_addresses;
+	/**
+	 * @evsel_orig_attrs: mapping from evsel pointer to its original
+	 *                    unstripped sample_type and registers bitmasks.
+	 */
+	struct hashmap evsel_orig_attrs;
 };
 
 static const pid_t kernel_pid = -1;
@@ -143,9 +166,7 @@ static u64 aslr_tool__remap_address(struct aslr_tool *aslr,
 	key.machine = maps__machine(aslr_thread->maps);
 	key.dso = map__dso(al.map);
 	key.invariant = map__start(al.map) - map__pgoff(al.map);
-	key.pid = (effective_cpumode == PERF_RECORD_MISC_KERNEL ||
-		   effective_cpumode == PERF_RECORD_MISC_GUEST_KERNEL) ?
-		  kernel_pid : aslr_thread->pid_;
+	key.pid = effective_cpumode == PERF_RECORD_MISC_KERNEL ? kernel_pid : aslr_thread->pid_;
 
 	if (hashmap__find(&aslr->remap_addresses, &key, &remapped_invariant_ptr)) {
 		remap_addr = *remapped_invariant_ptr + map__pgoff(al.map) +
@@ -593,6 +614,7 @@ static int aslr_tool__process_sample(const struct perf_tool *tool,
 	struct aslr_tool *aslr;
 	struct perf_tool *delegate;
 	int ret;
+	int orig_sample_size;
 	u64 sample_type;
 	struct thread *thread;
 	struct machine *aslr_machine;
@@ -605,12 +627,32 @@ static int aslr_tool__process_sample(const struct perf_tool *tool,
 	u64 addr;
 	size_t i;
 	size_t j;
+	struct aslr_evsel_priv *priv = NULL;
+	u64 orig_sample_type;
+	u64 orig_regs_user;
+	u64 orig_regs_intr;
 
 	del_tool = container_of(tool, struct delegate_tool, tool);
 	aslr = container_of(del_tool, struct aslr_tool, tool);
 	delegate = aslr->tool.delegate;
+
+	if (evsel__is_dummy_event(evsel))
+		return delegate->sample(delegate, event, sample, evsel, machine);
+
 	ret = -EFAULT;
-	sample_type = evsel->core.attr.sample_type;
+	orig_sample_type = evsel->core.attr.sample_type;
+	orig_regs_user = evsel->core.attr.sample_regs_user;
+	orig_regs_intr = evsel->core.attr.sample_regs_intr;
+
+	if (hashmap__find(&aslr->evsel_orig_attrs, evsel, &priv)) {
+		orig_sample_type = priv->orig_sample_type;
+		orig_regs_user = priv->orig_sample_regs_user;
+		orig_regs_intr = priv->orig_sample_regs_intr;
+	}
+
+	sample_type = orig_sample_type & ASLR_SUPPORTED_SAMPLE_TYPE;
+	sample_type &= ~PERF_SAMPLE_REGS_USER;
+	sample_type &= ~PERF_SAMPLE_REGS_INTR;
 	max_i = (event->header.size - sizeof(struct perf_event_header)) / sizeof(__u64);
 	max_j = (PERF_SAMPLE_MAX_SIZE - sizeof(struct perf_event_header)) / sizeof(__u64);
 	new_event = (union perf_event *)aslr->event_copy;
@@ -659,25 +701,25 @@ static int aslr_tool__process_sample(const struct perf_tool *tool,
 		i++; \
 	} while (0)
 
-	if (sample_type & PERF_SAMPLE_IDENTIFIER)
+	if (orig_sample_type & PERF_SAMPLE_IDENTIFIER)
 		COPY_U64(); /* id */
-	if (sample_type & PERF_SAMPLE_IP)
+	if (orig_sample_type & PERF_SAMPLE_IP)
 		REMAP_U64(sample->ip);
-	if (sample_type & PERF_SAMPLE_TID)
+	if (orig_sample_type & PERF_SAMPLE_TID)
 		COPY_U64(); /* pid, tid */
-	if (sample_type & PERF_SAMPLE_TIME)
+	if (orig_sample_type & PERF_SAMPLE_TIME)
 		COPY_U64(); /* time */
-	if (sample_type & PERF_SAMPLE_ADDR)
+	if (orig_sample_type & PERF_SAMPLE_ADDR)
 		REMAP_U64(sample->addr);
-	if (sample_type & PERF_SAMPLE_ID)
+	if (orig_sample_type & PERF_SAMPLE_ID)
 		COPY_U64(); /* id */
-	if (sample_type & PERF_SAMPLE_STREAM_ID)
+	if (orig_sample_type & PERF_SAMPLE_STREAM_ID)
 		COPY_U64(); /* stream_id */
-	if (sample_type & PERF_SAMPLE_CPU)
+	if (orig_sample_type & PERF_SAMPLE_CPU)
 		COPY_U64(); /* cpu, res */
-	if (sample_type & PERF_SAMPLE_PERIOD)
+	if (orig_sample_type & PERF_SAMPLE_PERIOD)
 		COPY_U64(); /* period */
-	if (sample_type & PERF_SAMPLE_READ) {
+	if (orig_sample_type & PERF_SAMPLE_READ) {
 		if ((evsel->core.attr.read_format & PERF_FORMAT_GROUP) == 0) {
 			COPY_U64(); /* value */
 			if (evsel->core.attr.read_format & PERF_FORMAT_TOTAL_TIME_ENABLED)
@@ -711,7 +753,7 @@ static int aslr_tool__process_sample(const struct perf_tool *tool,
 			}
 		}
 	}
-	if (sample_type & PERF_SAMPLE_CALLCHAIN) {
+	if (orig_sample_type & PERF_SAMPLE_CALLCHAIN) {
 		u64 nr;
 
 		if (CHECK_BOUNDS(1, 1)) {
@@ -777,7 +819,7 @@ static int aslr_tool__process_sample(const struct perf_tool *tool,
 			out_array[j++] = aslr_tool__remap_address(aslr, thread, cpumode, addr);
 		}
 	}
-	if (sample_type & PERF_SAMPLE_RAW) {
+	if (orig_sample_type & PERF_SAMPLE_RAW) {
 		size_t bytes = sizeof(u32) + sample->raw_size;
 		size_t u64_words = (bytes + 7) / 8;
 
@@ -796,7 +838,7 @@ static int aslr_tool__process_sample(const struct perf_tool *tool,
 		ret = 0;
 		goto out_put;
 	}
-	if (sample_type & PERF_SAMPLE_BRANCH_STACK) {
+	if (orig_sample_type & PERF_SAMPLE_BRANCH_STACK) {
 		u64 nr;
 
 		if (CHECK_BOUNDS(1, 1)) {
@@ -841,7 +883,7 @@ static int aslr_tool__process_sample(const struct perf_tool *tool,
 			goto out_put;
 		}
 	}
-	if (sample_type & PERF_SAMPLE_REGS_USER) {
+	if (orig_sample_type & PERF_SAMPLE_REGS_USER) {
 		u64 abi;
 
 		if (CHECK_BOUNDS(1, 0)) {
@@ -850,22 +892,16 @@ static int aslr_tool__process_sample(const struct perf_tool *tool,
 		}
 		abi = in_array[i++];
 		if (abi != PERF_SAMPLE_REGS_ABI_NONE) {
-			u64 nr = hweight64(evsel->core.attr.sample_regs_user);
+			u64 nr = hweight64(orig_regs_user);
 
-			if (nr > max_i - i || nr > max_j - j) {
+			if (nr > max_i - i) {
 				ret = -EFAULT;
 				goto out_put;
 			}
-			memcpy(&out_array[j], &in_array[i], nr * sizeof(u64));
 			i += nr;
-			j += nr;
 		}
-		/* TODO: can this be less conservative? */
-		pr_debug("Dropping regs user sample as possible ASLR leak\n");
-		ret = 0;
-		goto out_put;
 	}
-	if (sample_type & PERF_SAMPLE_STACK_USER) {
+	if (orig_sample_type & PERF_SAMPLE_STACK_USER) {
 		u64 size;
 
 		if (CHECK_BOUNDS(1, 1)) {
@@ -898,13 +934,13 @@ static int aslr_tool__process_sample(const struct perf_tool *tool,
 		ret = 0;
 		goto out_put;
 	}
-	if (sample_type & PERF_SAMPLE_WEIGHT_TYPE)
+	if (orig_sample_type & PERF_SAMPLE_WEIGHT_TYPE)
 		COPY_U64(); /* perf_sample_weight */
-	if (sample_type & PERF_SAMPLE_DATA_SRC)
+	if (orig_sample_type & PERF_SAMPLE_DATA_SRC)
 		COPY_U64(); /* data_src */
-	if (sample_type & PERF_SAMPLE_TRANSACTION)
+	if (orig_sample_type & PERF_SAMPLE_TRANSACTION)
 		COPY_U64(); /* transaction */
-	if (sample_type & PERF_SAMPLE_REGS_INTR) {
+	if (orig_sample_type & PERF_SAMPLE_REGS_INTR) {
 		u64 abi;
 
 		if (CHECK_BOUNDS(1, 0)) {
@@ -913,36 +949,30 @@ static int aslr_tool__process_sample(const struct perf_tool *tool,
 		}
 		abi = in_array[i++];
 		if (abi != PERF_SAMPLE_REGS_ABI_NONE) {
-			u64 nr = hweight64(evsel->core.attr.sample_regs_intr);
+			u64 nr = hweight64(orig_regs_intr);
 
-			if (nr > max_i - i || nr > max_j - j) {
+			if (nr > max_i - i) {
 				ret = -EFAULT;
 				goto out_put;
 			}
-			memcpy(&out_array[j], &in_array[i], nr * sizeof(u64));
 			i += nr;
-			j += nr;
 		}
-		/* TODO: can this be less conservative? */
-		pr_debug("Dropping interrupt register sample as possible ASLR leak\n");
-		ret = 0;
-		goto out_put;
 	}
-	if (sample_type & PERF_SAMPLE_PHYS_ADDR) {
+	if (orig_sample_type & PERF_SAMPLE_PHYS_ADDR) {
 		COPY_U64(); /* phys_addr */
 		/* TODO: can this be less conservative? */
 		pr_debug("Dropping physical address sample as possible ASLR leak\n");
 		ret = 0;
 		goto out_put;
 	}
-	if (sample_type & PERF_SAMPLE_CGROUP)
+	if (orig_sample_type & PERF_SAMPLE_CGROUP)
 		COPY_U64(); /* cgroup */
-	if (sample_type & PERF_SAMPLE_DATA_PAGE_SIZE)
+	if (orig_sample_type & PERF_SAMPLE_DATA_PAGE_SIZE)
 		COPY_U64(); /* data_page_size */
-	if (sample_type & PERF_SAMPLE_CODE_PAGE_SIZE)
+	if (orig_sample_type & PERF_SAMPLE_CODE_PAGE_SIZE)
 		COPY_U64(); /* code_page_size */
 
-	if (sample_type & PERF_SAMPLE_AUX) {
+	if (orig_sample_type & PERF_SAMPLE_AUX) {
 		u64 size;
 
 		if (CHECK_BOUNDS(1, 1)) {
@@ -983,8 +1013,22 @@ static int aslr_tool__process_sample(const struct perf_tool *tool,
 
 	new_event->sample.header.size = sizeof(struct perf_event_header) + j * sizeof(u64);
 
+	/* Temporarily override evsel attributes to match the stripped new_event format! */
+	orig_sample_size = evsel->sample_size;
+	evsel->sample_size = __evsel__sample_size(sample_type);
+	evsel->core.attr.sample_type = sample_type;
+	evsel->core.attr.sample_regs_user = 0;
+	evsel->core.attr.sample_regs_intr = 0;
+
 	perf_sample__init(&new_sample, /*all=*/ true);
 	ret = evsel__parse_sample(evsel, new_event, &new_sample);
+
+	/* Restore original attributes immediately so trace ingestion never desynchronizes! */
+	evsel->sample_size = orig_sample_size;
+	evsel->core.attr.sample_type = orig_sample_type;
+	evsel->core.attr.sample_regs_user = orig_regs_user;
+	evsel->core.attr.sample_regs_intr = orig_regs_intr;
+
 	if (ret) {
 		perf_sample__exit(&new_sample);
 		goto out_put;
@@ -1010,6 +1054,7 @@ static int aslr_tool__process_attr(const struct perf_tool *tool,
 	struct aslr_tool *aslr;
 	struct perf_tool *delegate;
 	union perf_event *new_event;
+	int err;
 
 	del_tool = container_of(tool, struct delegate_tool, tool);
 	aslr = container_of(del_tool, struct aslr_tool, tool);
@@ -1020,9 +1065,32 @@ static int aslr_tool__process_attr(const struct perf_tool *tool,
 	if (new_event->attr.attr.type == PERF_TYPE_BREAKPOINT)
 		new_event->attr.attr.bp_addr = 0;  /* Conservatively remove addresses. */
 
+	if (new_event->attr.attr.sample_type & PERF_SAMPLE_REGS_USER) {
+		new_event->attr.attr.sample_type &= ~PERF_SAMPLE_REGS_USER;
+		new_event->attr.attr.sample_regs_user = 0;
+	}
+	if (new_event->attr.attr.sample_type & PERF_SAMPLE_REGS_INTR) {
+		new_event->attr.attr.sample_type &= ~PERF_SAMPLE_REGS_INTR;
+		new_event->attr.attr.sample_regs_intr = 0;
+	}
+
 	new_event->attr.attr.sample_type &= ASLR_SUPPORTED_SAMPLE_TYPE;
 
-	return delegate->attr(delegate, new_event, pevlist);
+	err = delegate->attr(delegate, new_event, pevlist);
+	if (!err && pevlist && *pevlist) {
+		struct evsel *evsel = evlist__last(*pevlist);
+		struct aslr_evsel_priv *priv = zalloc(sizeof(*priv));
+
+		if (priv) {
+			priv->orig_sample_type = event->attr.attr.sample_type;
+			priv->orig_sample_regs_user = event->attr.attr.sample_regs_user;
+			priv->orig_sample_regs_intr = event->attr.attr.sample_regs_intr;
+			if (hashmap__add(&aslr->evsel_orig_attrs, evsel, priv) != 0)
+				free(priv);
+		}
+	}
+
+	return err;
 }
 
 static int skipn(int fd, off_t n)
@@ -1080,6 +1148,9 @@ static void aslr_tool__init(struct aslr_tool *aslr, struct perf_tool *delegate)
 		      /*ctx=*/NULL);
 	hashmap__init(&aslr->top_addresses,
 		      top_addresses__hash, top_addresses__equal,
+		      /*ctx=*/NULL);
+	hashmap__init(&aslr->evsel_orig_attrs,
+		      evsel_hash, evsel_equal,
 		      /*ctx=*/NULL);
 
 	aslr->tool.tool.sample	= aslr_tool__process_sample;
@@ -1141,11 +1212,37 @@ void aslr_tool__delete(struct perf_tool *tool)
 		zfree(&cur->pkey);
 		zfree(&cur->pvalue);
 	}
+	hashmap__for_each_entry(&aslr->evsel_orig_attrs, cur, bkt) {
+		zfree(&cur->pvalue);
+	}
 
 	hashmap__clear(&aslr->remap_addresses);
 	hashmap__clear(&aslr->top_addresses);
+	hashmap__clear(&aslr->evsel_orig_attrs);
 	aslr_tool__destroy_machines_priv(&aslr->machines);
 	machines__destroy_kernel_maps(&aslr->machines);
 	machines__exit(&aslr->machines);
 	free(aslr);
+}
+
+int aslr_tool__cache_orig_attrs(struct perf_tool *tool, struct evsel *evsel)
+{
+	struct delegate_tool *del_tool = container_of(tool, struct delegate_tool, tool);
+	struct aslr_tool *aslr = container_of(del_tool, struct aslr_tool, tool);
+	struct aslr_evsel_priv *priv = zalloc(sizeof(*priv));
+	int err;
+
+	if (!priv)
+		return -ENOMEM;
+
+	priv->orig_sample_type = evsel->core.attr.sample_type;
+	priv->orig_sample_regs_user = evsel->core.attr.sample_regs_user;
+	priv->orig_sample_regs_intr = evsel->core.attr.sample_regs_intr;
+
+	err = hashmap__add(&aslr->evsel_orig_attrs, evsel, priv);
+	if (err) {
+		free(priv);
+		return err;
+	}
+	return 0;
 }
