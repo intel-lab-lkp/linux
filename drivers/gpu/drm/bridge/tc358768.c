@@ -824,6 +824,9 @@ static void tc358768_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 		return;
 	}
 
+	/* Allow the PLL to settle */
+	msleep(20);
+
 	drm_display_mode_to_videomode(mode, &vm);
 
 	dsiclk = priv->dsiclk;
