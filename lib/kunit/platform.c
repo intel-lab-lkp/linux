@@ -161,6 +161,21 @@ kunit_platform_device_register_full(struct kunit *test,
 }
 EXPORT_SYMBOL_GPL(kunit_platform_device_register_full);
 
+/**
+ * kunit_platform_device_unregister() - Unregister a KUnit-managed platform device
+ * @test: test context
+ * @pdev: platform device to unregister
+ *
+ * Unregister a test-managed platform device and cancel its release action.
+ */
+void kunit_platform_device_unregister(struct kunit *test,
+				      struct platform_device *pdev)
+{
+	kunit_remove_action(test, platform_device_unregister_wrapper, pdev);
+	platform_device_unregister(pdev);
+}
+EXPORT_SYMBOL_GPL(kunit_platform_device_unregister);
+
 struct kunit_platform_device_probe_nb {
 	struct completion *x;
 	struct device *dev;
