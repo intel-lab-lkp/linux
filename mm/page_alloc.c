@@ -11525,7 +11525,23 @@ struct page *alloc_frozen_pages_nolock_noprof(gfp_t gfp_flags, int nid, unsigned
 	 */
 	gfp_t alloc_gfp = __GFP_NOWARN | __GFP_ZERO | __GFP_NOMEMALLOC | __GFP_COMP
 			| gfp_flags;
-	unsigned int alloc_flags = ALLOC_TRYLOCK;
+	/*
+	 * ALLOC_NOFRAGMENT steers this best-effort no-lock allocation
+	 * toward tainted-SPB sub-pageblock space before fragmenting any
+	 * clean superpageblock. Without it, atomic kmalloc_nolock callers
+	 * (e.g. BPF storage from sched_process_exec tracepoints) hit the
+	 * fallback path on every PCP miss and convert a movable pageblock
+	 * in a clean SPB to UNMOVABLE -- tainting a 1 GiB hugepage
+	 * candidate for an order-0 atomic alloc. With NOFRAGMENT set:
+	 *   - order > 0: the get_page_from_freelist relax sequence
+	 *     auto-refuses to drop NOFRAGMENT when the tainted pool can
+	 *     serve a smaller order, returning NULL to the caller.
+	 *   - order = 0: prefers tainted-SPB fragments first; only falls
+	 *     back to claiming a clean-SPB pageblock if the tainted pool
+	 *     is exhausted of suitable fragments.
+	 * Callers of alloc_pages_nolock() already handle NULL.
+	 */
+	unsigned int alloc_flags = ALLOC_TRYLOCK | ALLOC_NOFRAGMENT;
 	struct alloc_context ac = { };
 	struct page *page;
 
