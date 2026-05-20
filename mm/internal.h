@@ -102,6 +102,10 @@ struct pagetable_move_control {
 })
 
 void page_writeback_init(void);
+void folio_wait_init(void);
+void folio_wake_writeback(struct folio *folio);
+int folio_put_wait_locked(struct folio *folio, int state);
+int __folio_lock_async(struct folio *folio, struct wait_page_queue *wait);
 
 /*
  * If a 16GB hugetlb folio were mapped by PTEs of all of its 4kB pages,
