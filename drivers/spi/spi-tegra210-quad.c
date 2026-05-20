@@ -1664,6 +1664,15 @@ static irqreturn_t tegra_qspi_isr(int irq, void *context_data)
 
 	spin_unlock(&tqspi->lock);
 
+	/*
+	 * For small PIO transfers (e.g., TPM), process directly in hard IRQ
+	 * context unless there was a FIFO error. Error recovery calls
+	 * device_reset() which can sleep, so must be deferred to workqueue.
+	 */
+	if (!tqspi->is_curr_dma_xfer && tqspi->curr_dma_words <= QSPI_FIFO_DEPTH &&
+	    !tqspi->tx_status && !tqspi->rx_status)
+		return handle_cpu_based_xfer(tqspi);
+
 	queue_work(tqspi->wq, &tqspi->irq_work);
 
 	return IRQ_HANDLED;
