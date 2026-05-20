@@ -53,42 +53,6 @@ static int gmc_v12_0_ecc_interrupt_state(struct amdgpu_device *adev,
 	return 0;
 }
 
-static int gmc_v12_0_vm_fault_interrupt_state(struct amdgpu_device *adev,
-					      struct amdgpu_irq_src *src, unsigned type,
-					      enum amdgpu_interrupt_state state)
-{
-	switch (state) {
-	case AMDGPU_IRQ_STATE_DISABLE:
-		/* MM HUB */
-		amdgpu_gmc_set_vm_fault_masks(adev, AMDGPU_MMHUB0(0), false);
-		/* GFX HUB */
-		/* This works because this interrupt is only
-		 * enabled at init/resume and disabled in
-		 * fini/suspend, so the overall state doesn't
-		 * change over the course of suspend/resume.
-		 */
-		if (!adev->in_s0ix)
-			amdgpu_gmc_set_vm_fault_masks(adev, AMDGPU_GFXHUB(0), false);
-		break;
-	case AMDGPU_IRQ_STATE_ENABLE:
-		/* MM HUB */
-		amdgpu_gmc_set_vm_fault_masks(adev, AMDGPU_MMHUB0(0), true);
-		/* GFX HUB */
-		/* This works because this interrupt is only
-		 * enabled at init/resume and disabled in
-		 * fini/suspend, so the overall state doesn't
-		 * change over the course of suspend/resume.
-		 */
-		if (!adev->in_s0ix)
-			amdgpu_gmc_set_vm_fault_masks(adev, AMDGPU_GFXHUB(0), true);
-		break;
-	default:
-		break;
-	}
-
-	return 0;
-}
-
 static int gmc_v12_0_process_interrupt(struct amdgpu_device *adev,
 				       struct amdgpu_irq_src *source,
 				       struct amdgpu_iv_entry *entry)
@@ -160,7 +124,7 @@ static int gmc_v12_0_process_interrupt(struct amdgpu_device *adev,
 }
 
 static const struct amdgpu_irq_src_funcs gmc_v12_0_irq_funcs = {
-	.set = gmc_v12_0_vm_fault_interrupt_state,
+	.set = amdgpu_gmc_vm_fault_interrupt_state,
 	.process = gmc_v12_0_process_interrupt,
 };
 
