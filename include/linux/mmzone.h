@@ -978,7 +978,6 @@ struct zone {
 
 	/* zone watermarks, access with *_wmark_pages(zone) macros */
 	unsigned long _watermark[NR_WMARK];
-	unsigned long watermark_boost;
 
 	unsigned long nr_reserved_highatomic;
 	unsigned long nr_free_highatomic;
@@ -1167,9 +1166,6 @@ enum pgdat_flags {
 };
 
 enum zone_flags {
-	ZONE_BOOSTED_WATERMARK,		/* zone recently boosted watermarks.
-					 * Cleared when kswapd is woken.
-					 */
 	ZONE_RECLAIM_ACTIVE,		/* kswapd may be scanning the zone. */
 	ZONE_BELOW_HIGH,		/* zone is below high watermark. */
 };
@@ -1177,7 +1173,7 @@ enum zone_flags {
 static inline unsigned long wmark_pages(const struct zone *z,
 					enum zone_watermarks w)
 {
-	return z->_watermark[w] + z->watermark_boost;
+	return z->_watermark[w];
 }
 
 static inline unsigned long min_wmark_pages(const struct zone *z)
