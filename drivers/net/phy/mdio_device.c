@@ -215,6 +215,12 @@ int mdiobus_unregister_device(struct mdio_device *mdiodev)
 	if (mdiodev->bus->mdio_map[mdiodev->addr] != mdiodev)
 		return -EINVAL;
 
+	/*
+	 * Leave optional reset lines deasserted before releasing them so devices
+	 * remain discoverable across a later bus reprobe.
+	 */
+	mdio_device_reset(mdiodev, 0);
+
 	mdio_device_unregister_reset(mdiodev);
 
 	mdiodev->bus->mdio_map[mdiodev->addr] = NULL;
