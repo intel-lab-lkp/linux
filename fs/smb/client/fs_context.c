@@ -35,6 +35,7 @@
 #include "nterr.h"
 #include "rfc1002pdu.h"
 #include "fs_context.h"
+#include "cached_dir.h"
 
 DEFINE_MUTEX(cifs_mount_mutex);
 
@@ -1295,6 +1296,7 @@ static void smb3_sync_tcon_opts(struct cifs_sb_info *cifs_sb,
 
 		spin_lock(&tcon->tc_lock);
 		tcon->retry = ctx->retry;
+		tcon->no_lease = ctx->no_lease;
 		/*
 		 * Note: this updates the limit for new cached dir opens
 		 * but does not resize or evict existing cached dirents.
@@ -1303,6 +1305,26 @@ static void smb3_sync_tcon_opts(struct cifs_sb_info *cifs_sb,
 		spin_unlock(&tcon->tc_lock);
 	}
 	spin_unlock(&cifs_sb->tlink_tree_lock);
+
+	/*
+	 * When switching to nolease, close deferred file handles and
+	 * invalidate cached directory entries.  Both hold leases from
+	 * before the switch; without cleaning them up, those handles
+	 * continue using lease-based caching despite nolease being set.
+	 *
+	 * Note: files already open with leases (e.g. RWH) by applications
+	 * are not affected -- nolease only governs new opens.  Existing
+	 * handles retain their leases until the server sends a lease break
+	 * or the application closes the handle.
+	 *
+	 * Both _sb() helpers iterate all tcons internally and handle
+	 * their own locking.  They can sleep, so they must be called
+	 * outside tlink_tree_lock.
+	 */
+	if (ctx->no_lease) {
+		cifs_close_all_deferred_files_sb(cifs_sb);
+		invalidate_all_cached_dirs_sb(cifs_sb);
+	}
 }
 
 /*
