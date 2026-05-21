@@ -36,6 +36,7 @@
  */
 
 #include <linux/bug.h>
+#include <linux/pagemap.h>
 #include <linux/sched/signal.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -1464,6 +1465,34 @@ static int tls_setup_from_iter(struct iov_iter *from,
 
 		length -= copied;
 		size += copied;
+		/* Reject file-backed destination pages.  Writing unauthenticated
+		 * AEAD output into a page-cache page before tag verification
+		 * leaves the backing file modified even when recvmsg() returns
+		 * -EBADMSG.  Return -EOPNOTSUPP so the caller retries via the
+		 * non-ZC bounce-buffer path.
+		 */
+		{
+			ssize_t remain = copied;
+			size_t  off    = offset;
+			int     np = 0, j;
+
+			while (remain > 0) {
+				remain -= min_t(ssize_t, remain,
+						(ssize_t)(PAGE_SIZE - off));
+				off = 0;
+				np++;
+			}
+			for (j = 0; j < np; j++) {
+				if (folio_mapping(page_folio(pages[j]))) {
+					int k;
+
+					for (k = 0; k < np; k++)
+						put_page(pages[k]);
+					rc = -EOPNOTSUPP;
+					goto out;
+				}
+			}
+		}
 		while (copied) {
 			use = min_t(int, copied, PAGE_SIZE - offset);
 
@@ -1720,6 +1749,14 @@ tls_decrypt_sw(struct sock *sk, struct tls_context *tls_ctx,
 	if (err < 0) {
 		if (err == -EBADMSG)
 			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSDECRYPTERROR);
+		if (err == -EOPNOTSUPP && darg->zc) {
+			/* tls_setup_from_iter detected file-backed destination
+			 * pages; retry without ZC via the bounce-buffer path.
+			 */
+			darg->zc = false;
+			TLS_INC_STATS(sock_net(sk), LINUX_MIB_TLSDECRYPTRETRY);
+			return tls_decrypt_sw(sk, tls_ctx, msg, darg);
+		}
 		return err;
 	}
 	/* keep going even for ->async, the code below is TLS 1.3 */
