@@ -61,7 +61,7 @@ int i2c_dw_unreg_slave(struct i2c_client *slave)
 	return 0;
 }
 
-static u32 i2c_dw_read_clear_intrbits_slave(struct dw_i2c_dev *dev)
+__weak u32 i2c_dw_read_clear_intrbits_slave(struct dw_i2c_dev *dev)
 {
 	unsigned int stat, dummy;
 
@@ -176,7 +176,7 @@ irqreturn_t i2c_dw_isr_slave(struct dw_i2c_dev *dev)
 	return IRQ_HANDLED;
 }
 
-void i2c_dw_configure_slave(struct dw_i2c_dev *dev)
+__weak void i2c_dw_configure_slave(struct dw_i2c_dev *dev)
 {
 	if (dev->flags & ACCESS_POLLING)
 		return;

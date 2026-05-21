@@ -167,6 +167,11 @@ static int i2c_dw_init_regmap(struct dw_i2c_dev *dev)
 	if ((dev->flags & MODEL_MASK) == MODEL_AMD_NAVI_GPU)
 		map_cfg.max_register = AMD_UCSI_INTR_REG;
 
+#if IS_ENABLED(CONFIG_I2C_DWC_CORE)
+	if ((dev->flags & MODEL_MASK) == MODEL_STARFIVE)
+		map_cfg.max_register = DWC_IC_SMBUS_INTR_CLR;
+#endif
+
 	if (reg == swab32(DW_IC_COMP_TYPE_VALUE)) {
 		map_cfg.reg_read = dw_reg_read_swab;
 		map_cfg.reg_write = dw_reg_write_swab;
@@ -411,7 +416,7 @@ static void i2c_dw_write_timings(struct dw_i2c_dev *dev)
  *
  * The controller must be disabled before this function is called.
  */
-void i2c_dw_set_mode(struct dw_i2c_dev *dev, int mode)
+__weak void i2c_dw_set_mode(struct dw_i2c_dev *dev, int mode)
 {
 	if (mode == DW_IC_SLAVE && !dev->slave)
 		mode = DW_IC_MASTER;
@@ -430,7 +435,7 @@ void i2c_dw_set_mode(struct dw_i2c_dev *dev, int mode)
  *
  * Return: 0 on success, or negative errno otherwise.
  */
-int i2c_dw_init(struct dw_i2c_dev *dev)
+__weak int i2c_dw_init(struct dw_i2c_dev *dev)
 {
 	int ret;
 
@@ -806,10 +811,25 @@ static int i2c_dw_set_fifo_size(struct dw_i2c_dev *dev)
 	if (ret)
 		return ret;
 
+#if IS_ENABLED(CONFIG_I2C_DWC_CORE)
+	u32 tx_fifo_cfg = 8, rx_fifo_cfg = 8;
+
+#ifdef CONFIG_OF
+	ret = of_property_read_u32(dev->dev->of_node, "dwc-i2c-tx-fifo-depth", &tx_fifo_cfg);
+	if (!ret && (tx_fifo_cfg < 2 || tx_fifo_cfg > 256))
+		tx_fifo_cfg = 8;
+
+	ret = of_property_read_u32(dev->dev->of_node, "dwc-i2c-rx-fifo-depth", &rx_fifo_cfg);
+	if (!ret && (rx_fifo_cfg < 2 || rx_fifo_cfg > 256))
+		rx_fifo_cfg = 8;
+#endif
+	param = rx_fifo_cfg << 8 | tx_fifo_cfg << 16;
+#else
 	ret = regmap_read(dev->map, DW_IC_COMP_PARAM_1, &param);
 	i2c_dw_release_lock(dev);
 	if (ret)
 		return ret;
+#endif
 
 	tx_fifo_depth = FIELD_GET(DW_IC_FIFO_TX_FIELD, param) + 1;
 	rx_fifo_depth = FIELD_GET(DW_IC_FIFO_RX_FIELD, param) + 1;
@@ -835,7 +855,9 @@ u32 i2c_dw_func(struct i2c_adapter *adap)
 
 void i2c_dw_disable(struct dw_i2c_dev *dev)
 {
+#if !IS_ENABLED(CONFIG_I2C_DWC_CORE)
 	unsigned int dummy;
+#endif
 	int ret;
 
 	ret = i2c_dw_acquire_lock(dev);
@@ -847,7 +869,12 @@ void i2c_dw_disable(struct dw_i2c_dev *dev)
 
 	/* Disable all interrupts */
 	__i2c_dw_write_intr_mask(dev, 0);
+
+#if IS_ENABLED(CONFIG_I2C_DWC_CORE)
+	regmap_write(dev->map, DWC_IC_INTR_CLR, DWC_CLR_INTR);
+#else
 	regmap_read(dev->map, DW_IC_CLR_INTR, &dummy);
+#endif
 
 	i2c_dw_release_lock(dev);
 }
@@ -896,6 +923,12 @@ int i2c_dw_probe(struct dw_i2c_dev *dev)
 	if (ret)
 		return ret;
 
+#if IS_ENABLED(CONFIG_I2C_DWC_CORE)
+	if (dev->mode == DW_IC_SLAVE)
+		i2c_dw_probe_slave(dev);
+	else
+		i2c_dw_probe_master(dev);
+#else
 	ret = i2c_dw_probe_master(dev);
 	if (ret)
 		return ret;
@@ -906,10 +939,16 @@ int i2c_dw_probe(struct dw_i2c_dev *dev)
 
 	if (!adap->name[0])
 		strscpy(adap->name, "Synopsys DesignWare I2C adapter");
+#endif
 
 	adap->retries = 3;
 	adap->algo = &i2c_dw_algo;
+#if IS_ENABLED(CONFIG_I2C_DWC_SLAVE)
+	if (dev->mode == DW_IC_SLAVE)
+		adap->algo = &i2c_dw_slave_algo;
+#else
 	adap->quirks = &i2c_dw_quirks;
+#endif
 	adap->dev.parent = dev->dev;
 	i2c_set_adapdata(adap, dev);
 
@@ -938,16 +977,18 @@ int i2c_dw_probe(struct dw_i2c_dev *dev)
 	if (!dev->emptyfifo_hold_master)
 		irq_flags |= IRQF_NO_THREAD;
 
-	ret = i2c_dw_acquire_lock(dev);
-	if (ret)
-		return ret;
+	if (!IS_ENABLED(CONFIG_I2C_DWC_CORE) || dev->mode == DW_IC_MASTER) {
+		ret = i2c_dw_acquire_lock(dev);
+		if (ret)
+			return ret;
 
-	__i2c_dw_write_intr_mask(dev, 0);
-	i2c_dw_release_lock(dev);
+		__i2c_dw_write_intr_mask(dev, 0);
+		i2c_dw_release_lock(dev);
+	}
 
 	if (!(dev->flags & ACCESS_POLLING)) {
 		ret = devm_request_irq(dev->dev, dev->irq, i2c_dw_isr,
-				       irq_flags, dev_name(dev->dev), dev);
+				irq_flags, dev_name(dev->dev), dev);
 		if (ret)
 			return ret;
 	}

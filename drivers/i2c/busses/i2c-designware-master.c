@@ -185,7 +185,7 @@ static int i2c_dw_set_timings_master(struct dw_i2c_dev *dev)
 	return 0;
 }
 
-static void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
+__weak void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
 {
 	struct i2c_msg *msgs = dev->msgs;
 	u32 ic_con = 0, ic_tar = 0;
@@ -397,8 +397,12 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 			 * IC_RESTART_EN are set, we must manually
 			 * set restart bit between messages.
 			 */
+#if IS_ENABLED(CONFIG_I2C_DWC_CORE)
+			if (dev->msg_write_idx > 0)
+#else
 			if ((dev->master_cfg & DW_IC_CON_RESTART_EN) &&
 					(dev->msg_write_idx > 0))
+#endif
 				need_restart = true;
 		}
 
@@ -570,7 +574,7 @@ i2c_dw_read(struct dw_i2c_dev *dev)
 	}
 }
 
-static u32 i2c_dw_read_clear_intrbits(struct dw_i2c_dev *dev)
+__weak u32 i2c_dw_read_clear_intrbits(struct dw_i2c_dev *dev)
 {
 	unsigned int stat, dummy;
 
@@ -921,7 +925,7 @@ int i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 	return i2c_dw_xfer_common(dev, msgs, num);
 }
 
-void i2c_dw_configure_master(struct dw_i2c_dev *dev)
+__weak void i2c_dw_configure_master(struct dw_i2c_dev *dev)
 {
 	struct i2c_timings *t = &dev->timings;
 
@@ -967,7 +971,7 @@ static void i2c_dw_unprepare_recovery(struct i2c_adapter *adap)
 	i2c_dw_init(dev);
 }
 
-static int i2c_dw_init_recovery_info(struct dw_i2c_dev *dev)
+int i2c_dw_init_recovery_info(struct dw_i2c_dev *dev)
 {
 	struct i2c_bus_recovery_info *rinfo = &dev->rinfo;
 	struct i2c_adapter *adap = &dev->adapter;
@@ -1006,7 +1010,7 @@ static int i2c_dw_init_recovery_info(struct dw_i2c_dev *dev)
 	return 0;
 }
 
-int i2c_dw_probe_master(struct dw_i2c_dev *dev)
+__weak int i2c_dw_probe_master(struct dw_i2c_dev *dev)
 {
 	unsigned int ic_con;
 	int ret;

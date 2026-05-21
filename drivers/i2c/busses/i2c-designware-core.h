@@ -321,6 +321,11 @@ struct dw_i2c_dev {
 	u32			bus_capacitance_pF;
 	bool			clk_freq_optimized;
 	bool			emptyfifo_hold_master;
+#if IS_ENABLED(CONFIG_I2C_DWC_CORE)
+	u16			scl_hcnt;
+	u16			scl_lcnt;
+	struct i2c_adapter	*ms_adapter; /* Bind another I2C master controller */
+#endif
 };
 
 #define ACCESS_INTR_MASK			BIT(0)
@@ -328,6 +333,7 @@ struct dw_i2c_dev {
 #define ARBITRATION_SEMAPHORE			BIT(2)
 #define ACCESS_POLLING				BIT(3)
 
+#define MODEL_STARFIVE				BIT(9)
 #define MODEL_AMD_NAVI_GPU			BIT(10)
 #define MODEL_WANGXUN_SP			BIT(11)
 #define MODEL_MASK				GENMASK(11, 8)
@@ -359,8 +365,16 @@ int i2c_dw_handle_tx_abort(struct dw_i2c_dev *dev);
 u32 i2c_dw_func(struct i2c_adapter *adap);
 irqreturn_t i2c_dw_isr_master(struct dw_i2c_dev *dev);
 
+void i2c_dw_xfer_init(struct dw_i2c_dev *dev);
+int i2c_dw_init_recovery_info(struct dw_i2c_dev *dev);
+u32 i2c_dw_read_clear_intrbits(struct dw_i2c_dev *dev);
+u32 i2c_dw_read_clear_intrbits_slave(struct dw_i2c_dev *dev);
+
 extern const struct dev_pm_ops i2c_dw_dev_pm_ops;
 
+#if IS_ENABLED(CONFIG_I2C_DWC_CORE)
+#include "i2c-dwc-core.h"
+#else
 static inline void __i2c_dw_enable(struct dw_i2c_dev *dev)
 {
 	dev->status |= STATUS_ACTIVE;
@@ -372,6 +386,7 @@ static inline void __i2c_dw_disable_nowait(struct dw_i2c_dev *dev)
 	regmap_write(dev->map, DW_IC_ENABLE, 0);
 	dev->status &= ~STATUS_ACTIVE;
 }
+#endif
 
 static inline void __i2c_dw_write_intr_mask(struct dw_i2c_dev *dev,
 					    unsigned int intr_mask)
@@ -409,11 +424,21 @@ static inline void i2c_dw_configure_slave(struct dw_i2c_dev *dev) { }
 static inline irqreturn_t i2c_dw_isr_slave(struct dw_i2c_dev *dev) { return IRQ_NONE; }
 #endif
 
+#if IS_ENABLED(CONFIG_I2C_DWC_CORE)
+static inline void i2c_dw_configure(struct dw_i2c_dev *dev)
+{
+	if (device_is_compatible(dev->dev, "starfive,jhb100-dwc-i2c-slave"))
+		i2c_dw_configure_slave(dev);
+	else
+		i2c_dw_configure_master(dev);
+}
+#else
 static inline void i2c_dw_configure(struct dw_i2c_dev *dev)
 {
 	i2c_dw_configure_slave(dev);
 	i2c_dw_configure_master(dev);
 }
+#endif
 
 int i2c_dw_probe(struct dw_i2c_dev *dev);
 int i2c_dw_init(struct dw_i2c_dev *dev);

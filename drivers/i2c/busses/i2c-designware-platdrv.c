@@ -151,6 +151,10 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
 	if (device_property_present(device, "wx,i2c-snps-model"))
 		flags = MODEL_WANGXUN_SP | ACCESS_POLLING;
 
+	if (device_is_compatible(device, "starfive,jhb100-dwc-i2c-master") ||
+	    device_is_compatible(device, "starfive,jhb100-dwc-i2c-slave"))
+		flags |= MODEL_STARFIVE;
+
 	dev->dev = device;
 	dev->irq = irq;
 	dev->flags = flags;
@@ -255,6 +259,8 @@ static const struct of_device_id dw_i2c_of_match[] = {
 	{ .compatible = "mobileye,eyeq6lplus-i2c" },
 	{ .compatible = "mscc,ocelot-i2c" },
 	{ .compatible = "snps,designware-i2c" },
+	{ .compatible = "starfive,jhb100-dwc-i2c-master" },
+	{ .compatible = "starfive,jhb100-dwc-i2c-slave" },
 	{}
 };
 MODULE_DEVICE_TABLE(of, dw_i2c_of_match);
