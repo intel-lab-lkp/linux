@@ -12,7 +12,6 @@
 #include <linux/smsc911x.h>
 #include <linux/input.h>
 #include <linux/io.h>
-#include <linux/gpio.h>
 #include <linux/gpio/machine.h>
 #include <linux/gpio/property.h>
 #include <asm/machvec.h>
@@ -131,6 +130,56 @@ static const struct software_node rsk7203_sw3_key_node = {
 	},
 };
 
+/* The base of the function GPIOs in the flat enum */
+#define SH7203_FN_BASE GPIO_FN_PINT7_PB
+
+static const struct software_node rsk7203_pfc_functions_node = {
+	.name = "functions",
+	.parent = &pfc_gpiochip_node,
+};
+
+static const struct software_node rsk7203_txd0_hog_node = {
+	.name = "txd0-hog",
+	.parent = &rsk7203_pfc_functions_node,
+	.properties = (const struct property_entry[]) {
+		PROPERTY_ENTRY_BOOL("gpio-hog"),
+		PROPERTY_ENTRY_U32_ARRAY("gpios", ((u32[]){
+			GPIO_FN_TXD0 - SH7203_FN_BASE, GPIO_ACTIVE_HIGH
+		})),
+		PROPERTY_ENTRY_BOOL("input"),
+		PROPERTY_ENTRY_STRING("line-name", "TXD0"),
+		{ }
+	},
+};
+
+static const struct software_node rsk7203_rxd0_hog_node = {
+	.name = "rxd0-hog",
+	.parent = &rsk7203_pfc_functions_node,
+	.properties = (const struct property_entry[]) {
+		PROPERTY_ENTRY_BOOL("gpio-hog"),
+		PROPERTY_ENTRY_U32_ARRAY("gpios", ((u32[]){
+			GPIO_FN_RXD0 - SH7203_FN_BASE, GPIO_ACTIVE_HIGH
+		})),
+		PROPERTY_ENTRY_BOOL("input"),
+		PROPERTY_ENTRY_STRING("line-name", "RXD0"),
+		{ }
+	},
+};
+
+static const struct software_node rsk7203_irq0_hog_node = {
+	.name = "irq0-hog",
+	.parent = &rsk7203_pfc_functions_node,
+	.properties = (const struct property_entry[]) {
+		PROPERTY_ENTRY_BOOL("gpio-hog"),
+		PROPERTY_ENTRY_U32_ARRAY("gpios", ((u32[]){
+			GPIO_FN_IRQ0_PB - SH7203_FN_BASE, GPIO_ACTIVE_HIGH
+		})),
+		PROPERTY_ENTRY_BOOL("input"),
+		PROPERTY_ENTRY_STRING("line-name", "IRQ0_PB"),
+		{ }
+	},
+};
+
 static const struct software_node * const rsk7203_swnodes[] __initconst = {
 	&rsk7203_gpio_leds_node,
 	&rsk7203_green_led_node,
@@ -141,6 +190,10 @@ static const struct software_node * const rsk7203_swnodes[] __initconst = {
 	&rsk7203_sw1_key_node,
 	&rsk7203_sw2_key_node,
 	&rsk7203_sw3_key_node,
+	&rsk7203_pfc_functions_node,
+	&rsk7203_txd0_hog_node,
+	&rsk7203_rxd0_hog_node,
+	&rsk7203_irq0_hog_node,
 	NULL
 };
 
@@ -165,25 +218,45 @@ static const struct platform_device_info rsk7203_devices[] __initconst = {
 	},
 };
 
+/*
+ * The pfc-sh7203 device is registered at arch_initcall level, and the
+ * sh-pfc driver (registered at postcore_initcall level) probes as soon
+ * as the device is created.
+ *
+ * We need to register our software nodes at postcore_initcall level so
+ * they are already present in the system when the driver probes and
+ * tries to apply GPIO hogs.
+ */
+static int __init rsk7203_sw_nodes_setup(void)
+{
+	int error;
+
+	error = software_node_register(&pfc_gpiochip_node);
+	if (error && error != -EEXIST) {
+		pr_err("RSK7203: failed to register PFC software node: %d\n",
+		       error);
+		return error;
+	}
+
+	error = software_node_register_node_group(rsk7203_swnodes);
+	if (error) {
+		pr_err("RSK7203: failed to register board software nodes: %d\n",
+		       error);
+		return error;
+	}
+
+	return 0;
+}
+postcore_initcall(rsk7203_sw_nodes_setup);
+
 static int __init rsk7203_devices_setup(void)
 {
 	struct platform_device *pd;
 	int error;
 	int i;
 
-	/* Select pins for SCIF0 */
-	gpio_request(GPIO_FN_TXD0, NULL);
-	gpio_request(GPIO_FN_RXD0, NULL);
-
 	/* Setup LAN9118: CS1 in 16-bit Big Endian Mode, IRQ0 at Port B */
 	__raw_writel(0x36db0400, 0xfffc0008); /* CS1BCR */
-	gpio_request(GPIO_FN_IRQ0_PB, NULL);
-
-	error = software_node_register_node_group(rsk7203_swnodes);
-	if (error) {
-		pr_err("failed to register software nodes: %d\n", error);
-		return error;
-	}
 
 	for (i = 0; i < ARRAY_SIZE(rsk7203_devices); i++) {
 		pd = platform_device_register_full(&rsk7203_devices[i]);
