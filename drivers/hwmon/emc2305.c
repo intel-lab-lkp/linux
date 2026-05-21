@@ -716,6 +716,9 @@ static int emc2305_probe(struct i2c_client *client)
 
 static const struct of_device_id of_emc2305_match_table[] = {
 	{ .compatible = "microchip,emc2305", },
+	{ .compatible = "microchip,emc2303", },
+	{ .compatible = "microchip,emc2302", },
+	{ .compatible = "microchip,emc2301", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, of_emc2305_match_table);
