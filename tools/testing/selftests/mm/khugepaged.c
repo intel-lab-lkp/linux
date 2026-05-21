@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/vfs.h>
+#include <mm/file_utils.h>
 
 #include "linux/magic.h"
 

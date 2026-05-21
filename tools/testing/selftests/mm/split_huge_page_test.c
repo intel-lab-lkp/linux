@@ -19,6 +19,8 @@
 #include <malloc.h>
 #include <stdbool.h>
 #include <time.h>
+#include <mm/file_utils.h>
+
 #include "vm_util.h"
 #include "kselftest.h"
 #include "hugepage_settings.h"
