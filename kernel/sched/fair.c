@@ -14070,6 +14070,8 @@ out:
 static void set_cpu_sd_state_busy(int cpu)
 {
 	struct sched_domain *sd;
+
+	rcu_read_lock();
 	sd = rcu_dereference_all(per_cpu(sd_llc, cpu));
 
 	/*
@@ -14077,10 +14079,12 @@ static void set_cpu_sd_state_busy(int cpu)
 	 * domain has no shared object there is nothing to clear or account.
 	 */
 	if (!sd || !sd->shared || !sd->nohz_idle)
-		return;
+		goto unlock;
 	sd->nohz_idle = 0;
 
 	atomic_inc(&sd->shared->nr_busy_cpus);
+unlock:
+	rcu_read_unlock();
 }
 
 void nohz_balance_exit_idle(struct rq *rq)
@@ -14099,14 +14103,18 @@ void nohz_balance_exit_idle(struct rq *rq)
 static void set_cpu_sd_state_idle(int cpu)
 {
 	struct sched_domain *sd;
+
+	rcu_read_lock();
 	sd = rcu_dereference_all(per_cpu(sd_llc, cpu));
 
 	/* See set_cpu_sd_state_busy(): nohz_idle is only used with sd->shared. */
 	if (!sd || !sd->shared || sd->nohz_idle)
-		return;
+		goto unlock;
 	sd->nohz_idle = 1;
 
 	atomic_dec(&sd->shared->nr_busy_cpus);
+unlock:
+	rcu_read_unlock();
 }
 
 /*
