@@ -248,6 +248,20 @@ static void mtk_pcie_port_free(struct mtk_pcie_port *port)
 	struct mtk_pcie *pcie = port->pcie;
 	struct device *dev = pcie->dev;
 
+	if (port->irq) {
+		irq_set_chained_handler_and_data(port->irq, NULL, NULL);
+
+		if (port->irq_domain)
+			irq_domain_remove(port->irq_domain);
+
+		if (IS_ENABLED(CONFIG_PCI_MSI)) {
+			if (port->inner_domain)
+				irq_domain_remove(port->inner_domain);
+		}
+
+		irq_dispose_mapping(port->irq);
+	}
+
 	devm_iounmap(dev, port->base);
 	list_del(&port->list);
 	devm_kfree(dev, port);
@@ -527,25 +541,6 @@ static void mtk_pcie_enable_msi(struct mtk_pcie_port *port)
 	val = readl(port->base + PCIE_INT_MASK);
 	val &= ~MSI_MASK;
 	writel(val, port->base + PCIE_INT_MASK);
-}
-
-static void mtk_pcie_irq_teardown(struct mtk_pcie *pcie)
-{
-	struct mtk_pcie_port *port, *tmp;
-
-	list_for_each_entry_safe(port, tmp, &pcie->ports, list) {
-		irq_set_chained_handler_and_data(port->irq, NULL, NULL);
-
-		if (port->irq_domain)
-			irq_domain_remove(port->irq_domain);
-
-		if (IS_ENABLED(CONFIG_PCI_MSI)) {
-			if (port->inner_domain)
-				irq_domain_remove(port->inner_domain);
-		}
-
-		irq_dispose_mapping(port->irq);
-	}
 }
 
 static int mtk_pcie_intx_map(struct irq_domain *domain, unsigned int irq,
@@ -1175,8 +1170,6 @@ static void mtk_pcie_remove(struct platform_device *pdev)
 	pci_stop_root_bus(host->bus);
 	pci_remove_root_bus(host->bus);
 	mtk_pcie_free_resources(pcie);
-
-	mtk_pcie_irq_teardown(pcie);
 
 	mtk_pcie_put_resources(pcie);
 }
