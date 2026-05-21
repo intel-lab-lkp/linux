@@ -978,6 +978,14 @@ static CLOSURE_CALLBACK(cached_dev_write_complete)
 	cached_dev_bio_complete(&cl->work);
 }
 
+static CLOSURE_CALLBACK(backing_device_bypass_write_complete)
+{
+	closure_type(s, struct search, cl);
+
+	closure_call(&s->iop.cl, bch_data_insert, NULL, cl);
+	continue_at(cl, cached_dev_write_complete, NULL);
+}
+
 static void cached_dev_write(struct cached_dev *dc, struct search *s)
 {
 	struct closure *cl = &s->cl;
@@ -1058,6 +1066,11 @@ static void cached_dev_write(struct cached_dev *dc, struct search *s)
 	}
 
 insert_data:
+	if (s->iop.bypass) {
+		continue_at(cl, backing_device_bypass_write_complete, NULL);
+		return;
+	}
+
 	closure_call(&s->iop.cl, bch_data_insert, NULL, cl);
 	continue_at(cl, cached_dev_write_complete, NULL);
 }
