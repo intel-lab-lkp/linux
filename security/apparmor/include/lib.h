@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/lsm_hooks.h>
+#include <linux/seq_buf.h>
 
 #include "match.h"
 
@@ -72,7 +73,7 @@ do {									\
 #endif
 
 int aa_parse_debug_params(const char *str);
-int aa_print_debug_params(char *buffer);
+int aa_print_debug_params(struct seq_buf *s);
 
 #define AA_ERROR(fmt, args...)						\
 	pr_err_ratelimited("AppArmor: " fmt, ##args)

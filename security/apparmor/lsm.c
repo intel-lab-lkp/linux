@@ -16,6 +16,7 @@
 #include <linux/namei.h>
 #include <linux/ptrace.h>
 #include <linux/ctype.h>
+#include <linux/seq_buf.h>
 #include <linux/sysctl.h>
 #include <linux/sysfs.h>
 #include <linux/audit.h>
@@ -1765,20 +1766,20 @@ static struct security_hook_list apparmor_hooks[] __ro_after_init = {
  */
 
 static int param_set_aabool(const char *val, const struct kernel_param *kp);
-static int param_get_aabool(char *buffer, const struct kernel_param *kp);
+static int param_get_aabool(struct seq_buf *buffer, const struct kernel_param *kp);
 #define param_check_aabool param_check_bool
 static DEFINE_KERNEL_PARAM_OPS_NOARG(param_ops_aabool, param_set_aabool,
 				     param_get_aabool);
 
 static int param_set_aauint(const char *val, const struct kernel_param *kp);
-static int param_get_aauint(char *buffer, const struct kernel_param *kp);
+static int param_get_aauint(struct seq_buf *buffer, const struct kernel_param *kp);
 #define param_check_aauint param_check_uint
 static DEFINE_KERNEL_PARAM_OPS(param_ops_aauint, param_set_aauint,
 			       param_get_aauint);
 
 static int param_set_aacompressionlevel(const char *val,
 					const struct kernel_param *kp);
-static int param_get_aacompressionlevel(char *buffer,
+static int param_get_aacompressionlevel(struct seq_buf *buffer,
 					const struct kernel_param *kp);
 #define param_check_aacompressionlevel param_check_int
 static DEFINE_KERNEL_PARAM_OPS(param_ops_aacompressionlevel,
@@ -1786,14 +1787,14 @@ static DEFINE_KERNEL_PARAM_OPS(param_ops_aacompressionlevel,
 			       param_get_aacompressionlevel);
 
 static int param_set_aalockpolicy(const char *val, const struct kernel_param *kp);
-static int param_get_aalockpolicy(char *buffer, const struct kernel_param *kp);
+static int param_get_aalockpolicy(struct seq_buf *buffer, const struct kernel_param *kp);
 #define param_check_aalockpolicy param_check_bool
 static DEFINE_KERNEL_PARAM_OPS_NOARG(param_ops_aalockpolicy,
 				     param_set_aalockpolicy,
 				     param_get_aalockpolicy);
 
 static int param_set_debug(const char *val, const struct kernel_param *kp);
-static int param_get_debug(char *buffer, const struct kernel_param *kp);
+static int param_get_debug(struct seq_buf *buffer, const struct kernel_param *kp);
 
 static int param_set_audit(const char *val, const struct kernel_param *kp);
 static int param_get_audit(char *buffer, const struct kernel_param *kp);
@@ -1868,7 +1869,7 @@ module_param_named(path_max, aa_g_path_max, aauint, S_IRUSR);
 bool aa_g_paranoid_load = IS_ENABLED(CONFIG_SECURITY_APPARMOR_PARANOID_LOAD);
 module_param_named(paranoid_load, aa_g_paranoid_load, aabool, S_IRUGO);
 
-static int param_get_aaintbool(char *buffer, const struct kernel_param *kp);
+static int param_get_aaintbool(struct seq_buf *buffer, const struct kernel_param *kp);
 static int param_set_aaintbool(const char *val, const struct kernel_param *kp);
 #define param_check_aaintbool param_check_int
 static DEFINE_KERNEL_PARAM_OPS(param_ops_aaintbool, param_set_aaintbool,
@@ -1898,7 +1899,7 @@ static int param_set_aalockpolicy(const char *val, const struct kernel_param *kp
 	return param_set_bool(val, kp);
 }
 
-static int param_get_aalockpolicy(char *buffer, const struct kernel_param *kp)
+static int param_get_aalockpolicy(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	if (!apparmor_enabled)
 		return -EINVAL;
@@ -1916,7 +1917,7 @@ static int param_set_aabool(const char *val, const struct kernel_param *kp)
 	return param_set_bool(val, kp);
 }
 
-static int param_get_aabool(char *buffer, const struct kernel_param *kp)
+static int param_get_aabool(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	if (!apparmor_enabled)
 		return -EINVAL;
@@ -1942,7 +1943,7 @@ static int param_set_aauint(const char *val, const struct kernel_param *kp)
 	return error;
 }
 
-static int param_get_aauint(char *buffer, const struct kernel_param *kp)
+static int param_get_aauint(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	if (!apparmor_enabled)
 		return -EINVAL;
@@ -1978,7 +1979,7 @@ static int param_set_aaintbool(const char *val, const struct kernel_param *kp)
  * display in the /sys filesystem, while keeping it "int" for the LSM
  * infrastructure.
  */
-static int param_get_aaintbool(char *buffer, const struct kernel_param *kp)
+static int param_get_aaintbool(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	struct kernel_param kp_local;
 	bool value;
@@ -2011,7 +2012,7 @@ static int param_set_aacompressionlevel(const char *val,
 	return error;
 }
 
-static int param_get_aacompressionlevel(char *buffer,
+static int param_get_aacompressionlevel(struct seq_buf *buffer,
 					const struct kernel_param *kp)
 {
 	if (!apparmor_enabled)
@@ -2021,7 +2022,7 @@ static int param_get_aacompressionlevel(char *buffer,
 	return param_get_int(buffer, kp);
 }
 
-static int param_get_debug(char *buffer, const struct kernel_param *kp)
+static int param_get_debug(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	if (!apparmor_enabled)
 		return -EINVAL;

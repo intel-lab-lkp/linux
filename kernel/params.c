@@ -212,15 +212,16 @@ char *parse_args(const char *doing,
 }
 
 /* Lazy bastard, eh? */
-#define STANDARD_PARAM_DEF(name, type, format, strtolfn)      		\
+#define STANDARD_PARAM_DEF(name, type, format, strtolfn)		\
 	int param_set_##name(const char *val, const struct kernel_param *kp) \
 	{								\
 		return strtolfn(val, 0, (type *)kp->arg);		\
 	}								\
-	int param_get_##name(char *buffer, const struct kernel_param *kp) \
+	int param_get_##name(struct seq_buf *s,				\
+			     const struct kernel_param *kp)		\
 	{								\
-		return scnprintf(buffer, PAGE_SIZE, format "\n",	\
-				*((type *)kp->arg));			\
+		seq_buf_printf(s, format "\n", *((type *)kp->arg));	\
+		return 0;						\
 	}								\
 	DEFINE_KERNEL_PARAM_OPS(param_ops_##name,			\
 				param_set_##name, param_get_##name);	\
@@ -285,9 +286,10 @@ int param_set_charp(const char *val, const struct kernel_param *kp)
 }
 EXPORT_SYMBOL(param_set_charp);
 
-int param_get_charp(char *buffer, const struct kernel_param *kp)
+int param_get_charp(struct seq_buf *s, const struct kernel_param *kp)
 {
-	return scnprintf(buffer, PAGE_SIZE, "%s\n", *((char **)kp->arg));
+	seq_buf_printf(s, "%s\n", *((char **)kp->arg));
+	return 0;
 }
 EXPORT_SYMBOL(param_get_charp);
 
@@ -312,10 +314,11 @@ int param_set_bool(const char *val, const struct kernel_param *kp)
 }
 EXPORT_SYMBOL(param_set_bool);
 
-int param_get_bool(char *buffer, const struct kernel_param *kp)
+int param_get_bool(struct seq_buf *s, const struct kernel_param *kp)
 {
 	/* Y and N chosen as being relatively non-coder friendly */
-	return sprintf(buffer, "%c\n", *(bool *)kp->arg ? 'Y' : 'N');
+	seq_buf_printf(s, "%c\n", *(bool *)kp->arg ? 'Y' : 'N');
+	return 0;
 }
 EXPORT_SYMBOL(param_get_bool);
 
@@ -365,9 +368,10 @@ int param_set_invbool(const char *val, const struct kernel_param *kp)
 }
 EXPORT_SYMBOL(param_set_invbool);
 
-int param_get_invbool(char *buffer, const struct kernel_param *kp)
+int param_get_invbool(struct seq_buf *s, const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%c\n", (*(bool *)kp->arg) ? 'N' : 'Y');
+	seq_buf_printf(s, "%c\n", (*(bool *)kp->arg) ? 'N' : 'Y');
+	return 0;
 }
 EXPORT_SYMBOL(param_get_invbool);
 
@@ -453,36 +457,46 @@ static int param_array_set(const char *val, const struct kernel_param *kp)
 			   arr->num ?: &temp_num);
 }
 
-static int param_array_get(char *buffer, const struct kernel_param *kp)
+static int param_array_get(struct seq_buf *s, const struct kernel_param *kp)
 {
-	int i, off, ret;
-	char *elem_buf;
 	const struct kparam_array *arr = kp->arr;
 	struct kernel_param p = *kp;
+	char *elem_buf = NULL;
+	int i, ret = 0;
 
-	elem_buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!elem_buf)
-		return -ENOMEM;
+	for (i = 0; i < (arr->num ? *arr->num : arr->max); i++) {
+		size_t before = s->len;
 
-	for (i = off = 0; i < (arr->num ? *arr->num : arr->max); i++) {
 		p.arg = arr->elem + arr->elemsize * i;
 		check_kparam_locked(p.mod);
-		ret = arr->ops->get_str(elem_buf, &p);
-		if (ret < 0)
-			goto out;
-		ret = min(ret, (int)(PAGE_SIZE - 1 - off));
-		if (!ret)
+
+		if (arr->ops->get) {
+			ret = arr->ops->get(s, &p);
+			if (ret < 0)
+				goto out;
+		} else {
+			if (!elem_buf) {
+				elem_buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+				if (!elem_buf) {
+					ret = -ENOMEM;
+					goto out;
+				}
+			}
+			ret = arr->ops->get_str(elem_buf, &p);
+			if (ret < 0)
+				goto out;
+			seq_buf_putmem(s, elem_buf, ret);
+		}
+
+		/* Nothing got written (e.g. overflow) — stop. */
+		if (s->len == before)
 			break;
+
 		/* Replace the previous element's trailing newline with a comma. */
-		if (i)
-			buffer[off - 1] = ',';
-		memcpy(buffer + off, elem_buf, ret);
-		off += ret;
-		if (off == PAGE_SIZE - 1)
-			break;
+		if (i && s->buffer[before - 1] == '\n')
+			s->buffer[before - 1] = ',';
 	}
-	buffer[off] = '\0';
-	ret = off;
+	ret = 0;
 out:
 	kfree(elem_buf);
 	return ret;
@@ -517,10 +531,12 @@ int param_set_copystring(const char *val, const struct kernel_param *kp)
 }
 EXPORT_SYMBOL(param_set_copystring);
 
-int param_get_string(char *buffer, const struct kernel_param *kp)
+int param_get_string(struct seq_buf *s, const struct kernel_param *kp)
 {
 	const struct kparam_string *kps = kp->str;
-	return scnprintf(buffer, PAGE_SIZE, "%s\n", kps->string);
+
+	seq_buf_printf(s, "%s\n", kps->string);
+	return 0;
 }
 EXPORT_SYMBOL(param_get_string);
 

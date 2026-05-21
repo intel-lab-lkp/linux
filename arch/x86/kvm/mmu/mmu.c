@@ -70,7 +70,7 @@ static uint __read_mostly nx_huge_pages_recovery_ratio = 0;
 static uint __read_mostly nx_huge_pages_recovery_ratio = 60;
 #endif
 
-static int get_nx_huge_pages(char *buffer, const struct kernel_param *kp);
+static int get_nx_huge_pages(struct seq_buf *buffer, const struct kernel_param *kp);
 static int set_nx_huge_pages(const char *val, const struct kernel_param *kp);
 static int set_nx_huge_pages_recovery_param(const char *val, const struct kernel_param *kp);
 
@@ -7505,15 +7505,19 @@ static void kvm_wake_nx_recovery_thread(struct kvm *kvm)
 		vhost_task_wake(nx_thread);
 }
 
-static int get_nx_huge_pages(char *buffer, const struct kernel_param *kp)
+static int get_nx_huge_pages(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	int val = *(int *)kp->arg;
 
-	if (nx_hugepage_mitigation_hard_disabled)
-		return sysfs_emit(buffer, "never\n");
+	if (nx_hugepage_mitigation_hard_disabled) {
+		seq_buf_puts(buffer, "never\n");
+		return 0;
+	}
 
-	if (val == -1)
-		return sysfs_emit(buffer, "auto\n");
+	if (val == -1) {
+		seq_buf_puts(buffer, "auto\n");
+		return 0;
+	}
 
 	return param_get_bool(buffer, kp);
 }

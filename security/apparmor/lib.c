@@ -85,37 +85,32 @@ int aa_parse_debug_params(const char *str)
 
 /**
  * val_mask_to_str - convert a perm mask to its short string
- * @str: character buffer to store string in (at least 10 characters)
- * @size: size of the @str buffer
+ * @s: seq_buf to store string in
  * @table: NUL-terminated character buffer of permission characters (NOT NULL)
  * @mask: permission mask to convert
  */
-static int val_mask_to_str(char *str, size_t size,
-			   const struct val_table_ent *table, u32 mask)
+static void val_mask_to_str(struct seq_buf *s,
+			    const struct val_table_ent *table, u32 mask)
 {
 	const struct val_table_ent *ent;
-	int total = 0;
+	bool first = true;
 
 	for (ent = table; ent->str; ent++) {
 		if (ent->value && (ent->value & mask) == ent->value) {
-			int len = scnprintf(str, size, "%s%s", total ? "," : "",
-					    ent->str);
-			size -= len;
-			str += len;
-			total += len;
+			seq_buf_printf(s, "%s%s", first ? "" : ",", ent->str);
+			first = false;
 			mask &= ~ent->value;
 		}
 	}
-
-	return total;
 }
 
-int aa_print_debug_params(char *buffer)
+int aa_print_debug_params(struct seq_buf *s)
 {
 	if (!aa_g_debug)
-		return sprintf(buffer, "N");
-	return val_mask_to_str(buffer, PAGE_SIZE, debug_values_table,
-			       aa_g_debug);
+		seq_buf_puts(s, "N");
+	else
+		val_mask_to_str(s, debug_values_table, aa_g_debug);
+	return 0;
 }
 
 bool aa_resize_str_table(struct aa_str_table *t, int newsize, gfp_t gfp)

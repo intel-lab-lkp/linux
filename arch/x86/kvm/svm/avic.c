@@ -77,12 +77,14 @@ static int avic_param_set(const char *val, const struct kernel_param *kp)
 	return param_set_bint(val, kp);
 }
 
-static int avic_param_get(char *buffer, const struct kernel_param *kp)
+static int avic_param_get(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	int val = *(int *)kp->arg;
 
-	if (val == AVIC_AUTO_MODE)
-		return sysfs_emit(buffer, "N\n");
+	if (val == AVIC_AUTO_MODE) {
+		seq_buf_puts(buffer, "N\n");
+		return 0;
+	}
 
 	return param_get_bool(buffer, kp);
 }

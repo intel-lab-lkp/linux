@@ -84,10 +84,12 @@ static int param_set_sample_interval(const char *val, const struct kernel_param 
 	return 0;
 }
 
-static int param_get_sample_interval(char *buffer, const struct kernel_param *kp)
+static int param_get_sample_interval(struct seq_buf *buffer, const struct kernel_param *kp)
 {
-	if (!READ_ONCE(kfence_enabled))
-		return sprintf(buffer, "0\n");
+	if (!READ_ONCE(kfence_enabled)) {
+		seq_buf_puts(buffer, "0\n");
+		return 0;
+	}
 
 	return param_get_ulong(buffer, kp);
 }

@@ -500,61 +500,61 @@ void module_destroy_params(const struct kernel_param *params, unsigned int num);
 
 extern const struct kernel_param_ops param_ops_byte;
 int param_set_byte(const char *val, const struct kernel_param *kp);
-int param_get_byte(char *buffer, const struct kernel_param *kp);
+int param_get_byte(struct seq_buf *s, const struct kernel_param *kp);
 #define param_check_byte(name, p) __param_check(name, p, unsigned char)
 
 extern const struct kernel_param_ops param_ops_short;
 int param_set_short(const char *val, const struct kernel_param *kp);
-int param_get_short(char *buffer, const struct kernel_param *kp);
+int param_get_short(struct seq_buf *s, const struct kernel_param *kp);
 #define param_check_short(name, p) __param_check(name, p, short)
 
 extern const struct kernel_param_ops param_ops_ushort;
 int param_set_ushort(const char *val, const struct kernel_param *kp);
-int param_get_ushort(char *buffer, const struct kernel_param *kp);
+int param_get_ushort(struct seq_buf *s, const struct kernel_param *kp);
 #define param_check_ushort(name, p) __param_check(name, p, unsigned short)
 
 extern const struct kernel_param_ops param_ops_int;
 int param_set_int(const char *val, const struct kernel_param *kp);
-int param_get_int(char *buffer, const struct kernel_param *kp);
+int param_get_int(struct seq_buf *s, const struct kernel_param *kp);
 #define param_check_int(name, p) __param_check(name, p, int)
 
 extern const struct kernel_param_ops param_ops_uint;
 int param_set_uint(const char *val, const struct kernel_param *kp);
-int param_get_uint(char *buffer, const struct kernel_param *kp);
+int param_get_uint(struct seq_buf *s, const struct kernel_param *kp);
 int param_set_uint_minmax(const char *val, const struct kernel_param *kp,
 		unsigned int min, unsigned int max);
 #define param_check_uint(name, p) __param_check(name, p, unsigned int)
 
 extern const struct kernel_param_ops param_ops_long;
 int param_set_long(const char *val, const struct kernel_param *kp);
-int param_get_long(char *buffer, const struct kernel_param *kp);
+int param_get_long(struct seq_buf *s, const struct kernel_param *kp);
 #define param_check_long(name, p) __param_check(name, p, long)
 
 extern const struct kernel_param_ops param_ops_ulong;
 int param_set_ulong(const char *val, const struct kernel_param *kp);
-int param_get_ulong(char *buffer, const struct kernel_param *kp);
+int param_get_ulong(struct seq_buf *s, const struct kernel_param *kp);
 #define param_check_ulong(name, p) __param_check(name, p, unsigned long)
 
 extern const struct kernel_param_ops param_ops_ullong;
 int param_set_ullong(const char *val, const struct kernel_param *kp);
-int param_get_ullong(char *buffer, const struct kernel_param *kp);
+int param_get_ullong(struct seq_buf *s, const struct kernel_param *kp);
 #define param_check_ullong(name, p) __param_check(name, p, unsigned long long)
 
 extern const struct kernel_param_ops param_ops_hexint;
 int param_set_hexint(const char *val, const struct kernel_param *kp);
-int param_get_hexint(char *buffer, const struct kernel_param *kp);
+int param_get_hexint(struct seq_buf *s, const struct kernel_param *kp);
 #define param_check_hexint(name, p) param_check_uint(name, p)
 
 extern const struct kernel_param_ops param_ops_charp;
 int param_set_charp(const char *val, const struct kernel_param *kp);
-int param_get_charp(char *buffer, const struct kernel_param *kp);
+int param_get_charp(struct seq_buf *s, const struct kernel_param *kp);
 void param_free_charp(void *arg);
 #define param_check_charp(name, p) __param_check(name, p, char *)
 
 /* We used to allow int as well as bool.  We're taking that away! */
 extern const struct kernel_param_ops param_ops_bool;
 int param_set_bool(const char *val, const struct kernel_param *kp);
-int param_get_bool(char *buffer, const struct kernel_param *kp);
+int param_get_bool(struct seq_buf *s, const struct kernel_param *kp);
 #define param_check_bool(name, p) __param_check(name, p, bool)
 
 extern const struct kernel_param_ops param_ops_bool_enable_only;
@@ -564,7 +564,7 @@ int param_set_bool_enable_only(const char *val, const struct kernel_param *kp);
 
 extern const struct kernel_param_ops param_ops_invbool;
 int param_set_invbool(const char *val, const struct kernel_param *kp);
-int param_get_invbool(char *buffer, const struct kernel_param *kp);
+int param_get_invbool(struct seq_buf *s, const struct kernel_param *kp);
 #define param_check_invbool(name, p) __param_check(name, p, bool)
 
 /* An int, which can only be set like a bool (though it shows as an int). */
@@ -677,7 +677,7 @@ extern const struct kernel_param_ops param_array_ops;
 
 extern const struct kernel_param_ops param_ops_string;
 int param_set_copystring(const char *val, const struct kernel_param *kp);
-int param_get_string(char *buffer, const struct kernel_param *kp);
+int param_get_string(struct seq_buf *s, const struct kernel_param *kp);
 
 /* for exporting parameters in /sys/module/.../parameters */
 
