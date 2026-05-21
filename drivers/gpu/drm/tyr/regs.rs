@@ -7,16 +7,7 @@
 // does.
 #![allow(dead_code)]
 
-use kernel::{
-    bits::bit_u32,
-    device::{
-        Bound,
-        Device, //
-    },
-    devres::Devres,
-    io::Io,
-    prelude::*, //
-};
+use kernel::{bits::bit_u32, io::Io};
 
 use crate::driver::IoMem;
 
@@ -29,15 +20,13 @@ pub(crate) struct Register<const OFFSET: usize>;
 
 impl<const OFFSET: usize> Register<OFFSET> {
     #[inline]
-    pub(crate) fn read(&self, dev: &Device<Bound>, iomem: &Devres<IoMem>) -> Result<u32> {
-        let value = (*iomem).access(dev)?.read32(OFFSET);
-        Ok(value)
+    pub(crate) fn read(&self, iomem: &IoMem) -> u32 {
+        iomem.read32(OFFSET)
     }
 
     #[inline]
-    pub(crate) fn write(&self, dev: &Device<Bound>, iomem: &Devres<IoMem>, value: u32) -> Result {
-        (*iomem).access(dev)?.write32(value, OFFSET);
-        Ok(())
+    pub(crate) fn write(&self, iomem: &IoMem, value: u32) {
+        iomem.write32(value, OFFSET);
     }
 }
 
