@@ -1014,6 +1014,7 @@ static void cypress_read_int_callback(struct urb *urb)
 	unsigned long flags;
 	char tty_flag = TTY_NORMAL;
 	int bytes = 0;
+	int header_size = 0;
 	int result;
 	int i = 0;
 	int status = urb->status;
@@ -1058,18 +1059,32 @@ static void cypress_read_int_callback(struct urb *urb)
 	default:
 	case packet_format_1:
 		/* This is for the CY7C64013... */
+		header_size = 2;
+		if (result < header_size ||
+		    urb->transfer_buffer_length < header_size)
+			break;
 		priv->current_status = data[0] & 0xF8;
 		bytes = data[1] + 2;
 		i = 2;
 		break;
 	case packet_format_2:
 		/* This is for the CY7C63743... */
+		header_size = 1;
+		if (result < header_size ||
+		    urb->transfer_buffer_length < header_size)
+			break;
 		priv->current_status = data[0] & 0xF8;
 		bytes = (data[0] & 0x07) + 1;
 		i = 1;
 		break;
 	}
 	spin_unlock_irqrestore(&priv->lock, flags);
+	if (result < header_size || urb->transfer_buffer_length < header_size) {
+		dev_dbg(dev,
+			"%s - short packet header - received %d bytes but buffer has %d bytes\n",
+			__func__, result, urb->transfer_buffer_length);
+		goto continue_read;
+	}
 	if (result < bytes) {
 		dev_dbg(dev,
 			"%s - wrong packet size - received %d bytes but packet said %d bytes\n",
