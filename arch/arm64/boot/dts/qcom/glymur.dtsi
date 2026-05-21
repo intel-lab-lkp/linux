@@ -2428,7 +2428,6 @@
 			#clock-cells = <1>;
 			#phy-cells = <1>;
 
-			mode-switch;
 			orientation-switch;
 
 			status = "disabled";
@@ -2502,7 +2501,6 @@
 			#clock-cells = <1>;
 			#phy-cells = <1>;
 
-			mode-switch;
 			orientation-switch;
 
 			status = "disabled";
@@ -4363,6 +4361,7 @@
 						reg = <1>;
 
 						mdss_dp0_out: endpoint {
+							data-lanes = <0 1>;
 							remote-endpoint = <&usb_dp_qmpphy_dp_in>;
 						};
 					};
@@ -4454,6 +4453,7 @@
 						reg = <1>;
 
 						mdss_dp1_out: endpoint {
+							data-lanes = <0 1>;
 							remote-endpoint = <&usb_1_qmpphy_dp_in>;
 						};
 					};
