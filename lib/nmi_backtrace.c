@@ -75,7 +75,13 @@ void nmi_trigger_cpumask_backtrace(const cpumask_t *mask,
 		mdelay(1);
 		touch_softlockup_watchdog();
 	}
-	nmi_backtrace_stall_check(to_cpumask(backtrace_mask));
+
+	if (!cpumask_empty(to_cpumask(backtrace_mask))) {
+		pr_warn("After 10 seconds, these CPUS still haven't responded to the NMI: %*pbl\n",
+			cpumask_pr_args(to_cpumask(backtrace_mask)));
+
+		nmi_backtrace_stall_check(to_cpumask(backtrace_mask));
+	}
 
 	/*
 	 * Force flush any remote buffers that might be stuck in IRQ context
