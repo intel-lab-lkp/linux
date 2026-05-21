@@ -46,7 +46,7 @@ struct page *selinux_kernel_status_page(void)
 
 	mutex_lock(&selinux_state.status_lock);
 	if (!selinux_state.status_page) {
-		selinux_state.status_page = alloc_page(GFP_KERNEL|__GFP_ZERO);
+		selinux_state.status_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
 
 		if (selinux_state.status_page) {
 			status = page_address(selinux_state.status_page);
@@ -85,11 +85,11 @@ void selinux_status_update_setenforce(bool enforcing)
 		status = page_address(selinux_state.status_page);
 
 		status->sequence++;
-		smp_wmb();
+		smp_wmb(); /* ensure sequence increment visible before data update */
 
 		status->enforcing = enforcing ? 1 : 0;
 
-		smp_wmb();
+		smp_wmb(); /* ensure data update visible before sequence increment */
 		status->sequence++;
 	}
 	mutex_unlock(&selinux_state.status_lock);
@@ -110,12 +110,12 @@ void selinux_status_update_policyload(u32 seqno)
 		status = page_address(selinux_state.status_page);
 
 		status->sequence++;
-		smp_wmb();
+		smp_wmb(); /* ensure sequence increment visible before data update */
 
 		status->policyload = seqno;
 		status->deny_unknown = !security_get_allow_unknown();
 
-		smp_wmb();
+		smp_wmb(); /* ensure data update visible before sequence update */
 		status->sequence++;
 	}
 	mutex_unlock(&selinux_state.status_lock);
