@@ -204,12 +204,8 @@ static int owl_probe(struct pci_dev *pdev,
 	scnprintf(eeprom_name, sizeof(eeprom_name), "ath9k-eeprom-pci-%s.bin",
 		  dev_name(dev));
 
-	err = request_firmware_nowait(THIS_MODULE, true, eeprom_name,
+	return request_firmware_nowait(THIS_MODULE, true, eeprom_name,
 				      &pdev->dev, GFP_KERNEL, ctx, owl_fw_cb);
-	if (err)
-		dev_err(&pdev->dev, "failed to request caldata (%d).\n", err);
-
-	return err;
 }
 
 static void owl_remove(struct pci_dev *pdev)
