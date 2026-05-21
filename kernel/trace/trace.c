@@ -34,10 +34,12 @@
 #include <linux/percpu.h>
 #include <linux/splice.h>
 #include <linux/kdebug.h>
+#include <linux/random.h>
 #include <linux/string.h>
 #include <linux/mount.h>
 #include <linux/rwsem.h>
 #include <linux/slab.h>
+#include <linux/uuid.h>
 #include <linux/ctype.h>
 #include <linux/init.h>
 #include <linux/panic_notifier.h>
@@ -4804,6 +4806,7 @@ struct trace_mod_entry {
 struct trace_scratch {
 	unsigned int		clock_id;
 	unsigned long		text_addr;
+	u8			boot_id[UUID_SIZE];
 	unsigned long		nr_entries;
 	struct trace_mod_entry	entries[];
 };
@@ -4921,6 +4924,7 @@ static void update_last_data(struct trace_array *tr)
 	/* Reset the module list and reload them */
 	if (tr->scratch) {
 		struct trace_scratch *tscratch = tr->scratch;
+		const u8 *boot_id = get_boot_id();
 
 		tscratch->clock_id = tr->clock_id;
 		memset(tscratch->entries, 0,
@@ -4929,6 +4933,11 @@ static void update_last_data(struct trace_array *tr)
 
 		guard(mutex)(&scratch_mutex);
 		module_for_each_mod(save_mod, tr);
+		/* Also, update boot ID if exists */
+		if (boot_id)
+			memcpy(tscratch->boot_id, boot_id, sizeof(tscratch->boot_id));
+		else
+			memset(tscratch->boot_id, 0, sizeof(tscratch->boot_id));
 	}
 
 	/*
@@ -5822,9 +5831,10 @@ static void show_last_boot_header(struct seq_file *m, struct trace_array *tr)
 	 * Otherwise it shows the KASLR address from the previous boot which
 	 * should not be the same as the current boot.
 	 */
-	if (tscratch && (tr->flags & TRACE_ARRAY_FL_LAST_BOOT))
+	if (tscratch && (tr->flags & TRACE_ARRAY_FL_LAST_BOOT)) {
+		seq_printf(m, "# boot_id: %pUb\n", tscratch->boot_id);
 		seq_printf(m, "%lx\t[kernel]\n", tscratch->text_addr);
-	else
+	} else
 		seq_puts(m, "# Current\n");
 }
 
