@@ -8,7 +8,7 @@
 #include <ufs/ufshcd.h>
 #include "ufs-fault-injection.h"
 
-static int ufs_fault_get(char *buffer, const struct kernel_param *kp);
+static int ufs_fault_get(struct seq_buf *buffer, const struct kernel_param *kp);
 static int ufs_fault_set(const char *val, const struct kernel_param *kp);
 
 static DEFINE_KERNEL_PARAM_OPS(ufs_fault_ops, ufs_fault_set, ufs_fault_get);
@@ -31,11 +31,12 @@ MODULE_PARM_DESC(timeout,
 	"Fault injection. timeout=<interval>,<probability>,<space>,<times>");
 static DECLARE_FAULT_ATTR(ufs_timeout_attr);
 
-static int ufs_fault_get(char *buffer, const struct kernel_param *kp)
+static int ufs_fault_get(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	const char *fault_str = kp->arg;
 
-	return sysfs_emit(buffer, "%s\n", fault_str);
+	seq_buf_printf(buffer, "%s\n", fault_str);
+	return 0;
 }
 
 static int ufs_fault_set(const char *val, const struct kernel_param *kp)

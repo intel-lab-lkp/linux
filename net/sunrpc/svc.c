@@ -148,7 +148,7 @@ sunrpc_get_pool_mode(char *buf, size_t size)
 EXPORT_SYMBOL(sunrpc_get_pool_mode);
 
 static int
-param_get_pool_mode(char *buf, const struct kernel_param *kp)
+param_get_pool_mode(struct seq_buf *buf, const struct kernel_param *kp)
 {
 	char str[16];
 	int len;
@@ -162,7 +162,8 @@ param_get_pool_mode(char *buf, const struct kernel_param *kp)
 	str[len] = '\n';
 	str[len + 1] = '\0';
 
-	return sysfs_emit(buf, "%s", str);
+	seq_buf_printf(buf, "%s", str);
+	return 0;
 }
 
 module_param_call(pool_mode, param_set_pool_mode, param_get_pool_mode,

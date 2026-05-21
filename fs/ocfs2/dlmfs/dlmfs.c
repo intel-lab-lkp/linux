@@ -78,10 +78,11 @@ static int param_set_dlmfs_capabilities(const char *val,
 	printk(KERN_ERR "%s: readonly parameter\n", kp->name);
 	return -EINVAL;
 }
-static int param_get_dlmfs_capabilities(char *buffer,
+static int param_get_dlmfs_capabilities(struct seq_buf *buffer,
 					const struct kernel_param *kp)
 {
-	return sysfs_emit(buffer, DLMFS_CAPABILITIES);
+	seq_buf_printf(buffer, DLMFS_CAPABILITIES);
+	return 0;
 }
 module_param_call(capabilities, param_set_dlmfs_capabilities,
 		  param_get_dlmfs_capabilities, NULL, 0444);

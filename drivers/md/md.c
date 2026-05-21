@@ -10989,9 +10989,10 @@ static __exit void md_exit(void)
 subsys_initcall(md_init);
 module_exit(md_exit)
 
-static int get_ro(char *buffer, const struct kernel_param *kp)
+static int get_ro(struct seq_buf *buffer, const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%d\n", start_readonly);
+	seq_buf_printf(buffer, "%d\n", start_readonly);
+	return 0;
 }
 static int set_ro(const char *val, const struct kernel_param *kp)
 {

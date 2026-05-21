@@ -18,10 +18,12 @@ static int param_set_do_prints(const char *instr, const struct kernel_param *kp)
 	do_prints();
 	return 0;
 }
-static int param_get_do_prints(char *buffer, const struct kernel_param *kp)
+static int param_get_do_prints(struct seq_buf *buffer,
+			       const struct kernel_param *kp)
 {
 	do_prints();
-	return scnprintf(buffer, PAGE_SIZE, "did do_prints\n");
+	seq_buf_printf(buffer, "did do_prints\n");
+	return 0;
 }
 static DEFINE_KERNEL_PARAM_OPS(param_ops_do_prints, param_set_do_prints,
 			       param_get_do_prints);

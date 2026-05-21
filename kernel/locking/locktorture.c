@@ -86,11 +86,13 @@ out_err:
 }
 
 // Output a cpumask kernel parameter.
-static int param_get_cpumask(char *buffer, const struct kernel_param *kp)
+static int param_get_cpumask(struct seq_buf *buffer,
+			     const struct kernel_param *kp)
 {
 	cpumask_var_t *cm_bind = kp->arg;
 
-	return sprintf(buffer, "%*pbl", cpumask_pr_args(*cm_bind));
+	seq_buf_printf(buffer, "%*pbl", cpumask_pr_args(*cm_bind));
+	return 0;
 }
 
 static bool cpumask_nonempty(cpumask_var_t mask)

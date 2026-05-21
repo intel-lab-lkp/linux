@@ -309,7 +309,7 @@ static int set_allow_writes(const char *val, const struct kernel_param *cp)
 	return 0;
 }
 
-static int get_allow_writes(char *buf, const struct kernel_param *kp)
+static int get_allow_writes(struct seq_buf *buf, const struct kernel_param *kp)
 {
 	const char *res;
 
@@ -319,7 +319,8 @@ static int get_allow_writes(char *buf, const struct kernel_param *kp)
 	default: res = "default"; break;
 	}
 
-	return sprintf(buf, "%s\n", res);
+	seq_buf_printf(buf, "%s\n", res);
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(allow_writes_ops, set_allow_writes,

@@ -2240,18 +2240,22 @@ static int param_set_event_clearing(const char *val,
 	return result;
 }
 
-static int param_get_event_clearing(char *buffer,
+static int param_get_event_clearing(struct seq_buf *buffer,
 				    const struct kernel_param *kp)
 {
 	switch (ec_event_clearing) {
 	case ACPI_EC_EVT_TIMING_STATUS:
-		return sprintf(buffer, "status\n");
+		seq_buf_printf(buffer, "status\n");
+		return 0;
 	case ACPI_EC_EVT_TIMING_QUERY:
-		return sprintf(buffer, "query\n");
+		seq_buf_printf(buffer, "query\n");
+		return 0;
 	case ACPI_EC_EVT_TIMING_EVENT:
-		return sprintf(buffer, "event\n");
+		seq_buf_printf(buffer, "event\n");
+		return 0;
 	default:
-		return sprintf(buffer, "invalid\n");
+		seq_buf_printf(buffer, "invalid\n");
+		return 0;
 	}
 	return 0;
 }

@@ -73,12 +73,14 @@ out_inval:
 	return -EINVAL;
 }
 
-static int param_get_hashtbl_sz(char *buffer, const struct kernel_param *kp)
+static int param_get_hashtbl_sz(struct seq_buf *buffer,
+				const struct kernel_param *kp)
 {
 	unsigned int nbits;
 
 	nbits = *(unsigned int *)kp->arg;
-	return sprintf(buffer, "%u\n", 1U << nbits);
+	seq_buf_printf(buffer, "%u\n", 1U << nbits);
+	return 0;
 }
 
 #define param_check_hashtbl_sz(name, p) __param_check(name, p, unsigned int);

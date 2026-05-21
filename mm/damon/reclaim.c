@@ -340,10 +340,11 @@ static int damon_reclaim_enabled_store(const char *val,
 	return damon_reclaim_turn(enabled);
 }
 
-static int damon_reclaim_enabled_load(char *buffer,
-		const struct kernel_param *kp)
+static int damon_reclaim_enabled_load(struct seq_buf *buffer,
+				      const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%c\n", damon_reclaim_enabled() ? 'Y' : 'N');
+	seq_buf_printf(buffer, "%c\n", damon_reclaim_enabled() ? 'Y' : 'N');
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(enabled_param_ops, damon_reclaim_enabled_store,
@@ -363,8 +364,8 @@ static int damon_reclaim_kdamond_pid_store(const char *val,
 	return 0;
 }
 
-static int damon_reclaim_kdamond_pid_load(char *buffer,
-		const struct kernel_param *kp)
+static int damon_reclaim_kdamond_pid_load(struct seq_buf *buffer,
+					  const struct kernel_param *kp)
 {
 	int kdamond_pid = -1;
 
@@ -373,7 +374,8 @@ static int damon_reclaim_kdamond_pid_load(char *buffer,
 		if (kdamond_pid < 0)
 			kdamond_pid = -1;
 	}
-	return sprintf(buffer, "%d\n", kdamond_pid);
+	seq_buf_printf(buffer, "%d\n", kdamond_pid);
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(kdamond_pid_param_ops,

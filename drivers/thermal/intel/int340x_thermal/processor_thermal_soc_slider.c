@@ -77,10 +77,12 @@ static int slider_def_balance_set(const char *arg, const struct kernel_param *kp
 	return ret;
 }
 
-static int slider_def_balance_get(char *buf, const struct kernel_param *kp)
+static int slider_def_balance_get(struct seq_buf *buf,
+				  const struct kernel_param *kp)
 {
 	guard(mutex)(&slider_param_lock);
-	return sysfs_emit(buf, "%02x\n", slider_values[SOC_POWER_SLIDER_BALANCE]);
+	seq_buf_printf(buf, "%02x\n", slider_values[SOC_POWER_SLIDER_BALANCE]);
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(slider_def_balance_ops, slider_def_balance_set,
@@ -109,10 +111,12 @@ static int slider_def_offset_set(const char *arg, const struct kernel_param *kp)
 	return ret;
 }
 
-static int slider_def_offset_get(char *buf, const struct kernel_param *kp)
+static int slider_def_offset_get(struct seq_buf *buf,
+				 const struct kernel_param *kp)
 {
 	guard(mutex)(&slider_param_lock);
-	return sysfs_emit(buf, "%02x\n", slider_offset);
+	seq_buf_printf(buf, "%02x\n", slider_offset);
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(slider_offset_ops, slider_def_offset_set,

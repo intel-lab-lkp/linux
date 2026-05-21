@@ -28,9 +28,10 @@ static int ovl_ccup_set(const char *buf, const struct kernel_param *param)
 	return 0;
 }
 
-static int ovl_ccup_get(char *buf, const struct kernel_param *param)
+static int ovl_ccup_get(struct seq_buf *buf, const struct kernel_param *param)
 {
-	return sprintf(buf, "N\n");
+	seq_buf_printf(buf, "N\n");
+	return 0;
 }
 
 module_param_call(check_copy_up, ovl_ccup_set, ovl_ccup_get, NULL, 0644);

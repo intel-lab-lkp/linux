@@ -85,9 +85,10 @@ static int nvme_set_iopolicy(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static int nvme_get_iopolicy(char *buf, const struct kernel_param *kp)
+static int nvme_get_iopolicy(struct seq_buf *buf, const struct kernel_param *kp)
 {
-	return sprintf(buf, "%s\n", nvme_iopolicy_names[iopolicy]);
+	seq_buf_printf(buf, "%s\n", nvme_iopolicy_names[iopolicy]);
+	return 0;
 }
 
 module_param_call(iopolicy, nvme_set_iopolicy, nvme_get_iopolicy,

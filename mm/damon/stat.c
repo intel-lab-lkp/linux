@@ -19,8 +19,8 @@
 static int damon_stat_enabled_store(
 		const char *val, const struct kernel_param *kp);
 
-static int damon_stat_enabled_load(char *buffer,
-		const struct kernel_param *kp);
+static int damon_stat_enabled_load(struct seq_buf *buffer,
+				   const struct kernel_param *kp);
 
 static DEFINE_KERNEL_PARAM_OPS(enabled_param_ops, damon_stat_enabled_store,
 			       damon_stat_enabled_load);
@@ -306,9 +306,11 @@ static int damon_stat_enabled_store(
 	return 0;
 }
 
-static int damon_stat_enabled_load(char *buffer, const struct kernel_param *kp)
+static int damon_stat_enabled_load(struct seq_buf *buffer,
+				   const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%c\n", damon_stat_enabled() ? 'Y' : 'N');
+	seq_buf_printf(buffer, "%c\n", damon_stat_enabled() ? 'Y' : 'N');
+	return 0;
 }
 
 static int __init damon_stat_init(void)

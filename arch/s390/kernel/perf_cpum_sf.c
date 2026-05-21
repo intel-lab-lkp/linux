@@ -1991,11 +1991,13 @@ static int s390_pmu_sf_offline_cpu(unsigned int cpu)
 	return cpusf_pmu_setup(cpu, PMC_RELEASE);
 }
 
-static int param_get_sfb_size(char *buffer, const struct kernel_param *kp)
+static int param_get_sfb_size(struct seq_buf *buffer,
+			      const struct kernel_param *kp)
 {
 	if (!cpum_sf_avail())
 		return -ENODEV;
-	return sprintf(buffer, "%lu,%lu", CPUM_SF_MIN_SDB, CPUM_SF_MAX_SDB);
+	seq_buf_printf(buffer, "%lu,%lu", CPUM_SF_MIN_SDB, CPUM_SF_MAX_SDB);
+	return 0;
 }
 
 static int param_set_sfb_size(const char *val, const struct kernel_param *kp)

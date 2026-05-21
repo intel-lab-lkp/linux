@@ -371,12 +371,16 @@ static int vmentry_l1d_flush_set(const char *s, const struct kernel_param *kp)
 	return ret;
 }
 
-static int vmentry_l1d_flush_get(char *s, const struct kernel_param *kp)
+static int vmentry_l1d_flush_get(struct seq_buf *s,
+				 const struct kernel_param *kp)
 {
-	if (WARN_ON_ONCE(l1tf_vmx_mitigation >= ARRAY_SIZE(vmentry_l1d_param)))
-		return sysfs_emit(s, "???\n");
+	if (WARN_ON_ONCE(l1tf_vmx_mitigation >= ARRAY_SIZE(vmentry_l1d_param))) {
+		seq_buf_printf(s, "???\n");
+		return 0;
+	}
 
-	return sysfs_emit(s, "%s\n", vmentry_l1d_param[l1tf_vmx_mitigation].option);
+	seq_buf_printf(s, "%s\n", vmentry_l1d_param[l1tf_vmx_mitigation].option);
+	return 0;
 }
 
 /*
@@ -462,9 +466,11 @@ static int vmentry_l1d_flush_set(const char *s, const struct kernel_param *kp)
 	pr_warn_once("Kernel compiled without mitigations, ignoring vmentry_l1d_flush\n");
 	return 0;
 }
-static int vmentry_l1d_flush_get(char *s, const struct kernel_param *kp)
+static int vmentry_l1d_flush_get(struct seq_buf *s,
+				 const struct kernel_param *kp)
 {
-	return sysfs_emit(s, "never\n");
+	seq_buf_printf(s, "never\n");
+	return 0;
 }
 #endif
 

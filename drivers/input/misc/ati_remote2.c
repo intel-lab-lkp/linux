@@ -63,12 +63,13 @@ static int ati_remote2_set_channel_mask(const char *val,
 	return ati_remote2_set_mask(val, kp, ATI_REMOTE2_MAX_CHANNEL_MASK);
 }
 
-static int ati_remote2_get_channel_mask(char *buffer,
+static int ati_remote2_get_channel_mask(struct seq_buf *buffer,
 					const struct kernel_param *kp)
 {
 	pr_debug("%s()\n", __func__);
 
-	return sprintf(buffer, "0x%04x\n", *(unsigned int *)kp->arg);
+	seq_buf_printf(buffer, "0x%04x\n", *(unsigned int *)kp->arg);
+	return 0;
 }
 
 static int ati_remote2_set_mode_mask(const char *val,
@@ -79,12 +80,13 @@ static int ati_remote2_set_mode_mask(const char *val,
 	return ati_remote2_set_mask(val, kp, ATI_REMOTE2_MAX_MODE_MASK);
 }
 
-static int ati_remote2_get_mode_mask(char *buffer,
+static int ati_remote2_get_mode_mask(struct seq_buf *buffer,
 				     const struct kernel_param *kp)
 {
 	pr_debug("%s()\n", __func__);
 
-	return sprintf(buffer, "0x%02x\n", *(unsigned int *)kp->arg);
+	seq_buf_printf(buffer, "0x%02x\n", *(unsigned int *)kp->arg);
+	return 0;
 }
 
 static unsigned int channel_mask = ATI_REMOTE2_MAX_CHANNEL_MASK;

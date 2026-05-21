@@ -1797,10 +1797,11 @@ static int param_set_debug(const char *val, const struct kernel_param *kp);
 static int param_get_debug(struct seq_buf *buffer, const struct kernel_param *kp);
 
 static int param_set_audit(const char *val, const struct kernel_param *kp);
-static int param_get_audit(char *buffer, const struct kernel_param *kp);
+static int param_get_audit(struct seq_buf *buffer,
+			   const struct kernel_param *kp);
 
 static int param_set_mode(const char *val, const struct kernel_param *kp);
-static int param_get_mode(char *buffer, const struct kernel_param *kp);
+static int param_get_mode(struct seq_buf *buffer, const struct kernel_param *kp);
 
 /* Flag values, also controllable via /sys/module/apparmor/parameters
  * We define special types as we want to do additional mediation.
@@ -2050,13 +2051,15 @@ static int param_set_debug(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static int param_get_audit(char *buffer, const struct kernel_param *kp)
+static int param_get_audit(struct seq_buf *buffer,
+			   const struct kernel_param *kp)
 {
 	if (!apparmor_enabled)
 		return -EINVAL;
 	if (apparmor_initialized && !aa_current_policy_view_capable(NULL))
 		return -EPERM;
-	return sysfs_emit(buffer, "%s\n", audit_mode_names[aa_g_audit]);
+	seq_buf_printf(buffer, "%s\n", audit_mode_names[aa_g_audit]);
+	return 0;
 }
 
 static int param_set_audit(const char *val, const struct kernel_param *kp)
@@ -2078,13 +2081,14 @@ static int param_set_audit(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static int param_get_mode(char *buffer, const struct kernel_param *kp)
+static int param_get_mode(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	if (!apparmor_enabled)
 		return -EINVAL;
 	if (apparmor_initialized && !aa_current_policy_view_capable(NULL))
 		return -EPERM;
-	return sysfs_emit(buffer, "%s\n", aa_profile_mode_names[aa_g_profile_mode]);
+	seq_buf_printf(buffer, "%s\n", aa_profile_mode_names[aa_g_profile_mode]);
+	return 0;
 }
 
 static int param_set_mode(const char *val, const struct kernel_param *kp)

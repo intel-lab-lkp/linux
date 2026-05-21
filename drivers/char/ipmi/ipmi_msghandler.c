@@ -90,7 +90,8 @@ static int panic_op_write_handler(const char *val,
 	return 0;
 }
 
-static int panic_op_read_handler(char *buffer, const struct kernel_param *kp)
+static int panic_op_read_handler(struct seq_buf *buffer,
+				 const struct kernel_param *kp)
 {
 	const char *event_str;
 
@@ -99,7 +100,8 @@ static int panic_op_read_handler(char *buffer, const struct kernel_param *kp)
 	else
 		event_str = ipmi_panic_event_str[ipmi_send_panic_event];
 
-	return sprintf(buffer, "%s\n", event_str);
+	seq_buf_printf(buffer, "%s\n", event_str);
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(panic_op_ops, panic_op_write_handler,

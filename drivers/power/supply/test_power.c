@@ -490,10 +490,12 @@ static int param_set_ac_online(const char *key, const struct kernel_param *kp)
 	return 0;
 }
 
-static int param_get_ac_online(char *buffer, const struct kernel_param *kp)
+static int param_get_ac_online(struct seq_buf *buffer,
+			       const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%s\n",
-			map_get_key(map_ac_online, ac_online, "unknown"));
+	seq_buf_printf(buffer, "%s\n",
+		       map_get_key(map_ac_online, ac_online, "unknown"));
+	return 0;
 }
 
 static int param_set_usb_online(const char *key, const struct kernel_param *kp)
@@ -503,10 +505,12 @@ static int param_set_usb_online(const char *key, const struct kernel_param *kp)
 	return 0;
 }
 
-static int param_get_usb_online(char *buffer, const struct kernel_param *kp)
+static int param_get_usb_online(struct seq_buf *buffer,
+				const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%s\n",
-			map_get_key(map_ac_online, usb_online, "unknown"));
+	seq_buf_printf(buffer, "%s\n",
+		       map_get_key(map_ac_online, usb_online, "unknown"));
+	return 0;
 }
 
 static int param_set_battery_status(const char *key,
@@ -517,10 +521,12 @@ static int param_set_battery_status(const char *key,
 	return 0;
 }
 
-static int param_get_battery_status(char *buffer, const struct kernel_param *kp)
+static int param_get_battery_status(struct seq_buf *buffer,
+				    const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%s\n",
-			map_get_key(map_ac_online, battery_status, "unknown"));
+	seq_buf_printf(buffer, "%s\n",
+		       map_get_key(map_ac_online, battery_status, "unknown"));
+	return 0;
 }
 
 static int param_set_battery_health(const char *key,
@@ -531,10 +537,12 @@ static int param_set_battery_health(const char *key,
 	return 0;
 }
 
-static int param_get_battery_health(char *buffer, const struct kernel_param *kp)
+static int param_get_battery_health(struct seq_buf *buffer,
+				    const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%s\n",
-			map_get_key(map_ac_online, battery_health, "unknown"));
+	seq_buf_printf(buffer, "%s\n",
+		       map_get_key(map_ac_online, battery_health, "unknown"));
+	return 0;
 }
 
 static int param_set_battery_present(const char *key,
@@ -545,11 +553,12 @@ static int param_set_battery_present(const char *key,
 	return 0;
 }
 
-static int param_get_battery_present(char *buffer,
+static int param_get_battery_present(struct seq_buf *buffer,
 					const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%s\n",
-			map_get_key(map_ac_online, battery_present, "unknown"));
+	seq_buf_printf(buffer, "%s\n",
+		       map_get_key(map_ac_online, battery_present, "unknown"));
+	return 0;
 }
 
 static int param_set_battery_technology(const char *key,
@@ -561,12 +570,12 @@ static int param_set_battery_technology(const char *key,
 	return 0;
 }
 
-static int param_get_battery_technology(char *buffer,
+static int param_get_battery_technology(struct seq_buf *buffer,
 					const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%s\n",
-			map_get_key(map_ac_online, battery_technology,
-					"unknown"));
+	seq_buf_printf(buffer, "%s\n",
+		       map_get_key(map_ac_online, battery_technology, "unknown"));
+	return 0;
 }
 
 static int param_set_battery_capacity(const char *key,

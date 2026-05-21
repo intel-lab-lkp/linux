@@ -86,9 +86,10 @@ static int srpt_set_u64_x(const char *buffer, const struct kernel_param *kp)
 {
 	return kstrtou64(buffer, 16, (u64 *)kp->arg);
 }
-static int srpt_get_u64_x(char *buffer, const struct kernel_param *kp)
+static int srpt_get_u64_x(struct seq_buf *buffer, const struct kernel_param *kp)
 {
-	return sprintf(buffer, "0x%016llx\n", *(u64 *)kp->arg);
+	seq_buf_printf(buffer, "0x%016llx\n", *(u64 *)kp->arg);
+	return 0;
 }
 module_param_call(srpt_service_guid, srpt_set_u64_x, srpt_get_u64_x,
 		  &srpt_service_guid, 0444);

@@ -41,7 +41,7 @@ MODULE_PARM_DESC(cu, "Credit return units");
 
 unsigned long hfi1_cap_mask = HFI1_CAP_MASK_DEFAULT;
 static int hfi1_caps_set(const char *val, const struct kernel_param *kp);
-static int hfi1_caps_get(char *buffer, const struct kernel_param *kp);
+static int hfi1_caps_get(struct seq_buf *buffer, const struct kernel_param *kp);
 static DEFINE_KERNEL_PARAM_OPS(cap_ops, hfi1_caps_set, hfi1_caps_get);
 module_param_cb(cap_mask, &cap_ops, &hfi1_cap_mask, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(cap_mask, "Bit mask of enabled/disabled HW features");
@@ -101,14 +101,15 @@ done:
 	return ret;
 }
 
-static int hfi1_caps_get(char *buffer, const struct kernel_param *kp)
+static int hfi1_caps_get(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	unsigned long cap_mask = *(unsigned long *)kp->arg;
 
 	cap_mask &= ~HFI1_CAP_LOCKED_SMASK;
 	cap_mask |= ((cap_mask & HFI1_CAP_K2U) << HFI1_CAP_USER_SHIFT);
 
-	return sysfs_emit(buffer, "0x%lx\n", cap_mask);
+	seq_buf_printf(buffer, "0x%lx\n", cap_mask);
+	return 0;
 }
 
 struct pci_dev *get_pci_dev(struct rvt_dev_info *rdi)

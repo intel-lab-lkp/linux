@@ -358,7 +358,8 @@ static int param_set_nfs_timeout(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static int param_get_nfs_timeout(char *buffer, const struct kernel_param *kp)
+static int param_get_nfs_timeout(struct seq_buf *buffer,
+				 const struct kernel_param *kp)
 {
 	long num = *((int *)kp->arg);
 
@@ -369,7 +370,8 @@ static int param_get_nfs_timeout(char *buffer, const struct kernel_param *kp)
 			num = (num + (HZ - 1)) / HZ;
 	} else
 		num = -1;
-	return sysfs_emit(buffer, "%li\n", num);
+	seq_buf_printf(buffer, "%li\n", num);
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(param_ops_nfs_timeout, param_set_nfs_timeout,

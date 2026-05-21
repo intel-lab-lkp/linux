@@ -47,10 +47,11 @@ bool libceph_compatible(void *data)
 }
 EXPORT_SYMBOL(libceph_compatible);
 
-static int param_get_supported_features(char *buffer,
+static int param_get_supported_features(struct seq_buf *buffer,
 					const struct kernel_param *kp)
 {
-	return sprintf(buffer, "0x%llx", CEPH_FEATURES_SUPPORTED_DEFAULT);
+	seq_buf_printf(buffer, "0x%llx", CEPH_FEATURES_SUPPORTED_DEFAULT);
+	return 0;
 }
 static DEFINE_KERNEL_PARAM_OPS(param_ops_supported_features, NULL,
 			       param_get_supported_features);

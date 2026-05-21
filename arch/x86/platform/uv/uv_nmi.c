@@ -111,9 +111,11 @@ module_param_named(dump_loglevel, uv_nmi_loglevel, int, 0644);
  * The following values show statistics on how perf events are affecting
  * this system.
  */
-static int param_get_local64(char *buffer, const struct kernel_param *kp)
+static int param_get_local64(struct seq_buf *buffer,
+			     const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%lu\n", local64_read((local64_t *)kp->arg));
+	seq_buf_printf(buffer, "%lu\n", local64_read((local64_t *)kp->arg));
+	return 0;
 }
 
 static int param_set_local64(const char *val, const struct kernel_param *kp)
@@ -207,9 +209,11 @@ static const char * const actions_desc[nmi_act_max] = {
 
 static enum action_t uv_nmi_action = nmi_act_dump;
 
-static int param_get_action(char *buffer, const struct kernel_param *kp)
+static int param_get_action(struct seq_buf *buffer,
+			    const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%s\n", actions[uv_nmi_action]);
+	seq_buf_printf(buffer, "%s\n", actions[uv_nmi_action]);
+	return 0;
 }
 
 static int param_set_action(const char *val, const struct kernel_param *kp)

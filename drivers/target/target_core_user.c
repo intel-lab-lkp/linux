@@ -249,10 +249,11 @@ static int tcmu_set_global_max_data_area(const char *str,
 	return 0;
 }
 
-static int tcmu_get_global_max_data_area(char *buffer,
+static int tcmu_get_global_max_data_area(struct seq_buf *buffer,
 					 const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%d\n", TCMU_PAGES_TO_MBS(tcmu_global_max_pages));
+	seq_buf_printf(buffer, "%d\n", TCMU_PAGES_TO_MBS(tcmu_global_max_pages));
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(tcmu_global_max_data_area_op,
@@ -265,11 +266,12 @@ MODULE_PARM_DESC(global_max_data_area_mb,
 		 "Max MBs allowed to be allocated to all the tcmu device's "
 		 "data areas.");
 
-static int tcmu_get_block_netlink(char *buffer,
+static int tcmu_get_block_netlink(struct seq_buf *buffer,
 				  const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%s\n", tcmu_netlink_blocked ?
-		       "blocked" : "unblocked");
+	seq_buf_printf(buffer, "%s\n",
+		       tcmu_netlink_blocked ? "blocked" : "unblocked");
+	return 0;
 }
 
 static int tcmu_set_block_netlink(const char *str,

@@ -3970,9 +3970,11 @@ static int param_set_do_rcu_barrier(const char *val, const struct kernel_param *
 /*
  * Output the number of outstanding rcutree.do_rcu_barrier requests.
  */
-static int param_get_do_rcu_barrier(char *buffer, const struct kernel_param *kp)
+static int param_get_do_rcu_barrier(struct seq_buf *buffer,
+				    const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%d\n", atomic_read((atomic_t *)kp->arg));
+	seq_buf_printf(buffer, "%d\n", atomic_read((atomic_t *)kp->arg));
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(do_rcu_barrier_ops, param_set_do_rcu_barrier,

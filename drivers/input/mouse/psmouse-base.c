@@ -44,7 +44,8 @@ MODULE_LICENSE("GPL");
 
 static unsigned int psmouse_max_proto = PSMOUSE_AUTO;
 static int psmouse_set_maxproto(const char *val, const struct kernel_param *);
-static int psmouse_get_maxproto(char *buffer, const struct kernel_param *kp);
+static int psmouse_get_maxproto(struct seq_buf *buffer,
+				const struct kernel_param *kp);
 static DEFINE_KERNEL_PARAM_OPS(param_ops_proto_abbrev, psmouse_set_maxproto,
 			       psmouse_get_maxproto);
 #define param_check_proto_abbrev(name, p)	__param_check(name, p, unsigned int)
@@ -1994,11 +1995,13 @@ static int psmouse_set_maxproto(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static int psmouse_get_maxproto(char *buffer, const struct kernel_param *kp)
+static int psmouse_get_maxproto(struct seq_buf *buffer,
+				const struct kernel_param *kp)
 {
 	int type = *((unsigned int *)kp->arg);
 
-	return sprintf(buffer, "%s\n", psmouse_protocol_by_type(type)->name);
+	seq_buf_printf(buffer, "%s\n", psmouse_protocol_by_type(type)->name);
+	return 0;
 }
 
 static int __init psmouse_init(void)

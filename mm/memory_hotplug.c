@@ -100,13 +100,17 @@ static int set_memmap_mode(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static int get_memmap_mode(char *buffer, const struct kernel_param *kp)
+static int get_memmap_mode(struct seq_buf *buffer,
+			   const struct kernel_param *kp)
 {
 	int mode = *((int *)kp->arg);
 
-	if (mode == MEMMAP_ON_MEMORY_FORCE)
-		return sprintf(buffer, "force\n");
-	return sprintf(buffer, "%c\n", mode ? 'Y' : 'N');
+	if (mode == MEMMAP_ON_MEMORY_FORCE) {
+		seq_buf_printf(buffer, "force\n");
+		return 0;
+	}
+	seq_buf_printf(buffer, "%c\n", mode ? 'Y' : 'N');
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(memmap_mode_ops, set_memmap_mode,
@@ -147,9 +151,11 @@ static int set_online_policy(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static int get_online_policy(char *buffer, const struct kernel_param *kp)
+static int get_online_policy(struct seq_buf *buffer,
+			     const struct kernel_param *kp)
 {
-	return sprintf(buffer, "%s\n", online_policy_to_str[*((int *)kp->arg)]);
+	seq_buf_printf(buffer, "%s\n", online_policy_to_str[*((int *)kp->arg)]);
+	return 0;
 }
 
 /*

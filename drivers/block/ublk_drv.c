@@ -5899,10 +5899,11 @@ static int ublk_set_max_unprivileged_ublks(const char *buf,
 	return param_set_uint_minmax(buf, kp, 0, UBLK_MAX_UBLKS);
 }
 
-static int ublk_get_max_unprivileged_ublks(char *buf,
+static int ublk_get_max_unprivileged_ublks(struct seq_buf *buf,
 					   const struct kernel_param *kp)
 {
-	return sysfs_emit(buf, "%u\n", unprivileged_ublks_max);
+	seq_buf_printf(buf, "%u\n", unprivileged_ublks_max);
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(ublk_max_unprivileged_ublks_ops,

@@ -2694,12 +2694,16 @@ out:
 	return IRQ_HANDLED;
 }
 
-static int get_download_mode(char *buffer, const struct kernel_param *kp)
+static int get_download_mode(struct seq_buf *buffer,
+			     const struct kernel_param *kp)
 {
-	if (download_mode >= ARRAY_SIZE(download_mode_name))
-		return sysfs_emit(buffer, "unknown mode\n");
+	if (download_mode >= ARRAY_SIZE(download_mode_name)) {
+		seq_buf_printf(buffer, "unknown mode\n");
+		return 0;
+	}
 
-	return sysfs_emit(buffer, "%s\n", download_mode_name[download_mode]);
+	seq_buf_printf(buffer, "%s\n", download_mode_name[download_mode]);
+	return 0;
 }
 
 static int set_download_mode(const char *val, const struct kernel_param *kp)

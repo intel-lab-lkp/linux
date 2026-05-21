@@ -841,10 +841,11 @@ static int drm_panic_type_set(const char *val, const struct kernel_param *kp)
 	return -EINVAL;
 }
 
-static int drm_panic_type_get(char *buffer, const struct kernel_param *kp)
+static int drm_panic_type_get(struct seq_buf *buffer,
+			      const struct kernel_param *kp)
 {
-	return scnprintf(buffer, PAGE_SIZE, "%s\n",
-			 drm_panic_type_map[drm_panic_type]);
+	seq_buf_printf(buffer, "%s\n", drm_panic_type_map[drm_panic_type]);
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(drm_panic_ops, drm_panic_type_set,

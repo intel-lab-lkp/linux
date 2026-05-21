@@ -7182,9 +7182,11 @@ static int wq_affn_dfl_set(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static int wq_affn_dfl_get(char *buffer, const struct kernel_param *kp)
+static int wq_affn_dfl_get(struct seq_buf *buffer,
+			   const struct kernel_param *kp)
 {
-	return scnprintf(buffer, PAGE_SIZE, "%s\n", wq_affn_names[wq_affn_dfl]);
+	seq_buf_printf(buffer, "%s\n", wq_affn_names[wq_affn_dfl]);
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(wq_affn_dfl_ops, wq_affn_dfl_set,

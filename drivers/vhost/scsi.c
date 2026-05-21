@@ -81,10 +81,11 @@ static int vhost_scsi_set_inline_sg_cnt(const char *buf,
 }
 #endif
 
-static int vhost_scsi_get_inline_sg_cnt(char *buf,
+static int vhost_scsi_get_inline_sg_cnt(struct seq_buf *buf,
 					const struct kernel_param *kp)
 {
-	return sprintf(buf, "%u\n", vhost_scsi_inline_sg_cnt);
+	seq_buf_printf(buf, "%u\n", vhost_scsi_inline_sg_cnt);
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(vhost_scsi_inline_sg_cnt_op,
