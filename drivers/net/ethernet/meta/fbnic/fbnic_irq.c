@@ -132,7 +132,7 @@ static irqreturn_t fbnic_mac_msix_intr(int __always_unused irq, void *data)
 	fbn = netdev_priv(fbd->netdev);
 
 	/* Record link down events */
-	if (!fbd->mac->get_link(fbd, fbn->aui, fbn->fec))
+	if (!fbd->mac->get_link(fbd, fbd->aui, fbd->fec))
 		phylink_pcs_change(fbn->pcs, false);
 
 	return IRQ_HANDLED;

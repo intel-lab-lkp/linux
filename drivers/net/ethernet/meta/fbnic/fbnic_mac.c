@@ -515,7 +515,6 @@ static u32 __fbnic_mac_cmd_config_asic(struct fbnic_dev *fbd,
 	/* Enable MAC Promiscuous mode and Tx padding */
 	u32 command_config = FBNIC_MAC_COMMAND_CONFIG_TX_PAD_EN |
 			     FBNIC_MAC_COMMAND_CONFIG_PROMISC_EN;
-	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
 
 	/* Disable pause frames if not enabled */
 	if (!tx_pause)
@@ -524,7 +523,7 @@ static u32 __fbnic_mac_cmd_config_asic(struct fbnic_dev *fbd,
 		command_config |= FBNIC_MAC_COMMAND_CONFIG_RX_PAUSE_DIS;
 
 	/* Disable fault handling if no FEC is requested */
-	if (fbn->fec == FBNIC_FEC_OFF)
+	if (fbd->fec == FBNIC_FEC_OFF)
 		command_config |= FBNIC_MAC_COMMAND_CONFIG_FLT_HDL_DIS;
 
 	return command_config;

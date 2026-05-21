@@ -46,9 +46,6 @@ struct fbnic_net {
 	struct phylink_config phylink_config;
 	struct phylink_pcs *pcs;
 
-	u8 aui;
-	u8 fec;
-
 	/* Cached top bits of the HW time counter for 40b -> 64b conversion */
 	u32 time_high;
 	/* Protect readers of @time_offset, writers take @time_lock. */

@@ -88,6 +88,9 @@ struct fbnic_dev {
 	unsigned long end_of_pmd_training;
 	u8 pmd_state;
 
+	u8 aui;
+	u8 fec;
+
 	/* Local copy of hardware statistics */
 	struct fbnic_hw_stats hw_stats;
 
