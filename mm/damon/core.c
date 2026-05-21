@@ -3180,37 +3180,81 @@ static void damon_split_regions_of(struct damon_ctx *ctx,
 }
 
 /*
- * Split every target region into randomly-sized small regions
+ * Split each region whose access pattern has just changed (age == 0)
+ * into two, until @budget new regions have been produced or no eligible
+ * region remains.
+ */
+static void damon_split_zero_age_regions(struct damon_ctx *ctx,
+					 unsigned long budget)
+{
+	struct damon_target *t;
+	struct damon_region *r, *next;
+
+	damon_for_each_target(t, ctx) {
+		damon_for_each_region_safe(r, next, t) {
+			unsigned long sz_region, sz_sub;
+
+			if (!budget)
+				return;
+			if (r->age != 0)
+				continue;
+			sz_region = damon_sz_region(r);
+			if (sz_region < 2 * ctx->min_region_sz)
+				continue;
+
+			sz_sub = ALIGN_DOWN(damon_rand(ctx, 1, 10) *
+					sz_region / 10, ctx->min_region_sz);
+			/* Do not allow blank region */
+			if (sz_sub == 0 || sz_sub >= sz_region)
+				continue;
+
+			damon_split_region_at(t, r, sz_sub);
+			budget--;
+		}
+	}
+}
+
+/*
+ * Split target regions to refine the monitoring resolution under
+ * dynamically changing access patterns.
  *
- * This function splits every target region into random-sized small regions if
- * current total number of the regions is equal or smaller than half of the
- * user-specified maximum number of regions.  This is for maximizing the
- * monitoring accuracy under the dynamically changeable access patterns.  If a
- * split was unnecessarily made, later 'kdamond_merge_regions()' will revert
- * it.
+ * When the total region count leaves room for a blanket doubling
+ * (nr_regions <= max_nr_regions / 2), every region is randomly split.
+ * Otherwise, only regions whose access pattern has just changed
+ * (age == 0) are split, up to the remaining budget against
+ * max_nr_regions.
+ *
+ * Unnecessary splits are reverted by a later kdamond_merge_regions().
  */
 static void kdamond_split_regions(struct damon_ctx *ctx)
 {
 	struct damon_target *t;
-	unsigned int nr_regions = 0;
-	static unsigned int last_nr_regions;
+	unsigned long nr_regions = 0;
+	unsigned long max_nr_regions = ctx->attrs.max_nr_regions;
+	static unsigned long last_nr_regions;
 	int nr_subregions = 2;
 
 	damon_for_each_target(t, ctx)
 		nr_regions += damon_nr_regions(t);
 
-	if (nr_regions > ctx->attrs.max_nr_regions / 2)
-		return;
+	if (nr_regions >= max_nr_regions)
+		goto done;
+
+	if (nr_regions > max_nr_regions / 2) {
+		damon_split_zero_age_regions(ctx, max_nr_regions - nr_regions);
+		goto done;
+	}
 
 	/* Maybe the middle of the region has different access frequency */
 	if (last_nr_regions == nr_regions &&
-			nr_regions < ctx->attrs.max_nr_regions / 3)
+			nr_regions < max_nr_regions / 3)
 		nr_subregions = 3;
 
 	damon_for_each_target(t, ctx)
 		damon_split_regions_of(ctx, t, nr_subregions,
 				       ctx->min_region_sz);
 
+done:
 	last_nr_regions = nr_regions;
 }
 
