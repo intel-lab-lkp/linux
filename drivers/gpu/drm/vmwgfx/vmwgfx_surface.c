@@ -972,7 +972,7 @@ static int vmw_buffer_prime_to_surface_base(struct vmw_private *dev_priv,
 
 	*base_p = base;
 out:
-	vmw_user_bo_unref(&bo);
+	vmw_bo_unreference(&bo);
 
 	return ret;
 }
@@ -1593,12 +1593,12 @@ vmw_gb_surface_define_internal(struct drm_device *dev,
 		if (ret == 0) {
 			if (res->guest_memory_bo->is_dumb) {
 				VMW_DEBUG_USER("Can't backup surface with a dumb buffer.\n");
-				vmw_user_bo_unref(&res->guest_memory_bo);
+				vmw_bo_unreference(&res->guest_memory_bo);
 				ret = -EINVAL;
 				goto out_unlock;
 			} else if (res->guest_memory_bo->tbo.base.size < res->guest_memory_size) {
 				VMW_DEBUG_USER("Surface backup buffer too small.\n");
-				vmw_user_bo_unref(&res->guest_memory_bo);
+				vmw_bo_unreference(&res->guest_memory_bo);
 				ret = -EINVAL;
 				goto out_unlock;
 			} else {

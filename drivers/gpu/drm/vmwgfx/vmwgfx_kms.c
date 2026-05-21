@@ -1940,7 +1940,7 @@ int vmw_connector_get_modes(struct drm_connector *connector)
 struct vmw_user_object *vmw_user_object_ref(struct vmw_user_object *uo)
 {
 	if (uo->buffer)
-		vmw_user_bo_ref(uo->buffer);
+		vmw_bo_reference(uo->buffer);
 	else if (uo->surface)
 		vmw_surface_reference(uo->surface);
 	return uo;
@@ -1949,7 +1949,7 @@ struct vmw_user_object *vmw_user_object_ref(struct vmw_user_object *uo)
 void vmw_user_object_unref(struct vmw_user_object *uo)
 {
 	if (uo->buffer)
-		vmw_user_bo_unref(&uo->buffer);
+		vmw_bo_unreference(&uo->buffer);
 	else if (uo->surface)
 		vmw_surface_unreference(&uo->surface);
 }

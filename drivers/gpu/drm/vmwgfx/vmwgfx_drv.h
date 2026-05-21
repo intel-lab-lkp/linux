@@ -97,7 +97,6 @@ struct vmwgfx_hash_item {
 struct vmw_res_func;
 
 struct vmw_bo;
-struct vmw_bo;
 struct vmw_resource_dirty;
 
 /**
