@@ -1598,6 +1598,8 @@ static void svc_release_rqst(struct svc_rqst *rqstp)
 
 	if (procp && procp->pc_release)
 		procp->pc_release(rqstp);
+
+	rqstp->rq_procinfo = NULL;
 }
 
 /**
@@ -1620,6 +1622,7 @@ void svc_process(struct svc_rqst *rqstp)
 	 * Setup response xdr_buf.
 	 * Initially it has just one page
 	 */
+	rqstp->rq_procinfo = NULL;
 	rqstp->rq_next_page = &rqstp->rq_respages[1];
 	resv->iov_base = page_address(rqstp->rq_respages[0]);
 	resv->iov_len = 0;
@@ -1672,6 +1675,7 @@ void svc_process_bc(struct rpc_rqst *req, struct svc_rqst *rqstp)
 	int proc_error;
 
 	/* Build the svc_rqst used by the common processing routine */
+	rqstp->rq_procinfo = NULL;
 	rqstp->rq_xid = req->rq_xid;
 	rqstp->rq_prot = req->rq_xprt->prot;
 	rqstp->rq_bc_net = req->rq_xprt->xprt_net;
