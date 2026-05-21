@@ -120,9 +120,14 @@ static int rxe_check_bind_mw(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 			return -EINVAL;
 		}
 	} else {
-		if (unlikely((wqe->wr.wr.mw.addr < mr->ibmr.iova) ||
-			     ((wqe->wr.wr.mw.addr + wqe->wr.wr.mw.length) >
-			      (mr->ibmr.iova + mr->ibmr.length)))) {
+		u64 mw_end, mr_end;
+
+		if (unlikely(check_add_overflow(wqe->wr.wr.mw.addr,
+						wqe->wr.wr.mw.length, &mw_end) ||
+			     check_add_overflow(mr->ibmr.iova,
+						mr->ibmr.length, &mr_end) ||
+			     wqe->wr.wr.mw.addr < mr->ibmr.iova ||
+			     mw_end > mr_end)) {
 			rxe_dbg_mw(mw,
 				"attempt to bind a VA MW outside of the MR\n");
 			return -EINVAL;
