@@ -13,6 +13,8 @@
 #include <soc/tegra/bpmp.h>
 #include "mc.h"
 
+static struct dentry *emc_debugfs_root;
+
 struct tegra186_emc_dvfs {
 	unsigned long latency;
 	unsigned long rate;
@@ -207,7 +209,14 @@ static int tegra186_emc_get_emc_dvfs_latency(struct tegra186_emc *emc)
 		return err;
 	}
 
-	emc->debugfs.root = debugfs_create_dir("emc", NULL);
+	if (!emc_debugfs_root)
+		emc_debugfs_root = debugfs_create_dir("emc", NULL);
+
+	if (dev_to_node(emc->dev) == NUMA_NO_NODE)
+		emc->debugfs.root = emc_debugfs_root;
+	else
+		emc->debugfs.root = debugfs_create_dir(dev_name(emc->dev), emc_debugfs_root);
+
 	debugfs_create_file("available_rates", 0444, emc->debugfs.root, emc,
 			    &tegra186_emc_debug_available_rates_fops);
 	debugfs_create_file("min_rate", 0644, emc->debugfs.root, emc,
@@ -239,7 +248,7 @@ tegra186_emc_of_icc_xlate(const struct of_phandle_args *spec, void *data)
 
 	/* External Memory is the only possible ICC route */
 	list_for_each_entry(node, &provider->nodes, node_list) {
-		if (node->id != TEGRA_ICC_EMEM)
+		if (tegra_mc_client_id_from_node(node) != TEGRA_ICC_EMEM)
 			continue;
 
 		return node;
@@ -260,6 +269,7 @@ static int tegra186_emc_interconnect_init(struct tegra186_emc *emc)
 {
 	struct tegra_mc *mc = dev_get_drvdata(emc->dev->parent);
 	const struct tegra_mc_soc *soc = mc->soc;
+	int node_id = dev_to_node(mc->dev);
 	struct icc_node *node;
 	int err;
 
@@ -273,26 +283,36 @@ static int tegra186_emc_interconnect_init(struct tegra186_emc *emc)
 	icc_provider_init(&emc->provider);
 
 	/* create External Memory Controller node */
-	node = icc_node_create(TEGRA_ICC_EMC);
-	if (IS_ERR(node))
-		return PTR_ERR(node);
-
-	node->name = "External Memory Controller";
-	icc_node_add(node, &emc->provider);
-
-	/* link External Memory Controller to External Memory (DRAM) */
-	err = icc_link_create(node, TEGRA_ICC_EMEM);
-	if (err)
-		goto remove_nodes;
-
-	/* create External Memory node */
-	node = icc_node_create(TEGRA_ICC_EMEM);
+	node = tegra_mc_icc_node_create(node_id, TEGRA_ICC_EMC);
 	if (IS_ERR(node)) {
 		err = PTR_ERR(node);
 		goto remove_nodes;
 	}
 
-	node->name = "External Memory (DRAM)";
+	if (node_id == NUMA_NO_NODE)
+		node->name = "External Memory Controller";
+	else
+		node->name = dev_name(emc->dev);
+
+	icc_node_add(node, &emc->provider);
+
+	/* link External Memory Controller to External Memory (DRAM) */
+	err = tegra_mc_icc_link_create(node, node_id, TEGRA_ICC_EMEM);
+	if (err)
+		goto remove_nodes;
+
+	/* create External Memory node */
+	node = tegra_mc_icc_node_create(node_id, TEGRA_ICC_EMEM);
+	if (IS_ERR(node)) {
+		err = PTR_ERR(node);
+		goto remove_nodes;
+	}
+
+	if (node_id == NUMA_NO_NODE)
+		node->name = "External Memory (DRAM)";
+	else
+		node->name = devm_kasprintf(emc->dev, GFP_KERNEL, "%d-dram", node_id);
+
 	icc_node_add(node, &emc->provider);
 
 	err = icc_provider_register(&emc->provider);
