@@ -440,6 +440,7 @@ int esp6_output_head(struct xfrm_state *x, struct sk_buff *skb, struct esp_info 
 	struct page *page;
 	struct sk_buff *trailer;
 	int tailen = esp->tailen;
+	unsigned int allocsize;
 
 	if (x->encap) {
 		int err = esp6_output_encap(x, skb, esp);
@@ -448,8 +449,8 @@ int esp6_output_head(struct xfrm_state *x, struct sk_buff *skb, struct esp_info 
 			return err;
 	}
 
-	if (ALIGN(tailen, L1_CACHE_BYTES) > PAGE_SIZE ||
-	    ALIGN(skb->data_len, L1_CACHE_BYTES) > PAGE_SIZE)
+	allocsize = ALIGN(skb->data_len + tailen, L1_CACHE_BYTES);
+	if (allocsize > PAGE_SIZE)
 		goto cow;
 
 	if (!skb_cloned(skb)) {
