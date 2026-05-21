@@ -11,6 +11,7 @@
 #define pr_fmt(fmt) "KHO: " fmt
 
 #include <kunit/static_stub.h>
+#include <kunit/visibility.h>
 
 #include <linux/cleanup.h>
 #include <linux/cma.h>
@@ -1775,3 +1776,55 @@ int kho_locate_mem_hole(struct kexec_buf *kbuf,
 
 	return ret == 1 ? 0 : -EADDRNOTAVAIL;
 }
+
+#if IS_ENABLED(CONFIG_KUNIT)
+static bool _kho_is_pfn_preserved(struct kho_radix_tree *tree,
+				  unsigned long pfn, unsigned int order)
+{
+	unsigned long key = kho_radix_encode_key(PFN_PHYS(pfn), order);
+	struct kho_radix_node *node;
+	struct kho_radix_leaf *leaf;
+	unsigned int i, idx;
+
+	if (!tree->root)
+		return false;
+
+	guard(mutex)(&tree->lock);
+
+	node = tree->root;
+	for (i = KHO_TREE_MAX_DEPTH - 1; i > 0; i--) {
+		idx = kho_radix_get_table_index(key, i);
+
+		if (!node->table[idx])
+			return false;
+
+		node = phys_to_virt(node->table[idx]);
+	}
+
+	idx = kho_radix_get_bitmap_index(key);
+	leaf = (struct kho_radix_leaf *)node;
+
+	return test_bit(idx, leaf->bitmap);
+}
+
+bool kho_test_pages_preserved(phys_addr_t phys, unsigned long nr_pages)
+{
+	struct kho_radix_tree *tree = &kho_out.radix_tree;
+	unsigned long pfn = PHYS_PFN(phys);
+	unsigned long end_pfn;
+	unsigned int order;
+
+	end_pfn = pfn + nr_pages;
+	while (pfn < end_pfn) {
+		order = __kho_preserve_pages_order(pfn, end_pfn);
+
+		if (!_kho_is_pfn_preserved(tree, pfn, order))
+			return false;
+
+		pfn += 1 << order;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL_IF_KUNIT(kho_test_pages_preserved);
+#endif
