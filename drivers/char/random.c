@@ -1615,6 +1615,25 @@ static int sysctl_random_write_wakeup_bits = POOL_READY_BITS;
 static int sysctl_poolsize = POOL_BITS;
 static u8 sysctl_bootid[UUID_SIZE];
 
+/**
+ * get_boot_id - return the boot ID UUID
+ *
+ * This function returns a pointer to the boot ID UUID, which is generated on
+ * demand the first time this function is called. The boot ID is a UUID that
+ * is unique to each boot of the system.
+ */
+const u8 *get_boot_id(void)
+{
+	static DEFINE_SPINLOCK(bootid_spinlock);
+
+	spin_lock(&bootid_spinlock);
+	if (!sysctl_bootid[8])
+		generate_random_uuid(sysctl_bootid);
+	spin_unlock(&bootid_spinlock);
+
+	return sysctl_bootid;
+}
+
 /*
  * This function is used to return both the bootid UUID, and random
  * UUID. The difference is in whether table->data is NULL; if it is,
@@ -1638,12 +1657,8 @@ static int proc_do_uuid(const struct ctl_table *table, int write, void *buf,
 		uuid = tmp_uuid;
 		generate_random_uuid(uuid);
 	} else {
-		static DEFINE_SPINLOCK(bootid_spinlock);
-
-		spin_lock(&bootid_spinlock);
-		if (!uuid[8])
-			generate_random_uuid(uuid);
-		spin_unlock(&bootid_spinlock);
+		/* Ensure that the boot ID is initialized. */
+		get_boot_id();
 	}
 
 	snprintf(uuid_string, sizeof(uuid_string), "%pU", uuid);

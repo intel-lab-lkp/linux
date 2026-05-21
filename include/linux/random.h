@@ -130,6 +130,15 @@ static inline int get_random_bytes_wait(void *buf, size_t nbytes)
 	return ret;
 }
 
+#ifdef CONFIG_SYSCTL
+const u8 *get_boot_id(void);
+#else
+static inline const u8 *get_boot_id(void)
+{
+	return NULL;
+}
+#endif
+
 #ifdef CONFIG_SMP
 int random_prepare_cpu(unsigned int cpu);
 int random_online_cpu(unsigned int cpu);
