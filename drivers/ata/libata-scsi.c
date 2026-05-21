@@ -1680,7 +1680,7 @@ void ata_scsi_deferred_qc_work(struct work_struct *work)
 	if (qc && !ata_port_eh_scheduled(ap)) {
 		WARN_ON_ONCE(ap->ops->qc_defer(qc));
 		ap->deferred_qc = NULL;
-		ata_qc_issue(qc);
+		ata_qc_issue(ap, qc);
 	}
 
 	spin_unlock_irqrestore(ap->lock, flags);
@@ -1815,7 +1815,7 @@ static int ata_scsi_qc_issue(struct ata_port *ap, struct ata_queued_cmd *qc)
 	}
 
 issue:
-	ata_qc_issue(qc);
+	ata_qc_issue(ap, qc);
 
 	return 0;
 }
