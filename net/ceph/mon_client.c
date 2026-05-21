@@ -712,6 +712,8 @@ static struct ceph_msg *get_generic_reply(struct ceph_connection *con,
 	struct ceph_mon_client *monc = con->private;
 	struct ceph_mon_generic_request *req;
 	u64 tid = le64_to_cpu(hdr->tid);
+	int type = le16_to_cpu(hdr->type);
+	int front_len = le32_to_cpu(hdr->front_len);
 	u32 data_len = le32_to_cpu(hdr->data_len);
 	struct ceph_msg *m;
 
@@ -721,6 +723,17 @@ static struct ceph_msg *get_generic_reply(struct ceph_connection *con,
 		dout("get_generic_reply %lld dne\n", tid);
 		*skip = 1;
 		m = NULL;
+	} else if (front_len > req->reply->front_alloc_len) {
+		pr_warn_ratelimited("tid %llu front %d > prealloc %d\n",
+				    tid, front_len,
+				    req->reply->front_alloc_len);
+		*skip = 0;
+		m = ceph_msg_new(type, front_len, GFP_NOFS, false);
+		if (m) {
+			ceph_msg_put(req->reply);
+			req->reply = m;
+			m = ceph_msg_get(req->reply);
+		}
 	} else if (data_len > req->reply->data_length) {
 		pr_warn_ratelimited("mon generic reply tid %llu data %u > preallocated %zu, skipping\n",
 				    tid, data_len, req->reply->data_length);
