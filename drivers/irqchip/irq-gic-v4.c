@@ -159,6 +159,9 @@ int its_alloc_vcpu_irqs(struct its_vm *vm)
 {
 	int vpe_base_irq, i;
 
+	if (!gic_domain)
+		return -EINVAL;
+
 	vm->fwnode = irq_domain_alloc_named_id_fwnode("GICv4-vpe",
 						      task_pid_nr(current));
 	if (!vm->fwnode)
