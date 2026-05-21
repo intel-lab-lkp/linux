@@ -82,6 +82,17 @@ required:
   - width-mm
   - height-mm
   - panel-timing
-  - port
+
+oneOf:
+  - required:
+      - port
+  - required:
+      - ports
+
+if:
+  required:
+    - ports
+then:
+  $ref: /schemas/display/lvds-dual-ports.yaml#
 
 ...
