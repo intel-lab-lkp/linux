@@ -63,7 +63,7 @@ where
     // to be null here.
     if val.is_null() {
         // TODO: Use pr_warn_once available.
-        crate::pr_warn!("Null pointer passed to `module_param::set_param`");
+        crate::pr_warn!("Null pointer passed to `module_param::set_param`\n");
         return EINVAL.to_errno();
     }
 
