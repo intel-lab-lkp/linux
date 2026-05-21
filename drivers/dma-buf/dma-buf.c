@@ -180,6 +180,7 @@ static void dma_buf_release(struct dentry *dentry)
 	 */
 	BUG_ON(dmabuf->cb_in.active || dmabuf->cb_out.active);
 
+	__dma_buf_list_del(dmabuf);
 	dmabuf->ops->release(dmabuf);
 
 	if (dmabuf->resv == (struct dma_resv *)&dmabuf[1])
@@ -193,10 +194,13 @@ static void dma_buf_release(struct dentry *dentry)
 
 static int dma_buf_file_release(struct inode *inode, struct file *file)
 {
+	struct dma_buf *dmabuf = file->private_data;
+
 	if (!is_dma_buf_file(file))
 		return -EINVAL;
 
-	__dma_buf_list_del(file->private_data);
+	if (file != dmabuf->file)
+		dma_buf_put(dmabuf);
 
 	return 0;
 }
@@ -231,6 +235,11 @@ static int dma_buf_mmap_internal(struct file *file, struct vm_area_struct *vma)
 
 	if (!is_dma_buf_file(file))
 		return -EINVAL;
+
+	if ((vma->vm_flags & VM_WRITE) &&
+	    (vma->vm_flags & VM_SHARED) &&
+	    !(file->f_mode & FMODE_WRITE))
+		return -EACCES;
 
 	dmabuf = file->private_data;
 
@@ -537,6 +546,50 @@ static long dma_buf_import_sync_file(struct dma_buf *dmabuf,
 }
 #endif
 
+static const struct file_operations dma_buf_fops;
+
+static int dma_buf_ioctl_derive(struct dma_buf *dmabuf, struct file *file,
+				void __user *udata)
+{
+	struct dma_buf_derive params;
+	struct file *new_file;
+	int new_fd;
+
+	if (copy_from_user(&params, udata, sizeof(params)))
+		return -EFAULT;
+
+	if (params.flags & ~(O_ACCMODE | O_CLOEXEC))
+		return -EINVAL;
+
+	/* Escalating permissions is not allowed. */
+	if ((params.flags & O_ACCMODE) == O_RDWR &&
+	    !(file->f_mode & FMODE_WRITE))
+		return -EACCES;
+
+	new_file = alloc_file_clone(dmabuf->file, params.flags, &dma_buf_fops);
+	if (IS_ERR(new_file))
+		return PTR_ERR(new_file);
+
+	get_dma_buf(dmabuf);
+	new_file->private_data = dmabuf;
+
+	new_fd = get_unused_fd_flags(params.flags & O_CLOEXEC ? O_CLOEXEC : 0);
+	if (new_fd < 0) {
+		fput(new_file);
+		return new_fd;
+	}
+
+	params.fd = new_fd;
+	if (copy_to_user(udata, &params, sizeof(params))) {
+		put_unused_fd(new_fd);
+		fput(new_file);
+		return -EFAULT;
+	}
+
+	fd_install(new_fd, new_file);
+	return 0;
+}
+
 static long dma_buf_ioctl(struct file *file,
 			  unsigned int cmd, unsigned long arg)
 {
@@ -586,6 +639,9 @@ static long dma_buf_ioctl(struct file *file,
 	case DMA_BUF_IOCTL_IMPORT_SYNC_FILE:
 		return dma_buf_import_sync_file(dmabuf, (const void __user *)arg);
 #endif
+
+	case DMA_BUF_IOCTL_DERIVE:
+		return dma_buf_ioctl_derive(dmabuf, file, (void __user *)arg);
 
 	default:
 		return -ENOTTY;

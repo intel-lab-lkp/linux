@@ -168,6 +168,33 @@ struct dma_buf_import_sync_file {
 	__s32 fd;
 };
 
+/**
+ * struct dma_buf_derive - Obtain a dma-buf fd with reduced access permissions
+ *
+ * Userspace can perform a DMA_BUF_IOCTL_DERIVE to obtain a second file
+ * descriptor for the same dma-buf with a subset of the calling fd's
+ * permissions.  This allows a producer holding read-write access to hand a
+ * read-only view to a less-privileged consumer without giving up its own
+ * write access or allocating a separate buffer.
+ *
+ * Unlike first-export ioctls, the new fd is not a re-export. It shares the
+ * same reservation object, exporter ops, and underlying memory as the
+ * original.
+ *
+ * The requested permissions must not exceed those of the calling fd.
+ */
+struct dma_buf_derive {
+	/**
+	 * @flags: Requested access flags.
+	 *
+	 * Accepts O_RDONLY or O_RDWR, optionally combined with O_CLOEXEC.
+	 * All other bits must be zero.
+	 */
+	__u32 flags;
+	/** @fd: Returned file descriptor with the requested permissions */
+	__s32 fd;
+};
+
 #define DMA_BUF_BASE		'b'
 #define DMA_BUF_IOCTL_SYNC	_IOW(DMA_BUF_BASE, 0, struct dma_buf_sync)
 
@@ -179,5 +206,6 @@ struct dma_buf_import_sync_file {
 #define DMA_BUF_SET_NAME_B	_IOW(DMA_BUF_BASE, 1, __u64)
 #define DMA_BUF_IOCTL_EXPORT_SYNC_FILE	_IOWR(DMA_BUF_BASE, 2, struct dma_buf_export_sync_file)
 #define DMA_BUF_IOCTL_IMPORT_SYNC_FILE	_IOW(DMA_BUF_BASE, 3, struct dma_buf_import_sync_file)
+#define DMA_BUF_IOCTL_DERIVE		_IOWR(DMA_BUF_BASE, 4, struct dma_buf_derive)
 
 #endif
