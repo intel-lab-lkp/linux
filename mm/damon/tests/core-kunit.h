@@ -339,6 +339,75 @@ static void damon_test_split_regions_of(struct kunit *test)
 	damon_destroy_ctx(c);
 }
 
+/*
+ * kdamond_split_regions() must still be able to make progress when the
+ * total region count is above max_nr_regions / 2, as long as there is
+ * unused budget and at least one region whose access pattern has just
+ * changed.
+ */
+static void damon_test_split_above_half_progresses(struct kunit *test)
+{
+	struct damon_ctx *c;
+	struct damon_target *t;
+	struct damon_region *r, *big;
+	unsigned long start;
+	unsigned int nr_before, nr_after, i;
+	const unsigned int nr_small = 799;
+	const unsigned long small_sz = 10;
+	const unsigned long big_sz = 1000000;
+
+	c = damon_new_ctx();
+	if (!c)
+		kunit_skip(test, "ctx alloc fail");
+
+	c->attrs.min_nr_regions = 10;
+	c->attrs.max_nr_regions = 1500;
+
+	t = damon_new_target();
+	if (!t) {
+		damon_destroy_ctx(c);
+		kunit_skip(test, "target alloc fail");
+	}
+
+	for (i = 0; i < nr_small; i++) {
+		start = i * small_sz;
+		r = damon_new_region(start, start + small_sz);
+		if (!r) {
+			damon_free_target(t);
+			damon_destroy_ctx(c);
+			kunit_skip(test, "region alloc fail");
+		}
+		r->nr_accesses = (i & 1) ? 0 : 100;
+		r->age = 5;
+		damon_add_region(r, t);
+	}
+
+	start = nr_small * small_sz;
+	big = damon_new_region(start, start + big_sz);
+	if (!big) {
+		damon_free_target(t);
+		damon_destroy_ctx(c);
+		kunit_skip(test, "big region alloc fail");
+	}
+	big->nr_accesses = 50;
+	damon_add_region(big, t);
+
+	damon_add_target(c, t);
+
+	nr_before = damon_nr_regions(t);
+	KUNIT_EXPECT_GT(test, (unsigned long)nr_before,
+			c->attrs.max_nr_regions / 2);
+
+	kdamond_split_regions(c);
+
+	nr_after = damon_nr_regions(t);
+	KUNIT_EXPECT_GT(test, nr_after, nr_before);
+	KUNIT_EXPECT_LE(test, (unsigned long)nr_after,
+			c->attrs.max_nr_regions);
+
+	damon_destroy_ctx(c);
+}
+
 static void damon_test_ops_registration(struct kunit *test)
 {
 	struct damon_ctx *c = damon_new_ctx();
@@ -1370,6 +1439,7 @@ static struct kunit_case damon_test_cases[] = {
 	KUNIT_CASE(damon_test_merge_two),
 	KUNIT_CASE(damon_test_merge_regions_of),
 	KUNIT_CASE(damon_test_split_regions_of),
+	KUNIT_CASE(damon_test_split_above_half_progresses),
 	KUNIT_CASE(damon_test_ops_registration),
 	KUNIT_CASE(damon_test_set_regions),
 	KUNIT_CASE(damon_test_nr_accesses_to_accesses_bp),
