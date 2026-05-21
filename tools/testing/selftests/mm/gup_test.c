@@ -12,9 +12,10 @@
 #include <pthread.h>
 #include <assert.h>
 #include <mm/gup_test.h>
+#include <mm/hugepage_settings.h>
+
 #include "kselftest.h"
 #include "vm_util.h"
-#include "hugepage_settings.h"
 
 #define MB (1UL << 20)
 

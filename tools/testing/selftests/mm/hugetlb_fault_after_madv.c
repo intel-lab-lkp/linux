@@ -7,10 +7,10 @@
 #include <unistd.h>
 #include <setjmp.h>
 #include <signal.h>
+#include <mm/hugepage_settings.h>
 
 #include "vm_util.h"
 #include "kselftest.h"
-#include "hugepage_settings.h"
 
 #define INLOOP_ITER 100
 

@@ -18,9 +18,10 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
+#include <mm/hugepage_settings.h>
+
 #include "vm_util.h"
 #include "kselftest.h"
-#include "hugepage_settings.h"
 
 #ifndef STATX_DIOALIGN
 #define STATX_DIOALIGN		0x00002000U

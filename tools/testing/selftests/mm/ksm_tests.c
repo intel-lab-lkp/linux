@@ -11,11 +11,11 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <err.h>
+#include <mm/hugepage_settings.h>
 
 #include "kselftest.h"
 #include <include/vdso/time64.h>
 #include "vm_util.h"
-#include "hugepage_settings.h"
 
 #define KSM_SYSFS_PATH "/sys/kernel/mm/ksm/"
 #define KSM_FP(s) (KSM_SYSFS_PATH s)

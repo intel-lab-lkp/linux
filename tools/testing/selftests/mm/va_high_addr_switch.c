@@ -8,10 +8,10 @@
 #include <stdio.h>
 #include <sys/mman.h>
 #include <string.h>
+#include <mm/hugepage_settings.h>
 
 #include "vm_util.h"
 #include "kselftest.h"
-#include "hugepage_settings.h"
 
 /*
  * The hint addr value is used to allocate addresses

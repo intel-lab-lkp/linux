@@ -20,6 +20,7 @@
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <linux/memfd.h>
+#include <mm/hugepage_settings.h>
 
 #include "local_config.h"
 #ifdef LOCAL_CONFIG_HAVE_LIBURING
@@ -29,7 +30,6 @@
 #include "../../../../mm/gup_test.h"
 #include "kselftest.h"
 #include "vm_util.h"
-#include "hugepage_settings.h"
 
 static size_t pagesize;
 static int pagemap_fd;

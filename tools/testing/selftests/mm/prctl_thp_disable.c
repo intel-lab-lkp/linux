@@ -12,9 +12,9 @@
 #include <linux/mman.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
+#include <mm/hugepage_settings.h>
 
 #include "kselftest_harness.h"
-#include "hugepage_settings.h"
 #include "vm_util.h"
 
 #ifndef PR_THP_DISABLE_EXCEPT_ADVISED

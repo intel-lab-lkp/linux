@@ -19,11 +19,11 @@
 #include <sys/sysmacros.h>
 #include <sys/vfs.h>
 #include <mm/file_utils.h>
+#include <mm/hugepage_settings.h>
 
 #include "linux/magic.h"
 
 #include "vm_util.h"
-#include "hugepage_settings.h"
 
 #define BASE_ADDR ((void *)(1UL << 30))
 static unsigned long hpage_pmd_size;

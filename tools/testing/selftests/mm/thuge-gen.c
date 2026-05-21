@@ -12,9 +12,10 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <string.h>
+#include <mm/hugepage_settings.h>
+
 #include "vm_util.h"
 #include "kselftest.h"
-#include "hugepage_settings.h"
 
 #if !defined(MAP_HUGETLB)
 #define MAP_HUGETLB	0x40000
