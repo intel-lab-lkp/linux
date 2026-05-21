@@ -188,3 +188,6 @@ sphinx_*/
 
 # bc language scripts (not LLVM bitcode)
 !kernel/time/timeconst.bc
+
+# rustc error message long types
+*.long-type-*.txt
