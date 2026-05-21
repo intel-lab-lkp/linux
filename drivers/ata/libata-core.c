@@ -5059,7 +5059,7 @@ void ata_qc_complete(struct ata_queued_cmd *qc)
 	if (unlikely(qc->flags & ATA_QCFLAG_EH)) {
 		fill_result_tf(qc);
 		trace_ata_qc_complete_failed(qc);
-		ata_qc_schedule_eh(qc);
+		ata_qc_schedule_eh(ap, qc);
 		return;
 	}
 
@@ -5092,7 +5092,7 @@ void ata_qc_complete(struct ata_queued_cmd *qc)
 		 * fast drain, and freeze the port.
 		 */
 		ap->pflags |= ATA_PFLAG_EH_PENDING;
-		ata_qc_schedule_eh(qc);
+		ata_qc_schedule_eh(ap, qc);
 		return;
 	}
 

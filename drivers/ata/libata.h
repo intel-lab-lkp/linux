@@ -178,7 +178,7 @@ extern void ata_eh_acquire(struct ata_port *ap);
 extern void ata_eh_release(struct ata_port *ap);
 extern void ata_scsi_error(struct Scsi_Host *host);
 extern void ata_eh_fastdrain_timerfn(struct timer_list *t);
-extern void ata_qc_schedule_eh(struct ata_queued_cmd *qc);
+extern void ata_qc_schedule_eh(struct ata_port *ap, struct ata_queued_cmd *qc);
 extern void ata_dev_disable(struct ata_device *dev);
 extern void ata_eh_detach_dev(struct ata_device *dev);
 extern void ata_eh_about_to_do(struct ata_link *link, struct ata_device *dev,

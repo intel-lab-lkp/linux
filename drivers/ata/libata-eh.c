@@ -976,10 +976,8 @@ static void ata_eh_set_pending(struct ata_port *ap, bool fastdrain)
  *	LOCKING:
  *	spin_lock_irqsave(host lock)
  */
-void ata_qc_schedule_eh(struct ata_queued_cmd *qc)
+void ata_qc_schedule_eh(struct ata_port *ap, struct ata_queued_cmd *qc)
 {
-	struct ata_port *ap = qc->ap;
-
 	qc->flags |= ATA_QCFLAG_EH;
 	ata_eh_set_pending(ap, true);
 
