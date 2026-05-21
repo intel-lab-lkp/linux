@@ -717,13 +717,13 @@ static int smb3_handle_conflicting_options(struct fs_context *fc)
 				ctx->multichannel = true;
 			else
 				ctx->multichannel = false;
-		} else {
+		} else if (fc->purpose != FS_CONTEXT_FOR_RECONFIGURE) {
 			ctx->multichannel = false;
 			ctx->max_channels = 1;
 		}
+		/* For reconfigure with neither specified, keep inherited values */
 	}
 
-	//resetting default values as remount doesn't initialize fs_context again
 	ctx->multichannel_specified = false;
 	ctx->max_channels_specified = false;
 
@@ -919,6 +919,85 @@ static void smb3_fs_context_free(struct fs_context *fc)
 	struct smb3_fs_context *ctx = smb3_fc2context(fc);
 
 	smb3_cleanup_fs_context(ctx);
+}
+
+/*
+ * Sync cifs_sb->ctx with the runtime state visible through /proc/mounts.
+ * cifs_show_options() reads many fields from tcon/server/ses rather than
+ * from ctx.  On remount, libmount reads /proc/mounts and feeds those
+ * values back as mount options.  To avoid false mismatches between the
+ * old ctx and the newly parsed options, we must ensure ctx reflects
+ * the current runtime state before it is duplicated into the new
+ * remount context.
+ *
+ * Note: sb->s_umount is not yet held when VFS calls init_fs_context()
+ * for reconfigure, so in theory concurrent I/O paths could read
+ * cifs_sb->ctx fields (e.g. cifs_symlink_type()) while we write them.
+ * This is safe because all fields written here are word-sized
+ * (bool/int/pointer), so stores are architecturally atomic.  The same
+ * unsynchronized-read pattern already exists in cifs_show_options().
+ */
+static void smb3_sync_ctx_from_runtime(struct cifs_sb_info *cifs_sb)
+{
+	struct cifs_tcon *tcon = cifs_sb_master_tcon(cifs_sb);
+	struct TCP_Server_Info *server = tcon->ses->server;
+	struct cifs_ses *ses = tcon->ses;
+	struct smb3_fs_context *ctx = cifs_sb->ctx;
+	const char *domain;
+	int unicode;
+
+	/*
+	 * Server fields that can drift from ctx after mount:
+	 *  - ops/vals: dialect renegotiation during reconnect (paired,
+	 *    so read under srv_lock to match the writer in SMB2_negotiate)
+	 *  - dstaddr: SWN witness failover updates server->dstaddr; the
+	 *    128-byte sockaddr_storage is not atomic, so srv_lock is
+	 *    required against torn reads
+	 *  - nosharesock: can be flipped to true post-mount by SMB2_tcon
+	 *    on STATUS_BAD_NETWORK_NAME with ISOLATED_TRANSPORT, so read
+	 *    under srv_lock to pair with that writer
+	 */
+	spin_lock(&server->srv_lock);
+	ctx->ops = server->ops;
+	ctx->vals = server->vals;
+	ctx->dstaddr = server->dstaddr;
+	ctx->nosharesock = server->nosharesock;
+	spin_unlock(&server->srv_lock);
+
+	/*
+	 * tcon->unix_ext can be flipped post-mount by reset_cifs_unix_caps()
+	 * on SMB1 reconnect (smb1_reconnect path). Read under tc_lock to pair
+	 * with that writer. tcon->posix_extensions is only ever set at
+	 * mount-time pre-publish, but read it under the same lock so the
+	 * derived linux_ext/no_linux_ext pair is consistent.
+	 */
+	spin_lock(&tcon->tc_lock);
+	if (tcon->posix_extensions || tcon->unix_ext) {
+		ctx->linux_ext = 1;
+		ctx->no_linux_ext = 0;
+	} else {
+		ctx->linux_ext = 0;
+		ctx->no_linux_ext = 1;
+	}
+	spin_unlock(&tcon->tc_lock);
+	ctx->seal	  = tcon->seal;
+	ctx->persistent	  = tcon->use_persistent;
+	ctx->nopersistent = !tcon->use_persistent;
+	ctx->resilient	  = tcon->use_resilient;
+	ctx->witness	  = tcon->use_witness;
+
+	/*
+	 * Session fields: domainName and unicode are effectively
+	 * write-once (set during session setup, never freed/replaced
+	 * while the session exists), so plain reads are safe.
+	 */
+	domain = ses->domainName;
+	unicode = ses->unicode;
+
+	if (domain && !ctx->domainname)
+		ctx->domainname = kstrdup(domain, GFP_KERNEL);
+	if (unicode >= 0)
+		ctx->unicode = unicode;
 }
 
 /*
@@ -1957,6 +2036,40 @@ int smb3_init_fs_context(struct fs_context *fc)
 	struct smb3_fs_context *ctx;
 	char *nodename = utsname()->nodename;
 	int i;
+
+	/*
+	 * For reconfigure (remount), duplicate the existing mount context
+	 * instead of building one from scratch with init defaults.
+	 *
+	 * VFS sets fc->root before calling init_fs_context for reconfigure,
+	 * so we can access the existing superblock's context.  We first sync
+	 * cifs_sb->ctx with runtime state (tcon/server/ses) so that ctx
+	 * matches what cifs_show_options() displays.  Then we dup old_ctx
+	 * into new_ctx.  The parser will overwrite only the options
+	 * explicitly passed on remount, so any difference between new_ctx
+	 * and old_ctx in smb3_verify_reconfigure_ctx() represents a real,
+	 * intentional change by the user.
+	 */
+	if (fc->purpose == FS_CONTEXT_FOR_RECONFIGURE) {
+		struct cifs_sb_info *cifs_sb = CIFS_SB(fc->root->d_sb);
+		int rc;
+
+		smb3_sync_ctx_from_runtime(cifs_sb);
+
+		ctx = kzalloc_obj(struct smb3_fs_context);
+		if (!ctx)
+			return -ENOMEM;
+
+		rc = smb3_fs_context_dup(ctx, cifs_sb->ctx);
+		if (rc) {
+			kfree(ctx);
+			return rc;
+		}
+
+		fc->fs_private = ctx;
+		fc->ops = &smb3_fs_context_ops;
+		return 0;
+	}
 
 	ctx = kzalloc_obj(struct smb3_fs_context);
 	if (unlikely(!ctx))
