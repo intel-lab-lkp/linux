@@ -54,6 +54,11 @@ properties:
     minItems: 1
     maxItems: 65
 
+  iommus:
+    minItems: 1
+    maxItems: 64
+    description: Up to 1 IOMMU entry per DMA channel.
+
   "#dma-cells":
     description: |
       Specifies the number of cells needed to encode an DMA channel.
