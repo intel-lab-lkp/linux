@@ -127,13 +127,19 @@ static inline bool rxe_check_pagefault(struct ib_umem_odp *umem_odp, u64 iova,
 				       int length)
 {
 	bool need_fault = false;
-	u64 addr;
+	u64 addr, iova_end;
 	int idx;
+
+	if (length < 0 ||
+	    check_add_overflow(iova, (u64)length, &iova_end)) {
+		/* let the pagefault path reject a bogus iova/length */
+		return true;
+	}
 
 	addr = iova & (~(BIT(umem_odp->page_shift) - 1));
 
 	/* Skim through all pages that are to be accessed. */
-	while (addr < iova + length) {
+	while (addr < iova_end) {
 		idx = (addr - ib_umem_start(umem_odp)) >> umem_odp->page_shift;
 
 		if (!(umem_odp->map.pfn_list[idx] & HMM_PFN_VALID)) {
