@@ -4706,9 +4706,15 @@ cifs_copy_folioq_to_iter(struct folio_queue *folioq, size_t data_size,
 {
 	for (; folioq; folioq = folioq->next) {
 		for (int s = 0; s < folioq_count(folioq); s++) {
-			struct folio *folio = folioq_folio(folioq, s);
-			size_t fsize = folio_size(folio);
-			size_t n, len = umin(fsize - skip, data_size);
+			struct folio *folio;
+			size_t fsize, n, len;
+
+			if (data_size == 0)
+				return 0;
+
+			folio = folioq_folio(folioq, s);
+			fsize = folio_size(folio);
+			len = umin(fsize - skip, data_size);
 
 			n = copy_folio_to_iter(folio, skip, len, iter);
 			if (n != len) {
@@ -4719,6 +4725,12 @@ cifs_copy_folioq_to_iter(struct folio_queue *folioq, size_t data_size,
 			data_size -= n;
 			skip = 0;
 		}
+	}
+
+	if (data_size != 0) {
+		cifs_dbg(VFS, "%s: short copy, %zu bytes missing\n",
+			 __func__, data_size);
+		return smb_EIO2(smb_eio_trace_rx_copy_to_iter, 0, data_size);
 	}
 
 	return 0;
@@ -4836,7 +4848,7 @@ handle_read_data(struct TCP_Server_Info *server, struct mid_q_entry *mid,
 		}
 
 		/* Copy the data to the output I/O iterator. */
-		rdata->result = cifs_copy_folioq_to_iter(buffer, buffer_len,
+		rdata->result = cifs_copy_folioq_to_iter(buffer, data_len,
 							 cur_off, &rdata->subreq.io_iter);
 		if (rdata->result != 0) {
 			if (is_offloaded)
@@ -4845,7 +4857,7 @@ handle_read_data(struct TCP_Server_Info *server, struct mid_q_entry *mid,
 				dequeue_mid(server, mid, rdata->result);
 			return 0;
 		}
-		rdata->got_bytes = buffer_len;
+		rdata->got_bytes = data_len;
 
 	} else if (!check_add_overflow(data_offset, data_len, &end_off) &&
 		   buf_len >= end_off) {
