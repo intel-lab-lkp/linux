@@ -35,6 +35,7 @@
 #include <linux/sizes.h>
 #include <linux/suspend.h>
 #include <linux/switchtec.h>
+#include <linux/iopoll.h>
 #include "pci.h"
 
 static bool pcie_lbms_seen(struct pci_dev *dev, u16 lnksta)
@@ -6368,3 +6369,121 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9750, pci_mask_replay_timer_timeout);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9755, pci_mask_replay_timer_timeout);
 #endif
+
+#define RTL_TX_CONFIG			0x40
+#define RTL_CSIDR			0x64
+#define RTL_CSIAR			0x68
+#define RTL_ERIDR			0x70
+#define RTL_ERIAR			0x74
+#define RTL_OCPDR			0xb0
+
+#define CSIAR_FLAG			0x80000000
+#define CSIAR_WRITE_CMD			0x80000000
+#define CSIAR_BYTE_ENABLE		0x0000f000
+#define CSIAR_ADDR_MASK			0x00000fff
+
+#define ERIAR_READ_CMD			0x80000000
+#define ERIAR_MASK_1111			0x0f000000
+#define ERIAR_EXGMAC			0
+#define ERIAR_FLAG			0x80000000
+
+static u32 quirk_rtl_csi_read(void __iomem *base, u8 multi_fun_sel_bit, int addr)
+{
+	u32 cmd = (addr & CSIAR_ADDR_MASK) | (multi_fun_sel_bit << 16) | CSIAR_BYTE_ENABLE;
+	u32 val;
+
+	writel(cmd, base + RTL_CSIAR);
+	if (readl_poll_timeout(base + RTL_CSIAR, val, val & CSIAR_FLAG, 10, 1000))
+		return ~0;
+	return readl(base + RTL_CSIDR);
+}
+
+static void quirk_rtl_csi_write(void __iomem *base, u8 multi_fun_sel_bit, int addr, int value)
+{
+	u32 cmd = CSIAR_WRITE_CMD | (addr & CSIAR_ADDR_MASK) |
+		  CSIAR_BYTE_ENABLE | (multi_fun_sel_bit << 16);
+	u32 val;
+
+	writel(value, base + RTL_CSIDR);
+	writel(cmd, base + RTL_CSIAR);
+	readl_poll_timeout(base + RTL_CSIAR, val, !(val & CSIAR_FLAG), 10, 1000);
+}
+
+static u16 quirk_r8168_mac_ocp_read(void __iomem *base, u32 reg)
+{
+	writel(reg << 15, base + RTL_OCPDR);
+	return (u16)readl(base + RTL_OCPDR);
+}
+
+static void quirk_rtl8168_clear_and_set_csi(void __iomem *base, u8 multi_fun_sel_bit,
+					    u32 addr, u32 clearmask, u32 setmask)
+{
+	u32 val = quirk_rtl_csi_read(base, multi_fun_sel_bit, addr);
+
+	if (val != ~0) {
+		val &= ~clearmask;
+		val |= setmask;
+		quirk_rtl_csi_write(base, multi_fun_sel_bit, addr, val);
+	}
+}
+
+static void quirk_rtl8168_other_fun_pci_setting(void __iomem *base, u32 addr,
+						u32 clearmask, u32 setmask)
+{
+	for (int i = 2; i < 8; i++) {
+		if (i == 5 || i == 6)
+			continue;
+		quirk_rtl8168_clear_and_set_csi(base, i, addr, clearmask, setmask);
+	}
+}
+
+static void quirk_rtl8168_set_aspm_clkreq(struct pci_dev *pdev)
+{
+	void __iomem *base;
+	u16 pci_command;
+	int mmio_bar;
+	u32 txconfig, xid;
+
+	pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
+	if (!(pci_command & PCI_COMMAND_MEMORY))
+		return;
+
+	mmio_bar = pci_select_bars(pdev, IORESOURCE_MEM);
+	if (!mmio_bar)
+		return;
+
+	mmio_bar = ffs(mmio_bar) - 1;
+	base = pci_iomap(pdev, mmio_bar, 0);
+	if (!base)
+		return;
+
+	txconfig = readl(base + RTL_TX_CONFIG);
+	if (txconfig == ~0U) {
+		pci_iounmap(pdev, base);
+		return;
+	}
+
+	xid = (txconfig >> 20) & 0xfcf;
+	if ((xid & 0x7cf) != 0x54b && (xid & 0x7cf) != 0x54a) {
+		pci_iounmap(pdev, base);
+		return;
+	}
+
+	if ((quirk_r8168_mac_ocp_read(base, 0xdc00) & 0x0078) != 0x0030 ||
+	    (quirk_r8168_mac_ocp_read(base, 0xd006) & 0x00ff) != 0x0000) {
+		pci_iounmap(pdev, base);
+		return;
+	}
+
+	quirk_rtl8168_other_fun_pci_setting(base, 0x80,
+					    BIT(0) | BIT(1) | BIT(8),
+					    BIT(0) | BIT(1) | BIT(8));
+
+	quirk_rtl8168_other_fun_pci_setting(base, 0x44,
+					    0,
+					    BIT(0) | BIT(1));
+
+	pci_iounmap(pdev, base);
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_REALTEK, 0x8168, quirk_rtl8168_set_aspm_clkreq);
+DECLARE_PCI_FIXUP_RESUME(PCI_VENDOR_ID_REALTEK, 0x8168, quirk_rtl8168_set_aspm_clkreq);
