@@ -17,6 +17,7 @@
 static int interleave_arithmetic;
 static bool extended_linear_cache;
 static bool fail_autoassemble;
+static bool multi_decoder;
 
 #define FAKE_QTG_ID	42
 
@@ -1041,6 +1042,17 @@ static void default_mock_decoder(struct cxl_decoder *cxld)
 	WARN_ON_ONCE(!cxld_registry_new(cxld));
 }
 
+static int decoder_by_id(struct device *dev, const void *data)
+{
+	int target_id = (int)(uintptr_t)data;
+	struct cxl_decoder *cxld;
+
+	if (!is_switch_decoder(dev))
+		return 0;
+	cxld = to_cxl_decoder(dev);
+	return cxld->id == target_id;
+}
+
 static int first_decoder(struct device *dev, const void *data)
 {
 	struct cxl_decoder *cxld;
@@ -1079,6 +1091,8 @@ static bool mock_init_hdm_decoder(struct cxl_decoder *cxld)
 	struct cxl_memdev *cxlmd;
 	struct cxl_dport *dport;
 	struct device *dev;
+	int max_decoder_id;
+	int region_decoder_id = 0;
 	bool hb0 = false;
 	u64 base;
 	int i;
@@ -1129,9 +1143,16 @@ static bool mock_init_hdm_decoder(struct cxl_decoder *cxld)
 	 * assignment those devices are named cxl_mem.0, and cxl_mem.4.
 	 *
 	 * See 'cxl list -BMPu -m cxl_mem.0,cxl_mem.4'
+	 *
+	 * When multi_decoder is enabled, additionally program decoder
+	 * X.1 of the same endpoints as a second auto-region that shares
+	 * the switch's downstream ports with the first region, so that
+	 * the same dport ends up in target_map[] of two committed switch
+	 * decoders simultaneously.
 	 */
+	max_decoder_id = multi_decoder ? 1 : 0;
 	if (!is_endpoint_decoder(&cxld->dev) || !hb0 || pdev->id % 4 ||
-	    pdev->id > 4 || cxld->id > 0) {
+	    pdev->id > 4 || cxld->id > max_decoder_id) {
 		default_mock_decoder(cxld);
 		return false;
 	}
@@ -1142,8 +1163,13 @@ static bool mock_init_hdm_decoder(struct cxl_decoder *cxld)
 		return false;
 	}
 
+	region_decoder_id = cxld->id;
+
 	base = window->base_hpa;
 	if (extended_linear_cache)
+		base += mock_auto_region_size;
+	/* Place the second auto-region right after the first. */
+	if (region_decoder_id == 1)
 		base += mock_auto_region_size;
 	cxld->hpa_range = (struct range) {
 		.start = base,
@@ -1156,7 +1182,9 @@ static bool mock_init_hdm_decoder(struct cxl_decoder *cxld)
 	cxld->flags = CXL_DECODER_F_ENABLE;
 	cxled->state = CXL_DECODER_STATE_AUTO;
 	port->commit_end = cxld->id;
-	devm_cxl_dpa_reserve(cxled, 0,
+	devm_cxl_dpa_reserve(cxled,
+			     region_decoder_id *
+				 (mock_auto_region_size / 2),
 			     mock_auto_region_size / cxld->interleave_ways, 0);
 	cxld->commit = mock_decoder_commit;
 	cxld->reset = mock_decoder_reset;
@@ -1165,12 +1193,23 @@ static bool mock_init_hdm_decoder(struct cxl_decoder *cxld)
 	/*
 	 * Now that endpoint decoder is set up, walk up the hierarchy
 	 * and setup the switch and root port decoders targeting @cxlmd.
+	 *
+	 * For region 0 use switch-decoder slot 0 (selected by
+	 * first_decoder()); for region 1 use slot 1 so that the two
+	 * regions exercise the multi-decoder / shared-dport scenario.
 	 */
 	iter = port;
 	for (i = 0; i < 2; i++) {
 		dport = iter->parent_dport;
 		iter = dport->port;
-		dev = device_find_child(&iter->dev, NULL, first_decoder);
+		if (region_decoder_id == 0) {
+			dev = device_find_child(&iter->dev, NULL,
+						first_decoder);
+		} else {
+			dev = device_find_child(&iter->dev,
+						(void *)(uintptr_t)region_decoder_id,
+						decoder_by_id);
+		}
 		/*
 		 * Ancestor ports are guaranteed to be enumerated before
 		 * @port, and all ports have at least one decoder.
@@ -1179,23 +1218,36 @@ static bool mock_init_hdm_decoder(struct cxl_decoder *cxld)
 			continue;
 
 		cxlsd = to_cxl_switch_decoder(dev);
+		/*
+		 * Region 0 (decoder.0) keeps the historical shortcut of
+		 * stamping target[] directly so single-region setup is
+		 * unaffected by dport-add ordering quirks of cxl_test.
+		 *
+		 * Region 1 (decoder.1, only programmed when
+		 * multi_decoder=1) intentionally leaves target[]
+		 * to update_decoder_targets() at dport-add time.
+		 */
 		if (i == 0) {
 			/* put cxl_mem.4 second in the decode order */
 			if (pdev->id == 4) {
-				cxlsd->target[1] = dport;
+				if (region_decoder_id == 0)
+					cxlsd->target[1] = dport;
 				cxlsd->cxld.target_map[1] = dport->port_id;
 			} else {
-				cxlsd->target[0] = dport;
+				if (region_decoder_id == 0)
+					cxlsd->target[0] = dport;
 				cxlsd->cxld.target_map[0] = dport->port_id;
 			}
 		} else {
-			cxlsd->target[0] = dport;
+			if (region_decoder_id == 0)
+				cxlsd->target[0] = dport;
 			cxlsd->cxld.target_map[0] = dport->port_id;
 		}
 		cxld = &cxlsd->cxld;
 		cxld->target_type = CXL_DECODER_HOSTONLYMEM;
 		cxld->flags = CXL_DECODER_F_ENABLE;
-		iter->commit_end = 0;
+		if (iter->commit_end < region_decoder_id)
+			iter->commit_end = region_decoder_id;
 		/*
 		 * Switch targets 2 endpoints, while host bridge targets
 		 * one root port
@@ -1211,6 +1263,26 @@ static bool mock_init_hdm_decoder(struct cxl_decoder *cxld)
 		};
 		cxld->commit = mock_decoder_commit;
 		cxld->reset = mock_decoder_reset;
+
+		/*
+		 * For the second region only target_map[] is set above,
+		 * not cxlsd->target[]. On real hardware target[] gets
+		 * populated when dports are added (BIOS-programmed
+		 * decoders are read first, then dports get enumerated).
+		 * cxl_test's order is reversed: dports were added long
+		 * before this point, so re-fire the update here against
+		 * each existing dport to mimic the real-hardware
+		 * ordering and exercise update_decoder_targets() with
+		 * pre-programmed decoders.
+		 */
+		if (region_decoder_id == 1) {
+			struct cxl_dport *existing;
+			unsigned long index;
+
+			xa_for_each(&iter->dports, index, existing)
+				cxl_port_update_decoder_targets(iter,
+								existing);
+		}
 
 		cxld_registry_update(cxld);
 		put_device(dev);
@@ -2049,6 +2121,8 @@ module_param(extended_linear_cache, bool, 0444);
 MODULE_PARM_DESC(extended_linear_cache, "Enable extended linear cache support");
 module_param(fail_autoassemble, bool, 0444);
 MODULE_PARM_DESC(fail_autoassemble, "Simulate missing member of an auto-region");
+module_param(multi_decoder, bool, 0444);
+MODULE_PARM_DESC(multi_decoder, "Auto-program a 2nd decoder per endpoint sharing switch dports");
 module_init(cxl_test_init);
 module_exit(cxl_test_exit);
 MODULE_LICENSE("GPL v2");
