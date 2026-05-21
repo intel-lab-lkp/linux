@@ -410,8 +410,10 @@ static int dw_edma_pcie_probe(struct pci_dev *pdev,
 	chip->ll_rd_cnt = vsec_data->rd_ch_cnt;
 
 	chip->reg_base = pcim_iomap_table(pdev)[vsec_data->rg.bar];
-	if (!chip->reg_base)
-		return -ENOMEM;
+	if (!chip->reg_base) {
+		err = -ENOMEM;
+		goto err_free_irq_vectors;
+	}
 
 	for (i = 0; i < chip->ll_wr_cnt && !non_ll; i++) {
 		struct dw_edma_region *ll_region = &chip->ll_region_wr[i];
@@ -420,8 +422,10 @@ static int dw_edma_pcie_probe(struct pci_dev *pdev,
 		struct dw_edma_block *dt_block = &vsec_data->dt_wr[i];
 
 		ll_region->vaddr.io = pcim_iomap_table(pdev)[ll_block->bar];
-		if (!ll_region->vaddr.io)
-			return -ENOMEM;
+		if (!ll_region->vaddr.io) {
+			err = -ENOMEM;
+			goto err_free_irq_vectors;
+		}
 
 		ll_region->vaddr.io += ll_block->off;
 		ll_region->paddr = dw_edma_get_phys_addr(pdev, vsec_data,
@@ -430,8 +434,10 @@ static int dw_edma_pcie_probe(struct pci_dev *pdev,
 		ll_region->sz = ll_block->sz;
 
 		dt_region->vaddr.io = pcim_iomap_table(pdev)[dt_block->bar];
-		if (!dt_region->vaddr.io)
-			return -ENOMEM;
+		if (!dt_region->vaddr.io) {
+			err = -ENOMEM;
+			goto err_free_irq_vectors;
+		}
 
 		dt_region->vaddr.io += dt_block->off;
 		dt_region->paddr = dw_edma_get_phys_addr(pdev, vsec_data,
@@ -447,8 +453,10 @@ static int dw_edma_pcie_probe(struct pci_dev *pdev,
 		struct dw_edma_block *dt_block = &vsec_data->dt_rd[i];
 
 		ll_region->vaddr.io = pcim_iomap_table(pdev)[ll_block->bar];
-		if (!ll_region->vaddr.io)
-			return -ENOMEM;
+		if (!ll_region->vaddr.io) {
+			err = -ENOMEM;
+			goto err_free_irq_vectors;
+		}
 
 		ll_region->vaddr.io += ll_block->off;
 		ll_region->paddr = dw_edma_get_phys_addr(pdev, vsec_data,
@@ -457,8 +465,10 @@ static int dw_edma_pcie_probe(struct pci_dev *pdev,
 		ll_region->sz = ll_block->sz;
 
 		dt_region->vaddr.io = pcim_iomap_table(pdev)[dt_block->bar];
-		if (!dt_region->vaddr.io)
-			return -ENOMEM;
+		if (!dt_region->vaddr.io) {
+			err = -ENOMEM;
+			goto err_free_irq_vectors;
+		}
 
 		dt_region->vaddr.io += dt_block->off;
 		dt_region->paddr = dw_edma_get_phys_addr(pdev, vsec_data,
@@ -513,20 +523,25 @@ static int dw_edma_pcie_probe(struct pci_dev *pdev,
 	/* Validating if PCI interrupts were enabled */
 	if (!pci_dev_msi_enabled(pdev)) {
 		pci_err(pdev, "enable interrupt failed\n");
-		return -EPERM;
+		err = -EPERM;
+		goto err_free_irq_vectors;
 	}
 
 	/* Starting eDMA driver */
 	err = dw_edma_probe(chip);
 	if (err) {
 		pci_err(pdev, "eDMA probe failed\n");
-		return err;
+		goto err_free_irq_vectors;
 	}
 
 	/* Saving data structure reference */
 	pci_set_drvdata(pdev, chip);
 
 	return 0;
+
+err_free_irq_vectors:
+	pci_free_irq_vectors(pdev);
+	return err;
 }
 
 static void dw_edma_pcie_remove(struct pci_dev *pdev)
