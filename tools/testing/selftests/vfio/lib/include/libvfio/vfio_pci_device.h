@@ -122,4 +122,20 @@ static inline bool vfio_pci_device_match(struct vfio_pci_device *device,
 
 const char *vfio_pci_get_cdev_path(const char *bdf);
 
+static inline bool vfio_pci_noiommu_mode_enabled(void)
+{
+	char buf[8] = {};
+	int fd, n;
+
+	fd = open("/sys/module/vfio/parameters/enable_unsafe_noiommu_mode",
+		  O_RDONLY);
+	if (fd < 0)
+		return false;
+
+	n = read(fd, buf, sizeof(buf) - 1);
+	close(fd);
+
+	return n > 0 && buf[0] == 'Y';
+}
+
 #endif /* SELFTESTS_VFIO_LIB_INCLUDE_LIBVFIO_VFIO_PCI_DEVICE_H */
