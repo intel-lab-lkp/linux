@@ -62,24 +62,8 @@
  */
 #define DOUBLE_CHECK__
 
-/*
- * Define EXT4FS_DEBUG to produce debug messages
- */
-#undef EXT4FS_DEBUG
-
-/*
- * Debug code
- */
-#ifdef EXT4FS_DEBUG
-#define ext4_debug(f, a...)						\
-	do {								\
-		printk(KERN_DEBUG "EXT4-fs DEBUG (%s, %d): %s:",	\
-			__FILE__, __LINE__, __func__);			\
-		printk(KERN_DEBUG f, ## a);				\
-	} while (0)
-#else
-#define ext4_debug(fmt, ...)	no_printk(fmt, ##__VA_ARGS__)
-#endif
+#define ext4_debug(fmt, ...)						\
+	pr_debug("EXT4-fs DEBUG %s: " fmt, __func__,  ##__VA_ARGS__)
 
  /*
   * Turn on EXT_DEBUG to enable ext4_ext_show_path/leaf/move in extents.c
