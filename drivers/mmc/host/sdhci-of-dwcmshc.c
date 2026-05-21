@@ -816,7 +816,7 @@ static void dwcmshc_rk3568_set_clock(struct sdhci_host *host, unsigned int clock
 
 	/* Reset DLL */
 	sdhci_writel(host, BIT(1), DWCMSHC_EMMC_DLL_CTRL);
-	udelay(1);
+	fsleep(1);
 	sdhci_writel(host, 0x0, DWCMSHC_EMMC_DLL_CTRL);
 
 	/*
@@ -895,7 +895,7 @@ static void rk35xx_sdhci_reset(struct sdhci_host *host, u8 mask)
 
 	if (mask & SDHCI_RESET_ALL && priv->reset) {
 		reset_control_assert(priv->reset);
-		udelay(1);
+		fsleep(1);
 		reset_control_deassert(priv->reset);
 	}
 
@@ -1136,7 +1136,7 @@ static void cv18xx_sdhci_set_tap(struct sdhci_host *host, int tap)
 
 	clk |= SDHCI_CLOCK_CARD_EN;
 	sdhci_writew(host, clk, SDHCI_CLOCK_CONTROL);
-	usleep_range(1000, 2000);
+	fsleep(1500);
 }
 
 static int cv18xx_retry_tuning(struct mmc_host *mmc, u32 opcode, int *cmd_error)
@@ -1490,7 +1490,7 @@ static void sdhci_eic7700_config_phy(struct sdhci_host *host)
 		val |= PHY_PAD_RXSEL_1V8;
 		sdhci_writew(host, val, PHY_STBPAD_CNFG_R);
 	}
-	usleep_range(2000, 3000);
+	fsleep(2500);
 	sdhci_writel(host, drv | PHY_CNFG_RSTN_DEASSERT, PHY_CNFG_R);
 	sdhci_eic7700_config_phy_delay(host, dwc_priv->delay_line);
 }
@@ -1520,7 +1520,7 @@ static int sdhci_eic7700_reset_init(struct device *dev, struct eic7700_priv *pri
 		dev_err(dev, "Failed to assert reset signals: %d\n", ret);
 		return ret;
 	}
-	usleep_range(2000, 2100);
+	fsleep(2050);
 	ret = reset_control_deassert(priv->reset);
 	if (ret) {
 		dev_err(dev, "Failed to deassert reset signals: %d\n", ret);
@@ -1565,7 +1565,7 @@ static int sdhci_eic7700_delay_tuning(struct sdhci_host *host, u32 opcode)
 		ret = mmc_send_tuning(host->mmc, opcode, &cmd_error);
 		if (ret) {
 			host->ops->reset(host, SDHCI_RESET_CMD | SDHCI_RESET_DATA);
-			usleep_range(200, 210);
+			fsleep(205);
 			if (delay_min != -1 && delay_max != -1)
 				break;
 		} else {
@@ -1736,7 +1736,7 @@ static void sdhci_eic7700_set_uhs_signaling(struct sdhci_host *host, unsigned in
 		 */
 		sdhci_writew(host, 0xffff, PHY_DLLBT_CNFG_R);
 		sdhci_writeb(host, PHY_DLL_CTRL_ENABLE, PHY_DLL_CTRL_R);
-		usleep_range(100, 110);
+		fsleep(105);
 
 		ret = read_poll_timeout(sdhci_readb, status, status & DLL_LOCK_STS, 100, 1000000,
 					false, host, PHY_DLL_STATUS_R);
