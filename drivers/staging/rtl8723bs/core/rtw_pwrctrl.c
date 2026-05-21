@@ -389,11 +389,11 @@ void rtw_set_ps_mode(struct adapter *padapter, u8 ps_mode,
 
 /*
  * Return:
- *0:	Leave OK
- *-1:	Timeout
- *-2:	Other error
+ * 0:           Leave OK
+ * -ETIMEDOUT:  Timeout
+ * -ENODEV:     Other error
  */
-s32 LPS_RF_ON_check(struct adapter *padapter, u32 delay_ms)
+int LPS_RF_ON_check(struct adapter *padapter, u32 delay_ms)
 {
 	unsigned long start_time;
 	u8 bAwake = false;
@@ -405,10 +405,10 @@ s32 LPS_RF_ON_check(struct adapter *padapter, u32 delay_ms)
 			return 0;
 
 		if (padapter->bSurpriseRemoved)
-			return -2;
+			return -ENODEV;
 
 		if (jiffies_to_msecs(jiffies - start_time) > delay_ms)
-			return -1;
+			return -ETIMEDOUT;
 
 		msleep(1);
 	}

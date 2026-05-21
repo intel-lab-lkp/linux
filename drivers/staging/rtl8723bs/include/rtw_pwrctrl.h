@@ -233,7 +233,7 @@ int ips_leave(struct adapter *padapter);
 
 void rtw_ps_processor(struct adapter *padapter);
 
-s32 LPS_RF_ON_check(struct adapter *padapter, u32 delay_ms);
+int LPS_RF_ON_check(struct adapter *padapter, u32 delay_ms);
 void LPS_Enter(struct adapter *padapter, const char *msg);
 void LPS_Leave(struct adapter *padapter, const char *msg);
 void traffic_check_for_leave_lps(struct adapter *padapter, u8 tx, u32 tx_packets);
