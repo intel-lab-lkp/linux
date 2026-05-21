@@ -54,7 +54,6 @@ properties:
 
   regulators:
     type: object
-    $ref: /schemas/regulator/sprd,sc2731-regulator.yaml#
 
 patternProperties:
   "^adc@[0-9a-f]+$":
@@ -100,6 +99,26 @@ required:
   - '#size-cells'
 
 additionalProperties: false
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: sprd,sc2730
+    then:
+      properties:
+        regulators:
+          $ref: /schemas/regulator/sprd,sc2730-regulator.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: sprd,sc2731
+    then:
+      properties:
+        regulators:
+          $ref: /schemas/regulator/sprd,sc2731-regulator.yaml#
 
 examples:
   - |
