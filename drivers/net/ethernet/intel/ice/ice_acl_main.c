@@ -274,7 +274,19 @@ int ice_acl_add_rule_ethtool(struct ice_vsi *vsi, struct ethtool_rxnfc *cmd)
 		goto free_input;
 	}
 
+	input->acl_fltr = true;
+
+	mutex_lock(&hw->fdir_fltr_lock);
+	/* input struct is added to the HW filter list */
+	err = ice_ntuple_update_list_entry(pf, input, fsp->location);
+	mutex_unlock(&hw->fdir_fltr_lock);
+	if (err)
+		goto del_entry;
+
 	return 0;
+
+del_entry:
+	ice_flow_rem_entry(hw, ICE_BLK_ACL, entry_h);
 
 free_input:
 	kfree(input);
