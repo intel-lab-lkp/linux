@@ -463,11 +463,15 @@ static int mshv_synic_cpu_init(unsigned int cpu)
 			&spages->synic_event_flags_page;
 	struct hv_synic_event_ring_page **event_ring_page =
 			&spages->synic_event_ring_page;
+	bool vmbus_active = false;
+
 	/*
 	 * VMBus owns SIMP/SIEFP/SCONTROL when it is active.
 	 * See hv_hyp_synic_enable_regs() for that initialization.
 	 */
-	bool vmbus_active = hv_vmbus_exists();
+#if IS_ENABLED(CONFIG_HYPERV_VMBUS)
+	vmbus_active = hv_vmbus_exists();
+#endif
 
 	/*
 	 * Map the SYNIC message page. When VMBus is not active the
@@ -587,8 +591,12 @@ static int mshv_synic_cpu_exit(unsigned int cpu)
 		&spages->synic_event_flags_page;
 	struct hv_synic_event_ring_page **event_ring_page =
 		&spages->synic_event_ring_page;
+	bool vmbus_active = false;
+
 	/* VMBus owns SIMP/SIEFP/SCONTROL when it is active */
-	bool vmbus_active = hv_vmbus_exists();
+#if IS_ENABLED(CONFIG_HYPERV_VMBUS)
+	vmbus_active = hv_vmbus_exists();
+#endif
 
 	/* Disable the interrupt */
 	sint.as_uint64 = hv_get_non_nested_msr(HV_MSR_SINT0 + HV_SYNIC_INTERCEPTION_SINT_INDEX);
