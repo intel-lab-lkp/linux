@@ -79,6 +79,7 @@ static int udp_bpf_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 		goto out;
 	}
 
+	lock_sock(sk);
 msg_bytes_ready:
 	copied = sk_msg_recvmsg(sk, psock, msg, len, flags);
 	if (!copied) {
@@ -91,11 +92,13 @@ msg_bytes_ready:
 			if (psock_has_data(psock))
 				goto msg_bytes_ready;
 			ret = sk_udp_recvmsg(sk, msg, len, flags);
-			goto out;
+			goto unlock;
 		}
 		copied = -EAGAIN;
 	}
 	ret = copied;
+unlock:
+	release_sock(sk);
 out:
 	sk_psock_put(sk, psock);
 	return ret;
