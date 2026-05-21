@@ -224,29 +224,17 @@ static int tpm1_binary_bios_measurements_show(struct seq_file *m, void *v)
 {
 	struct tcpa_event *event = v;
 	struct tcpa_event temp_event;
-	char *temp_ptr;
-	int i;
 
 	memcpy(&temp_event, event, sizeof(struct tcpa_event));
 
-	/* convert raw integers for endianness */
 	temp_event.pcr_index = do_endian_conversion(event->pcr_index);
 	temp_event.event_type = do_endian_conversion(event->event_type);
 	temp_event.event_size = do_endian_conversion(event->event_size);
 
-	temp_ptr = (char *) &temp_event;
-
-	for (i = 0; i < (sizeof(struct tcpa_event) - 1) ; i++)
-		seq_putc(m, temp_ptr[i]);
-
-	temp_ptr = (char *) v;
-
-	for (i = (sizeof(struct tcpa_event) - 1);
-	     i < (sizeof(struct tcpa_event) + temp_event.event_size); i++)
-		seq_putc(m, temp_ptr[i]);
+	seq_write(m, &temp_event, sizeof(temp_event));
+	seq_write(m, event->event_data, temp_event.event_size);
 
 	return 0;
-
 }
 
 static int tpm1_ascii_bios_measurements_show(struct seq_file *m, void *v)
