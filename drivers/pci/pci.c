@@ -4489,33 +4489,18 @@ static int pci_pm_reset(struct pci_dev *dev, bool probe)
 }
 
 /**
- * pci_d3cold_reset - Put device into D3cold and back to D0 for reset
- * @dev: PCI device to reset
- * @probe: if true, check if D3cold reset is supported; if false, perform reset
+ * pci_dev_d3cold_d0_cycle - Perform D3cold->D0 power cycle
+ * @dev: Device to power cycle
  *
- * Reset the device by transitioning through D3cold (actual power removal via
- * platform power control) and back to D0. This requires ACPI _PR3 power
- * resources to be present - the platform must be able to physically cut power
- * to the device.
+ * Common helper to perform D3cold->D0 power cycle for reset methods.
+ * Attempts D3cold transition with automatic fallback to D3hot on platforms
+ * without ACPI _PR3 power resources. Handles IOMMU preparation and cleanup.
  *
- * Only available for single-function devices to avoid affecting other
- * functions in multi-function devices.
- *
- * Returns 0 if device can be/was reset this way, -ENOTTY if not supported,
- * or other negative error code on failure.
+ * Returns 0 on success, negative error code on failure.
  */
-static int pci_d3cold_reset(struct pci_dev *dev, bool probe)
+int pci_dev_d3cold_d0_cycle(struct pci_dev *dev)
 {
 	int ret;
-
-	if (dev->multifunction)
-		return -ENOTTY;
-
-	if (!pci_pr3_present(dev))
-		return -ENOTTY;
-
-	if (probe)
-		return 0;
 
 	if (dev->current_state != PCI_D0)
 		return -EINVAL;
@@ -4535,6 +4520,36 @@ static int pci_d3cold_reset(struct pci_dev *dev, bool probe)
 done:
 	pci_dev_reset_iommu_done(dev);
 	return ret;
+}
+
+/**
+ * pci_d3cold_reset - Put device into D3cold and back to D0 for reset
+ * @dev: PCI device to reset
+ * @probe: if true, check if D3cold reset is supported; if false, perform reset
+ *
+ * Reset the device by transitioning through D3cold (actual power removal via
+ * platform power control) and back to D0. This requires ACPI _PR3 power
+ * resources to be present - the platform must be able to physically cut power
+ * to the device.
+ *
+ * Only available for single-function devices to avoid affecting other
+ * functions in multi-function devices.
+ *
+ * Returns 0 if device can be/was reset this way, -ENOTTY if not supported,
+ * or other negative error code on failure.
+ */
+static int pci_d3cold_reset(struct pci_dev *dev, bool probe)
+{
+	if (dev->multifunction)
+		return -ENOTTY;
+
+	if (!pci_pr3_present(dev))
+		return -ENOTTY;
+
+	if (probe)
+		return 0;
+
+	return pci_dev_d3cold_d0_cycle(dev);
 }
 
 /**
