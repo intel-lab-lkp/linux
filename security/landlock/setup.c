@@ -32,6 +32,7 @@ struct lsm_blob_sizes landlock_blob_sizes __ro_after_init = {
 	.lbs_file = sizeof(struct landlock_file_security),
 	.lbs_inode = sizeof(struct landlock_inode_security),
 	.lbs_superblock = sizeof(struct landlock_superblock_security),
+	.lbs_ipc = sizeof(struct landlock_kern_ipc_perm_security),
 };
 
 int landlock_errata __ro_after_init;
