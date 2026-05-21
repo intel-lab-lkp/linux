@@ -461,8 +461,7 @@ static int param_array_get(struct seq_buf *s, const struct kernel_param *kp)
 {
 	const struct kparam_array *arr = kp->arr;
 	struct kernel_param p = *kp;
-	char *elem_buf = NULL;
-	int i, ret = 0;
+	int i, ret;
 
 	for (i = 0; i < (arr->num ? *arr->num : arr->max); i++) {
 		size_t before = s->len;
@@ -470,23 +469,9 @@ static int param_array_get(struct seq_buf *s, const struct kernel_param *kp)
 		p.arg = arr->elem + arr->elemsize * i;
 		check_kparam_locked(p.mod);
 
-		if (arr->ops->get) {
-			ret = arr->ops->get(s, &p);
-			if (ret < 0)
-				goto out;
-		} else {
-			if (!elem_buf) {
-				elem_buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
-				if (!elem_buf) {
-					ret = -ENOMEM;
-					goto out;
-				}
-			}
-			ret = arr->ops->get_str(elem_buf, &p);
-			if (ret < 0)
-				goto out;
-			seq_buf_putmem(s, elem_buf, ret);
-		}
+		ret = arr->ops->get(s, &p);
+		if (ret < 0)
+			return ret;
 
 		/* Nothing got written (e.g. overflow) — stop. */
 		if (s->len == before)
@@ -496,10 +481,7 @@ static int param_array_get(struct seq_buf *s, const struct kernel_param *kp)
 		if (i && s->buffer[before - 1] == '\n')
 			s->buffer[before - 1] = ',';
 	}
-	ret = 0;
-out:
-	kfree(elem_buf);
-	return ret;
+	return 0;
 }
 
 static void param_array_free(void *arg)
@@ -570,32 +552,22 @@ static ssize_t param_attr_show(const struct module_attribute *mattr,
 	int count;
 	const struct param_attribute *attribute = to_param_attr(mattr);
 	const struct kernel_param_ops *ops = attribute->param->ops;
+	struct seq_buf s;
 
-	if (!ops->get && !ops->get_str)
+	if (!ops->get)
 		return -EPERM;
 
-	WARN_ON_ONCE(ops->get && ops->get_str);
-
 	kernel_param_lock(mk->mod);
-	if (ops->get) {
-		struct seq_buf s;
-
-		seq_buf_init(&s, buf, PAGE_SIZE);
-		count = ops->get(&s, attribute->param);
-		if (count >= 0) {
-			WARN_ON_ONCE(count > 0);
-			count = seq_buf_used(&s);
-			/* Make sure string is terminated. */
-			seq_buf_str(&s);
-			/*
-			 * If overflowed, reduce count by 1 for trailing
-			 * NUL byte.
-			 */
-			if (seq_buf_has_overflowed(&s))
-				count--;
-		}
-	} else {
-		count = ops->get_str(buf, attribute->param);
+	seq_buf_init(&s, buf, PAGE_SIZE);
+	count = ops->get(&s, attribute->param);
+	if (count >= 0) {
+		WARN_ON_ONCE(count > 0);
+		count = seq_buf_used(&s);
+		/* Make sure string is terminated. */
+		seq_buf_str(&s);
+		/* If overflowed, reduce count by 1 for trailing NUL byte. */
+		if (seq_buf_has_overflowed(&s))
+			count--;
 	}
 	kernel_param_unlock(mk->mod);
 	return count;

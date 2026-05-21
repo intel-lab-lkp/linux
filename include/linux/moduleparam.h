@@ -66,15 +66,8 @@ struct kernel_param_ops {
 	/*
 	 * Format the parameter's value into @s.  Return 0 on success
 	 * (length derived from seq_buf_used()) or -errno on error.
-	 * Exactly one of .get and .get_str should be set; the dispatcher
-	 * WARNs and prefers .get if both are.
 	 */
 	int (*get)(struct seq_buf *s, const struct kernel_param *kp);
-	/*
-	 * Returns length written or -errno.  Buffer is 4k (ie. be short!).
-	 * Deprecated: callbacks should implement .get instead.
-	 */
-	int (*get_str)(char *buffer, const struct kernel_param *kp);
 	/* Optional function to free kp->arg when module unloaded. */
 	void (*free)(void *arg);
 };
@@ -84,33 +77,11 @@ struct kernel_param_ops {
  * any required visibility qualifiers (typically "static"):
  *
  *   static DEFINE_KERNEL_PARAM_OPS(my_ops, my_set, my_get);
- *
- * @_get may be either of:
- *   int (*)(struct seq_buf *, const struct kernel_param *) (seq_buf)
- *   int (*)(char *, const struct kernel_param *)           (legacy)
- *
- * The macro uses _Generic to route the function pointer to the
- * matching field (.get or .get_str) at compile time, leaving the
- * other field NULL. Each helper matches the wrong prototype signature
- * and returns NULL, falling through to the default branch otherwise;
- * if @_get has neither expected signature the assignment to the
- * fields gets a normal compile-time type-mismatch error.
  */
-#define _KERNEL_PARAM_OPS_GET(_get)					\
-	_Generic((_get),						\
-	    int (*)(char *, const struct kernel_param *): NULL,		\
-	    default: (_get))
-
-#define _KERNEL_PARAM_OPS_GET_STR(_get)					\
-	_Generic((_get),						\
-	    int (*)(struct seq_buf *, const struct kernel_param *): NULL, \
-	    default: (_get))
-
 #define DEFINE_KERNEL_PARAM_OPS(_name, _set, _get)			\
 	const struct kernel_param_ops _name = {				\
 		.set = (_set),						\
-		.get = _KERNEL_PARAM_OPS_GET(_get),			\
-		.get_str = _KERNEL_PARAM_OPS_GET_STR(_get),		\
+		.get = (_get),						\
 	}
 
 /* As DEFINE_KERNEL_PARAM_OPS, with KERNEL_PARAM_OPS_FL_NOARG set. */
@@ -118,16 +89,14 @@ struct kernel_param_ops {
 	const struct kernel_param_ops _name = {				\
 		.flags = KERNEL_PARAM_OPS_FL_NOARG,			\
 		.set = (_set),						\
-		.get = _KERNEL_PARAM_OPS_GET(_get),			\
-		.get_str = _KERNEL_PARAM_OPS_GET_STR(_get),		\
+		.get = (_get),						\
 	}
 
 /* As DEFINE_KERNEL_PARAM_OPS, with an additional .free callback. */
 #define DEFINE_KERNEL_PARAM_OPS_FREE(_name, _set, _get, _free)		\
 	const struct kernel_param_ops _name = {				\
 		.set = (_set),						\
-		.get = _KERNEL_PARAM_OPS_GET(_get),			\
-		.get_str = _KERNEL_PARAM_OPS_GET_STR(_get),		\
+		.get = (_get),						\
 		.free = (_free),					\
 	}
 
