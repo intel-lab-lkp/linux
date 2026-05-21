@@ -2894,6 +2894,7 @@ static int ucc_geth_rx(struct ucc_geth_private *ugeth, u8 rxQ, int rx_work_limit
 	u32 bd_status;
 	u8 *bdBuffer;
 	struct net_device *dev;
+	LIST_HEAD(rx_list);
 
 	ugeth_vdbg("%s: IN", __func__);
 
@@ -2934,7 +2935,7 @@ static int ucc_geth_rx(struct ucc_geth_private *ugeth, u8 rxQ, int rx_work_limit
 
 			dev->stats.rx_bytes += length;
 			/* Send the packet up the stack */
-			netif_receive_skb(skb);
+			list_add_tail(&skb->list, &rx_list);
 		}
 
 		skb = get_new_skb(ugeth, bd);
@@ -2959,6 +2960,8 @@ static int ucc_geth_rx(struct ucc_geth_private *ugeth, u8 rxQ, int rx_work_limit
 
 		bd_status = in_be32((u32 __iomem *)bd);
 	}
+
+	netif_receive_skb_list(&rx_list);
 
 	ugeth->rxBd[rxQ] = bd;
 	return howmany;
