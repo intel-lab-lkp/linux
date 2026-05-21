@@ -125,11 +125,12 @@ static int br_should_become_root_port(const struct net_bridge_port *p,
 	else if (t > 0)
 		return 0;
 
-	if (p->designated_cost + p->path_cost <
-	    rp->designated_cost + rp->path_cost)
+	t = p->designated_cost + READ_ONCE(p->path_cost) -
+	    (rp->designated_cost + READ_ONCE(rp->path_cost));
+
+	if (t < 0)
 		return 1;
-	else if (p->designated_cost + p->path_cost >
-		 rp->designated_cost + rp->path_cost)
+	else if (t > 0)
 		return 0;
 
 	t = memcmp(&p->designated_bridge, &rp->designated_bridge, 8);
@@ -187,7 +188,8 @@ static void br_root_selection(struct net_bridge *br)
 	} else {
 		p = br_get_port(br, root_port);
 		br->designated_root = p->designated_root;
-		br->root_path_cost = p->designated_cost + p->path_cost;
+		br->root_path_cost = p->designated_cost +
+				     READ_ONCE(p->path_cost);
 	}
 }
 
