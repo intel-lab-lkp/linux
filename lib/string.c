@@ -25,6 +25,7 @@
 #include <linux/stddef.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <vdso/page.h>
 
 #include <asm/page.h>
 #include <asm/rwonce.h>
@@ -127,7 +128,7 @@ ssize_t sized_strscpy(char *dest, const char *src, size_t count)
 	 * since we don't know if the next page is mapped.
 	 */
 	if ((long)src & (sizeof(long) - 1))
-		max = min(PAGE_SIZE - ((long)src & (PAGE_SIZE - 1)), max);
+		max = min(PAGE_SIZE - offset_in_page(src), max);
 #else
 	/* If src or dest is unaligned, don't do word-at-a-time. */
 	if (((long) dest | (long) src) & (sizeof(long) - 1))
