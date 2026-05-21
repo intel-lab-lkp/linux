@@ -3877,6 +3877,9 @@ int ata_eh_recover(struct ata_port *ap, struct ata_reset_operations *reset_ops,
 	ata_for_each_link(link, ap, EDGE) {
 		struct ata_eh_context *ehc = &link->eh_context;
 
+		/* Tell the compiler that link->ap == ap. */
+		__assume_ctx_lock(&link->ap->host->eh_mutex);
+
 		if (!(ehc->i.action & ATA_EH_RESET))
 			continue;
 
