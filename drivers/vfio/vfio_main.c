@@ -321,6 +321,20 @@ out_inode:
 	return ret;
 }
 
+static int vfio_device_set_noiommu_and_name(struct vfio_device *device)
+{
+	if (IS_ENABLED(CONFIG_VFIO_DEVICE_CDEV) && vfio_noiommu && !device->dev->iommu) {
+		device->noiommu = true;
+		add_taint(TAINT_USER, LOCKDEP_STILL_OK);
+		dev_warn(device->dev,
+			 "Adding kernel taint for vfio-noiommu cdev on device\n");
+	}
+
+	/* Just to be safe, expose to user explicitly noiommu cdev node */
+	return dev_set_name(&device->device, "%svfio%d",
+		     device->noiommu ? "noiommu-" : "", device->index);
+}
+
 static int __vfio_register_dev(struct vfio_device *device,
 			       enum vfio_group_type type)
 {
@@ -340,20 +354,21 @@ static int __vfio_register_dev(struct vfio_device *device,
 	if (!device->dev_set)
 		vfio_assign_device_set(device, device);
 
-	ret = dev_set_name(&device->device, "vfio%d", device->index);
-	if (ret)
-		return ret;
-
 	ret = vfio_device_set_group(device, type);
 	if (ret)
 		return ret;
+
+	ret = vfio_device_set_noiommu_and_name(device);
+	if (ret)
+		goto err_out;
 
 	/*
 	 * VFIO always sets IOMMU_CACHE because we offer no way for userspace to
 	 * restore cache coherency. It has to be checked here because it is only
 	 * valid for cases where we are using iommu groups.
 	 */
-	if (type == VFIO_IOMMU && !vfio_device_is_noiommu(device) &&
+	if (type == VFIO_IOMMU && !(vfio_device_is_noiommu(device) ||
+				    vfio_device_is_cdev_noiommu(device)) &&
 	    !device_iommu_capable(device->dev, IOMMU_CAP_CACHE_COHERENCY)) {
 		ret = -EINVAL;
 		goto err_out;
