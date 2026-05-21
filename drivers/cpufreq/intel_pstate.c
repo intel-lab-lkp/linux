@@ -2942,6 +2942,7 @@ static void intel_pstate_adjust_policy_max(struct cpudata *cpu,
 	    policy->max > cpu->pstate.max_freq) {
 		pr_debug("policy->max > max non turbo frequency\n");
 		policy->max = policy->cpuinfo.max_freq;
+		policy->update_limits = true;
 	}
 }
 
