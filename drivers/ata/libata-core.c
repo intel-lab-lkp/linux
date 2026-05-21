@@ -4939,15 +4939,13 @@ void ata_qc_free(struct ata_queued_cmd *qc)
 		qc->tag = ATA_TAG_POISON;
 }
 
-void __ata_qc_complete(struct ata_queued_cmd *qc)
+void __ata_qc_complete(struct ata_port *ap, struct ata_queued_cmd *qc)
 {
-	struct ata_port *ap;
 	struct ata_link *link;
 
 	if (WARN_ON_ONCE(!(qc->flags & ATA_QCFLAG_ACTIVE)))
 		return;
 
-	ap = qc->ap;
 	link = qc->dev->link;
 
 	if (likely(qc->flags & ATA_QCFLAG_DMAMAP))
@@ -5050,7 +5048,7 @@ void ata_qc_complete(struct ata_port *ap, struct ata_queued_cmd *qc)
 	if (unlikely(ata_tag_internal(qc->tag))) {
 		fill_result_tf(qc);
 		trace_ata_qc_complete_internal(qc);
-		__ata_qc_complete(qc);
+		__ata_qc_complete(ap, qc);
 		return;
 	}
 
@@ -5119,7 +5117,7 @@ void ata_qc_complete(struct ata_port *ap, struct ata_queued_cmd *qc)
 	if (unlikely(dev->flags & ATA_DFLAG_DUBIOUS_XFER))
 		ata_verify_xfer(qc);
 
-	__ata_qc_complete(qc);
+	__ata_qc_complete(ap, qc);
 }
 EXPORT_SYMBOL_GPL(ata_qc_complete);
 

@@ -1212,7 +1212,7 @@ static void __ata_eh_qc_complete(struct ata_queued_cmd *qc)
 
 	spin_lock_irqsave(ap->lock, flags);
 	qc->scsidone = ata_eh_scsidone;
-	__ata_qc_complete(qc);
+	__ata_qc_complete(ap, qc);
 	WARN_ON(ata_tag_valid(qc->tag));
 	spin_unlock_irqrestore(ap->lock, flags);
 

@@ -89,7 +89,7 @@ extern unsigned int ata_dev_set_feature(struct ata_device *dev,
 					u8 subcmd, u8 action);
 extern void ata_qc_free(struct ata_queued_cmd *qc);
 extern void ata_qc_issue(struct ata_port *ap, struct ata_queued_cmd *qc);
-extern void __ata_qc_complete(struct ata_queued_cmd *qc);
+extern void __ata_qc_complete(struct ata_port *ap, struct ata_queued_cmd *qc);
 extern int atapi_check_dma(struct ata_queued_cmd *qc);
 extern void swap_buf_le16(u16 *buf, unsigned int buf_words);
 extern bool ata_phys_link_online(struct ata_link *link);
