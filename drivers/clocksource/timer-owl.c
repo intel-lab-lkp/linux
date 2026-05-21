@@ -142,6 +142,7 @@ static int __init owl_timer_init(struct device_node *node)
 	}
 
 	rate = clk_get_rate(clk);
+	clk_put(clk);
 
 	owl_timer_reset(owl_clksrc_base);
 	owl_timer_set_enabled(owl_clksrc_base, true);
