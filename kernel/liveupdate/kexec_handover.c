@@ -10,6 +10,8 @@
 
 #define pr_fmt(fmt) "KHO: " fmt
 
+#include <kunit/static_stub.h>
+
 #include <linux/cleanup.h>
 #include <linux/cma.h>
 #include <linux/kmemleak.h>
@@ -423,7 +425,11 @@ static struct page *kho_restore_page(phys_addr_t phys, bool is_folio)
  */
 struct folio *kho_restore_folio(phys_addr_t phys)
 {
-	struct page *page = kho_restore_page(phys, true);
+	struct page *page;
+
+	KUNIT_STATIC_STUB_REDIRECT(kho_restore_folio, phys);
+
+	page = kho_restore_page(phys, true);
 
 	return page ? page_folio(page) : NULL;
 }
@@ -444,6 +450,8 @@ struct page *kho_restore_pages(phys_addr_t phys, unsigned long nr_pages)
 	const unsigned long start_pfn = PHYS_PFN(phys);
 	const unsigned long end_pfn = start_pfn + nr_pages;
 	unsigned long pfn = start_pfn;
+
+	KUNIT_STATIC_STUB_REDIRECT(kho_restore_pages, phys, nr_pages);
 
 	while (pfn < end_pfn) {
 		const unsigned int order =
