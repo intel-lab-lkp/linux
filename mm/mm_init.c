@@ -1075,13 +1075,15 @@ static void __ref zone_device_page_init_slow(struct page *page,
 static inline bool zone_device_page_init_optimization_enabled(void)
 {
 	/*
-	 * The template fast path copies a preinitialized struct page as an
-	 * array of u64 words. Skip it when the page_ref_set tracepoint is
-	 * enabled, and fall back to the slow path if struct page is not an
-	 * integral number of u64 words.
+	 * The template fast path copies a preinitialized struct page from
+	 * a reusable template. Keep sanitized builds on the slow path so
+	 * their instrumented stores remain intact, skip the fast path when
+	 * the page_ref_set tracepoint is enabled, and fall back if
+	 * struct page is not an integral number of u64 words.
 	 */
-	return !page_ref_tracepoint_active(page_ref_set) &&
-		IS_ALIGNED(sizeof(struct page), sizeof(u64));
+	return !IS_ENABLED(CONFIG_KASAN) && !IS_ENABLED(CONFIG_KMSAN) &&
+	       !page_ref_tracepoint_active(page_ref_set) &&
+	       IS_ALIGNED(sizeof(struct page), sizeof(u64));
 }
 
 static inline void zone_device_template_head_page_init(struct page *template,
@@ -1104,30 +1106,42 @@ static inline void zone_device_template_tail_page_init(struct page *template,
 }
 
 /*
- * The copied template already provides the PFN-invariant portion of a
- * ZONE_DEVICE struct page. Fix up the fields that still depend on @pfn
- * after the copy, namely the section bits and page->virtual when present.
+ * 'template' is a reusable page prototype rather than a strictly immutable
+ * object. Most ZONE_DEVICE fields stay constant across the pages covered by
+ * the current template, but section bits and page->virtual may still depend
+ * on the PFN. Refresh those PFN-dependent fields in the template before
+ * copying it into @page.
  */
-static inline void zone_device_page_init_finish(struct page *page,
-							unsigned long pfn)
+static inline void zone_device_page_update_template(struct page *template,
+						    unsigned long pfn)
 {
-	set_page_section_from_pfn(page, pfn);
+	set_page_section_from_pfn(template, pfn);
 #ifdef WANT_PAGE_VIRTUAL
 	if (!is_highmem_idx(ZONE_DEVICE))
-		set_page_address(page, __va(pfn << PAGE_SHIFT));
+		set_page_address(template, __va(pfn << PAGE_SHIFT));
 #endif
 }
 
 static void zone_device_page_init_from_template(struct page *page,
-		unsigned long pfn, const struct page *template)
+		unsigned long pfn, struct page *template)
 {
-	const u64 *src = (const u64 *)template;
-	u64 *dst = (u64 *)page;
-	unsigned int i;
+	/*
+	 * 'template' carries the invariant portion of a ZONE_DEVICE struct
+	 * page. Update the PFN-dependent fields in place before copying it
+	 * to the destination page.
+	 *
+	 * pageblock-aligned pages immediately feed
+	 * init_pageblock_migratetype(), which reads back page metadata via
+	 * helpers like page_zone(page). Avoid a read-after-streaming
+	 * dependency for these rare pages by using regular cached stores
+	 * instead of non-temporal ones.
+	 */
+	zone_device_page_update_template(template, pfn);
+	if (unlikely(pageblock_aligned(pfn)))
+		memcpy(page, template, sizeof(*page));
+	else
+		memcpy_streaming(page, template, sizeof(*page));
 
-	for (i = 0; i < sizeof(struct page) / sizeof(u64); i++)
-		dst[i] = src[i];
-	zone_device_page_init_finish(page, pfn);
 	zone_device_page_init_pageblock(page, pfn);
 }
 
@@ -1168,9 +1182,10 @@ static void __ref memmap_init_compound(struct page *head,
 	__SetPageHead(head);
 
 	/*
-	 * A tail template can be reused for all tail pages in the same compound page
-	 * because shared state for compound tails is pre-set by prep_compound_tail().
-	 * The per-page page->virtual and section in flags are fixed up after copying.
+	 * All tails of the same compound page share the state established by
+	 * prep_compound_tail(). Reuse one tail template for the whole range
+	 * and refresh only the PFN-dependent fields in that template before
+	 * each copy.
 	 */
 	if (use_template)
 		zone_device_template_tail_page_init(&template, head_pfn + 1,
@@ -1189,6 +1204,15 @@ static void __ref memmap_init_compound(struct page *head,
 			set_page_count(page, 0);
 		}
 	}
+
+	/*
+	 * prep_compound_head() updates compound metadata in struct folio fields
+	 * that alias the first tail-page descriptors. When the tail pages above
+	 * were populated with non-temporal stores, order those writes before the
+	 * overlapping metadata updates below.
+	 */
+	if (use_template)
+		memcpy_streaming_drain();
 	prep_compound_head(head, order);
 }
 
@@ -1237,10 +1261,23 @@ void __ref memmap_init_zone_device(struct zone *zone,
 		if (pfns_per_compound == 1)
 			continue;
 
+		/*
+		 * Compound-head setup immediately updates head->flags, so make
+		 * the streaming template copy visible before entering
+		 * memmap_init_compound().
+		 */
+		if (use_template)
+			memcpy_streaming_drain();
+
 		memmap_init_compound(page, pfn, zone_idx, nid, pgmap,
 				     compound_nr_pages(altmap, pgmap),
 				     use_template);
 	}
+	/*
+	 * Drain any remaining non-temporal stores before returning.
+	 */
+	if (use_template)
+		memcpy_streaming_drain();
 
 	pr_debug("%s initialised %lu pages in %ums\n", __func__,
 		nr_pages, jiffies_to_msecs(jiffies - start));
