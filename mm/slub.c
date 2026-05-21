@@ -5080,10 +5080,15 @@ void kmem_cache_return_sheaf(struct kmem_cache *s, gfp_t gfp,
 	struct slub_percpu_sheaves *pcs;
 	struct node_barn *barn;
 
-	if (unlikely((sheaf->capacity != s->sheaf_capacity)
-		     || sheaf->pfmemalloc)) {
+	if (unlikely(sheaf->capacity != s->sheaf_capacity)) {
 		sheaf_flush_unused(s, sheaf);
 		kfree(sheaf);
+		return;
+	}
+
+	if (unlikely(sheaf->pfmemalloc)) {
+		sheaf_flush_unused(s, sheaf);
+		free_empty_sheaf(s, sheaf);
 		return;
 	}
 
