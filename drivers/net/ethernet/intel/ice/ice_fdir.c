@@ -1178,19 +1178,25 @@ void ice_fdir_list_add_fltr(struct ice_hw *hw, struct ice_ntuple_fltr *fltr)
 /**
  * ice_fdir_update_cntrs - increment / decrement filter counter
  * @hw: pointer to hardware structure
- * @flow: filter flow type
+ * @fltr: filter node
  * @add: true implies filters added
  */
-void
-ice_fdir_update_cntrs(struct ice_hw *hw, enum ice_fltr_ptype flow, bool add)
+void ice_fdir_update_cntrs(struct ice_hw *hw, struct ice_ntuple_fltr *fltr,
+			   bool add)
 {
+	enum ice_fltr_ptype flow = fltr->flow_type;
 	int incr;
 
 	incr = add ? 1 : -1;
 	hw->fdir_active_fltr += incr;
 
-	if (flow == ICE_FLTR_PTYPE_NONF_NONE || flow >= ICE_FLTR_PTYPE_MAX)
+	if (flow == ICE_FLTR_PTYPE_NONF_NONE || flow >= ICE_FLTR_PTYPE_MAX) {
 		ice_debug(hw, ICE_DBG_SW, "Unknown filter type %d\n", flow);
+		return;
+	}
+
+	if (fltr->acl_fltr)
+		hw->acl_fltr_cnt[flow] += incr;
 	else
 		hw->fdir_fltr_cnt[flow] += incr;
 }

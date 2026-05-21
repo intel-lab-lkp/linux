@@ -198,6 +198,8 @@ struct ice_ntuple_fltr {
 	u32 fltr_id;
 	u8 fdid_prio;
 	u8 comp_report;
+
+	bool acl_fltr;
 };
 
 /* Dummy packet filter definition structure */
@@ -227,7 +229,7 @@ bool ice_fdir_is_dup_fltr(struct ice_hw *hw, struct ice_ntuple_fltr *input);
 bool ice_fdir_has_frag(enum ice_fltr_ptype flow);
 struct ice_ntuple_fltr *
 ice_fdir_find_fltr_by_idx(struct ice_hw *hw, u32 fltr_idx);
-void
-ice_fdir_update_cntrs(struct ice_hw *hw, enum ice_fltr_ptype flow, bool add);
+void ice_fdir_update_cntrs(struct ice_hw *hw, struct ice_ntuple_fltr *fltr,
+			   bool add);
 void ice_fdir_list_add_fltr(struct ice_hw *hw, struct ice_ntuple_fltr *input);
 #endif /* _ICE_FDIR_H_ */
