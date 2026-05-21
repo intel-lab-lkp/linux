@@ -2,7 +2,7 @@
 VERSION = 7
 PATCHLEVEL = 1
 SUBLEVEL = 0
-EXTRAVERSION = -rc3
+EXTRAVERSION = -rc3-capihw-v1
 NAME = Baby Opossum Posse
 
 # *DOCUMENTATION*
