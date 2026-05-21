@@ -6061,6 +6061,7 @@ static void scx_root_disable(struct scx_sched *sch)
 {
 	struct scx_task_iter sti;
 	struct task_struct *p;
+	bool was_switched_all;
 	int cpu;
 
 	/* guarantee forward progress and wait for descendants to be disabled */
@@ -6086,6 +6087,13 @@ static void scx_root_disable(struct scx_sched *sch)
 	 * disable ops.
 	 */
 	mutex_lock(&scx_enable_mutex);
+
+	/*
+	 * Snapshot the full vs partial mode before clearing the static
+	 * branch, so the dl_server re-balance below knows whether the
+	 * fair_server reservation needs to be reinstated.
+	 */
+	was_switched_all = scx_switched_all();
 
 	static_branch_disable(&__scx_switched_all);
 	WRITE_ONCE(scx_switching_all, false);
@@ -6136,10 +6144,24 @@ static void scx_root_disable(struct scx_sched *sch)
 	/*
 	 * Invalidate all the rq clocks to prevent getting outdated
 	 * rq clocks from a previous scx scheduler.
+	 *
+	 * Also re-balance the dl_server bandwidth reservations: detach
+	 * ext_server (no more sched_ext tasks) and reinstate fair_server
+	 * if it was previously detached because we were running in full
+	 * mode. Detach before attach to avoid a transient overflow of the
+	 * root domain's bandwidth capacity.
 	 */
 	for_each_possible_cpu(cpu) {
 		struct rq *rq = cpu_rq(cpu);
+
 		scx_rq_clock_invalidate(rq);
+
+		scoped_guard(rq_lock_irqsave, rq) {
+			dl_server_detach_bw(&rq->ext_server);
+			if (was_switched_all &&
+			    WARN_ON_ONCE(dl_server_attach_bw(&rq->fair_server)))
+				pr_warn("failed to re-attach fair_server on CPU %d\n", cpu);
+		}
 	}
 
 	/* no task is on scx, turn off all the switches and flush in-progress calls */
@@ -7313,6 +7335,27 @@ static void scx_root_enable_workfn(struct kthread_work *work)
 
 	if (!(ops->flags & SCX_OPS_SWITCH_PARTIAL))
 		static_branch_enable(&__scx_switched_all);
+
+	/*
+	 * Re-balance the dl_server bandwidth reservations.
+	 *
+	 * In full mode (!SCX_OPS_SWITCH_PARTIAL) no task will ever run in
+	 * the fair class, so detach the fair_server reservation and give
+	 * that bandwidth back to the RT class. Always attach the
+	 * ext_server reservation since sched_ext tasks are now possible.
+	 *
+	 * Detach before attach to avoid a transient overflow of the root
+	 * domain's bandwidth capacity.
+	 */
+	for_each_possible_cpu(cpu) {
+		struct rq *rq = cpu_rq(cpu);
+
+		guard(rq_lock_irqsave)(rq);
+		if (scx_switched_all())
+			dl_server_detach_bw(&rq->fair_server);
+		if (WARN_ON_ONCE(dl_server_attach_bw(&rq->ext_server)))
+			pr_warn("failed to attach ext_server on CPU %d\n", cpu);
+	}
 
 	pr_info("sched_ext: BPF scheduler \"%s\" enabled%s\n",
 		sch->ops.name, scx_switched_all() ? "" : " (partial)");

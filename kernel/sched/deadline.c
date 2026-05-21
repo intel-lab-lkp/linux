@@ -1872,6 +1872,13 @@ void sched_init_dl_servers(void)
 		dl_se->dl_server = 1;
 		dl_se->dl_defer = 1;
 		setup_new_dl_entity(dl_se);
+
+		/*
+		 * No BPF scheduler is loaded at boot, so the ext_server has no
+		 * tasks to protect. Detach its bandwidth reservation, it will
+		 * be re-attached when a BPF scheduler is loaded.
+		 */
+		dl_server_detach_bw(dl_se);
 #endif
 	}
 }
@@ -1881,6 +1888,9 @@ void __dl_server_attach_root(struct sched_dl_entity *dl_se, struct rq *rq)
 	u64 new_bw = dl_se->dl_bw;
 	int cpu = cpu_of(rq);
 	struct dl_bw *dl_b;
+
+	if (!dl_se->dl_bw_attached)
+		return;
 
 	dl_b = dl_bw_of(cpu_of(rq));
 	guard(raw_spinlock)(&dl_b->lock);
@@ -1907,16 +1917,21 @@ int dl_server_apply_params(struct sched_dl_entity *dl_se, u64 runtime, u64 perio
 	cpus = dl_bw_cpus(cpu);
 	cap = dl_bw_capacity(cpu);
 
-	if (__dl_overflow(dl_b, cap, old_bw, new_bw))
-		return -EBUSY;
+	if (init || dl_se->dl_bw_attached) {
+		if (__dl_overflow(dl_b, cap, old_bw, new_bw))
+			return -EBUSY;
+	}
 
 	if (init) {
 		__add_rq_bw(new_bw, &rq->dl);
 		__dl_add(dl_b, new_bw, cpus);
-	} else {
+		dl_se->dl_bw_attached = 1;
+	} else if (dl_se->dl_bw_attached) {
 		__dl_sub(dl_b, dl_se->dl_bw, cpus);
 		__dl_add(dl_b, new_bw, cpus);
 
+		dl_rq_change_utilization(rq, dl_se, new_bw);
+	} else {
 		dl_rq_change_utilization(rq, dl_se, new_bw);
 	}
 
@@ -1931,6 +1946,84 @@ int dl_server_apply_params(struct sched_dl_entity *dl_se, u64 runtime, u64 perio
 	dl_se->dl_density = to_ratio(dl_se->dl_deadline, dl_se->dl_runtime);
 
 	return 0;
+}
+
+/*
+ * Attach @dl_se's bandwidth to the root domain's total_bw accounting.
+ *
+ * Use to dynamically register a dl_server's bandwidth reservation while
+ * preserving its configured @dl_runtime / @dl_period. No-op if @dl_se is
+ * already attached.
+ *
+ * Returns -EBUSY if attaching would overflow the root domain capacity.
+ */
+int dl_server_attach_bw(struct sched_dl_entity *dl_se)
+{
+	struct rq *rq = dl_se->rq;
+	int cpu = cpu_of(rq);
+	struct dl_bw *dl_b;
+	unsigned long cap;
+	int cpus;
+
+	if (dl_se->dl_bw_attached)
+		return 0;
+
+	dl_b = dl_bw_of(cpu);
+	guard(raw_spinlock)(&dl_b->lock);
+
+	cpus = dl_bw_cpus(cpu);
+
+	/*
+	 * If there's no active CPU in this root domain (e.g., @cpu is offline),
+	 * just record the intent, so dl_server_add_bw() honors it when CPUs
+	 * come back.
+	 */
+	if (!cpus) {
+		dl_se->dl_bw_attached = 1;
+		return 0;
+	}
+
+	cap = dl_bw_capacity(cpu);
+
+	if (__dl_overflow(dl_b, cap, 0, dl_se->dl_bw))
+		return -EBUSY;
+
+	__dl_add(dl_b, dl_se->dl_bw, cpus);
+	dl_se->dl_bw_attached = 1;
+
+	return 0;
+}
+
+/*
+ * Detach @dl_se's bandwidth from the root domain's total_bw accounting.
+ *
+ * Use to dynamically unregister a dl_server's bandwidth reservation while
+ * preserving its configured @dl_runtime / @dl_period. No-op if @dl_se is
+ * not currently attached.
+ */
+void dl_server_detach_bw(struct sched_dl_entity *dl_se)
+{
+	struct rq *rq = dl_se->rq;
+	int cpu = cpu_of(rq);
+	struct dl_bw *dl_b;
+	int cpus;
+
+	if (!dl_se->dl_bw_attached)
+		return;
+
+	dl_b = dl_bw_of(cpu);
+	guard(raw_spinlock)(&dl_b->lock);
+
+	cpus = dl_bw_cpus(cpu);
+
+	/*
+	 * If no active CPUs in this root domain, the bandwidth isn't in
+	 * @dl_b right now; only clear the flag so dl_server_add_bw() skips
+	 * the server on the next root-domain rebuild.
+	 */
+	if (cpus)
+		__dl_sub(dl_b, dl_se->dl_bw, cpus);
+	dl_se->dl_bw_attached = 0;
 }
 
 /*
@@ -3240,12 +3333,12 @@ static void dl_server_add_bw(struct root_domain *rd, int cpu)
 	struct sched_dl_entity *dl_se;
 
 	dl_se = &cpu_rq(cpu)->fair_server;
-	if (dl_server(dl_se) && cpu_active(cpu))
+	if (dl_server(dl_se) && dl_se->dl_bw_attached && cpu_active(cpu))
 		__dl_add(&rd->dl_bw, dl_se->dl_bw, dl_bw_cpus(cpu));
 
 #ifdef CONFIG_SCHED_CLASS_EXT
 	dl_se = &cpu_rq(cpu)->ext_server;
-	if (dl_server(dl_se) && cpu_active(cpu))
+	if (dl_server(dl_se) && dl_se->dl_bw_attached && cpu_active(cpu))
 		__dl_add(&rd->dl_bw, dl_se->dl_bw, dl_bw_cpus(cpu));
 #endif
 }
@@ -3254,11 +3347,13 @@ static u64 dl_server_read_bw(int cpu)
 {
 	u64 dl_bw = 0;
 
-	if (cpu_rq(cpu)->fair_server.dl_server)
+	if (cpu_rq(cpu)->fair_server.dl_server &&
+	    cpu_rq(cpu)->fair_server.dl_bw_attached)
 		dl_bw += cpu_rq(cpu)->fair_server.dl_bw;
 
 #ifdef CONFIG_SCHED_CLASS_EXT
-	if (cpu_rq(cpu)->ext_server.dl_server)
+	if (cpu_rq(cpu)->ext_server.dl_server &&
+	    cpu_rq(cpu)->ext_server.dl_bw_attached)
 		dl_bw += cpu_rq(cpu)->ext_server.dl_bw;
 #endif
 
