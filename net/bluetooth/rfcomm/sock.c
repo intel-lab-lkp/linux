@@ -28,6 +28,7 @@
 #include <linux/export.h>
 #include <linux/debugfs.h>
 #include <linux/sched/signal.h>
+#include <linux/uio.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
@@ -730,7 +731,8 @@ static int rfcomm_sock_setsockopt(struct socket *sock, int level, int optname,
 	return err;
 }
 
-static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname, char __user *optval, int __user *optlen)
+static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname,
+				      sockopt_t *sopt)
 {
 	struct sock *sk = sock->sk;
 	struct sock *l2cap_sk;
@@ -742,8 +744,7 @@ static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname, char __u
 
 	BT_DBG("sk %p", sk);
 
-	if (get_user(len, optlen))
-		return -EFAULT;
+	len = sopt->optlen;
 
 	lock_sock(sk);
 
@@ -772,7 +773,8 @@ static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname, char __u
 		if (rfcomm_pi(sk)->role_switch)
 			opt |= RFCOMM_LM_MASTER;
 
-		if (put_user(opt, (u32 __user *) optval))
+		if (copy_to_iter(&opt, sizeof(opt), &sopt->iter_out) !=
+		    sizeof(opt))
 			err = -EFAULT;
 
 		break;
@@ -792,7 +794,7 @@ static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname, char __u
 		memcpy(cinfo.dev_class, conn->hcon->dev_class, 3);
 
 		len = min(len, sizeof(cinfo));
-		if (copy_to_user(optval, (char *) &cinfo, len))
+		if (copy_to_iter(&cinfo, len, &sopt->iter_out) != len)
 			err = -EFAULT;
 
 		break;
@@ -806,23 +808,24 @@ static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname, char __u
 	return err;
 }
 
-static int rfcomm_sock_getsockopt(struct socket *sock, int level, int optname, char __user *optval, int __user *optlen)
+static int rfcomm_sock_getsockopt(struct socket *sock, int level, int optname,
+				  sockopt_t *sopt)
 {
 	struct sock *sk = sock->sk;
 	struct bt_security sec;
 	int err = 0;
 	size_t len;
+	u32 opt;
 
 	BT_DBG("sk %p", sk);
 
 	if (level == SOL_RFCOMM)
-		return rfcomm_sock_getsockopt_old(sock, optname, optval, optlen);
+		return rfcomm_sock_getsockopt_old(sock, optname, sopt);
 
 	if (level != SOL_BLUETOOTH)
 		return -ENOPROTOOPT;
 
-	if (get_user(len, optlen))
-		return -EFAULT;
+	len = sopt->optlen;
 
 	lock_sock(sk);
 
@@ -837,7 +840,7 @@ static int rfcomm_sock_getsockopt(struct socket *sock, int level, int optname, c
 		sec.key_size = 0;
 
 		len = min(len, sizeof(sec));
-		if (copy_to_user(optval, (char *) &sec, len))
+		if (copy_to_iter(&sec, len, &sopt->iter_out) != len)
 			err = -EFAULT;
 
 		break;
@@ -848,8 +851,9 @@ static int rfcomm_sock_getsockopt(struct socket *sock, int level, int optname, c
 			break;
 		}
 
-		if (put_user(test_bit(BT_SK_DEFER_SETUP, &bt_sk(sk)->flags),
-			     (u32 __user *) optval))
+		opt = test_bit(BT_SK_DEFER_SETUP, &bt_sk(sk)->flags);
+		if (copy_to_iter(&opt, sizeof(opt), &sopt->iter_out) !=
+		    sizeof(opt))
 			err = -EFAULT;
 
 		break;
@@ -1021,7 +1025,7 @@ static const struct proto_ops rfcomm_sock_ops = {
 	.recvmsg	= rfcomm_sock_recvmsg,
 	.shutdown	= rfcomm_sock_shutdown,
 	.setsockopt	= rfcomm_sock_setsockopt,
-	.getsockopt	= rfcomm_sock_getsockopt,
+	.getsockopt_iter = rfcomm_sock_getsockopt,
 	.ioctl		= rfcomm_sock_ioctl,
 	.gettstamp	= sock_gettstamp,
 	.poll		= bt_sock_poll,
