@@ -93,6 +93,9 @@ struct kvm_arch {
 
 	/* KVM_CAP_RISCV_MP_STATE_RESET */
 	bool mp_state_reset;
+
+	/* Set by SBI SUSP to block concurrent HSM HART_START during system suspend */
+	bool suspend_in_progress;
 };
 
 struct kvm_cpu_trap {

@@ -838,6 +838,14 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 	/* Mark this VCPU ran at least once */
 	vcpu->arch.ran_atleast_once = true;
 
+	/*
+	 * Clear stale suspend flag from a previous suspend-resume cycle.
+	 * The flag was set by kvm_sbi_ext_susp_handler() and persists
+	 * across the userspace exit; clearing it here ensures subsequent
+	 * HSM HART_START operations are not blocked after resume.
+	 */
+	WRITE_ONCE(vcpu->kvm->arch.suspend_in_progress, false);
+
 	kvm_vcpu_srcu_read_lock(vcpu);
 
 	switch (run->exit_reason) {

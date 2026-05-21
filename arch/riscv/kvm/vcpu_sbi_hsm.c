@@ -31,6 +31,17 @@ static int kvm_sbi_hsm_vcpu_start(struct kvm_vcpu *vcpu)
 		goto out;
 	}
 
+	/*
+	 * Reject HART_START while a system suspend is in progress.
+	 * kvm_sbi_ext_susp_handler() sets this flag before checking
+	 * that all vCPUs are stopped; checking it here under
+	 * mp_state_lock closes the race.
+	 */
+	if (READ_ONCE(target_vcpu->kvm->arch.suspend_in_progress)) {
+		ret = SBI_ERR_DENIED;
+		goto out;
+	}
+
 	kvm_riscv_vcpu_sbi_request_reset(target_vcpu, cp->a1, cp->a2);
 
 	__kvm_riscv_vcpu_power_on(target_vcpu);

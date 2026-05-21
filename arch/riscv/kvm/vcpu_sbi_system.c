@@ -35,13 +35,23 @@ static int kvm_sbi_ext_susp_handler(struct kvm_vcpu *vcpu, struct kvm_run *run,
 			return 0;
 		}
 
+		/*
+		 * Set the VM-wide flag to block concurrent HSM HART_START
+		 * from racing with the per-vCPU stopped checks below.
+		 */
+		WRITE_ONCE(vcpu->kvm->arch.suspend_in_progress, true);
+
 		kvm_for_each_vcpu(i, tmp, vcpu->kvm) {
 			if (tmp == vcpu)
 				continue;
+			spin_lock(&tmp->arch.mp_state_lock);
 			if (!kvm_riscv_vcpu_stopped(tmp)) {
+				spin_unlock(&tmp->arch.mp_state_lock);
+				WRITE_ONCE(vcpu->kvm->arch.suspend_in_progress, false);
 				retdata->err_val = SBI_ERR_DENIED;
 				return 0;
 			}
+			spin_unlock(&tmp->arch.mp_state_lock);
 		}
 
 		kvm_riscv_vcpu_sbi_request_reset(vcpu, cp->a1, cp->a2);
