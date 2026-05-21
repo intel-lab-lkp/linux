@@ -130,6 +130,8 @@
 
 static const struct drm_driver i915_drm_driver;
 
+static void i915_driver_release(struct drm_device *dev, void *res);
+
 static int i915_workqueues_init(struct drm_i915_private *dev_priv)
 {
 	/*
@@ -914,7 +916,9 @@ int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	i915_welcome_messages(i915);
 
-	i915->do_release = true;
+	ret = drmm_add_action_or_reset(&i915->drm, i915_driver_release, NULL);
+	if (ret)
+		return ret;
 
 	return 0;
 
@@ -984,14 +988,11 @@ void i915_driver_remove(struct drm_i915_private *i915)
 	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
 }
 
-static void i915_driver_release(struct drm_device *dev)
+static void i915_driver_release(struct drm_device *dev, void *unused)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct intel_runtime_pm *rpm = &dev_priv->runtime_pm;
 	intel_wakeref_t wakeref;
-
-	if (!dev_priv->do_release)
-		return;
 
 	wakeref = intel_runtime_pm_get(rpm);
 
@@ -1876,7 +1877,6 @@ static const struct drm_driver i915_drm_driver = {
 	    DRIVER_GEM |
 	    DRIVER_RENDER | DRIVER_MODESET | DRIVER_ATOMIC | DRIVER_SYNCOBJ |
 	    DRIVER_SYNCOBJ_TIMELINE,
-	.release = i915_driver_release,
 	.open = i915_driver_open,
 	.postclose = i915_driver_postclose,
 	.show_fdinfo = PTR_IF(IS_ENABLED(CONFIG_PROC_FS), i915_drm_client_fdinfo),
