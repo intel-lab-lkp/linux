@@ -1963,6 +1963,34 @@ static const char *uart_type(struct uart_port *port)
 	return str;
 }
 
+bool uart_iotype_mmio(enum uart_iotype iotype)
+{
+	switch (iotype) {
+	case UPIO_MEM:
+	case UPIO_MEM32:
+	case UPIO_AU:
+	case UPIO_TSI:
+	case UPIO_MEM32BE:
+	case UPIO_MEM16:
+		return true;
+	default:
+		return false;
+	}
+}
+EXPORT_SYMBOL_GPL(uart_iotype_mmio);
+
+bool uart_iotype_io(enum uart_iotype iotype)
+{
+	switch (iotype) {
+	case UPIO_PORT:
+	case UPIO_HUB6:
+		return true;
+	default:
+		return false;
+	}
+}
+EXPORT_SYMBOL_GPL(uart_iotype_io);
+
 #ifdef CONFIG_PROC_FS
 
 static void uart_line_info(struct seq_file *m, struct uart_state *state)
