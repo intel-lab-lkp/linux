@@ -1458,11 +1458,12 @@ static void unmap_hotplug_pte_range(pmd_t *pmdp, unsigned long addr,
 
 		WARN_ON(!pte_present(pte));
 		__pte_clear(&init_mm, addr, ptep);
-		flush_tlb_kernel_range(addr, addr + PAGE_SIZE);
 		if (free_mapped)
 			free_hotplug_page_range(pte_page(pte),
 						PAGE_SIZE, altmap);
 	} while (addr += PAGE_SIZE, addr < end);
+
+	flush_tlb_kernel_range(addr, end);
 }
 
 static void unmap_hotplug_pmd_range(pud_t *pudp, unsigned long addr,
