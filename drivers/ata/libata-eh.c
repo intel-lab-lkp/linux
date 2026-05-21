@@ -1058,7 +1058,7 @@ static int ata_do_link_abort(struct ata_port *ap, struct ata_link *link)
 	ata_qc_for_each_with_internal(ap, qc, tag) {
 		if (qc && (!link || qc->dev->link == link)) {
 			qc->flags |= ATA_QCFLAG_EH;
-			ata_qc_complete(qc);
+			ata_qc_complete(ap, qc);
 			nr_aborted++;
 		}
 	}

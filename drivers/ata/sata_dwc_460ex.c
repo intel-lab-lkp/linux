@@ -758,7 +758,7 @@ static int sata_dwc_qc_complete(struct ata_port *ap, struct ata_queued_cmd *qc)
 	mask = (~(qcmd_tag_to_mask(tag)));
 	hsdev->sactive_queued = hsdev->sactive_queued & mask;
 	hsdev->sactive_issued = hsdev->sactive_issued & mask;
-	ata_qc_complete(qc);
+	ata_qc_complete(ap, qc);
 	return 0;
 }
 

@@ -5024,9 +5024,8 @@ static void ata_verify_xfer(struct ata_queued_cmd *qc)
  *	LOCKING:
  *	spin_lock_irqsave(host lock)
  */
-void ata_qc_complete(struct ata_queued_cmd *qc)
+void ata_qc_complete(struct ata_port *ap, struct ata_queued_cmd *qc)
 {
-	struct ata_port *ap = qc->ap;
 	struct ata_device *dev = qc->dev;
 	struct ata_eh_info *ehi = &dev->link->eh_info;
 
@@ -5232,7 +5231,7 @@ void ata_qc_issue(struct ata_queued_cmd *qc)
 sys_err:
 	qc->err_mask |= AC_ERR_SYSTEM;
 err:
-	ata_qc_complete(qc);
+	ata_qc_complete(ap, qc);
 }
 
 /**

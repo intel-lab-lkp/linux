@@ -1264,7 +1264,7 @@ static void sata_fsl_host_intr(struct ata_port *ap)
 			 ioread32(hcr_base + CC));
 
 		if (qc) {
-			ata_qc_complete(qc);
+			ata_qc_complete(ap, qc);
 		}
 	} else {
 		/* Spurious Interrupt!! */

@@ -145,7 +145,7 @@ static void sas_ata_task_done(struct sas_task *task)
 	}
 
 	qc->lldd_task = NULL;
-	ata_qc_complete(qc);
+	ata_qc_complete(ap, qc);
 	spin_unlock_irqrestore(ap->lock, flags);
 
 qc_already_gone:

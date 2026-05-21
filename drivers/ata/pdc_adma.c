@@ -415,7 +415,7 @@ static inline unsigned int adma_intr_pkt(struct ata_host *host)
 				qc->err_mask |= AC_ERR_OTHER;
 
 			if (!qc->err_mask)
-				ata_qc_complete(qc);
+				ata_qc_complete(ap, qc);
 			else {
 				struct ata_eh_info *ehi = &ap->link.eh_info;
 				ata_ehi_clear_desc(ehi);
@@ -457,7 +457,7 @@ static inline unsigned int adma_intr_mmio(struct ata_host *host)
 			pp->state = adma_state_idle;
 			qc->err_mask |= ac_err_mask(status);
 			if (!qc->err_mask)
-				ata_qc_complete(qc);
+				ata_qc_complete(ap, qc);
 			else {
 				struct ata_eh_info *ehi = &ap->link.eh_info;
 				ata_ehi_clear_desc(ehi);

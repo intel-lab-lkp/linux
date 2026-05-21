@@ -329,12 +329,13 @@ static unsigned int qs_qc_issue(struct ata_queued_cmd *qc)
 
 static void qs_do_or_die(struct ata_queued_cmd *qc, u8 status)
 {
+	struct ata_port *ap = qc->ap;
+
 	qc->err_mask |= ac_err_mask(status);
 
 	if (!qc->err_mask) {
-		ata_qc_complete(qc);
+		ata_qc_complete(ap, qc);
 	} else {
-		struct ata_port    *ap  = qc->ap;
 		struct ata_eh_info *ehi = &ap->link.eh_info;
 
 		ata_ehi_clear_desc(ehi);

@@ -890,7 +890,7 @@ static unsigned int pdc_host_intr(struct ata_port *ap,
 	case ATAPI_PROT_DMA:
 	case ATAPI_PROT_NODATA:
 		qc->err_mask |= ac_err_mask(ata_wait_idle(ap));
-		ata_qc_complete(qc);
+		ata_qc_complete(ap, qc);
 		handled = 1;
 		break;
 	default:

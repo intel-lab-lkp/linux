@@ -890,13 +890,13 @@ static void ata_hsm_qc_complete(struct ata_queued_cmd *qc, int in_wq)
 		if (qc) {
 			if (likely(!(qc->err_mask & AC_ERR_HSM))) {
 				ata_sff_irq_on(ap);
-				ata_qc_complete(qc);
+				ata_qc_complete(ap, qc);
 			} else
 				ata_port_freeze(ap);
 		}
 	} else {
 		if (likely(!(qc->err_mask & AC_ERR_HSM)))
-			ata_qc_complete(qc);
+			ata_qc_complete(ap, qc);
 		else
 			ata_port_freeze(ap);
 	}

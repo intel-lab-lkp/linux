@@ -786,7 +786,7 @@ int ata_qc_complete_multiple(struct ata_port *ap, u64 qc_active)
 
 		qc = ata_qc_from_tag(ap, tag);
 		if (qc) {
-			ata_qc_complete(qc);
+			ata_qc_complete(ap, qc);
 			nr_done++;
 		}
 		done_mask &= ~(1ULL << tag);

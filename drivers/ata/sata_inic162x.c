@@ -407,7 +407,7 @@ static void inic_host_intr(struct ata_port *ap)
 			     (ATA_DF | ATA_ERR)))
 			qc->err_mask |= AC_ERR_DEV;
 
-		ata_qc_complete(qc);
+		ata_qc_complete(ap, qc);
 		return;
 	}
 

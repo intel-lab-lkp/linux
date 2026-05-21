@@ -672,7 +672,7 @@ static inline unsigned int pdc20621_host_intr(struct ata_port *ap,
 				readl(mmio + 0x104), readl(mmio + PDC_HDMA_CTLSTAT));
 			/* get drive status; clear intr; complete txn */
 			qc->err_mask |= ac_err_mask(ata_wait_idle(ap));
-			ata_qc_complete(qc);
+			ata_qc_complete(ap, qc);
 			pdc20621_pop_hdma(qc);
 		}
 
@@ -711,7 +711,7 @@ static inline unsigned int pdc20621_host_intr(struct ata_port *ap,
 				readl(mmio + 0x104), readl(mmio + PDC_HDMA_CTLSTAT));
 			/* get drive status; clear intr; complete txn */
 			qc->err_mask |= ac_err_mask(ata_wait_idle(ap));
-			ata_qc_complete(qc);
+			ata_qc_complete(ap, qc);
 			pdc20621_pop_hdma(qc);
 		}
 		handled = 1;
@@ -722,7 +722,7 @@ static inline unsigned int pdc20621_host_intr(struct ata_port *ap,
 		status = ata_sff_busy_wait(ap, ATA_BUSY | ATA_DRQ, 1000);
 		ata_port_dbg(ap, "BUS_NODATA (drv_stat 0x%X)\n", status);
 		qc->err_mask |= ac_err_mask(status);
-		ata_qc_complete(qc);
+		ata_qc_complete(ap, qc);
 		handled = 1;
 
 	} else {
