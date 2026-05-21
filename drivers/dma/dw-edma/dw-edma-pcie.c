@@ -87,6 +87,7 @@ struct dw_edma_pcie_match_data {
 };
 
 #define DW_EDMA_PCIE_F_DEVMEM_PHYS_OFF	BIT(0)
+#define DW_EDMA_PCIE_F_RAW_SLAVE_ADDR	BIT(1)
 
 static const struct dw_edma_pcie_data snps_edda_data = {
 	/* eDMA registers location */
@@ -206,6 +207,10 @@ static u64 dw_edma_pcie_address(struct device *dev, phys_addr_t cpu_addr)
 static const struct dw_edma_plat_ops dw_edma_pcie_plat_ops = {
 	.irq_vector = dw_edma_pcie_irq_vector,
 	.pci_address = dw_edma_pcie_address,
+};
+
+static const struct dw_edma_plat_ops dw_edma_pcie_raw_addr_plat_ops = {
+	.irq_vector = dw_edma_pcie_irq_vector,
 };
 
 static void dw_edma_pcie_get_synopsys_dma_data(struct pci_dev *pdev,
@@ -435,7 +440,8 @@ static int dw_edma_pcie_probe(struct pci_dev *pdev,
 	chip->mf = dma_data->mf;
 	chip->default_irq_mode = match->default_irq_mode;
 	chip->nr_irqs = nr_irqs;
-	chip->ops = &dw_edma_pcie_plat_ops;
+	chip->ops = match->flags & DW_EDMA_PCIE_F_RAW_SLAVE_ADDR ?
+		    &dw_edma_pcie_raw_addr_plat_ops : &dw_edma_pcie_plat_ops;
 	chip->cfg_non_ll = non_ll;
 
 	chip->ll_wr_cnt = dma_data->wr_ch_cnt;
