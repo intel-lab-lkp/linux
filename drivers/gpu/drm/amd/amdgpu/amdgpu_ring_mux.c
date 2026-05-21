@@ -495,10 +495,6 @@ void amdgpu_ring_mux_ib_mark_offset(struct amdgpu_ring_mux *mux,
 	}
 
 	chunk = list_last_entry(&e->list, struct amdgpu_mux_chunk, entry);
-	if (!chunk) {
-		DRM_ERROR("cannot find chunk!\n");
-		return;
-	}
 
 	switch (type) {
 	case AMDGPU_MUX_OFFSET_TYPE_CONTROL:
@@ -528,10 +524,6 @@ void amdgpu_ring_mux_end_ib(struct amdgpu_ring_mux *mux, struct amdgpu_ring *rin
 	}
 
 	chunk = list_last_entry(&e->list, struct amdgpu_mux_chunk, entry);
-	if (!chunk) {
-		DRM_ERROR("cannot find chunk!\n");
-		return;
-	}
 
 	chunk->end = ring->wptr;
 	chunk->sync_seq = READ_ONCE(ring->fence_drv.sync_seq);
