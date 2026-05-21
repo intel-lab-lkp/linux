@@ -31,13 +31,19 @@ int mr_check_range(struct rxe_mr *mr, u64 iova, size_t length)
 		return 0;
 
 	case IB_MR_TYPE_USER:
-	case IB_MR_TYPE_MEM_REG:
-		if (iova < mr->ibmr.iova ||
-		    iova + length > mr->ibmr.iova + mr->ibmr.length) {
+	case IB_MR_TYPE_MEM_REG: {
+		u64 iova_end, mr_end;
+
+		if (check_add_overflow(iova, length, &iova_end) ||
+		    check_add_overflow(mr->ibmr.iova, mr->ibmr.length,
+				       &mr_end) ||
+		    iova < mr->ibmr.iova ||
+		    iova_end > mr_end) {
 			rxe_dbg_mr(mr, "iova/length out of range\n");
 			return -EINVAL;
 		}
 		return 0;
+	}
 
 	default:
 		rxe_dbg_mr(mr, "mr type not supported\n");
