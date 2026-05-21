@@ -390,6 +390,116 @@ static void test_alloc_errors(char *heap_name)
 	close(heap_fd);
 }
 
+static int setup_ro_derive(int heap_fd, int *dmabuf_fd, int *ro_fd)
+{
+	struct dma_buf_derive params = {
+		.flags = O_RDONLY | O_CLOEXEC,
+	};
+	int ret;
+
+	ret = dmabuf_heap_alloc(heap_fd, ONE_MEG, 0, dmabuf_fd);
+	ksft_test_result(!ret, "Allocate RW buffer\n");
+	if (ret)
+		return -1;
+
+	ret = ioctl(*dmabuf_fd, DMA_BUF_IOCTL_DERIVE, &params);
+	ksft_test_result(!ret, "Derive as O_RDONLY %s\n",
+			 ret < 0 ? strerror(errno) : "OK");
+	if (ret < 0) {
+		close(*dmabuf_fd);
+		*dmabuf_fd = -1;
+		return -1;
+	}
+
+	*ro_fd = params.fd;
+	return 0;
+}
+
+static void test_ro_derive(char *heap_name)
+{
+	int heap_fd = -1, dmabuf_fd = -1, ro_fd = -1;
+	void *rw_map = MAP_FAILED, *ro_map = MAP_FAILED;
+	int ret;
+
+	heap_fd = dmabuf_heap_open(heap_name);
+
+	ksft_print_msg("Testing read-only derive with mmap:\n");
+
+	if (setup_ro_derive(heap_fd, &dmabuf_fd, &ro_fd))
+		goto out;
+
+	rw_map = mmap(NULL, ONE_MEG, PROT_READ | PROT_WRITE, MAP_SHARED,
+		      dmabuf_fd, 0);
+	ksft_test_result(rw_map != MAP_FAILED, "RW mmap on RW fd %s\n",
+			 rw_map == MAP_FAILED ? strerror(errno) : "OK");
+	if (rw_map == MAP_FAILED)
+		goto out;
+
+	dmabuf_sync(dmabuf_fd, DMA_BUF_SYNC_START);
+	memset(rw_map, 0xab, ONE_MEG);
+	dmabuf_sync(dmabuf_fd, DMA_BUF_SYNC_END);
+
+	ro_map = mmap(NULL, ONE_MEG, PROT_READ, MAP_SHARED, ro_fd, 0);
+	ksft_test_result(ro_map != MAP_FAILED, "RO mmap on RO fd %s\n",
+			 ro_map == MAP_FAILED ? strerror(errno) : "OK");
+	if (ro_map == MAP_FAILED)
+		goto out;
+
+	dmabuf_sync(ro_fd, DMA_BUF_SYNC_START);
+	ret = memcmp(rw_map, ro_map, ONE_MEG);
+	dmabuf_sync(ro_fd, DMA_BUF_SYNC_END);
+	ksft_test_result(!ret, "Data written via RW fd visible through RO fd\n");
+
+out:
+	if (ro_map != MAP_FAILED)
+		munmap(ro_map, ONE_MEG);
+	if (rw_map != MAP_FAILED)
+		munmap(rw_map, ONE_MEG);
+	if (ro_fd >= 0)
+		close(ro_fd);
+	if (dmabuf_fd >= 0)
+		close(dmabuf_fd);
+	close(heap_fd);
+}
+
+static void test_ro_derive_escalation(char *heap_name)
+{
+	struct dma_buf_derive params = {
+		.flags = O_RDWR | O_CLOEXEC,
+	};
+	int heap_fd = -1, dmabuf_fd = -1, ro_fd = -1, ret = 0;
+	void *bad_map;
+
+	heap_fd = dmabuf_heap_open(heap_name);
+
+	ksft_print_msg("Testing read-only derive with escalation attempt:\n");
+
+	if (setup_ro_derive(heap_fd, &dmabuf_fd, &ro_fd))
+		goto out;
+
+	ret = ioctl(ro_fd, DMA_BUF_IOCTL_DERIVE, &params);
+	ksft_test_result(ret < 0 && errno == EACCES,
+			 "O_RDWR derive on RO fd correctly rejected (errno=%d)\n",
+			 errno);
+	if (!ret)
+		close(params.fd);
+
+	bad_map = mmap(NULL, ONE_MEG, PROT_READ | PROT_WRITE, MAP_SHARED,
+		       ro_fd, 0);
+	ksft_test_result(bad_map == MAP_FAILED && errno == EACCES,
+			 "RW shared mmap on RO fd correctly rejected (errno=%d)\n",
+			 errno);
+	if (bad_map != MAP_FAILED)
+		munmap(bad_map, ONE_MEG);
+
+out:
+	if (ro_fd >= 0)
+		close(ro_fd);
+	if (dmabuf_fd >= 0)
+		close(dmabuf_fd);
+	close(heap_fd);
+}
+
 static int numer_of_heaps(void)
 {
 	DIR *d = opendir(DEVPATH);
@@ -420,7 +530,7 @@ int main(void)
 		return KSFT_SKIP;
 	}
 
-	ksft_set_plan(11 * numer_of_heaps());
+	ksft_set_plan(20 * numer_of_heaps());
 
 	while ((dir = readdir(d))) {
 		if (!strncmp(dir->d_name, ".", 2))
@@ -435,6 +545,8 @@ int main(void)
 		test_alloc_zeroed(dir->d_name, ONE_MEG);
 		test_alloc_compat(dir->d_name);
 		test_alloc_errors(dir->d_name);
+		test_ro_derive(dir->d_name);
+		test_ro_derive_escalation(dir->d_name);
 	}
 	closedir(d);
 
