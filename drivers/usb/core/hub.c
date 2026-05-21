@@ -33,6 +33,7 @@
 #include <linux/random.h>
 #include <linux/pm_qos.h>
 #include <linux/kobject.h>
+#include <linux/sched/isolation.h>
 
 #include <linux/bitfield.h>
 #include <linux/uaccess.h>
@@ -6066,6 +6067,8 @@ static struct usb_driver hub_driver = {
 
 int usb_hub_init(void)
 {
+	unsigned int wq_flags;
+
 	if (usb_register(&hub_driver) < 0) {
 		printk(KERN_ERR "%s: can't register hub driver\n",
 			usbcore_name);
@@ -6077,8 +6080,17 @@ int usb_hub_init(void)
 	 * USB-PERSIST port handover. Otherwise it might see that a full-speed
 	 * device was gone before the EHCI controller had handed its port
 	 * over to the companion full-speed controller.
+	 *
+	 * Create WQ_UNBOUND workqueue instead of WQ_PERCPU if either isolcpus
+	 * or nohz_full boot option is specified.
 	 */
-	hub_wq = alloc_workqueue("usb_hub_wq", WQ_FREEZABLE | WQ_PERCPU, 0);
+	if (housekeeping_enabled(HK_TYPE_DOMAIN) ||
+	    housekeeping_enabled(HK_TYPE_KERNEL_NOISE))
+		wq_flags = WQ_UNBOUND;
+	else
+		wq_flags = WQ_PERCPU;
+
+	hub_wq = alloc_workqueue("usb_hub_wq", WQ_FREEZABLE | wq_flags, 0);
 	if (hub_wq)
 		return 0;
 
