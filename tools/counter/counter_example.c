@@ -57,12 +57,14 @@ int main(void)
 		if (ret == -1) {
 			fprintf(stderr, "Error adding watches[%d]: %s\n", i,
 				strerror(errno));
+			close(fd);
 			return 1;
 		}
 	}
 	ret = ioctl(fd, COUNTER_ENABLE_EVENTS_IOCTL);
 	if (ret == -1) {
 		perror("Error enabling events");
+		close(fd);
 		return 1;
 	}
 
@@ -70,11 +72,13 @@ int main(void)
 		ret = read(fd, event_data, sizeof(event_data));
 		if (ret == -1) {
 			perror("Failed to read event data");
+			close(fd);
 			return 1;
 		}
 
 		if (ret != sizeof(event_data)) {
 			fprintf(stderr, "Failed to read event data\n");
+			close(fd);
 			return -EIO;
 		}
 
