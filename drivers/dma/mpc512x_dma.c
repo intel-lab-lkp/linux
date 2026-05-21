@@ -706,8 +706,8 @@ mpc_dma_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 	for_each_sg(sgl, sg, sg_len, i) {
 		spin_lock_irqsave(&mchan->lock, iflags);
 
-		mdesc = list_first_entry(&mchan->free,
-						struct mpc_dma_desc, node);
+		mdesc = list_first_entry_or_null(&mchan->free,
+						 struct mpc_dma_desc, node);
 		if (!mdesc) {
 			spin_unlock_irqrestore(&mchan->lock, iflags);
 			/* Try to free completed descriptors */
