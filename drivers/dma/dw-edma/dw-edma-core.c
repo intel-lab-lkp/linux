@@ -1189,6 +1189,38 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 }
 EXPORT_SYMBOL_GPL(dw_edma_remove);
 
+struct dma_chan *dw_edma_find_channel(struct dw_edma_chip *chip, bool write,
+				      u16 id)
+{
+	struct dw_edma_chan *chan;
+	struct dw_edma *dw;
+
+	if (!chip)
+		return NULL;
+
+	dw = chip->dw;
+
+	if (!dw)
+		return NULL;
+
+	if (write) {
+		if (id >= dw->wr_ch_cnt)
+			return NULL;
+		chan = &dw->chan[id];
+		if (chan->dir != EDMA_DIR_WRITE)
+			return NULL;
+	} else {
+		if (id >= dw->rd_ch_cnt)
+			return NULL;
+		chan = &dw->chan[dw->wr_ch_cnt + id];
+		if (chan->dir != EDMA_DIR_READ)
+			return NULL;
+	}
+
+	return &chan->vc.chan;
+}
+EXPORT_SYMBOL_GPL(dw_edma_find_channel);
+
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Synopsys DesignWare eDMA controller core driver");
 MODULE_AUTHOR("Gustavo Pimentel <gustavo.pimentel@synopsys.com>");
