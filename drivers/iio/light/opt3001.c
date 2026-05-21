@@ -103,6 +103,7 @@ struct opt3001_chip_info {
 struct opt3001 {
 	struct i2c_client	*client;
 
+	/* Mutex for ensuring one executed command at a time */
 	struct mutex		lock;
 	bool			ok_to_ignore_lock;
 	bool			result_ready;
