@@ -467,7 +467,7 @@ static int param_array_get(char *buffer, const struct kernel_param *kp)
 	for (i = off = 0; i < (arr->num ? *arr->num : arr->max); i++) {
 		p.arg = arr->elem + arr->elemsize * i;
 		check_kparam_locked(p.mod);
-		ret = arr->ops->get(elem_buf, &p);
+		ret = arr->ops->get_str(elem_buf, &p);
 		if (ret < 0)
 			goto out;
 		ret = min(ret, (int)(PAGE_SIZE - 1 - off));
@@ -554,11 +554,11 @@ static ssize_t param_attr_show(const struct module_attribute *mattr,
 	int count;
 	const struct param_attribute *attribute = to_param_attr(mattr);
 
-	if (!attribute->param->ops->get)
+	if (!attribute->param->ops->get_str)
 		return -EPERM;
 
 	kernel_param_lock(mk->mod);
-	count = attribute->param->ops->get(buf, attribute->param);
+	count = attribute->param->ops->get_str(buf, attribute->param);
 	kernel_param_unlock(mk->mod);
 	return count;
 }
