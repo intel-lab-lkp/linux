@@ -1267,8 +1267,8 @@ setup_root_hem(struct hns_roce_dev *hr_dev, struct hns_roce_hem_list *hem_list,
 	int i, total;
 	int ret;
 
-	root_hem = list_first_entry(&head->root,
-				    struct hns_roce_hem_item, list);
+	root_hem = list_first_entry_or_null(&head->root,
+					    struct hns_roce_hem_item, list);
 	if (!root_hem)
 		return -ENOMEM;
 
