@@ -12,7 +12,7 @@
 
 #include "common.h"
 
-#define ACCESS_LAST LANDLOCK_SCOPE_SIGNAL
+#define ACCESS_LAST LANDLOCK_SCOPE_SYSV_MSG_QUEUE
 
 TEST(ruleset_with_unknown_scope)
 {
