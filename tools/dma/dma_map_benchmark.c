@@ -130,6 +130,7 @@ int main(int argc, char **argv)
 
 	if (ioctl(fd, cmd, &map)) {
 		perror("ioctl");
+		close(fd);
 		exit(1);
 	}
 
@@ -140,5 +141,6 @@ int main(int argc, char **argv)
 	printf("average unmap latency(us):%.1f standard deviation:%.1f\n",
 			map.avg_unmap_100ns/10.0, map.unmap_stddev/10.0);
 
+	close(fd);
 	return 0;
 }
