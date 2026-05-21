@@ -385,6 +385,7 @@ static unsigned int adma_qc_issue(struct ata_queued_cmd *qc)
 }
 
 static inline unsigned int adma_intr_pkt(struct ata_host *host)
+	__must_hold(host->lock)
 {
 	unsigned int handled = 0, port_no;
 
@@ -395,6 +396,9 @@ static inline unsigned int adma_intr_pkt(struct ata_host *host)
 		void __iomem *chan = ADMA_PORT_REGS(ap);
 		u8 status = readb(chan + ADMA_STATUS);
 
+		/* Tell the compiler that host->lock == ap->lock. */
+		__assume_ctx_lock(ap->lock);
+
 		if (status == 0)
 			continue;
 		handled = 1;
@@ -404,6 +408,9 @@ static inline unsigned int adma_intr_pkt(struct ata_host *host)
 			continue;
 		qc = ata_qc_from_tag(ap, ap->link.active_tag);
 		if (qc && (!(qc->tf.flags & ATA_TFLAG_POLLING))) {
+			/* Tell the compiler that qc->dev->link->ap == ap. */
+			__assume_ctx_lock(qc->dev->link->ap->lock);
+
 			if (status & aPERR)
 				qc->err_mask |= AC_ERR_HOST_BUS;
 			else if ((status & (aPSD | aUIRQ)))
@@ -435,6 +442,7 @@ static inline unsigned int adma_intr_pkt(struct ata_host *host)
 }
 
 static inline unsigned int adma_intr_mmio(struct ata_host *host)
+	__must_hold(host->lock)
 {
 	unsigned int handled = 0, port_no;
 
@@ -443,11 +451,13 @@ static inline unsigned int adma_intr_mmio(struct ata_host *host)
 		struct adma_port_priv *pp = ap->private_data;
 		struct ata_queued_cmd *qc;
 
+		/* Tell the compiler that host->lock == ap->lock. */
+		__assume_ctx_lock(ap->lock);
+
 		if (!pp || pp->state != adma_state_mmio)
 			continue;
 		qc = ata_qc_from_tag(ap, ap->link.active_tag);
 		if (qc && (!(qc->tf.flags & ATA_TFLAG_POLLING))) {
-
 			/* check main status, clearing INTRQ */
 			u8 status = ata_sff_check_status(ap);
 			if ((status & ATA_BUSY))

@@ -1052,6 +1052,7 @@ static void sata_fsl_post_internal_cmd(struct ata_queued_cmd *qc)
 }
 
 static void sata_fsl_error_intr(struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	struct sata_fsl_host_priv *host_priv = ap->host->private_data;
 	void __iomem *hcr_base = host_priv->hcr_base;
@@ -1178,6 +1179,7 @@ static void sata_fsl_error_intr(struct ata_port *ap)
 }
 
 static void sata_fsl_host_intr(struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	struct sata_fsl_host_priv *host_priv = ap->host->private_data;
 	void __iomem *hcr_base = host_priv->hcr_base;
@@ -1197,6 +1199,9 @@ static void sata_fsl_host_intr(struct ata_port *ap)
 	/* Workaround for data length mismatch errata */
 	if (unlikely(hstatus & INT_ON_DATA_LENGTH_MISMATCH)) {
 		ata_qc_for_each_with_internal(ap, qc, tag) {
+			/* Tell the compiler that qc->dev->link->ap == ap. */
+			__assume_ctx_lock(qc->dev->link->ap->lock);
+
 			if (qc && ata_is_atapi(qc->tf.protocol)) {
 				u32 hcontrol;
 				/* Set HControl[27] to clear error registers */
@@ -1298,6 +1303,8 @@ static irqreturn_t sata_fsl_interrupt(int irq, void *dev_instance)
 
 	ap = host->ports[0];
 	if (ap) {
+		/* Tell the compiler that host->lock == ap->lock. */
+		__assume_ctx_lock(ap->lock);
 		sata_fsl_host_intr(ap);
 	} else {
 		dev_warn(host->dev, "interrupt on disabled port 0\n");

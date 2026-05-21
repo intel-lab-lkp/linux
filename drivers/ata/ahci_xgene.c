@@ -555,6 +555,7 @@ softreset_retry:
  */
 static int xgene_ahci_handle_broken_edge_irq(struct ata_host *host,
 					     u32 irq_masked)
+	__must_hold(host->lock)
 {
 	struct ahci_host_priv *hpriv = host->private_data;
 	void __iomem *port_mmio;

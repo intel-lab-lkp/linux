@@ -324,6 +324,7 @@ static void inic_stop_idma(struct ata_port *ap)
 }
 
 static void inic_host_err_intr(struct ata_port *ap, u8 irq_stat, u16 idma_stat)
+	__must_hold(ap->lock)
 {
 	struct ata_eh_info *ehi = &ap->link.eh_info;
 	struct inic_port_priv *pp = ap->private_data;
@@ -380,6 +381,7 @@ static void inic_host_err_intr(struct ata_port *ap, u8 irq_stat, u16 idma_stat)
 }
 
 static void inic_host_intr(struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	void __iomem *port_base = inic_port_base(ap);
 	struct ata_queued_cmd *qc = ata_qc_from_tag(ap, ap->link.active_tag);
@@ -430,11 +432,14 @@ static irqreturn_t inic_interrupt(int irq, void *dev_instance)
 
 	spin_lock(&host->lock);
 
-	for (i = 0; i < NR_PORTS; i++)
+	for (i = 0; i < NR_PORTS; i++) {
+		/* Tell the compiler that host->ports[i]->lock == host->lock. */
+		__assume_ctx_lock(host->ports[i]->lock);
 		if (host_irq_stat & (HIRQ_PORT0 << i)) {
 			inic_host_intr(host->ports[i]);
 			handled++;
 		}
+	}
 
 	spin_unlock(&host->lock);
 

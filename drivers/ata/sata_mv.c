@@ -2433,6 +2433,7 @@ static unsigned int mv_get_err_pmp_map(struct ata_port *ap)
 }
 
 static void mv_pmp_eh_prep(struct ata_port *ap, unsigned int pmp_map)
+	__must_hold(ap->lock)
 {
 	unsigned int pmp;
 
@@ -2444,6 +2445,9 @@ static void mv_pmp_eh_prep(struct ata_port *ap, unsigned int pmp_map)
 		if (pmp_map & this_pmp) {
 			struct ata_link *link = &ap->pmp_link[pmp];
 			struct ata_eh_info *ehi = &link->eh_info;
+
+			/* Tell the compiler that link->ap == ap. */
+			__assume_ctx_lock(link->ap->lock);
 
 			pmp_map &= ~this_pmp;
 			ata_ehi_clear_desc(ehi);
@@ -2468,6 +2472,7 @@ static int mv_req_q_empty(struct ata_port *ap)
 }
 
 static int mv_handle_fbs_ncq_dev_err(struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	struct mv_port_priv *pp = ap->private_data;
 	int failed_links;
@@ -2528,6 +2533,7 @@ static int mv_handle_fbs_non_ncq_dev_err(struct ata_port *ap)
 }
 
 static int mv_handle_dev_err(struct ata_port *ap, u32 edma_err_cause)
+	__must_hold(ap->lock)
 {
 	struct mv_port_priv *pp = ap->private_data;
 
@@ -2601,6 +2607,7 @@ static void mv_unexpected_intr(struct ata_port *ap, int edma_was_enabled)
  *      Inherited from caller.
  */
 static void mv_err_intr(struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	void __iomem *port_mmio = mv_ap_base(ap);
 	u32 edma_err_cause, eh_freeze_mask, serr = 0;
@@ -2764,6 +2771,7 @@ static bool mv_process_crpb_response(struct ata_port *ap,
 }
 
 static void mv_process_crpb_entries(struct ata_port *ap, struct mv_port_priv *pp)
+	__must_hold(ap->lock)
 {
 	void __iomem *port_mmio = mv_ap_base(ap);
 	struct mv_host_priv *hpriv = ap->host->private_data;
@@ -2806,6 +2814,7 @@ static void mv_process_crpb_entries(struct ata_port *ap, struct mv_port_priv *pp
 }
 
 static void mv_port_intr(struct ata_port *ap, u32 port_cause)
+	__must_hold(ap->lock)
 {
 	struct mv_port_priv *pp;
 	int edma_was_enabled;
@@ -2848,6 +2857,7 @@ static void mv_port_intr(struct ata_port *ap, u32 port_cause)
  *      Inherited from caller.
  */
 static int mv_host_intr(struct ata_host *host, u32 main_irq_cause)
+	__must_hold(host->lock)
 {
 	struct mv_host_priv *hpriv = host->private_data;
 	void __iomem *mmio = hpriv->base, *hc_mmio;
@@ -2860,6 +2870,9 @@ static int mv_host_intr(struct ata_host *host, u32 main_irq_cause)
 	for (port = 0; port < hpriv->n_ports; port++) {
 		struct ata_port *ap = host->ports[port];
 		unsigned int p, shift, hardport, port_cause;
+
+		/* Tell the compiler that ap->lock == host->lock. */
+		__assume_ctx_lock(ap->lock);
 
 		MV_PORT_TO_SHIFT_AND_HARDPORT(port, shift, hardport);
 		/*

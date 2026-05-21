@@ -5027,6 +5027,9 @@ void ata_qc_complete(struct ata_port *ap, struct ata_queued_cmd *qc)
 	struct ata_device *dev = qc->dev;
 	struct ata_eh_info *ehi = &dev->link->eh_info;
 
+	/* Tell the compiler that qc->dev->link->ap == ap. */
+	__assume_ctx_lock(qc->dev->link->ap->lock);
+
 	/* Trigger the LED (if available) */
 	ledtrig_disk_activity(!!(qc->tf.flags & ATA_TFLAG_WRITE));
 
@@ -5161,6 +5164,10 @@ void ata_qc_issue(struct ata_port *ap, struct ata_queued_cmd *qc)
 {
 	struct ata_link *link = qc->dev->link;
 	u8 prot = qc->tf.protocol;
+
+	/* Tell the compiler that qc->ap == qc->dev->link->ap->lock == ap. */
+	__assume_ctx_lock(qc->ap->lock);
+	__assume_ctx_lock(qc->dev->link->ap->lock);
 
 	/*
 	 * Make sure we have a valid tag and that only one non-NCQ command is

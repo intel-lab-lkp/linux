@@ -329,8 +329,12 @@ static unsigned int qs_qc_issue(struct ata_queued_cmd *qc)
 }
 
 static void qs_do_or_die(struct ata_queued_cmd *qc, u8 status)
+	__must_hold(qc->dev->link->ap->lock)
 {
 	struct ata_port *ap = qc->ap;
+
+	/* Tell the compiler that ap == qc->dev->link->ap. */
+	__assume_ctx_lock(ap->lock);
 
 	qc->err_mask |= ac_err_mask(status);
 
@@ -350,6 +354,7 @@ static void qs_do_or_die(struct ata_queued_cmd *qc, u8 status)
 }
 
 static inline unsigned int qs_intr_pkt(struct ata_host *host)
+	__must_hold(host->lock)
 {
 	unsigned int handled = 0;
 	u8 sFFE;
@@ -376,6 +381,11 @@ static inline unsigned int qs_intr_pkt(struct ata_host *host)
 				continue;
 			qc = ata_qc_from_tag(ap, ap->link.active_tag);
 			if (qc && (!(qc->tf.flags & ATA_TFLAG_POLLING))) {
+				/*
+				 * Tell the compiler that qc->dev->link->ap->
+				 * scsi_host == host.
+				 */
+				__assume_ctx_lock(qc->dev->link->ap->lock);
 				switch (sHST) {
 				case 0: /* successful CPB */
 				case 3: /* device error */
@@ -392,6 +402,7 @@ static inline unsigned int qs_intr_pkt(struct ata_host *host)
 }
 
 static inline unsigned int qs_intr_mmio(struct ata_host *host)
+	__must_hold(host->lock)
 {
 	unsigned int handled = 0, port_no;
 
@@ -399,6 +410,9 @@ static inline unsigned int qs_intr_mmio(struct ata_host *host)
 		struct ata_port *ap = host->ports[port_no];
 		struct qs_port_priv *pp = ap->private_data;
 		struct ata_queued_cmd *qc;
+
+		/* Tell the compiler that ap->lock == host->lock. */
+		__assume_ctx_lock(ap->lock);
 
 		qc = ata_qc_from_tag(ap, ap->link.active_tag);
 		if (!qc) {

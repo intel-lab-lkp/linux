@@ -1705,6 +1705,7 @@ void ata_scsi_requeue_deferred_qc(struct ata_port *ap)
 }
 
 static void ata_scsi_schedule_deferred_qc(struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	struct ata_queued_cmd *qc = ap->deferred_qc;
 
@@ -1727,6 +1728,7 @@ static void ata_scsi_schedule_deferred_qc(struct ata_port *ap)
 }
 
 static void ata_scsi_qc_complete(struct ata_queued_cmd *qc)
+	__must_hold(qc->ap->lock)
 {
 	struct ata_port *ap = qc->ap;
 	struct scsi_cmnd *cmd = qc->scsicmd;
@@ -1763,6 +1765,7 @@ static void ata_scsi_qc_complete(struct ata_queued_cmd *qc)
 }
 
 static int ata_scsi_qc_issue(struct ata_port *ap, struct ata_queued_cmd *qc)
+	__must_hold(ap->lock)
 {
 	int ret;
 
@@ -1848,6 +1851,7 @@ issue:
  */
 static int ata_scsi_translate(struct ata_device *dev, struct scsi_cmnd *cmd,
 			      ata_xlat_func_t xlat_func)
+	__must_hold(dev->link->ap->lock)
 {
 	struct ata_port *ap = dev->link->ap;
 	struct ata_queued_cmd *qc;
@@ -3694,6 +3698,7 @@ static unsigned int ata_scsiop_maint_in(struct ata_device *dev,
  *	What a mess.
  */
 static void ata_scsi_report_zones_complete(struct ata_queued_cmd *qc)
+	__must_hold(qc->ap->lock)
 {
 	struct scsi_cmnd *scmd = qc->scsicmd;
 	struct sg_mapping_iter miter;
@@ -4547,6 +4552,9 @@ enum scsi_qc_status __ata_scsi_queuecmd(struct scsi_cmnd *scmd,
 
 		xlat_func = ata_get_xlat_func(dev, scsi_op);
 	}
+
+	/* Tell the compiler that dev->link->ap == ap. */
+	__assume_ctx_lock(dev->link->ap->lock);
 
 	if (xlat_func)
 		return ata_scsi_translate(dev, scmd, xlat_func);

@@ -808,6 +808,7 @@ static unsigned int nv_adma_tf_to_cpb(struct ata_taskfile *tf, __le16 *cpb)
 }
 
 static int nv_adma_check_cpb(struct ata_port *ap, int cpb_num, int force_err)
+	__must_hold(ap->lock)
 {
 	struct nv_adma_port_priv *pp = ap->private_data;
 	u8 flags = pp->cpb[cpb_num].resp_flags;
@@ -853,6 +854,7 @@ static int nv_adma_check_cpb(struct ata_port *ap, int cpb_num, int force_err)
 }
 
 static int nv_host_intr(struct ata_port *ap, u8 irq_stat)
+	__must_hold(ap->lock)
 {
 	struct ata_queued_cmd *qc = ata_qc_from_tag(ap, ap->link.active_tag);
 
@@ -891,6 +893,9 @@ static irqreturn_t nv_adma_interrupt(int irq, void *dev_instance)
 		u16 status;
 		u32 gen_ctl;
 		u32 notifier, notifier_error;
+
+		/* Tell the compiler that ap->lock == host->lock. */
+		__assume_ctx_lock(ap->lock);
 
 		notifier_clears[i] = 0;
 
@@ -1444,6 +1449,9 @@ static irqreturn_t nv_generic_interrupt(int irq, void *dev_instance)
 		struct ata_port *ap = host->ports[i];
 		struct ata_queued_cmd *qc;
 
+		/* Tell the compiler that ap->lock == &host->lock. */
+		__assume_ctx_lock(ap->lock);
+
 		qc = ata_qc_from_tag(ap, ap->link.active_tag);
 		if (qc && (!(qc->tf.flags & ATA_TFLAG_POLLING))) {
 			handled += ata_bmdma_port_intr(ap, qc);
@@ -1465,7 +1473,10 @@ static irqreturn_t nv_do_interrupt(struct ata_host *host, u8 irq_stat)
 {
 	int i, handled = 0;
 
+	/* TO DO: protect the code below with &host->lock. */
+
 	for (i = 0; i < host->n_ports; i++) {
+		__assume_ctx_lock(host->ports[i]->lock);
 		handled += nv_host_intr(host->ports[i], irq_stat);
 		irq_stat >>= NV_INT_PORT_SHIFT;
 	}
@@ -2064,6 +2075,7 @@ static void nv_swncq_hotplug(struct ata_port *ap, u32 fis)
 }
 
 static int nv_swncq_sdbfis(struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	struct ata_queued_cmd *qc;
 	struct nv_swncq_port_priv *pp = ap->private_data;
@@ -2179,6 +2191,7 @@ static void nv_swncq_dmafis(struct ata_port *ap)
 }
 
 static void nv_swncq_host_interrupt(struct ata_port *ap, u16 fis)
+	__must_hold(ap->lock)
 {
 	struct nv_swncq_port_priv *pp = ap->private_data;
 	struct ata_queued_cmd *qc;
@@ -2291,6 +2304,9 @@ static irqreturn_t nv_swncq_interrupt(int irq, void *dev_instance)
 
 	for (i = 0; i < host->n_ports; i++) {
 		struct ata_port *ap = host->ports[i];
+
+		/* Tell the compiler that ap->lock == host->lock. */
+		__assume_ctx_lock(ap->lock);
 
 		if (ap->link.sactive) {
 			nv_swncq_host_interrupt(ap, (u16)irq_stat);

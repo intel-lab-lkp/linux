@@ -1749,6 +1749,7 @@ static void ahci_fbs_dec_intr(struct ata_port *ap)
 }
 
 static void ahci_error_intr(struct ata_port *ap, u32 irq_stat)
+	__must_hold(ap->lock)
 {
 	struct ahci_host_priv *hpriv = ap->host->private_data;
 	struct ahci_port_priv *pp = ap->private_data;
@@ -1777,6 +1778,9 @@ static void ahci_error_intr(struct ata_port *ap, u32 irq_stat)
 
 	if (!link)
 		link = &ap->link;
+
+	/* Tell the compiler that link->ap == ap. */
+	__assume_ctx_lock(link->ap->lock);
 
 	active_qc = ata_qc_from_tag(ap, link->active_tag);
 	active_ehi = &link->eh_info;
@@ -1860,6 +1864,7 @@ static void ahci_error_intr(struct ata_port *ap, u32 irq_stat)
 }
 
 static void ahci_qc_complete(struct ata_port *ap, void __iomem *port_mmio)
+	__must_hold(ap->lock)
 {
 	struct ata_eh_info *ehi = &ap->link.eh_info;
 	struct ahci_port_priv *pp = ap->private_data;
@@ -1894,6 +1899,7 @@ static void ahci_qc_complete(struct ata_port *ap, void __iomem *port_mmio)
 
 static void ahci_handle_port_interrupt(struct ata_port *ap,
 				       void __iomem *port_mmio, u32 status)
+	__must_hold(ap->lock)
 {
 	struct ahci_port_priv *pp = ap->private_data;
 	struct ahci_host_priv *hpriv = ap->host->private_data;
@@ -1955,6 +1961,7 @@ static void ahci_handle_port_interrupt(struct ata_port *ap,
 }
 
 static void ahci_port_intr(struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	void __iomem *port_mmio = ahci_port_base(ap);
 	u32 status;
@@ -1993,6 +2000,8 @@ u32 ahci_handle_port_intr(struct ata_host *host, u32 irq_masked)
 
 		ap = host->ports[i];
 		if (ap) {
+			/* Tell the compiler that ap->lock == host->lock. */
+			__assume_ctx_lock(ap->lock);
 			ahci_port_intr(ap);
 		} else {
 			if (ata_ratelimit())

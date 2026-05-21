@@ -648,6 +648,7 @@ static struct ata_port_operations sata_rcar_port_ops = {
 };
 
 static void sata_rcar_serr_interrupt(struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	struct sata_rcar_priv *priv = ap->host->private_data;
 	struct ata_eh_info *ehi = &ap->link.eh_info;
@@ -679,6 +680,7 @@ static void sata_rcar_serr_interrupt(struct ata_port *ap)
 }
 
 static void sata_rcar_ata_interrupt(struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	struct ata_queued_cmd *qc;
 	int handled = 0;
@@ -712,6 +714,9 @@ static irqreturn_t sata_rcar_interrupt(int irq, void *dev_instance)
 	iowrite32(~sataintstat & priv->sataint_mask, base + SATAINTSTAT_REG);
 
 	ap = host->ports[0];
+
+	/* Tell the compiler that ap->lock == host->lock. */
+	__assume_ctx_lock(ap->lock);
 
 	if (sataintstat & SATAINTSTAT_ATA)
 		sata_rcar_ata_interrupt(ap);

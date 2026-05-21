@@ -966,6 +966,7 @@ static void sil24_thaw(struct ata_port *ap)
 }
 
 static void sil24_error_intr(struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	void __iomem *port = sil24_port_base(ap);
 	struct sil24_port_priv *pp = ap->private_data;
@@ -1093,6 +1094,7 @@ static void sil24_error_intr(struct ata_port *ap)
 }
 
 static inline void sil24_host_intr(struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	void __iomem *port = sil24_port_base(ap);
 	u32 slot_stat, qc_active;
@@ -1157,6 +1159,11 @@ static irqreturn_t sil24_interrupt(int irq, void *dev_instance)
 
 	for (i = 0; i < host->n_ports; i++)
 		if (status & (1 << i)) {
+			/*
+			 * Tell the compiler that this is the same lock as
+			 * host->lock.
+			 */
+			__assume_ctx_lock(host->ports[i]->lock);
 			sil24_host_intr(host->ports[i]);
 			handled++;
 		}

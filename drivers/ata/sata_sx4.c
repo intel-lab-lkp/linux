@@ -656,6 +656,7 @@ static inline unsigned int pdc20621_host_intr(struct ata_port *ap,
 					  struct ata_queued_cmd *qc,
 					  unsigned int doing_hdma,
 					  void __iomem *mmio)
+	__must_hold(ap->lock)
 {
 	unsigned int port_no = ap->port_no;
 	unsigned int port_ofs =
@@ -777,6 +778,9 @@ static irqreturn_t pdc20621_interrupt(int irq, void *dev_instance)
 			ata_port_dbg(ap, "seq %u, tmp %x\n", i, tmp);
 		if (tmp && ap) {
 			struct ata_queued_cmd *qc;
+
+			/* Tell the compiler that ap->lock == host->lock. */
+			__assume_ctx_lock(ap->lock);
 
 			qc = ata_qc_from_tag(ap, ap->link.active_tag);
 			if (qc && (!(qc->tf.flags & ATA_TFLAG_POLLING)))

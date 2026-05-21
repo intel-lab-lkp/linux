@@ -417,6 +417,7 @@ static int sil_scr_write(struct ata_link *link, unsigned int sc_reg, u32 val)
 }
 
 static void sil_host_intr(struct ata_port *ap, u32 bmdma2)
+	__must_hold(ap->lock)
 {
 	struct ata_eh_info *ehi = &ap->link.eh_info;
 	struct ata_queued_cmd *qc = ata_qc_from_tag(ap, ap->link.active_tag);
@@ -523,6 +524,9 @@ static irqreturn_t sil_interrupt(int irq, void *dev_instance)
 		if (bmdma2 == 0xffffffff ||
 		    !(bmdma2 & (SIL_DMA_COMPLETE | SIL_DMA_SATA_IRQ)))
 			continue;
+
+		/* Tell the compiler that ap->lock == host->lock. */
+		__assume_ctx_lock(ap->lock);
 
 		sil_host_intr(ap, bmdma2);
 		handled = 1;

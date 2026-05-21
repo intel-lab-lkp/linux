@@ -88,8 +88,10 @@ extern int ata_down_xfermask_limit(struct ata_device *dev, unsigned int sel);
 extern unsigned int ata_dev_set_feature(struct ata_device *dev,
 					u8 subcmd, u8 action);
 extern void ata_qc_free(struct ata_queued_cmd *qc);
-extern void ata_qc_issue(struct ata_port *ap, struct ata_queued_cmd *qc);
-extern void __ata_qc_complete(struct ata_port *ap, struct ata_queued_cmd *qc);
+extern void ata_qc_issue(struct ata_port *ap, struct ata_queued_cmd *qc)
+	__must_hold(ap->lock);
+extern void __ata_qc_complete(struct ata_port *ap, struct ata_queued_cmd *qc)
+	__must_hold(ap->lock);
 extern int atapi_check_dma(struct ata_queued_cmd *qc);
 extern void swap_buf_le16(u16 *buf, unsigned int buf_words);
 extern bool ata_phys_link_online(struct ata_link *link);
@@ -167,9 +169,11 @@ int ata_scsi_dev_config(struct scsi_device *sdev, struct queue_limits *lim,
 		struct ata_device *dev);
 enum scsi_qc_status __ata_scsi_queuecmd(struct scsi_cmnd *scmd,
 					struct ata_device *dev,
-					struct ata_port *ap);
+					struct ata_port *ap)
+	__must_hold(ap->lock);
 void ata_scsi_deferred_qc_work(struct work_struct *work);
-void ata_scsi_requeue_deferred_qc(struct ata_port *ap);
+void ata_scsi_requeue_deferred_qc(struct ata_port *ap)
+	__must_hold(ap->lock);
 
 /* libata-eh.c */
 extern unsigned int ata_internal_cmd_timeout(struct ata_device *dev, u8 cmd);
@@ -180,7 +184,8 @@ extern void ata_eh_release(struct ata_port *ap)
 	__releases(ap->host->eh_mutex);
 extern void ata_scsi_error(struct Scsi_Host *host);
 extern void ata_eh_fastdrain_timerfn(struct timer_list *t);
-extern void ata_qc_schedule_eh(struct ata_port *ap, struct ata_queued_cmd *qc);
+extern void ata_qc_schedule_eh(struct ata_port *ap, struct ata_queued_cmd *qc)
+	__must_hold(ap->lock);
 extern void ata_dev_disable(struct ata_device *dev);
 extern void ata_eh_detach_dev(struct ata_device *dev);
 extern void ata_eh_about_to_do(struct ata_link *link, struct ata_device *dev,

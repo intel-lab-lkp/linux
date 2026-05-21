@@ -410,6 +410,7 @@ static u32 qcmd_tag_to_mask(u8 tag)
 /* See ahci.c */
 static void sata_dwc_error_intr(struct ata_port *ap,
 				struct sata_dwc_device *hsdev, uint intpr)
+	__must_hold(ap->lock)
 {
 	struct sata_dwc_device_port *hsdevp = HSDEVP_FROM_AP(ap);
 	struct ata_eh_info *ehi = &ap->link.eh_info;
@@ -478,6 +479,10 @@ static irqreturn_t sata_dwc_isr(int irq, void *dev_instance)
 	intpr = sata_dwc_readl(&hsdev->sata_dwc_regs->intpr);
 
 	ap = host->ports[port];
+
+	/* Tell the compiler that host->lock == ap->lock. */
+	__assume_ctx_lock(ap->lock);
+
 	hsdevp = HSDEVP_FROM_AP(ap);
 
 	dev_dbg(ap->dev, "%s intpr=0x%08x active_tag=%d\n", __func__, intpr,
@@ -738,6 +743,7 @@ static void sata_dwc_dma_xfer_complete(struct ata_port *ap)
 }
 
 static int sata_dwc_qc_complete(struct ata_port *ap, struct ata_queued_cmd *qc)
+	__must_hold(ap->lock)
 {
 	u8 status = 0;
 	u32 mask = 0x0;

@@ -881,8 +881,12 @@ static inline int ata_hsm_ok_in_wq(struct ata_port *ap,
  *	Otherwise, none on entry and grabs host lock.
  */
 static void ata_hsm_qc_complete(struct ata_queued_cmd *qc, int in_wq)
+	__must_hold(qc->dev->link->ap->lock)
 {
 	struct ata_port *ap = qc->ap;
+
+	/* Tell the compiler that qc->dev->link->ap == ap. */
+	__assume_ctx_lock(ap->lock);
 
 	if (in_wq) {
 		/* EH might have kicked in while host lock is released. */
@@ -920,6 +924,9 @@ int ata_sff_hsm_move(struct ata_port *ap, struct ata_queued_cmd *qc,
 	int poll_next;
 
 	lockdep_assert_held(ap->lock);
+
+	/* Tell the compiler that qc->dev->link->ap == ap. */
+	__assume_ctx_lock(qc->dev->link->ap->lock);
 
 	WARN_ON_ONCE((qc->flags & ATA_QCFLAG_ACTIVE) == 0);
 
@@ -1394,6 +1401,7 @@ static unsigned int ata_sff_idle_irq(struct ata_port *ap)
 static unsigned int __ata_sff_port_intr(struct ata_port *ap,
 					struct ata_queued_cmd *qc,
 					bool hsmv_on_idle)
+	__must_hold(ap->lock)
 {
 	u8 status;
 

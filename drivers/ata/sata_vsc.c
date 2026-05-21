@@ -209,6 +209,7 @@ static void vsc_sata_tf_read(struct ata_port *ap, struct ata_taskfile *tf)
 }
 
 static inline void vsc_error_intr(u8 port_status, struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	if (port_status & (VSC_SATA_INT_PHY_CHANGE | VSC_SATA_INT_ERROR_M))
 		ata_port_freeze(ap);
@@ -217,6 +218,7 @@ static inline void vsc_error_intr(u8 port_status, struct ata_port *ap)
 }
 
 static void vsc_port_intr(u8 port_status, struct ata_port *ap)
+	__must_hold(ap->lock)
 {
 	struct ata_queued_cmd *qc;
 	int handled = 0;
@@ -266,6 +268,11 @@ static irqreturn_t vsc_sata_interrupt(int irq, void *dev_instance)
 	for (i = 0; i < host->n_ports; i++) {
 		u8 port_status = (status >> (8 * i)) & 0xff;
 		if (port_status) {
+			/*
+			 * Tell the compiler that this is the same lock as
+			 * host->lock.
+			 */
+			__assume_ctx_lock(host->ports[i]->lock);
 			vsc_port_intr(port_status, host->ports[i]);
 			handled++;
 		}

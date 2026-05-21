@@ -936,6 +936,7 @@ void ata_eh_fastdrain_timerfn(struct timer_list *t)
  *	spin_lock_irqsave(host lock)
  */
 static void ata_eh_set_pending(struct ata_port *ap, bool fastdrain)
+	__must_hold(ap->lock)
 {
 	unsigned int cnt;
 
@@ -1047,6 +1048,7 @@ void ata_port_schedule_eh(struct ata_port *ap)
 EXPORT_SYMBOL_GPL(ata_port_schedule_eh);
 
 static int ata_do_link_abort(struct ata_port *ap, struct ata_link *link)
+	__must_hold(ap->lock)
 {
 	struct ata_queued_cmd *qc;
 	int tag, nr_aborted = 0;
@@ -1057,6 +1059,9 @@ static int ata_do_link_abort(struct ata_port *ap, struct ata_link *link)
 	/* include internal tag in iteration */
 	ata_qc_for_each_with_internal(ap, qc, tag) {
 		if (qc && (!link || qc->dev->link == link)) {
+			/* Tell the compiler that link->ap == ap. */
+			__assume_ctx_lock(&link->ap->host->eh_mutex);
+
 			qc->flags |= ATA_QCFLAG_EH;
 			ata_qc_complete(ap, qc);
 			nr_aborted++;
@@ -1149,6 +1154,9 @@ static void __ata_port_freeze(struct ata_port *ap)
  */
 int ata_port_freeze(struct ata_port *ap)
 {
+	/* TO DO: fix all callers of this function that do not hold ap->lock. */
+	__assume_ctx_lock(ap->lock);
+
 	__ata_port_freeze(ap);
 
 	return ata_port_abort(ap);

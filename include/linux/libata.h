@@ -666,7 +666,7 @@ struct ata_queued_cmd {
 
 	unsigned int		err_mask;
 	struct ata_taskfile	result_tf;
-	ata_qc_cb_t		complete_fn;
+	ata_qc_cb_t		complete_fn /*__must_hold(qc->ap->lock)*/;
 
 	void			*private_data;
 	void			*lldd_task;
@@ -962,7 +962,8 @@ struct ata_port_operations {
 	int (*qc_defer)(struct ata_queued_cmd *qc);
 	int (*check_atapi_dma)(struct ata_queued_cmd *qc);
 	enum ata_completion_errors (*qc_prep)(struct ata_queued_cmd *qc);
-	unsigned int (*qc_issue)(struct ata_queued_cmd *qc);
+	unsigned int (*qc_issue)(struct ata_queued_cmd *qc)
+		__must_hold(&qc->dev->link->ap->lock);
 	void (*qc_fill_rtf)(struct ata_queued_cmd *qc);
 	void (*qc_ncq_fill_rtf)(struct ata_port *ap, u64 done_mask);
 
@@ -1204,7 +1205,8 @@ extern void ata_id_c_string(const u16 *id, unsigned char *s,
 			    unsigned int ofs, unsigned int len);
 extern unsigned int ata_do_dev_read_id(struct ata_device *dev,
 				       struct ata_taskfile *tf, __le16 *id);
-extern void ata_qc_complete(struct ata_port *ap, struct ata_queued_cmd *qc);
+extern void ata_qc_complete(struct ata_port *ap, struct ata_queued_cmd *qc)
+	__must_hold(ap->lock);
 extern u64 ata_qc_get_active(struct ata_port *ap);
 extern int ata_std_bios_param(struct scsi_device *sdev,
 			      struct gendisk *unused,
@@ -1314,11 +1316,13 @@ extern int ata_tport_add(struct device *parent, struct ata_port *ap);
 extern void ata_tport_delete(struct ata_port *ap);
 int ata_sas_sdev_configure(struct scsi_device *sdev, struct queue_limits *lim,
 			   struct ata_port *ap);
-extern int ata_sas_queuecmd(struct scsi_cmnd *cmd, struct ata_port *ap);
+extern int ata_sas_queuecmd(struct scsi_cmnd *cmd, struct ata_port *ap)
+	__must_hold(ap->lock);
 extern void ata_tf_to_fis(const struct ata_taskfile *tf,
 			  u8 pmp, int is_cmd, u8 *fis);
 extern void ata_tf_from_fis(const u8 *fis, struct ata_taskfile *tf);
-extern int ata_qc_complete_multiple(struct ata_port *ap, u64 qc_active);
+extern int ata_qc_complete_multiple(struct ata_port *ap, u64 qc_active)
+	__must_hold(ap->lock);
 extern bool sata_lpm_ignore_phy_events(struct ata_link *link);
 extern int sata_async_notification(struct ata_port *ap);
 
@@ -1409,8 +1413,10 @@ static inline int ata_acpi_cbl_pata_type(struct ata_port *ap)
  */
 extern void ata_port_schedule_eh(struct ata_port *ap);
 extern void ata_port_wait_eh(struct ata_port *ap);
-extern int ata_link_abort(struct ata_port *ap, struct ata_link *link);
-extern int ata_port_abort(struct ata_port *ap);
+extern int ata_link_abort(struct ata_port *ap, struct ata_link *link)
+	__must_hold(ap->lock);
+extern int ata_port_abort(struct ata_port *ap)
+	__must_hold(ap->lock);
 extern int ata_port_freeze(struct ata_port *ap);
 
 extern void ata_eh_freeze_port(struct ata_port *ap);
@@ -2042,7 +2048,8 @@ extern unsigned int ata_sff_data_xfer32(struct ata_queued_cmd *qc,
 			unsigned char *buf, unsigned int buflen, int rw);
 extern void ata_sff_irq_on(struct ata_port *ap);
 extern int ata_sff_hsm_move(struct ata_port *ap, struct ata_queued_cmd *qc,
-			    u8 status, int in_wq);
+			    u8 status, int in_wq)
+	__must_hold(ap->lock);
 extern void ata_sff_queue_work(struct work_struct *work);
 extern void ata_sff_queue_delayed_work(struct delayed_work *dwork,
 		unsigned long delay);
@@ -2050,9 +2057,11 @@ extern void ata_sff_queue_pio_task(struct ata_link *link, unsigned long delay);
 extern unsigned int ata_sff_qc_issue(struct ata_queued_cmd *qc);
 extern void ata_sff_qc_fill_rtf(struct ata_queued_cmd *qc);
 extern unsigned int ata_sff_port_intr(struct ata_port *ap,
-				      struct ata_queued_cmd *qc);
+				      struct ata_queued_cmd *qc)
+	__must_hold(ap->lock);
 extern irqreturn_t ata_sff_interrupt(int irq, void *dev_instance);
-extern void ata_sff_lost_interrupt(struct ata_port *ap);
+extern void ata_sff_lost_interrupt(struct ata_port *ap)
+	__must_hold(ap->lock);
 extern void ata_sff_freeze(struct ata_port *ap);
 extern void ata_sff_thaw(struct ata_port *ap);
 extern int ata_sff_prereset(struct ata_link *link, unsigned long deadline);
@@ -2095,7 +2104,8 @@ extern enum ata_completion_errors ata_bmdma_qc_prep(struct ata_queued_cmd *qc);
 extern unsigned int ata_bmdma_qc_issue(struct ata_queued_cmd *qc);
 extern enum ata_completion_errors ata_bmdma_dumb_qc_prep(struct ata_queued_cmd *qc);
 extern unsigned int ata_bmdma_port_intr(struct ata_port *ap,
-				      struct ata_queued_cmd *qc);
+				      struct ata_queued_cmd *qc)
+	__must_hold(ap->lock);
 extern irqreturn_t ata_bmdma_interrupt(int irq, void *dev_instance);
 extern void ata_bmdma_error_handler(struct ata_port *ap)
 	__must_hold(&ap->host->eh_mutex);

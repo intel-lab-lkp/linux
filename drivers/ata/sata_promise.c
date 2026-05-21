@@ -835,6 +835,7 @@ static void pdc_post_internal_cmd(struct ata_queued_cmd *qc)
 
 static void pdc_error_intr(struct ata_port *ap, struct ata_queued_cmd *qc,
 			   u32 port_status, u32 err_mask)
+	__must_hold(ap->lock)
 {
 	struct ata_eh_info *ehi = &ap->link.eh_info;
 	unsigned int ac_err_mask = 0;
@@ -869,10 +870,14 @@ static void pdc_error_intr(struct ata_port *ap, struct ata_queued_cmd *qc,
 
 static unsigned int pdc_host_intr(struct ata_port *ap,
 				  struct ata_queued_cmd *qc)
+	__must_hold(ap->lock)
 {
 	unsigned int handled = 0;
 	void __iomem *ata_mmio = ap->ioaddr.cmd_addr;
 	u32 port_status, err_mask;
+
+	/* Tell the compiler that qc->dev->link->ap == ap. */
+	__assume_ctx_lock(qc->dev->link->ap->lock);
 
 	err_mask = PDC_ERR_MASK;
 	if (ap->flags & PDC_FLAG_GEN_II)
@@ -974,8 +979,14 @@ static irqreturn_t pdc_interrupt(int irq, void *dev_instance)
 			struct ata_queued_cmd *qc;
 
 			qc = ata_qc_from_tag(ap, ap->link.active_tag);
-			if (qc && (!(qc->tf.flags & ATA_TFLAG_POLLING)))
+			if (qc && (!(qc->tf.flags & ATA_TFLAG_POLLING))) {
+				/*
+				 * Tell the compiler that ap->lock ==
+				 * host->lock.
+				 */
+				__assume_ctx_lock(ap->lock);
 				handled += pdc_host_intr(ap, qc);
+			}
 		}
 	}
 
