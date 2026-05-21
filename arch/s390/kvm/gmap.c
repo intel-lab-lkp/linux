@@ -545,6 +545,7 @@ static int gmap_handle_minor_crste_fault(struct gmap *gmap, struct guest_fault *
 			newcrste.s.fc1.d = 1;
 			newcrste.s.fc1.sd = 1;
 		}
+		f->crste_region3 = is_pud(newcrste);
 		/* In case of races, let the slow path deal with it. */
 		return !gmap_crstep_xchg_atomic(gmap, f->crstep, oldcrste, newcrste, f->gfn);
 	}
@@ -690,6 +691,7 @@ static int _gmap_link(struct kvm_s390_mmu_cache *mc, struct gmap *gmap, int leve
 			if (oldval.val != _CRSTE_EMPTY(oldval.h.tt).val &&
 			    crste_origin_large(oldval) != crste_origin_large(newval))
 				return -EAGAIN;
+			f->crste_region3 = is_pud(newval);
 		} while (!gmap_crstep_xchg_atomic(gmap, f->crstep, oldval, newval, f->gfn));
 		if (f->callback)
 			f->callback(f);
