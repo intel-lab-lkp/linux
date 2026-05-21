@@ -23,10 +23,8 @@ static __meminit int shuffle_param_set(const char *val,
 	return 0;
 }
 
-static const struct kernel_param_ops shuffle_param_ops = {
-	.set = shuffle_param_set,
-	.get = param_get_bool,
-};
+static DEFINE_KERNEL_PARAM_OPS(shuffle_param_ops, shuffle_param_set,
+			       param_get_bool);
 module_param_cb(shuffle, &shuffle_param_ops, &shuffle_param, 0400);
 
 /*

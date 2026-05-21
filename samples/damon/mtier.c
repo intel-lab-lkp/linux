@@ -38,10 +38,8 @@ module_param(node0_mem_free_bp, ulong, 0600);
 static int damon_sample_mtier_enable_store(
 		const char *val, const struct kernel_param *kp);
 
-static const struct kernel_param_ops enabled_param_ops = {
-	.set = damon_sample_mtier_enable_store,
-	.get = param_get_bool,
-};
+static DEFINE_KERNEL_PARAM_OPS(enabled_param_ops,
+			       damon_sample_mtier_enable_store, param_get_bool);
 
 static bool enabled __read_mostly;
 module_param_cb(enabled, &enabled_param_ops, &enabled, 0600);

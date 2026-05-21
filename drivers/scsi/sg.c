@@ -1644,10 +1644,8 @@ static int def_reserved_size_set(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static const struct kernel_param_ops def_reserved_size_ops = {
-	.set	= def_reserved_size_set,
-	.get	= param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(def_reserved_size_ops, def_reserved_size_set,
+			       param_get_int);
 
 module_param_cb(def_reserved_size, &def_reserved_size_ops, &def_reserved_size,
 		   S_IRUGO | S_IWUSR);

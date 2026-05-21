@@ -362,10 +362,8 @@ static int sec_pf_q_num_set(const char *val, const struct kernel_param *kp)
 	return hisi_qm_q_num_set(val, kp, PCI_DEVICE_ID_HUAWEI_SEC_PF);
 }
 
-static const struct kernel_param_ops sec_pf_q_num_ops = {
-	.set = sec_pf_q_num_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(sec_pf_q_num_ops, sec_pf_q_num_set,
+			       param_get_int);
 
 static u32 pf_q_num = SEC_PF_DEF_Q_NUM;
 module_param_cb(pf_q_num, &sec_pf_q_num_ops, &pf_q_num, 0444);
@@ -391,18 +389,13 @@ static int sec_ctx_q_num_set(const char *val, const struct kernel_param *kp)
 	return param_set_int(val, kp);
 }
 
-static const struct kernel_param_ops sec_ctx_q_num_ops = {
-	.set = sec_ctx_q_num_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(sec_ctx_q_num_ops, sec_ctx_q_num_set,
+			       param_get_int);
 static u32 ctx_q_num = SEC_CTX_Q_NUM_DEF;
 module_param_cb(ctx_q_num, &sec_ctx_q_num_ops, &ctx_q_num, 0444);
 MODULE_PARM_DESC(ctx_q_num, "Queue num in ctx (2 default, 2, 4, ..., 32)");
 
-static const struct kernel_param_ops vfs_num_ops = {
-	.set = vfs_num_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(vfs_num_ops, vfs_num_set, param_get_int);
 
 static u32 vfs_num;
 module_param_cb(vfs_num, &vfs_num_ops, &vfs_num, 0444);
@@ -454,10 +447,8 @@ u64 sec_get_alg_bitmap(struct hisi_qm *qm, u32 high, u32 low)
 	return ((u64)cap_val_h << SEC_ALG_BITMAP_SHIFT) | (u64)cap_val_l;
 }
 
-static const struct kernel_param_ops sec_uacce_mode_ops = {
-	.set = uacce_mode_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(sec_uacce_mode_ops, uacce_mode_set,
+			       param_get_int);
 
 /*
  * uacce_mode = 0 means sec only register to crypto,

@@ -43,10 +43,8 @@ static int efi_pstore_disable_set(const char *val, const struct kernel_param *kp
 	return 0;
 }
 
-static const struct kernel_param_ops pstore_disable_ops = {
-	.set	= efi_pstore_disable_set,
-	.get	= param_get_bool,
-};
+static DEFINE_KERNEL_PARAM_OPS(pstore_disable_ops, efi_pstore_disable_set,
+			       param_get_bool);
 
 module_param_cb(pstore_disable, &pstore_disable_ops, &pstore_disable, 0644);
 __MODULE_PARM_TYPE(pstore_disable, "bool");

@@ -1133,10 +1133,8 @@ static int poll_interval_param_set(const char *val, const struct kernel_param *k
 	return ret;
 }
 
-static const struct kernel_param_ops param_ops_poll_interval = {
-	.get = param_get_uint,
-	.set = poll_interval_param_set,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_poll_interval, poll_interval_param_set,
+			       param_get_uint);
 
 static unsigned int poll_interval = 360;
 module_param_cb(poll_interval, &param_ops_poll_interval, &poll_interval, 0644);

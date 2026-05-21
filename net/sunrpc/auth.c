@@ -83,10 +83,8 @@ static int param_get_hashtbl_sz(char *buffer, const struct kernel_param *kp)
 
 #define param_check_hashtbl_sz(name, p) __param_check(name, p, unsigned int);
 
-static const struct kernel_param_ops param_ops_hashtbl_sz = {
-	.set = param_set_hashtbl_sz,
-	.get = param_get_hashtbl_sz,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_hashtbl_sz, param_set_hashtbl_sz,
+			       param_get_hashtbl_sz);
 
 module_param_named(auth_hashtable_size, auth_hashbits, hashtbl_sz, 0644);
 MODULE_PARM_DESC(auth_hashtable_size, "RPC credential cache hashtable size");

@@ -87,11 +87,7 @@ static int avic_param_get(char *buffer, const struct kernel_param *kp)
 	return param_get_bool(buffer, kp);
 }
 
-static const struct kernel_param_ops avic_ops = {
-	.flags = KERNEL_PARAM_OPS_FL_NOARG,
-	.set = avic_param_set,
-	.get = avic_param_get,
-};
+static DEFINE_KERNEL_PARAM_OPS_NOARG(avic_ops, avic_param_set, avic_param_get);
 
 /*
  * Enable / disable AVIC.  In "auto" mode (default behavior), AVIC is enabled

@@ -255,10 +255,9 @@ static int tcmu_get_global_max_data_area(char *buffer,
 	return sprintf(buffer, "%d\n", TCMU_PAGES_TO_MBS(tcmu_global_max_pages));
 }
 
-static const struct kernel_param_ops tcmu_global_max_data_area_op = {
-	.set = tcmu_set_global_max_data_area,
-	.get = tcmu_get_global_max_data_area,
-};
+static DEFINE_KERNEL_PARAM_OPS(tcmu_global_max_data_area_op,
+			       tcmu_set_global_max_data_area,
+			       tcmu_get_global_max_data_area);
 
 module_param_cb(global_max_data_area_mb, &tcmu_global_max_data_area_op, NULL,
 		S_IWUSR | S_IRUGO);
@@ -292,10 +291,8 @@ static int tcmu_set_block_netlink(const char *str,
 	return 0;
 }
 
-static const struct kernel_param_ops tcmu_block_netlink_op = {
-	.set = tcmu_set_block_netlink,
-	.get = tcmu_get_block_netlink,
-};
+static DEFINE_KERNEL_PARAM_OPS(tcmu_block_netlink_op, tcmu_set_block_netlink,
+			       tcmu_get_block_netlink);
 
 module_param_cb(block_netlink, &tcmu_block_netlink_op, NULL, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(block_netlink, "Block new netlink commands.");

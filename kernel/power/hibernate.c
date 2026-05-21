@@ -1528,10 +1528,8 @@ static int hibernate_compressor_param_set(const char *compressor,
 	return ret;
 }
 
-static const struct kernel_param_ops hibernate_compressor_param_ops = {
-	.set    = hibernate_compressor_param_set,
-	.get    = param_get_string,
-};
+static DEFINE_KERNEL_PARAM_OPS(hibernate_compressor_param_ops,
+			       hibernate_compressor_param_set, param_get_string);
 
 static struct kparam_string hibernate_compressor_param_string = {
 	.maxlen = sizeof(hibernate_compressor),

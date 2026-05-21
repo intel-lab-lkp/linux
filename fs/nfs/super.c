@@ -1419,10 +1419,8 @@ static int param_set_portnr(const char *val, const struct kernel_param *kp)
 	*((unsigned int *)kp->arg) = num;
 	return 0;
 }
-static const struct kernel_param_ops param_ops_portnr = {
-	.set = param_set_portnr,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_portnr, param_set_portnr,
+			       param_get_uint);
 #define param_check_portnr(name, p) __param_check(name, p, unsigned int)
 
 module_param_named(callback_tcpport, nfs_callback_set_tcpport, portnr, 0644);

@@ -1214,10 +1214,8 @@ static int panic_print_set(const char *val, const struct kernel_param *kp)
 	return  param_set_ulong(val, kp);
 }
 
-static const struct kernel_param_ops panic_print_ops = {
-	.set	= panic_print_set,
-	.get	= param_get_ulong,
-};
+static DEFINE_KERNEL_PARAM_OPS(panic_print_ops, panic_print_set,
+			       param_get_ulong);
 __core_param_cb(panic_print, &panic_print_ops, &panic_print, 0644);
 
 static int __init oops_setup(char *s)

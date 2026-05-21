@@ -166,20 +166,15 @@ static int set_slice_us(const char *val, const struct kernel_param *kp)
 	return param_set_uint_minmax(val, kp, 100, 100 * USEC_PER_MSEC);
 }
 
-static const struct kernel_param_ops slice_us_param_ops = {
-	.set = set_slice_us,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(slice_us_param_ops, set_slice_us, param_get_uint);
 
 static int set_bypass_lb_intv_us(const char *val, const struct kernel_param *kp)
 {
 	return param_set_uint_minmax(val, kp, 0, 10 * USEC_PER_SEC);
 }
 
-static const struct kernel_param_ops bypass_lb_intv_us_param_ops = {
-	.set = set_bypass_lb_intv_us,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(bypass_lb_intv_us_param_ops,
+			       set_bypass_lb_intv_us, param_get_uint);
 
 #undef MODULE_PARAM_PREFIX
 #define MODULE_PARAM_PREFIX	"sched_ext."

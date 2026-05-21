@@ -45,10 +45,8 @@ MODULE_LICENSE("GPL");
 static unsigned int psmouse_max_proto = PSMOUSE_AUTO;
 static int psmouse_set_maxproto(const char *val, const struct kernel_param *);
 static int psmouse_get_maxproto(char *buffer, const struct kernel_param *kp);
-static const struct kernel_param_ops param_ops_proto_abbrev = {
-	.set = psmouse_set_maxproto,
-	.get = psmouse_get_maxproto,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_proto_abbrev, psmouse_set_maxproto,
+			       psmouse_get_maxproto);
 #define param_check_proto_abbrev(name, p)	__param_check(name, p, unsigned int)
 module_param_named(proto, psmouse_max_proto, proto_abbrev, 0644);
 MODULE_PARM_DESC(proto, "Highest protocol extension to probe (bare, imps, exps, any). Useful for KVM switches.");

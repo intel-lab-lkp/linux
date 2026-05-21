@@ -154,20 +154,15 @@ static struct dmatest_info {
 
 static int dmatest_run_set(const char *val, const struct kernel_param *kp);
 static int dmatest_run_get(char *val, const struct kernel_param *kp);
-static const struct kernel_param_ops run_ops = {
-	.set = dmatest_run_set,
-	.get = dmatest_run_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(run_ops, dmatest_run_set, dmatest_run_get);
 static bool dmatest_run;
 module_param_cb(run, &run_ops, &dmatest_run, 0644);
 MODULE_PARM_DESC(run, "Run the test (default: false)");
 
 static int dmatest_chan_set(const char *val, const struct kernel_param *kp);
 static int dmatest_chan_get(char *val, const struct kernel_param *kp);
-static const struct kernel_param_ops multi_chan_ops = {
-	.set = dmatest_chan_set,
-	.get = dmatest_chan_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(multi_chan_ops, dmatest_chan_set,
+			       dmatest_chan_get);
 
 static char test_channel[20];
 static struct kparam_string newchan_kps = {
@@ -178,9 +173,7 @@ module_param_cb(channel, &multi_chan_ops, &newchan_kps, 0644);
 MODULE_PARM_DESC(channel, "Bus ID of the channel to test (default: any)");
 
 static int dmatest_test_list_get(char *val, const struct kernel_param *kp);
-static const struct kernel_param_ops test_list_ops = {
-	.get = dmatest_test_list_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(test_list_ops, NULL, dmatest_test_list_get);
 module_param_cb(test_list, &test_list_ops, NULL, 0444);
 MODULE_PARM_DESC(test_list, "Print current test list");
 
@@ -292,10 +285,7 @@ static int dmatest_wait_get(char *val, const struct kernel_param *kp)
 	return param_get_bool(val, kp);
 }
 
-static const struct kernel_param_ops wait_ops = {
-	.get = dmatest_wait_get,
-	.set = param_set_bool,
-};
+static DEFINE_KERNEL_PARAM_OPS(wait_ops, param_set_bool, dmatest_wait_get);
 module_param_cb(wait, &wait_ops, &wait, 0444);
 MODULE_PARM_DESC(wait, "Wait for tests to complete (default: false)");
 

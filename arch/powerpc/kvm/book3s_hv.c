@@ -114,10 +114,7 @@ module_param(one_vm_per_core, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(one_vm_per_core, "Only run vCPUs from the same VM on a core (requires POWER8 or older)");
 
 #ifdef CONFIG_KVM_XICS
-static const struct kernel_param_ops module_param_ops = {
-	.set = param_set_int,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(module_param_ops, param_set_int, param_get_int);
 
 module_param_cb(kvm_irq_bypass, &module_param_ops, &kvm_irq_bypass, 0644);
 MODULE_PARM_DESC(kvm_irq_bypass, "Bypass passthrough interrupt optimization");

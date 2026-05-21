@@ -108,10 +108,7 @@ static int sgl_sge_nr_set(const char *val, const struct kernel_param *kp)
 	return param_set_ushort(val, kp);
 }
 
-static const struct kernel_param_ops sgl_sge_nr_ops = {
-	.set = sgl_sge_nr_set,
-	.get = param_get_ushort,
-};
+static DEFINE_KERNEL_PARAM_OPS(sgl_sge_nr_ops, sgl_sge_nr_set, param_get_ushort);
 
 static u16 sgl_sge_nr = HZIP_SGL_SGE_NR;
 module_param_cb(sgl_sge_nr, &sgl_sge_nr_ops, &sgl_sge_nr, 0444);

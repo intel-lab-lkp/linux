@@ -74,15 +74,11 @@ static int get_nx_huge_pages(char *buffer, const struct kernel_param *kp);
 static int set_nx_huge_pages(const char *val, const struct kernel_param *kp);
 static int set_nx_huge_pages_recovery_param(const char *val, const struct kernel_param *kp);
 
-static const struct kernel_param_ops nx_huge_pages_ops = {
-	.set = set_nx_huge_pages,
-	.get = get_nx_huge_pages,
-};
+static DEFINE_KERNEL_PARAM_OPS(nx_huge_pages_ops, set_nx_huge_pages,
+			       get_nx_huge_pages);
 
-static const struct kernel_param_ops nx_huge_pages_recovery_param_ops = {
-	.set = set_nx_huge_pages_recovery_param,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(nx_huge_pages_recovery_param_ops,
+			       set_nx_huge_pages_recovery_param, param_get_uint);
 
 module_param_cb(nx_huge_pages, &nx_huge_pages_ops, &nx_huge_pages, 0644);
 __MODULE_PARM_TYPE(nx_huge_pages, "bool");

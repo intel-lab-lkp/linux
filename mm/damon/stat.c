@@ -22,10 +22,8 @@ static int damon_stat_enabled_store(
 static int damon_stat_enabled_load(char *buffer,
 		const struct kernel_param *kp);
 
-static const struct kernel_param_ops enabled_param_ops = {
-	.set = damon_stat_enabled_store,
-	.get = damon_stat_enabled_load,
-};
+static DEFINE_KERNEL_PARAM_OPS(enabled_param_ops, damon_stat_enabled_store,
+			       damon_stat_enabled_load);
 
 static bool enabled __read_mostly = IS_ENABLED(
 	CONFIG_DAMON_STAT_ENABLED_DEFAULT);

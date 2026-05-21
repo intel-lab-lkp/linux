@@ -372,10 +372,8 @@ static int param_get_nfs_timeout(char *buffer, const struct kernel_param *kp)
 	return sysfs_emit(buffer, "%li\n", num);
 }
 
-static const struct kernel_param_ops param_ops_nfs_timeout = {
-	.set = param_set_nfs_timeout,
-	.get = param_get_nfs_timeout,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_nfs_timeout, param_set_nfs_timeout,
+			       param_get_nfs_timeout);
 #define param_check_nfs_timeout(name, p) __param_check(name, p, int)
 
 module_param(nfs_mountpoint_expiry_timeout, nfs_timeout, 0644);

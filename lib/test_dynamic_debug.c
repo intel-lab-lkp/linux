@@ -23,10 +23,8 @@ static int param_get_do_prints(char *buffer, const struct kernel_param *kp)
 	do_prints();
 	return scnprintf(buffer, PAGE_SIZE, "did do_prints\n");
 }
-static const struct kernel_param_ops param_ops_do_prints = {
-	.set = param_set_do_prints,
-	.get = param_get_do_prints,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_do_prints, param_set_do_prints,
+			       param_get_do_prints);
 module_param_cb(do_prints, &param_ops_do_prints, NULL, 0600);
 
 /*

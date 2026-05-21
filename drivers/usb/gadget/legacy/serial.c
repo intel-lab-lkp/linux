@@ -121,10 +121,7 @@ static int enable_set(const char *s, const struct kernel_param *kp)
 	return ret;
 }
 
-static const struct kernel_param_ops enable_ops = {
-	.set = enable_set,
-	.get = param_get_bool,
-};
+static DEFINE_KERNEL_PARAM_OPS(enable_ops, enable_set, param_get_bool);
 
 module_param_cb(enable, &enable_ops, &enable, 0644);
 

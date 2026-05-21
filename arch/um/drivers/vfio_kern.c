@@ -628,10 +628,8 @@ static int uml_vfio_cmdline_get(char *buffer, const struct kernel_param *kp)
 	return 0;
 }
 
-static const struct kernel_param_ops uml_vfio_cmdline_param_ops = {
-	.set = uml_vfio_cmdline_set,
-	.get = uml_vfio_cmdline_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(uml_vfio_cmdline_param_ops, uml_vfio_cmdline_set,
+			       uml_vfio_cmdline_get);
 
 device_param_cb(device, &uml_vfio_cmdline_param_ops, NULL, 0400);
 __uml_help(uml_vfio_cmdline_param_ops,

@@ -394,10 +394,7 @@ static int perf_mode_set(const char *val, const struct kernel_param *kp)
 	return param_set_int(val, kp);
 }
 
-static const struct kernel_param_ops zip_com_perf_ops = {
-	.set = perf_mode_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(zip_com_perf_ops, perf_mode_set, param_get_int);
 
 /*
  * perf_mode = 0 means enable high compression rate mode,
@@ -408,10 +405,8 @@ static u32 perf_mode = HZIP_HIGH_COMP_RATE;
 module_param_cb(perf_mode, &zip_com_perf_ops, &perf_mode, 0444);
 MODULE_PARM_DESC(perf_mode, "ZIP high perf mode 0(default), 1(enable)");
 
-static const struct kernel_param_ops zip_uacce_mode_ops = {
-	.set = uacce_mode_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(zip_uacce_mode_ops, uacce_mode_set,
+			       param_get_int);
 
 /*
  * uacce_mode = 0 means zip only register to crypto,
@@ -429,19 +424,13 @@ static int pf_q_num_set(const char *val, const struct kernel_param *kp)
 	return hisi_qm_q_num_set(val, kp, PCI_DEVICE_ID_HUAWEI_ZIP_PF);
 }
 
-static const struct kernel_param_ops pf_q_num_ops = {
-	.set = pf_q_num_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(pf_q_num_ops, pf_q_num_set, param_get_int);
 
 static u32 pf_q_num = HZIP_PF_DEF_Q_NUM;
 module_param_cb(pf_q_num, &pf_q_num_ops, &pf_q_num, 0444);
 MODULE_PARM_DESC(pf_q_num, "Number of queues in PF(v1 2-4096, v2 2-1024)");
 
-static const struct kernel_param_ops vfs_num_ops = {
-	.set = vfs_num_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(vfs_num_ops, vfs_num_set, param_get_int);
 
 static u32 vfs_num;
 module_param_cb(vfs_num, &vfs_num_ops, &vfs_num, 0444);

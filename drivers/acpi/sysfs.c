@@ -138,15 +138,11 @@ static int param_get_debug_level(char *buffer, const struct kernel_param *kp)
 	return result;
 }
 
-static const struct kernel_param_ops param_ops_debug_layer = {
-	.set = param_set_uint,
-	.get = param_get_debug_layer,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_debug_layer, param_set_uint,
+			       param_get_debug_layer);
 
-static const struct kernel_param_ops param_ops_debug_level = {
-	.set = param_set_uint,
-	.get = param_get_debug_level,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_debug_level, param_set_uint,
+			       param_get_debug_level);
 
 module_param_cb(debug_layer, &param_ops_debug_layer, &acpi_dbg_layer, 0644);
 module_param_cb(debug_level, &param_ops_debug_level, &acpi_dbg_level, 0644);
@@ -201,15 +197,12 @@ static int param_get_trace_method_name(char *buffer, const struct kernel_param *
 	return sysfs_emit(buffer, "%s\n", acpi_gbl_trace_method_name);
 }
 
-static const struct kernel_param_ops param_ops_trace_method = {
-	.set = param_set_trace_method_name,
-	.get = param_get_trace_method_name,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_trace_method,
+			       param_set_trace_method_name,
+			       param_get_trace_method_name);
 
-static const struct kernel_param_ops param_ops_trace_attrib = {
-	.set = param_set_uint,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_trace_attrib, param_set_uint,
+			       param_get_uint);
 
 module_param_cb(trace_method_name, &param_ops_trace_method, &trace_method_name, 0644);
 module_param_cb(trace_debug_layer, &param_ops_trace_attrib, &acpi_gbl_trace_dbg_layer, 0644);

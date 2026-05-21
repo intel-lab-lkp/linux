@@ -52,9 +52,8 @@ static int param_get_supported_features(char *buffer,
 {
 	return sprintf(buffer, "0x%llx", CEPH_FEATURES_SUPPORTED_DEFAULT);
 }
-static const struct kernel_param_ops param_ops_supported_features = {
-	.get = param_get_supported_features,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_supported_features, NULL,
+			       param_get_supported_features);
 module_param_cb(supported_features, &param_ops_supported_features, NULL,
 		0444);
 

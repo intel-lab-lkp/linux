@@ -314,10 +314,8 @@ static int cougar_param_set_g6_is_space(const char *val,
 	return 0;
 }
 
-static const struct kernel_param_ops cougar_g6_is_space_ops = {
-	.set	= cougar_param_set_g6_is_space,
-	.get	= param_get_bool,
-};
+static DEFINE_KERNEL_PARAM_OPS(cougar_g6_is_space_ops,
+			       cougar_param_set_g6_is_space, param_get_bool);
 module_param_cb(g6_is_space, &cougar_g6_is_space_ops, &g6_is_space, 0644);
 
 static const struct hid_device_id cougar_id_table[] = {

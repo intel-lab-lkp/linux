@@ -164,10 +164,7 @@ MODULE_PARM_DESC(ctl_dev_id, "Use control device identifier (based on codec addr
 
 #ifdef CONFIG_PM
 static int param_set_xint(const char *val, const struct kernel_param *kp);
-static const struct kernel_param_ops param_ops_xint = {
-	.set = param_set_xint,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_xint, param_set_xint, param_get_int);
 #define param_check_xint param_check_int
 
 static int power_save = CONFIG_SND_HDA_POWER_SAVE_DEFAULT;

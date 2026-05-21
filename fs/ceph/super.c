@@ -1684,10 +1684,8 @@ static int param_set_metrics(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static const struct kernel_param_ops param_ops_metrics = {
-	.set = param_set_metrics,
-	.get = param_get_bool,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_metrics, param_set_metrics,
+			       param_get_bool);
 
 bool disable_send_metrics = false;
 module_param_cb(disable_send_metrics, &param_ops_metrics, &disable_send_metrics, 0644);
@@ -1695,9 +1693,7 @@ MODULE_PARM_DESC(disable_send_metrics, "Enable sending perf metrics to ceph clus
 
 /* for both v1 and v2 syntax */
 static bool mount_support = true;
-static const struct kernel_param_ops param_ops_mount_syntax = {
-	.get = param_get_bool,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_mount_syntax, NULL, param_get_bool);
 module_param_cb(mount_syntax_v1, &param_ops_mount_syntax, &mount_support, 0444);
 module_param_cb(mount_syntax_v2, &param_ops_mount_syntax, &mount_support, 0444);
 

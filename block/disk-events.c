@@ -416,10 +416,8 @@ static int disk_events_set_dfl_poll_msecs(const char *val,
 	return 0;
 }
 
-static const struct kernel_param_ops disk_events_dfl_poll_msecs_param_ops = {
-	.set	= disk_events_set_dfl_poll_msecs,
-	.get	= param_get_ulong,
-};
+static DEFINE_KERNEL_PARAM_OPS(disk_events_dfl_poll_msecs_param_ops,
+			       disk_events_set_dfl_poll_msecs, param_get_ulong);
 
 #undef MODULE_PARAM_PREFIX
 #define MODULE_PARAM_PREFIX	"block."

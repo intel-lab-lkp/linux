@@ -90,21 +90,17 @@ static DEFINE_STATIC_KEY_MAYBE(CONFIG_ZSWAP_DEFAULT_ON, zswap_ever_enabled);
 static bool zswap_enabled = IS_ENABLED(CONFIG_ZSWAP_DEFAULT_ON);
 static int zswap_enabled_param_set(const char *,
 				   const struct kernel_param *);
-static const struct kernel_param_ops zswap_enabled_param_ops = {
-	.set =		zswap_enabled_param_set,
-	.get =		param_get_bool,
-};
+static DEFINE_KERNEL_PARAM_OPS(zswap_enabled_param_ops, zswap_enabled_param_set,
+			       param_get_bool);
 module_param_cb(enabled, &zswap_enabled_param_ops, &zswap_enabled, 0644);
 
 /* Crypto compressor to use */
 static char *zswap_compressor = CONFIG_ZSWAP_COMPRESSOR_DEFAULT;
 static int zswap_compressor_param_set(const char *,
 				      const struct kernel_param *);
-static const struct kernel_param_ops zswap_compressor_param_ops = {
-	.set =		zswap_compressor_param_set,
-	.get =		param_get_charp,
-	.free =		param_free_charp,
-};
+static DEFINE_KERNEL_PARAM_OPS_FREE(zswap_compressor_param_ops,
+				    zswap_compressor_param_set, param_get_charp,
+				    param_free_charp);
 module_param_cb(compressor, &zswap_compressor_param_ops,
 		&zswap_compressor, 0644);
 

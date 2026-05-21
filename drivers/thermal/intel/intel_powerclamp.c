@@ -112,10 +112,7 @@ static int duration_get(char *buf, const struct kernel_param *kp)
 	return ret;
 }
 
-static const struct kernel_param_ops duration_ops = {
-	.set = duration_set,
-	.get = duration_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(duration_ops, duration_set, duration_get);
 
 module_param_cb(duration, &duration_ops, NULL, 0644);
 MODULE_PARM_DESC(duration, "forced idle time for each attempt in msec.");
@@ -203,10 +200,7 @@ static int cpumask_get(char *buf, const struct kernel_param *kp)
 	return cpumap_print_to_pagebuf(false, buf, idle_injection_cpu_mask);
 }
 
-static const struct kernel_param_ops cpumask_ops = {
-	.set = cpumask_set,
-	.get = cpumask_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(cpumask_ops, cpumask_set, cpumask_get);
 
 module_param_cb(cpumask, &cpumask_ops, NULL, 0644);
 MODULE_PARM_DESC(cpumask, "Mask of CPUs to use for idle injection.");
@@ -252,10 +246,7 @@ skip_limit_set:
 	return ret;
 }
 
-static const struct kernel_param_ops max_idle_ops = {
-	.set = max_idle_set,
-	.get = param_get_byte,
-};
+static DEFINE_KERNEL_PARAM_OPS(max_idle_ops, max_idle_set, param_get_byte);
 
 module_param_cb(max_idle, &max_idle_ops, &max_idle, 0644);
 MODULE_PARM_DESC(max_idle, "maximum injected idle time to the total CPU time ratio in percent range:1-100");
@@ -299,10 +290,7 @@ exit_win:
 	return ret;
 }
 
-static const struct kernel_param_ops window_size_ops = {
-	.set = window_size_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(window_size_ops, window_size_set, param_get_int);
 
 module_param_cb(window_size, &window_size_ops, &window_size, 0644);
 MODULE_PARM_DESC(window_size, "sliding window in number of clamping cycles\n"

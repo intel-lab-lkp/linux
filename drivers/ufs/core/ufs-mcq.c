@@ -43,10 +43,8 @@ static int rw_queue_count_set(const char *val, const struct kernel_param *kp)
 				     num_possible_cpus());
 }
 
-static const struct kernel_param_ops rw_queue_count_ops = {
-	.set = rw_queue_count_set,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(rw_queue_count_ops, rw_queue_count_set,
+			       param_get_uint);
 
 static unsigned int rw_queues;
 module_param_cb(rw_queues, &rw_queue_count_ops, &rw_queues, 0644);
@@ -59,10 +57,8 @@ static int read_queue_count_set(const char *val, const struct kernel_param *kp)
 				     num_possible_cpus());
 }
 
-static const struct kernel_param_ops read_queue_count_ops = {
-	.set = read_queue_count_set,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(read_queue_count_ops, read_queue_count_set,
+			       param_get_uint);
 
 static unsigned int read_queues;
 module_param_cb(read_queues, &read_queue_count_ops, &read_queues, 0644);
@@ -75,10 +71,8 @@ static int poll_queue_count_set(const char *val, const struct kernel_param *kp)
 				     num_possible_cpus());
 }
 
-static const struct kernel_param_ops poll_queue_count_ops = {
-	.set = poll_queue_count_set,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(poll_queue_count_ops, poll_queue_count_set,
+			       param_get_uint);
 
 static unsigned int poll_queues = 1;
 module_param_cb(poll_queues, &poll_queue_count_ops, &poll_queues, 0644);

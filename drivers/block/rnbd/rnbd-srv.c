@@ -49,10 +49,8 @@ static struct kparam_string dev_search_path_kparam_str = {
 	.string	= dev_search_path
 };
 
-static const struct kernel_param_ops dev_search_path_ops = {
-	.set	= dev_search_path_set,
-	.get	= param_get_string,
-};
+static DEFINE_KERNEL_PARAM_OPS(dev_search_path_ops, dev_search_path_set,
+			       param_get_string);
 
 module_param_cb(dev_search_path, &dev_search_path_ops,
 		&dev_search_path_kparam_str, 0444);

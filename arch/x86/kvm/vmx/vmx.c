@@ -468,10 +468,8 @@ static int vmentry_l1d_flush_get(char *s, const struct kernel_param *kp)
 }
 #endif
 
-static const struct kernel_param_ops vmentry_l1d_flush_ops = {
-	.set = vmentry_l1d_flush_set,
-	.get = vmentry_l1d_flush_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(vmentry_l1d_flush_ops, vmentry_l1d_flush_set,
+			       vmentry_l1d_flush_get);
 module_param_cb(vmentry_l1d_flush, &vmentry_l1d_flush_ops, NULL, 0644);
 
 static __always_inline void vmx_disable_fb_clear(struct vcpu_vmx *vmx)

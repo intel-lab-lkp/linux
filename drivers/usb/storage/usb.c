@@ -158,10 +158,7 @@ static int delay_use_get(char *s, const struct kernel_param *kp)
 	return format_delay_ms(delay_ms, 3, "ms", s, PAGE_SIZE);
 }
 
-static const struct kernel_param_ops delay_use_ops = {
-	.set = delay_use_set,
-	.get = delay_use_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(delay_use_ops, delay_use_set, delay_use_get);
 module_param_cb(delay_use, &delay_use_ops, &delay_use, 0644);
 MODULE_PARM_DESC(delay_use, "time to delay before using a new device");
 

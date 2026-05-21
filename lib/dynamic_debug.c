@@ -807,10 +807,8 @@ int param_get_dyndbg_classes(char *buffer, const struct kernel_param *kp)
 }
 EXPORT_SYMBOL(param_get_dyndbg_classes);
 
-const struct kernel_param_ops param_ops_dyndbg_classes = {
-	.set = param_set_dyndbg_classes,
-	.get = param_get_dyndbg_classes,
-};
+DEFINE_KERNEL_PARAM_OPS(param_ops_dyndbg_classes, param_set_dyndbg_classes,
+			param_get_dyndbg_classes);
 EXPORT_SYMBOL(param_ops_dyndbg_classes);
 
 #define PREFIX_SIZE 128

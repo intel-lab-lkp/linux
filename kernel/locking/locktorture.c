@@ -98,10 +98,8 @@ static bool cpumask_nonempty(cpumask_var_t mask)
 	return cpumask_available(mask) && !cpumask_empty(mask);
 }
 
-static const struct kernel_param_ops lt_bind_ops = {
-	.set = param_set_cpumask,
-	.get = param_get_cpumask,
-};
+static DEFINE_KERNEL_PARAM_OPS(lt_bind_ops, param_set_cpumask,
+			       param_get_cpumask);
 
 module_param_cb(bind_readers, &lt_bind_ops, &bind_readers, 0444);
 module_param_cb(bind_writers, &lt_bind_ops, &bind_writers, 0444);

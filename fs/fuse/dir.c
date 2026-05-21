@@ -71,10 +71,7 @@ static int inval_wq_set(const char *val, const struct kernel_param *kp)
 
 	return 0;
 }
-static const struct kernel_param_ops inval_wq_ops = {
-	.set = inval_wq_set,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(inval_wq_ops, inval_wq_set, param_get_uint);
 module_param_cb(inval_wq, &inval_wq_ops, &inval_wq, 0644);
 __MODULE_PARM_TYPE(inval_wq, "uint");
 MODULE_PARM_DESC(inval_wq,

@@ -7187,10 +7187,8 @@ static int wq_affn_dfl_get(char *buffer, const struct kernel_param *kp)
 	return scnprintf(buffer, PAGE_SIZE, "%s\n", wq_affn_names[wq_affn_dfl]);
 }
 
-static const struct kernel_param_ops wq_affn_dfl_ops = {
-	.set	= wq_affn_dfl_set,
-	.get	= wq_affn_dfl_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(wq_affn_dfl_ops, wq_affn_dfl_set,
+			       wq_affn_dfl_get);
 
 module_param_cb(default_affinity_scope, &wq_affn_dfl_ops, NULL, 0644);
 
@@ -7886,10 +7884,8 @@ static int wq_watchdog_param_set_thresh(const char *val,
 	return 0;
 }
 
-static const struct kernel_param_ops wq_watchdog_thresh_ops = {
-	.set	= wq_watchdog_param_set_thresh,
-	.get	= param_get_ulong,
-};
+static DEFINE_KERNEL_PARAM_OPS(wq_watchdog_thresh_ops,
+			       wq_watchdog_param_set_thresh, param_get_ulong);
 
 module_param_cb(watchdog_thresh, &wq_watchdog_thresh_ops, &wq_watchdog_thresh,
 		0644);

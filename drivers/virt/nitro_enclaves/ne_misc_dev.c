@@ -86,10 +86,8 @@ struct ne_devs ne_devs = {
  */
 static int ne_set_kernel_param(const char *val, const struct kernel_param *kp);
 
-static const struct kernel_param_ops ne_cpu_pool_ops = {
-	.get	= param_get_string,
-	.set	= ne_set_kernel_param,
-};
+static DEFINE_KERNEL_PARAM_OPS(ne_cpu_pool_ops, ne_set_kernel_param,
+			       param_get_string);
 
 static char ne_cpus[NE_CPUS_SIZE];
 static struct kparam_string ne_cpus_arg = {

@@ -193,10 +193,8 @@ static int set_param_timeout(const char *val, const struct kernel_param *kp)
 	return rv;
 }
 
-static const struct kernel_param_ops param_ops_timeout = {
-	.set = set_param_timeout,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_timeout, set_param_timeout,
+			       param_get_int);
 #define param_check_timeout param_check_int
 
 typedef int (*action_fn)(const char *intval, char *outval);
@@ -259,17 +257,12 @@ static int set_param_wdog_ifnum(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static const struct kernel_param_ops param_ops_wdog_ifnum = {
-	.set = set_param_wdog_ifnum,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_wdog_ifnum, set_param_wdog_ifnum,
+			       param_get_int);
 
 #define param_check_wdog_ifnum param_check_int
 
-static const struct kernel_param_ops param_ops_str = {
-	.set = set_param_str,
-	.get = get_param_str,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_str, set_param_str, get_param_str);
 
 module_param(ifnum_to_use, wdog_ifnum, 0644);
 MODULE_PARM_DESC(ifnum_to_use, "The interface number to use for the watchdog "

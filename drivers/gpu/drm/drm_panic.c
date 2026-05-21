@@ -847,10 +847,8 @@ static int drm_panic_type_get(char *buffer, const struct kernel_param *kp)
 			 drm_panic_type_map[drm_panic_type]);
 }
 
-static const struct kernel_param_ops drm_panic_ops = {
-	.set = drm_panic_type_set,
-	.get = drm_panic_type_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(drm_panic_ops, drm_panic_type_set,
+			       drm_panic_type_get);
 
 module_param_cb(panic_screen, &drm_panic_ops, NULL, 0644);
 MODULE_PARM_DESC(panic_screen,

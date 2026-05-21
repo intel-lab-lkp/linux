@@ -5905,10 +5905,9 @@ static int ublk_get_max_unprivileged_ublks(char *buf,
 	return sysfs_emit(buf, "%u\n", unprivileged_ublks_max);
 }
 
-static const struct kernel_param_ops ublk_max_unprivileged_ublks_ops = {
-	.set = ublk_set_max_unprivileged_ublks,
-	.get = ublk_get_max_unprivileged_ublks,
-};
+static DEFINE_KERNEL_PARAM_OPS(ublk_max_unprivileged_ublks_ops,
+			       ublk_set_max_unprivileged_ublks,
+			       ublk_get_max_unprivileged_ublks);
 
 module_param_cb(ublks_max, &ublk_max_unprivileged_ublks_ops,
 		&unprivileged_ublks_max, 0644);

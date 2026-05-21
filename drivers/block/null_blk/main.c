@@ -149,10 +149,8 @@ static int null_set_queue_mode(const char *str, const struct kernel_param *kp)
 	return null_param_store_val(str, &g_queue_mode, NULL_Q_BIO, NULL_Q_MQ);
 }
 
-static const struct kernel_param_ops null_queue_mode_param_ops = {
-	.set	= null_set_queue_mode,
-	.get	= param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(null_queue_mode_param_ops, null_set_queue_mode,
+			       param_get_int);
 
 device_param_cb(queue_mode, &null_queue_mode_param_ops, &g_queue_mode, 0444);
 MODULE_PARM_DESC(queue_mode, "Block interface to use (0=bio,1=rq,2=multiqueue)");
@@ -193,10 +191,8 @@ static int null_set_irqmode(const char *str, const struct kernel_param *kp)
 					NULL_IRQ_TIMER);
 }
 
-static const struct kernel_param_ops null_irqmode_param_ops = {
-	.set	= null_set_irqmode,
-	.get	= param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(null_irqmode_param_ops, null_set_irqmode,
+			       param_get_int);
 
 device_param_cb(irqmode, &null_irqmode_param_ops, &g_irqmode, 0444);
 MODULE_PARM_DESC(irqmode, "IRQ completion handler. 0-none, 1-softirq, 2-timer");

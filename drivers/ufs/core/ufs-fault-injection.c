@@ -11,10 +11,7 @@
 static int ufs_fault_get(char *buffer, const struct kernel_param *kp);
 static int ufs_fault_set(const char *val, const struct kernel_param *kp);
 
-static const struct kernel_param_ops ufs_fault_ops = {
-	.get = ufs_fault_get,
-	.set = ufs_fault_set,
-};
+static DEFINE_KERNEL_PARAM_OPS(ufs_fault_ops, ufs_fault_set, ufs_fault_get);
 
 enum { FAULT_INJ_STR_SIZE = 80 };
 

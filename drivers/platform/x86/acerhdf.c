@@ -762,10 +762,7 @@ static int interval_set_uint(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static const struct kernel_param_ops interval_ops = {
-	.set = interval_set_uint,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(interval_ops, interval_set_uint, param_get_uint);
 
 module_param_cb(interval, &interval_ops, &interval, 0000);
 MODULE_PARM_DESC(interval, "Polling interval of temperature check");

@@ -124,10 +124,7 @@ static int mitigations_get(char *buffer, const struct kernel_param *kp)
 	return count;
 }
 
-static const struct kernel_param_ops ops = {
-	.set = mitigations_set,
-	.get = mitigations_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(ops, mitigations_set, mitigations_get);
 
 module_param_cb_unsafe(mitigations, &ops, NULL, 0600);
 MODULE_PARM_DESC(mitigations,

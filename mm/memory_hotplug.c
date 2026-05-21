@@ -109,10 +109,8 @@ static int get_memmap_mode(char *buffer, const struct kernel_param *kp)
 	return sprintf(buffer, "%c\n", mode ? 'Y' : 'N');
 }
 
-static const struct kernel_param_ops memmap_mode_ops = {
-	.set = set_memmap_mode,
-	.get = get_memmap_mode,
-};
+static DEFINE_KERNEL_PARAM_OPS(memmap_mode_ops, set_memmap_mode,
+			       get_memmap_mode);
 module_param_cb(memmap_on_memory, &memmap_mode_ops, &memmap_mode, 0444);
 MODULE_PARM_DESC(memmap_on_memory, "Enable memmap on memory for memory hotplug\n"
 		 "With value \"force\" it could result in memory wastage due "
@@ -163,10 +161,8 @@ static int get_online_policy(char *buffer, const struct kernel_param *kp)
  *                 (auto_movable_ratio, auto_movable_numa_aware) allows for it
  */
 static int online_policy __read_mostly = ONLINE_POLICY_CONTIG_ZONES;
-static const struct kernel_param_ops online_policy_ops = {
-	.set = set_online_policy,
-	.get = get_online_policy,
-};
+static DEFINE_KERNEL_PARAM_OPS(online_policy_ops, set_online_policy,
+			       get_online_policy);
 module_param_cb(online_policy, &online_policy_ops, &online_policy, 0644);
 MODULE_PARM_DESC(online_policy,
 		"Set the online policy (\"contig-zones\", \"auto-movable\") "

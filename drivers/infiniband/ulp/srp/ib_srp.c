@@ -195,10 +195,7 @@ out:
 	return res;
 }
 
-static const struct kernel_param_ops srp_tmo_ops = {
-	.get = srp_tmo_get,
-	.set = srp_tmo_set,
-};
+static DEFINE_KERNEL_PARAM_OPS(srp_tmo_ops, srp_tmo_set, srp_tmo_get);
 
 static inline struct srp_target_port *host_to_target(struct Scsi_Host *host)
 {

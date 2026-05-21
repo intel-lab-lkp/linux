@@ -897,10 +897,8 @@ static int fw_cfg_cmdline_get(char *buf, const struct kernel_param *kp)
 	return 0;
 }
 
-static const struct kernel_param_ops fw_cfg_cmdline_param_ops = {
-	.set = fw_cfg_cmdline_set,
-	.get = fw_cfg_cmdline_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(fw_cfg_cmdline_param_ops, fw_cfg_cmdline_set,
+			       fw_cfg_cmdline_get);
 
 device_param_cb(ioport, &fw_cfg_cmdline_param_ops, NULL, S_IRUSR);
 device_param_cb(mmio, &fw_cfg_cmdline_param_ops, NULL, S_IRUSR);

@@ -297,11 +297,8 @@ void param_free_charp(void *arg)
 }
 EXPORT_SYMBOL(param_free_charp);
 
-const struct kernel_param_ops param_ops_charp = {
-	.set = param_set_charp,
-	.get = param_get_charp,
-	.free = param_free_charp,
-};
+DEFINE_KERNEL_PARAM_OPS_FREE(param_ops_charp, param_set_charp, param_get_charp,
+			     param_free_charp);
 EXPORT_SYMBOL(param_ops_charp);
 
 /* Actually could be a bool or an int, for historical reasons. */
@@ -322,11 +319,7 @@ int param_get_bool(char *buffer, const struct kernel_param *kp)
 }
 EXPORT_SYMBOL(param_get_bool);
 
-const struct kernel_param_ops param_ops_bool = {
-	.flags = KERNEL_PARAM_OPS_FL_NOARG,
-	.set = param_set_bool,
-	.get = param_get_bool,
-};
+DEFINE_KERNEL_PARAM_OPS_NOARG(param_ops_bool, param_set_bool, param_get_bool);
 EXPORT_SYMBOL(param_ops_bool);
 
 int param_set_bool_enable_only(const char *val, const struct kernel_param *kp)
@@ -353,11 +346,8 @@ int param_set_bool_enable_only(const char *val, const struct kernel_param *kp)
 }
 EXPORT_SYMBOL_GPL(param_set_bool_enable_only);
 
-const struct kernel_param_ops param_ops_bool_enable_only = {
-	.flags = KERNEL_PARAM_OPS_FL_NOARG,
-	.set = param_set_bool_enable_only,
-	.get = param_get_bool,
-};
+DEFINE_KERNEL_PARAM_OPS_NOARG(param_ops_bool_enable_only,
+			      param_set_bool_enable_only, param_get_bool);
 EXPORT_SYMBOL_GPL(param_ops_bool_enable_only);
 
 /* This one must be bool. */
@@ -381,10 +371,7 @@ int param_get_invbool(char *buffer, const struct kernel_param *kp)
 }
 EXPORT_SYMBOL(param_get_invbool);
 
-const struct kernel_param_ops param_ops_invbool = {
-	.set = param_set_invbool,
-	.get = param_get_invbool,
-};
+DEFINE_KERNEL_PARAM_OPS(param_ops_invbool, param_set_invbool, param_get_invbool);
 EXPORT_SYMBOL(param_ops_invbool);
 
 int param_set_bint(const char *val, const struct kernel_param *kp)
@@ -403,11 +390,7 @@ int param_set_bint(const char *val, const struct kernel_param *kp)
 }
 EXPORT_SYMBOL(param_set_bint);
 
-const struct kernel_param_ops param_ops_bint = {
-	.flags = KERNEL_PARAM_OPS_FL_NOARG,
-	.set = param_set_bint,
-	.get = param_get_int,
-};
+DEFINE_KERNEL_PARAM_OPS_NOARG(param_ops_bint, param_set_bint, param_get_int);
 EXPORT_SYMBOL(param_ops_bint);
 
 /* We break the rule and mangle the string. */
@@ -515,11 +498,8 @@ static void param_array_free(void *arg)
 			arr->ops->free(arr->elem + arr->elemsize * i);
 }
 
-const struct kernel_param_ops param_array_ops = {
-	.set = param_array_set,
-	.get = param_array_get,
-	.free = param_array_free,
-};
+DEFINE_KERNEL_PARAM_OPS_FREE(param_array_ops, param_array_set, param_array_get,
+			     param_array_free);
 EXPORT_SYMBOL(param_array_ops);
 
 int param_set_copystring(const char *val, const struct kernel_param *kp)
@@ -544,10 +524,8 @@ int param_get_string(char *buffer, const struct kernel_param *kp)
 }
 EXPORT_SYMBOL(param_get_string);
 
-const struct kernel_param_ops param_ops_string = {
-	.set = param_set_copystring,
-	.get = param_get_string,
-};
+DEFINE_KERNEL_PARAM_OPS(param_ops_string, param_set_copystring,
+			param_get_string);
 EXPORT_SYMBOL(param_ops_string);
 
 /* sysfs output in /sys/modules/XYZ/parameters/ */

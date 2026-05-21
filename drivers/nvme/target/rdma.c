@@ -147,10 +147,7 @@ module_param_named(use_srq, nvmet_rdma_use_srq, bool, 0444);
 MODULE_PARM_DESC(use_srq, "Use shared receive queue.");
 
 static int srq_size_set(const char *val, const struct kernel_param *kp);
-static const struct kernel_param_ops srq_size_ops = {
-	.set = srq_size_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(srq_size_ops, srq_size_set, param_get_int);
 
 static int nvmet_rdma_srq_size = 1024;
 module_param_cb(srq_size, &srq_size_ops, &nvmet_rdma_srq_size, 0644);

@@ -36,10 +36,8 @@ static int ubifs_default_version_set(const char *val, const struct kernel_param 
 	return param_set_int(val, kp);
 }
 
-static const struct kernel_param_ops ubifs_default_version_ops = {
-	.set = ubifs_default_version_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(ubifs_default_version_ops,
+			       ubifs_default_version_set, param_get_int);
 
 int ubifs_default_version = UBIFS_FORMAT_VERSION;
 module_param_cb(default_version, &ubifs_default_version_ops, &ubifs_default_version, 0600);

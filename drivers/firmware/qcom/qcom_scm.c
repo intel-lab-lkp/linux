@@ -2725,10 +2725,8 @@ static int set_download_mode(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static const struct kernel_param_ops download_mode_param_ops = {
-	.get = get_download_mode,
-	.set = set_download_mode,
-};
+static DEFINE_KERNEL_PARAM_OPS(download_mode_param_ops, set_download_mode,
+			       get_download_mode);
 
 module_param_cb(download_mode, &download_mode_param_ops, NULL, 0644);
 MODULE_PARM_DESC(download_mode, "download mode: off/0/N for no dump mode, full/on/1/Y for full dump mode, mini for minidump mode and full,mini for both full and minidump mode together are acceptable values");

@@ -102,10 +102,8 @@ static int panic_op_read_handler(char *buffer, const struct kernel_param *kp)
 	return sprintf(buffer, "%s\n", event_str);
 }
 
-static const struct kernel_param_ops panic_op_ops = {
-	.set = panic_op_write_handler,
-	.get = panic_op_read_handler
-};
+static DEFINE_KERNEL_PARAM_OPS(panic_op_ops, panic_op_write_handler,
+			       panic_op_read_handler);
 module_param_cb(panic_op, &panic_op_ops, NULL, 0600);
 MODULE_PARM_DESC(panic_op, "Sets if the IPMI driver will attempt to store panic information in the event log in the event of a panic.  Set to 'none' for no, 'event' for a single event, or 'string' for a generic event and the panic string in IPMI OEM events.");
 

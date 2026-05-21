@@ -128,10 +128,8 @@ static int uic_cmd_timeout_set(const char *val, const struct kernel_param *kp)
 				     UIC_CMD_TIMEOUT_MAX);
 }
 
-static const struct kernel_param_ops uic_cmd_timeout_ops = {
-	.set = uic_cmd_timeout_set,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(uic_cmd_timeout_ops, uic_cmd_timeout_set,
+			       param_get_uint);
 
 module_param_cb(uic_cmd_timeout, &uic_cmd_timeout_ops, &uic_cmd_timeout, 0644);
 MODULE_PARM_DESC(uic_cmd_timeout,
@@ -145,10 +143,8 @@ static int dev_cmd_timeout_set(const char *val, const struct kernel_param *kp)
 				     QUERY_REQ_TIMEOUT_MAX);
 }
 
-static const struct kernel_param_ops dev_cmd_timeout_ops = {
-	.set = dev_cmd_timeout_set,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(dev_cmd_timeout_ops, dev_cmd_timeout_set,
+			       param_get_uint);
 
 module_param_cb(dev_cmd_timeout, &dev_cmd_timeout_ops, &dev_cmd_timeout, 0644);
 MODULE_PARM_DESC(dev_cmd_timeout,

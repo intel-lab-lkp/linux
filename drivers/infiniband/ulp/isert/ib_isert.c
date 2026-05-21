@@ -30,10 +30,8 @@ MODULE_PARM_DESC(debug_level, "Enable debug tracing if > 0 (default:0)");
 
 static int isert_sg_tablesize_set(const char *val,
 				  const struct kernel_param *kp);
-static const struct kernel_param_ops sg_tablesize_ops = {
-	.set = isert_sg_tablesize_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(sg_tablesize_ops, isert_sg_tablesize_set,
+			       param_get_int);
 
 static int isert_sg_tablesize = ISCSI_ISER_MIN_SG_TABLESIZE;
 module_param_cb(sg_tablesize, &sg_tablesize_ops, &isert_sg_tablesize, 0644);

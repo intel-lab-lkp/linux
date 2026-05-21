@@ -1398,10 +1398,8 @@ static int vu_cmdline_get(char *buffer, const struct kernel_param *kp)
 	return strlen(buffer) + 1;
 }
 
-static const struct kernel_param_ops vu_cmdline_param_ops = {
-	.set = vu_cmdline_set,
-	.get = vu_cmdline_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(vu_cmdline_param_ops, vu_cmdline_set,
+			       vu_cmdline_get);
 
 device_param_cb(device, &vu_cmdline_param_ops, NULL, S_IRUSR);
 __uml_help(vu_cmdline_param_ops,

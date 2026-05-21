@@ -322,10 +322,8 @@ static int get_allow_writes(char *buf, const struct kernel_param *kp)
 	return sprintf(buf, "%s\n", res);
 }
 
-static const struct kernel_param_ops allow_writes_ops = {
-	.set = set_allow_writes,
-	.get = get_allow_writes
-};
+static DEFINE_KERNEL_PARAM_OPS(allow_writes_ops, set_allow_writes,
+			       get_allow_writes);
 
 module_param_cb(allow_writes, &allow_writes_ops, NULL, 0600);
 

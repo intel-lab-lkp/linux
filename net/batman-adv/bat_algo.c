@@ -134,10 +134,8 @@ static int batadv_param_set_ra(const char *val, const struct kernel_param *kp)
 	return param_set_copystring(algo_name, kp);
 }
 
-static const struct kernel_param_ops batadv_param_ops_ra = {
-	.set = batadv_param_set_ra,
-	.get = param_get_string,
-};
+static DEFINE_KERNEL_PARAM_OPS(batadv_param_ops_ra, batadv_param_set_ra,
+			       param_get_string);
 
 static struct kparam_string batadv_param_string_ra = {
 	.maxlen = sizeof(batadv_routing_algo),

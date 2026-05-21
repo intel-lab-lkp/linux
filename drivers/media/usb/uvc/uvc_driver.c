@@ -2488,10 +2488,8 @@ static int param_set_nodrop(const char *val, const struct kernel_param *kp)
 	return param_set_bool(val, kp);
 }
 
-static const struct kernel_param_ops param_ops_nodrop = {
-	.set = param_set_nodrop,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_nodrop, param_set_nodrop,
+			       param_get_uint);
 
 param_check_uint(nodrop, &uvc_no_drop_param);
 module_param_cb(nodrop, &param_ops_nodrop, &uvc_no_drop_param, 0644);

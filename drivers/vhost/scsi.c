@@ -87,10 +87,9 @@ static int vhost_scsi_get_inline_sg_cnt(char *buf,
 	return sprintf(buf, "%u\n", vhost_scsi_inline_sg_cnt);
 }
 
-static const struct kernel_param_ops vhost_scsi_inline_sg_cnt_op = {
-	.get = vhost_scsi_get_inline_sg_cnt,
-	.set = vhost_scsi_set_inline_sg_cnt,
-};
+static DEFINE_KERNEL_PARAM_OPS(vhost_scsi_inline_sg_cnt_op,
+			       vhost_scsi_set_inline_sg_cnt,
+			       vhost_scsi_get_inline_sg_cnt);
 
 module_param_cb(inline_sg_cnt, &vhost_scsi_inline_sg_cnt_op, NULL, 0644);
 MODULE_PARM_DESC(inline_sg_cnt, "Set the number of scatterlist entries to pre-allocate. The default is 2048.");

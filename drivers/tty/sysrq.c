@@ -1074,10 +1074,8 @@ static int sysrq_reset_seq_param_set(const char *buffer,
 	return 0;
 }
 
-static const struct kernel_param_ops param_ops_sysrq_reset_seq = {
-	.get	= param_get_ushort,
-	.set	= sysrq_reset_seq_param_set,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_sysrq_reset_seq,
+			       sysrq_reset_seq_param_set, param_get_ushort);
 
 #define param_check_sysrq_reset_seq(name, p)	\
 	__param_check(name, p, unsigned short)

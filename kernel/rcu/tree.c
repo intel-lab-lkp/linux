@@ -498,15 +498,11 @@ static int param_set_next_fqs_jiffies(const char *val, const struct kernel_param
 	return ret;
 }
 
-static const struct kernel_param_ops first_fqs_jiffies_ops = {
-	.set = param_set_first_fqs_jiffies,
-	.get = param_get_ulong,
-};
+static DEFINE_KERNEL_PARAM_OPS(first_fqs_jiffies_ops,
+			       param_set_first_fqs_jiffies, param_get_ulong);
 
-static const struct kernel_param_ops next_fqs_jiffies_ops = {
-	.set = param_set_next_fqs_jiffies,
-	.get = param_get_ulong,
-};
+static DEFINE_KERNEL_PARAM_OPS(next_fqs_jiffies_ops, param_set_next_fqs_jiffies,
+			       param_get_ulong);
 
 module_param_cb(jiffies_till_first_fqs, &first_fqs_jiffies_ops, &jiffies_till_first_fqs, 0644);
 module_param_cb(jiffies_till_next_fqs, &next_fqs_jiffies_ops, &jiffies_till_next_fqs, 0644);
@@ -3979,10 +3975,8 @@ static int param_get_do_rcu_barrier(char *buffer, const struct kernel_param *kp)
 	return sprintf(buffer, "%d\n", atomic_read((atomic_t *)kp->arg));
 }
 
-static const struct kernel_param_ops do_rcu_barrier_ops = {
-	.set = param_set_do_rcu_barrier,
-	.get = param_get_do_rcu_barrier,
-};
+static DEFINE_KERNEL_PARAM_OPS(do_rcu_barrier_ops, param_set_do_rcu_barrier,
+			       param_get_do_rcu_barrier);
 static atomic_t do_rcu_barrier;
 module_param_cb(do_rcu_barrier, &do_rcu_barrier_ops, &do_rcu_barrier, 0644);
 

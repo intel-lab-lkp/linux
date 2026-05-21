@@ -3710,10 +3710,8 @@ static int param_set_portnr(const char *val, const struct kernel_param *kp)
 			RPC_MAX_RESVPORT);
 }
 
-static const struct kernel_param_ops param_ops_portnr = {
-	.set = param_set_portnr,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_portnr, param_set_portnr,
+			       param_get_uint);
 
 #define param_check_portnr(name, p) \
 	__param_check(name, p, unsigned int);
@@ -3729,10 +3727,8 @@ static int param_set_slot_table_size(const char *val,
 			RPC_MAX_SLOT_TABLE);
 }
 
-static const struct kernel_param_ops param_ops_slot_table_size = {
-	.set = param_set_slot_table_size,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_slot_table_size,
+			       param_set_slot_table_size, param_get_uint);
 
 #define param_check_slot_table_size(name, p) \
 	__param_check(name, p, unsigned int);
@@ -3745,10 +3741,8 @@ static int param_set_max_slot_table_size(const char *val,
 			RPC_MAX_SLOT_TABLE_LIMIT);
 }
 
-static const struct kernel_param_ops param_ops_max_slot_table_size = {
-	.set = param_set_max_slot_table_size,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_max_slot_table_size,
+			       param_set_max_slot_table_size, param_get_uint);
 
 #define param_check_max_slot_table_size(name, p) \
 	__param_check(name, p, unsigned int);

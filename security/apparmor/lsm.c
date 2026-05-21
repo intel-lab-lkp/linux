@@ -1767,38 +1767,30 @@ static struct security_hook_list apparmor_hooks[] __ro_after_init = {
 static int param_set_aabool(const char *val, const struct kernel_param *kp);
 static int param_get_aabool(char *buffer, const struct kernel_param *kp);
 #define param_check_aabool param_check_bool
-static const struct kernel_param_ops param_ops_aabool = {
-	.flags = KERNEL_PARAM_OPS_FL_NOARG,
-	.set = param_set_aabool,
-	.get = param_get_aabool
-};
+static DEFINE_KERNEL_PARAM_OPS_NOARG(param_ops_aabool, param_set_aabool,
+				     param_get_aabool);
 
 static int param_set_aauint(const char *val, const struct kernel_param *kp);
 static int param_get_aauint(char *buffer, const struct kernel_param *kp);
 #define param_check_aauint param_check_uint
-static const struct kernel_param_ops param_ops_aauint = {
-	.set = param_set_aauint,
-	.get = param_get_aauint
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_aauint, param_set_aauint,
+			       param_get_aauint);
 
 static int param_set_aacompressionlevel(const char *val,
 					const struct kernel_param *kp);
 static int param_get_aacompressionlevel(char *buffer,
 					const struct kernel_param *kp);
 #define param_check_aacompressionlevel param_check_int
-static const struct kernel_param_ops param_ops_aacompressionlevel = {
-	.set = param_set_aacompressionlevel,
-	.get = param_get_aacompressionlevel
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_aacompressionlevel,
+			       param_set_aacompressionlevel,
+			       param_get_aacompressionlevel);
 
 static int param_set_aalockpolicy(const char *val, const struct kernel_param *kp);
 static int param_get_aalockpolicy(char *buffer, const struct kernel_param *kp);
 #define param_check_aalockpolicy param_check_bool
-static const struct kernel_param_ops param_ops_aalockpolicy = {
-	.flags = KERNEL_PARAM_OPS_FL_NOARG,
-	.set = param_set_aalockpolicy,
-	.get = param_get_aalockpolicy
-};
+static DEFINE_KERNEL_PARAM_OPS_NOARG(param_ops_aalockpolicy,
+				     param_set_aalockpolicy,
+				     param_get_aalockpolicy);
 
 static int param_set_debug(const char *val, const struct kernel_param *kp);
 static int param_get_debug(char *buffer, const struct kernel_param *kp);
@@ -1879,10 +1871,8 @@ module_param_named(paranoid_load, aa_g_paranoid_load, aabool, S_IRUGO);
 static int param_get_aaintbool(char *buffer, const struct kernel_param *kp);
 static int param_set_aaintbool(const char *val, const struct kernel_param *kp);
 #define param_check_aaintbool param_check_int
-static const struct kernel_param_ops param_ops_aaintbool = {
-	.set = param_set_aaintbool,
-	.get = param_get_aaintbool
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_aaintbool, param_set_aaintbool,
+			       param_get_aaintbool);
 /* Boot time disable flag */
 static int apparmor_enabled __ro_after_init = 1;
 module_param_named(enabled, apparmor_enabled, aaintbool, 0444);

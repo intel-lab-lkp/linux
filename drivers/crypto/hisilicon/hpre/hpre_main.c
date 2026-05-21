@@ -420,10 +420,8 @@ static int hpre_cluster_regs_show(struct seq_file *s, void *unused)
 
 DEFINE_SHOW_ATTRIBUTE(hpre_cluster_regs);
 
-static const struct kernel_param_ops hpre_uacce_mode_ops = {
-	.set = uacce_mode_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(hpre_uacce_mode_ops, uacce_mode_set,
+			       param_get_int);
 
 /*
  * uacce_mode = 0 means hpre only register to crypto,
@@ -441,19 +439,13 @@ static int pf_q_num_set(const char *val, const struct kernel_param *kp)
 	return hisi_qm_q_num_set(val, kp, PCI_DEVICE_ID_HUAWEI_HPRE_PF);
 }
 
-static const struct kernel_param_ops hpre_pf_q_num_ops = {
-	.set = pf_q_num_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(hpre_pf_q_num_ops, pf_q_num_set, param_get_int);
 
 static u32 pf_q_num = HPRE_PF_DEF_Q_NUM;
 module_param_cb(pf_q_num, &hpre_pf_q_num_ops, &pf_q_num, 0444);
 MODULE_PARM_DESC(pf_q_num, "Number of queues in PF of CS(2-1024)");
 
-static const struct kernel_param_ops vfs_num_ops = {
-	.set = vfs_num_set,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(vfs_num_ops, vfs_num_set, param_get_int);
 
 static u32 vfs_num;
 module_param_cb(vfs_num, &vfs_num_ops, &vfs_num, 0444);

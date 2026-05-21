@@ -30,10 +30,8 @@ static int multipath_param_set(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static const struct kernel_param_ops multipath_param_ops = {
-	.set = multipath_param_set,
-	.get = param_get_bool,
-};
+static DEFINE_KERNEL_PARAM_OPS(multipath_param_ops, multipath_param_set,
+			       param_get_bool);
 
 module_param_cb(multipath, &multipath_param_ops, &multipath, 0444);
 MODULE_PARM_DESC(multipath,
@@ -55,10 +53,8 @@ static int multipath_always_on_set(const char *val,
 	return 0;
 }
 
-static const struct kernel_param_ops multipath_always_on_ops = {
-	.set = multipath_always_on_set,
-	.get = param_get_bool,
-};
+static DEFINE_KERNEL_PARAM_OPS(multipath_always_on_ops, multipath_always_on_set,
+			       param_get_bool);
 
 module_param_cb(multipath_always_on, &multipath_always_on_ops,
 		&multipath_always_on, 0444);

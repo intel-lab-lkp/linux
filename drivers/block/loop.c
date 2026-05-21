@@ -1806,10 +1806,8 @@ static int max_loop_param_set_int(const char *val,
 	return 0;
 }
 
-static const struct kernel_param_ops max_loop_param_ops = {
-	.set = max_loop_param_set_int,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(max_loop_param_ops, max_loop_param_set_int,
+			       param_get_int);
 
 module_param_cb(max_loop, &max_loop_param_ops, &max_loop, 0444);
 MODULE_PARM_DESC(max_loop, "Maximum number of loop devices");
@@ -1836,10 +1834,8 @@ static int loop_set_hw_queue_depth(const char *s, const struct kernel_param *p)
 	return 0;
 }
 
-static const struct kernel_param_ops loop_hw_qdepth_param_ops = {
-	.set	= loop_set_hw_queue_depth,
-	.get	= param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(loop_hw_qdepth_param_ops,
+			       loop_set_hw_queue_depth, param_get_int);
 
 device_param_cb(hw_queue_depth, &loop_hw_qdepth_param_ops, &hw_queue_depth, 0444);
 MODULE_PARM_DESC(hw_queue_depth, "Queue depth for each hardware queue. Default: " __stringify(LOOP_DEFAULT_HW_Q_DEPTH));

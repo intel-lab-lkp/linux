@@ -160,10 +160,8 @@ unlock:
 	return 0;
 }
 
-static const struct kernel_param_ops quirks_param_ops = {
-	.set = quirks_param_set,
-	.get = param_get_string,
-};
+static DEFINE_KERNEL_PARAM_OPS(quirks_param_ops, quirks_param_set,
+			       param_get_string);
 
 static struct kparam_string quirks_param_string = {
 	.maxlen = sizeof(quirks_param),

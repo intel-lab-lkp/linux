@@ -23,10 +23,7 @@ static int txeq_gear_set(const char *val, const struct kernel_param *kp)
 	return param_set_uint_minmax(val, kp, UFS_HS_G1, UFS_HS_GEAR_MAX);
 }
 
-static const struct kernel_param_ops txeq_gear_ops = {
-	.set = txeq_gear_set,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(txeq_gear_ops, txeq_gear_set, param_get_uint);
 
 static unsigned int adaptive_txeq_gear = UFS_HS_G6;
 module_param_cb(adaptive_txeq_gear, &txeq_gear_ops, &adaptive_txeq_gear, 0644);

@@ -123,10 +123,8 @@ static int param_set_local64(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static const struct kernel_param_ops param_ops_local64 = {
-	.get = param_get_local64,
-	.set = param_set_local64,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_local64, param_set_local64,
+			       param_get_local64);
 #define param_check_local64(name, p) __param_check(name, p, local64_t)
 
 static local64_t uv_nmi_count;
@@ -232,10 +230,8 @@ static int param_set_action(const char *val, const struct kernel_param *kp)
 	return -EINVAL;
 }
 
-static const struct kernel_param_ops param_ops_action = {
-	.get = param_get_action,
-	.set = param_set_action,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_action, param_set_action,
+			       param_get_action);
 #define param_check_action(name, p) __param_check(name, p, enum action_t)
 
 module_param_named(action, uv_nmi_action, action, 0644);

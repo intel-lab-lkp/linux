@@ -71,10 +71,8 @@ pvr_fw_trace_init_mask_set(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-const struct kernel_param_ops pvr_fw_trace_init_mask_ops = {
-	.set = pvr_fw_trace_init_mask_set,
-	.get = param_get_hexint,
-};
+DEFINE_KERNEL_PARAM_OPS(pvr_fw_trace_init_mask_ops, pvr_fw_trace_init_mask_set,
+			param_get_hexint);
 
 param_check_hexint(init_fw_trace_mask, &pvr_fw_trace_init_mask);
 module_param_cb(init_fw_trace_mask, &pvr_fw_trace_init_mask_ops, &pvr_fw_trace_init_mask, 0600);

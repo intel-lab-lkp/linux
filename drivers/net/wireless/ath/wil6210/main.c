@@ -62,10 +62,7 @@ static int mtu_max_set(const char *val, const struct kernel_param *kp)
 	return ret;
 }
 
-static const struct kernel_param_ops mtu_max_ops = {
-	.set = mtu_max_set,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(mtu_max_ops, mtu_max_set, param_get_uint);
 
 module_param_cb(mtu_max, &mtu_max_ops, &mtu_max, 0444);
 MODULE_PARM_DESC(mtu_max, " Max MTU value.");
@@ -91,10 +88,7 @@ static int ring_order_set(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static const struct kernel_param_ops ring_order_ops = {
-	.set = ring_order_set,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(ring_order_ops, ring_order_set, param_get_uint);
 
 module_param_cb(rx_ring_order, &ring_order_ops, &rx_ring_order, 0444);
 MODULE_PARM_DESC(rx_ring_order, " Rx ring order; size = 1 << order");

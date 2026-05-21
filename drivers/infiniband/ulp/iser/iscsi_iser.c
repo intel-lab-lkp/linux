@@ -90,10 +90,8 @@ module_param_named(debug_level, iser_debug_level, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug_level, "Enable debug tracing if > 0 (default:disabled)");
 
 static int iscsi_iser_set(const char *val, const struct kernel_param *kp);
-static const struct kernel_param_ops iscsi_iser_size_ops = {
-	.set = iscsi_iser_set,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(iscsi_iser_size_ops, iscsi_iser_set,
+			       param_get_uint);
 
 static unsigned int iscsi_max_lun = 512;
 module_param_cb(max_lun, &iscsi_iser_size_ops, &iscsi_max_lun, S_IRUGO);

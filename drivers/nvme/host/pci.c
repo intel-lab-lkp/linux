@@ -100,10 +100,8 @@ MODULE_PARM_DESC(sgl_threshold,
 #define NVME_PCI_MIN_QUEUE_SIZE 2
 #define NVME_PCI_MAX_QUEUE_SIZE 4095
 static int io_queue_depth_set(const char *val, const struct kernel_param *kp);
-static const struct kernel_param_ops io_queue_depth_ops = {
-	.set = io_queue_depth_set,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(io_queue_depth_ops, io_queue_depth_set,
+			       param_get_uint);
 
 static unsigned int io_queue_depth = 1024;
 module_param_cb(io_queue_depth, &io_queue_depth_ops, &io_queue_depth, 0644);
@@ -232,10 +230,8 @@ out_free_val:
 }
 
 static char quirks_param[128];
-static const struct kernel_param_ops quirks_param_ops = {
-	.set = quirks_param_set,
-	.get = param_get_string,
-};
+static DEFINE_KERNEL_PARAM_OPS(quirks_param_ops, quirks_param_set,
+			       param_get_string);
 
 static struct kparam_string quirks_param_string = {
 	.maxlen = sizeof(quirks_param),
@@ -257,10 +253,8 @@ static int io_queue_count_set(const char *val, const struct kernel_param *kp)
 	return param_set_uint(val, kp);
 }
 
-static const struct kernel_param_ops io_queue_count_ops = {
-	.set = io_queue_count_set,
-	.get = param_get_uint,
-};
+static DEFINE_KERNEL_PARAM_OPS(io_queue_count_ops, io_queue_count_set,
+			       param_get_uint);
 
 static unsigned int write_queues;
 module_param_cb(write_queues, &io_queue_count_ops, &write_queues, 0644);

@@ -23,15 +23,8 @@ static int page_order_update_notify(const char *val, const struct kernel_param *
 	return  param_set_uint_minmax(val, kp, 0, MAX_PAGE_ORDER);
 }
 
-static const struct kernel_param_ops page_reporting_param_ops = {
-	.set = &page_order_update_notify,
-	/*
-	 * For the get op, use param_get_int instead of param_get_uint.
-	 * This is to make sure that when unset the initialized value of
-	 * -1 is shown correctly
-	 */
-	.get = &param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(page_reporting_param_ops,
+			       &page_order_update_notify, &param_get_int);
 
 module_param_cb(page_reporting_order, &page_reporting_param_ops,
 			&page_reporting_order, 0644);

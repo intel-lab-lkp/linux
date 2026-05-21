@@ -307,10 +307,8 @@ static int damon_reclaim_addr_unit_store(const char *val,
 	return 0;
 }
 
-static const struct kernel_param_ops addr_unit_param_ops = {
-	.set = damon_reclaim_addr_unit_store,
-	.get = param_get_ulong,
-};
+static DEFINE_KERNEL_PARAM_OPS(addr_unit_param_ops,
+			       damon_reclaim_addr_unit_store, param_get_ulong);
 
 module_param_cb(addr_unit, &addr_unit_param_ops, &addr_unit, 0600);
 MODULE_PARM_DESC(addr_unit,
@@ -348,10 +346,8 @@ static int damon_reclaim_enabled_load(char *buffer,
 	return sprintf(buffer, "%c\n", damon_reclaim_enabled() ? 'Y' : 'N');
 }
 
-static const struct kernel_param_ops enabled_param_ops = {
-	.set = damon_reclaim_enabled_store,
-	.get = damon_reclaim_enabled_load,
-};
+static DEFINE_KERNEL_PARAM_OPS(enabled_param_ops, damon_reclaim_enabled_store,
+			       damon_reclaim_enabled_load);
 
 module_param_cb(enabled, &enabled_param_ops, &enabled, 0600);
 MODULE_PARM_DESC(enabled,
@@ -380,10 +376,9 @@ static int damon_reclaim_kdamond_pid_load(char *buffer,
 	return sprintf(buffer, "%d\n", kdamond_pid);
 }
 
-static const struct kernel_param_ops kdamond_pid_param_ops = {
-	.set = damon_reclaim_kdamond_pid_store,
-	.get = damon_reclaim_kdamond_pid_load,
-};
+static DEFINE_KERNEL_PARAM_OPS(kdamond_pid_param_ops,
+			       damon_reclaim_kdamond_pid_store,
+			       damon_reclaim_kdamond_pid_load);
 
 /*
  * PID of the DAMON thread

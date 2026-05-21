@@ -103,10 +103,7 @@ static int param_set_axis(const char *val, const struct kernel_param *kp)
 	return ret;
 }
 
-static const struct kernel_param_ops param_ops_axis = {
-	.set = param_set_axis,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_axis, param_set_axis, param_get_int);
 
 #define param_check_axis(name, p) param_check_int(name, p)
 

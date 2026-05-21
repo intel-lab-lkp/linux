@@ -1290,10 +1290,8 @@ static int param_get_vmidfilter(char *buffer, const struct kernel_param *kp)
 
 #define param_check_vmidfilter(name, p) __param_check(name, p, void)
 
-static const struct kernel_param_ops param_ops_vmidfilter = {
-	.set = param_set_vmidfilter,
-	.get = param_get_vmidfilter,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_vmidfilter, param_set_vmidfilter,
+			       param_get_vmidfilter);
 
 /**
  * hvc_iucv_init() - z/VM IUCV HVC device driver initialization

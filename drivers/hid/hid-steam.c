@@ -1840,10 +1840,8 @@ static int steam_param_set_lizard_mode(const char *val,
 	return 0;
 }
 
-static const struct kernel_param_ops steam_lizard_mode_ops = {
-	.set	= steam_param_set_lizard_mode,
-	.get	= param_get_bool,
-};
+static DEFINE_KERNEL_PARAM_OPS(steam_lizard_mode_ops,
+			       steam_param_set_lizard_mode, param_get_bool);
 
 module_param_cb(lizard_mode, &steam_lizard_mode_ops, &lizard_mode, 0644);
 MODULE_PARM_DESC(lizard_mode,

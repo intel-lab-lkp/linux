@@ -118,11 +118,8 @@ static int param_set_quirkp(const char *val,
 	return param_set_charp(val, kp);
 }
 
-static const struct kernel_param_ops param_ops_quirkp = {
-	.set = param_set_quirkp,
-	.get = param_get_charp,
-	.free = param_free_charp,
-};
+static DEFINE_KERNEL_PARAM_OPS_FREE(param_ops_quirkp, param_set_quirkp,
+				    param_get_charp, param_free_charp);
 
 #define param_check_quirkp param_check_charp
 

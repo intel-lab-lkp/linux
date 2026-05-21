@@ -649,60 +649,47 @@ static int param_set_battery_extension(const char *key,
 
 #define param_get_battery_extension param_get_bool
 
-static const struct kernel_param_ops param_ops_ac_online = {
-	.set = param_set_ac_online,
-	.get = param_get_ac_online,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_ac_online, param_set_ac_online,
+			       param_get_ac_online);
 
-static const struct kernel_param_ops param_ops_usb_online = {
-	.set = param_set_usb_online,
-	.get = param_get_usb_online,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_usb_online, param_set_usb_online,
+			       param_get_usb_online);
 
-static const struct kernel_param_ops param_ops_battery_status = {
-	.set = param_set_battery_status,
-	.get = param_get_battery_status,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_battery_status,
+			       param_set_battery_status,
+			       param_get_battery_status);
 
-static const struct kernel_param_ops param_ops_battery_present = {
-	.set = param_set_battery_present,
-	.get = param_get_battery_present,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_battery_present,
+			       param_set_battery_present,
+			       param_get_battery_present);
 
-static const struct kernel_param_ops param_ops_battery_technology = {
-	.set = param_set_battery_technology,
-	.get = param_get_battery_technology,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_battery_technology,
+			       param_set_battery_technology,
+			       param_get_battery_technology);
 
-static const struct kernel_param_ops param_ops_battery_health = {
-	.set = param_set_battery_health,
-	.get = param_get_battery_health,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_battery_health,
+			       param_set_battery_health,
+			       param_get_battery_health);
 
-static const struct kernel_param_ops param_ops_battery_capacity = {
-	.set = param_set_battery_capacity,
-	.get = param_get_battery_capacity,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_battery_capacity,
+			       param_set_battery_capacity,
+			       param_get_battery_capacity);
 
-static const struct kernel_param_ops param_ops_battery_voltage = {
-	.set = param_set_battery_voltage,
-	.get = param_get_battery_voltage,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_battery_voltage,
+			       param_set_battery_voltage,
+			       param_get_battery_voltage);
 
-static const struct kernel_param_ops param_ops_battery_charge_counter = {
-	.set = param_set_battery_charge_counter,
-	.get = param_get_battery_charge_counter,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_battery_charge_counter,
+			       param_set_battery_charge_counter,
+			       param_get_battery_charge_counter);
 
-static const struct kernel_param_ops param_ops_battery_current = {
-	.set = param_set_battery_current,
-	.get = param_get_battery_current,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_battery_current,
+			       param_set_battery_current,
+			       param_get_battery_current);
 
-static const struct kernel_param_ops param_ops_battery_extension = {
-	.set = param_set_battery_extension,
-	.get = param_get_battery_extension,
-};
+static DEFINE_KERNEL_PARAM_OPS(param_ops_battery_extension,
+			       param_set_battery_extension,
+			       param_get_battery_extension);
 
 #define param_check_ac_online(name, p) __param_check(name, p, void);
 #define param_check_usb_online(name, p) __param_check(name, p, void);

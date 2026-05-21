@@ -1284,10 +1284,8 @@ static int set_decoding_via_mca(const char *buf, const struct kernel_param *kp)
 	return ret;
 }
 
-static const struct kernel_param_ops decoding_via_mca_param_ops = {
-	.set = set_decoding_via_mca,
-	.get = param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(decoding_via_mca_param_ops, set_decoding_via_mca,
+			       param_get_int);
 
 module_param_cb(decoding_via_mca, &decoding_via_mca_param_ops, &decoding_via_mca, 0644);
 MODULE_PARM_DESC(decoding_via_mca, "decoding_via_mca: 0=off(default), 1=enable");

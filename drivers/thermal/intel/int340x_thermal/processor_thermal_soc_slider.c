@@ -83,10 +83,8 @@ static int slider_def_balance_get(char *buf, const struct kernel_param *kp)
 	return sysfs_emit(buf, "%02x\n", slider_values[SOC_POWER_SLIDER_BALANCE]);
 }
 
-static const struct kernel_param_ops slider_def_balance_ops = {
-	.set = slider_def_balance_set,
-	.get = slider_def_balance_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(slider_def_balance_ops, slider_def_balance_set,
+			       slider_def_balance_get);
 
 module_param_cb(slider_balance, &slider_def_balance_ops, NULL, 0644);
 MODULE_PARM_DESC(slider_balance, "Set slider default value for balance");
@@ -117,10 +115,8 @@ static int slider_def_offset_get(char *buf, const struct kernel_param *kp)
 	return sysfs_emit(buf, "%02x\n", slider_offset);
 }
 
-static const struct kernel_param_ops slider_offset_ops = {
-	.set = slider_def_offset_set,
-	.get = slider_def_offset_get,
-};
+static DEFINE_KERNEL_PARAM_OPS(slider_offset_ops, slider_def_offset_set,
+			       slider_def_offset_get);
 
 /*
  * To enhance power efficiency dynamically, the firmware can optionally

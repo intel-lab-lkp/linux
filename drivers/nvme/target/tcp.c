@@ -46,10 +46,7 @@ static int set_params(const char *str, const struct kernel_param *kp)
 	return param_store_val(str, kp->arg, 0, INT_MAX);
 }
 
-static const struct kernel_param_ops set_param_ops = {
-	.set	= set_params,
-	.get	= param_get_int,
-};
+static DEFINE_KERNEL_PARAM_OPS(set_param_ops, set_params, param_get_int);
 
 /* Define the socket priority to use for connections were it is desirable
  * that the NIC consider performing optimized packet processing or filtering.

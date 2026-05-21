@@ -92,10 +92,9 @@ static int param_get_sample_interval(char *buffer, const struct kernel_param *kp
 	return param_get_ulong(buffer, kp);
 }
 
-static const struct kernel_param_ops sample_interval_param_ops = {
-	.set = param_set_sample_interval,
-	.get = param_get_sample_interval,
-};
+static DEFINE_KERNEL_PARAM_OPS(sample_interval_param_ops,
+			       param_set_sample_interval,
+			       param_get_sample_interval);
 module_param_cb(sample_interval, &sample_interval_param_ops, &kfence_sample_interval, 0600);
 
 /* Pool usage% threshold when currently covered allocations are skipped. */
