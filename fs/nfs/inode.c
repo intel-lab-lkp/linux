@@ -1643,8 +1643,11 @@ static void nfs_wcc_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 			&& (fattr->valid & NFS_ATTR_FATTR_SIZE)
 			&& i_size_read(inode) == nfs_size_to_loff_t(fattr->pre_size)
 			&& !nfs_have_writebacks(inode)) {
-		trace_nfs_size_wcc(inode, fattr->size);
-		i_size_write(inode, nfs_size_to_loff_t(fattr->size));
+		if ((!nfs_have_write_delegation(inode)) ||
+			(NFS_I(inode)->cache_validity & NFS_INO_INVALID_SIZE)) {
+			trace_nfs_size_wcc(inode, fattr->size);
+			i_size_write(inode, nfs_size_to_loff_t(fattr->size));
+		}
 	}
 }
 
