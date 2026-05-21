@@ -1586,6 +1586,8 @@ static bool kvm_xen_hcall_sched_op(struct kvm_vcpu *vcpu, bool longmode,
 			return true;
 		fallthrough;
 	case SCHEDOP_yield:
+		trace_kvm_sched_event(vcpu->vcpu_id, KVM_SCHED_EVT_PV_YIELD,
+				      KVM_SCHED_INVALID_TARGET);
 		kvm_vcpu_on_spin(vcpu, true);
 		*r = 0;
 		return true;

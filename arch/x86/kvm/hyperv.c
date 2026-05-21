@@ -2593,6 +2593,8 @@ int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 			ret = HV_STATUS_INVALID_HYPERCALL_INPUT;
 			break;
 		}
+		trace_kvm_sched_event(vcpu->vcpu_id, KVM_SCHED_EVT_PV_YIELD,
+				      KVM_SCHED_INVALID_TARGET);
 		kvm_vcpu_on_spin(vcpu, true);
 		break;
 	case HVCALL_SIGNAL_EVENT:

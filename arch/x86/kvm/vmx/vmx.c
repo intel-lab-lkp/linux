@@ -6104,6 +6104,8 @@ static int handle_pause(struct kvm_vcpu *vcpu)
 	 * never set PAUSE_EXITING and just set PLE if supported,
 	 * so the vcpu must be CPL=0 if it gets a PAUSE exit.
 	 */
+	trace_kvm_sched_event(vcpu->vcpu_id, KVM_SCHED_EVT_PLE,
+			      KVM_SCHED_INVALID_TARGET);
 	kvm_vcpu_on_spin(vcpu, true);
 	return kvm_skip_emulated_instruction(vcpu);
 }

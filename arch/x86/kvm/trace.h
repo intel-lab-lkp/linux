@@ -11,6 +11,17 @@
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM kvm
 
+#ifndef _KVM_SCHED_EVENT_TYPES
+#define _KVM_SCHED_EVENT_TYPES
+enum kvm_sched_event_type {
+	KVM_SCHED_EVT_PLE,
+	KVM_SCHED_EVT_HLT,
+	KVM_SCHED_EVT_PV_YIELD,
+};
+
+#define KVM_SCHED_INVALID_TARGET	(-1LL)
+#endif
+
 #ifdef CREATE_TRACE_POINTS
 #define tracing_kvm_rip_read(vcpu) ({					\
 	typeof(vcpu) __vcpu = vcpu;					\
@@ -1963,6 +1974,41 @@ TRACE_EVENT(kvm_rmp_fault,
 	TP_printk("vcpu %u gpa %016llx pfn 0x%llx error_code 0x%llx rmp_level %d psmash_ret %d",
 		  __entry->vcpu_id, __entry->gpa, __entry->pfn,
 		  __entry->error_code, __entry->rmp_level, __entry->psmash_ret)
+);
+
+TRACE_DEFINE_ENUM(KVM_SCHED_EVT_PLE);
+TRACE_DEFINE_ENUM(KVM_SCHED_EVT_HLT);
+TRACE_DEFINE_ENUM(KVM_SCHED_EVT_PV_YIELD);
+
+/*
+ * Trace when a vCPU reaches selected wait/yield handling paths.  This is
+ * informational only and does not report the outcome of scheduling decisions.
+ * @target is the guest supplied value when one exists, and does not imply that
+ * the target exists, is runnable, or that a directed yield succeeded.
+ */
+TRACE_EVENT(kvm_sched_event,
+	TP_PROTO(unsigned int vcpu_id, int event, s64 target),
+	TP_ARGS(vcpu_id, event, target),
+
+	TP_STRUCT__entry(
+		__field(unsigned int,	vcpu_id)
+		__field(int,		event)
+		__field(s64,		target)
+	),
+
+	TP_fast_assign(
+		__entry->vcpu_id = vcpu_id;
+		__entry->event = event;
+		__entry->target = target;
+	),
+
+	TP_printk("vcpu %u event %s target %lld",
+		  __entry->vcpu_id,
+		  __print_symbolic(__entry->event,
+				   { KVM_SCHED_EVT_PLE, "ple" },
+				   { KVM_SCHED_EVT_HLT, "hlt" },
+				   { KVM_SCHED_EVT_PV_YIELD, "pv_yield" }),
+		  __entry->target)
 );
 
 #endif /* _TRACE_KVM_H */

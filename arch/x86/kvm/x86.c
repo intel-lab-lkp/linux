@@ -10482,6 +10482,7 @@ int ____kvm_emulate_hypercall(struct kvm_vcpu *vcpu, int cpl,
 		if (!guest_pv_has(vcpu, KVM_FEATURE_PV_SCHED_YIELD))
 			break;
 
+		trace_kvm_sched_event(vcpu->vcpu_id, KVM_SCHED_EVT_PV_YIELD, a0);
 		kvm_sched_yield(vcpu, a0);
 		ret = 0;
 		break;
@@ -11807,6 +11808,10 @@ static int __kvm_emulate_halt(struct kvm_vcpu *vcpu, int state, int reason)
 	 * handling wake events.
 	 */
 	++vcpu->stat.halt_exits;
+
+	if (reason == KVM_EXIT_HLT)
+		trace_kvm_sched_event(vcpu->vcpu_id, KVM_SCHED_EVT_HLT,
+				      KVM_SCHED_INVALID_TARGET);
 	if (lapic_in_kernel(vcpu)) {
 		if (kvm_vcpu_has_events(vcpu) || vcpu->arch.pv.pv_unhalted)
 			state = KVM_MP_STATE_RUNNABLE;
@@ -14553,6 +14558,7 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(kvm_vmgexit_exit);
 EXPORT_TRACEPOINT_SYMBOL_GPL(kvm_vmgexit_msr_protocol_enter);
 EXPORT_TRACEPOINT_SYMBOL_GPL(kvm_vmgexit_msr_protocol_exit);
 EXPORT_TRACEPOINT_SYMBOL_GPL(kvm_rmp_fault);
+EXPORT_TRACEPOINT_SYMBOL_GPL(kvm_sched_event);
 
 static int __init kvm_x86_init(void)
 {

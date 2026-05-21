@@ -3199,6 +3199,8 @@ static int pause_interception(struct kvm_vcpu *vcpu)
 
 	grow_ple_window(vcpu);
 
+	trace_kvm_sched_event(vcpu->vcpu_id, KVM_SCHED_EVT_PLE,
+			      KVM_SCHED_INVALID_TARGET);
 	kvm_vcpu_on_spin(vcpu, in_kernel);
 	return kvm_skip_emulated_instruction(vcpu);
 }
