@@ -28,4 +28,6 @@
 #define PAGE_MASK	(~(PAGE_SIZE - 1))
 #endif
 
+#define offset_in_page(p)	((unsigned long)(p) & ~PAGE_MASK)
+
 #endif	/* __VDSO_PAGE_H */
