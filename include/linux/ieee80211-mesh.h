@@ -71,6 +71,20 @@ struct ieee80211_mesh_hwmp_prep_bottom {
 	__le32 orig_sn;
 } __packed;
 
+struct ieee80211_mesh_hwmp_perr_dst {
+	u8 flags;
+	u8 addr[ETH_ALEN];
+	__le32 sn;
+	/* optional Destination External Address */
+	u8 variable[];
+} __packed;
+
+struct ieee80211_mesh_hwmp_perr {
+	u8 ttl;
+	u8 number_of_dst;
+	struct ieee80211_mesh_hwmp_perr_dst dsts[];
+} __packed;
+
 /* Mesh flags */
 #define MESH_FLAGS_AE_A4 	0x1
 #define MESH_FLAGS_AE_A5_A6	0x2
@@ -294,6 +308,17 @@ ieee80211_mesh_hwmp_prep_get_bottom(const u8 *ie)
 
 	return (void *)&top->variable[
 		ieee80211_mesh_preq_prep_ae_enabled(ie) ? ETH_ALEN : 0];
+}
+
+static inline u16
+ieee80211_mesh_hwmp_perr_get_rcode(const u8 *ie, u8 dst_idx)
+{
+	struct ieee80211_mesh_hwmp_perr *perr_ie = (void *)ie;
+	struct ieee80211_mesh_hwmp_perr_dst *dst =
+		&perr_ie->dsts[dst_idx];
+
+	return get_unaligned_le16(&dst->variable[
+		(dst->flags & AE_F) ? ETH_ALEN : 0]);
 }
 
 #endif /* LINUX_IEEE80211_MESH_H */
