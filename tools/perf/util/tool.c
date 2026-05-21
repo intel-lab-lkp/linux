@@ -110,7 +110,6 @@ static int process_event_synth_event_update_stub(const struct perf_tool *tool __
 int process_event_sample_stub(const struct perf_tool *tool __maybe_unused,
 			      union perf_event *event __maybe_unused,
 			      struct perf_sample *sample __maybe_unused,
-			      struct evsel *evsel __maybe_unused,
 			      struct machine *machine __maybe_unused)
 {
 	dump_printf(": unhandled!\n");
@@ -285,6 +284,7 @@ void perf_tool__init(struct perf_tool *tool, bool ordered_events)
 	tool->no_warn = false;
 	tool->show_feat_hdr = SHOW_FEAT_NO_HEADER;
 	tool->merge_deferred_callchains = true;
+	tool->dont_split_sample_group = false;
 
 	tool->sample = process_event_sample_stub;
 	tool->mmap = process_event_stub;
@@ -348,12 +348,11 @@ bool perf_tool__compressed_is_stub(const struct perf_tool *tool)
 	static int delegate_ ## name(const struct perf_tool *tool, \
 				     union perf_event *event, \
 				     struct perf_sample *sample, \
-				     struct evsel *evsel, \
 				     struct machine *machine) \
 	{								\
 		struct delegate_tool *del_tool = container_of(tool, struct delegate_tool, tool); \
 		struct perf_tool *delegate = del_tool->delegate;		\
-		return delegate->name(delegate, event, sample, evsel, machine);	\
+		return delegate->name(delegate, event, sample, machine);	\
 	}
 CREATE_DELEGATE_SAMPLE(read);
 CREATE_DELEGATE_SAMPLE(sample);
@@ -433,6 +432,8 @@ CREATE_DELEGATE_OP2(stat_config);
 CREATE_DELEGATE_OP2(stat_round);
 CREATE_DELEGATE_OP2(thread_map);
 CREATE_DELEGATE_OP2(time_conv);
+CREATE_DELEGATE_OP2(schedstat_cpu);
+CREATE_DELEGATE_OP2(schedstat_domain);
 CREATE_DELEGATE_OP2(tracing_data);
 
 #define CREATE_DELEGATE_OP3(name)					\
@@ -470,6 +471,7 @@ void delegate_tool__init(struct delegate_tool *tool, struct perf_tool *delegate)
 	tool->tool.no_warn = delegate->no_warn;
 	tool->tool.show_feat_hdr = delegate->show_feat_hdr;
 	tool->tool.merge_deferred_callchains = delegate->merge_deferred_callchains;
+	tool->tool.dont_split_sample_group = delegate->dont_split_sample_group;
 
 	tool->tool.sample = delegate_sample;
 	tool->tool.read = delegate_read;
@@ -516,4 +518,6 @@ void delegate_tool__init(struct delegate_tool *tool, struct perf_tool *delegate)
 	tool->tool.bpf_metadata = delegate_bpf_metadata;
 	tool->tool.compressed = delegate_compressed;
 	tool->tool.auxtrace = delegate_auxtrace;
+	tool->tool.schedstat_cpu = delegate_schedstat_cpu;
+	tool->tool.schedstat_domain = delegate_schedstat_domain;
 }
