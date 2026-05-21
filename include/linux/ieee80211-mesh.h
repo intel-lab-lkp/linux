@@ -321,4 +321,32 @@ ieee80211_mesh_hwmp_perr_get_rcode(const u8 *ie, u8 dst_idx)
 		(dst->flags & AE_F) ? ETH_ALEN : 0]);
 }
 
+/* IEEE Std 802.11-2016 9.4.2.113 PREQ element */
+static inline bool ieee80211_mesh_preq_size_ok(const u8 *pos, u8 elen)
+{
+	struct ieee80211_mesh_hwmp_preq_bottom *preq_elem_bottom =
+		ieee80211_mesh_hwmp_preq_get_bottom(pos);
+	u8 target_count;
+	u8 needed;
+
+	/* Check if the element contains flags */
+	if (elen < 1)
+		return false;
+
+	/* Check if the element contains target_count */
+	needed = sizeof(struct ieee80211_mesh_hwmp_preq_top) +
+		 (ieee80211_mesh_preq_prep_ae_enabled(pos) ? ETH_ALEN : 0)
+		 /* Originator External Address */ +
+		 sizeof(struct ieee80211_mesh_hwmp_preq_bottom);
+	if (elen < needed)
+		return false;
+
+	target_count = preq_elem_bottom->target_count;
+	if (target_count < 1 || target_count > 20)
+		return false;
+
+	needed += target_count * sizeof(struct ieee80211_mesh_hwmp_preq_target);
+	return elen == needed;
+}
+
 #endif /* LINUX_IEEE80211_MESH_H */
