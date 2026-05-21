@@ -640,6 +640,40 @@ config I2C_DESIGNWARE_PCI
 
 endif
 
+config I2C_DWC_CORE
+	tristate "Synopsys DWC I2C adapter"
+	select REGMAP
+	help
+	  This is a driver for the Synopsys DesignWare CORE (DWC) I2C controller,
+	  a variant of the DesignWare I2C IP with a different register layout.
+	  It shares common infrastructure with the standard DesignWare I2C
+	  driver (I2C_DESIGNWARE_CORE)
+
+if I2C_DWC_CORE
+
+config I2C_DWC_SLAVE
+	bool "Synopsys DWC Slave"
+	default I2C_DWC_CORE
+	select I2C_SLAVE
+	help
+	  If you say yes to this option, support will be included for the
+	  Synopsys DWC I2C slave adapter.
+
+	  This is not a standalone module, this module compiles together with
+	  i2c-dwc-core.
+
+config I2C_DWC_PLATFORM
+	tristate "Synopsys DWC Platform"
+	default I2C_DWC_CORE
+	help
+	  If you say yes to this option, support will be included for the
+	  Synopsys DWC I2C adapter.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called i2c-dwc-platform.
+
+endif
+
 config I2C_DIGICOLOR
 	tristate "Conexant Digicolor I2C driver"
 	depends on ARCH_DIGICOLOR || COMPILE_TEST

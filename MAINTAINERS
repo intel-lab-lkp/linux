@@ -25880,6 +25880,13 @@ L:	linux-i2c@vger.kernel.org
 S:	Supported
 F:	drivers/i2c/busses/i2c-designware-*
 
+SYNOPSYS DWC I2C DRIVER
+M:	Lianfeng Ouyang <lianfeng.ouyang@starfivetech.com>
+L:	linux-i2c@vger.kernel.org
+S:	Supported
+F:	Documentation/devicetree/bindings/i2c/snps,dwc-i2c.yaml
+F:	drivers/i2c/busses/i2c-dwc-*
+
 SYNOPSYS DESIGNWARE I2C DRIVER - AMDISP
 M:	Nirujogi Pratap <pratap.nirujogi@amd.com>
 M:	Bin Du <bin.du@amd.com>
