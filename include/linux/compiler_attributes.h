@@ -231,6 +231,12 @@
 #define   noinline                      __attribute__((__noinline__))
 
 /*
+ *   gcc: https://gcc.gnu.org/onlinedocs/gcc/Common-Attributes.html#index-nonnull
+ * clang: https://clang.llvm.org/docs/AttributeReference.html#nonnull
+ */
+#define __nonnull(x...)			__attribute__((__nonnull__(x)))
+
+/*
  * Optional: only supported since gcc >= 8
  * Optional: not supported by clang
  *
