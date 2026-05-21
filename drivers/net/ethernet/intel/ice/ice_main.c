@@ -17,6 +17,7 @@
 #include "devlink/port.h"
 #include "ice_sf_eth.h"
 #include "ice_hwmon.h"
+#include "ice_acl.h"
 /* Including ice_trace.h with CREATE_TRACE_POINTS defined will generate the
  * ice tracepoint functions. This must be done exactly once across the
  * ice driver.
@@ -4335,6 +4336,47 @@ static int ice_send_version(struct ice_pf *pf)
 }
 
 /**
+ * ice_init_acl - Initializes the ACL block
+ * @pf: ptr to PF device
+ *
+ * Return: 0 on success, negative on error
+ */
+static int ice_init_acl(struct ice_pf *pf)
+{
+	struct ice_acl_tbl_params params = {};
+	struct ice_hw *hw = &pf->hw;
+	int divider;
+
+	/* Creates a single ACL table that consist of src_ip(4 byte),
+	 * dest_ip(4 byte), src_port(2 byte) and dst_port(2 byte) for a total
+	 * of 12 bytes (96 bits), hence 120 bit wide keys, i.e. 3 TCAM slices.
+	 * If the given hardware card contains less than 8 PFs (ports) then
+	 * each PF will have its own TCAM slices. For 8 PFs, a given slice will
+	 * be shared by 2 different PFs.
+	 */
+	if (hw->dev_caps.num_funcs < 8)
+		divider = ICE_ACL_ENTIRE_SLICE;
+	else
+		divider = ICE_ACL_HALF_SLICE;
+
+	params.width = ICE_AQC_ACL_KEY_WIDTH_BYTES * 3;
+	params.depth = ICE_AQC_ACL_TCAM_DEPTH / divider;
+	params.entry_act_pairs = 1;
+	params.concurr = false;
+
+	return ice_acl_create_tbl(hw, &params);
+}
+
+/**
+ * ice_deinit_acl - Unroll the initialization of the ACL block
+ * @pf: ptr to PF device
+ */
+static void ice_deinit_acl(struct ice_pf *pf)
+{
+	ice_acl_destroy_tbl(&pf->hw);
+}
+
+/**
  * ice_init_fdir - Initialize flow director VSI and configuration
  * @pf: pointer to the PF instance
  *
@@ -4755,6 +4797,12 @@ static void ice_init_features(struct ice_pf *pf)
 	if (ice_init_fdir(pf))
 		dev_err(dev, "could not initialize flow director\n");
 
+	if (test_bit(ICE_FLAG_FD_ENA, pf->flags)) {
+		/* Note: ACL init failure is non-fatal to load */
+		if (ice_init_acl(pf))
+			dev_err(dev, "Failed to initialize ACL\n");
+	}
+
 	/* Note: DCB init failure is non-fatal to load */
 	if (ice_init_pf_dcb(pf, false)) {
 		clear_bit(ICE_FLAG_DCB_CAPABLE, pf->flags);
@@ -4777,6 +4825,7 @@ static void ice_deinit_features(struct ice_pf *pf)
 	ice_deinit_lag(pf);
 	if (test_bit(ICE_FLAG_DCB_CAPABLE, pf->flags))
 		ice_cfg_lldp_mib_change(&pf->hw, false);
+	ice_deinit_acl(pf);
 	ice_deinit_fdir(pf);
 	if (ice_is_feature_supported(pf, ICE_F_GNSS))
 		ice_gnss_exit(pf);
