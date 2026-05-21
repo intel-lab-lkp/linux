@@ -19,4 +19,5 @@ PCI Bus Subsystem
    endpoint/index
    controller/index
    boot-interrupts
+   pci-crash-capture
    tph

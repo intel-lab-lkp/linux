@@ -14,6 +14,7 @@
 #include <linux/cpuhotplug.h>
 #include <linux/memblock.h>
 #include <linux/kmemleak.h>
+#include <linux/pci_crash.h>
 
 #include <asm/page.h>
 #include <asm/sections.h>
@@ -91,6 +92,18 @@ void crash_save_vmcoreinfo(void)
 		vmcoreinfo_data = vmcoreinfo_data_safecopy;
 
 	vmcoreinfo_append_str("CRASHTIME=%lld\n", ktime_get_real_seconds());
+
+	/* Capture PCI config space before kexec into crash kernel */
+	pci_crash_save();
+	if (pci_crash_pagemap_phys && pci_crash_buffer_size > 0) {
+		vmcoreinfo_append_str("PCI_CRASH_PAGEMAP=0x%llx\n",
+				      (unsigned long long)pci_crash_pagemap_phys);
+		vmcoreinfo_append_str("PCI_CRASH_VERSION=%d\n",
+				      PCI_CRASH_VERSION);
+		vmcoreinfo_append_str("PCI_CRASH_BUF_SZ=%zu\n",
+				      pci_crash_buffer_size);
+	}
+
 	update_vmcoreinfo_note();
 }
 
