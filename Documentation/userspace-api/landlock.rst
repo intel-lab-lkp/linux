@@ -84,7 +84,8 @@ to be explicit about the denied-by-default access rights.
             LANDLOCK_ACCESS_NET_CONNECT_TCP,
         .scoped =
             LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET |
-            LANDLOCK_SCOPE_SIGNAL,
+            LANDLOCK_SCOPE_SIGNAL |
+            LANDLOCK_SCOPE_SYSV_MSG_QUEUE,
     };
 
 Because we may not know which kernel version an application will be executed
@@ -132,6 +133,10 @@ version, and only use the available subset of access rights:
     case 6 ... 8:
         /* Removes LANDLOCK_ACCESS_FS_RESOLVE_UNIX for ABI < 9 */
         ruleset_attr.handled_access_fs &= ~LANDLOCK_ACCESS_FS_RESOLVE_UNIX;
+        __attribute__((fallthrough));
+    case 9:
+        /* Removes LANDLOCK_SCOPE_SYSV_MSG_QUEUE for ABI < 10 */
+        ruleset_attr.scoped &= ~LANDLOCK_SCOPE_SYSV_MSG_QUEUE;
     }
 
 This enables the creation of an inclusive ruleset that will contain our rules.
@@ -379,6 +384,22 @@ The operations which can be scoped are:
 
     A :manpage:`sendto(2)` on a socket which was previously connected will not
     be restricted.  This works for both datagram and stream sockets.
+
+``LANDLOCK_SCOPE_SYSV_MSG_QUEUE``
+    This limits the set of System V message queues to which we can perform
+    :manpage:`msgget(2)`, :manpage:`msgrcv(2)`, :manpage:`msgsnd(2)`, and
+    :manpage:`msgctl(2)` calls to only message queues which were created by a
+    process in the same or a nested Landlock domain.
+
+    Since System V message queues are IPC namespace global constructs and do
+    not use file descriptors, enforcement of a ruleset with this scoping may
+    cause subsequent operations on an msqid that were allowed prior to
+    enforcement to be denied.
+
+    Denials are reported as ``EACCES``.  Unlike other Landlock scopes,
+    the check shares the generic SysV IPC permission path
+    (``ipcperms(3)``), which maps every denial to ``EACCES`` before it
+    reaches user space.
 
 IPC scoping does not support exceptions via :manpage:`landlock_add_rule(2)`.
 If an operation is scoped within a domain, no rules can be added to allow access
@@ -721,6 +742,13 @@ Pathname UNIX sockets (ABI < 9)
 Starting with the Landlock ABI version 9, it is possible to restrict
 connections to pathname UNIX domain sockets (:manpage:`unix(7)`) using
 the new ``LANDLOCK_ACCESS_FS_RESOLVE_UNIX`` right.
+
+System V message queue (ABI < 10)
+---------------------------------
+
+Starting with the Landlock ABI version 10, it is possible to restrict
+operations on System V message queues by setting
+``LANDLOCK_SCOPE_SYSV_MSG_QUEUE`` to the ``scoped`` ruleset attribute.
 
 .. _kernel_support:
 
