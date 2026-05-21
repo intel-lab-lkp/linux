@@ -230,6 +230,8 @@ void intel_gt_unpark_requests(struct intel_gt *gt)
 
 void intel_gt_fini_requests(struct intel_gt *gt)
 {
+	intel_gt_retire_requests(gt);
+
 	/* Wait until the work is marked as finished before unloading! */
 	cancel_delayed_work_sync(&gt->requests.retire_work);
 
