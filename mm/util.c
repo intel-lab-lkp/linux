@@ -34,6 +34,9 @@
 #include "internal.h"
 #include "swap.h"
 
+static kmem_buckets *user_buckets __ro_after_init;
+static kmem_buckets *nul_buckets __ro_after_init;
+
 /**
  * kfree_const - conditionally free memory
  * @x: pointer to the memory
@@ -61,7 +64,7 @@ static __always_inline char *__kmemdup_nul(const char *s, size_t len, gfp_t gfp)
 	char *buf;
 
 	/* '+1' for the NUL terminator */
-	buf = kmalloc_track_caller(len + 1, gfp);
+	buf = kmem_buckets_alloc_track_caller(nul_buckets, len + 1, gfp);
 	if (!buf)
 		return NULL;
 
@@ -195,15 +198,14 @@ char *kmemdup_nul(const char *s, size_t len, gfp_t gfp)
 }
 EXPORT_SYMBOL(kmemdup_nul);
 
-static kmem_buckets *user_buckets __ro_after_init;
-
-static int __init init_user_buckets(void)
+static int __init init_buckets(void)
 {
 	user_buckets = kmem_buckets_create("memdup_user", 0, 0, INT_MAX, NULL);
+	nul_buckets = kmem_buckets_create("memdup_nul", 0, 0, INT_MAX, NULL);
 
 	return 0;
 }
-subsys_initcall(init_user_buckets);
+subsys_initcall(init_buckets);
 
 /**
  * memdup_user - duplicate memory region from user space
