@@ -1379,23 +1379,21 @@ static int vu_cmdline_get_device(struct device *dev, void *data)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct virtio_uml_platform_data *pdata = pdev->dev.platform_data;
-	char *buffer = data;
-	unsigned int len = strlen(buffer);
+	struct seq_buf *s = data;
 
-	snprintf(buffer + len, PAGE_SIZE - len, "%s:%d:%d\n",
-		 pdata->socket_path, pdata->virtio_device_id, pdev->id);
+	seq_buf_printf(s, "%s:%d:%d\n",
+		       pdata->socket_path, pdata->virtio_device_id, pdev->id);
 	return 0;
 }
 
-static int vu_cmdline_get(char *buffer, const struct kernel_param *kp)
+static int vu_cmdline_get(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	guard(mutex)(&vu_cmdline_lock);
 
-	buffer[0] = '\0';
 	if (vu_cmdline_parent_registered)
 		device_for_each_child(&vu_cmdline_parent, buffer,
 				      vu_cmdline_get_device);
-	return strlen(buffer) + 1;
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(vu_cmdline_param_ops, vu_cmdline_set,

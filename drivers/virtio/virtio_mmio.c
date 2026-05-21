@@ -728,24 +728,21 @@ static int vm_cmdline_set(const char *device,
 
 static int vm_cmdline_get_device(struct device *dev, void *data)
 {
-	char *buffer = data;
-	unsigned int len = strlen(buffer);
+	struct seq_buf *s = data;
 	struct platform_device *pdev = to_platform_device(dev);
 
-	snprintf(buffer + len, PAGE_SIZE - len, "0x%llx@0x%llx:%llu:%d\n",
-			pdev->resource[0].end - pdev->resource[0].start + 1ULL,
-			(unsigned long long)pdev->resource[0].start,
-			(unsigned long long)pdev->resource[1].start,
-			pdev->id);
+	seq_buf_printf(s, "0x%llx@0x%llx:%llu:%d\n",
+		       pdev->resource[0].end - pdev->resource[0].start + 1ULL,
+		       (unsigned long long)pdev->resource[0].start,
+		       (unsigned long long)pdev->resource[1].start,
+		       pdev->id);
 	return 0;
 }
 
-static int vm_cmdline_get(char *buffer, const struct kernel_param *kp)
+static int vm_cmdline_get(struct seq_buf *s, const struct kernel_param *kp)
 {
-	buffer[0] = '\0';
-	device_for_each_child(&vm_cmdline_parent, buffer,
-			vm_cmdline_get_device);
-	return strlen(buffer) + 1;
+	device_for_each_child(&vm_cmdline_parent, s, vm_cmdline_get_device);
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(vm_cmdline_param_ops, vm_cmdline_set,

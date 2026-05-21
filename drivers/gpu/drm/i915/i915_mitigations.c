@@ -95,33 +95,37 @@ static int mitigations_set(const char *val, const struct kernel_param *kp)
 	return 0;
 }
 
-static int mitigations_get(char *buffer, const struct kernel_param *kp)
+static int mitigations_get(struct seq_buf *buffer,
+			   const struct kernel_param *kp)
 {
 	unsigned long local = READ_ONCE(mitigations);
-	int count, i;
 	bool enable;
+	int i;
 
-	if (!local)
-		return scnprintf(buffer, PAGE_SIZE, "%s\n", "off");
+	if (!local) {
+		seq_buf_printf(buffer, "%s\n", "off");
+		return 0;
+	}
 
 	if (local & BIT(BITS_PER_LONG - 1)) {
-		count = scnprintf(buffer, PAGE_SIZE, "%s,", "auto");
+		seq_buf_printf(buffer, "%s,", "auto");
 		enable = false;
 	} else {
 		enable = true;
-		count = 0;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(names); i++) {
 		if ((local & BIT(i)) != enable)
 			continue;
-
-		count += scnprintf(buffer + count, PAGE_SIZE - count,
-				   "%s%s,", enable ? "" : "!", names[i]);
+		seq_buf_printf(buffer, "%s%s,", enable ? "" : "!", names[i]);
 	}
 
-	buffer[count - 1] = '\n';
-	return count;
+	/* Replace the trailing comma with a newline. */
+	if (!seq_buf_has_overflowed(buffer) && buffer->len > 0 &&
+	    buffer->buffer[buffer->len - 1] == ',')
+		buffer->buffer[buffer->len - 1] = '\n';
+
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(ops, mitigations_set, mitigations_get);

@@ -1572,16 +1572,19 @@ static int pcie_aspm_set_policy(const char *val,
 	return 0;
 }
 
-static int pcie_aspm_get_policy(char *buffer, const struct kernel_param *kp)
+static int pcie_aspm_get_policy(struct seq_buf *buffer,
+				const struct kernel_param *kp)
 {
-	int i, cnt = 0;
-	for (i = 0; i < ARRAY_SIZE(policy_str); i++)
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(policy_str); i++) {
 		if (i == aspm_policy)
-			cnt += sprintf(buffer + cnt, "[%s] ", policy_str[i]);
+			seq_buf_printf(buffer, "[%s] ", policy_str[i]);
 		else
-			cnt += sprintf(buffer + cnt, "%s ", policy_str[i]);
-	cnt += sprintf(buffer + cnt, "\n");
-	return cnt;
+			seq_buf_printf(buffer, "%s ", policy_str[i]);
+	}
+	seq_buf_putc(buffer, '\n');
+	return 0;
 }
 
 module_param_call(policy, pcie_aspm_set_policy, pcie_aspm_get_policy,

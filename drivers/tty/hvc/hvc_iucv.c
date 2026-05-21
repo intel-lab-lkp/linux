@@ -1256,36 +1256,32 @@ static int param_set_vmidfilter(const char *val, const struct kernel_param *kp)
 
 /**
  * param_get_vmidfilter() - Get z/VM user ID filter
- * @buffer:	Buffer to store z/VM user ID filter,
- *		(buffer size assumption PAGE_SIZE)
+ * @buffer:	seq_buf to store z/VM user ID filter
  * @kp:		Kernel parameter pointing to the hvc_iucv_filter array
  *
  * The function stores the filter as a comma-separated list of z/VM user IDs
  * in @buffer. Typically, sysfs routines call this function for attr show.
  */
-static int param_get_vmidfilter(char *buffer, const struct kernel_param *kp)
+static int param_get_vmidfilter(struct seq_buf *buffer,
+				const struct kernel_param *kp)
 {
-	int rc;
 	size_t index, len;
 	void *start, *end;
 
 	if (!machine_is_vm() || !hvc_iucv_devices)
 		return -ENODEV;
 
-	rc = 0;
 	read_lock_bh(&hvc_iucv_filter_lock);
 	for (index = 0; index < hvc_iucv_filter_size; index++) {
 		start = hvc_iucv_filter + (8 * index);
 		end   = memchr(start, ' ', 8);
 		len   = (end) ? end - start : 8;
-		memcpy(buffer + rc, start, len);
-		rc += len;
-		buffer[rc++] = ',';
+		if (index)
+			seq_buf_putc(buffer, ',');
+		seq_buf_printf(buffer, "%.*s", (int)len, (char *)start);
 	}
 	read_unlock_bh(&hvc_iucv_filter_lock);
-	if (rc)
-		buffer[--rc] = '\0';	/* replace last comma and update rc */
-	return rc;
+	return 0;
 }
 
 #define param_check_vmidfilter(name, p) __param_check(name, p, void)

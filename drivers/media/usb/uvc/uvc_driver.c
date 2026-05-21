@@ -2451,12 +2451,14 @@ static int uvc_reset_resume(struct usb_interface *intf)
  * Module parameters
  */
 
-static int uvc_clock_param_get(char *buffer, const struct kernel_param *kp)
+static int uvc_clock_param_get(struct seq_buf *buffer,
+			       const struct kernel_param *kp)
 {
 	if (uvc_clock_param == CLOCK_MONOTONIC)
-		return sprintf(buffer, "CLOCK_MONOTONIC");
+		seq_buf_printf(buffer, "CLOCK_MONOTONIC");
 	else
-		return sprintf(buffer, "CLOCK_REALTIME");
+		seq_buf_printf(buffer, "CLOCK_REALTIME");
+	return 0;
 }
 
 static int uvc_clock_param_set(const char *val, const struct kernel_param *kp)

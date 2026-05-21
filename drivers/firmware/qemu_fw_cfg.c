@@ -860,7 +860,8 @@ static int fw_cfg_cmdline_set(const char *arg, const struct kernel_param *kp)
 	return PTR_ERR_OR_ZERO(fw_cfg_cmdline_dev);
 }
 
-static int fw_cfg_cmdline_get(char *buf, const struct kernel_param *kp)
+static int fw_cfg_cmdline_get(struct seq_buf *buf,
+			      const struct kernel_param *kp)
 {
 	/* stay silent if device was not configured via the command
 	 * line, or if the parameter name (ioport/mmio) doesn't match
@@ -873,22 +874,25 @@ static int fw_cfg_cmdline_get(char *buf, const struct kernel_param *kp)
 
 	switch (fw_cfg_cmdline_dev->num_resources) {
 	case 1:
-		return snprintf(buf, PAGE_SIZE, PH_ADDR_PR_1_FMT,
-				resource_size(&fw_cfg_cmdline_dev->resource[0]),
-				fw_cfg_cmdline_dev->resource[0].start);
+		seq_buf_printf(buf, PH_ADDR_PR_1_FMT,
+			       resource_size(&fw_cfg_cmdline_dev->resource[0]),
+			       fw_cfg_cmdline_dev->resource[0].start);
+		return 0;
 	case 3:
-		return snprintf(buf, PAGE_SIZE, PH_ADDR_PR_3_FMT,
-				resource_size(&fw_cfg_cmdline_dev->resource[0]),
-				fw_cfg_cmdline_dev->resource[0].start,
-				fw_cfg_cmdline_dev->resource[1].start,
-				fw_cfg_cmdline_dev->resource[2].start);
+		seq_buf_printf(buf, PH_ADDR_PR_3_FMT,
+			       resource_size(&fw_cfg_cmdline_dev->resource[0]),
+			       fw_cfg_cmdline_dev->resource[0].start,
+			       fw_cfg_cmdline_dev->resource[1].start,
+			       fw_cfg_cmdline_dev->resource[2].start);
+		return 0;
 	case 4:
-		return snprintf(buf, PAGE_SIZE, PH_ADDR_PR_4_FMT,
-				resource_size(&fw_cfg_cmdline_dev->resource[0]),
-				fw_cfg_cmdline_dev->resource[0].start,
-				fw_cfg_cmdline_dev->resource[1].start,
-				fw_cfg_cmdline_dev->resource[2].start,
-				fw_cfg_cmdline_dev->resource[3].start);
+		seq_buf_printf(buf, PH_ADDR_PR_4_FMT,
+			       resource_size(&fw_cfg_cmdline_dev->resource[0]),
+			       fw_cfg_cmdline_dev->resource[0].start,
+			       fw_cfg_cmdline_dev->resource[1].start,
+			       fw_cfg_cmdline_dev->resource[2].start,
+			       fw_cfg_cmdline_dev->resource[3].start);
+		return 0;
 	}
 
 	/* Should never get here */

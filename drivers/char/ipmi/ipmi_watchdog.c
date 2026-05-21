@@ -197,11 +197,11 @@ static DEFINE_KERNEL_PARAM_OPS(param_ops_timeout, set_param_timeout,
 			       param_get_int);
 #define param_check_timeout param_check_int
 
-typedef int (*action_fn)(const char *intval, char *outval);
+typedef int (*action_fn)(const char *intval, struct seq_buf *outval);
 
-static int action_op(const char *inval, char *outval);
-static int preaction_op(const char *inval, char *outval);
-static int preop_op(const char *inval, char *outval);
+static int action_op(const char *inval, struct seq_buf *outval);
+static int preaction_op(const char *inval, struct seq_buf *outval);
+static int preop_op(const char *inval, struct seq_buf *outval);
 static void check_parms(void);
 
 static int set_param_str(const char *val, const struct kernel_param *kp)
@@ -227,20 +227,11 @@ static int set_param_str(const char *val, const struct kernel_param *kp)
 	return rv;
 }
 
-static int get_param_str(char *buffer, const struct kernel_param *kp)
+static int get_param_str(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	action_fn fn = (action_fn) kp->arg;
-	int rv, len;
 
-	rv = fn(NULL, buffer);
-	if (rv)
-		return rv;
-
-	len = strlen(buffer);
-	buffer[len++] = '\n';
-	buffer[len] = 0;
-
-	return len;
+	return fn(NULL, buffer);
 }
 
 
@@ -1154,12 +1145,12 @@ static int action_op_set_val(const char *inval)
 	return 0;
 }
 
-static int action_op(const char *inval, char *outval)
+static int action_op(const char *inval, struct seq_buf *outval)
 {
 	int rv;
 
 	if (outval)
-		strcpy(outval, action);
+		seq_buf_printf(outval, "%s\n", action);
 
 	if (!inval)
 		return 0;
@@ -1186,12 +1177,12 @@ static int preaction_op_set_val(const char *inval)
 	return 0;
 }
 
-static int preaction_op(const char *inval, char *outval)
+static int preaction_op(const char *inval, struct seq_buf *outval)
 {
 	int rv;
 
 	if (outval)
-		strcpy(outval, preaction);
+		seq_buf_printf(outval, "%s\n", preaction);
 
 	if (!inval)
 		return 0;
@@ -1214,12 +1205,12 @@ static int preop_op_set_val(const char *inval)
 	return 0;
 }
 
-static int preop_op(const char *inval, char *outval)
+static int preop_op(const char *inval, struct seq_buf *outval)
 {
 	int rv;
 
 	if (outval)
-		strcpy(outval, preop);
+		seq_buf_printf(outval, "%s\n", preop);
 
 	if (!inval)
 		return 0;

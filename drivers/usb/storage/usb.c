@@ -115,27 +115,22 @@ static int parse_delay_str(const char *str, int ndecimals, const char *suffix,
  * @val: The integer value to format, scaled by 10^(@ndecimals).
  * @ndecimals: Number of decimal to scale down.
  * @suffix: Suffix string to format.
- * @str: Where to store the formatted string.
- * @size: The size of buffer for @str.
+ * @s: Where to store the formatted string.
  *
  * Format an integer value in @val scale down by 10^(@ndecimals) without @suffix
  * if @val is divisible by 10^(@ndecimals).
  * Otherwise format a value in @val just as it is with @suffix
- *
- * Returns the number of characters written into @str.
  */
-static int format_delay_ms(unsigned int val, int ndecimals, const char *suffix,
-			char *str, int size)
+static void format_delay_ms(unsigned int val, int ndecimals, const char *suffix,
+			    struct seq_buf *s)
 {
 	u64 delay_ms = val;
 	unsigned int rem = do_div(delay_ms, int_pow(10, ndecimals));
-	int ret;
 
 	if (rem)
-		ret = scnprintf(str, size, "%u%s\n", val, suffix);
+		seq_buf_printf(s, "%u%s\n", val, suffix);
 	else
-		ret = scnprintf(str, size, "%u\n", (unsigned int)delay_ms);
-	return ret;
+		seq_buf_printf(s, "%u\n", (unsigned int)delay_ms);
 }
 
 static int delay_use_set(const char *s, const struct kernel_param *kp)
@@ -151,11 +146,12 @@ static int delay_use_set(const char *s, const struct kernel_param *kp)
 	return 0;
 }
 
-static int delay_use_get(char *s, const struct kernel_param *kp)
+static int delay_use_get(struct seq_buf *s, const struct kernel_param *kp)
 {
 	unsigned int delay_ms = *((unsigned int *)kp->arg);
 
-	return format_delay_ms(delay_ms, 3, "ms", s, PAGE_SIZE);
+	format_delay_ms(delay_ms, 3, "ms", s);
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(delay_use_ops, delay_use_set, delay_use_get);

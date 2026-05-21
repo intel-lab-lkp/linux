@@ -334,8 +334,10 @@ void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
 extern int ddebug_dyndbg_module_param_cb(char *param, char *val,
 					const char *modname);
 struct kernel_param;
+struct seq_buf;
 int param_set_dyndbg_classes(const char *instr, const struct kernel_param *kp);
-int param_get_dyndbg_classes(char *buffer, const struct kernel_param *kp);
+int param_get_dyndbg_classes(struct seq_buf *buffer,
+			     const struct kernel_param *kp);
 
 #else
 
@@ -352,9 +354,11 @@ static inline int ddebug_dyndbg_module_param_cb(char *param, char *val,
 }
 
 struct kernel_param;
+struct seq_buf;
 static inline int param_set_dyndbg_classes(const char *instr, const struct kernel_param *kp)
 { return 0; }
-static inline int param_get_dyndbg_classes(char *buffer, const struct kernel_param *kp)
+static inline int param_get_dyndbg_classes(struct seq_buf *buffer,
+					   const struct kernel_param *kp)
 { return 0; }
 
 #endif

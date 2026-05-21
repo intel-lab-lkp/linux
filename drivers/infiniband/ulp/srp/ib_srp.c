@@ -161,14 +161,15 @@ static struct ib_client srp_client = {
 
 static struct ib_sa_client srp_sa_client;
 
-static int srp_tmo_get(char *buffer, const struct kernel_param *kp)
+static int srp_tmo_get(struct seq_buf *buffer, const struct kernel_param *kp)
 {
 	int tmo = *(int *)kp->arg;
 
 	if (tmo >= 0)
-		return sysfs_emit(buffer, "%d\n", tmo);
+		seq_buf_printf(buffer, "%d\n", tmo);
 	else
-		return sysfs_emit(buffer, "off\n");
+		seq_buf_printf(buffer, "off\n");
+	return 0;
 }
 
 static int srp_tmo_set(const char *val, const struct kernel_param *kp)

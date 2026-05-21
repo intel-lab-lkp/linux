@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/kallsyms.h>
+#include <linux/seq_buf.h>
 #include <linux/types.h>
 #include <linux/mutex.h>
 #include <linux/proc_fs.h>
@@ -787,7 +788,8 @@ EXPORT_SYMBOL(param_set_dyndbg_classes);
  * altered by direct >control.  Displays 0x for DISJOINT, 0-N for
  * LEVEL Returns: #chars written or <0 on error
  */
-int param_get_dyndbg_classes(char *buffer, const struct kernel_param *kp)
+int param_get_dyndbg_classes(struct seq_buf *buffer,
+			     const struct kernel_param *kp)
 {
 	const struct ddebug_class_param *dcp = kp->arg;
 	const struct ddebug_class_map *map = dcp->map;
@@ -796,11 +798,13 @@ int param_get_dyndbg_classes(char *buffer, const struct kernel_param *kp)
 
 	case DD_CLASS_TYPE_DISJOINT_NAMES:
 	case DD_CLASS_TYPE_DISJOINT_BITS:
-		return scnprintf(buffer, PAGE_SIZE, "0x%lx\n", *dcp->bits);
+		seq_buf_printf(buffer, "0x%lx\n", *dcp->bits);
+		return 0;
 
 	case DD_CLASS_TYPE_LEVEL_NAMES:
 	case DD_CLASS_TYPE_LEVEL_NUM:
-		return scnprintf(buffer, PAGE_SIZE, "%d\n", *dcp->lvl);
+		seq_buf_printf(buffer, "%d\n", *dcp->lvl);
+		return 0;
 	default:
 		return -1;
 	}

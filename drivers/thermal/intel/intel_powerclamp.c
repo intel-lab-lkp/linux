@@ -101,15 +101,13 @@ exit:
 	return ret;
 }
 
-static int duration_get(char *buf, const struct kernel_param *kp)
+static int duration_get(struct seq_buf *buf, const struct kernel_param *kp)
 {
-	int ret;
-
 	mutex_lock(&powerclamp_lock);
-	ret = sysfs_emit(buf, "%d\n", duration / 1000);
+	seq_buf_printf(buf, "%d\n", duration / 1000);
 	mutex_unlock(&powerclamp_lock);
 
-	return ret;
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(duration_ops, duration_set, duration_get);
@@ -192,12 +190,14 @@ skip_cpumask_set:
 	return ret;
 }
 
-static int cpumask_get(char *buf, const struct kernel_param *kp)
+static int cpumask_get(struct seq_buf *buf, const struct kernel_param *kp)
 {
 	if (!cpumask_available(idle_injection_cpu_mask))
 		return -ENODEV;
 
-	return cpumap_print_to_pagebuf(false, buf, idle_injection_cpu_mask);
+	seq_buf_printf(buf, "%*pb\n", nr_cpu_ids,
+		       cpumask_bits(idle_injection_cpu_mask));
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(cpumask_ops, cpumask_set, cpumask_get);

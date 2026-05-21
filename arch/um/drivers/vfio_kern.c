@@ -623,7 +623,8 @@ static int uml_vfio_cmdline_set(const char *device, const struct kernel_param *k
 	return 0;
 }
 
-static int uml_vfio_cmdline_get(char *buffer, const struct kernel_param *kp)
+static int uml_vfio_cmdline_get(struct seq_buf *buffer,
+				const struct kernel_param *kp)
 {
 	return 0;
 }

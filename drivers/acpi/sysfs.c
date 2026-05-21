@@ -89,53 +89,49 @@ static const struct acpi_dlevel acpi_debug_levels[] = {
 	ACPI_DEBUG_INIT(ACPI_LV_EVENTS),
 };
 
-static int param_get_debug_layer(char *buffer, const struct kernel_param *kp)
+static int param_get_debug_layer(struct seq_buf *buffer,
+				 const struct kernel_param *kp)
 {
-	int result = 0;
 	int i;
 
-	result = sprintf(buffer, "%-25s\tHex        SET\n", "Description");
+	seq_buf_printf(buffer, "%-25s\tHex        SET\n", "Description");
 
 	for (i = 0; i < ARRAY_SIZE(acpi_debug_layers); i++) {
-		result += sprintf(buffer + result, "%-25s\t0x%08lX [%c]\n",
-				  acpi_debug_layers[i].name,
-				  acpi_debug_layers[i].value,
-				  (acpi_dbg_layer & acpi_debug_layers[i].value)
-				  ? '*' : ' ');
+		seq_buf_printf(buffer, "%-25s\t0x%08lX [%c]\n",
+			       acpi_debug_layers[i].name,
+			       acpi_debug_layers[i].value,
+			       (acpi_dbg_layer & acpi_debug_layers[i].value)
+			       ? '*' : ' ');
 	}
-	result +=
-	    sprintf(buffer + result, "%-25s\t0x%08X [%c]\n", "ACPI_ALL_DRIVERS",
-		    ACPI_ALL_DRIVERS,
-		    (acpi_dbg_layer & ACPI_ALL_DRIVERS) ==
-		    ACPI_ALL_DRIVERS ? '*' : (acpi_dbg_layer & ACPI_ALL_DRIVERS)
-		    == 0 ? ' ' : '-');
-	result +=
-	    sprintf(buffer + result,
-		    "--\ndebug_layer = 0x%08X ( * = enabled)\n",
-		    acpi_dbg_layer);
+	seq_buf_printf(buffer, "%-25s\t0x%08X [%c]\n", "ACPI_ALL_DRIVERS",
+		       ACPI_ALL_DRIVERS,
+		       (acpi_dbg_layer & ACPI_ALL_DRIVERS) == ACPI_ALL_DRIVERS
+		       ? '*' : (acpi_dbg_layer & ACPI_ALL_DRIVERS) == 0
+		       ? ' ' : '-');
+	seq_buf_printf(buffer, "--\ndebug_layer = 0x%08X ( * = enabled)\n",
+		       acpi_dbg_layer);
 
-	return result;
+	return 0;
 }
 
-static int param_get_debug_level(char *buffer, const struct kernel_param *kp)
+static int param_get_debug_level(struct seq_buf *buffer,
+				 const struct kernel_param *kp)
 {
-	int result = 0;
 	int i;
 
-	result = sprintf(buffer, "%-25s\tHex        SET\n", "Description");
+	seq_buf_printf(buffer, "%-25s\tHex        SET\n", "Description");
 
 	for (i = 0; i < ARRAY_SIZE(acpi_debug_levels); i++) {
-		result += sprintf(buffer + result, "%-25s\t0x%08lX [%c]\n",
-				  acpi_debug_levels[i].name,
-				  acpi_debug_levels[i].value,
-				  (acpi_dbg_level & acpi_debug_levels[i].value)
-				  ? '*' : ' ');
+		seq_buf_printf(buffer, "%-25s\t0x%08lX [%c]\n",
+			       acpi_debug_levels[i].name,
+			       acpi_debug_levels[i].value,
+			       (acpi_dbg_level & acpi_debug_levels[i].value)
+			       ? '*' : ' ');
 	}
-	result +=
-	    sprintf(buffer + result, "--\ndebug_level = 0x%08X (* = enabled)\n",
-		    acpi_dbg_level);
+	seq_buf_printf(buffer, "--\ndebug_level = 0x%08X (* = enabled)\n",
+		       acpi_dbg_level);
 
-	return result;
+	return 0;
 }
 
 static DEFINE_KERNEL_PARAM_OPS(param_ops_debug_layer, param_set_uint,
@@ -247,16 +243,18 @@ static int param_set_trace_state(const char *val,
 	return 0;
 }
 
-static int param_get_trace_state(char *buffer, const struct kernel_param *kp)
+static int param_get_trace_state(struct seq_buf *buffer,
+				 const struct kernel_param *kp)
 {
 	if (!(acpi_gbl_trace_flags & ACPI_TRACE_ENABLED))
-		return sprintf(buffer, "disable\n");
-	if (!acpi_gbl_trace_method_name)
-		return sprintf(buffer, "enable\n");
-	if (acpi_gbl_trace_flags & ACPI_TRACE_ONESHOT)
-		return sprintf(buffer, "method-once\n");
+		seq_buf_printf(buffer, "disable\n");
+	else if (!acpi_gbl_trace_method_name)
+		seq_buf_printf(buffer, "enable\n");
+	else if (acpi_gbl_trace_flags & ACPI_TRACE_ONESHOT)
+		seq_buf_printf(buffer, "method-once\n");
 	else
-		return sprintf(buffer, "method\n");
+		seq_buf_printf(buffer, "method\n");
+	return 0;
 }
 
 module_param_call(trace_state, param_set_trace_state, param_get_trace_state,
@@ -272,14 +270,11 @@ MODULE_PARM_DESC(aml_debug_output,
 		 "To enable/disable the ACPI Debug Object output.");
 
 /* /sys/module/acpi/parameters/acpica_version */
-static int param_get_acpica_version(char *buffer,
+static int param_get_acpica_version(struct seq_buf *buffer,
 				    const struct kernel_param *kp)
 {
-	int result;
-
-	result = sprintf(buffer, "%x\n", ACPI_CA_VERSION);
-
-	return result;
+	seq_buf_printf(buffer, "%x\n", ACPI_CA_VERSION);
+	return 0;
 }
 
 module_param_call(acpica_version, NULL, param_get_acpica_version, NULL, 0444);

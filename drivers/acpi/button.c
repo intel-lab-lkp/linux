@@ -720,19 +720,24 @@ static int param_set_lid_init_state(const char *val,
 	return 0;
 }
 
-static int param_get_lid_init_state(char *buf, const struct kernel_param *kp)
+static int param_get_lid_init_state(struct seq_buf *buf,
+				    const struct kernel_param *kp)
 {
-	int i, c = 0;
+	int i;
 
-	for (i = 0; i < ARRAY_SIZE(lid_init_state_str); i++)
+	for (i = 0; i < ARRAY_SIZE(lid_init_state_str); i++) {
 		if (i == lid_init_state)
-			c += sprintf(buf + c, "[%s] ", lid_init_state_str[i]);
+			seq_buf_printf(buf, "[%s] ", lid_init_state_str[i]);
 		else
-			c += sprintf(buf + c, "%s ", lid_init_state_str[i]);
+			seq_buf_printf(buf, "%s ", lid_init_state_str[i]);
+	}
 
-	buf[c - 1] = '\n'; /* Replace the final space with a newline */
+	/* Replace the final space with a newline. */
+	if (!seq_buf_has_overflowed(buf) && buf->len > 0 &&
+	    buf->buffer[buf->len - 1] == ' ')
+		buf->buffer[buf->len - 1] = '\n';
 
-	return c;
+	return 0;
 }
 
 module_param_call(lid_init_state,

@@ -23,7 +23,8 @@ MODULE_LICENSE("GPL v2");
 
 static int fcoe_transport_create(const char *, const struct kernel_param *);
 static int fcoe_transport_destroy(const char *, const struct kernel_param *);
-static int fcoe_transport_show(char *buffer, const struct kernel_param *kp);
+static int fcoe_transport_show(struct seq_buf *buffer,
+			       const struct kernel_param *kp);
 static struct fcoe_transport *fcoe_transport_lookup(struct net_device *device);
 static struct fcoe_transport *fcoe_netdev_map_lookup(struct net_device *device);
 static int fcoe_transport_enable(const char *, const struct kernel_param *);
@@ -595,22 +596,21 @@ out_attach:
 }
 EXPORT_SYMBOL(fcoe_transport_detach);
 
-static int fcoe_transport_show(char *buffer, const struct kernel_param *kp)
+static int fcoe_transport_show(struct seq_buf *buffer,
+			       const struct kernel_param *kp)
 {
-	int i, j;
 	struct fcoe_transport *ft = NULL;
 
-	i = j = sprintf(buffer, "Attached FCoE transports:");
+	seq_buf_printf(buffer, "Attached FCoE transports:");
 	mutex_lock(&ft_mutex);
-	list_for_each_entry(ft, &fcoe_transports, list) {
-		if (i >= PAGE_SIZE - IFNAMSIZ)
-			break;
-		i += snprintf(&buffer[i], IFNAMSIZ, "%s ", ft->name);
+	if (list_empty(&fcoe_transports)) {
+		seq_buf_printf(buffer, "none");
+	} else {
+		list_for_each_entry(ft, &fcoe_transports, list)
+			seq_buf_printf(buffer, "%s ", ft->name);
 	}
 	mutex_unlock(&ft_mutex);
-	if (i == j)
-		i += snprintf(&buffer[i], IFNAMSIZ, "none");
-	return i;
+	return 0;
 }
 
 static int __init fcoe_transport_init(void)
