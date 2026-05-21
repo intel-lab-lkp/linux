@@ -1344,11 +1344,16 @@ static enum resp_states duplicate_request(struct rxe_qp *qp,
 			 */
 			u64 iova = reth_va(pkt);
 			u32 resid = reth_len(pkt);
+			u64 va_end_orig, va_end_new;
 
-			if (iova < res->read.va_org ||
+			if (check_add_overflow(res->read.va_org,
+					       (u64)res->read.length,
+					       &va_end_orig) ||
+			    check_add_overflow(iova, (u64)resid,
+					       &va_end_new) ||
+			    iova < res->read.va_org ||
 			    resid > res->read.length ||
-			    (iova + resid) > (res->read.va_org +
-					      res->read.length)) {
+			    va_end_new > va_end_orig) {
 				rc = RESPST_CLEANUP;
 				goto out;
 			}
