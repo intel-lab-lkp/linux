@@ -1170,7 +1170,7 @@ static void sata_fsl_error_intr(struct ata_port *ap)
 		ata_port_freeze(ap);
 	else if (abort) {
 		if (qc)
-			ata_link_abort(qc->dev->link);
+			ata_link_abort(ap, qc->dev->link);
 		else
 			ata_port_abort(ap);
 	}

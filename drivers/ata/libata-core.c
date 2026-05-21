@@ -5208,7 +5208,7 @@ void ata_qc_issue(struct ata_port *ap, struct ata_queued_cmd *qc)
 	if (unlikely(qc->dev->flags & ATA_DFLAG_SLEEPING)) {
 		link->eh_info.action |= ATA_EH_RESET;
 		ata_ehi_push_desc(&link->eh_info, "waking up from sleep");
-		ata_link_abort(link);
+		ata_link_abort(ap, link);
 		return;
 	}
 

@@ -2449,7 +2449,7 @@ static void mv_pmp_eh_prep(struct ata_port *ap, unsigned int pmp_map)
 			ata_ehi_push_desc(ehi, "dev err");
 			ehi->err_mask |= AC_ERR_DEV;
 			ehi->action |= ATA_EH_RESET;
-			ata_link_abort(link);
+			ata_link_abort(ap, link);
 		}
 	}
 }
@@ -2728,7 +2728,7 @@ static void mv_err_intr(struct ata_port *ap)
 
 	if (abort) {
 		if (qc)
-			ata_link_abort(qc->dev->link);
+			ata_link_abort(ap, qc->dev->link);
 		else
 			ata_port_abort(ap);
 	}

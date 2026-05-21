@@ -1853,7 +1853,7 @@ static void ahci_error_intr(struct ata_port *ap, u32 irq_stat)
 	if (irq_stat & PORT_IRQ_FREEZE)
 		ata_port_freeze(ap);
 	else if (fbs_need_dec) {
-		ata_link_abort(link);
+		ata_link_abort(ap, link);
 		ahci_fbs_dec_intr(ap);
 	} else
 		ata_port_abort(ap);

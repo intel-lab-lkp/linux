@@ -1081,9 +1081,9 @@ static int ata_do_link_abort(struct ata_port *ap, struct ata_link *link)
  *	RETURNS:
  *	Number of aborted qc's.
  */
-int ata_link_abort(struct ata_link *link)
+int ata_link_abort(struct ata_port *ap, struct ata_link *link)
 {
-	return ata_do_link_abort(link->ap, link);
+	return ata_do_link_abort(ap, link);
 }
 EXPORT_SYMBOL_GPL(ata_link_abort);
 

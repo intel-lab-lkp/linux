@@ -943,7 +943,7 @@ void sas_ata_device_link_abort(struct domain_device *device, bool force_reset)
 	link->eh_info.err_mask |= AC_ERR_DEV;
 	if (force_reset)
 		link->eh_info.action |= ATA_EH_RESET;
-	ata_link_abort(link);
+	ata_link_abort(ap, link);
 	spin_unlock_irqrestore(ap->lock, flags);
 }
 EXPORT_SYMBOL_GPL(sas_ata_device_link_abort);
