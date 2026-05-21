@@ -1097,6 +1097,11 @@ int f2fs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 				  ATTR_GID | ATTR_TIMES_SET))))
 		return -EPERM;
 
+	if (mapping_large_folio_support(inode->i_mapping) &&
+	    ((attr->ia_valid & ATTR_SIZE) ||
+	     ((attr->ia_valid & ATTR_MODE) && (attr->ia_mode & 0222))))
+		return -EOPNOTSUPP;
+
 	if ((attr->ia_valid & ATTR_SIZE)) {
 		if (!f2fs_is_compress_backend_ready(inode) ||
 				IS_DEVICE_ALIASING(inode))
