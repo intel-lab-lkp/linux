@@ -38,6 +38,7 @@ struct iov_iter;		/* in uio.h */
 #define VM_DEFER_KMEMLEAK	0
 #endif
 #define VM_SPARSE		0x00001000	/* sparse vm_area. not all pages are present. */
+#define VM_DECRYPTED		0x00002000	/* pages decrypted for host-shared access, re-encrypt on vfree */
 
 /* bits [20..32] reserved for arch specific ioremap internals */
 
@@ -152,6 +153,12 @@ extern void *vmalloc_noprof(unsigned long size) __alloc_size(1);
 
 extern void *vzalloc_noprof(unsigned long size) __alloc_size(1);
 #define vzalloc(...)		alloc_hooks(vzalloc_noprof(__VA_ARGS__))
+
+extern void *vmalloc_decrypted_noprof(unsigned long size) __alloc_size(1);
+#define vmalloc_decrypted(...)	alloc_hooks(vmalloc_decrypted_noprof(__VA_ARGS__))
+
+extern void *vzalloc_decrypted_noprof(unsigned long size) __alloc_size(1);
+#define vzalloc_decrypted(...)	alloc_hooks(vzalloc_decrypted_noprof(__VA_ARGS__))
 
 extern void *vmalloc_user_noprof(unsigned long size) __alloc_size(1);
 #define vmalloc_user(...)	alloc_hooks(vmalloc_user_noprof(__VA_ARGS__))

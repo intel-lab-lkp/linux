@@ -3416,6 +3416,103 @@ void vfree_atomic(const void *addr)
 		schedule_work(&p->wq);
 }
 
+/*
+ * Transition a single contiguous block of @nr pages at index @idx in
+ * @area->pages to encrypted or decrypted state.  On failure, the block's
+ * page-pointer slots are cleared so the standard free path will not return
+ * the pages to the allocator (they are leaked).
+ */
+static int __vm_pages_enc_dec(struct vm_struct *area, unsigned int idx,
+			      unsigned int nr, bool encrypt)
+{
+	unsigned long addr =
+		(unsigned long)kasan_reset_tag(page_address(area->pages[idx]));
+	int err = encrypt ? set_memory_encrypted(addr, nr) :
+			    set_memory_decrypted(addr, nr);
+
+	if (err)
+		memset(&area->pages[idx], 0, nr * sizeof(*area->pages));
+	return err;
+}
+
+/*
+ * Compact @area->pages, removing slots previously zeroed by
+ * __vm_pages_enc_dec().  Returns the number of leaked pages
+ * (old nr_pages - new nr_pages).
+ */
+static unsigned int vm_compact_leaked_pages(struct vm_struct *area)
+{
+	unsigned int i, dst;
+	unsigned int old_nr = area->nr_pages;
+
+	for (i = 0, dst = 0; i < area->nr_pages; i++) {
+		if (area->pages[i])
+			area->pages[dst++] = area->pages[i];
+	}
+	area->nr_pages = dst;
+	return old_nr - dst;
+}
+
+/*
+ * Re-encrypt the linear-map alias of all pages backing a VM_DECRYPTED area.
+ * Best-effort: on per-block failure the loop continues so as many pages as
+ * possible are returned to the encrypted state.  Pages that fail to
+ * transition are left out of area->pages and leaked.
+ */
+static int vm_pages_encrypt(struct vm_struct *area)
+{
+	unsigned int nr = 1U << vm_area_page_order(area);
+	unsigned int i;
+	unsigned int leaked;
+	int ret = 0;
+
+	for (i = 0; i < area->nr_pages; i += nr) {
+		int err = __vm_pages_enc_dec(area, i, nr, true);
+
+		if (err && !ret)
+			ret = err;
+	}
+
+	leaked = vm_compact_leaked_pages(area);
+	if (leaked)
+		pr_warn("vmalloc: re-encryption failed, leaked %u pages\n",
+			leaked);
+	return ret;
+}
+
+/*
+ * Decrypt the linear-map alias of all pages backing a VM_DECRYPTED area.
+ * On failure, the already-decrypted prefix is rolled back to encrypted.
+ * Pages that fail either the initial decrypt or the rollback re-encrypt are
+ * left out of area->pages and leaked.
+ */
+static int vm_pages_decrypt(struct vm_struct *area)
+{
+	unsigned int nr = 1U << vm_area_page_order(area);
+	unsigned int i;
+	unsigned int leaked;
+	int ret = 0;
+
+	for (i = 0; i < area->nr_pages; i += nr) {
+		ret = __vm_pages_enc_dec(area, i, nr, false);
+		if (ret)
+			goto rollback;
+	}
+	return 0;
+
+rollback:
+	while (i) {
+		i -= nr;
+		__vm_pages_enc_dec(area, i, nr, true);
+	}
+
+	leaked = vm_compact_leaked_pages(area);
+	if (leaked)
+		pr_warn("vmalloc: decryption failed, leaked %u pages\n",
+			leaked);
+	return ret;
+}
+
 /**
  * vfree - Release memory allocated by vmalloc()
  * @addr:  Memory base address
@@ -3456,6 +3553,9 @@ void vfree(const void *addr)
 				addr);
 		return;
 	}
+
+	if (unlikely(vm->flags & VM_DECRYPTED))
+		vm_pages_encrypt(vm);
 
 	if (unlikely(vm->flags & VM_FLUSH_RESET_PERMS))
 		vm_reset_perms(vm);
@@ -3896,6 +3996,22 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	}
 
 	/*
+	 * For VM_DECRYPTED areas, decrypt each
+	 * page on the linear map before creating the vmalloc alias.
+	 */
+	if (area->flags & VM_DECRYPTED) {
+		if (vm_pages_decrypt(area)) {
+			/*
+			 * vm_pages_decrypt() re-encrypted what it could;
+			 * clear VM_DECRYPTED so the deferred cleanup path
+			 * doesn't try to re-encrypt again.
+			 */
+			area->flags &= ~VM_DECRYPTED;
+			goto fail;
+		}
+	}
+
+	/*
 	 * page tables allocations ignore external gfp mask, enforce it
 	 * by the scope API
 	 */
@@ -4202,6 +4318,50 @@ void *vzalloc_noprof(unsigned long size)
 				__builtin_return_address(0));
 }
 EXPORT_SYMBOL(vzalloc_noprof);
+
+/**
+ * vmalloc_decrypted - allocate virtually contiguous decrypted memory
+ * @size: allocation size
+ *
+ * Allocate pages in decrypted/shared state for host-visible access in
+ * confidential computing environments.  Pages are automatically
+ * re-encrypted on vfree().
+ *
+ * Return: pointer to the allocated memory or %NULL on error
+ */
+void *vmalloc_decrypted_noprof(unsigned long size)
+{
+	return __vmalloc_node_range_noprof(size, 1, VMALLOC_START, VMALLOC_END,
+					   GFP_KERNEL,
+					   pgprot_decrypted(PAGE_KERNEL),
+					   VM_DECRYPTED, NUMA_NO_NODE,
+					   __builtin_return_address(0));
+}
+EXPORT_SYMBOL(vmalloc_decrypted_noprof);
+
+/**
+ * vzalloc_decrypted - allocate zeroed virtually contiguous decrypted memory
+ * @size:    allocation size
+ *
+ * Like vmalloc_decrypted(), but the memory is set to zero.
+ *
+ * Return: pointer to the allocated memory or %NULL on error
+ */
+void *vzalloc_decrypted_noprof(unsigned long size)
+{
+	void *addr;
+
+	addr = __vmalloc_node_range_noprof(size, 1, VMALLOC_START, VMALLOC_END,
+					   GFP_KERNEL,
+					   pgprot_decrypted(PAGE_KERNEL),
+					   VM_DECRYPTED, NUMA_NO_NODE,
+					   __builtin_return_address(0));
+	if (addr)
+		memset(addr, 0, size);
+
+	return addr;
+}
+EXPORT_SYMBOL(vzalloc_decrypted_noprof);
 
 /**
  * vmalloc_user - allocate zeroed virtually contiguous memory for userspace
@@ -5270,6 +5430,9 @@ static int vmalloc_info_show(struct seq_file *m, void *p)
 
 			if (v->flags & VM_DMA_COHERENT)
 				seq_puts(m, " dma-coherent");
+
+			if (v->flags & VM_DECRYPTED)
+				seq_puts(m, " decrypted");
 
 			if (is_vmalloc_addr(v->pages))
 				seq_puts(m, " vpages");
