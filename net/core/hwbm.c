@@ -33,11 +33,15 @@ int hwbm_pool_refill(struct hwbm_pool *bm_pool, gfp_t gfp)
 	if (!buf)
 		return -ENOMEM;
 
-	if (bm_pool->construct)
-		if (bm_pool->construct(bm_pool, buf)) {
-			hwbm_buf_free(bm_pool, buf);
-			return -ENOMEM;
-		}
+	if (!bm_pool->construct) {
+		hwbm_buf_free(bm_pool, buf);
+		return -EINVAL;
+	}
+
+	if (bm_pool->construct(bm_pool, buf)) {
+		hwbm_buf_free(bm_pool, buf);
+		return -ENOMEM;
+	}
 
 	return 0;
 }
