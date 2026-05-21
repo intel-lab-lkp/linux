@@ -94,9 +94,9 @@ csky_syscall_trace:
 	ldw	a3, (sp, LSAVE_A3)
 #if defined(__CSKYABIV2__)
 	subi	sp, 8
-	ldw	r9, (sp, LSAVE_A4)
+	ldw	r9, (sp, LSAVE_A4 + 8)
 	stw	r9, (sp, 0x0)
-	ldw	r9, (sp, LSAVE_A5)
+	ldw	r9, (sp, LSAVE_A5 + 8)
 	stw	r9, (sp, 0x4)
 	jsr	syscallid                     /* Do system call */
 	addi	sp, 8
