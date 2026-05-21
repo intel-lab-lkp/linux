@@ -791,6 +791,7 @@ struct phy_device {
 	struct sfp_bus *sfp_bus;
 	struct phy_port *sfp_cage_port;
 	struct phy_port *mod_port;
+	struct phy_port *upstream_port;
 	struct phylink *phylink;
 	struct net_device *attached_dev;
 	struct mii_timestamper *mii_ts;
@@ -2465,6 +2466,8 @@ int __phy_hwtstamp_set(struct phy_device *phydev,
 		       struct netlink_ext_ack *extack);
 
 struct phy_port *phy_get_sfp_port(struct phy_device *phydev);
+
+void phy_set_upstream_port(struct phy_device *phydev, struct phy_port *port);
 
 /**
  * phy_module_driver() - Helper macro for registering PHY drivers
