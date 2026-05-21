@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright (C) 2024 StarFive Technology Co., Ltd.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/i2c/snps,dwc-i2c.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Synopsys DWC I2C Controller
+
+maintainers:
+  - Lianfeng Ouyang <lianfeng.ouyang@starfivetech.com>
+
+allOf:
+  - $ref: /schemas/i2c/i2c-controller.yaml#
+
+properties:
+  compatible:
+    oneOf:
+      - description: Generic Synopsys DWC I2C controller
+        const: snps,dwc-i2c
+      - description: StarFive JHB100 I2C master controller
+        items:
+          - const: starfive,jhb100-dwc-i2c-master
+          - const: snps,dwc-i2c
+      - description: StarFive JHB100 I2C slave controller
+        items:
+          - const: starfive,jhb100-dwc-i2c-slave
+          - const: snps,dwc-i2c
+
+  reg:
+    description: DWC I2C controller memory mapped registers
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    minItems: 1
+    items:
+      - description: I2C controller reference clock source
+      - description: APB interface clock source
+
+  clock-names:
+    minItems: 1
+    items:
+      - const: ref
+      - const: pclk
+
+  resets:
+    maxItems: 1
+
+  clock-frequency:
+    description: Desired I2C bus clock frequency in Hz
+    enum: [100000, 400000, 1000000, 3400000]
+    default: 400000
+
+  i2c-sda-hold-time-ns:
+    description: |
+      The property should contain the SDA hold time in nanoseconds.
+      This value is used to compute value written into DW_IC_SDA_HOLD register.
+
+  i2c-scl-falling-time-ns:
+    description: |
+      The property should contain the SCL falling time in nanoseconds.
+      This value is used to compute the tLOW period.
+    default: 300
+
+  i2c-sda-falling-time-ns:
+    description: |
+      The property should contain the SDA falling time in nanoseconds.
+      This value is used to compute the tHIGH period.
+    default: 300
+
+  starfive,mctp-i2c-ms:
+    description: |
+      The property should contain reference to the master node associated with the slave.
+      This value is only used in slave mode, especially for MCTP application.
+
+  dwc-i2c-tx-fifo-depth:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      The property describes the tx fifo depth.
+    default: 8
+
+  dwc-i2c-rx-fifo-depth:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      The property describes the rx fifo depth.
+    default: 8
+
+unevaluatedProperties: false
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+examples:
+  - |
+    i2c@f0000 {
+      compatible = "snps,dwc-i2c";
+      reg = <0xf0000 0x1000>;
+      interrupts = <11>;
+      clock-frequency = <400000>;
+    };
+  - |
+    i2c@2000 {
+      compatible = "snps,dwc-i2c";
+      reg = <0x2000 0x100>;
+      #address-cells = <1>;
+      #size-cells = <0>;
+      clock-frequency = <400000>;
+      clocks = <&i2cclk>;
+      interrupts = <0>;
+
+      eeprom@64 {
+        compatible = "atmel,24c02";
+        reg = <0x64>;
+      };
+    };
+...
