@@ -32,7 +32,6 @@
 #include <asm/msr.h>
 #include <asm/nmi.h>
 #include <clocksource/hyperv_timer.h>
-#include <asm/numa.h>
 #include <asm/svm.h>
 
 /* Is Linux running on nested Microsoft Hypervisor */
@@ -413,46 +412,16 @@ static void __init hv_smp_prepare_boot_cpu(void)
 #endif
 }
 
-static void __init hv_smp_prepare_cpus(unsigned int max_cpus)
+static void __init hv_smp_prepare_cpus_for_snp(unsigned int max_cpus)
 {
-#ifdef CONFIG_X86_64
-	int i;
-	int ret;
-#endif
-
 	native_smp_prepare_cpus(max_cpus);
+	apic->wakeup_secondary_cpu_64 = hv_snp_boot_ap;
+}
 
-	/*
-	 *  Override wakeup_secondary_cpu_64 callback for SEV-SNP
-	 *  enlightened guest.
-	 */
-	if (!ms_hyperv.paravisor_present && hv_isolation_type_snp()) {
-		apic->wakeup_secondary_cpu_64 = hv_snp_boot_ap;
-		return;
-	}
-
-#ifdef CONFIG_X86_64
-	/* If AP LPs exist, we are in a kexec'd kernel and VPs already exist */
-	if (num_present_cpus() == 1 || hv_lp_exists(1))
-		return;
-
-	for_each_present_cpu(i) {
-		if (i == 0)
-			continue;
-		ret = hv_call_add_logical_proc(numa_cpu_node(i), i, cpu_physical_id(i));
-		BUG_ON(ret);
-	}
-
-	ret = hv_call_notify_all_processors_started();
-	WARN_ON(ret);
-
-	for_each_present_cpu(i) {
-		if (i == 0)
-			continue;
-		ret = hv_call_create_vp(numa_cpu_node(i), hv_current_partition_id, i, i);
-		BUG_ON(ret);
-	}
-#endif
+static void __init hv_smp_prepare_cpus_for_root(unsigned int max_cpus)
+{
+	native_smp_prepare_cpus(max_cpus);
+	hv_smp_prep_cpus();
 }
 #endif
 
@@ -722,9 +691,10 @@ static void __init ms_hyperv_init_platform(void)
 
 # ifdef CONFIG_SMP
 	smp_ops.smp_prepare_boot_cpu = hv_smp_prepare_boot_cpu;
-	if (hv_root_partition() ||
-	    (!ms_hyperv.paravisor_present && hv_isolation_type_snp()))
-		smp_ops.smp_prepare_cpus = hv_smp_prepare_cpus;
+	if (!ms_hyperv.paravisor_present && hv_isolation_type_snp())
+		smp_ops.smp_prepare_cpus = hv_smp_prepare_cpus_for_snp;
+	else if (hv_root_partition())
+		smp_ops.smp_prepare_cpus = hv_smp_prepare_cpus_for_root;
 # endif
 
 	/*

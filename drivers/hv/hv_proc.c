@@ -8,6 +8,7 @@
 #include <linux/minmax.h>
 #include <linux/export.h>
 #include <asm/mshyperv.h>
+#include <asm/numa.h>
 
 /*
  * See struct hv_deposit_memory. The first u64 is partition ID, the rest
@@ -154,7 +155,7 @@ bool hv_result_needs_memory(u64 status)
 }
 EXPORT_SYMBOL_GPL(hv_result_needs_memory);
 
-int hv_call_add_logical_proc(int node, u32 lp_index, u32 apic_id)
+static int hv_call_add_logical_proc(int node, u32 lp_index, u32 apic_id)
 {
 	struct hv_input_add_logical_processor *input;
 	struct hv_output_add_logical_processor *output;
@@ -240,7 +241,7 @@ int hv_call_create_vp(int node, u64 partition_id, u32 vp_index, u32 flags)
 }
 EXPORT_SYMBOL_GPL(hv_call_create_vp);
 
-int hv_call_notify_all_processors_started(void)
+static int hv_call_notify_all_processors_started(void)
 {
 	struct hv_input_notify_partition_event *input;
 	u64 status;
@@ -262,7 +263,7 @@ int hv_call_notify_all_processors_started(void)
 	return ret;
 }
 
-bool hv_lp_exists(u32 lp_index)
+static bool hv_lp_exists(u32 lp_index)
 {
 	struct hv_input_get_logical_processor_run_time *input;
 	struct hv_output_get_logical_processor_run_time *output;
@@ -285,4 +286,32 @@ bool hv_lp_exists(u32 lp_index)
 	}
 
 	return hv_result_success(status);
+}
+
+void hv_smp_prep_cpus(void)
+{
+#ifdef CONFIG_X86_64
+	int i, ret;
+
+	/* If AP LPs exist, we are in a kexec'd kernel and VPs already exist */
+	if (num_present_cpus() == 1 || hv_lp_exists(1))
+		return;
+
+	for_each_present_cpu(i) {
+		if (i == 0)
+			continue;
+		ret = hv_call_add_logical_proc(numa_cpu_node(i), i, cpu_physical_id(i));
+		BUG_ON(ret);
+	}
+
+	ret = hv_call_notify_all_processors_started();
+	WARN_ON(ret);
+
+	for_each_present_cpu(i) {
+		if (i == 0)
+			continue;
+		ret = hv_call_create_vp(numa_cpu_node(i), hv_current_partition_id, i, i);
+		BUG_ON(ret);
+	}
+#endif
 }
