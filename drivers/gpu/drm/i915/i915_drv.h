@@ -172,9 +172,6 @@ struct drm_i915_private {
 	/* display device data, must be placed after drm device member */
 	struct intel_display *display;
 
-	/* FIXME: Device release actions should all be moved to drmm_ */
-	bool do_release;
-
 	/* i915 device parameters */
 	struct i915_params params;
 

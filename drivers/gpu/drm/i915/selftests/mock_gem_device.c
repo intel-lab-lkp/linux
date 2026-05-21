@@ -59,12 +59,9 @@ void mock_device_flush(struct drm_i915_private *i915)
 						  NULL));
 }
 
-static void mock_device_release(struct drm_device *dev)
+static void mock_device_release(struct drm_device *dev, void *unused)
 {
 	struct drm_i915_private *i915 = to_i915(dev);
-
-	if (!i915->do_release)
-		goto out;
 
 	mock_device_flush(i915);
 	intel_gt_driver_remove(to_gt(i915));
@@ -81,14 +78,12 @@ static void mock_device_release(struct drm_device *dev)
 
 	drm_mode_config_cleanup(&i915->drm);
 
-out:
 	i915_params_free(&i915->params);
 }
 
 static const struct drm_driver mock_driver = {
 	.name = "mock",
 	.driver_features = DRIVER_GEM,
-	.release = mock_device_release,
 };
 
 static void release_dev(struct device *dev)
@@ -249,8 +244,11 @@ struct drm_i915_private *mock_gem_device(void)
 	__clear_bit(I915_WEDGED, &to_gt(i915)->reset.flags);
 	intel_engines_driver_register(i915);
 
-	i915->do_release = true;
 	ida_init(&i915->selftest.mock_region_instances);
+
+	ret = drmm_add_action_or_reset(&i915->drm, mock_device_release, NULL);
+	if (ret)
+		return NULL;
 
 	return i915;
 
