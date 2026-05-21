@@ -45,10 +45,13 @@ static void xattr_free(struct f2fs_sb_info *sbi, void *xattr_addr,
 		kfree(xattr_addr);
 }
 
-static int f2fs_xattr_fadvise_get(struct inode *inode, void *buffer)
+static int f2fs_xattr_fadvise_get(struct inode *inode, void *buffer,
+				  size_t size)
 {
 	if (!buffer)
 		goto out;
+	if (size < sizeof(unsigned int))
+		return -ERANGE;
 	if (mapping_large_folio_support(inode->i_mapping))
 		*((unsigned int *)buffer) |= BIT(F2FS_XATTR_FADV_LARGEFOLIO);
 out:
@@ -74,15 +77,25 @@ static int f2fs_xattr_generic_get(const struct xattr_handler *handler,
 	}
 	if (handler->flags == F2FS_XATTR_INDEX_USER &&
 	    !strcmp(name, "fadvise"))
-		return f2fs_xattr_fadvise_get(inode, buffer);
+		return f2fs_xattr_fadvise_get(inode, buffer, size);
 
 	return f2fs_getxattr(inode, handler->flags, name,
 			     buffer, size, NULL);
 }
 
-static int f2fs_xattr_fadvise_set(struct inode *inode, const void *value)
+static int f2fs_xattr_fadvise_set(struct inode *inode, const void *value,
+				  size_t size)
 {
 	unsigned int new_fadvise;
+
+	/* removexattr("user.fadvise") passes NULL to clear the hint. */
+	if (!value) {
+		f2fs_remove_ino_entry(F2FS_I_SB(inode),
+				      inode->i_ino, LARGE_FOLIO_INO);
+		return 0;
+	}
+	if (size != sizeof(new_fadvise))
+		return -EINVAL;
 
 	new_fadvise = *(unsigned int *)value;
 
@@ -116,7 +129,7 @@ static int f2fs_xattr_generic_set(const struct xattr_handler *handler,
 	}
 	if (handler->flags == F2FS_XATTR_INDEX_USER &&
 	    !strcmp(name, "fadvise"))
-		return f2fs_xattr_fadvise_set(inode, value);
+		return f2fs_xattr_fadvise_set(inode, value, size);
 
 	return f2fs_setxattr(inode, handler->flags, name,
 					value, size, NULL, flags);
