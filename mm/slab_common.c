@@ -366,13 +366,28 @@ struct kmem_cache *__kmem_cache_create_args(const char *name,
 		    object_size - args->usersize < args->useroffset))
 		args->usersize = args->useroffset = 0;
 
-	s = __kmem_cache_alias(name, object_size, flags, args);
-	if (s)
-		goto out_unlock;
-
 	cache_name = kstrdup_const(name, GFP_KERNEL);
 	if (!cache_name) {
 		err = -ENOMEM;
+		goto out_unlock;
+	}
+
+	if (strchr(cache_name, '/')) {
+		char *n;
+
+		n = kstrdup(cache_name, GFP_KERNEL);
+		kfree_const(cache_name);
+		if (!n) {
+			err = -ENOMEM;
+			goto out_unlock;
+		}
+
+		cache_name = strreplace(n, '/', '_');
+	}
+
+	s = __kmem_cache_alias(cache_name, object_size, flags, args);
+	if (s) {
+		kfree_const(cache_name);
 		goto out_unlock;
 	}
 
