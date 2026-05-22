@@ -50,8 +50,8 @@ static long __fsdev_dax_direct_access(struct dax_device *dax_dev, pgoff_t pgoff,
 {
 	struct dev_dax *dev_dax = dax_get_private(dax_dev);
 	size_t size = nr_pages << PAGE_SHIFT;
-	size_t offset = pgoff << PAGE_SHIFT;
 	phys_addr_t phys;
+	int i;
 
 	phys = dax_pgoff_to_phys(dev_dax, pgoff, size);
 	if (phys == -1) {
@@ -67,10 +67,20 @@ static long __fsdev_dax_direct_access(struct dax_device *dax_dev, pgoff_t pgoff,
 		*pfn = PHYS_PFN(phys);
 
 	/*
-	 * Use cached_size which was computed at probe time. The size cannot
-	 * change while the driver is bound (resize returns -EBUSY).
+	 * Return the number of physically contiguous pages available from
+	 * phys, clamped to the current range. For multi-range devices the
+	 * ranges may not be physically contiguous, so we cannot report
+	 * pages beyond the end of the range that contains phys.
 	 */
-	return PHYS_PFN(min(size, dev_dax->cached_size - offset));
+	for (i = 0; i < dev_dax->nr_range; i++) {
+		struct range *range = &dev_dax->ranges[i].range;
+
+		if (phys >= range->start && phys <= range->end)
+			return PHYS_PFN(min(size,
+					    (size_t)(range->end - phys + 1)));
+	}
+
+	return -EFAULT;
 }
 
 static int fsdev_dax_zero_page_range(struct dax_device *dax_dev,
@@ -271,11 +281,6 @@ static int fsdev_dax_probe(struct dev_dax *dev_dax)
 			goto err_pgmap;
 		}
 	}
-
-	/* Cache size now; it cannot change while driver is bound */
-	dev_dax->cached_size = 0;
-	for (i = 0; i < dev_dax->nr_range; i++)
-		dev_dax->cached_size += range_len(&dev_dax->ranges[i].range);
 
 	/*
 	 * Use MEMORY_DEVICE_FS_DAX without setting vmemmap_shift, leaving
