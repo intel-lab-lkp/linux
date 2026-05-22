@@ -587,10 +587,16 @@ static bool nvme_dbbuf_update_and_check_event(u16 value, __le32 *dbbuf_db,
 }
 
 static struct nvme_descriptor_pools *
-nvme_setup_descriptor_pools(struct nvme_dev *dev, unsigned numa_node)
+nvme_setup_descriptor_pools(struct nvme_dev *dev, int numa_node)
 {
-	struct nvme_descriptor_pools *pools = &dev->descriptor_pools[numa_node];
+	struct nvme_descriptor_pools *pools;
 	size_t small_align = NVME_SMALL_POOL_SIZE;
+
+	/* hctx->numa_node may be NUMA_NO_NODE; fall back to node 0. */
+	if (numa_node < 0 || numa_node >= nr_node_ids)
+		numa_node = 0;
+
+	pools = &dev->descriptor_pools[numa_node];
 
 	if (pools->small)
 		return pools; /* already initialized */
