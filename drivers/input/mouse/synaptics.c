@@ -534,9 +534,16 @@ static int synaptics_invert_y(int y)
  * Apply quirk(s) if the hardware matches
  */
 static void synaptics_apply_quirks(struct psmouse *psmouse,
-				   struct synaptics_device_info *info)
+                                   struct synaptics_device_info *info)
 {
-	int i;
+        int i;
+
+        /* Daffodil DC253D has a physical right button */
+        if (dmi_match(DMI_SYS_VENDOR, "Daffodil Computers Ltd.") &&
+            dmi_match(DMI_PRODUCT_NAME, "DC253D")) {
+                info->ext_cap_0c &= ~BIT(20);  /* Clear CLICKPAD bit */
+                psmouse_info(psmouse, "Force right button on Daffodil DC253D\n");
+        }
 
 	for (i = 0; min_max_pnpid_table[i].pnp_ids; i++) {
 		if (!psmouse_matches_pnp_id(psmouse,
