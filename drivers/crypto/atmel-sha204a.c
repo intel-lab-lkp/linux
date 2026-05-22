@@ -177,8 +177,14 @@ static int atmel_sha204a_probe(struct i2c_client *client)
 		return ret;
 
 	i2c_priv = i2c_get_clientdata(client);
+	i2c_priv->ready = false;
 
 	i2c_priv->caps = 0;
+
+	spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
+	list_add_tail(&i2c_priv->i2c_client_list_node,
+		      &atmel_i2c_mgmt.i2c_client_list);
+	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
 
 	memset(&i2c_priv->hwrng, 0, sizeof(i2c_priv->hwrng));
 
@@ -192,14 +198,25 @@ static int atmel_sha204a_probe(struct i2c_client *client)
 	ret = devm_hwrng_register(&client->dev, &i2c_priv->hwrng);
 	if (ret) {
 		dev_err(&client->dev, "failed to register RNG (%d)\n", ret);
-		return ret;
+		goto err_list_del;
 	}
 
 	ret = sysfs_create_group(&client->dev.kobj, &atmel_sha204a_groups);
 	if (ret) {
 		dev_err(&client->dev, "failed to create sysfs group (%d)\n", ret);
-		return ret;
+		goto err_hwrng_unregister;
 	}
+
+	spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
+	i2c_priv->ready = true;
+	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
+
+	return 0;
+
+err_hwrng_unregister:
+	devm_hwrng_unregister(&client->dev, &i2c_priv->hwrng);
+err_list_del:
+	atmel_i2c_unregister_client(i2c_priv);
 
 	return ret;
 }
@@ -208,9 +225,11 @@ static void atmel_sha204a_remove(struct i2c_client *client)
 {
 	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
 
+	atmel_i2c_deactivate_client(i2c_priv);
+
 	sysfs_remove_group(&client->dev.kobj, &atmel_sha204a_groups);
 	devm_hwrng_unregister(&client->dev, &i2c_priv->hwrng);
-	atmel_i2c_flush_queue();
+	atmel_i2c_unregister_client(i2c_priv);
 
 	kfree((void *)i2c_priv->hwrng.priv);
 }
@@ -245,7 +264,6 @@ static int __init atmel_sha204a_init(void)
 
 static void __exit atmel_sha204a_exit(void)
 {
-	atmel_i2c_flush_queue();
 	i2c_del_driver(&atmel_sha204a_driver);
 }
 
