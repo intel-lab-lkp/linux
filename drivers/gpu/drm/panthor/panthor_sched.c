@@ -147,13 +147,11 @@ struct panthor_scheduler {
 	struct panthor_device *ptdev;
 
 	/**
-	 * @wq: Workqueue used by our internal scheduler logic and
-	 * drm_gpu_scheduler.
+	 * @wq: Workqueue used by our internal scheduler logic.
 	 *
 	 * Used for the scheduler tick, group update or other kind of FW
 	 * event processing that can't be handled in the threaded interrupt
-	 * path. Also passed to the drm_gpu_scheduler instances embedded
-	 * in panthor_queue.
+	 * path.
 	 */
 	struct workqueue_struct *wq;
 
@@ -165,6 +163,14 @@ struct panthor_scheduler {
 	 * reclaim memory.
 	 */
 	struct workqueue_struct *heap_alloc_wq;
+
+	/**
+	 * @sched_wq: Workqueue used for the DRM scheduler.
+	 *
+	 * Workqueue used for drm_gpu_scheduler instances embedded in
+	 * panthor_queue.
+	 */
+	struct workqueue_struct *sched_wq;
 
 	/** @tick_work: Work executed on a scheduling tick. */
 	struct delayed_work tick_work;
@@ -3488,7 +3494,7 @@ group_create_queue(struct panthor_group *group,
 {
 	struct drm_sched_init_args sched_args = {
 		.ops = &panthor_queue_sched_ops,
-		.submit_wq = group->ptdev->scheduler->wq,
+		.submit_wq = group->ptdev->scheduler->sched_wq,
 		/*
 		 * The credit limit argument tells us the total number of
 		 * instructions across all CS slots in the ringbuffer, with
@@ -4078,6 +4084,9 @@ static void panthor_sched_fini(struct drm_device *ddev, void *res)
 	if (sched->heap_alloc_wq)
 		destroy_workqueue(sched->heap_alloc_wq);
 
+	if (sched->sched_wq)
+		destroy_workqueue(sched->sched_wq);
+
 	for (prio = PANTHOR_CSG_PRIORITY_COUNT - 1; prio >= 0; prio--) {
 		drm_WARN_ON(ddev, !list_empty(&sched->groups.runnable[prio]));
 		drm_WARN_ON(ddev, !list_empty(&sched->groups.idle[prio]));
@@ -4167,13 +4176,11 @@ int panthor_sched_init(struct panthor_device *ptdev)
 	 * FW is smart enough to fall back on other methods if the kernel can't
 	 * allocate memory, and fail the tiling job if none of these
 	 * countermeasures worked.
-	 *
-	 * Set WQ_MEM_RECLAIM on sched->wq to unblock the situation when the
-	 * system is running out of memory.
 	 */
 	sched->heap_alloc_wq = alloc_workqueue("panthor-heap-alloc", WQ_UNBOUND, 0);
-	sched->wq = alloc_workqueue("panthor-csf-sched", WQ_MEM_RECLAIM | WQ_UNBOUND, 0);
-	if (!sched->wq || !sched->heap_alloc_wq) {
+	sched->wq = alloc_workqueue("panthor-csf-sched", WQ_UNBOUND, 0);
+	sched->sched_wq = alloc_workqueue("panthor-drm-sched", WQ_MEM_RECLAIM, 0);
+	if (!sched->wq || !sched->heap_alloc_wq || !sched->sched_wq) {
 		panthor_sched_fini(&ptdev->base, sched);
 		drm_err(&ptdev->base, "Failed to allocate the workqueues");
 		return -ENOMEM;
