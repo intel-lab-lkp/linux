@@ -246,6 +246,9 @@
 			"IN1_R", "Line In Jack",
 			"Line Out Jack", "LOL",
 			"Line Out Jack", "LOR";
+		assigned-clocks = <&clk IMX8MP_CLK_SAI3>;
+		assigned-clock-parents = <&clk IMX8MP_AUDIO_PLL1_OUT>;
+		assigned-clock-rates = <12288000>;
 	};
 
 	sound-hdmi {
