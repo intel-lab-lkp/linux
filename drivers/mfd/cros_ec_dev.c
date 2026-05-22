@@ -198,6 +198,10 @@ static int ec_device_probe(struct platform_device *pdev)
 	ec->features.flags[1] = -1U; /* Not cached yet */
 	device_initialize(&ec->class_dev);
 
+	retval = cros_ec_read_features(ec);
+	if (retval < 0)
+		return retval;
+
 	for (i = 0; i < ARRAY_SIZE(cros_mcu_devices); i++) {
 		/*
 		 * Check whether this is actually a dedicated MCU rather
