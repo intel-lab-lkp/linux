@@ -6555,6 +6555,41 @@ KVM_S390_KEYOP_SSKE
 
 .. _kvm_run:
 
+4.145 KVM_PPC_GET_COMPAT_CAPS
+-----------------------------
+:Capability: KVM_CAP_PPC_COMPAT_CAPS
+:Architectures: powerpc
+:Type: vm ioctl
+:Parameters: struct kvm_ppc_compat_caps (out)
+:Returns:
+	0 on successful completion,
+	-EFAULT if ``struct kvm_ppc_compat_caps`` cannot be written
+
+IBM POWER system server-based processors provide a compatibility mode feature
+where an Nth generation processor can operate in modes consistent with earlier
+generations such as (N-1) and (N-2).
+
+This ioctl provides userspace with information about the CPU compatibility modes
+supported by the current host processor for booting the nested KVM guests on
+PowerNV (KVM nested APIv1) and PowerVM (KVM nested APIv2) platforms.
+
+::
+
+  struct kvm_ppc_compat_caps {
+	__u64	flags;			/* Reserved for future use */
+	__u64	compat_capabilities;	/* Capabilities supported by the host */
+  };
+
+The ``compat_capabilities`` bit field describes the processor compatibility
+modes supported by the host. For example, the following bits indicate support
+for specific processor modes.
+
+::
+
+  H_GUEST_CAP_POWER9  (bit 1): KVM guests can run in Power9 processor mode
+  H_GUEST_CAP_POWER10 (bit 2): KVM guests can run in Power10 processor mode
+  H_GUEST_CAP_POWER11 (bit 3): KVM guests can run in Power11 processor mode
+
 5. The kvm_run structure
 ========================
 
