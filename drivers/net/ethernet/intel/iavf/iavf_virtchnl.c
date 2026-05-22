@@ -827,19 +827,31 @@ void iavf_del_ether_addrs(struct iavf_adapter *adapter)
  * iavf_mac_add_ok
  * @adapter: adapter structure
  *
- * Submit list of filters based on PF response.
+ * Mark MAC filters as handled after PF confirms the add request.
+ * Logs the confirmed primary MAC address when applicable.
  **/
 static void iavf_mac_add_ok(struct iavf_adapter *adapter)
 {
 	struct iavf_mac_filter *f, *ftmp;
+	u8 primary_mac[ETH_ALEN] = {};
+	bool log_primary = false;
 
 	spin_lock_bh(&adapter->mac_vlan_list_lock);
 	list_for_each_entry_safe(f, ftmp, &adapter->mac_filter_list, list) {
 		f->is_new_mac = false;
-		if (!f->add && !f->add_handled)
+		if (!f->add && !f->add_handled) {
 			f->add_handled = true;
+			if (f->is_primary) {
+				ether_addr_copy(primary_mac, f->macaddr);
+				log_primary = true;
+			}
+		}
 	}
 	spin_unlock_bh(&adapter->mac_vlan_list_lock);
+
+	if (log_primary)
+		netdev_info(adapter->netdev,
+			    "MAC address set to %pM\n", primary_mac);
 }
 
 /**
