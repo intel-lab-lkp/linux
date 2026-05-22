@@ -210,12 +210,11 @@ sys_t_policy_ts_interval_store(struct config_item *item, const char *page,
 	unsigned int ms;
 	int ret;
 
-	mutex_lock(mutexp);
 	ret = kstrtouint(page, 10, &ms);
-	mutex_unlock(mutexp);
-
 	if (!ret) {
+		mutex_lock(mutexp);
 		pn->ts_interval = msecs_to_jiffies(ms);
+		mutex_unlock(mutexp);
 		return count;
 	}
 
@@ -241,12 +240,12 @@ sys_t_policy_clocksync_interval_store(struct config_item *item,
 	unsigned int ms;
 	int ret;
 
-	mutex_lock(mutexp);
 	ret = kstrtouint(page, 10, &ms);
-	mutex_unlock(mutexp);
 
 	if (!ret) {
+		mutex_lock(mutexp);
 		pn->clocksync_interval = msecs_to_jiffies(ms);
+		mutex_unlock(mutexp);
 		return count;
 	}
 
