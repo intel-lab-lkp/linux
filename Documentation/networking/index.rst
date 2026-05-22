@@ -91,6 +91,7 @@ Contents:
    openvswitch
    operstates
    packet_mmap
+   pause_test_plan
    phonet
    phy-link-topology
    phy-port
