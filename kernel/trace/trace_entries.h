@@ -251,6 +251,21 @@ FTRACE_ENTRY(user_stack, userstack_entry,
 );
 
 /*
+ * Stack ID entry - stores only a stack_id referencing the stackmap.
+ * Used when CONFIG_FTRACE_STACKMAP is enabled to deduplicate stacks.
+ */
+FTRACE_ENTRY(stack_id, stack_id_entry,
+
+	TRACE_STACK_ID,
+
+	F_STRUCT(
+		__field(	int,		stack_id	)
+	),
+
+	F_printk("<stack_id %d>", __entry->stack_id)
+);
+
+/*
  * trace_printk entry:
  */
 FTRACE_ENTRY(bprint, bprint_entry,
