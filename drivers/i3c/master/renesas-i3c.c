@@ -559,7 +559,7 @@ static int renesas_i3c_bus_init(struct i3c_master_controller *m)
 
 	i2c_parse_fw_timings(&m->dev, &t, true);
 
-	for (cks = 0; cks < 7; cks++) {
+	for (cks = 0; cks <= 7; cks++) {
 		/* SCL low-period calculation in Open-drain mode */
 		od_low_ticks = ((i2c_total_ticks * 6) / 10);
 
