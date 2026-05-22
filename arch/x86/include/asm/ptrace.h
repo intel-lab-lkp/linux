@@ -449,11 +449,7 @@ static inline unsigned long regs_get_kernel_argument(struct pt_regs *regs,
 }
 
 #define arch_has_single_step()	(1)
-#ifdef CONFIG_X86_DEBUGCTLMSR
-#define arch_has_block_step()	(1)
-#else
-#define arch_has_block_step()	(boot_cpu_data.x86 >= 6)
-#endif
+#define arch_has_block_step()	((CONFIG_X86_MINIMUM_CPU_FAMILY >= 6) || (boot_cpu_data.x86 >= 6))
 
 #define ARCH_HAS_USER_SINGLE_STEP_REPORT
 

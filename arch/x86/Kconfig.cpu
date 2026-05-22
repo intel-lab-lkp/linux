@@ -242,8 +242,7 @@ config X86_L1_CACHE_SHIFT
 	default "6"
 
 config X86_F00F_BUG
-	def_bool y
-	depends on M586MMX || M586TSC || M586
+	def_bool X86_MINIMUM_CPU_FAMILY=5 && CPU_SUP_INTEL
 
 config X86_ALIGNMENT_16
 	def_bool y
@@ -264,12 +263,6 @@ config X86_HAVE_PAE
 	def_bool y
 	depends on MCRUSOE || MEFFICEON || MCYRIXIII || MPENTIUM4 || MPENTIUMM || MPENTIUMIII || MPENTIUMII || M686 || MVIAC7 || MATOM || X86_64
 
-# this should be set for all -march=.. options where the compiler
-# generates cmov.
-config X86_CMOV
-	def_bool y
-	depends on (MK7 || MPENTIUM4 || MPENTIUMM || MPENTIUMIII || MPENTIUMII || M686 || MVIAC3_2 || MVIAC7 || MCRUSOE || MEFFICEON || MATOM || MGEODE_LX || X86_64)
-
 config X86_MINIMUM_CPU_FAMILY
 	int
 	default "64" if X86_64
@@ -278,7 +271,8 @@ config X86_MINIMUM_CPU_FAMILY
 
 config X86_DEBUGCTLMSR
 	def_bool y
-	depends on !(MK6 || MCYRIXIII || M586MMX || M586TSC || M586) && !UML
+	depends on !UML
+	depends on X86_MINIMUM_CPU_FAMILY=6
 
 config IA32_FEAT_CTL
 	def_bool y
@@ -314,7 +308,7 @@ config CPU_SUP_INTEL
 config CPU_SUP_CYRIX_32
 	default y
 	bool "Support Cyrix processors" if PROCESSOR_SELECT
-	depends on M586 || M586TSC || M586MMX || (EXPERT && !64BIT)
+	depends on X86_MINIMUM_CPU_FAMILY=5
 	help
 	  This enables detection, tunings and quirks for Cyrix processors
 

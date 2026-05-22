@@ -176,10 +176,9 @@ static inline unsigned long get_debugctlmsr(void)
 {
 	unsigned long debugctlmsr = 0;
 
-#ifndef CONFIG_X86_DEBUGCTLMSR
-	if (boot_cpu_data.x86 < 6)
+	if (CONFIG_X86_MINIMUM_CPU_FAMILY < 6 || boot_cpu_data.x86 < 6)
 		return 0;
-#endif
+
 	rdmsrq(MSR_IA32_DEBUGCTLMSR, debugctlmsr);
 
 	return debugctlmsr;
@@ -187,10 +186,9 @@ static inline unsigned long get_debugctlmsr(void)
 
 static inline void update_debugctlmsr(unsigned long debugctlmsr)
 {
-#ifndef CONFIG_X86_DEBUGCTLMSR
-	if (boot_cpu_data.x86 < 6)
+	if (CONFIG_X86_MINIMUM_CPU_FAMILY < 6 || boot_cpu_data.x86 < 6)
 		return;
-#endif
+
 	wrmsrq(MSR_IA32_DEBUGCTLMSR, debugctlmsr);
 }
 
