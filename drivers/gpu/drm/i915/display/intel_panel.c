@@ -59,27 +59,30 @@ intel_panel_preferred_fixed_mode(struct intel_connector *connector)
 					struct drm_display_mode, head);
 }
 
-static bool is_best_fixed_mode(struct intel_connector *connector,
-			       int vrefresh, int fixed_mode_vrefresh,
+static bool is_best_fixed_mode(int vrefresh, int fixed_mode_vrefresh,
 			       const struct drm_display_mode *best_mode)
 {
 	/* we want to always return something */
 	if (!best_mode)
 		return true;
 
-	/*
-	 * With VRR always pick a mode with equal/higher than requested
-	 * vrefresh, which we can then reduce to match the requested
-	 * vrefresh by extending the vblank length.
-	 */
-	if (intel_vrr_is_in_range(connector, vrefresh) &&
-	    intel_vrr_is_in_range(connector, fixed_mode_vrefresh) &&
-	    fixed_mode_vrefresh < vrefresh)
-		return false;
-
 	/* pick the fixed_mode that is closest in terms of vrefresh */
 	return abs(fixed_mode_vrefresh - vrefresh) <
 		abs(drm_mode_vrefresh(best_mode) - vrefresh);
+}
+
+static bool need_higher_rr_mode(struct intel_connector *connector,
+				const struct drm_display_mode *mode)
+{
+	int vrefresh = drm_mode_vrefresh(mode);
+
+	if (!intel_vrr_is_capable(connector))
+		return false;
+
+	if (!intel_vrr_is_in_range(connector, vrefresh))
+		return false;
+
+	return true;
 }
 
 const struct drm_display_mode *
@@ -89,10 +92,18 @@ intel_panel_fixed_mode(struct intel_connector *connector,
 	const struct drm_display_mode *fixed_mode, *best_mode = NULL;
 	int vrefresh = drm_mode_vrefresh(mode);
 
+	/*
+	 * With VRR always pick the highest refresh rate mode,
+	 * which we can then reduce to match the requested
+	 * vrefresh by extending the vblank length.
+	 */
+	if (need_higher_rr_mode(connector, mode))
+		return intel_panel_highest_vrefresh_mode(connector);
+
 	list_for_each_entry(fixed_mode, &connector->panel.fixed_modes, head) {
 		int fixed_mode_vrefresh = drm_mode_vrefresh(fixed_mode);
 
-		if (is_best_fixed_mode(connector, vrefresh,
+		if (is_best_fixed_mode(vrefresh,
 				       fixed_mode_vrefresh, best_mode))
 			best_mode = fixed_mode;
 	}
