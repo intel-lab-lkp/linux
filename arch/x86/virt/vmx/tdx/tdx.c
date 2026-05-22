@@ -1205,6 +1205,22 @@ static inline u64 tdx_tdr_pa(struct tdx_td *td)
 	return page_to_phys(td->tdr_page);
 }
 
+static void tdx_quote_init(void)
+{
+	struct tdx_module_args args = {};
+	u64 r;
+
+	do {
+		r = seamcall(TDH_QUOTE_INIT, &args);
+	} while (r == TDX_INTERRUPTED_RESUMABLE);
+
+	if (r)
+		return;
+
+	/* Quoting metadata is valid only after initialization */
+	get_tdx_sys_info_quote(&tdx_sysinfo.quote);
+}
+
 /* Initialize the TDX Module Extensions then Extension-SEAMCALLs can be used */
 static __init int tdx_ext_init(void)
 {
@@ -1306,6 +1322,13 @@ out_free_root:
 	return ret;
 }
 
+static int init_tdx_ext_features(void)
+{
+	tdx_quote_init();
+
+	return 0;
+}
+
 static __init int init_tdx_ext(void)
 {
 	int ret;
@@ -1321,7 +1344,11 @@ static __init int init_tdx_ext(void)
 	if (ret)
 		return ret;
 
-	return tdx_ext_init();
+	ret = tdx_ext_init();
+	if (ret)
+		return ret;
+
+	return init_tdx_ext_features();
 }
 
 static __init int init_tdx_module(void)
