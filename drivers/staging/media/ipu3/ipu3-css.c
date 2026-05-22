@@ -1613,6 +1613,12 @@ static int imgu_css_find_binary(struct imgu_css *css,
 		    in->height > bi->info.isp.sp.input.max_height)
 			continue;
 
+		/* Check the striping overlap isn't wider than the stripe. */
+		if (bi->info.isp.sp.iterator.num_stripes > 1 &&
+		    rects[IPU3_CSS_RECT_BDS].width <
+		    4 * IPU3_UAPI_ISP_VEC_ELEMS * 2)
+			continue;
+
 		if (imgu_css_queue_enabled(&queue[IPU3_CSS_QUEUE_OUT])) {
 			if (bi->info.isp.num_output_pins <= 0)
 				continue;
