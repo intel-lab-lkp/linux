@@ -1200,6 +1200,22 @@ static u64 to_hpa_list_info(struct page *root, unsigned int nr_pages)
 	       FIELD_PREP(HPA_LIST_INFO_LAST_ENTRY, nr_pages - 1);
 }
 
+/* Initialize the TDX Module Extensions then Extension-SEAMCALLs can be used */
+static int tdx_ext_init(void)
+{
+	struct tdx_module_args args = {};
+	u64 r;
+
+	do {
+		r = seamcall(TDH_EXT_INIT, &args);
+	} while (r == TDX_INTERRUPTED_RESUMABLE);
+
+	if (r != TDX_SUCCESS)
+		return -EFAULT;
+
+	return 0;
+}
+
 static int tdx_ext_mem_add(struct page *root, unsigned int nr_pages)
 {
 	struct tdx_module_args args = {
@@ -1287,6 +1303,8 @@ out_free_root:
 
 static int __maybe_unused init_tdx_ext(void)
 {
+	int ret;
+
 	if (!(tdx_sysinfo.features.tdx_features0 & TDX_FEATURES0_EXT))
 		return 0;
 
@@ -1294,7 +1312,11 @@ static int __maybe_unused init_tdx_ext(void)
 	if (!tdx_sysinfo.ext.ext_required)
 		return 0;
 
-	return tdx_ext_mem_setup();
+	ret = tdx_ext_mem_setup();
+	if (ret)
+		return ret;
+
+	return tdx_ext_init();
 }
 
 static __init int init_tdx_module(void)
