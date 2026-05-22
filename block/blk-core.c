@@ -1042,6 +1042,8 @@ unsigned long bdev_start_io_acct(struct block_device *bdev, enum req_op op,
 	part_stat_lock();
 	update_io_ticks(bdev, start_time, false);
 	part_stat_local_inc(bdev, in_flight[op_is_write(op)]);
+	if (bdev_is_partition(bdev))
+		part_stat_local_inc(bdev_whole(bdev), in_flight[op_is_write(op)]);
 	part_stat_unlock();
 
 	return start_time;
@@ -1073,6 +1075,8 @@ void bdev_end_io_acct(struct block_device *bdev, enum req_op op,
 	part_stat_add(bdev, sectors[sgrp], sectors);
 	part_stat_add(bdev, nsecs[sgrp], jiffies_to_nsecs(duration));
 	part_stat_local_dec(bdev, in_flight[op_is_write(op)]);
+	if (bdev_is_partition(bdev))
+		part_stat_local_dec(bdev_whole(bdev), in_flight[op_is_write(op)]);
 	part_stat_unlock();
 }
 EXPORT_SYMBOL(bdev_end_io_acct);
