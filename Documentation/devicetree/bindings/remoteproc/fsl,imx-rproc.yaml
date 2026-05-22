@@ -62,6 +62,14 @@ properties:
     minItems: 1
     maxItems: 32
 
+  memory-region-names:
+    minItems: 1
+    maxItems: 32
+    items:
+      oneOf:
+        - const: rsc-table
+        - pattern: '^vdev[0-9](buffer|vring[0-9])$'
+
   power-domains:
     minItems: 2
     maxItems: 8
