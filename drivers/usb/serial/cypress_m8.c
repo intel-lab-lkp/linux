@@ -1058,18 +1058,27 @@ static void cypress_read_int_callback(struct urb *urb)
 	default:
 	case packet_format_1:
 		/* This is for the CY7C64013... */
-		priv->current_status = data[0] & 0xF8;
-		bytes = data[1] + 2;
 		i = 2;
+		if (result < i)
+			break;
+		priv->current_status = data[0] & 0xF8;
+		bytes = data[1] + i;
 		break;
 	case packet_format_2:
 		/* This is for the CY7C63743... */
+		i = 1;
+		if (result < i)
+			break;
 		priv->current_status = data[0] & 0xF8;
 		bytes = (data[0] & 0x07) + 1;
-		i = 1;
 		break;
 	}
 	spin_unlock_irqrestore(&priv->lock, flags);
+	if (result < i) {
+		dev_dbg(dev, "%s - short packet received: %d bytes\n",
+			__func__, result);
+		goto continue_read;
+	}
 	if (result < bytes) {
 		dev_dbg(dev,
 			"%s - wrong packet size - received %d bytes but packet said %d bytes\n",
