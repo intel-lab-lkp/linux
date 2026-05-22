@@ -1619,6 +1619,34 @@ void dma_run_dependencies(struct dma_async_tx_descriptor *tx)
 }
 EXPORT_SYMBOL_GPL(dma_run_dependencies);
 
+#define dmaengine_prep_submit(chan, cb, cb_param, func, ...)	\
+({	struct dma_async_tx_descriptor *tx =			\
+		dmaengine_prep_##func(chan, __VA_ARGS__);	\
+		dma_cookie_t cookie = -ENOMEM;			\
+								\
+	if (tx) {						\
+		tx->callback = cb;				\
+		tx->callback_param = cb_param;			\
+		cookie = dmaengine_submit(tx);			\
+								\
+		if (dma_submit_error(cookie))			\
+			dmaengine_desc_free(tx);		\
+	}							\
+	cookie;							\
+})
+
+dma_cookie_t
+dmaengine_prep_submit_slave_single(struct dma_chan *chan,
+				   dma_async_tx_callback cb, void *cb_param,
+				   dma_addr_t buf, size_t len,
+				   enum dma_transfer_direction dir,
+				   unsigned long flags)
+{
+	return dmaengine_prep_submit(chan, cb, cb_param, slave_single,
+				     buf, len, dir, flags);
+}
+EXPORT_SYMBOL_GPL(dmaengine_prep_submit_slave_single);
+
 static int __init dma_bus_init(void)
 {
 	int err = dmaengine_init_unmap_pool();

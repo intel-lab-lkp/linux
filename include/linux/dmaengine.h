@@ -990,6 +990,13 @@ static inline struct dma_async_tx_descriptor *dmaengine_prep_slave_single(
 						  dir, flags, NULL);
 }
 
+dma_cookie_t
+dmaengine_prep_submit_slave_single(struct dma_chan *chan,
+				   dma_async_tx_callback cb, void *cb_param,
+				   dma_addr_t buf, size_t len,
+				   enum dma_transfer_direction dir,
+				   unsigned long flags);
+
 /**
  * dmaengine_prep_peripheral_dma_vec() - Prepare a DMA scatter-gather descriptor
  * @chan: The channel to be used for this descriptor
@@ -1574,6 +1581,16 @@ static inline int dma_get_slave_caps(struct dma_chan *chan,
 				     struct dma_slave_caps *caps)
 {
 	return -ENXIO;
+}
+
+static inline dma_cookie_t
+dmaengine_prep_submit_slave_single(struct dma_chan *chan,
+				   dma_async_tx_callback cb, void *cb_param;
+				   dma_addr_t buf, size_t len,
+				   enum dma_transfer_direction dir,
+				   unsigned long flags);
+{
+	return -ENODEV;
 }
 #endif
 
