@@ -10,8 +10,14 @@ void kvm_arm_target_impl_cpu_init(void);
 
 #ifdef CONFIG_ARM_PKVM_GUEST
 void pkvm_init_hyp_services(void);
+bool is_protected_kvm_guest(void);
 #else
 static inline void pkvm_init_hyp_services(void) { };
+
+static inline bool is_protected_kvm_guest(void)
+{
+	return false;
+}
 #endif
 
 static inline void kvm_arch_init_hyp_services(void)

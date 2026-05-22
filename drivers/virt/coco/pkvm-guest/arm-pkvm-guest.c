@@ -95,6 +95,11 @@ static int mmio_guard_ioremap_hook(phys_addr_t phys, size_t size,
 	return 0;
 }
 
+bool is_protected_kvm_guest(void)
+{
+	return !!pkvm_granule;
+}
+
 void pkvm_init_hyp_services(void)
 {
 	int i;
