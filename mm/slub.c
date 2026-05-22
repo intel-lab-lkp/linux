@@ -2771,6 +2771,8 @@ static struct slab_sheaf *__alloc_empty_sheaf(struct kmem_cache *s, gfp_t gfp,
 		return NULL;
 
 	sheaf->cache = s;
+	sheaf->capacity = capacity;
+	sheaf->pfmemalloc = false;
 
 	stat(s, SHEAF_ALLOC);
 
@@ -5001,21 +5003,15 @@ kmem_cache_prefill_sheaf(struct kmem_cache *s, gfp_t gfp, unsigned int size)
 
 	if (unlikely(size > s->sheaf_capacity)) {
 
-		sheaf = kzalloc_flex(*sheaf, objects, size, gfp);
+		sheaf = __alloc_empty_sheaf(s, gfp, size);
 		if (!sheaf)
 			return NULL;
 
 		stat(s, SHEAF_PREFILL_OVERSIZE);
-		sheaf->cache = s;
-		sheaf->capacity = size;
 
-		/*
-		 * we do not need to care about pfmemalloc here because oversize
-		 * sheaves area always flushed and freed when returned
-		 */
 		if (!__kmem_cache_alloc_bulk(s, gfp, size,
 					     &sheaf->objects[0])) {
-			kfree(sheaf);
+			free_empty_sheaf(s, sheaf);
 			return NULL;
 		}
 
@@ -5050,9 +5046,6 @@ kmem_cache_prefill_sheaf(struct kmem_cache *s, gfp_t gfp, unsigned int size)
 		sheaf = alloc_empty_sheaf(s, gfp);
 
 	if (sheaf) {
-		sheaf->capacity = s->sheaf_capacity;
-		sheaf->pfmemalloc = false;
-
 		if (sheaf->size < size &&
 		    __prefill_sheaf_pfmemalloc(s, sheaf, gfp)) {
 			sheaf_flush_unused(s, sheaf);
@@ -5083,7 +5076,7 @@ void kmem_cache_return_sheaf(struct kmem_cache *s, gfp_t gfp,
 	if (unlikely((sheaf->capacity != s->sheaf_capacity)
 		     || sheaf->pfmemalloc)) {
 		sheaf_flush_unused(s, sheaf);
-		kfree(sheaf);
+		free_empty_sheaf(s, sheaf);
 		return;
 	}
 
