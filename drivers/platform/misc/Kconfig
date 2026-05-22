@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Platform miscellaneous drivers configuration
+#
+
+config MC33978_CORE
+	tristate
+	depends on SPI
+	select IRQ_DOMAIN_HIERARCHY
+	select REGMAP
