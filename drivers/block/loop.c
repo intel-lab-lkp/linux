@@ -1118,6 +1118,9 @@ static void __loop_clr_fd(struct loop_device *lo)
 	struct file *filp;
 	gfp_t gfp = lo->old_gfp_mask;
 
+	/* flush outstanding writeback I/O before clearing lo_backing_file */
+	sync_blockdev(lo->lo_device);
+
 	spin_lock_irq(&lo->lo_lock);
 	filp = lo->lo_backing_file;
 	lo->lo_backing_file = NULL;
