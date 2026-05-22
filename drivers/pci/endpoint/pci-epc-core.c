@@ -14,6 +14,8 @@
 #include <linux/pci-epf.h>
 #include <linux/pci-ep-cfs.h>
 
+#include "../pci.h"
+
 static const struct class pci_epc_class = {
 	.name = "pci_epc",
 };
@@ -843,6 +845,71 @@ void pci_epc_linkdown(struct pci_epc *epc)
 EXPORT_SYMBOL_GPL(pci_epc_linkdown);
 
 /**
+ * pci_epc_doe_setup() - Discover and setup DOE mailboxes for all functions
+ * @epc: the EPC device on which DOE mailboxes has to be setup
+ *
+ * Discover DOE (Data Object Exchange) capabilities for all physical functions
+ * in the endpoint controller and register DOE mailboxes.
+ *
+ * Returns: 0 on success, -errno on failure
+ */
+static int pci_epc_doe_setup(struct pci_epc *epc)
+{
+	u16 cap_offset = 0;
+	u8 func_no;
+	int ret;
+
+	if (!epc->ops || !epc->ops->find_ext_capability)
+		return -EINVAL;
+
+	/* Discover DOE capabilities for all functions */
+	for (func_no = 0; func_no < epc->max_functions; func_no++) {
+		while ((cap_offset = epc->ops->find_ext_capability(epc, func_no, 0,
+								   cap_offset,
+								   PCI_EXT_CAP_ID_DOE))) {
+			/* Register this DOE mailbox */
+			ret = pci_ep_doe_add_mailbox(epc, func_no, cap_offset);
+			if (ret) {
+				dev_warn(&epc->dev,
+					 "[pf%d:offset %x] failed to add DOE mailbox\n",
+					 func_no, cap_offset);
+			}
+		}
+	}
+
+	dev_dbg(&epc->dev, "DOE mailboxes setup complete\n");
+	return 0;
+}
+
+/**
+ * pci_epc_init_capabilities() - Initialize EPC capabilities
+ * @epc: the EPC device whose capabilities need to be initialized
+ *
+ * Invoke to initialize capabilities supported by the EPC device.
+ */
+static void pci_epc_init_capabilities(struct pci_epc *epc)
+{
+	const struct pci_epc_features *epc_features;
+	int ret;
+
+	epc_features = pci_epc_get_features(epc, 0, 0);
+	if (!epc_features)
+		return;
+
+	if (IS_ENABLED(CONFIG_PCI_ENDPOINT_DOE) && epc_features->doe_capable) {
+		ret = pci_ep_doe_init(epc);
+		if (ret) {
+			dev_warn(&epc->dev, "DOE initialization failed: %d\n", ret);
+			return;
+		}
+
+		ret = pci_epc_doe_setup(epc);
+		if (ret)
+			dev_warn(&epc->dev, "DOE setup failed: %d\n", ret);
+	}
+}
+
+/**
  * pci_epc_init_notify() - Notify the EPF device that EPC device initialization
  *                         is completed.
  * @epc: the EPC device whose initialization is completed
@@ -856,6 +923,8 @@ void pci_epc_init_notify(struct pci_epc *epc)
 
 	if (IS_ERR_OR_NULL(epc))
 		return;
+
+	pci_epc_init_capabilities(epc);
 
 	mutex_lock(&epc->list_lock);
 	list_for_each_entry(epf, &epc->pci_epf, list) {
@@ -891,6 +960,27 @@ void pci_epc_notify_pending_init(struct pci_epc *epc, struct pci_epf *epf)
 EXPORT_SYMBOL_GPL(pci_epc_notify_pending_init);
 
 /**
+ * pci_epc_deinit_capabilities() - Cleanup EPC capabilities
+ * @epc: the EPC device whose capabilities need to be cleaned up
+ *
+ * Invoke to cleanup capabilities supported by the EPC device,
+ * and free the associated resources.
+ */
+static void pci_epc_deinit_capabilities(struct pci_epc *epc)
+{
+	const struct pci_epc_features *epc_features;
+
+	epc_features = pci_epc_get_features(epc, 0, 0);
+	if (!epc_features)
+		return;
+
+	if (IS_ENABLED(CONFIG_PCI_ENDPOINT_DOE) && epc_features->doe_capable) {
+		pci_ep_doe_destroy(epc);
+		dev_dbg(&epc->dev, "DOE mailboxes destroyed\n");
+	}
+}
+
+/**
  * pci_epc_deinit_notify() - Notify the EPF device about EPC deinitialization
  * @epc: the EPC device whose deinitialization is completed
  *
@@ -902,6 +992,8 @@ void pci_epc_deinit_notify(struct pci_epc *epc)
 
 	if (IS_ERR_OR_NULL(epc))
 		return;
+
+	pci_epc_deinit_capabilities(epc);
 
 	mutex_lock(&epc->list_lock);
 	list_for_each_entry(epf, &epc->pci_epf, list) {
