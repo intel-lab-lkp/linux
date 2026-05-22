@@ -87,6 +87,7 @@ struct tdmr_info {
 
 /* Bit definitions of TDX_FEATURES0 metadata field */
 #define TDX_FEATURES0_NO_RBP_MOD	BIT(18)
+#define TDX_FEATURES0_EXT		BIT_ULL(39)
 
 /*
  * Do not put any hardware-defined TDX structure representations below
