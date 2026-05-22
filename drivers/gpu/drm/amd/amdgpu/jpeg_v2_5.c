@@ -104,7 +104,8 @@ static int jpeg_v2_5_early_init(struct amdgpu_ip_block *ip_block)
 static int jpeg_v2_5_sw_init(struct amdgpu_ip_block *ip_block)
 {
 	struct amdgpu_ring *ring;
-	int i, r;
+	uint8_t i;
+	int r;
 	struct amdgpu_device *adev = ip_block->adev;
 
 	for (i = 0; i < adev->jpeg.num_jpeg_inst; ++i) {
@@ -149,7 +150,7 @@ static int jpeg_v2_5_sw_init(struct amdgpu_ip_block *ip_block)
 		else
 			ring->vm_hub = AMDGPU_MMHUB0(0);
 		ring->doorbell_index = (adev->doorbell_index.vcn.vcn_ring0_1 << 1) + 1 + 8 * i;
-		snprintf(ring->name, sizeof(ring->name), "jpeg_dec_%d", i);
+		snprintf(ring->name, sizeof(ring->name), "jpeg_dec_%u", i);
 		r = amdgpu_ring_init(adev, ring, 512, &adev->jpeg.inst[i].irq,
 				     0, AMDGPU_RING_PRIO_DEFAULT, NULL);
 		if (r)
