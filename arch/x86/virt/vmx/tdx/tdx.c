@@ -1213,6 +1213,21 @@ static inline u64 tdx_tdr_pa(struct tdx_td *td)
 	return page_to_phys(td->tdr_page);
 }
 
+/**
+ * tdx_quote_enabled() - Check whether TDX Quoting extension is available
+ *
+ * Return: %true if the Quoting extension is available, otherwise %false.
+ */
+bool tdx_quote_enabled(void)
+{
+	/*
+	 * No need for locking here. The quote buffer is initialized as part of
+	 * core TDX bringup, which comes before KVM is ready for userspace.
+	 */
+	return !!quote_data.buf;
+}
+EXPORT_SYMBOL_FOR_KVM(tdx_quote_enabled);
+
 #define HPAS_PER_PAGE			(PAGE_SIZE / sizeof(u64))
 
 static int tdx_quote_create_buf(unsigned int nr_pages, struct quote_data *qdata)
