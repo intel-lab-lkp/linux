@@ -670,6 +670,17 @@ static inline struct request *nvme_find_rq(struct blk_mq_tags *tags,
 			tag);
 		return NULL;
 	}
+	/*
+	 * blk_mq_tag_to_rq() returns whatever request last used this tag, which
+	 * may no longer be in flight if the device reports a bogus command id.
+	 * Completing it would deref a NULL rq->mq_hctx or double-complete a
+	 * command; the 4-bit genctr below only narrows the window.
+	 */
+	if (unlikely(blk_mq_rq_state(rq) != MQ_RQ_IN_FLIGHT)) {
+		dev_err(nvme_req(rq)->ctrl->device,
+			"completion for request %#x not in flight\n", tag);
+		return NULL;
+	}
 	if (unlikely(nvme_genctr_mask(nvme_req(rq)->genctr) != genctr)) {
 		dev_err(nvme_req(rq)->ctrl->device,
 			"request %#x genctr mismatch (got %#x expected %#x)\n",
