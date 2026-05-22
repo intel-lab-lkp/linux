@@ -217,6 +217,8 @@ static int allocinfo_ioctl_get_content_id(struct seq_file *m, void __user *arg)
 static bool matches_filter(struct codetag *ct, struct allocinfo_filter *filter,
 			   struct alloc_tag_counters *counters)
 {
+	bool inaccurate;
+
 	if (!filter || !filter->mask)
 		return true;
 
@@ -238,6 +240,12 @@ static bool matches_filter(struct codetag *ct, struct allocinfo_filter *filter,
 	if ((filter->mask & ALLOCINFO_FILTER_MASK_LINENO) &&
 	    ct->lineno != filter->fields.lineno)
 		return false;
+
+	if (filter->mask & ALLOCINFO_FILTER_MASK_INACCURATE) {
+		inaccurate = !!(ct->flags & CODETAG_FLAG_INACCURATE);
+		if (inaccurate != filter->fields.inaccurate)
+			return false;
+	}
 
 	if ((filter->mask & ALLOCINFO_FILTER_MASK_MIN_SIZE) ||
 	    (filter->mask & ALLOCINFO_FILTER_MASK_MAX_SIZE)) {
