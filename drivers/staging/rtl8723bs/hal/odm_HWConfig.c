@@ -227,19 +227,16 @@ static void odm_rx_phy_status_parsing(struct dm_odm_t *dm_odm,
 
 		odm_parsing_cfo(dm_odm, pkt_info, phy_sta_rpt->path_cfotail);
 	}
-
 	/*
 	 * UI BSS List signal strength(in percentage), make it good
 	 * looking, from 0~100.
 	 * It is assigned to the BSS List in GetValueFromBeaconOrProbeRsp().
 	 */
-	if (is_cck_rate) {
+	if (is_cck_rate)
 		phy_info->signal_strength = (u8)(odm_signal_scale_mapping(dm_odm, pwdb_all));
-	} else {
-		if (rf_rx_num != 0) {
-			phy_info->signal_strength = (u8)(odm_signal_scale_mapping(dm_odm, total_rssi /= rf_rx_num));
-		}
-	}
+	else if (rf_rx_num != 0)
+		phy_info->signal_strength = (u8)(odm_signal_scale_mapping(dm_odm, total_rssi /= rf_rx_num));
+
 }
 
 static void odm_Process_RSSIForDM(
