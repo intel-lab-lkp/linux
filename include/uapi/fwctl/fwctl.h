@@ -120,6 +120,8 @@ enum fwctl_rpc_scope {
  * @out_len: Length of the out memory
  * @in: Request message in device specific format
  * @out: Response message in device specific format
+ * @driver_data: Opaque userspace pointer passed verbatim to the driver.
+ *   Must be 0 for drivers that do not define a driver_data format.
  *
  * Deliver a Remote Procedure Call to the device FW and return the response. The
  * call's parameters and return are marshaled into linear buffers of memory. Any
@@ -136,6 +138,7 @@ struct fwctl_rpc {
 	__u32 out_len;
 	__aligned_u64 in;
 	__aligned_u64 out;
+	__aligned_u64 driver_data;
 };
 #define FWCTL_RPC _IO(FWCTL_TYPE, FWCTL_CMD_RPC)
 

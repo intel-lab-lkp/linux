@@ -304,7 +304,8 @@ static bool mlx5ctl_validate_rpc(const void *in, enum fwctl_rpc_scope scope)
 }
 
 static void *mlx5ctl_fw_rpc(struct fwctl_uctx *uctx, enum fwctl_rpc_scope scope,
-			    void *rpc_in, size_t in_len, size_t *out_len)
+			    void *rpc_in, size_t in_len, size_t *out_len,
+			    __u64 driver_data)
 {
 	struct mlx5ctl_dev *mcdev =
 		container_of(uctx->fwctl, struct mlx5ctl_dev, fwctl);
@@ -312,6 +313,9 @@ static void *mlx5ctl_fw_rpc(struct fwctl_uctx *uctx, enum fwctl_rpc_scope scope,
 		container_of(uctx, struct mlx5ctl_uctx, uctx);
 	void *rpc_out;
 	int ret;
+
+	if (driver_data)
+		return ERR_PTR(-EOPNOTSUPP);
 
 	if (in_len < MLX5_ST_SZ_BYTES(mbox_in_hdr) ||
 	    *out_len < MLX5_ST_SZ_BYTES(mbox_out_hdr))
