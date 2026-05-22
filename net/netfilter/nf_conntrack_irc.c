@@ -264,6 +264,8 @@ static int __init nf_conntrack_irc_init(void)
 {
 	int ret;
 
+	nf_conntrack_helper_deprecated(HELPER_NAME);
+
 	if (max_dcc_channels < 1) {
 		pr_err("max_dcc_channels must not be zero\n");
 		return -EINVAL;

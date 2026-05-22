@@ -600,6 +600,8 @@ static int __init nf_conntrack_pptp_init(void)
 {
 	NF_CT_HELPER_BUILD_BUG_ON(sizeof(struct nf_ct_pptp_master));
 
+	nf_conntrack_helper_deprecated(pptp.name);
+
 	return nf_conntrack_helper_register(&pptp);
 }
 
