@@ -62,6 +62,8 @@ static LIST_HEAD(tdx_memlist);
 static struct tdx_sys_info tdx_sysinfo __ro_after_init;
 static bool tdx_module_initialized __ro_after_init;
 
+static DEFINE_MUTEX(tdx_quote_lock);
+
 static struct quote_data {
 	void *buf;
 	u64 buf_len;
@@ -1227,6 +1229,86 @@ bool tdx_quote_enabled(void)
 	return !!quote_data.buf;
 }
 EXPORT_SYMBOL_FOR_KVM(tdx_quote_enabled);
+
+#define QUOTE_ID_MASK		GENMASK_U64(47, 32)
+
+static u64 tdx_quote_get(struct tdx_td *td, u64 in_data_pa, u64 in_data_len,
+			 u64 hpa_list_pa, u64 total_len, u64 *quote_len)
+{
+	struct tdx_module_args args = {
+		.rcx = tdx_tdr_pa(td),
+		/* Don't bother specifying the quote id */
+		.rdx = QUOTE_ID_MASK & (u64)-1,
+		.r8 = in_data_pa,
+		.r9 = in_data_len,
+		.r10 = hpa_list_pa,
+		.r11 = total_len,
+	};
+	u64 r;
+
+	do {
+		r = seamcall_ret(TDH_QUOTE_GET, &args);
+	} while (r == TDX_INTERRUPTED_RESUMABLE);
+
+	*quote_len = args.rcx;
+
+	return r;
+}
+
+/**
+ * tdx_quote_generate() - Generate a quote for a TD
+ * @td: The TD to generate the quote for.
+ * @in_data: Input data for the quote request.
+ * @in_data_len: Size of the input data in bytes.
+ * @quote_len: Returned size of the generated quote in bytes.
+ *
+ * Use the TDX Quoting extension to generate a TD quote. Pass the input data
+ * through the shared quote buffer and return the quote.
+ *
+ * Return: Newly allocated quote buffer or %NULL on failure.
+ * The caller must free the returned buffer with kvfree().
+ */
+void *tdx_quote_generate(struct tdx_td *td, void *in_data, u32 in_data_len,
+			 u32 *quote_len)
+{
+	void *quote_dup = NULL;
+	u64 r, out_len;
+
+	if (!tdx_quote_enabled())
+		return NULL;
+
+	/* TDH.QUOTE.GET expects the input data to fit in a page */
+	if (in_data_len > PAGE_SIZE)
+		return NULL;
+
+	mutex_lock(&tdx_quote_lock);
+
+	/*
+	 * Use the first page of the quote buffer for input data. The buffer
+	 * must be at least one page in size. @in_data may not be page-aligned,
+	 * but TDH.QUOTE.GET expects page-aligned addresses.
+	 */
+	memcpy(quote_data.buf, in_data, (size_t)in_data_len);
+
+	r = tdx_quote_get(td, quote_data.hpa_list[0], (u64)in_data_len,
+			  quote_data.hpa_list_pa, quote_data.buf_len, &out_len);
+	if (r || !out_len || out_len > quote_data.buf_len)
+		goto out;
+
+	/*
+	 * The quote buffer is a shared resource, so use it only for the
+	 * SEAMCALL and copy the data out as soon as possible.
+	 */
+	quote_dup = kvmemdup(quote_data.buf, out_len, GFP_KERNEL);
+
+out:
+	mutex_unlock(&tdx_quote_lock);
+
+	*quote_len = (u32)out_len;
+
+	return quote_dup;
+}
+EXPORT_SYMBOL_FOR_KVM(tdx_quote_generate);
 
 #define HPAS_PER_PAGE			(PAGE_SIZE / sizeof(u64))
 
