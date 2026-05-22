@@ -419,35 +419,6 @@ void nf_conntrack_helper_unregister(struct nf_conntrack_helper *me)
 }
 EXPORT_SYMBOL_GPL(nf_conntrack_helper_unregister);
 
-void nf_ct_helper_init(struct nf_conntrack_helper *helper,
-		       u16 l3num, u16 protonum, const char *name,
-		       u16 default_port, u16 spec_port, u32 id,
-		       const struct nf_conntrack_expect_policy *exp_pol,
-		       u32 expect_class_max,
-		       int (*help)(struct sk_buff *skb, unsigned int protoff,
-				   struct nf_conn *ct,
-				   enum ip_conntrack_info ctinfo),
-		       int (*from_nlattr)(struct nlattr *attr,
-					  struct nf_conn *ct),
-		       struct module *module)
-{
-	helper->nfproto = l3num;
-	helper->l4proto = protonum;
-	helper->expect_policy = exp_pol;
-	helper->expect_class_max = expect_class_max;
-	helper->help = help;
-	helper->from_nlattr = from_nlattr;
-	helper->me = module;
-	snprintf(helper->nat_mod_name, sizeof(helper->nat_mod_name),
-		 NF_NAT_HELPER_PREFIX "%s", name);
-
-	if (spec_port == default_port)
-		snprintf(helper->name, sizeof(helper->name), "%s", name);
-	else
-		snprintf(helper->name, sizeof(helper->name), "%s-%u", name, id);
-}
-EXPORT_SYMBOL_GPL(nf_ct_helper_init);
-
 int nf_conntrack_helpers_register(struct nf_conntrack_helper *helper,
 				  unsigned int n)
 {
