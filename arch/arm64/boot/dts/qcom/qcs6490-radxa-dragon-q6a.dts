@@ -1093,3 +1093,23 @@
 	bias-pull-up;
 	drive-strength = <10>;
 };
+
+/* Provide required regulator supplies for qfprom and PCIe controllers */
+&qfprom {
+	vcc-supply = <&vreg_l1c_1p8>;
+};
+
+&pcie0 {
+	vdda-supply = <&vreg_l1c_1p8>;
+	vddpe-3v3-supply = <&vreg_bob_3p296>;
+};
+
+&pcie1 {
+	vdda-supply = <&vreg_l1c_1p8>;
+	vddpe-3v3-supply = <&vreg_bob_3p296>;
+};
+
+/* Disable EUD as it conflicts with USB operation */
+&eud {
+	status = "disabled";
+};
