@@ -31,6 +31,7 @@
 #include <linux/syscore_ops.h>
 #include <linux/idr.h>
 #include <linux/kvm_types.h>
+#include <linux/bitfield.h>
 #include <asm/page.h>
 #include <asm/special_insns.h>
 #include <asm/msr-index.h>
@@ -1177,6 +1178,123 @@ static __init int init_tdmrs(struct tdmr_info_list *tdmr_list)
 	}
 
 	return 0;
+}
+
+static void tdx_clflush_hpa_list(struct page *root, unsigned int nr_pages)
+{
+	u64 *entries = page_to_virt(root);
+	int i;
+
+	for (i = 0; i < nr_pages; i++)
+		clflush_cache_range(__va(entries[i]), PAGE_SIZE);
+}
+
+#define HPA_LIST_INFO_FIRST_ENTRY	GENMASK_U64(11, 3)
+#define HPA_LIST_INFO_PFN		GENMASK_U64(51, 12)
+#define HPA_LIST_INFO_LAST_ENTRY	GENMASK_U64(63, 55)
+
+static u64 to_hpa_list_info(struct page *root, unsigned int nr_pages)
+{
+	return FIELD_PREP(HPA_LIST_INFO_FIRST_ENTRY, 0) |
+	       FIELD_PREP(HPA_LIST_INFO_PFN, page_to_pfn(root)) |
+	       FIELD_PREP(HPA_LIST_INFO_LAST_ENTRY, nr_pages - 1);
+}
+
+static int tdx_ext_mem_add(struct page *root, unsigned int nr_pages)
+{
+	struct tdx_module_args args = {
+		.rcx = to_hpa_list_info(root, nr_pages),
+	};
+	u64 r;
+
+	tdx_clflush_hpa_list(root, nr_pages);
+
+	do {
+		/*
+		 * TDH_EXT_MEM_ADD is designed to use output parameter RCX to
+		 * override/update input parameter RCX, so the caller doesn't
+		 * have to do manual parameter update on retry call.
+		 */
+		r = seamcall_ret(TDH_EXT_MEM_ADD, &args);
+	} while (r == TDX_INTERRUPTED_RESUMABLE);
+
+	if (r != TDX_SUCCESS)
+		return -EFAULT;
+
+	return 0;
+}
+
+static int tdx_ext_mem_setup(void)
+{
+	unsigned int nr_pages;
+	struct page *page;
+	u64 *root;
+	unsigned int i;
+	int ret;
+
+	nr_pages = tdx_sysinfo.ext.memory_pool_required_pages;
+	/*
+	 * memory_pool_required_pages == 0 means no need to add pages,
+	 * skip the memory setup.
+	 */
+	if (!nr_pages)
+		return 0;
+
+	root = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!root)
+		return -ENOMEM;
+
+	page = alloc_contig_pages(nr_pages, GFP_KERNEL, numa_mem_id(),
+				  &node_online_map);
+	if (!page) {
+		ret = -ENOMEM;
+		goto out_free_root;
+	}
+
+	for (i = 0; i < nr_pages;) {
+		unsigned int nents = min(nr_pages - i,
+					 PAGE_SIZE / sizeof(*root));
+		int j;
+
+		for (j = 0; j < nents; j++)
+			root[j] = page_to_phys(page + i + j);
+
+		ret = tdx_ext_mem_add(virt_to_page(root), nents);
+		/*
+		 * No SEAMCALLs to reclaim the added pages. For simple error
+		 * handling, leak all pages.
+		 */
+		WARN_ON_ONCE(ret);
+		if (ret)
+			break;
+
+		i += nents;
+	}
+
+	/*
+	 * Extensions memory can't be reclaimed once added, print out the
+	 * amount, stop tracking it and free the root page, no matter success
+	 * or failure.
+	 */
+	pr_info("%lu KB allocated for TDX Module Extensions\n",
+		nr_pages * PAGE_SIZE / 1024);
+
+out_free_root:
+	kfree(root);
+
+	return ret;
+}
+
+static int __maybe_unused init_tdx_ext(void)
+{
+	if (!(tdx_sysinfo.features.tdx_features0 & TDX_FEATURES0_EXT))
+		return 0;
+
+	/* No feature requires TDX Module Extensions. */
+	if (!tdx_sysinfo.ext.ext_required)
+		return 0;
+
+	return tdx_ext_mem_setup();
 }
 
 static __init int init_tdx_module(void)
