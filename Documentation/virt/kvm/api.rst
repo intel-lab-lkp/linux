@@ -7335,6 +7335,9 @@ inputs and outputs of the TDVMCALL.  Currently the following values of
    queued successfully, the TDX guest can poll the status field in the
    shared-memory area to check whether the Quote generation is completed or
    not. When completed, the generated Quote is returned via the same buffer.
+   If the host kernel generates Quotes through the TDX Quoting service provided
+   by the TDX module, KVM processes the GetQuote request and it will not appear
+   in userspace.  KVM only supports version 1 of the GetQuote request.
 
  * ``TDVMCALL_GET_TD_VM_CALL_INFO``: the guest has requested the support
    status of TDVMCALLs.  The output values for the given leaf should be
@@ -7342,7 +7345,10 @@ inputs and outputs of the TDVMCALL.  Currently the following values of
    field of the union.
 
  * ``TDVMCALL_SETUP_EVENT_NOTIFY_INTERRUPT``: the guest has requested to
-   set up a notification interrupt for vector ``vector``.
+   set up a notification interrupt for vector ``vector``.  Since this TDVMCALL
+   is used to optimize ``TDVMCALL_GET_QUOTE``, KVM disables this support in
+   userspace VMM if ``TDVMCALL_GET_QUOTE`` is completely handled in the kernel.
+   KVM may add kernel support for this in the future.
 
 KVM may add support for more values in the future that may cause a userspace
 exit, even without calls to ``KVM_ENABLE_CAP`` or similar.  In this case,
