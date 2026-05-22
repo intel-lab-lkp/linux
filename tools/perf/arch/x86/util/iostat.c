@@ -334,7 +334,7 @@ err:
 
 int iostat_prepare(struct evlist *evlist, struct perf_stat_config *config)
 {
-	if (evlist->core.nr_entries > 0) {
+	if (evlist__nr_entries(evlist) > 0) {
 		pr_warning("The -e and -M options are not supported."
 			   "All chosen events/metrics will be dropped\n");
 		evlist__put(evlist);
@@ -400,7 +400,7 @@ void iostat_prefix(struct evlist *evlist,
 		   struct perf_stat_config *config,
 		   char *prefix, struct timespec *ts)
 {
-	struct iio_root_port *rp = evlist->selected->priv;
+	struct iio_root_port *rp = evlist__selected(evlist)->priv;
 
 	if (rp) {
 		/*
@@ -463,7 +463,7 @@ void iostat_print_counters(struct evlist *evlist,
 	iostat_prefix(evlist, config, prefix, ts);
 	fprintf(config->output, "%s", prefix);
 	evlist__for_each_entry(evlist, counter) {
-		perf_device = evlist->selected->priv;
+		perf_device = evlist__selected(evlist)->priv;
 		if (perf_device && perf_device != counter->priv) {
 			evlist__set_selected(evlist, counter);
 			iostat_prefix(evlist, config, prefix, ts);
