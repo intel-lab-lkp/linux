@@ -135,11 +135,26 @@ static void fsdev_clear_ops(void *data)
  * The core mm code in free_zone_device_folio() handles the wake_up_var()
  * directly for this memory type.
  */
+static u64 fsdev_pfn_to_offset(struct dev_dax *dev_dax, unsigned long pfn)
+{
+	phys_addr_t phys = PFN_PHYS(pfn);
+	u64 offset = 0;
+
+	for (int i = 0; i < dev_dax->nr_range; i++) {
+		struct range *range = &dev_dax->ranges[i].range;
+
+		if (phys >= range->start && phys <= range->end)
+			return offset + (phys - range->start);
+		offset += range_len(range);
+	}
+	return -1ULL;
+}
+
 static int fsdev_pagemap_memory_failure(struct dev_pagemap *pgmap,
 		unsigned long pfn, unsigned long nr_pages, int mf_flags)
 {
 	struct dev_dax *dev_dax = pgmap->owner;
-	u64 offset = PFN_PHYS(pfn) - dev_dax->ranges[0].range.start;
+	u64 offset = fsdev_pfn_to_offset(dev_dax, pfn);
 	u64 len = nr_pages << PAGE_SHIFT;
 
 	return dax_holder_notify_failure(dev_dax->dax_dev, offset,
@@ -208,6 +223,7 @@ static int fsdev_dax_probe(struct dev_dax *dev_dax)
 {
 	struct dax_device *dax_dev = dev_dax->dax_dev;
 	struct device *dev = &dev_dax->dev;
+	bool pgmap_allocated = false;
 	struct dev_pagemap *pgmap;
 	struct inode *inode;
 	u64 data_offset = 0;
@@ -222,6 +238,7 @@ static int fsdev_dax_probe(struct dev_dax *dev_dax)
 		}
 
 		pgmap = dev_dax->pgmap;
+		pgmap->vmemmap_shift = 0;
 	} else {
 		size_t pgmap_size;
 
@@ -237,6 +254,7 @@ static int fsdev_dax_probe(struct dev_dax *dev_dax)
 
 		pgmap->nr_range = dev_dax->nr_range;
 		dev_dax->pgmap = pgmap;
+		pgmap_allocated = true;
 
 		for (i = 0; i < dev_dax->nr_range; i++) {
 			struct range *range = &dev_dax->ranges[i].range;
@@ -252,7 +270,8 @@ static int fsdev_dax_probe(struct dev_dax *dev_dax)
 					range_len(range), dev_name(dev))) {
 			dev_warn(dev, "mapping%d: %#llx-%#llx could not reserve range\n",
 				 i, range->start, range->end);
-			return -EBUSY;
+			rc = -EBUSY;
+			goto err_pgmap;
 		}
 	}
 
@@ -272,8 +291,10 @@ static int fsdev_dax_probe(struct dev_dax *dev_dax)
 	pgmap->owner = dev_dax;
 
 	addr = devm_memremap_pages(dev, pgmap);
-	if (IS_ERR(addr))
-		return PTR_ERR(addr);
+	if (IS_ERR(addr)) {
+		rc = PTR_ERR(addr);
+		goto err_pgmap;
+	}
 
 	/*
 	 * Clear any stale compound folio state left over from a previous
@@ -285,7 +306,7 @@ static int fsdev_dax_probe(struct dev_dax *dev_dax)
 	rc = devm_add_action_or_reset(dev, fsdev_clear_folio_state_action,
 				      dev_dax);
 	if (rc)
-		return rc;
+		goto err_pgmap;
 
 	/* Detect whether the data is at a non-zero offset into the memory */
 	if (pgmap->range.start != dev_dax->ranges[0].range.start) {
@@ -307,23 +328,32 @@ static int fsdev_dax_probe(struct dev_dax *dev_dax)
 	cdev_set_parent(cdev, &dev->kobj);
 	rc = cdev_add(cdev, dev->devt, 1);
 	if (rc)
-		return rc;
+		goto err_pgmap;
 
 	rc = devm_add_action_or_reset(dev, fsdev_cdev_del, cdev);
 	if (rc)
-		return rc;
+		goto err_pgmap;
 
 	/* Set the dax operations for fs-dax access path */
 	rc = dax_set_ops(dax_dev, &dev_dax_ops);
 	if (rc)
-		return rc;
+		goto err_pgmap;
 
 	rc = devm_add_action_or_reset(dev, fsdev_clear_ops, dev_dax);
 	if (rc)
-		return rc;
+		goto err_pgmap;
 
 	run_dax(dax_dev);
-	return devm_add_action_or_reset(dev, fsdev_kill, dev_dax);
+	rc = devm_add_action_or_reset(dev, fsdev_kill, dev_dax);
+	if (rc)
+		goto err_pgmap;
+
+	return 0;
+
+err_pgmap:
+	if (pgmap_allocated)
+		dev_dax->pgmap = NULL;
+	return rc;
 }
 
 static struct dax_device_driver fsdev_dax_driver = {
