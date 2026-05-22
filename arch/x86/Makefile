@@ -61,6 +61,11 @@ REALMODE_CFLAGS += $(cc_stack_align4)
 REALMODE_CFLAGS += $(CLANG_FLAGS)
 export REALMODE_CFLAGS
 
+REALMODE_CHECKFLAGS := $(subst -m64, -m16, \
+		       $(subst -m32, -m16, \
+		       $(subst -D__x86_64__, -D__i386__, \
+		       $(CHECKFLAGS))))
+
 # BITS is used as extension for files which are available in a 32 bit
 # and a 64 bit version to simplify shared Makefiles.
 # e.g.: obj-y += foo_$(BITS).o
