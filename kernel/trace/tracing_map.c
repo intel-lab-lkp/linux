@@ -125,32 +125,32 @@ u64 tracing_map_read_var_once(struct tracing_map_elt *elt, unsigned int i)
 	return (u64)atomic64_read(&elt->vars[i]);
 }
 
-int tracing_map_cmp_string(void *val_a, void *val_b)
+int tracing_map_cmp_string(const void *val_a, const void *val_b)
 {
-	char *a = val_a;
-	char *b = val_b;
+	const char *a = val_a;
+	const char *b = val_b;
 
 	return strcmp(a, b);
 }
 
-int tracing_map_cmp_none(void *val_a, void *val_b)
+int tracing_map_cmp_none(const void *val_a, const void *val_b)
 {
 	return 0;
 }
 
-static int tracing_map_cmp_atomic64(void *val_a, void *val_b)
+static int tracing_map_cmp_atomic64(const void *val_a, const void *val_b)
 {
-	u64 a = atomic64_read((atomic64_t *)val_a);
-	u64 b = atomic64_read((atomic64_t *)val_b);
+	u64 a = atomic64_read((const atomic64_t *)val_a);
+	u64 b = atomic64_read((const atomic64_t *)val_b);
 
 	return (a > b) ? 1 : ((a < b) ? -1 : 0);
 }
 
 #define DEFINE_TRACING_MAP_CMP_FN(type)					\
-static int tracing_map_cmp_##type(void *val_a, void *val_b)		\
+static int tracing_map_cmp_##type(const void *val_a, const void *val_b)	\
 {									\
-	type a = (type)(*(u64 *)val_a);					\
-	type b = (type)(*(u64 *)val_b);					\
+	type a = (type)(*(const u64 *)val_a);				\
+	type b = (type)(*(const u64 *)val_b);				\
 									\
 	return (a > b) ? 1 : ((a < b) ? -1 : 0);			\
 }
@@ -383,7 +383,6 @@ static void __tracing_map_elt_free(struct tracing_map_elt *elt)
 	if (!elt)
 		return;
 
-	kfree(elt->fields);
 	kfree(elt->vars);
 	kfree(elt->var_set);
 	kfree(elt->key);
@@ -406,7 +405,7 @@ static struct tracing_map_elt *tracing_map_elt_alloc(struct tracing_map *map)
 	struct tracing_map_elt *elt;
 	int err = 0;
 
-	elt = kzalloc_obj(*elt);
+	elt = kzalloc_flex(*elt, fields, map->n_fields);
 	if (!elt)
 		return ERR_PTR(-ENOMEM);
 
@@ -414,12 +413,6 @@ static struct tracing_map_elt *tracing_map_elt_alloc(struct tracing_map *map)
 
 	elt->key = kzalloc(map->key_size, GFP_KERNEL);
 	if (!elt->key) {
-		err = -ENOMEM;
-		goto free;
-	}
-
-	elt->fields = kzalloc_objs(*elt->fields, map->n_fields);
-	if (!elt->fields) {
 		err = -ENOMEM;
 		goto free;
 	}
@@ -857,10 +850,10 @@ static int cmp_entries_sum(const void *A, const void *B)
 {
 	const struct tracing_map_elt *elt_a, *elt_b;
 	const struct tracing_map_sort_entry *a, *b;
-	struct tracing_map_sort_key *sort_key;
-	struct tracing_map_field *field;
+	const struct tracing_map_sort_key *sort_key;
+	const struct tracing_map_field *field;
 	tracing_map_cmp_fn_t cmp_fn;
-	void *val_a, *val_b;
+	const void *val_a, *val_b;
 	int ret = 0;
 
 	a = *(const struct tracing_map_sort_entry **)A;
@@ -888,10 +881,10 @@ static int cmp_entries_key(const void *A, const void *B)
 {
 	const struct tracing_map_elt *elt_a, *elt_b;
 	const struct tracing_map_sort_entry *a, *b;
-	struct tracing_map_sort_key *sort_key;
-	struct tracing_map_field *field;
+	const struct tracing_map_sort_key *sort_key;
+	const struct tracing_map_field *field;
 	tracing_map_cmp_fn_t cmp_fn;
-	void *val_a, *val_b;
+	const void *val_a, *val_b;
 	int ret = 0;
 
 	a = *(const struct tracing_map_sort_entry **)A;
