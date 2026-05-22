@@ -51,9 +51,7 @@ static long __fsdev_dax_direct_access(struct dax_device *dax_dev, pgoff_t pgoff,
 	struct dev_dax *dev_dax = dax_get_private(dax_dev);
 	size_t size = nr_pages << PAGE_SHIFT;
 	size_t offset = pgoff << PAGE_SHIFT;
-	void *virt_addr = dev_dax->virt_addr + offset;
 	phys_addr_t phys;
-	unsigned long local_pfn;
 
 	phys = dax_pgoff_to_phys(dev_dax, pgoff, size);
 	if (phys == -1) {
@@ -63,11 +61,10 @@ static long __fsdev_dax_direct_access(struct dax_device *dax_dev, pgoff_t pgoff,
 	}
 
 	if (kaddr)
-		*kaddr = virt_addr;
+		*kaddr = __va(phys);
 
-	local_pfn = PHYS_PFN(phys);
 	if (pfn)
-		*pfn = local_pfn;
+		*pfn = PHYS_PFN(phys);
 
 	/*
 	 * Use cached_size which was computed at probe time. The size cannot
@@ -313,8 +310,13 @@ static int fsdev_dax_probe(struct dev_dax *dev_dax)
 		u64 phys = dev_dax->ranges[0].range.start;
 		u64 pgmap_phys = dev_dax->pgmap[0].range.start;
 
-		if (!WARN_ON(pgmap_phys > phys))
-			data_offset = phys - pgmap_phys;
+		if (pgmap_phys > phys) {
+			dev_err(dev, "pgmap start %#llx exceeds data start %#llx\n",
+				pgmap_phys, phys);
+			rc = -EINVAL;
+			goto err_pgmap;
+		}
+		data_offset = phys - pgmap_phys;
 
 		pr_debug("%s: offset detected phys=%llx pgmap_phys=%llx offset=%llx\n",
 		       __func__, phys, pgmap_phys, data_offset);
