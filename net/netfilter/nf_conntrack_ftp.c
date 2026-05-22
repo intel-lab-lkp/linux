@@ -35,11 +35,6 @@ MODULE_ALIAS("ip_conntrack_ftp");
 MODULE_ALIAS_NFCT_HELPER(HELPER_NAME);
 static DEFINE_SPINLOCK(nf_ftp_lock);
 
-#define MAX_PORTS 8
-static u_int16_t ports[MAX_PORTS];
-static unsigned int ports_c;
-module_param_array(ports, ushort, &ports_c, 0400);
-
 static bool loose;
 module_param(loose, bool, 0600);
 
@@ -360,10 +355,8 @@ static void update_nl_seq(struct nf_conn *ct, u32 nl_seq,
 	}
 }
 
-static int help(struct sk_buff *skb,
-		unsigned int protoff,
-		struct nf_conn *ct,
-		enum ip_conntrack_info ctinfo)
+static int ftp_help(struct sk_buff *skb, unsigned int protoff,
+		    struct nf_conn *ct, enum ip_conntrack_info ctinfo)
 {
 	unsigned int dataoff, datalen;
 	const struct tcphdr *th;
@@ -551,47 +544,31 @@ static int nf_ct_ftp_from_nlattr(struct nlattr *attr, struct nf_conn *ct)
 	return 0;
 }
 
-static struct nf_conntrack_helper ftp[MAX_PORTS * 2] __read_mostly;
-
 static const struct nf_conntrack_expect_policy ftp_exp_policy = {
 	.max_expected	= 1,
 	.timeout	= 5 * 60,
 };
 
+static struct nf_conntrack_helper ftp __read_mostly = {
+	.name			= HELPER_NAME,
+	.me			= THIS_MODULE,
+	.nfproto		= NFPROTO_UNSPEC,
+	.l4proto		= IPPROTO_TCP,
+	.help			= ftp_help,
+	.expect_policy		= &ftp_exp_policy,
+	.from_nlattr		= nf_ct_ftp_from_nlattr,
+};
+
 static void __exit nf_conntrack_ftp_fini(void)
 {
-	nf_conntrack_helpers_unregister(ftp, ports_c * 2);
+	nf_conntrack_helper_unregister(&ftp);
 }
 
 static int __init nf_conntrack_ftp_init(void)
 {
-	int i, ret = 0;
-
 	NF_CT_HELPER_BUILD_BUG_ON(sizeof(struct nf_ct_ftp_master));
 
-	if (ports_c == 0)
-		ports[ports_c++] = FTP_PORT;
-
-	/* FIXME should be configurable whether IPv4 and IPv6 FTP connections
-		 are tracked or not - YK */
-	for (i = 0; i < ports_c; i++) {
-		nf_ct_helper_init(&ftp[2 * i], AF_INET, IPPROTO_TCP,
-				  HELPER_NAME, FTP_PORT, ports[i], ports[i],
-				  &ftp_exp_policy, 0, help,
-				  nf_ct_ftp_from_nlattr, THIS_MODULE);
-		nf_ct_helper_init(&ftp[2 * i + 1], AF_INET6, IPPROTO_TCP,
-				  HELPER_NAME, FTP_PORT, ports[i], ports[i],
-				  &ftp_exp_policy, 0, help,
-				  nf_ct_ftp_from_nlattr, THIS_MODULE);
-	}
-
-	ret = nf_conntrack_helpers_register(ftp, ports_c * 2);
-	if (ret < 0) {
-		pr_err("failed to register helpers\n");
-		return ret;
-	}
-
-	return 0;
+	return nf_conntrack_helper_register(&ftp);
 }
 
 module_init(nf_conntrack_ftp_init);

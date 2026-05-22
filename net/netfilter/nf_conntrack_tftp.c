@@ -26,12 +26,6 @@ MODULE_LICENSE("GPL");
 MODULE_ALIAS("ip_conntrack_tftp");
 MODULE_ALIAS_NFCT_HELPER(HELPER_NAME);
 
-#define MAX_PORTS 8
-static unsigned short ports[MAX_PORTS];
-static unsigned int ports_c;
-module_param_array(ports, ushort, &ports_c, 0400);
-MODULE_PARM_DESC(ports, "Port numbers of TFTP servers");
-
 nf_nat_tftp_hook_fn __rcu *nf_nat_tftp_hook __read_mostly;
 EXPORT_SYMBOL_GPL(nf_nat_tftp_hook);
 
@@ -95,45 +89,30 @@ static int tftp_help(struct sk_buff *skb,
 	return ret;
 }
 
-static struct nf_conntrack_helper tftp[MAX_PORTS * 2] __read_mostly;
-
 static const struct nf_conntrack_expect_policy tftp_exp_policy = {
 	.max_expected	= 1,
 	.timeout	= 5 * 60,
 };
 
-static void __exit nf_conntrack_tftp_fini(void)
-{
-	nf_conntrack_helpers_unregister(tftp, ports_c * 2);
-}
+static struct nf_conntrack_helper tftp __read_mostly = {
+	.name			= HELPER_NAME,
+	.me			= THIS_MODULE,
+	.nfproto		= NFPROTO_UNSPEC,
+	.l4proto		= IPPROTO_UDP,
+	.help			= tftp_help,
+	.expect_policy		= &tftp_exp_policy,
+};
 
 static int __init nf_conntrack_tftp_init(void)
 {
-	int i, ret;
-
 	NF_CT_HELPER_BUILD_BUG_ON(0);
 
-	if (ports_c == 0)
-		ports[ports_c++] = TFTP_PORT;
-
-	for (i = 0; i < ports_c; i++) {
-		nf_ct_helper_init(&tftp[2 * i], AF_INET, IPPROTO_UDP,
-				  HELPER_NAME, TFTP_PORT, ports[i], i,
-				  &tftp_exp_policy, 0, tftp_help, NULL,
-				  THIS_MODULE);
-		nf_ct_helper_init(&tftp[2 * i + 1], AF_INET6, IPPROTO_UDP,
-				  HELPER_NAME, TFTP_PORT, ports[i], i,
-				  &tftp_exp_policy, 0, tftp_help, NULL,
-				  THIS_MODULE);
-	}
-
-	ret = nf_conntrack_helpers_register(tftp, ports_c * 2);
-	if (ret < 0) {
-		pr_err("failed to register helpers\n");
-		return ret;
-	}
-	return 0;
+	return nf_conntrack_helper_register(&tftp);
 }
 
+static void __exit nf_conntrack_tftp_fini(void)
+{
+	nf_conntrack_helper_unregister(&tftp);
+}
 module_init(nf_conntrack_tftp_init);
 module_exit(nf_conntrack_tftp_fini);
