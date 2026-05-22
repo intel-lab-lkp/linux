@@ -1074,6 +1074,20 @@ static int rpmh_rsc_probe(struct platform_device *pdev)
 	else
 		drv->regs = rpmh_rsc_reg_offset_ver_2_7;
 
+	/*
+	 * On some platforms the RSC is already managed by the firmware
+	 * when the kernel boots. Calling rpmh_probe_tcs_config() in this
+	 * state would reinitialize the controller and cause a security
+	 * violation. Skip TCS initialization if the hardware solver is
+	 * already active.
+	 */
+	if (readl_relaxed(drv->base + drv->regs[DRV_SOLVER_CONFIG]) &
+	    (DRV_HW_SOLVER_MASK << DRV_HW_SOLVER_SHIFT)) {
+		dev_dbg(&pdev->dev, "RSC already managed by firmware, skipping TCS init\n");
+		platform_set_drvdata(pdev, drv);
+		return 0;
+	}
+
 	ret = rpmh_probe_tcs_config(pdev, drv);
 	if (ret)
 		return ret;
