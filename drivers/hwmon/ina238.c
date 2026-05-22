@@ -310,11 +310,14 @@ static inline u32 ina238_reg_to_interval_us(struct ina238_data *data)
 	return vbusct + vshct + vtct;
 }
 
-/* Converting update_interval in msec to a single conversion time in usec */
-static inline u32 ina238_interval_ms_to_conv_time(long interval)
+/* Converting update_interval in usec to a single conversion time in usec.
+ * update_interval represents the raw ADC cycle time (VBUSCT + VSHCT + VTCT),
+ * independent of averaging.  Since all three fields are always set equal,
+ * the target per-field conversion time is simply interval / 3.
+ */
+static inline u32 ina238_interval_us_to_conv_time(long interval)
 {
-	/* 3 equal conversion times (VBUSCT, VSHCT, VTCT) cover all measurement types */
-	return DIV_ROUND_CLOSEST(interval * 1000, 3);
+	return DIV_ROUND_CLOSEST(interval, 3);
 }
 
 static int ina238_read_chip(struct device *dev, u32 attr, long *val)
@@ -327,8 +330,8 @@ static int ina238_read_chip(struct device *dev, u32 attr, long *val)
 					  INA238_ADC_CONFIG_AVG_SHIFT];
 		return 0;
 	case hwmon_chip_update_interval:
-		/* Return in msec */
-		*val = DIV_ROUND_CLOSEST(ina238_reg_to_interval_us(data), 1000);
+		/* Return in usec */
+		*val = ina238_reg_to_interval_us(data);
 		return 0;
 	default:
 		return -EOPNOTSUPP;
@@ -353,7 +356,7 @@ static int ina238_write_chip(struct device *dev, u32 attr, long val)
 		data->adc_config = adc_config;
 		return 0;
 	case hwmon_chip_update_interval:
-		val = ina238_interval_ms_to_conv_time(val);
+		val = ina238_interval_us_to_conv_time(val);
 		idx = find_closest(val, data->config->conv_time,
 				   ARRAY_SIZE(ina238_conv_time));
 		adc_config = (data->adc_config &
