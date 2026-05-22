@@ -27,6 +27,8 @@ static DECLARE_BITMAP(backtrace_mask, NR_CPUS) __read_mostly;
 /* "in progress" flag of arch_trigger_cpumask_backtrace */
 static unsigned long backtrace_flag;
 
+#define NMI_BT_TIMEOUT_SEC	10
+
 /*
  * When raise() is called it will be passed a pointer to the
  * backtrace_mask. Architectures that call nmi_cpu_backtrace()
@@ -68,8 +70,8 @@ void nmi_trigger_cpumask_backtrace(const cpumask_t *mask,
 		raise(to_cpumask(backtrace_mask));
 	}
 
-	/* Wait for up to 10 seconds for all CPUs to do the backtrace */
-	for (i = 0; i < 10 * 1000; i++) {
+	/* Wait for up to NMI_BT_TIMEOUT_SEC seconds for all CPUs to do the backtrace */
+	for (i = 0; i < NMI_BT_TIMEOUT_SEC * 1000; i++) {
 		if (cpumask_empty(to_cpumask(backtrace_mask)))
 			break;
 		mdelay(1);
@@ -77,8 +79,8 @@ void nmi_trigger_cpumask_backtrace(const cpumask_t *mask,
 	}
 
 	if (!cpumask_empty(to_cpumask(backtrace_mask))) {
-		pr_warn("After 10 seconds, these CPUS still haven't responded to the NMI: %*pbl\n",
-			cpumask_pr_args(to_cpumask(backtrace_mask)));
+		pr_warn("After %d seconds, these CPUS still haven't responded to the NMI: %*pbl\n",
+			NMI_BT_TIMEOUT_SEC, cpumask_pr_args(to_cpumask(backtrace_mask)));
 
 		nmi_backtrace_stall_check(to_cpumask(backtrace_mask));
 	}
