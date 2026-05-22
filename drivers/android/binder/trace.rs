@@ -26,7 +26,7 @@ declare_trace! {
 
 #[inline]
 fn raw_transaction(t: &Transaction) -> rust_binder_transaction {
-    t as *const Transaction as rust_binder_transaction
+    core::ptr::from_ref(t).cast_mut().cast()
 }
 
 #[inline]
