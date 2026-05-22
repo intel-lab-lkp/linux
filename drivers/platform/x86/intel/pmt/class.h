@@ -18,6 +18,7 @@
 /* PMT discovery base address/offset register layout */
 #define GET_BIR(v)		((v) & GENMASK(2, 0))
 #define GET_ADDRESS(v)		((v) & GENMASK(31, 3))
+#define PMT_DISC_HEADER_DWORDS INTEL_VSEC_ACPI_DISC_DWORDS
 
 struct device;
 struct pci_dev;
@@ -44,7 +45,7 @@ struct intel_pmt_entry {
 	struct telem_endpoint	*ep;
 	struct pci_dev		*pcidev;
 	struct intel_pmt_header	header;
-	u32			disc_header[4];
+	u32			disc_header[PMT_DISC_HEADER_DWORDS];
 	struct bin_attribute	pmt_bin_attr;
 	const struct attribute_group *attr_grp;
 	struct kobject		*kobj;
