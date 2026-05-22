@@ -122,6 +122,7 @@ int set_memory_encrypted(unsigned long vaddr, int numpages)
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(set_memory_encrypted);
 
 int set_memory_decrypted(unsigned long vaddr, int numpages)
 {
@@ -133,6 +134,7 @@ int set_memory_decrypted(unsigned long vaddr, int numpages)
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(set_memory_decrypted);
 
 /* are we a protected virtualization guest? */
 bool force_dma_unencrypted(struct device *dev)
