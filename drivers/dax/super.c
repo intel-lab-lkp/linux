@@ -116,11 +116,31 @@ EXPORT_SYMBOL_GPL(fs_dax_get_by_bdev);
 
 #if IS_ENABLED(CONFIG_FS_DAX)
 
+/**
+ * fs_put_dax() - release holder ownership of a dax_device
+ * @dax_dev: dax device to release (may be NULL)
+ * @holder: the holder pointer previously passed to fs_dax_get() or
+ *          fs_dax_get_by_bdev(); must match exactly, as it is used
+ *          in a cmpxchg to atomically release ownership
+ *
+ * Must only be called by the current holder. Clears holder_ops before
+ * holder_data to avoid a race where a concurrent fs_dax_get() could have
+ * its newly installed holder_ops overwritten.
+ */
 void fs_put_dax(struct dax_device *dax_dev, void *holder)
 {
-	if (dax_dev && holder &&
-	    cmpxchg(&dax_dev->holder_data, holder, NULL) == holder)
+	if (dax_dev && holder) {
+		/*
+		 * Clear holder_ops before holder_data so that a concurrent
+		 * fs_dax_get() cannot have its newly installed holder_ops
+		 * overwritten. holder_ops is only consulted when holder_data
+		 * is non-NULL, so clearing ops first is safe — any in-flight
+		 * holder_notify_failure() will see the old holder_data with
+		 * NULL ops (a no-op) rather than new ops with wrong context.
+		 */
 		dax_dev->holder_ops = NULL;
+		cmpxchg(&dax_dev->holder_data, holder, NULL);
+	}
 	put_dax(dax_dev);
 }
 EXPORT_SYMBOL_GPL(fs_put_dax);
