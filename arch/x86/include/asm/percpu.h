@@ -335,11 +335,9 @@ do {									\
 	old__.var = _oval;						\
 	new__.var = _nval;						\
 									\
-	asm_inline qual (						\
-		ALTERNATIVE("call this_cpu_cmpxchg8b_emu",		\
-			    "cmpxchg8b " __percpu_arg([var]), X86_FEATURE_CX8) \
-		: ALT_OUTPUT_SP([var] "+m" (__my_cpu_var(_var)),	\
-				"+a" (old__.low), "+d" (old__.high))	\
+	asm_inline qual ("cmpxchg8b " __percpu_arg([var])		\
+		: [var] "+m" (__my_cpu_var(_var)),			\
+				"+a" (old__.low), "+d" (old__.high)	\
 		: "b" (new__.low), "c" (new__.high),			\
 		  "S" (&(_var))						\
 		: "memory");						\
@@ -364,10 +362,8 @@ do {									\
 	old__.var = *_oval;						\
 	new__.var = _nval;						\
 									\
-	asm_inline qual (						\
-		ALTERNATIVE("call this_cpu_cmpxchg8b_emu",		\
-			    "cmpxchg8b " __percpu_arg([var]), X86_FEATURE_CX8) \
-		: ALT_OUTPUT_SP("=@ccz" (success),			\
+	asm_inline qual ("cmpxchg8b " __percpu_arg([var])		\
+		: "=@ccz" (success),					\
 				[var] "+m" (__my_cpu_var(_var)),	\
 				"+a" (old__.low), "+d" (old__.high))	\
 		: "b" (new__.low), "c" (new__.high),			\
