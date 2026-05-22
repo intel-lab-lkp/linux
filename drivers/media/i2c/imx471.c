@@ -76,12 +76,6 @@
 /* Default exposure margin */
 #define IMX471_EXPOSURE_MARGIN			18
 
-/* Horizontal crop window offset */
-#define IMX471_REG_H_WIN_OFFSET			CCI_REG8(0x0409)
-
-/* Vertical crop window offset */
-#define IMX471_REG_V_WIN_OFFSET			CCI_REG8(0x034b)
-
 /* Test Pattern Control */
 #define IMX471_REG_TEST_PATTERN			CCI_REG8(0x0600)
 #define IMX471_TEST_PATTERN_DISABLED		0
@@ -102,6 +96,32 @@
 #define IMX471_PIXEL_ARRAY_TOP			8
 #define IMX471_PIXEL_ARRAY_WIDTH		4656
 #define IMX471_PIXEL_ARRAY_HEIGHT		3496
+
+#define IMX471_REG_EXCK_FREQ			CCI_REG16(0x0136)
+#define IMX471_EXCK_FREQ(n)			((n) * 256)	/* n in MHz */
+
+#define IMX471_REG_CSI_DATA_FORMAT		CCI_REG16(0x0112)
+#define IMX471_CSI_DATA_FORMAT_RAW10		0x0a0a
+
+#define IMX471_REG_CSI_LANE_MODE		CCI_REG8(0x0114)
+#define IMX471_CSI_2_LANE_MODE			1
+#define IMX471_CSI_4_LANE_MODE			3
+
+#define IMX471_REG_X_ADD_STA			CCI_REG16(0x0344)
+#define IMX471_REG_Y_ADD_STA			CCI_REG16(0x0346)
+#define IMX471_REG_X_ADD_END			CCI_REG16(0x0348)
+#define IMX471_REG_Y_ADD_END			CCI_REG16(0x034a)
+#define IMX471_REG_X_OUTPUT_SIZE		CCI_REG16(0x034c)
+#define IMX471_REG_Y_OUTPUT_SIZE		CCI_REG16(0x034e)
+#define IMX471_REG_X_EVEN_INC			CCI_REG8(0x0381)
+#define IMX471_REG_X_ODD_INC			CCI_REG8(0x0383)
+#define IMX471_REG_Y_EVEN_INC			CCI_REG8(0x0385)
+#define IMX471_REG_Y_ODD_INC			CCI_REG8(0x0387)
+
+#define IMX471_REG_DIG_CROP_X_OFFSET		CCI_REG16(0x0408)
+#define IMX471_REG_DIG_CROP_Y_OFFSET		CCI_REG16(0x040a)
+#define IMX471_REG_DIG_CROP_WIDTH		CCI_REG16(0x040c)
+#define IMX471_REG_DIG_CROP_HEIGHT		CCI_REG16(0x040e)
 
 #define to_imx471(_sd) container_of_const(_sd, struct imx471, sd)
 
@@ -156,8 +176,7 @@ struct imx471 {
 };
 
 static const struct cci_reg_sequence imx471_global_regs[] = {
-	{ CCI_REG8(0x0136), 0x13 },
-	{ CCI_REG8(0x0137), 0x33 },
+	{ IMX471_REG_EXCK_FREQ, IMX471_EXCK_FREQ(19.2) },
 	{ CCI_REG8(0x3c7e), 0x08 },
 	{ CCI_REG8(0x3c7f), 0x05 },
 	{ CCI_REG8(0x3e35), 0x00 },
@@ -215,43 +234,29 @@ static const struct cci_reg_sequence imx471_global_regs[] = {
 };
 
 static const struct cci_reg_sequence mode_1928x1088_regs[] = {
-	{ CCI_REG8(0x0101), 0x00 },
-	{ CCI_REG8(0x0112), 0x0a },
-	{ CCI_REG8(0x0113), 0x0a },
-	{ CCI_REG8(0x0114), 0x03 },
+	{ IMX471_REG_ORIENTATION, 0x00 },
+	{ IMX471_REG_CSI_DATA_FORMAT, IMX471_CSI_DATA_FORMAT_RAW10 },
+	{ IMX471_REG_CSI_LANE_MODE, IMX471_CSI_4_LANE_MODE },
 	{ CCI_REG8(0x0342), 0x0a },
 	{ CCI_REG8(0x0343), 0x00 },
-	{ CCI_REG8(0x0340), 0x13 },
-	{ CCI_REG8(0x0341), 0xb0 },
-	{ CCI_REG8(0x0344), 0x00 },
-	{ CCI_REG8(0x0345), 0x00 },
-	{ CCI_REG8(0x0346), 0x01 },
-	{ CCI_REG8(0x0347), 0xbc },
-	{ CCI_REG8(0x0348), 0x12 },
-	{ CCI_REG8(0x0349), 0x2f },
-	{ CCI_REG8(0x034a), 0x0b },
-	{ CCI_REG8(0x034b), 0xeb },
-	{ CCI_REG8(0x0381), 0x01 },
-	{ CCI_REG8(0x0383), 0x01 },
-	{ CCI_REG8(0x0385), 0x01 },
-	{ CCI_REG8(0x0387), 0x01 },
+	{ IMX471_REG_FLL, 0x13b0 },
+	{ IMX471_REG_X_ADD_STA, 8 },
+	{ IMX471_REG_Y_ADD_STA, 444 },
+	{ IMX471_REG_X_ADD_END, 4647 },
+	{ IMX471_REG_Y_ADD_END, 3051 },
+	{ IMX471_REG_X_EVEN_INC, 1 },
+	{ IMX471_REG_X_ODD_INC, 1 },
+	{ IMX471_REG_Y_EVEN_INC, 1 },
+	{ IMX471_REG_Y_ODD_INC, 1 },
 	{ CCI_REG8(0x0900), 0x01 },
 	{ CCI_REG8(0x0901), 0x22 },
 	{ CCI_REG8(0x0902), 0x08 },
-	{ CCI_REG8(0x3f4c), 0x81 },
-	{ CCI_REG8(0x3f4d), 0x81 },
-	{ CCI_REG8(0x0408), 0x00 },
-	{ CCI_REG8(0x0409), 0xc8 },
-	{ CCI_REG8(0x040a), 0x00 },
-	{ CCI_REG8(0x040b), 0x6c },
-	{ CCI_REG8(0x040c), 0x07 },
-	{ CCI_REG8(0x040d), 0x88 },
-	{ CCI_REG8(0x040e), 0x04 },
-	{ CCI_REG8(0x040f), 0x40 },
-	{ CCI_REG8(0x034c), 0x07 },
-	{ CCI_REG8(0x034d), 0x88 },
-	{ CCI_REG8(0x034e), 0x04 },
-	{ CCI_REG8(0x034f), 0x40 },
+	{ IMX471_REG_DIG_CROP_X_OFFSET, 208 },
+	{ IMX471_REG_DIG_CROP_Y_OFFSET, 108 },
+	{ IMX471_REG_DIG_CROP_WIDTH, 1928 },
+	{ IMX471_REG_DIG_CROP_HEIGHT, 1088 },
+	{ IMX471_REG_X_OUTPUT_SIZE, 1928 },
+	{ IMX471_REG_Y_OUTPUT_SIZE, 1088 },
 	{ CCI_REG8(0x0301), 0x06 },
 	{ CCI_REG8(0x0303), 0x02 },
 	{ CCI_REG8(0x0305), 0x02 },
@@ -262,12 +267,11 @@ static const struct cci_reg_sequence mode_1928x1088_regs[] = {
 	{ CCI_REG8(0x030e), 0x00 },
 	{ CCI_REG8(0x030f), 0x53 },
 	{ CCI_REG8(0x0310), 0x01 },
-	{ CCI_REG8(0x0202), 0x13 },
-	{ CCI_REG8(0x0203), 0x9e },
-	{ CCI_REG8(0x0204), 0x00 },
-	{ CCI_REG8(0x0205), 0x00 },
-	{ CCI_REG8(0x020e), 0x01 },
-	{ CCI_REG8(0x020f), 0x00 },
+	{ IMX471_REG_EXPOSURE, 5022 },
+	{ IMX471_REG_ANALOG_GAIN, 0 },
+	{ IMX471_REG_DIG_GAIN_GLOBAL, 256 },
+	{ CCI_REG8(0x3f4c), 0x81 },
+	{ CCI_REG8(0x3f4d), 0x81 },
 	{ CCI_REG8(0x3f78), 0x01 },
 	{ CCI_REG8(0x3f79), 0x31 },
 	{ CCI_REG8(0x3ffe), 0x00 },
