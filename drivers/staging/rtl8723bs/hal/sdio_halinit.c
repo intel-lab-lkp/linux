@@ -36,8 +36,9 @@ static u8 CardEnable(struct adapter *padapter)
 			bMacPwrCtrlOn = true;
 			rtw_hal_set_hwreg(padapter, HW_VAR_APFM_ON_MAC, &bMacPwrCtrlOn);
 		}
-	} else
+	} else {
 		ret = _SUCCESS;
+	}
 
 	return ret;
 }
@@ -1011,8 +1012,9 @@ static void Hal_EfuseParseBoardType_8723BS(
 		pHalData->BoardType = (hwinfo[EEPROM_RF_BOARD_OPTION_8723B] & 0xE0) >> 5;
 		if (pHalData->BoardType == 0xFF)
 			pHalData->BoardType = (EEPROM_DEFAULT_BOARD_OPTION & 0xE0) >> 5;
-	} else
+	} else {
 		pHalData->BoardType = 0;
+	}
 }
 
 static void _ReadEfuseInfo8723BS(struct adapter *padapter)
