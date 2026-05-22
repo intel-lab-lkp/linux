@@ -436,6 +436,12 @@ Files in /proc/fs/ext4/<devname>
   mb_groups
         details of multiblock allocator buddy cache of free blocks
 
+  mb_stats
+        reports runtime statistics from the multiblock allocator
+        (mballoc). Writing 0 disables statistics collection, writing
+        1 enables statistics collection, and writing -1 clears the
+        current statistics and enables statistics collection.
+
 /sys entries
 ============
 
@@ -493,7 +499,8 @@ Files in /sys/fs/ext4/<devname>:
   mb_stats
         Controls whether the multiblock allocator should collect statistics,
         which are shown during the unmount. 1 means to collect statistics, 0
-        means not to collect statistics.
+        means not to collect statistics. This sysfs entry is deprecated, and
+        users should prefer /proc/fs/ext4/<devname>/mb_stats.
 
   mb_stream_req
         Files which have fewer blocks than this tunable parameter will have
