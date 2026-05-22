@@ -87,6 +87,39 @@ admin:
 }
 
 /*
+ * Some Set Features commands change controller behaviour that the driver is
+ * not prepared to handle on every transport.  Reject such commands from
+ * userspace passthrough rather than letting them put the controller into a
+ * state the driver cannot deal with.  The list can be extended as other
+ * problematic features are identified.
+ */
+static bool nvme_passthru_cmd_allowed(struct nvme_ctrl *ctrl,
+				      struct nvme_ns *ns,
+				      struct nvme_command *c)
+{
+	/*
+	 * This only filters admin commands (ns == NULL).  I/O commands share
+	 * the opcode space with admin commands - Dataset Management is 0x09,
+	 * the same value as Set Features - so they must not be inspected here.
+	 */
+	if (ns || c->common.opcode != nvme_admin_set_features)
+		return true;
+
+	switch (le32_to_cpu(c->common.cdw10) & 0xff) {
+	case NVME_FEAT_KATO:
+		/*
+		 * Keep Alive is optional on PCIe (NVMe 2.0a 5.27.1.12) and the
+		 * driver only arms keep-alive for fabrics.  Enabling it on
+		 * other transports starts a keep-alive command the driver is
+		 * not set up for and harms idle power states, so reject it.
+		 */
+		return ctrl->ops->flags & NVME_F_FABRICS;
+	default:
+		return true;
+	}
+}
+
+/*
  * Convert integer values from ioctl structures to user pointers, silently
  * ignoring the upper bits in the compat case to match behaviour of 32-bit
  * kernels.
@@ -316,6 +349,9 @@ static int nvme_user_cmd(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 	if (!nvme_cmd_allowed(ns, &c, 0, open_for_write))
 		return -EACCES;
 
+	if (!nvme_passthru_cmd_allowed(ctrl, ns, &c))
+		return -EOPNOTSUPP;
+
 	if (cmd.timeout_ms)
 		timeout = msecs_to_jiffies(cmd.timeout_ms);
 
@@ -362,6 +398,9 @@ static int nvme_user_cmd64(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 
 	if (!nvme_cmd_allowed(ns, &c, flags, open_for_write))
 		return -EACCES;
+
+	if (!nvme_passthru_cmd_allowed(ctrl, ns, &c))
+		return -EOPNOTSUPP;
 
 	if (cmd.timeout_ms)
 		timeout = msecs_to_jiffies(cmd.timeout_ms);
@@ -485,6 +524,9 @@ static int nvme_uring_cmd_io(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 
 	if (!nvme_cmd_allowed(ns, &c, 0, ioucmd->file->f_mode & FMODE_WRITE))
 		return -EACCES;
+
+	if (!nvme_passthru_cmd_allowed(ctrl, ns, &c))
+		return -EOPNOTSUPP;
 
 	d.metadata = READ_ONCE(cmd->metadata);
 	d.addr = READ_ONCE(cmd->addr);
