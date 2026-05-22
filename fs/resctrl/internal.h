@@ -234,6 +234,15 @@ struct rdtgroup {
 
 /* rdtgroup.flags */
 #define	RDT_DELETED		1
+/*
+ * RDT_DELETED_PLR is set when the pseudo-locked group's infrastructure
+ * (its associated device, debugfs files, etc.) has been deleted via
+ * rdtgroup_pseudo_lock_remove(). This can be done while there are
+ * references to the pseudo-locked region since the pseudo-locked region
+ * self is freed separately via pseudo_lock_free() after there are no more
+ * references.
+ */
+#define	RDT_DELETED_PLR		2
 
 /* rftype.flags */
 #define RFTYPE_FLAGS_CPUS_LIST	1
@@ -334,6 +343,7 @@ void rdt_last_cmd_puts(const char *s);
 __printf(1, 2)
 void rdt_last_cmd_printf(const char *fmt, ...);
 
+void rdtgroup_remove(struct rdtgroup *rdtgrp);
 struct rdtgroup *rdtgroup_kn_lock_live(struct kernfs_node *kn);
 
 void rdtgroup_kn_unlock(struct kernfs_node *kn);
@@ -482,6 +492,7 @@ void rdt_pseudo_lock_release(void);
 int rdtgroup_pseudo_lock_create(struct rdtgroup *rdtgrp);
 
 void rdtgroup_pseudo_lock_remove(struct rdtgroup *rdtgrp);
+void pseudo_lock_free(struct rdtgroup *rdtgrp);
 
 #else
 static inline int rdtgroup_locksetup_enter(struct rdtgroup *rdtgrp)
@@ -512,6 +523,7 @@ static inline int rdtgroup_pseudo_lock_create(struct rdtgroup *rdtgrp)
 }
 
 static inline void rdtgroup_pseudo_lock_remove(struct rdtgroup *rdtgrp) { }
+static inline void pseudo_lock_free(struct rdtgroup *rdtgrp) { }
 #endif /* CONFIG_RESCTRL_FS_PSEUDO_LOCK */
 
 #endif /* _FS_RESCTRL_INTERNAL_H */

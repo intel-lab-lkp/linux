@@ -333,8 +333,10 @@ out:
  *
  * Return: void
  */
-static void pseudo_lock_free(struct rdtgroup *rdtgrp)
+void pseudo_lock_free(struct rdtgroup *rdtgrp)
 {
+	if (!rdtgrp->plr)
+		return;
 	pseudo_lock_region_clear(rdtgrp->plr);
 	kfree(rdtgrp->plr);
 	rdtgrp->plr = NULL;
@@ -928,22 +930,37 @@ void rdtgroup_pseudo_lock_remove(struct rdtgroup *rdtgrp)
 {
 	struct pseudo_lock_region *plr = rdtgrp->plr;
 
+	lockdep_assert_held(&rdtgroup_mutex);
+
+	if (rdtgrp->mode != RDT_MODE_PSEUDO_LOCKSETUP &&
+	    rdtgrp->mode != RDT_MODE_PSEUDO_LOCKED)
+		return;
+
+	if (rdtgrp->flags & RDT_DELETED_PLR)
+		return;
+
+	rdtgrp->flags |= RDT_DELETED_PLR;
+
 	if (rdtgrp->mode == RDT_MODE_PSEUDO_LOCKSETUP) {
 		/*
 		 * Default group cannot be a pseudo-locked region so we can
 		 * free closid here.
 		 */
 		closid_free(rdtgrp->closid);
-		goto free;
+		return;
 	}
 
 	pseudo_lock_cstates_relax(plr);
-	debugfs_remove_recursive(rdtgrp->plr->debugfs_dir);
+	/*
+	 * Drop rdtgroup_mutex to enable debugfs_remove_recursive() to
+	 * complete as it waits for active users that may be blocked
+	 * waiting on rdtgroup_mutex to complete.
+	 */
+	mutex_unlock(&rdtgroup_mutex);
+	debugfs_remove_recursive(plr->debugfs_dir);
+	mutex_lock(&rdtgroup_mutex);
 	device_destroy(&pseudo_lock_class, MKDEV(pseudo_lock_major, plr->minor));
 	pseudo_lock_minor_release(plr->minor);
-
-free:
-	pseudo_lock_free(rdtgrp);
 }
 
 static int pseudo_lock_dev_open(struct inode *inode, struct file *filp)
@@ -971,6 +988,7 @@ static int pseudo_lock_dev_open(struct inode *inode, struct file *filp)
 static int pseudo_lock_dev_release(struct inode *inode, struct file *filp)
 {
 	struct rdtgroup *rdtgrp;
+	bool needs_free = false;
 
 	mutex_lock(&rdtgroup_mutex);
 	rdtgrp = filp->private_data;
@@ -980,8 +998,20 @@ static int pseudo_lock_dev_release(struct inode *inode, struct file *filp)
 		return -ENODEV;
 	}
 	filp->private_data = NULL;
-	atomic_dec(&rdtgrp->waitcount);
+
+	if (atomic_dec_and_test(&rdtgrp->waitcount) &&
+	    (rdtgrp->flags & RDT_DELETED)) {
+		needs_free = true;
+		rdtgroup_pseudo_lock_remove(rdtgrp);
+	}
+
 	mutex_unlock(&rdtgroup_mutex);
+
+	if (needs_free) {
+		pseudo_lock_free(rdtgrp);
+		rdtgroup_remove(rdtgrp);
+	}
+
 	return 0;
 }
 
