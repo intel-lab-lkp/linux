@@ -817,6 +817,22 @@ static s64 pmbus_reg2data_linear(struct pmbus_data *data,
 	return val;
 }
 
+s64 pmbus_reg2data_direct_calc(s64 val, s64 b, s32 m, s32 R)
+{
+	while (R > 0) {
+		val *= 10;
+		R--;
+	}
+	while (R < 0) {
+		val = div_s64(val + 5LL, 10L);  /* round closest */
+		R++;
+	}
+
+	val = div_s64(val - b, m);
+	return val;
+}
+EXPORT_SYMBOL_NS_GPL(pmbus_reg2data_direct_calc, "PMBUS");
+
 /*
  * Convert direct sensor values to milli- or micro-units
  * depending on sensor type.
@@ -824,7 +840,7 @@ static s64 pmbus_reg2data_linear(struct pmbus_data *data,
 static s64 pmbus_reg2data_direct(struct pmbus_data *data,
 				 struct pmbus_sensor *sensor)
 {
-	s64 b, val = (s16)sensor->data;
+	s64 b;
 	s32 m, R;
 
 	m = data->info->m[sensor->class];
@@ -848,17 +864,7 @@ static s64 pmbus_reg2data_direct(struct pmbus_data *data,
 		b *= 1000;
 	}
 
-	while (R > 0) {
-		val *= 10;
-		R--;
-	}
-	while (R < 0) {
-		val = div_s64(val + 5LL, 10L);  /* round closest */
-		R++;
-	}
-
-	val = div_s64(val - b, m);
-	return val;
+	return pmbus_reg2data_direct_calc((s16)sensor->data, b, m, R);
 }
 
 /*
@@ -1057,6 +1063,23 @@ static u16 pmbus_data2reg_linear(struct pmbus_data *data,
 	return (mantissa & 0x7ff) | ((exponent << 11) & 0xf800);
 }
 
+u16 pmbus_data2reg_direct_calc(s64 val, s64 b, s32 m, s32 R)
+{
+	val = val * m + b;
+
+	while (R > 0) {
+		val *= 10;
+		R--;
+	}
+	while (R < 0) {
+		val = div_s64(val + 5LL, 10L);  /* round closest */
+		R++;
+	}
+
+	return (u16)clamp_val(val, S16_MIN, S16_MAX);
+}
+EXPORT_SYMBOL_NS_GPL(pmbus_data2reg_direct_calc, "PMBUS");
+
 static u16 pmbus_data2reg_direct(struct pmbus_data *data,
 				 struct pmbus_sensor *sensor, s64 val)
 {
@@ -1078,18 +1101,8 @@ static u16 pmbus_data2reg_direct(struct pmbus_data *data,
 		R -= 3;		/* Adjust R and b for data in milli-units */
 		b *= 1000;
 	}
-	val = val * m + b;
 
-	while (R > 0) {
-		val *= 10;
-		R--;
-	}
-	while (R < 0) {
-		val = div_s64(val + 5LL, 10L);  /* round closest */
-		R++;
-	}
-
-	return (u16)clamp_val(val, S16_MIN, S16_MAX);
+	return pmbus_data2reg_direct_calc(val, b, m, R);
 }
 
 static u16 pmbus_data2reg_vid(struct pmbus_data *data,

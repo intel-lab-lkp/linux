@@ -578,5 +578,7 @@ DEFINE_GUARD(pmbus_lock, struct i2c_client *, pmbus_lock(_T), pmbus_unlock(_T))
 int pmbus_update_fan(struct i2c_client *client, int page, int id,
 		     u8 config, u8 mask, u16 command);
 struct dentry *pmbus_get_debugfs_dir(struct i2c_client *client);
+s64 pmbus_reg2data_direct_calc(s64 val, s64 b, s32 m, s32 R);
+u16 pmbus_data2reg_direct_calc(s64 val, s64 b, s32 m, s32 R);
 
 #endif /* PMBUS_H */
