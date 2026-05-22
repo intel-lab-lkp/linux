@@ -40,62 +40,64 @@
  *   Jaswinder Singh Rajput <jaswinder@kernel.org>
  */
 
-#include "builtin.h"
-#include "util/cgroup.h"
-#include <subcmd/parse-options.h>
-#include "util/parse-events.h"
-#include "util/pmus.h"
-#include "util/pmu.h"
-#include "util/tool_pmu.h"
-#include "util/event.h"
-#include "util/evlist.h"
-#include "util/evsel.h"
-#include "util/debug.h"
-#include "util/color.h"
-#include "util/stat.h"
-#include "util/header.h"
-#include "util/cpumap.h"
-#include "util/thread_map.h"
-#include "util/counts.h"
-#include "util/topdown.h"
-#include "util/session.h"
-#include "util/tool.h"
-#include "util/string2.h"
-#include "util/metricgroup.h"
-#include "util/synthetic-events.h"
-#include "util/target.h"
-#include "util/time-utils.h"
-#include "util/top.h"
-#include "util/affinity.h"
-#include "util/pfm.h"
-#include "util/bpf_counter.h"
-#include "util/iostat.h"
-#include "util/util.h"
-#include "util/intel-tpebs.h"
-#include "asm/bug.h"
-
-#include <linux/list_sort.h>
-#include <linux/time64.h>
-#include <linux/zalloc.h>
-#include <api/fs/fs.h>
 #include <errno.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <sys/prctl.h>
 #include <inttypes.h>
 #include <locale.h>
 #include <math.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <linux/err.h>
+#include <signal.h>
+#include <stdlib.h>
 
 #include <linux/ctype.h>
-#include <perf/evlist.h>
+#include <linux/err.h>
+#include <linux/list_sort.h>
+#include <linux/time64.h>
+#include <linux/zalloc.h>
+#include <sys/prctl.h>
+#include <sys/resource.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include <api/fs/fs.h>
 #include <internal/threadmap.h>
+#include <perf/evlist.h>
+#include <subcmd/parse-options.h>
+
+#include "asm/bug.h"
+#include "builtin.h"
+#include "util/affinity.h"
+#include "util/bpf_counter.h"
+#include "util/cgroup.h"
+#include "util/color.h"
+#include "util/counts.h"
+#include "util/cpumap.h"
+#include "util/debug.h"
+#include "util/event.h"
+#include "util/evlist.h"
+#include "util/evsel.h"
+#include "util/header.h"
+#include "util/intel-tpebs.h"
+#include "util/iostat.h"
+#include "util/metricgroup.h"
+#include "util/parse-events.h"
+#include "util/pfm.h"
+#include "util/pmu.h"
+#include "util/pmus.h"
+#include "util/session.h"
+#include "util/stat-print.h"
+#include "util/stat.h"
+#include "util/string2.h"
+#include "util/synthetic-events.h"
+#include "util/target.h"
+#include "util/thread_map.h"
+#include "util/time-utils.h"
+#include "util/tool.h"
+#include "util/tool_pmu.h"
+#include "util/top.h"
+#include "util/topdown.h"
+#include "util/util.h"
 
 #ifdef HAVE_BPF_SKEL
 #include "util/bpf_skel/bperf_cgroup.h"
@@ -123,6 +125,7 @@ static struct target target;
 static volatile sig_atomic_t	child_pid			= -1;
 static int			detailed_run			=  0;
 static bool			transaction_run;
+static bool use_perf_stat_print;
 static bool			topdown_run			= false;
 static bool			smi_cost			= false;
 static bool			smi_reset			= false;
@@ -1091,7 +1094,10 @@ static void print_counters(struct timespec *ts, int argc, const char **argv)
 	if (quiet)
 		return;
 
-	evlist__print_counters(evsel_list, &stat_config, &target, ts, argc, argv);
+	if (use_perf_stat_print)
+		perf_stat__print(evsel_list, &stat_config, &target, ts, argc, argv);
+	else
+		evlist__print_counters(evsel_list, &stat_config, &target, ts, argc, argv);
 }
 
 static volatile sig_atomic_t signr = -1;
@@ -2455,155 +2461,152 @@ int cmd_stat(int argc, const char **argv)
 	bool affinity = true, affinity_set = false;
 	struct option stat_options[] = {
 		OPT_BOOLEAN('T', "transaction", &transaction_run,
-			"hardware transaction statistics"),
+			    "hardware transaction statistics"),
 		OPT_CALLBACK('e', "event", &parse_events_option_args, "event",
-			"event selector. use 'perf list' to list available events",
-			parse_events_option),
-		OPT_CALLBACK(0, "filter", &evsel_list, "filter",
-			"event filter", parse_filter),
+			     "event selector. use 'perf list' to list available events",
+			     parse_events_option),
+		OPT_CALLBACK(0, "filter", &evsel_list, "filter", "event filter", parse_filter),
 		OPT_BOOLEAN('i', "no-inherit", &stat_config.no_inherit,
-			"child tasks do not inherit counters"),
-		OPT_STRING('p', "pid", &target.pid, "pid",
-			"stat events on existing process id"),
-		OPT_STRING('t', "tid", &target.tid, "tid",
-			"stat events on existing thread id"),
+			    "child tasks do not inherit counters"),
+		OPT_STRING('p', "pid", &target.pid, "pid", "stat events on existing process id"),
+		OPT_STRING('t', "tid", &target.tid, "tid", "stat events on existing thread id"),
 #ifdef HAVE_BPF_SKEL
 		OPT_STRING('b', "bpf-prog", &target.bpf_str, "bpf-prog-id",
-			"stat events on existing bpf program id"),
-		OPT_BOOLEAN(0, "bpf-counters", &target.use_bpf,
-			"use bpf program to count events"),
+			   "stat events on existing bpf program id"),
+		OPT_BOOLEAN(0, "bpf-counters", &target.use_bpf, "use bpf program to count events"),
 		OPT_STRING(0, "bpf-attr-map", &target.attr_map, "attr-map-path",
-			"path to perf_event_attr map"),
+			   "path to perf_event_attr map"),
 #endif
 		OPT_BOOLEAN('a', "all-cpus", &target.system_wide,
-			"system-wide collection from all CPUs"),
+			    "system-wide collection from all CPUs"),
 		OPT_BOOLEAN(0, "scale", &stat_config.scale,
-			"Use --no-scale to disable counter scaling for multiplexing"),
+			    "Use --no-scale to disable counter scaling for multiplexing"),
 		OPT_INCR('v', "verbose", &verbose,
-			"be more verbose (show counter open errors, etc)"),
+			 "be more verbose (show counter open errors, etc)"),
 		OPT_INTEGER('r', "repeat", &stat_config.run_count,
-			"repeat command and print average + stddev (max: 100, forever: 0)"),
+			    "repeat command and print average + stddev (max: 100, forever: 0)"),
 		OPT_BOOLEAN(0, "table", &stat_config.walltime_run_table,
-			"display details about each run (only with -r option)"),
+			    "display details about each run (only with -r option)"),
 		OPT_BOOLEAN('n', "null", &stat_config.null_run,
-			"null run - dont start any counters"),
-		OPT_INCR('d', "detailed", &detailed_run,
-			"detailed run - start a lot of events"),
-		OPT_BOOLEAN('S', "sync", &sync_run,
-			"call sync() before starting a run"),
+			    "null run - dont start any counters"),
+		OPT_INCR('d', "detailed", &detailed_run, "detailed run - start a lot of events"),
+		OPT_BOOLEAN('S', "sync", &sync_run, "call sync() before starting a run"),
 		OPT_CALLBACK_NOOPT('B', "big-num", NULL, NULL,
-				"print large numbers with thousands\' separators",
-				stat__set_big_num),
+				   "print large numbers with thousands\' separators",
+				   stat__set_big_num),
 		OPT_STRING('C', "cpu", &target.cpu_list, "cpu",
-			"list of cpus to monitor in system-wide"),
+			   "list of cpus to monitor in system-wide"),
 		OPT_BOOLEAN('A', "no-aggr", &opt_mode.no_aggr,
-			"disable aggregation across CPUs or PMUs"),
+			    "disable aggregation across CPUs or PMUs"),
 		OPT_BOOLEAN(0, "no-merge", &opt_mode.no_aggr,
-			"disable aggregation the same as -A or -no-aggr"),
+			    "disable aggregation the same as -A or -no-aggr"),
 		OPT_BOOLEAN(0, "hybrid-merge", &stat_config.hybrid_merge,
-			"Merge identical named hybrid events"),
+			    "Merge identical named hybrid events"),
 		OPT_STRING('x', "field-separator", &stat_config.csv_sep, "separator",
-			"print counts with custom separator"),
+			   "print counts with custom separator"),
 		OPT_BOOLEAN('j', "json-output", &stat_config.json_output,
-			"print counts in JSON format"),
+			    "print counts in JSON format"),
 		OPT_CALLBACK('G', "cgroup", &evsel_list, "name",
-			"monitor event in cgroup name only", parse_stat_cgroups),
+			     "monitor event in cgroup name only", parse_stat_cgroups),
 		OPT_STRING(0, "for-each-cgroup", &stat_config.cgroup_list, "name",
-			"expand events for each cgroup"),
+			   "expand events for each cgroup"),
 		OPT_STRING('o', "output", &output_name, "file", "output file name"),
 		OPT_BOOLEAN(0, "append", &append_file, "append to the output file"),
-		OPT_INTEGER(0, "log-fd", &output_fd,
-			"log output to fd, instead of stderr"),
+		OPT_INTEGER(0, "log-fd", &output_fd, "log output to fd, instead of stderr"),
 		OPT_STRING(0, "pre", &pre_cmd, "command",
-			"command to run prior to the measured command"),
+			   "command to run prior to the measured command"),
 		OPT_STRING(0, "post", &post_cmd, "command",
-			"command to run after to the measured command"),
+			   "command to run after to the measured command"),
 		OPT_UINTEGER('I', "interval-print", &stat_config.interval,
-			"print counts at regular interval in ms "
-			"(overhead is possible for values <= 100ms)"),
+			     "print counts at regular interval in ms "
+			     "(overhead is possible for values <= 100ms)"),
 		OPT_INTEGER(0, "interval-count", &stat_config.times,
-			"print counts for fixed number of times"),
+			    "print counts for fixed number of times"),
 		OPT_BOOLEAN(0, "interval-clear", &stat_config.interval_clear,
-			"clear screen in between new interval"),
-		OPT_UINTEGER(0, "timeout", &stat_config.timeout,
+			    "clear screen in between new interval"),
+		OPT_UINTEGER(
+			0, "timeout", &stat_config.timeout,
 			"stop workload and print counts after a timeout period in ms (>= 10ms)"),
 		OPT_BOOLEAN(0, "per-socket", &opt_mode.socket,
-			"aggregate counts per processor socket"),
+			    "aggregate counts per processor socket"),
 		OPT_BOOLEAN(0, "per-die", &opt_mode.die, "aggregate counts per processor die"),
 		OPT_BOOLEAN(0, "per-cluster", &opt_mode.cluster,
-			"aggregate counts per processor cluster"),
-		OPT_CALLBACK_OPTARG(0, "per-cache", &opt_mode.cache, &stat_config.aggr_level,
-				"cache level", "aggregate count at this cache level (Default: LLC)",
-				parse_cache_level),
+			    "aggregate counts per processor cluster"),
+		OPT_CALLBACK_OPTARG(
+			0, "per-cache", &opt_mode.cache, &stat_config.aggr_level, "cache level",
+			"aggregate count at this cache level (Default: LLC)", parse_cache_level),
 		OPT_BOOLEAN(0, "per-core", &opt_mode.core,
-			"aggregate counts per physical processor core"),
+			    "aggregate counts per physical processor core"),
 		OPT_BOOLEAN(0, "per-thread", &opt_mode.thread, "aggregate counts per thread"),
 		OPT_BOOLEAN(0, "per-node", &opt_mode.node, "aggregate counts per numa node"),
-		OPT_INTEGER('D', "delay", &target.initial_delay,
+		OPT_INTEGER(
+			'D', "delay", &target.initial_delay,
 			"ms to wait before starting measurement after program start (-1: start with events disabled)"),
 		OPT_CALLBACK_NOOPT(0, "metric-only", &stat_config.metric_only, NULL,
-				"Only print computed metrics. No raw values", enable_metric_only),
+				   "Only print computed metrics. No raw values",
+				   enable_metric_only),
 		OPT_BOOLEAN(0, "metric-no-group", &stat_config.metric_no_group,
-			"don't group metric events, impacts multiplexing"),
+			    "don't group metric events, impacts multiplexing"),
 		OPT_BOOLEAN(0, "metric-no-merge", &stat_config.metric_no_merge,
-			"don't try to share events between metrics in a group"),
+			    "don't try to share events between metrics in a group"),
 		OPT_BOOLEAN(0, "metric-no-threshold", &stat_config.metric_no_threshold,
-			"disable adding events for the metric threshold calculation"),
-		OPT_BOOLEAN(0, "topdown", &topdown_run,
-			"measure top-down statistics"),
+			    "disable adding events for the metric threshold calculation"),
+		OPT_BOOLEAN(0, "topdown", &topdown_run, "measure top-down statistics"),
 #ifdef HAVE_ARCH_X86_64_SUPPORT
 		OPT_BOOLEAN(0, "record-tpebs", &tpebs_recording,
-			"enable recording for tpebs when retire_latency required"),
+			    "enable recording for tpebs when retire_latency required"),
 		OPT_CALLBACK(0, "tpebs-mode", &tpebs_mode, "tpebs-mode",
-			"Mode of TPEBS recording: mean, min or max",
-			parse_tpebs_mode),
+			     "Mode of TPEBS recording: mean, min or max", parse_tpebs_mode),
 #endif
 		OPT_UINTEGER(0, "td-level", &stat_config.topdown_level,
-			"Set the metrics level for the top-down statistics (0: max level)"),
-		OPT_BOOLEAN(0, "smi-cost", &smi_cost,
-			"measure SMI cost"),
+			     "Set the metrics level for the top-down statistics (0: max level)"),
+		OPT_BOOLEAN(0, "smi-cost", &smi_cost, "measure SMI cost"),
 		OPT_CALLBACK('M', "metrics", &evsel_list, "metric/metric group list",
-			"monitor specified metrics or metric groups (separated by ,)",
-			append_metric_groups),
+			     "monitor specified metrics or metric groups (separated by ,)",
+			     append_metric_groups),
 		OPT_BOOLEAN_FLAG(0, "all-kernel", &stat_config.all_kernel,
-				"Configure all used events to run in kernel space.",
-				PARSE_OPT_EXCLUSIVE),
+				 "Configure all used events to run in kernel space.",
+				 PARSE_OPT_EXCLUSIVE),
 		OPT_BOOLEAN_FLAG(0, "all-user", &stat_config.all_user,
-				"Configure all used events to run in user space.",
-				PARSE_OPT_EXCLUSIVE),
+				 "Configure all used events to run in user space.",
+				 PARSE_OPT_EXCLUSIVE),
 		OPT_BOOLEAN(0, "percore-show-thread", &stat_config.percore_show_thread,
-			"Use with 'percore' event qualifier to show the event "
-			"counts of one hardware thread by sum up total hardware "
-			"threads of same physical core"),
-		OPT_BOOLEAN(0, "summary", &stat_config.summary,
-			"print summary for interval mode"),
+			    "Use with 'percore' event qualifier to show the event "
+			    "counts of one hardware thread by sum up total hardware "
+			    "threads of same physical core"),
+		OPT_BOOLEAN(0, "new", &use_perf_stat_print,
+			    "use new clean API code for display output"),
+		OPT_BOOLEAN(0, "summary", &stat_config.summary, "print summary for interval mode"),
 		OPT_BOOLEAN(0, "no-csv-summary", &stat_config.no_csv_summary,
-			"don't print 'summary' for CSV summary output"),
+			    "don't print 'summary' for CSV summary output"),
 		OPT_BOOLEAN(0, "quiet", &quiet,
-			"don't print any output, messages or warnings (useful with record)"),
+			    "don't print any output, messages or warnings (useful with record)"),
 		OPT_BOOLEAN_SET(0, "affinity", &affinity, &affinity_set,
-			"enable (default) or disable affinity optimizations to reduce IPIs"),
+				"enable (default) or disable affinity optimizations to reduce IPIs"),
 		OPT_CALLBACK(0, "cputype", &evsel_list, "hybrid cpu type",
-			"Only enable events on applying cpu with this type "
-			"for hybrid platform (e.g. core or atom)",
-			parse_cputype),
-		OPT_CALLBACK(0, "pmu-filter", &evsel_list, "pmu",
+			     "Only enable events on applying cpu with this type "
+			     "for hybrid platform (e.g. core or atom)",
+			     parse_cputype),
+		OPT_CALLBACK(
+			0, "pmu-filter", &evsel_list, "pmu",
 			"Only enable events on applying pmu with specified "
 			"for multiple pmus with same type(e.g. hisi_sicl2_cpa0 or hisi_sicl0_cpa0)",
 			parse_pmu_filter),
 #ifdef HAVE_LIBPFM
 		OPT_CALLBACK(0, "pfm-events", &evsel_list, "event",
-			"libpfm4 event selector. use 'perf list' to list available events",
-			parse_libpfm_events_option),
+			     "libpfm4 event selector. use 'perf list' to list available events",
+			     parse_libpfm_events_option),
 #endif
-		OPT_CALLBACK(0, "control", &stat_config, "fd:ctl-fd[,ack-fd] or fifo:ctl-fifo[,ack-fifo]",
+		OPT_CALLBACK(
+			0, "control", &stat_config,
+			"fd:ctl-fd[,ack-fd] or fifo:ctl-fifo[,ack-fifo]",
 			"Listen on ctl-fd descriptor for command to control measurement ('enable': enable events, 'disable': disable events).\n"
 			"\t\t\t  Optionally send control command completion ('ack\\n') to ack-fd descriptor.\n"
 			"\t\t\t  Alternatively, ctl-fifo / ack-fifo will be opened and used as ctl-fd / ack-fd.",
 			parse_control_option),
 		OPT_CALLBACK_OPTARG(0, "iostat", &evsel_list, &stat_config, "default",
-				"measure I/O performance metrics provided by arch/platform",
-				iostat_parse),
+				    "measure I/O performance metrics provided by arch/platform",
+				    iostat_parse),
 		OPT_END()
 	};
 	const char * const stat_usage[] = {
