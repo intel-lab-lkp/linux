@@ -173,6 +173,13 @@ struct gpu_buddy {
 	 * that fits in the remaining space.
 	 */
 	struct gpu_buddy_block **roots;
+	/*
+	 * Per-order free block scoreboard: free_scoreboard[order] holds the
+	 * number of blocks of that order currently in the free state.
+	 * Incremented in mark_free(), decremented wherever rbtree_remove() is
+	 * called on a free block.
+	 */
+	u64 *free_scoreboard;
 /* public: */
 	unsigned int n_roots;
 	unsigned int max_order;
