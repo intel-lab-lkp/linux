@@ -383,6 +383,17 @@ int intel_pmt_dev_create(struct intel_pmt_entry *entry, struct intel_pmt_namespa
 	if (IS_ERR(entry->disc_table))
 		return PTR_ERR(entry->disc_table);
 
+	/*
+	 * The mapped discovery resource may be smaller than disc_header (its
+	 * size is the namespace's DVSEC entry_size in dwords, which can be
+	 * less than 4). Cap the copy to the actual resource size to avoid
+	 * reading past the mapped region; any unread dwords stay zero from
+	 * the zero-initialized allocation of the containing struct.
+	 */
+	memcpy_fromio(entry->disc_header, entry->disc_table,
+		      min_t(size_t, sizeof(entry->disc_header),
+			    resource_size(disc_res)));
+
 	if (ns->pmt_pre_decode) {
 		ret = ns->pmt_pre_decode(intel_vsec_dev, entry);
 		if (ret)
