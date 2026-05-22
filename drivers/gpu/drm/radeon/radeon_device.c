@@ -1800,7 +1800,7 @@ int radeon_gpu_reset(struct radeon_device *rdev)
 					    ring_sizes[i], ring_data[i]);
 		} else {
 			radeon_fence_driver_force_completion(rdev, i);
-			kfree(ring_data[i]);
+			kvfree(ring_data[i]);
 		}
 	}
 
