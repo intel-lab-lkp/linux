@@ -737,8 +737,10 @@ err_undo:
 	buddy = __get_buddy(block);
 	if (buddy &&
 	    (gpu_buddy_block_is_free(block) &&
-	     gpu_buddy_block_is_free(buddy)))
+	     gpu_buddy_block_is_free(buddy))) {
+		rbtree_remove(mm, block);
 		__gpu_buddy_free(mm, block, false);
+	}
 	return ERR_PTR(err);
 }
 
@@ -847,8 +849,10 @@ alloc_from_freetree(struct gpu_buddy *mm,
 	return block;
 
 err_undo:
-	if (tmp != order)
+	if (tmp != order) {
+		rbtree_remove(mm, block);
 		__gpu_buddy_free(mm, block, false);
+	}
 	return ERR_PTR(err);
 }
 
@@ -968,8 +972,10 @@ err_undo:
 	buddy = __get_buddy(block);
 	if (buddy &&
 	    (gpu_buddy_block_is_free(block) &&
-	     gpu_buddy_block_is_free(buddy)))
+	     gpu_buddy_block_is_free(buddy))) {
+		rbtree_remove(mm, block);
 		__gpu_buddy_free(mm, block, false);
+	}
 	return ERR_PTR(err);
 }
 
@@ -1054,8 +1060,10 @@ err_undo:
 	buddy = __get_buddy(block);
 	if (buddy &&
 	    (gpu_buddy_block_is_free(block) &&
-	     gpu_buddy_block_is_free(buddy)))
+	     gpu_buddy_block_is_free(buddy))) {
+		rbtree_remove(mm, block);
 		__gpu_buddy_free(mm, block, false);
+	}
 
 err_free:
 	if (err == -ENOSPC && total_allocated_on_err) {
