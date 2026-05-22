@@ -441,12 +441,17 @@ static int snd_cx231xx_capture_open(struct snd_pcm_substream *substream)
 static int snd_cx231xx_pcm_close(struct snd_pcm_substream *substream)
 {
 	int ret;
-	struct cx231xx *dev = snd_pcm_substream_chip(substream);
+        struct cx231xx *dev = snd_pcm_substream_chip(substream);
 
-	dev_dbg(dev->dev, "closing device\n");
+        if (!dev) {
+                pr_err("cx231xx: called with null device\n");
+                return -ENODEV;
+        }
 
-	/* inform hardware to stop streaming */
-	mutex_lock(&dev->lock);
+        dev_dbg(dev->dev, "closing device\n");
+
+        /* inform hardware to stop streaming */
+        mutex_lock(&dev->lock);
 	ret = cx231xx_capture_start(dev, 0, Audio);
 
 	/* set alternate setting for audio interface */
