@@ -2139,38 +2139,23 @@ static void __jbd2_journal_unfile_buffer(struct journal_head *jh)
 }
 
 /**
- * jbd2_journal_try_to_free_buffers() - try to free page buffers.
+ * jbd2_journal_try_to_free_buffers() - try to free folio buffers.
  * @journal: journal for operation
  * @folio: Folio to detach data from.
  *
- * For all the buffers on this page,
- * if they are fully written out ordered data, move them onto BUF_CLEAN
- * so try_to_free_buffers() can reap them.
+ * For each buffer_head on @folio, if the buffer has a journal_head but
+ * is not attached to a running or committing transaction, try to remove
+ * it from the checkpoint list.  This is needed for data=journal mode
+ * where data buffers are journaled: once they are checkpointed, the
+ * journal_head can be detached and the buffer freed.  If any buffer is
+ * still attached to a transaction, the folio cannot be released and we
+ * bail out.  Otherwise we call try_to_free_buffers() to detach all
+ * buffer_heads from the folio.
  *
- * This function returns non-zero if we wish try_to_free_buffers()
- * to be called. We do this if the page is releasable by try_to_free_buffers().
- * We also do it if the page has locked or dirty buffers and the caller wants
- * us to perform sync or async writeout.
+ * For data=ordered and writeback modes, data buffers never have
+ * journal_heads, so this degenerates to a plain try_to_free_buffers().
  *
- * This complicates JBD locking somewhat.  We aren't protected by the
- * BKL here.  We wish to remove the buffer from its committing or
- * running transaction's ->t_datalist via __jbd2_journal_unfile_buffer.
- *
- * This may *change* the value of transaction_t->t_datalist, so anyone
- * who looks at t_datalist needs to lock against this function.
- *
- * Even worse, someone may be doing a jbd2_journal_dirty_data on this
- * buffer.  So we need to lock against that.  jbd2_journal_dirty_data()
- * will come out of the lock with the buffer dirty, which makes it
- * ineligible for release here.
- *
- * Who else is affected by this?  hmm...  Really the only contender
- * is do_get_write_access() - it could be looking at the buffer while
- * journal_try_to_free_buffer() is changing its state.  But that
- * cannot happen because we never reallocate freed data as metadata
- * while the data is part of a transaction.  Yes?
- *
- * Return false on failure, true on success
+ * Return: true if the folio's buffers were freed, false otherwise
  */
 bool jbd2_journal_try_to_free_buffers(journal_t *journal, struct folio *folio)
 {
