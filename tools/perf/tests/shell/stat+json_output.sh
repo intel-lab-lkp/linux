@@ -248,6 +248,12 @@ then
 	check_per_die
 	check_per_socket
 fi
+if [ $skip_test -ne 1 ]
+then
+	check_per_cache_instance
+	check_per_cluster
+fi
+check_metric_only
 
 cleanup
 exit 0
