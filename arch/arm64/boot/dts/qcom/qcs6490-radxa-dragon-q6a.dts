@@ -1113,3 +1113,88 @@
 &eud {
 	status = "disabled";
 };
+
+&gpucc {
+	status = "okay";
+};
+
+&gmu {
+	status = "okay";
+};
+
+&dispcc {
+	status = "okay";
+};
+
+&mdss {
+	status = "okay";
+};
+
+&tlmm {
+	dp_hot_plug_det: dp-hot-plug-det-state {
+		pins = "gpio47";
+		function = "dp_hot";
+		bias-disable;
+	};
+};
+
+/ {
+	hdmi-bridge {
+		compatible = "dp-connector";
+		label = "hdmi";
+		type = "full-size";
+		pinctrl-names = "default";
+		pinctrl-0 = <&dp_hot_plug_det>;
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			port@0 {
+				reg = <0>;
+				hdmi_bridge_in: endpoint {
+					remote-endpoint = <&usb_dp_qmpphy_out_dp>;
+				};
+			};
+			port@1 {
+				reg = <1>;
+				hdmi_bridge_out: endpoint {
+					remote-endpoint = <&hdmi_connector_in>;
+				};
+			};
+		};
+	};
+
+	hdmi-connector {
+		compatible = "hdmi-connector";
+		label = "hdmi";
+		type = "a";
+		port {
+			hdmi_connector_in: endpoint {
+				remote-endpoint = <&hdmi_bridge_out>;
+			};
+		};
+	};
+};
+
+&mdss_dp {
+	status = "okay";
+};
+
+&mdss_dp_out {
+	data-lanes = <0 1>;
+};
+
+&mdss_dsi {
+	status = "disabled";
+};
+
+&mdss_dsi_phy {
+	status = "disabled";
+};
+
+&mdss_edp {
+	status = "disabled";
+};
+
+&mdss_edp_phy {
+	status = "disabled";
+};
