@@ -472,22 +472,22 @@ static int swap_cluster_alloc_table(struct swap_cluster_info *ci, gfp_t gfp)
 	if (!mem_cgroup_disabled()) {
 		VM_WARN_ON_ONCE(ci->memcg_table);
 		ci->memcg_table = kzalloc_obj(*ci->memcg_table, gfp);
-		if (!ci->memcg_table)
-			goto err_free;
+		if (!ci->memcg_table) {
+			swap_cluster_free_table(ci);
+			return -ENOMEM;
+		}
 	}
 #endif
 
 #if !SWAP_TABLE_HAS_ZEROFLAG
 	VM_WARN_ON_ONCE(ci->zero_bitmap);
 	ci->zero_bitmap = bitmap_zalloc(SWAPFILE_CLUSTER, gfp);
-	if (!ci->zero_bitmap)
-		goto err_free;
+	if (!ci->zero_bitmap) {
+		swap_cluster_free_table(ci);
+		return -ENOMEM;
+	}
 #endif
 	return 0;
-
-err_free:
-	swap_cluster_free_table(ci);
-	return -ENOMEM;
 }
 
 /*
