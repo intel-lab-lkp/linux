@@ -56,6 +56,20 @@ config MUX_GPIO
 	  To compile the driver as a module, choose M here: the module will
 	  be called mux-gpio.
 
+config MUX_MC33978
+	tristate "NXP MC33978/MC34978 Analog Multiplexer"
+	depends on MFD_MC33978
+	help
+	  MC33978/MC34978 24-to-1 analog multiplexer (AMUX) driver.
+
+	  This driver provides mux-control for the analog multiplexer,
+	  which can route switch voltages, temperature, and battery voltage
+	  to an external ADC. Typically used with IIO ADC drivers to measure
+	  analog values from the 22 switch inputs plus temperature and VBATP.
+
+	  To compile the driver as a module, choose M here: the module will
+	  be called mux-mc33978.
+
 config MUX_MMIO
 	tristate "MMIO/Regmap register bitfield-controlled Multiplexer"
 	depends on OF
