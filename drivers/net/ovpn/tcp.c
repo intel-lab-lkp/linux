@@ -283,9 +283,9 @@ static void ovpn_tcp_send_sock(struct ovpn_peer *peer, struct sock *sk)
 			/* in case of TCP error we can't recover the VPN
 			 * stream therefore we abort the connection
 			 */
-			if (ovpn_peer_hold(peer))
-				if (!schedule_work(&peer->tcp.defer_del_work))
-					ovpn_peer_put(peer);
+			ovpn_peer_hold(peer);
+			if (!schedule_work(&peer->tcp.defer_del_work))
+				ovpn_peer_put(peer);
 
 			/* we bail out immediately and keep tx_in_progress set
 			 * to true. This way we prevent more TX attempts
