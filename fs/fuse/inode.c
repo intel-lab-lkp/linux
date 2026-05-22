@@ -1246,7 +1246,7 @@ static void process_init_limits(struct fuse_conn *fc, struct fuse_init_out *arg)
 	sanitize_global_limit(&max_user_congthresh);
 
 	if (arg->max_background) {
-		unsigned int max_background = max_background = arg->max_background;
+		unsigned int max_background = arg->max_background;
 
 		if (!cap_sys_admin && max_background > max_user_bgreq)
 			max_background = max_user_bgreq;
