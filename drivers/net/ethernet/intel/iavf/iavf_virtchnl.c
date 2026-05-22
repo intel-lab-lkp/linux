@@ -2522,6 +2522,7 @@ void iavf_virtchnl_completion(struct iavf_adapter *adapter,
 		case VIRTCHNL_OP_ADD_CLOUD_FILTER: {
 			struct iavf_cloud_filter *cf, *cftmp;
 
+			spin_lock_bh(&adapter->cloud_filter_list_lock);
 			list_for_each_entry_safe(cf, cftmp,
 						 &adapter->cloud_filter_list,
 						 list) {
@@ -2532,16 +2533,23 @@ void iavf_virtchnl_completion(struct iavf_adapter *adapter,
 							       v_retval));
 					iavf_print_cloud_filter(adapter,
 								&cf->f);
+					if (msglen)
+						dev_info(&adapter->pdev->dev,
+							 "%.*s\n",
+							 (int)msglen,
+							 (const char *)msg);
 					list_del(&cf->list);
 					kfree(cf);
 					adapter->num_cloud_filters--;
 				}
 			}
+			spin_unlock_bh(&adapter->cloud_filter_list_lock);
 			}
 			break;
 		case VIRTCHNL_OP_DEL_CLOUD_FILTER: {
 			struct iavf_cloud_filter *cf;
 
+			spin_lock_bh(&adapter->cloud_filter_list_lock);
 			list_for_each_entry(cf, &adapter->cloud_filter_list,
 					    list) {
 				if (cf->state == __IAVF_CF_DEL_PENDING) {
@@ -2553,6 +2561,7 @@ void iavf_virtchnl_completion(struct iavf_adapter *adapter,
 								&cf->f);
 				}
 			}
+			spin_unlock_bh(&adapter->cloud_filter_list_lock);
 			}
 			break;
 		case VIRTCHNL_OP_ADD_FDIR_FILTER: {
@@ -2568,8 +2577,10 @@ void iavf_virtchnl_completion(struct iavf_adapter *adapter,
 							       v_retval));
 					iavf_print_fdir_fltr(adapter, fdir);
 					if (msglen)
-						dev_err(&adapter->pdev->dev,
-							"%s\n", msg);
+						dev_info(&adapter->pdev->dev,
+							 "%.*s\n",
+							 (int)msglen,
+							 (const char *)msg);
 					list_del(&fdir->list);
 					iavf_dec_fdir_active_fltr(adapter, fdir);
 					kfree(fdir);
