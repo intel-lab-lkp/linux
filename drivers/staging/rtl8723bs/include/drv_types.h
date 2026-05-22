@@ -373,6 +373,15 @@ struct adapter {
 	unsigned char     in_cta_test;
 };
 
+struct transmit_queues {
+	u16 beQ;
+	u16 bkQ;
+	u16 viQ;
+	u16 voQ;
+	u16 mgtQ;
+	u16 hiQ;
+};
+
 #define adapter_to_dvobj(adapter) (adapter->dvobj)
 #define adapter_to_pwrctl(adapter) (dvobj_to_pwrctl(adapter->dvobj))
 #define adapter_wdev_data(adapter) (&((adapter)->wdev_data))

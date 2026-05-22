@@ -188,25 +188,18 @@ static void _InitTxBufferBoundary(struct adapter *padapter)
 	rtw_write8(padapter, REG_TDECTRL + 1, txpktbuf_bndy);
 }
 
-static void _InitNormalChipRegPriority(
-	struct adapter *Adapter,
-	u16 beQ,
-	u16 bkQ,
-	u16 viQ,
-	u16 voQ,
-	u16 mgtQ,
-	u16 hiQ
-)
+static void _InitNormalChipRegPriority(struct adapter *Adapter,
+				       struct transmit_queues queues)
 {
 	u16 value16 = (rtw_read16(Adapter, REG_TRXDMA_CTRL) & 0x7);
 
 	value16 |=
-		_TXDMA_BEQ_MAP(beQ)  |
-		_TXDMA_BKQ_MAP(bkQ)  |
-		_TXDMA_VIQ_MAP(viQ)  |
-		_TXDMA_VOQ_MAP(voQ)  |
-		_TXDMA_MGQ_MAP(mgtQ) |
-		_TXDMA_HIQ_MAP(hiQ);
+		_TXDMA_BEQ_MAP(queues.beQ)  |
+		_TXDMA_BKQ_MAP(queues.bkQ)  |
+		_TXDMA_VIQ_MAP(queues.viQ)  |
+		_TXDMA_VOQ_MAP(queues.voQ)  |
+		_TXDMA_MGQ_MAP(queues.mgtQ) |
+		_TXDMA_HIQ_MAP(queues.hiQ);
 
 	rtw_write16(Adapter, REG_TRXDMA_CTRL, value16);
 }
@@ -231,17 +224,23 @@ static void _InitNormalChipOneOutEpPriority(struct adapter *Adapter)
 		break;
 	}
 
-	_InitNormalChipRegPriority(
-		Adapter, value, value, value, value, value, value
-	);
+	struct transmit_queues queues = {
+		.beQ = value,
+		.bkQ = value,
+		.viQ = value,
+		.voQ = value,
+		.mgtQ = value,
+		.hiQ = value,
+	};
 
+	_InitNormalChipRegPriority(Adapter, queues);
 }
 
 static void _InitNormalChipTwoOutEpPriority(struct adapter *Adapter)
 {
 	struct hal_com_data *pHalData = GET_HAL_DATA(Adapter);
 	struct registry_priv *pregistrypriv = &Adapter->registrypriv;
-	u16 beQ, bkQ, viQ, voQ, mgtQ, hiQ;
+	struct transmit_queues queues;
 
 	u16 valueHi = 0;
 	u16 valueLow = 0;
@@ -264,49 +263,48 @@ static void _InitNormalChipTwoOutEpPriority(struct adapter *Adapter)
 	}
 
 	if (!pregistrypriv->wifi_spec) {
-		beQ = valueLow;
-		bkQ = valueLow;
-		viQ = valueHi;
-		voQ = valueHi;
-		mgtQ = valueHi;
-		hiQ = valueHi;
+		queues.beQ = valueLow;
+		queues.bkQ = valueLow;
+		queues.viQ = valueHi;
+		queues.voQ = valueHi;
+		queues.mgtQ = valueHi;
+		queues.hiQ = valueHi;
 	} else {
 		/* for WMM , CONFIG_OUT_EP_WIFI_MODE */
-		beQ = valueLow;
-		bkQ = valueHi;
-		viQ = valueHi;
-		voQ = valueLow;
-		mgtQ = valueHi;
-		hiQ = valueHi;
+		queues.beQ = valueLow;
+		queues.bkQ = valueHi;
+		queues.viQ = valueHi;
+		queues.voQ = valueLow;
+		queues.mgtQ = valueHi;
+		queues.hiQ = valueHi;
 	}
 
-	_InitNormalChipRegPriority(Adapter, beQ, bkQ, viQ, voQ, mgtQ, hiQ);
-
+	_InitNormalChipRegPriority(Adapter, queues);
 }
 
 static void _InitNormalChipThreeOutEpPriority(struct adapter *padapter)
 {
 	struct registry_priv *pregistrypriv = &padapter->registrypriv;
-	u16 beQ, bkQ, viQ, voQ, mgtQ, hiQ;
+	struct transmit_queues queues;
 
 	if (!pregistrypriv->wifi_spec) {
 		/*  typical setting */
-		beQ = QUEUE_LOW;
-		bkQ = QUEUE_LOW;
-		viQ = QUEUE_NORMAL;
-		voQ = QUEUE_HIGH;
-		mgtQ = QUEUE_HIGH;
-		hiQ = QUEUE_HIGH;
+		queues.beQ = QUEUE_LOW;
+		queues.bkQ = QUEUE_LOW;
+		queues.viQ = QUEUE_NORMAL;
+		queues.voQ = QUEUE_HIGH;
+		queues.mgtQ = QUEUE_HIGH;
+		queues.hiQ = QUEUE_HIGH;
 	} else {
 		/*  for WMM */
-		beQ = QUEUE_LOW;
-		bkQ = QUEUE_NORMAL;
-		viQ = QUEUE_NORMAL;
-		voQ = QUEUE_HIGH;
-		mgtQ = QUEUE_HIGH;
-		hiQ = QUEUE_HIGH;
+		queues.beQ = QUEUE_LOW;
+		queues.bkQ = QUEUE_NORMAL;
+		queues.viQ = QUEUE_NORMAL;
+		queues.voQ = QUEUE_HIGH;
+		queues.mgtQ = QUEUE_HIGH;
+		queues.hiQ = QUEUE_HIGH;
 	}
-	_InitNormalChipRegPriority(padapter, beQ, bkQ, viQ, voQ, mgtQ, hiQ);
+	_InitNormalChipRegPriority(padapter, queues);
 }
 
 static void _InitQueuePriority(struct adapter *Adapter)
@@ -988,9 +986,9 @@ static void _ReadRFType(struct adapter *Adapter)
 	pHalData->rf_chip = RF_6052;
 }
 
-static void Hal_EfuseParseMACAddr_8723BS(
-	struct adapter *padapter, u8 *hwinfo, bool AutoLoadFail
-)
+static void Hal_EfuseParseMACAddr_8723BS(struct adapter *padapter,
+					 u8 *hwinfo,
+					 bool AutoLoadFail)
 {
 	struct eeprom_priv *pEEPROM = GET_EEPROM_EFUSE_PRIV(padapter);
 
@@ -1002,9 +1000,9 @@ static void Hal_EfuseParseMACAddr_8723BS(
 	}
 }
 
-static void Hal_EfuseParseBoardType_8723BS(
-	struct adapter *padapter, u8 *hwinfo, bool AutoLoadFail
-)
+static void Hal_EfuseParseBoardType_8723BS(struct adapter *padapter,
+					   u8 *hwinfo,
+					   bool AutoLoadFail)
 {
 	struct hal_com_data *pHalData = GET_HAL_DATA(padapter);
 
@@ -1192,9 +1190,9 @@ void SetHwRegWithBuf8723B(struct adapter *padapter, u8 variable, u8 *pbuf, int l
 /*	Description: */
 /*		Query setting of specified variable. */
 /*  */
-u8 GetHalDefVar8723BSDIO(
-	struct adapter *Adapter, enum hal_def_variable eVariable, void *pValue
-)
+u8 GetHalDefVar8723BSDIO(struct adapter *Adapter,
+			 enum hal_def_variable eVariable,
+			 void *pValue)
 {
 	u8 bResult = _SUCCESS;
 
