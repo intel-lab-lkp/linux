@@ -28,7 +28,7 @@ static int atmel_ecc_kpp_refcnt;
 DECLARE_COMPLETION(atmel_ecc_unreg_done);
 static bool atmel_ecc_unreg_active;
 
-static struct atmel_ecc_driver_data driver_data;
+static struct atmel_ecc_driver_data atmel_i2c_mgmt;
 
 /**
  * struct atmel_ecdh_ctx - transformation context
@@ -214,14 +214,14 @@ static struct i2c_client *atmel_ecc_i2c_client_alloc(void)
 	int min_tfm_cnt = INT_MAX;
 	int tfm_cnt;
 
-	spin_lock(&driver_data.i2c_list_lock);
+	spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
 
-	if (list_empty(&driver_data.i2c_client_list)) {
-		spin_unlock(&driver_data.i2c_list_lock);
+	if (list_empty(&atmel_i2c_mgmt.i2c_client_list)) {
+		spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
 		return ERR_PTR(-ENODEV);
 	}
 
-	list_for_each_entry(i2c_priv, &driver_data.i2c_client_list,
+	list_for_each_entry(i2c_priv, &atmel_i2c_mgmt.i2c_client_list,
 			    i2c_client_list_node) {
 		if (!i2c_priv->ready)
 			continue;
@@ -239,7 +239,7 @@ static struct i2c_client *atmel_ecc_i2c_client_alloc(void)
 		client = min_i2c_priv->client;
 	}
 
-	spin_unlock(&driver_data.i2c_list_lock);
+	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
 
 	return client;
 }
@@ -334,11 +334,11 @@ static int atmel_ecc_probe(struct i2c_client *client)
 	i2c_priv = i2c_get_clientdata(client);
 	i2c_priv->ready = false;
 
-	spin_lock(&driver_data.i2c_list_lock);
+	spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
 	list_add_tail(&i2c_priv->i2c_client_list_node,
-		      &driver_data.i2c_client_list);
+		      &atmel_i2c_mgmt.i2c_client_list);
 	i2c_priv->ready = true;
-	spin_unlock(&driver_data.i2c_list_lock);
+	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
 
 	mutex_lock(&atmel_ecc_kpp_lock);
 	/*
@@ -352,12 +352,11 @@ static int atmel_ecc_probe(struct i2c_client *client)
 		timeout = wait_for_completion_timeout(&atmel_ecc_unreg_done,
 						      msecs_to_jiffies(2000));
 		mutex_lock(&atmel_ecc_kpp_lock);
-
 		if (timeout == 0) {
-			spin_lock(&driver_data.i2c_list_lock);
+			spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
 			i2c_priv->ready = false;
 			list_del(&i2c_priv->i2c_client_list_node);
-			spin_unlock(&driver_data.i2c_list_lock);
+			spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
 			mutex_unlock(&atmel_ecc_kpp_lock);
 
 			dev_err(&client->dev, "probe timed out, former driver instance not fully deregistered\n");
@@ -368,10 +367,10 @@ static int atmel_ecc_probe(struct i2c_client *client)
 	if (atmel_ecc_kpp_refcnt == 0) {
 		ret = crypto_register_kpp(&atmel_ecdh_nist_p256);
 		if (ret) {
-			spin_lock(&driver_data.i2c_list_lock);
+			spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
 			i2c_priv->ready = false;
 			list_del(&i2c_priv->i2c_client_list_node);
-			spin_unlock(&driver_data.i2c_list_lock);
+			spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
 			mutex_unlock(&atmel_ecc_kpp_lock);
 
 			dev_err(&client->dev, "%s alg registration failed\n",
@@ -391,9 +390,9 @@ static void atmel_ecc_remove(struct i2c_client *client)
 	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
 	bool trigger_unreg = false;
 
-	spin_lock(&driver_data.i2c_list_lock);
+	spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
 	i2c_priv->ready = false;
-	spin_unlock(&driver_data.i2c_list_lock);
+	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
 
 	/*
 	 * The Linux crypto core automatically blocks until all active
@@ -413,9 +412,9 @@ static void atmel_ecc_remove(struct i2c_client *client)
 	if (atomic_read(&i2c_priv->tfm_count))
 		wait_for_completion(&i2c_priv->remove_done);
 
-	spin_lock(&driver_data.i2c_list_lock);
+	spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
 	list_del(&i2c_priv->i2c_client_list_node);
-	spin_unlock(&driver_data.i2c_list_lock);
+	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
 
 	/*
 	 * The driver registers once an algorithm, but maintains a list of
@@ -459,8 +458,8 @@ static struct i2c_driver atmel_ecc_driver = {
 
 static int __init atmel_ecc_init(void)
 {
-	spin_lock_init(&driver_data.i2c_list_lock);
-	INIT_LIST_HEAD(&driver_data.i2c_client_list);
+	spin_lock_init(&atmel_i2c_mgmt.i2c_list_lock);
+	INIT_LIST_HEAD(&atmel_i2c_mgmt.i2c_client_list);
 	return i2c_add_driver(&atmel_ecc_driver);
 }
 
