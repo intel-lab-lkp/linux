@@ -377,7 +377,6 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 	node = dev_to_node(&dev->dev);
 	dev->is_probed = 1;
 
-	cpu_hotplug_disable();
 	/*
 	 * Prevent nesting work_on_cpu() for the case where a Virtual Function
 	 * device is probed from work_on_cpu() of the Physical device.
@@ -389,6 +388,7 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 		struct pci_probe_arg arg = { .ddi = &ddi };
 
 		INIT_WORK_ONSTACK(&arg.work, local_pci_probe_callback);
+		cpu_hotplug_disable();
 		/*
 		 * The target election and the enqueue of the work must be within
 		 * the same RCU read side section so that when the workqueue pool
@@ -414,11 +414,11 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 			error = local_pci_probe(&ddi);
 		}
 
+		cpu_hotplug_enable();
 		destroy_work_on_stack(&arg.work);
 	}
 
 	dev->is_probed = 0;
-	cpu_hotplug_enable();
 	return error;
 }
 
