@@ -1049,6 +1049,7 @@ static __init int construct_tdmrs(struct list_head *tmb_list,
 static __init int config_tdx_module(struct tdmr_info_list *tdmr_list,
 				    u64 global_keyid)
 {
+	u64 seamcall_fn = TDH_SYS_CONFIG_V0;
 	struct tdx_module_args args = {};
 	u64 *tdmr_pa_array;
 	size_t array_sz;
@@ -1074,8 +1075,22 @@ static __init int config_tdx_module(struct tdmr_info_list *tdmr_list,
 	args.rcx = __pa(tdmr_pa_array);
 	args.rdx = tdmr_list->nr_consumed_tdmrs;
 	args.r8 = global_keyid;
-	ret = seamcall_prerr(TDH_SYS_CONFIG, &args);
 
+	if (tdx_sysinfo.features.tdx_features0 & TDX_FEATURES0_QUOTE) {
+		args.r9 |= TDX_FEATURES0_QUOTE;
+		/* These parameters require version >= 1 */
+		seamcall_fn = TDH_SYS_CONFIG;
+	}
+
+	ret = seamcall_prerr(seamcall_fn, &args);
+	if (ret)
+		goto free_tdmr;
+
+	/* enabling TDX Quoting may change tdx_sysinfo, update it */
+	if (tdx_sysinfo.features.tdx_features0 & TDX_FEATURES0_QUOTE)
+		ret = get_tdx_sys_info(&tdx_sysinfo);
+
+free_tdmr:
 	/* Free the array as it is not required anymore. */
 	kfree(tdmr_pa_array);
 
@@ -1384,12 +1399,17 @@ static void tdx_quote_init(void)
 	unsigned int nr_quote_pages;
 	u64 r;
 
+	if (!(tdx_sysinfo.features.tdx_features0 & TDX_FEATURES0_QUOTE))
+		return;
+
 	do {
 		r = seamcall(TDH_QUOTE_INIT, &args);
 	} while (r == TDX_INTERRUPTED_RESUMABLE);
 
-	if (r)
+	if (r) {
+		pr_err("Failed to enable quoting extension: 0x%llx\n", r);
 		return;
+	}
 
 	/* Quoting metadata is valid only after initialization */
 	if (get_tdx_sys_info_quote(&tdx_sysinfo.quote))
