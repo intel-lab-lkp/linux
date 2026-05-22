@@ -1521,9 +1521,9 @@ fn get_frozen_status(data: UserSlice) -> Result {
                 found = true;
                 let inner = proc.inner.lock();
                 let txns_pending = inner.txns_pending_locked();
-                info.async_recv |= inner.async_recv as u32;
-                info.sync_recv |= inner.sync_recv as u32;
-                info.sync_recv |= (txns_pending as u32) << 1;
+                info.async_recv |= u32::from(inner.async_recv);
+                info.sync_recv |= u32::from(inner.sync_recv);
+                info.sync_recv |= u32::from(txns_pending) << 1;
             }
         });
     }
