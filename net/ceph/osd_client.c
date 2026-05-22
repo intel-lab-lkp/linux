@@ -5088,7 +5088,7 @@ int ceph_osdc_list_watchers(struct ceph_osd_client *osdc,
 	ret = ceph_osdc_wait_request(osdc, req);
 	if (ret >= 0) {
 		void *p = page_address(pages[0]);
-		void *const end = p + req->r_ops[0].outdata_len;
+		void *const end = p + min_t(u32, req->r_ops[0].outdata_len, PAGE_SIZE);
 
 		ret = decode_watchers(&p, end, watchers, num_watchers);
 	}
