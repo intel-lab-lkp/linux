@@ -213,6 +213,7 @@ EXPORT_SYMBOL_NS_GPL(dw_spi_check_status, "SPI_DW_CORE");
 static irqreturn_t dw_spi_transfer_handler(struct dw_spi *dws)
 {
 	u16 irq_status = dw_readl(dws, DW_SPI_ISR);
+	unsigned long flags;
 
 	if (dw_spi_check_status(dws, false)) {
 		spi_finalize_current_transfer(dws->ctlr);
@@ -226,7 +227,9 @@ static irqreturn_t dw_spi_transfer_handler(struct dw_spi *dws)
 	 * final stage of the transfer. By doing so we'll get the next IRQ
 	 * right when the leftover incoming data is received.
 	 */
+	spin_lock_irqsave(&dws->buf_lock, flags);
 	dw_reader(dws);
+	spin_unlock_irqrestore(&dws->buf_lock, flags);
 	if (!dws->rx_len) {
 		dw_spi_mask_intr(dws, 0xff);
 		spi_finalize_current_transfer(dws->ctlr);
@@ -240,7 +243,9 @@ static irqreturn_t dw_spi_transfer_handler(struct dw_spi *dws)
 	 * have the TXE IRQ flood at the final stage of the transfer.
 	 */
 	if (irq_status & DW_SPI_INT_TXEI) {
+		spin_lock_irqsave(&dws->buf_lock, flags);
 		dw_writer(dws);
+		spin_unlock_irqrestore(&dws->buf_lock, flags);
 		if (!dws->tx_len)
 			dw_spi_mask_intr(dws, DW_SPI_INT_TXEI);
 	}
@@ -468,11 +473,14 @@ static int dw_spi_transfer_one(struct spi_controller *ctlr,
 static inline void dw_spi_abort(struct spi_controller *ctlr)
 {
 	struct dw_spi *dws = spi_controller_get_devdata(ctlr);
+	unsigned long flags;
 
 	if (dws->dma_mapped)
 		dws->dma_ops->dma_stop(dws);
 
+	spin_lock_irqsave(&dws->buf_lock, flags);
 	dw_spi_reset_chip(dws);
+	spin_unlock_irqrestore(&dws->buf_lock, flags);
 }
 
 static void dw_spi_handle_err(struct spi_controller *ctlr,
@@ -938,6 +946,8 @@ int dw_spi_add_controller(struct device *dev, struct dw_spi *dws)
 
 	dws->ctlr = ctlr;
 	dws->dma_addr = (dma_addr_t)(dws->paddr + DW_SPI_DR);
+
+	spin_lock_init(&dws->buf_lock);
 
 	spi_controller_set_devdata(ctlr, dws);
 

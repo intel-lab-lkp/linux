@@ -196,6 +196,7 @@ struct dw_spi {
 	const struct dw_spi_dma_ops *dma_ops;
 	struct completion	dma_completion;
 
+	spinlock_t		buf_lock; /* Serialize FIFO access vs chip reset */
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs;
 	struct debugfs_regset32 regset;
