@@ -351,12 +351,8 @@ static int atmel_ecc_probe(struct i2c_client *client)
 						      msecs_to_jiffies(2000));
 		mutex_lock(&atmel_ecc_kpp_lock);
 		if (timeout == 0) {
-			spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
-			i2c_priv->ready = false;
-			list_del(&i2c_priv->i2c_client_list_node);
-			spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
-			mutex_unlock(&atmel_ecc_kpp_lock);
-
+			atmel_i2c_deactivate_client(i2c_priv);
+			atmel_i2c_unregister_client(i2c_priv);
 			dev_err(&client->dev, "probe timed out, former driver instance not fully deregistered\n");
 			return -ETIMEDOUT;
 		}
@@ -365,12 +361,8 @@ static int atmel_ecc_probe(struct i2c_client *client)
 	if (atmel_ecc_kpp_refcnt == 0) {
 		ret = crypto_register_kpp(&atmel_ecdh_nist_p256);
 		if (ret) {
-			spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
-			i2c_priv->ready = false;
-			list_del(&i2c_priv->i2c_client_list_node);
-			spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
-			mutex_unlock(&atmel_ecc_kpp_lock);
-
+			atmel_i2c_deactivate_client(i2c_priv);
+			atmel_i2c_unregister_client(i2c_priv);
 			dev_err(&client->dev, "%s alg registration failed\n",
 				atmel_ecdh_nist_p256.base.cra_driver_name);
 			return ret;
@@ -388,9 +380,7 @@ static void atmel_ecc_remove(struct i2c_client *client)
 	struct atmel_i2c_client_priv *i2c_priv = i2c_get_clientdata(client);
 	bool trigger_unreg = false;
 
-	spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
-	i2c_priv->ready = false;
-	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
+	atmel_i2c_deactivate_client(i2c_priv);
 
 	/*
 	 * The Linux crypto core automatically blocks until all active
@@ -410,9 +400,7 @@ static void atmel_ecc_remove(struct i2c_client *client)
 	if (atomic_read(&i2c_priv->tfm_count))
 		wait_for_completion(&i2c_priv->remove_done);
 
-	spin_lock(&atmel_i2c_mgmt.i2c_list_lock);
-	list_del(&i2c_priv->i2c_client_list_node);
-	spin_unlock(&atmel_i2c_mgmt.i2c_list_lock);
+	atmel_i2c_unregister_client(i2c_priv);
 
 	/*
 	 * The driver registers once an algorithm, but maintains a list of
@@ -461,7 +449,6 @@ static int __init atmel_ecc_init(void)
 
 static void __exit atmel_ecc_exit(void)
 {
-	atmel_i2c_flush_queue();
 	i2c_del_driver(&atmel_ecc_driver);
 }
 
