@@ -91,25 +91,6 @@ __asm__(".text\n"
 	"vide: ret\n");
 #endif
 
-static void init_amd_k5(struct cpuinfo_x86 *c)
-{
-#ifdef CONFIG_X86_32
-/*
- * General Systems BIOSen alias the cpu frequency registers
- * of the Elan at 0x000df000. Unfortunately, one of the Linux
- * drivers subsequently pokes it, and changes the CPU speed.
- * Workaround : Remove the unneeded alias.
- */
-#define CBAR		(0xfffc) /* Configuration Base Address  (32-bit) */
-#define CBAR_ENB	(0x80000000)
-#define CBAR_KEY	(0X000000CB)
-	if (c->x86_model == 9 || c->x86_model == 10) {
-		if (inl(CBAR) & CBAR_ENB)
-			outl(0 | CBAR_KEY, CBAR);
-	}
-#endif
-}
-
 static void init_amd_k6(struct cpuinfo_x86 *c)
 {
 #ifdef CONFIG_X86_32
@@ -1065,7 +1046,6 @@ static void init_amd(struct cpuinfo_x86 *c)
 		clear_cpu_cap(c, X86_FEATURE_MCE);
 
 	switch (c->x86) {
-	case 4:    init_amd_k5(c); break;
 	case 5:    init_amd_k6(c); break;
 	case 6:	   init_amd_k7(c); break;
 	case 0xf:  init_amd_k8(c); break;
