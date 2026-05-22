@@ -849,10 +849,8 @@ alloc_from_freetree(struct gpu_buddy *mm,
 	return block;
 
 err_undo:
-	if (tmp != order) {
-		rbtree_remove(mm, block);
-		__gpu_buddy_free(mm, block, false);
-	}
+	rbtree_remove(mm, block);
+	__gpu_buddy_free(mm, block, false);
 	return ERR_PTR(err);
 }
 
