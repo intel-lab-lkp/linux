@@ -54,7 +54,7 @@ struct dax_device *alloc_dax(void *private, const struct dax_operations *ops);
 void *dax_holder(struct dax_device *dax_dev);
 void put_dax(struct dax_device *dax_dev);
 void kill_dax(struct dax_device *dax_dev);
-struct dax_device *dax_dev_get(dev_t devt);
+struct dax_device *dax_dev_find(dev_t devt);
 void dax_write_cache(struct dax_device *dax_dev, bool wc);
 bool dax_write_cache_enabled(struct dax_device *dax_dev);
 bool dax_synchronous(struct dax_device *dax_dev);
@@ -91,6 +91,10 @@ static inline void put_dax(struct dax_device *dax_dev)
 }
 static inline void kill_dax(struct dax_device *dax_dev)
 {
+}
+static inline struct dax_device *dax_dev_find(dev_t devt)
+{
+	return NULL;
 }
 static inline void dax_write_cache(struct dax_device *dax_dev, bool wc)
 {
