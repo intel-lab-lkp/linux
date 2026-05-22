@@ -483,7 +483,7 @@ pub fn to_result(err: crate::ffi::c_int) -> Result {
 /// #         core::ptr::null_mut()
 /// #     }
 /// #     pub(super) unsafe fn non_null_ptr() -> *mut kernel::ffi::c_void {
-/// #         0x1234 as *mut kernel::ffi::c_void
+/// #         core::ptr::without_provenance_mut(0x1234)
 /// #     }
 /// # }
 /// // SAFETY: ...

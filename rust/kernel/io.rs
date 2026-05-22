@@ -109,14 +109,14 @@ impl<const SIZE: usize> MmioRaw<SIZE> {
 ///             return Err(ENOMEM);
 ///         }
 ///
-///         Ok(IoMem(MmioRaw::new(addr as usize, SIZE)?))
+///         Ok(IoMem(MmioRaw::new(addr.expose_provenance(), SIZE)?))
 ///     }
 /// }
 ///
 /// impl<const SIZE: usize> Drop for IoMem<SIZE> {
 ///     fn drop(&mut self) {
 ///         // SAFETY: `self.0.addr()` is guaranteed to be properly mapped by `Self::new`.
-///         unsafe { bindings::iounmap(self.0.addr() as *mut c_void); };
+///         unsafe { bindings::iounmap(core::ptr::with_exposed_provenance_mut(self.0.addr())); };
 ///     }
 /// }
 ///
@@ -733,12 +733,14 @@ macro_rules! impl_mmio_io_capable {
         impl<const SIZE: usize> IoCapable<$ty> for $mmio<SIZE> {
             unsafe fn io_read(&self, address: usize) -> $ty {
                 // SAFETY: By the trait invariant `address` is a valid address for MMIO operations.
-                unsafe { bindings::$read_fn(address as *const c_void) }
+                unsafe { bindings::$read_fn(core::ptr::with_exposed_provenance(address)) }
             }
 
             unsafe fn io_write(&self, value: $ty, address: usize) {
                 // SAFETY: By the trait invariant `address` is a valid address for MMIO operations.
-                unsafe { bindings::$write_fn(value, address as *mut c_void) }
+                unsafe {
+                    bindings::$write_fn(value, core::ptr::with_exposed_provenance_mut(address))
+                }
             }
         }
     };

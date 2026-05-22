@@ -175,7 +175,7 @@ impl<const SIZE: usize> Bar<SIZE> {
         // `pdev` is valid by the invariants of `Device`.
         // `num` is checked for validity by a previous call to `Device::resource_len`.
         // `name` is always valid.
-        let ioptr: usize = unsafe { bindings::pci_iomap(pdev.as_raw(), num, 0) } as usize;
+        let ioptr = unsafe { bindings::pci_iomap(pdev.as_raw(), num, 0) }.expose_provenance();
         if ioptr == 0 {
             // SAFETY:
             // `pdev` is valid by the invariants of `Device`.
@@ -212,7 +212,7 @@ impl<const SIZE: usize> Bar<SIZE> {
         // `ioptr` is valid by the safety requirements.
         // `num` is valid by the safety requirements.
         unsafe {
-            bindings::pci_iounmap(pdev.as_raw(), ioptr as *mut c_void);
+            bindings::pci_iounmap(pdev.as_raw(), core::ptr::with_exposed_provenance_mut(ioptr));
             bindings::pci_release_region(pdev.as_raw(), num);
         }
     }

@@ -28,7 +28,7 @@ impl UserPtr {
     /// Create a `UserPtr` from an integer representing the userspace address.
     #[inline]
     pub fn from_addr(addr: usize) -> Self {
-        Self(addr as *mut c_void)
+        Self(core::ptr::without_provenance_mut(addr))
     }
 
     /// Create a `UserPtr` from a pointer representing the userspace address.

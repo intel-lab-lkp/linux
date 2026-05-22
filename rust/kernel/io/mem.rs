@@ -266,7 +266,7 @@ impl<const SIZE: usize> IoMem<SIZE> {
             return Err(ENOMEM);
         }
 
-        let io = MmioRaw::new(addr as usize, size)?;
+        let io = MmioRaw::new(addr.expose_provenance(), size)?;
         let io = IoMem { io };
 
         Ok(io)
@@ -284,7 +284,7 @@ impl<const SIZE: usize> IoMem<SIZE> {
 impl<const SIZE: usize> Drop for IoMem<SIZE> {
     fn drop(&mut self) {
         // SAFETY: Safe as by the invariant of `Io`.
-        unsafe { bindings::iounmap(self.io.addr() as *mut c_void) }
+        unsafe { bindings::iounmap(core::ptr::with_exposed_provenance_mut(self.io.addr())) }
     }
 }
 

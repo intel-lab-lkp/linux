@@ -280,7 +280,7 @@ mod tests {
             fn is_aligned_to(&self, align: usize) -> bool {
                 assert!(align.is_power_of_two());
 
-                let addr = self.0.as_ptr() as usize;
+                let addr = self.0.as_ptr().addr();
                 addr & (align - 1) == 0
             }
         }
