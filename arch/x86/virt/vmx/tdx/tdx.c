@@ -32,6 +32,7 @@
 #include <linux/idr.h>
 #include <linux/kvm_types.h>
 #include <linux/bitfield.h>
+#include <linux/vmalloc.h>
 #include <asm/page.h>
 #include <asm/special_insns.h>
 #include <asm/msr-index.h>
@@ -60,6 +61,13 @@ static LIST_HEAD(tdx_memlist);
 
 static struct tdx_sys_info tdx_sysinfo __ro_after_init;
 static bool tdx_module_initialized __ro_after_init;
+
+static struct quote_data {
+	void *buf;
+	u64 buf_len;
+	u64 *hpa_list;
+	phys_addr_t hpa_list_pa;
+} quote_data;
 
 typedef void (*sc_err_func_t)(u64 fn, u64 err, struct tdx_module_args *args);
 
@@ -1205,9 +1213,78 @@ static inline u64 tdx_tdr_pa(struct tdx_td *td)
 	return page_to_phys(td->tdr_page);
 }
 
+#define HPAS_PER_PAGE			(PAGE_SIZE / sizeof(u64))
+
+static int tdx_quote_create_buf(unsigned int nr_pages, struct quote_data *qdata)
+{
+	unsigned long pfn;
+	u64 qlist_npages;
+	int err, i, j;
+	u64 *qlist;
+	void *qbuf;
+
+	if (!nr_pages)
+		return -EINVAL;
+
+	/* The last entry of a linked list page points to the next page	*/
+	qlist_npages = (u64)DIV_ROUND_UP(nr_pages, HPAS_PER_PAGE - 1);
+
+	qlist = vmalloc_array(qlist_npages, PAGE_SIZE);
+	if (!qlist) {
+		err = -ENOMEM;
+		goto out_err;
+	}
+
+	/*
+	 * Make sure unfilled entries are always -1, which means NULL in TDX.
+	 * Only the last page needs to be filled. All the other pages will be
+	 * fully populated.
+	 */
+	memset((u8 *)qlist + (qlist_npages - 1) * PAGE_SIZE, 0xff, PAGE_SIZE);
+
+	qbuf = vcalloc(nr_pages, PAGE_SIZE);
+	if (!qbuf) {
+		err = -ENOMEM;
+		goto out_err;
+	}
+
+	/* Populate HPA_LINKED_LIST as per TDX ABI spec */
+	for (i = 0, j = 0; j < nr_pages; i++) {
+		if ((i % HPAS_PER_PAGE) == HPAS_PER_PAGE - 1) {
+			/*
+			 * The last entry always points to the next page. The
+			 * address of the following entry must be on next page's
+			 * boundary.
+			 */
+			pfn = vmalloc_to_pfn(&qlist[i + 1]);
+			qlist[i] = PFN_PHYS(pfn);
+			continue;
+		}
+
+		pfn = vmalloc_to_pfn((u8 *)qbuf + j * PAGE_SIZE);
+		qlist[i] = PFN_PHYS(pfn);
+		j++;
+	}
+
+	qdata->buf = qbuf;
+	qdata->buf_len = (u64)nr_pages * PAGE_SIZE;
+	qdata->hpa_list = qlist;
+
+	pfn = vmalloc_to_pfn(qlist);
+	qdata->hpa_list_pa = PFN_PHYS(pfn);
+
+	return 0;
+
+out_err:
+	vfree(qlist);
+
+	return err;
+}
+
 static void tdx_quote_init(void)
 {
 	struct tdx_module_args args = {};
+	unsigned int nr_quote_pages;
 	u64 r;
 
 	do {
@@ -1218,7 +1295,13 @@ static void tdx_quote_init(void)
 		return;
 
 	/* Quoting metadata is valid only after initialization */
-	get_tdx_sys_info_quote(&tdx_sysinfo.quote);
+	if (get_tdx_sys_info_quote(&tdx_sysinfo.quote))
+		return;
+
+	nr_quote_pages = PAGE_ALIGN(tdx_sysinfo.quote.max_quote_size) /
+			 PAGE_SIZE;
+	if (tdx_quote_create_buf(nr_quote_pages, &quote_data))
+		pr_err("Failed to create quote buffer\n");
 }
 
 /* Initialize the TDX Module Extensions then Extension-SEAMCALLs can be used */
