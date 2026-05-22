@@ -431,7 +431,7 @@ struct snd_soc_jack_pin;
 int snd_soc_register_card(struct snd_soc_card *card);
 void snd_soc_unregister_card(struct snd_soc_card *card);
 int devm_snd_soc_register_card(struct device *dev, struct snd_soc_card *card);
-int devm_snd_soc_register_deferrable_card(struct device *dev, struct snd_soc_card *card);
+#define devm_snd_soc_register_deferrable_card(d, c) devm_snd_soc_register_card(d, c)
 #ifdef CONFIG_PM_SLEEP
 int snd_soc_suspend(struct device *dev);
 int snd_soc_resume(struct device *dev);
@@ -1081,8 +1081,6 @@ struct snd_soc_card {
 #ifdef CONFIG_PM_SLEEP
 	struct work_struct deferred_resume_work;
 #endif
-	u32 pop_time;
-
 	/* bit field */
 	unsigned int instantiated:1;
 	unsigned int topology_shortname_created:1;

@@ -238,6 +238,23 @@ struct snd_sof_widget *sof_ipc4_find_swidget_by_ids(struct snd_sof_dev *sdev,
 	return NULL;
 }
 
+static u32 sof_ipc4_fmt_cfg_to_type(u32 fmt_cfg)
+{
+	/* Fetch the sample type from the fmt for 8 and 32 bit formats */
+	u32 __bits = SOF_IPC4_AUDIO_FORMAT_CFG_V_BIT_DEPTH(fmt_cfg);
+
+	if (__bits == 8 || __bits == 32)
+		return SOF_IPC4_AUDIO_FORMAT_CFG_SAMPLE_TYPE(fmt_cfg);
+
+	/*
+	 * Return LSB integer type for 16, 20 and 24 formats as the firmware is
+	 * handling the LSB/MSB alignment internally, for the kernel this
+	 * should not be taken into account, we treat them as LSB to match with
+	 * the format we support on the PCM side.
+	 */
+	return SOF_IPC4_TYPE_LSB_INTEGER;
+}
+
 static void sof_ipc4_dbg_audio_format(struct device *dev, struct sof_ipc4_pin_format *pin_fmt,
 				      int num_formats)
 {
@@ -246,8 +263,9 @@ static void sof_ipc4_dbg_audio_format(struct device *dev, struct sof_ipc4_pin_fo
 	for (i = 0; i < num_formats; i++) {
 		struct sof_ipc4_audio_format *fmt = &pin_fmt[i].audio_fmt;
 		dev_dbg(dev,
-			"Pin #%d: %uHz, %ubit, %luch (ch_map %#x ch_cfg %u interleaving_style %u fmt_cfg %#x) buffer size %d\n",
+			"Pin #%d: %uHz, %ubit (type: %u), %luch (ch_map %#x ch_cfg %u interleaving_style %u fmt_cfg %#x) buffer size %d\n",
 			pin_fmt[i].pin_index, fmt->sampling_frequency, fmt->bit_depth,
+			sof_ipc4_fmt_cfg_to_type(fmt->fmt_cfg),
 			SOF_IPC4_AUDIO_FORMAT_CFG_CHANNELS_COUNT(fmt->fmt_cfg),
 			fmt->ch_map, fmt->ch_cfg, fmt->interleaving_style, fmt->fmt_cfg,
 			pin_fmt[i].buffer_size);
@@ -624,6 +642,7 @@ static int sof_ipc4_widget_setup_pcm(struct snd_sof_widget *swidget)
 	struct sof_ipc4_available_audio_format *available_fmt;
 	struct snd_soc_component *scomp = swidget->scomp;
 	struct sof_ipc4_copier *ipc4_copier;
+	struct snd_sof_pcm_stream *sps;
 	struct snd_sof_pcm *spcm;
 	int node_type = 0;
 	int ret, dir;
@@ -668,24 +687,23 @@ static int sof_ipc4_widget_setup_pcm(struct snd_sof_widget *swidget)
 	if (ret)
 		goto free_available_fmt;
 
-	if (dir == SNDRV_PCM_STREAM_PLAYBACK) {
-		struct snd_sof_pcm_stream *sps = &spcm->stream[dir];
+	sps = &spcm->stream[dir];
+	sof_update_ipc_object(scomp, &sps->dsp_max_burst_size_in_ms,
+			      SOF_COPIER_DEEP_BUFFER_TOKENS,
+			      swidget->tuples,
+			      swidget->num_tuples, sizeof(u32), 1);
 
-		sof_update_ipc_object(scomp, &sps->dsp_max_burst_size_in_ms,
-				      SOF_COPIER_DEEP_BUFFER_TOKENS,
-				      swidget->tuples,
-				      swidget->num_tuples, sizeof(u32), 1);
-		/* Set default DMA buffer size if it is not specified in topology */
-		if (!sps->dsp_max_burst_size_in_ms) {
-			struct snd_sof_widget *pipe_widget = swidget->spipe->pipe_widget;
-			struct sof_ipc4_pipeline *pipeline = pipe_widget->private;
+	/* Set default DMA buffer size if it is not specified in topology */
+	if (!sps->dsp_max_burst_size_in_ms) {
+		struct snd_sof_widget *pipe_widget = swidget->spipe->pipe_widget;
+		struct sof_ipc4_pipeline *pipeline = pipe_widget->private;
 
+		if (dir == SNDRV_PCM_STREAM_PLAYBACK)
 			sps->dsp_max_burst_size_in_ms = pipeline->use_chain_dma ?
 				SOF_IPC4_CHAIN_DMA_BUFFER_SIZE : SOF_IPC4_MIN_DMA_BUFFER_SIZE;
-		}
-	} else {
-		/* Capture data is copied from DSP to host in 1ms bursts */
-		spcm->stream[dir].dsp_max_burst_size_in_ms = 1;
+		else
+			/* Capture data is copied from DSP to host in 1ms bursts */
+			sps->dsp_max_burst_size_in_ms = 1;
 	}
 
 skip_gtw_cfg:
@@ -927,6 +945,7 @@ static void sof_ipc4_widget_free_comp_dai(struct snd_sof_widget *swidget)
 static int sof_ipc4_widget_setup_comp_pipeline(struct snd_sof_widget *swidget)
 {
 	struct snd_soc_component *scomp = swidget->scomp;
+	struct snd_sof_dev *sdev = snd_soc_component_get_drvdata(scomp);
 	struct sof_ipc4_pipeline *pipeline;
 	struct snd_sof_pipeline *spipe = swidget->spipe;
 	int ret;
@@ -940,6 +959,16 @@ static int sof_ipc4_widget_setup_comp_pipeline(struct snd_sof_widget *swidget)
 	if (ret) {
 		dev_err(scomp->dev, "parsing scheduler tokens failed\n");
 		goto err;
+	}
+
+	if (sof_debug_check_flag(SOF_DBG_DISABLE_MULTICORE)) {
+		pipeline->core_id = SOF_DSP_PRIMARY_CORE;
+	} else if (pipeline->core_id > sdev->num_cores - 1) {
+		dev_info(scomp->dev,
+			 "out of range core id for %s, moving it %d -> %d\n",
+			 swidget->widget->name, pipeline->core_id,
+			 SOF_DSP_PRIMARY_CORE);
+		pipeline->core_id = SOF_DSP_PRIMARY_CORE;
 	}
 
 	swidget->core = pipeline->core_id;
@@ -1351,23 +1380,6 @@ static int sof_ipc4_widget_assign_instance_id(struct snd_sof_dev *sdev,
 	}
 
 	return 0;
-}
-
-static u32 sof_ipc4_fmt_cfg_to_type(u32 fmt_cfg)
-{
-	/* Fetch  the sample type from the fmt for 8 and 32 bit formats */
-	u32 __bits = SOF_IPC4_AUDIO_FORMAT_CFG_V_BIT_DEPTH(fmt_cfg);
-
-	if (__bits == 8 || __bits == 32)
-		return SOF_IPC4_AUDIO_FORMAT_CFG_SAMPLE_TYPE(fmt_cfg);
-
-	/*
-	 * Return LSB integer type for 20 and 24 formats as the firmware is
-	 * handling the LSB/MSB alignment internally, for the kernel this
-	 * should not be taken into account, we treat them as LSB to match with
-	 * the format we support on the PCM side.
-	 */
-	return SOF_IPC4_TYPE_LSB_INTEGER;
 }
 
 /* update hw_params based on the audio stream format */
@@ -2430,9 +2442,18 @@ sof_ipc4_prepare_copier_module(struct snd_sof_widget *swidget,
 			copier_data->gtw_cfg.dma_buffer_size);
 		break;
 	case snd_soc_dapm_dai_out:
-	case snd_soc_dapm_aif_out:
 		copier_data->gtw_cfg.dma_buffer_size =
 			SOF_IPC4_MIN_DMA_BUFFER_SIZE * copier_data->base_config.obs;
+		break;
+	case snd_soc_dapm_aif_out:
+		copier_data->gtw_cfg.dma_buffer_size =
+			max((u32)SOF_IPC4_MIN_DMA_BUFFER_SIZE, deep_buffer_dma_ms) *
+				copier_data->base_config.obs;
+		dev_dbg(sdev->dev, "copier %s, dma buffer%s: %u ms (%u bytes)",
+			swidget->widget->name,
+			deep_buffer_dma_ms ? " (using Deep Buffer)" : "",
+			max((u32)SOF_IPC4_MIN_DMA_BUFFER_SIZE, deep_buffer_dma_ms),
+			copier_data->gtw_cfg.dma_buffer_size);
 		break;
 	default:
 		break;
