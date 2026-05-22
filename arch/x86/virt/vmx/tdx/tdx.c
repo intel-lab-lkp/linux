@@ -1200,6 +1200,11 @@ static __init u64 to_hpa_list_info(struct page *root, unsigned int nr_pages)
 	       FIELD_PREP(HPA_LIST_INFO_LAST_ENTRY, nr_pages - 1);
 }
 
+static inline u64 tdx_tdr_pa(struct tdx_td *td)
+{
+	return page_to_phys(td->tdr_page);
+}
+
 /* Initialize the TDX Module Extensions then Extension-SEAMCALLs can be used */
 static __init int tdx_ext_init(void)
 {
@@ -1724,11 +1729,6 @@ void tdx_guest_keyid_free(unsigned int keyid)
 	ida_free(&tdx_guest_keyid_pool, keyid);
 }
 EXPORT_SYMBOL_FOR_KVM(tdx_guest_keyid_free);
-
-static inline u64 tdx_tdr_pa(struct tdx_td *td)
-{
-	return page_to_phys(td->tdr_page);
-}
 
 /*
  * The TDX module exposes a CLFLUSH_BEFORE_ALLOC bit to specify whether
