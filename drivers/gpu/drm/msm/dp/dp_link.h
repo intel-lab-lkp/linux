@@ -24,7 +24,7 @@ struct msm_dp_link_info {
 	unsigned long capabilities;
 };
 
-#define DP_TRAIN_LEVEL_MAX	3
+#define DP_TRAIN_LEVEL_MAX	2
 
 struct msm_dp_link_test_video {
 	u32 test_video_pattern;
