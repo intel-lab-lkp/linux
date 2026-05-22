@@ -80,6 +80,7 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/migrate.h>
+#include <trace/events/rmap.h>
 
 #include "internal.h"
 #include "swap.h"
@@ -3100,23 +3101,31 @@ static void rmap_walk_file(struct folio *folio,
 
 void rmap_walk(struct folio *folio, struct rmap_walk_control *rwc)
 {
+	trace_rmap_walk_start(folio, rwc, false);
+
 	if (unlikely(folio_test_ksm(folio)))
 		rmap_walk_ksm(folio, rwc);
 	else if (folio_test_anon(folio))
 		rmap_walk_anon(folio, rwc, false);
 	else
 		rmap_walk_file(folio, rwc, false);
+
+	trace_rmap_walk_end(folio, rwc, false);
 }
 
 /* Like rmap_walk, but caller holds relevant rmap lock */
 void rmap_walk_locked(struct folio *folio, struct rmap_walk_control *rwc)
 {
+	trace_rmap_walk_start(folio, rwc, true);
+
 	/* no ksm support for now */
 	VM_BUG_ON_FOLIO(folio_test_ksm(folio), folio);
 	if (folio_test_anon(folio))
 		rmap_walk_anon(folio, rwc, true);
 	else
 		rmap_walk_file(folio, rwc, true);
+
+	trace_rmap_walk_end(folio, rwc, true);
 }
 
 #ifdef CONFIG_HUGETLB_PAGE
