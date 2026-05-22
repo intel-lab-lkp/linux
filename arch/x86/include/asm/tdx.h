@@ -115,6 +115,15 @@ struct tdx_quote_req {
 	u32 out_len;
 	u8 data[];
 };
+
+#define TDX_QUOTE_REQ_HDR_SIZE		(offsetof(struct tdx_quote_req, data))
+
+/*
+ * TDG.VP.VMCALL<GetQuote> Status Codes
+ */
+#define TDX_QUOTE_STATUS_SUCCESS	0x0000000000000000ULL
+#define TDX_QUOTE_STATUS_ERROR		0x8000000000000000ULL
+#define TDX_QUOTE_STATUS_UNAVAILABLE	0x8000000000000001ULL
 #endif /* CONFIG_INTEL_TDX_GUEST || CONFIG_KVM_INTEL_TDX */
 
 #ifdef CONFIG_INTEL_TDX_HOST
