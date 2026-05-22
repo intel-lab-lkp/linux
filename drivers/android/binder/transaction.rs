@@ -402,16 +402,16 @@ impl DeliverToRead for Transaction {
         let tr = tr_sec.tr_data();
         if let Some(target_node) = &self.target_node {
             let (ptr, cookie) = target_node.get_id();
-            tr.target.ptr = ptr as _;
-            tr.cookie = cookie as _;
+            tr.target.ptr = ptr;
+            tr.cookie = cookie;
         };
         tr.code = self.code;
         tr.flags = self.flags;
-        tr.data_size = self.data_size as _;
-        tr.data.ptr.buffer = self.data_address as _;
-        tr.offsets_size = self.offsets_size as _;
+        tr.data_size = self.data_size as u64;
+        tr.data.ptr.buffer = self.data_address as u64;
+        tr.offsets_size = self.offsets_size as u64;
         if tr.offsets_size > 0 {
-            tr.data.ptr.offsets = (self.data_address + ptr_align(self.data_size).unwrap()) as _;
+            tr.data.ptr.offsets = (self.data_address + ptr_align(self.data_size).unwrap()) as u64;
         }
         tr.sender_euid = self.sender_euid.into_uid_in_current_ns();
         tr.sender_pid = 0;
