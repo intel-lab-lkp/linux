@@ -248,7 +248,7 @@ nfsd4_alloc_layout_stateid(struct nfsd4_compound_state *cstate,
 			NFSPROC4_CLNT_CB_LAYOUT);
 
 	if (parent->sc_type == SC_TYPE_DELEG)
-		ls->ls_file = nfsd_file_get(fp->fi_deleg_file);
+		ls->ls_file = nfsd_file_get(rcu_dereference_protected(fp->fi_deleg_file, 1));
 	else
 		ls->ls_file = find_any_file(fp);
 	BUG_ON(!ls->ls_file);
