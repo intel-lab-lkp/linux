@@ -539,6 +539,9 @@ void *inet_frag_reasm_prepare(struct inet_frag_queue *q, struct sk_buff *skb,
 		FRAG_CB(skb)->next_frag = FRAG_CB(head)->next_frag;
 		rb_replace_node(&head->rbnode, &skb->rbnode,
 				&q->rb_fragments);
+		delta = skb->truesize - head->truesize;
+		if (delta)
+			add_frag_mem_limit(q->fqdir, delta);
 		consume_skb(head);
 		head = skb;
 	}
