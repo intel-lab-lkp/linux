@@ -460,6 +460,10 @@ static struct rtree_node *alloc_rtree_node(gfp_t gfp_mask, int safe_needed,
 
 /**
  * add_rtree_block - Add a new leave node to the radix tree.
+ * @zone: Radix tree where node gets added.
+ * @gfp_mask: GFP mask for the allocation.
+ * @safe_needed: Get pages not used before hibernation (restore only).
+ * @ca: Pointer to a linked list of pages ("a chain") to allocate from.
  *
  * The leave nodes need to be allocated in order to keep the leaves
  * linked list in order. This is guaranteed by the zone->blocks
@@ -530,6 +534,11 @@ static void free_zone_bm_rtree(struct mem_zone_bm_rtree *zone,
 
 /**
  * create_zone_bm_rtree - Create a radix tree for one zone.
+ * @gfp_mask: GFP mask for the allocation.
+ * @safe_needed: Get pages not used before hibernation (restore only).
+ * @ca: Pointer to a linked list of pages ("a chain") to allocate from.
+ * @start: First page frame number (PFN) in the zone to build the tree for.
+ * @end: PFN one past the last page covered by the tree.
  *
  * Allocated the mem_zone_bm_rtree structure and initializes it.
  * This function also allocated and builds the radix tree for the
@@ -568,6 +577,8 @@ static struct mem_zone_bm_rtree *create_zone_bm_rtree(gfp_t gfp_mask,
 
 /**
  * free_zone_bm_rtree - Free the memory of the radix tree.
+ * @zone: Radix tree to free node pages from.
+ * @clear_nosave_free: If set, clear the PageNosaveFree bit for the pages.
  *
  * Free all node pages of the radix tree. The mem_zone_bm_rtree
  * structure itself is not freed here nor are the rtree_node
@@ -680,6 +691,9 @@ static int create_mem_extents(struct list_head *list, gfp_t gfp_mask)
 
 /**
  * memory_bm_create - Allocate memory for a memory bitmap.
+ * @bm: Memory bitmap.
+ * @gfp_mask: Mask to use for memory allocations.
+ * @safe_needed: Get pages not used before hibernation (restore only).
  */
 static int memory_bm_create(struct memory_bitmap *bm, gfp_t gfp_mask,
 			    int safe_needed)
@@ -723,6 +737,7 @@ static int memory_bm_create(struct memory_bitmap *bm, gfp_t gfp_mask,
 /**
  * memory_bm_free - Free memory occupied by the memory bitmap.
  * @bm: Memory bitmap.
+ * @clear_nosave_free: If set, clear the PageNosaveFree bit for the pages.
  */
 static void memory_bm_free(struct memory_bitmap *bm, int clear_nosave_free)
 {
@@ -738,9 +753,14 @@ static void memory_bm_free(struct memory_bitmap *bm, int clear_nosave_free)
 
 /**
  * memory_bm_find_bit - Find the bit for a given PFN in a memory bitmap.
+ * @bm: Memory bitmap.
+ * @pfn: Page Frame Number (PFN).
+ * @addr: Returned address of the bitmap storage containing the bit.
+ * @bit_nr: Returned bit number within @addr.
  *
  * Find the bit in memory bitmap @bm that corresponds to the given PFN.
- * The cur.zone, cur.block and cur.node_pfn members of @bm are updated.
+ * The cur.zone, cur.node, cur.node_pfn and cur.cur_pfn members
+ * of @bm are updated.
  *
  * Walk the radix tree to find the page containing the bit that represents @pfn
  * and return the position of the bit in @addr and @bit_nr.
@@ -879,8 +899,9 @@ static bool memory_bm_pfn_present(struct memory_bitmap *bm, unsigned long pfn)
 	return !memory_bm_find_bit(bm, pfn, &addr, &bit);
 }
 
-/*
+/**
  * rtree_next_node - Jump to the next leaf node.
+ * @bm: Memory bitmap.
  *
  * Set the position to the beginning of the next node in the
  * memory bitmap. This is either the next node in the current
@@ -990,6 +1011,8 @@ static void memory_bm_recycle(struct memory_bitmap *bm)
 
 /**
  * register_nosave_region - Register a region of unsaveable memory.
+ * @start_pfn: Start page frame number (PFN).
+ * @end_pfn: End page frame number (PFN).
  *
  * Register a range of page frames the contents of which should not be saved
  * during hibernation (to be used in the early initialization code).
@@ -1307,6 +1330,8 @@ static unsigned int count_free_highmem_pages(void)
 
 /**
  * saveable_highmem_page - Check if a highmem page is saveable.
+ * @zone: Zone containing the PFN.
+ * @pfn: Page frame number to check.
  *
  * Determine whether a highmem page should be included in a hibernation image.
  *
@@ -1364,6 +1389,8 @@ static unsigned int count_highmem_pages(void)
 
 /**
  * saveable_page - Check if the given page is saveable.
+ * @zone: Zone containing the PFN.
+ * @pfn: Page frame number to check.
  *
  * Determine whether a non-highmem page should be included in a hibernation
  * image.
@@ -1442,6 +1469,8 @@ static inline bool do_copy_page(long *dst, long *src)
 
 /**
  * safe_copy_page - Copy a page in a safe way.
+ * @dst: Destination page.
+ * @s_page: Source page.
  *
  * Check if the page we are going to copy is marked as present in the kernel
  * page tables. This always is the case if CONFIG_DEBUG_PAGEALLOC or
@@ -1689,6 +1718,9 @@ static unsigned long preallocate_image_highmem(unsigned long nr_pages)
 
 /**
  *  __fraction - Compute (an approximation of) x * (multiplier / base).
+ * @x: Value the fraction is applied to.
+ * @multiplier: Fraction numerator.
+ * @base: Fraction denominator.
  */
 static unsigned long __fraction(u64 x, u64 multiplier, u64 base)
 {
@@ -1984,6 +2016,7 @@ int hibernate_preallocate_memory(void)
 #ifdef CONFIG_HIGHMEM
 /**
  * count_pages_for_highmem - Count non-highmem pages needed for copying highmem.
+ * @nr_highmem: Number of highmem pages to copy.
  *
  * Compute the number of non-highmem pages that will be necessary for creating
  * copies of highmem pages.
@@ -2005,6 +2038,8 @@ static unsigned int count_pages_for_highmem(unsigned int nr_highmem) { return 0;
 
 /**
  * enough_free_mem - Check if there is enough free memory for the image.
+ * @nr_pages: Number of normal pages required for the image.
+ * @nr_highmem: Number of highmem pages required for the image.
  */
 static int enough_free_mem(unsigned int nr_pages, unsigned int nr_highmem)
 {
@@ -2025,6 +2060,7 @@ static int enough_free_mem(unsigned int nr_pages, unsigned int nr_highmem)
 #ifdef CONFIG_HIGHMEM
 /**
  * get_highmem_buffer - Allocate a buffer for highmem pages.
+ * @safe_needed: Whether a safe buffer for copying highmem pages is needed.
  *
  * If there are some highmem pages in the hibernation image, we may need a
  * buffer to copy them and/or load their data.
@@ -2037,6 +2073,8 @@ static inline int get_highmem_buffer(int safe_needed)
 
 /**
  * alloc_highmem_pages - Allocate some highmem pages for the image.
+ * @bm: Bitmap to mark allocated pages in.
+ * @nr_highmem: Number of highmem pages to allocate.
  *
  * Try to allocate as many pages as needed, but if the number of free highmem
  * pages is less than that, allocate them all.
@@ -2067,6 +2105,9 @@ static inline unsigned int alloc_highmem_pages(struct memory_bitmap *bm,
 
 /**
  * swsusp_alloc - Allocate memory for hibernation image.
+ * @copy_bm: Bitmap to mark allocated pages in.
+ * @nr_pages: Number of normal pages to allocate.
+ * @nr_highmem: Number of highmem pages to allocate.
  *
  * We first try to allocate as many highmem pages as there are
  * saveable highmem pages in the system.  If that fails, we allocate
@@ -2294,6 +2335,7 @@ static void duplicate_memory_bitmap(struct memory_bitmap *dst,
 
 /**
  * mark_unsafe_pages - Mark pages that were used before hibernation.
+ * @bm: Bitmap containing PFNs of pages used before hibernation.
  *
  * Mark the pages that cannot be used for storing the image during restoration,
  * because they conflict with the pages that had been used before hibernation.
@@ -2332,6 +2374,7 @@ static int check_header(struct swsusp_info *info)
 
 /**
  * load_header - Check the image header and copy the data from it.
+ * @info: Pointer to the structure to copy the header data to.
  */
 static int load_header(struct swsusp_info *info)
 {
@@ -2485,6 +2528,8 @@ static struct page *last_highmem_page;
 
 /**
  * get_highmem_page_buffer - Prepare a buffer to store a highmem image page.
+ * @page: Page structure of the highmem image page to be loaded.
+ * @ca: Chain allocator to allocate memory for the page copy if needed.
  *
  * For a given highmem image page get a buffer that suspend_write_next() should
  * return to its caller to write to.
@@ -2708,6 +2753,8 @@ static int prepare_image(struct memory_bitmap *new_bm, struct memory_bitmap *bm,
 
 /**
  * get_buffer - Get the address to store the next image data page.
+ * @bm: Memory bitmap with the "original" PFNs of the image pages.
+ * @ca: Chain allocator to allocate memory for the page copy if needed.
  *
  * Get the address that snapshot_write_next() should return to its caller to
  * write to.
@@ -2845,6 +2892,7 @@ next:
 
 /**
  * snapshot_write_finalize - Complete the loading of a hibernation image.
+ * @handle: Snapshot handle structure used for the loading.
  *
  * Must be called after the last call to snapshot_write_next() in case the last
  * page in the image happens to be a highmem page and its contents should be
