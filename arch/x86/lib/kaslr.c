@@ -54,7 +54,6 @@ unsigned long kaslr_get_random_long(const char *purpose)
 	const unsigned long mix_const = 0x3f39e593UL;
 #endif
 	unsigned long raw, random = get_boot_seed();
-	bool use_i8254 = true;
 
 	if (purpose) {
 		debug_putstr(purpose);
@@ -66,24 +65,13 @@ unsigned long kaslr_get_random_long(const char *purpose)
 			debug_putstr(" RDRAND");
 		if (rdrand_long(&raw)) {
 			random ^= raw;
-			use_i8254 = false;
 		}
 	}
 
-	if (has_cpuflag(X86_FEATURE_TSC)) {
-		if (purpose)
-			debug_putstr(" RDTSC");
-		raw = rdtsc();
-
-		random ^= raw;
-		use_i8254 = false;
-	}
-
-	if (use_i8254) {
-		if (purpose)
-			debug_putstr(" i8254");
-		random ^= i8254();
-	}
+	if (purpose)
+		debug_putstr(" RDTSC");
+	raw = rdtsc();
+	random ^= raw;
 
 	/* Circular multiply for better bit diffusion */
 	asm(_ASM_MUL "%3"

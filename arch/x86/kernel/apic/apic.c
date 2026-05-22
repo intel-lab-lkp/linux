@@ -666,8 +666,7 @@ static void __init lapic_cal_handler(struct clock_event_device *dev)
 	long tapic = apic_read(APIC_TMCCT);
 	u32 pm = acpi_pm_read_early();
 
-	if (boot_cpu_has(X86_FEATURE_TSC))
-		tsc = rdtsc();
+	tsc = rdtsc();
 
 	switch (lapic_cal_loops++) {
 	case 0:
@@ -727,13 +726,11 @@ calibrate_by_pmtimer(u32 deltapm, long *delta, long *deltatsc)
 	*delta = (long)res;
 
 	/* Correct the tsc counter value */
-	if (boot_cpu_has(X86_FEATURE_TSC)) {
-		res = (((u64)(*deltatsc)) * pm_100ms);
-		do_div(res, deltapm);
-		apic_pr_verbose("TSC delta adjusted to PM-Timer: %lu (%ld)\n",
-				(unsigned long)res, *deltatsc);
-		*deltatsc = (long)res;
-	}
+	res = (((u64)(*deltatsc)) * pm_100ms);
+	do_div(res, deltapm);
+	apic_pr_verbose("TSC delta adjusted to PM-Timer: %lu (%ld)\n",
+			(unsigned long)res, *deltatsc);
+	*deltatsc = (long)res;
 
 	return 0;
 }
@@ -902,12 +899,10 @@ static int __init calibrate_APIC_clock(void)
 	apic_pr_verbose("..... mult: %u\n", lapic_clockevent.mult);
 	apic_pr_verbose("..... calibration result: %u\n", lapic_timer_period);
 
-	if (boot_cpu_has(X86_FEATURE_TSC)) {
-		delta_tsc_khz = (deltatsc * HZ) / (1000 * LAPIC_CAL_LOOPS);
+	delta_tsc_khz = (deltatsc * HZ) / (1000 * LAPIC_CAL_LOOPS);
 
-		apic_pr_verbose("..... CPU clock speed is %ld.%03ld MHz.\n",
-				delta_tsc_khz / 1000, delta_tsc_khz % 1000);
-	}
+	apic_pr_verbose("..... CPU clock speed is %ld.%03ld MHz.\n",
+			delta_tsc_khz / 1000, delta_tsc_khz % 1000);
 
 	bus_khz = (long)lapic_timer_period * HZ / 1000;
 	apic_pr_verbose("..... host bus clock speed is %ld.%03ld MHz.\n",

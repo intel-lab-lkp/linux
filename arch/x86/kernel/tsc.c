@@ -305,23 +305,11 @@ int check_tsc_unstable(void)
 }
 EXPORT_SYMBOL_GPL(check_tsc_unstable);
 
-#ifdef CONFIG_X86_TSC
 int __init notsc_setup(char *str)
 {
 	mark_tsc_unstable("boot parameter notsc");
 	return 1;
 }
-#else
-/*
- * disable flag for tsc. Takes effect by clearing the TSC cpu flag
- * in cpu/common.c
- */
-int __init notsc_setup(char *str)
-{
-	setup_clear_cpu_cap(X86_FEATURE_TSC);
-	return 1;
-}
-#endif
 __setup("notsc", notsc_setup);
 
 enum {
@@ -942,9 +930,6 @@ void recalibrate_cpu_khz(void)
 #ifndef CONFIG_SMP
 	unsigned long cpu_khz_old = cpu_khz;
 
-	if (!boot_cpu_has(X86_FEATURE_TSC))
-		return;
-
 	cpu_khz = x86_platform.calibrate_cpu();
 	tsc_khz = x86_platform.calibrate_tsc();
 	if (tsc_khz == 0)
@@ -1059,8 +1044,6 @@ static struct notifier_block time_cpufreq_notifier_block = {
 
 static int __init cpufreq_register_tsc_scaling(void)
 {
-	if (!boot_cpu_has(X86_FEATURE_TSC))
-		return 0;
 	if (boot_cpu_has(X86_FEATURE_CONSTANT_TSC))
 		return 0;
 	cpufreq_register_notifier(&time_cpufreq_notifier_block,
@@ -1266,7 +1249,7 @@ static void __init check_system_tsc_reliable(void)
  */
 int unsynchronized_tsc(void)
 {
-	if (!boot_cpu_has(X86_FEATURE_TSC) || tsc_unstable)
+	if (tsc_unstable)
 		return 1;
 
 #ifdef CONFIG_SMP
@@ -1416,7 +1399,7 @@ unreg:
 
 static int __init init_tsc_clocksource(void)
 {
-	if (!boot_cpu_has(X86_FEATURE_TSC) || !tsc_khz)
+	if (!tsc_khz)
 		return 0;
 
 	if (tsc_unstable) {
@@ -1515,8 +1498,6 @@ static void __init tsc_enable_sched_clock(void)
 
 void __init tsc_early_init(void)
 {
-	if (!boot_cpu_has(X86_FEATURE_TSC))
-		return;
 	/* Don't change UV TSC multi-chassis synchronization */
 	if (is_early_uv_system())
 		return;
@@ -1530,11 +1511,6 @@ void __init tsc_early_init(void)
 
 void __init tsc_init(void)
 {
-	if (!cpu_feature_enabled(X86_FEATURE_TSC)) {
-		setup_clear_cpu_cap(X86_FEATURE_TSC_DEADLINE_TIMER);
-		return;
-	}
-
 	/*
 	 * native_calibrate_cpu_early can only calibrate using methods that are
 	 * available early in boot.

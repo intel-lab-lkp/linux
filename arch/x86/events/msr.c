@@ -229,11 +229,6 @@ static struct pmu pmu_msr = {
 
 static int __init msr_init(void)
 {
-	if (!boot_cpu_has(X86_FEATURE_TSC)) {
-		pr_cont("no MSR PMU driver.\n");
-		return 0;
-	}
-
 	msr_mask = perf_msr_probe(msr, PERF_MSR_EVENT_MAX, true, NULL);
 
 	perf_pmu_register(&pmu_msr, "msr", -1);

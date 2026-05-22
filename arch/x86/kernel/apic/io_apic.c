@@ -1491,23 +1491,6 @@ static void __init delay_with_tsc(void)
 	} while ((now - start) < 40000000000ULL / HZ &&	time_before_eq(jiffies, end));
 }
 
-static void __init delay_without_tsc(void)
-{
-	unsigned long end = jiffies + 4;
-	int band = 1;
-
-	/*
-	 * We don't know any frequency yet, but waiting for
-	 * 40940000000/HZ cycles is safe:
-	 * 4 GHz == 10 jiffies
-	 * 1 GHz == 40 jiffies
-	 * 1 << 1 + 1 << 2 +...+ 1 << 11 = 4094
-	 */
-	do {
-		__delay(((1U << band++) * 10000000UL) / HZ);
-	} while (band < 12 && time_before_eq(jiffies, end));
-}
-
 /*
  * There is a nasty bug in some older SMP boards, their mptable lies
  * about the timer IRQ. We do the following to work around the situation:
@@ -1524,10 +1507,7 @@ static int __init timer_irq_works(void)
 		return 1;
 
 	local_irq_enable();
-	if (boot_cpu_has(X86_FEATURE_TSC))
-		delay_with_tsc();
-	else
-		delay_without_tsc();
+	delay_with_tsc();
 
 	/*
 	 * Expect a few ticks at least, to be sure some possible

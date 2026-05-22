@@ -471,7 +471,6 @@ The following feature bits are used by Linux to signal various TSC attributes,
 but they can only be taken to be meaningful for UP or single node systems.
 
 =========================	=======================================
-X86_FEATURE_TSC			The TSC is available in hardware
 X86_FEATURE_RDTSCP		The RDTSCP instruction is available
 X86_FEATURE_CONSTANT_TSC	The TSC rate is unchanged with P-states
 X86_FEATURE_NONSTOP_TSC		The TSC does not stop in C-states
