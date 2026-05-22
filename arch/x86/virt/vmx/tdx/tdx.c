@@ -1180,7 +1180,7 @@ static __init int init_tdmrs(struct tdmr_info_list *tdmr_list)
 	return 0;
 }
 
-static void tdx_clflush_hpa_list(struct page *root, unsigned int nr_pages)
+static __init void tdx_clflush_hpa_list(struct page *root, unsigned int nr_pages)
 {
 	u64 *entries = page_to_virt(root);
 	int i;
@@ -1193,7 +1193,7 @@ static void tdx_clflush_hpa_list(struct page *root, unsigned int nr_pages)
 #define HPA_LIST_INFO_PFN		GENMASK_U64(51, 12)
 #define HPA_LIST_INFO_LAST_ENTRY	GENMASK_U64(63, 55)
 
-static u64 to_hpa_list_info(struct page *root, unsigned int nr_pages)
+static __init u64 to_hpa_list_info(struct page *root, unsigned int nr_pages)
 {
 	return FIELD_PREP(HPA_LIST_INFO_FIRST_ENTRY, 0) |
 	       FIELD_PREP(HPA_LIST_INFO_PFN, page_to_pfn(root)) |
@@ -1201,7 +1201,7 @@ static u64 to_hpa_list_info(struct page *root, unsigned int nr_pages)
 }
 
 /* Initialize the TDX Module Extensions then Extension-SEAMCALLs can be used */
-static int tdx_ext_init(void)
+static __init int tdx_ext_init(void)
 {
 	struct tdx_module_args args = {};
 	u64 r;
@@ -1216,7 +1216,7 @@ static int tdx_ext_init(void)
 	return 0;
 }
 
-static int tdx_ext_mem_add(struct page *root, unsigned int nr_pages)
+static __init int tdx_ext_mem_add(struct page *root, unsigned int nr_pages)
 {
 	struct tdx_module_args args = {
 		.rcx = to_hpa_list_info(root, nr_pages),
@@ -1240,7 +1240,7 @@ static int tdx_ext_mem_add(struct page *root, unsigned int nr_pages)
 	return 0;
 }
 
-static int tdx_ext_mem_setup(void)
+static __init int tdx_ext_mem_setup(void)
 {
 	unsigned int nr_pages;
 	struct page *page;
@@ -1301,7 +1301,7 @@ out_free_root:
 	return ret;
 }
 
-static int __maybe_unused init_tdx_ext(void)
+static __init int init_tdx_ext(void)
 {
 	int ret;
 
@@ -1370,6 +1370,10 @@ static __init int init_tdx_module(void)
 
 	/* Initialize TDMRs to complete the TDX module initialization */
 	ret = init_tdmrs(&tdx_tdmr_list);
+	if (ret)
+		goto err_reset_pamts;
+
+	ret = init_tdx_ext();
 	if (ret)
 		goto err_reset_pamts;
 
