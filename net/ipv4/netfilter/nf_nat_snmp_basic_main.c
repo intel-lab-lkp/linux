@@ -207,9 +207,8 @@ static struct nf_conntrack_helper snmp_trap_helper __read_mostly = {
 	.help			= help,
 	.expect_policy		= &snmp_exp_policy,
 	.name			= "snmp_trap",
-	.tuple.src.l3num	= AF_INET,
-	.tuple.src.u.udp.port	= cpu_to_be16(SNMP_TRAP_PORT),
-	.tuple.dst.protonum	= IPPROTO_UDP,
+	.nfproto		= NFPROTO_IPV4,
+	.l4proto		= IPPROTO_UDP,
 };
 
 static int __init nf_nat_snmp_basic_init(void)

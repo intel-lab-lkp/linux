@@ -169,35 +169,21 @@ static const struct nf_conntrack_expect_policy amanda_exp_policy = {
 	.timeout		= 180,
 };
 
-static struct nf_conntrack_helper amanda_helper[2] __read_mostly = {
-	{
-		.name			= HELPER_NAME,
-		.me			= THIS_MODULE,
-		.help			= amanda_help,
-		.tuple.src.l3num	= AF_INET,
-		.tuple.src.u.udp.port	= cpu_to_be16(10080),
-		.tuple.dst.protonum	= IPPROTO_UDP,
-		.expect_policy		= &amanda_exp_policy,
-		.nat_mod_name		= NF_NAT_HELPER_NAME(HELPER_NAME),
-	},
-	{
-		.name			= "amanda",
-		.me			= THIS_MODULE,
-		.help			= amanda_help,
-		.tuple.src.l3num	= AF_INET6,
-		.tuple.src.u.udp.port	= cpu_to_be16(10080),
-		.tuple.dst.protonum	= IPPROTO_UDP,
-		.expect_policy		= &amanda_exp_policy,
-		.nat_mod_name		= NF_NAT_HELPER_NAME(HELPER_NAME),
-	},
+static struct nf_conntrack_helper amanda_helper __read_mostly = {
+	.name			= HELPER_NAME,
+	.me			= THIS_MODULE,
+	.help			= amanda_help,
+	.nfproto		= NFPROTO_UNSPEC,
+	.l4proto		= IPPROTO_UDP,
+	.expect_policy		= &amanda_exp_policy,
+	.nat_mod_name		= NF_NAT_HELPER_NAME(HELPER_NAME),
 };
 
 static void __exit nf_conntrack_amanda_fini(void)
 {
 	int i;
 
-	nf_conntrack_helpers_unregister(amanda_helper,
-					ARRAY_SIZE(amanda_helper));
+	nf_conntrack_helper_unregister(&amanda_helper);
 	for (i = 0; i < ARRAY_SIZE(search); i++)
 		textsearch_destroy(search[i].ts);
 }
@@ -217,8 +203,7 @@ static int __init nf_conntrack_amanda_init(void)
 			goto err1;
 		}
 	}
-	ret = nf_conntrack_helpers_register(amanda_helper,
-					    ARRAY_SIZE(amanda_helper));
+	ret = nf_conntrack_helper_register(&amanda_helper);
 	if (ret < 0)
 		goto err1;
 	return 0;

@@ -59,8 +59,8 @@ static DEFINE_SPINLOCK(nf_h323_lock);
 static char *h323_buffer;
 
 static struct nf_conntrack_helper nf_conntrack_helper_h245;
-static struct nf_conntrack_helper nf_conntrack_helper_q931[];
-static struct nf_conntrack_helper nf_conntrack_helper_ras[];
+static struct nf_conntrack_helper nf_conntrack_helper_q931;
+static struct nf_conntrack_helper nf_conntrack_helper_ras;
 
 static int get_tpkt_data(struct sk_buff *skb, unsigned int protoff,
 			 struct nf_conn *ct, enum ip_conntrack_info ctinfo,
@@ -580,8 +580,8 @@ static const struct nf_conntrack_expect_policy h245_exp_policy = {
 static struct nf_conntrack_helper nf_conntrack_helper_h245 __read_mostly = {
 	.name			= "H.245",
 	.me			= THIS_MODULE,
-	.tuple.src.l3num	= AF_UNSPEC,
-	.tuple.dst.protonum	= IPPROTO_UDP,
+	.nfproto		= NFPROTO_UNSPEC,
+	.l4proto		= IPPROTO_UDP,
 	.help			= h245_help,
 	.expect_policy		= &h245_exp_policy,
 };
@@ -767,7 +767,7 @@ static int expect_callforwarding(struct sk_buff *skb,
 	nf_ct_expect_init(exp, NF_CT_EXPECT_CLASS_DEFAULT, nf_ct_l3num(ct),
 			  &ct->tuplehash[!dir].tuple.src.u3, &addr,
 			  IPPROTO_TCP, NULL, &port);
-	rcu_assign_pointer(exp->assign_helper, nf_conntrack_helper_q931);
+	rcu_assign_pointer(exp->assign_helper, &nf_conntrack_helper_q931);
 
 	nathook = rcu_dereference(nfct_h323_nat_hook);
 	if (memcmp(&ct->tuplehash[dir].tuple.src.u3,
@@ -1140,25 +1140,13 @@ static const struct nf_conntrack_expect_policy q931_exp_policy = {
 	.timeout		= 240,
 };
 
-static struct nf_conntrack_helper nf_conntrack_helper_q931[] __read_mostly = {
-	{
-		.name			= "Q.931",
-		.me			= THIS_MODULE,
-		.tuple.src.l3num	= AF_INET,
-		.tuple.src.u.tcp.port	= cpu_to_be16(Q931_PORT),
-		.tuple.dst.protonum	= IPPROTO_TCP,
-		.help			= q931_help,
-		.expect_policy		= &q931_exp_policy,
-	},
-	{
-		.name			= "Q.931",
-		.me			= THIS_MODULE,
-		.tuple.src.l3num	= AF_INET6,
-		.tuple.src.u.tcp.port	= cpu_to_be16(Q931_PORT),
-		.tuple.dst.protonum	= IPPROTO_TCP,
-		.help			= q931_help,
-		.expect_policy		= &q931_exp_policy,
-	},
+static struct nf_conntrack_helper nf_conntrack_helper_q931 __read_mostly = {
+	.name			= "Q.931",
+	.me			= THIS_MODULE,
+	.nfproto		= NFPROTO_UNSPEC,
+	.l4proto		= IPPROTO_TCP,
+	.help			= q931_help,
+	.expect_policy		= &q931_exp_policy,
 };
 
 static unsigned char *get_udp_data(struct sk_buff *skb, unsigned int protoff,
@@ -1234,7 +1222,7 @@ static int expect_q931(struct sk_buff *skb, struct nf_conn *ct,
 				&ct->tuplehash[!dir].tuple.src.u3 : NULL,
 			  &ct->tuplehash[!dir].tuple.dst.u3,
 			  IPPROTO_TCP, NULL, &port);
-	rcu_assign_pointer(exp->assign_helper, nf_conntrack_helper_q931);
+	rcu_assign_pointer(exp->assign_helper, &nf_conntrack_helper_q931);
 	exp->flags = NF_CT_EXPECT_PERMANENT;	/* Accept multiple calls */
 
 	nathook = rcu_dereference(nfct_h323_nat_hook);
@@ -1306,7 +1294,7 @@ static int process_gcf(struct sk_buff *skb, struct nf_conn *ct,
 	nf_ct_expect_init(exp, NF_CT_EXPECT_CLASS_DEFAULT, nf_ct_l3num(ct),
 			  &ct->tuplehash[!dir].tuple.src.u3, &addr,
 			  IPPROTO_UDP, NULL, &port);
-	rcu_assign_pointer(exp->assign_helper, nf_conntrack_helper_ras);
+	rcu_assign_pointer(exp->assign_helper, &nf_conntrack_helper_ras);
 
 	if (nf_ct_expect_related(exp, 0) == 0) {
 		pr_debug("nf_ct_ras: expect RAS ");
@@ -1523,7 +1511,7 @@ static int process_acf(struct sk_buff *skb, struct nf_conn *ct,
 			  &ct->tuplehash[!dir].tuple.src.u3, &addr,
 			  IPPROTO_TCP, NULL, &port);
 	exp->flags = NF_CT_EXPECT_PERMANENT;
-	rcu_assign_pointer(exp->assign_helper, nf_conntrack_helper_q931);
+	rcu_assign_pointer(exp->assign_helper, &nf_conntrack_helper_q931);
 
 	if (nf_ct_expect_related(exp, 0) == 0) {
 		pr_debug("nf_ct_ras: expect Q.931 ");
@@ -1577,7 +1565,7 @@ static int process_lcf(struct sk_buff *skb, struct nf_conn *ct,
 			  &ct->tuplehash[!dir].tuple.src.u3, &addr,
 			  IPPROTO_TCP, NULL, &port);
 	exp->flags = NF_CT_EXPECT_PERMANENT;
-	rcu_assign_pointer(exp->assign_helper, nf_conntrack_helper_q931);
+	rcu_assign_pointer(exp->assign_helper, &nf_conntrack_helper_q931);
 
 	if (nf_ct_expect_related(exp, 0) == 0) {
 		pr_debug("nf_ct_ras: expect Q.931 ");
@@ -1711,25 +1699,13 @@ static const struct nf_conntrack_expect_policy ras_exp_policy = {
 	.timeout		= 240,
 };
 
-static struct nf_conntrack_helper nf_conntrack_helper_ras[] __read_mostly = {
-	{
-		.name			= "RAS",
-		.me			= THIS_MODULE,
-		.tuple.src.l3num	= AF_INET,
-		.tuple.src.u.udp.port	= cpu_to_be16(RAS_PORT),
-		.tuple.dst.protonum	= IPPROTO_UDP,
-		.help			= ras_help,
-		.expect_policy		= &ras_exp_policy,
-	},
-	{
-		.name			= "RAS",
-		.me			= THIS_MODULE,
-		.tuple.src.l3num	= AF_INET6,
-		.tuple.src.u.udp.port	= cpu_to_be16(RAS_PORT),
-		.tuple.dst.protonum	= IPPROTO_UDP,
-		.help			= ras_help,
-		.expect_policy		= &ras_exp_policy,
-	},
+static struct nf_conntrack_helper nf_conntrack_helper_ras __read_mostly = {
+	.name			= "RAS",
+	.me			= THIS_MODULE,
+	.nfproto		= NFPROTO_UNSPEC,
+	.l4proto		= IPPROTO_UDP,
+	.help			= ras_help,
+	.expect_policy		= &ras_exp_policy,
 };
 
 static int __init h323_helper_init(void)
@@ -1739,19 +1715,16 @@ static int __init h323_helper_init(void)
 	ret = nf_conntrack_helper_register(&nf_conntrack_helper_h245);
 	if (ret < 0)
 		return ret;
-	ret = nf_conntrack_helpers_register(nf_conntrack_helper_q931,
-					ARRAY_SIZE(nf_conntrack_helper_q931));
+	ret = nf_conntrack_helper_register(&nf_conntrack_helper_q931);
 	if (ret < 0)
 		goto err1;
-	ret = nf_conntrack_helpers_register(nf_conntrack_helper_ras,
-					ARRAY_SIZE(nf_conntrack_helper_ras));
+	ret = nf_conntrack_helper_register(&nf_conntrack_helper_ras);
 	if (ret < 0)
 		goto err2;
 
 	return 0;
 err2:
-	nf_conntrack_helpers_unregister(nf_conntrack_helper_q931,
-					ARRAY_SIZE(nf_conntrack_helper_q931));
+	nf_conntrack_helper_unregister(&nf_conntrack_helper_q931);
 err1:
 	nf_conntrack_helper_unregister(&nf_conntrack_helper_h245);
 	return ret;
@@ -1759,10 +1732,8 @@ err1:
 
 static void __exit h323_helper_exit(void)
 {
-	nf_conntrack_helpers_unregister(nf_conntrack_helper_ras,
-					ARRAY_SIZE(nf_conntrack_helper_ras));
-	nf_conntrack_helpers_unregister(nf_conntrack_helper_q931,
-					ARRAY_SIZE(nf_conntrack_helper_q931));
+	nf_conntrack_helper_unregister(&nf_conntrack_helper_ras);
+	nf_conntrack_helper_unregister(&nf_conntrack_helper_q931);
 	nf_conntrack_helper_unregister(&nf_conntrack_helper_h245);
 }
 

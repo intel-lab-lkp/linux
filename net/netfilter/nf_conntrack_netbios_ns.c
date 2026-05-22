@@ -33,7 +33,7 @@ static unsigned int timeout __read_mostly = 3;
 module_param(timeout, uint, 0400);
 MODULE_PARM_DESC(timeout, "timeout for master connection/replies in seconds");
 
-static struct nf_conntrack_expect_policy exp_policy = {
+static struct nf_conntrack_expect_policy exp_policy __ro_after_init = {
 	.max_expected	= 1,
 };
 
@@ -46,9 +46,8 @@ static int netbios_ns_help(struct sk_buff *skb, unsigned int protoff,
 
 static struct nf_conntrack_helper helper __read_mostly = {
 	.name			= HELPER_NAME,
-	.tuple.src.l3num	= NFPROTO_IPV4,
-	.tuple.src.u.udp.port	= cpu_to_be16(NMBD_PORT),
-	.tuple.dst.protonum	= IPPROTO_UDP,
+	.nfproto		= NFPROTO_IPV4,
+	.l4proto		= IPPROTO_UDP,
 	.me			= THIS_MODULE,
 	.help			= netbios_ns_help,
 	.expect_policy		= &exp_policy,

@@ -43,15 +43,14 @@ static int snmp_conntrack_help(struct sk_buff *skb, unsigned int protoff,
 	return NF_ACCEPT;
 }
 
-static struct nf_conntrack_expect_policy exp_policy = {
+static struct nf_conntrack_expect_policy exp_policy __ro_after_init = {
 	.max_expected	= 1,
 };
 
 static struct nf_conntrack_helper helper __read_mostly = {
 	.name			= "snmp",
-	.tuple.src.l3num	= NFPROTO_IPV4,
-	.tuple.src.u.udp.port	= cpu_to_be16(SNMP_PORT),
-	.tuple.dst.protonum	= IPPROTO_UDP,
+	.nfproto		= NFPROTO_IPV4,
+	.l4proto		= IPPROTO_UDP,
 	.me			= THIS_MODULE,
 	.help			= snmp_conntrack_help,
 	.expect_policy		= &exp_policy,

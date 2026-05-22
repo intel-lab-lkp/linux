@@ -246,8 +246,8 @@ nfnl_cthelper_create(const struct nlattr * const tb[],
 	helper->data_len = size;
 
 	helper->flags |= NF_CT_HELPER_F_USERSPACE;
-	memcpy(&helper->tuple, tuple, sizeof(struct nf_conntrack_tuple));
-
+	helper->nfproto = tuple->src.l3num;
+	helper->l4proto = tuple->dst.protonum;
 	helper->me = THIS_MODULE;
 	helper->help = nfnl_userspace_cthelper;
 	helper->from_nlattr = nfnl_cthelper_from_nlattr;
@@ -441,8 +441,8 @@ static int nfnl_cthelper_new(struct sk_buff *skb, const struct nfnl_info *info,
 		if (strncmp(cur->name, helper_name, NF_CT_HELPER_NAME_LEN))
 			continue;
 
-		if ((tuple.src.l3num != cur->tuple.src.l3num ||
-		     tuple.dst.protonum != cur->tuple.dst.protonum))
+		if (tuple.src.l3num != cur->nfproto ||
+		    tuple.dst.protonum != cur->l4proto)
 			continue;
 
 		if (info->nlh->nlmsg_flags & NLM_F_EXCL)
@@ -471,10 +471,10 @@ nfnl_cthelper_dump_tuple(struct sk_buff *skb,
 		goto nla_put_failure;
 
 	if (nla_put_be16(skb, NFCTH_TUPLE_L3PROTONUM,
-			 htons(helper->tuple.src.l3num)))
+			 htons(helper->nfproto)))
 		goto nla_put_failure;
 
-	if (nla_put_u8(skb, NFCTH_TUPLE_L4PROTONUM, helper->tuple.dst.protonum))
+	if (nla_put_u8(skb, NFCTH_TUPLE_L4PROTONUM, helper->l4proto))
 		goto nla_put_failure;
 
 	nla_nest_end(skb, nest_parms);
@@ -650,8 +650,8 @@ static int nfnl_cthelper_get(struct sk_buff *skb, const struct nfnl_info *info,
 			continue;
 
 		if (tuple_set &&
-		    (tuple.src.l3num != cur->tuple.src.l3num ||
-		     tuple.dst.protonum != cur->tuple.dst.protonum))
+		    (tuple.src.l3num != cur->nfproto ||
+		     tuple.dst.protonum != cur->l4proto))
 			continue;
 
 		skb2 = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
@@ -710,8 +710,8 @@ static int nfnl_cthelper_del(struct sk_buff *skb, const struct nfnl_info *info,
 			continue;
 
 		if (tuple_set &&
-		    (tuple.src.l3num != cur->tuple.src.l3num ||
-		     tuple.dst.protonum != cur->tuple.dst.protonum))
+		    (tuple.src.l3num != cur->nfproto ||
+		     tuple.dst.protonum != cur->l4proto))
 			continue;
 
 		if (refcount_dec_if_one(&cur->refcnt)) {

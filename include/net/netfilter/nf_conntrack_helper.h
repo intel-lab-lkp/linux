@@ -37,8 +37,8 @@ struct nf_conntrack_helper {
 	struct module *me;		/* pointer to self */
 	const struct nf_conntrack_expect_policy *expect_policy;
 
-	/* Tuple of things we will help (compared against server response) */
-	struct nf_conntrack_tuple tuple;
+	u8 nfproto; /* l3num protocol that the helper supports (can be NFPROTO_UNSPEC) */
+	u8 l4proto;  /* l4 protocol that the helper supports (UDP, TCP) */
 
 	/* Function to call when data passes; return verdict, or -1 to
            invalidate. */
