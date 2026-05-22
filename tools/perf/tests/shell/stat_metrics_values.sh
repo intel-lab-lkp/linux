@@ -22,9 +22,20 @@ for cputype in /sys/bus/event_source/devices/cpu_*; do
 	$PYTHON $pythonvalidator -rule $rulefile -output_dir $tmpdir -wl "${workload}" \
 		-cputype "${cputype}"
 	ret=$?
-	rm -rf $tmpdir
 	if [ $ret -ne 0 ]; then
 		echo "Metric validation return with errors. Please check metrics reported with errors."
+		rm -rf $tmpdir
+		exit $ret
+	fi
+
+	echo "Testing metrics for: $cputype (New API)"
+	$PYTHON $pythonvalidator -rule $rulefile -output_dir $tmpdir -wl "${workload}" \
+		-cputype "${cputype}" -new
+	ret=$?
+	rm -rf $tmpdir
+	if [ $ret -ne 0 ]; then
+		echo "Metric validation return with errors (New API). Please check metrics reported with errors."
+		exit $ret
 	fi
 done
 exit $ret
