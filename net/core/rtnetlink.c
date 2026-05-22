@@ -1971,12 +1971,14 @@ static int rtnl_fill_prop_list(struct sk_buff *skb,
 	if (ret <= 0)
 		goto nest_cancel;
 
-	nla_nest_end(skb, prop_list);
+	if (nla_nest_end_safe(skb, prop_list) < 0)
+		goto nest_cancel;
+
 	return 0;
 
 nest_cancel:
 	nla_nest_cancel(skb, prop_list);
-	return ret;
+	return -EMSGSIZE;
 }
 
 static int rtnl_fill_proto_down(struct sk_buff *skb,
