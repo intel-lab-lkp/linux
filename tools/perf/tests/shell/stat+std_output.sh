@@ -132,6 +132,11 @@ then
 	check_per_die "STD (New API)" "$perf_cmd"
 	check_per_socket "STD (New API)" "$perf_cmd"
 fi
+if [ $skip_test -ne 1 ]
+then
+	check_per_cache_instance "STD (New API)" "$perf_cmd"
+	check_per_cluster "STD (New API)" "$perf_cmd"
+fi
 
 cleanup
 exit 0
