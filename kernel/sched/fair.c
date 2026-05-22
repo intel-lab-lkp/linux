@@ -14070,6 +14070,8 @@ out:
 static void set_cpu_sd_state_busy(int cpu)
 {
 	struct sched_domain *sd;
+
+	guard(rcu)();
 	sd = rcu_dereference_all(per_cpu(sd_llc, cpu));
 
 	/*
@@ -14099,6 +14101,8 @@ void nohz_balance_exit_idle(struct rq *rq)
 static void set_cpu_sd_state_idle(int cpu)
 {
 	struct sched_domain *sd;
+
+	guard(rcu)();
 	sd = rcu_dereference_all(per_cpu(sd_llc, cpu));
 
 	/* See set_cpu_sd_state_busy(): nohz_idle is only used with sd->shared. */
