@@ -305,7 +305,10 @@ vmw_vkms_disable_vblank(struct drm_crtc *crtc)
 	if (!vmw->vkms_enabled)
 		return;
 
-	hrtimer_cancel(&du->vkms.timer);
+	/*
+	 * Non-blocking cancel to avoid ABBA deadlock while holding vbl_lock.
+	 */
+	hrtimer_try_to_cancel(&du->vkms.timer);
 	du->vkms.surface = NULL;
 	du->vkms.period_ns = ktime_set(0, 0);
 }
@@ -390,9 +393,16 @@ vmw_vkms_crtc_atomic_disable(struct drm_crtc *crtc,
 			     struct drm_atomic_state *state)
 {
 	struct vmw_private *vmw = vmw_priv(crtc->dev);
+	struct vmw_display_unit *du = vmw_crtc_to_du(crtc);
 
-	if (vmw->vkms_enabled)
+	if (vmw->vkms_enabled) {
 		drm_crtc_vblank_off(crtc);
+		/*
+		 * Synchronously stop the timer after releasing the vbl_lock
+		 * to ensure no further callbacks occur.
+		 */
+		hrtimer_cancel(&du->vkms.timer);
+	}
 }
 
 static bool
