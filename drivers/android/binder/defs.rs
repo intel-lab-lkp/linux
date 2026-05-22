@@ -164,10 +164,7 @@ impl BinderTransactionDataSecctx {
     /// View the inner data as wrapped in `BinderTransactionData`.
     pub(crate) fn tr_data(&mut self) -> &mut BinderTransactionData {
         // SAFETY: Transparent wrapper is safe to transmute.
-        unsafe {
-            &mut *(&mut self.transaction_data as *mut uapi::binder_transaction_data
-                as *mut BinderTransactionData)
-        }
+        unsafe { core::mem::transmute(&mut self.transaction_data) }
     }
 }
 
