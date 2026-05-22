@@ -2121,13 +2121,14 @@ static const struct sdhci_ops sdhci_gl9767_ops = {
 };
 
 const struct sdhci_pci_fixes sdhci_gl9767 = {
-	.quirks		= SDHCI_QUIRK_NO_ENDATTR_IN_NOPDESC,
-	.quirks2	= SDHCI_QUIRK2_BROKEN_DDR50,
-	.probe_slot	= gli_probe_slot_gl9767,
-	.add_host	= sdhci_pci_uhs2_add_host,
-	.remove_host	= sdhci_pci_uhs2_remove_host,
-	.ops		= &sdhci_gl9767_ops,
+        .quirks         = SDHCI_QUIRK_NO_ENDATTR_IN_NOPDESC,
+        .quirks2        = SDHCI_QUIRK2_BROKEN_DDR50,
+        .probe_slot     = gli_probe_slot_gl9767,
+        .add_host       = sdhci_pci_uhs2_add_host,
+        .remove_host    = sdhci_pci_uhs2_remove_host,
+        .ops            = &sdhci_gl9767_ops,
 #ifdef CONFIG_PM_SLEEP
-	.resume		= sdhci_pci_gli_resume,
+        .suspend        = gl9763e_suspend,
+        .resume         = sdhci_pci_gli_resume,
 #endif
 };
