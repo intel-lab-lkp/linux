@@ -40,6 +40,13 @@ properties:
     type: boolean
     deprecated: true
 
+  nvidia,external-control:
+    description:
+      Indicates that the controller is configured externally and that the host
+      should not attempt to access it. This is usually used by a modem that
+      requires precise bus configuration.
+    type: boolean
+
 required:
   - compatible
   - reg
