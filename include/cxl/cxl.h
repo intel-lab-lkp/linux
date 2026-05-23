@@ -122,12 +122,14 @@ struct cxl_register_map {
  * @coord: QoS performance data (i.e. latency, bandwidth)
  * @cdat_coord: raw QoS performance data from CDAT
  * @qos_class: QoS Class cookies
+ * @shareable: Is the range sharable
  */
 struct cxl_dpa_perf {
 	struct range dpa_range;
 	struct access_coordinate coord[ACCESS_COORDINATE_MAX];
 	struct access_coordinate cdat_coord[ACCESS_COORDINATE_MAX];
 	int qos_class;
+	bool shareable;
 };
 
 enum cxl_partition_mode {
@@ -141,11 +143,13 @@ enum cxl_partition_mode {
  * @res: shortcut to the partition in the DPA resource tree (cxlds->dpa_res)
  * @perf: performance attributes of the partition from CDAT
  * @mode: operation mode for the DPA capacity, e.g. ram, pmem, dynamic...
+ * @handle: DSMAS handle intended to represent this partition
  */
 struct cxl_dpa_partition {
 	struct resource res;
 	struct cxl_dpa_perf perf;
 	enum cxl_partition_mode mode;
+	u8 handle;
 };
 
 #define CXL_NR_PARTITIONS_MAX 3
