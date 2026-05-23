@@ -564,7 +564,9 @@ static int xlgmac_start(struct xlgmac_pdata *pdata)
 	struct net_device *netdev = pdata->netdev;
 	int ret;
 
-	hw_ops->init(pdata);
+	ret = hw_ops->init(pdata);
+	if (ret)
+		goto err_init;
 	xlgmac_napi_enable(pdata, 1);
 
 	ret = xlgmac_request_irqs(pdata);
@@ -580,7 +582,7 @@ static int xlgmac_start(struct xlgmac_pdata *pdata)
 err_napi:
 	xlgmac_napi_disable(pdata, 1);
 	hw_ops->exit(pdata);
-
+err_init:
 	return ret;
 }
 
