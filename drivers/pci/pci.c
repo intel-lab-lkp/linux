@@ -335,7 +335,7 @@ free_and_exit:
  * pci_dev_str_match - test if a string matches a device
  * @dev: the PCI device to test
  * @p: string to match the device against
- * @endptr: pointer to the string after the match
+ * @endptr: pointer to the string after the match, with the delimiter skipped
  *
  * Test if a string (typically from a kernel parameter) matches a specified
  * PCI device. The string may be of one of the following formats:
@@ -389,8 +389,13 @@ static int pci_dev_str_match(struct pci_dev *dev, const char *p,
 		    (!subsystem_vendor ||
 			    subsystem_vendor == dev->subsystem_vendor) &&
 		    (!subsystem_device ||
-			    subsystem_device == dev->subsystem_device))
-			goto found;
+			    subsystem_device == dev->subsystem_device)) {
+			ret = 1;
+			goto out;
+		}
+
+		/* No matching string found */
+		ret = 0;
 	} else {
 		/*
 		 * PCI Bus, Device, Function IDs are specified
@@ -400,15 +405,18 @@ static int pci_dev_str_match(struct pci_dev *dev, const char *p,
 		if (ret < 0)
 			return ret;
 		else if (ret)
-			goto found;
+			goto out;
 	}
+out:
+	/*
+	 * Whether we matched (ret == 1) or didn't (ret == 0),
+	 * ensure the token ends with a valid boundary.
+	 */
+	if (*p != '\0' && *p != ';' && *p != ',')
+		return -EINVAL;
 
-	*endptr = p;
-	return 0;
-
-found:
-	*endptr = p;
-	return 1;
+	*endptr = *p == '\0' ? p : p + 1;
+	return ret;
 }
 
 static u8 __pci_find_next_cap(struct pci_bus *bus, unsigned int devfn,
@@ -941,12 +949,6 @@ static void __pci_config_acs(struct pci_dev *dev, struct pci_acs *caps,
 			/* Found a match */
 			break;
 		}
-
-		if (*p != ';' && *p != ',') {
-			/* End of param or invalid format */
-			break;
-		}
-		p++;
 	}
 
 	if (ret != 1)
@@ -6434,12 +6436,6 @@ static resource_size_t pci_specified_resource_alignment(struct pci_dev *dev,
 			       p);
 			break;
 		}
-
-		if (*p != ';' && *p != ',') {
-			/* End of param or invalid format */
-			break;
-		}
-		p++;
 	}
 out:
 	spin_unlock(&resource_alignment_lock);
