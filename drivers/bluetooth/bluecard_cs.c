@@ -1,18 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  *
  *  Bluetooth driver for the Anycom BlueCard (LSE039/LSE041)
  *
  *  Copyright (C) 2001-2002  Marcel Holtmann <marcel@holtmann.org>
- *
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License version 2 as
- *  published by the Free Software Foundation;
- *
- *  Software distributed under the License is distributed on an "AS
- *  IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
- *  implied. See the License for the specific language governing
- *  rights and limitations under the License.
  *
  *  The initial developer of the original code is David A. Hinds
  *  <dahinds@users.sourceforge.net>.  Portions created by David A. Hinds
