@@ -222,6 +222,15 @@
 
 #define EP_UNACTIVE_PTR ((void *) -1L)
 
+/* Non-NULL sentinel terminating ctx->tfile_check_list, so that
+ * "head->next == NULL" unambiguously means "this head is not on any
+ * check list" -- the invariant ep_remove_file() and list_file() rely
+ * on. Without this, the tail of the check list aliases the
+ * "not linked" state and ep_remove_file() may free a head that
+ * clear_tfile_check_list() still references.
+ */
+#define EP_TFILE_LIST_END ((struct epitems_head *)EP_UNACTIVE_PTR)
+
 #define EP_ITEM_COST (sizeof(struct epitem) + sizeof(struct eppoll_entry))
 
 /* Wait structure used by the poll hooks */
@@ -472,7 +481,7 @@ static void list_file(struct file *file, struct ep_ctl_ctx *ctx)
 
 	head = container_of(file->f_ep, struct epitems_head, epitems);
 	if (!head->next) {
-		head->next = ctx->tfile_check_list;
+		head->next = ctx->tfile_check_list ? : EP_TFILE_LIST_END;
 		ctx->tfile_check_list = head;
 	}
 }
@@ -1686,7 +1695,7 @@ static int reverse_path_check(struct ep_ctl_ctx *ctx)
 {
 	struct epitems_head *p;
 
-	for (p = ctx->tfile_check_list; p; p = p->next) {
+	for (p = ctx->tfile_check_list; p != EP_TFILE_LIST_END; p = p->next) {
 		int error;
 		path_count_init(ctx);
 		rcu_read_lock();
@@ -2440,11 +2449,12 @@ static int ep_loop_check(struct ep_ctl_ctx *ctx, struct eventpoll *ep,
 static void clear_tfile_check_list(struct ep_ctl_ctx *ctx)
 {
 	rcu_read_lock();
-	while (ctx->tfile_check_list) {
+	while (ctx->tfile_check_list != EP_TFILE_LIST_END) {
 		struct epitems_head *head = ctx->tfile_check_list;
 		ctx->tfile_check_list = head->next;
 		unlist_file(head);
 	}
+	ctx->tfile_check_list = NULL;
 	rcu_read_unlock();
 }
 
@@ -2603,7 +2613,7 @@ int do_epoll_ctl_file(struct file *f, int op, struct epoll_key *tf,
 	int full_check;
 	struct eventpoll *ep;
 	struct epitem *epi;
-	struct ep_ctl_ctx ctx = { };
+	struct ep_ctl_ctx ctx = {.tfile_check_list = EP_TFILE_LIST_END };
 
 	/* The target file descriptor must support poll */
 	if (!file_can_poll(tf->file))
