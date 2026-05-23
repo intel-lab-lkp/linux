@@ -105,6 +105,17 @@ properties:
       Restricts the UFS controller to rate-a or rate-b for both TX and
       RX directions.
 
+patternProperties:
+  "^txeq-settings-g[1-6]$":
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 6
+    maxItems: 12
+    description: |
+      Static TX Equalization settings for High Speed (HS) gears.
+      The settings are specified as an array of tuples (PreShoot, DeEmphasis, PrecodeEn).
+      The array must contain these tuples in the following order:
+      Host Lane 0, [Host Lane 1], Device Lane 0, [Device Lane 1].
+
 dependencies:
   freq-table-hz: [ clocks ]
   operating-points-v2: [ clocks, clock-names ]
