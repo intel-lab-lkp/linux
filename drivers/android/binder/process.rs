@@ -30,7 +30,15 @@ use kernel::{
     sync::{
         aref::ARef,
         lock::{spinlock::SpinLockBackend, Guard},
-        Arc, ArcBorrow, CondVar, CondVarTimeoutResult, Mutex, SpinLock, UniqueArc,
+        poll::PollCondVarBox,
+        Arc,
+        ArcBorrow,
+        CondVar,
+        CondVarTimeoutResult,
+        Mutex,
+        SetOnce,
+        SpinLock,
+        UniqueArc, //
     },
     task::Task,
     uaccess::{UserSlice, UserSliceReader},
@@ -172,21 +180,26 @@ impl ProcessInner {
     /// taken while holding the inner process lock.
     pub(crate) fn push_work(
         &mut self,
+        proc: &Process,
         work: DLArc<dyn DeliverToRead>,
     ) -> Result<(), (BinderError, DLArc<dyn DeliverToRead>)> {
+        let sync = work.should_sync_wakeup();
+
         // Try to find a ready thread to which to push the work.
         if let Some(thread) = self.ready_threads.pop_front() {
             // Push to thread while holding state lock. This prevents the thread from giving up
             // (for example, because of a signal) when we're about to deliver work.
-            match thread.push_work(work) {
+            match thread.push_work_inner(work, sync) {
                 PushWorkRes::Ok => Ok(()),
+                PushWorkRes::OkNotifyPoll => {
+                    proc.notify_poll(sync);
+                    Ok(())
+                }
                 PushWorkRes::FailedDead(work) => Err((BinderError::new_dead(), work)),
             }
         } else if self.is_dead {
             Err((BinderError::new_dead(), work))
         } else {
-            let sync = work.should_sync_wakeup();
-
             // Didn't find a thread waiting for proc work; this can happen
             // in two scenarios:
             // 1. All threads are busy handling transactions
@@ -194,17 +207,12 @@ impl ProcessInner {
             //    the kernel driver soon and pick up this work.
             // 2. Threads are using the (e)poll interface, in which case
             //    they may be blocked on the waitqueue without having been
-            //    added to waiting_threads. For this case, we just iterate
-            //    over all threads not handling transaction work, and
-            //    wake them all up. We wake all because we don't know whether
-            //    a thread that called into (e)poll is handling non-binder
-            //    work currently.
+            //    added to waiting_threads. For this case, we wake it up
+            //    directly.
             self.work.push_back(work);
 
             // Wake up polling threads, if any.
-            for thread in self.threads.values() {
-                thread.notify_if_poll_ready(sync);
-            }
+            proc.notify_poll(sync);
 
             Ok(())
         }
@@ -227,11 +235,11 @@ impl ProcessInner {
 
         // If we decided that we need to push work, push either to the process or to a thread if
         // one is specified.
-        if let Some(node) = push {
+        if let Some(pnode) = push {
             if let Some(thread) = othread {
-                thread.push_work_deferred(node);
+                thread.push_work_deferred(pnode);
             } else {
-                let _ = self.push_work(node);
+                let _ = self.push_work(&node.owner, pnode);
                 // Nothing to do: `push_work` may fail if the process is dead, but that's ok as in
                 // that case, it doesn't care about the notification.
             }
@@ -457,6 +465,12 @@ pub(crate) struct Process {
     #[pin]
     node_refs: Mutex<ProcessNodeRefs>,
 
+    // Synchronizes `register_wait` calls to the `PollCondVarBox`.
+    //
+    // The `PollCondVarBox` is not stored here because synchronization is
+    // done for `register_wait` only. Wakeups do not take this lock.
+    poll: SetOnce<PollCondVarBox>,
+
     // Work node for deferred work item.
     #[pin]
     defer_work: Work<Process>,
@@ -516,6 +530,7 @@ impl Process {
                 defer_work <- kernel::new_work!("Process::defer_work"),
                 links <- ListLinks::new(),
                 stats: BinderStats::new(),
+                poll: SetOnce::new(),
             }),
             GFP_KERNEL,
         )?;
@@ -715,7 +730,7 @@ impl Process {
 
     pub(crate) fn push_work(&self, work: DLArc<dyn DeliverToRead>) -> BinderResult {
         // If push_work fails, drop the work item outside the lock.
-        let res = self.inner.lock().push_work(work);
+        let res = self.inner.lock().push_work(self, work);
         match res {
             Ok(()) => Ok(()),
             Err((err, work)) => {
@@ -994,7 +1009,7 @@ impl Process {
         if let Ok(Some(node)) = inner.get_existing_node(ptr, cookie) {
             if let Some(node) = node.inc_ref_done_locked(strong, &mut inner) {
                 // This only fails if the process is dead.
-                let _ = inner.push_work(node);
+                let _ = inner.push_work(self, node);
             }
         }
         Ok(())
@@ -1505,6 +1520,15 @@ impl Process {
             }
         }
     }
+
+    pub(crate) fn notify_poll(&self, sync: bool) {
+        if let Some(poll) = self.poll.as_ref() {
+            if sync {
+                poll.notify_sync();
+            }
+            poll.notify_all();
+        }
+    }
 }
 
 fn get_frozen_status(data: UserSlice) -> Result {
@@ -1696,7 +1720,21 @@ impl Process {
         table: PollTable<'_>,
     ) -> Result<u32> {
         let thread = this.get_current_thread()?;
-        let (from_proc, mut mask) = thread.poll(file, table);
+        {
+            let poll = loop {
+                if let Some(poll) = this.poll.as_ref() {
+                    break poll;
+                }
+
+                let poll = PollCondVarBox::new(c"Process::poll", kernel::static_lock_class!())?;
+                // Reuse our existing mutex to synchronize callers initializing.
+                let _guard = this.node_refs.lock();
+                this.poll.populate(poll);
+            };
+
+            table.register_wait(file, poll);
+        }
+        let (from_proc, mut mask) = thread.poll()?;
         if mask == 0 && from_proc && !this.inner.lock().work.is_empty() {
             mask |= bindings::POLLIN;
         }
