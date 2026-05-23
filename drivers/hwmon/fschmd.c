@@ -834,9 +834,9 @@ static int watchdog_release(struct inode *inode, struct file *filp)
 		watchdog_stop(data);
 		data->watchdog_expect_close = 0;
 	} else {
-		watchdog_trigger(data);
-		dev_crit(&data->client->dev,
-			"unexpected close, not stopping watchdog!\n");
+		if (!watchdog_trigger(data))
+			pr_crit("%s: unexpected close, not stopping watchdog!\n",
+				data->watchdog_name);
 	}
 
 	clear_bit(0, &data->watchdog_is_open);
