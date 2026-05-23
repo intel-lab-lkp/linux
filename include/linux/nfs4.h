@@ -767,6 +767,9 @@ enum pnfs_block_extent_state {
 	PNFS_BLOCK_NONE_DATA		= 3,
 };
 
+/* Maximum NFSv4.1 pNFS multipath data-server address count */
+#define NFS4_PNFS_MAX_MULTI_CNT		256
+
 /* on the wire size of a block layout extent */
 #define PNFS_BLOCK_EXTENT_SIZE \
 	(7 * sizeof(__be32) + NFS4_DEVICEID4_SIZE)

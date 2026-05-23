@@ -159,10 +159,13 @@ nfs4_fl_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 			goto out_err_free_deviceid;
 
 		mp_count = be32_to_cpup(p); /* multipath count */
+		if (mp_count > NFS4_PNFS_MAX_MULTI_CNT)
+			goto out_err_free_deviceid;
 		for (j = 0; j < mp_count; j++) {
 			da = nfs4_decode_mp_ds_addr(net, &stream, gfp_flags);
-			if (da)
-				list_add_tail(&da->da_node, &dsaddrs);
+			if (!da)
+				break;
+			list_add_tail(&da->da_node, &dsaddrs);
 		}
 		if (list_empty(&dsaddrs)) {
 			dprintk("%s: no suitable DS addresses found\n",

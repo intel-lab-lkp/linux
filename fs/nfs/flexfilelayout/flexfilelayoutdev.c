@@ -78,12 +78,18 @@ nfs4_ff_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 		goto out_err_drain_dsaddrs;
 	mp_count = be32_to_cpup(p);
 	dprintk("%s: multipath ds count %d\n", __func__, mp_count);
+	if (mp_count > NFS4_PNFS_MAX_MULTI_CNT) {
+		dprintk("%s: multipath count %u greater than supported maximum %d\n",
+			__func__, mp_count, NFS4_PNFS_MAX_MULTI_CNT);
+		goto out_err_drain_dsaddrs;
+	}
 
 	for (i = 0; i < mp_count; i++) {
 		/* multipath ds */
 		da = nfs4_decode_mp_ds_addr(net, &stream, gfp_flags);
-		if (da)
-			list_add_tail(&da->da_node, &dsaddrs);
+		if (!da)
+			break;
+		list_add_tail(&da->da_node, &dsaddrs);
 	}
 	if (list_empty(&dsaddrs)) {
 		dprintk("%s: no suitable DS addresses found\n",
