@@ -50,7 +50,6 @@ struct damon_size_range {
  * @nr_accesses_bp:	@nr_accesses in basis point (0.01%) that updated for
  *			each sampling interval.
  * @probe_hits:		Number of probe-positive region samples.
- * @list:		List head for siblings.
  * @age:		Age of this region.
  *
  * For any use case, @ar should be non-zero positive size.
@@ -79,7 +78,10 @@ struct damon_region {
 	unsigned int nr_accesses;
 	unsigned int nr_accesses_bp;
 	unsigned char probe_hits[DAMON_MAX_PROBES];
+/* private: */
+	/* List head for siblings. */
 	struct list_head list;
+/* public: */
 
 	unsigned int age;
 /* private: Internal value for age calculation. */
