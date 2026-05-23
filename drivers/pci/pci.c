@@ -958,8 +958,11 @@ static const char *pci_dev_match_config_acs(struct pci_dev *dev, const char *p)
 static void pci_param_config_acs(struct pci_dev *dev, struct pci_acs *caps)
 {
 	u16 shift = 0, valid_ctrl = dev->acs_capabilities & GENMASK_U16(6, 0);
-	u16 invalid_bits, enabled_bits = 0, disabled_bits = 0;
+	u16 new_ctrl, invalid_bits, enabled_bits = 0, disabled_bits = 0;
 	const char *p, *seg;
+
+	if (dev->acs_capabilities & PCI_ACS_ECAP)
+		valid_ctrl |= GENMASK_U16(12, 7);
 
 	if (!config_acs_param || !valid_ctrl)
 		return;
@@ -1000,10 +1003,23 @@ static void pci_param_config_acs(struct pci_dev *dev, struct pci_acs *caps)
 		return;
 	}
 
+	/*
+	 * DMAC/UMAC are 2-bit fields where encoding 0b11 is reserved. The
+	 * final value can land on 0b11 not only when the user enables both
+	 * bits, but also when they enable one bit, e.g. "1x", while fw_ctrl
+	 * already has the other set (e.g. "01").
+	 */
+	new_ctrl = (caps->fw_ctrl | enabled_bits) & ~disabled_bits;
+	if (FIELD_GET(PCI_ACS_DMAC_MASK, new_ctrl) == PCI_ACS_MAC_RSVD ||
+	    FIELD_GET(PCI_ACS_UMAC_MASK, new_ctrl) == PCI_ACS_MAC_RSVD) {
+		pci_err(dev, "ACS DMAC/UMAC would be set to reserved value\n");
+		return;
+	}
+
 	pci_dbg(dev, "ACS enabled: %#06x, disabled: %#06x\n",
 		enabled_bits, disabled_bits);
 
-	caps->ctrl = (caps->fw_ctrl | enabled_bits) & ~disabled_bits;
+	caps->ctrl = new_ctrl;
 }
 
 /**
@@ -1024,6 +1040,16 @@ static void pci_std_enable_acs(struct pci_dev *dev, struct pci_acs *caps)
 
 	/* Upstream Forwarding */
 	caps->ctrl |= (dev->acs_capabilities & PCI_ACS_UF);
+
+	/*
+	 * Enable Unclaimed Request Redirect Control, I/O Request Blocking,
+	 * and Downstream and Upstream Port Memory Target Access Redirect.
+	 */
+	if (dev->acs_capabilities & PCI_ACS_ECAP) {
+		caps->ctrl |= PCI_ACS_URRC | PCI_ACS_IB;
+		FIELD_MODIFY(PCI_ACS_DMAC_MASK, &caps->ctrl, PCI_ACS_MAC_RR);
+		FIELD_MODIFY(PCI_ACS_UMAC_MASK, &caps->ctrl, PCI_ACS_MAC_RR);
+	}
 
 	/* Enable Translation Blocking for external devices and noats */
 	if (pci_ats_disabled() || dev->external_facing || dev->untrusted)
