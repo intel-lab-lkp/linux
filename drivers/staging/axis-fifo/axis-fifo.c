@@ -125,7 +125,6 @@ static ssize_t axis_fifo_read(struct file *f, char __user *buf,
 	unsigned int words_available;
 	unsigned int copied;
 	unsigned int copy;
-	unsigned int i;
 	int ret;
 	u32 tmp_buf[READ_BUF_SIZE];
 
@@ -167,10 +166,7 @@ static ssize_t axis_fifo_read(struct file *f, char __user *buf,
 	while (words_available > 0) {
 		copy = min(words_available, READ_BUF_SIZE);
 
-		for (i = 0; i < copy; i++) {
-			tmp_buf[i] = ioread32(fifo->base_addr +
-					      XLLF_RDFD_OFFSET);
-		}
+		readsl(fifo->base_addr + XLLF_RDFD_OFFSET, tmp_buf, copy);
 		words_available -= copy;
 
 		if (copy_to_user(buf + copied * sizeof(u32), tmp_buf,
@@ -186,8 +182,11 @@ static ssize_t axis_fifo_read(struct file *f, char __user *buf,
 	return bytes_available;
 
 err_flush_rx:
-	while (words_available--)
-		ioread32(fifo->base_addr + XLLF_RDFD_OFFSET);
+	while (words_available > 0) {
+		copy = min_t(unsigned int, words_available, READ_BUF_SIZE);
+		readsl(fifo->base_addr + XLLF_RDFD_OFFSET, tmp_buf, copy);
+		words_available -= copy;
+	}
 
 end_unlock:
 	mutex_unlock(&fifo->read_lock);
@@ -257,8 +256,7 @@ static ssize_t axis_fifo_write(struct file *f, const char __user *buf,
 		goto end_unlock;
 	}
 
-	for (int i = 0; i < words_to_write; ++i)
-		iowrite32(txbuf[i], fifo->base_addr + XLLF_TDFD_OFFSET);
+	writesl(fifo->base_addr + XLLF_TDFD_OFFSET, txbuf, words_to_write);
 
 	iowrite32(len, fifo->base_addr + XLLF_TLR_OFFSET);
 
