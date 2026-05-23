@@ -515,7 +515,6 @@ static int wacom_intuos_pad(struct wacom_wac *wacom)
 	struct wacom_features *features = &wacom->features;
 	unsigned char *data = wacom->data;
 	struct input_dev *input = wacom->pad_input;
-	int i;
 	int buttons = 0, nbuttons = features->numbered_buttons;
 	int keys = 0, nkeys = 0;
 	int ring1 = 0, ring2 = 0;
@@ -523,6 +522,10 @@ static int wacom_intuos_pad(struct wacom_wac *wacom)
 	bool prox = false;
 	bool wrench = false, keyboard = false, mute_touch = false, menu = false,
 	     info = false;
+	int i;
+
+	if (!input)
+		return 0;
 
 	/* pad packets. Works as a second tool and is always in prox */
 	if (!(data[0] == WACOM_REPORT_INTUOSPAD || data[0] == WACOM_REPORT_INTUOS5PAD ||
