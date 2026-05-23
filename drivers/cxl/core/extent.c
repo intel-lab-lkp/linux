@@ -18,8 +18,60 @@ static void cxled_release_extent(struct cxl_endpoint_decoder *cxled,
 	memdev_release_extent(mds, &dc_extent->dpa_range);
 }
 
+/*
+ * Host-wide registry of live tag groups with non-null uuids.  Enforces
+ * that within this host, a tag uuid identifies exactly one allocation
+ * across all regions and memdevs — closing the gap left by the
+ * per-region scans in cxlr_add_extent() and uuid_claim_tagged().  The
+ * orchestrator (FM) owns tag-uuid allocation per spec; this is a
+ * defense against firmware bugs and orchestrator misbehavior.  Untagged
+ * (null uuid) allocations are not tracked: the spec defines no
+ * cross-chain identity for them.
+ */
+static DEFINE_MUTEX(cxl_tag_lock);
+static LIST_HEAD(cxl_tag_groups);
+
+static int cxl_tag_register(struct cxl_dc_tag_group *grp)
+{
+	struct cxl_dc_tag_group *g;
+
+	if (uuid_is_null(&grp->uuid))
+		return 0;
+
+	guard(mutex)(&cxl_tag_lock);
+	list_for_each_entry(g, &cxl_tag_groups, registry_node)
+		if (uuid_equal(&g->uuid, &grp->uuid))
+			return -EBUSY;
+	list_add_tail(&grp->registry_node, &cxl_tag_groups);
+	return 0;
+}
+
+static void cxl_tag_unregister(struct cxl_dc_tag_group *grp)
+{
+	if (uuid_is_null(&grp->uuid))
+		return;
+
+	guard(mutex)(&cxl_tag_lock);
+	list_del(&grp->registry_node);
+}
+
+bool cxl_tag_already_committed(const uuid_t *tag)
+{
+	struct cxl_dc_tag_group *g;
+
+	if (uuid_is_null(tag))
+		return false;
+
+	guard(mutex)(&cxl_tag_lock);
+	list_for_each_entry(g, &cxl_tag_groups, registry_node)
+		if (uuid_equal(&g->uuid, tag))
+			return true;
+	return false;
+}
+
 static void free_tag_group(struct cxl_dc_tag_group *group)
 {
+	cxl_tag_unregister(group);
 	xa_destroy(&group->dc_extents);
 	kfree(group);
 }
@@ -54,12 +106,20 @@ alloc_tag_group(struct cxl_dax_region *cxlr_dax, uuid_t *uuid)
 {
 	struct cxl_dc_tag_group *group __free(kfree) =
 				kzalloc(sizeof(*group), GFP_KERNEL);
+	int rc;
+
 	if (!group)
 		return ERR_PTR(-ENOMEM);
 
 	group->cxlr_dax = cxlr_dax;
 	uuid_copy(&group->uuid, uuid);
 	xa_init(&group->dc_extents);
+	INIT_LIST_HEAD(&group->registry_node);
+
+	rc = cxl_tag_register(group);
+	if (rc)
+		return ERR_PTR(rc);
+
 	return no_free_ptr(group);
 }
 

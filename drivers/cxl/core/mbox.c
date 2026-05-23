@@ -1474,6 +1474,25 @@ static int cxl_add_pending(struct cxl_memdev_state *mds)
 		extract_tag_group(pending, &tag, &group);
 		list_sort(NULL, &group, extent_seq_compare);
 
+		/*
+		 * Cross-More-chain uniqueness.  A non-null tag seen in this
+		 * group must not already correspond to a committed tag group
+		 * anywhere on this host.  More=0 was supposed to close that
+		 * allocation, and tag uuids must be unique across all regions
+		 * and memdevs (the orchestrator owns assignment per spec).
+		 * Either constraint failing — same chain redelivered, or two
+		 * distinct allocations colliding on the same uuid — is a
+		 * firmware/orchestrator bug; reject the whole group.
+		 */
+		if (cxl_tag_already_committed(&tag)) {
+			dev_warn(dev,
+				 "Tag %pUb: dropping group, tag already committed (firmware/orchestrator bug)\n",
+				 &tag);
+			list_for_each_entry_safe(pos, tmp, &group, list)
+				delete_extent_node(pos);
+			continue;
+		}
+
 		/* Sequence-number integrity */
 		if (cxl_check_group_seq(dev, &tag, &group)) {
 			list_for_each_entry_safe(pos, tmp, &group, list)
