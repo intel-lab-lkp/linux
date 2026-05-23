@@ -34,7 +34,6 @@
 #include <linux/log2.h>
 #include <linux/quotaops.h>
 #include <linux/uaccess.h>
-#include <linux/dax.h>
 #include <linux/iversion.h>
 #include "ext2.h"
 #include "xattr.h"
@@ -198,7 +197,6 @@ static void ext2_put_super (struct super_block * sb)
 	brelse (sbi->s_sbh);
 	sb->s_fs_info = NULL;
 	kfree(sbi->s_blockgroup_lock);
-	fs_put_dax(sbi->s_daxdev, NULL);
 	kfree(sbi);
 }
 
@@ -332,8 +330,6 @@ static int ext2_show_options(struct seq_file *seq, struct dentry *root)
 	if (test_opt(sb, XIP))
 		seq_puts(seq, ",xip");
 
-	if (test_opt(sb, DAX))
-		seq_puts(seq, ",dax");
 
 	if (!test_opt(sb, RESERVATION))
 		seq_puts(seq, ",noreservation");
@@ -432,7 +428,7 @@ static const struct export_operations ext2_export_ops = {
 enum {
 	Opt_bsd_df, Opt_minix_df, Opt_grpid, Opt_nogrpid, Opt_resgid, Opt_resuid,
 	Opt_sb, Opt_errors, Opt_nouid32, Opt_debug, Opt_oldalloc, Opt_orlov,
-	Opt_nobh, Opt_user_xattr, Opt_acl, Opt_xip, Opt_dax, Opt_ignore,
+	Opt_nobh, Opt_user_xattr, Opt_acl, Opt_xip, Opt_ignore,
 	Opt_quota, Opt_usrquota, Opt_grpquota, Opt_reservation,
 };
 
@@ -462,7 +458,6 @@ static const struct fs_parameter_spec ext2_param_spec[] = {
 	fsparam_flag_no	("user_xattr", Opt_user_xattr),
 	fsparam_flag_no	("acl", Opt_acl),
 	fsparam_flag	("xip", Opt_xip),
-	fsparam_flag	("dax", Opt_dax),
 	fsparam_flag	("grpquota", Opt_grpquota),
 	fsparam_flag	("noquota", Opt_ignore),
 	fsparam_flag	("quota", Opt_quota),
@@ -595,20 +590,9 @@ static int ext2_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		ext2_msg_fc(fc, KERN_INFO, "(no)acl options not supported");
 		break;
 #endif
-	case Opt_xip:
-		ext2_msg_fc(fc, KERN_INFO, "use dax instead of xip");
-		ctx_set_mount_opt(ctx, EXT2_MOUNT_XIP);
-		fallthrough;
-	case Opt_dax:
-#ifdef CONFIG_FS_DAX
-		ext2_msg_fc(fc, KERN_WARNING,
-		    "DAX enabled. Warning: DAX support in ext2 driver is deprecated"
-		    " and will be removed at the end of 2025. Please use ext4 driver instead.");
-		ctx_set_mount_opt(ctx, EXT2_MOUNT_DAX);
-#else
-		ext2_msg_fc(fc, KERN_INFO, "dax option not supported");
-#endif
-		break;
+        case Opt_xip:
+                ext2_msg_fc(fc, KERN_ERR, "DAX support has been removed. Please use ext4 instead.");
+                return -EINVAL;
 
 #if defined(CONFIG_QUOTA)
 	case Opt_quota:
@@ -906,8 +890,6 @@ static int ext2_fill_super(struct super_block *sb, struct fs_context *fc)
 	}
 	sb->s_fs_info = sbi;
 	sbi->s_sb_block = sb_block;
-	sbi->s_daxdev = fs_dax_get_by_bdev(sb->s_bdev, &sbi->s_dax_part_off,
-					   NULL, NULL);
 
 	spin_lock_init(&sbi->s_lock);
 	ret = -EINVAL;
@@ -992,16 +974,8 @@ static int ext2_fill_super(struct super_block *sb, struct fs_context *fc)
 	}
 	blocksize = BLOCK_SIZE << le32_to_cpu(sbi->s_es->s_log_block_size);
 
-	if (test_opt(sb, DAX)) {
-		if (!sbi->s_daxdev) {
-			ext2_msg(sb, KERN_ERR,
-				"DAX unsupported by block device. Turning off DAX.");
-			clear_opt(sbi->s_mount_opt, DAX);
-		} else if (blocksize != PAGE_SIZE) {
-			ext2_msg(sb, KERN_ERR, "unsupported blocksize for DAX\n");
-			clear_opt(sbi->s_mount_opt, DAX);
-		}
-	}
+
+
 
 	/* If the blocksize doesn't match, re-read the thing.. */
 	if (sb->s_blocksize != blocksize) {
@@ -1252,7 +1226,6 @@ failed_mount_group_desc:
 failed_mount:
 	brelse(bh);
 failed_sbi:
-	fs_put_dax(sbi->s_daxdev, NULL);
 	sb->s_fs_info = NULL;
 	kfree(sbi->s_blockgroup_lock);
 	kfree(sbi);
@@ -1379,11 +1352,7 @@ static int ext2_reconfigure(struct fs_context *fc)
 
 	spin_lock(&sbi->s_lock);
 	es = sbi->s_es;
-	if ((sbi->s_mount_opt ^ new_opts.s_mount_opt) & EXT2_MOUNT_DAX) {
-		ext2_msg(sb, KERN_WARNING, "warning: refusing change of "
-			 "dax flag with busy inodes while remounting");
-		new_opts.s_mount_opt ^= EXT2_MOUNT_DAX;
-	}
+
 	if ((bool)(flags & SB_RDONLY) == sb_rdonly(sb))
 		goto out_set;
 	if (flags & SB_RDONLY) {
