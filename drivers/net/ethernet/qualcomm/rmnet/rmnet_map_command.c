@@ -69,8 +69,8 @@ static void rmnet_map_send_ack(struct sk_buff *skb,
 	netif_tx_unlock(dev);
 }
 
-/* Process MAP command frame and send N/ACK message as appropriate. Message cmd
- * name is decoded here and appropriate handler is called.
+/* Process MAP command frame and send ACK message for supported commands.
+ * Message cmd name is decoded here and the appropriate handler is called.
  */
 void rmnet_map_command(struct sk_buff *skb, struct rmnet_port *port)
 {
