@@ -1413,8 +1413,13 @@ static void ffs_dmabuf_signal_done(struct ffs_dma_fence *dma_fence, int ret)
 static void ffs_epfile_dmabuf_io_complete(struct usb_ep *ep,
 					  struct usb_request *req)
 {
+	struct ffs_dma_fence *fence = req->context;
+	struct ffs_dmabuf_priv *priv = fence->priv;
+
 	pr_vdebug("FFS: DMABUF transfer complete, status=%d\n", req->status);
-	ffs_dmabuf_signal_done(req->context, req->status);
+	ffs_dmabuf_signal_done(fence, req->status);
+	priv->req = NULL;
+	priv->ep = NULL;
 	usb_ep_free_request(ep, req);
 }
 
