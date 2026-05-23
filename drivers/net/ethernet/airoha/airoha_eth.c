@@ -684,6 +684,14 @@ static int airoha_qdma_rx_process(struct airoha_queue *q, int budget)
 					     false);
 
 		done++;
+#if IS_ENABLED(CONFIG_NET_AIROHA_XFRM)
+		if (airoha_xfrm_in_active(port) &&
+		    airoha_xfrm_rx_skb(port, q->skb)) {
+			q->skb = NULL;
+			continue;
+		}
+#endif
+
 		napi_gro_receive(&q->napi, q->skb);
 		q->skb = NULL;
 		continue;
@@ -2008,6 +2016,19 @@ static netdev_tx_t airoha_dev_xmit(struct sk_buff *skb,
 	void *data;
 	u16 index;
 	u8 fport;
+#if IS_ENABLED(CONFIG_NET_AIROHA_XFRM)
+	int err;
+
+	if (airoha_xfrm_out_active(port)) {
+		err = airoha_xfrm_encrypt_skb(port, skb);
+		if (err == -EINPROGRESS)
+			return NETDEV_TX_OK;
+		if (err == -EBUSY)
+			return NETDEV_TX_BUSY;
+		if (err)
+			goto error;
+	}
+#endif
 
 	qid = airoha_qdma_get_txq(qdma, skb_get_queue_mapping(skb));
 	tag = airoha_get_dsa_tag(skb, dev);
@@ -2895,6 +2916,8 @@ static const struct net_device_ops airoha_netdev_ops = {
 	.ndo_stop		= airoha_dev_stop,
 	.ndo_change_mtu		= airoha_dev_change_mtu,
 	.ndo_select_queue	= airoha_dev_select_queue,
+	.ndo_fix_features	= airoha_xfrm_fix_features,
+	.ndo_set_features	= airoha_xfrm_set_features,
 	.ndo_start_xmit		= airoha_dev_xmit,
 	.ndo_get_stats64        = airoha_dev_get_stats64,
 	.ndo_set_mac_address	= airoha_dev_set_macaddr,
@@ -3025,6 +3048,7 @@ static int airoha_alloc_gdm_port(struct airoha_eth *eth,
 	/* XXX: Read nbq from DTS */
 	port->nbq = id == AIROHA_GDM3_IDX && airoha_is_7581(eth) ? 4 : 0;
 	eth->ports[p] = port;
+	airoha_xfrm_build_netdev(dev);
 
 	return airoha_metadata_dst_alloc(port);
 }
@@ -3155,6 +3179,7 @@ error_napi_stop:
 
 		if (port->dev->reg_state == NETREG_REGISTERED)
 			unregister_netdev(port->dev);
+		airoha_xfrm_teardown_netdev(port->dev);
 		airoha_metadata_dst_free(port);
 	}
 	airoha_hw_cleanup(eth);
@@ -3180,6 +3205,7 @@ static void airoha_remove(struct platform_device *pdev)
 			continue;
 
 		unregister_netdev(port->dev);
+		airoha_xfrm_teardown_netdev(port->dev);
 		airoha_metadata_dst_free(port);
 	}
 	airoha_hw_cleanup(eth);
@@ -3328,7 +3354,30 @@ static struct platform_driver airoha_driver = {
 		.of_match_table = of_airoha_match,
 	},
 };
-module_platform_driver(airoha_driver);
+
+static int __init airoha_init(void)
+{
+	int err;
+
+	err = airoha_xfrm_register_notifier();
+	if (err)
+		return err;
+
+	err = platform_driver_register(&airoha_driver);
+	if (err)
+		airoha_xfrm_unregister_notifier();
+
+	return err;
+}
+
+static void __exit airoha_exit(void)
+{
+	platform_driver_unregister(&airoha_driver);
+	airoha_xfrm_unregister_notifier();
+}
+
+module_init(airoha_init);
+module_exit(airoha_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Lorenzo Bianconi <lorenzo@kernel.org>");

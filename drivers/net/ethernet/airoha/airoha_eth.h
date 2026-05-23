@@ -11,6 +11,8 @@
 #include <linux/etherdevice.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
+#include <linux/kconfig.h>
+#include <linux/jump_label.h>
 #include <linux/netdevice.h>
 #include <linux/reset.h>
 #include <linux/soc/airoha/airoha_offload.h>
@@ -533,6 +535,12 @@ struct airoha_qdma {
 	struct airoha_queue q_rx[AIROHA_NUM_RX_RING];
 };
 
+#if IS_ENABLED(CONFIG_NET_AIROHA_XFRM)
+struct eip93_ipsec;
+DECLARE_STATIC_KEY_FALSE(airoha_xfrm_in_state_key);
+DECLARE_STATIC_KEY_FALSE(airoha_xfrm_out_state_key);
+#endif
+
 struct airoha_gdm_port {
 	struct airoha_qdma *qdma;
 	struct airoha_eth *eth;
@@ -549,6 +557,13 @@ struct airoha_gdm_port {
 	u64 fwd_tx_packets;
 
 	struct metadata_dst *dsa_meta[AIROHA_MAX_DSA_PORTS];
+
+#if IS_ENABLED(CONFIG_NET_AIROHA_XFRM)
+	struct eip93_ipsec *xfrm_ipsec;
+	atomic_t xfrm_state_count;
+	atomic_t xfrm_out_state_count;
+	atomic_t xfrm_in_state_count;
+#endif
 };
 
 #define AIROHA_RXD4_PPE_CPU_REASON	GENMASK(20, 16)
@@ -680,6 +695,60 @@ int airoha_ppe_debugfs_init(struct airoha_ppe *ppe);
 static inline int airoha_ppe_debugfs_init(struct airoha_ppe *ppe)
 {
 	return 0;
+}
+#endif
+
+#if IS_ENABLED(CONFIG_NET_AIROHA_XFRM)
+static inline bool airoha_xfrm_in_active(struct airoha_gdm_port *port)
+{
+	return static_branch_unlikely(&airoha_xfrm_in_state_key) &&
+	       atomic_read(&port->xfrm_in_state_count);
+}
+
+static inline bool airoha_xfrm_out_active(struct airoha_gdm_port *port)
+{
+	return static_branch_unlikely(&airoha_xfrm_out_state_key) &&
+	       atomic_read(&port->xfrm_out_state_count);
+}
+
+void airoha_xfrm_build_netdev(struct net_device *dev);
+void airoha_xfrm_teardown_netdev(struct net_device *dev);
+netdev_features_t airoha_xfrm_fix_features(struct net_device *dev,
+					   netdev_features_t features);
+int airoha_xfrm_set_features(struct net_device *dev,
+			     netdev_features_t features);
+bool airoha_xfrm_rx_skb(struct airoha_gdm_port *port, struct sk_buff *skb);
+int airoha_xfrm_encrypt_skb(struct airoha_gdm_port *port, struct sk_buff *skb);
+int airoha_xfrm_register_notifier(void);
+void airoha_xfrm_unregister_notifier(void);
+#else
+static inline void airoha_xfrm_build_netdev(struct net_device *dev)
+{
+}
+
+static inline void airoha_xfrm_teardown_netdev(struct net_device *dev)
+{
+}
+
+static inline netdev_features_t
+airoha_xfrm_fix_features(struct net_device *dev, netdev_features_t features)
+{
+	return features;
+}
+
+static inline int airoha_xfrm_set_features(struct net_device *dev,
+					   netdev_features_t features)
+{
+	return 0;
+}
+
+static inline int airoha_xfrm_register_notifier(void)
+{
+	return 0;
+}
+
+static inline void airoha_xfrm_unregister_notifier(void)
+{
 }
 #endif
 
