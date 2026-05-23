@@ -2065,10 +2065,12 @@ void e1000e_set_interrupt_capability(struct e1000_adapter *adapter)
 							    a->num_vectors);
 				if (err > 0)
 					return;
-			}
-			/* MSI-X failed, so fall through and try MSI */
-			e_err("Failed to initialize MSI-X interrupts.  Falling back to MSI interrupts.\n");
-			e1000e_reset_interrupt_capability(adapter);
+                        }
+                        /* MSI-X failed, so fall through and try MSI */
+                        e_err("Failed to initialize MSI-X interrupts.  Falling back to MSI interrupts.\n");
+                        kfree(adapter->msix_entries);
+                        adapter->msix_entries = NULL;
+                        e1000e_reset_interrupt_capability(adapter);
 		}
 		adapter->int_mode = E1000E_INT_MODE_MSI;
 		fallthrough;
