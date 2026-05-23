@@ -2241,6 +2241,16 @@ int drm_crtc_vblank_start_timer(struct drm_crtc *crtc)
 
 	drm_calc_timestamping_constants(crtc, &crtc->mode);
 
+	/*
+	 * DEFENSIVE CHECK:
+	 * drm_calc_timestamping_constants() truncates framedur_ns to 0 if
+	 * userspace provides a malicious mode with a huge crtc_clock and
+	 * small htotal/vtotal. Prevent an infinite hard-IRQ loop from a
+	 * 0-period hrtimer by rejecting such modes.
+	 */
+	if (unlikely(vblank->framedur_ns == 0))
+		return -EINVAL;
+
 	spin_lock_irqsave(&vtimer->interval_lock, flags);
 	vtimer->interval = ns_to_ktime(vblank->framedur_ns);
 	spin_unlock_irqrestore(&vtimer->interval_lock, flags);
