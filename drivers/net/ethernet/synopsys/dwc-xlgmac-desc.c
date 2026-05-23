@@ -230,10 +230,11 @@ static int xlgmac_alloc_channels(struct xlgmac_pdata *pdata)
 {
 	struct xlgmac_channel *channel_head, *channel;
 	struct xlgmac_ring *tx_ring, *rx_ring;
+	unsigned int i, count;
 	int ret = -ENOMEM;
-	unsigned int i;
 
-	channel_head = kzalloc_objs(struct xlgmac_channel, pdata->channel_count);
+	count = max_t(unsigned int, pdata->tx_ring_count, pdata->rx_ring_count);
+	channel_head = kzalloc_objs(struct xlgmac_channel, count);
 	if (!channel_head)
 		return ret;
 
@@ -248,8 +249,7 @@ static int xlgmac_alloc_channels(struct xlgmac_pdata *pdata)
 	if (!rx_ring)
 		goto err_rx_ring;
 
-	for (i = 0, channel = channel_head; i < pdata->channel_count;
-		i++, channel++) {
+	for (i = 0, channel = channel_head; i < count; i++, channel++) {
 		snprintf(channel->name, sizeof(channel->name), "channel-%u", i);
 		channel->pdata = pdata;
 		channel->queue_index = i;
@@ -281,6 +281,7 @@ static int xlgmac_alloc_channels(struct xlgmac_pdata *pdata)
 	}
 
 	pdata->channel_head = channel_head;
+	pdata->channel_count = count;
 
 	return 0;
 

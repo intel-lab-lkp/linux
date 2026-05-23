@@ -98,8 +98,7 @@ static int xlgmac_init(struct xlgmac_pdata *pdata)
 		return ret;
 	}
 
-	/* Channel and ring params initializtion
-	 *  pdata->channel_count;
+	/* Ring params initialization
 	 *  pdata->tx_ring_count;
 	 *  pdata->rx_ring_count;
 	 *  pdata->tx_desc_count;
@@ -144,9 +143,6 @@ static int xlgmac_init(struct xlgmac_pdata *pdata)
 		dev_err(pdata->dev, "error setting real rx queue count\n");
 		return ret;
 	}
-
-	pdata->channel_count =
-		max_t(unsigned int, pdata->tx_ring_count, pdata->rx_ring_count);
 
 	/* Initialize RSS hash key and lookup table */
 	netdev_rss_key_fill(pdata->rss_key, sizeof(pdata->rss_key));
