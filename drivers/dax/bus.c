@@ -177,6 +177,11 @@ static bool is_static(struct dax_region *dax_region)
 	return (dax_region->res.flags & IORESOURCE_DAX_STATIC) != 0;
 }
 
+static bool is_dynamic(struct dax_region *dax_region)
+{
+	return (dax_region->res.flags & IORESOURCE_DAX_DCD) != 0;
+}
+
 bool static_dev_dax(struct dev_dax *dev_dax)
 {
 	return is_static(dev_dax->region);
@@ -299,6 +304,9 @@ static unsigned long long dax_region_avail_size(struct dax_region *dax_region)
 	struct resource *res;
 
 	lockdep_assert_held(&dax_region_rwsem);
+
+	if (is_dynamic(dax_region))
+		return 0;
 
 	for_each_dax_region_resource(dax_region, res)
 		size -= resource_size(res);
@@ -1384,6 +1392,8 @@ static umode_t dev_dax_visible(struct kobject *kobj, struct attribute *a, int n)
 	if (a == &dev_attr_numa_node.attr && !IS_ENABLED(CONFIG_NUMA))
 		return 0;
 	if (a == &dev_attr_mapping.attr && is_static(dax_region))
+		return 0;
+	if (a == &dev_attr_mapping.attr && is_dynamic(dax_region))
 		return 0;
 	if ((a == &dev_attr_align.attr ||
 	     a == &dev_attr_size.attr) && is_static(dax_region))
