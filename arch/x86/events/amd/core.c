@@ -16,7 +16,7 @@
 #include "../perf_event.h"
 
 static DEFINE_PER_CPU(unsigned long, perf_nmi_tstamp);
-static unsigned long perf_nmi_window;
+static unsigned long perf_nmi_window __ro_after_init;
 
 /* AMD Event 0xFFF: Merge.  Used with Large Increment per Cycle events */
 #define AMD_MERGE_EVENT ((0xFULL << 32) | 0xFFULL)
