@@ -84,79 +84,57 @@ u32 tau_interrupts(unsigned long cpu);
 #endif
 #endif /* CONFIG_PPC32 */
 
+struct irq_stat_info {
+	const char	*symbol;
+	const char	*text;
+};
+
+#define ISE(idx, sym, txt)[IRQ_COUNT_##idx] = { .symbol = sym, .text = txt}
+
+static struct irq_stat_info irq_stat_info[IRQ_COUNT_MAX] __ro_after_init = {
+	ISE(LOC_TIMER,		"LOC", "  Local timer interrupts for timer event device\n"),
+	ISE(BCT_TIMER,		"BCT", "  Broadcast timer interrupts for timer event device\n"),
+	ISE(OTHER_TIMER,	"LOC", "  Local timer interrupts for others\n"),
+	ISE(SPURIOUS,		"SPU", "  Spurious interrupts\n"),
+	ISE(PMI,		"PMI", "  Performance monitoring interrupts\n"),
+	ISE(MCE,		"MCE", "  Machine check exceptions\n"),
+	ISE(NMI_SRESET,		"NMI", "  System Reset interrupts\n"),
+#ifdef CONFIG_PPC_WATCHDOG
+	ISE(WATCHDOG,		"WDG", "  Watchdog soft-NMI interrupts\n"),
+#endif
+#ifdef CONFIG_PPC_DOORBELL
+	ISE(DOORBELL,		"DBL", "  Doorbell interrupts\n"),
+#endif
+};
+
 int arch_show_interrupts(struct seq_file *p, int prec)
 {
-	int j;
+	const struct irq_stat_info *info = irq_stat_info;
+
+	for (unsigned int i = 0; i < ARRAY_SIZE(irq_stat_info); i++, info++) {
+		seq_printf(p, "%*s:", prec, info->symbol);
+		irq_proc_emit_counts(p, &irq_stat.counts[i]);
+		seq_puts(p, info->text);
+	}
 
 #if defined(CONFIG_PPC32) && defined(CONFIG_TAU_INT)
 	if (tau_initialized) {
+		int j;
 		seq_printf(p, "%*s:", prec, "TAU");
 		for_each_online_cpu(j)
 			seq_put_decimal_ull_width(p, " ", tau_interrupts(j), 10);
 		seq_puts(p, "  PowerPC             Thermal Assist (cpu temp)\n");
 	}
 #endif /* CONFIG_PPC32 && CONFIG_TAU_INT */
-
-	seq_printf(p, "%*s:", prec, "LOC");
-	for_each_online_cpu(j)
-		seq_put_decimal_ull_width(p, " ", per_cpu(irq_stat, j).timer_irqs_event, 10);
-        seq_printf(p, "  Local timer interrupts for timer event device\n");
-
-	seq_printf(p, "%*s:", prec, "BCT");
-	for_each_online_cpu(j)
-		seq_put_decimal_ull_width(p, " ", per_cpu(irq_stat, j).broadcast_irqs_event, 10);
-	seq_printf(p, "  Broadcast timer interrupts for timer event device\n");
-
-	seq_printf(p, "%*s:", prec, "LOC");
-	for_each_online_cpu(j)
-		seq_put_decimal_ull_width(p, " ", per_cpu(irq_stat, j).timer_irqs_others, 10);
-        seq_printf(p, "  Local timer interrupts for others\n");
-
-	seq_printf(p, "%*s:", prec, "SPU");
-	for_each_online_cpu(j)
-		seq_put_decimal_ull_width(p, " ", per_cpu(irq_stat, j).spurious_irqs, 10);
-	seq_printf(p, "  Spurious interrupts\n");
-
-	seq_printf(p, "%*s:", prec, "PMI");
-	for_each_online_cpu(j)
-		seq_put_decimal_ull_width(p, " ", per_cpu(irq_stat, j).pmu_irqs, 10);
-	seq_printf(p, "  Performance monitoring interrupts\n");
-
-	seq_printf(p, "%*s:", prec, "MCE");
-	for_each_online_cpu(j)
-		seq_put_decimal_ull_width(p, " ", per_cpu(irq_stat, j).mce_exceptions, 10);
-	seq_printf(p, "  Machine check exceptions\n");
-
 #ifdef CONFIG_PPC_BOOK3S_64
 	if (cpu_has_feature(CPU_FTR_HVMODE)) {
+		int j;
 		seq_printf(p, "%*s:", prec, "HMI");
 		for_each_online_cpu(j)
 			seq_put_decimal_ull_width(p, " ", paca_ptrs[j]->hmi_irqs, 10);
 		seq_printf(p, "  Hypervisor Maintenance Interrupts\n");
 	}
 #endif
-
-	seq_printf(p, "%*s:", prec, "NMI");
-	for_each_online_cpu(j)
-		seq_put_decimal_ull_width(p, " ", per_cpu(irq_stat, j).sreset_irqs, 10);
-	seq_printf(p, "  System Reset interrupts\n");
-
-#ifdef CONFIG_PPC_WATCHDOG
-	seq_printf(p, "%*s:", prec, "WDG");
-	for_each_online_cpu(j)
-		seq_put_decimal_ull_width(p, " ", per_cpu(irq_stat, j).soft_nmi_irqs, 10);
-	seq_printf(p, "  Watchdog soft-NMI interrupts\n");
-#endif
-
-#ifdef CONFIG_PPC_DOORBELL
-	if (cpu_has_feature(CPU_FTR_DBELL)) {
-		seq_printf(p, "%*s:", prec, "DBL");
-		for_each_online_cpu(j)
-			seq_put_decimal_ull_width(p, " ", per_cpu(irq_stat, j).doorbell_irqs, 10);
-		seq_printf(p, "  Doorbell interrupts\n");
-	}
-#endif
-
 	return 0;
 }
 
@@ -165,24 +143,15 @@ int arch_show_interrupts(struct seq_file *p, int prec)
  */
 u64 arch_irq_stat_cpu(unsigned int cpu)
 {
-	u64 sum = per_cpu(irq_stat, cpu).timer_irqs_event;
+	irq_cpustat_t *p = per_cpu_ptr(&irq_stat, cpu);
+	u64 sum = 0;
 
-	sum += per_cpu(irq_stat, cpu).broadcast_irqs_event;
-	sum += per_cpu(irq_stat, cpu).pmu_irqs;
-	sum += per_cpu(irq_stat, cpu).mce_exceptions;
-	sum += per_cpu(irq_stat, cpu).spurious_irqs;
-	sum += per_cpu(irq_stat, cpu).timer_irqs_others;
+	for (unsigned int i = 0; i < ARRAY_SIZE(irq_stat_info); i++)
+		sum += p->counts[i];
+
 #ifdef CONFIG_PPC_BOOK3S_64
 	sum += paca_ptrs[cpu]->hmi_irqs;
 #endif
-	sum += per_cpu(irq_stat, cpu).sreset_irqs;
-#ifdef CONFIG_PPC_WATCHDOG
-	sum += per_cpu(irq_stat, cpu).soft_nmi_irqs;
-#endif
-#ifdef CONFIG_PPC_DOORBELL
-	sum += per_cpu(irq_stat, cpu).doorbell_irqs;
-#endif
-
 	return sum;
 }
 
@@ -248,7 +217,7 @@ static void __do_irq(struct pt_regs *regs, unsigned long oldsp)
 
 	/* And finally process it */
 	if (unlikely(!irq))
-		__this_cpu_inc(irq_stat.spurious_irqs);
+		inc_irq_stat(SPURIOUS);
 	else
 		generic_handle_irq(irq);
 
