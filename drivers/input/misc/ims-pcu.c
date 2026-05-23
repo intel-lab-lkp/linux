@@ -406,7 +406,16 @@ static void ims_pcu_destroy_gamepad(struct ims_pcu *pcu)
 
 static void ims_pcu_report_events(struct ims_pcu *pcu)
 {
-	u32 data = get_unaligned_be32(&pcu->read_buf[3]);
+	u32 data;
+
+	/* 6-axis setting (1 byte) + button data + checksum */
+	if (pcu->read_pos < IMS_PCU_DATA_OFFSET + 1 + sizeof(data) + 1) {
+		dev_warn(pcu->dev, "Short buttons report: %d bytes\n",
+			 pcu->read_pos);
+		return;
+	}
+
+	data = get_unaligned_be32(&pcu->read_buf[IMS_PCU_DATA_OFFSET + 1]);
 
 	ims_pcu_buttons_report(pcu, data & ~IMS_PCU_GAMEPAD_MASK);
 	if (pcu->gamepad)
@@ -716,6 +725,12 @@ static int ims_pcu_get_info(struct ims_pcu *pcu)
 		dev_err(pcu->dev,
 			"GET_INFO command failed, error: %d\n", error);
 		return error;
+	}
+
+	if (pcu->cmd_buf_len < IMS_PCU_DATA_OFFSET + IMS_PCU_SET_INFO_SIZE + 1) {
+		dev_err(pcu->dev, "Short GET_INFO response: %d bytes\n",
+			pcu->cmd_buf_len);
+		return -EIO;
 	}
 
 	memcpy(pcu->part_number,
@@ -1283,6 +1298,12 @@ static int ims_pcu_read_ofn_config(struct ims_pcu *pcu, u8 addr, u8 *data)
 	if (error)
 		return error;
 
+	if (pcu->cmd_buf_len < OFN_REG_RESULT_OFFSET + 2 + 1) {
+		dev_err(pcu->dev, "Short OFN_GET_CONFIG response: %d bytes\n",
+			pcu->cmd_buf_len);
+		return -EIO;
+	}
+
 	result = (s16)get_unaligned_le16(pcu->cmd_buf + OFN_REG_RESULT_OFFSET);
 	if (result < 0)
 		return -EIO;
@@ -1843,6 +1864,12 @@ static int ims_pcu_get_device_info(struct ims_pcu *pcu)
 		return error;
 	}
 
+	if (pcu->cmd_buf_len < IMS_PCU_DATA_OFFSET + 6 + 1) {
+		dev_err(pcu->dev, "Short GET_FW_VERSION response: %d bytes\n",
+			pcu->cmd_buf_len);
+		return -EIO;
+	}
+
 	snprintf(pcu->fw_version, sizeof(pcu->fw_version),
 		 "%02d%02d%02d%02d.%c%c",
 		 pcu->cmd_buf[2], pcu->cmd_buf[3], pcu->cmd_buf[4], pcu->cmd_buf[5],
@@ -1855,6 +1882,12 @@ static int ims_pcu_get_device_info(struct ims_pcu *pcu)
 		return error;
 	}
 
+	if (pcu->cmd_buf_len < IMS_PCU_DATA_OFFSET + 6 + 1) {
+		dev_err(pcu->dev, "Short GET_BL_VERSION response: %d bytes\n",
+			pcu->cmd_buf_len);
+		return -EIO;
+	}
+
 	snprintf(pcu->bl_version, sizeof(pcu->bl_version),
 		 "%02d%02d%02d%02d.%c%c",
 		 pcu->cmd_buf[2], pcu->cmd_buf[3], pcu->cmd_buf[4], pcu->cmd_buf[5],
@@ -1865,6 +1898,12 @@ static int ims_pcu_get_device_info(struct ims_pcu *pcu)
 		dev_err(pcu->dev,
 			"RESET_REASON command failed, error: %d\n", error);
 		return error;
+	}
+
+	if (pcu->cmd_buf_len < IMS_PCU_DATA_OFFSET + 1 + 1) {
+		dev_err(pcu->dev, "Short RESET_REASON response: %d bytes\n",
+			pcu->cmd_buf_len);
+		return -EIO;
 	}
 
 	snprintf(pcu->reset_reason, sizeof(pcu->reset_reason),
@@ -1891,6 +1930,12 @@ static int ims_pcu_identify_type(struct ims_pcu *pcu, u8 *device_id)
 		dev_err(pcu->dev,
 			"GET_DEVICE_ID command failed, error: %d\n", error);
 		return error;
+	}
+
+	if (pcu->cmd_buf_len < IMS_PCU_DATA_OFFSET + 1 + 1) {
+		dev_err(pcu->dev, "Short GET_DEVICE_ID response: %d bytes\n",
+			pcu->cmd_buf_len);
+		return -EIO;
 	}
 
 	*device_id = pcu->cmd_buf[IMS_PCU_DATA_OFFSET];
@@ -1982,6 +2027,12 @@ static int ims_pcu_init_bootloader_mode(struct ims_pcu *pcu)
 	if (error) {
 		dev_err(pcu->dev, "Bootloader does not respond, aborting\n");
 		return error;
+	}
+
+	if (pcu->cmd_buf_len < IMS_PCU_DATA_OFFSET + 15 + 4 + 1) {
+		dev_err(pcu->dev, "Short QUERY_DEVICE response: %d bytes\n",
+			pcu->cmd_buf_len);
+		return -EIO;
 	}
 
 	pcu->fw_start_addr =
