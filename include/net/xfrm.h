@@ -1141,7 +1141,7 @@ struct xfrm_offload {
 #define	CRYPTO_FALLBACK		8
 #define	XFRM_GSO_SEGMENT	16
 #define	XFRM_GRO		32
-/* 64 is free */
+#define	XFRM_ESP_NO_TRAILER	64
 #define	XFRM_DEV_RESUME		128
 #define	XFRM_XMIT		256
 
@@ -1157,6 +1157,12 @@ struct xfrm_offload {
 
 	/* Used to keep whole l2 header for transport mode GRO */
 	__u16			orig_mac_len;
+
+	/*
+	 * ESP packet engines can reserve tailroom in the generic ESP path and
+	 * generate padding, next-header and ICV bytes during device TX.
+	 */
+	__u16			esp_tx_tailen;
 
 	__u8			proto;
 	__u8			inner_ipproto;

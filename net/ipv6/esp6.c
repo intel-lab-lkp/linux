@@ -751,7 +751,11 @@ int esp6_input_done2(struct sk_buff *skb, int err)
 	if (unlikely(err))
 		goto out;
 
-	err = esp_remove_trailer(skb);
+	/* Hardware ESP decapsulation can already remove pad/trailer/ICV. */
+	if (xo && (xo->flags & XFRM_ESP_NO_TRAILER))
+		err = xo->proto;
+	else
+		err = esp_remove_trailer(skb);
 	if (unlikely(err < 0))
 		goto out;
 

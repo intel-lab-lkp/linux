@@ -308,8 +308,10 @@ static int esp6_xmit(struct xfrm_state *x, struct sk_buff *skb,  netdev_features
 	int blksize;
 	struct xfrm_offload *xo;
 	struct crypto_aead *aead;
+	struct sk_buff *trailer;
 	struct esp_info esp;
 	bool hw_offload = true;
+	bool hw_trailer = false;
 	__u32 seq;
 
 	esp.inplace = true;
@@ -318,6 +320,7 @@ static int esp6_xmit(struct xfrm_state *x, struct sk_buff *skb,  netdev_features
 
 	if (!xo)
 		return -EINVAL;
+	xo->esp_tx_tailen = 0;
 
 	if (!(features & NETIF_F_HW_ESP) || x->xso.dev != skb->dev) {
 		xo->flags |= CRYPTO_FALLBACK;
@@ -338,8 +341,32 @@ static int esp6_xmit(struct xfrm_state *x, struct sk_buff *skb,  netdev_features
 	esp.clen = ALIGN(skb->len + 2 + esp.tfclen, blksize);
 	esp.plen = esp.clen - skb->len - esp.tfclen;
 	esp.tailen = esp.tfclen + esp.plen + alen;
+	if (esp.tailen > U16_MAX)
+		return -EINVAL;
 
-	if (!hw_offload || !skb_is_gso(skb)) {
+	if (hw_offload && !skb_is_gso(skb) && !x->encap && x->xso.dev &&
+	    x->xso.dev->xfrmdev_ops &&
+	    x->xso.dev->xfrmdev_ops->xdo_dev_esp_tx_hw_trailer)
+		hw_trailer =
+			x->xso.dev->xfrmdev_ops->xdo_dev_esp_tx_hw_trailer(skb, x);
+
+	if (hw_trailer) {
+		int esph_offset;
+
+		/*
+		 * The device packet engine will write ESP padding, next-header
+		 * and ICV bytes. Keep skb->len unchanged here, but make sure the
+		 * later DMA writer owns enough linear tailroom.
+		 */
+		esp.esph = ip_esp_hdr(skb);
+		esph_offset = (unsigned char *)esp.esph - skb_transport_header(skb);
+		esp.nfrags = skb_cow_data(skb, esp.tailen, &trailer);
+		if (esp.nfrags < 0)
+			return esp.nfrags;
+		esp.esph = (struct ip_esp_hdr *)(skb_transport_header(skb) +
+						 esph_offset);
+		xo->esp_tx_tailen = esp.tailen;
+	} else if (!hw_offload || !skb_is_gso(skb)) {
 		esp.nfrags = esp6_output_head(x, skb, &esp);
 		if (esp.nfrags < 0)
 			return esp.nfrags;
