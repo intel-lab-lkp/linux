@@ -1384,7 +1384,7 @@ TRACE_EVENT(nfsd_handle_dir_event,
 	TP_STRUCT__entry(
 		__field(u32, mask)
 		__field(dev_t, s_dev)
-		__field(ino_t, i_ino)
+		__field(u64, i_ino)
 		__string_len(name, name ? name->name : NULL,
 				   name ? name->len : 0)
 	),
@@ -1394,7 +1394,7 @@ TRACE_EVENT(nfsd_handle_dir_event,
 		__entry->i_ino = dir ? dir->i_ino : 0;
 		__assign_str(name);
 	),
-	TP_printk("inode=0x%x:0x%x:0x%lx mask=%s name=%s",
+	TP_printk("inode=0x%x:0x%x:0x%llx mask=%s name=%s",
 			MAJOR(__entry->s_dev), MINOR(__entry->s_dev),
 			__entry->i_ino, show_fsnotify_mask(__entry->mask),
 			__get_str(name))
