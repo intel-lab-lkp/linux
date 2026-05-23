@@ -227,7 +227,7 @@ static int cat_run_test(const struct resctrl_test *test, const struct user_param
 	/* Get the largest contiguous exclusive portion of the cache */
 	ret = get_mask_no_shareable(test->resource, &long_mask);
 	if (ret)
-		return ret;
+		long_mask = full_cache_mask;
 
 	/* Get L3/L2 cache size */
 	ret = get_cache_size(uparams->cpu, test->resource, &cache_total_size);
