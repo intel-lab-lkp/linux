@@ -189,6 +189,7 @@ synproxy_tstamp_adjust(struct sk_buff *skb, unsigned int protoff,
 		       const struct nf_conn_synproxy *synproxy)
 {
 	unsigned int optoff, optend;
+	bool tstamp_seen = false;
 	__be32 *ptr, old;
 
 	if (synproxy->tsoff == 0)
@@ -216,6 +217,8 @@ synproxy_tstamp_adjust(struct sk_buff *skb, unsigned int protoff,
 				return false;
 			if (op[0] == TCPOPT_TIMESTAMP &&
 			    op[1] == TCPOLEN_TIMESTAMP) {
+				if (tstamp_seen)
+					return false;
 				if (CTINFO2DIR(ctinfo) == IP_CT_DIR_REPLY) {
 					ptr = (__be32 *)&op[2];
 					old = *ptr;
@@ -229,7 +232,10 @@ synproxy_tstamp_adjust(struct sk_buff *skb, unsigned int protoff,
 				}
 				inet_proto_csum_replace4(&th->check, skb,
 							 old, *ptr, false);
-				return true;
+				/* continue parsing options in case there is a
+				 * duplicated tstamp, drop the packet
+				 */
+				tstamp_seen = true;
 			}
 			optoff += op[1];
 		}
