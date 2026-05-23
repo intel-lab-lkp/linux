@@ -1343,6 +1343,109 @@ static void extract_tag_group(struct list_head *pending,
 }
 
 /*
+ * Validate shared_extn_seq across a tag group already sorted ascending.
+ *
+ * A tag group is well-formed iff either every member has
+ * shared_extn_seq == 0 (non-sharable allocation) or the sorted group is
+ * exactly 1, 2, ..., n (sharable).  Anything else — mix, gap, duplicate,
+ * non-zero starting other than 1 — is a device firmware bug.
+ */
+static int cxl_check_group_seq(struct device *dev,
+			       const uuid_t *tag,
+			       const struct list_head *group)
+{
+	struct cxl_extent_list_node *pos;
+	u16 first, expected;
+
+	if (list_empty(group))
+		return 0;
+
+	pos = list_first_entry(group, struct cxl_extent_list_node, list);
+	first = le16_to_cpu(pos->extent->shared_extn_seq);
+
+	if (first == 0) {
+		list_for_each_entry(pos, group, list) {
+			if (le16_to_cpu(pos->extent->shared_extn_seq) != 0) {
+				dev_warn(dev,
+					 "Tag %pUb: shared_extn_seq mixed 0/non-zero in one allocation (firmware bug)\n",
+					 tag);
+				return -EINVAL;
+			}
+		}
+		return 0;
+	}
+
+	if (first != 1) {
+		dev_warn(dev,
+			 "Tag %pUb: shared_extn_seq starts at %u, expected 1 (firmware bug)\n",
+			 tag, first);
+		return -EINVAL;
+	}
+
+	expected = 1;
+	list_for_each_entry(pos, group, list) {
+		u16 s = le16_to_cpu(pos->extent->shared_extn_seq);
+
+		if (s != expected) {
+			dev_warn(dev,
+				 "Tag %pUb: shared_extn_seq gap/dup: expected %u got %u (firmware bug)\n",
+				 tag, expected, s);
+			return -EINVAL;
+		}
+		expected++;
+	}
+	return 0;
+}
+
+/*
+ * For tagged groups, reject allocations that span DC partitions.  A tag
+ * is an allocation identity; the partition's CDAT DSMAS entry is what
+ * tells the host which attributes (sharable, writable, coherency)
+ * apply.  Untagged groups are skipped — the spec does not define a
+ * cross-chain identity for them.
+ */
+static int cxl_check_group_partition(struct cxl_memdev_state *mds,
+				     const uuid_t *tag,
+				     const struct list_head *group)
+{
+	struct device *dev = mds->cxlds.dev;
+	const struct cxl_dpa_partition *first_part = NULL;
+	u64 first_dpa = 0;
+	struct cxl_extent_list_node *pos;
+
+	if (uuid_is_null(tag) || list_empty(group))
+		return 0;
+
+	list_for_each_entry(pos, group, list) {
+		struct cxl_extent *extent = pos->extent;
+		struct range ext_range = (struct range) {
+			.start = le64_to_cpu(extent->start_dpa),
+			.end = le64_to_cpu(extent->start_dpa) +
+				le64_to_cpu(extent->length) - 1,
+		};
+		const struct cxl_dpa_partition *part;
+
+		part = cxl_extent_dc_partition(mds, extent, &ext_range);
+		if (!part)
+			return -ENXIO;
+
+		if (!first_part) {
+			first_part = part;
+			first_dpa = ext_range.start;
+			continue;
+		}
+
+		if (part != first_part) {
+			dev_warn(dev,
+				 "Tag %pUb: extents span DC partitions (DPA:%#llx and DPA:%#llx), firmware bug\n",
+				 tag, first_dpa, ext_range.start);
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+/*
  * Drive the pending Add-Capacity records through cxl_add_extent(),
  * grouped by tag.  Per group: extract from pending, stable-sort by
  * shared_extn_seq, then attempt to add each extent.  Online the tag
@@ -1370,6 +1473,20 @@ static int cxl_add_pending(struct cxl_memdev_state *mds)
 					 list)->extent->uuid);
 		extract_tag_group(pending, &tag, &group);
 		list_sort(NULL, &group, extent_seq_compare);
+
+		/* Sequence-number integrity */
+		if (cxl_check_group_seq(dev, &tag, &group)) {
+			list_for_each_entry_safe(pos, tmp, &group, list)
+				delete_extent_node(pos);
+			continue;
+		}
+
+		/* Partition equality (skipped for null UUID) */
+		if (cxl_check_group_partition(mds, &tag, &group)) {
+			list_for_each_entry_safe(pos, tmp, &group, list)
+				delete_extent_node(pos);
+			continue;
+		}
 
 		/* Alignment gate — abort the group if any member fails */
 		bool aligned = true;
