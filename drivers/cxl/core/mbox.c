@@ -1587,25 +1587,6 @@ static int handle_add_event(struct cxl_memdev_state *mds,
 	return rc;
 }
 
-/*
- * Stub: ack the release back to the device so it knows we are not
- * using the range.  A later commit replaces this with the real
- * teardown that walks the region's tag group and tears down the
- * member dc_extent devices.
- */
-static int cxl_rm_extent(struct cxl_memdev_state *mds,
-			 struct cxl_extent *extent)
-{
-	u64 start_dpa = le64_to_cpu(extent->start_dpa);
-	struct range dpa_range = {
-		.start = start_dpa,
-		.end = start_dpa + le64_to_cpu(extent->length) - 1,
-	};
-
-	memdev_release_extent(mds, &dpa_range);
-	return 0;
-}
-
 static char *cxl_dcd_evt_type_str(u8 type)
 {
 	switch (type) {

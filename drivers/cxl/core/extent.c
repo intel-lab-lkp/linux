@@ -344,6 +344,107 @@ static void dc_extent_unregister(void *ext)
 	device_unregister(&dc_extent->dev);
 }
 
+static void rm_tag_group(struct cxl_dc_tag_group *group)
+{
+	struct device *region_dev = &group->cxlr_dax->dev;
+	struct dc_extent *dc_extent;
+	unsigned long index;
+
+	/*
+	 * Tagged allocations release atomically.  Invalidate caches once
+	 * for the whole group (no mappings exist at this point — partial
+	 * release is not supported, so all members are leaving use
+	 * together) before tearing down each dc_extent device.
+	 *
+	 * Pin @group across the walk: each devm_release_action runs the
+	 * dc_extent_unregister action synchronously, which drops the last
+	 * reference on the dc_extent device and fires dc_extent_release.
+	 * The release decrements group->nr_extents and, on the final
+	 * decrement, frees @group.  Without the pin the next iteration's
+	 * xa_find_after() dereferences a freed xarray.
+	 */
+	cxl_region_invalidate_memregion(group->cxlr_dax->cxlr);
+
+	group->nr_extents++;
+	xa_for_each(&group->dc_extents, index, dc_extent)
+		devm_release_action(region_dev, dc_extent_unregister, dc_extent);
+	group->nr_extents--;
+	if (!group->nr_extents)
+		free_tag_group(group);
+}
+
+int cxl_rm_extent(struct cxl_memdev_state *mds, struct cxl_extent *extent)
+{
+	u64 start_dpa = le64_to_cpu(extent->start_dpa);
+	struct cxl_memdev *cxlmd = mds->cxlds.cxlmd;
+	struct cxl_endpoint_decoder *cxled;
+	struct cxl_dax_region *cxlr_dax;
+	struct cxl_dc_tag_group *group;
+	struct dc_extent *dc_extent;
+	struct cxl_region *cxlr;
+	struct range dpa_range;
+	unsigned long idx;
+	uuid_t tag;
+
+	dpa_range = (struct range) {
+		.start = start_dpa,
+		.end = start_dpa + le64_to_cpu(extent->length) - 1,
+	};
+
+	guard(rwsem_read)(&cxl_rwsem.region);
+	cxlr = cxl_dpa_to_region(cxlmd, start_dpa, &cxled);
+	if (!cxlr) {
+		/*
+		 * No region can happen here for a few reasons:
+		 *
+		 * 1) Extents were accepted and the host crashed/rebooted
+		 *    leaving them in an accepted state.  On reboot the host
+		 *    has not yet created a region to own them.
+		 *
+		 * 2) Region destruction won the race with the device releasing
+		 *    all the extents.  Here the release will be a duplicate of
+		 *    the one sent via region destruction.
+		 *
+		 * 3) The device is confused and releasing extents for which no
+		 *    region ever existed.
+		 *
+		 * In all these cases make sure the device knows we are not
+		 * using this extent.
+		 */
+		memdev_release_extent(mds, &dpa_range);
+		return -ENXIO;
+	}
+
+	cxlr_dax = cxlr->cxlr_dax;
+	import_uuid(&tag, extent->uuid);
+
+	/*
+	 * Find the dc_extent whose DPA range covers the released range and
+	 * whose tag matches.  The release targets the entire containing
+	 * tag group atomically; partial release is not supported.
+	 */
+	group = NULL;
+	xa_for_each(&cxlr_dax->dc_extents, idx, dc_extent) {
+		if (dc_extent->cxled != cxled)
+			continue;
+		if (!range_contains(&dc_extent->dpa_range, &dpa_range))
+			continue;
+		if (!uuid_equal(&dc_extent->group->uuid, &tag))
+			continue;
+		group = dc_extent->group;
+		break;
+	}
+	if (!group) {
+		dev_err(&cxlr_dax->dev,
+			"release DPA %pra (%pU) matches no dc_extent\n",
+			&dpa_range, &tag);
+		return -EINVAL;
+	}
+
+	rm_tag_group(group);
+	return 0;
+}
+
 static void cleanup_pending_dc_extent(struct dc_extent *dc_extent)
 {
 	struct cxl_dc_tag_group *group = dc_extent->group;
