@@ -87,9 +87,13 @@ u32 tau_interrupts(unsigned long cpu);
 struct irq_stat_info {
 	const char	*symbol;
 	const char	*text;
+	int		skip;
 };
 
-#define ISE(idx, sym, txt)[IRQ_COUNT_##idx] = { .symbol = sym, .text = txt}
+/* ISE - IRQ STAT ENABLED, ISC - IRQ STAT CONDITIONAL */
+#define ISE(idx, sym, txt)[IRQ_COUNT_##idx] = { .symbol = sym, .text = txt, .skip = 0}
+#define ISC(idx, sym, txt)[IRQ_COUNT_##idx] = { .symbol = sym, .text = txt, .skip = 1}
+
 
 static struct irq_stat_info irq_stat_info[IRQ_COUNT_MAX] __ro_after_init = {
 	ISE(LOC_TIMER,		"LOC", "  Local timer interrupts for timer event device\n"),
@@ -97,8 +101,8 @@ static struct irq_stat_info irq_stat_info[IRQ_COUNT_MAX] __ro_after_init = {
 	ISE(OTHER_TIMER,	"LOC", "  Local timer interrupts for others\n"),
 	ISE(SPURIOUS,		"SPU", "  Spurious interrupts\n"),
 	ISE(PMI,		"PMI", "  Performance monitoring interrupts\n"),
-	ISE(MCE,		"MCE", "  Machine check exceptions\n"),
-	ISE(NMI_SRESET,		"NMI", "  System Reset interrupts\n"),
+	ISC(MCE,		"MCE", "  Machine check exceptions\n"),
+	ISC(NMI_SRESET,		"NMI", "  System Reset interrupts\n"),
 #ifdef CONFIG_PPC_WATCHDOG
 	ISE(WATCHDOG,		"WDG", "  Watchdog soft-NMI interrupts\n"),
 #endif
@@ -107,11 +111,25 @@ static struct irq_stat_info irq_stat_info[IRQ_COUNT_MAX] __ro_after_init = {
 #endif
 };
 
+/*
+ * Used for default disabled counters to increment the stats and to enable the
+ * entry for /proc/interrupts output.
+ */
+static DECLARE_BITMAP(irq_stat_count_show, IRQ_COUNT_MAX) __read_mostly;
+void inc_irq_stat_and_enable(enum irq_stat_counts which)
+{
+	__this_cpu_inc(irq_stat.counts[which]);
+	set_bit(which, irq_stat_count_show);
+}
+
 int arch_show_interrupts(struct seq_file *p, int prec)
 {
 	const struct irq_stat_info *info = irq_stat_info;
 
 	for (unsigned int i = 0; i < ARRAY_SIZE(irq_stat_info); i++, info++) {
+		if (!test_bit(i, irq_stat_count_show))
+			continue;
+
 		seq_printf(p, "%*s:", prec, info->symbol);
 		irq_proc_emit_counts(p, &irq_stat.counts[i]);
 		seq_puts(p, info->text);
@@ -137,6 +155,19 @@ int arch_show_interrupts(struct seq_file *p, int prec)
 #endif
 	return 0;
 }
+
+static int __init irq_init_stats(void)
+{
+	struct irq_stat_info *info = irq_stat_info;
+
+	for (unsigned int i = 0; i < ARRAY_SIZE(irq_stat_info); i++, info++) {
+		if (info->skip == 0)
+			set_bit(i, irq_stat_count_show);
+	}
+
+	return 0;
+}
+late_initcall(irq_init_stats);
 
 /*
  * /proc/stat helpers
