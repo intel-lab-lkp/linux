@@ -46,4 +46,16 @@ config POWER_SEQUENCING_PCIE_M2
 	  connectors. This driver handles the power sequencing for the M.2
 	  connectors exposing multiple interfaces like PCIe, SATA, UART, etc...
 
+config POWER_SEQUENCING_TEGRA_MODEM
+	tristate "NVIDIA Tegra modem power sequencing driver"
+	depends on ARCH_TEGRA && USB_NET_XMM6260 && USB_SUPPORT
+	help
+	  Enable this to support power sequence for XMM6260 modem found in
+	  various Tegra devices with cellular capabilities, like
+	  LG Optimus 4X P880, LG Optimus Vu P895, Google Nexus 7 (2012) 3G
+	  and ASUS Transformer Pad 3G TF300TG.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called pwrseq-tegra-modem.
+
 endif
