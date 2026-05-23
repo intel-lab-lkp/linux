@@ -494,6 +494,19 @@ static int iwl_mvm_rx_crypto(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 		return 0;
 	case RX_MPDU_RES_STATUS_SEC_CMAC_GMAC_ENC:
 		break;
+	case IWL_RX_MPDU_STATUS_SEC_UNKNOWN:
+		/*
+		 * Firmware-indicated unknown cipher; the AMPDU case is
+		 * already handled at the top of this function.  For
+		 * non-AMPDU frames this is valid (cipher not enumerated
+		 * by the RX status field, or frame before key install).
+		 * Pass undecrypted to mac80211.
+		 */
+		dev_info_once(mvm->dev,
+			      "RX SEC_UNKNOWN (status=0x%x)\n", status);
+		IWL_DEBUG_DROP(mvm,
+			       "RX SEC_UNKNOWN (status=0x%x)\n", status);
+		break;
 	default:
 		/*
 		 * Sometimes we can get frames that were not decrypted
