@@ -2943,8 +2943,13 @@ static int nvme_configure_apst(struct nvme_ctrl *ctrl)
 			continue;
 
 		exit_latency_us = (u64)le32_to_cpu(ctrl->psd[state].exit_lat);
-		if (exit_latency_us > ctrl->ps_max_latency_us)
+		if (exit_latency_us > ctrl->ps_max_latency_us) {
+			dev_info_once(ctrl->device,
+				      "APST: skipping non-op PS%d (exit_lat %llu us > cap %llu us); raise nvme_core.default_ps_max_latency_us to enable\n",
+				      state, exit_latency_us,
+				      ctrl->ps_max_latency_us);
 			continue;
+		}
 
 		total_latency_us = exit_latency_us +
 			le32_to_cpu(ctrl->psd[state].entry_lat);
