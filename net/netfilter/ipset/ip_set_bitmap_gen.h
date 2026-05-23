@@ -51,7 +51,7 @@ mtype_ext_cleanup(struct ip_set *set)
 	u32 id;
 
 	for (id = 0; id < map->elements; id++)
-		if (test_bit(id, map->members))
+		if (test_bit_acquire(id, map->members))
 			ip_set_ext_destroy(set, get_ext(set, map, id));
 }
 
@@ -142,6 +142,7 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 			ret = 0;
 		} else if (!(flags & IPSET_FLAG_EXIST)) {
 			set_bit(e->id, map->members);
+			smp_mb__after_atomic();
 			return -IPSET_ERR_EXIST;
 		}
 		/* Element is re-added, cleanup extensions */
@@ -166,6 +167,7 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 
 	/* Activate element */
 	set_bit(e->id, map->members);
+	smp_mb__after_atomic();
 	set->elements++;
 
 	return 0;
@@ -219,7 +221,7 @@ mtype_list(const struct ip_set *set,
 		cond_resched_rcu();
 		id = cb->args[IPSET_CB_ARG0];
 		x = get_ext(set, map, id);
-		if (!test_bit(id, map->members) ||
+		if (!test_bit_acquire(id, map->members) ||
 		    (SET_WITH_TIMEOUT(set) &&
 #ifdef IP_SET_BITMAP_STORED_TIMEOUT
 		     mtype_is_filled(x) &&
@@ -278,6 +280,7 @@ mtype_gc(struct timer_list *t)
 			x = get_ext(set, map, id);
 			if (ip_set_timeout_expired(ext_timeout(x, set))) {
 				clear_bit(id, map->members);
+				smp_mb__after_atomic();
 				ip_set_ext_destroy(set, x);
 				set->elements--;
 			}
