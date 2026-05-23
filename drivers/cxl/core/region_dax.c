@@ -82,6 +82,26 @@ static void cxlr_dax_unregister(void *_cxlr_dax)
 	device_unregister(&cxlr_dax->dev);
 }
 
+static int cxlr_add_existing_extents(struct cxl_region *cxlr)
+{
+	struct cxl_region_params *p = &cxlr->params;
+	int i, latched_rc = 0;
+
+	for (i = 0; i < p->nr_targets; i++) {
+		struct device *dev = &p->targets[i]->cxld.dev;
+		int rc;
+
+		rc = cxl_process_extent_list(p->targets[i]);
+		if (rc) {
+			dev_err(dev, "Existing extent processing failed %d\n",
+				rc);
+			latched_rc = rc;
+		}
+	}
+
+	return latched_rc;
+}
+
 int devm_cxl_add_dax_region(struct cxl_region *cxlr)
 {
 	struct device *dev;
@@ -109,6 +129,13 @@ int devm_cxl_add_dax_region(struct cxl_region *cxlr)
 
 	dev_dbg(&cxlr->dev, "%s: register %s\n", dev_name(dev->parent),
 		dev_name(dev));
+
+	if (cxlr->mode == CXL_PARTMODE_DYNAMIC_RAM_A) {
+		rc = cxlr_add_existing_extents(cxlr);
+		if (rc)
+			dev_err(&cxlr->dev,
+				"Existing extent processing failed %d\n", rc);
+	}
 
 	return devm_add_action_or_reset(&cxlr->dev, cxlr_dax_unregister,
 					no_free_ptr(cxlr_dax));
