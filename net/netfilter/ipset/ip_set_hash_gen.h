@@ -342,6 +342,12 @@ mtype_add_cidr(struct ip_set *set, struct htype *h, u8 cidr, u8 n)
 		}
 	}
 	if (j != -1) {
+		/* We shift the cidr values to the right
+		 * by duplicating the entries one by one,
+		 * starting from the end.
+		 * It means the same test can be repeated twice
+		 * by a concurrent mtype_test_cidrs() reader.
+		 */
 		for (; i > j; i--)
 			h->nets[i].cidr[n] = h->nets[i - 1].cidr[n];
 	}
@@ -363,6 +369,11 @@ mtype_del_cidr(struct ip_set *set, struct htype *h, u8 cidr, u8 n)
 		h->nets[CIDR_POS(cidr)].nets[n]--;
 		if (h->nets[CIDR_POS(cidr)].nets[n] > 0)
 			goto unlock;
+		/* We shift the cidr values to the left
+		 * by duplicating the remaining entries one by one.
+		 * It means the same test can be repeated twice
+		 * by a concurrent mtype_test_cidrs() reader.
+		 */
 		for (j = i; j < net_end && h->nets[j].cidr[n]; j++)
 			h->nets[j].cidr[n] = h->nets[j + 1].cidr[n];
 		h->nets[j].cidr[n] = 0;
