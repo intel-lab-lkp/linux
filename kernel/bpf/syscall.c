@@ -3076,7 +3076,7 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)
 
 	err = security_bpf_prog_load(prog, attr, token, uattr.is_kernel);
 	if (err)
-		goto free_prog_sec;
+		goto free_prog;
 
 	/* run eBPF verifier */
 	err = bpf_check(&prog, attr, uattr, uattr_size);
@@ -3122,8 +3122,6 @@ free_used_maps:
 	__bpf_prog_put_noref(prog, prog->aux->real_func_cnt);
 	return err;
 
-free_prog_sec:
-	security_bpf_prog_free(prog);
 free_prog:
 	free_uid(prog->aux->user);
 	if (prog->aux->attach_btf)
