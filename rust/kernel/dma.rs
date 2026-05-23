@@ -5,7 +5,7 @@
 //! C header: [`include/linux/dma-mapping.h`](srctree/include/linux/dma-mapping.h)
 
 use crate::{
-    bindings, build_assert, device,
+    bindings, device,
     device::{Bound, Core},
     error::{to_result, Result},
     prelude::*,
@@ -383,7 +383,7 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
         gfp_flags: kernel::alloc::Flags,
         dma_attrs: Attrs,
     ) -> Result<CoherentAllocation<T>> {
-        build_assert!(
+        const_assert!(
             core::mem::size_of::<T>() > 0,
             "It doesn't make sense for the allocated type to be a ZST"
         );

@@ -251,7 +251,7 @@ where
     where
         T: ListArcSafe<ID2>,
     {
-        build_assert!(ID != ID2);
+        const_assert!(ID != ID2);
 
         // SAFETY: We have a `UniqueArc`, so there is no `ListArc`.
         unsafe { <T as ListArcSafe<ID>>::on_create_list_arc_from_unique(unique.as_mut()) };

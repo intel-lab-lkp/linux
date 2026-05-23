@@ -5,7 +5,7 @@
 //! C header: [`include/linux/xarray.h`](srctree/include/linux/xarray.h)
 
 use crate::{
-    alloc, bindings, build_assert,
+    alloc, bindings, const_assert,
     error::{Error, Result},
     ffi::c_void,
     types::{ForeignOwnable, NotThreadSafe, Opaque},
@@ -230,7 +230,7 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
         value: T,
         gfp: alloc::Flags,
     ) -> Result<Option<T>, StoreError<T>> {
-        build_assert!(
+        const_assert!(
             T::FOREIGN_ALIGN >= 4,
             "pointers stored in XArray must be 4-byte aligned"
         );
