@@ -736,7 +736,7 @@ void SetHalODMVar(
 				ODM_CmnInfoPtrArrayHook(podmpriv, ODM_CMNINFO_STA_STATUS, psta->mac_id, NULL);
 
 				/* spin_unlock_bh(&pHalData->odm_stainfo_lock); */
-		    }
+			}
 		}
 		break;
 	case HAL_ODM_P2P_STATE:
