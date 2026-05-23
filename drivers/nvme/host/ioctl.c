@@ -14,8 +14,9 @@ enum {
 	NVME_IOCTL_PARTITION	= (1 << 1),
 };
 
-static bool nvme_cmd_allowed(struct nvme_ns *ns, struct nvme_command *c,
-		unsigned int flags, bool open_for_write)
+static bool nvme_cmd_allowed(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
+			     struct nvme_command *c, unsigned int flags,
+			     bool open_for_write)
 {
 	u32 effects;
 
@@ -50,6 +51,26 @@ static bool nvme_cmd_allowed(struct nvme_ns *ns, struct nvme_command *c,
 			case NVME_ID_CNS_CTRL:
 				return true;
 			}
+		} else if (c->common.opcode == nvme_admin_set_features) {
+			/*
+			 * Reject Set Features that change controller state the
+			 * driver manages itself; setting them behind the driver's
+			 * back from userspace leaves it unable to react correctly.
+			 * Keep Alive is only armed for fabrics - on other
+			 * transports it has no reserved tag and harms idle power
+			 * states.
+			 */
+			switch (le32_to_cpu(c->features.fid) & 0xff) {
+			case NVME_FEAT_KATO:
+				if (ctrl->ops->flags & NVME_F_FABRICS)
+					break;
+				fallthrough;
+			case NVME_FEAT_HOST_BEHAVIOR:
+			case NVME_FEAT_HOST_MEM_BUF:
+			case NVME_FEAT_NUM_QUEUES:
+			case NVME_FEAT_AUTO_PST:
+				return false;
+			}
 		}
 		goto admin;
 	}
@@ -59,7 +80,7 @@ static bool nvme_cmd_allowed(struct nvme_ns *ns, struct nvme_command *c,
 	 * and marks this command as supported.  If not reject unprivileged
 	 * passthrough.
 	 */
-	effects = nvme_command_effects(ns->ctrl, ns, c->common.opcode);
+	effects = nvme_command_effects(ctrl, ns, c->common.opcode);
 	if (!(effects & NVME_CMD_EFFECTS_CSUPP))
 		goto admin;
 
@@ -298,7 +319,7 @@ static int nvme_user_cmd(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 	c.common.cdw14 = cpu_to_le32(cmd.cdw14);
 	c.common.cdw15 = cpu_to_le32(cmd.cdw15);
 
-	if (!nvme_cmd_allowed(ns, &c, 0, open_for_write))
+	if (!nvme_cmd_allowed(ctrl, ns, &c, 0, open_for_write))
 		return -EACCES;
 
 	if (cmd.timeout_ms)
@@ -345,7 +366,7 @@ static int nvme_user_cmd64(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 	c.common.cdw14 = cpu_to_le32(cmd.cdw14);
 	c.common.cdw15 = cpu_to_le32(cmd.cdw15);
 
-	if (!nvme_cmd_allowed(ns, &c, flags, open_for_write))
+	if (!nvme_cmd_allowed(ctrl, ns, &c, flags, open_for_write))
 		return -EACCES;
 
 	if (cmd.timeout_ms)
@@ -470,7 +491,7 @@ static int nvme_uring_cmd_io(struct nvme_ctrl *ctrl, struct nvme_ns *ns,
 	c.common.cdw14 = cpu_to_le32(READ_ONCE(cmd->cdw14));
 	c.common.cdw15 = cpu_to_le32(READ_ONCE(cmd->cdw15));
 
-	if (!nvme_cmd_allowed(ns, &c, 0, ioucmd->file->f_mode & FMODE_WRITE))
+	if (!nvme_cmd_allowed(ctrl, ns, &c, 0, ioucmd->file->f_mode & FMODE_WRITE))
 		return -EACCES;
 
 	d.metadata = READ_ONCE(cmd->metadata);
