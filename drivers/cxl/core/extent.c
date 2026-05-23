@@ -64,10 +64,54 @@ alloc_tag_group(struct cxl_dax_region *cxlr_dax, uuid_t *uuid)
 }
 
 /*
+ * Find the DC (Dynamic Capacity) partition that fully contains @ext_range,
+ * or NULL if the extent falls outside every DC partition on this memdev.
+ * The returned pointer is owned by mds->cxlds.part[] and lives for the
+ * lifetime of the memdev.
+ */
+const struct cxl_dpa_partition *
+cxl_extent_dc_partition(struct cxl_memdev_state *mds,
+			struct cxl_extent *extent,
+			struct range *ext_range)
+{
+	struct cxl_dev_state *cxlds = &mds->cxlds;
+	struct device *dev = mds->cxlds.dev;
+
+	for (int i = 0; i < cxlds->nr_partitions; i++) {
+		struct cxl_dpa_partition *part = &cxlds->part[i];
+		struct range partition_range = {
+			.start = part->res.start,
+			.end = part->res.end,
+		};
+
+		if (part->mode != CXL_PARTMODE_DYNAMIC_RAM_A)
+			continue;
+
+		if (range_contains(&partition_range, ext_range)) {
+			dev_dbg(dev, "DC extent DPA %pra (DCR:%pra)(%pU)\n",
+				ext_range, &partition_range, extent->uuid);
+			return part;
+		}
+	}
+
+	dev_err_ratelimited(dev,
+			    "DC extent DPA %pra (%pU) is not in a valid DC partition\n",
+			    ext_range, extent->uuid);
+	return NULL;
+}
+
+/*
  * Stage 1 of the add pipeline: pure, no allocation.  Resolve the extent
- * to its region/endpoint decoder and ext_range, and verify the range
- * fits in the resolved endpoint decoder's DPA resource.  Further
- * per-extent invariants layer into this function in subsequent commits.
+ * to its region/endpoint decoder and ext_range, and enforce every
+ * per-extent invariant the device must satisfy:
+ *
+ *   - DPA falls inside a Dynamic Capacity partition (cxl_extent_dc_partition).
+ *   - CDAT-sharability rules:
+ *       sharable:     tag must be non-null AND shared_extn_seq != 0
+ *       non-sharable: shared_extn_seq must be 0  (tag is optional)
+ *     Any cross-mixing is a device firmware bug.
+ *   - DPA resolves to an endpoint decoder attached to a region.
+ *   - The extent's range is fully contained in that ED's DPA resource.
  *
  * Caller must hold cxl_rwsem.region for read (cxl_dpa_to_region()).
  * On success, @out_cxled / @out_cxlr_dax / @out_ext_range carry the
@@ -81,6 +125,10 @@ static int cxl_validate_extent(struct cxl_memdev_state *mds,
 {
 	u64 start_dpa = le64_to_cpu(extent->start_dpa);
 	struct cxl_memdev *cxlmd = mds->cxlds.cxlmd;
+	struct device *dev = mds->cxlds.dev;
+	uuid_t *uuid = (uuid_t *)extent->uuid;
+	u16 seq = le16_to_cpu(extent->shared_extn_seq);
+	const struct cxl_dpa_partition *part;
 	struct cxl_endpoint_decoder *cxled;
 	struct cxl_region *cxlr;
 	struct range ext_range = (struct range) {
@@ -88,6 +136,30 @@ static int cxl_validate_extent(struct cxl_memdev_state *mds,
 		.end = start_dpa + le64_to_cpu(extent->length) - 1,
 	};
 	struct range ed_range;
+
+	part = cxl_extent_dc_partition(mds, extent, &ext_range);
+	if (!part)
+		return -ENXIO;
+
+	if (part->perf.shareable) {
+		if (uuid_is_null(uuid)) {
+			dev_err_ratelimited(dev,
+				"DC extent DPA %pra: sharable-partition extent has null tag (firmware bug)\n",
+				&ext_range);
+			return -ENXIO;
+		}
+		if (seq == 0) {
+			dev_err_ratelimited(dev,
+				"DC extent DPA %pra (%pU): sharable-partition extent missing shared_extn_seq (firmware bug)\n",
+				&ext_range, uuid);
+			return -ENXIO;
+		}
+	} else if (seq != 0) {
+		dev_err_ratelimited(dev,
+			"DC extent DPA %pra (%pU): non-sharable partition but shared_extn_seq=%u (firmware bug)\n",
+			&ext_range, uuid, seq);
+		return -ENXIO;
+	}
 
 	cxlr = cxl_dpa_to_region(cxlmd, start_dpa, &cxled);
 	if (!cxlr)
