@@ -548,17 +548,22 @@ static int ti_eqep_probe(struct platform_device *pdev)
 	pm_runtime_get_sync(dev);
 
 	clk = devm_clk_get_enabled(dev, NULL);
-	if (IS_ERR(clk))
-		return dev_err_probe(dev, PTR_ERR(clk), "failed to enable clock\n");
-
-	err = counter_add(counter);
-	if (err < 0) {
-		pm_runtime_put_sync(dev);
-		pm_runtime_disable(dev);
-		return err;
+	if (IS_ERR(clk)) {
+		err = PTR_ERR(clk);
+		dev_err_probe(dev, err, "failed to enable clock\n");
+		goto err_pm;
 	}
 
+	err = counter_add(counter);
+	if (err < 0)
+		goto err_pm;
+
 	return 0;
+
+err_pm:
+	pm_runtime_put_sync(dev);
+	pm_runtime_disable(dev);
+	return err;
 }
 
 static void ti_eqep_remove(struct platform_device *pdev)
