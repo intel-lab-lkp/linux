@@ -347,6 +347,11 @@ struct mxt_data {
 	/* for config update handling */
 	struct completion crc_completion;
 
+	/* for loading config */
+	struct completion config_completion;
+	struct mutex config_lock;
+	bool shutting_down;
+
 	u32 *t19_keymap;
 	unsigned int t19_num_keys;
 
@@ -2221,8 +2226,11 @@ static int mxt_configure_objects(struct mxt_data *data,
 
 static void mxt_config_cb(const struct firmware *cfg, void *ctx)
 {
-	mxt_configure_objects(ctx, cfg);
+	struct mxt_data *data = ctx;
+
+	mxt_configure_objects(data, cfg);
 	release_firmware(cfg);
+	complete(&data->config_completion);
 }
 
 static int mxt_initialize(struct mxt_data *data)
@@ -2271,12 +2279,22 @@ static int mxt_initialize(struct mxt_data *data)
 	if (error)
 		return error;
 
+	scoped_guard(mutex, &data->config_lock) {
+		wait_for_completion(&data->config_completion);
+
+		if (data->shutting_down)
+			return -EBUSY;
+
+		reinit_completion(&data->config_completion);
+	}
+
 	error = request_firmware_nowait(THIS_MODULE, true, MXT_CFG_NAME,
 					&client->dev, GFP_KERNEL, data,
 					mxt_config_cb);
 	if (error) {
 		dev_err(&client->dev, "Failed to invoke firmware loader: %d\n",
 			error);
+		complete(&data->config_completion);
 		return error;
 	}
 
@@ -3237,6 +3255,9 @@ static int mxt_probe(struct i2c_client *client)
 	init_completion(&data->bl_completion);
 	init_completion(&data->reset_completion);
 	init_completion(&data->crc_completion);
+	init_completion(&data->config_completion);
+	complete(&data->config_completion);
+	data->shutting_down = false;
 
 	data->suspend_mode = dmi_check_system(chromebook_T9_suspend_dmi) ?
 		MXT_SUSPEND_T9_CTRL : MXT_SUSPEND_DEEP_SLEEP;
@@ -3341,6 +3362,12 @@ err_disable_regulators:
 static void mxt_remove(struct i2c_client *client)
 {
 	struct mxt_data *data = i2c_get_clientdata(client);
+
+	scoped_guard(mutex, &data->config_lock) {
+		data->shutting_down = true;
+	}
+
+	wait_for_completion(&data->config_completion);
 
 	disable_irq(data->irq);
 	mxt_free_input_device(data);
