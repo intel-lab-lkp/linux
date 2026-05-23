@@ -887,6 +887,7 @@ struct pci_acs {
 static void __pci_config_acs(struct pci_dev *dev, struct pci_acs *caps,
 			     const char *p, const u16 acs_mask, const u16 acs_flags)
 {
+	u16 valid_ctrl = dev->acs_capabilities & GENMASK_U16(6, 0);
 	u16 flags = acs_flags;
 	u16 mask = acs_mask;
 	char *delimit;
@@ -932,12 +933,6 @@ static void __pci_config_acs(struct pci_dev *dev, struct pci_acs *caps,
 			}
 		}
 
-		if (mask & ~(PCI_ACS_SV | PCI_ACS_TB | PCI_ACS_RR | PCI_ACS_CR |
-			    PCI_ACS_UF | PCI_ACS_EC | PCI_ACS_DT)) {
-			pci_err(dev, "Invalid ACS flags specified\n");
-			return;
-		}
-
 		ret = pci_dev_str_match(dev, p, &p);
 		if (ret < 0) {
 			pr_warn_once("PCI: Can't parse ACS command line parameter\n");
@@ -959,6 +954,12 @@ static void __pci_config_acs(struct pci_dev *dev, struct pci_acs *caps,
 
 	if (!pci_dev_specific_disable_acs_redir(dev))
 		return;
+
+	if (!acs_mask && (mask & ~valid_ctrl)) {
+		pci_err(dev, "Invalid ACS bits specified: %#06x\n",
+			mask & ~valid_ctrl);
+		return;
+	}
 
 	pci_dbg(dev, "ACS mask  = %#06x\n", mask);
 	pci_dbg(dev, "ACS flags = %#06x\n", flags);
