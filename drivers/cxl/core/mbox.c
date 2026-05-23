@@ -7,6 +7,7 @@
 #include <linux/unaligned.h>
 #include <linux/list.h>
 #include <linux/list_sort.h>
+#include <linux/sizes.h>
 #include <cxlpci.h>
 #include <cxlmem.h>
 #include <cxl.h>
@@ -1281,6 +1282,24 @@ static int add_to_pending_list(struct list_head *pending_list,
 }
 
 /*
+ * Device-dax requires extent boundaries aligned to its mapping granularity.
+ * Use SZ_2M as a conservative default; a tighter check that queries the
+ * cxl_dax_region / cxl_endpoint_decoder for its actual alignment would be
+ * strictly more correct, but SZ_2M is the minimum device-dax supports on
+ * every architecture that enables CXL DCD today.
+ */
+#define CXL_DCD_EXTENT_ALIGN	SZ_2M
+
+static bool cxl_extent_dcd_aligned(const struct cxl_extent *extent)
+{
+	u64 start = le64_to_cpu(extent->start_dpa);
+	u64 len = le64_to_cpu(extent->length);
+
+	return IS_ALIGNED(start, CXL_DCD_EXTENT_ALIGN) &&
+	       IS_ALIGNED(len, CXL_DCD_EXTENT_ALIGN);
+}
+
+/*
  * Compare two extents by shared_extn_seq (ascending).  list_sort is
  * stable so when shared_extn_seq is 0 for every entry (non-sharable
  * partition) ties fall back to arrival order via list_add_tail() in
@@ -1351,6 +1370,26 @@ static int cxl_add_pending(struct cxl_memdev_state *mds)
 					 list)->extent->uuid);
 		extract_tag_group(pending, &tag, &group);
 		list_sort(NULL, &group, extent_seq_compare);
+
+		/* Alignment gate — abort the group if any member fails */
+		bool aligned = true;
+		list_for_each_entry(pos, &group, list) {
+			if (!cxl_extent_dcd_aligned(pos->extent)) {
+				dev_warn(dev,
+					 "Tag %pUb: dropping group, extent DPA:%#llx LEN:%#llx not %u-aligned\n",
+					 &tag,
+					 le64_to_cpu(pos->extent->start_dpa),
+					 le64_to_cpu(pos->extent->length),
+					 CXL_DCD_EXTENT_ALIGN);
+				aligned = false;
+				break;
+			}
+		}
+		if (!aligned) {
+			list_for_each_entry_safe(pos, tmp, &group, list)
+				delete_extent_node(pos);
+			continue;
+		}
 
 		u16 logical_seq = 1;
 		list_for_each_entry_safe(pos, tmp, &group, list) {
