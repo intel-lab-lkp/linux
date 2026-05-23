@@ -8,6 +8,8 @@
 #include <linux/uuid.h>
 #include <linux/node.h>
 #include <linux/list.h>
+#include <linux/mutex.h>
+#include <linux/workqueue.h>
 #include <cxl/event.h>
 #include <cxl/mailbox.h>
 #include "cxl.h"
@@ -402,19 +404,32 @@ static inline struct cxl_dev_state *mbox_to_cxlds(struct cxl_mailbox *cxl_mbox)
 
 /**
  * struct pending_add_ctx - Staging state for an in-progress
- *			    DCD_ADD_CAPACITY event chain
+ *							DCD_ADD_CAPACITY event chain
  * @pending_extents: extents received so far in the chain; flushed when
- *		     the chain closes (More=0)
+ *					 the chain closes (More=0)
  * @group: tag group being assembled from the chain
+ * @timeout_work: watchdog that fires if a chain is opened with
+ *				  CXL_DCD_EVENT_MORE but the closing record never arrives
+ * @lock: serialises updates to the chain state against the watchdog
+ * @armed: set when a More=1 chain opens; cleared when the chain closes,
+ *		   either by a More=0 event record or by the watchdog firing.
  *
  * A DCD_ADD_CAPACITY notification can span multiple event records
  * stitched together by the CXL_DCD_EVENT_MORE flag.  Records are staged
- * here until the device clears More, at which point the staged batch is
- * processed and responded to as a single Add_DC_Response.
+ * here until an event record with 'More'=0 is received, at which point the
+ * staged batch is processed and responded to as a single Add_DC_Response.
+ *
+ * If a chain is opened (More=1) but the device never sends the closing
+ * record, the staged list would otherwise sit indefinitely.  @timeout_work
+ * is a defensive watchdog that refuses such a chain with an empty response
+ * and drops the staged list.
  */
 struct pending_add_ctx {
 	struct list_head pending_extents;
 	struct cxl_dc_tag_group *group;
+	struct delayed_work timeout_work;
+	struct mutex lock;
+	bool armed;
 };
 
 /**
