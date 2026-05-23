@@ -18,6 +18,15 @@ static int interleave_arithmetic;
 static bool extended_linear_cache;
 static bool fail_autoassemble;
 
+/*
+ * Mock serial sentinel.  The cxl_mock_mem probe stamps this serial on
+ * exactly one platform device (cxl_mem with id 0); that single memdev's
+ * DC partition is marked sharable below in mock_cxl_endpoint_parse_cdat
+ * so the suite can exercise sharable-extent code paths without losing
+ * the non-sharable coverage on the other mock memdevs.
+ */
+#define MOCK_DC_SHARABLE_SERIAL 0xDCDCULL
+
 #define FAKE_QTG_ID	42
 
 #define NR_CXL_HOST_BRIDGES 2
@@ -1432,6 +1441,18 @@ static void mock_cxl_endpoint_parse_cdat(struct cxl_port *port)
 		};
 
 		dpa_perf_setup(port, &range, perf);
+
+		/*
+		 * The mock probe stamps MOCK_DC_SHARABLE_SERIAL onto exactly
+		 * one cxl_mem instance; mark its DC partition sharable so
+		 * cxl_validate_extent() routes shared-seq injects through
+		 * the sharable regime.  Every other memdev keeps its DC
+		 * partition non-sharable so the existing untagged / seq=0
+		 * tests still run on this kernel.
+		 */
+		if (cxlds->part[i].mode == CXL_PARTMODE_DYNAMIC_RAM_A &&
+		    cxlds->serial == MOCK_DC_SHARABLE_SERIAL)
+			perf->shareable = true;
 	}
 
 	cxl_memdev_update_perf(cxlmd);
