@@ -4404,17 +4404,15 @@ u8 *nfsd4_encode_dir_attr_change(struct xdr_stream *xdr, struct nfs4_delegation 
 {
 	struct dentry *dentry = nf->nf_file->f_path.dentry;
 	struct notify_attr4 na = { };
-	struct name_snapshot n;
 	bool ret;
 	u8 *p = NULL;
 
 	if (!(dp->dl_notify_mask & BIT(NOTIFY4_CHANGE_DIR_ATTRS)))
 		return NULL;
 
-	take_dentry_name_snapshot(&n, dentry);
+	/* RFC 8881 s10.4.3: ne_file must be a zero-length string for dir attrs */
 	ret = nfsd4_setup_notify_entry4(&na.na_changed_entry, xdr,
-					dentry, dp, nf, (char *)n.name.name,
-					n.name.len);
+					dentry, dp, nf, "", 0);
 
 	/* Don't bother with the event if we're not encoding attrs */
 	if (ret && na.na_changed_entry.ne_attrs.attr_vals.len) {
@@ -4422,7 +4420,6 @@ u8 *nfsd4_encode_dir_attr_change(struct xdr_stream *xdr, struct nfs4_delegation 
 		if (!xdrgen_encode_notify_attr4(xdr, &na))
 			p = NULL;
 	}
-	release_dentry_name_snapshot(&n);
 	return p;
 }
 
