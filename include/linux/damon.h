@@ -837,12 +837,12 @@ struct damon_filter {
 
 /**
  * struct damon_probe - Data region attribute probe.
- *
- * @filters:	Filters for assessing if a given region is for this probe.
- * @list:	Siblings list.
  */
 struct damon_probe {
+/* private: */
+	/* Filters for assessing if a given region is for this probe. */
 	struct list_head filters;
+	/* Siblings list. */
 	struct list_head list;
 };
 
