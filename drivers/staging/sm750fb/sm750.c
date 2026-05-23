@@ -764,7 +764,7 @@ static int lynxfb_set_fbinfo(struct fb_info *info, int index)
 			g_fbmode[index] = g_fbmode[0];
 	}
 
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < ARRAY_SIZE(pdb); i++) {
 		ret = fb_find_mode(var, info, g_fbmode[index],
 				   pdb[i], cdb[i], NULL, 8);
 
