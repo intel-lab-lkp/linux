@@ -6,6 +6,7 @@
 #include <linux/mutex.h>
 #include <linux/unaligned.h>
 #include <linux/list.h>
+#include <linux/list_sort.h>
 #include <cxlpci.h>
 #include <cxlmem.h>
 #include <cxl.h>
@@ -1181,7 +1182,7 @@ static void delete_extent_node(struct cxl_extent_list_node *node)
 	kfree(node);
 }
 
-static void memdev_release_extent(struct cxl_memdev_state *mds, struct range *range)
+void memdev_release_extent(struct cxl_memdev_state *mds, struct range *range)
 {
 	struct device *dev = mds->cxlds.dev;
 	struct cxl_extent_list_node *node;
@@ -1280,11 +1281,120 @@ static int add_to_pending_list(struct list_head *pending_list,
 }
 
 /*
- * Stub: stage extents on the pending list and reply with an empty
- * ADD_DC_RESPONSE on More=0 (refuse all).  A later commit replaces
- * the no-op tail with the real Add pipeline that surfaces a dax
- * device per accepted extent.
+ * Compare two extents by shared_extn_seq (ascending).  list_sort is
+ * stable so when shared_extn_seq is 0 for every entry (non-sharable
+ * partition) ties fall back to arrival order via list_add_tail() in
+ * add_to_pending_list().
  */
+static int extent_seq_compare(void *priv,
+			      const struct list_head *a,
+			      const struct list_head *b)
+{
+	const struct cxl_extent_list_node *ea =
+		list_entry(a, struct cxl_extent_list_node, list);
+	const struct cxl_extent_list_node *eb =
+		list_entry(b, struct cxl_extent_list_node, list);
+	u16 sa = le16_to_cpu(ea->extent->shared_extn_seq);
+	u16 sb = le16_to_cpu(eb->extent->shared_extn_seq);
+
+	if (sa < sb)
+		return -1;
+	if (sa > sb)
+		return 1;
+	return 0;
+}
+
+/*
+ * Move every pending extent whose tag matches @tag onto @group, preserving
+ * the order they appear in @pending.
+ */
+static void extract_tag_group(struct list_head *pending,
+			      const uuid_t *tag,
+			      struct list_head *group)
+{
+	struct cxl_extent_list_node *pos, *tmp;
+
+	list_for_each_entry_safe(pos, tmp, pending, list) {
+		uuid_t t;
+
+		import_uuid(&t, pos->extent->uuid);
+		if (uuid_equal(&t, tag))
+			list_move_tail(&pos->list, group);
+	}
+}
+
+/*
+ * Drive the pending Add-Capacity records through cxl_add_extent(),
+ * grouped by tag.  Per group: extract from pending, stable-sort by
+ * shared_extn_seq, then attempt to add each extent.  Online the tag
+ * group via online_tag_group() once all of its extents have been
+ * realized.  Validation gates layer onto this loop in later commits.
+ */
+static int cxl_add_pending(struct cxl_memdev_state *mds)
+{
+	struct device *dev = mds->cxlds.dev;
+	struct list_head *pending = &mds->add_ctx.pending_extents;
+	struct cxl_extent_list_node *pos, *tmp;
+	LIST_HEAD(accepted);
+	int total_accepted = 0;
+
+	while (!list_empty(pending)) {
+		LIST_HEAD(group);
+		struct cxl_dc_tag_group *tag_group;
+		int group_cnt = 0;
+		uuid_t tag;
+		int rc;
+
+		import_uuid(&tag,
+			list_first_entry(pending,
+					 struct cxl_extent_list_node,
+					 list)->extent->uuid);
+		extract_tag_group(pending, &tag, &group);
+		list_sort(NULL, &group, extent_seq_compare);
+
+		u16 logical_seq = 1;
+		list_for_each_entry_safe(pos, tmp, &group, list) {
+			u16 raw = le16_to_cpu(pos->extent->shared_extn_seq);
+			u16 seq = raw ? raw : logical_seq;
+
+			logical_seq++;
+
+			if (cxl_add_extent(mds, pos->extent, seq)) {
+				dev_dbg(dev,
+					"Tag %pUb: failed to add extent DPA:%#llx LEN:%#llx\n",
+					&tag,
+					le64_to_cpu(pos->extent->start_dpa),
+					le64_to_cpu(pos->extent->length));
+				delete_extent_node(pos);
+				continue;
+			}
+			group_cnt++;
+		}
+
+		tag_group = mds->add_ctx.group;
+		if (!tag_group)
+			continue;
+
+		rc = online_tag_group(tag_group);
+		if (rc) {
+			dev_warn(dev,
+				 "Tag %pUb: failed to online tag group (%d)\n",
+				 &tag, rc);
+			list_for_each_entry_safe(pos, tmp, &group, list)
+				delete_extent_node(pos);
+		} else {
+			list_splice_tail_init(&group, &accepted);
+			total_accepted += group_cnt;
+		}
+
+		mds->add_ctx.group = NULL;
+	}
+
+	list_splice(&accepted, pending);
+	return cxl_send_dc_response(mds, CXL_MBOX_OP_ADD_DC_RESPONSE,
+				    pending, total_accepted);
+}
+
 static int handle_add_event(struct cxl_memdev_state *mds,
 			    struct cxl_event_dcd *event)
 {
@@ -1316,8 +1426,7 @@ static int handle_add_event(struct cxl_memdev_state *mds,
 	ctx->armed = false;
 	cancel_delayed_work(&ctx->timeout_work);
 
-	rc = cxl_send_dc_response(mds, CXL_MBOX_OP_ADD_DC_RESPONSE,
-				  &mds->add_ctx.pending_extents, 0);
+	rc = cxl_add_pending(mds);
 	clear_pending_extents(mds);
 	return rc;
 }

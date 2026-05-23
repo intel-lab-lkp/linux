@@ -495,6 +495,7 @@ struct cxl_region_params {
  * @type: Endpoint decoder target type
  * @cxl_nvb: nvdimm bridge for coordinating @cxlr_pmem setup / shutdown
  * @cxlr_pmem: (for pmem regions) cached copy of the nvdimm bridge
+ * @cxlr_dax: (for DC regions) cached copy of CXL DAX bridge
  * @flags: Region state flags
  * @params: active + config params for the region
  * @coord: QoS access coordinates for the region
@@ -510,6 +511,7 @@ struct cxl_region {
 	enum cxl_decoder_type type;
 	struct cxl_nvdimm_bridge *cxl_nvb;
 	struct cxl_pmem_region *cxlr_pmem;
+	struct cxl_dax_region *cxlr_dax;
 	unsigned long flags;
 	struct cxl_region_params params;
 	struct access_coordinate coord[ACCESS_COORDINATE_MAX];
@@ -568,6 +570,15 @@ struct cxl_dax_region {
 	struct device dev;
 	struct cxl_region *cxlr;
 	struct range hpa_range;
+	/*
+	 * dc_extents is keyed by an allocator-assigned u32 (see
+	 * online_tag_group()).  Tag groups have no first-class identity in
+	 * this xarray; siblings within a tag find each other via
+	 * dc_extent->group.  Tag-uniqueness lookup is a linear xa_for_each
+	 * walk, adequate at the bounded per-region extent counts the
+	 * driver handles.
+	 */
+	struct xarray dc_extents;
 };
 
 /**
@@ -594,6 +605,14 @@ struct cxl_dc_tag_group {
 	struct xarray dc_extents;
 	unsigned int nr_extents;
 };
+
+bool is_dc_extent(struct device *dev);
+static inline struct dc_extent *to_dc_extent(struct device *dev)
+{
+	if (!is_dc_extent(dev))
+		return NULL;
+	return container_of(dev, struct dc_extent, dev);
+}
 
 /**
  * struct cxl_port - logical collection of upstream port devices and

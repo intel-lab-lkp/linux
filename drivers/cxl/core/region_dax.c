@@ -13,6 +13,7 @@ static void cxl_dax_region_release(struct device *dev)
 {
 	struct cxl_dax_region *cxlr_dax = to_cxl_dax_region(dev);
 
+	xa_destroy(&cxlr_dax->dc_extents);
 	kfree(cxlr_dax);
 }
 
@@ -57,11 +58,13 @@ static struct cxl_dax_region *cxl_dax_region_alloc(struct cxl_region *cxlr)
 	if (!cxlr_dax)
 		return ERR_PTR(-ENOMEM);
 
+	xa_init_flags(&cxlr_dax->dc_extents, XA_FLAGS_ALLOC);
 	cxlr_dax->hpa_range.start = p->res->start;
 	cxlr_dax->hpa_range.end = p->res->end;
 
 	dev = &cxlr_dax->dev;
 	cxlr_dax->cxlr = cxlr;
+	cxlr->cxlr_dax = cxlr_dax;
 	device_initialize(dev);
 	lockdep_set_class(&dev->mutex, &cxl_dax_region_key);
 	device_set_pm_not_required(dev);
