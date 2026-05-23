@@ -16,24 +16,13 @@
 #include <linux/usb/hcd.h>
 #include <linux/usb/of.h>
 #include <linux/usb/phy.h>
+#include <linux/usb/tegra_usb_phy.h>
 
 #include <soc/tegra/common.h>
 
 #include "../host/ehci.h"
 
 #include "ci.h"
-
-struct tegra_usb {
-	struct ci_hdrc_platform_data data;
-	struct platform_device *dev;
-
-	const struct tegra_usb_soc_info *soc;
-	struct usb_phy *phy;
-	struct clk *clk;
-
-	bool needs_double_reset;
-	bool externally_controlled;
-};
 
 struct tegra_usb_soc_info {
 	unsigned long flags;

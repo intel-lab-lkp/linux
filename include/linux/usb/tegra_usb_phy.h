@@ -9,6 +9,7 @@
 #include <linux/clk.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
+#include <linux/usb/chipidea.h>
 #include <linux/usb/otg.h>
 
 struct gpio_desc;
@@ -60,6 +61,20 @@ enum tegra_usb_phy_port_speed {
 	TEGRA_USB_PHY_PORT_SPEED_FULL = 0,
 	TEGRA_USB_PHY_PORT_SPEED_LOW,
 	TEGRA_USB_PHY_PORT_SPEED_HIGH,
+};
+
+struct tegra_usb_soc_info;
+
+struct tegra_usb {
+	struct ci_hdrc_platform_data data;
+	struct platform_device *dev;
+
+	const struct tegra_usb_soc_info *soc;
+	struct usb_phy *phy;
+	struct clk *clk;
+
+	bool needs_double_reset;
+	bool externally_controlled;
 };
 
 struct tegra_xtal_freq;
