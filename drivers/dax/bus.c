@@ -5,6 +5,7 @@
 #include <linux/mutex.h>
 #include <linux/list.h>
 #include <linux/slab.h>
+#include <linux/sort.h>
 #include <linux/dax.h>
 #include <linux/io.h>
 #include "dax-private.h"
@@ -1312,6 +1313,89 @@ retry:
 	return 0;
 }
 
+/* DC extents are all-or-nothing: an extent is either free or fully claimed. */
+static bool dax_resource_in_use(const struct dax_resource *dax_resource)
+{
+	return dax_resource->use_cnt > 0;
+}
+
+struct dax_uuid_match {
+	const struct dax_region *dax_region;
+	const uuid_t *uuid;
+};
+
+static int find_uuid_extent(struct device *dev, const void *data)
+{
+	const struct dax_uuid_match *match = data;
+	struct dax_resource *dax_resource;
+
+	if (!match->dax_region->dc_ops->is_extent(dev))
+		return 0;
+
+	dax_resource = dev_get_drvdata(dev);
+	if (!dax_resource || dax_resource_in_use(dax_resource))
+		return 0;
+	return uuid_equal(&dax_resource->uuid, match->uuid);
+}
+
+struct dax_tag_collect {
+	const struct dax_region *dax_region;
+	const uuid_t *uuid;
+	struct dax_resource **arr;
+	unsigned int count;
+	unsigned int cap;
+};
+
+static int collect_uuid_extent(struct device *dev, void *data)
+{
+	struct dax_tag_collect *c = data;
+	struct dax_resource *dax_resource;
+
+	if (!c->dax_region->dc_ops->is_extent(dev))
+		return 0;
+
+	dax_resource = dev_get_drvdata(dev);
+	if (!dax_resource || dax_resource_in_use(dax_resource))
+		return 0;
+	if (!uuid_equal(&dax_resource->uuid, c->uuid))
+		return 0;
+
+	if (c->count == c->cap)
+		return -ENOSPC;
+	c->arr[c->count++] = dax_resource;
+	return 0;
+}
+
+static int count_uuid_extent(struct device *dev, void *data)
+{
+	struct dax_tag_collect *c = data;
+	struct dax_resource *dax_resource;
+
+	if (!c->dax_region->dc_ops->is_extent(dev))
+		return 0;
+
+	dax_resource = dev_get_drvdata(dev);
+	if (!dax_resource || dax_resource_in_use(dax_resource))
+		return 0;
+	if (!uuid_equal(&dax_resource->uuid, c->uuid))
+		return 0;
+
+	c->count++;
+	return 0;
+}
+
+static int dax_resource_seq_cmp(const void *a, const void *b)
+{
+	const struct dax_resource * const *pa = a;
+	const struct dax_resource * const *pb = b;
+
+	if ((*pa)->seq_num < (*pb)->seq_num)
+		return -1;
+	if ((*pa)->seq_num > (*pb)->seq_num)
+		return 1;
+	return 0;
+}
+
 static ssize_t size_store(struct device *dev, struct device_attribute *attr,
 		const char *buf, size_t len)
 {
@@ -1544,13 +1628,177 @@ static DEVICE_ATTR_RO(numa_node);
 static ssize_t uuid_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return sysfs_emit(buf, "%d\n", 0);
+	struct dev_dax *dev_dax = to_dev_dax(dev);
+	int rc;
+
+	rc = down_read_interruptible(&dax_dev_rwsem);
+	if (rc)
+		return rc;
+
+	for (int i = 0; i < dev_dax->nr_range; i++) {
+		struct dax_resource *r = dev_dax->ranges[i].dax_resource;
+
+		if (r && !uuid_is_null(&r->uuid)) {
+			rc = sysfs_emit(buf, "%pUb\n", &r->uuid);
+			goto out;
+		}
+	}
+	rc = sysfs_emit(buf, "0\n");
+out:
+	up_read(&dax_dev_rwsem);
+	return rc;
+}
+
+static ssize_t uuid_claim_untagged(struct dax_region *dax_region,
+				   struct dev_dax *dev_dax)
+{
+	struct dax_uuid_match match = {
+		.dax_region = dax_region,
+		.uuid = &uuid_null,
+	};
+	struct dax_resource *dax_resource;
+	resource_size_t to_alloc;
+	struct device *extent_dev;
+	ssize_t alloc;
+
+	extent_dev = device_find_child(dax_region->dev, &match,
+				       find_uuid_extent);
+	if (!extent_dev)
+		return -ENOENT;
+
+	dax_resource = dev_get_drvdata(extent_dev);
+	to_alloc = resource_size(dax_resource->res);
+	alloc = __dev_dax_resize(dax_resource->res, dev_dax, to_alloc,
+				 dax_resource);
+	put_device(extent_dev);
+	if (alloc < 0)
+		return alloc;
+	if (alloc == 0)
+		return -ENOENT;
+	dax_resource->use_cnt++;
+	return 0;
+}
+
+static ssize_t uuid_claim_tagged(struct dax_region *dax_region,
+				 struct dev_dax *dev_dax, const uuid_t *uuid)
+{
+	struct dax_tag_collect c = {
+		.dax_region = dax_region,
+		.uuid = uuid,
+	};
+	unsigned int i;
+	ssize_t rc;
+
+	/* Two-pass: count, then collect into a sized array. */
+	device_for_each_child(dax_region->dev, &c, count_uuid_extent);
+	if (!c.count)
+		return -ENOENT;
+
+	c.arr = kmalloc_array(c.count, sizeof(*c.arr), GFP_KERNEL);
+	if (!c.arr)
+		return -ENOMEM;
+	c.cap = c.count;
+	c.count = 0;
+
+	rc = device_for_each_child(dax_region->dev, &c, collect_uuid_extent);
+	if (rc)
+		goto out;
+
+	sort(c.arr, c.count, sizeof(*c.arr), dax_resource_seq_cmp, NULL);
+
+	/*
+	 * Tagged groups carry a dense 1..n @seq_num regardless of source
+	 * (sharable: device-stamped; non-sharable: host-assigned in
+	 * arrival order — see &struct dax_resource).  A gap or
+	 * out-of-range value here means an extent went missing on the
+	 * cxl side (e.g. a per-extent failure in cxl_add_pending) or a
+	 * cxl-side validation gap; in either case refuse the whole
+	 * group rather than carve a partial allocation.
+	 */
+	for (i = 0; i < c.count; i++) {
+		if (c.arr[i]->seq_num != i + 1) {
+			dev_WARN_ONCE(dax_region->dev, 1,
+				"tag %pUb seq invariant violated at slot %u (got %u)\n",
+				uuid, i, c.arr[i]->seq_num);
+			rc = -EINVAL;
+			goto out;
+		}
+	}
+
+	for (i = 0; i < c.count; i++) {
+		resource_size_t to_alloc = resource_size(c.arr[i]->res);
+		ssize_t alloc;
+
+		alloc = __dev_dax_resize(c.arr[i]->res, dev_dax, to_alloc,
+					 c.arr[i]);
+		if (alloc < 0) {
+			rc = alloc;
+			goto rollback;
+		}
+		if (alloc == 0) {
+			rc = -ENOSPC;
+			goto rollback;
+		}
+		c.arr[i]->use_cnt++;
+	}
+	rc = 0;
+	goto out;
+
+rollback:
+	/*
+	 * Partial failure: trim every range we added in this attempt.
+	 * trim_dev_dax_range pops the most-recently-appended range from
+	 * dev_dax->ranges[] and decrements its dax_resource->use_cnt, so
+	 * looping until we have undone @i additions restores both
+	 * dev_dax->ranges[] and the matched dax_resources' use_cnt.
+	 */
+	while (i-- > 0)
+		trim_dev_dax_range(dev_dax);
+out:
+	kfree(c.arr);
+	return rc;
 }
 
 static ssize_t uuid_store(struct device *dev, struct device_attribute *attr,
 			  const char *buf, size_t len)
 {
-	return -EOPNOTSUPP;
+	struct dev_dax *dev_dax = to_dev_dax(dev);
+	struct dax_region *dax_region = dev_dax->region;
+	uuid_t uuid;
+	ssize_t rc;
+
+	if (!is_dynamic(dax_region))
+		return -EOPNOTSUPP;
+
+	if (sysfs_streq(buf, "0"))
+		uuid_copy(&uuid, &uuid_null);
+	else {
+		rc = uuid_parse(buf, &uuid);
+		if (rc)
+			return rc;
+	}
+
+	rc = down_write_killable(&dax_region_rwsem);
+	if (rc)
+		return rc;
+	if (!dax_region->dev->driver) {
+		rc = -ENXIO;
+		goto err_region;
+	}
+	rc = down_write_killable(&dax_dev_rwsem);
+	if (rc)
+		goto err_region;
+
+	if (uuid_is_null(&uuid))
+		rc = uuid_claim_untagged(dax_region, dev_dax);
+	else
+		rc = uuid_claim_tagged(dax_region, dev_dax, &uuid);
+
+	up_write(&dax_dev_rwsem);
+err_region:
+	up_write(&dax_region_rwsem);
+
+	return rc < 0 ? rc : len;
 }
 static DEVICE_ATTR_RW(uuid);
 
@@ -1610,8 +1858,12 @@ static umode_t dev_dax_visible(struct kobject *kobj, struct attribute *a, int n)
 		return 0;
 	if (a == &dev_attr_mapping.attr && is_dynamic(dax_region))
 		return 0;
-	if ((a == &dev_attr_align.attr ||
-	     a == &dev_attr_size.attr) && is_static(dax_region))
+	if (a == &dev_attr_uuid.attr && !is_dynamic(dax_region))
+		return 0444;
+	if (a == &dev_attr_align.attr &&
+	    (is_static(dax_region) || is_dynamic(dax_region)))
+		return 0444;
+	if (a == &dev_attr_size.attr && is_static(dax_region))
 		return 0444;
 	return a->mode;
 }
