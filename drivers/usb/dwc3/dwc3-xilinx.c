@@ -194,7 +194,7 @@ static int dwc3_xlnx_init_zynqmp(struct dwc3_xlnx *priv_data)
 	}
 
 	if (priv_data->usb3_phy) {
-		/* Set PIPE Power Present signal in FPD Power Present Register*/
+		/* Set PIPE Power Present signal in FPD Power Present Register */
 		writel(FPD_POWER_PRSNT_OPTION, priv_data->regs + XLNX_USB_FPD_POWER_PRSNT);
 		/* Set the PIPE Clock Select bit in FPD PIPE Clock register */
 		writel(PIPE_CLK_SELECT, priv_data->regs + XLNX_USB_FPD_PIPE_CLK);
