@@ -12731,6 +12731,7 @@ L:	linux-crypto@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/crypto/inside-secure,safexcel-eip93.yaml
 F:	drivers/crypto/inside-secure/eip93/
+F:	include/crypto/eip93-ipsec.h
 
 INTEGRITY MEASUREMENT ARCHITECTURE (IMA)
 M:	Mimi Zohar <zohar@linux.ibm.com>

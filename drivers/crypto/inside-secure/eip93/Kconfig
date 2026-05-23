@@ -18,3 +18,13 @@ config CRYPTO_DEV_EIP93
 	  CTR crypto. Also provide DES and 3DES ECB and CBC.
 
 	  Also provide AEAD authenc(hmac(x), cipher(y)) for supported algo.
+
+config CRYPTO_DEV_EIP93_IPSEC
+	bool
+	depends on CRYPTO_DEV_EIP93
+	depends on XFRM_OFFLOAD
+	default y
+	help
+	  Select this if a netdev driver should be allowed to use EIP93 for
+	  ESP packet encapsulation and decapsulation rather than only the
+	  crypto transform.

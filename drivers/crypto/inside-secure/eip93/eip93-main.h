@@ -13,6 +13,7 @@
 #include <crypto/internal/skcipher.h>
 #include <linux/bitfield.h>
 #include <linux/interrupt.h>
+#include <linux/kconfig.h>
 
 #define EIP93_RING_BUSY_DELAY		500
 
@@ -92,6 +93,8 @@
 						    EIP93_HASH_SHA224 | \
 						    EIP93_HASH_SHA256))
 
+struct eip93_ipsec;
+
 /**
  * struct eip93_device - crypto engine device structure
  */
@@ -101,6 +104,7 @@ struct eip93_device {
 	struct clk		*clk;
 	int			irq;
 	struct eip93_ring		*ring;
+	struct eip93_ipsec	*ipsec;
 };
 
 struct eip93_desc_ring {
@@ -124,8 +128,8 @@ struct eip93_ring {
 	/* command/result rings */
 	struct eip93_desc_ring		cdr;
 	struct eip93_desc_ring		rdr;
-	spinlock_t			write_lock;
-	spinlock_t			read_lock;
+	spinlock_t			write_lock; /* command descriptor enqueue */
+	spinlock_t			read_lock; /* result descriptor dequeue */
 	/* aync idr */
 	spinlock_t			idr_lock;
 	struct idr			crypto_async_idr;
@@ -147,5 +151,35 @@ struct eip93_alg_template {
 		struct ahash_alg	ahash;
 	} alg;
 };
+
+struct eip93_ipsec_request;
+
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_IPSEC)
+int eip93_ipsec_register(struct eip93_device *eip93);
+void eip93_ipsec_unregister(struct eip93_device *eip93);
+void eip93_ipsec_handle_result(struct eip93_ipsec_request *req, int err,
+			       u32 pe_ctrl_stat, u32 pe_length);
+void eip93_ipsec_report_irq(struct eip93_device *eip93, u32 irq_status);
+#else
+static inline int eip93_ipsec_register(struct eip93_device *eip93)
+{
+	return 0;
+}
+
+static inline void eip93_ipsec_unregister(struct eip93_device *eip93)
+{
+}
+
+static inline void eip93_ipsec_handle_result(struct eip93_ipsec_request *req,
+					     int err, u32 pe_ctrl_stat,
+					     u32 pe_length)
+{
+}
+
+static inline void eip93_ipsec_report_irq(struct eip93_device *eip93,
+					  u32 irq_status)
+{
+}
+#endif
 
 #endif /* _EIP93_MAIN_H_ */

@@ -185,7 +185,9 @@ fail:
 
 static void eip93_handle_result_descriptor(struct eip93_device *eip93)
 {
-	struct crypto_async_request *async;
+	struct crypto_async_request *async = NULL;
+	struct eip93_ipsec_request *ipsec = NULL;
+	void *request;
 	struct eip93_descriptor *rdesc;
 	u16 desc_flags, crypto_idr;
 	bool last_entry;
@@ -224,11 +226,11 @@ get_more:
 			 FIELD_GET(EIP93_PE_LENGTH_HOST_PE_READY, pe_length) !=
 			 EIP93_PE_LENGTH_PE_READY);
 
-		err = rdesc->pe_ctrl_stat_word & (EIP93_PE_CTRL_PE_EXT_ERR_CODE |
-						  EIP93_PE_CTRL_PE_EXT_ERR |
-						  EIP93_PE_CTRL_PE_SEQNUM_ERR |
-						  EIP93_PE_CTRL_PE_PAD_ERR |
-						  EIP93_PE_CTRL_PE_AUTH_ERR);
+		err = pe_ctrl_stat & (EIP93_PE_CTRL_PE_EXT_ERR_CODE |
+				      EIP93_PE_CTRL_PE_EXT_ERR |
+				      EIP93_PE_CTRL_PE_SEQNUM_ERR |
+				      EIP93_PE_CTRL_PE_PAD_ERR |
+				      EIP93_PE_CTRL_PE_AUTH_ERR);
 
 		desc_flags = FIELD_GET(EIP93_PE_USER_ID_DESC_FLAGS, rdesc->user_id);
 		crypto_idr = FIELD_GET(EIP93_PE_USER_ID_CRYPTO_IDR, rdesc->user_id);
@@ -248,23 +250,37 @@ get_more:
 	if (!last_entry)
 		goto get_more;
 
-	/* Get crypto async ref only for last descriptor */
+	/* Get request ref only for last descriptor */
 	scoped_guard(spinlock_bh, &eip93->ring->idr_lock) {
-		async = idr_find(&eip93->ring->crypto_async_idr, crypto_idr);
+		request = idr_find(&eip93->ring->crypto_async_idr, crypto_idr);
 		idr_remove(&eip93->ring->crypto_async_idr, crypto_idr);
+	}
+	if (!request) {
+		dev_warn_ratelimited(eip93->dev, "missing request id %u\n",
+				     crypto_idr);
+		goto get_more;
 	}
 
 	/* Parse error in ctrl stat word */
 	err = eip93_parse_ctrl_stat_err(eip93, err);
 
+	if (desc_flags & EIP93_DESC_IPSEC) {
+		ipsec = request;
+		eip93_ipsec_handle_result(ipsec, err, pe_ctrl_stat, pe_length);
+		goto get_more;
+	}
+
+	async = request;
+
 	if (desc_flags & EIP93_DESC_SKCIPHER)
 		eip93_skcipher_handle_result(async, err);
-
-	if (desc_flags & EIP93_DESC_AEAD)
+	else if (desc_flags & EIP93_DESC_AEAD)
 		eip93_aead_handle_result(async, err);
-
-	if (desc_flags & EIP93_DESC_HASH)
+	else if (desc_flags & EIP93_DESC_HASH)
 		eip93_hash_handle_result(async, err);
+	else
+		dev_warn_ratelimited(eip93->dev, "unknown descriptor flags %#x\n",
+				     desc_flags);
 
 	goto get_more;
 }
@@ -279,21 +295,26 @@ static void eip93_done_task(unsigned long data)
 static irqreturn_t eip93_irq_handler(int irq, void *data)
 {
 	struct eip93_device *eip93 = data;
+	bool handled = false;
 	u32 irq_status;
 
 	irq_status = readl(eip93->base + EIP93_REG_INT_MASK_STAT);
 	if (FIELD_GET(EIP93_INT_RDR_THRESH, irq_status)) {
 		eip93_irq_disable(eip93, EIP93_INT_RDR_THRESH);
 		tasklet_schedule(&eip93->ring->done_task);
-		return IRQ_HANDLED;
+		irq_status &= ~EIP93_INT_RDR_THRESH;
+		handled = true;
 	}
 
-	/* Ignore errors in AUTO mode, handled by the RDR */
-	eip93_irq_clear(eip93, irq_status);
-	if (irq_status)
-		eip93_irq_disable(eip93, irq_status);
+	if (!irq_status)
+		return handled ? IRQ_HANDLED : IRQ_NONE;
 
-	return IRQ_NONE;
+	eip93_ipsec_report_irq(eip93, irq_status);
+
+	eip93_irq_clear(eip93, irq_status);
+	eip93_irq_disable(eip93, irq_status);
+
+	return IRQ_HANDLED;
 }
 
 static void eip93_initialize(struct eip93_device *eip93, u32 supported_algo_flags)
@@ -455,14 +476,23 @@ static int eip93_crypto_probe(struct platform_device *pdev)
 
 	eip93_initialize(eip93, algo_flags);
 
-	/* Init finished, enable RDR interrupt */
-	eip93_irq_enable(eip93, EIP93_INT_RDR_THRESH);
-
-	ret = eip93_register_algs(eip93, algo_flags);
+	ret = eip93_ipsec_register(eip93);
 	if (ret) {
 		eip93_cleanup(eip93);
 		return ret;
 	}
+
+	ret = eip93_register_algs(eip93, algo_flags);
+	if (ret) {
+		eip93_ipsec_unregister(eip93);
+		eip93_cleanup(eip93);
+		return ret;
+	}
+
+	/* Init finished, enable RDR and fatal error interrupts */
+	eip93_irq_enable(eip93, EIP93_INT_RDR_THRESH | EIP93_INT_INTERFACE_ERR |
+			 EIP93_INT_RPOC_ERR | EIP93_INT_PE_RING_ERR |
+			 EIP93_INT_HALT);
 
 	ver = readl(eip93->base + EIP93_REG_PE_REVISION);
 	/* EIP_EIP_NO:MAJOR_HW_REV:MINOR_HW_REV:HW_PATCH,PE(ALGO_FLAGS) */
@@ -484,6 +514,7 @@ static void eip93_crypto_remove(struct platform_device *pdev)
 
 	algo_flags = readl(eip93->base + EIP93_REG_PE_OPTION_1);
 
+	eip93_ipsec_unregister(eip93);
 	eip93_unregister_algs(algo_flags, ARRAY_SIZE(eip93_algs));
 	eip93_cleanup(eip93);
 }
