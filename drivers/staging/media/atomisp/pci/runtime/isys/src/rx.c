@@ -55,7 +55,7 @@ void ia_css_isys_rx_enable_all_interrupts(enum mipi_port_id port)
  * */
 enum mipi_port_id ia_css_isys_port_to_mipi_port(enum mipi_port_id api_port)
 {
-	/* In this module the validity of the inptu variable should
+	/* In this module the validity of the input variable should
 	 * have been checked already, so we do not check for erroneous
 	 * values. */
 	enum mipi_port_id port = MIPI_PORT0_ID;
