@@ -892,6 +892,11 @@ bool is_cxl_region(struct device *dev);
 
 extern const struct bus_type cxl_bus_type;
 
+struct cxl_notify_data {
+	enum dc_event event;
+	struct cxl_dc_tag_group *group;
+};
+
 /*
  * Note, add_dport() is expressly for the cxl_port driver. TODO: investigate a
  * type-safe driver model where probe()/remove() take the type of object implied
@@ -904,6 +909,7 @@ struct cxl_driver {
 	void (*remove)(struct device *dev);
 	struct cxl_dport *(*add_dport)(struct cxl_port *port,
 				       struct device *dport_dev);
+	int (*notify)(struct device *dev, struct cxl_notify_data *notify_data);
 	struct device_driver drv;
 	int id;
 };

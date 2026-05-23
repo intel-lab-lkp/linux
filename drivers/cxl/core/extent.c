@@ -63,7 +63,6 @@ static const struct attribute_group dc_extent_attribute_group = {
 
 __ATTRIBUTE_GROUPS(dc_extent_attribute);
 
-
 static void cxled_release_extent(struct cxl_endpoint_decoder *cxled,
 				 struct dc_extent *dc_extent)
 {
@@ -359,6 +358,36 @@ dc_extent_build(struct cxl_endpoint_decoder *cxled,
 	return dc_extent;
 }
 
+int cxlr_notify_extent(struct cxl_region *cxlr, enum dc_event event,
+		       struct cxl_dc_tag_group *group)
+{
+	struct device *dev = &cxlr->cxlr_dax->dev;
+	struct cxl_notify_data notify_data;
+	struct cxl_driver *driver;
+
+	dev_dbg(dev, "Trying notify: type %d tag %pUb\n", event, &group->uuid);
+
+	guard(device)(dev);
+
+	/*
+	 * The lack of a driver indicates a notification has failed.  No user
+	 * space coordination was possible.
+	 */
+	if (!dev->driver)
+		return 0;
+	driver = to_cxl_drv(dev->driver);
+	if (!driver->notify)
+		return 0;
+
+	notify_data = (struct cxl_notify_data) {
+		.event = event,
+		.group = group,
+	};
+
+	dev_dbg(dev, "Notify: type %d tag %pUb\n", event, &group->uuid);
+	return driver->notify(dev, &notify_data);
+}
+
 /*
  * Stage 4: insert @dc_extent into the pending tag group.  All extents in
  * one More-chain group share a UUID — enforced here as the group is
@@ -462,7 +491,7 @@ static void dc_extent_unregister(void *ext)
 	device_unregister(&dc_extent->dev);
 }
 
-static void rm_tag_group(struct cxl_dc_tag_group *group)
+void rm_tag_group(struct cxl_dc_tag_group *group)
 {
 	struct device *region_dev = &group->cxlr_dax->dev;
 	struct dc_extent *dc_extent;

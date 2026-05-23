@@ -8,6 +8,7 @@
 #include <linux/device.h>
 #include <linux/cdev.h>
 #include <linux/idr.h>
+#include <linux/uuid.h>
 
 /* private routines between core files */
 struct dax_device;
@@ -15,6 +16,14 @@ struct dax_device *inode_dax(struct inode *inode);
 struct inode *dax_inode(struct dax_device *dax_dev);
 int dax_bus_init(void);
 void dax_bus_exit(void);
+
+/**
+ * struct dax_dc_ops - Operations for dc-backed regions
+ * @is_extent: return if the device is an extent
+ */
+struct dax_dc_ops {
+	bool (*is_extent)(struct device *dev);
+};
 
 /**
  * struct dax_region - mapping infrastructure for dax devices
@@ -27,6 +36,7 @@ void dax_bus_exit(void);
  * @res: resource tree to track instance allocations
  * @seed: allow userspace to find the first unbound seed device
  * @youngest: allow userspace to find the most recently created device
+ * @dc_ops: operations required for DC-backed regions
  */
 struct dax_region {
 	int id;
@@ -38,6 +48,7 @@ struct dax_region {
 	struct resource res;
 	struct device *seed;
 	struct device *youngest;
+	struct dax_dc_ops *dc_ops;
 };
 
 /**
@@ -57,11 +68,13 @@ struct dax_mapping {
  * @pgoff: page offset
  * @range: resource-span
  * @mapping: reference to the dax_mapping for this range
+ * @dax_resource: if not NULL; dax DC resource containing this range
  */
 struct dev_dax_range {
 	unsigned long pgoff;
 	struct range range;
 	struct dax_mapping *mapping;
+	struct dax_resource *dax_resource;
 };
 
 /**
@@ -105,6 +118,42 @@ struct dev_dax {
  * outside of drivers/dax/
  */
 void run_dax(struct dax_device *dax_dev);
+
+/**
+ * struct dax_resource - For DC DAX regions; an active resource
+ * @region: dax_region this resources is in
+ * @res: resource
+ * @uuid: tag identifying the backing extent; zero uuid means untagged
+ * @seq_num: 1..n assembly-order index within the tag group; 0 for the
+ *	     untagged pool (uuid == 0).  For extents from a sharable
+ *	     CXL DC partition this is the device-stamped shared_extn_seq
+ *	     (CXL 3.1 Table 8-51).  For extents from a non-sharable
+ *	     partition the cxl layer fills it in event arrival order, so
+ *	     the dax layer can rely on a single 1..n dense invariant when
+ *	     it claims a tagged group in uuid_store().
+ * @use_cnt: count the number of uses of this resource
+ *
+ * Changes to the dax_region and the dax_resources within it are protected by
+ * dax_region_rwsem
+ *
+ * dax_resource's are not intended to be used outside the dax layer.
+ */
+struct dax_resource {
+	struct dax_region *region;
+	struct resource *res;
+	uuid_t uuid;
+	u16 seq_num;
+	unsigned int use_cnt;
+};
+
+/*
+ * Similar to run_dax() dax_region_add_resource() is exported but is not
+ * intended to be a generic operation outside the dax subsystem.  It is only
+ * generic between the dax layer and the dax drivers.
+ */
+int dax_region_add_resource(struct dax_region *dax_region, struct device *dev,
+			    resource_size_t start, resource_size_t length,
+			    const uuid_t *tag, u16 seq_num);
 
 static inline struct dev_dax *to_dev_dax(struct device *dev)
 {
