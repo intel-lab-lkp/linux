@@ -4209,7 +4209,7 @@ setup_notify_fhandle(struct dentry *dentry, struct nfs4_file *fi,
 	}
 
 	fileid_type = exportfs_encode_inode_fh(inode, fid, &maxsize, parent, flags);
-	if (fileid_type < 0)
+	if (fileid_type < 0 || fileid_type == FILEID_INVALID)
 		return false;
 
 	fhp->fh_fileid_type = fileid_type;
