@@ -359,6 +359,7 @@ struct ufshcd_tx_eqtr_record {
  * @is_valid: True if parameter contains valid TX Equalization settings
  * @is_applied: True if settings have been applied to UniPro of both sides
  * @is_trained: True if parameters obtained from TX EQTR procedure
+ * @is_static: True if settings are static
  */
 struct ufshcd_tx_eq_params {
 	struct ufshcd_tx_eq_settings host[UFS_MAX_LANES];
@@ -367,7 +368,11 @@ struct ufshcd_tx_eq_params {
 	bool is_valid;
 	bool is_applied;
 	bool is_trained;
+	bool is_static;
 };
+
+/* TX EQ Settings Tuple has 3 elements - PreShoot, DeEmphasis and PrecodeEn. */
+#define TX_EQ_SETTINGS_TUPLE_SZ		3
 
 /**
  * struct ufs_hba_variant_ops - variant specific callbacks

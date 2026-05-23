@@ -210,6 +210,86 @@ static void ufshcd_init_lanes_per_dir(struct ufs_hba *hba)
 	}
 }
 
+static void ufshcd_parse_static_tx_eq_settings(struct ufs_hba *hba)
+{
+	size_t sz = hba->lanes_per_direction * 2 * TX_EQ_SETTINGS_TUPLE_SZ;
+	u32 settings[UFS_MAX_LANES * 2 * TX_EQ_SETTINGS_TUPLE_SZ];
+	u32 *host_settings, *device_settings;
+	u32 lpd = hba->lanes_per_direction;
+	struct ufshcd_tx_eq_params *params;
+	struct device *dev = hba->dev;
+	int i, err, count, gear, lane;
+	char prop_name[MAX_PROP_SIZE];
+
+	if (!lpd || lpd > UFS_MAX_LANES) {
+		dev_err(dev, "Invalid lanes-per-direction value (%u) provided\n", lpd);
+		return;
+	}
+
+	for (gear = UFS_HS_G1; gear <= UFS_HS_GEAR_MAX; gear++) {
+		snprintf(prop_name, MAX_PROP_SIZE, "txeq-settings-g%d", gear);
+		count = of_property_count_u32_elems(dev->of_node, prop_name);
+		if (count <= 0)
+			continue;
+
+		if (count != sz) {
+			dev_err(dev, "Property %s has invalid count (%d), expecting %zu\n",
+				prop_name, count, sz);
+			continue;
+		}
+
+		err = of_property_read_u32_array(dev->of_node, prop_name,
+						 settings, sz);
+		if (err) {
+			dev_err(dev, "Failed to read %s property, %d\n",
+				prop_name, err);
+			continue;
+		}
+
+		for (i = 0; i < count; i += TX_EQ_SETTINGS_TUPLE_SZ) {
+			if (settings[i] >= TX_HS_NUM_PRESHOOT) {
+				dev_err(dev, "An invalid TX EQ PreShoot (%d) provided in %s property\n",
+					settings[i], prop_name);
+				break;
+			}
+
+			if (settings[i + 1] >= TX_HS_NUM_DEEMPHASIS) {
+				dev_err(dev, "An invalid TX EQ DeEmphasis (%d) provided in %s property\n",
+					settings[i + 1], prop_name);
+				break;
+			}
+
+			if (settings[i + 2] > 1) {
+				dev_err(dev, "An invalid PrecodeEn (%d) provided in %s property\n",
+					settings[i + 2], prop_name);
+				break;
+			}
+		}
+
+		if (i != count)
+			continue;
+
+		params = &hba->tx_eq_params[gear - 1];
+		host_settings = settings;
+		device_settings = settings + lpd * TX_EQ_SETTINGS_TUPLE_SZ;
+
+		for (lane = 0; lane < lpd; lane++) {
+			params->host[lane].preshoot = host_settings[0];
+			params->host[lane].deemphasis =	host_settings[1];
+			params->host[lane].precode_en = host_settings[2];
+			host_settings += TX_EQ_SETTINGS_TUPLE_SZ;
+
+			params->device[lane].preshoot =	device_settings[0];
+			params->device[lane].deemphasis = device_settings[1];
+			params->device[lane].precode_en = device_settings[2];
+			device_settings += TX_EQ_SETTINGS_TUPLE_SZ;
+		}
+
+		params->is_valid = true;
+		params->is_static = true;
+	}
+}
+
 /**
  * ufshcd_parse_clock_min_max_freq  - Parse MIN and MAX clocks freq
  * @hba: per adapter instance
@@ -527,6 +607,8 @@ int ufshcd_pltfrm_init(struct platform_device *pdev,
 	}
 
 	ufshcd_init_lanes_per_dir(hba);
+
+	ufshcd_parse_static_tx_eq_settings(hba);
 
 	err = ufshcd_parse_operating_points(hba);
 	if (err) {
