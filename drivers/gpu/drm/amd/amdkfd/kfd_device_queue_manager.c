@@ -25,6 +25,7 @@
 #include <linux/ratelimit.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
+#include <linux/overflow.h>
 #include <linux/list.h>
 #include <linux/types.h>
 #include <linux/bitops.h>
@@ -3442,10 +3443,13 @@ static void copy_context_work_handler(struct work_struct *work)
 
 static uint32_t *get_queue_ids(uint32_t num_queues, uint32_t *usr_queue_id_array)
 {
-	size_t array_size = num_queues * sizeof(uint32_t);
+	size_t array_size;
 
 	if (!usr_queue_id_array)
 		return NULL;
+
+	if (check_mul_overflow((size_t)num_queues, sizeof(uint32_t), &array_size))
+		return ERR_PTR(-EINVAL);
 
 	return memdup_user(usr_queue_id_array, array_size);
 }
