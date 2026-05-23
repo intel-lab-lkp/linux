@@ -249,6 +249,65 @@ int dax_region_add_resource(struct dax_region *dax_region,
 }
 EXPORT_SYMBOL_GPL(dax_region_add_resource);
 
+int dax_region_rm_resource(struct dax_region *dax_region,
+			   struct device *dev)
+{
+	struct dax_resource *dax_resource;
+
+	guard(rwsem_write)(&dax_region_rwsem);
+
+	dax_resource = dev_get_drvdata(dev);
+	if (!dax_resource)
+		return 0;
+
+	if (dax_resource->use_cnt)
+		return -EBUSY;
+
+	/*
+	 * release the resource under dax_region_rwsem to avoid races with
+	 * users trying to use the extent
+	 */
+	__dax_release_resource(dax_resource);
+	dev_set_drvdata(dev, NULL);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dax_region_rm_resource);
+
+/**
+ * dax_region_rm_resources - atomically remove a set of dax_resources.
+ *
+ * Walk @devs twice under dax_region_rwsem.  First pass refuses the
+ * operation if any member's use_cnt is non-zero; second pass releases
+ * each.  This gives refuse-all-or-none semantics across the set, which
+ * a tag group's atomic release relies on.  Devices with no
+ * dax_resource attached are silently skipped.
+ */
+int dax_region_rm_resources(struct dax_region *dax_region,
+			    struct device * const *devs, unsigned int n)
+{
+	unsigned int i;
+
+	guard(rwsem_write)(&dax_region_rwsem);
+
+	for (i = 0; i < n; i++) {
+		struct dax_resource *r = dev_get_drvdata(devs[i]);
+
+		if (r && r->use_cnt)
+			return -EBUSY;
+	}
+
+	for (i = 0; i < n; i++) {
+		struct dax_resource *r = dev_get_drvdata(devs[i]);
+
+		if (!r)
+			continue;
+		__dax_release_resource(r);
+		dev_set_drvdata(devs[i], NULL);
+	}
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dax_region_rm_resources);
+
 bool static_dev_dax(struct dev_dax *dev_dax)
 {
 	return is_static(dev_dax->region);

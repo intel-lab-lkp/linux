@@ -147,13 +147,17 @@ struct dax_resource {
 };
 
 /*
- * Similar to run_dax() dax_region_add_resource() is exported but is not
- * intended to be a generic operation outside the dax subsystem.  It is only
+ * Similar to run_dax() dax_region_{add,rm}_resource() are exported but are not
+ * intended to be generic operations outside the dax subsystem.  They are only
  * generic between the dax layer and the dax drivers.
  */
 int dax_region_add_resource(struct dax_region *dax_region, struct device *dev,
 			    resource_size_t start, resource_size_t length,
 			    const uuid_t *tag, u16 seq_num);
+int dax_region_rm_resource(struct dax_region *dax_region,
+			   struct device *dev);
+int dax_region_rm_resources(struct dax_region *dax_region,
+			    struct device * const *devs, unsigned int n);
 
 static inline struct dev_dax *to_dev_dax(struct device *dev)
 {

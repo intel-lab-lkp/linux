@@ -532,6 +532,7 @@ int cxl_rm_extent(struct cxl_memdev_state *mds, struct cxl_extent *extent)
 	struct range dpa_range;
 	unsigned long idx;
 	uuid_t tag;
+	int rc;
 
 	dpa_range = (struct range) {
 		.start = start_dpa,
@@ -588,6 +589,18 @@ int cxl_rm_extent(struct cxl_memdev_state *mds, struct cxl_extent *extent)
 		return -EINVAL;
 	}
 
+	rc = cxlr_notify_extent(cxlr, DCD_RELEASE_CAPACITY, group);
+	if (rc) {
+		/*
+		 * dax layer refused (-EBUSY) or failed (-ENOMEM, etc.).  Do
+		 * not proceed to tear down the tag group — leave its
+		 * dax_resources alive so we do not free them out from under
+		 * live dev_dax ranges.  The device will retry the release.
+		 */
+		return 0;
+	}
+
+	/* Release the entire tag group */
 	rm_tag_group(group);
 	return 0;
 }

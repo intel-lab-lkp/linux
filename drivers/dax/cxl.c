@@ -44,19 +44,52 @@ static int cxl_dax_group_add(struct dax_region *dax_region,
 
 	xa_for_each(&group->dc_extents, index, dc_extent) {
 		rc = __cxl_dax_add_resource(dax_region, dc_extent);
-		if (rc)
+		if (rc) {
+			/*
+			 * Unwind every dax_resource already added for this
+			 * group; one rm per owner suffices.
+			 */
+			struct dc_extent *u;
+			unsigned long uidx;
+
+			xa_for_each(&group->dc_extents, uidx, u) {
+				if (u == dc_extent)
+					break;
+				dax_region_rm_resource(dax_region, &u->dev);
+			}
 			return rc;
+		}
 	}
 	return 0;
 }
 
-/*
- * RELEASE is still a stub here — the atomic dax_region_rm_resources API
- * and its wire-up land in the next commit.  An incoming RELEASE returns
- * success and the cxl side proceeds to rm_tag_group(), which device-
- * unregisters each dc_extent; the devm action armed by
- * dax_region_add_resource() then tears down each dax_resource.
- */
+static int cxl_dax_group_rm(struct dax_region *dax_region,
+			    struct cxl_dc_tag_group *group)
+{
+	struct dc_extent *dc_extent;
+	struct device **devs;
+	unsigned long index;
+	unsigned int n = 0;
+	int rc;
+
+	if (!group->nr_extents)
+		return 0;
+
+	devs = kmalloc_array(group->nr_extents, sizeof(*devs), GFP_KERNEL);
+	if (!devs)
+		return -ENOMEM;
+
+	xa_for_each(&group->dc_extents, index, dc_extent) {
+		if (n == group->nr_extents)
+			break;
+		devs[n++] = &dc_extent->dev;
+	}
+
+	rc = dax_region_rm_resources(dax_region, devs, n);
+	kfree(devs);
+	return rc;
+}
+
 static int cxl_dax_region_notify(struct device *dev,
 				 struct cxl_notify_data *notify_data)
 {
@@ -68,10 +101,7 @@ static int cxl_dax_region_notify(struct device *dev,
 	case DCD_ADD_CAPACITY:
 		return cxl_dax_group_add(dax_region, group);
 	case DCD_RELEASE_CAPACITY:
-		dev_dbg(&cxlr_dax->dev,
-			"DCD RELEASE notify (tag %pUb): no-op (stub)\n",
-			&group->uuid);
-		return 0;
+		return cxl_dax_group_rm(dax_region, group);
 	case DCD_FORCED_CAPACITY_RELEASE:
 	default:
 		dev_err(&cxlr_dax->dev, "Unknown DC event %d\n",
