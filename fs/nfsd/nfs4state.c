@@ -3593,6 +3593,9 @@ nfsd4_cb_notify_done(struct nfsd4_callback *cb,
 	struct nfsd4_cb_notify *ncn = container_of(cb, struct nfsd4_cb_notify, ncn_cb);
 	struct nfs4_delegation *dp = container_of(ncn, struct nfs4_delegation, dl_cb_notify);
 
+	if (dp->dl_stid.sc_status)
+		return 1;
+
 	switch (task->tk_status) {
 	case -NFS4ERR_DELAY:
 		rpc_delay(task, 2 * HZ);
