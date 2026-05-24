@@ -990,7 +990,7 @@ xfs_ioc_swapext(
 	if (xfs_is_shutdown(ip->i_mount))
 		return -EIO;
 
-	return xfs_swap_extents(ip, tip, sxp);
+	return xfs_swap_extents(fd_file(f), fd_file(tmp), sxp);
 }
 
 static int

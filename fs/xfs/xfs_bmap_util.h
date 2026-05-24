@@ -8,6 +8,7 @@
 
 /* Kernel only BMAP related definitions and functions */
 
+struct file;
 struct xfs_bmbt_irec;
 struct xfs_extent_free_item;
 struct xfs_ifork;
@@ -68,7 +69,7 @@ int	xfs_insert_file_space(struct xfs_inode *, xfs_off_t offset,
 bool	xfs_can_free_eofblocks(struct xfs_inode *ip);
 int	xfs_free_eofblocks(struct xfs_inode *ip);
 
-int	xfs_swap_extents(struct xfs_inode *ip, struct xfs_inode *tip,
+int	xfs_swap_extents(struct file *file, struct file *tmp_file,
 			 struct xfs_swapext *sx);
 
 xfs_daddr_t xfs_fsb_to_db(struct xfs_inode *ip, xfs_fsblock_t fsb);

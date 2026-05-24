@@ -1505,10 +1505,12 @@ xfs_swap_change_owner(
 
 int
 xfs_swap_extents(
-	struct xfs_inode	*ip,	/* target inode */
-	struct xfs_inode	*tip,	/* tmp inode */
+	struct file		*file,
+	struct file		*tmp_file,
 	struct xfs_swapext	*sxp)
 {
+	struct xfs_inode	*ip = XFS_I(file_inode(file));
+	struct xfs_inode	*tip = XFS_I(file_inode(tmp_file));
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_trans	*tp;
 	struct xfs_bstat	*sbp = &sxp->sx_stat;
@@ -1727,9 +1729,21 @@ xfs_swap_extents(
 		xfs_trans_set_sync(tp);
 
 	error = xfs_trans_commit(tp);
+	if (error)
+		goto out_unlock_ilock;
 
 	trace_xfs_swap_extent_after(ip, 0);
 	trace_xfs_swap_extent_after(tip, 1);
+
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	xfs_iunlock(tip, XFS_ILOCK_EXCL);
+
+	error = file_remove_privs(file);
+	if (error)
+		goto out_unlock;
+	if (file_inode(file) != file_inode(tmp_file))
+		error = file_remove_privs(tmp_file);
+	goto out_unlock;
 
 out_unlock_ilock:
 	xfs_iunlock(ip, XFS_ILOCK_EXCL);
