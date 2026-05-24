@@ -14,6 +14,7 @@
 #include <linux/ioport.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
+#include <linux/numa.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/types.h>
@@ -29,6 +30,63 @@ static void cbqri_set_cbm(struct cbqri_controller *ctrl, u64 cbm)
 {
 	iowrite64(cbm, ctrl->base + CBQRI_CC_BLOCK_MASK_OFF);
 }
+
+/* Set the Rbwb (reserved bandwidth blocks) field in bc_bw_alloc */
+static void cbqri_set_rbwb(struct cbqri_controller *ctrl, u64 rbwb)
+{
+	u64 reg;
+
+	reg = ioread64(ctrl->base + CBQRI_BC_BW_ALLOC_OFF);
+	FIELD_MODIFY(CBQRI_CONTROL_REGISTERS_RBWB_MASK, &reg, rbwb);
+	iowrite64(reg, ctrl->base + CBQRI_BC_BW_ALLOC_OFF);
+}
+
+/* Get the Rbwb (reserved bandwidth blocks) field in bc_bw_alloc */
+static u64 cbqri_get_rbwb(struct cbqri_controller *ctrl)
+{
+	u64 reg;
+
+	reg = ioread64(ctrl->base + CBQRI_BC_BW_ALLOC_OFF);
+	return FIELD_GET(CBQRI_CONTROL_REGISTERS_RBWB_MASK, reg);
+}
+
+/* Set the Mweight (opportunistic weight) field in bc_bw_alloc */
+static void cbqri_set_mweight(struct cbqri_controller *ctrl, u64 mweight)
+{
+	u64 reg;
+
+	reg = ioread64(ctrl->base + CBQRI_BC_BW_ALLOC_OFF);
+	FIELD_MODIFY(CBQRI_CONTROL_REGISTERS_MWEIGHT_MASK, &reg, mweight);
+	iowrite64(reg, ctrl->base + CBQRI_BC_BW_ALLOC_OFF);
+}
+
+/* Get the Mweight (opportunistic weight) field in bc_bw_alloc */
+static u64 cbqri_get_mweight(struct cbqri_controller *ctrl)
+{
+	u64 reg;
+
+	reg = ioread64(ctrl->base + CBQRI_BC_BW_ALLOC_OFF);
+	return FIELD_GET(CBQRI_CONTROL_REGISTERS_MWEIGHT_MASK, reg);
+}
+
+/*
+ * Stage both fields of bc_bw_alloc in one read-modify-write so the staging
+ * register is consistent after a single MMIO write.
+ */
+static void cbqri_set_bc_bw_alloc(struct cbqri_controller *ctrl,
+				  u64 rbwb, u64 mweight)
+{
+	u64 reg = ioread64(ctrl->base + CBQRI_BC_BW_ALLOC_OFF);
+
+	FIELD_MODIFY(CBQRI_CONTROL_REGISTERS_RBWB_MASK, &reg, rbwb);
+	FIELD_MODIFY(CBQRI_CONTROL_REGISTERS_MWEIGHT_MASK, &reg, mweight);
+	iowrite64(reg, ctrl->base + CBQRI_BC_BW_ALLOC_OFF);
+}
+
+enum cbqri_bc_field {
+	CBQRI_BC_FIELD_RBWB,
+	CBQRI_BC_FIELD_MWEIGHT,
+};
 
 static int cbqri_wait_busy_flag(struct cbqri_controller *ctrl, int reg_offset,
 				u64 *regp)
@@ -131,6 +189,41 @@ int cbqri_mon_op(struct cbqri_controller *ctrl, int reg_offset,
 
 	if (out_reg)
 		*out_reg = reg;
+
+	return 0;
+}
+
+/*
+ * Perform bandwidth allocation control operation on bandwidth controller.
+ * Caller must hold ctrl->lock.
+ */
+static int cbqri_bc_alloc_op(struct cbqri_controller *ctrl, int operation, int rcid)
+{
+	int reg_offset = CBQRI_BC_ALLOC_CTL_OFF;
+	int status;
+	u64 reg;
+
+	lockdep_assert_held(&ctrl->lock);
+
+	if (cbqri_wait_busy_flag(ctrl, reg_offset, &reg) < 0) {
+		pr_err_ratelimited("BUSY timeout before starting operation\n");
+		return -EIO;
+	}
+	FIELD_MODIFY(CBQRI_CONTROL_REGISTERS_OP_MASK, &reg, operation);
+	FIELD_MODIFY(CBQRI_CONTROL_REGISTERS_RCID_MASK, &reg, rcid);
+	iowrite64(reg, ctrl->base + reg_offset);
+
+	if (cbqri_wait_busy_flag(ctrl, reg_offset, &reg) < 0) {
+		pr_err_ratelimited("BUSY timeout during operation\n");
+		return -EIO;
+	}
+
+	status = FIELD_GET(CBQRI_CONTROL_REGISTERS_STATUS_MASK, reg);
+	if (status != CBQRI_BC_ALLOC_CTL_STATUS_SUCCESS) {
+		pr_err_ratelimited("BC alloc op %d failed: status=%d\n",
+				   operation, status);
+		return -EIO;
+	}
 
 	return 0;
 }
@@ -262,6 +355,152 @@ int cbqri_read_cache_config(struct cbqri_controller *ctrl, u32 closid,
 		 */
 		*cbm_out = lower_32_bits(ioread64(ctrl->base + CBQRI_CC_BLOCK_MASK_OFF));
 	}
+	mutex_unlock(&ctrl->lock);
+	return err;
+}
+
+/*
+ * Apply a per-RCID update to one field (Rbwb or Mweight) of bc_bw_alloc.
+ * bc_bw_alloc packs both fields, so both halves are seeded from the
+ * authoritative software caches before CONFIG_LIMIT. This avoids the
+ * silent READ_LIMIT no-op window where stale data from a prior op's
+ * RCID could leak into the unmodified field. The verify step uses an
+ * inverted-value sentinel to confirm hardware accepted the target field.
+ *
+ * Caller must hold ctrl->lock.
+ */
+static int cbqri_apply_bc_field(struct cbqri_controller *ctrl, u32 closid,
+				enum cbqri_bc_field field, u64 val)
+{
+	u64 rbwb = ctrl->rbwb_cache[closid];
+	u64 mweight = ctrl->mweight_cache[closid];
+	u64 readback;
+	int ret;
+
+	lockdep_assert_held(&ctrl->lock);
+
+	if (field == CBQRI_BC_FIELD_RBWB)
+		rbwb = val;
+	else
+		mweight = val;
+
+	cbqri_set_bc_bw_alloc(ctrl, rbwb, mweight);
+
+	ret = cbqri_bc_alloc_op(ctrl, CBQRI_BC_ALLOC_CTL_OP_CONFIG_LIMIT, closid);
+	if (ret < 0)
+		return ret;
+
+	/*
+	 * Pre-write a sentinel that cannot equal val to the target field
+	 * so a silent READ_LIMIT (status SUCCESS but no staging update)
+	 * is detectable in the readback. ~val truncated to the field
+	 * width cannot equal val.
+	 */
+	if (field == CBQRI_BC_FIELD_RBWB)
+		cbqri_set_rbwb(ctrl, ~val);
+	else
+		cbqri_set_mweight(ctrl, ~val);
+
+	ret = cbqri_bc_alloc_op(ctrl, CBQRI_BC_ALLOC_CTL_OP_READ_LIMIT, closid);
+	if (ret < 0)
+		return ret;
+
+	readback = (field == CBQRI_BC_FIELD_RBWB) ?
+		   cbqri_get_rbwb(ctrl) : cbqri_get_mweight(ctrl);
+	if (readback != val) {
+		pr_err_ratelimited("BC field verify mismatch (reg=0x%llx != val=%llu)\n",
+				   readback, val);
+		return -EIO;
+	}
+
+	/* Hardware confirmed to hold val. Update the authoritative cache. */
+	if (field == CBQRI_BC_FIELD_RBWB)
+		ctrl->rbwb_cache[closid] = rbwb;
+	else
+		ctrl->mweight_cache[closid] = mweight;
+
+	return 0;
+}
+
+/*
+ * Apply an Rbwb update for closid, optionally enforcing CBQRI section 4.5
+ * sum(Rbwb) <= MRBWB. check_sum=false is used by coordinated init/reset
+ * walks where intermediate sums may transiently exceed MRBWB.
+ */
+int cbqri_apply_rbwb(struct cbqri_controller *ctrl, u32 closid,
+		     u64 rbwb, bool check_sum)
+{
+	u32 i;
+	int ret;
+
+	if (rbwb > U16_MAX)
+		return -EINVAL;
+
+	mutex_lock(&ctrl->lock);
+
+	if (check_sum && rbwb > 0) {
+		u64 sum = rbwb;
+
+		for (i = 0; i < ctrl->rcid_count; i++) {
+			if (i == closid)
+				continue;
+			sum += ctrl->rbwb_cache[i];
+		}
+		if (sum > ctrl->bc.mrbwb) {
+			/* Ratelimited: a userspace loop should not fill dmesg. */
+			pr_err_ratelimited("RBWB sum %llu exceeds MRBWB %u\n",
+					   sum, ctrl->bc.mrbwb);
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+
+	ret = cbqri_apply_bc_field(ctrl, closid, CBQRI_BC_FIELD_RBWB, rbwb);
+out:
+	mutex_unlock(&ctrl->lock);
+	return ret;
+}
+
+int cbqri_apply_mweight_config(struct cbqri_controller *ctrl, u32 closid,
+			       u64 mweight)
+{
+	int ret;
+
+	if (mweight > FIELD_MAX(CBQRI_CONTROL_REGISTERS_MWEIGHT_MASK))
+		return -EINVAL;
+
+	mutex_lock(&ctrl->lock);
+	ret = cbqri_apply_bc_field(ctrl, closid, CBQRI_BC_FIELD_MWEIGHT, mweight);
+	mutex_unlock(&ctrl->lock);
+	return ret;
+}
+
+/*
+ * Read the Rbwb (reserved bandwidth blocks) for closid via READ_LIMIT.
+ */
+int cbqri_read_rbwb(struct cbqri_controller *ctrl, u32 closid, u64 *rbwb_out)
+{
+	int err;
+
+	mutex_lock(&ctrl->lock);
+	err = cbqri_bc_alloc_op(ctrl, CBQRI_BC_ALLOC_CTL_OP_READ_LIMIT, closid);
+	if (err == 0)
+		*rbwb_out = cbqri_get_rbwb(ctrl);
+	mutex_unlock(&ctrl->lock);
+	return err;
+}
+
+/*
+ * Read the Mweight (opportunistic weight) for closid via READ_LIMIT.
+ */
+int cbqri_read_mweight(struct cbqri_controller *ctrl, u32 closid, u64 *mweight_out)
+{
+	int err;
+
+	mutex_lock(&ctrl->lock);
+	err = cbqri_bc_alloc_op(ctrl, CBQRI_BC_ALLOC_CTL_OP_READ_LIMIT, closid);
+	if (err == 0)
+		*mweight_out = cbqri_get_mweight(ctrl);
 	mutex_unlock(&ctrl->lock);
 	return err;
 }
@@ -442,6 +681,109 @@ static int cbqri_probe_cc(struct cbqri_controller *ctrl)
 	return 0;
 }
 
+static int cbqri_probe_bc(struct cbqri_controller *ctrl)
+{
+	bool has_mon_at_code = false;
+	int err, status;
+	u32 i;
+	u64 reg;
+
+	reg = ioread64(ctrl->base + CBQRI_BC_CAPABILITIES_OFF);
+	if (reg == 0)
+		return -ENODEV;
+
+	ctrl->ver_minor = FIELD_GET(CBQRI_BC_CAPABILITIES_VER_MINOR_MASK, reg);
+	ctrl->ver_major = FIELD_GET(CBQRI_BC_CAPABILITIES_VER_MAJOR_MASK, reg);
+	ctrl->bc.nbwblks = FIELD_GET(CBQRI_BC_CAPABILITIES_NBWBLKS_MASK, reg);
+	ctrl->bc.mrbwb = FIELD_GET(CBQRI_BC_CAPABILITIES_MRBWB_MASK, reg);
+
+	if (!ctrl->bc.nbwblks) {
+		pr_err("bandwidth controller has nbwblks=0\n");
+		return -EINVAL;
+	}
+
+	if (!ctrl->rcid_count) {
+		pr_err("bandwidth controller has rcid_count=0\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * Reset seeds RCID 0 with mrbwb - (rcid_count - 1). Reject a
+	 * controller that would underflow that arithmetic.
+	 */
+	if (ctrl->bc.mrbwb < ctrl->rcid_count) {
+		pr_err("bandwidth controller has mrbwb=%u < rcid_count=%u, rejecting\n",
+		       ctrl->bc.mrbwb, ctrl->rcid_count);
+		return -EINVAL;
+	}
+
+	pr_debug("version=%d.%d nbwblks=%d mrbwb=%d\n",
+		 ctrl->ver_major, ctrl->ver_minor,
+		 ctrl->bc.nbwblks, ctrl->bc.mrbwb);
+
+	/* Probe monitoring features */
+	err = cbqri_probe_feature(ctrl, CBQRI_BC_MON_CTL_OFF,
+				  CBQRI_BC_MON_CTL_OP_READ_COUNTER, &status,
+				  &has_mon_at_code);
+	if (err)
+		return err;
+
+	if (status == CBQRI_MON_CTL_STATUS_SUCCESS)
+		ctrl->mon_capable = true;
+
+	/* Probe allocation features */
+	err = cbqri_probe_feature(ctrl, CBQRI_BC_ALLOC_CTL_OFF,
+				  CBQRI_BC_ALLOC_CTL_OP_READ_LIMIT,
+				  &status, &ctrl->bc.supports_alloc_at_code);
+	if (err)
+		return err;
+
+	if (status == CBQRI_BC_ALLOC_CTL_STATUS_SUCCESS) {
+		ctrl->alloc_capable = true;
+
+		/*
+		 * Per-RCID Rbwb and Mweight caches. The caches feed both
+		 * fields of bc_bw_alloc on every apply so the staging
+		 * register reflects authoritative software state, sidestepping
+		 * silent READ_LIMIT no-op corruption of the unmodified field.
+		 * rbwb_cache also lets cbqri_apply_rbwb() validate
+		 * sum(Rbwb) <= MRBWB without re-reading every RCID.
+		 */
+		ctrl->rbwb_cache = kcalloc(ctrl->rcid_count,
+					   sizeof(*ctrl->rbwb_cache),
+					   GFP_KERNEL);
+		if (!ctrl->rbwb_cache)
+			return -ENOMEM;
+
+		ctrl->mweight_cache = kcalloc(ctrl->rcid_count,
+					      sizeof(*ctrl->mweight_cache),
+					      GFP_KERNEL);
+		if (!ctrl->mweight_cache) {
+			kfree(ctrl->rbwb_cache);
+			ctrl->rbwb_cache = NULL;
+			return -ENOMEM;
+		}
+
+		/*
+		 * Seed mweight to the maximum, matching the resctrl-side
+		 * MB_WGHT default. cbqri_apply_bc_field() reads both halves
+		 * of bc_bw_alloc from the caches on every CONFIG_LIMIT, so
+		 * the first MB_MIN domain init (which writes Rbwb) would
+		 * otherwise commit Mweight=0 to every RCID. Per CBQRI 4.5
+		 * a weight of 0 implies the configured limit is a hard
+		 * limit and the use of unused or non-reserved bandwidth
+		 * is not allowed, which starves every RCID of opportunistic
+		 * bandwidth until the subsequent MB_WGHT domain init
+		 * catches up.
+		 */
+		for (i = 0; i < ctrl->rcid_count; i++)
+			ctrl->mweight_cache[i] =
+				FIELD_MAX(CBQRI_CONTROL_REGISTERS_MWEIGHT_MASK);
+	}
+
+	return 0;
+}
+
 static int cbqri_probe_controller(struct cbqri_controller *ctrl)
 {
 	int err;
@@ -476,6 +818,9 @@ static int cbqri_probe_controller(struct cbqri_controller *ctrl)
 	switch (ctrl->type) {
 	case CBQRI_CONTROLLER_TYPE_CAPACITY:
 		err = cbqri_probe_cc(ctrl);
+		break;
+	case CBQRI_CONTROLLER_TYPE_BANDWIDTH:
+		err = cbqri_probe_bc(ctrl);
 		break;
 	default:
 		pr_err("unknown controller type %d\n", ctrl->type);
@@ -529,6 +874,8 @@ void cbqri_controller_destroy(struct cbqri_controller *ctrl)
 		iounmap(ctrl->base);
 		release_mem_region(ctrl->addr, ctrl->size);
 	}
+	kfree(ctrl->mweight_cache);
+	kfree(ctrl->rbwb_cache);
 	kfree(ctrl);
 }
 
@@ -626,6 +973,38 @@ int riscv_cbqri_register_controller(const struct cbqri_controller_info *info)
 			cbqri_controller_destroy(ctrl);
 			return err;
 		}
+		break;
+	}
+	case CBQRI_CONTROLLER_TYPE_BANDWIDTH: {
+		struct cbqri_controller *other;
+		int node_id;
+
+		ctrl->mem.prox_dom = info->prox_dom;
+		node_id = pxm_to_node(info->prox_dom);
+		if (node_id == NUMA_NO_NODE) {
+			pr_warn("controller at %pa: proximity domain %u has no NUMA node, skipping\n",
+				&ctrl->addr, info->prox_dom);
+			cbqri_controller_destroy(ctrl);
+			return -ENODEV;
+		}
+		/*
+		 * cbqri_resctrl_dom tracks a single hw_ctrl per domain, so a
+		 * second BC sharing the same proximity domain would be
+		 * silently dropped when the resctrl glue resolves the cpu to
+		 * an existing domain. Reject the duplicate at register time
+		 * to keep the failure mode visible.
+		 */
+		list_for_each_entry(other, &cbqri_controllers, list) {
+			if (other->type != CBQRI_CONTROLLER_TYPE_BANDWIDTH)
+				continue;
+			if (other->mem.prox_dom != info->prox_dom)
+				continue;
+			pr_warn("controller at %pa: proximity domain %u already claimed by %pa, skipping\n",
+				&ctrl->addr, info->prox_dom, &other->addr);
+			cbqri_controller_destroy(ctrl);
+			return -EEXIST;
+		}
+		cpumask_copy(&ctrl->mem.cpu_mask, cpumask_of_node(node_id));
 		break;
 	}
 	default:

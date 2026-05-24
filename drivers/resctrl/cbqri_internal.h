@@ -9,12 +9,20 @@
 #include <linux/mutex.h>
 #include <linux/types.h>
 
-/* Capacity Controller (CC) MMIO register offsets. */
+/*
+ * Capacity Controller (CC) and Bandwidth Controller (BC) MMIO register offsets.
+ */
 #define CBQRI_CC_CAPABILITIES_OFF 0
 #define CBQRI_CC_MON_CTL_OFF      8
 #define CBQRI_CC_MON_CTL_VAL_OFF 16
 #define CBQRI_CC_ALLOC_CTL_OFF   24
 #define CBQRI_CC_BLOCK_MASK_OFF  32
+
+#define CBQRI_BC_CAPABILITIES_OFF 0
+#define CBQRI_BC_MON_CTL_OFF      8
+#define CBQRI_BC_MON_CTR_VAL_OFF 16
+#define CBQRI_BC_ALLOC_CTL_OFF   24
+#define CBQRI_BC_BW_ALLOC_OFF    32
 
 /*
  * Smallest MMIO span the driver actually accesses: highest defined
@@ -29,6 +37,11 @@
 #define CBQRI_CC_CAPABILITIES_VER_MAJOR_MASK  GENMASK(7, 4)
 #define CBQRI_CC_CAPABILITIES_NCBLKS_MASK     GENMASK(23, 8)
 
+#define CBQRI_BC_CAPABILITIES_VER_MINOR_MASK  GENMASK(3, 0)
+#define CBQRI_BC_CAPABILITIES_VER_MAJOR_MASK  GENMASK(7, 4)
+#define CBQRI_BC_CAPABILITIES_NBWBLKS_MASK    GENMASK(23, 8)
+#define CBQRI_BC_CAPABILITIES_MRBWB_MASK      GENMASK_ULL(47, 32)
+
 #define CBQRI_CONTROL_REGISTERS_OP_MASK      GENMASK(4, 0)
 #define CBQRI_CONTROL_REGISTERS_AT_MASK      GENMASK(7, 5)
 #define CBQRI_CONTROL_REGISTERS_AT_DATA      0
@@ -36,13 +49,21 @@
 #define CBQRI_CONTROL_REGISTERS_RCID_MASK    GENMASK(19, 8)
 #define CBQRI_CONTROL_REGISTERS_STATUS_MASK  GENMASK_ULL(38, 32)
 #define CBQRI_CONTROL_REGISTERS_BUSY_MASK    GENMASK_ULL(39, 39)
+#define CBQRI_CONTROL_REGISTERS_RBWB_MASK    GENMASK(15, 0)
+#define CBQRI_CONTROL_REGISTERS_MWEIGHT_MASK GENMASK(27, 20)
 
 #define CBQRI_CC_ALLOC_CTL_OP_CONFIG_LIMIT 1
 #define CBQRI_CC_ALLOC_CTL_OP_READ_LIMIT   2
 #define CBQRI_CC_ALLOC_CTL_STATUS_SUCCESS  1
 
+#define CBQRI_BC_ALLOC_CTL_OP_CONFIG_LIMIT 1
+#define CBQRI_BC_ALLOC_CTL_OP_READ_LIMIT   2
+#define CBQRI_BC_ALLOC_CTL_STATUS_SUCCESS  1
+
 #define CBQRI_CC_MON_CTL_OP_CONFIG_EVENT 1
 #define CBQRI_CC_MON_CTL_OP_READ_COUNTER 2
+
+#define CBQRI_BC_MON_CTL_OP_READ_COUNTER 2
 
 /* mon_ctl field masks (CC and BC share an identical OP/MCID/EVT_ID/STATUS layout) */
 #define CBQRI_MON_CTL_OP_MASK        GENMASK(4, 0)
@@ -58,6 +79,14 @@
 /* Capacity Controller hardware capabilities */
 struct riscv_cbqri_capacity_caps {
 	u16 ncblks;
+	bool supports_alloc_at_code;
+};
+
+/* Bandwidth Controller hardware capabilities */
+struct riscv_cbqri_bandwidth_caps {
+	u16 nbwblks; /* number of bandwidth blocks */
+	u16 mrbwb;   /* max reserved bw blocks */
+
 	bool supports_alloc_at_code;
 };
 
@@ -109,6 +138,7 @@ struct cbqri_controller {
 	int ver_major;
 	int ver_minor;
 
+	struct riscv_cbqri_bandwidth_caps bc;
 	struct riscv_cbqri_capacity_caps cc;
 
 	bool alloc_capable;
@@ -120,6 +150,15 @@ struct cbqri_controller {
 	u32 rcid_count;
 	u32 mcid_count;
 
+	/*
+	 * Per-RCID cache of the most recent Rbwb / Mweight values applied
+	 * via CONFIG_LIMIT. bc_bw_alloc packs both fields into one register,
+	 * so cbqri_apply_bc_field() seeds both halves from the authoritative
+	 * cache before CONFIG_LIMIT.
+	 */
+	u16 *rbwb_cache;
+	u8  *mweight_cache;
+
 	struct list_head list;
 
 	struct cache_controller {
@@ -129,6 +168,12 @@ struct cbqri_controller {
 		/* Unique Cache ID from the PPTT table's Cache Type Structure */
 		u32 cache_id;
 	} cache;
+
+	struct mem_controller {
+		/* Proximity Domain from SRAT table Memory Affinity Controller */
+		u32 prox_dom;
+		struct cpumask cpu_mask;
+	} mem;
 };
 
 extern struct list_head cbqri_controllers;
@@ -145,5 +190,15 @@ int cbqri_mon_op(struct cbqri_controller *ctrl, int reg_offset,
 		 int operation, int mcid, int evt_id, u64 *out_reg);
 
 int cbqri_init_mon_counters(struct cbqri_controller *ctrl);
+
+int cbqri_apply_rbwb(struct cbqri_controller *ctrl, u32 closid,
+		     u64 rbwb, bool check_sum);
+
+int cbqri_apply_mweight_config(struct cbqri_controller *ctrl, u32 closid,
+			       u64 mweight);
+
+int cbqri_read_rbwb(struct cbqri_controller *ctrl, u32 closid, u64 *rbwb_out);
+
+int cbqri_read_mweight(struct cbqri_controller *ctrl, u32 closid, u64 *mweight_out);
 
 #endif /* _DRIVERS_RESCTRL_CBQRI_INTERNAL_H */
