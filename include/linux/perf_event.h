@@ -119,6 +119,7 @@ struct perf_branch_stack {
 };
 
 struct task_struct;
+struct arm_cmn_node;
 
 /*
  * extra PMU register associated with an event
@@ -200,6 +201,27 @@ struct hw_perf_event {
 			u64	conf;
 			u64	conf1;
 		};
+#ifdef CONFIG_ARM_CMN
+/* Some implementations use a mesh larger than the architectural max of 12 */
+#define CMN_MAX_DIMENSION		14
+#define CMN_MAX_XPS			(CMN_MAX_DIMENSION * CMN_MAX_DIMENSION)
+#define CMN_MAX_NODES_PER_EVENT		CMN_MAX_XPS
+#define CMN_MAX_DTCS			4
+		struct arm_cmn_hw_event { /* arm_cmn */
+			/*
+			 * CMN PMU event state overlaid on hw_perf_event.
+			 * Must fit before the 'target' field.
+			 */
+			struct arm_cmn_node	*dn;
+			u64			dtm_idx[DIV_ROUND_UP(CMN_MAX_NODES_PER_EVENT * 2, 64)];
+			s8			dtc_idx[CMN_MAX_DTCS];
+			u8			num_dns;
+			u8			dtm_offset;
+			DECLARE_BITMAP(wp_idx, CMN_MAX_XPS);
+			bool			wide_sel;
+			int			filter_sel;
+		} cmn;
+#endif
 	};
 	/*
 	 * If the event is a per task event, this will point to the task in

@@ -31,12 +31,7 @@
 #define CMN_CHILD_NODE_ADDR		GENMASK(29, 0)
 #define CMN_CHILD_NODE_EXTERNAL		BIT(31)
 
-#define CMN_MAX_DIMENSION		12
-#define CMN_MAX_XPS			(CMN_MAX_DIMENSION * CMN_MAX_DIMENSION)
 #define CMN_MAX_DTMS			(CMN_MAX_XPS + (CMN_MAX_DIMENSION - 1) * 4)
-
-/* Currently XPs are the node type we can have most of; others top out at 128 */
-#define CMN_MAX_NODES_PER_EVENT		CMN_MAX_XPS
 
 /* The CFG node has various info besides the discovery tree */
 #define CMN_CFGM_PERIPH_ID_01		0x0008
@@ -148,7 +143,6 @@
 #define CMN_DT_PMSRR_SS_REQ		BIT(0)
 
 #define CMN_DT_NUM_COUNTERS		8
-#define CMN_MAX_DTCS			4
 
 /*
  * Even in the worst case a DTC counter can't wrap in fewer than 2^42 cycles,
@@ -595,24 +589,6 @@ static void arm_cmn_debugfs_init(struct arm_cmn *cmn, int id)
 static void arm_cmn_debugfs_init(struct arm_cmn *cmn, int id) {}
 #endif
 
-struct arm_cmn_hw_event {
-	struct arm_cmn_node *dn;
-	u64 dtm_idx[DIV_ROUND_UP(CMN_MAX_NODES_PER_EVENT * 2, 64)];
-	s8 dtc_idx[CMN_MAX_DTCS];
-	u8 num_dns;
-	u8 dtm_offset;
-
-	/*
-	 * WP config registers are divided to UP and DOWN events. We need to
-	 * keep to track only one of them.
-	 */
-	DECLARE_BITMAP(wp_idx, CMN_MAX_XPS);
-
-	bool wide_sel;
-	enum cmn_filter_select filter_sel;
-};
-static_assert(sizeof(struct arm_cmn_hw_event) <= offsetof(struct hw_perf_event, target));
-
 #define for_each_hw_dn(hw, dn, i) \
 	for (i = 0, dn = hw->dn; i < hw->num_dns; i++, dn++)
 
@@ -622,7 +598,7 @@ static_assert(sizeof(struct arm_cmn_hw_event) <= offsetof(struct hw_perf_event, 
 
 static struct arm_cmn_hw_event *to_cmn_hw(struct perf_event *event)
 {
-	return (struct arm_cmn_hw_event *)&event->hw;
+	return &event->hw.cmn;
 }
 
 static void arm_cmn_set_index(u64 x[], unsigned int pos, unsigned int val)
