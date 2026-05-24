@@ -1080,6 +1080,8 @@ static void ep_remove_file(struct eventpoll *ep, struct epitem *epi,
 			v = container_of(head, struct epitems_head, epitems);
 			if (!smp_load_acquire(&v->next))
 				to_free = v;
+			if (!hlist_empty(&v->epitems))
+				to_free = NULL;
 		}
 	}
 	hlist_del_rcu(&epi->fllink);
