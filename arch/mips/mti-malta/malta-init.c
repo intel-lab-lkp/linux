@@ -75,7 +75,7 @@ static void __init console_config(void)
 	if ((strstr(fw_getcmdline(), "earlycon=")) == NULL) {
 		sprintf(console_string, "uart8250,io,0x3f8,%d%c%c", baud,
 			parity, bits);
-		setup_earlycon(console_string);
+		setup_earlycon(console_string, 0);
 	}
 
 	if ((strstr(fw_getcmdline(), "console=")) == NULL) {

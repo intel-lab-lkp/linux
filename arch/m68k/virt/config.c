@@ -83,7 +83,7 @@ void __init config_virt(void)
 
 	snprintf(earlycon, sizeof(earlycon), "early_gf_tty,0x%08x",
 		 virt_bi_data.tty.mmio);
-	setup_earlycon(earlycon);
+	setup_earlycon(earlycon, 0);
 
 	mach_init_IRQ = virt_init_IRQ;
 	mach_sched_init = virt_sched_init;
