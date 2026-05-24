@@ -34,7 +34,7 @@ static void eip93_hash_free_data_blocks(struct ahash_request *req)
 	if (!list_empty(&rctx->blocks))
 		INIT_LIST_HEAD(&rctx->blocks);
 
-	if (rctx->finalize)
+	if (rctx->finalize && rctx->data_dma)
 		dma_unmap_single(eip93->dev, rctx->data_dma,
 				 rctx->data_used,
 				 DMA_TO_DEVICE);
@@ -47,12 +47,13 @@ static void eip93_hash_free_sa_record(struct ahash_request *req)
 	struct eip93_hash_ctx *ctx = crypto_ahash_ctx(ahash);
 	struct eip93_device *eip93 = ctx->eip93;
 
-	if (IS_HMAC(ctx->flags))
+	if (IS_HMAC(ctx->flags) && rctx->sa_record_hmac_base)
 		dma_unmap_single(eip93->dev, rctx->sa_record_hmac_base,
 				 sizeof(rctx->sa_record_hmac), DMA_TO_DEVICE);
 
-	dma_unmap_single(eip93->dev, rctx->sa_record_base,
-			 sizeof(rctx->sa_record), DMA_TO_DEVICE);
+	if (rctx->sa_record_base)
+		dma_unmap_single(eip93->dev, rctx->sa_record_base,
+				 sizeof(rctx->sa_record), DMA_TO_DEVICE);
 }
 
 void eip93_hash_handle_result(struct crypto_async_request *async, int err)
@@ -66,8 +67,9 @@ void eip93_hash_handle_result(struct crypto_async_request *async, int err)
 	struct eip93_device *eip93 = ctx->eip93;
 	int i;
 
-	dma_unmap_single(eip93->dev, rctx->sa_state_base,
-			 sizeof(*sa_state), DMA_FROM_DEVICE);
+	if (rctx->sa_state_base)
+		dma_unmap_single(eip93->dev, rctx->sa_state_base,
+				 sizeof(*sa_state), DMA_FROM_DEVICE);
 
 	/*
 	 * With partial_hash assume SHA256_DIGEST_SIZE buffer is passed.
@@ -200,6 +202,10 @@ static void __eip93_hash_init(struct ahash_request *req)
 
 	rctx->len = 0;
 	rctx->data_used = 0;
+	rctx->sa_record_base = 0;
+	rctx->sa_state_base = 0;
+	rctx->sa_record_hmac_base = 0;
+	rctx->data_dma = 0;
 	rctx->partial_hash = false;
 	rctx->finalize = false;
 	INIT_LIST_HEAD(&rctx->blocks);
@@ -250,8 +256,12 @@ static int eip93_send_hash_req(struct crypto_async_request *async, u8 *data,
 									   sizeof(*sa_record_hmac),
 									   DMA_TO_DEVICE);
 				ret = dma_mapping_error(eip93->dev, rctx->sa_record_hmac_base);
-				if (ret)
+				if (ret) {
+					rctx->sa_record_hmac_base = 0;
+					dma_unmap_single(eip93->dev, src_addr, len,
+							 DMA_TO_DEVICE);
 					return ret;
+				}
 
 				cdesc.sa_addr = rctx->sa_record_hmac_base;
 			}
@@ -420,12 +430,14 @@ static int eip93_hash_update(struct ahash_request *req)
 	return ret;
 
 free_sa_record:
-	dma_unmap_single(eip93->dev, rctx->sa_record_base,
-			 sizeof(*sa_record), DMA_TO_DEVICE);
+	if (rctx->sa_record_base)
+		dma_unmap_single(eip93->dev, rctx->sa_record_base,
+				 sizeof(*sa_record), DMA_TO_DEVICE);
 
 free_sa_state:
-	dma_unmap_single(eip93->dev, rctx->sa_state_base,
-			 sizeof(*sa_state), DMA_TO_DEVICE);
+	if (rctx->sa_state_base)
+		dma_unmap_single(eip93->dev, rctx->sa_state_base,
+				 sizeof(*sa_state), DMA_TO_DEVICE);
 
 	return ret;
 }
@@ -501,12 +513,14 @@ static int __eip93_hash_final(struct ahash_request *req, bool map_dma)
 free_blocks:
 	eip93_hash_free_data_blocks(req);
 
-	dma_unmap_single(eip93->dev, rctx->sa_record_base,
-			 sizeof(*sa_record), DMA_TO_DEVICE);
+	if (rctx->sa_record_base)
+		dma_unmap_single(eip93->dev, rctx->sa_record_base,
+				 sizeof(*sa_record), DMA_TO_DEVICE);
 
 free_sa_state:
-	dma_unmap_single(eip93->dev, rctx->sa_state_base,
-			 sizeof(*sa_state), DMA_TO_DEVICE);
+	if (rctx->sa_state_base)
+		dma_unmap_single(eip93->dev, rctx->sa_state_base,
+				 sizeof(*sa_state), DMA_TO_DEVICE);
 
 	return ret;
 }
@@ -549,11 +563,13 @@ static int eip93_hash_finup(struct ahash_request *req)
 	return __eip93_hash_final(req, false);
 
 free_sa_record:
-	dma_unmap_single(eip93->dev, rctx->sa_record_base,
-			 sizeof(*sa_record), DMA_TO_DEVICE);
+	if (rctx->sa_record_base)
+		dma_unmap_single(eip93->dev, rctx->sa_record_base,
+				 sizeof(*sa_record), DMA_TO_DEVICE);
 free_sa_state:
-	dma_unmap_single(eip93->dev, rctx->sa_state_base,
-			 sizeof(*sa_state), DMA_TO_DEVICE);
+	if (rctx->sa_state_base)
+		dma_unmap_single(eip93->dev, rctx->sa_state_base,
+				 sizeof(*sa_state), DMA_TO_DEVICE);
 
 	return ret;
 }

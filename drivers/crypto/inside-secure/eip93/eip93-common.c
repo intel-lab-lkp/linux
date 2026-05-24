@@ -527,6 +527,8 @@ int eip93_send_req(struct crypto_async_request *async,
 
 	rctx->sa_state_ctr = NULL;
 	rctx->sa_state = NULL;
+	rctx->sa_state_ctr_base = 0;
+	rctx->sa_state_base = 0;
 
 	if (IS_ECB(flags))
 		goto skip_iv;
@@ -534,8 +536,10 @@ int eip93_send_req(struct crypto_async_request *async,
 	memcpy(iv, reqiv, rctx->ivsize);
 
 	rctx->sa_state = kzalloc(sizeof(*rctx->sa_state), GFP_KERNEL);
-	if (!rctx->sa_state)
-		return -ENOMEM;
+	if (!rctx->sa_state) {
+		err = -ENOMEM;
+		goto free_sa_state;
+	}
 
 	sa_state = rctx->sa_state;
 
