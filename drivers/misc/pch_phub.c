@@ -316,7 +316,7 @@ static int pch_phub_write_gbe_mac_addr(struct pch_phub_reg *chip, u8 *data)
 	int retval;
 	int i;
 
-	if ((chip->ioh_type == 1) || (chip->ioh_type == 5)) /* EG20T or ML7831*/
+	if ((chip->ioh_type == PCH_EG20T) || (chip->ioh_type == PCH_ML7831))
 		retval = pch_phub_gbe_serial_rom_conf(chip);
 	else	/* ML7223 */
 		retval = pch_phub_gbe_serial_rom_conf_mp(chip);
@@ -509,6 +509,14 @@ static const struct bin_attribute pch_bin_attr = {
 	.write = pch_phub_bin_write,
 };
 
+enum {
+	PCH_EG20T,
+	PCH_ML7213,
+	PCH_ML7223M,
+	PCH_ML7223N,
+	PCH_ML7831,
+};
+
 static int pch_phub_probe(struct pci_dev *pdev,
 				    const struct pci_device_id *id)
 {
@@ -551,7 +559,7 @@ static int pch_phub_probe(struct pci_dev *pdev,
 
 	chip->pdev = pdev; /* Save pci device struct */
 
-	if (id->driver_data == 1) { /* EG20T PCH */
+	if (id->driver_data == PCH_EG20T) { /* EG20T PCH */
 		const char *board_name;
 		unsigned int prefetch = 0x000affaa;
 
@@ -599,7 +607,7 @@ static int pch_phub_probe(struct pci_dev *pdev,
 					CLKCFG_UART_MASK);
 			}
 		}
-	} else if (id->driver_data == 2) { /* ML7213 IOH */
+	} else if (id->driver_data == PCH_ML7213) { /* ML7213 IOH */
 		ret = sysfs_create_bin_file(&pdev->dev.kobj, &pch_bin_attr);
 		if (ret)
 			goto err_sysfs_create;
@@ -612,7 +620,7 @@ static int pch_phub_probe(struct pci_dev *pdev,
 		iowrite32(0x000affa0, chip->pch_phub_base_address + 0x14);
 		chip->pch_opt_rom_start_address =\
 						 PCH_PHUB_ROM_START_ADDR_ML7213;
-	} else if (id->driver_data == 3) { /* ML7223 IOH Bus-m*/
+	} else if (id->driver_data == PCH_ML7223M) { /* ML7223 IOH Bus-m*/
 		/* set the prefech value
 		 * Device8(GbE)
 		 */
@@ -622,7 +630,7 @@ static int pch_phub_probe(struct pci_dev *pdev,
 		chip->pch_opt_rom_start_address =\
 						 PCH_PHUB_ROM_START_ADDR_ML7223;
 		chip->pch_mac_start_address = PCH_PHUB_MAC_START_ADDR_ML7223;
-	} else if (id->driver_data == 4) { /* ML7223 IOH Bus-n*/
+	} else if (id->driver_data == PCH_ML7223N) { /* ML7223 IOH Bus-n*/
 		ret = sysfs_create_file(&pdev->dev.kobj,
 					&dev_attr_pch_mac.attr);
 		if (ret)
@@ -639,7 +647,7 @@ static int pch_phub_probe(struct pci_dev *pdev,
 		chip->pch_opt_rom_start_address =\
 						 PCH_PHUB_ROM_START_ADDR_ML7223;
 		chip->pch_mac_start_address = PCH_PHUB_MAC_START_ADDR_ML7223;
-	} else if (id->driver_data == 5) { /* ML7831 */
+	} else if (id->driver_data == PCH_ML7831) { /* ML7831 */
 		ret = sysfs_create_file(&pdev->dev.kobj,
 					&dev_attr_pch_mac.attr);
 		if (ret)
@@ -703,11 +711,11 @@ static int __maybe_unused pch_phub_resume(struct device *dev_d)
 }
 
 static const struct pci_device_id pch_phub_pcidev_id[] = {
-	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_PCH1_PHUB),       1,  },
-	{ PCI_VDEVICE(ROHM, PCI_DEVICE_ID_ROHM_ML7213_PHUB), 2,  },
-	{ PCI_VDEVICE(ROHM, PCI_DEVICE_ID_ROHM_ML7223_mPHUB), 3,  },
-	{ PCI_VDEVICE(ROHM, PCI_DEVICE_ID_ROHM_ML7223_nPHUB), 4,  },
-	{ PCI_VDEVICE(ROHM, PCI_DEVICE_ID_ROHM_ML7831_PHUB), 5,  },
+	{ PCI_VDEVICE(INTEL, PCI_DEVICE_ID_PCH1_PHUB),        .driver_data = PCH_EG20T },
+	{ PCI_VDEVICE(ROHM, PCI_DEVICE_ID_ROHM_ML7213_PHUB),  .driver_data = PCH_ML7213 },
+	{ PCI_VDEVICE(ROHM, PCI_DEVICE_ID_ROHM_ML7223_mPHUB), .driver_data = PCH_ML7223M },
+	{ PCI_VDEVICE(ROHM, PCI_DEVICE_ID_ROHM_ML7223_nPHUB), .driver_data = PCH_ML7223N },
+	{ PCI_VDEVICE(ROHM, PCI_DEVICE_ID_ROHM_ML7831_PHUB),  .driver_data = PCH_ML7831 },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, pch_phub_pcidev_id);
