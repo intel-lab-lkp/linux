@@ -13,11 +13,13 @@
 #include <crypto/internal/skcipher.h>
 #include <linux/bitfield.h>
 #include <linux/interrupt.h>
+#include <linux/limits.h>
 
 #define EIP93_RING_BUSY_DELAY		500
 
 #define EIP93_RING_NUM			512
 #define EIP93_RING_BUSY			32
+#define EIP93_REQUEST_IDR_LIMIT		(U16_MAX + 1)
 #define EIP93_CRA_PRIORITY		1500
 
 #define EIP93_RING_SA_STATE_ADDR(base, idx)	((base) + (idx))
