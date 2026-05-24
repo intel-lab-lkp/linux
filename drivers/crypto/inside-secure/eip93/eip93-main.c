@@ -224,11 +224,14 @@ get_more:
 			 FIELD_GET(EIP93_PE_LENGTH_HOST_PE_READY, pe_length) !=
 			 EIP93_PE_LENGTH_PE_READY);
 
-		err = rdesc->pe_ctrl_stat_word & (EIP93_PE_CTRL_PE_EXT_ERR_CODE |
-						  EIP93_PE_CTRL_PE_EXT_ERR |
-						  EIP93_PE_CTRL_PE_SEQNUM_ERR |
-						  EIP93_PE_CTRL_PE_PAD_ERR |
-						  EIP93_PE_CTRL_PE_AUTH_ERR);
+		/* Order descriptor reads after device ownership is returned. */
+		dma_rmb();
+
+		err = pe_ctrl_stat & (EIP93_PE_CTRL_PE_EXT_ERR_CODE |
+				      EIP93_PE_CTRL_PE_EXT_ERR |
+				      EIP93_PE_CTRL_PE_SEQNUM_ERR |
+				      EIP93_PE_CTRL_PE_PAD_ERR |
+				      EIP93_PE_CTRL_PE_AUTH_ERR);
 
 		desc_flags = FIELD_GET(EIP93_PE_USER_ID_DESC_FLAGS, rdesc->user_id);
 		crypto_idr = FIELD_GET(EIP93_PE_USER_ID_CRYPTO_IDR, rdesc->user_id);
