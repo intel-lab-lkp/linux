@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/counter/gpio-counter.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: GPIO-based Counter
+
+maintainers:
+  - Wadim Mueller <wadim.mueller@cmblu.de>
+
+description:
+  GPIO-based software counter.  Decodes up to two primary signals (A
+  and B) and an optional index pulse via edge-triggered GPIO interrupts
+  into a count.  Supports quadrature X1/X2/X4, pulse-direction, and
+  pure increase/decrease modes; the mode is selected at runtime via
+  the counter sysfs ABI.
+
+properties:
+  compatible:
+    const: gpio-counter
+
+  signal-a-gpios:
+    maxItems: 1
+    description:
+      Signal A input (encoder phase A in quadrature modes; pulse
+      input in pulse-direction and increase/decrease modes).
+
+  signal-b-gpios:
+    maxItems: 1
+    description:
+      Signal B input (encoder phase B in quadrature modes; direction
+      input in pulse-direction mode; unused in increase/decrease).
+
+  index-gpios:
+    maxItems: 1
+    description:
+      Optional index (Z) input.  When pulsed, loads the configured
+      preset into the count.
+
+required:
+  - compatible
+  - signal-a-gpios
+  - signal-b-gpios
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    counter {
+        compatible = "gpio-counter";
+        signal-a-gpios = <&gpio0 10 GPIO_ACTIVE_LOW>;
+        signal-b-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
+        index-gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
+    };
+
+...
