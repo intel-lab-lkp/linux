@@ -9,6 +9,7 @@
 #define _EIP93_CIPHER_H_
 
 #include "eip93-main.h"
+#include "eip93-regs.h"
 
 struct eip93_crypto_ctx {
 	struct eip93_device		*eip93;
@@ -16,7 +17,6 @@ struct eip93_crypto_ctx {
 	struct sa_record		*sa_record;
 	u32				sa_nonce;
 	int				blksize;
-	dma_addr_t			sa_record_base;
 	/* AEAD specific */
 	unsigned int			authsize;
 	unsigned int			assoclen;
@@ -32,6 +32,7 @@ struct eip93_cipher_reqctx {
 	unsigned int			textsize;
 	unsigned int			assoclen;
 	unsigned int			authsize;
+	struct sa_record		sa_record __aligned(CRYPTO_DMA_ALIGN);
 	dma_addr_t			sa_record_base;
 	struct sa_state			*sa_state;
 	dma_addr_t			sa_state_base;

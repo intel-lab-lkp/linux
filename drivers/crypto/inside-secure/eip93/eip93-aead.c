@@ -42,12 +42,18 @@ void eip93_aead_handle_result(struct crypto_async_request *async, int err)
 
 static int eip93_aead_send_req(struct crypto_async_request *async)
 {
+	struct eip93_crypto_ctx *ctx = crypto_tfm_ctx(async->tfm);
 	struct aead_request *req = aead_request_cast(async);
 	struct eip93_cipher_reqctx *rctx = aead_request_ctx(req);
 	int err;
 
 	err = check_valid_request(rctx);
 	if (err) {
+		if (rctx->sa_record_base) {
+			dma_unmap_single(ctx->eip93->dev, rctx->sa_record_base,
+					 sizeof(rctx->sa_record), DMA_TO_DEVICE);
+			rctx->sa_record_base = 0;
+		}
 		aead_request_complete(req, err);
 		return err;
 	}
@@ -81,8 +87,6 @@ static void eip93_aead_cra_exit(struct crypto_tfm *tfm)
 {
 	struct eip93_crypto_ctx *ctx = crypto_tfm_ctx(tfm);
 
-	dma_unmap_single(ctx->eip93->dev, ctx->sa_record_base,
-			 sizeof(*ctx->sa_record), DMA_TO_DEVICE);
 	kfree(ctx->sa_record);
 }
 
@@ -191,11 +195,24 @@ static int eip93_aead_crypt(struct aead_request *req)
 	struct crypto_aead *aead = crypto_aead_reqtfm(req);
 	int ret;
 
-	ctx->sa_record_base = dma_map_single(ctx->eip93->dev, ctx->sa_record,
-					     sizeof(*ctx->sa_record), DMA_TO_DEVICE);
-	ret = dma_mapping_error(ctx->eip93->dev, ctx->sa_record_base);
-	if (ret)
+	memcpy(&rctx->sa_record, ctx->sa_record, sizeof(rctx->sa_record));
+	if (IS_DECRYPT(rctx->flags)) {
+		rctx->sa_record.sa_cmd0_word |= EIP93_SA_CMD_DIRECTION_IN;
+		rctx->sa_record.sa_cmd1_word &= ~(EIP93_SA_CMD_COPY_PAD |
+						   EIP93_SA_CMD_COPY_DIGEST);
+	} else {
+		rctx->sa_record.sa_cmd0_word &= ~EIP93_SA_CMD_DIRECTION_IN;
+		rctx->sa_record.sa_cmd1_word |= EIP93_SA_CMD_COPY_PAD |
+						 EIP93_SA_CMD_COPY_DIGEST;
+	}
+
+	rctx->sa_record_base = dma_map_single(ctx->eip93->dev, &rctx->sa_record,
+					      sizeof(rctx->sa_record), DMA_TO_DEVICE);
+	ret = dma_mapping_error(ctx->eip93->dev, rctx->sa_record_base);
+	if (ret) {
+		rctx->sa_record_base = 0;
 		return ret;
+	}
 
 	rctx->textsize = req->cryptlen;
 	rctx->blksize = ctx->blksize;
@@ -205,7 +222,6 @@ static int eip93_aead_crypt(struct aead_request *req)
 	rctx->sg_dst = req->dst;
 	rctx->ivsize = crypto_aead_ivsize(aead);
 	rctx->desc_flags = EIP93_DESC_AEAD;
-	rctx->sa_record_base = ctx->sa_record_base;
 
 	if (IS_DECRYPT(rctx->flags))
 		rctx->textsize -= rctx->authsize;
@@ -237,10 +253,6 @@ static int eip93_aead_decrypt(struct aead_request *req)
 {
 	struct eip93_crypto_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
 	struct eip93_cipher_reqctx *rctx = aead_request_ctx(req);
-
-	ctx->sa_record->sa_cmd0_word |= EIP93_SA_CMD_DIRECTION_IN;
-	ctx->sa_record->sa_cmd1_word &= ~(EIP93_SA_CMD_COPY_PAD |
-					  EIP93_SA_CMD_COPY_DIGEST);
 
 	rctx->flags = ctx->flags;
 	rctx->flags |= EIP93_DECRYPT;

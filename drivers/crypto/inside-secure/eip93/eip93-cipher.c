@@ -32,6 +32,7 @@ void eip93_skcipher_handle_result(struct crypto_async_request *async, int err)
 
 static int eip93_skcipher_send_req(struct crypto_async_request *async)
 {
+	struct eip93_crypto_ctx *ctx = crypto_tfm_ctx(async->tfm);
 	struct skcipher_request *req = skcipher_request_cast(async);
 	struct eip93_cipher_reqctx *rctx = skcipher_request_ctx(req);
 	int err;
@@ -39,6 +40,11 @@ static int eip93_skcipher_send_req(struct crypto_async_request *async)
 	err = check_valid_request(rctx);
 
 	if (err) {
+		if (rctx->sa_record_base) {
+			dma_unmap_single(ctx->eip93->dev, rctx->sa_record_base,
+					 sizeof(rctx->sa_record), DMA_TO_DEVICE);
+			rctx->sa_record_base = 0;
+		}
 		skcipher_request_complete(req, err);
 		return err;
 	}
@@ -72,8 +78,6 @@ static void eip93_skcipher_cra_exit(struct crypto_tfm *tfm)
 {
 	struct eip93_crypto_ctx *ctx = crypto_tfm_ctx(tfm);
 
-	dma_unmap_single(ctx->eip93->dev, ctx->sa_record_base,
-			 sizeof(*ctx->sa_record), DMA_TO_DEVICE);
 	kfree(ctx->sa_record);
 }
 
@@ -133,7 +137,7 @@ static int eip93_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
 	return 0;
 }
 
-static int eip93_skcipher_crypt(struct skcipher_request *req)
+static int eip93_skcipher_crypt(struct skcipher_request *req, bool encrypt)
 {
 	struct eip93_cipher_reqctx *rctx = skcipher_request_ctx(req);
 	struct crypto_async_request *async = &req->base;
@@ -153,11 +157,19 @@ static int eip93_skcipher_crypt(struct skcipher_request *req)
 				crypto_skcipher_blocksize(skcipher)))
 			return -EINVAL;
 
-	ctx->sa_record_base = dma_map_single(ctx->eip93->dev, ctx->sa_record,
-					     sizeof(*ctx->sa_record), DMA_TO_DEVICE);
-	ret = dma_mapping_error(ctx->eip93->dev, ctx->sa_record_base);
-	if (ret)
+	memcpy(&rctx->sa_record, ctx->sa_record, sizeof(rctx->sa_record));
+	if (encrypt)
+		rctx->sa_record.sa_cmd0_word &= ~EIP93_SA_CMD_DIRECTION_IN;
+	else
+		rctx->sa_record.sa_cmd0_word |= EIP93_SA_CMD_DIRECTION_IN;
+
+	rctx->sa_record_base = dma_map_single(ctx->eip93->dev, &rctx->sa_record,
+					      sizeof(rctx->sa_record), DMA_TO_DEVICE);
+	ret = dma_mapping_error(ctx->eip93->dev, rctx->sa_record_base);
+	if (ret) {
+		rctx->sa_record_base = 0;
 		return ret;
+	}
 
 	rctx->assoclen = 0;
 	rctx->textsize = req->cryptlen;
@@ -167,7 +179,6 @@ static int eip93_skcipher_crypt(struct skcipher_request *req)
 	rctx->ivsize = crypto_skcipher_ivsize(skcipher);
 	rctx->blksize = ctx->blksize;
 	rctx->desc_flags = EIP93_DESC_SKCIPHER;
-	rctx->sa_record_base = ctx->sa_record_base;
 
 	return eip93_skcipher_send_req(async);
 }
@@ -181,22 +192,19 @@ static int eip93_skcipher_encrypt(struct skcipher_request *req)
 	rctx->flags = tmpl->flags;
 	rctx->flags |= EIP93_ENCRYPT;
 
-	return eip93_skcipher_crypt(req);
+	return eip93_skcipher_crypt(req, true);
 }
 
 static int eip93_skcipher_decrypt(struct skcipher_request *req)
 {
-	struct eip93_crypto_ctx *ctx = crypto_tfm_ctx(req->base.tfm);
 	struct eip93_cipher_reqctx *rctx = skcipher_request_ctx(req);
 	struct eip93_alg_template *tmpl = container_of(req->base.tfm->__crt_alg,
 				struct eip93_alg_template, alg.skcipher.base);
 
-	ctx->sa_record->sa_cmd0_word |= EIP93_SA_CMD_DIRECTION_IN;
-
 	rctx->flags = tmpl->flags;
 	rctx->flags |= EIP93_DECRYPT;
 
-	return eip93_skcipher_crypt(req);
+	return eip93_skcipher_crypt(req, false);
 }
 
 /* Available algorithms in this module */
