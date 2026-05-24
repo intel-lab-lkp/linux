@@ -33,7 +33,6 @@ struct netpoll {
 
 	union inet_addr local_ip, remote_ip;
 	bool ipv6;
-	u8 remote_mac[ETH_ALEN];
 };
 
 #define np_info(np, fmt, ...)				\

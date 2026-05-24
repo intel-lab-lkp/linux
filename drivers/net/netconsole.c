@@ -178,6 +178,7 @@ enum target_state {
  *		dev_name, dev_mac).
  * @local_port:	UDP source port used to build outgoing log packets.
  * @remote_port:	UDP destination port used to build outgoing log packets.
+ * @remote_mac:	Destination ethernet address used to build outgoing log packets.
  * @buf:	The buffer used to send the full msg to the network stack
  * @resume_wq:	Workqueue to resume deactivated target
  * @skb_pool:	Per-target fallback skb pool consulted by find_skb() when
@@ -207,6 +208,7 @@ struct netconsole_target {
 	struct netpoll		np;
 	u16			local_port;
 	u16			remote_port;
+	u8			remote_mac[ETH_ALEN];
 	/* protected by target_list_lock */
 	char			buf[MAX_PRINT_CHUNK];
 	struct work_struct	resume_wq;
@@ -433,7 +435,7 @@ static struct netconsole_target *alloc_and_init(void)
 	strscpy(nt->np.dev_name, "eth0", IFNAMSIZ);
 	nt->local_port = 6665;
 	nt->remote_port = 6666;
-	eth_broadcast_addr(nt->np.remote_mac);
+	eth_broadcast_addr(nt->remote_mac);
 	nt->state = STATE_DISABLED;
 	INIT_WORK(&nt->resume_wq, process_resume_target);
 
@@ -486,7 +488,7 @@ static void netconsole_print_banner(struct netconsole_target *nt)
 		np_info(np, "remote IPv6 address %pI6c\n", &np->remote_ip.in6);
 	else
 		np_info(np, "remote IPv4 address %pI4\n", &np->remote_ip.ip);
-	np_info(np, "remote ethernet address %pM\n", np->remote_mac);
+	np_info(np, "remote ethernet address %pM\n", nt->remote_mac);
 }
 
 /* Parse the string and populate the `inet_addr` union. Return 0 if IPv4 is
@@ -642,7 +644,7 @@ static ssize_t local_mac_show(struct config_item *item, char *buf)
 
 static ssize_t remote_mac_show(struct config_item *item, char *buf)
 {
-	return sysfs_emit(buf, "%pM\n", to_target(item)->np.remote_mac);
+	return sysfs_emit(buf, "%pM\n", to_target(item)->remote_mac);
 }
 
 static ssize_t transmit_errors_show(struct config_item *item, char *buf)
@@ -1047,7 +1049,7 @@ static ssize_t remote_mac_store(struct config_item *item, const char *buf,
 		goto out_unlock;
 	if (buf[MAC_ADDR_STR_LEN] && buf[MAC_ADDR_STR_LEN] != '\n')
 		goto out_unlock;
-	memcpy(nt->np.remote_mac, remote_mac, ETH_ALEN);
+	memcpy(nt->remote_mac, remote_mac, ETH_ALEN);
 
 	ret = count;
 out_unlock:
@@ -1808,14 +1810,15 @@ static void push_udp(struct netconsole_target *nt, struct sk_buff *skb, int len)
 	netpoll_udp_checksum(np, skb, len);
 }
 
-static void push_eth(struct netpoll *np, struct sk_buff *skb)
+static void push_eth(struct netconsole_target *nt, struct sk_buff *skb)
 {
+	struct netpoll *np = &nt->np;
 	struct ethhdr *eth;
 
 	eth = skb_push(skb, ETH_HLEN);
 	skb_reset_mac_header(skb);
 	ether_addr_copy(eth->h_source, np->dev->dev_addr);
-	ether_addr_copy(eth->h_dest, np->remote_mac);
+	ether_addr_copy(eth->h_dest, nt->remote_mac);
 	if (np->ipv6)
 		eth->h_proto = htons(ETH_P_IPV6);
 	else
@@ -1903,7 +1906,7 @@ static int netpoll_send_udp(struct netconsole_target *nt, const char *msg,
 		push_ipv6(np, skb, len);
 	else
 		push_ipv4(np, skb, len);
-	push_eth(np, skb);
+	push_eth(nt, skb);
 	skb->dev = np->dev;
 
 	return (int)netpoll_send_skb(np, skb);
@@ -2298,7 +2301,7 @@ static int netconsole_parser_cmdline(struct netconsole_target *nt, char *opt)
 
 	if (*cur != 0) {
 		/* MAC address */
-		if (!mac_pton(cur, np->remote_mac))
+		if (!mac_pton(cur, nt->remote_mac))
 			goto parse_failed;
 	}
 
