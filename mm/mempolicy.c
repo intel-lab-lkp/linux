@@ -1883,15 +1883,11 @@ static int kernel_migrate_pages(pid_t pid, unsigned long maxnode,
 	if (err)
 		goto out;
 
-	/* Find the mm_struct */
-	rcu_read_lock();
-	task = pid ? find_task_by_vpid(pid) : current;
+	task = pid ? find_get_task_by_vpid(pid) : current;
 	if (!task) {
-		rcu_read_unlock();
 		err = -ESRCH;
 		goto out;
 	}
-	get_task_struct(task);
 
 	err = -EINVAL;
 
@@ -1900,11 +1896,9 @@ static int kernel_migrate_pages(pid_t pid, unsigned long maxnode,
 	 * Use the regular "ptrace_may_access()" checks.
 	 */
 	if (!ptrace_may_access(task, PTRACE_MODE_READ_REALCREDS)) {
-		rcu_read_unlock();
 		err = -EPERM;
 		goto out_put;
 	}
-	rcu_read_unlock();
 
 	task_nodes = cpuset_mems_allowed(task);
 	/* Is the user allowed to access the target nodes? */
@@ -1932,7 +1926,8 @@ static int kernel_migrate_pages(pid_t pid, unsigned long maxnode,
 
 	mmput(mm);
 out_put:
-	put_task_struct(task);
+	if (pid)
+		put_task_struct(task);
 out:
 	NODEMASK_SCRATCH_FREE(scratch);
 	return err;
