@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: GPL-2.0
+
+menuconfig CLK_SIFLOWER
+	bool "Clock driver for Siflower SoCs"
+	depends on ARCH_SIFLOWER || COMPILE_TEST
+	default ARCH_SIFLOWER
+	help
+	  Clock drivers for Siflower Linux-capable SoCs.
+
+if CLK_SIFLOWER
+
+config CLK_SF21_TOPCRM
+	tristate "Clock driver for Siflower SF21 toplevel clock & reset module"
+	depends on ARCH_SIFLOWER || COMPILE_TEST
+	default ARCH_SIFLOWER
+	select RESET_CONTROLLER
+	select RATIONAL
+	help
+	  Supports the toplevel clock and reset module in Siflower SF21 SoCs.
+	  If this kernel is meant to run on Siflower SF21A6826 or SF21H8898,
+	  enable this driver.
+
+endif

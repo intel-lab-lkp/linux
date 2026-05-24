@@ -145,6 +145,7 @@ obj-y					+= renesas/
 obj-$(CONFIG_COMMON_CLK_ROCKCHIP)	+= rockchip/
 obj-$(CONFIG_COMMON_CLK_SAMSUNG)	+= samsung/
 obj-$(CONFIG_CLK_SIFIVE)		+= sifive/
+obj-$(CONFIG_CLK_SIFLOWER)		+= siflower/
 obj-y					+= socfpga/
 obj-y					+= sophgo/
 obj-y					+= spacemit/
