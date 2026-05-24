@@ -1922,25 +1922,20 @@ static int kernel_migrate_pages(pid_t pid, unsigned long maxnode,
 		goto out_put;
 
 	mm = get_task_mm(task);
-	put_task_struct(task);
-
 	if (!mm) {
 		err = -EINVAL;
-		goto out;
+		goto out_put;
 	}
 
 	err = do_migrate_pages(mm, old, new,
 		capable(CAP_SYS_NICE) ? MPOL_MF_MOVE_ALL : MPOL_MF_MOVE);
 
 	mmput(mm);
-out:
-	NODEMASK_SCRATCH_FREE(scratch);
-
-	return err;
-
 out_put:
 	put_task_struct(task);
-	goto out;
+out:
+	NODEMASK_SCRATCH_FREE(scratch);
+	return err;
 }
 
 SYSCALL_DEFINE4(migrate_pages, pid_t, pid, unsigned long, maxnode,
