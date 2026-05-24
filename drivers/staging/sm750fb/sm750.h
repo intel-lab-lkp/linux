@@ -6,24 +6,24 @@
 
 #define MHZ(x) ((x) * 1000000)
 
-#define DEFAULT_SM750_CHIP_CLOCK	290
-#define DEFAULT_SM750LE_CHIP_CLOCK	333
+#define DEFAULT_SM750_CHIP_CLOCK 290
+#define DEFAULT_SM750LE_CHIP_CLOCK 333
 #ifndef SM750LE_REVISION_ID
 #define SM750LE_REVISION_ID ((unsigned char)0xfe)
 #endif
 
 enum sm750_pnltype {
-	sm750_24TFT = 0,	/* 24bit tft */
-	sm750_dualTFT = 2,	/* dual 18 bit tft */
-	sm750_doubleTFT = 1,	/* 36 bit double pixel tft */
+	SM750_24TFT = 0, /* 24bit tft */
+	SM750_DUAL_TFT = 2, /* dual 18 bit tft */
+	SM750_DOUBLE_TFT = 1, /* 36 bit double pixel tft */
 };
 
 /* vga channel is not concerned  */
 enum sm750_dataflow {
-	sm750_simul_pri,	/* primary => all head */
-	sm750_simul_sec,	/* secondary => all head */
-	sm750_dual_normal,	/* primary => panel head and secondary => crt */
-	sm750_dual_swap,	/* primary => crt head and secondary => panel */
+	sm750_simul_pri, /* primary => all head */
+	sm750_simul_sec, /* secondary => all head */
+	sm750_dual_normal, /* primary => panel head and secondary => crt */
+	sm750_dual_swap, /* primary => crt head and secondary => panel */
 };
 
 enum sm750_channel {
@@ -35,19 +35,18 @@ enum sm750_channel {
 enum sm750_path {
 	sm750_panel = 1,
 	sm750_crt = 2,
-	sm750_pnc = 3,	/* panel and crt */
+	sm750_pnc = 3, /* panel and crt */
 };
 
 struct init_status {
-	ushort powerMode;
+	unsigned short power_mode;
 	/* below three clocks are in unit of MHZ*/
-	ushort chip_clk;
-	ushort mem_clk;
-	ushort master_clk;
-	ushort setAllEngOff;
-	ushort resetMemory;
+	unsigned short chip_clk;
+	unsigned short mem_clk;
+	unsigned short master_clk;
+	unsigned short set_all_eng_off;
+	unsigned short reset_memory;
 };
-
 struct lynx_accel {
 	/* base virtual address of DPR registers */
 	unsigned char __iomem *dpr_base;
@@ -57,26 +56,21 @@ struct lynx_accel {
 	/* function pointers */
 	void (*de_init)(struct lynx_accel *accel);
 
-	int (*de_wait)(void);/* see if hardware ready to work */
+	int (*de_wait)(void); /* see if hardware ready to work */
 
-	int (*de_fillrect)(struct lynx_accel *accel,
-			   u32 base, u32 pitch, u32 bpp,
-			   u32 x, u32 y, u32 width, u32 height,
+	int (*de_fillrect)(struct lynx_accel *accel, u32 base, u32 pitch,
+			   u32 bpp, u32 x, u32 y, u32 width, u32 height,
 			   u32 color, u32 rop);
 
-	int (*de_copyarea)(struct lynx_accel *accel,
-			   u32 s_base, u32 s_pitch,
-			   u32 sx, u32 sy,
-			   u32 d_base, u32 d_pitch,
-			   u32 bpp, u32 dx, u32 dy,
-			   u32 width, u32 height,
-			   u32 rop2);
+	int (*de_copyarea)(struct lynx_accel *accel, u32 s_base, u32 s_pitch,
+			   u32 sx, u32 sy, u32 d_base, u32 d_pitch, u32 bpp,
+			   u32 dx, u32 dy, u32 width, u32 height, u32 rop2);
 
 	int (*de_imageblit)(struct lynx_accel *accel, const char *p_srcbuf,
-			    u32 src_delta, u32 start_bit, u32 d_base, u32 d_pitch,
-			    u32 byte_per_pixel, u32 dx, u32 dy, u32 width,
-			    u32 height, u32 f_color, u32 b_color, u32 rop2);
-
+			    u32 src_delta, u32 start_bit, u32 d_base,
+			    u32 d_pitch, u32 byte_per_pixel, u32 dx, u32 dy,
+			    u32 width, u32 height, u32 f_color, u32 b_color,
+			    u32 rop2);
 };
 
 struct sm750_dev {
@@ -89,7 +83,7 @@ struct sm750_dev {
 	int accel_off;
 	int fb_count;
 	int mtrr_off;
-	struct{
+	struct {
 		int vram;
 	} mtrr;
 	/* all smi graphic adaptor got below attributes */
@@ -97,8 +91,8 @@ struct sm750_dev {
 	unsigned long vidreg_start;
 	__u32 vidmem_size;
 	__u32 vidreg_size;
-	void __iomem *pvReg;
-	unsigned char __iomem *pvMem;
+	void __iomem *pv_reg;
+	unsigned char __iomem *pv_mem;
 	/* locks*/
 	spinlock_t slock;
 
@@ -136,11 +130,11 @@ struct lynxfb_crtc {
 	unsigned char __iomem *v_screen; /* virtual address of on_screen */
 	int o_cursor; /* cursor address offset in vidmem */
 	int o_screen; /* onscreen address offset in vidmem */
-	int channel;/* which channel this crtc stands for*/
-	resource_size_t vidmem_size;/* this view's video memory max size */
+	int channel; /* which channel this crtc stands for*/
+	resource_size_t vidmem_size; /* this view's video memory max size */
 
 	/* below attributes belong to info->fix, their value depends on specific adaptor*/
-	u16 line_pad;/* padding information:0,1,2,4,8,16,... */
+	u16 line_pad; /* padding information:0,1,2,4,8,16,... */
 	u16 xpanstep;
 	u16 ypanstep;
 	u16 ywrapstep;
@@ -206,8 +200,8 @@ int hw_sm750_crtc_set_mode(struct lynxfb_crtc *crtc,
 			   struct fb_var_screeninfo *var,
 			   struct fb_fix_screeninfo *fix);
 
-int hw_sm750_set_col_reg(struct lynxfb_crtc *crtc, ushort index,
-			 ushort red, ushort green, ushort blue);
+int hw_sm750_set_col_reg(struct lynxfb_crtc *crtc, ushort index, ushort red,
+			 ushort green, ushort blue);
 
 int hw_sm750_set_blank(struct lynxfb_output *output, int blank);
 int hw_sm750le_set_blank(struct lynxfb_output *output, int blank);

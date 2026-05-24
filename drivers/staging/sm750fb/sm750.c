@@ -33,7 +33,7 @@
 static int g_hwcursor = 1;
 static int g_noaccel;
 static int g_nomtrr;
-static const char *g_fbmode[] = {NULL, NULL};
+static const char *g_fbmode[] = { NULL, NULL };
 static const char *g_def_fbmode = "1024x768-32@60";
 static char *g_settings;
 static int g_dualview;
@@ -41,64 +41,62 @@ static char *g_option;
 
 static const struct fb_videomode lynx750_ext[] = {
 	/*	1024x600-60 VESA	[1.71:1] */
-	{NULL,  60, 1024, 600, 20423, 144,  40, 18, 1, 104, 3,
-	 FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
-	 FB_VMODE_NONINTERLACED},
+	{ NULL, 60, 1024, 600, 20423, 144, 40, 18, 1, 104, 3,
+	  FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+	  FB_VMODE_NONINTERLACED },
 
 	/*	1024x600-70 VESA */
-	{NULL,  70, 1024, 600, 17211, 152,  48, 21, 1, 104, 3,
-	 FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
-	 FB_VMODE_NONINTERLACED},
+	{ NULL, 70, 1024, 600, 17211, 152, 48, 21, 1, 104, 3,
+	  FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+	  FB_VMODE_NONINTERLACED },
 
 	/*	1024x600-75 VESA */
-	{NULL,  75, 1024, 600, 15822, 160,  56, 23, 1, 104, 3,
-	 FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
-	 FB_VMODE_NONINTERLACED},
+	{ NULL, 75, 1024, 600, 15822, 160, 56, 23, 1, 104, 3,
+	  FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+	  FB_VMODE_NONINTERLACED },
 
 	/*	1024x600-85 VESA */
-	{NULL,  85, 1024, 600, 13730, 168,  56, 26, 1, 112, 3,
-	 FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
-	 FB_VMODE_NONINTERLACED},
+	{ NULL, 85, 1024, 600, 13730, 168, 56, 26, 1, 112, 3,
+	  FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+	  FB_VMODE_NONINTERLACED },
 
 	/*	720x480	*/
-	{NULL, 60,  720,  480,  37427, 88,   16, 13, 1,   72,  3,
-	 FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
-	 FB_VMODE_NONINTERLACED},
+	{ NULL, 60, 720, 480, 37427, 88, 16, 13, 1, 72, 3,
+	  FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+	  FB_VMODE_NONINTERLACED },
 
 	/*	1280x720		[1.78:1]	*/
-	{NULL, 60,  1280,  720,  13426, 162, 86, 22, 1,  136, 3,
-	 FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
-	 FB_VMODE_NONINTERLACED},
+	{ NULL, 60, 1280, 720, 13426, 162, 86, 22, 1, 136, 3,
+	  FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+	  FB_VMODE_NONINTERLACED },
 
 	/*	1280x768@60 */
-	{NULL, 60, 1280, 768, 12579, 192, 64, 20, 3, 128, 7,
-	 FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
-	 FB_VMODE_NONINTERLACED},
+	{ NULL, 60, 1280, 768, 12579, 192, 64, 20, 3, 128, 7,
+	  FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+	  FB_VMODE_NONINTERLACED },
 
 	/*	1360 x 768	[1.77083:1]	*/
-	{NULL,  60, 1360, 768, 11804, 208,  64, 23, 1, 144, 3,
-	 FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
-	 FB_VMODE_NONINTERLACED},
+	{ NULL, 60, 1360, 768, 11804, 208, 64, 23, 1, 144, 3,
+	  FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+	  FB_VMODE_NONINTERLACED },
 
 	/*	1368 x 768      [1.78:1]	*/
-	{NULL, 60,  1368,  768,  11647, 216, 72, 23, 1,  144, 3,
-	 FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
-	 FB_VMODE_NONINTERLACED},
+	{ NULL, 60, 1368, 768, 11647, 216, 72, 23, 1, 144, 3,
+	  FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+	  FB_VMODE_NONINTERLACED },
 
 	/*	1440 x 900		[16:10]	*/
-	{NULL, 60, 1440, 900, 9392, 232, 80, 28, 1, 152, 3,
-	 FB_SYNC_VERT_HIGH_ACT,
-	 FB_VMODE_NONINTERLACED},
+	{ NULL, 60, 1440, 900, 9392, 232, 80, 28, 1, 152, 3,
+	  FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED },
 
 	/*	1440x960		[15:10]	*/
-	{NULL, 60, 1440, 960, 8733, 240, 88, 30, 1, 152, 3,
-	 FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
-	 FB_VMODE_NONINTERLACED},
+	{ NULL, 60, 1440, 960, 8733, 240, 88, 30, 1, 152, 3,
+	  FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT,
+	  FB_VMODE_NONINTERLACED },
 
 	/*	1920x1080	[16:9]	*/
-	{NULL, 60, 1920, 1080, 6734, 148, 88, 41, 1, 44, 3,
-	 FB_SYNC_VERT_HIGH_ACT,
-	 FB_VMODE_NONINTERLACED},
+	{ NULL, 60, 1920, 1080, 6734, 148, 88, 41, 1, 44, 3,
+	  FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED },
 };
 
 /* no hardware cursor supported under version 2.6.10, kernel bug */
@@ -120,8 +118,7 @@ static int lynxfb_ops_cursor(struct fb_info *info, struct fb_cursor *fbcursor)
 
 	sm750_hw_cursor_disable(cursor);
 	if (fbcursor->set & FB_CUR_SETSIZE)
-		sm750_hw_cursor_set_size(cursor,
-					 fbcursor->image.width,
+		sm750_hw_cursor_set_size(cursor, fbcursor->image.width,
 					 fbcursor->image.height);
 
 	if (fbcursor->set & FB_CUR_SETPOS)
@@ -134,19 +131,23 @@ static int lynxfb_ops_cursor(struct fb_info *info, struct fb_cursor *fbcursor)
 		u16 fg, bg;
 
 		fg = ((info->cmap.red[fbcursor->image.fg_color] & 0xf800)) |
-		     ((info->cmap.green[fbcursor->image.fg_color] & 0xfc00) >> 5) |
-		     ((info->cmap.blue[fbcursor->image.fg_color] & 0xf800) >> 11);
+		     ((info->cmap.green[fbcursor->image.fg_color] & 0xfc00) >>
+		      5) |
+		     ((info->cmap.blue[fbcursor->image.fg_color] & 0xf800) >>
+		      11);
 
 		bg = ((info->cmap.red[fbcursor->image.bg_color] & 0xf800)) |
-		     ((info->cmap.green[fbcursor->image.bg_color] & 0xfc00) >> 5) |
-		     ((info->cmap.blue[fbcursor->image.bg_color] & 0xf800) >> 11);
+		     ((info->cmap.green[fbcursor->image.bg_color] & 0xfc00) >>
+		      5) |
+		     ((info->cmap.blue[fbcursor->image.bg_color] & 0xf800) >>
+		      11);
 
 		sm750_hw_cursor_set_color(cursor, fg, bg);
 	}
 
 	if (fbcursor->set & (FB_CUR_SETSHAPE | FB_CUR_SETIMAGE)) {
-		sm750_hw_cursor_set_data(cursor, fbcursor->rop, fbcursor->image.data,
-					 fbcursor->mask);
+		sm750_hw_cursor_set_data(cursor, fbcursor->rop,
+					 fbcursor->image.data, fbcursor->mask);
 	}
 
 	if (fbcursor->enable)
@@ -178,7 +179,7 @@ static void lynxfb_ops_fillrect(struct fb_info *info,
 	bpp = info->var.bits_per_pixel >> 3;
 
 	color = (bpp == 1) ? region->color :
-		((u32 *)info->pseudo_palette)[region->color];
+			     ((u32 *)info->pseudo_palette)[region->color];
 	rop = (region->rop != ROP_COPY) ? HW_ROP2_XOR : HW_ROP2_COPY;
 
 	/*
@@ -189,11 +190,9 @@ static void lynxfb_ops_fillrect(struct fb_info *info,
 	 */
 	spin_lock(&sm750_dev->slock);
 
-	sm750_dev->accel.de_fillrect(&sm750_dev->accel,
-				     base, pitch, bpp,
-				     region->dx, region->dy,
-				     region->width, region->height,
-				     color, rop);
+	sm750_dev->accel.de_fillrect(&sm750_dev->accel, base, pitch, bpp,
+				     region->dx, region->dy, region->width,
+				     region->height, color, rop);
 	spin_unlock(&sm750_dev->slock);
 }
 
@@ -223,10 +222,9 @@ static void lynxfb_ops_copyarea(struct fb_info *info,
 	 */
 	spin_lock(&sm750_dev->slock);
 
-	sm750_dev->accel.de_copyarea(&sm750_dev->accel,
-				     base, pitch, region->sx, region->sy,
-				     base, pitch, bpp, region->dx, region->dy,
-				     region->width, region->height,
+	sm750_dev->accel.de_copyarea(&sm750_dev->accel, base, pitch, region->sx,
+				     region->sy, base, pitch, bpp, region->dx,
+				     region->dy, region->width, region->height,
 				     HW_ROP2_COPY);
 	spin_unlock(&sm750_dev->slock);
 }
@@ -272,12 +270,11 @@ static void lynxfb_ops_imageblit(struct fb_info *info,
 	 */
 	spin_lock(&sm750_dev->slock);
 
-	sm750_dev->accel.de_imageblit(&sm750_dev->accel,
-				      image->data, image->width >> 3, 0,
-				      base, pitch, bpp,
-				      image->dx, image->dy,
-				      image->width, image->height,
-				      fgcol, bgcol, HW_ROP2_COPY);
+	sm750_dev->accel.de_imageblit(&sm750_dev->accel, image->data,
+				      image->width >> 3, 0, base, pitch, bpp,
+				      image->dx, image->dy, image->width,
+				      image->height, fgcol, bgcol,
+				      HW_ROP2_COPY);
 	spin_unlock(&sm750_dev->slock);
 }
 
@@ -385,7 +382,7 @@ static int lynxfb_ops_set_par(struct fb_info *info)
 
 	var->height = -1;
 	var->width = -1;
-	var->accel_flags = 0;/*FB_ACCELF_TEXT;*/
+	var->accel_flags = 0; /*FB_ACCELF_TEXT;*/
 
 	if (ret) {
 		dev_err(info->device, "bpp %d not supported\n",
@@ -498,7 +495,7 @@ static int lynxfb_ops_check_var(struct fb_var_screeninfo *var,
 
 	var->height = -1;
 	var->width = -1;
-	var->accel_flags = 0;/* FB_ACCELF_TEXT; */
+	var->accel_flags = 0; /* FB_ACCELF_TEXT; */
 
 	/* check if current fb's video memory big enough to hold the onscreen*/
 	request = var->xres_virtual * (var->bits_per_pixel >> 3);
@@ -514,12 +511,9 @@ static int lynxfb_ops_check_var(struct fb_var_screeninfo *var,
 	return hw_sm750_crtc_check_mode(crtc, var);
 }
 
-static int lynxfb_ops_setcolreg(unsigned int regno,
-				unsigned int red,
-				unsigned int green,
-				unsigned int blue,
-				unsigned int transp,
-				struct fb_info *info)
+static int lynxfb_ops_setcolreg(unsigned int regno, unsigned int red,
+				unsigned int green, unsigned int blue,
+				unsigned int transp, struct fb_info *info)
 {
 	struct lynxfb_par *par;
 	struct lynxfb_crtc *crtc;
@@ -556,8 +550,7 @@ static int lynxfb_ops_setcolreg(unsigned int regno,
 	if (info->fix.visual == FB_VISUAL_TRUECOLOR && regno < 256) {
 		u32 val;
 
-		if (var->bits_per_pixel == 16 ||
-		    var->bits_per_pixel == 32 ||
+		if (var->bits_per_pixel == 16 || var->bits_per_pixel == 32 ||
 		    var->bits_per_pixel == 24) {
 			val = chan_to_field(red, &var->red);
 			val |= chan_to_field(green, &var->green);
@@ -616,32 +609,33 @@ static int sm750fb_set_drv(struct lynxfb_par *par)
 
 	/* chip specific phase */
 	sm750_dev->accel.de_wait = (sm750_dev->revid == SM750LE_REVISION_ID) ?
-				    hw_sm750le_de_wait : hw_sm750_de_wait;
+					   hw_sm750le_de_wait :
+					   hw_sm750_de_wait;
 	switch (sm750_dev->dataflow) {
 	case sm750_simul_pri:
 		output->paths = sm750_pnc;
 		crtc->channel = sm750_primary;
 		crtc->o_screen = 0;
-		crtc->v_screen = sm750_dev->pvMem;
+		crtc->v_screen = sm750_dev->pv_mem;
 		break;
 	case sm750_simul_sec:
 		output->paths = sm750_pnc;
 		crtc->channel = sm750_secondary;
 		crtc->o_screen = 0;
-		crtc->v_screen = sm750_dev->pvMem;
+		crtc->v_screen = sm750_dev->pv_mem;
 		break;
 	case sm750_dual_normal:
 		if (par->index == 0) {
 			output->paths = sm750_panel;
 			crtc->channel = sm750_primary;
 			crtc->o_screen = 0;
-			crtc->v_screen = sm750_dev->pvMem;
+			crtc->v_screen = sm750_dev->pv_mem;
 		} else {
 			output->paths = sm750_crt;
 			crtc->channel = sm750_secondary;
 			/* not consider of padding stuffs for o_screen,need fix */
 			crtc->o_screen = sm750_dev->vidmem_size >> 1;
-			crtc->v_screen = sm750_dev->pvMem + crtc->o_screen;
+			crtc->v_screen = sm750_dev->pv_mem + crtc->o_screen;
 		}
 		break;
 	case sm750_dual_swap:
@@ -649,7 +643,7 @@ static int sm750fb_set_drv(struct lynxfb_par *par)
 			output->paths = sm750_panel;
 			crtc->channel = sm750_secondary;
 			crtc->o_screen = 0;
-			crtc->v_screen = sm750_dev->pvMem;
+			crtc->v_screen = sm750_dev->pv_mem;
 		} else {
 			output->paths = sm750_crt;
 			crtc->channel = sm750_primary;
@@ -657,7 +651,7 @@ static int sm750fb_set_drv(struct lynxfb_par *par)
 			 * need fix
 			 */
 			crtc->o_screen = sm750_dev->vidmem_size >> 1;
-			crtc->v_screen = sm750_dev->pvMem + crtc->o_screen;
+			crtc->v_screen = sm750_dev->pv_mem + crtc->o_screen;
 		}
 		break;
 	default:
@@ -670,7 +664,7 @@ static int sm750fb_set_drv(struct lynxfb_par *par)
 static const struct fb_ops lynxfb_ops = {
 	.owner = THIS_MODULE,
 	FB_DEFAULT_IOMEM_OPS,
-	.fb_check_var =  lynxfb_ops_check_var,
+	.fb_check_var = lynxfb_ops_check_var,
 	.fb_set_par = lynxfb_ops_set_par,
 	.fb_setcolreg = lynxfb_ops_setcolreg,
 	.fb_blank = lynxfb_ops_blank,
@@ -680,7 +674,7 @@ static const struct fb_ops lynxfb_ops = {
 static const struct fb_ops lynxfb_ops_with_cursor = {
 	.owner = THIS_MODULE,
 	FB_DEFAULT_IOMEM_OPS,
-	.fb_check_var =  lynxfb_ops_check_var,
+	.fb_check_var = lynxfb_ops_check_var,
 	.fb_set_par = lynxfb_ops_set_par,
 	.fb_setcolreg = lynxfb_ops_setcolreg,
 	.fb_blank = lynxfb_ops_blank,
@@ -691,7 +685,7 @@ static const struct fb_ops lynxfb_ops_with_cursor = {
 static const struct fb_ops lynxfb_ops_accel = {
 	.owner = THIS_MODULE,
 	__FB_DEFAULT_IOMEM_OPS_RDWR,
-	.fb_check_var =  lynxfb_ops_check_var,
+	.fb_check_var = lynxfb_ops_check_var,
 	.fb_set_par = lynxfb_ops_set_par,
 	.fb_setcolreg = lynxfb_ops_setcolreg,
 	.fb_blank = lynxfb_ops_blank,
@@ -705,7 +699,7 @@ static const struct fb_ops lynxfb_ops_accel = {
 static const struct fb_ops lynxfb_ops_accel_with_cursor = {
 	.owner = THIS_MODULE,
 	__FB_DEFAULT_IOMEM_OPS_RDWR,
-	.fb_check_var =  lynxfb_ops_check_var,
+	.fb_check_var = lynxfb_ops_check_var,
 	.fb_set_par = lynxfb_ops_set_par,
 	.fb_setcolreg = lynxfb_ops_setcolreg,
 	.fb_blank = lynxfb_ops_blank,
@@ -728,11 +722,14 @@ static int lynxfb_set_fbinfo(struct fb_info *info, int index)
 	struct fb_fix_screeninfo *fix;
 
 	const struct fb_videomode *pdb[] = {
-		lynx750_ext, NULL, vesa_modes,
+		lynx750_ext,
+		NULL,
+		vesa_modes,
 	};
-	int cdb[] = {ARRAY_SIZE(lynx750_ext), 0, VESA_MODEDB_SIZE};
+	int cdb[] = { ARRAY_SIZE(lynx750_ext), 0, VESA_MODEDB_SIZE };
 	static const char *fix_id[2] = {
-		"sm750_fb1", "sm750_fb2",
+		"sm750_fb1",
+		"sm750_fb2",
 	};
 
 	int ret, line_length;
@@ -755,13 +752,13 @@ static int lynxfb_set_fbinfo(struct fb_info *info, int index)
 	 * must be set after crtc member initialized
 	 */
 	crtc->cursor.offset = crtc->o_screen + crtc->vidmem_size - 1024;
-	crtc->cursor.mmio = sm750_dev->pvReg +
-		0x800f0 + (int)crtc->channel * 0x140;
+	crtc->cursor.mmio =
+		sm750_dev->pv_reg + 0x800f0 + (int)crtc->channel * 0x140;
 
 	crtc->cursor.max_h = 64;
 	crtc->cursor.max_w = 64;
 	crtc->cursor.size = crtc->cursor.max_h * crtc->cursor.max_w * 2 / 8;
-	crtc->cursor.vstart = sm750_dev->pvMem + crtc->cursor.offset;
+	crtc->cursor.vstart = sm750_dev->pv_mem + crtc->cursor.offset;
 
 	memset_io(crtc->cursor.vstart, 0, crtc->cursor.size);
 	if (!g_hwcursor)
@@ -788,8 +785,8 @@ static int lynxfb_set_fbinfo(struct fb_info *info, int index)
 	}
 
 	for (i = 0; i < 3; i++) {
-		ret = fb_find_mode(var, info, g_fbmode[index],
-				   pdb[i], cdb[i], NULL, 8);
+		ret = fb_find_mode(var, info, g_fbmode[index], pdb[i], cdb[i],
+				   NULL, 8);
 
 		if (ret == 1 || ret == 2)
 			break;
@@ -859,9 +856,9 @@ static void sm750fb_setup(struct sm750_dev *sm750_dev, char *src)
 	sm750_dev->init_parm.chip_clk = 0;
 	sm750_dev->init_parm.mem_clk = 0;
 	sm750_dev->init_parm.master_clk = 0;
-	sm750_dev->init_parm.powerMode = 0;
-	sm750_dev->init_parm.setAllEngOff = 0;
-	sm750_dev->init_parm.resetMemory = 1;
+	sm750_dev->init_parm.power_mode = 0;
+	sm750_dev->init_parm.set_all_eng_off = 0;
+	sm750_dev->init_parm.reset_memory = 1;
 
 	/* defaultly turn g_hwcursor on for both view */
 	g_hwcursor = 3;
@@ -880,11 +877,11 @@ static void sm750fb_setup(struct sm750_dev *sm750_dev, char *src)
 		} else if (!strncmp(opt, "nocrt", strlen("nocrt"))) {
 			sm750_dev->nocrt = 1;
 		} else if (!strncmp(opt, "36bit", strlen("36bit"))) {
-			sm750_dev->pnltype = sm750_doubleTFT;
+			sm750_dev->pnltype = SM750_DOUBLE_TFT;
 		} else if (!strncmp(opt, "18bit", strlen("18bit"))) {
-			sm750_dev->pnltype = sm750_dualTFT;
+			sm750_dev->pnltype = SM750_DUAL_TFT;
 		} else if (!strncmp(opt, "24bit", strlen("24bit"))) {
-			sm750_dev->pnltype = sm750_24TFT;
+			sm750_dev->pnltype = SM750_24TFT;
 		} else if (!strncmp(opt, "nohwc0", strlen("nohwc0"))) {
 			g_hwcursor &= ~0x1;
 		} else if (!strncmp(opt, "nohwc1", strlen("nohwc1"))) {
@@ -901,7 +898,8 @@ static void sm750fb_setup(struct sm750_dev *sm750_dev, char *src)
 				dev_info(&sm750_dev->pdev->dev,
 					 "find fbmode1 : %s\n", g_fbmode[1]);
 			} else {
-				dev_warn(&sm750_dev->pdev->dev, "How many view you wann set?\n");
+				dev_warn(&sm750_dev->pdev->dev,
+					 "How many view you wann set?\n");
 			}
 		}
 	}
@@ -1028,7 +1026,7 @@ static int lynxfb_pci_probe(struct pci_dev *pdev,
 		sm750_dev->mtrr.vram = arch_phys_wc_add(sm750_dev->vidmem_start,
 							sm750_dev->vidmem_size);
 
-	memset_io(sm750_dev->pvMem, 0, sm750_dev->vidmem_size);
+	memset_io(sm750_dev->pv_mem, 0, sm750_dev->vidmem_size);
 
 	pci_set_drvdata(pdev, sm750_dev);
 
@@ -1059,8 +1057,8 @@ static void lynxfb_pci_remove(struct pci_dev *pdev)
 	sm750fb_framebuffer_release(sm750_dev);
 	arch_phys_wc_del(sm750_dev->mtrr.vram);
 
-	iounmap(sm750_dev->pvReg);
-	iounmap(sm750_dev->pvMem);
+	iounmap(sm750_dev->pv_reg);
+	iounmap(sm750_dev->pv_mem);
 	pci_release_region(pdev, 1);
 	kfree(g_settings);
 }
@@ -1112,8 +1110,12 @@ static int __init lynxfb_setup(char *options)
 }
 
 static const struct pci_device_id smi_pci_table[] = {
-	{ PCI_DEVICE(0x126f, 0x0750), },
-	{0,}
+	{
+		PCI_DEVICE(0x126f, 0x0750),
+	},
+	{
+		0,
+	}
 };
 
 MODULE_DEVICE_TABLE(pci, smi_pci_table);
@@ -1121,11 +1123,11 @@ MODULE_DEVICE_TABLE(pci, smi_pci_table);
 static SIMPLE_DEV_PM_OPS(lynxfb_pm_ops, lynxfb_suspend, lynxfb_resume);
 
 static struct pci_driver lynxfb_driver = {
-	.name =		"sm750fb",
-	.id_table =	smi_pci_table,
-	.probe =	lynxfb_pci_probe,
-	.remove =	lynxfb_pci_remove,
-	.driver.pm =	&lynxfb_pm_ops,
+	.name = "sm750fb",
+	.id_table = smi_pci_table,
+	.probe = lynxfb_pci_probe,
+	.remove = lynxfb_pci_remove,
+	.driver.pm = &lynxfb_pm_ops,
 };
 
 static int __init lynxfb_init(void)
@@ -1162,9 +1164,7 @@ MODULE_PARM_DESC(g_option,
 		 "\t\tdualview:dual frame buffer feature enabled\n"
 		 "\t\tnohwc:disable hardware cursor\n"
 		 "\t\tUsual example:\n"
-		 "\t\tinsmod ./sm750fb.ko g_option=\"noaccel,nohwc,1280x1024-8@60\"\n"
-		 );
-
+		 "\t\tinsmod ./sm750fb.ko g_option=\"noaccel,nohwc,1280x1024-8@60\"\n");
 MODULE_AUTHOR("monk liu <monk.liu@siliconmotion.com>");
 MODULE_AUTHOR("Sudip Mukherjee <sudip@vectorindia.org>");
 MODULE_DESCRIPTION("Frame buffer driver for SM750 chipset");
