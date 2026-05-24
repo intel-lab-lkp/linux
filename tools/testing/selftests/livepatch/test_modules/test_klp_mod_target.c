@@ -5,31 +5,29 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/proc_fs.h>
-#include <linux/seq_file.h>
+#include <linux/moduleparam.h>
 
-static struct proc_dir_entry *pde;
-
-static noinline int test_klp_mod_target_show(struct seq_file *m, void *v)
+static noinline int test_klp_mod_target_get(char *buffer, const struct kernel_param *kp)
 {
-	seq_printf(m, "%s: %s\n", THIS_MODULE->name, "original output");
-	return 0;
+	return sprintf(buffer, "%s: %s\n", THIS_MODULE->name, "original output");
 }
+
+static const struct kernel_param_ops test_klp_mod_target_ops = {
+	.get = test_klp_mod_target_get,
+};
+
+module_param_cb(klp_mod_arg, &test_klp_mod_target_ops, NULL, 0444);
+MODULE_PARM_DESC(klp_mod_arg, "The value of this argument will be livepatched");
 
 static int test_klp_mod_target_init(void)
 {
 	pr_info("%s\n", __func__);
-	pde = proc_create_single("test_klp_mod_target", 0, NULL,
-				 test_klp_mod_target_show);
-	if (!pde)
-		return -ENOMEM;
 	return 0;
 }
 
 static void test_klp_mod_target_exit(void)
 {
 	pr_info("%s\n", __func__);
-	proc_remove(pde);
 }
 
 module_init(test_klp_mod_target_init);

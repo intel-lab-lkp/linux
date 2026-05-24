@@ -198,26 +198,25 @@ livepatch: '$MOD_REPLACE': unpatching complete
 % rmmod $MOD_REPLACE"
 
 
-# - load a target module that provides /proc/test_klp_mod_target with
-#   original output
-# - load a livepatch that patches the target module's show function
-# - verify the proc entry returns livepatched output
+# - load a target module with module_param_cb get data with original output
+# - load a livepatch that patches the target module's get function
+# - verify the parameter get function returns the livepatched output
 # - disable and unload the livepatch
-# - verify the proc entry returns original output again
+# - verify the parameter get function returns the original output again
 # - unload the target module
 
 start_test "module function patching"
 
 load_mod $MOD_TARGET
 
-if [[ "$(cat /proc/$MOD_TARGET)" != "$MOD_TARGET: original output" ]] ; then
+if [[ "$(cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/klp_mod_arg)" != "$MOD_TARGET: original output" ]] ; then
 	echo -e "FAIL\n\n"
 	die "livepatch kselftest(s) failed"
 fi
 
 load_lp $MOD_TARGET_PATCH
 
-if [[ "$(cat /proc/$MOD_TARGET)" != "$MOD_TARGET_PATCH: this has been live patched" ]] ; then
+if [[ "$(cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/klp_mod_arg)" != "$MOD_TARGET_PATCH: this has been live patched" ]] ; then
 	echo -e "FAIL\n\n"
 	die "livepatch kselftest(s) failed"
 fi
@@ -225,7 +224,7 @@ fi
 disable_lp $MOD_TARGET_PATCH
 unload_lp $MOD_TARGET_PATCH
 
-if [[ "$(cat /proc/$MOD_TARGET)" != "$MOD_TARGET: original output" ]] ; then
+if [[ "$(cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/klp_mod_arg)" != "$MOD_TARGET: original output" ]] ; then
 	echo -e "FAIL\n\n"
 	die "livepatch kselftest(s) failed"
 fi
@@ -252,9 +251,9 @@ $MOD_TARGET: test_klp_mod_target_exit"
 
 # - load a livepatch that targets a not-yet-loaded module
 # - load the target module: klp_module_coming patches it immediately
-# - verify the proc entry returns livepatched output
+# - verify the parameter get function returns the livepatched output
 # - disable and unload the livepatch
-# - verify the proc entry returns original output again
+# - verify the parameter get function returns the original output again
 # - unload the target module
 
 start_test "module function patching (livepatch first)"
@@ -262,7 +261,7 @@ start_test "module function patching (livepatch first)"
 load_lp $MOD_TARGET_PATCH
 load_mod $MOD_TARGET
 
-if [[ "$(cat /proc/$MOD_TARGET)" != "$MOD_TARGET_PATCH: this has been live patched" ]] ; then
+if [[ "$(cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/klp_mod_arg)" != "$MOD_TARGET_PATCH: this has been live patched" ]] ; then
 	echo -e "FAIL\n\n"
 	die "livepatch kselftest(s) failed"
 fi
@@ -270,7 +269,7 @@ fi
 disable_lp $MOD_TARGET_PATCH
 unload_lp $MOD_TARGET_PATCH
 
-if [[ "$(cat /proc/$MOD_TARGET)" != "$MOD_TARGET: original output" ]] ; then
+if [[ "$(cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/klp_mod_arg)" != "$MOD_TARGET: original output" ]] ; then
 	echo -e "FAIL\n\n"
 	die "livepatch kselftest(s) failed"
 fi

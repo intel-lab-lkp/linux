@@ -8,17 +8,16 @@
 #include <linux/livepatch.h>
 #include <linux/seq_file.h>
 
-static int livepatch_mod_target_show(struct seq_file *m, void *v)
+static int livepatch_mod_target_get(char *buffer, const struct kernel_param *kp)
 {
-	seq_printf(m, "%s: %s\n", THIS_MODULE->name,
-		   "this has been live patched");
-	return 0;
+	return sprintf(buffer, "%s: %s\n", THIS_MODULE->name,
+		       "this has been live patched");
 }
 
 static struct klp_func funcs[] = {
 	{
-		.old_name = "test_klp_mod_target_show",
-		.new_func = livepatch_mod_target_show,
+		.old_name = "test_klp_mod_target_get",
+		.new_func = livepatch_mod_target_get,
 	},
 	{},
 };
