@@ -352,12 +352,14 @@ static int meson_drv_bind_master(struct device *dev, bool has_components)
 
 	ret = drm_dev_register(drm, 0);
 	if (ret)
-		goto uninstall_irq;
+		goto uninstall_poll;
 
 	drm_client_setup(drm, NULL);
 
 	return 0;
 
+uninstall_poll:
+	drm_kms_helper_poll_fini(drm);
 uninstall_irq:
 	free_irq(priv->vsync_irq, drm);
 exit_afbcd:
