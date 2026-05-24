@@ -1902,24 +1902,31 @@ static int kernel_migrate_pages(pid_t pid, unsigned long maxnode,
 		goto out_put;
 	}
 
+	err = down_read_killable(&task->signal->exec_update_lock);
+	if (err)
+		goto out_put;
 	/*
 	 * Check if this process has the right to modify the specified process.
 	 * Use the regular "ptrace_may_access()" checks.
 	 */
 	if (!ptrace_may_access(task, PTRACE_MODE_READ_REALCREDS)) {
 		err = -EPERM;
-		goto out_put;
+		goto unlock;
 	}
 
 	err = security_task_movememory(task);
 	if (err)
-		goto out_put;
+		goto unlock;
 
 	mm = get_task_mm(task);
 	if (!mm) {
 		err = -EINVAL;
-		goto out_put;
+		goto unlock;
 	}
+unlock:
+	up_read(&task->signal->exec_update_lock);
+	if (err)
+		goto out_put;
 
 	err = do_migrate_pages(mm, old, new,
 		capable(CAP_SYS_NICE) ? MPOL_MF_MOVE_ALL : MPOL_MF_MOVE);
