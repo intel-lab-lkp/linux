@@ -5,7 +5,8 @@ Description:
 		 Controls whether the multiblock allocator should
 		 collect statistics, which are shown during the unmount.
 		 1 means to collect statistics, 0 means not to collect
-		 statistics
+		 statistics. This sysfs entry is deprecated, and users
+		 should prefer /proc/fs/ext4/<disk>/mb_stats.
 
 What:		/sys/fs/ext4/<disk>/mb_group_prealloc
 Date:		March 2008

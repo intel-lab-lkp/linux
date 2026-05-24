@@ -53,6 +53,54 @@ typedef enum {
 static const char proc_dirname[] = "fs/ext4";
 static struct proc_dir_entry *ext4_proc_root;
 
+static int ext4_mb_stats_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ext4_seq_mb_stats_show, pde_data(inode));
+}
+
+static ssize_t ext4_mb_stats_write(struct file *file, const char __user *buf,
+				   size_t count, loff_t *ppos)
+{
+	struct super_block *sb = pde_data(file_inode(file));
+	struct ext4_sb_info *sbi = EXT4_SB(sb);
+	int val;
+	int ret;
+
+	ret = kstrtoint_from_user(buf, count, 0, &val);
+	if (ret)
+		return ret;
+
+	ret = count;
+	mutex_lock(&sbi->s_mb_stats_mutex);
+	switch (val) {
+	case -1:
+		WRITE_ONCE(sbi->s_mb_stats, 0);
+		ext4_mb_stats_clear(sbi);
+		WRITE_ONCE(sbi->s_mb_stats, 1);
+		break;
+	case 1:
+		WRITE_ONCE(sbi->s_mb_stats, 1);
+		break;
+	case 0:
+		WRITE_ONCE(sbi->s_mb_stats, 0);
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+	mutex_unlock(&sbi->s_mb_stats_mutex);
+
+	return ret;
+}
+
+static const struct proc_ops ext4_mb_stats_proc_ops = {
+	.proc_open	= ext4_mb_stats_open,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_release	= single_release,
+	.proc_write	= ext4_mb_stats_write,
+};
+
 struct ext4_attr {
 	struct attribute attr;
 	short attr_id;
@@ -466,7 +514,10 @@ static ssize_t mb_stats_store(struct ext4_sb_info *sbi,
 	ret = kstrtouint(skip_spaces(buf), 0, &t);
 	if (ret)
 		return ret;
+
+	mutex_lock(&sbi->s_mb_stats_mutex);
 	WRITE_ONCE(sbi->s_mb_stats, t);
+	mutex_unlock(&sbi->s_mb_stats_mutex);
 	return len;
 }
 
@@ -658,8 +709,8 @@ int ext4_register_sysfs(struct super_block *sb)
 					ext4_fc_info_show, sb);
 		proc_create_seq_data("mb_groups", S_IRUGO, sbi->s_proc,
 				&ext4_mb_seq_groups_ops, sb);
-		proc_create_single_data("mb_stats", 0444, sbi->s_proc,
-				ext4_seq_mb_stats_show, sb);
+		proc_create_data("mb_stats", 0644, sbi->s_proc,
+				 &ext4_mb_stats_proc_ops, sb);
 		proc_create_seq_data("mb_structs_summary", 0444, sbi->s_proc,
 				&ext4_mb_seq_structs_summary_ops, sb);
 	}

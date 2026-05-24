@@ -1623,18 +1623,7 @@ softirq.
 1.8 Ext4 file system parameters
 -------------------------------
 
-Information about mounted ext4 file systems can be found in
-/proc/fs/ext4.  Each mounted filesystem will have a directory in
-/proc/fs/ext4 based on its device name (i.e., /proc/fs/ext4/hdc or
-/proc/fs/ext4/sda9 or /proc/fs/ext4/dm-0).   The files in each per-device
-directory are shown in Table 1-12, below.
-
-.. table:: Table 1-12: Files in /proc/fs/ext4/<devname>
-
- ==============  ==========================================================
- File            Content
- mb_groups       details of multiblock allocator buddy cache of free blocks
- ==============  ==========================================================
+See Documentation/admin-guide/ext4.rst for ext4-specific /proc entries.
 
 1.9 /proc/consoles
 -------------------
