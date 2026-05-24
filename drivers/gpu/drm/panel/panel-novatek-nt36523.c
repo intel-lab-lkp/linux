@@ -1047,13 +1047,6 @@ static int nt36523_unprepare(struct drm_panel *panel)
 	return 0;
 }
 
-static void nt36523_remove(struct mipi_dsi_device *dsi)
-{
-	struct panel_info *pinfo = mipi_dsi_get_drvdata(dsi);
-
-	drm_panel_remove(&pinfo->panel);
-}
-
 static int nt36523_get_modes(struct drm_panel *panel,
 			       struct drm_connector *connector)
 {
@@ -1225,7 +1218,9 @@ static int nt36523_probe(struct mipi_dsi_device *dsi)
 			return dev_err_probe(dev, ret, "Failed to get backlight\n");
 	}
 
-	drm_panel_add(&pinfo->panel);
+	ret = devm_drm_panel_add(dev, &pinfo->panel);
+	if (ret)
+		return ret;
 
 	for (i = 0; i < DSI_NUM_MIN + pinfo->desc->is_dual_dsi; i++) {
 		pinfo->dsi[i]->lanes = pinfo->desc->lanes;
@@ -1259,7 +1254,6 @@ MODULE_DEVICE_TABLE(of, nt36523_of_match);
 
 static struct mipi_dsi_driver nt36523_driver = {
 	.probe = nt36523_probe,
-	.remove = nt36523_remove,
 	.driver = {
 		.name = "panel-novatek-nt36523",
 		.of_match_table = nt36523_of_match,
