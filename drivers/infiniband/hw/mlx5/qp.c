@@ -2725,6 +2725,10 @@ static void destroy_qp_common(struct mlx5_ib_dev *dev, struct mlx5_ib_qp *qp,
 		if (err)
 			mlx5_ib_warn(dev, "failed to destroy QP 0x%x\n",
 				     base->mqp.qpn);
+		if (qp->rl.rate) {
+			mlx5_rl_remove_rate(dev->mdev, &qp->rl);
+			memset(&qp->rl, 0, sizeof(qp->rl));
+		}
 	}
 
 	destroy_qp(dev, qp, base, udata);
@@ -3673,8 +3677,10 @@ static enum mlx5_qp_optpar opt_mask[MLX5_QP_NUM_STATE][MLX5_QP_NUM_STATE][MLX5_Q
 					  MLX5_QP_OPTPAR_RNR_TIMEOUT,
 			[MLX5_QP_ST_UC] = MLX5_QP_OPTPAR_ALT_ADDR_PATH	|
 					  MLX5_QP_OPTPAR_RWE		|
-					  MLX5_QP_OPTPAR_PM_STATE,
-			[MLX5_QP_ST_UD] = MLX5_QP_OPTPAR_Q_KEY,
+					  MLX5_QP_OPTPAR_PM_STATE	|
+					  MLX5_QP_OPTPAR_PP_INDEX,
+			[MLX5_QP_ST_UD] = MLX5_QP_OPTPAR_Q_KEY		|
+					  MLX5_QP_OPTPAR_PP_INDEX,
 			[MLX5_QP_ST_XRC] = MLX5_QP_OPTPAR_ALT_ADDR_PATH	|
 					  MLX5_QP_OPTPAR_RRE		|
 					  MLX5_QP_OPTPAR_RAE		|
@@ -3693,10 +3699,12 @@ static enum mlx5_qp_optpar opt_mask[MLX5_QP_NUM_STATE][MLX5_QP_NUM_STATE][MLX5_Q
 					  MLX5_QP_OPTPAR_ALT_ADDR_PATH,
 			[MLX5_QP_ST_UC] = MLX5_QP_OPTPAR_RWE		|
 					  MLX5_QP_OPTPAR_PM_STATE	|
-					  MLX5_QP_OPTPAR_ALT_ADDR_PATH,
+					  MLX5_QP_OPTPAR_ALT_ADDR_PATH	|
+					  MLX5_QP_OPTPAR_PP_INDEX,
 			[MLX5_QP_ST_UD] = MLX5_QP_OPTPAR_Q_KEY		|
 					  MLX5_QP_OPTPAR_SRQN		|
-					  MLX5_QP_OPTPAR_CQN_RCV,
+					  MLX5_QP_OPTPAR_CQN_RCV	|
+					  MLX5_QP_OPTPAR_PP_INDEX,
 			[MLX5_QP_ST_XRC] = MLX5_QP_OPTPAR_RRE		|
 					  MLX5_QP_OPTPAR_RAE		|
 					  MLX5_QP_OPTPAR_RWE		|
@@ -3840,11 +3848,31 @@ out:
 	return err;
 }
 
+static bool qp_rate_limit_supported(struct mlx5_ib_dev *dev,
+				    struct mlx5_ib_qp *qp)
+{
+	if (qp->type == IB_QPT_RAW_PACKET ||
+	    qp->flags & IB_QP_CREATE_SOURCE_QPN)
+		return true;
+
+	if (qp->type == IB_QPT_UD)
+		return MLX5_CAP_QOS(dev->mdev, packet_pacing_req_ud);
+
+	if (qp->type == IB_QPT_UC)
+		return MLX5_CAP_QOS(dev->mdev, packet_pacing_req_uc);
+
+	return false;
+}
+
 static int qp_rl_parse(struct mlx5_ib_dev *dev,
+		       struct mlx5_ib_qp *qp,
 		       const struct ib_qp_attr *attr,
 		       const struct mlx5_ib_modify_qp *ucmd,
 		       struct mlx5_rate_limit *rl_desired)
 {
+	if (!qp_rate_limit_supported(dev, qp))
+		return -EOPNOTSUPP;
+
 	rl_desired->rate = attr->rate_limit;
 
 	if (ucmd->burst_info.max_burst_sz) {
@@ -3905,15 +3933,20 @@ static void qp_rl_rollback(struct mlx5_core_dev *dev,
 
 static void qp_rl_commit(struct mlx5_core_dev *dev,
 			 struct mlx5_ib_qp *qp,
-			 struct mlx5_rate_limit_ctx *ctx)
+			 struct mlx5_rate_limit_ctx *ctx,
+			 enum ib_qp_state new_state)
 {
-	if (!ctx->rl_changed)
-		return;
+	if (ctx->rl_changed) {
+		if (ctx->rl_old.rate)
+			mlx5_rl_remove_rate(dev, &ctx->rl_old);
+		qp->rl = ctx->rl_desired;
+	}
 
-	if (ctx->rl_old.rate)
-		mlx5_rl_remove_rate(dev, &ctx->rl_old);
-
-	qp->rl = ctx->rl_desired;
+	if (new_state == IB_QPS_RESET || new_state == IB_QPS_ERR) {
+		if (qp->rl.rate)
+			mlx5_rl_remove_rate(dev, &qp->rl);
+		memset(&qp->rl, 0, sizeof(qp->rl));
+	}
 }
 
 static int modify_raw_packet_qp_sq(
@@ -4220,6 +4253,7 @@ static int __mlx5_ib_modify_qp(struct ib_qp *ibqp,
 	struct mlx5_ib_qp *qp = to_mqp(ibqp);
 	struct mlx5_ib_qp_base *base = &qp->trans_qp.base;
 	struct mlx5_ib_cq *send_cq, *recv_cq;
+	struct mlx5_rate_limit_ctx rl_ctx = {};
 	struct mlx5_ib_pd *pd;
 	enum mlx5_qp_state mlx5_cur, mlx5_new;
 	void *qpc, *pri_path, *alt_path;
@@ -4410,20 +4444,31 @@ static int __mlx5_ib_modify_qp(struct ib_qp *ibqp,
 		goto out;
 	}
 
-	op = optab[mlx5_cur][mlx5_new];
-	optpar |= ib_mask_to_mlx5_opt(attr_mask);
-	optpar &= opt_mask[mlx5_cur][mlx5_new][mlx5_st];
-
-	if (attr_mask & IB_QP_RATE_LIMIT && qp->type != IB_QPT_RAW_PACKET) {
-		err = -EOPNOTSUPP;
-		goto out;
+	if (attr_mask & IB_QP_RATE_LIMIT) {
+		err = qp_rl_parse(dev, qp, attr, ucmd, &rl_ctx.rl_desired);
+		if (err)
+			goto out;
+	} else {
+		rl_ctx.rl_desired = qp->rl;
 	}
+
+	op = optab[mlx5_cur][mlx5_new];
+	if (!mlx5_rl_are_equal(&rl_ctx.rl_desired, &qp->rl)) {
+		err = qp_rl_prepare(dev, qp, op, &rl_ctx);
+		if (err)
+			goto out;
+	}
+	optpar |= ib_mask_to_mlx5_opt(attr_mask);
+	if (rl_ctx.rl_changed)
+		optpar |= MLX5_QP_OPTPAR_PP_INDEX;
+	optpar &= opt_mask[mlx5_cur][mlx5_new][mlx5_st];
 
 	if (qp->type == IB_QPT_RAW_PACKET ||
 	    qp->flags & IB_QP_CREATE_SOURCE_QPN) {
 		struct mlx5_modify_raw_qp_param raw_qp_param = {};
 
 		raw_qp_param.operation = op;
+		raw_qp_param.rl_ctx = rl_ctx;
 		if (cur_state == IB_QPS_RESET && new_state == IB_QPS_INIT) {
 			raw_qp_param.rq_q_ctr_id = set_id;
 			raw_qp_param.set_mask |= MLX5_RAW_QP_MOD_SET_RQ_Q_CTR_ID;
@@ -4432,22 +4477,8 @@ static int __mlx5_ib_modify_qp(struct ib_qp *ibqp,
 		if (attr_mask & IB_QP_PORT)
 			raw_qp_param.port = attr->port_num;
 
-		if (attr_mask & IB_QP_RATE_LIMIT) {
-			err = qp_rl_parse(dev, qp, attr, ucmd,
-					  &raw_qp_param.rl_ctx.rl_desired);
-			if (err)
-				goto out;
-
-			if (!mlx5_rl_are_equal(&raw_qp_param.rl_ctx.rl_desired,
-					       &qp->rl)) {
-				err = qp_rl_prepare(dev, qp, op,
-						    &raw_qp_param.rl_ctx);
-				if (err)
-					goto out;
-			}
-
+		if (rl_ctx.rl_changed)
 			raw_qp_param.set_mask |= MLX5_RAW_QP_RATE_LIMIT;
-		}
 
 		err = modify_raw_packet_qp(dev, qp, &raw_qp_param, tx_affinity);
 		if (err) {
@@ -4455,8 +4486,13 @@ static int __mlx5_ib_modify_qp(struct ib_qp *ibqp,
 			goto out;
 		}
 
-		qp_rl_commit(dev->mdev, qp, &raw_qp_param.rl_ctx);
+		qp_rl_commit(dev->mdev, qp, &raw_qp_param.rl_ctx, new_state);
 	} else {
+		if (rl_ctx.rl_changed) {
+			MLX5_SET(qpc, qpc, packet_pacing_rate_limit_index,
+				 rl_ctx.rl_desired_index);
+		}
+
 		if (udata) {
 			/* For the kernel flows, the resp will stay zero */
 			resp->ece_options =
@@ -4466,6 +4502,13 @@ static int __mlx5_ib_modify_qp(struct ib_qp *ibqp,
 		}
 		err = mlx5_core_qp_modify(dev, op, optpar, qpc, &base->mqp,
 					  &resp->ece_options);
+
+		if (err) {
+			qp_rl_rollback(dev->mdev, &rl_ctx);
+			goto out;
+		}
+
+		qp_rl_commit(dev->mdev, qp, &rl_ctx, new_state);
 	}
 
 	if (err)
