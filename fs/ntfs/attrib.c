@@ -595,6 +595,37 @@ static u32 ntfs_resident_attr_min_value_length(const __le32 type)
 	}
 }
 
+static bool ntfs_file_name_attr_is_valid(const struct attr_record *a)
+{
+	const struct file_name_attr *fn;
+	u32 attr_len = le32_to_cpu(a->length);
+	u32 value_length;
+	u16 value_offset;
+	u32 file_name_size;
+
+	if (a->non_resident)
+		return false;
+
+	if (attr_len < offsetof(struct attr_record, data.resident.reserved) +
+			sizeof(a->data.resident.reserved))
+		return false;
+
+	value_length = le32_to_cpu(a->data.resident.value_length);
+	value_offset = le16_to_cpu(a->data.resident.value_offset);
+
+	if (value_length > attr_len || value_offset > attr_len - value_length)
+		return false;
+
+	if (value_length < ntfs_resident_attr_min_value_length(AT_FILE_NAME))
+		return false;
+
+	fn = (const struct file_name_attr *)((const u8 *)a + value_offset);
+	file_name_size = fn->file_name_length * sizeof(__le16);
+
+	return file_name_size <=
+			value_length - offsetof(struct file_name_attr, file_name);
+}
+
 /*
  * ntfs_attr_find - find (next) attribute in mft record
  * @type:	attribute type to find
@@ -705,6 +736,13 @@ static int ntfs_attr_find(const __le32 type, const __le16 *name,
 			}
 		}
 
+		if (a->type == AT_FILE_NAME &&
+		    !ntfs_file_name_attr_is_valid(a)) {
+			ntfs_error(vol->sb,
+				   "Corrupt $FILE_NAME attribute in MFT record %llu\n",
+				   ctx->ntfs_ino->mft_no);
+			break;
+		}
 		if (type == AT_UNUSED)
 			return 0;
 		if (a->type != type)
@@ -1251,6 +1289,14 @@ do_next_attr_loop:
 			break;
 
 		ctx->attr = a;
+
+		if (a->type == AT_FILE_NAME &&
+		    !ntfs_file_name_attr_is_valid(a)) {
+			ntfs_error(vol->sb,
+				   "Corrupt $FILE_NAME attribute in MFT record %llu\n",
+				   ctx->ntfs_ino->mft_no);
+			break;
+		}
 
 		if (a->non_resident) {
 			u32 min_len;
