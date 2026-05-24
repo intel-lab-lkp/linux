@@ -283,11 +283,35 @@ static bool bound_by_mac(struct netconsole_target *nt)
 	return is_valid_ether_addr(nt->np.dev_mac);
 }
 
+/* Initialise the per-target skb pool that find_skb() falls back to and
+ * seed it. Pair with netconsole_skb_pool_flush() at the matching
+ * netpoll teardown.
+ */
+static void netconsole_skb_pool_init(struct netconsole_target *nt)
+{
+	skb_queue_head_init(&nt->np.skb_pool);
+	INIT_WORK(&nt->np.refill_wq, refill_skbs_work_handler);
+	refill_skbs(&nt->np);
+}
+
+static void netconsole_skb_pool_flush(struct netconsole_target *nt)
+{
+	skb_pool_flush(&nt->np);
+}
+
 /* Attempts to resume logging to a deactivated target. */
 static void resume_target(struct netconsole_target *nt)
 {
+	/* Initialise the skb pool before netpoll_setup() makes nt->np.dev
+	 * visible to target_list walkers (e.g. netconsole_netdev_event),
+	 * which otherwise may move the target to the cleanup list and
+	 * call netconsole_skb_pool_flush() on uninitialised state.
+	 */
+	netconsole_skb_pool_init(nt);
+
 	if (netpoll_setup(&nt->np)) {
 		/* netpoll fails setup once, do not try again. */
+		netconsole_skb_pool_flush(nt);
 		nt->state = STATE_DISABLED;
 		return;
 	}
@@ -389,6 +413,7 @@ static void netconsole_process_cleanups_core(void)
 	list_for_each_entry_safe(nt, tmp, &target_cleanup_list, list) {
 		/* all entries in the cleanup_list needs to be disabled */
 		WARN_ON_ONCE(nt->state == STATE_ENABLED);
+		netconsole_skb_pool_flush(nt);
 		do_netpoll_cleanup(&nt->np);
 		if (bound_by_mac(nt))
 			memset(&nt->np.dev_name, 0, IFNAMSIZ);
@@ -732,9 +757,19 @@ static ssize_t enabled_store(struct config_item *item,
 		 */
 		netconsole_print_banner(&nt->np);
 
+		/* Initialise the skb pool before netpoll_setup() so the pool
+		 * is valid as soon as nt->np.dev becomes visible to
+		 * target_list walkers (netconsole_netdev_event), which would
+		 * otherwise call netconsole_skb_pool_flush() on uninitialised
+		 * state.
+		 */
+		netconsole_skb_pool_init(nt);
+
 		ret = netpoll_setup(&nt->np);
-		if (ret)
+		if (ret) {
+			netconsole_skb_pool_flush(nt);
 			goto out_unlock;
+		}
 
 		nt->state = STATE_ENABLED;
 		pr_info("network logging started\n");
@@ -1474,8 +1509,10 @@ static void drop_netconsole_target(struct config_group *group,
 	 * The target may have never been enabled, or was manually disabled
 	 * before being removed so netpoll may have already been cleaned up.
 	 */
-	if (nt->state == STATE_ENABLED)
+	if (nt->state == STATE_ENABLED) {
+		netconsole_skb_pool_flush(nt);
 		netpoll_cleanup(&nt->np);
+	}
 
 	config_item_put(&nt->group.cg_item);
 }
@@ -2257,10 +2294,18 @@ static struct netconsole_target *alloc_param_target(char *target_config,
 	if (err)
 		goto fail;
 
+	/* Initialise the skb pool before netpoll_setup() so the pool is
+	 * valid as soon as nt->np.dev becomes visible. The target is not
+	 * yet on target_list, so a netdev event cannot reach it here, but
+	 * mirror the configfs path for symmetry.
+	 */
+	netconsole_skb_pool_init(nt);
+
 	err = netpoll_setup(&nt->np);
 	if (err) {
 		pr_err("Not enabling netconsole for %s%d. Netpoll setup failed\n",
 		       NETCONSOLE_PARAM_TARGET_PREFIX, cmdline_count);
+		netconsole_skb_pool_flush(nt);
 		if (!IS_ENABLED(CONFIG_NETCONSOLE_DYNAMIC))
 			/* only fail if dynamic reconfiguration is set,
 			 * otherwise, keep the target in the list, but disabled.
@@ -2282,6 +2327,8 @@ fail:
 static void free_param_target(struct netconsole_target *nt)
 {
 	cancel_work_sync(&nt->resume_wq);
+	if (nt->state == STATE_ENABLED)
+		netconsole_skb_pool_flush(nt);
 	netpoll_cleanup(&nt->np);
 #ifdef	CONFIG_NETCONSOLE_DYNAMIC
 	kfree(nt->userdata);
