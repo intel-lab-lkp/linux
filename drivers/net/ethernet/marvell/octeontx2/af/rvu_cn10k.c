@@ -178,6 +178,13 @@ int rvu_mbox_handler_lmtst_tbl_setup(struct rvu *rvu,
 	 * pcifunc (will be the one who is calling this mailbox).
 	 */
 	if (req->base_pcifunc) {
+		/* Only allow LMTLINE sharing within the same PF, so that a
+		 * PCI function cannot hijack another PF's LMTLINE region.
+		 */
+		if (rvu_get_pf(rvu->pdev, req->hdr.pcifunc) !=
+		    rvu_get_pf(rvu->pdev, req->base_pcifunc))
+			return -EPERM;
+
 		/* Calculating the LMT table index equivalent to primary
 		 * pcifunc.
 		 */
