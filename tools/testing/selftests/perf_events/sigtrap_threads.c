@@ -35,11 +35,15 @@
 
 #define NUM_THREADS 5
 
+/* Force watchpoint access to actually occur. */
+#define READ_ONCE(x)       (*(volatile typeof(x) *)&(x))
+#define WRITE_ONCE(x, val) (*(volatile typeof(x) *)&(x) = (val))
+
 /* Data shared between test body, threads, and signal handler. */
 static struct {
 	int tids_want_signal;		/* Which threads still want a signal. */
 	int signal_count;		/* Sanity check number of signals received. */
-	volatile int iterate_on;	/* Variable to set breakpoint on. */
+	int iterate_on;			/* Variable to set breakpoint on. */
 	siginfo_t first_siginfo;	/* First observed siginfo_t. */
 } ctx;
 
@@ -94,14 +98,14 @@ static void *test_thread(void *arg)
 	pthread_barrier_wait(barrier);
 
 	__atomic_fetch_add(&ctx.tids_want_signal, tid, __ATOMIC_RELAXED);
-	iter = ctx.iterate_on; /* read */
+	iter = READ_ONCE(ctx.iterate_on);
 	if (iter >= 0) {
 		for (i = 0; i < iter - 1; i++) {
 			__atomic_fetch_add(&ctx.tids_want_signal, tid, __ATOMIC_RELAXED);
-			ctx.iterate_on = iter; /* idempotent write */
+			WRITE_ONCE(ctx.iterate_on, iter); /* idempotent write */
 		}
 	} else {
-		while (ctx.iterate_on);
+		while (READ_ONCE(ctx.iterate_on));
 	}
 
 	return NULL;
@@ -175,7 +179,7 @@ TEST_F(sigtrap_threads, enable_event)
 	EXPECT_EQ(ctx.first_siginfo.si_perf_data, TEST_SIG_DATA(&ctx.iterate_on, 0));
 
 	/* Check enabled for parent. */
-	ctx.iterate_on = 0;
+	WRITE_ONCE(ctx.iterate_on, 0);
 	EXPECT_EQ(__atomic_load_n(&ctx.signal_count, __ATOMIC_RELAXED), NUM_THREADS + 1);
 }
 
@@ -194,20 +198,20 @@ TEST_F(sigtrap_threads, modify_and_enable_event)
 	EXPECT_EQ(ctx.first_siginfo.si_perf_data, TEST_SIG_DATA(&ctx.iterate_on, 42));
 
 	/* Check enabled for parent. */
-	ctx.iterate_on = 0;
+	WRITE_ONCE(ctx.iterate_on, 0);
 	EXPECT_EQ(__atomic_load_n(&ctx.signal_count, __ATOMIC_RELAXED), NUM_THREADS + 1);
 }
 
 /* Stress test event + signal handling. */
 TEST_F(sigtrap_threads, signal_stress)
 {
-	ctx.iterate_on = 3000;
+	WRITE_ONCE(ctx.iterate_on, 3000);
 
 	EXPECT_EQ(ioctl(self->fd, PERF_EVENT_IOC_ENABLE, 0), 0);
 	run_test_threads(_metadata, self);
 	EXPECT_EQ(ioctl(self->fd, PERF_EVENT_IOC_DISABLE, 0), 0);
 
-	EXPECT_EQ(__atomic_load_n(&ctx.signal_count, __ATOMIC_RELAXED), NUM_THREADS * ctx.iterate_on);
+	EXPECT_EQ(__atomic_load_n(&ctx.signal_count, __ATOMIC_RELAXED), NUM_THREADS * READ_ONCE(ctx.iterate_on));
 	EXPECT_EQ(__atomic_load_n(&ctx.tids_want_signal, __ATOMIC_RELAXED), 0);
 	EXPECT_EQ(ctx.first_siginfo.si_addr, &ctx.iterate_on);
 	EXPECT_EQ(ctx.first_siginfo.si_perf_type, PERF_TYPE_BREAKPOINT);
@@ -219,7 +223,7 @@ TEST_F(sigtrap_threads, signal_stress_with_disable)
 	const int target_count = NUM_THREADS * 3000;
 	int i;
 
-	ctx.iterate_on = -1;
+	WRITE_ONCE(ctx.iterate_on, -1);
 
 	EXPECT_EQ(ioctl(self->fd, PERF_EVENT_IOC_ENABLE, 0), 0);
 	pthread_barrier_wait(&self->barrier);
@@ -227,7 +231,7 @@ TEST_F(sigtrap_threads, signal_stress_with_disable)
 		EXPECT_EQ(ioctl(self->fd, PERF_EVENT_IOC_DISABLE, 0), 0);
 		EXPECT_EQ(ioctl(self->fd, PERF_EVENT_IOC_ENABLE, 0), 0);
 	}
-	ctx.iterate_on = 0;
+	WRITE_ONCE(ctx.iterate_on, 0);
 	for (i = 0; i < NUM_THREADS; i++)
 		ASSERT_EQ(pthread_join(self->threads[i], NULL), 0);
 	EXPECT_EQ(ioctl(self->fd, PERF_EVENT_IOC_DISABLE, 0), 0);
