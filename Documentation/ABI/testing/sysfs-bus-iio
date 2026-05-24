@@ -2458,3 +2458,20 @@ Description:
 		seconds, expressed as:
 
 		- a range specified as "[min step max]"
+
+What:/sys/bus/iio/devices/iio:deviceX/in_volumeflow_raw
+What:/sys/bus/iio/devices/iio:deviceX/in_volumeflowY_raw
+KernelVersion:6.19
+Contact:linux-iio@vger.kernel.org
+Description:
+Raw (unscaled) volumetric flow rate reading from the channel.
+To convert to standard units (litres / second) apply the
+channel's _scale (and _offset, when present).
+
+What:/sys/bus/iio/devices/iio:deviceX/in_volumeflow_scale
+What:/sys/bus/iio/devices/iio:deviceX/in_volumeflowY_scale
+KernelVersion:6.19
+Contact:linux-iio@vger.kernel.org
+Description:
+Scale factor applied to raw volumetric flow readings to obtain
+the value in litres per second (l/s).
