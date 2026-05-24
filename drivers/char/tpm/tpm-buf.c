@@ -7,6 +7,8 @@
 #include <linux/module.h>
 #include <linux/tpm.h>
 
+#include "tpm.h"
+
 /**
  * tpm_buf_init() - Allocate and initialize a TPM command
  * @buf:	A &tpm_buf
@@ -108,7 +110,7 @@ void tpm_buf_append(struct tpm_buf *buf, const u8 *new_data, u16 new_length)
 	if (buf->flags & TPM_BUF_OVERFLOW)
 		return;
 
-	if ((buf->length + new_length) > PAGE_SIZE) {
+	if ((buf->length + new_length) > TPM_BUFSIZE) {
 		WARN(1, "tpm_buf: write overflow\n");
 		buf->flags |= TPM_BUF_OVERFLOW;
 		return;
