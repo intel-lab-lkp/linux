@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/imu/opensensorfusion,osf-uart.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Open Sensor Fusion UART sensor aggregation device
+
+maintainers:
+  - Jinseob Kim <kimjinseob88@gmail.com>
+
+description:
+  UART-attached sensor aggregation device using the OSF0 frame format.
+  The device sends capability, status, and sample frames to the host.
+
+properties:
+  compatible:
+    const: opensensorfusion,osf-uart
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    serial {
+        osf {
+            compatible = "opensensorfusion,osf-uart";
+        };
+    };
+
+...

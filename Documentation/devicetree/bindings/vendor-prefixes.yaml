@@ -1239,6 +1239,8 @@ patternProperties:
     description: OpenRISC.io
   "^openwrt,.*":
     description: OpenWrt
+  "^opensensorfusion,.*":
+    description: Open Sensor Fusion project
   "^option,.*":
     description: Option NV
   "^oranth,.*":
