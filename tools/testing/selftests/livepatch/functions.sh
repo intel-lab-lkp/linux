@@ -15,6 +15,8 @@ if [[ -e /sys/kernel/tracing/trace ]]; then
 else
 	SYSFS_TRACING_DIR="$SYSFS_DEBUG_DIR/tracing"
 fi
+# List of loaded modules used in tests
+TEST_MODS=()
 
 # Kselftest framework requirement - SKIP code is 4
 ksft_skip=4
@@ -125,6 +127,14 @@ function set_ftrace_enabled() {
 }
 
 function cleanup() {
+	# Remove leftover modules in reverse order to handle dependencies
+	for mod_item in "${TEST_MODS[@]}"; do
+		if is_livepatch_mod "$mod_item"; then
+			disable_lp "$mod_item"
+		fi
+		_remove_mod "$mod_item"
+	done
+
 	pop_config
 }
 
@@ -181,6 +191,9 @@ function __load_mod() {
 	# Wait for module in sysfs ...
 	loop_until '[[ -e "/sys/module/$mod" ]]' ||
 		die "failed to load module $mod"
+
+	# Store the module in the modules list
+	TEST_MODS+=("$mod")
 }
 
 
@@ -262,12 +275,20 @@ function _remove_mod() {
 		die "failed to unload module $mod (/sys/module)"
 }
 
-# unload_mod(modname) - unload a kernel module
+# unload_mod(modname) - unload a kernel module and remove it from TEST_MODS
 #	modname - module name to unload
 function unload_mod() {
 	local mod="$1"
 
 	_remove_mod "$mod"
+
+	# Remove from TEST_MODS array
+	for i in "${!TEST_MODS[@]}"; do
+		if [[ "${TEST_MODS[$i]}" == "$mod" ]]; then
+			unset 'TEST_MODS[$i]'
+			break
+		fi
+	done
 }
 
 # unload_lp(modname) - unload a kernel module with a livepatch
