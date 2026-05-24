@@ -5,11 +5,11 @@ config OPEN_SENSOR_FUSION
 	depends on IIO
 	depends on SERIAL_DEV_BUS
 	select CRC32
+	select IIO_KFIFO_BUF
 	help
-	  Build the Open Sensor Fusion UART receive path.
+	  Build the Open Sensor Fusion UART IIO driver.
 
-	  The driver receives OSF0 frames over a serdev UART.
-	  Frames are decoded and validated before being passed to the
-	  driver core.
-	  This patch only adds the transport path.
-	  IIO device registration is added separately.
+	  The driver receives OSF0 frames over a serdev UART and registers
+	  IIO devices for supported capability entries.
+	  Raw reads use the latest decoded samples. Buffered reads use
+	  fixed scan layouts and IIO timestamps.
