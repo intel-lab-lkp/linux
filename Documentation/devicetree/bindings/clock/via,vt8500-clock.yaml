@@ -1,0 +1,209 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/via,vt8500-clock.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: VIA/Wondermedia VT8500 Clock Controller
+
+maintainers:
+  - Michael Turquette <mturquette@baylibre.com>
+  - Stephen Boyd <sboyd@kernel.org>
+
+description:
+  Clock controller bindings for VIA/Wondermedia VT8500 and Wondermedia WM8xxx
+  series SoCs.
+
+select:
+  properties:
+    compatible:
+      const: via,vt8500-pmc
+
+  required:
+    - compatible
+
+properties:
+  compatible:
+    const: via,vt8500-pmc
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    type: object
+    additionalProperties: true
+
+    properties:
+      "#address-cells":
+        const: 1
+
+      "#size-cells":
+        const: 0
+
+    required:
+      - "#address-cells"
+      - "#size-cells"
+
+    patternProperties:
+      "^[a-z0-9-]+(@[0-9a-f]+)?$":
+        type: object
+
+        properties:
+          compatible:
+            enum:
+              - via,vt8500-pll-clock
+              - wm,wm8650-pll-clock
+              - wm,wm8750-pll-clock
+              - wm,wm8850-pll-clock
+              - via,vt8500-device-clock
+
+          reg:
+            maxItems: 1
+            description:
+              Offset of the PLL register within the PMC register space.
+
+          clocks:
+            maxItems: 1
+
+          "#clock-cells":
+            const: 0
+
+          enable-reg:
+            $ref: /schemas/types.yaml#/definitions/uint32
+            description:
+              Offset of the clock enable register within the PMC
+              register space.
+
+          enable-bit:
+            $ref: /schemas/types.yaml#/definitions/uint32
+            maximum: 31
+            description:
+              Bit index controlling clock enable.
+
+          divisor-reg:
+            $ref: /schemas/types.yaml#/definitions/uint32
+            description:
+              Offset of the clock divisor register within the PMC
+              register space.
+
+          divisor-mask:
+            $ref: /schemas/types.yaml#/definitions/uint32
+            default: 0x1f
+            description:
+              Bitmask describing the divisor field inside divisor-reg.
+
+        dependentRequired:
+          enable-reg:
+            - enable-bit
+
+          enable-bit:
+            - enable-reg
+
+        required:
+          - compatible
+          - "#clock-cells"
+
+        allOf:
+          - if:
+              properties:
+                compatible:
+                  enum:
+                    - via,vt8500-pll-clock
+                    - wm,wm8650-pll-clock
+                    - wm,wm8750-pll-clock
+                    - wm,wm8850-pll-clock
+            then:
+              required:
+                - reg
+                - clocks
+
+          - if:
+              properties:
+                compatible:
+                  const: via,vt8500-device-clock
+            then:
+              properties:
+                reg: false
+
+              required:
+                - clocks
+
+              anyOf:
+                - required:
+                    - enable-reg
+                    - enable-bit
+
+                - required:
+                    - divisor-reg
+
+        additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - clocks
+
+additionalProperties: false
+
+examples:
+  - |
+    pmc@d8130000 {
+        compatible = "via,vt8500-pmc";
+        reg = <0xd8130000 0x1000>;
+
+        clocks {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            ref24: ref24M {
+                compatible = "fixed-clock";
+                #clock-cells = <0>;
+                clock-frequency = <24000000>;
+            };
+
+            ref25: ref25M {
+                compatible = "fixed-clock";
+                #clock-cells = <0>;
+                clock-frequency = <25000000>;
+            };
+
+            plla: clock@200 {
+                compatible = "wm,wm8650-pll-clock";
+                #clock-cells = <0>;
+                clocks = <&ref25>;
+                reg = <0x200>;
+            };
+
+            pllb: clock@204 {
+                compatible = "wm,wm8650-pll-clock";
+                #clock-cells = <0>;
+                clocks = <&ref25>;
+                reg = <0x204>;
+            };
+
+            clkarm: arm {
+                compatible = "via,vt8500-device-clock";
+                #clock-cells = <0>;
+                clocks = <&plla>;
+                divisor-reg = <0x300>;
+            };
+
+            clkuart0: uart0 {
+                compatible = "via,vt8500-device-clock";
+                #clock-cells = <0>;
+                clocks = <&ref24>;
+                enable-reg = <0x250>;
+                enable-bit = <1>;
+            };
+
+            clksdhc: sdhc {
+                compatible = "via,vt8500-device-clock";
+                #clock-cells = <0>;
+                clocks = <&pllb>;
+                divisor-reg = <0x328>;
+                divisor-mask = <0x3f>;
+                enable-reg = <0x254>;
+                enable-bit = <18>;
+            };
+        };
+    };
