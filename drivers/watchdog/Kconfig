@@ -1811,7 +1811,8 @@ config M54xx_WATCHDOG
 
 config ATH79_WDT
 	tristate "Atheros AR71XX/AR724X/AR913X hardware watchdog"
-	depends on ATH79 || (ARM && COMPILE_TEST)
+	depends on ATH79 || COMPILE_TEST
+	depends on OF
 	help
 	  Hardware driver for the built-in watchdog timer on the Atheros
 	  AR71XX/AR724X/AR913X SoCs.
