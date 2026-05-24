@@ -70,7 +70,7 @@ static struct posix_acl *f2fs_acl_from_disk(const char *value, size_t size)
 
 	for (i = 0; i < count; i++) {
 
-		if ((char *)entry > end)
+		if ((char *)entry + sizeof(struct f2fs_acl_entry_short) > end)
 			goto fail;
 
 		acl->a_entries[i].e_tag  = le16_to_cpu(entry->e_tag);
@@ -86,6 +86,8 @@ static struct posix_acl *f2fs_acl_from_disk(const char *value, size_t size)
 			break;
 
 		case ACL_USER:
+			if ((char *)entry + sizeof(struct f2fs_acl_entry) > end)
+				goto fail;
 			acl->a_entries[i].e_uid =
 				make_kuid(&init_user_ns,
 						le32_to_cpu(entry->e_id));
@@ -93,6 +95,8 @@ static struct posix_acl *f2fs_acl_from_disk(const char *value, size_t size)
 					sizeof(struct f2fs_acl_entry));
 			break;
 		case ACL_GROUP:
+			if ((char *)entry + sizeof(struct f2fs_acl_entry) > end)
+				goto fail;
 			acl->a_entries[i].e_gid =
 				make_kgid(&init_user_ns,
 						le32_to_cpu(entry->e_id));
