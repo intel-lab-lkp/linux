@@ -54,6 +54,12 @@ static void wacom_wac_queue_insert(struct hid_device *hdev,
 {
 	bool warned = false;
 
+	if (size > kfifo_size(fifo)) {
+		hid_warn(hdev, "%s: report too large (%d > %u) for kfifo\n",
+			 __func__, size, kfifo_size(fifo));
+		return;
+	}
+
 	while (kfifo_avail(fifo) < size) {
 		if (!warned)
 			hid_warn(hdev, "%s: kfifo has filled, starting to drop events\n", __func__);
