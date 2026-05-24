@@ -722,6 +722,7 @@ static int rmi_f54_probe(struct rmi_function *fn)
 	ret = video_register_device(&f54->vdev, VFL_TYPE_TOUCH, -1);
 	if (ret) {
 		dev_err(&fn->dev, "Unable to register video subdevice.");
+		vb2_queue_release(&f54->queue);
 		goto remove_v4l2;
 	}
 
