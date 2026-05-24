@@ -53,6 +53,8 @@ enum resctrl_res_level {
 	RDT_RESOURCE_L2,
 	RDT_RESOURCE_MBA,
 	RDT_RESOURCE_SMBA,
+	RDT_RESOURCE_MB_MIN,
+	RDT_RESOURCE_MB_WGHT,
 	RDT_RESOURCE_PERF_PKG,
 
 	/* Must be the last */
