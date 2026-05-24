@@ -85,20 +85,6 @@
 
 /**
  * struct pch_phub_reg - PHUB register structure
- * @phub_id_reg:			PHUB_ID register val
- * @q_pri_val_reg:			QUEUE_PRI_VAL register val
- * @rc_q_maxsize_reg:			RC_QUEUE_MAXSIZE register val
- * @bri_q_maxsize_reg:			BRI_QUEUE_MAXSIZE register val
- * @comp_resp_timeout_reg:		COMP_RESP_TIMEOUT register val
- * @bus_slave_control_reg:		BUS_SLAVE_CONTROL_REG register val
- * @deadlock_avoid_type_reg:		DEADLOCK_AVOID_TYPE register val
- * @intpin_reg_wpermit_reg0:		INTPIN_REG_WPERMIT register 0 val
- * @intpin_reg_wpermit_reg1:		INTPIN_REG_WPERMIT register 1 val
- * @intpin_reg_wpermit_reg2:		INTPIN_REG_WPERMIT register 2 val
- * @intpin_reg_wpermit_reg3:		INTPIN_REG_WPERMIT register 3 val
- * @int_reduce_control_reg:		INT_REDUCE_CONTROL registers val
- * @clkcfg_reg:				CLK CFG register val
- * @funcsel_reg:			Function select register value
  * @pch_phub_base_address:		Register base address
  * @pch_phub_extrom_base_address:	external rom base address
  * @pch_mac_start_address:		MAC address area start address
@@ -107,20 +93,6 @@
  * @pdev:				pointer to pci device struct
  */
 struct pch_phub_reg {
-	u32 phub_id_reg;
-	u32 q_pri_val_reg;
-	u32 rc_q_maxsize_reg;
-	u32 bri_q_maxsize_reg;
-	u32 comp_resp_timeout_reg;
-	u32 bus_slave_control_reg;
-	u32 deadlock_avoid_type_reg;
-	u32 intpin_reg_wpermit_reg0;
-	u32 intpin_reg_wpermit_reg1;
-	u32 intpin_reg_wpermit_reg2;
-	u32 intpin_reg_wpermit_reg3;
-	u32 int_reduce_control_reg[MAX_NUM_INT_REDUCE_CONTROL_REG];
-	u32 clkcfg_reg;
-	u32 funcsel_reg;
 	void __iomem *pch_phub_base_address;
 	void __iomem *pch_phub_extrom_base_address;
 	u32 pch_mac_start_address;
@@ -147,129 +119,6 @@ static void pch_phub_read_modify_write_reg(struct pch_phub_reg *chip,
 {
 	void __iomem *reg_addr = chip->pch_phub_base_address + reg_addr_offset;
 	iowrite32(((ioread32(reg_addr) & ~mask)) | data, reg_addr);
-}
-
-/* pch_phub_save_reg_conf - saves register configuration */
-static void __maybe_unused pch_phub_save_reg_conf(struct pci_dev *pdev)
-{
-	unsigned int i;
-	struct pch_phub_reg *chip = pci_get_drvdata(pdev);
-
-	void __iomem *p = chip->pch_phub_base_address;
-
-	chip->phub_id_reg = ioread32(p + PCH_PHUB_ID_REG);
-	chip->q_pri_val_reg = ioread32(p + PCH_PHUB_QUEUE_PRI_VAL_REG);
-	chip->rc_q_maxsize_reg = ioread32(p + PCH_PHUB_RC_QUEUE_MAXSIZE_REG);
-	chip->bri_q_maxsize_reg = ioread32(p + PCH_PHUB_BRI_QUEUE_MAXSIZE_REG);
-	chip->comp_resp_timeout_reg =
-				ioread32(p + PCH_PHUB_COMP_RESP_TIMEOUT_REG);
-	chip->bus_slave_control_reg =
-				ioread32(p + PCH_PHUB_BUS_SLAVE_CONTROL_REG);
-	chip->deadlock_avoid_type_reg =
-				ioread32(p + PCH_PHUB_DEADLOCK_AVOID_TYPE_REG);
-	chip->intpin_reg_wpermit_reg0 =
-				ioread32(p + PCH_PHUB_INTPIN_REG_WPERMIT_REG0);
-	chip->intpin_reg_wpermit_reg1 =
-				ioread32(p + PCH_PHUB_INTPIN_REG_WPERMIT_REG1);
-	chip->intpin_reg_wpermit_reg2 =
-				ioread32(p + PCH_PHUB_INTPIN_REG_WPERMIT_REG2);
-	chip->intpin_reg_wpermit_reg3 =
-				ioread32(p + PCH_PHUB_INTPIN_REG_WPERMIT_REG3);
-	dev_dbg(&pdev->dev, "%s : "
-		"chip->phub_id_reg=%x, "
-		"chip->q_pri_val_reg=%x, "
-		"chip->rc_q_maxsize_reg=%x, "
-		"chip->bri_q_maxsize_reg=%x, "
-		"chip->comp_resp_timeout_reg=%x, "
-		"chip->bus_slave_control_reg=%x, "
-		"chip->deadlock_avoid_type_reg=%x, "
-		"chip->intpin_reg_wpermit_reg0=%x, "
-		"chip->intpin_reg_wpermit_reg1=%x, "
-		"chip->intpin_reg_wpermit_reg2=%x, "
-		"chip->intpin_reg_wpermit_reg3=%x\n", __func__,
-		chip->phub_id_reg,
-		chip->q_pri_val_reg,
-		chip->rc_q_maxsize_reg,
-		chip->bri_q_maxsize_reg,
-		chip->comp_resp_timeout_reg,
-		chip->bus_slave_control_reg,
-		chip->deadlock_avoid_type_reg,
-		chip->intpin_reg_wpermit_reg0,
-		chip->intpin_reg_wpermit_reg1,
-		chip->intpin_reg_wpermit_reg2,
-		chip->intpin_reg_wpermit_reg3);
-	for (i = 0; i < MAX_NUM_INT_REDUCE_CONTROL_REG; i++) {
-		chip->int_reduce_control_reg[i] =
-		    ioread32(p + PCH_PHUB_INT_REDUCE_CONTROL_REG_BASE + 4 * i);
-		dev_dbg(&pdev->dev, "%s : "
-			"chip->int_reduce_control_reg[%d]=%x\n",
-			__func__, i, chip->int_reduce_control_reg[i]);
-	}
-	chip->clkcfg_reg = ioread32(p + CLKCFG_REG_OFFSET);
-	if ((chip->ioh_type == 2) || (chip->ioh_type == 4))
-		chip->funcsel_reg = ioread32(p + FUNCSEL_REG_OFFSET);
-}
-
-/* pch_phub_restore_reg_conf - restore register configuration */
-static void __maybe_unused pch_phub_restore_reg_conf(struct pci_dev *pdev)
-{
-	unsigned int i;
-	struct pch_phub_reg *chip = pci_get_drvdata(pdev);
-	void __iomem *p;
-	p = chip->pch_phub_base_address;
-
-	iowrite32(chip->phub_id_reg, p + PCH_PHUB_ID_REG);
-	iowrite32(chip->q_pri_val_reg, p + PCH_PHUB_QUEUE_PRI_VAL_REG);
-	iowrite32(chip->rc_q_maxsize_reg, p + PCH_PHUB_RC_QUEUE_MAXSIZE_REG);
-	iowrite32(chip->bri_q_maxsize_reg, p + PCH_PHUB_BRI_QUEUE_MAXSIZE_REG);
-	iowrite32(chip->comp_resp_timeout_reg,
-					p + PCH_PHUB_COMP_RESP_TIMEOUT_REG);
-	iowrite32(chip->bus_slave_control_reg,
-					p + PCH_PHUB_BUS_SLAVE_CONTROL_REG);
-	iowrite32(chip->deadlock_avoid_type_reg,
-					p + PCH_PHUB_DEADLOCK_AVOID_TYPE_REG);
-	iowrite32(chip->intpin_reg_wpermit_reg0,
-					p + PCH_PHUB_INTPIN_REG_WPERMIT_REG0);
-	iowrite32(chip->intpin_reg_wpermit_reg1,
-					p + PCH_PHUB_INTPIN_REG_WPERMIT_REG1);
-	iowrite32(chip->intpin_reg_wpermit_reg2,
-					p + PCH_PHUB_INTPIN_REG_WPERMIT_REG2);
-	iowrite32(chip->intpin_reg_wpermit_reg3,
-					p + PCH_PHUB_INTPIN_REG_WPERMIT_REG3);
-	dev_dbg(&pdev->dev, "%s : "
-		"chip->phub_id_reg=%x, "
-		"chip->q_pri_val_reg=%x, "
-		"chip->rc_q_maxsize_reg=%x, "
-		"chip->bri_q_maxsize_reg=%x, "
-		"chip->comp_resp_timeout_reg=%x, "
-		"chip->bus_slave_control_reg=%x, "
-		"chip->deadlock_avoid_type_reg=%x, "
-		"chip->intpin_reg_wpermit_reg0=%x, "
-		"chip->intpin_reg_wpermit_reg1=%x, "
-		"chip->intpin_reg_wpermit_reg2=%x, "
-		"chip->intpin_reg_wpermit_reg3=%x\n", __func__,
-		chip->phub_id_reg,
-		chip->q_pri_val_reg,
-		chip->rc_q_maxsize_reg,
-		chip->bri_q_maxsize_reg,
-		chip->comp_resp_timeout_reg,
-		chip->bus_slave_control_reg,
-		chip->deadlock_avoid_type_reg,
-		chip->intpin_reg_wpermit_reg0,
-		chip->intpin_reg_wpermit_reg1,
-		chip->intpin_reg_wpermit_reg2,
-		chip->intpin_reg_wpermit_reg3);
-	for (i = 0; i < MAX_NUM_INT_REDUCE_CONTROL_REG; i++) {
-		iowrite32(chip->int_reduce_control_reg[i],
-			p + PCH_PHUB_INT_REDUCE_CONTROL_REG_BASE + 4 * i);
-		dev_dbg(&pdev->dev, "%s : "
-			"chip->int_reduce_control_reg[%d]=%x\n",
-			__func__, i, chip->int_reduce_control_reg[i]);
-	}
-
-	iowrite32(chip->clkcfg_reg, p + CLKCFG_REG_OFFSET);
-	if ((chip->ioh_type == 2) || (chip->ioh_type == 4))
-		iowrite32(chip->funcsel_reg, p + FUNCSEL_REG_OFFSET);
 }
 
 /**
