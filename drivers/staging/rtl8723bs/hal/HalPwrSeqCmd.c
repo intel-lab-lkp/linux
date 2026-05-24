@@ -4,22 +4,22 @@
  * Copyright(c) 2007 - 2011 Realtek Corporation. All rights reserved.
  *
  ******************************************************************************/
-/*++
-Copyright (c) Realtek Semiconductor Corp. All rights reserved.
-
-Module Name:
-	HalPwrSeqCmd.c
-
-Abstract:
-	Implement HW Power sequence configuration CMD handling routine for Realtek devices.
-
-Major Change History:
-	When       Who               What
-	---------- ---------------   -------------------------------
-	2011-10-26 Lucas            Modify to be compatible with SD4-CE driver.
-	2011-07-07 Roger            Create.
-
---*/
+/*
+ * Copyright (c) Realtek Semiconductor Corp. All rights reserved.
+ *
+ * Module Name:
+ *  HalPwrSeqCmd.c
+ *
+ * Abstract:
+ *  Implement HW Power sequence configuration CMD handling routine for Realtek devices.
+ *
+ * Major Change History:
+ *	When       Who               What
+ *	---------- ---------------   -------------------------------
+ *	2011-10-26 Lucas            Modify to be compatible with SD4-CE driver.
+ *	2011-07-07 Roger            Create.
+ *
+ */
 #include <drv_types.h>
 #include <HalPwrSeqCmd.h>
 
