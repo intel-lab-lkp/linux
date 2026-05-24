@@ -699,9 +699,12 @@ static int at24_probe(struct i2c_client *client)
 	at24->offset_adj = at24_get_offset_adj(flags, byte_len);
 	at24->client_regmaps[0] = regmap;
 
-	at24->vcc_reg = devm_regulator_get(dev, "vcc");
-	if (IS_ERR(at24->vcc_reg))
-		return PTR_ERR(at24->vcc_reg);
+	at24->vcc_reg = devm_regulator_get_optional(dev, "vcc");
+	if (IS_ERR(at24->vcc_reg)) {
+		if (PTR_ERR(at24->vcc_reg) != -ENODEV)
+			return PTR_ERR(at24->vcc_reg);
+		at24->vcc_reg = NULL;
+	}
 
 	writable = !(flags & AT24_FLAG_READONLY);
 	if (writable) {
@@ -754,9 +757,12 @@ static int at24_probe(struct i2c_client *client)
 
 	full_power = acpi_dev_state_d0(&client->dev);
 	if (full_power) {
-		err = regulator_enable(at24->vcc_reg);
-		if (err)
-			return dev_err_probe(dev, err, "Failed to enable vcc regulator\n");
+		if (at24->vcc_reg) {
+			err = regulator_enable(at24->vcc_reg);
+			if (err) {
+				return dev_err_probe(dev, err, "Failed to enable vcc regulator\n");
+			}
+		}
 
 		pm_runtime_set_active(dev);
 	}
@@ -771,7 +777,7 @@ static int at24_probe(struct i2c_client *client)
 		err = at24_read(at24, 0, &test_byte, 1);
 		if (err) {
 			pm_runtime_disable(dev);
-			if (!pm_runtime_status_suspended(dev))
+			if (!pm_runtime_status_suspended(dev) && at24->vcc_reg)
 				regulator_disable(at24->vcc_reg);
 			return -ENODEV;
 		}
@@ -808,7 +814,7 @@ static void at24_remove(struct i2c_client *client)
 
 	pm_runtime_disable(&client->dev);
 	if (acpi_dev_state_d0(&client->dev)) {
-		if (!pm_runtime_status_suspended(&client->dev))
+		if (!pm_runtime_status_suspended(&client->dev) && at24->vcc_reg)
 			regulator_disable(at24->vcc_reg);
 		pm_runtime_set_suspended(&client->dev);
 	}
@@ -819,6 +825,8 @@ static int __maybe_unused at24_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct at24_data *at24 = i2c_get_clientdata(client);
 
+	if (!at24->vcc_reg)
+		return 0;
 	return regulator_disable(at24->vcc_reg);
 }
 
@@ -827,6 +835,8 @@ static int __maybe_unused at24_resume(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct at24_data *at24 = i2c_get_clientdata(client);
 
+	if (!at24->vcc_reg)
+		return 0;
 	return regulator_enable(at24->vcc_reg);
 }
 
