@@ -1889,7 +1889,18 @@ static int kernel_migrate_pages(pid_t pid, unsigned long maxnode,
 		goto out;
 	}
 
-	err = -EINVAL;
+	task_nodes = cpuset_mems_allowed(task);
+	/* Is the user allowed to access the target nodes? */
+	if (!nodes_subset(*new, task_nodes) && !capable(CAP_SYS_NICE)) {
+		err = -EPERM;
+		goto out_put;
+	}
+
+	task_nodes = cpuset_mems_allowed(current);
+	if (!nodes_and(*new, *new, task_nodes)) {
+		err = -EINVAL;
+		goto out_put;
+	}
 
 	/*
 	 * Check if this process has the right to modify the specified process.
@@ -1899,17 +1910,6 @@ static int kernel_migrate_pages(pid_t pid, unsigned long maxnode,
 		err = -EPERM;
 		goto out_put;
 	}
-
-	task_nodes = cpuset_mems_allowed(task);
-	/* Is the user allowed to access the target nodes? */
-	if (!nodes_subset(*new, task_nodes) && !capable(CAP_SYS_NICE)) {
-		err = -EPERM;
-		goto out_put;
-	}
-
-	task_nodes = cpuset_mems_allowed(current);
-	if (!nodes_and(*new, *new, task_nodes))
-		goto out_put;
 
 	err = security_task_movememory(task);
 	if (err)
