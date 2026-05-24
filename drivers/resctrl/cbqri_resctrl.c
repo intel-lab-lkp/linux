@@ -411,6 +411,9 @@ int resctrl_arch_update_one(struct rdt_resource *r, struct rdt_ctrl_domain *d,
 	case RDT_RESOURCE_L2:
 	case RDT_RESOURCE_L3:
 		return cbqri_apply_cache_config_dom(dom, r, closid, t, cfg_val);
+	case RDT_RESOURCE_MB_MIN:
+		/* sum(Rbwb) <= MRBWB validation runs inside cbqri_apply_rbwb(). */
+		return cbqri_apply_rbwb(dom->hw_ctrl, closid, cfg_val, true);
 	default:
 		return -EINVAL;
 	}
@@ -463,6 +466,14 @@ u32 resctrl_arch_get_config(struct rdt_resource *r, struct rdt_ctrl_domain *d,
 		if (err < 0)
 			val = resctrl_get_default_ctrl(r);
 		break;
+	case RDT_RESOURCE_MB_MIN: {
+		u64 rbwb;
+
+		err = cbqri_read_rbwb(ctrl, closid, &rbwb);
+		if (err == 0)
+			val = (u32)rbwb;
+		break;
+	}
 	default:
 		break;
 	}
@@ -470,9 +481,22 @@ u32 resctrl_arch_get_config(struct rdt_resource *r, struct rdt_ctrl_domain *d,
 	return val;
 }
 
+/*
+ * RCID 0 carries the remaining MRBWB after every other RCID is seeded with
+ * the minimum Rbwb of 1. cbqri_probe_bc() rejects a bandwidth controller
+ * with mrbwb < rcid_count, so this subtraction cannot underflow.
+ */
+static u64 cbqri_rcid0_rbwb(struct cbqri_controller *ctrl)
+{
+	if (WARN_ON_ONCE(ctrl->bc.mrbwb < ctrl->rcid_count))
+		return 1;
+	return ctrl->bc.mrbwb - (ctrl->rcid_count - 1);
+}
+
 void resctrl_arch_reset_all_ctrls(struct rdt_resource *r)
 {
 	struct cbqri_resctrl_res *hw_res;
+	struct cbqri_resctrl_dom *dom;
 	struct rdt_ctrl_domain *d;
 	enum resctrl_conf_type t;
 	u32 default_ctrl;
@@ -487,15 +511,41 @@ void resctrl_arch_reset_all_ctrls(struct rdt_resource *r)
 		return;
 
 	list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
-		for (i = 0; i < hw_res->ctrl->rcid_count; i++) {
-			for (t = 0; t < CDP_NUM_TYPES; t++) {
+		dom = container_of(d, struct cbqri_resctrl_dom,
+				   resctrl_ctrl_dom);
+
+		switch (r->rid) {
+		case RDT_RESOURCE_MB_MIN:
+			/*
+			 * CBQRI section 4.5: Rbwb >= 1, sum(Rbwb) <= MRBWB.
+			 * Walk N-1..1 first so RCID 0 lands last with the
+			 * remaining budget.
+			 */
+			for (i = 0; i < hw_res->ctrl->rcid_count; i++) {
+				u32 rcid = (i + 1) % hw_res->ctrl->rcid_count;
+				u64 rbwb = (rcid == 0) ?
+					cbqri_rcid0_rbwb(dom->hw_ctrl) : 1;
 				int rerr;
 
-				rerr = resctrl_arch_update_one(r, d, i, t, default_ctrl);
+				rerr = cbqri_apply_rbwb(dom->hw_ctrl, rcid, rbwb, false);
 				if (rerr)
-					pr_err_ratelimited("rid=%d reset RCID %u type %u failed (%d)\n",
-							   r->rid, i, t, rerr);
+					pr_err_ratelimited("RBWB reset RCID %u failed (%d)\n",
+							   rcid, rerr);
 			}
+			break;
+		default:
+			for (i = 0; i < hw_res->ctrl->rcid_count; i++) {
+				for (t = 0; t < CDP_NUM_TYPES; t++) {
+					int rerr;
+
+					rerr = resctrl_arch_update_one(r, d, i, t,
+								       default_ctrl);
+					if (rerr)
+						pr_err_ratelimited("rid=%d reset RCID %u type %u failed (%d)\n",
+								   r->rid, i, t, rerr);
+				}
+			}
+			break;
 		}
 	}
 }
@@ -520,26 +570,51 @@ static struct rdt_ctrl_domain *cbqri_new_domain(struct cbqri_controller *ctrl)
 static int cbqri_init_domain_ctrlval(struct rdt_resource *r, struct rdt_ctrl_domain *d)
 {
 	struct cbqri_resctrl_res *hw_res;
+	struct cbqri_resctrl_dom *dom;
 	enum resctrl_conf_type t;
 	int err = 0;
+	u64 rbwb;
 	int i;
 
 	hw_res = container_of(r, struct cbqri_resctrl_res, resctrl_res);
+	dom = container_of(d, struct cbqri_resctrl_dom, resctrl_ctrl_dom);
 
 	for (i = 0; i < hw_res->ctrl->rcid_count; i++) {
 		/*
-		 * Seed both DATA and CODE staged slots so a later mount
-		 * with -o cdp does not see stale CODE values.
-		 * On non-AT controllers cbqri_cc_alloc_op() masks AT to 0
-		 * so all three iterations land on the same hardware state.
-		 * The redundant writes are harmless.
+		 * For MB_MIN walk, RCIDs 1..N-1 then RCID 0 last so the sum
+		 * doesn't exceed MRBWB during the walk.
 		 */
-		for (t = 0; t < CDP_NUM_TYPES; t++) {
-			err = resctrl_arch_update_one(r, d, i, t,
-						      resctrl_get_default_ctrl(r));
-			if (err)
-				return err;
+		u32 rcid = (r->rid == RDT_RESOURCE_MB_MIN) ?
+				((i + 1) % hw_res->ctrl->rcid_count) : i;
+
+		switch (r->rid) {
+		case RDT_RESOURCE_MB_MIN:
+			/*
+			 * CBQRI section 4.5: Rbwb >= 1, sum(Rbwb) <= MRBWB.
+			 * RCID 0 takes the remaining budget.
+			 */
+			rbwb = (rcid == 0) ? cbqri_rcid0_rbwb(dom->hw_ctrl) : 1;
+
+			err = cbqri_apply_rbwb(dom->hw_ctrl, rcid, rbwb, false);
+			break;
+		default:
+			/*
+			 * Seed both DATA and CODE staged slots so a later
+			 * mount with -o cdp does not see stale CODE values.
+			 * On non-AT controllers cbqri_cc_alloc_op() masks
+			 * AT to 0, so all three iterations land on the same
+			 * hardware state. The redundant writes are harmless.
+			 */
+			for (t = 0; t < CDP_NUM_TYPES; t++) {
+				err = resctrl_arch_update_one(r, d, i, t,
+							      resctrl_get_default_ctrl(r));
+				if (err)
+					break;
+			}
+			break;
 		}
+		if (err)
+			return err;
 	}
 	return 0;
 }
@@ -639,8 +714,64 @@ static int cbqri_resctrl_control_init(struct cbqri_resctrl_res *cbqri_res)
 			res->mon_capable = true;
 		}
 		break;
+
+	case RDT_RESOURCE_MB_MIN:
+		res->name = "MB_MIN";
+		res->schema_fmt = RESCTRL_SCHEMA_RANGE;
+		/*
+		 * resctrl requires a cache scope for MBA-style domains.
+		 * Use L3 as a proxy until the resctrl supports non-cache
+		 * scopes for bandwidth resources.
+		 */
+		res->ctrl_scope = RESCTRL_L3_CACHE;
+		/* Rbwb is an integer block count, not a percentage. No MBA delay_linear. */
+		res->membw.throttle_mode = THREAD_THROTTLE_UNDEFINED;
+		res->membw.min_bw = 1;
+		res->membw.max_bw = ctrl->bc.mrbwb;
+		res->membw.bw_gran = 1;
+		/*
+		 * CBQRI section 4.5 caps sum(Rbwb) <= MRBWB. Default new
+		 * groups to min_bw so mkdir cannot overflow that sum.
+		 */
+		res->membw.default_to_min = true;
+		res->alloc_capable = ctrl->alloc_capable;
+		INIT_LIST_HEAD(&res->ctrl_domains);
+		INIT_LIST_HEAD(&res->mon_domains);
+		break;
+
 	default:
 		break;
+	}
+
+	return 0;
+}
+
+/*
+ * Pick one BC to back MB_MIN.  Multiple BCs must agree on rcid_count
+ * and mrbwb.  Mismatch is fatal because resctrl exposes a single set
+ * of caps per rid.
+ */
+static int cbqri_resctrl_pick_bw_alloc(void)
+{
+	struct cbqri_resctrl_res *mb_min = &cbqri_resctrl_resources[RDT_RESOURCE_MB_MIN];
+	struct cbqri_controller *ctrl;
+
+	list_for_each_entry(ctrl, &cbqri_controllers, list) {
+		if (ctrl->type != CBQRI_CONTROLLER_TYPE_BANDWIDTH)
+			continue;
+		if (!ctrl->alloc_capable)
+			continue;
+
+		if (mb_min->ctrl) {
+			if (mb_min->ctrl->rcid_count != ctrl->rcid_count ||
+			    mb_min->ctrl->bc.mrbwb != ctrl->bc.mrbwb) {
+				pr_err("BW controllers have mismatched capabilities\n");
+				return -EINVAL;
+			}
+			continue;
+		}
+
+		mb_min->ctrl = ctrl;
 	}
 
 	return 0;
@@ -860,6 +991,37 @@ err_undo_ctrl_dom:
 	return err;
 }
 
+static int cbqri_attach_cpu_to_one_bw_res(struct cbqri_controller *ctrl,
+					  enum resctrl_res_level rid,
+					  unsigned int cpu)
+{
+	struct cbqri_resctrl_res *hw_res = &cbqri_resctrl_resources[rid];
+	struct rdt_resource *res = &hw_res->resctrl_res;
+	struct rdt_ctrl_domain *domain;
+	int dom_id = ctrl->mem.prox_dom;
+
+	if (!hw_res->ctrl)
+		return 0;
+
+	domain = cbqri_find_ctrl_domain(&res->ctrl_domains, dom_id);
+	if (domain) {
+		cpumask_set_cpu(cpu, &domain->hdr.cpu_mask);
+		return 0;
+	}
+
+	domain = cbqri_create_ctrl_domain(ctrl, res, cpu, dom_id);
+	if (IS_ERR(domain))
+		return PTR_ERR(domain);
+
+	return 0;
+}
+
+static int cbqri_attach_cpu_to_bw_ctrl(struct cbqri_controller *ctrl,
+				       unsigned int cpu)
+{
+	return cbqri_attach_cpu_to_one_bw_res(ctrl, RDT_RESOURCE_MB_MIN, cpu);
+}
+
 static void cbqri_detach_cpu_from_l3_mon(struct rdt_resource *res,
 					 unsigned int cpu)
 {
@@ -937,6 +1099,10 @@ static int cbqri_resctrl_setup(void)
 	if (err)
 		return err;
 
+	err = cbqri_resctrl_pick_bw_alloc();
+	if (err)
+		return err;
+
 	cbqri_resctrl_pick_counters();
 
 	for (rid = 0; rid < RDT_NUM_RESOURCES; rid++) {
@@ -983,14 +1149,24 @@ static int cbqri_resctrl_online_cpu(unsigned int cpu)
 	mutex_lock(&cbqri_domain_list_lock);
 
 	list_for_each_entry(ctrl, &cbqri_controllers, list) {
-		if (ctrl->type != CBQRI_CONTROLLER_TYPE_CAPACITY)
+		switch (ctrl->type) {
+		case CBQRI_CONTROLLER_TYPE_CAPACITY:
+			if (!cpumask_test_cpu(cpu, &ctrl->cache.cpu_mask))
+				continue;
+			if (!ctrl->alloc_capable)
+				continue;
+			err = cbqri_attach_cpu_to_cap_ctrl(ctrl, cpu);
+			break;
+		case CBQRI_CONTROLLER_TYPE_BANDWIDTH:
+			if (!cpumask_test_cpu(cpu, &ctrl->mem.cpu_mask))
+				continue;
+			if (!ctrl->alloc_capable)
+				continue;
+			err = cbqri_attach_cpu_to_bw_ctrl(ctrl, cpu);
+			break;
+		default:
 			continue;
-		if (!cpumask_test_cpu(cpu, &ctrl->cache.cpu_mask))
-			continue;
-		if (!ctrl->alloc_capable)
-			continue;
-
-		err = cbqri_attach_cpu_to_cap_ctrl(ctrl, cpu);
+		}
 		if (err)
 			break;
 	}
