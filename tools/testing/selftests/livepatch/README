@@ -54,3 +54,6 @@ check_result().  The latter function greps the kernel's ring buffer for
 those strings for result comparison.  Other utility functions include
 general module loading and livepatch loading helpers (waiting for patch
 transitions, sysfs entries, etc.)
+
+All new tests and test modules MUST be compatible with kernel version 4.12 and
+later, including current upstream kernels.
