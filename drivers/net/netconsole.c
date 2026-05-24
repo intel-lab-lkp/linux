@@ -283,6 +283,14 @@ static bool bound_by_mac(struct netconsole_target *nt)
 	return is_valid_ether_addr(nt->np.dev_mac);
 }
 
+static void refill_skbs_work_handler(struct work_struct *work)
+{
+	struct netpoll *np =
+		container_of(work, struct netpoll, refill_wq);
+
+	refill_skbs(np);
+}
+
 /* Initialise the per-target skb pool that find_skb() falls back to and
  * seed it. Pair with netconsole_skb_pool_flush() at the matching
  * netpoll teardown.
