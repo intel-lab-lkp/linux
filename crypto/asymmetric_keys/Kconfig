@@ -15,12 +15,29 @@ config ASYMMETRIC_PUBLIC_KEY_SUBTYPE
 	select MPILIB
 	select CRYPTO_HASH_INFO
 	select CRYPTO_AKCIPHER
+	select CRYPTO_RSA
 	select CRYPTO_SIG
 	select CRYPTO_HASH
 	help
 	  This option provides support for asymmetric public key type handling.
 	  If signature generation and/or verification are to be used,
 	  appropriate hash algorithms (such as SHA-1) must be available.
+	  ENOPKG will be reported if the requisite algorithm is unavailable.
+
+config ASYMMETRIC_TPM2_KEY_SUBTYPE
+	tristate "Asymmetric TPM2 crypto algorithm subtype"
+	depends on TCG_TPM
+	select CRYPTO_SHA256
+	select CRYPTO_HASH_INFO
+	select CRYPTO_TPM2_KEY
+	select ASN1
+	select ASN1_ENCODER
+	help
+	  This option provides support for asymmetric TPM2 key type handling.
+	  Asymmetric operations such as sign and verify are delegated to the
+	  TPM, and bound to the kernel crypto subsystem. Both RSA and ECDSA
+	  keys are supported.
+
 	  ENOPKG will be reported if the requisite algorithm is unavailable.
 
 config X509_CERTIFICATE_PARSER
