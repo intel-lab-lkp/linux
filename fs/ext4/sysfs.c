@@ -41,6 +41,7 @@ typedef enum {
 	attr_pointer_atomic,
 	attr_journal_task,
 	attr_err_report_sec,
+	attr_mb_stats,
 } attr_id_t;
 
 typedef enum {
@@ -241,6 +242,7 @@ EXT4_ATTR_FUNC(session_write_kbytes, 0444);
 EXT4_ATTR_FUNC(lifetime_write_kbytes, 0444);
 EXT4_ATTR_FUNC(reserved_clusters, 0644);
 EXT4_ATTR_FUNC(sra_exceeded_retry_limit, 0444);
+EXT4_ATTR_FUNC(mb_stats, 0644);
 
 EXT4_ATTR_OFFSET(inode_readahead_blks, 0644, inode_readahead,
 		 ext4_sb_info, s_inode_readahead_blks);
@@ -250,7 +252,6 @@ EXT4_ATTR_OFFSET(mb_best_avail_max_trim_order, 0644, mb_order,
 		 ext4_sb_info, s_mb_best_avail_max_trim_order);
 EXT4_ATTR_OFFSET(err_report_sec, 0644, err_report_sec, ext4_sb_info, s_err_report_sec);
 EXT4_RW_ATTR_SBI_UI(inode_goal, s_inode_goal);
-EXT4_RW_ATTR_SBI_UI(mb_stats, s_mb_stats);
 EXT4_RW_ATTR_SBI_UI(mb_max_to_scan, s_mb_max_to_scan);
 EXT4_RW_ATTR_SBI_UI(mb_min_to_scan, s_mb_min_to_scan);
 EXT4_RW_ATTR_SBI_UI(mb_order2_req, s_mb_order2_reqs);
@@ -451,6 +452,24 @@ static ssize_t ext4_generic_attr_show(struct ext4_attr *a,
 	return 0;
 }
 
+static ssize_t mb_stats_show(struct ext4_sb_info *sbi, char *buf)
+{
+	return sysfs_emit(buf, "%u\n", READ_ONCE(sbi->s_mb_stats));
+}
+
+static ssize_t mb_stats_store(struct ext4_sb_info *sbi,
+			      const char *buf, size_t len)
+{
+	unsigned int t;
+	int ret;
+
+	ret = kstrtouint(skip_spaces(buf), 0, &t);
+	if (ret)
+		return ret;
+	WRITE_ONCE(sbi->s_mb_stats, t);
+	return len;
+}
+
 static ssize_t ext4_attr_show(struct kobject *kobj,
 			      struct attribute *attr, char *buf)
 {
@@ -475,6 +494,8 @@ static ssize_t ext4_attr_show(struct kobject *kobj,
 		return sysfs_emit(buf, "%llu\n",
 				(unsigned long long)
 			percpu_counter_sum(&sbi->s_sra_exceeded_retry_limit));
+	case attr_mb_stats:
+		return mb_stats_show(sbi, buf);
 	case attr_feature:
 		return sysfs_emit(buf, "supported\n");
 	case attr_first_error_time:
@@ -559,6 +580,8 @@ static ssize_t ext4_attr_store(struct kobject *kobj,
 		return inode_readahead_blks_store(sbi, buf, len);
 	case attr_trigger_test_error:
 		return trigger_test_error(sbi, buf, len);
+	case attr_mb_stats:
+		return mb_stats_store(sbi, buf, len);
 	case attr_err_report_sec:
 		return err_report_sec_store(sbi, buf, len);
 	default:

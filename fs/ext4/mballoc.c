@@ -924,7 +924,7 @@ static int ext4_mb_scan_groups_xa_range(struct ext4_allocation_context *ac,
 	xa_for_each_range(xa, group, grp, start, end - 1) {
 		int err;
 
-		if (sbi->s_mb_stats)
+		if (READ_ONCE(sbi->s_mb_stats))
 			atomic64_inc(&sbi->s_bal_cX_groups_considered[cr]);
 
 		err = ext4_mb_scan_group(ac, grp->bb_group);
@@ -980,7 +980,7 @@ wrap_around:
 		goto wrap_around;
 	}
 
-	if (sbi->s_mb_stats)
+	if (READ_ONCE(sbi->s_mb_stats))
 		atomic64_inc(&sbi->s_bal_cX_failed[ac->ac_criteria]);
 
 	/* Increment cr and search again if no group is found */
@@ -1031,7 +1031,7 @@ wrap_around:
 		goto wrap_around;
 	}
 
-	if (sbi->s_mb_stats)
+	if (READ_ONCE(sbi->s_mb_stats))
 		atomic64_inc(&sbi->s_bal_cX_failed[ac->ac_criteria]);
 	/*
 	 * CR_BEST_AVAIL_LEN works based on the concept that we have
@@ -1135,7 +1135,7 @@ wrap_around:
 
 	/* Reset goal length to original goal length before falling into CR_GOAL_LEN_SLOW */
 	ac->ac_g_ex.fe_len = ac->ac_orig_goal_len;
-	if (sbi->s_mb_stats)
+	if (READ_ONCE(sbi->s_mb_stats))
 		atomic64_inc(&sbi->s_bal_cX_failed[ac->ac_criteria]);
 	ac->ac_criteria = CR_GOAL_LEN_SLOW;
 
@@ -1184,7 +1184,7 @@ static int ext4_mb_scan_groups_linear(struct ext4_allocation_context *ac,
 		ac->ac_criteria++;
 
 	/* Processed all groups and haven't found blocks */
-	if (sbi->s_mb_stats && i == ngroups)
+	if (READ_ONCE(sbi->s_mb_stats) && i == ngroups)
 		atomic64_inc(&sbi->s_bal_cX_failed[cr]);
 
 	return 0;
@@ -2541,7 +2541,7 @@ void ext4_mb_simple_scan_group(struct ext4_allocation_context *ac,
 
 		BUG_ON(ac->ac_f_ex.fe_len != ac->ac_g_ex.fe_len);
 
-		if (EXT4_SB(sb)->s_mb_stats)
+		if (READ_ONCE(EXT4_SB(sb)->s_mb_stats))
 			atomic_inc(&EXT4_SB(sb)->s_bal_2orders);
 
 		break;
@@ -2786,7 +2786,7 @@ static int ext4_mb_good_group_nolock(struct ext4_allocation_context *ac,
 
 	if (!grp)
 		return -EFSCORRUPTED;
-	if (sbi->s_mb_stats)
+	if (READ_ONCE(sbi->s_mb_stats))
 		atomic64_inc(&sbi->s_bal_cX_groups_considered[ac->ac_criteria]);
 	if (should_lock) {
 		ext4_lock_group(sb, group);
@@ -3097,7 +3097,7 @@ repeat:
 		}
 	}
 
-	if (sbi->s_mb_stats && ac->ac_status == AC_STATUS_FOUND) {
+	if (READ_ONCE(sbi->s_mb_stats) && ac->ac_status == AC_STATUS_FOUND) {
 		atomic64_inc(&sbi->s_bal_cX_hits[ac->ac_criteria]);
 		if (ac->ac_flags & EXT4_MB_STREAM_ALLOC &&
 		    ac->ac_b_ex.fe_group == ac->ac_g_ex.fe_group)
@@ -3210,7 +3210,7 @@ int ext4_seq_mb_stats_show(struct seq_file *seq, void *offset)
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
 
 	seq_puts(seq, "mballoc:\n");
-	if (!sbi->s_mb_stats) {
+	if (!READ_ONCE(sbi->s_mb_stats)) {
 		seq_puts(seq, "\tmb stats collection turned off.\n");
 		seq_puts(
 			seq,
@@ -3787,7 +3787,7 @@ int ext4_mb_init(struct super_block *sb)
 
 	sbi->s_mb_max_to_scan = MB_DEFAULT_MAX_TO_SCAN;
 	sbi->s_mb_min_to_scan = MB_DEFAULT_MIN_TO_SCAN;
-	sbi->s_mb_stats = MB_DEFAULT_STATS;
+	WRITE_ONCE(sbi->s_mb_stats, MB_DEFAULT_STATS);
 	sbi->s_mb_stream_request = MB_DEFAULT_STREAM_THRESHOLD;
 	sbi->s_mb_order2_reqs = MB_DEFAULT_ORDER2_REQS;
 	sbi->s_mb_best_avail_max_trim_order = MB_DEFAULT_BEST_AVAIL_TRIM_ORDER;
@@ -3929,7 +3929,7 @@ void ext4_mb_release(struct super_block *sb)
 	kfree(sbi->s_mb_offsets);
 	kfree(sbi->s_mb_maxs);
 	iput(sbi->s_buddy_cache);
-	if (sbi->s_mb_stats) {
+	if (READ_ONCE(sbi->s_mb_stats)) {
 		ext4_msg(sb, KERN_INFO,
 		       "mballoc: %u blocks %u reqs (%u success)",
 				atomic_read(&sbi->s_bal_allocated),
@@ -4688,7 +4688,7 @@ static void ext4_mb_collect_stats(struct ext4_allocation_context *ac)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(ac->ac_sb);
 
-	if (sbi->s_mb_stats && ac->ac_g_ex.fe_len >= 1) {
+	if (READ_ONCE(sbi->s_mb_stats) && ac->ac_g_ex.fe_len >= 1) {
 		atomic_inc(&sbi->s_bal_reqs);
 		atomic_add(ac->ac_b_ex.fe_len, &sbi->s_bal_allocated);
 		if (ac->ac_b_ex.fe_len >= ac->ac_o_ex.fe_len)
