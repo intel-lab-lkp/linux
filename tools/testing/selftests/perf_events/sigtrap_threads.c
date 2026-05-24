@@ -159,8 +159,8 @@ static void run_test_threads(struct __test_metadata *_metadata,
 TEST_F(sigtrap_threads, remain_disabled)
 {
 	run_test_threads(_metadata, self);
-	EXPECT_EQ(ctx.signal_count, 0);
-	EXPECT_NE(ctx.tids_want_signal, 0);
+	EXPECT_EQ(__atomic_load_n(&ctx.signal_count, __ATOMIC_RELAXED), 0);
+	EXPECT_NE(__atomic_load_n(&ctx.tids_want_signal, __ATOMIC_RELAXED), 0);
 }
 
 TEST_F(sigtrap_threads, enable_event)
@@ -168,15 +168,15 @@ TEST_F(sigtrap_threads, enable_event)
 	EXPECT_EQ(ioctl(self->fd, PERF_EVENT_IOC_ENABLE, 0), 0);
 	run_test_threads(_metadata, self);
 
-	EXPECT_EQ(ctx.signal_count, NUM_THREADS);
-	EXPECT_EQ(ctx.tids_want_signal, 0);
+	EXPECT_EQ(__atomic_load_n(&ctx.signal_count, __ATOMIC_RELAXED), NUM_THREADS);
+	EXPECT_EQ(__atomic_load_n(&ctx.tids_want_signal, __ATOMIC_RELAXED), 0);
 	EXPECT_EQ(ctx.first_siginfo.si_addr, &ctx.iterate_on);
 	EXPECT_EQ(ctx.first_siginfo.si_perf_type, PERF_TYPE_BREAKPOINT);
 	EXPECT_EQ(ctx.first_siginfo.si_perf_data, TEST_SIG_DATA(&ctx.iterate_on, 0));
 
 	/* Check enabled for parent. */
 	ctx.iterate_on = 0;
-	EXPECT_EQ(ctx.signal_count, NUM_THREADS + 1);
+	EXPECT_EQ(__atomic_load_n(&ctx.signal_count, __ATOMIC_RELAXED), NUM_THREADS + 1);
 }
 
 /* Test that modification propagates to all inherited events. */
@@ -187,15 +187,15 @@ TEST_F(sigtrap_threads, modify_and_enable_event)
 	EXPECT_EQ(ioctl(self->fd, PERF_EVENT_IOC_MODIFY_ATTRIBUTES, &new_attr), 0);
 	run_test_threads(_metadata, self);
 
-	EXPECT_EQ(ctx.signal_count, NUM_THREADS);
-	EXPECT_EQ(ctx.tids_want_signal, 0);
+	EXPECT_EQ(__atomic_load_n(&ctx.signal_count, __ATOMIC_RELAXED), NUM_THREADS);
+	EXPECT_EQ(__atomic_load_n(&ctx.tids_want_signal, __ATOMIC_RELAXED), 0);
 	EXPECT_EQ(ctx.first_siginfo.si_addr, &ctx.iterate_on);
 	EXPECT_EQ(ctx.first_siginfo.si_perf_type, PERF_TYPE_BREAKPOINT);
 	EXPECT_EQ(ctx.first_siginfo.si_perf_data, TEST_SIG_DATA(&ctx.iterate_on, 42));
 
 	/* Check enabled for parent. */
 	ctx.iterate_on = 0;
-	EXPECT_EQ(ctx.signal_count, NUM_THREADS + 1);
+	EXPECT_EQ(__atomic_load_n(&ctx.signal_count, __ATOMIC_RELAXED), NUM_THREADS + 1);
 }
 
 /* Stress test event + signal handling. */
@@ -207,8 +207,8 @@ TEST_F(sigtrap_threads, signal_stress)
 	run_test_threads(_metadata, self);
 	EXPECT_EQ(ioctl(self->fd, PERF_EVENT_IOC_DISABLE, 0), 0);
 
-	EXPECT_EQ(ctx.signal_count, NUM_THREADS * ctx.iterate_on);
-	EXPECT_EQ(ctx.tids_want_signal, 0);
+	EXPECT_EQ(__atomic_load_n(&ctx.signal_count, __ATOMIC_RELAXED), NUM_THREADS * ctx.iterate_on);
+	EXPECT_EQ(__atomic_load_n(&ctx.tids_want_signal, __ATOMIC_RELAXED), 0);
 	EXPECT_EQ(ctx.first_siginfo.si_addr, &ctx.iterate_on);
 	EXPECT_EQ(ctx.first_siginfo.si_perf_type, PERF_TYPE_BREAKPOINT);
 	EXPECT_EQ(ctx.first_siginfo.si_perf_data, TEST_SIG_DATA(&ctx.iterate_on, 0));
