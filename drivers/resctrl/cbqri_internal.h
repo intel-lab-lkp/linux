@@ -63,12 +63,26 @@
 #define CBQRI_CC_MON_CTL_OP_CONFIG_EVENT 1
 #define CBQRI_CC_MON_CTL_OP_READ_COUNTER 2
 
+#define CBQRI_BC_MON_CTL_OP_CONFIG_EVENT 1
 #define CBQRI_BC_MON_CTL_OP_READ_COUNTER 2
 
-/* mon_ctl field masks (CC and BC share an identical OP/MCID/EVT_ID/STATUS layout) */
-#define CBQRI_MON_CTL_OP_MASK        GENMASK(4, 0)
-#define CBQRI_MON_CTL_MCID_MASK      GENMASK(19, 8)
-#define CBQRI_MON_CTL_EVT_ID_MASK    GENMASK(27, 20)
+/* Bandwidth usage monitoring event IDs (CBQRI spec Table 10) */
+#define CBQRI_BC_EVT_ID_TOTAL_READ_WRITE  1
+
+/* bc_mon_ctr_val layout (CBQRI spec section 4.3, Figure 7) */
+#define CBQRI_BC_MON_CTR_VAL_CTR_MASK    GENMASK_ULL(61, 0)
+#define CBQRI_BC_MON_CTR_VAL_INVALID     BIT_ULL(62)
+#define CBQRI_BC_MON_CTR_VAL_OVF         BIT_ULL(63)
+
+/*
+ * mon_ctl field masks (CC and BC share an identical OP/MCID/EVT_ID/STATUS
+ * layout). Keep all masks u64-wide so FIELD_MODIFY() on a u64 register
+ * never zero-extends a 32-bit ~mask and clobbers the WPRI/STATUS/BUSY
+ * fields in bits 63:32 for future support of RV32
+ */
+#define CBQRI_MON_CTL_OP_MASK        GENMASK_ULL(4, 0)
+#define CBQRI_MON_CTL_MCID_MASK      GENMASK_ULL(19, 8)
+#define CBQRI_MON_CTL_EVT_ID_MASK    GENMASK_ULL(27, 20)
 #define CBQRI_MON_CTL_STATUS_MASK    GENMASK_ULL(38, 32)
 #define CBQRI_MON_CTL_STATUS_SUCCESS 1
 
@@ -88,6 +102,19 @@ struct riscv_cbqri_bandwidth_caps {
 	u16 mrbwb;   /* max reserved bw blocks */
 
 	bool supports_alloc_at_code;
+};
+
+/**
+ * struct cbqri_bc_mon_state - per-MCID software accumulator for BC bandwidth
+ * @prev_ctr: previous 62-bit hardware snapshot (already masked to CTR field)
+ * @chunks:   accumulated 64-bit byte total across hardware wraparounds
+ *
+ * Updated in resctrl_arch_rmid_read() under cbqri_controller::lock and
+ * zeroed by resctrl_arch_reset_rmid().
+ */
+struct cbqri_bc_mon_state {
+	u64 prev_ctr;
+	u64 chunks;
 };
 
 /**
@@ -159,6 +186,15 @@ struct cbqri_controller {
 	u16 *rbwb_cache;
 	u8  *mweight_cache;
 
+	/*
+	 * Per-MCID 64-bit software accumulator for the BC's mbm_total_bytes
+	 * event. Allocated by cbqri_init_bc_mon_counters() when this BC is
+	 * paired with an L3 monitoring domain, sized by ->mcid_count. NULL
+	 * on capacity controllers and on BCs that are not mon-paired.
+	 * Protected by ->lock along with the surrounding MMIO sequence.
+	 */
+	struct cbqri_bc_mon_state *mbm_total_states;
+
 	struct list_head list;
 
 	struct cache_controller {
@@ -200,5 +236,11 @@ int cbqri_apply_mweight_config(struct cbqri_controller *ctrl, u32 closid,
 int cbqri_read_rbwb(struct cbqri_controller *ctrl, u32 closid, u64 *rbwb_out);
 
 int cbqri_read_mweight(struct cbqri_controller *ctrl, u32 closid, u64 *mweight_out);
+
+u64 cbqri_bc_mon_overflow(u64 prev_ctr, u64 cur_ctr);
+
+int cbqri_init_bc_mon_counters(struct cbqri_controller *bc);
+
+struct cbqri_controller *cbqri_find_only_mon_bc(void);
 
 #endif /* _DRIVERS_RESCTRL_CBQRI_INTERNAL_H */
