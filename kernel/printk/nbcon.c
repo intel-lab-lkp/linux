@@ -952,7 +952,7 @@ static void wctxt_load_execution_ctx(struct nbcon_write_context *wctxt,
 {
 	wctxt->cpu = pmsg->cpu;
 	wctxt->pid = pmsg->pid;
-	memcpy(wctxt->comm, pmsg->comm, sizeof(wctxt->comm));
+	strscpy(wctxt->comm, pmsg->comm, sizeof(wctxt->comm));
 	static_assert(sizeof(wctxt->comm) == sizeof(pmsg->comm));
 }
 #else

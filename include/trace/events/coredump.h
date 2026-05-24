@@ -32,7 +32,7 @@ TRACE_EVENT(coredump,
 
 	TP_fast_assign(
 		__entry->sig = sig;
-		memcpy(__entry->comm, current->comm, TASK_COMM_LEN);
+		strscpy(__entry->comm, current->comm, TASK_COMM_LEN);
 	),
 
 	TP_printk("sig=%d comm=%s",

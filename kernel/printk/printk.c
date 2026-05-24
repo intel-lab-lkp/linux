@@ -2255,7 +2255,7 @@ static void pmsg_load_execution_ctx(struct printk_message *pmsg,
 {
 	pmsg->cpu = printk_info_get_cpu(info);
 	pmsg->pid = printk_info_get_pid(info);
-	memcpy(pmsg->comm, info->comm, sizeof(pmsg->comm));
+	strscpy(pmsg->comm, info->comm, sizeof(pmsg->comm));
 	static_assert(sizeof(pmsg->comm) == sizeof(info->comm));
 }
 #else
