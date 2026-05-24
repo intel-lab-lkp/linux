@@ -440,6 +440,13 @@ int devm_watchdog_register_device(struct device *dev,
 	if (!rcwdd)
 		return -ENOMEM;
 
+	/*
+	 * We are passing the devres device here so if the user did not pass
+	 * another parent, it's this one.
+	 */
+	if (!wdd->parent)
+		wdd->parent = dev;
+
 	ret = watchdog_register_device(wdd);
 	if (!ret) {
 		*rcwdd = wdd;
