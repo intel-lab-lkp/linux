@@ -1,0 +1,11 @@
+---
+--- ASN.1 for TPM 2.0 keys
+---
+
+TPMKey ::= SEQUENCE {
+	type		OBJECT IDENTIFIER ({tpm2_key_get_type}),
+	emptyAuth	[0] EXPLICIT BOOLEAN OPTIONAL ({tpm2_key_get_empty_auth}),
+	parent		INTEGER ({tpm2_key_get_parent}),
+	pubkey		OCTET STRING ({tpm2_get_public}),
+	privkey		OCTET STRING ({tpm2_get_private})
+	}

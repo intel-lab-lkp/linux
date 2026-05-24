@@ -211,3 +211,9 @@ obj-$(CONFIG_CRYPTO_KDF800108_CTR) += kdf_sp800108.o
 obj-$(CONFIG_CRYPTO_DF80090A) += df_sp80090a.o
 
 obj-$(CONFIG_CRYPTO_KRB5) += krb5/
+
+ifdef CONFIG_CRYPTO_TPM2_KEY
+$(obj)/tpm2_key.asn1.o: $(obj)/tpm2_key.asn1.h $(obj)/tpm2_key.asn1.c
+$(obj)/tpm2_key.o: $(obj)/tpm2_key.asn1.h
+obj-y += tpm2_key.o tpm2_key.asn1.o
+endif

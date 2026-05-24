@@ -3,6 +3,13 @@
 # Generic algorithms support
 #
 
+config CRYPTO_TPM2_KEY
+	bool
+	depends on CRYPTO
+	select ASN1
+	select OID_REGISTRY
+	default n
+
 #
 # async_tx api: hardware offloaded memory transfer/transform support
 #

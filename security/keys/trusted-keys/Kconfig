@@ -8,9 +8,9 @@ config TRUSTED_KEYS_TPM
 	select CRYPTO_HASH_INFO
 	select CRYPTO_LIB_SHA1
 	select CRYPTO_LIB_UTILS
+	select CRYPTO_TPM2_KEY
 	select ASN1_ENCODER
 	select OID_REGISTRY
-	select ASN1
 	select HAVE_TRUSTED_KEYS
 	help
 	  Enable use of the Trusted Platform Module (TPM) as trusted key
