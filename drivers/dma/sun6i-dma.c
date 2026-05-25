@@ -788,9 +788,15 @@ static struct dma_async_tx_descriptor *sun6i_dma_prep_slave_sg(
 	return vchan_tx_prep(&vchan->vc, &txd->vd, flags);
 
 err_lli_free:
-	for (p_lli = txd->p_lli, v_lli = txd->v_lli; v_lli;
-	     p_lli = v_lli->p_lli_next, v_lli = v_lli->v_lli_next)
+	p_lli = txd->p_lli;
+	v_lli = txd->v_lli;
+	while (v_lli) {
+		struct sun6i_dma_lli *next_v_lli = v_lli->v_lli_next;
+		dma_addr_t next_p_lli = v_lli->p_lli_next;
 		dma_pool_free(sdev->pool, v_lli, p_lli);
+		v_lli = next_v_lli;
+		p_lli = next_p_lli;
+	}
 	kfree(txd);
 	return NULL;
 }
@@ -869,9 +875,15 @@ static struct dma_async_tx_descriptor *sun6i_dma_prep_dma_cyclic(
 	return vchan_tx_prep(&vchan->vc, &txd->vd, flags);
 
 err_lli_free:
-	for (p_lli = txd->p_lli, v_lli = txd->v_lli; v_lli;
-	     p_lli = v_lli->p_lli_next, v_lli = v_lli->v_lli_next)
+	p_lli = txd->p_lli;
+	v_lli = txd->v_lli;
+	while (v_lli) {
+		struct sun6i_dma_lli *next_v_lli = v_lli->v_lli_next;
+		dma_addr_t next_p_lli = v_lli->p_lli_next;
 		dma_pool_free(sdev->pool, v_lli, p_lli);
+		v_lli = next_v_lli;
+		p_lli = next_p_lli;
+	}
 	kfree(txd);
 	return NULL;
 }
