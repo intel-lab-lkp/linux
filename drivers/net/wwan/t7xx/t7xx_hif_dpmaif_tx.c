@@ -449,10 +449,10 @@ static int t7xx_dpmaif_tx_hw_push_thread(void *arg)
 
 	while (!kthread_should_stop()) {
 		if (t7xx_tx_lists_are_all_empty(dpmaif_ctrl) ||
-		    dpmaif_ctrl->state != DPMAIF_STATE_PWRON) {
+		    READ_ONCE(dpmaif_ctrl->state) != DPMAIF_STATE_PWRON) {
 			if (wait_event_interruptible(dpmaif_ctrl->tx_wq,
 						     (!t7xx_tx_lists_are_all_empty(dpmaif_ctrl) &&
-						     dpmaif_ctrl->state == DPMAIF_STATE_PWRON) ||
+						     READ_ONCE(dpmaif_ctrl->state) == DPMAIF_STATE_PWRON) ||
 						     kthread_should_stop()))
 				continue;
 
@@ -460,14 +460,23 @@ static int t7xx_dpmaif_tx_hw_push_thread(void *arg)
 				break;
 		}
 
+		mutex_lock(&dpmaif_ctrl->tx_pm_lock);
+		if (READ_ONCE(dpmaif_ctrl->state) != DPMAIF_STATE_PWRON) {
+			mutex_unlock(&dpmaif_ctrl->tx_pm_lock);
+			continue;
+		}
+
 		ret = pm_runtime_resume_and_get(dpmaif_ctrl->dev);
-		if (ret < 0 && ret != -EACCES)
+		if (ret < 0 && ret != -EACCES) {
+			mutex_unlock(&dpmaif_ctrl->tx_pm_lock);
 			return ret;
+		}
 
 		t7xx_pci_disable_sleep(dpmaif_ctrl->t7xx_dev);
 		t7xx_do_tx_hw_push(dpmaif_ctrl);
 		t7xx_pci_enable_sleep(dpmaif_ctrl->t7xx_dev);
 		pm_runtime_put_autosuspend(dpmaif_ctrl->dev);
+		mutex_unlock(&dpmaif_ctrl->tx_pm_lock);
 	}
 
 	return 0;
@@ -475,6 +484,7 @@ static int t7xx_dpmaif_tx_hw_push_thread(void *arg)
 
 int t7xx_dpmaif_tx_thread_init(struct dpmaif_ctrl *dpmaif_ctrl)
 {
+	mutex_init(&dpmaif_ctrl->tx_pm_lock);
 	init_waitqueue_head(&dpmaif_ctrl->tx_wq);
 	dpmaif_ctrl->tx_thread = kthread_run(t7xx_dpmaif_tx_hw_push_thread,
 					     dpmaif_ctrl, "dpmaif_tx_hw_push");

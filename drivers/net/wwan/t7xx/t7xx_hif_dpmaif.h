@@ -20,6 +20,7 @@
 
 #include <linux/bitmap.h>
 #include <linux/mm_types.h>
+#include <linux/mutex.h>
 #include <linux/netdevice.h>
 #include <linux/sched.h>
 #include <linux/skbuff.h>
@@ -172,6 +173,8 @@ struct dpmaif_ctrl {
 	struct t7xx_pci_dev		*t7xx_dev;
 	struct md_pm_entity		dpmaif_pm_entity;
 	enum dpmaif_state		state;
+	enum dpmaif_state		pre_suspend_state;
+	struct mutex			tx_pm_lock;
 	bool				dpmaif_sw_init_done;
 	struct dpmaif_hw_info		hw_info;
 	struct dpmaif_tx_queue		txq[DPMAIF_TXQ_NUM];

@@ -412,6 +412,11 @@ static int t7xx_dpmaif_suspend(struct t7xx_pci_dev *t7xx_dev, void *param)
 	struct dpmaif_ctrl *dpmaif_ctrl = param;
 
 	t7xx_dpmaif_tx_stop(dpmaif_ctrl);
+	dpmaif_ctrl->pre_suspend_state = READ_ONCE(dpmaif_ctrl->state);
+	mutex_lock(&dpmaif_ctrl->tx_pm_lock);
+	WRITE_ONCE(dpmaif_ctrl->state, DPMAIF_STATE_PWROFF);
+	mutex_unlock(&dpmaif_ctrl->tx_pm_lock);
+	wake_up(&dpmaif_ctrl->tx_wq);
 	t7xx_dpmaif_hw_stop_all_txq(&dpmaif_ctrl->hw_info);
 	t7xx_dpmaif_hw_stop_all_rxq(&dpmaif_ctrl->hw_info);
 	t7xx_dpmaif_disable_irq(dpmaif_ctrl);
@@ -451,6 +456,7 @@ static int t7xx_dpmaif_resume(struct t7xx_pci_dev *t7xx_dev, void *param)
 	if (!dpmaif_ctrl)
 		return 0;
 
+	WRITE_ONCE(dpmaif_ctrl->state, dpmaif_ctrl->pre_suspend_state);
 	t7xx_dpmaif_start_txrx_qs(dpmaif_ctrl);
 	t7xx_dpmaif_enable_irq(dpmaif_ctrl);
 	t7xx_dpmaif_unmask_dlq_intr(dpmaif_ctrl);
