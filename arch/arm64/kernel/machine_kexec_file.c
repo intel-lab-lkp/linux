@@ -82,10 +82,11 @@ int load_other_segments(struct kimage *image,
 			char *cmdline, void *headers,
 			unsigned long headers_sz)
 {
-	struct kexec_buf kbuf = {};
-	void *dtb = NULL;
 	unsigned long initrd_load_addr = 0, dtb_len,
 		      orig_segments = image->nr_segments;
+	struct kexec_buf kbuf = {};
+	unsigned long pnum = 0;
+	void *dtb = NULL;
 	int ret = 0;
 
 	kbuf.image = image;
@@ -98,6 +99,23 @@ int load_other_segments(struct kimage *image,
 		kbuf.bufsz = headers_sz;
 		kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
 		kbuf.memsz = headers_sz;
+
+#ifdef CONFIG_CRASH_HOTPLUG
+		/*
+		 * The elfcorehdr segment size accounts for VMCOREINFO, kernel_map
+		 * maximum CPUs and maximum memory ranges.
+		 */
+		if (IS_ENABLED(CONFIG_MEMORY_HOTPLUG))
+			pnum = 2 + num_possible_cpus() + CONFIG_CRASH_MAX_MEMORY_RANGES;
+		else
+			pnum += 2 + num_possible_cpus();
+
+		if (pnum < (unsigned long)PN_XNUM)
+			kbuf.memsz = pnum * sizeof(Elf64_Phdr) + sizeof(Elf64_Ehdr);
+		else
+			pr_err("number of Phdrs %lu exceeds max\n", pnum);
+#endif
+
 		kbuf.buf_align = SZ_64K; /* largest supported page size */
 		kbuf.buf_max = ULONG_MAX;
 		kbuf.top_down = true;
@@ -108,6 +126,7 @@ int load_other_segments(struct kimage *image,
 			goto out_err;
 		}
 		image->elf_load_addr = kbuf.mem;
+		image->elf_headers_sz = kbuf.memsz;
 
 		kexec_dprintk("Loaded elf core header at 0x%lx bufsz=0x%lx memsz=0x%lx\n",
 			      image->elf_load_addr, kbuf.bufsz, kbuf.memsz);
