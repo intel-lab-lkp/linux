@@ -1511,9 +1511,9 @@ static unsigned int collapse_mthp_count_present(struct collapse_control *cc,
  * If a collapse is permitted, we attempt to collapse the PTE range into a
  * mTHP.
  */
-static int mthp_collapse(struct mm_struct *mm, struct vm_area_struct *vma,
-		unsigned long address, int referenced, int unmapped,
-		struct collapse_control *cc, unsigned long enabled_orders)
+static int mthp_collapse(struct mm_struct *mm, unsigned long address,
+		int referenced, int unmapped, struct collapse_control *cc,
+		unsigned long enabled_orders)
 {
 	unsigned int nr_occupied_ptes, nr_ptes, max_ptes_none;
 	int collapsed = 0, stack_size = 0;
@@ -1533,7 +1533,7 @@ static int mthp_collapse(struct mm_struct *mm, struct vm_area_struct *vma,
 		if (!test_bit(order, &enabled_orders))
 			goto next_order;
 
-		max_ptes_none = collapse_max_ptes_none(cc, vma, order);
+		max_ptes_none = collapse_max_ptes_none(cc, NULL, order);
 
 		nr_occupied_ptes = collapse_mthp_count_present(cc, offset,
 							       nr_ptes);
@@ -1758,7 +1758,7 @@ out_unmap:
 	if (result == SCAN_SUCCEED) {
 		/* collapse_huge_page expects the lock to be dropped before calling */
 		mmap_read_unlock(mm);
-		nr_collapsed = mthp_collapse(mm, vma, start_addr, referenced,
+		nr_collapsed = mthp_collapse(mm, start_addr, referenced,
 					     unmapped, cc, enabled_orders);
 		/* mmap_lock was released above, set lock_dropped */
 		*lock_dropped = true;
