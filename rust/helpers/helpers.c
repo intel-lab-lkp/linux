@@ -62,6 +62,7 @@
 #include "err.c"
 #include "irq.c"
 #include "fs.c"
+#include "genetlink.c"
 #include "gpu.c"
 #include "io.c"
 #include "jump_label.c"
