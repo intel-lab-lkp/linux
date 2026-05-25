@@ -1468,6 +1468,10 @@ static void dispatch_enqueue(struct scx_sched *sch, struct rq *rq,
 	WARN_ON_ONCE((p->scx.dsq_flags & SCX_TASK_DSQ_ON_PRIQ) ||
 		     !RB_EMPTY_NODE(&p->scx.dsq_priq));
 
+	/* Track queue time for schedstat run_delay accounting */
+	if (!p->sched_info.last_queued)
+		sched_info_enqueue(task_rq(p), p);
+
 	if (!is_local) {
 		raw_spin_lock_nested(&dsq->lock,
 			(enq_flags & SCX_ENQ_NESTED) ? SINGLE_DEPTH_NESTING : 0);
