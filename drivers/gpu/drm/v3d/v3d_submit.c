@@ -1300,8 +1300,16 @@ v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 		ret = v3d_get_extensions(file_priv, args->extensions, &se, cpu_job);
 		if (ret) {
 			drm_dbg(dev, "Failed to get extensions.\n");
-			goto fail;
+			v3d_job_deallocate((void *)&cpu_job);
+			goto fail_init;
 		}
+	}
+
+	ret = v3d_job_init(v3d, file_priv, &cpu_job->base,
+			   v3d_cpu_job_free, 0, &se, V3D_CPU);
+	if (ret) {
+		v3d_job_deallocate((void *)&cpu_job);
+		goto fail_init;
 	}
 
 	/* Every CPU job must have a CPU job user extension */
@@ -1318,13 +1326,6 @@ v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 	}
 
 	trace_v3d_submit_cpu_ioctl(&v3d->drm, cpu_job->job_type);
-
-	ret = v3d_job_init(v3d, file_priv, &cpu_job->base,
-			   v3d_cpu_job_free, 0, &se, V3D_CPU);
-	if (ret) {
-		v3d_job_deallocate((void *)&cpu_job);
-		goto fail;
-	}
 
 	clean_job = cpu_job->indirect_csd.clean_job;
 	csd_job = cpu_job->indirect_csd.job;
@@ -1402,6 +1403,8 @@ fail:
 	v3d_job_cleanup((void *)cpu_job);
 	v3d_job_cleanup((void *)csd_job);
 	v3d_job_cleanup(clean_job);
+
+fail_init:
 	v3d_put_multisync_post_deps(&se);
 
 	return ret;
