@@ -10,7 +10,6 @@
  */
 
 #include <linux/bits.h>
-#include <linux/idr.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
@@ -19,7 +18,6 @@
 #include <linux/mfd/nct6694.h>
 #include <linux/module.h>
 #include <linux/slab.h>
-#include <linux/spinlock.h>
 #include <linux/usb.h>
 
 #define NCT6694_VENDOR_ID	0x0416
@@ -43,7 +41,7 @@ struct nct6694_usb_data {
 	__le32 *int_buffer;
 };
 
-static const struct mfd_cell nct6694_devs[] = {
+static const struct mfd_cell nct6694_usb_devs[] = {
 	MFD_CELL_NAME("nct6694-gpio"),
 	MFD_CELL_NAME("nct6694-gpio"),
 	MFD_CELL_NAME("nct6694-gpio"),
@@ -244,56 +242,8 @@ static void usb_int_callback(struct urb *urb)
 resubmit:
 	ret = usb_submit_urb(urb, GFP_ATOMIC);
 	if (ret)
-		dev_warn(nct6694->dev, "Failed to resubmit urb, status %pe",  ERR_PTR(ret));
+		dev_warn(nct6694->dev, "Failed to resubmit urb, status %pe", ERR_PTR(ret));
 }
-
-static void nct6694_irq_enable(struct irq_data *data)
-{
-	struct nct6694 *nct6694 = irq_data_get_irq_chip_data(data);
-	irq_hw_number_t hwirq = irqd_to_hwirq(data);
-
-	guard(spinlock_irqsave)(&nct6694->irq_lock);
-
-	nct6694->irq_enable |= BIT(hwirq);
-}
-
-static void nct6694_irq_disable(struct irq_data *data)
-{
-	struct nct6694 *nct6694 = irq_data_get_irq_chip_data(data);
-	irq_hw_number_t hwirq = irqd_to_hwirq(data);
-
-	guard(spinlock_irqsave)(&nct6694->irq_lock);
-
-	nct6694->irq_enable &= ~BIT(hwirq);
-}
-
-static const struct irq_chip nct6694_irq_chip = {
-	.name = "nct6694-irq",
-	.flags = IRQCHIP_SKIP_SET_WAKE,
-	.irq_enable = nct6694_irq_enable,
-	.irq_disable = nct6694_irq_disable,
-};
-
-static int nct6694_irq_domain_map(struct irq_domain *d, unsigned int irq, irq_hw_number_t hw)
-{
-	struct nct6694 *nct6694 = d->host_data;
-
-	irq_set_chip_data(irq, nct6694);
-	irq_set_chip_and_handler(irq, &nct6694_irq_chip, handle_simple_irq);
-
-	return 0;
-}
-
-static void nct6694_irq_domain_unmap(struct irq_domain *d, unsigned int irq)
-{
-	irq_set_chip_and_handler(irq, NULL, NULL);
-	irq_set_chip_data(irq, NULL);
-}
-
-static const struct irq_domain_ops nct6694_irq_domain_ops = {
-	.map	= nct6694_irq_domain_map,
-	.unmap	= nct6694_irq_domain_unmap,
-};
 
 static int nct6694_usb_probe(struct usb_interface *iface,
 			     const struct usb_device_id *id)
@@ -328,37 +278,21 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 
 	udata->udev = udev;
 
+	nct6694->dev = dev;
 	nct6694->priv = udata;
 	nct6694->read_msg = nct6694_usb_read_msg;
 	nct6694->write_msg = nct6694_usb_write_msg;
 
-	nct6694->domain = irq_domain_create_simple(NULL, NCT6694_NR_IRQS, 0,
-						   &nct6694_irq_domain_ops,
-						   nct6694);
-	if (!nct6694->domain) {
-		ret = -ENODEV;
-		goto err_urb;
-	}
-
-	nct6694->dev = dev;
-
-	ida_init(&nct6694->gpio_ida);
-	ida_init(&nct6694->i2c_ida);
-	ida_init(&nct6694->canfd_ida);
-	ida_init(&nct6694->wdt_ida);
-
-	spin_lock_init(&nct6694->irq_lock);
-
 	ret = devm_mutex_init(dev, &udata->access_lock);
 	if (ret)
-		goto err_ida;
+		goto err_urb;
 
 	interface = iface->cur_altsetting;
 
 	int_endpoint = &interface->endpoint[0].desc;
 	if (!usb_endpoint_is_int_in(int_endpoint)) {
 		ret = -ENODEV;
-		goto err_ida;
+		goto err_urb;
 	}
 
 	usb_fill_int_urb(udata->int_in_urb, udev, usb_rcvintpipe(udev, NCT6694_INT_IN_EP),
@@ -367,11 +301,11 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 
 	ret = usb_submit_urb(udata->int_in_urb, GFP_KERNEL);
 	if (ret)
-		goto err_ida;
+		goto err_urb;
 
 	usb_set_intfdata(iface, nct6694);
 
-	ret = mfd_add_hotplug_devices(dev, nct6694_devs, ARRAY_SIZE(nct6694_devs));
+	ret = nct6694_core_probe(dev, nct6694, nct6694_usb_devs, ARRAY_SIZE(nct6694_usb_devs));
 	if (ret)
 		goto err_mfd;
 
@@ -379,12 +313,6 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 
 err_mfd:
 	usb_kill_urb(udata->int_in_urb);
-err_ida:
-	ida_destroy(&nct6694->wdt_ida);
-	ida_destroy(&nct6694->canfd_ida);
-	ida_destroy(&nct6694->i2c_ida);
-	ida_destroy(&nct6694->gpio_ida);
-	irq_domain_remove(nct6694->domain);
 err_urb:
 	usb_free_urb(udata->int_in_urb);
 	return ret;
@@ -395,13 +323,8 @@ static void nct6694_usb_disconnect(struct usb_interface *iface)
 	struct nct6694 *nct6694 = usb_get_intfdata(iface);
 	struct nct6694_usb_data *udata = nct6694->priv;
 
-	mfd_remove_devices(nct6694->dev);
+	nct6694_core_remove(nct6694);
 	usb_kill_urb(udata->int_in_urb);
-	ida_destroy(&nct6694->wdt_ida);
-	ida_destroy(&nct6694->canfd_ida);
-	ida_destroy(&nct6694->i2c_ida);
-	ida_destroy(&nct6694->gpio_ida);
-	irq_domain_remove(nct6694->domain);
 	usb_free_urb(udata->int_in_urb);
 }
 
@@ -419,6 +342,6 @@ static struct usb_driver nct6694_usb_driver = {
 };
 module_usb_driver(nct6694_usb_driver);
 
-MODULE_DESCRIPTION("Nuvoton NCT6694 core driver");
+MODULE_DESCRIPTION("Nuvoton NCT6694 USB transport driver");
 MODULE_AUTHOR("Ming Yu <tmyu0@nuvoton.com>");
 MODULE_LICENSE("GPL");

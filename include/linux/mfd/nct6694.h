@@ -10,9 +10,12 @@
 #define __MFD_NCT6694_H
 
 #include <linux/idr.h>
-#include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
+
+struct device;
+struct irq_domain;
+struct mfd_cell;
 
 #define NCT6694_HWMON_MOD	0x00
 #define NCT6694_PWM_MOD		0x01
@@ -114,5 +117,9 @@ static inline int nct6694_write_msg(struct nct6694 *nct6694,
 {
 	return nct6694->write_msg(nct6694, cmd_hd, buf);
 }
+
+int nct6694_core_probe(struct device *dev, struct nct6694 *nct6694,
+		       const struct mfd_cell *cells, int n_cells);
+void nct6694_core_remove(struct nct6694 *nct6694);
 
 #endif
