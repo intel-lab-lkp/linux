@@ -667,4 +667,36 @@ static inline size_t num_pages_contiguous(struct page **pages, size_t nr_pages)
 	return i;
 }
 
+static inline spinlock_t *pmd_huge_lock(pmd_t *pmd, struct vm_area_struct *vma)
+{
+	spinlock_t *ptl;
+
+	if (pmd_present(*pmd) || !pmd_none(*pmd)) {
+		ptl = pmd_lock(vma->vm_mm, pmd);
+		if (pmd_present(*pmd) && pmd_leaf(*pmd))
+			return ptl;
+		else if (!pmd_present(*pmd) && !pmd_none(*pmd))
+			return ptl;
+		spin_unlock(ptl);
+	}
+
+	return NULL;
+}
+
+static inline spinlock_t *pud_huge_lock(pud_t *pud, struct vm_area_struct *vma)
+{
+	spinlock_t *ptl;
+
+	if (pud_present(*pud) || !pud_none(*pud)) {
+		ptl = pud_lock(vma->vm_mm, pud);
+		if (pud_present(*pud) && pud_leaf(*pud))
+			return ptl;
+		else if (!pud_present(*pud) && !pud_none(*pud))
+			return ptl;
+		spin_unlock(ptl);
+	}
+
+	return NULL;
+}
+
 #endif
