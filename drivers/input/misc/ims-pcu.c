@@ -2063,6 +2063,10 @@ err_free_buffers:
 	ims_pcu_buffers_free(pcu);
 err_unclaim_intf:
 	usb_driver_release_interface(&ims_pcu_driver, pcu->data_intf);
+	goto err_clear_intfdata;
+err_clear_intfdata:
+	if (pcu->ctrl_intf)
+		usb_set_intfdata(pcu->ctrl_intf, NULL);
 err_free_mem:
 	kfree(pcu);
 	return error;
