@@ -1888,6 +1888,9 @@ static ssize_t zynqmp_dp_pattern_write(struct file *file,
 	ssize_t ret;
 	int pattern;
 
+	if (*ppos != 0)
+		return -EINVAL;
+
 	ret = simple_write_to_buffer(buf, sizeof(buf) - 1, ppos, user_buf,
 				     count);
 	if (ret < 0)
@@ -2027,6 +2030,9 @@ static ssize_t zynqmp_dp_custom_write(struct file *file,
 	struct zynqmp_dp *dp = file->private_data;
 	ssize_t ret;
 	char buf[sizeof(dp->test.custom)];
+
+	if (*ppos != 0)
+		return -EINVAL;
 
 	ret = simple_write_to_buffer(buf, sizeof(buf), ppos, user_buf, count);
 	if (ret < 0)
