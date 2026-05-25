@@ -94,6 +94,7 @@ declare -a BEAUTY_FILES=(
   "include/uapi/linux/fadvise.h"
   "include/uapi/linux/fcntl.h"
   "include/uapi/linux/fs.h"
+  "include/uapi/linux/futex.h"
   "include/uapi/linux/mount.h"
   "include/uapi/linux/prctl.h"
   "include/uapi/linux/sched.h"
