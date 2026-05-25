@@ -189,7 +189,7 @@ static void crtc_release(struct config_item *item)
 	}
 }
 
-static struct configfs_item_operations crtc_item_operations = {
+static const struct configfs_item_operations crtc_item_operations = {
 	.release	= &crtc_release,
 };
 
@@ -231,7 +231,7 @@ static struct config_group *make_crtc_group(struct config_group *group,
 	return &crtc->group;
 }
 
-static struct configfs_group_operations crtcs_group_operations = {
+static const struct configfs_group_operations crtcs_group_operations = {
 	.make_group	= &make_crtc_group,
 };
 
@@ -276,7 +276,7 @@ static void plane_possible_crtcs_drop_link(struct config_item *src,
 		vkms_config_plane_detach_crtc(plane->config, crtc->config);
 }
 
-static struct configfs_item_operations plane_possible_crtcs_item_operations = {
+static const struct configfs_item_operations plane_possible_crtcs_item_operations = {
 	.allow_link	= plane_possible_crtcs_allow_link,
 	.drop_link	= plane_possible_crtcs_drop_link,
 };
@@ -345,7 +345,7 @@ static void plane_release(struct config_item *item)
 	}
 }
 
-static struct configfs_item_operations plane_item_operations = {
+static const struct configfs_item_operations plane_item_operations = {
 	.release	= &plane_release,
 };
 
@@ -393,7 +393,7 @@ static struct config_group *make_plane_group(struct config_group *group,
 	return &plane->group;
 }
 
-static struct configfs_group_operations planes_group_operations = {
+static const struct configfs_group_operations planes_group_operations = {
 	.make_group	= &make_plane_group,
 };
 
@@ -438,7 +438,7 @@ static void encoder_possible_crtcs_drop_link(struct config_item *src,
 		vkms_config_encoder_detach_crtc(encoder->config, crtc->config);
 }
 
-static struct configfs_item_operations encoder_possible_crtcs_item_operations = {
+static const struct configfs_item_operations encoder_possible_crtcs_item_operations = {
 	.allow_link	= encoder_possible_crtcs_allow_link,
 	.drop_link	= encoder_possible_crtcs_drop_link,
 };
@@ -462,7 +462,7 @@ static void encoder_release(struct config_item *item)
 	}
 }
 
-static struct configfs_item_operations encoder_item_operations = {
+static const struct configfs_item_operations encoder_item_operations = {
 	.release	= &encoder_release,
 };
 
@@ -510,7 +510,7 @@ static struct config_group *make_encoder_group(struct config_group *group,
 	return &encoder->group;
 }
 
-static struct configfs_group_operations encoders_group_operations = {
+static const struct configfs_group_operations encoders_group_operations = {
 	.make_group	= &make_encoder_group,
 };
 
@@ -579,7 +579,7 @@ static void connector_release(struct config_item *item)
 	}
 }
 
-static struct configfs_item_operations connector_item_operations = {
+static const struct configfs_item_operations connector_item_operations = {
 	.release	= &connector_release,
 };
 
@@ -628,7 +628,7 @@ static void connector_possible_encoders_drop_link(struct config_item *src,
 	}
 }
 
-static struct configfs_item_operations connector_possible_encoders_item_operations = {
+static const struct configfs_item_operations connector_possible_encoders_item_operations = {
 	.allow_link	= connector_possible_encoders_allow_link,
 	.drop_link	= connector_possible_encoders_drop_link,
 };
@@ -677,7 +677,7 @@ static struct config_group *make_connector_group(struct config_group *group,
 	return &connector->group;
 }
 
-static struct configfs_group_operations connectors_group_operations = {
+static const struct configfs_group_operations connectors_group_operations = {
 	.make_group	= &make_connector_group,
 };
 
@@ -750,7 +750,7 @@ static void device_release(struct config_item *item)
 	kfree(dev);
 }
 
-static struct configfs_item_operations device_item_operations = {
+static const struct configfs_item_operations device_item_operations = {
 	.release	= &device_release,
 };
 
@@ -802,7 +802,7 @@ static struct config_group *make_device_group(struct config_group *group,
 	return &dev->group;
 }
 
-static struct configfs_group_operations device_group_ops = {
+static const struct configfs_group_operations device_group_ops = {
 	.make_group = &make_device_group,
 };
 
