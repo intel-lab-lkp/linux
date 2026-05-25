@@ -358,6 +358,34 @@ static inline void lazy_mmu_mode_pause(void) {}
 static inline void lazy_mmu_mode_resume(void) {}
 #endif
 
+#ifndef pmd_batch_hint
+/**
+ * pmd_batch_hint - Number of PMD entries that can be added to batch without scanning.
+ * @pmdp: Page table pointer for the entry.
+ * @pmd: Page table entry.
+ *
+ * Some architectures know that a set of contiguous pmds all map the same
+ * contiguous memory with the same permissions. In this case, it can provide a
+ * hint to aid pmd batching without the core code needing to scan every pmd.
+ *
+ * An architecture implementation may ignore the PMD accessed state. Further,
+ * the dirty state must apply atomically to all the PMDs described by the hint.
+ *
+ * May be overridden by the architecture, else pmd_batch_hint is always 1.
+ */
+static inline unsigned int pmd_batch_hint(pmd_t *pmdp, pmd_t pmd)
+{
+	return 1;
+}
+#endif
+
+#ifndef pmd_advance_pfn
+static inline pmd_t pmd_advance_pfn(pmd_t pmd, unsigned long nr)
+{
+	return __pmd(pmd_val(pmd) + (nr << PFN_PTE_SHIFT));
+}
+#endif
+
 #ifndef pte_batch_hint
 /**
  * pte_batch_hint - Number of pages that can be added to batch without scanning.

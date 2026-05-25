@@ -164,6 +164,8 @@ static inline pteval_t __phys_to_pte_val(phys_addr_t phys)
 	(__boundary - 1 < (end) - 1) ? __boundary : (end);			\
 })
 
+#define pmd_valid_cont(pmd)    (pmd_valid(pmd) && pmd_cont(pmd))
+
 #define pte_hw_dirty(pte)	(pte_write(pte) && !pte_rdonly(pte))
 #define pte_sw_dirty(pte)	(!!(pte_val(pte) & PTE_DIRTY))
 #define pte_dirty(pte)		(pte_sw_dirty(pte) || pte_hw_dirty(pte))
@@ -667,6 +669,12 @@ static inline pgprot_t pmd_pgprot(pmd_t pmd)
 	unsigned long pfn = pmd_pfn(pmd);
 
 	return __pgprot(pmd_val(pfn_pmd(pfn, __pgprot(0))) ^ pmd_val(pmd));
+}
+
+#define pmd_advance_pfn pmd_advance_pfn
+static inline pmd_t pmd_advance_pfn(pmd_t pmd, unsigned long nr)
+{
+	return pfn_pmd(pmd_pfn(pmd) + nr, pmd_pgprot(pmd));
 }
 
 #define pud_pgprot pud_pgprot
@@ -1655,6 +1663,17 @@ extern pte_t modify_prot_start_ptes(struct vm_area_struct *vma,
 extern void modify_prot_commit_ptes(struct vm_area_struct *vma, unsigned long addr,
 				    pte_t *ptep, pte_t old_pte, pte_t pte,
 				    unsigned int nr);
+
+#ifdef CONFIG_HUGETLB_PAGE
+#define pmd_batch_hint pmd_batch_hint
+static inline unsigned int pmd_batch_hint(pmd_t *pmdp, pmd_t pmd)
+{
+	if (!pmd_valid_cont(pmd))
+		return 1;
+
+	return CONT_PMDS - (((unsigned long)pmdp >> 3) & (CONT_PMDS - 1));
+}
+#endif
 
 #ifdef CONFIG_ARM64_CONTPTE
 

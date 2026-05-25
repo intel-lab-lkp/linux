@@ -270,7 +270,7 @@ static inline int anon_vma_prepare(struct vm_area_struct *vma)
 	return __anon_vma_prepare(vma);
 }
 
-/* Flags for folio_pte_batch(). */
+/* Flags for folio_{pmd,pte}_batch(). */
 typedef int __bitwise fpb_t;
 
 /* Compare PTEs respecting the dirty bit. */
@@ -293,6 +293,79 @@ typedef int __bitwise fpb_t;
  * modify the PTE at @ptentp to be young or dirty, respectively.
  */
 #define FPB_MERGE_YOUNG_DIRTY		((__force fpb_t)BIT(4))
+
+static inline pmd_t __pmd_batch_clear_ignored(pmd_t pmd, fpb_t flags)
+{
+	if (!(flags & FPB_RESPECT_DIRTY))
+		pmd = pmd_mkclean(pmd);
+	if (likely(!(flags & FPB_RESPECT_SOFT_DIRTY)))
+		pmd = pmd_clear_soft_dirty(pmd);
+	if (likely(!(flags & FPB_RESPECT_WRITE)))
+		pmd = pmd_wrprotect(pmd);
+	return pmd_mkold(pmd);
+}
+
+/**
+ * folio_pmd_batch - detect a PMD batch for a large folio.
+ *                  - The only user of this is hugetlb for contiguous
+ *                    PMDs
+ **/
+static inline unsigned int folio_pmd_batch(struct folio *folio, pmd_t *pmdp, pmd_t *pmdentp,
+				  unsigned int max_nr, fpb_t flags, bool *any_writable,
+				  bool *any_young, bool *any_dirty)
+{
+	pmd_t expected_pmd, pmd = *pmdentp;
+	bool writable, young, dirty;
+	unsigned int nr, cur_nr;
+
+	if (any_writable)
+		*any_writable = !!pmd_write(*pmdentp);
+	if (any_young)
+		*any_young = !!pmd_young(*pmdentp);
+	if (any_dirty)
+		*any_dirty = !!pmd_dirty(*pmdentp);
+
+	VM_WARN_ON_FOLIO(!pmd_present(pmd), folio);
+	VM_WARN_ON_FOLIO(!folio_test_large(folio) || max_nr < 1, folio);
+	VM_WARN_ON_FOLIO(page_folio(pfn_to_page(pmd_pfn(pmd))) != folio, folio);
+
+	/* Limit max_nr to the actual remaining PFNs in the folio we could batch. */
+	max_nr = min_t(unsigned long, max_nr,
+		       (folio_pfn(folio) + folio_nr_pages(folio) -
+		       pmd_pfn(pmd)) >> (PMD_SHIFT - PAGE_SHIFT));
+
+	nr = pmd_batch_hint(pmdp, pmd);
+	expected_pmd = __pmd_batch_clear_ignored(pmd_advance_pfn(pmd, nr << (PMD_SHIFT - PAGE_SHIFT)), flags);
+	pmdp = pmdp + nr;
+
+	while (nr < max_nr) {
+		pmd = pmdp_get(pmdp);
+		if (any_writable)
+			writable = !!pmd_write(pmd);
+		if (any_young)
+			young = !!pmd_young(pmd);
+		if (any_dirty)
+			dirty = !!pmd_dirty(pmd);
+		pmd = __pmd_batch_clear_ignored(pmd, flags);
+
+		if (!pmd_same(pmd, expected_pmd))
+			break;
+
+		if (any_writable)
+			*any_writable |= writable;
+		if (any_young)
+			*any_young |= young;
+		if (any_dirty)
+			*any_dirty |= dirty;
+
+		cur_nr = pmd_batch_hint(pmdp, pmd);
+		expected_pmd = pmd_advance_pfn(expected_pmd, cur_nr << (PMD_SHIFT - PAGE_SHIFT));
+		pmdp += cur_nr;
+		nr += cur_nr;
+	}
+
+	return min(nr, max_nr);
+}
 
 static inline pte_t __pte_batch_clear_ignored(pte_t pte, fpb_t flags)
 {
