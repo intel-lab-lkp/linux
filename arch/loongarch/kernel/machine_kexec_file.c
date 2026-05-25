@@ -71,6 +71,37 @@ static void cmdline_add_kho(struct kimage *image, unsigned long *cmdline_tmplen,
 	    image->kho.scratch->bufsz,    (u64)image->kho.scratch->mem);
 	*cmdline_tmplen += n;
 }
+
+/*
+ * Remove all "kho_handover=..." tokens from cmdline.  Needed when
+ * --reuse-cmdline is used: the running kernel's cmdline already carries a
+ * stale kho_handover= from the previous kexec load; without removal the new
+ * kernel sees two entries and kho_populate() ends up using the wrong (stale)
+ * FDT address.
+ */
+static void cmdline_remove_kho(char *cmdline)
+{
+	const char *key = "kho_handover=";
+	size_t key_len = strlen(key);
+	char *p = cmdline;
+
+	while ((p = strstr(p, key)) != NULL) {
+		char *start = p;
+		char *end;
+
+		/* Only match at a token boundary */
+		if (start != cmdline && *(start - 1) != ' ') {
+			p += key_len;
+			continue;
+		}
+		end = start + key_len;
+		while (*end && *end != ' ')
+			end++;
+		while (*end == ' ')
+			end++;
+		memmove(start, end, strlen(end) + 1);
+	}
+}
 #endif
 
 #ifdef CONFIG_CRASH_DUMP
@@ -249,6 +280,10 @@ int load_other_segments(struct kimage *image,
 	}
 
 	memcpy(modified_cmdline + cmdline_tmplen, cmdline, cmdline_len);
+#ifdef CONFIG_KEXEC_HANDOVER
+	/* Strip stale kho_handover= that --reuse-cmdline may have carried over */
+	cmdline_remove_kho(modified_cmdline + cmdline_tmplen);
+#endif
 	cmdline = modified_cmdline;
 	image->arch.cmdline_ptr = (unsigned long)cmdline;
 
