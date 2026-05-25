@@ -635,22 +635,23 @@ bool psr_su_set_dsc_slice_height(struct dc *dc, struct dc_link *link,
 {
 	uint32_t pic_height;
 	uint32_t slice_height;
+	uint32_t num_slices_v;
 
 	config->dsc_slice_height = 0;
 	if (!(link->connector_signal & SIGNAL_TYPE_EDP) ||
 	    !dc->caps.edp_dsc_support ||
 	    link->panel_config.dsc.disable_dsc_edp ||
-	    !link->dpcd_caps.dsc_caps.dsc_basic_caps.fields.dsc_support.DSC_SUPPORT ||
-	    !stream->timing.dsc_cfg.num_slices_v)
+	    !link->dpcd_caps.dsc_caps.dsc_basic_caps.fields.dsc_support.DSC_SUPPORT)
 		return true;
+
+	num_slices_v = READ_ONCE(stream->timing.dsc_cfg.num_slices_v);
+	if (!num_slices_v)
+		return false;
 
 	pic_height = stream->timing.v_addressable +
 		stream->timing.v_border_top + stream->timing.v_border_bottom;
 
-	if (stream->timing.dsc_cfg.num_slices_v == 0)
-		return false;
-
-	slice_height = pic_height / stream->timing.dsc_cfg.num_slices_v;
+	slice_height = pic_height / num_slices_v;
 	config->dsc_slice_height = (uint16_t)slice_height;
 
 	if (slice_height) {
