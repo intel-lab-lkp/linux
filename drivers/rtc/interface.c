@@ -927,10 +927,12 @@ static void rtc_timer_remove(struct rtc_device *rtc, struct rtc_timer *timer)
  */
 void rtc_timer_do_work(struct work_struct *work)
 {
-	struct rtc_timer *timer;
+	unsigned long start_jiffies = jiffies;
 	struct timerqueue_node *next;
-	ktime_t now;
+	struct rtc_timer *timer;
 	struct rtc_time tm;
+	int loop_count = 0;
+	ktime_t now;
 	int err;
 
 	struct rtc_device *rtc =
@@ -945,6 +947,15 @@ again:
 	}
 	now = rtc_tm_to_ktime(tm);
 	while ((next = timerqueue_getnext(&rtc->timerqueue))) {
+		loop_count++;
+
+		if (unlikely(time_after(jiffies, start_jiffies + HZ))) {
+			dev_warn(&rtc->dev, "RTC time jump (loop: %d) to %ptR.\n",
+				 loop_count, &tm);
+			WARN_ON_ONCE(1);
+			break;
+		}
+
 		if (next->expires > now)
 			break;
 
