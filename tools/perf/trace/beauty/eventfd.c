@@ -1,17 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1
 #include "trace/beauty/beauty.h"
+#include "trace/beauty/include/uapi/linux/eventfd.h"
 
-#ifndef EFD_SEMAPHORE
-#define EFD_SEMAPHORE		1
-#endif
-
-#ifndef EFD_NONBLOCK
-#define EFD_NONBLOCK		00004000
-#endif
-
-#ifndef EFD_CLOEXEC
-#define EFD_CLOEXEC		02000000
-#endif
 
 size_t syscall_arg__scnprintf_eventfd_flags(char *bf, size_t size, struct syscall_arg *arg)
 {

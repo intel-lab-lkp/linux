@@ -90,6 +90,7 @@ declare -a BEAUTY_FILES=(
   "include/uapi/drm/drm.h"
   "include/uapi/drm/i915_drm.h"
   "include/linux/socket.h"
+  "include/uapi/linux/eventfd.h"
   "include/uapi/linux/fadvise.h"
   "include/uapi/linux/fcntl.h"
   "include/uapi/linux/fs.h"
