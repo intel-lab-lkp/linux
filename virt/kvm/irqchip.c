@@ -96,12 +96,54 @@ int kvm_set_irq(struct kvm *kvm, int irq_source_id, u32 irq, int level,
 	return ret;
 }
 
-static void free_irq_routing_table(struct kvm_irq_routing_table *rt)
+static struct kvm_kernel_irq_routing_entry *
+kvm_get_irq_routing_entries_cache(struct kvm *kvm, size_t alloc_size)
 {
+	struct kvm_kernel_irq_routing_entry *entries = NULL;
+	struct kvm_kernel_irq_routing_entry *cache = NULL;
+
+	/*
+	 * Reuse cached entries[] only for an exact allocation-size match.
+	 */
+	mutex_lock(&kvm->irq_lock);
+	if (kvm->irq_routing_entries_cache_size == alloc_size &&
+	    kvm->irq_routing_entries_cache) {
+		entries = kvm->irq_routing_entries_cache;
+	} else if (kvm->irq_routing_entries_cache) {
+		cache = kvm->irq_routing_entries_cache;
+	}
+
+	kvm->irq_routing_entries_cache = NULL;
+	kvm->irq_routing_entries_cache_size = 0;
+	mutex_unlock(&kvm->irq_lock);
+
+	kvfree(cache);
+
+	return entries;
+}
+
+static void free_irq_routing_table(struct kvm *kvm,
+				   struct kvm_irq_routing_table *rt)
+{
+	struct kvm_kernel_irq_routing_entry *entries;
+
 	if (!rt)
 		return;
 
-	kvfree(rt->entries);
+	entries = rt->entries;
+	if (kvm && !ZERO_OR_NULL_PTR(entries)) {
+		mutex_lock(&kvm->irq_lock);
+		if (!kvm->irq_routing_entries_cache) {
+			kvm->irq_routing_entries_cache = entries;
+			kvm->irq_routing_entries_cache_size = rt->entries_size;
+			entries = NULL;
+		}
+		mutex_unlock(&kvm->irq_lock);
+
+		kvfree(entries);
+	} else {
+		kvfree(entries);
+	}
 	kfree(rt);
 }
 
@@ -110,7 +152,10 @@ void kvm_free_irq_routing(struct kvm *kvm)
 	/* Called only during vm destruction. Nobody can use the pointer
 	   at this stage */
 	struct kvm_irq_routing_table *rt = rcu_access_pointer(kvm->irq_routing);
-	free_irq_routing_table(rt);
+	free_irq_routing_table(NULL, rt);
+	kvfree(kvm->irq_routing_entries_cache);
+	kvm->irq_routing_entries_cache = NULL;
+	kvm->irq_routing_entries_cache_size = 0;
 }
 
 static int setup_routing_entry(struct kvm *kvm,
@@ -161,6 +206,7 @@ int kvm_set_irq_routing(struct kvm *kvm,
 {
 	struct kvm_irq_routing_table *new, *old;
 	struct kvm_kernel_irq_routing_entry *e;
+	size_t alloc_size;
 	u32 i, j, nr_rt_entries = 0;
 	int r;
 
@@ -176,12 +222,17 @@ int kvm_set_irq_routing(struct kvm *kvm,
 	if (!new)
 		return -ENOMEM;
 
-	e = kvzalloc_objs(*e, nr, GFP_KERNEL_ACCOUNT);
+	/* Round up to the kmalloc bucket size to improve cache hit rate. */
+	alloc_size = kmalloc_size_roundup(size_mul(sizeof(*e), nr));
+	e = kvm_get_irq_routing_entries_cache(kvm, alloc_size);
+	if (!e)
+		e = kvzalloc(alloc_size, GFP_KERNEL_ACCOUNT);
 	if (!e) {
 		r = -ENOMEM;
 		goto out;
 	}
 	new->entries = e;
+	new->entries_size = alloc_size;
 
 	new->nr_rt_entries = nr_rt_entries;
 	for (i = 0; i < KVM_NR_IRQCHIPS; i++)
@@ -218,7 +269,7 @@ int kvm_set_irq_routing(struct kvm *kvm,
 	new = old;
 	r = 0;
 out:
-	free_irq_routing_table(new);
+	free_irq_routing_table(kvm, new);
 
 	return r;
 }

@@ -694,6 +694,7 @@ struct kvm_irq_routing_table {
 	int chip[KVM_NR_IRQCHIPS][KVM_IRQCHIP_NUM_PINS];
 	u32 nr_rt_entries;
 	struct kvm_kernel_irq_routing_entry *entries;
+	size_t entries_size;
 	/*
 	 * Array indexed by gsi. Each entry contains list of irq chips
 	 * the gsi is connected to.
@@ -845,6 +846,11 @@ struct kvm {
 	 * Update side is protected by irq_lock.
 	 */
 	struct kvm_irq_routing_table __rcu *irq_routing;
+	/*
+	 * Cache for the entries[] allocation of a freed IRQ routing table.
+	 */
+	struct kvm_kernel_irq_routing_entry *irq_routing_entries_cache;
+	size_t irq_routing_entries_cache_size;
 
 	struct hlist_head irq_ack_notifier_list;
 #endif
