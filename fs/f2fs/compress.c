@@ -1488,8 +1488,11 @@ void f2fs_compress_write_end_io(struct bio *bio, struct folio *folio)
 				f2fs_is_compressed_page(folio));
 	int i;
 
-	if (unlikely(bio->bi_status != BLK_STS_OK))
+	if (unlikely(bio->bi_status != BLK_STS_OK)) {
 		mapping_set_error(cic->inode->i_mapping, -EIO);
+		if (type == F2FS_WB_CP_DATA)
+			f2fs_stop_checkpoint(sbi, true, STOP_CP_REASON_WRITE_FAIL);
+	}
 
 	f2fs_compress_free_page(page);
 
