@@ -334,6 +334,11 @@ static int vdec_start_streaming(struct vb2_queue *q, unsigned int count)
 	atomic_set(&sess->esparser_queued_bufs, 0);
 	v4l2_ctrl_s_ctrl(sess->ctrl_min_buf_capture, 1);
 
+	mutex_lock(&core->lock);
+	core->cur_sess = sess;
+	sess->status = STATUS_INIT;
+	mutex_unlock(&core->lock);
+
 	ret = vdec_poweron(sess);
 	if (ret)
 		goto vififo_free;
@@ -344,12 +349,14 @@ static int vdec_start_streaming(struct vb2_queue *q, unsigned int count)
 		sess->recycle_thread = kthread_run(vdec_recycle_thread, sess,
 						   "vdec_recycle");
 
-	sess->status = STATUS_INIT;
-	core->cur_sess = sess;
 	schedule_work(&sess->esparser_queue_work);
 	return 0;
 
 vififo_free:
+	mutex_lock(&core->lock);
+	core->cur_sess = NULL;
+	sess->status = STATUS_STOPPED;
+	mutex_unlock(&core->lock);
 	dma_free_coherent(sess->core->dev, sess->vififo_size,
 			  sess->vififo_vaddr, sess->vififo_paddr);
 bufs_done:
