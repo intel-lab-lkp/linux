@@ -143,8 +143,7 @@ static int atmel_tdes_sg_copy(struct scatterlist **sg, size_t *offset,
 	size_t count, off = 0;
 
 	while (buflen && total) {
-		count = min((*sg)->length - *offset, total);
-		count = min(count, buflen);
+		count = min3((*sg)->length - *offset, total, buflen);
 
 		if (!count)
 			return off;
@@ -469,8 +468,8 @@ static int atmel_tdes_crypt_start(struct atmel_tdes_dev *dd)
 
 
 	if (fast)  {
-		count = min_t(size_t, dd->total, sg_dma_len(dd->in_sg));
-		count = min_t(size_t, count, sg_dma_len(dd->out_sg));
+		count = min3(sg_dma_len(dd->in_sg), sg_dma_len(dd->out_sg),
+			     dd->total);
 
 		err = dma_map_sg(dd->dev, dd->in_sg, 1, DMA_TO_DEVICE);
 		if (!err) {
