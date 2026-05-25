@@ -75,9 +75,6 @@ static int ext4_sync_parent(struct inode *inode)
 			if (ret)
 				break;
 		}
-		ret = sync_inode_metadata(inode, 1);
-		if (ret)
-			break;
 	}
 	dput(dentry);
 	return ret;
@@ -87,19 +84,10 @@ static int ext4_fsync_nojournal(struct file *file, loff_t start, loff_t end,
 				int datasync, bool *needs_barrier)
 {
 	struct inode *inode = file->f_inode;
-	struct writeback_control wbc = {
-		.sync_mode = WB_SYNC_ALL,
-		.nr_to_write = 0,
-	};
 	int ret;
 
 	ret = mmb_fsync_noflush(file, READ_ONCE(EXT4_I(inode)->i_metadata_bhs),
 				start, end, datasync);
-	if (ret)
-		return ret;
-
-	/* Force writeout of inode table buffer to disk */
-	ret = ext4_write_inode(inode, &wbc);
 	if (ret)
 		return ret;
 

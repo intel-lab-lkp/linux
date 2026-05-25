@@ -5696,10 +5696,16 @@ static int ext4_do_update_inode(handle_t *handle,
 		ext4_update_other_inodes_time(inode->i_sb, inode->i_ino,
 					      bh->b_data);
 
-	BUFFER_TRACE(bh, "call ext4_handle_dirty_metadata");
-	err = ext4_handle_dirty_metadata(handle, NULL, bh);
-	if (err)
-		goto out_error;
+	if (!ext4_handle_valid(handle)) {
+		if (!ei->i_metadata_bhs)
+			ext4_inode_attach_mmb(inode);
+		mmb_mark_inode_buffer_dirty(iloc->bh, ei->i_metadata_bhs);
+	} else {
+		BUFFER_TRACE(bh, "call ext4_handle_dirty_metadata");
+		err = ext4_handle_dirty_metadata(handle, NULL, bh);
+		if (err)
+			goto out_error;
+	}
 	ext4_clear_inode_state(inode, EXT4_STATE_NEW);
 	if (set_large_file) {
 		BUFFER_TRACE(EXT4_SB(sb)->s_sbh, "get write access");
@@ -5786,24 +5792,6 @@ int ext4_write_inode(struct inode *inode, struct writeback_control *wbc)
 
 		err = ext4_fc_commit(EXT4_SB(inode->i_sb)->s_journal,
 						EXT4_I(inode)->i_sync_tid);
-	} else {
-		struct ext4_iloc iloc;
-
-		err = __ext4_get_inode_loc_noinmem(inode, &iloc);
-		if (err)
-			return err;
-		/*
-		 * sync(2) will flush the whole buffer cache. No need to do
-		 * it here separately for each inode.
-		 */
-		if (wbc->sync_mode == WB_SYNC_ALL && !wbc->for_sync)
-			sync_dirty_buffer(iloc.bh);
-		if (buffer_req(iloc.bh) && !buffer_uptodate(iloc.bh)) {
-			ext4_error_inode_block(inode, iloc.bh->b_blocknr, EIO,
-					       "IO error syncing inode");
-			err = -EIO;
-		}
-		brelse(iloc.bh);
 	}
 	return err;
 }
@@ -6348,7 +6336,6 @@ int ext4_mark_iloc_dirty(handle_t *handle,
 
 	/* the do_update_inode consumes one bh->b_count */
 	get_bh(iloc->bh);
-
 	/* ext4_do_update_inode() does jbd2_journal_dirty_metadata */
 	err = ext4_do_update_inode(handle, inode, iloc);
 	put_bh(iloc->bh);

@@ -122,6 +122,8 @@
 #define EXT4_HT_EXT_CONVERT     11
 #define EXT4_HT_MAX             12
 
+void ext4_inode_attach_mmb(struct inode *inode);
+
 int
 ext4_mark_iloc_dirty(handle_t *handle,
 		     struct inode *inode,
