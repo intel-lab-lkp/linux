@@ -1392,10 +1392,15 @@ static inline pud_t pudp_establish(struct vm_area_struct *vma,
 }
 #endif
 
+#define __HAVE_ARCH_PUDP_INVALIDATE_AD
+extern pud_t pudp_invalidate_ad(struct vm_area_struct *vma,
+				unsigned long address, pud_t *pudp);
+
 #define __HAVE_ARCH_PMDP_INVALIDATE_AD
 extern pmd_t pmdp_invalidate_ad(struct vm_area_struct *vma,
 				unsigned long address, pmd_t *pmdp);
 
+#define __HAVE_ARCH_PUDP_INVALIDATE
 pud_t pudp_invalidate(struct vm_area_struct *vma, unsigned long address,
 		      pud_t *pudp);
 

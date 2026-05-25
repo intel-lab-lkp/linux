@@ -1263,9 +1263,19 @@ static inline pmd_t generic_pmdp_establish(struct vm_area_struct *vma,
 }
 #endif
 
+#ifndef __HAVE_ARCH_PUDP_INVALIDATE
+extern pud_t pudp_invalidate(struct vm_area_struct *vma, unsigned long address,
+			    pud_t *pudp);
+#endif
+
 #ifndef __HAVE_ARCH_PMDP_INVALIDATE
 extern pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
 			    pmd_t *pmdp);
+#endif
+
+#ifndef __HAVE_ARCH_PUDP_INVALIDATE_AD
+extern pud_t pudp_invalidate_ad(struct vm_area_struct *vma,
+				unsigned long address, pud_t *pudp);
 #endif
 
 #ifndef __HAVE_ARCH_PMDP_INVALIDATE_AD
@@ -1810,6 +1820,21 @@ static inline pgprot_t pgprot_modify(pgprot_t oldprot, pgprot_t newprot)
 
 #ifdef CONFIG_HAVE_ARCH_SOFT_DIRTY
 #ifndef CONFIG_ARCH_ENABLE_THP_MIGRATION
+static inline pud_t pud_swp_mksoft_dirty(pud_t pud)
+{
+	return pud;
+}
+
+static inline int pud_swp_soft_dirty(pud_t pud)
+{
+	return 0;
+}
+
+static inline pud_t pud_swp_clear_soft_dirty(pud_t pud)
+{
+	return pud;
+}
+
 static inline pmd_t pmd_swp_mksoft_dirty(pmd_t pmd)
 {
 	return pmd;
@@ -1848,6 +1873,11 @@ static inline int pte_soft_dirty(pte_t pte)
 }
 
 static inline int pmd_soft_dirty(pmd_t pmd)
+{
+	return 0;
+}
+
+static inline int pud_soft_dirty(pud_t pud)
 {
 	return 0;
 }

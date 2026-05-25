@@ -628,6 +628,19 @@ static inline bool pmd_is_device_private_entry(pmd_t pmd)
 
 #endif /* CONFIG_ZONE_DEVICE && CONFIG_ARCH_ENABLE_THP_MIGRATION */
 
+#ifdef CONFIG_HUGETLB_PAGE
+/**
+ * pud_is_migration_entry() - Does this PUD entry encode a migration entry?
+ * @pud: PUD entry.
+ *
+ * Returns: true if the PUD encodes a migration entry, otherwise false.
+ */
+static inline bool pud_is_migration_entry(pud_t pud)
+{
+	return softleaf_is_migration(softleaf_from_pud(pud));
+}
+#endif
+
 /**
  * pmd_is_migration_entry() - Does this PMD entry encode a migration entry?
  * @pmd: PMD entry.
