@@ -40,6 +40,7 @@
 #include <rdma/rdma_user_ioctl.h>
 #include "uverbs.h"
 #include "core_priv.h"
+#include <rdma/ib_user_ioctl_cmds.h>
 #include "rdma_core.h"
 
 static void uverbs_uobject_free(struct kref *ref)
@@ -421,12 +422,22 @@ free:
 	return ERR_PTR(ret);
 }
 
+static enum rdmacg_resource_type
+uverbs_obj_to_rdmacg_type(u16 uverbs_obj_id)
+{
+	switch (uverbs_obj_id) {
+	case UVERBS_OBJECT_QP: return RDMACG_RESOURCE_QP;
+	default:               return RDMACG_RESOURCE_HCA_OBJECT;
+	}
+}
+
 static struct ib_uobject *
 alloc_begin_idr_uobject(const struct uverbs_api_object *obj,
 			struct uverbs_attr_bundle *attrs)
 {
 	int ret;
 	struct ib_uobject *uobj;
+	enum rdmacg_resource_type rdmacg_type;
 
 	uobj = alloc_uobj(attrs, obj);
 	if (IS_ERR(uobj))
@@ -440,6 +451,19 @@ alloc_begin_idr_uobject(const struct uverbs_api_object *obj,
 				   RDMACG_RESOURCE_HCA_OBJECT, 1);
 	if (ret)
 		goto remove;
+
+	rdmacg_type = uverbs_obj_to_rdmacg_type(uobj_get_object_id(uobj));
+	if (rdmacg_type != RDMACG_RESOURCE_HCA_OBJECT) {
+		ret = ib_rdmacg_try_charge(&uobj->cg_obj, uobj->context->device,
+					   rdmacg_type, 1);
+		if (ret) {
+			ib_rdmacg_uncharge(&uobj->cg_obj, uobj->context->device,
+					   RDMACG_RESOURCE_HCA_OBJECT, 1);
+			goto remove;
+		}
+	}
+
+	uobj->rdmacg_type = rdmacg_type;
 
 	return uobj;
 
@@ -523,10 +547,18 @@ struct ib_uobject *rdma_alloc_begin_uobject(const struct uverbs_api_object *obj,
 	return ret;
 }
 
-static void alloc_abort_idr_uobject(struct ib_uobject *uobj)
+static void rdmacg_uncharge_uobj(struct ib_uobject *uobj)
 {
 	ib_rdmacg_uncharge(&uobj->cg_obj, uobj->context->device,
 			   RDMACG_RESOURCE_HCA_OBJECT, 1);
+	if (uobj->rdmacg_type != RDMACG_RESOURCE_HCA_OBJECT)
+		ib_rdmacg_uncharge(&uobj->cg_obj, uobj->context->device,
+				   uobj->rdmacg_type, 1);
+}
+
+static void alloc_abort_idr_uobject(struct ib_uobject *uobj)
+{
+	rdmacg_uncharge_uobj(uobj);
 
 	xa_erase(&uobj->ufile->idr, uobj->id);
 }
@@ -546,8 +578,7 @@ static int __must_check destroy_hw_idr_uobject(struct ib_uobject *uobj,
 	if (why == RDMA_REMOVE_ABORT)
 		return 0;
 
-	ib_rdmacg_uncharge(&uobj->cg_obj, uobj->context->device,
-			   RDMACG_RESOURCE_HCA_OBJECT, 1);
+	rdmacg_uncharge_uobj(uobj);
 
 	return 0;
 }

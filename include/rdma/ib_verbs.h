@@ -1568,6 +1568,7 @@ struct ib_uobject {
 	void		       *object;		/* containing object */
 	struct list_head	list;		/* link to context's list */
 	struct ib_rdmacg_object	cg_obj;		/* rdmacg object */
+	enum rdmacg_resource_type rdmacg_type;	/* per-type cgroup index */
 	int			id;		/* index into kernel idr */
 	struct kref		ref;
 	atomic_t		usecnt;		/* protects exclusive access */
