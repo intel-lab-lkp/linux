@@ -219,7 +219,7 @@ void se_if_rx_callback(struct mbox_client *mbox_cl, void *msg)
 			se_clbk_hdl->dev_ctx->devname, *(u32 *)header);
 
 		if (rx_msg_sz != se_clbk_hdl->rx_msg_sz &&
-		    check_hdr_exception_for_sz(priv, header)) {
+		    !check_hdr_exception_for_sz(priv, header)) {
 			dev_err(dev,
 				"%s: Rsp to CMD: hdr(0x%x) with different sz(%d != %d).\n",
 				se_clbk_hdl->dev_ctx->devname, *(u32 *)header,
