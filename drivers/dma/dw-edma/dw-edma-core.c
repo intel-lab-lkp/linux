@@ -219,12 +219,66 @@ static void dw_edma_device_caps(struct dma_chan *dchan,
 	}
 }
 
+static enum dw_edma_ch_irq_mode
+dw_edma_get_default_irq_mode(struct dw_edma_chan *chan)
+{
+	switch (chan->dw->chip->default_irq_mode) {
+	case DW_EDMA_CH_IRQ_DEFAULT:
+	case DW_EDMA_CH_IRQ_LOCAL:
+		return chan->dw->chip->default_irq_mode;
+	case DW_EDMA_CH_IRQ_REMOTE:
+		if (!(chan->dw->chip->flags & DW_EDMA_CHIP_LOCAL))
+			return DW_EDMA_CH_IRQ_REMOTE;
+		return DW_EDMA_CH_IRQ_DEFAULT;
+	default:
+		return DW_EDMA_CH_IRQ_DEFAULT;
+	}
+}
+
+static int dw_edma_parse_irq_mode(struct dw_edma_chan *chan,
+				  const struct dma_slave_config *config,
+				  enum dw_edma_ch_irq_mode *mode)
+{
+	const struct dw_edma_irq_config *pcfg;
+
+	/* peripheral_config is optional, fall back to the frontend default. */
+	*mode = dw_edma_get_default_irq_mode(chan);
+	if (!config || !config->peripheral_config)
+		return 0;
+
+	if (chan->dw->chip->mf == EDMA_MF_HDMA_NATIVE)
+		return -EOPNOTSUPP;
+
+	if (config->peripheral_size != sizeof(*pcfg))
+		return -EINVAL;
+
+	pcfg = config->peripheral_config;
+	if (pcfg->reserved)
+		return -EINVAL;
+
+	switch (pcfg->irq_mode) {
+	case DW_EDMA_CH_IRQ_DEFAULT:
+	case DW_EDMA_CH_IRQ_LOCAL:
+		*mode = pcfg->irq_mode;
+		return 0;
+	case DW_EDMA_CH_IRQ_REMOTE:
+		if (chan->dw->chip->flags & DW_EDMA_CHIP_LOCAL)
+			return -EINVAL;
+		*mode = DW_EDMA_CH_IRQ_REMOTE;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
 static int dw_edma_device_config(struct dma_chan *dchan,
 				 struct dma_slave_config *config)
 {
 	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
+	enum dw_edma_ch_irq_mode mode;
 	bool cfg_non_ll;
 	int non_ll = 0;
+	int ret;
 
 	chan->non_ll = false;
 	if (chan->dw->chip->mf == EDMA_MF_HDMA_NATIVE) {
@@ -255,10 +309,11 @@ static int dw_edma_device_config(struct dma_chan *dchan,
 
 		if (cfg_non_ll || non_ll)
 			chan->non_ll = true;
-	} else if (config->peripheral_config) {
-		dev_err(dchan->device->dev,
-			"peripheral config param applicable only for HDMA\n");
-		return -EINVAL;
+	} else {
+		ret = dw_edma_parse_irq_mode(chan, config, &mode);
+		if (ret)
+			return ret;
+		chan->irq_mode = mode;
 	}
 
 	memcpy(&chan->config, config, sizeof(*config));
@@ -853,6 +908,8 @@ static int dw_edma_alloc_chan_resources(struct dma_chan *dchan)
 	if (chan->status != EDMA_ST_IDLE)
 		return -EBUSY;
 
+	chan->irq_mode = dw_edma_get_default_irq_mode(chan);
+
 	return 0;
 }
 
@@ -904,6 +961,7 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 		chan->configured = false;
 		chan->request = EDMA_REQ_NONE;
 		chan->status = EDMA_ST_IDLE;
+		chan->irq_mode = dw_edma_get_default_irq_mode(chan);
 
 		if (chan->dir == EDMA_DIR_WRITE)
 			chan->ll_max = (chip->ll_region_wr[chan->id].sz / EDMA_LL_SZ);

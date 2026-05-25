@@ -61,6 +61,43 @@ enum dw_edma_chip_flags {
 };
 
 /**
+ * enum dw_edma_ch_irq_mode - per-channel interrupt routing control
+ * @DW_EDMA_CH_IRQ_DEFAULT:   keep legacy behavior
+ * @DW_EDMA_CH_IRQ_LOCAL:     local interrupt only (edma_int[])
+ * @DW_EDMA_CH_IRQ_REMOTE:    remote interrupt only (IMWr/MSI),
+ *                            while masking local DONE/ABORT output.
+ *
+ * DesignWare EP eDMA can signal interrupts locally through the edma_int[]
+ * bus, and remotely using posted memory writes (IMWr) that may be
+ * interpreted as MSI/MSI-X by the RC.
+ *
+ * For the v0 eDMA programming path, DMA_*_INT_MASK gates the local edma_int[]
+ * assertion, while there is no dedicated per-channel mask for IMWr generation.
+ * To request a remote-only interrupt, Synopsys recommends setting both LIE and
+ * RIE, and masking the local interrupt in DMA_*_INT_MASK (rather than relying
+ * on LIE=0/RIE=1). See the DesignWare endpoint databook 5.40a, Non Linked
+ * List Mode interrupt handling ("Hint").
+ */
+enum dw_edma_ch_irq_mode {
+	DW_EDMA_CH_IRQ_DEFAULT	= 0,
+	DW_EDMA_CH_IRQ_LOCAL,
+	DW_EDMA_CH_IRQ_REMOTE,
+};
+
+/**
+ * struct dw_edma_irq_config - dw-edma interrupt routing configuration
+ * @irq_mode: per-channel interrupt routing control.
+ * @reserved: must be zero.
+ *
+ * Pass this structure via dma_slave_config.peripheral_config and
+ * dma_slave_config.peripheral_size.
+ */
+struct dw_edma_irq_config {
+	enum dw_edma_ch_irq_mode irq_mode;
+	u32 reserved;
+};
+
+/**
  * struct dw_edma_chip - representation of DesignWare eDMA controller hardware
  * @dev:		 struct device of the eDMA controller
  * @nr_irqs:		 total number of DMA IRQs
@@ -76,6 +113,8 @@ enum dw_edma_chip_flags {
  * @db_irq:		 Virtual IRQ dedicated to interrupt emulation
  * @db_offset:		 Offset from DMA register base
  * @mf:			 DMA register map format
+ * @default_irq_mode:	 default per-channel interrupt routing when client
+ *			 does not supply dw_edma_irq_config
  * @dw:			 struct dw_edma that is filled by dw_edma_probe()
  */
 struct dw_edma_chip {
@@ -101,6 +140,7 @@ struct dw_edma_chip {
 	resource_size_t		db_offset;
 
 	enum dw_edma_map_format	mf;
+	enum dw_edma_ch_irq_mode	default_irq_mode;
 
 	struct dw_edma		*dw;
 	bool			cfg_non_ll;
