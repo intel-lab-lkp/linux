@@ -597,6 +597,33 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_ATTANSIC, PCI_ANY_ID, quirk_blacklist_vpd
 DECLARE_PCI_FIXUP_CLASS_HEADER(PCI_VENDOR_ID_AMAZON_ANNAPURNA_LABS, 0x0031,
 			       PCI_CLASS_BRIDGE_PCI, 8, quirk_blacklist_vpd);
 
+/*
+ * On some Lenovo platforms, the Realtek RTL8111xP multi-function device
+ * advertises VPD on all functions, but the VPD data is not usable.
+ * Function 0 returns an invalid first tag and functions 1-4 never complete
+ * VPD accesses.
+ */
+static void quirk_lenovo_realtek_rtl8111xp_no_vpd(struct pci_dev *dev)
+{
+	if (dev->revision != 0x0e ||
+	    dev->subsystem_vendor != PCI_VENDOR_ID_LENOVO ||
+	    dev->subsystem_device != 0x507e)
+		return;
+
+	dev->vpd.len = PCI_VPD_SZ_INVALID;
+	pci_warn(dev, FW_BUG "disabling VPD access (can't determine size of non-standard VPD format)\n");
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_REALTEK, 0x8168,
+			 quirk_lenovo_realtek_rtl8111xp_no_vpd);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_REALTEK, 0x816a,
+			 quirk_lenovo_realtek_rtl8111xp_no_vpd);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_REALTEK, 0x816b,
+			 quirk_lenovo_realtek_rtl8111xp_no_vpd);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_REALTEK, 0x816c,
+			 quirk_lenovo_realtek_rtl8111xp_no_vpd);
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_REALTEK, 0x816d,
+			 quirk_lenovo_realtek_rtl8111xp_no_vpd);
+
 static void quirk_chelsio_extend_vpd(struct pci_dev *dev)
 {
 	int chip = (dev->device & 0xf000) >> 12;
