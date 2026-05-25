@@ -5,6 +5,7 @@
 #include <linux/etherdevice.h>
 #include <linux/netlink.h>
 #include <linux/netfilter.h>
+#include <linux/netdevice.h>
 #include <linux/spinlock.h>
 #include <linux/netfilter/nf_conntrack_common.h>
 #include <linux/netfilter/nf_tables.h>
@@ -76,6 +77,7 @@ out:
 struct nft_forward_info {
 	const struct net_device *indev;
 	const struct net_device *outdev;
+	const struct net_device *hw_outdev;
 	struct id {
 		__u16	id;
 		__be16	proto;
@@ -179,6 +181,7 @@ static void nft_dev_path_info(const struct net_device_path_stack *stack,
 		}
 	}
 	info->outdev = info->indev;
+	info->hw_outdev = info->indev;
 
 	if (nf_flowtable_hw_offload(flowtable) &&
 	    nft_is_valid_ether_device(info->indev))
@@ -250,6 +253,7 @@ static void nft_dev_forward_path(const struct nft_pktinfo *pkt,
 	struct net_device_path_stack stack;
 	struct nft_forward_info info = {};
 	unsigned char ha[ETH_ALEN];
+	struct net_device *lag_slave = NULL;
 	int i;
 
 	if (nft_dev_fill_forward_path(route, dst, ct, dir, ha, &stack) >= 0)
@@ -258,8 +262,33 @@ static void nft_dev_forward_path(const struct nft_pktinfo *pkt,
 	if (info.outdev)
 		route->tuple[dir].out.ifindex = info.outdev->ifindex;
 
-	if (!info.indev || !nft_flowtable_find_dev(info.indev, ft))
+	if (!info.indev)
 		return;
+
+	if (info.xmit_type == FLOW_OFFLOAD_XMIT_DIRECT &&
+	    netif_is_lag_master(info.hw_outdev)) {
+		rcu_read_lock();
+		lag_slave = netdev_get_xmit_slave((struct net_device *)info.hw_outdev,
+						  pkt->skb, false);
+		if (lag_slave)
+			dev_hold(lag_slave);
+		rcu_read_unlock();
+
+		if (!lag_slave)
+			return;
+
+		if (!nft_is_valid_ether_device(lag_slave)) {
+			dev_put(lag_slave);
+			return;
+		}
+
+		info.hw_outdev = lag_slave;
+	}
+
+	if (!nft_flowtable_find_dev(info.hw_outdev, ft)) {
+		dev_put(lag_slave);
+		return;
+	}
 
 	route->tuple[!dir].in.ifindex = info.indev->ifindex;
 	for (i = 0; i < info.num_encaps; i++) {
@@ -281,9 +310,12 @@ static void nft_dev_forward_path(const struct nft_pktinfo *pkt,
 	if (info.xmit_type == FLOW_OFFLOAD_XMIT_DIRECT) {
 		memcpy(route->tuple[dir].out.h_source, info.h_source, ETH_ALEN);
 		memcpy(route->tuple[dir].out.h_dest, info.h_dest, ETH_ALEN);
+		route->tuple[dir].out.hw_ifindex = info.hw_outdev->ifindex;
 		route->tuple[dir].xmit_type = info.xmit_type;
 	}
 	route->tuple[dir].out.needs_gso_segment = info.needs_gso_segment;
+
+	dev_put(lag_slave);
 }
 
 int nft_flow_route(const struct nft_pktinfo *pkt, const struct nf_conn *ct,
