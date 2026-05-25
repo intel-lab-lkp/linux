@@ -2333,9 +2333,8 @@ void uvc_video_stop_streaming(struct uvc_streaming *stream)
 {
 	uvc_video_stop_transfer(stream, 1);
 
-	if (stream->intf->num_altsetting > 1) {
-		usb_set_interface(stream->dev->udev, stream->intfnum, 0);
-	} else {
+	usb_set_interface(stream->dev->udev, stream->intfnum, 0);
+	if (stream->intf->num_altsetting == 1) {
 		/*
 		 * UVC doesn't specify how to inform a bulk-based device
 		 * when the video stream is stopped. Windows sends a
