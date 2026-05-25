@@ -5,6 +5,7 @@
 #include <linux/pci.h>
 
 #include "wx_type.h"
+#include "wx_hw.h"
 #include "wx_mbx.h"
 #include "wx_lib.h"
 #include "wx_vf.h"
@@ -332,6 +333,7 @@ void wxvf_down(struct wx *wx)
 	netif_tx_disable(netdev);
 	netif_carrier_off(netdev);
 	wx_napi_disable_all(wx);
+	wx_update_stats(wx);
 	wx_reset_vf(wx);
 
 	wx_clean_all_tx_rings(wx);
@@ -405,6 +407,7 @@ static void wxvf_service_task(struct work_struct *work)
 
 	wxvf_link_config_subtask(wx);
 	wxvf_reset_subtask(wx);
+	wx_update_stats(wx);
 	wx_service_event_complete(wx);
 }
 
@@ -415,3 +418,51 @@ void wxvf_init_service(struct wx *wx)
 	clear_bit(WX_STATE_SERVICE_SCHED, wx->state);
 }
 EXPORT_SYMBOL(wxvf_init_service);
+
+static void wxvf_get_queue_stats_rx(struct net_device *dev, int idx,
+				    struct netdev_queue_stats_rx *stats)
+{
+	struct wx *wx = netdev_priv(dev);
+	struct wx_ring *ring = wx->rx_ring[idx];
+
+	stats->packets = ring->stats.packets;
+	stats->bytes = ring->stats.bytes;
+	stats->alloc_fail = wx->alloc_rx_buff_failed;
+	stats->csum_complete = wx->hw_csum_rx_good;
+	stats->csum_bad = wx->hw_csum_rx_error;
+}
+
+static void wxvf_get_queue_stats_tx(struct net_device *dev, int idx,
+				    struct netdev_queue_stats_tx *stats)
+{
+	struct wx *wx = netdev_priv(dev);
+	struct wx_ring *ring = wx->tx_ring[idx];
+
+	stats->packets = ring->stats.packets;
+	stats->bytes = ring->stats.bytes;
+}
+
+static void wxvf_get_base_stats(struct net_device *dev,
+				struct netdev_queue_stats_rx *rx,
+				struct netdev_queue_stats_tx *tx)
+{
+	rx->bytes = 0;
+	rx->packets = 0;
+	rx->alloc_fail = 0;
+	rx->csum_complete = 0;
+	rx->csum_bad = 0;
+	tx->bytes = 0;
+	tx->packets = 0;
+}
+
+static const struct netdev_stat_ops wxvf_stat_ops = {
+	.get_queue_stats_rx  = wxvf_get_queue_stats_rx,
+	.get_queue_stats_tx  = wxvf_get_queue_stats_tx,
+	.get_base_stats      = wxvf_get_base_stats,
+};
+
+void wx_set_stat_ops_vf(struct net_device *netdev)
+{
+	netdev->stat_ops = &wxvf_stat_ops;
+}
+EXPORT_SYMBOL(wx_set_stat_ops_vf);

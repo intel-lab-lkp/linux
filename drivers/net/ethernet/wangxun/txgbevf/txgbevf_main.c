@@ -7,6 +7,7 @@
 #include <linux/netdevice.h>
 #include <linux/string.h>
 #include <linux/etherdevice.h>
+#include <net/netdev_queues.h>
 
 #include "../libwx/wx_type.h"
 #include "../libwx/wx_hw.h"
@@ -254,6 +255,7 @@ static int txgbevf_probe(struct pci_dev *pdev,
 
 	wx->driver_name = KBUILD_MODNAME;
 	wx_set_ethtool_ops_vf(netdev);
+	wx_set_stat_ops_vf(netdev);
 	netdev->netdev_ops = &txgbevf_netdev_ops;
 
 	/* setup the private structure */

@@ -189,6 +189,7 @@ static int ngbevf_probe(struct pci_dev *pdev,
 
 	wx->driver_name = KBUILD_MODNAME;
 	wx_set_ethtool_ops_vf(netdev);
+	wx_set_stat_ops_vf(netdev);
 	netdev->netdev_ops = &ngbevf_netdev_ops;
 
 	/* setup the private structure */

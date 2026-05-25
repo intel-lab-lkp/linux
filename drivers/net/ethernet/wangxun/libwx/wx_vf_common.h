@@ -20,5 +20,6 @@ int wxvf_open(struct net_device *netdev);
 void wxvf_down(struct wx *wx);
 int wxvf_close(struct net_device *netdev);
 void wxvf_init_service(struct wx *wx);
+void wx_set_stat_ops_vf(struct net_device *netdev);
 
 #endif /* _WX_VF_COMMON_H_ */
