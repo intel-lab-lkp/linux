@@ -148,4 +148,12 @@ int mlkem1024_encaps_internal(u8 ct[MLKEM1024_CIPHERTEXT_BYTES],
 			      const u8 pk[MLKEM1024_PUBLIC_KEY_BYTES],
 			      const u8 eseed[MLKEM_ESEED_BYTES]);
 
+#if IS_ENABLED(CONFIG_CRYPTO_LIB_MLKEM_KUNIT_TEST)
+/* Functions exported for KUnit testing only */
+u16 mlkem_reduce_once(u16 x);
+u16 mlkem_reduce(u32 x);
+u16 mlkem_compress_d(u16 x, int d);
+u16 mlkem_decompress_d(u16 x, int d);
+#endif
+
 #endif /* _CRYPTO_MLKEM_H */

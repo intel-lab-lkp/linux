@@ -10,6 +10,7 @@
 #include <crypto/mlkem.h>
 #include <crypto/sha3.h>
 #include <crypto/utils.h>
+#include <kunit/visibility.h>
 #include <linux/export.h>
 #include <linux/module.h>
 #include <linux/random.h>
@@ -889,6 +890,32 @@ int mlkem1024_decaps(u8 ss[MLKEM_SHARED_SECRET_BYTES],
 	return mlkem_decaps(ss, ct, sk, &mlkem1024);
 }
 EXPORT_SYMBOL_NS_GPL(mlkem1024_decaps, "CRYPTO_INTERNAL");
+
+#if IS_ENABLED(CONFIG_CRYPTO_LIB_MLKEM_KUNIT_TEST)
+u16 mlkem_reduce_once(u16 x)
+{
+	return reduce_once(x);
+}
+EXPORT_SYMBOL_IF_KUNIT(mlkem_reduce_once);
+
+u16 mlkem_reduce(u32 x)
+{
+	return reduce(x);
+}
+EXPORT_SYMBOL_IF_KUNIT(mlkem_reduce);
+
+u16 mlkem_compress_d(u16 x, int d)
+{
+	return compress_d(x, d);
+}
+EXPORT_SYMBOL_IF_KUNIT(mlkem_compress_d);
+
+u16 mlkem_decompress_d(u16 x, int d)
+{
+	return decompress_d(x, d);
+}
+EXPORT_SYMBOL_IF_KUNIT(mlkem_decompress_d);
+#endif /* CONFIG_CRYPTO_LIB_MLKEM_KUNIT_TEST */
 
 MODULE_DESCRIPTION("ML-KEM (Module-Lattice-Based Key Encapsulation Mechanism)");
 MODULE_LICENSE("GPL");
