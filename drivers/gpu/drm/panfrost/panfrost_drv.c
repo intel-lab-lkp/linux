@@ -986,9 +986,8 @@ static int panfrost_probe(struct platform_device *pdev)
 		goto err_out0;
 	}
 
-	pm_runtime_set_active(pfdev->base.dev);
-	pm_runtime_mark_last_busy(pfdev->base.dev);
 	pm_runtime_enable(pfdev->base.dev);
+	pm_runtime_resume_and_get(pfdev->base.dev);
 	pm_runtime_set_autosuspend_delay(pfdev->base.dev, 50); /* ~3 frames */
 	pm_runtime_use_autosuspend(pfdev->base.dev);
 
@@ -1003,6 +1002,8 @@ static int panfrost_probe(struct platform_device *pdev)
 	err = panfrost_gem_shrinker_init(&pfdev->base);
 	if (err)
 		goto err_out2;
+
+	pm_runtime_put_sync_suspend(pfdev->base.dev);
 
 	return 0;
 
@@ -1024,8 +1025,9 @@ static void panfrost_remove(struct platform_device *pdev)
 	panfrost_gem_shrinker_cleanup(&pfdev->base);
 
 	pm_runtime_get_sync(pfdev->base.dev);
-	pm_runtime_disable(pfdev->base.dev);
 	panfrost_device_fini(pfdev);
+	pm_runtime_put_sync(pfdev->base.dev);
+	pm_runtime_disable(pfdev->base.dev);
 	pm_runtime_set_suspended(pfdev->base.dev);
 }
 
