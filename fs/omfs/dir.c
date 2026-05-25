@@ -232,7 +232,7 @@ static int omfs_dir_is_empty(struct inode *inode)
 			break;
 
 	brelse(bh);
-	return *ptr != ~0;
+	return i == nbuckets;
 }
 
 static int omfs_remove(struct inode *dir, struct dentry *dentry)
