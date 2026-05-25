@@ -159,33 +159,38 @@ static int lan743x_ptp_reserve_event_ch(struct lan743x_adapter *adapter,
 	struct lan743x_ptp *ptp = &adapter->ptp;
 	int result = -ENODEV;
 
+	if (event_channel < 0 || event_channel >= LAN743X_PTP_N_EVENT_CHAN)
+		return -EINVAL;
+
 	mutex_lock(&ptp->command_lock);
-	if (!(test_bit(event_channel, &ptp->used_event_ch))) {
-		ptp->used_event_ch |= BIT(event_channel);
-		result = event_channel;
-	} else {
-		netif_warn(adapter, drv, adapter->netdev,
-			   "attempted to reserved a used event_channel = %d\n",
-			   event_channel);
-	}
+	ptp->used_event_ch |= BIT(event_channel);
+	ptp->event_ch_refcnt[event_channel]++;
+	result = event_channel;
 	mutex_unlock(&ptp->command_lock);
 	return result;
 }
 
-static void lan743x_ptp_release_event_ch(struct lan743x_adapter *adapter,
+static bool lan743x_ptp_release_event_ch(struct lan743x_adapter *adapter,
 					 int event_channel)
 {
 	struct lan743x_ptp *ptp = &adapter->ptp;
+	bool fully_released = false;
 
 	mutex_lock(&ptp->command_lock);
 	if (test_bit(event_channel, &ptp->used_event_ch)) {
-		ptp->used_event_ch &= ~BIT(event_channel);
+		ptp->event_ch_refcnt[event_channel]--;
+		if (ptp->event_ch_refcnt[event_channel] <= 0) {
+			ptp->event_ch_refcnt[event_channel] = 0;
+			ptp->used_event_ch &= ~BIT(event_channel);
+			fully_released = true;
+		}
 	} else {
 		netif_warn(adapter, drv, adapter->netdev,
 			   "attempted release on a not used event_channel = %d\n",
 			   event_channel);
 	}
 	mutex_unlock(&ptp->command_lock);
+	return fully_released;
 }
 
 static void lan743x_ptp_clock_get(struct lan743x_adapter *adapter,
@@ -648,27 +653,30 @@ static void lan743x_ptp_io_perout_off(struct lan743x_adapter *adapter,
 
 	event_ch = ptp->ptp_io_perout[index];
 	if (event_ch >= 0) {
-		/* set target to far in the future, effectively disabling it */
-		lan743x_csr_write(adapter,
-				  PTP_CLOCK_TARGET_SEC_X(event_ch),
-				  0xFFFF0000);
-		lan743x_csr_write(adapter,
-				  PTP_CLOCK_TARGET_NS_X(event_ch),
-				  0);
+		bool ch_free = lan743x_ptp_release_event_ch(adapter, event_ch);
 
-		gen_cfg = lan743x_csr_read(adapter, HS_PTP_GENERAL_CONFIG);
-		gen_cfg &= ~(HS_PTP_GENERAL_CONFIG_CLOCK_EVENT_X_MASK_
-				    (event_ch));
-		gen_cfg &= ~(HS_PTP_GENERAL_CONFIG_EVENT_POL_X_(event_ch));
-		gen_cfg |= HS_PTP_GENERAL_CONFIG_RELOAD_ADD_X_(event_ch);
-		lan743x_csr_write(adapter, HS_PTP_GENERAL_CONFIG, gen_cfg);
-		if (event_ch)
-			lan743x_csr_write(adapter, PTP_INT_STS,
-					  PTP_INT_TIMER_INT_B_);
-		else
-			lan743x_csr_write(adapter, PTP_INT_STS,
-					  PTP_INT_TIMER_INT_A_);
-		lan743x_ptp_release_event_ch(adapter, event_ch);
+		if (ch_free) {
+			/* Last user of this channel - disable HW channel */
+			lan743x_csr_write(adapter,
+					  PTP_CLOCK_TARGET_SEC_X(event_ch),
+					  0xFFFF0000);
+			lan743x_csr_write(adapter,
+					  PTP_CLOCK_TARGET_NS_X(event_ch),
+					  0);
+
+			gen_cfg = lan743x_csr_read(adapter, HS_PTP_GENERAL_CONFIG);
+			gen_cfg &= ~(HS_PTP_GENERAL_CONFIG_CLOCK_EVENT_X_MASK_
+					    (event_ch));
+			gen_cfg &= ~(HS_PTP_GENERAL_CONFIG_EVENT_POL_X_(event_ch));
+			gen_cfg |= HS_PTP_GENERAL_CONFIG_RELOAD_ADD_X_(event_ch);
+			lan743x_csr_write(adapter, HS_PTP_GENERAL_CONFIG, gen_cfg);
+			if (event_ch)
+				lan743x_csr_write(adapter, PTP_INT_STS,
+						  PTP_INT_TIMER_INT_B_);
+			else
+				lan743x_csr_write(adapter, PTP_INT_STS,
+						  PTP_INT_TIMER_INT_A_);
+		}
 		ptp->ptp_io_perout[index] = -1;
 	}
 
@@ -715,16 +723,21 @@ static int lan743x_ptp_io_perout(struct lan743x_adapter *adapter, int on,
 		return 0;
 	}
 
-	if (event_ch >= LAN743X_PTP_N_EVENT_CHAN) {
-		/* already on, turn off first */
+	if (event_ch >= 0) {
+		/* already on for this index, turn off this pin first */
 		lan743x_ptp_io_perout_off(adapter, index);
 	}
 
-	event_ch = lan743x_ptp_reserve_event_ch(adapter, index);
+	/* Map perout index to one of the available event channels. Multiple
+	 * perout indices sharing the same channel (even/odd split) allows all
+	 * PTP-IO pins to be driven simultaneously from a single channel.
+	 */
+	event_ch = lan743x_ptp_reserve_event_ch(adapter,
+						index % LAN743X_PTP_N_EVENT_CHAN);
 	if (event_ch < 0) {
 		netif_warn(adapter, drv, adapter->netdev,
 			   "Failed to reserve event channel %d for PEROUT\n",
-			   index);
+			   index % LAN743X_PTP_N_EVENT_CHAN);
 		goto failed;
 	}
 	ptp->ptp_io_perout[index] = event_ch;
