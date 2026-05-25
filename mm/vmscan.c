@@ -850,7 +850,8 @@ static bool lru_gen_set_refs(struct folio *folio)
 		return false;
 	}
 
-	set_mask_bits(&folio->flags.f, LRU_REFS_FLAGS, BIT(PG_workingset));
+	if (folio_test_active(folio))
+		set_mask_bits(&folio->flags.f, LRU_REFS_FLAGS, BIT(PG_workingset));
 	return true;
 }
 #else
