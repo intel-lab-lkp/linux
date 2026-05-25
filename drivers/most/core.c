@@ -100,7 +100,7 @@ static const struct {
 static void most_free_mbo_coherent(struct mbo *mbo)
 {
 	struct most_channel *c = mbo->context;
-	u16 const coherent_buf_size = c->cfg.buffer_size + c->cfg.extra_len;
+	u32 const coherent_buf_size = c->cfg.buffer_size + c->cfg.extra_len;
 
 	if (c->iface->dma_free)
 		c->iface->dma_free(mbo, coherent_buf_size);
