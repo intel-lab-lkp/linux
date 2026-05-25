@@ -118,5 +118,9 @@ then
 else
 	echo "[Skip] Skipping tests for system_wide_no_aggr, per_core, per_die and per_socket since socket id exposed via topology is invalid"
 fi
+# New API basic checks
+perf_cmd="--new -o ${stat_output}"
+check_no_args "STD (New API)" "$perf_cmd"
+
 cleanup
 exit 0
