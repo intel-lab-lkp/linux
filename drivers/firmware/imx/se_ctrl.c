@@ -56,7 +56,7 @@ struct se_var_info {
 /* contains fixed information */
 struct se_soc_info {
 	const u16 soc_id;
-	const bool soc_register;
+	const char *soc_name;
 	const struct se_fw_img_name se_fw_img_nm;
 };
 
@@ -72,7 +72,7 @@ static struct se_var_info var_se_info;
 
 static struct se_soc_info se_imx8ulp_info = {
 	.soc_id = SOC_ID_OF_IMX8ULP,
-	.soc_register = true,
+	.soc_name = "i.MX8ULP",
 	.se_fw_img_nm = {
 		.prim_fw_nm_in_rfs = IMX_ELE_FW_DIR
 			"mx8ulpa2-ahab-container.img",
@@ -163,7 +163,7 @@ static int get_se_soc_info(struct se_if_priv *priv, const struct se_soc_info *se
 	var_se_info.soc_rev = s_info->d_info.soc_rev;
 	load_fw->imem.state = s_info->d_addn_info.imem_state;
 
-	if (!se_info->soc_register)
+	if (!se_info->soc_name)
 		return 0;
 
 	attr = devm_kzalloc(priv->dev, sizeof(*attr), GFP_KERNEL);
@@ -181,14 +181,7 @@ static int get_se_soc_info(struct se_if_priv *priv, const struct se_soc_info *se
 						FIELD_GET(DEV_GETINFO_MAJ_VER_MASK,
 							  var_se_info.soc_rev));
 
-	switch (se_info->soc_id) {
-	case SOC_ID_OF_IMX8ULP:
-		attr->soc_id = "i.MX8ULP";
-		break;
-	case SOC_ID_OF_IMX93:
-		attr->soc_id = "i.MX93";
-		break;
-	}
+	attr->soc_id = se_info->soc_name;
 
 	err = of_property_read_string(of_root, "model", &attr->machine);
 	if (err)
