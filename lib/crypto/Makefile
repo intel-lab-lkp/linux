@@ -199,6 +199,11 @@ libmldsa-y := mldsa.o
 
 ################################################################################
 
+obj-$(CONFIG_CRYPTO_LIB_MLKEM) += libmlkem.o
+libmlkem-y := mlkem.o
+
+################################################################################
+
 obj-$(CONFIG_CRYPTO_LIB_NH) += libnh.o
 libnh-y := nh.o
 ifeq ($(CONFIG_CRYPTO_LIB_NH_ARCH),y)

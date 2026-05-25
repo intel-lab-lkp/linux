@@ -158,8 +158,8 @@ API documentation
 .. toctree::
    :maxdepth: 2
 
+   libcrypto-asymmetric
    libcrypto-blockcipher
    libcrypto-hash
-   libcrypto-signature
    libcrypto-utils
    sha3

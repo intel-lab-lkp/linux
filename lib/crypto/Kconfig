@@ -143,6 +143,14 @@ config CRYPTO_LIB_MLDSA
 	  The ML-DSA library functions.  Select this if your module uses any of
 	  the functions from <crypto/mldsa.h>.
 
+config CRYPTO_LIB_MLKEM
+	tristate
+	select CRYPTO_LIB_SHA3
+	select CRYPTO_LIB_UTILS
+	help
+	  The ML-KEM library functions.  Select this if your module uses any of
+	  the functions from <crypto/mlkem.h>.
+
 config CRYPTO_LIB_NH
 	tristate
 	help
