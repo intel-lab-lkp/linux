@@ -555,6 +555,10 @@ static void rdmacg_uncharge_uobj(struct ib_uobject *uobj)
 	if (uobj->rdmacg_type != RDMACG_RESOURCE_HCA_OBJECT)
 		ib_rdmacg_uncharge(&uobj->cg_obj, uobj->context->device,
 				   uobj->rdmacg_type, 1);
+	if (uobj->rdmacg_mr_mem_bytes)
+		ib_rdmacg_uncharge(&uobj->cg_obj, uobj->context->device,
+				   RDMACG_RESOURCE_MR_MEM,
+				   uobj->rdmacg_mr_mem_bytes);
 }
 
 static void alloc_abort_idr_uobject(struct ib_uobject *uobj)

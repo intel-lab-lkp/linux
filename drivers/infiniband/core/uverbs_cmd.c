@@ -764,6 +764,15 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 
 	uobj->object = mr;
 	uobj_put_obj_read(pd);
+
+	if (cmd.length) {
+		ret = ib_rdmacg_try_charge(&uobj->cg_obj, uobj->context->device,
+					   RDMACG_RESOURCE_MR_MEM, cmd.length);
+		if (ret)
+			goto err_dereg;
+		uobj->rdmacg_mr_mem_bytes = cmd.length;
+	}
+
 	uobj_finalize_uobj_create(uobj, attrs);
 
 	resp.lkey = mr->lkey;
@@ -771,6 +780,9 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	resp.mr_handle = uobj->id;
 	return uverbs_response(attrs, &resp, sizeof(resp));
 
+err_dereg:
+	ib_dereg_mr_user(mr, &attrs->driver_udata);
+	goto err_free;
 err_put:
 	uobj_put_obj_read(pd);
 err_free:

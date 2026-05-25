@@ -34,6 +34,8 @@
 #include "rdma_core.h"
 #include "uverbs.h"
 #include <rdma/uverbs_std_types.h>
+#include <linux/cgroup_rdma.h>
+#include "core_priv.h"
 #include "restrack.h"
 
 static int uverbs_free_mr(struct ib_uobject *uobject,
@@ -140,6 +142,16 @@ static int UVERBS_HANDLER(UVERBS_METHOD_DM_MR_REG)(
 	rdma_restrack_set_name(&mr->res, NULL);
 	rdma_restrack_add(&mr->res);
 	uobj->object = mr;
+
+	if (attr.length) {
+		ret = ib_rdmacg_try_charge(&uobj->cg_obj, uobj->context->device,
+					   RDMACG_RESOURCE_MR_MEM, attr.length);
+		if (ret) {
+			ib_dereg_mr_user(mr, &attrs->driver_udata);
+			return ret;
+		}
+		uobj->rdmacg_mr_mem_bytes = attr.length;
+	}
 
 	uverbs_finalize_uobj_create(attrs, UVERBS_ATTR_REG_DM_MR_HANDLE);
 
@@ -253,6 +265,16 @@ static int UVERBS_HANDLER(UVERBS_METHOD_REG_DMABUF_MR)(
 	rdma_restrack_set_name(&mr->res, NULL);
 	rdma_restrack_add(&mr->res);
 	uobj->object = mr;
+
+	if (length) {
+		ret = ib_rdmacg_try_charge(&uobj->cg_obj, uobj->context->device,
+					   RDMACG_RESOURCE_MR_MEM, length);
+		if (ret) {
+			ib_dereg_mr_user(mr, &attrs->driver_udata);
+			return ret;
+		}
+		uobj->rdmacg_mr_mem_bytes = length;
+	}
 
 	uverbs_finalize_uobj_create(attrs, UVERBS_ATTR_REG_DMABUF_MR_HANDLE);
 
@@ -382,6 +404,16 @@ static int UVERBS_HANDLER(UVERBS_METHOD_REG_MR)(
 	rdma_restrack_set_name(&mr->res, NULL);
 	rdma_restrack_add(&mr->res);
 	uobj->object = mr;
+
+	if (length) {
+		ret = ib_rdmacg_try_charge(&uobj->cg_obj, uobj->context->device,
+					   RDMACG_RESOURCE_MR_MEM, length);
+		if (ret) {
+			ib_dereg_mr_user(mr, &attrs->driver_udata);
+			return ret;
+		}
+		uobj->rdmacg_mr_mem_bytes = length;
+	}
 
 	uverbs_finalize_uobj_create(attrs, UVERBS_ATTR_REG_MR_HANDLE);
 
