@@ -650,7 +650,7 @@ static struct buffer_head * V1_minix_update_inode(struct inode * inode)
 		raw_inode->i_zone[0] = old_encode_dev(inode->i_rdev);
 	else for (i = 0; i < 9; i++)
 		raw_inode->i_zone[i] = minix_inode->u.i1_data[i];
-	mark_buffer_dirty(bh);
+	mmb_mark_inode_buffer_dirty(bh, &minix_i(inode)->i_metadata_bhs);
 	return bh;
 }
 
@@ -679,7 +679,7 @@ static struct buffer_head * V2_minix_update_inode(struct inode * inode)
 		raw_inode->i_zone[0] = old_encode_dev(inode->i_rdev);
 	else for (i = 0; i < 10; i++)
 		raw_inode->i_zone[i] = minix_inode->u.i2_data[i];
-	mark_buffer_dirty(bh);
+	mmb_mark_inode_buffer_dirty(bh, &minix_i(inode)->i_metadata_bhs);
 	return bh;
 }
 
@@ -694,14 +694,6 @@ static int minix_write_inode(struct inode *inode, struct writeback_control *wbc)
 		bh = V2_minix_update_inode(inode);
 	if (!bh)
 		return -EIO;
-	if (wbc->sync_mode == WB_SYNC_ALL && buffer_dirty(bh)) {
-		sync_dirty_buffer(bh);
-		if (buffer_req(bh) && !buffer_uptodate(bh)) {
-			printk("IO error syncing minix inode [%s:%08llx]\n",
-				inode->i_sb->s_id, inode->i_ino);
-			err = -EIO;
-		}
-	}
 	brelse (bh);
 	return err;
 }
