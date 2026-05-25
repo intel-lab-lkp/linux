@@ -7,6 +7,7 @@
 #define _CGROUP_RDMA_H
 
 #include <linux/cgroup.h>
+#include <linux/types.h>
 
 enum rdmacg_resource_type {
 	RDMACG_RESOURCE_HCA_HANDLE,
@@ -46,9 +47,11 @@ void rdmacg_unregister_device(struct rdmacg_device *device);
 /* APIs for RDMA/IB stack to charge/uncharge pool specific resources */
 int rdmacg_try_charge(struct rdma_cgroup **rdmacg,
 		      struct rdmacg_device *device,
-		      enum rdmacg_resource_type index);
+		      enum rdmacg_resource_type index,
+		      s64 amount);
 void rdmacg_uncharge(struct rdma_cgroup *cg,
 		     struct rdmacg_device *device,
-		     enum rdmacg_resource_type index);
+		     enum rdmacg_resource_type index,
+		     s64 amount);
 #endif	/* CONFIG_CGROUP_RDMA */
 #endif	/* _CGROUP_RDMA_H */

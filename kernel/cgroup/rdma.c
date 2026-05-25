@@ -26,10 +26,15 @@ enum rdmacg_limit_tokens {
 	NR_RDMACG_LIMIT_TOKENS,
 };
 
+/* match_token uses %d for substring extraction only (simple_strtol captures
+ * all digits regardless of overflow).  Actual s64 range validation is done
+ * by match_s64() below - must not be changed to %s or the "xxx=max" exact
+ * match patterns would be shadowed.
+ */
 static const match_table_t rdmacg_limit_tokens = {
-	{ RDMACG_HCA_HANDLE_VAL,	"hca_handle=%d"	},
+	{ RDMACG_HCA_HANDLE_VAL,	"hca_handle=%d"		},
 	{ RDMACG_HCA_HANDLE_MAX,	"hca_handle=max"	},
-	{ RDMACG_HCA_OBJECT_VAL,	"hca_object=%d"	},
+	{ RDMACG_HCA_OBJECT_VAL,	"hca_object=%d"		},
 	{ RDMACG_HCA_OBJECT_MAX,	"hca_object=max"	},
 	{ NR_RDMACG_LIMIT_TOKENS,	NULL			},
 };
@@ -59,9 +64,9 @@ static char const *rdmacg_resource_names[] = {
 
 /* resource tracker for each resource of rdma cgroup */
 struct rdmacg_resource {
-	int max;
-	int usage;
-	int peak;
+	s64 max;
+	s64 usage;
+	s64 peak;
 };
 
 /*
@@ -105,13 +110,13 @@ static inline struct rdma_cgroup *get_current_rdmacg(void)
 }
 
 static void set_resource_limit(struct rdmacg_resource_pool *rpool,
-			       int index, int new_max)
+			       int index, s64 new_max)
 {
-	if (new_max == S32_MAX) {
-		if (rpool->resources[index].max != S32_MAX)
+	if (new_max == S64_MAX) {
+		if (rpool->resources[index].max != S64_MAX)
 			rpool->num_max_cnt++;
 	} else {
-		if (rpool->resources[index].max == S32_MAX)
+		if (rpool->resources[index].max == S64_MAX)
 			rpool->num_max_cnt--;
 	}
 	rpool->resources[index].max = new_max;
@@ -122,7 +127,7 @@ static void set_all_resource_max_limit(struct rdmacg_resource_pool *rpool)
 	int i;
 
 	for (i = 0; i < RDMACG_RESOURCE_MAX; i++)
-		set_resource_limit(rpool, i, S32_MAX);
+		set_resource_limit(rpool, i, S64_MAX);
 }
 
 static void free_cg_rpool_locked(struct rdmacg_resource_pool *rpool)
@@ -198,6 +203,7 @@ get_cg_rpool_locked(struct rdma_cgroup *cg, struct rdmacg_device *device)
  * @cg: pointer to cg to uncharge and all parents in hierarchy
  * @device: pointer to rdmacg device
  * @index: index of the resource to uncharge in cg (resource pool)
+ * @amount: amount to uncharge
  *
  * It also frees the resource pool which was created as part of
  * charging operation when there are no resources attached to
@@ -206,7 +212,8 @@ get_cg_rpool_locked(struct rdma_cgroup *cg, struct rdmacg_device *device)
 static void
 uncharge_cg_locked(struct rdma_cgroup *cg,
 		   struct rdmacg_device *device,
-		   enum rdmacg_resource_type index)
+		   enum rdmacg_resource_type index,
+		   s64 amount)
 {
 	struct rdmacg_resource_pool *rpool;
 
@@ -222,7 +229,7 @@ uncharge_cg_locked(struct rdma_cgroup *cg,
 		return;
 	}
 
-	rpool->resources[index].usage--;
+	rpool->resources[index].usage -= amount;
 
 	/*
 	 * A negative count (or overflow) is invalid,
@@ -303,18 +310,20 @@ static void rdmacg_event_locked(struct rdma_cgroup *cg,
  * @stop_cg: while traversing hirerchy, when meet with stop_cg cgroup
  *           stop uncharging
  * @index: index of the resource to uncharge in cg in given resource pool
+ * @amount: amount to uncharge
  */
 static void rdmacg_uncharge_hierarchy(struct rdma_cgroup *cg,
 				     struct rdmacg_device *device,
 				     struct rdma_cgroup *stop_cg,
-				     enum rdmacg_resource_type index)
+				     enum rdmacg_resource_type index,
+				     s64 amount)
 {
 	struct rdma_cgroup *p;
 
 	mutex_lock(&rdmacg_mutex);
 
 	for (p = cg; p != stop_cg; p = parent_rdmacg(p))
-		uncharge_cg_locked(p, device, index);
+		uncharge_cg_locked(p, device, index, amount);
 
 	mutex_unlock(&rdmacg_mutex);
 
@@ -326,15 +335,17 @@ static void rdmacg_uncharge_hierarchy(struct rdma_cgroup *cg,
  * @cg: pointer to cg to uncharge and all parents in hierarchy
  * @device: pointer to rdmacg device
  * @index: index of the resource to uncharge in cgroup in given resource pool
+ * @amount: amount to uncharge
  */
 void rdmacg_uncharge(struct rdma_cgroup *cg,
 		     struct rdmacg_device *device,
-		     enum rdmacg_resource_type index)
+		     enum rdmacg_resource_type index,
+		     s64 amount)
 {
 	if (index >= RDMACG_RESOURCE_MAX)
 		return;
 
-	rdmacg_uncharge_hierarchy(cg, device, NULL, index);
+	rdmacg_uncharge_hierarchy(cg, device, NULL, index, amount);
 }
 EXPORT_SYMBOL(rdmacg_uncharge);
 
@@ -343,6 +354,7 @@ EXPORT_SYMBOL(rdmacg_uncharge);
  * @rdmacg: pointer to rdma cgroup which will own this resource
  * @device: pointer to rdmacg device
  * @index: index of the resource to charge in cgroup (resource pool)
+ * @amount: amount to charge
  *
  * This function follows charging resource in hierarchical way.
  * It will fail if the charge would cause the new value to exceed the
@@ -361,7 +373,8 @@ EXPORT_SYMBOL(rdmacg_uncharge);
  */
 int rdmacg_try_charge(struct rdma_cgroup **rdmacg,
 		      struct rdmacg_device *device,
-		      enum rdmacg_resource_type index)
+		      enum rdmacg_resource_type index,
+		      s64 amount)
 {
 	struct rdma_cgroup *cg, *p;
 	struct rdmacg_resource_pool *rpool;
@@ -369,6 +382,9 @@ int rdmacg_try_charge(struct rdma_cgroup **rdmacg,
 	int ret = 0;
 
 	if (index >= RDMACG_RESOURCE_MAX)
+		return -EINVAL;
+
+	if (amount <= 0)
 		return -EINVAL;
 
 	/*
@@ -384,8 +400,9 @@ int rdmacg_try_charge(struct rdma_cgroup **rdmacg,
 			ret = PTR_ERR(rpool);
 			goto err;
 		} else {
-			new = (s64)rpool->resources[index].usage + 1;
-			if (new > rpool->resources[index].max) {
+			new = rpool->resources[index].usage + amount;
+			if (new < rpool->resources[index].usage ||
+			    new > rpool->resources[index].max) {
 				ret = -EAGAIN;
 				goto err;
 			} else {
@@ -409,7 +426,7 @@ err:
 	if (ret == -EAGAIN)
 		rdmacg_event_locked(cg, p, device, index);
 	mutex_unlock(&rdmacg_mutex);
-	rdmacg_uncharge_hierarchy(cg, device, p, index);
+	rdmacg_uncharge_hierarchy(cg, device, p, index, amount);
 	return ret;
 }
 EXPORT_SYMBOL(rdmacg_try_charge);
@@ -477,6 +494,25 @@ static struct rdmacg_device *rdmacg_get_device_locked(const char *name)
 	return NULL;
 }
 
+static int match_s64(substring_t *s, s64 *result)
+{
+	char *buf;
+	int ret;
+	s64 val;
+
+	buf = kmemdup_nul(s->from, s->to - s->from, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+	ret = kstrtoll(buf, 0, &val);
+	kfree(buf);
+	if (ret)
+		return ret;
+	if (val < 0)
+		return -EINVAL;
+	*result = val;
+	return 0;
+}
+
 static ssize_t rdmacg_resource_set_max(struct kernfs_open_file *of,
 				       char *buf, size_t nbytes, loff_t off)
 {
@@ -486,7 +522,7 @@ static ssize_t rdmacg_resource_set_max(struct kernfs_open_file *of,
 	struct rdmacg_device *device;
 	char *options = strstrip(buf);
 	char *p;
-	int *new_limits;
+	s64 *new_limits;
 	unsigned long enables = 0;
 	int i = 0, ret = 0;
 
@@ -497,7 +533,7 @@ static ssize_t rdmacg_resource_set_max(struct kernfs_open_file *of,
 		goto err;
 	}
 
-	new_limits = kzalloc_objs(int, RDMACG_RESOURCE_MAX);
+	new_limits = kcalloc(RDMACG_RESOURCE_MAX, sizeof(s64), GFP_KERNEL);
 	if (!new_limits) {
 		ret = -ENOMEM;
 		goto err;
@@ -506,7 +542,8 @@ static ssize_t rdmacg_resource_set_max(struct kernfs_open_file *of,
 	/* parse resource limit tokens */
 	while ((p = strsep(&options, " \t\n"))) {
 		substring_t args[MAX_OPT_ARGS];
-		int tok, intval;
+		int tok;
+		s64 intval;
 
 		if (!*p)
 			continue;
@@ -514,7 +551,7 @@ static ssize_t rdmacg_resource_set_max(struct kernfs_open_file *of,
 		tok = match_token(p, rdmacg_limit_tokens, args);
 		switch (tok) {
 		case RDMACG_HCA_HANDLE_VAL:
-			if (match_int(&args[0], &intval) || intval < 0) {
+			if (match_s64(&args[0], &intval)) {
 				ret = -EINVAL;
 				goto parse_err;
 			}
@@ -522,11 +559,11 @@ static ssize_t rdmacg_resource_set_max(struct kernfs_open_file *of,
 			enables |= BIT(RDMACG_RESOURCE_HCA_HANDLE);
 			break;
 		case RDMACG_HCA_HANDLE_MAX:
-			new_limits[RDMACG_RESOURCE_HCA_HANDLE] = S32_MAX;
+			new_limits[RDMACG_RESOURCE_HCA_HANDLE] = S64_MAX;
 			enables |= BIT(RDMACG_RESOURCE_HCA_HANDLE);
 			break;
 		case RDMACG_HCA_OBJECT_VAL:
-			if (match_int(&args[0], &intval) || intval < 0) {
+			if (match_s64(&args[0], &intval)) {
 				ret = -EINVAL;
 				goto parse_err;
 			}
@@ -534,7 +571,7 @@ static ssize_t rdmacg_resource_set_max(struct kernfs_open_file *of,
 			enables |= BIT(RDMACG_RESOURCE_HCA_OBJECT);
 			break;
 		case RDMACG_HCA_OBJECT_MAX:
-			new_limits[RDMACG_RESOURCE_HCA_OBJECT] = S32_MAX;
+			new_limits[RDMACG_RESOURCE_HCA_OBJECT] = S64_MAX;
 			enables |= BIT(RDMACG_RESOURCE_HCA_OBJECT);
 			break;
 		default:
@@ -588,7 +625,7 @@ static void print_rpool_values(struct seq_file *sf,
 {
 	enum rdmacg_file_type sf_type;
 	int i;
-	u32 value;
+	s64 value;
 
 	sf_type = seq_cft(sf)->private;
 
@@ -599,7 +636,7 @@ static void print_rpool_values(struct seq_file *sf,
 			if (rpool)
 				value = rpool->resources[i].max;
 			else
-				value = S32_MAX;
+				value = S64_MAX;
 		} else if (sf_type == RDMACG_RESOURCE_TYPE_PEAK) {
 			value = rpool ? rpool->resources[i].peak : 0;
 		} else {
@@ -609,10 +646,10 @@ static void print_rpool_values(struct seq_file *sf,
 				value = 0;
 		}
 
-		if (value == S32_MAX)
+		if (value == S64_MAX)
 			seq_puts(sf, RDMACG_MAX_STR);
 		else
-			seq_printf(sf, "%d", value);
+			seq_printf(sf, "%lld", value);
 		seq_putc(sf, ' ');
 	}
 }
