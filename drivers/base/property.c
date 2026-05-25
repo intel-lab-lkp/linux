@@ -807,18 +807,32 @@ struct fwnode_handle *
 fwnode_get_next_child_node(const struct fwnode_handle *fwnode,
 			   struct fwnode_handle *child)
 {
-	struct fwnode_handle *next;
+	struct fwnode_handle *next, *child_parent = NULL;
+	const struct fwnode_handle *parent;
 
 	if (IS_ERR_OR_NULL(fwnode))
 		return NULL;
+	/*
+	 * If this function is in a loop and the previous iteration returned
+	 * an child from fwnode->secondary, then we need to use the secondary
+	 * as parent rather than @fwnode.
+	 */
+	if (child) {
+		child_parent = fwnode_get_parent(child);
+		parent = child_parent;
+	} else {
+		parent = fwnode;
+	}
 
-	/* Try to find a child in primary fwnode */
-	next = fwnode_call_ptr_op(fwnode, get_next_child_node, child);
+	next = fwnode_call_ptr_op(parent, get_next_child_node, child);
 	if (next)
-		return next;
+		goto put_child_parent;
 
-	/* When no more children in primary, continue with secondary */
-	return fwnode_call_ptr_op(fwnode->secondary, get_next_child_node, child);
+	next = fwnode_call_ptr_op(parent->secondary, get_next_child_node, NULL);
+
+put_child_parent:
+	fwnode_handle_put(child_parent);
+	return next;
 }
 EXPORT_SYMBOL_GPL(fwnode_get_next_child_node);
 
