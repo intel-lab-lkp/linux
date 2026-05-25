@@ -10,8 +10,8 @@
  */
 
 #include <linux/bits.h>
-#include <linux/interrupt.h>
 #include <linux/idr.h>
+#include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
 #include <linux/kernel.h>
@@ -21,6 +21,27 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/usb.h>
+
+#define NCT6694_VENDOR_ID	0x0416
+#define NCT6694_PRODUCT_ID	0x200B
+#define NCT6694_INT_IN_EP	0x81
+#define NCT6694_BULK_IN_EP	0x02
+#define NCT6694_BULK_OUT_EP	0x03
+
+#define NCT6694_URB_TIMEOUT	1000
+
+union __packed nct6694_usb_msg {
+	struct nct6694_cmd_header cmd_header;
+	struct nct6694_response_header response_header;
+};
+
+struct nct6694_usb_data {
+	struct mutex access_lock;
+	struct urb *int_in_urb;
+	struct usb_device *udev;
+	union nct6694_usb_msg *usb_msg;
+	__le32 *int_buffer;
+};
 
 static const struct mfd_cell nct6694_devs[] = {
 	MFD_CELL_NAME("nct6694-gpio"),
@@ -96,11 +117,12 @@ static int nct6694_response_err_handling(struct nct6694 *nct6694, unsigned char 
  */
 int nct6694_read_msg(struct nct6694 *nct6694, const struct nct6694_cmd_header *cmd_hd, void *buf)
 {
-	union nct6694_usb_msg *msg = nct6694->usb_msg;
-	struct usb_device *udev = nct6694->udev;
+	struct nct6694_usb_data *udata = nct6694->priv;
+	union nct6694_usb_msg *msg = udata->usb_msg;
+	struct usb_device *udev = udata->udev;
 	int tx_len, rx_len, ret;
 
-	guard(mutex)(&nct6694->access_lock);
+	guard(mutex)(&udata->access_lock);
 
 	memcpy(&msg->cmd_header, cmd_hd, sizeof(*cmd_hd));
 	msg->cmd_header.hctrl = NCT6694_HCTRL_GET;
@@ -146,11 +168,12 @@ EXPORT_SYMBOL_GPL(nct6694_read_msg);
  */
 int nct6694_write_msg(struct nct6694 *nct6694, const struct nct6694_cmd_header *cmd_hd, void *buf)
 {
-	union nct6694_usb_msg *msg = nct6694->usb_msg;
-	struct usb_device *udev = nct6694->udev;
+	struct nct6694_usb_data *udata = nct6694->priv;
+	union nct6694_usb_msg *msg = udata->usb_msg;
+	struct usb_device *udev = udata->udev;
 	int tx_len, rx_len, ret;
 
-	guard(mutex)(&nct6694->access_lock);
+	guard(mutex)(&udata->access_lock);
 
 	memcpy(&msg->cmd_header, cmd_hd, sizeof(*cmd_hd));
 	msg->cmd_header.hctrl = NCT6694_HCTRL_SET;
@@ -277,6 +300,7 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 	struct usb_endpoint_descriptor *int_endpoint;
 	struct usb_host_interface *interface;
 	struct device *dev = &iface->dev;
+	struct nct6694_usb_data *udata;
 	struct nct6694 *nct6694;
 	int ret;
 
@@ -284,17 +308,25 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 	if (!nct6694)
 		return -ENOMEM;
 
-	nct6694->usb_msg = devm_kzalloc(dev, sizeof(union nct6694_usb_msg), GFP_KERNEL);
-	if (!nct6694->usb_msg)
+	udata = devm_kzalloc(dev, sizeof(*udata), GFP_KERNEL);
+	if (!udata)
 		return -ENOMEM;
 
-	nct6694->int_buffer = devm_kzalloc(dev, sizeof(*nct6694->int_buffer), GFP_KERNEL);
-	if (!nct6694->int_buffer)
+	udata->usb_msg = devm_kzalloc(dev, sizeof(*udata->usb_msg), GFP_KERNEL);
+	if (!udata->usb_msg)
 		return -ENOMEM;
 
-	nct6694->int_in_urb = usb_alloc_urb(0, GFP_KERNEL);
-	if (!nct6694->int_in_urb)
+	udata->int_buffer = devm_kzalloc(dev, sizeof(*udata->int_buffer), GFP_KERNEL);
+	if (!udata->int_buffer)
 		return -ENOMEM;
+
+	udata->int_in_urb = usb_alloc_urb(0, GFP_KERNEL);
+	if (!udata->int_in_urb)
+		return -ENOMEM;
+
+	udata->udev = udev;
+
+	nct6694->priv = udata;
 
 	nct6694->domain = irq_domain_create_simple(NULL, NCT6694_NR_IRQS, 0,
 						   &nct6694_irq_domain_ops,
@@ -305,7 +337,6 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 	}
 
 	nct6694->dev = dev;
-	nct6694->udev = udev;
 
 	ida_init(&nct6694->gpio_ida);
 	ida_init(&nct6694->i2c_ida);
@@ -314,7 +345,7 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 
 	spin_lock_init(&nct6694->irq_lock);
 
-	ret = devm_mutex_init(dev, &nct6694->access_lock);
+	ret = devm_mutex_init(dev, &udata->access_lock);
 	if (ret)
 		goto err_ida;
 
@@ -326,11 +357,11 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 		goto err_ida;
 	}
 
-	usb_fill_int_urb(nct6694->int_in_urb, udev, usb_rcvintpipe(udev, NCT6694_INT_IN_EP),
-			 nct6694->int_buffer, sizeof(*nct6694->int_buffer), usb_int_callback,
+	usb_fill_int_urb(udata->int_in_urb, udev, usb_rcvintpipe(udev, NCT6694_INT_IN_EP),
+			 udata->int_buffer, sizeof(*udata->int_buffer), usb_int_callback,
 			 nct6694, int_endpoint->bInterval);
 
-	ret = usb_submit_urb(nct6694->int_in_urb, GFP_KERNEL);
+	ret = usb_submit_urb(udata->int_in_urb, GFP_KERNEL);
 	if (ret)
 		goto err_ida;
 
@@ -343,7 +374,7 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 	return 0;
 
 err_mfd:
-	usb_kill_urb(nct6694->int_in_urb);
+	usb_kill_urb(udata->int_in_urb);
 err_ida:
 	ida_destroy(&nct6694->wdt_ida);
 	ida_destroy(&nct6694->canfd_ida);
@@ -351,22 +382,23 @@ err_ida:
 	ida_destroy(&nct6694->gpio_ida);
 	irq_domain_remove(nct6694->domain);
 err_urb:
-	usb_free_urb(nct6694->int_in_urb);
+	usb_free_urb(udata->int_in_urb);
 	return ret;
 }
 
 static void nct6694_usb_disconnect(struct usb_interface *iface)
 {
 	struct nct6694 *nct6694 = usb_get_intfdata(iface);
+	struct nct6694_usb_data *udata = nct6694->priv;
 
 	mfd_remove_devices(nct6694->dev);
-	usb_kill_urb(nct6694->int_in_urb);
+	usb_kill_urb(udata->int_in_urb);
 	ida_destroy(&nct6694->wdt_ida);
 	ida_destroy(&nct6694->canfd_ida);
 	ida_destroy(&nct6694->i2c_ida);
 	ida_destroy(&nct6694->gpio_ida);
 	irq_domain_remove(nct6694->domain);
-	usb_free_urb(nct6694->int_in_urb);
+	usb_free_urb(udata->int_in_urb);
 }
 
 static const struct usb_device_id nct6694_ids[] = {
