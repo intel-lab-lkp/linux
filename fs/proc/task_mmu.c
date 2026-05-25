@@ -1571,72 +1571,54 @@ static inline void clear_soft_dirty_pmd(struct vm_area_struct *vma,
 }
 #endif
 
-static int clear_refs_pte_range(pmd_t *pmd, unsigned long addr,
-				unsigned long end, struct mm_walk *walk)
+static void clear_refs_pmd_range(struct pt_range_walk *ptw,
+				 enum clear_refs_types type)
 {
-	struct clear_refs_private *cp = walk->private;
-	struct vm_area_struct *vma = walk->vma;
-	pte_t *pte, ptent;
-	spinlock_t *ptl;
-	struct folio *folio;
+	struct vm_area_struct *vma = ptw->vma;
+	unsigned long addr = ptw->curr_addr;
 
-	ptl = pmd_trans_huge_lock(pmd, vma);
-	if (ptl) {
-		if (cp->type == CLEAR_REFS_SOFT_DIRTY) {
-			clear_soft_dirty_pmd(vma, addr, pmd);
-			goto out;
-		}
-
-		if (!pmd_present(*pmd))
-			goto out;
-
-		folio = pmd_folio(*pmd);
-
-		/* Clear accessed and referenced bits. */
-		pmdp_test_and_clear_young(vma, addr, pmd);
-		folio_test_clear_young(folio);
-		folio_clear_referenced(folio);
-out:
-		spin_unlock(ptl);
-		return 0;
+	if (type == CLEAR_REFS_SOFT_DIRTY) {
+		clear_soft_dirty_pmd(vma, addr, ptw->pmdp);
+		return;
 	}
 
-	pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
-	if (!pte) {
-		walk->action = ACTION_AGAIN;
-		return 0;
-	}
-	for (; addr != end; pte++, addr += PAGE_SIZE) {
-		ptent = ptep_get(pte);
+	if (!pmd_present(ptw->pmd) || !ptw->folio)
+		return;
 
-		if (cp->type == CLEAR_REFS_SOFT_DIRTY) {
-			clear_soft_dirty(vma, addr, pte);
-			continue;
-		}
-
-		if (!pte_present(ptent))
-			continue;
-
-		folio = vm_normal_folio(vma, addr, ptent);
-		if (!folio)
-			continue;
-
-		/* Clear accessed and referenced bits. */
-		ptep_test_and_clear_young(vma, addr, pte);
-		folio_test_clear_young(folio);
-		folio_clear_referenced(folio);
-	}
-	pte_unmap_unlock(pte - 1, ptl);
-	cond_resched();
-	return 0;
+	pmdp_test_and_clear_young(vma, addr, ptw->pmdp);
+	folio_test_clear_young(ptw->folio);
+	folio_clear_referenced(ptw->folio);
 }
 
-static int clear_refs_test_walk(unsigned long start, unsigned long end,
-				struct mm_walk *walk)
+static void clear_refs_pte_range(struct pt_range_walk *ptw,
+				enum clear_refs_types type)
 {
-	struct clear_refs_private *cp = walk->private;
-	struct vm_area_struct *vma = walk->vma;
+	struct vm_area_struct *vma = ptw->vma;
+	unsigned long addr = ptw->curr_addr;
+	unsigned long end = pmd_addr_end(addr, vma->vm_end);
+	pte_t *ptep = ptw->ptep;
 
+	for (; addr != end; ptep++, addr += PAGE_SIZE) {
+		if (type == CLEAR_REFS_SOFT_DIRTY) {
+			clear_soft_dirty(vma, addr, ptep);
+			continue;
+		}
+
+		if (!ptw->present || !ptw->folio)
+			continue;
+
+		/* Clear accessed and referenced bits. */
+		ptep_test_and_clear_young(vma, addr, ptep);
+		folio_test_clear_young(ptw->folio);
+		folio_clear_referenced(ptw->folio);
+	}
+
+	ptw->next_addr = end;
+}
+
+static int clear_refs_test_vma(struct vm_area_struct *vma,
+			       enum clear_refs_types type)
+{
 	if (vma->vm_flags & VM_PFNMAP)
 		return 1;
 
@@ -1646,18 +1628,12 @@ static int clear_refs_test_walk(unsigned long start, unsigned long end,
 	 * Writing 3 to /proc/pid/clear_refs only affects file mapped pages.
 	 * Writing 4 to /proc/pid/clear_refs affects all pages.
 	 */
-	if (cp->type == CLEAR_REFS_ANON && vma->vm_file)
+	if (type == CLEAR_REFS_ANON && vma->vm_file)
 		return 1;
-	if (cp->type == CLEAR_REFS_MAPPED && !vma->vm_file)
+	if (type == CLEAR_REFS_MAPPED && !vma->vm_file)
 		return 1;
 	return 0;
 }
-
-static const struct mm_walk_ops clear_refs_walk_ops = {
-	.pmd_entry		= clear_refs_pte_range,
-	.test_walk		= clear_refs_test_walk,
-	.walk_lock		= PGWALK_WRLOCK,
-};
 
 static ssize_t clear_refs_write(struct file *file, const char __user *buf,
 				size_t count, loff_t *ppos)
@@ -1688,9 +1664,6 @@ static ssize_t clear_refs_write(struct file *file, const char __user *buf,
 	if (mm) {
 		VMA_ITERATOR(vmi, mm, 0);
 		struct mmu_notifier_range range;
-		struct clear_refs_private cp = {
-			.type = type,
-		};
 
 		if (mmap_write_lock_killable(mm)) {
 			count = -EINTR;
@@ -1712,13 +1685,47 @@ static ssize_t clear_refs_write(struct file *file, const char __user *buf,
 				vm_flags_clear(vma, VM_SOFTDIRTY);
 				vma_set_page_prot(vma);
 			}
-
+			vma_iter_init(&vmi, mm, 0);
 			inc_tlb_flush_pending(mm);
 			mmu_notifier_range_init(&range, MMU_NOTIFY_SOFT_DIRTY,
 						0, mm, 0, -1UL);
 			mmu_notifier_invalidate_range_start(&range);
 		}
-		walk_page_range(mm, 0, -1, &clear_refs_walk_ops, &cp);
+
+		for_each_vma(vmi, vma) {
+			struct pt_range_walk ptw = {
+				.mm = mm,
+			};
+			enum pt_range_walk_type pt_type;
+			pt_type_flags_t flags = PT_TYPE_ALL;
+			int ret;
+
+			/* We ignore hugetlb vmas */
+			if (is_vm_hugetlb_page(vma))
+				continue;
+
+			ret = clear_refs_test_vma(vma, type);
+			if (ret > 0)
+				continue;
+			else if (ret < 0)
+				break;
+
+			pt_type = pt_range_walk_start(&ptw, vma, vma->vm_start, vma->vm_end, flags);
+			while (pt_type != PTW_DONE) {
+
+				/*
+				 * Since we ignore hugetlb vmas, we just care for PMD
+				 * or PTE mapped pages.
+				 */
+				if (ptw.level == PTW_PMD_LEVEL)
+					clear_refs_pmd_range(&ptw, type);
+				else if (ptw.level == PTW_PTE_LEVEL)
+					clear_refs_pte_range(&ptw, type);
+
+				pt_type = pt_range_walk_next(&ptw, vma, vma->vm_start, vma->vm_end, flags);
+			}
+			pt_range_walk_done(&ptw);
+		}
 		if (type == CLEAR_REFS_SOFT_DIRTY) {
 			mmu_notifier_invalidate_range_end(&range);
 			flush_tlb_mm(mm);
