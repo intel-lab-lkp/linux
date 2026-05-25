@@ -1267,7 +1267,9 @@ struct iommu_vevent_tegra241_cmdqv {
  * can have multiple FDs for different types, but is confined to one per @type.
  * User space should open the @out_veventq_fd to read vEVENTs out of a vEVENTQ,
  * if there are vEVENTs available. A vEVENTQ will lose events due to overflow,
- * if the number of the vEVENTs hits @veventq_depth.
+ * if the number of the vEVENTs hits @veventq_depth. The maximum @veventq_depth
+ * is implementation-specific; -EINVAL will be returned if the requested value
+ * exceeds it.
  *
  * Each vEVENT in a vEVENTQ encloses a struct iommufd_vevent_header followed by
  * a type-specific data structure, in a normal case:
