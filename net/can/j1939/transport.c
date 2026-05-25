@@ -32,6 +32,13 @@
 #define J1939_ETP_CMD_EOMA 0x17
 #define J1939_ETP_CMD_ABORT 0xff
 
+/* Time until session invalidation upon reception of a hold message.
+ * Corresponds to T4 in the specification.
+ * See ISO 11783-3 2018 - 5.10.3.5 Connection closure
+ * and SAE J1939-21 2022 - 5.10.2.4 Connection Closure
+ */
+#define J1939_CTS_HOLD_TIMEOUT_MS 1050
+
 enum j1939_xtp_abort {
 	J1939_XTP_NO_ABORT = 0,
 	J1939_XTP_ABORT_BUSY = 1,
@@ -1428,6 +1435,16 @@ j1939_xtp_rx_eoma(struct j1939_priv *priv, struct sk_buff *skb,
 	j1939_session_put(session);
 }
 
+/* See:
+ * SAE J1939-21 2022 - 5.10.2.3 Data Transfer
+ * ISO 11783-3 2018 - 5.11.5.4 Extended Connection Mode Clear To Send (ETP.CM_CTS)
+ * The number of packets to send can be set to 0 to hold the connection
+ */
+static inline bool j1939_cts_is_hold(const struct sk_buff *skb)
+{
+	return (!skb->data[1]);
+}
+
 static void
 j1939_xtp_rx_cts_one(struct j1939_session *session, struct sk_buff *skb)
 {
@@ -1442,9 +1459,28 @@ j1939_xtp_rx_cts_one(struct j1939_session *session, struct sk_buff *skb)
 
 	netdev_dbg(session->priv->ndev, "%s: 0x%p\n", __func__, session);
 
-	if (session->last_cmd == dat[0]) {
-		err = J1939_XTP_ABORT_DUP_SEQ;
-		goto out_session_cancel;
+	session->last_cmd = dat[0];
+
+	if (j1939_cts_is_hold(skb)) {
+		/* The originator should abort the session after T4 (=< 1050ms):
+		 *   SAE J1939-21 2022 - 5.10.2.4 Connection Closure
+		 *   a lack of a CTS for more than (T4) seconds after a CTS (0) message to
+		 *   hold the connection open" will all cause a connection closure to occur.
+		 *
+		 * The receiver should send followup CTS not later then Th (=< 500ms):
+		 *   SAE J1939-21 2001 - C.1 Connection Mode Data Transfer
+		 *   The responder station then issues a TP.CM_CTS indicating that it wants
+		 *   to hold the connection open but cannot receive any packets right now. A
+		 *   maximum of 500 ms later it must send another TP.CM_CTS message to hold
+		 *   the connection.
+		 *
+		 */
+		if (session->transmission)
+			j1939_session_txtimer_cancel(session);
+
+		j1939_tp_set_rxtimeout(session, J1939_CTS_HOLD_TIMEOUT_MS);
+		netdev_dbg(session->priv->ndev, "%s: 0x%p received CTS hold\n", __func__, session);
+		return;
 	}
 
 	if (session->skcb.addr.type == J1939_ETP)
@@ -1457,7 +1493,11 @@ j1939_xtp_rx_cts_one(struct j1939_session *session, struct sk_buff *skb)
 	else if (dat[1] > session->pkt.block /* 0xff for etp */)
 		goto out_session_cancel;
 
-	/* set packet counters only when not CTS(0) */
+	if (session->pkt.tx_acked >= pkt) {
+		err = J1939_XTP_ABORT_DUP_SEQ;
+		goto out_session_cancel;
+	}
+
 	session->pkt.tx_acked = pkt - 1;
 	j1939_session_skb_drop_old(session);
 	session->pkt.last = session->pkt.tx_acked + dat[1];
@@ -1467,19 +1507,13 @@ j1939_xtp_rx_cts_one(struct j1939_session *session, struct sk_buff *skb)
 	/* TODO: do not set tx here, do it in txtimer */
 	session->pkt.tx = session->pkt.tx_acked;
 
-	session->last_cmd = dat[0];
-	if (dat[1]) {
-		j1939_tp_set_rxtimeout(session, 1250);
-		if (session->transmission) {
-			if (session->pkt.tx_acked)
-				j1939_sk_errqueue(session,
-						  J1939_ERRQUEUE_TX_SCHED);
-			j1939_session_txtimer_cancel(session);
-			j1939_tp_schedule_txtimer(session, 0);
-		}
-	} else {
-		/* CTS(0) */
-		j1939_tp_set_rxtimeout(session, 550);
+	j1939_tp_set_rxtimeout(session, 1250);
+	if (session->transmission) {
+		if (session->pkt.tx_acked)
+			j1939_sk_errqueue(session,
+						J1939_ERRQUEUE_TX_SCHED);
+		j1939_session_txtimer_cancel(session);
+		j1939_tp_schedule_txtimer(session, 0);
 	}
 	return;
 
