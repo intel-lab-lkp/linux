@@ -50,10 +50,15 @@ static void highbank_l2c310_write_sec(unsigned long val, unsigned reg)
 
 static void __init highbank_init_irq(void)
 {
+	struct device_node *np;
+
 	irqchip_init();
 
-	if (of_find_compatible_node(NULL, NULL, "arm,cortex-a9"))
+	np = of_find_compatible_node(NULL, NULL, "arm,cortex-a9");
+	if (np) {
+		of_node_put(np);
 		highbank_scu_map_io();
+	}
 }
 
 static void highbank_power_off(void)
@@ -141,6 +146,7 @@ static void __init highbank_init(void)
 	/* Map system registers */
 	np = of_find_compatible_node(NULL, NULL, "calxeda,hb-sregs");
 	sregs_base = of_iomap(np, 0);
+	of_node_put(np);
 	WARN_ON(!sregs_base);
 
 	register_platform_power_off(highbank_power_off);
