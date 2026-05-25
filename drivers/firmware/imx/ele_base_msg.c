@@ -208,6 +208,11 @@ int ele_fw_authenticate(struct se_if_priv *priv, phys_addr_t contnr_addr,
 	if (!priv)
 		return -EINVAL;
 
+	if (upper_32_bits(contnr_addr) || upper_32_bits(img_addr)) {
+		dev_err(priv->dev, "Wrong address: %pap %pap\n", &contnr_addr, &img_addr);
+		return -EINVAL;
+	}
+
 	struct se_api_msg *tx_msg __free(kfree)	=
 		kzalloc(ELE_FW_AUTH_REQ_SZ, GFP_KERNEL);
 	if (!tx_msg)
@@ -224,8 +229,8 @@ int ele_fw_authenticate(struct se_if_priv *priv, phys_addr_t contnr_addr,
 		return ret;
 
 	tx_msg->data[0] = lower_32_bits(contnr_addr);
-	tx_msg->data[1] = upper_32_bits(contnr_addr);
-	tx_msg->data[2] = img_addr;
+	tx_msg->data[1] = 0;
+	tx_msg->data[2] = lower_32_bits(img_addr);
 
 	ret = ele_msg_send_rcv(priv->priv_dev_ctx, tx_msg, ELE_FW_AUTH_REQ_SZ, rx_msg,
 			       ELE_FW_AUTH_RSP_MSG_SZ);
