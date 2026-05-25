@@ -1008,7 +1008,8 @@ void iwl_rx_dispatch(struct iwl_op_mode *op_mode, struct napi_struct *napi,
 	/* Based on type of command response or notification,
 	 *   handle those that need handling via function in
 	 *   rx_handlers table.  See iwl_setup_rx_handlers() */
-	if (priv->rx_handlers[pkt->hdr.cmd]) {
+	if (pkt->hdr.cmd < ARRAY_SIZE(priv->rx_handlers) &&
+	    priv->rx_handlers[pkt->hdr.cmd]) {
 		priv->rx_handlers_stats[pkt->hdr.cmd]++;
 		priv->rx_handlers[pkt->hdr.cmd](priv, rxb);
 	} else {
