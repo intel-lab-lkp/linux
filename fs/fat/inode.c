@@ -431,6 +431,9 @@ EXPORT_SYMBOL_GPL(fat_attach);
 void fat_detach(struct inode *inode)
 {
 	struct msdos_sb_info *sbi = MSDOS_SB(inode->i_sb);
+
+	/* The block isn't associated with the inode anymore... */
+	mmb_clear_inode_blk(&MSDOS_I(inode)->i_metadata_bhs);
 	spin_lock(&sbi->inode_hash_lock);
 	MSDOS_I(inode)->i_pos = 0;
 	hlist_del_init(&MSDOS_I(inode)->i_fat_hash);
@@ -906,7 +909,7 @@ retry:
 				  &raw_entry->cdate, &raw_entry->ctime_cs);
 	}
 	spin_unlock(&sbi->inode_hash_lock);
-	mark_buffer_dirty(bh);
+	mmb_mark_inode_buffer_dirty(bh, &MSDOS_I(inode)->i_metadata_bhs);
 	err = 0;
 	if (wait)
 		err = sync_dirty_buffer(bh);
@@ -925,7 +928,7 @@ static int fat_write_inode(struct inode *inode, struct writeback_control *wbc)
 		err = fat_clusters_flush(sb);
 		mutex_unlock(&MSDOS_SB(sb)->s_lock);
 	} else
-		err = __fat_write_inode(inode, wbc->sync_mode == WB_SYNC_ALL);
+		err = __fat_write_inode(inode, 0);
 
 	return err;
 }
