@@ -4280,6 +4280,21 @@ static int mem_cgroup_css_online(struct cgroup_subsys_state *css)
 	 */
 	xa_store(&mem_cgroup_private_ids, memcg->id.id, memcg, GFP_KERNEL);
 
+	/*
+	 * It is unlikely for non-leaf memcgs to get direct charges on v2.
+	 * Drain the parent's stock if we are the first child.
+	 */
+	if (cgroup_subsys_on_dfl(memory_cgrp_subsys)) {
+		struct mem_cgroup *parent = parent_mem_cgroup(memcg);
+		int cpu;
+
+		if (parent && !mem_cgroup_is_root(parent) &&
+			      !css_has_online_children(&parent->css)) {
+			for_each_online_cpu(cpu)
+				work_on_cpu(cpu, drain_stock_on_cpu, parent);
+		}
+	}
+
 	return 0;
 free_objcg:
 	for_each_node(nid) {
