@@ -1707,7 +1707,7 @@ void udf_update_extra_perms(struct inode *inode, umode_t mode)
 
 int udf_write_inode(struct inode *inode, struct writeback_control *wbc)
 {
-	return udf_update_inode(inode, wbc->sync_mode == WB_SYNC_ALL);
+	return udf_update_inode(inode, 0);
 }
 
 static int udf_sync_inode(struct inode *inode)
@@ -1936,7 +1936,7 @@ finish:
 	unlock_buffer(bh);
 
 	/* write the data blocks */
-	mark_buffer_dirty(bh);
+	mmb_mark_inode_buffer_dirty(bh, &iinfo->i_metadata_bhs);
 	if (do_sync) {
 		sync_dirty_buffer(bh);
 		if (buffer_write_io_error(bh)) {
