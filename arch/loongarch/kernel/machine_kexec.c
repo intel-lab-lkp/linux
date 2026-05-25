@@ -21,8 +21,13 @@
 #include <asm/cacheflush.h>
 #include <asm/page.h>
 
-/* 0x100000 ~ 0x200000 is safe */
-#define KEXEC_CONTROL_CODE	TO_CACHE(0x100000UL)
+/*
+ * Both addresses are within the first 2MB which is always reserved by
+ * memblock_init().  Avoid 0x100000 because QEMU places its machine FDT
+ * there when using '-kernel'; overwriting it silences earlycon in the
+ * kexec'd kernel.
+ */
+#define KEXEC_CONTROL_CODE	TO_CACHE(0x180000UL)
 #define KEXEC_CMDLINE_ADDR	TO_CACHE(0x108000UL)
 
 static unsigned long reboot_code_buffer;
