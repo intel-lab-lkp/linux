@@ -131,6 +131,8 @@ then
 	check_per_core "STD (New API)" "$perf_cmd"
 	check_per_die "STD (New API)" "$perf_cmd"
 	check_per_socket "STD (New API)" "$perf_cmd"
+	check_per_cache_instance "STD (New API)" "$perf_cmd"
+	check_per_cluster "STD (New API)" "$perf_cmd"
 fi
 
 cleanup
