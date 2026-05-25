@@ -4327,14 +4327,14 @@ static int may_o_create(struct mnt_idmap *idmap,
  * Attempt to atomically look up, create and open a file from a negative
  * dentry.
  *
- * Returns 0 if successful.  The file will have been created and attached to
- * @file by the filesystem calling finish_open().
+ * If FMODE_OPENED is set, the file will have been created and attached to
+ * @file by the filesystem calling finish_open(). If the file was looked up
+ * only (no O_CREAT flag), FMODE_OPENED won't be set. The caller will need
+ * to perform the open themselves. @path will have been updated to point to
+ * the new dentry. This may be negative. atomic_open() does not consume
+ * @dentry on error, but will dput() it if the filesystem replaces it.
  *
- * If the file was looked up only or didn't need creating, FMODE_OPENED won't
- * be set.  The caller will need to perform the open themselves.  @path will
- * have been updated to point to the new dentry.  This may be negative.
- *
- * Returns an error code otherwise.
+ * Returns the opened/looked-up dentry on success or ERR_PTR(-E) on failure.
  */
 static struct dentry *atomic_open(const struct path *path, struct dentry *dentry,
 				  struct file *file,
@@ -4350,24 +4350,30 @@ static struct dentry *atomic_open(const struct path *path, struct dentry *dentry
 				       open_to_namei_flags(open_flag), mode);
 	d_lookup_done(dentry);
 	if (!error) {
-		if (file->f_mode & FMODE_OPENED) {
-			if (unlikely(dentry != file->f_path.dentry)) {
-				dput(dentry);
-				dentry = dget(file->f_path.dentry);
-			}
-		} else if (WARN_ON(file->f_path.dentry == DENTRY_NOT_SET)) {
+		struct dentry *new = file->f_path.dentry;
+
+		if (WARN_ON(new == DENTRY_NOT_SET)) {
 			error = -EIO;
-		} else {
-			if (file->f_path.dentry) {
+		} else if (file->f_mode & FMODE_OPENED) {
+			// finish_open() called
+			if (unlikely(dentry != new)) {
 				dput(dentry);
-				dentry = file->f_path.dentry;
+				dentry = dget(new);
 			}
-			if (unlikely(d_is_negative(dentry)))
+		} else if (new) {
+			// finish_no_open() called with dentry replaced
+			if (unlikely(d_is_negative(new))) {
+				dput(new);
 				error = -ENOENT;
+			} else {
+				dput(dentry);
+				dentry = new;
+			}
+		} else if (unlikely(d_is_negative(dentry))) {
+			error = -ENOENT;
 		}
 	}
 	if (error) {
-		dput(dentry);
 		dentry = ERR_PTR(error);
 	}
 	return dentry;
@@ -4397,7 +4403,7 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	struct inode *dir_inode = dir->d_inode;
 	int open_flag = op->open_flag;
 	struct dentry *dentry;
-	int error, create_error = 0;
+	int error = 0, create_error = 0;
 	umode_t mode = op->mode;
 	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(wq);
 
@@ -4459,10 +4465,13 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	if (dir_inode->i_op->atomic_open) {
 		if (nd->flags & LOOKUP_DIRECTORY)
 			open_flag |= O_DIRECTORY;
-		dentry = atomic_open(&nd->path, dentry, file, open_flag, mode);
-		if (unlikely(create_error) && dentry == ERR_PTR(-ENOENT))
-			dentry = ERR_PTR(create_error);
-		return dentry;
+		struct dentry *res = atomic_open(&nd->path, dentry, file, open_flag, mode);
+		error = PTR_ERR_OR_ZERO(res);
+		if (unlikely(create_error) && error == -ENOENT)
+			error = create_error;
+		if (error)
+			goto out_dput;
+		return res;
 	}
 
 	if (d_in_lookup(dentry)) {
@@ -5025,28 +5034,29 @@ struct file *dentry_create(struct path *path, int flags, umode_t mode,
 	idmap = mnt_idmap(path->mnt);
 
 	if (dir_inode->i_op->atomic_open) {
-		path->dentry = dir;
+		const struct path dir_path = { .mnt = path->mnt, .dentry = dir };
+		struct dentry *res;
+
 		mode = vfs_prepare_mode(idmap, dir_inode, mode, S_IALLUGO, S_IFREG);
 
-		create_error = may_o_create(idmap, path, dentry, mode);
+		create_error = may_o_create(idmap, &dir_path, dentry, mode);
 		if (create_error)
 			flags &= ~O_CREAT;
 
-		dentry = atomic_open(path, dentry, file, flags, mode);
-		error = PTR_ERR_OR_ZERO(dentry);
+		res = atomic_open(&dir_path, dentry, file, flags, mode);
+		error = PTR_ERR_OR_ZERO(res);
 
 		if (unlikely(create_error) && error == -ENOENT)
 			error = create_error;
 
 		if (!error) {
 			if (file->f_mode & FMODE_CREATED)
-				fsnotify_create(dir->d_inode, dentry);
+				fsnotify_create(dir->d_inode, res);
 			if (file->f_mode & FMODE_OPENED)
 				fsnotify_open(file);
+
+			path->dentry = res;
 		}
-
-		path->dentry = dentry;
-
 	} else {
 		error = vfs_create(mnt_idmap(path->mnt), path->dentry, mode, NULL);
 		if (!error)
