@@ -2959,19 +2959,15 @@ static void __free_frozen_pages(struct page *page, unsigned int order,
 
 	/*
 	 * We only track unmovable, reclaimable and movable on pcp lists.
-	 * Place ISOLATE pages on the isolated list because they are being
-	 * offlined but treat HIGHATOMIC and CMA as movable pages so we can
-	 * get those areas back if necessary. Otherwise, we may have to free
-	 * excessively into the page allocator
+	 * ISOLATE, HIGHATOMIC and CMA pageblocks are freed directly to the
+	 * buddy allocator so their migratetype is not misrouted on PCP lists
+	 * (e.g. order-9 pages must not share the MIGRATE_MOVABLE THP list).
 	 */
 	zone = page_zone(page);
 	migratetype = get_pfnblock_migratetype(page, pfn);
 	if (unlikely(migratetype >= MIGRATE_PCPTYPES)) {
-		if (unlikely(is_migrate_isolate(migratetype))) {
-			free_one_page(zone, page, pfn, order, fpi_flags);
-			return;
-		}
-		migratetype = MIGRATE_MOVABLE;
+		free_one_page(zone, page, pfn, order, fpi_flags);
+		return;
 	}
 
 	if (unlikely((fpi_flags & FPI_TRYLOCK) && IS_ENABLED(CONFIG_PREEMPT_RT)
@@ -3043,6 +3039,17 @@ void free_unref_folios(struct folio_batch *folios)
 		folio->private = NULL;
 		migratetype = get_pfnblock_migratetype(&folio->page, pfn);
 
+		if (unlikely(!is_migrate_isolate(migratetype) &&
+			     migratetype >= MIGRATE_PCPTYPES)) {
+			if (pcp) {
+				pcp_spin_unlock(pcp);
+				locked_zone = NULL;
+				pcp = NULL;
+			}
+			free_one_page(zone, &folio->page, pfn, order, FPI_NONE);
+			continue;
+		}
+
 		/* Different zone requires a different pcp lock */
 		if (zone != locked_zone ||
 		    is_migrate_isolate(migratetype)) {
@@ -3074,13 +3081,6 @@ void free_unref_folios(struct folio_batch *folios)
 			}
 			locked_zone = zone;
 		}
-
-		/*
-		 * Non-isolated types over MIGRATE_PCPTYPES get added
-		 * to the MIGRATE_MOVABLE pcp list.
-		 */
-		if (unlikely(migratetype >= MIGRATE_PCPTYPES))
-			migratetype = MIGRATE_MOVABLE;
 
 		trace_mm_page_free_batched(&folio->page);
 		if (!free_frozen_page_commit(zone, pcp, &folio->page,
