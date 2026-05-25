@@ -1164,8 +1164,19 @@ config MFD_MENF21BMC
 	  will be called menf21bmc.
 
 config MFD_NCT6694
-	tristate "Nuvoton NCT6694 support"
+	tristate
 	select MFD_CORE
+	help
+	  Core MFD support for the Nuvoton NCT6694 peripheral expander.
+	  This provides the common APIs and shared structures used by all
+	  interfaces (USB, HIF) to access the NCT6694 hardware features
+	  such as GPIO, I2C, CAN-FD, Watchdog, ADC, PWM, and RTC.
+
+	  It is selected automatically by the transport interface drivers.
+
+config MFD_NCT6694_USB
+	tristate "Nuvoton NCT6694 USB interface support"
+	select MFD_NCT6694
 	depends on USB
 	help
 	  This enables support for the Nuvoton USB device NCT6694, which shares
@@ -1177,6 +1188,15 @@ config MFD_NCT6694
 	  monitoring and control features.
 	  Additional drivers must be enabled to utilize the specific
 	  functionalities of the device.
+	  This enables support for the Nuvoton NCT6694 peripheral expander
+	  connected via the USB interface.
+
+	  The transport driver uses USB bulk and interrupt transfers to
+	  communicate with the NCT6694 firmware. Enable this option if you
+	  are using the NCT6694 via a USB connection.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called nct6694.
 
 config MFD_OCELOT
 	tristate "Microsemi Ocelot External Control Support"
