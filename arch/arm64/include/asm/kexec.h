@@ -127,7 +127,8 @@ int arch_kimage_file_post_load_cleanup(struct kimage *image);
 extern int load_other_segments(struct kimage *image,
 		unsigned long kernel_load_addr, unsigned long kernel_size,
 		char *initrd, unsigned long initrd_len,
-		char *cmdline);
+		char *cmdline, void *headers, unsigned long headers_size);
+extern int prepare_elf_headers(void **addr, unsigned long *sz);
 #endif
 
 #endif /* __ASSEMBLER__ */

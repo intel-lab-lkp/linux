@@ -44,6 +44,11 @@ static void *image_load(struct kimage *image,
 	struct kexec_buf kbuf = {};
 	unsigned long text_offset, kernel_segment_number;
 	struct kexec_segment *kernel_segment;
+#ifdef CONFIG_CRASH_DUMP
+	/* load elf core header */
+	unsigned long headers_sz;
+	void *headers;
+#endif
 	int ret;
 
 	/*
@@ -89,6 +94,18 @@ static void *image_load(struct kimage *image,
 
 	kernel_segment_number = image->nr_segments;
 
+#ifdef CONFIG_CRASH_DUMP
+	if (image->type == KEXEC_TYPE_CRASH) {
+		ret = prepare_elf_headers(&headers, &headers_sz);
+		if (ret) {
+			pr_err("Preparing elf core header failed\n");
+			return ERR_PTR(ret);
+		}
+		image->elf_headers = headers;
+		image->elf_headers_sz = headers_sz;
+	}
+#endif
+
 	/*
 	 * The location of the kernel segment may make it impossible to satisfy
 	 * the other segment requirements, so we try repeatedly to find a
@@ -99,7 +116,8 @@ static void *image_load(struct kimage *image,
 		kernel_segment = &image->segment[kernel_segment_number];
 		ret = load_other_segments(image, kernel_segment->mem,
 					  kernel_segment->memsz, initrd,
-					  initrd_len, cmdline);
+					  initrd_len, cmdline,
+					  headers, headers_sz);
 		if (!ret)
 			break;
 
@@ -107,7 +125,7 @@ static void *image_load(struct kimage *image,
 		 * We couldn't find space for the other segments; erase the
 		 * kernel segment and try the next available hole.
 		 */
-		image->nr_segments -= 1;
+		image->nr_segments = kernel_segment_number;
 		kbuf.buf_min = kernel_segment->mem + kernel_segment->memsz;
 		kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
 	}
