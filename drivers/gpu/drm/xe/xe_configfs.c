@@ -838,7 +838,7 @@ static void xe_config_device_release(struct config_item *item)
 	kfree(dev);
 }
 
-static struct configfs_item_operations xe_config_device_ops = {
+static const struct configfs_item_operations xe_config_device_ops = {
 	.release	= xe_config_device_release,
 };
 
@@ -855,7 +855,7 @@ static bool xe_config_device_is_visible(struct config_item *item,
 	return true;
 }
 
-static struct configfs_group_operations xe_config_device_group_ops = {
+static const struct configfs_group_operations xe_config_device_group_ops = {
 	.is_visible	= xe_config_device_is_visible,
 };
 
@@ -950,7 +950,7 @@ static bool xe_config_sriov_is_visible(struct config_item *item,
 	return true;
 }
 
-static struct configfs_group_operations xe_config_sriov_group_ops = {
+static const struct configfs_group_operations xe_config_sriov_group_ops = {
 	.is_visible	= xe_config_sriov_is_visible,
 };
 
@@ -1054,7 +1054,7 @@ static struct config_group *xe_config_make_device_group(struct config_group *gro
 	return &dev->group;
 }
 
-static struct configfs_group_operations xe_config_group_ops = {
+static const struct configfs_group_operations xe_config_group_ops = {
 	.make_group	= xe_config_make_device_group,
 };
 
