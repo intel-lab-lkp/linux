@@ -151,15 +151,15 @@ struct buffer_head *bio_endio_bh(struct bio *bio)
 EXPORT_SYMBOL(bio_endio_bh);
 
 /*
- * End-of-IO handler helper function which does not touch the bh after
- * unlocking it.
- * Note: unlock_buffer() sort-of does touch the bh after unlocking it, but
- * a race there is benign: unlock_buffer() only use the bh's address for
- * hashing after unlocking the buffer, so it doesn't actually touch the bh
- * itself.
+ * Default synchronous end-of-IO handler..  Just mark it up-to-date
+ * and unlock the buffer.  We put the buffer first because buffers
+ * on the stack may be freed as soon as unlock_buffer() is called.
+ * Buffers attached to a folio will also not be freed until they are
+ * unlocked, so this order is safe for both kinds of buffer.
  */
-static void __end_buffer_read_notouch(struct buffer_head *bh, int uptodate)
+void end_buffer_read_sync(struct buffer_head *bh, int uptodate)
 {
+	put_bh(bh);
 	if (uptodate) {
 		set_buffer_uptodate(bh);
 	} else {
@@ -167,16 +167,6 @@ static void __end_buffer_read_notouch(struct buffer_head *bh, int uptodate)
 		clear_buffer_uptodate(bh);
 	}
 	unlock_buffer(bh);
-}
-
-/*
- * Default synchronous end-of-IO handler..  Just mark it up-to-date and
- * unlock the buffer.
- */
-void end_buffer_read_sync(struct buffer_head *bh, int uptodate)
-{
-	put_bh(bh);
-	__end_buffer_read_notouch(bh, uptodate);
 }
 EXPORT_SYMBOL(end_buffer_read_sync);
 
