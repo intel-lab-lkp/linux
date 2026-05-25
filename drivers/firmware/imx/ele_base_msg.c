@@ -290,7 +290,7 @@ int ele_debug_dump(struct se_if_priv *priv)
 
 		rx_msg->header.size -= 2;
 
-		if (rx_msg->header.size > 4)
+		if (rx_msg->header.size > 2)
 			rx_msg->header.size--;
 
 		for (i = 0; i < rx_msg->header.size; i += 2)
