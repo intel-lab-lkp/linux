@@ -9595,6 +9595,38 @@ out:
 }
 #endif	/* CONFIG_CGROUP_SCHED */
 
+/**
+ * scx_bpf_cgroup_report_throttled - Report throttled time for a cgroup
+ * @cgrp: target cgroup
+ * @throttled_ns: amount of throttled time in nanoseconds to add
+ *
+ * BPF schedulers implementing bandwidth control should call this to update
+ * the kernel's throttled_usec accounting in cpu.stat. Without this, tools
+ * reading cpu.stat will see zero throttled time under SCX scheduling.
+ */
+__bpf_kfunc void scx_bpf_cgroup_report_throttled(struct cgroup *cgrp,
+						  u64 throttled_ns)
+{
+#ifdef CONFIG_CFS_BANDWIDTH
+	struct task_group *tg;
+
+	rcu_read_lock();
+	tg = cgrp->subsys[cpu_cgrp_id] ?
+	     container_of(cgrp->subsys[cpu_cgrp_id], struct task_group, css) :
+	     NULL;
+	if (tg) {
+		struct cfs_bandwidth *cfs_b = &tg->cfs_bandwidth;
+
+		raw_spin_lock_irq(&cfs_b->lock);
+		cfs_b->throttled_time += throttled_ns;
+		cfs_b->nr_throttled++;
+		cfs_b->nr_periods++;
+		raw_spin_unlock_irq(&cfs_b->lock);
+	}
+	rcu_read_unlock();
+#endif
+}
+
 __bpf_kfunc_end_defs();
 
 BTF_KFUNCS_START(scx_kfunc_ids_any)
@@ -9630,6 +9662,7 @@ BTF_ID_FLAGS(func, scx_bpf_events)
 #ifdef CONFIG_CGROUP_SCHED
 BTF_ID_FLAGS(func, scx_bpf_task_cgroup, KF_IMPLICIT_ARGS | KF_RCU | KF_ACQUIRE)
 #endif
+BTF_ID_FLAGS(func, scx_bpf_cgroup_report_throttled, KF_TRUSTED_ARGS)
 BTF_KFUNCS_END(scx_kfunc_ids_any)
 
 static const struct btf_kfunc_id_set scx_kfunc_set_any = {
