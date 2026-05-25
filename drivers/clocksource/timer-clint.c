@@ -81,6 +81,12 @@ static u64 notrace clint_get_cycles64(void)
 {
 	return clint_get_cycles();
 }
+
+static u64 notrace csr_get_cycles64(void)
+{
+	return csr_read(CSR_TIME);
+}
+
 #else /* CONFIG_64BIT */
 static u64 notrace clint_get_cycles64(void)
 {
@@ -93,7 +99,25 @@ static u64 notrace clint_get_cycles64(void)
 
 	return ((u64)hi << 32) | lo;
 }
+
+static u64 notrace csr_get_cycles64(void)
+{
+	u32 hi, lo;
+
+	do {
+		hi = csr_read(CSR_TIMEH);
+		lo = csr_read(CSR_TIME);
+	} while (hi != csr_read(CSR_TIMEH));
+
+	return ((u64)hi << 32) | lo;
+}
+
 #endif /* CONFIG_64BIT */
+
+static u64 csr_rdtime(struct clocksource *cs)
+{
+	return csr_get_cycles64();
+}
 
 static u64 clint_rdtime(struct clocksource *cs)
 {
@@ -105,8 +129,19 @@ static struct clocksource clint_clocksource = {
 	.rating		= 300,
 	.mask		= CLOCKSOURCE_MASK(64),
 	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
-	.read		= clint_rdtime,
+	.read		= csr_rdtime,
 };
+
+static int csr_clock_next_event(unsigned long delta,
+				   struct clock_event_device *ce)
+{
+	void __iomem *r = clint_timer_cmp +
+			  cpuid_to_hartid_map(smp_processor_id());
+
+	csr_set(CSR_IE, IE_TIE);
+	writeq_relaxed(csr_get_cycles64() + delta, r);
+	return 0;
+}
 
 static int clint_clock_next_event(unsigned long delta,
 				   struct clock_event_device *ce)
@@ -123,12 +158,15 @@ static DEFINE_PER_CPU(struct clock_event_device, clint_clock_event) = {
 	.name		= "clint_clockevent",
 	.features	= CLOCK_EVT_FEAT_ONESHOT,
 	.rating		= 100,
-	.set_next_event	= clint_clock_next_event,
+	.set_next_event	= csr_clock_next_event,
 };
 
 static int clint_timer_starting_cpu(unsigned int cpu)
 {
 	struct clock_event_device *ce = per_cpu_ptr(&clint_clock_event, cpu);
+
+	if (!riscv_has_extension_likely(RISCV_ISA_EXT_ZICNTR))
+		ce->set_next_event = clint_clock_next_event;
 
 	ce->cpumask = cpumask_of(cpu);
 	clockevents_config_and_register(ce, clint_timer_freq, 100, ULONG_MAX);
@@ -161,7 +199,7 @@ static irqreturn_t clint_timer_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static int __init clint_timer_init_dt(struct device_node *np)
+static int __init clint_timer_init(struct device_node *np)
 {
 	int rc;
 	u32 i, nr_irqs;
@@ -227,13 +265,19 @@ static int __init clint_timer_init_dt(struct device_node *np)
 
 	pr_info("%pOFP: timer running at %ld Hz\n", np, clint_timer_freq);
 
+	if (!riscv_has_extension_likely(RISCV_ISA_EXT_ZICNTR))
+		clint_clocksource.read = clint_rdtime;
+
 	rc = clocksource_register_hz(&clint_clocksource, clint_timer_freq);
 	if (rc) {
 		pr_err("%pOFP: clocksource register failed [%d]\n", np, rc);
 		goto fail_iounmap;
 	}
 
-	sched_clock_register(clint_get_cycles64, 64, clint_timer_freq);
+	if (riscv_has_extension_likely(RISCV_ISA_EXT_ZICNTR))
+		sched_clock_register(csr_get_cycles64, 64, clint_timer_freq);
+	else
+		sched_clock_register(clint_get_cycles64, 64, clint_timer_freq);
 
 	rc = request_percpu_irq(clint_timer_irq, clint_timer_interrupt,
 				 "clint-timer", &clint_clock_event);
@@ -271,6 +315,11 @@ fail_free_irq:
 fail_iounmap:
 	iounmap(base);
 	return rc;
+}
+
+static int __init clint_timer_init_dt(struct device_node *np)
+{
+	return clint_timer_init(np);
 }
 
 TIMER_OF_DECLARE(clint_timer, "riscv,clint0", clint_timer_init_dt);
