@@ -660,9 +660,10 @@ int mmb_fsync_noflush(struct file *file, struct mapping_metadata_bhs *mmb,
 	if (err)
 		return err;
 
-	if (!(inode_state_read_once(inode) & I_DIRTY_ALL))
+	if (!(inode_state_read_once(inode) & (I_DIRTY_ALL | I_SYNC)))
 		goto sync_buffers;
-	if (datasync && !(inode_state_read_once(inode) & I_DIRTY_DATASYNC))
+	if (datasync &&
+	    !(inode_state_read_once(inode) & (I_DIRTY_DATASYNC | I_SYNC)))
 		goto sync_buffers;
 
 	ret = sync_inode_metadata(inode, 1);
