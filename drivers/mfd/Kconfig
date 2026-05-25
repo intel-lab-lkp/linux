@@ -1174,6 +1174,22 @@ config MFD_NCT6694
 
 	  It is selected automatically by the transport interface drivers.
 
+config MFD_NCT6694_HIF
+	tristate "Nuvoton NCT6694 HIF (eSPI) interface support"
+	depends on HAS_IOPORT && ACPI
+	select MFD_NCT6694
+	select REGMAP_MMIO
+	help
+	  This enables support for the Nuvoton NCT6694 peripheral expander
+	  connected via the Host Interface (HIF) using eSPI transport.
+
+	  The transport driver uses Super-I/O mapping and shared memory to
+	  communicate with the NCT6694 firmware. Enable this option if you
+	  are using the NCT6694 over an eSPI interface on an ACPI platform.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called nct6694-hif.
+
 config MFD_NCT6694_USB
 	tristate "Nuvoton NCT6694 USB interface support"
 	select MFD_NCT6694
