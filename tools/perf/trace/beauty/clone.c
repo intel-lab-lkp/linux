@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: LGPL-2.1
 /*
- * trace/beauty/cone.c
+ * trace/beauty/clone.c
  *
  *  Copyright (C) 2017, Red Hat Inc, Arnaldo Carvalho de Melo <acme@redhat.com>
  */
 
-#include "trace/beauty/beauty.h"
 #include <linux/kernel.h>
 #include <linux/log2.h>
 #include <sys/types.h>
-#include <sched.h>
+#include "trace/beauty/beauty.h"
+#include "trace/beauty/include/uapi/linux/sched.h"
+
 
 static size_t clone__scnprintf_flags(unsigned long flags, char *bf, size_t size, bool show_prefix)
 {

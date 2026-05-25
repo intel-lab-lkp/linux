@@ -1,20 +1,12 @@
 // SPDX-License-Identifier: LGPL-2.1
 #include "trace/beauty/beauty.h"
-
-#include <sched.h>
+#include "trace/beauty/include/uapi/linux/sched.h"
 
 /*
  * Not defined anywhere else, probably, just to make sure we
  * catch future flags
  */
 #define SCHED_POLICY_MASK 0xff
-
-#ifndef SCHED_DEADLINE
-#define SCHED_DEADLINE 6
-#endif
-#ifndef SCHED_RESET_ON_FORK
-#define SCHED_RESET_ON_FORK 0x40000000
-#endif
 
 size_t syscall_arg__scnprintf_sched_policy(char *bf, size_t size,
 					   struct syscall_arg *arg)

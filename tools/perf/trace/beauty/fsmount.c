@@ -5,16 +5,9 @@
  *  Copyright (C) 2019, Red Hat Inc, Arnaldo Carvalho de Melo <acme@redhat.com>
  */
 
-#include "trace/beauty/beauty.h"
 #include <linux/log2.h>
-#include <sys/mount.h>
-
-#ifndef MOUNT_ATTR__ATIME
-#define MOUNT_ATTR__ATIME	0x00000070 /* Setting on how atime should be updated */
-#endif
-#ifndef MOUNT_ATTR_RELATIME
-#define MOUNT_ATTR_RELATIME	0x00000000 /* - Update atime relative to mtime/ctime. */
-#endif
+#include "trace/beauty/beauty.h"
+#include "trace/beauty/include/uapi/linux/mount.h"
 
 
 static size_t fsmount__scnprintf_flags(unsigned long flags, char *bf, size_t size, bool show_prefix)

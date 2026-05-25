@@ -5,25 +5,10 @@
  *  Copyright (C) 2017, Red Hat Inc, Arnaldo Carvalho de Melo <acme@redhat.com>
  */
 
-#include "trace/beauty/beauty.h"
 #include <linux/kernel.h>
-#include <linux/fcntl.h>
+#include "trace/beauty/beauty.h"
+#include "trace/beauty/include/uapi/linux/fcntl.h"
 
-#ifndef F_GET_RW_HINT
-#define F_GET_RW_HINT		(F_LINUX_SPECIFIC_BASE + 11)
-#endif
-
-#ifndef F_SET_RW_HINT
-#define F_SET_RW_HINT		(F_LINUX_SPECIFIC_BASE + 12)
-#endif
-
-#ifndef F_GET_FILE_RW_HINT
-#define F_GET_FILE_RW_HINT	(F_LINUX_SPECIFIC_BASE + 13)
-#endif
-
-#ifndef F_SET_FILE_RW_HINT
-#define F_SET_FILE_RW_HINT	(F_LINUX_SPECIFIC_BASE + 14)
-#endif
 
 static size_t fcntl__scnprintf_getfd(unsigned long val, char *bf, size_t size, bool show_prefix)
 {
