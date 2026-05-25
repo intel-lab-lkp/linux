@@ -4439,6 +4439,23 @@ void scx_group_set_bandwidth(struct task_group *tg,
 
 	percpu_up_read(&scx_cgroup_ops_rwsem);
 }
+
+void scx_group_set_runtime(struct task_group *tg, u64 runtime_us)
+{
+	struct scx_sched *sch;
+
+	percpu_down_read(&scx_cgroup_ops_rwsem);
+	sch = scx_root;
+
+	if (scx_cgroup_enabled && SCX_HAS_OP(sch, cgroup_set_runtime) &&
+	    tg->scx.bw_runtime_us != runtime_us)
+		SCX_CALL_OP(sch, cgroup_set_runtime, NULL,
+			    tg_cgrp(tg), runtime_us);
+
+	tg->scx.bw_runtime_us = runtime_us;
+
+	percpu_up_read(&scx_cgroup_ops_rwsem);
+}
 #endif	/* CONFIG_EXT_GROUP_SCHED */
 
 #if defined(CONFIG_EXT_GROUP_SCHED) || defined(CONFIG_EXT_SUB_SCHED)

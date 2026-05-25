@@ -739,6 +739,18 @@ struct sched_ext_ops {
 	 */
 	void (*cgroup_set_idle)(struct cgroup *cgrp, bool idle);
 
+	/**
+	 * @cgroup_set_runtime: A cgroup's runtime is being set directly
+	 * @cgrp: cgroup whose runtime is being set
+	 * @runtime_us: runtime in microseconds
+	 *
+	 * Update @cgrp's available runtime. This is from the cpu.max.runtime
+	 * cgroup interface. @runtime_us is the total runtime budget that the
+	 * cgroup may consume. The BPF scheduler should track this value and
+	 * throttle tasks in @cgrp once the budget is exhausted.
+	 */
+	void (*cgroup_set_runtime)(struct cgroup *cgrp, u64 runtime_us);
+
 #endif	/* CONFIG_EXT_GROUP_SCHED */
 
 	/**

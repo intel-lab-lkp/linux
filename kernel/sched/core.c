@@ -10181,6 +10181,8 @@ static int cpu_runtime_write_u64(struct cgroup_subsys_state *css,
 	cfs_b->runtime = (u64)runtime_us * NSEC_PER_USEC;
 	raw_spin_unlock_irq(&cfs_b->lock);
 
+
+	scx_group_set_runtime(tg, runtime_us);
 	return 0;
 }
 
