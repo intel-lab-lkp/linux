@@ -249,7 +249,10 @@ then
 	check_per_core
 	check_per_die
 	check_per_socket
+	check_per_cache_instance
+	check_per_cluster
 fi
+check_metric_only
 
 cleanup
 exit 0
