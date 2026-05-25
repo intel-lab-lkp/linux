@@ -12,11 +12,13 @@
 #include <crypto/utils.h>
 #include <kunit/visibility.h>
 #include <linux/export.h>
+#include <linux/fips.h>
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/unaligned.h>
+#include "fips-mlkem.h"
 
 #define Q 3329 /* The prime q = 2^8 * 13 + 1 */
 #define N 256 /* Number of coefficients per ring element */
@@ -629,6 +631,20 @@ static int k_pke_decrypt(u8 m[32], const u8 *sk, const u8 *ct,
 	return 0;
 }
 
+static int mlkem_encaps_internal(u8 *ct, u8 ss[MLKEM_SHARED_SECRET_BYTES],
+				 const u8 *pk,
+				 const u8 eseed[MLKEM_ESEED_BYTES],
+				 const struct mlkem_parameter_set *params);
+static int mlkem_decaps(u8 ss[MLKEM_SHARED_SECRET_BYTES], const u8 *ct,
+			const u8 *sk, const struct mlkem_parameter_set *params);
+
+struct mlkem_fips140_pct_workspace {
+	u8 eseed[MLKEM_ESEED_BYTES];
+	u8 ct[MLKEM1024_CIPHERTEXT_BYTES];
+	u8 ss1[MLKEM_SHARED_SECRET_BYTES];
+	u8 ss2[MLKEM_SHARED_SECRET_BYTES];
+};
+
 /*
  * Generate an ML-KEM key pair (@pk, @sk) from the random seed @seed.
  * The lengths of @pk and @sk are determined by the chosen @params.
@@ -662,6 +678,27 @@ static int mlkem_keygen_internal(u8 *pk, u8 *sk,
 	sk_ptr += SHA3_256_DIGEST_SIZE;
 	memcpy(sk_ptr, &seed[32], 32);
 
+	if (fips_enabled) {
+		/* Do the Pairwise Consistency Test required by FIPS 140-3. */
+		struct mlkem_fips140_pct_workspace *ws __free(kfree_sensitive) =
+			kmalloc_obj(*ws);
+		if (!ws)
+			return -ENOMEM; /* Out of memory, not a PCT failure */
+		get_random_bytes(ws->eseed, sizeof(ws->eseed));
+		err = mlkem_encaps_internal(ws->ct, ws->ss1, pk, ws->eseed,
+					    params);
+		if (err == -ENOMEM)
+			return -ENOMEM; /* Out of memory, not a PCT failure */
+		if (err)
+			panic("mlkem: FIPS PCT failed (encaps): %d", err);
+		err = mlkem_decaps(ws->ss2, ws->ct, sk, params);
+		if (err == -ENOMEM)
+			return -ENOMEM; /* Out of memory, not a PCT failure */
+		if (err)
+			panic("mlkem: FIPS PCT failed (decaps): %d", err);
+		if (crypto_memneq(ws->ss1, ws->ss2, MLKEM_SHARED_SECRET_BYTES))
+			panic("mlkem: FIPS PCT failed (compare)");
+	}
 	return 0;
 }
 
@@ -890,6 +927,84 @@ int mlkem1024_decaps(u8 ss[MLKEM_SHARED_SECRET_BYTES],
 	return mlkem_decaps(ss, ct, sk, &mlkem1024);
 }
 EXPORT_SYMBOL_NS_GPL(mlkem1024_decaps, "CRYPTO_INTERNAL");
+
+#ifdef CONFIG_CRYPTO_FIPS
+/*
+ * This function implements the ML-KEM cryptographic algorithm self-tests
+ * required by FIPS 140-3, or rather the FIPS 140-3 Implementation Guidance
+ * document which is where they are actually specified.  The requirement is that
+ * for one ML-KEM parameter set, one test be done for keygen and encapsulation,
+ * and two tests be done for decapsulation to exercise both the normal case and
+ * the implicit rejection case.  It's worded in such a way that the tests don't
+ * necessarily have to be "known-answer tests", but those are what we use.
+ *
+ * This is just for FIPS compliance.  Normal testing done by kernel developers
+ * and integrators should use the much more comprehensive KUnit test suite.
+ */
+static int __init mlkem_mod_init(void)
+{
+	struct {
+		u8 pk[MLKEM768_PUBLIC_KEY_BYTES];
+		u8 sk[MLKEM768_SECRET_KEY_BYTES];
+		u8 ct[MLKEM768_CIPHERTEXT_BYTES];
+		u8 ss[MLKEM_SHARED_SECRET_BYTES];
+	} *bufs __free(kfree_sensitive) = NULL;
+	int err;
+
+	if (!fips_enabled)
+		return 0;
+
+	bufs = kmalloc_obj(*bufs);
+	if (!bufs)
+		panic("mlkem: fips test failed: ENOMEM");
+
+	err = mlkem768_keygen_internal(bufs->pk, bufs->sk,
+				       fips_test_mlkem768_seed);
+	if (err)
+		panic("mlkem: fips test failed: keygen failed with err=%d",
+		      err);
+	if (crypto_memneq(bufs->pk, fips_test_mlkem768_pk, sizeof(bufs->pk)))
+		panic("mlkem: fips test failed: wrong public key");
+	if (crypto_memneq(bufs->sk, fips_test_mlkem768_sk, sizeof(bufs->sk)))
+		panic("mlkem: fips test failed: wrong secret key");
+
+	err = mlkem768_encaps_internal(bufs->ct, bufs->ss, bufs->pk,
+				       fips_test_mlkem768_eseed);
+	if (err)
+		panic("mlkem: fips test failed: encaps failed with err=%d",
+		      err);
+
+	if (crypto_memneq(bufs->ct, fips_test_mlkem768_ct, sizeof(bufs->ct)))
+		panic("mlkem: fips test failed: wrong ciphertext");
+	if (crypto_memneq(bufs->ss, fips_test_mlkem768_ss, sizeof(bufs->ss)))
+		panic("mlkem: fips test failed: wrong shared secret after encaps");
+
+	memset(bufs->ss, 0, sizeof(bufs->ss));
+	err = mlkem768_decaps(bufs->ss, bufs->ct, bufs->sk);
+	if (err)
+		panic("mlkem: fips test failed: valid decaps failed with err=%d",
+		      err);
+	if (crypto_memneq(bufs->ss, fips_test_mlkem768_ss, sizeof(bufs->ss)))
+		panic("mlkem: fips test failed: wrong shared secret after valid decaps");
+
+	err = mlkem768_decaps(bufs->ss, fips_test_mlkem768_ct_invalid,
+			      bufs->sk);
+	if (err)
+		panic("mlkem: fips test failed: invalid decaps failed with err=%d",
+		      err);
+	if (crypto_memneq(bufs->ss, fips_test_mlkem768_ss_rejected,
+			  sizeof(bufs->ss)))
+		panic("mlkem: fips test failed: wrong shared secret after invalid decaps");
+
+	return 0;
+}
+subsys_initcall(mlkem_mod_init);
+
+static void __exit mlkem_mod_exit(void)
+{
+}
+module_exit(mlkem_mod_exit);
+#endif /* CONFIG_CRYPTO_FIPS */
 
 #if IS_ENABLED(CONFIG_CRYPTO_LIB_MLKEM_KUNIT_TEST)
 u16 mlkem_reduce_once(u16 x)

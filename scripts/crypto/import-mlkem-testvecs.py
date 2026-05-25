@@ -13,6 +13,7 @@
 # This script generates the following files:
 #
 #   lib/crypto/tests/mlkem-testvecs.h
+#   lib/crypto/fips-mlkem.h
 
 import hashlib
 import os
@@ -33,6 +34,9 @@ MLKEM_LENGTHS = {
         "ct_len": 1568,
     },
 }
+
+MLKEM_SEED_BYTES = 64
+MLKEM_ESEED_BYTES = 32
 
 
 def print_header(file):
@@ -99,6 +103,62 @@ def hash_testvecs(testvecs):
     return h.digest(length=32)
 
 
+def gen_fips_file(tv):
+    with open(LINUX_DIR + "/lib/crypto/fips-mlkem.h", "w") as file:
+        ct_len = MLKEM_LENGTHS[768]["ct_len"]
+        print_header(file)
+        attribs = " __initconst __maybe_unused"
+
+        # The test vectors were generated deterministically using the SHAKE128
+        # of an empty string as the randomness.  Take the first MLKEM_SEED_BYTES
+        # + MLKEM_ESEED_BYTES to get the seeds used by the first test vector.
+        # Take an additional ct_len bytes to get the invalid ciphertext.
+        rnd_data = hashlib.shake_128().digest(
+            MLKEM_SEED_BYTES + MLKEM_ESEED_BYTES + ct_len
+        )
+
+        print_static_u8_array_definition(
+            file,
+            f"fips_test_mlkem768_seed[MLKEM_SEED_BYTES]{attribs}",
+            rnd_data[:MLKEM_SEED_BYTES],
+        )
+        print_static_u8_array_definition(
+            file,
+            f"fips_test_mlkem768_eseed[MLKEM_ESEED_BYTES]{attribs}",
+            rnd_data[MLKEM_SEED_BYTES : MLKEM_SEED_BYTES + MLKEM_ESEED_BYTES],
+        )
+        print_static_u8_array_definition(
+            file,
+            f"fips_test_mlkem768_pk[MLKEM768_PUBLIC_KEY_BYTES]{attribs}",
+            tv.pk,
+        )
+        print_static_u8_array_definition(
+            file,
+            f"fips_test_mlkem768_sk[MLKEM768_SECRET_KEY_BYTES]{attribs}",
+            tv.sk,
+        )
+        print_static_u8_array_definition(
+            file,
+            f"fips_test_mlkem768_ct[MLKEM768_CIPHERTEXT_BYTES]{attribs}",
+            tv.ct,
+        )
+        print_static_u8_array_definition(
+            file,
+            f"fips_test_mlkem768_ss[MLKEM_SHARED_SECRET_BYTES]{attribs}",
+            tv.ss,
+        )
+        print_static_u8_array_definition(
+            file,
+            f"fips_test_mlkem768_ct_invalid[MLKEM768_CIPHERTEXT_BYTES]{attribs}",
+            rnd_data[MLKEM_SEED_BYTES + MLKEM_ESEED_BYTES :],
+        )
+        print_static_u8_array_definition(
+            file,
+            f"fips_test_mlkem768_ss_rejected[MLKEM_SHARED_SECRET_BYTES]{attribs}",
+            tv.ss_rejected,
+        )
+
+
 if len(sys.argv) != 2:
     sys.stderr.write(f"Usage: {SCRIPT_NAME} TESTVECS_DIR\n")
     sys.exit(2)
@@ -115,3 +175,5 @@ with open(LINUX_DIR + "/lib/crypto/tests/mlkem-testvecs.h", "w") as file:
         hash = hash_testvecs(testvecs)
         print(f"\n#define MLKEM{paramset}_NUM_TESTVECS {num_testvecs}", file=file)
         print_static_u8_array_definition(file, f"mlkem{paramset}_hash[32]", hash)
+        if paramset == 768:  # FIPS only requires tests for one parameter set
+            gen_fips_file(testvecs[0])
