@@ -8,6 +8,7 @@
  */
 #include <linux/kexec.h>
 #include <linux/elf.h>
+#include <linux/memory_hotplug.h>
 #include <linux/slab.h>
 #include <linux/of.h>
 #include <linux/libfdt.h>
@@ -47,6 +48,9 @@ static int get_nr_ram_ranges_callback(struct resource *res, void *arg)
 static int prepare_elf64_ram_headers_callback(struct resource *res, void *arg)
 {
 	struct crash_mem *cmem = arg;
+
+	if (WARN_ON_ONCE(cmem->nr_ranges >= cmem->max_nr_ranges))
+		return -EAGAIN;
 
 	cmem->ranges[cmem->nr_ranges].start = res->start;
 	cmem->ranges[cmem->nr_ranges].end = res->end;
@@ -281,12 +285,15 @@ int load_extra_segments(struct kimage *image, unsigned long kernel_start,
 	if (image->type == KEXEC_TYPE_CRASH) {
 		void *headers;
 		unsigned long headers_sz;
+		get_online_mems();
 		ret = prepare_elf_headers(&headers, &headers_sz);
 		if (ret) {
+			put_online_mems();
 			pr_err("Preparing elf core header failed\n");
 			goto out;
 		}
 
+		put_online_mems();
 		kbuf.buffer = headers;
 		kbuf.bufsz = headers_sz;
 		kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
