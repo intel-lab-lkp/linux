@@ -10101,8 +10101,7 @@ static int tg_set_bandwidth(struct task_group *tg,
 	if (quota_us != RUNTIME_INF && quota_us > max_bw_runtime_us)
 		return -EINVAL;
 
-	if (quota_us != RUNTIME_INF && (burst_us > quota_us ||
-					burst_us + quota_us > max_bw_runtime_us))
+	if (quota_us != RUNTIME_INF && (burst_us + quota_us > max_bw_runtime_us))
 		return -EINVAL;
 
 #ifdef CONFIG_CFS_BANDWIDTH
@@ -10162,6 +10161,41 @@ static int cpu_burst_write_u64(struct cgroup_subsys_state *css,
 
 	tg_bandwidth(tg, &period_us, &quota_us, NULL);
 	return tg_set_bandwidth(tg, period_us, quota_us, burst_us);
+}
+
+static int cpu_runtime_write_u64(struct cgroup_subsys_state *css,
+				 struct cftype *cftype, u64 runtime_us)
+{
+	struct task_group *tg = css_tg(css);
+	struct cfs_bandwidth *cfs_b = &tg->cfs_bandwidth;
+
+	if (runtime_us > max_bw_runtime_us)
+		return -EINVAL;
+
+	raw_spin_lock_irq(&cfs_b->lock);
+	if (cfs_b->quota != RUNTIME_INF &&
+	    (u64)runtime_us * NSEC_PER_USEC > cfs_b->quota + cfs_b->burst) {
+		raw_spin_unlock_irq(&cfs_b->lock);
+		return -EINVAL;
+	}
+	cfs_b->runtime = (u64)runtime_us * NSEC_PER_USEC;
+	raw_spin_unlock_irq(&cfs_b->lock);
+
+	return 0;
+}
+
+static u64 cpu_runtime_read_u64(struct cgroup_subsys_state *css,
+				struct cftype *cftype)
+{
+	struct task_group *tg = css_tg(css);
+	struct cfs_bandwidth *cfs_b = &tg->cfs_bandwidth;
+	u64 runtime_ns;
+
+	raw_spin_lock_irq(&cfs_b->lock);
+	runtime_ns = cfs_b->runtime;
+	raw_spin_unlock_irq(&cfs_b->lock);
+
+	return runtime_ns / NSEC_PER_USEC;
 }
 #endif /* CONFIG_GROUP_SCHED_BANDWIDTH */
 
@@ -10513,6 +10547,12 @@ static struct cftype cpu_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.read_u64 = cpu_burst_read_u64,
 		.write_u64 = cpu_burst_write_u64,
+	},
+	{
+		.name = "max.runtime",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_runtime_read_u64,
+		.write_u64 = cpu_runtime_write_u64,
 	},
 #endif /* CONFIG_CFS_BANDWIDTH */
 #ifdef CONFIG_UCLAMP_TASK_GROUP

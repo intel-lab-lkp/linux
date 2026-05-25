@@ -776,6 +776,67 @@ cleanup:
 	return ret;
 }
 
+static int test_cpucg_max_runtime(const char *root)
+{
+	int ret = KSFT_FAIL;
+	long quota_usec = 1000;		/* 1ms (minimum) */
+	long period_usec = 100000;	/* 100ms */
+	long burst_usec = 5000000;	/* 5s, so cap = 5001ms */
+	long runtime_usec = 2500000;	/* 2500ms = half of 5s run */
+	long duration_sec = 5;
+	long expected_usec = duration_sec * USEC_PER_SEC / 2; /* 50% */
+	long usage_usec;
+	char *cpucg;
+	char buf[64];
+	int pid;
+
+	cpucg = cg_name(root, "cpucg_runtime_test");
+	if (!cpucg)
+		goto cleanup;
+
+	if (cg_create(cpucg))
+		goto cleanup;
+
+	snprintf(buf, sizeof(buf), "%ld %ld", quota_usec, period_usec);
+	if (cg_write(cpucg, "cpu.max", buf))
+		goto cleanup;
+	if (cg_write_numeric(cpucg, "cpu.max.burst", burst_usec))
+		goto cleanup;
+
+	/* Start burner, let it settle, then inject credits */
+	struct cpu_hog_func_param param = {
+		.nprocs = 1,
+		.ts = { .tv_sec = duration_sec, .tv_nsec = 0 },
+		.clock_type = CPU_HOG_CLOCK_WALL,
+	};
+	pid = cg_run_nowait(cpucg, hog_cpus_timed, (void *)&param);
+	if (pid < 0)
+		goto cleanup;
+
+	usleep(100000);
+	if (cg_write_numeric(cpucg, "cpu.max.runtime", runtime_usec)) {
+		kill(pid, SIGKILL);
+		waitpid(pid, NULL, 0);
+		goto cleanup;
+	}
+
+	waitpid(pid, NULL, 0);
+
+	usage_usec = cg_read_key_long(cpucg, "cpu.stat", "usage_usec");
+	if (usage_usec <= 0)
+		goto cleanup;
+
+	if (!values_close_report(usage_usec, expected_usec, 10))
+		goto cleanup;
+
+	ret = KSFT_PASS;
+
+cleanup:
+	cg_destroy(cpucg);
+	free(cpucg);
+	return ret;
+}
+
 #define T(x) { x, #x }
 struct cpucg_test {
 	int (*fn)(const char *root);
@@ -790,6 +851,7 @@ struct cpucg_test {
 	T(test_cpucg_nested_weight_underprovisioned),
 	T(test_cpucg_max),
 	T(test_cpucg_max_nested),
+	T(test_cpucg_max_runtime),
 };
 #undef T
 
