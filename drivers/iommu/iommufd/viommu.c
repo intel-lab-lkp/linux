@@ -3,6 +3,8 @@
  */
 #include <linux/file.h>
 #include "iommufd_private.h"
+#include <linux/cleanup.h>
+#include <linux/tsm.h>
 
 void iommufd_viommu_destroy(struct iommufd_object *obj)
 {
@@ -123,6 +125,8 @@ void iommufd_vdevice_abort(struct iommufd_object *obj)
 	struct iommufd_device *idev = vdev->idev;
 
 	lockdep_assert_held(&idev->igroup->lock);
+
+	tsm_unbind(idev->dev);
 
 	if (vdev->destroy)
 		vdev->destroy(vdev);

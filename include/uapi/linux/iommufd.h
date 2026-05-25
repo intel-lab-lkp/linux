@@ -57,6 +57,7 @@ enum {
 	IOMMUFD_CMD_IOAS_CHANGE_PROCESS = 0x92,
 	IOMMUFD_CMD_VEVENTQ_ALLOC = 0x93,
 	IOMMUFD_CMD_HW_QUEUE_ALLOC = 0x94,
+	IOMMUFD_CMD_VDEVICE_TSM_OP = 0x95,
 };
 
 /**
@@ -1142,6 +1143,31 @@ struct iommu_vdevice_alloc {
 	__aligned_u64 virt_id;
 };
 #define IOMMU_VDEVICE_ALLOC _IO(IOMMUFD_TYPE, IOMMUFD_CMD_VDEVICE_ALLOC)
+
+/**
+ * enum iommu_vdevice_tsm_op_type - operation type for struct iommu_vdevice_tsm_op
+ * @IOMMU_VDEVICE_TSM_BIND: Bind a vDevice to TSM
+ * @IOMMU_VDEVICE_TSM_UNBIND: Unbind a vDevice from TSM
+ */
+enum iommu_vdevice_tsm_op_type {
+	IOMMU_VDEVICE_TSM_BIND = 0x1,
+	IOMMU_VDEVICE_TSM_UNBIND,
+};
+
+/**
+ * struct iommu_vdevice_tsm_op - ioctl(IOMMU_VDEVICE_TSM_OP)
+ * @size: sizeof(struct iommu_vdevice_tsm_op)
+ * @type: Type of TSM operation. Must be defined in enum iommu_vdevice_tsm_op_type
+ * @flags: Must be 0
+ * @vdevice_id: Object handle for the vDevice. Returned from IOMMU_VDEVICE_ALLOC
+ */
+struct iommu_vdevice_tsm_op {
+	__u32 size;
+	__u32 type;
+	__u32 flags;
+	__u32 vdevice_id;
+};
+#define IOMMU_VDEVICE_TSM_OP _IO(IOMMUFD_TYPE, IOMMUFD_CMD_VDEVICE_TSM_OP)
 
 /**
  * struct iommu_ioas_change_process - ioctl(VFIO_IOAS_CHANGE_PROCESS)
