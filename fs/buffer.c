@@ -426,12 +426,19 @@ static void bh_end_async_read(struct bio *bio)
 	end_buffer_async_read(bh, uptodate);
 }
 
-/*
- * Completion handler for block_write_full_folio() - folios which are unlocked
- * during I/O, and which have the writeback flag cleared upon I/O completion.
+/**
+ * bh_end_async_write - I/O end handler for async folio writes
+ * @bio: The bio being completed.
+ *
+ * Pass this function to bh_submit() if you're doing the equivalent of
+ * block_write_full_folio().  That is, the folio is unlocked, and will
+ * have its writeback flag cleared once all async write buffers have
+ * completed.
  */
-static void end_buffer_async_write(struct buffer_head *bh, int uptodate)
+void bh_end_async_write(struct bio *bio)
 {
+	bool success = bio->bi_status == BLK_STS_OK;
+	struct buffer_head *bh = bio_endio_bh(bio);
 	unsigned long flags;
 	struct buffer_head *first;
 	struct buffer_head *tmp;
@@ -440,7 +447,7 @@ static void end_buffer_async_write(struct buffer_head *bh, int uptodate)
 	BUG_ON(!buffer_async_write(bh));
 
 	folio = bh->b_folio;
-	if (uptodate) {
+	if (success) {
 		set_buffer_uptodate(bh);
 	} else {
 		buffer_io_error(bh, ", lost async page write");
@@ -468,28 +475,7 @@ static void end_buffer_async_write(struct buffer_head *bh, int uptodate)
 still_busy:
 	spin_unlock_irqrestore(&first->b_uptodate_lock, flags);
 }
-
-/**
- * bh_end_async_write - I/O end handler for async folio writes
- * @bio: The bio being completed.
- *
- * Pass this function to bh_submit() if you're doing the equivalent of
- * block_write_full_folio().
- */
-void bh_end_async_write(struct bio *bio)
-{
-	bool success = bio->bi_status == BLK_STS_OK;
-	struct buffer_head *bh = bio_endio_bh(bio);
-	end_buffer_async_write(bh, success);
-}
 EXPORT_SYMBOL(bh_end_async_write);
-
-void mark_buffer_async_write(struct buffer_head *bh)
-{
-	bh->b_end_io = end_buffer_async_write;
-	set_buffer_async_write(bh);
-}
-EXPORT_SYMBOL(mark_buffer_async_write);
 
 
 /*
