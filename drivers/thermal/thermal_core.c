@@ -1012,7 +1012,6 @@ static int thermal_cooling_device_add(struct thermal_cooling_device *cdev, void 
 	cdev->updated = false;
 	cdev->device.class = thermal_class;
 	cdev->device.release = thermal_cdev_release;
-	device_initialize(&cdev->device);
 	cdev->devdata = devdata;
 
 	ret = dev_set_name(&cdev->device, "cooling_device%d", cdev->id);
