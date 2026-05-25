@@ -164,7 +164,7 @@ static bool check_hdr_exception_for_sz(struct se_if_priv *priv,
 	 */
 	if (header->command == ELE_DEBUG_DUMP_REQ &&
 	    header->ver == priv->if_defs->base_api_ver &&
-	    header->size >= 0 && header->size <= ELE_DEBUG_DUMP_RSP_SZ)
+	    header->size >= 2 && header->size <= (ELE_DEBUG_DUMP_RSP_SZ / 4))
 		return true;
 
 	return false;
