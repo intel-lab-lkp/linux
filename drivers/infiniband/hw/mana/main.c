@@ -555,19 +555,28 @@ int mana_ib_query_device(struct ib_device *ibdev, struct ib_device_attr *props,
 	props->vendor_part_id = dev->gdma_dev->dev_id.type;
 	props->max_mr_size = MANA_IB_MAX_MR_SIZE;
 	props->page_size_cap = dev->adapter_caps.page_size_cap;
-	props->max_qp = dev->adapter_caps.max_qp_count;
-	props->max_qp_wr = dev->adapter_caps.max_qp_wr;
+	/*
+	 * mana_ib stores adapter capabilities internally as u32, but the
+	 * corresponding ib_device_attr fields are signed int. Clamp each
+	 * value at this boundary so a cap larger than INT_MAX is never
+	 * narrowed into a negative value visible to the IB core or
+	 * userspace.
+	 */
+	props->max_qp = min_t(u32, dev->adapter_caps.max_qp_count, INT_MAX);
+	props->max_qp_wr = min_t(u32, dev->adapter_caps.max_qp_wr, INT_MAX);
 	props->device_cap_flags = IB_DEVICE_RC_RNR_NAK_GEN;
-	props->max_send_sge = dev->adapter_caps.max_send_sge_count;
-	props->max_recv_sge = dev->adapter_caps.max_recv_sge_count;
-	props->max_sge_rd = dev->adapter_caps.max_recv_sge_count;
-	props->max_cq = dev->adapter_caps.max_cq_count;
-	props->max_cqe = dev->adapter_caps.max_qp_wr;
-	props->max_mr = dev->adapter_caps.max_mr_count;
-	props->max_pd = dev->adapter_caps.max_pd_count;
-	props->max_qp_rd_atom = dev->adapter_caps.max_inbound_read_limit;
-	props->max_res_rd_atom = props->max_qp_rd_atom * props->max_qp;
-	props->max_qp_init_rd_atom = dev->adapter_caps.max_outbound_read_limit;
+	props->max_send_sge = min_t(u32, dev->adapter_caps.max_send_sge_count, INT_MAX);
+	props->max_recv_sge = min_t(u32, dev->adapter_caps.max_recv_sge_count, INT_MAX);
+	props->max_sge_rd = min_t(u32, dev->adapter_caps.max_recv_sge_count, INT_MAX);
+	props->max_cq = min_t(u32, dev->adapter_caps.max_cq_count, INT_MAX);
+	props->max_cqe = min_t(u32, dev->adapter_caps.max_qp_wr, INT_MAX);
+	props->max_mr = min_t(u32, dev->adapter_caps.max_mr_count, INT_MAX);
+	props->max_pd = min_t(u32, dev->adapter_caps.max_pd_count, INT_MAX);
+	props->max_qp_rd_atom = min_t(u32, dev->adapter_caps.max_inbound_read_limit, INT_MAX);
+	props->max_res_rd_atom = min_t(s64,
+				       (s64)props->max_qp_rd_atom * props->max_qp,
+				       INT_MAX);
+	props->max_qp_init_rd_atom = min_t(u32, dev->adapter_caps.max_outbound_read_limit, INT_MAX);
 	props->atomic_cap = IB_ATOMIC_NONE;
 	props->masked_atomic_cap = IB_ATOMIC_NONE;
 	props->max_ah = INT_MAX;
