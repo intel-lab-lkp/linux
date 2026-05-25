@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/cleanup.h>
 #include <linux/pci-tsm.h>
+#include <uapi/linux/iommufd.h>
 
 static void tsm_release(struct device *);
 static const struct class tsm_class = {
@@ -126,6 +127,44 @@ int tsm_unbind(struct device *dev)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tsm_unbind);
+
+static int tsm_pci_req_scope(u32 scope, enum pci_tsm_req_scope *pci_scope)
+{
+	switch (scope) {
+	case IOMMU_VDEVICE_TSM_REQ_PCI_INFO:
+		*pci_scope = PCI_TSM_REQ_INFO;
+		return 0;
+	case IOMMU_VDEVICE_TSM_REQ_PCI_STATE_CHANGE:
+		*pci_scope = PCI_TSM_REQ_STATE_CHANGE;
+		return 0;
+	case IOMMU_VDEVICE_TSM_REQ_PCI_DEBUG_READ:
+		*pci_scope = PCI_TSM_REQ_DEBUG_READ;
+		return 0;
+	case IOMMU_VDEVICE_TSM_REQ_PCI_DEBUG_WRITE:
+		*pci_scope = PCI_TSM_REQ_DEBUG_WRITE;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
+ssize_t tsm_guest_req(struct device *dev, struct tsm_guest_req_info *info)
+{
+	int ret;
+	enum pci_tsm_req_scope pci_scope;
+
+	if (!dev_is_pci(dev))
+		return -EINVAL;
+
+	ret = tsm_pci_req_scope(info->scope, &pci_scope);
+	if (ret)
+		return ret;
+
+	return pci_tsm_guest_req(to_pci_dev(dev), pci_scope, info->req,
+				 info->req_len, info->resp, info->resp_len,
+				 NULL);
+}
+EXPORT_SYMBOL_GPL(tsm_guest_req);
 
 static void tsm_release(struct device *dev)
 {

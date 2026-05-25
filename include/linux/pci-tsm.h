@@ -4,6 +4,7 @@
 #include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/sockptr.h>
+#include <uapi/linux/iommufd.h>
 
 struct pci_tsm;
 struct tsm_dev;
@@ -173,7 +174,7 @@ enum pci_tsm_req_scope {
 	 * typical TDISP collateral information like Device Interface Reports.
 	 * No device secrets are permitted, and no device state is changed.
 	 */
-	PCI_TSM_REQ_INFO = 0,
+	PCI_TSM_REQ_INFO = IOMMU_VDEVICE_TSM_REQ_PCI_INFO,
 	/**
 	 * @PCI_TSM_REQ_STATE_CHANGE: Request to change the TDISP state from
 	 * UNLOCKED->LOCKED, LOCKED->RUN, or other architecture specific state
@@ -181,14 +182,14 @@ enum pci_tsm_req_scope {
 	 * to TDISP) device / host state, configuration, or data change is
 	 * permitted.
 	 */
-	PCI_TSM_REQ_STATE_CHANGE = 1,
+	PCI_TSM_REQ_STATE_CHANGE = IOMMU_VDEVICE_TSM_REQ_PCI_STATE_CHANGE,
 	/**
 	 * @PCI_TSM_REQ_DEBUG_READ: Read-only request for debug information
 	 *
 	 * A method to facilitate TVM information retrieval outside of typical
 	 * TDISP operational requirements. No device secrets are permitted.
 	 */
-	PCI_TSM_REQ_DEBUG_READ = 2,
+	PCI_TSM_REQ_DEBUG_READ = IOMMU_VDEVICE_TSM_REQ_PCI_DEBUG_READ,
 	/**
 	 * @PCI_TSM_REQ_DEBUG_WRITE: Device state changes for debug purposes
 	 *
@@ -196,7 +197,7 @@ enum pci_tsm_req_scope {
 	 * the TDISP operational model. If allowed, requires CAP_SYS_RAW_IO, and
 	 * will taint the kernel.
 	 */
-	PCI_TSM_REQ_DEBUG_WRITE = 3,
+	PCI_TSM_REQ_DEBUG_WRITE = IOMMU_VDEVICE_TSM_REQ_PCI_DEBUG_WRITE,
 };
 
 #ifdef CONFIG_PCI_TSM

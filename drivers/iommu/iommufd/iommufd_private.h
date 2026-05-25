@@ -701,8 +701,14 @@ int iommufd_hw_queue_alloc_ioctl(struct iommufd_ucmd *ucmd);
 void iommufd_hw_queue_destroy(struct iommufd_object *obj);
 #ifdef CONFIG_TSM
 int iommufd_vdevice_tsm_op_ioctl(struct iommufd_ucmd *ucmd);
+int iommufd_vdevice_tsm_req_ioctl(struct iommufd_ucmd *ucmd);
 #else
 static inline int iommufd_vdevice_tsm_op_ioctl(struct iommufd_ucmd *ucmd)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int iommufd_vdevice_tsm_req_ioctl(struct iommufd_ucmd *ucmd)
 {
 	return -EOPNOTSUPP;
 }

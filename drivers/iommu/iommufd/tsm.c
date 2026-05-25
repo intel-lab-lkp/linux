@@ -60,3 +60,71 @@ out_put_vdev:
 	iommufd_put_object(ucmd->ictx, &vdev->obj);
 	return rc;
 }
+
+static bool iommufd_vdevice_tsm_req_scope_valid(u32 scope)
+{
+	if (scope > IOMMU_VDEVICE_TSM_REQ_SCOPE_PCI_LAST)
+		return false;
+
+	switch (scope) {
+	case IOMMU_VDEVICE_TSM_REQ_PCI_INFO:
+	case IOMMU_VDEVICE_TSM_REQ_PCI_STATE_CHANGE:
+	case IOMMU_VDEVICE_TSM_REQ_PCI_DEBUG_READ:
+	case IOMMU_VDEVICE_TSM_REQ_PCI_DEBUG_WRITE:
+		return true;
+	default:
+		return false;
+	}
+}
+
+/**
+ * iommufd_vdevice_tsm_req_ioctl - Forward TSM requests
+ * @ucmd: user command data for IOMMU_VDEVICE_TSM_REQ
+ *
+ * Resolve @iommu_vdevice_tsm_req::vdevice_id to a vdevice and pass the
+ * request/response buffers to the TSM core.
+ *
+ * Return:
+ *  -errno on error.
+ *  positive residue if response/request bytes were left unconsumed.
+ *    if response buffer is provided, residue indicates the number of bytes
+ *    not used in response buffer
+ *    if there is no response buffer, residue indicates the number of bytes
+ *    not consumed in req buffer
+ *  0 otherwise.
+ */
+int iommufd_vdevice_tsm_req_ioctl(struct iommufd_ucmd *ucmd)
+{
+	int rc;
+	struct iommufd_vdevice *vdev;
+	struct iommu_vdevice_tsm_req *cmd = ucmd->cmd;
+	struct tsm_guest_req_info info = {
+		.scope = cmd->scope,
+		.req   = {
+			.user = u64_to_user_ptr(cmd->req_uptr),
+			.is_kernel = false,
+		},
+		.req_len = cmd->req_len,
+		.resp    =  {
+			.user = u64_to_user_ptr(cmd->resp_uptr),
+			.is_kernel = false,
+		},
+		.resp_len = cmd->resp_len,
+	};
+
+	if (cmd->__reserved)
+		return -EOPNOTSUPP;
+
+	if (!iommufd_vdevice_tsm_req_scope_valid(cmd->scope))
+		return -EINVAL;
+
+	vdev = iommufd_get_vdevice(ucmd->ictx, cmd->vdevice_id);
+	if (IS_ERR(vdev))
+		return PTR_ERR(vdev);
+
+	rc = tsm_guest_req(vdev->idev->dev, &info);
+
+	/* No inline response, hence we don't need to copy the response */
+	iommufd_put_object(ucmd->ictx, &vdev->obj);
+	return rc;
+}

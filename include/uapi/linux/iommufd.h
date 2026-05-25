@@ -58,6 +58,7 @@ enum {
 	IOMMUFD_CMD_VEVENTQ_ALLOC = 0x93,
 	IOMMUFD_CMD_HW_QUEUE_ALLOC = 0x94,
 	IOMMUFD_CMD_VDEVICE_TSM_OP = 0x95,
+	IOMMUFD_CMD_VDEVICE_TSM_REQ = 0x96,
 };
 
 /**
@@ -1373,4 +1374,83 @@ struct iommu_hw_queue_alloc {
 	__aligned_u64 length;
 };
 #define IOMMU_HW_QUEUE_ALLOC _IO(IOMMUFD_TYPE, IOMMUFD_CMD_HW_QUEUE_ALLOC)
+
+/*
+ * TSM request scope values are allocated by iommufd. Each device-bus transport
+ * gets a range from this number space.
+ */
+#define IOMMU_VDEVICE_TSM_REQ_SCOPE_PCI_BASE	0
+
+enum iommu_vdevice_tsm_req_scope {
+	/*
+	 * Read-only, without side effects, request for typical TDISP
+	 * collateral information like Device Interface Reports. No device
+	 * secrets are permitted, and no device state is changed.
+	 */
+	IOMMU_VDEVICE_TSM_REQ_PCI_INFO =
+		IOMMU_VDEVICE_TSM_REQ_SCOPE_PCI_BASE,
+	/*
+	 * Request to change the TDISP state from UNLOCKED->LOCKED,
+	 * LOCKED->RUN, or other architecture specific state changes to
+	 * support those transitions for a TDI. No other device or host state,
+	 * configuration, or data change is permitted.
+	 */
+	IOMMU_VDEVICE_TSM_REQ_PCI_STATE_CHANGE =
+		IOMMU_VDEVICE_TSM_REQ_SCOPE_PCI_BASE + 1,
+	/*
+	 * Read-only request for debug information outside of typical TDISP
+	 * operational requirements. No device secrets are permitted.
+	 */
+	IOMMU_VDEVICE_TSM_REQ_PCI_DEBUG_READ =
+		IOMMU_VDEVICE_TSM_REQ_SCOPE_PCI_BASE + 2,
+	/*
+	 * Device state changes for debug purposes. The request may affect the
+	 * operational state of the device outside of the TDISP operational
+	 * model. If allowed, this requires CAP_SYS_RAW_IO and taints the
+	 * kernel.
+	 */
+	IOMMU_VDEVICE_TSM_REQ_PCI_DEBUG_WRITE =
+		IOMMU_VDEVICE_TSM_REQ_SCOPE_PCI_BASE + 3,
+	IOMMU_VDEVICE_TSM_REQ_SCOPE_PCI_LAST =
+		IOMMU_VDEVICE_TSM_REQ_PCI_DEBUG_WRITE,
+};
+
+/**
+ * struct iommu_vdevice_tsm_req - ioctl(IOMMU_VDEVICE_TSM_REQ)
+ * @size: sizeof(struct iommu_vdevice_tsm_req)
+ * @vdevice_id: vDevice ID the guest request is for
+ * @scope: One of enum iommu_vdevice_tsm_req_scope
+ * @req_len: Size in bytes of the input payload at @req_uptr
+ * @resp_len: Size in bytes of the output buffer at @resp_uptr
+ * @__reserved: Must be 0
+ * @req_uptr: Userspace pointer to the guest-provided request payload
+ * @resp_uptr: Userspace pointer to the guest response buffer
+ *
+ * Forward a TSM request to the TSM bound vDevice. This is intended for
+ * guest TSM/TDISP message transport where the host kernel only marshals
+ * bytes between userspace and the TSM implementation.
+ *
+ * Requests outside the iommufd allocated scope values are rejected. Lower
+ * layers may reject scope values that are valid in the global iommufd
+ * namespace, but not permitted for a specific bus.
+ *
+ * The request payload is read from @req_uptr/@req_len. If a response is
+ * expected, userspace provides @resp_uptr/@resp_len as writable storage for
+ * response bytes returned by the TSM path.
+ *
+ * The ioctl is only suitable for commands and results that the host kernel
+ * has no use, the host is only facilitating guest to TSM communication.
+ */
+struct iommu_vdevice_tsm_req {
+	__u32 size;
+	__u32 vdevice_id;
+	__u32 scope;
+	__u32 req_len;
+	__u32 resp_len;
+	__u32 __reserved;
+	__aligned_u64 req_uptr;
+	__aligned_u64 resp_uptr;
+};
+
+#define IOMMU_VDEVICE_TSM_REQ _IO(IOMMUFD_TYPE, IOMMUFD_CMD_VDEVICE_TSM_REQ)
 #endif
