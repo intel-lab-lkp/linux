@@ -1059,6 +1059,61 @@ static void rtw89_usb_intf_deinit(struct rtw89_dev *rtwdev,
 	usb_set_intfdata(intf, NULL);
 }
 
+static ssize_t serial_number_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct wiphy *wiphy = container_of(dev, struct wiphy, dev);
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct rtw89_dev *rtwdev = hw->priv;
+	struct rtw89_efuse *efuse = &rtwdev->efuse;
+
+	return sysfs_emit(buf, "%*phN\n",
+			  (int)sizeof(efuse->sn), efuse->sn);
+}
+static DEVICE_ATTR_RO(serial_number);
+
+static ssize_t uuid_show(struct device *dev,
+			 struct device_attribute *attr, char *buf)
+{
+	struct wiphy *wiphy = container_of(dev, struct wiphy, dev);
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct rtw89_dev *rtwdev = hw->priv;
+	struct rtw89_efuse *efuse = &rtwdev->efuse;
+
+	return sysfs_emit(buf, "%pUb\n", efuse->uuid);
+}
+static DEVICE_ATTR_RO(uuid);
+
+static struct attribute *rtw89_usb_attrs[] = {
+	&dev_attr_serial_number.attr,
+	&dev_attr_uuid.attr,
+	NULL,
+};
+
+static const struct attribute_group rtw89_usb_group = {
+	.name = "rtw89_usb",
+	.attrs = rtw89_usb_attrs,
+};
+__ATTRIBUTE_GROUPS(rtw89_usb);
+
+static void rtw89_usb_sysfs_create(struct rtw89_dev *rtwdev)
+{
+	int ret;
+
+	if (!test_bit(RTW89_QUIRK_HW_INFO_SYSFS, rtwdev->quirks))
+		return;
+
+	ret = sysfs_create_groups(&rtwdev->hw->wiphy->dev.kobj,
+				  rtw89_usb_groups);
+	if (ret)
+		rtw89_warn(rtwdev, "failed to create sysfs groups: %d\n", ret);
+}
+
+static void rtw89_usb_sysfs_remove(struct rtw89_dev *rtwdev)
+{
+	sysfs_remove_groups(&rtwdev->hw->wiphy->dev.kobj, rtw89_usb_groups);
+}
+
 int rtw89_usb_probe(struct usb_interface *intf,
 		    const struct usb_device_id *id)
 {
@@ -1123,6 +1178,7 @@ int rtw89_usb_probe(struct usb_interface *intf,
 		goto err_core_deinit;
 	}
 
+	rtw89_usb_sysfs_create(rtwdev);
 	rtw89_usb_start_rx(rtwdev);
 
 	set_bit(RTW89_FLAG_PROBE_DONE, rtwdev->flags);
@@ -1159,6 +1215,7 @@ void rtw89_usb_disconnect(struct usb_interface *intf)
 	rtw89_usb_cancel_rx_bufs(rtwusb);
 	rtw89_usb_cancel_tx_bufs(rtwusb);
 
+	rtw89_usb_sysfs_remove(rtwdev);
 	rtw89_core_unregister(rtwdev);
 	rtw89_core_deinit(rtwdev);
 	rtw89_usb_deinit_rx(rtwdev);
