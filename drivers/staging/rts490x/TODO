@@ -1,0 +1,35 @@
+TODO list for rts490xa-i3c-hub staging driver
+==============================================
+
+Completed in v2
+---------------
+- [x] Add proper DT binding schema validation (dt-schema)
+      Addressed in v2 dt-bindings patch: all properties carry vendor
+      prefix, use standard types (boolean/u32 with unit suffixes),
+      unevaluatedProperties: false, validated via dt-schema.
+
+Remaining before moving out of staging
+---------------------------------------
+- Clean up open-coded OF property parsing; use device_property_* APIs
+  instead of of_property_read_* where possible
+- Remove use of full_name / sscanf for node name parsing; use
+  of_node_name_eq() and fwnode helpers instead
+- Replace global mutex (i3c_hub_regmap_mutex) with per-device locking
+- Add kernel-doc comments for all exported/public functions
+- Resolve TODO comment in i3c_hub_hw_configure_tp() regarding MUX
+  connection verification
+- Remove TBD comment in i3c_hub_probe() regarding DEV_CMD security lock
+- Review and fix potential locking issues in i3c_hub_delayed_work()
+  when registering logical buses
+- Fix error handling in i3c_hub_delayed_work(): early return on failure
+  does not unregister already-registered logical buses, causing resource
+  leak; needs proper cleanup on error path
+
+Rebase on upstream i3c hub framework (pending)
+-----------------------------------------------
+A generic i3c hub framework is being introduced upstream by the NXP
+P3H2x4x patch series (v10, under review):
+  https://lore.kernel.org/linux-i3c/20260525064209.2263045-1-lakshay.piplani@nxp.com/
+
+Once that framework is merged, rebase this driver on it and move
+out of staging.

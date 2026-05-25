@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config RTS490X_I3C_HUB
+	tristate "Realtek RTS490x I3C HUB driver"
+	depends on I3C
+	depends on REGMAP_I3C
+	select GPIOLIB
+	help
+	  Support for Realtek RTS490x series I3C HUB devices (RTS4900,
+	  RTS4901, RTS4902, RTS4903, RTS4904, RTS4906).
+
+	  The I3C HUB provides port expansion, voltage level translation,
+	  bus capacitance isolation, address conflict isolation, SMBus
+	  agent functionality and GPIO expansion.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called rts490xa-i3c-hub.
