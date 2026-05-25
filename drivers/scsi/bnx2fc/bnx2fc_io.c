@@ -1716,6 +1716,7 @@ static int bnx2fc_build_bd_list_from_sg(struct bnx2fc_cmd *io_req)
 	if (bd_count > BNX2FC_FW_MAX_BDS_PER_CMD) {
 		pr_err("bd_count = %d exceeded FW supported max BD(255), task_id = 0x%x\n",
 		       bd_count, io_req->xid);
+		bnx2fc_unmap_sg_list(io_req);
 		return -ENOMEM;
 	}
 
