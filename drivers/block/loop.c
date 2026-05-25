@@ -36,6 +36,7 @@
 #include <linux/blk-mq.h>
 #include <linux/spinlock.h>
 #include <uapi/linux/loop.h>
+#include <linux/task_work.h>
 
 /* Possible states of device */
 enum {
@@ -74,6 +75,10 @@ struct loop_device {
 	struct gendisk		*lo_disk;
 	struct mutex		lo_mutex;
 	bool			idr_visible;
+	union {
+		struct callback_head lo_clr_task_work;
+		struct work_struct lo_clr_work;
+	};
 };
 
 struct loop_cmd {
@@ -1112,11 +1117,33 @@ out_putf:
 	return error;
 }
 
-static void __loop_clr_fd(struct loop_device *lo)
+static void __loop_clr_fd(struct callback_head *callback)
 {
+	struct loop_device *lo = container_of(callback, struct loop_device, lo_clr_task_work);
 	struct queue_limits lim;
 	struct file *filp;
 	gfp_t gfp = lo->old_gfp_mask;
+
+	/* Step 1: Flush all outstanding I/O, without open_mutex held. */
+
+	/*
+	 * Now that loop_queue_rq() sees lo->lo_state != Lo_bound,
+	 * wait for already started loop_queue_rq() to complete.
+	 */
+	synchronize_rcu();
+	/*
+	 * Now that no more works are scheduled by loop_queue_rq(),
+	 * wait for already scheduled works to complete.
+	 */
+	drain_workqueue(lo->workqueue);
+	/*
+	 * Now that no more AIO requests are scheduled by lo_rw_aio(),
+	 * wait for already started AIO to complete.
+	 */
+	blk_mq_unfreeze_queue(lo->lo_queue, blk_mq_freeze_queue(lo->lo_queue));
+
+	/* Step 2: Perform remaining cleanup, with open_mutex held. */
+	mutex_lock(&lo->lo_disk->open_mutex);
 
 	spin_lock_irq(&lo->lo_lock);
 	filp = lo->lo_backing_file;
@@ -1128,12 +1155,7 @@ static void __loop_clr_fd(struct loop_device *lo)
 	lo->lo_sizelimit = 0;
 	memset(lo->lo_file_name, 0, LO_NAME_SIZE);
 
-	/*
-	 * Reset the block size to the default.
-	 *
-	 * No queue freezing needed because this is called from the final
-	 * ->release call only, so there can't be any outstanding I/O.
-	 */
+	/* Reset the block size to the default. */
 	lim = queue_limits_start_update(lo->lo_queue);
 	lim.logical_block_size = SECTOR_SIZE;
 	lim.physical_block_size = SECTOR_SIZE;
@@ -1145,8 +1167,6 @@ static void __loop_clr_fd(struct loop_device *lo)
 	/* let user-space know about this change */
 	kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
 	mapping_set_gfp_mask(filp->f_mapping, gfp);
-	/* This is safe: open() is still holding a reference. */
-	module_put(THIS_MODULE);
 
 	disk_force_media_change(lo->lo_disk);
 
@@ -1154,9 +1174,6 @@ static void __loop_clr_fd(struct loop_device *lo)
 		int err;
 
 		/*
-		 * open_mutex has been held already in release path, so don't
-		 * acquire it if this function is called in such case.
-		 *
 		 * If the reread partition isn't from release path, lo_refcnt
 		 * must be at least one and it can only become zero when the
 		 * current holder is released.
@@ -1181,12 +1198,31 @@ static void __loop_clr_fd(struct loop_device *lo)
 	WRITE_ONCE(lo->lo_state, Lo_unbound);
 	mutex_unlock(&lo->lo_mutex);
 
+	/* Step 3: Drop refcounts, without open_mutex held. */
+	mutex_unlock(&lo->lo_disk->open_mutex);
+
 	/*
 	 * Need not hold lo_mutex to fput backing file. Calling fput holding
 	 * lo_mutex triggers a circular lock dependency possibility warning as
 	 * fput can take open_mutex which is usually taken before lo_mutex.
 	 */
 	fput(filp);
+
+	/*
+	 * Drop all references that would have been dropped as soon as
+	 * returning from lo_release() and releasing disk->open_mutex.
+	 */
+	module_put(lo->lo_disk->fops->owner);
+	put_device(disk_to_dev(lo->lo_disk));
+
+	module_put(THIS_MODULE);
+}
+
+static void loop_clr_work(struct work_struct *work)
+{
+	struct loop_device *lo = container_of(work, struct loop_device, lo_clr_work);
+
+	__loop_clr_fd(&lo->lo_clr_task_work);
 }
 
 static int loop_clr_fd(struct loop_device *lo)
@@ -1747,8 +1783,30 @@ static void lo_release(struct gendisk *disk)
 	need_clear = (lo->lo_state == Lo_rundown);
 	mutex_unlock(&lo->lo_mutex);
 
-	if (need_clear)
-		__loop_clr_fd(lo);
+	/*
+	 * In order to flush pending I/O requests before clearing the backing device,
+	 * defer __loop_clr_fd() to task work context or normal workqueue context.
+	 * The Lo_rundown state guarantees that lo_open() will fail with -ENXIO.
+	 */
+	if (need_clear) {
+		/*
+		 * Grab all references that will be dropped as soon as returning from
+		 * lo_release() and releasing disk->open_mutex.
+		 */
+		get_device(disk_to_dev(disk));
+		__module_get(disk->fops->owner);
+		/*
+		 * Prefer task work, for userspace might be expecting that fput()
+		 * on the backing file is processed before lo_release() from close()
+		 * returns to user mode.
+		 */
+		init_task_work(&lo->lo_clr_task_work, __loop_clr_fd);
+		if ((current->flags & PF_KTHREAD) ||
+		    task_work_add(current, &lo->lo_clr_task_work, TWA_RESUME)) {
+			INIT_WORK(&lo->lo_clr_work, loop_clr_work);
+			schedule_work(&lo->lo_clr_work);
+		}
+	}
 }
 
 static void lo_free_disk(struct gendisk *disk)
