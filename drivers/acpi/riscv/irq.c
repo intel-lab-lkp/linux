@@ -134,7 +134,8 @@ struct fwnode_handle *riscv_acpi_get_gsi_domain_id(u32 gsi)
 static int __init riscv_acpi_register_ext_intc(u32 gsi_base, u32 nr_irqs, u32 nr_idcs,
 					       u32 id, u32 type)
 {
-	struct riscv_ext_intc_list *ext_intc_element, *node, *prev;
+	struct riscv_ext_intc_list *ext_intc_element, *node;
+	struct list_head *pos = &ext_intc_list;
 
 	ext_intc_element = kzalloc_obj(*ext_intc_element);
 	if (!ext_intc_element)
@@ -153,18 +154,22 @@ static int __init riscv_acpi_register_ext_intc(u32 gsi_base, u32 nr_irqs, u32 nr
 	ext_intc_element->nr_idcs = nr_idcs;
 	ext_intc_element->id = id;
 	list_for_each_entry(node, &ext_intc_list, list) {
-		if (node->gsi_base < ext_intc_element->gsi_base)
+		if (node->gsi_base < ext_intc_element->gsi_base) {
+			pos = &node->list;
 			break;
+		}
 	}
 
 	/* Adjust the previous node's GSI range if that has pending registration */
-	prev = list_prev_entry(node, list);
-	if (!list_entry_is_head(prev, &ext_intc_list, list)) {
+	if (pos->prev != &ext_intc_list) {
+		struct riscv_ext_intc_list *prev =
+			list_entry(pos->prev, struct riscv_ext_intc_list, list);
+
 		if (prev->flag & RISCV_ACPI_INTC_FLAG_PENDING)
 			prev->nr_irqs = ext_intc_element->gsi_base - prev->gsi_base;
 	}
 
-	list_add_tail(&ext_intc_element->list, &node->list);
+	list_add_tail(&ext_intc_element->list, pos);
 	return 0;
 }
 
