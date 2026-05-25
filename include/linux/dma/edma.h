@@ -106,10 +106,23 @@ struct dw_edma_chip {
 	bool			cfg_non_ll;
 };
 
+/**
+ * struct dw_edma_hw_chan_filter - DesignWare eDMA hardware channel selector
+ * @dma_dev: DMA controller device to match
+ * @write: true to select a write channel, false to select a read channel
+ * @id: hardware channel number within the selected direction
+ */
+struct dw_edma_hw_chan_filter {
+	struct device	*dma_dev;
+	bool		write;
+	u16		id;
+};
+
 /* Export to the platform drivers */
 #if IS_REACHABLE(CONFIG_DW_EDMA)
 int dw_edma_probe(struct dw_edma_chip *chip);
 int dw_edma_remove(struct dw_edma_chip *chip);
+bool dw_edma_filter_hw_chan(struct dma_chan *chan, void *param);
 #else
 static inline int dw_edma_probe(struct dw_edma_chip *chip)
 {
@@ -119,6 +132,11 @@ static inline int dw_edma_probe(struct dw_edma_chip *chip)
 static inline int dw_edma_remove(struct dw_edma_chip *chip)
 {
 	return 0;
+}
+
+static inline bool dw_edma_filter_hw_chan(struct dma_chan *chan, void *param)
+{
+	return false;
 }
 #endif /* CONFIG_DW_EDMA */
 
