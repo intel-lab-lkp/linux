@@ -74,7 +74,7 @@ int ele_get_info(struct se_if_priv *priv, struct ele_dev_info *s_info)
 						   &get_info_addr,
 						   GFP_KERNEL);
 	if (!get_info_data) {
-		dev_dbg(priv->dev,
+		dev_err(priv->dev,
 			"%s: Failed to allocate get_info_addr.", __func__);
 		return -ENOMEM;
 	}
