@@ -22,3 +22,13 @@ __rust_helper void rust_helper_srcu_read_unlock(struct srcu_struct *ssp, int idx
 {
 	srcu_read_unlock(ssp, idx);
 }
+
+__rust_helper void rust_helper_srcu_barrier(struct srcu_struct *ssp)
+{
+	srcu_barrier(ssp);
+}
+
+__rust_helper void rust_helper_synchronize_srcu_expedited(struct srcu_struct *ssp)
+{
+	synchronize_srcu_expedited(ssp);
+}
