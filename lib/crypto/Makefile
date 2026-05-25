@@ -386,6 +386,11 @@ endif # CONFIG_CRYPTO_LIB_SM3_ARCH
 
 ################################################################################
 
+obj-$(CONFIG_CRYPTO_LIB_XWING) += libxwing.o
+libxwing-y := xwing.o
+
+################################################################################
+
 obj-$(CONFIG_MPILIB) += mpi/
 
 obj-$(CONFIG_CRYPTO_SELFTESTS_FULL)		+= simd.o

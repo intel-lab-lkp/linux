@@ -18,3 +18,10 @@ Support for the ML-KEM key encapsulation mechanism.
 This shall be used as part of a hybrid scheme such as X-Wing, not by itself.
 
 .. kernel-doc:: include/crypto/mlkem.h
+
+X-Wing
+------
+
+Support for the X-Wing key encapsulation mechanism.
+
+.. kernel-doc:: include/crypto/xwing.h
