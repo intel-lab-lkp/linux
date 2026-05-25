@@ -154,10 +154,14 @@ static void dsb_buffer_flush_map(struct intel_dsb *dsb)
 static bool pre_commit_is_vrr_active(struct intel_atomic_state *state,
 				     struct intel_crtc *crtc)
 {
+	struct intel_display *display = to_intel_display(state);
 	const struct intel_crtc_state *old_crtc_state =
 		intel_atomic_get_old_crtc_state(state, crtc);
 	const struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
+
+	if (intel_vrr_always_use_vrr_tg(display))
+		return true;
 
 	/* VRR will be enabled afterwards, if necessary */
 	if (intel_crtc_needs_modeset(new_crtc_state))
