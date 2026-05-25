@@ -106,6 +106,8 @@ struct perf_stat_config {
 	bool			 ctl_fd_close;
 	const char		*cgroup_list;
 	unsigned int		topdown_level;
+	bool			 headers_printed;
+	bool			 metric_only_headers_printed;
 };
 
 extern struct perf_stat_config stat_config;
