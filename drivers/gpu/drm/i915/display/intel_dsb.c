@@ -902,7 +902,15 @@ void intel_dsb_wait_for_delayed_vblank(struct intel_atomic_state *state,
 		 * the hardware itself guarantees that we're SCL lines
 		 * away from the delayed vblank, and we won't be inside
 		 * the vmin safe window so this extra wait does nothing.
+		 *
+		 * Experimentally, when PIPEDSL is exactly at
+		 * safe_window_start as the next WAIT_DSL_OUT is reached,
+		 * the wait is skipped immediately.
+		 *
+		 * Wait one scanline first so PIPEDSL has moved into the
+		 * window before WAIT_DSL_OUT runs.
 		 */
+		intel_dsb_wait_usec(dsb, intel_scanlines_to_usecs(adjusted_mode, 1));
 		intel_dsb_wait_scanline_out(state, dsb,
 					    intel_vrr_safe_window_start(crtc_state),
 					    intel_vrr_vmin_safe_window_end(crtc_state));
