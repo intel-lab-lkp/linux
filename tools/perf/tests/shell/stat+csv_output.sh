@@ -88,5 +88,21 @@ then
 else
 	echo "[Skip] Skipping tests for system_wide_no_aggr, per_core, per_die and per_socket since socket id exposed via topology is invalid"
 fi
+# New API CSV checks
+perf_cmd="--new -x$csv_sep -o ${stat_output}"
+check_no_args "CSV (New API)" "$perf_cmd"
+check_system_wide "CSV (New API)" "$perf_cmd"
+check_interval "CSV (New API)" "$perf_cmd"
+check_event "CSV (New API)" "$perf_cmd"
+check_per_thread "CSV (New API)" "$perf_cmd"
+check_per_node "CSV (New API)" "$perf_cmd"
+if [ $skip_test -ne 1 ]
+then
+	check_system_wide_no_aggr "CSV (New API)" "$perf_cmd"
+	check_per_core "CSV (New API)" "$perf_cmd"
+	check_per_die "CSV (New API)" "$perf_cmd"
+	check_per_socket "CSV (New API)" "$perf_cmd"
+fi
+
 cleanup
 exit 0
