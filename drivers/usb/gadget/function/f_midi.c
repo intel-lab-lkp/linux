@@ -430,6 +430,8 @@ static void f_midi_disable(struct usb_function *f)
 	usb_ep_disable(midi->in_ep);
 	usb_ep_disable(midi->out_ep);
 
+	cancel_work_sync(&midi->work);
+
 	/* release IN requests */
 	while (kfifo_get(&midi->in_req_fifo, &req))
 		free_ep_req(midi->in_ep, req);
