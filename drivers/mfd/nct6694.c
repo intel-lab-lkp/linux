@@ -79,7 +79,7 @@ static const struct mfd_cell nct6694_devs[] = {
 	MFD_CELL_NAME("nct6694-rtc"),
 };
 
-static int nct6694_response_err_handling(struct nct6694 *nct6694, unsigned char err_status)
+static int nct6694_usb_err_handling(struct nct6694 *nct6694, unsigned char err_status)
 {
 	switch (err_status) {
 	case NCT6694_NO_ERROR:
@@ -104,7 +104,7 @@ static int nct6694_response_err_handling(struct nct6694 *nct6694, unsigned char 
 }
 
 /**
- * nct6694_read_msg() - Read message from NCT6694 device
+ * nct6694_usb_read_msg() - Read message from NCT6694 device via USB
  * @nct6694: NCT6694 device pointer
  * @cmd_hd: command header structure
  * @buf: buffer to store the response data
@@ -115,9 +115,9 @@ static int nct6694_response_err_handling(struct nct6694 *nct6694, unsigned char 
  *
  * Return: Negative value on error or 0 on success.
  */
-static int nct6694_read_msg(struct nct6694 *nct6694,
-			    const struct nct6694_cmd_header *cmd_hd,
-			    void *buf)
+static int nct6694_usb_read_msg(struct nct6694 *nct6694,
+				const struct nct6694_cmd_header *cmd_hd,
+				void *buf)
 {
 	struct nct6694_usb_data *udata = nct6694->priv;
 	union nct6694_usb_msg *msg = udata->usb_msg;
@@ -153,11 +153,11 @@ static int nct6694_read_msg(struct nct6694 *nct6694,
 		return -EIO;
 	}
 
-	return nct6694_response_err_handling(nct6694, msg->response_header.sts);
+	return nct6694_usb_err_handling(nct6694, msg->response_header.sts);
 }
 
 /**
- * nct6694_write_msg() - Write message to NCT6694 device
+ * nct6694_usb_write_msg() - Write message to NCT6694 device via USB
  * @nct6694: NCT6694 device pointer
  * @cmd_hd: command header structure
  * @buf: buffer containing the data to be sent
@@ -167,9 +167,9 @@ static int nct6694_read_msg(struct nct6694 *nct6694,
  *
  * Return: Negative value on error or 0 on success.
  */
-static int nct6694_write_msg(struct nct6694 *nct6694,
-			     const struct nct6694_cmd_header *cmd_hd,
-			     void *buf)
+static int nct6694_usb_write_msg(struct nct6694 *nct6694,
+				 const struct nct6694_cmd_header *cmd_hd,
+				 void *buf)
 {
 	struct nct6694_usb_data *udata = nct6694->priv;
 	union nct6694_usb_msg *msg = udata->usb_msg;
@@ -211,7 +211,7 @@ static int nct6694_write_msg(struct nct6694 *nct6694,
 		return -EIO;
 	}
 
-	return nct6694_response_err_handling(nct6694, msg->response_header.sts);
+	return nct6694_usb_err_handling(nct6694, msg->response_header.sts);
 }
 
 static void usb_int_callback(struct urb *urb)
@@ -329,8 +329,8 @@ static int nct6694_usb_probe(struct usb_interface *iface,
 	udata->udev = udev;
 
 	nct6694->priv = udata;
-	nct6694->read_msg = nct6694_read_msg;
-	nct6694->write_msg = nct6694_write_msg;
+	nct6694->read_msg = nct6694_usb_read_msg;
+	nct6694->write_msg = nct6694_usb_write_msg;
 
 	nct6694->domain = irq_domain_create_simple(NULL, NCT6694_NR_IRQS, 0,
 						   &nct6694_irq_domain_ops,
