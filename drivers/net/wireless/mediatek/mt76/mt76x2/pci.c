@@ -119,7 +119,7 @@ mt76x2e_suspend(struct pci_dev *pdev, pm_message_t state)
 	mt76_worker_disable(&mdev->tx_worker);
 
 	mt76_for_each_q_rx(mdev, i)
-		napi_disable(&mdev->napi[i]);
+		mt76_rx_napi_disable(mdev, i);
 
 	pci_enable_wake(pdev, pci_choose_state(pdev, state), true);
 	pci_save_state(pdev);
@@ -131,7 +131,7 @@ mt76x2e_suspend(struct pci_dev *pdev, pm_message_t state)
 
 restore:
 	mt76_for_each_q_rx(mdev, i)
-		napi_enable(&mdev->napi[i]);
+		mt76_rx_napi_enable(mdev, i);
 	napi_enable(&mdev->tx_napi);
 
 	return err;
@@ -153,7 +153,7 @@ mt76x2e_resume(struct pci_dev *pdev)
 	mt76_worker_enable(&mdev->tx_worker);
 
 	mt76_for_each_q_rx(mdev, i) {
-		napi_enable(&mdev->napi[i]);
+		mt76_rx_napi_enable(mdev, i);
 	}
 	napi_enable(&mdev->tx_napi);
 

@@ -1099,9 +1099,12 @@ static void
 mt76_dma_rx_queue_init(struct mt76_dev *dev, enum mt76_rxq_id qid,
 		       int (*poll)(struct napi_struct *napi, int budget))
 {
+	struct mt76_queue *q = &dev->q_rx[qid];
+
 	netif_napi_add(dev->napi_dev, &dev->napi[qid], poll);
-	mt76_dma_rx_fill_buf(dev, &dev->q_rx[qid], false);
-	napi_enable(&dev->napi[qid]);
+	q->napi_state = MT76_NAPI_ADDED;
+	mt76_dma_rx_fill_buf(dev, q, false);
+	mt76_rx_napi_enable(dev, qid);
 }
 
 static int
@@ -1189,7 +1192,7 @@ void mt76_dma_cleanup(struct mt76_dev *dev)
 	mt76_for_each_q_rx(dev, i) {
 		struct mt76_queue *q = &dev->q_rx[i];
 
-		netif_napi_del(&dev->napi[i]);
+		mt76_rx_napi_del(dev, i);
 		mt76_dma_rx_cleanup(dev, q);
 
 		page_pool_destroy(q->page_pool);

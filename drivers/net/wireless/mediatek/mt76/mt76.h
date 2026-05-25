@@ -251,6 +251,7 @@ struct mt76_queue {
 	int buf_size;
 	bool stopped;
 	bool blocked;
+	u8 napi_state;
 
 	u8 buf_offset;
 	u16 flags;
@@ -1282,6 +1283,45 @@ static inline int mt76_wed_dma_setup(struct mt76_dev *dev, struct mt76_queue *q,
 #define mt76_for_each_q_rx(dev, i)	\
 	for (i = 0; i < ARRAY_SIZE((dev)->q_rx); i++)	\
 		if ((dev)->q_rx[i].ndesc)
+
+#define MT76_NAPI_ADDED		BIT(0)
+#define MT76_NAPI_ENABLED	BIT(1)
+
+static inline void mt76_rx_napi_enable(struct mt76_dev *dev, int qid)
+{
+	struct mt76_queue *q = &dev->q_rx[qid];
+
+	if (!(q->napi_state & MT76_NAPI_ADDED) ||
+	    (q->napi_state & MT76_NAPI_ENABLED))
+		return;
+
+	napi_enable(&dev->napi[qid]);
+	q->napi_state |= MT76_NAPI_ENABLED;
+}
+
+static inline void mt76_rx_napi_disable(struct mt76_dev *dev, int qid)
+{
+	struct mt76_queue *q = &dev->q_rx[qid];
+
+	if (!(q->napi_state & MT76_NAPI_ADDED) ||
+	    !(q->napi_state & MT76_NAPI_ENABLED))
+		return;
+
+	napi_disable(&dev->napi[qid]);
+	q->napi_state &= ~MT76_NAPI_ENABLED;
+}
+
+static inline void mt76_rx_napi_del(struct mt76_dev *dev, int qid)
+{
+	struct mt76_queue *q = &dev->q_rx[qid];
+
+	if (!(q->napi_state & MT76_NAPI_ADDED))
+		return;
+
+	mt76_rx_napi_disable(dev, qid);
+	netif_napi_del(&dev->napi[qid]);
+	q->napi_state = 0;
+}
 
 
 #define mt76_dereference(p, dev) \

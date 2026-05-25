@@ -88,11 +88,11 @@ int mt7925e_mac_reset(struct mt792x_dev *dev)
 
 	mt76_worker_disable(&dev->mt76.tx_worker);
 	if (irq_map->rx.data_complete_mask)
-		napi_disable(&dev->mt76.napi[MT_RXQ_MAIN]);
+		mt76_rx_napi_disable(&dev->mt76, MT_RXQ_MAIN);
 	if (irq_map->rx.wm_complete_mask)
-		napi_disable(&dev->mt76.napi[MT_RXQ_MCU]);
+		mt76_rx_napi_disable(&dev->mt76, MT_RXQ_MCU);
 	if (irq_map->rx.wm2_complete_mask)
-		napi_disable(&dev->mt76.napi[MT_RXQ_MCU_WA]);
+		mt76_rx_napi_disable(&dev->mt76, MT_RXQ_MCU_WA);
 	if (irq_map->tx.all_complete_mask)
 		napi_disable(&dev->mt76.tx_napi);
 
@@ -102,7 +102,7 @@ int mt7925e_mac_reset(struct mt792x_dev *dev)
 	mt792x_wpdma_reset(dev, true);
 
 	mt76_for_each_q_rx(&dev->mt76, i) {
-		napi_enable(&dev->mt76.napi[i]);
+		mt76_rx_napi_enable(&dev->mt76, i);
 	}
 	napi_enable(&dev->mt76.tx_napi);
 

@@ -1327,7 +1327,7 @@ mt7915_mac_restart(struct mt7915_dev *dev)
 	mt76_worker_disable(&dev->mt76.tx_worker);
 	mt76_for_each_q_rx(mdev, i) {
 		if (mdev->q_rx[i].ndesc)
-			napi_disable(&dev->mt76.napi[i]);
+			mt76_rx_napi_disable(&dev->mt76, i);
 	}
 	napi_disable(&dev->mt76.tx_napi);
 
@@ -1339,7 +1339,7 @@ mt7915_mac_restart(struct mt7915_dev *dev)
 
 	mt76_for_each_q_rx(mdev, i) {
 		if (mdev->q_rx[i].ndesc) {
-			napi_enable(&dev->mt76.napi[i]);
+			mt76_rx_napi_enable(&dev->mt76, i);
 		}
 	}
 
@@ -1527,7 +1527,7 @@ void mt7915_mac_reset_work(struct work_struct *work)
 
 	mt76_worker_disable(&dev->mt76.tx_worker);
 	mt76_for_each_q_rx(&dev->mt76, i)
-		napi_disable(&dev->mt76.napi[i]);
+		mt76_rx_napi_disable(&dev->mt76, i);
 	napi_disable(&dev->mt76.tx_napi);
 
 
@@ -1558,7 +1558,7 @@ void mt7915_mac_reset_work(struct work_struct *work)
 		clear_bit(MT76_RESET, &phy2->mt76->state);
 
 	mt76_for_each_q_rx(&dev->mt76, i) {
-		napi_enable(&dev->mt76.napi[i]);
+		mt76_rx_napi_enable(&dev->mt76, i);
 	}
 
 	local_bh_disable();

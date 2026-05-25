@@ -236,7 +236,7 @@ void mt7615_mac_reset_work(struct work_struct *work)
 
 	mt76_worker_disable(&dev->mt76.tx_worker);
 	mt76_for_each_q_rx(&dev->mt76, i)
-		napi_disable(&dev->mt76.napi[i]);
+		mt76_rx_napi_disable(&dev->mt76, i);
 	napi_disable(&dev->mt76.tx_napi);
 
 	mt7615_mutex_acquire(dev);
@@ -264,7 +264,7 @@ void mt7615_mac_reset_work(struct work_struct *work)
 
 	napi_enable(&dev->mt76.tx_napi);
 	mt76_for_each_q_rx(&dev->mt76, i) {
-		napi_enable(&dev->mt76.napi[i]);
+		mt76_rx_napi_enable(&dev->mt76, i);
 	}
 
 	local_bh_disable();

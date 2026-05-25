@@ -444,7 +444,7 @@ static void mt76x02_watchdog_reset(struct mt76x02_dev *dev)
 	napi_disable(&dev->mt76.tx_napi);
 
 	mt76_for_each_q_rx(&dev->mt76, i) {
-		napi_disable(&dev->mt76.napi[i]);
+		mt76_rx_napi_disable(&dev->mt76, i);
 	}
 
 	mutex_lock(&dev->mt76.mutex);
@@ -505,7 +505,7 @@ static void mt76x02_watchdog_reset(struct mt76x02_dev *dev)
 
 	napi_enable(&dev->mt76.tx_napi);
 	mt76_for_each_q_rx(&dev->mt76, i) {
-		napi_enable(&dev->mt76.napi[i]);
+		mt76_rx_napi_enable(&dev->mt76, i);
 	}
 
 	local_bh_disable();

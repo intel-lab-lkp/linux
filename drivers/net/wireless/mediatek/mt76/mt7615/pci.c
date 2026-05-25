@@ -92,7 +92,7 @@ static int mt7615_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 	mt76_worker_disable(&mdev->tx_worker);
 
 	mt76_for_each_q_rx(mdev, i) {
-		napi_disable(&mdev->napi[i]);
+		mt76_rx_napi_disable(mdev, i);
 	}
 	tasklet_kill(&mdev->irq_tasklet);
 
@@ -127,7 +127,7 @@ static int mt7615_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 
 restore:
 	mt76_for_each_q_rx(mdev, i) {
-		napi_enable(&mdev->napi[i]);
+		mt76_rx_napi_enable(mdev, i);
 	}
 	napi_enable(&mdev->tx_napi);
 	if (hif_suspend)
@@ -166,7 +166,7 @@ static int mt7615_pci_resume(struct pci_dev *pdev)
 	mt76_worker_enable(&mdev->tx_worker);
 
 	mt76_for_each_q_rx(mdev, i) {
-		napi_enable(&mdev->napi[i]);
+		mt76_rx_napi_enable(mdev, i);
 	}
 	napi_enable(&mdev->tx_napi);
 

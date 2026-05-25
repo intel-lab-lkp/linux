@@ -1423,8 +1423,8 @@ static void mt7603_mac_watchdog_reset(struct mt7603_dev *dev)
 
 	mt76_worker_disable(&dev->mt76.tx_worker);
 	tasklet_disable(&dev->mt76.pre_tbtt_tasklet);
-	napi_disable(&dev->mt76.napi[0]);
-	napi_disable(&dev->mt76.napi[1]);
+	mt76_rx_napi_disable(&dev->mt76, 0);
+	mt76_rx_napi_disable(&dev->mt76, 1);
 	napi_disable(&dev->mt76.tx_napi);
 
 	mutex_lock(&dev->mt76.mutex);
@@ -1474,8 +1474,8 @@ static void mt7603_mac_watchdog_reset(struct mt7603_dev *dev)
 	mt7603_beacon_set_timer(dev, -1, beacon_int);
 
 	napi_enable(&dev->mt76.tx_napi);
-	napi_enable(&dev->mt76.napi[0]);
-	napi_enable(&dev->mt76.napi[1]);
+	mt76_rx_napi_enable(&dev->mt76, 0);
+	mt76_rx_napi_enable(&dev->mt76, 1);
 
 	local_bh_disable();
 	napi_schedule(&dev->mt76.tx_napi);

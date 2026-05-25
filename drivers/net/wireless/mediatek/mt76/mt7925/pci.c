@@ -40,7 +40,7 @@ static void mt7925e_unregister_device(struct mt792x_dev *dev)
 	cancel_work_sync(&dev->init_work);
 	mt76_unregister_device(&dev->mt76);
 	mt76_for_each_q_rx(&dev->mt76, i)
-		napi_disable(&dev->mt76.napi[i]);
+		mt76_rx_napi_disable(&dev->mt76, i);
 	cancel_delayed_work_sync(&pm->ps_work);
 	cancel_work_sync(&pm->wake_work);
 	cancel_work_sync(&dev->reset_work);
@@ -481,7 +481,7 @@ static int mt7925_pci_suspend(struct device *device)
 	mt76_worker_disable(&mdev->tx_worker);
 
 	mt76_for_each_q_rx(mdev, i) {
-		napi_disable(&mdev->napi[i]);
+		mt76_rx_napi_disable(mdev, i);
 	}
 
 	/* wait until dma is idle  */
@@ -509,7 +509,7 @@ static int mt7925_pci_suspend(struct device *device)
 
 restore_napi:
 	mt76_for_each_q_rx(mdev, i) {
-		napi_enable(&mdev->napi[i]);
+		mt76_rx_napi_enable(mdev, i);
 	}
 	napi_enable(&mdev->tx_napi);
 
@@ -559,7 +559,7 @@ static int _mt7925_pci_resume(struct device *device, bool restore)
 	mt76_worker_enable(&mdev->tx_worker);
 
 	mt76_for_each_q_rx(mdev, i) {
-		napi_enable(&mdev->napi[i]);
+		mt76_rx_napi_enable(mdev, i);
 	}
 	napi_enable(&mdev->tx_napi);
 

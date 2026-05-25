@@ -291,8 +291,9 @@ int mt76_npu_rx_queue_init(struct mt76_dev *dev, struct mt76_queue *q)
 		goto out;
 
 	netif_napi_add(dev->napi_dev, &dev->napi[qid], mt76_npu_rx_poll);
+	q->napi_state = MT76_NAPI_ADDED;
 	mt76_npu_fill_rx_queue(dev, q);
-	napi_enable(&dev->napi[qid]);
+	mt76_rx_napi_enable(dev, qid);
 out:
 	mutex_unlock(&dev->mutex);
 
