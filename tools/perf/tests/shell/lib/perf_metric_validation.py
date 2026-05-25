@@ -36,7 +36,7 @@ class TestError:
 
 class Validator:
     def __init__(self, rulefname, reportfname='', t=5, debug=False, datafname='', fullrulefname='',
-                 workload='true', metrics='', cputype='cpu'):
+                 workload='true', metrics='', cputype='cpu', new_print=False):
         self.rulefname = rulefname
         self.reportfname = reportfname
         self.rules = None
@@ -68,6 +68,7 @@ class Validator:
         self.datafname = datafname
         self.debug = debug
         self.fullrulefname = fullrulefname
+        self.new_print = new_print
 
     def __set_metrics(self, metrics=''):
         if metrics != '':
@@ -379,7 +380,10 @@ class Validator:
 
     def _run_perf(self, metric, workload: str):
         tool = 'perf'
-        command = [tool, 'stat', '--cputype', self.cputype, '-j', '-M', f"{metric}", "-a"]
+        command = [tool, 'stat']
+        if self.new_print:
+            command.append('--new')
+        command.extend(['--cputype', self.cputype, '-j', '-M', f"{metric}", "-a"])
         wl = workload.split()
         command.extend(wl)
         print(" ".join(command))
@@ -584,6 +588,8 @@ def main() -> None:
     parser.add_argument("-m", help="Metric list to validate", default="")
     parser.add_argument("-cputype", help="Only test metrics for the given CPU/PMU type",
                         default="cpu")
+    parser.add_argument("-new", help="Use new printing API (--new)",
+                        action="store_true", default=False)
     args = parser.parse_args()
     outpath = Path(args.output_dir)
     reportf = Path.joinpath(outpath, 'perf_report.json')
@@ -592,7 +598,7 @@ def main() -> None:
 
     validator = Validator(args.rule, reportf, debug=args.debug,
                           datafname=datafile, fullrulefname=fullrule, workload=args.wl,
-                          metrics=args.m, cputype=args.cputype)
+                          metrics=args.m, cputype=args.cputype, new_print=args.new)
     ret = validator.test()
 
     return ret
