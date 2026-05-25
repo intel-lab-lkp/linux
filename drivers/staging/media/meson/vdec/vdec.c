@@ -286,10 +286,13 @@ static int vdec_start_streaming(struct vb2_queue *q, unsigned int count)
 	struct vb2_v4l2_buffer *buf;
 	int ret;
 
+	mutex_lock(&core->lock);
 	if (core->cur_sess && core->cur_sess != sess) {
+		mutex_unlock(&core->lock);
 		ret = -EBUSY;
 		goto bufs_done;
 	}
+	mutex_unlock(&core->lock);
 
 	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
 		sess->streamon_out = 1;
