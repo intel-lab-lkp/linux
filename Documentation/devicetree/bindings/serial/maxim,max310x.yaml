@@ -40,6 +40,34 @@ properties:
     minItems: 1
     maxItems: 16
 
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+patternProperties:
+  "^port@[0-3]$":
+    type: object
+    description:
+      Per-port subnode that carries the RS-485 properties from
+      /schemas/serial/rs485.yaml# for a single UART channel of the
+      chip. Only those rs485-* properties (and the per-port reg) are
+      accepted here; device-wide settings stay on the parent node.
+
+    allOf:
+      - $ref: /schemas/serial/rs485.yaml#
+
+    properties:
+      reg:
+        description: Port number on the chip.
+        maximum: 3
+
+    required:
+      - reg
+
+    unevaluatedProperties: false
+
 required:
   - compatible
   - reg
@@ -70,5 +98,37 @@ examples:
             interrupts = <7 IRQ_TYPE_LEVEL_LOW>;
             gpio-controller;
             #gpio-cells = <2>;
+        };
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        serial@0 {
+            compatible = "maxim,max14830";
+            reg = <0>;
+            spi-max-frequency = <26000000>;
+            clocks = <&xtal4m>;
+            clock-names = "xtal";
+            interrupt-parent = <&gpio3>;
+            interrupts = <7 IRQ_TYPE_LEVEL_LOW>;
+            gpio-controller;
+            #gpio-cells = <2>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            port@0 {
+                reg = <0>;
+                rs485-rts-active-low;
+                linux,rs485-enabled-at-boot-time;
+            };
+
+            port@2 {
+                reg = <2>;
+                rs485-rts-active-low;
+            };
         };
     };
