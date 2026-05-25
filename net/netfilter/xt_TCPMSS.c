@@ -117,6 +117,7 @@ tcpmss_mangle_packet(struct sk_buff *skb,
 	for (i = sizeof(struct tcphdr); i <= tcp_hdrlen - TCPOLEN_MSS; i += optlen(opt, i)) {
 		if (opt[i] == TCPOPT_MSS && opt[i+1] == TCPOLEN_MSS) {
 			u_int16_t oldmss;
+			u16 csum_oldmss, csum_newmss;
 
 			oldmss = (opt[i+2] << 8) | opt[i+3];
 
@@ -130,8 +131,19 @@ tcpmss_mangle_packet(struct sk_buff *skb,
 			opt[i+2] = (newmss & 0xff00) >> 8;
 			opt[i+3] = newmss & 0x00ff;
 
+			csum_oldmss = htons(oldmss);
+			csum_newmss = htons(newmss);
+
+			/* MSS may be unaligned; fix up the incremental checksum
+			 * to avoid an invalid checksum and a dropped packet.
+			 */
+			if (((char *)&opt[i + 2] - (char *)tcph) & 0x1 != 0) {
+				csum_oldmss = swab16(csum_oldmss);
+				csum_newmss = swab16(csum_newmss);
+			}
+
 			inet_proto_csum_replace2(&tcph->check, skb,
-						 htons(oldmss), htons(newmss),
+						 csum_oldmss, csum_newmss,
 						 false);
 			return 0;
 		}
