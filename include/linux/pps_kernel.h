@@ -59,7 +59,7 @@ struct pps_device {
 	void const *lookup_cookie;		/* For pps_lookup_dev() only */
 	struct device dev;
 	struct fasync_struct *async_queue;	/* fasync method */
-	spinlock_t lock;
+	raw_spinlock_t lock;
 };
 
 /*

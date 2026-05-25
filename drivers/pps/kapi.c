@@ -102,7 +102,7 @@ struct pps_device *pps_register_source(struct pps_source_info *info,
 		pps->info.echo = pps_echo_client_default;
 
 	init_waitqueue_head(&pps->queue);
-	spin_lock_init(&pps->lock);
+	raw_spin_lock_init(&pps->lock);
 
 	/* Create the char device */
 	err = pps_register_cdev(pps);
@@ -167,7 +167,7 @@ void pps_event(struct pps_device *pps, struct pps_event_time *ts, int event,
 
 	timespec_to_pps_ktime(&ts_real, ts->ts_real);
 
-	spin_lock_irqsave(&pps->lock, flags);
+	raw_spin_lock_irqsave(&pps->lock, flags);
 
 	/* Must call the echo function? */
 	if ((pps->params.mode & (PPS_ECHOASSERT | PPS_ECHOCLEAR)))
@@ -214,6 +214,6 @@ void pps_event(struct pps_device *pps, struct pps_event_time *ts, int event,
 		kill_fasync(&pps->async_queue, SIGIO, POLL_IN);
 	}
 
-	spin_unlock_irqrestore(&pps->lock, flags);
+	raw_spin_unlock_irqrestore(&pps->lock, flags);
 }
 EXPORT_SYMBOL(pps_event);
