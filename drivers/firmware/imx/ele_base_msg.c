@@ -95,6 +95,8 @@ int ele_get_info(struct se_if_priv *priv, struct ele_dev_info *s_info)
 
 	ret = se_val_rsp_hdr_n_status(priv, rx_msg, ELE_GET_INFO_REQ,
 				      ELE_GET_INFO_RSP_MSG_SZ, true);
+	if (ret < 0)
+		goto exit;
 
 	memcpy(s_info, get_info_data, sizeof(*s_info));
 exit:
