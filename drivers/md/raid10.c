@@ -103,13 +103,28 @@ static inline struct r10bio *get_resync_r10bio(struct bio *bio)
 	return get_resync_pages(bio)->raid_bio;
 }
 
-static void * r10bio_pool_alloc(gfp_t gfp_flags, void *data)
+static inline unsigned int calc_r10bio_pool_disks(struct mddev *mddev)
 {
-	struct r10conf *conf = data;
-	int size = offsetof(struct r10bio, devs[conf->geo.raid_disks]);
+	/* If delta_disks < 0, use bigger r10bio->devs[] is ok. */
+	return mddev->raid_disks + max(0, mddev->delta_disks);
+}
 
-	/* allocate a r10bio with room for raid_disks entries in the
-	 * bios array */
+static inline int calc_r10bio_size(struct mddev *mddev)
+{
+	return offsetof(struct r10bio, devs[calc_r10bio_pool_disks(mddev)]);
+}
+
+static mempool_t *create_r10bio_pool(struct mddev *mddev)
+{
+	int size = calc_r10bio_size(mddev);
+
+	return mempool_create_kmalloc_pool(NR_RAID_BIOS, size);
+}
+
+static struct r10bio *alloc_r10bio(struct mddev *mddev, gfp_t gfp_flags)
+{
+	int size = calc_r10bio_size(mddev);
+
 	return kzalloc(size, gfp_flags);
 }
 
@@ -137,7 +152,7 @@ static void * r10buf_pool_alloc(gfp_t gfp_flags, void *data)
 	int nalloc, nalloc_rp;
 	struct resync_pages *rps;
 
-	r10_bio = r10bio_pool_alloc(gfp_flags, conf);
+	r10_bio = alloc_r10bio(conf->mddev, gfp_flags);
 	if (!r10_bio)
 		return NULL;
 
@@ -277,7 +292,7 @@ static void free_r10bio(struct r10bio *r10_bio)
 	struct r10conf *conf = r10_bio->mddev->private;
 
 	put_all_bios(conf, r10_bio);
-	mempool_free(r10_bio, &conf->r10bio_pool);
+	mempool_free(r10_bio, conf->r10bio_pool);
 }
 
 static void put_buf(struct r10bio *r10_bio)
@@ -1531,7 +1546,7 @@ static void __make_request(struct mddev *mddev, struct bio *bio, int sectors)
 	struct r10conf *conf = mddev->private;
 	struct r10bio *r10_bio;
 
-	r10_bio = mempool_alloc(&conf->r10bio_pool, GFP_NOIO);
+	r10_bio = mempool_alloc(conf->r10bio_pool, GFP_NOIO);
 
 	r10_bio->master_bio = bio;
 	r10_bio->sectors = sectors;
@@ -1723,7 +1738,7 @@ static int raid10_handle_discard(struct mddev *mddev, struct bio *bio)
 				(last_stripe_index << geo->chunk_shift);
 
 retry_discard:
-	r10_bio = mempool_alloc(&conf->r10bio_pool, GFP_NOIO);
+	r10_bio = mempool_alloc(conf->r10bio_pool, GFP_NOIO);
 	r10_bio->mddev = mddev;
 	r10_bio->state = 0;
 	r10_bio->sectors = 0;
@@ -3823,7 +3838,7 @@ static void raid10_free_conf(struct r10conf *conf)
 	if (!conf)
 		return;
 
-	mempool_exit(&conf->r10bio_pool);
+	mempool_destroy(conf->r10bio_pool);
 	kfree(conf->mirrors);
 	kfree(conf->mirrors_old);
 	kfree(conf->mirrors_new);
@@ -3870,9 +3885,8 @@ static struct r10conf *setup_conf(struct mddev *mddev)
 
 	conf->geo = geo;
 	conf->copies = copies;
-	err = mempool_init(&conf->r10bio_pool, NR_RAID_BIOS, r10bio_pool_alloc,
-			   rbio_pool_free, conf);
-	if (err)
+	conf->r10bio_pool = create_r10bio_pool(mddev);
+	if (!conf->r10bio_pool)
 		goto out;
 
 	err = bioset_init(&conf->bio_split, BIO_POOL_SIZE, 0, 0);
@@ -4365,6 +4379,7 @@ static int raid10_start_reshape(struct mddev *mddev)
 	struct md_rdev *rdev;
 	int spares = 0;
 	int ret;
+	mempool_t *new_pool;
 
 	if (test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
 		return -EBUSY;
@@ -4400,7 +4415,19 @@ static int raid10_start_reshape(struct mddev *mddev)
 	if (spares < mddev->delta_disks)
 		return -EINVAL;
 
+	mddev_unlock(mddev);
+	mddev_suspend_and_lock_nointr(mddev);
 	conf->offset_diff = min_offset_diff;
+	if (mddev->delta_disks > 0) {
+		new_pool = create_r10bio_pool(mddev);
+		if (!new_pool) {
+			mddev_unlock_and_resume(mddev);
+			mddev_lock_nointr(mddev);
+			return -ENOMEM;
+		}
+		mempool_destroy(conf->r10bio_pool);
+		conf->r10bio_pool = new_pool;
+	}
 	spin_lock_irq(&conf->device_lock);
 	if (conf->mirrors_new) {
 		memcpy(conf->mirrors_new, conf->mirrors,
@@ -4417,6 +4444,8 @@ static int raid10_start_reshape(struct mddev *mddev)
 		sector_t size = raid10_size(mddev, 0, 0);
 		if (size < mddev->array_sectors) {
 			spin_unlock_irq(&conf->device_lock);
+			mddev_unlock_and_resume(mddev);
+			mddev_lock_nointr(mddev);
 			pr_warn("md/raid10:%s: array size must be reduce before number of disks\n",
 				mdname(mddev));
 			return -EINVAL;
@@ -4427,6 +4456,8 @@ static int raid10_start_reshape(struct mddev *mddev)
 		conf->reshape_progress = 0;
 	conf->reshape_safe = conf->reshape_progress;
 	spin_unlock_irq(&conf->device_lock);
+	mddev_unlock_and_resume(mddev);
+	mddev_lock_nointr(mddev);
 
 	if (mddev->delta_disks && mddev->bitmap) {
 		struct mdp_superblock_1 *sb = NULL;
