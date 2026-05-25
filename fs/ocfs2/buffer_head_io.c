@@ -321,11 +321,10 @@ int ocfs2_read_blocks(struct ocfs2_caching_info *ci, u64 block, int nr,
 				continue;
 			}
 
-			get_bh(bh); /* for end_buffer_read_sync() */
+			get_bh(bh); /* for bh_end_read() */
 			if (validate)
 				set_buffer_needs_validate(bh);
-			bh->b_end_io = end_buffer_read_sync;
-			submit_bh(REQ_OP_READ, bh);
+			bh_submit(bh, REQ_OP_READ, bh_end_read);
 			continue;
 		}
 	}
