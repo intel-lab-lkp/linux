@@ -1425,9 +1425,10 @@ PAGE_SIZE multiple when read back.
 
 The following nested keys are defined.
 
-	  ==========            ================================
+	  ====================  ==================================================
 	  swappiness            Swappiness value to reclaim with
-	  ==========            ================================
+	  zswap_writeback_only  Only perform proactive zswap writeback
+	  ====================  ==================================================
 
 	Specifying a swappiness value instructs the kernel to perform
 	the reclaim with that swappiness value. Note that this has the
@@ -1436,6 +1437,19 @@ The following nested keys are defined.
 
 	The valid range for swappiness is [0-200, max], setting
 	swappiness=max exclusively reclaims anonymous memory.
+
+	The zswap_writeback_only key skips ordinary memory reclaim and
+	writes back pages from zswap to the backing swap device until
+	the requested amount has been written or no further candidates
+	are found. This is useful to proactively offload cold pages from
+	the zswap pool to the swap device. It is only available if
+	zswap writeback is enabled. zswap_writeback_only cannot be combined
+	with swappiness; specifying both returns -EINVAL.
+
+	Example::
+
+	  # Write back up to 100MB of pages from zswap to the backing swap
+	  echo "100M zswap_writeback_only" > memory.reclaim
 
   memory.peak
 	A read-write single value file which exists on non-root cgroups.
