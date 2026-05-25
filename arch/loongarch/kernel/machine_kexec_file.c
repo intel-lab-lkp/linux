@@ -55,6 +55,24 @@ static void cmdline_add_initrd(struct kimage *image, unsigned long *cmdline_tmpl
 	*cmdline_tmplen += initrd_strlen;
 }
 
+#ifdef CONFIG_KEXEC_HANDOVER
+/* Add "kho_handover=<fdt_size>@<fdt_addr>,<scratch_size>@<scratch_addr>" to cmdline. */
+static void cmdline_add_kho(struct kimage *image, unsigned long *cmdline_tmplen,
+			    char *modified_cmdline)
+{
+	int n;
+
+	if (!image->kho.fdt || !image->kho.scratch)
+		return;
+
+	n = sprintf(modified_cmdline + *cmdline_tmplen,
+	    "kho_handover=0x%llx@0x%llx,0x%lx@0x%llx ",
+	    (u64)PAGE_SIZE,               image->kho.fdt,
+	    image->kho.scratch->bufsz,    (u64)image->kho.scratch->mem);
+	*cmdline_tmplen += n;
+}
+#endif
+
 #ifdef CONFIG_CRASH_DUMP
 
 static int prepare_elf_headers(void **addr, unsigned long *sz)
@@ -219,6 +237,10 @@ int load_other_segments(struct kimage *image,
 		/* Add the initrd=start,size parameter to the command line */
 		cmdline_add_initrd(image, &cmdline_tmplen, modified_cmdline, initrd_load_addr);
 	}
+
+#ifdef CONFIG_KEXEC_HANDOVER
+	cmdline_add_kho(image, &cmdline_tmplen, modified_cmdline);
+#endif
 
 	if (cmdline_len + cmdline_tmplen > COMMAND_LINE_SIZE) {
 		pr_err("Appending command line exceeds COMMAND_LINE_SIZE\n");

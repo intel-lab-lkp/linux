@@ -48,6 +48,7 @@
 #include <asm/setup.h>
 #include <asm/time.h>
 #include <asm/unwind.h>
+#include <linux/kexec_handover.h>
 
 #define SMBIOS_BIOSSIZE_OFFSET		0x09
 #define SMBIOS_BIOSEXTERN_OFFSET	0x13
@@ -226,6 +227,32 @@ static int __init early_parse_mem(char *p)
 	return 0;
 }
 early_param("mem", early_parse_mem);
+
+#ifdef CONFIG_KEXEC_HANDOVER
+static int __init early_parse_kho(char *p)
+{
+	phys_addr_t fdt_addr, scratch_addr;
+	u64 fdt_size, scratch_size;
+
+	if (!p)
+		return -EINVAL;
+
+	fdt_size = memparse(p, &p);
+	if (*p++ != '@')
+		return -EINVAL;
+	fdt_addr = memparse(p, &p);
+	if (*p++ != ',')
+		return -EINVAL;
+	scratch_size = memparse(p, &p);
+	if (*p++ != '@')
+		return -EINVAL;
+	scratch_addr = memparse(p, &p);
+
+	kho_populate(fdt_addr, fdt_size, scratch_addr, scratch_size);
+	return 0;
+}
+early_param("kho_handover", early_parse_kho);
+#endif
 
 static void __init arch_reserve_vmcore(void)
 {
