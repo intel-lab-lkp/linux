@@ -474,18 +474,18 @@ software_node_get_next_child(const struct fwnode_handle *fwnode,
 	struct swnode *p = to_swnode(fwnode);
 	struct swnode *c = to_swnode(child);
 
-	if (!p || list_empty(&p->children) ||
-	    (c && list_is_last(&c->entry, &p->children))) {
-		fwnode_handle_put(child);
+	if (!p || list_empty(&p->children))
 		return NULL;
+
+	if (c) {
+		fwnode_handle_put(child);
+		if (list_is_last(&c->entry, &p->children))
+			return NULL;
+		c = list_next_entry(c, entry);
+	} else {
+		c = list_first_entry(&p->children, struct swnode, entry);
 	}
 
-	if (c)
-		c = list_next_entry(c, entry);
-	else
-		c = list_first_entry(&p->children, struct swnode, entry);
-
-	fwnode_handle_put(child);
 	return fwnode_handle_get(&c->fwnode);
 }
 
