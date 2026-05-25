@@ -12,7 +12,6 @@
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/kexec.h>
-#include <linux/memory_hotplug.h>
 #include <linux/pe.h>
 #include <linux/string.h>
 #include <asm/byteorder.h>
@@ -97,14 +96,11 @@ static void *image_load(struct kimage *image,
 
 #ifdef CONFIG_CRASH_DUMP
 	if (image->type == KEXEC_TYPE_CRASH) {
-		get_online_mems();
-		ret = prepare_elf_headers(&headers, &headers_sz);
+		ret = crash_prepare_headers_locked(true, &headers, &headers_sz, NULL);
 		if (ret) {
 			pr_err("Preparing elf core header failed\n");
-			put_online_mems();
 			return ERR_PTR(ret);
 		}
-		put_online_mems();
 		image->elf_headers = headers;
 		image->elf_headers_sz = headers_sz;
 	}
