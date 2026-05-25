@@ -1508,9 +1508,9 @@ static void gfs2_dir_readahead(struct inode *inode, unsigned hsize, u32 index,
 				brelse(bh);
 				continue;
 			}
-			bh->b_end_io = end_buffer_read_sync;
-			submit_bh(REQ_OP_READ | REQ_RAHEAD | REQ_META |
-				  REQ_PRIO, bh);
+			bh_submit(bh,
+				REQ_OP_READ | REQ_RAHEAD | REQ_META | REQ_PRIO,
+				bh_end_read);
 			continue;
 		}
 		brelse(bh);
