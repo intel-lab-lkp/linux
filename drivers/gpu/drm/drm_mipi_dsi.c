@@ -163,6 +163,7 @@ of_mipi_dsi_device_add(struct mipi_dsi_host *host, struct device_node *node)
 {
 	struct mipi_dsi_device_info info = { };
 	int ret;
+	struct mipi_dsi_device *dsi;
 	u32 reg;
 
 	if (of_alias_from_compatible(node, info.type, sizeof(info.type)) < 0) {
@@ -179,8 +180,10 @@ of_mipi_dsi_device_add(struct mipi_dsi_host *host, struct device_node *node)
 
 	info.channel = reg;
 	info.node = of_node_get(node);
-
-	return mipi_dsi_device_register_full(host, &info);
+	dsi = mipi_dsi_device_register_full(host, &info);
+	if (IS_ERR(dsi))
+		of_node_put(node);
+	return dsi;
 }
 #else
 static struct mipi_dsi_device *
