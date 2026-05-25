@@ -1426,6 +1426,9 @@ static int max310x_probe(struct device *dev, const struct max310x_devtype *devty
 #endif
 
 	for (i = 0; i < devtype->nr; i++) {
+		struct fwnode_handle *saved_fwnode = dev_fwnode(dev);
+		struct device_node *port_np = NULL;
+		struct device_node *child;
 		unsigned int line;
 
 		line = find_first_zero_bit(max310x_lines, MAX310X_UART_NRMAX);
@@ -1434,6 +1437,40 @@ static int max310x_probe(struct device *dev, const struct max310x_devtype *devty
 			goto out_uart;
 		}
 		s->p[i].port.line = line;
+
+		/* Locate the matching "port@i" DT subnode, if any. */
+		for_each_available_child_of_node(dev->of_node, child) {
+			u32 reg;
+
+			if (!of_node_name_eq(child, "port"))
+				continue;
+			if (of_property_read_u32(child, "reg", &reg))
+				continue;
+			if (reg == i) {
+				port_np = child;
+				break;
+			}
+		}
+
+		/*
+		 * Temporarily retarget dev's fwnode to the per-port subnode
+		 * so uart_get_rs485_mode() picks up the per-port properties.
+		 * For single-port variants, fall back to the chip's own
+		 * fwnode so legacy DTs that declare rs485 properties at the
+		 * top level keep working.
+		 */
+		if (port_np) {
+			device_set_node(dev, of_fwnode_handle(port_np));
+			ret = uart_get_rs485_mode(&s->p[i].port);
+			device_set_node(dev, saved_fwnode);
+			of_node_put(port_np);
+			if (ret)
+				goto out_uart;
+		} else if (devtype->nr == 1) {
+			ret = uart_get_rs485_mode(&s->p[i].port);
+			if (ret)
+				goto out_uart;
+		}
 
 		/* Register port */
 		ret = uart_add_one_port(&max310x_uart, &s->p[i].port);
