@@ -102,7 +102,10 @@ then
 	check_per_core "CSV (New API)" "$perf_cmd"
 	check_per_die "CSV (New API)" "$perf_cmd"
 	check_per_socket "CSV (New API)" "$perf_cmd"
+	check_per_cache_instance "CSV (New API)" "$perf_cmd"
+	check_per_cluster "CSV (New API)" "$perf_cmd"
 fi
+check_metric_only "CSV (New API)" "$perf_cmd"
 
 cleanup
 exit 0
