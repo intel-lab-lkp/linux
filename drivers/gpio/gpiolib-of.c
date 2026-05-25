@@ -194,6 +194,16 @@ static void of_gpio_try_fixup_polarity(const struct device_node *np,
 		{ "himax,hx8357",	"gpios-reset",	false },
 		{ "himax,hx8369",	"gpios-reset",	false },
 #endif
+#if IS_ENABLED(CONFIG_LEDS_IS31FL319X)
+		/*
+		 * According to the IS31FL319x datasheet, the SDB pin is active‑low.
+		 * However, existing device tree incorrectly configure it
+		 * as active‑high.
+		 */
+		{ "issi,is31fl3199",	"shutdown-gpios",	false },
+		{ "si-en,sn3190",	"shutdown-gpios",	false },
+		{ "si-en,sn3193",	"shutdown-gpios",	false },
+#endif
 #if IS_ENABLED(CONFIG_MTD_NAND_JZ4780)
 		/*
 		 * The rb-gpios semantics was undocumented and qi,lb60 (along with
