@@ -4,6 +4,7 @@
  * Copyright (C) 2025 SUSE LLC.
  */
 
+#include <fcntl.h>
 #include <assert.h>
 #include <errno.h>
 #include <sched.h>
