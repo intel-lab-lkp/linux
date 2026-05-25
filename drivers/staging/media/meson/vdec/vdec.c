@@ -372,6 +372,10 @@ vififo_free:
 	dma_free_coherent(sess->core->dev, sess->vififo_size,
 			  sess->vififo_vaddr, sess->vififo_paddr);
 bufs_done:
+	mutex_unlock(&sess->lock);
+	cancel_work_sync(&sess->esparser_queue_work);
+	mutex_lock(&sess->lock);
+
 	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		sess->streamon_out = 0;
 		while ((buf = v4l2_m2m_src_buf_remove(sess->m2m_ctx)))
@@ -430,6 +434,9 @@ static void vdec_stop_streaming(struct vb2_queue *q)
 			kthread_stop(sess->recycle_thread);
 
 		vdec_poweroff(sess);
+		mutex_unlock(&sess->lock);
+		cancel_work_sync(&sess->esparser_queue_work);
+		mutex_lock(&sess->lock);
 		vdec_free_canvas(sess);
 		dma_free_coherent(sess->core->dev, sess->vififo_size,
 				  sess->vififo_vaddr, sess->vififo_paddr);
@@ -947,6 +954,8 @@ err_free_sess:
 static int vdec_close(struct file *file)
 {
 	struct amvdec_session *sess = file_to_amvdec_session(file);
+
+	cancel_work_sync(&sess->esparser_queue_work);
 
 	v4l2_m2m_ctx_release(sess->m2m_ctx);
 	v4l2_m2m_release(sess->m2m_dev);
