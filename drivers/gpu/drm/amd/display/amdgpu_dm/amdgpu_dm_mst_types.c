@@ -363,9 +363,6 @@ static int dm_dp_mst_get_modes(struct drm_connector *connector)
 	struct amdgpu_dm_connector *aconnector = to_amdgpu_dm_connector(connector);
 	int ret = 0;
 
-	if (!aconnector)
-		return drm_add_edid_modes(connector, NULL);
-
 	if (!aconnector->drm_edid) {
 		const struct drm_edid *drm_edid;
 
@@ -456,7 +453,7 @@ static int dm_dp_mst_get_modes(struct drm_connector *connector)
 		 * plugged back with same display index, its hdcp properties
 		 * will be retrieved from hdcp_work within dm_dp_mst_get_modes
 		 */
-		if (aconnector->dc_sink && connector->state) {
+		if (connector->state) {
 			struct drm_device *dev = connector->dev;
 			struct amdgpu_device *adev = drm_to_adev(dev);
 
@@ -472,20 +469,18 @@ static int dm_dp_mst_get_modes(struct drm_connector *connector)
 			}
 		}
 
-		if (aconnector->dc_sink) {
-			amdgpu_dm_update_freesync_caps(
-					connector, aconnector->drm_edid, true);
+		amdgpu_dm_update_freesync_caps(
+				connector, aconnector->drm_edid, true);
 
 #if defined(CONFIG_DRM_AMD_DC_FP)
-			if (!validate_dsc_caps_on_connector(aconnector))
-				memset(&aconnector->dc_sink->dsc_caps,
-				       0, sizeof(aconnector->dc_sink->dsc_caps));
+		if (!validate_dsc_caps_on_connector(aconnector))
+			memset(&aconnector->dc_sink->dsc_caps,
+			       0, sizeof(aconnector->dc_sink->dsc_caps));
 #endif
 
-			if (!retrieve_downstream_port_device(aconnector))
-				memset(&aconnector->mst_downstream_port_present,
-					0, sizeof(aconnector->mst_downstream_port_present));
-		}
+		if (!retrieve_downstream_port_device(aconnector))
+			memset(&aconnector->mst_downstream_port_present,
+				0, sizeof(aconnector->mst_downstream_port_present));
 	}
 
 	drm_edid_connector_update(&aconnector->base, aconnector->drm_edid);
