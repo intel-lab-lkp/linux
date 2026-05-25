@@ -427,6 +427,7 @@ uverbs_obj_to_rdmacg_type(u16 uverbs_obj_id)
 {
 	switch (uverbs_obj_id) {
 	case UVERBS_OBJECT_QP: return RDMACG_RESOURCE_QP;
+	case UVERBS_OBJECT_MR: return RDMACG_RESOURCE_MR;
 	default:               return RDMACG_RESOURCE_HCA_OBJECT;
 	}
 }
