@@ -92,9 +92,27 @@ struct nct6694 {
 	spinlock_t irq_lock;
 	unsigned int irq_enable;
 	void *priv;
+
+	int (*read_msg)(struct nct6694 *nct6694,
+			const struct nct6694_cmd_header *cmd_hd,
+			void *buf);
+	int (*write_msg)(struct nct6694 *nct6694,
+			 const struct nct6694_cmd_header *cmd_hd,
+			 void *buf);
 };
 
-int nct6694_read_msg(struct nct6694 *nct6694, const struct nct6694_cmd_header *cmd_hd, void *buf);
-int nct6694_write_msg(struct nct6694 *nct6694, const struct nct6694_cmd_header *cmd_hd, void *buf);
+static inline int nct6694_read_msg(struct nct6694 *nct6694,
+				   const struct nct6694_cmd_header *cmd_hd,
+				   void *buf)
+{
+	return nct6694->read_msg(nct6694, cmd_hd, buf);
+}
+
+static inline int nct6694_write_msg(struct nct6694 *nct6694,
+				    const struct nct6694_cmd_header *cmd_hd,
+				    void *buf)
+{
+	return nct6694->write_msg(nct6694, cmd_hd, buf);
+}
 
 #endif
