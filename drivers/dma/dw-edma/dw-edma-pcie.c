@@ -87,6 +87,7 @@ struct dw_edma_pcie_match_data {
 	int (*parse_caps)(struct pci_dev *pdev,
 			  struct dw_edma_pcie_data *pdata);
 	unsigned long flags;
+	u32 chip_flags;
 	enum dw_edma_ch_irq_mode default_irq_mode;
 };
 
@@ -451,6 +452,7 @@ static int dw_edma_pcie_probe(struct pci_dev *pdev,
 	chip->dev = dev;
 
 	chip->mf = dma_data->mf;
+	chip->flags = match->chip_flags;
 	chip->default_irq_mode = match->default_irq_mode;
 	chip->nr_irqs = nr_irqs;
 	chip->ops = match->plat_ops;
