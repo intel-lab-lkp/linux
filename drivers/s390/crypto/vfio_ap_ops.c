@@ -2054,11 +2054,12 @@ static int vfio_ap_mdev_open_device(struct vfio_device *vdev)
 {
 	struct ap_matrix_mdev *matrix_mdev =
 		container_of(vdev, struct ap_matrix_mdev, vdev);
+	struct kvm *kvm = vfio_device_get_kvm(vdev);
 
-	if (!vdev->kvm)
+	if (!kvm)
 		return -EINVAL;
 
-	return vfio_ap_mdev_set_kvm(matrix_mdev, vdev->kvm);
+	return vfio_ap_mdev_set_kvm(matrix_mdev, kvm);
 }
 
 static void vfio_ap_mdev_close_device(struct vfio_device *vdev)

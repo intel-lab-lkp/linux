@@ -163,7 +163,7 @@ out_unlock:
 static void vfio_device_group_get_kvm_safe(struct vfio_device *device)
 {
 	spin_lock(&device->group->kvm_ref_lock);
-	vfio_device_get_kvm_safe(device, device->group->kvm);
+	vfio_device_get_kvm_safe(device, device->group->kvm_file);
 	spin_unlock(&device->group->kvm_ref_lock);
 }
 
@@ -181,10 +181,10 @@ static int vfio_df_group_open(struct vfio_device_file *df)
 	mutex_lock(&device->dev_set->lock);
 
 	/*
-	 * Before the first device open, get the KVM pointer currently
-	 * associated with the group (if there is one) and obtain a reference
-	 * now that will be held until the open_count reaches 0 again.  Save
-	 * the pointer in the device for use by drivers.
+	 * Before the first device open, get the VM struct file currently
+	 * associated with the group (if there is one) and obtain a
+	 * reference now that will be held until the open_count reaches 0
+	 * again. Save the file in the device for use by drivers.
 	 */
 	if (device->open_count == 0)
 		vfio_device_group_get_kvm_safe(device);
@@ -862,9 +862,7 @@ bool vfio_group_enforced_coherent(struct vfio_group *group)
 
 void vfio_group_set_kvm(struct vfio_group *group, struct kvm *kvm)
 {
-	spin_lock(&group->kvm_ref_lock);
-	group->kvm = kvm;
-	spin_unlock(&group->kvm_ref_lock);
+	vfio_kvm_file_replace(&group->kvm_file, &group->kvm_ref_lock, kvm);
 }
 
 /**

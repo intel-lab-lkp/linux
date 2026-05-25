@@ -442,55 +442,61 @@ void vfio_unregister_group_dev(struct vfio_device *device)
 EXPORT_SYMBOL_GPL(vfio_unregister_group_dev);
 
 #if IS_ENABLED(CONFIG_KVM)
-void vfio_device_get_kvm_safe(struct vfio_device *device, struct kvm *kvm)
+void vfio_kvm_file_replace(struct file **dst, spinlock_t *lock, struct kvm *kvm)
 {
-	void (*pfn)(struct kvm *kvm);
-	bool (*fn)(struct kvm *kvm);
-	bool ret;
+	struct file *old_kvm_file, *new_kvm_file = NULL;
 
+	/*
+	 * @kvm can outlive the VM fd and its final __fput(). Only take a
+	 * new reference if the VM file is still active.
+	 */
+	if (kvm)
+		new_kvm_file = get_file_active(&kvm->_file);
+
+	spin_lock(lock);
+	old_kvm_file = *dst;
+	*dst = new_kvm_file;
+	spin_unlock(lock);
+
+	if (old_kvm_file)
+		fput(old_kvm_file);
+}
+
+void vfio_device_get_kvm_safe(struct vfio_device *device, struct file *kvm_file)
+{
 	lockdep_assert_held(&device->dev_set->lock);
 
-	if (!kvm)
-		return;
+	/*
+	 * Take a VM file reference if the KVM fd is still active.
+	 */
+	if (kvm_file)
+		kvm_file = get_file(kvm_file);
 
-	pfn = symbol_get(kvm_put_kvm);
-	if (WARN_ON(!pfn))
-		return;
-
-	fn = symbol_get(kvm_get_kvm_safe);
-	if (WARN_ON(!fn)) {
-		symbol_put(kvm_put_kvm);
-		return;
-	}
-
-	ret = fn(kvm);
-	symbol_put(kvm_get_kvm_safe);
-	if (!ret) {
-		symbol_put(kvm_put_kvm);
-		return;
-	}
-
-	device->put_kvm = pfn;
-	device->kvm = kvm;
+	device->kvm_file = kvm_file;
 }
 
 void vfio_device_put_kvm(struct vfio_device *device)
 {
+	struct file *kvm_file;
+
 	lockdep_assert_held(&device->dev_set->lock);
 
-	if (!device->kvm)
+	kvm_file = device->kvm_file;
+	if (!kvm_file)
 		return;
 
-	if (WARN_ON(!device->put_kvm))
-		goto clear;
-
-	device->put_kvm(device->kvm);
-	device->put_kvm = NULL;
-	symbol_put(kvm_put_kvm);
-
-clear:
-	device->kvm = NULL;
+	device->kvm_file = NULL;
+	fput(kvm_file);
 }
+
+struct kvm *vfio_device_get_kvm(struct vfio_device *device)
+{
+	if (!device->kvm_file)
+		return NULL;
+
+	return device->kvm_file->private_data;
+}
+EXPORT_SYMBOL_GPL(vfio_device_get_kvm);
 #endif
 
 /* true if the vfio_device has open_device() called but not close_device() */
@@ -1518,13 +1524,10 @@ static void vfio_device_file_set_kvm(struct file *file, struct kvm *kvm)
 	struct vfio_device_file *df = file->private_data;
 
 	/*
-	 * The kvm is first recorded in the vfio_device_file, and will
-	 * be propagated to vfio_device::kvm when the file is bound to
-	 * iommufd successfully in the vfio device cdev path.
+	 * Cache the VM file reference associated with this VFIO file so it
+	 * can be pinned into vfio_device while the device is open.
 	 */
-	spin_lock(&df->kvm_ref_lock);
-	df->kvm = kvm;
-	spin_unlock(&df->kvm_ref_lock);
+	vfio_kvm_file_replace(&df->kvm_file, &df->kvm_ref_lock, kvm);
 }
 
 /**
@@ -1532,8 +1535,8 @@ static void vfio_device_file_set_kvm(struct file *file, struct kvm *kvm)
  * @file: VFIO group file or VFIO device file
  * @kvm: KVM to link
  *
- * When a VFIO device is first opened the KVM will be available in
- * device->kvm if one was associated with the file.
+ * When a VFIO device is first opened, VFIO caches a VM file reference if
+ * one was associated with the file.
  */
 void vfio_file_set_kvm(struct file *file, struct kvm *kvm)
 {

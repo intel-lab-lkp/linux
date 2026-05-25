@@ -22,7 +22,21 @@ struct kvm;
 struct iommufd_ctx;
 struct iommufd_device;
 struct iommufd_access;
+struct vfio_device;
 struct vfio_info_cap;
+
+#if IS_ENABLED(CONFIG_KVM)
+/*
+ * Return the KVM associated with @vdev's kvm_file. The returned pointer
+ * is valid only while VFIO device open holds the kvm_file reference.
+ */
+struct kvm *vfio_device_get_kvm(struct vfio_device *vdev);
+#else
+static inline struct kvm *vfio_device_get_kvm(struct vfio_device *vdev)
+{
+	return NULL;
+}
+#endif
 
 /*
  * VFIO devices can be placed in a set, this allows all devices to share this
@@ -54,7 +68,7 @@ struct vfio_device {
 	struct list_head dev_set_list;
 	unsigned int migration_flags;
 	u8 precopy_info_v2;
-	struct kvm *kvm;
+	struct file *kvm_file;
 
 	/* Members below here are private, not for driver use */
 	unsigned int index;
@@ -66,7 +80,6 @@ struct vfio_device {
 	unsigned int open_count;
 	struct completion comp;
 	struct iommufd_access *iommufd_access;
-	void (*put_kvm)(struct kvm *kvm);
 	struct inode *inode;
 #if IS_ENABLED(CONFIG_IOMMUFD)
 	struct iommufd_device *iommufd_device;

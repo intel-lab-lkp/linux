@@ -56,7 +56,7 @@ err_put_registration:
 static void vfio_df_get_kvm_safe(struct vfio_device_file *df)
 {
 	spin_lock(&df->kvm_ref_lock);
-	vfio_device_get_kvm_safe(df->device, df->kvm);
+	vfio_device_get_kvm_safe(df->device, df->kvm_file);
 	spin_unlock(&df->kvm_ref_lock);
 }
 
@@ -133,10 +133,10 @@ long vfio_df_ioctl_bind_iommufd(struct vfio_device_file *df,
 	}
 
 	/*
-	 * Before the device open, get the KVM pointer currently
-	 * associated with the device file (if there is) and obtain
-	 * a reference.  This reference is held until device closed.
-	 * Save the pointer in the device for use by drivers.
+	 * Before the device open, get the VM struct file currently
+	 * associated with the device file (if there is one) and obtain a
+	 * reference. This reference is held until the device is closed.
+	 * Save the file in the device for use by drivers.
 	 */
 	vfio_df_get_kvm_safe(df);
 
