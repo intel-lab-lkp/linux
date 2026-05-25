@@ -127,6 +127,29 @@ static void buffer_io_error(struct buffer_head *bh, char *msg)
 			bh->b_bdev, (unsigned long long)bh->b_blocknr, msg);
 }
 
+/**
+ * bio_endio_bh - Return the bh for a bio
+ * @bio: The bio
+ *
+ * Call this in your bio_end_io handler to retrieve the buffer_head
+ * submitted in bh_submit().  If you did not call bh_submit(), do not
+ * call this function; it will return garbage.
+ *
+ * This function consumes the bio refcount which will probably free the
+ * bio.  You should retrieve the bi_status before calling this.
+ */
+struct buffer_head *bio_endio_bh(struct bio *bio)
+{
+	struct buffer_head *bh = bio->bi_private;
+
+	if (unlikely(bio_flagged(bio, BIO_QUIET)))
+		set_bit(BH_Quiet, &bh->b_state);
+	bio_put(bio);
+
+	return bh;
+}
+EXPORT_SYMBOL(bio_endio_bh);
+
 /*
  * End-of-IO handler helper function which does not touch the bh after
  * unlocking it.
@@ -157,6 +180,21 @@ void end_buffer_read_sync(struct buffer_head *bh, int uptodate)
 }
 EXPORT_SYMBOL(end_buffer_read_sync);
 
+/**
+ * bh_end_read - I/O end handler for reads
+ * @bio: The bio being completed.
+ *
+ * Pass this function to bh_submit() if you're reading to the buffer,
+ * unless you need your own special I/O end handler.
+ */
+void bh_end_read(struct bio *bio)
+{
+	bool uptodate = bio->bi_status == BLK_STS_OK;
+	struct buffer_head *bh = bio_endio_bh(bio);
+	end_buffer_read_sync(bh, uptodate);
+}
+EXPORT_SYMBOL(bh_end_read);
+
 void end_buffer_write_sync(struct buffer_head *bh, int uptodate)
 {
 	if (uptodate) {
@@ -170,6 +208,21 @@ void end_buffer_write_sync(struct buffer_head *bh, int uptodate)
 	put_bh(bh);
 }
 EXPORT_SYMBOL(end_buffer_write_sync);
+
+/**
+ * bh_end_write - I/O end handler for writes
+ * @bio: The bio being completed.
+ *
+ * Pass this function to bh_submit() if you're writing from the buffer,
+ * unless you need your own special I/O end handler.
+ */
+void bh_end_write(struct bio *bio)
+{
+	bool success = bio->bi_status == BLK_STS_OK;
+	struct buffer_head *bh = bio_endio_bh(bio);
+	end_buffer_write_sync(bh, success);
+}
+EXPORT_SYMBOL(bh_end_write);
 
 static struct buffer_head *
 __find_get_block_slow(struct block_device *bdev, sector_t block, bool atomic)
@@ -413,6 +466,21 @@ static void end_buffer_async_write(struct buffer_head *bh, int uptodate)
 still_busy:
 	spin_unlock_irqrestore(&first->b_uptodate_lock, flags);
 }
+
+/**
+ * bh_end_async_write - I/O end handler for async folio writes
+ * @bio: The bio being completed.
+ *
+ * Pass this function to bh_submit() if you're doing the equivalent of
+ * block_write_full_folio().
+ */
+void bh_end_async_write(struct bio *bio)
+{
+	bool success = bio->bi_status == BLK_STS_OK;
+	struct buffer_head *bh = bio_endio_bh(bio);
+	end_buffer_async_write(bh, success);
+}
+EXPORT_SYMBOL(bh_end_async_write);
 
 /*
  * If a page's buffers are under async readin (end_buffer_async_read
@@ -1148,13 +1216,10 @@ EXPORT_SYMBOL(__bforget);
 
 static void end_bio_bh_io_sync(struct bio *bio)
 {
-	struct buffer_head *bh = bio->bi_private;
+	bool uptodate = bio->bi_status == BLK_STS_OK;
+	struct buffer_head *bh = bio_endio_bh(bio);
 
-	if (unlikely(bio_flagged(bio, BIO_QUIET)))
-		set_bit(BH_Quiet, &bh->b_state);
-
-	bh->b_end_io(bh, !bio->bi_status);
-	bio_put(bio);
+	bh->b_end_io(bh, uptodate);
 }
 
 static void buffer_set_crypto_ctx(struct bio *bio, const struct buffer_head *bh,
