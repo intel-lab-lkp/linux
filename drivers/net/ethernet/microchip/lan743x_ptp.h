@@ -19,6 +19,8 @@
 #define LAN743X_PTP_N_EVENT_CHAN	2
 #define LAN743X_PTP_N_PEROUT		LAN743X_PTP_N_EVENT_CHAN
 #define PCI11X1X_PTP_IO_MAX_CHANNELS	8
+#define PCI11X1X_PTP_IO_MAX_OUT_PINS	12
+#define PCI11X1X_PTP_N_PEROUT		PCI11X1X_PTP_IO_MAX_OUT_PINS
 #define LAN743X_PTP_N_EXTTS		PCI11X1X_PTP_IO_MAX_CHANNELS
 #define LAN743X_PTP_N_PPS		0
 #define PTP_CMD_CTL_TIMEOUT_CNT		50
@@ -83,8 +85,9 @@ struct lan743x_ptp {
 	struct ptp_pin_desc pin_config[LAN743X_PTP_N_GPIO];
 
 	unsigned long used_event_ch;
+	int event_ch_refcnt[LAN743X_PTP_N_EVENT_CHAN]; /* ref count for shared channel usage */
 	struct lan743x_ptp_perout perout[LAN743X_PTP_N_PEROUT];
-	int ptp_io_perout[LAN743X_PTP_N_PEROUT]; /* PTP event channel (0=channel A, 1=channel B) */
+	int ptp_io_perout[PCI11X1X_PTP_N_PEROUT]; /* PTP event channel per perout index */
 	struct lan743x_extts extts[LAN743X_PTP_N_EXTTS];
 
 	bool leds_multiplexed;

@@ -1530,7 +1530,9 @@ int lan743x_ptp_open(struct lan743x_adapter *adapter)
 	ptp->ptp_clock_info.max_adj = LAN743X_PTP_MAX_FREQ_ADJ_IN_PPB;
 	ptp->ptp_clock_info.n_alarm = 0;
 	ptp->ptp_clock_info.n_ext_ts = LAN743X_PTP_N_EXTTS;
-	ptp->ptp_clock_info.n_per_out = LAN743X_PTP_N_EVENT_CHAN;
+	ptp->ptp_clock_info.n_per_out = adapter->is_pci11x1x ?
+					PCI11X1X_PTP_N_PEROUT :
+					LAN743X_PTP_N_EVENT_CHAN;
 	ptp->ptp_clock_info.n_pins = n_pins;
 	ptp->ptp_clock_info.pps = LAN743X_PTP_N_PPS;
 	ptp->ptp_clock_info.supported_extts_flags = PTP_RISING_EDGE |
