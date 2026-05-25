@@ -475,12 +475,12 @@ EXPORT_SYMBOL(mark_buffer_async_write);
  * using RCU, grab the lock, verify we didn't race with somebody detaching the
  * bh / moving it to different inode and only then proceeding.
  */
-
 void mmb_init(struct mapping_metadata_bhs *mmb, struct address_space *mapping)
 {
 	spin_lock_init(&mmb->lock);
 	INIT_LIST_HEAD(&mmb->list);
 	mmb->mapping = mapping;
+	mmb->inode_blk = MMB_INVALID_BLK;
 }
 EXPORT_SYMBOL(mmb_init);
 
@@ -548,11 +548,13 @@ EXPORT_SYMBOL_GPL(mmb_has_buffers);
 int mmb_sync(struct mapping_metadata_bhs *mmb)
 {
 	struct buffer_head *bh;
+	sector_t inode_blk;
 	int err = 0;
 	struct blk_plug plug;
 	LIST_HEAD(tmp);
 
-	if (!mmb_has_buffers(mmb))
+	if (!mmb_has_buffers(mmb) &&
+	    data_race(mmb->inode_blk == MMB_INVALID_BLK))
 		return 0;
 
 	blk_start_plug(&plug);
@@ -591,8 +593,22 @@ int mmb_sync(struct mapping_metadata_bhs *mmb)
 			}
 		}
 	}
-
+	inode_blk = mmb->inode_blk;
+	mmb->inode_blk = MMB_INVALID_BLK;
 	spin_unlock(&mmb->lock);
+
+	/* Writeout inode buffer if it was set and wasn't written out yet */
+	if (inode_blk != MMB_INVALID_BLK) {
+		bh = sb_find_get_block(mmb->mapping->host->i_sb, inode_blk);
+		if (bh) {
+			write_dirty_buffer(bh, REQ_SYNC);
+			wait_on_buffer(bh);
+			if (!buffer_uptodate(bh))
+				err = -EIO;
+			brelse(bh);
+		}
+	}
+
 	blk_finish_plug(&plug);
 	spin_lock(&mmb->lock);
 
@@ -644,18 +660,18 @@ int mmb_fsync_noflush(struct file *file, struct mapping_metadata_bhs *mmb,
 	if (err)
 		return err;
 
-	if (mmb)
-		ret = mmb_sync(mmb);
 	if (!(inode_state_read_once(inode) & I_DIRTY_ALL))
-		goto out;
+		goto sync_buffers;
 	if (datasync && !(inode_state_read_once(inode) & I_DIRTY_DATASYNC))
-		goto out;
+		goto sync_buffers;
 
-	err = sync_inode_metadata(inode, 1);
-	if (ret == 0)
-		ret = err;
-
-out:
+	ret = sync_inode_metadata(inode, 1);
+sync_buffers:
+	if (mmb) {
+		err = mmb_sync(mmb);
+		if (ret == 0)
+			ret = err;
+	}
 	/* check and advance again to catch errors after syncing out buffers */
 	err = file_check_and_advance_wb_err(file);
 	if (ret == 0)
@@ -730,6 +746,28 @@ void mmb_mark_buffer_dirty(struct buffer_head *bh,
 	}
 }
 EXPORT_SYMBOL(mmb_mark_buffer_dirty);
+
+/**
+ * mmb_mark_inode_buffer_dirty - Mark buffer containing inode as dirty and
+ *				 track it for fsync.
+ * @bh: The buffer containing the inode.
+ * @mmb: Mmb structure for metadata tracking.
+ *
+ * Mark the buffer containing inode as dirty and track the block number of
+ * the buffer containing the inode in mmb so that it gets written out from
+ * mmb_sync().
+ */
+void mmb_mark_inode_buffer_dirty(struct buffer_head *bh,
+				 struct mapping_metadata_bhs *mmb)
+{
+	/* For simplicity we use mmb->lock to synchronize with mmb_sync() */
+	spin_lock(&mmb->lock);
+	mark_buffer_dirty(bh);
+	mmb->inode_blk = bh->b_blocknr;
+	spin_unlock(&mmb->lock);
+}
+EXPORT_SYMBOL(mmb_mark_inode_buffer_dirty);
+
 
 /**
  * block_dirty_folio - Mark a folio as dirty.

@@ -207,6 +207,8 @@ void end_buffer_write_sync(struct buffer_head *bh, int uptodate);
 
 /* Things to do with metadata buffers list */
 void mmb_mark_buffer_dirty(struct buffer_head *bh, struct mapping_metadata_bhs *mmb);
+void mmb_mark_inode_buffer_dirty(struct buffer_head *bh,
+				 struct mapping_metadata_bhs *mmb);
 int mmb_fsync_noflush(struct file *file, struct mapping_metadata_bhs *mmb,
 		      loff_t start, loff_t end, bool datasync);
 int mmb_fsync(struct file *file, struct mapping_metadata_bhs *mmb,
@@ -513,12 +515,24 @@ bool block_dirty_folio(struct address_space *mapping, struct folio *folio);
 
 #ifdef CONFIG_BUFFER_HEAD
 
+#define MMB_INVALID_BLK (~0ULL)
+
 void buffer_init(void);
 bool try_to_free_buffers(struct folio *folio);
 void mmb_init(struct mapping_metadata_bhs *mmb, struct address_space *mapping);
 bool mmb_has_buffers(struct mapping_metadata_bhs *mmb);
 void mmb_invalidate(struct mapping_metadata_bhs *mmb);
 int mmb_sync(struct mapping_metadata_bhs *mmb);
+static inline void mmb_clear_inode_blk(struct mapping_metadata_bhs *mmb)
+{
+	/*
+	 * The lock is mostly pointless here but let's keep setting of
+	 * inode_blk consistently under it.
+	 */
+	spin_lock(&mmb->lock);
+	mmb->inode_blk = MMB_INVALID_BLK;
+	spin_unlock(&mmb->lock);
+}
 void invalidate_bh_lrus(void);
 void invalidate_bh_lrus_cpu(void);
 bool has_bh_in_lru(int cpu, void *dummy);
