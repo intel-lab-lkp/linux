@@ -1797,6 +1797,22 @@ static inline pmd_t pmd_swp_clear_soft_dirty(pmd_t pmd)
 	return pmd;
 }
 #endif
+#ifndef CONFIG_HUGETLB_PAGE
+static inline pud_t pud_swp_mksoft_dirty(pud_t pud)
+{
+	return pud;
+}
+
+static inline int pud_swp_soft_dirty(pud_t pud)
+{
+	return 0;
+}
+
+static inline pud_t pud_swp_clear_soft_dirty(pud_t pud)
+{
+	return pud;
+}
+#endif
 #else /* !CONFIG_HAVE_ARCH_SOFT_DIRTY */
 static inline int pte_soft_dirty(pte_t pte)
 {
@@ -1856,6 +1872,21 @@ static inline int pmd_swp_soft_dirty(pmd_t pmd)
 static inline pmd_t pmd_swp_clear_soft_dirty(pmd_t pmd)
 {
 	return pmd;
+}
+
+static inline pud_t pud_swp_mksoft_dirty(pud_t pud)
+{
+	return pud;
+}
+
+static inline int pud_swp_soft_dirty(pud_t pud)
+{
+	return 0;
+}
+
+static inline pud_t pud_swp_clear_soft_dirty(pud_t pud)
+{
+	return pud;
 }
 #endif
 
@@ -2419,5 +2450,11 @@ pgprot_t vm_get_page_prot(vm_flags_t vm_flags)				\
 			(VM_READ | VM_WRITE | VM_EXEC | VM_SHARED)];	\
 }									\
 EXPORT_SYMBOL(vm_get_page_prot);
+
+#ifdef CONFIG_HUGETLB_PAGE
+#ifndef __pud_to_swp_entry
+#define __pud_to_swp_entry(pud) ((swp_entry_t) { pud_val(pud) })
+#endif
+#endif
 
 #endif /* _LINUX_PGTABLE_H */

@@ -593,6 +593,13 @@ static inline int pmd_protnone(pmd_t pmd)
 #define pmd_mkvalid_k(pmd)	pte_pmd(pte_mkvalid_k(pmd_pte(pmd)))
 #define pmd_mkinvalid(pmd)	pte_pmd(pte_mkinvalid(pmd_pte(pmd)))
 #ifdef CONFIG_HAVE_ARCH_USERFAULTFD_WP
+#define pud_uffd_wp(pud)	pte_uffd_wp(pud_pte(pud))
+#define pud_mkuffd_wp(pud)	pte_pud(pte_mkuffd_wp(pud_pte(pud)))
+#define pud_clear_uffd_wp(pud)	pte_pud(pte_clear_uffd_wp(pud_pte(pud)))
+#define pud_swp_uffd_wp(pud)	pte_swp_uffd_wp(pud_pte(pud))
+#define pud_swp_mkuffd_wp(pud)	pte_pud(pte_swp_mkuffd_wp(pud_pte(pud)))
+#define pud_swp_clear_uffd_wp(pud) \
+				pte_pud(pte_swp_clear_uffd_wp(pud_pte(pud)))
 #define pmd_uffd_wp(pmd)	pte_uffd_wp(pmd_pte(pmd))
 #define pmd_mkuffd_wp(pmd)	pte_pmd(pte_mkuffd_wp(pmd_pte(pmd)))
 #define pmd_clear_uffd_wp(pmd)	pte_pmd(pte_clear_uffd_wp(pmd_pte(pmd)))
@@ -1538,6 +1545,11 @@ static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
 #define __pmd_to_swp_entry(pmd)		((swp_entry_t) { pmd_val(pmd) })
 #define __swp_entry_to_pmd(swp)		__pmd((swp).val)
 #endif /* CONFIG_ARCH_ENABLE_THP_MIGRATION */
+
+#ifdef CONFIG_HUGETLB_PAGE
+#define __pud_to_swp_entry(pud)         ((swp_entry_t) { pud_val(pud) })
+#define __swp_entry_to_pud(swp)         __pud((swp).val)
+#endif
 
 /*
  * Ensure that there are not more swap files than can be encoded in the kernel

@@ -117,6 +117,39 @@ static inline softleaf_t softleaf_from_pmd(pmd_t pmd)
 
 #endif
 
+#ifdef CONFIG_HUGETLB_PAGE
+/**
+ * softleaf_from_pud() - Obtain a leaf entry from a PUD entry.
+ * @pud: PUD entry.
+ *
+ * If @pud is present (therefore not a leaf entry) the function returns an empty
+ * leaf entry. Otherwise, it returns a leaf entry.
+ *
+ * Returns: Leaf entry.
+ */
+static inline softleaf_t softleaf_from_pud(pud_t pud)
+{
+	softleaf_t arch_entry;
+
+	if (pud_present(pud) || pud_none(pud))
+		return softleaf_mk_none();
+
+	if (pud_swp_soft_dirty(pud))
+		pud = pud_swp_clear_soft_dirty(pud);
+	if (pud_swp_uffd_wp(pud))
+		pud = pud_swp_clear_uffd_wp(pud);
+	arch_entry = __pud_to_swp_entry(pud);
+
+	/* Temporary until swp_entry_t eliminated. */
+	return swp_entry(__swp_type(arch_entry), __swp_offset(arch_entry));
+}
+#else
+static inline softleaf_t softleaf_from_pud(pud_t pud)
+{
+	return softleaf_mk_none();
+}
+#endif
+
 /**
  * softleaf_is_none() - Is the leaf entry empty?
  * @entry: Leaf entry.

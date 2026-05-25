@@ -78,6 +78,21 @@ static inline pmd_t pmd_swp_clear_uffd_wp(pmd_t pmd)
 {
 	return pmd;
 }
+
+static inline pud_t pud_swp_mkuffd_wp(pud_t pud)
+{
+	return pud;
+}
+
+static inline int pud_swp_uffd_wp(pud_t pud)
+{
+	return 0;
+}
+
+static inline pud_t pud_swp_clear_uffd_wp(pud_t pud)
+{
+	return pud;
+}
 #endif /* CONFIG_HAVE_ARCH_USERFAULTFD_WP */
 
 #endif /* _ASM_GENERIC_PGTABLE_UFFD_H */

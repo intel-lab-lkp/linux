@@ -339,6 +339,7 @@ static inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 #define __swp_entry_to_pmd(x)	__pmd((x).val | _PAGE_HUGE)
 #define __pte_to_swp_entry(pte) ((swp_entry_t) { pte_val(pte) })
 #define __pmd_to_swp_entry(pmd) ((swp_entry_t) { pmd_val(pmd) })
+#define __pud_to_swp_entry(pud) ((swp_entry_t) { pud_val(pud) })
 
 static inline bool pte_swp_exclusive(pte_t pte)
 {

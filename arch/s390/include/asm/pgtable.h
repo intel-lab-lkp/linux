@@ -903,10 +903,30 @@ static inline pmd_t pmd_clear_soft_dirty(pmd_t pmd)
 	return clear_pmd_bit(pmd, __pgprot(_SEGMENT_ENTRY_SOFT_DIRTY));
 }
 
+static inline int pud_soft_dirty(pud_t pud)
+{
+	return pud_val(pud) & _REGION3_ENTRY_SOFT_DIRTY;
+}
+
+static inline pud_t pud_mksoft_dirty(pud_t pud)
+{
+	return set_pud_bit(pud, __pgprot(_REGION3_ENTRY_SOFT_DIRTY));
+}
+
+static inline pud_t pud_clear_soft_dirty(pud_t pud)
+{
+	return clear_pud_bit(pud, __pgprot(_REGION3_ENTRY_SOFT_DIRTY));
+}
+
 #ifdef CONFIG_ARCH_ENABLE_THP_MIGRATION
 #define pmd_swp_soft_dirty(pmd)		pmd_soft_dirty(pmd)
 #define pmd_swp_mksoft_dirty(pmd)	pmd_mksoft_dirty(pmd)
 #define pmd_swp_clear_soft_dirty(pmd)	pmd_clear_soft_dirty(pmd)
+#endif
+#ifdef CONFIG_HUGETLB_PAGE
+#define pud_swp_soft_dirty(pud)		pud_soft_dirty(pud)
+#define pud_swp_mksoft_dirty(pud)	pud_mksoft_dirty(pud)
+#define pud_swp_clear_soft_dirty(pud)	pud_clear_soft_dirty(pud)
 #endif
 
 /*
@@ -1947,6 +1967,24 @@ static inline unsigned long __swp_offset_rste(swp_entry_t entry)
  * requires conversion of the swap type and offset, and not all the possible
  * PTE bits.
  */
+static inline swp_entry_t __pud_to_swp_entry(pud_t pud)
+{
+	swp_entry_t arch_entry;
+	pte_t pte;
+
+	arch_entry = __rste_to_swp_entry(pud_val(pud));
+	pte = mk_swap_pte(__swp_type_rste(arch_entry), __swp_offset_rste(arch_entry));
+	return __pte_to_swp_entry(pte);
+}
+
+static inline pud_t __swp_entry_to_pud(swp_entry_t arch_entry)
+{
+	pud_t pud;
+
+	pud = __pud(mk_swap_rste(__swp_type(arch_entry), __swp_offset(arch_entry)));
+	return pud;
+}
+
 static inline swp_entry_t __pmd_to_swp_entry(pmd_t pmd)
 {
 	swp_entry_t arch_entry;
