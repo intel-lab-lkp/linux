@@ -25,6 +25,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/memblock.h>
+#include <linux/memory_hotplug.h>
 
 #include <asm/bootparam.h>
 #include <asm/processor.h>
@@ -226,6 +227,9 @@ static int prepare_elf64_ram_headers_callback(struct resource *res, void *arg)
 {
 	struct crash_mem *cmem = arg;
 
+	if (WARN_ON_ONCE(cmem->nr_ranges >= cmem->max_nr_ranges))
+		return -EAGAIN;
+
 	cmem->ranges[cmem->nr_ranges].start = res->start;
 	cmem->ranges[cmem->nr_ranges].end = res->end;
 	cmem->nr_ranges++;
@@ -419,10 +423,14 @@ int crash_load_segments(struct kimage *image)
 				  .buf_max = ULONG_MAX, .top_down = false };
 
 	/* Prepare elf headers and add a segment */
+	get_online_mems();
 	ret = prepare_elf_headers(&kbuf.buffer, &kbuf.bufsz, &pnum);
-	if (ret)
+	if (ret) {
+		put_online_mems();
 		return ret;
+	}
 
+	put_online_mems();
 	image->elf_headers	= kbuf.buffer;
 	image->elf_headers_sz	= kbuf.bufsz;
 	kbuf.memsz		= kbuf.bufsz;
