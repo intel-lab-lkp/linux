@@ -144,9 +144,8 @@ int ocfs2_read_blocks_sync(struct ocfs2_super *osb, u64 block,
 #endif
 		}
 
-		get_bh(bh); /* for end_buffer_read_sync() */
-		bh->b_end_io = end_buffer_read_sync;
-		submit_bh(REQ_OP_READ, bh);
+		get_bh(bh); /* for bh_end_read() */
+		bh_submit(bh, REQ_OP_READ, bh_end_read);
 	}
 
 read_failure:
