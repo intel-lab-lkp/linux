@@ -16,8 +16,12 @@ description:
 
 properties:
   compatible:
-    enum:
-      - qcom,qcs615-qmp-usb3-dp-phy
+    oneOf:
+      - items:
+          - enum:
+              - qcom,shikra-qmp-usb3-dp-phy
+          - const: qcom,qcs615-qmp-usb3-dp-phy
+      - const: qcom,qcs615-qmp-usb3-dp-phy
 
   reg:
     maxItems: 1
@@ -33,12 +37,15 @@ properties:
       - const: pipe
 
   resets:
-    maxItems: 2
+    minItems: 2
+    maxItems: 3
 
   reset-names:
+    minItems: 2
     items:
       - const: phy_phy
       - const: dp_phy
+      - const: phy
 
   vdda-phy-supply: true
 
