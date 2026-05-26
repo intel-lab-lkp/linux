@@ -387,9 +387,9 @@ void btrfs_clear_buffer_dirty(struct btrfs_trans_handle *trans,
 			      struct extent_buffer *buf);
 
 int btrfs_alloc_page_array(unsigned int nr_pages, struct page **page_array,
-			   bool nofail);
+			   gfp_t gfp);
 int btrfs_alloc_folio_array(unsigned int nr_folios, unsigned int order,
-			    struct folio **folio_array);
+			    struct folio **folio_array, gfp_t gfp);
 
 #ifdef CONFIG_BTRFS_FS_RUN_SANITY_TESTS
 bool find_lock_delalloc_range(struct inode *inode,
