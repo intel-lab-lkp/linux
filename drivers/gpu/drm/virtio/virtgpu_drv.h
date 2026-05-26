@@ -263,6 +263,7 @@ struct virtio_gpu_device {
 	bool has_host_visible;
 	bool has_context_init;
 	bool has_blob_alignment;
+	bool hibernation;
 	struct virtio_shm_region host_visible_region;
 	struct drm_mm host_visible_mm;
 
@@ -279,6 +280,8 @@ struct virtio_gpu_device {
 	uint64_t capset_id_mask;
 	struct list_head cap_cache;
 	uint32_t blob_alignment;
+
+	struct notifier_block pm_nb;
 
 	/* protects uuid state when exporting */
 	spinlock_t resource_export_lock;
@@ -345,7 +348,8 @@ void virtio_gpu_cmd_create_resource(struct virtio_gpu_device *vgdev,
 				    struct virtio_gpu_object_array *objs,
 				    struct virtio_gpu_fence *fence);
 void virtio_gpu_cmd_unref_resource(struct virtio_gpu_device *vgdev,
-				   struct virtio_gpu_object *bo);
+				   struct virtio_gpu_object *bo,
+				   int no_cb);
 int virtio_gpu_panic_cmd_transfer_to_host_2d(struct virtio_gpu_device *vgdev,
 					     uint64_t offset,
 					     uint32_t width, uint32_t height,
@@ -496,6 +500,8 @@ void virtio_gpu_add_object_to_restore_list(struct virtio_gpu_device *vgdev,
 					   struct virtio_gpu_object *bo);
 
 int virtio_gpu_object_restore_all(struct virtio_gpu_device *vgdev);
+
+void virtio_gpu_object_unref_all(struct virtio_gpu_device *vgdev);
 
 /* virtgpu_prime.c */
 int virtio_gpu_resource_assign_uuid(struct virtio_gpu_device *vgdev,
