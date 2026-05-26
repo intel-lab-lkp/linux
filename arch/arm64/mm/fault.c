@@ -227,13 +227,16 @@ int __ptep_set_access_flags_anysz(struct vm_area_struct *vma,
 	 */
 	pte_val(entry) ^= PTE_RDONLY;
 	pteval = pte_val(pte);
-	do {
-		old_pteval = pteval;
-		pteval ^= PTE_RDONLY;
-		pteval |= pte_val(entry);
-		pteval ^= PTE_RDONLY;
-		pteval = cmpxchg_relaxed(&pte_val(*ptep), old_pteval, pteval);
-	} while (pteval != old_pteval);
+	scoped_guard(kpkeys_hardened_pgtables) {
+		do {
+			old_pteval = pteval;
+			pteval ^= PTE_RDONLY;
+			pteval |= pte_val(entry);
+			pteval ^= PTE_RDONLY;
+			pteval = cmpxchg_relaxed(&pte_val(*ptep), old_pteval,
+						 pteval);
+		} while (pteval != old_pteval);
+	}
 
 	/*
 	 * Invalidate the local stale read-only entry.  Remote stale entries
