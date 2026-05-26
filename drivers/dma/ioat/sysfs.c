@@ -144,7 +144,7 @@ size_t count)
 	int intr_coalesce = 0;
 	struct ioatdma_chan *ioat_chan = to_ioat_chan(c);
 
-	if (sscanf(page, "%du", &intr_coalesce) != -1) {
+	if (!kstrtoint(page, 10, &intr_coalesce)) {
 		if ((intr_coalesce < 0) ||
 		    (intr_coalesce > IOAT_INTRDELAY_MASK))
 			return -EINVAL;
