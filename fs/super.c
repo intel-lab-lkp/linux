@@ -831,17 +831,25 @@ enum super_iter_flags_t {
 
 static inline struct super_block *first_super(enum super_iter_flags_t flags)
 {
+	struct list_head *next;
+
 	if (flags & SUPER_ITER_REVERSE)
-		return list_last_entry(&super_blocks, struct super_block, s_list);
-	return list_first_entry(&super_blocks, struct super_block, s_list);
+		next = rcu_dereference(list_bidir_prev_rcu(&super_blocks));
+	else
+		next = READ_ONCE(super_blocks.next);
+	return list_entry(next, struct super_block, s_list);
 }
 
 static inline struct super_block *next_super(struct super_block *sb,
 					     enum super_iter_flags_t flags)
 {
+	struct list_head *next;
+
 	if (flags & SUPER_ITER_REVERSE)
-		return list_prev_entry(sb, s_list);
-	return list_next_entry(sb, s_list);
+		next = rcu_dereference(list_bidir_prev_rcu(&sb->s_list));
+	else
+		next = READ_ONCE(sb->s_list.next);
+	return list_entry(next, struct super_block, s_list);
 }
 
 static void __iterate_supers(void (*f)(struct super_block *, void *), void *arg,
@@ -850,15 +858,15 @@ static void __iterate_supers(void (*f)(struct super_block *, void *), void *arg,
 	struct super_block *sb, *p = NULL;
 	bool excl = flags & SUPER_ITER_EXCL;
 
-	guard(spinlock)(&sb_lock);
-
+	rcu_read_lock();
 	for (sb = first_super(flags);
 	     !list_entry_is_head(sb, &super_blocks, s_list);
 	     sb = next_super(sb, flags)) {
 		if (super_flags(sb, SB_DYING))
 			continue;
-		refcount_inc(&sb->s_count);
-		spin_unlock(&sb_lock);
+		if (!refcount_inc_not_zero(&sb->s_count))
+			continue;
+		rcu_read_unlock();
 
 		if (flags & SUPER_ITER_UNLOCKED) {
 			f(sb, arg);
@@ -867,13 +875,14 @@ static void __iterate_supers(void (*f)(struct super_block *, void *), void *arg,
 			super_unlock(sb, excl);
 		}
 
-		spin_lock(&sb_lock);
 		if (p)
-			__put_super(p);
+			put_super(p);
 		p = sb;
+		rcu_read_lock();
 	}
+	rcu_read_unlock();
 	if (p)
-		__put_super(p);
+		put_super(p);
 }
 
 void iterate_supers(void (*f)(struct super_block *, void *), void *arg)
@@ -895,15 +904,15 @@ void iterate_supers_type(struct file_system_type *type,
 {
 	struct super_block *sb, *p = NULL;
 
-	spin_lock(&sb_lock);
-	hlist_for_each_entry(sb, &type->fs_supers, s_instances) {
+	rcu_read_lock();
+	hlist_for_each_entry_rcu(sb, &type->fs_supers, s_instances) {
 		bool locked;
 
 		if (super_flags(sb, SB_DYING))
 			continue;
-
-		refcount_inc(&sb->s_count);
-		spin_unlock(&sb_lock);
+		if (!refcount_inc_not_zero(&sb->s_count))
+			continue;
+		rcu_read_unlock();
 
 		locked = super_lock_shared(sb);
 		if (locked) {
@@ -911,14 +920,14 @@ void iterate_supers_type(struct file_system_type *type,
 			super_unlock_shared(sb);
 		}
 
-		spin_lock(&sb_lock);
 		if (p)
-			__put_super(p);
+			put_super(p);
 		p = sb;
+		rcu_read_lock();
 	}
+	rcu_read_unlock();
 	if (p)
-		__put_super(p);
-	spin_unlock(&sb_lock);
+		put_super(p);
 }
 
 EXPORT_SYMBOL(iterate_supers_type);
@@ -927,25 +936,21 @@ struct super_block *user_get_super(dev_t dev, bool excl)
 {
 	struct super_block *sb;
 
-	spin_lock(&sb_lock);
-	list_for_each_entry(sb, &super_blocks, s_list) {
-		bool locked;
-
+	rcu_read_lock();
+	list_for_each_entry_rcu(sb, &super_blocks, s_list) {
 		if (sb->s_dev != dev)
 			continue;
+		if (!refcount_inc_not_zero(&sb->s_count))
+			continue;
+		rcu_read_unlock();
 
-		refcount_inc(&sb->s_count);
-		spin_unlock(&sb_lock);
-
-		locked = super_lock(sb, excl);
-		if (locked)
+		if (super_lock(sb, excl))
 			return sb;
 
-		spin_lock(&sb_lock);
-		__put_super(sb);
-		break;
+		put_super(sb);
+		return NULL;
 	}
-	spin_unlock(&sb_lock);
+	rcu_read_unlock();
 	return NULL;
 }
 
