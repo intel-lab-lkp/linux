@@ -1643,6 +1643,79 @@ static void stmmac_clear_descriptors(struct stmmac_priv *priv,
 }
 
 /**
+ * stmmac_reinit_rx_descriptors - re-program RX descriptors from existing
+ *				   buffers (allocation-free)
+ * @priv: driver private structure
+ * @dma_conf: structure holding the dma data
+ * @queue: RX queue index
+ *
+ * Description: walk rx_q->buf_pool[] and re-program every RX descriptor's
+ * buffer-address fields from the buffers that are already attached to the
+ * queue. This is intended for the resume path: between suspend and resume
+ * the descriptor buffer-address fields may have been overwritten by HW
+ * writeback (RDESx are reused for status/length on completion), but the
+ * underlying RX buffers (page_pool pages or XSK frames) are still alive
+ * in buf_pool[]. By re-using them we avoid any allocation on resume,
+ * which is unsafe under memory pressure.
+ *
+ * This helper is expected to be called only in stmmac_resume.
+ */
+static void stmmac_reinit_rx_descriptors(struct stmmac_priv *priv,
+					 struct stmmac_dma_conf *dma_conf,
+					 u32 queue)
+{
+	struct stmmac_rx_queue *rx_q = &dma_conf->rx_queue[queue];
+	int i;
+
+	for (i = 0; i < dma_conf->dma_rx_size; i++) {
+		struct stmmac_rx_buffer *buf = &rx_q->buf_pool[i];
+		struct dma_desc *p = stmmac_get_rx_desc(priv, rx_q, i);
+
+		if (rx_q->xsk_pool) {
+			dma_addr_t dma_addr;
+
+			/* The XSK pool may not be fully populated (e.g.
+			 * xdpsock TX-only); skip empty slots.
+			 */
+			if (!buf->xdp)
+				continue;
+
+			dma_addr = xsk_buff_xdp_get_dma(buf->xdp);
+			stmmac_set_desc_addr(priv, p, dma_addr);
+			stmmac_set_desc_sec_addr(priv, p, 0, false);
+		} else {
+			/* Theoretically unreachable: napi_disable() in
+			 * stmmac_suspend() ensures all initialized slots
+			 * have a valid page before we get here.
+			 * Defensive check only.
+			 */
+			if (!buf->page)
+				continue;
+
+			stmmac_set_desc_addr(priv, p, buf->addr);
+			stmmac_set_desc_sec_addr(priv, p, buf->sec_addr,
+						 priv->sph_active &&
+						 buf->sec_page);
+
+			if (dma_conf->dma_buf_sz == BUF_SIZE_16KiB)
+				stmmac_init_desc3(priv, p);
+		}
+	}
+
+	/* Chain mode: re-link descriptor 'next' pointers. This is
+	 * allocation-free; it just rewrites the per-descriptor next
+	 * field which may have been clobbered by HW writeback.
+	 */
+	if (priv->descriptor_mode == STMMAC_CHAIN_MODE) {
+		void *des = priv->extend_desc ? (void *)rx_q->dma_erx
+					      : (void *)rx_q->dma_rx;
+
+		stmmac_mode_init(priv, des, rx_q->dma_rx_phy,
+				 dma_conf->dma_rx_size, priv->extend_desc);
+	}
+}
+
+/**
  * stmmac_init_rx_buffers - init the RX descriptor buffer.
  * @priv: driver private structure
  * @dma_conf: structure to take the dma data
@@ -8272,6 +8345,7 @@ int stmmac_resume(struct device *dev)
 {
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct stmmac_priv *priv = netdev_priv(ndev);
+	u32 queue;
 	int ret;
 
 	if (priv->plat->resume) {
@@ -8315,6 +8389,22 @@ int stmmac_resume(struct device *dev)
 	phylink_prepare_resume(priv->phylink);
 
 	mutex_lock(&priv->lock);
+
+	/* Re-program the RX descriptors from the buffers that are still
+	 * attached to priv->dma_conf.rx_queue[].buf_pool[]. The buffer-
+	 * address fields of the RX descriptors may have been overwritten
+	 * by HW writeback while the DMA was being stopped on suspend
+	 * (RDESx are reused for status/length on completion), so they
+	 * must be repopulated before the DMA is restarted in
+	 * stmmac_hw_setup() below; otherwise the controller would
+	 * dereference stale addresses and trigger a fatal bus error.
+	 *
+	 * This path is allocation-free: it relies entirely on the RX
+	 * buffers preserved across suspend, which makes the resume path
+	 * safe under memory pressure.
+	 */
+	for (queue = 0; queue < priv->plat->rx_queues_to_use; queue++)
+		stmmac_reinit_rx_descriptors(priv, &priv->dma_conf, queue);
 
 	stmmac_reset_queues_param(priv);
 
