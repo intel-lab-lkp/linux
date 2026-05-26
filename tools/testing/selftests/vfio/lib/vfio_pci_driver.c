@@ -5,12 +5,14 @@
 #ifdef __x86_64__
 extern struct vfio_pci_driver_ops dsa_ops;
 extern struct vfio_pci_driver_ops ioat_ops;
+extern struct vfio_pci_driver_ops igb_ops;
 #endif
 
 static struct vfio_pci_driver_ops *driver_ops[] = {
 #ifdef __x86_64__
 	&dsa_ops,
 	&ioat_ops,
+	&igb_ops,
 #endif
 };
 

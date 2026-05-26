@@ -13,6 +13,7 @@ LIBVFIO_C += vfio_pci_driver.c
 ifeq ($(ARCH:x86_64=x86),x86)
 LIBVFIO_C += drivers/ioat/ioat.c
 LIBVFIO_C += drivers/dsa/dsa.c
+LIBVFIO_C += drivers/igb/igb.c
 endif
 
 LIBVFIO_OUTPUT := $(OUTPUT)/libvfio
