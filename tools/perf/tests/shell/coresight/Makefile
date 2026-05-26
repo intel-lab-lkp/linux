@@ -6,6 +6,7 @@ include ../../../../../tools/scripts/utilities.mak
 
 SUBDIRS = \
 	asm_pure_loop \
+	context_switch_loop \
 	memcpy_thread \
 	thread_loop \
 	unroll_loop_thread
