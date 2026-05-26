@@ -286,8 +286,17 @@ extern unsigned int kobjsize(const void *objp);
  */
 typedef int __bitwise vma_flag_t;
 
-#define DECLARE_VMA_BIT(name, bitnum) \
-	VMA_ ## name ## _BIT = ((__force vma_flag_t)bitnum)
+/*
+ * VMA_NO_BIT means "no bit"; mk_vma_flags() skips it. DECLARE_VMA_BIT()
+ * below uses it for any bit number that doesn't fit in the bitmap, so
+ * callers don't need to track which bits are valid on the current build.
+ */
+#define VMA_NO_BIT	((__force vma_flag_t)-1)
+
+#define DECLARE_VMA_BIT(name, bitnum)					\
+	VMA_ ## name ## _BIT = (((bitnum) < NUM_VMA_FLAG_BITS) ?	\
+				((__force vma_flag_t)(bitnum)) :	\
+				VMA_NO_BIT)
 #define DECLARE_VMA_BIT_ALIAS(name, aliased) \
 	VMA_ ## name ## _BIT = (VMA_ ## aliased ## _BIT)
 enum {
@@ -1081,6 +1090,8 @@ static __always_inline void vma_flags_set_flag(vma_flags_t *flags,
 {
 	unsigned long *bitmap = flags->__vma_flags;
 
+	if ((__force int)bit < 0)
+		return;
 	__set_bit((__force int)bit, bitmap);
 }
 
