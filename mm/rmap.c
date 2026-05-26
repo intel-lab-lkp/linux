@@ -1958,11 +1958,12 @@ static inline unsigned int folio_unmap_pte_batch(struct folio *folio,
 	end_addr = pmd_addr_end(addr, vma->vm_end);
 	max_nr = (end_addr - addr) >> PAGE_SHIFT;
 
-	/* We only support lazyfree or file folios batching for now ... */
-	if (folio_test_anon(folio) && folio_test_swapbacked(folio))
-		return 1;
 
 	if (pte_unused(pte))
+		return 1;
+
+	if (__is_defined(__HAVE_ARCH_UNMAP_ONE) && folio_test_anon(folio) &&
+	    folio_test_swapbacked(folio))
 		return 1;
 
 	/*
@@ -2136,8 +2137,9 @@ static inline bool ttu_lazyfree_folio(struct vm_area_struct *vma,
 	return true;
 }
 
-static inline void set_swp_pte_at(struct mm_struct *mm, unsigned long address,
-		pte_t *ptep, swp_entry_t entry, pte_t pteval, bool anon_exclusive)
+static inline void set_swp_ptes(struct mm_struct *mm, unsigned long address,
+		pte_t *ptep, swp_entry_t entry, pte_t pteval, bool anon_exclusive,
+		unsigned long nr_pages)
 {
 	pte_t swp_pte = swp_entry_to_pte(entry);
 
@@ -2151,24 +2153,37 @@ static inline void set_swp_pte_at(struct mm_struct *mm, unsigned long address,
 			swp_pte = pte_swp_mkuffd_wp(swp_pte);
 	} else {
 		/* Device-exclusive entry */
+		VM_WARN_ON(nr_pages != 1);
 		if (pte_swp_soft_dirty(pteval))
 			swp_pte = pte_swp_mksoft_dirty(swp_pte);
 		if (pte_swp_uffd_wp(pteval))
 			swp_pte = pte_swp_mkuffd_wp(swp_pte);
 	}
 
-	set_pte_at(mm, address, ptep, swp_pte);
+	for (int i = 0; i < nr_pages; ++i, ++ptep, address += PAGE_SIZE) {
+		set_pte_at(mm, address, ptep, swp_pte);
+		swp_pte = pte_next_swp_offset(swp_pte);
+	}
 }
 
-static inline bool ttu_anon_folio(struct vm_area_struct *vma, struct folio *folio,
-		struct page *subpage, unsigned long address, pte_t *ptep,
-		pte_t pteval)
+static inline void finish_folio_unmap(struct vm_area_struct *vma,
+		struct folio *folio, struct page *subpage,
+		unsigned long nr_pages)
 {
-	bool anon_exclusive = folio_test_anon(folio) && PageAnonExclusive(subpage);
+	folio_remove_rmap_ptes(folio, subpage, nr_pages, vma);
+	if (vma->vm_flags & VM_LOCKED)
+		mlock_drain_local();
+	folio_put_refs(folio, nr_pages);
+}
+
+static inline bool __ttu_anon_folio(struct vm_area_struct *vma, struct folio *folio,
+		struct page *subpage, unsigned long address, pte_t *ptep,
+		pte_t pteval, unsigned long nr_pages, bool anon_exclusive)
+{
 	swp_entry_t entry = page_swap_entry(subpage);
 	struct mm_struct *mm = vma->vm_mm;
 
-	if (folio_dup_swap_pages(folio, subpage, 1) < 0)
+	if (folio_dup_swap_pages(folio, subpage, nr_pages) < 0)
 		return false;
 
 	/*
@@ -2177,13 +2192,14 @@ static inline bool ttu_anon_folio(struct vm_area_struct *vma, struct folio *foli
 	 * so we'll not check/care.
 	 */
 	if (arch_unmap_one(mm, vma, address, pteval) < 0) {
-		folio_put_swap_pages(folio, subpage, 1);
+		VM_WARN_ON(nr_pages != 1);
+		folio_put_swap_pages(folio, subpage, nr_pages);
 		return false;
 	}
 
 	/* See folio_try_share_anon_rmap(): clear PTE first. */
-	if (anon_exclusive && folio_try_share_anon_rmap_pte(folio, subpage)) {
-		folio_put_swap_pages(folio, subpage, 1);
+	if (anon_exclusive && folio_try_share_anon_rmap_ptes(folio, subpage, nr_pages)) {
+		folio_put_swap_pages(folio, subpage, nr_pages);
 		return false;
 	}
 
@@ -2194,9 +2210,49 @@ static inline bool ttu_anon_folio(struct vm_area_struct *vma, struct folio *foli
 		spin_unlock(&mmlist_lock);
 	}
 
-	dec_mm_counter(mm, MM_ANONPAGES);
-	inc_mm_counter(mm, MM_SWAPENTS);
-	set_swp_pte_at(mm, address, ptep, entry, pteval, anon_exclusive);
+	add_mm_counter(mm, MM_ANONPAGES, -nr_pages);
+	add_mm_counter(mm, MM_SWAPENTS, nr_pages);
+	set_swp_ptes(mm, address, ptep, entry, pteval, anon_exclusive, nr_pages);
+	finish_folio_unmap(vma, folio, subpage, nr_pages);
+	return true;
+}
+
+/*
+ * Unmap an anonymous folio from the pagetables of a process. The function
+ * may partially succeed in unmapping some pages out of nr_pages, in which
+ * case it will restore the remaining ptes and return false. Returns true
+ * if all of nr_pages were unmapped.
+ */
+static inline bool ttu_anon_folio(struct vm_area_struct *vma, struct folio *folio,
+		struct page *first_page, unsigned long address, pte_t *ptep,
+		pte_t pteval, unsigned long nr_pages)
+{
+	bool expected_anon_exclusive;
+	int sub_batch_idx = 0;
+	int len, ret;
+
+	for (;;) {
+		expected_anon_exclusive = PageAnonExclusive(first_page + sub_batch_idx);
+		len = page_anon_exclusive_batch(sub_batch_idx, nr_pages,
+						first_page, expected_anon_exclusive);
+		ret = __ttu_anon_folio(vma, folio, first_page + sub_batch_idx,
+				       address, ptep, pteval, len, expected_anon_exclusive);
+		if (!ret) {
+			/* restore the remaining ptes which got cleared */
+			set_ptes(vma->vm_mm, address, ptep, pteval, nr_pages);
+			return ret;
+		}
+
+		nr_pages -= len;
+		if (!nr_pages)
+			break;
+
+		pteval = pte_advance_pfn(pteval, len);
+		address += len * PAGE_SIZE;
+		sub_batch_idx += len;
+		ptep += len;
+	}
+
 	return true;
 }
 
@@ -2392,11 +2448,10 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 			}
 
 			if (!ttu_anon_folio(vma, folio, subpage, address,
-						    pvmw.pte, pteval)) {
-				set_pte_at(mm, address, pvmw.pte, pteval);
+						    pvmw.pte, pteval, nr_pages)) {
 				goto walk_abort;
 			}
-			goto finish_unmap;
+			continue;
 		} else {
 			/*
 			 * This is a locked file-backed folio,
@@ -2412,10 +2467,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 			add_mm_counter(mm, mm_counter_file(folio), -nr_pages);
 		}
 finish_unmap:
-		folio_remove_rmap_ptes(folio, subpage, nr_pages, vma);
-		if (vma->vm_flags & VM_LOCKED)
-			mlock_drain_local();
-		folio_put_refs(folio, nr_pages);
+		finish_folio_unmap(vma, folio, subpage, nr_pages);
 
 		/*
 		 * If we are sure that we batched the entire folio and cleared
