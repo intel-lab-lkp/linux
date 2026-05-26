@@ -312,6 +312,7 @@ static int ap_cpu_clock_probe(struct platform_device *pdev)
 		}
 		parent_name =  __clk_get_name(parent);
 		clk_name[12] += cluster_index;
+		clk_put(parent);
 		ap_cpu_clk[cluster_index].clk_name =
 			ap_cp_unique_name(dev, np->parent, clk_name);
 		ap_cpu_clk[cluster_index].cluster = cluster_index;
