@@ -15,18 +15,22 @@
 #include "vxfs_extern.h"
 
 
-static inline void
+static inline int
 vxfs_get_fshead(struct vxfs_oltfshead *fshp, struct vxfs_sb_info *infp)
 {
-	BUG_ON(infp->vsi_fshino);
+	if (infp->vsi_fshino)
+		return -EINVAL;
 	infp->vsi_fshino = fs32_to_cpu(infp, fshp->olt_fsino[0]);
+	return 0;
 }
 
-static inline void
+static inline int
 vxfs_get_ilist(struct vxfs_oltilist *ilistp, struct vxfs_sb_info *infp)
 {
-	BUG_ON(infp->vsi_iext);
+	if (infp->vsi_iext)
+		return -EINVAL;
 	infp->vsi_iext = fs32_to_cpu(infp, ilistp->olt_iext[0]);
+	return 0;
 }
 
 static inline u_long
@@ -86,10 +90,12 @@ vxfs_read_olt(struct super_block *sbp, u_long bsize)
 		
 		switch (fs32_to_cpu(infp, ocp->olt_type)) {
 		case VXFS_OLT_FSHEAD:
-			vxfs_get_fshead((struct vxfs_oltfshead *)oaddr, infp);
+			if (vxfs_get_fshead((struct vxfs_oltfshead *)oaddr, infp))
+				goto fail;
 			break;
 		case VXFS_OLT_ILIST:
-			vxfs_get_ilist((struct vxfs_oltilist *)oaddr, infp);
+			if (vxfs_get_ilist((struct vxfs_oltilist *)oaddr, infp))
+				goto fail;
 			break;
 		}
 
