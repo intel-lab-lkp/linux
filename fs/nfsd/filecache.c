@@ -1181,7 +1181,7 @@ open_file:
 		nf->nf_mark = nfsd_file_mark_find_or_create(inode);
 
 	if (type != S_IFREG || nf->nf_mark) {
-		if (file) {
+		if (file && (file->f_mode & FMODE_OPENED)) {
 			get_file(file);
 			nf->nf_file = file;
 			status = nfs_ok;
