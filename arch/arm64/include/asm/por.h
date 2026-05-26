@@ -10,6 +10,8 @@
 
 #define POR_EL0_INIT	POR_ELx_PERM_PREP(0, POE_RWX)
 
+#ifndef __ASSEMBLY__
+
 static inline bool por_elx_allows_read(u64 por, u8 pkey)
 {
 	u8 perm = POR_ELx_PERM_GET(pkey, por);
@@ -37,5 +39,7 @@ static inline u64 por_elx_set_pkey_perms(u64 por, u8 pkey, u64 perms)
 
 	return (por & ~(POE_MASK << shift)) | (perms << shift);
 }
+
+#endif	/* __ASSEMBLY__ */
 
 #endif /* _ASM_ARM64_POR_H */
