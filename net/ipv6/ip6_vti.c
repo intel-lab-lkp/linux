@@ -317,9 +317,10 @@ static int vti6_input_proto(struct sk_buff *skb, int nexthdr, __be32 spi,
 			goto discard;
 		}
 
+		XFRM_TUNNEL_SKB_CB(skb)->tunnel.ip6 = t;
+		dev_hold(t->dev);
 		rcu_read_unlock();
 
-		XFRM_TUNNEL_SKB_CB(skb)->tunnel.ip6 = t;
 		XFRM_SPI_SKB_CB(skb)->family = AF_INET6;
 		XFRM_SPI_SKB_CB(skb)->daddroff = offsetof(struct ipv6hdr, daddr);
 		return xfrm_input(skb, nexthdr, spi, encap_type);
@@ -356,6 +357,7 @@ static int vti6_rcv_cb(struct sk_buff *skb, int err)
 	if (err) {
 		DEV_STATS_INC(dev, rx_errors);
 		DEV_STATS_INC(dev, rx_dropped);
+		dev_put(dev);
 
 		return 0;
 	}
@@ -369,6 +371,7 @@ static int vti6_rcv_cb(struct sk_buff *skb, int err)
 		if (inner_mode == NULL) {
 			XFRM_INC_STATS(dev_net(skb->dev),
 				       LINUX_MIB_XFRMINSTATEMODEERROR);
+			dev_put(dev);
 			return -EINVAL;
 		}
 	}
@@ -379,12 +382,15 @@ static int vti6_rcv_cb(struct sk_buff *skb, int err)
 	ret = xfrm_policy_check(NULL, XFRM_POLICY_IN, skb, family);
 	skb->mark = orig_mark;
 
-	if (!ret)
+	if (!ret) {
+		dev_put(dev);
 		return -EPERM;
+	}
 
 	skb_scrub_packet(skb, !net_eq(t->net, dev_net(skb->dev)));
 	skb->dev = dev;
 	dev_sw_netstats_rx_add(dev, skb->len);
+	dev_put(dev);
 
 	return 0;
 }
