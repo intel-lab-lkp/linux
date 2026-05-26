@@ -2231,7 +2231,8 @@ static int nvme_query_fdp_granularity(struct nvme_ctrl *ctrl,
 	struct nvme_fdp_config_desc *desc;
 	size_t size = sizeof(hdr);
 	void *log, *end;
-	int i, n, ret;
+	int i, ret;
+	u16 numfdpc;
 
 	ret = nvme_get_log_lsi(ctrl, 0, NVME_LOG_FDP_CONFIGS, 0,
 			       NVME_CSI_NVM, &hdr, size, 0, info->endgid);
@@ -2262,10 +2263,10 @@ static int nvme_query_fdp_granularity(struct nvme_ctrl *ctrl,
 		goto out;
 	}
 
-	n = le16_to_cpu(h->numfdpc) + 1;
-	if (fdp_idx > n) {
+	numfdpc = le16_to_cpu(h->numfdpc);
+	if (fdp_idx > numfdpc) {
 		dev_warn(ctrl->device, "FDP index:%d out of range:%d\n",
-			 fdp_idx, n);
+			 fdp_idx, numfdpc);
 		/* Proceed without registering FDP streams */
 		ret = 0;
 		goto out;
@@ -2275,7 +2276,15 @@ static int nvme_query_fdp_granularity(struct nvme_ctrl *ctrl,
 	desc = log;
 	end = log + size - sizeof(*h);
 	for (i = 0; i < fdp_idx; i++) {
-		log += le16_to_cpu(desc->dsze);
+		u16 dsze = le16_to_cpu(desc->dsze);
+
+		if (!dsze || log + dsze > end) {
+			dev_warn(ctrl->device,
+				 "FDP invalid config descriptor at index %d\n", i);
+			ret = 0;
+			goto out;
+		}
+		log += dsze;
 		desc = log;
 		if (log >= end) {
 			dev_warn(ctrl->device,
