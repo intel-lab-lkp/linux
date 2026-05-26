@@ -224,7 +224,7 @@ struct ib_cq *__ib_alloc_cq(struct ib_device *dev, void *private, int nr_cqe,
 		return ERR_PTR(-EINVAL);
 
 	cq = rdma_zalloc_drv_obj(dev, ib_cq);
-	if (!cq)
+	if (unlikely(ZERO_OR_NULL_PTR(cq)))
 		return ERR_PTR(ret);
 
 	cq->device = dev;
