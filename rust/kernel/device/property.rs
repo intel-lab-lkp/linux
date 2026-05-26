@@ -136,18 +136,15 @@ impl FwNode {
         let mut val: KVec<T> = KVec::with_capacity(len, GFP_KERNEL)?;
 
         let res = T::read_array_from_fwnode_property(self, name, val.spare_capacity_mut());
-        let res = match res {
-            Ok(_) => {
-                // SAFETY:
-                // - `len` is equal to `val.capacity - val.len`, because
-                //   `val.capacity` is `len` and `val.len` is zero.
-                // - All elements within the interval [`0`, `len`) were initialized
-                //   by `read_array_from_fwnode_property`.
-                unsafe { val.inc_len(len) }
-                Ok(val)
-            }
-            Err(e) => Err(e),
-        };
+        let res = res.map(|()| {
+            // SAFETY:
+            // - `len` is equal to `val.capacity - val.len`, because
+            //   `val.capacity` is `len` and `val.len` is zero.
+            // - All elements within the interval [`0`, `len`) were initialized
+            //   by `read_array_from_fwnode_property`.
+            unsafe { val.inc_len(len) }
+            val
+        });
         Ok(PropertyGuard {
             inner: res,
             fwnode: self,
@@ -474,12 +471,12 @@ impl Property for CString {
 /// It must be public, because it appears in the signatures of other public
 /// functions, but its methods shouldn't be used outside the kernel crate.
 pub trait PropertyInt: Copy + Sealed {
-    /// Reads a property array.
-    fn read_array_from_fwnode_property<'a>(
+    /// Reads a property array into `out`.
+    fn read_array_from_fwnode_property(
         fwnode: &FwNode,
         name: &CStr,
-        out: &'a mut [MaybeUninit<Self>],
-    ) -> Result<&'a mut [Self]>;
+        out: &mut [MaybeUninit<Self>],
+    ) -> Result;
 
     /// Reads the length of a property array.
     fn read_array_len_from_fwnode_property(fwnode: &FwNode, name: &CStr) -> Result<usize>;
@@ -495,11 +492,11 @@ macro_rules! impl_property_for_int {
         impl<const N: usize> Sealed for [$int; N] {}
 
         impl PropertyInt for $int {
-            fn read_array_from_fwnode_property<'a>(
+            fn read_array_from_fwnode_property(
                 fwnode: &FwNode,
                 name: &CStr,
-                out: &'a mut [MaybeUninit<Self>],
-            ) -> Result<&'a mut [Self]> {
+                out: &mut [MaybeUninit<Self>],
+            ) -> Result {
                 // SAFETY:
                 // - `fwnode`, `name` and `out` are all valid by their type
                 //   invariants.
@@ -515,12 +512,7 @@ macro_rules! impl_property_for_int {
                         out.len(),
                     )
                 };
-                to_result(ret)?;
-                // SAFETY: Transmuting from `&'a mut [MaybeUninit<Self>]` to
-                // `&'a mut [Self]` is sound, because the previous call to a
-                // `fwnode_property_read_*_array` function (which didn't fail)
-                // fully initialized the slice.
-                Ok(unsafe { core::mem::transmute::<&mut [MaybeUninit<Self>], &mut [Self]>(out) })
+                to_result(ret)
             }
 
             fn read_array_len_from_fwnode_property(fwnode: &FwNode, name: &CStr) -> Result<usize> {
