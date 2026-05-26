@@ -242,6 +242,10 @@ extern bool snd_usb_skip_validation;
  *  from snd_usb_handle_sync_urb. Instead fall through and enqueue a
  *  packet_info containing only size-0 packets, so the OUT ring keeps
  *  moving (emits silence). Needed by Behringer Flow 8 (1397:050c).
+ * QUIRK_FLAG_MIXER_SKIP_GET_CUR_VOL
+ *  Skip reading current volume for mixers, as some devices return constant
+ *  values or errors but otherwise works fine, i.e., setting volume takes
+ *  desired effect.
  */
 
 enum {
@@ -275,6 +279,7 @@ enum {
 	QUIRK_TYPE_MIXER_PLAYBACK_LINEAR_VOL	= 27,
 	QUIRK_TYPE_MIXER_CAPTURE_LINEAR_VOL	= 28,
 	QUIRK_TYPE_IFB_SILENCE_ON_EMPTY		= 29,
+	QUIRK_TYPE_MIXER_SKIP_GET_CUR_VOL	= 30,
 /* Please also edit snd_usb_audio_quirk_flag_names */
 };
 
@@ -310,5 +315,6 @@ enum {
 #define QUIRK_FLAG_MIXER_PLAYBACK_LINEAR_VOL	QUIRK_FLAG(MIXER_PLAYBACK_LINEAR_VOL)
 #define QUIRK_FLAG_MIXER_CAPTURE_LINEAR_VOL	QUIRK_FLAG(MIXER_CAPTURE_LINEAR_VOL)
 #define QUIRK_FLAG_IFB_SILENCE_ON_EMPTY		QUIRK_FLAG(IFB_SILENCE_ON_EMPTY)
+#define QUIRK_FLAG_MIXER_SKIP_GET_CUR_VOL	QUIRK_FLAG(MIXER_SKIP_GET_CUR_VOL)
 
 #endif /* __USBAUDIO_H */

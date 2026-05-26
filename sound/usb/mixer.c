@@ -420,6 +420,11 @@ static int get_cur_ctl_value(struct usb_mixer_elem_info *cval,
 static inline int get_cur_mix_raw(struct usb_mixer_elem_info *cval,
 				  int channel, int *value)
 {
+	struct snd_usb_audio *chip = cval->head.mixer->chip;
+
+	if (chip->quirk_flags & QUIRK_FLAG_MIXER_SKIP_GET_CUR_VOL)
+		return -ENXIO;
+
 	return get_ctl_value(cval, UAC_GET_CUR,
 			     (cval->control << 8) | channel,
 			     value);

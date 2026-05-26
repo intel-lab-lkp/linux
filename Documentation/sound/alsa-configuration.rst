@@ -2389,6 +2389,10 @@ quirk_flags
           from snd_usb_handle_sync_urb. Instead fall through and enqueue a
           packet_info containing only size-0 packets, so the OUT ring keeps
           moving (emits silence). Needed by Behringer Flow 8 (1397:050c).
+        * bit 30: ``mixer_skip_get_cur_vol``
+          Skip reading current volume for mixers, as some devices return
+          constant values or errors but otherwise works fine, i.e., setting
+          volume takes desired effect.
 
 This module supports multiple devices, autoprobe and hotplugging.
 
