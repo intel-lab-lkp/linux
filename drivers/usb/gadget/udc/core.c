@@ -1594,7 +1594,7 @@ static int gadget_match_driver(struct device *dev, const struct device_driver *d
 			struct usb_gadget_driver, driver);
 
 	/* If the driver specifies a udc_name, it must match the UDC's name */
-	if (driver->udc_name &&
+	if (driver->udc_name && dev_name(&udc->dev) &&
 			strcmp(driver->udc_name, dev_name(&udc->dev)) != 0)
 		return 0;
 
