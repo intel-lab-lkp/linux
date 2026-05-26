@@ -185,6 +185,42 @@ mod base {
 }
 
 impl<T: Send> Devres<T> {
+    // 1. Get the standard Rust string at compile time
+    const TYPE_NAME: &'static str = core::any::type_name::<T>();
+
+    // 2. Store the actual bytes in a const array (a VALUE, not a reference)
+    const TYPE_NAME_BUF: [u8; 128] = {
+        let bytes = Self::TYPE_NAME.as_bytes();
+        let mut buf = [0u8; 128];
+        let mut i = 0;
+
+        while i < bytes.len() && i < 127 {
+            buf[i] = bytes[i];
+            i += 1;
+        }
+        buf[i] = 0; // The null terminator
+        buf
+    };
+
+    // 3. Take a reference to the array (which promotes it to static memory)
+    const TYPE_NAME_CSTR: &'static crate::str::CStr = {
+        let static_buf: &'static [u8; 128] = &Self::TYPE_NAME_BUF;
+
+        // Find the length up to the null byte
+        let mut len = 0;
+        while len < 128 && static_buf[len] != 0 {
+            len += 1;
+        }
+
+        // SAFETY: `static_buf` is promoted to static memory, and we verified the null byte.
+        unsafe {
+            crate::str::CStr::from_bytes_with_nul_unchecked(core::slice::from_raw_parts(
+                static_buf.as_ptr(),
+                len + 1,
+            ))
+        }
+    };
+
     /// Creates a new [`Devres`] instance of the given `data`.
     ///
     /// The `data` encapsulated within the returned `Devres` instance' `data` will be
@@ -209,9 +245,8 @@ impl<T: Send> Devres<T> {
                     unsafe {
                         base::devres_set_node_dbginfo(
                             node,
-                            // TODO: Use `core::any::type_name::<T>()` once it is a `const fn`,
-                            // such that we can convert the `&str` to a `&CStr` at compile-time.
-                            c"Devres<T>".as_char_ptr(),
+                            // Injects the statically promoted C-string pointer
+                            Self::TYPE_NAME_CSTR.as_char_ptr(),
                             core::mem::size_of::<Revocable<T>>(),
                         )
                     };
