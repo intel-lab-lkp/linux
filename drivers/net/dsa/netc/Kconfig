@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config NET_DSA_NETC_SWITCH
 	tristate "NXP NETC Ethernet switch support"
+	depends on NET_VENDOR_FREESCALE
 	depends on ARM64 || COMPILE_TEST
 	depends on NET_DSA && PCI
 	select NET_DSA_TAG_NETC

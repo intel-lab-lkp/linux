@@ -35,8 +35,6 @@ struct enetc_mdio_priv {
 	int mdio_base;
 };
 
-#if IS_REACHABLE(CONFIG_FSL_ENETC_MDIO)
-
 int enetc_mdio_read_c22(struct mii_bus *bus, int phy_id, int regnum);
 int enetc_mdio_write_c22(struct mii_bus *bus, int phy_id, int regnum,
 			 u16 value);
@@ -44,25 +42,5 @@ int enetc_mdio_read_c45(struct mii_bus *bus, int phy_id, int devad, int regnum);
 int enetc_mdio_write_c45(struct mii_bus *bus, int phy_id, int devad, int regnum,
 			 u16 value);
 struct enetc_hw *enetc_hw_alloc(struct device *dev, void __iomem *port_regs);
-
-#else
-
-static inline int enetc_mdio_read_c22(struct mii_bus *bus, int phy_id,
-				      int regnum)
-{ return -EINVAL; }
-static inline int enetc_mdio_write_c22(struct mii_bus *bus, int phy_id,
-				       int regnum, u16 value)
-{ return -EINVAL; }
-static inline int enetc_mdio_read_c45(struct mii_bus *bus, int phy_id,
-				      int devad, int regnum)
-{ return -EINVAL; }
-static inline int enetc_mdio_write_c45(struct mii_bus *bus, int phy_id,
-				       int devad, int regnum, u16 value)
-{ return -EINVAL; }
-static inline struct enetc_hw *enetc_hw_alloc(struct device *dev,
-					      void __iomem *port_regs)
-{ return ERR_PTR(-EINVAL); }
-
-#endif
 
 #endif
