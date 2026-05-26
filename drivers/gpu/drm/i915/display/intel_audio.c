@@ -36,6 +36,7 @@
 #include "intel_cdclk.h"
 #include "intel_crtc.h"
 #include "intel_de.h"
+#include "intel_display.h"
 #include "intel_display_types.h"
 #include "intel_display_wa.h"
 #include "intel_lpe_audio.h"
@@ -1207,6 +1208,28 @@ static int intel_audio_component_sync_audio_rate(struct device *kdev, int port,
 	return err;
 }
 
+static bool intel_audio_connector_is_forced_off(struct intel_display *display,
+						int port)
+{
+	struct drm_connector_list_iter conn_iter;
+	struct intel_connector *connector;
+	bool forced_off = false;
+
+	drm_connector_list_iter_begin(display->drm, &conn_iter);
+	for_each_intel_connector_iter(connector, &conn_iter) {
+		struct intel_encoder *encoder = intel_attached_encoder(connector);
+
+		if (encoder && encoder->port == port &&
+		    connector->base.force == DRM_FORCE_OFF) {
+			forced_off = true;
+			break;
+		}
+	}
+	drm_connector_list_iter_end(&conn_iter);
+
+	return forced_off;
+}
+
 static int intel_audio_component_get_eld(struct device *kdev, int port,
 					 int cpu_transcoder, bool *enabled,
 					 unsigned char *buf, int max_bytes)
@@ -1219,9 +1242,13 @@ static int intel_audio_component_get_eld(struct device *kdev, int port,
 
 	audio_state = find_audio_state(display, port, cpu_transcoder);
 	if (!audio_state) {
+		mutex_unlock(&display->audio.mutex);
+		if (intel_audio_connector_is_forced_off(display, port)) {
+			*enabled = false;
+			return 0;
+		}
 		drm_dbg_kms(display->drm, "Not valid for port %c\n",
 			    port_name(port));
-		mutex_unlock(&display->audio.mutex);
 		return -EINVAL;
 	}
 
