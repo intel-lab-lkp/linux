@@ -2378,7 +2378,7 @@ static int get_cur_path(struct send_ctx *sctx, u64 ino, u64 gen,
 	struct fs_path *name = NULL;
 	u64 parent_inode = 0;
 	u64 parent_gen = 0;
-	int stop = 0;
+	bool stop = false;
 	const bool is_cur_inode = (ino == sctx->cur_ino && gen == sctx->cur_inode_gen);
 
 	if (is_cur_inode && fs_path_len(&sctx->cur_inode_path) > 0) {
@@ -2413,7 +2413,7 @@ static int get_cur_path(struct send_ctx *sctx, u64 ino, u64 gen,
 		wdm = get_waiting_dir_move(sctx, ino);
 		if (wdm && wdm->orphanized) {
 			ret = gen_unique_name(sctx, ino, gen, name);
-			stop = 1;
+			stop = true;
 		} else if (wdm) {
 			ret = get_first_ref(sctx->parent_root, ino,
 					    &parent_inode, &parent_gen, name);
@@ -2422,7 +2422,7 @@ static int get_cur_path(struct send_ctx *sctx, u64 ino, u64 gen,
 							&parent_inode,
 							&parent_gen, name);
 			if (ret)
-				stop = 1;
+				stop = true;
 		}
 
 		if (ret < 0)
@@ -3349,7 +3349,7 @@ static int add_pending_dir_move(struct send_ctx *sctx,
 	struct rb_node *parent = NULL;
 	struct pending_dir_move *entry = NULL, *pm;
 	struct recorded_ref *cur;
-	int exists = 0;
+	bool exists = false;
 	int ret;
 
 	pm = kmalloc_obj(*pm);
@@ -3370,7 +3370,7 @@ static int add_pending_dir_move(struct send_ctx *sctx,
 		} else if (parent_ino > entry->parent_ino) {
 			p = &(*p)->rb_right;
 		} else {
-			exists = 1;
+			exists = true;
 			break;
 		}
 	}
@@ -6559,10 +6559,10 @@ static int finish_inode_if_needed(struct send_ctx *sctx, bool at_end)
 	u64 right_uid;
 	u64 right_gid;
 	u64 right_fileattr;
-	int need_chmod = 0;
-	int need_chown = 0;
+	bool need_chmod = false;
+	bool need_chown = false;
 	bool need_fileattr = false;
-	int need_truncate = 1;
+	bool need_truncate = true;
 	int pending_move = 0;
 	int refs_processed = 0;
 
@@ -6602,11 +6602,11 @@ static int finish_inode_if_needed(struct send_ctx *sctx, bool at_end)
 	left_fileattr = info.fileattr;
 
 	if (!sctx->parent_root || sctx->cur_inode_new) {
-		need_chown = 1;
+		need_chown = true;
 		if (!S_ISLNK(sctx->cur_inode_mode))
-			need_chmod = 1;
+			need_chmod = true;
 		if (sctx->cur_inode_next_write_offset == sctx->cur_inode_size)
-			need_truncate = 0;
+			need_truncate = false;
 	} else {
 		u64 old_size;
 
@@ -6620,15 +6620,15 @@ static int finish_inode_if_needed(struct send_ctx *sctx, bool at_end)
 		right_fileattr = info.fileattr;
 
 		if (left_uid != right_uid || left_gid != right_gid)
-			need_chown = 1;
+			need_chown = true;
 		if (!S_ISLNK(sctx->cur_inode_mode) && left_mode != right_mode)
-			need_chmod = 1;
+			need_chmod = true;
 		if (!S_ISLNK(sctx->cur_inode_mode) && left_fileattr != right_fileattr)
 			need_fileattr = true;
 		if ((old_size == sctx->cur_inode_size) ||
 		    (sctx->cur_inode_size > old_size &&
 		     sctx->cur_inode_next_write_offset == sctx->cur_inode_size))
-			need_truncate = 0;
+			need_truncate = false;
 	}
 
 	if (S_ISREG(sctx->cur_inode_mode)) {
@@ -7986,7 +7986,7 @@ long btrfs_ioctl_send(struct btrfs_root *send_root, const struct btrfs_ioctl_sen
 	u64 *clone_sources_tmp = NULL;
 	int clone_sources_to_rollback = 0;
 	size_t alloc_size;
-	int sort_clone_roots = 0;
+	bool sort_clone_roots = false;
 	struct btrfs_lru_cache_entry *entry;
 	struct btrfs_lru_cache_entry *tmp;
 
@@ -8209,7 +8209,7 @@ long btrfs_ioctl_send(struct btrfs_root *send_root, const struct btrfs_ioctl_sen
 	sort(sctx->clone_roots, sctx->clone_roots_cnt,
 			sizeof(*sctx->clone_roots), __clone_root_cmp_sort,
 			NULL);
-	sort_clone_roots = 1;
+	sort_clone_roots = true;
 
 	ret = flush_delalloc_roots(sctx);
 	if (ret)
