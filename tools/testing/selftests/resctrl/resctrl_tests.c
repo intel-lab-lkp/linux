@@ -34,6 +34,17 @@ static unsigned int detect_vendor(void)
 	if (initialized)
 		return vendor_id;
 
+#if defined(__aarch64__)
+	/*
+	 * aarch64 has no userspace vendor_id in /proc/cpuinfo.  MPAM-capable
+	 * ARM implementations follow ARM DDI 0598; treat all aarch64 builds
+	 * as a single vendor for the purposes of resctrl selftests.
+	 */
+	vendor_id = ARCH_ARM;
+	initialized = true;
+	return vendor_id;
+#endif
+
 	inf = fopen("/proc/cpuinfo", "r");
 	if (!inf) {
 		vendor_id = 0;
