@@ -10,6 +10,7 @@
 #include <linux/circ_buf.h>
 #include <linux/clk.h>
 #include <linux/console.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>
@@ -23,6 +24,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/seq_file.h>
 #include <linux/serial_core.h>
 #include <linux/slab.h>
 #include <linux/tty_flip.h>
@@ -291,6 +293,8 @@ struct lpuart_port {
 	bool			is_cs7; /* Set to true when character size is 7 */
 					/* and the parity is enabled		*/
 	bool			dma_idle_int;
+
+	struct dentry		*debugfs_dir;
 };
 
 struct lpuart_soc_data {
@@ -1031,6 +1035,7 @@ static void lpuart32_rxint(struct lpuart_port *sport)
 	}
 
 out:
+
 	uart_unlock_and_check_sysrq(&sport->port);
 
 	tty_flip_buffer_push(port);
@@ -2860,6 +2865,67 @@ static int lpuart_global_reset(struct lpuart_port *sport)
 	return 0;
 }
 
+#ifdef CONFIG_DEBUG_FS
+
+#define dump_register_hex(_seq, _reg, _sport) \
+seq_printf((_seq), "%-12s: 0x%02x\n", #_reg, readb((_sport)->port.membase + (_reg)))
+
+#define dump_register32_hex(_seq, _reg, _sport) \
+seq_printf((_seq), "%-12s: 0x%08x\n", #_reg, lpuart32_read(&(_sport)->port, _reg))
+
+static int regs_show(struct seq_file *s, void *p)
+{
+	struct lpuart_port *sport = s->private;
+
+	pm_runtime_get_sync(sport->port.dev);
+
+	if (lpuart_is_32(sport)) {
+		dump_register32_hex(s, UARTBAUD, sport);
+		dump_register32_hex(s, UARTSTAT, sport);
+		dump_register32_hex(s, UARTCTRL, sport);
+		dump_register32_hex(s, UARTMATCH, sport);
+		dump_register32_hex(s, UARTMODIR, sport);
+		dump_register32_hex(s, UARTFIFO, sport);
+		dump_register32_hex(s, UARTWATER, sport);
+	} else {
+		dump_register_hex(s, UARTBDH, sport);
+		dump_register_hex(s, UARTBDL, sport);
+		dump_register_hex(s, UARTCR1, sport);
+		dump_register_hex(s, UARTCR2, sport);
+		dump_register_hex(s, UARTSR1, sport);
+		dump_register_hex(s, UARTCR3, sport);
+		dump_register_hex(s, UARTDR, sport);
+		dump_register_hex(s, UARTCR4, sport);
+		dump_register_hex(s, UARTCR5, sport);
+		dump_register_hex(s, UARTMODEM, sport);
+		dump_register_hex(s, UARTPFIFO, sport);
+		dump_register_hex(s, UARTCFIFO, sport);
+		dump_register_hex(s, UARTSFIFO, sport);
+		dump_register_hex(s, UARTTWFIFO, sport);
+		dump_register_hex(s, UARTTCFIFO, sport);
+		dump_register_hex(s, UARTRWFIFO, sport);
+	}
+
+	pm_runtime_mark_last_busy(sport->port.dev);
+	pm_runtime_put_autosuspend(sport->port.dev);
+
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(regs);
+
+static void lpuart_init_debugfs(struct lpuart_port *sport)
+{
+	sport->debugfs_dir = debugfs_create_dir(dev_name(sport->port.dev),
+						NULL);
+
+	debugfs_create_file("regs", 0400, sport->debugfs_dir, sport, &regs_fops);
+}
+
+#else
+static inline void lpuart_init_debugfs(struct lpuart_port *sport) {}
+#endif
+
 static int lpuart_probe(struct platform_device *pdev)
 {
 	const struct lpuart_soc_data *sdata = of_device_get_match_data(&pdev->dev);
@@ -2969,6 +3035,8 @@ static int lpuart_probe(struct platform_device *pdev)
 	if (ret)
 		goto failed_irq_request;
 
+	lpuart_init_debugfs(sport);
+
 	return 0;
 
 failed_irq_request:
@@ -2987,6 +3055,7 @@ static void lpuart_remove(struct platform_device *pdev)
 {
 	struct lpuart_port *sport = platform_get_drvdata(pdev);
 
+	debugfs_remove_recursive(sport->debugfs_dir);
 	uart_remove_one_port(&lpuart_reg, &sport->port);
 
 	lpuart_disable_clks(sport);
