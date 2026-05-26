@@ -112,11 +112,9 @@ struct simple_xattr_cache {
 
 struct simple_xattr {
 	struct rhash_head hash_node;
-	union {
-		struct list_head node;
-		struct rcu_head rcu;
-	};
 	struct list_head *parent;
+	struct list_head node;
+	struct rcu_head rcu;
 	char *name;
 	size_t size;
 	char value[] __counted_by(size);
