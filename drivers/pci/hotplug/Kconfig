@@ -20,7 +20,7 @@ if HOTPLUG_PCI
 
 config HOTPLUG_PCI_COMPAQ
 	tristate "Compaq PCI Hotplug driver"
-	depends on X86 && PCI_BIOS
+	depends on X86_32 && PCI_BIOS
 	help
 	  Say Y here if you have a motherboard with a Compaq PCI Hotplug
 	  controller.
