@@ -1761,8 +1761,9 @@ static int ibmvnic_get_vpd(struct ibmvnic_adapter *adapter)
 	union ibmvnic_crq crq;
 	int len = 0;
 	int rc;
+	unsigned char *buff = adapter->vpd->buff;
 
-	if (adapter->vpd->buff)
+	if (buff)
 		len = adapter->vpd->len;
 
 	mutex_lock(&adapter->fw_lock);
@@ -1788,17 +1789,17 @@ static int ibmvnic_get_vpd(struct ibmvnic_adapter *adapter)
 	if (!adapter->vpd->len)
 		return -ENODATA;
 
-	if (!adapter->vpd->buff)
-		adapter->vpd->buff = kzalloc(adapter->vpd->len, GFP_KERNEL);
+	if (!buff)
+		buff = kzalloc(adapter->vpd->len, GFP_KERNEL);
 	else if (adapter->vpd->len != len)
-		adapter->vpd->buff =
-			krealloc(adapter->vpd->buff,
-				 adapter->vpd->len, GFP_KERNEL);
+		buff = krealloc(buff,
+				adapter->vpd->len, GFP_KERNEL);
 
-	if (!adapter->vpd->buff) {
+	if (!buff) {
 		dev_err(dev, "Could allocate VPD buffer\n");
 		return -ENOMEM;
 	}
+	adapter->vpd->buff = buff;
 
 	adapter->vpd->dma_addr =
 		dma_map_single(dev, adapter->vpd->buff, adapter->vpd->len,
