@@ -5872,6 +5872,10 @@ static void scx_root_disable(struct scx_sched *sch)
 
 		scoped_guard (sched_change, p, queue_flags) {
 			p->sched_class = new_class;
+
+			if (old_class == &ext_sched_class &&
+			    new_class == &fair_sched_class)
+				set_load_weight(p, false);
 		}
 
 		scx_disable_and_exit_task(scx_task_sched(p), p);
