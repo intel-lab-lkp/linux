@@ -219,3 +219,77 @@ void intel_cmtg_set_clk_select(const struct intel_crtc_state *crtc_state)
 	if (clk_sel_set)
 		intel_de_rmw(display, CMTG_CLK_SEL, clk_sel_clr, clk_sel_set);
 }
+
+static inline enum transcoder to_cmtg_transcoder(enum transcoder cpu_transcoder)
+{
+	switch (cpu_transcoder) {
+	case TRANSCODER_A:
+		return TRANSCODER_CMTG0;
+	case TRANSCODER_B:
+		return TRANSCODER_CMTG1;
+	default:
+		return INVALID_TRANSCODER;
+	}
+}
+
+void intel_cmtg_set_timings(const struct intel_crtc_state *crtc_state, bool lrr)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	enum transcoder cmtg_transcoder = to_cmtg_transcoder(crtc_state->cpu_transcoder);
+	u32 crtc_vdisplay, crtc_vtotal, crtc_vblank_start, crtc_vblank_end;
+
+	if (!intel_cmtg_is_allowed(crtc_state))
+		return;
+
+	crtc_vdisplay = adjusted_mode->crtc_vdisplay;
+
+	/*
+	 * For platforms that always use VRR Timing Generator, the VTOTAL.Vtotal
+	 * bits are not required. Since the support for these bits is going to
+	 * be deprecated in upcoming platforms, avoid writing these bits for the
+	 * platforms that do not use legacy Timing Generator.
+	 */
+	crtc_vtotal = 1;
+
+	/*
+	 * VBLANK_START not used by hw, just clear it
+	 * to make it stand out in register dumps.
+	 */
+	crtc_vblank_start = 1;
+
+	crtc_vblank_end = adjusted_mode->crtc_vblank_end;
+
+	if (lrr) {
+		intel_de_write(display, TRANS_SET_CONTEXT_LATENCY(display, cmtg_transcoder),
+			       crtc_state->set_context_latency);
+		intel_de_write(display, TRANS_VBLANK(display, cmtg_transcoder),
+			       VBLANK_START(crtc_vblank_start - 1) |
+			       VBLANK_END(crtc_vblank_end - 1));
+		intel_de_write(display, TRANS_VTOTAL(display, cmtg_transcoder),
+			       VACTIVE(crtc_vdisplay - 1) |
+			       VTOTAL(crtc_vtotal - 1));
+		return;
+	}
+
+	intel_de_write(display, TRANS_HTOTAL(display, cmtg_transcoder),
+		       HACTIVE(adjusted_mode->crtc_hdisplay - 1) |
+		       HTOTAL(adjusted_mode->crtc_htotal - 1));
+	intel_de_write(display, TRANS_HBLANK(display, cmtg_transcoder),
+		       HBLANK_START(adjusted_mode->crtc_hblank_start - 1) |
+		       HBLANK_END(adjusted_mode->crtc_hblank_end - 1));
+	intel_de_write(display, TRANS_HSYNC(display, cmtg_transcoder),
+		       HSYNC_START(adjusted_mode->crtc_hsync_start - 1) |
+		       HSYNC_END(adjusted_mode->crtc_hsync_end - 1));
+	intel_de_write(display, TRANS_VTOTAL(display, cmtg_transcoder),
+		       VACTIVE(crtc_vdisplay - 1) |
+		       VTOTAL(crtc_vtotal - 1));
+	intel_de_write(display, TRANS_VBLANK(display, cmtg_transcoder),
+		       VBLANK_START(crtc_vblank_start - 1) |
+		       VBLANK_END(crtc_vblank_end - 1));
+	intel_de_write(display, TRANS_VSYNC(display, cmtg_transcoder),
+		       VSYNC_START(adjusted_mode->crtc_vsync_start - 1) |
+		       VSYNC_END(adjusted_mode->crtc_vsync_end - 1));
+	intel_de_write(display, TRANS_SET_CONTEXT_LATENCY(display, cmtg_transcoder),
+		       crtc_state->set_context_latency);
+}
