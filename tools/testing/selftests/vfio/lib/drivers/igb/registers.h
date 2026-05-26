@@ -3,6 +3,8 @@
 #ifndef _IGB_REGISTERS_H_
 #define _IGB_REGISTERS_H_
 
+#include <linux/bits.h>
+
 /* Register Offsets (Intel 82576EB Datasheet) */
 #define IGB_CTRL 0x00000 /* Device Control */
 #define IGB_STATUS 0x00008 /* Device Status */
@@ -76,12 +78,18 @@
 #define IGB_VMOLR_BAM 0x08000000 /* Broadcast Accept Mode */
 #define IGB_RAH_POOL_1 0x00040000 /* Pool 1 assignment */
 
-#define IGB_EIMS 0x01524 /* Extended Interrupt Mask Set */
 #define IGB_EICS 0x01520 /* Extended Interrupt Cause Set */
+#define IGB_EIMS 0x01524 /* Extended Interrupt Mask Set */
 #define IGB_EIMC 0x01528 /* Extended Interrupt Mask Clear */
+#define IGB_EIAC 0x0152C /* Extended Interrupt Auto Clear */
+#define IGB_EIAM 0x01530 /* Extended Interrupt Auto Mask Enable */
+#define IGB_EICR_VEC0 BIT(0) /* MSI-X cause/vector 0 */
 #define IGB_CTRL_GIO_MASTER_DISABLE (1 << 2) /* GIO Master Disable */
 #define IGB_STATUS_GIO_MASTER_ENABLE (1 << 19) /* GIO Master Enable */
 #define IGB_GPIE 0x01514 /* General Purpose Interrupt Enable */
+/* GPIE fields per 82576 datasheet section 7.3.2.11, Table 7-47 */
+#define IGB_GPIE_MULTIPLE_MSIX BIT(4)  /* Multi-vector MSI-X mode */
+#define IGB_GPIE_EIAME         BIT(30) /* Apply EIAM on MSI-X assertion */
 #define IGB_TXDCTL0_Q_EN (1 << 25) /* Transmit Queue Enable */
 #define IGB_RXDCTL0_Q_EN (1 << 25) /* Receive Queue Enable */
 #define IGB_MRQC 0x05818 /* Multiple Receive Queues Command */
@@ -99,7 +107,6 @@
 #define IGB_PHY_CTRL_FULL_DUPLEX	0x0100 /* bit 8 */
 #define IGB_PHY_CTRL_LOOPBACK		0x4000 /* bit 14 */
 
-#define IGB_GPIE_EIAME 0x10 /* Extended Interrupt Auto Mask Enable */
 #define IGB_IVAR_VALID 0x80 /* Valid bit for IVAR register */
 
 /*
