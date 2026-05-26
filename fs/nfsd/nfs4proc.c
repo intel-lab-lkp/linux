@@ -302,10 +302,6 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 			goto out;
 	}
 
-	status = fh_compose(resfhp, fhp->fh_export, child, fhp);
-	if (status != nfs_ok)
-		goto out;
-
 	v_mtime = 0;
 	v_atime = 0;
 	if (nfsd4_create_is_exclusive(open->op_createmode)) {
@@ -328,6 +324,10 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		 * no change happened.
 		 */
 		status = fh_fill_both_attrs(fhp);
+		if (status != nfs_ok)
+			goto out;
+
+		status = fh_compose(resfhp, fhp->fh_export, child, fhp);
 		if (status != nfs_ok)
 			goto out;
 
@@ -380,6 +380,10 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		goto out;
 	open->op_created = true;
 	fh_fill_post_attrs(fhp);
+
+	status = fh_compose(resfhp, fhp->fh_export, child, fhp);
+	if (status != nfs_ok)
+		goto out;
 
 	/* A newly created file already has a file size of zero. */
 	if ((iap->ia_valid & ATTR_SIZE) && (iap->ia_size == 0))
