@@ -742,6 +742,7 @@ static int process_connect(struct ceph_connection *con)
 	u64 sup_feat = from_msgr(con->msgr)->supported_features;
 	u64 req_feat = from_msgr(con->msgr)->required_features;
 	u64 server_feat = le64_to_cpu(con->v1.in_reply.features);
+	u32 connect_seq;
 	int ret;
 
 	dout("process_connect on %p tag %d\n", con, con->v1.in_tag);
@@ -894,12 +895,15 @@ static int process_connect(struct ceph_connection *con)
 			le32_to_cpu(con->v1.in_reply.global_seq);
 		con->v1.connect_seq++;
 		con->peer_features = server_feat;
+		connect_seq = le32_to_cpu(con->v1.in_reply.connect_seq);
 		dout("process_connect got READY gseq %d cseq %d (%d)\n",
-		     con->v1.peer_global_seq,
-		     le32_to_cpu(con->v1.in_reply.connect_seq),
-		     con->v1.connect_seq);
-		WARN_ON(con->v1.connect_seq !=
-			le32_to_cpu(con->v1.in_reply.connect_seq));
+		     con->v1.peer_global_seq, connect_seq, con->v1.connect_seq);
+		if (con->v1.connect_seq != connect_seq) {
+			pr_err_ratelimited("connect_seq mismatch: my %u peer %u\n",
+					   con->v1.connect_seq, connect_seq);
+			con->error_msg = "protocol error, connect_seq mismatch";
+			return -1;
+		}
 
 		if (con->v1.in_reply.flags & CEPH_MSG_CONNECT_LOSSY)
 			ceph_con_flag_set(con, CEPH_CON_F_LOSSYTX);
@@ -1456,7 +1460,7 @@ out:
 	return ret;
 
 bad_tag:
-	pr_err("try_read bad tag %d\n", con->v1.in_tag);
+	pr_err_ratelimited("try_read bad tag %d\n", con->v1.in_tag);
 	con->error_msg = "protocol error, garbage tag";
 	ret = -1;
 	goto out;
