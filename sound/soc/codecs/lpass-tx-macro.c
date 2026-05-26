@@ -2493,14 +2493,9 @@ static const struct tx_macro_data lpass_ver_11 = {
 
 static const struct of_device_id tx_macro_dt_match[] = {
 	{
-		/*
-		 * The block is actually LPASS v9.4, but keep LPASS v9 match
-		 * data and audio widgets, due to compatibility reasons.
-		 * Microphones are working on SC7280 fine, so apparently the fix
-		 * is not necessary.
-		 */
 		.compatible = "qcom,sc7280-lpass-tx-macro",
-		.data = &lpass_ver_9,
+		/* LPASS v9.4 */
+		.data = &lpass_ver_9_2,
 	}, {
 		.compatible = "qcom,sm6115-lpass-tx-macro",
 		.data = &lpass_ver_10_sm6115,
