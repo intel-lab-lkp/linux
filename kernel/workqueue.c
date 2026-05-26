@@ -2437,6 +2437,24 @@ bool queue_work_on(int cpu, struct workqueue_struct *wq,
 	bool ret = false;
 	unsigned long irq_flags;
 
+	/*
+	 * NOTE: These checks are here to assure that no users will still
+	 * rely on system_wq and system_unbound_wq.
+	 * They can be removed along with those workqueue when the
+	 * time comes.
+	 */
+	if (unlikely(wq == system_wq)) {
+		pr_warn_once("workqueue: system_wq will be removed shortly. "
+			"Use system_percpu_wq instead. Caller: %ps\n",
+			__builtin_return_address(0));
+		wq = system_percpu_wq;
+	} else if (unlikely(wq == system_unbound_wq)) {
+		pr_warn_once("workqueue: system_unbound_wq will be removed shortly. "
+			"Use system_dfl_wq instead. Caller: %ps\n",
+			__builtin_return_address(0));
+		wq = system_dfl_wq;
+	}
+
 	local_irq_save(irq_flags);
 
 	if (!test_and_set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work)) &&
@@ -2604,6 +2622,24 @@ bool queue_delayed_work_on(int cpu, struct workqueue_struct *wq,
 	bool ret = false;
 	unsigned long irq_flags;
 
+	/*
+	 * NOTE: These checks are here to assure that no users will still
+	 * rely on system_wq and system_unbound_wq.
+	 * They can be removed along with those workqueue when the
+	 * time comes.
+	 */
+	if (unlikely(wq == system_wq)) {
+		pr_warn_once("workqueue: system_wq will be removed shortly. "
+			"Use system_percpu_wq instead. Caller: %ps\n",
+			__builtin_return_address(0));
+		wq = system_percpu_wq;
+	} else if (unlikely(wq == system_unbound_wq)) {
+		pr_warn_once("workqueue: system_unbound_wq will be removed shortly. "
+			"Use system_dfl_wq instead. Caller: %ps\n",
+			__builtin_return_address(0));
+		wq = system_dfl_wq;
+	}
+
 	/* read the comment in __queue_work() */
 	local_irq_save(irq_flags);
 
@@ -2642,6 +2678,24 @@ bool mod_delayed_work_on(int cpu, struct workqueue_struct *wq,
 	unsigned long irq_flags;
 	bool ret;
 
+	/*
+	 * NOTE: These checks are here to assure that no users will still
+	 * rely on system_wq and system_unbound_wq.
+	 * They can be removed along with those workqueue when the
+	 * time comes.
+	 */
+	if (unlikely(wq == system_wq)) {
+		pr_warn_once("workqueue: system_wq will be removed shortly. "
+		      "Use system_percpu_wq instead. Caller: %ps\n",
+		       __builtin_return_address(0));
+		wq = system_percpu_wq;
+	} else if (unlikely(wq == system_unbound_wq)) {
+		pr_warn_once("workqueue: system_unbound_wq will be removed shortly. "
+		      "Use system_dfl_wq instead. Caller: %ps\n",
+		       __builtin_return_address(0));
+		wq = system_dfl_wq;
+	}
+
 	ret = work_grab_pending(&dwork->work, WORK_CANCEL_DELAYED, &irq_flags);
 
 	if (!clear_pending_if_disabled(&dwork->work))
@@ -2675,6 +2729,24 @@ static void rcu_work_rcufn(struct rcu_head *rcu)
 bool queue_rcu_work(struct workqueue_struct *wq, struct rcu_work *rwork)
 {
 	struct work_struct *work = &rwork->work;
+
+	/*
+	 * NOTE: These checks are here to assure that no users will still
+	 * rely on system_wq and system_unbound_wq.
+	 * They can be removed along with those workqueue when the
+	 * time comes.
+	 */
+	if (unlikely(wq == system_wq)) {
+		pr_warn_once("workqueue: system_wq will be removed shortly. "
+			"Use system_percpu_wq instead. Caller: %ps\n",
+			__builtin_return_address(0));
+		wq = system_percpu_wq;
+	} else if (unlikely(wq == system_unbound_wq)) {
+		pr_warn_once("workqueue: system_unbound_wq will be removed shortly. "
+			"Use system_dfl_wq instead. Caller: %ps\n",
+			__builtin_return_address(0));
+		wq = system_dfl_wq;
+	}
 
 	/*
 	 * rcu_work can't be canceled or disabled. Warn if the user reached
