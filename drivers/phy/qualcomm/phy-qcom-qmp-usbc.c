@@ -513,7 +513,7 @@ static const char * const usb3phy_reset_l[] = {
 };
 
 static const char * const usb3dpphy_reset_l[] = {
-	"phy_phy", "dp_phy",
+	"phy_phy", "dp_phy", "phy",
 };
 
 static const struct regulator_bulk_data qmp_phy_msm8998_vreg_l[] = {
