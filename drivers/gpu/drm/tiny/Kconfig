@@ -98,6 +98,22 @@ config DRM_PIXPAPER
 
 	  If M is selected, the module will be built as pixpaper.ko.
 
+config DRM_PIXPAPER_426M
+	tristate "DRM support for PIXPAPER 4.26 monochrome display panel"
+	depends on DRM && SPI
+	depends on MMU
+	select DRM_CLIENT_SELECTION
+	select DRM_GEM_SHMEM_HELPER
+	select DRM_KMS_HELPER
+	help
+	  DRM driver for the Mayqueen Pixpaper 4.26 monochrome e-ink
+	  display panel.
+
+	  This driver supports SPI-connected 800x480 monochrome panels
+	  with an XRGB8888 framebuffer input format.
+
+	  If M is selected, the module will be built as pixpaper-426m.ko.
+
 config TINYDRM_HX8357D
 	tristate "DRM support for HX8357D display panels"
 	depends on DRM && SPI
