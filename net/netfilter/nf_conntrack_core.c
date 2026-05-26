@@ -1730,15 +1730,17 @@ void nf_conntrack_free(struct nf_conn *ct)
 	 */
 	WARN_ON(refcount_read(&ct->ct_general.use) != 0);
 
+	rcu_read_lock();
 	if (ct->status & IPS_SRC_NAT_DONE) {
 		const struct nf_nat_hook *nat_hook;
 
-		rcu_read_lock();
 		nat_hook = rcu_dereference(nf_nat_hook);
 		if (nat_hook)
 			nat_hook->remove_nat_bysrc(ct);
-		rcu_read_unlock();
 	}
+
+	nf_ct_timeout_put(ct);
+	rcu_read_unlock();
 
 	kfree(ct->ext);
 	kmem_cache_free(nf_conntrack_cachep, ct);
@@ -2356,8 +2358,8 @@ found:
 	return ct;
 }
 
-static void nf_ct_iterate_cleanup(int (*iter)(struct nf_conn *i, void *data),
-				  const struct nf_ct_iter_data *iter_data)
+void nf_ct_iterate_cleanup(int (*iter)(struct nf_conn *i, void *data),
+			   const struct nf_ct_iter_data *iter_data)
 {
 	unsigned int bucket = 0;
 	struct nf_conn *ct;
@@ -2374,6 +2376,7 @@ static void nf_ct_iterate_cleanup(int (*iter)(struct nf_conn *i, void *data),
 	}
 	mutex_unlock(&nf_conntrack_mutex);
 }
+EXPORT_SYMBOL_GPL(nf_ct_iterate_cleanup);
 
 void nf_ct_iterate_cleanup_net(int (*iter)(struct nf_conn *i, void *data),
 			       const struct nf_ct_iter_data *iter_data)

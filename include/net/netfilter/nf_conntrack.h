@@ -239,6 +239,8 @@ struct nf_ct_iter_data {
 };
 
 /* Iterate over all conntracks: if iter returns true, it's deleted. */
+void nf_ct_iterate_cleanup(int (*iter)(struct nf_conn *i, void *data),
+			   const struct nf_ct_iter_data *iter_data);
 void nf_ct_iterate_cleanup_net(int (*iter)(struct nf_conn *i, void *data),
 			       const struct nf_ct_iter_data *iter_data);
 

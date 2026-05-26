@@ -25,17 +25,28 @@
 const struct nf_ct_timeout_hooks __rcu *nf_ct_timeout_hook __read_mostly;
 EXPORT_SYMBOL_GPL(nf_ct_timeout_hook);
 
+/* nf_ct_iterate_cleanup() holds refcount on this conntrack. */
 static int untimeout(struct nf_conn *ct, void *timeout)
 {
 	struct nf_conn_timeout *timeout_ext = nf_ct_timeout_find(ct);
 
 	if (timeout_ext) {
-		const struct nf_ct_timeout *t;
+		struct nf_ct_timeout *t;
 
 		t = rcu_access_pointer(timeout_ext->timeout);
+		if (!t)
+			return 0;
 
-		if (!timeout || t == timeout)
+		if (!timeout || t == timeout) {
 			RCU_INIT_POINTER(timeout_ext->timeout, NULL);
+
+			/* No race with nf_conntrack_free() which is called
+			 * only after the conntrack has been removed from
+			 * the hashes.
+			 */
+			if (refcount_dec_and_test(&t->refcnt))
+				kfree_rcu(t, rcu);
+		}
 	}
 
 	/* We are not intended to delete this conntrack. */
@@ -49,7 +60,10 @@ void nf_ct_untimeout(struct net *net, struct nf_ct_timeout *timeout)
 		.data	= timeout,
 	};
 
-	nf_ct_iterate_cleanup_net(untimeout, &iter_data);
+	if (net)
+		nf_ct_iterate_cleanup_net(untimeout, &iter_data);
+	else
+		nf_ct_iterate_cleanup(untimeout, &iter_data);
 }
 EXPORT_SYMBOL_GPL(nf_ct_untimeout);
 
