@@ -324,10 +324,19 @@ static int pch_phub_write_gbe_mac_addr(struct pch_phub_reg *chip, u8 *data)
 	int retval;
 	int i;
 
-	if (chip->ioh_type == PCH_EG20T || chip->ioh_type == PCH_ML7831)
+	switch (chip->ioh_type) {
+	case PCH_EG20T:
+	case PCH_ML7831:
 		retval = pch_phub_gbe_serial_rom_conf(chip);
-	else	/* ML7223 */
+		break;
+
+	case PCH_ML7213:
+	case PCH_ML7223M:
+	case PCH_ML7223N:
 		retval = pch_phub_gbe_serial_rom_conf_mp(chip);
+		break;
+	}
+
 	if (retval)
 		return retval;
 
