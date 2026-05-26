@@ -24,6 +24,7 @@ LIBVFIO_O_DIRS := $(shell dirname $(LIBVFIO_O) | uniq)
 $(shell mkdir -p $(LIBVFIO_O_DIRS))
 
 CFLAGS += -I$(LIBVFIO_SRCDIR)/include
+CFLAGS += -I$(top_srcdir)/drivers/net/ethernet/intel/igb
 
 $(LIBVFIO_O): $(LIBVFIO_OUTPUT)/%.o : $(LIBVFIO_SRCDIR)/%.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c $< -o $@

@@ -5,14 +5,19 @@
 #include <linux/io.h>
 #include <linux/pci_regs.h>
 #include <linux/pci_ids.h>
+#include <linux/mii.h>
 #include <libvfio/vfio_pci_device.h>
 
-#include "registers.h"
+#include "e1000_regs.h"
+#include "e1000_defines.h"
+#include "e1000_82575.h"
 
 #define PCI_DEVICE_ID_INTEL_82576 0x10C9
 #define IGB_MAX_CHUNK_SIZE 1024
 #define MSIX_VECTOR 0
 #define RING_SIZE 4096 /* Number of descriptors in ring */
+#define IGB_ETH_OVERHEAD_SZ 18
+#define IGB_JUMBO_FRAME_SIZE (IGB_MAX_CHUNK_SIZE + IGB_ETH_OVERHEAD_SZ)
 
 struct igb_tx_desc {
 	union {
@@ -76,23 +81,23 @@ static int igb_write_phy(struct igb *igb, u32 offset, u16 data)
 	int i;
 
 	mdic = (((u32)data) |
-		(offset << IGB_MDIC_REG_SHIFT) |
-		(1 << IGB_MDIC_PHY_SHIFT) |
-		IGB_MDIC_OP_WRITE);
+		(offset << E1000_MDIC_REG_SHIFT) |
+		(1 << E1000_MDIC_PHY_SHIFT) |
+		E1000_MDIC_OP_WRITE);
 
-	igb_write32(igb, IGB_MDIC, mdic);
+	igb_write32(igb, E1000_MDIC, mdic);
 
 	for (i = 0; i < 1000; i++) {
 		usleep(50);
-		mdic = igb_read32(igb, IGB_MDIC);
-		if (mdic & IGB_MDIC_READY)
+		mdic = igb_read32(igb, E1000_MDIC);
+		if (mdic & E1000_MDIC_READY)
 			break;
 	}
 
-	if (!(mdic & IGB_MDIC_READY))
+	if (!(mdic & E1000_MDIC_READY))
 		return -1;
 
-	if (mdic & IGB_MDIC_ERROR)
+	if (mdic & E1000_MDIC_ERROR)
 		return -1;
 
 	return 0;
@@ -125,14 +130,14 @@ static int igb_setup_loopback(struct igb *igb)
 	 * below clears the autoneg-enable bit, so this is effectively a
 	 * no-op there.
 	 */
-	(void)igb_write_phy(igb, IGB_PHY_CTRL_REG_OFFSET,
-			    IGB_PHY_CTRL_AN_ENABLE | IGB_PHY_CTRL_AN_RESTART);
+	(void)igb_write_phy(igb, MII_BMCR,
+			    BMCR_ANENABLE | BMCR_ANRESTART);
 
 	/* PHY control: loopback + 1Gb/s full duplex, autoneg disabled. */
-	ret = igb_write_phy(igb, IGB_PHY_CTRL_REG_OFFSET,
-			    IGB_PHY_CTRL_LOOPBACK |
-			    IGB_PHY_CTRL_SPEED_1000 |
-			    IGB_PHY_CTRL_FULL_DUPLEX);
+	ret = igb_write_phy(igb, MII_BMCR,
+			    BMCR_LOOPBACK |
+			    BMCR_SPEED1000 |
+			    BMCR_FULLDPLX);
 	if (ret)
 		return ret;
 
@@ -148,14 +153,14 @@ static int igb_setup_loopback(struct igb *igb)
 	 * the link state the descriptor engine does not run, since the chip
 	 * normally waits for a real negotiated link.
 	 */
-	ctrl = igb_read32(igb, IGB_CTRL);
-	ctrl &= ~IGB_CTRL_SPD_SEL;
-	ctrl |= IGB_CTRL_FRCSPD |
-		IGB_CTRL_FRCDPX |
-		IGB_CTRL_SPD_1000 |
-		IGB_CTRL_FD |
-		IGB_CTRL_SLU;
-	igb_write32(igb, IGB_CTRL, ctrl);
+	ctrl = igb_read32(igb, E1000_CTRL);
+	ctrl &= ~E1000_CTRL_SPD_SEL;
+	ctrl |= E1000_CTRL_FRCSPD |
+		E1000_CTRL_FRCDPX |
+		E1000_CTRL_SPD_1000 |
+		E1000_CTRL_FD |
+		E1000_CTRL_SLU;
+	igb_write32(igb, E1000_CTRL, ctrl);
 
 	/*
 	 * Settling delay matching the kernel ethtool selftest's msleep(500)
@@ -189,15 +194,14 @@ static void igb_hw_init(struct vfio_pci_device *device)
 	u16 cmd_reg;
 	int retries;
 
-
-
 	iova_tx = to_iova(device, igb->tx_ring);
 	iova_rx = to_iova(device, igb->rx_ring);
+
 	/* Signal that the driver is loaded */
-	ctrl = igb_read32(igb, IGB_CTRL_EXT);
-	ctrl |= IGB_CTRL_EXT_DRV_LOAD;
-	ctrl &= ~IGB_CTRL_EXT_LINK_MODE_MASK;
-	igb_write32(igb, IGB_CTRL_EXT, ctrl);
+	ctrl = igb_read32(igb, E1000_CTRL_EXT);
+	ctrl |= E1000_CTRL_EXT_DRV_LOAD;
+	ctrl &= ~E1000_CTRL_EXT_LINK_MODE_MASK;
+	igb_write32(igb, E1000_CTRL_EXT, ctrl);
 
 	/* Enable PCI Bus Master. */
 	cmd_reg = vfio_pci_config_readw(device, PCI_COMMAND);
@@ -214,27 +218,27 @@ static void igb_hw_init(struct vfio_pci_device *device)
 	 * retrying the failed read indefinitely, which keeps PCIe AER and
 	 * IOMMU error handling busy and interferes with reset recovery.
 	 */
-	ctrl = igb_read32(igb, IGB_GCR);
-	ctrl &= ~IGB_GCR_CMPL_TMOUT_RESEND;
-	igb_write32(igb, IGB_GCR, ctrl);
+	ctrl = igb_read32(igb, E1000_GCR);
+	ctrl &= ~E1000_GCR_CMPL_TMOUT_RESEND;
+	igb_write32(igb, E1000_GCR, ctrl);
 
 	/* Configure PHY internal loopback for testing. */
 	if (igb_setup_loopback(igb))
 		return;
 
 	/* Configure TX and RX descriptor rings */
-	igb_write32(igb, IGB_TDBAL0, (u32)iova_tx);
-	igb_write32(igb, IGB_TDBAH0, (u32)(iova_tx >> 32));
-	igb_write32(igb, IGB_TDLEN0, RING_SIZE * sizeof(struct igb_tx_desc));
-	igb_write32(igb, IGB_TDH0, 0);
-	igb_write32(igb, IGB_TDT0, 0);
-	igb_write32(igb, IGB_TXDCTL0, IGB_TXDCTL0_Q_EN);
+	igb_write32(igb, E1000_TDBAL(0), (u32)iova_tx);
+	igb_write32(igb, E1000_TDBAH(0), (u32)(iova_tx >> 32));
+	igb_write32(igb, E1000_TDLEN(0), RING_SIZE * sizeof(struct igb_tx_desc));
+	igb_write32(igb, E1000_TDH(0), 0);
+	igb_write32(igb, E1000_TDT(0), 0);
+	igb_write32(igb, E1000_TXDCTL(0), E1000_TXDCTL_QUEUE_ENABLE);
 
-	igb_write32(igb, IGB_RDBAL0, (u32)iova_rx);
-	igb_write32(igb, IGB_RDBAH0, (u32)(iova_rx >> 32));
-	igb_write32(igb, IGB_RDLEN0, RING_SIZE * sizeof(struct igb_rx_desc));
-	igb_write32(igb, IGB_RDH0, 0);
-	igb_write32(igb, IGB_RDT0, 0);
+	igb_write32(igb, E1000_RDBAL(0), (u32)iova_rx);
+	igb_write32(igb, E1000_RDBAH(0), (u32)(iova_rx >> 32));
+	igb_write32(igb, E1000_RDLEN(0), RING_SIZE * sizeof(struct igb_rx_desc));
+	igb_write32(igb, E1000_RDH(0), 0);
+	igb_write32(igb, E1000_RDT(0), 0);
 
 	/*
 	 * Select the advanced one-buffer descriptor format.  Per 82576
@@ -244,15 +248,15 @@ static void igb_hw_init(struct vfio_pci_device *device)
 	 * writeback layout (section 7.1.5.2), so polling rx.wb.status_error
 	 * requires this format.  Section 8.10.2 specifies DESCTYPE[27:25].
 	 */
-	igb_write32(igb, IGB_SRRCTL0, IGB_SRRCTL_DESCTYPE_ADV_ONEBUF);
+	igb_write32(igb, E1000_SRRCTL(0), E1000_SRRCTL_DESCTYPE_ADV_ONEBUF);
 
-	igb_write32(igb, IGB_RXDCTL0, IGB_RXDCTL0_Q_EN);
+	igb_write32(igb, E1000_RXDCTL(0), E1000_RXDCTL_QUEUE_ENABLE);
 
 	/* Wait for TX and RX queues to be enabled */
 	retries = 2000;
 	while (retries-- > 0) {
-		if ((igb_read32(igb, IGB_TXDCTL0) & IGB_TXDCTL0_Q_EN) &&
-		    (igb_read32(igb, IGB_RXDCTL0) & IGB_RXDCTL0_Q_EN))
+		if ((igb_read32(igb, E1000_TXDCTL(0)) & E1000_TXDCTL_QUEUE_ENABLE) &&
+		    (igb_read32(igb, E1000_RXDCTL(0)) & E1000_RXDCTL_QUEUE_ENABLE))
 			break;
 		usleep(10);
 	}
@@ -270,13 +274,12 @@ static void igb_hw_init(struct vfio_pci_device *device)
 	 * selftest work on both real hardware and QEMU without conditional
 	 * code paths.
 	 */
-	rctl = IGB_RCTL_EN |       /* Receiver Enable */
-	       IGB_RCTL_UPE |      /* Unicast Promiscuous (for dummy MAC) */
-	       IGB_RCTL_LBM_MAC |  /* MAC Loopback - for QEMU emulation only */
-	       IGB_RCTL_SECRC;     /* Strip CRC (needed for memcmp) */
-	igb_write32(igb, IGB_RCTL, rctl);
-	igb_write32(igb, IGB_TCTL, IGB_TCTL_EN);
-
+	rctl = E1000_RCTL_EN |       /* Receiver Enable */
+	       E1000_RCTL_UPE |      /* Unicast Promiscuous (for dummy MAC) */
+	       E1000_RCTL_LBM_MAC |  /* MAC Loopback - for QEMU emulation only */
+	       E1000_RCTL_SECRC;     /* Strip CRC (needed for memcmp) */
+	igb_write32(igb, E1000_RCTL, rctl);
+	igb_write32(igb, E1000_TCTL, E1000_TCTL_EN);
 	/*
 	 * Program MSI-X interrupt routing per 82576 datasheet:
 	 *
@@ -297,15 +300,15 @@ static void igb_hw_init(struct vfio_pci_device *device)
 	 * IVAR (section 7.3.1.2, register definition in 8.8.13): map RX
 	 * cause 0 to MSI-X vector 0 and mark the entry valid.
 	 */
-	igb_write32(igb, IGB_GPIE, IGB_GPIE_MULTIPLE_MSIX | IGB_GPIE_EIAME);
-	igb_write32(igb, IGB_EIAC, IGB_EICR_VEC0);
-	igb_write32(igb, IGB_EIAM, IGB_EICR_VEC0);
+	igb_write32(igb, E1000_GPIE, E1000_GPIE_MSIX_MODE | E1000_GPIE_EIAME);
+	igb_write32(igb, E1000_EIAC, E1000_EICR_RX_QUEUE0);
+	igb_write32(igb, E1000_EIAM, E1000_EICR_RX_QUEUE0);
 
 	/* Enable interrupts on vector 0 */
-	igb_write32(igb, IGB_EIMS, IGB_EICR_VEC0);
+	igb_write32(igb, E1000_EIMS, E1000_EICR_RX_QUEUE0);
 
 	/* Map vector 0 to interrupt cause 0 and mark it valid */
-	igb_write32(igb, IGB_IVAR0, IGB_IVAR_VALID);
+	igb_write32(igb, E1000_IVAR0, E1000_IVAR_VALID);
 
 	/* Initialize driver state and capability limits */
 	igb->tx_tail = 0;
@@ -316,6 +319,7 @@ static void igb_hw_init(struct vfio_pci_device *device)
 	device->driver.msi = MSIX_VECTOR;
 }
 
+
 static void igb_init(struct vfio_pci_device *device)
 {
 	struct igb *igb = to_igb_state(device);
@@ -325,9 +329,9 @@ static void igb_init(struct vfio_pci_device *device)
 	igb->bar0 = device->bars[0].vaddr;
 
 	/* Reset device and disable all interrupts. */
-	igb_write32(igb, IGB_CTRL, igb_read32(igb, IGB_CTRL) | IGB_CTRL_RST);
+	igb_write32(igb, E1000_CTRL, igb_read32(igb, E1000_CTRL) | E1000_CTRL_RST);
 	usleep(20000);
-	igb_write32(igb, IGB_IMC, 0xFFFFFFFF);
+	igb_write32(igb, E1000_IMC, 0xFFFFFFFF);
 
 	/*
 	 * Enable MSI-X via VFIO before device-side register programming.
@@ -341,24 +345,26 @@ static void igb_init(struct vfio_pci_device *device)
 
 	igb_hw_init(device);
 }
+
+
 static void igb_remove(struct vfio_pci_device *device)
 {
 	struct igb *igb = to_igb_state(device);
 
 	vfio_pci_msix_disable(device);
-	igb_write32(igb, IGB_RCTL, 0);
-	igb_write32(igb, IGB_TCTL, 0);
-	igb_write32(igb, IGB_CTRL, igb_read32(igb, IGB_CTRL) | IGB_CTRL_RST);
+	igb_write32(igb, E1000_RCTL, 0);
+	igb_write32(igb, E1000_TCTL, 0);
+	igb_write32(igb, E1000_CTRL, igb_read32(igb, E1000_CTRL) | E1000_CTRL_RST);
 }
 
 static void igb_irq_disable(struct igb *igb)
 {
-	igb_write32(igb, IGB_EIMC, IGB_EICR_VEC0);
+	igb_write32(igb, E1000_EIMC, E1000_EICR_RX_QUEUE0);
 }
 
 static void igb_irq_enable(struct igb *igb)
 {
-	igb_write32(igb, IGB_EIMS, IGB_EICR_VEC0);
+	igb_write32(igb, E1000_EIMS, E1000_EICR_RX_QUEUE0);
 }
 
 static void igb_irq_clear(struct igb *igb)
@@ -370,7 +376,7 @@ static void igb_irq_clear(struct igb *igb)
 	 * the read-to-clear path in 7.3.4.3.  Bits not in EIAC are still
 	 * cleared by writing 1.
 	 */
-	igb_write32(igb, IGB_EICR, 0xFFFFFFFF);
+	igb_write32(igb, E1000_EICR, 0xFFFFFFFF);
 }
 
 static void igb_memcpy_start(struct vfio_pci_device *device, iova_t src,
@@ -404,23 +410,23 @@ static void igb_memcpy_start(struct vfio_pci_device *device, iova_t src,
 		 * in bits 15:0 of cmd_type_len.
 		 */
 		tx->read.cmd_type_len = (uint32_t)size |
-			IGB_ADVTXD_DTYP_DATA |
-			IGB_ADVTXD_DCMD_DEXT |
-			IGB_ADVTXD_DCMD_IFCS |
-			IGB_ADVTXD_DCMD_EOP;
+			E1000_ADVTXD_DTYP_DATA |
+			E1000_ADVTXD_DCMD_DEXT |
+			E1000_ADVTXD_DCMD_IFCS |
+			E1000_ADVTXD_DCMD_EOP;
 		/*
 		 * PAYLEN (section 7.2.2.3.11) is the total payload size
 		 * in olinfo_status[31:14].
 		 */
 		tx->read.olinfo_status =
-			(uint32_t)size << IGB_ADVTXD_PAYLEN_SHIFT;
+			(uint32_t)size << E1000_ADVTXD_PAYLEN_SHIFT;
 
 		igb->tx_tail = (igb->tx_tail + 1) % RING_SIZE;
 		igb->rx_tail = (igb->rx_tail + 1) % RING_SIZE;
 	}
 
-	igb_write32(igb, IGB_RDT0, igb->rx_tail);
-	igb_write32(igb, IGB_TDT0, igb->tx_tail);
+	igb_write32(igb, E1000_RDT(0), igb->rx_tail);
+	igb_write32(igb, E1000_TDT(0), igb->tx_tail);
 }
 
 /*
@@ -474,7 +480,6 @@ static int igb_memcpy_wait(struct vfio_pci_device *device)
 	}
 
 	igb_irq_clear(igb);
-
 	igb_irq_enable(igb);
 
 	if (rx->wb.status_error & 1)
@@ -505,7 +510,7 @@ static void igb_send_msi(struct vfio_pci_device *device)
 {
 	struct igb *igb = to_igb_state(device);
 
-	igb_write32(igb, IGB_EICS, 1);
+	igb_write32(igb, E1000_EICS, 1);
 }
 
 const struct vfio_pci_driver_ops igb_ops = {
