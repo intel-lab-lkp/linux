@@ -2146,6 +2146,52 @@ static noinline_for_stack void rcu_gp_fqs_loop(void)
 	}
 }
 
+#ifdef CONFIG_RCU_GP_CLEANUP_STALE_CHECK
+/*
+ * Threshold of consecutive GPs with rdp->defer_qs_pending stuck at
+ * PENDING and no observed PENDING -> IDLE transition before WARN.
+ */
+#define RCU_DEFER_QS_STUCK_GPS_THRESHOLD	5
+
+static void rcu_gp_cleanup_stale_check(void)
+{
+	int cpu;
+	unsigned long cur_gp_seq = READ_ONCE(rcu_state.gp_seq);
+
+	for_each_online_cpu(cpu) {
+		struct rcu_data *rdp = per_cpu_ptr(&rcu_data, cpu);
+		s64 clears_now;
+		int p_now;
+
+		if (READ_ONCE(rdp->gp_seq) != cur_gp_seq) {
+			rdp->defer_qs_pending_stuck_gps = 0;
+			rdp->defer_qs_pending_clears_snap =
+				atomic64_read(&rdp->defer_qs_pending_clears);
+			continue;
+		}
+
+		clears_now = atomic64_read(&rdp->defer_qs_pending_clears);
+		p_now = READ_ONCE(rdp->defer_qs_pending);
+
+		if (p_now != DEFER_QS_PENDING ||
+		    clears_now != rdp->defer_qs_pending_clears_snap) {
+			rdp->defer_qs_pending_stuck_gps = 0;
+			rdp->defer_qs_pending_clears_snap = clears_now;
+			continue;
+		}
+
+		rdp->defer_qs_pending_stuck_gps++;
+		WARN_ONCE(rdp->defer_qs_pending_stuck_gps >=
+			  RCU_DEFER_QS_STUCK_GPS_THRESHOLD,
+			"RCU: defer_qs_pending STUCK on CPU %d for %u GPs (gp_seq=%lu, clears=%lld)\n",
+			cpu, rdp->defer_qs_pending_stuck_gps,
+			cur_gp_seq, clears_now);
+	}
+}
+#else
+static inline void rcu_gp_cleanup_stale_check(void) { }
+#endif /* CONFIG_RCU_GP_CLEANUP_STALE_CHECK */
+
 /*
  * Clean up after the old grace period.
  */
@@ -2220,6 +2266,7 @@ static noinline void rcu_gp_cleanup(void)
 
 	/* Declare grace period done, trace first to use old GP number. */
 	trace_rcu_grace_period(rcu_state.name, rcu_state.gp_seq, TPS("end"));
+	rcu_gp_cleanup_stale_check();
 	rcu_seq_end(&rcu_state.gp_seq);
 	ASSERT_EXCLUSIVE_WRITER(rcu_state.gp_seq);
 	WRITE_ONCE(rcu_state.gp_state, RCU_GP_IDLE);

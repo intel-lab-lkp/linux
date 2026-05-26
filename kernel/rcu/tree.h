@@ -204,6 +204,11 @@ struct rcu_data {
 					/* period it is aware of. */
 	struct irq_work defer_qs_iw;	/* Obtain later scheduler attention. */
 	int defer_qs_pending;		/* irqwork or softirq pending? */
+#ifdef CONFIG_RCU_GP_CLEANUP_STALE_CHECK
+	atomic64_t   defer_qs_pending_clears;
+	s64          defer_qs_pending_clears_snap;
+	unsigned int defer_qs_pending_stuck_gps;
+#endif
 	struct work_struct strict_work;	/* Schedule readers for strict GPs. */
 
 	/* 2) batch handling */
@@ -299,6 +304,9 @@ struct rcu_data {
 static inline void rcu_defer_qs_clear(struct rcu_data *rdp)
 {
 	WRITE_ONCE(rdp->defer_qs_pending, DEFER_QS_IDLE);
+#ifdef CONFIG_RCU_GP_CLEANUP_STALE_CHECK
+	atomic64_inc(&rdp->defer_qs_pending_clears);
+#endif
 }
 
 /* Values for nocb_defer_wakeup field in struct rcu_data. */
