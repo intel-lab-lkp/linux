@@ -392,15 +392,24 @@ static void f2fs_write_end_io(struct bio *bio)
 		if (f2fs_in_warm_node_list(folio))
 			f2fs_del_fsync_node_entry(sbi, folio);
 
-		dec_page_count(sbi, type);
+		if (type == F2FS_WB_CP_DATA) {
+			unsigned long flags;
 
-		/*
-		 * we should access sbi before folio_end_writeback() to
-		 * avoid racing w/ kill_f2fs_super()
-		 */
-		if (type == F2FS_WB_CP_DATA && !get_pages(sbi, type) &&
-				wq_has_sleeper(&sbi->cp_wait))
-			wake_up(&sbi->cp_wait);
+			/*
+			 * Hold cp_wait.lock across the zero transition and the
+			 * wakeup so f2fs_wait_on_all_pages() cannot miss it or
+			 * free sbi before this callback stops touching cp_wait.
+			 */
+			if (atomic_dec_and_lock_irqsave(&sbi->nr_pages[type],
+							&sbi->cp_wait.lock,
+							flags)) {
+				wake_up_locked(&sbi->cp_wait);
+				spin_unlock_irqrestore(&sbi->cp_wait.lock,
+						       flags);
+			}
+		} else {
+			dec_page_count(sbi, type);
+		}
 
 		folio_clear_f2fs_gcing(folio);
 		folio_end_writeback(folio);

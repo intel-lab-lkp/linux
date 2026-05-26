@@ -1497,24 +1497,40 @@ static void unblock_operations(struct f2fs_sb_info *sbi)
 	f2fs_unlock_all(sbi);
 }
 
+static bool f2fs_prepare_cp_wait(struct f2fs_sb_info *sbi,
+				 struct wait_queue_entry *wait, int type)
+{
+	unsigned long flags;
+	bool wait_more;
+
+	prepare_to_wait(&sbi->cp_wait, wait, TASK_UNINTERRUPTIBLE);
+	spin_lock_irqsave(&sbi->cp_wait.lock, flags);
+	wait_more = get_pages(sbi, type);
+	spin_unlock_irqrestore(&sbi->cp_wait.lock, flags);
+
+	return wait_more;
+}
+
 void f2fs_wait_on_all_pages(struct f2fs_sb_info *sbi, int type)
 {
 	DEFINE_WAIT(wait);
 
 	for (;;) {
-		if (!get_pages(sbi, type))
+		if (!f2fs_prepare_cp_wait(sbi, &wait, type))
 			break;
 
 		if (unlikely(f2fs_cp_error(sbi) &&
 			!is_sbi_flag_set(sbi, SBI_IS_CLOSE)))
 			break;
+		finish_wait(&sbi->cp_wait, &wait);
 
 		if (type == F2FS_DIRTY_META)
 			f2fs_sync_meta_pages(sbi, LONG_MAX, FS_CP_META_IO);
 		else if (type == F2FS_WB_CP_DATA)
 			f2fs_submit_merged_write(sbi, DATA);
 
-		prepare_to_wait(&sbi->cp_wait, &wait, TASK_UNINTERRUPTIBLE);
+		if (!f2fs_prepare_cp_wait(sbi, &wait, type))
+			break;
 		io_schedule_timeout(DEFAULT_SCHEDULE_TIMEOUT);
 	}
 	finish_wait(&sbi->cp_wait, &wait);
