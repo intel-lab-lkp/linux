@@ -5234,4 +5234,8 @@ void map_anon_folio_pte_nopf(struct folio *folio, pte_t *pte,
 		struct vm_area_struct *vma, unsigned long addr,
 		bool uffd_wp);
 
+bool cond_install_uffd_wp_ptes(struct vm_area_struct *vma, unsigned long addr,
+		pte_t *ptep, pte_t pte, unsigned long nr_ptes);
+
+
 #endif /* _LINUX_MM_H */
