@@ -874,36 +874,34 @@ int tcf_idr_check_alloc(struct tc_action_net *tn, u32 *index,
 	u32 max;
 
 	if (*index) {
-		rcu_read_lock();
+		mutex_lock(&idrinfo->lock);
 		p = idr_find(&idrinfo->action_idr, *index);
 
 		if (IS_ERR(p)) {
 			/* This means that another process allocated
 			 * index but did not assign the pointer yet.
 			 */
-			rcu_read_unlock();
+			mutex_unlock(&idrinfo->lock);
 			return -EAGAIN;
 		}
 
 		if (!p) {
 			/* Empty slot, try to allocate it */
 			max = *index;
-			rcu_read_unlock();
+			mutex_unlock(&idrinfo->lock);
 			goto new;
 		}
 
 		if (!refcount_inc_not_zero(&p->tcfa_refcnt)) {
 			/* Action was deleted in parallel */
-			rcu_read_unlock();
+			mutex_unlock(&idrinfo->lock);
 			return -EAGAIN;
 		}
 
 		if (bind)
 			atomic_inc(&p->tcfa_bindcnt);
 		*a = p;
-
-		rcu_read_unlock();
-
+		mutex_unlock(&idrinfo->lock);
 		return 1;
 	} else {
 		/* Find a slot */
