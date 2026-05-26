@@ -2583,8 +2583,8 @@ int udp_rcv(struct sk_buff *skb)
 	struct rtable *rt = skb_rtable(skb);
 	struct net *net = dev_net(skb->dev);
 	struct sock *sk = NULL;
-	unsigned short ulen;
 	__be32 saddr, daddr;
+	unsigned int ulen;
 	struct udphdr *uh;
 	bool refcounted;
 	int drop_reason;
@@ -2604,6 +2604,9 @@ int udp_rcv(struct sk_buff *skb)
 
 	if (ulen > skb->len)
 		goto short_packet;
+
+	if (!ulen)
+		ulen = skb->len;
 
 	if (ulen < sizeof(*uh))
 		goto short_packet;
