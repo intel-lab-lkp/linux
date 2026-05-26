@@ -677,6 +677,7 @@ static void __exit cttimeout_exit(void)
 
 	unregister_pernet_subsys(&cttimeout_ops);
 	RCU_INIT_POINTER(nf_ct_timeout_hook, NULL);
+	synchronize_net();
 
 	nf_ct_untimeout(NULL, NULL);
 }

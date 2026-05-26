@@ -969,20 +969,9 @@ oif_changed:
 }
 EXPORT_SYMBOL_GPL(nf_nat_inet_fn);
 
-struct nf_nat_proto_clean {
-	u8	l3proto;
-	u8	l4proto;
-};
-
 /* kill conntracks with affected NAT section */
 static int nf_nat_proto_remove(struct nf_conn *i, void *data)
 {
-	const struct nf_nat_proto_clean *clean = data;
-
-	if ((clean->l3proto && nf_ct_l3num(i) != clean->l3proto) ||
-	    (clean->l4proto && nf_ct_protonum(i) != clean->l4proto))
-		return 0;
-
 	return i->status & IPS_NAT_MASK ? 1 : 0;
 }
 
@@ -1350,9 +1339,9 @@ static int __init nf_nat_init(void)
 
 static void __exit nf_nat_cleanup(void)
 {
-	struct nf_nat_proto_clean clean = {};
+	struct nf_ct_iter_data iter_data = {};
 
-	nf_ct_iterate_destroy(nf_nat_proto_clean, &clean);
+	nf_ct_iterate_cleanup(nf_nat_proto_clean, &iter_data);
 
 	nf_ct_helper_expectfn_unregister(&follow_master_nat);
 	RCU_INIT_POINTER(nf_nat_hook, NULL);

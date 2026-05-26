@@ -244,10 +244,6 @@ void nf_ct_iterate_cleanup(int (*iter)(struct nf_conn *i, void *data),
 void nf_ct_iterate_cleanup_net(int (*iter)(struct nf_conn *i, void *data),
 			       const struct nf_ct_iter_data *iter_data);
 
-/* also set unconfirmed conntracks as dying. Only use in module exit path. */
-void nf_ct_iterate_destroy(int (*iter)(struct nf_conn *i, void *data),
-			   void *data);
-
 struct nf_conntrack_zone;
 
 void nf_conntrack_free(struct nf_conn *ct);
