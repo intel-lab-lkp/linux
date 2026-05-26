@@ -159,7 +159,7 @@ fn read<T: Reader + Sync>(data: &T, buf: *const c_char, count: usize) -> isize {
 ///
 /// `file` must be a valid pointer to a `file` struct.
 /// The `private_data` of the file must contain a valid pointer to a `seq_file` whose
-/// `private` data in turn points to a `T` that implements `Reader`.
+/// `private` data is valid to convert to a shared reference to `T`.
 /// `buf` must be a valid user-space buffer.
 pub(crate) unsafe extern "C" fn write<T: Reader + Sync>(
     file: *mut bindings::file,
@@ -168,9 +168,10 @@ pub(crate) unsafe extern "C" fn write<T: Reader + Sync>(
     _ppos: *mut bindings::loff_t,
 ) -> isize {
     // SAFETY: The file was opened with `single_open`, which sets `private_data` to a `seq_file`.
-    let seq = unsafe { &mut *((*file).private_data.cast::<bindings::seq_file>()) };
-    // SAFETY: By caller precondition, this pointer is live and points to a value of type `T`.
-    let data = unsafe { &*(seq.private as *const T) };
+    let seq = unsafe { (*file).private_data.cast::<bindings::seq_file>() };
+    // SAFETY: By caller precondition, `seq` points to a live `seq_file` whose
+    // `private` data is valid to convert to a shared reference to `T`.
+    let data = unsafe { &*((*seq).private as *const T) };
     read(data, buf, count)
 }
 
