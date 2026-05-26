@@ -122,7 +122,8 @@ static int fwctl_cmd_rpc(struct fwctl_ucmd *ucmd)
 
 	out_len = cmd->out_len;
 	void *outbuf __free(kvfree) = fwctl->ops->fw_rpc(
-		ucmd->uctx, cmd->scope, inbuf, cmd->in_len, &out_len);
+		ucmd->uctx, cmd->scope, inbuf, cmd->in_len, &out_len,
+		cmd->driver_data);
 	if (IS_ERR(outbuf))
 		return PTR_ERR(outbuf);
 	if (outbuf == inbuf) {

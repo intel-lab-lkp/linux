@@ -172,13 +172,17 @@ static unsigned int bnxtctl_get_timeout(struct input *req)
 
 static void *bnxtctl_fw_rpc(struct fwctl_uctx *uctx,
 			    enum fwctl_rpc_scope scope,
-			    void *in, size_t in_len, size_t *out_len)
+			    void *in, size_t in_len, size_t *out_len,
+			    __u64 driver_data)
 {
 	struct bnxtctl_dev *bnxtctl =
 		container_of(uctx->fwctl, struct bnxtctl_dev, fwctl);
 	struct bnxt_en_dev *edev = bnxtctl->aux_priv->edev;
 	struct bnxt_fw_msg rpc_in = {0};
 	int rc;
+
+	if (driver_data)
+		return ERR_PTR(-EOPNOTSUPP);
 
 	if (in_len < sizeof(struct input) || in_len > HWRM_MAX_REQ_LEN)
 		return ERR_PTR(-EINVAL);

@@ -51,10 +51,14 @@ struct fwctl_ops {
 	 * @fw_rpc: Implement FWCTL_RPC. Deliver rpc_in/in_len to the FW and
 	 * return the response and set out_len. rpc_in can be returned as the
 	 * response pointer. Otherwise the returned pointer is freed with
-	 * kvfree().
+	 * kvfree(). driver_data is the opaque value from fwctl_rpc, passed
+	 * verbatim from userspace. The driver is responsible for interpreting
+	 * and validating it. Drivers that do not define a driver_data format
+	 * must return -EOPNOTSUPP if driver_data is non-zero.
 	 */
 	void *(*fw_rpc)(struct fwctl_uctx *uctx, enum fwctl_rpc_scope scope,
-			void *rpc_in, size_t in_len, size_t *out_len);
+			void *rpc_in, size_t in_len, size_t *out_len,
+			__u64 driver_data);
 };
 
 /**

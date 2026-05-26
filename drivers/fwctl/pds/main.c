@@ -348,7 +348,8 @@ static int pdsfc_validate_rpc(struct pdsfc_dev *pdsfc,
 }
 
 static void *pdsfc_fw_rpc(struct fwctl_uctx *uctx, enum fwctl_rpc_scope scope,
-			  void *in, size_t in_len, size_t *out_len)
+			  void *in, size_t in_len, size_t *out_len,
+			  __u64 driver_data)
 {
 	struct pdsfc_dev *pdsfc = container_of(uctx->fwctl, struct pdsfc_dev, fwctl);
 	struct device *dev = &uctx->fwctl->dev;
@@ -361,6 +362,9 @@ static void *pdsfc_fw_rpc(struct fwctl_uctx *uctx, enum fwctl_rpc_scope scope,
 	void *in_payload = NULL;
 	void *out = NULL;
 	int err;
+
+	if (driver_data)
+		return ERR_PTR(-EOPNOTSUPP);
 
 	err = pdsfc_validate_rpc(pdsfc, rpc, scope);
 	if (err)
