@@ -2301,6 +2301,7 @@ static void __queue_work(int cpu, struct workqueue_struct *wq,
 {
 	struct pool_workqueue *pwq;
 	struct worker_pool *last_pool, *pool;
+	struct task_struct *wake_p = NULL;
 	unsigned int work_flags;
 	unsigned int req_cpu = cpu;
 
@@ -2415,7 +2416,7 @@ retry:
 
 		trace_workqueue_activate_work(work);
 		insert_work(pwq, work, &pool->worklist, work_flags);
-		kick_pool(pool);
+		wake_p = kick_pool_pick(pool);
 	} else {
 		work_flags |= WORK_STRUCT_INACTIVE;
 		insert_work(pwq, work, &pwq->inactive_works, work_flags);
@@ -2423,6 +2424,15 @@ retry:
 
 out:
 	raw_spin_unlock(&pool->lock);
+	/*
+	 * Issue the wakeup after dropping pool->lock to shorten the
+	 * locked region on this hot enqueue path.  kick_pool_pick() did all
+	 * of the work that required the lock (worker selection and
+	 * wake_cpu setup); the wake_up_process() itself only needs to
+	 * take the target rq->lock.
+	 */
+	if (wake_p)
+		wake_up_process(wake_p);
 	rcu_read_unlock();
 }
 
@@ -3243,6 +3253,7 @@ __acquires(&pool->lock)
 {
 	struct pool_workqueue *pwq = get_work_pwq(work);
 	struct worker_pool *pool = worker->pool;
+	struct task_struct *wake_p;
 	unsigned long work_data;
 	int lockdep_start_depth, rcu_start_depth;
 	bool bh_draining = pool->flags & POOL_BH_DRAINING;
@@ -3296,8 +3307,11 @@ __acquires(&pool->lock)
 	 * since nr_running would always be >= 1 at this point. This is used to
 	 * chain execution of the pending work items for WORKER_NOT_RUNNING
 	 * workers such as the UNBOUND and CPU_INTENSIVE ones.
+	 *
+	 * Select the worker to wake while holding pool->lock, but defer the
+	 * actual wake_up_process() until after the lock is dropped below.
 	 */
-	kick_pool(pool);
+	wake_p = kick_pool_pick(pool);
 
 	/*
 	 * Record the last pool and clear PENDING which should be the last
@@ -3309,6 +3323,9 @@ __acquires(&pool->lock)
 
 	pwq->stats[PWQ_STAT_STARTED]++;
 	raw_spin_unlock_irq(&pool->lock);
+
+	if (wake_p)
+		wake_up_process(wake_p);
 
 	rcu_start_depth = rcu_preempt_depth();
 	lockdep_start_depth = lockdep_depth(current);
