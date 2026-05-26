@@ -153,8 +153,8 @@ struct mpi_msg_hdr{
 struct phy_start_req {
 	__le32	tag;
 	__le32	ase_sh_lm_slr_phyid;
-	struct sas_identify_frame sas_identify;
-	u32	reserved[5];
+	struct sas_identify_frame_local sas_identify;	/* _local to omit CRC field */
+	u32	reserved[6];
 } __attribute__((packed, aligned(4)));
 
 
@@ -229,7 +229,7 @@ struct hw_event_resp {
 	__le32	lr_evt_status_phyid_portid;
 	__le32	evt_param;
 	__le32	npip_portstate;
-	struct sas_identify_frame	sas_identify;
+	struct sas_identify_frame_local	sas_identify;	/* _local to omit CRC field */
 	struct dev_to_host_fis	sata_fis;
 } __attribute__((packed, aligned(4)));
 
