@@ -139,7 +139,7 @@ static struct otto_emdio_priv *otto_emdio_bus_to_priv(struct mii_bus *bus)
 }
 
 static int otto_emdio_run_cmd(struct mii_bus *bus, u32 cmd,
-			      struct otto_emdio_cmd_regs *cmd_data)
+			      struct otto_emdio_cmd_regs *cmd_data, u32 *value)
 {
 	struct otto_emdio_priv *priv = otto_emdio_bus_to_priv(bus);
 	const struct otto_emdio_info *info = priv->info;
@@ -176,7 +176,19 @@ static int otto_emdio_run_cmd(struct mii_bus *bus, u32 cmd,
 	if (ret)
 		return ret;
 
-	return cmdstate & info->cmd_fail ? -ENXIO : 0;
+	if (cmdstate & info->cmd_fail)
+		return -ENXIO;
+
+	if (!value)
+		return 0;
+
+	ret = regmap_read(priv->regmap, info->cmd_regs.io_data, value);
+	if (ret)
+		return ret;
+
+	*value = FIELD_GET(PHY_CTRL_DATA, *value);
+
+	return 0;
 }
 
 static int otto_emdio_wait_ready(struct otto_emdio_priv *priv)
@@ -253,7 +265,7 @@ static int otto_emdio_9300_write_c22(struct mii_bus *bus, int port, int regnum, 
 		.port_mask_low	= BIT(port),
 	};
 
-	return otto_emdio_run_cmd(bus, PHY_CTRL_TYPE_C22 | PHY_CTRL_WRITE, &cmd_regs);
+	return otto_emdio_run_cmd(bus, PHY_CTRL_TYPE_C22 | PHY_CTRL_WRITE, &cmd_regs, NULL);
 }
 
 static int otto_emdio_9300_read_c45(struct mii_bus *bus, int phy_id, int dev_addr, int regnum)
@@ -320,7 +332,7 @@ static int otto_emdio_9300_write_c45(struct mii_bus *bus, int port,
 		.port_mask_low	= BIT(port),
 	};
 
-	return otto_emdio_run_cmd(bus, PHY_CTRL_TYPE_C45 | PHY_CTRL_WRITE, &cmd_regs);
+	return otto_emdio_run_cmd(bus, PHY_CTRL_TYPE_C45 | PHY_CTRL_WRITE, &cmd_regs, NULL);
 }
 
 static int otto_emdio_write_c22(struct mii_bus *bus, int phy_id, int regnum, u16 value)
