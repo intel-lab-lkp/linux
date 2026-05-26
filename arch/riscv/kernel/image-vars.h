@@ -34,4 +34,18 @@ __efistub_sysfb_primary_display	= sysfb_primary_display;
 
 #endif
 
+#ifdef CONFIG_KEXEC_CORE
+#define KEXEC_TRAMP_TEXT						\
+		. = ALIGN(PAGE_SIZE);					\
+		__kexec_tramp_text_start = .;				\
+		KEEP(*(.kexec.tramp.text))				\
+		KEEP(*(.kexec.tramp.text.*))				\
+		__kexec_tramp_text_end = .;				\
+		ASSERT((__kexec_tramp_text_end - __kexec_tramp_text_start) <= PAGE_SIZE,  \
+			".kexec.tramp.text exceeds 4K");				\
+		. = ALIGN(PAGE_SIZE);
+#else
+#define KEXEC_TRAMP_TEXT /* nothing */
+#endif
+
 #endif /* __RISCV_KERNEL_IMAGE_VARS_H */
