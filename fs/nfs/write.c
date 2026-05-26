@@ -2119,7 +2119,7 @@ int nfs_migrate_folio(struct address_space *mapping, struct folio *dst,
 	}
 
 	if (folio_test_private_2(src)) { /* [DEPRECATED] */
-		if (mode == MIGRATE_ASYNC)
+		if (migrate_mode_is_async(mode))
 			return -EBUSY;
 		folio_wait_private_2(src);
 	}
