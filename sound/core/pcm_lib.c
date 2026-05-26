@@ -2115,6 +2115,21 @@ static int do_transfer(struct snd_pcm_substream *substream, int c,
 		return transfer(substream, c, hwoff, &iter, bytes);
 	}
 
+	/*
+	 * When data is NULL (fill_silence path), import_ubuf() would
+	 * be called with a garbage userspace pointer that is neither a
+	 * valid kernel nor user address.  This can crash when current->mm
+	 * is NULL (e.g., during do_exit() -> exit_files() -> __fput()).
+	 * Since fill_silence ignores the iov_iter entirely, use a dummy
+	 * kvec to avoid the import_ubuf path.
+	 */
+	if (!data) {
+		struct kvec kvec = { NULL, 0 };
+
+		iov_iter_kvec(&iter, type, &kvec, 1, bytes);
+		return transfer(substream, c, hwoff, &iter, bytes);
+	}
+
 	err = import_ubuf(type, (__force void __user *)data, bytes, &iter);
 	if (err)
 		return err;
