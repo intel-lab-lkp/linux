@@ -261,6 +261,7 @@ struct rvu_pfvf {
 	struct qmem	*pool_ctx;
 	struct qmem	*npa_qints_ctx;
 	unsigned long	*aura_bmap;
+	unsigned long	*halo_bmap;
 	unsigned long	*pool_bmap;
 
 	/* NIX contexts */
