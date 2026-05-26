@@ -252,48 +252,50 @@ struct host_to_dev_fis {
  */
 #ifdef __LITTLE_ENDIAN_BITFIELD
 struct sas_identify_frame {
-	/* Byte 0 */
-	u8  frame_type:4;
-	u8  dev_type:3;
-	u8  _un0:1;
+	__struct_group(sas_identify_frame_local, payload, __packed,
+		/* Byte 0 */
+		u8  frame_type:4;
+		u8  dev_type:3;
+		u8  _un0:1;
 
-	/* Byte 1 */
-	u8  _un1;
+		/* Byte 1 */
+		u8  _un1;
 
-	/* Byte 2 */
-	union {
-		struct {
-			u8  _un20:1;
-			u8  smp_iport:1;
-			u8  stp_iport:1;
-			u8  ssp_iport:1;
-			u8  _un247:4;
+		/* Byte 2 */
+		union {
+			struct {
+				u8  _un20:1;
+				u8  smp_iport:1;
+				u8  stp_iport:1;
+				u8  ssp_iport:1;
+				u8  _un247:4;
+			};
+			u8 initiator_bits;
 		};
-		u8 initiator_bits;
-	};
 
-	/* Byte 3 */
-	union {
-		struct {
-			u8  _un30:1;
-			u8 smp_tport:1;
-			u8 stp_tport:1;
-			u8 ssp_tport:1;
-			u8 _un347:4;
+		/* Byte 3 */
+		union {
+			struct {
+				u8  _un30:1;
+				u8 smp_tport:1;
+				u8 stp_tport:1;
+				u8 ssp_tport:1;
+				u8 _un347:4;
+			};
+			u8 target_bits;
 		};
-		u8 target_bits;
-	};
 
-	/* Byte 4 - 11 */
-	u8 _un4_11[8];
+		/* Byte 4 - 11 */
+		u8 _un4_11[8];
 
-	/* Byte 12 - 19 */
-	u8 sas_addr[SAS_ADDR_SIZE];
+		/* Byte 12 - 19 */
+		u8 sas_addr[SAS_ADDR_SIZE];
 
-	/* Byte 20 */
-	u8 phy_id;
+		/* Byte 20 */
+		u8 phy_id;
 
-	u8 _un21_27[7];
+		u8 _un21_27[7];
+	);
 
 	__be32 crc;
 } __attribute__ ((packed));
@@ -473,48 +475,50 @@ struct report_phy_sata_resp {
 
 #elif defined(__BIG_ENDIAN_BITFIELD)
 struct sas_identify_frame {
-	/* Byte 0 */
-	u8  _un0:1;
-	u8  dev_type:3;
-	u8  frame_type:4;
+	__struct_group(sas_identify_frame_local, payload, __packed,
+		/* Byte 0 */
+		u8  _un0:1;
+		u8  dev_type:3;
+		u8  frame_type:4;
 
-	/* Byte 1 */
-	u8  _un1;
+		/* Byte 1 */
+		u8  _un1;
 
-	/* Byte 2 */
-	union {
-		struct {
-			u8  _un247:4;
-			u8  ssp_iport:1;
-			u8  stp_iport:1;
-			u8  smp_iport:1;
-			u8  _un20:1;
+		/* Byte 2 */
+		union {
+			struct {
+				u8  _un247:4;
+				u8  ssp_iport:1;
+				u8  stp_iport:1;
+				u8  smp_iport:1;
+				u8  _un20:1;
+			};
+			u8 initiator_bits;
 		};
-		u8 initiator_bits;
-	};
 
-	/* Byte 3 */
-	union {
-		struct {
-			u8 _un347:4;
-			u8 ssp_tport:1;
-			u8 stp_tport:1;
-			u8 smp_tport:1;
-			u8 _un30:1;
+		/* Byte 3 */
+		union {
+			struct {
+				u8 _un347:4;
+				u8 ssp_tport:1;
+				u8 stp_tport:1;
+				u8 smp_tport:1;
+				u8 _un30:1;
+			};
+			u8 target_bits;
 		};
-		u8 target_bits;
-	};
 
-	/* Byte 4 - 11 */
-	u8 _un4_11[8];
+		/* Byte 4 - 11 */
+		u8 _un4_11[8];
 
-	/* Byte 12 - 19 */
-	u8 sas_addr[SAS_ADDR_SIZE];
+		/* Byte 12 - 19 */
+		u8 sas_addr[SAS_ADDR_SIZE];
 
-	/* Byte 20 */
-	u8 phy_id;
+		/* Byte 20 */
+		u8 phy_id;
 
-	u8 _un21_27[7];
+		u8 _un21_27[7];
+	);
 
 	__be32 crc;
 } __attribute__ ((packed));
