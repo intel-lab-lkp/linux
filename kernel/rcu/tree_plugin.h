@@ -747,6 +747,7 @@ static void rcu_read_unlock_special(struct task_struct *t)
 			// Using softirq, safe to awaken, and either the
 			// wakeup is free or there is either an expedited
 			// GP in flight or a potential need to deboost.
+			set_need_resched_current();
 			if (rdp->defer_qs_pending != DEFER_QS_PENDING) {
 				rdp->defer_qs_pending = DEFER_QS_PENDING;
 				raise_softirq_irqoff(RCU_SOFTIRQ);
