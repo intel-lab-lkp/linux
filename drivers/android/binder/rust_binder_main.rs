@@ -6,7 +6,6 @@
 
 #![crate_name = "rust_binder"]
 #![recursion_limit = "256"]
-#![allow(clippy::cast_lossless)]
 
 use kernel::{
     bindings::{self, seq_file},
