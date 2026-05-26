@@ -1681,7 +1681,7 @@ static int hist_trigger_elt_data_alloc(struct tracing_map_elt *elt)
 	elt_data->field_var_str = kcalloc(n_str, sizeof(char *), GFP_KERNEL);
 	if (!elt_data->field_var_str) {
 		hist_elt_data_free(elt_data);
-		return -EINVAL;
+		return -ENOMEM;
 	}
 	elt_data->n_field_var_str = n_str;
 
