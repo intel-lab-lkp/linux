@@ -401,6 +401,12 @@ drm_helper_probe_detect(struct drm_connector *connector,
 	struct drm_device *dev = connector->dev;
 	int ret;
 
+	if (connector->force) {
+		drm_dbg_kms(dev, "[CONNECTOR:%d:%s] forced off, skipping detect\n",
+			    connector->base.id, connector->name);
+		return connector_status_disconnected;
+	}
+
 	if (!ctx)
 		return drm_helper_probe_detect_ctx(connector, force);
 
