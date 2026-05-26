@@ -495,6 +495,10 @@ copy_mc_to_kernel(void *to, const void *from, unsigned len);
 #define copy_mc_to_kernel copy_mc_to_kernel
 
 unsigned long __must_check
+copy_mc_to_kernel_nt(void *to, const void *from, unsigned len);
+#define copy_mc_to_kernel_nt copy_mc_to_kernel_nt
+
+unsigned long __must_check
 copy_mc_to_user(void __user *to, const void *from, unsigned len);
 #endif
 
