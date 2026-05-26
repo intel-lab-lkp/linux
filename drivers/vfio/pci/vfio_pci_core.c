@@ -29,6 +29,7 @@
 #include <linux/sched/mm.h>
 #include <linux/iommufd.h>
 #include <linux/pci-p2pdma.h>
+#include <linux/pci-tph.h>
 #if IS_ENABLED(CONFIG_EEH)
 #include <asm/eeh.h>
 #endif
@@ -41,6 +42,7 @@
 static bool nointxmask;
 static bool disable_vga;
 static bool disable_idle_d3;
+static bool enable_unsafe_tph;
 
 static void vfio_pci_eventfd_rcu_free(struct rcu_head *rcu)
 {
@@ -1554,6 +1556,159 @@ static int vfio_pci_core_feature_token(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 
+static int vfio_pci_tph_st_shadow_size(struct vfio_pci_core_device *vdev)
+{
+	struct pci_dev *pdev = vdev->pdev;
+	u32 loc = pcie_tph_get_st_table_loc(pdev);
+	int ret;
+
+	if (loc == PCI_TPH_LOC_CAP) {
+		return pcie_tph_get_st_table_size(pdev);
+	} else if (loc == PCI_TPH_LOC_MSIX) {
+		ret = pci_msix_vec_count(pdev);
+		if (ret < 0)
+			return 0;
+		return ret;
+	} else {
+		return 0;
+	}
+}
+
+static int vfio_pci_tph_op_raw_table(struct vfio_pci_core_device *vdev,
+				     bool is_get,
+				     struct vfio_device_feature_tph_st *arg)
+{
+	void __user *uptr = u64_to_user_ptr(arg->data_uptr);
+	size_t sz = arg->count * sizeof(u16);
+	struct pci_dev *pdev = vdev->pdev;
+	int i, idx, ret;
+	u16 *sts;
+
+	if (!vdev->tph_st_shadow)
+		return -EOPNOTSUPP;
+
+	if (arg->flags & ~VFIO_TPH_ST_OP_TYPE_MASK)
+		return -EINVAL;
+	if (arg->count == 0 || arg->index >= vdev->tph_st_entries ||
+		arg->count > vdev->tph_st_entries ||
+		arg->index + arg->count > vdev->tph_st_entries)
+		return -EINVAL;
+
+	if (is_get) {
+		ret = copy_to_user(uptr, &vdev->tph_st_shadow[arg->index], sz);
+		if (ret)
+			return -EFAULT;
+		return 0;
+	}
+
+	sts = memdup_array_user(uptr, arg->count, sizeof(u16));
+	if (IS_ERR(sts))
+		return PTR_ERR(sts);
+
+	if (pcie_tph_enabled_mode(vdev->pdev) < 0) {
+		memcpy(&vdev->tph_st_shadow[arg->index], sts, sz);
+		kfree(sts);
+		return 0;
+	}
+
+	for (i = 0; i < arg->count; i++) {
+		idx = arg->index + i;
+		ret = pcie_tph_set_st_entry(pdev, idx, sts[i]);
+		if (ret)
+			goto rollback;
+	}
+
+	memcpy(&vdev->tph_st_shadow[arg->index], sts, sz);
+	kfree(sts);
+	return 0;
+
+rollback:
+	while (i-- > 0) {
+		idx = arg->index + i;
+		pcie_tph_set_st_entry(pdev, idx, vdev->tph_st_shadow[idx]);
+	}
+	kfree(sts);
+	return ret;
+}
+
+static int vfio_pci_tph_op_cpu_query(struct vfio_pci_core_device *vdev,
+				     struct vfio_device_feature_tph_st *arg)
+{
+	void __user *uptr = u64_to_user_ptr(arg->data_uptr);
+	struct pci_dev *pdev = vdev->pdev;
+	enum tph_mem_type mtype;
+	int i, ret;
+	u32 *cpus;
+	u16 st;
+
+	if (arg->flags & ~(VFIO_TPH_ST_OP_TYPE_MASK | VFIO_TPH_ST_MEM_TYPE_MASK))
+		return -EINVAL;
+	if (arg->count == 0 || arg->count > nr_cpu_ids || arg->index != 0)
+		return -EINVAL;
+
+	cpus = memdup_array_user(uptr, arg->count, sizeof(u32));
+	if (IS_ERR(cpus))
+		return PTR_ERR(cpus);
+
+	mtype = (arg->flags & VFIO_TPH_ST_MEM_TYPE_MASK) == VFIO_TPH_ST_MEM_TYPE_VM ?
+		TPH_MEM_TYPE_VM : TPH_MEM_TYPE_PM;
+	for (i = 0; i < arg->count; i++) {
+		ret = pcie_tph_get_cpu_st(pdev, mtype, cpus[i], &st);
+		if (ret)
+			goto out;
+		cpus[i] = st;
+	}
+
+	ret = copy_to_user(uptr, cpus, arg->count * sizeof(u32));
+out:
+	kfree(cpus);
+	return ret;
+}
+
+static int vfio_pci_core_feature_tph_st(struct vfio_pci_core_device *vdev,
+					u32 flags,
+					struct vfio_device_feature_tph_st __user *arg,
+					size_t argsz)
+{
+	struct vfio_device_feature_tph_st tph_st;
+	bool is_get, is_set;
+	u32 op_type;
+	int ret;
+
+	if (!enable_unsafe_tph)
+		return -EOPNOTSUPP;
+
+	ret = vfio_check_feature(flags, argsz,
+				 VFIO_DEVICE_FEATURE_GET |
+				 VFIO_DEVICE_FEATURE_SET |
+				 VFIO_DEVICE_FEATURE_PROBE,
+				 sizeof(tph_st));
+	if (ret <= 0)
+		return ret;
+
+	if (copy_from_user(&tph_st, arg, sizeof(tph_st)))
+		return -EFAULT;
+
+	op_type = tph_st.flags & VFIO_TPH_ST_OP_TYPE_MASK;
+	is_get = !!(flags & VFIO_DEVICE_FEATURE_GET);
+	is_set = !!(flags & VFIO_DEVICE_FEATURE_SET);
+
+	guard(mutex)(&vdev->tph_lock);
+
+	switch (op_type) {
+	case VFIO_TPH_ST_OP_RAW_TABLE:
+		if (is_set && is_get)
+			return -EINVAL;
+		return vfio_pci_tph_op_raw_table(vdev, is_get, &tph_st);
+	case VFIO_TPH_ST_OP_CPU_QUERY:
+		if (is_set)
+			return -EOPNOTSUPP;
+		return vfio_pci_tph_op_cpu_query(vdev, &tph_st);
+	default:
+		return -EINVAL;
+	}
+}
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
@@ -1572,6 +1727,8 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 		return vfio_pci_core_feature_token(vdev, flags, arg, argsz);
 	case VFIO_DEVICE_FEATURE_DMA_BUF:
 		return vfio_pci_core_feature_dma_buf(vdev, flags, arg, argsz);
+	case VFIO_DEVICE_FEATURE_TPH_ST:
+		return vfio_pci_core_feature_tph_st(vdev, flags, arg, argsz);
 	default:
 		return -ENOTTY;
 	}
@@ -2134,12 +2291,23 @@ int vfio_pci_core_init_dev(struct vfio_device *core_vdev)
 	mutex_init(&vdev->igate);
 	spin_lock_init(&vdev->irqlock);
 	mutex_init(&vdev->ioeventfds_lock);
+	mutex_init(&vdev->tph_lock);
+	vdev->tph_st_entries = vfio_pci_tph_st_shadow_size(vdev);
+	vdev->tph_st_shadow = NULL;
+	if (vdev->tph_st_entries) {
+		vdev->tph_st_shadow = kcalloc(vdev->tph_st_entries, sizeof(u16),
+					      GFP_KERNEL);
+		if (!vdev->tph_st_shadow)
+			return -ENOMEM;
+	}
 	INIT_LIST_HEAD(&vdev->dummy_resources_list);
 	INIT_LIST_HEAD(&vdev->ioeventfds_list);
 	INIT_LIST_HEAD(&vdev->sriov_pfs_item);
 	ret = pcim_p2pdma_init(vdev->pdev);
-	if (ret && ret != -EOPNOTSUPP)
+	if (ret && ret != -EOPNOTSUPP) {
+		kfree(vdev->tph_st_shadow);
 		return ret;
+	}
 	INIT_LIST_HEAD(&vdev->dmabufs);
 	init_rwsem(&vdev->memory_lock);
 	xa_init(&vdev->ctx);
@@ -2155,6 +2323,8 @@ void vfio_pci_core_release_dev(struct vfio_device *core_vdev)
 
 	mutex_destroy(&vdev->igate);
 	mutex_destroy(&vdev->ioeventfds_lock);
+	mutex_destroy(&vdev->tph_lock);
+	kfree(vdev->tph_st_shadow);
 	kfree(vdev->region);
 	kfree(vdev->pm_save);
 }
@@ -2615,11 +2785,13 @@ static void vfio_pci_dev_set_try_reset(struct vfio_device_set *dev_set)
 }
 
 void vfio_pci_core_set_params(bool is_nointxmask, bool is_disable_vga,
-			      bool is_disable_idle_d3)
+			      bool is_disable_idle_d3,
+			      bool is_enable_unsafe_tph)
 {
 	nointxmask = is_nointxmask;
 	disable_vga = is_disable_vga;
 	disable_idle_d3 = is_disable_idle_d3;
+	enable_unsafe_tph = is_enable_unsafe_tph;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_set_params);
 

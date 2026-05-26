@@ -1534,6 +1534,55 @@ struct vfio_device_feature_dma_buf {
  */
 #define VFIO_DEVICE_FEATURE_MIG_PRECOPY_INFOv2  12
 
+/**
+ * VFIO_DEVICE_FEATURE_TPH_ST - Manage PCIe TPH Steering Tag entries
+ *
+ * Provides userspace interface to manage PCIe TPH ST table entries.
+ *
+ * @flags: Composite control flags
+ *  Operation type[bit0~3]: Exclusive operation selection
+ *  Attribute bits[bit4~31]: Additional property parameters
+ *
+ * @index: Start entry offset, only valid for raw table operation
+ * @count: Number of consecutive entries to operate
+ * @data_uptr: Aligned userspace data buffer pointer
+ *
+ * VFIO_TPH_ST_OP_RAW_TABLE type:
+ *   Access raw ST table entry directly.
+ *   Attribute bits are ignored in this operation.
+ *   Userspace data buffer stores 16-bit raw steering tag values.
+ *   SET writes entries, and GET reads existing raw ST entries back to user
+ *   buffer.
+ *
+ * VFIO_TPH_ST_OP_CPU_QUERY type:
+ *   Resolve ST tag from CPU ID, only supports GET operation.
+ *   Attribute bits carry memory type info.
+ *   Userspace data buffer provides 32-bit CPU IDs, kernel returns translated
+ *   16-bit ST tag according to specified memory type. No modification to ST
+ *   table during query.
+ *
+ * This feature is gated by enable_unsafe_tph module parameter.
+ */
+#define VFIO_DEVICE_FEATURE_TPH_ST	13
+
+struct vfio_device_feature_tph_st {
+	__u32 flags;
+
+/* Operation type field */
+#define VFIO_TPH_ST_OP_TYPE_MASK	0xFu
+#define VFIO_TPH_ST_OP_RAW_TABLE	0x0u
+#define VFIO_TPH_ST_OP_CPU_QUERY	0x1u
+
+/* Attribute bits for CPU query operation type */
+#define VFIO_TPH_ST_MEM_TYPE_MASK	(1u << 4)
+#define VFIO_TPH_ST_MEM_TYPE_VM		(0u << 4)
+#define VFIO_TPH_ST_MEM_TYPE_PM		(1u << 4)
+
+	__u16 index;
+	__u16 count;
+	__aligned_u64 data_uptr;
+};
+
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**
