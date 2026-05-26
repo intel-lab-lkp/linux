@@ -549,7 +549,9 @@ macro_rules! impl_property_for_int {
 
                 // SAFETY: `val` is always initialized when
                 // `fwnode_property_read_*_array` is successful.
-                Ok(val.map(|v| unsafe { v.assume_init() }))
+                //
+                // See https://doc.rust-lang.org/stable/core/mem/union.MaybeUninit.html#initializing-an-array-element-by-element.
+                Ok(unsafe { mem::transmute::<_, [$int; N]>(val) })
             }
         }
     )* };
