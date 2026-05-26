@@ -1952,6 +1952,8 @@ static bool blk_mq_mark_tag_wait(struct blk_mq_hw_ctx *hctx,
 	spin_lock_irq(&wq->lock);
 	spin_lock(&hctx->dispatch_wait_lock);
 	if (!list_empty(&wait->entry)) {
+		list_del_init(&wait->entry);
+		atomic_dec(&sbq->ws_active);
 		spin_unlock(&hctx->dispatch_wait_lock);
 		spin_unlock_irq(&wq->lock);
 		return false;
