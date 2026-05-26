@@ -641,6 +641,13 @@ int vcc_sendmsg(struct socket *sock, struct msghdr *m, size_t size)
 	if (eff != size)
 		memset(skb->data + size, 0, eff-size);
 
+	if (test_bit(ATM_VF_RELEASED, &vcc->flags) ||
+	    test_bit(ATM_VF_CLOSE, &vcc->flags) ||
+	    !test_bit(ATM_VF_READY, &vcc->flags)) {
+		error = -EPIPE;
+		goto free_skb;
+	}
+
 	if (vcc->dev->ops->pre_send) {
 		error = vcc->dev->ops->pre_send(vcc, skb);
 		if (error)
