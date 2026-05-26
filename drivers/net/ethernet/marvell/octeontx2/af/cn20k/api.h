@@ -29,4 +29,7 @@ int cn20k_mbox_setup(struct otx2_mbox *mbox, struct pci_dev *pdev,
 		     void *reg_base, int direction, int ndevs);
 void cn20k_rvu_enable_afvf_intr(struct rvu *rvu, int vfs);
 void cn20k_rvu_disable_afvf_intr(struct rvu *rvu, int vfs);
+
+void npa_cn20k_dpc_free_all(struct rvu *rvu, u16 pcifunc);
+
 #endif /* CN20K_API_H */
