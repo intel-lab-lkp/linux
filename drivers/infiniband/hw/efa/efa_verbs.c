@@ -2097,8 +2097,7 @@ int efa_destroy_ah(struct ib_ah *ibah, u32 flags)
 		return -EOPNOTSUPP;
 	}
 
-	efa_ah_destroy(dev, ah);
-	return 0;
+	return efa_ah_destroy(dev, ah);
 }
 
 struct rdma_hw_stats *efa_alloc_hw_port_stats(struct ib_device *ibdev,
