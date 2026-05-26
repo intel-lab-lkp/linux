@@ -3,6 +3,7 @@
 
 #include <linux/if_ether.h>
 #include <linux/bitfield.h>
+#include <linux/ethtool.h>
 
 #include "rnpgbe.h"
 #include "rnpgbe_mbx.h"
@@ -23,19 +24,36 @@ static int mucse_fw_send_cmd_wait_resp(struct mucse_hw *hw,
 				       struct mbx_fw_cmd_req *req,
 				       struct mbx_fw_cmd_reply *reply)
 {
+	struct mbx_req_cookie *cookie = &hw->mbx.cookie;
 	int len = le16_to_cpu(req->datalen);
 	int retry_cnt = 3;
 	int err;
 
+	BUILD_BUG_ON(sizeof(struct mbx_fw_cmd_reply) != 56);
+
 	mutex_lock(&hw->mbx.lock);
+
+	if (hw->mbx.irq_en)
+		reinit_completion(&cookie->comp);
+
 	err = mucse_write_and_wait_ack_mbx(hw, (u32 *)req, len);
 	if (err)
 		goto out;
 	do {
-		err = mucse_poll_and_read_mbx(hw, (u32 *)reply,
-					      sizeof(*reply));
-		if (err)
-			goto out;
+		if (hw->mbx.irq_en) {
+			err = wait_for_completion_timeout(&cookie->comp,
+							  cookie->timeout);
+			if (err) {
+				memcpy((u8 *)reply, cookie->cmd,
+				       sizeof(*reply));
+				err = 0;
+			}
+		} else {
+			err = mucse_poll_and_read_mbx(hw, (u32 *)reply,
+						      sizeof(*reply));
+			if (err)
+				goto out;
+		}
 		/* mucse_write_and_wait_ack_mbx return 0 means fw has
 		 * received request, wait for the expect opcode
 		 * reply with 'retry_cnt' times.
@@ -191,9 +209,180 @@ int mucse_mbx_get_macaddr(struct mucse_hw *hw, int pfvfnum,
 }
 
 /**
+ * mucse_mbx_phyup - Echo fw let the phy up
+ * @hw: pointer to the HW structure
+ * @is_phyup: true for up, false for down
+ *
+ * mucse_mbx_phyup echo fw to change phy status
+ *
+ * Return: 0 on success, negative errno on failure
+ **/
+int mucse_mbx_phyup(struct mucse_hw *hw, bool is_phyup)
+{
+	struct mbx_fw_cmd_req req = {
+		.datalen = cpu_to_le16(sizeof(req.phy_status) +
+				       MUCSE_MBX_REQ_HDR_LEN),
+		.opcode  = cpu_to_le16(SET_PHY_UP),
+		.phy_status = {
+			.port_mask = cpu_to_le32(BIT(hw->port)),
+			.status  = cpu_to_le32(is_phyup ? 1 : 0),
+		},
+	};
+	int len, err;
+
+	len = le16_to_cpu(req.datalen);
+	mutex_lock(&hw->mbx.lock);
+	err = mucse_write_and_wait_ack_mbx(hw, (u32 *)&req, len);
+	mutex_unlock(&hw->mbx.lock);
+
+	return err;
+}
+
+/**
+ * mucse_mbx_link_report - Echo fw report link change event or not
+ * @hw: pointer to the HW structure
+ * @is_report: true for report, false for no
+ *
+ * mucse_mbx_link_eventup echo fw to change event report state
+ *
+ * Return: 0 on success, negative errno on failure
+ **/
+int mucse_mbx_link_report(struct mucse_hw *hw, bool is_report)
+{
+	struct mbx_fw_cmd_req req = {
+		.datalen = cpu_to_le16(sizeof(req.report_status) +
+				       MUCSE_MBX_REQ_HDR_LEN),
+		.opcode  = cpu_to_le16(LINK_REPORT_EN),
+		.report_status = {
+			.port_mask = cpu_to_le16(BIT(hw->port)),
+			.status  = cpu_to_le16(is_report ? 1 : 0),
+		},
+	};
+	int len, err;
+
+	len = le16_to_cpu(req.datalen);
+	mutex_lock(&hw->mbx.lock);
+	err = mucse_write_and_wait_ack_mbx(hw, (u32 *)&req, len);
+	mutex_unlock(&hw->mbx.lock);
+
+	return err;
+}
+
+/**
+ * mucse_update_link_status_reg - update driver speed inf to reg
+ * @hw: pointer to the HW structure
+ * @req: pointer to req data
+ *
+ * mucse_update_link_status_reg update reg according to driver info,
+ * fw will send irq if status is differ with reg
+ *
+ **/
+static void mucse_update_link_status_reg(struct mucse_hw *hw,
+					 struct mbx_fw_cmd_req *req)
+{
+	u16 status = le16_to_cpu(req->link_stat.st.status);
+	u32 value;
+
+	value = mucse_hw_rd32(hw, RNPGBE_LINK_ST);
+	value &= ~M_ST_MASK;
+	value |= M_DEFAULT_ST;
+
+	if (le16_to_cpu(req->link_stat.port_status)) {
+		value |= BIT(0);
+		switch (hw->speed) {
+		case 10:
+			value |= (mucse_speed_10 << 8);
+			break;
+		case 100:
+			value |= (mucse_speed_100 << 8);
+			break;
+		case 1000:
+			value |= (mucse_speed_1000 << 8);
+			break;
+		default:
+			/* invalid speed do nothing */
+			break;
+		}
+
+		value |= FIELD_PREP(BIT(4), !!hw->duplex);
+		value |= FIELD_PREP(GENMASK_U32(25, 24),
+				    status & GENMASK(1, 0));
+	} else {
+		value &= ~BIT(0);
+	}
+
+	if (status & ST_STATUS_LLDP_STATUS_MASK)
+		value |= BIT(6);
+	else
+		value &= ~BIT(6);
+
+	mucse_hw_wr32(hw, RNPGBE_LINK_ST, value);
+}
+
+/**
+ * mucse_mbx_fw_req_handler - Handle fw req
+ * @hw: pointer to the HW structure
+ * @req: pointer to req data
+ *
+ * rnpgbe_mbx_fw_req_handler handler fw req, such as a link event req.
+ *
+ * @return: 0 on success, negative on failure
+ **/
+static void mucse_mbx_fw_req_handler(struct mucse_hw *hw,
+				     struct mbx_fw_cmd_req *req)
+{
+	struct mucse *mucse = container_of(hw, struct mucse, hw);
+	u32 magic = le32_to_cpu(req->link_stat.port_magic);
+	unsigned long flags;
+
+	if (le16_to_cpu(req->opcode) == LINK_CHANGE_EVT) {
+		spin_lock_irqsave(&mucse->link_lock, flags);
+
+		if (le16_to_cpu(req->link_stat.port_status))
+			hw->link = true;
+		else
+			hw->link = false;
+
+		if (magic == ST_VALID_MAGIC) {
+			hw->speed = le16_to_cpu(req->link_stat.st.speed);
+			hw->duplex = req->link_stat.st.flags & DUPLEX_BIT;
+			/* update regs to notify link info is received */
+			mucse_update_link_status_reg(hw, req);
+		} else {
+			hw->speed = 0;
+			hw->duplex = 0;
+			mucse_hw_wr32(hw, RNPGBE_LINK_ST, M_DEFAULT_ST);
+		}
+		mucse->flags |= M_FLAG_NEED_LINK_UPDATE;
+		spin_unlock_irqrestore(&mucse->link_lock, flags);
+	}
+}
+
+static void mucse_mbx_fw_reply_handler(struct mucse_hw *hw,
+				       struct mbx_fw_cmd_reply *reply)
+{
+	struct mbx_req_cookie *cookie = &hw->mbx.cookie;
+
+	BUILD_BUG_ON(sizeof(struct mbx_fw_cmd_reply) != 56);
+
+	memcpy(cookie->cmd, (u8 *)reply, sizeof(*reply));
+	complete(&cookie->comp);
+}
+
+/**
  * mucse_fw_irq_handler - Try to handle a req from hw
  * @hw: pointer to the HW structure
  **/
 void mucse_fw_irq_handler(struct mucse_hw *hw)
 {
+	struct mbx_fw_cmd_reply reply = {};
+
+	/* try to check and read fw req */
+	if (mucse_check_and_read_mbx(hw, (u32 *)&reply, sizeof(reply)))
+		return;
+
+	if (le16_to_cpu(reply.flags) & FLAGS_REPLY)
+		mucse_mbx_fw_reply_handler(hw, &reply);
+	else
+		mucse_mbx_fw_req_handler(hw, (struct mbx_fw_cmd_req *)&reply);
 }
