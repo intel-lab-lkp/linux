@@ -1993,7 +1993,7 @@ static struct hist_field *create_hist_field(struct hist_trigger_data *hist_data,
 	if (flags & HIST_FIELD_FL_CONST) {
 		hist_field->fn_num = HIST_FIELD_FN_CONST;
 		hist_field->size = sizeof(u64);
-		hist_field->type = kstrdup("u64", GFP_KERNEL);
+		hist_field->type = kstrdup_const("u64", GFP_KERNEL);
 		if (!hist_field->type)
 			goto free;
 		goto out;
