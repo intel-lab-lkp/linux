@@ -260,7 +260,7 @@ static void amt_del_group(struct amt_dev *amt, struct amt_group_node *gnode)
 
 	if (cancel_delayed_work(&gnode->group_timer))
 		dev_put(amt->dev);
-	hlist_del_rcu(&gnode->node);
+	hlist_del_init_rcu(&gnode->node);
 	gnode->tunnel_list->nr_groups--;
 
 	if (!gnode->v6)
@@ -412,23 +412,31 @@ static void amt_group_work(struct work_struct *work)
 	struct amt_group_node *gnode = container_of(to_delayed_work(work),
 						    struct amt_group_node,
 						    group_timer);
-	struct amt_tunnel_list *tunnel = gnode->tunnel_list;
-	struct amt_dev *amt = gnode->amt;
+	struct amt_tunnel_list *tunnel;
 	struct amt_source_node *snode;
 	bool delete_group = true;
+	struct amt_dev *amt;
 	struct hlist_node *t;
 	int i, buckets;
 
+	rcu_read_lock();
+	tunnel = gnode->tunnel_list;
+	amt = gnode->amt;
 	buckets = amt->hash_buckets;
 
 	spin_lock_bh(&tunnel->lock);
+	if (hlist_unhashed(&gnode->node)) {
+		spin_unlock_bh(&tunnel->lock);
+		rcu_read_unlock();
+		goto out;
+	}
 	if (gnode->filter_mode == MCAST_INCLUDE) {
 		/* Not Used */
 		spin_unlock_bh(&tunnel->lock);
+		rcu_read_unlock();
 		goto out;
 	}
 
-	rcu_read_lock();
 	for (i = 0; i < buckets; i++) {
 		hlist_for_each_entry_safe(snode, t,
 					  &gnode->sources[i], node) {
