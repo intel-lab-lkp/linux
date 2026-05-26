@@ -721,6 +721,12 @@ struct mlx5_ib_mr {
 			u8 revoked :1;
 			/* Indicates previous dmabuf page fault occurred */
 			u8 dmabuf_faulted:1;
+			/* Set when the MR owns dmabuf_st_index and must
+			 * release it via mlx5_st_dealloc_index() once the
+			 * firmware mkey is no longer referencing it.
+			 */
+			u8 dmabuf_st_owned:1;
+			u16 dmabuf_st_index;
 			struct mlx5_ib_mkey null_mmkey;
 		};
 	};

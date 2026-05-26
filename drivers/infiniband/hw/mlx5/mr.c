@@ -38,6 +38,7 @@
 #include <linux/delay.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-resv.h>
+#include <linux/pci-tph.h>
 #include <rdma/frmr_pools.h>
 #include <rdma/ib_umem_odp.h>
 #include "dm.h"
@@ -45,6 +46,8 @@
 #include "umr.h"
 #include "data_direct.h"
 #include "dmah.h"
+
+MODULE_IMPORT_NS("DMA_BUF");
 
 static int mkey_max_umr_order(struct mlx5_ib_dev *dev)
 {
@@ -899,6 +902,63 @@ static struct dma_buf_attach_ops mlx5_ib_dmabuf_attach_ops = {
 	.invalidate_mappings = mlx5_ib_dmabuf_invalidate_cb,
 };
 
+/*
+ * Query TPH metadata from @dmabuf and translate the raw steering tag into
+ * an mlx5 ST index. On success, returns 0 and the caller becomes the
+ * owner of *@st_index (must be released with mlx5_st_dealloc_index()
+ * once the firmware mkey no longer references it). On any failure
+ * *@st_index and *@ph are left as the no-TPH defaults set by the caller.
+ *
+ * @dmabuf must already be referenced by the caller (e.g. via the umem's
+ * attachment) so we don't re-resolve the user's fd here and avoid a
+ * dup2() TOCTOU between umem creation and TPH lookup.
+ */
+static void get_tph_mr_dmabuf(struct mlx5_ib_dev *dev, struct dma_buf *dmabuf,
+			      u16 *st_index, u8 *ph)
+{
+	u8 req_type;
+	u16 steering_tag;
+	u8 st_width;
+	int ret;
+
+	if (!dmabuf->ops->get_tph)
+		return;
+
+	req_type = pcie_tph_enabled_req_type(dev->mdev->pdev);
+	switch (req_type) {
+	case PCI_TPH_REQ_TPH_ONLY:
+		st_width = 8;
+		break;
+	case PCI_TPH_REQ_EXT_TPH:
+		st_width = 16;
+		break;
+	default:
+		return;
+	}
+
+	ret = dmabuf->ops->get_tph(dmabuf, &steering_tag, ph, st_width);
+	if (ret) {
+		mlx5_ib_dbg(dev, "get_tph failed (%d)\n", ret);
+		*ph = MLX5_IB_NO_PH;
+		return;
+	}
+
+	ret = mlx5_st_alloc_index_by_tag(dev->mdev, steering_tag, st_index);
+	if (ret) {
+		*ph = MLX5_IB_NO_PH;
+		mlx5_ib_dbg(dev, "st_alloc_index_by_tag failed (%d)\n", ret);
+	}
+}
+
+static void mlx5_ib_mr_put_dmabuf_st(struct mlx5_ib_mr *mr)
+{
+	if (mr->umem && mr->dmabuf_st_owned) {
+		mlx5_st_dealloc_index(mr_to_mdev(mr)->mdev,
+				      mr->dmabuf_st_index);
+		mr->dmabuf_st_owned = 0;
+	}
+}
+
 static struct ib_mr *
 reg_user_mr_dmabuf(struct ib_pd *pd, struct device *dma_device,
 		   u64 offset, u64 length, u64 virt_addr,
@@ -941,14 +1001,24 @@ reg_user_mr_dmabuf(struct ib_pd *pd, struct device *dma_device,
 		ph = dmah->ph;
 		if (dmah->valid_fields & BIT(IB_DMAH_CPU_ID_EXISTS))
 			st_index = mdmah->st_index;
+	} else {
+		get_tph_mr_dmabuf(dev, umem_dmabuf->attach->dmabuf,
+				  &st_index, &ph);
 	}
 
 	mr = alloc_cacheable_mr(pd, &umem_dmabuf->umem, virt_addr,
 				access_flags, access_mode,
 				st_index, ph);
 	if (IS_ERR(mr)) {
+		if (!dmah && st_index != MLX5_MKC_PCIE_TPH_NO_STEERING_TAG_INDEX)
+			mlx5_st_dealloc_index(dev->mdev, st_index);
 		ib_umem_release(&umem_dmabuf->umem);
 		return ERR_CAST(mr);
+	}
+
+	if (!dmah && st_index != MLX5_MKC_PCIE_TPH_NO_STEERING_TAG_INDEX) {
+		mr->dmabuf_st_index = st_index;
+		mr->dmabuf_st_owned = 1;
 	}
 
 	mlx5_ib_dbg(dev, "mkey 0x%x\n", mr->mmkey.key);
@@ -1377,9 +1447,17 @@ static int mlx5r_handle_mkey_cleanup(struct mlx5_ib_mr *mr)
 	bool is_odp = is_odp_mr(mr);
 	int ret;
 
-	if (mr->ibmr.frmr.pool && !mlx5_umr_revoke_mr_with_lock(mr) &&
-	    !ib_frmr_pool_push(mr->ibmr.device, &mr->ibmr))
-		return 0;
+	if (mr->ibmr.frmr.pool && !mlx5_umr_revoke_mr_with_lock(mr)) {
+		/*
+		 * The mkey has been revoked: firmware no longer references
+		 * dmabuf_st_index, so release it before this mr can re-enter
+		 * the FRMR cache for reuse by another registration.
+		 */
+		mlx5_ib_mr_put_dmabuf_st(mr);
+
+		if (!ib_frmr_pool_push(mr->ibmr.device, &mr->ibmr))
+			return 0;
+	}
 
 	if (is_odp)
 		mutex_lock(&to_ib_umem_odp(mr->umem)->umem_mutex);
@@ -1400,6 +1478,8 @@ static int mlx5r_handle_mkey_cleanup(struct mlx5_ib_mr *mr)
 		dma_resv_unlock(
 			to_ib_umem_dmabuf(mr->umem)->attach->dmabuf->resv);
 	}
+	if (!ret)
+		mlx5_ib_mr_put_dmabuf_st(mr);
 	return ret;
 }
 
