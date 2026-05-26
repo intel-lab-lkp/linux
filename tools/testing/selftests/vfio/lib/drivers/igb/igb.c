@@ -98,61 +98,71 @@ static int igb_write_phy(struct igb *igb, u32 offset, u16 data)
 	return 0;
 }
 
-static int igb_read_phy(struct igb *igb, u32 offset, u16 *data)
+/*
+ * Configure the device for PHY internal loopback per 82576 datasheet
+ * section 3.5.6.3.1.  Force the PHY to 1Gb/s full duplex with loopback
+ * enabled, then force the MAC link state to match.  Internal loopback
+ * wraps data at the end of the PHY datapath (section 3.5.6.3), so the
+ * physical link state is irrelevant.
+ *
+ * Section 3.5.6.1 directs to "Use PHY Loopback instead of MAC Loopback
+ * on the 82576", and section 3.5.6.2 states "MAC Loopback is not used
+ * on this device."  RCTL.LBM_MAC is still set elsewhere as a QEMU-only
+ * accommodation; see the RCTL programming in the caller for the
+ * rationale.
+ */
+static int igb_setup_loopback(struct igb *igb)
 {
-	u32 mdic;
-	int i;
-
-	mdic = ((offset << IGB_MDIC_REG_SHIFT) |
-		(1 << IGB_MDIC_PHY_SHIFT) |
-		IGB_MDIC_OP_READ);
-
-	igb_write32(igb, IGB_MDIC, mdic);
-
-	for (i = 0; i < 1000; i++) {
-		usleep(50);
-		mdic = igb_read32(igb, IGB_MDIC);
-		if (mdic & IGB_MDIC_READY)
-			break;
-	}
-
-	if (!(mdic & IGB_MDIC_READY))
-		return -1;
-
-	if (mdic & IGB_MDIC_ERROR)
-		return -1;
-
-	*data = (u16)mdic;
-	return 0;
-}
-
-static int igb_phy_setup_autoneg(struct igb *igb)
-{
-	int timeout_ms = 1000;
-	bool success = false;
-	u16 phy_status;
+	u32 ctrl;
 	int ret;
-	int i;
 
-	/* Trigger auto-negotiation */
+	/*
+	 * Kick the autoneg machinery solely to bring STATUS.LU up under
+	 * QEMU's igb emulation: QEMU only updates STATUS.LU via its
+	 * autoneg-done timer, and without LU set its receive path
+	 * (e1000x_hw_rx_enabled) drops every loopback frame.  On real
+	 * hardware autoneg cannot complete before the next PHY write
+	 * below clears the autoneg-enable bit, so this is effectively a
+	 * no-op there.
+	 */
+	(void)igb_write_phy(igb, IGB_PHY_CTRL_REG_OFFSET,
+			    IGB_PHY_CTRL_AN_ENABLE | IGB_PHY_CTRL_AN_RESTART);
+
+	/* PHY control: loopback + 1Gb/s full duplex, autoneg disabled. */
 	ret = igb_write_phy(igb, IGB_PHY_CTRL_REG_OFFSET,
-			    IGB_PHY_CTRL_AN_ENABLE | IGB_PHY_CTRL_RESTART_AN);
+			    IGB_PHY_CTRL_LOOPBACK |
+			    IGB_PHY_CTRL_SPEED_1000 |
+			    IGB_PHY_CTRL_FULL_DUPLEX);
 	if (ret)
 		return ret;
 
-	for (i = 0; i < timeout_ms; i++) {
-		if (igb_read_phy(igb, IGB_PHY_STATUS_REG_OFFSET, &phy_status) == 0) {
-			success = !!(phy_status & IGB_PHY_STATUS_AN_COMP);
-			if (success)
-				break;
-		}
-		usleep(1000);
-	}
+	/*
+	 * Brief delay before forcing the MAC, mirroring the kernel ethtool
+	 * selftest in igb_integrated_phy_loopback().  Not specified by the
+	 * datasheet, but empirically required by the kernel driver.
+	 */
+	usleep(50000);
 
-	if (!success) {
-		printf("igb: Auto-negotiation did not complete in time\n");
-		return -ETIMEDOUT;
-	}
+	/*
+	 * Force the MAC to 1Gb/s full duplex with link up.  Without forcing
+	 * the link state the descriptor engine does not run, since the chip
+	 * normally waits for a real negotiated link.
+	 */
+	ctrl = igb_read32(igb, IGB_CTRL);
+	ctrl &= ~IGB_CTRL_SPD_SEL;
+	ctrl |= IGB_CTRL_FRCSPD |
+		IGB_CTRL_FRCDPX |
+		IGB_CTRL_SPD_1000 |
+		IGB_CTRL_FD |
+		IGB_CTRL_SLU;
+	igb_write32(igb, IGB_CTRL, ctrl);
+
+	/*
+	 * Settling delay matching the kernel ethtool selftest's msleep(500)
+	 * at the tail of igb_integrated_phy_loopback().  Not specified by
+	 * the datasheet; empirical, and inherited from the kernel driver.
+	 */
+	usleep(500000);
 
 	return 0;
 }
@@ -199,8 +209,8 @@ static void igb_init(struct vfio_pci_device *device)
 		vfio_pci_config_writew(device, PCI_COMMAND, cmd_reg);
 	}
 
-	/* Trigger autonegotiation. This enables IGB to transmit data. */
-	if (igb_phy_setup_autoneg(igb))
+	/* Configure PHY internal loopback for testing. */
+	if (igb_setup_loopback(igb))
 		return;
 
 	/* Configure TX and RX descriptor rings */
@@ -227,10 +237,22 @@ static void igb_init(struct vfio_pci_device *device)
 		usleep(10);
 	}
 
-	/* Enable Receiver and Transmitter */
+	/*
+	 * Enable Receiver and Transmitter.  RCTL.LBM_MAC is set in addition
+	 * to PHY loopback as a QEMU-only accommodation: QEMU's emulated igb
+	 * does not honor PHY register 0 bit 14 (PHY internal loopback) and
+	 * relies on RCTL.LBM_MAC to wrap TX descriptors back to the RX
+	 * queue.  Datasheet 8.10.1 (RCTL register) advises "When using the
+	 * internal PHY, LBM should remain set to 00b", so setting LBM_MAC
+	 * here deviates from datasheet guidance; empirically the bit has
+	 * no observable effect on real 82576 hardware because MAC loopback
+	 * is not implemented (datasheet 3.5.6.2).  Setting both lets the
+	 * selftest work on both real hardware and QEMU without conditional
+	 * code paths.
+	 */
 	rctl = IGB_RCTL_EN |       /* Receiver Enable */
 	       IGB_RCTL_UPE |      /* Unicast Promiscuous (for dummy MAC) */
-	       IGB_RCTL_LBM_MAC |  /* MAC Loopback Mode */
+	       IGB_RCTL_LBM_MAC |  /* MAC Loopback - for QEMU emulation only */
 	       IGB_RCTL_SECRC;     /* Strip CRC (needed for memcmp) */
 	igb_write32(igb, IGB_RCTL, rctl);
 	igb_write32(igb, IGB_TCTL, IGB_TCTL_EN);
