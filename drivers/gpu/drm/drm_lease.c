@@ -467,6 +467,13 @@ out_free_objects:
 }
 
 /*
+ * Upper bound on the number of objects a single lease can reference.
+ * Real workloads use a handful; this is set well above any plausible
+ * value to avoid kmalloc requests that would exceed MAX_PAGE_ORDER.
+ */
+#define DRM_MAX_LEASE_OBJECTS	4096
+
+/*
  * The master associated with the specified file will have a lease
  * created containing the objects specified in the ioctl structure.
  * A file descriptor will be allocated for that and returned to the
@@ -505,6 +512,12 @@ int drm_mode_create_lease_ioctl(struct drm_device *dev,
 	}
 
 	object_count = cl->object_count;
+	if (unlikely(object_count > DRM_MAX_LEASE_OBJECTS)) {
+		drm_dbg_lease(dev, "object_count %zu exceeds max %u\n",
+			      object_count, DRM_MAX_LEASE_OBJECTS);
+		ret = -EINVAL;
+		goto out_lessor;
+	}
 
 	/* Handle leased objects, if any */
 	idr_init(&leases);
