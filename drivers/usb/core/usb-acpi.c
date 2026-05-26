@@ -197,7 +197,7 @@ static int usb_acpi_add_usb4_devlink(struct usb_device *udev)
  * Private to usb-acpi, all the core needs to know is that
  * port_dev->location is non-zero when it has been set by the firmware.
  */
-#define USB_ACPI_LOCATION_VALID (1 << 31)
+#define USB_ACPI_LOCATION_VALID BIT(31)
 
 static void
 usb_acpi_get_connect_type(struct usb_port *port_dev, acpi_handle *handle)
