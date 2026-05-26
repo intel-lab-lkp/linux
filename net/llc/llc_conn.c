@@ -101,7 +101,8 @@ int llc_conn_state_process(struct sock *sk, struct sk_buff *skb)
 	case LLC_DISC_PRIM:
 		sock_hold(sk);
 		if (sk->sk_type == SOCK_STREAM &&
-		    sk->sk_state == TCP_ESTABLISHED) {
+		    sk->sk_state == TCP_ESTABLISHED &&
+		    sk->sk_socket) {
 			sk->sk_shutdown       = SHUTDOWN_MASK;
 			sk->sk_socket->state  = SS_UNCONNECTED;
 			sk->sk_state          = TCP_CLOSE;
@@ -136,7 +137,8 @@ int llc_conn_state_process(struct sock *sk, struct sk_buff *skb)
 		break;
 	case LLC_CONN_PRIM:
 		if (sk->sk_type == SOCK_STREAM &&
-		    sk->sk_state == TCP_SYN_SENT) {
+		    sk->sk_state == TCP_SYN_SENT &&
+		    sk->sk_socket) {
 			if (ev->status) {
 				sk->sk_socket->state = SS_UNCONNECTED;
 				sk->sk_state         = TCP_CLOSE;
@@ -149,7 +151,7 @@ int llc_conn_state_process(struct sock *sk, struct sk_buff *skb)
 		break;
 	case LLC_DISC_PRIM:
 		sock_hold(sk);
-		if (sk->sk_type == SOCK_STREAM && sk->sk_state == TCP_CLOSING) {
+		if (sk->sk_type == SOCK_STREAM && sk->sk_state == TCP_CLOSING && sk->sk_socket) {
 			sk->sk_socket->state = SS_UNCONNECTED;
 			sk->sk_state         = TCP_CLOSE;
 			sk->sk_state_change(sk);
