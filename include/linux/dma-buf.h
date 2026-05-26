@@ -114,6 +114,27 @@ struct dma_buf_ops {
 	void (*unpin)(struct dma_buf_attachment *attach);
 
 	/**
+	 * @get_tph:
+	 * @dmabuf: DMA buffer for which to retrieve TPH metadata
+	 * @steering_tag: Returns the raw TPH steering tag for @st_width
+	 * @ph: Returns the TPH processing hint (2-bit value)
+	 * @st_width: Consumer's supported steering tag width in bits (8 or 16)
+	 *
+	 * Return the TPH (TLP Processing Hints) metadata associated with this
+	 * DMA buffer for the requested steering-tag width. 8-bit ST and 16-bit
+	 * Extended ST are distinct namespaces in the PCIe TPH ST table and may
+	 * both be present with different values, so the exporter must select the
+	 * value that matches @st_width and must not substitute one for the other.
+	 *
+	 * Return 0 on success, -EOPNOTSUPP if no metadata is available for the
+	 * requested width, or -EINVAL if @st_width is not 8 or 16.
+	 *
+	 * This callback is optional.
+	 */
+	int (*get_tph)(struct dma_buf *dmabuf, u16 *steering_tag, u8 *ph,
+		       u8 st_width);
+
+	/**
 	 * @map_dma_buf:
 	 *
 	 * This is called by dma_buf_map_attachment() and is used to map a
