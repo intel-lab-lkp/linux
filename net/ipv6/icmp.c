@@ -157,7 +157,8 @@ static bool is_ineligible(const struct sk_buff *skb)
 		 */
 		if (!tp && frag_off != 0)
 			return false;
-		else if (!tp || !(*tp & ICMPV6_INFOMSG_MASK))
+		else if (!tp || !(*tp & ICMPV6_INFOMSG_MASK) ||
+			 *tp == NDISC_REDIRECT)
 			return true;
 	}
 	return false;
