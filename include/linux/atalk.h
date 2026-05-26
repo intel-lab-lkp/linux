@@ -12,6 +12,7 @@ struct atalk_route {
 	struct atalk_addr  gateway;
 	int		   flags;
 	struct atalk_route *next;
+	struct rcu_head	   rcu;
 };
 
 /**

@@ -603,7 +603,7 @@ static int atrtr_delete(struct atalk_addr *addr)
 		     tmp->target.s_node == addr->s_node)) {
 			*r = tmp->next;
 			dev_put(tmp->dev);
-			kfree(tmp);
+			kfree_rcu(tmp, rcu);
 			goto out;
 		}
 		r = &tmp->next;
@@ -628,7 +628,7 @@ static void atrtr_device_down(struct net_device *dev)
 		if (tmp->dev == dev) {
 			*r = tmp->next;
 			dev_put(dev);
-			kfree(tmp);
+			kfree_rcu(tmp, rcu);
 		} else
 			r = &tmp->next;
 	}
@@ -1553,10 +1553,13 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	int loopback = 0;
 	struct sockaddr_at local_satalk, gsat;
 	struct sk_buff *skb;
-	struct net_device *dev;
+	struct net_device *dev = NULL;
+	struct net_device *dev_lo = NULL;
 	struct ddpehdr *ddp;
 	int size, hard_header_len;
 	struct atalk_route *rt, *rt_lo = NULL;
+	int rt_flags;
+	struct atalk_addr rt_gateway;
 	int err;
 
 	if (flags & ~(MSG_DONTWAIT|MSG_CMSG_COMPAT))
@@ -1600,6 +1603,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	/* For headers */
 	size = sizeof(struct ddpehdr) + len + ddp_dl->header_length;
 
+	rcu_read_lock();
 	if (usat->sat_addr.s_net || usat->sat_addr.s_node == ATADDR_ANYNODE) {
 		rt = atrtr_find(&usat->sat_addr);
 	} else {
@@ -1610,29 +1614,38 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 
 		rt = atrtr_find(&at_hint);
 	}
-	err = -ENETUNREACH;
-	if (!rt)
+	if (!rt) {
+		rcu_read_unlock();
+		err = -ENETUNREACH;
 		goto out;
+	}
 
 	dev = rt->dev;
-
-	net_dbg_ratelimited("SK %p: Size needed %d, device %s\n",
-			sk, size, dev->name);
+	dev_hold(dev);
+	rt_flags = rt->flags;
+	rt_gateway = rt->gateway;
 
 	hard_header_len = dev->hard_header_len;
 	/* Leave room for loopback hardware header if necessary */
 	if (usat->sat_addr.s_node == ATADDR_BCAST &&
-	    (dev->flags & IFF_LOOPBACK || !(rt->flags & RTF_GATEWAY))) {
+	    (dev->flags & IFF_LOOPBACK || !(rt_flags & RTF_GATEWAY))) {
 		struct atalk_addr at_lo;
 
 		at_lo.s_node = 0;
 		at_lo.s_net  = 0;
 
 		rt_lo = atrtr_find(&at_lo);
-
-		if (rt_lo && rt_lo->dev->hard_header_len > hard_header_len)
-			hard_header_len = rt_lo->dev->hard_header_len;
+		if (rt_lo) {
+			dev_lo = rt_lo->dev;
+			dev_hold(dev_lo);
+			if (dev_lo->hard_header_len > hard_header_len)
+				hard_header_len = dev_lo->hard_header_len;
+		}
 	}
+	rcu_read_unlock();
+
+	net_dbg_ratelimited("SK %p: Size needed %d, device %s\n",
+			sk, size, dev->name);
 
 	size += hard_header_len;
 	release_sock(sk);
@@ -1675,7 +1688,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	 * to group we are in)
 	 */
 	if (ddp->deh_dnode == ATADDR_BCAST &&
-	    !(rt->flags & RTF_GATEWAY) && !(dev->flags & IFF_LOOPBACK)) {
+	    !(rt_flags & RTF_GATEWAY) && !(dev->flags & IFF_LOOPBACK)) {
 		struct sk_buff *skb2 = skb_copy(skb, GFP_KERNEL);
 
 		if (skb2) {
@@ -1693,19 +1706,18 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 		/* loop back */
 		skb_orphan(skb);
 		if (ddp->deh_dnode == ATADDR_BCAST) {
-			if (!rt_lo) {
+			if (!dev_lo) {
 				kfree_skb(skb);
 				err = -ENETUNREACH;
 				goto out;
 			}
-			dev = rt_lo->dev;
-			skb->dev = dev;
+			skb->dev = dev_lo;
 		}
-		ddp_dl->request(ddp_dl, skb, dev->dev_addr);
+		ddp_dl->request(ddp_dl, skb, skb->dev->dev_addr);
 	} else {
 		net_dbg_ratelimited("SK %p: send out.\n", sk);
-		if (rt->flags & RTF_GATEWAY) {
-		    gsat.sat_addr = rt->gateway;
+		if (rt_flags & RTF_GATEWAY) {
+		    gsat.sat_addr = rt_gateway;
 		    usat = &gsat;
 		}
 
@@ -1718,6 +1730,8 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 
 out:
 	release_sock(sk);
+	dev_put(dev);
+	dev_put(dev_lo);
 	return err ? : len;
 }
 
