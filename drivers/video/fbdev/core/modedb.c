@@ -724,7 +724,6 @@ int fb_find_mode(struct fb_var_screeninfo *var,
 			res_specified = 1;
 		}
 done:
-		kfree(mode_option_buf);
 		if (cvt) {
 			struct fb_videomode cvt_mode;
 			int ret;
@@ -749,6 +748,7 @@ done:
 
 			if (!ret && !fb_try_mode(var, info, &cvt_mode, bpp)) {
 				DPRINTK("modedb CVT: CVT mode ok\n");
+				kfree(mode_option_buf);
 				return 1;
 			}
 
@@ -793,8 +793,10 @@ done:
 				if (!interlace_specified ||
 				    db_interlace == interlace)
 					if (refresh_specified &&
-					    db[i].refresh == refresh)
+					    db[i].refresh == refresh) {
+						kfree(mode_option_buf);
 						return 1;
+					}
 
 				if (score < diff) {
 					diff = score;
@@ -802,6 +804,8 @@ done:
 				}
 			}
 		}
+
+		kfree(mode_option_buf);
 		if (best != -1) {
 			fb_try_mode(var, info, &db[best], bpp);
 			return (refresh_specified) ? 2 : 1;
