@@ -426,13 +426,16 @@ static void svc_thread_cmd_config_status(struct stratix10_svc_controller *ctrl,
 		cb_data->status = BIT(SVC_STATUS_COMPLETED);
 		cb_data->kaddr2 = (res.a2) ?
 				  svc_pa_to_va(res.a2) : NULL;
-		cb_data->kaddr3 = (res.a3) ? &res.a3 : NULL;
+		cb_data->a3 = res.a3;
+		cb_data->kaddr3 = (res.a3) ? &cb_data->a3 : NULL;
 	} else {
 		pr_err("%s: poll status error\n", __func__);
-		cb_data->kaddr1 = &res.a1;
+		cb_data->a1 = res.a1;
+		cb_data->kaddr1 = &cb_data->a1;
 		cb_data->kaddr2 = (res.a2) ?
 				  svc_pa_to_va(res.a2) : NULL;
-		cb_data->kaddr3 = (res.a3) ? &res.a3 : NULL;
+		cb_data->a3 = res.a3;
+		cb_data->kaddr3 = (res.a3) ? &cb_data->a3 : NULL;
 		cb_data->status = BIT(SVC_STATUS_ERROR);
 	}
 
@@ -478,32 +481,40 @@ static void svc_thread_recv_status_ok(struct stratix10_svc_data *p_data,
 	case COMMAND_HWMON_READTEMP:
 	case COMMAND_HWMON_READVOLT:
 		cb_data->status = BIT(SVC_STATUS_OK);
-		cb_data->kaddr1 = &res.a1;
+		cb_data->a1 = res.a1;
+		cb_data->kaddr1 = &cb_data->a1;
 		break;
 	case COMMAND_SMC_SVC_VERSION:
 		cb_data->status = BIT(SVC_STATUS_OK);
-		cb_data->kaddr1 = &res.a1;
-		cb_data->kaddr2 = &res.a2;
+		cb_data->a1 = res.a1;
+		cb_data->kaddr1 = &cb_data->a1;
+		cb_data->a2 = res.a2;
+		cb_data->kaddr2 = &cb_data->a2;
 		break;
 	case COMMAND_RSU_DCMF_VERSION:
 		cb_data->status = BIT(SVC_STATUS_OK);
-		cb_data->kaddr1 = &res.a1;
-		cb_data->kaddr2 = &res.a2;
+		cb_data->a1 = res.a1;
+		cb_data->kaddr1 = &cb_data->a1;
+		cb_data->a2 = res.a2;
+		cb_data->kaddr2 = &cb_data->a2;
 		break;
 	case COMMAND_FCS_RANDOM_NUMBER_GEN:
 	case COMMAND_FCS_GET_PROVISION_DATA:
 	case COMMAND_POLL_SERVICE_STATUS:
 		cb_data->status = BIT(SVC_STATUS_OK);
-		cb_data->kaddr1 = &res.a1;
+		cb_data->a1 = res.a1;
+		cb_data->kaddr1 = &cb_data->a1;
 		cb_data->kaddr2 = svc_pa_to_va(res.a2);
-		cb_data->kaddr3 = &res.a3;
+		cb_data->a3 = res.a3;
+		cb_data->kaddr3 = &cb_data->a3;
 		break;
 	case COMMAND_MBOX_SEND_CMD:
 		cb_data->status = BIT(SVC_STATUS_OK);
-		cb_data->kaddr1 = &res.a1;
+		cb_data->a1 = res.a1;
+		cb_data->kaddr1 = &cb_data->a1;
 		/* SDM return size in u8. Convert size to u32 word */
-		res.a2 = res.a2 * BYTE_TO_WORD_SIZE;
-		cb_data->kaddr2 = &res.a2;
+		cb_data->a2 = res.a2 * BYTE_TO_WORD_SIZE;
+		cb_data->kaddr2 = &cb_data->a2;
 		break;
 	default:
 		pr_warn("it shouldn't happen\n");
@@ -792,10 +803,12 @@ static int svc_normal_to_secure_thread(void *data)
 		case INTEL_SIP_SMC_RSU_ERROR:
 			pr_err("%s: STATUS_ERROR\n", __func__);
 			cbdata->status = BIT(SVC_STATUS_ERROR);
-			cbdata->kaddr1 = &res.a1;
+			cbdata->a1 = res.a1;
+			cbdata->kaddr1 = &cbdata->a1;
 			cbdata->kaddr2 = (res.a2) ?
 				svc_pa_to_va(res.a2) : NULL;
-			cbdata->kaddr3 = (res.a3) ? &res.a3 : NULL;
+			cbdata->a3 = res.a3;
+			cbdata->kaddr3 = (res.a3) ? &cbdata->a3 : NULL;
 			pdata->chan->scl->receive_cb(pdata->chan->scl, cbdata);
 			break;
 		default:

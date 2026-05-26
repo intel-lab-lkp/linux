@@ -222,12 +222,29 @@ struct stratix10_svc_command_config_type {
  * @kaddr1: address of 1st completed data block
  * @kaddr2: address of 2nd completed data block
  * @kaddr3: address of 3rd completed data block
+ * @a1: internal scratch storage; kaddr1 points here when the firmware
+ *      returns a scalar in res.a1 rather than a buffer address
+ * @a2: internal scratch storage; kaddr2 points here when the firmware
+ *      returns a scalar in res.a2 rather than a buffer address; the stored
+ *      value may be derived from res.a2 rather than copied verbatim
+ *      (e.g. byte-to-word unit conversion for MBOX_SEND_CMD)
+ * @a3: internal scratch storage; kaddr3 points here when the firmware
+ *      returns a scalar in res.a3 rather than a buffer address
+ *
+ * a1/a2/a3 are only used when the corresponding kaddrN field carries a
+ * scalar SMC/HVC return value.  When kaddrN points to a persistent mapped
+ * buffer obtained via svc_pa_to_va(), these fields are not used.  Storing
+ * the scalar copies here rather than in a stack-local arm_smccc_res ensures
+ * the pointer remains valid for the lifetime of this structure.
  */
 struct stratix10_svc_cb_data {
 	u32 status;
 	void *kaddr1;
 	void *kaddr2;
 	void *kaddr3;
+	unsigned long a1;
+	unsigned long a2;
+	unsigned long a3;
 };
 
 /**
