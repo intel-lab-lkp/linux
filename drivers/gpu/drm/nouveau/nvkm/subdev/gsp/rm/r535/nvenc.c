@@ -30,8 +30,8 @@ r535_nvenc_alloc(struct nvkm_gsp_object *chan, u32 handle, u32 class, int inst,
 	NV_MSENC_ALLOCATION_PARAMETERS *args;
 
 	args = nvkm_gsp_rm_alloc_get(chan, handle, class, sizeof(*args), nvenc);
-	if (WARN_ON(IS_ERR(args)))
-		return PTR_ERR(args);
+	if (WARN_ON(IS_ERR_OR_NULL(args)))
+		return args ? PTR_ERR(args) : -EIO;
 
 	args->size = sizeof(*args);
 	args->engineInstance = inst;
