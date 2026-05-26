@@ -312,7 +312,7 @@ impl ShrinkablePageRange {
 
         // SAFETY: This just initializes the pages array.
         unsafe {
-            let self_ptr = self as *const ShrinkablePageRange;
+            let self_ptr = ptr::from_ref(self);
             for i in 0..num_pages {
                 let info = pages.as_mut_ptr().add(i);
                 (&raw mut (*info).range).write(self_ptr);
@@ -593,7 +593,7 @@ impl ShrinkablePageRange {
         unsafe {
             self.iterate(offset, size_of_val(obj), |page, offset, to_copy| {
                 // SAFETY: The sum of `offset` and `to_copy` is bounded by the size of T.
-                let obj_ptr = (obj as *const T).cast::<u8>().add(obj_offset);
+                let obj_ptr = ptr::from_ref(obj).cast::<u8>().add(obj_offset);
                 // SAFETY: We have a reference to the object, so the pointer is valid.
                 page.write_raw(obj_ptr, offset, to_copy)?;
                 obj_offset += to_copy;

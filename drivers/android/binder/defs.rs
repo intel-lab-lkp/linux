@@ -4,6 +4,8 @@
 
 use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut};
+use core::ptr;
+
 use kernel::{
     transmute::{AsBytes, FromBytes},
     uapi::{self, *},
@@ -165,7 +167,7 @@ impl BinderTransactionDataSecctx {
     pub(crate) fn tr_data(&mut self) -> &mut BinderTransactionData {
         // SAFETY: Transparent wrapper is safe to transmute.
         unsafe {
-            &mut *((&mut self.transaction_data as *mut uapi::binder_transaction_data)
+            &mut *(ptr::from_mut::<uapi::binder_transaction_data>(&mut self.transaction_data)
                 .cast::<BinderTransactionData>())
         }
     }
