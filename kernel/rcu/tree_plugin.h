@@ -622,6 +622,17 @@ notrace void rcu_preempt_deferred_qs(struct task_struct *t)
 }
 
 /*
+ * True if the current context is inside a compounded RCU read-side
+ * section, i.e. either in an active rcu_read_lock() (depth>0) or in an
+ * outer preempt-disabled / BH-disabled scope.
+ */
+static inline bool rcu_in_compounded_section(void)
+{
+	return rcu_preempt_depth() > 0 ||
+	       (preempt_count() & (PREEMPT_MASK | SOFTIRQ_MASK)) != 0;
+}
+
+/*
  * Minimal handler to give the scheduler a chance to re-evaluate.
  */
 static void rcu_preempt_deferred_qs_handler(struct irq_work *iwp)
@@ -632,19 +643,10 @@ static void rcu_preempt_deferred_qs_handler(struct irq_work *iwp)
 	rdp = container_of(iwp, struct rcu_data, defer_qs_iw);
 
 	/*
-	 * If the IRQ work handler happens to run in the middle of RCU read-side
-	 * critical section, it could be ineffective in getting the scheduler's
-	 * attention to report a deferred quiescent state (the whole point of the
-	 * IRQ work). For this reason, requeue the IRQ work.
-	 *
-	 * Basically, we want to avoid following situation:
-	 * 1. rcu_read_unlock() queues IRQ work (state -> DEFER_QS_PENDING)
-	 * 2. CPU enters new rcu_read_lock()
-	 * 3. IRQ work runs but cannot report QS due to rcu_preempt_depth() > 0
-	 * 4. rcu_read_unlock() does not re-queue work (state still PENDING)
-	 * 5. Deferred QS reporting does not happen.
+	 * Clear defer_qs_pending when the handler fires inside a compounded
+	 * section as we may need to rearm the irq_work.
 	 */
-	if (rcu_preempt_depth() > 0)
+	if (rcu_in_compounded_section())
 		rcu_defer_qs_clear(rdp);
 }
 
