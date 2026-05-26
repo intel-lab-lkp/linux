@@ -10409,6 +10409,22 @@ out:
 }
 
 #ifdef CONFIG_PM
+static int ufshcd_wl_resume_pm_recovered(struct ufs_hba *hba)
+{
+	int ret = 0;
+	struct scsi_device *sdp = hba->ufs_device_wlun;
+
+	if (!sdp || !scsi_block_when_processing_errors(sdp))
+		return 0;
+
+	if (hba->ufshcd_state == UFSHCD_STATE_OPERATIONAL &&
+	    ufshcd_is_link_active(hba) &&
+	    ufshcd_is_ufs_dev_active(hba))
+		ret = 1;
+
+	return ret;
+}
+
 static int __ufshcd_wl_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	int ret;
@@ -10463,6 +10479,9 @@ static int __ufshcd_wl_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 
 	if (!ufshcd_is_ufs_dev_active(hba)) {
 		ret = ufshcd_set_dev_pwr_mode(hba, UFS_ACTIVE_PWR_MODE);
+		if (pm_op == UFS_RUNTIME_PM && ret == -EIO &&
+		    ufshcd_wl_resume_pm_recovered(hba))
+			ret = 0;
 		if (ret)
 			goto set_old_link_state;
 		ufshcd_set_timestamp_attr(hba);
