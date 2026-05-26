@@ -177,7 +177,8 @@ static void vcc_destroy_socket(struct sock *sk)
 
 	set_bit(ATM_VF_CLOSE, &vcc->flags);
 	clear_bit(ATM_VF_READY, &vcc->flags);
-	if (vcc->dev && vcc->dev->ops->close)
+	if (vcc->dev && vcc->dev->ops->close &&
+	    !test_bit(ATM_DF_REMOVED, &vcc->dev->flags))
 		vcc->dev->ops->close(vcc);
 	if (vcc->push)
 		vcc->push(vcc, NULL); /* atmarpd has no push */
