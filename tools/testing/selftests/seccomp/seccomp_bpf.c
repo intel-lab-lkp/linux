@@ -516,7 +516,7 @@ TEST(filter_chain_limits)
 	}
 }
 
-TEST(mode_filter_cannot_move_to_strict)
+TEST(mode_filter_combined)
 {
 	struct sock_filter filter[] = {
 		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ALLOW),
@@ -534,8 +534,7 @@ TEST(mode_filter_cannot_move_to_strict)
 	ASSERT_EQ(0, ret);
 
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_STRICT, NULL, 0, 0);
-	EXPECT_EQ(-1, ret);
-	EXPECT_EQ(EINVAL, errno);
+	ASSERT_EQ(0, ret);
 }
 
 
