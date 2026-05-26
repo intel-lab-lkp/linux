@@ -1576,13 +1576,16 @@ int setup_bdev_super(struct super_block *sb, int sb_flags,
 		bdev_fput(bdev_file);
 		return -EBUSY;
 	}
-	spin_lock(&sb_lock);
+	/*
+	 * Publish before SB_BORN is set. super_wake(sb, SB_BORN) below uses
+	 * smp_store_release(); any iterator that observes SB_BORN via
+	 * super_flags()'s smp_load_acquire() sees these writes.
+	 */
 	sb->s_bdev_file = bdev_file;
 	sb->s_bdev = bdev;
 	sb->s_bdi = bdi_get(bdev->bd_disk->bdi);
 	if (bdev_stable_writes(bdev))
-		sb->s_iflags |= SB_I_STABLE_WRITES;
-	spin_unlock(&sb_lock);
+		WRITE_ONCE(sb->s_iflags, sb->s_iflags | SB_I_STABLE_WRITES);
 
 	snprintf(sb->s_id, sizeof(sb->s_id), "%pg", bdev);
 	shrinker_debugfs_rename(sb->s_shrink, "sb-%s:%s", sb->s_type->name,
