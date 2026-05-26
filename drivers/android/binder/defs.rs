@@ -148,7 +148,7 @@ decl_wrapper!(ExtendedError, uapi::binder_extended_error);
 impl BinderVersion {
     pub(crate) fn current() -> Self {
         Self(MaybeUninit::new(uapi::binder_version {
-            protocol_version: BINDER_CURRENT_PROTOCOL_VERSION as _,
+            protocol_version: BINDER_CURRENT_PROTOCOL_VERSION as i32,
         }))
     }
 }

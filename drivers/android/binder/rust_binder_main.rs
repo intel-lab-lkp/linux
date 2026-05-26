@@ -6,7 +6,7 @@
 
 #![crate_name = "rust_binder"]
 #![recursion_limit = "256"]
-#![allow(clippy::as_underscore, clippy::cast_lossless)]
+#![allow(clippy::cast_lossless)]
 
 use kernel::{
     bindings::{self, seq_file},
@@ -412,7 +412,7 @@ unsafe extern "C" fn rust_binder_ioctl(
     // SAFETY: We previously set `private_data` in `rust_binder_open`.
     let f = unsafe { Arc::<Process>::borrow((*file).private_data) };
     // SAFETY: The caller ensures that the file is valid.
-    match Process::ioctl(f, unsafe { File::from_raw_file(file) }, cmd as _, arg as _) {
+    match Process::ioctl(f, unsafe { File::from_raw_file(file) }, cmd, arg) {
         Ok(()) => 0,
         Err(err) => err.to_errno() as isize,
     }
