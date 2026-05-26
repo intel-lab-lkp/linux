@@ -5,7 +5,6 @@
 #include <linux/pcs/pcs-xpcs.h>
 
 #include "fbnic.h"
-#include "fbnic_netdev.h"
 
 #define DW_VENDOR		BIT(15)
 #define FBNIC_PCS_VENDOR	BIT(9)
@@ -15,18 +14,14 @@ static int
 fbnic_mdio_read_pmd(struct fbnic_dev *fbd, int addr, int regnum)
 {
 	u8 aui = FBNIC_AUI_UNKNOWN;
-	struct fbnic_net *fbn;
 	int ret = 0;
 
 	/* We don't need a second PMD, just one can handle both lanes */
 	if (addr)
 		return 0;
 
-	if (fbd->netdev) {
-		fbn = netdev_priv(fbd->netdev);
-		if (fbn->aui < FBNIC_AUI_UNKNOWN)
-			aui = fbn->aui;
-	}
+	if (fbd->aui < FBNIC_AUI_UNKNOWN)
+		aui = fbd->aui;
 
 	switch (regnum) {
 	case MDIO_DEVID1:

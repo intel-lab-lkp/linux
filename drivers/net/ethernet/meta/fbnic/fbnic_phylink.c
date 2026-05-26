@@ -65,6 +65,7 @@ int fbnic_phylink_ethtool_ksettings_get(struct net_device *netdev,
 					struct ethtool_link_ksettings *cmd)
 {
 	struct fbnic_net *fbn = netdev_priv(netdev);
+	struct fbnic_dev *fbd = fbn->fbd;
 	int err;
 
 	err = phylink_ethtool_ksettings_get(fbn->phylink, cmd);
@@ -72,7 +73,7 @@ int fbnic_phylink_ethtool_ksettings_get(struct net_device *netdev,
 		unsigned long *supp = cmd->link_modes.supported;
 
 		cmd->base.port = PORT_DA;
-		cmd->lanes = (fbn->aui & FBNIC_AUI_MODE_R2) ? 2 : 1;
+		cmd->lanes = (fbd->aui & FBNIC_AUI_MODE_R2) ? 2 : 1;
 
 		fbnic_phylink_get_supported_fec_modes(supp);
 	}
@@ -84,11 +85,12 @@ int fbnic_phylink_get_fecparam(struct net_device *netdev,
 			       struct ethtool_fecparam *fecparam)
 {
 	struct fbnic_net *fbn = netdev_priv(netdev);
+	struct fbnic_dev *fbd = fbn->fbd;
 
-	if (fbn->fec & FBNIC_FEC_RS) {
+	if (fbd->fec & FBNIC_FEC_RS) {
 		fecparam->active_fec = ETHTOOL_FEC_RS;
 		fecparam->fec = ETHTOOL_FEC_RS;
-	} else if (fbn->fec & FBNIC_FEC_BASER) {
+	} else if (fbd->fec & FBNIC_FEC_BASER) {
 		fecparam->active_fec = ETHTOOL_FEC_BASER;
 		fecparam->fec = ETHTOOL_FEC_BASER;
 	} else {
@@ -96,7 +98,7 @@ int fbnic_phylink_get_fecparam(struct net_device *netdev,
 		fecparam->fec = ETHTOOL_FEC_OFF;
 	}
 
-	if (fbn->aui & FBNIC_AUI_MODE_PAM4)
+	if (fbd->aui & FBNIC_AUI_MODE_PAM4)
 		fecparam->fec |= ETHTOOL_FEC_AUTO;
 
 	return 0;
@@ -120,7 +122,7 @@ fbnic_phylink_mac_prepare(struct phylink_config *config, unsigned int mode,
 	struct fbnic_net *fbn = netdev_priv(netdev);
 	struct fbnic_dev *fbd = fbn->fbd;
 
-	fbd->mac->prepare(fbd, fbn->aui, fbn->fec);
+	fbd->mac->prepare(fbd, fbd->aui, fbd->fec);
 
 	return 0;
 }
@@ -140,7 +142,7 @@ fbnic_phylink_mac_finish(struct phylink_config *config, unsigned int mode,
 	struct fbnic_dev *fbd = fbn->fbd;
 
 	/* Retest the link state and restart interrupts */
-	fbd->mac->get_link(fbd, fbn->aui, fbn->fec);
+	fbd->mac->get_link(fbd, fbd->aui, fbd->fec);
 
 	return 0;
 }
@@ -227,10 +229,10 @@ int fbnic_phylink_create(struct net_device *netdev)
 	__set_bit(PHY_INTERFACE_MODE_25GBASER,
 		  fbn->phylink_config.supported_interfaces);
 
-	fbnic_mac_get_fw_settings(fbd, &fbn->aui, &fbn->fec);
+	fbnic_mac_get_fw_settings(fbd, &fbd->aui, &fbd->fec);
 
 	phylink = phylink_create(&fbn->phylink_config, NULL,
-				 fbnic_phylink_select_interface(fbn->aui),
+				 fbnic_phylink_select_interface(fbd->aui),
 				 &fbnic_phylink_mac_ops);
 	if (IS_ERR(phylink)) {
 		err = PTR_ERR(phylink);
