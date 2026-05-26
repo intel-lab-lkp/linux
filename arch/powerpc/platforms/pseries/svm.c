@@ -6,6 +6,7 @@
  * Author: Anshuman Khandual <khandual@linux.vnet.ibm.com>
  */
 
+#include <linux/export.h>
 #include <linux/mm.h>
 #include <linux/memblock.h>
 #include <linux/mem_encrypt.h>
@@ -50,6 +51,7 @@ int set_memory_encrypted(unsigned long addr, int numpages)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(set_memory_encrypted);
 
 int set_memory_decrypted(unsigned long addr, int numpages)
 {
@@ -63,6 +65,7 @@ int set_memory_decrypted(unsigned long addr, int numpages)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(set_memory_decrypted);
 
 /* There's one dispatch log per CPU. */
 #define NR_DTL_PAGE (DISPATCH_LOG_BYTES * CONFIG_NR_CPUS / PAGE_SIZE)
