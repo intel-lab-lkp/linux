@@ -968,6 +968,13 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.matches = has_impdef_pmuv3,
 		.cpu_enable = cpu_enable_impdef_pmuv3_traps,
 	},
+#ifdef CONFIG_HISILICON_ERRATUM_162100125
+	{
+		.desc = "Hisilicon erratum 162100125",
+		.capability = ARM64_WORKAROUND_HISILICON_ERRATUM_162100125,
+		ERRATA_MIDR_ALL_VERSIONS(MIDR_HISI_HIP09),
+	},
+#endif
 	{
 	}
 };
