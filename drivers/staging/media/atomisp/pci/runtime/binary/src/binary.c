@@ -945,7 +945,7 @@ int ia_css_binary_find(struct ia_css_binary_descr *descr, struct ia_css_binary *
 	/* MW: used after an error check, may accept NULL, but doubtful */
 	assert(binary);
 
-	dev_dbg(atomisp_dev, "ia_css_binary_find() enter: descr=%p, (mode=%d), binary=%p\n",
+	dev_dbg(atomisp_dev, "enter: descr=%p, (mode=%d), binary=%p\n",
 		descr, descr->mode, binary);
 
 	mode = descr->mode;
@@ -1012,7 +1012,7 @@ int ia_css_binary_find(struct ia_css_binary_descr *descr, struct ia_css_binary *
 		/* printf("sh_css_binary_find: evaluating candidate:
 		 * %d\n",candidate->id); */
 		dev_dbg(atomisp_dev,
-			"ia_css_binary_find() candidate = %p, mode = %d ID = %d\n",
+			"candidate = %p, mode = %d ID = %d\n",
 			candidate, candidate->pipeline.mode, candidate->id);
 
 		/*
@@ -1023,14 +1023,14 @@ int ia_css_binary_find(struct ia_css_binary_descr *descr, struct ia_css_binary *
 		if (!candidate->enable.continuous &&
 		    continuous && (mode != IA_CSS_BINARY_MODE_COPY)) {
 			dev_dbg(atomisp_dev,
-				"ia_css_binary_find() [%d] continue: !%d && %d && (%d != %d)\n",
+				"[%d] continue: !%d && %d && (%d != %d)\n",
 				__LINE__, candidate->enable.continuous,
 				continuous, mode, IA_CSS_BINARY_MODE_COPY);
 			continue;
 		}
 		if (striped && candidate->iterator.num_stripes == 1) {
 			dev_dbg(atomisp_dev,
-				"ia_css_binary_find() [%d] continue: binary is not striped\n",
+				"[%d] continue: binary is not striped\n",
 				__LINE__);
 			continue;
 		}
@@ -1039,37 +1039,37 @@ int ia_css_binary_find(struct ia_css_binary_descr *descr, struct ia_css_binary *
 		    (mode != IA_CSS_BINARY_MODE_COPY) &&
 		    (mode != IA_CSS_BINARY_MODE_CAPTURE_PP) &&
 		    (mode != IA_CSS_BINARY_MODE_VF_PP)) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: (%d != %d)\n",
+			dev_dbg(atomisp_dev, "[%d] continue: (%d != %d)\n",
 				__LINE__, candidate->pipeline.isp_pipe_version, isp_pipe_version);
 			continue;
 		}
 		if (!candidate->enable.reduced_pipe && enable_reduced_pipe) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: !%d && %d\n",
+			dev_dbg(atomisp_dev, "[%d] continue: !%d && %d\n",
 				__LINE__, candidate->enable.reduced_pipe, enable_reduced_pipe);
 			continue;
 		}
 		if (!candidate->enable.dvs_6axis && enable_dvs_6axis) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: !%d && %d\n",
+			dev_dbg(atomisp_dev, "[%d] continue: !%d && %d\n",
 				__LINE__, candidate->enable.dvs_6axis, enable_dvs_6axis);
 			continue;
 		}
 		if (candidate->enable.high_speed && !enable_high_speed) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: %d && !%d\n",
+			dev_dbg(atomisp_dev, "[%d] continue: %d && !%d\n",
 				__LINE__, candidate->enable.high_speed, enable_high_speed);
 			continue;
 		}
 		if (!candidate->enable.xnr && need_xnr) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: %d && !%d\n",
+			dev_dbg(atomisp_dev, "[%d] continue: %d && !%d\n",
 				__LINE__, candidate->enable.xnr, need_xnr);
 			continue;
 		}
 		if (!(candidate->enable.ds & 2) && enable_yuv_ds) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: !%d && %d\n",
+			dev_dbg(atomisp_dev, "[%d] continue: !%d && %d\n",
 				__LINE__, ((candidate->enable.ds & 2) != 0), enable_yuv_ds);
 			continue;
 		}
 		if ((candidate->enable.ds & 2) && !enable_yuv_ds) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: %d && !%d\n",
+			dev_dbg(atomisp_dev, "[%d] continue: %d && !%d\n",
 				__LINE__, ((candidate->enable.ds & 2) != 0), enable_yuv_ds);
 			continue;
 		}
@@ -1085,13 +1085,13 @@ int ia_css_binary_find(struct ia_css_binary_descr *descr, struct ia_css_binary *
 				       /* or more than one output pin. */
 				       xcandidate->num_output_pins > 1)) {
 			dev_dbg(atomisp_dev,
-				"ia_css_binary_find() [%d] continue: (%p != NULL) && !(%d || %d || (%d >%d))\n",
+				"[%d] continue: (%p != NULL) && !(%d || %d || (%d >%d))\n",
 				__LINE__, req_vf_info, candidate->enable.vf_veceven,
 				candidate->vf_dec.is_variable, xcandidate->num_output_pins, 1);
 			continue;
 		}
 		if (!candidate->enable.dvs_envelope && need_dvs) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: !%d && %d\n",
+			dev_dbg(atomisp_dev, "[%d] continue: !%d && %d\n",
 				__LINE__, candidate->enable.dvs_envelope, (int)need_dvs);
 			continue;
 		}
@@ -1099,37 +1099,37 @@ int ia_css_binary_find(struct ia_css_binary_descr *descr, struct ia_css_binary *
 		ia_css_binary_internal_res(req_in_info, req_bds_out_info,
 					   req_bin_out_info, &dvs_env, candidate, &internal_res);
 		if (internal_res.width > candidate->internal.max_width) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: (%d > %d)\n",
+			dev_dbg(atomisp_dev, "[%d] continue: (%d > %d)\n",
 				__LINE__, internal_res.width, candidate->internal.max_width);
 			continue;
 		}
 		if (internal_res.height > candidate->internal.max_height) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: (%d > %d)\n",
+			dev_dbg(atomisp_dev, "[%d] continue: (%d > %d)\n",
 				__LINE__, internal_res.height, candidate->internal.max_height);
 			continue;
 		}
 		if (!candidate->enable.ds && need_ds && !(xcandidate->num_output_pins > 1)) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: !%d && %d\n",
+			dev_dbg(atomisp_dev, "[%d] continue: !%d && %d\n",
 				__LINE__, candidate->enable.ds, (int)need_ds);
 			continue;
 		}
 		if (!candidate->enable.uds && !candidate->enable.dvs_6axis && need_dz) {
 			dev_dbg(atomisp_dev,
-				"ia_css_binary_find() [%d] continue: !%d && !%d && %d\n",
+				"[%d] continue: !%d && !%d && %d\n",
 				__LINE__, candidate->enable.uds, candidate->enable.dvs_6axis,
 				(int)need_dz);
 			continue;
 		}
 		if (online && candidate->input.source == IA_CSS_BINARY_INPUT_MEMORY) {
 			dev_dbg(atomisp_dev,
-				"ia_css_binary_find() [%d] continue: %d && (%d == %d)\n",
+				"[%d] continue: %d && (%d == %d)\n",
 				__LINE__, online, candidate->input.source,
 				IA_CSS_BINARY_INPUT_MEMORY);
 			continue;
 		}
 		if (!online && candidate->input.source == IA_CSS_BINARY_INPUT_SENSOR) {
 			dev_dbg(atomisp_dev,
-				"ia_css_binary_find() [%d] continue: !%d && (%d == %d)\n",
+				"[%d] continue: !%d && (%d == %d)\n",
 				__LINE__, online, candidate->input.source,
 				IA_CSS_BINARY_INPUT_SENSOR);
 			continue;
@@ -1137,7 +1137,7 @@ int ia_css_binary_find(struct ia_css_binary_descr *descr, struct ia_css_binary *
 		if (req_bin_out_info->res.width < candidate->output.min_width ||
 		    req_bin_out_info->res.width > candidate->output.max_width) {
 			dev_dbg(atomisp_dev,
-				"ia_css_binary_find() [%d] continue: (%d > %d) || (%d < %d)\n",
+				"[%d] continue: (%d > %d) || (%d < %d)\n",
 				__LINE__, req_bin_out_info->padded_width,
 				candidate->output.min_width, req_bin_out_info->padded_width,
 				candidate->output.max_width);
@@ -1148,19 +1148,19 @@ int ia_css_binary_find(struct ia_css_binary_descr *descr, struct ia_css_binary *
 		    req_vf_info) { /* and we need vf output. */
 			if (req_vf_info->res.width > candidate->output.max_width) {
 				dev_dbg(atomisp_dev,
-					"ia_css_binary_find() [%d] continue: (%d < %d)\n",
+					"[%d] continue: (%d < %d)\n",
 					__LINE__, req_vf_info->res.width,
 					candidate->output.max_width);
 				continue;
 			}
 		}
 		if (req_in_info->padded_width > candidate->input.max_width) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: (%d > %d)\n",
+			dev_dbg(atomisp_dev, "[%d] continue: (%d > %d)\n",
 				__LINE__, req_in_info->padded_width, candidate->input.max_width);
 			continue;
 		}
 		if (!binary_supports_output_format(xcandidate, req_bin_out_info->format)) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: !%d\n",
+			dev_dbg(atomisp_dev, "[%d] continue: !%d\n",
 				__LINE__, binary_supports_output_format(xcandidate,
 									req_bin_out_info->format));
 			continue;
@@ -1172,7 +1172,7 @@ int ia_css_binary_find(struct ia_css_binary_descr *descr, struct ia_css_binary *
 		    is supported. */
 		    !binary_supports_output_format(xcandidate, req_vf_info->format)) {
 			dev_dbg(atomisp_dev,
-				"ia_css_binary_find() [%d] continue: (%d > %d) && (%p != NULL) && !%d\n",
+				"[%d] continue: (%d > %d) && (%p != NULL) && !%d\n",
 				__LINE__, xcandidate->num_output_pins, 1, req_vf_info,
 				binary_supports_output_format(xcandidate, req_vf_info->format));
 			continue;
@@ -1183,7 +1183,7 @@ int ia_css_binary_find(struct ia_css_binary_descr *descr, struct ia_css_binary *
 		    req_vf_info && candidate->enable.vf_veceven &&
 		    !binary_supports_vf_format(xcandidate, req_vf_info->format)) {
 			dev_dbg(atomisp_dev,
-				"ia_css_binary_find() [%d] continue: (%d == %d) && (%p != NULL) && %d && !%d\n",
+				"[%d] continue: (%d == %d) && (%p != NULL) && %d && !%d\n",
 				__LINE__, xcandidate->num_output_pins, 1,
 				req_vf_info, candidate->enable.vf_veceven,
 				binary_supports_vf_format(xcandidate, req_vf_info->format));
@@ -1195,7 +1195,7 @@ int ia_css_binary_find(struct ia_css_binary_descr *descr, struct ia_css_binary *
 		    req_vf_info && candidate->enable.vf_veceven) { /* and we need vf output. */
 			if (req_vf_info->res.width > candidate->output.max_width) {
 				dev_dbg(atomisp_dev,
-					"ia_css_binary_find() [%d] continue: (%d < %d)\n",
+					"[%d] continue: (%d < %d)\n",
 					__LINE__, req_vf_info->res.width,
 					candidate->output.max_width);
 				continue;
@@ -1204,20 +1204,20 @@ int ia_css_binary_find(struct ia_css_binary_descr *descr, struct ia_css_binary *
 
 		if (!supports_bds_factor(candidate->bds.supported_bds_factors,
 					 descr->required_bds_factor)) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: 0x%x & 0x%x)\n",
+			dev_dbg(atomisp_dev, "[%d] continue: 0x%x & 0x%x)\n",
 				__LINE__, candidate->bds.supported_bds_factors,
 				descr->required_bds_factor);
 			continue;
 		}
 
 		if (!candidate->enable.dpc && need_dpc) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: 0x%x & 0x%x)\n",
+			dev_dbg(atomisp_dev, "[%d] continue: 0x%x & 0x%x)\n",
 				__LINE__, candidate->enable.dpc, descr->enable_dpc);
 			continue;
 		}
 
 		if (candidate->uds.use_bci && enable_capture_pp_bli) {
-			dev_dbg(atomisp_dev, "ia_css_binary_find() [%d] continue: 0x%x & 0x%x)\n",
+			dev_dbg(atomisp_dev, "[%d] continue: 0x%x & 0x%x)\n",
 				__LINE__, candidate->uds.use_bci, descr->enable_capture_pp_bli);
 			continue;
 		}
