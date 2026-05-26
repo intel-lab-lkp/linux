@@ -363,6 +363,14 @@ static bool pci_physfn_is_probed(struct pci_dev *dev)
 #endif
 }
 
+/*
+ * Return true if current task is a workqueue kworker
+ */
+static bool wq_kworker(void)
+{
+	return current->flags & PF_WQ_WORKER;
+}
+
 static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 			  const struct pci_device_id *id)
 {
@@ -380,10 +388,17 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 	cpu_hotplug_disable();
 	/*
 	 * Prevent nesting work_on_cpu() for the case where a Virtual Function
-	 * device is probed from work_on_cpu() of the Physical device.
+	 * device is probed from work_on_cpu() of the Physical device or when
+	 * the current task is a workqueue kworker.
+	 *
+	 * TODO: With a deeply nested PCIe topology, pci_call_probe() can be
+	 * recursively called multiple times. If the nesting is deep enough,
+	 * it may cause exhaustion of the kernel stack. So some additional
+	 * changes will be needed if such a deeply nested topology is to be
+	 * supported.
 	 */
 	if (node < 0 || node >= MAX_NUMNODES || !node_online(node) ||
-	    pci_physfn_is_probed(dev)) {
+	    pci_physfn_is_probed(dev) || wq_kworker()) {
 		error = local_pci_probe(&ddi);
 	} else {
 		struct pci_probe_arg arg = { .ddi = &ddi };
