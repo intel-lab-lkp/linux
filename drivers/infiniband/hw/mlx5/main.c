@@ -2458,7 +2458,7 @@ static int mlx5_ib_mmap_clock_info_page(struct mlx5_ib_dev *dev,
 			      virt_to_page(dev->mdev->clock_info));
 }
 
-static int phys_addr_to_bar(struct pci_dev *pdev, phys_addr_t pa)
+static int phys_addr_to_bar(struct pci_dev *pdev, phys_addr_t pa, size_t len)
 {
 	resource_size_t start, end;
 	int bar;
@@ -2474,7 +2474,7 @@ static int phys_addr_to_bar(struct pci_dev *pdev, phys_addr_t pa)
 		if (!start || !end)
 			continue;
 
-		if (pa >= start && pa <= end)
+		if (pa >= start && (pa + len - 1) <= end)
 			return bar;
 	}
 
@@ -2492,7 +2492,7 @@ static int mlx5_ib_mmap_get_pfns(struct rdma_user_mmap_entry *entry,
 	phys_vec->paddr = mentry->address;
 	phys_vec->len = entry->npages * PAGE_SIZE;
 
-	bar = phys_addr_to_bar(pdev, phys_vec->paddr);
+	bar = phys_addr_to_bar(pdev, phys_vec->paddr, phys_vec->len);
 	if (bar < 0)
 		return -EINVAL;
 
