@@ -116,13 +116,11 @@ int rvu_npa_aq_enq_inst(struct rvu *rvu, struct npa_aq_enq_req *req,
 	case NPA_AQ_INSTOP_WRITE:
 		/* Copy context and write mask */
 		if (req->ctype == NPA_AQ_CTYPE_AURA) {
-			memcpy(mask, &req->aura_mask,
-			       sizeof(struct npa_aura_s));
-			memcpy(ctx, &req->aura, sizeof(struct npa_aura_s));
+			memcpy(mask, &req->aura_mask, NIX_MAX_CTX_SIZE);
+			memcpy(ctx, &req->aura, NIX_MAX_CTX_SIZE);
 		} else {
-			memcpy(mask, &req->pool_mask,
-			       sizeof(struct npa_pool_s));
-			memcpy(ctx, &req->pool, sizeof(struct npa_pool_s));
+			memcpy(mask, &req->pool_mask, NIX_MAX_CTX_SIZE);
+			memcpy(ctx, &req->pool, NIX_MAX_CTX_SIZE);
 		}
 		break;
 	case NPA_AQ_INSTOP_INIT:
@@ -134,9 +132,9 @@ int rvu_npa_aq_enq_inst(struct rvu *rvu, struct npa_aq_enq_req *req,
 			/* Set pool's context address */
 			req->aura.pool_addr = pfvf->pool_ctx->iova +
 			(req->aura.pool_addr * pfvf->pool_ctx->entry_sz);
-			memcpy(ctx, &req->aura, sizeof(struct npa_aura_s));
+			memcpy(ctx, &req->aura, NIX_MAX_CTX_SIZE);
 		} else { /* POOL's context */
-			memcpy(ctx, &req->pool, sizeof(struct npa_pool_s));
+			memcpy(ctx, &req->pool, NIX_MAX_CTX_SIZE);
 		}
 		break;
 	case NPA_AQ_INSTOP_NOP:
@@ -196,11 +194,9 @@ int rvu_npa_aq_enq_inst(struct rvu *rvu, struct npa_aq_enq_req *req,
 		/* Copy read context into mailbox */
 		if (req->op == NPA_AQ_INSTOP_READ) {
 			if (req->ctype == NPA_AQ_CTYPE_AURA)
-				memcpy(&rsp->aura, ctx,
-				       sizeof(struct npa_aura_s));
+				memcpy(&rsp->aura, ctx, NIX_MAX_CTX_SIZE);
 			else
-				memcpy(&rsp->pool, ctx,
-				       sizeof(struct npa_pool_s));
+				memcpy(&rsp->pool, ctx, NIX_MAX_CTX_SIZE);
 		}
 	}
 

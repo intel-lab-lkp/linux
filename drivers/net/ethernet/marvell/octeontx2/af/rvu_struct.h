@@ -227,7 +227,11 @@ struct npa_aura_s {
 	u64 fc_msh_dst            : 11;
 	u64 reserved_435_447      : 13;
 	u64 reserved_448_511;		/* W7 */
+	/* Ensure all context sizes are 128 bytes */
+	u64 padding[8];
 };
+
+static_assert(sizeof(struct npa_aura_s) == NIX_MAX_CTX_SIZE);
 
 struct npa_pool_s {
 	u64 stack_base;			/* W0 */
@@ -284,6 +288,8 @@ struct npa_pool_s {
 	u64 reserved_896_959;		/* W14 */
 	u64 reserved_960_1023;		/* W15 */
 };
+
+static_assert(sizeof(struct npa_pool_s) == NIX_MAX_CTX_SIZE);
 
 /* NIX admin queue completion status */
 enum nix_aq_comp {
