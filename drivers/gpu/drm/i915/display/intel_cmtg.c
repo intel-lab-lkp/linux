@@ -238,6 +238,12 @@ bool intel_cmtg_is_allowed(const struct intel_crtc_state *crtc_state)
 	struct intel_display *display = to_intel_display(crtc_state);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 
+	/*
+	 * Currently Dc3co patches are not merged so returning false for
+	 * continuing cmtg patch review
+	 */
+	return false;
+
 	if ((cpu_transcoder == TRANSCODER_A || cpu_transcoder == TRANSCODER_B) &&
 	    DISPLAY_VER(display) == 35 && intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP))
 		return true;
