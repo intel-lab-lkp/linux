@@ -1102,6 +1102,9 @@ int mt7925_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 					      &msta->deflink);
 	}
 
+	if (!err)
+		set_bit(MT_WCID_FLAG_DRV_PUBLISH, &msta->deflink.wcid.flags);
+
 	return err;
 }
 EXPORT_SYMBOL_GPL(mt7925_mac_sta_add);
