@@ -1258,13 +1258,21 @@ static void kick_bh_pool(struct worker_pool *pool)
 }
 
 /**
- * kick_pool - wake up an idle worker if necessary
+ * kick_pool_pick - select a worker to wake up but defer the wakeup
  * @pool: pool to kick
  *
- * @pool may have pending work items. Wake up worker if necessary. Returns
- * whether a worker was woken up.
+ * Same selection logic as kick_pool() but returns the task that should be
+ * woken instead of calling wake_up_process() on it.  The caller is
+ * responsible for calling wake_up_process() on the returned task (typically
+ * after dropping @pool->lock to shorten the locked region).
+ *
+ * Returns the task_struct to wake, or NULL if no wakeup is needed (e.g. the
+ * pool was empty, no idle worker was available, or it was a BH pool which
+ * was already kicked synchronously).
+ *
+ * Must be called with @pool->lock held.
  */
-static bool kick_pool(struct worker_pool *pool)
+static struct task_struct *kick_pool_pick(struct worker_pool *pool)
 {
 	struct worker *worker = first_idle_worker(pool);
 	struct task_struct *p;
@@ -1272,11 +1280,11 @@ static bool kick_pool(struct worker_pool *pool)
 	lockdep_assert_held(&pool->lock);
 
 	if (!need_more_worker(pool) || !worker)
-		return false;
+		return NULL;
 
 	if (pool->flags & POOL_BH) {
 		kick_bh_pool(pool);
-		return true;
+		return NULL;
 	}
 
 	p = worker->task;
@@ -1310,6 +1318,22 @@ static bool kick_pool(struct worker_pool *pool)
 		}
 	}
 #endif
+	return p;
+}
+
+/**
+ * kick_pool - wake up an idle worker if necessary
+ * @pool: pool to kick
+ *
+ * @pool may have pending work items.  Wake up worker if necessary.  Returns
+ * whether a worker was woken up.
+ */
+static bool kick_pool(struct worker_pool *pool)
+{
+	struct task_struct *p = kick_pool_pick(pool);
+
+	if (!p)
+		return false;
 	wake_up_process(p);
 	return true;
 }
