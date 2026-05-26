@@ -8,6 +8,13 @@
 # in the COPYING file in the root directory of this source tree).
 # You may select, at your option, one of the above-listed licenses.
 # ################################################################
+
+ifdef CONFIG_KASAN_STACK
+# with address sanitizer, the forced inlining produces worse
+# code and and risks stack overflow
+subdir-ccflags-y += -DZSTD_NO_INLINE
+endif
+
 obj-$(CONFIG_ZSTD_COMPRESS) += zstd_compress.o
 obj-$(CONFIG_ZSTD_DECOMPRESS) += zstd_decompress.o
 obj-$(CONFIG_ZSTD_COMMON) += zstd_common.o
