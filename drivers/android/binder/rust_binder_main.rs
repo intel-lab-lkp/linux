@@ -6,12 +6,7 @@
 
 #![crate_name = "rust_binder"]
 #![recursion_limit = "256"]
-#![allow(
-    clippy::as_underscore,
-    clippy::ref_as_ptr,
-    clippy::ptr_as_ptr,
-    clippy::cast_lossless
-)]
+#![allow(clippy::as_underscore, clippy::ref_as_ptr, clippy::cast_lossless)]
 
 use kernel::{
     bindings::{self, seq_file},

@@ -165,8 +165,8 @@ impl BinderTransactionDataSecctx {
     pub(crate) fn tr_data(&mut self) -> &mut BinderTransactionData {
         // SAFETY: Transparent wrapper is safe to transmute.
         unsafe {
-            &mut *(&mut self.transaction_data as *mut uapi::binder_transaction_data
-                as *mut BinderTransactionData)
+            &mut *((&mut self.transaction_data as *mut uapi::binder_transaction_data)
+                .cast::<BinderTransactionData>())
         }
     }
 }
