@@ -321,25 +321,25 @@ static const struct zorrocl zcl_picasso4_z2 = {
 
 static const struct zorro_device_id cirrusfb_zorro_table[] = {
 	{
-		.id		= ZORRO_PROD_HELFRICH_SD64_REG,
-		.driver_data	= (unsigned long)&zcl_sd64,
+		.id = ZORRO_PROD_HELFRICH_SD64_REG,
+		.driver_data_ptr = &zcl_sd64,
 	}, {
-		.id		= ZORRO_PROD_HELFRICH_PICCOLO_REG,
-		.driver_data	= (unsigned long)&zcl_piccolo,
+		.id = ZORRO_PROD_HELFRICH_PICCOLO_REG,
+		.driver_data_ptr = &zcl_piccolo,
 	}, {
-		.id	= ZORRO_PROD_VILLAGE_TRONIC_PICASSO_II_II_PLUS_REG,
-		.driver_data	= (unsigned long)&zcl_picasso,
+		.id = ZORRO_PROD_VILLAGE_TRONIC_PICASSO_II_II_PLUS_REG,
+		.driver_data_ptr = &zcl_picasso,
 	}, {
-		.id		= ZORRO_PROD_GVP_EGS_28_24_SPECTRUM_REG,
-		.driver_data	= (unsigned long)&zcl_spectrum,
+		.id = ZORRO_PROD_GVP_EGS_28_24_SPECTRUM_REG,
+		.driver_data_ptr = &zcl_spectrum,
 	}, {
-		.id		= ZORRO_PROD_VILLAGE_TRONIC_PICASSO_IV_Z3,
-		.driver_data	= (unsigned long)&zcl_picasso4_z3,
+		.id = ZORRO_PROD_VILLAGE_TRONIC_PICASSO_IV_Z3,
+		.driver_data_ptr = &zcl_picasso4_z3,
 	}, {
-		.id		= ZORRO_PROD_VILLAGE_TRONIC_PICASSO_IV_Z2_REG,
-		.driver_data	= (unsigned long)&zcl_picasso4_z2,
+		.id = ZORRO_PROD_VILLAGE_TRONIC_PICASSO_IV_Z2_REG,
+		.driver_data_ptr = &zcl_picasso4_z2,
 	},
-	{ 0 }
+	{ }
 };
 MODULE_DEVICE_TABLE(zorro, cirrusfb_zorro_table);
 #endif /* CONFIG_ZORRO */
@@ -2208,7 +2208,7 @@ static int cirrusfb_zorro_register(struct zorro_dev *z,
 	if (!info)
 		return -ENOMEM;
 
-	zcl = (const struct zorrocl *)ent->driver_data;
+	zcl = ent->driver_data_ptr;
 	btype = zcl->type;
 	regbase = zorro_resource_start(z) + zcl->regoffset;
 	ramsize = zcl->ramsize;
