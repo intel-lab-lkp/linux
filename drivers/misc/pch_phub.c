@@ -93,20 +93,6 @@ enum pch_phub_type {
 
 /**
  * struct pch_phub_reg - PHUB register structure
- * @phub_id_reg:			PHUB_ID register val
- * @q_pri_val_reg:			QUEUE_PRI_VAL register val
- * @rc_q_maxsize_reg:			RC_QUEUE_MAXSIZE register val
- * @bri_q_maxsize_reg:			BRI_QUEUE_MAXSIZE register val
- * @comp_resp_timeout_reg:		COMP_RESP_TIMEOUT register val
- * @bus_slave_control_reg:		BUS_SLAVE_CONTROL_REG register val
- * @deadlock_avoid_type_reg:		DEADLOCK_AVOID_TYPE register val
- * @intpin_reg_wpermit_reg0:		INTPIN_REG_WPERMIT register 0 val
- * @intpin_reg_wpermit_reg1:		INTPIN_REG_WPERMIT register 1 val
- * @intpin_reg_wpermit_reg2:		INTPIN_REG_WPERMIT register 2 val
- * @intpin_reg_wpermit_reg3:		INTPIN_REG_WPERMIT register 3 val
- * @int_reduce_control_reg:		INT_REDUCE_CONTROL registers val
- * @clkcfg_reg:				CLK CFG register val
- * @funcsel_reg:			Function select register value
  * @pch_phub_base_address:		Register base address
  * @pch_phub_extrom_base_address:	external rom base address
  * @pch_mac_start_address:		MAC address area start address
@@ -115,20 +101,6 @@ enum pch_phub_type {
  * @pdev:				pointer to pci device struct
  */
 struct pch_phub_reg {
-	u32 phub_id_reg;
-	u32 q_pri_val_reg;
-	u32 rc_q_maxsize_reg;
-	u32 bri_q_maxsize_reg;
-	u32 comp_resp_timeout_reg;
-	u32 bus_slave_control_reg;
-	u32 deadlock_avoid_type_reg;
-	u32 intpin_reg_wpermit_reg0;
-	u32 intpin_reg_wpermit_reg1;
-	u32 intpin_reg_wpermit_reg2;
-	u32 intpin_reg_wpermit_reg3;
-	u32 int_reduce_control_reg[MAX_NUM_INT_REDUCE_CONTROL_REG];
-	u32 clkcfg_reg;
-	u32 funcsel_reg;
 	void __iomem *pch_phub_base_address;
 	void __iomem *pch_phub_extrom_base_address;
 	u32 pch_mac_start_address;
