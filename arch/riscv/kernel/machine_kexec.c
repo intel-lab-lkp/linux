@@ -18,6 +18,8 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 
+unsigned long kexec_tramp_satp;
+unsigned long riscv_kexec_norelocate_pa;
 static pgd_t kexec_tramp_pgd[PTRS_PER_PGD] __aligned(PAGE_SIZE);
 static p4d_t kexec_tramp_p4d[PTRS_PER_P4D] __aligned(PAGE_SIZE);
 static pud_t kexec_tramp_pud[PTRS_PER_PUD] __aligned(PAGE_SIZE);
@@ -135,11 +137,17 @@ machine_kexec_prepare(struct kimage *image)
 	} else {
 		/*
 		 * Crash kexec uses riscv_kexec_norelocate as a trampoline.
-		 * Pre-build the trampoline page tables here so the panic
-		 * path only has to switch satp and jump.
+		 * Pre-build the trampoline page tables and capture the
+		 * trampoline SATP value plus the physical address of
+		 * riscv_kexec_norelocate so that the panic path only has
+		 * to switch satp and jump.
 		 */
 		riscv_kexec_build_tramp((unsigned long)__kexec_tramp_text_start,
 					__pa_symbol(__kexec_tramp_text_start));
+		WRITE_ONCE(riscv_kexec_norelocate_pa,
+			   __pa_symbol(&riscv_kexec_norelocate));
+		WRITE_ONCE(kexec_tramp_satp,
+			   PFN_DOWN(__pa_symbol(kexec_tramp_pgd)) | satp_mode);
 	}
 
 	return 0;
@@ -243,7 +251,35 @@ machine_kexec(struct kimage *image)
 
 	/* Jump to the relocation code */
 	pr_notice("Bye...\n");
-	kexec_method(first_ind_entry, jump_addr, fdt_addr,
-		     this_hart_id, kernel_map.va_pa_offset);
+	/*
+	 * Hand off to the trampoline. For KEXEC_TYPE_CRASH we go into
+	 * riscv_kexec_norelocate, which uses t3 as the 1st/2nd-pass
+	 * discriminator (must be 0 on first entry). A bare
+	 *   asm volatile ("li t3, 0" ::: "t3")
+	 * before the C call only declares t3 *modified*; the compiler is
+	 * free to use t3 as scratch when materialising args. Pin t3 = 0
+	 * (and the args) via local register variables and perform the
+	 * indirect jump inside the same inline asm so t3 == 0 is
+	 * guaranteed at the moment control leaves machine_kexec().
+	 */
+	{
+		register unsigned long a0_val asm("a0") = first_ind_entry;
+		register unsigned long a1_val asm("a1") = jump_addr;
+		register unsigned long a2_val asm("a2") = fdt_addr;
+		register unsigned long a3_val asm("a3") = this_hart_id;
+		register unsigned long a4_val asm("a4") = kernel_map.va_pa_offset;
+		register unsigned long t3_zero asm("t3") = 0;
+		register riscv_kexec_method m asm("t6") = kexec_method;
+
+		asm volatile (
+			"jr %[m]"
+			:
+			: "r" (a0_val), "r" (a1_val), "r" (a2_val),
+			  "r" (a3_val), "r" (a4_val),
+			  "r" (t3_zero),
+			  [m] "r" (m)
+			: "memory"
+		);
+	}
 	unreachable();
 }
