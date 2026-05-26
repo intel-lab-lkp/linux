@@ -1332,8 +1332,7 @@ int simple_xattr_get(struct simple_xattr_cache *cache, struct list_head *xattrs,
 {
 	struct simple_xattr *xattr;
 	struct sx_key key = { .parent = xattrs, .name = name };
-	/* cache->ht is stored set once from NULL to non-NULL */
-	struct rhashtable *ht = smp_load_acquire(&cache->ht);
+	struct rhashtable *ht = READ_ONCE(cache->ht);
 	int ret = -ENODATA;
 
 	if (!ht)
@@ -1356,7 +1355,7 @@ int simple_xattr_get(struct simple_xattr_cache *cache, struct list_head *xattrs,
 static struct rhashtable *simple_xattrs_lazy_alloc(struct simple_xattr_cache *cache,
 						   const void *value, int flags)
 {
-	struct rhashtable *ht = cache->ht;
+	struct rhashtable *oldht, *ht = READ_ONCE(cache->ht);
 	int err;
 
 	if (unlikely(!ht)) {
@@ -1373,8 +1372,18 @@ static struct rhashtable *simple_xattrs_lazy_alloc(struct simple_xattr_cache *ca
 			return ERR_PTR(err);
 		}
 
-		/* Paris with smp_load_acquire() in simple_xattr_get() */
-		smp_store_release(&cache->ht, ht);
+		/*
+		 * Provides release semantics on success, so that use of a
+		 * non-NULL READ_ONCE(cache->ht) will be ordered relative to the
+		 * above initialization, due to implicit address dependency.
+		 */
+		oldht = cmpxchg_release(&cache->ht, NULL, ht);
+		if (oldht) {
+			/* Race lost */
+			rhashtable_destroy(ht);
+			kfree(ht);
+			ht = oldht;
+		}
 	}
 	return ht;
 }
