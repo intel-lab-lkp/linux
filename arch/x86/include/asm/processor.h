@@ -488,10 +488,7 @@ struct thread_struct {
 	unsigned long		cr2;
 	unsigned long		trap_nr;
 	unsigned long		error_code;
-#ifdef CONFIG_VM86
-	/* Virtual 86 mode info */
-	struct vm86		*vm86;
-#endif
+
 	/* IO permissions: */
 	struct io_bitmap	*io_bitmap;
 

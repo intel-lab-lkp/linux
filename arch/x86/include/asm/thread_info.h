@@ -36,11 +36,7 @@
  * dynamic, but for now it is always 2 words longer.
  */
 #ifdef CONFIG_X86_32
-# ifdef CONFIG_VM86
-#  define TOP_OF_KERNEL_STACK_PADDING 16
-# else
-#  define TOP_OF_KERNEL_STACK_PADDING 8
-# endif
+# define TOP_OF_KERNEL_STACK_PADDING 8
 #else /* x86-64 */
 # ifdef CONFIG_X86_FRED
 #  define TOP_OF_KERNEL_STACK_PADDING (2 * 8)
