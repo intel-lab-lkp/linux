@@ -176,7 +176,6 @@ nfnl_cthelper_parse_expect_policy(struct nf_conntrack_helper *helper,
 				  const struct nlattr *attr)
 {
 	int i, ret;
-	struct nf_conntrack_expect_policy *expect_policy;
 	struct nlattr *tb[NFCTH_POLICY_SET_MAX+1];
 	unsigned int class_max;
 
@@ -195,26 +194,19 @@ nfnl_cthelper_parse_expect_policy(struct nf_conntrack_helper *helper,
 	if (class_max > NF_CT_MAX_EXPECT_CLASSES)
 		return -EOVERFLOW;
 
-	expect_policy = kzalloc_objs(struct nf_conntrack_expect_policy,
-				     class_max);
-	if (expect_policy == NULL)
-		return -ENOMEM;
-
 	for (i = 0; i < class_max; i++) {
 		if (!tb[NFCTH_POLICY_SET+i])
 			goto err;
 
-		ret = nfnl_cthelper_expect_policy(&expect_policy[i],
+		ret = nfnl_cthelper_expect_policy(&helper->expect_policy[i],
 						  tb[NFCTH_POLICY_SET+i]);
 		if (ret < 0)
 			goto err;
 	}
 
 	helper->expect_class_max = class_max - 1;
-	helper->expect_policy = expect_policy;
 	return 0;
 err:
-	kfree(expect_policy);
 	return -EINVAL;
 }
 
@@ -244,7 +236,7 @@ nfnl_cthelper_create(const struct nlattr * const tb[],
 	size = ntohl(nla_get_be32(tb[NFCTH_PRIV_DATA_LEN]));
 	if (size > sizeof_field(struct nf_conn_help, data)) {
 		ret = -ENOMEM;
-		goto err2;
+		goto err1;
 	}
 	helper->data_len = size;
 
@@ -273,14 +265,12 @@ nfnl_cthelper_create(const struct nlattr * const tb[],
 		}
 	}
 
-	ret = nf_conntrack_helper_register(helper);
+	ret = __nf_conntrack_helper_register(helper);
 	if (ret < 0)
-		goto err2;
+		goto err1;
 
 	list_add_tail(&nfcth->list, &nfnl_cthelper_list);
 	return 0;
-err2:
-	kfree(helper->expect_policy);
 err1:
 	kfree(nfcth);
 	return ret;
@@ -723,7 +713,6 @@ static int nfnl_cthelper_del(struct sk_buff *skb, const struct nfnl_info *info,
 		if (refcount_dec_if_one(&cur->refcnt)) {
 			found = true;
 			nf_conntrack_helper_unregister(cur);
-			kfree(cur->expect_policy);
 
 			list_del(&nlcth->list);
 			kfree(nlcth);
@@ -799,7 +788,6 @@ static void __exit nfnl_cthelper_exit(void)
 		cur = &nlcth->helper;
 
 		nf_conntrack_helper_unregister(cur);
-		kfree(cur->expect_policy);
 		kfree(nlcth);
 	}
 }

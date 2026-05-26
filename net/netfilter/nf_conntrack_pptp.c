@@ -376,7 +376,7 @@ invalid:
 }
 
 static int
-pptp_outbound_pkt(struct sk_buff *skb, unsigned int protoff,
+pptp_ptrbound_pkt(struct sk_buff *skb, unsigned int protoff,
 		  struct PptpControlHeader *ctlh,
 		  union pptp_ctrl_union *pptpReq,
 		  unsigned int reqlen,
@@ -567,7 +567,7 @@ conntrack_pptp_help(struct sk_buff *skb, unsigned int protoff,
 	 * established from PNS->PAC.  However, RFC makes no guarantee */
 	if (dir == IP_CT_DIR_ORIGINAL)
 		/* client -> server (PNS -> PAC) */
-		ret = pptp_outbound_pkt(skb, protoff, ctlh, pptpReq, reqlen, ct,
+		ret = pptp_ptrbound_pkt(skb, protoff, ctlh, pptpReq, reqlen, ct,
 					ctinfo);
 	else
 		/* server -> client (PAC -> PNS) */
@@ -586,27 +586,25 @@ static const struct nf_conntrack_expect_policy pptp_exp_policy = {
 };
 
 /* control protocol helper */
-static struct nf_conntrack_helper pptp __read_mostly = {
-	.name			= "pptp",
-	.me			= THIS_MODULE,
-	.tuple.src.l3num	= AF_INET,
-	.tuple.src.u.tcp.port	= cpu_to_be16(PPTP_CONTROL_PORT),
-	.tuple.dst.protonum	= IPPROTO_TCP,
-	.help			= conntrack_pptp_help,
-	.destroy		= pptp_destroy_siblings,
-	.expect_policy		= &pptp_exp_policy,
-};
+static struct nf_conntrack_helper pptp __read_mostly;
+static struct nf_conntrack_helper *pptp_ptr __read_mostly;
 
 static int __init nf_conntrack_pptp_init(void)
 {
 	NF_CT_HELPER_BUILD_BUG_ON(sizeof(struct nf_ct_pptp_master));
 
-	return nf_conntrack_helper_register(&pptp);
+	nf_ct_helper_init(&pptp, AF_INET, IPPROTO_TCP,
+			  "pptp", PPTP_CONTROL_PORT, PPTP_CONTROL_PORT, PPTP_CONTROL_PORT,
+			  &pptp_exp_policy, 0, conntrack_pptp_help, NULL, THIS_MODULE);
+
+	pptp.destroy = pptp_destroy_siblings;
+
+	return nf_conntrack_helper_register(&pptp, &pptp_ptr);
 }
 
 static void __exit nf_conntrack_pptp_fini(void)
 {
-	nf_conntrack_helper_unregister(&pptp);
+	nf_conntrack_helper_unregister(pptp_ptr);
 }
 
 module_init(nf_conntrack_pptp_init);
