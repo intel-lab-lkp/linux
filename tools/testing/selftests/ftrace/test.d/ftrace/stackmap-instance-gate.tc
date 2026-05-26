@@ -1,0 +1,42 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# description: ftrace - stackmap option is gated to the top-level trace instance
+# requires: stack_map options/stackmap instances
+
+# The 'stackmap' option is added to TOP_LEVEL_TRACE_FLAGS, matching the
+# convention used for global-only options like 'printk' and 'record-cmd'.
+# Verify that:
+# 1. The global instance exposes options/stackmap and the stack_map* nodes.
+# 2. A newly created secondary instance under instances/ does NOT expose
+#    options/stackmap or stack_map* nodes.
+
+fail() {
+    echo "FAIL: $1"
+    rmdir instances/test_stackmap_gate 2>/dev/null
+    exit_fail
+}
+
+# 1. Global instance must expose the option and the nodes
+test -e options/stackmap || fail "options/stackmap missing on global instance"
+test -e stack_map        || fail "stack_map missing on global instance"
+test -e stack_map_stat   || fail "stack_map_stat missing on global instance"
+test -e stack_map_bin    || fail "stack_map_bin missing on global instance"
+
+# 2. Create a secondary instance and verify it does NOT see the option
+#    or the stack_map* nodes.
+mkdir instances/test_stackmap_gate || fail "could not create secondary instance"
+
+if [ -e instances/test_stackmap_gate/options/stackmap ]; then
+    fail "secondary instance unexpectedly exposes options/stackmap"
+fi
+
+for f in stack_map stack_map_stat stack_map_bin; do
+    if [ -e instances/test_stackmap_gate/$f ]; then
+        fail "secondary instance unexpectedly has $f"
+    fi
+done
+
+rmdir instances/test_stackmap_gate || fail "could not remove secondary instance"
+
+echo "stackmap option gating to top-level instance works"
+exit 0

@@ -1,0 +1,103 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# description: ftrace - stackmap basic functionality
+# requires: stack_map options/stackmap function:tracer
+
+# Test that ftrace stackmap deduplication works:
+# 1. Enable stackmap + stacktrace options
+# 2. Run function tracer briefly
+# 3. Verify trace contains <stack_id> events (read BEFORE switching
+#    tracer back to nop, since tracer_init() resets the ring buffer)
+# 4. Verify stack_map has entries and zero drops
+# 5. Verify reset is rejected (-EBUSY) while tracing is active
+# 6. Verify reset clears the map when tracing is stopped
+
+fail() {
+    echo "FAIL: $1"
+    exit_fail
+}
+
+# Restore state on any exit (success, fail, or interrupt) so a
+# half-finished test does not leave stacktrace/stackmap enabled.
+cleanup() {
+    disable_tracing 2>/dev/null
+    echo nop > current_tracer 2>/dev/null
+    echo 0 > options/stackmap 2>/dev/null
+    echo 0 > options/stacktrace 2>/dev/null
+}
+trap cleanup EXIT
+
+disable_tracing
+clear_trace
+
+# Verify stackmap files exist
+test -f stack_map      || fail "stack_map file missing"
+test -f stack_map_stat || fail "stack_map_stat file missing"
+test -f stack_map_bin  || fail "stack_map_bin file missing"
+
+# Enable stackmap dedup
+echo 1 > options/stackmap
+echo 1 > options/stacktrace
+
+# Run function tracer briefly
+echo function > current_tracer
+enable_tracing
+sleep 1
+disable_tracing
+
+# Read trace contents NOW, before switching tracer back to nop.
+# tracer_init() unconditionally calls tracing_reset_online_cpus(),
+# so the ring buffer would be empty after 'echo nop > current_tracer'.
+count=$(grep -c "<stack_id" trace || true)
+: "${count:=0}"
+if [ "$count" -eq 0 ]; then
+    fail "trace has no <stack_id> events"
+fi
+
+# Now safe to switch back and disable options
+echo nop > current_tracer
+echo 0 > options/stackmap
+
+# Check stack_map_stat
+entries=$(cat stack_map_stat | grep "^entries:" | awk '{print $2}')
+: "${entries:=0}"
+if [ "$entries" -eq 0 ]; then
+    fail "stackmap has zero entries after tracing"
+fi
+
+successes=$(cat stack_map_stat | grep "^successes:" | awk '{print $2}')
+: "${successes:=0}"
+if [ "$successes" -eq 0 ]; then
+    fail "stackmap has zero successes"
+fi
+
+drops=$(cat stack_map_stat | grep "^drops:" | awk '{print $2}')
+: "${drops:=0}"
+if [ "$drops" -ne 0 ]; then
+    fail "stackmap had $drops drops (pool exhausted?)"
+fi
+
+# Check stack_map text output is parseable
+first_id=$(cat stack_map | grep "^stack_id" | head -1 | awk '{print $2}')
+if [ -z "$first_id" ]; then
+    fail "stack_map output has no stack_id entries"
+fi
+
+# Test that reset is rejected while tracing is active
+enable_tracing
+if echo 0 > stack_map 2>/dev/null; then
+    disable_tracing
+    fail "stackmap reset should fail while tracing is active"
+fi
+disable_tracing
+
+# Test reset works when tracing is stopped
+echo 0 > stack_map
+entries_after=$(cat stack_map_stat | grep "^entries:" | awk '{print $2}')
+: "${entries_after:=-1}"
+if [ "$entries_after" -ne 0 ]; then
+    fail "stackmap reset did not clear entries (got $entries_after)"
+fi
+
+echo "stackmap basic test passed: $entries unique stacks, $successes successes, $drops drops"
+exit 0
