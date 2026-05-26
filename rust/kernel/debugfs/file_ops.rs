@@ -57,13 +57,6 @@ impl<T> FileOps<T> {
     }
 }
 
-impl<T: Adapter> FileOps<T> {
-    pub(super) const fn adapt(&self) -> &FileOps<T::Inner> {
-        // SAFETY: `Adapter` asserts that `T` can be legally cast to `T::Inner`.
-        unsafe { core::mem::transmute(self) }
-    }
-}
-
 #[cfg(CONFIG_DEBUG_FS)]
 impl<T> Deref for FileOps<T> {
     type Target = bindings::file_operations;
@@ -85,8 +78,9 @@ impl<'a, T: Writer> fmt::Display for WriterAdapter<&'a T> {
 ///
 /// # Safety
 ///
-/// * `inode`'s private pointer must point to a value of type `T` which will outlive the `inode`
-///   and will not have any unique references alias it during the call.
+/// * `inode`'s private pointer must be valid to convert to a shared reference
+///   to `T` for as long as it may be used by `writer_act::<T>`, without any
+///   unique references aliasing it during those calls.
 /// * `file` must point to a live, not-yet-initialized file object.
 unsafe extern "C" fn writer_open<T: Writer + Sync>(
     inode: *mut bindings::inode,
@@ -96,10 +90,11 @@ unsafe extern "C" fn writer_open<T: Writer + Sync>(
     let data = unsafe { (*inode).i_private };
     // SAFETY:
     // * `file` is acceptable by caller precondition.
-    // * `print_act` will be called on a `seq_file` with private data set to the third argument,
-    //   so we meet its safety requirements.
-    // * The `data` pointer passed in the third argument is a valid `T` pointer that outlives
-    //   this call by caller preconditions.
+    // * `writer_act::<T>` will be called on a `seq_file` with private data set
+    //   to the third argument, so we meet its safety requirements.
+    // * By caller precondition, the `data` pointer passed in the third argument
+    //   is valid to convert to a shared reference to `T` whenever
+    //   `writer_act::<T>` is called.
     unsafe { bindings::single_open(file, Some(writer_act::<T>), data) }
 }
 
@@ -107,14 +102,16 @@ unsafe extern "C" fn writer_open<T: Writer + Sync>(
 ///
 /// # Safety
 ///
-/// `seq` must point to a live `seq_file` whose private data is a valid pointer to a `T` which may
-/// not have any unique references alias it during the call.
+/// `seq` must point to a live `seq_file` whose private data is valid to convert
+/// to a shared reference to `T` and may not have any unique references aliasing
+/// it during the call.
 unsafe extern "C" fn writer_act<T: Writer + Sync>(
     seq: *mut bindings::seq_file,
     _: *mut c_void,
 ) -> c_int {
-    // SAFETY: By caller precondition, this pointer is valid pointer to a `T`, and
-    // there are not and will not be any unique references until we are done.
+    // SAFETY: By caller precondition, this pointer is valid to convert to a
+    // shared reference to `T`, and there are not and will not be any unique
+    // references until we are done.
     let data = unsafe { &*((*seq).private.cast::<T>()) };
     // SAFETY: By caller precondition, `seq_file` points to a live `seq_file`, so we can lift
     // it.
@@ -128,8 +125,11 @@ pub(crate) trait ReadFile<T> {
     const FILE_OPS: FileOps<T>;
 }
 
-impl<T: Writer + Sync> ReadFile<T> for T {
-    const FILE_OPS: FileOps<T> = {
+impl<T, D> ReadFile<D> for T
+where
+    T: Writer + Sync + Adapter<D>,
+{
+    const FILE_OPS: FileOps<D> = {
         let operations = bindings::file_operations {
             read: Some(bindings::seq_read),
             llseek: Some(bindings::seq_lseek),
@@ -137,10 +137,10 @@ impl<T: Writer + Sync> ReadFile<T> for T {
             open: Some(writer_open::<Self>),
             ..pin_init::zeroed()
         };
-        // SAFETY: `operations` is all stock `seq_file` implementations except for `writer_open`.
-        // `open`'s only requirement beyond what is provided to all open functions is that the
-        // inode's data pointer must point to a `T` that will outlive it, which matches the
-        // `FileOps` requirements.
+        // SAFETY: `operations` is all stock `seq_file` implementations except
+        // for `writer_open`, which passes private data to `writer_act::<T>`.
+        // `T: Adapter<D>` guarantees that it may reconstruct a reference to `T`
+        // from the `D` private data required by `FileOps<D>`.
         unsafe { FileOps::new(operations, 0o400) }
     };
 }
@@ -159,7 +159,7 @@ fn read<T: Reader + Sync>(data: &T, buf: *const c_char, count: usize) -> isize {
 ///
 /// `file` must be a valid pointer to a `file` struct.
 /// The `private_data` of the file must contain a valid pointer to a `seq_file` whose
-/// `private` data in turn points to a `T` that implements `Reader`.
+/// `private` data is valid to convert to a shared reference to `T`.
 /// `buf` must be a valid user-space buffer.
 pub(crate) unsafe extern "C" fn write<T: Reader + Sync>(
     file: *mut bindings::file,
@@ -169,7 +169,8 @@ pub(crate) unsafe extern "C" fn write<T: Reader + Sync>(
 ) -> isize {
     // SAFETY: The file was opened with `single_open`, which sets `private_data` to a `seq_file`.
     let seq = unsafe { &mut *((*file).private_data.cast::<bindings::seq_file>()) };
-    // SAFETY: By caller precondition, this pointer is live and points to a value of type `T`.
+    // SAFETY: By caller precondition, this pointer is valid to convert to a shared reference to
+    // `T`.
     let data = unsafe { &*(seq.private as *const T) };
     read(data, buf, count)
 }
@@ -179,8 +180,11 @@ pub(crate) trait ReadWriteFile<T> {
     const FILE_OPS: FileOps<T>;
 }
 
-impl<T: Writer + Reader + Sync> ReadWriteFile<T> for T {
-    const FILE_OPS: FileOps<T> = {
+impl<T, D> ReadWriteFile<D> for T
+where
+    T: Writer + Reader + Sync + Adapter<D>,
+{
+    const FILE_OPS: FileOps<D> = {
         let operations = bindings::file_operations {
             open: Some(writer_open::<T>),
             read: Some(bindings::seq_read),
@@ -189,14 +193,9 @@ impl<T: Writer + Reader + Sync> ReadWriteFile<T> for T {
             release: Some(bindings::single_release),
             ..pin_init::zeroed()
         };
-        // SAFETY: `operations` is all stock `seq_file` implementations except for `writer_open`
-        // and `write`.
-        // `writer_open`'s only requirement beyond what is provided to all open functions is that
-        // the inode's data pointer must point to a `T` that will outlive it, which matches the
-        // `FileOps` requirements.
-        // `write` only requires that the file's private data pointer points to `seq_file`
-        // which points to a `T` that will outlive it, which matches what `writer_open`
-        // provides.
+        // SAFETY: `writer_open` and `write` access the private data through
+        // `T`; `T: Adapter<D>` guarantees that this is valid for the `D`
+        // private data required by `FileOps<D>`.
         unsafe { FileOps::new(operations, 0o600) }
     };
 }
@@ -217,8 +216,7 @@ unsafe extern "C" fn write_only_open(
 /// # Safety
 ///
 /// * `file` must be a valid pointer to a `file` struct.
-/// * The `private_data` of the file must contain a valid pointer to a `T` that implements
-///   `Reader`.
+/// * The `private_data` of the file must be valid to convert to a shared reference to `T`.
 /// * `buf` must be a valid user-space buffer.
 pub(crate) unsafe extern "C" fn write_only_write<T: Reader + Sync>(
     file: *mut bindings::file,
@@ -226,8 +224,8 @@ pub(crate) unsafe extern "C" fn write_only_write<T: Reader + Sync>(
     count: usize,
     _ppos: *mut bindings::loff_t,
 ) -> isize {
-    // SAFETY: The caller ensures that `file` is a valid pointer and that `private_data` holds a
-    // valid pointer to `T`.
+    // SAFETY: The caller ensures that `file` is a valid pointer and that
+    // `private_data` is valid to convert to a shared reference to `T`.
     let data = unsafe { &*((*file).private_data as *const T) };
     read(data, buf, count)
 }
@@ -236,19 +234,21 @@ pub(crate) trait WriteFile<T> {
     const FILE_OPS: FileOps<T>;
 }
 
-impl<T: Reader + Sync> WriteFile<T> for T {
-    const FILE_OPS: FileOps<T> = {
+impl<T, D> WriteFile<D> for T
+where
+    T: Reader + Sync + Adapter<D>,
+{
+    const FILE_OPS: FileOps<D> = {
         let operations = bindings::file_operations {
             open: Some(write_only_open),
             write: Some(write_only_write::<T>),
             llseek: Some(bindings::noop_llseek),
             ..pin_init::zeroed()
         };
-        // SAFETY:
-        // * `write_only_open` populates the file private data with the inode private data
-        // * `write_only_write`'s only requirement is that the private data of the file point to
-        //   a `T` and be legal to convert to a shared reference, which `write_only_open`
-        //   satisfies.
+        // SAFETY: `write_only_open` stores the inode private data in the file,
+        // and `write_only_write::<T>` accesses it through `T`. `T: Adapter<D>`
+        // guarantees that this is valid for the `D` private data required by
+        // `FileOps<D>`.
         unsafe { FileOps::new(operations, 0o200) }
     };
 }

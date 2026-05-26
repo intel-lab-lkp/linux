@@ -20,31 +20,31 @@ use core::{
     ops::Deref, //
 };
 
+/// Indicates that operations implemented for `Self` may operate on file private
+/// data pointing to `D`.
+///
 /// # Safety
 ///
-/// To implement this trait, it must be safe to cast a `&Self` to a `&Inner`.
-/// It is intended for use in unstacking adapters out of `FileOps` backings.
-pub(crate) unsafe trait Adapter {
-    type Inner;
-}
+/// Operations may reconstruct a shared reference to `Self` from a pointer to
+/// `D`. Implementers must also arrange for any additional invariants of `Self`
+/// to hold whenever such an operation is called.
+pub(super) unsafe trait Adapter<D> {}
 
-/// Adapter to implement `Reader` via a callback with the same representation as `T`.
+// SAFETY: A pointer to `D` may be reconstructed as a shared reference to `D`.
+unsafe impl<D> Adapter<D> for D {}
+
+/// Adapter to implement `Reader` via a callback with the same representation as `D`.
 ///
-/// * Layer it on top of `WriterAdapter` if you want to add a custom callback for `write`.
-/// * Layer it on top of `NoWriter` to pass through any support present on the underlying type.
+/// * Layer it on top of `FormatAdapter` for a read-write callback file.
+/// * Layer it on top of `NoWriter` for a write-only callback file.
 ///
 /// # Invariants
 ///
-/// If an instance for `WritableAdapter<_, W>` is constructed, `W` is inhabited.
+/// When `WritableAdapter<_, W>` is used for file operations, `W` is inhabited.
 #[repr(transparent)]
-pub(crate) struct WritableAdapter<D, W> {
+pub(super) struct WritableAdapter<D, W> {
     inner: D,
     _writer: PhantomData<W>,
-}
-
-// SAFETY: Stripping off the adapter only removes constraints
-unsafe impl<D, W> Adapter for WritableAdapter<D, W> {
-    type Inner = D;
 }
 
 impl<D: Writer, W> Writer for WritableAdapter<D, W> {
@@ -58,19 +58,20 @@ where
     W: Fn(&D::Target, &mut UserSliceReader) -> Result + Send + Sync + 'static,
 {
     fn read_from_slice(&self, reader: &mut UserSliceReader) -> Result {
-        // SAFETY: WritableAdapter<_, W> can only be constructed if W is inhabited
+        // SAFETY: The callback API obtains this implementation only after
+        // receiving a `&'static W`, so `W` is inhabited.
         let w: &W = unsafe { materialize_zst() };
         w(self.inner.deref(), reader)
     }
 }
 
-/// Adapter to implement `Writer` via a callback with the same representation as `T`.
+/// Adapter to implement `Writer` via a callback with the same representation as `D`.
 ///
 /// # Invariants
 ///
-/// If an instance for `FormatAdapter<_, F>` is constructed, `F` is inhabited.
+/// When `FormatAdapter<_, F>` is used for file operations, `F` is inhabited.
 #[repr(transparent)]
-pub(crate) struct FormatAdapter<D, F> {
+pub(super) struct FormatAdapter<D, F> {
     inner: D,
     _formatter: PhantomData<F>,
 }
@@ -87,25 +88,20 @@ where
     F: Fn(&D, &mut fmt::Formatter<'_>) -> fmt::Result + 'static,
 {
     fn write(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // SAFETY: FormatAdapter<_, F> can only be constructed if F is inhabited
+        // SAFETY: The callback API obtains this implementation only after
+        // receiving a `&'static F`, so `F` is inhabited.
         let f: &F = unsafe { materialize_zst() };
         f(&self.inner, fmt)
     }
 }
 
-// SAFETY: Stripping off the adapter only removes constraints
-unsafe impl<D, F> Adapter for FormatAdapter<D, F> {
-    type Inner = D;
-}
+// SAFETY: `FormatAdapter<D, F>` is transparent over `D`. The callback API
+// receives a `&'static F`, which establishes its inhabitation invariant.
+unsafe impl<D, F> Adapter<D> for FormatAdapter<D, F> {}
 
 #[repr(transparent)]
-pub(crate) struct NoWriter<D> {
+pub(super) struct NoWriter<D> {
     inner: D,
-}
-
-// SAFETY: Stripping off the adapter only removes constraints
-unsafe impl<D> Adapter for NoWriter<D> {
-    type Inner = D;
 }
 
 impl<D> Deref for NoWriter<D> {
@@ -115,11 +111,20 @@ impl<D> Deref for NoWriter<D> {
     }
 }
 
+// SAFETY: The nested adapters are transparent over `D`. The callback APIs
+// receive `&'static F` and `&'static W`, which establish their inhabitation
+// invariants.
+unsafe impl<D, F, W> Adapter<D> for WritableAdapter<FormatAdapter<D, F>, W> {}
+
+// SAFETY: The nested adapters are transparent over `D`. The callback API
+// receives a `&'static W`, which establishes its inhabitation invariant.
+unsafe impl<D, W> Adapter<D> for WritableAdapter<NoWriter<D>, W> {}
+
 /// For types with a unique value, produce a static reference to it.
 ///
 /// # Safety
 ///
-/// The caller asserts that F is inhabited
+/// The caller asserts that `F` is inhabited.
 unsafe fn materialize_zst<F>() -> &'static F {
     const { assert!(core::mem::size_of::<F>() == 0) };
     let zst_dangle: core::ptr::NonNull<F> = core::ptr::NonNull::dangling();

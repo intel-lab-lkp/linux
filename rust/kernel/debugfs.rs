@@ -239,7 +239,7 @@ impl Dir {
         T: Send + Sync + 'static,
         F: Fn(&T, &mut fmt::Formatter<'_>) -> fmt::Result + Send + Sync,
     {
-        let file_ops = <FormatAdapter<T, F>>::FILE_OPS.adapt();
+        let file_ops = &<FormatAdapter<T, F> as ReadFile<T>>::FILE_OPS;
         self.create_file(name, data, file_ops)
     }
 
@@ -294,9 +294,7 @@ impl Dir {
         W: Fn(&T, &mut UserSliceReader) -> Result + Send + Sync,
     {
         let file_ops =
-            <WritableAdapter<FormatAdapter<T, F>, W> as file_ops::ReadWriteFile<_>>::FILE_OPS
-                .adapt()
-                .adapt();
+            &<WritableAdapter<FormatAdapter<T, F>, W> as file_ops::ReadWriteFile<T>>::FILE_OPS;
         self.create_file(name, data, file_ops)
     }
 
@@ -348,9 +346,7 @@ impl Dir {
         T: Send + Sync + 'static,
         W: Fn(&T, &mut UserSliceReader) -> Result + Send + Sync,
     {
-        let file_ops = <WritableAdapter<NoWriter<T>, W> as WriteFile<_>>::FILE_OPS
-            .adapt()
-            .adapt();
+        let file_ops = &<WritableAdapter<NoWriter<T>, W> as WriteFile<T>>::FILE_OPS;
         self.create_file(name, data, file_ops)
     }
 
@@ -584,7 +580,7 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
         T: Send + Sync + 'static,
         F: Fn(&T, &mut fmt::Formatter<'_>) -> fmt::Result + Send + Sync,
     {
-        let vtable = <FormatAdapter<T, F> as ReadFile<_>>::FILE_OPS.adapt();
+        let vtable = &<FormatAdapter<T, F> as ReadFile<T>>::FILE_OPS;
         self.create_file(name, data, vtable)
     }
 
@@ -642,9 +638,7 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
         F: Fn(&T, &mut fmt::Formatter<'_>) -> fmt::Result + Send + Sync,
         W: Fn(&T, &mut UserSliceReader) -> Result + Send + Sync,
     {
-        let vtable = <WritableAdapter<FormatAdapter<T, F>, W> as ReadWriteFile<_>>::FILE_OPS
-            .adapt()
-            .adapt();
+        let vtable = &<WritableAdapter<FormatAdapter<T, F>, W> as ReadWriteFile<T>>::FILE_OPS;
         self.create_file(name, data, vtable)
     }
 
@@ -689,9 +683,7 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
         T: Send + Sync + 'static,
         W: Fn(&T, &mut UserSliceReader) -> Result + Send + Sync,
     {
-        let vtable = &<WritableAdapter<NoWriter<T>, W> as WriteFile<_>>::FILE_OPS
-            .adapt()
-            .adapt();
+        let vtable = &<WritableAdapter<NoWriter<T>, W> as WriteFile<T>>::FILE_OPS;
         self.create_file(name, data, vtable)
     }
 
