@@ -669,8 +669,10 @@ ipv4_synproxy_hook(void *priv, struct sk_buff *skb,
 	switch (state->state) {
 	case TCP_CONNTRACK_CLOSE:
 		if (th->rst && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+			spin_lock_bh(&ct->lock);
 			nf_ct_seqadj_init(ct, ctinfo, synproxy->isn -
 						      ntohl(th->seq) + 1);
+			spin_unlock_bh(&ct->lock);
 			break;
 		}
 
@@ -682,7 +684,9 @@ ipv4_synproxy_hook(void *priv, struct sk_buff *skb,
 		 * adjustments, they will get initialized once the connection is
 		 * reestablished.
 		 */
+		spin_lock_bh(&ct->lock);
 		nf_ct_seqadj_init(ct, ctinfo, 0);
+		spin_unlock_bh(&ct->lock);
 		synproxy->tsoff = 0;
 		this_cpu_inc(snet->stats->conn_reopened);
 		fallthrough;
@@ -731,7 +735,9 @@ ipv4_synproxy_hook(void *priv, struct sk_buff *skb,
 		swap(opts.tsval, opts.tsecr);
 		synproxy_send_server_ack(net, state, skb, th, &opts);
 
+		spin_lock_bh(&ct->lock);
 		nf_ct_seqadj_init(ct, ctinfo, synproxy->isn - ntohl(th->seq));
+		spin_unlock_bh(&ct->lock);
 		nf_conntrack_event_cache(IPCT_SEQADJ, ct);
 
 		swap(opts.tsval, opts.tsecr);
@@ -1094,8 +1100,10 @@ ipv6_synproxy_hook(void *priv, struct sk_buff *skb,
 	switch (state->state) {
 	case TCP_CONNTRACK_CLOSE:
 		if (th->rst && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+			spin_lock_bh(&ct->lock);
 			nf_ct_seqadj_init(ct, ctinfo, synproxy->isn -
 						      ntohl(th->seq) + 1);
+			spin_unlock_bh(&ct->lock);
 			break;
 		}
 
@@ -1107,7 +1115,9 @@ ipv6_synproxy_hook(void *priv, struct sk_buff *skb,
 		 * adjustments, they will get initialized once the connection is
 		 * reestablished.
 		 */
+		spin_lock_bh(&ct->lock);
 		nf_ct_seqadj_init(ct, ctinfo, 0);
+		spin_unlock_bh(&ct->lock);
 		synproxy->tsoff = 0;
 		this_cpu_inc(snet->stats->conn_reopened);
 		fallthrough;
@@ -1156,7 +1166,9 @@ ipv6_synproxy_hook(void *priv, struct sk_buff *skb,
 		swap(opts.tsval, opts.tsecr);
 		synproxy_send_server_ack_ipv6(net, state, skb, th, &opts);
 
+		spin_lock_bh(&ct->lock);
 		nf_ct_seqadj_init(ct, ctinfo, synproxy->isn - ntohl(th->seq));
+		spin_unlock_bh(&ct->lock);
 		nf_conntrack_event_cache(IPCT_SEQADJ, ct);
 
 		swap(opts.tsval, opts.tsecr);
