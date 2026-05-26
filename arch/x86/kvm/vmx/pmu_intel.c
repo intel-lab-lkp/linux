@@ -293,6 +293,7 @@ static bool intel_pmu_handle_lbr_msrs_access(struct kvm_vcpu *vcpu,
 {
 	struct lbr_desc *lbr_desc = vcpu_to_lbr_desc(vcpu);
 	u32 index = msr_info->index;
+	int err;
 
 	if (!intel_pmu_is_valid_lbr_msr(vcpu, index))
 		return false;
@@ -309,12 +310,12 @@ static bool intel_pmu_handle_lbr_msrs_access(struct kvm_vcpu *vcpu,
 	local_irq_disable();
 	if (lbr_desc->event->state == PERF_EVENT_STATE_ACTIVE) {
 		if (read)
-			rdmsrq(index, msr_info->data);
+			err = rdmsrq_safe(index, &msr_info->data);
 		else
-			wrmsrq(index, msr_info->data);
+			err = wrmsrq_safe(index, msr_info->data);
 		__set_bit(INTEL_PMC_IDX_FIXED_VLBR, vcpu_to_pmu(vcpu)->pmc_in_use);
 		local_irq_enable();
-		return true;
+		return !err;
 	}
 	clear_bit(INTEL_PMC_IDX_FIXED_VLBR, vcpu_to_pmu(vcpu)->pmc_in_use);
 	local_irq_enable();
