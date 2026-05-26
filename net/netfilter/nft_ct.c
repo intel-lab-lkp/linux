@@ -1148,7 +1148,7 @@ static void nft_ct_helper_obj_eval(struct nft_object *obj,
 		return;
 
 	help = nf_ct_helper_ext_add(ct, GFP_ATOMIC);
-	if (help) {
+	if (help && refcount_inc_not_zero(&to_assign->ct_refcnt)) {
 		rcu_assign_pointer(help->helper, to_assign);
 		set_bit(IPS_HELPER_BIT, &ct->status);
 

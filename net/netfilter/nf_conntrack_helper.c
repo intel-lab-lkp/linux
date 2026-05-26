@@ -237,20 +237,6 @@ int __nf_ct_try_assign_helper(struct nf_conn *ct, struct nf_conn *tmpl,
 }
 EXPORT_SYMBOL_GPL(__nf_ct_try_assign_helper);
 
-/* appropriate ct lock protecting must be taken by caller */
-static int unhelp(struct nf_conn *ct, void *me)
-{
-	struct nf_conn_help *help = nfct_help(ct);
-
-	if (help && rcu_dereference_raw(help->helper) == me) {
-		nf_conntrack_event(IPCT_HELPER, ct);
-		RCU_INIT_POINTER(help->helper, NULL);
-	}
-
-	/* We are not intended to delete this conntrack. */
-	return 0;
-}
-
 void nf_ct_helper_destroy(struct nf_conn *ct)
 {
 	struct nf_conn_help *help = nfct_help(ct);
@@ -388,6 +374,7 @@ int __nf_conntrack_helper_register(struct nf_conntrack_helper *me)
 		}
 	}
 	refcount_set(&me->refcnt, 1);
+	refcount_set(&me->ct_refcnt, 1);
 	hlist_add_head_rcu(&me->hnode, &nf_ct_helper_hash[h]);
 	nf_ct_helper_count++;
 out:
@@ -445,19 +432,18 @@ void nf_conntrack_helper_unregister(struct nf_conntrack_helper *me)
 	nf_ct_helper_count--;
 	mutex_unlock(&nf_ct_helper_mutex);
 
+	/* This helper is going away, disable it. */
+	rcu_assign_pointer(me->help, NULL);
+
 	/* Make sure every nothing is still using the helper unless its a
 	 * connection in the hash.
 	 */
 	synchronize_rcu();
 
 	nf_ct_expect_iterate_destroy(expect_iter_me, me);
-	nf_ct_iterate_destroy(unhelp, me);
 
-	/* nf_ct_iterate_destroy() does an unconditional synchronize_rcu() as
-	 * last step, this ensures rcu readers of exp->helper are done.
-	 * No need for another synchronize_rcu() here.
-	 */
-	kfree(me);
+	if (refcount_dec_and_test(&me->ct_refcnt))
+		kfree_rcu(me, rcu);
 }
 EXPORT_SYMBOL_GPL(nf_conntrack_helper_unregister);
 
@@ -479,7 +465,7 @@ void nf_ct_helper_init(struct nf_conntrack_helper *helper,
 	helper->tuple.dst.protonum = protonum;
 	helper->tuple.src.u.all = htons(spec_port);
 
-	helper->help = help;
+	rcu_assign_pointer(helper->help, help);
 	helper->from_nlattr = from_nlattr;
 	helper->me = module;
 	snprintf(helper->nat_mod_name, sizeof(helper->nat_mod_name),

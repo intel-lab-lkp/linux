@@ -240,7 +240,8 @@ static int ctnetlink_dump_helpinfo(struct sk_buff *skb,
 	if (nla_put_string(skb, CTA_HELP_NAME, helper->name))
 		goto nla_put_failure;
 
-	if (helper->to_nlattr)
+	if (rcu_access_pointer(helper->help) &&
+	    helper->to_nlattr)
 		helper->to_nlattr(skb, ct);
 
 	nla_nest_end(skb, nest_helper);
@@ -1974,7 +1975,8 @@ static int ctnetlink_change_helper(struct nf_conn *ct,
 	if (help) {
 		if (rcu_access_pointer(help->helper) == helper) {
 			/* update private helper data if allowed. */
-			if (helper->from_nlattr)
+			if (rcu_access_pointer(helper->help) &&
+			    helper->from_nlattr)
 				helper->from_nlattr(helpinfo, ct);
 			err = 0;
 		} else
@@ -2289,12 +2291,14 @@ ctnetlink_create_conntrack(struct net *net,
 				goto err2;
 			}
 			/* set private helper data if allowed. */
-			if (helper->from_nlattr)
+			if (rcu_access_pointer(helper->help) &&
+			    helper->from_nlattr)
 				helper->from_nlattr(helpinfo, ct);
 
 			/* disable helper auto-assignment for this entry */
 			ct->status |= IPS_HELPER;
-			RCU_INIT_POINTER(help->helper, helper);
+			if (refcount_inc_not_zero(&helper->ct_refcnt))
+				RCU_INIT_POINTER(help->helper, helper);
 		}
 	}
 
