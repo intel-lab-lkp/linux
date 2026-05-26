@@ -366,7 +366,7 @@ static struct super_block *alloc_super(struct file_system_type *type, int flags,
 	spin_lock_init(&s->s_inode_wblist_lock);
 	fserror_mount(s);
 
-	s->s_count = 1;
+	refcount_set(&s->s_count, 1);
 	atomic_set(&s->s_active, 1);
 	mutex_init(&s->s_vfs_rename_mutex);
 	lockdep_set_class(&s->s_vfs_rename_mutex, &type->s_vfs_rename_key);
@@ -406,7 +406,7 @@ fail:
  */
 static void __put_super(struct super_block *s)
 {
-	if (!--s->s_count) {
+	if (refcount_dec_and_test(&s->s_count)) {
 		list_del_init(&s->s_list);
 		WARN_ON(s->s_dentry_lru.node);
 		WARN_ON(s->s_inode_lru.node);
@@ -528,7 +528,7 @@ static bool grab_super(struct super_block *sb)
 {
 	bool locked;
 
-	sb->s_count++;
+	refcount_inc(&sb->s_count);
 	spin_unlock(&sb_lock);
 	locked = super_lock_excl(sb);
 	if (locked) {
@@ -857,7 +857,7 @@ static void __iterate_supers(void (*f)(struct super_block *, void *), void *arg,
 	     sb = next_super(sb, flags)) {
 		if (super_flags(sb, SB_DYING))
 			continue;
-		sb->s_count++;
+		refcount_inc(&sb->s_count);
 		spin_unlock(&sb_lock);
 
 		if (flags & SUPER_ITER_UNLOCKED) {
@@ -902,7 +902,7 @@ void iterate_supers_type(struct file_system_type *type,
 		if (super_flags(sb, SB_DYING))
 			continue;
 
-		sb->s_count++;
+		refcount_inc(&sb->s_count);
 		spin_unlock(&sb_lock);
 
 		locked = super_lock_shared(sb);
@@ -934,7 +934,7 @@ struct super_block *user_get_super(dev_t dev, bool excl)
 		if (sb->s_dev != dev)
 			continue;
 
-		sb->s_count++;
+		refcount_inc(&sb->s_count);
 		spin_unlock(&sb_lock);
 
 		locked = super_lock(sb, excl);
@@ -1368,7 +1368,7 @@ static struct super_block *bdev_super_lock(struct block_device *bdev, bool excl)
 
 	/* Make sure sb doesn't go away from under us */
 	spin_lock(&sb_lock);
-	sb->s_count++;
+	refcount_inc(&sb->s_count);
 	spin_unlock(&sb_lock);
 
 	mutex_unlock(&bdev->bd_holder_lock);
