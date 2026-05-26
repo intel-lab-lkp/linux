@@ -322,8 +322,15 @@ static unsigned int writeback_delay(struct cached_dev *dc,
 struct dirty_io {
 	struct closure		cl;
 	struct cached_dev	*dc;
+	struct writeback_batch	*batch;
+	struct list_head	list;
 	uint16_t		sequence;
 	struct bio		bio;
+};
+
+struct writeback_batch {
+	struct list_head	keys;
+	spinlock_t		lock;
 };
 
 static void dirty_init(struct keybuf_key *w)
@@ -353,38 +360,34 @@ static CLOSURE_CALLBACK(write_dirty_finish)
 	closure_type(io, struct dirty_io, cl);
 	struct keybuf_key *w = io->bio.bi_private;
 	struct cached_dev *dc = io->dc;
+	bool written = KEY_DIRTY(&w->key);
 
 	bio_free_pages(&io->bio);
 
-	/* This is kind of a dumb way of signalling errors. */
-	if (KEY_DIRTY(&w->key)) {
-		int ret;
-		unsigned int i;
-		struct keylist keys;
-
-		bch_keylist_init(&keys);
-
-		bkey_copy(keys.top, &w->key);
-		SET_KEY_DIRTY(keys.top, false);
-		bch_keylist_push(&keys);
-
-		for (i = 0; i < KEY_PTRS(&w->key); i++)
-			atomic_inc(&PTR_BUCKET(dc->disk.c, &w->key, i)->pin);
-
-		ret = bch_btree_insert(dc->disk.c, &keys, NULL, &w->key);
-
-		if (ret)
-			trace_bcache_writeback_collision(&w->key);
-
-		atomic_long_inc(ret
-				? &dc->disk.c->writeback_keys_failed
-				: &dc->disk.c->writeback_keys_done);
+	/*
+	* Temporarily add this key to io->batch->keys. After the successful
+	* writeback IOs inside the current batch of read_dirty() finished,
+	* writeback_finish_batch() explicitly flushes the backing device before
+	* inserting the cleaned keys back into the btree. This guarantees that
+	* the backing data will be on stable media before the dirty btree keys
+	* are marked by the clean keys, avoiding stale clean bkeys after power
+	* failure.
+	*/
+	if (written) {
+		INIT_LIST_HEAD(&io->list);
+		spin_lock(&io->batch->lock);
+		list_add_tail(&io->list, &io->batch->keys);
+		spin_unlock(&io->batch->lock);
+	} else {
+		bch_keybuf_del(&dc->writeback_keys, w);
 	}
 
-	bch_keybuf_del(&dc->writeback_keys, w);
 	up(&dc->in_flight);
 
-	closure_return_with_destructor(cl, dirty_io_destructor);
+	if (written)
+		closure_return(cl);
+	else
+		closure_return_with_destructor(cl, dirty_io_destructor);
 }
 
 static void dirty_endio(struct bio *bio)
@@ -398,6 +401,70 @@ static void dirty_endio(struct bio *bio)
 	}
 
 	closure_put(&io->cl);
+}
+
+static int writeback_flush(struct cached_dev *dc)
+{
+	struct bio bio;
+	int ret;
+
+	bio_init(&bio, dc->bdev, NULL, 0, REQ_OP_WRITE | REQ_PREFLUSH);
+
+	ret = submit_bio_wait(&bio);
+	if (ret)
+		bch_count_backing_io_errors(dc, &bio);
+
+	bio_uninit(&bio);
+	return ret;
+}
+
+static void writeback_clean_key(struct cached_dev *dc, struct keybuf_key *w)
+{
+	int ret;
+	unsigned int i;
+	struct keylist keys;
+
+	bch_keylist_init(&keys);
+
+	bkey_copy(keys.top, &w->key);
+	SET_KEY_DIRTY(keys.top, false);
+	bch_keylist_push(&keys);
+
+	for (i = 0; i < KEY_PTRS(&w->key); i++)
+		atomic_inc(&PTR_BUCKET(dc->disk.c, &w->key, i)->pin);
+
+	ret = bch_btree_insert(dc->disk.c, &keys, NULL, &w->key);
+
+	if (ret)
+		trace_bcache_writeback_collision(&w->key);
+
+	atomic_long_inc(ret
+			? &dc->disk.c->writeback_keys_failed
+			: &dc->disk.c->writeback_keys_done);
+}
+
+static void writeback_finish_batch(struct cached_dev *dc,
+				   struct writeback_batch *batch)
+{
+	struct dirty_io *io, *t;
+	int flush_ret = 0;
+
+	if (!list_empty(&batch->keys))
+		flush_ret = writeback_flush(dc);
+
+	list_for_each_entry_safe(io, t, &batch->keys, list) {
+		struct keybuf_key *w = io->bio.bi_private;
+
+		list_del(&io->list);
+
+		if (flush_ret == 0)
+			writeback_clean_key(dc, w);
+		else
+			atomic_long_inc(&dc->disk.c->writeback_keys_failed);
+
+		bch_keybuf_del(&dc->writeback_keys, w);
+		kfree(io);
+	}
 }
 
 static CLOSURE_CALLBACK(write_dirty)
@@ -480,10 +547,14 @@ static void read_dirty(struct cached_dev *dc)
 	struct dirty_io *io;
 	struct closure cl;
 	uint16_t sequence = 0;
+	struct writeback_batch batch;
 
 	BUG_ON(!llist_empty(&dc->writeback_ordering_wait.list));
 	atomic_set(&dc->writeback_sequence_next, sequence);
 	closure_init_stack(&cl);
+
+	INIT_LIST_HEAD(&batch.keys);
+	spin_lock_init(&batch.lock);
 
 	/*
 	 * XXX: if we error, background writeback just spins. Should use some
@@ -544,6 +615,7 @@ static void read_dirty(struct cached_dev *dc)
 
 			w->private	= io;
 			io->dc		= dc;
+			io->batch	= &batch;
 			io->sequence    = sequence++;
 
 			dirty_init(w);
@@ -585,10 +657,12 @@ err:
 	}
 
 	/*
-	 * Wait for outstanding writeback IOs to finish (and keybuf slots to be
-	 * freed) before refilling again
+	 * Wait for outstanding writeback IOs to finish, then flush the
+	 * backing device, insert the clean keys back to btree, and free
+	 * keybuf slots.
 	 */
 	closure_sync(&cl);
+	writeback_finish_batch(dc, &batch);
 }
 
 /* Scan for dirty data */
