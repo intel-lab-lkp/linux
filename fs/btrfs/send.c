@@ -4157,7 +4157,7 @@ static int rename_current_inode(struct send_ctx *sctx,
 /*
  * This does all the move/link/unlink/rmdir magic.
  */
-static int process_recorded_refs(struct send_ctx *sctx, int *pending_move)
+static int process_recorded_refs(struct send_ctx *sctx, bool *pending_move)
 {
 	struct btrfs_fs_info *fs_info = sctx->send_root->fs_info;
 	int ret = 0;
@@ -4417,7 +4417,7 @@ static int process_recorded_refs(struct send_ctx *sctx, int *pending_move)
 				goto out;
 			if (ret == 1) {
 				can_rename = false;
-				*pending_move = 1;
+				*pending_move = true;
 			}
 		}
 
@@ -4428,7 +4428,7 @@ static int process_recorded_refs(struct send_ctx *sctx, int *pending_move)
 				goto out;
 			if (ret == 1) {
 				can_rename = false;
-				*pending_move = 1;
+				*pending_move = true;
 			}
 		}
 
@@ -4793,7 +4793,7 @@ static int process_all_refs(struct send_ctx *sctx,
 	struct btrfs_key key;
 	struct btrfs_key found_key;
 	iterate_inode_ref_t cb;
-	int pending_move = 0;
+	bool pending_move = false;
 
 	path = alloc_path_for_send();
 	if (!path)
@@ -6524,8 +6524,7 @@ static int process_all_extents(struct send_ctx *sctx)
 }
 
 static int process_recorded_refs_if_needed(struct send_ctx *sctx, bool at_end,
-					   int *pending_move,
-					   int *refs_processed)
+					   bool *pending_move, bool *refs_processed)
 {
 	int ret;
 
@@ -6543,7 +6542,7 @@ static int process_recorded_refs_if_needed(struct send_ctx *sctx, bool at_end,
 	if (ret < 0)
 		return ret;
 
-	*refs_processed = 1;
+	*refs_processed = true;
 	return 0;
 }
 
@@ -6563,8 +6562,8 @@ static int finish_inode_if_needed(struct send_ctx *sctx, bool at_end)
 	int need_chown = 0;
 	bool need_fileattr = false;
 	int need_truncate = 1;
-	int pending_move = 0;
-	int refs_processed = 0;
+	bool pending_move = false;
+	bool refs_processed = false;
 
 	if (sctx->ignore_cur_inode)
 		return 0;
