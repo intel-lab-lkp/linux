@@ -412,6 +412,8 @@ static void br2684_close_vcc(struct br2684_vcc *brvcc)
 	write_lock_irq(&devs_lock);
 	list_del(&brvcc->brvccs);
 	write_unlock_irq(&devs_lock);
+	brvcc->atmvcc->push = brvcc->old_push;
+	brvcc->atmvcc->pop = brvcc->old_pop;
 	brvcc->atmvcc->user_back = NULL;	/* what about vcc->recvq ??? */
 	brvcc->atmvcc->release_cb = brvcc->old_release_cb;
 	brvcc->old_push(brvcc->atmvcc, NULL);	/* pass on the bad news */
