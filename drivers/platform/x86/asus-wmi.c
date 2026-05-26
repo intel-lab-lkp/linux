@@ -70,6 +70,7 @@ module_param(fnlock_default, bool, 0444);
 #define NOTIFY_KBD_TTP			0xae
 #define NOTIFY_LID_FLIP			0xfa
 #define NOTIFY_LID_FLIP_ROG		0xbd
+#define NOTIFY_KEYSTONE			0xb4
 
 #define ASUS_WMI_FNLOCK_BIOS_DISABLED	BIT(0)
 
@@ -278,6 +279,8 @@ struct asus_wmi {
 	int tablet_switch_event_code;
 	u32 tablet_switch_dev_id;
 	bool tablet_switch_inverted;
+
+	bool keystone_detected;
 
 	enum fan_type fan_type;
 	enum fan_type gpu_fan_type;
@@ -644,6 +647,66 @@ static bool asus_wmi_dev_is_present(struct asus_wmi *asus, u32 dev_id)
 	pr_debug("%s called (0x%08x), retval: 0x%08x\n", __func__, dev_id, retval);
 
 	return status == 0 && (retval & ASUS_WMI_DSTS_PRESENCE_BIT);
+}
+
+/* Keystone *******************************************************************/
+
+static ssize_t keystone_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	struct asus_wmi *asus = dev_get_drvdata(dev);
+	u32 retval;
+	int err;
+
+	err = asus_wmi_get_devstate(asus, ASUS_WMI_DEVID_KEYSTONE, &retval);
+	if (err)
+		return err;
+
+	return sysfs_emit(buf, "%d\n", !!(retval & ASUS_WMI_DSTS_PRESENCE_BIT));
+}
+
+static DEVICE_ATTR_RO(keystone);
+
+static void asus_wmi_keystone_notify(struct asus_wmi *asus)
+{
+	sysfs_notify(&asus->platform_device->dev.kobj, NULL, "keystone");
+}
+
+static int asus_wmi_keystone_init(struct asus_wmi *asus)
+{
+	u32 retval;
+	int err;
+
+	/*
+	 * Use a raw devstate call rather than asus_wmi_dev_is_present().
+	 * For this devid, PRESENCE_BIT encodes current insert state, not
+	 * feature presence, so asus_wmi_dev_is_present() would return false
+	 * whenever the dongle is absent at boot, even on machines that have
+	 * a keystone slot.
+	 * -ENODEV means the firmware doesn't know this devid at all.
+	 * retval is not examined here, only the return code matters.
+	 */
+	err = asus_wmi_get_devstate(asus, ASUS_WMI_DEVID_KEYSTONE, &retval);
+	if (err == -ENODEV)
+		return 0;
+	if (err)
+		return err;
+
+	err = device_create_file(&asus->platform_device->dev, &dev_attr_keystone);
+	if (err)
+		return err;
+
+	asus->keystone_detected = true;
+	return 0;
+}
+
+static void asus_wmi_keystone_exit(struct asus_wmi *asus)
+{
+	if (!asus->keystone_detected)
+		return;
+
+	device_remove_file(&asus->platform_device->dev, &dev_attr_keystone);
+	asus->keystone_detected = false;
 }
 
 /* Input **********************************************************************/
@@ -4575,6 +4638,12 @@ static void asus_wmi_handle_event_code(int code, struct asus_wmi *asus)
 		return;
 	}
 
+	if (code == NOTIFY_KEYSTONE) {
+		if (asus->keystone_detected)
+			asus_wmi_keystone_notify(asus);
+		return;
+	}
+
 	if (code == NOTIFY_KBD_FBM || code == NOTIFY_KBD_TTP) {
 		if (asus->fan_boost_mode_available)
 			fan_boost_mode_switch_next(asus);
@@ -5085,6 +5154,10 @@ static int asus_wmi_add(struct platform_device *pdev)
 	if (err)
 		goto fail_sysfs;
 
+	err = asus_wmi_keystone_init(asus);
+	if (err)
+		dev_warn(&pdev->dev, "Keystone initialization failed: %d\n", err);
+
 	err = asus_wmi_input_init(asus);
 	if (err)
 		goto fail_input;
@@ -5170,6 +5243,7 @@ fail_leds:
 fail_hwmon:
 	asus_wmi_input_exit(asus);
 fail_input:
+	asus_wmi_keystone_exit(asus);
 	asus_wmi_sysfs_exit(asus->platform_device);
 fail_sysfs:
 fail_custom_fan_curve:
@@ -5191,6 +5265,7 @@ static void asus_wmi_remove(struct platform_device *device)
 	asus_wmi_backlight_exit(asus);
 	asus_screenpad_exit(asus);
 	asus_wmi_input_exit(asus);
+	asus_wmi_keystone_exit(asus);
 	asus_wmi_led_exit(asus);
 	asus_wmi_rfkill_exit(asus);
 	asus_wmi_debugfs_exit(asus);
