@@ -485,7 +485,7 @@ static inline void ptp_cancel_worker_sync(struct ptp_clock *ptp)
  * @pclock_index: phc index of ptp pclock.
  * @vclock_index: pointer to pointer of vclock index.
  *
- * return number of vclocks.
+ * Returns: number of vclocks on success, or negative errno.
  */
 int ptp_get_vclocks_index(int pclock_index, int **vclock_index);
 
@@ -500,7 +500,7 @@ int ptp_get_vclocks_index(int pclock_index, int **vclock_index);
 ktime_t ptp_convert_timestamp(const ktime_t *hwtstamp, int vclock_index);
 #else
 static inline int ptp_get_vclocks_index(int pclock_index, int **vclock_index)
-{ return 0; }
+{ return -ENODEV; }
 static inline ktime_t ptp_convert_timestamp(const ktime_t *hwtstamp,
 					    int vclock_index)
 { return 0; }

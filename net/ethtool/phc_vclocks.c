@@ -36,7 +36,7 @@ static int phc_vclocks_prepare_data(const struct ethnl_req_info *req_base,
 	data->num = ethtool_get_phc_vclocks(dev, &data->index);
 	ethnl_ops_complete(dev);
 
-	return ret;
+	return data->num < 0 ? data->num : 0;
 }
 
 static int phc_vclocks_reply_size(const struct ethnl_req_info *req_base,

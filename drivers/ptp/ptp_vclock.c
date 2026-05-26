@@ -242,33 +242,36 @@ int ptp_get_vclocks_index(int pclock_index, int **vclock_index)
 	char name[PTP_CLOCK_NAME_LEN] = "";
 	struct ptp_clock *ptp;
 	struct device *dev;
-	int num = 0;
+	int ret;
 
 	if (pclock_index < 0)
-		return num;
+		return -ENODEV;
 
 	snprintf(name, PTP_CLOCK_NAME_LEN, "ptp%d", pclock_index);
 	dev = class_find_device_by_name(&ptp_class, name);
 	if (!dev)
-		return num;
+		return -ENODEV;
 
 	ptp = dev_get_drvdata(dev);
 
 	if (mutex_lock_interruptible(&ptp->n_vclocks_mux)) {
-		put_device(dev);
-		return num;
+		ret = -EINTR;
+		goto exit_put_dev;
 	}
 
 	*vclock_index = kzalloc(sizeof(int) * ptp->n_vclocks, GFP_KERNEL);
-	if (!(*vclock_index))
-		goto out;
+	if (!(*vclock_index)) {
+		ret = -ENOMEM;
+		goto exit_unlock;
+	}
 
 	memcpy(*vclock_index, ptp->vclock_index, sizeof(int) * ptp->n_vclocks);
-	num = ptp->n_vclocks;
-out:
+	ret = ptp->n_vclocks;
+exit_unlock:
 	mutex_unlock(&ptp->n_vclocks_mux);
+exit_put_dev:
 	put_device(dev);
-	return num;
+	return ret;
 }
 EXPORT_SYMBOL(ptp_get_vclocks_index);
 
