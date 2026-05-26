@@ -41,9 +41,10 @@ MODULE_FIRMWARE("amdnpu/17f0_11/npu_7.sbin");
  * 0.8: Support BO usage query
  * 0.9: Add new device type AMDXDNA_DEV_TYPE_PF
  * 0.10: Support AIE4 UMQ
+ * 0.11: Support AIE coredump
  */
 #define AMDXDNA_DRIVER_MAJOR		0
-#define AMDXDNA_DRIVER_MINOR		10
+#define AMDXDNA_DRIVER_MINOR		11
 
 /*
  * Bind the driver base on (vendor_id, device_id) pair and later use the

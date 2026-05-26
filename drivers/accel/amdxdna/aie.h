@@ -15,6 +15,12 @@
 struct psp_device;
 struct smu_device;
 
+struct aie_msg_ops {
+	int (*get_coredump)(struct amdxdna_hwctx *hwctx,
+			    struct amdxdna_msg_buf_hdl *list_hdl,
+			    u32 num_bufs);
+};
+
 struct aie_device {
 	struct amdxdna_dev *xdna;
 	struct mailbox_channel *mgmt_chann;
@@ -29,6 +35,7 @@ struct aie_device {
 	struct smu_device *smu_hdl;
 
 	struct amdxdna_drm_query_aie_metadata metadata;
+	struct aie_msg_ops msg_ops;
 };
 
 #define DECLARE_AIE_MSG(name, op) \
@@ -91,6 +98,23 @@ struct amdxdna_rev_vbnv {
 	const char	*vbnv;
 };
 
+struct amdxdna_coredump_buf_entry {
+	__u64			buf_addr;
+	__u32			buf_size;
+	__u32			reserved;
+} __packed;
+
+struct amdxdna_msg_buf_hdl {
+	struct amdxdna_dev	*xdna;
+	void			*vaddr;
+	dma_addr_t		dma_addr;
+	u32			size;
+};
+
+#define to_cpu_addr(hdl, offset)  ((hdl)->vaddr + (offset))
+#define to_dma_addr(hdl, offset)  ((hdl)->dma_addr + (offset))
+#define to_buf_size(hdl)          ((hdl)->size)
+
 /* aie.c */
 void aie_dump_mgmt_chann_debug(struct aie_device *aie);
 void aie_destroy_chann(struct aie_device *aie, struct mailbox_channel **chann);
@@ -99,10 +123,9 @@ int aie_check_protocol(struct aie_device *aie, u32 fw_major, u32 fw_minor);
 void amdxdna_vbnv_init(struct amdxdna_dev *xdna);
 int amdxdna_get_metadata(struct aie_device *aie, struct amdxdna_client *client,
 			 struct amdxdna_drm_get_info *args);
-void *amdxdna_alloc_msg_buffer(struct amdxdna_dev *xdna, u32 *size,
-			       dma_addr_t *dma_addr);
-void amdxdna_free_msg_buffer(struct amdxdna_dev *xdna, size_t size,
-			     void *cpu_addr, dma_addr_t dma_addr);
+struct amdxdna_msg_buf_hdl *amdxdna_alloc_msg_buffer(struct amdxdna_dev *xdna, u32 size);
+void amdxdna_free_msg_buffer(struct amdxdna_msg_buf_hdl *hdl);
+int amdxdna_get_coredump(struct aie_device *aie, struct amdxdna_drm_get_array *args);
 
 /* aie_psp.c */
 struct psp_device *aiem_psp_create(struct drm_device *ddev, struct psp_config *conf);

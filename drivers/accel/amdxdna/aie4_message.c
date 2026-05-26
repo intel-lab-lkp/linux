@@ -5,14 +5,17 @@
 
 #include <drm/amdxdna_accel.h>
 #include <drm/drm_print.h>
+#include <linux/bitfield.h>
 #include <linux/mutex.h>
 
 #include "aie.h"
 #include "aie4_msg_priv.h"
 #include "aie4_pci.h"
+#include "amdxdna_ctx.h"
 #include "amdxdna_mailbox.h"
 #include "amdxdna_mailbox_helper.h"
 #include "amdxdna_pci_drv.h"
+#include "amdxdna_pm.h"
 
 int aie4_suspend_fw(struct amdxdna_dev_hdl *ndev)
 {
@@ -70,7 +73,7 @@ int aie4_attach_work_buffer(struct amdxdna_dev_hdl *ndev)
 	struct amdxdna_dev *xdna = ndev->aie.xdna;
 	int ret;
 
-	req.buff_addr = ndev->work_buf_addr;
+	req.buff_addr = to_dma_addr(ndev->work_buf_hdl, 0);
 	req.buff_size = AIE4_WORK_BUFFER_MIN_SIZE;
 
 	ret = aie_send_mgmt_msg_wait(&ndev->aie, &msg);
@@ -80,4 +83,32 @@ int aie4_attach_work_buffer(struct amdxdna_dev_hdl *ndev)
 		XDNA_DBG(xdna, "Attached work buffer");
 
 	return ret;
+}
+
+int aie4_get_aie_coredump(struct amdxdna_hwctx *hwctx,
+			  struct amdxdna_msg_buf_hdl *list_hdl,
+			  u32 num_bufs)
+{
+	DECLARE_AIE_MSG(aie4_msg_aie_coredump, AIE4_MSG_OP_AIE_COREDUMP);
+	struct amdxdna_dev *xdna = hwctx->client->xdna;
+	struct amdxdna_dev_hdl *ndev = xdna->dev_handle;
+	int ret;
+
+	req.context_id = hwctx->fw_ctx_id;
+	req.pasid = FIELD_PREP(AIE4_MSG_PASID, hwctx->client->pasid) |
+		    FIELD_PREP(AIE4_MSG_PASID_VLD, 1);
+	req.num_buffers = num_bufs;
+	req.buffer_list_addr = to_dma_addr(list_hdl, 0);
+
+	ret = aie_send_mgmt_msg_wait(&ndev->aie, &msg);
+	if (ret)
+		XDNA_ERR(xdna, "Get coredump got status 0x%x", resp.status);
+
+	return ret;
+}
+
+void aie4_msg_init(struct amdxdna_dev_hdl *ndev)
+{
+	if (AIE_FEATURE_ON(&ndev->aie, AIE4_GET_COREDUMP))
+		ndev->aie.msg_ops.get_coredump = aie4_get_aie_coredump;
 }

@@ -635,11 +635,24 @@ struct amdxdna_drm_bo_usage {
 	__u64 heap_usage;
 };
 
+/**
+ * struct amdxdna_drm_aie_coredump - The data for AIE coredump
+ */
+struct amdxdna_drm_aie_coredump {
+	/** @pid: The Process ID of the process that created this context.*/
+	__u64 pid;
+	/** @context_id: Context ID. */
+	__u32 context_id;
+	/** @pad: MBZ. */
+	__u32 pad;
+};
+
 /*
  * Supported params in struct amdxdna_drm_get_array
  */
 #define DRM_AMDXDNA_HW_CONTEXT_ALL	0
 #define DRM_AMDXDNA_HW_LAST_ASYNC_ERR	2
+#define DRM_AMDXDNA_AIE_COREDUMP	5
 #define DRM_AMDXDNA_BO_USAGE		6
 
 /**
@@ -656,6 +669,19 @@ struct amdxdna_drm_get_array {
 	 *
 	 * %DRM_AMDXDNA_HW_LAST_ASYNC_ERR:
 	 * Returns last async error.
+	 *
+	 * %DRM_AMDXDNA_AIE_COREDUMP:
+	 * Returns AIE tile memory dump for a hardware context.
+	 *
+	 * Input: num_element must be 1. buffer points to a user buffer whose
+	 * size is element_size bytes. The first sizeof(struct
+	 * amdxdna_drm_aie_coredump) bytes of buffer carry the request
+	 * (pid + context_id). On success the driver writes rows * cols * 1 MB
+	 * of tile dump data into buffer. If the buffer is too small the
+	 * driver sets element_size to the required size and returns -ENOSPC.
+	 *
+	 * Access: context owners may coredump their own contexts;
+	 * CAP_SYS_ADMIN may coredump any context.
 	 *
 	 * %DRM_AMDXDNA_BO_USAGE:
 	 * Returns usage of heap/internal/external BOs.

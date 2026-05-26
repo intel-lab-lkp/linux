@@ -4,6 +4,7 @@
  */
 
 #include <drm/amdxdna_accel.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_print.h>
 #include <linux/firmware.h>
@@ -15,6 +16,7 @@
 #include "amdxdna_mailbox.h"
 #include "amdxdna_mailbox_helper.h"
 #include "amdxdna_pci_drv.h"
+#include "amdxdna_pm.h"
 
 #define NO_IOHUB		0
 #define PSP_NOTIFY_INTR		0xD007BE11
@@ -512,6 +514,7 @@ static int aie4m_pcidev_init(struct amdxdna_dev *xdna)
 	if (ret)
 		return ret;
 
+	aie4_msg_init(ndev);
 	amdxdna_vbnv_init(xdna);
 	XDNA_DBG(xdna, "init finished");
 
@@ -573,35 +576,60 @@ static int aie4_get_info(struct amdxdna_client *client, struct amdxdna_drm_get_i
 static int aie4_alloc_work_buffer(struct amdxdna_dev_hdl *ndev)
 {
 	struct amdxdna_dev *xdna = ndev->aie.xdna;
-	u32 buf_size = AIE4_WORK_BUFFER_MIN_SIZE;
 
-	ndev->work_buf = amdxdna_alloc_msg_buffer(xdna, &buf_size,
-						  &ndev->work_buf_addr);
-	if (IS_ERR(ndev->work_buf)) {
-		int ret = PTR_ERR(ndev->work_buf);
+	ndev->work_buf_hdl = amdxdna_alloc_msg_buffer(xdna, AIE4_WORK_BUFFER_MIN_SIZE);
+	if (IS_ERR(ndev->work_buf_hdl)) {
+		int ret = PTR_ERR(ndev->work_buf_hdl);
 
 		XDNA_ERR(xdna, "Failed to alloc work buffer, size 0x%x",
 			 AIE4_WORK_BUFFER_MIN_SIZE);
-		ndev->work_buf = NULL;
+		ndev->work_buf_hdl = NULL;
 		return ret;
 	}
 
-	ndev->work_buf_size = buf_size;
-	XDNA_DBG(xdna, "Work buffer allocated: size 0x%x", buf_size);
+	XDNA_DBG(xdna, "Work buffer allocated: size 0x%x",
+		 to_buf_size(ndev->work_buf_hdl));
 
 	return 0;
 }
 
 static void aie4_free_work_buffer(struct amdxdna_dev_hdl *ndev)
 {
-	struct amdxdna_dev *xdna = ndev->aie.xdna;
-
-	if (!ndev->work_buf)
+	if (!ndev->work_buf_hdl)
 		return;
 
-	amdxdna_free_msg_buffer(xdna, ndev->work_buf_size, ndev->work_buf,
-				ndev->work_buf_addr);
-	ndev->work_buf = NULL;
+	amdxdna_free_msg_buffer(ndev->work_buf_hdl);
+	ndev->work_buf_hdl = NULL;
+}
+
+static int aie4_get_array(struct amdxdna_client *client,
+			  struct amdxdna_drm_get_array *args)
+{
+	struct amdxdna_dev_hdl *ndev = client->xdna->dev_handle;
+	struct amdxdna_dev *xdna = client->xdna;
+	int ret, idx;
+
+	if (!drm_dev_enter(&xdna->ddev, &idx))
+		return -ENODEV;
+
+	ret = amdxdna_pm_resume_get_locked(xdna);
+	if (ret)
+		goto dev_exit;
+
+	switch (args->param) {
+	case DRM_AMDXDNA_AIE_COREDUMP:
+		ret = amdxdna_get_coredump(&ndev->aie, args);
+		break;
+	default:
+		ret = -EOPNOTSUPP;
+		break;
+	}
+
+	amdxdna_pm_suspend_put(xdna);
+
+dev_exit:
+	drm_dev_exit(idx);
+	return ret;
 }
 
 static int aie4_pf_init(struct amdxdna_dev *xdna)
@@ -664,4 +692,5 @@ const struct amdxdna_dev_ops aie4_vf_ops = {
 	.mmap			= aie4_doorbell_mmap,
 	.cmd_wait		= aie4_cmd_wait,
 	.get_aie_info		= aie4_get_info,
+	.get_array		= aie4_get_array,
 };

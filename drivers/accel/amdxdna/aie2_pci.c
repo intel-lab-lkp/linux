@@ -20,6 +20,7 @@
 #include <linux/xarray.h>
 #include <asm/hypervisor.h>
 
+#include "aie.h"
 #include "aie2_msg_priv.h"
 #include "aie2_pci.h"
 #include "aie2_solver.h"
@@ -1088,6 +1089,7 @@ static int aie2_query_ctx_status_array(struct amdxdna_client *client,
 static int aie2_get_array(struct amdxdna_client *client,
 			  struct amdxdna_drm_get_array *args)
 {
+	struct amdxdna_dev_hdl *ndev = client->xdna->dev_handle;
 	struct amdxdna_dev *xdna = client->xdna;
 	int ret, idx;
 
@@ -1104,6 +1106,9 @@ static int aie2_get_array(struct amdxdna_client *client,
 		break;
 	case DRM_AMDXDNA_HW_LAST_ASYNC_ERR:
 		ret = aie2_get_array_async_error(xdna->dev_handle, args);
+		break;
+	case DRM_AMDXDNA_AIE_COREDUMP:
+		ret = amdxdna_get_coredump(&ndev->aie, args);
 		break;
 	case DRM_AMDXDNA_BO_USAGE:
 		ret = amdxdna_drm_get_bo_usage(&xdna->ddev, args);
