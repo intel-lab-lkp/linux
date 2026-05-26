@@ -5594,12 +5594,12 @@ static int fec_resume(struct device *dev)
 		if (fep->rpm_active)
 			pm_runtime_force_resume(dev);
 
-		ret = fec_enet_clk_enable(ndev, true);
-		if (ret) {
-			rtnl_unlock();
-			goto failed_clk;
-		}
 		if (fep->wol_flag & FEC_WOL_FLAG_ENABLE) {
+			ret = fec_enet_clk_enable(ndev, true);
+			if (ret) {
+				rtnl_unlock();
+				goto failed_clk;
+			}
 			fec_enet_stop_mode(fep, false);
 			if (fep->wake_irq) {
 				disable_irq_wake(fep->wake_irq);
@@ -5612,6 +5612,11 @@ static int fec_resume(struct device *dev)
 			fep->wol_flag &= ~FEC_WOL_FLAG_SLEEP_ON;
 		} else {
 			pinctrl_pm_select_default_state(&fep->pdev->dev);
+			ret = fec_enet_clk_enable(ndev, true);
+			if (ret) {
+				rtnl_unlock();
+				goto failed_clk;
+			}
 		}
 		fec_restart(ndev);
 		netif_tx_lock_bh(ndev);
