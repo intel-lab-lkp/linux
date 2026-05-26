@@ -7628,7 +7628,9 @@ static void hrtick_start_fair(struct rq *rq, struct task_struct *p)
 			resched_curr(rq);
 		return;
 	}
-	delta = (se->load.weight * vdelta) / NICE_0_LOAD;
+
+	if (unlikely(se->load.weight != NICE_0_LOAD))
+		delta = (NICE_0_LOAD * vdelta) / se->load.weight;
 
 	/*
 	 * Correct for instantaneous load of other classes.
