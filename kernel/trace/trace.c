@@ -57,6 +57,7 @@
 
 #include "trace.h"
 #include "trace_output.h"
+#include "trace_stackmap.h"
 
 #ifdef CONFIG_FTRACE_STARTUP_TEST
 /*
@@ -509,12 +510,13 @@ EXPORT_SYMBOL_GPL(unregister_ftrace_export);
 /* trace_options that are only supported by global_trace */
 #define TOP_LEVEL_TRACE_FLAGS (TRACE_ITER(PRINTK) |			\
 	       TRACE_ITER(PRINTK_MSGONLY) | TRACE_ITER(RECORD_CMD) |	\
-	       TRACE_ITER(PROF_TEXT_OFFSET) | FPROFILE_DEFAULT_FLAGS)
+	       TRACE_ITER(PROF_TEXT_OFFSET) | TRACE_ITER(STACKMAP) |	\
+	       FPROFILE_DEFAULT_FLAGS)
 
 /* trace_flags that are default zero for instances */
 #define ZEROED_TRACE_FLAGS \
 	(TRACE_ITER(EVENT_FORK) | TRACE_ITER(FUNC_FORK) | TRACE_ITER(TRACE_PRINTK) | \
-	 TRACE_ITER(COPY_MARKER))
+	 TRACE_ITER(COPY_MARKER) | TRACE_ITER(STACKMAP))
 
 /*
  * The global_trace is the descriptor that holds the top-level tracing
@@ -2182,6 +2184,49 @@ void __ftrace_trace_stack(struct trace_array *tr,
 				calls[i] = FTRACE_TRAMPOLINE_MARKER;
 		}
 	}
+#endif
+
+#ifdef CONFIG_FTRACE_STACKMAP
+	/*
+	 * If stackmap dedup is enabled, try to store only the stack_id
+	 * in the ring buffer instead of the full stack trace.
+	 */
+	if (tr->trace_flags & TRACE_ITER(STACKMAP)) {
+		struct ftrace_stackmap *smap;
+		struct stack_id_entry *sid_entry;
+		int sid;
+
+		smap = smp_load_acquire(&tr->stackmap);
+		if (!smap)
+			goto full_stack;
+
+		sid = ftrace_stackmap_get_id(smap, fstack->calls, nr_entries);
+		if (sid >= 0) {
+			event = __trace_buffer_lock_reserve(buffer,
+					TRACE_STACK_ID,
+					sizeof(*sid_entry), trace_ctx);
+			if (!event) {
+				/*
+				 * Could not reserve a TRACE_STACK_ID slot;
+				 * fall back to the full-stack path so the
+				 * event still gets a stack trace recorded.
+				 */
+				goto full_stack;
+			}
+			sid_entry = ring_buffer_event_data(event);
+			sid_entry->stack_id = sid;
+			/*
+			 * stack_id is a synthetic side-event attached to a
+			 * primary trace event that was already subject to
+			 * filtering. No per-event filter is defined for
+			 * TRACE_STACK_ID, so commit unconditionally.
+			 */
+			__buffer_unlock_commit(buffer, event);
+			goto out;
+		}
+		/* On stackmap failure, record the full stack instead. */
+	}
+full_stack:
 #endif
 
 	event = __trace_buffer_lock_reserve(buffer, TRACE_STACK,
@@ -9219,6 +9264,35 @@ static __init void tracer_init_tracefs_work_func(struct work_struct *work)
 			NULL, &tracing_dyn_info_fops);
 #endif
 
+#ifdef CONFIG_FTRACE_STACKMAP
+	{
+		struct ftrace_stackmap *smap;
+
+		smap = ftrace_stackmap_create(&global_trace);
+		if (!IS_ERR(smap)) {
+			/*
+			 * Use smp_store_release to ensure the stackmap
+			 * structure is fully initialized before publishing
+			 * the pointer to concurrent trace event readers.
+			 */
+			smp_store_release(&global_trace.stackmap, smap);
+			trace_create_file("stack_map", TRACE_MODE_WRITE, NULL,
+					smap, &ftrace_stackmap_fops);
+			trace_create_file("stack_map_stat", TRACE_MODE_READ, NULL,
+					smap, &ftrace_stackmap_stat_fops);
+			trace_create_file("stack_map_bin", TRACE_MODE_READ, NULL,
+					smap, &ftrace_stackmap_bin_fops);
+		} else {
+			pr_warn("ftrace stackmap init failed, dedup disabled\n");
+			/*
+			 * global_trace is statically defined; its stackmap
+			 * field is zero-initialized via BSS, so leaving it
+			 * NULL ensures the smp_load_acquire() in
+			 * __ftrace_trace_stack() falls back to full stack.
+			 */
+		}
+	}
+#endif
 	create_trace_instances(NULL);
 
 	update_tracer_options();
