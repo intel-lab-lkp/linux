@@ -401,6 +401,17 @@ drm_helper_probe_detect(struct drm_connector *connector,
 	struct drm_device *dev = connector->dev;
 	int ret;
 
+	if (connector->force) {
+		drm_dbg_kms(dev, "[CONNECTOR:%d:%s] force=%d, skipping detect\n",
+			     connector->base.id, connector->name,
+			     connector->force);
+		if (connector->force == DRM_FORCE_ON ||
+		    connector->force == DRM_FORCE_ON_DIGITAL)
+			return connector_status_connected;
+		else
+			return connector_status_disconnected;
+	}
+
 	if (!ctx)
 		return drm_helper_probe_detect_ctx(connector, force);
 
