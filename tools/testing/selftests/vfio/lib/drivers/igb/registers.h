@@ -73,6 +73,8 @@
 
 #define IGB_RAH0 0x05404 /* Receive Address High 0 */
 #define IGB_VMOLR0 0x05AD0 /* VM Offload Layout Register 0 */
+#define IGB_GCR 0x05B00 /* PCIe Control */
+#define IGB_GCR_CMPL_TMOUT_RESEND BIT(16) /* Re-send on completion timeout */
 
 #define IGB_VMOLR_LPE 0x00010000 /* Long Packet Enable */
 #define IGB_VMOLR_BAM 0x08000000 /* Broadcast Accept Mode */
