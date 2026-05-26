@@ -3,6 +3,7 @@
 #define _BR_NETFILTER_H_
 
 #include <linux/netfilter.h>
+#include <net/dst.h>
 
 #include "../../../net/bridge/br_private.h"
 
@@ -44,9 +45,21 @@ static inline struct rtable *bridge_parent_rtable(const struct net_device *dev)
 {
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	struct net_bridge_port *port;
+	struct rtable *rt;
 
+	/* Caller receives a held dst reference and must drop it. */
+	rt = NULL;
+	rcu_read_lock();
 	port = br_port_get_rcu(dev);
-	return port ? &port->br->fake_rtable : NULL;
+	if (!port)
+		goto out;
+
+	rt = rcu_dereference(port->br->fake_rtable);
+	if (rt && !dst_hold_safe(&rt->dst))
+		rt = NULL;
+out:
+	rcu_read_unlock();
+	return rt;
 #else
 	return NULL;
 #endif

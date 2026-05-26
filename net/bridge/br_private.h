@@ -508,11 +508,7 @@ struct net_bridge {
 	struct rhashtable		fdb_hash_tbl;
 	struct list_head		port_list;
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
-	union {
-		struct rtable		fake_rtable;
-		struct rt6_info		fake_rt6_info;
-	};
-	u32				metrics[RTAX_MAX];
+	struct rtable __rcu		*fake_rtable;
 #endif
 	u16				group_fwd_mask;
 	u16				group_fwd_mask_required;
@@ -2018,11 +2014,13 @@ extern const struct nf_br_ops __rcu *nf_br_ops;
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 int br_nf_core_init(void);
 void br_nf_core_fini(void);
-void br_netfilter_rtable_init(struct net_bridge *);
+int br_netfilter_rtable_init(struct net_bridge *br);
+void br_netfilter_rtable_fini(struct net_bridge *br);
 #else
 static inline int br_nf_core_init(void) { return 0; }
 static inline void br_nf_core_fini(void) {}
-#define br_netfilter_rtable_init(x)
+static inline int br_netfilter_rtable_init(struct net_bridge *br) { return 0; }
+static inline void br_netfilter_rtable_fini(struct net_bridge *br) {}
 #endif
 
 /* br_stp.c */
