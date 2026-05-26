@@ -226,6 +226,17 @@ static void igb_init(struct vfio_pci_device *device)
 	igb_write32(igb, IGB_RDLEN0, RING_SIZE * sizeof(struct igb_rx_desc));
 	igb_write32(igb, IGB_RDH0, 0);
 	igb_write32(igb, IGB_RDT0, 0);
+
+	/*
+	 * Select the advanced one-buffer descriptor format.  Per 82576
+	 * datasheet section 7.1.5.2: "SRRCTL[n].DESCTYPE must be set to a
+	 * value other than 000b for the 82576 to write back the special
+	 * descriptors."  struct igb_rx_desc matches the advanced one-buffer
+	 * writeback layout (section 7.1.5.2), so polling rx.wb.status_error
+	 * requires this format.  Section 8.10.2 specifies DESCTYPE[27:25].
+	 */
+	igb_write32(igb, IGB_SRRCTL0, IGB_SRRCTL_DESCTYPE_ADV_ONEBUF);
+
 	igb_write32(igb, IGB_RXDCTL0, IGB_RXDCTL0_Q_EN);
 
 	/* Wait for TX and RX queues to be enabled */
@@ -322,12 +333,29 @@ static void igb_memcpy_start(struct vfio_pci_device *device, iova_t src,
 		memset(rx, 0, sizeof(struct igb_rx_desc));
 
 		rx->read.pkt_addr = dst;
-		tx->read.buffer_addr = src;
-		tx->read.cmd_type_len = (u32)size;
-		tx->read.cmd_type_len |= (u32)(IGB_TXD_CMD_EOP) << IGB_TXD_CMD_SHIFT;
+		rx->read.hdr_addr = 0;
 
-		/* Set to 0 to disable offloads and avoid needing a context descriptor */
-		tx->read.olinfo_status = 0;
+		tx->read.buffer_addr = src;
+		/*
+		 * Build an advanced data descriptor per 82576 datasheet
+		 * section 7.2.2.3.  DEXT marks the descriptor as advanced
+		 * (required by hardware); DTYP=data selects the data
+		 * descriptor; IFCS asks the MAC to append the Ethernet
+		 * FCS (without it the frame is dropped as malformed);
+		 * EOP marks end of packet.  DTALEN is the buffer length
+		 * in bits 15:0 of cmd_type_len.
+		 */
+		tx->read.cmd_type_len = (uint32_t)size |
+			IGB_ADVTXD_DTYP_DATA |
+			IGB_ADVTXD_DCMD_DEXT |
+			IGB_ADVTXD_DCMD_IFCS |
+			IGB_ADVTXD_DCMD_EOP;
+		/*
+		 * PAYLEN (section 7.2.2.3.11) is the total payload size
+		 * in olinfo_status[31:14].
+		 */
+		tx->read.olinfo_status =
+			(uint32_t)size << IGB_ADVTXD_PAYLEN_SHIFT;
 
 		igb->tx_tail = (igb->tx_tail + 1) % RING_SIZE;
 		igb->rx_tail = (igb->rx_tail + 1) % RING_SIZE;

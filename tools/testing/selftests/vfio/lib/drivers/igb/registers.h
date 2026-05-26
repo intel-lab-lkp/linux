@@ -20,9 +20,13 @@
 #define IGB_RDBAL0 0x0C000 /* Rx Desc Base Address Low */
 #define IGB_RDBAH0 0x0C004 /* Rx Desc Base Address High */
 #define IGB_RDLEN0 0x0C008 /* Rx Desc Length */
+#define IGB_SRRCTL0 0x0C00C /* Split and Replication Receive Control Q0 */
 #define IGB_RDH0 0x0C010 /* Rx Desc Head */
 #define IGB_RDT0 0x0C018 /* Rx Desc Tail */
 #define IGB_RXDCTL0 0x0C028 /* Rx Desc Control */
+
+/* SRRCTL fields per 82576 datasheet section 8.10.2 */
+#define IGB_SRRCTL_DESCTYPE_ADV_ONEBUF (1u << 25) /* 001b: advanced one-buffer */
 
 /* Tx Ring 0 Registers */
 #define IGB_TDBAL0 0x0E000 /* Tx Desc Base Address Low */
@@ -98,10 +102,17 @@
 #define IGB_GPIE_EIAME 0x10 /* Extended Interrupt Auto Mask Enable */
 #define IGB_IVAR_VALID 0x80 /* Valid bit for IVAR register */
 
-#define IGB_TXD_CMD_EOP 0x01 /* End of Packet */
-#define IGB_TXD_CMD_IFCS 0x02 /* Insert FCS */
-#define IGB_TXD_CMD_RS 0x08 /* Report Status */
-#define IGB_TXD_CMD_SHIFT 24 /* Shift for command bits in cmd_type_len */
-#define IGB_TXD_CMD_LEGACY_FORMAT (1 << 20) /* Forces legacy descriptor format in QEMU */
+/*
+ * Advanced TX Data Descriptor fields per 82576 datasheet section 7.2.2.3.
+ * The cmd_type_len word holds: DTALEN[15:0], MAC[19:18], DTYP[23:20],
+ * DCMD[31:24].  The olinfo_status word holds: STA[3:0], IDX[6:4],
+ * POPTS[13:8], PAYLEN[31:14].
+ */
+#define IGB_ADVTXD_DTYP_DATA	(0x3u << 20) /* DTYP=0011b: advanced data */
+#define IGB_ADVTXD_DCMD_EOP	(1u << 24)   /* DCMD bit 0: End of Packet */
+#define IGB_ADVTXD_DCMD_IFCS	(1u << 25)   /* DCMD bit 1: Insert FCS */
+#define IGB_ADVTXD_DCMD_RS	(1u << 27)   /* DCMD bit 3: Report Status */
+#define IGB_ADVTXD_DCMD_DEXT	(1u << 29)   /* DCMD bit 5: 1b for advanced */
+#define IGB_ADVTXD_PAYLEN_SHIFT	14           /* PAYLEN bit position */
 
 #endif /* _IGB_REGISTERS_H_ */
