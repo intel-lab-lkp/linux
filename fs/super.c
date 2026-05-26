@@ -407,7 +407,7 @@ fail:
 static void __put_super(struct super_block *s)
 {
 	if (refcount_dec_and_test(&s->s_count)) {
-		list_del_init(&s->s_list);
+		list_bidir_del_rcu(&s->s_list);
 		WARN_ON(s->s_dentry_lru.node);
 		WARN_ON(s->s_inode_lru.node);
 		WARN_ON(s->s_mounts);
@@ -445,7 +445,7 @@ static void kill_super_notify(struct super_block *sb)
 	 * SB_DEAD.
 	 */
 	spin_lock(&sb_lock);
-	hlist_del_init(&sb->s_instances);
+	hlist_del_rcu(&sb->s_instances);
 	spin_unlock(&sb_lock);
 
 	/*
@@ -784,8 +784,8 @@ retry:
 	 * It's in a nascent state and users should wait on SB_BORN or
 	 * SB_DYING to be set.
 	 */
-	list_add_tail(&s->s_list, &super_blocks);
-	hlist_add_head(&s->s_instances, &s->s_type->fs_supers);
+	list_add_tail_rcu(&s->s_list, &super_blocks);
+	hlist_add_head_rcu(&s->s_instances, &s->s_type->fs_supers);
 	spin_unlock(&sb_lock);
 	get_filesystem(s->s_type);
 	shrinker_register(s->s_shrink);
