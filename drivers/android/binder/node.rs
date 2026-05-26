@@ -321,7 +321,7 @@ impl Node {
     /// An id that is unique across all binder nodes on the system. Used as the key in the
     /// `by_node` map.
     pub(crate) fn global_id(&self) -> usize {
-        self as *const Node as usize
+        (self as *const Node).addr()
     }
 
     pub(crate) fn get_id(&self) -> (u64, u64) {

@@ -511,7 +511,7 @@ unsafe extern "C" fn rust_binder_proc_show(
     _: *mut kernel::ffi::c_void,
 ) -> kernel::ffi::c_int {
     // SAFETY: Accessing the private field of `seq_file` is okay.
-    let pid = (unsafe { (*ptr).private }) as usize as Pid;
+    let pid = unsafe { (*ptr).private }.addr() as Pid;
     // SAFETY: The caller ensures that the pointer is valid and exclusive for the duration in which
     // this method is called.
     let m = unsafe { SeqFile::from_raw(ptr) };
