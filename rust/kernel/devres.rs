@@ -185,6 +185,57 @@ mod base {
 }
 
 impl<T: Send> Devres<T> {
+    #[cfg(CONFIG_DEBUG_DEVRES)]
+    const TYPE_NAME: &'static str = core::any::type_name::<T>();
+
+    #[cfg(CONFIG_DEBUG_DEVRES)]
+    const TYPE_NAME_BUF: [u8; 128] = {
+        let bytes = Self::TYPE_NAME.as_bytes();
+        let mut buf = [0u8; 128];
+        let mut i = 0;
+
+        if bytes.len() > 127 {
+            // Copy exactly 124 bytes, then append '...' to clearly indicate truncation
+            while i < 124 {
+                buf[i] = bytes[i];
+                i += 1;
+            }
+            buf[124] = b'.';
+            buf[125] = b'.';
+            buf[126] = b'.';
+            buf[127] = 0; // Null terminator
+        } else {
+            // Copy normally
+            while i < bytes.len() {
+                buf[i] = bytes[i];
+                i += 1;
+            }
+            buf[i] = 0; // Null terminator
+        }
+        buf
+    };
+
+    #[cfg(CONFIG_DEBUG_DEVRES)]
+    const TYPE_NAME_CSTR: &'static crate::str::CStr = {
+        let static_buf: &'static [u8; 128] = &Self::TYPE_NAME_BUF;
+
+        let mut len = 0;
+        while len < 128 && static_buf[len] != 0 {
+            len += 1;
+        }
+
+        // SAFETY: `static_buf` is promoted to static memory, and we verified the null byte.
+        unsafe {
+            crate::str::CStr::from_bytes_with_nul_unchecked(core::slice::from_raw_parts(
+                static_buf.as_ptr(),
+                len + 1,
+            ))
+        }
+    };
+
+    #[cfg(not(CONFIG_DEBUG_DEVRES))]
+    const TYPE_NAME_CSTR: &'static crate::str::CStr = crate::c_str!("");
+
     /// Creates a new [`Devres`] instance of the given `data`.
     ///
     /// The `data` encapsulated within the returned `Devres` instance' `data` will be
@@ -209,9 +260,7 @@ impl<T: Send> Devres<T> {
                     unsafe {
                         base::devres_set_node_dbginfo(
                             node,
-                            // TODO: Use `core::any::type_name::<T>()` once it is a `const fn`,
-                            // such that we can convert the `&str` to a `&CStr` at compile-time.
-                            c"Devres<T>".as_char_ptr(),
+                            Self::TYPE_NAME_CSTR.as_char_ptr(),
                             core::mem::size_of::<Revocable<T>>(),
                         )
                     };

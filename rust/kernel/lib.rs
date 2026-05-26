@@ -22,6 +22,7 @@
 // Expected to become stable.
 #![feature(arbitrary_self_types)]
 #![feature(derive_coerce_pointee)]
+#![feature(const_type_name)]
 //
 // To be determined.
 #![feature(used_with_arg)]
