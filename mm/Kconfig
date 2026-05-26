@@ -645,6 +645,14 @@ config MIGRATION
 	  pages as migration can relocate pages to satisfy a huge page
 	  allocation instead of reclaiming.
 
+config DEMOTION_WITH_NON_TEMPORAL_STORES
+	bool "Use non-temporal stores for demotion"
+	default n
+	depends on MIGRATION
+	help
+	  Enable non-temporal stores when migrating pages due to demotion.
+	  If disabled, demotion uses regular migration copy paths.
+
 config DEVICE_MIGRATION
 	def_bool MIGRATION && ZONE_DEVICE
 
