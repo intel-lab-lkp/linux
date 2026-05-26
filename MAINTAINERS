@@ -3287,6 +3287,7 @@ ARM/QUALCOMM MAILING LIST
 L:	linux-arm-msm@vger.kernel.org
 C:	irc://irc.oftc.net/linux-msm
 F:	Documentation/devicetree/bindings/*/qcom*
+F:	Documentation/devicetree/bindings/mmc/sdhci-msm.yaml
 F:	Documentation/devicetree/bindings/soc/qcom/
 F:	arch/arm/boot/dts/qcom/
 F:	arch/arm/configs/qcom_defconfig
