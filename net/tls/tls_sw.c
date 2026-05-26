@@ -2867,7 +2867,20 @@ int tls_set_sw_offload(struct sock *sk, int tx,
 	rec_seq = crypto_info_rec_seq(src_crypto_info, cipher_desc);
 
 	if (!*aead) {
-		*aead = crypto_alloc_aead(cipher_desc->cipher_name, 0, 0);
+		u32 mask = 0;
+
+		if (tx) {
+			struct sk_psock *psock;
+
+			psock = sk_psock_get(sk);
+			if (psock) {
+				mask = CRYPTO_ALG_ASYNC;
+				sw_ctx_tx->async_capable = 1;
+				sk_psock_put(sk, psock);
+			}
+		}
+
+		*aead = crypto_alloc_aead(cipher_desc->cipher_name, 0, mask);
 		if (IS_ERR(*aead)) {
 			rc = PTR_ERR(*aead);
 			*aead = NULL;
