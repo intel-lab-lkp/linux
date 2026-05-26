@@ -18,6 +18,65 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 
+static pgd_t kexec_tramp_pgd[PTRS_PER_PGD] __aligned(PAGE_SIZE);
+static p4d_t kexec_tramp_p4d[PTRS_PER_P4D] __aligned(PAGE_SIZE);
+static pud_t kexec_tramp_pud[PTRS_PER_PUD] __aligned(PAGE_SIZE);
+static pmd_t kexec_tramp_pmd[PTRS_PER_PMD] __aligned(PAGE_SIZE);
+static pte_t kexec_tramp_pte[PTRS_PER_PTE] __aligned(PAGE_SIZE);
+static p4d_t kexec_tramp_p4d2[PTRS_PER_P4D] __aligned(PAGE_SIZE);
+static pud_t kexec_tramp_pud2[PTRS_PER_PUD] __aligned(PAGE_SIZE);
+static pmd_t kexec_tramp_pmd2[PTRS_PER_PMD] __aligned(PAGE_SIZE);
+static pte_t kexec_tramp_pte2[PTRS_PER_PTE] __aligned(PAGE_SIZE);
+
+static void map_tramp_page(p4d_t *p4ds, pud_t *puds, pmd_t *pmds, pte_t *ptes,
+			   unsigned long va, unsigned long pa)
+{
+	pgd_t *pgd = (pgd_t *)kexec_tramp_pgd + pgd_index(va);
+	pmd_t *pmd;
+
+	if (pgtable_l5_enabled) {
+		p4d_t *p4d;
+
+		set_pgd(pgd, pfn_pgd(PFN_DOWN(__pa_symbol(p4ds)), PAGE_TABLE));
+		p4d = (p4d_t *)p4ds + p4d_index(va);
+		if (pgtable_l4_enabled)
+			set_p4d(p4d, pfn_p4d(PFN_DOWN(__pa_symbol(puds)),
+				PAGE_TABLE));
+		else
+			set_p4d(p4d, pfn_p4d(PFN_DOWN(__pa_symbol(pmds)),
+				PAGE_TABLE));
+	} else {
+		set_pgd(pgd, pfn_pgd(PFN_DOWN(__pa_symbol(puds)), PAGE_TABLE));
+	}
+
+	if (pgtable_l4_enabled) {
+		pud_t *pud = (pud_t *)puds + pud_index(va);
+
+		set_pud(pud, pfn_pud(PFN_DOWN(__pa_symbol(pmds)), PAGE_TABLE));
+		pmd = (pmd_t *)pmds + pmd_index(va);
+	} else {
+		pmd = (pmd_t *)puds + pmd_index(va);
+	}
+	set_pmd(pmd, pfn_pmd(PFN_DOWN(__pa_symbol(ptes)), PAGE_TABLE));
+
+	set_pte((pte_t *)ptes + pte_index(va),
+		pfn_pte(PFN_DOWN(pa), PAGE_KERNEL_EXEC));
+}
+
+static void riscv_kexec_build_tramp(unsigned long va, unsigned long pa)
+{
+	/* VA -> PA: map the trampoline page via its kernel VA. */
+	map_tramp_page(kexec_tramp_p4d,  kexec_tramp_pud,
+		       kexec_tramp_pmd,  kexec_tramp_pte,  va, pa);
+
+	/*
+	 * PA -> PA: identity-map the same page so the second-pass code
+	 * can keep executing after the kernel VA mapping is dropped.
+	 */
+	map_tramp_page(kexec_tramp_p4d2, kexec_tramp_pud2,
+		       kexec_tramp_pmd2, kexec_tramp_pte2, pa, pa);
+}
+
 /*
  * machine_kexec_prepare - Initialize kexec
  *
@@ -73,6 +132,14 @@ machine_kexec_prepare(struct kimage *image)
 
 		/* Mark the control page executable */
 		set_memory_x((unsigned long) control_code_buffer, 1);
+	} else {
+		/*
+		 * Crash kexec uses riscv_kexec_norelocate as a trampoline.
+		 * Pre-build the trampoline page tables here so the panic
+		 * path only has to switch satp and jump.
+		 */
+		riscv_kexec_build_tramp((unsigned long)__kexec_tramp_text_start,
+					__pa_symbol(__kexec_tramp_text_start));
 	}
 
 	return 0;
