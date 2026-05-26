@@ -389,7 +389,7 @@ xrep_cow_find_bad_rt(
 		error = xrep_cow_mark_file_range(xc, xc->irec.br_startblock,
 				xc->irec.br_blockcount);
 		if (error)
-			goto out_rtg;
+			goto out_sr;
 	}
 
 out_sr:
