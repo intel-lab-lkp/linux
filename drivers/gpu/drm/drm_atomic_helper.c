@@ -1034,8 +1034,6 @@ drm_atomic_helper_check_planes(struct drm_device *dev,
 
 		drm_atomic_helper_plane_changed(state, old_plane_state, new_plane_state, plane);
 
-		drm_atomic_helper_check_plane_damage(state, old_plane_state, new_plane_state);
-
 		if (!funcs || !funcs->atomic_check)
 			continue;
 
