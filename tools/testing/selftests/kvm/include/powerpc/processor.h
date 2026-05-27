@@ -15,16 +15,16 @@ struct kvm_vm;
 struct kvm_vcpu;
 
 struct ex_regs {
-	uint64_t	gprs[32];
-	uint64_t	nia;
-	uint64_t	msr;
-	uint64_t	cfar;
-	uint64_t	lr;
-	uint64_t	ctr;
-	uint64_t	xer;
+	u64	gprs[32];
+	u64	nia;
+	u64	msr;
+	u64	cfar;
+	u64	lr;
+	u64	ctr;
+	u64	xer;
 	uint32_t	cr;
 	uint32_t	trap;
-	uint64_t	vaddr; /* vaddr of this struct */
+	u64	vaddr; /* vaddr of this struct */
 };
 
 void vm_install_exception_handler(struct kvm_vm *vm, int vector,

@@ -5,7 +5,7 @@
 #include "kvm_util.h"
 #include "hcall.h"
 
-int64_t hcall0(uint64_t token)
+int64_t hcall0(u64 token)
 {
 	register uintptr_t r3 asm ("r3") = token;
 
@@ -17,7 +17,7 @@ int64_t hcall0(uint64_t token)
 	return r3;
 }
 
-int64_t hcall1(uint64_t token, uint64_t arg1)
+int64_t hcall1(u64 token, u64 arg1)
 {
 	register uintptr_t r3 asm ("r3") = token;
 	register uintptr_t r4 asm ("r4") = arg1;
@@ -30,7 +30,7 @@ int64_t hcall1(uint64_t token, uint64_t arg1)
 	return r3;
 }
 
-int64_t hcall2(uint64_t token, uint64_t arg1, uint64_t arg2)
+int64_t hcall2(u64 token, u64 arg1, u64 arg2)
 {
 	register uintptr_t r3 asm ("r3") = token;
 	register uintptr_t r4 asm ("r4") = arg1;
