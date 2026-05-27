@@ -246,6 +246,60 @@ static inline void anon_vma_unlock_read(struct anon_vma *anon_vma)
 	up_read(&anon_vma->root->rwsem);
 }
 
+/* anon_vma_tree_t APIs */
+
+static inline anon_vma_tree_t make_anon_vma_tree(struct anon_vma *anon_vma)
+{
+	return (anon_vma_tree_t)anon_vma;
+}
+
+static inline struct anon_vma *anon_vma_tree_anon_vma(anon_vma_tree_t anon_tree)
+{
+	return (struct anon_vma *)anon_tree;
+}
+
+static inline void anon_vma_tree_lock_write(anon_vma_tree_t anon_tree)
+{
+	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
+
+	anon_vma_lock_write(anon_vma);
+}
+
+static inline int anon_vma_tree_trylock_write(anon_vma_tree_t anon_tree)
+{
+	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
+
+	return anon_vma_trylock_write(anon_vma);
+}
+
+static inline void anon_vma_tree_unlock_write(anon_vma_tree_t anon_tree)
+{
+	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
+
+	anon_vma_unlock_write(anon_vma);
+}
+
+static inline void anon_vma_tree_lock_read(anon_vma_tree_t anon_tree)
+{
+	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
+
+	anon_vma_lock_read(anon_vma);
+}
+
+static inline int anon_vma_tree_trylock_read(anon_vma_tree_t anon_tree)
+{
+	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
+
+	return anon_vma_trylock_read(anon_vma);
+}
+
+static inline void anon_vma_tree_unlock_read(anon_vma_tree_t anon_tree)
+{
+	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
+
+	anon_vma_unlock_read(anon_vma);
+}
+
 struct anon_vma *folio_get_anon_vma(const struct folio *folio);
 
 /* Operations which modify VMAs. */

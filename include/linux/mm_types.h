@@ -917,6 +917,9 @@ struct vm_area_desc {
 	struct mmap_action action;
 };
 
+/* Tagged pointer stored in vma->anon_vma. Low bits encode anon_vma type. */
+typedef unsigned long anon_vma_tree_t;
+
 /*
  * This struct describes a virtual memory area. There is one of these
  * per VM-area/task. A VM area is any part of the process virtual memory
