@@ -76,9 +76,10 @@ static bool vma_is_fork_child(struct vm_area_struct *vma)
 	/*
 	 * The list_is_singular() test is to avoid merging VMA cloned from
 	 * parents. This can improve scalability caused by the anon_vma root
-	 * lock.
+	 * lock. ANON_VMA_TREE_VMA has no anon_vma_chain.
 	 */
-	return vma && vma->anon_vma && !list_is_singular(&vma->anon_vma_chain);
+	return vma && vma->anon_vma && !anon_vma_tree_is_vma(vma->anon_vma) &&
+		 !list_is_singular(&vma->anon_vma_chain);
 }
 
 static inline bool is_mergeable_vma(struct vma_merge_struct *vmg, bool merge_next)
@@ -777,6 +778,17 @@ static bool can_merge_remove_vma(struct vm_area_struct *vma)
 }
 
 /*
+ * The ANON_VMA_LAZY root VMA may still be referenced by folio->mapping.
+ * Keeping the root avoids allocating an extra VMA.
+ */
+#define SWAP_VMG_TARGET_IF_DELETE_ANON_VMA_LAZY_ROOT(vmg, delete_vma) do { \
+	if (anon_vma_lazy_enabled()) { \
+		if (delete_vma && vma_is_anon_vma_lazy_root(delete_vma)) \
+			swap(vmg->target, delete_vma); \
+	} \
+} while (0)
+
+/*
  * vma_merge_existing_range - Attempt to merge VMAs based on a VMA having its
  * attributes modified.
  *
@@ -933,12 +945,15 @@ static __must_check struct vm_area_struct *vma_merge_existing_range(
 		vmg->end = next->vm_end;
 		vmg->pgoff = prev->vm_pgoff;
 
+		SWAP_VMG_TARGET_IF_DELETE_ANON_VMA_LAZY_ROOT(vmg, middle);
+		SWAP_VMG_TARGET_IF_DELETE_ANON_VMA_LAZY_ROOT(vmg, next);
+
 		/*
 		 * We already ensured anon_vma compatibility above, so now it's
 		 * simply a case of, if prev has no anon_vma object, which of
 		 * next or middle contains the anon_vma we must duplicate.
 		 */
-		err = dup_anon_vma(prev, next->anon_vma ? next : middle,
+		err = dup_anon_vma(vmg->target, next->anon_vma ? next : middle,
 				   &anon_dup);
 	} else if (merge_left) {
 		/*
@@ -954,8 +969,10 @@ static __must_check struct vm_area_struct *vma_merge_existing_range(
 
 		if (!vmg->__remove_middle)
 			vmg->__adjust_middle_start = true;
+		else
+			SWAP_VMG_TARGET_IF_DELETE_ANON_VMA_LAZY_ROOT(vmg, middle);
 
-		err = dup_anon_vma(prev, middle, &anon_dup);
+		err = dup_anon_vma(vmg->target, middle, &anon_dup);
 	} else { /* merge_right */
 		/*
 		 *     |<------------->| OR
@@ -974,6 +991,7 @@ static __must_check struct vm_area_struct *vma_merge_existing_range(
 		if (vmg->__remove_middle) {
 			vmg->end = next->vm_end;
 			vmg->pgoff = next->vm_pgoff - pglen;
+			SWAP_VMG_TARGET_IF_DELETE_ANON_VMA_LAZY_ROOT(vmg, middle);
 		} else {
 			/* We shrink middle and expand next. */
 			vmg->__adjust_next_start = true;
@@ -982,7 +1000,7 @@ static __must_check struct vm_area_struct *vma_merge_existing_range(
 			vmg->pgoff = middle->vm_pgoff;
 		}
 
-		err = dup_anon_vma(next, middle, &anon_dup);
+		err = dup_anon_vma(vmg->target, middle, &anon_dup);
 	}
 
 	if (err || commit_merge(vmg))
@@ -1212,6 +1230,7 @@ int vma_expand(struct vma_merge_struct *vmg)
 
 		vma_start_write(next);
 		vmg->__remove_next = true;
+		SWAP_VMG_TARGET_IF_DELETE_ANON_VMA_LAZY_ROOT(vmg, next);
 
 		next_sticky = vma_flags_and_mask(&next->flags, VMA_STICKY_FLAGS);
 		vma_flags_set_mask(&sticky_flags, next_sticky);
