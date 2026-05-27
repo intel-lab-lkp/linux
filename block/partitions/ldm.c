@@ -138,7 +138,7 @@ static bool ldm_parse_tocblock (const u8 *data, struct tocblock *toc)
 	if (strncmp (toc->bitmap1_name, TOC_BITMAP1,
 			sizeof (toc->bitmap1_name)) != 0) {
 		ldm_crit ("TOCBLOCK's first bitmap is '%s', should be '%s'.",
-				TOC_BITMAP1, toc->bitmap1_name);
+				toc->bitmap1_name, TOC_BITMAP1);
 		return false;
 	}
 	strscpy_pad(toc->bitmap2_name, data + 0x46, sizeof(toc->bitmap2_name));
@@ -147,7 +147,7 @@ static bool ldm_parse_tocblock (const u8 *data, struct tocblock *toc)
 	if (strncmp (toc->bitmap2_name, TOC_BITMAP2,
 			sizeof (toc->bitmap2_name)) != 0) {
 		ldm_crit ("TOCBLOCK's second bitmap is '%s', should be '%s'.",
-				TOC_BITMAP2, toc->bitmap2_name);
+				toc->bitmap2_name, TOC_BITMAP2);
 		return false;
 	}
 	ldm_debug ("Parsed TOCBLOCK successfully.");
