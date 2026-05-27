@@ -38,46 +38,125 @@ static DEFINE_SPINLOCK(pnv_php_lock);
 static void pnv_php_register(struct device_node *dn);
 static void pnv_php_unregister_one(struct device_node *dn);
 static void pnv_php_unregister(struct device_node *dn);
-
-static void pcie_enable_irq(struct pnv_php_slot *php_slot);
-static int pcie_check_link_active(struct pci_dev *pdev);
-static void pcie_detect_surprise_removal(struct pnv_php_slot *php_slot);
-
-static void pcie_fixup_presence_state(struct pnv_php_slot *php_slot, u8 *presence)
-{
-	if (pci_pcie_type(php_slot->pdev) == PCI_EXP_TYPE_DOWNSTREAM &&
-	    *presence == OPAL_PCI_SLOT_EMPTY) {
-		/*
-		 * Similar to pciehp_hpc, check whether the Link Active
-		 * bit is set to account for broken downstream bridges
-		 * that don't properly assert Presence Detect State, as
-		 * was observed on the Microsemi Switchtec PM8533 PFX
-		 * [11f8:8533].
-		 */
-		if (pcie_check_link_active(php_slot->pdev) > 0)
-			*presence = OPAL_PCI_SLOT_PRESENT;
-	}
-}
-
-static void pcie_fundamental_reset(struct pnv_php_slot *php_slot)
-{
-	pci_set_pcie_reset_state(php_slot->pdev, pcie_warm_reset);
-	msleep(250);
-	pci_set_pcie_reset_state(php_slot->pdev, pcie_deassert_reset);
-}
-
-static void pnv_php_enable_irq(struct pnv_php_slot *php_slot)
-{
-	if (php_slot->backend_ops->enable_irq)
-		php_slot->backend_ops->enable_irq(php_slot);
-}
-
+static irqreturn_t pnv_php_interrupt(int irq, void *data);
 static void pnv_php_disable_irq(struct pnv_php_slot *php_slot,
-				bool disable_device, bool disable_msi)
+				bool disable_device, bool disable_msi);
+
+static void pcie_init_irq(struct pnv_php_slot *php_slot, int irq)
 {
-	if (php_slot->backend_ops->disable_irq)
-		php_slot->backend_ops->disable_irq(php_slot, disable_device,
-				disable_msi);
+	struct pci_dev *pdev = php_slot->pdev;
+	u32 broken_pdc = 0;
+	u16 sts, ctrl;
+	int ret;
+
+	/* Check PDC (Presence Detection Change) is broken or not */
+	ret = of_property_read_u32(php_slot->dn, "ibm,slot-broken-pdc",
+				   &broken_pdc);
+	if (!ret && broken_pdc)
+		php_slot->flags |= PNV_PHP_FLAG_BROKEN_PDC;
+
+	/* Clear pending interrupts */
+	pcie_capability_read_word(pdev, PCI_EXP_SLTSTA, &sts);
+	if (php_slot->flags & PNV_PHP_FLAG_BROKEN_PDC)
+		sts |= PCI_EXP_SLTSTA_DLLSC;
+	else
+		sts |= (PCI_EXP_SLTSTA_PDC | PCI_EXP_SLTSTA_DLLSC);
+	pcie_capability_write_word(pdev, PCI_EXP_SLTSTA, sts);
+
+	/* Request the interrupt */
+	ret = request_irq(irq, pnv_php_interrupt, IRQF_SHARED,
+			  php_slot->name, php_slot);
+	if (ret) {
+		pnv_php_disable_irq(php_slot, true, true);
+		SLOT_WARN(php_slot, "Error %d enabling IRQ %d\n", ret, irq);
+		return;
+	}
+
+	/* Enable the interrupts */
+	pcie_capability_read_word(pdev, PCI_EXP_SLTCTL, &ctrl);
+	if (php_slot->flags & PNV_PHP_FLAG_BROKEN_PDC) {
+		ctrl &= ~PCI_EXP_SLTCTL_PDCE;
+		ctrl |= (PCI_EXP_SLTCTL_HPIE |
+			 PCI_EXP_SLTCTL_DLLSCE);
+	} else {
+		ctrl |= (PCI_EXP_SLTCTL_HPIE |
+			 PCI_EXP_SLTCTL_PDCE |
+			 PCI_EXP_SLTCTL_DLLSCE);
+	}
+	pcie_capability_write_word(pdev, PCI_EXP_SLTCTL, ctrl);
+
+	/* The interrupt is initialized successfully when @irq is valid */
+	php_slot->irq = irq;
+}
+
+static int pcie_enable_msix(struct pnv_php_slot *php_slot)
+{
+	struct pci_dev *pdev = php_slot->pdev;
+	struct msix_entry entry;
+	int nr_entries, ret;
+	u16 pcie_flag;
+
+	/* Get total number of MSIx entries */
+	nr_entries = pci_msix_vec_count(pdev);
+	if (nr_entries < 0)
+		return nr_entries;
+
+	/* Check hotplug MSIx entry is in range */
+	pcie_capability_read_word(pdev, PCI_EXP_FLAGS, &pcie_flag);
+	entry.entry = FIELD_GET(PCI_EXP_FLAGS_IRQ, pcie_flag);
+	if (entry.entry >= nr_entries)
+		return -ERANGE;
+
+	/* Enable MSIx */
+	ret = pci_enable_msix_exact(pdev, &entry, 1);
+	if (ret) {
+		SLOT_WARN(php_slot, "Error %d enabling MSIx\n", ret);
+		return ret;
+	}
+
+	return entry.vector;
+}
+
+static void pcie_enable_irq(struct pnv_php_slot *php_slot)
+{
+	struct pci_dev *pdev = php_slot->pdev;
+	int irq, ret;
+
+	if (!pdev)
+		return;
+
+	/*
+	 * The MSI/MSIx interrupt might have been occupied by other
+	 * drivers. Don't populate the surprise hotplug capability
+	 * in that case.
+	 */
+	if (pci_dev_msi_enabled(pdev))
+		return;
+
+	ret = pci_enable_device(pdev);
+	if (ret) {
+		SLOT_WARN(php_slot, "Error %d enabling device\n", ret);
+		return;
+	}
+
+	pci_set_master(pdev);
+
+	/* Enable MSIx interrupt */
+	irq = pcie_enable_msix(php_slot);
+	if (irq > 0) {
+		pcie_init_irq(php_slot, irq);
+		return;
+	}
+
+	/*
+	 * Use MSI if MSIx doesn't work. Fail back to legacy INTx
+	 * if MSI doesn't work either
+	 */
+	ret = pci_enable_msi(pdev);
+	if (!ret || pdev->irq) {
+		irq = pdev->irq;
+		pcie_init_irq(php_slot, irq);
+	}
 }
 
 static void pcie_disable_irq(struct pnv_php_slot *php_slot,
@@ -106,6 +185,174 @@ static void pcie_disable_irq(struct pnv_php_slot *php_slot,
 
 	if (disable_device)
 		pci_disable_device(pdev);
+}
+
+static void pcie_get_attention_state(struct pnv_php_slot *php_slot, u8 *state)
+{
+	struct pci_dev *bridge = php_slot->pdev;
+	u16 status;
+
+	pcie_capability_read_word(bridge, PCI_EXP_SLTCTL, &status);
+	*state = (status & (PCI_EXP_SLTCTL_AIC | PCI_EXP_SLTCTL_PIC)) >> 6;
+}
+
+static void pcie_set_attention_state(struct pnv_php_slot *php_slot, u8 state)
+{
+	struct pci_dev *bridge = php_slot->pdev;
+	u16 new, mask;
+
+	php_slot->attention_state = state;
+	mask = PCI_EXP_SLTCTL_AIC;
+
+	if (state)
+		new = FIELD_PREP(PCI_EXP_SLTCTL_AIC, state);
+	else
+		new = PCI_EXP_SLTCTL_ATTN_IND_OFF;
+
+	pcie_capability_clear_and_set_word(bridge, PCI_EXP_SLTCTL, mask, new);
+}
+
+static int pcie_check_link_active(struct pci_dev *pdev)
+{
+	u16 lnk_status;
+	int ret;
+
+	ret = pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lnk_status);
+	if (ret == PCIBIOS_DEVICE_NOT_FOUND || PCI_POSSIBLE_ERROR(lnk_status))
+		return -ENODEV;
+
+	ret = !!(lnk_status & PCI_EXP_LNKSTA_DLLLA);
+
+	return ret;
+}
+
+static void pcie_fixup_presence_state(struct pnv_php_slot *php_slot, u8 *presence)
+{
+	if (pci_pcie_type(php_slot->pdev) == PCI_EXP_TYPE_DOWNSTREAM &&
+	    *presence == OPAL_PCI_SLOT_EMPTY) {
+		/*
+		 * Similar to pciehp_hpc, check whether the Link Active
+		 * bit is set to account for broken downstream bridges
+		 * that don't properly assert Presence Detect State, as
+		 * was observed on the Microsemi Switchtec PM8533 PFX
+		 * [11f8:8533].
+		 */
+		if (pcie_check_link_active(php_slot->pdev) > 0)
+			*presence = OPAL_PCI_SLOT_PRESENT;
+	}
+}
+
+static void pcie_fundamental_reset(struct pnv_php_slot *php_slot)
+{
+	pci_set_pcie_reset_state(php_slot->pdev, pcie_warm_reset);
+	msleep(250);
+	pci_set_pcie_reset_state(php_slot->pdev, pcie_deassert_reset);
+}
+
+static void pcie_detect_surprise_removal(struct pnv_php_slot *php_slot)
+{
+	struct pci_dev *pdev = php_slot->pdev;
+	struct eeh_dev *edev;
+	struct eeh_pe *pe;
+	int i, rc;
+
+	if (!pdev)
+		return;
+
+	/*
+	 * When a device is surprise removed from a downstream bridge slot,
+	 * the upstream bridge port can still end up frozen due to related EEH
+	 * events, which will in turn block the MSI interrupts for slot hotplug
+	 * detection.
+	 *
+	 * Detect and thaw any frozen upstream PE after slot deactivation.
+	 */
+	edev = pci_dev_to_eeh_dev(pdev);
+	pe = edev ? edev->pe : NULL;
+	rc = eeh_pe_get_state(pe);
+	if ((rc == -ENODEV) || (rc == -ENOENT)) {
+		SLOT_WARN(
+			php_slot,
+			"Upstream bridge PE state unknown, hotplug detect may fail\n");
+	} else {
+		if (pe->state & EEH_PE_ISOLATED) {
+			SLOT_WARN(
+				php_slot,
+				"Upstream bridge PE %02x frozen, thawing...\n",
+				pe->addr);
+			for (i = 0; i < 3; i++)
+				if (!eeh_unfreeze_pe(pe))
+					break;
+			if (i >= 3)
+				SLOT_WARN(
+					php_slot,
+					"Unable to thaw PE %02x, hotplug detect will fail!\n",
+					pe->addr);
+			else
+				SLOT_WARN(php_slot,
+					  "PE %02x thawed successfully\n",
+					  pe->addr);
+		}
+	}
+}
+
+static int pcie_reset_slot(struct pnv_php_slot *php_slot, bool probe)
+{
+	struct pci_dev *bridge = php_slot->pdev;
+	uint16_t sts;
+
+	if (probe)
+		return 0;
+
+	/* mask our interrupt while resetting the bridge */
+	if (php_slot->irq > 0)
+		disable_irq(php_slot->irq);
+
+	pci_bridge_secondary_bus_reset(bridge);
+
+	/* clear any state changes that happened due to the reset */
+	pcie_capability_read_word(php_slot->pdev, PCI_EXP_SLTSTA, &sts);
+	sts &= (PCI_EXP_SLTSTA_PDC | PCI_EXP_SLTSTA_DLLSC);
+	pcie_capability_write_word(php_slot->pdev, PCI_EXP_SLTSTA, sts);
+
+	if (php_slot->irq > 0)
+		enable_irq(php_slot->irq);
+
+	return 0;
+}
+
+static const struct pnv_php_backend_ops pnv_php_pcie_ops = {
+	.enable_irq              = pcie_enable_irq,
+	.disable_irq             = pcie_disable_irq,
+	.get_attention_state     = pcie_get_attention_state,
+	.set_attention_state     = pcie_set_attention_state,
+	.fixup_presence_state    = pcie_fixup_presence_state,
+	.fundamental_reset       = pcie_fundamental_reset,
+	.detect_surprise_removal = pcie_detect_surprise_removal,
+	.reset_slot              = pcie_reset_slot,
+};
+
+static int opencapi_reset_slot(struct pnv_php_slot *slot, bool probe)
+{
+	return probe ? 1 : -ENODEV;
+}
+
+static const struct pnv_php_backend_ops pnv_php_opencapi_ops = {
+	.reset_slot              = opencapi_reset_slot,
+};
+
+static void pnv_php_enable_irq(struct pnv_php_slot *php_slot)
+{
+	if (php_slot->backend_ops->enable_irq)
+		php_slot->backend_ops->enable_irq(php_slot);
+}
+
+static void pnv_php_disable_irq(struct pnv_php_slot *php_slot,
+				bool disable_device, bool disable_msi)
+{
+	if (php_slot->backend_ops->disable_irq)
+		php_slot->backend_ops->disable_irq(php_slot, disable_device,
+				disable_msi);
 }
 
 static void pnv_php_free_slot(struct kref *kref)
@@ -427,20 +674,6 @@ static int pnv_php_get_power_state(struct hotplug_slot *slot, u8 *state)
 	return 0;
 }
 
-static int pcie_check_link_active(struct pci_dev *pdev)
-{
-	u16 lnk_status;
-	int ret;
-
-	ret = pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lnk_status);
-	if (ret == PCIBIOS_DEVICE_NOT_FOUND || PCI_POSSIBLE_ERROR(lnk_status))
-		return -ENODEV;
-
-	ret = !!(lnk_status & PCI_EXP_LNKSTA_DLLLA);
-
-	return ret;
-}
-
 static int pnv_php_get_adapter_state(struct hotplug_slot *slot, u8 *state)
 {
 	struct pnv_php_slot *php_slot = to_pnv_php_slot(slot);
@@ -465,15 +698,6 @@ static int pnv_php_get_adapter_state(struct hotplug_slot *slot, u8 *state)
 	return ret;
 }
 
-static void pcie_get_attention_state(struct pnv_php_slot *php_slot, u8 *state)
-{
-	struct pci_dev *bridge = php_slot->pdev;
-	u16 status;
-
-	pcie_capability_read_word(bridge, PCI_EXP_SLTCTL, &status);
-	*state = (status & (PCI_EXP_SLTCTL_AIC | PCI_EXP_SLTCTL_PIC)) >> 6;
-}
-
 static int pnv_php_get_attention_state(struct hotplug_slot *slot, u8 *state)
 {
 	struct pnv_php_slot *php_slot = to_pnv_php_slot(slot);
@@ -495,22 +719,6 @@ static int pnv_php_set_attention_state(struct hotplug_slot *slot, u8 state)
 		php_slot->backend_ops->set_attention_state(php_slot, state);
 
 	return 0;
-}
-
-static void pcie_set_attention_state(struct pnv_php_slot *php_slot, u8 state)
-{
-	struct pci_dev *bridge = php_slot->pdev;
-	u16 new, mask;
-
-	php_slot->attention_state = state;
-	mask = PCI_EXP_SLTCTL_AIC;
-
-	if (state)
-		new = FIELD_PREP(PCI_EXP_SLTCTL_AIC, state);
-	else
-		new = PCI_EXP_SLTCTL_ATTN_IND_OFF;
-
-	pcie_capability_clear_and_set_word(bridge, PCI_EXP_SLTCTL, mask, new);
 }
 
 static int pnv_php_activate_slot(struct pnv_php_slot *php_slot,
@@ -658,31 +866,6 @@ static int pnv_php_reset_slot(struct hotplug_slot *slot, bool probe)
 	return probe ? 0 : -ENODEV;
 }
 
-static int pcie_reset_slot(struct pnv_php_slot *php_slot, bool probe)
-{
-	struct pci_dev *bridge = php_slot->pdev;
-	uint16_t sts;
-
-	if (probe)
-		return 0;
-
-	/* mask our interrupt while resetting the bridge */
-	if (php_slot->irq > 0)
-		disable_irq(php_slot->irq);
-
-	pci_bridge_secondary_bus_reset(bridge);
-
-	/* clear any state changes that happened due to the reset */
-	pcie_capability_read_word(php_slot->pdev, PCI_EXP_SLTSTA, &sts);
-	sts &= (PCI_EXP_SLTSTA_PDC | PCI_EXP_SLTSTA_DLLSC);
-	pcie_capability_write_word(php_slot->pdev, PCI_EXP_SLTSTA, sts);
-
-	if (php_slot->irq > 0)
-		enable_irq(php_slot->irq);
-
-	return 0;
-}
-
 static int pnv_php_enable_slot(struct hotplug_slot *slot)
 {
 	struct pnv_php_slot *php_slot = to_pnv_php_slot(slot);
@@ -800,26 +983,6 @@ static void pnv_php_release(struct pnv_php_slot *php_slot)
 	pnv_php_put_slot(php_slot->parent);
 }
 
-static const struct pnv_php_backend_ops pnv_php_pcie_ops = {
-	.enable_irq              = pcie_enable_irq,
-	.disable_irq             = pcie_disable_irq,
-	.get_attention_state     = pcie_get_attention_state,
-	.set_attention_state     = pcie_set_attention_state,
-	.fixup_presence_state    = pcie_fixup_presence_state,
-	.fundamental_reset       = pcie_fundamental_reset,
-	.detect_surprise_removal = pcie_detect_surprise_removal,
-	.reset_slot              = pcie_reset_slot,
-};
-
-static int opencapi_reset_slot(struct pnv_php_slot *slot, bool probe)
-{
-	return probe ? 1 : -ENODEV;
-}
-
-static const struct pnv_php_backend_ops pnv_php_opencapi_ops = {
-	.reset_slot              = opencapi_reset_slot,
-};
-
 static struct pnv_php_slot *pnv_php_alloc_slot(struct device_node *dn)
 {
 	struct pnv_php_slot *php_slot;
@@ -934,86 +1097,11 @@ static int pnv_php_register_slot(struct pnv_php_slot *php_slot)
 	return 0;
 }
 
-static int pcie_enable_msix(struct pnv_php_slot *php_slot)
-{
-	struct pci_dev *pdev = php_slot->pdev;
-	struct msix_entry entry;
-	int nr_entries, ret;
-	u16 pcie_flag;
-
-	/* Get total number of MSIx entries */
-	nr_entries = pci_msix_vec_count(pdev);
-	if (nr_entries < 0)
-		return nr_entries;
-
-	/* Check hotplug MSIx entry is in range */
-	pcie_capability_read_word(pdev, PCI_EXP_FLAGS, &pcie_flag);
-	entry.entry = FIELD_GET(PCI_EXP_FLAGS_IRQ, pcie_flag);
-	if (entry.entry >= nr_entries)
-		return -ERANGE;
-
-	/* Enable MSIx */
-	ret = pci_enable_msix_exact(pdev, &entry, 1);
-	if (ret) {
-		SLOT_WARN(php_slot, "Error %d enabling MSIx\n", ret);
-		return ret;
-	}
-
-	return entry.vector;
-}
-
 static void
 pnv_php_detect_clear_surprise_removal_freeze(struct pnv_php_slot *php_slot)
 {
 	if (php_slot->backend_ops->detect_surprise_removal)
 		php_slot->backend_ops->detect_surprise_removal(php_slot);
-}
-
-static void pcie_detect_surprise_removal(struct pnv_php_slot *php_slot)
-{
-	struct pci_dev *pdev = php_slot->pdev;
-	struct eeh_dev *edev;
-	struct eeh_pe *pe;
-	int i, rc;
-
-	if (!pdev)
-		return;
-
-	/*
-	 * When a device is surprise removed from a downstream bridge slot,
-	 * the upstream bridge port can still end up frozen due to related EEH
-	 * events, which will in turn block the MSI interrupts for slot hotplug
-	 * detection.
-	 *
-	 * Detect and thaw any frozen upstream PE after slot deactivation.
-	 */
-	edev = pci_dev_to_eeh_dev(pdev);
-	pe = edev ? edev->pe : NULL;
-	rc = eeh_pe_get_state(pe);
-	if ((rc == -ENODEV) || (rc == -ENOENT)) {
-		SLOT_WARN(
-			php_slot,
-			"Upstream bridge PE state unknown, hotplug detect may fail\n");
-	} else {
-		if (pe->state & EEH_PE_ISOLATED) {
-			SLOT_WARN(
-				php_slot,
-				"Upstream bridge PE %02x frozen, thawing...\n",
-				pe->addr);
-			for (i = 0; i < 3; i++)
-				if (!eeh_unfreeze_pe(pe))
-					break;
-			if (i >= 3)
-				SLOT_WARN(
-					php_slot,
-					"Unable to thaw PE %02x, hotplug detect will fail!\n",
-					pe->addr);
-			else
-				SLOT_WARN(php_slot,
-					  "PE %02x thawed successfully\n",
-					  pe->addr);
-		}
-	}
 }
 
 static void pnv_php_event_handler(struct work_struct *work)
@@ -1107,95 +1195,6 @@ static irqreturn_t pnv_php_interrupt(int irq, void *data)
 	queue_work(php_slot->wq, &event->work);
 
 	return IRQ_HANDLED;
-}
-
-static void pcie_init_irq(struct pnv_php_slot *php_slot, int irq)
-{
-	struct pci_dev *pdev = php_slot->pdev;
-	u32 broken_pdc = 0;
-	u16 sts, ctrl;
-	int ret;
-
-	/* Check PDC (Presence Detection Change) is broken or not */
-	ret = of_property_read_u32(php_slot->dn, "ibm,slot-broken-pdc",
-				   &broken_pdc);
-	if (!ret && broken_pdc)
-		php_slot->flags |= PNV_PHP_FLAG_BROKEN_PDC;
-
-	/* Clear pending interrupts */
-	pcie_capability_read_word(pdev, PCI_EXP_SLTSTA, &sts);
-	if (php_slot->flags & PNV_PHP_FLAG_BROKEN_PDC)
-		sts |= PCI_EXP_SLTSTA_DLLSC;
-	else
-		sts |= (PCI_EXP_SLTSTA_PDC | PCI_EXP_SLTSTA_DLLSC);
-	pcie_capability_write_word(pdev, PCI_EXP_SLTSTA, sts);
-
-	/* Request the interrupt */
-	ret = request_irq(irq, pnv_php_interrupt, IRQF_SHARED,
-			  php_slot->name, php_slot);
-	if (ret) {
-		pnv_php_disable_irq(php_slot, true, true);
-		SLOT_WARN(php_slot, "Error %d enabling IRQ %d\n", ret, irq);
-		return;
-	}
-
-	/* Enable the interrupts */
-	pcie_capability_read_word(pdev, PCI_EXP_SLTCTL, &ctrl);
-	if (php_slot->flags & PNV_PHP_FLAG_BROKEN_PDC) {
-		ctrl &= ~PCI_EXP_SLTCTL_PDCE;
-		ctrl |= (PCI_EXP_SLTCTL_HPIE |
-			 PCI_EXP_SLTCTL_DLLSCE);
-	} else {
-		ctrl |= (PCI_EXP_SLTCTL_HPIE |
-			 PCI_EXP_SLTCTL_PDCE |
-			 PCI_EXP_SLTCTL_DLLSCE);
-	}
-	pcie_capability_write_word(pdev, PCI_EXP_SLTCTL, ctrl);
-
-	/* The interrupt is initialized successfully when @irq is valid */
-	php_slot->irq = irq;
-}
-
-static void pcie_enable_irq(struct pnv_php_slot *php_slot)
-{
-	struct pci_dev *pdev = php_slot->pdev;
-	int irq, ret;
-
-	if (!pdev)
-		return;
-
-	/*
-	 * The MSI/MSIx interrupt might have been occupied by other
-	 * drivers. Don't populate the surprise hotplug capability
-	 * in that case.
-	 */
-	if (pci_dev_msi_enabled(pdev))
-		return;
-
-	ret = pci_enable_device(pdev);
-	if (ret) {
-		SLOT_WARN(php_slot, "Error %d enabling device\n", ret);
-		return;
-	}
-
-	pci_set_master(pdev);
-
-	/* Enable MSIx interrupt */
-	irq = pcie_enable_msix(php_slot);
-	if (irq > 0) {
-		pcie_init_irq(php_slot, irq);
-		return;
-	}
-
-	/*
-	 * Use MSI if MSIx doesn't work. Fail back to legacy INTx
-	 * if MSI doesn't work either
-	 */
-	ret = pci_enable_msi(pdev);
-	if (!ret || pdev->irq) {
-		irq = pdev->irq;
-		pcie_init_irq(php_slot, irq);
-	}
 }
 
 static int pnv_php_register_one(struct device_node *dn)
