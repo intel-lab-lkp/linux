@@ -31,7 +31,15 @@ int zl3073x_chan_state_update(struct zl3073x_dev *zldev, u8 index)
 	if (rc)
 		return rc;
 
-	/* Read df_offset vs tracked reference */
+	/* Read df_offset only when locked to a reference. In NCO mode
+	 * df_offset was captured at entry by nco_mode_set() - preserve it.
+	 */
+	if (!zl3073x_chan_is_locked(chan)) {
+		if (!zl3073x_chan_mode_is_nco(chan))
+			chan->df_offset = ZL_DPLL_DF_OFFSET_UNKNOWN;
+		return 0;
+	}
+
 	rc = zl3073x_poll_zero_u8(zldev, ZL_REG_DPLL_DF_READ(index),
 				  ZL_DPLL_DF_READ_SEM,
 				  ZL_POLL_DF_READ_TIMEOUT_US);
@@ -59,6 +67,64 @@ int zl3073x_chan_state_update(struct zl3073x_dev *zldev, u8 index)
 }
 
 /**
+ * zl3073x_chan_nco_mode_set - switch DPLL channel to NCO mode
+ * @zldev: pointer to zl3073x_dev structure
+ * @index: DPLL channel index
+ *
+ * Switches the channel to NCO mode, waits for the hardware to
+ * auto-capture the tracking offset via nco_auto_read, then reads
+ * the captured df_offset directly from the register.
+ *
+ * Return: 0 on success, <0 on error
+ */
+int zl3073x_chan_nco_mode_set(struct zl3073x_dev *zldev, u8 index)
+{
+	struct zl3073x_chan *chan = &zldev->chan[index];
+	u8 prev_mode;
+	u64 val;
+	int rc;
+
+	prev_mode = zl3073x_chan_mode_get(chan);
+	zl3073x_chan_mode_set(chan, ZL_DPLL_MODE_REFSEL_MODE_NCO);
+
+	rc = zl3073x_write_u8(zldev, ZL_REG_DPLL_MODE_REFSEL(index),
+			      chan->mode_refsel);
+	if (rc) {
+		zl3073x_chan_mode_set(chan, prev_mode);
+		return rc;
+	}
+
+	/* nco_auto_read captures the tracking offset at NCO entry
+	 * only from reflock or auto mode. From freerun/holdover the
+	 * captured value is stale.
+	 */
+	if (prev_mode != ZL_DPLL_MODE_REFSEL_MODE_REFLOCK &&
+	    prev_mode != ZL_DPLL_MODE_REFSEL_MODE_AUTO) {
+		chan->df_offset = ZL_DPLL_DF_OFFSET_UNKNOWN;
+		return 0;
+	}
+
+	/* Read df_offset captured by nco_auto_read during mode switch.
+	 * No DF_READ semaphore handshake needed - nco_auto_read
+	 * populates the register before the mode switch completes
+	 * (specified by the datasheet and verified by HW testing).
+	 * Mode switch already succeeded, so don't propagate a read failure
+	 * back to userspace.
+	 */
+	rc = zl3073x_read_u48(zldev, ZL_REG_DPLL_DF_OFFSET(index), &val);
+	if (rc) {
+		dev_warn(zldev->dev,
+			 "Failed to read DPLL%u df_offset: %pe\n",
+			 index, ERR_PTR(rc));
+		chan->df_offset = ZL_DPLL_DF_OFFSET_UNKNOWN;
+	} else {
+		chan->df_offset = sign_extend64(val, 47);
+	}
+
+	return 0;
+}
+
+/**
  * zl3073x_chan_state_fetch - fetch DPLL channel state from hardware
  * @zldev: pointer to zl3073x_dev structure
  * @index: DPLL channel index to fetch state for
@@ -73,6 +139,10 @@ int zl3073x_chan_state_fetch(struct zl3073x_dev *zldev, u8 index)
 	struct zl3073x_chan *chan = &zldev->chan[index];
 	int rc, i;
 
+	rc = zl3073x_read_u8(zldev, ZL_REG_DPLL_CTRL(index), &chan->ctrl);
+	if (rc)
+		return rc;
+
 	rc = zl3073x_read_u8(zldev, ZL_REG_DPLL_MODE_REFSEL(index),
 			     &chan->mode_refsel);
 	if (rc)
@@ -84,6 +154,20 @@ int zl3073x_chan_state_fetch(struct zl3073x_dev *zldev, u8 index)
 	rc = zl3073x_chan_state_update(zldev, index);
 	if (rc)
 		return rc;
+
+	/* If channel was configured in NCO mode by firmware, read the
+	 * df_offset directly from the register. chan_state_update()
+	 * skips it because the channel is not locked.
+	 */
+	if (zl3073x_chan_mode_is_nco(chan)) {
+		u64 n;
+
+		rc = zl3073x_read_u48(zldev, ZL_REG_DPLL_DF_OFFSET(index), &n);
+		if (rc)
+			chan->df_offset = ZL_DPLL_DF_OFFSET_UNKNOWN;
+		else
+			chan->df_offset = sign_extend64(n, 47);
+	}
 
 	dev_dbg(zldev->dev,
 		"DPLL%u lock_state: %u, ho: %u, sel_state: %u, sel_ref: %u\n",
@@ -147,7 +231,15 @@ int zl3073x_chan_state_set(struct zl3073x_dev *zldev, u8 index,
 	if (!memcmp(&dchan->cfg, &chan->cfg, sizeof(chan->cfg)))
 		return 0;
 
-	/* Direct register write for mode_refsel */
+	/* Direct register writes for ctrl and mode_refsel */
+	if (dchan->ctrl != chan->ctrl) {
+		rc = zl3073x_write_u8(zldev, ZL_REG_DPLL_CTRL(index),
+				      chan->ctrl);
+		if (rc)
+			return rc;
+		dchan->ctrl = chan->ctrl;
+	}
+
 	if (dchan->mode_refsel != chan->mode_refsel) {
 		rc = zl3073x_write_u8(zldev, ZL_REG_DPLL_MODE_REFSEL(index),
 				      chan->mode_refsel);
