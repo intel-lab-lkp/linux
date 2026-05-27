@@ -97,6 +97,32 @@ properties:
     required:
       - compatible
 
+  marvell,mv88e6xxx-avb-mode:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Marvell MV88E6xxx switches that support Audio Video Bridging /
+      Time-Sensitive Networking (AVB/TSN) traffic prioritization can have
+      ports configured in one of several modes. These modes control the
+      handling of frames with non-AVB frame priorities and destination
+      addresses.
+    oneOf:
+      - description:
+          Standard Mode. Frames whose priority is mapped to an AVB
+          traffic class (TC) are considered AVB frames; other frames are
+          considered legacy (non-AVB).
+        const: 0
+      - description:
+          Enhanced Mode. Frames whose priority is mapped to an AVB TC
+          and for which a static FDB or MDB entry exists are considered
+          AVB frames. Frames with an AVB TC but no matching FDB or MDB
+          entry are dropped. AVB MDB entries can be added using the
+          MDB_FLAGS_STREAM_RESERVED netlink flag.
+        const: 1
+      - description:
+          Secure Mode. As Enhanced Mode, but the matching FDB or MDB
+          entry must also have the source port's bit set.
+        const: 2
+
 allOf:
   - $ref: dsa.yaml#/$defs/ethernet-ports
 
