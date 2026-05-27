@@ -248,8 +248,23 @@ time it will be set using the Dirty tracking mechanism described above.
 :Arch:		any
 :Protects:	- kvm_usage_count
 		- hardware virtualization enable/disable
-:Comment:	Exists to allow taking cpus_read_lock() while kvm_usage_count is
-		protected, which simplifies the virtualization enabling logic.
+:Comment:       ``kvm_usage_count`` serves to deduplicate hardware
+    virtualization enabling and disabling requests from different VMs
+    being created.
+
+    Hardware virtualization enabling/disabling requires taking
+    ``cpus_read_lock()``.
+
+    ``kvm_lock`` used to also protect ``kvm_usage_count``, but other
+    parts of the Linux kernel holding ``cpus_read_lock()`` need to
+    call into KVM to ensure that VM state remains consistent with the
+    host's state. For example, when the CPU frequency changes, KVM is
+    notified. ``kvmclock_cpufreq_notifier()`` takes ``kvm_lock`` to
+    iterate ``vm_list``.
+
+    To decouple these, use different locks, ``kvm_lock`` for
+    ``vm_list`` and ``kvm_usage_lock`` for enabling/disabling hardware
+    virtualization.
 
 ``kvm->mn_invalidate_lock``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
