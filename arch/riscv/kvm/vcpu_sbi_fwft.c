@@ -279,8 +279,8 @@ static int kvm_fwft_get_feature(struct kvm_vcpu *vcpu, u32 feature,
 		return SBI_ERR_DENIED;
 	}
 
-	if (!tconf->supported || !tconf->enabled)
-		return SBI_ERR_NOT_SUPPORTED;
+	if (!tconf->feature->supported(vcpu))
+		return  SBI_ERR_NOT_SUPPORTED;
 
 	*conf = tconf;
 
@@ -361,11 +361,10 @@ static int kvm_sbi_ext_fwft_init(struct kvm_vcpu *vcpu)
 		feature = &features[i];
 		conf = &fwft->configs[i];
 		if (feature->supported)
-			conf->supported = feature->supported(vcpu);
+			conf->enabled = feature->supported(vcpu);
 		else
-			conf->supported = true;
+			conf->enabled = true;
 
-		conf->enabled = conf->supported;
 		conf->feature = feature;
 	}
 
@@ -406,7 +405,7 @@ static unsigned long kvm_sbi_ext_fwft_get_reg_count(struct kvm_vcpu *vcpu)
 			continue;
 
 		conf = kvm_sbi_fwft_get_config(vcpu, feature->id);
-		if (!conf || !conf->supported)
+		if (!conf || !feature->supported(vcpu))
 			continue;
 
 		ret++;
@@ -428,7 +427,7 @@ static int kvm_sbi_ext_fwft_get_reg_id(struct kvm_vcpu *vcpu, int index, u64 *re
 			continue;
 
 		conf = kvm_sbi_fwft_get_config(vcpu, feature->id);
-		if (!conf || !conf->supported)
+		if (!conf || !feature->supported(vcpu))
 			continue;
 
 		if (index == idx) {
@@ -463,7 +462,7 @@ static int kvm_sbi_ext_fwft_get_reg(struct kvm_vcpu *vcpu, unsigned long reg_num
 		return -ENOENT;
 
 	conf = kvm_sbi_fwft_get_config(vcpu, feature->id);
-	if (!conf || !conf->supported)
+	if (!conf || !feature->supported(vcpu))
 		return -ENOENT;
 
 	switch (reg_num - feature->first_reg_num) {
@@ -500,7 +499,7 @@ static int kvm_sbi_ext_fwft_set_reg(struct kvm_vcpu *vcpu, unsigned long reg_num
 		return -ENOENT;
 
 	conf = kvm_sbi_fwft_get_config(vcpu, feature->id);
-	if (!conf || !conf->supported)
+	if (!conf || !feature->supported(vcpu))
 		return -ENOENT;
 
 	switch (reg_num - feature->first_reg_num) {
