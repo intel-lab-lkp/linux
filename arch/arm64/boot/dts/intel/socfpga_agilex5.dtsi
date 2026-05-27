@@ -244,6 +244,7 @@
 			reg = <0x10da0000 0x1000>;
 			#address-cells = <3>;
 			#size-cells = <0>;
+			resets = <&rst I3C0_RESET>;
 			interrupts = <GIC_SPI 164 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clkmgr AGILEX5_L4_MP_CLK>;
 			status = "disabled";
@@ -255,6 +256,7 @@
 			reg = <0x10da1000 0x1000>;
 			#address-cells = <3>;
 			#size-cells = <0>;
+			resets = <&rst I3C1_RESET>;
 			interrupts = <GIC_SPI 165 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clkmgr AGILEX5_L4_MP_CLK>;
 			status = "disabled";
@@ -313,6 +315,7 @@
 			cdns,board-delay-ps = <4830>;
 			iommus = <&smmu 4>;
 			dma-coherent;
+			resets = <&rst NAND_RESET>;
 			status = "disabled";
 		};
 
