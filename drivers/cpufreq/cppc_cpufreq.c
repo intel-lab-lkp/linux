@@ -28,6 +28,52 @@
 
 static struct cpufreq_driver cppc_cpufreq_driver;
 
+/* Autonomous Selection boot parameter modes */
+enum {
+	AUTO_SEL_PERFORMANCE = 1,
+	AUTO_SEL_BALANCE_PERFORMANCE = 2,
+	AUTO_SEL_DEFAULT_EPP = 3,
+};
+
+static int auto_sel_mode;
+
+static int auto_sel_mode_set(const char *val, const struct kernel_param *kp)
+{
+	int *mode = kp->arg;
+
+	if (sysfs_streq(val, "performance") || sysfs_streq(val, "1"))
+		*mode = AUTO_SEL_PERFORMANCE;
+	else if (sysfs_streq(val, "balance_performance") || sysfs_streq(val, "2"))
+		*mode = AUTO_SEL_BALANCE_PERFORMANCE;
+	else if (sysfs_streq(val, "default_epp") || sysfs_streq(val, "3"))
+		*mode = AUTO_SEL_DEFAULT_EPP;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
+static int auto_sel_mode_get(char *buffer, const struct kernel_param *kp)
+{
+	int *mode = kp->arg;
+
+	switch (*mode) {
+	case AUTO_SEL_PERFORMANCE:
+		return sysfs_emit(buffer, "performance\n");
+	case AUTO_SEL_BALANCE_PERFORMANCE:
+		return sysfs_emit(buffer, "balance_performance\n");
+	case AUTO_SEL_DEFAULT_EPP:
+		return sysfs_emit(buffer, "default_epp\n");
+	default:
+		return sysfs_emit(buffer, "disabled\n");
+	}
+}
+
+static const struct kernel_param_ops auto_sel_mode_ops = {
+	.set = auto_sel_mode_set,
+	.get = auto_sel_mode_get,
+};
+
 #ifdef CONFIG_ACPI_CPPC_CPUFREQ_FIE
 static enum {
 	FIE_UNSET = -1,
@@ -645,7 +691,9 @@ static int cppc_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	unsigned int cpu = policy->cpu;
 	struct cppc_cpudata *cpu_data;
 	struct cppc_perf_caps *caps;
+	bool set_epp = true;
 	int ret;
+	u32 epp;
 
 	cpu_data = cppc_cpufreq_get_cpu_data(cpu);
 	if (!cpu_data) {
@@ -716,11 +764,87 @@ static int cppc_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	policy->cur = cppc_perf_to_khz(caps, caps->highest_perf);
 	cpu_data->perf_ctrls.desired_perf =  caps->highest_perf;
 
-	ret = cppc_set_perf(cpu, &cpu_data->perf_ctrls);
-	if (ret) {
-		pr_debug("Err setting perf value:%d on CPU:%d. ret:%d\n",
-			 caps->highest_perf, cpu, ret);
-		goto out;
+	/*
+	 * Enable autonomous mode on first init if boot param is set.
+	 * Check last_governor to detect first init and skip if auto_sel
+	 * is already enabled.
+	 */
+	if (auto_sel_mode && policy->last_governor[0] == '\0' &&
+	    !cpu_data->perf_ctrls.auto_sel) {
+		/* Init min/max_perf from caps if not already set by HW. */
+		if (!cpu_data->perf_ctrls.min_perf)
+			cpu_data->perf_ctrls.min_perf = caps->lowest_nonlinear_perf;
+		if (!cpu_data->perf_ctrls.max_perf)
+			cpu_data->perf_ctrls.max_perf = policy->boost_enabled ?
+				caps->highest_perf : caps->nominal_perf;
+
+		/*
+		 * In autonomous mode desired_perf is only a hint; EPP and
+		 * the platform drive actual selection within [min, max].
+		 * Initialize it to max_perf so HW starts at the upper bound.
+		 */
+		cpu_data->perf_ctrls.desired_perf = cpu_data->perf_ctrls.max_perf;
+
+		policy->cur = cppc_perf_to_khz(caps,
+					       cpu_data->perf_ctrls.desired_perf);
+
+		/*
+		 * Set EPP per mode. 'default_epp' preserves the BIOS/firmware
+		 * programmed EPP value. EPP is optional - some platforms may
+		 * not support it.
+		 */
+		switch (auto_sel_mode) {
+		case AUTO_SEL_PERFORMANCE:
+			epp = CPPC_EPP_PERFORMANCE_PREF;
+			break;
+		case AUTO_SEL_BALANCE_PERFORMANCE:
+			epp = CPPC_EPP_BALANCE_PERFORMANCE_PREF;
+			break;
+		default:
+			set_epp = false;
+			break;
+		}
+
+		if (set_epp) {
+			ret = cppc_set_epp(cpu, epp);
+			if (ret && ret != -EOPNOTSUPP)
+				pr_warn("Failed to set EPP for CPU%d (%d)\n", cpu, ret);
+			else if (!ret)
+				cpu_data->perf_ctrls.energy_perf = epp;
+		}
+
+		/* Program min/max/desired into CPPC regs (non-fatal on failure). */
+		ret = cppc_set_perf(cpu, &cpu_data->perf_ctrls);
+		if (ret)
+			pr_warn("set_perf failed CPU%d (%d); using HW values\n",
+				cpu, ret);
+
+		ret = cppc_set_auto_sel(cpu, true);
+		if (ret && ret != -EOPNOTSUPP)
+			pr_warn("auto_sel CPU%d failed (%d); using OS mode\n",
+				cpu, ret);
+		else if (!ret)
+			cpu_data->perf_ctrls.auto_sel = true;
+	}
+
+	if (cpu_data->perf_ctrls.auto_sel) {
+		/* Sync policy limits from HW when autonomous mode is active */
+		policy->min = cppc_perf_to_khz(caps,
+					       cpu_data->perf_ctrls.min_perf ?:
+					       caps->lowest_nonlinear_perf);
+		policy->max = cppc_perf_to_khz(caps,
+					       cpu_data->perf_ctrls.max_perf ?:
+					       (policy->boost_enabled ?
+						caps->highest_perf :
+						caps->nominal_perf));
+	} else {
+		/* Normal mode: governors control frequency */
+		ret = cppc_set_perf(cpu, &cpu_data->perf_ctrls);
+		if (ret) {
+			pr_debug("Err setting perf value:%d on CPU:%d. ret:%d\n",
+				 caps->highest_perf, cpu, ret);
+			goto out;
+		}
 	}
 
 	cppc_cpufreq_cpu_fie_init(policy);
@@ -1040,9 +1164,21 @@ static int __init cppc_cpufreq_init(void)
 
 static void __exit cppc_cpufreq_exit(void)
 {
+	unsigned int cpu;
+
+	for_each_present_cpu(cpu)
+		cppc_set_auto_sel(cpu, false);
+
 	cpufreq_unregister_driver(&cppc_cpufreq_driver);
 	cppc_freq_invariance_exit();
 }
+
+module_param_cb(auto_sel_mode, &auto_sel_mode_ops, &auto_sel_mode, 0444);
+MODULE_PARM_DESC(auto_sel_mode,
+		 "Enable CPPC autonomous performance selection at boot: "
+		 "performance or 1 (EPP=performance), "
+		 "balance_performance or 2 (EPP=balance_performance), "
+		 "default_epp or 3 (preserve BIOS/firmware EPP)");
 
 module_exit(cppc_cpufreq_exit);
 MODULE_AUTHOR("Ashwin Chaugule");
