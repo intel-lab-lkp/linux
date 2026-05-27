@@ -10,6 +10,11 @@ KVM Lock Overview
 The acquisition orders for mutexes are as follows:
 
 - cpus_read_lock() is taken outside kvm_lock
+    - Taking cpus_read_lock() outside of kvm_lock is problematic,
+      despite it being the official ordering, as it is quite easy to
+      unknowingly trigger cpus_read_lock() while holding kvm_lock.
+      Use caution when walking vm_list, e.g. avoid complex operations
+      when possible.
 
 - kvm_usage_lock is taken outside cpus_read_lock()
 
@@ -27,13 +32,6 @@ The acquisition orders for mutexes are as follows:
   use the same memslots array.  kvm->slots_lock and kvm->slots_arch_lock
   are taken on the waiting side when modifying memslots, so MMU notifiers
   must not take either kvm->slots_lock or kvm->slots_arch_lock.
-
-cpus_read_lock() vs kvm_lock:
-
-- Taking cpus_read_lock() outside of kvm_lock is problematic, despite that
-  being the official ordering, as it is quite easy to unknowingly trigger
-  cpus_read_lock() while holding kvm_lock.  Use caution when walking vm_list,
-  e.g. avoid complex operations when possible.
 
 For SRCU:
 
