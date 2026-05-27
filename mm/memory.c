@@ -3803,19 +3803,28 @@ vm_fault_t __vmf_anon_prepare(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	vm_fault_t ret = 0;
+	bool maybe_huge = pmd_none(*vmf->pmd);
 
-	if (likely(vma->anon_vma))
-		return 0;
-	if (anon_vma_lazy_enabled()) {
+	if (likely(vma->anon_vma)) {
+		if (!vma_is_anon_vma_lazy(vma) || !maybe_huge)
+			return 0;
+	}
+#ifdef CONFIG_ANON_VMA_LAZY
+	if (anon_vma_lazy_enabled() && !maybe_huge) {
 		vma_prepare_anon_vma_lazy(vma);
 		return 0;
 	}
+#endif
 	if (vmf->flags & FAULT_FLAG_VMA_LOCK) {
 		if (!mmap_read_trylock(vma->vm_mm))
 			return VM_FAULT_RETRY;
 	}
-	if (__anon_vma_prepare(vma))
+	if (!vma->anon_vma  && __anon_vma_prepare(vma))
 		ret = VM_FAULT_OOM;
+#ifdef CONFIG_ANON_VMA_LAZY
+	if (vma->anon_vma && maybe_huge && vma_upgrade_anon_vma_lazy(vma))
+		ret = VM_FAULT_OOM;
+#endif
 	if (vmf->flags & FAULT_FLAG_VMA_LOCK)
 		mmap_read_unlock(vma->vm_mm);
 	return ret;

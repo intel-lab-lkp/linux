@@ -452,13 +452,20 @@ int __anon_vma_prepare(struct vm_area_struct *vma)
 	return vma_prepare_anon_vma(vma, false, NULL);
 }
 
-static int vma_upgrade_anon_vma_lazy(struct vm_area_struct *vma)
+/**
+ * vma_upgrade_anon_vma_lazy - upgrade a VMA's lazy anon_vma to a regular one
+ * @vma: the VMA whose anon_vma_lazy is being upgraded
+ */
+int vma_upgrade_anon_vma_lazy(struct vm_area_struct *vma)
 {
-	anon_vma_tree_t vma_tree = vma->anon_vma;
+	anon_vma_tree_t anon_tree = READ_ONCE(vma->anon_vma);
 	struct anon_vma *parent_anon_vma = NULL;
 
-	if (anon_vma_tree_is_parent(vma_tree))
-		parent_anon_vma = anon_vma_tree_anon_vma(vma_tree);
+	VM_BUG_ON_VMA(!anon_tree, vma);
+	if (!anon_vma_tree_type(anon_tree))
+		return 0;
+	if (anon_vma_tree_is_parent(anon_tree))
+		parent_anon_vma = anon_vma_tree_anon_vma(anon_tree);
 	return vma_prepare_anon_vma(vma, true, parent_anon_vma);
 }
 

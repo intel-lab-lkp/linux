@@ -419,6 +419,11 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma);
 int  __anon_vma_prepare(struct vm_area_struct *vma);
 /* Called on first anon fault or from anon_vma_prepare(). */
 void vma_prepare_anon_vma_lazy(struct vm_area_struct *vma);
+/*
+ * Upgrade VMA ANON_VMA_LAZY to a regular anon_vma during fork, or when
+ * cloning ANON_VMA_TREE_PARENT or a hugepage VMA.
+ */
+int vma_upgrade_anon_vma_lazy(struct vm_area_struct *vma);
 void unlink_anon_vmas(struct vm_area_struct *vma);
 
 static inline int anon_vma_prepare(struct vm_area_struct *vma)

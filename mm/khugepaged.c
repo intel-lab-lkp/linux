@@ -1164,6 +1164,11 @@ static enum scan_result collapse_huge_page(struct mm_struct *mm, unsigned long a
 	if (result != SCAN_SUCCEED)
 		goto out_up_write;
 
+	/* Upgrade anon_vma_lazy to protect the anon_vma. */
+	if (vma_upgrade_anon_vma_lazy(vma)) {
+		result = SCAN_FAIL;
+		goto out_up_write;
+	}
 	anon_vma_tree_lock_write(vma->anon_vma);
 
 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, mm, address,
