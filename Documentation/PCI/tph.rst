@@ -47,14 +47,22 @@ Manage TPH
 
 To enable TPH for a device, use the following function::
 
-  int pcie_enable_tph(struct pci_dev *pdev, int mode);
+  int pcie_enable_tph(struct pci_dev *pdev, int mode,
+                      enum tph_req_policy req_policy);
 
 This function enables TPH support for device with a specific ST mode.
-Current supported modes include:
+
+Supported modes include:
 
   * PCI_TPH_ST_NS_MODE - NO ST Mode
   * PCI_TPH_ST_IV_MODE - Interrupt Vector Mode
   * PCI_TPH_ST_DS_MODE - Device Specific Mode
+
+Supported requester policies:
+
+  * TPH_REQ_AUTO - Auto select by hardware/root port capability
+  * TPH_REQ_STANDARD - Force standard TPH (8-bit Steering Tag)
+  * TPH_REQ_EXTENDED - Force extended TPH (16-bit Steering Tag)
 
 `pcie_enable_tph()` checks whether the requested mode is actually
 supported by the device before enabling. The device driver can figure out

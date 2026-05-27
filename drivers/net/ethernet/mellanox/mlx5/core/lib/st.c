@@ -55,7 +55,7 @@ struct mlx5_st *mlx5_st_create(struct mlx5_core_dev *dev)
 	}
 
 	/* The OS doesn't support ST */
-	ret = pcie_enable_tph(pdev, PCI_TPH_ST_DS_MODE);
+	ret = pcie_enable_tph(pdev, PCI_TPH_ST_DS_MODE, TPH_REQ_AUTO);
 	if (ret)
 		return NULL;
 

@@ -373,14 +373,21 @@ EXPORT_SYMBOL(pcie_disable_tph);
  *   - PCI_TPH_ST_IV_MODE: Interrupt Vector Mode
  *   - PCI_TPH_ST_DS_MODE: Device Specific Mode
  *
+ * @req_policy: TPH requester selection policy
+ *
+ *   - TPH_REQ_AUTO: Auto select by hardware/root port capability
+ *   - TPH_REQ_STANDARD: Force standard TPH (8-bit ST)
+ *   - TPH_REQ_EXTENDED: Force extended TPH (16-bit ST)
+ *
  * Check whether the mode is actually supported by the device before enabling
- * and return an error if not. Additionally determine what types of requests,
- * TPH or extended TPH, can be issued by the device based on its TPH requester
- * capability and the Root Port's completer capability.
+ * and return an error if not. Select TPH requester type according to
+ * @req_policy and negotiated capability between device and root port. Return
+ * error for invalid policy or unsupported extended TPH requests.
  *
  * Return: 0 on success, otherwise negative value (-errno)
  */
-int pcie_enable_tph(struct pci_dev *pdev, int mode)
+int pcie_enable_tph(struct pci_dev *pdev, int mode,
+		    enum tph_req_policy req_policy)
 {
 	u32 reg;
 	u8 dev_modes;
@@ -403,8 +410,18 @@ int pcie_enable_tph(struct pci_dev *pdev, int mode)
 
 	pdev->tph_mode = mode;
 
-	pdev->tph_req_type = pdev->tph_ext_requester ? PCI_TPH_REQ_EXT_TPH :
-						       PCI_TPH_REQ_TPH_ONLY;
+	if (req_policy == TPH_REQ_AUTO) {
+		pdev->tph_req_type = pdev->tph_ext_requester ?
+			PCI_TPH_REQ_EXT_TPH : PCI_TPH_REQ_TPH_ONLY;
+	} else if (req_policy == TPH_REQ_STANDARD) {
+		pdev->tph_req_type = PCI_TPH_REQ_TPH_ONLY;
+	} else if (req_policy == TPH_REQ_EXTENDED) {
+		if (!pdev->tph_ext_requester)
+			return -EINVAL;
+		pdev->tph_req_type = PCI_TPH_REQ_EXT_TPH;
+	} else {
+		return -EINVAL;
+	}
 
 	/* Write them into TPH control register */
 	pci_read_config_dword(pdev, pdev->tph_cap + PCI_TPH_CTRL, &reg);
