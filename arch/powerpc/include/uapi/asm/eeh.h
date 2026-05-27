@@ -16,8 +16,24 @@
 #define EEH_PE_STATE_UNAVAIL		5	/* Unavailable		*/
 
 /* EEH error types and functions */
-#define EEH_ERR_TYPE_32			0       /* 32-bits error	*/
-#define EEH_ERR_TYPE_64			1       /* 64-bits error	*/
+#define EEH_ERR_TYPE_FATAL                  0x1   /* Fatal error */
+#define EEH_ERR_TYPE_RECOVERED_RANDOM       0x2   /* Recovered random event */
+#define EEH_ERR_TYPE_RECOVERED_SPECIAL      0x3   /* Recovered special event */
+#define EEH_ERR_TYPE_CORRUPTED_PAGE         0x4   /* Corrupted page */
+#define EEH_ERR_TYPE_CORRUPTED_SLB          0x5   /* Corrupted SLB */
+#define EEH_ERR_TYPE_TRANSLATOR_FAILURE     0x6   /* Translator failure */
+#define EEH_ERR_TYPE_32                     0x7   /* 32-bit IOA bus error */
+#define EEH_ERR_TYPE_PLATFORM_SPECIFIC      0x8   /* Platform specific */
+#define EEH_ERR_TYPE_CORRUPTED_DCACHE_START 0x9   /* Corrupted D-cache start */
+#define EEH_ERR_TYPE_CORRUPTED_DCACHE_END   0xA   /* Corrupted D-cache end */
+#define EEH_ERR_TYPE_CORRUPTED_ICACHE_START 0xB   /* Corrupted I-cache start */
+#define EEH_ERR_TYPE_CORRUPTED_ICACHE_END   0xC   /* Corrupted I-cache end */
+#define EEH_ERR_TYPE_CORRUPTED_TLB_START    0xD   /* Corrupted TLB start */
+#define EEH_ERR_TYPE_CORRUPTED_TLB_END      0xE   /* Corrupted TLB end */
+#define EEH_ERR_TYPE_64                     0xF   /* 64-bit IOA bus error */
+#define EEH_ERR_TYPE_UPSTREAM_IO_ERROR      0x10  /* Upstream IO error */
+
+/* EEH supported function types */
 #define EEH_ERR_FUNC_MIN		0
 #define EEH_ERR_FUNC_LD_MEM_ADDR	0	/* Memory load	*/
 #define EEH_ERR_FUNC_LD_MEM_DATA	1

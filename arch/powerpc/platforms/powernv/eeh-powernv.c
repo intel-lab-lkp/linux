@@ -1169,8 +1169,15 @@ static int pnv_eeh_err_inject(struct eeh_pe *pe, int type, int func,
 	struct pnv_phb *phb = hose->private_data;
 	s64 rc;
 
-	if (type != OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR &&
-	    type != OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR64) {
+	/* Map generic EEH Type to OPAL Type */
+	switch (type) {
+	case EEH_ERR_TYPE_32:
+		type = OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR;
+		break;
+	case EEH_ERR_TYPE_64:
+		type = OPAL_ERR_INJECT_TYPE_IOA_BUS_ERR64;
+		break;
+	default:
 		pr_warn("%s: Invalid error type %d\n",
 			__func__, type);
 		return -ERANGE;
