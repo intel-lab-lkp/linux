@@ -27,6 +27,9 @@ extern int pnv_pci_set_power_state(uint64_t id, uint8_t state,
 int64_t pnv_opal_pci_msi_eoi(struct irq_data *d);
 bool is_pnv_opal_msi(struct irq_chip *chip);
 
+/* To be set for hotplug operations for PCIe/OpenCAPI */
+struct pnv_php_backend_ops;
+
 struct pnv_php_slot {
 	struct hotplug_slot		slot;
 	uint64_t			id;
@@ -50,10 +53,23 @@ struct pnv_php_slot {
 	void				*fdt;
 	void				*dt;
 	struct of_changeset		ocs;
+	const struct pnv_php_backend_ops *backend_ops;
 	struct pnv_php_slot		*parent;
 	struct list_head		children;
 	struct list_head		link;
 };
+
+struct pnv_php_backend_ops {
+	void (*enable_irq)(struct pnv_php_slot *slot);
+	void (*disable_irq)(struct pnv_php_slot *slot, bool disable_device, bool disable_msi);
+	void (*fixup_presence_state)(struct pnv_php_slot *slot, u8 *presence);
+	void  (*get_attention_state)(struct pnv_php_slot *slot, u8 *state);
+	void  (*set_attention_state)(struct pnv_php_slot *slot, u8 state);
+	void (*fundamental_reset)(struct pnv_php_slot *slot);
+	void (*detect_surprise_removal)(struct pnv_php_slot *slot);
+	int  (*reset_slot)(struct pnv_php_slot *slot, bool probe);
+};
+
 extern struct pnv_php_slot *pnv_php_find_slot(struct device_node *dn);
 extern int pnv_php_set_slot_power_state(struct hotplug_slot *slot,
 					uint8_t state);
