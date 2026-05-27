@@ -1237,23 +1237,37 @@ u32 nvme_command_effects(struct nvme_ctrl *ctrl, struct nvme_ns *ns, u8 opcode)
 }
 EXPORT_SYMBOL_NS_GPL(nvme_command_effects, "NVME_TARGET_PASSTHRU");
 
-u32 nvme_passthru_start(struct nvme_ctrl *ctrl, struct nvme_ns *ns, u8 opcode)
+int nvme_passthru_start(struct nvme_ctrl *ctrl, struct nvme_ns *ns, u8 opcode,
+			u32 *effects)
 {
-	u32 effects = nvme_command_effects(ctrl, ns, opcode);
+	*effects = nvme_command_effects(ctrl, ns, opcode);
 
 	/*
 	 * For simplicity, IO to all namespaces is quiesced even if the command
-	 * effects say only one namespace is affected.
+	 * effects say only one namespace is affected.  Bound the drain wait so
+	 * a stuck I/O cannot wedge the passthrough caller (and any task on the
+	 * scan_lock or subsys lock) indefinitely; the other in-tree callers of
+	 * the freeze drain (pci shutdown, tcp/rdma reset) already use this same
+	 * NVME_IO_TIMEOUT bound.
 	 */
-	if (effects & NVME_CMD_EFFECTS_CSE_MASK) {
+	if (*effects & NVME_CMD_EFFECTS_CSE_MASK) {
 		mutex_lock(&ctrl->scan_lock);
 		mutex_lock(&ctrl->subsys->lock);
 		nvme_mpath_start_freeze(ctrl->subsys);
 		nvme_mpath_wait_freeze(ctrl->subsys);
 		nvme_start_freeze(ctrl);
-		nvme_wait_freeze(ctrl);
+		if (!nvme_wait_freeze_timeout(ctrl, NVME_IO_TIMEOUT)) {
+			dev_warn(ctrl->device,
+				 "I/O did not drain in %u seconds; aborting passthrough\n",
+				 nvme_io_timeout);
+			nvme_unfreeze(ctrl);
+			nvme_mpath_unfreeze(ctrl->subsys);
+			mutex_unlock(&ctrl->subsys->lock);
+			mutex_unlock(&ctrl->scan_lock);
+			return -EBUSY;
+		}
 	}
-	return effects;
+	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(nvme_passthru_start, "NVME_TARGET_PASSTHRU");
 

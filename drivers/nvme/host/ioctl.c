@@ -176,7 +176,12 @@ static int nvme_submit_user_cmd(struct request_queue *q,
 	bio = req->bio;
 	ctrl = nvme_req(req)->ctrl;
 
-	effects = nvme_passthru_start(ctrl, ns, cmd->common.opcode);
+	ret = nvme_passthru_start(ctrl, ns, cmd->common.opcode, &effects);
+	if (ret) {
+		if (bio)
+			blk_rq_unmap_user(bio);
+		goto out_free_req;
+	}
 	ret = nvme_execute_rq(req, false);
 	if (result)
 		*result = le64_to_cpu(nvme_req(req)->result.u64);

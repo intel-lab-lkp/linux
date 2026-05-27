@@ -220,7 +220,12 @@ static void nvmet_passthru_execute_cmd_work(struct work_struct *w)
 	u32 effects;
 	int status;
 
-	effects = nvme_passthru_start(ctrl, ns, req->cmd->common.opcode);
+	status = nvme_passthru_start(ctrl, ns, req->cmd->common.opcode, &effects);
+	if (status) {
+		nvmet_req_complete(req, NVME_SC_INTERNAL);
+		blk_mq_free_request(rq);
+		return;
+	}
 	status = nvme_execute_rq(rq, false);
 	if (status == NVME_SC_SUCCESS &&
 	    req->cmd->common.opcode == nvme_admin_identify) {
