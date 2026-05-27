@@ -1403,14 +1403,17 @@ static int fmh_gpib_attach_impl(struct gpib_board *board, const struct gpib_boar
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "gpib_control_status");
 	if (!res) {
 		dev_err(board->dev, "Unable to locate mmio resource\n");
-		return -ENODEV;
+		retval = -ENODEV;
+		return retval;
 	}
 
 	if (request_mem_region(res->start,
 			       resource_size(res),
 			       pdev->name) == NULL) {
 		dev_err(board->dev, "cannot claim registers\n");
-		return -ENXIO;
+		retval = -ENXIO;
+		return retval;
+
 	}
 	e_priv->gpib_iomem_res = res;
 
@@ -1418,7 +1421,8 @@ static int fmh_gpib_attach_impl(struct gpib_board *board, const struct gpib_boar
 				     resource_size(e_priv->gpib_iomem_res));
 	if (!nec_priv->mmiobase) {
 		dev_err(board->dev, "Could not map I/O memory\n");
-		return -ENOMEM;
+		retval = -ENOMEM;
+		goto err_release_gpib_region;
 	}
 	dev_dbg(board->dev, "iobase %pr remapped to %p\n",
 		e_priv->gpib_iomem_res, nec_priv->mmiobase);
@@ -1426,42 +1430,48 @@ static int fmh_gpib_attach_impl(struct gpib_board *board, const struct gpib_boar
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "dma_fifos");
 	if (!res) {
 		dev_err(board->dev, "Unable to locate mmio resource for gpib dma port\n");
-		return -ENODEV;
+		retval = -ENODEV;
+		goto err_iounmap_gpib;
 	}
 	if (request_mem_region(res->start,
 			       resource_size(res),
 			       pdev->name) == NULL) {
 		dev_err(board->dev, "cannot claim registers\n");
-		return -ENXIO;
+		retval = -ENXIO;
+		goto err_iounmap_gpib;
 	}
 	e_priv->dma_port_res = res;
 	e_priv->fifo_base = ioremap(e_priv->dma_port_res->start,
 				    resource_size(e_priv->dma_port_res));
 	if (!e_priv->fifo_base) {
 		dev_err(board->dev, "Could not map I/O memory for fifos\n");
-		return -ENOMEM;
+		retval = -ENOMEM;
+		goto err_release_dma_region;
 	}
 	dev_dbg(board->dev, "dma fifos 0x%lx remapped to %p, length=%ld\n",
 		(unsigned long)e_priv->dma_port_res->start, e_priv->fifo_base,
 		(unsigned long)resource_size(e_priv->dma_port_res));
 
 	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
-		return -EBUSY;
+	if (irq < 0) {
+		retval = -EBUSY;
+		goto err_iounmap_fifo;
+	}
+	e_priv->irq = irq;
 	retval = request_irq(irq, fmh_gpib_interrupt, IRQF_SHARED, pdev->name, board);
 	if (retval) {
 		dev_err(board->dev,
 			"cannot register interrupt handler err=%d\n",
 			retval);
-		return retval;
+		goto err_iounmap_fifo;
 	}
-	e_priv->irq = irq;
 
 	if (acquire_dma) {
 		e_priv->dma_channel = dma_request_slave_channel(board->dev, "rxtx");
 		if (!e_priv->dma_channel) {
 			dev_err(board->dev, "failed to acquire dma channel \"rxtx\".\n");
-			return -EIO;
+			retval = -EIO;
+			goto err_free_irq;
 		}
 	}
 	/*
@@ -1473,6 +1483,20 @@ static int fmh_gpib_attach_impl(struct gpib_board *board, const struct gpib_boar
 		fifo_max_burst_length_mask;
 
 	return fmh_gpib_init(e_priv, board, handshake_mode);
+
+err_free_irq:
+	free_irq(e_priv->irq, board);
+err_iounmap_fifo:
+	iounmap(e_priv->fifo_base);
+err_release_dma_region:
+	release_mem_region(e_priv->dma_port_res->start,
+				resource_size(e_priv->dma_port_res));
+err_iounmap_gpib:
+	iounmap(nec_priv->mmiobase);
+err_release_gpib_region:
+	release_mem_region(e_priv->gpib_iomem_res->start,
+				resource_size(e_priv->gpib_iomem_res));
+	return retval;
 }
 
 int fmh_gpib_attach_holdoff_all(struct gpib_board *board, const struct gpib_board_config *config)
