@@ -104,13 +104,15 @@ test_stream(struct i915_perf *perf)
 	struct i915_perf_stream *stream;
 	struct intel_gt *gt;
 
-	if (!props.engine)
-		return NULL;
-
 	gt = props.engine->gt;
 
 	if (!oa_config)
 		return NULL;
+
+	if (!props.engine) {
+		i915_oa_config_put(oa_config);
+		return NULL;
+	}
 
 	props.metrics_set = oa_config->id;
 
