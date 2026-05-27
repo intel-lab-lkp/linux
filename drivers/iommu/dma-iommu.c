@@ -1515,8 +1515,14 @@ int iommu_dma_map_sg(struct device *dev, struct scatterlist *sg, int nents,
 	 * implementation - it knows better than we do.
 	 */
 	ret = iommu_map_sg(domain, iova, sg, nents, prot, GFP_ATOMIC);
-	if (ret < 0 || ret < iova_len)
+	if (ret < 0 || ret < iova_len) {
+		if (ret > 0) {
+			/* Unmap partially mapped bytes before freeing IOVA */
+			if (iommu_unmap(domain, iova, ret) != ret)
+				ret = -EIO;
+		}
 		goto out_free_iova;
+	}
 
 	return __finalise_sg(dev, sg, nents, iova);
 
@@ -1525,7 +1531,7 @@ out_free_iova:
 out_restore_sg:
 	__invalidate_sg(sg, nents);
 out:
-	if (ret != -ENOMEM && ret != -EREMOTEIO)
+	if (ret != -ENOMEM && ret != -EREMOTEIO && ret != -EIO)
 		return -EINVAL;
 	return ret;
 }
