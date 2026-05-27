@@ -58,6 +58,7 @@
 #include "intel_modeset_setup.h"
 #include "intel_opregion.h"
 #include "intel_overlay.h"
+#include "intel_parent.h"
 #include "intel_pmdemand.h"
 #include "intel_pps.h"
 #include "intel_psr.h"
@@ -834,7 +835,7 @@ static bool suspend_to_idle(void)
 	return false;
 }
 
-void intel_display_driver_pm_enable_d3cold(struct intel_display *display)
+static void intel_display_driver_pm_enable_d3cold(struct intel_display *display)
 {
 	/*
 	 * We do a lot of poking in a lot of registers, make sure they work
@@ -852,7 +853,7 @@ void intel_display_driver_pm_enable_d3cold(struct intel_display *display)
 		intel_hpd_poll_enable(display);
 }
 
-void intel_display_driver_pm_disable_d3cold(struct intel_display *display)
+static void intel_display_driver_pm_disable_d3cold(struct intel_display *display)
 {
 	intel_dmc_resume(display);
 
@@ -950,11 +951,19 @@ void intel_display_driver_pm_resume(struct intel_display *display)
 
 void intel_display_driver_pm_runtime_suspend(struct intel_display *display)
 {
+	if (intel_parent_d3cold_allowed(display)) {
+		intel_display_driver_pm_enable_d3cold(display);
+		return;
+	}
+
 	intel_hpd_poll_enable(display);
 }
 
 void intel_display_driver_pm_runtime_suspend_late(struct intel_display *display)
 {
+	if (intel_parent_d3cold_allowed(display))
+		intel_display_driver_pm_suspend_late(display);
+
 	/*
 	 * If xe_display_pm_suspend_late() is not called, it is likely
 	 * that we will be on dynamic DC states with DMC wakelock enabled. We
@@ -965,6 +974,11 @@ void intel_display_driver_pm_runtime_suspend_late(struct intel_display *display)
 
 void intel_display_driver_pm_runtime_resume(struct intel_display *display)
 {
+	if (intel_parent_d3cold_allowed(display)) {
+		intel_display_driver_pm_disable_d3cold(display);
+		return;
+	}
+
 	intel_hpd_init(display);
 	intel_hpd_poll_disable(display);
 	skl_watermark_ipc_update(display);

@@ -248,11 +248,6 @@ void xe_display_pm_runtime_suspend(struct xe_device *xe)
 	if (!xe->info.probe_display)
 		return;
 
-	if (xe->d3cold.allowed) {
-		intel_display_driver_pm_enable_d3cold(display);
-		return;
-	}
-
 	intel_display_driver_pm_runtime_suspend(display);
 }
 
@@ -272,9 +267,6 @@ void xe_display_pm_runtime_suspend_late(struct xe_device *xe)
 
 	if (!xe->info.probe_display)
 		return;
-
-	if (xe->d3cold.allowed)
-		intel_display_driver_pm_suspend_late(display);
 
 	intel_display_driver_pm_runtime_suspend_late(display);
 }
@@ -316,11 +308,6 @@ void xe_display_pm_runtime_resume(struct xe_device *xe)
 	if (!xe->info.probe_display)
 		return;
 
-	if (xe->d3cold.allowed) {
-		intel_display_driver_pm_disable_d3cold(display);
-		return;
-	}
-
 	intel_display_driver_pm_runtime_resume(display);
 }
 
@@ -350,6 +337,13 @@ static const struct intel_display_irq_interface xe_display_irq_interface = {
 	.synchronize = irq_synchronize,
 };
 
+static bool d3cold_allowed(struct drm_device *drm)
+{
+	struct xe_device *xe = to_xe_device(drm);
+
+	return xe->d3cold.allowed;
+}
+
 static bool has_auxccs(struct drm_device *drm)
 {
 	struct xe_device *xe = to_xe_device(drm);
@@ -369,6 +363,7 @@ static const struct intel_display_parent_interface parent = {
 	.pcode = &xe_display_pcode_interface,
 	.rpm = &xe_display_rpm_interface,
 	.stolen = &xe_display_stolen_interface,
+	.d3cold_allowed = d3cold_allowed,
 	.has_auxccs = has_auxccs,
 };
 

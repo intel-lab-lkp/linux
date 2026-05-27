@@ -40,8 +40,6 @@ void intel_display_driver_suspend_access(struct intel_display *display);
 void intel_display_driver_resume_access(struct intel_display *display);
 bool intel_display_driver_check_access(struct intel_display *display);
 
-void intel_display_driver_pm_enable_d3cold(struct intel_display *display);
-void intel_display_driver_pm_disable_d3cold(struct intel_display *display);
 void intel_display_driver_pm_suspend(struct intel_display *display);
 void intel_display_driver_pm_suspend_late(struct intel_display *display);
 void intel_display_driver_pm_resume_early(struct intel_display *display);

@@ -439,6 +439,11 @@ void intel_parent_fence_priority_display(struct intel_display *display, struct d
 		display->parent->fence_priority_display(fence);
 }
 
+bool intel_parent_d3cold_allowed(struct intel_display *display)
+{
+	return display->parent->d3cold_allowed && display->parent->d3cold_allowed(display->drm);
+}
+
 bool intel_parent_has_auxccs(struct intel_display *display)
 {
 	return display->parent->has_auxccs && display->parent->has_auxccs(display->drm);

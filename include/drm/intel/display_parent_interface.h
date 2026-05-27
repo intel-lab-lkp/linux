@@ -294,6 +294,9 @@ struct intel_display_parent_interface {
 		/** @fence_priority_display: Set display priority. Optional. */
 		void (*fence_priority_display)(struct dma_fence *fence);
 
+		/** @d3cold_allowed: Is d3cold allowed. Optional. */
+		bool (*d3cold_allowed)(struct drm_device *drm);
+
 		/** @has_auxccs: Are AuxCCS formats supported by the parent. Optional. */
 		bool (*has_auxccs)(struct drm_device *drm);
 

@@ -151,6 +151,7 @@ u32 intel_parent_vlv_iosf_read(struct intel_display *display, enum vlv_iosf_sb_u
 int intel_parent_vlv_iosf_write(struct intel_display *display, enum vlv_iosf_sb_unit unit, u32 addr, u32 val);
 
 /* generic */
+bool intel_parent_d3cold_allowed(struct intel_display *display);
 bool intel_parent_has_auxccs(struct intel_display *display);
 bool intel_parent_has_fenced_regions(struct intel_display *display);
 bool intel_parent_vgpu_active(struct intel_display *display);
