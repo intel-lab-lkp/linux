@@ -701,6 +701,79 @@ out:
 	return anon_vma;
 }
 
+anon_rmap_t vma_get_anon_rmap(struct vm_area_struct *vma)
+{
+	mmap_assert_locked(vma->vm_mm);
+	VM_BUG_ON(!vma->anon_vma);
+	get_anon_vma(vma->anon_vma);
+	return anon_vma_to_anon_rmap(vma->anon_vma);
+}
+
+void put_anon_rmap(anon_rmap_t anon_rmap)
+{
+	put_anon_vma(anon_rmap_to_anon_vma(anon_rmap));
+}
+
+void anon_rmap_lock_write(anon_rmap_t anon_rmap)
+{
+	anon_vma_lock_write(anon_rmap_to_anon_vma(anon_rmap));
+}
+
+int anon_rmap_trylock_write(anon_rmap_t anon_rmap)
+{
+	return anon_vma_trylock_write(anon_rmap_to_anon_vma(anon_rmap));
+}
+
+void anon_rmap_unlock_write(anon_rmap_t anon_rmap)
+{
+	anon_vma_unlock_write(anon_rmap_to_anon_vma(anon_rmap));
+}
+
+void anon_rmap_lock_read(anon_rmap_t anon_rmap)
+{
+	anon_vma_lock_read(anon_rmap_to_anon_vma(anon_rmap));
+}
+
+int anon_rmap_trylock_read(anon_rmap_t anon_rmap)
+{
+	return anon_vma_trylock_read(anon_rmap_to_anon_vma(anon_rmap));
+}
+
+void anon_rmap_unlock_read(anon_rmap_t anon_rmap)
+{
+	anon_vma_unlock_read(anon_rmap_to_anon_vma(anon_rmap));
+}
+
+bool folio_maybe_same_anon_vma(const struct folio *folio,
+	const struct vm_area_struct *vma)
+{
+	struct anon_vma *anon_vma;
+	struct anon_vma *tgt_anon_vma = vma->anon_vma;
+	bool same = false;
+
+	rcu_read_lock();
+	anon_vma = folio_anon_vma(folio);
+	if (anon_vma && tgt_anon_vma)
+		same = anon_vma->root == tgt_anon_vma->root;
+	rcu_read_unlock();
+	return same;
+}
+
+anon_rmap_t folio_get_anon_rmap(const struct folio *folio)
+{
+	struct anon_vma *anon_vma = folio_get_anon_vma(folio);
+
+	return anon_vma ? anon_vma_to_anon_rmap(anon_vma) : ANON_RMAP_NULL;
+}
+
+anon_rmap_t folio_lock_anon_rmap_read(const struct folio *folio,
+				      struct rmap_walk_control *rwc)
+{
+	struct anon_vma *anon_vma = folio_lock_anon_vma_read(folio, rwc);
+
+	return anon_vma ? anon_vma_to_anon_rmap(anon_vma) : ANON_RMAP_NULL;
+}
+
 #ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
 /*
  * Flush TLB entries for recently unmapped pages from remote CPUs. It is

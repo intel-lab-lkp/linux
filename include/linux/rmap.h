@@ -937,6 +937,44 @@ int pfn_mkclean_range(unsigned long pfn, unsigned long nr_pages, pgoff_t pgoff,
 void remove_migration_ptes(struct folio *src, struct folio *dst,
 		enum ttu_flags flags);
 
+/* Reverse mapping handle for anonymous folio rmap helpers. */
+typedef struct anon_rmap {
+	unsigned long rmap;
+} anon_rmap_t;
+
+#define ANON_RMAP_NULL make_anon_rmap(0)
+
+static inline anon_rmap_t make_anon_rmap(const void *anon_mapping)
+{
+	return (anon_rmap_t){ .rmap = (unsigned long)anon_mapping, };
+}
+
+static inline unsigned long anon_rmap_value(anon_rmap_t anon_rmap)
+{
+	return anon_rmap.rmap;
+}
+
+static inline anon_rmap_t anon_vma_to_anon_rmap(const struct anon_vma *anon_vma)
+{
+	return make_anon_rmap(anon_vma);
+}
+
+static inline struct anon_vma *anon_rmap_to_anon_vma(anon_rmap_t anon_rmap)
+{
+	unsigned long rmap = anon_rmap_value(anon_rmap);
+
+	return (struct anon_vma *)rmap;
+}
+
+anon_rmap_t vma_get_anon_rmap(struct vm_area_struct *vma);
+void put_anon_rmap(anon_rmap_t anon_rmap);
+void anon_rmap_lock_write(anon_rmap_t anon_rmap);
+int anon_rmap_trylock_write(anon_rmap_t anon_rmap);
+void anon_rmap_unlock_write(anon_rmap_t anon_rmap);
+void anon_rmap_lock_read(anon_rmap_t anon_rmap);
+int anon_rmap_trylock_read(anon_rmap_t anon_rmap);
+void anon_rmap_unlock_read(anon_rmap_t anon_rmap);
+
 /*
  * rmap_walk_control: To control rmap traversing for specific needs
  *
@@ -968,6 +1006,36 @@ void rmap_walk(struct folio *folio, struct rmap_walk_control *rwc);
 void rmap_walk_locked(struct folio *folio, struct rmap_walk_control *rwc);
 struct anon_vma *folio_lock_anon_vma_read(const struct folio *folio,
 					  struct rmap_walk_control *rwc);
+
+bool folio_maybe_same_anon_vma(const struct folio *folio,
+	const struct vm_area_struct *vma);
+anon_rmap_t folio_get_anon_rmap(const struct folio *folio);
+anon_rmap_t folio_lock_anon_rmap_read(const struct folio *folio,
+	struct rmap_walk_control *rwc);
+
+static inline struct vm_area_struct *anon_rmap_iter_first_vma(
+	anon_rmap_t anon_rmap, unsigned long start, unsigned long last,
+	struct anon_vma_chain **avc)
+{
+	struct anon_vma *anon_vma = anon_rmap_to_anon_vma(anon_rmap);
+
+	*avc = anon_vma_interval_tree_iter_first(&anon_vma->rb_root, start, last);
+	return *avc ? (*avc)->vma : NULL;
+}
+
+static inline struct vm_area_struct *anon_rmap_iter_next_vma(
+	anon_rmap_t anon_rmap, unsigned long start, unsigned long last,
+	struct anon_vma_chain **avc)
+{
+	if (!*avc)
+		return NULL;
+	*avc = anon_vma_interval_tree_iter_next(*avc, start, last);
+	return *avc ? (*avc)->vma : NULL;
+}
+
+#define anon_rmap_foreach_vma(vma, avc, anon_rmap, start, last) 	   \
+	for (vma = anon_rmap_iter_first_vma(anon_rmap, start, last, &avc); \
+	     vma; vma = anon_rmap_iter_next_vma(anon_rmap, start, last, &avc))
 
 #else	/* !CONFIG_MMU */
 
