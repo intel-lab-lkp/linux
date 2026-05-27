@@ -486,6 +486,10 @@ int drm_mode_create_lease_ioctl(struct drm_device *dev,
 	struct drm_file *lessee_priv;
 	int fd = -1;
 	uint32_t *object_ids;
+	static const size_t max_objects =
+		8 * sizeof(drm_crtc_mask(NULL)) +
+		8 * sizeof(drm_plane_mask(NULL)) +
+		8 * sizeof(drm_connector_mask(NULL));
 
 	/* Can't lease without MODESET */
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
@@ -505,6 +509,11 @@ int drm_mode_create_lease_ioctl(struct drm_device *dev,
 	}
 
 	object_count = cl->object_count;
+	if (object_count > max_objects) {
+		drm_dbg_lease(dev, "too many objects (%ld)\n", object_count);
+		ret = -EINVAL;
+		goto out_lessor;
+	}
 
 	/* Handle leased objects, if any */
 	idr_init(&leases);
