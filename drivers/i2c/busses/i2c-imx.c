@@ -922,7 +922,7 @@ static void i2c_imx_slave_init(struct imx_i2c_struct *i2c_imx)
 	i2c_imx_enable_bus_idle(i2c_imx);
 }
 
-static int i2c_imx_reg_slave(struct i2c_client *client)
+static int i2c_imx_reg_target(struct i2c_client *client)
 {
 	struct imx_i2c_struct *i2c_imx = i2c_get_adapdata(client->adapter);
 	int ret;
@@ -945,7 +945,7 @@ static int i2c_imx_reg_slave(struct i2c_client *client)
 	return 0;
 }
 
-static int i2c_imx_unreg_slave(struct i2c_client *client)
+static int i2c_imx_unreg_target(struct i2c_client *client)
 {
 	struct imx_i2c_struct *i2c_imx = i2c_get_adapdata(client->adapter);
 	int ret;
@@ -1704,8 +1704,8 @@ static const struct i2c_algorithm i2c_imx_algo = {
 	.xfer = i2c_imx_xfer,
 	.xfer_atomic = i2c_imx_xfer_atomic,
 	.functionality = i2c_imx_func,
-	.reg_slave = i2c_imx_reg_slave,
-	.unreg_slave = i2c_imx_unreg_slave,
+	.reg_target = i2c_imx_reg_target,
+	.unreg_target = i2c_imx_unreg_target,
 };
 
 static int i2c_imx_probe(struct platform_device *pdev)
