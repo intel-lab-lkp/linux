@@ -3184,14 +3184,62 @@ static void reset_ctrl_pos(struct lruvec *lruvec, int type, bool carryover)
 	}
 }
 
+/*
+ * positive_ctrl_err() - return true if SP is hotter than PV
+ *
+ * Drives MGLRU type and tier selection in get_type_to_scan() and
+ * get_tier_idx(). A true return means the setpoint is hotter than the process
+ * variable and reclaim should favor the other type or a higher tier.
+ *
+ * With reliable refault statistics on both sides, compare refault rates. That
+ * path dominates on large lruvecs under sustained memory pressure, including
+ * the node-level lruvec when memcg is disabled.
+ *
+ * Small memcg leaf lruvecs often lack reliable refault statistics: few pages,
+ * infrequent reclaim, and counters reset on generation advance. Treating a
+ * low PV refault count as unconditional evidence that SP is hotter ignores
+ * swappiness and tier gain and confuses "no samples yet" with "cold". Using
+ * the rate comparison when only SP lacks samples skews the ratio. The
+ * low-sample paths below apply gain-aware fallbacks and apply defaulting to SP
+ * is hotter when neither side has eviction history.
+ */
 static bool positive_ctrl_err(struct ctrl_pos *sp, struct ctrl_pos *pv)
 {
+	unsigned long pv_ref = pv->refaulted;
+	/* Used by the rate comparison (SP only) and the total fallback (both). */
+	unsigned long sp_total = sp->total + MIN_LRU_BATCH;
+	unsigned long pv_total = pv->total + MIN_LRU_BATCH;
+
+	/* Both sides: compare refault rates. */
+	if (sp->refaulted >= MIN_LRU_BATCH && pv->refaulted >= MIN_LRU_BATCH)
+		goto compare_rates;
+
 	/*
-	 * Return true if the PV has a limited number of refaults or a lower
-	 * refaulted/total than the SP.
+	 * SP only: PV refault count is not statistically meaningful; treat PV
+	 * refaults as zero and use the rate comparison (yields SP hotter).
 	 */
-	return pv->refaulted < MIN_LRU_BATCH ||
-	       pv->refaulted * (sp->total + MIN_LRU_BATCH) * sp->gain <=
+	if (sp->refaulted >= MIN_LRU_BATCH) {
+		pv_ref = 0;
+		goto compare_rates;
+	}
+
+	/* PV only: trust PV refault signal; SP is not hotter. */
+	if (pv->refaulted >= MIN_LRU_BATCH)
+		return false;
+
+	/* Neither side has eviction history, pv is colder */
+	if (!sp->total && !pv->total)
+		return true;
+
+	/* Neither side has enough refaults: compare gain-weighted totals. */
+	return sp->gain * pv_total <= pv->gain * sp_total;
+
+compare_rates:
+	/*
+	 * Rate comparison with margin on SP total and refault only; PV total is
+	 * not padded so a meaningful PV refault rate is preserved when sampled.
+	 */
+	return pv_ref * sp_total * sp->gain <=
 	       (sp->refaulted + 1) * pv->total * pv->gain;
 }
 
