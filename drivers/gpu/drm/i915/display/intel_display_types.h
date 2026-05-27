@@ -1035,6 +1035,7 @@ struct intel_crtc_state {
 		/* logical state of LUTs */
 		struct drm_property_blob *degamma_lut, *gamma_lut, *ctm;
 		struct drm_display_mode mode, pipe_mode, adjusted_mode;
+		u32 background_color;
 		enum drm_scaling_filter scaling_filter;
 		u8 sharpness_strength;
 	} hw;
@@ -1822,6 +1823,7 @@ struct intel_dp {
 	/* intersection of source and sink rates */
 	int num_common_rates;
 	int common_rates[DP_MAX_SUPPORTED_RATES];
+	int max_common_lane_count;
 	struct {
 		/* TODO: move the rest of link specific fields to here */
 		bool active;

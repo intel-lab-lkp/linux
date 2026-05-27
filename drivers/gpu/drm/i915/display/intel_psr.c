@@ -1508,15 +1508,21 @@ int _intel_psr_min_set_context_latency(const struct intel_crtc_state *crtc_state
 	 * SRD_STATUS is used by PSR1 and Panel Replay DP on LunarLake.
 	 */
 
-	if (DISPLAY_VER(display) >= 30 && (needs_panel_replay ||
-					   needs_sel_update))
+	if (needs_sel_update)
 		return 0;
-	else if (DISPLAY_VER(display) < 30 && (needs_sel_update ||
-					       intel_crtc_has_type(crtc_state,
-								   INTEL_OUTPUT_EDP)))
+
+	if (DISPLAY_VER(display) < 30 &&
+	    intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP))
 		return 0;
-	else
-		return 1;
+
+	if (DISPLAY_VER(display) >= 30 &&
+	    needs_panel_replay)
+		return 0;
+
+	if (intel_vrr_always_use_vrr_tg(display))
+		return 0;
+
+	return 1;
 }
 
 static bool _wake_lines_fit_into_vblank(const struct intel_crtc_state *crtc_state,
@@ -1902,7 +1908,7 @@ void intel_psr_set_non_psr_pipes(struct intel_dp *intel_dp,
 		return;
 
 	/* We ignore possible secondary PSR/Panel Replay capable eDP */
-	for_each_intel_crtc(display->drm, crtc)
+	for_each_intel_crtc(display, crtc)
 		active_pipes |= crtc->active ? BIT(crtc->pipe) : 0;
 
 	active_pipes = intel_calc_active_pipes(state, active_pipes);
@@ -2911,6 +2917,11 @@ intel_psr_apply_su_area_workarounds(struct intel_crtc_state *crtc_state)
 	    ((IS_DISPLAY_VERx100_STEP(display, 1400, STEP_A0, STEP_B0) ||
 	      display->platform.alderlake_p || display->platform.tigerlake)) &&
 	    crtc_state->splitter.enable)
+		crtc_state->psr2_su_area.y1 = 0;
+
+	if (intel_display_wa(display, INTEL_DISPLAY_WA_16029024088) &&
+	    crtc_state->req_psr2_sdp_prior_scanline &&
+	    !crtc_state->enable_psr2_su_region_et)
 		crtc_state->psr2_su_area.y1 = 0;
 
 	/* Wa 14019834836 */
