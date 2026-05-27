@@ -431,6 +431,16 @@ int __init xbc_snprint_cmdline(char *buf, size_t size, struct xbc_node *root)
 	const char *val, *q;
 	int ret;
 
+	/*
+	 * A leaf @root (e.g. an empty "kernel {}" subtree, or a key whose
+	 * only child is a value node) has no descendant key/value pairs to
+	 * render. The leaf-finding iterator below would otherwise return
+	 * @root itself, which xbc_node_compose_key_after() rejects with
+	 * -EINVAL.
+	 */
+	if (root && xbc_node_is_leaf(root))
+		return 0;
+
 	xbc_node_for_each_key_value(root, knode, val) {
 		ret = xbc_node_compose_key_after(root, knode,
 					xbc_namebuf, XBC_KEYLEN_MAX);
