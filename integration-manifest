@@ -1,0 +1,36 @@
+drm drm-fixes e7ae89a0c97ce2b68b0983cd01eda67cf373517d
+	Linux 7.1-rc5
+drm-misc drm-misc-fixes 44e151be23deb788d9f6124de93823faf6e04e99
+	accel/ivpu: prevent uninitialized data bug in debugfs
+drm-rust drm-rust-fixes 0a69ac25bd596d50823d530d0a2004336668c0df
+	rust: drm: fix unsound initialization in drm::Device::new
+drm-intel drm-intel-fixes 3549a9649dc7c5fc586ab12f675279283cdcb2a7
+	drm/i915/psr: Use DC_OFF wake reference to block DC6 on vblank enable
+drm-xe drm-xe-fixes 4d25342543c01310fc4e0cba7cb17c775e2421e2
+	drm/xe/oa: Fix exec_queue leak on width check in stream open
+drm drm-next a97a23ce3473c2323e1b63db414474b72b1c8a3b
+	Merge tag 'exynos-drm-next-for-v7.2' of git://git.kernel.org/pub/scm/linux/kernel/git/daeinki/drm-exynos into drm-next
+drm-misc drm-misc-next-fixes f6c73e7156b54d8b9ddf1a27f4e93d3a1e49a73e
+	drm: rcar-du: Fix crash when no CMM is available
+drm-intel drm-intel-next-fixes 314f6179e370988ac00dadf373a4f6166eb3db15
+	drm/i915/psr: Init variable to avoid early exit from et alignment loop
+drm-xe drm-xe-next-fixes 6de23f81a5e08be8fbf5e8d7e9febc72a5b5f27f
+	Linux 7.0-rc1
+drm-misc drm-misc-next 3c3c5fb9b36836d279ebe370189d68a0a3387362
+	dt-bindings: display: panel-lvds: Add Riverdi RVT70HSLNWCA0 and RVT101HVLNWC00
+drm-rust drm-rust-next 2cf1840b0fa7637b6731fd554529f8d57ea34c04
+	gpu: nova-core: vbios: remove unused rom_header field
+drm-intel drm-intel-next 771394b4fb6d7d8be5a90228cea53affd20617f5
+	drm/i915/power: drop resume parameter from intel_display_power_init_hw()
+drm-intel drm-intel-gt-next 6c064db893f548d57036fce17c6493808396e620
+	Revert "i915: don't use a vma that didn't match the context VM"
+drm-xe drm-xe-next 9462f2b677506d8d698e81bfa378bbfd65a19187
+	drm/xe/pm: Do early initialization in init_early()
+drm-intel topic/core-for-CI 42f6438f1d344694656e7eca76e2d02b109697b6
+	Revert "lockdep: Enable PROVE_RAW_LOCK_NESTING with PROVE_LOCKING."
+drm-xe topic/xe-for-CI bd9ef8d19f9e9ff47518ce48fb2002d58bfeeaaa
+	drm/xe/nvlp: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
+drm-intel topic/pipe-reorder 2c683e9b419328da3433a49f7c467da71aaf0469
+	drm/i915/display: change pipe allocation order for discrete platforms
