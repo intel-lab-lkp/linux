@@ -323,11 +323,9 @@ impl Vbios {
 
             // Convert to a specific image type
             match BiosImageType::try_from(image.pcir.code_type) {
-                Ok(BiosImageType::PciAt) => {
+                Ok(BiosImageType::PciAt) if pci_at_image.is_none() => {
                     // Silently ignore any extra PCI-AT images.
-                    if pci_at_image.is_none() {
-                        pci_at_image = Some(PciAtBiosImage::try_from(image)?);
-                    }
+                    pci_at_image = Some(PciAtBiosImage::try_from(image)?);
                 }
                 Ok(BiosImageType::FwSec) => fwsec_section = Some(image.data),
                 _ => {
