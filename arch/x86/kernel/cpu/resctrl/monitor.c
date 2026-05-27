@@ -278,6 +278,13 @@ int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_domain_hdr *hdr,
 
 	switch (r->rid) {
 	case RDT_RESOURCE_L3:
+		/*
+		 * No SNC for mmio based L3 occupancy, so there is no need
+		 * to convert logical RMID to a physical RMID via
+		 * logical_rmid_to_physical_rmid().
+		 */
+		if (erdt_enabled() && eventid == QOS_L3_OCCUP_EVENT_ID)
+			return erdt_mon_read(hdr, eventid, rmid, val);
 		return arch_l3_read_event(hdr, rmid, eventid, val, r);
 	case RDT_RESOURCE_PERF_PKG:
 		return intel_aet_read_event(hdr->id, rmid, arch_priv, val);
