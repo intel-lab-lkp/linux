@@ -43,8 +43,10 @@ write_buffer() {
 	id=$1
 	size=$2
 
-	# write the string into the raw marker
-	make_str $id $size > trace_marker_raw
+	# Pipe through dd to ensure a single atomic write() syscall.
+	# Shell's printf builtin uses stdio buffering which may split the
+	# output into multiple writes.
+	make_str $id $size | dd of=trace_marker_raw bs=`expr $size + 4` iflag=fullblock
 }
 
 
