@@ -414,4 +414,5 @@ struct keybuf_key *bch_keybuf_next_rescan(struct cache_set *c,
 					  struct bkey *end,
 					  keybuf_pred_fn *pred);
 void bch_update_bucket_in_use(struct cache_set *c, struct gc_stat *stats);
+void bkey_put(struct cache_set *c, struct bkey *k);
 #endif

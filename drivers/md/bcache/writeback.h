@@ -151,5 +151,6 @@ void bcache_dev_sectors_dirty_add(struct cache_set *c, unsigned int inode,
 void bch_sectors_dirty_init(struct bcache_device *d);
 void bch_cached_dev_writeback_init(struct cached_dev *dc);
 int bch_cached_dev_writeback_start(struct cached_dev *dc);
+void bch_writeback_finish_batch(struct cache_set *c);
 
 #endif

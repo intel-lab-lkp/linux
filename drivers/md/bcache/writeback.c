@@ -348,6 +348,111 @@ static CLOSURE_CALLBACK(dirty_io_destructor)
 	kfree(io);
 }
 
+static void writeback_batch_init(struct writeback_batch *wb)
+{
+	wb->count = 0;
+	spin_lock_init(&wb->lock);
+	array_allocator_init(&wb->pool);
+	INIT_LIST_HEAD(&wb->keys);
+}
+
+static void writeback_add_key(struct cached_dev *dc, struct bkey *key)
+{
+	struct writeback_bkey *bk;
+	unsigned int i;
+
+	spin_lock(&dc->writeback_batch.lock);
+	bk = array_alloc(&dc->writeback_batch.pool);
+	if (!bk) {
+		spin_unlock(&dc->writeback_batch.lock);
+		return;
+	}
+
+	for (i = 0; i < KEY_PTRS(key); i++)
+		atomic_inc(&PTR_BUCKET(dc->disk.c, key, i)->pin);
+
+	bkey_copy(&bk->key, key);
+	INIT_LIST_HEAD(&bk->list);
+	list_add_tail(&bk->list, &dc->writeback_batch.keys);
+	dc->writeback_batch.count++;
+	spin_unlock(&dc->writeback_batch.lock);
+}
+
+static int writeback_flush(struct cached_dev *dc)
+{
+	struct bio bio;
+	int ret;
+
+	bio_init(&bio, dc->bdev, NULL, 0, REQ_OP_WRITE | REQ_PREFLUSH);
+
+	ret = submit_bio_wait(&bio);
+	if (ret)
+		bch_count_backing_io_errors(dc, &bio);
+
+	bio_uninit(&bio);
+	return ret;
+}
+
+static void writeback_finish_batch(struct cached_dev *dc)
+{
+	struct writeback_bkey *bk, *tmp;
+	struct keylist keys;
+	LIST_HEAD(local);
+	int flush_ret, ret;
+
+	spin_lock(&dc->writeback_batch.lock);
+	if (list_empty(&dc->writeback_batch.keys)) {
+		spin_unlock(&dc->writeback_batch.lock);
+		return;
+	}
+	list_splice_init(&dc->writeback_batch.keys, &local);
+	dc->writeback_batch.count = 0;
+	spin_unlock(&dc->writeback_batch.lock);
+
+	flush_ret = writeback_flush(dc);
+
+	list_for_each_entry(bk, &local, list) {
+		if (flush_ret == 0) {
+			bch_keylist_init(&keys);
+			bkey_copy(keys.top, &bk->key);
+			SET_KEY_DIRTY(keys.top, false);
+			bch_keylist_push(&keys);
+			ret = bch_btree_insert(dc->disk.c, &keys, NULL,
+					       &bk->key);
+			if (ret)
+				trace_bcache_writeback_collision(&bk->key);
+			atomic_long_inc(ret
+					? &dc->disk.c->writeback_keys_failed
+					: &dc->disk.c->writeback_keys_done);
+		} else {
+			bkey_put(dc->disk.c, &bk->key);
+		}
+	}
+
+	spin_lock(&dc->writeback_batch.lock);
+	list_for_each_entry_safe(bk, tmp, &local, list) {
+		list_del(&bk->list);
+		array_free(&dc->writeback_batch.pool, bk);
+	}
+	spin_unlock(&dc->writeback_batch.lock);
+}
+
+void bch_writeback_finish_batch(struct cache_set *c)
+{
+	unsigned int i;
+
+	for (i = 0; i < c->devices_max_used; i++) {
+		struct bcache_device *d = c->devices[i];
+		struct cached_dev *dc;
+
+		if (!d || UUID_FLASH_ONLY(&c->uuids[i]))
+			continue;
+		dc = container_of(d, struct cached_dev, disk);
+		if (dc->writeback_flush_interval)
+			writeback_finish_batch(dc);
+	}
+}
+
 static CLOSURE_CALLBACK(write_dirty_finish)
 {
 	closure_type(io, struct dirty_io, cl);
@@ -356,30 +461,8 @@ static CLOSURE_CALLBACK(write_dirty_finish)
 
 	bio_free_pages(&io->bio);
 
-	/* This is kind of a dumb way of signalling errors. */
-	if (KEY_DIRTY(&w->key)) {
-		int ret;
-		unsigned int i;
-		struct keylist keys;
-
-		bch_keylist_init(&keys);
-
-		bkey_copy(keys.top, &w->key);
-		SET_KEY_DIRTY(keys.top, false);
-		bch_keylist_push(&keys);
-
-		for (i = 0; i < KEY_PTRS(&w->key); i++)
-			atomic_inc(&PTR_BUCKET(dc->disk.c, &w->key, i)->pin);
-
-		ret = bch_btree_insert(dc->disk.c, &keys, NULL, &w->key);
-
-		if (ret)
-			trace_bcache_writeback_collision(&w->key);
-
-		atomic_long_inc(ret
-				? &dc->disk.c->writeback_keys_failed
-				: &dc->disk.c->writeback_keys_done);
-	}
+	if (KEY_DIRTY(&w->key))
+		writeback_add_key(dc, &w->key);
 
 	bch_keybuf_del(&dc->writeback_keys, w);
 	up(&dc->in_flight);
@@ -818,8 +901,14 @@ static int bch_writeback_thread(void *arg)
 
 		read_dirty(dc);
 
+		if (!dc->writeback_flush_interval ||
+		    dc->writeback_batch.count >= dc->writeback_flush_interval)
+			writeback_finish_batch(dc);
+
 		if (searched_full_index) {
 			unsigned int delay = dc->writeback_delay * HZ;
+
+			writeback_finish_batch(dc);
 
 			while (delay &&
 			       !kthread_should_stop() &&
@@ -830,6 +919,8 @@ static int bch_writeback_thread(void *arg)
 			bch_ratelimit_reset(&dc->writeback_rate);
 		}
 	}
+
+	writeback_finish_batch(dc);
 
 	if (dc->writeback_write_wq)
 		destroy_workqueue(dc->writeback_write_wq);
@@ -1049,6 +1140,7 @@ void bch_cached_dev_writeback_init(struct cached_dev *dc)
 	sema_init(&dc->in_flight, 64);
 	init_rwsem(&dc->writeback_lock);
 	bch_keybuf_init(&dc->writeback_keys);
+	writeback_batch_init(&dc->writeback_batch);
 
 	dc->writeback_metadata		= true;
 	dc->writeback_running		= false;
@@ -1064,6 +1156,7 @@ void bch_cached_dev_writeback_init(struct cached_dev *dc)
 	dc->writeback_rate_fp_term_mid = 10;
 	dc->writeback_rate_fp_term_high = 1000;
 	dc->writeback_rate_i_term_inverse = 10000;
+	dc->writeback_flush_interval	= WRITEBACK_FLUSH_INTERVAL_DEFAULT;
 
 	/* For dc->writeback_lock contention in update_writeback_rate() */
 	dc->rate_update_retry = 0;

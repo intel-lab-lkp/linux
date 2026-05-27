@@ -25,6 +25,7 @@
 #include "btree.h"
 #include "debug.h"
 #include "extents.h"
+#include "writeback.h"
 
 #include <linux/slab.h>
 #include <linux/bitops.h>
@@ -1837,6 +1838,7 @@ static void bch_btree_gc(struct cache_set *c)
 	closure_init_stack(&writes);
 	bch_btree_op_init(&op, SHRT_MAX);
 
+	bch_writeback_finish_batch(c);
 	btree_gc_start(c);
 
 	/* if CACHE_SET_IO_DISABLE set, gc thread should stop too */

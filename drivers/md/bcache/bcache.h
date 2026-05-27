@@ -247,6 +247,24 @@ struct keybuf {
 	DECLARE_ARRAY_ALLOCATOR(struct keybuf_key, freelist, KEYBUF_NR);
 };
 
+struct writeback_bkey {
+	BKEY_PADDED(key);
+	struct list_head	list;
+};
+
+#define WRITEBACK_FLUSH_INTERVAL_DEFAULT	0
+#define WRITEBACK_FLUSH_INTERVAL_MIN		0
+#define WRITEBACK_FLUSH_INTERVAL_MAX		50000
+
+struct writeback_batch {
+	spinlock_t		lock;
+	u32			count;
+	struct list_head	keys;
+
+	DECLARE_ARRAY_ALLOCATOR(struct writeback_bkey, pool,
+				WRITEBACK_FLUSH_INTERVAL_MAX);
+};
+
 struct bcache_device {
 	struct closure		cl;
 
@@ -347,6 +365,8 @@ struct cached_dev {
 	struct workqueue_struct	*writeback_write_wq;
 
 	struct keybuf		writeback_keys;
+	struct writeback_batch	writeback_batch;
+	unsigned int		writeback_flush_interval;
 
 	struct task_struct	*status_update_thread;
 	/*
