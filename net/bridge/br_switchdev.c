@@ -548,7 +548,8 @@ out_free:
 }
 
 static void br_switchdev_mdb_populate(struct switchdev_obj_port_mdb *mdb,
-				      const struct net_bridge_mdb_entry *mp)
+				      const struct net_bridge_mdb_entry *mp,
+				      const struct net_bridge_port_group *pg)
 {
 	if (mp->addr.proto == htons(ETH_P_IP))
 		ip_eth_mc_map(mp->addr.dst.ip4, mdb->addr);
@@ -560,6 +561,9 @@ static void br_switchdev_mdb_populate(struct switchdev_obj_port_mdb *mdb,
 		ether_addr_copy(mdb->addr, mp->addr.dst.mac_addr);
 
 	mdb->vid = mp->addr.vid;
+	mdb->flags = 0;
+	if (pg && (pg->flags & MDB_PG_FLAGS_STREAM_RESERVED))
+		mdb->flags |= SWITCHDEV_MDB_F_STREAM_RESERVED;
 }
 
 static void br_switchdev_host_mdb_one(struct net_device *dev,
@@ -575,7 +579,7 @@ static void br_switchdev_host_mdb_one(struct net_device *dev,
 		},
 	};
 
-	br_switchdev_mdb_populate(&mdb, mp);
+	br_switchdev_mdb_populate(&mdb, mp, NULL);
 
 	switch (type) {
 	case RTM_NEWMDB:
@@ -622,6 +626,7 @@ static int br_switchdev_mdb_queue_one(struct list_head *mdb_list,
 				      unsigned long action,
 				      enum switchdev_obj_id id,
 				      const struct net_bridge_mdb_entry *mp,
+				      const struct net_bridge_port_group *pg,
 				      struct net_device *orig_dev)
 {
 	struct switchdev_obj_port_mdb mdb = {
@@ -632,7 +637,7 @@ static int br_switchdev_mdb_queue_one(struct list_head *mdb_list,
 	};
 	struct switchdev_obj_port_mdb *pmdb;
 
-	br_switchdev_mdb_populate(&mdb, mp);
+	br_switchdev_mdb_populate(&mdb, mp, pg);
 
 	if (action == SWITCHDEV_PORT_OBJ_ADD &&
 	    switchdev_port_obj_act_is_deferred(dev, action, &mdb.obj)) {
@@ -671,7 +676,7 @@ void br_switchdev_mdb_notify(struct net_device *dev,
 	if (!pg)
 		return br_switchdev_host_mdb(dev, mp, type);
 
-	br_switchdev_mdb_populate(&mdb, mp);
+	br_switchdev_mdb_populate(&mdb, mp, pg);
 
 	mdb.obj.orig_dev = pg->key.port->dev;
 	switch (type) {
@@ -740,7 +745,7 @@ br_switchdev_mdb_replay(struct net_device *br_dev, struct net_device *dev,
 		if (mp->host_joined) {
 			err = br_switchdev_mdb_queue_one(&mdb_list, dev, action,
 							 SWITCHDEV_OBJ_ID_HOST_MDB,
-							 mp, br_dev);
+							 mp, NULL, br_dev);
 			if (err) {
 				spin_unlock_bh(&br->multicast_lock);
 				goto out_free_mdb;
@@ -754,7 +759,7 @@ br_switchdev_mdb_replay(struct net_device *br_dev, struct net_device *dev,
 
 			err = br_switchdev_mdb_queue_one(&mdb_list, dev, action,
 							 SWITCHDEV_OBJ_ID_PORT_MDB,
-							 mp, dev);
+							 mp, p, dev);
 			if (err) {
 				spin_unlock_bh(&br->multicast_lock);
 				goto out_free_mdb;

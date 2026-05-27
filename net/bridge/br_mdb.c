@@ -146,6 +146,8 @@ static void __mdb_entry_fill_flags(struct br_mdb_entry *e, unsigned char flags)
 		e->flags |= MDB_FLAGS_BLOCKED;
 	if (flags & MDB_PG_FLAGS_OFFLOAD_FAILED)
 		e->flags |= MDB_FLAGS_OFFLOAD_FAILED;
+	if (flags & MDB_PG_FLAGS_STREAM_RESERVED)
+		e->flags |= MDB_FLAGS_STREAM_RESERVED;
 }
 
 static void __mdb_entry_to_br_ip(struct br_mdb_entry *entry, struct br_ip *ip,
@@ -664,6 +666,7 @@ static const struct nla_policy br_mdbe_attrs_pol[MDBE_ATTR_MAX + 1] = {
 						  MCAST_INCLUDE),
 	[MDBE_ATTR_SRC_LIST] = NLA_POLICY_NESTED(br_mdbe_src_list_pol),
 	[MDBE_ATTR_RTPROT] = NLA_POLICY_MIN(NLA_U8, RTPROT_STATIC),
+	[MDBE_ATTR_FLAGS] = NLA_POLICY_MASK(NLA_U32, MDB_FLAGS_STREAM_RESERVED),
 };
 
 static bool is_valid_mdb_source(struct nlattr *attr, __be16 proto,
@@ -1072,6 +1075,8 @@ static int br_mdb_add_group(const struct br_mdb_config *cfg,
 	if (entry->state == MDB_PERMANENT)
 		flags |= MDB_PG_FLAGS_PERMANENT;
 
+	flags |= cfg->pg_flags;
+
 	if (br_multicast_is_star_g(&group))
 		return br_mdb_add_group_star_g(cfg, mp, brmctx, flags, extack);
 	else
@@ -1223,6 +1228,13 @@ static int br_mdb_config_attrs_init(struct nlattr *set_attrs,
 			return -EINVAL;
 		}
 		cfg->rt_protocol = nla_get_u8(mdb_attrs[MDBE_ATTR_RTPROT]);
+	}
+
+	if (mdb_attrs[MDBE_ATTR_FLAGS]) {
+		u32 user_flags = nla_get_u32(mdb_attrs[MDBE_ATTR_FLAGS]);
+
+		if (user_flags & MDB_FLAGS_STREAM_RESERVED)
+			cfg->pg_flags |= MDB_PG_FLAGS_STREAM_RESERVED;
 	}
 
 	return 0;

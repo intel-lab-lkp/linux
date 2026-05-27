@@ -111,10 +111,14 @@ struct switchdev_obj_port_vlan {
 	container_of((OBJ), struct switchdev_obj_port_vlan, obj)
 
 /* SWITCHDEV_OBJ_ID_PORT_MDB */
+
+#define SWITCHDEV_MDB_F_STREAM_RESERVED		BIT(0)
+
 struct switchdev_obj_port_mdb {
 	struct switchdev_obj obj;
 	unsigned char addr[ETH_ALEN];
 	u16 vid;
+	u32 flags;
 };
 
 #define SWITCHDEV_OBJ_PORT_MDB(OBJ) \

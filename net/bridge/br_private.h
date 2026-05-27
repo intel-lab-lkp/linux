@@ -111,6 +111,7 @@ struct br_mdb_config {
 	struct br_mdb_src_entry		*src_entries;
 	int				num_src_entries;
 	u8				rt_protocol;
+	unsigned char			pg_flags;
 };
 #endif
 
@@ -317,6 +318,7 @@ struct net_bridge_fdb_flush_desc {
 #define MDB_PG_FLAGS_STAR_EXCL		BIT(3)
 #define MDB_PG_FLAGS_BLOCKED		BIT(4)
 #define MDB_PG_FLAGS_OFFLOAD_FAILED	BIT(5)
+#define MDB_PG_FLAGS_STREAM_RESERVED	BIT(6)
 
 #define PG_SRC_ENT_LIMIT	32
 
