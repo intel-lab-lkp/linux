@@ -918,6 +918,43 @@ static inline void assert_fault_locked(const struct vm_fault *vmf)
 }
 #endif /* CONFIG_PER_VMA_LOCK */
 
+#ifdef CONFIG_VMA_REF
+static inline void vma_rcuref_init(struct vm_area_struct *vma)
+{
+	rcuref_init(&vma->vm_rcuref, 1);
+}
+
+static inline struct vm_area_struct *vma_get(struct vm_area_struct *vma)
+{
+	if (rcuref_get(&vma->vm_rcuref))
+		return vma;
+	return NULL;
+}
+
+static inline bool vma_put(struct vm_area_struct *vma)
+{
+	bool release = rcuref_put(&vma->vm_rcuref);
+
+	if (unlikely(release))
+		vm_area_free(vma);
+	return release;
+}
+#else
+static inline void vma_rcuref_init(struct vm_area_struct *vma) {}
+
+static inline struct vm_area_struct *vma_get(struct vm_area_struct *vma)
+{
+	VM_WARN_ON_ONCE(true); /* not allowed */
+	return NULL;
+}
+
+static inline bool vma_put(struct vm_area_struct *vma)
+{
+	vm_area_free(vma);
+	return true;
+}
+#endif /* CONFIG_VMA_REF */
+
 static inline bool mm_flags_test(int flag, const struct mm_struct *mm)
 {
 	return test_bit(flag, ACCESS_PRIVATE(&mm->flags, __mm_flags));
@@ -957,6 +994,7 @@ static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)
 	vma->vm_ops = &vma_dummy_vm_ops;
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
 	vma_lock_init(vma, false);
+	vma_rcuref_init(vma);
 }
 
 /* Use when VMA is not part of the VMA tree and needs no locking */

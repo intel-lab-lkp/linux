@@ -1419,12 +1419,20 @@ config ANON_VMA_LAZY
 	bool "Lazy allocation of anon_vma"
 	def_bool y
 	depends on ARCH_SUPPORTS_ANON_VMA_LAZY && MMU
+	select VMA_REF
 	help
 	  For anonymous VMAs without children, avoid allocating anon_vma
 	  and anon_vma_chain to reduce memory overhead.
 
+	  ANON_VMA_LAZY records the VMA in folio->mapping, while VMA_REF
+	  ensures that the recorded VMA remains valid.
+
 	  Say Y to enable this optimization for anonymous VMAs without
 	  children.
+
+config VMA_REF
+	def_bool n
+	depends on MMU
 
 config IOMMU_MM_DATA
 	bool

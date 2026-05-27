@@ -6,6 +6,7 @@
 
 #include <linux/auxvec.h>
 #include <linux/kref.h>
+#include <linux/rcuref.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/rbtree.h>
@@ -978,6 +979,9 @@ struct vm_area_struct {
 	 * slowpath.
 	 */
 	unsigned int vm_lock_seq;
+#endif
+#ifdef CONFIG_ANON_VMA_LAZY
+	rcuref_t vm_rcuref; /* Ensures the VMA stays valid. */
 #endif
 	/*
 	 * A file's MAP_PRIVATE vma can be in both i_mmap tree and anon_vma

@@ -160,6 +160,6 @@ err_ksm:
 	mmap_write_unlock(mm);
 err_free:
 	*vmap = NULL;
-	vm_area_free(vma);
+	vma_put(vma);
 	return err;
 }

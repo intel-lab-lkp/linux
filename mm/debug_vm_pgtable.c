@@ -1036,7 +1036,7 @@ static void __init destroy_args(struct pgtable_debug_args *args)
 
 	/* Free vma and mm struct */
 	if (args->vma)
-		vm_area_free(args->vma);
+		vma_put(args->vma);
 
 	if (args->mm)
 		mmput(args->mm);

@@ -392,7 +392,7 @@ again:
 		mpol_put(vma_policy(vp->remove));
 		if (!vp->remove2)
 			WARN_ON_ONCE(vp->vma->vm_end < vp->remove->vm_end);
-		vm_area_free(vp->remove);
+		vma_put(vp->remove);
 
 		/*
 		 * In mprotect's case 6 (see comments on vma_merge),
@@ -470,7 +470,7 @@ void remove_vma(struct vm_area_struct *vma)
 	if (vma->vm_file)
 		fput(vma->vm_file);
 	mpol_put(vma_policy(vma));
-	vm_area_free(vma);
+	vma_put(vma);
 }
 
 /*
@@ -582,7 +582,7 @@ out_free_mpol:
 out_free_vmi:
 	vma_iter_free(vmi);
 out_free_vma:
-	vm_area_free(new);
+	vma_put(new);
 	return err;
 }
 
@@ -1950,7 +1950,7 @@ out_vma_link:
 out_free_mempol:
 	mpol_put(vma_policy(new_vma));
 out_free_vma:
-	vm_area_free(new_vma);
+	vma_put(new_vma);
 out:
 	return NULL;
 }
@@ -2596,7 +2596,7 @@ static int __mmap_new_vma(struct mmap_state *map, struct vm_area_struct **vmap,
 free_iter_vma:
 	vma_iter_free(vmi);
 free_vma:
-	vm_area_free(vma);
+	vma_put(vma);
 	return error;
 }
 
@@ -2946,7 +2946,7 @@ out:
 	return 0;
 
 mas_store_fail:
-	vm_area_free(vma);
+	vma_put(vma);
 unacct_fail:
 	vm_unacct_memory(len >> PAGE_SHIFT);
 	return -ENOMEM;

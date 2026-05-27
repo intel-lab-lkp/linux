@@ -1481,7 +1481,7 @@ static struct vm_area_struct *__install_special_mapping(
 	return vma;
 
 out:
-	vm_area_free(vma);
+	vma_put(vma);
 	return ERR_PTR(ret);
 }
 
@@ -1922,7 +1922,7 @@ out:
 fail_nomem_anon_vma_fork:
 	mpol_put(vma_policy(tmp));
 fail_nomem_policy:
-	vm_area_free(tmp);
+	vma_put(tmp);
 fail_nomem:
 	retval = -ENOMEM;
 	vm_unacct_memory(charge);
