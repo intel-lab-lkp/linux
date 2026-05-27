@@ -55,8 +55,10 @@ static int run_sanity_job(struct xe_migrate *m, struct xe_device *xe,
 	fence = dma_fence_get(&job->drm.s_fence->finished);
 	xe_sched_job_push(job);
 
-	if (sanity_fence_failed(xe, fence, str, test))
+	if (sanity_fence_failed(xe, fence, str, test)) {
+		dma_fence_put(fence);
 		return -ETIMEDOUT;
+	}
 
 	dma_fence_put(fence);
 	kunit_info(test, "%s: Job completed\n", str);
