@@ -450,7 +450,7 @@ netdev_tx_t libipw_xmit(struct sk_buff *skb, struct net_device *dev)
 	for (; i < nr_frags; i++) {
 		skb_frag = txb->fragments[i];
 
-		if (host_encrypt)
+		if (host_encrypt && crypt && crypt->ops)
 			skb_reserve(skb_frag,
 				    crypt->ops->extra_mpdu_prefix_len);
 
