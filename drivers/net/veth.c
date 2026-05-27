@@ -28,6 +28,7 @@
 #include <linux/bpf_trace.h>
 #include <linux/net_tstamp.h>
 #include <linux/skbuff_ref.h>
+#include <linux/sched/clock.h>
 #include <net/page_pool/helpers.h>
 
 #define DRV_NAME	"veth"
@@ -43,6 +44,8 @@
 
 #define VETH_XDP_TX_BULK_SIZE	16
 #define VETH_XDP_BATCH		16
+
+#define VETH_BQL_COAL_TX_USECS	100 /* default tx-usecs for BQL batching */
 
 struct veth_stats {
 	u64	rx_drops;
@@ -62,6 +65,11 @@ struct veth_rq_stats {
 	struct u64_stats_sync	syncp;
 };
 
+struct veth_bql_state {
+	u64	time;	/* sched_clock() when current coalescing window started */
+	int	n_bql;	/* BQL completions batched in the current window */
+};
+
 struct veth_rq {
 	struct napi_struct	xdp_napi;
 	struct napi_struct __rcu *napi; /* points to xdp_napi when the latter is initialized */
@@ -69,6 +77,7 @@ struct veth_rq {
 	struct bpf_prog __rcu	*xdp_prog;
 	struct xdp_mem_info	xdp_mem;
 	struct veth_rq_stats	stats;
+	struct veth_bql_state	bql_state;
 	bool			rx_notify_masked;
 	struct ptr_ring		xdp_ring;
 	struct xdp_rxq_info	xdp_rxq;
@@ -81,6 +90,7 @@ struct veth_priv {
 	struct bpf_prog		*_xdp_prog;
 	struct veth_rq		*rq;
 	unsigned int		requested_headroom;
+	unsigned int		tx_coal_usecs;	/* BQL completion coalescing */
 };
 
 struct veth_xdp_tx_bq {
@@ -265,7 +275,30 @@ static void veth_get_channels(struct net_device *dev,
 static int veth_set_channels(struct net_device *dev,
 			     struct ethtool_channels *ch);
 
+static int veth_get_coalesce(struct net_device *dev,
+			     struct ethtool_coalesce *ec,
+			     struct kernel_ethtool_coalesce *kernel_coal,
+			     struct netlink_ext_ack *extack)
+{
+	struct veth_priv *priv = netdev_priv(dev);
+
+	ec->tx_coalesce_usecs = priv->tx_coal_usecs;
+	return 0;
+}
+
+static int veth_set_coalesce(struct net_device *dev,
+			     struct ethtool_coalesce *ec,
+			     struct kernel_ethtool_coalesce *kernel_coal,
+			     struct netlink_ext_ack *extack)
+{
+	struct veth_priv *priv = netdev_priv(dev);
+
+	priv->tx_coal_usecs = ec->tx_coalesce_usecs;
+	return 0;
+}
+
 static const struct ethtool_ops veth_ethtool_ops = {
+	.supported_coalesce_params = ETHTOOL_COALESCE_TX_USECS,
 	.get_drvinfo		= veth_get_drvinfo,
 	.get_link		= ethtool_op_get_link,
 	.get_strings		= veth_get_strings,
@@ -275,6 +308,8 @@ static const struct ethtool_ops veth_ethtool_ops = {
 	.get_ts_info		= ethtool_op_get_ts_info,
 	.get_channels		= veth_get_channels,
 	.set_channels		= veth_set_channels,
+	.get_coalesce		= veth_get_coalesce,
+	.set_coalesce		= veth_set_coalesce,
 };
 
 /* general routines */
@@ -937,13 +972,45 @@ xdp_xmit:
 	return NULL;
 }
 
+static void veth_bql_complete(struct veth_bql_state *state,
+			      struct netdev_queue *peer_txq)
+{
+	netdev_tx_completed_queue(peer_txq, state->n_bql,
+				  state->n_bql * VETH_BQL_UNIT);
+	state->n_bql = 0;
+	state->time = sched_clock();
+}
+
+static void veth_bql_maybe_complete(struct veth_bql_state *state,
+				    struct netdev_queue *peer_txq,
+				    u64 coalescing_ns)
+{
+	if (state->n_bql && sched_clock() >= state->time + coalescing_ns)
+		veth_bql_complete(state, peer_txq);
+}
+
 static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 			struct veth_xdp_tx_bq *bq,
 			struct veth_stats *stats,
 			struct netdev_queue *peer_txq)
 {
+	struct veth_bql_state *state = &rq->bql_state;
 	int i, done = 0, n_xdpf = 0;
 	void *xdpf[VETH_XDP_BATCH];
+	struct veth_priv *priv;
+	u64 bql_flush_ns;
+
+	priv = netdev_priv(rq->dev);
+	bql_flush_ns = (u64)priv->tx_coal_usecs * 1000;
+
+	/* Clamp stored timestamp in case we migrated to a CPU with a behind
+	 * sched_clock(); prevents the deadline from never firing.
+	 */
+	state->time = min(state->time, sched_clock());
+
+	/* Flush completions that timed out since the previous NAPI poll. */
+	if (peer_txq && bql_flush_ns)
+		veth_bql_maybe_complete(state, peer_txq, bql_flush_ns);
 
 	for (i = 0; i < budget; i++) {
 		void *ptr = __ptr_ring_consume(&rq->xdp_ring);
@@ -972,8 +1039,16 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 			struct sk_buff *skb = veth_ptr_to_skb(ptr);
 
 			stats->xdp_bytes += skb->len;
-			if (peer_txq && bql_charged)
-				netdev_tx_completed_queue(peer_txq, 1, VETH_BQL_UNIT);
+			if (peer_txq && bql_charged) {
+				if (!bql_flush_ns) {
+					netdev_tx_completed_queue(peer_txq, 1,
+								  VETH_BQL_UNIT);
+				} else {
+					state->n_bql++;
+					veth_bql_maybe_complete(state, peer_txq,
+								bql_flush_ns);
+				}
+			}
 
 			skb = veth_xdp_rcv_skb(rq, skb, bq, stats);
 			if (skb) {
@@ -988,6 +1063,18 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 
 	if (n_xdpf)
 		veth_xdp_rcv_bulk_skb(rq, xdpf, n_xdpf, bq, stats);
+
+	/* If the ring is now empty and the peer TX queue is stalled by DQL
+	 * backpressure, release completions immediately to unblock it.
+	 */
+	if (peer_txq && state->n_bql && __ptr_ring_empty(&rq->xdp_ring)) {
+		/* Pairs with smp_wmb() in __ptr_ring_produce(); ensure ring
+		 * emptiness is observed before reading peer_txq->state.
+		 */
+		smp_rmb();
+		if (test_bit(__QUEUE_STATE_STACK_XOFF, &peer_txq->state))
+			veth_bql_complete(state, peer_txq);
+	}
 
 	u64_stats_update_begin(&rq->stats.syncp);
 	rq->stats.vs.xdp_redirect += stats->xdp_redirect;
@@ -1093,6 +1180,9 @@ static int __veth_napi_enable_range(struct net_device *dev, int start, int end)
 
 		napi_enable(&rq->xdp_napi);
 		rcu_assign_pointer(priv->rq[i].napi, &priv->rq[i].xdp_napi);
+
+		rq->bql_state.time = sched_clock();
+		rq->bql_state.n_bql = 0;
 	}
 
 	return 0;
@@ -1134,6 +1224,8 @@ static void veth_napi_del_range(struct net_device *dev, int start, int end)
 		struct veth_rq *rq = &priv->rq[i];
 
 		rq->rx_notify_masked = false;
+		rq->bql_state.n_bql = 0;
+		rq->bql_state.time = 0;
 		ptr_ring_cleanup(&rq->xdp_ring, veth_ptr_free);
 	}
 
@@ -1813,6 +1905,8 @@ static const struct xdp_metadata_ops veth_xdp_metadata_ops = {
 
 static void veth_setup(struct net_device *dev)
 {
+	struct veth_priv *priv = netdev_priv(dev);
+
 	ether_setup(dev);
 
 	dev->priv_flags &= ~IFF_TX_SKB_SHARING;
@@ -1837,6 +1931,8 @@ static void veth_setup(struct net_device *dev)
 	dev->pcpu_stat_type = NETDEV_PCPU_STAT_TSTATS;
 	dev->max_mtu = ETH_MAX_MTU;
 	dev->watchdog_timeo = msecs_to_jiffies(16000);
+
+	priv->tx_coal_usecs = VETH_BQL_COAL_TX_USECS;
 
 	dev->hw_features = VETH_FEATURES;
 	dev->hw_enc_features = VETH_FEATURES;
