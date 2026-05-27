@@ -1173,10 +1173,11 @@ static void migrate_folio_undo_src(struct folio *src,
 				   struct list_head *ret)
 {
 	if (page_was_mapped)
-		remove_migration_ptes(src, src, 0);
+		remove_migration_ptes(src, src,
+			anon_rmap_value(anon_rmap) ? TTU_RMAP_LOCKED : 0);
 	/* Drop an anon_rmap reference if we took one */
 	if (anon_rmap_value(anon_rmap))
-		put_anon_rmap(anon_rmap);
+		anon_rmap_unlock_put(anon_rmap);
 	if (locked)
 		folio_unlock(src);
 	if (ret)
@@ -1280,23 +1281,6 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	}
 
 	/*
-	 * By try_to_migrate(), src->mapcount goes down to 0 here. In this case,
-	 * we cannot notice that anon_vma is freed while we migrate a page.
-	 * This get_anon_rmap() delays freeing anon_rmap pointer until the end
-	 * of migration. File cache pages are no problem because of page_lock()
-	 * File Caches may use write_page() or lock_page() in migration, then,
-	 * just care Anon page here.
-	 *
-	 * Only folio_get_anon_rmap() understands the subtleties of
-	 * getting a hold on an anon_rmap from outside one of its mms.
-	 * But if we cannot get anon_rmap, then we won't need it anyway,
-	 * because that implies that the anon page is no longer mapped
-	 * (and cannot be remapped so long as we hold the page lock).
-	 */
-	if (folio_test_anon(src) && !folio_test_ksm(src))
-		anon_rmap = folio_get_anon_rmap(src);
-
-	/*
 	 * Block others from accessing the new page when we get around to
 	 * establishing additional references. We are usually the only one
 	 * holding a reference to dst at this point. We used to have a BUG
@@ -1307,6 +1291,26 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	if (unlikely(!folio_trylock(dst)))
 		goto out;
 	dst_locked = true;
+
+	/*
+	 * By try_to_migrate(), src->mapcount goes down to 0 here. In this case,
+	 * we cannot notice that anon_vma is freed while we migrate a page.
+	 * This get_anon_rmap() delays freeing anon_rmap pointer until the end
+	 * of migration. File cache pages are no problem because of page_lock()
+	 * File Caches may use write_page() or lock_page() in migration, then,
+	 * just care Anon page here.
+	 *
+	 * Only folio_trylock_get_anon_rmap() understands the subtleties of
+	 * getting and locking an anon_rmap from outside one of its mms.
+	 * But if we cannot get anon_rmap, then we won't need it anyway,
+	 * because that implies that the anon page is no longer mapped
+	 * (and cannot be remapped so long as we hold the page lock).
+	 */
+	if (folio_test_anon(src) && !folio_test_ksm(src)) {
+		anon_rmap = folio_trylock_get_anon_rmap(src);
+		if (!anon_rmap_value(anon_rmap))
+			goto out;
+	}
 
 	if (unlikely(page_has_movable_ops(&src->page))) {
 		__migrate_folio_record(dst, old_page_state, anon_rmap);
@@ -1331,10 +1335,14 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 			goto out;
 		}
 	} else if (folio_mapped(src)) {
+		enum ttu_flags ttu = mode == MIGRATE_ASYNC ? TTU_BATCH_FLUSH : 0;
+
+		if (anon_rmap_value(anon_rmap))
+			ttu |= TTU_RMAP_LOCKED;
 		/* Establish migration ptes */
 		VM_BUG_ON_FOLIO(folio_test_anon(src) &&
 			       !folio_test_ksm(src) && !anon_rmap_value(anon_rmap), src);
-		try_to_migrate(src, mode == MIGRATE_ASYNC ? TTU_BATCH_FLUSH : 0);
+		try_to_migrate(src, ttu);
 		old_page_state |= PAGE_WAS_MAPPED;
 	}
 
@@ -1415,7 +1423,8 @@ static int migrate_folio_move(free_folio_t put_new_folio, unsigned long private,
 		lru_add_drain();
 
 	if (old_page_state & PAGE_WAS_MAPPED)
-		remove_migration_ptes(src, dst, 0);
+		remove_migration_ptes(src, dst,
+			anon_rmap_value(anon_rmap) ? TTU_RMAP_LOCKED : 0);
 
 out_unlock_both:
 	folio_unlock(dst);
@@ -1434,7 +1443,7 @@ out_unlock_both:
 	list_del(&src->lru);
 	/* Drop an anon_rmap reference if we took one */
 	if (anon_rmap_value(anon_rmap))
-		put_anon_rmap(anon_rmap);
+		anon_rmap_unlock_put(anon_rmap);
 	folio_unlock(src);
 	migrate_folio_done(src, reason);
 
@@ -1485,7 +1494,7 @@ static int unmap_and_move_huge_page(new_folio_t get_new_folio,
 	int page_was_mapped = 0;
 	anon_rmap_t anon_rmap = ANON_RMAP_NULL;
 	struct address_space *mapping = NULL;
-	enum ttu_flags ttu = 0;
+	enum ttu_flags ttu = TTU_RMAP_LOCKED;
 
 	if (folio_ref_count(src) == 1) {
 		/* page was freed from under us. So we are done. */
@@ -1519,11 +1528,14 @@ static int unmap_and_move_huge_page(new_folio_t get_new_folio,
 		goto out_unlock;
 	}
 
-	if (folio_test_anon(src))
-		anon_rmap = folio_get_anon_rmap(src);
-
 	if (unlikely(!folio_trylock(dst)))
-		goto put_anon;
+		goto out_unlock;
+
+	if (folio_test_anon(src)) {
+		anon_rmap = folio_trylock_get_anon_rmap(src);
+		if (!anon_rmap_value(anon_rmap))
+			goto unlock_put_anon;
+	}
 
 	if (folio_mapped(src)) {
 		if (!folio_test_anon(src)) {
@@ -1536,8 +1548,6 @@ static int unmap_and_move_huge_page(new_folio_t get_new_folio,
 			mapping = hugetlb_folio_mapping_lock_write(src);
 			if (unlikely(!mapping))
 				goto unlock_put_anon;
-
-			ttu = TTU_RMAP_LOCKED;
 		}
 
 		try_to_migrate(src, ttu);
@@ -1550,15 +1560,14 @@ static int unmap_and_move_huge_page(new_folio_t get_new_folio,
 	if (page_was_mapped)
 		remove_migration_ptes(src, !rc ? dst : src, ttu);
 
-	if (ttu & TTU_RMAP_LOCKED)
+	if (page_was_mapped && !folio_test_anon(src))
 		i_mmap_unlock_write(mapping);
 
 unlock_put_anon:
 	folio_unlock(dst);
 
-put_anon:
 	if (anon_rmap_value(anon_rmap))
-		put_anon_rmap(anon_rmap);
+		anon_rmap_unlock_put(anon_rmap);
 
 	if (!rc) {
 		move_hugetlb_state(src, dst, reason);

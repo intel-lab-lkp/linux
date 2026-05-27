@@ -1042,6 +1042,18 @@ bool folio_maybe_same_anon_vma(const struct folio *folio,
 anon_rmap_t folio_get_anon_rmap(const struct folio *folio);
 anon_rmap_t folio_lock_anon_rmap_read(const struct folio *folio,
 	struct rmap_walk_control *rwc);
+/*
+ * folio_trylock_get_anon_rmap ensures that the migration operation
+ * completes atomically and is mutually exclusive with free_pgtables().
+ *
+ * Note: for ANON_VMA_LAZY, this is not equivalent to
+ * anon_rmap_trylock_read() + folio_get_anon_rmap(), because
+ * anon_rmap_trylock_read() only increments the VMA reference count,
+ * while this helper uses vma_start_read() to prevent the VMA from
+ * being modified or removed.
+ */
+anon_rmap_t folio_trylock_get_anon_rmap(const struct folio *folio);
+void anon_rmap_unlock_put(anon_rmap_t anon_rmap);
 
 static inline struct vm_area_struct *anon_rmap_iter_first_vma(
 	anon_rmap_t anon_rmap, unsigned long start, unsigned long last,

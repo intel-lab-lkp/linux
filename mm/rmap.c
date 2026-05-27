@@ -1223,6 +1223,46 @@ anon_rmap_t folio_lock_anon_rmap_read(const struct folio *folio,
 	return anon_vma ? anon_vma_to_anon_rmap(anon_vma) : ANON_RMAP_NULL;
 }
 
+anon_rmap_t folio_trylock_get_anon_rmap(const struct folio *folio)
+{
+	struct anon_vma *anon_vma;
+	struct vm_area_struct *vma;
+
+	if (folio_test_anon_vma_lazy(folio)) {
+		vma = folio_get_anon_vma_lazy(folio);
+		if (vma && !lock_vma_under_rcu(vma->vm_mm, vma->vm_start)) {
+			vma_put(vma);
+			vma = NULL;
+		}
+		if (vma)
+			return vma_to_anon_rmap(vma);
+	}
+
+	anon_vma = folio_get_anon_vma(folio);
+	if (anon_vma && !anon_vma_trylock_read(anon_vma)) {
+		put_anon_vma(anon_vma);
+		anon_vma = NULL;
+	}
+	return anon_vma ? anon_vma_to_anon_rmap(anon_vma) : ANON_RMAP_NULL;
+}
+
+void anon_rmap_unlock_put(anon_rmap_t anon_rmap)
+{
+	struct anon_vma *anon_vma;
+
+	if (!anon_rmap_is_anon_vma(anon_rmap)) {
+		struct vm_area_struct *vma = anon_rmap_to_vma(anon_rmap);
+
+		vma_end_read(vma);
+		vma_put(vma);
+		return;
+	}
+
+	anon_vma = anon_rmap_to_anon_vma(anon_rmap);
+	anon_vma_unlock_read(anon_vma);
+	put_anon_vma(anon_vma);
+}
+
 #ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
 /*
  * Flush TLB entries for recently unmapped pages from remote CPUs. It is
