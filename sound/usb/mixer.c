@@ -420,6 +420,9 @@ static int get_cur_ctl_value(struct usb_mixer_elem_info *cval,
 static inline int get_cur_mix_raw(struct usb_mixer_elem_info *cval,
 				  int channel, int *value)
 {
+	if (cval->get_cur_broken)
+		return -ENXIO;
+
 	return get_ctl_value(cval, UAC_GET_CUR,
 			     (cval->control << 8) | channel,
 			     value);
@@ -1258,6 +1261,16 @@ static int check_sticky_volume_control(struct usb_mixer_elem_info *cval,
 			return 0;
 	}
 
+	if (cval->head.mixer->chip->quirk_flags & QUIRK_FLAG_MIXER_GET_CUR_BROKEN) {
+		usb_audio_warn(cval->head.mixer->chip,
+			       "%d:%d: broken mixer GET_CUR (%d/%d/%d => %d)\n",
+			       cval->head.id, mixer_ctrl_intf(cval->head.mixer),
+			       cval->min, cval->max, cval->res, saved);
+
+		cval->get_cur_broken = 1;
+		return -ENXIO;
+	}
+
 	usb_audio_err(cval->head.mixer->chip,
 		      "%d:%d: sticky mixer values (%d/%d/%d => %d), disabling\n",
 		      cval->head.id, mixer_ctrl_intf(cval->head.mixer),
@@ -1360,12 +1373,12 @@ static int get_min_max_with_quirks(struct usb_mixer_elem_info *cval,
 				goto no_checks;
 
 			ret = check_sticky_volume_control(cval, minchn, saved);
-			if (ret < 0) {
+			if (ret == -ENODEV) {
 				snd_usb_set_cur_mix_value(cval, minchn, 0, saved);
 				return ret;
 			}
 
-			if (cval->min + cval->res < cval->max)
+			if (!ret && cval->min + cval->res < cval->max)
 				check_volume_control_res(cval, minchn, saved);
 
 			snd_usb_set_cur_mix_value(cval, minchn, 0, saved);
