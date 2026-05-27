@@ -23,6 +23,24 @@ static LIST_HEAD(rx_mode_list);
 static DEFINE_SPINLOCK(rx_mode_lock);
 static DECLARE_WORK(rx_mode_work, netdev_rx_mode_work);
 
+static void netif_rx_mode_queue(struct net_device *dev);
+
+static void netif_rx_mode_retry(struct work_struct *work)
+{
+	struct net_device *dev = container_of(work, struct net_device,
+					      rx_mode_retry_work.work);
+
+	netif_rx_mode_queue(dev);
+	dev_put(dev);
+}
+
+void netif_rx_mode_init(struct net_device *dev)
+{
+	INIT_LIST_HEAD(&dev->rx_mode_node);
+	__hw_addr_init(&dev->rx_mode_addr_cache);
+	INIT_DELAYED_WORK(&dev->rx_mode_retry_work, netif_rx_mode_retry);
+}
+
 /*
  * General list handling functions
  */
@@ -1252,6 +1270,35 @@ static int netif_uc_promisc_update(struct net_device *dev)
 	return 0;
 }
 
+void netif_rx_mode_schedule_retry(struct net_device *dev)
+{
+	unsigned long delay;
+
+	/* Total retry budget: 1+2+4+8 = 15 seconds. */
+	if (dev->rx_mode_retry_delay >= 8 * HZ) {
+		netdev_err(dev, "rx_mode retry limit reached, giving up\n");
+		return;
+	}
+
+	delay = dev->rx_mode_retry_delay ? dev->rx_mode_retry_delay * 2 : HZ;
+	dev_hold(dev);
+	if (!schedule_delayed_work(&dev->rx_mode_retry_work, delay)) {
+		dev_put(dev);
+		return;
+	}
+	if (!dev->rx_mode_retry_delay)
+		netdev_info(dev, "rx_mode install failed, retrying with backoff\n");
+	dev->rx_mode_retry_delay = delay;
+}
+EXPORT_SYMBOL_GPL(netif_rx_mode_schedule_retry);
+
+void netif_rx_mode_cancel_retry(struct net_device *dev)
+{
+	if (cancel_delayed_work(&dev->rx_mode_retry_work))
+		dev_put(dev);
+	dev->rx_mode_retry_delay = 0;
+}
+
 static void netif_rx_mode_run(struct net_device *dev)
 {
 	struct netdev_hw_addr_list uc_snap, mc_snap, uc_ref, mc_ref;
@@ -1275,8 +1322,8 @@ static void netif_rx_mode_run(struct net_device *dev)
 		err = netif_addr_lists_snapshot(dev, &uc_snap, &mc_snap,
 						&uc_ref, &mc_ref);
 		if (err) {
-			netdev_WARN(dev, "failed to sync uc/mc addresses\n");
 			netif_addr_unlock_bh(dev);
+			netif_rx_mode_schedule_retry(dev);
 			return;
 		}
 
@@ -1292,12 +1339,17 @@ static void netif_rx_mode_run(struct net_device *dev)
 		__dev_set_promiscuity(dev, promisc_inc, false);
 
 	if (ops->ndo_set_rx_mode_async) {
-		ops->ndo_set_rx_mode_async(dev, &uc_snap, &mc_snap);
+		err = ops->ndo_set_rx_mode_async(dev, &uc_snap, &mc_snap);
 
 		netif_addr_lock_bh(dev);
 		netif_addr_lists_reconcile(dev, &uc_snap, &mc_snap,
 					   &uc_ref, &mc_ref);
 		netif_addr_unlock_bh(dev);
+
+		if (err)
+			netif_rx_mode_schedule_retry(dev);
+		else
+			netif_rx_mode_cancel_retry(dev);
 	} else if (ops->ndo_set_rx_mode) {
 		netif_addr_lock_bh(dev);
 		ops->ndo_set_rx_mode(dev);
