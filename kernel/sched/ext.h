@@ -35,6 +35,14 @@ static inline bool task_on_scx(const struct task_struct *p)
 	return scx_enabled() && p->sched_class == &ext_sched_class;
 }
 
+static inline void scx_rebuild_fair_weight_on_class_switch(struct task_struct *p,
+							   const struct sched_class *old_class,
+							   const struct sched_class *new_class)
+{
+	if (old_class == &ext_sched_class && new_class == &fair_sched_class)
+		set_load_weight(p, false);
+}
+
 #ifdef CONFIG_SCHED_CORE
 bool scx_prio_less(const struct task_struct *a, const struct task_struct *b,
 		   bool in_fi);
@@ -55,6 +63,9 @@ static inline int scx_check_setscheduler(struct task_struct *p, int policy) { re
 static inline bool task_on_scx(const struct task_struct *p) { return false; }
 static inline bool scx_allow_ttwu_queue(const struct task_struct *p) { return true; }
 static inline void init_sched_ext_class(void) {}
+static inline void scx_rebuild_fair_weight_on_class_switch(struct task_struct *p,
+							   const struct sched_class *old_class,
+							   const struct sched_class *new_class) {}
 
 #endif	/* CONFIG_SCHED_CLASS_EXT */
 
