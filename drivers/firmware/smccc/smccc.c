@@ -9,7 +9,6 @@
 #include <linux/init.h>
 #include <linux/arm-smccc.h>
 #include <linux/kernel.h>
-#include <linux/platform_device.h>
 #include <linux/arm-smccc-bus.h>
 #include <linux/idr.h>
 #include <linux/slab.h>
@@ -241,14 +240,13 @@ subsys_initcall(arm_smccc_bus_init);
 
 static int __init smccc_devices_init(void)
 {
-	struct platform_device *pdev;
-
 	if (smccc_trng_available) {
-		pdev = platform_device_register_simple("smccc_trng", -1,
-						       NULL, 0);
-		if (IS_ERR(pdev))
-			pr_err("smccc_trng: could not register device: %ld\n",
-			       PTR_ERR(pdev));
+		struct arm_smccc_device *sdev;
+
+		sdev = arm_smccc_device_register("arm-smccc-trng");
+		if (IS_ERR(sdev))
+			pr_err("arm-smccc-trng: could not register device: %ld\n",
+			       PTR_ERR(sdev));
 	}
 
 	return 0;
