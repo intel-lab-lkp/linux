@@ -1142,18 +1142,18 @@ enum {
 
 static void __migrate_folio_record(struct folio *dst,
 				   int old_page_state,
-				   struct anon_vma *anon_vma)
+				   anon_rmap_t anon_rmap)
 {
-	dst->private = (void *)anon_vma + old_page_state;
+	dst->private = (void *)anon_rmap_to_anon_vma(anon_rmap) + old_page_state;
 }
 
 static void __migrate_folio_extract(struct folio *dst,
 				   int *old_page_state,
-				   struct anon_vma **anon_vmap)
+				   anon_rmap_t *anon_rmapp)
 {
 	unsigned long private = (unsigned long)dst->private;
 
-	*anon_vmap = (struct anon_vma *)(private & ~PAGE_OLD_STATES);
+	*anon_rmapp = anon_vma_to_anon_rmap((void *)(private & ~PAGE_OLD_STATES));
 	*old_page_state = private & PAGE_OLD_STATES;
 	dst->private = NULL;
 }
@@ -1161,15 +1161,15 @@ static void __migrate_folio_extract(struct folio *dst,
 /* Restore the source folio to the original state upon failure */
 static void migrate_folio_undo_src(struct folio *src,
 				   int page_was_mapped,
-				   struct anon_vma *anon_vma,
+				   anon_rmap_t anon_rmap,
 				   bool locked,
 				   struct list_head *ret)
 {
 	if (page_was_mapped)
 		remove_migration_ptes(src, src, 0);
-	/* Drop an anon_vma reference if we took one */
-	if (anon_vma)
-		put_anon_vma(anon_vma);
+	/* Drop an anon_rmap reference if we took one */
+	if (anon_rmap_value(anon_rmap))
+		put_anon_rmap(anon_rmap);
 	if (locked)
 		folio_unlock(src);
 	if (ret)
@@ -1210,7 +1210,7 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	struct folio *dst;
 	int rc = -EAGAIN;
 	int old_page_state = 0;
-	struct anon_vma *anon_vma = NULL;
+	anon_rmap_t anon_rmap = ANON_RMAP_NULL;
 	bool locked = false;
 	bool dst_locked = false;
 
@@ -1275,19 +1275,19 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	/*
 	 * By try_to_migrate(), src->mapcount goes down to 0 here. In this case,
 	 * we cannot notice that anon_vma is freed while we migrate a page.
-	 * This get_anon_vma() delays freeing anon_vma pointer until the end
+	 * This get_anon_rmap() delays freeing anon_rmap pointer until the end
 	 * of migration. File cache pages are no problem because of page_lock()
 	 * File Caches may use write_page() or lock_page() in migration, then,
 	 * just care Anon page here.
 	 *
-	 * Only folio_get_anon_vma() understands the subtleties of
-	 * getting a hold on an anon_vma from outside one of its mms.
-	 * But if we cannot get anon_vma, then we won't need it anyway,
+	 * Only folio_get_anon_rmap() understands the subtleties of
+	 * getting a hold on an anon_rmap from outside one of its mms.
+	 * But if we cannot get anon_rmap, then we won't need it anyway,
 	 * because that implies that the anon page is no longer mapped
 	 * (and cannot be remapped so long as we hold the page lock).
 	 */
 	if (folio_test_anon(src) && !folio_test_ksm(src))
-		anon_vma = folio_get_anon_vma(src);
+		anon_rmap = folio_get_anon_rmap(src);
 
 	/*
 	 * Block others from accessing the new page when we get around to
@@ -1302,7 +1302,7 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	dst_locked = true;
 
 	if (unlikely(page_has_movable_ops(&src->page))) {
-		__migrate_folio_record(dst, old_page_state, anon_vma);
+		__migrate_folio_record(dst, old_page_state, anon_rmap);
 		return 0;
 	}
 
@@ -1326,13 +1326,13 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	} else if (folio_mapped(src)) {
 		/* Establish migration ptes */
 		VM_BUG_ON_FOLIO(folio_test_anon(src) &&
-			       !folio_test_ksm(src) && !anon_vma, src);
+			       !folio_test_ksm(src) && !anon_rmap_value(anon_rmap), src);
 		try_to_migrate(src, mode == MIGRATE_ASYNC ? TTU_BATCH_FLUSH : 0);
 		old_page_state |= PAGE_WAS_MAPPED;
 	}
 
 	if (!folio_mapped(src)) {
-		__migrate_folio_record(dst, old_page_state, anon_vma);
+		__migrate_folio_record(dst, old_page_state, anon_rmap);
 		return 0;
 	}
 
@@ -1345,7 +1345,7 @@ out:
 		ret = NULL;
 
 	migrate_folio_undo_src(src, old_page_state & PAGE_WAS_MAPPED,
-			       anon_vma, locked, ret);
+			       anon_rmap, locked, ret);
 	migrate_folio_undo_dst(dst, dst_locked, put_new_folio, private);
 
 	return rc;
@@ -1359,12 +1359,12 @@ static int migrate_folio_move(free_folio_t put_new_folio, unsigned long private,
 {
 	int rc;
 	int old_page_state = 0;
-	struct anon_vma *anon_vma = NULL;
+	anon_rmap_t anon_rmap = ANON_RMAP_NULL;
 	bool src_deferred_split = false;
 	bool src_partially_mapped = false;
 	struct list_head *prev;
 
-	__migrate_folio_extract(dst, &old_page_state, &anon_vma);
+	__migrate_folio_extract(dst, &old_page_state, &anon_rmap);
 	prev = dst->lru.prev;
 	list_del(&dst->lru);
 
@@ -1425,9 +1425,9 @@ out_unlock_both:
 	 * and will be freed.
 	 */
 	list_del(&src->lru);
-	/* Drop an anon_vma reference if we took one */
-	if (anon_vma)
-		put_anon_vma(anon_vma);
+	/* Drop an anon_rmap reference if we took one */
+	if (anon_rmap_value(anon_rmap))
+		put_anon_rmap(anon_rmap);
 	folio_unlock(src);
 	migrate_folio_done(src, reason);
 
@@ -1439,12 +1439,12 @@ out:
 	 */
 	if (rc == -EAGAIN) {
 		list_add(&dst->lru, prev);
-		__migrate_folio_record(dst, old_page_state, anon_vma);
+		__migrate_folio_record(dst, old_page_state, anon_rmap);
 		return rc;
 	}
 
 	migrate_folio_undo_src(src, old_page_state & PAGE_WAS_MAPPED,
-			       anon_vma, true, ret);
+			       anon_rmap, true, ret);
 	migrate_folio_undo_dst(dst, true, put_new_folio, private);
 
 	return rc;
@@ -1476,7 +1476,7 @@ static int unmap_and_move_huge_page(new_folio_t get_new_folio,
 	struct folio *dst;
 	int rc = -EAGAIN;
 	int page_was_mapped = 0;
-	struct anon_vma *anon_vma = NULL;
+	anon_rmap_t anon_rmap = ANON_RMAP_NULL;
 	struct address_space *mapping = NULL;
 	enum ttu_flags ttu = 0;
 
@@ -1513,7 +1513,7 @@ static int unmap_and_move_huge_page(new_folio_t get_new_folio,
 	}
 
 	if (folio_test_anon(src))
-		anon_vma = folio_get_anon_vma(src);
+		anon_rmap = folio_get_anon_rmap(src);
 
 	if (unlikely(!folio_trylock(dst)))
 		goto put_anon;
@@ -1550,8 +1550,8 @@ unlock_put_anon:
 	folio_unlock(dst);
 
 put_anon:
-	if (anon_vma)
-		put_anon_vma(anon_vma);
+	if (anon_rmap_value(anon_rmap))
+		put_anon_rmap(anon_rmap);
 
 	if (!rc) {
 		move_hugetlb_state(src, dst, reason);
@@ -1778,11 +1778,11 @@ static void migrate_folios_undo(struct list_head *src_folios,
 	dst2 = list_next_entry(dst, lru);
 	list_for_each_entry_safe(folio, folio2, src_folios, lru) {
 		int old_page_state = 0;
-		struct anon_vma *anon_vma = NULL;
+		anon_rmap_t anon_rmap = ANON_RMAP_NULL;
 
-		__migrate_folio_extract(dst, &old_page_state, &anon_vma);
+		__migrate_folio_extract(dst, &old_page_state, &anon_rmap);
 		migrate_folio_undo_src(folio, old_page_state & PAGE_WAS_MAPPED,
-				anon_vma, true, ret_folios);
+				anon_rmap, true, ret_folios);
 		list_del(&dst->lru);
 		migrate_folio_undo_dst(dst, true, put_new_folio, private);
 		dst = dst2;

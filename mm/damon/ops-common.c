@@ -172,7 +172,7 @@ void damon_folio_mkold(struct folio *folio)
 {
 	struct rmap_walk_control rwc = {
 		.rmap_one = damon_folio_mkold_one,
-		.anon_lock = folio_lock_anon_vma_read,
+		.anon_lock = folio_lock_anon_rmap_read,
 	};
 
 	if (!folio_mapped(folio) || !folio_raw_mapping(folio)) {
@@ -236,7 +236,7 @@ bool damon_folio_young(struct folio *folio)
 	struct rmap_walk_control rwc = {
 		.arg = &accessed,
 		.rmap_one = damon_folio_young_one,
-		.anon_lock = folio_lock_anon_vma_read,
+		.anon_lock = folio_lock_anon_rmap_read,
 	};
 
 	if (!folio_mapped(folio) || !folio_raw_mapping(folio)) {

@@ -547,11 +547,11 @@ static void collect_procs_anon(const struct folio *folio,
 		int force_early)
 {
 	struct task_struct *tsk;
-	struct anon_vma *av;
+	anon_rmap_t anon_rmap;
 	pgoff_t pgoff;
 
-	av = folio_lock_anon_vma_read(folio, NULL);
-	if (av == NULL)	/* Not actually mapped anymore */
+	anon_rmap = folio_lock_anon_rmap_read(folio, NULL);
+	if (!anon_rmap_value(anon_rmap))	/* Not actually mapped anymore */
 		return;
 
 	pgoff = page_pgoff(folio, page);
@@ -564,9 +564,8 @@ static void collect_procs_anon(const struct folio *folio,
 
 		if (!t)
 			continue;
-		anon_vma_interval_tree_foreach(vmac, &av->rb_root,
+		anon_rmap_foreach_vma(vma, vmac, anon_rmap,
 					       pgoff, pgoff) {
-			vma = vmac->vma;
 			if (vma->vm_mm != t->mm)
 				continue;
 			addr = page_mapped_in_vma(page, vma);
@@ -574,7 +573,7 @@ static void collect_procs_anon(const struct folio *folio,
 		}
 	}
 	rcu_read_unlock();
-	anon_vma_unlock_read(av);
+	anon_rmap_unlock_read(anon_rmap);
 }
 
 /*

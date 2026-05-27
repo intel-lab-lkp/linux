@@ -102,7 +102,7 @@ static void page_idle_clear_pte_refs(struct folio *folio)
 	 */
 	static struct rmap_walk_control rwc = {
 		.rmap_one = page_idle_clear_pte_refs_one,
-		.anon_lock = folio_lock_anon_vma_read,
+		.anon_lock = folio_lock_anon_rmap_read,
 	};
 
 	if (!folio_mapped(folio) || !folio_raw_mapping(folio))

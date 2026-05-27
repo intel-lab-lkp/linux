@@ -187,7 +187,7 @@ struct ksm_stable_node {
 /**
  * struct ksm_rmap_item - reverse mapping item for virtual addresses
  * @rmap_list: next rmap_item in mm_slot's singly-linked rmap_list
- * @anon_vma: pointer to anon_vma for this mm,address, when in stable tree
+ * @anon_rmap: anonymous folio rmap for this mm,address, when in stable tree
  * @nid: NUMA node id of unstable tree in which linked (may not match page)
  * @mm: the memory structure this rmap_item is pointing into
  * @address: the virtual address this rmap_item tracks (+ flags in low bits)
@@ -201,7 +201,7 @@ struct ksm_stable_node {
 struct ksm_rmap_item {
 	struct ksm_rmap_item *rmap_list;
 	union {
-		struct anon_vma *anon_vma;	/* when stable */
+		anon_rmap_t anon_rmap;	/* when stable */
 #ifdef CONFIG_NUMA
 		int nid;		/* when node of unstable tree */
 #endif
@@ -786,7 +786,7 @@ static void break_cow(struct ksm_rmap_item *rmap_item)
 	 * It is not an accident that whenever we want to break COW
 	 * to undo, we also need to drop a reference to the anon_vma.
 	 */
-	put_anon_vma(rmap_item->anon_vma);
+	put_anon_rmap(rmap_item->anon_rmap);
 
 	mmap_read_lock(mm);
 	vma = find_mergeable_vma(mm, addr);
@@ -898,7 +898,7 @@ static void remove_node_from_stable_tree(struct ksm_stable_node *stable_node)
 
 		VM_BUG_ON(stable_node->rmap_hlist_len <= 0);
 		stable_node->rmap_hlist_len--;
-		put_anon_vma(rmap_item->anon_vma);
+		put_anon_rmap(rmap_item->anon_rmap);
 		rmap_item->address &= PAGE_MASK;
 		cond_resched();
 	}
@@ -1051,7 +1051,7 @@ static void remove_rmap_item_from_tree(struct ksm_rmap_item *rmap_item)
 		VM_BUG_ON(stable_node->rmap_hlist_len <= 0);
 		stable_node->rmap_hlist_len--;
 
-		put_anon_vma(rmap_item->anon_vma);
+		put_anon_rmap(rmap_item->anon_rmap);
 		rmap_item->head = NULL;
 		rmap_item->address &= PAGE_MASK;
 
@@ -1598,9 +1598,8 @@ static int try_to_merge_with_ksm_page(struct ksm_rmap_item *rmap_item,
 	/* Unstable nid is in union with stable anon_vma: remove first */
 	remove_rmap_item_from_tree(rmap_item);
 
-	/* Must get reference to anon_vma while still holding mmap_lock */
-	rmap_item->anon_vma = vma->anon_vma;
-	get_anon_vma(vma->anon_vma);
+	/* Must get reference to anon_rmap while still holding mmap_lock */
+	rmap_item->anon_rmap = vma_get_anon_rmap(vma);
 out:
 	mmap_read_unlock(mm);
 	trace_ksm_merge_with_ksm_page(kpage, page_to_pfn(kpage ? kpage : page),
@@ -3108,7 +3107,6 @@ struct folio *ksm_might_need_to_copy(struct folio *folio,
 			struct vm_area_struct *vma, unsigned long addr)
 {
 	struct page *page = folio_page(folio, 0);
-	struct anon_vma *anon_vma = folio_anon_vma(folio);
 	struct folio *new_folio;
 
 	if (folio_test_large(folio))
@@ -3118,10 +3116,10 @@ struct folio *ksm_might_need_to_copy(struct folio *folio,
 		if (folio_stable_node(folio) &&
 		    !(ksm_run & KSM_RUN_UNMERGE))
 			return folio;	/* no need to copy it */
-	} else if (!anon_vma) {
+	} else if (!folio_test_anon(folio)) {
 		return folio;		/* no need to copy it */
 	} else if (folio->index == linear_page_index(vma, addr) &&
-			anon_vma->root == vma->anon_vma->root) {
+			folio_maybe_same_anon_vma(folio, vma)) {
 		return folio;		/* still no need to copy it */
 	}
 	if (PageHWPoison(page))
@@ -3173,20 +3171,20 @@ again:
 	hlist_for_each_entry(rmap_item, &stable_node->hlist, hlist) {
 		/* Ignore the stable/unstable/sqnr flags */
 		const unsigned long addr = rmap_item->address & PAGE_MASK;
-		struct anon_vma *anon_vma = rmap_item->anon_vma;
+		anon_rmap_t anon_rmap = rmap_item->anon_rmap;
 		struct anon_vma_chain *vmac;
 		struct vm_area_struct *vma;
 
 		cond_resched();
-		if (!anon_vma_trylock_read(anon_vma)) {
+		if (!anon_rmap_trylock_read(anon_rmap)) {
 			if (rwc->try_lock) {
 				rwc->contended = true;
 				return;
 			}
-			anon_vma_lock_read(anon_vma);
+			anon_rmap_lock_read(anon_rmap);
 		}
 
-		anon_vma_interval_tree_foreach(vmac, &anon_vma->rb_root,
+		anon_rmap_foreach_vma(vma, vmac, anon_rmap,
 					       0, ULONG_MAX) {
 
 			cond_resched();
@@ -3207,15 +3205,15 @@ again:
 				continue;
 
 			if (!rwc->rmap_one(folio, vma, addr, rwc->arg)) {
-				anon_vma_unlock_read(anon_vma);
+				anon_rmap_unlock_read(anon_rmap);
 				return;
 			}
 			if (rwc->done && rwc->done(folio)) {
-				anon_vma_unlock_read(anon_vma);
+				anon_rmap_unlock_read(anon_rmap);
 				return;
 			}
 		}
-		anon_vma_unlock_read(anon_vma);
+		anon_rmap_unlock_read(anon_rmap);
 	}
 	if (!search_new_forks++)
 		goto again;
@@ -3237,9 +3235,9 @@ void collect_procs_ksm(const struct folio *folio, const struct page *page,
 	if (!stable_node)
 		return;
 	hlist_for_each_entry(rmap_item, &stable_node->hlist, hlist) {
-		struct anon_vma *av = rmap_item->anon_vma;
+		anon_rmap_t anon_rmap = rmap_item->anon_rmap;
 
-		anon_vma_lock_read(av);
+		anon_rmap_lock_read(anon_rmap);
 		rcu_read_lock();
 		for_each_process(tsk) {
 			struct anon_vma_chain *vmac;
@@ -3248,10 +3246,9 @@ void collect_procs_ksm(const struct folio *folio, const struct page *page,
 				task_early_kill(tsk, force_early);
 			if (!t)
 				continue;
-			anon_vma_interval_tree_foreach(vmac, &av->rb_root, 0,
+			anon_rmap_foreach_vma(vma, vmac, anon_rmap, 0,
 						       ULONG_MAX)
 			{
-				vma = vmac->vma;
 				if (vma->vm_mm == t->mm) {
 					addr = rmap_item->address & PAGE_MASK;
 					add_to_kill_ksm(t, page, vma, to_kill,
@@ -3260,7 +3257,7 @@ void collect_procs_ksm(const struct folio *folio, const struct page *page,
 			}
 		}
 		rcu_read_unlock();
-		anon_vma_unlock_read(av);
+		anon_rmap_unlock_read(anon_rmap);
 	}
 }
 #endif

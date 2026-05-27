@@ -4051,7 +4051,7 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 	struct folio *end_folio = folio_next(folio);
 	bool is_anon = folio_test_anon(folio);
 	struct address_space *mapping = NULL;
-	struct anon_vma *anon_vma = NULL;
+	anon_rmap_t anon_rmap = ANON_RMAP_NULL;
 	int old_order = folio_order(folio);
 	struct folio *new_folio, *next;
 	int nr_shmem_dropped = 0;
@@ -4087,12 +4087,12 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 		 * is taken to serialise against parallel split or collapse
 		 * operations.
 		 */
-		anon_vma = folio_get_anon_vma(folio);
-		if (!anon_vma) {
+		anon_rmap = folio_get_anon_rmap(folio);
+		if (!anon_rmap_value(anon_rmap)) {
 			ret = -EBUSY;
 			goto out;
 		}
-		anon_vma_lock_write(anon_vma);
+		anon_rmap_lock_write(anon_rmap);
 		mapping = NULL;
 	} else {
 		unsigned int min_order;
@@ -4122,7 +4122,7 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 			}
 		}
 
-		anon_vma = NULL;
+		anon_rmap = ANON_RMAP_NULL;
 		i_mmap_lock_read(mapping);
 
 		/*
@@ -4200,9 +4200,9 @@ fail:
 	}
 
 out_unlock:
-	if (anon_vma) {
-		anon_vma_unlock_write(anon_vma);
-		put_anon_vma(anon_vma);
+	if (anon_rmap_value(anon_rmap)) {
+		anon_rmap_unlock_write(anon_rmap);
+		put_anon_rmap(anon_rmap);
 	}
 	if (mapping)
 		i_mmap_unlock_read(mapping);

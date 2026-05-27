@@ -997,15 +997,13 @@ struct rmap_walk_control {
 	bool (*rmap_one)(struct folio *folio, struct vm_area_struct *vma,
 					unsigned long addr, void *arg);
 	int (*done)(struct folio *folio);
-	struct anon_vma *(*anon_lock)(const struct folio *folio,
-				      struct rmap_walk_control *rwc);
+	anon_rmap_t (*anon_lock)(const struct folio *folio,
+				 struct rmap_walk_control *rwc);
 	bool (*invalid_vma)(struct vm_area_struct *vma, void *arg);
 };
 
 void rmap_walk(struct folio *folio, struct rmap_walk_control *rwc);
 void rmap_walk_locked(struct folio *folio, struct rmap_walk_control *rwc);
-struct anon_vma *folio_lock_anon_vma_read(const struct folio *folio,
-					  struct rmap_walk_control *rwc);
 
 bool folio_maybe_same_anon_vma(const struct folio *folio,
 	const struct vm_area_struct *vma);
