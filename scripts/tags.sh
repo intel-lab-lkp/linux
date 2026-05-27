@@ -305,7 +305,7 @@ exuberant()
 emacs()
 {
 	setup_regex emacs asm c
-	all_target_sources | xargs $1 -a "${regex[@]}"
+	all_target_sources | xargs $1 -a $no_members "${regex[@]}"
 
 	setup_regex emacs kconfig
 	all_kconfigs | xargs $1 -a "${regex[@]}"
@@ -334,6 +334,7 @@ if [ "${ARCH}" = "um" ]; then
 fi
 
 remove_structs=
+no_members=
 case "$1" in
 	"cscope")
 		docscope
@@ -353,6 +354,7 @@ case "$1" in
 		rm -f TAGS
 		xtags etags
 		remove_structs=y
+		no_members=--no-members
 		;;
 esac
 
