@@ -261,7 +261,7 @@ static void simpledrm_device_release_clocks(void *res)
 
 	for (i = 0; i < sdev->clk_count; ++i) {
 		if (sdev->clks[i]) {
-			clk_disable_unprepare(sdev->clks[i]);
+			__clk_disable_unprepare_counts_only(sdev->clks[i]);
 			clk_put(sdev->clks[i]);
 		}
 	}
@@ -315,7 +315,7 @@ err:
 	while (i) {
 		--i;
 		if (sdev->clks[i]) {
-			clk_disable_unprepare(sdev->clks[i]);
+			__clk_disable_unprepare_counts_only(sdev->clks[i]);
 			clk_put(sdev->clks[i]);
 		}
 	}
