@@ -315,6 +315,9 @@ static void hinic3_link_status_change(struct net_device *netdev,
 {
 	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
 
+	if (test_bit(HINIC3_CHANGE_RES_INVALID, &nic_dev->flags))
+		return;
+
 	if (link_status_up) {
 		if (netif_carrier_ok(netdev))
 			return;

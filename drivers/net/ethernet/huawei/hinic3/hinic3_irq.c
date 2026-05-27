@@ -137,7 +137,8 @@ static int hinic3_set_interrupt_moder(struct net_device *netdev, u16 q_id,
 	struct hinic3_interrupt_info info = {};
 	int err;
 
-	if (q_id >= nic_dev->q_params.num_qps)
+	if (test_bit(HINIC3_CHANGE_RES_INVALID, &nic_dev->flags) ||
+	    q_id >= nic_dev->q_params.num_qps)
 		return 0;
 
 	info.interrupt_coalesc_set = 1;
