@@ -22,8 +22,8 @@ struct ex_regs {
 	u64	lr;
 	u64	ctr;
 	u64	xer;
-	uint32_t	cr;
-	uint32_t	trap;
+	u32	cr;
+	u32	trap;
 	u64	vaddr; /* vaddr of this struct */
 };
 
