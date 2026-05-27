@@ -21,11 +21,10 @@ The acquisition orders for mutexes are as follows:
 - kvm->lock is taken outside vcpu->mutex
 
 - kvm->lock is taken outside kvm->slots_lock and kvm->irq_lock
+    - kvm->slots_lock is taken outside kvm->irq_lock, though acquiring
+      them together is quite rare.
 
 - vcpu->mutex is taken outside kvm->slots_lock and kvm->slots_arch_lock
-
-- kvm->slots_lock is taken outside kvm->irq_lock, though acquiring
-  them together is quite rare.
 
 - kvm->mn_active_invalidate_count ensures that pairs of
   invalidate_range_start() and invalidate_range_end() callbacks
