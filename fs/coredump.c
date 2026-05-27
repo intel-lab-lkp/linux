@@ -637,7 +637,7 @@ static int umh_coredump_setup(struct subprocess_info *info, struct cred *new)
 		pidfs_coredump(cp);
 
 		/*
-		 * Usermode helpers are childen of either
+		 * Usermode helpers are children of either
 		 * system_dfl_wq or of kthreadd. So we know that
 		 * we're starting off with a clean file descriptor
 		 * table. So we should always be able to use
@@ -1053,7 +1053,7 @@ static bool coredump_write(struct core_name *cn,
 	cn->core_dumped = binfmt->core_dump(cprm);
 	/*
 	 * Ensures that file size is big enough to contain the current
-	 * file postion. This prevents gdb from complaining about
+	 * file position. This prevents gdb from complaining about
 	 * a truncated file if the last "write" to the file was
 	 * dump_skip.
 	 */
