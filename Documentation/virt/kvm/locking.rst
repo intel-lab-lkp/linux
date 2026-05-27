@@ -61,6 +61,10 @@ sections.
 2. Exception
 ------------
 
+The general rule in KVM is that any modification to shadow page tables
+(and their entries (SPTEs)) must be protected by ``kvm->mmu_lock``,
+with the exceptions described below.
+
 Fast page fault:
 
 Fast page fault is the fast path which fixes the guest page fault out of
