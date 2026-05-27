@@ -902,8 +902,7 @@ static int validate_special_event(unsigned long addr, unsigned long mask)
  * Return: 0 if valid, RTAS_INVALID_PARAMETER otherwise.
  */
 
-static int validate_corrupted_page(struct eeh_pe *pe __maybe_unused,
-				   unsigned long addr, unsigned long mask)
+static int validate_corrupted_page(unsigned long addr, unsigned long mask)
 {
 	if (!addr) {
 		pr_err("corrupted-page requires non-zero addr\n");
@@ -978,7 +977,7 @@ static int prepare_errinjct_buffer(struct eeh_pe *pe, int type, int func,
 		if (addr == 0)
 			return RTAS_INVALID_PARAMETER;
 
-		if (validate_corrupted_page(pe, addr, mask))
+		if (validate_corrupted_page(addr, mask))
 			return RTAS_INVALID_PARAMETER;
 
 		buf32[0] = cpu_to_be32(upper_32_bits(addr));
@@ -1048,6 +1047,97 @@ static int prepare_errinjct_buffer(struct eeh_pe *pe, int type, int func,
 }
 
 /**
+ * rtas_open_errinjct_session - Open an RTAS error injection session
+ *
+ * Opens a session with the RTAS ibm,open-errinjct service.
+ *
+ * Return: Positive session token on success, negative error code on failure.
+ */
+static int rtas_open_errinjct_session(void)
+{
+	int open_token, args[2] = {0};
+	int rc, status, session_token = -1;
+
+	open_token = rtas_function_token(RTAS_FN_IBM_OPEN_ERRINJCT);
+	if (open_token == RTAS_UNKNOWN_SERVICE) {
+		pr_err("RTAS: ibm,open-errinjct not available\n");
+		return RTAS_UNKNOWN_SERVICE;
+	}
+
+	/* Call open; original code treated rtas_call return as session token */
+	rc = rtas_call(open_token, 0, 2, args);
+	status = args[1];
+	if (status != 0) {
+		pr_err("RTAS: open-errinjct failed: status=%d args[1]=%d rc=%d\n",
+		       status, args[1], rc);
+		return status ? status : -EIO;
+	}
+
+	session_token = args[0];
+	pr_info("Opened injection session: token=%d\n", session_token);
+	return session_token;
+}
+
+/**
+ * rtas_close_errinjct_session - Close an RTAS error injection session
+ * @session_token: Session token returned from open
+ *
+ * Attempts to close a previously opened error injection session. Best-effort;
+ * logs warnings if close fails or if service is unavailable.
+ */
+
+static void rtas_close_errinjct_session(int session_token)
+{
+	int close_token, args[2] = {0};
+
+	if (session_token <= 0)
+		return;
+
+	close_token = rtas_function_token(RTAS_FN_IBM_CLOSE_ERRINJCT);
+	if (close_token == RTAS_UNKNOWN_SERVICE) {
+		pr_warn("close-errinjct not available\n");
+		return;
+	}
+
+	args[0] = session_token;
+	rtas_call(close_token, 1, 1, args);
+	if (args[0])
+		pr_warn("close-errinjct  args[0]=%d\n", args[0]);
+}
+
+/**
+ * do_errinjct_call - Invoke the RTAS error injection service
+ * @errinjct_token: RTAS token for ibm,errinjct
+ * @type:           RTAS error type
+ * @session_token:  RTAS error injection session token
+ *
+ * Issues the RTAS ibm,errinjct call with the prepared work buffer. Logs errors
+ * on failure.
+ *
+ * Return: 0 on success, negative error code otherwise.
+ */
+
+static int do_errinjct_call(int errinjct_token, int type, int session_token)
+{
+	int rc, status;
+
+	if (errinjct_token == RTAS_UNKNOWN_SERVICE)
+		return -ENODEV;
+
+	/* errinjct takes: type, session_token, workbuf pointer (3 in), returns status */
+	rc = rtas_call(errinjct_token, 3, 1, &status, type, session_token,
+		       rtas_errinjct_buf);
+
+	if (rc || status != 0) {
+		pr_err("RTAS: errinjct failed: rc=%d, status=%d\n", rc, status);
+		return status ? status : -EIO;
+	}
+
+	pr_info("RTAS: errinjct ok: rc=%d, status=%d\n", rc, status);
+	return 0;
+}
+
+/**
  * pseries_eeh_err_inject - Inject specified error to the indicated PE
  * @pe: the indicated PE
  * @type: error type
@@ -1060,29 +1150,65 @@ static int prepare_errinjct_buffer(struct eeh_pe *pe, int type, int func,
 static int pseries_eeh_err_inject(struct eeh_pe *pe, int type, int func,
 				  unsigned long addr, unsigned long mask)
 {
-	struct	eeh_dev	*pdev;
+	int rc = 0;
+	int session_token = -1;
+	int errinjct_token;
 
-	/* Check on PCI error type */
-	if (type != EEH_ERR_TYPE_32 && type != EEH_ERR_TYPE_64)
-		return -EINVAL;
+	/* Validate type */
+	if (!validate_err_type(type)) {
+		pr_err("RTAS: invalid error type 0x%x\n", type);
+		return RTAS_INVALID_PARAMETER;
+	}
+	pr_debug("RTAS: error type 0x%x\n", type);
 
-	switch (func) {
-	case EEH_ERR_FUNC_LD_MEM_ADDR:
-	case EEH_ERR_FUNC_LD_MEM_DATA:
-	case EEH_ERR_FUNC_ST_MEM_ADDR:
-	case EEH_ERR_FUNC_ST_MEM_DATA:
-		/* injects a MMIO error for all pdev's belonging to PE */
-		pci_lock_rescan_remove();
-		list_for_each_entry(pdev, &pe->edevs, entry)
-			eeh_pe_inject_mmio_error(pdev->pdev);
-		pci_unlock_rescan_remove();
-		break;
-	default:
-		return -ERANGE;
+	/* For IOA bus errors we must validate err_func and addr/mask in PE.
+	 * For other types: if addr/mask present we'll still validate BAR range;
+	 * otherwise skip function checks.
+	 */
+	if (type == RTAS_ERR_TYPE_IOA_BUS_ERROR ||
+	    type == RTAS_ERR_TYPE_IOA_BUS_ERROR_64) {
+		/* Validate that addr/mask fall in the PE's BAR ranges */
+		rc = validate_addr_mask_in_pe(pe, addr, mask);
+		if (rc)
+			return rc;
+	} else if (addr || mask) {
+		/* If caller provided addr/mask for a non-IOA type, do a BAR check too */
+		rc = validate_addr_mask_in_pe(pe, addr, mask);
+		if (rc)
+			return rc;
 	}
 
-	return 0;
+	/* Open RTAS session */
+	session_token = rtas_open_errinjct_session();
+	if (session_token < 0)
+		return session_token;
+
+	/* get errinjct token */
+	errinjct_token = rtas_function_token(RTAS_FN_IBM_ERRINJCT);
+	if (errinjct_token == RTAS_UNKNOWN_SERVICE) {
+		pr_err("RTAS: ibm,errinjct not available\n");
+		rc = -ENODEV;
+		goto out_close;
+	}
+
+	/* prepare shared buffer while holding lock */
+	spin_lock(&rtas_errinjct_buf_lock);
+	rc = prepare_errinjct_buffer(pe, type, func, addr, mask);
+	if (rc) {
+		spin_unlock(&rtas_errinjct_buf_lock);
+		goto out_close;
+	}
+
+	/* perform the errinjct RTAS call */
+	rc = do_errinjct_call(errinjct_token, type, session_token);
+	spin_unlock(&rtas_errinjct_buf_lock);
+
+out_close:
+	/* always attempt close if we opened a session */
+	rtas_close_errinjct_session(session_token);
+	return rc;
 }
+
 
 static struct eeh_ops pseries_eeh_ops = {
 	.name			= "pseries",
