@@ -60,16 +60,16 @@ static inline bool raid6_has_sse1_or_mmxext(void)
 static __always_inline void __init arch_raid6_init(void)
 {
 	if (raid6_has_avx2()) {
+		raid6_algo_add(&raid6_avx2x1);
+		raid6_algo_add(&raid6_avx2x2);
+		if (IS_ENABLED(CONFIG_X86_64))
+			raid6_algo_add(&raid6_avx2x4);
 		if (raid6_has_avx512()) {
 			raid6_algo_add(&raid6_avx512x1);
 			raid6_algo_add(&raid6_avx512x2);
 			if (IS_ENABLED(CONFIG_X86_64))
 				raid6_algo_add(&raid6_avx512x4);
 		}
-		raid6_algo_add(&raid6_avx2x1);
-		raid6_algo_add(&raid6_avx2x2);
-		if (IS_ENABLED(CONFIG_X86_64))
-			raid6_algo_add(&raid6_avx2x4);
 	} else if (IS_ENABLED(CONFIG_X86_64) || raid6_has_sse2()) {
 		/* x86_64 can assume SSE2 as baseline */
 		raid6_algo_add(&raid6_sse2x1);
