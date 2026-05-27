@@ -6,6 +6,7 @@
  * parts of early kernel initialization.
  */
 #include <linux/acpi.h>
+#include <linux/bootconfig.h>
 #include <linux/console.h>
 #include <linux/cpu.h>
 #include <linux/crash_dump.h>
@@ -923,6 +924,8 @@ void __init setup_arch(char **cmdline_p)
 #endif
 	builtin_cmdline_added = true;
 #endif
+
+	xbc_prepend_embedded_cmdline(boot_command_line, COMMAND_LINE_SIZE);
 
 	strscpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
 	*cmdline_p = command_line;
