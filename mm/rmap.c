@@ -168,7 +168,7 @@ static struct kmem_cache *anon_vma_chain_cachep;
  *        covering both regular anon_vma and lazy anon_vma mappings.
  */
 
-bool anon_vma_lazy_enable;
+bool anon_vma_lazy_enable = true;
 #endif
 
 static inline struct anon_vma *anon_vma_alloc(void)
