@@ -828,15 +828,15 @@ static void xen_pgd_pin(struct mm_struct *mm)
  */
 void xen_mm_pin_all(void)
 {
-	struct page *page;
+	struct ptdesc *ptdesc;
 
 	spin_lock(&init_mm.page_table_lock);
 	spin_lock(&pgd_lock);
 
-	list_for_each_entry(page, &pgd_list, lru) {
-		if (!PagePinned(page)) {
-			__xen_pgd_pin(&init_mm, (pgd_t *)page_address(page));
-			SetPageSavePinned(page);
+	list_for_each_entry(ptdesc, &pgd_list, pt_list) {
+		if (!PagePinned(ptdesc_page(ptdesc))) {
+			__xen_pgd_pin(&init_mm, (pgd_t *)ptdesc_address(ptdesc));
+			SetPageSavePinned(ptdesc_page(ptdesc));
 		}
 	}
 
