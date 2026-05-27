@@ -67,15 +67,6 @@
  */
 #define GPU_BUDDY_TRIM_DISABLE			BIT(5)
 
-enum gpu_buddy_free_tree {
-	GPU_BUDDY_CLEAR_TREE = 0,
-	GPU_BUDDY_DIRTY_TREE,
-	GPU_BUDDY_MAX_FREE_TREES,
-};
-
-#define for_each_free_tree(tree) \
-	for ((tree) = 0; (tree) < GPU_BUDDY_MAX_FREE_TREES; (tree)++)
-
 /**
  * struct gpu_buddy_block - Block within a buddy allocator
  *
@@ -103,6 +94,14 @@ struct gpu_buddy_block {
 #define   GPU_BUDDY_ALLOCATED	   (1 << 10)
 #define   GPU_BUDDY_FREE	   (2 << 10)
 #define   GPU_BUDDY_SPLIT	   (3 << 10)
+/*
+ * GPU_BUDDY_HEADER_CLEAR has two roles:
+ *  - FREE state:      set when the block's full range is cleared (tracker
+ *                     confirmed).  Cleared free blocks float in the buddy
+ *                     tree and are NOT inserted into free_tree[].
+ *  - ALLOCATED state: set when the block was served from cleared memory,
+ *                     informing the caller that no GPU clear pass is needed.
+ */
 #define GPU_BUDDY_HEADER_CLEAR  GENMASK_ULL(9, 9)
 /* Free to be used, if needed in the future */
 #define GPU_BUDDY_HEADER_UNUSED GENMASK_ULL(8, 6)
@@ -130,10 +129,43 @@ struct gpu_buddy_block {
 /* private: */
 	struct list_head tmp_link;
 	unsigned int subtree_max_alignment;
+	bool subtree_has_dirty;
 };
 
 /* Order-zero must be at least SZ_4K */
 #define GPU_BUDDY_MAX_ORDER (63 - 12)
+
+/**
+ * struct gpu_clear_extent - a contiguous cleared (zeroed) address range
+ *
+ * Tracks a single contiguous address range whose memory content is known
+ * to be zeroed.  Extents are non-overlapping and stored in an augmented
+ * red-black tree sorted by @start.  The augmented value @subtree_max_size
+ * allows O(log N) search for an extent of at least a given size.
+ */
+struct gpu_clear_extent {
+/* private: */
+	struct rb_node	rb;
+	u64		start;
+	u64		end;
+	u64		subtree_max_size;
+};
+
+/**
+ * struct gpu_clear_tracker - tracks cleared (zeroed) address intervals
+ *
+ * Maintains a set of non-overlapping cleared extents as an augmented
+ * red-black tree.  The tracker is embedded inside struct gpu_buddy and
+ * replaces the former dual (clear/dirty) free-tree scheme.
+ *
+ * @total_clear: Total bytes of cleared memory currently tracked.
+ */
+struct gpu_clear_tracker {
+/* private: */
+	struct rb_root	root;
+/* public: */
+	u64		total_clear;
+};
 
 /**
  * struct gpu_buddy - GPU binary buddy allocator
@@ -154,18 +186,20 @@ struct gpu_buddy_block {
  * @avail: Total free space currently available for allocation in bytes.
  * @clear_avail: Free space available in the clear tree (zeroed memory) in bytes.
  *               This is a subset of @avail.
+ * @clear: Tracker of cleared address ranges (decoupled from free_tree).
  * @lock_dep_map: Annotates gpu_buddy API with a driver provided lock.
  */
 struct gpu_buddy {
 /* private: */
+	struct gpu_clear_tracker clear;
 	/*
-	 * Array of red-black trees for free block management.
-	 * Indexed as free_trees[clear/dirty][order] where:
-	 * - Index 0 (GPU_BUDDY_CLEAR_TREE): blocks with zeroed content
-	 * - Index 1 (GPU_BUDDY_DIRTY_TREE): blocks with unknown content
-	 * Each tree holds free blocks of the corresponding order.
+	 * One RB-tree per order containing all free blocks (clear and
+	 * dirty alike).  The augment field subtree_has_dirty lets dirty
+	 * allocations skip subtrees with no dirty inventory in O(log N).
+	 * Cleared free blocks coexist here but are also indexed by the
+	 * @clear tracker for fast CLEAR_ALLOCATION lookups.
 	 */
-	struct rb_root **free_trees;
+	struct rb_root *free_tree;
 	/*
 	 * Array of root blocks representing the top-level blocks of the
 	 * binary tree(s). Multiple roots exist when the total size is not

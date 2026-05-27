@@ -78,15 +78,11 @@ static void gpu_test_buddy_subtree_offset_alignment_stress(struct kunit *test)
 		}
 
 		for (order = mm.max_order; order >= 0 && !root; order--) {
-			for (tree = 0; tree < 2; tree++) {
-				node = mm.free_trees[tree][order].rb_node;
-				if (node) {
-					root = container_of(node,
-							    struct gpu_buddy_block,
-							    rb);
-					break;
-				}
-			}
+			node = mm.free_tree[order].rb_node;
+			if (node)
+				root = container_of(node,
+						    struct gpu_buddy_block,
+						    rb);
 		}
 
 		KUNIT_ASSERT_NOT_NULL(test, root);
@@ -97,8 +93,8 @@ static void gpu_test_buddy_subtree_offset_alignment_stress(struct kunit *test)
 		gpu_buddy_free_list(&mm, &allocated[i], 0);
 
 		for (order = 0; order <= mm.max_order; order++) {
-			for (tree = 0; tree < 2; tree++) {
-				node = mm.free_trees[tree][order].rb_node;
+			{
+				node = mm.free_tree[order].rb_node;
 				if (!node)
 					continue;
 
