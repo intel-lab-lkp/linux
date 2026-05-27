@@ -100,6 +100,31 @@
  */
 #define DW_VR_RSFEC_CTRL_TC_PAD_ALTER	BIT(10)
 
+/* Vendor specific 4 channel PCS registers */
+
+/* DW_VR_MII_PCS_VL_INTVL and DW_VR_MII_AN_INTR_STS conflict
+ * but code paths are different
+ */
+#define DW_VR_MII_PCS_VL_INTVL		0x8002
+/* 0x8008 - 0x800f */
+#define DW_VR_MII_PCS_VL0_L		0x8008
+#define DW_VR_MII_PCS_VL0_H		0x8009
+#define DW_VR_MII_PCS_PCS_MODE		0x8010
+
+/* DW_VR_MII_PCS_PCS_MODE bits */
+#define DW_VR_MII_PCS_MODE_HI_BER25		BIT(2)
+#define DW_VR_MII_PCS_MODE_DISABLE_MLD		BIT(1)
+#define DW_VR_MII_PCS_MODE_CLAUSE49		BIT(0)
+
+/* 25G requires these two bits are set.
+ *
+ * The CLAUSE49 bit changes the interface with the MAC
+ * to 64 bit and the BER25 bit changes the measurement
+ * interval to 2ms.
+ */
+#define DW_VR_MII_PCS_MODE_CLAUSE107 \
+	(DW_VR_MII_PCS_MODE_HI_BER25 | DW_VR_MII_PCS_MODE_CLAUSE49)
+
 #define DW_XPCS_INFO_DECLARE(_name, _pcs, _pma)				\
 	static const struct dw_xpcs_info _name = { .pcs = _pcs, .pma = _pma }
 
