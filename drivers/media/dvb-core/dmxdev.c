@@ -612,6 +612,21 @@ static inline int dvb_dmxdev_filter_reset(struct dmxdev_filter *dmxdevfilter)
 	return 0;
 }
 
+static void dvb_dmxdev_cleanup_pes(struct dmxdev_filter *dmxdevfilter)
+{
+	struct dmxdev_feed *feed;
+	struct dmx_demux *demux = dmxdevfilter->dev->demux;
+
+	list_for_each_entry(feed, &dmxdevfilter->feed.ts, next) {
+		if (!feed->ts)
+			continue;
+
+		feed->ts->stop_filtering(feed->ts);
+		demux->release_ts_feed(demux, feed->ts);
+		feed->ts = NULL;
+	}
+}
+
 static int dvb_dmxdev_start_feed(struct dmxdev *dmxdev,
 				 struct dmxdev_filter *filter,
 				 struct dmxdev_feed *feed)
@@ -652,12 +667,14 @@ static int dvb_dmxdev_start_feed(struct dmxdev *dmxdev,
 	ret = tsfeed->set(tsfeed, feed->pid, ts_type, ts_pes, timeout);
 	if (ret < 0) {
 		dmxdev->demux->release_ts_feed(dmxdev->demux, tsfeed);
+		feed->ts = NULL;
 		return ret;
 	}
 
 	ret = tsfeed->start_filtering(tsfeed);
 	if (ret < 0) {
 		dmxdev->demux->release_ts_feed(dmxdev->demux, tsfeed);
+		feed->ts = NULL;
 		return ret;
 	}
 
@@ -768,7 +785,8 @@ static int dvb_dmxdev_filter_start(struct dmxdev_filter *filter)
 		list_for_each_entry(feed, &filter->feed.ts, next) {
 			ret = dvb_dmxdev_start_feed(dmxdev, filter, feed);
 			if (ret < 0) {
-				dvb_dmxdev_filter_stop(filter);
+				dvb_dmxdev_cleanup_pes(filter);
+				dvb_ringbuffer_flush(&filter->buffer);
 				return ret;
 			}
 		}
@@ -884,6 +902,7 @@ static int dvb_dmxdev_add_pid(struct dmxdev *dmxdev,
 			      struct dmxdev_filter *filter, u16 pid)
 {
 	struct dmxdev_feed *feed;
+	int ret;
 
 	if ((filter->type != DMXDEV_TYPE_PES) ||
 	    (filter->state < DMXDEV_STATE_SET))
@@ -901,8 +920,14 @@ static int dvb_dmxdev_add_pid(struct dmxdev *dmxdev,
 	feed->pid = pid;
 	list_add(&feed->next, &filter->feed.ts);
 
-	if (filter->state >= DMXDEV_STATE_GO)
-		return dvb_dmxdev_start_feed(dmxdev, filter, feed);
+	if (filter->state >= DMXDEV_STATE_GO) {
+		ret = dvb_dmxdev_start_feed(dmxdev, filter, feed);
+		if (ret < 0) {
+			list_del(&feed->next);
+			kfree(feed);
+		}
+		return ret;
+	}
 
 	return 0;
 }
