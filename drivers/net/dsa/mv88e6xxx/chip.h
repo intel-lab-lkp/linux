@@ -19,6 +19,7 @@
 #include <linux/ptp_clock_kernel.h>
 #include <linux/timecounter.h>
 #include <net/dsa.h>
+#include <net/pkt_sched.h>
 
 #define EDSA_HLEN		8
 #define MV88E6XXX_N_FID		4096
@@ -216,6 +217,7 @@ struct mv88e6xxx_ptp_ops;
 struct mv88e6xxx_pcs_ops;
 struct mv88e6xxx_cc_coeffs;
 struct mv88e6xxx_tcam_ops;
+struct mv88e6xxx_tc_ops;
 
 struct mv88e6xxx_irq {
 	u16 masked;
@@ -248,6 +250,46 @@ struct mv88e6xxx_port_hwtstamp {
 
 	/* Current timestamp configuration */
 	struct kernel_hwtstamp_config tstamp_config;
+};
+
+enum mv88e6xxx_avb_mode {
+	MV88E6XXX_AVB_MODE_STANDARD = 0,
+	MV88E6XXX_AVB_MODE_ENHANCED,
+	MV88E6XXX_AVB_MODE_SECURE,
+};
+
+enum mv88e6xxx_avb_tc {
+	/* Non-AVB traffic */
+	MV88E6XXX_AVB_TC_LEGACY = 0,
+	/* Higher latency, low priority AVB flows (class B) */
+	MV88E6XXX_AVB_TC_LO = 1,
+	/* Low latency, high priority AVB flows (class A) */
+	MV88E6XXX_AVB_TC_HI = 2,
+	MV88E6XXX_AVB_TC_MAX = MV88E6XXX_AVB_TC_HI
+};
+
+struct mv88e6xxx_avb_priority_map {
+	union {
+		/* Number of queues, for MV88E6XXX_AVB_TC_LEGACY */
+		u8 count;
+
+		/* Frame priority, for MV88E6XXX_AVB_TC_LO/HI */
+		u8 fpri;
+	};
+
+	/* Queue priority*/
+	u8 qpri;
+};
+
+struct mv88e6xxx_avb_tc_policy {
+	/* AVB mode */
+	enum mv88e6xxx_avb_mode mode;
+
+	/* Ports participating in HW offload priority mapping */
+	u16 port_mask;
+
+	/* Map from 802.1p frame priority to queue */
+	struct mv88e6xxx_avb_priority_map map[MV88E6XXX_AVB_TC_MAX + 1];
 };
 
 enum mv88e6xxx_policy_mapping {
@@ -439,6 +481,9 @@ struct mv88e6xxx_chip {
 	/* Current ingress and egress monitor ports */
 	int egress_dest_port;
 	int ingress_dest_port;
+
+	/* Global AVB queue policy resources */
+	struct mv88e6xxx_avb_tc_policy avb_tc_policy;
 
 	/* Per-port timestamping resources. */
 	struct mv88e6xxx_port_hwtstamp port_hwtstamp[DSA_MAX_PORTS];
@@ -721,6 +766,9 @@ struct mv88e6xxx_ops {
 
 	/* Ternary Content Addressable Memory operations */
 	const struct mv88e6xxx_tcam_ops *tcam_ops;
+
+	/* Traffic control / Qdisc operations */
+	const struct mv88e6xxx_tc_ops *tc_ops;
 };
 
 struct mv88e6xxx_irq_ops {
@@ -766,6 +814,28 @@ struct mv88e6xxx_avb_ops {
 	int (*tai_read)(struct mv88e6xxx_chip *chip, int addr, u16 *data,
 			int len);
 	int (*tai_write)(struct mv88e6xxx_chip *chip, int addr, u16 data);
+
+	/* Access port-scoped Audio Video Bridging registers */
+	int (*port_avb_read)(struct mv88e6xxx_chip *chip, int port, int addr,
+			     u16 *data, int len);
+	int (*port_avb_write)(struct mv88e6xxx_chip *chip, int port, int addr,
+			      u16 data);
+
+	/* Access global Audio Video Bridging registers */
+	int (*avb_read)(struct mv88e6xxx_chip *chip, int addr, u16 *data,
+			int len);
+	int (*avb_write)(struct mv88e6xxx_chip *chip, int addr, u16 data);
+
+	/* Access global Class Shaping and Pacing registers */
+	int (*qav_read)(struct mv88e6xxx_chip *chip, int addr, u16 *data,
+			int len);
+	int (*qav_write)(struct mv88e6xxx_chip *chip, int addr, u16 data);
+
+	/* Access port-scoped Class Shaping and Pacing registers */
+	int (*port_qav_read)(struct mv88e6xxx_chip *chip, int port, int addr,
+			     u16 *data, int len);
+	int (*port_qav_write)(struct mv88e6xxx_chip *chip, int port, int addr,
+			      u16 data);
 };
 
 struct mv88e6xxx_ptp_ops {
@@ -799,6 +869,12 @@ struct mv88e6xxx_tcam_ops {
 	int (*entry_add)(struct mv88e6xxx_chip *chip,
 			 struct mv88e6xxx_tcam_entry *entry, u8 idx);
 	int (*flush_tcam)(struct mv88e6xxx_chip *chip);
+};
+
+struct mv88e6xxx_tc_ops {
+	int (*tc_enable)(struct mv88e6xxx_chip *chip,
+			 const struct mv88e6xxx_avb_tc_policy *policy);
+	int (*tc_disable)(struct mv88e6xxx_chip *chip);
 };
 
 static inline bool mv88e6xxx_has_stu(struct mv88e6xxx_chip *chip)
