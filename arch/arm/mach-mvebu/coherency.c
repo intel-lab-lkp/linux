@@ -192,6 +192,10 @@ static void __init armada_375_380_coherency_init(struct device_node *np)
 
 		p = kzalloc_obj(*p);
 		p->name = kstrdup("arm,io-coherent", GFP_KERNEL);
+		if (!p->name) {
+			kfree(p);
+			return;
+		}
 		of_add_property(cache_dn, p);
 	}
 }
