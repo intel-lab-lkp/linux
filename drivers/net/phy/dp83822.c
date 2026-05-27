@@ -4,6 +4,7 @@
  * Copyright (C) 2017 Texas Instruments Inc.
  */
 
+#include <linux/clk.h>
 #include <linux/ethtool.h>
 #include <linux/etherdevice.h>
 #include <linux/kernel.h>
@@ -203,6 +204,7 @@ struct dp83822_private {
 	u8 cfg_dac_minus;
 	u8 cfg_dac_plus;
 	struct ethtool_wolinfo wol;
+	struct clk *clk;
 	bool set_gpio2_clk_out;
 	u32 gpio2_clk_out;
 	bool led_pin_enable[DP83822_MAX_LED_PINS];
@@ -984,12 +986,18 @@ static int dp83822_attach_mdi_port(struct phy_device *phydev,
 
 static int dp8382x_probe(struct phy_device *phydev)
 {
+	struct device *dev = &phydev->mdio.dev;
 	struct dp83822_private *dp83822;
 
-	dp83822 = devm_kzalloc(&phydev->mdio.dev, sizeof(*dp83822),
+	dp83822 = devm_kzalloc(dev, sizeof(*dp83822),
 			       GFP_KERNEL);
 	if (!dp83822)
 		return -ENOMEM;
+
+	dp83822->clk = devm_clk_get_optional_enabled(dev, NULL);
+	if (IS_ERR(dp83822->clk))
+		return dev_err_probe(dev, PTR_ERR(dp83822->clk),
+				     "Failed to request ref clock\n");
 
 	dp83822->tx_amplitude_100base_tx_index = -1;
 	dp83822->mac_termination_index = -1;
