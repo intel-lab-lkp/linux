@@ -371,8 +371,8 @@ void cec_unregister_adapter(struct cec_adapter *adap)
 		return;
 
 #ifdef CONFIG_MEDIA_CEC_RC
-	/* Note: rc_unregister also calls rc_free */
 	rc_unregister_device(adap->rc);
+	rc_free_device(adap->rc);
 	adap->rc = NULL;
 #endif
 	debugfs_remove_recursive(adap->cec_dir);
