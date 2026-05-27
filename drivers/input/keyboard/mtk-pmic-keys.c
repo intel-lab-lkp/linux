@@ -363,7 +363,7 @@ static int mtk_pmic_keys_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	for_each_child_of_node_scoped(node, child) {
+	for_each_available_child_of_node_scoped(node, child) {
 		keys->keys[index].regs = &mtk_pmic_regs->keys_regs[index];
 
 		keys->keys[index].irq =
