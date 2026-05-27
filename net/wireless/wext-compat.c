@@ -109,6 +109,7 @@ int cfg80211_wext_giwrange(struct net_device *dev,
 	struct iw_point *data = &wrqu->data;
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct iw_range *range = (struct iw_range *) extra;
+	bool have_wep40 = false, have_wep104 = false;
 	enum nl80211_band band;
 	int i, c = 0;
 
@@ -170,16 +171,21 @@ int cfg80211_wext_giwrange(struct net_device *dev,
 			break;
 
 		case WLAN_CIPHER_SUITE_WEP40:
-			range->encoding_size[range->num_encoding_sizes++] =
-				WLAN_KEY_LEN_WEP40;
+			have_wep40 = true;
 			break;
 
 		case WLAN_CIPHER_SUITE_WEP104:
-			range->encoding_size[range->num_encoding_sizes++] =
-				WLAN_KEY_LEN_WEP104;
+			have_wep104 = true;
 			break;
 		}
 	}
+
+	if (have_wep40)
+		range->encoding_size[range->num_encoding_sizes++] =
+			WLAN_KEY_LEN_WEP40;
+	if (have_wep104)
+		range->encoding_size[range->num_encoding_sizes++] =
+			WLAN_KEY_LEN_WEP104;
 
 	for (band = 0; band < NUM_NL80211_BANDS; band ++) {
 		struct ieee80211_supported_band *sband;
