@@ -2721,6 +2721,8 @@ err_clk_ahb:
 err_clk_enable:
 	pm_runtime_put_sync(dev->dev);
 err_pm_get:
+	if (ctx->vdoa)
+		vdoa_context_destroy(ctx->vdoa);
 	v4l2_fh_del(&ctx->fh, file);
 	v4l2_fh_exit(&ctx->fh);
 err_coda_name_init:
