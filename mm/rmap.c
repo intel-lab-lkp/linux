@@ -794,42 +794,84 @@ anon_rmap_t vma_get_anon_rmap(struct vm_area_struct *vma)
 
 	mmap_assert_locked(vma->vm_mm);
 	VM_BUG_ON(!vma->anon_vma);
+	if (!anon_vma) {
+		vma_get(vma);
+		return vma_to_anon_rmap(vma);
+	}
 	get_anon_vma(anon_vma);
 	return anon_vma_to_anon_rmap(anon_vma);
 }
 
 void put_anon_rmap(anon_rmap_t anon_rmap)
 {
+	if (!anon_rmap_is_anon_vma(anon_rmap)) {
+		vma_put(anon_rmap_to_vma(anon_rmap));
+		return;
+	}
 	put_anon_vma(anon_rmap_to_anon_vma(anon_rmap));
 }
 
+/*
+ * Rmap for anonymous pages normally only needs read protection.
+ * However, huge page splitting in huge_memory requires the rmap
+ * write lock to prevent concurrency, achieved by upgrading to a
+ * regular anon_vma.
+ */
 void anon_rmap_lock_write(anon_rmap_t anon_rmap)
 {
+	VM_BUG_ON(!anon_rmap_is_anon_vma(anon_rmap));
 	anon_vma_lock_write(anon_rmap_to_anon_vma(anon_rmap));
 }
 
 int anon_rmap_trylock_write(anon_rmap_t anon_rmap)
 {
+	VM_BUG_ON(!anon_rmap_is_anon_vma(anon_rmap));
 	return anon_vma_trylock_write(anon_rmap_to_anon_vma(anon_rmap));
 }
 
 void anon_rmap_unlock_write(anon_rmap_t anon_rmap)
 {
+	VM_BUG_ON(!anon_rmap_is_anon_vma(anon_rmap));
 	anon_vma_unlock_write(anon_rmap_to_anon_vma(anon_rmap));
+}
+
+static void anon_vma_lazy_lock_read(struct vm_area_struct *vma)
+{
+	vma_get(vma);
+}
+
+static bool anon_vma_lazy_trylock_read(struct vm_area_struct *vma)
+{
+	return (bool)vma_get(vma);
+}
+
+static void anon_vma_lazy_unlock_read(struct vm_area_struct *vma)
+{
+	vma_put(vma);
 }
 
 void anon_rmap_lock_read(anon_rmap_t anon_rmap)
 {
+	if (!anon_rmap_is_anon_vma(anon_rmap)) {
+		anon_vma_lazy_lock_read(anon_rmap_to_vma(anon_rmap));
+		return;
+	}
 	anon_vma_lock_read(anon_rmap_to_anon_vma(anon_rmap));
 }
 
 int anon_rmap_trylock_read(anon_rmap_t anon_rmap)
 {
+	if (!anon_rmap_is_anon_vma(anon_rmap))
+		return anon_vma_lazy_trylock_read(anon_rmap_to_vma(anon_rmap));
 	return anon_vma_trylock_read(anon_rmap_to_anon_vma(anon_rmap));
 }
 
 void anon_rmap_unlock_read(anon_rmap_t anon_rmap)
 {
+	if (!anon_rmap_is_anon_vma(anon_rmap)) {
+		anon_vma_lazy_unlock_read(anon_rmap_to_vma(anon_rmap));
+		return;
+	}
 	anon_vma_unlock_read(anon_rmap_to_anon_vma(anon_rmap));
 }
 

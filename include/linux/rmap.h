@@ -938,15 +938,23 @@ void remove_migration_ptes(struct folio *src, struct folio *dst,
 		enum ttu_flags flags);
 
 /* Reverse mapping handle for anonymous folio rmap helpers. */
+enum anon_rmap_type {
+	ANON_RMAP_ANON_VMA = 0,
+	ANON_RMAP_ANON_VMA_LAZY = 1,
+};
+#define ANON_RMAP_TYPE_BITS 1
+#define ANON_RMAP_TYPE_MASK ((1UL << ANON_RMAP_TYPE_BITS) - 1)
+
 typedef struct anon_rmap {
 	unsigned long rmap;
 } anon_rmap_t;
 
-#define ANON_RMAP_NULL make_anon_rmap(0)
+#define ANON_RMAP_NULL (make_anon_rmap(0, ANON_RMAP_ANON_VMA))
 
-static inline anon_rmap_t make_anon_rmap(const void *anon_mapping)
+static inline anon_rmap_t make_anon_rmap(const void *anon_mapping,
+	enum anon_rmap_type type)
 {
-	return (anon_rmap_t){ .rmap = (unsigned long)anon_mapping, };
+	return (anon_rmap_t){ .rmap = (unsigned long)anon_mapping + type, };
 }
 
 static inline unsigned long anon_rmap_value(anon_rmap_t anon_rmap)
@@ -956,14 +964,38 @@ static inline unsigned long anon_rmap_value(anon_rmap_t anon_rmap)
 
 static inline anon_rmap_t anon_vma_to_anon_rmap(const struct anon_vma *anon_vma)
 {
-	return make_anon_rmap(anon_vma);
+	return make_anon_rmap(anon_vma, ANON_RMAP_ANON_VMA);
 }
 
 static inline struct anon_vma *anon_rmap_to_anon_vma(anon_rmap_t anon_rmap)
 {
 	unsigned long rmap = anon_rmap_value(anon_rmap);
 
-	return (struct anon_vma *)rmap;
+	return (struct anon_vma *)(rmap - ANON_RMAP_ANON_VMA);
+}
+
+static inline anon_rmap_t vma_to_anon_rmap(const struct vm_area_struct *vma)
+{
+	return make_anon_rmap(vma, ANON_RMAP_ANON_VMA_LAZY);
+}
+
+static inline struct vm_area_struct *anon_rmap_to_vma(anon_rmap_t anon_rmap)
+{
+	unsigned long rmap = anon_rmap_value(anon_rmap);
+
+	VM_BUG_ON((rmap & ANON_RMAP_TYPE_MASK) != ANON_RMAP_ANON_VMA_LAZY);
+	return (struct vm_area_struct *)(rmap - ANON_RMAP_ANON_VMA_LAZY);
+}
+
+static inline bool anon_rmap_is_anon_vma(anon_rmap_t anon_rmap)
+{
+#ifdef CONFIG_ANON_VMA_LAZY
+	unsigned long rmap = anon_rmap_value(anon_rmap);
+
+	return (rmap & ANON_RMAP_TYPE_MASK) == ANON_RMAP_ANON_VMA;
+#else
+	return true;
+#endif
 }
 
 anon_rmap_t vma_get_anon_rmap(struct vm_area_struct *vma);
@@ -1015,8 +1047,17 @@ static inline struct vm_area_struct *anon_rmap_iter_first_vma(
 	anon_rmap_t anon_rmap, unsigned long start, unsigned long last,
 	struct anon_vma_chain **avc)
 {
-	struct anon_vma *anon_vma = anon_rmap_to_anon_vma(anon_rmap);
+	struct anon_vma *anon_vma;
 
+	*avc = NULL;
+	if (!anon_rmap_is_anon_vma(anon_rmap)) {
+		struct vm_area_struct *vma = anon_rmap_to_vma(anon_rmap);
+
+		if (vma->vm_pgoff + vma_pages(vma) < start || vma->vm_pgoff > last)
+			return NULL; /* No overlap in the VMA range. */
+		return vma;
+	} else
+		anon_vma = anon_rmap_to_anon_vma(anon_rmap);
 	*avc = anon_vma_interval_tree_iter_first(&anon_vma->rb_root, start, last);
 	return *avc ? (*avc)->vma : NULL;
 }

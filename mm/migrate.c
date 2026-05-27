@@ -1144,7 +1144,10 @@ static void __migrate_folio_record(struct folio *dst,
 				   int old_page_state,
 				   anon_rmap_t anon_rmap)
 {
-	dst->private = (void *)anon_rmap_to_anon_vma(anon_rmap) + old_page_state;
+	unsigned long rmap = anon_rmap_value(anon_rmap);
+
+	dst->private = (void *)(rmap & ~PAGE_OLD_STATES) + old_page_state;
+	dst->mapping = (struct address_space *)rmap;
 }
 
 static void __migrate_folio_extract(struct folio *dst,
@@ -1152,8 +1155,12 @@ static void __migrate_folio_extract(struct folio *dst,
 				   anon_rmap_t *anon_rmapp)
 {
 	unsigned long private = (unsigned long)dst->private;
+	unsigned long mapping = (unsigned long)dst->mapping;
 
-	*anon_rmapp = anon_vma_to_anon_rmap((void *)(private & ~PAGE_OLD_STATES));
+	VM_BUG_ON((private & ~PAGE_OLD_STATES) != (mapping & ~ANON_RMAP_TYPE_MASK));
+	*anon_rmapp = make_anon_rmap((void *)(mapping & ~ANON_RMAP_TYPE_MASK),
+		mapping & ANON_RMAP_TYPE_MASK);
+	dst->mapping = NULL;
 	*old_page_state = private & PAGE_OLD_STATES;
 	dst->private = NULL;
 }

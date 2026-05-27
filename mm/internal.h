@@ -260,76 +260,147 @@ static inline void anon_vma_unlock_read(struct anon_vma *anon_vma)
 #ifdef CONFIG_ANON_VMA_LAZY
 extern bool anon_vma_lazy_enable;
 static inline bool anon_vma_lazy_enabled(void) { return anon_vma_lazy_enable; }
-#else
-static inline bool anon_vma_lazy_enabled(void) { return false; }
-#endif
 
-static inline anon_vma_tree_t make_anon_vma_tree(struct anon_vma *anon_vma)
+static inline int anon_vma_tree_type(anon_vma_tree_t anon_tree)
 {
-	return (anon_vma_tree_t)anon_vma;
+	VM_WARN_ON(((unsigned long)anon_tree & ANON_VMA_TREE_MASK) ==
+		ANON_VMA_TREE_INVALID);
+	return (unsigned long)anon_tree & ANON_VMA_TREE_MASK;
+}
+
+static inline bool anon_vma_tree_is_vma(anon_vma_tree_t anon_tree)
+{
+	return anon_vma_tree_type(anon_tree) == ANON_VMA_TREE_VMA;
+}
+
+static inline bool anon_vma_tree_is_parent(anon_vma_tree_t anon_tree)
+{
+	return anon_vma_tree_type(anon_tree) == ANON_VMA_TREE_PARENT;
+}
+
+static inline struct vm_area_struct *anon_vma_tree_vma(anon_vma_tree_t anon_tree)
+{
+	BUILD_BUG_ON(__alignof__(struct vm_area_struct) <= ANON_VMA_TREE_MASK);
+	if (!anon_vma_tree_is_vma(anon_tree))
+		return NULL;
+	return (struct vm_area_struct *)(
+		(unsigned long)anon_tree & ~ANON_VMA_TREE_MASK);
 }
 
 static inline struct anon_vma *anon_vma_tree_anon_vma(anon_vma_tree_t anon_tree)
 {
-	return (struct anon_vma *)anon_tree;
+	BUILD_BUG_ON(__alignof__(struct anon_vma) <= ANON_VMA_TREE_MASK);
+	if (anon_vma_tree_is_vma(anon_tree))
+		return NULL;
+	return (struct anon_vma *)((unsigned long)anon_tree & ~ANON_VMA_TREE_MASK);
+}
+
+#else
+static inline bool anon_vma_lazy_enabled(void) { return false; }
+static inline int anon_vma_tree_type(anon_vma_tree_t anon_tree) { return 0; }
+static inline bool anon_vma_tree_is_vma(anon_vma_tree_t anon_tree) { return false; }
+static inline bool anon_vma_tree_is_parent(
+	anon_vma_tree_t anon_tree) { return false; }
+static inline struct vm_area_struct *anon_vma_tree_vma(
+	anon_vma_tree_t anon_tree) { return NULL; }
+static inline struct anon_vma *anon_vma_tree_anon_vma(
+	anon_vma_tree_t anon_tree) { return (struct anon_vma *)anon_tree; }
+#endif
+
+static inline anon_vma_tree_t make_anon_vma_tree(const struct anon_vma *anon_vma)
+{
+	return (anon_vma_tree_t)anon_vma;
 }
 
 /* Store anon_vma in vma->anon_vma using a tagged pointer. */
 static inline void vma_set_anon_vma(struct vm_area_struct *vma,
-		struct anon_vma *anon_vma)
+	const struct anon_vma *anon_vma)
 {
 	vma->anon_vma = (anon_vma_tree_t)anon_vma;
 }
 
-/* Return the VMA's anon_vma. */
+/* Return the VMA's anon_vma, or NULL if it is marked lazy. */
 static inline struct anon_vma *vma_anon_vma(const struct vm_area_struct *vma)
 {
 	/* Use READ_ONCE() for reusable_anon_vma */
 	anon_vma_tree_t anon_tree = READ_ONCE(vma->anon_vma);
 
+	if (anon_vma_tree_type(anon_tree) != ANON_VMA_TREE_REGULAR)
+		return NULL;
 	return anon_vma_tree_anon_vma(anon_tree);
 }
 
+static inline bool vma_is_anon_vma_lazy(const struct vm_area_struct *vma)
+{
+	return anon_vma_tree_type((anon_vma_tree_t)vma->anon_vma);
+}
+
+static inline const struct vm_area_struct *vma_anon_vma_lazy_root(
+	const struct vm_area_struct *vma)
+{
+	anon_vma_tree_t anon_tree = (anon_vma_tree_t)vma->anon_vma;
+	int lazy_type = anon_vma_tree_type(anon_tree);
+
+	if (!lazy_type)
+		return NULL;
+	if (anon_vma_tree_is_parent(anon_tree))
+		return vma;
+	return anon_vma_tree_vma(anon_tree);
+}
+
+static inline bool vma_is_anon_vma_lazy_root(const struct vm_area_struct *vma)
+{
+	return vma == vma_anon_vma_lazy_root(vma);
+}
+
+/*
+ * ANON_VMA_TREE_VMA is just a VMA, without anon_vma or anon_vma_chain,
+ * so no protection is needed.
+ */
 static inline void anon_vma_tree_lock_write(anon_vma_tree_t anon_tree)
 {
 	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
 
-	anon_vma_lock_write(anon_vma);
+	if (anon_vma)
+		anon_vma_lock_write(anon_vma);
 }
 
 static inline int anon_vma_tree_trylock_write(anon_vma_tree_t anon_tree)
 {
 	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
 
-	return anon_vma_trylock_write(anon_vma);
+	return anon_vma ? anon_vma_trylock_write(anon_vma) : 1;
 }
 
 static inline void anon_vma_tree_unlock_write(anon_vma_tree_t anon_tree)
 {
 	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
 
-	anon_vma_unlock_write(anon_vma);
+	if (anon_vma)
+		anon_vma_unlock_write(anon_vma);
 }
 
 static inline void anon_vma_tree_lock_read(anon_vma_tree_t anon_tree)
 {
 	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
 
-	anon_vma_lock_read(anon_vma);
+	if (anon_vma)
+		anon_vma_lock_read(anon_vma);
 }
 
 static inline int anon_vma_tree_trylock_read(anon_vma_tree_t anon_tree)
 {
 	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
 
-	return anon_vma_trylock_read(anon_vma);
+	return anon_vma ? anon_vma_trylock_read(anon_vma) : 1;
 }
 
 static inline void anon_vma_tree_unlock_read(anon_vma_tree_t anon_tree)
 {
 	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
 
-	anon_vma_unlock_read(anon_vma);
+	if (anon_vma)
+		anon_vma_unlock_read(anon_vma);
 }
 
 struct anon_vma *folio_get_anon_vma(const struct folio *folio);
