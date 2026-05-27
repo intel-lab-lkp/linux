@@ -15,6 +15,8 @@
 
 #include <asm/archrandom.h>
 
+#include "rmm.h"
+
 static u32 smccc_version = ARM_SMCCC_VERSION_1_0;
 static enum arm_smccc_conduit smccc_conduit = SMCCC_CONDUIT_NONE;
 static DEFINE_IDA(arm_smccc_bus_id);
@@ -240,6 +242,12 @@ subsys_initcall(arm_smccc_bus_init);
 
 static int __init smccc_devices_init(void)
 {
+	/*
+	 * Register the RMI and RSI devices only when firmware exposes
+	 * the required SMCCC function IDs at a supported revision.
+	 */
+	register_rsi_device();
+
 	if (smccc_trng_available) {
 		struct arm_smccc_device *sdev;
 
