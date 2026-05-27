@@ -119,9 +119,29 @@ static int i2c_hid_acpi_probe(struct i2c_client *client)
 static const struct acpi_device_id i2c_hid_acpi_match[] = {
 	{ "ACPI0C50" },
 	{ "PNP0C50" },
+	/*
+	 * Some devices, for example the Lenovo KaiTian N60d and Inspur CP300L3,
+	 * declare their I2C HID ACPI touchpad in the DSDT as _HID "PRP0001"
+	 * with _DSD compatible "hid-over-i2c" instead of the standard
+	 * "PNP0C50". This worked before i2c-hid was split into i2c-hid-acpi
+	 * and i2c-hid-of, but PRP0001 devices on the ACPI bus are no longer
+	 * probed after the split. The _DSM call in probe() naturally rejects
+	 * PRP0001 devices that are not actually I2C HID, so matching PRP0001
+	 * here is safe.
+	 */
+	{ "PRP0001" },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, i2c_hid_acpi_match);
+
+	/*
+	 * When an ACPI device has a _DSD "compatible" property, the uevent
+	 * modalias uses the OF format (of:N<name>T<compatible>) instead of
+	 * the ACPI format (acpi:<HID>). Add an OF alias so udev can autoload
+	 * this module for such devices. probe() will reject pure DT devices
+	 * via the _DSM HID descriptor call.
+	 */
+MODULE_ALIAS("of:N*TChid-over-i2c");
 
 static struct i2c_driver i2c_hid_acpi_driver = {
 	.driver = {
