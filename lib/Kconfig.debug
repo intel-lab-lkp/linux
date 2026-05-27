@@ -1385,6 +1385,24 @@ config TEST_LOCKUP
 
 	  If unsure, say N.
 
+config TEST_CRASH
+	tristate "Test module to trigger crashes"
+	help
+	  Expose a file in debugfs which triggers a panic() call in
+	  various kernel execution contexts.
+
+	      $ cat /sys/kernel/debug/test_crash
+	      irq
+	      [...]
+	      $ echo "irq" > /sys/kernel/debug/test_crash
+	      Kernel panic - not syncing: User triggered crash in context irq
+
+	  This is useful for testing console drivers, and can help rule
+	  out issues with the console itself when silent reboots or
+	  hangs are observed on a particular system.
+
+	  If unsure, say N.
+
 endmenu # "Debug lockups and hangs"
 
 menu "Scheduler Debugging"
