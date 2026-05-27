@@ -137,6 +137,17 @@ struct xe_ggtt {
 	const struct xe_ggtt_pt_ops *pt_ops;
 	/** @mm: The memory manager used to manage individual GGTT allocations */
 	struct drm_mm mm;
+	/**
+	 * @mm_offset: base offset added to drm_mm node addresses to obtain hardware
+	 * GGTT addresses. For PF this is 0 (drm_mm uses absolute hardware addresses).
+	 * For VF this equals @start (drm_mm uses relative addresses from VF base).
+	 * Updated atomically by xe_ggtt_shift_nodes() during VF recovery.
+	 */
+	u64 mm_offset;
+	/** @reserved_bottom: permanently reserved [0, WOPCM) drm_mm node for PF */
+	struct drm_mm_node reserved_bottom;
+	/** @reserved_top: permanently reserved [GUC_GGTT_TOP, total) drm_mm node for PF */
+	struct drm_mm_node reserved_top;
 	/** @access_count: counts GGTT writes */
 	unsigned int access_count;
 	/** @wq: Dedicated unordered work queue to process node removals */
@@ -318,6 +329,10 @@ static void ggtt_fini_early(struct drm_device *drm, void *arg)
 {
 	struct xe_ggtt *ggtt = arg;
 
+	if (drm_mm_node_allocated(&ggtt->reserved_top))
+		drm_mm_remove_node(&ggtt->reserved_top);
+	if (drm_mm_node_allocated(&ggtt->reserved_bottom))
+		drm_mm_remove_node(&ggtt->reserved_bottom);
 	destroy_workqueue(ggtt->wq);
 	drm_mm_takedown(&ggtt->mm);
 }
@@ -354,16 +369,66 @@ static const struct xe_ggtt_pt_ops xelpg_pt_wa_ops = {
 	.ggtt_get_pte = xe_ggtt_get_pte,
 };
 
-static void __xe_ggtt_init_early(struct xe_ggtt *ggtt, u64 start, u64 size)
+/*
+ * __xe_ggtt_init_early - Generic drm_mm initialisation for both PF and VF.
+ *
+ * @start and @size define the usable GGTT range exposed through the public API.
+ * @mm_offset is added to every drm_mm node address to obtain the hardware
+ * address (0 for PF where the drm_mm spans real addresses; @start for VF).
+ * @mm_size is the total span passed to drm_mm_init() (equals @size for VF;
+ * equals the full hardware GGTT size for PF).
+ */
+static void __xe_ggtt_init_early(struct xe_ggtt *ggtt, u64 start, u64 size,
+				 u64 mm_offset, u64 mm_size)
 {
 	ggtt->start = start;
 	ggtt->size = size;
-	drm_mm_init(&ggtt->mm, 0, size);
+	ggtt->mm_offset = mm_offset;
+	drm_mm_init(&ggtt->mm, 0, mm_size);
+}
+
+/*
+ * __xe_ggtt_reserve_pf_nodes - Permanently reserve the forbidden GGTT zones.
+ *
+ * Must be called after __xe_ggtt_init_early() for the PF case.  Reserves
+ * [0, @wopcm) and [@guc_top, @total_size) so the allocator never hands them
+ * out.  On failure the drm_mm is torn down and the error is returned.
+ */
+static int __xe_ggtt_reserve_pf_nodes(struct xe_ggtt *ggtt, u64 wopcm,
+				      u64 guc_top, u64 total_size)
+{
+	int err;
+
+	/* Reserve [0, wopcm) — GuC cannot access below WOPCM */
+	if (wopcm > 0) {
+		ggtt->reserved_bottom.start = 0;
+		ggtt->reserved_bottom.size = wopcm;
+		err = drm_mm_reserve_node(&ggtt->mm, &ggtt->reserved_bottom);
+		if (WARN_ON(err))
+			goto err_takedown;
+	}
+
+	/* Reserve [guc_top, total_size) — GuC cannot access above GUC_GGTT_TOP */
+	if (guc_top < total_size) {
+		ggtt->reserved_top.start = guc_top;
+		ggtt->reserved_top.size = total_size - guc_top;
+		err = drm_mm_reserve_node(&ggtt->mm, &ggtt->reserved_top);
+		if (WARN_ON(err))
+			goto err_remove_bottom;
+	}
+
+	return 0;
+
+err_remove_bottom:
+	drm_mm_remove_node(&ggtt->reserved_bottom);
+err_takedown:
+	drm_mm_takedown(&ggtt->mm);
+	return err;
 }
 
 int xe_ggtt_init_kunit(struct xe_ggtt *ggtt, u32 start, u32 size)
 {
-	__xe_ggtt_init_early(ggtt, start, size);
+	__xe_ggtt_init_early(ggtt, start, size, start, size);
 	return 0;
 }
 EXPORT_SYMBOL_IF_KUNIT(xe_ggtt_init_kunit);
@@ -405,8 +470,13 @@ int xe_ggtt_init_early(struct xe_ggtt *ggtt)
 			xe_tile_err(ggtt->tile, "Hardware reported no preallocated GSM\n");
 			return -ENOMEM;
 		}
+		/*
+		 * For PF, ggtt_size holds the full hardware GGTT size. The
+		 * WOPCM and GUC_GGTT_TOP limits are enforced via permanently
+		 * reserved drm_mm nodes rather than by capping the range.
+		 */
 		ggtt_start = wopcm;
-		ggtt_size = (gsm_size / 8) * (u64)XE_PAGE_SIZE - ggtt_start;
+		ggtt_size = (gsm_size / 8) * (u64)XE_PAGE_SIZE;
 	} else {
 		ggtt_start = xe_tile_sriov_vf_ggtt_base(ggtt->tile);
 		ggtt_size = xe_tile_sriov_vf_ggtt(ggtt->tile);
@@ -423,9 +493,6 @@ int xe_ggtt_init_early(struct xe_ggtt *ggtt)
 	if (IS_DGFX(xe) && xe->info.vram_flags & XE_VRAM_FLAGS_NEED64K)
 		ggtt->flags |= XE_GGTT_FLAGS_64K;
 
-	if (ggtt_size + ggtt_start > GUC_GGTT_TOP)
-		ggtt_size = GUC_GGTT_TOP - ggtt_start;
-
 	if (GRAPHICS_VERx100(xe) >= 1270)
 		ggtt->pt_ops =
 			(ggtt->tile->media_gt && XE_GT_WA(ggtt->tile->media_gt, 22019338487)) ||
@@ -438,7 +505,19 @@ int xe_ggtt_init_early(struct xe_ggtt *ggtt)
 	if (!ggtt->wq)
 		return -ENOMEM;
 
-	__xe_ggtt_init_early(ggtt, ggtt_start, ggtt_size);
+	if (!IS_SRIOV_VF(xe)) {
+		__xe_ggtt_init_early(ggtt, ggtt_start, GUC_GGTT_TOP - ggtt_start,
+				     0, ggtt_size);
+		err = __xe_ggtt_reserve_pf_nodes(ggtt, ggtt_start, GUC_GGTT_TOP,
+						 ggtt_size);
+		if (err) {
+			destroy_workqueue(ggtt->wq);
+			return err;
+		}
+	} else {
+		__xe_ggtt_init_early(ggtt, ggtt_start, ggtt_size,
+				     ggtt_start, ggtt_size);
+	}
 
 	err = drmm_add_action_or_reset(&xe->drm, ggtt_fini_early, ggtt);
 	if (err)
@@ -459,7 +538,7 @@ static void xe_ggtt_initial_clear(struct xe_ggtt *ggtt)
 	/* Display may have allocated inside ggtt, so be careful with clearing here */
 	mutex_lock(&ggtt->lock);
 	drm_mm_for_each_hole(hole, &ggtt->mm, start, end)
-		xe_ggtt_clear(ggtt, ggtt->start + start, end - start);
+		xe_ggtt_clear(ggtt, ggtt->mm_offset + start, end - start);
 
 	xe_ggtt_invalidate(ggtt);
 	mutex_unlock(&ggtt->lock);
@@ -613,6 +692,7 @@ void xe_ggtt_shift_nodes(struct xe_ggtt *ggtt, u64 new_start)
 
 	/* pairs with READ_ONCE in xe_ggtt_node_addr() */
 	WRITE_ONCE(ggtt->start, new_start);
+	WRITE_ONCE(ggtt->mm_offset, new_start);
 }
 
 static int xe_ggtt_insert_node_locked(struct xe_ggtt_node *node,
@@ -815,20 +895,19 @@ static int __xe_ggtt_insert_bo_at(struct xe_ggtt *ggtt, struct xe_bo *bo,
 
 	mutex_lock(&ggtt->lock);
 	/*
-	 * When inheriting the initial framebuffer, the framebuffer is
-	 * physically located at VRAM address 0, and usually at GGTT address 0 too.
-	 *
-	 * The display code will ask for a GGTT allocation between end of BO and
-	 * remainder of GGTT, unaware that the start is reserved by WOPCM.
+	 * Convert caller-supplied hardware GGTT addresses to drm_mm-relative
+	 * coordinates. For PF mm_offset is 0 so this is a no-op; callers pass
+	 * real addresses and the reserved_bottom/top nodes prevent allocations
+	 * in the forbidden regions. For VF, mm_offset equals the VF base so
+	 * we convert to relative drm_mm space.
 	 */
-	if (start >= ggtt->start)
-		start -= ggtt->start;
+	if (start >= ggtt->mm_offset)
+		start -= ggtt->mm_offset;
 	else
 		start = 0;
 
-	/* Should never happen, but since we handle start, fail graciously for end */
-	if (end >= ggtt->start)
-		end -= ggtt->start;
+	if (end >= ggtt->mm_offset)
+		end -= ggtt->mm_offset;
 	else
 		end = 0;
 
@@ -923,7 +1002,7 @@ u64 xe_ggtt_largest_hole(struct xe_ggtt *ggtt, u64 alignment, u64 *spare)
 
 	mutex_lock(&ggtt->lock);
 	drm_mm_for_each_hole(entry, mm, hole_start, hole_end) {
-		hole_start = max(hole_start, ggtt->start);
+		hole_start = max(hole_start, ggtt->mm_offset);
 		hole_start = ALIGN(hole_start, alignment);
 		hole_end = ALIGN_DOWN(hole_end, alignment);
 		if (hole_start >= hole_end)
@@ -1098,7 +1177,7 @@ u64 xe_ggtt_print_holes(struct xe_ggtt *ggtt, u64 alignment, struct drm_printer 
 
 	mutex_lock(&ggtt->lock);
 	drm_mm_for_each_hole(entry, mm, hole_start, hole_end) {
-		hole_start = max(hole_start, ggtt->start);
+		hole_start = max(hole_start, ggtt->mm_offset);
 		hole_start = ALIGN(hole_start, alignment);
 		hole_end = ALIGN_DOWN(hole_end, alignment);
 		if (hole_start >= hole_end)
@@ -1152,7 +1231,7 @@ u64 xe_ggtt_read_pte(struct xe_ggtt *ggtt, u64 offset)
 u64 xe_ggtt_node_addr(const struct xe_ggtt_node *node)
 {
 	/* pairs with WRITE_ONCE in xe_ggtt_shift_nodes() */
-	return node->base.start + READ_ONCE(node->ggtt->start);
+	return node->base.start + READ_ONCE(node->ggtt->mm_offset);
 }
 
 /**
