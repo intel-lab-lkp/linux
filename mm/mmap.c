@@ -1799,7 +1799,7 @@ __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 			 * Don't prepare anon_vma until fault since we don't
 			 * copy page for current vma.
 			 */
-			tmp->anon_vma = NULL;
+			vma_set_anon_vma(tmp, NULL);
 		} else if (anon_vma_fork(tmp, mpnt))
 			goto fail_nomem_anon_vma_fork;
 		vm_flags_clear(tmp, VM_LOCKED_MASK);

@@ -15,7 +15,7 @@ struct vma_prepare {
 	struct vm_area_struct *adj_next;
 	struct file *file;
 	struct address_space *mapping;
-	struct anon_vma *anon_vma;
+	anon_vma_tree_t anon_vma;
 	struct vm_area_struct *insert;
 	struct vm_area_struct *remove;
 	struct vm_area_struct *remove2;
@@ -104,7 +104,7 @@ struct vma_merge_struct {
 		vma_flags_t vma_flags;
 	};
 	struct file *file;
-	struct anon_vma *anon_vma;
+	anon_vma_tree_t anon_vma;
 	struct mempolicy *policy;
 	struct vm_userfaultfd_ctx uffd_ctx;
 	struct anon_vma_name *anon_name;

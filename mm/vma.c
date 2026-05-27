@@ -107,8 +107,8 @@ static bool is_mergeable_anon_vma(struct vma_merge_struct *vmg, bool merge_next)
 {
 	struct vm_area_struct *tgt = merge_next ? vmg->next : vmg->prev;
 	struct vm_area_struct *src = vmg->middle; /* existing merge case. */
-	struct anon_vma *tgt_anon = tgt->anon_vma;
-	struct anon_vma *src_anon = vmg->anon_vma;
+	anon_vma_tree_t tgt_anon = tgt->anon_vma;
+	anon_vma_tree_t src_anon = vmg->anon_vma;
 
 	/*
 	 * We _can_ have !src, vmg->anon_vma via copy_vma(). In this instance we
@@ -311,7 +311,7 @@ static void vma_prepare(struct vma_prepare *vp)
 	}
 
 	if (vp->anon_vma) {
-		anon_vma_lock_write(vp->anon_vma);
+		anon_vma_tree_lock_write(vp->anon_vma);
 		anon_vma_interval_tree_pre_update_vma(vp->vma);
 		if (vp->adj_next)
 			anon_vma_interval_tree_pre_update_vma(vp->adj_next);
@@ -364,7 +364,7 @@ static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 		anon_vma_interval_tree_post_update_vma(vp->vma);
 		if (vp->adj_next)
 			anon_vma_interval_tree_post_update_vma(vp->adj_next);
-		anon_vma_unlock_write(vp->anon_vma);
+		anon_vma_tree_unlock_write(vp->anon_vma);
 	}
 
 	if (vp->file) {
@@ -652,7 +652,7 @@ void validate_mm(struct mm_struct *mm)
 	mt_validate(&mm->mm_mt);
 	for_each_vma(vmi, vma) {
 #ifdef CONFIG_DEBUG_VM_RB
-		struct anon_vma *anon_vma = vma->anon_vma;
+		anon_vma_tree_t anon_tree = vma->anon_vma;
 		struct anon_vma_chain *avc;
 #endif
 		unsigned long vmi_start, vmi_end;
@@ -676,11 +676,11 @@ void validate_mm(struct mm_struct *mm)
 		}
 
 #ifdef CONFIG_DEBUG_VM_RB
-		if (anon_vma) {
-			anon_vma_lock_read(anon_vma);
+		if (anon_tree) {
+			anon_vma_tree_lock_read(anon_tree);
 			list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
 				anon_vma_interval_tree_verify(avc);
-			anon_vma_unlock_read(anon_vma);
+			anon_vma_tree_unlock_read(anon_tree);
 		}
 #endif
 		/* Check for a infinite loop */
@@ -2009,7 +2009,7 @@ static struct anon_vma *reusable_anon_vma(struct vm_area_struct *old,
 					  struct vm_area_struct *b)
 {
 	if (anon_vma_compatible(a, b)) {
-		struct anon_vma *anon_vma = READ_ONCE(old->anon_vma);
+		struct anon_vma *anon_vma = vma_anon_vma(old);
 
 		if (anon_vma && list_is_singular(&old->anon_vma_chain))
 			return anon_vma;
@@ -3160,7 +3160,7 @@ int expand_upwards(struct vm_area_struct *vma, unsigned long address)
 	/* Lock the VMA before expanding to prevent concurrent page faults */
 	vma_start_write(vma);
 	/* We update the anon VMA tree. */
-	anon_vma_lock_write(vma->anon_vma);
+	anon_vma_tree_lock_write(vma->anon_vma);
 
 	/* Somebody else might have raced and expanded it already */
 	if (address > vma->vm_end) {
@@ -3186,7 +3186,7 @@ int expand_upwards(struct vm_area_struct *vma, unsigned long address)
 			}
 		}
 	}
-	anon_vma_unlock_write(vma->anon_vma);
+	anon_vma_tree_unlock_write(vma->anon_vma);
 	vma_iter_free(&vmi);
 	validate_mm(mm);
 	return error;
@@ -3239,7 +3239,7 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 	/* Lock the VMA before expanding to prevent concurrent page faults */
 	vma_start_write(vma);
 	/* We update the anon VMA tree. */
-	anon_vma_lock_write(vma->anon_vma);
+	anon_vma_tree_lock_write(vma->anon_vma);
 
 	/* Somebody else might have raced and expanded it already */
 	if (address < vma->vm_start) {
@@ -3266,7 +3266,7 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 			}
 		}
 	}
-	anon_vma_unlock_write(vma->anon_vma);
+	anon_vma_tree_unlock_write(vma->anon_vma);
 	vma_iter_free(&vmi);
 	validate_mm(mm);
 	return error;

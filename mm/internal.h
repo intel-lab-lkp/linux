@@ -258,6 +258,22 @@ static inline struct anon_vma *anon_vma_tree_anon_vma(anon_vma_tree_t anon_tree)
 	return (struct anon_vma *)anon_tree;
 }
 
+/* Store anon_vma in vma->anon_vma using a tagged pointer. */
+static inline void vma_set_anon_vma(struct vm_area_struct *vma,
+		struct anon_vma *anon_vma)
+{
+	vma->anon_vma = (anon_vma_tree_t)anon_vma;
+}
+
+/* Return the VMA's anon_vma. */
+static inline struct anon_vma *vma_anon_vma(const struct vm_area_struct *vma)
+{
+	/* Use READ_ONCE() for reusable_anon_vma */
+	anon_vma_tree_t anon_tree = READ_ONCE(vma->anon_vma);
+
+	return anon_vma_tree_anon_vma(anon_tree);
+}
+
 static inline void anon_vma_tree_lock_write(anon_vma_tree_t anon_tree)
 {
 	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);

@@ -987,7 +987,7 @@ struct vm_area_struct {
 	 */
 	struct list_head anon_vma_chain; /* Serialized by mmap_lock &
 					  * page_table_lock */
-	struct anon_vma *anon_vma;	/* Serialized by page_table_lock */
+	anon_vma_tree_t anon_vma;	/* Serialized by page_table_lock */
 
 	/* Function pointers to deal with this struct. */
 	const struct vm_operations_struct *vm_ops;
