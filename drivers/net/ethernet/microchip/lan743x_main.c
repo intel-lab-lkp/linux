@@ -28,6 +28,17 @@
 
 #define RFE_RD_FIFO_TH_3_DWORDS	0x3
 
+#define LAN743X_DEF_MSG_ENABLE \
+	(NETIF_MSG_DRV      | \
+	 NETIF_MSG_PROBE    | \
+	 NETIF_MSG_LINK     | \
+	 NETIF_MSG_IFUP     | \
+	 NETIF_MSG_IFDOWN   | \
+	 NETIF_MSG_TX_QUEUED)
+static int lan743x_msg_enable = -1;
+module_param(lan743x_msg_enable, int, 0);
+MODULE_PARM_DESC(lan743x_msg_enable, "Debug message level");
+
 static bool pci11x1x_is_a0(struct lan743x_adapter *adapter)
 {
 	u32 dev_rev = adapter->csr.id_rev & ID_REV_CHIP_REV_MASK_;
@@ -3661,9 +3672,7 @@ static int lan743x_pcidev_probe(struct pci_dev *pdev,
 	pci_set_drvdata(pdev, netdev);
 	adapter = netdev_priv(netdev);
 	adapter->netdev = netdev;
-	adapter->msg_enable = NETIF_MSG_DRV | NETIF_MSG_PROBE |
-			      NETIF_MSG_LINK | NETIF_MSG_IFUP |
-			      NETIF_MSG_IFDOWN | NETIF_MSG_TX_QUEUED;
+	adapter->msg_enable = netif_msg_init(lan743x_msg_enable, LAN743X_DEF_MSG_ENABLE);
 	netdev->max_mtu = LAN743X_MAX_FRAME_SIZE;
 
 	of_get_mac_address(pdev->dev.of_node, adapter->mac_address);
