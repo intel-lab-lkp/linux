@@ -303,7 +303,7 @@ static void simplefb_clocks_destroy(struct simplefb_par *par)
 	for (i = 0; i < par->clk_count; i++) {
 		if (par->clks[i]) {
 			if (par->clks_enabled)
-				clk_disable_unprepare(par->clks[i]);
+				__clk_disable_unprepare_counts_only(par->clks[i]);
 			clk_put(par->clks[i]);
 		}
 	}
