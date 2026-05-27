@@ -50,6 +50,9 @@
 /* PAUSE refresh threshold: send refresh when timer reaches this value */
 #define NETC_PAUSE_THRESH		0x7FFF
 
+#define NETC_FDBT_CLEAN_INTERVAL	(3 * HZ)
+#define NETC_FDBT_AGEING_ACT_CNT	100
+
 struct netc_switch;
 
 struct netc_switch_info {
@@ -124,6 +127,11 @@ struct netc_switch {
 	struct ntmp_user ntmp;
 	struct hlist_head fdb_list;
 	struct mutex fdbt_lock; /* FDB table lock */
+	struct delayed_work fdbt_clean;
+	/* (interval * act_cnt) is ageing time */
+	unsigned long fdbt_acteu_interval;
+	u8 fdbt_ageing_act_cnt; /* maximum is 127 */
+	atomic_t br_cnt;
 	struct hlist_head vlan_list;
 	struct mutex vft_lock; /* VLAN filter table lock */
 
