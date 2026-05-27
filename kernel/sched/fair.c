@@ -4961,8 +4961,15 @@ static inline void update_tg_load_avg(struct cfs_rq *cfs_rq)
 	/*
 	 * For migration heavy workloads, access to tg->load_avg can be
 	 * unbound. Limit the update rate to at most once per ms.
+	 *
+	 * The enclosing PELT update paths always hold rq->lock and have
+	 * called update_rq_clock(rq) within microseconds, so rq->clock_task
+	 * is fresh.  Use it instead of sched_clock_cpu() to avoid an rdtsc
+	 * (plus pipeline serialisation) per call -- this function is invoked
+	 * once per leaf cfs_rq in __update_blocked_fair(), so on hosts with
+	 * many cgroups the rdtsc cost dominates the rate-limit check itself.
 	 */
-	now = sched_clock_cpu(cpu_of(rq_of(cfs_rq)));
+	now = rq_clock_task(rq_of(cfs_rq));
 	if (now - cfs_rq->last_update_tg_load_avg < NSEC_PER_MSEC)
 		return;
 
@@ -4985,7 +4992,8 @@ static inline void clear_tg_load_avg(struct cfs_rq *cfs_rq)
 	if (cfs_rq->tg == &root_task_group)
 		return;
 
-	now = sched_clock_cpu(cpu_of(rq_of(cfs_rq)));
+	/* See update_tg_load_avg() for the rq_clock_task() rationale. */
+	now = rq_clock_task(rq_of(cfs_rq));
 	delta = 0 - cfs_rq->tg_load_avg_contrib;
 	atomic_long_add(delta, &cfs_rq->tg->load_avg);
 	cfs_rq->tg_load_avg_contrib = 0;
