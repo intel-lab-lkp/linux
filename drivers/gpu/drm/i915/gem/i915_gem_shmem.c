@@ -156,7 +156,7 @@ int shmem_sg_alloc_table(struct drm_i915_private *i915, struct sg_table *st,
 		nr_pages = min_array(((unsigned long[]) {
 					folio_nr_pages(folio),
 					page_count - i,
-					max_segment / PAGE_SIZE,
+					i915_sg_segment_size(i915->drm.dev) / PAGE_SIZE,
 				      }), 3);
 
 		if (!i ||
