@@ -65,7 +65,8 @@ The general rule in KVM is that any modification to shadow page tables
 (and their entries (SPTEs)) must be protected by ``kvm->mmu_lock``,
 with the exceptions described below.
 
-Fast page fault:
+2.1. Fast page fault
+^^^^^^^^^^^^^^^^^^^^
 
 Fast page fault is the fast path which fixes the guest page fault out of
 the mmu-lock on x86. Currently, the page fault can be fast in one of the
@@ -217,7 +218,8 @@ Since the spte is "volatile" if it can be updated out of mmu-lock, we always
 atomically update the spte and the race caused by fast page fault can be avoided.
 See the comments in spte_needs_atomic_update() and mmu_spte_update().
 
-Lockless Access Tracking:
+2.2 Lockless Access Tracking
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This is used for Intel CPUs that are using EPT but do not support the EPT A/D
 bits. In this case, PTEs are tagged as A/D disabled (using ignored bits), and
