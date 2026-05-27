@@ -3,6 +3,8 @@
 #include <linux/ioport.h>
 #include <linux/swap.h>
 #include <linux/memblock.h>
+#include <linux/mm.h>
+#include <linux/huge_mm.h>
 #include <linux/swapfile.h>
 #include <linux/swapops.h>
 #include <linux/kmemleak.h>
@@ -37,6 +39,15 @@
 #include <trace/events/tlb.h>
 
 #include "mm_internal.h"
+
+#ifdef CONFIG_READONLY_HUGE_ZERO_FOLIO
+bool __init arch_make_huge_zero_folio_readonly(struct folio *folio)
+{
+	unsigned long addr = (unsigned long)folio_address(folio);
+
+	return !set_memory_ro(addr, HPAGE_PMD_NR);
+}
+#endif
 
 /*
  * Tables translating between page_cache_type_t and pte encoding.
