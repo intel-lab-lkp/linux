@@ -610,6 +610,7 @@ static int btrfs_dio_iomap_end(struct inode *inode, loff_t pos, loff_t length,
 {
 	struct iomap_iter *iter = container_of(iomap, struct iomap_iter, iomap);
 	struct btrfs_dio_data *dio_data = iter->private;
+	struct btrfs_ordered_extent *ordered = dio_data->ordered;
 	size_t submitted = dio_data->submitted;
 	const bool write = !!(flags & IOMAP_WRITE);
 	int ret = 0;
@@ -624,16 +625,23 @@ static int btrfs_dio_iomap_end(struct inode *inode, loff_t pos, loff_t length,
 	if (submitted < length) {
 		pos += submitted;
 		length -= submitted;
-		if (write)
-			btrfs_finish_ordered_extent(dio_data->ordered,
-						    pos, length, false);
-		else
+		if (write) {
+			/*
+			 * We got a short write, will fallback to buffered IO
+			 * for the whole range.
+			 * Set the truncate length to 0, so that no real file
+			 * extent item will be created.
+			 */
+			btrfs_mark_ordered_extent_truncated(ordered, 0);
+			btrfs_finish_ordered_extent(ordered, pos, length, true);
+		} else {
 			btrfs_unlock_dio_extent(&BTRFS_I(inode)->io_tree, pos,
 						pos + length - 1, NULL);
+		}
 		ret = -ENOTBLK;
 	}
 	if (write) {
-		btrfs_put_ordered_extent(dio_data->ordered);
+		btrfs_put_ordered_extent(ordered);
 		dio_data->ordered = NULL;
 	}
 
