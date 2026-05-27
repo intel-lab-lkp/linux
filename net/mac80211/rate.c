@@ -396,12 +396,13 @@ static void __rate_control_send_low(struct ieee80211_hw *hw,
 		info->control.rates[0].idx = i;
 		break;
 	}
-	WARN_ONCE(i == sband->n_bitrates,
-		  "no supported rates for sta %pM (0x%x, band %d) in rate_mask 0x%x with flags 0x%x\n",
-		  sta ? sta->addr : NULL,
-		  sta ? sta->deflink.supp_rates[sband->band] : -1,
-		  sband->band,
-		  rate_mask, rate_flags);
+	if (rate_mask)
+		WARN_ONCE(i == sband->n_bitrates,
+			  "no supported rates for sta %pM (0x%x, band %d) in rate_mask 0x%x with flags 0x%x\n",
+			  sta ? sta->addr : NULL,
+			  sta ? sta->deflink.supp_rates[sband->band] : -1,
+			  sband->band,
+			  rate_mask, rate_flags);
 
 	info->control.rates[0].count =
 		(info->flags & IEEE80211_TX_CTL_NO_ACK) ?
