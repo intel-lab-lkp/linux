@@ -711,8 +711,13 @@ static void __kvm_gmem_unbind(struct kvm_memory_slot *slot, struct gmem_file *f)
 	xa_store_range(&f->bindings, start, end - 1, NULL, GFP_KERNEL);
 
 	/*
-	 * synchronize_srcu(&kvm->srcu) ensured that kvm_gmem_get_pfn()
-	 * cannot see this memslot.
+	 * This is called when memslots are updated, after the old
+	 * memslot container is no longer in
+	 * use. synchronize_srcu(&kvm->srcu) was called there, so
+	 * kvm_gmem_get_pfn() from KVM's guest fault handling cannot
+	 * see this memslot. See Documentation/virt/kvm/locking.rst
+	 * for more information about kvm->srcu and the memslots
+	 * container.
 	 */
 	WRITE_ONCE(slot->gmem.file, NULL);
 }
