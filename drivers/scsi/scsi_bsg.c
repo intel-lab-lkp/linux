@@ -78,12 +78,20 @@ static int scsi_bsg_map_user_buffer(struct request *req,
 				    struct io_uring_cmd *ioucmd,
 				    unsigned int issue_flags, gfp_t gfp_mask)
 {
-	const struct bsg_uring_cmd *cmd = io_uring_sqe128_cmd(ioucmd->sqe, struct bsg_uring_cmd);
-	bool is_write = cmd->dout_xfer_len > 0;
-	u64 buf_addr = is_write ? cmd->dout_xferp : cmd->din_xferp;
-	unsigned long buf_len = is_write ? cmd->dout_xfer_len : cmd->din_xfer_len;
+	struct bsg_uring_cmd local_cmd;
+	const struct bsg_uring_cmd *cmd;
+	bool is_write;
+	u64 buf_addr;
+	unsigned long buf_len;
 	struct iov_iter iter;
 	int ret;
+
+	memcpy(&local_cmd, io_uring_sqe128_cmd(ioucmd->sqe, struct bsg_uring_cmd),
+	       sizeof(local_cmd));
+	cmd = &local_cmd;
+	is_write = cmd->dout_xfer_len > 0;
+	buf_addr = is_write ? cmd->dout_xferp : cmd->din_xferp;
+	buf_len = is_write ? cmd->dout_xfer_len : cmd->din_xfer_len;
 
 	if (ioucmd->flags & IORING_URING_CMD_FIXED) {
 		ret = io_uring_cmd_import_fixed(buf_addr, buf_len,
@@ -104,12 +112,17 @@ static int scsi_bsg_uring_cmd(struct request_queue *q, struct io_uring_cmd *iouc
 			       unsigned int issue_flags, bool open_for_write)
 {
 	struct scsi_bsg_uring_cmd_pdu *pdu = scsi_bsg_uring_cmd_pdu(ioucmd);
-	const struct bsg_uring_cmd *cmd = io_uring_sqe128_cmd(ioucmd->sqe, struct bsg_uring_cmd);
+	struct bsg_uring_cmd local_cmd;
+	const struct bsg_uring_cmd *cmd;
 	struct scsi_cmnd *scmd;
 	struct request *req;
 	blk_mq_req_flags_t blk_flags = 0;
 	gfp_t gfp_mask = GFP_KERNEL;
 	int ret;
+
+	memcpy(&local_cmd, io_uring_sqe128_cmd(ioucmd->sqe, struct bsg_uring_cmd),
+	       sizeof(local_cmd));
+	cmd = &local_cmd;
 
 	if (cmd->protocol != BSG_PROTOCOL_SCSI ||
 	    cmd->subprotocol != BSG_SUB_PROTOCOL_SCSI_CMD)
