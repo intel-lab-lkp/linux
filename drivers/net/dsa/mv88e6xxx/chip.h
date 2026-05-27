@@ -126,6 +126,7 @@ enum mv88e6xxx_edsa_support {
 };
 
 struct mv88e6xxx_ops;
+struct mv88e6xxx_qav_info;
 
 struct mv88e6xxx_info {
 	enum mv88e6xxx_family family;
@@ -179,6 +180,11 @@ struct mv88e6xxx_info {
 
 	/* Number of TX queues */
 	u8 num_tx_queues;
+
+	/* 802.1Qav credit-based shaping capability data, or NULL if the
+	 * chip does not support CBS offload.
+	 */
+	const struct mv88e6xxx_qav_info *qav;
 
 	/* Internal PHY start index. 0 means that internal PHYs range starts at
 	 * port 0, 1 means internal PHYs range starts at port 1, etc
@@ -654,6 +660,13 @@ struct mv88e6xxx_ops {
 				   size_t size);
 
 	int (*port_egress_rate_limiting)(struct mv88e6xxx_chip *chip, int port);
+
+	/* Select egress scheduling mode: number of highest-numbered queues that
+	 * use strict priority instead of WRR/WFQ. Used to ensure CBS-shaped
+	 * queues take precedence over best-effort traffic.
+	 */
+	int (*port_set_scheduling_mode)(struct mv88e6xxx_chip *chip, int port,
+					u8 mode);
 	int (*port_pause_limit)(struct mv88e6xxx_chip *chip, int port, u8 in,
 				u8 out);
 	int (*port_disable_learn_limit)(struct mv88e6xxx_chip *chip, int port);
@@ -875,6 +888,15 @@ struct mv88e6xxx_tc_ops {
 	int (*tc_enable)(struct mv88e6xxx_chip *chip,
 			 const struct mv88e6xxx_avb_tc_policy *policy);
 	int (*tc_disable)(struct mv88e6xxx_chip *chip);
+	int (*set_port_cbs_qopt)(struct mv88e6xxx_chip *chip, int port,
+				 const struct tc_cbs_qopt_offload *cbs_qopt);
+};
+
+/* Per-family 802.1Qav credit-based shaping capability data. */
+struct mv88e6xxx_qav_info {
+	u16 rate_unit;		/* in kbps */
+	u16 rate_mask;		/* QPri Rate valid bits mask */
+	u16 hi_limit_mask;	/* QPri Hi Limit valid bits mask */
 };
 
 static inline bool mv88e6xxx_has_stu(struct mv88e6xxx_chip *chip)

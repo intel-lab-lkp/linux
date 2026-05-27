@@ -107,7 +107,67 @@ static int mv88e6xxx_tc_disable(struct mv88e6xxx_chip *chip)
 	return chip->info->ops->tc_ops->tc_disable(chip);
 }
 
-/* MQPRIO helpers */
+/* MQPRIO and CBS helpers */
+
+/* Ensure strict priority scheduling is enabled for CBS ports */
+static int mv88e6xxx_cbs_update_scheduler(struct mv88e6xxx_chip *chip, int port,
+					  bool has_cbs)
+{
+	const struct mv88e6xxx_ops *ops = chip->info->ops;
+	u8 mode;
+
+	if (!ops->port_set_scheduling_mode)
+		return 0;
+
+	mode = has_cbs ? chip->info->num_tx_queues - 1 : 0;
+
+	return ops->port_set_scheduling_mode(chip, port, mode);
+}
+
+/* Return true if any CBS queue has a non-zero rate configured on a port. */
+static bool mv88e6xxx_avb_port_has_cbs(struct mv88e6xxx_chip *chip, int port)
+{
+	int queue, err;
+	u16 rate;
+
+	for (queue = 0; queue < chip->info->num_tx_queues; queue++) {
+		err = mv88e6xxx_port_qav_read(chip, port,
+					      MV88E6XXX_PORT_QAV_CFG_RATE(queue),
+					      &rate, 1);
+		if (err)
+			continue;
+		else if (rate)
+			return true;
+	}
+
+	return false;
+}
+
+/* Enable/disable CBS and, if supported, strict priority, on a port */
+int mv88e6xxx_qav_set_port_cbs_qopt(struct mv88e6xxx_chip *chip, int port,
+				    const struct tc_cbs_qopt_offload *cbs_qopt)
+{
+	const struct mv88e6xxx_ops *ops = chip->info->ops;
+	const struct mv88e6xxx_tc_ops *tc_ops = ops->tc_ops;
+	bool old_active, new_active;
+	int err;
+
+	if (!tc_ops->set_port_cbs_qopt)
+		return -EOPNOTSUPP;
+
+	old_active = mv88e6xxx_avb_port_has_cbs(chip, port);
+
+	err = tc_ops->set_port_cbs_qopt(chip, port, cbs_qopt);
+	if (err)
+		return err;
+
+	new_active = cbs_qopt->enable ? true : mv88e6xxx_avb_port_has_cbs(chip, port);
+
+	if (old_active != new_active)
+		return mv88e6xxx_cbs_update_scheduler(chip, port, new_active);
+
+	return 0;
+}
 
 /* Set the AVB global policy limit registers
  *
@@ -197,18 +257,18 @@ static u16 mv88e6xxx_avb_get_cfg_avb_mode(struct mv88e6xxx_chip *chip)
 	return cfg;
 }
 
-/* Enable or disable a port for AVB
- *
- * @param chip		Marvell switch chip instance
- * @param port		Switch port
- * @param enable	If true, will enable AVB queues on this port.
- *
- * @return		0 on success, or a negative error value otherwise
- */
-static int mv88e6xxx_avb_set_port_avb_mode(struct mv88e6xxx_chip *chip,
-					   int port, bool enable)
+int mv88e6xxx_avb_set_port_avb_mode(struct mv88e6xxx_chip *chip,
+				    int port, bool enable)
 {
 	u16 cfg;
+
+	/* When disabling, only revert to legacy mode if no CBS queue
+	 * is still active on this port.
+	 */
+	if (!enable && mv88e6xxx_avb_port_has_cbs(chip, port)) {
+		dev_info(chip->dev, "p%d: CBS active, not disabling AVB\n", port);
+		return 0;
+	}
 
 	if (enable)
 		cfg = mv88e6xxx_avb_get_cfg_avb_mode(chip);
@@ -216,22 +276,6 @@ static int mv88e6xxx_avb_set_port_avb_mode(struct mv88e6xxx_chip *chip,
 		cfg = MV88E6XXX_PORT_AVB_CFG_AVB_MODE_LEGACY;
 
 	return mv88e6xxx_port_avb_write(chip, port, MV88E6XXX_PORT_AVB_CFG, cfg);
-}
-
-static int mv88e6xxx_avb_set_avb_mode(struct mv88e6xxx_chip *chip, bool enable)
-{
-	int port, err;
-
-	for (port = 0, err = 0; port < mv88e6xxx_num_ports(chip); ++port) {
-		if (!dsa_is_user_port(chip->ds, port))
-			continue;
-
-		err = mv88e6xxx_avb_set_port_avb_mode(chip, port, enable);
-		if (err)
-			break;
-	}
-
-	return err;
 }
 
 int mv88e6xxx_avb_tc_enable(struct mv88e6xxx_chip *chip,
@@ -254,14 +298,8 @@ int mv88e6xxx_avb_tc_enable(struct mv88e6xxx_chip *chip,
 	if (err)
 		goto err_iso_ptr;
 
-	err = mv88e6xxx_avb_set_avb_mode(chip, true);
-	if (err)
-		goto err_tc;
-
 	return 0;
 
-err_tc:
-	mv88e6xxx_tc_disable(chip);
 err_iso_ptr:
 	mv88e6xxx_qav_set_iso_ptr(chip, 0);
 err_mac_avb:
@@ -273,11 +311,18 @@ err_mac_avb:
 
 int mv88e6xxx_avb_tc_disable(struct mv88e6xxx_chip *chip)
 {
-	int err;
+	int port, err;
 
-	err = mv88e6xxx_avb_set_avb_mode(chip, false);
-	if (err)
-		return err;
+	/* Revert all user ports to legacy mode irrespective of CBS setting */
+	for (port = 0; port < mv88e6xxx_num_ports(chip); port++) {
+		if (!dsa_is_user_port(chip->ds, port))
+			continue;
+		err = mv88e6xxx_port_avb_write(chip, port,
+					       MV88E6XXX_PORT_AVB_CFG,
+					       MV88E6XXX_PORT_AVB_CFG_AVB_MODE_LEGACY);
+		if (err)
+			return err;
+	}
 
 	err = mv88e6xxx_tc_disable(chip);
 	if (err)
@@ -293,6 +338,26 @@ int mv88e6xxx_avb_tc_disable(struct mv88e6xxx_chip *chip)
 		if (err)
 			return err;
 	}
+
+	return 0;
+}
+
+static int mv88e6xxx_qav_set_port_config(struct mv88e6xxx_chip *chip, int port,
+					 int queue, u16 rate, u16 hilimit)
+{
+	int err;
+
+	err = mv88e6xxx_port_qav_write(chip, port,
+				       MV88E6XXX_PORT_QAV_CFG_RATE(queue),
+				       rate);
+	if (err)
+		return err;
+
+	err = mv88e6xxx_port_qav_write(chip, port,
+				       MV88E6XXX_PORT_QAV_CFG_HI_LIMIT(queue),
+				       hilimit);
+	if (err)
+		return err;
 
 	return 0;
 }
@@ -424,14 +489,63 @@ static int mv88e6352_tc_disable(struct mv88e6xxx_chip *chip)
 	return 0;
 }
 
+static int mv88e6xxx_set_port_cbs_qopt(struct mv88e6xxx_chip *chip, int port,
+				       const struct tc_cbs_qopt_offload *cbs_qopt)
+{
+	const struct mv88e6xxx_qav_info *qav = chip->info->qav;
+	u16 rate, hilimit;
+
+	if (!qav)
+		return -EOPNOTSUPP;
+
+	if (cbs_qopt->enable) {
+		rate = DIV_ROUND_UP(cbs_qopt->idleslope, qav->rate_unit);
+		rate = clamp_t(u16, rate, 1, qav->rate_mask);
+
+		hilimit = cbs_qopt->hicredit;
+		hilimit = clamp_t(u16, hilimit, 1, qav->hi_limit_mask);
+	} else {
+		rate = 0;
+		hilimit = qav->hi_limit_mask;
+	}
+
+	return mv88e6xxx_qav_set_port_config(chip, port, cbs_qopt->queue,
+					     rate, hilimit);
+}
+
 const struct mv88e6xxx_tc_ops mv88e6341_tc_ops = {
 	.tc_enable		= mv88e6352_tc_enable,
 	.tc_disable		= mv88e6352_tc_disable,
+	.set_port_cbs_qopt	= mv88e6xxx_set_port_cbs_qopt,
 };
+
+static int mv88e6352_set_port_cbs_qopt(struct mv88e6xxx_chip *chip, int port,
+				       const struct tc_cbs_qopt_offload *cbs_qopt)
+{
+	u16 cfg;
+	int err;
+
+	err = mv88e6xxx_set_port_cbs_qopt(chip, port, cbs_qopt);
+	if (err)
+		return err;
+
+	/* Set undocumented enable register */
+	err = mv88e6xxx_port_qav_read(chip, port, MV88E6352_PORT_QAV_CFG, &cfg, 1);
+	if (err)
+		return err;
+
+	if (cbs_qopt->enable)
+		cfg |= MV88E6352_PORT_QAV_CFG_ENABLE;
+	else
+		cfg &= ~MV88E6352_PORT_QAV_CFG_ENABLE;
+
+	return mv88e6xxx_port_qav_write(chip, port, MV88E6352_PORT_QAV_CFG, cfg);
+}
 
 const struct mv88e6xxx_tc_ops mv88e6352_tc_ops = {
 	.tc_enable		= mv88e6352_tc_enable,
 	.tc_disable		= mv88e6352_tc_disable,
+	.set_port_cbs_qopt	= mv88e6352_set_port_cbs_qopt,
 };
 
 static inline u16 mv88e6390_avb_pri_map_to_reg(const struct mv88e6xxx_avb_priority_map map[])
@@ -515,4 +629,5 @@ static int mv88e6390_tc_disable(struct mv88e6xxx_chip *chip)
 const struct mv88e6xxx_tc_ops mv88e6390_tc_ops = {
 	.tc_enable		= mv88e6390_tc_enable,
 	.tc_disable		= mv88e6390_tc_disable,
+	.set_port_cbs_qopt	= mv88e6xxx_set_port_cbs_qopt,
 };

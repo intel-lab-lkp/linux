@@ -241,6 +241,22 @@
 
 /* Offset 0x0A: Egress Rate Control 2 */
 #define MV88E6XXX_PORT_EGRESS_RATE_CTL2		0x0a
+/* Number of highest-numbered queues using strict priority instead of WRR.
+ * 0 = WRR for all queues, 3 = all queues strict priority.
+ */
+#define MV88E6352_PORT_EGRESS_RATE_CTL2_SCHEDULE_MASK	GENMASK(13, 12)
+
+/* Offset 0x1C: Port Queue Control (6390 family) */
+#define MV88E6390_PORT_QUEUE_CTL			0x1c
+#define MV88E6390_PORT_QUEUE_CTL_UPDATE			BIT(15)
+#define MV88E6390_PORT_QUEUE_CTL_PTR_MASK		GENMASK(14, 8)
+#define MV88E6390_PORT_QUEUE_CTL_DATA_MASK		GENMASK(7, 0)
+/* Pointers */
+#define MV88E6390_PORT_QUEUE_CTL_PTR_SCHEDULE		0x00
+/* Number of highest-numbered queues using strict priority instead of WFQ.
+ * 0 = WFQ for all queues, 7 = all queues strict priority.
+ */
+#define MV88E6390_PORT_QUEUE_CTL_SCHEDULE_MASK		GENMASK(2, 0)
 
 /* Offset 0x0B: Port Association Vector */
 #define MV88E6XXX_PORT_ASSOC_VECTOR			0x0b
@@ -563,6 +579,10 @@ int mv88e6165_port_set_jumbo_size(struct mv88e6xxx_chip *chip, int port,
 				  size_t size);
 int mv88e6095_port_egress_rate_limiting(struct mv88e6xxx_chip *chip, int port);
 int mv88e6097_port_egress_rate_limiting(struct mv88e6xxx_chip *chip, int port);
+int mv88e6352_port_set_scheduling_mode(struct mv88e6xxx_chip *chip, int port,
+				       u8 mode);
+int mv88e6390_port_set_scheduling_mode(struct mv88e6xxx_chip *chip, int port,
+				       u8 mode);
 int mv88e6xxx_port_set_assoc_vector(struct mv88e6xxx_chip *chip, int port,
 				    u16 pav);
 int mv88e6097_port_pause_limit(struct mv88e6xxx_chip *chip, int port, u8 in,

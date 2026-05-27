@@ -94,6 +94,9 @@
 #define MV88E6XXX_AVB_CFG_OUI_HI		0x0C
 #define MV88E6XXX_AVB_CFG_OUI_LO		0x0D
 
+#define MV88E6XXX_PORT_QAV_CFG_RATE(queue)	((((queue) & 0x7) << 1))
+#define MV88E6XXX_PORT_QAV_CFG_HI_LIMIT(queue)	((((queue) & 0x7) << 1) + 1)
+
 /* 6352 Family AVB Global Config (4 TX queues) */
 
 #define MV88E6352_AVB_CFG_AVB_HI_FPRI_GET(p)	MV88E6XXX_AVB_CFG_AVB_HI_FPRI_GET(p)
@@ -109,6 +112,9 @@
 #define MV88E6352_AVB_CFG_AVB_LO_QPRI_MASK	GENMASK(1, 0)
 #define MV88E6352_AVB_CFG_AVB_LO_QPRI_GET(p)	FIELD_GET(MV88E6352_AVB_CFG_AVB_LO_QPRI_MASK, p)
 #define MV88E6352_AVB_CFG_AVB_LO_QPRI_SET(p)	FIELD_PREP(MV88E6352_AVB_CFG_AVB_LO_QPRI_MASK, p)
+
+#define MV88E6352_PORT_QAV_CFG			0x08
+#define MV88E6352_PORT_QAV_CFG_ENABLE		0x8000
 
 /* 6390 Family AVB Global Config (8 TX queues) */
 
@@ -176,6 +182,17 @@ extern const struct mv88e6xxx_tc_ops mv88e6341_tc_ops;
 extern const struct mv88e6xxx_tc_ops mv88e6352_tc_ops;
 extern const struct mv88e6xxx_tc_ops mv88e6390_tc_ops;
 
+/* Enable or disable a port for AVB. Caller must acquire register lock.
+ *
+ * @param chip		Marvell switch chip instance
+ * @param port		Switch port
+ * @param enable	If true, will enable AVB queues on this port.
+ *
+ * @return		0 on success, or a negative error value otherwise
+ */
+int mv88e6xxx_avb_set_port_avb_mode(struct mv88e6xxx_chip *chip,
+				    int port, bool enable);
+
 /* Set AVB queue priority policy. Caller must acquire register lock.
  *
  * @param chip		Marvell switch chip instance
@@ -193,5 +210,19 @@ int mv88e6xxx_avb_tc_enable(struct mv88e6xxx_chip *chip,
  * @return		0 on success, or a negative error value otherwise
  */
 int mv88e6xxx_avb_tc_disable(struct mv88e6xxx_chip *chip);
+
+struct tc_cbs_qopt_offload;
+
+/* Set AVB credit based shaper policy. Caller must acquire register lock.
+ *
+ * @param chip		Marvell switch chip instance
+ * @param port		Switch port
+ * @param cbs_qopt	CBS policy to apply
+ *
+ * @return		0 on success, or a negative error value otherwise
+ */
+int mv88e6xxx_qav_set_port_cbs_qopt(struct mv88e6xxx_chip *chip,
+				    int port,
+				    const struct tc_cbs_qopt_offload *cbs_qopt);
 
 #endif /* _MV88E6XXX_AVB_H */

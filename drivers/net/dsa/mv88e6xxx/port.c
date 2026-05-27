@@ -1323,6 +1323,51 @@ int mv88e6097_port_egress_rate_limiting(struct mv88e6xxx_chip *chip, int port)
 				    0x0001);
 }
 
+/* Set the egress scheduling mode (WRR vs strict priority for top queues).
+ * @mode is the number of high-numbered queues to put into strict priority
+ * (0 = WRR for all queues, 3 = all queues strict).
+ */
+int mv88e6352_port_set_scheduling_mode(struct mv88e6xxx_chip *chip, int port,
+				       u8 mode)
+{
+	u16 reg;
+	int err;
+
+	if (mode > FIELD_MAX(MV88E6352_PORT_EGRESS_RATE_CTL2_SCHEDULE_MASK))
+		return -EINVAL;
+
+	err = mv88e6xxx_port_read(chip, port, MV88E6XXX_PORT_EGRESS_RATE_CTL2,
+				  &reg);
+	if (err)
+		return err;
+
+	reg &= ~MV88E6352_PORT_EGRESS_RATE_CTL2_SCHEDULE_MASK;
+	reg |= FIELD_PREP(MV88E6352_PORT_EGRESS_RATE_CTL2_SCHEDULE_MASK, mode);
+
+	return mv88e6xxx_port_write(chip, port, MV88E6XXX_PORT_EGRESS_RATE_CTL2,
+				    reg);
+}
+
+/* Set the egress scheduling mode (WFQ vs strict priority for top queues).
+ * @mode is the number of high-numbered queues to put into strict priority
+ * (0 = WFQ for all queues, 7 = all queues strict).
+ */
+int mv88e6390_port_set_scheduling_mode(struct mv88e6xxx_chip *chip, int port,
+				       u8 mode)
+{
+	u16 reg;
+
+	if (mode > FIELD_MAX(MV88E6390_PORT_QUEUE_CTL_SCHEDULE_MASK))
+		return -EINVAL;
+
+	reg = MV88E6390_PORT_QUEUE_CTL_UPDATE |
+	      FIELD_PREP(MV88E6390_PORT_QUEUE_CTL_PTR_MASK,
+			 MV88E6390_PORT_QUEUE_CTL_PTR_SCHEDULE) |
+	      FIELD_PREP(MV88E6390_PORT_QUEUE_CTL_SCHEDULE_MASK, mode);
+
+	return mv88e6xxx_port_write(chip, port, MV88E6390_PORT_QUEUE_CTL, reg);
+}
+
 /* Offset 0x0B: Port Association Vector */
 
 int mv88e6xxx_port_set_assoc_vector(struct mv88e6xxx_chip *chip, int port,
