@@ -75,7 +75,11 @@ static unsigned long deferred_split_scan(struct shrinker *shrink,
 static bool split_underused_thp = true;
 
 static atomic_t huge_zero_refcount;
+#ifdef CONFIG_READONLY_HUGE_ZERO_FOLIO
+struct folio *huge_zero_folio __ro_after_init;
+#else
 struct folio *huge_zero_folio __read_mostly;
+#endif
 unsigned long huge_zero_pfn __read_mostly = ~0UL;
 unsigned long huge_anon_orders_always __read_mostly;
 unsigned long huge_anon_orders_madvise __read_mostly;
@@ -304,6 +308,18 @@ static unsigned long shrink_huge_zero_folio_scan(struct shrinker *shrink,
 
 	return 0;
 }
+
+#ifdef CONFIG_READONLY_HUGE_ZERO_FOLIO
+static bool __init make_huge_zero_folio_readonly(void)
+{
+	return arch_make_huge_zero_folio_readonly(READ_ONCE(huge_zero_folio));
+}
+#else
+static bool __init make_huge_zero_folio_readonly(void)
+{
+	return false;
+}
+#endif
 
 static struct shrinker *huge_zero_folio_shrinker;
 
@@ -965,8 +981,15 @@ static int __init thp_shrinker_init(void)
 		 * that get_huge_zero_folio() will most likely not fail as
 		 * thp_shrinker_init() is invoked early on during boot.
 		 */
-		if (!get_huge_zero_folio())
+		if (!get_huge_zero_folio()) {
 			pr_warn("Allocating persistent huge zero folio failed\n");
+			return 0;
+		}
+
+		if (IS_ENABLED(CONFIG_READONLY_HUGE_ZERO_FOLIO) &&
+		    !make_huge_zero_folio_readonly())
+			pr_warn("Making persistent huge zero folio read-only failed\n");
+
 		return 0;
 	}
 

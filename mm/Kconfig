@@ -787,6 +787,23 @@ config PERSISTENT_HUGE_ZERO_FOLIO
 	  Say Y if your system has lots of memory. Say N if you are
 	  memory constrained.
 
+config ARCH_HAS_READONLY_HUGE_ZERO_FOLIO
+	bool
+
+config READONLY_HUGE_ZERO_FOLIO
+	bool "Map the huge zero folio read-only in the direct map"
+	depends on PERSISTENT_HUGE_ZERO_FOLIO
+	depends on ARCH_HAS_READONLY_HUGE_ZERO_FOLIO
+	help
+	  The persistent huge zero folio is shared globally, and nothing
+	  should ever change its contents after initialization.
+
+	  When supported, mark the folio read-only in the direct map so such
+	  writes trigger a fault instead of silently corrupting the zero contents.
+
+	  If the permission change is not supported, the kernel keeps using
+	  the writable persistent huge zero folio.
+
 config MM_ID
 	def_bool n
 
