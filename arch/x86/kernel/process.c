@@ -107,9 +107,6 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 	/* fpu_clone() will initialize the "dst_fpu" memory */
 	memcpy_and_pad(dst, arch_task_struct_size, src, sizeof(*dst), 0);
 
-#ifdef CONFIG_VM86
-	dst->thread.vm86 = NULL;
-#endif
 
 	return 0;
 }
@@ -127,12 +124,10 @@ void arch_release_task_struct(struct task_struct *tsk)
  */
 void exit_thread(struct task_struct *tsk)
 {
-	struct thread_struct *t = &tsk->thread;
 
 	if (test_thread_flag(TIF_IO_BITMAP))
 		io_bitmap_exit(tsk);
 
-	free_vm86(t);
 
 	shstk_free(tsk);
 	fpu__drop(tsk);

@@ -5,11 +5,7 @@
 #include <uapi/asm/processor-flags.h>
 #include <linux/mem_encrypt.h>
 
-#ifdef CONFIG_VM86
-#define X86_VM_MASK	X86_EFLAGS_VM
-#else
-#define X86_VM_MASK	0 /* No VM86 support */
-#endif
+#define X86_VM_MASK     0 /* No VM86 support */
 
 /*
  * CR3's layout varies depending on several things.
