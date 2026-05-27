@@ -408,17 +408,15 @@ static int aead_accept_parent_nokey(void *private, struct sock *sk)
 	unsigned int len = sizeof(*ctx);
 	unsigned int ivlen = crypto_aead_ivsize(tfm);
 
-	ctx = sock_kmalloc(sk, len, GFP_KERNEL);
+	ctx = sock_kzalloc(sk, len, GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
-	memset(ctx, 0, len);
 
-	ctx->iv = sock_kmalloc(sk, ivlen, GFP_KERNEL);
+	ctx->iv = sock_kzalloc(sk, ivlen, GFP_KERNEL);
 	if (!ctx->iv) {
 		sock_kfree_s(sk, ctx, len);
 		return -ENOMEM;
 	}
-	memset(ctx->iv, 0, ivlen);
 
 	INIT_LIST_HEAD(&ctx->tsgl_list);
 	ctx->len = len;
