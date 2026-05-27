@@ -208,6 +208,16 @@ void sctp_stream_clear(struct sctp_stream *stream)
 void sctp_stream_update(struct sctp_stream *stream, struct sctp_stream *new)
 {
 	const struct sctp_sched_ops *sched = sctp_sched_ops_from_stream(stream);
+	__u16 sid = SCTP_MAX_STREAM;
+
+	/* Preserve the current stream if its sid survives the table swap. */
+	if (stream->out_curr) {
+		for (sid = 0; sid < stream->outcnt; sid++)
+			if (SCTP_SO(stream, sid) == stream->out_curr)
+				break;
+		if (sid == stream->outcnt)
+			sid = SCTP_MAX_STREAM;
+	}
 
 	sched->unsched_all(stream);
 	sctp_stream_outq_migrate(stream, new, new->outcnt);
@@ -217,6 +227,7 @@ void sctp_stream_update(struct sctp_stream *stream, struct sctp_stream *new)
 	stream->in  = new->in;
 	stream->outcnt = new->outcnt;
 	stream->incnt  = new->incnt;
+	stream->out_curr = sid < stream->outcnt ? SCTP_SO(stream, sid) : NULL;
 
 	sched->sched_all(stream);
 
