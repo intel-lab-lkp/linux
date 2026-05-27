@@ -37,6 +37,7 @@ struct netc_tbl_vers {
 	u8 bpt_ver;
 	u8 ipft_ver;
 	u8 ett_ver;
+	u8 ect_ver;
 };
 
 struct netc_swcbd {
@@ -232,6 +233,11 @@ struct ett_cfge_data {
 	__le32 esqa_tgt_eid;
 };
 
+struct ect_stse_data {
+	__le64 enq_frm_cnt;
+	__le64 rej_frm_cnt;
+};
+
 struct bpt_bpse_data {
 	__le32 amount_used;
 	__le32 amount_used_hwm;
@@ -294,6 +300,7 @@ int ntmp_vft_delete_entry(struct ntmp_user *user, u16 vid);
 int ntmp_ett_add_or_update_entry(struct ntmp_user *user, u32 entry_id,
 				 bool add, const struct ett_cfge_data *cfge);
 int ntmp_ett_delete_entry(struct ntmp_user *user, u32 entry_id);
+int ntmp_ect_update_entry(struct ntmp_user *user, u32 entry_id);
 int ntmp_bpt_update_entry(struct ntmp_user *user, u32 entry_id,
 			  const struct bpt_cfge_data *cfge);
 #else
