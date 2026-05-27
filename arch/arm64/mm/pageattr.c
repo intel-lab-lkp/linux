@@ -3,7 +3,9 @@
  * Copyright (c) 2014, The Linux Foundation. All rights reserved.
  */
 #include <linux/kernel.h>
+#include <linux/init.h>
 #include <linux/mm.h>
+#include <linux/huge_mm.h>
 #include <linux/module.h>
 #include <linux/mem_encrypt.h>
 #include <linux/sched.h>
@@ -146,6 +148,20 @@ static int __change_memory_common(unsigned long start, unsigned long size,
 		flush_tlb_kernel_range(start, start + size);
 	return ret;
 }
+
+#ifdef CONFIG_READONLY_HUGE_ZERO_FOLIO
+bool __init arch_make_huge_zero_folio_readonly(struct folio *folio)
+{
+	unsigned long addr = (unsigned long)folio_address(folio);
+
+	if (!can_set_direct_map())
+		return false;
+
+	return !__change_memory_common(addr, PMD_SIZE,
+				       __pgprot(PTE_RDONLY),
+				       __pgprot(PTE_WRITE));
+}
+#endif
 
 static int change_memory_common(unsigned long addr, int numpages,
 				pgprot_t set_mask, pgprot_t clear_mask)
