@@ -778,7 +778,7 @@ void assert_on_unhandled_exception(struct kvm_vcpu *vcpu)
 		REPORT_GUEST_ASSERT(uc);
 }
 
-static gva_t vm_alloc_stack(struct kvm_vm *vm, int nr_pages)
+gva_t vm_alloc_stack(struct kvm_vm *vm, int nr_pages)
 {
 	int size = nr_pages * getpagesize();
 	gva_t stack_gva;

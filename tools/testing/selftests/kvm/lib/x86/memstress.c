@@ -43,7 +43,7 @@ static void l1_vmx_code(struct vmx_pages *vmx, u64 vcpu_id)
 	GUEST_ASSERT(ept_1g_pages_supported());
 
 	rsp = &l2_guest_stack[L2_GUEST_STACK_SIZE - 1];
-	*rsp = vcpu_id;
+	*(u64 *)vmx->stack = vcpu_id;
 	prepare_vmcs(vmx, memstress_l2_guest_entry, rsp);
 
 	GUEST_ASSERT(!vmlaunch());
@@ -56,9 +56,8 @@ static void l1_svm_code(struct svm_test_data *svm, u64 vcpu_id)
 	unsigned long l2_guest_stack[L2_GUEST_STACK_SIZE];
 	unsigned long *rsp;
 
-
 	rsp = &l2_guest_stack[L2_GUEST_STACK_SIZE - 1];
-	*rsp = vcpu_id;
+	*(u64 *)svm->stack = vcpu_id;
 	generic_svm_setup(svm, memstress_l2_guest_entry, rsp);
 
 	run_guest(svm->vmcb, svm->vmcb_gpa);
