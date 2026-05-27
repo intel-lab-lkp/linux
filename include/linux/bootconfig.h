@@ -308,4 +308,11 @@ static inline const char *xbc_get_embedded_bootconfig(size_t *size)
 }
 #endif
 
+/* Build-time-rendered bootconfig cmdline prepended in setup_arch() */
+#ifdef CONFIG_BOOT_CONFIG_EMBED_CMDLINE
+void __init xbc_prepend_embedded_cmdline(char *dst, size_t size);
+#else
+static inline void xbc_prepend_embedded_cmdline(char *dst, size_t size) { }
+#endif
+
 #endif
