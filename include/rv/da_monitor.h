@@ -310,6 +310,9 @@ static int da_monitor_init(void)
 
 /*
  * da_monitor_destroy - return the allocated slot
+ *
+ * Wait for all in-flight handlers before returning the slot to avoid
+ * out-of-bound accesses.
  */
 static inline void da_monitor_destroy(void)
 {
@@ -320,6 +323,7 @@ static inline void da_monitor_destroy(void)
 
 	da_monitor_reset_all();
 
+	tracepoint_synchronize_unregister();
 	rv_put_task_monitor_slot(task_mon_slot);
 	task_mon_slot = RV_PER_TASK_MONITOR_INIT;
 }
