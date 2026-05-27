@@ -248,6 +248,22 @@ static inline void anon_vma_unlock_read(struct anon_vma *anon_vma)
 
 /* anon_vma_tree_t APIs */
 
+/* Encoded anon_vma tree type. Must fit within ANON_VMA_TREE_BITS. */
+#define ANON_VMA_TREE_REGULAR 0 /* regular anon_vma */
+#define ANON_VMA_TREE_VMA     1
+#define ANON_VMA_TREE_PARENT  2
+#define ANON_VMA_TREE_INVALID 3 /* reserved */
+
+#define ANON_VMA_TREE_BITS 2
+#define ANON_VMA_TREE_MASK ((1UL << ANON_VMA_TREE_BITS) - 1)
+
+#ifdef CONFIG_ANON_VMA_LAZY
+extern bool anon_vma_lazy_enable;
+static inline bool anon_vma_lazy_enabled(void) { return anon_vma_lazy_enable; }
+#else
+static inline bool anon_vma_lazy_enabled(void) { return false; }
+#endif
+
 static inline anon_vma_tree_t make_anon_vma_tree(struct anon_vma *anon_vma)
 {
 	return (anon_vma_tree_t)anon_vma;

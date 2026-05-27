@@ -1412,6 +1412,20 @@ config LOCK_MM_AND_FIND_VMA
 	bool
 	depends on !STACK_GROWSUP
 
+config ARCH_SUPPORTS_ANON_VMA_LAZY
+	def_bool n
+
+config ANON_VMA_LAZY
+	bool "Lazy allocation of anon_vma"
+	def_bool y
+	depends on ARCH_SUPPORTS_ANON_VMA_LAZY && MMU
+	help
+	  For anonymous VMAs without children, avoid allocating anon_vma
+	  and anon_vma_chain to reduce memory overhead.
+
+	  Say Y to enable this optimization for anonymous VMAs without
+	  children.
+
 config IOMMU_MM_DATA
 	bool
 

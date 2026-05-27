@@ -87,6 +87,90 @@
 static struct kmem_cache *anon_vma_cachep;
 static struct kmem_cache *anon_vma_chain_cachep;
 
+#ifdef CONFIG_ANON_VMA_LAZY
+/*
+ * ANON_VMA_LAZY: defer anon_vma allocation until fork().
+ *
+ * anon_vma and anon_vma_chain exist mainly to support reverse mapping
+ * across multiple processes. For VMAs that belong to a single process,
+ * eagerly creating anon_vma introduces unnecessary memory and setup
+ * overhead.
+ *
+ * This optimization delays anon_vma creation until fork(). Before that
+ * the VMA stays in a lazy state and no anon_vma or anon_vma_chain
+ * topology is created.
+ *
+ * vma->anon_vma encodes the anonymous VMA state. Low bits of the pointer
+ * distinguish lazy states:
+ *
+ *   NULL
+ *        VMA has no anonymous or CoW pages.
+ *
+ *   regular anon_vma
+ *        Standard anon_vma with anon_vma_chain topology.
+ *
+ *   anon_vma_lazy_root | ANON_VMA_TREE_VMA
+ *        Lazy root for the VMA that first faults anonymous pages.
+ *        No anon_vma or anon_vma_chain topology exists.
+ *
+ *   parent_anon_vma | ANON_VMA_TREE_PARENT
+ *        Lazy state for VMAs created during fork(). The lazy parent_anon_vma
+ *        refers to the anon_vma of the parent VMA.
+ *
+ * Anonymous folios extend folio->mapping with FOLIO_MAPPING_ANON_VMA_LAZY:
+ *
+ *   anon_vma | FOLIO_MAPPING_ANON
+ *        regular anonymous mapping
+ *
+ *   anon_vma_lazy_root | FOLIO_MAPPING_ANON_VMA_LAZY
+ *        lazy anonymous mapping
+ *
+ * In typical workloads most VMAs remain in ANON_VMA_TREE_VMA state.
+ * These VMAs have no anon_vma, no anon_vma_chain and only a single VMA.
+ * Reverse mapping can therefore be performed without anon_vma locking,
+ * providing a faster rmap path for the common case.
+ *
+ * During fork(), VMAs in ANON_VMA_TREE_VMA are upgraded to regular
+ * anon_vma in the parent to establish sharing topology. Child VMAs are
+ * created as ANON_VMA_TREE_PARENT and do not allocate anon_vma,
+ * avoiding additional fork overhead.
+ *
+ * Folio mapping rules:
+ *
+ *   Lazy anonymous folios store the lazy root in folio->mapping using
+ *   FOLIO_MAPPING_ANON_VMA_LAZY. This allows rmap walkers to resolve the
+ *   owning VMA without requiring anon_vma topology.
+ *
+ *   folio->mapping may be updated during fork() when lazy VMAs are
+ *   upgraded to regular anon_vma. dup_anon_rmap() in copy_page_range()
+ *   performs the upgrade and installs the new anon_vma mapping.
+ *
+ *   folio_move_anon_rmap() updates folio->mapping when anonymous folios
+ *   move between VMAs.
+ *
+ *   As with regular anonymous memory, __folio_remove_rmap() does not
+ *   clear folio->mapping. Rmap walkers validate mappings using
+ *   folio_mapped().
+ *
+ * VMA split keeps vma->anon_vma unchanged. The lazy root holds an extra
+ * reference so folio->mapping remains valid without scanning folios.
+ *
+ * Internal helpers:
+ *
+ *   anon_vma_link_t
+ *        The value encodes a reference to anon_vma topology. Low bits
+ *        are used as type tags to distinguish different anon_vma
+ *        implementations (e.g. regular anon_vma or anon_vma_lazy).
+ *
+ *   anon_rmap_t
+ *        anon_rmap_t wraps the tagged pointer used by the rmap code and
+ *        provides a type-safe interface for reverse mapping operations,
+ *        covering both regular anon_vma and lazy anon_vma mappings.
+ */
+
+bool anon_vma_lazy_enable;
+#endif
+
 static inline struct anon_vma *anon_vma_alloc(void)
 {
 	struct anon_vma *anon_vma;

@@ -1558,6 +1558,15 @@ static const struct ctl_table mmap_table[] = {
 				.extra2         = (void *)&mmap_rnd_compat_bits_max,
 		},
 #endif
+#ifdef CONFIG_ANON_VMA_LAZY
+		{
+				.procname	= "anon_vma_lazy",
+				.data		= &anon_vma_lazy_enable,
+				.maxlen		= sizeof(anon_vma_lazy_enable),
+				.mode		= 0600,
+				.proc_handler	= proc_dobool,
+		},
+#endif
 };
 #endif /* CONFIG_SYSCTL */
 

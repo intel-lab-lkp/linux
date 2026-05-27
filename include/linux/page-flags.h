@@ -697,6 +697,12 @@ PAGEFLAG_FALSE(VmemmapSelfHosted, vmemmap_self_hosted)
  * bit; and then folio->mapping points, not to an anon_vma, but to a private
  * structure which KSM associates with that merged folio.  See ksm.h.
  *
+ * If CONFIG_ANON_VMA_LAZY is enabled, the FOLIO_MAPPING_ANON_KSM bit is used
+ * for the ANON_VMA_LAZY optimization. In this case, folio->mapping points to
+ * the ANON_VMA_LAZY root VMA instead of anon_vma. The folio_test_anon()
+ * check also needs to be updated accordingly.
+
+ *
  * Please note that, confusingly, "folio_mapping" refers to the inode
  * address_space which maps the folio from disk; whereas "folio_mapped"
  * refers to user virtual address space into which the folio is mapped.
@@ -711,11 +717,16 @@ PAGEFLAG_FALSE(VmemmapSelfHosted, vmemmap_self_hosted)
 #define FOLIO_MAPPING_ANON	0x1
 #define FOLIO_MAPPING_ANON_KSM	0x2
 #define FOLIO_MAPPING_KSM	(FOLIO_MAPPING_ANON | FOLIO_MAPPING_ANON_KSM)
+#define FOLIO_MAPPING_ANON_VMA_LAZY	FOLIO_MAPPING_ANON_KSM
 #define FOLIO_MAPPING_FLAGS	(FOLIO_MAPPING_ANON | FOLIO_MAPPING_ANON_KSM)
 
 static __always_inline bool folio_test_anon(const struct folio *folio)
 {
+#ifdef CONFIG_ANON_VMA_LAZY
+	return ((unsigned long)folio->mapping & FOLIO_MAPPING_FLAGS) != 0;
+#else
 	return ((unsigned long)folio->mapping & FOLIO_MAPPING_ANON) != 0;
+#endif
 }
 
 static __always_inline bool folio_test_lazyfree(const struct folio *folio)
@@ -734,6 +745,18 @@ static __always_inline bool PageAnon(const struct page *page)
 {
 	return folio_test_anon(page_folio(page));
 }
+
+static inline bool folio_test_anon_vma_lazy(const struct folio *folio)
+{
+#ifdef CONFIG_ANON_VMA_LAZY
+	unsigned long flags = (unsigned long)folio->mapping;
+
+	return (flags & FOLIO_MAPPING_FLAGS) == FOLIO_MAPPING_ANON_VMA_LAZY;
+#else
+	return false;
+#endif
+}
+
 #ifdef CONFIG_KSM
 /*
  * A KSM page is one of those write-protected "shared pages" or "merged pages"
