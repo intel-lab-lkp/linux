@@ -30,6 +30,31 @@
 
 struct drm_connector;
 struct i2c_adapter;
+struct dentry;
+
+struct drm_scdc_status_flags {
+	/* Status Register 0 */
+	bool clock_detected;
+	bool ch0_locked;
+	bool ch1_locked;
+	bool ch2_locked;
+};
+
+struct drm_scdc_state {
+	/** @stf: contents of the status flag registers */
+	struct drm_scdc_status_flags stf;
+	/** @scramling_enabled: true if TMDS scrambling is on */
+	bool scrambling_enabled;
+	/** @scrambling_detected: true if the sink actually detected scrambling */
+	bool scrambling_detected;
+	/**
+	 * @tmds_bclk_x40: true if TMDS bit period is 1/40th of the TMDS
+	 * clock period, false if it's 1/10th of the clock period.
+	 */
+	bool tmds_bclk_x40;
+	/** @error_count: character error counts for each channel */
+	u16 error_count[3];
+};
 
 int drm_scdc_read(struct i2c_adapter *adapter, u8 offset, void *buffer,
 		  size_t size);
@@ -76,5 +101,12 @@ bool drm_scdc_get_scrambling_status(struct drm_connector *connector);
 
 bool drm_scdc_set_scrambling(struct drm_connector *connector, bool enable);
 bool drm_scdc_set_high_tmds_clock_ratio(struct drm_connector *connector, bool set);
+
+int drm_scdc_read_status0_flags(struct drm_connector *connector,
+				struct drm_scdc_status_flags *flags);
+int drm_scdc_read_state(struct drm_connector *connector,
+			struct drm_scdc_state *state);
+int drm_scdc_read_error_counters(struct drm_connector *connector, u16 counter[3]);
+void drm_scdc_debugfs_init(struct drm_connector *connector, struct dentry *root);
 
 #endif
