@@ -3969,8 +3969,26 @@ static int __rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 		dev = NULL;
 	}
 
-	if (dev)
+	if (dev) {
+		/* changelink may mutate the link's creation netns.
+		 * rtnl_link_get_net_capable() above only checked
+		 * tgt_net. When the creation netns differs, also
+		 * require CAP_NET_ADMIN there. Otherwise a migrated
+		 * device lets a caller with caps only in its current
+		 * netns mutate the creation netns.
+		 */
+		if (dev->rtnl_link_ops && dev->rtnl_link_ops->get_link_net) {
+			struct net *dev_link_net;
+
+			dev_link_net = dev->rtnl_link_ops->get_link_net(dev);
+			if (!net_eq(dev_link_net, tgt_net) &&
+			    !netlink_ns_capable(skb, dev_link_net->user_ns,
+						CAP_NET_ADMIN))
+				return -EPERM;
+		}
+
 		return rtnl_changelink(skb, nlh, ops, dev, tgt_net, tbs, data, extack);
+	}
 
 	if (!(nlh->nlmsg_flags & NLM_F_CREATE)) {
 		/* No dev found and NLM_F_CREATE not set. Requested dev does not exist,
