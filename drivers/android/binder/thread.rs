@@ -1249,9 +1249,9 @@ impl Thread {
                 info.reply = err.reply;
 
                 {
-                    let mut ee = self.inner.lock().extended_error;
-                    ee.command = err.reply;
-                    ee.param = source.to_errno();
+                    let mut inner = self.inner.lock();
+                    inner.extended_error.command = err.reply;
+                    inner.extended_error.param = source.to_errno();
                 }
 
                 pr_warn!(
