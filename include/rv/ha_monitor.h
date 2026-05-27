@@ -116,6 +116,35 @@ static enum hrtimer_restart ha_monitor_timer_callback(struct hrtimer *hrtimer);
 #define ha_get_ns() 0
 #endif /* HA_CLK_NS */
 
+static bool ha_mon_initializing;
+
+static int ha_monitor_init(void)
+{
+	int ret;
+
+	ha_mon_initializing = true;
+	ret = da_monitor_init();
+	ha_mon_initializing = false;
+	return ret;
+}
+
+static void ha_monitor_destroy(void)
+{
+	da_monitor_destroy();
+}
+
+/*
+ * ha_monitor_uninitialized - are fields like the timer initialized?
+ *
+ * On a clean monitor, we can assume an active monitor (monitoring) is
+ * initialized, however the monitoring field cannot be trusted during
+ * initialization.
+ */
+static inline bool ha_monitor_uninitialized(struct da_monitor *da_mon)
+{
+	return ha_mon_initializing || !da_monitoring(da_mon);
+}
+
 /* Should be supplied by the monitor */
 static u64 ha_get_env(struct ha_monitor *ha_mon, enum envs env, u64 time_ns);
 static bool ha_verify_constraint(struct ha_monitor *ha_mon,
@@ -160,7 +189,7 @@ static inline void ha_monitor_reset_env(struct da_monitor *da_mon)
 	struct ha_monitor *ha_mon = to_ha_monitor(da_mon);
 
 	/* Initialisation resets the monitor before initialising the timer */
-	if (likely(da_monitoring(da_mon)))
+	if (likely(!ha_monitor_uninitialized(da_mon)))
 		ha_cancel_timer(ha_mon);
 }
 
