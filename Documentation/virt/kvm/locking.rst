@@ -283,7 +283,7 @@ time it will be set using the Dirty tracking mechanism described above.
 ^^^^^^^^^^^^^^^^^
 :Type:		spinlock_t or rwlock_t
 :Arch:		any
-:Protects:	-shadow page/shadow tlb entry
+:Protects:	- shadow page/shadow tlb entry
 :Comment:	it is a spinlock since it is used in mmu notifier.
 
 ``kvm->srcu``
