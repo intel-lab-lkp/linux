@@ -100,6 +100,46 @@ static __always_inline void memcpy_flushcache(void *dst, const void *src, size_t
 	}
 	__memcpy_flushcache(dst, src, cnt);
 }
+
+/*
+ * Only reuse memcpy_flushcache() for transfers that can stay entirely
+ * on its non-temporal store path. Fall back to memcpy() for zero-length
+ * copies and for unaligned transfers so the generic streaming API does
+ * not expose flushcache semantics on cached head/tail fragments.
+ */
+static __always_inline int memcpy_flushcache_nt_safe(const void *dst,
+						     const void *src,
+						     size_t cnt)
+{
+	unsigned long d = (unsigned long)dst;
+	unsigned long s = (unsigned long)src;
+
+	if (!cnt)
+		return 0;
+
+	if (cnt >= 8)
+		return !(d & 7) && !(s & 7) && !(cnt & 7);
+
+	return cnt == 4 && !(d & 3) && !(s & 3);
+}
+
+#define __HAVE_ARCH_MEMCPY_STREAMING 1
+static __always_inline void memcpy_streaming(void *dst, const void *src,
+					     size_t cnt)
+{
+	if (!cnt)
+		return;
+
+	if (memcpy_flushcache_nt_safe(dst, src, cnt))
+		memcpy_flushcache(dst, src, cnt);
+	else
+		memcpy(dst, src, cnt);
+}
+
+static __always_inline void memcpy_streaming_drain(void)
+{
+	asm volatile("sfence" : : : "memory");
+}
 #endif
 
 #endif /* __KERNEL__ */
