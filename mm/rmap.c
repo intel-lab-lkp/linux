@@ -875,9 +875,97 @@ void anon_rmap_unlock_read(anon_rmap_t anon_rmap)
 	anon_vma_unlock_read(anon_rmap_to_anon_vma(anon_rmap));
 }
 
+static inline bool test_folio_unmapped(const struct folio *folio, bool test)
+{
+	return test && !folio_mapped(folio);
+}
+
+/*
+ * Must be called under rcu_read_lock().
+ *
+ * For FOLIO_MAPPING_ANON_VMA_LAZY, first obtain the VMA recorded in the
+ * lazy mapping and take a reference with vma_get() so its fields can be
+ * safely accessed. If the folio is no longer mapped in that VMA, resolve
+ * and look up the actual VMA covering the folio.
+ */
+static struct vm_area_struct *folio_resolve_anon_vma_lazy(
+	const struct folio *folio, bool tryget, bool test_map)
+{
+	struct vm_area_struct *vma, *anon_lazy_root;
+	struct mm_struct *mm;
+	unsigned long anon_mapping;
+	pgoff_t pgoff;
+	unsigned long addr;
+
+	anon_mapping = (unsigned long)READ_ONCE(folio->mapping);
+	if ((anon_mapping & FOLIO_MAPPING_FLAGS) != FOLIO_MAPPING_ANON_VMA_LAZY)
+		return NULL;
+	if (test_folio_unmapped(folio, test_map))
+		return NULL;
+
+	anon_lazy_root = vma = (struct vm_area_struct *)(anon_mapping -
+		FOLIO_MAPPING_ANON_VMA_LAZY);
+	mm = vma->vm_mm;
+	if (!mm || !vma->anon_vma || !vma_get(anon_lazy_root))
+		return NULL;
+	pgoff = folio->index;
+	if (vma_address(vma, pgoff, folio_nr_pages(folio)) == -EFAULT) {
+		addr = vma->vm_start + ((pgoff - vma->vm_pgoff) << PAGE_SHIFT);
+		vma = vma_lookup(mm, addr);
+		if (vma && tryget && !vma_get(vma))
+			vma = NULL;
+	}
+	if (!tryget || anon_lazy_root != vma)
+		vma_put(anon_lazy_root);
+	if (test_folio_unmapped(folio, test_map) && vma) {
+		vma_put(vma);
+		vma = NULL;
+	}
+	return vma;
+}
+
+/* Like folio_get_anon_vma(), but for ANON_VMA_LAZY VMAs. */
+static struct vm_area_struct *folio_get_anon_vma_lazy(const struct folio *folio)
+{
+	struct vm_area_struct *vma = NULL;
+
+	rcu_read_lock();
+	vma = folio_resolve_anon_vma_lazy(folio, true, true);
+	rcu_read_unlock();
+	return vma;
+}
+
+/*
+ * For ANON_VMA_LAZY VMAs, similar to folio_get_anon_lazy_vma().
+ *
+ * These VMAs do not have an anon_vma or anon_vma_chain and correspond
+ * to only a single VMA. Therefore, reverse mapping can be performed
+ * without taking the anon_vma lock, providing a faster rmap path for
+ * this common case.
+ */
+static struct vm_area_struct *folio_lock_anon_vma_lazy_read(
+	const struct folio *folio, struct rmap_walk_control *rwc, bool test_map)
+{
+	struct vm_area_struct *vma = NULL;
+
+	rcu_read_lock();
+	vma = folio_resolve_anon_vma_lazy(folio, true, test_map);
+	rcu_read_unlock();
+	return vma;
+}
+
 static anon_rmap_t folio_anon_rmap(const struct folio *folio)
 {
 	struct anon_vma *anon_vma;
+	struct vm_area_struct *vma;
+
+	if (folio_test_anon_vma_lazy(folio)) {
+		rcu_read_lock();
+		vma = folio_resolve_anon_vma_lazy(folio, false, false);
+		rcu_read_unlock();
+		if (vma)
+			return vma_to_anon_rmap(vma);
+	}
 
 	anon_vma = folio_anon_vma(folio);
 	return anon_vma ? anon_vma_to_anon_rmap(anon_vma) : ANON_RMAP_NULL;
@@ -887,29 +975,49 @@ bool folio_maybe_same_anon_vma(const struct folio *folio,
 	const struct vm_area_struct *vma)
 {
 	struct anon_vma *anon_vma;
-	struct anon_vma *tgt_anon_vma = vma_anon_vma(vma);
+	struct anon_vma *tgt_anon_vma = anon_vma_tree_anon_vma(vma->anon_vma);
 	bool same = false;
 
 	rcu_read_lock();
-	anon_vma = folio_anon_vma(folio);
-	if (anon_vma && tgt_anon_vma)
-		same = anon_vma->root == tgt_anon_vma->root;
+	if (folio_test_anon_vma_lazy(folio)) {
+		same = vma == folio_resolve_anon_vma_lazy(folio, false, false);
+	} else {
+		anon_vma = folio_anon_vma(folio);
+		if (anon_vma && tgt_anon_vma)
+			same = anon_vma->root == tgt_anon_vma->root;
+	}
 	rcu_read_unlock();
 	return same;
 }
 
 anon_rmap_t folio_get_anon_rmap(const struct folio *folio)
 {
-	struct anon_vma *anon_vma = folio_get_anon_vma(folio);
+	struct anon_vma *anon_vma;
+	struct vm_area_struct *vma;
 
+	if (folio_test_anon_vma_lazy(folio)) {
+		vma = folio_get_anon_vma_lazy(folio);
+		if (vma)
+			return vma_to_anon_rmap(vma);
+	}
+
+	anon_vma = folio_get_anon_vma(folio);
 	return anon_vma ? anon_vma_to_anon_rmap(anon_vma) : ANON_RMAP_NULL;
 }
 
 anon_rmap_t folio_lock_anon_rmap_read(const struct folio *folio,
 				      struct rmap_walk_control *rwc)
 {
-	struct anon_vma *anon_vma = folio_lock_anon_vma_read(folio, rwc);
+	struct anon_vma *anon_vma;
+	struct vm_area_struct *vma;
 
+	if (folio_test_anon_vma_lazy(folio)) {
+		vma = folio_lock_anon_vma_lazy_read(folio, rwc, true);
+		if (vma)
+			return vma_to_anon_rmap(vma);
+	}
+
+	anon_vma = folio_lock_anon_vma_read(folio, rwc);
 	return anon_vma ? anon_vma_to_anon_rmap(anon_vma) : ANON_RMAP_NULL;
 }
 
@@ -3140,6 +3248,12 @@ static anon_rmap_t rmap_walk_anon_lock(const struct folio *folio,
 	 * are holding mmap_lock. Users without mmap_lock are required to
 	 * take a reference count to prevent the anon_vma disappearing
 	 */
+	if (folio_test_anon_vma_lazy(folio)) {
+		struct vm_area_struct *vma;
+
+		vma = folio_lock_anon_vma_lazy_read(folio, rwc, false);
+		return vma ? vma_to_anon_rmap(vma) : ANON_RMAP_NULL;
+	}
 	anon_vma = folio_anon_vma(folio);
 	if (!anon_vma)
 		return ANON_RMAP_NULL;
