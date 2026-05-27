@@ -235,7 +235,7 @@ reset_assert:
 }
 
 static const struct dev_pm_ops rzg3e_phy_usb3_pm = {
-	NOIRQ_SYSTEM_SLEEP_PM_OPS(rzg3e_phy_usb3_suspend, rzg3e_phy_usb3_resume)
+	SYSTEM_SLEEP_PM_OPS(rzg3e_phy_usb3_suspend, rzg3e_phy_usb3_resume)
 };
 
 static const struct of_device_id rzg3e_phy_usb3_match_table[] = {
