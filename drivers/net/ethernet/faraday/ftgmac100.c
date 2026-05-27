@@ -1949,6 +1949,7 @@ static int ftgmac100_probe(struct platform_device *pdev)
 	struct ftgmac100 *priv;
 	struct device_node *np;
 	int err = 0;
+	int alias_id;
 
 	np = pdev->dev.of_node;
 	if (np) {
@@ -1972,6 +1973,11 @@ static int ftgmac100_probe(struct platform_device *pdev)
 	netdev = devm_alloc_etherdev(&pdev->dev, sizeof(*priv));
 	if (!netdev)
 		return -ENOMEM;
+
+	/* Assign interface name based on DTS alias (e.g., ethernet0 -> eth0) */
+	alias_id = of_alias_get_id(pdev->dev.of_node, "ethernet");
+	if (alias_id >= 0)
+		snprintf(netdev->name, IFNAMSIZ, "eth%d", alias_id);
 
 	SET_NETDEV_DEV(netdev, &pdev->dev);
 
