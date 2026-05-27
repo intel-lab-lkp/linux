@@ -33,7 +33,8 @@ int zl3073x_chan_state_update(struct zl3073x_dev *zldev, u8 index)
 
 	/* Read df_offset vs tracked reference */
 	rc = zl3073x_poll_zero_u8(zldev, ZL_REG_DPLL_DF_READ(index),
-				  ZL_DPLL_DF_READ_SEM);
+				  ZL_DPLL_DF_READ_SEM,
+				  ZL_POLL_DF_READ_TIMEOUT_US);
 	if (rc)
 		return rc;
 
@@ -43,7 +44,8 @@ int zl3073x_chan_state_update(struct zl3073x_dev *zldev, u8 index)
 		return rc;
 
 	rc = zl3073x_poll_zero_u8(zldev, ZL_REG_DPLL_DF_READ(index),
-				  ZL_DPLL_DF_READ_SEM);
+				  ZL_DPLL_DF_READ_SEM,
+				  ZL_POLL_DF_READ_TIMEOUT_US);
 	if (rc)
 		return rc;
 
