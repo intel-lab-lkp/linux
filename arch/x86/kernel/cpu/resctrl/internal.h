@@ -31,13 +31,13 @@
 /**
  * struct arch_mbm_state - values used to compute resctrl_arch_rmid_read()s
  *			   return value.
- * @chunks:	Total data moved (multiply by rdt_group.mon_scale to get bytes)
- * @prev_msr:	Value of IA32_QM_CTR last time it was read for the RMID used to
- *		find this struct.
+ * @chunks:		Total data moved (multiply by rdt_group.mon_scale to get bytes)
+ * @prev_mon_val:	Previous monitor counter value for the RMID used to
+ *			find this struct.
  */
 struct arch_mbm_state {
 	u64	chunks;
-	u64	prev_msr;
+	u64	prev_mon_val;
 };
 
 /* Setting bit 0 in L3_QOS_EXT_CFG enables the ABMC feature. */
