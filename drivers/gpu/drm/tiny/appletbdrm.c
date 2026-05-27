@@ -324,7 +324,7 @@ static int appletbdrm_primary_plane_helper_begin_fb_access(struct drm_plane *pla
 	struct drm_rect damage;
 	size_t request_size;
 
-	drm_atomic_helper_damage_iter_init(&iter, NULL, new_plane_state);
+	drm_atomic_helper_damage_iter_init(&iter, new_plane_state);
 	drm_atomic_for_each_plane_damage(&iter, &damage) {
 		frames_size += struct_size((struct appletbdrm_frame *)0, buf, rect_size(&damage));
 	}
@@ -376,7 +376,6 @@ static int appletbdrm_primary_plane_helper_atomic_check(struct drm_plane *plane,
 }
 
 static int appletbdrm_flush_damage(struct appletbdrm_device *adev,
-				   struct drm_plane_state *old_state,
 				   struct drm_plane_state *state)
 {
 	struct appletbdrm_plane_state *appletbdrm_state = to_appletbdrm_plane_state(state);
@@ -412,7 +411,7 @@ static int appletbdrm_flush_damage(struct appletbdrm_device *adev,
 
 	frame = (struct appletbdrm_frame *)request->data;
 
-	drm_atomic_helper_damage_iter_init(&iter, old_state, state);
+	drm_atomic_helper_damage_iter_init(&iter, state);
 	drm_atomic_for_each_plane_damage(&iter, &damage) {
 		struct drm_rect dst_clip = state->dst;
 		struct iosys_map dst = IOSYS_MAP_INIT_VADDR(frame->buf);
@@ -479,13 +478,12 @@ static void appletbdrm_primary_plane_helper_atomic_update(struct drm_plane *plan
 	struct appletbdrm_device *adev = drm_to_adev(plane->dev);
 	struct drm_device *drm = plane->dev;
 	struct drm_plane_state *plane_state = plane->state;
-	struct drm_plane_state *old_plane_state = drm_atomic_get_old_plane_state(old_state, plane);
 	int idx;
 
 	if (!drm_dev_enter(drm, &idx))
 		return;
 
-	appletbdrm_flush_damage(adev, old_plane_state, plane_state);
+	appletbdrm_flush_damage(adev, plane_state);
 
 	drm_dev_exit(idx);
 }

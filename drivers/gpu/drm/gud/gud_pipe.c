@@ -618,7 +618,6 @@ void gud_plane_atomic_update(struct drm_plane *plane,
 {
 	struct drm_device *drm = plane->dev;
 	struct gud_device *gdrm = to_gud_device(drm);
-	struct drm_plane_state *old_state = drm_atomic_get_old_plane_state(atomic_state, plane);
 	struct drm_plane_state *new_state = drm_atomic_get_new_plane_state(atomic_state, plane);
 	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(new_state);
 	struct drm_framebuffer *fb = new_state->fb;
@@ -647,7 +646,7 @@ void gud_plane_atomic_update(struct drm_plane *plane,
 	if (ret)
 		goto out;
 
-	drm_atomic_helper_damage_iter_init(&iter, old_state, new_state);
+	drm_atomic_helper_damage_iter_init(&iter, new_state);
 	drm_atomic_for_each_plane_damage(&iter, &damage)
 		gud_fb_handle_damage(gdrm, fb, &shadow_plane_state->data[0], &damage);
 

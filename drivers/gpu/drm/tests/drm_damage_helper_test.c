@@ -20,7 +20,6 @@ struct drm_damage_mock {
 	struct drm_property prop;
 	struct drm_framebuffer fb;
 	struct drm_plane_state state;
-	struct drm_plane_state old_state;
 };
 
 static int drm_damage_helper_init(struct kunit *test)
@@ -37,7 +36,6 @@ static int drm_damage_helper_init(struct kunit *test)
 	mock->state.fb = &mock->fb;
 	mock->state.visible = true;
 
-	mock->old_state.plane = &mock->plane;
 	mock->state.plane = &mock->plane;
 
 	/* just enough so that drm_plane_enable_fb_damage_clips() works */
@@ -124,9 +122,8 @@ static void drm_test_damage_iter_no_damage(struct kunit *test)
 	u32 num_hits = 0;
 
 	/* Plane src same as fb size. */
-	set_plane_src(&mock->old_state, 0, 0, mock->fb.width << 16, mock->fb.height << 16);
 	set_plane_src(&mock->state, 0, 0, mock->fb.width << 16, mock->fb.height << 16);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -142,11 +139,9 @@ static void drm_test_damage_iter_no_damage_fractional_src(struct kunit *test)
 	u32 num_hits = 0;
 
 	/* Plane src has fractional part. */
-	set_plane_src(&mock->old_state, 0x3fffe, 0x3fffe,
-		      0x3fffe + (1024 << 16), 0x3fffe + (768 << 16));
 	set_plane_src(&mock->state, 0x3fffe, 0x3fffe,
 		      0x3fffe + (1024 << 16), 0x3fffe + (768 << 16));
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -164,9 +159,8 @@ static void drm_test_damage_iter_no_damage_not_visible(struct kunit *test)
 
 	mock->state.visible = false;
 
-	set_plane_src(&mock->old_state, 0, 0, 1024 << 16, 768 << 16);
 	set_plane_src(&mock->state, 0, 0, 1024 << 16, 768 << 16);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -182,9 +176,8 @@ static void drm_test_damage_iter_no_damage_no_crtc(struct kunit *test)
 
 	mock->state.crtc = NULL;
 
-	set_plane_src(&mock->old_state, 0, 0, 1024 << 16, 768 << 16);
 	set_plane_src(&mock->state, 0, 0, 1024 << 16, 768 << 16);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -200,9 +193,8 @@ static void drm_test_damage_iter_no_damage_no_fb(struct kunit *test)
 
 	mock->state.fb = NULL;
 
-	set_plane_src(&mock->old_state, 0, 0, 1024 << 16, 768 << 16);
 	set_plane_src(&mock->state, 0, 0, 1024 << 16, 768 << 16);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -218,13 +210,12 @@ static void drm_test_damage_iter_simple_damage(struct kunit *test)
 	struct drm_rect clip;
 	u32 num_hits = 0;
 
-	set_plane_src(&mock->old_state, 0, 0, 1024 << 16, 768 << 16);
 	set_plane_src(&mock->state, 0, 0, 1024 << 16, 768 << 16);
 	/* Damage set to plane src */
 	set_damage_clip(&damage, 0, 0, 1024, 768);
 	set_damage_blob(&damage_blob, &damage, sizeof(damage));
 	set_plane_damage(&mock->state, &damage_blob);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -241,12 +232,11 @@ static void drm_test_damage_iter_single_damage(struct kunit *test)
 	struct drm_rect clip;
 	u32 num_hits = 0;
 
-	set_plane_src(&mock->old_state, 0, 0, 1024 << 16, 768 << 16);
 	set_plane_src(&mock->state, 0, 0, 1024 << 16, 768 << 16);
 	set_damage_clip(&damage, 256, 192, 768, 576);
 	set_damage_blob(&damage_blob, &damage, sizeof(damage));
 	set_plane_damage(&mock->state, &damage_blob);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -263,13 +253,12 @@ static void drm_test_damage_iter_single_damage_intersect_src(struct kunit *test)
 	struct drm_rect clip;
 	u32 num_hits = 0;
 
-	set_plane_src(&mock->old_state, 0, 0, 1024 << 16, 768 << 16);
 	set_plane_src(&mock->state, 0, 0, 1024 << 16, 768 << 16);
 	/* Damage intersect with plane src. */
 	set_damage_clip(&damage, 256, 192, 1360, 768);
 	set_damage_blob(&damage_blob, &damage, sizeof(damage));
 	set_plane_damage(&mock->state, &damage_blob);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -286,13 +275,12 @@ static void drm_test_damage_iter_single_damage_outside_src(struct kunit *test)
 	struct drm_rect clip;
 	u32 num_hits = 0;
 
-	set_plane_src(&mock->old_state, 0, 0, 1024 << 16, 768 << 16);
 	set_plane_src(&mock->state, 0, 0, 1024 << 16, 768 << 16);
 	/* Damage clip outside plane src */
 	set_damage_clip(&damage, 1360, 1360, 1380, 1380);
 	set_damage_blob(&damage_blob, &damage, sizeof(damage));
 	set_plane_damage(&mock->state, &damage_blob);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -309,14 +297,12 @@ static void drm_test_damage_iter_single_damage_fractional_src(struct kunit *test
 	u32 num_hits = 0;
 
 	/* Plane src has fractional part. */
-	set_plane_src(&mock->old_state, 0x40002, 0x40002,
-		      0x40002 + (1024 << 16), 0x40002 + (768 << 16));
 	set_plane_src(&mock->state, 0x40002, 0x40002,
 		      0x40002 + (1024 << 16), 0x40002 + (768 << 16));
 	set_damage_clip(&damage, 10, 10, 256, 330);
 	set_damage_blob(&damage_blob, &damage, sizeof(damage));
 	set_plane_damage(&mock->state, &damage_blob);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -334,15 +320,13 @@ static void drm_test_damage_iter_single_damage_intersect_fractional_src(struct k
 	u32 num_hits = 0;
 
 	/* Plane src has fractional part. */
-	set_plane_src(&mock->old_state, 0x40002, 0x40002,
-		      0x40002 + (1024 << 16), 0x40002 + (768 << 16));
 	set_plane_src(&mock->state, 0x40002, 0x40002,
 		      0x40002 + (1024 << 16), 0x40002 + (768 << 16));
 	/* Damage intersect with plane src. */
 	set_damage_clip(&damage, 10, 1, 1360, 330);
 	set_damage_blob(&damage_blob, &damage, sizeof(damage));
 	set_plane_damage(&mock->state, &damage_blob);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -361,15 +345,13 @@ static void drm_test_damage_iter_single_damage_outside_fractional_src(struct kun
 	u32 num_hits = 0;
 
 	/* Plane src has fractional part. */
-	set_plane_src(&mock->old_state, 0x40002, 0x40002,
-		      0x40002 + (1024 << 16), 0x40002 + (768 << 16));
 	set_plane_src(&mock->state, 0x40002, 0x40002,
 		      0x40002 + (1024 << 16), 0x40002 + (768 << 16));
 	/* Damage clip outside plane src */
 	set_damage_clip(&damage, 1360, 1360, 1380, 1380);
 	set_damage_blob(&damage_blob, &damage, sizeof(damage));
 	set_plane_damage(&mock->state, &damage_blob);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -385,14 +367,13 @@ static void drm_test_damage_iter_damage(struct kunit *test)
 	struct drm_rect clip;
 	u32 num_hits = 0;
 
-	set_plane_src(&mock->old_state, 0, 0, 1024 << 16, 768 << 16);
 	set_plane_src(&mock->state, 0, 0, 1024 << 16, 768 << 16);
 	/* 2 damage clips. */
 	set_damage_clip(&damage[0], 20, 30, 200, 180);
 	set_damage_clip(&damage[1], 240, 200, 280, 250);
 	set_damage_blob(&damage_blob, &damage[0], sizeof(damage));
 	set_plane_damage(&mock->state, &damage_blob);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip) {
 		if (num_hits == 0)
 			check_damage_clip(test, &clip, 20, 30, 200, 180);
@@ -413,8 +394,6 @@ static void drm_test_damage_iter_damage_one_intersect(struct kunit *test)
 	struct drm_rect clip;
 	u32 num_hits = 0;
 
-	set_plane_src(&mock->old_state, 0x40002, 0x40002,
-		      0x40002 + (1024 << 16), 0x40002 + (768 << 16));
 	set_plane_src(&mock->state, 0x40002, 0x40002,
 		      0x40002 + (1024 << 16), 0x40002 + (768 << 16));
 	/* 2 damage clips, one intersect plane src. */
@@ -422,7 +401,7 @@ static void drm_test_damage_iter_damage_one_intersect(struct kunit *test)
 	set_damage_clip(&damage[1], 2, 2, 1360, 1360);
 	set_damage_blob(&damage_blob, &damage[0], sizeof(damage));
 	set_plane_damage(&mock->state, &damage_blob);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip) {
 		if (num_hits == 0)
 			check_damage_clip(test, &clip, 20, 30, 200, 180);
@@ -443,14 +422,13 @@ static void drm_test_damage_iter_damage_one_outside(struct kunit *test)
 	struct drm_rect clip;
 	u32 num_hits = 0;
 
-	set_plane_src(&mock->old_state, 0, 0, 1024 << 16, 768 << 16);
 	set_plane_src(&mock->state, 0, 0, 1024 << 16, 768 << 16);
 	/* 2 damage clips, one outside plane src. */
 	set_damage_clip(&damage[0], 1360, 1360, 1380, 1380);
 	set_damage_clip(&damage[1], 240, 200, 280, 250);
 	set_damage_blob(&damage_blob, &damage[0], sizeof(damage));
 	set_plane_damage(&mock->state, &damage_blob);
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -467,7 +445,6 @@ static void drm_test_damage_iter_damage_ignore(struct kunit *test)
 	struct drm_rect clip;
 	u32 num_hits = 0;
 
-	set_plane_src(&mock->old_state, 0, 0, 1024 << 16, 768 << 16);
 	set_plane_src(&mock->state, 0, 0, 1024 << 16, 768 << 16);
 	/* 2 damage clips, but ignore them. */
 	set_damage_clip(&damage[0], 20, 30, 200, 180);
@@ -475,7 +452,7 @@ static void drm_test_damage_iter_damage_ignore(struct kunit *test)
 	set_damage_blob(&damage_blob, &damage[0], sizeof(damage));
 	set_plane_damage(&mock->state, &damage_blob);
 	mock->state.ignore_damage_clips = true;
-	drm_atomic_helper_damage_iter_init(&iter, &mock->old_state, &mock->state);
+	drm_atomic_helper_damage_iter_init(&iter, &mock->state);
 	drm_atomic_for_each_plane_damage(&iter, &clip) {
 		if (num_hits == 0)
 			check_damage_clip(test, &clip, 0, 0, 1024, 768);

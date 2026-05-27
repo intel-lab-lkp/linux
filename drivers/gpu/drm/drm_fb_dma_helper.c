@@ -138,7 +138,7 @@ void drm_fb_dma_sync_non_coherent(struct drm_device *drm,
 			continue;
 
 		daddr = drm_fb_dma_get_gem_addr(state->fb, state, i);
-		drm_atomic_helper_damage_iter_init(&iter, old_state, state);
+		drm_atomic_helper_damage_iter_init(&iter, state);
 
 		drm_atomic_for_each_plane_damage(&iter, &clip) {
 			/* Ignore x1/x2 values, invalidate complete lines */

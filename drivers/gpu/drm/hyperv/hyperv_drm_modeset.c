@@ -171,14 +171,13 @@ static void hyperv_plane_atomic_update(struct drm_plane *plane,
 				       struct drm_atomic_commit *state)
 {
 	struct hyperv_drm_device *hv = to_hv(plane->dev);
-	struct drm_plane_state *old_state = drm_atomic_get_old_plane_state(state, plane);
 	struct drm_plane_state *new_state = drm_atomic_get_new_plane_state(state, plane);
 	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(new_state);
 	struct drm_rect damage;
 	struct drm_rect dst_clip;
 	struct drm_atomic_helper_damage_iter iter;
 
-	drm_atomic_helper_damage_iter_init(&iter, old_state, new_state);
+	drm_atomic_helper_damage_iter_init(&iter, new_state);
 	drm_atomic_for_each_plane_damage(&iter, &damage) {
 		dst_clip = new_state->dst;
 

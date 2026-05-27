@@ -1733,7 +1733,6 @@ void vmw_kms_lost_device(struct drm_device *dev)
 int vmw_du_helper_plane_update(struct vmw_du_update_plane *update)
 {
 	struct drm_plane_state *state = update->plane->state;
-	struct drm_plane_state *old_state = update->old_state;
 	struct drm_atomic_helper_damage_iter iter;
 	struct drm_rect clip;
 	struct drm_rect bb;
@@ -1750,7 +1749,7 @@ int vmw_du_helper_plane_update(struct vmw_du_update_plane *update)
 	 * Iterate in advance to check if really need plane update and find the
 	 * number of clips that actually are in plane src for fifo allocation.
 	 */
-	drm_atomic_helper_damage_iter_init(&iter, old_state, state);
+	drm_atomic_helper_damage_iter_init(&iter, state);
 	drm_atomic_for_each_plane_damage(&iter, &clip)
 		num_hits++;
 
@@ -1818,7 +1817,7 @@ int vmw_du_helper_plane_update(struct vmw_du_update_plane *update)
 	bb.x2 = INT_MIN;
 	bb.y2 = INT_MIN;
 
-	drm_atomic_helper_damage_iter_init(&iter, old_state, state);
+	drm_atomic_helper_damage_iter_init(&iter, state);
 	drm_atomic_for_each_plane_damage(&iter, &clip) {
 		uint32_t fb_x = clip.x1;
 		uint32_t fb_y = clip.y1;
