@@ -35,8 +35,8 @@ The acquisition orders for mutexes are as follows:
 For SRCU:
 
 - ``synchronize_srcu(&kvm->srcu)`` is called inside critical sections
-  for kvm->lock, vcpu->mutex and kvm->slots_lock.  These locks _cannot_
-  be taken inside a kvm->srcu read-side critical section; that is, the
+  for vcpu->mutex and kvm->slots_lock.  These locks _cannot_ be taken
+  inside a kvm->srcu read-side critical section; that is, the
   following is broken::
 
       srcu_read_lock(&kvm->srcu);
