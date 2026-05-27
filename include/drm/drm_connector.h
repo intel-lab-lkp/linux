@@ -1256,6 +1256,22 @@ struct drm_connector_hdmi_audio_funcs {
 	 */
 	int (*mute_stream)(struct drm_connector *connector,
 			   bool enable, int direction);
+
+	/**
+	 * @crtc_state_change:
+	 *
+	 * Notify the audio codec that the CRTC state has changed on this
+	 * connector. Called when a CRTC is enabled or disabled while the
+	 * connector remains physically connected. This is important for
+	 * DP/HDMI audio because audio transport depends on the video
+	 * stream's blanking intervals. The @crtc_state_change callback
+	 * is optional.
+	 *
+	 * @connector: the connector whose CRTC state changed
+	 * @crtc_active: true if the CRTC is now active, false if disabled
+	 */
+	void (*crtc_state_change)(struct drm_connector *connector,
+				  bool crtc_active);
 };
 
 void drm_connector_cec_phys_addr_invalidate(struct drm_connector *connector);

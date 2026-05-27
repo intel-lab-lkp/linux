@@ -128,6 +128,29 @@ void drm_connector_hdmi_audio_plugged_notify(struct drm_connector *connector,
 }
 EXPORT_SYMBOL(drm_connector_hdmi_audio_plugged_notify);
 
+/**
+ * drm_connector_hdmi_audio_crtc_notify - Notify the audio codec of CRTC state change
+ * @connector: A pointer to the connector
+ * @crtc_active: true if the CRTC is now active, false if disabled
+ *
+ * Notify the HDMI audio codec that the CRTC state has changed on this
+ * connector. This should be called by DRM drivers when a CRTC is
+ * enabled or disabled on a connector that has audio capability, even
+ * if the connector remains physically connected.
+ *
+ * Unlike drm_connector_hdmi_audio_plugged_notify() which signals
+ * physical connection changes, this function signals display pipeline
+ * state changes that affect the audio transport path.
+ */
+void drm_connector_hdmi_audio_crtc_notify(struct drm_connector *connector,
+					  bool crtc_active)
+{
+	if (connector->hdmi_audio.funcs->crtc_state_change)
+		connector->hdmi_audio.funcs->crtc_state_change(connector,
+							       crtc_active);
+}
+EXPORT_SYMBOL(drm_connector_hdmi_audio_crtc_notify);
+
 static const struct hdmi_codec_ops drm_connector_hdmi_audio_ops = {
 	.audio_startup = drm_connector_hdmi_audio_startup,
 	.prepare = drm_connector_hdmi_audio_prepare,
