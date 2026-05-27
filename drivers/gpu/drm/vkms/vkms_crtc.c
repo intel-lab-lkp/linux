@@ -116,9 +116,31 @@ static int vkms_crtc_atomic_check(struct drm_crtc *crtc,
 	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state,
 									  crtc);
 	struct vkms_crtc_state *vkms_state = to_vkms_crtc_state(crtc_state);
+	struct drm_display_mode *mode = &crtc_state->adjusted_mode;
 	struct drm_plane *plane;
 	struct drm_plane_state *plane_state;
 	int i = 0, ret;
+	int vrefresh;
+	u64 frame_ns;
+
+	/*
+	 * Reject modes that would cause an hrtimer storm.
+	 * A virtual display cannot meaningfully refresh at >1000 Hz,
+	 * and an extremely high vrefresh (or a crafted combination of
+	 * crtc_clock/htotal/vtotal that overflows the vrefresh computation)
+	 * would produce a frame duration close to zero, locking the CPU
+	 * in an interrupt loop.
+	 */
+	if (crtc_state->enable) {
+		vrefresh = drm_mode_vrefresh(mode);
+		if (vrefresh > 1000)
+			return -EINVAL;
+		if (!mode->crtc_clock || !mode->htotal || !mode->vtotal)
+			return -EINVAL;
+		frame_ns = div_u64((u64)mode->htotal * mode->vtotal * 1000000ULL, mode->crtc_clock);
+		if (frame_ns < 1000000) /* <1 ms => refresh >1000 Hz */
+			return -EINVAL;
+	}
 
 	if (vkms_state->active_planes)
 		return 0;
