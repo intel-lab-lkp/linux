@@ -23,6 +23,8 @@
 #include "util/env.h"
 #include "util/header.h"
 
+#define GENUINE_INTEL_SPR "GenuineIntel-6-8F"
+#define GENUINE_INTEL_EMR "GenuineIntel-6-CF"
 #define GENUINE_INTEL_GNR "GenuineIntel-6-A[DE]"
 
 static bool cached_snc_supported;
@@ -30,8 +32,10 @@ static pthread_once_t snc_support_once = PTHREAD_ONCE_INIT;
 
 static void init_snc_support(void)
 {
-	/* Graniterapids supports SNC configuration. */
+	/* Sapphirerapids Emeraldrapids Graniterapids support SNC configuration. */
 	static const char *const supported_cpuids[] = {
+		GENUINE_INTEL_SPR, /* Sapphirerapids */
+		GENUINE_INTEL_EMR, /* Emeraldrapids */
 		GENUINE_INTEL_GNR, /* Graniterapids */
 	};
 	char *cpuid = get_cpuid_str((struct perf_cpu){0});
@@ -161,6 +165,7 @@ static void init_snc_map(void)
 {
 	int snc_nodes = snc_nodes_per_l3_cache();
 	char *cpuid;
+	static const u8 spr_emr_snc2_map[] = { 0, 0, 1, 1 };
 	static const u8 gnr_snc2_map[] = { 1, 1, 0, 0 };
 	static const u8 snc3_map[] = { 1, 1, 0, 0, 2, 2 };
 
@@ -168,7 +173,11 @@ static void init_snc_map(void)
 	case 2:
 		cpuid = get_cpuid_str((struct perf_cpu){ 0 });
 		if (cpuid) {
-			if (strcmp_cpuid_str(GENUINE_INTEL_GNR, cpuid) == 0) {
+			if (strcmp_cpuid_str(GENUINE_INTEL_SPR, cpuid) == 0 ||
+			    strcmp_cpuid_str(GENUINE_INTEL_EMR, cpuid) == 0) {
+				cached_imc_snc_map = spr_emr_snc2_map;
+				cached_imc_snc_map_len = ARRAY_SIZE(spr_emr_snc2_map);
+			} else if (strcmp_cpuid_str(GENUINE_INTEL_GNR, cpuid) == 0) {
 				cached_imc_snc_map = gnr_snc2_map;
 				cached_imc_snc_map_len = ARRAY_SIZE(gnr_snc2_map);
 			}
