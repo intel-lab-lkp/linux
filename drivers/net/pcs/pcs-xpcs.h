@@ -114,6 +114,7 @@ struct dw_xpcs {
 	struct mdio_device *mdiodev[DW_XPCS_MAX_CHANNELS];
 	struct clk_bulk_data clks[DW_XPCS_NUM_CLKS];
 	struct phylink_pcs pcs;
+	int channels;
 	phy_interface_t interface;
 	bool need_reset;
 	u8 eee_mult_fact;

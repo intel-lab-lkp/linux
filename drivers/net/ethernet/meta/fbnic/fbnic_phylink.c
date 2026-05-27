@@ -200,9 +200,11 @@ int fbnic_phylink_create(struct net_device *netdev)
 	struct fbnic_dev *fbd = fbn->fbd;
 	struct phylink_pcs *pcs;
 	struct phylink *phylink;
+	/* See fbnic_mdio.c addr usage */
+	int addrs[] = { 0, 1 };
 	int err;
 
-	pcs = xpcs_create_pcs_mdiodev(fbd->mdio_bus, 0);
+	pcs = xpcs_create_pcs_mdiodevs(fbd->mdio_bus, addrs, ARRAY_SIZE(addrs));
 	if (IS_ERR(pcs)) {
 		err = PTR_ERR(pcs);
 		dev_err(fbd->dev, "Failed to create PCS device: %d\n", err);

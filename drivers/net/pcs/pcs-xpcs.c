@@ -214,9 +214,15 @@ int xpcs_read(struct dw_xpcs *xpcs, int dev, u32 reg)
 	return mdiodev_c45_read(xpcs->mdiodev[0], dev, reg);
 }
 
+static int
+xpcs_mdev_write_ch(struct dw_xpcs *xpcs, int ch, int dev, u32 reg, u16 val)
+{
+	return mdiodev_c45_write(xpcs->mdiodev[ch], dev, reg, val);
+}
+
 int xpcs_write(struct dw_xpcs *xpcs, int dev, u32 reg, u16 val)
 {
-	return mdiodev_c45_write(xpcs->mdiodev[0], dev, reg, val);
+	return xpcs_mdev_write_ch(xpcs, 0, dev, reg, val);
 }
 
 int xpcs_modify(struct dw_xpcs *xpcs, int dev, u32 reg, u16 mask, u16 set)
@@ -1524,16 +1530,21 @@ static int xpcs_identify(struct dw_xpcs *xpcs)
 	return -ENODEV;
 }
 
-static struct dw_xpcs *xpcs_create_data(struct mdio_device *mdiodev)
+static struct dw_xpcs *
+xpcs_create_data(struct mdio_device **mdiodev, int channels)
 {
 	struct dw_xpcs *xpcs;
+	int i;
 
 	xpcs = kzalloc_obj(*xpcs);
 	if (!xpcs)
 		return ERR_PTR(-ENOMEM);
 
-	mdio_device_get(mdiodev);
-	xpcs->mdiodev[0] = mdiodev;
+	xpcs->channels = channels;
+	for (i = 0; i < channels; i++) {
+		mdio_device_get(mdiodev[i]);
+		xpcs->mdiodev[i] = mdiodev[i];
+	}
 	xpcs->pcs.ops = &xpcs_phylink_ops;
 	xpcs->pcs.poll = true;
 
@@ -1542,7 +1553,10 @@ static struct dw_xpcs *xpcs_create_data(struct mdio_device *mdiodev)
 
 static void xpcs_free_data(struct dw_xpcs *xpcs)
 {
-	mdio_device_put(xpcs->mdiodev[0]);
+	int i;
+
+	for (i = 0; i < xpcs->channels; i++)
+		mdio_device_put(xpcs->mdiodev[i]);
 	kfree(xpcs);
 }
 
@@ -1591,12 +1605,12 @@ static int xpcs_init_id(struct dw_xpcs *xpcs)
 	return xpcs_identify(xpcs);
 }
 
-static struct dw_xpcs *xpcs_create(struct mdio_device *mdiodev)
+static struct dw_xpcs *xpcs_create(struct mdio_device **mdiodev, int channels)
 {
 	struct dw_xpcs *xpcs;
 	int ret;
 
-	xpcs = xpcs_create_data(mdiodev);
+	xpcs = xpcs_create_data(mdiodev, channels);
 	if (IS_ERR(xpcs))
 		return xpcs;
 
@@ -1628,6 +1642,76 @@ out_free_data:
 }
 
 /**
+ * xpcs_create_mdiodevs() - create a DW xPCS instance with multiple @addrs
+ * @bus: pointer to the MDIO-bus descriptor for the device to be looked at
+ * @addrs: an array of int
+ * @channels: the number of addrs items or channels
+ *
+ * Return: a pointer to the DW XPCS handle if successful, -EINVAL if the
+ * addrs is NULL or channels is out of bounds, otherwise -ENODEV if
+ * the PCS device couldn't be found on the bus and other negative errno related
+ * to the data allocation and MDIO-bus communications.
+ */
+struct dw_xpcs *
+xpcs_create_mdiodevs(struct mii_bus *bus, const int *addrs, int channels)
+{
+	struct mdio_device *mdiodev[DW_XPCS_MAX_CHANNELS], *rval;
+	struct dw_xpcs *xpcs;
+	int i;
+
+	if (!addrs || channels <= 0 || channels > DW_XPCS_MAX_CHANNELS)
+		return ERR_PTR(-EINVAL);
+
+	for (i = 0; i < channels; i++) {
+		rval = mdio_device_create(bus, addrs[i]);
+		if (IS_ERR(rval))
+			goto out_nomem;
+		mdiodev[i] = rval;
+	}
+
+	xpcs = xpcs_create(mdiodev, channels);
+
+	/* xpcs_create() has taken a refcount on the mdiodev if it was
+	 * successful. If xpcs_create() fails, this will free the mdio
+	 * device here. In any case, we don't need to hold our reference
+	 * anymore, and putting it here will allow mdio_device_put() in
+	 * xpcs_destroy() to automatically free the mdio device.
+	 */
+	for (i = 0; i < channels; i++)
+		mdio_device_put(mdiodev[i]);
+
+	return xpcs;
+out_nomem:
+	while (i--)
+		mdio_device_free(mdiodev[i]);
+	return ERR_CAST(rval);
+}
+EXPORT_SYMBOL_GPL(xpcs_create_mdiodevs);
+
+/**
+ * xpcs_create_pcs_mdiodevs() - create a DW xPCS instance with multiple @addrs
+ * @bus: pointer to the MDIO-bus descriptor for the device to be looked at
+ * @addrs: an array of int
+ * @channels: the number of addrs items or channels
+ *
+ * Return: a pointer to the DW XPCS handle if successful, otherwise -ENODEV if
+ * the PCS device couldn't be found on the bus and other negative errno related
+ * to the data allocation and MDIO-bus communications.
+ */
+struct phylink_pcs *
+xpcs_create_pcs_mdiodevs(struct mii_bus *bus, const int *addrs, int channels)
+{
+	struct dw_xpcs *xpcs;
+
+	xpcs = xpcs_create_mdiodevs(bus, addrs, channels);
+	if (IS_ERR(xpcs))
+		return ERR_CAST(xpcs);
+
+	return &xpcs->pcs;
+}
+EXPORT_SYMBOL_GPL(xpcs_create_pcs_mdiodevs);
+
+/**
  * xpcs_create_mdiodev() - create a DW xPCS instance with the MDIO @addr
  * @bus: pointer to the MDIO-bus descriptor for the device to be looked at
  * @addr: device MDIO-bus ID
@@ -1638,24 +1722,7 @@ out_free_data:
  */
 struct dw_xpcs *xpcs_create_mdiodev(struct mii_bus *bus, int addr)
 {
-	struct mdio_device *mdiodev;
-	struct dw_xpcs *xpcs;
-
-	mdiodev = mdio_device_create(bus, addr);
-	if (IS_ERR(mdiodev))
-		return ERR_CAST(mdiodev);
-
-	xpcs = xpcs_create(mdiodev);
-
-	/* xpcs_create() has taken a refcount on the mdiodev if it was
-	 * successful. If xpcs_create() fails, this will free the mdio
-	 * device here. In any case, we don't need to hold our reference
-	 * anymore, and putting it here will allow mdio_device_put() in
-	 * xpcs_destroy() to automatically free the mdio device.
-	 */
-	mdio_device_put(mdiodev);
-
-	return xpcs;
+	return xpcs_create_mdiodevs(bus, &addr, 1);
 }
 EXPORT_SYMBOL_GPL(xpcs_create_mdiodev);
 
@@ -1693,7 +1760,7 @@ struct dw_xpcs *xpcs_create_fwnode(struct fwnode_handle *fwnode)
 	if (!mdiodev)
 		return ERR_PTR(-EPROBE_DEFER);
 
-	xpcs = xpcs_create(mdiodev);
+	xpcs = xpcs_create(&mdiodev, 1);
 
 	/* xpcs_create() has taken a refcount on the mdiodev if it was
 	 * successful. If xpcs_create() fails, this will free the mdio
