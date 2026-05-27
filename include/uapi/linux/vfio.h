@@ -1554,6 +1554,35 @@ struct vfio_device_feature_tph_st_config {
 	__aligned_u64 data_uptr;
 };
 
+/**
+ * VFIO_DEVICE_FEATURE_TPH_CPU_ST - Query TPH ST by CPU, mem and requester type
+ *
+ * Read-only interface to resolve Steering Tag using:
+ *  - CPU ID
+ *  - Memory type (volatile / persistent)
+ *  - TPH requested type (standard 8-bit / extended 16-bit)
+ *
+ * @flags: bit0 - memory type, bit1 - TPH requester type
+ * @count: Number of CPU IDs to query consecutively
+ * @data_uptr: Userspace buffer: [in] u32 cpu_id array, [out] u16 st_tag array
+ *
+ * This feature is gated by enable_unsafe_tph module parameter.
+ */
+#define VFIO_DEVICE_FEATURE_TPH_CPU_ST		14
+
+struct vfio_device_feature_tph_cpu_st {
+	__u32 flags;
+#define VFIO_TPH_CPU_ST_MEM_TYPE_MASK	1u
+#define VFIO_TPH_CPU_ST_MEM_TYPE_VM	(0u << 0)
+#define VFIO_TPH_CPU_ST_MEM_TYPE_PM	(1u << 0)
+#define VFIO_TPH_CPU_ST_REQ_TYPE_MASK	(1u << 1)
+#define VFIO_TPH_CPU_ST_REQ_STANDARD	(0u << 1)
+#define VFIO_TPH_CPU_ST_REQ_EXTENDED	(1u << 1)
+	__u16 count;
+	__u16 reserved; /* Reserved for future use, must be zero */
+	__aligned_u64 data_uptr;
+};
+
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**
