@@ -190,39 +190,38 @@ static long media_request_ioctl_queue(struct media_request *req)
 static long media_request_ioctl_reinit(struct media_request *req)
 {
 	struct media_device *mdev = req->mdev;
-	unsigned long flags;
+	long err = 0;
 
 	mutex_lock(&mdev->req_queue_mutex);
 
-	spin_lock_irqsave(&req->lock, flags);
+	spin_lock_irq(&req->lock);
 	if (req->state != MEDIA_REQUEST_STATE_IDLE &&
 	    req->state != MEDIA_REQUEST_STATE_COMPLETE) {
 		dev_dbg(mdev->dev,
 			"request: %s not in idle or complete state, cannot reinit\n",
 			req->debug_str);
-		spin_unlock_irqrestore(&req->lock, flags);
-		mutex_unlock(&mdev->req_queue_mutex);
-		return -EBUSY;
+		err = -EBUSY;
+		goto bailout;
 	}
 	if (req->access_count) {
 		dev_dbg(mdev->dev,
 			"request: %s is being accessed, cannot reinit\n",
 			req->debug_str);
-		spin_unlock_irqrestore(&req->lock, flags);
-		mutex_unlock(&mdev->req_queue_mutex);
-		return -EBUSY;
+		err = -EBUSY;
+		goto bailout;
 	}
 	req->state = MEDIA_REQUEST_STATE_CLEANING;
-	spin_unlock_irqrestore(&req->lock, flags);
+	spin_unlock_irq(&req->lock);
 
 	media_request_clean(req);
 
-	spin_lock_irqsave(&req->lock, flags);
+	spin_lock_irq(&req->lock);
 	req->state = MEDIA_REQUEST_STATE_IDLE;
-	spin_unlock_irqrestore(&req->lock, flags);
+bailout:
+	spin_unlock_irq(&req->lock);
 	mutex_unlock(&mdev->req_queue_mutex);
 
-	return 0;
+	return err;
 }
 
 static long media_request_ioctl(struct file *filp, unsigned int cmd,
