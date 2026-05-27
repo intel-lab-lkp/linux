@@ -7398,6 +7398,11 @@ static void tg3_napi_disable(struct tg3 *tp)
 	struct tg3_napi *tnapi;
 	int i;
 
+	if (!tp->napi_enabled)
+		return;
+
+	tp->napi_enabled = false;
+
 	for (i = tp->irq_cnt - 1; i >= 0; i--) {
 		tnapi = &tp->napi[i];
 		if (tnapi->tx_buffers) {
@@ -7419,6 +7424,8 @@ static void tg3_napi_enable(struct tg3 *tp)
 	int txq_idx = 0, rxq_idx = 0;
 	struct tg3_napi *tnapi;
 	int i;
+
+	tp->napi_enabled = true;
 
 	for (i = 0; i < tp->irq_cnt; i++) {
 		tnapi = &tp->napi[i];
@@ -17718,6 +17725,7 @@ static int tg3_init_one(struct pci_dev *pdev,
 	tp->tx_mode = TG3_DEF_TX_MODE;
 	tp->irq_sync = 1;
 	tp->pcierr_recovery = false;
+	tp->napi_enabled = false;
 
 	if (tg3_debug > 0)
 		tp->msg_enable = tg3_debug;
@@ -18099,7 +18107,8 @@ static void tg3_remove_one(struct pci_dev *pdev)
 		}
 		free_netdev(dev);
 		pci_release_regions(pdev);
-		pci_disable_device(pdev);
+		if (pci_is_enabled(pdev))
+			pci_disable_device(pdev);
 	}
 }
 
@@ -18257,7 +18266,8 @@ static void tg3_shutdown(struct pci_dev *pdev)
 
 	rtnl_unlock();
 
-	pci_disable_device(pdev);
+	if (pci_is_enabled(pdev))
+		pci_disable_device(pdev);
 }
 
 /**

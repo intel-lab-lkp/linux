@@ -3429,6 +3429,7 @@ struct tg3 {
 	struct device			*hwmon_dev;
 	bool				link_up;
 	bool				pcierr_recovery;
+	bool				napi_enabled;
 
 	u32                             ape_hb;
 	unsigned long                   ape_hb_interval;
