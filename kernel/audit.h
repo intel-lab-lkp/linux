@@ -324,13 +324,13 @@ extern struct list_head *audit_killed_trees(void);
 #define audit_watch_path(w) ""
 #define audit_watch_compare(w, i, d) 0
 
-#define audit_alloc_mark(k, p, l) (ERR_PTR(-EINVAL))
+#define audit_alloc_mark(k, p, l, c) (ERR_PTR(-EINVAL))
 #define audit_mark_path(m) ""
 #define audit_remove_mark(m) do { } while (0)
 #define audit_remove_mark_rule(k) do { } while (0)
 #define audit_mark_compare(m, i, d) 0
 #define audit_exe_compare(t, m) (-EINVAL)
-#define audit_dupe_exe(n, o) (-EINVAL)
+#define audit_dupe_exe(n, o, c) (-EINVAL)
 
 #define audit_remove_tree_rule(rule) BUG()
 #define audit_add_tree_rule(rule) -EINVAL
