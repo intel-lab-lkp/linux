@@ -2740,7 +2740,6 @@ static bool gup_fast_folio_allowed(struct folio *folio, unsigned int flags)
 	bool reject_file_backed = false;
 	struct address_space *mapping;
 	bool check_secretmem = false;
-	unsigned long mapping_flags;
 
 	/*
 	 * If we aren't pinning then no problematic write can occur. A long term
@@ -2792,9 +2791,8 @@ static bool gup_fast_folio_allowed(struct folio *folio, unsigned int flags)
 		return false;
 
 	/* Anonymous folios pose no problem. */
-	mapping_flags = (unsigned long)mapping & FOLIO_MAPPING_FLAGS;
-	if (mapping_flags)
-		return mapping_flags & FOLIO_MAPPING_ANON;
+	if (mapping_is_anon((unsigned long)mapping))
+		return true;
 
 	/*
 	 * At this point, we know the mapping is non-null and points to an

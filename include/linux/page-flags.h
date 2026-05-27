@@ -720,13 +720,18 @@ PAGEFLAG_FALSE(VmemmapSelfHosted, vmemmap_self_hosted)
 #define FOLIO_MAPPING_ANON_VMA_LAZY	FOLIO_MAPPING_ANON_KSM
 #define FOLIO_MAPPING_FLAGS	(FOLIO_MAPPING_ANON | FOLIO_MAPPING_ANON_KSM)
 
-static __always_inline bool folio_test_anon(const struct folio *folio)
+static __always_inline bool mapping_is_anon(unsigned long mapping)
 {
 #ifdef CONFIG_ANON_VMA_LAZY
-	return ((unsigned long)folio->mapping & FOLIO_MAPPING_FLAGS) != 0;
+	return (mapping & FOLIO_MAPPING_FLAGS) != 0;
 #else
-	return ((unsigned long)folio->mapping & FOLIO_MAPPING_ANON) != 0;
+	return (mapping & FOLIO_MAPPING_ANON) != 0;
 #endif
+}
+
+static __always_inline bool folio_test_anon(const struct folio *folio)
+{
+	return mapping_is_anon((unsigned long)folio->mapping);
 }
 
 static __always_inline bool folio_test_lazyfree(const struct folio *folio)
@@ -738,7 +743,11 @@ static __always_inline bool PageAnonNotKsm(const struct page *page)
 {
 	unsigned long flags = (unsigned long)page_folio(page)->mapping;
 
+#ifdef CONFIG_ANON_VMA_LAZY
+	return (flags & FOLIO_MAPPING_FLAGS) != FOLIO_MAPPING_KSM;
+#else
 	return (flags & FOLIO_MAPPING_FLAGS) == FOLIO_MAPPING_ANON;
+#endif
 }
 
 static __always_inline bool PageAnon(const struct page *page)

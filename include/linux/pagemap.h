@@ -507,7 +507,7 @@ static inline pgoff_t mapping_align_index(const struct address_space *mapping,
 static inline bool mapping_large_folio_support(const struct address_space *mapping)
 {
 	/* AS_FOLIO_ORDER is only reasonable for pagecache folios */
-	VM_WARN_ONCE((unsigned long)mapping & FOLIO_MAPPING_ANON,
+	VM_WARN_ONCE(mapping_is_anon((unsigned long)mapping),
 			"Anonymous mapping always supports large folio");
 
 	return mapping_max_folio_order(mapping) > 0;
