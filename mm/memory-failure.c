@@ -1325,6 +1325,28 @@ static inline bool HWPoisonHandlable(struct page *page, unsigned long flags)
 	return PageLRU(page) || is_free_buddy_page(page);
 }
 
+/*
+ * Positive identification of pages the hwpoison handler cannot recover.
+ * These page types are owned by kernel internals (no userspace mapping
+ * to unmap, no file mapping to invalidate, no migration target), so the
+ * shake_page() / retry loop in get_any_page() can never turn them into
+ * something HWPoisonHandlable() will accept.  Short-circuit them to
+ * -ENOTRECOVERABLE so callers can panic on operator request instead of
+ * spinning through retries that exit as a transient-looking -EIO.
+ *
+ * The MF_SOFT_OFFLINE / page_has_movable_ops() opt-out mirrors
+ * HWPoisonHandlable(): soft-offline is allowed to migrate movable_ops
+ * pages even though they are not on the LRU.
+ */
+static inline bool HWPoisonKernelOwned(struct page *page, unsigned long flags)
+{
+	if ((flags & MF_SOFT_OFFLINE) && page_has_movable_ops(page))
+		return false;
+
+	return PageReserved(page) || PageSlab(page) ||
+	       PageTable(page) || PageLargeKmalloc(page);
+}
+
 static int __get_hwpoison_page(struct page *page, unsigned long flags)
 {
 	struct folio *folio = page_folio(page);
@@ -1370,6 +1392,19 @@ static int get_any_page(struct page *p, unsigned long flags)
 
 	if (flags & MF_COUNT_INCREASED)
 		count_increased = true;
+
+	/*
+	 * Page types we know are kernel-owned and cannot be recovered.
+	 * Short-circuit before the shake_page() / retry loop, which
+	 * cannot turn any of these into something HWPoisonHandlable().
+	 * Drop the caller's reference if MF_COUNT_INCREASED took one.
+	 */
+	if (HWPoisonKernelOwned(p, flags)) {
+		if (count_increased)
+			put_page(p);
+		ret = -ENOTRECOVERABLE;
+		goto out;
+	}
 
 try_again:
 	if (!count_increased) {
@@ -1418,7 +1453,7 @@ try_again:
 		ret = -EIO;
 	}
 out:
-	if (ret == -EIO)
+	if (ret == -EIO || ret == -ENOTRECOVERABLE)
 		pr_err("%#lx: unhandlable page.\n", page_to_pfn(p));
 
 	return ret;
@@ -1475,7 +1510,10 @@ static int __get_unpoison_page(struct page *page)
  *         -EIO for pages on which we can not handle memory errors,
  *         -EBUSY when get_hwpoison_page() has raced with page lifecycle
  *         operations like allocation and free,
- *         -EHWPOISON when the page is hwpoisoned and taken off from buddy.
+ *         -EHWPOISON when the page is hwpoisoned and taken off from buddy,
+ *         -ENOTRECOVERABLE for kernel-owned pages identified by
+ *         HWPoisonKernelOwned() (PG_reserved, slab,
+ *         page-table, large-kmalloc) that the handler cannot recover.
  */
 static int get_hwpoison_page(struct page *p, unsigned long flags)
 {
