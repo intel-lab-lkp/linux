@@ -539,8 +539,13 @@ config MCP4728
 	  will be called mcp4728.
 
 config MCP47FEB02
+	tristate
+
+config MCP47FEB02_I2C
 	tristate "MCP47F(E/V)B01/02/04/08/11/12/14/18/21/22/24/28 DAC driver"
 	depends on I2C
+	select MCP47FEB02
+	select REGMAP_I2C
 	help
 	  Say yes here if you want to build the driver for the Microchip:
 	  - 8-bit DAC:
