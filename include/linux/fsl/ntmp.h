@@ -260,9 +260,14 @@ int ntmp_fdbt_add_entry(struct ntmp_user *user, u32 *entry_id,
 int ntmp_fdbt_update_entry(struct ntmp_user *user, u32 entry_id,
 			   const struct fdbt_cfge_data *cfge);
 int ntmp_fdbt_delete_entry(struct ntmp_user *user, u32 entry_id);
+int ntmp_fdbt_delete_entry_by_keye(struct ntmp_user *user,
+				   const struct fdbt_keye_data *keye);
 int ntmp_fdbt_search_port_entry(struct ntmp_user *user, int port,
 				u32 *resume_entry_id,
 				struct fdbt_entry_data *entry);
+int ntmp_fdbt_update_activity_element(struct ntmp_user *user);
+int ntmp_fdbt_delete_aging_entries(struct ntmp_user *user, u8 act_cnt);
+int ntmp_fdbt_delete_port_dynamic_entries(struct ntmp_user *user, int port);
 int ntmp_vft_add_entry(struct ntmp_user *user, u16 vid,
 		       const struct vft_cfge_data *cfge);
 int ntmp_bpt_update_entry(struct ntmp_user *user, u32 entry_id,
