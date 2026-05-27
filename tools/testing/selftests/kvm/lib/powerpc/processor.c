@@ -97,17 +97,17 @@ static u64 pt_entry_coverage(struct kvm_vm *vm, int level)
 	return size;
 }
 
-static int pt_idx(struct kvm_vm *vm, u64 vaddr, int level, u64 *nls)
+static int pt_idx(struct kvm_vm *vm, gva_t gva, int level, u64 *nls)
 {
 	switch (level) {
 	case 1:
 		if (nls)
 			*nls = 0x9;
-		return (vaddr >> 39) & 0x1fff;
+		return (gva >> 39) & 0x1fff;
 	case 2:
 		if (nls)
 			*nls = 0x9;
-		return (vaddr >> 30) & 0x1ff;
+		return (gva >> 30) & 0x1ff;
 	case 3:
 		if (vm->mode == VM_MODE_P52V52_4K) {
 			if (nls)
@@ -116,12 +116,12 @@ static int pt_idx(struct kvm_vm *vm, u64 vaddr, int level, u64 *nls)
 			if (nls)
 				*nls = 0x5;
 		}
-		return (vaddr >> 21) & 0x1ff;
+		return (gva >> 21) & 0x1ff;
 	case 4:
 		if (vm->mode == VM_MODE_P52V52_4K)
-			return (vaddr >> 12) & 0x1ff;
+			return (gva >> 12) & 0x1ff;
 		else /* vm->mode == VM_MODE_P52V52_64K */
-			return (vaddr >> 16) & 0x1f;
+			return (gva >> 16) & 0x1f;
 	default:
 		TEST_ASSERT(false, "Invalid page table level %d\n", level);
 		return 0;
@@ -129,9 +129,9 @@ static int pt_idx(struct kvm_vm *vm, u64 vaddr, int level, u64 *nls)
 }
 
 static u64 *virt_get_pte(struct kvm_vm *vm, gpa_t pt,
-			  u64 vaddr, int level, u64 *nls)
+			  gva_t gva, int level, u64 *nls)
 {
-	int idx = pt_idx(vm, vaddr, level, nls);
+	int idx = pt_idx(vm, gva, level, nls);
 	u64 *ptep = addr_gpa2hva(vm, pt + idx * 8);
 
 	return ptep;
@@ -189,7 +189,7 @@ static gpa_t __vm_alloc_pt(struct kvm_vm *vm, u64 pt_shift)
 	return pt;
 }
 
-void virt_arch_pg_map(struct kvm_vm *vm, u64 gva, u64 gpa)
+void virt_arch_pg_map(struct kvm_vm *vm, gva_t gva, gpa_t gpa)
 {
 	gpa_t pt = vm->mmu.pgd;
 	u64 *ptep, pte;
@@ -331,7 +331,7 @@ struct kvm_vcpu *vm_arch_vcpu_add(struct kvm_vm *vm, u32 vcpu_id)
 				       MEM_REGION_DATA);
 	ex_regs_paddr = addr_gva2gpa(vm, ex_regs_vaddr);
 	ex_regs = addr_gpa2hva(vm, ex_regs_paddr);
-	ex_regs->vaddr = ex_regs_vaddr;
+	ex_regs->gva = ex_regs_vaddr;
 
 	vcpu = __vm_vcpu_add(vm, vcpu_id);
 
