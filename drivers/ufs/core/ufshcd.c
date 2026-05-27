@@ -5849,12 +5849,14 @@ void ufshcd_compl_one_cqe(struct ufs_hba *hba, int task_tag,
 			  struct cq_entry *cqe)
 {
 	struct scsi_cmnd *cmd = ufshcd_tag_to_cmd(hba, task_tag);
-	struct ufshcd_lrb *lrbp = scsi_cmd_priv(cmd);
+	struct ufshcd_lrb *lrbp;
 	enum utp_ocs ocs;
 
 	if (WARN_ONCE(!cmd, "cqe->command_desc_base_addr = %#llx\n",
 		      le64_to_cpu(cqe->command_desc_base_addr)))
 		return;
+
+	lrbp = scsi_cmd_priv(cmd);
 
 	if (hba->monitor.enabled) {
 		lrbp->compl_time_stamp = ktime_get();
@@ -7909,8 +7911,12 @@ static void ufshcd_set_req_abort_skip(struct ufs_hba *hba, unsigned long bitmap)
 
 	for_each_set_bit(tag, &bitmap, hba->nutrs) {
 		struct scsi_cmnd *cmd = ufshcd_tag_to_cmd(hba, tag);
-		struct ufshcd_lrb *lrbp = scsi_cmd_priv(cmd);
+		struct ufshcd_lrb *lrbp;
 
+		if (!cmd)
+			continue;
+
+		lrbp = scsi_cmd_priv(cmd);
 		lrbp->req_abort_skip = true;
 	}
 }
@@ -7931,10 +7937,15 @@ static void ufshcd_set_req_abort_skip(struct ufs_hba *hba, unsigned long bitmap)
 int ufshcd_try_to_abort_task(struct ufs_hba *hba, int tag)
 {
 	struct scsi_cmnd *cmd = ufshcd_tag_to_cmd(hba, tag);
-	struct ufshcd_lrb *lrbp = scsi_cmd_priv(cmd);
+	struct ufshcd_lrb *lrbp;
 	int err;
 	int poll_cnt;
 	u8 resp = 0xF;
+
+	if (!cmd)
+		return -EINVAL;
+
+	lrbp = scsi_cmd_priv(cmd);
 
 	for (poll_cnt = 100; poll_cnt; poll_cnt--) {
 		err = ufshcd_issue_tm_cmd(hba, lrbp->lun, tag, UFS_QUERY_TASK,
