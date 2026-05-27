@@ -226,6 +226,17 @@ void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err,
 int netlink_has_listeners(struct sock *sk, unsigned int group);
 bool netlink_strict_get_check(struct sk_buff *skb);
 
+/*
+ * netlink_unicast() 'nonblock' argument:
+ *   0              - blocking with default sk_sndtimeo (may be infinite)
+ *   MSG_DONTWAIT   - nonblocking, immediate -EAGAIN if socket is congested
+ *   NETLINK_UNICAST_TIMED - blocking with finite sk_sndtimeo; if the timeout
+ *                   expires mid-wait, return -EAGAIN without triggering
+ *                   netlink_overrun() on retry.  For callers that manage
+ *                   their own retry/backlog policy (e.g. audit).
+ */
+#define NETLINK_UNICAST_TIMED 2
+
 int netlink_unicast(struct sock *ssk, struct sk_buff *skb, __u32 portid, int nonblock);
 int netlink_broadcast(struct sock *ssk, struct sk_buff *skb, __u32 portid,
 		      __u32 group, gfp_t allocation);

@@ -753,7 +753,7 @@ static int auditd_send_unicast_skb(struct sk_buff *skb)
 	portid = ac->portid;
 	rcu_read_unlock();
 
-	rc = netlink_unicast(sk, skb, portid, 0);
+	rc = netlink_unicast(sk, skb, portid, NETLINK_UNICAST_TIMED);
 	put_net(net);
 	if (rc < 0)
 		goto err;
@@ -811,7 +811,7 @@ static int kauditd_send_queue(struct sock *sk, u32 portid,
 retry:
 		/* grab an extra skb reference in case of error */
 		skb_get(skb);
-		rc = netlink_unicast(sk, skb, portid, 0);
+		rc = netlink_unicast(sk, skb, portid, NETLINK_UNICAST_TIMED);
 		if (rc < 0) {
 			/* send failed - try a few times unless fatal error */
 			if (++failed >= retry_limit ||
@@ -967,7 +967,7 @@ int audit_send_list_thread(void *_dest)
 	audit_ctl_unlock();
 
 	while ((skb = __skb_dequeue(&dest->q)) != NULL)
-		netlink_unicast(sk, skb, dest->portid, 0);
+		netlink_unicast(sk, skb, dest->portid, NETLINK_UNICAST_TIMED);
 
 	put_net(dest->net);
 	kfree(dest);
@@ -1018,9 +1018,11 @@ static int audit_send_reply_thread(void *arg)
 	audit_ctl_lock();
 	audit_ctl_unlock();
 
-	/* Ignore failure. It'll only happen if the sender goes away,
-	   because our timeout is set to infinite. */
-	netlink_unicast(audit_get_sk(reply->net), reply->skb, reply->portid, 0);
+	/*
+	 * Failure here means the sender went away or the finite
+	 * sk_sndtimeo expired; either way the reply is best-effort.
+	 */
+	netlink_unicast(audit_get_sk(reply->net), reply->skb, reply->portid, NETLINK_UNICAST_TIMED);
 	reply->skb = NULL;
 	audit_free_reply(reply);
 	return 0;
