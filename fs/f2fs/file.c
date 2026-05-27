@@ -4806,6 +4806,9 @@ static void f2fs_dio_iostat_start(struct f2fs_sb_info *sbi, struct bio *bio)
 {
 	void *bi_private = bio->bi_private;
 
+	if (!f2fs_iostat_enabled(sbi))
+		return;
+
 	iostat_alloc_and_bind_ctx(sbi, bio, bi_private);
 	iostat_update_submit_ctx(bio, DATA);
 	bio->bi_end_io = f2fs_dio_end_bio;
@@ -4823,7 +4826,8 @@ static int f2fs_dio_read_end_io(struct kiocb *iocb, ssize_t size, int error,
 	dec_page_count(sbi, F2FS_DIO_READ);
 	if (error)
 		return error;
-	f2fs_update_iostat(sbi, NULL, APP_DIRECT_READ_IO, size);
+	if (f2fs_iostat_enabled(sbi))
+		f2fs_update_iostat(sbi, NULL, APP_DIRECT_READ_IO, size);
 	return 0;
 }
 
@@ -5104,7 +5108,8 @@ static int f2fs_dio_write_end_io(struct kiocb *iocb, ssize_t size, int error,
 	if (error)
 		return error;
 	f2fs_update_time(sbi, REQ_TIME);
-	f2fs_update_iostat(sbi, NULL, APP_DIRECT_IO, size);
+	if (f2fs_iostat_enabled(sbi))
+		f2fs_update_iostat(sbi, NULL, APP_DIRECT_IO, size);
 	return 0;
 }
 

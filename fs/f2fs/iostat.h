@@ -44,6 +44,11 @@ struct bio_iostat_ctx {
 	struct bio_post_read_ctx *post_read_ctx;
 };
 
+static inline bool f2fs_iostat_enabled(struct f2fs_sb_info *sbi)
+{
+	return sbi->iostat_enable;
+}
+
 static inline void iostat_update_submit_ctx(struct bio *bio,
 			enum page_type type)
 {
@@ -72,6 +77,7 @@ static inline void f2fs_update_iostat(struct f2fs_sb_info *sbi, struct inode *in
 		enum iostat_type type, unsigned long long io_bytes) {}
 static inline void f2fs_update_read_folio_count(struct f2fs_sb_info *sbi,
 		struct folio *folio) {}
+static inline bool f2fs_iostat_enabled(struct f2fs_sb_info *sbi) { return false; }
 static inline void iostat_update_and_unbind_ctx(struct bio *bio) {}
 static inline void iostat_alloc_and_bind_ctx(struct f2fs_sb_info *sbi,
 		struct bio *bio, struct bio_post_read_ctx *ctx) {}
