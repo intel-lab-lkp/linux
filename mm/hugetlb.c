@@ -2238,6 +2238,23 @@ static nodemask_t *policy_mbind_nodemask(gfp_t gfp)
 	return NULL;
 }
 
+static unsigned int allowed_mems_nr(struct hstate *h)
+{
+	int node;
+	unsigned int nr = 0;
+	nodemask_t *mbind_nodemask;
+	unsigned int *array = h->free_huge_pages_node;
+	gfp_t gfp_mask = htlb_alloc_mask(h);
+
+	mbind_nodemask = policy_mbind_nodemask(gfp_mask);
+	for_each_node_mask(node, cpuset_current_mems_allowed) {
+		if (!mbind_nodemask || node_isset(node, *mbind_nodemask))
+			nr += array[node];
+	}
+
+	return nr;
+}
+
 /*
  * Increase the hugetlb pool such that it can accommodate a reservation
  * of size 'delta'.
@@ -2260,7 +2277,7 @@ static int gather_surplus_pages(struct hstate *h, long delta)
 		alloc_nodemask = cpuset_current_mems_allowed;
 
 	lockdep_assert_held(&hugetlb_lock);
-	needed = (h->resv_huge_pages + delta) - h->free_huge_pages;
+	needed = (h->resv_huge_pages + delta) - allowed_mems_nr(h);
 	if (needed <= 0) {
 		h->resv_huge_pages += delta;
 		return 0;
@@ -2295,7 +2312,7 @@ retry:
 	 */
 	spin_lock_irq(&hugetlb_lock);
 	needed = (h->resv_huge_pages + delta) -
-			(h->free_huge_pages + allocated);
+			(allowed_mems_nr(h) + allocated);
 	if (needed > 0) {
 		if (alloc_ok)
 			goto retry;
@@ -4496,23 +4513,6 @@ static int __init hugepage_alloc_threads_setup(char *s)
 	return 1;
 }
 __setup("hugepage_alloc_threads=", hugepage_alloc_threads_setup);
-
-static unsigned int allowed_mems_nr(struct hstate *h)
-{
-	int node;
-	unsigned int nr = 0;
-	nodemask_t *mbind_nodemask;
-	unsigned int *array = h->free_huge_pages_node;
-	gfp_t gfp_mask = htlb_alloc_mask(h);
-
-	mbind_nodemask = policy_mbind_nodemask(gfp_mask);
-	for_each_node_mask(node, cpuset_current_mems_allowed) {
-		if (!mbind_nodemask || node_isset(node, *mbind_nodemask))
-			nr += array[node];
-	}
-
-	return nr;
-}
 
 void hugetlb_report_meminfo(struct seq_file *m)
 {
