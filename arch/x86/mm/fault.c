@@ -281,7 +281,7 @@ void arch_sync_kernel_mappings(unsigned long start, unsigned long end)
 			spinlock_t *pgt_lock;
 
 			/* the pgt_lock only for Xen */
-			pgt_lock = &pgd_page_get_mm(ptdesc_page(ptdesc))->page_table_lock;
+			pgt_lock = &pgd_page_get_mm(ptdesc)->page_table_lock;
 
 			spin_lock(pgt_lock);
 			vmalloc_sync_one(ptdesc_address(ptdesc), addr);
