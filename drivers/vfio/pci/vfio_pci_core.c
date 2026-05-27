@@ -42,7 +42,7 @@
 static bool nointxmask;
 static bool disable_vga;
 static bool disable_idle_d3;
-static bool enable_unsafe_tph;
+bool enable_unsafe_tph;
 
 static void vfio_pci_eventfd_rcu_free(struct rcu_head *rcu)
 {
@@ -509,6 +509,9 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 			return ret;
 	}
 
+	/* Clear TPH status when taking over ownership */
+	pcie_disable_tph(pdev);
+
 	/* Don't allow our initial saved state to include busmaster */
 	pci_clear_master(pdev);
 
@@ -620,6 +623,9 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 	 * 'vdev->pm_save').
 	 */
 	vfio_pci_set_power_state(vdev, PCI_D0);
+
+	/* Clear TPH status when releasing ownership */
+	pcie_disable_tph(pdev);
 
 	/* Stop the device from further DMA */
 	pci_clear_master(pdev);
