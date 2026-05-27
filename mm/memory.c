@@ -3806,6 +3806,10 @@ vm_fault_t __vmf_anon_prepare(struct vm_fault *vmf)
 
 	if (likely(vma->anon_vma))
 		return 0;
+	if (anon_vma_lazy_enabled()) {
+		vma_prepare_anon_vma_lazy(vma);
+		return 0;
+	}
 	if (vmf->flags & FAULT_FLAG_VMA_LOCK) {
 		if (!mmap_read_trylock(vma->vm_mm))
 			return VM_FAULT_RETRY;

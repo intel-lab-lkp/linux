@@ -417,12 +417,21 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src,
 	enum vma_operation operation);
 int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma);
 int  __anon_vma_prepare(struct vm_area_struct *vma);
+/* Called on first anon fault or from anon_vma_prepare(). */
+void vma_prepare_anon_vma_lazy(struct vm_area_struct *vma);
 void unlink_anon_vmas(struct vm_area_struct *vma);
 
 static inline int anon_vma_prepare(struct vm_area_struct *vma)
 {
 	if (likely(vma->anon_vma))
 		return 0;
+
+#ifdef CONFIG_ANON_VMA_LAZY
+	if (anon_vma_lazy_enabled()) {
+		vma_prepare_anon_vma_lazy(vma);
+		return 0;
+	}
+#endif
 
 	return __anon_vma_prepare(vma);
 }

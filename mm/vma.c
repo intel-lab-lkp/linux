@@ -1995,6 +1995,8 @@ static int anon_vma_compatible(struct vm_area_struct *a, struct vm_area_struct *
  * acceptable for merging, so we can do all of this optimistically. But
  * we do that READ_ONCE() to make sure that we never re-load the pointer.
  *
+ * For upgrading ANON_VMA_LAZY VMAs, follow the same reuse rules as splitting.
+ *
  * IOW: that the "list_is_singular()" test on the anon_vma_chain only
  * matters for the 'stable anon_vma' case (ie the thing we want to avoid
  * is to return an anon_vma that is "complex" due to having gone through
@@ -2005,12 +2007,15 @@ static int anon_vma_compatible(struct vm_area_struct *a, struct vm_area_struct *
  * a read lock on the mmap_lock.
  */
 static struct anon_vma *reusable_anon_vma(struct vm_area_struct *old,
+					  struct vm_area_struct *vma,
 					  struct vm_area_struct *a,
 					  struct vm_area_struct *b)
 {
 	if (anon_vma_compatible(a, b)) {
 		struct anon_vma *anon_vma = vma_anon_vma(old);
 
+		if (anon_vma && vma_is_anon_vma_lazy(vma))
+			return anon_vma;
 		if (anon_vma && list_is_singular(&old->anon_vma_chain))
 			return anon_vma;
 	}
@@ -2034,7 +2039,7 @@ struct anon_vma *find_mergeable_anon_vma(struct vm_area_struct *vma)
 	/* Try next first. */
 	next = vma_iter_load(&vmi);
 	if (next) {
-		anon_vma = reusable_anon_vma(next, vma, next);
+		anon_vma = reusable_anon_vma(next, vma, vma, next);
 		if (anon_vma)
 			return anon_vma;
 	}
@@ -2044,7 +2049,7 @@ struct anon_vma *find_mergeable_anon_vma(struct vm_area_struct *vma)
 	prev = vma_prev(&vmi);
 	/* Try prev next. */
 	if (prev)
-		anon_vma = reusable_anon_vma(prev, prev, vma);
+		anon_vma = reusable_anon_vma(prev, vma, prev, vma);
 
 	/*
 	 * We might reach here with anon_vma == NULL if we can't find
