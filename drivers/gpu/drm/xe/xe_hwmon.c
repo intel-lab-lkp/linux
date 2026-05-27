@@ -860,9 +860,15 @@ static int xe_hwmon_pcode_read_fan_control(const struct xe_hwmon *hwmon, u32 sub
 {
 	struct xe_tile *root_tile = xe_device_get_root_tile(hwmon->xe);
 
-	/* Platforms that don't return correct value */
+	/*
+	 * The PCODE FAN_SPEED_CONTROL subcommands return an error on DG2, so we
+	 * answer the FSC_READ_NUM_FANS query here. DG2 only wires a single fan
+	 * tachometer register (BMG_FAN_1_SPEED == 0x138140, shared with i915's
+	 * PCU_PWM_FAN_SPEED); BMG_FAN_2/3_SPEED read 0 on DG2 silicon. Reporting
+	 * one fan keeps a phantom fan2_input that always reads 0 out of sysfs.
+	 */
 	if (hwmon->xe->info.platform == XE_DG2 && subcmd == FSC_READ_NUM_FANS) {
-		*uval = 2;
+		*uval = 1;
 		return 0;
 	}
 
