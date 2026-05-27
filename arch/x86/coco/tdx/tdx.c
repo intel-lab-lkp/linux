@@ -703,8 +703,25 @@ static bool handle_in(struct pt_regs *regs, int size, int port)
 	 */
 	success = !__tdx_hypercall(&args);
 
-	/* Update part of the register affected by the emulated instruction */
-	regs->ax &= ~mask;
+	/*
+	 * IN writes the result into a sub-register of RAX. Only the
+	 * 32-bit form zero-extends; the smaller forms leave the upper
+	 * bits untouched:
+	 *
+	 *   insn  dest  size  bits written     bits preserved
+	 *   inb   AL    1     RAX[ 7: 0]       RAX[63: 8]
+	 *   inw   AX    2     RAX[15: 0]       RAX[63:16]
+	 *   inl   EAX   4     RAX[63: 0]       (none, zero-extended)
+	 *
+	 * 'mask' only covers the low 'size' bytes, which is exactly the
+	 * range affected for size 1 and 2. For size 4 the write also
+	 * clears RAX[63:32], so widen the clear-mask.
+	 */
+	if (size == 4)
+		regs->ax = 0;
+	else
+		regs->ax &= ~mask;
+
 	if (success)
 		regs->ax |= args.r11 & mask;
 
