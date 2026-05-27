@@ -33,6 +33,10 @@
 #include <asm/ppc-pci.h>
 #include <asm/rtas.h>
 
+#ifndef pr_fmt
+#define pr_fmt(fmt) "EEH: " fmt
+#endif
+
 /* RTAS tokens */
 static int ibm_set_eeh_option;
 static int ibm_set_slot_reset;
@@ -785,6 +789,263 @@ static int pseries_notify_resume(struct eeh_dev *edev)
 	return 0;
 }
 #endif
+
+/**
+ * validate_addr_mask_in_pe - Validate that an addr+mask fall within PE's BARs
+ * @pe:  EEH PE containing one or more PCI devices
+ * @addr: Address to validate
+ * @mask: Address mask to validate
+ *
+ * Checks that @addr is mapped into a BAR/MMIO region of any device belonging
+ * to the PE. If @mask is non-zero, ensures it is consistent with @addr.
+ *
+ * Return: 0 if valid, RTAS_INVALID_PARAMETER on failure.
+ */
+
+static int validate_addr_mask_in_pe(struct eeh_pe *pe, unsigned long addr,
+				    unsigned long mask)
+{
+	struct eeh_dev *edev, *tmp;
+	struct pci_dev *pdev;
+	int bar;
+	resource_size_t bar_start, bar_len;
+	bool valid = false;
+
+	/* nothing to validate */
+	if (addr == 0 && mask == 0)
+		return 0;
+
+	eeh_pe_for_each_dev(pe, edev, tmp) {
+		pdev = eeh_dev_to_pci_dev(edev);
+		if (!pdev)
+			continue;
+
+		for (bar = 0; bar < PCI_NUM_RESOURCES; bar++) {
+			bar_start = pci_resource_start(pdev, bar);
+			bar_len = pci_resource_len(pdev, bar);
+
+			if (!bar_len)
+				continue;
+
+			if (addr >= bar_start && addr < (bar_start + bar_len)) {
+				/* ensure mask makes sense for the addr value */
+				if ((addr & mask) != addr) {
+					pr_err("Mask 0x%lx invalid for addr 0x%lx in BAR[%d] range 0x%llx-0x%llx\n",
+					       mask, addr, bar,
+					       (unsigned long long)bar_start,
+					       (unsigned long long)(bar_start + bar_len));
+					return RTAS_INVALID_PARAMETER;
+				}
+
+				pr_debug("addr=0x%lx with mask=0x%lx validated in BAR[%d] of %s\n",
+					 addr, mask, bar, pci_name(pdev));
+				valid = true;
+			}
+		}
+	}
+
+	if (!valid) {
+		pr_err("addr=0x%lx not valid within any BAR of any device in PE\n",
+		       addr);
+		return RTAS_INVALID_PARAMETER;
+	}
+
+	return 0;
+}
+
+/**
+ * validate_err_type - Basic sanity check for RTAS error type
+ * @type: RTAS error type
+ *
+ * Ensures that the error type is within the valid RTAS error type range.
+ *
+ * Return: true if valid, false otherwise.
+ */
+
+static bool validate_err_type(int type)
+{
+	if (type < RTAS_ERR_TYPE_FATAL ||
+	    type > RTAS_ERR_TYPE_UPSTREAM_IO_ERROR)
+		return false;
+
+	return true;
+}
+
+/**
+ * validate_special_event - Validate parameters for special-event injection
+ * @addr: Address parameter (should be zero)
+ * @mask: Mask parameter (should be zero)
+ *
+ * Special-event error injection should not take addr/mask.  Rejects if either
+ * is set.
+ *
+ * Return: 0 if valid, RTAS_INVALID_PARAMETER otherwise.
+ */
+
+static int validate_special_event(unsigned long addr, unsigned long mask)
+{
+	if (addr || mask) {
+		pr_err("Special-event should not specify addr/mask\n");
+		return RTAS_INVALID_PARAMETER;
+	}
+	return 0;
+}
+
+/**
+ * validate_corrupted_page - Validate parameters for corrupted-page injection
+ * @pe:   EEH PE (__maybe_unused)
+ * @addr: Physical page address (required)
+ * @mask: Address mask (ignored if non-zero)
+ *
+ * Ensures a valid non-zero page address is provided. Warns if mask is set.
+ *
+ * Return: 0 if valid, RTAS_INVALID_PARAMETER otherwise.
+ */
+
+static int validate_corrupted_page(struct eeh_pe *pe __maybe_unused,
+				   unsigned long addr, unsigned long mask)
+{
+	if (!addr) {
+		pr_err("corrupted-page requires non-zero addr\n");
+		return RTAS_INVALID_PARAMETER;
+	}
+	/* Mask not meaningful for corrupted-page */
+	if (mask)
+		pr_warn("corrupted-page ignoring mask=0x%lx\n", mask);
+
+	return 0;
+}
+
+/**
+ * validate_ioa_bus_error - Validate parameters for IOA bus error injection
+ * @pe:   EEH PE whose BARs are validated against
+ * @addr: Address parameter (optional)
+ * @mask: Mask parameter (optional)
+ *
+ * For IOA bus error injections, @addr and @mask are optional. If present,
+ * they must map into the PE's MMIO/CFG space.
+ *
+ * Return: 0 if valid or addr/mask absent, RTAS_INVALID_PARAMETER otherwise.
+ */
+
+static int validate_ioa_bus_error(struct eeh_pe *pe,
+				  unsigned long addr, unsigned long mask)
+{
+	/* Must map into BAR/MMIO/CFG space of PE */
+	return validate_addr_mask_in_pe(pe, addr, mask);
+}
+
+
+/**
+ * prepare_errinjct_buffer - Prepare RTAS error injection work buffer
+ * @pe:   EEH PE for the target device(s)
+ * @type: RTAS error type
+ * @func: Error function selector (semantics vary by type)
+ * @addr: Address argument (type-dependent)
+ * @mask: Mask argument (type-dependent)
+ *
+ * Clears the global error injection work buffer and populates it based on
+ * the error type and parameters provided. Performs inline validation of the
+ * arguments for each supported error type.
+ *
+ * Return: 0 on success, or RTAS_INVALID_PARAMETER / -EINVAL on failure.
+ */
+
+static int prepare_errinjct_buffer(struct eeh_pe *pe, int type, int func,
+				   unsigned long addr, unsigned long mask)
+{
+	__be64 *buf64;
+	__be32 *buf32;
+
+	memset(rtas_errinjct_buf, 0, RTAS_ERRINJCT_BUF_SIZE);
+	buf64 = (__be64 *)rtas_errinjct_buf;
+	buf32 = (__be32 *)rtas_errinjct_buf;
+
+	switch (type) {
+	case RTAS_ERR_TYPE_RECOVERED_SPECIAL_EVENT:
+		/* func must be 1 = non-persistent or 2 = persistent */
+		if (func < 1 || func > 2)
+			return RTAS_INVALID_PARAMETER;
+
+		if (validate_special_event(addr, mask))
+			return RTAS_INVALID_PARAMETER;
+
+		buf32[0] = cpu_to_be32(func);
+		break;
+
+	case RTAS_ERR_TYPE_CORRUPTED_PAGE:
+		/* addr required: physical page address */
+		if (addr == 0)
+			return RTAS_INVALID_PARAMETER;
+
+		if (validate_corrupted_page(pe, addr, mask))
+			return RTAS_INVALID_PARAMETER;
+
+		buf32[0] = cpu_to_be32(upper_32_bits(addr));
+		buf32[1] = cpu_to_be32(lower_32_bits(addr));
+		break;
+
+	case RTAS_ERR_TYPE_IOA_BUS_ERROR:
+		/* 32-bit IOA bus error: addr/mask optional */
+		if (func < EEH_ERR_FUNC_LD_MEM_ADDR || func > EEH_ERR_FUNC_MAX)
+			return RTAS_INVALID_PARAMETER;
+
+		if (addr || mask) {
+			if (validate_ioa_bus_error(pe, addr, mask))
+				return RTAS_INVALID_PARAMETER;
+		}
+
+		buf32[0] = cpu_to_be32((u32)addr);
+		buf32[1] = cpu_to_be32((u32)mask);
+		buf32[2] = cpu_to_be32(pe->addr);
+		buf32[3] = cpu_to_be32(BUID_HI(pe->phb->buid));
+		buf32[4] = cpu_to_be32(BUID_LO(pe->phb->buid));
+		buf32[5] = cpu_to_be32(func);
+		break;
+
+	case RTAS_ERR_TYPE_IOA_BUS_ERROR_64:
+		/* 64-bit IOA bus error: addr/mask optional */
+		if (func < EEH_ERR_FUNC_MIN || func > EEH_ERR_FUNC_MAX)
+			return RTAS_INVALID_PARAMETER;
+
+		if (addr || mask) {
+			if (validate_ioa_bus_error(pe, addr, mask))
+				return RTAS_INVALID_PARAMETER;
+		}
+
+		buf64[0] = cpu_to_be64(addr);
+		buf64[1] = cpu_to_be64(mask);
+		buf32[4] = cpu_to_be32(pe->addr);
+		buf32[5] = cpu_to_be32(BUID_HI(pe->phb->buid));
+		buf32[6] = cpu_to_be32(BUID_LO(pe->phb->buid));
+		buf32[7] = cpu_to_be32(func);
+		break;
+
+	case RTAS_ERR_TYPE_CORRUPTED_DCACHE_START:
+	case RTAS_ERR_TYPE_CORRUPTED_DCACHE_END:
+	case RTAS_ERR_TYPE_CORRUPTED_ICACHE_START:
+	case RTAS_ERR_TYPE_CORRUPTED_ICACHE_END:
+		/* addr/mask optional, no strict validation */
+		buf32[0] = cpu_to_be32(addr);
+		buf32[1] = cpu_to_be32(mask);
+		break;
+
+	case RTAS_ERR_TYPE_CORRUPTED_TLB_START:
+	case RTAS_ERR_TYPE_CORRUPTED_TLB_END:
+		/* only addr field relevant */
+		buf32[0] = cpu_to_be32(addr);
+		break;
+
+	default:
+		pr_err("Unsupported error type 0x%x\n", type);
+		return -EINVAL;
+	}
+
+	pr_debug("RTAS: errinjct buffer prepared: type=%d func=%d addr=0x%lx mask=0x%lx\n",
+		 type, func, addr, mask);
+
+	return 0;
+}
 
 /**
  * pseries_eeh_err_inject - Inject specified error to the indicated PE
