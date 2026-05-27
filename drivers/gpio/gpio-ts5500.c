@@ -422,10 +422,10 @@ static void ts5500_dio_remove(struct platform_device *pdev)
 }
 
 static const struct platform_device_id ts5500_dio_ids[] = {
-	{ "ts5500-dio1", TS5500_DIO1 },
-	{ "ts5500-dio2", TS5500_DIO2 },
-	{ "ts5500-dio-lcd", TS5500_LCD },
-	{ "ts5600-dio-lcd", TS5600_LCD },
+	{ .name = "ts5500-dio1", .driver_data = TS5500_DIO1 },
+	{ .name = "ts5500-dio2", .driver_data = TS5500_DIO2 },
+	{ .name = "ts5500-dio-lcd", .driver_data = TS5500_LCD },
+	{ .name = "ts5600-dio-lcd", .driver_data = TS5600_LCD },
 	{ }
 };
 MODULE_DEVICE_TABLE(platform, ts5500_dio_ids);
