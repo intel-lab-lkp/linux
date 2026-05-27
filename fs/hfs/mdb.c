@@ -99,8 +99,10 @@ int hfs_mdb_get(struct super_block *sb)
 	char *ptr;
 	int off2, len, size, sect;
 	sector_t part_start, part_size;
-	loff_t off;
+	sector_t mdb_block, vbm_first, vbm_last;
+	loff_t off, vbm_off;
 	__be16 attrib;
+	u32 bitmap_size;
 
 	/* set the device driver to 512-byte blocks */
 	size = sb_min_blocksize(sb, HFS_SECTOR_SIZE);
@@ -183,6 +185,25 @@ int hfs_mdb_get(struct super_block *sb)
 	if (!is_hfs_cnid_counts_valid(sb)) {
 		pr_warn("filesystem possibly corrupted, running fsck.hfs is recommended. Mounting read-only.\n");
 		sb->s_flags |= SB_RDONLY;
+	}
+
+	/*
+	 * hfs_mdb_commit() writes the bitmap while holding mdb_bh. Reject
+	 * images whose bitmap range can resolve to the MDB buffer_head.
+	 */
+	bitmap_size = DIV_ROUND_UP(HFS_SB(sb)->fs_ablocks, BITS_PER_BYTE);
+	if (!bitmap_size) {
+		pr_err("bad volume bitmap size\n");
+		return -EIO;
+	}
+	vbm_off = (loff_t)(part_start + be16_to_cpu(mdb->drVBMSt)) <<
+		  HFS_SECTOR_SIZE_BITS;
+	vbm_first = vbm_off >> sb->s_blocksize_bits;
+	vbm_last = (vbm_off + bitmap_size - 1) >> sb->s_blocksize_bits;
+	mdb_block = HFS_SB(sb)->mdb_bh->b_blocknr;
+	if (vbm_first <= mdb_block && mdb_block <= vbm_last) {
+		pr_err("volume bitmap overlaps MDB\n");
+		return -EIO;
 	}
 
 	/* TRY to get the alternate (backup) MDB. */
