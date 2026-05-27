@@ -1183,7 +1183,7 @@ int rtas_call(int token, int nargs, int nret, int *outputs, ...)
 	unsigned long flags;
 	struct rtas_args *args;
 	char *buff_copy = NULL;
-	int ret;
+	int ret = 0;
 
 	if (!rtas.entry || token == RTAS_UNKNOWN_SERVICE)
 		return -1;
@@ -1213,15 +1213,48 @@ int rtas_call(int token, int nargs, int nret, int *outputs, ...)
 	va_rtas_call_unlocked(args, token, nargs, nret, list);
 	va_end(list);
 
+	/*
+	 * Special handling for RTAS_FN_IBM_OPEN_ERRINJCT:
+	 * Per PAPR, ibm,open-errinjct has a unique return format:
+	 *   rets[0] = injection session token (output parameter)
+	 *   rets[1] = status code
+	 *
+	 * This differs from standard RTAS calls which return:
+	 *   rets[0] = status code
+	 *   rets[1..] = output parameters
+	 *
+	 * We must extract status from rets[1] (not rets[0]) to correctly
+	 * detect errors and trigger __fetch_rtas_last_error() when status == -1.
+	 */
 	/* A -1 return code indicates that the last command couldn't
-	   be completed due to a hardware error. */
-	if (be32_to_cpu(args->rets[0]) == -1)
+	 * be completed due to a hardware error.
+	 */
+	if (token == rtas_function_token(RTAS_FN_IBM_OPEN_ERRINJCT) && nret > 1)
+		ret = be32_to_cpu(args->rets[1]);
+	else if (nret > 0)
+		ret = be32_to_cpu(args->rets[0]);
+
+	if (ret == -1)
 		buff_copy = __fetch_rtas_last_error(NULL);
 
-	if (nret > 1 && outputs != NULL)
-		for (i = 0; i < nret-1; ++i)
-			outputs[i] = be32_to_cpu(args->rets[i + 1]);
-	ret = (nret > 0) ? be32_to_cpu(args->rets[0]) : 0;
+	/* Copy all return values to caller's outputs buffer if provided */
+	if (nret > 1 && outputs != NULL) {
+		if (token == rtas_function_token(RTAS_FN_IBM_OPEN_ERRINJCT)) {
+			/* Special case: rets[0]=token, rets[1]=status, rets[2..]=outputs */
+			for (i = 0; i < nret; ++i)
+				outputs[i] = be32_to_cpu(args->rets[i]);
+		} else {
+			/* Normal case: rets[0]=status, rets[1..]=outputs */
+			for (i = 0; i < nret - 1; ++i)
+				outputs[i] = be32_to_cpu(args->rets[i + 1]);
+		}
+	} else {
+		/* Either no outputs to copy (nret <= 1) or caller
+		 * didn't provide output buffer ensure ret contains
+		 * the status code for standard RTAS calls.
+		 */
+		ret = (nret > 0) ? be32_to_cpu(args->rets[0]) : 0;
+	}
 
 	lockdep_unpin_lock(&rtas_lock, cookie);
 	raw_spin_unlock_irqrestore(&rtas_lock, flags);
