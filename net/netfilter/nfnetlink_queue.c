@@ -1136,13 +1136,114 @@ nfqnl_enqueue_packet(struct nf_queue_entry *entry, unsigned int queuenum)
 	return err;
 }
 
+static bool nfqnl_validate_ipopts(const struct iphdr *iph_new,
+				  const struct nf_queue_entry *e)
+{
+	const struct iphdr *iph_orig = ip_hdr(e->skb);
+	unsigned int ihl = iph_new->ihl * 4;
+
+	if (iph_new->ihl != iph_orig->ihl)
+		return false;
+	if (ihl == sizeof(*iph_orig))
+		return true;
+
+	return memcmp(iph_new + 1, ip_hdr(e->skb) + 1, ihl - sizeof(*iph_orig)) == 0;
+}
+
+static bool nfqnl_validate_ip4(const struct iphdr *iph, unsigned int data_len,
+			       const struct nf_queue_entry *e)
+{
+	unsigned int ihl;
+
+	if (data_len < sizeof(*iph))
+		return false;
+
+	ihl = iph->ihl * 4u;
+	if (ihl < sizeof(*iph) || data_len < ihl)
+		return false;
+
+	if (iph->version != 4 ||
+	    iph->frag_off != ip_hdr(e->skb)->frag_off ||
+	    ntohs(iph->tot_len) != data_len)
+		return false;
+
+	/* ip parses (validates) options after PRE_ROUTING hook.
+	 * Do not allow later ip option modifications.
+	 */
+	if (e->state.hook != NF_INET_PRE_ROUTING &&
+	    !nfqnl_validate_ipopts(iph, e))
+		return false;
+
+	return true;
+}
+
+static bool nfqnl_validate_ip6(const struct ipv6hdr *ip6, unsigned int data_len)
+{
+	if (data_len < sizeof(*ip6))
+		return false;
+
+	/* netlink attribute size is limited to 2**16 - sizeof netlink header,
+	 * so we cannot support jumbograms.
+	 */
+	if (ntohs(ip6->payload_len) != data_len - sizeof(*ip6))
+		return false;
+
+	if (ip6->version != 6 ||
+	    ipv6_ext_hdr(ip6->nexthdr))
+		return false;
+
+	return true;
+}
+
+static bool nfqnl_validate_arp(unsigned int data_len)
+{
+	const unsigned int minsz = 8 + 2 * ETH_ALEN + 2 * sizeof(__be32);
+
+	/* don't allow truncation below min size */
+	return data_len >= minsz;
+}
+
+static bool nfqnl_validate_br(const struct ethhdr *eth, unsigned int data_len)
+{
+#ifdef CONFIG_NETFILTER_FAMILY_BRIDGE
+	/* disallow truncation below ethernet header size */
+	if (data_len < sizeof(*eth))
+		return false;
+
+	return true;
+#else
+	return false;
+#endif
+}
+
+static bool nfqnl_validate_write(const void *data, unsigned int data_len,
+				 const struct nf_queue_entry *e)
+{
+	switch (e->state.pf) {
+	case NFPROTO_ARP:
+		return nfqnl_validate_arp(data_len);
+	case NFPROTO_IPV4:
+		return nfqnl_validate_ip4(data, data_len, e);
+	case NFPROTO_IPV6:
+		return nfqnl_validate_ip6(data, data_len) &&
+		       !(IP6CB(e->skb)->flags & IP6SKB_JUMBOGRAM);
+	case NFPROTO_BRIDGE:
+		return nfqnl_validate_br(data, data_len);
+	}
+
+	return false;
+}
+
 static int
-nfqnl_mangle(void *data, unsigned int data_len, struct nf_queue_entry *e, int diff)
+nfqnl_mangle(const void *data, unsigned int data_len, struct nf_queue_entry *e, int diff)
 {
 	struct sk_buff *nskb;
 
 	if (e->state.net->user_ns != &init_user_ns)
 		return -EPERM;
+
+	if (!nfqnl_validate_write(data, data_len, e))
+		return -EINVAL;
 
 	if (diff < 0) {
 		unsigned int min_len = skb_transport_offset(e->skb);
