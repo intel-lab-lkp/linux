@@ -164,3 +164,107 @@ void sys_info(unsigned long si_mask)
 {
 	__sys_info(si_mask ? : kernel_si_mask);
 }
+
+#ifdef CONFIG_SW_WATCHPOINT
+
+/* default 100 ms interval */
+static unsigned long watch_interval_ms = 100;
+module_param(watch_interval_ms, ulong, 0644);
+MODULE_PARM_DESC(watch_interval_ms, "SW watchpoint check interval in ms");
+
+static unsigned long paddr_dram_to_watch;
+module_param(paddr_dram_to_watch, ulong, 0644);
+MODULE_PARM_DESC(paddr_dram_to_watch, "Physical DRAM address to watch");
+
+static unsigned long *vaddr_dram;
+
+static unsigned long target_dram_val;
+module_param(target_dram_val, ulong, 0644);
+MODULE_PARM_DESC(target_dram_val, "Target DRAM value to trigger watchpoint");
+
+/* The MMIO address should be 32b aligned */
+static unsigned long paddr_mmio_to_watch;
+module_param(paddr_mmio_to_watch, ulong, 0644);
+MODULE_PARM_DESC(paddr_mmio_to_watch, "Physical MMIO address to watch (32bit aligned)");
+
+static unsigned int *vaddr_mmio;
+
+static unsigned int target_mmio_val;
+module_param(target_mmio_val, uint, 0644);
+MODULE_PARM_DESC(target_mmio_val, "Target MMIO value to trigger watchpoint");
+
+static bool panic_on_hit;
+module_param(panic_on_hit, bool, 0644);
+MODULE_PARM_DESC(panic_on_hit, "Panic when watchpoint hits");
+
+static bool hang_on_hit;
+module_param(hang_on_hit, bool, 0644);
+MODULE_PARM_DESC(hang_on_hit, "Hang when watchpoint hits");
+
+/* Stop the watchpoint timer after first hit */
+static bool check_once = true;
+module_param(check_once, bool, 0644);
+MODULE_PARM_DESC(check_once, "Stop watching after first hit");
+
+static struct timer_list sw_watchpoint_timer;
+
+static void sw_watchpoint_timer_fn(struct timer_list *unused)
+{
+	bool hit = false;
+
+	if (vaddr_mmio && (*vaddr_mmio == target_mmio_val)) {
+		pr_info("MMIO [@0x%lx] hit the target value [0x%x]!\n",
+			paddr_mmio_to_watch, target_mmio_val);
+		hit = true;
+	}
+
+	if (vaddr_dram && (*vaddr_dram == target_dram_val)) {
+		pr_info("DRAM [@0x%lx] hit the target value [0x%lx]!\n",
+			paddr_dram_to_watch, target_dram_val);
+		hit = true;
+	}
+
+	if (hit) {
+		sys_info(0);
+
+		/* Useful for attaching HW debugger */
+		if (hang_on_hit) {
+			pr_warn("Will dead loop on this CPU\n");
+			while (1);
+		}
+
+		/* Could be used to trigger kexec/kdump */
+		if (panic_on_hit)
+			panic("SW watchpoint hit!");
+
+		if (check_once)
+			return;
+	}
+
+	mod_timer(&sw_watchpoint_timer, jiffies + msecs_to_jiffies(watch_interval_ms));
+}
+
+static int __init sw_watchpoint_timer_init(void)
+{
+	if (paddr_mmio_to_watch) {
+		vaddr_mmio = ioremap(paddr_mmio_to_watch & PAGE_MASK, PAGE_SIZE);
+		if (!vaddr_mmio)
+			return -ENOMEM;
+
+		vaddr_mmio += (paddr_mmio_to_watch % PAGE_SIZE) / 4;
+	}
+
+	if (paddr_dram_to_watch) {
+		vaddr_dram = phys_to_virt(paddr_dram_to_watch);
+		if (!vaddr_dram)
+			return -ENOMEM;
+	}
+
+	timer_setup(&sw_watchpoint_timer, sw_watchpoint_timer_fn, 0);
+	sw_watchpoint_timer.expires = jiffies + msecs_to_jiffies(watch_interval_ms);
+	add_timer(&sw_watchpoint_timer);
+
+	return 0;
+}
+core_initcall(sw_watchpoint_timer_init);
+#endif
