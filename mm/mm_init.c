@@ -1071,10 +1071,20 @@ static void __ref zone_device_page_init_slow(struct page *page,
 static inline bool zone_device_page_init_optimization_enabled(void)
 {
 	/*
+	 * Keep sanitized builds on the slow path so their stores stay
+	 * instrumented.
+	 */
+	if (IS_ENABLED(CONFIG_KASAN) || IS_ENABLED(CONFIG_KMSAN))
+		return false;
+
+	/*
 	 * The template fast path copies a preinitialized struct page image.
 	 * Skip it when the page_ref_set tracepoint is enabled.
 	 */
-	return !page_ref_tracepoint_active(page_ref_set);
+	if (page_ref_tracepoint_active(page_ref_set))
+		return false;
+
+	return true;
 }
 
 static inline void zone_device_template_head_page_init(struct page *template,
@@ -1120,9 +1130,19 @@ static void zone_device_page_init_from_template(struct page *page,
 	 * 'template' carries the invariant portion of a ZONE_DEVICE struct
 	 * page. Update the PFN-dependent fields in place before copying it
 	 * to the destination page.
+	 *
+	 * pageblock-aligned pages immediately feed
+	 * init_pageblock_migratetype(), which reads back page metadata via
+	 * helpers like page_zone(page). Avoid a read-after-streaming
+	 * dependency for these rare pages by using regular cached stores
+	 * instead of non-temporal ones.
 	 */
 	zone_device_page_update_template(template, pfn);
-	memcpy(page, template, sizeof(*page));
+	if (unlikely(pageblock_aligned(pfn)))
+		memcpy(page, template, sizeof(*page));
+	else
+		memcpy_streaming(page, template, sizeof(*page));
+
 	zone_device_page_init_pageblock(page, pfn);
 }
 
@@ -1184,6 +1204,15 @@ static void __ref memmap_init_compound(struct page *head,
 		prep_compound_tail(page, head, order);
 		set_page_count(page, 0);
 	}
+
+	/*
+	 * prep_compound_head() updates compound metadata in struct folio fields
+	 * that alias the first tail-page descriptors. When the tail pages above
+	 * were populated with non-temporal stores, order those writes before the
+	 * overlapping metadata updates below.
+	 */
+	if (use_template)
+		memcpy_streaming_drain();
 	prep_compound_head(head, order);
 }
 
@@ -1232,10 +1261,24 @@ void __ref memmap_init_zone_device(struct zone *zone,
 		if (pfns_per_compound == 1)
 			continue;
 
+		/*
+		 * memmap_init_compound() immediately updates compound-head
+		 * metadata. If the head-page template copy above used
+		 * non-temporal stores, order them before entering the
+		 * compound setup path.
+		 */
+		if (use_template)
+			memcpy_streaming_drain();
+
 		memmap_init_compound(page, pfn, zone_idx, nid, pgmap,
 				     compound_nr_pages(altmap, pgmap),
 				     use_template);
 	}
+	/*
+	 * Drain any remaining non-temporal stores before returning.
+	 */
+	if (use_template)
+		memcpy_streaming_drain();
 
 	pr_debug("%s initialised %lu pages in %ums\n", __func__,
 		nr_pages, jiffies_to_msecs(jiffies - start));
