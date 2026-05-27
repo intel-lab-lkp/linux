@@ -429,6 +429,7 @@ static int ti_cpufreq_get_efuse(struct ti_cpufreq_data *opp_data,
 static int ti_cpufreq_get_rev(struct ti_cpufreq_data *opp_data,
 			      u32 *revision_value)
 {
+	const struct of_device_id *match;
 	struct device *dev = opp_data->cpu_dev;
 	u32 revision;
 	int ret;
@@ -441,6 +442,15 @@ static int ti_cpufreq_get_rev(struct ti_cpufreq_data *opp_data,
 		 */
 		*revision_value = 0x1;
 		goto done;
+	} else {
+		/* Check if we're on a K3 SoC that needs k3-socinfo */
+		match = dev_get_platdata(dev);
+		if (match && !strncmp(match->compatible, "ti,am62", 7)) {
+			/* SoC info not ready yet, defer */
+			dev_dbg(opp_data->cpu_dev,
+				"Failed to get SoC info, deferring probe\n");
+			return -EPROBE_DEFER;
+		}
 	}
 
 	ret = regmap_read(opp_data->syscon, opp_data->soc_data->rev_offset,
