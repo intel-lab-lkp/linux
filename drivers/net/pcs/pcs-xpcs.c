@@ -211,23 +211,23 @@ static bool __xpcs_linkmode_supported(const struct dw_xpcs_compat *compat,
 
 int xpcs_read(struct dw_xpcs *xpcs, int dev, u32 reg)
 {
-	return mdiodev_c45_read(xpcs->mdiodev, dev, reg);
+	return mdiodev_c45_read(xpcs->mdiodev[0], dev, reg);
 }
 
 int xpcs_write(struct dw_xpcs *xpcs, int dev, u32 reg, u16 val)
 {
-	return mdiodev_c45_write(xpcs->mdiodev, dev, reg, val);
+	return mdiodev_c45_write(xpcs->mdiodev[0], dev, reg, val);
 }
 
 int xpcs_modify(struct dw_xpcs *xpcs, int dev, u32 reg, u16 mask, u16 set)
 {
-	return mdiodev_c45_modify(xpcs->mdiodev, dev, reg, mask, set);
+	return mdiodev_c45_modify(xpcs->mdiodev[0], dev, reg, mask, set);
 }
 
 static int xpcs_modify_changed(struct dw_xpcs *xpcs, int dev, u32 reg,
 			       u16 mask, u16 set)
 {
-	return mdiodev_c45_modify_changed(xpcs->mdiodev, dev, reg, mask, set);
+	return mdiodev_c45_modify_changed(xpcs->mdiodev[0], dev, reg, mask, set);
 }
 
 static int xpcs_read_vendor(struct dw_xpcs *xpcs, int dev, u32 reg)
@@ -304,7 +304,7 @@ static int xpcs_soft_reset(struct dw_xpcs *xpcs,
 #define xpcs_warn(__xpcs, __state, __args...) \
 ({ \
 	if ((__state)->link) \
-		dev_warn(&(__xpcs)->mdiodev->dev, ##__args); \
+		dev_warn(&(__xpcs)->mdiodev[0]->dev, ##__args); \
 })
 
 static int xpcs_read_fault_c73(struct dw_xpcs *xpcs,
@@ -400,7 +400,7 @@ static void xpcs_link_up_usxgmii(struct dw_xpcs *xpcs, int speed)
 	return;
 
 out:
-	dev_err(&xpcs->mdiodev->dev, "%s: XPCS access returned %pe\n",
+	dev_err(&xpcs->mdiodev[0]->dev, "%s: XPCS access returned %pe\n",
 		__func__, ERR_PTR(ret));
 }
 
@@ -726,7 +726,7 @@ static void xpcs_pre_config(struct phylink_pcs *pcs, phy_interface_t interface)
 
 	ret = xpcs_switch_interface_mode(xpcs, interface);
 	if (ret)
-		dev_err(&xpcs->mdiodev->dev, "switch interface failed: %pe\n",
+		dev_err(&xpcs->mdiodev[0]->dev, "switch interface failed: %pe\n",
 			ERR_PTR(ret));
 
 	if (!xpcs->need_reset)
@@ -734,14 +734,14 @@ static void xpcs_pre_config(struct phylink_pcs *pcs, phy_interface_t interface)
 
 	compat = xpcs_find_compat(xpcs, interface);
 	if (!compat) {
-		dev_err(&xpcs->mdiodev->dev, "unsupported interface %s\n",
+		dev_err(&xpcs->mdiodev[0]->dev, "unsupported interface %s\n",
 			phy_modes(interface));
 		return;
 	}
 
 	ret = xpcs_soft_reset(xpcs, compat);
 	if (ret)
-		dev_err(&xpcs->mdiodev->dev, "soft reset failed: %pe\n",
+		dev_err(&xpcs->mdiodev[0]->dev, "soft reset failed: %pe\n",
 			ERR_PTR(ret));
 
 	xpcs->need_reset = false;
@@ -1189,30 +1189,30 @@ static void xpcs_get_state(struct phylink_pcs *pcs, unsigned int neg_mode,
 
 	switch (compat->an_mode) {
 	case DW_10GBASER:
-		phylink_mii_c45_pcs_get_state(xpcs->mdiodev, state);
+		phylink_mii_c45_pcs_get_state(xpcs->mdiodev[0], state);
 		break;
 	case DW_AN_C73:
 		ret = xpcs_get_state_c73(xpcs, state, compat);
 		if (ret)
-			dev_err(&xpcs->mdiodev->dev, "%s returned %pe\n",
+			dev_err(&xpcs->mdiodev[0]->dev, "%s returned %pe\n",
 				"xpcs_get_state_c73", ERR_PTR(ret));
 		break;
 	case DW_AN_C37_SGMII:
 		ret = xpcs_get_state_c37_sgmii(xpcs, state);
 		if (ret)
-			dev_err(&xpcs->mdiodev->dev, "%s returned %pe\n",
+			dev_err(&xpcs->mdiodev[0]->dev, "%s returned %pe\n",
 				"xpcs_get_state_c37_sgmii", ERR_PTR(ret));
 		break;
 	case DW_AN_C37_1000BASEX:
 		ret = xpcs_get_state_c37_1000basex(xpcs, neg_mode, state);
 		if (ret)
-			dev_err(&xpcs->mdiodev->dev, "%s returned %pe\n",
+			dev_err(&xpcs->mdiodev[0]->dev, "%s returned %pe\n",
 				"xpcs_get_state_c37_1000basex", ERR_PTR(ret));
 		break;
 	case DW_2500BASEX:
 		ret = xpcs_get_state_2500basex(xpcs, state);
 		if (ret)
-			dev_err(&xpcs->mdiodev->dev, "%s returned %pe\n",
+			dev_err(&xpcs->mdiodev[0]->dev, "%s returned %pe\n",
 				"xpcs_get_state_2500basex", ERR_PTR(ret));
 		break;
 	default:
@@ -1232,14 +1232,14 @@ static void xpcs_link_up_sgmii_1000basex(struct dw_xpcs *xpcs,
 
 	if (interface == PHY_INTERFACE_MODE_1000BASEX) {
 		if (speed != SPEED_1000) {
-			dev_err(&xpcs->mdiodev->dev,
+			dev_err(&xpcs->mdiodev[0]->dev,
 				"%s: speed %dMbps not supported\n",
 				__func__, speed);
 			return;
 		}
 
 		if (duplex != DUPLEX_FULL)
-			dev_err(&xpcs->mdiodev->dev,
+			dev_err(&xpcs->mdiodev[0]->dev,
 				"%s: half duplex not supported\n",
 				__func__);
 	}
@@ -1247,7 +1247,7 @@ static void xpcs_link_up_sgmii_1000basex(struct dw_xpcs *xpcs,
 	ret = xpcs_write(xpcs, MDIO_MMD_VEND2, MII_BMCR,
 			 mii_bmcr_encode_fixed(speed, duplex));
 	if (ret)
-		dev_err(&xpcs->mdiodev->dev, "%s: xpcs_write returned %pe\n",
+		dev_err(&xpcs->mdiodev[0]->dev, "%s: xpcs_write returned %pe\n",
 			__func__, ERR_PTR(ret));
 }
 
@@ -1533,7 +1533,7 @@ static struct dw_xpcs *xpcs_create_data(struct mdio_device *mdiodev)
 		return ERR_PTR(-ENOMEM);
 
 	mdio_device_get(mdiodev);
-	xpcs->mdiodev = mdiodev;
+	xpcs->mdiodev[0] = mdiodev;
 	xpcs->pcs.ops = &xpcs_phylink_ops;
 	xpcs->pcs.poll = true;
 
@@ -1542,7 +1542,7 @@ static struct dw_xpcs *xpcs_create_data(struct mdio_device *mdiodev)
 
 static void xpcs_free_data(struct dw_xpcs *xpcs)
 {
-	mdio_device_put(xpcs->mdiodev);
+	mdio_device_put(xpcs->mdiodev[0]);
 	kfree(xpcs);
 }
 
@@ -1552,7 +1552,7 @@ static int xpcs_init_clks(struct dw_xpcs *xpcs)
 		[DW_XPCS_CORE_CLK] = "core",
 		[DW_XPCS_PAD_CLK] = "pad",
 	};
-	struct device *dev = &xpcs->mdiodev->dev;
+	struct device *dev = &xpcs->mdiodev[0]->dev;
 	int ret, i;
 
 	for (i = 0; i < DW_XPCS_NUM_CLKS; ++i)
@@ -1580,7 +1580,7 @@ static int xpcs_init_id(struct dw_xpcs *xpcs)
 {
 	const struct dw_xpcs_info *info;
 
-	info = dev_get_platdata(&xpcs->mdiodev->dev);
+	info = dev_get_platdata(&xpcs->mdiodev[0]->dev);
 	if (!info) {
 		xpcs->info.pcs = DW_XPCS_ID_NATIVE;
 		xpcs->info.pma = DW_XPCS_PMA_ID_NATIVE;

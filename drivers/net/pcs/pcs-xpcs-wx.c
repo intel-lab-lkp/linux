@@ -123,7 +123,7 @@ static int txgbe_pcs_poll_power_up(struct dw_xpcs *xpcs)
 				10000, 1000000, false,
 				xpcs, DW_VR_XS_PCS_DIG_STS);
 	if (ret < 0)
-		dev_err(&xpcs->mdiodev->dev, "xpcs power-up timeout\n");
+		dev_err(&xpcs->mdiodev[0]->dev, "xpcs power-up timeout\n");
 
 	return ret;
 }
@@ -139,7 +139,7 @@ static int txgbe_pma_init_done(struct dw_xpcs *xpcs)
 				100000, 10000000, false,
 				xpcs, DW_VR_XS_PCS_DIG_CTRL1);
 	if (ret < 0)
-		dev_err(&xpcs->mdiodev->dev, "xpcs pma initialization timeout\n");
+		dev_err(&xpcs->mdiodev[0]->dev, "xpcs pma initialization timeout\n");
 
 	return ret;
 }
