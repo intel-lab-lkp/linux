@@ -2886,7 +2886,7 @@ static int unix_stream_read_skb(struct sock *sk, skb_read_actor_t recv_actor)
 		return -EAGAIN;
 	}
 
-	WRITE_ONCE(u->inq_len, u->inq_len - skb->len);
+	WRITE_ONCE(u->inq_len, u->inq_len - unix_skb_len(skb));
 
 #if IS_ENABLED(CONFIG_AF_UNIX_OOB)
 	if (skb == u->oob_skb) {
@@ -3056,6 +3056,10 @@ unlock:
 		if (!(flags & MSG_PEEK)) {
 			UNIXCB(skb).consumed += chunk;
 
+			spin_lock(&sk->sk_receive_queue.lock);
+			WRITE_ONCE(u->inq_len, u->inq_len - chunk);
+			spin_unlock(&sk->sk_receive_queue.lock);
+
 			sk_peek_offset_bwd(sk, chunk);
 
 			if (UNIXCB(skb).fp) {
@@ -3067,7 +3071,6 @@ unlock:
 				break;
 
 			spin_lock(&sk->sk_receive_queue.lock);
-			WRITE_ONCE(u->inq_len, u->inq_len - skb->len);
 			__skb_unlink(skb, &sk->sk_receive_queue);
 			spin_unlock(&sk->sk_receive_queue.lock);
 
