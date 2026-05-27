@@ -2680,6 +2680,33 @@ static bool nvme_pci_update_nr_queues(struct nvme_dev *dev)
 	return true;
 }
 
+static int nvme_pci_check_reset_queue_depth(struct nvme_dev *dev)
+{
+	u32 nvmeq_q_depth;
+	u32 dev_q_depth = dev->q_depth;
+
+	if (dev->ctrl.queue_count <= 1)
+		return 0;
+
+	nvmeq_q_depth = dev->queues[1].q_depth;
+	if (nvmeq_q_depth == dev_q_depth)
+		return 0;
+
+	if (nvmeq_q_depth > dev_q_depth) {
+		dev_err(dev->ctrl.device,
+			"IO queue depth decreased after reset (%u -> %u); "
+			"live reset recovery is unsupported\n",
+			nvmeq_q_depth, dev_q_depth);
+		return -EIO;
+	}
+
+	dev_warn(dev->ctrl.device,
+		 "IO queue depth increased after reset (%u -> %u); "
+		 "remove and probe the controller again to use the new depth\n",
+		 nvmeq_q_depth, dev_q_depth);
+	return 0;
+}
+
 static int nvme_pci_enable(struct nvme_dev *dev)
 {
 	int result = -ENOMEM;
@@ -2936,6 +2963,9 @@ static void nvme_reset_work(struct work_struct *work)
 
 	mutex_lock(&dev->shutdown_lock);
 	result = nvme_pci_enable(dev);
+	if (result)
+		goto out_unlock;
+	result = nvme_pci_check_reset_queue_depth(dev);
 	if (result)
 		goto out_unlock;
 	nvme_unquiesce_admin_queue(&dev->ctrl);
