@@ -656,6 +656,14 @@ static int cppc_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	policy->driver_data = cpu_data;
 
 	/*
+	 * Enable CPPC for both OS-driven and autonomous modes.
+	 * The Enable register is optional - some platforms may not support it
+	 */
+	ret = cppc_set_enable(cpu, true);
+	if (ret && ret != -EOPNOTSUPP)
+		pr_warn("Failed to enable CPPC for CPU%d (%d)\n", cpu, ret);
+
+	/*
 	 * Set min to lowest nonlinear perf to avoid any efficiency penalty (see
 	 * Section 8.4.7.1.1.5 of ACPI 6.1 spec)
 	 */
