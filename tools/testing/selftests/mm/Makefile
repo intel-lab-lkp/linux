@@ -181,6 +181,7 @@ TEST_FILES += charge_reserved_hugetlb.sh
 TEST_FILES += hugetlb_reparenting_test.sh
 TEST_FILES += test_page_frag.sh
 TEST_FILES += run_vmtests.sh
+TEST_FILES += hwpoison-panic.sh
 
 # required by charge_reserved_hugetlb.sh
 TEST_FILES += write_hugetlb_memory.sh
