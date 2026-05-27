@@ -16,10 +16,27 @@
 #include <linux/export.h>
 #include <linux/mempool.h>
 #include <linux/writeback.h>
+#include <linux/static_key.h>
+#include <linux/init.h>
 #include "slab.h"
 
 static DECLARE_FAULT_ATTR(fail_mempool_alloc);
 static DECLARE_FAULT_ATTR(fail_mempool_alloc_bulk);
+
+/*
+ * Debugging support for mempool using static key.
+ *
+ * This allows enabling mempool debug at boot time via:
+ *   mempool_debug
+ */
+static DEFINE_STATIC_KEY_FALSE(mempool_debug_enabled);
+
+static int __init mempool_debug_setup(char *str)
+{
+	static_branch_enable(&mempool_debug_enabled);
+	return 0;
+}
+early_param("mempool_debug", mempool_debug_setup);
 
 static int __init mempool_faul_inject_init(void)
 {
@@ -37,7 +54,6 @@ static int __init mempool_faul_inject_init(void)
 }
 late_initcall(mempool_faul_inject_init);
 
-#ifdef CONFIG_SLUB_DEBUG_ON
 static void poison_error(struct mempool *pool, void *element, size_t size,
 			 size_t byte)
 {
@@ -73,6 +89,9 @@ static void __check_element(struct mempool *pool, void *element, size_t size)
 
 static void check_element(struct mempool *pool, void *element)
 {
+	if (!static_branch_unlikely(&mempool_debug_enabled))
+		return;
+
 	/* Skip checking: KASAN might save its metadata in the element. */
 	if (kasan_enabled())
 		return;
@@ -112,6 +131,9 @@ static void __poison_element(void *element, size_t size)
 
 static void poison_element(struct mempool *pool, void *element)
 {
+	if (!static_branch_unlikely(&mempool_debug_enabled))
+		return;
+
 	/* Skip poisoning: KASAN might save its metadata in the element. */
 	if (kasan_enabled())
 		return;
@@ -140,14 +162,6 @@ static void poison_element(struct mempool *pool, void *element)
 #endif
 	}
 }
-#else /* CONFIG_SLUB_DEBUG_ON */
-static inline void check_element(struct mempool *pool, void *element)
-{
-}
-static inline void poison_element(struct mempool *pool, void *element)
-{
-}
-#endif /* CONFIG_SLUB_DEBUG_ON */
 
 static __always_inline bool kasan_poison_element(struct mempool *pool,
 		void *element)
