@@ -392,6 +392,14 @@ static __always_inline void __folio_rmap_sanity_checks(const struct folio *folio
 		unsigned long mapping = (unsigned long)folio->mapping;
 		struct anon_vma *anon_vma;
 
+		if (folio_test_anon_vma_lazy(folio)) {
+			struct vm_area_struct *root_vma =
+				(void *)(mapping - FOLIO_MAPPING_ANON_VMA_LAZY);
+
+			VM_WARN_ON_FOLIO(!rcuref_read(&root_vma->vm_rcuref), folio);
+			return;
+		}
+
 		anon_vma = (void *)(mapping - FOLIO_MAPPING_ANON);
 		VM_WARN_ON_FOLIO(atomic_read(&anon_vma->refcount) == 0, folio);
 	}
@@ -431,12 +439,40 @@ void hugetlb_add_anon_rmap(struct folio *, struct vm_area_struct *,
 void hugetlb_add_new_anon_rmap(struct folio *, struct vm_area_struct *,
 		unsigned long address);
 
+/**
+ * folio_upgrade_anon_vma_lazy - upgrade folio->mapping from ANON_VMA_LAZY to
+ *                               an anon_vma
+ * @folio: The folio to upgrade
+ * @vma:   The VMA the folio currently belongs to
+ *
+ * Upgrade folio->mapping from ANON_VMA_LAZY to an anon_vma.
+ * This transition is strictly one-way and never reverts back to a lazy
+ * mapping.
+ *
+ * Called during fork() while holding the mmap lock and the VMA write lock,
+ * but without taking the folio lock. Concurrent readers may briefly observe
+ * the old lazy mapping. Migration relies on folio_trylock_get_anon_rmap()
+ * to ensure atomicity, while other rmap operations remain unaffected.
+ */
+static inline void folio_upgrade_anon_vma_lazy(struct folio *folio,
+					       struct vm_area_struct *vma)
+{
+	unsigned long anon_tree = (unsigned long)vma->anon_vma;
+
+	VM_BUG_ON_VMA(!anon_tree || !IS_ALIGNED(anon_tree, sizeof(long)), vma);
+	anon_tree = anon_tree + FOLIO_MAPPING_ANON;
+	WRITE_ONCE(folio->mapping, (struct address_space *)anon_tree);
+}
+
 /* See folio_try_dup_anon_rmap_*() */
 static inline int hugetlb_try_dup_anon_rmap(struct folio *folio,
 		struct vm_area_struct *vma)
 {
 	VM_WARN_ON_FOLIO(!folio_test_hugetlb(folio), folio);
 	VM_WARN_ON_FOLIO(!folio_test_anon(folio), folio);
+
+	if (folio_test_anon_vma_lazy(folio))
+		folio_upgrade_anon_vma_lazy(folio, vma);
 
 	if (PageAnonExclusive(&folio->page)) {
 		if (unlikely(folio_needs_cow_for_dma(vma, folio)))
@@ -573,6 +609,8 @@ static __always_inline int __folio_try_dup_anon_rmap(struct folio *folio,
 	int i;
 
 	VM_WARN_ON_FOLIO(!folio_test_anon(folio), folio);
+	if (folio_test_anon_vma_lazy(folio))
+		folio_upgrade_anon_vma_lazy(folio, src_vma);
 	__folio_rmap_sanity_checks(folio, page, nr_pages, level);
 
 	/*

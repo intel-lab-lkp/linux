@@ -2002,6 +2002,16 @@ void folio_move_anon_rmap(struct folio *folio, struct vm_area_struct *vma)
 	void *anon_vma = vma_anon_vma(vma);
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
+
+	if (!anon_vma) {
+		const struct vm_area_struct *root_vma = vma_anon_vma_lazy_root(vma);
+
+		VM_BUG_ON_VMA(!root_vma, vma);
+		root_vma = (void *)root_vma + FOLIO_MAPPING_ANON_VMA_LAZY;
+		WRITE_ONCE(folio->mapping, (struct address_space *)root_vma);
+		return;
+	}
+
 	VM_BUG_ON_VMA(!anon_vma, vma);
 
 	anon_vma += FOLIO_MAPPING_ANON;
@@ -2023,7 +2033,16 @@ void folio_move_anon_rmap(struct folio *folio, struct vm_area_struct *vma)
 static void __folio_set_anon(struct folio *folio, struct vm_area_struct *vma,
 			     unsigned long address, bool exclusive)
 {
-	struct anon_vma *anon_vma = vma_anon_vma(vma);
+	anon_vma_tree_t anon_tree = vma->anon_vma;
+	const struct vm_area_struct *root_vma = vma_anon_vma_lazy_root(vma);
+	struct anon_vma *anon_vma = anon_vma_tree_anon_vma(anon_tree);
+
+	if (root_vma && (anon_vma_tree_is_vma(anon_tree) || exclusive)) {
+		root_vma = (void *)root_vma + FOLIO_MAPPING_ANON_VMA_LAZY;
+		WRITE_ONCE(folio->mapping, (struct address_space *)root_vma);
+		folio->index = linear_page_index(vma, address);
+		return;
+	}
 
 	BUG_ON(!anon_vma);
 
