@@ -22,7 +22,8 @@ enum tph_mem_type {
 
 /*
  * TPH requester selection policy
- * Used to choose standard/extended TPH when enabling TPH
+ * Used to select standard/extended TPH type for TPH enable and
+ * Steering Tag retrieval.
  */
 enum tph_req_policy {
 	TPH_REQ_AUTO,		/* Kernel auto selection based on capability */
@@ -35,6 +36,7 @@ int pcie_tph_set_st_entry(struct pci_dev *pdev,
 			  unsigned int index, u16 tag);
 int pcie_tph_get_cpu_st(struct pci_dev *dev,
 			enum tph_mem_type mem_type,
+			enum tph_req_policy req_policy,
 			unsigned int cpu, u16 *tag);
 void pcie_disable_tph(struct pci_dev *pdev);
 int pcie_enable_tph(struct pci_dev *pdev, int mode,
@@ -47,6 +49,7 @@ static inline int pcie_tph_set_st_entry(struct pci_dev *pdev,
 { return -EINVAL; }
 static inline int pcie_tph_get_cpu_st(struct pci_dev *dev,
 				      enum tph_mem_type mem_type,
+				      enum tph_req_policy req_policy,
 				      unsigned int cpu, u16 *tag)
 { return -EINVAL; }
 static inline void pcie_disable_tph(struct pci_dev *pdev) { }

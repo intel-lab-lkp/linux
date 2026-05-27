@@ -105,7 +105,8 @@ int mlx5_st_alloc_index(struct mlx5_core_dev *dev, enum tph_mem_type mem_type,
 	if (!st)
 		return -EOPNOTSUPP;
 
-	ret = pcie_tph_get_cpu_st(dev->pdev, mem_type, cpu_uid, &tag);
+	ret = pcie_tph_get_cpu_st(dev->pdev, mem_type, TPH_REQ_AUTO, cpu_uid,
+				  &tag);
 	if (ret)
 		return ret;
 

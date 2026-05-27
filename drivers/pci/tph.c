@@ -236,23 +236,43 @@ static int write_tag_to_st_table(struct pci_dev *pdev, int index, u16 tag)
  * with a specific CPU
  * @pdev: PCI device
  * @mem_type: target memory type (volatile or persistent RAM)
+ * @req_policy: TPH requester selection policy
+ *
+ *      - TPH_REQ_AUTO: Use currently active requester type
+ *      - TPH_REQ_STANDARD: Retrieve tag for standard TPH (8-bit ST)
+ *      - TPH_REQ_EXTENDED: Retrieve tag for extended TPH (16-bit ST)
+ *
  * @cpu: associated CPU id
  * @tag: Steering Tag to be returned
  *
- * Return the Steering Tag for a target memory that is associated with a
- * specific CPU as indicated by cpu.
+ * Return the Steering Tag for a target memory and requester policy that is
+ * associated with a specific CPU as indicated by cpu.
  *
  * Return: 0 if success, otherwise negative value (-errno)
  */
 int pcie_tph_get_cpu_st(struct pci_dev *pdev, enum tph_mem_type mem_type,
+			enum tph_req_policy req_policy,
 			unsigned int cpu, u16 *tag)
 {
 #ifdef CONFIG_ACPI
 	struct pci_dev *rp;
 	acpi_handle rp_acpi_handle;
 	union st_info info;
+	u8 tph_req_type = pdev->tph_req_type;
 	u32 cpu_uid;
 	int ret;
+
+	if (req_policy == TPH_REQ_AUTO) {
+		tph_req_type = pdev->tph_req_type;
+	} else if (req_policy == TPH_REQ_STANDARD) {
+		tph_req_type = PCI_TPH_REQ_TPH_ONLY;
+	} else if (req_policy == TPH_REQ_EXTENDED) {
+		if (!pdev->tph_ext_requester)
+			return -EINVAL;
+		tph_req_type = PCI_TPH_REQ_EXT_TPH;
+	} else {
+		return -EINVAL;
+	}
 
 	ret = acpi_get_cpu_uid(cpu, &cpu_uid);
 	if (ret != 0)
@@ -269,7 +289,7 @@ int pcie_tph_get_cpu_st(struct pci_dev *pdev, enum tph_mem_type mem_type,
 		return -EINVAL;
 	}
 
-	*tag = tph_extract_tag(mem_type, pdev->tph_req_type, &info);
+	*tag = tph_extract_tag(mem_type, tph_req_type, &info);
 
 	pci_dbg(pdev, "get steering tag: mem_type=%s, cpu=%d, tag=%#04x\n",
 		(mem_type == TPH_MEM_TYPE_VM) ? "volatile" : "persistent",
