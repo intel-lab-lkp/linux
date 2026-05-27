@@ -272,12 +272,12 @@ static void da_monitor_reset_all(void)
 	struct task_struct *g, *p;
 	int cpu;
 
-	read_lock(&tasklist_lock);
-	for_each_process_thread(g, p)
-		da_monitor_reset(da_get_monitor(p));
+	scoped_guard(read_lock, &tasklist_lock) {
+		for_each_process_thread(g, p)
+			da_monitor_reset(da_get_monitor(p));
+	}
 	for_each_present_cpu(cpu)
 		da_monitor_reset(da_get_monitor(idle_task(cpu)));
-	read_unlock(&tasklist_lock);
 }
 
 /*
