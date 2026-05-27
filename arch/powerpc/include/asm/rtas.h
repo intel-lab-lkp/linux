@@ -519,6 +519,27 @@ int rtas_get_error_log_max(void);
 extern spinlock_t rtas_data_buf_lock;
 extern char rtas_data_buf[RTAS_DATA_BUF_SIZE];
 
+/*
+ * RTAS Error Injection Buffer (PAPR-compliant)
+ * ============================================
+ *
+ * 1KB aligned, zero-initialized buffer for ibm,errinjct RTAS work area.
+ * Protected by rtas_errinjct_buf_lock for concurrent access safety.
+ *
+ * PAPR Requirement: ibm,errinjct requires a caller-allocated buffer passed
+ * via physical address. Buffer must accommodate largest error type layouts:
+ * - IOA bus error (64-bit): 8x32-bit words (32 bytes)
+ * - All other types: <=4x32-bit words (16 bytes)
+ *
+ * Usage:
+ * prepare_errinjct_buffer() -> spin_lock() -> rtas_call() -> spin_unlock()
+ *
+ * Alignment: SZ_1K ensures PAPR firmware requirements and cache-line safety.
+ */
+#define RTAS_ERRINJCT_BUF_SIZE 1024
+extern spinlock_t rtas_errinjct_buf_lock;
+extern char rtas_errinjct_buf[RTAS_ERRINJCT_BUF_SIZE];
+
 /* RMO buffer reserved for user-space RTAS use */
 extern unsigned long rtas_rmo_buf;
 
