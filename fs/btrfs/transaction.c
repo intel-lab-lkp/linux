@@ -1483,8 +1483,66 @@ void btrfs_add_dead_root(struct btrfs_root *root)
 }
 
 /*
- * Update each subvolume root and its relocation root, if it exists, in the tree
- * of tree roots. Also free log roots if they exist.
+ * Update the root_item for @root to point at the current root->node
+ * and write it to the tree root.
+ */
+static int prepare_root_item(struct btrfs_trans_handle *trans,
+			   struct btrfs_root *root)
+{
+	if (root->commit_root != root->node) {
+		list_add_tail(&root->dirty_list,
+			      &trans->transaction->switch_commits);
+		btrfs_set_root_node(&root->root_item, root->node);
+	}
+
+	return btrfs_update_root(trans, trans->fs_info->tree_root,
+				 &root->root_key, &root->root_item);
+}
+
+/*
+ * Update root items for all dirty fs roots without the finalization
+ * side effects of commit_fs_roots() (clearing FORCE_COW, freeing
+ * logs, clearing trans tags, etc.). Tags are preserved so
+ * commit_fs_roots() can still find these roots later.
+ */
+static int qgroup_commit_fs_roots(struct btrfs_trans_handle *trans)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	struct btrfs_root *gang[8];
+	unsigned long index = 0;
+	int i;
+	int nr;
+
+	spin_lock(&fs_info->fs_roots_radix_lock);
+	while (1) {
+		nr = radix_tree_gang_lookup_tag(&fs_info->fs_roots_radix,
+						(void **)gang, index,
+						ARRAY_SIZE(gang),
+						BTRFS_ROOT_TRANS_TAG);
+		if (nr == 0)
+			break;
+		for (i = 0; i < nr; i++) {
+			struct btrfs_root *root = gang[i];
+			int ret;
+
+			spin_unlock(&fs_info->fs_roots_radix_lock);
+
+			ret = prepare_root_item(trans, root);
+			if (unlikely(ret))
+				return ret;
+
+			spin_lock(&fs_info->fs_roots_radix_lock);
+		}
+		index = btrfs_root_id(gang[nr - 1]) + 1;
+	}
+	spin_unlock(&fs_info->fs_roots_radix_lock);
+	return 0;
+}
+
+/*
+ * Finalize each dirty subvolume root: free log trees, update relocation
+ * roots, clear BTRFS_ROOT_FORCE_COW, persist root items, and clear
+ * BTRFS_ROOT_TRANS_TAG.
  */
 static noinline int commit_fs_roots(struct btrfs_trans_handle *trans)
 {
@@ -1541,16 +1599,7 @@ static noinline int commit_fs_roots(struct btrfs_trans_handle *trans)
 			clear_bit(BTRFS_ROOT_FORCE_COW, &root->state);
 			smp_mb__after_atomic();
 
-			if (root->commit_root != root->node) {
-				list_add_tail(&root->dirty_list,
-					&trans->transaction->switch_commits);
-				btrfs_set_root_node(&root->root_item,
-						    root->node);
-			}
-
-			ret2 = btrfs_update_root(trans, fs_info->tree_root,
-						&root->root_key,
-						&root->root_item);
+			ret2 = prepare_root_item(trans, root);
 			if (unlikely(ret2))
 				return ret2;
 			spin_lock(&fs_info->fs_roots_radix_lock);
@@ -1610,7 +1659,13 @@ static int qgroup_account_snapshot(struct btrfs_trans_handle *trans,
 		return ret;
 	}
 
-	ret = commit_fs_roots(trans);
+	/*
+	 * Use qgroup_commit_fs_roots() instead of commit_fs_roots()
+	 * because the transaction is still in progress and we must not
+	 * clear FORCE_COW on roots whose blocks are shared with a
+	 * snapshot.
+	 */
+	ret = qgroup_commit_fs_roots(trans);
 	if (ret)
 		return ret;
 	ret = btrfs_qgroup_account_extents(trans);
@@ -1624,16 +1679,12 @@ static int qgroup_account_snapshot(struct btrfs_trans_handle *trans,
 		return ret;
 
 	/*
-	 * Now we do a simplified commit transaction, which will:
-	 * 1) commit all subvolume and extent tree
-	 *    To ensure all subvolume and extent tree have a valid
-	 *    commit_root to accounting later insert_dir_item()
-	 * 2) write all btree blocks onto disk
-	 *    This is to make sure later btree modification will be cowed
-	 *    Or commit_root can be populated and cause wrong qgroup numbers
-	 * In this simplified commit, we don't really care about other trees
-	 * like chunk and root tree, as they won't affect qgroup.
-	 * And we don't write super to avoid half committed status.
+	 * Simplified commit for qgroup accounting:
+	 * 1) commit cow-only roots (extent tree, etc.) for consistent
+	 *    commit_root pointers
+	 * 2) write all btree blocks to disk so subsequent modifications
+	 *    are properly COW'd
+	 * We don't write the super to avoid a half-committed state.
 	 */
 	ret = commit_cowonly_roots(trans);
 	if (ret)
@@ -1646,13 +1697,7 @@ static int qgroup_account_snapshot(struct btrfs_trans_handle *trans,
 		return ret;
 	}
 
-	/*
-	 * Force parent root to be updated, as we recorded it before so its
-	 * last_trans == cur_transid.
-	 * Or it won't be committed again onto disk after later
-	 * insert_dir_item()
-	 */
-	return record_root_in_trans(trans, parent, true);
+	return 0;
 }
 
 /*
