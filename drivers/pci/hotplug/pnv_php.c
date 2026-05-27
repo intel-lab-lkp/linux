@@ -47,6 +47,9 @@ static void pnv_php_disable_irq(struct pnv_php_slot *php_slot,
 	struct pci_dev *pdev = php_slot->pdev;
 	u16 ctrl;
 
+	if (!pdev)
+		return;
+
 	if (php_slot->irq > 0) {
 		pcie_capability_read_word(pdev, PCI_EXP_SLTCTL, &ctrl);
 		ctrl &= ~(PCI_EXP_SLTCTL_HPIE |
@@ -414,7 +417,8 @@ static int pnv_php_get_adapter_state(struct hotplug_slot *slot, u8 *state)
 	 */
 	ret = pnv_pci_get_presence_state(php_slot->id, &presence);
 	if (ret >= 0) {
-		if (pci_pcie_type(php_slot->pdev) == PCI_EXP_TYPE_DOWNSTREAM &&
+		if (php_slot->pdev &&
+			pci_pcie_type(php_slot->pdev) == PCI_EXP_TYPE_DOWNSTREAM &&
 			presence == OPAL_PCI_SLOT_EMPTY) {
 			/*
 			 * Similar to pciehp_hpc, check whether the Link Active
@@ -441,6 +445,11 @@ static int pnv_php_get_raw_indicator_status(struct hotplug_slot *slot, u8 *state
 	struct pnv_php_slot *php_slot = to_pnv_php_slot(slot);
 	struct pci_dev *bridge = php_slot->pdev;
 	u16 status;
+
+	if (!bridge) {
+		*state = 0;
+		return 0;
+	}
 
 	pcie_capability_read_word(bridge, PCI_EXP_SLTCTL, &status);
 	*state = (status & (PCI_EXP_SLTCTL_AIC | PCI_EXP_SLTCTL_PIC)) >> 6;
@@ -514,11 +523,13 @@ static int pnv_php_activate_slot(struct pnv_php_slot *php_slot,
 			 * fence / freeze.
 			 */
 			SLOT_WARN(php_slot, "Try %d...\n", i + 1);
-			pci_set_pcie_reset_state(php_slot->pdev,
-						 pcie_warm_reset);
-			msleep(250);
-			pci_set_pcie_reset_state(php_slot->pdev,
-						 pcie_deassert_reset);
+			if (php_slot->pdev) {
+				pci_set_pcie_reset_state(php_slot->pdev,
+							 pcie_warm_reset);
+				msleep(250);
+				pci_set_pcie_reset_state(php_slot->pdev,
+							 pcie_deassert_reset);
+			}
 
 			ret = pnv_php_set_slot_power_state(
 				slot, OPAL_PCI_SLOT_POWER_ON);
@@ -911,6 +922,9 @@ pnv_php_detect_clear_suprise_removal_freeze(struct pnv_php_slot *php_slot)
 	struct eeh_pe *pe;
 	int i, rc;
 
+	if (!pdev)
+		return;
+
 	/*
 	 * When a device is surprise removed from a downstream bridge slot,
 	 * the upstream bridge port can still end up frozen due to related EEH
@@ -1092,6 +1106,9 @@ static void pnv_php_enable_irq(struct pnv_php_slot *php_slot)
 {
 	struct pci_dev *pdev = php_slot->pdev;
 	int irq, ret;
+
+	if (!pdev)
+		return;
 
 	/*
 	 * The MSI/MSIx interrupt might have been occupied by other
