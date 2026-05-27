@@ -24,6 +24,7 @@
 #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
 
 #include "../core.h"
+#include "../pinmux.h"
 #include "../pinctrl-utils.h"
 
 #define PMIC_GPIO_ADDRESS_RANGE			0x100
@@ -253,139 +254,124 @@ static int pmic_gpio_write(struct pmic_gpio_state *state,
 	return ret;
 }
 
-static int pmic_gpio_get_groups_count(struct pinctrl_dev *pctldev)
-{
-	/* Every PIN is a group */
-	return pctldev->desc->npins;
-}
-
-static const char *pmic_gpio_get_group_name(struct pinctrl_dev *pctldev,
-					    unsigned pin)
-{
-	return pctldev->desc->pins[pin].name;
-}
-
-static int pmic_gpio_get_group_pins(struct pinctrl_dev *pctldev, unsigned pin,
-				    const unsigned **pins, unsigned *num_pins)
-{
-	*pins = &pctldev->desc->pins[pin].number;
-	*num_pins = 1;
-	return 0;
-}
-
 static const struct pinctrl_ops pmic_gpio_pinctrl_ops = {
-	.get_groups_count	= pmic_gpio_get_groups_count,
-	.get_group_name		= pmic_gpio_get_group_name,
-	.get_group_pins		= pmic_gpio_get_group_pins,
+	.get_groups_count	= pinctrl_generic_get_group_count,
+	.get_group_name		= pinctrl_generic_get_group_name,
+	.get_group_pins		= pinctrl_generic_get_group_pins,
 	.dt_node_to_map		= pinconf_generic_dt_node_to_map_group,
 	.dt_free_map		= pinctrl_utils_free_map,
 };
 
-static int pmic_gpio_get_functions_count(struct pinctrl_dev *pctldev)
-{
-	return ARRAY_SIZE(pmic_gpio_functions);
-}
-
-static const char *pmic_gpio_get_function_name(struct pinctrl_dev *pctldev,
-					       unsigned function)
-{
-	return pmic_gpio_functions[function];
-}
-
-static int pmic_gpio_get_function_groups(struct pinctrl_dev *pctldev,
-					 unsigned function,
-					 const char *const **groups,
-					 unsigned *const num_qgroups)
-{
-	*groups = pmic_gpio_groups;
-	*num_qgroups = pctldev->desc->npins;
-	return 0;
-}
-
-static int pmic_gpio_set_mux(struct pinctrl_dev *pctldev, unsigned function,
-				unsigned pin)
+static int pmic_gpio_set_mux(struct pinctrl_dev *pctldev, unsigned int function,
+				unsigned int selector)
 {
 	struct pmic_gpio_state *state = pinctrl_dev_get_drvdata(pctldev);
 	struct pmic_gpio_pad *pad;
-	unsigned int val;
-	int ret;
+	struct group_desc *group;
+	unsigned int val, pin, func;
+	int ret, i;
 
 	if (function > PMIC_GPIO_FUNC_INDEX_DTEST4) {
 		pr_err("function: %d is not defined\n", function);
 		return -EINVAL;
 	}
 
-	pad = pctldev->desc->pins[pin].drv_data;
-	/*
-	 * Non-LV/MV subtypes only support 2 special functions,
-	 * offsetting the dtestx function values by 2
-	 */
-	if (!pad->lv_mv_type) {
-		if (function == PMIC_GPIO_FUNC_INDEX_FUNC3 ||
-				function == PMIC_GPIO_FUNC_INDEX_FUNC4) {
-			pr_err("LV/MV subtype doesn't have func3/func4\n");
-			return -EINVAL;
+	group = pinctrl_generic_get_group(pctldev, selector);
+	if (!group)
+		return -EINVAL;
+
+	/* For standard functions, iterate over all pins in the group */
+	for (i = 0; i < group->grp.npins; i++) {
+		pin = group->grp.pins[i];
+		pad = pctldev->desc->pins[pin].drv_data;
+
+		func = function;
+		/*
+		 * Non-LV/MV subtypes only support 2 special functions,
+		 * offsetting the dtestx function values by 2
+		 */
+		if (!pad->lv_mv_type) {
+			if (func == PMIC_GPIO_FUNC_INDEX_FUNC3 ||
+					func == PMIC_GPIO_FUNC_INDEX_FUNC4) {
+				dev_err(state->dev,
+					"pin%d: LV/MV subtype doesn't have func3/func4\n",
+					pin);
+				return -EINVAL;
+			}
+			if (func >= PMIC_GPIO_FUNC_INDEX_DTEST1)
+				func -= (PMIC_GPIO_FUNC_INDEX_DTEST1 -
+						PMIC_GPIO_FUNC_INDEX_FUNC3);
 		}
-		if (function >= PMIC_GPIO_FUNC_INDEX_DTEST1)
-			function -= (PMIC_GPIO_FUNC_INDEX_DTEST1 -
-					PMIC_GPIO_FUNC_INDEX_FUNC3);
+
+		pad->function = func;
+
+		if (pad->analog_pass)
+			val = PMIC_GPIO_MODE_ANALOG_PASS_THRU;
+		else if (pad->output_enabled && pad->input_enabled)
+			val = PMIC_GPIO_MODE_DIGITAL_INPUT_OUTPUT;
+		else if (pad->output_enabled)
+			val = PMIC_GPIO_MODE_DIGITAL_OUTPUT;
+		else
+			val = PMIC_GPIO_MODE_DIGITAL_INPUT;
+
+		if (pad->lv_mv_type) {
+			ret = pmic_gpio_write(state, pad,
+					PMIC_GPIO_REG_MODE_CTL, val);
+			if (ret < 0)
+				return ret;
+
+			val = pad->atest - 1;
+			ret = pmic_gpio_write(state, pad,
+					PMIC_GPIO_REG_LV_MV_ANA_PASS_THRU_SEL, val);
+			if (ret < 0)
+				return ret;
+
+			val = pad->out_value
+				<< PMIC_GPIO_LV_MV_OUTPUT_INVERT_SHIFT;
+			val |= pad->function
+				& PMIC_GPIO_LV_MV_OUTPUT_SOURCE_SEL_MASK;
+			ret = pmic_gpio_write(state, pad,
+				PMIC_GPIO_REG_LV_MV_DIG_OUT_SOURCE_CTL, val);
+			if (ret < 0)
+				return ret;
+		} else {
+			val = val << PMIC_GPIO_REG_MODE_DIR_SHIFT;
+			val |= pad->function << PMIC_GPIO_REG_MODE_FUNCTION_SHIFT;
+			val |= pad->out_value & PMIC_GPIO_REG_MODE_VALUE_SHIFT;
+
+			ret = pmic_gpio_write(state, pad, PMIC_GPIO_REG_MODE_CTL, val);
+			if (ret < 0)
+				return ret;
+		}
+
+		val = pad->is_enabled << PMIC_GPIO_REG_MASTER_EN_SHIFT;
+
+		ret = pmic_gpio_write(state, pad, PMIC_GPIO_REG_EN_CTL, val);
+		if (ret < 0)
+			return ret;
 	}
 
-	pad->function = function;
-
-	if (pad->analog_pass)
-		val = PMIC_GPIO_MODE_ANALOG_PASS_THRU;
-	else if (pad->output_enabled && pad->input_enabled)
-		val = PMIC_GPIO_MODE_DIGITAL_INPUT_OUTPUT;
-	else if (pad->output_enabled)
-		val = PMIC_GPIO_MODE_DIGITAL_OUTPUT;
-	else
-		val = PMIC_GPIO_MODE_DIGITAL_INPUT;
-
-	if (pad->lv_mv_type) {
-		ret = pmic_gpio_write(state, pad,
-				PMIC_GPIO_REG_MODE_CTL, val);
-		if (ret < 0)
-			return ret;
-
-		val = pad->atest - 1;
-		ret = pmic_gpio_write(state, pad,
-				PMIC_GPIO_REG_LV_MV_ANA_PASS_THRU_SEL, val);
-		if (ret < 0)
-			return ret;
-
-		val = pad->out_value
-			<< PMIC_GPIO_LV_MV_OUTPUT_INVERT_SHIFT;
-		val |= pad->function
-			& PMIC_GPIO_LV_MV_OUTPUT_SOURCE_SEL_MASK;
-		ret = pmic_gpio_write(state, pad,
-			PMIC_GPIO_REG_LV_MV_DIG_OUT_SOURCE_CTL, val);
-		if (ret < 0)
-			return ret;
-	} else {
-		val = val << PMIC_GPIO_REG_MODE_DIR_SHIFT;
-		val |= pad->function << PMIC_GPIO_REG_MODE_FUNCTION_SHIFT;
-		val |= pad->out_value & PMIC_GPIO_REG_MODE_VALUE_SHIFT;
-
-		ret = pmic_gpio_write(state, pad, PMIC_GPIO_REG_MODE_CTL, val);
-		if (ret < 0)
-			return ret;
-	}
-
-	val = pad->is_enabled << PMIC_GPIO_REG_MASTER_EN_SHIFT;
-
-	return pmic_gpio_write(state, pad, PMIC_GPIO_REG_EN_CTL, val);
+	return 0;
 }
 
 static const struct pinmux_ops pmic_gpio_pinmux_ops = {
-	.get_functions_count	= pmic_gpio_get_functions_count,
-	.get_function_name	= pmic_gpio_get_function_name,
-	.get_function_groups	= pmic_gpio_get_function_groups,
+	.get_functions_count	= pinmux_generic_get_function_count,
+	.get_function_name	= pinmux_generic_get_function_name,
+	.get_function_groups	= pinmux_generic_get_function_groups,
 	.set_mux		= pmic_gpio_set_mux,
 };
 
-static int pmic_gpio_config_get(struct pinctrl_dev *pctldev,
-				unsigned int pin, unsigned long *config)
+/**
+ * pmic_gpio_pinconf_pin_get() - Get configuration for a single pin
+ * @pctldev: pinctrl device
+ * @pin: Pin number
+ * @config: Configuration parameter to get
+ *
+ * Core function to read a single pin's configuration.
+ * Used by both per-pin and per-group config get operations.
+ */
+static int pmic_gpio_pinconf_pin_get(struct pinctrl_dev *pctldev,
+				     unsigned int pin, unsigned long *config)
 {
 	unsigned param = pinconf_to_config_param(*config);
 	struct pmic_gpio_pad *pad;
@@ -476,8 +462,48 @@ static int pmic_gpio_config_get(struct pinctrl_dev *pctldev,
 	return 0;
 }
 
-static int pmic_gpio_config_set(struct pinctrl_dev *pctldev, unsigned int pin,
-				unsigned long *configs, unsigned nconfs)
+/**
+ * pmic_gpio_pinconf_group_get() - Get configuration for a pin group
+ * @pctldev: pinctrl device
+ * @selector: Group selector
+ * @config: Configuration parameter to get
+ *
+ * For multi-pin groups, we assume all pins have the same configuration,
+ * so we read the configuration from the first pin in the group.
+ */
+static int pmic_gpio_pinconf_group_get(struct pinctrl_dev *pctldev,
+				       unsigned int selector,
+				       unsigned long *config)
+{
+	const struct group_desc *group;
+	unsigned int pin;
+
+	group = pinctrl_generic_get_group(pctldev, selector);
+	if (!group)
+		return -EINVAL;
+
+	/*
+	 * For multi-pin groups, we assume all pins have the same configuration,
+	 * so we read the configuration from the first pin in the group.
+	 */
+	pin = group->grp.pins[0];
+
+	return pmic_gpio_pinconf_pin_get(pctldev, pin, config);
+}
+
+/**
+ * pmic_gpio_pinconf_pin_set() - Set configuration for a single pin
+ * @pctldev: pinctrl device
+ * @pin: Pin number
+ * @configs: Array of configuration parameters
+ * @nconfs: Number of configurations
+ *
+ * Core function to configure a single pin.
+ * Used by both per-pin and per-group config set operations.
+ */
+static int pmic_gpio_pinconf_pin_set(struct pinctrl_dev *pctldev,
+				     unsigned int pin,
+				     unsigned long *configs, unsigned int nconfs)
 {
 	struct pmic_gpio_state *state = pinctrl_dev_get_drvdata(pctldev);
 	struct pmic_gpio_pad *pad;
@@ -651,12 +677,58 @@ static int pmic_gpio_config_set(struct pinctrl_dev *pctldev, unsigned int pin,
 	val = pad->is_enabled << PMIC_GPIO_REG_MASTER_EN_SHIFT;
 
 	ret = pmic_gpio_write(state, pad, PMIC_GPIO_REG_EN_CTL, val);
+	if (ret < 0)
+		return ret;
 
-	return ret;
+	return 0;
 }
 
-static void pmic_gpio_config_dbg_show(struct pinctrl_dev *pctldev,
-				      struct seq_file *s, unsigned pin)
+/**
+ * pmic_gpio_pinconf_group_set() - Set configuration for a pin group
+ * @pctldev: pinctrl device
+ * @selector: Group selector
+ * @configs: Array of configuration parameters
+ * @nconfs: Number of configurations
+ *
+ * Iterates over all pins in the group and applies config to each.
+ */
+static int pmic_gpio_pinconf_group_set(struct pinctrl_dev *pctldev,
+				       unsigned int selector,
+				       unsigned long *configs,
+				       unsigned int nconfs)
+{
+	const struct group_desc *group;
+	unsigned int pin;
+	int i, ret;
+
+	group = pinctrl_generic_get_group(pctldev, selector);
+	if (!group)
+		return -EINVAL;
+
+	/* Iterate over all pins in the group and apply config to each */
+	for (i = 0; i < group->grp.npins; i++) {
+		pin = group->grp.pins[i];
+
+		ret = pmic_gpio_pinconf_pin_set(pctldev, pin, configs, nconfs);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
+
+/**
+ * pmic_gpio_pinconf_pin_dbg_show() - Show configuration for a single pin
+ * @pctldev: pinctrl device
+ * @s: seq_file for output
+ * @pin: Pin number
+ *
+ * Core function that dumps the configuration of a single GPIO pin.
+ * Used by pinconf-pins debugfs, pinconf-groups debugfs, and gpio debugfs.
+ */
+static void pmic_gpio_pinconf_pin_dbg_show(struct pinctrl_dev *pctldev,
+					   struct seq_file *s,
+					   unsigned int pin)
 {
 	struct pmic_gpio_state *state = pinctrl_dev_get_drvdata(pctldev);
 	struct pmic_gpio_pad *pad;
@@ -716,11 +788,46 @@ static void pmic_gpio_config_dbg_show(struct pinctrl_dev *pctldev,
 	}
 }
 
+/**
+ * pmic_gpio_pinconf_group_dbg_show() - Show configuration for a pin group
+ * @pctldev: pinctrl device
+ * @s: seq_file for output
+ * @selector: Group selector
+ *
+ * Shows the configuration for all pins in a group.
+ * Used by the pinconf-groups debugfs interface.
+ */
+static void pmic_gpio_pinconf_group_dbg_show(struct pinctrl_dev *pctldev,
+					     struct seq_file *s,
+					     unsigned int selector)
+{
+	const struct group_desc *group;
+	unsigned int pin;
+	int i;
+
+	group = pinctrl_generic_get_group(pctldev, selector);
+	if (!group)
+		return;
+
+	/* Iterate over all pins in the group and show status for each */
+	for (i = 0; i < group->grp.npins; i++) {
+		pin = group->grp.pins[i];
+
+		if (i > 0)
+			seq_puts(s, "\n       ");
+
+		pmic_gpio_pinconf_pin_dbg_show(pctldev, s, pin);
+	}
+}
+
 static const struct pinconf_ops pmic_gpio_pinconf_ops = {
 	.is_generic			= true,
-	.pin_config_group_get		= pmic_gpio_config_get,
-	.pin_config_group_set		= pmic_gpio_config_set,
-	.pin_config_group_dbg_show	= pmic_gpio_config_dbg_show,
+	.pin_config_get			= pmic_gpio_pinconf_pin_get,
+	.pin_config_set			= pmic_gpio_pinconf_pin_set,
+	.pin_config_dbg_show		= pmic_gpio_pinconf_pin_dbg_show,
+	.pin_config_group_get		= pmic_gpio_pinconf_group_get,
+	.pin_config_group_set		= pmic_gpio_pinconf_group_set,
+	.pin_config_group_dbg_show	= pmic_gpio_pinconf_group_dbg_show,
 };
 
 static int pmic_gpio_get_direction(struct gpio_chip *chip, unsigned pin)
@@ -745,7 +852,7 @@ static int pmic_gpio_direction_input(struct gpio_chip *chip, unsigned pin)
 
 	config = pinconf_to_config_packed(PIN_CONFIG_INPUT_ENABLE, 1);
 
-	return pmic_gpio_config_set(state->ctrl, pin, &config, 1);
+	return pmic_gpio_pinconf_pin_set(state->ctrl, pin, &config, 1);
 }
 
 static int pmic_gpio_direction_output(struct gpio_chip *chip,
@@ -756,7 +863,7 @@ static int pmic_gpio_direction_output(struct gpio_chip *chip,
 
 	config = pinconf_to_config_packed(PIN_CONFIG_LEVEL, val);
 
-	return pmic_gpio_config_set(state->ctrl, pin, &config, 1);
+	return pmic_gpio_pinconf_pin_set(state->ctrl, pin, &config, 1);
 }
 
 static int pmic_gpio_get(struct gpio_chip *chip, unsigned pin)
@@ -788,7 +895,7 @@ static int pmic_gpio_set(struct gpio_chip *chip, unsigned int pin, int value)
 
 	config = pinconf_to_config_packed(PIN_CONFIG_LEVEL, value);
 
-	return pmic_gpio_config_set(state->ctrl, pin, &config, 1);
+	return pmic_gpio_pinconf_pin_set(state->ctrl, pin, &config, 1);
 }
 
 static int pmic_gpio_of_xlate(struct gpio_chip *chip,
@@ -810,7 +917,7 @@ static void pmic_gpio_dbg_show(struct seq_file *s, struct gpio_chip *chip)
 	unsigned i;
 
 	for (i = 0; i < chip->ngpio; i++) {
-		pmic_gpio_config_dbg_show(state->ctrl, s, i);
+		pmic_gpio_pinconf_pin_dbg_show(state->ctrl, s, i);
 		seq_puts(s, "\n");
 	}
 }
@@ -1129,11 +1236,11 @@ static int pmic_gpio_probe(struct platform_device *pdev)
 	pctrldesc->custom_conf_items = pmic_conf_items;
 #endif
 
-	for (i = 0; i < npins; i++, pindesc++) {
+	for (i = 0; i < npins; i++) {
 		pad = &pads[i];
-		pindesc->drv_data = pad;
-		pindesc->number = i;
-		pindesc->name = pmic_gpio_groups[i];
+		pindesc[i].drv_data = pad;
+		pindesc[i].number = i;
+		pindesc[i].name = pmic_gpio_groups[i];
 
 		pad->base = reg + i * PMIC_GPIO_ADDRESS_RANGE;
 
@@ -1153,6 +1260,30 @@ static int pmic_gpio_probe(struct platform_device *pdev)
 	state->ctrl = devm_pinctrl_register(dev, pctrldesc, state);
 	if (IS_ERR(state->ctrl))
 		return PTR_ERR(state->ctrl);
+
+	/* Register pin groups - each GPIO is a group for standard functions */
+	for (i = 0; i < npins; i++) {
+		ret = pinctrl_generic_add_group(state->ctrl,
+						pmic_gpio_groups[i],
+						&pindesc[i].number, 1, NULL);
+		if (ret < 0) {
+			dev_err(dev, "failed to register group %s\n",
+				pmic_gpio_groups[i]);
+			return ret;
+		}
+	}
+
+	/* Register standard functions - all GPIOs support these */
+	for (i = 0; i < ARRAY_SIZE(pmic_gpio_functions); i++) {
+		ret = pinmux_generic_add_function(state->ctrl,
+						  pmic_gpio_functions[i],
+						  pmic_gpio_groups, npins, NULL);
+		if (ret < 0) {
+			dev_err(dev, "failed to register function %s\n",
+				pmic_gpio_functions[i]);
+			return ret;
+		}
+	}
 
 	parent_node = of_irq_find_parent(state->dev->of_node);
 	if (!parent_node)
