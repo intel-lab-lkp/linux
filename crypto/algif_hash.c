@@ -38,11 +38,9 @@ static int hash_alloc_result(struct sock *sk, struct hash_ctx *ctx)
 
 	ds = crypto_ahash_digestsize(crypto_ahash_reqtfm(&ctx->req));
 
-	ctx->result = sock_kmalloc(sk, ds, GFP_KERNEL);
+	ctx->result = sock_kzalloc(sk, ds, GFP_KERNEL);
 	if (!ctx->result)
 		return -ENOMEM;
-
-	memset(ctx->result, 0, ds);
 
 	return 0;
 }
@@ -412,11 +410,10 @@ static int hash_accept_parent_nokey(void *private, struct sock *sk)
 	struct hash_ctx *ctx;
 	unsigned int len = sizeof(*ctx) + crypto_ahash_reqsize(tfm);
 
-	ctx = sock_kmalloc(sk, len, GFP_KERNEL);
+	ctx = sock_kzalloc(sk, len, GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
-	memset(ctx, 0, len);
 	ctx->len = len;
 	crypto_init_wait(&ctx->wait);
 
