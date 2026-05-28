@@ -449,7 +449,7 @@ static irqreturn_t falcon_legacy_interrupt_a1(int irq, void *dev_id)
 		   "IRQ %d on CPU %d status " EF4_OWORD_FMT "\n",
 		   irq, raw_smp_processor_id(), EF4_OWORD_VAL(*int_ker));
 
-	if (!likely(READ_ONCE(efx->irq_soft_enabled)))
+	if (!likely(ef4_irq_soft_enabled(efx)))
 		return IRQ_HANDLED;
 
 	/* Check to see if we have a serious error condition */

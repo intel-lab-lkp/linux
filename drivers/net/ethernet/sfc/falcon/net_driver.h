@@ -1305,6 +1305,18 @@ static inline netdev_features_t ef4_supported_features(const struct ef4_nic *efx
 	return net_dev->features | net_dev->hw_features;
 }
 
+static inline void ef4_set_irq_soft_enabled(struct ef4_nic *efx, bool enabled)
+{
+	/* Publish channel state before changing the IRQ handler gate. */
+	smp_store_release(&efx->irq_soft_enabled, enabled);
+}
+
+static inline bool ef4_irq_soft_enabled(struct ef4_nic *efx)
+{
+	/* Pair with ef4_set_irq_soft_enabled() before touching channels. */
+	return smp_load_acquire(&efx->irq_soft_enabled);
+}
+
 /* Get the current TX queue insert index. */
 static inline unsigned int
 ef4_tx_queue_get_insert_index(const struct ef4_tx_queue *tx_queue)

@@ -333,7 +333,7 @@ static irqreturn_t ef100_msi_interrupt(int irq, void *dev_id)
 	netif_vdbg(efx, intr, efx->net_dev,
 		   "IRQ %d on CPU %d\n", irq, raw_smp_processor_id());
 
-	if (likely(READ_ONCE(efx->irq_soft_enabled))) {
+	if (likely(efx_irq_soft_enabled(efx))) {
 		/* Note test interrupts */
 		if (context->index == efx->irq_level)
 			efx->last_irq_cpu = raw_smp_processor_id();

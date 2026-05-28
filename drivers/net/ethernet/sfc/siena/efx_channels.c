@@ -1004,7 +1004,7 @@ static int efx_soft_enable_interrupts(struct efx_nic *efx)
 
 	BUG_ON(efx->state == STATE_DISABLED);
 
-	efx->irq_soft_enabled = true;
+	efx_set_irq_soft_enabled(efx, true);
 	smp_wmb();
 
 	efx_for_each_channel(channel, efx) {
@@ -1041,7 +1041,7 @@ static void efx_soft_disable_interrupts(struct efx_nic *efx)
 
 	efx_siena_mcdi_mode_poll(efx);
 
-	efx->irq_soft_enabled = false;
+	efx_set_irq_soft_enabled(efx, false);
 	smp_wmb();
 
 	if (efx->legacy_irq)

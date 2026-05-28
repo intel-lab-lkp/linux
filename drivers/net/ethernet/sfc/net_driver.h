@@ -1731,6 +1731,18 @@ static inline void efx_xmit_hwtstamp_pending(struct sk_buff *skb)
 	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
 }
 
+static inline void efx_set_irq_soft_enabled(struct efx_nic *efx, bool enabled)
+{
+	/* Publish channel state before changing the IRQ handler gate. */
+	smp_store_release(&efx->irq_soft_enabled, enabled);
+}
+
+static inline bool efx_irq_soft_enabled(struct efx_nic *efx)
+{
+	/* Pair with efx_set_irq_soft_enabled() before touching channels. */
+	return smp_load_acquire(&efx->irq_soft_enabled);
+}
+
 /* Get the max fill level of the TX queues on this channel */
 static inline unsigned int
 efx_channel_tx_fill_level(struct efx_channel *channel)
