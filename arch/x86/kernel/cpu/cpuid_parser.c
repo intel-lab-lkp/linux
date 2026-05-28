@@ -103,6 +103,18 @@ cpuid_read_0x2(const struct cpuid_parse_entry *e, const struct cpuid_read_output
  */
 define_cpuid_read_function(deterministic_cache, leaf_0x4_n, l, l->cache_type == 0);
 
+static void
+cpuid_read_0x9(const struct cpuid_parse_entry *e, const struct cpuid_read_output *output)
+{
+	struct leaf_0x1_0 l1;
+
+	cpuid_read(0x1, &l1);
+	if (!l1.dca)
+		return;
+
+	cpuid_read_generic(e, output);
+}
+
 /*
  * Define an extended range CPUID read function
  *
