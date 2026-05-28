@@ -727,7 +727,10 @@ static void flush_tlb_all_ipi(void *info)
 
 void flush_tlb_all(void)
 {
-	on_each_cpu(flush_tlb_all_ipi, NULL, 1);
+	if (pv_tlb_flush_enabled())
+		kvm_flush_tlb_mask(cpu_online_mask, flush_tlb_all_ipi, NULL);
+	else
+		on_each_cpu(flush_tlb_all_ipi, NULL, 1);
 }
 
 static void flush_tlb_mm_ipi(void *mm)
@@ -743,7 +746,10 @@ void flush_tlb_mm(struct mm_struct *mm)
 	preempt_disable();
 
 	if ((atomic_read(&mm->mm_users) != 1) || (current->mm != mm)) {
-		on_each_cpu_mask(mm_cpumask(mm), flush_tlb_mm_ipi, mm, 1);
+		if (pv_tlb_flush_enabled())
+			kvm_flush_tlb_mask(mm_cpumask(mm), flush_tlb_mm_ipi, mm);
+		else
+			on_each_cpu_mask(mm_cpumask(mm), flush_tlb_mm_ipi, mm, 1);
 	} else {
 		unsigned int cpu;
 
@@ -782,7 +788,10 @@ void flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned l
 			.addr2 = end,
 		};
 
-		on_each_cpu_mask(mm_cpumask(mm), flush_tlb_range_ipi, &fd, 1);
+		if (pv_tlb_flush_enabled())
+			kvm_flush_tlb_mask(mm_cpumask(mm), flush_tlb_range_ipi, &fd);
+		else
+			on_each_cpu_mask(mm_cpumask(mm), flush_tlb_range_ipi, &fd, 1);
 	} else {
 		unsigned int cpu;
 
@@ -809,7 +818,10 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 		.addr2 = end,
 	};
 
-	on_each_cpu(flush_tlb_kernel_range_ipi, &fd, 1);
+	if (pv_tlb_flush_enabled())
+		kvm_flush_tlb_mask(cpu_online_mask, flush_tlb_kernel_range_ipi, &fd);
+	else
+		on_each_cpu(flush_tlb_kernel_range_ipi, &fd, 1);
 }
 
 static void flush_tlb_page_ipi(void *info)
@@ -828,7 +840,10 @@ void flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 			.addr1 = page,
 		};
 
-		on_each_cpu_mask(mm_cpumask(vma->vm_mm), flush_tlb_page_ipi, &fd, 1);
+		if (pv_tlb_flush_enabled())
+			kvm_flush_tlb_mask(mm_cpumask(vma->vm_mm), flush_tlb_page_ipi, &fd);
+		else
+			on_each_cpu_mask(mm_cpumask(vma->vm_mm), flush_tlb_page_ipi, &fd, 1);
 	} else {
 		unsigned int cpu;
 
@@ -851,6 +866,9 @@ static void flush_tlb_one_ipi(void *info)
 
 void flush_tlb_one(unsigned long vaddr)
 {
-	on_each_cpu(flush_tlb_one_ipi, (void *)vaddr, 1);
+	if (pv_tlb_flush_enabled())
+		kvm_flush_tlb_mask(cpu_online_mask, flush_tlb_one_ipi, (void *)vaddr);
+	else
+		on_each_cpu(flush_tlb_one_ipi, (void *)vaddr, 1);
 }
 EXPORT_SYMBOL(flush_tlb_one);
