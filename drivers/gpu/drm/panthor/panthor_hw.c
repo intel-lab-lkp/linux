@@ -9,6 +9,7 @@
 #include "panthor_device.h"
 #include "panthor_device_io.h"
 #include "panthor_gpu.h"
+#include "panthor_gpu_discover_regs.h"
 #include "panthor_gpu_regs.h"
 #include "panthor_hw.h"
 #include "panthor_pwr.h"
@@ -297,18 +298,37 @@ static int panthor_hw_bind_device(struct panthor_device *ptdev)
 static int panthor_hw_gpu_id_init(struct panthor_device *ptdev)
 {
 	struct panthor_gpu_id *gpu_id = &ptdev->gpu_id;
-	ptdev->gpu_info.gpu_id = gpu_read(ptdev->iomem, GPU_ID);
+	u32 gpu_id32 = gpu_read(ptdev->iomem, GPU_ID);
 
-	if (!ptdev->gpu_info.gpu_id)
+	if (!gpu_id32)
 		return -ENXIO;
 
-	gpu_id->arch.major = GPU_ARCH_MAJOR(ptdev->gpu_info.gpu_id);
-	gpu_id->arch.minor = GPU_ARCH_MINOR(ptdev->gpu_info.gpu_id);
-	gpu_id->arch.rev = GPU_ARCH_REV(ptdev->gpu_info.gpu_id);
-	gpu_id->prod_major = GPU_PROD_MAJOR(ptdev->gpu_info.gpu_id);
-	gpu_id->ver.major = GPU_VER_MAJOR(ptdev->gpu_info.gpu_id);
-	gpu_id->ver.minor = GPU_VER_MINOR(ptdev->gpu_info.gpu_id);
-	gpu_id->ver.status = GPU_VER_STATUS(ptdev->gpu_info.gpu_id);
+	ptdev->gpu_info.gpu_id = gpu_id32;
+
+	gpu_id->arch.major = GPU_ARCH_MAJOR(gpu_id32);
+	gpu_id->arch.minor = GPU_ARCH_MINOR(gpu_id32);
+	gpu_id->arch.rev = GPU_ARCH_REV(gpu_id32);
+	gpu_id->prod_major = GPU_PROD_MAJOR(gpu_id32);
+	gpu_id->ver.major = GPU_VER_MAJOR(gpu_id32);
+	gpu_id->ver.minor = GPU_VER_MINOR(gpu_id32);
+	gpu_id->ver.status = GPU_VER_STATUS(gpu_id32);
+
+	if (GPU_ARCH_MAJOR(gpu_id32) == GPU_WIDE_COMPAT) {
+		u64 gpu_id64 = gpu_read64(ptdev->iomem, GPU_WIDE_ID);
+		if (!gpu_id64)
+			return -ENXIO;
+
+		ptdev->gpu_info.gpu_wide_id = gpu_id64;
+		ptdev->gpu_info.gpu_id = 0;
+
+		gpu_id->arch.major = GPU_WIDE_ARCH_MAJOR(gpu_id64);
+		gpu_id->arch.minor = GPU_WIDE_ARCH_MINOR(gpu_id64);
+		gpu_id->arch.rev = GPU_WIDE_ARCH_REV(gpu_id64);
+		gpu_id->prod_major = GPU_WIDE_PROD_MAJOR(gpu_id64);
+		gpu_id->ver.major = GPU_WIDE_VER_MAJOR(gpu_id64);
+		gpu_id->ver.minor = GPU_WIDE_VER_MINOR(gpu_id64);
+		gpu_id->ver.status = GPU_WIDE_VER_STATUS(gpu_id64);
+	}
 
 	return 0;
 }
