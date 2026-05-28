@@ -555,6 +555,10 @@ struct mana_port_context {
 	u32 speed;
 	/* Maximum speed supported by the SKU (mbps) */
 	u32 max_speed;
+	/* 1 = not queried, 0 = cached success, negative = permanent error */
+	int link_cfg_error;
+	/* Serializes mana_query_link_cfg() and mana_set_bw_clamp(). */
+	struct mutex link_cfg_mutex;
 
 	bool port_is_up;
 	bool port_st_save; /* Saved port state */

@@ -1456,6 +1456,12 @@ int mana_query_link_cfg(struct mana_port_context *apc)
 	struct mana_query_link_config_req req = {};
 	int err;
 
+	mutex_lock(&apc->link_cfg_mutex);
+
+	err = apc->link_cfg_error;
+	if (err <= 0)
+		goto out;
+
 	mana_gd_init_req_hdr(&req.hdr, MANA_QUERY_LINK_CONFIG,
 			     sizeof(req), sizeof(resp));
 
@@ -1468,10 +1474,11 @@ int mana_query_link_cfg(struct mana_port_context *apc)
 	if (err) {
 		if (err == -EOPNOTSUPP) {
 			netdev_info_once(ndev, "MANA_QUERY_LINK_CONFIG not supported\n");
-			return err;
+			apc->link_cfg_error = err;
+			goto out;
 		}
 		netdev_err(ndev, "Failed to query link config: %d\n", err);
-		return err;
+		goto out;
 	}
 
 	err = mana_verify_resp_hdr(&resp.hdr, MANA_QUERY_LINK_CONFIG,
@@ -1482,16 +1489,20 @@ int mana_query_link_cfg(struct mana_port_context *apc)
 			   resp.hdr.status);
 		if (!err)
 			err = -EOPNOTSUPP;
-		return err;
+		goto out;
 	}
 
 	if (resp.qos_unconfigured) {
 		err = -EINVAL;
-		return err;
+		goto out;
 	}
 	apc->speed = resp.link_speed_mbps;
 	apc->max_speed = resp.qos_speed_mbps;
-	return 0;
+	apc->link_cfg_error = 0;
+	err = 0;
+out:
+	mutex_unlock(&apc->link_cfg_mutex);
+	return err;
 }
 
 int mana_set_bw_clamp(struct mana_port_context *apc, u32 speed,
@@ -1508,17 +1519,19 @@ int mana_set_bw_clamp(struct mana_port_context *apc, u32 speed,
 	req.link_speed_mbps = speed;
 	req.enable_clamping = enable_clamping;
 
+	mutex_lock(&apc->link_cfg_mutex);
+
 	err = mana_send_request(apc->ac, &req, sizeof(req), &resp,
 				sizeof(resp));
 
 	if (err) {
 		if (err == -EOPNOTSUPP) {
 			netdev_info_once(ndev, "MANA_SET_BW_CLAMP not supported\n");
-			return err;
+			goto out;
 		}
 		netdev_err(ndev, "Failed to set bandwidth clamp for speed %u, err = %d",
 			   speed, err);
-		return err;
+		goto out;
 	}
 
 	err = mana_verify_resp_hdr(&resp.hdr, MANA_SET_BW_CLAMP,
@@ -1529,13 +1542,18 @@ int mana_set_bw_clamp(struct mana_port_context *apc, u32 speed,
 			   resp.hdr.status);
 		if (!err)
 			err = -EOPNOTSUPP;
-		return err;
+		goto out;
 	}
 
 	if (resp.qos_unconfigured)
 		netdev_info(ndev, "QoS is unconfigured\n");
 
-	return 0;
+	/* Invalidate the cache; next query will re-fetch from firmware. */
+	apc->link_cfg_error = 1;
+	err = 0;
+out:
+	mutex_unlock(&apc->link_cfg_mutex);
+	return err;
 }
 
 int mana_create_wq_obj(struct mana_port_context *apc,
@@ -3430,6 +3448,8 @@ static int mana_probe_port(struct mana_context *ac, int port_idx,
 	apc->port_handle = INVALID_MANA_HANDLE;
 	apc->pf_filter_handle = INVALID_MANA_HANDLE;
 	apc->port_idx = port_idx;
+	apc->link_cfg_error = 1;
+	mutex_init(&apc->link_cfg_mutex);
 	apc->cqe_coalescing_enable = 0;
 
 	mutex_init(&apc->vport_mutex);
@@ -3750,6 +3770,9 @@ int mana_probe(struct gdma_dev *gd, bool resuming)
 			rtnl_lock();
 			apc = netdev_priv(ac->ports[i]);
 			enable_work(&apc->queue_reset_work);
+			mutex_lock(&apc->link_cfg_mutex);
+			apc->link_cfg_error = 1;
+			mutex_unlock(&apc->link_cfg_mutex);
 			err = mana_attach(ac->ports[i]);
 			rtnl_unlock();
 			/* Log the port for which the attach failed, stop
