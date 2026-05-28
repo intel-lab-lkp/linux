@@ -9575,7 +9575,9 @@ M:	Kees Cook <kees@kernel.org>
 L:	linux-mm@kvack.org
 S:	Supported
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/kees/linux.git for-next/execve
+F:	arch/x86/entry/syscalls/syscall_64.tbl
 F:	Documentation/userspace-api/ELF.rst
+F:	Documentation/userspace-api/spawn_template.rst
 F:	fs/*binfmt_*.c
 F:	fs/Kconfig.binfmt
 F:	fs/exec.c

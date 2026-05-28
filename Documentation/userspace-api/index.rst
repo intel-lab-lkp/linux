@@ -22,6 +22,7 @@ System calls
    ioctl/index
    mseal
    rseq
+   spawn_template
 
 Security-related interfaces
 ===========================
