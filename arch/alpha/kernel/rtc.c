@@ -15,6 +15,7 @@
 #include <linux/bcd.h>
 #include <linux/rtc.h>
 #include <linux/platform_device.h>
+#include <linux/workqueue.h>
 
 #include "proto.h"
 
@@ -155,11 +156,12 @@ union remote_data {
 	long retval;
 };
 
-static void
+static long
 do_remote_read(void *data)
 {
 	union remote_data *x = data;
 	x->retval = alpha_rtc_read_time(NULL, x->tm);
+	return 0;
 }
 
 static int
@@ -168,17 +170,18 @@ remote_read_time(struct device *dev, struct rtc_time *tm)
 	union remote_data x;
 	if (smp_processor_id() != boot_cpuid) {
 		x.tm = tm;
-		smp_call_function_single(boot_cpuid, do_remote_read, &x, 1);
+		work_on_cpu(boot_cpuid, do_remote_read, &x);
 		return x.retval;
 	}
 	return alpha_rtc_read_time(NULL, tm);
 }
 
-static void
+static long
 do_remote_set(void *data)
 {
 	union remote_data *x = data;
 	x->retval = alpha_rtc_set_time(NULL, x->tm);
+	return 0;
 }
 
 static int
@@ -187,7 +190,7 @@ remote_set_time(struct device *dev, struct rtc_time *tm)
 	union remote_data x;
 	if (smp_processor_id() != boot_cpuid) {
 		x.tm = tm;
-		smp_call_function_single(boot_cpuid, do_remote_set, &x, 1);
+		work_on_cpu(boot_cpuid, do_remote_set, &x);
 		return x.retval;
 	}
 	return alpha_rtc_set_time(NULL, tm);
