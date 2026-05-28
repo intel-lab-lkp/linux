@@ -9594,6 +9594,7 @@ F:	include/uapi/linux/spawn_template.h
 F:	kernel/fork.c
 F:	mm/vma_exec.c
 F:	tools/testing/selftests/exec/
+F:	tools/testing/selftests/exec/spawn_template.c
 N:	asm/elf.h
 N:	binfmt
 
