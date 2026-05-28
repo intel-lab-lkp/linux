@@ -440,8 +440,12 @@ void vcpu_setup_sgx_lepubkeyhash(struct kvm_vcpu *vcpu)
  */
 static bool sgx_intercept_encls_ecreate(struct kvm_vcpu *vcpu)
 {
+	const struct cpuid_regs *sl0 = cpuid_subleaf_raw(&boot_cpu_data, 0x12, 0);
+	const struct cpuid_regs *sl1 = cpuid_subleaf_raw(&boot_cpu_data, 0x12, 1);
 	struct kvm_cpuid_entry2 *guest_cpuid;
-	u32 eax, ebx, ecx, edx;
+
+	if (!sl0 || !sl1)
+		return true;
 
 	if (!vcpu->kvm->arch.sgx_provisioning_allowed)
 		return true;
@@ -450,17 +454,15 @@ static bool sgx_intercept_encls_ecreate(struct kvm_vcpu *vcpu)
 	if (!guest_cpuid)
 		return true;
 
-	cpuid_count(0x12, 0, &eax, &ebx, &ecx, &edx);
-	if (guest_cpuid->ebx != ebx || guest_cpuid->edx != edx)
+	if (guest_cpuid->ebx != sl0->ebx || guest_cpuid->edx != sl0->edx)
 		return true;
 
 	guest_cpuid = kvm_find_cpuid_entry_index(vcpu, 0x12, 1);
 	if (!guest_cpuid)
 		return true;
 
-	cpuid_count(0x12, 1, &eax, &ebx, &ecx, &edx);
-	if (guest_cpuid->eax != eax || guest_cpuid->ebx != ebx ||
-	    guest_cpuid->ecx != ecx || guest_cpuid->edx != edx)
+	if (guest_cpuid->eax != sl1->eax || guest_cpuid->ebx != sl1->ebx ||
+	    guest_cpuid->ecx != sl1->ecx || guest_cpuid->edx != sl1->edx)
 		return true;
 
 	return false;
