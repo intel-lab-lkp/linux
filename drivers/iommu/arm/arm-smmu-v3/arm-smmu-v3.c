@@ -146,18 +146,28 @@ static bool queue_full(struct arm_smmu_ll_queue *q)
 	       Q_WRP(q, q->prod) != Q_WRP(q, q->cons);
 }
 
+static bool __queue_empty(struct arm_smmu_ll_queue *q, u32 cons, u32 prod)
+{
+	return Q_IDX(q, prod) == Q_IDX(q, cons) &&
+	       Q_WRP(q, prod) == Q_WRP(q, cons);
+}
+
 static bool queue_empty(struct arm_smmu_ll_queue *q)
 {
-	return Q_IDX(q, q->prod) == Q_IDX(q, q->cons) &&
-	       Q_WRP(q, q->prod) == Q_WRP(q, q->cons);
+	return __queue_empty(q, q->cons, q->prod);
+}
+
+static bool __queue_consumed(struct arm_smmu_ll_queue *q, u32 cons, u32 prod)
+{
+	return ((Q_WRP(q, cons) == Q_WRP(q, prod)) &&
+		(Q_IDX(q, cons) > Q_IDX(q, prod))) ||
+	       ((Q_WRP(q, cons) != Q_WRP(q, prod)) &&
+		(Q_IDX(q, cons) <= Q_IDX(q, prod)));
 }
 
 static bool queue_consumed(struct arm_smmu_ll_queue *q, u32 prod)
 {
-	return ((Q_WRP(q, q->cons) == Q_WRP(q, prod)) &&
-		(Q_IDX(q, q->cons) > Q_IDX(q, prod))) ||
-	       ((Q_WRP(q, q->cons) != Q_WRP(q, prod)) &&
-		(Q_IDX(q, q->cons) <= Q_IDX(q, prod)));
+	return __queue_consumed(q, q->cons, prod);
 }
 
 static void queue_sync_cons_out(struct arm_smmu_queue *q)
