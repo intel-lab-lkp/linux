@@ -2799,7 +2799,7 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_AMD64_TSC_RATIO:
 		if (!msr_info->host_initiated &&
 		    !guest_cpu_cap_has(vcpu, X86_FEATURE_TSCRATEMSR))
-			return 1;
+			return -EINVAL;
 		msr_info->data = svm->tsc_ratio_msr;
 		break;
 	case MSR_STAR:
@@ -2868,7 +2868,7 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_IA32_SPEC_CTRL:
 		if (!msr_info->host_initiated &&
 		    !guest_has_spec_ctrl_msr(vcpu))
-			return 1;
+			return -EINVAL;
 
 		if (boot_cpu_has(X86_FEATURE_V_SPEC_CTRL))
 			msr_info->data = svm->vmcb->save.spec_ctrl;
@@ -2878,7 +2878,7 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_AMD64_VIRT_SPEC_CTRL:
 		if (!msr_info->host_initiated &&
 		    !guest_cpu_cap_has(vcpu, X86_FEATURE_VIRT_SSBD))
-			return 1;
+			return -EINVAL;
 
 		msr_info->data = svm->virt_spec_ctrl;
 		break;
@@ -2915,7 +2915,7 @@ static int svm_complete_emulated_msr(struct kvm_vcpu *vcpu, int err)
 		return kvm_complete_insn_gp(vcpu, err);
 
 	svm_vmgexit_inject_exception(svm, X86_TRAP_GP);
-	return 1;
+	return -EINVAL;
 }
 
 static int svm_set_vm_cr(struct kvm_vcpu *vcpu, u64 data)
@@ -2924,7 +2924,7 @@ static int svm_set_vm_cr(struct kvm_vcpu *vcpu, u64 data)
 	int svm_dis, chg_mask;
 
 	if (data & ~SVM_VM_CR_VALID_MASK)
-		return 1;
+		return -EINVAL;
 
 	chg_mask = SVM_VM_CR_VALID_MASK;
 
@@ -2938,7 +2938,7 @@ static int svm_set_vm_cr(struct kvm_vcpu *vcpu, u64 data)
 
 	/* check for svm_disable while efer.svme is set */
 	if (svm_dis && (vcpu->arch.efer & EFER_SVME))
-		return 1;
+		return -EINVAL;
 
 	return 0;
 }
@@ -2960,7 +2960,7 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		if (!guest_cpu_cap_has(vcpu, X86_FEATURE_TSCRATEMSR)) {
 
 			if (!msr->host_initiated)
-				return 1;
+				return -EINVAL;
 			/*
 			 * In case TSC scaling is not enabled, always
 			 * leave this MSR at the default value.
@@ -2970,12 +2970,12 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 			 * Ignore this value as well.
 			 */
 			if (data != 0 && data != svm->tsc_ratio_msr)
-				return 1;
+				return -EINVAL;
 			break;
 		}
 
 		if (data & SVM_TSC_RATIO_RSVD)
-			return 1;
+			return -EINVAL;
 
 		svm->tsc_ratio_msr = data;
 
@@ -2997,10 +2997,10 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 	case MSR_IA32_SPEC_CTRL:
 		if (!msr->host_initiated &&
 		    !guest_has_spec_ctrl_msr(vcpu))
-			return 1;
+			return -EINVAL;
 
 		if (kvm_spec_ctrl_test_value(data))
-			return 1;
+			return -EINVAL;
 
 		if (boot_cpu_has(X86_FEATURE_V_SPEC_CTRL))
 			svm->vmcb->save.spec_ctrl = data;
@@ -3025,10 +3025,10 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 	case MSR_AMD64_VIRT_SPEC_CTRL:
 		if (!msr->host_initiated &&
 		    !guest_cpu_cap_has(vcpu, X86_FEATURE_VIRT_SSBD))
-			return 1;
+			return -EINVAL;
 
 		if (data & ~SPEC_CTRL_SSBD)
-			return 1;
+			return -EINVAL;
 
 		svm->virt_spec_ctrl = data;
 		break;
@@ -3123,7 +3123,7 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		}
 
 		if (data & DEBUGCTL_RESERVED_BITS)
-			return 1;
+			return -EINVAL;
 
 		if (svm->vmcb->save.dbgctl == data)
 			break;
@@ -3139,7 +3139,7 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		if (!lbrv)
 			return KVM_MSR_RET_UNSUPPORTED;
 		if (!msr->host_initiated)
-			return 1;
+			return -EINVAL;
 		*svm_vmcb_lbr(svm, ecx) = data;
 		vmcb_mark_dirty(svm->vmcb, VMCB_LBR);
 		break;
@@ -3151,7 +3151,7 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		 * originating from those kernels.
 		 */
 		if (!msr->host_initiated && !page_address_valid(vcpu, data))
-			return 1;
+			return -EINVAL;
 
 		svm->nested.hsave_msr = data & PAGE_MASK;
 		break;
@@ -3164,10 +3164,10 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		u64 supported_de_cfg;
 
 		if (svm_get_feature_msr(ecx, &supported_de_cfg))
-			return 1;
+			return -EINVAL;
 
 		if (data & ~supported_de_cfg)
-			return 1;
+			return -EINVAL;
 
 		svm->msr_decfg = data;
 		break;
