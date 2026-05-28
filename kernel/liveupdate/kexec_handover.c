@@ -15,6 +15,7 @@
 #include <linux/kmemleak.h>
 #include <linux/count_zeros.h>
 #include <linux/kasan.h>
+#include <linux/io.h>
 #include <linux/kexec.h>
 #include <linux/kexec_handover.h>
 #include <linux/kho_radix_tree.h>
@@ -395,6 +396,129 @@ void kho_radix_destroy_tree(struct kho_radix_tree *tree)
 	__kho_radix_destroy_tree(tree->root, KHO_TREE_MAX_DEPTH - 1);
 }
 EXPORT_SYMBOL_GPL(kho_radix_destroy_tree);
+
+/*
+ * Convert a crash tree node's children from PA to VA in-place via memremap().
+ * On failure, already-remapped pages are not cleaned up -- the crash kernel
+ * is short-lived and will reboot after dump collection, so the leak is
+ * inconsequential.
+ */
+static int kho_radix_crash_convert_node(struct kho_radix_node *node,
+					unsigned int level)
+{
+	struct kho_radix_node *child;
+	unsigned int i;
+	int err;
+
+	for (i = 0; i < (1 << KHO_TABLE_SIZE_LOG2); i++) {
+		if (!node->table[i])
+			continue;
+
+		/* Validate: PA must have bit 63 clear and be page-aligned */
+		if ((node->table[i] & BIT_ULL(63)) ||
+		    (node->table[i] & (PAGE_SIZE - 1)))
+			return -EINVAL;
+
+		child = memremap(node->table[i], PAGE_SIZE, MEMREMAP_WB);
+		if (!child)
+			return -ENOMEM;
+
+		/* Overwrite PA with VA in-place */
+		node->table[i] = (u64)(uintptr_t)child;
+
+		/* Recurse for intermediate levels; level 1 children are leaves */
+		if (level > 1) {
+			err = kho_radix_crash_convert_node(child, level - 1);
+			if (err)
+				return err;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * kho_radix_crash_init - Initialize a crash-kernel view of a KHO radix tree.
+ * @tree: The crash tree to initialize.
+ * @root_pa: Physical address of the radix tree root from the old kernel.
+ *
+ * Maps the old kernel's radix tree into the crash kernel's address space
+ * by memremapping each node and converting table entries from physical to
+ * virtual addresses in-place. After successful initialization, the tree
+ * can be traversed with kho_radix_crash_contains_page() using direct
+ * pointer dereferencing.
+ *
+ * This function is intended for use in the crash kernel where the old
+ * kernel's memory is not in the direct map. No locking is used as the
+ * crash kernel is effectively single-threaded during dump collection.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int kho_radix_crash_init(struct kho_radix_crash_tree *tree, phys_addr_t root_pa)
+{
+	struct kho_radix_node *root;
+	int err;
+
+	tree->root = NULL;
+
+	if (!root_pa || (root_pa & (PAGE_SIZE - 1)))
+		return -EINVAL;
+
+	root = memremap(root_pa, PAGE_SIZE, MEMREMAP_WB);
+	if (!root)
+		return -ENOMEM;
+
+	err = kho_radix_crash_convert_node(root, KHO_TREE_MAX_DEPTH - 1);
+	if (err)
+		return err;
+
+	tree->root = root;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(kho_radix_crash_init);
+
+/**
+ * kho_radix_crash_contains_page - Check if a page is in a crash-kernel radix tree.
+ * @tree: The crash tree, previously initialized with kho_radix_crash_init().
+ * @pfn: The page frame number to check.
+ * @order: The order of the page.
+ *
+ * Traverses the radix tree using direct pointer dereferencing (the table
+ * entries were converted from PA to VA during init). No locking is used as the
+ * crash kernel is effectively single-threaded during dump collection.
+ *
+ * Note: This function checks specifically for the presence of the page at the
+ * given order. If a larger order page that encompasses this page is preserved,
+ * this function will return false.
+ *
+ * Return: true if the page is present in the tree, false otherwise.
+ */
+bool kho_radix_crash_contains_page(struct kho_radix_crash_tree *tree,
+				   unsigned long pfn, unsigned int order)
+{
+	unsigned long key = kho_encode_radix_key(PFN_PHYS(pfn), order);
+	struct kho_radix_node *node = tree->root;
+	struct kho_radix_leaf *leaf;
+	unsigned int i, idx;
+
+	if (!tree->root)
+		return false;
+
+	/* Traverse using VA pointers stored in table[] */
+	for (i = KHO_TREE_MAX_DEPTH - 1; i > 0; i--) {
+		idx = kho_radix_get_table_index(key, i);
+
+		if (!node->table[idx])
+			return false;
+
+		node = (struct kho_radix_node *)(uintptr_t)node->table[idx];
+	}
+
+	leaf = (struct kho_radix_leaf *)node;
+	idx = kho_radix_get_bitmap_index(key);
+	return test_bit(idx, leaf->bitmap);
+}
+EXPORT_SYMBOL_GPL(kho_radix_crash_contains_page);
 
 static int kho_radix_walk_leaf(struct kho_radix_leaf *leaf, unsigned long key,
 			       const struct kho_radix_walk_cb *cb, void *data)
