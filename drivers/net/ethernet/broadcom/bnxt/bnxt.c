@@ -11843,7 +11843,7 @@ static int bnxt_request_irq(struct bnxt *bp)
 #endif
 
 	/* Enable TPH support as part of IRQ request */
-	rc = pcie_enable_tph(bp->pdev, PCI_TPH_ST_IV_MODE);
+	rc = pcie_enable_tph(bp->pdev, PCI_TPH_ST_IV_MODE, TPH_REQ_AUTO);
 	if (!rc)
 		bp->tph_mode = PCI_TPH_ST_IV_MODE;
 

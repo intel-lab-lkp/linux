@@ -21,6 +21,16 @@ enum tph_mem_type {
 	TPH_MEM_TYPE_PM		/* persistent memory */
 };
 
+/*
+ * TPH requester selection policy
+ * Used to choose standard/extended TPH when enabling TPH
+ */
+enum tph_req_policy {
+	TPH_REQ_AUTO,		/* Auto select by capability */
+	TPH_REQ_STANDARD,	/* Force standard TPH (8-bit ST) */
+	TPH_REQ_EXTENDED	/* Force extended TPH (16-bit ST) */
+};
+
 #ifdef CONFIG_PCIE_TPH
 int pcie_tph_set_st_entry(struct pci_dev *pdev,
 			  unsigned int index, u16 tag);
@@ -28,7 +38,8 @@ int pcie_tph_get_cpu_st(struct pci_dev *dev,
 			enum tph_mem_type mem_type,
 			unsigned int cpu, u16 *tag);
 void pcie_disable_tph(struct pci_dev *pdev);
-int pcie_enable_tph(struct pci_dev *pdev, int mode);
+int pcie_enable_tph(struct pci_dev *pdev, int mode,
+		    enum tph_req_policy req_policy);
 u16 pcie_tph_get_st_table_size(struct pci_dev *pdev);
 u32 pcie_tph_get_st_table_loc(struct pci_dev *pdev);
 #else
@@ -40,7 +51,8 @@ static inline int pcie_tph_get_cpu_st(struct pci_dev *dev,
 				      unsigned int cpu, u16 *tag)
 { return -EINVAL; }
 static inline void pcie_disable_tph(struct pci_dev *pdev) { }
-static inline int pcie_enable_tph(struct pci_dev *pdev, int mode)
+static inline int pcie_enable_tph(struct pci_dev *pdev, int mode,
+				  enum tph_req_policy req_policy)
 { return -EINVAL; }
 static inline u16 pcie_tph_get_st_table_size(struct pci_dev *pdev)
 { return 0; }
