@@ -253,18 +253,14 @@ EXPORT_SYMBOL_GPL(bcom_gen_bd_tx_release);
  * PSC support code
  */
 
-/**
- * bcom_psc_parameters - Bestcomm initialization value table for PSC devices
- *
- * This structure is only used internally.  It is a lookup table for PSC
- * specific parameters to bestcomm tasks.
- */
-static struct bcom_psc_params {
+struct bcom_psc_params {
 	int rx_initiator;
 	int rx_ipr;
 	int tx_initiator;
 	int tx_ipr;
-} bcom_psc_params[] = {
+};
+
+static struct bcom_psc_params bcom_psc_params[] = {
 	[0] = {
 		.rx_initiator = BCOM_INITIATOR_PSC1_RX,
 		.rx_ipr = BCOM_IPR_PSC1_RX,
