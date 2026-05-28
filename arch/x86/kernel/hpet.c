@@ -11,7 +11,6 @@
 #include <asm/irq_remapping.h>
 #include <asm/hpet.h>
 #include <asm/time.h>
-#include <asm/mwait.h>
 #include <asm/msr.h>
 
 #undef  pr_fmt
@@ -913,19 +912,15 @@ static bool __init hpet_counting(void)
 
 static bool __init mwait_pc10_supported(void)
 {
-	unsigned int eax, ebx, ecx, mwait_substates;
+	const struct leaf_0x5_0 *l5 = cpuid_leaf(&boot_cpu_data, 0x5);
 
 	if (boot_cpu_data.x86_vendor != X86_VENDOR_INTEL)
 		return false;
 
-	if (!cpu_feature_enabled(X86_FEATURE_MWAIT))
+	if (!l5 || !cpu_feature_enabled(X86_FEATURE_MWAIT))
 		return false;
 
-	cpuid(CPUID_LEAF_MWAIT, &eax, &ebx, &ecx, &mwait_substates);
-
-	return (ecx & CPUID5_ECX_EXTENSIONS_SUPPORTED) &&
-	       (ecx & CPUID5_ECX_INTERRUPT_BREAK) &&
-	       (mwait_substates & (0xF << 28));
+	return l5->mwait_ext && l5->mwait_irq_break && l5->n_c7_substates;
 }
 
 /*
