@@ -1291,7 +1291,7 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 		 */
 		if (kvm->arch.xen.shinfo_cache.active &&
 		    kvm_xen_shared_info_init(kvm))
-			r = 1;
+			r = -EINVAL;
 	}
 	mutex_unlock(&kvm->arch.xen.xen_lock);
 
@@ -1309,7 +1309,7 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 		int i;
 
 		if (page_num)
-			return 1;
+			return -EINVAL;
 
 		/* mov imm32, %eax */
 		instructions[0] = 0xb8;
@@ -1328,7 +1328,7 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 			if (kvm_vcpu_write_guest(vcpu,
 						 page_addr + (i * sizeof(instructions)),
 						 instructions, sizeof(instructions)))
-				return 1;
+				return -EFAULT;
 		}
 	} else {
 		/*
@@ -1343,7 +1343,7 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 		int ret;
 
 		if (page_num >= blob_size)
-			return 1;
+			return -EINVAL;
 
 		blob_addr += page_num * PAGE_SIZE;
 
@@ -1354,7 +1354,7 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 		ret = kvm_vcpu_write_guest(vcpu, page_addr, page, PAGE_SIZE);
 		kfree(page);
 		if (ret)
-			return 1;
+			return -EFAULT;
 	}
 	return 0;
 }

@@ -857,7 +857,7 @@ int kvm_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	switch (msr) {
 	case MSR_CORE_PERF_GLOBAL_STATUS:
 		if (!msr_info->host_initiated)
-			return 1; /* RO MSR */
+			return -EINVAL; /* RO MSR */
 		fallthrough;
 	case MSR_AMD64_PERF_CNTR_GLOBAL_STATUS:
 		/* Per PPR, Read-only MSR. Writes are ignored. */
@@ -865,7 +865,7 @@ int kvm_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			break;
 
 		if (data & pmu->global_status_rsvd)
-			return 1;
+			return -EINVAL;
 
 		pmu->global_status = data;
 		break;
@@ -874,7 +874,7 @@ int kvm_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		fallthrough;
 	case MSR_CORE_PERF_GLOBAL_CTRL:
 		if (!kvm_valid_perf_global_ctrl(pmu, data))
-			return 1;
+			return -EINVAL;
 
 		if (pmu->global_ctrl != data) {
 			diff = pmu->global_ctrl ^ data;
@@ -894,7 +894,7 @@ int kvm_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		 * GLOBAL_STATUS, and so the set of reserved bits is the same.
 		 */
 		if (data & pmu->global_status_rsvd)
-			return 1;
+			return -EINVAL;
 		fallthrough;
 	case MSR_AMD64_PERF_CNTR_GLOBAL_STATUS_CLR:
 		if (!msr_info->host_initiated)

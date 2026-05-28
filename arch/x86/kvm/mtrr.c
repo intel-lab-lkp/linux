@@ -99,10 +99,10 @@ int kvm_mtrr_set_msr(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 
 	mtrr = find_mtrr(vcpu, msr);
 	if (!mtrr)
-		return 1;
+		return -EINVAL;
 
 	if (!kvm_mtrr_valid(vcpu, msr, data))
-		return 1;
+		return -EINVAL;
 
 	*mtrr = data;
 	return 0;
@@ -126,7 +126,7 @@ int kvm_mtrr_get_msr(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata)
 
 	mtrr = find_mtrr(vcpu, msr);
 	if (!mtrr)
-		return 1;
+		return -EINVAL;
 
 	*pdata = *mtrr;
 	return 0;
