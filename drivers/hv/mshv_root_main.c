@@ -2134,7 +2134,7 @@ mshv_dev_release(struct inode *inode, struct file *filp)
 
 static int mshv_root_sched_online;
 
-static const char *scheduler_type_to_string(enum hv_scheduler_type type)
+const char *scheduler_type_to_string(enum hv_scheduler_type type)
 {
 	switch (type) {
 	case HV_SCHEDULER_TYPE_LP:

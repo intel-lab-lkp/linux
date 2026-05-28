@@ -52,6 +52,19 @@ int mshv_unregister_preserve_page(struct page *pg)
 }
 EXPORT_SYMBOL_GPL(mshv_unregister_preserve_page);
 
+/**
+ * mshv_iterate_preserved() - Walk all preserved pages
+ * @cb: callbacks invoked for each key/table entry
+ * @data: opaque data passed to callbacks
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int mshv_iterate_preserved(const struct kho_radix_walk_cb *cb, void *data)
+{
+	return kho_radix_walk_tree(&preserved_pages_tree, cb, data);
+}
+EXPORT_SYMBOL_GPL(mshv_iterate_preserved);
+
 /* Preserve a single page identified by its PFN key with KHO */
 static int preserve_key_cb(unsigned long key, void *data)
 {

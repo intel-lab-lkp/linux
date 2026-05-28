@@ -379,4 +379,6 @@ bool mshv_region_handle_gfn_fault(struct mshv_mem_region *region, u64 gfn);
 void mshv_region_movable_fini(struct mshv_mem_region *region);
 bool mshv_region_movable_init(struct mshv_mem_region *region);
 
+const char *scheduler_type_to_string(enum hv_scheduler_type type);
+
 #endif /* _MSHV_ROOT_H_ */
