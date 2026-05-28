@@ -3267,10 +3267,29 @@ void arm_smmu_attach_release(struct arm_smmu_attach_state *state)
 	struct arm_smmu_master_domain *master_domain = state->old_master_domain;
 	struct arm_smmu_master *master = state->master;
 
+	lockdep_assert_not_held(&arm_smmu_asid_lock);
 	iommu_group_mutex_assert(master->dev);
 
 	if (!master_domain)
 		return;
+
+	if (master_domain->using_iopf) {
+		struct arm_smmu_device *smmu = master->smmu;
+
+		/* Drain the hardware eventq */
+		if (master->stall_enabled) {
+			arm_smmu_drain_queue_for_iopf(smmu, &smmu->evtq.q);
+			/* Ensure pending events have reached the IOPF queue */
+			if (smmu->evtq.q.irq)
+				synchronize_irq(smmu->evtq.q.irq);
+		}
+		/* Pending events might be in the combined_irq handler */
+		if (smmu->combined_irq)
+			synchronize_irq(smmu->combined_irq);
+		/* Lastly, drain the IOPF queue */
+		iopf_queue_flush_dev(master->dev);
+	}
+
 	arm_smmu_disable_iopf(master, master_domain);
 	kfree(master_domain);
 	state->old_master_domain = NULL;
