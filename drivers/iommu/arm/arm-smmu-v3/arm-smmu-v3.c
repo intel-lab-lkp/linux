@@ -3195,9 +3195,9 @@ arm_smmu_master_build_invs(struct arm_smmu_master *master, bool ats_enabled,
 	return master->build_invs;
 }
 
-static void arm_smmu_remove_master_domain(struct arm_smmu_master *master,
-					  struct iommu_domain *domain,
-					  ioasid_t ssid)
+static struct arm_smmu_master_domain *
+arm_smmu_remove_master_domain(struct arm_smmu_master *master,
+			      struct iommu_domain *domain, ioasid_t ssid)
 {
 	struct arm_smmu_domain *smmu_domain = to_smmu_domain_devices(domain);
 	struct arm_smmu_master_domain *master_domain;
@@ -3205,7 +3205,7 @@ static void arm_smmu_remove_master_domain(struct arm_smmu_master *master,
 	unsigned long flags;
 
 	if (!smmu_domain)
-		return;
+		return NULL;
 
 	if (domain->type == IOMMU_DOMAIN_NESTED)
 		nested_ats_flush = to_smmu_nested_domain(domain)->enable_ats;
@@ -3220,8 +3220,23 @@ static void arm_smmu_remove_master_domain(struct arm_smmu_master *master,
 	}
 	spin_unlock_irqrestore(&smmu_domain->devices_lock, flags);
 
+	/* arm_smmu_attach_release() will free it */
+	return master_domain;
+}
+
+/* Release the old master_domain detached by arm_smmu_remove_master_domain() */
+void arm_smmu_attach_release(struct arm_smmu_attach_state *state)
+{
+	struct arm_smmu_master_domain *master_domain = state->old_master_domain;
+	struct arm_smmu_master *master = state->master;
+
+	iommu_group_mutex_assert(master->dev);
+
+	if (!master_domain)
+		return;
 	arm_smmu_disable_iopf(master, master_domain);
 	kfree(master_domain);
+	state->old_master_domain = NULL;
 }
 
 /*
@@ -3519,7 +3534,8 @@ void arm_smmu_attach_commit(struct arm_smmu_attach_state *state)
 		arm_smmu_atc_inv_master(master, IOMMU_NO_PASID);
 	}
 
-	arm_smmu_remove_master_domain(master, state->old_domain, state->ssid);
+	state->old_master_domain = arm_smmu_remove_master_domain(
+		master, state->old_domain, state->ssid);
 	arm_smmu_install_old_domain_invs(state);
 	master->ats_enabled = state->ats_enabled;
 }
@@ -3594,6 +3610,7 @@ static int arm_smmu_attach_dev(struct iommu_domain *domain, struct device *dev,
 
 	arm_smmu_attach_commit(&state);
 	mutex_unlock(&arm_smmu_asid_lock);
+	arm_smmu_attach_release(&state);
 	return 0;
 }
 
@@ -3694,6 +3711,7 @@ int arm_smmu_set_pasid(struct arm_smmu_master *master,
 
 out_unlock:
 	mutex_unlock(&arm_smmu_asid_lock);
+	arm_smmu_attach_release(&state);
 	return ret;
 }
 
@@ -3714,9 +3732,11 @@ static int arm_smmu_blocking_set_dev_pasid(struct iommu_domain *new_domain,
 	arm_smmu_clear_cd(master, pasid);
 	if (master->ats_enabled)
 		arm_smmu_atc_inv_master(master, pasid);
-	arm_smmu_remove_master_domain(master, &smmu_domain->domain, pasid);
+	state.old_master_domain = arm_smmu_remove_master_domain(
+		master, &smmu_domain->domain, pasid);
 	arm_smmu_install_old_domain_invs(&state);
 	mutex_unlock(&arm_smmu_asid_lock);
+	arm_smmu_attach_release(&state);
 
 	/*
 	 * When the last user of the CD table goes away downgrade the STE back
@@ -3774,6 +3794,7 @@ static void arm_smmu_attach_dev_ste(struct iommu_domain *domain,
 	arm_smmu_install_ste_for_dev(master, ste);
 	arm_smmu_attach_commit(&state);
 	mutex_unlock(&arm_smmu_asid_lock);
+	arm_smmu_attach_release(&state);
 
 	/*
 	 * This has to be done after removing the master from the
