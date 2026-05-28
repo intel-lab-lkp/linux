@@ -60,6 +60,8 @@ struct panthor_hw {
 };
 
 int panthor_hw_init(struct panthor_device *ptdev);
+int panthor_hw_info_init(struct panthor_device *ptdev);
+
 int panthor_hw_power_status_register(void);
 void panthor_hw_power_status_unregister(void);
 

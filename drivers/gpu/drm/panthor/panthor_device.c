@@ -16,6 +16,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_print.h>
 
+#include "panthor_aw.h"
 #include "panthor_devfreq.h"
 #include "panthor_device.h"
 #include "panthor_fw.h"
@@ -100,6 +101,7 @@ void panthor_device_unplug(struct panthor_device *ptdev)
 	panthor_gem_shrinker_unplug(ptdev);
 	panthor_gpu_unplug(ptdev);
 	panthor_pwr_unplug(ptdev);
+	panthor_aw_unplug(ptdev);
 
 	pm_runtime_dont_use_autosuspend(ptdev->base.dev);
 	pm_runtime_put_sync_suspend(ptdev->base.dev);
@@ -255,9 +257,17 @@ int panthor_device_init(struct panthor_device *ptdev)
 	if (ret)
 		goto err_rpm_put;
 
-	ret = panthor_pwr_init(ptdev);
+	ret = panthor_aw_init(ptdev);
 	if (ret)
 		goto err_rpm_put;
+
+	ret = panthor_hw_info_init(ptdev);
+	if (ret)
+		goto err_unplug_aw;
+
+	ret = panthor_pwr_init(ptdev);
+	if (ret)
+		goto err_unplug_aw;
 
 	ret = panthor_gpu_init(ptdev);
 	if (ret)
@@ -314,6 +324,9 @@ err_unplug_gpu:
 
 err_unplug_pwr:
 	panthor_pwr_unplug(ptdev);
+
+err_unplug_aw:
+	panthor_aw_unplug(ptdev);
 
 err_rpm_put:
 	pm_runtime_put_sync_suspend(ptdev->base.dev);

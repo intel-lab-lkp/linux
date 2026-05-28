@@ -326,7 +326,7 @@ static int panthor_gpu_info_init(struct panthor_device *ptdev)
 	return overload_shader_present(ptdev);
 }
 
-static int panthor_hw_info_init(struct panthor_device *ptdev)
+int panthor_hw_info_init(struct panthor_device *ptdev)
 {
 	u64 l2_features = ptdev->gpu_info.l2_features;
 	u32 major, minor, status;
@@ -433,9 +433,5 @@ int panthor_hw_init(struct panthor_device *ptdev)
 	if (ret)
 		return ret;
 
-	ret = panthor_hw_bind_device(ptdev);
-	if (ret)
-		return ret;
-
-	return panthor_hw_info_init(ptdev);
+	return panthor_hw_bind_device(ptdev);
 }

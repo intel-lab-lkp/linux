@@ -18,6 +18,7 @@
 #include <drm/gpu_scheduler.h>
 #include <drm/panthor_drm.h>
 
+struct panthor_aw;
 struct panthor_csf;
 struct panthor_csf_ctx;
 struct panthor_device;
@@ -195,6 +196,9 @@ struct panthor_device {
 
 	/** @hw: GPU-specific data. */
 	struct panthor_hw *hw;
+
+	/** @aw: AW-specific data */
+	struct panthor_aw *aw;
 
 	/** @pwr: Power control management data. */
 	struct panthor_pwr *pwr;
