@@ -115,6 +115,20 @@ cpuid_read_0x9(const struct cpuid_parse_entry *e, const struct cpuid_read_output
 	cpuid_read_generic(e, output);
 }
 
+static void
+cpuid_read_0x12(const struct cpuid_parse_entry *e, const struct cpuid_read_output *output)
+{
+	struct leaf_0x7_0 l7;
+
+	cpuid_read(0x7, &l7);
+	if (!l7.sgx)
+		return;
+
+	cpuid_read_generic(e, output);
+}
+
+define_cpuid_read_function(sgx_epc_sections, leaf_0x12_n, l, l->subleaf_type == 0);
+
 /*
  * Define an extended range CPUID read function
  *
