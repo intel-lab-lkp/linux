@@ -207,6 +207,9 @@ struct cpuid_leaves {
 	CPUID_LEAF   (	0x0,		0  );
 	CPUID_LEAF   (	0x1,		0  );
 	CPUID_LEAF   (  0x80000000,	0  );
+	CPUID_LEAF   (  0x80000002,	0  );
+	CPUID_LEAF   (  0x80000003,	0  );
+	CPUID_LEAF   (  0x80000004,	0  );
 };
 
 /*
