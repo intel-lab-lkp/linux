@@ -1112,8 +1112,8 @@ static int mtl_find_qgv_points(struct intel_display *display,
 		if (max_data_rate < data_rate)
 			continue;
 
-		if (max_data_rate - data_rate < best_rate) {
-			best_rate = max_data_rate - data_rate;
+		if (max_data_rate < best_rate) {
+			best_rate = max_data_rate;
 			qgv_peak_bw = display->bw.peakbw[i];
 		}
 
