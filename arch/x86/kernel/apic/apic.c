@@ -1960,14 +1960,15 @@ static bool __init detect_init_APIC(void)
 
 static bool __init apic_verify(unsigned long addr)
 {
-	u32 features, h, l;
+	const struct leaf_0x1_0 *l1;
+	u32 h, l;
 
 	/*
-	 * The APIC feature bit should now be enabled
-	 * in `cpuid'
+	 * The APIC feature bit should now be enabled in CPUID
 	 */
-	features = cpuid_edx(1);
-	if (!(features & (1 << X86_FEATURE_APIC))) {
+	cpuid_refresh_leaf(&boot_cpu_data, 0x1);
+	l1 = cpuid_leaf(&boot_cpu_data, 0x1);
+	if (!l1 || !l1->apic) {
 		pr_warn("Could not enable APIC!\n");
 		return false;
 	}
