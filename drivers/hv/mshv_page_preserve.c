@@ -24,6 +24,8 @@
 
 static void *fdt_page;
 static struct kho_radix_tree preserved_pages_tree;
+static u64 *frozen_partition_ids;
+static unsigned int nr_frozen_partition_ids;
 
 /**
  * mshv_register_preserve_page() - Register a page to be preserved by KHO
@@ -78,7 +80,7 @@ static int preserve_table_cb(phys_addr_t phys, void *data)
 	return kho_preserve_pages(phys_to_page(phys), 1);
 }
 
-static int create_fdt(void)
+static int create_fdt(u64 *partition_ids, unsigned int nr_partition_ids)
 {
 	int err;
 	void *fdt;
@@ -106,6 +108,19 @@ static int create_fdt(void)
 	err = fdt_property(fdt, "root_table", &root_table, sizeof(root_table));
 	if (err)
 		return err;
+	if (nr_partition_ids) {
+		phys_addr_t ids_pa = virt_to_phys(partition_ids);
+		u32 count = nr_partition_ids;
+
+		err = fdt_property(fdt, "partition_ids", &ids_pa,
+				   sizeof(ids_pa));
+		if (err)
+			return err;
+		err = fdt_property(fdt, "nr_partition_ids", &count,
+				   sizeof(count));
+		if (err)
+			return err;
+	}
 	err = fdt_end_node(fdt);
 	if (err)
 		return err;
@@ -118,6 +133,8 @@ static int create_fdt(void)
 
 /**
  * preserve_tree() - Preserve pages owned by Microsoft Hypervisor
+ * @partition_ids: array of frozen partition IDs to serialize, or NULL
+ * @nr_partition_ids: number of entries in @partition_ids
  *
  * This gets called prior to kexec and is our signal to finally preserve the
  * pages with KHO, and create & register the named FDT. We also need to freeze
@@ -125,7 +142,7 @@ static int create_fdt(void)
  *
  * Return: 0 on success, -errno on error.
  */
-static int preserve_tree(void)
+static int preserve_tree(u64 *partition_ids, unsigned int nr_partition_ids)
 {
 	const struct kho_radix_walk_cb preserve_cb = {
 		.key = preserve_key_cb,
@@ -141,7 +158,7 @@ static int preserve_tree(void)
 	}
 
 	/* Populate the pre-allocated FDT page with current tree state */
-	err = create_fdt();
+	err = create_fdt(partition_ids, nr_partition_ids);
 	if (err) {
 		pr_warn("%s() - create_fdt() failed: %d\n", __func__, err);
 		return err;
@@ -177,6 +194,11 @@ static int preserve_tree(void)
 /*
  * Reboot-callback triggering page preservation prior to kexec. Other reboots
  * need no KHO preservation.
+ *
+ * The mshv_root module's higher-priority reboot notifier freezes all VPs
+ * and hands off partition IDs via mshv_set_frozen_partition_ids() before
+ * this callback runs. If the module is not loaded, no partitions exist
+ * and the tree is preserved without partition IDs.
  */
 static int reboot_cb(struct notifier_block *nb, unsigned long action,
 		     void *data)
@@ -185,9 +207,9 @@ static int reboot_cb(struct notifier_block *nb, unsigned long action,
 	if (kexec_in_progress) {
 		int err;
 
-		/* Finalize handover: write KHO descriptors, flush metadata */
 		pr_debug("%s() - KHO-preserving page tree\n", __func__);
-		err = preserve_tree();
+		err = preserve_tree(frozen_partition_ids,
+				    nr_frozen_partition_ids);
 		if (err)
 			panic("preserve_tree() failed - must not kexec: %d\n",
 			      err);
@@ -259,6 +281,74 @@ static int __init restore_tree(void)
 	pr_debug("Restored tracking from KHO.\n");
 	return 0;
 }
+
+/**
+ * mshv_set_frozen_partition_ids() - Hand off frozen partition IDs for KHO
+ * @ids: kho_alloc_preserve()'d array of partition IDs, or NULL
+ * @nr: number of entries in @ids
+ *
+ * Called by the mshv_root module's reboot notifier (which runs at higher
+ * priority) to pass the frozen partition ID list to the built-in page
+ * preservation code before it serializes the KHO FDT.
+ */
+void mshv_set_frozen_partition_ids(u64 *ids, unsigned int nr)
+{
+	frozen_partition_ids = ids;
+	nr_frozen_partition_ids = nr;
+}
+EXPORT_SYMBOL_GPL(mshv_set_frozen_partition_ids);
+
+/**
+ * mshv_retrieve_frozen_partition_ids() - Retrieve frozen partition IDs
+ * @partition_ids: receives pointer to the preserved ID array, or NULL
+ * @nr_ids: receives the number of entries, or 0
+ *
+ * Counterpart to mshv_freeze_and_get_partition_ids(). Reads the partition
+ * ID list from the KHO-preserved FDT. The returned pointer (if non-NULL)
+ * refers to kho_alloc_preserve()'d memory from the previous kernel.
+ *
+ * Return: 0 on success (including when no IDs are found), negative errno on
+ *  error.
+ */
+int mshv_retrieve_frozen_partition_ids(u64 **partition_ids,
+				       unsigned int *nr_ids)
+{
+	int node, len;
+	const phys_addr_t *ids_pa;
+	const u32 *count_prop;
+
+	*partition_ids = NULL;
+	*nr_ids = 0;
+
+	if (!fdt_page)
+		return 0;
+
+	node = fdt_path_offset(fdt_page, "/");
+	if (node < 0)
+		return 0;
+
+	ids_pa = fdt_getprop(fdt_page, node, "partition_ids", &len);
+	if (!ids_pa)
+		return 0;
+
+	if (len != sizeof(*ids_pa)) {
+		pr_err("Malformed preserved FDT: invalid partition_ids property.\n");
+		return -EINVAL;
+	}
+
+	count_prop = fdt_getprop(fdt_page, node, "nr_partition_ids", &len);
+	if (!count_prop || len != sizeof(*count_prop)) {
+		pr_err("Malformed preserved FDT: invalid nr_partition_ids property.\n");
+		return -EINVAL;
+	}
+
+	*partition_ids = phys_to_virt(*ids_pa);
+	*nr_ids = *count_prop;
+
+	pr_info("Retrieved %u frozen partition ID(s) from KHO\n", *nr_ids);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mshv_retrieve_frozen_partition_ids);
 
 /*
  * Restore individual pages using KHO's helper during boot.

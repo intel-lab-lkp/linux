@@ -14,5 +14,8 @@ int mshv_preserve_init(void);
 int mshv_register_preserve_page(struct page *pg);
 int mshv_unregister_preserve_page(struct page *pg);
 int mshv_iterate_preserved(const struct kho_radix_walk_cb *cb, void *data);
+void mshv_set_frozen_partition_ids(u64 *ids, unsigned int nr);
+int mshv_retrieve_frozen_partition_ids(u64 **partition_ids,
+				       unsigned int *nr_ids);
 
 #endif /* _MSHV_PAGE_PRESERVE_H */

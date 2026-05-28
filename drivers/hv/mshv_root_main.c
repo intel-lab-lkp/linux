@@ -18,6 +18,7 @@
 #include <linux/anon_inodes.h>
 #include <linux/mm.h>
 #include <linux/io.h>
+#include <linux/cleanup.h>
 #include <linux/cpuhotplug.h>
 #include <linux/random.h>
 #include <asm/mshyperv.h>
@@ -27,6 +28,7 @@
 #include <linux/kexec.h>
 #include <linux/page-flags.h>
 #include <linux/crash_dump.h>
+#include <linux/kexec_handover.h>
 #include <linux/panic_notifier.h>
 #include <linux/vmalloc.h>
 #include <linux/rseq.h>
@@ -359,6 +361,7 @@ mshv_suspend_vp(const struct mshv_vp *vp, bool *message_in_flight)
  */
 static long mshv_run_vp_with_hyp_scheduler(struct mshv_vp *vp)
 {
+	bool message_in_flight;
 	long ret;
 	struct hv_register_assoc suspend_regs[2] = {
 			{ .name = HV_REGISTER_INTERCEPT_SUSPEND },
@@ -375,32 +378,40 @@ static long mshv_run_vp_with_hyp_scheduler(struct mshv_vp *vp)
 	}
 
 	ret = wait_event_interruptible(vp->run.vp_suspend_queue,
-				       vp->run.kicked_by_hv == 1);
-	if (ret) {
-		bool message_in_flight;
+				       vp->run.kicked_by_hv == 1 ||
+				       READ_ONCE(mshv_root.frozen));
 
-		/*
-		 * Otherwise the waiting was interrupted by a signal: suspend
-		 * the vCPU explicitly and copy message in flight (if any).
-		 */
-		ret = mshv_suspend_vp(vp, &message_in_flight);
-		if (ret)
-			return ret;
-
-		/* Return if no message in flight */
-		if (!message_in_flight)
-			return -EINTR;
-
-		/* Wait for the message in flight. */
-		wait_event(vp->run.vp_suspend_queue, vp->run.kicked_by_hv == 1);
+	/* Normal wakeup: intercept arrived */
+	if (!ret && !READ_ONCE(mshv_root.frozen)) {
+		vp->run.kicked_by_hv = 0;
+		return 0;
 	}
+
+	/*
+	 * Signal or frozen: VP was resumed above and may still be
+	 * running in the hypervisor. Suspend it before returning.
+	 */
+	ret = mshv_suspend_vp(vp, &message_in_flight);
+	if (ret)
+		return ret;
+
+	/* No in-flight message or frozen — nothing to deliver */
+	if (!message_in_flight || READ_ONCE(mshv_root.frozen))
+		return -EINTR;
+
+	/* Signal case: wait for the in-flight intercept message */
+	wait_event(vp->run.vp_suspend_queue,
+		   vp->run.kicked_by_hv == 1 ||
+		   READ_ONCE(mshv_root.frozen));
+
+	if (READ_ONCE(mshv_root.frozen))
+		return -EINTR;
 
 	/*
 	 * Reset the flag to make the wait_event call above work
 	 * next time.
 	 */
 	vp->run.kicked_by_hv = 0;
-
 	return 0;
 }
 
@@ -503,7 +514,8 @@ mshv_vp_wait_for_hv_kick(struct mshv_vp *vp)
 	ret = wait_event_interruptible(vp->run.vp_suspend_queue,
 				       (vp->run.kicked_by_hv == 1 &&
 					!mshv_vp_dispatch_thread_blocked(vp)) ||
-				       mshv_vp_interrupt_pending(vp));
+				       mshv_vp_interrupt_pending(vp) ||
+				       READ_ONCE(mshv_root.frozen));
 	if (ret)
 		return -EINTR;
 
@@ -512,6 +524,9 @@ mshv_vp_wait_for_hv_kick(struct mshv_vp *vp)
 				       vp->run.kicked_by_hv,
 				       mshv_vp_dispatch_thread_blocked(vp),
 				       mshv_vp_interrupt_pending(vp));
+
+	if (READ_ONCE(mshv_root.frozen))
+		return -EBUSY;
 
 	vp->run.flags.root_sched_blocked = 0;
 	vp->run.kicked_by_hv = 0;
@@ -538,6 +553,11 @@ static long mshv_run_vp_with_root_scheduler(struct mshv_vp *vp)
 	do {
 		u32 flags = 0;
 		struct hv_output_dispatch_vp output;
+
+		if (READ_ONCE(mshv_root.frozen)) {
+			ret = -EBUSY;
+			break;
+		}
 
 		if (__xfer_to_guest_mode_work_pending()) {
 			ret = xfer_to_guest_mode_handle_work();
@@ -712,6 +732,11 @@ static long mshv_vp_ioctl_run_vp(struct mshv_vp *vp, void __user *ret_msg)
 	trace_mshv_run_vp_entry(vp->vp_partition->pt_id, vp->vp_index);
 
 	do {
+		if (READ_ONCE(mshv_root.frozen)) {
+			rc = -EBUSY;
+			break;
+		}
+
 		if (hv_scheduler_type == HV_SCHEDULER_TYPE_ROOT)
 			rc = mshv_run_vp_with_root_scheduler(vp);
 		else
@@ -1073,6 +1098,9 @@ mshv_partition_ioctl_create_vp(struct mshv_partition *partition,
 	struct page *intercept_msg_page, *register_page, *ghcb_page;
 	struct hv_stats_page *stats_pages[2];
 	long ret;
+
+	if (READ_ONCE(mshv_root.frozen))
+		return -EBUSY;
 
 	if (copy_from_user(&args, arg, sizeof(args)))
 		return -EFAULT;
@@ -1762,6 +1790,201 @@ static void drain_all_vps(const struct mshv_partition *partition)
 	}
 }
 
+/**
+ * mshv_freeze_and_get_partition_ids() - Freeze all partitions and collect IDs
+ * @partition_ids: on success, receives a kho_alloc_preserve()'d array of
+ *      partition IDs; set to NULL on failure or when no partitions exist
+ * @nr_ids: on success, receives the number of entries in @partition_ids; set to
+ *      0 on failure or when no partitions exist
+ *
+ * Sets the global frozen flag to prevent creation of new partitions and
+ * (re-)dispatching of VPs. Kicks all VPs so they exit their dispatch loops,
+ * then waits for each VP to actually finish by acquiring its mutex.
+ *
+ * Must be called before kexec to ensure no VP modifies VM-memory that Linux
+ * will re-use post-kexec.
+ *
+ * Return: 0 on success, negative errno on failure. On failure, partitions
+ *  and VPs are left in an undefined state — the caller must not proceed
+ *  with kexec and should panic.
+ */
+static int
+mshv_freeze_and_get_partition_ids(u64 **partition_ids, unsigned int *nr_ids)
+{
+	unsigned int nr_alloc = 0, nr_ref = 0, nr_noref = 0;
+	struct mshv_partition *partition;
+	struct mshv_vp *vp;
+	int bkt, i;
+	u64 *ids;
+
+	*partition_ids = NULL;
+	*nr_ids = 0;
+
+	scoped_guard(spinlock, &mshv_root.pt_ht_lock)
+		mshv_root.frozen = true;
+
+	/*
+	 * Count partitions to size the ID array. Frozen prevents new additions,
+	 * so this is an upper bound.
+	 */
+	scoped_guard(rcu)
+		hash_for_each_rcu(mshv_root.pt_htable, bkt, partition, pt_hnode)
+			nr_alloc++;
+
+	if (!nr_alloc) {
+		pr_info("Frozen 0 partition(s) for kexec\n");
+		return 0;
+	}
+
+	ids = kho_alloc_preserve(nr_alloc * sizeof(*ids));
+	if (IS_ERR(ids)) {
+		pr_err("Failed to allocate partition ID array for freeze\n");
+		return PTR_ERR(ids);
+	}
+
+	/*
+	 * Record every partition's ID and obtain a reference for later use.
+	 *
+	 * Zero-refcount partitions (destroy_partition() in progress) still get
+	 * their ID recorded — destruction may not complete before kexec, and
+	 * the next kernel must clean them up. Their IDs are stored at the back
+	 * of the array so the kick/drain phase can iterate only the ref'd
+	 * prefix ids[0..nr_ref).
+	 *
+	 * VP kicking is deferred to the next phase where it happens under
+	 * pt_mutex, which serializes against mshv_partition_ioctl_create_vp().
+	 */
+	rcu_read_lock();
+	hash_for_each_rcu(mshv_root.pt_htable, bkt, partition, pt_hnode) {
+		if (!mshv_partition_get(partition)) {
+			/*
+			 * Zero refcount — destroy_partition() is in progress.
+			 * All fds are closed so no VP ioctl can be running.
+			 * Store at the back; skip VP kicking.
+			 */
+			ids[nr_alloc - 1 - nr_noref++] = partition->pt_id;
+			continue;
+		}
+
+		ids[nr_ref++] = partition->pt_id;
+	}
+	rcu_read_unlock();
+
+	/*
+	 * For each ref'd partition, acquire and release pt_mutex as a barrier
+	 * against any in-flight create_vp. After this, the frozen flag
+	 * prevents new VPs from being created, so pt_vp_array is stable.
+	 * Then kick all VPs and drain by acquiring each vp_mutex.
+	 *
+	 * Root scheduler: disable_vp_dispatch() sets
+	 * HV_REGISTER_DISPATCH_SUSPEND, which causes any in-progress dispatch
+	 * hypercall to return. This is safe regardless of VP state because the
+	 * VP only executes while the kernel thread's dispatch hypercall is
+	 * active — once it returns, the VP cannot run until re-dispatched,
+	 * which the frozen check prevents.
+	 *
+	 * Hyp scheduler: the VP runs independently in the hypervisor and must
+	 * be explicitly suspended from within its dispatch loop (via
+	 * mshv_suspend_vp()) when the kernel thread detects the frozen flag.
+	 * wake_up_all() unblocks the kernel thread so it can do so.
+	 */
+	for (i = 0; i < nr_ref; i++) {
+		/* Ref held; partition stays in hash and alive outside RCU */
+		scoped_guard(rcu)
+			partition = mshv_partition_find(ids[i]);
+
+		/* Barrier: wait for any in-flight create_vp to complete */
+		scoped_guard(mutex, &partition->pt_mutex) {}
+
+		for (bkt = 0; bkt < MSHV_MAX_VPS; bkt++) {
+			vp = partition->pt_vp_array[bkt];
+			if (!vp)
+				continue;
+
+			if (hv_scheduler_type == HV_SCHEDULER_TYPE_ROOT)
+				disable_vp_dispatch(vp);
+
+			wake_up_all(&vp->run.vp_suspend_queue);
+		}
+
+		/*
+		 * Wait for every VP to finish its current ioctl. Taking the VP
+		 * mutex proves the VP is no longer inside run_vp.
+		 *
+		 * On Hyp-scheduler, prior mshv_suspend_vp() might have failed.
+		 * Since it's idempotent, we can safely re-issue and fail kexec
+		 * if suspend fails again. In this case, the caller is expected
+		 * to panic, so cleanup is unnecessary.
+		 */
+		for (bkt = 0; bkt < MSHV_MAX_VPS; bkt++) {
+			vp = partition->pt_vp_array[bkt];
+			if (!vp)
+				continue;
+
+			scoped_guard(mutex, &vp->vp_mutex) {
+				if (hv_scheduler_type != HV_SCHEDULER_TYPE_ROOT) {
+					bool mif;
+					int ret;
+
+					ret = mshv_suspend_vp(vp, &mif);
+					if (ret)
+						return ret;
+				}
+			}
+		}
+
+		/*
+		 * Tear down doorbell ports owned by the parent partition.
+		 * These survive child partition deletion and kexec, so the
+		 * new kernel would collide on port IDs if we leave them.
+		 */
+		mshv_eventfd_release(partition);
+
+		mshv_partition_put(partition);
+	}
+
+	/* Move non-ref'd IDs next to ref'd IDs to form a contiguous array */
+	if (nr_noref) {
+		memmove(&ids[nr_ref], &ids[nr_alloc - nr_noref],
+			nr_noref * sizeof(*ids));
+	}
+
+	*partition_ids = ids;
+	*nr_ids = nr_ref + nr_noref;
+
+	pr_info("Frozen %u partition(s) for kexec\n", nr_ref + nr_noref);
+	return 0;
+}
+
+/*
+ * Reboot notifier for the mshv_root module. Runs at higher priority than
+ * the built-in page-preservation notifier so that all VPs are frozen and
+ * partition IDs are handed off before the tree is serialized.
+ */
+static int mshv_root_reboot_cb(struct notifier_block *nb, unsigned long action,
+			       void *data)
+{
+	if (kexec_in_progress) {
+		u64 *partition_ids;
+		unsigned int nr_partition_ids;
+		int err;
+
+		err = mshv_freeze_and_get_partition_ids(&partition_ids,
+							&nr_partition_ids);
+		if (err)
+			panic("mshv_freeze_and_get_partition_ids() failed - must not kexec: %d\n",
+			      err);
+
+		mshv_set_frozen_partition_ids(partition_ids, nr_partition_ids);
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block mshv_root_reboot_notifier = {
+	.notifier_call = mshv_root_reboot_cb,
+	.priority = 1, /* higher than the built-in preserve notifier (0) */
+};
+
 static void
 remove_partition(struct mshv_partition *partition)
 {
@@ -1911,12 +2134,26 @@ mshv_partition_release(struct inode *inode, struct file *filp)
 static int
 add_partition(struct mshv_partition *partition)
 {
-	spin_lock(&mshv_root.pt_ht_lock);
+	guard(spinlock)(&mshv_root.pt_ht_lock);
+
+	/*
+	 * Reject new partitions once frozen. Note: there is a small window
+	 * where a concurrent create-ioctl has already called
+	 * hv_call_create_partition() but not yet reached here. If kexec fires
+	 * during that window, the caller's error-path
+	 * hv_call_delete_partition() may never execute and the empty partition
+	 * leaks in the hypervisor.
+	 *
+	 * No pages are deposited at that point, so only the hypervisor-internal
+	 * tracking is lost. Closing this fully would require reworking the
+	 * entire mshv-locking logic so that the frozen check and the hypervisor
+	 * create call happen atomically.
+	 */
+	if (mshv_root.frozen)
+		return -EBUSY;
 
 	hash_add_rcu(mshv_root.pt_htable, &partition->pt_hnode,
 		     partition->pt_id);
-
-	spin_unlock(&mshv_root.pt_ht_lock);
 
 	return 0;
 }
@@ -2316,6 +2553,55 @@ root_scheduler_deinit(void)
 	free_percpu(root_scheduler_output);
 }
 
+/**
+ * vacuum_stale_partitions() - Tear down partitions left by a prior kernel.
+ * @dev: device for logging
+ *
+ * After kexec the previous kernel's partitions are still alive in the
+ * hypervisor. Retrieve their IDs from the KHO-preserved FDT and finalize,
+ * withdraw, and delete each one so the deposited pages return to the free pool.
+ */
+static void __init vacuum_stale_partitions(struct device *dev)
+{
+	u64 *ids;
+	unsigned int nr;
+	int i, err;
+
+	err = mshv_retrieve_frozen_partition_ids(&ids, &nr);
+	if (err) {
+		dev_err(dev, "Failed to retrieve stale partition IDs: %d\n",
+			err);
+		return;
+	}
+
+	for (i = 0; i < nr; i++) {
+		dev_info(dev, "Cleaning up stale partition %llu\n",
+			 ids[i]);
+
+		err = hv_call_finalize_partition(ids[i]);
+		if (err == -EINVAL) {
+			dev_info(dev, "partition %llu already gone\n",
+				 ids[i]);
+			continue;
+		}
+		if (err)
+			dev_warn(dev, "finalize partition %llu failed: %d\n",
+				 ids[i], err);
+
+		err = hv_call_withdraw_memory(U64_MAX, NUMA_NO_NODE, ids[i]);
+		if (err)
+			dev_warn(dev, "withdraw memory %llu failed: %d\n",
+				 ids[i], err);
+
+		err = hv_call_delete_partition(ids[i]);
+		if (err)
+			dev_warn(dev, "delete partition %llu failed: %d\n",
+				 ids[i], err);
+	}
+
+	kho_restore_free(ids);
+}
+
 static int __init mshv_init_vmm_caps(struct device *dev)
 {
 	int ret;
@@ -2372,9 +2658,15 @@ static int __init mshv_parent_partition_init(void)
 	if (ret)
 		goto synic_cleanup;
 
-	ret = root_scheduler_init(dev);
+	vacuum_stale_partitions(dev);
+
+	ret = register_reboot_notifier(&mshv_root_reboot_notifier);
 	if (ret)
 		goto synic_cleanup;
+
+	ret = root_scheduler_init(dev);
+	if (ret)
+		goto unregister_reboot;
 
 	ret = mshv_debugfs_init();
 	if (ret)
@@ -2395,6 +2687,8 @@ exit_debugfs:
 	mshv_debugfs_exit();
 deinit_root_scheduler:
 	root_scheduler_deinit();
+unregister_reboot:
+	unregister_reboot_notifier(&mshv_root_reboot_notifier);
 synic_cleanup:
 	mshv_synic_exit();
 device_deregister:
@@ -2410,6 +2704,7 @@ static void __exit mshv_parent_partition_exit(void)
 	misc_deregister(&mshv_dev);
 	mshv_irqfd_wq_cleanup();
 	root_scheduler_deinit();
+	unregister_reboot_notifier(&mshv_root_reboot_notifier);
 	mshv_synic_exit();
 }
 
