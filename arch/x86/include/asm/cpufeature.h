@@ -39,7 +39,6 @@ enum cpuid_leafs
 };
 
 extern const char * const x86_cap_flags[NCAPINTS*32];
-extern const char * const x86_power_flags[32];
 
 /*
  * In order to save room, we index into this array by doing
