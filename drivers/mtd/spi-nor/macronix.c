@@ -83,6 +83,18 @@ mx25l3255e_late_init_fixups(struct spi_nor *nor)
 	return 0;
 }
 
+static int
+macronix_4pp3b_late_init_fixups(struct spi_nor *nor)
+{
+	struct spi_nor_flash_parameter *params = nor->params;
+
+	params->hwcaps.mask |= SNOR_HWCAPS_PP_1_4_4;
+	spi_nor_set_pp_settings(&params->page_programs[SNOR_CMD_PP_1_4_4],
+				SPINOR_OP_PP_1_4_4, SNOR_PROTO_1_4_4);
+
+	return 0;
+}
+
 static const struct spi_nor_fixups mx25l25635_fixups = {
 	.post_bfpt = mx25l25635_post_bfpt_fixups,
 	.post_sfdp = macronix_qpp4b_post_sfdp_fixups,
@@ -94,6 +106,10 @@ static const struct spi_nor_fixups macronix_qpp4b_fixups = {
 
 static const struct spi_nor_fixups mx25l3255e_fixups = {
 	.late_init = mx25l3255e_late_init_fixups,
+};
+
+static const struct spi_nor_fixups macronix_4pp3b_fixups = {
+	.late_init = macronix_4pp3b_late_init_fixups,
 };
 
 static const struct flash_info macronix_nor_parts[] = {
@@ -130,9 +146,10 @@ static const struct flash_info macronix_nor_parts[] = {
 		.size = SZ_8M,
 		.no_sfdp_flags = SECT_4K,
 	}, {
-		/* MX25L12805D */
+		/* MX25L12805D, MX25L12833F, MX25L12845G */
 		.id = SNOR_ID(0xc2, 0x20, 0x18),
 		.flags = SPI_NOR_HAS_LOCK | SPI_NOR_4BIT_BP,
+		.fixups = &macronix_4pp3b_fixups,
 	}, {
 		/* MX25L25635E, MX25L25645G */
 		.id = SNOR_ID(0xc2, 0x20, 0x19),
