@@ -61,6 +61,7 @@ static void nft_ct_get_eval(const struct nft_expr *expr,
 	const struct nf_conntrack_tuple *tuple;
 	const struct nf_conntrack_helper *helper;
 	unsigned int state;
+	u8 addr_len;
 
 	ct = nf_ct_get(pkt->skb, &ctinfo);
 
@@ -178,14 +179,17 @@ static void nft_ct_get_eval(const struct nft_expr *expr,
 	}
 
 	tuple = &ct->tuplehash[priv->dir].tuple;
+	addr_len = nf_ct_l3num(ct) == NFPROTO_IPV4 ? 4 : 16;
 	switch (priv->key) {
 	case NFT_CT_SRC:
-		memcpy(dest, tuple->src.u3.all,
-		       nf_ct_l3num(ct) == NFPROTO_IPV4 ? 4 : 16);
+		if (priv->len != addr_len)
+			goto err;
+		memcpy(dest, tuple->src.u3.all, addr_len);
 		return;
 	case NFT_CT_DST:
-		memcpy(dest, tuple->dst.u3.all,
-		       nf_ct_l3num(ct) == NFPROTO_IPV4 ? 4 : 16);
+		if (priv->len != addr_len)
+			goto err;
+		memcpy(dest, tuple->dst.u3.all, addr_len);
 		return;
 	case NFT_CT_PROTO_SRC:
 		nft_reg_store16(dest, (__force u16)tuple->src.u.all);
