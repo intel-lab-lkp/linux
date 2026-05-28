@@ -742,14 +742,12 @@ out:
 }
 
 /*
- * A section metric is concatenated in a way that @low bits 12-31 define the
- * bits 12-31 of the metric and @high bits 0-19 define the bits 32-51 of the
- * metric.
+ * A section metric is concatenated in a way that @low bits define the bits
+ * 12-31 of the metric and @high bits define the bits 32-51 of the metric.
  */
-static inline u64 __init sgx_calc_section_metric(u64 low, u64 high)
+static inline u64 __init sgx_calc_section_metric(u32 low, u32 high)
 {
-	return (low & GENMASK_ULL(31, 12)) +
-	       ((high & GENMASK_ULL(19, 0)) << 32);
+	return ((u64)high << 32) | (low << 12);
 }
 
 #ifdef CONFIG_NUMA
@@ -796,29 +794,28 @@ static void __init arch_update_sysfs_visibility(int nid) {}
 
 static bool __init sgx_page_cache_init(void)
 {
-	u32 eax, ebx, ecx, edx, type;
+	const struct leaf_0x12_n *sl;
 	u64 pa, size;
 	int nid;
-	int i;
 
 	sgx_numa_nodes = kmalloc_objs(*sgx_numa_nodes, num_possible_nodes());
 	if (!sgx_numa_nodes)
 		return false;
 
-	for (i = 0; i < ARRAY_SIZE(sgx_epc_sections); i++) {
-		cpuid_count(SGX_CPUID, i + SGX_CPUID_EPC, &eax, &ebx, &ecx, &edx);
+	for (int i = 0; i < ARRAY_SIZE(sgx_epc_sections); i++) {
+		u32 subleaf = SGX_CPUID_EPC + i;
 
-		type = eax & SGX_CPUID_EPC_MASK;
-		if (type == SGX_CPUID_EPC_INVALID)
+		sl = cpuid_subleaf_n(&boot_cpu_data, 0x12, subleaf);
+		if (!sl)
 			break;
 
-		if (type != SGX_CPUID_EPC_SECTION) {
-			pr_err_once("Unknown EPC section type: %u\n", type);
+		if (sl->subleaf_type != SGX_CPUID_EPC_SECTION) {
+			pr_err_once("Unknown EPC section type: %u\n", sl->subleaf_type);
 			break;
 		}
 
-		pa   = sgx_calc_section_metric(eax, ebx);
-		size = sgx_calc_section_metric(ecx, edx);
+		pa   = sgx_calc_section_metric(sl->epc_sec_base_addr_0, sl->epc_sec_base_addr_1);
+		size = sgx_calc_section_metric(sl->epc_sec_size_0, sl->epc_sec_size_1);
 
 		pr_info("EPC section 0x%llx-0x%llx\n", pa, pa + size - 1);
 
