@@ -909,7 +909,7 @@ void ext4_es_insert_extent(struct inode *inode, ext4_lblk_t lblk,
 	struct extent_status newes;
 	ext4_lblk_t end = lblk + len - 1;
 	int err1 = 0, err2 = 0, err3 = 0;
-	int resv_used = 0, pending = 0;
+	int resv_used = 0;
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
 	struct extent_status *es1 = NULL;
 	struct extent_status *es2 = NULL;
@@ -977,7 +977,6 @@ retry:
 			__free_pending(pr);
 			pr = NULL;
 		}
-		pending = err3;
 	}
 	ext4_es_inc_seq(inode);
 error:
@@ -998,7 +997,6 @@ error:
 	 * any previously delayed allocated clusters instead of claim them
 	 * again.
 	 */
-	resv_used += pending;
 	if (resv_used)
 		ext4_da_update_reserve_space(inode, resv_used,
 					     delalloc_reserve_used);
