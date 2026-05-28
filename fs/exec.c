@@ -1392,15 +1392,12 @@ static void free_bprm(struct linux_binprm *bprm)
 	kfree(bprm);
 }
 
-static struct linux_binprm *alloc_bprm(int fd, struct filename *filename, int flags)
+static struct linux_binprm *alloc_bprm_file(struct file *file,
+					    struct filename *filename,
+					    int fd, int flags)
 {
 	struct linux_binprm *bprm;
-	struct file *file;
 	int retval = -ENOMEM;
-
-	file = do_open_execat(fd, filename, flags);
-	if (IS_ERR(file))
-		return ERR_CAST(file);
 
 	bprm = kzalloc_obj(*bprm);
 	if (!bprm) {
@@ -1461,6 +1458,17 @@ static struct linux_binprm *alloc_bprm(int fd, struct filename *filename, int fl
 out_free:
 	free_bprm(bprm);
 	return ERR_PTR(retval);
+}
+
+static struct linux_binprm *alloc_bprm(int fd, struct filename *filename, int flags)
+{
+	struct file *file;
+
+	file = do_open_execat(fd, filename, flags);
+	if (IS_ERR(file))
+		return ERR_CAST(file);
+
+	return alloc_bprm_file(file, filename, fd, flags);
 }
 
 DEFINE_CLASS(bprm, struct linux_binprm *, if (!IS_ERR(_T)) free_bprm(_T),
@@ -1901,6 +1909,59 @@ int kernel_execve(const char *kernel_filename,
 	return bprm_execve(bprm);
 }
 
+static inline struct user_arg_ptr native_arg(const char __user *const __user *p)
+{
+	return (struct user_arg_ptr){.ptr.native = p};
+}
+
+static int do_execveat_file_common(struct file *file, struct filename *filename,
+				   struct user_arg_ptr argv,
+				   struct user_arg_ptr envp, int flags)
+{
+	struct linux_binprm *bprm;
+	struct file *exec_file;
+	int retval;
+
+	if (flags & ~AT_EMPTY_PATH)
+		return -EINVAL;
+
+	if ((current->flags & PF_NPROC_EXCEEDED) &&
+	    is_rlimit_overlimit(current_ucounts(), UCOUNT_RLIMIT_NPROC, rlimit(RLIMIT_NPROC)))
+		return -EAGAIN;
+
+	current->flags &= ~PF_NPROC_EXCEEDED;
+
+	retval = exe_file_deny_write_access(file);
+	if (retval)
+		return retval;
+	exec_file = get_file(file);
+
+	bprm = alloc_bprm_file(exec_file, filename, AT_FDCWD, flags);
+	if (IS_ERR(bprm))
+		return PTR_ERR(bprm);
+
+	retval = do_execveat_common_bprm(bprm, argv, envp);
+	free_bprm(bprm);
+	return retval;
+}
+
+int kernel_execveat_file(struct file *file, const char *filename,
+			 const void __user *argv,
+			 const void __user *envp,
+			 int flags)
+{
+	const char __user *const __user *user_argv;
+	const char __user *const __user *user_envp;
+
+	CLASS(filename_kernel, name)(filename);
+
+	user_argv = (const char __user *const __user *)argv;
+	user_envp = (const char __user *const __user *)envp;
+
+	return do_execveat_file_common(file, name, native_arg(user_argv),
+				       native_arg(user_envp), flags);
+}
+
 void set_binfmt(struct linux_binfmt *new)
 {
 	struct mm_struct *mm = current->mm;
@@ -1923,11 +1984,6 @@ void set_dumpable(struct mm_struct *mm, int value)
 		return;
 
 	__mm_flags_set_mask_dumpable(mm, value);
-}
-
-static inline struct user_arg_ptr native_arg(const char __user *const __user *p)
-{
-	return (struct user_arg_ptr){.ptr.native = p};
 }
 
 SYSCALL_DEFINE3(execve,
