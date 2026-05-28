@@ -20,6 +20,8 @@ static u16 hygon_get_dst_fabric_id(struct addr_ctx *ctx)
 	switch (df_cfg.rev) {
 	case HYGON_DF1:
 		return FIELD_GET(HYGON_DF1_DST_FABRIC_ID, ctx->map.limit);
+	case HYGON_DF2:
+		return FIELD_GET(HYGON_DF2_DST_FABRIC_ID, ctx->map.limit);
 	default:
 		atl_debug_on_bad_df_rev();
 		return 0;
@@ -40,6 +42,7 @@ static u64 hygon_make_space_for_coh_st_id(struct addr_ctx *ctx)
 	case NOHASH_16CHAN:
 	case NOHASH_32CHAN:
 	case DF2_2CHAN_HASH:
+	case HYGON_DF2_4CHAN_HASH:
 		return make_space_for_coh_st_id_at_intlv_bit(ctx);
 
 	case HYGON_DF1_3CHAN:
@@ -129,6 +132,7 @@ static u16 hygon_calculate_coh_st_id(struct addr_ctx *ctx)
 	case NOHASH_16CHAN:
 	case NOHASH_32CHAN:
 	case DF2_2CHAN_HASH:
+	case HYGON_DF2_4CHAN_HASH:
 		return hygon_get_coh_st_id_df(ctx);
 
 	default:
@@ -156,6 +160,7 @@ static u64 hygon_insert_coh_st_id(struct addr_ctx *ctx, u64 denorm_addr, u16 coh
 	case NOHASH_16CHAN:
 	case NOHASH_32CHAN:
 	case DF2_2CHAN_HASH:
+	case HYGON_DF2_4CHAN_HASH:
 		return insert_coh_st_id_at_intlv_bit(ctx, denorm_addr, coh_st_id);
 
 	case HYGON_DF1_3CHAN:

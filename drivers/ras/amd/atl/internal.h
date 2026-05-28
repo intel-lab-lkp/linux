@@ -55,6 +55,7 @@ static inline bool is_hygon_f18h(void)
 enum df_revisions {
 	UNKNOWN,
 	HYGON_DF1,
+	HYGON_DF2,
 	DF2,
 	DF3,
 	DF3p5,
@@ -87,6 +88,7 @@ enum intlv_modes {
 	MI3_HASH_16CHAN			= 0x19,
 	MI3_HASH_32CHAN			= 0x1A,
 	DF2_2CHAN_HASH			= 0x21,
+	HYGON_DF2_4CHAN_HASH		= 0x22,
 	/* DF4.5 modes are all IntLvNumChan + 0x20 */
 	DF4p5_NPS1_16CHAN_1K_HASH	= 0x2C,
 	DF4p5_NPS0_24CHAN_1K_HASH	= 0x2E,
