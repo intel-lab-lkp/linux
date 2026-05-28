@@ -123,8 +123,8 @@ static inline unsigned int exttable_size(struct extended_sigtable *et)
 
 
 /*
- * Use CPUID to generate a "vfm" value. Useful before cpuinfo_x86
- * structures are populated.
+ * Use a direct CPUID query to generate a "vfm" value. To be used before
+ * the CPUID parser is initialized; e.g. head's load_ucode_bsp() stage.
  */
 static u32 intel_cpuid_vfm(void)
 {
