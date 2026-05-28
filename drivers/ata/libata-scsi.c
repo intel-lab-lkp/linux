@@ -1680,7 +1680,7 @@ void ata_scsi_deferred_qc_work(struct work_struct *work)
 	if (qc && !ata_port_eh_scheduled(ap)) {
 		WARN_ON_ONCE(ap->ops->qc_defer(qc));
 		ap->deferred_qc = NULL;
-		ata_qc_issue(qc);
+		ata_qc_issue(ap, qc);
 	}
 
 	spin_unlock_irqrestore(ap->lock, flags);
@@ -1815,7 +1815,7 @@ static int ata_scsi_qc_issue(struct ata_port *ap, struct ata_queued_cmd *qc)
 	}
 
 issue:
-	ata_qc_issue(qc);
+	ata_qc_issue(ap, qc);
 
 	return 0;
 }
@@ -1847,9 +1847,8 @@ issue:
  *	command needs to be deferred.
  */
 static int ata_scsi_translate(struct ata_device *dev, struct scsi_cmnd *cmd,
-			      ata_xlat_func_t xlat_func)
+			      ata_xlat_func_t xlat_func, struct ata_port *ap)
 {
-	struct ata_port *ap = dev->link->ap;
 	struct ata_queued_cmd *qc;
 
 	/*
@@ -4504,9 +4503,9 @@ static void ata_scsi_simulate(struct ata_device *dev, struct scsi_cmnd *cmd)
 }
 
 enum scsi_qc_status __ata_scsi_queuecmd(struct scsi_cmnd *scmd,
-					struct ata_device *dev)
+					struct ata_device *dev,
+					struct ata_port *ap)
 {
-	struct ata_port *ap = dev->link->ap;
 	u8 scsi_op = scmd->cmnd[0];
 	ata_xlat_func_t xlat_func;
 
@@ -4547,7 +4546,7 @@ enum scsi_qc_status __ata_scsi_queuecmd(struct scsi_cmnd *scmd,
 	}
 
 	if (xlat_func)
-		return ata_scsi_translate(dev, scmd, xlat_func);
+		return ata_scsi_translate(dev, scmd, xlat_func, ap);
 
 	ata_scsi_simulate(dev, scmd);
 
@@ -4593,7 +4592,7 @@ enum scsi_qc_status ata_scsi_queuecmd(struct Scsi_Host *shost,
 
 	dev = ata_scsi_find_dev(ap, scsidev);
 	if (likely(dev))
-		rc = __ata_scsi_queuecmd(cmd, dev);
+		rc = __ata_scsi_queuecmd(cmd, dev, ap);
 	else {
 		cmd->result = (DID_BAD_TARGET << 16);
 		scsi_done(cmd);
