@@ -157,45 +157,9 @@
 /* Steal the highest bit of pebs_data_cfg for SW usage */
 #define PEBS_UPDATE_DS_SW	BIT_ULL(63)
 
-/*
- * Intel "Architectural Performance Monitoring extension" CPUID
- * detection/enumeration details:
- */
-#define ARCH_PERFMON_EXT_LEAF			0x00000023
-#define ARCH_PERFMON_NUM_COUNTER_LEAF		0x1
-#define ARCH_PERFMON_ACR_LEAF			0x2
+// _CPUID_TODO_: Remove subleaf 4 and 5 after defining them
 #define ARCH_PERFMON_PEBS_CAP_LEAF		0x4
 #define ARCH_PERFMON_PEBS_COUNTER_LEAF		0x5
-
-union cpuid35_eax {
-	struct {
-		unsigned int	leaf0:1;
-		/* Counters Sub-Leaf */
-		unsigned int    cntr_subleaf:1;
-		/* Auto Counter Reload Sub-Leaf */
-		unsigned int    acr_subleaf:1;
-		/* Events Sub-Leaf */
-		unsigned int    events_subleaf:1;
-		/* arch-PEBS Sub-Leaves */
-		unsigned int	pebs_caps_subleaf:1;
-		unsigned int	pebs_cnts_subleaf:1;
-		unsigned int	reserved:26;
-	} split;
-	unsigned int            full;
-};
-
-union cpuid35_ebx {
-	struct {
-		/* UnitMask2 Supported */
-		unsigned int    umask2:1;
-		/* EQ-bit Supported */
-		unsigned int    eq:1;
-		/* rdpmc user disable Supported */
-		unsigned int    rdpmc_user_disable:1;
-		unsigned int	reserved:29;
-	} split;
-	unsigned int            full;
-};
 
 /*
  * AMD "Extended Performance Monitoring and Debug" CPUID
