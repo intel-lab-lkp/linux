@@ -807,6 +807,8 @@ early_param("rdrand", rdrand_cmdline);
 
 static void clear_rdrand_cpuid_bit(struct cpuinfo_x86 *c)
 {
+	struct leaf_0x1_0 l1;
+
 	/*
 	 * Saving of the MSR used to hide the RDRAND support during
 	 * suspend/resume is done by arch/x86/power/cpu.c, which is
@@ -819,7 +821,8 @@ static void clear_rdrand_cpuid_bit(struct cpuinfo_x86 *c)
 	 * The self-test can clear X86_FEATURE_RDRAND, so check for
 	 * RDRAND support using the CPUID function directly.
 	 */
-	if (!(cpuid_ecx(1) & BIT(30)) || rdrand_force)
+	cpuid_read(0x1, &l1);
+	if (!l1.rdrand || rdrand_force)
 		return;
 
 	msr_clear_bit(MSR_AMD64_CPUID_FN_1, 62);
@@ -828,7 +831,8 @@ static void clear_rdrand_cpuid_bit(struct cpuinfo_x86 *c)
 	 * Verify that the CPUID change has occurred in case the kernel is
 	 * running virtualized and the hypervisor doesn't support the MSR.
 	 */
-	if (cpuid_ecx(1) & BIT(30)) {
+	cpuid_read(0x1, &l1);
+	if (l1.rdrand) {
 		pr_info_once("BIOS may not properly restore RDRAND after suspend, but hypervisor does not support hiding RDRAND via CPUID.\n");
 		return;
 	}
