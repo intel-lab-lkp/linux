@@ -1359,6 +1359,17 @@ SND_SOC_DAILINK_DEF(sof_dmic,
 SND_SOC_DAILINK_DEF(pdm_dmic,
 	DAILINK_COMP_ARRAY(COMP_CPU("acp-pdm-dmic")));
 
+SND_SOC_DAILINK_DEF(sof_i2s0,
+	DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-i2s0")));
+SND_SOC_DAILINK_DEF(sof_i2s1,
+	DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-i2s1")));
+SND_SOC_DAILINK_DEF(sof_i2s2,
+	DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-i2s2")));
+SND_SOC_DAILINK_DEF(sof_pdm0,
+	DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-dmic0")));
+SND_SOC_DAILINK_DEF(sof_pdm1,
+	DAILINK_COMP_ARRAY(COMP_CPU("acp-sof-dmic1")));
+
 static int acp_rtk_set_bias_level(struct snd_soc_card *card,
 				  struct snd_soc_dapm_context *dapm,
 				  enum snd_soc_bias_level level)
