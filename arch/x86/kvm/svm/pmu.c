@@ -144,7 +144,7 @@ static int amd_pmu_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		return 0;
 	}
 
-	return 1;
+	return -EINVAL;
 }
 
 static int amd_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
@@ -173,7 +173,7 @@ static int amd_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		return 0;
 	}
 
-	return 1;
+	return -EINVAL;
 }
 
 static void amd_pmu_refresh(struct kvm_vcpu *vcpu)
