@@ -2442,8 +2442,10 @@ int __netlink_dump_start(struct sock *ssk, struct sk_buff *skb,
 
 	sock_put(sk);
 
-	if (ret)
+	if (ret) {
+		kfree_skb(skb);
 		return ret;
+	}
 
 	/* We successfully started a dump, by returning -EINTR we
 	 * signal not to send ACK even if it was requested.
