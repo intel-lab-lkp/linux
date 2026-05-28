@@ -4427,8 +4427,18 @@ static void handle_backoff_block(struct ceph_osd *osd, struct MOSDBackoff *m)
 	backoff->end = m->end;
 	m->end = NULL;   /* ditto */
 
-	insert_backoff(&spg->backoffs, backoff);
-	insert_backoff_by_id(&osd->o_backoffs_by_id, backoff);
+	if (__insert_backoff(&spg->backoffs, backoff)) {
+		pr_err("%s failed to insert backoff\n", __func__);
+		free_backoff(backoff);
+		return;
+	}
+
+	if (__insert_backoff_by_id(&osd->o_backoffs_by_id, backoff)) {
+		pr_err("%s failed to insert backoff by id\n", __func__);
+		erase_backoff(&spg->backoffs, backoff);
+		free_backoff(backoff);
+		return;
+	}
 
 	/*
 	 * Ack with original backoff's epoch so that the OSD can
