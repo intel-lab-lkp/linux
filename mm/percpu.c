@@ -1803,9 +1803,9 @@ static void pcpu_memalloc_scope_restore(gfp_t gfp, unsigned int flags)
  * @gfp: allocation flags
  *
  * Allocate percpu area of @size bytes aligned at @align.  If @gfp doesn't
- * contain %GFP_KERNEL, the allocation is atomic. If @gfp has __GFP_NOWARN
- * then no warning will be triggered on invalid or failed allocation
- * requests.
+ * allow blocking, or if allocation is requested from reclaim context, the
+ * allocation is atomic. If @gfp has __GFP_NOWARN then no warning will be
+ * triggered on invalid or failed allocation requests.
  *
  * RETURNS:
  * Percpu pointer to the allocated area on success, NULL on failure.
@@ -1828,7 +1828,12 @@ void __percpu *pcpu_alloc_noprof(size_t size, size_t align, bool reserved,
 	gfp = current_gfp_context(gfp);
 	/* whitelisted flags that can be passed to the backing allocators */
 	pcpu_gfp = gfp & (GFP_KERNEL | __GFP_NORETRY | __GFP_NOWARN);
-	is_atomic = !gfpflags_allow_blocking(gfp);
+	/*
+	 * Reclaim can be entered while pcpu_alloc_mutex is already held by
+	 * another percpu allocation. Avoid recursing back into the mutex from
+	 * reclaim; best-effort allocations from already populated areas are OK.
+	 */
+	is_atomic = !gfpflags_allow_blocking(gfp) || current->reclaim_state;
 	do_warn = !(gfp & __GFP_NOWARN);
 
 	/*
