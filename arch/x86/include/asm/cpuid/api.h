@@ -213,15 +213,6 @@ static inline u32 cpuid_base_hypervisor(const char *sig, u32 leaves)
 }
 
 /*
- * CPUID(0x80000006) parsing:
- */
-
-static inline bool cpuid_amd_hygon_has_l3_cache(void)
-{
-	return cpuid_edx(0x80000006);
-}
-
-/*
  * 'struct cpuid_leaves' accessors (without sanity checks):
  *
  * For internal use by the CPUID parser.
@@ -501,6 +492,17 @@ static inline bool cpuid_amd_hygon_has_l3_cache(void)
 	     _ptr = &((const union leaf_0x2_regs *)(_regs))->desc[1];			\
 	     _ptr < &((const union leaf_0x2_regs *)(_regs))->desc[16] && (_desc = &cpuid_0x2_table[*_ptr]);\
 	     _ptr++)
+
+/*
+ * CPUID(0x80000006)
+ */
+
+static inline bool cpuid_amd_hygon_has_l3_cache(struct cpuinfo_x86 *c)
+{
+	const struct leaf_0x80000006_0 *el6 = cpuid_leaf(c, 0x80000006);
+
+	return el6 && el6->l3_assoc;
+}
 
 /*
  * CPUID parser exported APIs:
