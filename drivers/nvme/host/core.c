@@ -2275,7 +2275,15 @@ static int nvme_query_fdp_granularity(struct nvme_ctrl *ctrl,
 	desc = log;
 	end = log + size - sizeof(*h);
 	for (i = 0; i < fdp_idx; i++) {
-		log += le16_to_cpu(desc->dsze);
+		u16 dsze = le16_to_cpu(desc->dsze);
+
+		if (!dsze || log + dsze > end) {
+			dev_warn(ctrl->device,
+				 "FDP invalid config descriptor at index %d\n", i);
+			ret = 0;
+			goto out;
+		}
+		log += dsze;
 		desc = log;
 		if (log >= end) {
 			dev_warn(ctrl->device,
