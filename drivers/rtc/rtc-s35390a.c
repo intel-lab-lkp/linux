@@ -479,10 +479,8 @@ static int s35390a_probe(struct i2c_client *client)
 		return PTR_ERR(rtc);
 
 	err_read = s35390a_read_status(s35390a, &status1);
-	if (err_read < 0) {
-		dev_err(dev, "error resetting chip\n");
-		return err_read;
-	}
+	if (err_read < 0)
+		return dev_err_probe(dev, err_read, "error resetting chip\n");
 
 	if (status1 & S35390A_FLAG_24H)
 		s35390a->twentyfourhour = 1;
@@ -493,16 +491,12 @@ static int s35390a_probe(struct i2c_client *client)
 		/* disable alarm (and maybe test mode) */
 		buf = 0;
 		err = s35390a_set_reg(s35390a, S35390A_CMD_STATUS2, &buf, 1);
-		if (err < 0) {
-			dev_err(dev, "error disabling alarm");
-			return err;
-		}
+		if (err < 0)
+			return dev_err_probe(dev, err, "error disabling alarm");
 	} else {
 		err = s35390a_disable_test_mode(s35390a);
-		if (err < 0) {
-			dev_err(dev, "error disabling test mode\n");
-			return err;
-		}
+		if (err < 0)
+			return dev_err_probe(dev, err, "error disabling test mode\n");
 	}
 
 	device_set_wakeup_capable(dev, 1);
