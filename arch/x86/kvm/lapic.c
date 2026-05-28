@@ -2412,11 +2412,10 @@ static int kvm_lapic_reg_write(struct kvm_lapic *apic, u32 reg, u32 val)
 
 	switch (reg) {
 	case APIC_ID:		/* Local APIC ID */
-		if (!apic_x2apic_mode(apic)) {
+		if (!apic_x2apic_mode(apic))
 			kvm_apic_set_xapic_id(apic, val >> 24);
-		} else {
-			ret = 1;
-		}
+		else
+			ret = -EINVAL;
 		break;
 
 	case APIC_TASKPRI:
@@ -2432,14 +2431,14 @@ static int kvm_lapic_reg_write(struct kvm_lapic *apic, u32 reg, u32 val)
 		if (!apic_x2apic_mode(apic))
 			kvm_apic_set_ldr(apic, val & APIC_LDR_MASK);
 		else
-			ret = 1;
+			ret = -EINVAL;
 		break;
 
 	case APIC_DFR:
 		if (!apic_x2apic_mode(apic))
 			kvm_apic_set_dfr(apic, val | 0x0FFFFFFF);
 		else
-			ret = 1;
+			ret = -EINVAL;
 		break;
 
 	case APIC_SPIV: {
@@ -2470,7 +2469,7 @@ static int kvm_lapic_reg_write(struct kvm_lapic *apic, u32 reg, u32 val)
 		break;
 	case APIC_ICR2:
 		if (apic_x2apic_mode(apic))
-			ret = 1;
+			ret = -EINVAL;
 		else
 			kvm_lapic_set_reg(apic, APIC_ICR2, val & 0xff000000);
 		break;
@@ -2485,7 +2484,7 @@ static int kvm_lapic_reg_write(struct kvm_lapic *apic, u32 reg, u32 val)
 	case APIC_LVTCMCI: {
 		u32 index = get_lvt_index(reg);
 		if (!kvm_lapic_lvt_supported(apic, index)) {
-			ret = 1;
+			ret = -EINVAL;
 			break;
 		}
 		if (!kvm_apic_sw_enabled(apic))
@@ -2527,7 +2526,7 @@ static int kvm_lapic_reg_write(struct kvm_lapic *apic, u32 reg, u32 val)
 	}
 	case APIC_ESR:
 		if (apic_x2apic_mode(apic) && val != 0)
-			ret = 1;
+			ret = -EINVAL;
 		break;
 
 	case APIC_SELF_IPI:
@@ -2536,12 +2535,12 @@ static int kvm_lapic_reg_write(struct kvm_lapic *apic, u32 reg, u32 val)
 		 * the vector, everything else is reserved.
 		 */
 		if (!apic_x2apic_mode(apic) || (val & ~APIC_VECTOR_MASK))
-			ret = 1;
+			ret = -EINVAL;
 		else
 			kvm_apic_send_ipi(apic, APIC_DEST_SELF | val, 0);
 		break;
 	default:
-		ret = 1;
+		ret = -EINVAL;
 		break;
 	}
 
@@ -2599,7 +2598,7 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_lapic_set_eoi);
 static int __kvm_x2apic_icr_write(struct kvm_lapic *apic, u64 data, bool fast)
 {
 	if (data & X2APIC_ICR_RESERVED_BITS)
-		return 1;
+		return -EINVAL;
 
 	/*
 	 * The BUSY bit is reserved on both Intel and AMD in x2APIC mode, but
@@ -2804,12 +2803,12 @@ int kvm_apic_set_base(struct kvm_vcpu *vcpu, u64 value, bool host_initiated)
 		(guest_cpu_cap_has(vcpu, X86_FEATURE_X2APIC) ? 0 : X2APIC_ENABLE);
 
 	if ((value & reserved_bits) != 0 || new_mode == LAPIC_MODE_INVALID)
-		return 1;
+		return -EINVAL;
 	if (!host_initiated) {
 		if (old_mode == LAPIC_MODE_X2APIC && new_mode == LAPIC_MODE_XAPIC)
 			return 1;
 		if (old_mode == LAPIC_MODE_DISABLED && new_mode == LAPIC_MODE_X2APIC)
-			return 1;
+			return -EINVAL;
 	}
 
 	__kvm_apic_set_base(vcpu, value);
@@ -3438,7 +3437,7 @@ static int kvm_lapic_msr_read(struct kvm_lapic *apic, u32 reg, u64 *data)
 	}
 
 	if (kvm_lapic_reg_read(apic, reg, 4, &low))
-		return 1;
+		return -EINVAL;
 
 	*data = low;
 
@@ -3457,7 +3456,7 @@ static int kvm_lapic_msr_write(struct kvm_lapic *apic, u32 reg, u64 data)
 
 	/* Bits 63:32 are reserved in all other registers. */
 	if (data >> 32)
-		return 1;
+		return -EINVAL;
 
 	return kvm_lapic_reg_write(apic, reg, (u32)data);
 }
@@ -3468,7 +3467,7 @@ int kvm_x2apic_msr_write(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 	u32 reg = (msr - APIC_BASE_MSR) << 4;
 
 	if (!lapic_in_kernel(vcpu) || !apic_x2apic_mode(apic))
-		return 1;
+		return -EINVAL;
 
 	return kvm_lapic_msr_write(apic, reg, data);
 }
@@ -3479,7 +3478,7 @@ int kvm_x2apic_msr_read(struct kvm_vcpu *vcpu, u32 msr, u64 *data)
 	u32 reg = (msr - APIC_BASE_MSR) << 4;
 
 	if (!lapic_in_kernel(vcpu) || !apic_x2apic_mode(apic))
-		return 1;
+		return -EINVAL;
 
 	return kvm_lapic_msr_read(apic, reg, data);
 }
@@ -3487,7 +3486,7 @@ int kvm_x2apic_msr_read(struct kvm_vcpu *vcpu, u32 msr, u64 *data)
 int kvm_hv_vapic_msr_write(struct kvm_vcpu *vcpu, u32 reg, u64 data)
 {
 	if (!lapic_in_kernel(vcpu))
-		return 1;
+		return -EINVAL;
 
 	return kvm_lapic_msr_write(vcpu->arch.apic, reg, data);
 }
@@ -3495,7 +3494,7 @@ int kvm_hv_vapic_msr_write(struct kvm_vcpu *vcpu, u32 reg, u64 data)
 int kvm_hv_vapic_msr_read(struct kvm_vcpu *vcpu, u32 reg, u64 *data)
 {
 	if (!lapic_in_kernel(vcpu))
-		return 1;
+		return -EINVAL;
 
 	return kvm_lapic_msr_read(vcpu->arch.apic, reg, data);
 }
