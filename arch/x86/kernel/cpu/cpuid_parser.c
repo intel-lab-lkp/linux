@@ -42,23 +42,29 @@ cpuid_read_generic(const struct cpuid_parse_entry *e, const struct cpuid_read_ou
 		cpuid_read_subleaf(e->leaf, e->subleaf + i, regs);
 }
 
-static void
-cpuid_read_0x80000000(const struct cpuid_parse_entry *e, const struct cpuid_read_output *output)
-{
-	struct leaf_0x80000000_0 *el0 = (struct leaf_0x80000000_0 *)output->regs;
-
-	cpuid_read_subleaf(e->leaf, e->subleaf, el0);
-
-	/*
-	 * Protect against Intel 32-bit CPUs lacking an extended CPUID range.  A
-	 * CPUID(0x80000000) query on such machines will repeat the output of the
-	 * highest standard CPUID leaf instead.
-	 */
-	if (CPUID_RANGE(el0->max_ext_leaf) != CPUID_EXT_START)
-		return;
-
-	output->info->nr_entries = 1;
+/*
+ * Define an extended range CPUID read function
+ *
+ * Guard against CPUs lacking the passed range leaf; e.g. Intel 32-bit CPUs lacking
+ * CPUID(0x80000000).  A query on such machines will just repeat the output of the
+ * highest standard CPUID leaf.
+ */
+#define define_cpuid_range_read_function(_range, _name)					\
+static void											\
+cpuid_read_##_range(const struct cpuid_parse_entry *e, const struct cpuid_read_output *output)	\
+{												\
+	struct leaf_##_range##_0 *l = (struct leaf_##_range##_0 *)output->regs;			\
+												\
+	cpuid_read_subleaf(e->leaf, e->subleaf, l);						\
+	if (CPUID_RANGE(l->max_##_name##_leaf) != _range)					\
+		return;										\
+												\
+	output->info->nr_entries = 1;								\
 }
+
+define_cpuid_range_read_function(0x80000000, ext);
+define_cpuid_range_read_function(0x80860000, tra);
+define_cpuid_range_read_function(0xc0000000, cntr);
 
 /*
  * CPUID parser tables:
@@ -115,10 +121,14 @@ static unsigned int cpuid_range_max_leaf(const struct cpuid_table *t, unsigned i
 {
 	const struct leaf_0x0_0 *l0 = __cpuid_table_subleaf(t, 0x0, 0);
 	const struct leaf_0x80000000_0 *el0 = __cpuid_table_subleaf(t, 0x80000000, 0);
+	const struct leaf_0x80860000_0 *tl0 = __cpuid_table_subleaf(t, 0x80860000, 0);
+	const struct leaf_0xc0000000_0 *cl0 = __cpuid_table_subleaf(t, 0xc0000000, 0);
 
 	switch (range) {
-	case CPUID_BASE_START:	return l0  ?  l0->max_std_leaf : 0;
-	case CPUID_EXT_START:	return el0 ? el0->max_ext_leaf : 0;
+	case CPUID_BASE_START:	return l0  ?  l0->max_std_leaf  : 0;
+	case CPUID_EXT_START:	return el0 ? el0->max_ext_leaf  : 0;
+	case CPUID_TMX_START:	return tl0 ? tl0->max_tra_leaf  : 0;
+	case CPUID_CTR_START:	return cl0 ? cl0->max_cntr_leaf : 0;
 	default:		return 0;
 	}
 }
@@ -180,6 +190,8 @@ cpuid_fill_table(struct cpuid_table *t, const struct cpuid_parse_entry entries[]
 	} ranges[] = {
 		{ CPUID_BASE_START, CPUID_BASE_END },
 		{ CPUID_EXT_START,  CPUID_EXT_END  },
+		{ CPUID_TMX_START,  CPUID_TMX_END  },
+		{ CPUID_CTR_START,  CPUID_CTR_END  },
 	};
 
 	for (unsigned int i = 0; i < ARRAY_SIZE(ranges); i++)
