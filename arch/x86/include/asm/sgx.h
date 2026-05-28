@@ -16,16 +16,10 @@
  * together for better readability.  The architectural definitions come first.
  */
 
-/* The SGX specific CPUID function. */
-#define SGX_CPUID		0x12
-/* EPC enumeration. */
+/* First CPUID(0x12) subleaf for EPC enumeration */
 #define SGX_CPUID_EPC		2
-/* An invalid EPC section, i.e. the end marker. */
-#define SGX_CPUID_EPC_INVALID	0x0
-/* A valid EPC section. */
+/* Valid subleaf EPC section */
 #define SGX_CPUID_EPC_SECTION	0x1
-/* The bitmask for the EPC section type. */
-#define SGX_CPUID_EPC_MASK	GENMASK(3, 0)
 
 enum sgx_encls_function {
 	ECREATE		= 0x00,

@@ -20,6 +20,15 @@
 #include "../../../../arch/x86/include/asm/enclu.h"
 #include "../../../../arch/x86/include/uapi/asm/sgx.h"
 
+/* The SGX specific CPUID function */
+#define SGX_CPUID		0x12
+
+/* An invalid EPC section, i.e. the end marker */
+#define SGX_CPUID_EPC_INVALID	0x0
+
+/* The bitmask for the EPC section type */
+#define SGX_CPUID_EPC_MASK	GENMASK(3, 0)
+
 enum encl_op_type {
 	ENCL_OP_PUT_TO_BUFFER,
 	ENCL_OP_GET_FROM_BUFFER,
