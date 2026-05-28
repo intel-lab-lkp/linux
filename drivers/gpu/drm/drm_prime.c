@@ -190,6 +190,9 @@ void drm_prime_remove_buf_handle(struct drm_prime_file_private *prime_fpriv,
 				 uint32_t handle)
 {
 	struct rb_node *rb;
+	struct drm_prime_member *found = NULL;
+
+	mutex_lock(&prime_fpriv->lock);
 
 	rb = prime_fpriv->handles.rb_node;
 	while (rb) {
@@ -200,14 +203,20 @@ void drm_prime_remove_buf_handle(struct drm_prime_file_private *prime_fpriv,
 			rb_erase(&member->handle_rb, &prime_fpriv->handles);
 			rb_erase(&member->dmabuf_rb, &prime_fpriv->dmabufs);
 
-			dma_buf_put(member->dma_buf);
-			kfree(member);
+			found = member;
 			break;
 		} else if (member->handle < handle) {
 			rb = rb->rb_right;
 		} else {
 			rb = rb->rb_left;
 		}
+	}
+	mutex_unlock(&prime_fpriv->lock);
+
+	/* Defer resource release outside the mutex to prevent deadlocks */
+	if (found) {
+		dma_buf_put(found->dma_buf);
+		kfree(found);
 	}
 }
 
