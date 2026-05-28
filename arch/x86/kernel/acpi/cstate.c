@@ -123,18 +123,18 @@ static short mwait_supported[ACPI_PROCESSOR_MAX_POWER];
 
 static long acpi_processor_ffh_cstate_probe_cpu(void *_cx)
 {
+	struct cpuinfo_x86 *c = &cpu_data(smp_processor_id());
+	const struct leaf_0x5_0 *l5 = cpuid_leaf(c, 0x5);
 	struct acpi_processor_cx *cx = _cx;
-	unsigned int eax, ebx, ecx, edx;
-	unsigned int edx_part;
 	unsigned int cstate_type; /* C-state type and not ACPI C-state type */
 	unsigned int num_cstate_subtype;
 
-	cpuid(CPUID_LEAF_MWAIT, &eax, &ebx, &ecx, &edx);
+	if (!l5)
+		return -1;
 
 	/* Check whether this particular cx_type (in CST) is supported or not */
 	cstate_type = (MWAIT_HINT2CSTATE(cx->address) + 1) & MWAIT_CSTATE_MASK;
-	edx_part = edx >> (cstate_type * MWAIT_SUBSTATE_SIZE);
-	num_cstate_subtype = edx_part & MWAIT_SUBSTATE_MASK;
+	num_cstate_subtype = cpuid_mwait_n_substates(l5, cstate_type);
 
 	/* If the HW does not support any sub-states in this C-state */
 	if (num_cstate_subtype == 0) {
@@ -144,7 +144,7 @@ static long acpi_processor_ffh_cstate_probe_cpu(void *_cx)
 	}
 
 	/* mwait ecx extensions INTERRUPT_BREAK should be supported for C2/C3 */
-	if (!(ecx & CPUID5_ECX_EXTENSIONS_SUPPORTED) || !(ecx & CPUID5_ECX_INTERRUPT_BREAK))
+	if (!l5->mwait_ext || !l5->mwait_irq_break)
 		return -1;
 
 	if (!mwait_supported[cstate_type]) {
@@ -163,11 +163,13 @@ static long acpi_processor_ffh_cstate_probe_cpu(void *_cx)
 int acpi_processor_ffh_cstate_probe(unsigned int cpu,
 		struct acpi_processor_cx *cx, struct acpi_power_register *reg)
 {
-	struct cstate_entry *percpu_entry;
 	struct cpuinfo_x86 *c = &cpu_data(cpu);
+	struct cstate_entry *percpu_entry;
+	const struct leaf_0x5_0 *l5;
 	long retval;
 
-	if (!cpu_cstate_entry || c->cpuid_level < CPUID_LEAF_MWAIT)
+	l5 = cpuid_leaf(c, 0x5);
+	if (!cpu_cstate_entry || !l5)
 		return -1;
 
 	if (reg->bit_offset != NATIVE_CSTATE_BEYOND_HALT)
