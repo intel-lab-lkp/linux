@@ -53,29 +53,6 @@
 #define HW_FEEDBACK_PTR_VALID_BIT		BIT(0)
 #define HW_FEEDBACK_CONFIG_HFI_ENABLE_BIT	BIT(0)
 
-/* CPUID detection and enumeration definitions for HFI */
-
-#define CPUID_HFI_LEAF 6
-
-union hfi_capabilities {
-	struct {
-		u8	performance:1;
-		u8	energy_efficiency:1;
-		u8	__reserved:6;
-	} split;
-	u8 bits;
-};
-
-union cpuid6_edx {
-	struct {
-		union hfi_capabilities	capabilities;
-		u32			table_pages:4;
-		u32			__reserved:4;
-		s32			index:16;
-	} split;
-	u32 full;
-};
-
 /**
  * struct hfi_cpu_data - HFI capabilities per CPU
  * @perf_cap:		Performance capability
@@ -326,16 +303,20 @@ void intel_hfi_process_event(__u64 pkg_therm_status_msr_val)
 			   msecs_to_jiffies(HFI_UPDATE_DELAY_MS));
 }
 
-static void init_hfi_cpu_index(struct hfi_cpu_info *info)
+static bool init_hfi_cpu_index(struct hfi_cpu_info *info, int cpu)
 {
-	union cpuid6_edx edx;
+	const struct leaf_0x6_0 *l6 = cpuid_leaf(&cpu_data(cpu), 0x6);
 
 	/* Do not re-read @cpu's index if it has already been initialized. */
 	if (info->index > -1)
-		return;
+		return true;
 
-	edx.full = cpuid_edx(CPUID_HFI_LEAF);
-	info->index = edx.split.index;
+	/* Cannot do anything if CPUID(0x6) is missing */
+	if (!l6)
+		return false;
+
+	info->index = l6->this_lcpu_hwfdbk_idx;
+	return true;
 }
 
 /*
@@ -436,7 +417,8 @@ void intel_hfi_online(unsigned int cpu)
 		info->hfi_instance = hfi_instance;
 	}
 
-	init_hfi_cpu_index(info);
+	if (!init_hfi_cpu_index(info, cpu))
+		return;
 
 	/*
 	 * Now check if the HFI instance of the package of @cpu has been
@@ -535,19 +517,13 @@ void intel_hfi_offline(unsigned int cpu)
 
 static __init int hfi_parse_features(void)
 {
-	unsigned int nr_capabilities;
-	union cpuid6_edx edx;
+	const struct leaf_0x6_0 *l6 = cpuid_leaf(&boot_cpu_data, 0x6);
+	unsigned int nr_capabilities = 0;
 
-	if (!boot_cpu_has(X86_FEATURE_HFI))
+	if (!boot_cpu_has(X86_FEATURE_HFI) || !l6)
 		return -ENODEV;
 
-	/*
-	 * If we are here we know that CPUID_HFI_LEAF exists. Parse the
-	 * supported capabilities and the size of the HFI table.
-	 */
-	edx.full = cpuid_edx(CPUID_HFI_LEAF);
-
-	if (!edx.split.capabilities.split.performance) {
+	if (!l6->perfcap_reporting) {
 		pr_debug("Performance reporting not supported! Not using HFI\n");
 		return -ENODEV;
 	}
@@ -556,11 +532,13 @@ static __init int hfi_parse_features(void)
 	 * The number of supported capabilities determines the number of
 	 * columns in the HFI table. Exclude the reserved bits.
 	 */
-	edx.split.capabilities.split.__reserved = 0;
-	nr_capabilities = hweight8(edx.split.capabilities.bits);
+	if (l6->perfcap_reporting)
+		nr_capabilities++;
+	if (l6->encap_reporting)
+		nr_capabilities++;
 
 	/* The number of 4KB pages required by the table */
-	hfi_features.nr_table_pages = edx.split.table_pages + 1;
+	hfi_features.nr_table_pages = l6->feedback_sz + 1;
 
 	/*
 	 * The header contains change indications for each supported feature.
