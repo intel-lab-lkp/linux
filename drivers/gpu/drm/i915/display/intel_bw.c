@@ -155,8 +155,8 @@ static int adls_pcode_read_psf_gv_point_info(struct intel_display *display,
 
 static u16 icl_qgv_points_mask(struct intel_display *display)
 {
-	unsigned int num_psf_gv_points = display->bw.max[0].num_psf_gv_points;
-	unsigned int num_qgv_points = display->bw.max[0].num_qgv_points;
+	unsigned int num_psf_gv_points = display->bw.num_psf_gv_points;
+	unsigned int num_qgv_points = display->bw.num_qgv_points;
 	u16 qgv_points = 0, psf_points = 0;
 
 	/*
@@ -536,6 +536,9 @@ static int icl_get_bw_info(struct intel_display *display,
 	ipqdepth = min(ipqdepthpch, display_bw_params->displayrtids / num_channels);
 	qi.deinterleave = DIV_ROUND_UP(num_channels, is_y_tile(display) ? 4 : 2);
 
+	display->bw.num_qgv_points = qi.num_qgv_points;
+	display->bw.num_psf_gv_points = qi.num_psf_points;
+
 	for (i = 0; i < num_groups; i++) {
 		struct intel_bw_info *bi = &display->bw.max[i];
 		int clpchgroup;
@@ -543,9 +546,6 @@ static int icl_get_bw_info(struct intel_display *display,
 
 		clpchgroup = (display_bw_params->deburst * qi.deinterleave / num_channels) << i;
 		bi->num_planes = (ipqdepth - clpchgroup) / clpchgroup + 1;
-
-		bi->num_qgv_points = qi.num_qgv_points;
-		bi->num_psf_gv_points = qi.num_psf_points;
 
 		for (j = 0; j < qi.num_qgv_points; j++) {
 			const struct intel_qgv_point *sp = &qi.points[j];
@@ -629,6 +629,9 @@ static int tgl_get_bw_info(struct intel_display *display,
 	 */
 	clperchgroup = 4 * (8 / num_channels) * qi.deinterleave;
 
+	display->bw.num_qgv_points = qi.num_qgv_points;
+	display->bw.num_psf_gv_points = qi.num_psf_points;
+
 	display->bw.max[0].num_planes = U8_MAX;
 
 	for (i = 0; i < num_groups; i++) {
@@ -646,9 +649,6 @@ static int tgl_get_bw_info(struct intel_display *display,
 			else
 				bi_next->num_planes = 0;
 		}
-
-		bi->num_qgv_points = qi.num_qgv_points;
-		bi->num_psf_gv_points = qi.num_psf_points;
 
 		for (j = 0; j < qi.num_qgv_points; j++) {
 			const struct intel_qgv_point *sp = &qi.points[j];
@@ -702,11 +702,12 @@ static void dg2_get_bw_info(struct intel_display *display)
 {
 	int i;
 
+	display->bw.num_qgv_points = 1;
+
 	display->bw.max[0].num_planes = U8_MAX;
 	display->bw.max[0].deratedbw[0] = display->platform.dg2_g11 ? 38000 : 50000;
 
 	/* Bandwidth does not depend on # of planes; set all groups the same */
-	display->bw.max[0].num_qgv_points = 1;
 	for (i = 1; i < ARRAY_SIZE(display->bw.max); i++)
 		display->bw.max[i] = display->bw.max[0];
 
@@ -732,6 +733,8 @@ static int xe2_hpd_get_bw_info(struct intel_display *display,
 	peakbw = tgl_peakbw(num_channels, qi.channel_width, icl_sagv_max_dclk(&qi));
 	maxdebw = min(soc_bw_params->deprogbwlimit * 1000, peakbw * DEPROGBWPCLIMIT / 100);
 
+	display->bw.num_qgv_points = qi.num_qgv_points;
+
 	display->bw.max[0].num_planes = U8_MAX;
 
 	for (i = 0; i < qi.num_qgv_points; i++) {
@@ -748,7 +751,6 @@ static int xe2_hpd_get_bw_info(struct intel_display *display,
 	}
 
 	/* Bandwidth does not depend on # of planes; set all groups the same */
-	display->bw.max[0].num_qgv_points = qi.num_qgv_points;
 	for (i = 1; i < ARRAY_SIZE(display->bw.max); i++)
 		display->bw.max[i] = display->bw.max[0];
 
@@ -767,6 +769,9 @@ static unsigned int icl_max_bw_index(struct intel_display *display,
 {
 	int i;
 
+	if (qgv_point >= display->bw.num_qgv_points)
+		return UINT_MAX;
+
 	/*
 	 * Let's return max bw for 0 planes
 	 */
@@ -775,13 +780,6 @@ static unsigned int icl_max_bw_index(struct intel_display *display,
 	for (i = 0; i < ARRAY_SIZE(display->bw.max); i++) {
 		const struct intel_bw_info *bi =
 			&display->bw.max[i];
-
-		/*
-		 * Pcode will not expose all QGV points when
-		 * SAGV is forced to off/min/med/max.
-		 */
-		if (qgv_point >= bi->num_qgv_points)
-			return UINT_MAX;
 
 		if (num_planes >= bi->num_planes)
 			return i;
@@ -795,16 +793,12 @@ static unsigned int tgl_max_bw_index(struct intel_display *display,
 {
 	int i;
 
+	if (qgv_point >= display->bw.num_qgv_points)
+		return UINT_MAX;
+
 	for (i = ARRAY_SIZE(display->bw.max) - 1; i >= 0; i--) {
 		const struct intel_bw_info *bi =
 			&display->bw.max[i];
-
-		/*
-		 * Pcode will not expose all QGV points when
-		 * SAGV is forced to off/min/med/max.
-		 */
-		if (qgv_point >= bi->num_qgv_points)
-			return UINT_MAX;
 
 		if (num_planes <= bi->num_planes)
 			return i;
@@ -941,7 +935,7 @@ intel_atomic_get_bw_state(struct intel_atomic_state *state)
 static unsigned int icl_max_bw_qgv_point_mask(struct intel_display *display,
 					      int num_active_planes)
 {
-	unsigned int num_qgv_points = display->bw.max[0].num_qgv_points;
+	unsigned int num_qgv_points = display->bw.num_qgv_points;
 	unsigned int max_bw_point = 0;
 	unsigned int max_bw = 0;
 	int i;
@@ -977,7 +971,7 @@ static u16 icl_prepare_qgv_points_mask(struct intel_display *display,
 
 static unsigned int icl_max_bw_psf_gv_point_mask(struct intel_display *display)
 {
-	unsigned int num_psf_gv_points = display->bw.max[0].num_psf_gv_points;
+	unsigned int num_psf_gv_points = display->bw.num_psf_gv_points;
 	unsigned int max_bw_point_mask = 0;
 	unsigned int max_bw = 0;
 	int i;
@@ -1082,7 +1076,7 @@ static int mtl_find_qgv_points(struct intel_display *display,
 			       struct intel_bw_state *new_bw_state)
 {
 	unsigned int best_rate = UINT_MAX;
-	unsigned int num_qgv_points = display->bw.max[0].num_qgv_points;
+	unsigned int num_qgv_points = display->bw.num_qgv_points;
 	unsigned int qgv_peak_bw  = 0;
 	int i;
 	int ret;
@@ -1153,8 +1147,8 @@ static int icl_find_qgv_points(struct intel_display *display,
 			       const struct intel_bw_state *old_bw_state,
 			       struct intel_bw_state *new_bw_state)
 {
-	unsigned int num_psf_gv_points = display->bw.max[0].num_psf_gv_points;
-	unsigned int num_qgv_points = display->bw.max[0].num_qgv_points;
+	unsigned int num_psf_gv_points = display->bw.num_psf_gv_points;
+	unsigned int num_qgv_points = display->bw.num_qgv_points;
 	u16 psf_points = 0;
 	u16 qgv_points = 0;
 	int i;
