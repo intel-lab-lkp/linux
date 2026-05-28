@@ -1905,8 +1905,8 @@ static const struct of_device_id fsi_of_match[] = {
 MODULE_DEVICE_TABLE(of, fsi_of_match);
 
 static const struct platform_device_id fsi_id_table[] = {
-	{ "sh_fsi",	(kernel_ulong_t)&fsi1_core },
-	{},
+	{ .name = "sh_fsi" },
+	{ }
 };
 MODULE_DEVICE_TABLE(platform, fsi_id_table);
 
@@ -1929,9 +1929,7 @@ static int fsi_probe(struct platform_device *pdev)
 		fsi_of_parse("fsia", np, &info.port_a, &pdev->dev);
 		fsi_of_parse("fsib", np, &info.port_b, &pdev->dev);
 	} else {
-		const struct platform_device_id	*id_entry = pdev->id_entry;
-		if (id_entry)
-			core = (struct fsi_core *)id_entry->driver_data;
+		core = &fsi1_core;
 
 		if (pdev->dev.platform_data)
 			memcpy(&info, pdev->dev.platform_data, sizeof(info));
