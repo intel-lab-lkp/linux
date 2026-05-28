@@ -43,6 +43,7 @@
 #define X86_CPUID	new_cpu_data+CPUINFO_cpuid_level
 #define X86_CAPABILITY	new_cpu_data+CPUINFO_x86_capability
 #define X86_VENDOR_ID	new_cpu_data+CPUINFO_x86_vendor_id
+#define X86_FEATUREFLAG	new_cpu_data+CPUINFO_CPUID_0x1_EDX
 
 /*
  * Worst-case size of the kernel mapping we need to make:
@@ -263,6 +264,7 @@ SYM_FUNC_START(startup_32_smp)
 	andb $0x0f,%cl		# mask mask revision
 	movb %cl,X86_STEPPING
 	movl %edx,X86_CAPABILITY
+	movl %edx,X86_FEATUREFLAG
 
 .Lis486:
 	movl $0x50022,%ecx	# set AM, WP, NE and MP

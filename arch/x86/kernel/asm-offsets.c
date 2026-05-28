@@ -40,6 +40,11 @@ static void __used common(void)
 	OFFSET(CPUINFO_cpuid_level, cpuinfo_x86, cpuid_level);
 	OFFSET(CPUINFO_x86_capability, cpuinfo_x86, x86_capability);
 	OFFSET(CPUINFO_x86_vendor_id, cpuinfo_x86, x86_vendor_id);
+	DEFINE(CPUINFO_CPUID_0x1_EDX,
+	       offsetof(struct cpuinfo_x86, cpuid)		+
+	       offsetof(struct cpuid_table, leaves)		+
+	       offsetof(struct cpuid_leaves, leaf_0x1_0)	+
+	       offsetof(struct cpuid_regs, edx));
 
 	BLANK();
 	OFFSET(TASK_threadsp, task_struct, thread.sp);
