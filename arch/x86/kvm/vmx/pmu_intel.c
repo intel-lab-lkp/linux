@@ -493,8 +493,8 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
 	struct lbr_desc *lbr_desc = vcpu_to_lbr_desc(vcpu);
 	struct kvm_cpuid_entry2 *entry;
-	union cpuid10_eax eax;
-	union cpuid10_edx edx;
+	struct leaf_0xa_0 l = { };
+	struct cpuid_regs *regs = (struct cpuid_regs *)&l;
 	u64 perf_capabilities;
 	u64 counter_rsvd;
 
@@ -515,21 +515,18 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 	if (!entry)
 		return;
 
-	eax.full = entry->eax;
-	edx.full = entry->edx;
+	regs->eax = entry->eax;
+	regs->edx = entry->edx;
 
-	pmu->version = eax.split.version_id;
+	pmu->version = l.pmu_version;
 	if (!pmu->version)
 		return;
 
-	pmu->nr_arch_gp_counters = min_t(int, eax.split.num_counters,
-					 kvm_pmu_cap.num_counters_gp);
-	eax.split.bit_width = min_t(int, eax.split.bit_width,
-				    kvm_pmu_cap.bit_width_gp);
-	pmu->counter_bitmask[KVM_PMC_GP] = BIT_ULL(eax.split.bit_width) - 1;
-	eax.split.mask_length = min_t(int, eax.split.mask_length,
-				      kvm_pmu_cap.events_mask_len);
-	pmu->available_event_types = ~entry->ebx & (BIT_ULL(eax.split.mask_length) - 1);
+	pmu->nr_arch_gp_counters	= min_t(int, l.num_counters_gp, kvm_pmu_cap.num_counters_gp);
+	l.bit_width_gp			= min_t(int, l.bit_width_gp, kvm_pmu_cap.bit_width_gp);
+	pmu->counter_bitmask[KVM_PMC_GP]= BIT_ULL(l.bit_width_gp) - 1;
+	l.events_mask_len		= min_t(int, l.events_mask_len, kvm_pmu_cap.events_mask_len);
+	pmu->available_event_types	= ~entry->ebx & (BIT_ULL(l.events_mask_len) - 1);
 
 	entry = kvm_find_cpuid_entry_index(vcpu, 7, 0);
 	if (entry &&
@@ -552,11 +549,9 @@ static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 	if (pmu->version == 1)
 		return;
 
-	pmu->nr_arch_fixed_counters = min_t(int, edx.split.num_counters_fixed,
-					    kvm_pmu_cap.num_counters_fixed);
-	edx.split.bit_width_fixed = min_t(int, edx.split.bit_width_fixed,
-					  kvm_pmu_cap.bit_width_fixed);
-	pmu->counter_bitmask[KVM_PMC_FIXED] = BIT_ULL(edx.split.bit_width_fixed) - 1;
+	pmu->nr_arch_fixed_counters = min_t(int, l.num_counters_fixed, kvm_pmu_cap.num_counters_fixed);
+	l.bitwidth_fixed	    = min_t(int, l.bitwidth_fixed, kvm_pmu_cap.bit_width_fixed);
+	pmu->counter_bitmask[KVM_PMC_FIXED] = BIT_ULL(l.bitwidth_fixed) - 1;
 
 	intel_pmu_enable_fixed_counter_bits(pmu, INTEL_FIXED_0_KERNEL |
 						 INTEL_FIXED_0_USER |
