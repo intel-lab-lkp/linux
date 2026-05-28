@@ -41,7 +41,6 @@ static void init_zhaoxin_cap(struct cpuinfo_x86 *c)
 		 * EDX feature bits.  Refresh the leaf.
 		 */
 		cpuid_refresh_leaf(c, 0xc0000001);
-		c->x86_capability[CPUID_C000_0001_EDX] = cpuid_edx(0xC0000001);
 	}
 
 	if (c->x86 >= 0x6)
