@@ -188,25 +188,18 @@ static void _InitTxBufferBoundary(struct adapter *padapter)
 	rtw_write8(padapter, REG_TDECTRL + 1, txpktbuf_bndy);
 }
 
-static void _InitNormalChipRegPriority(
-	struct adapter *Adapter,
-	u16 beQ,
-	u16 bkQ,
-	u16 viQ,
-	u16 voQ,
-	u16 mgtQ,
-	u16 hiQ
-)
+static void _InitNormalChipRegPriority(struct adapter *Adapter,
+				       u16 queues[TX_Q_MAX])
 {
 	u16 value16 = (rtw_read16(Adapter, REG_TRXDMA_CTRL) & 0x7);
 
 	value16 |=
-		_TXDMA_BEQ_MAP(beQ)  |
-		_TXDMA_BKQ_MAP(bkQ)  |
-		_TXDMA_VIQ_MAP(viQ)  |
-		_TXDMA_VOQ_MAP(voQ)  |
-		_TXDMA_MGQ_MAP(mgtQ) |
-		_TXDMA_HIQ_MAP(hiQ);
+		_TXDMA_BEQ_MAP(queues[TX_Q_BE])  |
+		_TXDMA_BKQ_MAP(queues[TX_Q_BK])  |
+		_TXDMA_VIQ_MAP(queues[TX_Q_VI])  |
+		_TXDMA_VOQ_MAP(queues[TX_Q_VO])  |
+		_TXDMA_MGQ_MAP(queues[TX_Q_MGT]) |
+		_TXDMA_HIQ_MAP(queues[TX_Q_HI]);
 
 	rtw_write16(Adapter, REG_TRXDMA_CTRL, value16);
 }
@@ -214,6 +207,7 @@ static void _InitNormalChipRegPriority(
 static void _InitNormalChipOneOutEpPriority(struct adapter *Adapter)
 {
 	struct hal_com_data *pHalData = GET_HAL_DATA(Adapter);
+	u16 queues[TX_Q_MAX];
 
 	u16 value = 0;
 
@@ -231,17 +225,19 @@ static void _InitNormalChipOneOutEpPriority(struct adapter *Adapter)
 		break;
 	}
 
-	_InitNormalChipRegPriority(
-		Adapter, value, value, value, value, value, value
-	);
+	for (int i = 0; i < TX_Q_MAX; i++)
+		queues[i] = value;
 
+	_InitNormalChipRegPriority(Adapter, queues);
 }
 
 static void _InitNormalChipTwoOutEpPriority(struct adapter *Adapter)
 {
 	struct hal_com_data *pHalData = GET_HAL_DATA(Adapter);
 	struct registry_priv *pregistrypriv = &Adapter->registrypriv;
-	u16 beQ, bkQ, viQ, voQ, mgtQ, hiQ;
+
+	u16 typical_queues[TX_Q_MAX];
+	u16 wmm_queues[TX_Q_MAX];
 
 	u16 valueHi = 0;
 	u16 valueLow = 0;
@@ -263,50 +259,53 @@ static void _InitNormalChipTwoOutEpPriority(struct adapter *Adapter)
 		break;
 	}
 
+	typical_queues[TX_Q_BE] = valueLow;
+	typical_queues[TX_Q_BK] = valueLow;
+	typical_queues[TX_Q_VI] = valueHi;
+	typical_queues[TX_Q_VO] = valueHi;
+	typical_queues[TX_Q_MGT] = valueHi;
+	typical_queues[TX_Q_HI] = valueHi;
+
+	wmm_queues[TX_Q_BE] = valueLow;
+	wmm_queues[TX_Q_BK] = valueHi;
+	wmm_queues[TX_Q_VI] = valueHi;
+	wmm_queues[TX_Q_VO] = valueLow;
+	wmm_queues[TX_Q_MGT] = valueHi;
+	wmm_queues[TX_Q_HI] = valueHi;
+
 	if (!pregistrypriv->wifi_spec) {
-		beQ = valueLow;
-		bkQ = valueLow;
-		viQ = valueHi;
-		voQ = valueHi;
-		mgtQ = valueHi;
-		hiQ = valueHi;
+		_InitNormalChipRegPriority(Adapter, typical_queues);
 	} else {
 		/* for WMM , CONFIG_OUT_EP_WIFI_MODE */
-		beQ = valueLow;
-		bkQ = valueHi;
-		viQ = valueHi;
-		voQ = valueLow;
-		mgtQ = valueHi;
-		hiQ = valueHi;
+		_InitNormalChipRegPriority(Adapter, wmm_queues);
 	}
-
-	_InitNormalChipRegPriority(Adapter, beQ, bkQ, viQ, voQ, mgtQ, hiQ);
-
 }
 
 static void _InitNormalChipThreeOutEpPriority(struct adapter *padapter)
 {
 	struct registry_priv *pregistrypriv = &padapter->registrypriv;
-	u16 beQ, bkQ, viQ, voQ, mgtQ, hiQ;
 
-	if (!pregistrypriv->wifi_spec) {
-		/*  typical setting */
-		beQ = QUEUE_LOW;
-		bkQ = QUEUE_LOW;
-		viQ = QUEUE_NORMAL;
-		voQ = QUEUE_HIGH;
-		mgtQ = QUEUE_HIGH;
-		hiQ = QUEUE_HIGH;
-	} else {
-		/*  for WMM */
-		beQ = QUEUE_LOW;
-		bkQ = QUEUE_NORMAL;
-		viQ = QUEUE_NORMAL;
-		voQ = QUEUE_HIGH;
-		mgtQ = QUEUE_HIGH;
-		hiQ = QUEUE_HIGH;
-	}
-	_InitNormalChipRegPriority(padapter, beQ, bkQ, viQ, voQ, mgtQ, hiQ);
+	u16 typical_queues[TX_Q_MAX] = {
+		[TX_Q_BE] = QUEUE_LOW,
+		[TX_Q_BK] = QUEUE_LOW,
+		[TX_Q_VI] = QUEUE_NORMAL,
+		[TX_Q_VO] = QUEUE_HIGH,
+		[TX_Q_MGT] = QUEUE_HIGH,
+		[TX_Q_HI] = QUEUE_HIGH,
+	};
+	u16 wmm_queues[TX_Q_MAX] = {
+		[TX_Q_BE] = QUEUE_LOW,
+		[TX_Q_BK] = QUEUE_NORMAL,
+		[TX_Q_VI] = QUEUE_NORMAL,
+		[TX_Q_VO] = QUEUE_HIGH,
+		[TX_Q_MGT] = QUEUE_HIGH,
+		[TX_Q_HI] = QUEUE_HIGH,
+	};
+
+	if (!pregistrypriv->wifi_spec)
+		_InitNormalChipRegPriority(padapter, typical_queues);
+	else
+		_InitNormalChipRegPriority(padapter, wmm_queues);
 }
 
 static void _InitQueuePriority(struct adapter *Adapter)

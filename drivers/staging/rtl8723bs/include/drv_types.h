@@ -373,6 +373,16 @@ struct adapter {
 	unsigned char     in_cta_test;
 };
 
+enum transmit_queues {
+	TX_Q_BE = 0,
+	TX_Q_BK,
+	TX_Q_VI,
+	TX_Q_VO,
+	TX_Q_MGT,
+	TX_Q_HI,
+	TX_Q_MAX,
+};
+
 #define adapter_to_dvobj(adapter) (adapter->dvobj)
 #define adapter_to_pwrctl(adapter) (dvobj_to_pwrctl(adapter->dvobj))
 #define adapter_wdev_data(adapter) (&((adapter)->wdev_data))
