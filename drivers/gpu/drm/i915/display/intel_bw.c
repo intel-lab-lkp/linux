@@ -711,6 +711,10 @@ static void dg2_get_bw_info(struct intel_display *display)
 	display->bw.max[0].num_planes = U8_MAX;
 	display->bw.max[0].deratedbw[0] = display->platform.dg2_g11 ? 38000 : 50000;
 
+	drm_dbg_kms(display->drm,
+		    "QGV 0: deratedbw=%u\n",
+		    display->bw.max[0].deratedbw[0]);
+
 	/* Bandwidth does not depend on # of planes; set all groups the same */
 	for (i = 1; i < ARRAY_SIZE(display->bw.max); i++)
 		display->bw.max[i] = display->bw.max[0];
