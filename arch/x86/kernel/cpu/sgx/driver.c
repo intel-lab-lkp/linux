@@ -165,32 +165,33 @@ static struct miscdevice sgx_dev_enclave = {
 
 int __init sgx_drv_init(void)
 {
-	unsigned int eax, ebx, ecx, edx;
+	const struct leaf_0x12_0 *l0 = cpuid_leaf(&boot_cpu_data, 0x12);
+	const struct cpuid_regs *l0r = cpuid_leaf_raw(&boot_cpu_data, 0x12);
+	const struct cpuid_regs *l1r = cpuid_subleaf_raw(&boot_cpu_data, 0x12, 1);
 	u64 attr_mask;
 	u64 xfrm_mask;
 	int ret;
+
+	if (!l0 || !l0r || !l1r)
+		return -ENODEV;
 
 	if (!cpu_feature_enabled(X86_FEATURE_SGX_LC)) {
 		pr_info("SGX disabled: SGX launch control CPU feature is not available, /dev/sgx_enclave disabled.\n");
 		return -ENODEV;
 	}
 
-	cpuid_count(SGX_CPUID, 0, &eax, &ebx, &ecx, &edx);
-
-	if (!(eax & 1))  {
+	if (!l0->sgx1) {
 		pr_info("SGX disabled: SGX1 instruction support not available, /dev/sgx_enclave disabled.\n");
 		return -ENODEV;
 	}
 
-	sgx_misc_reserved_mask = ~ebx | SGX_MISC_RESERVED_MASK;
+	sgx_misc_reserved_mask = ~l0r->ebx | SGX_MISC_RESERVED_MASK;
 
-	cpuid_count(SGX_CPUID, 1, &eax, &ebx, &ecx, &edx);
-
-	attr_mask = (((u64)ebx) << 32) + (u64)eax;
+	attr_mask = (((u64)l1r->ebx) << 32) + (u64)l1r->eax;
 	sgx_attributes_reserved_mask = ~attr_mask | SGX_ATTR_RESERVED_MASK;
 
 	if (cpu_feature_enabled(X86_FEATURE_OSXSAVE)) {
-		xfrm_mask = (((u64)edx) << 32) + (u64)ecx;
+		xfrm_mask = (((u64)l1r->edx) << 32) + (u64)l1r->ecx;
 		sgx_xfrm_reserved_mask = ~xfrm_mask;
 	}
 
