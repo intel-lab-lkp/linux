@@ -704,7 +704,6 @@ static __always_inline u32 raw_cpuid_get(struct cpuid_reg cpuid)
 do {									\
 	const struct cpuid_reg cpuid = x86_feature_cpuid(leaf * 32);	\
 	const u32 __maybe_unused kvm_cpu_cap_init_in_progress = leaf;	\
-	const u32 *kernel_cpu_caps = boot_cpu_data.x86_capability;	\
 	u32 kvm_cpu_cap_passthrough = 0;				\
 	u32 kvm_cpu_cap_synthesized = 0;				\
 	u32 kvm_cpu_cap_emulated = 0;					\
@@ -715,7 +714,7 @@ do {									\
 	kvm_cpu_caps[leaf] = kvm_cpu_cap_features;			\
 									\
 	if (leaf < NCAPINTS)						\
-		kvm_cpu_caps[leaf] &= kernel_cpu_caps[leaf];		\
+		kvm_cpu_caps[leaf] &= cpuid_word(&boot_cpu_data, leaf);\
 									\
 	kvm_cpu_caps[leaf] |= kvm_cpu_cap_passthrough;			\
 	kvm_cpu_caps[leaf] &= (raw_cpuid_get(cpuid) |			\
