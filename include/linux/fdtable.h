@@ -112,6 +112,8 @@ int iterate_fd(struct files_struct *, unsigned,
 
 extern int close_fd(unsigned int fd);
 extern struct file *file_close_fd(unsigned int fd);
+int do_close_range(unsigned int fd, unsigned int max_fd, unsigned int flags);
+int ksys_dup3(unsigned int oldfd, unsigned int newfd, int flags);
 
 extern struct kmem_cache *files_cachep;
 
