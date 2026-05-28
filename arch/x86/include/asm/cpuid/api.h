@@ -381,6 +381,18 @@ static inline u32 cpuid_base_hypervisor(const char *sig, u32 leaves)
 #define cpuid_leaf_raw(_cpuinfo, _leaf)						\
 	((const struct cpuid_regs *)(cpuid_leaf(_cpuinfo, _leaf)))
 
+/**
+ * cpuid_subleaf_raw() - Access parsed CPUID data in raw format
+ * @_cpuinfo:	CPU capability structure reference ('struct cpuinfo_x86')
+ * @_leaf:	CPUID leaf, in compile-time 0xN format
+ * @_subleaf:	CPUID subleaf, in compile-time decimal format
+ *
+ * Similar to cpuid_subleaf(), but returns a raw 'struct cpuid_regs' pointer to
+ * the parsed CPUID data instead of a "typed" <asm/cpuid/leaf_types.h> pointer.
+ */
+#define cpuid_subleaf_raw(_cpuinfo, _leaf, _subleaf)				\
+	((const struct cpuid_regs *)(cpuid_subleaf(_cpuinfo, _leaf, _subleaf)))
+
 /*
  * Call-site APIs for CPUID leaves with a subleaf range:
  */
