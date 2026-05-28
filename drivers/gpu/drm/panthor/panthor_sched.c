@@ -1875,7 +1875,10 @@ static void process_fw_events_work(struct work_struct *work)
 	u32 events = atomic_xchg(&sched->fw_events, 0);
 	struct panthor_device *ptdev = sched->ptdev;
 
-	mutex_lock(&sched->lock);
+	guard(mutex)(&sched->lock);
+
+	if (!panthor_aw_has_gpu_access(ptdev))
+		return;
 
 	if (events & JOB_INT_GLOBAL_IF) {
 		sched_process_global_irq_locked(ptdev);
@@ -1888,8 +1891,6 @@ static void process_fw_events_work(struct work_struct *work)
 		sched_process_csg_irq_locked(ptdev, csg_id);
 		events &= ~BIT(csg_id);
 	}
-
-	mutex_unlock(&sched->lock);
 }
 
 /**
@@ -1983,6 +1984,8 @@ static int csgs_upd_ctx_apply_locked(struct panthor_device *ptdev,
 		csg_iface = panthor_fw_get_csg_iface(ptdev, csg_id);
 
 		ret = panthor_fw_csg_wait_acks(ptdev, csg_id, req_mask, &acked, 100);
+		if (ret && !panthor_aw_has_gpu_access(ptdev))
+			ret = 0;
 
 		if (acked & CSG_ENDPOINT_CONFIG)
 			csg_slot_sync_priority_locked(ptdev, csg_id);

@@ -10,6 +10,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_print.h>
 
+#include "panthor_aw.h"
 #include "panthor_device.h"
 #include "panthor_device_io.h"
 #include "panthor_gpu_regs.h"
@@ -118,7 +119,8 @@ static int panthor_pwr_reset(struct panthor_device *ptdev, u32 reset_cmd)
 				msecs_to_jiffies(PWR_RESET_TIMEOUT_MS))) {
 		guard(spinlock_irqsave)(&ptdev->pwr->reqs_lock);
 
-		if (reset_pending(ptdev) && !reset_irq_raised(ptdev)) {
+		if (reset_pending(ptdev) && !reset_irq_raised(ptdev) &&
+		    panthor_aw_has_gpu_access(ptdev)) {
 			drm_err(&ptdev->base, "RESET timed out (0x%x)", reset_cmd);
 			return -ETIMEDOUT;
 		}
@@ -262,9 +264,14 @@ static int panthor_pwr_domain_transition(struct panthor_device *ptdev, u32 cmd, 
 
 	panthor_pwr_write_command(ptdev, pwr_cmd, mask);
 
-	ret = gpu_read64_poll_timeout(pwr->iomem, ready_reg, val, (mask & val) == expected_val,
+	ret = gpu_read64_poll_timeout(pwr->iomem, ready_reg, val,
+				      ((mask & val) == expected_val ||
+				       !panthor_aw_has_gpu_access(ptdev)),
 				      100, timeout_us);
 	if (ret) {
+		if (!panthor_aw_has_gpu_access(ptdev))
+			return 0;
+
 		drm_err(&ptdev->base,
 			"timeout waiting on %s power domain transition, cmd(0x%x), arg(0x%llx)",
 			get_domain_name(domain), pwr_cmd, mask);
@@ -326,9 +333,13 @@ static int retract_domain(struct panthor_device *ptdev, u32 domain)
 	 * allow-flag will be set with delegated-flag being cleared.
 	 */
 	ret = gpu_read64_poll_timeout(pwr->iomem, PWR_STATUS, val,
-				      ((delegated_mask | allow_mask) & val) == allow_mask, 10,
-				      PWR_TRANSITION_TIMEOUT_US);
+				      (((delegated_mask | allow_mask) & val) == allow_mask ||
+				       !panthor_aw_has_gpu_access(ptdev)),
+				      10, PWR_TRANSITION_TIMEOUT_US);
 	if (ret) {
+		if (!panthor_aw_has_gpu_access(ptdev))
+			return 0;
+
 		drm_err(&ptdev->base, "Retracting %s domain timeout, cmd(0x%x)",
 			get_domain_name(domain), pwr_cmd);
 		return ret;
@@ -383,9 +394,13 @@ static int delegate_domain(struct panthor_device *ptdev, u32 domain)
 	 * allow-flag will be cleared with delegated-flag being set.
 	 */
 	ret = gpu_read64_poll_timeout(pwr->iomem, PWR_STATUS, val,
-				      ((delegated_mask | allow_mask) & val) == delegated_mask,
+				      (((delegated_mask | allow_mask) & val) == delegated_mask ||
+				       !panthor_aw_has_gpu_access(ptdev)),
 				      10, PWR_TRANSITION_TIMEOUT_US);
 	if (ret) {
+		if (!panthor_aw_has_gpu_access(ptdev))
+			return 0;
+
 		drm_err(&ptdev->base, "Delegating %s domain timeout, cmd(0x%x)",
 			get_domain_name(domain), pwr_cmd);
 		return ret;
@@ -512,7 +527,7 @@ void panthor_pwr_l2_power_off(struct panthor_device *ptdev)
 	const u64 pwr_status = gpu_read64(pwr->iomem, PWR_STATUS);
 
 	/* Abort if L2 power off constraints are not satisfied */
-	if (!(pwr_status & l2_allow_mask)) {
+	if (!(pwr_status & l2_allow_mask) && panthor_aw_has_gpu_access(ptdev)) {
 		drm_warn(&ptdev->base, "Power off L2 domain not allowed");
 		return;
 	}
