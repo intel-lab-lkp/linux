@@ -66,8 +66,7 @@ int dns_query(struct net *net,
 {
 	struct key *rkey;
 	struct user_key_payload *upayload;
-	size_t typelen, desclen;
-	char *desc, *cp;
+	char *desc;
 	int ret, len;
 
 	kenter("%s,%*.*s,%zu,%s",
@@ -75,32 +74,16 @@ int dns_query(struct net *net,
 
 	if (!name || namelen < 3 || namelen > 255)
 		return -EINVAL;
+	if (type && *type == '\0')
+		return -EINVAL;
 
 	/* construct the query key description as "[<type>:]<name>" */
-	typelen = 0;
-	desclen = 0;
-	if (type) {
-		typelen = strlen(type);
-		if (typelen < 1)
-			return -EINVAL;
-		desclen += typelen + 1;
-	}
-
-	desclen += namelen + 1;
-
-	desc = kmalloc(desclen, GFP_KERNEL);
+	if (type)
+		desc = kasprintf(GFP_KERNEL, "%s:%.*s", type, (int)namelen, name);
+	else
+		desc = kmemdup_nul(name, namelen, GFP_KERNEL);
 	if (!desc)
 		return -ENOMEM;
-
-	cp = desc;
-	if (type) {
-		memcpy(cp, type, typelen);
-		cp += typelen;
-		*cp++ = ':';
-	}
-	memcpy(cp, name, namelen);
-	cp += namelen;
-	*cp = '\0';
 
 	if (!options)
 		options = "";
