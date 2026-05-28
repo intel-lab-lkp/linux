@@ -186,6 +186,7 @@ void sctp_stream_free(struct sctp_stream *stream)
 	int i;
 
 	sched->unsched_all(stream);
+	stream->out_curr = NULL;
 	for (i = 0; i < stream->outcnt; i++)
 		sctp_stream_free_ext(stream, i);
 	genradix_free(&stream->out);
