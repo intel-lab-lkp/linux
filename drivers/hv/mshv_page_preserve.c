@@ -11,6 +11,7 @@
 #define pr_fmt(fmt) "mshv: " fmt
 
 #include <asm/mshyperv.h>
+#include <linux/crash_dump.h>
 #include <linux/kexec.h>
 #include <linux/kexec_handover.h>
 #include <linux/kho_radix_tree.h>
@@ -327,6 +328,57 @@ static int __init alloc_tree(void)
 	return 0;
 }
 
+#ifdef CONFIG_CRASH_DUMP
+static struct kho_radix_crash_tree crash_preserved_pages_tree;
+
+/**
+ * restore_crash_tree() - Set up the crash tree for dump-time page exclusion.
+ *
+ * In the crash kernel, the old kernel's memory is not in the direct map.
+ * The old kernel stashes the radix tree root PA in Hyper-V crash MSR P2
+ * so we can retrieve it without touching the old kernel's FDT.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+static int __init restore_crash_tree(void)
+{
+	phys_addr_t root_pa;
+
+	root_pa = hv_get_msr(HV_MSR_CRASH_P2);
+	if (!root_pa)
+		return -ENOENT;
+
+	/*
+	 * The MSR may contain stale data from a previous
+	 * hyperv_report_panic().  Sanity-check that it looks like a
+	 * page-aligned physical address within the architectural limit.
+	 */
+	if (!PAGE_ALIGNED(root_pa) || root_pa >> MAX_POSSIBLE_PHYSMEM_BITS) {
+		pr_warn("Invalid crash tree root PA: 0x%llx\n",
+			(unsigned long long)root_pa);
+		return -EINVAL;
+	}
+
+	return kho_radix_crash_init(&crash_preserved_pages_tree, root_pa);
+}
+
+static bool mshv_vmcore_pfn_is_ram(struct vmcore_cb *cb, unsigned long pfn)
+{
+	/*
+	 * MSHV-owned pages must not be read during crash dump collection.
+	 * Currently all pages are registered at order 0. If higher-order
+	 * registrations are added, this lookup will need to handle them
+	 * (e.g. by querying multiple orders or using a range-based API).
+	 */
+	return !kho_radix_crash_contains_page(&crash_preserved_pages_tree,
+					      pfn, 0);
+}
+
+static struct vmcore_cb mshv_vmcore_cb = {
+	.pfn_is_ram = mshv_vmcore_pfn_is_ram,
+};
+#endif
+
 static struct notifier_block reboot_notifier = {
 	.notifier_call = reboot_cb,
 	.priority = 0,
@@ -346,6 +398,24 @@ static struct notifier_block reboot_notifier = {
 int __init mshv_preserve_init(void)
 {
 	int err;
+
+#ifdef CONFIG_CRASH_DUMP
+	if (is_kdump_kernel()) {
+		/*
+		 * Crash kernel only needs the pfn_is_ram callback to exclude
+		 * MSHV-owned pages from the dump.  No page restoration, no
+		 * reboot notifier — the crash kernel reboots after collection.
+		 */
+		err = restore_crash_tree();
+		if (err) {
+			pr_err("Could not set up crash page tree: %d; MSHV pages may appear in dump\n",
+			       err);
+			return 0;
+		}
+		register_vmcore_cb(&mshv_vmcore_cb);
+		return 0;
+	}
+#endif
 
 	if (!kho_is_enabled()) {
 		pr_err("KHO is disabled; page deposits will fail.\n");
@@ -382,6 +452,16 @@ int __init mshv_preserve_init(void)
 		 * across kexec, causing memory corruption post-kexec.
 		 */
 		panic("Could not register reboot notification: %d\n", err);
+
+	/*
+	 * Stash the radix tree root PA in crash MSR P2 so the crash
+	 * kernel can retrieve it without touching the old kernel's FDT
+	 * (which is not in the crash kernel's direct map).  The root
+	 * pointer is stable once the tree is initialized — pages are
+	 * added/removed within the existing tree structure.
+	 */
+	hv_set_msr(HV_MSR_CRASH_P2,
+		   virt_to_phys(preserved_pages_tree.root));
 
 	return 0;
 }
