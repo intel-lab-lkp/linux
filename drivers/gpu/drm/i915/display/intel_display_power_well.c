@@ -732,6 +732,17 @@ static void gen9_write_dc_state(struct intel_display *display,
 	int rewrites = 0;
 	int rereads = 0;
 	u32 v;
+	u32 ro_mask = 0;
+
+	/*
+	 * mask the RO bits from state and read back to avoid
+	 * unnecessary rewrites.
+	 * FIXME: Implement RO mask for remaining display versions.
+	 */
+	if (DISPLAY_VER(display) >= 35)
+		ro_mask = DC_STATE_EN_RO_MASK;
+
+	state = (state & ~ro_mask);
 
 	intel_de_write(display, DC_STATE_EN, state);
 
@@ -741,7 +752,7 @@ static void gen9_write_dc_state(struct intel_display *display,
 	 * we are confident that state is exactly what we want.
 	 */
 	do  {
-		v = intel_de_read(display, DC_STATE_EN);
+		v = intel_de_read(display, DC_STATE_EN) & ~ro_mask;
 
 		if (v != state) {
 			intel_de_write(display, DC_STATE_EN, state);
