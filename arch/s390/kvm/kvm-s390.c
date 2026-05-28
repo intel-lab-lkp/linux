@@ -1015,8 +1015,26 @@ static int kvm_s390_set_mem_control(struct kvm *kvm, struct kvm_device_attr *att
 			return -EINVAL;
 
 		ret = -EBUSY;
-		if (!kvm->created_vcpus)
-			ret = gmap_set_limit(kvm->arch.gmap, gpa_to_gfn(new_limit));
+		if (!kvm->created_vcpus) {
+			struct kvm_memslots *slots;
+			struct kvm_memory_slot *ms;
+			int bkt;
+
+			ret = 0;
+			mutex_lock(&kvm->slots_arch_lock);
+			slots = kvm_memslots(kvm);
+			if (slots && !kvm_memslots_empty(slots)) {
+				kvm_for_each_memslot(ms, bkt, slots) {
+					if (gpa_to_gfn(new_limit) < ms->base_gfn + ms->npages) {
+						ret = -EBUSY;
+						break;
+					}
+				}
+			}
+			if (!ret)
+				ret = gmap_set_limit(kvm->arch.gmap, gpa_to_gfn(new_limit));
+			mutex_unlock(&kvm->slots_arch_lock);
+		}
 		VM_EVENT(kvm, 3, "SET: max guest address: %lu", new_limit);
 		VM_EVENT(kvm, 3, "New guest asce: 0x%p",
 			 (void *)kvm->arch.gmap->asce.val);
@@ -5671,6 +5689,8 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 		if (new->userspace_addr & ~PAGE_MASK)
 			return -EINVAL;
 		if ((new->base_gfn + new->npages) * PAGE_SIZE > kvm->arch.mem_limit)
+			return -EINVAL;
+		if (!asce_contains_gfn(kvm->arch.gmap->asce, new->base_gfn + new->npages - 1))
 			return -EINVAL;
 	}
 
