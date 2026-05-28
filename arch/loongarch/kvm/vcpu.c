@@ -173,7 +173,37 @@ static void kvm_update_stolen_time(struct kvm_vcpu *vcpu)
 	}
 
 	st = (struct kvm_steal_time __user *)ghc->hva;
-	if (kvm_guest_has_pv_feature(vcpu, KVM_FEATURE_PREEMPT)) {
+	if (kvm_guest_has_pv_feature(vcpu, KVM_FEATURE_PV_TLB_FLUSH)) {
+		u32 old = 0;
+		int err = 0;
+
+		/*
+		 * Atomically read and clear st->preempted.  amswap_db.w
+		 * provides full barrier semantics and avoids the race with
+		 * guest-side try_cmpxchg().  Operates on the 32-bit aligned
+		 * word containing preempted (pad bytes are always zero).
+		 */
+		asm volatile(
+		"1: amswap_db.w %1, %z3, %2	\n"
+		"2:				\n"
+		_ASM_EXTABLE_UACCESS_ERR_ZERO(1b, 2b, %0, %1)
+		: "+r" (err), "+&r" (old),
+		  "+ZB" (*(u32 *)&st->preempted)
+		: "Jr" (0)
+		: "memory");
+
+		if (err)
+			goto out;
+
+		vcpu->arch.st.preempted = 0;
+
+		if ((u8)old & KVM_VCPU_FLUSH_TLB) {
+			vcpu->arch.vpid = 0;	/* Drop vpid to flush TLB */
+			trace_kvm_pv_tlb_flush(vcpu, true);
+		} else {
+			trace_kvm_pv_tlb_flush(vcpu, false);
+		}
+	} else if (kvm_guest_has_pv_feature(vcpu, KVM_FEATURE_PREEMPT)) {
 		unsafe_put_user(0, &st->preempted, out);
 		vcpu->arch.st.preempted = 0;
 	}
