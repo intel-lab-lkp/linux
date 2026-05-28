@@ -129,6 +129,9 @@ static bool rule_match_item(struct rule_match_ctx *match_ctx)
 
 		return hwe->class != r->engine_class;
 	case XE_RTP_MATCH_FUNC:
+		if (drm_WARN_ON(&xe->drm, !hwe))
+			return false;
+
 		return r->match_func(xe, gt, hwe);
 	default:
 		drm_warn(&xe->drm, "Invalid RTP match %u\n",
