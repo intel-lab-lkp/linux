@@ -16,6 +16,7 @@
 #define M_DEFAULT_N210_MHZ             62
 
 #define TX_AXI_RW_EN                   0xc
+#define RX_AXI_RW_EN                   0x03
 #define RNPGBE_DMA_AXI_EN              0x0010
 
 #define RNPGBE_MAX_QUEUES 8
