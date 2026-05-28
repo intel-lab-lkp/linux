@@ -110,6 +110,34 @@ Description:
 		affinity for this device.
 
 
+What:		/sys/bus/cxl/devices/memX/cxl_reset
+Date:		May, 2026
+KernelVersion:	v7.1
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(WO) Write a boolean true value, for example "1" or "true", to
+		request CXL Reset for this memory device. The driver performs
+		CXL-specific reset coordination for the target memdev before
+		issuing reset, including any required preparation for affected
+		CXL memory regions and related CXL memory devices.
+
+		CXL Reset control is Function 0 scoped. A write to this
+		attribute resets the CXL.cache and CXL.mem state for all
+		CXL.cache or CXL.mem functions in the same CXL device reset
+		scope, not only the memX device associated with this file.
+
+		The optional CXL Reset Memory Clear operation is not exposed by
+		this attribute.
+
+		A reset fails with -EBUSY if any affected CXL region is
+		online as System RAM or has an active region driver bound.
+		Userspace must first quiesce and release affected CXL memory
+		mappings.
+
+		If this file is not present, then CXL Reset is not supported
+		for the device.
+
+
 What:		/sys/bus/cxl/devices/memX/security/state
 Date:		June, 2023
 KernelVersion:	v6.5
