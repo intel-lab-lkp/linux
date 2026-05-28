@@ -863,8 +863,13 @@ __SYSCALL(__NR_listns, sys_listns)
 #define __NR_rseq_slice_yield 471
 __SYSCALL(__NR_rseq_slice_yield, sys_rseq_slice_yield)
 
+#define __NR_spawn_template_create 472
+__SYSCALL(__NR_spawn_template_create, sys_spawn_template_create)
+#define __NR_spawn_template_spawn 473
+__SYSCALL(__NR_spawn_template_spawn, sys_spawn_template_spawn)
+
 #undef __NR_syscalls
-#define __NR_syscalls 472
+#define __NR_syscalls 474
 
 /*
  * 32 bit systems traditionally used different
