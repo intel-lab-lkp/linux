@@ -472,7 +472,8 @@ static int ext4_dx_csum_verify(struct inode *inode,
 	}
 	limit = le16_to_cpu(c->limit);
 	count = le16_to_cpu(c->count);
-	if (count_offset + (limit * sizeof(struct dx_entry)) >
+	if (!count || count > limit ||
+	    count_offset + (limit * sizeof(struct dx_entry)) >
 	    EXT4_BLOCK_SIZE(inode->i_sb) - sizeof(struct dx_tail)) {
 		warn_no_space_for_csum(inode);
 		return 0;
@@ -501,7 +502,8 @@ static void ext4_dx_csum_set(struct inode *inode, struct ext4_dir_entry *dirent)
 	}
 	limit = le16_to_cpu(c->limit);
 	count = le16_to_cpu(c->count);
-	if (count_offset + (limit * sizeof(struct dx_entry)) >
+	if (!count || count > limit ||
+	    count_offset + (limit * sizeof(struct dx_entry)) >
 	    EXT4_BLOCK_SIZE(inode->i_sb) - sizeof(struct dx_tail)) {
 		warn_no_space_for_csum(inode);
 		return;
