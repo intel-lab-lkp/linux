@@ -113,11 +113,10 @@ static struct device *sysfs_root __initdata;
 
 static const struct idle_cpu *icpu __initdata;
 static struct cpuidle_state *cpuidle_state_table __initdata;
+static const struct leaf_0x5_0 *mwait_leaf __initdata;
 
 /* C-states data from the 'intel_idle.table' cmdline parameter */
 static struct cpuidle_state cmdline_states[CPUIDLE_STATE_MAX] __initdata;
-
-static unsigned int mwait_substates __initdata;
 
 /*
  * Enable interrupts before entering the C-state. On some platforms and for
@@ -2047,7 +2046,7 @@ static void __init sklh_idle_state_table_update(void)
 		return;
 
 	/* if PC10 not present in CPUID.MWAIT.EDX */
-	if ((mwait_substates & (0xF << 28)) == 0)
+	if (mwait_leaf->n_c7_substates == 0)
 		return;
 
 	rdmsrq(MSR_PKG_CST_CONFIG_CONTROL, msr);
@@ -2135,10 +2134,8 @@ static void __init byt_cht_auto_demotion_disable(void)
 
 static bool __init intel_idle_verify_cstate(unsigned int mwait_hint)
 {
-	unsigned int mwait_cstate = (MWAIT_HINT2CSTATE(mwait_hint) + 1) &
-					MWAIT_CSTATE_MASK;
-	unsigned int num_substates = (mwait_substates >> mwait_cstate * 4) &
-					MWAIT_SUBSTATE_MASK;
+	unsigned int mwait_cstate = (MWAIT_HINT2CSTATE(mwait_hint) + 1) & MWAIT_CSTATE_MASK;
+	unsigned int num_substates = cpuid_mwait_n_substates(mwait_leaf, mwait_cstate);
 
 	/* Ignore the C-state if there are NO sub-states in CPUID for it. */
 	if (num_substates == 0)
@@ -2641,8 +2638,8 @@ error:
 
 static int __init intel_idle_init(void)
 {
+	const struct cpuid_regs *mwait_leaf_raw;
 	const struct x86_cpu_id *id;
-	unsigned int eax, ebx, ecx;
 	int retval;
 
 	/* Do not load intel_idle at all for now if idle= is passed */
@@ -2666,14 +2663,15 @@ static int __init intel_idle_init(void)
 			return -ENODEV;
 	}
 
-	cpuid(CPUID_LEAF_MWAIT, &eax, &ebx, &ecx, &mwait_substates);
+	mwait_leaf = cpuid_leaf(&boot_cpu_data, 0x5);
+	if (!mwait_leaf || !mwait_leaf->mwait_ext || !mwait_leaf->mwait_irq_break)
+		return -ENODEV;
 
-	if (!(ecx & CPUID5_ECX_EXTENSIONS_SUPPORTED) ||
-	    !(ecx & CPUID5_ECX_INTERRUPT_BREAK) ||
-	    !mwait_substates)
-			return -ENODEV;
+	mwait_leaf_raw = cpuid_leaf_raw(&boot_cpu_data, 0x5);
+	if (!mwait_leaf_raw || !mwait_leaf_raw->edx)
+		return -ENODEV;
 
-	pr_debug("MWAIT substates: 0x%x\n", mwait_substates);
+	pr_debug("MWAIT substates: 0x%x\n", mwait_leaf_raw->edx);
 
 	icpu = (const struct idle_cpu *)id->driver_data;
 	if (icpu && ignore_native()) {
