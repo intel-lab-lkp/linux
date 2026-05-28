@@ -1778,6 +1778,23 @@ static void pcpu_alloc_tag_free_hook(struct pcpu_chunk *chunk, int off, size_t s
 }
 #endif
 
+static unsigned int pcpu_memalloc_scope_save(gfp_t gfp)
+{
+	if (!(gfp & __GFP_IO))
+		return memalloc_noio_save();
+	if (!(gfp & __GFP_FS))
+		return memalloc_nofs_save();
+	return 0;
+}
+
+static void pcpu_memalloc_scope_restore(gfp_t gfp, unsigned int flags)
+{
+	if (!(gfp & __GFP_IO))
+		memalloc_noio_restore(flags);
+	else if (!(gfp & __GFP_FS))
+		memalloc_nofs_restore(flags);
+}
+
 /**
  * pcpu_alloc - the percpu allocator
  * @size: size of area to allocate in bytes
@@ -1901,7 +1918,12 @@ restart:
 
 	/* No space left.  Create a new chunk. */
 	if (list_empty(&pcpu_chunk_lists[pcpu_free_slot])) {
+		unsigned int pcpu_scope;
+
+		pcpu_scope = pcpu_memalloc_scope_save(pcpu_gfp);
 		chunk = pcpu_create_chunk(pcpu_gfp);
+		pcpu_memalloc_scope_restore(pcpu_gfp, pcpu_scope);
+
 		if (!chunk) {
 			err = "failed to allocate new chunk";
 			goto fail;
@@ -1931,9 +1953,13 @@ area_found:
 		page_end = PFN_UP(off + size);
 
 		for_each_clear_bitrange_from(rs, re, chunk->populated, page_end) {
+			unsigned int pcpu_scope;
+
 			WARN_ON(chunk->immutable);
 
+			pcpu_scope = pcpu_memalloc_scope_save(pcpu_gfp);
 			ret = pcpu_populate_chunk(chunk, rs, re, pcpu_gfp);
+			pcpu_memalloc_scope_restore(pcpu_gfp, pcpu_scope);
 
 			spin_lock_irqsave(&pcpu_lock, flags);
 			if (ret) {
