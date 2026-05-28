@@ -475,7 +475,7 @@ int panthor_pwr_init(struct panthor_device *ptdev)
 	if (!pwr)
 		return -ENOMEM;
 
-	pwr->iomem = ptdev->iomem + PWR_CONTROL_BASE;
+	pwr->iomem = ptdev->iomem + ptdev->hw->map.pwr_control_base;
 	spin_lock_init(&pwr->reqs_lock);
 	init_waitqueue_head(&pwr->reqs_acked);
 	ptdev->pwr = pwr;
@@ -486,7 +486,7 @@ int panthor_pwr_init(struct panthor_device *ptdev)
 
 	err = panthor_request_pwr_irq(
 		ptdev, &pwr->irq, irq, PWR_INTERRUPTS_MASK,
-		pwr->iomem + PWR_INT_BASE);
+		pwr->iomem);
 	if (err)
 		return err;
 

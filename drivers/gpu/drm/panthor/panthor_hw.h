@@ -27,13 +27,28 @@ struct panthor_hw_ops {
 };
 
 /**
+ * struct panthor_hw_regmap - Register base addresses
+ */
+struct panthor_hw_regmap {
+	/** @gpu_control_base: GPU_CONTROL base address */
+	u32 gpu_control_base;
+
+	/** @pwr_control_base: PWR_CONTROL base address */
+	u32 pwr_control_base;
+
+	/** @mcu_control_base: MCU_CONTROL base address */
+	u32 mcu_control_base;
+};
+
+/**
  * struct panthor_hw - GPU specific register mapping and functions
  */
 struct panthor_hw {
-	/** @features: Bitmap containing panthor_hw_feature */
-
 	/** @ops: Panthor HW specific operations */
 	struct panthor_hw_ops ops;
+
+	/** @map: Panthor HW-specific register base addresses */
+	struct panthor_hw_regmap map;
 };
 
 int panthor_hw_init(struct panthor_device *ptdev);
