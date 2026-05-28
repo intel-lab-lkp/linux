@@ -531,6 +531,20 @@ module_param(dpm_watchdog_all_cpu_backtrace, bool, 0644);
 MODULE_PARM_DESC(dpm_watchdog_all_cpu_backtrace,
 		 "Backtrace all CPUs on DPM watchdog timeout");
 
+#ifdef CONFIG_DPM_WATCHDOG_DEFAULT_ENABLED
+static unsigned int __read_mostly dpm_watchdog_enabled = 1;
+#else
+static unsigned int __read_mostly dpm_watchdog_enabled;
+#endif
+
+static int __init dpm_watchdog_setup(char *str)
+{
+	if (kstrtouint(str, 0, &dpm_watchdog_enabled) == 0)
+		return 1;
+	return 0;
+}
+__setup("dpm_watchdog_enabled=", dpm_watchdog_setup);
+
 /**
  * dpm_watchdog_handler - Driver suspend / resume watchdog handler.
  * @t: The timer that PM watchdog depends on.
@@ -574,6 +588,9 @@ static void dpm_watchdog_set(struct dpm_watchdog *wd, struct device *dev)
 {
 	struct timer_list *timer = &wd->timer;
 
+	if (!dpm_watchdog_enabled)
+		return;
+
 	wd->dev = dev;
 	wd->tsk = current;
 	wd->fatal = CONFIG_DPM_WATCHDOG_TIMEOUT == CONFIG_DPM_WATCHDOG_WARNING_TIMEOUT;
@@ -591,6 +608,9 @@ static void dpm_watchdog_set(struct dpm_watchdog *wd, struct device *dev)
 static void dpm_watchdog_clear(struct dpm_watchdog *wd)
 {
 	struct timer_list *timer = &wd->timer;
+
+	if (!dpm_watchdog_enabled)
+		return;
 
 	timer_delete_sync(timer);
 	timer_destroy_on_stack(timer);
