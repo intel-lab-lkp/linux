@@ -4,9 +4,11 @@
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/device.h>
 #include <linux/delay.h>
+#include <linux/memregion.h>
 #include <linux/pci.h>
 #include <linux/pci-doe.h>
 #include <linux/aer.h>
+#include <linux/xarray.h>
 #include <cxlpci.h>
 #include <cxlmem.h>
 #include <cxl.h>
@@ -925,4 +927,172 @@ int cxl_port_get_possible_dports(struct cxl_port *port)
 	pci_walk_bus(bus, count_dports, &ctx);
 
 	return ctx.count;
+}
+
+static int cxl_reset_system_ram_found(struct resource *res, void *data)
+{
+	return 1;
+}
+
+struct cxl_reset_region_context {
+	struct xarray regions;
+};
+
+static void __maybe_unused
+cxl_reset_region_context_init(struct cxl_reset_region_context *ctx)
+{
+	xa_init(&ctx->regions);
+}
+
+static void __maybe_unused
+cxl_reset_region_context_destroy(struct cxl_reset_region_context *ctx)
+{
+	xa_destroy(&ctx->regions);
+}
+
+static int cxl_reset_add_region(struct cxl_reset_region_context *ctx,
+				struct cxl_region *cxlr)
+{
+	int rc;
+
+	if (!cxlr || !cxlr->params.res)
+		return 0;
+
+	rc = xa_insert(&ctx->regions, (unsigned long)cxlr, cxlr, GFP_KERNEL);
+
+	/* A region may be referenced by multiple affected endpoint decoders. */
+	return rc == -EBUSY ? 0 : rc;
+}
+
+static int cxl_reset_collect_region(struct device *dev, void *data)
+{
+	struct cxl_reset_region_context *ctx = data;
+	struct cxl_endpoint_decoder *cxled;
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	cxled = to_cxl_endpoint_decoder(dev);
+	return cxl_reset_add_region(ctx, cxled->cxld.region);
+}
+
+static int __maybe_unused
+cxl_reset_collect_memdev_regions(struct cxl_reset_region_context *ctx,
+				 struct cxl_memdev *cxlmd)
+{
+	struct cxl_port *endpoint;
+
+	if (!cxlmd || !cxlmd->cxlds)
+		return -ENODEV;
+
+	endpoint = cxlmd->endpoint;
+	if (!endpoint)
+		return 0;
+
+	return device_for_each_child(&endpoint->dev, ctx,
+				     cxl_reset_collect_region);
+}
+
+static bool cxl_reset_region_has_system_ram(struct cxl_region *cxlr)
+{
+	struct cxl_region_params *p = &cxlr->params;
+	int rc;
+
+	if (!p->res)
+		return false;
+
+	rc = walk_iomem_res_desc(IORES_DESC_NONE,
+				 IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY,
+				 p->res->start, p->res->end, NULL,
+				 cxl_reset_system_ram_found);
+
+	return rc > 0;
+}
+
+static int cxl_reset_validate_region_idle(struct cxl_region *cxlr)
+{
+	struct resource *res = cxlr->params.res;
+	int rc = 0;
+
+	lockdep_assert_held_write(&cxl_rwsem.region);
+
+	if (cxl_reset_region_has_system_ram(cxlr)) {
+		dev_err(&cxlr->dev,
+			"Cannot reset while CXL memory is online as System RAM [%pr]\n",
+			res);
+		return -EBUSY;
+	}
+
+	if (!device_trylock(&cxlr->dev))
+		return -EAGAIN;
+
+	if (cxlr->dev.driver) {
+		dev_err(&cxlr->dev,
+			"Cannot reset while CXL region has an active driver\n");
+		rc = -EBUSY;
+	}
+
+	device_unlock(&cxlr->dev);
+	return rc;
+}
+
+static int __maybe_unused
+cxl_reset_validate_regions_idle(struct cxl_reset_region_context *ctx)
+{
+	struct cxl_region *cxlr;
+	unsigned long index;
+	int rc;
+
+	xa_for_each(&ctx->regions, index, cxlr) {
+		rc = cxl_reset_validate_region_idle(cxlr);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
+static int cxl_reset_flush_region_cache(struct cxl_region *cxlr)
+{
+	struct resource *res = cxlr->params.res;
+	int rc;
+
+	if (!res)
+		return 0;
+
+	rc = cpu_cache_invalidate_memregion(res->start, resource_size(res));
+	if (rc)
+		dev_err(&cxlr->dev, "Failed to invalidate CPU cache [%pr]: %d\n",
+			res, rc);
+
+	return rc;
+}
+
+static int __maybe_unused
+cxl_reset_flush_cpu_caches(struct cxl_reset_region_context *ctx)
+{
+	struct cxl_region *cxlr;
+	unsigned long index;
+	int rc;
+
+	if (xa_empty(&ctx->regions))
+		return 0;
+
+	if (!cpu_cache_has_invalidate_memregion()) {
+		if (IS_ENABLED(CONFIG_CXL_REGION_INVALIDATION_TEST)) {
+			pr_info_once(
+				"Bypassing cpu_cache_invalidate_memregion() for testing!\n");
+			return 0;
+		}
+		pr_warn("Failed to synchronize CPU cache state\n");
+		return -ENXIO;
+	}
+
+	xa_for_each(&ctx->regions, index, cxlr) {
+		rc = cxl_reset_flush_region_cache(cxlr);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
 }
