@@ -76,7 +76,7 @@ unsigned long xen_released_pages;
 static __ref void xen_get_vendor(void)
 {
 	init_cpu_devs();
-	cpuid_scan_cpu(&boot_cpu_data);
+	cpuid_scan_cpu_early(&boot_cpu_data);
 	cpu_detect(&boot_cpu_data);
 	get_cpu_vendor(&boot_cpu_data);
 }

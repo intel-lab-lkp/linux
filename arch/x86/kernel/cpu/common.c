@@ -1021,8 +1021,10 @@ static void init_speculation_control(struct cpuinfo_x86 *c)
 
 void get_cpu_cap(struct cpuinfo_x86 *c)
 {
-	const struct leaf_0x80000000_0 *el0 = cpuid_leaf(c, 0x80000000);
+	const struct leaf_0x80000000_0 *el0;
 	u32 eax, ebx, ecx, edx;
+
+	cpuid_scan_cpu(c);
 
 	/* Intel-defined flags: level 0x00000001 */
 	if (c->cpuid_level >= 0x00000001) {
@@ -1057,6 +1059,7 @@ void get_cpu_cap(struct cpuinfo_x86 *c)
 		c->x86_capability[CPUID_D_1_EAX] = eax;
 	}
 
+	el0 = cpuid_leaf(c, 0x80000000);
 	c->extended_cpuid_level = el0 ? el0->max_ext_leaf : 0;
 
 	if (c->extended_cpuid_level >= 0x80000001) {
@@ -1798,7 +1801,7 @@ static void __init early_identify_cpu(struct cpuinfo_x86 *c)
 
 	/* cyrix could have cpuid enabled via c_identify()*/
 	if (cpuid_feature()) {
-		cpuid_scan_cpu(c);
+		cpuid_scan_cpu_early(c);
 		cpu_detect(c);
 		get_cpu_vendor(c);
 		intel_unlock_cpuid_leafs(c);
@@ -1971,7 +1974,7 @@ static void generic_identify(struct cpuinfo_x86 *c)
 	if (!cpuid_feature())
 		return;
 
-	cpuid_scan_cpu(c);
+	cpuid_scan_cpu_early(c);
 	cpu_detect(c);
 	get_cpu_vendor(c);
 	intel_unlock_cpuid_leafs(c);

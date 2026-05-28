@@ -2,6 +2,7 @@
 #ifndef _ARCH_X86_CPUID_PARSER_H
 #define _ARCH_X86_CPUID_PARSER_H
 
+#include <linux/types.h>
 #include <asm/cpuid/types.h>
 
 /*
@@ -109,16 +110,63 @@ struct cpuid_parse_entry {
 	__CPUID_PARSE_ENTRY(_leaf, __cpuid_leaf_first_subleaf(_leaf), n, _reader_fn)
 
 /*
- * CPUID parser table:
+ * CPUID parser tables:
  */
 
-#define CPUID_PARSE_ENTRIES									\
+/*
+ * Early-boot CPUID leaves (to be parsed before x86 vendor detection)
+ *
+ * These leaves must be parsed at early boot to identify the x86 vendor. The
+ * parser treats them as universally valid across all vendors.
+ *
+ * At early boot, only leaves in this table must be parsed.  For all other
+ * leaves, the CPUID parser will assume that "boot_cpu_data.x86_vendor" is
+ * properly set beforehand.
+ *
+ * Note: If these entries are to be modified, please adapt the kernel-doc of
+ * cpuid_scan_cpu_early() accordingly.
+ */
+#define CPUID_EARLY_ENTRIES									\
 	/*			Leaf		Subleaf		Reader function */		\
 	CPUID_PARSE_ENTRY   (	0x0,		0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x1,		0,		generic			),	\
+
+/*
+ * Common CPUID leaves
+ *
+ * These leaves can be parsed once basic x86 vendor detection is in place.
+ * Further vendor-agnostic leaves, which are not needed at early boot, are also
+ * listed here.
+ *
+ * For vendor-specific leaves, a matching entry must be added to the CPUID leaf
+ * vendor table later defined.  Leaves which are here, but without a matching
+ * vendor entry, are treated by the CPUID parser as valid for all x86 vendors.
+ */
+#define CPUID_COMMON_ENTRIES									\
+	/*			Leaf		Subleaf		Reader function */		\
 	CPUID_PARSE_ENTRY   (	0x80000000,	0,		0x80000000		),	\
 	CPUID_PARSE_ENTRY   (	0x80000002,	0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x80000003,	0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x80000004,	0,		generic			),	\
+
+/*
+ * CPUID leaf vendor table:
+ */
+
+struct cpuid_vendor_entry {
+	unsigned int	leaf;
+	u8		vendors[X86_VENDOR_NUM];
+	u8		nvendors;
+};
+
+#define CPUID_VENDOR_ENTRY(_leaf, ...)							\
+	{										\
+		.leaf		= _leaf,						\
+		.vendors	= { __VA_ARGS__ },					\
+		.nvendors	= (sizeof((u8[]){__VA_ARGS__})/sizeof(u8)),		\
+	}
+
+#define CPUID_VENDOR_ENTRIES								\
+	/*		   Leaf		Vendor list		    */			\
 
 #endif /* _ARCH_X86_CPUID_PARSER_H */

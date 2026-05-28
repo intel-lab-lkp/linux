@@ -532,6 +532,7 @@ static inline bool cpuid_amd_hygon_has_l3_cache(void)
  * CPUID parser exported APIs:
  */
 
+void cpuid_scan_cpu_early(struct cpuinfo_x86 *c);
 void cpuid_scan_cpu(struct cpuinfo_x86 *c);
 void cpuid_refresh_leaf(struct cpuinfo_x86 *c, u32 leaf);
 void cpuid_refresh_range(struct cpuinfo_x86 *c, u32 start, u32 end);
