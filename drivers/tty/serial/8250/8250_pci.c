@@ -5394,12 +5394,14 @@ static const struct pci_device_id serial_pci_tbl[] = {
 	 * Brainboxes UC-260/271/701/756
 	 */
 	{
-		PCI_VDEVICE(INTASHIELD, 0x0D21),
+		.vendor = PCI_VENDOR_ID_INTASHIELD, .device = 0x0D21,
+		.subvendor = PCI_ANY_ID, .subdevice = PCI_ANY_ID,
 		.class = PCI_CLASS_COMMUNICATION_MULTISERIAL << 8,
 		.class_mask = 0xffff00,
 		.driver_data = pbn_b2_4_115200,
 	}, {
-		PCI_VDEVICE(INTASHIELD, 0x0E34),
+		.vendor = PCI_VENDOR_ID_INTASHIELD, .device = 0x0E34,
+		.subvendor = PCI_ANY_ID, .subdevice = PCI_ANY_ID,
 		.class = PCI_CLASS_COMMUNICATION_MULTISERIAL << 8,
 		.class_mask = 0xffff00,
 		.driver_data = pbn_b2_4_115200,
