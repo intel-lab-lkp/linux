@@ -370,8 +370,13 @@ static inline int mpol_store_user_nodemask(const struct mempolicy *pol)
 static void mpol_relative_nodemask(nodemask_t *ret, const nodemask_t *orig,
 				   const nodemask_t *rel)
 {
+	unsigned int w = nodes_weight(*rel);
 	nodemask_t tmp;
-	nodes_fold(tmp, *orig, nodes_weight(*rel));
+
+	if (w == 0)
+		return -EINVAL;
+
+	nodes_fold(tmp, *orig, w);
 	nodes_onto(*ret, tmp, *rel);
 }
 
