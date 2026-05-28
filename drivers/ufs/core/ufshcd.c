@@ -6047,6 +6047,37 @@ static irqreturn_t ufshcd_transfer_req_compl(struct ufs_hba *hba)
 	return IRQ_HANDLED;
 }
 
+static void ufshcd_force_compl_pending_transfer(struct ufs_hba *hba)
+{
+	unsigned long completed_reqs;
+	unsigned long flags;
+	int tag;
+
+	ufshcd_transfer_req_compl(hba);
+
+	spin_lock_irqsave(&hba->outstanding_lock, flags);
+	completed_reqs = hba->outstanding_reqs;
+	hba->outstanding_reqs = 0;
+	spin_unlock_irqrestore(&hba->outstanding_lock, flags);
+
+	for_each_set_bit(tag, &completed_reqs, hba->nutrs) {
+		struct scsi_cmnd *cmd = ufshcd_tag_to_cmd(hba, tag);
+
+		if (cmd && ufshcd_is_scsi_cmd(cmd) &&
+		    !test_bit(SCMD_STATE_COMPLETE, &cmd->state)) {
+			/*
+			 * The host has been reset and the original command
+			 * outcome is unknown. Requeue SCSI commands so callers
+			 * such as ufshcd_set_dev_pwr_mode() can re-issue START
+			 * STOP UNIT and converge the device power mode.
+			 */
+			set_host_byte(cmd, DID_REQUEUE);
+			ufshcd_release_scsi_cmd(hba, cmd);
+			scsi_done(cmd);
+		}
+	}
+}
+
 int __ufshcd_write_ee_control(struct ufs_hba *hba, u32 ee_ctrl_mask)
 {
 	return ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_WRITE_ATTR,
@@ -6571,6 +6602,8 @@ static void ufshcd_complete_requests(struct ufs_hba *hba, bool force_compl)
 {
 	if (hba->mcq_enabled)
 		ufshcd_mcq_compl_pending_transfer(hba, force_compl);
+	else if (force_compl)
+		ufshcd_force_compl_pending_transfer(hba);
 	else
 		ufshcd_transfer_req_compl(hba);
 
@@ -9506,23 +9539,30 @@ out:
 static enum scsi_timeout_action ufshcd_eh_timed_out(struct scsi_cmnd *scmd)
 {
 	struct ufs_hba *hba = shost_priv(scmd->device->host);
+	int ret;
 
-	if (!hba->system_suspending) {
+	if (!hba->pm_op_in_progress || scmd->device != hba->ufs_device_wlun ||
+	    scmd->cmnd[0] != START_STOP) {
 		/* Activate the error handler in the SCSI core. */
 		return SCSI_EH_NOT_HANDLED;
 	}
 
 	/*
-	 * If we get here we know that no TMFs are outstanding and also that
-	 * the only pending command is a START STOP UNIT command. Handle the
-	 * timeout of that command directly to prevent a deadlock between
-	 * ufshcd_set_dev_pwr_mode() and ufshcd_err_handler().
+	 * PM START STOP UNIT commands are issued while a PM operation is in
+	 * progress. Handle such timeouts directly to avoid entering regular
+	 * SCSI EH, which may deadlock with the PM operation and may also make
+	 * scsi_execute_cmd() retries fail while the host is still in recovery.
 	 */
-	ufshcd_link_recovery(hba);
+	ret = ufshcd_link_recovery(hba);
 	dev_info(hba->dev, "%s() finished; outstanding_tasks = %#lx.\n",
 		 __func__, hba->outstanding_tasks);
 
-	return scsi_host_busy(hba->host) ? SCSI_EH_RESET_TIMER : SCSI_EH_DONE;
+	if (ret)
+		return SCSI_EH_NOT_HANDLED;
+
+	WARN_ON_ONCE(!test_bit(SCMD_STATE_COMPLETE, &scmd->state));
+
+	return SCSI_EH_DONE;
 }
 
 static const struct attribute_group *ufshcd_driver_groups[] = {
@@ -10559,7 +10599,6 @@ static int ufshcd_wl_suspend(struct device *dev)
 
 	hba = shost_priv(sdev->host);
 	down(&hba->host_sem);
-	hba->system_suspending = true;
 
 	if (pm_runtime_suspended(dev))
 		goto out;
@@ -10601,7 +10640,6 @@ out:
 		hba->curr_dev_pwr_mode, hba->uic_link_state);
 	if (!ret)
 		hba->is_sys_suspended = false;
-	hba->system_suspending = false;
 	up(&hba->host_sem);
 	return ret;
 }
