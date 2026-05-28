@@ -1410,7 +1410,7 @@ static const struct attribute_group *amd_attr_update[] = {
 
 static int __init amd_core_pmu_init(void)
 {
-	union cpuid_0x80000022_ebx ebx;
+	const struct leaf_0x80000022_0 *leaf = cpuid_leaf(&boot_cpu_data, 0x80000022);
 	u64 even_ctr_mask = 0ULL;
 	int i;
 
@@ -1430,14 +1430,12 @@ static int __init amd_core_pmu_init(void)
 	x86_pmu.cntr_mask64	= GENMASK_ULL(AMD64_NUM_COUNTERS_CORE - 1, 0);
 
 	/* Check for Performance Monitoring v2 support */
-	if (boot_cpu_has(X86_FEATURE_PERFMON_V2)) {
-		ebx.full = cpuid_ebx(EXT_PERFMON_DEBUG_FEATURES);
-
+	if (leaf && boot_cpu_has(X86_FEATURE_PERFMON_V2)) {
 		/* Update PMU version for later usage */
 		x86_pmu.version = 2;
 
 		/* Find the number of available Core PMCs */
-		x86_pmu.cntr_mask64 = GENMASK_ULL(ebx.split.num_core_pmc - 1, 0);
+		x86_pmu.cntr_mask64 = GENMASK_ULL(leaf->n_pmc_core - 1, 0);
 
 		amd_pmu_global_cntr_mask = x86_pmu.cntr_mask64;
 
