@@ -77,7 +77,7 @@
 			#clock-cells = <0>;
 		};
 
-		dss_oldi_io_ctrl: oldi-io-controller@8600 {
+		dss_oldi_io_ctrl: dss-oldi-io-ctrl@8600 {
 			compatible = "ti,am625-dss-oldi-io-ctrl", "syscon";
 			reg = <0x8600 0x200>;
 		};
