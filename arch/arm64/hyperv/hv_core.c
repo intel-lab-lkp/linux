@@ -185,9 +185,9 @@ void hyperv_report_panic(struct pt_regs *regs, long err, bool in_die)
 	 */
 	hv_set_vpreg(HV_REGISTER_GUEST_CRASH_P0, err);
 	hv_set_vpreg(HV_REGISTER_GUEST_CRASH_P1, guest_id);
-	hv_set_vpreg(HV_REGISTER_GUEST_CRASH_P2, regs->pc);
-	hv_set_vpreg(HV_REGISTER_GUEST_CRASH_P3, regs->sp);
-	hv_set_vpreg(HV_REGISTER_GUEST_CRASH_P4, 0);
+	/* P2 is reserved for the KHO preserved-pages tree root PA */
+	hv_set_vpreg(HV_REGISTER_GUEST_CRASH_P3, regs->pc);
+	hv_set_vpreg(HV_REGISTER_GUEST_CRASH_P4, regs->sp);
 
 	/*
 	 * Let Hyper-V know there is crash data available

@@ -212,7 +212,7 @@ static void hv_kmsg_dump(struct kmsg_dumper *dumper,
 	 */
 	hv_set_msr(HV_MSR_CRASH_P0, 0);
 	hv_set_msr(HV_MSR_CRASH_P1, 0);
-	hv_set_msr(HV_MSR_CRASH_P2, 0);
+	/* P2 is reserved for the KHO preserved-pages tree root PA */
 	hv_set_msr(HV_MSR_CRASH_P3, bytes_written ? virt_to_phys(hv_panic_page) : 0);
 	hv_set_msr(HV_MSR_CRASH_P4, bytes_written);
 

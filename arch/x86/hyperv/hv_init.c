@@ -675,8 +675,8 @@ void hyperv_report_panic(struct pt_regs *regs, long err, bool in_die)
 
 	wrmsrq(HV_X64_MSR_CRASH_P0, err);
 	wrmsrq(HV_X64_MSR_CRASH_P1, guest_id);
-	wrmsrq(HV_X64_MSR_CRASH_P2, regs->ip);
-	wrmsrq(HV_X64_MSR_CRASH_P3, regs->ax);
+	/* P2 is reserved for the KHO preserved-pages tree root PA */
+	wrmsrq(HV_X64_MSR_CRASH_P3, regs->ip);
 	wrmsrq(HV_X64_MSR_CRASH_P4, regs->sp);
 
 	/*
