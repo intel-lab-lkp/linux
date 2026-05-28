@@ -675,8 +675,8 @@ enum kvm_msr_access {
 /*
  * Internal error codes that are used to indicate that MSR emulation encountered
  * an error that should result in #GP in the guest, unless userspace handles it.
- * Note, '1', '0', and negative numbers are off limits, as they are used by KVM
- * as part of KVM's lightly documented internal KVM_RUN return codes.
+ * Other than these internal error codes negative errno values can be used for
+ * error cases, or 0 for success.
  *
  * UNSUPPORTED	- The MSR isn't supported, either because it is completely
  *		  unknown to KVM, or because the MSR should not exist according
