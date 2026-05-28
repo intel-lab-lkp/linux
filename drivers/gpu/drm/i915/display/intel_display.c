@@ -7518,6 +7518,8 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	struct intel_power_domain_mask put_domains[I915_MAX_PIPES] = {};
 	struct ref_tracker *wakeref = NULL;
 	u32 target_dc_state;
+	bool cmtg_status = false;
+	bool dc3co_allowed = intel_display_power_dc3co_allowed(display);
 
 	/*
 	 * Delay re-enabling DC states by 17 ms to avoid the off->on->off
@@ -7635,7 +7637,8 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	/* FIXME probably need to sequence this properly */
 	intel_program_dpkgc_latency(state);
 
-	intel_cmtg_program(state);
+	if (dc3co_allowed)
+		cmtg_status = intel_cmtg_program(state);
 
 	intel_wait_for_vblank_workers(state);
 
@@ -7732,7 +7735,7 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	}
 
 	if (intel_display_power_dc3co_supported(display)) {
-		if (intel_display_power_dc3co_allowed(display)) {
+		if (dc3co_allowed && cmtg_status) {
 			/*
 			 * Use minimal re-enable delay to allow DC3CO entry on
 			 * the next idle frame, unlike the 17ms guard needed to
