@@ -673,16 +673,14 @@ static int tgl_get_bw_info(struct intel_display *display,
 				    i, j, bi->num_planes, bi->deratedbw[j],
 				    bi->peakbw[j]);
 		}
+	}
 
-		for (j = 0; j < qi.num_psf_points; j++) {
-			const struct intel_psf_gv_point *sp = &qi.psf_points[j];
+	for (i = 0; i < qi.num_psf_points; i++) {
+		const struct intel_psf_gv_point *sp = &qi.psf_points[i];
 
-			bi->psf_bw[j] = adl_calc_psf_bw(sp->clk);
+		display->bw.psf_bw[i] = adl_calc_psf_bw(sp->clk);
 
-			drm_dbg_kms(display->drm,
-				    "BW%d / PSF GV %d: num_planes=%d bw=%u\n",
-				    i, j, bi->num_planes, bi->psf_bw[j]);
-		}
+		drm_dbg_kms(display->drm, "PSF GV %d: bw=%u\n", i, display->bw.psf_bw[i]);
 	}
 
 	/*
@@ -810,10 +808,7 @@ static unsigned int tgl_max_bw_index(struct intel_display *display,
 static unsigned int adl_psf_bw(struct intel_display *display,
 			       int psf_gv_point)
 {
-	const struct intel_bw_info *bi =
-			&display->bw.max[0];
-
-	return bi->psf_bw[psf_gv_point];
+	return display->bw.psf_bw[psf_gv_point];
 }
 
 static unsigned int icl_qgv_bw(struct intel_display *display,
