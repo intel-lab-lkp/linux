@@ -21,6 +21,7 @@
 #include <linux/types.h>
 #include <linux/umh.h>
 #include <linux/utime.h>
+#include <linux/crc32.h>
 
 #include <asm/byteorder.h>
 
@@ -29,6 +30,9 @@
 
 static __initdata bool csum_present;
 static __initdata u32 io_csum;
+
+static bool initramfs_debug;
+core_param(initramfs_debug, initramfs_debug, bool, 0400);
 
 static ssize_t __init xwrite(struct file *file, const unsigned char *p,
 		size_t count, loff_t *pos)
@@ -716,6 +720,20 @@ static void __init populate_initrd_image(char *err)
 }
 #endif /* CONFIG_BLK_DEV_RAM */
 
+/*
+ * Record a CRC32 checksum of the initrd contents for diagnostics.
+ */
+static void debug_initrd_crc32(const void *data, size_t len)
+{
+	u32 crc;
+
+	pr_info("initramfs: integrity diagnostics enabled\n");
+
+	crc = crc32_le(~0, data, len);
+
+	pr_info("initramfs: external initrd CRC32 checksum: %08x\n", crc);
+}
+
 static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 {
 	/* Load the built in initramfs */
@@ -725,6 +743,10 @@ static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 
 	if (!initrd_start || IS_ENABLED(CONFIG_INITRAMFS_FORCE))
 		goto done;
+
+	if (initramfs_debug)
+		debug_initrd_crc32((char *)initrd_start,
+				   initrd_end - initrd_start);
 
 	if (IS_ENABLED(CONFIG_BLK_DEV_RAM))
 		printk(KERN_INFO "Trying to unpack rootfs image as initramfs...\n");
