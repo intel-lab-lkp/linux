@@ -17,6 +17,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/soundwire/sdw.h>
 #include <linux/spi/spi.h>
 #include <linux/stddef.h>
 #include <linux/string.h>
@@ -25,6 +26,49 @@
 #include <sound/cs-amp-lib.h>
 
 #include "cs35l56.h"
+
+void cs35l56_mask_soundwire_interrupts(struct sdw_slave *peripheral)
+{
+	 /*
+	  * The read of GEN_INT_STAT_1 is required as per the SoundWire spec
+	  * for interrupt status bits to clear.
+	  * GEN_INT_MASK_1 masks the _inputs_ to GEN_INT_STAT1.
+	  */
+	sdw_write_no_pm(peripheral, CS35L56_SDW_GEN_INT_MASK_1, 0);
+	sdw_read_no_pm(peripheral, CS35L56_SDW_GEN_INT_STAT_1);
+	sdw_write_no_pm(peripheral, CS35L56_SDW_GEN_INT_STAT_1, 0xFF);
+}
+EXPORT_SYMBOL_NS_GPL(cs35l56_mask_soundwire_interrupts, "SND_SOC_CS35L56_SHARED");
+
+void cs35l56_unmask_soundwire_interrupts(struct sdw_slave *peripheral)
+{
+	sdw_write_no_pm(peripheral, CS35L56_SDW_GEN_INT_MASK_1, CS35L56_SDW_INT_MASK_CODEC_IRQ);
+}
+EXPORT_SYMBOL_NS_GPL(cs35l56_unmask_soundwire_interrupts, "SND_SOC_CS35L56_SHARED");
+
+void cs35l56_disable_sdw_interrupts(struct cs35l56_private *cs35l56)
+{
+	if (!cs35l56->sdw_peripheral)
+		return;
+
+	cs35l56->sdw_irq_no_unmask = true;
+	flush_work(&cs35l56->sdw_irq_work);
+
+	/* Mask interrupts and flush in case sdw_irq_work was queued again */
+	cs35l56_mask_soundwire_interrupts(cs35l56->sdw_peripheral);
+	flush_work(&cs35l56->sdw_irq_work);
+}
+EXPORT_SYMBOL_NS_GPL(cs35l56_disable_sdw_interrupts, "SND_SOC_CS35L56_SHARED");
+
+void cs35l56_enable_sdw_interrupts(struct cs35l56_private *cs35l56)
+{
+	if (!cs35l56->sdw_peripheral)
+		return;
+
+	cs35l56->sdw_irq_no_unmask = false;
+	cs35l56_unmask_soundwire_interrupts(cs35l56->sdw_peripheral);
+}
+EXPORT_SYMBOL_NS_GPL(cs35l56_enable_sdw_interrupts, "SND_SOC_CS35L56_SHARED");
 
 static const struct reg_sequence cs35l56_asp_patch[] = {
 	/*
