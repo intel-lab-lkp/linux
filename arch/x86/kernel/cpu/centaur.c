@@ -106,6 +106,7 @@ static void early_init_centaur(struct cpuinfo_x86 *c)
 
 static void init_centaur(struct cpuinfo_x86 *c)
 {
+	const struct leaf_0xa_0 *la = cpuid_leaf(c, 0xa);
 #ifdef CONFIG_X86_32
 	const struct leaf_0x80000005_0 *el5 = cpuid_leaf(c, 0x80000005);
 	u32  lo, hi, newlo;
@@ -116,17 +117,8 @@ static void init_centaur(struct cpuinfo_x86 *c)
 	early_init_centaur(c);
 	init_intel_cacheinfo(c);
 
-	if (c->cpuid_level > 9) {
-		unsigned int eax = cpuid_eax(10);
-
-		/*
-		 * Check for version and the number of counters
-		 * Version(eax[7:0]) can't be 0;
-		 * Counters(eax[15:8]) should be greater than 1;
-		 */
-		if ((eax & 0xff) && (((eax >> 8) & 0xff) > 1))
-			set_cpu_cap(c, X86_FEATURE_ARCH_PERFMON);
-	}
+	if (la && la->pmu_version && la->num_counters_gp > 1)
+		set_cpu_cap(c, X86_FEATURE_ARCH_PERFMON);
 
 #ifdef CONFIG_X86_32
 	if (c->x86 == 5) {
