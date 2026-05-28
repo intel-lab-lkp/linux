@@ -42,7 +42,7 @@
 static bool nointxmask;
 static bool disable_vga;
 static bool disable_idle_d3;
-static bool enable_unsafe_tph;
+bool enable_unsafe_tph;
 
 static void vfio_pci_eventfd_rcu_free(struct rcu_head *rcu)
 {
@@ -1560,6 +1560,9 @@ static int vfio_pci_tph_init(struct vfio_pci_core_device *vdev)
 
 	mutex_init(&vdev->tph_lock);
 
+	/* Reset TPH status on new user session */
+	pcie_disable_tph(vdev->pdev);
+
 	return 0;
 }
 
@@ -1570,6 +1573,9 @@ static void vfio_pci_tph_deinit(struct vfio_pci_core_device *vdev)
 	vdev->tph_st_entries = 0;
 
 	mutex_destroy(&vdev->tph_lock);
+
+	/* Reset TPH status on session exit */
+	pcie_disable_tph(vdev->pdev);
 }
 
 static int vfio_pci_core_feature_tph_st_config(
