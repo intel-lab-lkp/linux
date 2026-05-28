@@ -68,6 +68,14 @@ under per socket sysfs directory created at
 
 Note: lseek() is not supported as entire metrics table is read.
 
+The sysfs metrics_bin path supports only HSMP protocol version 6 and,
+because it is a file read, can return a torn snapshot if userspace
+reads in pieces.  Protocol version 7 metric tables
+(``struct hsmp_metric_table_zen6``, ~13 KB) also exceed PAGE_SIZE, so
+a read returns ``-EOPNOTSUPP``.  For atomic reads on any protocol
+version, use the ``HSMP_IOCTL_GET_TELEMETRY_DATA`` ioctl on /dev/hsmp
+(see below).
+
 Metrics table definitions will be documented as part of Public PPR.
 The same is defined in the amd_hsmp.h header.
 
@@ -167,7 +175,7 @@ Next thing, open the device file, as follows::
     exit(1);
   }
 
-The following IOCTL is defined:
+The following IOCTLs are defined:
 
 ``ioctl(file, HSMP_IOCTL_CMD, struct hsmp_message *msg)``
   The argument is a pointer to a::
@@ -179,6 +187,26 @@ The following IOCTL is defined:
     	__u32	args[HSMP_MAX_MSG_LEN];		/* argument/response buffer */
     	__u16	sock_ind;			/* socket number */
     };
+
+``ioctl(file, HSMP_IOCTL_GET_TELEMETRY_DATA, struct hsmp_telemetry_data *req)``
+  Atomically fetch the firmware metric (telemetry) table for a socket.
+  The ioctl copies the table in one shot, so unlike the metrics_bin
+  sysfs path it cannot return a torn snapshot and is not bounded by
+  PAGE_SIZE.  Required for HSMP protocol version 7+ (e.g. Family 1Ah
+  Model 50h-5Fh, ~13 KB ``struct hsmp_metric_table_zen6``).  Argument::
+
+    struct hsmp_telemetry_data {
+    	__u64 buf; /* User pointer to destination buffer */
+    	__u32 size; /* Size of @buf, must equal firmware-reported table size */
+    	__u16 sock_ind; /* Socket index */
+    	__u16 reserved; /* Reserved, must be zero */
+    };
+
+  Userspace picks the layout matching the running protocol version
+  (``struct hsmp_metric_table`` for v6, ``struct hsmp_metric_table_zen6``
+  for v7, queried via the ``protocol_version`` sysfs attribute) and
+  uses ``sizeof()`` of that struct for ``size``.  The kernel rejects
+  a mismatched ``size`` or non-zero ``reserved`` with ``-EINVAL``.
 
 The ioctl would return a non-zero on failure; you can read errno to see
 what happened. The transaction returns 0 on success.

@@ -12,8 +12,11 @@
 #include <linux/acpi.h>
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/nospec.h>
 #include <linux/semaphore.h>
+#include <linux/slab.h>
 #include <linux/sysfs.h>
+#include <linux/uaccess.h>
 
 #include "hsmp.h"
 
@@ -287,7 +290,7 @@ static bool is_get_msg(struct hsmp_message *msg)
 	return false;
 }
 
-long hsmp_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
+static long hsmp_ioctl_msg(struct file *fp, unsigned long arg)
 {
 	int __user *arguser = (int  __user *)arg;
 	struct hsmp_message msg = { 0 };
@@ -302,6 +305,19 @@ long hsmp_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	 */
 	if (msg.msg_id < HSMP_TEST || msg.msg_id >= HSMP_MSG_ID_MAX)
 		return -ENOMSG;
+
+	/*
+	 * Sanitize the user-controlled msg_id against speculative
+	 * execution.  The bounds check above retires the out-of-range
+	 * case with -ENOMSG, but a mispredicted branch can still let the
+	 * CPU speculatively use msg_id as an index into
+	 * hsmp_msg_desc_table[] (here and in validate_message() /
+	 * is_get_msg() called downstream via hsmp_send_message()), and
+	 * pull arbitrary kernel memory into the cache (Spectre v1,
+	 * CVE-2017-5753).  Clamp once into msg.msg_id so every downstream
+	 * dereference sees the sanitized value.
+	 */
+	msg.msg_id = array_index_nospec(msg.msg_id, HSMP_MSG_ID_MAX);
 
 	switch (fp->f_mode & (FMODE_WRITE | FMODE_READ)) {
 	case FMODE_WRITE:
@@ -341,6 +357,105 @@ long hsmp_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	}
 
 	return 0;
+}
+
+/*
+ * Fetch the firmware metric (telemetry) table for the requested socket and
+ * copy it to the userspace buffer described by the request.
+ *
+ * The metric table size is variable across HSMP protocol versions and on
+ * Family 1Ah Model 50h-5Fh exceeds PAGE_SIZE.  Userspace must therefore
+ * supply a buffer at least the firmware-reported size in bytes.
+ */
+static long hsmp_ioctl_get_telemetry(struct file *fp, unsigned long arg)
+{
+	void __user *arguser = (void __user *)arg;
+	struct hsmp_telemetry_data req;
+	struct hsmp_socket *sock;
+	void __user *user_buf;
+	size_t tbl_size;
+	unsigned int sock_ind;
+	void *kbuf;
+	int ret;
+
+	/* Telemetry data is read-only; require read access on the fd. */
+	if (!(fp->f_mode & FMODE_READ))
+		return -EPERM;
+
+	if (copy_from_user(&req, arguser, sizeof(req)))
+		return -EFAULT;
+
+	/*
+	 * Reserved fields must be zero so future kernels can safely
+	 * repurpose them without breaking already-deployed userspace.
+	 */
+	if (req.reserved)
+		return -EINVAL;
+
+	if (!hsmp_pdev.sock || req.sock_ind >= hsmp_pdev.num_sockets)
+		return -ENODEV;
+
+	tbl_size = hsmp_pdev.hsmp_table_size;
+	if (!tbl_size)
+		return -ENODEV;
+
+	/*
+	 * Userspace must size its buffer using the appropriate UAPI metric
+	 * table struct for the running protocol version.  Reject mismatched
+	 * sizes so we never silently truncate or short-write.
+	 */
+	if (req.size != tbl_size)
+		return -EINVAL;
+
+	/*
+	 * Sanitize the user-controlled socket index against speculative
+	 * execution.  The bounds check above retires the out-of-range case
+	 * with -ENODEV, but a mispredicted branch can still let the CPU
+	 * speculatively use sock_ind as an index into hsmp_pdev.sock[] and
+	 * pull arbitrary kernel memory into the cache (Spectre v1, CVE-2017-
+	 * 5753).  array_index_nospec() turns the bounds check into a
+	 * data-flow clamp so the speculative load is in-range too.
+	 */
+	sock_ind = array_index_nospec(req.sock_ind, hsmp_pdev.num_sockets);
+	sock = &hsmp_pdev.sock[sock_ind];
+	if (!sock->metric_tbl_addr)
+		return -ENODEV;
+
+	user_buf = u64_to_user_ptr(req.buf);
+
+	/*
+	 * The bounce buffer is overwritten in full by memcpy_fromio() inside
+	 * hsmp_metric_tbl_read(); use kvmalloc() to avoid the zeroing cost of
+	 * kvzalloc() on the ~13 KB allocation done on every ioctl call.
+	 */
+	kbuf = kvmalloc(tbl_size, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	ret = hsmp_metric_tbl_read(sock, kbuf, tbl_size);
+	if (ret < 0)
+		goto out;
+
+	if (copy_to_user(user_buf, kbuf, tbl_size))
+		ret = -EFAULT;
+	else
+		ret = 0;
+
+out:
+	kvfree(kbuf);
+	return ret;
+}
+
+long hsmp_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
+{
+	switch (cmd) {
+	case HSMP_IOCTL_CMD:
+		return hsmp_ioctl_msg(fp, arg);
+	case HSMP_IOCTL_GET_TELEMETRY_DATA:
+		return hsmp_ioctl_get_telemetry(fp, arg);
+	default:
+		return -ENOTTY;
+	}
 }
 
 ssize_t hsmp_metric_tbl_read(struct hsmp_socket *sock, char *buf, size_t size)
