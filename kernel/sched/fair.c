@@ -8890,7 +8890,6 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  * @cpu: the CPU to get the utilization for
  * @p: task for which the CPU utilization should be predicted or NULL
  * @dst_cpu: CPU @p migrates to, -1 if @p moves from @cpu or @p == NULL
- * @boost: 1 to enable boosting, otherwise 0
  *
  * The unit of the return value must be the same as the one of CPU capacity
  * so that CPU utilization can be compared with CPU capacity.
@@ -8908,12 +8907,6 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  * be when a long-sleeping task wakes up. The contribution to CPU utilization
  * of such a task would be significantly decayed at this point of time.
  *
- * Boosted CPU utilization is defined as max(CPU runnable, CPU utilization).
- * CPU contention for CFS tasks can be detected by CPU runnable > CPU
- * utilization. Boosting is implemented in cpu_util() so that internal
- * users (e.g. EAS) can use it next to external users (e.g. schedutil),
- * latter via cpu_util_cfs_boost().
- *
  * CPU utilization can be higher than the current CPU capacity
  * (f_curr/f_max * max CPU capacity) or even the max CPU capacity because
  * of rounding errors as well as task migrations or wakeups of new tasks.
@@ -8924,19 +8917,13 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  * though since this is useful for predicting the CPU capacity required
  * after task migrations (scheduler-driven DVFS).
  *
- * Return: (Boosted) (estimated) utilization for the specified CPU.
+ * Return: (Estimated) utilization for the specified CPU.
  */
 static unsigned long
-cpu_util(int cpu, struct task_struct *p, int dst_cpu, int boost)
+cpu_util(int cpu, struct task_struct *p, int dst_cpu)
 {
 	struct cfs_rq *cfs_rq = &cpu_rq(cpu)->cfs;
 	unsigned long util = READ_ONCE(cfs_rq->avg.util_avg);
-	unsigned long runnable;
-
-	if (boost) {
-		runnable = READ_ONCE(cfs_rq->avg.runnable_avg);
-		util = max(util, runnable);
-	}
 
 	/*
 	 * If @dst_cpu is -1 or @p migrates from @cpu to @dst_cpu remove its
@@ -8993,12 +8980,7 @@ cpu_util(int cpu, struct task_struct *p, int dst_cpu, int boost)
 
 unsigned long cpu_util_cfs(int cpu)
 {
-	return cpu_util(cpu, NULL, -1, 0);
-}
-
-unsigned long cpu_util_cfs_boost(int cpu)
-{
-	return cpu_util(cpu, NULL, -1, 1);
+	return cpu_util(cpu, NULL, -1);
 }
 
 /*
@@ -9020,7 +9002,7 @@ static unsigned long cpu_util_without(int cpu, struct task_struct *p)
 	if (cpu != task_cpu(p) || !READ_ONCE(p->se.avg.last_update_time))
 		p = NULL;
 
-	return cpu_util(cpu, p, -1, 0);
+	return cpu_util(cpu, p, -1);
 }
 
 /*
@@ -9187,7 +9169,7 @@ static inline void eenv_pd_busy_time(struct energy_env *eenv,
 	int cpu;
 
 	for_each_cpu(cpu, pd_cpus) {
-		unsigned long util = cpu_util(cpu, p, -1, 0);
+		unsigned long util = cpu_util(cpu, p, -1);
 
 		busy_time += effective_cpu_util(cpu, util, NULL, NULL);
 	}
@@ -9211,7 +9193,7 @@ eenv_pd_max_util(struct energy_env *eenv, struct cpumask *pd_cpus,
 
 	for_each_cpu(cpu, pd_cpus) {
 		struct task_struct *tsk = (cpu == dst_cpu) ? p : NULL;
-		unsigned long util = cpu_util(cpu, p, dst_cpu, 1);
+		unsigned long util = cpu_util(cpu, p, dst_cpu);
 		unsigned long eff_util, min, max;
 
 		/*
@@ -9373,7 +9355,7 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 			if (!cpumask_test_cpu(cpu, p->cpus_ptr))
 				continue;
 
-			util = cpu_util(cpu, p, cpu, 0);
+			util = cpu_util(cpu, p, cpu);
 			cpu_cap = capacity_of(cpu);
 
 			/*
@@ -13028,7 +13010,7 @@ static struct rq *sched_balance_find_src_rq(struct lb_env *env,
 			break;
 
 		case migrate_util:
-			util = cpu_util_cfs_boost(i);
+			util = cpu_util_cfs(i);
 
 			/*
 			 * Don't try to pull utilization from a CPU with one
