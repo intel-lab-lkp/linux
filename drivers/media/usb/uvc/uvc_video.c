@@ -12,6 +12,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
 #include <linux/videodev2.h>
@@ -2148,6 +2149,17 @@ int uvc_video_resume(struct uvc_streaming *stream, int reset)
 	uvc_video_clock_reset(&stream->clock);
 
 	if (!uvc_queue_streaming(&stream->queue))
+		return 0;
+
+	/*
+	 * During hibernation image writing (PMSG_THAW), the kernel briefly
+	 * resumes devices after the snapshot has been created.  Skip hardware
+	 * reinitialization to avoid USB traffic and the spurious camera LED
+	 * activation.  stream->frozen has already been cleared, so if the
+	 * image write fails and the system resumes normally, driver state
+	 * remains consistent; userspace will need to restart the stream.
+	 */
+	if (pm_hibernation_snapshot_done())
 		return 0;
 
 	ret = uvc_commit_video(stream, &stream->ctrl);
