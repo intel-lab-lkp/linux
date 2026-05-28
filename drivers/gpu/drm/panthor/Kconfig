@@ -27,3 +27,10 @@ config DRM_PANTHOR_SYSTEM
 	depends on OF
 	help
 	  Driver for GPU-wide configuration of Arm Mali 5th Gen AM GPUs.
+
+config DRM_PANTHOR_ARBITRATION
+	tristate "HW-assisted virtualization for Mali 5th Gen AM GPUs"
+	depends on DRM_PANTHOR
+	depends on OF
+	help
+	  HW-assisted virtualization driver for Mali 5th Gen AM GPUs.

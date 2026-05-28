@@ -15,5 +15,6 @@ panthor-y := \
 
 obj-$(CONFIG_DRM_PANTHOR) += panthor.o
 obj-$(CONFIG_DRM_PANTHOR_SYSTEM) += system/
+obj-$(CONFIG_DRM_PANTHOR_ARBITRATION) += arbitration/
 
 CFLAGS_panthor_gpu.o := -I$(src)
