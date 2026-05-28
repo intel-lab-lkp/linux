@@ -9,6 +9,7 @@
 #include <linux/types.h>
 
 #include "panthor_arbitration.h"
+#include "panthor_arbitration_sched.h"
 #include "panthor_partition_control.h"
 #include "panthor_resource_group.h"
 
@@ -18,6 +19,10 @@ static int panthor_arbitration_runtime_suspend(struct device *dev)
 {
 	struct panthor_arbitration *adev = dev_get_drvdata(dev);
 	int ret = 0;
+
+	ret = panthor_arbitration_sched_suspend(adev);
+	if (ret)
+		return ret;
 
 	ret = panthor_partition_control_suspend(adev);
 	if (ret)
@@ -40,6 +45,10 @@ static int panthor_arbitration_runtime_resume(struct device *dev)
 		return ret;
 
 	ret = panthor_partition_control_resume(adev);
+	if (ret)
+		return ret;
+
+	ret = panthor_arbitration_sched_resume(adev);
 	if (ret)
 		return ret;
 
@@ -79,12 +88,19 @@ static int panthor_arbitration_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_term_partition;
 
+	ret = panthor_arbitration_sched_init(adev);
+	if (ret)
+		goto err_term_resgroup;
+
 	pm_runtime_set_autosuspend_delay(dev, PANTHOR_PM_AUTOSUSPEND_DELAY_MS);
 	pm_runtime_use_autosuspend(dev);
 
 	pm_runtime_put_autosuspend(dev);
 
 	return 0;
+
+err_term_resgroup:
+	panthor_resource_group_term(adev);
 
 err_term_partition:
 	panthor_partition_control_term(adev);
@@ -106,6 +122,7 @@ static void panthor_arbitration_remove(struct platform_device *pdev)
 	if (ret < 0)
 		goto out_suspended;
 
+	panthor_arbitration_sched_term(adev);
 	panthor_resource_group_term(adev);
 	panthor_partition_control_term(adev);
 

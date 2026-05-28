@@ -5,6 +5,7 @@
 #define __PANTHOR_ARBITRATION_H__
 
 struct device;
+struct panthor_arbitration_sched;
 struct panthor_partition_control;
 struct panthor_resource_group;
 
@@ -24,6 +25,9 @@ struct panthor_arbitration {
 
 	/** @rg: Pointer array to resource group data */
 	struct panthor_resource_group *rg[AM_ARB_MAX_RG_COUNT];
+
+	/** @shed: Pointer to scheduler data. 1 sched per partition */
+	struct panthor_arbitration_sched *sched[AM_ARB_MAX_PC_COUNT];
 };
 
 #endif
