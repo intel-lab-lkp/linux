@@ -536,6 +536,7 @@ ip_vs_sched_persist(struct ip_vs_service *svc,
 			IP_VS_DBG(1, "p-schedule: no dest found.\n");
 			kfree(param.pe_data);
 			*ignored = 0;
+			ip_vs_conn_put(ct);
 			return NULL;
 		}
 
@@ -551,6 +552,7 @@ ip_vs_sched_persist(struct ip_vs_service *svc,
 		if (ct == NULL) {
 			kfree(param.pe_data);
 			*ignored = -1;
+			ip_vs_conn_put(ct);
 			return NULL;
 		}
 
