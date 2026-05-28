@@ -189,6 +189,7 @@ static const struct attribute_group *pt_attr_groups[] = {
 
 static int __init pt_pmu_hw_init(void)
 {
+	const struct leaf_0x15_0 *l15;
 	struct dev_ext_attribute *de_attrs;
 	struct attribute **attrs;
 	size_t size;
@@ -199,18 +200,11 @@ static int __init pt_pmu_hw_init(void)
 	rdmsrq(MSR_PLATFORM_INFO, reg);
 	pt_pmu.max_nonturbo_ratio = (reg & 0xff00) >> 8;
 
-	/*
-	 * if available, read in TSC to core crystal clock ratio,
-	 * otherwise, zero for numerator stands for "not enumerated"
-	 * as per SDM
-	 */
-	if (boot_cpu_data.cpuid_level >= CPUID_LEAF_TSC) {
-		u32 eax, ebx, ecx, edx;
-
-		cpuid(CPUID_LEAF_TSC, &eax, &ebx, &ecx, &edx);
-
-		pt_pmu.tsc_art_num = ebx;
-		pt_pmu.tsc_art_den = eax;
+	/* Save the TSC to core crystal clock ratio, if available */
+	l15 = cpuid_leaf(&boot_cpu_data, 0x15);
+	if (l15) {
+		pt_pmu.tsc_art_num = l15->tsc_numerator;
+		pt_pmu.tsc_art_den = l15->tsc_denominator;
 	}
 
 	/* model-specific quirks */
