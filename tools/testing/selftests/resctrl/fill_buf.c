@@ -27,6 +27,9 @@ static void sb(void)
 #if defined(__i386) || defined(__x86_64)
 	asm volatile("sfence\n\t"
 		     : : : "memory");
+#elif defined(__aarch64__)
+	asm volatile("dsb sy\n\t"
+		     : : : "memory");
 #endif
 }
 
@@ -34,6 +37,9 @@ static void cl_flush(void *p)
 {
 #if defined(__i386) || defined(__x86_64)
 	asm volatile("clflush (%0)\n\t"
+		     : : "r"(p) : "memory");
+#elif defined(__aarch64__)
+	asm volatile("dc civac, %0\n\t"
 		     : : "r"(p) : "memory");
 #endif
 }
