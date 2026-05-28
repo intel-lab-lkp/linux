@@ -1623,7 +1623,7 @@ int vmx_get_vmx_msr(struct nested_vmx_msrs *msrs, u32 msr_index, u64 *pdata)
 		*pdata = msrs->vmfunc_controls;
 		break;
 	default:
-		return 1;
+		return -EINVAL;
 	}
 
 	return 0;
