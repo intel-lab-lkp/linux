@@ -3539,13 +3539,19 @@ static inline void add_partial(struct kmem_cache_node *n,
 	__add_partial(n, slab, mode);
 }
 
+static inline void clear_node_partial_state(struct kmem_cache_node *n,
+					struct slab *slab)
+{
+	slab_clear_node_partial(slab);
+	n->nr_partial--;
+}
+
 static inline void remove_partial(struct kmem_cache_node *n,
 					struct slab *slab)
 {
 	lockdep_assert_held(&n->list_lock);
 	list_del(&slab->slab_list);
-	slab_clear_node_partial(slab);
-	n->nr_partial--;
+	clear_node_partial_state(n, slab);
 }
 
 /*
@@ -3786,8 +3792,7 @@ static bool get_partial_node_bulk(struct kmem_cache *s,
 		if (!first)
 			first = slab;
 		last = slab;
-		slab_clear_node_partial(slab);
-		n->nr_partial--;
+		clear_node_partial_state(n, slab);
 
 		total_free += slab_free;
 		if (total_free >= pc->max_objects)
@@ -8282,8 +8287,7 @@ static int __kmem_cache_do_shrink(struct kmem_cache *s)
 
 			if (free == slab->objects) {
 				list_move(&slab->slab_list, &discard);
-				slab_clear_node_partial(slab);
-				n->nr_partial--;
+				clear_node_partial_state(n, slab);
 				dec_slabs_node(s, node, slab->objects);
 			} else if (free <= SHRINK_PROMOTE_MAX)
 				list_move(&slab->slab_list, promote + free - 1);
