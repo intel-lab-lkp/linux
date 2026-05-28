@@ -53,9 +53,8 @@ patternProperties:
 
   "^clock-controller@[0-9a-f]+$":
     type: object
-    $ref: /schemas/clock/ti,am654-ehrpwm-tbclk.yaml#
     description:
-      Clock provider for TI EHRPWM nodes.
+      A clock controller with registers in the Control Module.
 
   "phy@[0-9a-f]+$":
     type: object
@@ -76,9 +75,8 @@ patternProperties:
 
   "^clock@[0-9a-f]+$":
     type: object
-    $ref: /schemas/soc/ti/ti,am654-serdes-ctrl.yaml#
     description:
-      This is the Serdes Control region.
+      A clock with registers in the Control Module.
 
   "^dss-oldi-io-ctrl@[0-9a-f]+$":
     type: object
