@@ -629,6 +629,8 @@ static int tgl_get_bw_info(struct intel_display *display,
 	 */
 	clperchgroup = 4 * (8 / num_channels) * qi.deinterleave;
 
+	display->bw.max[0].num_planes = U8_MAX;
+
 	for (i = 0; i < num_groups; i++) {
 		struct intel_bw_info *bi = &display->bw.max[i];
 		struct intel_bw_info *bi_next;
@@ -701,10 +703,10 @@ static void dg2_get_bw_info(struct intel_display *display)
 {
 	int i;
 
+	display->bw.max[0].num_planes = U8_MAX;
 	display->bw.max[0].deratedbw[0] = display->platform.dg2_g11 ? 38000 : 50000;
 
 	/* Bandwidth does not depend on # of planes; set all groups the same */
-	display->bw.max[0].num_planes = 1;
 	display->bw.max[0].num_qgv_points = 1;
 	for (i = 1; i < ARRAY_SIZE(display->bw.max); i++)
 		display->bw.max[i] = display->bw.max[0];
@@ -731,6 +733,8 @@ static int xe2_hpd_get_bw_info(struct intel_display *display,
 	peakbw = tgl_peakbw(num_channels, qi.channel_width, icl_sagv_max_dclk(&qi));
 	maxdebw = min(soc_bw_params->deprogbwlimit * 1000, peakbw * DEPROGBWPCLIMIT / 100);
 
+	display->bw.max[0].num_planes = U8_MAX;
+
 	for (i = 0; i < qi.num_points; i++) {
 		const struct intel_qgv_point *sp = &qi.points[i];
 		int bw = tgl_peakbw(num_channels, qi.channel_width, sp->dclk);
@@ -745,7 +749,6 @@ static int xe2_hpd_get_bw_info(struct intel_display *display,
 	}
 
 	/* Bandwidth does not depend on # of planes; set all groups the same */
-	display->bw.max[0].num_planes = 1;
 	display->bw.max[0].num_qgv_points = qi.num_points;
 	for (i = 1; i < ARRAY_SIZE(display->bw.max); i++)
 		display->bw.max[i] = display->bw.max[0];
@@ -808,7 +811,7 @@ static unsigned int tgl_max_bw_index(struct intel_display *display,
 			return i;
 	}
 
-	return 0;
+	return UINT_MAX;
 }
 
 static unsigned int adl_psf_bw(struct intel_display *display,
