@@ -198,49 +198,6 @@ union cpuid35_ebx {
 };
 
 /*
- * Intel Architectural LBR CPUID detection/enumeration details:
- */
-union cpuid28_eax {
-	struct {
-		/* Supported LBR depth values */
-		unsigned int	lbr_depth_mask:8;
-		unsigned int	reserved:22;
-		/* Deep C-state Reset */
-		unsigned int	lbr_deep_c_reset:1;
-		/* IP values contain LIP */
-		unsigned int	lbr_lip:1;
-	} split;
-	unsigned int		full;
-};
-
-union cpuid28_ebx {
-	struct {
-		/* CPL Filtering Supported */
-		unsigned int    lbr_cpl:1;
-		/* Branch Filtering Supported */
-		unsigned int    lbr_filter:1;
-		/* Call-stack Mode Supported */
-		unsigned int    lbr_call_stack:1;
-	} split;
-	unsigned int            full;
-};
-
-union cpuid28_ecx {
-	struct {
-		/* Mispredict Bit Supported */
-		unsigned int    lbr_mispred:1;
-		/* Timed LBRs Supported */
-		unsigned int    lbr_timed_lbr:1;
-		/* Branch Type Field Supported */
-		unsigned int    lbr_br_type:1;
-		unsigned int	reserved:13;
-		/* Branch counters (Event Logging) Supported */
-		unsigned int	lbr_counters:4;
-	} split;
-	unsigned int            full;
-};
-
-/*
  * AMD "Extended Performance Monitoring and Debug" CPUID
  * detection/enumeration details:
  */
