@@ -347,6 +347,12 @@ struct panthor_device {
 
 		/** @recovery_needed: True when a resume attempt failed. */
 		atomic_t recovery_needed;
+
+		/** @hw_component_lock: Lock protects HW component PM state transitions */
+		struct mutex hw_component_lock;
+
+		/** @hw_component_state: HW component PM state */
+		atomic_t hw_component_state;
 	} pm;
 
 	/** @profile_mask: User-set profiling flags for job accounting. */
@@ -435,6 +441,9 @@ int panthor_device_mmap_io(struct panthor_device *ptdev,
 
 int panthor_device_resume(struct device *dev);
 int panthor_device_suspend(struct device *dev);
+
+int panthor_device_suspend_hw_components(struct panthor_device *ptdev);
+int panthor_device_resume_hw_components(struct panthor_device *ptdev);
 
 static inline int panthor_device_resume_and_get(struct panthor_device *ptdev)
 {

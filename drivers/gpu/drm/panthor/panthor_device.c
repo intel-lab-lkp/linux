@@ -179,6 +179,10 @@ int panthor_device_init(struct panthor_device *ptdev)
 	if (ret)
 		return ret;
 
+	ret = drmm_mutex_init(&ptdev->base, &ptdev->pm.hw_component_lock);
+	if (ret)
+		return ret;
+
 	ret = drmm_mutex_init(&ptdev->base, &ptdev->pm.mmio_lock);
 	if (ret)
 		return ret;
@@ -288,6 +292,9 @@ int panthor_device_init(struct panthor_device *ptdev)
 	ret = panthor_fw_init(ptdev);
 	if (ret)
 		goto err_unplug_mmu;
+
+	atomic_set(&ptdev->pm.hw_component_state,
+		   PANTHOR_DEVICE_PM_STATE_ACTIVE);
 
 	ret = panthor_sched_init(ptdev);
 	if (ret)
@@ -477,21 +484,55 @@ int panthor_device_mmap_io(struct panthor_device *ptdev, struct vm_area_struct *
 	return 0;
 }
 
-static int panthor_device_resume_hw_components(struct panthor_device *ptdev)
+int panthor_device_suspend_hw_components(struct panthor_device *ptdev)
+{
+	guard(mutex)(&ptdev->pm.hw_component_lock);
+
+	if (atomic_read(&ptdev->pm.hw_component_state) ==
+	    PANTHOR_DEVICE_PM_STATE_SUSPENDED)
+		return 0;
+
+	if (!pm_runtime_suspended(ptdev->base.dev)) {
+		panthor_fw_suspend(ptdev);
+		panthor_mmu_suspend(ptdev);
+		panthor_gpu_suspend(ptdev);
+		panthor_pwr_suspend(ptdev);
+	}
+
+	atomic_set(&ptdev->pm.hw_component_state,
+		   PANTHOR_DEVICE_PM_STATE_SUSPENDED);
+
+	return 0;
+}
+
+int panthor_device_resume_hw_components(struct panthor_device *ptdev)
 {
 	int ret;
+
+	guard(mutex)(&ptdev->pm.hw_component_lock);
+
+	if (atomic_read(&ptdev->pm.hw_component_state) ==
+	    PANTHOR_DEVICE_PM_STATE_ACTIVE)
+		return 0;
 
 	panthor_pwr_resume(ptdev);
 	panthor_gpu_resume(ptdev);
 	panthor_mmu_resume(ptdev);
 
 	ret = panthor_fw_resume(ptdev);
-	if (!ret)
+	if (!ret) {
+		atomic_set(&ptdev->pm.hw_component_state,
+			   PANTHOR_DEVICE_PM_STATE_ACTIVE);
 		return 0;
+	}
 
 	panthor_mmu_suspend(ptdev);
 	panthor_gpu_suspend(ptdev);
 	panthor_pwr_suspend(ptdev);
+
+	atomic_set(&ptdev->pm.hw_component_state,
+		   PANTHOR_DEVICE_PM_STATE_SUSPENDED);
+
 	return ret;
 }
 
@@ -602,10 +643,7 @@ int panthor_device_suspend(struct device *dev)
 		 * The end of the reset will happen in the resume path though.
 		 */
 		panthor_sched_suspend(ptdev);
-		panthor_fw_suspend(ptdev);
-		panthor_mmu_suspend(ptdev);
-		panthor_gpu_suspend(ptdev);
-		panthor_pwr_suspend(ptdev);
+		panthor_device_suspend_hw_components(ptdev);
 		drm_dev_exit(cookie);
 	}
 
