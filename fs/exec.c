@@ -1775,30 +1775,11 @@ out:
 	return retval;
 }
 
-static int do_execveat_common(int fd, struct filename *filename,
-			      struct user_arg_ptr argv,
-			      struct user_arg_ptr envp,
-			      int flags)
+static int do_execveat_common_bprm(struct linux_binprm *bprm,
+				   struct user_arg_ptr argv,
+				   struct user_arg_ptr envp)
 {
 	int retval;
-
-	/*
-	 * We move the actual failure in case of RLIMIT_NPROC excess from
-	 * set*uid() to execve() because too many poorly written programs
-	 * don't check setuid() return code.  Here we additionally recheck
-	 * whether NPROC limit is still exceeded.
-	 */
-	if ((current->flags & PF_NPROC_EXCEEDED) &&
-	    is_rlimit_overlimit(current_ucounts(), UCOUNT_RLIMIT_NPROC, rlimit(RLIMIT_NPROC)))
-		return -EAGAIN;
-
-	/* We're below the limit (still or again), so we don't want to make
-	 * further execve() calls fail. */
-	current->flags &= ~PF_NPROC_EXCEEDED;
-
-	CLASS(bprm, bprm)(fd, filename, flags);
-	if (IS_ERR(bprm))
-		return PTR_ERR(bprm);
 
 	retval = count(argv, MAX_ARG_STRINGS);
 	if (retval < 0)
@@ -1844,6 +1825,34 @@ static int do_execveat_common(int fd, struct filename *filename,
 	}
 
 	return bprm_execve(bprm);
+}
+
+static int do_execveat_common(int fd, struct filename *filename,
+			      struct user_arg_ptr argv,
+			      struct user_arg_ptr envp,
+			      int flags)
+{
+	/*
+	 * We move the actual failure in case of RLIMIT_NPROC excess from
+	 * set*uid() to execve() because too many poorly written programs
+	 * don't check setuid() return code.  Here we additionally recheck
+	 * whether NPROC limit is still exceeded.
+	 */
+	if ((current->flags & PF_NPROC_EXCEEDED) &&
+	    is_rlimit_overlimit(current_ucounts(), UCOUNT_RLIMIT_NPROC, rlimit(RLIMIT_NPROC)))
+		return -EAGAIN;
+
+	/*
+	 * We're below the limit (still or again), so we don't want to make
+	 * further execve() calls fail.
+	 */
+	current->flags &= ~PF_NPROC_EXCEEDED;
+
+	CLASS(bprm, bprm)(fd, filename, flags);
+	if (IS_ERR(bprm))
+		return PTR_ERR(bprm);
+
+	return do_execveat_common_bprm(bprm, argv, envp);
 }
 
 int kernel_execve(const char *kernel_filename,
