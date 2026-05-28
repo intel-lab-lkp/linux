@@ -86,7 +86,8 @@ kind of setup that ``posix_spawn_file_actions_t`` commonly performs:
   Open a path using ``struct open_how`` and install it at ``newfd``.
 
 ``SPAWN_TEMPLATE_ACTION_CLOSE_RANGE``
-  Apply ``close_range()`` to a child fd range.
+  Apply ``close_range()`` to a child fd range.  Passing ``newfd == -1`` means
+  the range extends to the largest possible fd.
 
 ``SPAWN_TEMPLATE_ACTION_SIGMASK``
   Set the child signal mask.

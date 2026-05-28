@@ -220,6 +220,8 @@ static int spawn_template_apply_sigdefault(const struct spawn_template_action *a
 
 static int spawn_template_apply_action(const struct spawn_template_action *action)
 {
+	unsigned int max_fd;
+
 	switch (action->type) {
 	case SPAWN_TEMPLATE_ACTION_CLOSE:
 		return close_fd(action->fd);
@@ -251,7 +253,8 @@ static int spawn_template_apply_action(const struct spawn_template_action *actio
 	case SPAWN_TEMPLATE_ACTION_OPEN:
 		return spawn_template_apply_open(action);
 	case SPAWN_TEMPLATE_ACTION_CLOSE_RANGE:
-		return do_close_range(action->fd, action->newfd, action->flags);
+		max_fd = action->newfd == -1 ? ~0U : action->newfd;
+		return do_close_range(action->fd, max_fd, action->flags);
 	case SPAWN_TEMPLATE_ACTION_SIGMASK:
 		return spawn_template_apply_sigmask(action);
 	case SPAWN_TEMPLATE_ACTION_SIGDEFAULT:
@@ -306,8 +309,9 @@ static int spawn_template_copy_actions(struct spawn_template_action **out_action
 				return -EINVAL;
 			break;
 		case SPAWN_TEMPLATE_ACTION_CLOSE_RANGE:
-			if (actions[i].fd < 0 || actions[i].newfd < 0 ||
-			    actions[i].fd > actions[i].newfd ||
+			if (actions[i].fd < 0 || actions[i].newfd < -1 ||
+			    (actions[i].newfd >= 0 &&
+			     actions[i].fd > actions[i].newfd) ||
 			    (actions[i].flags &
 			     ~(CLOSE_RANGE_UNSHARE | CLOSE_RANGE_CLOEXEC)) ||
 			    actions[i].arg)
