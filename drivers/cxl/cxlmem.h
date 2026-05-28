@@ -48,6 +48,7 @@ struct cxl_memdev_attach {
  * @cxl_nvd: optional bridge to an nvdimm if the device supports pmem
  * @endpoint: connection to the CXL port topology for this memory device
  * @attach: creator of this memdev depends on CXL link attach to operate
+ * @reset_capable: cached CXL Reset support
  * @id: id number of this memdev instance.
  * @depth: endpoint port depth
  * @scrub_cycle: current scrub cycle set for this device
@@ -65,6 +66,7 @@ struct cxl_memdev {
 	struct cxl_nvdimm *cxl_nvd;
 	struct cxl_port *endpoint;
 	const struct cxl_memdev_attach *attach;
+	bool reset_capable;
 	int id;
 	int depth;
 	u8 scrub_cycle;

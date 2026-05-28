@@ -1207,6 +1207,22 @@ static bool cxl_reset_has_cache_or_mem(struct pci_dev *pdev)
 	return cap & (PCI_DVSEC_CXL_CACHE_CAPABLE | PCI_DVSEC_CXL_MEM_CAPABLE);
 }
 
+static bool cxl_reset_is_type2(struct pci_dev *pdev)
+{
+	u16 dvsec, cap;
+
+	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+					  PCI_DVSEC_CXL_DEVICE);
+	if (!dvsec)
+		return false;
+
+	if (pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_CAP, &cap))
+		return false;
+
+	return (cap & PCI_DVSEC_CXL_CACHE_CAPABLE) &&
+	       (cap & PCI_DVSEC_CXL_MEM_CAPABLE);
+}
+
 static int cxl_reset_add_sibling(struct cxl_reset_context *ctx,
 				 struct pci_dev *sibling)
 {
@@ -1939,7 +1955,7 @@ out:
 	return rc;
 }
 
-static int __maybe_unused cxl_do_reset(struct pci_dev *pdev, bool mem_clear)
+static int cxl_do_reset(struct pci_dev *pdev, bool mem_clear)
 {
 	struct cxl_reset_context ctx = {
 		.target = pdev,
@@ -1964,5 +1980,89 @@ static int __maybe_unused cxl_do_reset(struct pci_dev *pdev, bool mem_clear)
 
 out:
 	cxl_reset_context_destroy(&ctx);
+	return rc;
+}
+
+static struct pci_dev *cxl_reset_get_fn0(struct pci_dev *pdev)
+{
+	unsigned int devfn;
+
+	/*
+	 * CXL Reset control/status is exposed in Function 0 and affects all
+	 * CXL.cache/mem functions in the device.
+	 */
+	if (pci_ari_enabled(pdev->bus))
+		devfn = 0;
+	else
+		devfn = PCI_DEVFN(PCI_SLOT(pdev->devfn), 0);
+
+	if (pdev->devfn == devfn)
+		return pci_dev_get(pdev);
+
+	return pci_get_slot(pdev->bus, devfn);
+}
+
+static bool cxl_memdev_probe_reset_capable(struct cxl_memdev *cxlmd)
+{
+	struct device *dev = cxlmd->dev.parent;
+	struct pci_dev *pdev, *fn0;
+	int dvsec;
+	u16 cap;
+
+	if (!dev || !dev_is_pci(dev))
+		return false;
+
+	pdev = to_pci_dev(dev);
+	if (!cxl_reset_is_type2(pdev))
+		return false;
+
+	fn0 = cxl_reset_get_fn0(pdev);
+	if (!fn0)
+		return false;
+
+	dvsec = pci_find_dvsec_capability(fn0, PCI_VENDOR_ID_CXL,
+					  PCI_DVSEC_CXL_DEVICE);
+	if (!dvsec)
+		goto out;
+
+	if (pci_read_config_word(fn0, dvsec + PCI_DVSEC_CXL_CAP, &cap))
+		goto out;
+
+	pci_dev_put(fn0);
+	return cap & PCI_DVSEC_CXL_RST_CAPABLE;
+
+out:
+	pci_dev_put(fn0);
+	return false;
+}
+
+void cxl_memdev_init_reset(struct cxl_memdev *cxlmd)
+{
+	cxlmd->reset_capable = cxl_memdev_probe_reset_capable(cxlmd);
+}
+
+bool cxl_memdev_reset_capable(struct cxl_memdev *cxlmd)
+{
+	return cxlmd->reset_capable;
+}
+
+int cxl_memdev_reset(struct cxl_memdev *cxlmd)
+{
+	struct device *dev = cxlmd->dev.parent;
+	struct pci_dev *fn0;
+	int rc;
+
+	if (!cxl_memdev_reset_capable(cxlmd))
+		return -EOPNOTSUPP;
+
+	if (!dev || !dev_is_pci(dev))
+		return -ENODEV;
+
+	fn0 = cxl_reset_get_fn0(to_pci_dev(dev));
+	if (!fn0)
+		return -ENODEV;
+
+	rc = cxl_do_reset(fn0, false);
+	pci_dev_put(fn0);
 	return rc;
 }

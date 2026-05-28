@@ -199,6 +199,26 @@ static ssize_t security_erase_store(struct device *dev,
 static struct device_attribute dev_attr_security_erase =
 	__ATTR(erase, 0200, NULL, security_erase_store);
 
+static ssize_t cxl_reset_store(struct device *dev,
+			       struct device_attribute *attr, const char *buf,
+			       size_t len)
+{
+	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
+	bool reset;
+	int rc;
+
+	rc = kstrtobool(buf, &reset);
+	if (rc)
+		return rc;
+
+	if (!reset)
+		return -EINVAL;
+
+	rc = cxl_memdev_reset(cxlmd);
+	return rc ? rc : len;
+}
+static DEVICE_ATTR_WO(cxl_reset);
+
 bool cxl_memdev_has_poison_cmd(struct cxl_memdev *cxlmd,
 			       enum poison_cmd_enabled_bits cmd)
 {
@@ -421,6 +441,7 @@ static struct attribute *cxl_memdev_attributes[] = {
 	&dev_attr_payload_max.attr,
 	&dev_attr_label_storage_size.attr,
 	&dev_attr_numa_node.attr,
+	&dev_attr_cxl_reset.attr,
 	NULL,
 };
 
@@ -485,8 +506,16 @@ static struct attribute *cxl_memdev_security_attributes[] = {
 static umode_t cxl_memdev_visible(struct kobject *kobj, struct attribute *a,
 				  int n)
 {
+	struct device *dev = kobj_to_dev(kobj);
+	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
+
 	if (!IS_ENABLED(CONFIG_NUMA) && a == &dev_attr_numa_node.attr)
 		return 0;
+
+	if (a == &dev_attr_cxl_reset.attr &&
+	    !cxl_memdev_reset_capable(cxlmd))
+		return 0;
+
 	return a->mode;
 }
 
@@ -1099,6 +1128,7 @@ static int cxlmd_add(struct cxl_memdev *cxlmd, struct cxl_dev_state *cxlds)
 
 	cxlmd->cxlds = cxlds;
 	cxlds->cxlmd = cxlmd;
+	cxl_memdev_init_reset(cxlmd);
 
 	rc = cdev_device_add(&cxlmd->cdev, &cxlmd->dev);
 	if (rc) {
