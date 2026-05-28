@@ -253,26 +253,20 @@ static int moxart_rtc_probe(struct platform_device *pdev)
 	moxart_rtc->gpio_data = devm_gpiod_get(&pdev->dev, "rtc-data",
 					       GPIOD_IN);
 	ret = PTR_ERR_OR_ZERO(moxart_rtc->gpio_data);
-	if (ret) {
-		dev_err(&pdev->dev, "can't get rtc data gpio: %d\n", ret);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "can't get rtc data gpio\n");
 
 	moxart_rtc->gpio_sclk = devm_gpiod_get(&pdev->dev, "rtc-sclk",
 					       GPIOD_ASIS);
 	ret = PTR_ERR_OR_ZERO(moxart_rtc->gpio_sclk);
-	if (ret) {
-		dev_err(&pdev->dev, "can't get rtc sclk gpio: %d\n", ret);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "can't get rtc sclk gpio\n");
 
 	moxart_rtc->gpio_reset = devm_gpiod_get(&pdev->dev, "rtc-reset",
 						GPIOD_ASIS);
 	ret = PTR_ERR_OR_ZERO(moxart_rtc->gpio_reset);
-	if (ret) {
-		dev_err(&pdev->dev, "can't get rtc reset gpio: %d\n", ret);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "can't get rtc reset gpio\n");
 
 	spin_lock_init(&moxart_rtc->rtc_lock);
 	platform_set_drvdata(pdev, moxart_rtc);
@@ -280,10 +274,9 @@ static int moxart_rtc_probe(struct platform_device *pdev)
 	moxart_rtc->rtc = devm_rtc_device_register(&pdev->dev, pdev->name,
 						   &moxart_rtc_ops,
 						   THIS_MODULE);
-	if (IS_ERR(moxart_rtc->rtc)) {
-		dev_err(&pdev->dev, "devm_rtc_device_register failed\n");
-		return PTR_ERR(moxart_rtc->rtc);
-	}
+	if (IS_ERR(moxart_rtc->rtc))
+		return dev_err_probe(&pdev->dev, PTR_ERR(moxart_rtc->rtc),
+				     "devm_rtc_device_register failed\n");
 
 	return 0;
 }
