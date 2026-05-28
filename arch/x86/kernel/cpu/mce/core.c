@@ -120,7 +120,7 @@ BLOCKING_NOTIFIER_HEAD(x86_mce_decoder_chain);
 
 void mce_prep_record_common(struct mce *m)
 {
-	m->cpuid	= cpuid_eax(1);
+	m->cpuid	= cpuid_leaf_raw(&boot_cpu_data, 0x1)->eax;
 	m->cpuvendor	= boot_cpu_data.x86_vendor;
 	m->mcgcap	= native_rdmsrq(MSR_IA32_MCG_CAP);
 	/* need the internal __ version to avoid deadlocks */
