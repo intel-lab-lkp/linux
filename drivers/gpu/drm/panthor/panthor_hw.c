@@ -41,6 +41,10 @@ static struct panthor_hw panthor_hw_arch_v10 = {
 	.map = {
 		.gpu_control_base = 0x0,
 		.mcu_control_base = 0x700,
+		.mmu_as = {
+			.base = 0x2400,
+			.stride = 0x40,
+		},
 	},
 };
 
@@ -54,6 +58,10 @@ static struct panthor_hw panthor_hw_arch_v14 = {
 		.gpu_control_base = 0x0,
 		.pwr_control_base = 0x800,
 		.mcu_control_base = 0x700,
+		.mmu_as = {
+			.base = 0x2400,
+			.stride = 0x40,
+		},
 	},
 };
 

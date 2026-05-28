@@ -38,6 +38,14 @@ struct panthor_hw_regmap {
 
 	/** @mcu_control_base: MCU_CONTROL base address */
 	u32 mcu_control_base;
+
+	struct {
+		/** @mmu_as.base: MMU_AS base address */
+		u32 base;
+
+		/** @mmu_as.stride: Stride between subsequent MMU_AS register blocks */
+		u32 stride;
+	} mmu_as;
 };
 
 /**
