@@ -18,6 +18,8 @@
 #include <drm/gpu_scheduler.h>
 #include <drm/panthor_drm.h>
 
+#include "panthor_aw.h"
+
 struct panthor_aw;
 struct panthor_csf;
 struct panthor_csf_ctx;
@@ -461,8 +463,18 @@ static inline int panthor_device_resume_and_get(struct panthor_device *ptdev)
 	 * succeeded. Given resume errors are not expected, this is probably
 	 * something we can live with.
 	 */
-	if (ret && atomic_cmpxchg(&ptdev->pm.recovery_needed, 1, 0) == 1)
-		pm_runtime_set_suspended(ptdev->base.dev);
+	if (ret) {
+		if (atomic_cmpxchg(&ptdev->pm.recovery_needed, 1, 0) == 1)
+			pm_runtime_set_suspended(ptdev->base.dev);
+
+		return ret;
+	}
+
+	ret = panthor_aw_ensure_gpu_access(ptdev);
+	if (ret) {
+		pm_runtime_put_autosuspend(ptdev->base.dev);
+		return ret;
+	}
 
 	return ret;
 }

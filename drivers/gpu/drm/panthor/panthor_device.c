@@ -570,11 +570,11 @@ int panthor_device_resume(struct device *dev)
 			atomic_set(&ptdev->reset.pending, 0);
 		}
 
-		ret = panthor_device_resume_hw_components(ptdev);
+		ret = panthor_aw_resume(ptdev);
 		if (ret && ptdev->reset.fast) {
 			drm_err(&ptdev->base, "Fast reset failed, trying a slow reset");
 			ptdev->reset.fast = false;
-			ret = panthor_device_resume_hw_components(ptdev);
+			ret = panthor_aw_resume(ptdev);
 		}
 
 		if (!ret)
@@ -643,7 +643,7 @@ int panthor_device_suspend(struct device *dev)
 		 * The end of the reset will happen in the resume path though.
 		 */
 		panthor_sched_suspend(ptdev);
-		panthor_device_suspend_hw_components(ptdev);
+		panthor_aw_suspend(ptdev);
 		drm_dev_exit(cookie);
 	}
 

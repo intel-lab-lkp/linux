@@ -77,6 +77,9 @@ struct panthor_aw {
 
 	/** @msg_retry_work: Work to resend messages */
 	struct work_struct msg_retry_work;
+
+	/** @post_yield_work: Work to yield the GPU */
+	struct work_struct post_yield_work;
 };
 
 static bool panthor_aw_is_open(struct panthor_aw *aw)
@@ -116,6 +119,52 @@ static int panthor_aw_state_wait_transition(struct panthor_aw *aw, u32 timeout_m
 		(atomic_read(&aw->state) == PANTHOR_AW_STATE_READY ||
 		 atomic_read(&aw->state) == PANTHOR_AW_STATE_GPU_GRANTED),
 		timeout_ms);
+}
+
+static void panthor_aw_post_yield_work(struct work_struct *work)
+{
+	struct panthor_aw *aw =
+		container_of(work, struct panthor_aw, post_yield_work);
+	struct panthor_device *ptdev = aw->ptdev;
+	struct device *dev = ptdev->base.dev;
+	int ret;
+
+	/* Something else has progressed the state to READY. */
+	if (atomic_read(&aw->state) != PANTHOR_AW_STATE_GPU_STOPPED)
+		return;
+
+	/*
+	 * Ensure in-progress resume is completed and prevent future RPM suspend
+	 * to keep the clocks turned on when accessing HW registers.
+	 */
+	pm_runtime_get_noresume(dev);
+	pm_runtime_barrier(dev);
+
+	ret = panthor_device_suspend_hw_components(ptdev);
+	if (ret)
+		dev_warn(dev, "Failed to suspend hardware components.");
+
+	panthor_aw_state_set(aw, PANTHOR_AW_STATE_READY);
+
+	/*
+	 * schedule an immediate tick to re-evaluate if there is any additional
+	 * work. This will request access to the GPU again and if the driver has
+	 * gone idle, it will yield GPU access via the runtime suspend path.
+	 */
+	panthor_sched_resume(ptdev);
+
+	pm_runtime_put_noidle(dev);
+}
+
+static bool panthor_aw_schedule_post_yield_work(struct panthor_aw *aw)
+{
+	if (panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_GPU_GRANTED,
+				     PANTHOR_AW_STATE_GPU_STOPPED)) {
+		queue_work(aw->wq, &aw->post_yield_work);
+		return true;
+	}
+
+	return false;
 }
 
 static void panthor_aw_msg_retry_work(struct work_struct *work)
@@ -166,7 +215,9 @@ static void panthor_aw_handshake_handle(struct panthor_aw *aw, u64 message)
 
 		panthor_aw_send_msg(aw, reply);
 
-		/* TODO: Handle AW restart */
+		/* Arbiter was restarted. Window is no longer granted access. */
+		if (panthor_aw_schedule_post_yield_work(aw))
+			drm_info(&ptdev->base, "Arbiter was restarted, yielding GPU");
 	}
 
 	panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_INIT, PANTHOR_AW_STATE_READY);
@@ -192,6 +243,38 @@ static void panthor_aw_handle_message(struct panthor_aw *aw)
 		drm_warn(&ptdev->base, "Unsupported msg id (0x%x)", msg_id);
 }
 
+static void panthor_aw_handle_window_closed(struct panthor_aw *aw)
+{
+	struct panthor_device *ptdev = aw->ptdev;
+
+	/* Ignore this WINDOW_CLOSED as part of reset operation. */
+	if (panthor_device_reset_is_pending(ptdev))
+		return;
+
+	if (atomic_read(&aw->state) == PANTHOR_AW_STATE_GPU_STOPPED ||
+	    atomic_read(&aw->state) == PANTHOR_AW_STATE_READY ||
+	    atomic_read(&aw->state) == PANTHOR_AW_STATE_INIT) {
+		drm_warn(&ptdev->base, "Unexpected WINDOW_CLOSED received");
+		return;
+	}
+
+	/*
+	 * Window may have been closed immediately after opening.
+	 * Setting state back to READY will prevent WINDOW_OPENDED from
+	 * mistakenly transitioning the state to GRANTED.
+	 */
+	if (panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_GPU_REQUEST,
+				     PANTHOR_AW_STATE_READY))
+		return;
+
+	/* Triggerred from messaged-based yield. Unblock its wait */
+	if (panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_STOPPED_IDLE,
+				     PANTHOR_AW_STATE_READY))
+		return;
+
+	panthor_aw_schedule_post_yield_work(aw);
+}
+
 static irqreturn_t panthor_aw_irq_raw_hander(int irq, void *data)
 {
 	struct panthor_irq *pirq = data;
@@ -211,7 +294,9 @@ static irqreturn_t panthor_aw_irq_raw_hander(int irq, void *data)
 	if (status & WINDOW_IRQ_MESSAGE)
 		panthor_aw_handle_message(aw);
 
-	/* TODO: handle WINDOW_CLOSED*/
+	if (status & WINDOW_IRQ_WINDOW_CLOSED)
+		panthor_aw_handle_window_closed(aw);
+
 
 	if ((status & WINDOW_IRQ_WINDOW_OPENED) && panthor_aw_is_open(aw))
 		panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_GPU_REQUEST,
@@ -264,12 +349,16 @@ static int panthor_request_aw_irq(struct panthor_device *ptdev,
 
 static int panthor_aw_request(struct panthor_aw *aw)
 {
+	struct panthor_device *ptdev = aw->ptdev;
 	int ret;
 
 again:
 	switch(atomic_read(&aw->state)) {
 	case PANTHOR_AW_STATE_GPU_GRANTED:
 		return 0;
+
+	case PANTHOR_AW_STATE_GPU_STOPPED:
+		return -EAGAIN;
 
 	case PANTHOR_AW_STATE_READY:
 		break;
@@ -278,14 +367,22 @@ again:
 		panthor_aw_handshake_init(aw);
 		ret = panthor_aw_state_wait(aw, PANTHOR_AW_STATE_READY,
 					    PANTHOR_AW_HANDSHAKE_TIMEOUT_MS);
-		if (ret)
+		if (ret) {
+			drm_err(&ptdev->base,
+				"Timed out waiting for handshake to complete");
 			return ret;
+		}
+
 		goto again;
 	default:
 		ret = panthor_aw_state_wait_transition(
 			aw, PANTHOR_AW_STATE_TRANSITION_TIMEOUT_MS);
-		if (ret)
+		if (ret) {
+			drm_err(&ptdev->base,
+				"Timed out waiting for AW state transition");
 			return ret;
+		}
+
 		goto again;
 	}
 
@@ -295,15 +392,20 @@ again:
 
 	panthor_aw_send_msg(aw, VM_ARB_GPU_REQUEST);
 
-	/* Wait for GPU to be granted */
-	ret = panthor_aw_state_wait(aw, PANTHOR_AW_STATE_GPU_GRANTED,
-				    PANTHOR_AW_GPU_REQUEST_TIMEOUT_MS);
+	ret = panthor_aw_wait_cond(
+		aw, atomic_read(&aw->state) != PANTHOR_AW_STATE_GPU_REQUEST,
+		PANTHOR_AW_GPU_REQUEST_TIMEOUT_MS);
 	if (ret) {
-		panthor_aw_state_set(aw, PANTHOR_AW_STATE_READY);
+		if (!panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_GPU_REQUEST,
+					      PANTHOR_AW_STATE_READY))
+			goto again;
+
+		drm_err(&ptdev->base,
+				"Timed out waiting for AW GPU to be granted");
 		return ret;
 	}
 
-	return 0;
+	goto again;
 }
 
 static int panthor_aw_yield(struct panthor_aw *aw)
@@ -335,6 +437,7 @@ int panthor_aw_init(struct panthor_device *ptdev)
 	aw->iomem = ptdev->iomem;
 
 	INIT_WORK(&aw->msg_retry_work, panthor_aw_msg_retry_work);
+	INIT_WORK(&aw->post_yield_work, panthor_aw_post_yield_work);
 
 	init_waitqueue_head(&aw->waitqueue);
 	atomic_set(&aw->state, PANTHOR_AW_STATE_INIT);
@@ -367,6 +470,7 @@ void panthor_aw_unplug(struct panthor_device *ptdev)
 		return;
 
 	disable_work_sync(&aw->msg_retry_work);
+	disable_work_sync(&aw->post_yield_work);
 
 	panthor_aw_irq_suspend(&aw->irq);
 }
@@ -376,16 +480,47 @@ int panthor_aw_resume(struct panthor_device *ptdev)
 	struct panthor_aw *aw = ptdev->aw;
 	int ret;
 
+	/* resume hw components directly if AW is not supported */
 	if (!aw)
-		return 0;
+		return panthor_device_resume_hw_components(ptdev);
 
 	panthor_aw_irq_resume(&aw->irq);
 
+again:
 	ret = panthor_aw_request(aw);
+	if (ret)
+		goto err_out;
+
+	ret = panthor_device_resume_hw_components(ptdev);
 	if (ret) {
-		drm_warn(&ptdev->base, "Timedout waiting for GPU to be granted");
+		/* Yield GPU access if HW components failed to resume */
+		if (panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_GPU_GRANTED,
+					     PANTHOR_AW_STATE_STOPPED_IDLE)) {
+			/*
+			 * If failure is caused by WINDOW_CLOSED and the IRQ is
+			 * handled after this condition, AW may emit a rogue
+			 * idle event that will be ignored by the arbitration
+			 * scheduler. WINDOW_CLOSED handler will then transition
+			 * the state back to READY.
+			 */
+			panthor_aw_yield(aw);
+		}
+
 		goto err_out;
 	}
+
+	/*
+	 * WINDOW_CLOSED won the race. post_yield_work owns component cleanup
+	 * and will transition state to READY after this PM transition is
+	 * complete.
+	 */
+	if (atomic_read(&aw->state) == PANTHOR_AW_STATE_GPU_STOPPED) {
+		ret = -EAGAIN;
+		goto err_out;
+	}
+
+	if (atomic_read(&aw->state) != PANTHOR_AW_STATE_GPU_GRANTED)
+		goto again;
 
 	return 0;
 
@@ -401,20 +536,33 @@ int panthor_aw_suspend(struct panthor_device *ptdev)
 
 	/* suspend hw components directly if AW is not supported */
 	if (!aw)
-		return 0;
+		return panthor_device_suspend_hw_components(ptdev);
 
 	if (atomic_read(&aw->state) == PANTHOR_AW_STATE_READY)
 		goto out_irq_suspend;
 
+	if (atomic_read(&aw->state) == PANTHOR_AW_STATE_GPU_GRANTED) {
+		ret = panthor_device_suspend_hw_components(ptdev);
+		if (ret)
+			goto out_irq_suspend;
+	}
+
 	if (panthor_aw_state_try_set(aw, PANTHOR_AW_STATE_GPU_GRANTED,
-		PANTHOR_AW_STATE_GPU_STOPPED))
+		PANTHOR_AW_STATE_STOPPED_IDLE)) {
 		ret = panthor_aw_yield(aw);
-	else
-		ret = panthor_aw_state_wait(
-			aw, PANTHOR_AW_STATE_READY,
-			PANTHOR_AW_STATE_TRANSITION_TIMEOUT_MS);
+		if (ret)
+			panthor_aw_state_set(aw, PANTHOR_AW_STATE_READY);
+	}
 
 out_irq_suspend:
 	panthor_aw_irq_suspend(&aw->irq);
 	return ret;
+}
+
+int panthor_aw_ensure_gpu_access(struct panthor_device *ptdev)
+{
+	if (!ptdev->aw)
+		return 0;
+
+	return panthor_aw_resume(ptdev);
 }
