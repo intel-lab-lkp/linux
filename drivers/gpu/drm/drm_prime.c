@@ -202,7 +202,10 @@ void drm_prime_remove_buf_handle(struct drm_prime_file_private *prime_fpriv,
 
 			dma_buf_put(member->dma_buf);
 			kfree(member);
-			break;
+			/* Duplicate handles may exist; restart search from root
+			 * to guarantee removal of all matching entries.
+			 */
+			rb = prime_fpriv->handles.rb_node;
 		} else if (member->handle < handle) {
 			rb = rb->rb_right;
 		} else {
