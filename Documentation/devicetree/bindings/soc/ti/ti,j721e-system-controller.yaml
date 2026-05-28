@@ -26,10 +26,14 @@ properties:
   compatible:
     items:
       - enum:
+          - ti,am62-system-controller
+          - ti,am62a-system-controller
+          - ti,am62p-system-controller
           - ti,am654-system-controller
           - ti,j7200-system-controller
           - ti,j721e-system-controller
           - ti,j721s2-system-controller
+          - ti,j784s4-system-controller
       - const: syscon
       - const: simple-mfd
 
