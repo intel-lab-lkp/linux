@@ -41,7 +41,7 @@ static u16 get_dst_fabric_id(struct addr_ctx *ctx)
  * expanded address bits:	[20+n : n+p][n+p-1 : p][p-1 : 0]
  *				[23   :  11][10    : 8][7   : 0]
  */
-static u64 make_space_for_coh_st_id_at_intlv_bit(struct addr_ctx *ctx)
+u64 make_space_for_coh_st_id_at_intlv_bit(struct addr_ctx *ctx)
 {
 	return expand_bits(ctx->map.intlv_bit_pos,
 			   ctx->map.total_intlv_bits,
@@ -320,7 +320,7 @@ static u16 calculate_coh_st_id(struct addr_ctx *ctx)
 	}
 }
 
-static u64 insert_coh_st_id_at_intlv_bit(struct addr_ctx *ctx, u64 denorm_addr, u16 coh_st_id)
+u64 insert_coh_st_id_at_intlv_bit(struct addr_ctx *ctx, u64 denorm_addr, u16 coh_st_id)
 {
 	return denorm_addr | (coh_st_id << ctx->map.intlv_bit_pos);
 }

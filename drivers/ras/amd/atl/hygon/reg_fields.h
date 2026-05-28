@@ -60,6 +60,19 @@
 #define HYGON_DF1_INTLV_ADDR_SEL	GENMASK(10, 8)
 
 /*
+ * Destination Fabric ID
+ *
+ * Access type: Instance
+ *
+ * Register
+ *	Rev	Fieldname	Bits
+ *
+ *	D18F0x114 [DRAM Limit Address]
+ *	HYGON_DF1	DstFabricID	[9:0]
+ */
+#define HYGON_DF1_DST_FABRIC_ID	GENMASK(9, 0)
+
+/*
  * Interleave Number of Dies
  *
  * Access type: Instance
