@@ -18,12 +18,51 @@
 #include <linux/clk.h>
 #include <linux/string_choices.h>
 #include <net/phy/realtek_phy.h>
+#include <linux/firmware.h>
+#include <linux/crc32.h>
 
 #include "../phylib.h"
 #include "realtek.h"
 
 #define RTL_8261C_CG			0x001cc898
 #define RTL_8261CE_CG			0x001cc899
+#define FW_MAIN_MAGIC			0x52544C38
+#define FW_SUB_MAGIC_8261C		0x32363143
+#define FW_SUB_MAGIC_8261D		0x32363144
+#define RTL8261X_POLL_TIMEOUT_MS	100
+
+#define RTL8261C_CE_FW_NAME	"rtl_nic/rtl8261c.bin"
+MODULE_FIRMWARE(RTL8261C_CE_FW_NAME);
+
+enum rtl8261x_fw_op {
+	OP_WRITE = 0x00,	/* Write */
+	OP_POLL  = 0x02,	/* Polling */
+};
+
+struct rtl8261x_fw_header {
+	__le32 main_magic;	/* Main magic number 0x52544C38 ("RTL8") */
+	__le32 sub_magic;	/* Sub magic number */
+	__le16 version_major;	/* Major version */
+	__le16 version_minor;	/* Minor version */
+	__le16 num_entries;	/* Number of entries */
+	__le16 reserved;	/* Reserved */
+	__le32 crc32;		/* CRC32 checksum */
+} __packed;
+
+struct rtl8261x_fw_entry {
+	__u8  type;		/* Operation type (OP_*) */
+	__u8  dev;		/* MMD device */
+	__le16 addr;		/* Register address */
+	__u8  msb;		/* MSB bit position */
+	__u8  lsb;		/* LSB bit position */
+	__le16 value;		/* Value to write/compare */
+	__le16 timeout_ms;	/* Poll timeout in milliseconds */
+	__u8  poll_set;		/* Poll for set (1) or clear (0) */
+	__u8  reserved;		/* Reserved */
+} __packed;
+
+#define FW_HEADER_SIZE		sizeof(struct rtl8261x_fw_header)
+#define FW_ENTRY_SIZE		sizeof(struct rtl8261x_fw_entry)
 
 #define RTL8201F_IER_PAGE			0x07
 #define RTL8201F_IER				0x13
@@ -332,6 +371,8 @@ struct rtl8261x_priv {
 	enum rtl8261x_chip_model model;
 	u8 sub_phy_id;
 	bool is_generic;
+	const char *fw_name;
+	bool fw_loaded;
 };
 
 static int rtl821x_read_page(struct phy_device *phydev)
@@ -413,16 +454,19 @@ static int rtl8261x_probe(struct phy_device *phydev)
 	switch (sub_phy_id) {
 	case RTL8261C_CE_MODEL:
 		priv->model = RTL8261_MODEL_C_CE;
+		priv->fw_name = RTL8261C_CE_FW_NAME;
 		phydev_info(phydev, "RTL8261C/CE detected (sub_id 0x%02x)\n", sub_phy_id);
 		break;
 
 	case RTL8261D_MODEL:
 		priv->model = RTL8261_MODEL_D;
+		priv->fw_name = NULL;
 		phydev_info(phydev, "RTL8261D detected (sub_id 0x%02x)\n", sub_phy_id);
 		break;
 
 	default:
 		priv->model = RTL8261_MODEL_GENERIC;
+		priv->fw_name = NULL;
 		priv->is_generic = true;
 		phydev_warn(phydev, "Unknown sub_id 0x%02x! Using GENERIC mode. Update driver for full support.\n",
 			    sub_phy_id);
@@ -450,6 +494,165 @@ static int rtl8261x_get_features(struct phy_device *phydev)
 			 phydev->supported);
 
 	return 0;
+}
+
+static int rtl8261x_verify_firmware(struct phy_device *phydev, const struct firmware *fw)
+{
+	const struct rtl8261x_fw_header *hdr;
+	u32 calc_crc, file_crc;
+	size_t data_len;
+	u16 num_entries;
+	u32 main_magic, sub_magic;
+
+	if (fw->size < FW_HEADER_SIZE) {
+		phydev_err(phydev, "Firmware too small: %zu bytes\n", fw->size);
+		return -EINVAL;
+	}
+
+	hdr = (const struct rtl8261x_fw_header *)fw->data;
+
+	main_magic = le32_to_cpu(hdr->main_magic);
+	if (main_magic != FW_MAIN_MAGIC) {
+		phydev_err(phydev, "Invalid firmware magic: 0x%08x\n", main_magic);
+		return -EINVAL;
+	}
+
+	sub_magic = le32_to_cpu(hdr->sub_magic);
+	if (sub_magic != FW_SUB_MAGIC_8261C && sub_magic != FW_SUB_MAGIC_8261D) {
+		phydev_err(phydev, "Invalid sub magic: 0x%08x\n", sub_magic);
+		return -EINVAL;
+	}
+
+	num_entries = le16_to_cpu(hdr->num_entries);
+	data_len = num_entries * FW_ENTRY_SIZE;
+
+	if (fw->size != sizeof(*hdr) + data_len) {
+		phydev_err(phydev, "Firmware size mismatch\n");
+		return -EINVAL;
+	}
+
+	calc_crc = crc32(~0, fw->data + FW_HEADER_SIZE, data_len) ^ ~0;
+	file_crc = le32_to_cpu(hdr->crc32);
+
+	if (calc_crc != file_crc) {
+		phydev_err(phydev, "CRC32 mismatch: calculated=0x%08x file=0x%08x\n",
+			   calc_crc, file_crc);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int rtl_phy_write_mmd_bits(struct phy_device *phydev, int devnum,
+				  u16 reg, u8 msb, u8 lsb, u16 val)
+{
+	int ret;
+	u32 reg_val;
+
+	if (msb > 15 || lsb > msb)
+		return -EINVAL;
+
+	ret = phy_read_mmd(phydev, devnum, reg);
+	if (ret < 0)
+		return ret;
+	reg_val = ret;
+
+	reg_val &= ~GENMASK(msb, lsb);
+	reg_val |= (val << lsb) & GENMASK(msb, lsb);
+
+	return phy_write_mmd(phydev, devnum, reg, reg_val);
+}
+
+static int rtl8261x_fw_execute_entry(struct phy_device *phydev,
+				     const struct rtl8261x_fw_entry *entry)
+{
+	u16 addr, value, timeout_ms;
+	u8 dev, msb, lsb, poll_set;
+	u32 bits, expect_val;
+	int ret = 0;
+	int val;
+
+	dev = entry->dev;
+	addr = le16_to_cpu(entry->addr);
+	msb = entry->msb;
+	lsb = entry->lsb;
+	value = le16_to_cpu(entry->value);
+	timeout_ms = le16_to_cpu(entry->timeout_ms);
+	poll_set = entry->poll_set;
+
+	if (timeout_ms == 0)
+		timeout_ms = RTL8261X_POLL_TIMEOUT_MS;
+
+	switch (entry->type) {
+	case OP_WRITE:
+		ret = rtl_phy_write_mmd_bits(phydev, dev, addr, msb, lsb, value);
+		if (ret) {
+			phydev_err(phydev, "WRITE failed: dev=%d addr=0x%04x\n", dev, addr);
+			return ret;
+		}
+		break;
+
+	case OP_POLL: {
+		bits = GENMASK(msb, lsb);
+		expect_val = (value << lsb) & bits;
+
+		if (poll_set)
+			ret = phy_read_mmd_poll_timeout(phydev, dev, addr, val,
+							(val & bits) == expect_val,
+							1000, timeout_ms * 1000, false);
+		else
+			ret = phy_read_mmd_poll_timeout(phydev, dev, addr, val,
+							(val & bits) != expect_val,
+							1000, timeout_ms * 1000, false);
+		if (ret)
+			phydev_err(phydev, "POLL timeout: dev=%d addr=0x%04x\n",
+				   dev, addr);
+		break;
+	}
+	default:
+		phydev_err(phydev, "Unknown firmware operation: %d\n", entry->type);
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
+static int rtl8261x_fw_load(struct phy_device *phydev)
+{
+	struct rtl8261x_priv *priv = phydev->priv;
+	const struct rtl8261x_fw_entry *entry;
+	const struct rtl8261x_fw_header *hdr;
+	const struct firmware *fw;
+	int ret, i;
+
+	if (!priv->fw_name)
+		return 0;
+
+	ret = request_firmware(&fw, priv->fw_name, &phydev->mdio.dev);
+	if (ret)
+		return ret;
+
+	ret = rtl8261x_verify_firmware(phydev, fw);
+	if (ret)
+		goto release_fw;
+
+	hdr = (const struct rtl8261x_fw_header *)fw->data;
+
+	entry = (const struct rtl8261x_fw_entry *)(fw->data + FW_HEADER_SIZE);
+	for (i = 0; i < le16_to_cpu(hdr->num_entries); i++, entry++) {
+		ret = rtl8261x_fw_execute_entry(phydev, entry);
+		if (ret) {
+			phydev_err(phydev, "Entry %d failed: %d\n", i, ret);
+			goto release_fw;
+		}
+	}
+
+	priv->fw_loaded = true;
+
+release_fw:
+	release_firmware(fw);
+	return ret;
 }
 
 static int rtl8261x_config_master_slave(struct phy_device *phydev)
@@ -599,6 +802,22 @@ static int rtl8261x_config_aneg(struct phy_device *phydev)
 		return genphy_c45_restart_aneg(phydev);
 
 	return 0;
+}
+
+static int rtl8261x_config_init(struct phy_device *phydev)
+{
+	struct rtl8261x_priv *priv = phydev->priv;
+	int ret = 0;
+
+	if (!priv->is_generic && !priv->fw_loaded) {
+		ret = rtl8261x_fw_load(phydev);
+		if (ret) {
+			phydev_err(phydev, "Firmware loading failed: %d\n", ret);
+			return ret;
+		}
+	}
+
+	return ret;
 }
 
 static int rtl821x_probe(struct phy_device *phydev)
@@ -3296,6 +3515,7 @@ static struct phy_driver realtek_drvs[] = {
 		PHY_ID_MATCH_EXACT(RTL_8261C_CG),
 		.name             = "Realtek RTL8261C_RTL8261D 10Gbps PHY",
 		.probe            = rtl8261x_probe,
+		.config_init	  = rtl8261x_config_init,
 		.get_features     = rtl8261x_get_features,
 		.config_aneg      = rtl8261x_config_aneg,
 		.read_status      = rtl8261x_read_status,
@@ -3308,6 +3528,7 @@ static struct phy_driver realtek_drvs[] = {
 		PHY_ID_MATCH_EXACT(RTL_8261CE_CG),
 		.name             = "Realtek RTL8261CE 10Gbps PHY",
 		.probe            = rtl8261x_probe,
+		.config_init	  = rtl8261x_config_init,
 		.get_features     = rtl8261x_get_features,
 		.config_aneg      = rtl8261x_config_aneg,
 		.read_status      = rtl8261x_read_status,
