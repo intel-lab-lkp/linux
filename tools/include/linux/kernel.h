@@ -46,6 +46,10 @@
 #define min_t(type, x, y)	min((type)x, (type)y)
 #define clamp(val, lo, hi)	min((typeof(val))max(val, lo), hi)
 
+#ifndef swap
+#define swap(a, b)  do { typeof(a) __tmp = (a); (a) = (b); (b) = __tmp; } while (0)
+#endif
+
 #ifndef BUG_ON
 #ifdef NDEBUG
 #define BUG_ON(cond) do { if (cond) {} } while (0)
