@@ -87,6 +87,8 @@ struct mtk_base_irq_data {
 	int irq_clr_reg;
 	int irq_clr_shift;
 	int irq_status_shift;
+
+	struct regmap *regmap;
 };
 
 struct device;
