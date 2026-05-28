@@ -6367,4 +6367,23 @@ static void pci_mask_replay_timer_timeout(struct pci_dev *pdev)
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9750, pci_mask_replay_timer_timeout);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_GLI, 0x9755, pci_mask_replay_timer_timeout);
+
+static void pci_mask_replay_timer_timeout_on_endpoint(struct pci_dev *pdev)
+{
+	u32 val;
+
+	if (!pdev->aer_cap)
+		return;
+
+	pci_info(pdev, "mask Replay Timer Timeout on endpoint due to hardware defect\n");
+
+	pci_read_config_dword(pdev, pdev->aer_cap + PCI_ERR_COR_MASK, &val);
+	val |= PCI_ERR_COR_REP_TIMER;
+	pci_write_config_dword(pdev, pdev->aer_cap + PCI_ERR_COR_MASK, val);
+
+	/* Also mask the parent root port */
+	pci_mask_replay_timer_timeout(pdev);
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_REALTEK, 0x525a,
+			 pci_mask_replay_timer_timeout_on_endpoint);
 #endif
