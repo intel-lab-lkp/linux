@@ -242,10 +242,8 @@ static int palmas_rtc_probe(struct platform_device *pdev)
 
 	/* Clear pending interrupts */
 	ret = palmas_clear_interrupts(&pdev->dev);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "clear RTC int failed, err = %d\n", ret);
-		return ret;
-	}
+	if (ret < 0)
+		return dev_err_probe(&pdev->dev, ret, "clear RTC int failed\n");
 
 	palmas_rtc->dev = &pdev->dev;
 	platform_set_drvdata(pdev, palmas_rtc);
@@ -280,10 +278,8 @@ static int palmas_rtc_probe(struct platform_device *pdev)
 	ret = palmas_update_bits(palmas, PALMAS_RTC_BASE, PALMAS_RTC_CTRL_REG,
 			PALMAS_RTC_CTRL_REG_STOP_RTC,
 			PALMAS_RTC_CTRL_REG_STOP_RTC);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "RTC_CTRL write failed, err = %d\n", ret);
-		return ret;
-	}
+	if (ret < 0)
+		return dev_err_probe(&pdev->dev, ret, "RTC_CTRL write failed\n");
 
 	palmas_rtc->irq = platform_get_irq(pdev, 0);
 
@@ -292,18 +288,15 @@ static int palmas_rtc_probe(struct platform_device *pdev)
 				&palmas_rtc_ops, THIS_MODULE);
 	if (IS_ERR(palmas_rtc->rtc)) {
 		ret = PTR_ERR(palmas_rtc->rtc);
-		dev_err(&pdev->dev, "RTC register failed, err = %d\n", ret);
-		return ret;
+		return dev_err_probe(&pdev->dev, ret, "RTC register failed\n");
 	}
 
 	ret = devm_request_threaded_irq(&pdev->dev, palmas_rtc->irq, NULL,
 			palmas_rtc_interrupt,
 			IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 			dev_name(&pdev->dev), palmas_rtc);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "IRQ request failed, err = %d\n", ret);
-		return ret;
-	}
+	if (ret < 0)
+		return dev_err_probe(&pdev->dev, ret, "IRQ request failed\n");
 
 	return 0;
 }
