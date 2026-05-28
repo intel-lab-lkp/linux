@@ -99,6 +99,7 @@ common_shutdown_1(void *generic_ptr)
 		*pflags = flags;
 		set_cpu_present(cpuid, false);
 		set_cpu_possible(cpuid, false);
+		mb();
 		halt();
 	}
 #endif
@@ -127,7 +128,7 @@ common_shutdown_1(void *generic_ptr)
 	set_cpu_present(boot_cpuid, false);
 	set_cpu_possible(boot_cpuid, false);
 	while (!cpumask_empty(cpu_present_mask))
-		barrier();
+		smp_mb();
 #endif
 
 	/* If booted from SRM, reset some of the original environment. */
