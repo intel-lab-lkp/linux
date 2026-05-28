@@ -120,7 +120,7 @@ static void setup_inj_struct(struct mce *m)
 
 	m->cpuvendor = boot_cpu_data.x86_vendor;
 	m->time	     = ktime_get_real_seconds();
-	m->cpuid     = cpuid_eax(1);
+	m->cpuid     = cpuid_leaf_raw(&boot_cpu_data, 0x1)->eax;
 	m->microcode = boot_cpu_data.microcode;
 }
 
