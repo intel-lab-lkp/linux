@@ -59,7 +59,7 @@ struct intel_psf_gv_point {
 struct intel_qgv_info {
 	struct intel_qgv_point points[I915_NUM_QGV_POINTS];
 	struct intel_psf_gv_point psf_points[I915_NUM_PSF_GV_POINTS];
-	u8 num_points;
+	u8 num_qgv_points;
 	u8 num_psf_points;
 	u8 t_bl;
 	u8 max_numchannels;
@@ -252,7 +252,7 @@ static int icl_get_qgv_points(struct intel_display *display,
 {
 	int i, ret;
 
-	qi->num_points = dram_info->num_qgv_points;
+	qi->num_qgv_points = dram_info->num_qgv_points;
 	qi->num_psf_points = dram_info->num_psf_gv_points;
 
 	if (DISPLAY_VER(display) >= 14) {
@@ -324,10 +324,10 @@ static int icl_get_qgv_points(struct intel_display *display,
 	}
 
 	if (drm_WARN_ON(display->drm,
-			qi->num_points > ARRAY_SIZE(qi->points)))
-		qi->num_points = ARRAY_SIZE(qi->points);
+			qi->num_qgv_points > ARRAY_SIZE(qi->points)))
+		qi->num_qgv_points = ARRAY_SIZE(qi->points);
 
-	for (i = 0; i < qi->num_points; i++) {
+	for (i = 0; i < qi->num_qgv_points; i++) {
 		struct intel_qgv_point *sp = &qi->points[i];
 
 		ret = intel_read_qgv_point_info(display, sp, i);
@@ -373,7 +373,7 @@ static int icl_sagv_max_dclk(const struct intel_qgv_info *qi)
 	u16 dclk = 0;
 	int i;
 
-	for (i = 0; i < qi->num_points; i++)
+	for (i = 0; i < qi->num_qgv_points; i++)
 		dclk = max(dclk, qi->points[i].dclk);
 
 	return dclk;
@@ -544,10 +544,10 @@ static int icl_get_bw_info(struct intel_display *display,
 		clpchgroup = (display_bw_params->deburst * qi.deinterleave / num_channels) << i;
 		bi->num_planes = (ipqdepth - clpchgroup) / clpchgroup + 1;
 
-		bi->num_qgv_points = qi.num_points;
+		bi->num_qgv_points = qi.num_qgv_points;
 		bi->num_psf_gv_points = qi.num_psf_points;
 
-		for (j = 0; j < qi.num_points; j++) {
+		for (j = 0; j < qi.num_qgv_points; j++) {
 			const struct intel_qgv_point *sp = &qi.points[j];
 			int ct, bw;
 
@@ -574,7 +574,7 @@ static int icl_get_bw_info(struct intel_display *display,
 	 * SAGV point, but we can't send PCode commands to restrict it
 	 * as it will fail and pointless anyway.
 	 */
-	if (qi.num_points == 1)
+	if (qi.num_qgv_points == 1)
 		display->sagv.status = I915_SAGV_NOT_CONTROLLED;
 	else
 		display->sagv.status = I915_SAGV_ENABLED;
@@ -647,10 +647,10 @@ static int tgl_get_bw_info(struct intel_display *display,
 				bi_next->num_planes = 0;
 		}
 
-		bi->num_qgv_points = qi.num_points;
+		bi->num_qgv_points = qi.num_qgv_points;
 		bi->num_psf_gv_points = qi.num_psf_points;
 
-		for (j = 0; j < qi.num_points; j++) {
+		for (j = 0; j < qi.num_qgv_points; j++) {
 			const struct intel_qgv_point *sp = &qi.points[j];
 			int ct, bw;
 
@@ -690,7 +690,7 @@ static int tgl_get_bw_info(struct intel_display *display,
 	 * SAGV point, but we can't send PCode commands to restrict it
 	 * as it will fail and pointless anyway.
 	 */
-	if (qi.num_points == 1)
+	if (qi.num_qgv_points == 1)
 		display->sagv.status = I915_SAGV_NOT_CONTROLLED;
 	else
 		display->sagv.status = I915_SAGV_ENABLED;
@@ -734,7 +734,7 @@ static int xe2_hpd_get_bw_info(struct intel_display *display,
 
 	display->bw.max[0].num_planes = U8_MAX;
 
-	for (i = 0; i < qi.num_points; i++) {
+	for (i = 0; i < qi.num_qgv_points; i++) {
 		const struct intel_qgv_point *sp = &qi.points[i];
 		int bw = tgl_peakbw(num_channels, qi.channel_width, sp->dclk);
 
@@ -748,7 +748,7 @@ static int xe2_hpd_get_bw_info(struct intel_display *display,
 	}
 
 	/* Bandwidth does not depend on # of planes; set all groups the same */
-	display->bw.max[0].num_qgv_points = qi.num_points;
+	display->bw.max[0].num_qgv_points = qi.num_qgv_points;
 	for (i = 1; i < ARRAY_SIZE(display->bw.max); i++)
 		display->bw.max[i] = display->bw.max[0];
 
@@ -756,7 +756,7 @@ static int xe2_hpd_get_bw_info(struct intel_display *display,
 	 * Xe2_HPD should always have exactly two QGV points representing
 	 * battery and plugged-in operation.
 	 */
-	drm_WARN_ON(display->drm, qi.num_points != 2);
+	drm_WARN_ON(display->drm, qi.num_qgv_points != 2);
 	display->sagv.status = I915_SAGV_ENABLED;
 
 	return 0;
