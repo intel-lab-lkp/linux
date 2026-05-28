@@ -1106,8 +1106,17 @@ cxl_reset_flush_cpu_caches(struct cxl_reset_region_context *ctx)
 	return 0;
 }
 
+struct cxl_reset_memdev {
+	struct cxl_memdev *cxlmd;
+	bool active;
+	bool locked;
+};
+
 struct cxl_reset_context {
 	struct pci_dev *target;
+	struct cxl_reset_memdev *memdevs;
+	int nr_memdevs;
+	int memdev_capacity;
 	struct pci_dev **siblings;
 	int nr_siblings;
 	int sibling_capacity;
@@ -1235,6 +1244,173 @@ static int cxl_reset_collect_siblings(struct cxl_reset_context *ctx)
 	cxl_reset_read_non_cxl_func_map(ctx->target, non_cxl_func_map);
 	pci_walk_bus(ctx->target->bus, cxl_reset_collect_sibling, &wctx);
 	return wctx.rc;
+}
+
+static int cxl_reset_match_memdev_by_parent(struct device *dev,
+					    const void *parent)
+{
+	return is_cxl_memdev(dev) && dev->parent == parent;
+}
+
+static bool cxl_reset_memdev_active(struct cxl_memdev *cxlmd)
+{
+	return cxlmd->dev.driver && cxlmd->endpoint &&
+	       !IS_ERR(cxlmd->endpoint);
+}
+
+static int cxl_reset_collect_pci_memdev(struct cxl_reset_context *ctx,
+					struct pci_dev *pdev)
+{
+	struct cxl_reset_memdev *memdevs;
+	struct cxl_memdev *cxlmd;
+	struct device *dev;
+	int capacity, i;
+
+	dev = bus_find_device(&cxl_bus_type, NULL, &pdev->dev,
+			      cxl_reset_match_memdev_by_parent);
+	if (!dev)
+		return 0;
+
+	cxlmd = to_cxl_memdev(dev);
+	for (i = 0; i < ctx->nr_memdevs; i++) {
+		if (ctx->memdevs[i].cxlmd == cxlmd) {
+			put_device(dev);
+			return 0;
+		}
+	}
+
+	if (ctx->nr_memdevs < ctx->memdev_capacity)
+		goto add;
+
+	capacity = ctx->memdev_capacity ? ctx->memdev_capacity * 2 :
+		   CXL_RESET_SIBLINGS_INIT;
+	memdevs = krealloc(ctx->memdevs, capacity * sizeof(*memdevs),
+			   GFP_KERNEL);
+	if (!memdevs) {
+		put_device(dev);
+		return -ENOMEM;
+	}
+
+	ctx->memdevs = memdevs;
+	ctx->memdev_capacity = capacity;
+
+add:
+	ctx->memdevs[ctx->nr_memdevs++] = (struct cxl_reset_memdev) {
+		.cxlmd = cxlmd,
+	};
+	return 0;
+}
+
+/*
+ * CXL Reset is device scoped for CXL.cache/mem. Use the affected PCI
+ * function set to find memdevs whose regions and endpoint decoder state must
+ * be handled around the reset.
+ */
+static int __maybe_unused cxl_reset_collect_memdevs(struct cxl_reset_context *ctx)
+{
+	int rc, i;
+
+	rc = cxl_reset_collect_pci_memdev(ctx, ctx->target);
+	if (rc)
+		return rc;
+
+	for (i = 0; i < ctx->nr_siblings; i++) {
+		rc = cxl_reset_collect_pci_memdev(ctx, ctx->siblings[i]);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
+static int __maybe_unused
+cxl_reset_collect_regions(struct cxl_reset_context *ctx,
+			  struct cxl_reset_region_context *region_ctx)
+{
+	int rc, i;
+
+	lockdep_assert_held_write(&cxl_rwsem.region);
+
+	for (i = 0; i < ctx->nr_memdevs; i++) {
+		struct cxl_reset_memdev *rmd = &ctx->memdevs[i];
+		struct cxl_memdev *cxlmd = rmd->cxlmd;
+
+		if (!device_trylock(&cxlmd->dev))
+			return -EAGAIN;
+
+		if (cxl_reset_memdev_active(cxlmd)) {
+			rc = cxl_reset_collect_memdev_regions(region_ctx,
+							      cxlmd);
+			if (!rc)
+				rmd->active = true;
+		} else {
+			rc = 0;
+		}
+
+		device_unlock(&cxlmd->dev);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
+static void cxl_reset_unlock_memdevs(struct cxl_reset_context *ctx)
+{
+	int i;
+
+	for (i = ctx->nr_memdevs - 1; i >= 0; i--) {
+		struct cxl_reset_memdev *rmd = &ctx->memdevs[i];
+
+		if (!rmd->locked)
+			continue;
+
+		device_unlock(&rmd->cxlmd->dev);
+		rmd->locked = false;
+	}
+}
+
+static int __maybe_unused cxl_reset_lock_memdevs(struct cxl_reset_context *ctx)
+{
+	int i;
+
+	lockdep_assert_held_write(&cxl_rwsem.region);
+
+	for (i = 0; i < ctx->nr_memdevs; i++) {
+		struct cxl_reset_memdev *rmd = &ctx->memdevs[i];
+		struct cxl_memdev *cxlmd = rmd->cxlmd;
+
+		if (!rmd->active)
+			continue;
+
+		if (!device_trylock(&cxlmd->dev))
+			goto err;
+
+		rmd->locked = true;
+		if (!cxl_reset_memdev_active(cxlmd)) {
+			cxl_reset_unlock_memdevs(ctx);
+			return -ENODEV;
+		}
+	}
+
+	return 0;
+
+err:
+	cxl_reset_unlock_memdevs(ctx);
+	return -EAGAIN;
+}
+
+static void __maybe_unused cxl_reset_put_memdevs(struct cxl_reset_context *ctx)
+{
+	int i;
+
+	for (i = 0; i < ctx->nr_memdevs; i++)
+		put_device(&ctx->memdevs[i].cxlmd->dev);
+
+	kfree(ctx->memdevs);
+	ctx->memdevs = NULL;
+	ctx->nr_memdevs = 0;
+	ctx->memdev_capacity = 0;
 }
 
 static void cxl_pci_functions_reset_done(struct cxl_reset_context *ctx)
