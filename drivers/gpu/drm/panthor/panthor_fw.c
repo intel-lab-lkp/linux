@@ -19,6 +19,7 @@
 #include <drm/drm_print.h>
 
 #include "panthor_device.h"
+#include "panthor_device_io.h"
 #include "panthor_fw.h"
 #include "panthor_fw_regs.h"
 #include "panthor_gem.h"

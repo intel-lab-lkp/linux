@@ -31,6 +31,7 @@
 #include <linux/sizes.h>
 
 #include "panthor_device.h"
+#include "panthor_device_io.h"
 #include "panthor_gem.h"
 #include "panthor_gpu.h"
 #include "panthor_gpu_regs.h"

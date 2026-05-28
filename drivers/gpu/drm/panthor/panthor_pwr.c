@@ -11,6 +11,7 @@
 #include <drm/drm_print.h>
 
 #include "panthor_device.h"
+#include "panthor_device_io.h"
 #include "panthor_gpu_regs.h"
 #include "panthor_hw.h"
 #include "panthor_pwr.h"
