@@ -14957,6 +14957,15 @@ static void switched_from_fair(struct rq *rq, struct task_struct *p)
 	detach_task_cfs_rq(p);
 }
 
+static void switching_to_fair(struct rq *rq, struct task_struct *p)
+{
+	/*
+	 * Tasks may come from classes that don't keep se.load up to date.
+	 * Rebuild it before the task is enqueued.
+	 */
+	set_load_weight(p, false);
+}
+
 static void switched_to_fair(struct rq *rq, struct task_struct *p)
 {
 	WARN_ON_ONCE(p->se.sched_delayed);
@@ -15351,6 +15360,7 @@ DEFINE_SCHED_CLASS(fair) = {
 	.prio_changed		= prio_changed_fair,
 	.switching_from		= switching_from_fair,
 	.switched_from		= switched_from_fair,
+	.switching_to		= switching_to_fair,
 	.switched_to		= switched_to_fair,
 
 	.get_rr_interval	= get_rr_interval_fair,
