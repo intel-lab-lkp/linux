@@ -2584,6 +2584,9 @@ struct net_device {
 	 * Double protects:
 	 *	@up, @moving_ns, @nd_net, @xdp_features
 	 *
+	 * Ops protects:
+	 *	@hwprov
+	 *
 	 * Double ops protects:
 	 *	@real_num_rx_queues, @real_num_tx_queues
 	 *
