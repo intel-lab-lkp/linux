@@ -661,7 +661,7 @@ static struct l2tp_tunnel *pppol2tp_tunnel_get(struct net *net,
 			refcount_inc(&tunnel->ref_count);
 			error = l2tp_tunnel_register(tunnel, net, &tcfg);
 			if (error < 0) {
-				kfree(tunnel);
+				l2tp_tunnel_put(tunnel);
 				return ERR_PTR(error);
 			}
 
