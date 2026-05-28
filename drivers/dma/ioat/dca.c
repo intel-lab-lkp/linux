@@ -11,13 +11,9 @@
 #include <linux/dca.h>
 
 #include <asm/cpuid/api.h>
-
-/* either a kernel change is needed, or we need something like this in kernel */
-#ifndef CONFIG_SMP
+#include <asm/mpspec.h>
+#include <asm/cpu.h>
 #include <asm/smp.h>
-#undef cpu_physical_id
-#define cpu_physical_id(cpu) (cpuid_ebx(1) >> 24)
-#endif
 
 #include "dma.h"
 #include "registers.h"
