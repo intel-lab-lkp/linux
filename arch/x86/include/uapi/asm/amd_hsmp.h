@@ -592,6 +592,99 @@ struct hsmp_metric_table {
 	__u32 gfxclk_frequency[8];
 };
 
+#define HSMP_F1A_M50_M5F_MAX_CORES_PER_CCD	32
+#define HSMP_F1A_M50_M5F_MAX_FREQ_TABLE_SIZE	4
+#define HSMP_F1A_M50_M5F_MAX_XGMI_LINKS	8
+#define HSMP_F1A_M50_M5F_MAX_PCIE_LINKS	8
+#define HSMP_F1A_M50_M5F_MAX_CCDS		8
+
+/* Metrics table (supported only with proto version 7) */
+struct hsmp_metric_table_zen6_iod {
+	__u32 num_active_ccds;	/* Number of valid entries in the sibling ccd[] array */
+	__u32 accumulation_counter;
+
+	/* TEMPERATURE */
+	__u64 max_socket_temperature_acc;
+
+	/* POWER */
+	__u32 socket_power_limit;
+	__u32 max_socket_power_limit;
+	__u64 socket_power_acc;
+	__u64 core_power_acc;
+	__u64 uncore_power_acc;
+
+	/* ENERGY */
+	__u64 timestamp;
+	__u64 socket_energy_acc;
+	__u64 core_energy_acc;
+	__u64 uncore_energy_acc;
+
+	/* FREQUENCY */
+	__u64 fclk_frequency_acc;
+	__u64 uclk_frequency_acc;
+	__u64 ddr_rate_acc;
+	__u64 lclk_frequency_acc[HSMP_F1A_M50_M5F_MAX_FREQ_TABLE_SIZE];
+
+	/* FREQUENCY RANGE */
+	__u32 fclk_frequency_table[HSMP_F1A_M50_M5F_MAX_FREQ_TABLE_SIZE];
+	__u32 uclk_frequency_table[HSMP_F1A_M50_M5F_MAX_FREQ_TABLE_SIZE];
+	__u32 ddr_rate_table[HSMP_F1A_M50_M5F_MAX_FREQ_TABLE_SIZE];
+	__u32 max_df_pstate_range;
+	__u32 min_df_pstate_range;
+	__u32 lclk_frequency_table[HSMP_F1A_M50_M5F_MAX_FREQ_TABLE_SIZE];
+	__u32 max_lclk_dpm_range;
+	__u32 min_lclk_dpm_range;
+
+	/* XGMI */
+	__u64 xgmi_bit_rate[HSMP_F1A_M50_M5F_MAX_XGMI_LINKS];
+	__u64 xgmi_read_bandwidth[HSMP_F1A_M50_M5F_MAX_XGMI_LINKS];
+	__u64 xgmi_write_bandwidth[HSMP_F1A_M50_M5F_MAX_XGMI_LINKS];
+
+	/* ACTIVITY */
+	__u64 socket_c0_residency_acc;
+	__u64 socket_df_cstate_residency_acc;
+	__u64 dram_read_bandwidth_acc;
+	__u64 dram_write_bandwidth_acc;
+	__u32 max_dram_bandwidth;
+	__u64 pcie_bandwidth_acc[HSMP_F1A_M50_M5F_MAX_PCIE_LINKS];
+
+	/* THROTTLERS */
+	__u32 prochot_residency_acc;
+	__u32 ppt_residency_acc;
+	__u32 thm_residency_acc;
+	__u32 vrhot_residency_acc;
+	__u32 cpu_tdc_residency_acc;
+	__u32 soc_tdc_residency_acc;
+	__u32 io_mem_tdc_residency_acc;
+	__u32 fit_residency_acc;
+};
+
+struct hsmp_metric_table_zen6_ccd {
+	__u32 core_apicid_of_thread0[HSMP_F1A_M50_M5F_MAX_CORES_PER_CCD];
+	__u64 core_c0[HSMP_F1A_M50_M5F_MAX_CORES_PER_CCD];
+	__u64 core_cc1[HSMP_F1A_M50_M5F_MAX_CORES_PER_CCD];
+	__u64 core_cc6[HSMP_F1A_M50_M5F_MAX_CORES_PER_CCD];
+	__u64 core_frequency[HSMP_F1A_M50_M5F_MAX_CORES_PER_CCD];
+	__u64 core_frequency_effective[HSMP_F1A_M50_M5F_MAX_CORES_PER_CCD];
+	__u64 core_power[HSMP_F1A_M50_M5F_MAX_CORES_PER_CCD];
+};
+
+/*
+ * Metrics table for Family 0x1A, Models 0x50 to 0x5F, table version 0x00700000.
+ *
+ * The layout mirrors the SMU's binary metric table verbatim: one IOD block
+ * followed by HSMP_F1A_M50_M5F_MAX_CCDS fixed-size CCD blocks. Only the first
+ * iod.num_active_ccds entries in ccd[] carry meaningful data; the remaining
+ * entries are firmware padding and must be ignored by userspace.
+ *
+ * Future processors within the same family and model may support a
+ * variable number of CCDs and cores.
+ */
+struct hsmp_metric_table_zen6 {
+	struct hsmp_metric_table_zen6_iod iod;
+	struct hsmp_metric_table_zen6_ccd ccd[HSMP_F1A_M50_M5F_MAX_CCDS];
+};
+
 /* Reset to default packing */
 #pragma pack()
 
