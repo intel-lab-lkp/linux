@@ -214,8 +214,11 @@ struct cpuid_leaves {
 	CPUID_LEAF_N (  0x4,		8  );
 	CPUID_LEAF   (	0x5,		0  );
 	CPUID_LEAF   (	0x6,		0  );
+	CPUID_LEAF   (  0x7,		0  );
+	CPUID_LEAF   (  0x7,		1  );
 	CPUID_LEAF   (	0x9,		0  );
 	CPUID_LEAF   (  0xa,		0  );
+	CPUID_LEAF   (  0xd,		1  );
 	CPUID_LEAF   (	0x12,		0  );
 	CPUID_LEAF   (	0x12,		1  );
 	CPUID_LEAF_N (	0x12,		8  );
@@ -229,6 +232,7 @@ struct cpuid_leaves {
 	CPUID_LEAF   (	0x23,		4  );
 	CPUID_LEAF   (	0x23,		5  );
 	CPUID_LEAF   (  0x80000000,	0  );
+	CPUID_LEAF   (  0x80000001,	0  );
 	CPUID_LEAF   (  0x80000002,	0  );
 	CPUID_LEAF   (  0x80000003,	0  );
 	CPUID_LEAF   (  0x80000004,	0  );
@@ -236,7 +240,10 @@ struct cpuid_leaves {
 	CPUID_LEAF   (  0x80000006,	0  );
 	CPUID_LEAF   (  0x80000007,	0  );
 	CPUID_LEAF   (  0x80000008,	0  );
+	CPUID_LEAF   (  0x8000000a,	0  );
 	CPUID_LEAF_N (  0x8000001d,	8  );
+	CPUID_LEAF   (  0x8000001f,	0  );
+	CPUID_LEAF   (  0x80000021,	0  );
 	CPUID_LEAF   (  0x80000022,	0  );
 	CPUID_LEAF   (  0x80860000,	0  );
 	CPUID_LEAF   (  0x80860001,	0  );

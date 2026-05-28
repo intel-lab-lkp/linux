@@ -149,7 +149,10 @@ struct cpuid_parse_entry {
 	CPUID_PARSE_ENTRY   (	0x5,		0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x6,		0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x9,		0,		0x9			),	\
+	CPUID_PARSE_ENTRY   (	0x7,		0,		generic			),	\
+	CPUID_PARSE_ENTRY   (	0x7,		1,		0x7_1			),	\
 	CPUID_PARSE_ENTRY   (	0xa,		0,		generic			),	\
+	CPUID_PARSE_ENTRY   (	0xd,		1,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x12,		0,		0x12			),	\
 	CPUID_PARSE_ENTRY   (	0x12,		1,		0x12			),	\
 	CPUID_PARSE_ENTRY_N (	0x12,				sgx_epc_sections	),	\
@@ -163,6 +166,7 @@ struct cpuid_parse_entry {
 	CPUID_PARSE_ENTRY   (	0x23,		4,		0x23_4			),	\
 	CPUID_PARSE_ENTRY   (	0x23,		5,		0x23_5			),	\
 	CPUID_PARSE_ENTRY   (	0x80000000,	0,		0x80000000		),	\
+	CPUID_PARSE_ENTRY   (	0x80000001,	0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x80000002,	0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x80000003,	0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x80000004,	0,		generic			),	\
@@ -170,7 +174,10 @@ struct cpuid_parse_entry {
 	CPUID_PARSE_ENTRY   (	0x80000006,	0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x80000007,	0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x80000008,	0,		generic			),	\
+	CPUID_PARSE_ENTRY   (	0x8000000a,	0,		generic			),	\
 	CPUID_PARSE_ENTRY_N (	0x8000001d,			deterministic_cache	),	\
+	CPUID_PARSE_ENTRY   (	0x8000001f,	0,		generic			),	\
+	CPUID_PARSE_ENTRY   (	0x80000021,	0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x80000022,	0,		generic			),	\
 	CPUID_PARSE_ENTRY   (	0x80860000,	0,		0x80860000		),	\
 	CPUID_PARSE_ENTRY   (	0x80860001,	0,		generic			),	\
