@@ -4,6 +4,8 @@
 #ifndef __PANTHOR_ARBITRATION_H__
 #define __PANTHOR_ARBITRATION_H__
 
+#include <linux/types.h>
+
 struct device;
 struct panthor_arbitration_sched;
 struct panthor_partition_control;
@@ -29,5 +31,15 @@ struct panthor_arbitration {
 	/** @shed: Pointer to scheduler data. 1 sched per partition */
 	struct panthor_arbitration_sched *sched[AM_ARB_MAX_PC_COUNT];
 };
+
+/* AW to Arbiter events */
+int panthor_arbitration_on_request(struct panthor_arbitration *adev, u8 aw_id);
+int panthor_arbitration_on_idle(struct panthor_arbitration *adev, u8 aw_id);
+int panthor_arbitration_on_stopped(struct panthor_arbitration *adev, u8 aw_id);
+
+/* Arbiter to AW events */
+int panthor_arbitration_on_grant(struct panthor_arbitration *adev, u8 aw_id);
+int panthor_arbitration_on_stop(struct panthor_arbitration *adev, u8 aw_id);
+int panthor_arbitration_on_close(struct panthor_arbitration *adev, u8 aw_id);
 
 #endif

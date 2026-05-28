@@ -127,10 +127,10 @@ static void rg_handle_message(struct panthor_resource_group *rg, u8 aw_id,
 		rg_respond_to_handshake(rg, aw_id, message);
 		break;
 	case VM_ARB_GPU_REQUEST:
-		/* TODO: on_request */
+		panthor_arbitration_on_request(dev_get_drvdata(rg->dev), aw_id);
 		break;
 	case VM_ARB_GPU_STOPPED:
-		/* TODO: on_idle */
+		panthor_arbitration_on_idle(dev_get_drvdata(rg->dev), aw_id);
 		break;
 	default:
 		dev_warn(rg->dev, "Invalid message (0x%llx)", message);

@@ -55,6 +55,44 @@ static int panthor_arbitration_runtime_resume(struct device *dev)
 	return 0;
 }
 
+/* AW to Arbiter events */
+int panthor_arbitration_on_request(struct panthor_arbitration *adev, u8 aw_id)
+{
+	/* TODO: AW to PC assignment */
+	return panthor_arbitration_sched_on_request(adev->sched[0], aw_id);
+}
+
+int panthor_arbitration_on_idle(struct panthor_arbitration *adev, u8 aw_id)
+{
+	/* TODO: AW to PC assignment */
+	return panthor_arbitration_sched_on_idle(adev->sched[0], aw_id);
+}
+
+int panthor_arbitration_on_stopped(struct panthor_arbitration *adev, u8 aw_id)
+{
+	/* TODO: AW to PC assignment */
+	return panthor_arbitration_sched_on_stopped(adev->sched[0], aw_id);
+}
+
+/* Arbiter to AW events */
+int panthor_arbitration_on_grant(struct panthor_arbitration *adev, u8 aw_id)
+{
+	/* TODO: AW to PC assignment */
+	return panthor_partition_control_open_window(adev->pc[0], aw_id);
+}
+
+int panthor_arbitration_on_stop(struct panthor_arbitration *adev, u8 aw_id)
+{
+	/* TODO: AW to PC assignment */
+	return panthor_partition_control_yield_now(adev->pc[0]);
+}
+
+int panthor_arbitration_on_close(struct panthor_arbitration *adev, u8 aw_id)
+{
+	/* TODO: AW to PC assignment */
+	return panthor_partition_control_close_window(adev->pc[0]);
+}
+
 static int panthor_arbitration_probe(struct platform_device *pdev)
 {
 	struct panthor_arbitration *adev;

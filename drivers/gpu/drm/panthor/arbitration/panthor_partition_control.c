@@ -220,15 +220,24 @@ static int window_open(struct panthor_partition_control *pc, u8 aw_id)
 
 static void partition_handle_reset_done(struct panthor_partition_control *pc)
 {
+	bool notify_stopped = false;
+	int aw_id;
+
 	scoped_guard(spinlock_irqsave, &pc->lock) {
+		aw_id = pc->current_aw;
 		pc->current_aw = -1;
 
 		/* RESET_DONE from CLOSE_WINDOW */
 		if (pc->closing)
 			pc->closing = false;
+		else if (aw_id >= 0)
+			notify_stopped = true;
 	}
 
 	wake_up_all(&pc->waitqueue);
+
+	if (notify_stopped)
+		panthor_arbitration_on_stopped(dev_get_drvdata(pc->dev), aw_id);
 }
 
 static irqreturn_t partition_irq_raw_handler(int irq, void *data)
