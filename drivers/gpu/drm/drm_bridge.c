@@ -417,6 +417,7 @@ void drm_bridge_add(struct drm_bridge *bridge)
 	if (!list_empty(&bridge->list))
 		list_del_init(&bridge->list);
 
+	mutex_init(&bridge->hpd_state_mutex);
 	mutex_init(&bridge->hpd_mutex);
 
 	if (bridge->ops & DRM_BRIDGE_OP_HDMI)
@@ -469,6 +470,7 @@ void drm_bridge_remove(struct drm_bridge *bridge)
 	mutex_unlock(&bridge_lock);
 
 	mutex_destroy(&bridge->hpd_mutex);
+	mutex_destroy(&bridge->hpd_state_mutex);
 
 	drm_bridge_put(bridge);
 }
@@ -1451,19 +1453,25 @@ void drm_bridge_hpd_enable(struct drm_bridge *bridge,
 	if (!(bridge->ops & DRM_BRIDGE_OP_HPD))
 		return;
 
+	mutex_lock(&bridge->hpd_state_mutex);
+
 	mutex_lock(&bridge->hpd_mutex);
 
-	if (WARN(bridge->hpd_cb, "Hot plug detection already enabled\n"))
+	if (WARN(bridge->hpd_cb, "Hot plug detection already enabled\n")) {
+		mutex_unlock(&bridge->hpd_mutex);
 		goto unlock;
+	}
 
 	bridge->hpd_cb = cb;
 	bridge->hpd_data = data;
+
+	mutex_unlock(&bridge->hpd_mutex);
 
 	if (bridge->funcs->hpd_enable)
 		bridge->funcs->hpd_enable(bridge);
 
 unlock:
-	mutex_unlock(&bridge->hpd_mutex);
+	mutex_unlock(&bridge->hpd_state_mutex);
 }
 EXPORT_SYMBOL_GPL(drm_bridge_hpd_enable);
 
@@ -1484,13 +1492,15 @@ void drm_bridge_hpd_disable(struct drm_bridge *bridge)
 	if (!(bridge->ops & DRM_BRIDGE_OP_HPD))
 		return;
 
-	mutex_lock(&bridge->hpd_mutex);
+	mutex_lock(&bridge->hpd_state_mutex);
 	if (bridge->funcs->hpd_disable)
 		bridge->funcs->hpd_disable(bridge);
 
+	mutex_lock(&bridge->hpd_mutex);
 	bridge->hpd_cb = NULL;
 	bridge->hpd_data = NULL;
 	mutex_unlock(&bridge->hpd_mutex);
+	mutex_unlock(&bridge->hpd_state_mutex);
 }
 EXPORT_SYMBOL_GPL(drm_bridge_hpd_disable);
 
