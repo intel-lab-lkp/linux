@@ -2059,7 +2059,7 @@ int qedf_init_mp_req(struct qedf_ioreq *io_req)
 		mp_req->req_len = io_req->data_xfer_len;
 
 	mp_req->req_buf = dma_alloc_coherent(&qedf->pdev->dev, QEDF_PAGE_SIZE,
-	    &mp_req->req_buf_dma, GFP_KERNEL);
+	    &mp_req->req_buf_dma, GFP_ATOMIC);
 	if (!mp_req->req_buf) {
 		QEDF_ERR(&(qedf->dbg_ctx), "Unable to alloc MP req buffer\n");
 		qedf_free_mp_resc(io_req);
@@ -2067,7 +2067,7 @@ int qedf_init_mp_req(struct qedf_ioreq *io_req)
 	}
 
 	mp_req->resp_buf = dma_alloc_coherent(&qedf->pdev->dev,
-	    QEDF_PAGE_SIZE, &mp_req->resp_buf_dma, GFP_KERNEL);
+	    QEDF_PAGE_SIZE, &mp_req->resp_buf_dma, GFP_ATOMIC);
 	if (!mp_req->resp_buf) {
 		QEDF_ERR(&(qedf->dbg_ctx), "Unable to alloc TM resp "
 			  "buffer\n");
@@ -2078,7 +2078,7 @@ int qedf_init_mp_req(struct qedf_ioreq *io_req)
 	/* Allocate and map mp_req_bd and mp_resp_bd */
 	sz = sizeof(struct scsi_sge);
 	mp_req->mp_req_bd = dma_alloc_coherent(&qedf->pdev->dev, sz,
-	    &mp_req->mp_req_bd_dma, GFP_KERNEL);
+	    &mp_req->mp_req_bd_dma, GFP_ATOMIC);
 	if (!mp_req->mp_req_bd) {
 		QEDF_ERR(&(qedf->dbg_ctx), "Unable to alloc MP req bd\n");
 		qedf_free_mp_resc(io_req);
@@ -2086,7 +2086,7 @@ int qedf_init_mp_req(struct qedf_ioreq *io_req)
 	}
 
 	mp_req->mp_resp_bd = dma_alloc_coherent(&qedf->pdev->dev, sz,
-	    &mp_req->mp_resp_bd_dma, GFP_KERNEL);
+	    &mp_req->mp_resp_bd_dma, GFP_ATOMIC);
 	if (!mp_req->mp_resp_bd) {
 		QEDF_ERR(&(qedf->dbg_ctx), "Unable to alloc MP resp bd\n");
 		qedf_free_mp_resc(io_req);
