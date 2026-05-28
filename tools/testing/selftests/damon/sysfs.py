@@ -36,6 +36,7 @@ def assert_true(condition, expectation, status):
     if condition is not True:
         fail(expectation, status)
 
+
 def assert_watermarks_committed(watermarks, dump):
     wmark_metric_val = {
             'none': 0,
@@ -97,8 +98,14 @@ def assert_filter_committed(filter_, dump):
     assert_true(filter_.type_ == dump['type'], 'type', dump)
     assert_true(filter_.matching == dump['matching'], 'matching', dump)
     assert_true(filter_.allow == dump['allow'], 'allow', dump)
-    # TODO: check memcg_path and memcg_id if type is memcg
-    if filter_.type_ == 'addr':
+    if filter_.type_ == 'memcg':
+        shown, rd_err = _damon_sysfs.read_file(
+                os.path.join(filter_.sysfs_dir(), 'memcg_path'))
+        if rd_err is not None:
+            fail('memcg_path sysfs read', {'error': rd_err})
+        assert_true(shown.rstrip('\n') == ('%s' % filter_.memcg_path),
+                    'memcg_path_sysfs', dump)
+    elif filter_.type_ == 'addr':
         assert_true([filter_.addr_start, filter_.addr_end] ==
                     dump['addr_range'], 'addr_range', dump)
     elif filter_.type_ == 'target':
@@ -307,6 +314,8 @@ def main():
                 ops_filters=[
                     _damon_sysfs.DamosFilter(type_='anon', matching=True,
                                              allow=True),
+                    _damon_sysfs.DamosFilter(type_='memcg', matching=True,
+                                             allow=True, memcg_path='/'),
                     ],
                 )])
     context.idx = 0
