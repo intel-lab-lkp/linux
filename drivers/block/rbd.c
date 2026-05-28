@@ -6079,7 +6079,7 @@ static int rbd_dev_v2_snap_context(struct rbd_device *rbd_dev,
 	 * make sure the computed size of the snapshot context we
 	 * allocate is representable in a size_t.
 	 */
-	if (snap_count > (SIZE_MAX - sizeof (struct ceph_snap_context))
+	if ((size_t)snap_count > (SIZE_MAX - sizeof (struct ceph_snap_context))
 				 / sizeof (u64)) {
 		ret = -EINVAL;
 		goto out;
