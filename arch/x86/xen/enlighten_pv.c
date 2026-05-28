@@ -369,15 +369,13 @@ static bool __init xen_check_mwait(void)
 
 static bool __init xen_check_xsave(void)
 {
-	unsigned int cx, xsave_mask;
+	const struct leaf_0x1_0 *l1 = cpuid_leaf(&boot_cpu_data, 0x1);
 
-	cx = cpuid_ecx(1);
-
-	xsave_mask = (1 << (X86_FEATURE_XSAVE % 32)) |
-		     (1 << (X86_FEATURE_OSXSAVE % 32));
+	if (!l1)
+		return false;
 
 	/* Xen will set CR4.OSXSAVE if supported and not disabled by force */
-	return (cx & xsave_mask) == xsave_mask;
+	return l1->xsave && l1->osxsave;
 }
 
 static void __init xen_init_capabilities(void)
