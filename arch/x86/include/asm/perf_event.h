@@ -158,44 +158,6 @@
 #define PEBS_UPDATE_DS_SW	BIT_ULL(63)
 
 /*
- * Intel "Architectural Performance Monitoring" CPUID
- * detection/enumeration details:
- */
-union cpuid10_eax {
-	struct {
-		unsigned int version_id:8;
-		unsigned int num_counters:8;
-		unsigned int bit_width:8;
-		unsigned int mask_length:8;
-	} split;
-	unsigned int full;
-};
-
-union cpuid10_ebx {
-	struct {
-		unsigned int no_unhalted_core_cycles:1;
-		unsigned int no_instructions_retired:1;
-		unsigned int no_unhalted_reference_cycles:1;
-		unsigned int no_llc_reference:1;
-		unsigned int no_llc_misses:1;
-		unsigned int no_branch_instruction_retired:1;
-		unsigned int no_branch_misses_retired:1;
-	} split;
-	unsigned int full;
-};
-
-union cpuid10_edx {
-	struct {
-		unsigned int num_counters_fixed:5;
-		unsigned int bit_width_fixed:8;
-		unsigned int reserved1:2;
-		unsigned int anythread_deprecated:1;
-		unsigned int reserved2:16;
-	} split;
-	unsigned int full;
-};
-
-/*
  * Intel "Architectural Performance Monitoring extension" CPUID
  * detection/enumeration details:
  */
