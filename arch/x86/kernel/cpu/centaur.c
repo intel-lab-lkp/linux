@@ -107,11 +107,11 @@ static void early_init_centaur(struct cpuinfo_x86 *c)
 static void init_centaur(struct cpuinfo_x86 *c)
 {
 #ifdef CONFIG_X86_32
-	char *name;
+	const struct leaf_0x80000005_0 *el5 = cpuid_leaf(c, 0x80000005);
+	u32  lo, hi, newlo;
 	u32  fcr_set = 0;
 	u32  fcr_clr = 0;
-	u32  lo, hi, newlo;
-	u32  aa, bb, cc, dd;
+	char *name;
 #endif
 	early_init_centaur(c);
 	init_intel_cacheinfo(c);
@@ -181,13 +181,8 @@ static void init_centaur(struct cpuinfo_x86 *c)
 		/* Set 3DNow! on Winchip 2 and above. */
 		if (c->x86_model >= 8)
 			set_cpu_cap(c, X86_FEATURE_3DNOW);
-		/* See if we can find out some more. */
-		if (cpuid_eax(0x80000000) >= 0x80000005) {
-			/* Yes, we can. */
-			cpuid(0x80000005, &aa, &bb, &cc, &dd);
-			/* Add L1 data and code cache sizes. */
-			c->x86_cache_size = (cc>>24)+(dd>>24);
-		}
+		if (el5)
+			c->x86_cache_size = el5->l1_dcache_size_kb + el5->l1_icache_size_kb;
 		sprintf(c->x86_model_id, "WinChip %s", name);
 	}
 #endif
