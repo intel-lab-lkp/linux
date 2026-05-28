@@ -30,6 +30,7 @@
 #include <linux/set_memory.h>
 #include <hyperv/hvhdk.h>
 #include <asm/mshyperv.h>
+#include "mshv_root.h"
 
 u64 hv_current_partition_id = HV_PARTITION_ID_SELF;
 EXPORT_SYMBOL_GPL(hv_current_partition_id);
@@ -382,6 +383,8 @@ int __init hv_common_init(void)
 	if (hv_parent_partition()) {
 		hv_synic_eventring_tail = alloc_percpu(u8 *);
 		BUG_ON(!hv_synic_eventring_tail);
+
+		mshv_preserve_init();
 	}
 
 	hv_vp_index = kmalloc_array(nr_cpu_ids, sizeof(*hv_vp_index),

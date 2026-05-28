@@ -69,8 +69,16 @@ int hv_call_withdraw_memory(u64 count, int node, u64 partition_id)
 
 		completed = hv_repcomp(status);
 
-		for (i = 0; i < completed; i++)
-			__free_page(pfn_to_page(output_page->gpa_page_list[i]));
+		for (i = 0; i < completed; i++) {
+			struct page *pg = pfn_to_page(output_page->gpa_page_list[i]);
+			int res = mshv_unregister_preserve_page(pg);
+
+			WARN_ONCE(res, "Failed to unregister PFN %#llx\n",
+				  output_page->gpa_page_list[i]);
+
+			/* Free regardless -- HV has already released the page */
+			__free_page(pg);
+		}
 
 		if (!hv_result_success(status)) {
 			if (hv_result(status) == HV_STATUS_NO_RESOURCES)

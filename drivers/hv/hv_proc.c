@@ -8,6 +8,7 @@
 #include <linux/minmax.h>
 #include <linux/export.h>
 #include <asm/mshyperv.h>
+#include "mshv_root.h"
 
 /*
  * See struct hv_deposit_memory. The first u64 is partition ID, the rest
@@ -22,6 +23,7 @@ int hv_call_deposit_pages(int node, u64 partition_id, u32 num_pages)
 	int *counts;
 	int num_allocations;
 	int i, j, page_count;
+	int reg_i = 0, reg_j = 0;
 	int order;
 	u64 status;
 	int ret;
@@ -72,6 +74,18 @@ int hv_call_deposit_pages(int node, u64 partition_id, u32 num_pages)
 	}
 	num_allocations = i;
 
+	/* Register the pages for preservation across kexec */
+	for (i = 0; i < num_allocations; ++i) {
+		for (j = 0; j < counts[i]; ++j) {
+			ret = mshv_register_preserve_page(pages[i] + j);
+			if (ret) {
+				reg_i = i;
+				reg_j = j;
+				goto err_unregister;
+			}
+		}
+	}
+
 	local_irq_save(flags);
 
 	input_page = *this_cpu_ptr(hyperv_pcpu_input_arg);
@@ -90,18 +104,26 @@ int hv_call_deposit_pages(int node, u64 partition_id, u32 num_pages)
 	if (!hv_result_success(status)) {
 		hv_status_err(status, "\n");
 		ret = hv_result_to_errno(status);
-		goto err_free_allocations;
+		reg_i = num_allocations;
+		goto err_unregister;
 	}
 
 	ret = 0;
 	goto free_buf;
 
-err_free_allocations:
+err_unregister:
 	for (i = 0; i < num_allocations; ++i) {
-		base_pfn = page_to_pfn(pages[i]);
-		for (j = 0; j < counts[i]; ++j)
-			__free_page(pfn_to_page(base_pfn + j));
+		for (j = 0; j < counts[i]; ++j) {
+			if (i == reg_i && j == reg_j)
+				goto err_free_allocations;
+			mshv_unregister_preserve_page(pages[i] + j);
+		}
 	}
+
+err_free_allocations:
+	for (i = 0; i < num_allocations; ++i)
+		for (j = 0; j < counts[i]; ++j)
+			__free_page(pages[i] + j);
 
 free_buf:
 	free_page((unsigned long)pages);

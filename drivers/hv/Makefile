@@ -21,7 +21,7 @@ mshv_vtl-y := mshv_vtl_main.o
 
 # Code that must be built-in
 obj-$(CONFIG_HYPERV) += hv_common.o
-obj-$(subst m,y,$(CONFIG_MSHV_ROOT)) += hv_proc.o
+obj-$(subst m,y,$(CONFIG_MSHV_ROOT)) += hv_proc.o mshv_page_preserve.o
 ifneq ($(CONFIG_MSHV_ROOT)$(CONFIG_MSHV_VTL),)
 	obj-y += mshv_common.o
 endif
