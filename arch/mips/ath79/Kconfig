@@ -7,7 +7,6 @@ config SOC_AR71XX
 
 config SOC_AR724X
 	select HAVE_PCI
-	select PCI_AR724X if PCI
 	def_bool n
 
 config SOC_AR913X
@@ -18,15 +17,9 @@ config SOC_AR933X
 
 config SOC_AR934X
 	select HAVE_PCI
-	select PCI_AR724X if PCI
 	def_bool n
 
 config SOC_QCA955X
 	select HAVE_PCI
-	select PCI_AR724X if PCI
 	def_bool n
-
-config PCI_AR724X
-	def_bool n
-
 endif
