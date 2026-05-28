@@ -38,6 +38,24 @@ cpuid_read_generic(const struct cpuid_parse_entry *e, const struct cpuid_read_ou
 		cpuid_read_subleaf(e->leaf, e->subleaf + i, regs);
 }
 
+static void
+cpuid_read_0x80000000(const struct cpuid_parse_entry *e, const struct cpuid_read_output *output)
+{
+	struct leaf_0x80000000_0 *el0 = (struct leaf_0x80000000_0 *)output->regs;
+
+	cpuid_read_subleaf(e->leaf, e->subleaf, el0);
+
+	/*
+	 * Protect against Intel 32-bit CPUs lacking an extended CPUID range.  A
+	 * CPUID(0x80000000) query on such machines will repeat the output of the
+	 * highest standard CPUID leaf instead.
+	 */
+	if (CPUID_RANGE(el0->max_ext_leaf) != CPUID_EXT_START)
+		return;
+
+	output->info->nr_entries = 1;
+}
+
 /*
  * CPUID parser table:
  */
@@ -53,9 +71,11 @@ static const struct cpuid_parse_entry cpuid_parse_entries[] = {
 static unsigned int cpuid_range_max_leaf(const struct cpuid_table *t, unsigned int range)
 {
 	const struct leaf_0x0_0 *l0 = __cpuid_table_subleaf(t, 0x0, 0);
+	const struct leaf_0x80000000_0 *el0 = __cpuid_table_subleaf(t, 0x80000000, 0);
 
 	switch (range) {
 	case CPUID_BASE_START:	return l0  ?  l0->max_std_leaf : 0;
+	case CPUID_EXT_START:	return el0 ? el0->max_ext_leaf : 0;
 	default:		return 0;
 	}
 }
@@ -113,6 +133,7 @@ cpuid_fill_table(struct cpuid_table *t, const struct cpuid_parse_entry entries[]
 		unsigned int end;
 	} ranges[] = {
 		{ CPUID_BASE_START, CPUID_BASE_END },
+		{ CPUID_EXT_START,  CPUID_EXT_END  },
 	};
 
 	for (unsigned int i = 0; i < ARRAY_SIZE(ranges); i++)
