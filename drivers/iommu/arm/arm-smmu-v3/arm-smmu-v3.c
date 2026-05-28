@@ -894,6 +894,33 @@ static int arm_smmu_cmdq_batch_submit(struct arm_smmu_device *smmu,
 					   cmds->num, true);
 }
 
+/* Drain an SMMU EVTQ or PRIQ to a PROD snapshot taken on entry */
+static int arm_smmu_drain_queue_for_iopf(struct arm_smmu_device *smmu,
+					 struct arm_smmu_queue *q)
+{
+	struct arm_smmu_queue_poll qp;
+	u32 prod, cons;
+	int ret = 0;
+
+	/* Snapshot PROD; entries [old_cons, prod) are the cohort to drain */
+	prod = readl_relaxed(q->prod_reg);
+	queue_poll_init(smmu, &qp);
+	qp.wfe = false; /* No SEV on EVTQ/PRIQ PROD advance */
+	/* Read MMIO each iteration; llq->cons is the threaded handler's */
+	do {
+		cons = readl_relaxed(q->cons_reg);
+		if (__queue_empty(&q->llq, cons, prod) ||
+		    __queue_consumed(&q->llq, cons, prod))
+			return 0;
+		cond_resched();
+	} while (!(ret = queue_poll(&qp)));
+
+	dev_warn_ratelimited(smmu->dev,
+			     "queue drain timed out at prod=0x%x cons=0x%x\n",
+			     prod, cons);
+	return ret;
+}
+
 static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused,
 				   struct iommu_page_response *resp)
 {
