@@ -1156,7 +1156,7 @@ xfs_mountfs(
 	xfs_fs_unreserve_ag_blocks(mp);
 	if (error) {
 		xfs_warn(mp, "log mount finish failed");
-		goto out_rtunmount;
+		goto out_qm_unmount;
 	}
 
 	/*
@@ -1174,7 +1174,7 @@ xfs_mountfs(
 	if (xfs_has_zoned(mp)) {
 		error = xfs_mount_zones(mp);
 		if (error)
-			goto out_rtunmount;
+			goto out_qm_unmount;
 	}
 
 	/*
@@ -1228,16 +1228,29 @@ xfs_mountfs(
 	return 0;
 
  out_agresv:
+	/*
+	 * Drain ordinary inodegc before we drop per-AG reservations or tear
+	 * down quota state.  Background inactivation can still attach dquots
+	 * here, and dqget can still need the quota inodes.
+	 */
+	xfs_inodegc_flush(mp);
 	xfs_fs_unreserve_ag_blocks(mp);
 	xfs_qm_unmount_quotas(mp);
 	if (xfs_has_zoned(mp))
 		xfs_unmount_zones(mp);
+ out_qm_unmount:
+	/*
+	 * xfs_qm_newmount() can bring quota inodes into the mount.  Drain
+	 * inodegc before destroying quotainfo because background inactivation
+	 * can still attach dquots.
+	 */
+	xfs_inodegc_flush(mp);
+	/* Clean out dquots that might be in memory after quotacheck. */
+	xfs_qm_unmount(mp);
  out_rtunmount:
 	xfs_rtunmount_inodes(mp);
  out_rele_rip:
 	xfs_irele(rip);
-	/* Clean out dquots that might be in memory after quotacheck. */
-	xfs_qm_unmount(mp);
  out_free_metadir:
 	if (mp->m_metadirip)
 		xfs_irele(mp->m_metadirip);
