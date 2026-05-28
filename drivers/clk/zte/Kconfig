@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# ZTE Clock Drivers
+#
+menu "Clock driver for ZTE SoC"
+	depends on ARCH_ZTE || COMPILE_TEST
+
+config COMMON_CLK_ZX297520V3
+	tristate "Clock driver for ZTE zx297520v3"
+	default SOC_ZX297520V3
+	help
+	  This driver supports ZTE zx297520v3 basic clocks.
+
+	  Enable this if you want to build a kernel that is able to run on
+	  boards based on this SoC. You can safely enable multiple clock
+	  drivers. The one(s) matching the device tree will be used.
+
+endmenu
