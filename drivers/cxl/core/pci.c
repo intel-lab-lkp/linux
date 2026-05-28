@@ -20,6 +20,9 @@
 #define CXL_RESET_MAX_FUNCTIONS		256
 #define CXL_RESET_FUNCTION_MAP_REGS	(CXL_RESET_MAX_FUNCTIONS / 32)
 #define CXL_RESET_SIBLINGS_INIT		8
+#define CXL_RESET_CACHE_WBI_POLL_US	100
+#define CXL_RESET_CACHE_WBI_TIMEOUT_US	(100 * USEC_PER_MSEC)
+#define CXL_RESET_MIN_QUIET_MS		100
 
 /**
  * DOC: cxl core pci
@@ -1301,5 +1304,187 @@ cxl_pci_functions_reset_prepare(struct cxl_reset_context *ctx)
 
 err:
 	cxl_pci_functions_reset_done(ctx);
+	return rc;
+}
+
+static int cxl_reset_update_ctrl2(struct pci_dev *pdev, int dvsec, u16 set,
+				  u16 clear)
+{
+	u16 ctrl2;
+	int rc;
+
+	rc = pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_CTRL2, &ctrl2);
+	if (rc)
+		return rc;
+
+	ctrl2 &= ~clear;
+	ctrl2 |= set;
+
+	return pci_write_config_word(pdev, dvsec + PCI_DVSEC_CXL_CTRL2, ctrl2);
+}
+
+static int cxl_reset_wait_cache_inv(struct pci_dev *pdev, int dvsec)
+{
+	int remaining_us = CXL_RESET_CACHE_WBI_TIMEOUT_US;
+	u16 status2;
+	int rc;
+
+	do {
+		usleep_range(CXL_RESET_CACHE_WBI_POLL_US,
+			     CXL_RESET_CACHE_WBI_POLL_US + 1);
+		remaining_us -= CXL_RESET_CACHE_WBI_POLL_US;
+
+		rc = pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_STATUS2,
+					  &status2);
+		if (rc)
+			return rc;
+
+		if (status2 & PCI_DVSEC_CXL_CACHE_INV)
+			return 0;
+	} while (remaining_us > 0);
+
+	pci_err(pdev, "CXL cache WB+I timed out\n");
+	return -ETIMEDOUT;
+}
+
+static int cxl_reset_enable_cache(struct pci_dev *pdev, int dvsec, u16 cap)
+{
+	if (!(cap & PCI_DVSEC_CXL_CACHE_CAPABLE))
+		return 0;
+
+	return cxl_reset_update_ctrl2(pdev, dvsec, 0,
+				      PCI_DVSEC_CXL_DISABLE_CACHING);
+}
+
+static int cxl_reset_disable_cache(struct pci_dev *pdev, int dvsec, u16 cap)
+{
+	int rc;
+
+	if (!(cap & PCI_DVSEC_CXL_CACHE_CAPABLE))
+		return 0;
+
+	rc = cxl_reset_update_ctrl2(pdev, dvsec,
+				    PCI_DVSEC_CXL_DISABLE_CACHING, 0);
+	if (rc)
+		return rc;
+
+	if (!(cap & PCI_DVSEC_CXL_CACHE_WBI_CAPABLE))
+		return 0;
+
+	rc = cxl_reset_update_ctrl2(pdev, dvsec,
+				    PCI_DVSEC_CXL_INIT_CACHE_WBI, 0);
+	if (rc)
+		goto err_enable_cache;
+
+	rc = cxl_reset_wait_cache_inv(pdev, dvsec);
+	if (rc)
+		goto err_enable_cache;
+
+	return 0;
+
+err_enable_cache:
+	/*
+	 * Best effort rollback: preserve the original WB+I failure even if
+	 * re-enabling CXL.cache also fails.
+	 */
+	cxl_reset_enable_cache(pdev, dvsec, cap);
+	return rc;
+}
+
+static int cxl_reset_wait_done(struct pci_dev *pdev, int dvsec, u16 cap)
+{
+	static const u32 reset_timeout_ms[] = { 10, 100, 1000, 10000, 100000 };
+	u32 timeout_ms;
+	u16 status2;
+	int rc, idx;
+
+	idx = FIELD_GET(PCI_DVSEC_CXL_RST_TIMEOUT, cap);
+	if (idx >= ARRAY_SIZE(reset_timeout_ms))
+		idx = ARRAY_SIZE(reset_timeout_ms) - 1;
+	timeout_ms = reset_timeout_ms[idx];
+
+	msleep(max_t(u32, timeout_ms, CXL_RESET_MIN_QUIET_MS));
+
+	rc = pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_STATUS2,
+				  &status2);
+	if (rc)
+		return rc;
+
+	if (status2 & PCI_DVSEC_CXL_RST_ERR) {
+		pci_err(pdev, "CXL reset error\n");
+		return -EIO;
+	}
+
+	if (!(status2 & PCI_DVSEC_CXL_RST_DONE)) {
+		pci_err(pdev, "CXL reset timed out\n");
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
+static int __maybe_unused cxl_dev_reset(struct pci_dev *pdev, bool mem_clear)
+{
+	int dvsec, rc;
+	u16 ctrl2_clear = 0;
+	u16 cap;
+
+	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+					  PCI_DVSEC_CXL_DEVICE);
+	if (!dvsec)
+		return -ENODEV;
+
+	rc = pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_CAP, &cap);
+	if (rc)
+		return rc;
+
+	if (!(cap & PCI_DVSEC_CXL_RST_CAPABLE))
+		return -EOPNOTSUPP;
+
+	if (mem_clear && !(cap & PCI_DVSEC_CXL_RST_MEM_CLR_CAPABLE))
+		return -EOPNOTSUPP;
+
+	if (!pci_wait_for_pending_transaction(pdev))
+		pci_err(pdev, "timed out waiting for pending transactions\n");
+
+	rc = pci_dev_reset_iommu_prepare(pdev);
+	if (rc) {
+		pci_err(pdev, "failed to block IOMMU for CXL reset: %d\n",
+			rc);
+		return rc;
+	}
+
+	rc = cxl_reset_disable_cache(pdev, dvsec, cap);
+	if (rc)
+		goto out_iommu;
+	if (cap & PCI_DVSEC_CXL_CACHE_CAPABLE)
+		ctrl2_clear |= PCI_DVSEC_CXL_DISABLE_CACHING;
+
+	if (mem_clear) {
+		rc = cxl_reset_update_ctrl2(pdev, dvsec,
+					    PCI_DVSEC_CXL_RST_MEM_CLR_EN, 0);
+		if (rc)
+			goto out_ctrl2;
+		ctrl2_clear |= PCI_DVSEC_CXL_RST_MEM_CLR_EN;
+	}
+
+	rc = cxl_reset_update_ctrl2(pdev, dvsec,
+				    PCI_DVSEC_CXL_INIT_CXL_RST, 0);
+	if (rc)
+		goto out_ctrl2;
+
+	rc = cxl_reset_wait_done(pdev, dvsec, cap);
+	if (rc)
+		goto out_iommu;
+
+	rc = cxl_reset_update_ctrl2(pdev, dvsec, 0,
+				    PCI_DVSEC_CXL_DISABLE_CACHING);
+
+out_ctrl2:
+	if (rc && ctrl2_clear)
+		cxl_reset_update_ctrl2(pdev, dvsec, 0, ctrl2_clear);
+
+out_iommu:
+	pci_dev_reset_iommu_done(pdev);
 	return rc;
 }
