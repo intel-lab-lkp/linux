@@ -679,7 +679,7 @@ int cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, u64 size)
 	return devm_add_action_or_reset(&port->dev, cxl_dpa_release, cxled);
 }
 
-static void cxld_set_interleave(struct cxl_decoder *cxld, u32 *ctrl)
+static int cxld_set_interleave_fields(struct cxl_decoder *cxld, u32 *ctrl)
 {
 	u16 eig;
 	u8 eiw;
@@ -690,14 +690,22 @@ static void cxld_set_interleave(struct cxl_decoder *cxld, u32 *ctrl)
 	 */
 	if (WARN_ONCE(ways_to_eiw(cxld->interleave_ways, &eiw),
 		      "invalid interleave_ways: %d\n", cxld->interleave_ways))
-		return;
+		return -EINVAL;
 	if (WARN_ONCE(granularity_to_eig(cxld->interleave_granularity, &eig),
 		      "invalid interleave_granularity: %d\n",
 		      cxld->interleave_granularity))
-		return;
+		return -EINVAL;
 
 	u32p_replace_bits(ctrl, eig, CXL_HDM_DECODER0_CTRL_IG_MASK);
 	u32p_replace_bits(ctrl, eiw, CXL_HDM_DECODER0_CTRL_IW_MASK);
+	return 0;
+}
+
+static void cxld_set_interleave(struct cxl_decoder *cxld, u32 *ctrl)
+{
+	if (cxld_set_interleave_fields(cxld, ctrl))
+		return;
+
 	*ctrl |= CXL_HDM_DECODER0_CTRL_COMMIT;
 }
 
@@ -925,6 +933,310 @@ static void cxl_decoder_reset(struct cxl_decoder *cxld)
 		cxled = to_cxl_endpoint_decoder(&cxld->dev);
 		cxled->state = CXL_DECODER_STATE_MANUAL;
 	}
+}
+
+static int cxl_restore_dvsec_range(struct cxl_memdev *cxlmd,
+				   struct cxl_endpoint_decoder *cxled)
+{
+	struct cxl_dev_state *cxlds = cxlmd->cxlds;
+	struct cxl_decoder *cxld = &cxled->cxld;
+	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
+	u64 base = cxld->hpa_range.start;
+	u64 size = range_len(&cxld->hpa_range);
+	u32 lo;
+	int dvsec = cxlds->cxl_dvsec;
+	int id = cxld->id;
+	int rc;
+
+	if (!dvsec)
+		return 0;
+
+	if (id >= CXL_DVSEC_RANGE_MAX)
+		return 0;
+
+	rc = pci_write_config_dword(pdev, dvsec + PCI_DVSEC_CXL_RANGE_BASE_HIGH(id),
+				    upper_32_bits(base));
+	if (rc)
+		return rc;
+
+	rc = pci_read_config_dword(pdev, dvsec + PCI_DVSEC_CXL_RANGE_BASE_LOW(id),
+				   &lo);
+	if (rc)
+		return rc;
+	lo &= ~PCI_DVSEC_CXL_MEM_BASE_LOW;
+	lo |= lower_32_bits(base) & PCI_DVSEC_CXL_MEM_BASE_LOW;
+
+	rc = pci_write_config_dword(pdev, dvsec + PCI_DVSEC_CXL_RANGE_BASE_LOW(id),
+				    lo);
+	if (rc)
+		return rc;
+
+	rc = pci_write_config_dword(pdev, dvsec + PCI_DVSEC_CXL_RANGE_SIZE_HIGH(id),
+				    upper_32_bits(size));
+	if (rc)
+		return rc;
+
+	rc = pci_read_config_dword(pdev, dvsec + PCI_DVSEC_CXL_RANGE_SIZE_LOW(id),
+				   &lo);
+	if (rc)
+		return rc;
+
+	/*
+	 * Preserve MEM_INFO_VALID / MEM_ACTIVE and any reserved bits while
+	 * restoring only the programmable size bits.
+	 */
+	lo &= ~PCI_DVSEC_CXL_MEM_SIZE_LOW;
+	lo |= lower_32_bits(size) & PCI_DVSEC_CXL_MEM_SIZE_LOW;
+
+	return pci_write_config_dword(pdev,
+				      dvsec + PCI_DVSEC_CXL_RANGE_SIZE_LOW(id),
+				      lo);
+}
+
+static int cxl_restore_hdm_decoder(struct cxl_hdm *cxlhdm,
+				   struct cxl_endpoint_decoder *cxled)
+{
+	struct cxl_decoder *cxld = &cxled->cxld;
+	void __iomem *hdm;
+	u64 base, size, skip;
+	u32 ctrl;
+	int id;
+
+	id = cxld->id;
+	hdm = cxlhdm->regs.hdm_decoder;
+	ctrl = readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+	if (ctrl & CXL_HDM_DECODER0_CTRL_LOCK)
+		return 0;
+
+	base = cxld->hpa_range.start;
+	size = range_len(&cxld->hpa_range);
+	skip = cxled->skip;
+
+	ctrl &= ~(CXL_HDM_DECODER0_CTRL_LOCK |
+		  CXL_HDM_DECODER0_CTRL_COMMIT |
+		  CXL_HDM_DECODER0_CTRL_COMMITTED |
+		  CXL_HDM_DECODER0_CTRL_COMMIT_ERROR);
+	if (cxld_set_interleave_fields(cxld, &ctrl))
+		return -EINVAL;
+	cxld_set_type(cxld, &ctrl);
+
+	/* Preserve setup_hw_decoder() programming order, without COMMIT. */
+	writel(upper_32_bits(base), hdm + CXL_HDM_DECODER0_BASE_HIGH_OFFSET(id));
+	writel(lower_32_bits(base), hdm + CXL_HDM_DECODER0_BASE_LOW_OFFSET(id));
+	writel(upper_32_bits(size), hdm + CXL_HDM_DECODER0_SIZE_HIGH_OFFSET(id));
+	writel(lower_32_bits(size), hdm + CXL_HDM_DECODER0_SIZE_LOW_OFFSET(id));
+	writel(upper_32_bits(skip), hdm + CXL_HDM_DECODER0_SKIP_HIGH(id));
+	writel(lower_32_bits(skip), hdm + CXL_HDM_DECODER0_SKIP_LOW(id));
+	wmb();
+	writel(ctrl, hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+
+	return 0;
+}
+
+struct cxl_restore_ctx {
+	struct cxl_memdev *cxlmd;
+	struct cxl_hdm *cxlhdm;
+};
+
+static int cxl_restore_decoder(struct device *dev, void *data)
+{
+	struct cxl_restore_ctx *ctx = data;
+	struct cxl_endpoint_decoder *cxled;
+	struct cxl_decoder *cxld;
+	int rc;
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	cxled = to_cxl_endpoint_decoder(dev);
+	cxld = &cxled->cxld;
+	if ((cxld->flags & CXL_DECODER_F_ENABLE) == 0)
+		return 0;
+
+	if (ctx->cxlhdm->regs.hdm_decoder) {
+		if (cxld->id >= ctx->cxlhdm->decoder_count)
+			return -EINVAL;
+
+		rc = cxl_restore_hdm_decoder(ctx->cxlhdm, cxled);
+		if (rc)
+			return rc;
+	}
+
+	return cxl_restore_dvsec_range(ctx->cxlmd, cxled);
+}
+
+static int cxl_restore_decoders(struct cxl_memdev *cxlmd, struct cxl_hdm *cxlhdm)
+{
+	struct cxl_port *port = cxlhdm->port;
+	void __iomem *hdm = cxlhdm->regs.hdm_decoder;
+	struct cxl_restore_ctx ctx = {
+		.cxlmd = cxlmd,
+		.cxlhdm = cxlhdm,
+	};
+	u32 global_ctrl;
+
+	if (hdm) {
+		global_ctrl = readl(hdm + CXL_HDM_DECODER_CTRL_OFFSET);
+		writel(global_ctrl & ~CXL_HDM_DECODER_ENABLE,
+		       hdm + CXL_HDM_DECODER_CTRL_OFFSET);
+	}
+
+	return device_for_each_child(&port->dev, &ctx, cxl_restore_decoder);
+}
+
+/**
+ * cxl_restore_memdev_decoders - Restore endpoint decoder programming
+ * @cxlmd: CXL memdev whose endpoint decoders need to be restored
+ *
+ * Restore only programmable decoder state from CXL core's cached decoder
+ * objects. For endpoints with HDM decoder registers, program the HDM decoder
+ * fields and mirror decoder ids representable by CXL_DVSEC_RANGE_MAX into the
+ * DVSEC range registers when present. For endpoints without HDM decoder
+ * registers, restore DVSEC range registers only.
+ *
+ * This helper leaves CXL.mem disabled: it does not commit HDM decoders, enable
+ * the HDM Decoder Capability, set PCI_DVSEC_CXL_MEM_ENABLE, or restore
+ * unrelated DVSEC CTRL, CTRL2, LOCK, MEM_ENABLE, or other control state.
+ * Callers must perform final commit/resume steps only after reset safety checks
+ * pass.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+int cxl_restore_memdev_decoders(struct cxl_memdev *cxlmd)
+{
+	struct cxl_port *endpoint = cxlmd->endpoint;
+	struct cxl_hdm *cxlhdm;
+	int rc;
+
+	lockdep_assert_held_write(&cxl_rwsem.region);
+
+	if (!endpoint)
+		return -ENODEV;
+
+	cxlhdm = dev_get_drvdata(&endpoint->dev);
+	if (!cxlhdm)
+		return -ENODEV;
+
+	scoped_guard(rwsem_read, &cxl_rwsem.dpa)
+		rc = cxl_restore_decoders(cxlmd, cxlhdm);
+	return rc;
+}
+
+static int cxl_commit_restored_hdm_decoder(struct cxl_hdm *cxlhdm,
+					   struct cxl_endpoint_decoder *cxled)
+{
+	struct cxl_decoder *cxld = &cxled->cxld;
+	void __iomem *hdm = cxlhdm->regs.hdm_decoder;
+	u32 ctrl;
+	int id;
+
+	if ((cxld->flags & CXL_DECODER_F_ENABLE) == 0)
+		return 0;
+
+	if (!hdm)
+		return 0;
+
+	id = cxld->id;
+	if (id >= cxlhdm->decoder_count)
+		return -EINVAL;
+
+	/*
+	 * cxl_restore_hdm_decoder() programmed the decoder fields first. This
+	 * control register write sets COMMIT as the final programming step.
+	 */
+	ctrl = readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+	if (ctrl & CXL_HDM_DECODER0_CTRL_LOCK)
+		return 0;
+
+	if (ctrl & CXL_HDM_DECODER0_CTRL_COMMITTED)
+		return 0;
+
+	ctrl |= CXL_HDM_DECODER0_CTRL_COMMIT;
+	writel(ctrl, hdm + CXL_HDM_DECODER0_CTRL_OFFSET(id));
+
+	return cxld_await_commit(hdm, id);
+}
+
+struct cxl_commit_decoder_ctx {
+	struct cxl_hdm *cxlhdm;
+	int id;
+};
+
+static int cxl_commit_restored_decoder_by_id(struct device *dev, void *data)
+{
+	struct cxl_commit_decoder_ctx *ctx = data;
+	struct cxl_endpoint_decoder *cxled;
+	int rc;
+
+	if (!is_endpoint_decoder(dev))
+		return 0;
+
+	cxled = to_cxl_endpoint_decoder(dev);
+	if (cxled->cxld.id != ctx->id)
+		return 0;
+
+	rc = cxl_commit_restored_hdm_decoder(ctx->cxlhdm, cxled);
+	return rc ?: 1;
+}
+
+/**
+ * cxl_commit_memdev_decoders - Commit restored endpoint decoder programming
+ * @cxlmd: CXL memdev whose endpoint decoders need to be committed
+ *
+ * Resume endpoint decoding after cxl_restore_memdev_decoders() has restored
+ * programmable decoder fields. For endpoints with HDM decoder registers, enable
+ * the HDM Decoder Capability and commit enabled, unlocked endpoint decoders.
+ * Locked decoders are left to their current hardware/firmware-owned state.
+ *
+ * This helper does not set PCI_DVSEC_CXL_MEM_ENABLE. Callers must enable
+ * CXL.mem only after all reset safety checks and decoder restore/commit steps
+ * have completed.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+int cxl_commit_memdev_decoders(struct cxl_memdev *cxlmd)
+{
+	struct cxl_port *endpoint = cxlmd->endpoint;
+	struct cxl_hdm *cxlhdm;
+	void __iomem *hdm;
+	u32 global_ctrl;
+	int i, rc;
+
+	lockdep_assert_held_write(&cxl_rwsem.region);
+
+	if (!endpoint)
+		return -ENODEV;
+
+	cxlhdm = dev_get_drvdata(&endpoint->dev);
+	if (!cxlhdm)
+		return -ENODEV;
+
+	hdm = cxlhdm->regs.hdm_decoder;
+	if (!hdm)
+		return 0;
+
+	global_ctrl = readl(hdm + CXL_HDM_DECODER_CTRL_OFFSET);
+	writel(global_ctrl | CXL_HDM_DECODER_ENABLE,
+	       hdm + CXL_HDM_DECODER_CTRL_OFFSET);
+
+	for (i = 0; i < cxlhdm->decoder_count; i++) {
+		struct cxl_commit_decoder_ctx ctx = {
+			.cxlhdm = cxlhdm,
+			.id = i,
+		};
+
+		/*
+		 * Per CXL Spec 3.1 8.2.4.20.12 software must commit decoders
+		 * in HPA order. Region setup already enforces that ordering by
+		 * decoder id, so restore commits follow ascending id order.
+		 */
+		rc = device_for_each_child(&endpoint->dev, &ctx,
+					   cxl_commit_restored_decoder_by_id);
+		if (rc < 0)
+			return rc;
+	}
+
+	return 0;
 }
 
 static int cxl_setup_hdm_decoder_from_dvsec(

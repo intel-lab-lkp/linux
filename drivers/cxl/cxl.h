@@ -794,6 +794,8 @@ int cxl_port_setup_regs(struct cxl_port *port,
 struct cxl_dev_state;
 int cxl_dvsec_rr_decode(struct cxl_dev_state *cxlds,
 			struct cxl_endpoint_dvsec_info *info);
+int cxl_restore_memdev_decoders(struct cxl_memdev *cxlmd);
+int cxl_commit_memdev_decoders(struct cxl_memdev *cxlmd);
 
 bool is_cxl_region(struct device *dev);
 
