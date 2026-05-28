@@ -758,8 +758,7 @@ static int xe2_hpd_get_bw_info(struct intel_display *display,
 	display->bw.max[0].num_planes = 1;
 	display->bw.max[0].num_qgv_points = qi.num_points;
 	for (i = 1; i < ARRAY_SIZE(display->bw.max); i++)
-		memcpy(&display->bw.max[i], &display->bw.max[0],
-		       sizeof(display->bw.max[0]));
+		display->bw.max[i] = display->bw.max[0];
 
 	/*
 	 * Xe2_HPD should always have exactly two QGV points representing
