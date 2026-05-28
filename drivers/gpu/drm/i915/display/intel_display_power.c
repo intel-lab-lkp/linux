@@ -1614,11 +1614,17 @@ static void tgl_bw_buddy_init(struct intel_display *display)
 	const struct dram_info *dram_info = intel_dram_info(display);
 	const struct buddy_page_mask *table;
 	unsigned long abox_mask = DISPLAY_INFO(display)->abox_mask;
+	u8 channels = dram_info->num_channels;
 	int config, i;
 
 	/* BW_BUDDY registers are not used on dgpu's beyond DG1 */
 	if (display->platform.dgfx && !display->platform.dg1)
 		return;
+
+	/* For LPDDR4 / LPDDR5, pcode reports subchannels. */
+	if (dram_info->type == INTEL_DRAM_LPDDR4 ||
+	    dram_info->type == INTEL_DRAM_LPDDR5)
+		channels /= 2;
 
 	if (intel_display_wa(display, INTEL_DISPLAY_WA_1409767108))
 		/* Wa_1409767108 */
@@ -1627,7 +1633,7 @@ static void tgl_bw_buddy_init(struct intel_display *display)
 		table = tgl_buddy_page_masks;
 
 	for (config = 0; table[config].page_mask != 0; config++)
-		if (table[config].num_channels == dram_info->num_channels &&
+		if (table[config].num_channels == channels &&
 		    table[config].type == dram_info->type)
 			break;
 
