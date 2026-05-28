@@ -97,20 +97,16 @@ struct vmw_screen_object_unit {
 	bool defined;
 };
 
-static void vmw_sou_destroy(struct vmw_screen_object_unit *sou)
-{
-	vmw_du_cleanup(&sou->base);
-	kfree(sou);
-}
-
-
 /*
  * Screen Object Display Unit CRTC functions
  */
-
 static void vmw_sou_crtc_destroy(struct drm_crtc *crtc)
 {
-	vmw_sou_destroy(vmw_crtc_to_sou(crtc));
+	struct vmw_screen_object_unit *sou = vmw_crtc_to_sou(crtc);
+
+	vmw_vkms_crtc_cleanup(&sou->base.crtc);
+	drm_crtc_cleanup(&sou->base.crtc);
+	kfree(sou);
 }
 
 /*
@@ -319,29 +315,19 @@ static const struct drm_crtc_funcs vmw_screen_object_crtc_funcs = {
  * Screen Object Display Unit encoder functions
  */
 
-static void vmw_sou_encoder_destroy(struct drm_encoder *encoder)
-{
-	vmw_sou_destroy(vmw_encoder_to_sou(encoder));
-}
-
 static const struct drm_encoder_funcs vmw_screen_object_encoder_funcs = {
-	.destroy = vmw_sou_encoder_destroy,
+	.destroy = drm_encoder_cleanup,
 };
 
 /*
  * Screen Object Display Unit connector functions
  */
 
-static void vmw_sou_connector_destroy(struct drm_connector *connector)
-{
-	vmw_sou_destroy(vmw_connector_to_sou(connector));
-}
-
 static const struct drm_connector_funcs vmw_sou_connector_funcs = {
 	.dpms = vmw_du_connector_dpms,
 	.detect = vmw_du_connector_detect,
 	.fill_modes = drm_helper_probe_single_connector_modes,
-	.destroy = vmw_sou_connector_destroy,
+	.destroy = drm_connector_cleanup,
 	.reset = vmw_du_connector_reset,
 	.atomic_duplicate_state = vmw_du_connector_duplicate_state,
 	.atomic_destroy_state = vmw_du_connector_destroy_state,
@@ -755,7 +741,7 @@ vmw_sou_primary_plane_atomic_update(struct drm_plane *plane,
 static const struct drm_plane_funcs vmw_sou_plane_funcs = {
 	.update_plane = drm_atomic_helper_update_plane,
 	.disable_plane = drm_atomic_helper_disable_plane,
-	.destroy = vmw_du_primary_plane_destroy,
+	.destroy = drm_plane_cleanup,
 	.reset = vmw_du_plane_reset,
 	.atomic_duplicate_state = vmw_du_plane_duplicate_state,
 	.atomic_destroy_state = vmw_du_plane_destroy_state,
@@ -881,18 +867,12 @@ static int vmw_sou_init(struct vmw_private *dev_priv, unsigned unit)
 	encoder->possible_crtcs = (1 << unit);
 	encoder->possible_clones = 0;
 
-	ret = drm_connector_register(connector);
-	if (ret) {
-		DRM_ERROR("Failed to register connector\n");
-		goto err_free_encoder;
-	}
-
 	ret = drm_crtc_init_with_planes(dev, crtc, primary,
 					&cursor->base,
 					&vmw_screen_object_crtc_funcs, NULL);
 	if (ret) {
 		DRM_ERROR("Failed to initialize CRTC\n");
-		goto err_free_unregister;
+		goto err_free_encoder;
 	}
 
 	drm_crtc_helper_add(crtc, &vmw_sou_crtc_helper_funcs);
@@ -910,8 +890,6 @@ static int vmw_sou_init(struct vmw_private *dev_priv, unsigned unit)
 
 	return 0;
 
-err_free_unregister:
-	drm_connector_unregister(connector);
 err_free_encoder:
 	drm_encoder_cleanup(encoder);
 err_free_connector:

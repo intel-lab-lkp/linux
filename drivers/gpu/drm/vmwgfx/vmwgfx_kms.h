@@ -348,7 +348,6 @@ struct vmw_display_unit {
  * Shared display unit functions - vmwgfx_kms.c
  */
 void vmw_du_init(struct vmw_display_unit *du);
-void vmw_du_cleanup(struct vmw_display_unit *du);
 int vmw_du_crtc_gamma_set(struct drm_crtc *crtc,
 			   u16 *r, u16 *g, u16 *b,
 			   uint32_t size,
@@ -402,9 +401,6 @@ vmw_kms_new_framebuffer(struct vmw_private *dev_priv,
 void vmw_guess_mode_timing(struct drm_display_mode *mode);
 void vmw_kms_update_implicit_fb(struct vmw_private *dev_priv);
 void vmw_kms_create_implicit_placement_property(struct vmw_private *dev_priv);
-
-/* Universal Plane Helpers */
-void vmw_du_primary_plane_destroy(struct drm_plane *plane);
 
 /* Atomic Helpers */
 int vmw_du_primary_plane_atomic_check(struct drm_plane *plane,

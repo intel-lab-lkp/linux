@@ -26,30 +26,6 @@ void vmw_du_init(struct vmw_display_unit *du)
 	vmw_vkms_crtc_init(&du->crtc);
 }
 
-void vmw_du_cleanup(struct vmw_display_unit *du)
-{
-	struct vmw_private *dev_priv = vmw_priv(du->primary.dev);
-
-	vmw_vkms_crtc_cleanup(&du->crtc);
-	drm_plane_cleanup(&du->primary);
-	if (vmw_cmd_supported(dev_priv))
-		drm_plane_cleanup(&du->cursor.base);
-
-	drm_connector_unregister(&du->connector);
-	drm_crtc_cleanup(&du->crtc);
-	drm_encoder_cleanup(&du->encoder);
-	drm_connector_cleanup(&du->connector);
-}
-
-
-void vmw_du_primary_plane_destroy(struct drm_plane *plane)
-{
-	drm_plane_cleanup(plane);
-
-	/* Planes are static in our case so we don't free it */
-}
-
-
 /**
  * vmw_du_plane_unpin_surf - unpins resource associated with a framebuffer surface
  *

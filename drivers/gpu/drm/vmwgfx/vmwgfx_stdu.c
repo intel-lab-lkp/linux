@@ -131,12 +131,6 @@ struct vmw_screen_target_display_unit {
 	unsigned int cpp;
 };
 
-
-
-static void vmw_stdu_destroy(struct vmw_screen_target_display_unit *stdu);
-
-
-
 /******************************************************************************
  * Screen Target Display Unit CRTC Functions
  *****************************************************************************/
@@ -148,7 +142,11 @@ static void vmw_stdu_destroy(struct vmw_screen_target_display_unit *stdu);
  */
 static void vmw_stdu_crtc_destroy(struct drm_crtc *crtc)
 {
-	vmw_stdu_destroy(vmw_crtc_to_stdu(crtc));
+	struct vmw_screen_target_display_unit *stdu = vmw_crtc_to_stdu(crtc);
+
+	vmw_vkms_crtc_cleanup(&stdu->base.crtc);
+	drm_crtc_cleanup(&stdu->base.crtc);
+	kfree(stdu);
 }
 
 /**
@@ -797,23 +795,8 @@ static const struct drm_crtc_funcs vmw_stdu_crtc_funcs = {
  * Screen Target Display Unit Encoder Functions
  *****************************************************************************/
 
-/**
- * vmw_stdu_encoder_destroy - cleans up the STDU
- *
- * @encoder: used the get the containing STDU
- *
- * vmwgfx cleans up crtc/encoder/connector all at the same time so technically
- * this can be a no-op.  Nevertheless, it doesn't hurt of have this in case
- * the common KMS code changes and somehow vmw_stdu_crtc_destroy() doesn't
- * get called.
- */
-static void vmw_stdu_encoder_destroy(struct drm_encoder *encoder)
-{
-	vmw_stdu_destroy(vmw_encoder_to_stdu(encoder));
-}
-
 static const struct drm_encoder_funcs vmw_stdu_encoder_funcs = {
-	.destroy = vmw_stdu_encoder_destroy,
+	.destroy = drm_encoder_cleanup,
 };
 
 
@@ -821,21 +804,6 @@ static const struct drm_encoder_funcs vmw_stdu_encoder_funcs = {
 /******************************************************************************
  * Screen Target Display Unit Connector Functions
  *****************************************************************************/
-
-/**
- * vmw_stdu_connector_destroy - cleans up the STDU
- *
- * @connector: used to get the containing STDU
- *
- * vmwgfx cleans up crtc/encoder/connector all at the same time so technically
- * this can be a no-op.  Nevertheless, it doesn't hurt of have this in case
- * the common KMS code changes and somehow vmw_stdu_crtc_destroy() doesn't
- * get called.
- */
-static void vmw_stdu_connector_destroy(struct drm_connector *connector)
-{
-	vmw_stdu_destroy(vmw_connector_to_stdu(connector));
-}
 
 static enum drm_mode_status
 vmw_stdu_connector_mode_valid(struct drm_connector *connector,
@@ -907,7 +875,7 @@ static const struct drm_connector_funcs vmw_stdu_connector_funcs = {
 	.dpms = vmw_du_connector_dpms,
 	.detect = vmw_du_connector_detect,
 	.fill_modes = drm_helper_probe_single_connector_modes,
-	.destroy = vmw_stdu_connector_destroy,
+	.destroy = drm_connector_cleanup,
 	.reset = vmw_du_connector_reset,
 	.atomic_duplicate_state = vmw_du_connector_duplicate_state,
 	.atomic_destroy_state = vmw_du_connector_destroy_state,
@@ -1473,7 +1441,7 @@ vmw_stdu_crtc_atomic_flush(struct drm_crtc *crtc,
 static const struct drm_plane_funcs vmw_stdu_plane_funcs = {
 	.update_plane = drm_atomic_helper_update_plane,
 	.disable_plane = drm_atomic_helper_disable_plane,
-	.destroy = vmw_du_primary_plane_destroy,
+	.destroy = drm_plane_cleanup,
 	.reset = vmw_du_plane_reset,
 	.atomic_duplicate_state = vmw_du_plane_duplicate_state,
 	.atomic_destroy_state = vmw_du_plane_destroy_state,
@@ -1607,18 +1575,12 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 	encoder->possible_crtcs = (1 << unit);
 	encoder->possible_clones = 0;
 
-	ret = drm_connector_register(connector);
-	if (ret) {
-		DRM_ERROR("Failed to register connector\n");
-		goto err_free_encoder;
-	}
-
 	ret = drm_crtc_init_with_planes(dev, crtc, primary,
 					&cursor->base,
 					&vmw_stdu_crtc_funcs, NULL);
 	if (ret) {
 		DRM_ERROR("Failed to initialize CRTC\n");
-		goto err_free_unregister;
+		goto err_free_encoder;
 	}
 
 	drm_crtc_helper_add(crtc, &vmw_stdu_crtc_helper_funcs);
@@ -1636,8 +1598,6 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 
 	return 0;
 
-err_free_unregister:
-	drm_connector_unregister(connector);
 err_free_encoder:
 	drm_encoder_cleanup(encoder);
 err_free_connector:
@@ -1646,23 +1606,6 @@ err_free:
 	kfree(stdu);
 	return ret;
 }
-
-
-
-/**
- *  vmw_stdu_destroy - Cleans up a vmw_screen_target_display_unit
- *
- *  @stdu:  Screen Target Display Unit to be destroyed
- *
- *  Clean up after vmw_stdu_init
- */
-static void vmw_stdu_destroy(struct vmw_screen_target_display_unit *stdu)
-{
-	vmw_du_cleanup(&stdu->base);
-	kfree(stdu);
-}
-
-
 
 /******************************************************************************
  * Screen Target Display KMS Functions
