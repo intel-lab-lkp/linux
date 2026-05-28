@@ -47,6 +47,11 @@ obj-$(CONFIG_EDAC_X38)			+= x38_edac.o
 obj-$(CONFIG_EDAC_I82860)		+= i82860_edac.o
 obj-$(CONFIG_EDAC_AMD64)		+= amd64_edac.o
 
+amd64_edac-y				:= amd64_edac_core.o hygon_edac.o
+
+$(obj)/amd64_edac_core.o: $(src)/amd64_edac.c FORCE
+	$(call if_changed_rule,cc_o_c)
+
 obj-$(CONFIG_EDAC_PASEMI)		+= pasemi_edac.o
 
 mpc85xx_edac_mod-y			:= fsl_ddr_edac.o mpc85xx_edac.o

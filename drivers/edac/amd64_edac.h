@@ -8,6 +8,9 @@
  * GNU General Public License.
  */
 
+#ifndef _AMD64_EDAC_H
+#define _AMD64_EDAC_H
+
 #include <linux/module.h>
 #include <linux/ctype.h>
 #include <linux/init.h>
@@ -524,3 +527,5 @@ static inline u32 dct_sel_baseaddr(struct amd64_pvt *pvt)
 	}
 	return (pvt)->dct_sel_lo & 0xFFFFF800;
 }
+
+#endif /* _AMD64_EDAC_H */
