@@ -544,18 +544,26 @@ void ip_forward_options(struct sk_buff *skb)
 
 	if (opt->rr_needaddr) {
 		optptr = (unsigned char *)raw + opt->rr;
-		ip_rt_get_source(&optptr[optptr[2]-5], skb, rt);
-		opt->is_changed = 1;
+		if (optptr + optptr[1] <= skb_tail_pointer(skb) &&
+		    optptr[2] >= 5 && optptr[2] <= optptr[1] + 1) {
+			ip_rt_get_source(&optptr[optptr[2] - 5], skb, rt);
+			opt->is_changed = 1;
+		}
 	}
 	if (opt->srr_is_hit) {
 		int srrptr, srrspace;
 
 		optptr = raw + opt->srr;
 
-		for ( srrptr = optptr[2], srrspace = optptr[1];
-		     srrptr <= srrspace;
-		     srrptr += 4
-		     ) {
+		/* optptr[1] (option length) may have been rewritten after the
+		 * parse-time check; if it now runs past the skb the option is
+		 * malformed, so skip the source-route rewrite below.
+		 */
+		srrspace = optptr[1];
+		if (optptr + srrspace > skb_tail_pointer(skb))
+			srrspace = 0;
+
+		for (srrptr = optptr[2]; srrptr <= srrspace; srrptr += 4) {
 			if (srrptr + 3 > srrspace)
 				break;
 			if (memcmp(&opt->nexthop, &optptr[srrptr-1], 4) == 0)
@@ -572,8 +580,11 @@ void ip_forward_options(struct sk_buff *skb)
 		}
 		if (opt->ts_needaddr) {
 			optptr = raw + opt->ts;
-			ip_rt_get_source(&optptr[optptr[2]-9], skb, rt);
-			opt->is_changed = 1;
+			if (optptr + optptr[1] <= skb_tail_pointer(skb) &&
+			    optptr[2] >= 9 && optptr[2] <= optptr[1] + 5) {
+				ip_rt_get_source(&optptr[optptr[2] - 9], skb, rt);
+				opt->is_changed = 1;
+			}
 		}
 	}
 	if (opt->is_changed) {
