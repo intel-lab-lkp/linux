@@ -911,11 +911,16 @@ static int ines_isa_attach(struct gpib_board *board, const struct gpib_board_con
 	nec7210_board_reset(nec_priv, board);
 	if (request_irq(config->ibirq, ines_pci_interrupt, isr_flags, DRV_NAME, board)) {
 		dev_err(board->gpib_dev, "failed to allocate IRQ %d\n", config->ibirq);
-		return -1;
+		retval = -ENODEV;
+		goto err_release_region;
 	}
 	ines_priv->irq = config->ibirq;
 	ines_online(ines_priv, board, 1);
 	return 0;
+
+err_release_region:
+	release_region(config->ibbase, ines_isa_iosize);
+	return retval;
 }
 
 static void ines_pci_detach(struct gpib_board *board)
