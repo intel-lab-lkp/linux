@@ -97,6 +97,39 @@ cpuid_read_0x2(const struct cpuid_parse_entry *e, const struct cpuid_read_output
 	output->info->nr_entries = 1;
 }
 
+static bool cpuid_0x23_has_subleaf(u32 subleaf)
+{
+	struct leaf_0x23_0 l;
+
+	cpuid_read_subleaf(0x23, 0, &l);
+
+	switch (subleaf) {
+	case 0:		return l.subleaf_0;
+	case 1:		return l.counters_subleaf;
+	case 2:		return l.acr_subleaf;
+	case 3:		return l.events_subleaf;
+	case 4:		return l.pebs_caps_subleaf;
+	case 5:		return l.pebs_subleaf;
+	default:	return false;
+	}
+}
+
+#define define_cpuid_0x23_subleaf_read_function(subl)						\
+static void											\
+cpuid_read_0x23_##subl(const struct cpuid_parse_entry *e, const struct cpuid_read_output *output) \
+{												\
+	if (!cpuid_0x23_has_subleaf(subl))							\
+		return;										\
+												\
+	cpuid_read_generic(e, output);								\
+}
+
+define_cpuid_0x23_subleaf_read_function(1);
+define_cpuid_0x23_subleaf_read_function(2);
+define_cpuid_0x23_subleaf_read_function(3);
+define_cpuid_0x23_subleaf_read_function(4);
+define_cpuid_0x23_subleaf_read_function(5);
+
 /*
  * Shared read function for Intel CPUID(0x4) and AMD CPUID(0x8000001d), as both have
  * the same subleaf enumeration logic and register output format.
