@@ -30,9 +30,20 @@ returns a template fd.  The fd is an ordinary file descriptor backed by an
 anonymous inode.  Closing the fd releases the template.
 
 Userspace can identify the executable either by an existing executable fd or by
-path.  Exactly one of ``execfd`` and ``filename`` must be supplied.  Passing
-``SPAWN_TEMPLATE_CREATE_CLOEXEC`` sets ``O_CLOEXEC`` on the returned template
-fd.
+an absolute path.  Exactly one of ``execfd`` and ``filename`` must be supplied.
+Passing ``SPAWN_TEMPLATE_CREATE_CLOEXEC`` sets ``O_CLOEXEC`` on the returned
+template fd.
+
+Relative paths are rejected for path-created templates.  The kernel stores the
+filename and re-opens it at spawn time to check that the path still names the
+same executable.  A relative filename would be resolved against the caller's
+current working directory at spawn time, not the directory that was current
+when the template was created.  For example, a template created for ``bin/tool``
+while the caller is in ``/repo-a`` could later be spawned after the caller has
+changed to ``/repo-b``.  Revalidating ``bin/tool`` would then look under
+``/repo-b`` and give different semantics from the executable that was
+originally templated.  Userspace that wants directory-relative lookup should
+open the executable itself and create the template from ``execfd``.
 
 Creating a template for an unsupported executable format fails.  For this RFC
 that means non-ELF executables fail template creation rather than becoming a

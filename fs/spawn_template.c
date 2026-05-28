@@ -441,6 +441,8 @@ static int spawn_template_open_filename(u64 filename, struct file **file,
 	tmp = strndup_user(u64_to_user_ptr(filename), PATH_MAX);
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
+	if (tmp[0] != '/')
+		return -EINVAL;
 	kfilename = tmp;
 
 	tmp_file = open_exec(kfilename);
