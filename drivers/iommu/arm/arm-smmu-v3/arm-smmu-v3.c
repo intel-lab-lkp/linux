@@ -3149,7 +3149,7 @@ static int arm_smmu_enable_iopf(struct arm_smmu_master *master,
 	 * device-specific fault handlers and don't need IOPF, so this is not a
 	 * failure.
 	 */
-	if (!master->stall_enabled)
+	if (!master->stall_enabled && !master->pri_enabled)
 		return 0;
 
 	/* We're not keeping track of SIDs in fault events */
@@ -3351,6 +3351,12 @@ void arm_smmu_attach_release(struct arm_smmu_attach_state *state)
 			/* Ensure pending events have reached the IOPF queue */
 			if (smmu->evtq.q.irq)
 				synchronize_irq(smmu->evtq.q.irq);
+		}
+		/* Drain the hardware priq */
+		if (master->pri_enabled) {
+			arm_smmu_drain_queue_for_iopf(smmu, &smmu->priq.q);
+			if (smmu->priq.q.irq)
+				synchronize_irq(smmu->priq.q.irq);
 		}
 		/* Pending events might be in the combined_irq handler */
 		if (smmu->combined_irq)
@@ -4282,8 +4288,17 @@ static struct iommu_device *arm_smmu_probe_device(struct device *dev)
 
 	if (dev_is_pci(dev)) {
 		unsigned int stu = __ffs(smmu->pgsize_bitmap);
+		struct pci_dev *pdev = to_pci_dev(dev);
 
-		pci_prepare_ats(to_pci_dev(dev), stu);
+		if (!pci_prepare_ats(pdev, stu) && pci_pri_supported(pdev) &&
+		    (smmu->features & ARM_SMMU_FEAT_PRI) && smmu->evtq.iopf) {
+			unsigned int reqs = 1 << smmu->priq.q.llq.max_n_shift;
+
+			if (!pci_reset_pri(pdev) && !pci_enable_pri(pdev, reqs))
+				master->pri_enabled = true;
+			else
+				dev_warn(master->dev, "failed to enable PRI\n");
+		}
 	}
 
 	return &smmu->iommu;
@@ -4299,6 +4314,8 @@ static void arm_smmu_release_device(struct device *dev)
 
 	WARN_ON(master->iopf_refcount);
 
+	if (master->pri_enabled)
+		pci_disable_pri(to_pci_dev(master->dev));
 	arm_smmu_disable_pasid(master);
 	arm_smmu_remove_master(master);
 	if (arm_smmu_cdtab_allocated(&master->cd_table))
