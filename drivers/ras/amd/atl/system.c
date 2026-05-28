@@ -231,7 +231,7 @@ static int determine_df_rev(void)
 	return 0;
 }
 
-static int get_dram_hole_base(void)
+int get_dram_hole_base(void)
 {
 	u8 func = 0;
 
@@ -274,7 +274,7 @@ static void apply_node_id_shift(void)
 	df_cfg.socket_id_shift		+= df_cfg.node_id_shift;
 }
 
-static void dump_df_cfg(void)
+void dump_df_cfg(void)
 {
 	pr_debug("rev=0x%x",				df_cfg.rev);
 
