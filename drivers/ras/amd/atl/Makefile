@@ -20,6 +20,7 @@ amd_atl-y		+= hygon/dehash.o
 amd_atl-y		+= hygon/denormalize.o
 amd_atl-y		+= hygon/map.o
 amd_atl-y		+= hygon/system.o
+amd_atl-y		+= hygon/umc.o
 
 amd_atl-$(CONFIG_AMD_ATL_PRM) += prm.o
 
