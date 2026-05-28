@@ -915,21 +915,22 @@ static long se_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	scoped_cond_guard(mutex_intr, return -EBUSY, &dev_ctx->fops_lock) {
 		switch (cmd) {
 		case SE_IOCTL_ENABLE_CMD_RCV:
-			if (!priv->cmd_receiver_clbk_hdl.dev_ctx) {
+			scoped_guard(mutex, &priv->priv_dev_ctx->fops_lock) {
+				if (priv->cmd_receiver_clbk_hdl.dev_ctx) {
+					err = -EBUSY;
+					goto out_enable_cmd_rcv;
+				}
+				priv->cmd_receiver_clbk_hdl.rx_msg =
+								kzalloc(MAX_NVM_MSG_LEN,
+									GFP_KERNEL);
 				if (!priv->cmd_receiver_clbk_hdl.rx_msg) {
-					priv->cmd_receiver_clbk_hdl.rx_msg =
-						kzalloc(MAX_NVM_MSG_LEN,
-							GFP_KERNEL);
-					if (!priv->cmd_receiver_clbk_hdl.rx_msg) {
-						err = -ENOMEM;
-						break;
-					}
+					err = -ENOMEM;
+					goto out_enable_cmd_rcv;
 				}
 				priv->cmd_receiver_clbk_hdl.rx_msg_sz = MAX_NVM_MSG_LEN;
 				priv->cmd_receiver_clbk_hdl.dev_ctx = dev_ctx;
 				err = 0;
-			} else {
-				err = -EBUSY;
+out_enable_cmd_rcv:
 			}
 			break;
 		case SE_IOCTL_GET_MU_INFO:
