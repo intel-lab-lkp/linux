@@ -866,6 +866,11 @@ void gen9_set_dc_state(struct intel_display *display, u32 state)
 	power_domains->dc_state = val & mask;
 }
 
+void xe3lpd_enable_dc_count(struct intel_display *display)
+{
+	intel_de_write(display, DC_COUNT_EN, DC_COUNT_EN_COUNTER_ENABLE);
+}
+
 static void xe3lpd_enable_dc3co(struct intel_display *display)
 {
 	drm_dbg_kms(display->drm, "Enabling DC3CO\n");
