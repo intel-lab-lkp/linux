@@ -45,13 +45,14 @@ static int avs_tgl_dsp_core_stall(struct avs_dev *adev, u32 core_mask, bool stal
  */
 static int avs_tgl_set_xtal_freq(struct avs_dev *adev)
 {
+	const struct leaf_0x15_0 *l = cpuid_leaf(&boot_cpu_data, 0x15);
 	unsigned int freq;
 	int ret;
 
-	if (boot_cpu_data.cpuid_level < CPUID_LEAF_TSC)
+	if (!l)
 		return 0;
 
-	freq = cpuid_ecx(CPUID_LEAF_TSC);
+	freq = l->cpu_crystal_hz;
 	if (freq) {
 		ret = avs_ipc_set_fw_config(adev, 1, AVS_FW_CFG_XTAL_FREQ_HZ, sizeof(freq), &freq);
 		if (ret)
