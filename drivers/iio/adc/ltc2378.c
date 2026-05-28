@@ -18,8 +18,12 @@
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 #include <linux/types.h>
+#include <linux/units.h>
 
+#include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
+#include <linux/iio/trigger_consumer.h>
+#include <linux/iio/triggered_buffer.h>
 #include <linux/iio/types.h>
 
 #include "ltc2378.h"
@@ -278,6 +282,25 @@ static const struct iio_info ltc2378_iio_info = {
 	.read_avail = LTC2378_READ_AVAIL,
 };
 
+static irqreturn_t ltc2378_trigger_handler(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *indio_dev = pf->indio_dev;
+	struct ltc2378_state *st = iio_priv(indio_dev);
+	int ret;
+
+	ret = ltc2378_convert_and_acquire(st);
+	if (ret < 0)
+		goto err_out;
+
+	iio_push_to_buffers_with_ts(indio_dev, &st->scan, sizeof(st->scan),
+				    pf->timestamp);
+
+err_out:
+	iio_trigger_notify_done(indio_dev->trig);
+	return IRQ_HANDLED;
+}
+
 static int ltc2378_probe(struct spi_device *spi)
 {
 	struct device *dev = &spi->dev;
@@ -314,17 +337,27 @@ static int ltc2378_probe(struct spi_device *spi)
 	st->chans[0].type = IIO_VOLTAGE;
 	st->chans[0].info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |
 					  BIT(IIO_CHAN_INFO_SCALE);
+	st->chans[0].scan_index = 0;
 
 	struct iio_scan_type ltc2378_scan;
 
 	ret = ltc2378_offload_buffer_setup(indio_dev, spi);
 	if (ret == -ENODEV) {
 		/* SPI offloading is unavailable. Fall back to triggered buffer. */
-		dev_dbg(dev, "triggered data capture not supported\n");
 		ltc2378_scan.format = st->info->twos_comp ? IIO_SCAN_FORMAT_SIGNED_INT :
 							    IIO_SCAN_FORMAT_UNSIGNED_INT;
 		ltc2378_scan.realbits = st->info->resolution;
 		ltc2378_scan.storagebits = st->info->resolution > 16 ? 32 : 16;
+
+		ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
+						      &iio_pollfunc_store_time,
+						      &ltc2378_trigger_handler,
+						      NULL);
+		if (ret)
+			return ret;
+
+		/* Add timestamp channel */
+		st->chans[num_iio_chans++] = IIO_CHAN_SOFT_TIMESTAMP(1);
 	} else if (ret) {
 		return dev_err_probe(dev, ret, "error on SPI offload setup\n");
 	} else {
