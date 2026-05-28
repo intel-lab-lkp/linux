@@ -105,6 +105,36 @@ struct panthor_irq {
 };
 
 /**
+ * struct panthor_gpu_id - Parsed GPU_ID fields
+ */
+struct panthor_gpu_id {
+	struct {
+		/** @arch.major: Architecture major revision */
+		u8 major;
+
+		/** @arch.minor: Architecture minor revision */
+		u8 minor;
+
+		/** @arch.rev: Architecture patch revision */
+		u8 rev;
+	} arch;
+
+	/** @prod_major: Product identifier */
+	u8 prod_major;
+
+	struct {
+		/** @ver.major: Major release version number */
+		u8 major;
+
+		/** @ver.minor: Minor release version number */
+		u8 minor;
+
+		/** @ver.status: Status of GPU release */
+		u8 status;
+	} ver;
+};
+
+/**
  * enum panthor_device_profiling_mode - Profiling state
  */
 enum panthor_device_profiling_flags {
@@ -159,6 +189,9 @@ struct panthor_device {
 
 	/** @csif_info: Command stream interface information. */
 	struct drm_panthor_csif_info csif_info;
+
+	/** @gpu_id: Parsed GPU_ID fields */
+	struct panthor_gpu_id gpu_id;
 
 	/** @hw: GPU-specific data. */
 	struct panthor_hw *hw;

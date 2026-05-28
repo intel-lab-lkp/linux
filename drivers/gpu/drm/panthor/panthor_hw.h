@@ -5,7 +5,6 @@
 #define __PANTHOR_HW_H__
 
 #include "panthor_device.h"
-#include "panthor_gpu_regs.h"
 
 /**
  * struct panthor_hw_ops - HW operations that are specific to a GPU
@@ -58,7 +57,7 @@ static inline void panthor_hw_l2_power_off(struct panthor_device *ptdev)
 
 static inline bool panthor_hw_has_pwr_ctrl(struct panthor_device *ptdev)
 {
-	return GPU_ARCH_MAJOR(ptdev->gpu_info.gpu_id) >= 14;
+	return ptdev->gpu_id.arch.major >= 14;
 }
 
 #endif /* __PANTHOR_HW_H__ */
