@@ -21,10 +21,10 @@
  * scheme. Each key is an unsigned long that combines a page's physical
  * address and its order.
  *
- * Client code is responsible for allocating the root node of the tree,
- * initializing the mutex lock, and managing its lifecycle. It must use the
- * tree data structures defined in the KHO ABI,
- * `include/linux/kho/abi/kexec_handover.h`.
+ * Client code must initialize the tree using kho_radix_tree_init(). Pass
+ * a physical address to restore a tree preserved across kexec, or 0 to
+ * allocate a fresh empty tree. The tree uses data structures defined in
+ * the KHO ABI, `include/linux/kho/abi/kexec_handover.h`.
  */
 
 struct kho_radix_node;
@@ -32,6 +32,7 @@ struct kho_radix_node;
 struct kho_radix_tree {
 	struct kho_radix_node *root;
 	struct mutex lock; /* protects the tree's structure and root pointer */
+	bool frozen;
 };
 
 /**
@@ -51,11 +52,12 @@ struct kho_radix_walk_cb {
 #ifdef CONFIG_KEXEC_HANDOVER
 
 int kho_radix_add_key(struct kho_radix_tree *tree, unsigned long key);
-void kho_radix_del_key(struct kho_radix_tree *tree, unsigned long key);
+int kho_radix_del_key(struct kho_radix_tree *tree, unsigned long key);
 int kho_radix_walk_tree(struct kho_radix_tree *tree,
 			const struct kho_radix_walk_cb *cb, void *data);
 int kho_radix_init_tree(struct kho_radix_tree *tree, struct kho_radix_node *root);
 void kho_radix_destroy_tree(struct kho_radix_tree *tree);
+int kho_radix_tree_freeze(struct kho_radix_tree *tree);
 
 #else  /* #ifdef CONFIG_KEXEC_HANDOVER */
 
@@ -64,8 +66,11 @@ static inline int kho_radix_add_key(struct kho_radix_tree *tree, unsigned long k
 	return -EOPNOTSUPP;
 }
 
-static inline void kho_radix_del_key(struct kho_radix_tree *tree,
-				     unsigned long key) { }
+static inline int kho_radix_del_key(struct kho_radix_tree *tree,
+				     unsigned long key)
+{
+	return -EOPNOTSUPP;
+}
 
 static inline int kho_radix_walk_tree(struct kho_radix_tree *tree,
 				      const struct kho_radix_walk_cb *cb, void *data)
@@ -80,6 +85,11 @@ static inline int kho_radix_init_tree(struct kho_radix_tree *tree,
 }
 
 static inline void kho_radix_destroy_tree(struct kho_radix_tree *tree) { }
+
+static inline int kho_radix_tree_freeze(struct kho_radix_tree *tree)
+{
+	return -EOPNOTSUPP;
+}
 
 #endif /* #ifdef CONFIG_KEXEC_HANDOVER */
 
