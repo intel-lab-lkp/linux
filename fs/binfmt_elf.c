@@ -48,6 +48,7 @@
 #include <linux/uaccess.h>
 #include <uapi/linux/rseq.h>
 #include <linux/rseq.h>
+#include <linux/spawn_template.h>
 #include <asm/param.h>
 #include <asm/page.h>
 
@@ -553,6 +554,89 @@ out:
 	return elf_phdata;
 }
 
+#if !ELF_COMPAT
+void spawn_exec_template_put(struct spawn_exec_template *tmpl)
+{
+	if (!tmpl)
+		return;
+	if (!refcount_dec_and_test(&tmpl->refcount))
+		return;
+	kfree(tmpl->exec_phdrs);
+	kfree(tmpl);
+}
+
+struct spawn_exec_template *
+spawn_exec_template_get(struct spawn_exec_template *tmpl)
+{
+	refcount_inc(&tmpl->refcount);
+	return tmpl;
+}
+
+bool spawn_exec_template_matches(struct spawn_exec_template *tmpl,
+				 struct file *file)
+{
+	if (!tmpl)
+		return false;
+	if (!spawn_template_file_key_matches(file, &tmpl->exec_key))
+		return false;
+	if (!can_mmap_file(file))
+		return false;
+	return true;
+}
+
+int spawn_exec_template_create(struct file *file,
+			       struct spawn_exec_template **out)
+{
+	struct spawn_exec_template *tmpl;
+	loff_t pos = 0;
+	ssize_t nread;
+	int retval;
+
+	*out = NULL;
+
+	tmpl = kzalloc_obj(*tmpl, GFP_KERNEL);
+	if (!tmpl)
+		return -ENOMEM;
+	refcount_set(&tmpl->refcount, 1);
+
+	spawn_template_fill_file_key(file, &tmpl->exec_key);
+
+	nread = kernel_read(file, &tmpl->exec_ehdr, sizeof(tmpl->exec_ehdr),
+			    &pos);
+	if (nread < 0) {
+		retval = nread;
+		goto out_put_template;
+	}
+
+	retval = -ENOEXEC;
+	if (nread != sizeof(tmpl->exec_ehdr))
+		goto out_put_template;
+	if (memcmp(tmpl->exec_ehdr.e_ident, ELFMAG, SELFMAG) != 0)
+		goto out_put_template;
+	if (tmpl->exec_ehdr.e_type != ET_EXEC &&
+	    tmpl->exec_ehdr.e_type != ET_DYN)
+		goto out_put_template;
+	if (!elf_check_arch(&tmpl->exec_ehdr))
+		goto out_put_template;
+	if (elf_check_fdpic(&tmpl->exec_ehdr))
+		goto out_put_template;
+	if (!can_mmap_file(file))
+		goto out_put_template;
+
+	tmpl->exec_phdrs = load_elf_phdrs(&tmpl->exec_ehdr, file);
+	if (!tmpl->exec_phdrs)
+		goto out_put_template;
+	tmpl->exec_phnum = tmpl->exec_ehdr.e_phnum;
+
+	*out = tmpl;
+	return 0;
+
+out_put_template:
+	spawn_exec_template_put(tmpl);
+	return retval;
+}
+#endif
+
 #ifndef CONFIG_ARCH_BINFMT_ELF_STATE
 
 /**
@@ -833,6 +917,7 @@ static int parse_elf_properties(struct file *f, const struct elf_phdr *phdr,
 static int load_elf_binary(struct linux_binprm *bprm)
 {
 	struct file *interpreter = NULL; /* to shut gcc up */
+	struct spawn_exec_template *spawn_tmpl = bprm->spawn_template;
 	unsigned long load_bias = 0, phdr_addr = 0;
 	int first_pt_load = 1;
 	unsigned long error;
@@ -852,6 +937,12 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	struct arch_elf_state arch_state = INIT_ARCH_ELF_STATE;
 	struct mm_struct *mm;
 	struct pt_regs *regs;
+	bool use_spawn_tmpl = spawn_exec_template_matches(spawn_tmpl, bprm->file);
+	bool free_elf_phdata = true;
+
+	if (use_spawn_tmpl)
+		memcpy(bprm->buf, &spawn_tmpl->exec_ehdr,
+		       sizeof(spawn_tmpl->exec_ehdr));
 
 	retval = -ENOEXEC;
 	/* First of all, some simple consistency checks */
@@ -867,7 +958,12 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	if (!can_mmap_file(bprm->file))
 		goto out;
 
-	elf_phdata = load_elf_phdrs(elf_ex, bprm->file);
+	if (use_spawn_tmpl)
+		elf_phdata = spawn_tmpl->exec_phdrs;
+	else
+		elf_phdata = load_elf_phdrs(elf_ex, bprm->file);
+	if (use_spawn_tmpl)
+		free_elf_phdata = false;
 	if (!elf_phdata)
 		goto out;
 
@@ -1284,7 +1380,8 @@ out_free_interp:
 		}
 	}
 
-	kfree(elf_phdata);
+	if (free_elf_phdata)
+		kfree(elf_phdata);
 
 	set_binfmt(&elf_format);
 
@@ -1391,7 +1488,8 @@ out_free_file:
 	if (interpreter)
 		fput(interpreter);
 out_free_ph:
-	kfree(elf_phdata);
+	if (free_elf_phdata)
+		kfree(elf_phdata);
 	goto out;
 }
 

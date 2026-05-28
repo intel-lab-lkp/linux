@@ -1914,9 +1914,12 @@ static inline struct user_arg_ptr native_arg(const char __user *const __user *p)
 	return (struct user_arg_ptr){.ptr.native = p};
 }
 
-static int do_execveat_file_common(struct file *file, struct filename *filename,
-				   struct user_arg_ptr argv,
-				   struct user_arg_ptr envp, int flags)
+static int do_execveat_file_template_common(struct file *file,
+					    struct filename *filename,
+					    struct user_arg_ptr argv,
+					    struct user_arg_ptr envp,
+					    int flags,
+					    struct spawn_exec_template *tmpl)
 {
 	struct linux_binprm *bprm;
 	struct file *exec_file;
@@ -1940,9 +1943,18 @@ static int do_execveat_file_common(struct file *file, struct filename *filename,
 	if (IS_ERR(bprm))
 		return PTR_ERR(bprm);
 
+	bprm->spawn_template = tmpl;
 	retval = do_execveat_common_bprm(bprm, argv, envp);
 	free_bprm(bprm);
 	return retval;
+}
+
+static int do_execveat_file_common(struct file *file, struct filename *filename,
+				   struct user_arg_ptr argv,
+				   struct user_arg_ptr envp, int flags)
+{
+	return do_execveat_file_template_common(file, filename, argv, envp,
+						flags, NULL);
 }
 
 int kernel_execveat_file(struct file *file, const char *filename,
@@ -1960,6 +1972,25 @@ int kernel_execveat_file(struct file *file, const char *filename,
 
 	return do_execveat_file_common(file, name, native_arg(user_argv),
 				       native_arg(user_envp), flags);
+}
+
+int kernel_execveat_file_template(struct file *file, const char *filename,
+				  const void __user *argv,
+				  const void __user *envp, int flags,
+				  struct spawn_exec_template *tmpl)
+{
+	const char __user *const __user *user_argv;
+	const char __user *const __user *user_envp;
+
+	CLASS(filename_kernel, name)(filename);
+
+	user_argv = (const char __user *const __user *)argv;
+	user_envp = (const char __user *const __user *)envp;
+
+	return do_execveat_file_template_common(file, name,
+						native_arg(user_argv),
+						native_arg(user_envp),
+						flags, tmpl);
 }
 
 void set_binfmt(struct linux_binfmt *new)

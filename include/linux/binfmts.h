@@ -9,6 +9,7 @@
 
 struct filename;
 struct coredump_params;
+struct spawn_exec_template;
 
 #define CORENAME_MAX_SIZE 128
 
@@ -53,6 +54,7 @@ struct linux_binprm {
 	struct file *executable; /* Executable to pass to the interpreter */
 	struct file *interpreter;
 	struct file *file;
+	struct spawn_exec_template *spawn_template;
 	struct cred *cred;	/* new credentials */
 	int unsafe;		/* how unsafe this exec is (mask of LSM_UNSAFE_*) */
 	unsigned int per_clear;	/* bits to clear in current->personality */
@@ -145,6 +147,10 @@ int kernel_execveat_file(struct file *file, const char *filename,
 			 const void __user *argv,
 			 const void __user *envp,
 			 int flags);
+int kernel_execveat_file_template(struct file *file, const char *filename,
+				  const void __user *argv,
+				  const void __user *envp, int flags,
+				  struct spawn_exec_template *tmpl);
 extern void set_binfmt(struct linux_binfmt *new);
 extern ssize_t read_code(struct file *, unsigned long, loff_t, size_t);
 

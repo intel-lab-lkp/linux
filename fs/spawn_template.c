@@ -28,7 +28,7 @@
 
 struct spawn_template {
 	struct file *exec_file;
-	struct spawn_template_file_key exec_key;
+	struct spawn_exec_template *exec_template;
 	const struct cred *creator_cred;
 	char *filename;
 	bool deny_write;
@@ -36,6 +36,7 @@ struct spawn_template {
 
 struct spawn_template_spawn_context {
 	struct spawn_template *tmpl;
+	struct spawn_exec_template *exec_template;
 	struct spawn_template_spawn_args args;
 	struct spawn_template_action *actions;
 };
@@ -114,16 +115,16 @@ static bool spawn_template_key_matches(struct spawn_template *tmpl)
 		file = tmp;
 
 		matches = spawn_template_file_key_matches(file,
-							  &tmpl->exec_key);
+				&tmpl->exec_template->exec_key);
 		matches = matches && spawn_template_file_exec_allowed(file);
 		exe_file_allow_write_access(file);
 		if (!matches)
 			return false;
 	}
 
-	return spawn_template_file_exec_allowed(tmpl->exec_file) &&
-	       spawn_template_file_key_matches(tmpl->exec_file,
-					       &tmpl->exec_key);
+	if (!spawn_template_file_exec_allowed(tmpl->exec_file))
+		return false;
+	return spawn_exec_template_matches(tmpl->exec_template, tmpl->exec_file);
 }
 
 static int spawn_template_copy_signal_set(const struct spawn_template_action *action,
@@ -331,26 +332,29 @@ static int spawn_template_child(void *data)
 {
 	struct spawn_template_spawn_context *ctx = data;
 	struct spawn_template *tmpl = ctx->tmpl;
+	struct spawn_exec_template *exec_template = ctx->exec_template;
 	int ret;
 	u64 i;
 
 	for (i = 0; i < ctx->args.actions_len; i++) {
 		ret = spawn_template_apply_action(&ctx->actions[i]);
 		if (ret < 0)
-			goto out_exec_error;
+			goto out_put_exec_template;
 	}
 
 	if (!(ctx->args.flags & SPAWN_TEMPLATE_SPAWN_INHERIT_FDS)) {
 		ret = do_close_range(3, ~0U, 0);
 		if (ret < 0)
-			goto out_exec_error;
+			goto out_put_exec_template;
 	}
 
-	ret = kernel_execveat_file(tmpl->exec_file, "",
-				   u64_to_user_ptr(ctx->args.argv),
-				   u64_to_user_ptr(ctx->args.envp),
-				   AT_EMPTY_PATH);
-out_exec_error:
+	ret = kernel_execveat_file_template(tmpl->exec_file, "",
+					    u64_to_user_ptr(ctx->args.argv),
+					    u64_to_user_ptr(ctx->args.envp),
+					    AT_EMPTY_PATH,
+					    exec_template);
+out_put_exec_template:
+	spawn_exec_template_put(exec_template);
 	if (ret < 0)
 		do_exit(spawn_template_exit_status(ret));
 	return 0;
@@ -373,6 +377,7 @@ static int spawn_template_release(struct inode *inode, struct file *file)
 
 	if (tmpl->deny_write)
 		exe_file_allow_write_access(tmpl->exec_file);
+	spawn_exec_template_put(tmpl->exec_template);
 	fput(tmpl->exec_file);
 	put_cred(tmpl->creator_cred);
 	kfree(tmpl->filename);
@@ -501,7 +506,10 @@ SYSCALL_DEFINE2(spawn_template_create,
 						 &tmpl->deny_write);
 	if (ret)
 		goto out_free_tmpl;
-	spawn_template_fill_file_key(tmpl->exec_file, &tmpl->exec_key);
+
+	ret = spawn_exec_template_create(tmpl->exec_file, &tmpl->exec_template);
+	if (ret)
+		goto out_put_exec;
 
 	if (args.flags & SPAWN_TEMPLATE_CREATE_CLOEXEC)
 		fd_flags |= O_CLOEXEC;
@@ -514,6 +522,7 @@ SYSCALL_DEFINE2(spawn_template_create,
 	return ret;
 
 out_put_exec:
+	spawn_exec_template_put(tmpl->exec_template);
 	if (tmpl->deny_write)
 		exe_file_allow_write_access(tmpl->exec_file);
 	fput(tmpl->exec_file);
@@ -580,6 +589,7 @@ SYSCALL_DEFINE3(spawn_template_spawn, int, template_fd,
 		ret = -ESTALE;
 		goto out_free_actions;
 	}
+	ctx->exec_template = spawn_exec_template_get(ctx->tmpl->exec_template);
 
 	kargs = (struct kernel_clone_args) {
 		.flags		= CLONE_VM | CLONE_VFORK | CLONE_PIDFD,
@@ -590,6 +600,8 @@ SYSCALL_DEFINE3(spawn_template_spawn, int, template_fd,
 	};
 
 	ret = kernel_clone(&kargs);
+	if (ret < 0)
+		spawn_exec_template_put(ctx->exec_template);
 
 out_free_actions:
 	kfree(ctx->actions);
