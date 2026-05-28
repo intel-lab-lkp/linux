@@ -699,25 +699,15 @@ static int tgl_get_bw_info(struct intel_display *display,
 
 static void dg2_get_bw_info(struct intel_display *display)
 {
-	unsigned int deratedbw = display->platform.dg2_g11 ? 38000 : 50000;
-	int num_groups = ARRAY_SIZE(display->bw.max);
 	int i;
 
-	/*
-	 * DG2 doesn't have SAGV or QGV points, just a constant max bandwidth
-	 * that doesn't depend on the number of planes enabled. So fill all the
-	 * plane group with constant bw information for uniformity with other
-	 * platforms. DG2-G10 platforms have a constant 50 GB/s bandwidth,
-	 * whereas DG2-G11 platforms have 38 GB/s.
-	 */
-	for (i = 0; i < num_groups; i++) {
-		struct intel_bw_info *bi = &display->bw.max[i];
+	display->bw.max[0].deratedbw[0] = display->platform.dg2_g11 ? 38000 : 50000;
 
-		bi->num_planes = 1;
-		/* Need only one dummy QGV point per group */
-		bi->num_qgv_points = 1;
-		bi->deratedbw[0] = deratedbw;
-	}
+	/* Bandwidth does not depend on # of planes; set all groups the same */
+	display->bw.max[0].num_planes = 1;
+	display->bw.max[0].num_qgv_points = 1;
+	for (i = 1; i < ARRAY_SIZE(display->bw.max); i++)
+		display->bw.max[i] = display->bw.max[0];
 
 	display->sagv.status = I915_SAGV_NOT_CONTROLLED;
 }
