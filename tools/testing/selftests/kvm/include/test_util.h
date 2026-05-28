@@ -26,6 +26,8 @@
 
 #define msecs_to_usecs(msec)    ((msec) * 1000ULL)
 
+#define swap(a, b)  do { typeof(a) __tmp = (a); (a) = (b); (b) = __tmp; } while (0)
+
 static inline __printf(1, 2) int _no_printf(const char *format, ...) { return 0; }
 
 #ifdef DEBUG
