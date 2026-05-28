@@ -631,13 +631,16 @@ void __init pti_init(void)
 	pr_info("enabled\n");
 
 #ifdef CONFIG_X86_32
+	struct leaf_0x1_0 l1;
+
 	/*
 	 * We check for X86_FEATURE_PCID here. But the init-code will
 	 * clear the feature flag on 32 bit because the feature is not
 	 * supported on 32 bit anyway. To print the warning we need to
 	 * check with cpuid directly again.
 	 */
-	if (cpuid_ecx(0x1) & BIT(17)) {
+	cpuid_read(0x1, &l1);
+	if (l1.pcid) {
 		/* Use printk to work around pr_fmt() */
 		printk(KERN_WARNING "\n");
 		printk(KERN_WARNING "************************************************************\n");
