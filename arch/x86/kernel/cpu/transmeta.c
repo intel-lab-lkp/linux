@@ -12,77 +12,63 @@
 
 static void early_init_transmeta(struct cpuinfo_x86 *c)
 {
-	u32 xlvl;
+	const struct leaf_0x80860000_0 *l = cpuid_leaf(c, 0x80860000);
 
-	/* Transmeta-defined flags: level 0x80860001 */
-	xlvl = cpuid_eax(0x80860000);
-	if ((xlvl & 0xffff0000) == 0x80860000) {
-		if (xlvl >= 0x80860001)
-			c->x86_capability[CPUID_8086_0001_EDX] = cpuid_edx(0x80860001);
-	}
+	if (l && l->max_tra_leaf >= 0x80860001)
+		c->x86_capability[CPUID_8086_0001_EDX] = cpuid_edx(0x80860001);
+}
+
+/*
+ * If CPU revision is 0x02000000, then CPUID(0x80860002) should be used instead.
+ */
+static bool is_legacy_revision(const struct leaf_0x80860001_0 *l1)
+{
+	return !(l1->cpu_rev_major == 2 && l1->cpu_rev_minor == 0 &&
+		 l1->cpu_rev_mask_major == 0 && l1->cpu_rev_mask_minor == 0);
 }
 
 static void init_transmeta(struct cpuinfo_x86 *c)
 {
-	unsigned int cap_mask, uk, max, dummy;
-	unsigned int cms_rev1, cms_rev2;
-	unsigned int cpu_rev, cpu_freq = 0, cpu_flags, new_cpu_rev;
-	char cpu_info[65];
+	const struct leaf_0x80860001_0 *l1 = cpuid_leaf(c, 0x80860001);
+	const struct leaf_0x80860002_0 *l2 = cpuid_leaf(c, 0x80860002);
+	const struct leaf_0x80860003_0 *l3 = cpuid_leaf(c, 0x80860003);
+	const struct leaf_0x80860004_0 *l4 = cpuid_leaf(c, 0x80860004);
+	const struct leaf_0x80860005_0 *l5 = cpuid_leaf(c, 0x80860005);
+	const struct leaf_0x80860006_0 *l6 = cpuid_leaf(c, 0x80860006);
+	unsigned int cap_mask, uk;
 
 	early_init_transmeta(c);
 
 	cpu_detect_cache_sizes(c);
 
-	/* Print CMS and CPU revision */
-	max = cpuid_eax(0x80860000);
-	cpu_rev = 0;
-	if (max >= 0x80860001) {
-		cpuid(0x80860001, &dummy, &cpu_rev, &cpu_freq, &cpu_flags);
-		if (cpu_rev != 0x02000000) {
-			pr_info("CPU: Processor revision %u.%u.%u.%u, %u MHz\n",
-				(cpu_rev >> 24) & 0xff,
-				(cpu_rev >> 16) & 0xff,
-				(cpu_rev >> 8) & 0xff,
-				cpu_rev & 0xff,
-				cpu_freq);
-		}
+	if (l1 && is_legacy_revision(l1)) {
+		pr_info("CPU: Processor revision %u.%u.%u.%u, %u MHz\n",
+			l1->cpu_rev_major, l1->cpu_rev_minor,
+			l1->cpu_rev_mask_major, l1->cpu_rev_mask_minor,
+			l1->cpu_base_mhz);
 	}
-	if (max >= 0x80860002) {
-		cpuid(0x80860002, &new_cpu_rev, &cms_rev1, &cms_rev2, &dummy);
-		if (cpu_rev == 0x02000000) {
-			pr_info("CPU: Processor revision %08X, %u MHz\n",
-				new_cpu_rev, cpu_freq);
-		}
+
+	if (l1 && l2 && !is_legacy_revision(l1)) {
+		pr_info("CPU: Processor revision %08X, %u MHz\n",
+			l2->cpu_rev_id, l1->cpu_base_mhz);
+	}
+
+	if (l2) {
 		pr_info("CPU: Code Morphing Software revision %u.%u.%u-%u-%u\n",
-		       (cms_rev1 >> 24) & 0xff,
-		       (cms_rev1 >> 16) & 0xff,
-		       (cms_rev1 >> 8) & 0xff,
-		       cms_rev1 & 0xff,
-		       cms_rev2);
+			l2->cms_rev_major, l2->cms_rev_minor,
+			l2->cms_rev_mask_1, l2->cms_rev_mask_2,
+			l2->cms_rev_mask_3);
 	}
-	if (max >= 0x80860006) {
-		cpuid(0x80860003,
-		      (void *)&cpu_info[0],
-		      (void *)&cpu_info[4],
-		      (void *)&cpu_info[8],
-		      (void *)&cpu_info[12]);
-		cpuid(0x80860004,
-		      (void *)&cpu_info[16],
-		      (void *)&cpu_info[20],
-		      (void *)&cpu_info[24],
-		      (void *)&cpu_info[28]);
-		cpuid(0x80860005,
-		      (void *)&cpu_info[32],
-		      (void *)&cpu_info[36],
-		      (void *)&cpu_info[40],
-		      (void *)&cpu_info[44]);
-		cpuid(0x80860006,
-		      (void *)&cpu_info[48],
-		      (void *)&cpu_info[52],
-		      (void *)&cpu_info[56],
-		      (void *)&cpu_info[60]);
-		cpu_info[64] = '\0';
-		pr_info("CPU: %s\n", cpu_info);
+
+	if (l3 && l4 && l5 && l6) {
+		u32 info[] = {
+			l3->cpu_info_0,  l3->cpu_info_1,  l3->cpu_info_2,  l3->cpu_info_3,
+			l4->cpu_info_4,  l4->cpu_info_5,  l4->cpu_info_6,  l4->cpu_info_7,
+			l5->cpu_info_8,  l5->cpu_info_9,  l5->cpu_info_10, l5->cpu_info_11,
+			l6->cpu_info_12, l6->cpu_info_13, l6->cpu_info_14, l6->cpu_info_15,
+			0 /* Null terminator */,
+		};
+		pr_info("CPU: %s\n", (char *)info);
 	}
 
 	/* Unhide possibly hidden capability flags */
