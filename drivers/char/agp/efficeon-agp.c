@@ -192,21 +192,24 @@ static int efficeon_free_gatt_table(struct agp_bridge_data *bridge)
 
 static int efficeon_create_gatt_table(struct agp_bridge_data *bridge)
 {
-	int index;
-	const int pati    = EFFICEON_PATI;
+	const struct leaf_0x1_0 *l = cpuid_leaf(&boot_cpu_data, 0x1);
+	int num_entries, l1_pages, clflush_chunk;
 	const int present = EFFICEON_PRESENT;
-	const int clflush_chunk = ((cpuid_ebx(1) >> 8) & 0xff) << 3;
-	int num_entries, l1_pages;
+	const int pati    = EFFICEON_PATI;
 
 	num_entries = A_SIZE_LVL2(agp_bridge->current_size)->num_entries;
 
 	printk(KERN_DEBUG PFX "efficeon_create_gatt_table(%d)\n", num_entries);
 
+	if (!l)
+		return -EIO;
+
 	/* There are 2^10 PTE pages per PDE page */
 	BUG_ON(num_entries & 0x3ff);
 	l1_pages = num_entries >> 10;
 
-	for (index = 0 ; index < l1_pages ; index++) {
+	clflush_chunk = l->clflush_size * 8;
+	for (int index = 0; index < l1_pages; index++) {
 		int offset;
 		unsigned long page;
 		unsigned long value;
@@ -236,12 +239,18 @@ static int efficeon_create_gatt_table(struct agp_bridge_data *bridge)
 
 static int efficeon_insert_memory(struct agp_memory * mem, off_t pg_start, int type)
 {
-	int i, count = mem->page_count, num_entries;
+	const struct leaf_0x1_0 *l1 = cpuid_leaf(&boot_cpu_data, 0x1);
+	int count = mem->page_count, num_entries, clflush_chunk;
 	unsigned int *page, *last_page;
-	const int clflush_chunk = ((cpuid_ebx(1) >> 8) & 0xff) << 3;
-	const unsigned long clflush_mask = ~(clflush_chunk-1);
+	unsigned long clflush_mask;
 
 	printk(KERN_DEBUG PFX "efficeon_insert_memory(%lx, %d)\n", pg_start, count);
+
+	if (!l1)
+		return -EIO;
+
+	clflush_chunk = l1->clflush_size * 8;
+	clflush_mask = ~(clflush_chunk - 1);
 
 	num_entries = A_SIZE_LVL2(agp_bridge->current_size)->num_entries;
 	if ((pg_start + mem->page_count) > num_entries)
@@ -255,7 +264,7 @@ static int efficeon_insert_memory(struct agp_memory * mem, off_t pg_start, int t
 	}
 
 	last_page = NULL;
-	for (i = 0; i < count; i++) {
+	for (int i = 0; i < count; i++) {
 		int index = pg_start + i;
 		unsigned long insert = efficeon_mask_memory(mem->pages[i]);
 
