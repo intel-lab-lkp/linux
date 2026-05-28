@@ -15,6 +15,7 @@
 #include <linux/sched/task.h>
 #include <linux/signal.h>
 #include <linux/slab.h>
+#include <linux/spawn_template.h>
 #include <linux/string.h>
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
@@ -27,6 +28,7 @@
 
 struct spawn_template {
 	struct file *exec_file;
+	struct spawn_template_file_key exec_key;
 	const struct cred *creator_cred;
 	char *filename;
 	bool deny_write;
@@ -39,6 +41,46 @@ struct spawn_template_spawn_context {
 };
 
 static const struct file_operations spawn_template_fops;
+
+static bool spawn_template_file_exec_allowed(struct file *file);
+
+void spawn_template_fill_file_key(struct file *file,
+				  struct spawn_template_file_key *key)
+{
+	struct inode *inode = file_inode(file);
+	struct timespec64 ctime = inode_get_ctime(inode);
+	struct timespec64 mtime = inode_get_mtime(inode);
+
+	key->dev = inode->i_sb->s_dev;
+	key->ino = inode->i_ino;
+	key->size = i_size_read(inode);
+	key->mode = READ_ONCE(inode->i_mode);
+	key->uid = inode->i_uid;
+	key->gid = inode->i_gid;
+	key->ctime_sec = ctime.tv_sec;
+	key->ctime_nsec = ctime.tv_nsec;
+	key->mtime_sec = mtime.tv_sec;
+	key->mtime_nsec = mtime.tv_nsec;
+}
+
+bool spawn_template_file_key_matches(struct file *file,
+				     const struct spawn_template_file_key *key)
+{
+	struct spawn_template_file_key cur;
+
+	spawn_template_fill_file_key(file, &cur);
+
+	return cur.dev == key->dev &&
+	       cur.ino == key->ino &&
+	       cur.size == key->size &&
+	       cur.mode == key->mode &&
+	       uid_eq(cur.uid, key->uid) &&
+	       gid_eq(cur.gid, key->gid) &&
+	       cur.ctime_sec == key->ctime_sec &&
+	       cur.ctime_nsec == key->ctime_nsec &&
+	       cur.mtime_sec == key->mtime_sec &&
+	       cur.mtime_nsec == key->mtime_nsec;
+}
 
 static int spawn_template_exit_status(int err)
 {
@@ -56,6 +98,32 @@ static int spawn_template_exit_status(int err)
 static bool spawn_template_cred_matches(struct spawn_template *tmpl)
 {
 	return current_cred() == tmpl->creator_cred;
+}
+
+static bool spawn_template_key_matches(struct spawn_template *tmpl)
+{
+	bool matches;
+
+	if (tmpl->filename) {
+		struct file *file __free(fput) = NULL;
+		struct file *tmp;
+
+		tmp = open_exec(tmpl->filename);
+		if (IS_ERR(tmp))
+			return false;
+		file = tmp;
+
+		matches = spawn_template_file_key_matches(file,
+							  &tmpl->exec_key);
+		matches = matches && spawn_template_file_exec_allowed(file);
+		exe_file_allow_write_access(file);
+		if (!matches)
+			return false;
+	}
+
+	return spawn_template_file_exec_allowed(tmpl->exec_file) &&
+	       spawn_template_file_key_matches(tmpl->exec_file,
+					       &tmpl->exec_key);
 }
 
 static int spawn_template_copy_signal_set(const struct spawn_template_action *action,
@@ -433,6 +501,7 @@ SYSCALL_DEFINE2(spawn_template_create,
 						 &tmpl->deny_write);
 	if (ret)
 		goto out_free_tmpl;
+	spawn_template_fill_file_key(tmpl->exec_file, &tmpl->exec_key);
 
 	if (args.flags & SPAWN_TEMPLATE_CREATE_CLOEXEC)
 		fd_flags |= O_CLOEXEC;
@@ -507,6 +576,11 @@ SYSCALL_DEFINE3(spawn_template_spawn, int, template_fd,
 	if (ret)
 		goto out_free_ctx;
 
+	if (!spawn_template_key_matches(ctx->tmpl)) {
+		ret = -ESTALE;
+		goto out_free_actions;
+	}
+
 	kargs = (struct kernel_clone_args) {
 		.flags		= CLONE_VM | CLONE_VFORK | CLONE_PIDFD,
 		.pidfd		= u64_to_user_ptr(ctx->args.pidfd),
@@ -517,6 +591,7 @@ SYSCALL_DEFINE3(spawn_template_spawn, int, template_fd,
 
 	ret = kernel_clone(&kargs);
 
+out_free_actions:
 	kfree(ctx->actions);
 out_free_ctx:
 	kfree(ctx);
