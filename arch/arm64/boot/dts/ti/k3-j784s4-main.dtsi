@@ -152,12 +152,12 @@
 };
 
 &scm_conf {
-	pcie2_ctrl: pcie2-ctrl@4078 {
+	pcie2_ctrl: pcie-ctrl@4078 {
 		compatible = "ti,j784s4-pcie-ctrl", "syscon";
 		reg = <0x4078 0x4>;
 	};
 
-	pcie3_ctrl: pcie3-ctrl@407c {
+	pcie3_ctrl: pcie-ctrl@407c {
 		compatible = "ti,j784s4-pcie-ctrl", "syscon";
 		reg = <0x407c 0x4>;
 	};
