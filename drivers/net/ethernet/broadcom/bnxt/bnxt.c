@@ -11731,6 +11731,7 @@ static void bnxt_irq_affinity_notify(struct irq_affinity_notify *notify,
 		return;
 
 	if (pcie_tph_get_cpu_st(irq->bp->pdev, TPH_MEM_TYPE_VM,
+				TPH_REQ_AUTO,
 				cpumask_first(irq->cpu_mask), &tag))
 		return;
 
@@ -11889,6 +11890,7 @@ static int bnxt_request_irq(struct bnxt *bp)
 
 			/* Init ST table entry */
 			if (pcie_tph_get_cpu_st(irq->bp->pdev, TPH_MEM_TYPE_VM,
+						TPH_REQ_AUTO,
 						cpumask_first(irq->cpu_mask),
 						&tag))
 				continue;

@@ -87,11 +87,13 @@ To retrieve a Steering Tag for a target memory associated with a specific
 CPU, use the following function::
 
   int pcie_tph_get_cpu_st(struct pci_dev *pdev, enum tph_mem_type type,
+                          enum tph_req_policy req_policy,
                           unsigned int cpu, u16 *tag);
 
 The `type` argument is used to specify the memory type, either volatile
-or persistent, of the target memory. The `cpu` argument specifies the
-CPU where the memory is associated to.
+or persistent, of the target memory. The `req_policy` used to select
+standard/extended ST. The `cpu` argument specifies the CPU where the memory
+is associated to.
 
 After the ST value is retrieved, the device driver can use the following
 function to write the ST into the device::
@@ -125,8 +127,8 @@ been changed. Here is a sample code for IRQ affinity notifier:
          /* Pick a right CPU as the target - here is just an example */
          cpu_id = cpumask_first(irq->cpu_mask);
 
-         if (pcie_tph_get_cpu_st(irq->pdev, TPH_MEM_TYPE_VM, cpu_id,
-                                 &tag))
+         if (pcie_tph_get_cpu_st(irq->pdev, TPH_MEM_TYPE_VM, TPH_REQ_AUTO,
+                                 cpu_id, &tag))
              return;
 
          if (pcie_tph_set_st_entry(irq->pdev, irq->msix_nr, tag))
