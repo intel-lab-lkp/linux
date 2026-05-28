@@ -57,6 +57,7 @@ static void kvm_vm_init_features(struct kvm *kvm)
 		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_PV_PREEMPT);
 		kvm->arch.kvm_features |= BIT(KVM_LOONGARCH_VM_FEAT_PV_STEALTIME);
 	}
+	kvm->arch.pv_auto_features = kvm->arch.pv_features;
 }
 
 int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)

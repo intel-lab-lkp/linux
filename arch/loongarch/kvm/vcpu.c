@@ -1169,7 +1169,7 @@ static int kvm_loongarch_cpucfg_set_attr(struct kvm_vcpu *vcpu,
 		if ((kvm->arch.pv_features & LOONGARCH_PV_FEAT_UPDATED)
 				&& ((kvm->arch.pv_features & valid) != val))
 			return -EINVAL;
-		kvm->arch.pv_features = val | LOONGARCH_PV_FEAT_UPDATED;
+		kvm->arch.pv_features = (val | kvm->arch.pv_auto_features) | LOONGARCH_PV_FEAT_UPDATED;
 		return 0;
 	default:
 		return -ENXIO;

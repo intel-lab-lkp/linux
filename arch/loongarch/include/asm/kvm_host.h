@@ -127,6 +127,8 @@ struct kvm_arch {
 	struct kvm_phyid_map  *phyid_map;
 	/* Enabled PV features */
 	unsigned long pv_features;
+	/* PV features auto-enabled by kernel */
+	unsigned long pv_auto_features;
 	/* Supported KVM features */
 	unsigned long kvm_features;
 
