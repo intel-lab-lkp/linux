@@ -3669,10 +3669,12 @@ static inline bool f2fs_skip_inode_update(struct inode *inode, int dsync)
 		spin_unlock(&sbi->inode_lock[DIRTY_META]);
 		return ret;
 	}
-	if (!is_inode_flag_set(inode, FI_AUTO_RECOVER) ||
-			file_keep_isize(inode) ||
-			i_size_read(inode) & ~PAGE_MASK)
+	if (file_keep_isize(inode) || i_size_read(inode) & ~PAGE_MASK)
 		return false;
+
+	if (!is_inode_flag_set(inode, FI_AUTO_RECOVER))
+		return f2fs_is_time_consistent(inode) &&
+			!is_inode_flag_set(inode, FI_DIRTY_INODE);
 
 	if (!f2fs_is_time_consistent(inode))
 		return false;
