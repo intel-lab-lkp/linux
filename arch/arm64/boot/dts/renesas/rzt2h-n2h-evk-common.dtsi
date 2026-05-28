@@ -254,6 +254,9 @@
 	sci0_pins: sci0-pins {
 		pinmux = <RZT2H_PORT_PINMUX(27, 4, 0x14)>,
 			 <RZT2H_PORT_PINMUX(27, 5, 0x14)>;
+		drive-strength-microamp = <9000>;
+		slew-rate = <1>;
+		input-schmitt-disable;
 	};
 
 #if SD0_EMMC
