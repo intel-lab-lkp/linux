@@ -303,9 +303,14 @@ static bool __init xen_check_mwait(void)
 		.u.set_pminfo.id	= -1,
 		.u.set_pminfo.type	= XEN_PM_PDC,
 	};
-	uint32_t buf[3];
 	unsigned int ax, bx, cx, dx;
-	unsigned int mwait_mask;
+	union {
+		struct cpuid_regs	r;
+		struct leaf_0x1_0	l;
+	} c1 = {
+		.r.eax = 1,
+	};
+	uint32_t buf[3];
 
 	/* We need to determine whether it is OK to expose the MWAIT
 	 * capability to the kernel to harvest deeper than C3 states from ACPI
@@ -325,15 +330,8 @@ static bool __init xen_check_mwait(void)
 	if (!xen_running_on_version_or_later(4, 2))
 		return false;
 
-	ax = 1;
-	cx = 0;
-
-	native_cpuid(&ax, &bx, &cx, &dx);
-
-	mwait_mask = (1 << (X86_FEATURE_EST % 32)) |
-		     (1 << (X86_FEATURE_MWAIT % 32));
-
-	if ((cx & mwait_mask) != mwait_mask)
+	native_cpuid(&c1.r.eax, &c1.r.ebx, &c1.r.ecx, &c1.r.edx);
+	if (!c1.l.est || !c1.l.monitor)
 		return false;
 
 	/* We need to emulate the MWAIT_LEAF and for that we need both
