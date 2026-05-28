@@ -375,12 +375,10 @@ static ssize_t __sbi_show_value(struct f2fs_attr *a,
 	}
 }
 
-static ssize_t f2fs_sbi_show(struct f2fs_attr *a,
-			struct f2fs_sb_info *sbi, char *buf)
+static ssize_t __f2fs_sbi_show(struct f2fs_attr *a,
+			       struct f2fs_sb_info *sbi, char *buf,
+			       unsigned char *ptr)
 {
-	unsigned char *ptr = NULL;
-
-	ptr = __struct_ptr(sbi, a->struct_type);
 	if (!ptr)
 		return -EINVAL;
 
@@ -464,6 +462,29 @@ static ssize_t f2fs_sbi_show(struct f2fs_attr *a,
 	return __sbi_show_value(a, sbi, buf, ptr + a->offset);
 }
 
+static ssize_t f2fs_sbi_show(struct f2fs_attr *a,
+			     struct f2fs_sb_info *sbi, char *buf)
+{
+	return __f2fs_sbi_show(a, sbi, buf,
+			       __struct_ptr(sbi, a->struct_type));
+}
+
+static ssize_t f2fs_gc_thread_show(struct f2fs_attr *a,
+				   struct f2fs_sb_info *sbi, char *buf)
+{
+	struct f2fs_gc_kthread *gc_th;
+	int srcu_idx;
+	ssize_t ret;
+
+	gc_th = f2fs_get_gc_thread(sbi, &srcu_idx);
+	if (!gc_th)
+		return -EINVAL;
+
+	ret = __f2fs_sbi_show(a, sbi, buf, (unsigned char *)gc_th);
+	f2fs_put_gc_thread(sbi, srcu_idx);
+	return ret;
+}
+
 static void __sbi_store_value(struct f2fs_attr *a,
 			struct f2fs_sb_info *sbi,
 			unsigned char *ui, unsigned long value)
@@ -487,16 +508,47 @@ static void __sbi_store_value(struct f2fs_attr *a,
 	}
 }
 
-static ssize_t __sbi_store(struct f2fs_attr *a,
-			struct f2fs_sb_info *sbi,
-			const char *buf, size_t count)
+static bool f2fs_wake_gc_thread(struct f2fs_sb_info *sbi)
 {
-	unsigned char *ptr;
+	struct f2fs_gc_kthread *gc_th;
+	int srcu_idx;
+
+	gc_th = f2fs_get_gc_thread(sbi, &srcu_idx);
+	if (!gc_th)
+		return false;
+
+	gc_th->gc_wake = true;
+	wake_up_interruptible_all(&gc_th->gc_wait_queue_head);
+	f2fs_put_gc_thread(sbi, srcu_idx);
+	return true;
+}
+
+static void f2fs_set_gc_thread_nice(struct f2fs_sb_info *sbi, long priority)
+{
+	struct f2fs_gc_kthread *gc_th;
+	struct task_struct *gc_task;
+	int srcu_idx;
+
+	gc_th = f2fs_get_gc_thread(sbi, &srcu_idx);
+	if (!gc_th)
+		return;
+
+	gc_task = READ_ONCE(gc_th->f2fs_gc_task);
+	if (gc_task)
+		set_user_nice(gc_task, PRIO_TO_NICE(priority));
+
+	f2fs_put_gc_thread(sbi, srcu_idx);
+}
+
+static ssize_t __f2fs_sbi_store(struct f2fs_attr *a,
+				struct f2fs_sb_info *sbi,
+				unsigned char *ptr,
+				const char *buf, size_t count)
+{
 	unsigned long t;
 	unsigned int *ui;
 	ssize_t ret;
 
-	ptr = __struct_ptr(sbi, a->struct_type);
 	if (!ptr)
 		return -EINVAL;
 
@@ -664,21 +716,13 @@ out:
 			sbi->gc_mode = GC_NORMAL;
 		} else if (t == 1) {
 			sbi->gc_mode = GC_URGENT_HIGH;
-			if (sbi->gc_thread) {
-				sbi->gc_thread->gc_wake = true;
-				wake_up_interruptible_all(
-					&sbi->gc_thread->gc_wait_queue_head);
+			if (f2fs_wake_gc_thread(sbi))
 				wake_up_discard_thread(sbi, true);
-			}
 		} else if (t == 2) {
 			sbi->gc_mode = GC_URGENT_LOW;
 		} else if (t == 3) {
 			sbi->gc_mode = GC_URGENT_MID;
-			if (sbi->gc_thread) {
-				sbi->gc_thread->gc_wake = true;
-				wake_up_interruptible_all(
-					&sbi->gc_thread->gc_wait_queue_head);
-			}
+			f2fs_wake_gc_thread(sbi);
 		} else {
 			return -EINVAL;
 		}
@@ -934,14 +978,14 @@ out:
 	if (!strcmp(a->attr.name, "gc_boost_gc_multiple")) {
 		if (t < 1 || t > SEGS_PER_SEC(sbi))
 			return -EINVAL;
-		sbi->gc_thread->boost_gc_multiple = (unsigned int)t;
+		*ui = (unsigned int)t;
 		return count;
 	}
 
 	if (!strcmp(a->attr.name, "gc_boost_gc_greedy")) {
 		if (t > GC_GREEDY)
 			return -EINVAL;
-		sbi->gc_thread->boost_gc_greedy = (unsigned int)t;
+		*ui = (unsigned int)t;
 		return count;
 	}
 
@@ -980,24 +1024,47 @@ out:
 		return count;
 	}
 
-	if (!strcmp(a->attr.name, "critical_task_priority")) {
-		if (t < NICE_TO_PRIO(MIN_NICE) || t > NICE_TO_PRIO(MAX_NICE))
-			return -EINVAL;
-		if (!capable(CAP_SYS_NICE))
-			return -EPERM;
-		sbi->critical_task_priority = t;
-		if (sbi->cprc_info.f2fs_issue_ckpt)
-			set_user_nice(sbi->cprc_info.f2fs_issue_ckpt,
-					PRIO_TO_NICE(sbi->critical_task_priority));
-		if (sbi->gc_thread && sbi->gc_thread->f2fs_gc_task)
-			set_user_nice(sbi->gc_thread->f2fs_gc_task,
-					PRIO_TO_NICE(sbi->critical_task_priority));
-		return count;
-	}
+		if (!strcmp(a->attr.name, "critical_task_priority")) {
+			int nice;
+
+			if (t < NICE_TO_PRIO(MIN_NICE) || t > NICE_TO_PRIO(MAX_NICE))
+				return -EINVAL;
+			if (!capable(CAP_SYS_NICE))
+				return -EPERM;
+			sbi->critical_task_priority = t;
+			nice = PRIO_TO_NICE(sbi->critical_task_priority);
+			if (sbi->cprc_info.f2fs_issue_ckpt)
+				set_user_nice(sbi->cprc_info.f2fs_issue_ckpt, nice);
+			f2fs_set_gc_thread_nice(sbi, sbi->critical_task_priority);
+			return count;
+		}
 
 	__sbi_store_value(a, sbi, ptr + a->offset, t);
 
 	return count;
+}
+
+static ssize_t f2fs_gc_thread_store(struct f2fs_attr *a,
+				    struct f2fs_sb_info *sbi,
+				    const char *buf, size_t count)
+{
+	struct f2fs_gc_kthread *gc_th;
+	int srcu_idx;
+	ssize_t ret;
+
+	if (!down_read_trylock(&sbi->sb->s_umount))
+		return -EAGAIN;
+
+	gc_th = f2fs_get_gc_thread(sbi, &srcu_idx);
+	if (!gc_th) {
+		up_read(&sbi->sb->s_umount);
+		return -EINVAL;
+	}
+
+	ret = __f2fs_sbi_store(a, sbi, (unsigned char *)gc_th, buf, count);
+	f2fs_put_gc_thread(sbi, srcu_idx);
+	up_read(&sbi->sb->s_umount);
+	return ret;
 }
 
 static ssize_t f2fs_sbi_store(struct f2fs_attr *a,
@@ -1006,13 +1073,15 @@ static ssize_t f2fs_sbi_store(struct f2fs_attr *a,
 {
 	ssize_t ret;
 	bool gc_entry = (!strcmp(a->attr.name, "gc_urgent") ||
+				 !strcmp(a->attr.name, "gc_idle") ||
 					a->struct_type == GC_THREAD);
 
 	if (gc_entry) {
 		if (!down_read_trylock(&sbi->sb->s_umount))
 			return -EAGAIN;
 	}
-	ret = __sbi_store(a, sbi, buf, count);
+	ret = __f2fs_sbi_store(a, sbi,
+			       __struct_ptr(sbi, a->struct_type), buf, count);
 	if (gc_entry)
 		up_read(&sbi->sb->s_umount);
 
@@ -1173,7 +1242,10 @@ static struct f2fs_attr f2fs_attr_##name = __ATTR(name, 0444, name##_show, NULL)
 #endif
 
 #define GC_THREAD_RW_ATTR(name, elname)				\
-	F2FS_RW_ATTR(GC_THREAD, f2fs_gc_kthread, name, elname)
+	F2FS_ATTR_OFFSET(GC_THREAD, name, 0644,			\
+		f2fs_gc_thread_show, f2fs_gc_thread_store,	\
+		offsetof(struct f2fs_gc_kthread, elname),	\
+		sizeof_field(struct f2fs_gc_kthread, elname))
 
 #define SM_INFO_RW_ATTR(name, elname)				\
 	F2FS_RW_ATTR(SM_INFO, f2fs_sm_info, name, elname)
