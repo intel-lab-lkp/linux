@@ -215,11 +215,13 @@ struct cpuid_leaves {
 	CPUID_LEAF   (	0x5,		0  );
 	CPUID_LEAF   (	0x6,		0  );
 	CPUID_LEAF   (	0x9,		0  );
+	CPUID_LEAF   (  0xa,		0  );
 	CPUID_LEAF   (	0x12,		0  );
 	CPUID_LEAF   (	0x12,		1  );
 	CPUID_LEAF_N (	0x12,		8  );
 	CPUID_LEAF   (  0x15,		0  );
 	CPUID_LEAF   (	0x16,		0  );
+	CPUID_LEAF   (  0x1c,		0  );
 	CPUID_LEAF   (  0x80000000,	0  );
 	CPUID_LEAF   (  0x80000002,	0  );
 	CPUID_LEAF   (  0x80000003,	0  );
