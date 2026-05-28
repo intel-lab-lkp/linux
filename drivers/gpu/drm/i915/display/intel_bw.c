@@ -633,14 +633,13 @@ static int tgl_get_bw_info(struct intel_display *display,
 
 	for (i = 0; i < num_groups; i++) {
 		struct intel_bw_info *bi = &display->bw.max[i];
-		struct intel_bw_info *bi_next;
 		int clpchgroup;
 		int j;
 
 		clpchgroup = (display_bw_params->deburst * qi.deinterleave / num_channels) << i;
 
 		if (i < num_groups - 1) {
-			bi_next = &display->bw.max[i + 1];
+			struct intel_bw_info *bi_next = &display->bw.max[i + 1];
 
 			if (clpchgroup < clperchgroup)
 				bi_next->num_planes = (ipqdepth - clpchgroup) / clpchgroup;
