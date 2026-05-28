@@ -494,6 +494,25 @@ static inline u32 cpuid_base_hypervisor(const char *sig, u32 leaves)
 	     _ptr++)
 
 /*
+ * CPUID(0x5)
+ */
+
+static inline unsigned int cpuid_mwait_n_substates(const struct leaf_0x5_0 *l5, unsigned int cstate)
+{
+	switch (cstate) {
+	case 0:		return l5->n_c0_substates;
+	case 1:		return l5->n_c1_substates;
+	case 2:		return l5->n_c2_substates;
+	case 3:		return l5->n_c3_substates;
+	case 4:		return l5->n_c4_substates;
+	case 5:		return l5->n_c5_substates;
+	case 6:		return l5->n_c6_substates;
+	case 7:		return l5->n_c7_substates;
+	default:	return 0;
+	}
+}
+
+/*
  * CPUID(0x80000006)
  */
 
