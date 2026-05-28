@@ -27,36 +27,48 @@
 static const struct ltc2378_chip_info ltc2338_18_chip_info = {
 	.name = "ltc2338-18",
 	.resolution = 18,
+	.max_sample_rate_hz = HZ_PER_MHZ,
+	.tconv_ns = 527,
 	.twos_comp = true,
 };
 
 static const struct ltc2378_chip_info ltc2364_16_chip_info = {
 	.name = "ltc2364-16",
 	.resolution = 16,
+	.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+	.tconv_ns = 3000,
 	.twos_comp = false,
 };
 
 static const struct ltc2378_chip_info ltc2364_18_chip_info = {
 	.name = "ltc2364-18",
 	.resolution = 18,
+	.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+	.tconv_ns = 3000,
 	.twos_comp = false,
 };
 
 static const struct ltc2378_chip_info ltc2367_16_chip_info = {
 	.name = "ltc2367-16",
 	.resolution = 16,
+	.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+	.tconv_ns = 1500,
 	.twos_comp = false,
 };
 
 static const struct ltc2378_chip_info ltc2367_18_chip_info = {
 	.name = "ltc2367-18",
 	.resolution = 18,
+	.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+	.tconv_ns = 1500,
 	.twos_comp = false,
 };
 
 static const struct ltc2378_chip_info ltc2368_16_chip_info = {
 	.name = "ltc2368-16",
 	.resolution = 16,
+	.max_sample_rate_hz = HZ_PER_MHZ,
+	.tconv_ns = 527,
 	.twos_comp = false,
 
 };
@@ -64,84 +76,112 @@ static const struct ltc2378_chip_info ltc2368_16_chip_info = {
 static const struct ltc2378_chip_info ltc2368_18_chip_info = {
 	.name = "ltc2368-18",
 	.resolution = 18,
+	.max_sample_rate_hz = HZ_PER_MHZ,
+	.tconv_ns = 527,
 	.twos_comp = false,
 };
 
 static const struct ltc2378_chip_info ltc2369_18_chip_info = {
 	.name = "ltc2369-18",
 	.resolution = 18,
+	.max_sample_rate_hz = 1600 * HZ_PER_KHZ,
+	.tconv_ns = 412,
 	.twos_comp = false,
 };
 
 static const struct ltc2378_chip_info ltc2370_16_chip_info = {
 	.name = "ltc2370-16",
 	.resolution = 16,
+	.max_sample_rate_hz = 2 * HZ_PER_MHZ,
+	.tconv_ns = 322,
 	.twos_comp = false,
 };
 
 static const struct ltc2378_chip_info ltc2376_16_chip_info = {
 	.name = "ltc2376-16",
 	.resolution = 16,
+	.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+	.tconv_ns = 3000,
 	.twos_comp = true,
 };
 
 static const struct ltc2378_chip_info ltc2376_18_chip_info = {
 	.name = "ltc2376-18",
 	.resolution = 18,
+	.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+	.tconv_ns = 3000,
 	.twos_comp = true,
 };
 
 static const struct ltc2378_chip_info ltc2376_20_chip_info = {
 	.name = "ltc2376-20",
 	.resolution = 20,
+	.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+	.tconv_ns = 3000,
 	.twos_comp = true,
 };
 
 static const struct ltc2378_chip_info ltc2377_16_chip_info = {
 	.name = "ltc2377-16",
 	.resolution = 16,
+	.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+	.tconv_ns = 1500,
 	.twos_comp = true,
 };
 
 static const struct ltc2378_chip_info ltc2377_18_chip_info = {
 	.name = "ltc2377-18",
 	.resolution = 18,
+	.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+	.tconv_ns = 1500,
 	.twos_comp = true,
 };
 
 static const struct ltc2378_chip_info ltc2377_20_chip_info = {
 	.name = "ltc2377-20",
 	.resolution = 20,
+	.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+	.tconv_ns = 1500,
 	.twos_comp = true,
 };
 
 static const struct ltc2378_chip_info ltc2378_16_chip_info = {
 	.name = "ltc2378-16",
 	.resolution = 16,
+	.max_sample_rate_hz = HZ_PER_MHZ,
+	.tconv_ns = 527,
 	.twos_comp = true,
 };
 
 static const struct ltc2378_chip_info ltc2378_18_chip_info = {
 	.name = "ltc2378-18",
 	.resolution = 18,
+	.max_sample_rate_hz = HZ_PER_MHZ,
+	.tconv_ns = 527,
 	.twos_comp = true,
 };
 
 static const struct ltc2378_chip_info ltc2378_20_chip_info = {
 	.name = "ltc2378-20",
 	.resolution = 20,
+	.max_sample_rate_hz = HZ_PER_MHZ,
+	.tconv_ns = 675,
 	.twos_comp = true,
 };
 
 static const struct ltc2378_chip_info ltc2379_18_chip_info = {
 	.name = "ltc2379-18",
 	.resolution = 18,
+	.max_sample_rate_hz = 1600 * HZ_PER_KHZ,
+	.tconv_ns = 412,
 	.twos_comp = true,
 };
 
 static const struct ltc2378_chip_info ltc2380_16_chip_info = {
 	.name = "ltc2380-16",
 	.resolution = 16,
+	.max_sample_rate_hz = 2 * HZ_PER_MHZ,
+	.tconv_ns = 322,
 	.twos_comp = true,
 };
 
@@ -190,7 +230,7 @@ static int ltc2378_read_raw(struct iio_dev *indio_dev,
 	int ret;
 
 	switch (info) {
-	case IIO_CHAN_INFO_RAW:
+	case IIO_CHAN_INFO_RAW: {
 		IIO_DEV_ACQUIRE_DIRECT_MODE(indio_dev, claim);
 		if (IIO_DEV_ACQUIRE_FAILED(claim))
 			return -EBUSY;
@@ -200,7 +240,7 @@ static int ltc2378_read_raw(struct iio_dev *indio_dev,
 			return ret;
 
 		return IIO_VAL_INT;
-
+	}
 	case IIO_CHAN_INFO_SCALE:
 		*val = st->ref_uV / MILLI;
 		/*
@@ -216,6 +256,17 @@ static int ltc2378_read_raw(struct iio_dev *indio_dev,
 
 		return IIO_VAL_FRACTIONAL_LOG2;
 
+	case IIO_CHAN_INFO_SAMP_FREQ: {
+		IIO_DEV_ACQUIRE_DIRECT_MODE(indio_dev, claim);
+		if (IIO_DEV_ACQUIRE_FAILED(claim))
+			return -EBUSY;
+
+		ret = ltc2378_get_sampling_frequency(st, val);
+		if (ret)
+			return ret;
+
+		return IIO_VAL_INT;
+	}
 	default:
 		return -EINVAL;
 	}
@@ -223,6 +274,8 @@ static int ltc2378_read_raw(struct iio_dev *indio_dev,
 
 static const struct iio_info ltc2378_iio_info = {
 	.read_raw = &ltc2378_read_raw,
+	.write_raw = LTC2378_WRITE_RAW,
+	.read_avail = LTC2378_READ_AVAIL,
 };
 
 static int ltc2378_probe(struct spi_device *spi)
@@ -261,10 +314,35 @@ static int ltc2378_probe(struct spi_device *spi)
 	st->chans[0].type = IIO_VOLTAGE;
 	st->chans[0].info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |
 					  BIT(IIO_CHAN_INFO_SCALE);
-	st->chans[0].scan_type.format = st->info->twos_comp ? IIO_SCAN_FORMAT_SIGNED_INT :
-							      IIO_SCAN_FORMAT_UNSIGNED_INT;
-	st->chans[0].scan_type.realbits = st->info->resolution;
-	st->chans[0].scan_type.storagebits = st->info->resolution > 16 ? 32 : 16;
+
+	struct iio_scan_type ltc2378_scan;
+
+	ret = ltc2378_offload_buffer_setup(indio_dev, spi);
+	if (ret == -ENODEV) {
+		/* SPI offloading is unavailable. Fall back to triggered buffer. */
+		dev_dbg(dev, "triggered data capture not supported\n");
+		ltc2378_scan.format = st->info->twos_comp ? IIO_SCAN_FORMAT_SIGNED_INT :
+							    IIO_SCAN_FORMAT_UNSIGNED_INT;
+		ltc2378_scan.realbits = st->info->resolution;
+		ltc2378_scan.storagebits = st->info->resolution > 16 ? 32 : 16;
+	} else if (ret) {
+		return dev_err_probe(dev, ret, "error on SPI offload setup\n");
+	} else {
+		/*
+		 * Currently, the available offload hardware + DMA configuration
+		 * only supports pushing 32-bit data elements to IIO buffers in
+		 * CPU endianness.
+		 */
+		st->chans[0].info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SAMP_FREQ);
+		st->chans[0].info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_SAMP_FREQ);
+
+		ltc2378_scan.format = st->info->twos_comp ? IIO_SCAN_FORMAT_SIGNED_INT :
+							    IIO_SCAN_FORMAT_UNSIGNED_INT;
+		ltc2378_scan.realbits = st->info->resolution;
+		ltc2378_scan.storagebits = 32;
+	}
+
+	st->chans[0].scan_type = ltc2378_scan;
 
 	st->xfer.rx_buf = &st->scan.data;
 	st->xfer.len = BITS_TO_BYTES(st->chans[0].scan_type.storagebits);
@@ -340,3 +418,4 @@ MODULE_AUTHOR("Ioan-Daniel Pop <pop.ioan-daniel@analog.com>");
 MODULE_AUTHOR("Marcelo Schmitt <marcelo.schmitt@analog.com>");
 MODULE_DESCRIPTION("Analog Devices LTC2378 ADC series driver");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS("IIO_LTC2378");
