@@ -52,25 +52,12 @@ static inline u16 dcaid_from_pcidev(struct pci_dev *pci)
 	return pci_dev_id(pci);
 }
 
-static int dca_enabled_in_bios(struct pci_dev *pdev)
-{
-	/* CPUID level 9 returns DCA configuration */
-	/* Bit 0 indicates DCA enabled by the BIOS */
-	u32 eax;
-	int res;
-
-	eax = cpuid_eax(CPUID_LEAF_DCA);
-	res = eax & BIT(0);
-	if (!res)
-		dev_dbg(&pdev->dev, "DCA is disabled in BIOS\n");
-
-	return res;
-}
-
 int system_has_dca_enabled(struct pci_dev *pdev)
 {
-	if (boot_cpu_has(X86_FEATURE_DCA))
-		return dca_enabled_in_bios(pdev);
+	const struct leaf_0x9_0 *l9 = cpuid_leaf(&boot_cpu_data, 0x9);
+
+	if (l9 && boot_cpu_has(X86_FEATURE_DCA))
+		return l9->dca_enabled_in_bios;
 
 	dev_dbg(&pdev->dev, "boot cpu doesn't have X86_FEATURE_DCA\n");
 	return 0;
