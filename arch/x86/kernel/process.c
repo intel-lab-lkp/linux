@@ -876,34 +876,32 @@ void __noreturn stop_this_cpu(void *dummy)
 static __init bool prefer_mwait_c1_over_halt(void)
 {
 	const struct cpuinfo_x86 *c = &boot_cpu_data;
-	u32 eax, ebx, ecx, edx;
+	const struct leaf_0x5_0 *l5 = cpuid_leaf(c, 0x5);
 
 	/* If override is enforced on the command line, fall back to HALT. */
 	if (boot_option_idle_override != IDLE_NO_OVERRIDE)
 		return false;
 
 	/* MWAIT is not supported on this platform. Fallback to HALT */
-	if (!cpu_has(c, X86_FEATURE_MWAIT))
+	if (!cpu_has(c, X86_FEATURE_MWAIT) || !l5)
 		return false;
 
 	/* Monitor has a bug or APIC stops in C1E. Fallback to HALT */
 	if (boot_cpu_has_bug(X86_BUG_MONITOR) || boot_cpu_has_bug(X86_BUG_AMD_APIC_C1E))
 		return false;
 
-	cpuid(CPUID_LEAF_MWAIT, &eax, &ebx, &ecx, &edx);
-
 	/*
 	 * If MWAIT extensions are not available, it is safe to use MWAIT
 	 * with EAX=0, ECX=0.
 	 */
-	if (!(ecx & CPUID5_ECX_EXTENSIONS_SUPPORTED))
+	if (!l5->mwait_ext)
 		return true;
 
 	/*
 	 * If MWAIT extensions are available, there should be at least one
 	 * MWAIT C1 substate present.
 	 */
-	return !!(edx & MWAIT_C1_SUBSTATE_MASK);
+	return l5->n_c1_substates;
 }
 
 /*
