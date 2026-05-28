@@ -1852,8 +1852,6 @@ static int ata_scsi_translate(struct ata_device *dev, struct scsi_cmnd *cmd,
 	struct ata_port *ap = dev->link->ap;
 	struct ata_queued_cmd *qc;
 
-	lockdep_assert_held(ap->lock);
-
 	/*
 	 * ata_scsi_qc_new() calls scsi_done(cmd) in case of failure. So we
 	 * have nothing further to do when allocating a qc fails.
