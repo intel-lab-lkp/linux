@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2021 Intel Corporation. All rights reserved. */
 #include <linux/units.h>
+#include <linux/bitmap.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/device.h>
 #include <linux/delay.h>
+#include <linux/iommu.h>
 #include <linux/memregion.h>
 #include <linux/pci.h>
 #include <linux/pci-doe.h>
@@ -14,6 +16,10 @@
 #include <cxl.h>
 #include "core.h"
 #include "trace.h"
+
+#define CXL_RESET_MAX_FUNCTIONS		256
+#define CXL_RESET_FUNCTION_MAP_REGS	(CXL_RESET_MAX_FUNCTIONS / 32)
+#define CXL_RESET_SIBLINGS_INIT		8
 
 /**
  * DOC: cxl core pci
@@ -1095,4 +1101,205 @@ cxl_reset_flush_cpu_caches(struct cxl_reset_region_context *ctx)
 	}
 
 	return 0;
+}
+
+struct cxl_reset_context {
+	struct pci_dev *target;
+	struct pci_dev **siblings;
+	int nr_siblings;
+	int sibling_capacity;
+	int nr_siblings_prepared;
+};
+
+struct cxl_reset_walk_ctx {
+	struct cxl_reset_context *ctx;
+	unsigned long *non_cxl_func_map;
+	int rc;
+};
+
+static void
+cxl_reset_read_non_cxl_func_map(struct pci_dev *pdev,
+				unsigned long *non_cxl_func_map)
+{
+	u32 map[CXL_RESET_FUNCTION_MAP_REGS] = {};
+	u16 dvsec;
+	int rc, i;
+
+	bitmap_zero(non_cxl_func_map, CXL_RESET_MAX_FUNCTIONS);
+
+	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+					  PCI_DVSEC_CXL_FUNCTION_MAP);
+	if (!dvsec)
+		return;
+
+	for (i = 0; i < CXL_RESET_FUNCTION_MAP_REGS; i++) {
+		rc = pci_read_config_dword(pdev,
+					   dvsec + PCI_DVSEC_CXL_FUNCTION_MAP_REG +
+					   i * sizeof(map[i]), &map[i]);
+		if (rc) {
+			pci_warn(pdev,
+				 "failed to read CXL Function Map; treating all siblings as CXL: %d\n",
+				 rc);
+			bitmap_zero(non_cxl_func_map, CXL_RESET_MAX_FUNCTIONS);
+			return;
+		}
+	}
+
+	bitmap_from_arr32(non_cxl_func_map, map, CXL_RESET_MAX_FUNCTIONS);
+}
+
+static bool cxl_reset_is_cxl_sibling(struct pci_dev *pdev,
+				     struct pci_dev *sibling,
+				     unsigned long *non_cxl_func_map)
+{
+	if (sibling == pdev || sibling->bus != pdev->bus)
+		return false;
+
+	if (pci_ari_enabled(pdev->bus))
+		return !test_bit(sibling->devfn, non_cxl_func_map);
+
+	if (PCI_SLOT(sibling->devfn) != PCI_SLOT(pdev->devfn))
+		return false;
+
+	return !test_bit(PCI_FUNC(sibling->devfn) * 32 +
+			 PCI_SLOT(sibling->devfn), non_cxl_func_map);
+}
+
+static bool cxl_reset_has_cache_or_mem(struct pci_dev *pdev)
+{
+	u16 dvsec, cap;
+
+	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+					  PCI_DVSEC_CXL_DEVICE);
+	if (!dvsec)
+		return false;
+
+	if (pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_CAP, &cap))
+		return false;
+
+	return cap & (PCI_DVSEC_CXL_CACHE_CAPABLE | PCI_DVSEC_CXL_MEM_CAPABLE);
+}
+
+static int cxl_reset_add_sibling(struct cxl_reset_context *ctx,
+				 struct pci_dev *sibling)
+{
+	struct pci_dev **siblings;
+	int capacity;
+
+	if (ctx->nr_siblings < ctx->sibling_capacity)
+		goto add;
+
+	capacity = ctx->sibling_capacity ? ctx->sibling_capacity * 2 :
+		   CXL_RESET_SIBLINGS_INIT;
+	siblings = krealloc(ctx->siblings, capacity * sizeof(*siblings),
+			    GFP_KERNEL);
+	if (!siblings)
+		return -ENOMEM;
+
+	ctx->siblings = siblings;
+	ctx->sibling_capacity = capacity;
+
+add:
+	pci_dev_get(sibling);
+	ctx->siblings[ctx->nr_siblings++] = sibling;
+	return 0;
+}
+
+static int cxl_reset_collect_sibling(struct pci_dev *sibling, void *data)
+{
+	struct cxl_reset_walk_ctx *wctx = data;
+	struct cxl_reset_context *ctx = wctx->ctx;
+	struct pci_dev *pdev = ctx->target;
+
+	if (!cxl_reset_is_cxl_sibling(pdev, sibling, wctx->non_cxl_func_map))
+		return 0;
+
+	if (!cxl_reset_has_cache_or_mem(sibling))
+		return 0;
+
+	wctx->rc = cxl_reset_add_sibling(ctx, sibling);
+	return wctx->rc;
+}
+
+static int cxl_reset_collect_siblings(struct cxl_reset_context *ctx)
+{
+	DECLARE_BITMAP(non_cxl_func_map, CXL_RESET_MAX_FUNCTIONS);
+	struct cxl_reset_walk_ctx wctx = {
+		.ctx = ctx,
+		.non_cxl_func_map = non_cxl_func_map,
+	};
+
+	cxl_reset_read_non_cxl_func_map(ctx->target, non_cxl_func_map);
+	pci_walk_bus(ctx->target->bus, cxl_reset_collect_sibling, &wctx);
+	return wctx.rc;
+}
+
+static void cxl_pci_functions_reset_done(struct cxl_reset_context *ctx)
+{
+	int i;
+
+	for (i = ctx->nr_siblings_prepared - 1; i >= 0; i--) {
+		struct pci_dev *sibling = ctx->siblings[i];
+
+		pci_dev_reset_iommu_done(sibling);
+		pci_dev_restore(sibling);
+		pci_dev_unlock(sibling);
+	}
+
+	for (i = 0; i < ctx->nr_siblings; i++)
+		pci_dev_put(ctx->siblings[i]);
+
+	kfree(ctx->siblings);
+	ctx->siblings = NULL;
+	ctx->nr_siblings = 0;
+	ctx->sibling_capacity = 0;
+	ctx->nr_siblings_prepared = 0;
+}
+
+static int __maybe_unused
+cxl_pci_functions_reset_prepare(struct cxl_reset_context *ctx)
+{
+	int rc, i;
+
+	ctx->siblings = NULL;
+	ctx->nr_siblings = 0;
+	ctx->sibling_capacity = 0;
+	ctx->nr_siblings_prepared = 0;
+
+	rc = cxl_reset_collect_siblings(ctx);
+	if (rc)
+		goto err;
+
+	for (i = 0; i < ctx->nr_siblings; i++) {
+		struct pci_dev *sibling = ctx->siblings[i];
+
+		if (!pci_dev_trylock(sibling)) {
+			rc = -EAGAIN;
+			goto err;
+		}
+
+		pci_dev_save_and_disable(sibling);
+		rc = pci_dev_reset_iommu_prepare(sibling);
+		if (rc) {
+			pci_err(sibling,
+				"failed to block IOMMU for CXL reset: %d\n",
+				rc);
+			/*
+			 * Undo save_and_disable() for this sibling. IOMMU
+			 * prepare failed, so this sibling is not counted in
+			 * nr_siblings_prepared and must not get iommu_done().
+			 */
+			pci_dev_restore(sibling);
+			pci_dev_unlock(sibling);
+			goto err;
+		}
+
+		ctx->nr_siblings_prepared++;
+	}
+
+	return 0;
+
+err:
+	cxl_pci_functions_reset_done(ctx);
+	return rc;
 }
