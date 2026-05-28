@@ -148,6 +148,9 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 	unsigned long freq = ULONG_MAX;
 	int ret;
 
+	if (!device_property_read_bool(ptdev->base.dev, "operating-points-v2"))
+		return 0;
+
 	pdevfreq = drmm_kzalloc(&ptdev->base, sizeof(*ptdev->devfreq), GFP_KERNEL);
 	if (!pdevfreq)
 		return -ENOMEM;
@@ -267,7 +270,7 @@ void panthor_devfreq_resume(struct panthor_device *ptdev)
 {
 	struct panthor_devfreq *pdevfreq = ptdev->devfreq;
 
-	if (!pdevfreq->devfreq)
+	if (!pdevfreq || !pdevfreq->devfreq)
 		return;
 
 	panthor_devfreq_reset(pdevfreq);
@@ -279,7 +282,7 @@ void panthor_devfreq_suspend(struct panthor_device *ptdev)
 {
 	struct panthor_devfreq *pdevfreq = ptdev->devfreq;
 
-	if (!pdevfreq->devfreq)
+	if (!pdevfreq || !pdevfreq->devfreq)
 		return;
 
 	drm_WARN_ON(&ptdev->base, devfreq_suspend_device(pdevfreq->devfreq));
@@ -290,7 +293,7 @@ void panthor_devfreq_record_busy(struct panthor_device *ptdev)
 	struct panthor_devfreq *pdevfreq = ptdev->devfreq;
 	unsigned long irqflags;
 
-	if (!pdevfreq->devfreq)
+	if (!pdevfreq || !pdevfreq->devfreq)
 		return;
 
 	spin_lock_irqsave(&pdevfreq->lock, irqflags);
@@ -306,7 +309,7 @@ void panthor_devfreq_record_idle(struct panthor_device *ptdev)
 	struct panthor_devfreq *pdevfreq = ptdev->devfreq;
 	unsigned long irqflags;
 
-	if (!pdevfreq->devfreq)
+	if (!pdevfreq || !pdevfreq->devfreq)
 		return;
 
 	spin_lock_irqsave(&pdevfreq->lock, irqflags);
@@ -323,7 +326,7 @@ unsigned long panthor_devfreq_get_freq(struct panthor_device *ptdev)
 	unsigned long freq = 0;
 	int ret;
 
-	if (!pdevfreq->devfreq)
+	if (!pdevfreq || !pdevfreq->devfreq)
 		return 0;
 
 	ret = pdevfreq->devfreq->profile->get_cur_freq(ptdev->base.dev, &freq);
