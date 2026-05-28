@@ -4506,7 +4506,55 @@ int nfs4_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
 	return err;
 }
 
-/* 
+/*
+ * Would applying @sattr (which changes mode, owner, and/or group) remove the
+ * write access of a held write delegation's owning credential, as judged by
+ * the resulting file mode bits?
+ *
+ * Such a change makes the delegation's cached "open for write" assertion
+ * stale: a later open(O_WRONLY) could be served from the delegation without
+ * the server getting a chance to deny it.  Only the mode bits and the
+ * holder's fsuid/fsgid are consulted; an NFSv4 ACL (which the client cannot
+ * evaluate locally), a privileged caller, or supplementary group membership
+ * may make the answer imprecise, but the cost is at most an unnecessary
+ * delegation return or a fall back to the server's recall -- never incorrect
+ * access.
+ */
+static bool nfs4_setattr_removes_write(struct inode *inode, struct iattr *sattr)
+{
+	struct nfs_delegation *delegation;
+	const struct cred *cred;
+	umode_t mode = inode->i_mode;
+	kuid_t uid = inode->i_uid;
+	kgid_t gid = inode->i_gid;
+	bool ret = false;
+
+	delegation = nfs4_get_valid_delegation(inode);
+	if (!delegation)
+		return false;
+	if (!(delegation->type & FMODE_WRITE))
+		goto out;
+	cred = delegation->cred;
+
+	if (sattr->ia_valid & ATTR_MODE)
+		mode = sattr->ia_mode;
+	if (sattr->ia_valid & ATTR_UID)
+		uid = sattr->ia_uid;
+	if (sattr->ia_valid & ATTR_GID)
+		gid = sattr->ia_gid;
+
+	if (uid_eq(uid, cred->fsuid))
+		ret = !(mode & S_IWUSR);
+	else if (gid_eq(gid, cred->fsgid))
+		ret = !(mode & S_IWGRP);
+	else
+		ret = !(mode & S_IWOTH);
+out:
+	nfs_put_delegation(delegation);
+	return ret;
+}
+
+/*
  * The file is not closed if it is opened due to the a request to change
  * the size of the file. The open call will not be needed once the
  * VFS layer lookup-intents are implemented.
@@ -4555,9 +4603,19 @@ nfs4_proc_setattr(struct dentry *dentry, struct nfs_fattr *fattr,
 			cred = ctx->cred;
 	}
 
-	/* Return any delegations if we're going to change ACLs */
-	if ((sattr->ia_valid & (ATTR_MODE|ATTR_UID|ATTR_GID)) != 0)
-		nfs4_inode_make_writeable(inode);
+	/*
+	 * A change to mode, owner, or group that removes the write
+	 * delegation holder's own write access makes the delegation's cached
+	 * "open for write" stale; return it so a later open() revalidates
+	 * access with the server.  A change that keeps write access leaves
+	 * the delegation in place.
+	 */
+	if (sattr->ia_valid & (ATTR_MODE | ATTR_UID | ATTR_GID)) {
+		if (nfs4_setattr_removes_write(inode, sattr))
+			nfs4_inode_return_delegation(inode);
+		else
+			nfs4_inode_make_writeable(inode);
+	}
 
 	status = nfs4_do_setattr(inode, cred, fattr, sattr, ctx, NULL);
 	if (status == 0) {
