@@ -1106,14 +1106,8 @@ static int mtl_find_qgv_points(struct intel_display *display,
 	 * offered per plane group
 	 */
 	for (i = 0; i < num_qgv_points; i++) {
-		unsigned int bw_index =
-			tgl_max_bw_index(display, num_active_planes, i);
-		unsigned int max_data_rate;
-
-		if (bw_index >= ARRAY_SIZE(display->bw.max))
-			continue;
-
-		max_data_rate = display->bw.max[bw_index].deratedbw[i];
+		unsigned int max_data_rate =
+			icl_qgv_bw(display, num_active_planes, i);
 
 		if (max_data_rate < data_rate)
 			continue;
