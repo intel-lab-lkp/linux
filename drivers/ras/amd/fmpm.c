@@ -564,10 +564,14 @@ out_clear:
 /* Check that the record matches expected types for the current system.*/
 static bool fmp_is_usable(struct fru_rec *rec)
 {
+	const struct cpuid_regs *l1 = cpuid_leaf_raw(&boot_cpu_data, 0x1);
 	struct cper_sec_fru_mem_poison *fmp = &rec->fmp;
 	u64 cpuid;
 
 	pr_debug("Validation bits: 0x%016llx\n", fmp->validation_bits);
+
+	if (!l1)
+		return false;
 
 	if (!(fmp->validation_bits & FMP_VALID_ARCH_TYPE)) {
 		pr_debug("Arch type unknown\n");
@@ -584,7 +588,7 @@ static bool fmp_is_usable(struct fru_rec *rec)
 		return false;
 	}
 
-	cpuid = cpuid_eax(1);
+	cpuid = l1->eax;
 	if (fmp->fru_arch != cpuid) {
 		pr_debug("Arch value mismatch: record = 0x%016llx, system = 0x%016llx\n",
 			 fmp->fru_arch, cpuid);
@@ -719,15 +723,19 @@ out:
 	return ret;
 }
 
-static void set_fmp_fields(struct fru_rec *rec, unsigned int cpu)
+static int set_fmp_fields(struct fru_rec *rec, unsigned int cpu)
 {
+	const struct cpuid_regs *l1 = cpuid_leaf_raw(&boot_cpu_data, 0x1);
 	struct cper_sec_fru_mem_poison *fmp = &rec->fmp;
+
+	if (!l1)
+		return -EIO;
 
 	fmp->fru_arch_type    = FMP_ARCH_TYPE_X86_CPUID_1_EAX;
 	fmp->validation_bits |= FMP_VALID_ARCH_TYPE;
 
 	/* Assume all CPUs in the system have the same value for now. */
-	fmp->fru_arch	      = cpuid_eax(1);
+	fmp->fru_arch	      = l1->eax;
 	fmp->validation_bits |= FMP_VALID_ARCH;
 
 	fmp->fru_id_type      = FMP_ID_TYPE_X86_PPIN;
@@ -735,6 +743,8 @@ static void set_fmp_fields(struct fru_rec *rec, unsigned int cpu)
 
 	fmp->fru_id	      = topology_ppin(cpu);
 	fmp->validation_bits |= FMP_VALID_ID;
+
+	return 0;
 }
 
 static int init_fmps(void)
@@ -761,7 +771,9 @@ static int init_fmps(void)
 			break;
 		}
 
-		set_fmp_fields(rec, fru_cpu);
+		ret = set_fmp_fields(rec, fru_cpu);
+		if (ret)
+			break;
 	}
 
 	return ret;
