@@ -574,10 +574,8 @@ static int sprd_rtc_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	ret = of_property_read_u32(node, "reg", &rtc->base);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to get RTC base address\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "failed to get RTC base address\n");
 
 	rtc->irq = platform_get_irq(pdev, 0);
 	if (rtc->irq < 0)
@@ -592,26 +590,20 @@ static int sprd_rtc_probe(struct platform_device *pdev)
 
 	/* check if we need set the alarm interrupt */
 	ret = sprd_rtc_check_alarm_int(rtc);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to check RTC alarm interrupt\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "failed to check RTC alarm interrupt\n");
 
 	/* check if RTC time values are valid */
 	ret = sprd_rtc_check_power_down(rtc);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to check RTC time values\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "failed to check RTC time values\n");
 
 	ret = devm_request_threaded_irq(&pdev->dev, rtc->irq, NULL,
 					sprd_rtc_handler,
 					IRQF_ONESHOT | IRQF_EARLY_RESUME,
 					pdev->name, rtc);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "failed to request RTC irq\n");
-		return ret;
-	}
+	if (ret < 0)
+		return dev_err_probe(&pdev->dev, ret, "failed to request RTC irq\n");
 
 	device_init_wakeup(&pdev->dev, true);
 
