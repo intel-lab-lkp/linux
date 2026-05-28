@@ -125,28 +125,25 @@ static void bsp_init_hygon(struct cpuinfo_x86 *c)
 
 static void early_init_hygon(struct cpuinfo_x86 *c)
 {
+	const struct leaf_0x80000007_0 *el7 = cpuid_leaf(c, 0x80000007);
 	u32 dummy;
 
 	set_cpu_cap(c, X86_FEATURE_K8);
 
 	rdmsr_safe(MSR_AMD64_PATCH_LEVEL, &c->microcode, &dummy);
 
-	/*
-	 * c->x86_power is 8000_0007 edx. Bit 8 is TSC runs at constant rate
-	 * with P/T states and does not stop in deep C-states
-	 */
-	if (c->x86_power & (1 << 8)) {
-		set_cpu_cap(c, X86_FEATURE_CONSTANT_TSC);
-		set_cpu_cap(c, X86_FEATURE_NONSTOP_TSC);
+	if (el7) {
+		if (el7->constant_tsc) {
+			set_cpu_cap(c, X86_FEATURE_CONSTANT_TSC);
+			set_cpu_cap(c, X86_FEATURE_NONSTOP_TSC);
+		}
+
+		if (el7->proc_power_reporting)
+			set_cpu_cap(c, X86_FEATURE_ACC_POWER);
+
+		if (el7->rapl_interface)
+			set_cpu_cap(c, X86_FEATURE_RAPL);
 	}
-
-	/* Bit 12 of 8000_0007 edx is accumulated power mechanism. */
-	if (c->x86_power & BIT(12))
-		set_cpu_cap(c, X86_FEATURE_ACC_POWER);
-
-	/* Bit 14 indicates the Runtime Average Power Limit interface. */
-	if (c->x86_power & BIT(14))
-		set_cpu_cap(c, X86_FEATURE_RAPL);
 
 #ifdef CONFIG_X86_64
 	set_cpu_cap(c, X86_FEATURE_SYSCALL32);
