@@ -131,6 +131,7 @@ static const struct regulator_ops sc2731_regu_linear_ops = {
 			  vstep, vmin, vmax) {			\
 	.name			= #_id,				\
 	.of_match		= of_match_ptr(#_id),		\
+	.regulators_node	= of_match_ptr("regulators"),	\
 	.ops			= &sc2731_regu_linear_ops,	\
 	.type			= REGULATOR_VOLTAGE,		\
 	.id			= SC2731_##_id,			\
@@ -226,7 +227,7 @@ static int sc2731_regulator_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	config.dev = &pdev->dev;
+	config.dev = pdev->dev.parent;
 	config.regmap = regmap;
 
 	for (i = 0; i < ARRAY_SIZE(regulators); i++) {
@@ -242,12 +243,19 @@ static int sc2731_regulator_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct platform_device_id sc2731_regulator_id_table[] = {
+	{ "sc2731-regulator" },
+	{ }
+};
+MODULE_DEVICE_TABLE(platform, sc2731_regulator_id_table);
+
 static struct platform_driver sc2731_regulator_driver = {
 	.driver = {
 		.name = "sc27xx-regulator",
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe = sc2731_regulator_probe,
+	.id_table = sc2731_regulator_id_table,
 };
 
 module_platform_driver(sc2731_regulator_driver);
