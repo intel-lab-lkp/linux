@@ -1871,7 +1871,8 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 		break;
 	/* AMD Extended Performance Monitoring and Debug */
 	case 0x80000022: {
-		union cpuid_0x80000022_ebx ebx = { };
+		struct leaf_0x80000022_0 leaf = { };
+		struct cpuid_regs *regs = (struct cpuid_regs *)&leaf;
 
 		entry->ecx = entry->edx = 0;
 		if (!enable_pmu || !kvm_cpu_cap_has(X86_FEATURE_PERFMON_V2)) {
@@ -1881,8 +1882,8 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 
 		cpuid_entry_override(entry, CPUID_8000_0022_EAX);
 
-		ebx.split.num_core_pmc = kvm_pmu_cap.num_counters_gp;
-		entry->ebx = ebx.full;
+		leaf.n_pmc_core = kvm_pmu_cap.num_counters_gp;
+		entry->ebx = regs->ebx;
 		break;
 	}
 	/*Add support for Centaur's CPUID instruction*/
