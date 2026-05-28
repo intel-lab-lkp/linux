@@ -139,8 +139,8 @@ static long acpi_processor_ffh_cstate_probe_cpu(void *_cx)
 
 	/* If the HW does not support any sub-states in this C-state */
 	if (num_cstate_subtype == 0) {
-		pr_warn(FW_BUG "ACPI MWAIT C-state 0x%x not supported by HW (0x%x)\n",
-				cx->address, edx_part);
+		pr_warn(FW_BUG "ACPI MWAIT hint 0x%x for MWAIT C-state type %u not supported by HW\n",
+			cx->address, cstate_type);
 		return -1;
 	}
 
