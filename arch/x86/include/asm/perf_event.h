@@ -161,24 +161,6 @@
 #define ARCH_PERFMON_PEBS_CAP_LEAF		0x4
 #define ARCH_PERFMON_PEBS_COUNTER_LEAF		0x5
 
-/*
- * AMD "Extended Performance Monitoring and Debug" CPUID
- * detection/enumeration details:
- */
-union cpuid_0x80000022_ebx {
-	struct {
-		/* Number of Core Performance Counters */
-		unsigned int	num_core_pmc:4;
-		/* Number of available LBR Stack Entries */
-		unsigned int	lbr_v2_stack_sz:6;
-		/* Number of Data Fabric Counters */
-		unsigned int	num_df_pmc:6;
-		/* Number of Unified Memory Controller Counters */
-		unsigned int	num_umc_pmc:6;
-	} split;
-	unsigned int		full;
-};
-
 struct x86_pmu_capability {
 	int		version;
 	int		num_counters_gp;
@@ -497,11 +479,6 @@ struct arch_pebs_cntr_header {
 	u32 metrics;
 	u32 reserved;
 };
-
-/*
- * AMD Extended Performance Monitoring and Debug cpuid feature detection
- */
-#define EXT_PERFMON_DEBUG_FEATURES		0x80000022
 
 /*
  * IBS cpuid feature detection
