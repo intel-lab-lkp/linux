@@ -947,14 +947,12 @@ struct cxl_reset_region_context {
 	struct xarray regions;
 };
 
-static void __maybe_unused
-cxl_reset_region_context_init(struct cxl_reset_region_context *ctx)
+static void cxl_reset_region_context_init(struct cxl_reset_region_context *ctx)
 {
 	xa_init(&ctx->regions);
 }
 
-static void __maybe_unused
-cxl_reset_region_context_destroy(struct cxl_reset_region_context *ctx)
+static void cxl_reset_region_context_destroy(struct cxl_reset_region_context *ctx)
 {
 	xa_destroy(&ctx->regions);
 }
@@ -985,9 +983,8 @@ static int cxl_reset_collect_region(struct device *dev, void *data)
 	return cxl_reset_add_region(ctx, cxled->cxld.region);
 }
 
-static int __maybe_unused
-cxl_reset_collect_memdev_regions(struct cxl_reset_region_context *ctx,
-				 struct cxl_memdev *cxlmd)
+static int cxl_reset_collect_memdev_regions(struct cxl_reset_region_context *ctx,
+					    struct cxl_memdev *cxlmd)
 {
 	struct cxl_port *endpoint;
 
@@ -1045,8 +1042,7 @@ static int cxl_reset_validate_region_idle(struct cxl_region *cxlr)
 	return rc;
 }
 
-static int __maybe_unused
-cxl_reset_validate_regions_idle(struct cxl_reset_region_context *ctx)
+static int cxl_reset_validate_regions_idle(struct cxl_reset_region_context *ctx)
 {
 	struct cxl_region *cxlr;
 	unsigned long index;
@@ -1077,25 +1073,40 @@ static int cxl_reset_flush_region_cache(struct cxl_region *cxlr)
 	return rc;
 }
 
-static int __maybe_unused
-cxl_reset_flush_cpu_caches(struct cxl_reset_region_context *ctx)
+static int cxl_reset_cpu_cache_flush_preflight(struct cxl_reset_region_context *ctx,
+					       bool *skip)
 {
-	struct cxl_region *cxlr;
-	unsigned long index;
-	int rc;
+	if (skip)
+		*skip = false;
 
 	if (xa_empty(&ctx->regions))
 		return 0;
 
-	if (!cpu_cache_has_invalidate_memregion()) {
-		if (IS_ENABLED(CONFIG_CXL_REGION_INVALIDATION_TEST)) {
-			pr_info_once(
-				"Bypassing cpu_cache_invalidate_memregion() for testing!\n");
-			return 0;
-		}
-		pr_warn("Failed to synchronize CPU cache state\n");
-		return -ENXIO;
+	if (cpu_cache_has_invalidate_memregion())
+		return 0;
+
+	if (IS_ENABLED(CONFIG_CXL_REGION_INVALIDATION_TEST)) {
+		pr_info_once(
+			"Bypassing cpu_cache_invalidate_memregion() for testing!\n");
+		if (skip)
+			*skip = true;
+		return 0;
 	}
+
+	pr_warn("Failed to synchronize CPU cache state\n");
+	return -ENXIO;
+}
+
+static int cxl_reset_flush_cpu_caches(struct cxl_reset_region_context *ctx)
+{
+	struct cxl_region *cxlr;
+	unsigned long index;
+	bool skip;
+	int rc;
+
+	rc = cxl_reset_cpu_cache_flush_preflight(ctx, &skip);
+	if (rc || skip)
+		return rc;
 
 	xa_for_each(&ctx->regions, index, cxlr) {
 		rc = cxl_reset_flush_region_cache(cxlr);
@@ -1120,7 +1131,11 @@ struct cxl_reset_context {
 	struct pci_dev **siblings;
 	int nr_siblings;
 	int sibling_capacity;
+	int nr_siblings_locked;
 	int nr_siblings_prepared;
+	bool target_locked;
+	bool target_saved;
+	bool target_iommu_prepared;
 };
 
 struct cxl_reset_walk_ctx {
@@ -1306,7 +1321,7 @@ add:
  * function set to find memdevs whose regions and endpoint decoder state must
  * be handled around the reset.
  */
-static int __maybe_unused cxl_reset_collect_memdevs(struct cxl_reset_context *ctx)
+static int cxl_reset_collect_memdevs(struct cxl_reset_context *ctx)
 {
 	int rc, i;
 
@@ -1323,7 +1338,7 @@ static int __maybe_unused cxl_reset_collect_memdevs(struct cxl_reset_context *ct
 	return 0;
 }
 
-static int __maybe_unused
+static int
 cxl_reset_collect_regions(struct cxl_reset_context *ctx,
 			  struct cxl_reset_region_context *region_ctx)
 {
@@ -1370,7 +1385,7 @@ static void cxl_reset_unlock_memdevs(struct cxl_reset_context *ctx)
 	}
 }
 
-static int __maybe_unused cxl_reset_lock_memdevs(struct cxl_reset_context *ctx)
+static int cxl_reset_lock_memdevs(struct cxl_reset_context *ctx)
 {
 	int i;
 
@@ -1400,7 +1415,7 @@ err:
 	return -EAGAIN;
 }
 
-static void __maybe_unused cxl_reset_put_memdevs(struct cxl_reset_context *ctx)
+static void cxl_reset_put_memdevs(struct cxl_reset_context *ctx)
 {
 	int i;
 
@@ -1417,13 +1432,19 @@ static void cxl_pci_functions_reset_done(struct cxl_reset_context *ctx)
 {
 	int i;
 
+	/*
+	 * Config state was restored early for CXL MMIO access. Complete PCI
+	 * reset recovery here by unblocking IOMMU and running reset_done().
+	 */
 	for (i = ctx->nr_siblings_prepared - 1; i >= 0; i--) {
 		struct pci_dev *sibling = ctx->siblings[i];
 
 		pci_dev_reset_iommu_done(sibling);
 		pci_dev_restore(sibling);
-		pci_dev_unlock(sibling);
 	}
+
+	for (i = ctx->nr_siblings_locked - 1; i >= 0; i--)
+		pci_dev_unlock(ctx->siblings[i]);
 
 	for (i = 0; i < ctx->nr_siblings; i++)
 		pci_dev_put(ctx->siblings[i]);
@@ -1432,30 +1453,38 @@ static void cxl_pci_functions_reset_done(struct cxl_reset_context *ctx)
 	ctx->siblings = NULL;
 	ctx->nr_siblings = 0;
 	ctx->sibling_capacity = 0;
+	ctx->nr_siblings_locked = 0;
 	ctx->nr_siblings_prepared = 0;
 }
 
-static int __maybe_unused
-cxl_pci_functions_reset_prepare(struct cxl_reset_context *ctx)
+static int cxl_pci_functions_lock(struct cxl_reset_context *ctx)
 {
-	int rc, i;
+	int i;
 
-	ctx->siblings = NULL;
-	ctx->nr_siblings = 0;
-	ctx->sibling_capacity = 0;
-	ctx->nr_siblings_prepared = 0;
-
-	rc = cxl_reset_collect_siblings(ctx);
-	if (rc)
-		goto err;
+	ctx->nr_siblings_locked = 0;
 
 	for (i = 0; i < ctx->nr_siblings; i++) {
 		struct pci_dev *sibling = ctx->siblings[i];
 
 		if (!pci_dev_trylock(sibling)) {
-			rc = -EAGAIN;
-			goto err;
+			cxl_pci_functions_reset_done(ctx);
+			return -EAGAIN;
 		}
+
+		ctx->nr_siblings_locked++;
+	}
+
+	return 0;
+}
+
+static int cxl_pci_functions_reset_prepare(struct cxl_reset_context *ctx)
+{
+	int rc, i;
+
+	ctx->nr_siblings_prepared = 0;
+
+	for (i = 0; i < ctx->nr_siblings_locked; i++) {
+		struct pci_dev *sibling = ctx->siblings[i];
 
 		pci_dev_save_and_disable(sibling);
 		rc = pci_dev_reset_iommu_prepare(sibling);
@@ -1469,7 +1498,6 @@ cxl_pci_functions_reset_prepare(struct cxl_reset_context *ctx)
 			 * nr_siblings_prepared and must not get iommu_done().
 			 */
 			pci_dev_restore(sibling);
-			pci_dev_unlock(sibling);
 			goto err;
 		}
 
@@ -1481,6 +1509,79 @@ cxl_pci_functions_reset_prepare(struct cxl_reset_context *ctx)
 err:
 	cxl_pci_functions_reset_done(ctx);
 	return rc;
+}
+
+/*
+ * Restore PCI config space after reset so CXL MMIO is accessible for memdev
+ * restore. Driver reset_done callbacks remain deferred to final cleanup.
+ */
+static void cxl_pci_functions_restore_state(struct cxl_reset_context *ctx)
+{
+	int i;
+
+	for (i = ctx->nr_siblings_prepared - 1; i >= 0; i--)
+		pci_restore_state(ctx->siblings[i]);
+}
+
+static int cxl_pci_target_lock(struct cxl_reset_context *ctx)
+{
+	struct pci_dev *pdev = ctx->target;
+
+	if (!pci_dev_trylock(pdev))
+		return -EAGAIN;
+
+	ctx->target_locked = true;
+	return 0;
+}
+
+static int cxl_pci_target_reset_prepare(struct cxl_reset_context *ctx)
+{
+	struct pci_dev *pdev = ctx->target;
+	int rc;
+
+	/* Disable first to stop new transactions, then drain in-flight ones. */
+	pci_dev_save_and_disable(pdev);
+	ctx->target_saved = true;
+
+	if (!pci_wait_for_pending_transaction(pdev))
+		pci_err(pdev, "timed out waiting for pending transactions\n");
+
+	rc = pci_dev_reset_iommu_prepare(pdev);
+	if (rc) {
+		pci_err(pdev, "failed to block IOMMU for CXL reset: %d\n", rc);
+		return rc;
+	}
+
+	ctx->target_iommu_prepared = true;
+	return 0;
+}
+
+static void cxl_pci_target_restore_state(struct cxl_reset_context *ctx)
+{
+	if (ctx->target_saved)
+		pci_restore_state(ctx->target);
+}
+
+static void cxl_pci_target_reset_done(struct cxl_reset_context *ctx)
+{
+	if (ctx->target_iommu_prepared) {
+		pci_dev_reset_iommu_done(ctx->target);
+		ctx->target_iommu_prepared = false;
+	}
+
+	/*
+	 * cxl_pci_target_restore_state() restores config space before memdev
+	 * restore. Complete PCI reset recovery here with reset_done().
+	 */
+	if (ctx->target_saved) {
+		pci_dev_restore(ctx->target);
+		ctx->target_saved = false;
+	}
+
+	if (ctx->target_locked) {
+		pci_dev_unlock(ctx->target);
+		ctx->target_locked = false;
+	}
 }
 
 static int cxl_reset_update_ctrl2(struct pci_dev *pdev, int dvsec, u16 set,
@@ -1599,7 +1700,7 @@ static int cxl_reset_wait_done(struct pci_dev *pdev, int dvsec, u16 cap)
 	return 0;
 }
 
-static int __maybe_unused cxl_dev_reset(struct pci_dev *pdev, bool mem_clear)
+static int cxl_dev_reset(struct pci_dev *pdev, bool mem_clear)
 {
 	int dvsec, rc;
 	u16 ctrl2_clear = 0;
@@ -1620,19 +1721,9 @@ static int __maybe_unused cxl_dev_reset(struct pci_dev *pdev, bool mem_clear)
 	if (mem_clear && !(cap & PCI_DVSEC_CXL_RST_MEM_CLR_CAPABLE))
 		return -EOPNOTSUPP;
 
-	if (!pci_wait_for_pending_transaction(pdev))
-		pci_err(pdev, "timed out waiting for pending transactions\n");
-
-	rc = pci_dev_reset_iommu_prepare(pdev);
-	if (rc) {
-		pci_err(pdev, "failed to block IOMMU for CXL reset: %d\n",
-			rc);
-		return rc;
-	}
-
 	rc = cxl_reset_disable_cache(pdev, dvsec, cap);
 	if (rc)
-		goto out_iommu;
+		return rc;
 	if (cap & PCI_DVSEC_CXL_CACHE_CAPABLE)
 		ctrl2_clear |= PCI_DVSEC_CXL_DISABLE_CACHING;
 
@@ -1651,7 +1742,7 @@ static int __maybe_unused cxl_dev_reset(struct pci_dev *pdev, bool mem_clear)
 
 	rc = cxl_reset_wait_done(pdev, dvsec, cap);
 	if (rc)
-		goto out_iommu;
+		return rc;
 
 	rc = cxl_reset_update_ctrl2(pdev, dvsec, 0,
 				    PCI_DVSEC_CXL_DISABLE_CACHING);
@@ -1660,7 +1751,218 @@ out_ctrl2:
 	if (rc && ctrl2_clear)
 		cxl_reset_update_ctrl2(pdev, dvsec, 0, ctrl2_clear);
 
-out_iommu:
-	pci_dev_reset_iommu_done(pdev);
+	return rc;
+}
+
+static int cxl_reset_restore_memdev(struct cxl_reset_memdev *rmd)
+{
+	struct cxl_memdev *cxlmd = rmd->cxlmd;
+	int rc;
+
+	if (!rmd->active)
+		return 0;
+
+	rc = cxl_restore_memdev_decoders(cxlmd);
+	if (rc)
+		dev_err(&cxlmd->dev,
+			"Failed to restore CXL.mem decoders after reset: %d\n",
+			rc);
+
+	return rc;
+}
+
+static int cxl_reset_commit_memdev(struct cxl_reset_memdev *rmd)
+{
+	struct cxl_memdev *cxlmd = rmd->cxlmd;
+	int rc;
+
+	if (!rmd->active)
+		return 0;
+
+	rc = cxl_commit_memdev_decoders(cxlmd);
+	if (rc)
+		dev_err(&cxlmd->dev,
+			"Failed to commit CXL.mem decoders after reset: %d\n",
+			rc);
+
+	return rc;
+}
+
+static int cxl_reset_enable_memdev(struct cxl_reset_memdev *rmd)
+{
+	struct cxl_memdev *cxlmd = rmd->cxlmd;
+	struct cxl_dev_state *cxlds = cxlmd->cxlds;
+	int rc;
+
+	if (!rmd->active)
+		return 0;
+
+	cxlds->media_ready = false;
+
+	rc = cxl_set_mem_enable(cxlds, PCI_DVSEC_CXL_MEM_ENABLE);
+	if (rc < 0) {
+		dev_err(&cxlmd->dev,
+			"Failed to enable CXL.mem after reset: %d\n", rc);
+		return rc;
+	}
+
+	rc = cxl_await_media_ready(cxlds);
+	if (rc) {
+		dev_err(&cxlmd->dev,
+			"Media not active after CXL reset: %d\n", rc);
+		return rc;
+	}
+	cxlds->media_ready = true;
+
+	return 0;
+}
+
+static void cxl_reset_disable_memdevs(struct cxl_reset_context *ctx)
+{
+	int rc, i;
+
+	for (i = ctx->nr_memdevs - 1; i >= 0; i--) {
+		struct cxl_memdev *cxlmd = ctx->memdevs[i].cxlmd;
+
+		if (!ctx->memdevs[i].active)
+			continue;
+
+		rc = cxl_set_mem_enable(cxlmd->cxlds, 0);
+		if (rc < 0)
+			dev_err(&cxlmd->dev,
+				"Failed to disable CXL.mem after reset restore failure; device state may be inconsistent: %d\n",
+				rc);
+	}
+}
+
+static int cxl_reset_restore_memdevs(struct cxl_reset_context *ctx)
+{
+	int rc;
+	int i;
+
+	lockdep_assert_held_write(&cxl_rwsem.region);
+
+	for (i = 0; i < ctx->nr_memdevs; i++) {
+		rc = cxl_reset_restore_memdev(&ctx->memdevs[i]);
+		if (rc)
+			return rc;
+	}
+
+	for (i = 0; i < ctx->nr_memdevs; i++) {
+		rc = cxl_reset_commit_memdev(&ctx->memdevs[i]);
+		if (rc)
+			return rc;
+	}
+
+	for (i = 0; i < ctx->nr_memdevs; i++) {
+		rc = cxl_reset_enable_memdev(&ctx->memdevs[i]);
+		if (rc) {
+			cxl_reset_disable_memdevs(ctx);
+			return rc;
+		}
+	}
+
+	return 0;
+}
+
+static void cxl_reset_context_destroy(struct cxl_reset_context *ctx)
+{
+	/*
+	 * LIFO unwind for regular completion and partial initialization:
+	 * memdevs, sibling functions, target function, then references.
+	 * Each cleanup helper tolerates being called after its state was
+	 * already released on an earlier error path.
+	 */
+	cxl_reset_unlock_memdevs(ctx);
+	cxl_pci_functions_reset_done(ctx);
+	cxl_pci_target_reset_done(ctx);
+	cxl_reset_put_memdevs(ctx);
+}
+
+static int cxl_do_reset_locked(struct cxl_reset_context *ctx, bool mem_clear)
+{
+	struct cxl_reset_region_context region_ctx;
+	int rc;
+
+	lockdep_assert_held_write(&cxl_rwsem.region);
+
+	cxl_reset_region_context_init(&region_ctx);
+
+	rc = cxl_reset_collect_regions(ctx, &region_ctx);
+	if (rc)
+		goto out;
+
+	rc = cxl_pci_target_lock(ctx);
+	if (rc)
+		goto out;
+
+	rc = cxl_pci_functions_lock(ctx);
+	if (rc)
+		goto out;
+
+	rc = cxl_reset_lock_memdevs(ctx);
+	if (rc)
+		goto out;
+
+	rc = cxl_reset_cpu_cache_flush_preflight(&region_ctx, NULL);
+	if (rc)
+		goto out;
+
+	rc = cxl_reset_validate_regions_idle(&region_ctx);
+	if (rc)
+		goto out;
+
+	rc = cxl_reset_flush_cpu_caches(&region_ctx);
+	if (rc)
+		goto out;
+
+	rc = cxl_pci_target_reset_prepare(ctx);
+	if (rc)
+		goto out;
+
+	rc = cxl_pci_functions_reset_prepare(ctx);
+	if (rc)
+		goto out;
+
+	rc = cxl_dev_reset(ctx->target, mem_clear);
+
+	cxl_pci_target_restore_state(ctx);
+	cxl_pci_functions_restore_state(ctx);
+
+	if (!rc)
+		rc = cxl_reset_restore_memdevs(ctx);
+
+	cxl_reset_unlock_memdevs(ctx);
+
+out:
+	cxl_reset_region_context_destroy(&region_ctx);
+	return rc;
+}
+
+static int __maybe_unused cxl_do_reset(struct pci_dev *pdev, bool mem_clear)
+{
+	struct cxl_reset_context ctx = {
+		.target = pdev,
+	};
+	int rc;
+
+	/*
+	 * Snapshot the CXL r3.2 9.7 device reset scope before taking
+	 * cxl_rwsem.region. Hot-added functions after this point are not
+	 * coordinated by this reset operation.
+	 */
+	rc = cxl_reset_collect_siblings(&ctx);
+	if (rc)
+		goto out;
+
+	rc = cxl_reset_collect_memdevs(&ctx);
+	if (rc)
+		goto out;
+
+	scoped_guard(rwsem_write, &cxl_rwsem.region)
+		rc = cxl_do_reset_locked(&ctx, mem_clear);
+
+out:
+	cxl_reset_context_destroy(&ctx);
 	return rc;
 }
