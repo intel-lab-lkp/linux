@@ -105,7 +105,8 @@ MODULE_PARM_DESC(disable_pi_offsets,
 	"disable protection information if it has an offset");
 
 /*
- * nvme_wq - hosts nvme related works that are not reset or delete
+ * nvme_wq - hosts nvme related works that are not queue setup, reset or delete
+ * nvme_setup_wq - hosts nvme queue setup works
  * nvme_reset_wq - hosts nvme reset works
  * nvme_delete_wq - hosts nvme delete works
  *
@@ -123,6 +124,9 @@ EXPORT_SYMBOL_GPL(nvme_reset_wq);
 
 struct workqueue_struct *nvme_delete_wq;
 EXPORT_SYMBOL_GPL(nvme_delete_wq);
+
+struct workqueue_struct *nvme_setup_wq;
+EXPORT_SYMBOL_GPL(nvme_setup_wq);
 
 static LIST_HEAD(nvme_subsystems);
 DEFINE_MUTEX(nvme_subsystems_lock);
@@ -5124,10 +5128,14 @@ static int __init nvme_core_init(void)
 	if (!nvme_delete_wq)
 		goto destroy_reset_wq;
 
+	nvme_setup_wq = alloc_workqueue("nvme-setup-wq", wq_flags, 0);
+	if (!nvme_setup_wq)
+		goto destroy_delete_wq;
+
 	result = alloc_chrdev_region(&nvme_ctrl_base_chr_devt, 0,
 			NVME_MINORS, "nvme");
 	if (result < 0)
-		goto destroy_delete_wq;
+		goto destroy_setup_wq;
 
 	result = class_register(&nvme_class);
 	if (result)
@@ -5161,6 +5169,8 @@ destroy_class:
 	class_unregister(&nvme_class);
 unregister_chrdev:
 	unregister_chrdev_region(nvme_ctrl_base_chr_devt, NVME_MINORS);
+destroy_setup_wq:
+	destroy_workqueue(nvme_setup_wq);
 destroy_delete_wq:
 	destroy_workqueue(nvme_delete_wq);
 destroy_reset_wq:
@@ -5179,6 +5189,7 @@ static void __exit nvme_core_exit(void)
 	class_unregister(&nvme_class);
 	unregister_chrdev_region(nvme_ns_chr_devt, NVME_MINORS);
 	unregister_chrdev_region(nvme_ctrl_base_chr_devt, NVME_MINORS);
+	destroy_workqueue(nvme_setup_wq);
 	destroy_workqueue(nvme_delete_wq);
 	destroy_workqueue(nvme_reset_wq);
 	destroy_workqueue(nvme_wq);

@@ -49,6 +49,7 @@ extern unsigned int admin_timeout;
 extern struct workqueue_struct *nvme_wq;
 extern struct workqueue_struct *nvme_reset_wq;
 extern struct workqueue_struct *nvme_delete_wq;
+extern struct workqueue_struct *nvme_setup_wq;
 extern struct mutex nvme_subsystems_lock;
 
 /*
