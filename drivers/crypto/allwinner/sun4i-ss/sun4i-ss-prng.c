@@ -8,7 +8,7 @@ int sun4i_ss_prng_seed(struct crypto_rng *tfm, const u8 *seed,
 	struct rng_alg *alg = crypto_rng_alg(tfm);
 
 	algt = container_of(alg, struct sun4i_ss_alg_template, alg.rng);
-	memcpy(algt->ss->seed, seed, slen);
+	memcpy(algt->ss->seed, seed, min_t(unsigned int, slen, sizeof(algt->ss->seed)));
 
 	return 0;
 }
