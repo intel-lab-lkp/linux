@@ -2766,15 +2766,16 @@ RDMA Interface Files
 
 	The following nested keys are defined.
 
-	  ==========	=============================
+	  ==========	================================================
 	  hca_handle	Maximum number of HCA Handles
 	  hca_object 	Maximum number of HCA Objects
-	  ==========	=============================
+	  mr_mem	Maximum cumulative MR memory size in bytes
+	  ==========	================================================
 
 	An example for mlx4 and ocrdma device follows::
 
-	  mlx4_0 hca_handle=2 hca_object=2000
-	  ocrdma1 hca_handle=3 hca_object=max
+	  mlx4_0 hca_handle=2 hca_object=2000 mr_mem=1073741824
+	  ocrdma1 hca_handle=3 hca_object=max mr_mem=max
 
   rdma.current
 	A read-only file that describes current resource usage.
@@ -2782,8 +2783,8 @@ RDMA Interface Files
 
 	An example for mlx4 and ocrdma device follows::
 
-	  mlx4_0 hca_handle=1 hca_object=20
-	  ocrdma1 hca_handle=1 hca_object=23
+	  mlx4_0 hca_handle=1 hca_object=20 mr_mem=1048576
+	  ocrdma1 hca_handle=1 hca_object=23 mr_mem=0
 
   rdma.peak
 	A read-only nested-keyed file that exists for all the cgroups
@@ -2792,8 +2793,8 @@ RDMA Interface Files
 
 	An example for mlx4 and ocrdma device follows::
 
-	  mlx4_0 hca_handle=1 hca_object=20
-	  ocrdma1 hca_handle=0 hca_object=23
+	  mlx4_0 hca_handle=1 hca_object=20 mr_mem=1048576
+	  ocrdma1 hca_handle=0 hca_object=23 mr_mem=0
 
   rdma.events
 	A read-only nested-keyed file which exists on non-root
@@ -2815,7 +2816,7 @@ RDMA Interface Files
 
 	An example for mlx4 device follows::
 
-	  mlx4_0 hca_handle.max=5 hca_handle.alloc_fail=3 hca_object.max=0 hca_object.alloc_fail=0
+	  mlx4_0 hca_handle.max=5 hca_handle.alloc_fail=3 hca_object.max=0 hca_object.alloc_fail=0 mr_mem.max=0 mr_mem.alloc_fail=0
 
   rdma.events.local
 	Similar to rdma.events but the fields in the file are local
@@ -2836,7 +2837,7 @@ RDMA Interface Files
 
 	An example for mlx4 device follows::
 
-	  mlx4_0 hca_handle.max=5 hca_handle.alloc_fail=0 hca_object.max=0 hca_object.alloc_fail=0
+	  mlx4_0 hca_handle.max=5 hca_handle.alloc_fail=0 hca_object.max=0 hca_object.alloc_fail=0 mr_mem.max=0 mr_mem.alloc_fail=0
 
 DMEM
 ----
