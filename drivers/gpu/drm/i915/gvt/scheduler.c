@@ -68,6 +68,37 @@ static void set_context_pdp_root_pointer(
 		ring_context->pdps[i].val = pdp[7 - i];
 }
 
+static unsigned long
+intel_vgpu_context_page_num(struct intel_vgpu *vgpu,
+			    const struct intel_engine_cs *engine)
+{
+	unsigned long context_page_num;
+
+	context_page_num = engine->context_size >> PAGE_SHIFT;
+
+	if (IS_BROADWELL(vgpu->gvt->gt->i915) && engine->id == RCS0)
+		context_page_num = 19;
+
+	return context_page_num;
+}
+
+static bool
+intel_vgpu_lrca_range_valid(struct intel_vgpu *vgpu,
+			    const struct intel_engine_cs *engine,
+			    u32 lrca)
+{
+	unsigned long context_page_num;
+	u32 max_lrca;
+
+	context_page_num = intel_vgpu_context_page_num(vgpu, engine);
+	if (!context_page_num)
+		return false;
+
+	max_lrca = (U32_MAX >> I915_GTT_PAGE_SHIFT) - (context_page_num - 1);
+
+	return lrca <= max_lrca;
+}
+
 static void update_shadow_pdps(struct intel_vgpu_workload *workload)
 {
 	struct execlist_ring_context *shadow_ring_context;
@@ -1645,6 +1676,12 @@ intel_vgpu_create_workload(struct intel_vgpu *vgpu,
 	u32 head, tail, start, ctl, ctx_ctl, per_ctx, indirect_ctx;
 	u32 guest_head;
 	int ret;
+
+	if (!intel_vgpu_lrca_range_valid(vgpu, engine, desc->lrca)) {
+		gvt_vgpu_err("invalid guest context LRCA: 0x%x\n",
+			     desc->lrca);
+		return ERR_PTR(-EINVAL);
+	}
 
 	ring_context_gpa = intel_vgpu_gma_to_gpa(vgpu->gtt.ggtt_mm,
 			(u32)((desc->lrca + 1) << I915_GTT_PAGE_SHIFT));
