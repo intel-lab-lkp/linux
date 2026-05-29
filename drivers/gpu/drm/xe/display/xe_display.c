@@ -394,8 +394,11 @@ void xe_display_pm_runtime_suspend_late(struct xe_device *xe)
 	if (!xe->info.probe_display)
 		return;
 
-	if (xe->d3cold.allowed)
+	if (xe->d3cold.allowed) {
 		xe_display_pm_suspend_late(xe);
+		intel_dmc_wl_flush_release_work(display);
+		return;
+	}
 
 	/*
 	 * If xe_display_pm_suspend_late() is not called, it is likely
