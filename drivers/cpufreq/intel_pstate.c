@@ -404,17 +404,15 @@ static void intel_pstate_set_itmt_prio(int cpu)
 
 static int intel_pstate_get_cppc_guaranteed(int cpu)
 {
-	struct cppc_perf_caps cppc_perf;
+	u64 guaranteed_perf;
 	int ret;
 
-	ret = cppc_get_perf_caps(cpu, &cppc_perf);
+	ret = cppc_get_effective_guaranteed_perf(cpu, &guaranteed_perf);
+
 	if (ret)
 		return ret;
 
-	if (cppc_perf.guaranteed_perf)
-		return cppc_perf.guaranteed_perf;
-
-	return cppc_perf.nominal_perf;
+	return guaranteed_perf;
 }
 
 static int intel_pstate_cppc_get_scaling(int cpu)

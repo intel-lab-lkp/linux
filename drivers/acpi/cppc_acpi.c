@@ -1329,6 +1329,32 @@ int cppc_get_highest_perf(int cpunum, u64 *highest_perf)
 EXPORT_SYMBOL_GPL(cppc_get_highest_perf);
 
 /**
+ * cppc_get_effective_guaranteed_perf - get effective guaranteed performance
+ * @cpunum: CPU number
+ * @guaranteed_perf: Effective guaranteed performance value
+ *
+ * The ACPI CPPC specification states that if the Guaranteed
+ * Performance register is not implemented, OSPM assumes the
+ * guaranteed performance is equal to nominal performance.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+int cppc_get_effective_guaranteed_perf(int cpunum, u64 *guaranteed_perf)
+{
+	struct cppc_perf_caps perf_caps;
+	int ret;
+
+	ret = cppc_get_perf_caps(cpunum, &perf_caps);
+	if (ret)
+		return ret;
+	*guaranteed_perf = perf_caps.guaranteed_perf ?:
+			   perf_caps.nominal_perf;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(cppc_get_effective_guaranteed_perf);
+
+/**
  * cppc_get_epp_perf - Get the epp register value.
  * @cpunum: CPU from which to get epp preference value.
  * @epp_perf: Return address.
