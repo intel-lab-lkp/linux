@@ -6,7 +6,6 @@
 #include <linux/irq.h>
 
 typedef struct {
-	unsigned int __softirq_pending;
 	unsigned int timer_irqs_event;
 	unsigned int broadcast_irqs_event;
 	unsigned int timer_irqs_others;
@@ -23,6 +22,8 @@ typedef struct {
 } ____cacheline_aligned irq_cpustat_t;
 
 DECLARE_PER_CPU_SHARED_ALIGNED(irq_cpustat_t, irq_stat);
+DECLARE_PER_CPU(unsigned int, __softirq_pending);
+#define local_softirq_pending_ref       __softirq_pending
 
 #define __ARCH_IRQ_STAT
 #define __ARCH_IRQ_EXIT_IRQS_DISABLED
