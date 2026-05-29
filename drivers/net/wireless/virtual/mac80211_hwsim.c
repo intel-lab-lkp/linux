@@ -2793,6 +2793,7 @@ mac80211_hwsim_sta_rc_update(struct ieee80211_hw *hw,
 	for (link_id = 0;
 	     link_id < ARRAY_SIZE(vif->link_conf);
 	     link_id++) {
+		u32 confbw_mhz = 20;
 		enum nl80211_chan_width confbw = NL80211_CHAN_WIDTH_20_NOHT;
 		struct ieee80211_bss_conf *vif_conf;
 
@@ -2826,10 +2827,17 @@ mac80211_hwsim_sta_rc_update(struct ieee80211_hw *hw,
 				confbw = chanctx_conf->def.width;
 		}
 
-		WARN(bw > hwsim_get_chanwidth(confbw),
+		/*
+		 * ieee80211_sta_rx_bandwidth does not represent sub-20 MHz
+		 * channels, so treat 5/10 MHz channel contexts as 20 MHz when
+		 * validating the link bandwidth.
+		 */
+		confbw_mhz = max_t(u32, confbw_mhz, hwsim_get_chanwidth(confbw));
+
+		WARN(bw > confbw_mhz,
 		     "intf %pM [link=%d]: bad STA %pM bandwidth %d MHz (%d) > channel config %d MHz (%d)\n",
 		     vif->addr, link_id, sta->addr, bw, sta->deflink.bandwidth,
-		     hwsim_get_chanwidth(data->bw), data->bw);
+		     hwsim_get_chanwidth(confbw), confbw);
 
 
 	}
