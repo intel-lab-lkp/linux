@@ -185,6 +185,11 @@ int hfs_mdb_get(struct super_block *sb)
 		sb->s_flags |= SB_RDONLY;
 	}
 
+	if (be16_to_cpu(mdb->drVBMSt) <= HFS_MDB_BLK) {
+		pr_err("volume bitmap overlaps MDB\n");
+		return -EIO;
+	}
+
 	/* TRY to get the alternate (backup) MDB. */
 	sect = part_start + part_size - 2;
 	bh = sb_bread512(sb, sect, mdb2);
@@ -341,6 +346,11 @@ void hfs_mdb_commit(struct super_block *sb)
 		size = (HFS_SB(sb)->fs_ablocks + 7) / 8;
 		ptr = (u8 *)HFS_SB(sb)->bitmap;
 		while (size) {
+			if (unlikely(block == HFS_SB(sb)->mdb_bh->b_blocknr)) {
+				pr_err("volume bitmap overlaps MDB, forcing read-only\n");
+				sb->s_flags |= SB_RDONLY;
+				break;
+			}
 			bh = sb_bread(sb, block);
 			if (!bh) {
 				pr_err("unable to read volume bitmap\n");
