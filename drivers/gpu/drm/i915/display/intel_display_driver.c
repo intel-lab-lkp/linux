@@ -686,6 +686,17 @@ int intel_display_driver_pm_suspend(struct intel_display *display)
 	if (!HAS_DISPLAY(display))
 		return 0;
 
+	/*
+	 * We do a lot of poking in a lot of registers, make sure they work
+	 * properly.
+	 */
+	intel_display_power_disable(display);
+
+	drm_client_dev_suspend(display->drm);
+
+	drm_kms_helper_poll_disable(display->drm);
+	intel_display_driver_disable_user_access(display);
+
 	state = drm_atomic_helper_suspend(display->drm);
 	ret = PTR_ERR_OR_ZERO(state);
 	if (ret)
