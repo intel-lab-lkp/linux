@@ -846,7 +846,9 @@ static int tsl2583_probe(struct i2c_client *clientp)
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->name = chip->client->name;
 
-	pm_runtime_enable(&clientp->dev);
+	ret = devm_pm_runtime_enable(&clientp->dev);
+	if (ret)
+		return ret;
 	pm_runtime_set_autosuspend_delay(&clientp->dev,
 					 TSL2583_POWER_OFF_DELAY_MS);
 	pm_runtime_use_autosuspend(&clientp->dev);
@@ -873,8 +875,6 @@ static void tsl2583_remove(struct i2c_client *client)
 
 	iio_device_unregister(indio_dev);
 
-	pm_runtime_disable(&client->dev);
-	pm_runtime_set_suspended(&client->dev);
 
 	tsl2583_set_power_state(chip, TSL2583_CNTL_PWR_OFF);
 }
