@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/uaccess.h>
+#include <linux/string.h>
 
 __rust_helper unsigned long
 rust_helper_copy_from_user(void *to, const void __user *from, unsigned long n)
@@ -27,3 +28,9 @@ unsigned long rust_helper__copy_to_user(void __user *to, const void *from, unsig
 	return _inline_copy_to_user(to, from, n);
 }
 #endif
+
+__rust_helper
+void *rust_helper_memchr(const void *s, int c, size_t n)
+{
+	return __builtin_memchr(s, c, n);
+}
