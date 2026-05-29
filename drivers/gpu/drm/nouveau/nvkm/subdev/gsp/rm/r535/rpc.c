@@ -204,6 +204,14 @@ r535_gsp_msgq_get_entry(struct nvkm_gsp *gsp)
  *   The user is responsible for freeing the memory allocated for the GSP
  *   message pages after they have been processed.
  */
+/**
+ * r535_gsp_msgq_peek() - Peek at a GSP message queue element
+ * @gsp: GSP device
+ * @gsp_rpc_len: expected RPC length
+ * @retries: retry counter
+ *
+ * Return: ERR_PTR on error, valid pointer on success, never NULL
+ */
 static void *
 r535_gsp_msgq_peek(struct nvkm_gsp *gsp, u32 gsp_rpc_len, int *retries)
 {
@@ -229,6 +237,13 @@ struct r535_gsp_msg_info {
 static void
 r535_gsp_msg_dump(struct nvkm_gsp *gsp, struct nvfw_gsp_rpc *msg, int lvl);
 
+/**
+ * r535_gsp_msgq_recv_one_elem() - Receive one GSP message queue element
+ * @gsp: GSP device
+ * @info: message queue receive information
+ *
+ * Return: ERR_PTR on error, valid pointer on success, never NULL
+ */
 static void *
 r535_gsp_msgq_recv_one_elem(struct nvkm_gsp *gsp,
 			    struct r535_gsp_msg_info *info)
@@ -283,6 +298,14 @@ r535_gsp_msgq_recv_one_elem(struct nvkm_gsp *gsp,
 	return buf;
 }
 
+/**
+ * r535_gsp_msgq_recv() - Receive a complete GSP message from the message queue
+ * @gsp: GSP device
+ * @gsp_rpc_len: expected RPC length
+ * @retries: retry counter
+ *
+ * Return: ERR_PTR on error, valid pointer on success, never NULL
+ */
 static void *
 r535_gsp_msgq_recv(struct nvkm_gsp *gsp, u32 gsp_rpc_len, int *retries)
 {
@@ -450,6 +473,14 @@ r535_gsp_msg_dump(struct nvkm_gsp *gsp, struct nvfw_gsp_rpc *msg, int lvl)
 	}
 }
 
+/**
+ * r535_gsp_msg_recv() - Receive and validate a GSP RPC message
+ * @gsp: GSP device
+ * @fn: expected function number (0 to skip validation)
+ * @gsp_rpc_len: expected RPC length
+ *
+ * Return: ERR_PTR on error or validation failure, valid pointer on success, never NULL
+ */
 struct nvfw_gsp_rpc *
 r535_gsp_msg_recv(struct nvkm_gsp *gsp, int fn, u32 gsp_rpc_len)
 {
@@ -609,6 +640,14 @@ r535_gsp_rpc_done(struct nvkm_gsp *gsp, void *repv)
 	r535_gsp_msg_done(gsp, rpc);
 }
 
+/**
+ * r535_gsp_rpc_get() - Allocate and initialize a GSP RPC message
+ * @gsp: GSP device
+ * @fn: RPC function number
+ * @payload_size: size of the RPC payload
+ *
+ * Return: ERR_PTR on error, valid pointer on success, never NULL
+ */
 static void *
 r535_gsp_rpc_get(struct nvkm_gsp *gsp, u32 fn, u32 payload_size)
 {
