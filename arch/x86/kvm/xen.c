@@ -153,21 +153,11 @@ static int xen_get_guest_pvclock(struct kvm_vcpu *vcpu,
 				 struct gfn_to_pfn_cache *gpc,
 				 unsigned int offset)
 {
-	int r;
+	CLASS(gpc_map_local_ro, pvclock_map)(gpc, offset + sizeof(*hv_clock));
+	if (IS_ERR(pvclock_map))
+		return PTR_ERR(pvclock_map);
 
-	read_lock(&gpc->lock);
-	while (!kvm_gpc_check(gpc, offset + sizeof(*hv_clock))) {
-		read_unlock(&gpc->lock);
-
-		r = kvm_gpc_refresh(gpc, offset + sizeof(*hv_clock));
-		if (r)
-			return r;
-
-		read_lock(&gpc->lock);
-	}
-
-	memcpy(hv_clock, gpc->khva + offset, sizeof(*hv_clock));
-	read_unlock(&gpc->lock);
+	memcpy(hv_clock, *pvclock_map + offset, sizeof(*hv_clock));
 
 	/*
 	 * Sanity check TSC shift+multiplier to verify the guest's view of time
