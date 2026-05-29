@@ -524,13 +524,17 @@ static int unshare_pfn_hyp(u64 pfn)
 		goto unlock;
 	}
 
-	this->count--;
-	if (this->count)
+	if (this->count > 1) {
+		this->count--;
+		goto unlock;
+	}
+
+	ret = kvm_call_hyp_nvhe(__pkvm_host_unshare_hyp, pfn);
+	if (ret)
 		goto unlock;
 
 	rb_erase(&this->node, &hyp_shared_pfns);
 	kfree(this);
-	ret = kvm_call_hyp_nvhe(__pkvm_host_unshare_hyp, pfn);
 unlock:
 	mutex_unlock(&hyp_shared_pfns_lock);
 
