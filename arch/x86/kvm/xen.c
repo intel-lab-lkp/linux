@@ -1438,7 +1438,9 @@ static bool wait_pending_event(struct kvm_vcpu *vcpu, int nr_ports,
 
 	guard(srcu)(&kvm->srcu);
 
-	read_lock(&gpc->lock);
+	if (!read_trylock(&gpc->lock))
+		return ret;
+
 	if (!kvm_gpc_check(gpc, PAGE_SIZE))
 		goto out_rcu;
 
