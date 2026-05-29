@@ -678,20 +678,24 @@ static bool swapin_zswap_admit(swp_entry_t entry,
 static unsigned long swapin_admit_orders(swp_entry_t entry,
 					 unsigned long orders,
 					 struct vm_fault *vmf,
-					 unsigned long locality_orders)
+					 unsigned long locality_orders,
+					 bool zswap_only)
 {
 	unsigned long candidates = orders & ~BIT(0);
-	unsigned long admitted = orders & BIT(0);
+	unsigned long admitted = zswap_only ? 0 : orders & BIT(0);
+	enum zswap_range_state fault_zswap_state = ZSWAP_RANGE_NEVER_ENABLED;
 	struct zswap_admit_ctx zswap_ctx = {};
+	bool fault_zswap_checked = false;
 	int order;
 
 	if (!candidates)
-		return orders;
+		return zswap_only ? 0 : orders;
 
 	while (candidates) {
 		enum zswap_range_state state;
 		unsigned int nr_pages;
 		swp_entry_t range_entry;
+		bool zswap_locality;
 		bool admit = false;
 
 		order = fls_long(candidates) - 1;
@@ -703,6 +707,29 @@ static unsigned long swapin_admit_orders(swp_entry_t entry,
 		nr_pages = 1U << order;
 		range_entry = swp_entry(swp_type(entry),
 					round_down(swp_offset(entry), nr_pages));
+		zswap_locality = order <= SWAPIN_ZSWAP_MAX_ORDER &&
+				 swapin_zswap_locality(vmf, order,
+						       locality_orders);
+		/*
+		 * If the faulting slot is already in zswap but this order has
+		 * no zswap locality evidence, a larger range covering the fault
+		 * cannot be admitted: it is either all-zswap or mixed, and both
+		 * require zswap locality. Avoid scanning the whole range on
+		 * sparse/random zswap refaults. If the faulting slot is not in
+		 * zswap, keep the full classification so all-disk large swapin
+		 * can follow the existing policy.
+		 */
+		if (!zswap_locality) {
+			if (zswap_only)
+				goto next;
+			if (!fault_zswap_checked) {
+				fault_zswap_state = zswap_probe_range(entry, 1);
+				fault_zswap_checked = true;
+			}
+			if (fault_zswap_state == ZSWAP_RANGE_ALL_ZSWAP)
+				goto next;
+		}
+
 		if (!swapin_zeromap_same(range_entry, nr_pages))
 			goto next;
 
@@ -718,7 +745,7 @@ static unsigned long swapin_admit_orders(swp_entry_t entry,
 			break;
 		case ZSWAP_RANGE_NEVER_ENABLED:
 		case ZSWAP_RANGE_NO_ZSWAP:
-			admit = true;
+			admit = !zswap_only;
 			break;
 		}
 
@@ -730,21 +757,32 @@ next:
 		candidates &= ~BIT(order);
 	}
 
-	return admitted ? admitted : BIT(0);
+	return admitted ? admitted : (zswap_only ? 0 : BIT(0));
 }
 
-static bool zswap_needs_order0_retry(struct folio *folio)
+static bool zswap_folio_all_zswap(struct folio *folio)
 {
+	return zswap_probe_range(folio->swap, folio_nr_pages(folio)) ==
+	       ZSWAP_RANGE_ALL_ZSWAP;
+}
+
+static bool zswap_needs_fallback(struct folio *folio, bool zswap_only)
+{
+	enum zswap_range_state state;
+
 	if (!folio_test_large(folio))
 		return false;
+
+	state = zswap_probe_range(folio->swap, folio_nr_pages(folio));
+	if (zswap_only)
+		return state != ZSWAP_RANGE_ALL_ZSWAP;
 
 	/*
 	 * Admission sees only an advisory zswap snapshot. Recheck after the
 	 * large swapcache folio is installed; if the range became mixed, drop
 	 * the fresh folio before IO and let order-0 handle each slot.
 	 */
-	return zswap_probe_range(folio->swap, folio_nr_pages(folio)) ==
-	       ZSWAP_RANGE_MIXED;
+	return state == ZSWAP_RANGE_MIXED;
 }
 
 /*
@@ -758,8 +796,7 @@ bool swapin_fault_only_young(struct folio *folio)
 	if (!folio_test_large(folio) || !folio_test_swapcache(folio))
 		return false;
 
-	return zswap_probe_range(folio->swap, folio_nr_pages(folio)) ==
-	       ZSWAP_RANGE_ALL_ZSWAP;
+	return zswap_folio_all_zswap(folio);
 }
 
 /*
@@ -893,6 +930,58 @@ static struct folio *swap_cache_read_folio(swp_entry_t entry, gfp_t gfp,
 	return folio;
 }
 
+static struct folio *swapin_alloc_read(swp_entry_t entry, gfp_t gfp,
+				       unsigned long orders,
+				       struct vm_fault *vmf,
+				       struct mempolicy *mpol, pgoff_t ilx,
+				       bool retry_order0, bool zswap_only)
+{
+	struct folio *folio;
+	int ret;
+
+again:
+	do {
+		folio = swap_cache_get_folio(entry);
+		if (folio)
+			return folio;
+		folio = swap_cache_alloc_speculative_folio(entry, gfp, orders,
+							   vmf, mpol, ilx);
+	} while (PTR_ERR(folio) == -EEXIST);
+
+	if (IS_ERR(folio))
+		return retry_order0 ? folio : NULL;
+
+	if (zswap_needs_fallback(folio, zswap_only)) {
+		count_mthp_stat(folio_order(folio), MTHP_STAT_SWPIN_FALLBACK);
+		/*
+		 * The folio is newly allocated, locked, clean and not uptodate;
+		 * no data has been read into it. Removing it only restores the
+		 * swap table entries so the fallback path can resolve a backend
+		 * race without attempting speculative large-folio zswapin.
+		 */
+		swap_cache_del_folio(folio);
+		folio_unlock(folio);
+		folio_put(folio);
+		if (!retry_order0)
+			return NULL;
+		orders = BIT(0);
+		goto again;
+	}
+
+	ret = swap_read_folio(folio, NULL);
+	if (ret == -EAGAIN) {
+		count_mthp_stat(folio_order(folio), MTHP_STAT_SWPIN_FALLBACK);
+		swap_cache_del_folio(folio);
+		folio_unlock(folio);
+		folio_put(folio);
+		if (!retry_order0)
+			return NULL;
+		orders = BIT(0);
+		goto again;
+	}
+	return folio;
+}
+
 /**
  * swapin_sync - swap-in one or multiple entries skipping readahead.
  * @entry: swap entry indicating the target slot
@@ -917,47 +1006,28 @@ struct folio *swapin_sync(swp_entry_t entry, gfp_t gfp,
 			  struct vm_fault *vmf, struct mempolicy *mpol,
 			  pgoff_t ilx)
 {
-	struct folio *folio;
-	int ret;
+	orders = swapin_admit_orders(entry, orders, vmf,
+				     locality_orders, false);
+	return swapin_alloc_read(entry, gfp, orders, vmf, mpol, ilx,
+				 true, false);
+}
 
-	orders = swapin_admit_orders(entry, orders, vmf, locality_orders);
-again:
-	do {
-		folio = swap_cache_get_folio(entry);
-		if (folio)
-			return folio;
-		folio = swap_cache_alloc_speculative_folio(entry, gfp, orders,
-							   vmf, mpol, ilx);
-	} while (PTR_ERR(folio) == -EEXIST);
+static struct folio *swapin_zswap_large(swp_entry_t entry, gfp_t gfp,
+					unsigned long orders,
+					unsigned long locality_orders,
+					struct vm_fault *vmf,
+					struct mempolicy *mpol, pgoff_t ilx)
+{
+	if (READ_ONCE(page_cluster) <= 0)
+		return NULL;
 
-	if (IS_ERR(folio))
-		return folio;
+	orders = swapin_admit_orders(entry, orders, vmf,
+				     locality_orders, true);
+	if (!orders)
+		return NULL;
 
-	if (zswap_needs_order0_retry(folio)) {
-		count_mthp_stat(folio_order(folio), MTHP_STAT_SWPIN_FALLBACK);
-		/*
-		 * The folio is newly allocated, locked, clean and not uptodate;
-		 * no data has been read into it. Removing it only restores the
-		 * swap table entries so order-0 swapin can resolve a backend
-		 * race without attempting speculative large-folio zswapin.
-		 */
-		swap_cache_del_folio(folio);
-		folio_unlock(folio);
-		folio_put(folio);
-		orders = BIT(0);
-		goto again;
-	}
-
-	ret = swap_read_folio(folio, NULL);
-	if (ret == -EAGAIN) {
-		count_mthp_stat(folio_order(folio), MTHP_STAT_SWPIN_FALLBACK);
-		swap_cache_del_folio(folio);
-		folio_unlock(folio);
-		folio_put(folio);
-		orders = BIT(0);
-		goto again;
-	}
-	return folio;
+	return swapin_alloc_read(entry, gfp, orders, vmf, mpol, ilx,
+				 false, true);
 }
 
 /*
@@ -1048,12 +1118,88 @@ static unsigned long swapin_nr_pages(unsigned long offset)
 	return pages;
 }
 
+struct swap_cluster_ra {
+	unsigned long start_offset;
+	unsigned long end_offset;
+	bool readahead;
+};
+
+static void swap_cluster_ra_prepare(swp_entry_t entry,
+				    struct swap_cluster_ra *ra)
+{
+	struct swap_info_struct *si = __swap_entry_to_info(entry);
+	unsigned long entry_offset = swp_offset(entry);
+	unsigned long mask;
+
+	mask = swapin_nr_pages(entry_offset) - 1;
+	ra->readahead = !!mask;
+	ra->start_offset = entry_offset;
+	ra->end_offset = entry_offset;
+	if (!mask)
+		return;
+
+	/* Read a page_cluster sized and aligned cluster around offset. */
+	ra->start_offset = entry_offset & ~mask;
+	ra->end_offset = entry_offset | mask;
+	if (!ra->start_offset)	/* First page is swap header. */
+		ra->start_offset++;
+	if (ra->end_offset >= si->max)
+		ra->end_offset = si->max - 1;
+}
+
+static unsigned long swap_cluster_ra_orders(swp_entry_t entry,
+					    unsigned long orders,
+					    const struct swap_cluster_ra *ra)
+{
+	unsigned long admitted = 0;
+	unsigned long candidates = orders & ~BIT(0);
+	unsigned long entry_offset = swp_offset(entry);
+	int order;
+
+	if (!ra->readahead)
+		return 0;
+
+	while (candidates) {
+		unsigned long nr_pages;
+		unsigned long start_offset;
+		unsigned long end_offset;
+
+		order = fls_long(candidates) - 1;
+		if (order > MAX_PAGE_ORDER) {
+			candidates &= ~BIT(order);
+			continue;
+		}
+
+		nr_pages = 1UL << order;
+		start_offset = round_down(entry_offset, nr_pages);
+		end_offset = start_offset + nr_pages - 1;
+		if (start_offset >= ra->start_offset &&
+		    end_offset <= ra->end_offset)
+			admitted |= BIT(order);
+		candidates &= ~BIT(order);
+	}
+
+	return admitted;
+}
+
+static bool swapin_readahead_skip(unsigned long index,
+				  unsigned long skip_start,
+				  unsigned long skip_end)
+{
+	return skip_start < skip_end &&
+	       index >= skip_start && index < skip_end;
+}
+
 /**
- * swap_cluster_readahead - swap in pages in hope we need them soon
+ * swap_cluster_readahead_win - swap in pages from a prepared swap window
  * @entry: swap entry of this memory
  * @gfp_mask: memory allocation flags
  * @mpol: NUMA memory allocation policy to be applied
  * @ilx: NUMA interleave index, for use only when MPOL_INTERLEAVE
+ * @ra: readahead window prepared by swap_cluster_ra_prepare()
+ * @skip_start: first offset already covered by @target_folio
+ * @skip_end: offset after the already covered range
+ * @target_folio: target folio to return after queueing the rest of the window
  *
  * Returns the struct folio for entry and addr, after queueing swapin.
  *
@@ -1066,33 +1212,38 @@ static unsigned long swapin_nr_pages(unsigned long offset)
  * are used for every page of the readahead: neighbouring pages on swap
  * are fairly likely to have been swapped out from the same node.
  */
-struct folio *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
-				     struct mempolicy *mpol, pgoff_t ilx)
+static struct folio *swap_cluster_readahead_win(swp_entry_t entry,
+						gfp_t gfp_mask,
+						struct mempolicy *mpol,
+						pgoff_t ilx,
+						const struct swap_cluster_ra *ra,
+						unsigned long skip_start,
+						unsigned long skip_end,
+						struct folio *target_folio)
 {
 	struct folio *folio;
 	unsigned long entry_offset = swp_offset(entry);
-	unsigned long offset = entry_offset;
-	unsigned long start_offset, end_offset;
-	unsigned long mask;
-	struct swap_info_struct *si = __swap_entry_to_info(entry);
+	unsigned long offset;
 	struct blk_plug plug;
 	struct swap_iocb *splug = NULL;
 	swp_entry_t ra_entry;
 
-	mask = swapin_nr_pages(offset) - 1;
-	if (!mask)
+	if (!ra->readahead)
 		goto skip;
 
-	/* Read a page_cluster sized and aligned cluster around offset. */
-	start_offset = offset & ~mask;
-	end_offset = offset | mask;
-	if (!start_offset)	/* First page is swap header. */
-		start_offset++;
-	if (end_offset >= si->max)
-		end_offset = si->max - 1;
+	if (target_folio &&
+	    skip_start <= ra->start_offset && skip_end > ra->end_offset)
+		goto skip;
 
 	blk_start_plug(&plug);
-	for (offset = start_offset; offset <= end_offset ; offset++) {
+	for (offset = ra->start_offset; offset <= ra->end_offset; offset++) {
+		if (swapin_readahead_skip(offset, skip_start, skip_end)) {
+			if (skip_end > ra->end_offset)
+				break;
+			offset = skip_end - 1;
+			continue;
+		}
+
 		/* Ok, do the async read-ahead now */
 		ra_entry = swp_entry(swp_type(entry), offset);
 		folio = swap_cache_read_folio(ra_entry, gfp_mask, mpol, ilx,
@@ -1105,9 +1256,28 @@ struct folio *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
 	swap_read_unplug(splug);
 	lru_add_drain();	/* Push any new pages onto the LRU now */
 skip:
+	if (target_folio)
+		return target_folio;
+
 	/* The page was likely read above, so no need for plugging here */
 	return swap_cache_read_folio(entry, gfp_mask, mpol, ilx, NULL, false);
 }
+
+struct folio *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
+				     struct mempolicy *mpol, pgoff_t ilx)
+{
+	struct swap_cluster_ra ra;
+
+	swap_cluster_ra_prepare(entry, &ra);
+	return swap_cluster_readahead_win(entry, gfp_mask, mpol, ilx, &ra,
+					 0, 0, NULL);
+}
+
+struct swap_vma_ra {
+	unsigned long start;
+	unsigned long end;
+	int win;
+};
 
 static int swap_vma_ra_win(struct vm_fault *vmf, unsigned long *start,
 			   unsigned long *end)
@@ -1147,35 +1317,69 @@ static int swap_vma_ra_win(struct vm_fault *vmf, unsigned long *start,
 	return win;
 }
 
-/**
- * swap_vma_readahead - swap in pages in hope we need them soon
- * @targ_entry: swap entry of the targeted memory
- * @gfp_mask: memory allocation flags
- * @mpol: NUMA memory allocation policy to be applied
- * @targ_ilx: NUMA interleave index, for use only when MPOL_INTERLEAVE
- * @vmf: fault information
- *
- * Returns the struct folio for entry and addr, after queueing swapin.
- *
- * Primitive swap readahead code. We simply read in a few pages whose
- * virtual addresses are around the fault address in the same vma.
- *
- * Caller must hold read mmap_lock if vmf->vma is not NULL.
- *
+static unsigned long swap_vma_ra_orders(struct vm_fault *vmf,
+					unsigned long orders,
+					const struct swap_vma_ra *ra)
+{
+	unsigned long admitted = 0;
+	unsigned long candidates = orders & ~BIT(0);
+	int order;
+
+	if (ra->win <= 1)
+		return 0;
+
+	while (candidates) {
+		unsigned long size;
+		unsigned long start;
+		unsigned long end;
+
+		order = fls_long(candidates) - 1;
+		if (order > MAX_PAGE_ORDER) {
+			candidates &= ~BIT(order);
+			continue;
+		}
+
+		size = PAGE_SIZE << order;
+		start = ALIGN_DOWN(vmf->address, size);
+		end = start + size;
+		if (start >= ra->start && end <= ra->end)
+			admitted |= BIT(order);
+		candidates &= ~BIT(order);
+	}
+
+	return admitted;
+}
+
+/*
+ * Queue swapin for a precomputed VMA readahead window. The window has already
+ * been accounted in vma->swap_readahead_info, so fallback after a failed
+ * zswap-large attempt does not update readahead state a second time. If
+ * @target_folio is already populated, queue only the part of the window outside
+ * [@skip_start, @skip_end) and return @target_folio.
  */
-static struct folio *swap_vma_readahead(swp_entry_t targ_entry, gfp_t gfp_mask,
-		struct mempolicy *mpol, pgoff_t targ_ilx, struct vm_fault *vmf)
+static struct folio *swap_vma_readahead_win(swp_entry_t targ_entry,
+					    gfp_t gfp_mask,
+					    struct mempolicy *mpol,
+					    pgoff_t targ_ilx,
+					    struct vm_fault *vmf,
+					    const struct swap_vma_ra *ra,
+					    unsigned long skip_start,
+					    unsigned long skip_end,
+					    struct folio *target_folio)
 {
 	struct blk_plug plug;
 	struct swap_iocb *splug = NULL;
 	struct folio *folio;
 	pte_t *pte = NULL, pentry;
-	int win;
 	unsigned long start, end, addr;
 	pgoff_t ilx = targ_ilx;
 
-	win = swap_vma_ra_win(vmf, &start, &end);
-	if (win == 1)
+	if (ra->win <= 1)
+		goto skip;
+
+	start = ra->start;
+	end = ra->end;
+	if (target_folio && skip_start <= start && skip_end >= end)
 		goto skip;
 
 	ilx = targ_ilx - PFN_DOWN(vmf->address - start);
@@ -1184,6 +1388,18 @@ static struct folio *swap_vma_readahead(swp_entry_t targ_entry, gfp_t gfp_mask,
 	for (addr = start; addr < end; ilx++, addr += PAGE_SIZE) {
 		struct swap_info_struct *si = NULL;
 		softleaf_t entry;
+
+		if (swapin_readahead_skip(addr, skip_start, skip_end)) {
+			unsigned long next = min(skip_end, end);
+
+			if (pte) {
+				pte_unmap(pte);
+				pte = NULL;
+			}
+			ilx += PFN_DOWN(next - addr) - 1;
+			addr = next - PAGE_SIZE;
+			continue;
+		}
 
 		if (!pte++) {
 			pte = pte_offset_map(vmf->pmd, addr);
@@ -1220,6 +1436,9 @@ static struct folio *swap_vma_readahead(swp_entry_t targ_entry, gfp_t gfp_mask,
 	swap_read_unplug(splug);
 	lru_add_drain();
 skip:
+	if (target_folio)
+		return target_folio;
+
 	/* The folio was likely read above, so no need for plugging here */
 	folio = swap_cache_read_folio(targ_entry, gfp_mask, mpol, targ_ilx,
 				      NULL, false);
@@ -1230,25 +1449,78 @@ skip:
  * swapin_readahead - swap in pages in hope we need them soon
  * @entry: swap entry of this memory
  * @gfp_mask: memory allocation flags
+ * @orders: large folio orders suitable for the faulting entry
  * @vmf: fault information
  *
  * Returns the struct folio for entry and addr, after queueing swapin.
  *
- * It's a main entry function for swap readahead. By the configuration,
- * it will read ahead blocks by cluster-based(ie, physical disk based)
- * or vma-based(ie, virtual address based on faulty address) readahead.
+ * This first computes the normal VMA or cluster readahead window. If the
+ * window fully covers an aligned all-zswap range containing the fault, that
+ * range may be swapped in as one large folio. The remaining window is still
+ * queued through the original order-0 readahead path, skipping the already
+ * covered target range and without updating readahead state a second time.
  */
 struct folio *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
-				struct vm_fault *vmf)
+				unsigned long orders, struct vm_fault *vmf)
 {
 	struct mempolicy *mpol;
 	pgoff_t ilx;
 	struct folio *folio;
+	unsigned long ra_orders;
+	bool vma_ra;
 
 	mpol = get_vma_policy(vmf->vma, vmf->address, 0, &ilx);
-	folio = swap_use_vma_readahead() ?
-		swap_vma_readahead(entry, gfp_mask, mpol, ilx, vmf) :
-		swap_cluster_readahead(entry, gfp_mask, mpol, ilx);
+	vma_ra = swap_use_vma_readahead();
+	if (vma_ra) {
+		struct swap_vma_ra ra = {};
+		unsigned long skip_start = 0;
+		unsigned long skip_end = 0;
+
+		ra.win = swap_vma_ra_win(vmf, &ra.start, &ra.end);
+		ra_orders = swap_vma_ra_orders(vmf, orders, &ra);
+		if (ra_orders) {
+			folio = swapin_zswap_large(entry, gfp_mask, ra_orders,
+						   ra_orders, vmf, mpol, ilx);
+			if (folio) {
+				skip_start = ALIGN_DOWN(vmf->address,
+							folio_size(folio));
+				skip_end = skip_start + folio_size(folio);
+				folio = swap_vma_readahead_win(entry, gfp_mask,
+							       mpol, ilx, vmf,
+							       &ra, skip_start,
+							       skip_end, folio);
+				goto out;
+			}
+		}
+		folio = swap_vma_readahead_win(entry, gfp_mask, mpol, ilx,
+					       vmf, &ra, 0, 0, NULL);
+	} else {
+		struct swap_cluster_ra ra;
+		unsigned long skip_start = 0;
+		unsigned long skip_end = 0;
+
+		swap_cluster_ra_prepare(entry, &ra);
+		ra_orders = swap_cluster_ra_orders(entry, orders, &ra);
+		if (ra_orders) {
+			folio = swapin_zswap_large(entry, gfp_mask, ra_orders,
+						   ra_orders, vmf, mpol, ilx);
+			if (folio) {
+				skip_start = swp_offset(folio->swap);
+				skip_end = skip_start + folio_nr_pages(folio);
+				folio = swap_cluster_readahead_win(entry,
+								   gfp_mask,
+								   mpol, ilx,
+								   &ra,
+								   skip_start,
+								   skip_end,
+								   folio);
+				goto out;
+			}
+		}
+		folio = swap_cluster_readahead_win(entry, gfp_mask, mpol, ilx,
+						   &ra, 0, 0, NULL);
+	}
+out:
 	mpol_cond_put(mpol);
 
 	return folio;

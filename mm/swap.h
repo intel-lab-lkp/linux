@@ -323,7 +323,7 @@ struct folio *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 struct folio *swap_cluster_readahead(swp_entry_t entry, gfp_t flag,
 		struct mempolicy *mpol, pgoff_t ilx);
 struct folio *swapin_readahead(swp_entry_t entry, gfp_t flag,
-			struct vm_fault *vmf);
+			       unsigned long orders, struct vm_fault *vmf);
 struct folio *swapin_sync(swp_entry_t entry, gfp_t flag, unsigned long orders,
 			  unsigned long locality_orders, struct vm_fault *vmf,
 			  struct mempolicy *mpol, pgoff_t ilx);
@@ -413,7 +413,7 @@ static inline struct folio *swap_cluster_readahead(swp_entry_t entry,
 }
 
 static inline struct folio *swapin_readahead(swp_entry_t swp, gfp_t gfp_mask,
-			struct vm_fault *vmf)
+				unsigned long orders, struct vm_fault *vmf)
 {
 	return NULL;
 }

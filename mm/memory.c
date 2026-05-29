@@ -5027,13 +5027,14 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	if (folio)
 		swap_update_readahead(folio, vma, vmf->address);
 	if (!folio) {
+		unsigned long swapin_orders = thp_swapin_suitable_orders(vmf);
+
 		/*
 		 * Swapin bypasses readahead for SWP_SYNCHRONOUS_IO devices.
 		 * The swap device is pinned while checking the flag, matching
 		 * the existing fault path.
 		 */
 		if (data_race(si->flags & SWP_SYNCHRONOUS_IO)) {
-			unsigned long swapin_orders = thp_swapin_suitable_orders(vmf);
 			unsigned long locality_orders =
 				swapin_anon_locality_orders(vmf, swapin_orders);
 
@@ -5041,7 +5042,8 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 					    swapin_orders | BIT(0),
 					    locality_orders, vmf, NULL, 0);
 		} else {
-			folio = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE, vmf);
+			folio = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
+						 swapin_orders, vmf);
 		}
 
 		if (IS_ERR_OR_NULL(folio)) {

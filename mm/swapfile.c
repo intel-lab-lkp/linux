@@ -2452,7 +2452,7 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 			};
 
 			folio = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE,
-						&vmf);
+						 0, &vmf);
 		}
 		if (!folio) {
 			swp_tb = swap_table_get(__swap_entry_to_cluster(entry),
