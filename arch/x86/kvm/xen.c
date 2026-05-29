@@ -42,8 +42,9 @@ static int kvm_xen_shared_info_init(struct kvm *kvm)
 	u32 *wc_sec_hi;
 	u32 wc_version;
 	u64 wall_nsec;
-	int ret = 0;
-	int idx = srcu_read_lock(&kvm->srcu);
+	int ret;
+
+	guard(srcu)(&kvm->srcu);
 
 	read_lock(&gpc->lock);
 	while (!kvm_gpc_check(gpc, PAGE_SIZE)) {
@@ -51,7 +52,7 @@ static int kvm_xen_shared_info_init(struct kvm *kvm)
 
 		ret = kvm_gpc_refresh(gpc, PAGE_SIZE);
 		if (ret)
-			goto out;
+			return ret;
 
 		read_lock(&gpc->lock);
 	}
@@ -99,10 +100,7 @@ static int kvm_xen_shared_info_init(struct kvm *kvm)
 	read_unlock(&gpc->lock);
 
 	kvm_make_all_cpus_request(kvm, KVM_REQ_MASTERCLOCK_UPDATE);
-
-out:
-	srcu_read_unlock(&kvm->srcu, idx);
-	return ret;
+	return 0;
 }
 
 void kvm_xen_inject_timer_irqs(struct kvm_vcpu *vcpu)
@@ -1437,9 +1435,10 @@ static bool wait_pending_event(struct kvm_vcpu *vcpu, int nr_ports,
 	struct gfn_to_pfn_cache *gpc = &kvm->arch.xen.shinfo_cache;
 	unsigned long *pending_bits;
 	bool ret = true;
-	int idx, i;
+	int i;
 
-	idx = srcu_read_lock(&kvm->srcu);
+	guard(srcu)(&kvm->srcu);
+
 	read_lock(&gpc->lock);
 	if (!kvm_gpc_check(gpc, PAGE_SIZE))
 		goto out_rcu;
@@ -1462,8 +1461,6 @@ static bool wait_pending_event(struct kvm_vcpu *vcpu, int nr_ports,
 
  out_rcu:
 	read_unlock(&gpc->lock);
-	srcu_read_unlock(&kvm->srcu, idx);
-
 	return ret;
 }
 
@@ -1795,7 +1792,7 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 	unsigned long *pending_bits, *mask_bits;
 	int port_word_bit;
 	bool kick_vcpu = false;
-	int vcpu_idx, idx, rc;
+	int vcpu_idx, rc;
 
 	vcpu_idx = READ_ONCE(xe->vcpu_idx);
 	if (vcpu_idx >= 0)
@@ -1812,10 +1809,11 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 
 	rc = -EWOULDBLOCK;
 
-	idx = srcu_read_lock(&kvm->srcu);
+	guard(srcu)(&kvm->srcu);
 
 	if (!read_trylock(&gpc->lock))
-		goto out_rcu;
+		return rc;
+
 	if (!kvm_gpc_check(gpc, PAGE_SIZE))
 		goto out_unlock;
 
@@ -1856,7 +1854,7 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 			 */
 			if (!test_and_set_bit(port_word_bit, &vcpu->arch.xen.evtchn_pending_sel))
 				kick_vcpu = true;
-			goto out_rcu;
+			goto out_kick;
 		}
 		if (!kvm_gpc_check(gpc, sizeof(struct vcpu_info))) {
 			if (!test_and_set_bit(port_word_bit, &vcpu->arch.xen.evtchn_pending_sel))
@@ -1888,9 +1886,7 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 
  out_unlock:
 	read_unlock(&gpc->lock);
- out_rcu:
-	srcu_read_unlock(&kvm->srcu, idx);
-
+ out_kick:
 	if (kick_vcpu) {
 		kvm_make_request(KVM_REQ_UNBLOCK, vcpu);
 		kvm_vcpu_kick(vcpu);
