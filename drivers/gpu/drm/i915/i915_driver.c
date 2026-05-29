@@ -54,6 +54,7 @@
 #include "display/intel_bw.h"
 #include "display/intel_cdclk.h"
 #include "display/intel_crtc.h"
+#include "display/intel_display_core.h"
 #include "display/intel_display_device.h"
 #include "display/intel_display_driver.h"
 #include "display/intel_display_power.h"
@@ -1052,6 +1053,8 @@ void i915_driver_shutdown(struct drm_i915_private *i915)
 
 		drm_atomic_helper_shutdown(&i915->drm);
 	}
+
+	flush_workqueue(display->wq.cleanup);
 
 	intel_dp_mst_suspend(display);
 
