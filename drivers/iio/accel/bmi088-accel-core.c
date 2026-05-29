@@ -573,7 +573,9 @@ int bmi088_accel_core_probe(struct device *dev, struct regmap *regmap,
 	/* Enable runtime PM */
 	pm_runtime_get_noresume(dev);
 	pm_runtime_set_suspended(dev);
-	pm_runtime_enable(dev);
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		return ret;
 	/* We need ~6ms to startup, so set the delay to 6 seconds */
 	pm_runtime_set_autosuspend_delay(dev, 6000);
 	pm_runtime_use_autosuspend(dev);
@@ -595,8 +597,6 @@ void bmi088_accel_core_remove(struct device *dev)
 
 	iio_device_unregister(indio_dev);
 
-	pm_runtime_disable(dev);
-	pm_runtime_set_suspended(dev);
 	bmi088_accel_power_down(data);
 }
 EXPORT_SYMBOL_NS_GPL(bmi088_accel_core_remove, "IIO_BMI088");
