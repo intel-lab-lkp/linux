@@ -4602,6 +4602,61 @@ static int kvm_x86_dev_has_attr(struct kvm_device_attr *attr)
 	return __kvm_x86_dev_get_attr(attr, &val);
 }
 
+static int kvm_get_msr_index_list(struct kvm_msr_list __user *user_msr_list)
+{
+	struct kvm_msr_list msr_list;
+	unsigned int n;
+
+	if (copy_from_user(&msr_list, user_msr_list, sizeof(msr_list)))
+		return -EFAULT;
+
+	n = msr_list.nmsrs;
+	msr_list.nmsrs = num_msrs_to_save + num_emulated_msrs;
+	if (copy_to_user(user_msr_list, &msr_list, sizeof(msr_list)))
+		return -EFAULT;
+
+	if (n < msr_list.nmsrs)
+		return -E2BIG;
+
+	if (copy_to_user(user_msr_list->indices, &msrs_to_save,
+				num_msrs_to_save * sizeof(u32)))
+		return -EFAULT;
+
+	if (copy_to_user(user_msr_list->indices + num_msrs_to_save,
+			 &emulated_msrs, num_emulated_msrs * sizeof(u32)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int kvm_get_feature_msr_index_list(struct kvm_msr_list __user *user_msr_list)
+{
+	struct kvm_msr_list msr_list;
+	unsigned int n;
+
+	if (copy_from_user(&msr_list, user_msr_list, sizeof(msr_list)))
+		return -EFAULT;
+
+	n = msr_list.nmsrs;
+	msr_list.nmsrs = num_msr_based_features;
+	if (copy_to_user(user_msr_list, &msr_list, sizeof(msr_list)))
+		return -EFAULT;
+
+	if (n < msr_list.nmsrs)
+		return -E2BIG;
+
+	if (copy_to_user(user_msr_list->indices, &msr_based_features,
+				num_msr_based_features * sizeof(u32)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int kvm_get_feature_msrs(struct kvm_msrs __user *user_msrs)
+{
+	return msr_io(NULL, user_msrs, do_get_feature_msr, 1);
+}
+
 long kvm_arch_dev_ioctl(struct file *filp,
 			unsigned int ioctl, unsigned long arg)
 {
@@ -4609,32 +4664,9 @@ long kvm_arch_dev_ioctl(struct file *filp,
 	long r;
 
 	switch (ioctl) {
-	case KVM_GET_MSR_INDEX_LIST: {
-		struct kvm_msr_list __user *user_msr_list = argp;
-		struct kvm_msr_list msr_list;
-		unsigned n;
-
-		r = -EFAULT;
-		if (copy_from_user(&msr_list, user_msr_list, sizeof(msr_list)))
-			goto out;
-		n = msr_list.nmsrs;
-		msr_list.nmsrs = num_msrs_to_save + num_emulated_msrs;
-		if (copy_to_user(user_msr_list, &msr_list, sizeof(msr_list)))
-			goto out;
-		r = -E2BIG;
-		if (n < msr_list.nmsrs)
-			goto out;
-		r = -EFAULT;
-		if (copy_to_user(user_msr_list->indices, &msrs_to_save,
-				 num_msrs_to_save * sizeof(u32)))
-			goto out;
-		if (copy_to_user(user_msr_list->indices + num_msrs_to_save,
-				 &emulated_msrs,
-				 num_emulated_msrs * sizeof(u32)))
-			goto out;
-		r = 0;
+	case KVM_GET_MSR_INDEX_LIST:
+		r = kvm_get_msr_index_list(argp);
 		break;
-	}
 	case KVM_GET_SUPPORTED_CPUID:
 	case KVM_GET_EMULATED_CPUID: {
 		struct kvm_cpuid2 __user *cpuid_arg = argp;
@@ -4662,30 +4694,11 @@ long kvm_arch_dev_ioctl(struct file *filp,
 			goto out;
 		r = 0;
 		break;
-	case KVM_GET_MSR_FEATURE_INDEX_LIST: {
-		struct kvm_msr_list __user *user_msr_list = argp;
-		struct kvm_msr_list msr_list;
-		unsigned int n;
-
-		r = -EFAULT;
-		if (copy_from_user(&msr_list, user_msr_list, sizeof(msr_list)))
-			goto out;
-		n = msr_list.nmsrs;
-		msr_list.nmsrs = num_msr_based_features;
-		if (copy_to_user(user_msr_list, &msr_list, sizeof(msr_list)))
-			goto out;
-		r = -E2BIG;
-		if (n < msr_list.nmsrs)
-			goto out;
-		r = -EFAULT;
-		if (copy_to_user(user_msr_list->indices, &msr_based_features,
-				 num_msr_based_features * sizeof(u32)))
-			goto out;
-		r = 0;
+	case KVM_GET_MSR_FEATURE_INDEX_LIST:
+		r = kvm_get_feature_msr_index_list(argp);
 		break;
-	}
 	case KVM_GET_MSRS:
-		r = msr_io(NULL, argp, do_get_feature_msr, 1);
+		r = kvm_get_feature_msrs(argp);
 		break;
 #ifdef CONFIG_KVM_HYPERV
 	case KVM_GET_SUPPORTED_HV_CPUID:
@@ -5719,6 +5732,20 @@ static int kvm_get_reg_list(struct kvm_vcpu *vcpu,
 	return 0;
 }
 
+static int kvm_get_msrs(struct kvm_vcpu *vcpu, struct kvm_msrs __user *user_msrs)
+{
+	guard(srcu)(&vcpu->kvm->srcu);
+
+	return msr_io(vcpu, user_msrs, do_get_msr, 1);
+}
+
+static int kvm_set_msrs(struct kvm_vcpu *vcpu, struct kvm_msrs __user *user_msrs)
+{
+	guard(srcu)(&vcpu->kvm->srcu);
+
+	return msr_io(vcpu, user_msrs, do_set_msr, 0);
+}
+
 long kvm_arch_vcpu_ioctl(struct file *filp,
 			 unsigned int ioctl, unsigned long arg)
 {
@@ -5823,18 +5850,12 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 		r = 0;
 		break;
 	}
-	case KVM_GET_MSRS: {
-		int idx = srcu_read_lock(&vcpu->kvm->srcu);
-		r = msr_io(vcpu, argp, do_get_msr, 1);
-		srcu_read_unlock(&vcpu->kvm->srcu, idx);
+	case KVM_GET_MSRS:
+		r = kvm_get_msrs(vcpu, argp);
 		break;
-	}
-	case KVM_SET_MSRS: {
-		int idx = srcu_read_lock(&vcpu->kvm->srcu);
-		r = msr_io(vcpu, argp, do_set_msr, 0);
-		srcu_read_unlock(&vcpu->kvm->srcu, idx);
+	case KVM_SET_MSRS:
+		r = kvm_set_msrs(vcpu, argp);
 		break;
-	}
 	case KVM_GET_ONE_REG:
 	case KVM_SET_ONE_REG:
 		r = kvm_get_set_one_reg(vcpu, ioctl, argp);
