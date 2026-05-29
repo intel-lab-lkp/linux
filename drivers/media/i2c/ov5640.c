@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
+#include <linux/reset.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <media/v4l2-async.h>
@@ -442,7 +443,7 @@ struct ov5640_dev {
 	u32 xclk_freq;
 
 	struct regulator_bulk_data supplies[OV5640_NUM_SUPPLIES];
-	struct gpio_desc *reset_gpio;
+	struct reset_control *reset;
 	struct gpio_desc *pwdn_gpio;
 	bool   upside_down;
 
@@ -2448,12 +2449,12 @@ static void ov5640_power(struct ov5640_dev *sensor, bool enable)
  *
  * In such cases, this gpio should be mapped to pwdn_gpio in the driver, and we
  * should still toggle the pwdn_gpio below with the appropriate delays, while
- * the calls to reset_gpio will be ignored.
+ * the calls to reset will be ignored.
  */
 static void ov5640_powerup_sequence(struct ov5640_dev *sensor)
 {
 	if (sensor->pwdn_gpio) {
-		gpiod_set_value_cansleep(sensor->reset_gpio, 1);
+		reset_control_assert(sensor->reset);
 
 		/* camera power cycle */
 		ov5640_power(sensor, false);
@@ -2461,7 +2462,7 @@ static void ov5640_powerup_sequence(struct ov5640_dev *sensor)
 		ov5640_power(sensor, true);
 		usleep_range(1000, 2000);	/* t3 */
 
-		gpiod_set_value_cansleep(sensor->reset_gpio, 0);
+		reset_control_deassert(sensor->reset);
 	} else {
 		/* software reset */
 		ov5640_write_reg(sensor, OV5640_REG_SYS_CTRL0,
@@ -3914,11 +3915,10 @@ static int ov5640_probe(struct i2c_client *client)
 	if (IS_ERR(sensor->pwdn_gpio))
 		return PTR_ERR(sensor->pwdn_gpio);
 
-	/* request optional reset pin */
-	sensor->reset_gpio = devm_gpiod_get_optional(dev, "reset",
-						     GPIOD_OUT_HIGH);
-	if (IS_ERR(sensor->reset_gpio))
-		return PTR_ERR(sensor->reset_gpio);
+	sensor->reset = devm_reset_control_get_optional_shared(dev, NULL);
+	if (IS_ERR(sensor->reset))
+		return dev_err_probe(dev, PTR_ERR(sensor->reset),
+				     "Failed to get reset\n");
 
 	v4l2_i2c_subdev_init(&sensor->sd, client, &ov5640_subdev_ops);
 	sensor->sd.internal_ops = &ov5640_internal_ops;
