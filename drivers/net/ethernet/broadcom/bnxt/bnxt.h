@@ -36,7 +36,7 @@
 #include <linux/firmware/broadcom/tee_bnxt_fw.h>
 #endif
 
-#define BNXT_DEFAULT_RX_COPYBREAK 256
+#define BNXT_DEFAULT_RX_COPYBREAK 0
 #define BNXT_MAX_RX_COPYBREAK 1024
 
 extern struct list_head bnxt_block_cb_list;
