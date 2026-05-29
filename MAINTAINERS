@@ -22265,6 +22265,7 @@ RAS ERROR STATUS
 M:	Ahmed Tiba <ahmed.tiba@arm.com>
 S:	Maintained
 F:	Documentation/devicetree/bindings/firmware/arm,ras-cper.yaml
+F:	drivers/ras/cper-esource.c
 
 RAS INFRASTRUCTURE
 M:	Tony Luck <tony.luck@intel.com>

@@ -80,6 +80,14 @@ static inline bool is_hest_sync_notify(struct ghes *ghes)
 	return notify_type == ACPI_HEST_NOTIFY_SEA;
 }
 
+static inline u32 cper_estatus_len(struct acpi_hest_generic_status *estatus)
+{
+	if (estatus->raw_data_length)
+		return estatus->raw_data_offset + estatus->raw_data_length;
+	else
+		return sizeof(*estatus) + estatus->data_length;
+}
+
 struct ghes_vendor_record_entry {
 	struct work_struct work;
 	int error_severity;
@@ -108,6 +116,8 @@ int __ghes_read_estatus(struct acpi_hest_generic_status *estatus,
 int ghes_estatus_cached(struct acpi_hest_generic_status *estatus);
 void ghes_estatus_cache_add(struct acpi_hest_generic *generic,
 			    struct acpi_hest_generic_status *estatus);
+int ghes_register_vendor_record_notifier(struct notifier_block *nb);
+void ghes_unregister_vendor_record_notifier(struct notifier_block *nb);
 void ghes_defer_non_standard_event(struct acpi_hest_generic_data *gdata,
 				   int sev);
 int ghes_severity(int severity);
