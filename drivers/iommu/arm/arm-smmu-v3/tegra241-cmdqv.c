@@ -208,6 +208,7 @@ struct tegra241_vintf_sid {
  * @num_sids_per_vintf: Total number of SID mappings per VINTF
  * @vintf_ids: VINTF id allocator
  * @vintfs: List of VINTFs
+ * @removing: Set while the device is being torn down via impl_remove
  */
 struct tegra241_cmdqv {
 	struct arm_smmu_device smmu;
@@ -226,6 +227,8 @@ struct tegra241_cmdqv {
 	struct ida vintf_ids;
 
 	struct tegra241_vintf **vintfs;
+
+	bool removing;
 };
 
 /* Config and Polling Helpers */
@@ -452,7 +455,9 @@ static void tegra241_vcmdq_hw_deinit(struct tegra241_vcmdq *vcmdq)
 			readl_relaxed(REG_VCMDQ_PAGE0(vcmdq, GERROR)),
 			readl_relaxed(REG_VCMDQ_PAGE0(vcmdq, CONS)));
 	}
-	tegra241_vcmdq_hw_flush_timeout(vcmdq);
+	/* In the removing path, smmu->cmdq.q.base is freed by the devres */
+	if (!vcmdq->cmdqv->removing)
+		tegra241_vcmdq_hw_flush_timeout(vcmdq);
 
 	writel_relaxed(0, REG_VCMDQ_PAGE0(vcmdq, PROD));
 	writel_relaxed(0, REG_VCMDQ_PAGE0(vcmdq, CONS));
@@ -785,6 +790,13 @@ static void tegra241_cmdqv_remove(struct arm_smmu_device *smmu)
 		container_of(smmu, struct tegra241_cmdqv, smmu);
 	u16 idx;
 
+	/*
+	 * tegra241_cmdqv_remove() is added to devres at the very beginning. So,
+	 * at this point, devres has already freed the SMMU resources that this
+	 * path must not access to avoid a UAF.
+	 */
+	cmdqv->removing = true;
+
 	/* Remove VINTF resources */
 	for (idx = 0; idx < cmdqv->num_vintfs; idx++) {
 		if (cmdqv->vintfs[idx]) {
@@ -928,6 +940,7 @@ __tegra241_cmdqv_probe(struct arm_smmu_device *smmu, struct resource *res,
 	cmdqv->base = base;
 	cmdqv->dev = smmu->impl_dev;
 	cmdqv->base_phys = res->start;
+	cmdqv->removing = false;
 
 	if (cmdqv->irq > 0) {
 		ret = request_threaded_irq(irq, NULL, tegra241_cmdqv_isr,
