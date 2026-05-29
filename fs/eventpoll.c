@@ -472,7 +472,13 @@ static void list_file(struct file *file, struct ep_ctl_ctx *ctx)
 
 	head = container_of(file->f_ep, struct epitems_head, epitems);
 	if (!head->next) {
-		head->next = ctx->tfile_check_list;
+		/*
+		 * Terminate the check list with EP_UNACTIVE_PTR (non-NULL)
+		 * so that head->next == NULL unambiguously means "not on
+		 * any check list". ep_remove_file() relies on that
+		 * invariant to decide whether the head is safe to free.
+		 */
+		head->next = ctx->tfile_check_list ? : EP_UNACTIVE_PTR;
 		ctx->tfile_check_list = head;
 	}
 }
@@ -1686,7 +1692,7 @@ static int reverse_path_check(struct ep_ctl_ctx *ctx)
 {
 	struct epitems_head *p;
 
-	for (p = ctx->tfile_check_list; p; p = p->next) {
+	for (p = ctx->tfile_check_list; p != EP_UNACTIVE_PTR; p = p->next) {
 		int error;
 		path_count_init(ctx);
 		rcu_read_lock();
@@ -2440,11 +2446,12 @@ static int ep_loop_check(struct ep_ctl_ctx *ctx, struct eventpoll *ep,
 static void clear_tfile_check_list(struct ep_ctl_ctx *ctx)
 {
 	rcu_read_lock();
-	while (ctx->tfile_check_list) {
+	while (ctx->tfile_check_list != EP_UNACTIVE_PTR) {
 		struct epitems_head *head = ctx->tfile_check_list;
 		ctx->tfile_check_list = head->next;
 		unlist_file(head);
 	}
+	ctx->tfile_check_list = EP_UNACTIVE_PTR;
 	rcu_read_unlock();
 }
 
@@ -2603,7 +2610,7 @@ int do_epoll_ctl_file(struct file *f, int op, struct epoll_key *tf,
 	int full_check;
 	struct eventpoll *ep;
 	struct epitem *epi;
-	struct ep_ctl_ctx ctx = { };
+	struct ep_ctl_ctx ctx = { .tfile_check_list = EP_UNACTIVE_PTR };
 
 	/* The target file descriptor must support poll */
 	if (!file_can_poll(tf->file))
