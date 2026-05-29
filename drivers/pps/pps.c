@@ -66,7 +66,7 @@ static int pps_cdev_pps_fetch(struct pps_device *pps, struct pps_fdata *fdata)
 		err = wait_event_interruptible(pps->queue,
 				ev != pps->last_ev);
 	else {
-		unsigned long ticks;
+		long ticks;
 
 		dev_dbg(&pps->dev, "timeout %lld.%09d\n",
 				(long long) fdata->timeout.sec,
@@ -74,7 +74,9 @@ static int pps_cdev_pps_fetch(struct pps_device *pps, struct pps_fdata *fdata)
 		ticks = fdata->timeout.sec * HZ;
 		ticks += fdata->timeout.nsec / (NSEC_PER_SEC / HZ);
 
-		if (ticks != 0) {
+		if (ticks < 0) {
+			return -ETIMEDOUT;
+		} else if (ticks > 0) {
 			err = wait_event_interruptible_timeout(
 					pps->queue,
 					ev != pps->last_ev,
