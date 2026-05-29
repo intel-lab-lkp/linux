@@ -250,6 +250,43 @@ def assert_ctxs_committed(kdamonds):
             if ctx in ctxs_paused_for_dump:
                 ctx.pause = False
 
+def test_memcg_filter_memcg_path_staging():
+    global kdamonds
+    memcg_filter = _damon_sysfs.DamosFilter(
+            type_='memcg', matching=True, allow=True, memcg_path='/')
+    kdamonds = _damon_sysfs.Kdamonds(
+            [_damon_sysfs.Kdamond(
+                contexts=[_damon_sysfs.DamonCtx(
+                    targets=[_damon_sysfs.DamonTarget(pid=-1)],
+                    schemes=[_damon_sysfs.Damos()],
+                    )])])
+    err = kdamonds.start()
+    if err is not None:
+        fail('memcg_path staging: kdamond start', {'error': err})
+
+    context = _damon_sysfs.DamonCtx(
+            targets=[_damon_sysfs.DamonTarget(pid=-1)],
+            schemes=[_damon_sysfs.Damos(ops_filters=[memcg_filter])])
+    context.idx = 0
+    context.kdamond = kdamonds.kdamonds[0]
+    kdamonds.kdamonds[0].contexts = [context]
+
+    err = kdamonds.kdamonds[0].commit()
+    if err is not None:
+        fail('memcg_path staging: kdamond commit', {'error': err})
+
+    shown, rd_err = _damon_sysfs.read_file(
+            os.path.join(memcg_filter.sysfs_dir(), 'memcg_path'))
+    if rd_err is not None:
+        fail('memcg_path staging: sysfs read', {'error': rd_err})
+    assert_true(shown.rstrip('\n') == memcg_filter.memcg_path,
+                'memcg_path readback', {'shown': shown})
+
+    err = kdamonds.stop()
+    if err is not None:
+        fail('memcg_path staging: kdamond stop', {'error': err})
+    kdamonds = None
+
 def main():
     global kdamonds
     kdamonds = _damon_sysfs.Kdamonds(
@@ -355,6 +392,8 @@ def main():
     del kdamonds.kdamonds[0].contexts[0].targets[1]
     assert_ctxs_committed(kdamonds)
     kdamonds.stop()
+
+    test_memcg_filter_memcg_path_staging()
 
 if __name__ == '__main__':
     main()
