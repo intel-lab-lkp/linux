@@ -1186,6 +1186,18 @@ static void vmx_remove_autostore_msr(struct vcpu_vmx *vmx, u32 msr)
 	vmx_remove_auto_msr(&vmx->msr_autostore, msr, VM_EXIT_MSR_STORE_COUNT);
 }
 
+static u16 kvm_read_ldt(void)
+{
+	u16 ldt;
+	asm("sldt %0" : "=g"(ldt));
+	return ldt;
+}
+
+static void kvm_load_ldt(u16 sel)
+{
+	asm("lldt %0" : : "rm"(sel));
+}
+
 #ifdef CONFIG_X86_32
 /*
  * On 32-bit kernels, VM exits still load the FS and GS bases from the

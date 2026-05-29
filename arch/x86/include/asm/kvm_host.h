@@ -2334,18 +2334,6 @@ static inline void kvm_dec_apicv_irq_window_req(struct kvm *kvm)
 
 #define kvm_arch_has_readonly_mem(kvm) (!(kvm)->arch.has_protected_state)
 
-static inline u16 kvm_read_ldt(void)
-{
-	u16 ldt;
-	asm("sldt %0" : "=g"(ldt));
-	return ldt;
-}
-
-static inline void kvm_load_ldt(u16 sel)
-{
-	asm("lldt %0" : : "rm"(sel));
-}
-
 #ifdef CONFIG_X86_64
 static inline unsigned long read_msr(unsigned long msr)
 {
