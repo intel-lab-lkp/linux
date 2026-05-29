@@ -308,6 +308,17 @@ void machine_kexec(struct kimage *image)
 				break;
 			}
 		}
+	} else if (internal->efi_tables_mem) {
+		/*
+		 * ACPI-only system: DEVICE_TREE_GUID was not in the original
+		 * EFI config table.  Switch to the new table that was built in
+		 * kho_load_fdt() with DEVICE_TREE_GUID appended.
+		 */
+		efi_system_table_t *st =
+			(efi_system_table_t *)TO_CACHE(systable_ptr);
+
+		st->tables    = internal->efi_tables_mem;
+		st->nr_tables = internal->efi_tables_cnt;
 	}
 #endif
 

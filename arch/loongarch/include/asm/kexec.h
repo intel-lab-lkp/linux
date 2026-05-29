@@ -42,6 +42,9 @@ struct kimage_arch {
 #ifdef CONFIG_KEXEC_HANDOVER
 	void *fdt;		/* virtual address of KHO FDT segment buffer */
 	unsigned long fdt_mem;	/* physical address of KHO FDT segment */
+	void *efi_tables;		/* new EFI config table buffer (virtual) */
+	unsigned long efi_tables_mem;	/* physical address of new EFI config table */
+	unsigned long efi_tables_cnt;	/* number of entries in new EFI config table */
 #endif
 };
 

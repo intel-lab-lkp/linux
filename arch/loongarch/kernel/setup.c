@@ -286,8 +286,27 @@ static void __init fdt_setup(void)
 	void *fdt_pointer;
 
 	/* ACPI-based systems do not require parsing fdt */
-	if (acpi_os_get_root_pointer())
+	if (acpi_os_get_root_pointer()) {
+#ifdef CONFIG_KEXEC_HANDOVER
+		/*
+		 * On a KHO kexec boot the first kernel builds a minimal FDT
+		 * containing only /chosen with linux,kho-fdt and
+		 * linux,kho-scratch, and switches the EFI config table to a
+		 * new one that includes a DEVICE_TREE_GUID entry pointing to
+		 * it.  Use efi_fdt_pointer() to detect this case.
+		 *
+		 * Call early_init_dt_scan() to let early_init_dt_check_kho()
+		 * consume the KHO data, then reset initial_boot_params so the
+		 * rest of the ACPI boot path is not confused by this FDT.
+		 */
+		fdt_pointer = efi_fdt_pointer();
+		if (fdt_pointer && !fdt_check_header(fdt_pointer)) {
+			early_init_dt_scan(fdt_pointer, __pa(fdt_pointer));
+			initial_boot_params = NULL;
+		}
+#endif
 		return;
+	}
 
 	/* Prefer to use built-in dtb, checking its legality first. */
 	if (IS_ENABLED(CONFIG_BUILTIN_DTB) && !fdt_check_header(__dtb_start))
