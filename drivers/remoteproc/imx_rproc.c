@@ -682,12 +682,8 @@ static int imx_rproc_prepare(struct rproc *rproc)
 
 static int imx_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
 {
-	int ret;
-
-	ret = rproc_elf_load_rsc_table(rproc, fw);
-	if (ret)
-		dev_info(&rproc->dev, "No resource table in elf\n");
-
+	rproc_elf_load_rsc_table_optional(rproc, fw, dev_info,
+					  "No resource table in elf\n");
 	return 0;
 }
 

@@ -679,20 +679,15 @@ release_tcm:
  */
 static int zynqmp_r5_parse_fw(struct rproc *rproc, const struct firmware *fw)
 {
-	int ret;
-
-	ret = rproc_elf_load_rsc_table(rproc, fw);
-	if (ret == -EINVAL) {
-		/*
-		 * resource table only required for IPC.
-		 * if not present, this is not necessarily an error;
-		 * for example, loading r5 hello world application
-		 * so simply inform user and keep going.
-		 */
-		dev_info(&rproc->dev, "no resource table found.\n");
-		ret = 0;
-	}
-	return ret;
+	/*
+	 * resource table only required for IPC.
+	 * if not present, this is not necessarily an error;
+	 * for example, loading r5 hello world application
+	 * so simply inform user and keep going.
+	 */
+	rproc_elf_load_rsc_table_optional(rproc, fw, dev_info,
+					  "no resource table found.\n");
+	return 0;
 }
 
 /**
