@@ -78,12 +78,6 @@
 #define KVM_DIRTY_LOG_MANUAL_CAPS   (KVM_DIRTY_LOG_MANUAL_PROTECT_ENABLE | \
 					KVM_DIRTY_LOG_INITIALLY_SET)
 
-#define KVM_BUS_LOCK_DETECTION_VALID_MODE	(KVM_BUS_LOCK_DETECTION_OFF | \
-						 KVM_BUS_LOCK_DETECTION_EXIT)
-
-#define KVM_X86_NOTIFY_VMEXIT_VALID_BITS	(KVM_X86_NOTIFY_VMEXIT_ENABLED | \
-						 KVM_X86_NOTIFY_VMEXIT_USER)
-
 /* x86-specific vcpu->requests bit members */
 #define KVM_REQ_MIGRATE_TIMER		KVM_ARCH_REQ(0)
 #define KVM_REQ_REPORT_TPR_ACCESS	KVM_ARCH_REQ(1)
@@ -2428,34 +2422,6 @@ static inline void kvm_arch_vcpu_unblocking(struct kvm_vcpu *vcpu)
 }
 
 int memslot_rmap_alloc(struct kvm_memory_slot *slot, unsigned long npages);
-
-#define KVM_CLOCK_VALID_FLAGS						\
-	(KVM_CLOCK_TSC_STABLE | KVM_CLOCK_REALTIME | KVM_CLOCK_HOST_TSC)
-
-#define KVM_X86_VALID_QUIRKS			\
-	(KVM_X86_QUIRK_LINT0_REENABLED |	\
-	 KVM_X86_QUIRK_CD_NW_CLEARED |		\
-	 KVM_X86_QUIRK_LAPIC_MMIO_HOLE |	\
-	 KVM_X86_QUIRK_OUT_7E_INC_RIP |		\
-	 KVM_X86_QUIRK_MISC_ENABLE_NO_MWAIT |	\
-	 KVM_X86_QUIRK_FIX_HYPERCALL_INSN |	\
-	 KVM_X86_QUIRK_MWAIT_NEVER_UD_FAULTS |	\
-	 KVM_X86_QUIRK_SLOT_ZAP_ALL |		\
-	 KVM_X86_QUIRK_STUFF_FEATURE_MSRS |	\
-	 KVM_X86_QUIRK_IGNORE_GUEST_PAT |	\
-	 KVM_X86_QUIRK_VMCS12_ALLOW_FREEZE_IN_SMM |	\
-	 KVM_X86_QUIRK_NESTED_SVM_SHARED_PAT)
-
-#define KVM_X86_CONDITIONAL_QUIRKS		\
-	(KVM_X86_QUIRK_CD_NW_CLEARED |		\
-	 KVM_X86_QUIRK_IGNORE_GUEST_PAT)
-
-/*
- * KVM previously used a u32 field in kvm_run to indicate the hypercall was
- * initiated from long mode. KVM now sets bit 0 to indicate long mode, but the
- * remaining 31 lower bits must be 0 to preserve ABI.
- */
-#define KVM_EXIT_HYPERCALL_MBZ		GENMASK_ULL(31, 1)
 
 static inline bool kvm_arch_has_irq_bypass(void)
 {
