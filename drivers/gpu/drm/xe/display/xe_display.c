@@ -198,7 +198,6 @@ void xe_display_register(struct xe_device *xe)
 		return;
 
 	intel_display_driver_register(display);
-	intel_display_power_enable(display);
 }
 
 void xe_display_unregister(struct xe_device *xe)
@@ -208,7 +207,6 @@ void xe_display_unregister(struct xe_device *xe)
 	if (!xe->info.probe_display)
 		return;
 
-	intel_display_power_disable(display);
 	intel_display_driver_unregister(display);
 }
 
