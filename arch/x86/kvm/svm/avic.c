@@ -146,6 +146,11 @@ static void avic_set_x2apic_msr_interception(struct vcpu_svm *svm,
 	svm->x2avic_msrs_intercepted = intercept;
 }
 
+static int kvm_cpu_get_apicid(int mps_cpu)
+{
+	return default_cpu_present_to_apicid(mps_cpu);
+}
+
 static u32 __avic_get_max_physical_id(struct kvm *kvm, struct kvm_vcpu *vcpu)
 {
 	u32 arch_max;
