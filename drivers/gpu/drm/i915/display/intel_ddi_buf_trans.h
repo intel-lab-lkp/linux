@@ -84,6 +84,23 @@ enum intel_lt_vspeo {
 	LT_DP2X
 };
 
+enum intel_c20_vspeo {
+	_C20_unused0 = 0,
+	_C20_unused1,
+	_C20_unused2,
+	_C20_unused3,
+
+	C20_DP14 = 4,
+	C20_DP2X
+};
+
+enum intel_c10_vspeo {
+	C10_DP14_RBR_HBR = 0,
+	C10_DP14_HBR2_HBR3,
+	C10_EDP_NON_HBR3,
+	C10_EDP_HBR3
+};
+
 bool is_hobl_buf_trans(const struct intel_ddi_buf_trans *table);
 
 void intel_ddi_buf_trans_init(struct intel_encoder *encoder);

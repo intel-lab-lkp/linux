@@ -1787,6 +1787,41 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 }
 
 static int
+snps_get_c10_vspeo_index(struct intel_encoder *encoder,
+			 const struct intel_crtc_state *crtc_state)
+{
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+		if (crtc_state->port_clock > 540000)
+			return C10_EDP_HBR3;
+		else
+			return C10_EDP_NON_HBR3;
+	}
+
+	if (intel_crtc_has_dp_encoder(crtc_state)) {
+		if (crtc_state->port_clock > 270000)
+			return C10_DP14_HBR2_HBR3;
+		else
+			return C10_DP14_RBR_HBR;
+	}
+
+	return -EINVAL;
+}
+
+static int
+snps_get_c20_vspeo_index(struct intel_encoder *encoder,
+			 const struct intel_crtc_state *crtc_state)
+{
+	if (intel_crtc_has_dp_encoder(crtc_state)) {
+		if (intel_dp_is_uhbr(crtc_state))
+			return C20_DP2X;
+		else
+			return C20_DP14;
+	}
+
+	return -EINVAL;
+}
+
+static int
 xe3plpd_get_lt_vspeo_index(struct intel_encoder *encoder,
 			   const struct intel_crtc_state *crtc_state)
 {
@@ -1819,10 +1854,14 @@ void intel_ddi_buf_trans_init(struct intel_encoder *encoder)
 		encoder->get_phy_vspeo_index = xe3plpd_get_lt_vspeo_index;
 		encoder->get_phy_vspeo = intel_bios_encoder_get_lt_vspeo;
 	} else if (DISPLAY_VER(display) >= 14) {
-		if (intel_encoder_is_c10phy(encoder))
+		encoder->get_phy_vspeo = intel_bios_encoder_get_cx0_vspeo;
+		if (intel_encoder_is_c10phy(encoder)) {
 			encoder->get_buf_trans = mtl_get_c10_buf_trans;
-		else
+			encoder->get_phy_vspeo_index = snps_get_c10_vspeo_index;
+		} else {
 			encoder->get_buf_trans = mtl_get_c20_buf_trans;
+			encoder->get_phy_vspeo_index = snps_get_c20_vspeo_index;
+		}
 	} else if (display->platform.dg2) {
 		encoder->get_buf_trans = dg2_get_snps_buf_trans;
 	} else if (display->platform.alderlake_p) {

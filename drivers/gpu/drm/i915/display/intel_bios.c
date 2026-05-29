@@ -3899,6 +3899,40 @@ intel_bios_encoder_get_lt_vspeo(const struct intel_bios_encoder_data *devdata,
 	return vspeo;
 }
 
+const struct intel_ddi_buf_trans *
+intel_bios_encoder_get_cx0_vspeo(const struct intel_bios_encoder_data *devdata,
+				 int idx)
+{
+	struct intel_display *display = devdata->display;
+	struct intel_ddi_buf_trans *vspeo = (void *) devdata->vspeo;
+	union intel_ddi_buf_trans_entry *entries = (void *) vspeo->entries;
+	const u32 *tables = display->vbt.vspeo.tables;
+	int num_columns = display->vbt.vspeo.num_columns;
+	int num_rows = display->vbt.vspeo.num_rows;
+	size_t offset = 0;
+	int level;
+
+	INTEL_DISPLAY_STATE_WARN(display, idx < _C20_unused0 || idx > C20_DP2X,
+				 "Cx0 requested invalid VS/PE-O table: %d\n", idx);
+
+	offset += idx * num_rows * num_columns;
+
+	for (level = 0; level < num_rows; level++) {
+		u32 vswing = tables[offset];
+		u32 pre_cursor = tables[offset+1];
+		u32 post_cursor = tables[offset+2];
+
+		entries[level].snps.vswing = vswing;
+		entries[level].snps.pre_cursor = pre_cursor;
+		entries[level].snps.post_cursor = post_cursor;
+
+		offset += num_columns;
+	}
+
+	vspeo->num_entries = num_rows;
+	return vspeo;
+}
+
 bool intel_bios_encoder_is_dedicated_external(const struct intel_bios_encoder_data *devdata)
 {
 	return devdata->display->vbt.version >= 264 &&
