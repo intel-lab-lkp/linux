@@ -625,7 +625,9 @@ static int mlx90614_probe(struct i2c_client *client)
 						 MLX90614_AUTOSLEEP_DELAY);
 		pm_runtime_use_autosuspend(&client->dev);
 		pm_runtime_set_active(&client->dev);
-		pm_runtime_enable(&client->dev);
+		ret = devm_pm_runtime_enable(&client->dev);
+		if (ret)
+			return ret;
 	}
 
 	return iio_device_register(indio_dev);
@@ -639,10 +641,8 @@ static void mlx90614_remove(struct i2c_client *client)
 	iio_device_unregister(indio_dev);
 
 	if (data->wakeup_gpio) {
-		pm_runtime_disable(&client->dev);
 		if (!pm_runtime_status_suspended(&client->dev))
 			mlx90614_sleep(data);
-		pm_runtime_set_suspended(&client->dev);
 	}
 }
 
