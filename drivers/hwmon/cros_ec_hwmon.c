@@ -117,17 +117,29 @@ static int cros_ec_hwmon_read_temp(struct cros_ec_device *cros_ec, u8 index, u8 
 	return 0;
 }
 
-static int cros_ec_hwmon_read_temp_threshold(struct cros_ec_device *cros_ec, u8 index,
-					     enum ec_temp_thresholds threshold, u32 *temp)
+static int cros_ec_hwmon_get_thermal_config(struct cros_ec_device *cros_ec, u8 index,
+					    struct ec_thermal_config *config)
 {
 	struct ec_params_thermal_get_threshold_v1 req = {};
-	struct ec_thermal_config resp;
 	int ret;
 
 	req.sensor_num = index;
 	ret = cros_ec_cmd(cros_ec, 1, EC_CMD_THERMAL_GET_THRESHOLD,
-			  &req, sizeof(req), &resp, sizeof(resp));
+			  &req, sizeof(req), config, sizeof(*config));
 	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static int cros_ec_hwmon_read_temp_threshold(struct cros_ec_device *cros_ec, u8 index,
+					     enum ec_temp_thresholds threshold, u32 *temp)
+{
+	struct ec_thermal_config resp;
+	int ret;
+
+	ret = cros_ec_hwmon_get_thermal_config(cros_ec, index, &resp);
+	if (ret)
 		return ret;
 
 	*temp = resp.temp_host[threshold];
