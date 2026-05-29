@@ -1037,13 +1037,14 @@ static int ads1015_probe(struct i2c_client *client)
 		return ret;
 	pm_runtime_set_autosuspend_delay(&client->dev, ADS1015_SLEEP_DELAY_MS);
 	pm_runtime_use_autosuspend(&client->dev);
-	pm_runtime_enable(&client->dev);
+	ret = devm_pm_runtime_enable(&client->dev);
+	if (ret)
+		return ret;
 
 	ret = iio_device_register(indio_dev);
-	if (ret < 0) {
-		dev_err(&client->dev, "Failed to register IIO device\n");
-		return ret;
-	}
+	if (ret < 0)
+		return dev_err_probe(&client->dev, ret,
+				     "Failed to register IIO device\n");
 
 	return 0;
 }
@@ -1055,9 +1056,6 @@ static void ads1015_remove(struct i2c_client *client)
 	int ret;
 
 	iio_device_unregister(indio_dev);
-
-	pm_runtime_disable(&client->dev);
-	pm_runtime_set_suspended(&client->dev);
 
 	/* power down single shot mode */
 	ret = ads1015_set_conv_mode(data, ADS1015_SINGLESHOT);
