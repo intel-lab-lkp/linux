@@ -402,6 +402,10 @@ static const struct hwmon_channel_info * const cros_ec_hwmon_info[] = {
 	NULL
 };
 
+static const struct attribute_group *cros_ec_hwmon_groups[] = {
+	NULL
+};
+
 static int cros_ec_hwmon_cooling_get_max_state(struct thermal_cooling_device *cdev,
 					       unsigned long *val)
 {
@@ -588,7 +592,8 @@ static int cros_ec_hwmon_probe(struct platform_device *pdev)
 	cros_ec_hwmon_register_fan_cooling_devices(dev, priv);
 
 	hwmon_dev = devm_hwmon_device_register_with_info(dev, "cros_ec", priv,
-							 &cros_ec_hwmon_chip_info, NULL);
+							 &cros_ec_hwmon_chip_info,
+							 cros_ec_hwmon_groups);
 	platform_set_drvdata(pdev, priv);
 
 	return PTR_ERR_OR_ZERO(hwmon_dev);
