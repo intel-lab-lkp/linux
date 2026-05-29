@@ -21,6 +21,7 @@
 #include <linux/migrate.h>
 #include <linux/vmalloc.h>
 #include <linux/huge_mm.h>
+#include <linux/sizes.h>
 #include <linux/zswap.h>
 #include <linux/shmem_fs.h>
 #include "internal.h"
@@ -556,6 +557,24 @@ static struct folio *swap_cache_alloc_speculative_folio(swp_entry_t targ_entry,
 					mpol, ilx, true);
 }
 
+/*
+ * Initial conservative cap for speculative zswap large swapin. Locality
+ * evidence is supplied by the caller or by generic VMA hints; the common
+ * swapin layer keeps backend safety and pressure decisions here.
+ */
+#define SWAPIN_ZSWAP_MAX_SIZE			SZ_64K
+#if PAGE_SIZE < SWAPIN_ZSWAP_MAX_SIZE
+#define SWAPIN_ZSWAP_MAX_ORDER			\
+	ilog2(SWAPIN_ZSWAP_MAX_SIZE / PAGE_SIZE)
+#else
+#define SWAPIN_ZSWAP_MAX_ORDER			0
+#endif
+
+struct zswap_admit_ctx {
+	bool pressure_checked;
+	bool reclaim_pressure;
+};
+
 static bool swapin_zeromap_same(swp_entry_t entry, unsigned int nr_pages)
 {
 	unsigned int ci_start = swp_cluster_offset(entry);
@@ -586,11 +605,84 @@ static bool swapin_zeromap_same(swp_entry_t entry, unsigned int nr_pages)
 	return true;
 }
 
+static bool swapin_zswap_locality(struct vm_fault *vmf, unsigned int order,
+				  unsigned long locality_orders)
+{
+	struct vm_area_struct *vma = vmf ? vmf->vma : NULL;
+
+	if (!order || order > MAX_PAGE_ORDER)
+		return false;
+
+	if (vma && (vma->vm_flags & VM_RAND_READ))
+		return false;
+
+	return locality_orders & BIT(order);
+}
+
+static bool swapin_zswap_refaulted(swp_entry_t entry, unsigned int nr_pages)
+{
+	unsigned int type = swp_type(entry);
+	pgoff_t offset = swp_offset(entry);
+	unsigned int i;
+
+	for (i = 0; i < nr_pages; i++) {
+		bool workingset;
+		void *shadow;
+
+		shadow = swap_cache_get_shadow(swp_entry(type, offset + i));
+		if (!shadow)
+			continue;
+		if (workingset_test_recent(shadow, false, &workingset, false) &&
+		    workingset)
+			return true;
+	}
+
+	return false;
+}
+
+static bool swapin_zswap_admit(swp_entry_t entry,
+			       unsigned int order, unsigned int nr_pages,
+			       struct vm_fault *vmf,
+			       unsigned long locality_orders,
+			       struct zswap_admit_ctx *ctx)
+{
+	if (order > SWAPIN_ZSWAP_MAX_ORDER)
+		return false;
+
+	/*
+	 * Treat zswap-backed large swapin as speculative. The common layer
+	 * consumes caller-provided locality orders, but does not inspect
+	 * anon-specific PTE state or shmem-specific mapping state directly.
+	 */
+	if (!swapin_zswap_locality(vmf, order, locality_orders))
+		return false;
+
+	/*
+	 * A recent workingset refault shadow in the target range means reclaim
+	 * already saw churn there. Keep the refault path narrow instead of
+	 * speculatively decompressing neighbouring slots.
+	 */
+	if (swapin_zswap_refaulted(entry, nr_pages))
+		return false;
+
+	if (!ctx->pressure_checked) {
+		ctx->reclaim_pressure = zswap_pool_reclaim_pressure();
+		ctx->pressure_checked = true;
+	}
+	if (ctx->reclaim_pressure)
+		return false;
+
+	return true;
+}
+
 static unsigned long swapin_admit_orders(swp_entry_t entry,
-					 unsigned long orders)
+					 unsigned long orders,
+					 struct vm_fault *vmf,
+					 unsigned long locality_orders)
 {
 	unsigned long candidates = orders & ~BIT(0);
 	unsigned long admitted = orders & BIT(0);
+	struct zswap_admit_ctx zswap_ctx = {};
 	int order;
 
 	if (!candidates)
@@ -616,9 +708,14 @@ static unsigned long swapin_admit_orders(swp_entry_t entry,
 
 		state = zswap_probe_range(range_entry, nr_pages);
 		switch (state) {
+		case ZSWAP_RANGE_ALL_ZSWAP:
+			admit = swapin_zswap_admit(range_entry, order,
+						   nr_pages, vmf,
+						   locality_orders,
+						   &zswap_ctx);
+			break;
 		case ZSWAP_RANGE_MIXED:
 			break;
-		case ZSWAP_RANGE_ALL_ZSWAP:
 		case ZSWAP_RANGE_NEVER_ENABLED:
 		case ZSWAP_RANGE_NO_ZSWAP:
 			admit = true;
@@ -769,8 +866,8 @@ static struct folio *swap_cache_read_folio(swp_entry_t entry, gfp_t gfp,
 	ret = swap_read_folio(folio, plug);
 	/*
 	 * Swap readahead allocates order-0 folios. -EAGAIN is reserved for
-	 * retryable large zswap backend races and must be handled by the
-	 * synchronous common swapin path.
+	 * retryable large zswap backend races and should never escape to this
+	 * order-0 path.
 	 */
 	VM_WARN_ON_ONCE(ret == -EAGAIN);
 	if (readahead) {
@@ -786,6 +883,7 @@ static struct folio *swap_cache_read_folio(swp_entry_t entry, gfp_t gfp,
  * @entry: swap entry indicating the target slot
  * @gfp: memory allocation flags
  * @orders: allocation orders
+ * @locality_orders: orders with caller-provided locality evidence
  * @vmf: fault information
  * @mpol: NUMA memory allocation policy to be applied
  * @ilx: NUMA interleave index, for use only when MPOL_INTERLEAVE
@@ -794,16 +892,20 @@ static struct folio *swap_cache_read_folio(swp_entry_t entry, gfp_t gfp,
  * existing folio in the swap cache for @entry. This initiates the IO, too,
  * if needed. @entry is rounded down if @orders allow large allocation.
  *
- * Context: Caller must ensure @entry is valid and pin the swap device with refcount.
+ * Context: Caller must ensure @entry is valid and pin the swap device with
+ * refcount.
  * Return: Returns the folio on success, error code if failed.
  */
-struct folio *swapin_sync(swp_entry_t entry, gfp_t gfp, unsigned long orders,
-			   struct vm_fault *vmf, struct mempolicy *mpol, pgoff_t ilx)
+struct folio *swapin_sync(swp_entry_t entry, gfp_t gfp,
+			  unsigned long orders,
+			  unsigned long locality_orders,
+			  struct vm_fault *vmf, struct mempolicy *mpol,
+			  pgoff_t ilx)
 {
 	struct folio *folio;
 	int ret;
 
-	orders = swapin_admit_orders(entry, orders);
+	orders = swapin_admit_orders(entry, orders, vmf, locality_orders);
 again:
 	do {
 		folio = swap_cache_get_folio(entry);

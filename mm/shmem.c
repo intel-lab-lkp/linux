@@ -2031,7 +2031,7 @@ static struct folio *shmem_swap_alloc_folio(struct inode *inode,
 
 again:
 	mpol = shmem_get_pgoff_policy(info, index, order, &ilx);
-	folio = swapin_sync(entry, gfp, BIT(order), vmf, mpol, ilx);
+	folio = swapin_sync(entry, gfp, BIT(order), 0, vmf, mpol, ilx);
 	mpol_cond_put(mpol);
 
 	if (!IS_ERR(folio))

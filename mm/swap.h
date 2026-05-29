@@ -323,9 +323,10 @@ struct folio *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 struct folio *swap_cluster_readahead(swp_entry_t entry, gfp_t flag,
 		struct mempolicy *mpol, pgoff_t ilx);
 struct folio *swapin_readahead(swp_entry_t entry, gfp_t flag,
-		struct vm_fault *vmf);
+			struct vm_fault *vmf);
 struct folio *swapin_sync(swp_entry_t entry, gfp_t flag, unsigned long orders,
-			   struct vm_fault *vmf, struct mempolicy *mpol, pgoff_t ilx);
+			  unsigned long locality_orders, struct vm_fault *vmf,
+			  struct mempolicy *mpol, pgoff_t ilx);
 void swap_update_readahead(struct folio *folio, struct vm_area_struct *vma,
 			   unsigned long addr);
 
@@ -418,7 +419,8 @@ static inline struct folio *swapin_readahead(swp_entry_t swp, gfp_t gfp_mask,
 
 static inline struct folio *swapin_sync(
 	swp_entry_t entry, gfp_t flag, unsigned long orders,
-	struct vm_fault *vmf, struct mempolicy *mpol, pgoff_t ilx)
+	unsigned long locality_orders, struct vm_fault *vmf,
+	struct mempolicy *mpol, pgoff_t ilx)
 {
 	return NULL;
 }
