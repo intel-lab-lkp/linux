@@ -81,7 +81,7 @@ static inline void syscall_get_arguments(struct task_struct *task,
 					 struct pt_regs *regs,
 					 unsigned long *args)
 {
-	args[0] = regs->orig_x0;
+	args[0] = regs->regs[0];
 	args[1] = regs->regs[1];
 	args[2] = regs->regs[2];
 	args[3] = regs->regs[3];
