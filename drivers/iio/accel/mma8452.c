@@ -1693,7 +1693,9 @@ static int mma8452_probe(struct i2c_client *client)
 	if (ret < 0)
 		goto buffer_cleanup;
 
-	pm_runtime_enable(&client->dev);
+	ret = devm_pm_runtime_enable(&client->dev);
+	if (ret)
+		goto buffer_cleanup;
 	pm_runtime_set_autosuspend_delay(&client->dev,
 					 MMA8452_AUTO_SUSPEND_DELAY_MS);
 	pm_runtime_use_autosuspend(&client->dev);
@@ -1732,9 +1734,6 @@ static void mma8452_remove(struct i2c_client *client)
 	struct mma8452_data *data = iio_priv(indio_dev);
 
 	iio_device_unregister(indio_dev);
-
-	pm_runtime_disable(&client->dev);
-	pm_runtime_set_suspended(&client->dev);
 
 	iio_triggered_buffer_cleanup(indio_dev);
 	mma8452_trigger_cleanup(indio_dev);
