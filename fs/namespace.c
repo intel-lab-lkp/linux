@@ -6431,6 +6431,25 @@ bool mnt_may_suid(struct vfsmount *mnt)
 	       current_in_userns(mnt->mnt_sb->s_user_ns);
 }
 
+#ifdef CONFIG_FSNOTIFY
+void mnt_notify_add(struct mount *m)
+{
+	/*
+	 * notify_list is protected by namespace_sem.
+	 * It is possible to call this function without holding namespace_sem,
+	 * but in those cases, the mount is associated with a new mount
+	 * namespace that can't have any fanotify marks yet.
+	 */
+	if ((m->mnt_ns && m->mnt_ns->n_fsnotify_marks) ||
+	    (m->prev_ns && m->prev_ns->n_fsnotify_marks)) {
+		rwsem_assert_held_write(&namespace_sem);
+		list_add_tail(&m->to_notify, &notify_list);
+	} else {
+		m->prev_ns = m->mnt_ns;
+	}
+}
+#endif
+
 static struct ns_common *mntns_get(struct task_struct *task)
 {
 	struct ns_common *ns = NULL;

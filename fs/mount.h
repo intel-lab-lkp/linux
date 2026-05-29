@@ -219,15 +219,7 @@ static inline struct mnt_namespace *to_mnt_ns(struct ns_common *ns)
 }
 
 #ifdef CONFIG_FSNOTIFY
-static inline void mnt_notify_add(struct mount *m)
-{
-	/* Optimize the case where there are no watches */
-	if ((m->mnt_ns && m->mnt_ns->n_fsnotify_marks) ||
-	    (m->prev_ns && m->prev_ns->n_fsnotify_marks))
-		list_add_tail(&m->to_notify, &notify_list);
-	else
-		m->prev_ns = m->mnt_ns;
-}
+void mnt_notify_add(struct mount *m);
 #else
 static inline void mnt_notify_add(struct mount *m)
 {
