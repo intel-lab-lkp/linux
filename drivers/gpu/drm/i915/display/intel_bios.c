@@ -2204,10 +2204,10 @@ parse_vswing_preemph_override(struct intel_display *display)
 	if (!block)
 		return;
 
-	display->vbt.tables = block->tables;
-	display->vbt.num_tables = block->num_tables;
-	display->vbt.num_columns = block->num_columns;
-	display->vbt.num_rows = vswing_preemph_num_rows(display);
+	display->vbt.vspeo.tables = block->tables;
+	display->vbt.vspeo.num_tables = block->num_tables;
+	display->vbt.vspeo.num_columns = block->num_columns;
+	display->vbt.vspeo.num_rows = vswing_preemph_num_rows(display);
 }
 
 static u8 translate_iboost(struct intel_display *display, u8 val)
