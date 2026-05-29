@@ -880,7 +880,9 @@ static int us5182d_probe(struct i2c_client *client)
 			goto out_err;
 	}
 
-	pm_runtime_enable(&client->dev);
+	ret = devm_pm_runtime_enable(&client->dev);
+	if (ret)
+		goto out_err;
 	pm_runtime_set_autosuspend_delay(&client->dev,
 					 US5182D_SLEEP_MS);
 	pm_runtime_use_autosuspend(&client->dev);
@@ -903,9 +905,6 @@ static void us5182d_remove(struct i2c_client *client)
 	int ret;
 
 	iio_device_unregister(i2c_get_clientdata(client));
-
-	pm_runtime_disable(&client->dev);
-	pm_runtime_set_suspended(&client->dev);
 
 	ret = us5182d_shutdown_en(data, US5182D_CFG0_SHUTDOWN_EN);
 	if (ret)
