@@ -628,24 +628,12 @@ void kvm_xen_inject_pending_events(struct kvm_vcpu *v)
 	if (!evtchn_pending_sel)
 		return;
 
-	/*
-	 * Yes, this is an open-coded loop. But that's just what put_user()
-	 * does anyway. Page it in and retry the instruction. We're just a
-	 * little more honest about it.
-	 */
-	read_lock(&gpc->lock);
-	while (!kvm_gpc_check(gpc, sizeof(struct vcpu_info))) {
-		read_unlock(&gpc->lock);
+	CLASS(gpc_map_local, vcpu_info_map)(gpc, sizeof(struct vcpu_info));
+	if (IS_ERR(vcpu_info_map))
+		return;
 
-		if (kvm_gpc_refresh(gpc, sizeof(struct vcpu_info)))
-			return;
-
-		read_lock(&gpc->lock);
-	}
-
-	/* Now gpc->khva is a valid kernel address for the vcpu_info */
 	if (IS_ENABLED(CONFIG_64BIT) && v->kvm->arch.xen.long_mode) {
-		struct vcpu_info *vi = gpc->khva;
+		struct vcpu_info *vi = *vcpu_info_map;
 
 		asm volatile(LOCK_PREFIX "orq %0, %1\n"
 			     "notq %0\n"
@@ -657,7 +645,7 @@ void kvm_xen_inject_pending_events(struct kvm_vcpu *v)
 		WRITE_ONCE(vi->evtchn_upcall_pending, 1);
 	} else {
 		u32 evtchn_pending_sel32 = evtchn_pending_sel;
-		struct compat_vcpu_info *vi = gpc->khva;
+		struct compat_vcpu_info *vi = *vcpu_info_map;
 
 		asm volatile(LOCK_PREFIX "orl %0, %1\n"
 			     "notl %0\n"
@@ -668,8 +656,6 @@ void kvm_xen_inject_pending_events(struct kvm_vcpu *v)
 			     : "0" (evtchn_pending_sel32));
 		WRITE_ONCE(vi->evtchn_upcall_pending, 1);
 	}
-
-	read_unlock(&gpc->lock);
 
 	/* For the per-vCPU lapic vector, deliver it as MSI. */
 	if (v->arch.xen.upcall_vector)
