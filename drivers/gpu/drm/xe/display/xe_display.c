@@ -473,8 +473,8 @@ void xe_display_pm_resume(struct xe_device *xe)
 
 	if (intel_display_device_present(display)) {
 		intel_display_driver_resume(display);
-		drm_kms_helper_poll_enable(&xe->drm);
 		intel_display_driver_enable_user_access(display);
+		drm_kms_helper_poll_enable(&xe->drm);
 	}
 
 	if (intel_display_device_present(display))
