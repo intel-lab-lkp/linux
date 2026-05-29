@@ -333,7 +333,7 @@ static void test_sigsegv_handler_with_different_pkey_for_stack(void)
 
 	if (child_pid < 0) {
 		errno = -child_pid;
-		perror("clone");
+		pkey_assert(0);
 	} else if (child_pid == 0) {
 		thread_segv_maperr_ptr(&sigstack);
 		syscall_raw(SYS_exit, 0, 0, 0, 0, 0, 0);
@@ -500,7 +500,7 @@ static void test_pkru_sigreturn(void)
 
 	if (child_pid < 0) {
 		errno = -child_pid;
-		perror("clone");
+		pkey_assert(0);
 	} else if (child_pid == 0) {
 		thread_sigusr2_self(&sigstack);
 		syscall_raw(SYS_exit, 0, 0, 0, 0, 0, 0);
