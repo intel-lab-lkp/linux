@@ -35,27 +35,19 @@ static bool kvm_xen_hcall_evtchn_send(struct kvm_vcpu *vcpu, u64 param, u64 *r);
 
 DEFINE_STATIC_KEY_DEFERRED_FALSE(kvm_xen_enabled, HZ);
 
-static int kvm_xen_shared_info_init(struct kvm *kvm)
+static int __kvm_xen_shared_info_init(struct kvm *kvm)
 {
 	struct gfn_to_pfn_cache *gpc = &kvm->arch.xen.shinfo_cache;
 	struct pvclock_wall_clock *wc;
 	u32 *wc_sec_hi;
 	u32 wc_version;
 	u64 wall_nsec;
-	int ret;
 
 	guard(srcu)(&kvm->srcu);
 
-	read_lock(&gpc->lock);
-	while (!kvm_gpc_check(gpc, PAGE_SIZE)) {
-		read_unlock(&gpc->lock);
-
-		ret = kvm_gpc_refresh(gpc, PAGE_SIZE);
-		if (ret)
-			return ret;
-
-		read_lock(&gpc->lock);
-	}
+	CLASS(gpc_map_local, shinfo_map)(gpc, PAGE_SIZE);
+	if (IS_ERR(shinfo_map))
+		return PTR_ERR(shinfo_map);
 
 	/*
 	 * This code mirrors kvm_write_wall_clock() except that it writes
@@ -74,14 +66,14 @@ static int kvm_xen_shared_info_init(struct kvm *kvm)
 	BUILD_BUG_ON(offsetof(struct shared_info, wc_sec_hi) != 0xc0c);
 
 	if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
-		struct shared_info *shinfo = gpc->khva;
+		struct shared_info *shinfo = *shinfo_map;
 
 		wc_sec_hi = &shinfo->wc_sec_hi;
 		wc = &shinfo->wc;
 	} else
 #endif
 	{
-		struct compat_shared_info *shinfo = gpc->khva;
+		struct compat_shared_info *shinfo = *shinfo_map;
 
 		wc_sec_hi = &shinfo->arch.wc_sec_hi;
 		wc = &shinfo->wc;
@@ -97,10 +89,18 @@ static int kvm_xen_shared_info_init(struct kvm *kvm)
 	smp_wmb();
 
 	wc->version = wc_version + 1;
-	read_unlock(&gpc->lock);
-
-	kvm_make_all_cpus_request(kvm, KVM_REQ_MASTERCLOCK_UPDATE);
 	return 0;
+}
+
+static int kvm_xen_shared_info_init(struct kvm *kvm)
+{
+	int r;
+
+	r = __kvm_xen_shared_info_init(kvm);
+	if (!r)
+		kvm_make_all_cpus_request(kvm, KVM_REQ_MASTERCLOCK_UPDATE);
+
+	return r;
 }
 
 void kvm_xen_inject_timer_irqs(struct kvm_vcpu *vcpu)
