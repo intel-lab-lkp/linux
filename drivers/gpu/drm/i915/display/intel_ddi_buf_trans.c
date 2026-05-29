@@ -3,6 +3,8 @@
  * Copyright © 2020 Intel Corporation
  */
 
+#include <drm/drm_print.h>
+
 #include "intel_cx0_phy.h"
 #include "intel_ddi.h"
 #include "intel_ddi_buf_trans.h"
@@ -1785,6 +1787,20 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 }
 
 static int
+xe3plpd_get_lt_vspeo_index(struct intel_encoder *encoder,
+			   const struct intel_crtc_state *crtc_state)
+{
+	if (intel_crtc_has_dp_encoder(crtc_state)) {
+		if (intel_dp_is_uhbr(crtc_state))
+			return LT_DP2X;
+		else
+			return LT_DP14;
+	}
+
+	return -EINVAL;
+}
+
+static int
 _get_phy_vspeo_index(struct intel_encoder *encoder,
 		     const struct intel_crtc_state *crtc_state)
 {
@@ -1800,6 +1816,8 @@ void intel_ddi_buf_trans_init(struct intel_encoder *encoder)
 
 	if (HAS_LT_PHY(display)) {
 		encoder->get_buf_trans = xe3plpd_get_lt_buf_trans;
+		encoder->get_phy_vspeo_index = xe3plpd_get_lt_vspeo_index;
+		encoder->get_phy_vspeo = intel_bios_encoder_get_lt_vspeo;
 	} else if (DISPLAY_VER(display) >= 14) {
 		if (intel_encoder_is_c10phy(encoder))
 			encoder->get_buf_trans = mtl_get_c10_buf_trans;
@@ -1878,8 +1896,12 @@ const struct intel_ddi_buf_trans *intel_ddi_buf_trans_get(struct intel_encoder *
 
 	table = encoder->get_phy_vspeo_index(encoder, crtc_state);
 	if (table < 0) {
-		drm_WARN_ONCE(display->drm, 1,
+		drm_WARN_ONCE(display->drm, table == EOPNOTSUPP,
 			      "platform does not support VS/PE-O, setting default\n");
+
+		drm_WARN_ONCE(display->drm, table != EOPNOTSUPP,
+			      "non-DP (%d) encoder asks for VS/PE-O, setting default\n",
+			      crtc_state->output_types);
 
 		return encoder->get_buf_trans(encoder, crtc_state, n_entries);
 	}
