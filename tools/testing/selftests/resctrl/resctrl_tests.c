@@ -23,6 +23,15 @@ static struct resctrl_test *resctrl_tests[] = {
 	&l2_noncont_cat_test,
 };
 
+static bool detect_aarch64(void)
+{
+#if defined(__aarch64__)
+	return true;
+#else
+	return false;
+#endif
+}
+
 static unsigned int detect_vendor(void)
 {
 	static unsigned int vendor_id;
@@ -33,6 +42,18 @@ static unsigned int detect_vendor(void)
 
 	if (initialized)
 		return vendor_id;
+
+	if (detect_aarch64()) {
+		/*
+		 * aarch64 has no userspace vendor_id in /proc/cpuinfo.
+		 * MPAM-capable ARM implementations follow ARM DDI 0598;
+		 * treat all aarch64 builds as a single vendor for the
+		 * purposes of resctrl selftests.
+		 */
+		vendor_id = ARCH_ARM;
+		initialized = true;
+		return vendor_id;
+	}
 
 	inf = fopen("/proc/cpuinfo", "r");
 	if (!inf) {
