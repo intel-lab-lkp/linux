@@ -1772,11 +1772,6 @@ struct kvm_lapic_irq {
 	bool msi_redir_hint;
 };
 
-static inline u16 kvm_lapic_irq_dest_mode(bool dest_mode_logical)
-{
-	return dest_mode_logical ? APIC_DEST_LOGICAL : APIC_DEST_PHYSICAL;
-}
-
 enum kvm_x86_run_flags {
 	KVM_RUN_FORCE_IMMEDIATE_EXIT	= BIT(0),
 	KVM_RUN_LOAD_GUEST_DR6		= BIT(1),
@@ -2509,13 +2504,6 @@ void __user *__x86_set_memory_region(struct kvm *kvm, int id, gpa_t gpa,
 				     u32 size);
 bool kvm_vcpu_is_reset_bsp(struct kvm_vcpu *vcpu);
 bool kvm_vcpu_is_bsp(struct kvm_vcpu *vcpu);
-
-static inline bool kvm_irq_is_postable(struct kvm_lapic_irq *irq)
-{
-	/* We can only post Fixed and LowPrio IRQs */
-	return (irq->delivery_mode == APIC_DM_FIXED ||
-		irq->delivery_mode == APIC_DM_LOWEST);
-}
 
 static inline void kvm_arch_vcpu_blocking(struct kvm_vcpu *vcpu)
 {
