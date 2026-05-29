@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config OPEN_SENSOR_FUSION
+	tristate "Open Sensor Fusion UART IIO driver"
+	depends on IIO
+	depends on SERIAL_DEV_BUS
+	select CRC32
+	help
+	  Build the Open Sensor Fusion UART receive path.
+
+	  The driver receives OSF0 frames over a serdev UART.
+	  Frames are decoded and validated before being passed to the
+	  driver core.
+	  This patch only adds the transport path.
+	  IIO device registration is added separately.
