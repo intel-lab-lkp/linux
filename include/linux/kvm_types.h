@@ -6,6 +6,7 @@
 #include <linux/bits.h>
 #include <linux/export.h>
 #include <linux/types.h>
+#include <vdso/page.h>
 #include <asm/kvm_types.h>
 
 #ifdef KVM_SUB_MODULES
@@ -72,6 +73,21 @@ typedef u64            hpa_t;
 typedef u64            hfn_t;
 
 typedef hfn_t kvm_pfn_t;
+
+static inline gpa_t gfn_to_gpa(gfn_t gfn)
+{
+	return (gpa_t)gfn << PAGE_SHIFT;
+}
+
+static inline gfn_t gpa_to_gfn(gpa_t gpa)
+{
+	return (gfn_t)(gpa >> PAGE_SHIFT);
+}
+
+static inline hpa_t pfn_to_hpa(kvm_pfn_t pfn)
+{
+	return (hpa_t)pfn << PAGE_SHIFT;
+}
 
 struct gfn_to_hva_cache {
 	u64 generation;

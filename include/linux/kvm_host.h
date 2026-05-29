@@ -1923,21 +1923,6 @@ hva_to_gfn_memslot(unsigned long hva, struct kvm_memory_slot *slot)
 	return slot->base_gfn + gfn_offset;
 }
 
-static inline gpa_t gfn_to_gpa(gfn_t gfn)
-{
-	return (gpa_t)gfn << PAGE_SHIFT;
-}
-
-static inline gfn_t gpa_to_gfn(gpa_t gpa)
-{
-	return (gfn_t)(gpa >> PAGE_SHIFT);
-}
-
-static inline hpa_t pfn_to_hpa(kvm_pfn_t pfn)
-{
-	return (hpa_t)pfn << PAGE_SHIFT;
-}
-
 static inline bool kvm_is_gpa_in_memslot(struct kvm *kvm, gpa_t gpa)
 {
 	unsigned long hva = gfn_to_hva(kvm, gpa_to_gfn(gpa));
