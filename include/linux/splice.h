@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Function declerations and data structures related to the splice
+ * Function declarations and data structures related to the splice
  * implementation.
  *
  * Copyright (C) 2007 Jens Axboe <jens.axboe@oracle.com>
