@@ -831,6 +831,12 @@ void intel_display_driver_pm_resume(struct intel_display *display)
 	if (!HAS_DISPLAY(display))
 		return;
 
+	intel_dmc_resume(display);
+
+	drm_mode_config_reset(display->drm);
+
+	intel_display_driver_init_hw(display);
+
 	intel_display_driver_resume_access(display);
 
 	intel_hpd_init(display);

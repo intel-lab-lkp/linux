@@ -57,7 +57,6 @@
 #include "display/intel_display_device.h"
 #include "display/intel_display_driver.h"
 #include "display/intel_display_power.h"
-#include "display/intel_dmc.h"
 #include "display/intel_dp.h"
 #include "display/intel_dpt.h"
 #include "display/intel_dram.h"
@@ -1233,8 +1232,6 @@ static int i915_drm_resume(struct drm_device *dev)
 	/* Must be called after GGTT is resumed. */
 	intel_dpt_resume(display);
 
-	intel_dmc_resume(display);
-
 	i9xx_display_sr_restore(display);
 
 	intel_gmbus_reset(display);
@@ -1255,12 +1252,7 @@ static int i915_drm_resume(struct drm_device *dev)
 	 */
 	intel_irq_resume(dev_priv);
 
-	if (intel_display_device_present(display))
-		drm_mode_config_reset(dev);
-
 	i915_gem_resume(dev_priv);
-
-	intel_display_driver_init_hw(display);
 
 	intel_clock_gating_init(&dev_priv->drm);
 

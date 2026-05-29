@@ -322,13 +322,6 @@ void xe_display_pm_resume(struct xe_device *xe)
 	if (!xe->info.probe_display)
 		return;
 
-	intel_dmc_resume(display);
-
-	if (intel_display_device_present(display))
-		drm_mode_config_reset(&xe->drm);
-
-	intel_display_driver_init_hw(display);
-
 	intel_display_driver_pm_resume(display);
 }
 
