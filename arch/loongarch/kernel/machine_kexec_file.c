@@ -13,7 +13,9 @@
 #include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/kexec.h>
+#include <linux/libfdt.h>
 #include <linux/memblock.h>
+#include <linux/of_fdt.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/types.h>
@@ -31,6 +33,11 @@ int arch_kimage_file_post_load_cleanup(struct kimage *image)
 	vfree(image->elf_headers);
 	image->elf_headers = NULL;
 	image->elf_headers_sz = 0;
+
+#ifdef CONFIG_KEXEC_HANDOVER
+	kvfree(image->arch.fdt);
+	image->arch.fdt = NULL;
+#endif
 
 	return kexec_image_post_load_cleanup_default(image);
 }
@@ -54,6 +61,111 @@ static void cmdline_add_initrd(struct kimage *image, unsigned long *cmdline_tmpl
 		initrd, image->initrd_buf_len);
 	*cmdline_tmplen += initrd_strlen;
 }
+
+#ifdef CONFIG_KEXEC_HANDOVER
+/*
+ * Add KHO metadata to an FDT /chosen node and load the FDT as a kexec
+ * segment.  The second kernel reads linux,kho-fdt and linux,kho-scratch
+ * from /chosen via early_init_dt_check_kho() and calls kho_populate().
+ *
+ */
+static int kho_load_fdt(struct kimage *image)
+{
+	void *fdt;
+	int ret, chosen_node;
+	size_t fdt_size;
+	struct kexec_buf kbuf = {
+		.image		= image,
+		.buf_min	= 0,
+		.buf_max	= ULONG_MAX,
+		.top_down	= true,
+	};
+
+	if (!image->kho.fdt || !image->kho.scratch)
+		return 0;
+
+	if (initial_boot_params) {
+		/*
+		 * FDT boot: copy the running kernel's FDT and append KHO
+		 * properties to /chosen.
+		 */
+
+		/*
+		 * Only two KHO properties are added to /chosen (linux,kho-fdt
+		 * and linux,kho-scratch), so SZ_1K of extra space is
+		 * sufficient.
+		 */
+		fdt_size = fdt_totalsize(initial_boot_params) + SZ_1K;
+		fdt = kvmalloc(fdt_size, GFP_KERNEL);
+		if (!fdt)
+			return -ENOMEM;
+
+		ret = fdt_open_into(initial_boot_params, fdt, fdt_size);
+		if (ret < 0) {
+			pr_err("Failed to open FDT: %d\n", ret);
+			goto out_free;
+		}
+
+		chosen_node = fdt_path_offset(fdt, "/chosen");
+		if (chosen_node == -FDT_ERR_NOTFOUND) {
+			pr_debug("No /chosen node in FDT, creating one\n");
+			chosen_node = fdt_add_subnode(fdt,
+						      fdt_path_offset(fdt, "/"),
+						      "chosen");
+		}
+		if (chosen_node < 0) {
+			ret = chosen_node;
+			goto out_free;
+		}
+
+		/* Remove stale KHO properties left by a previous kexec load */
+		fdt_delprop(fdt, chosen_node, "linux,kho-fdt");
+		fdt_delprop(fdt, chosen_node, "linux,kho-scratch");
+
+		ret = fdt_appendprop_addrrange(fdt, 0, chosen_node,
+					       "linux,kho-fdt",
+					       image->kho.fdt, PAGE_SIZE);
+		if (ret)
+			goto out_free;
+
+		ret = fdt_appendprop_addrrange(fdt, 0, chosen_node,
+					       "linux,kho-scratch",
+					       image->kho.scratch->mem,
+					       image->kho.scratch->bufsz);
+		if (ret)
+			goto out_free;
+
+		/*
+		 * Shrink totalsize to the actual data size so the kexec segment
+		 * allocated by kexec_add_buffer() covers only the packed FDT data.
+		 * The slack added above for property insertion is part of the
+		 * kvmalloc'd buffer, which is freed by kimage_file_post_load_cleanup()
+		 * once the kexec image has been loaded.
+		 */
+		fdt_pack(fdt);
+
+		kbuf.buffer	= fdt;
+		kbuf.bufsz	= fdt_totalsize(fdt);
+		kbuf.memsz	= kbuf.bufsz;
+		kbuf.buf_align	= PAGE_SIZE;
+		kbuf.mem	= KEXEC_BUF_MEM_UNKNOWN;
+
+		ret = kexec_add_buffer(&kbuf);
+		if (ret)
+			goto out_free;
+
+		image->arch.fdt     = fdt;
+		image->arch.fdt_mem = kbuf.mem;
+		return 0;
+	} else {
+		return -EINVAL;
+	}
+
+out_free:
+	kvfree(fdt);
+	return ret;
+}
+#endif
 
 #ifdef CONFIG_CRASH_DUMP
 
@@ -229,6 +341,12 @@ int load_other_segments(struct kimage *image,
 	memcpy(modified_cmdline + cmdline_tmplen, cmdline, cmdline_len);
 	cmdline = modified_cmdline;
 	image->arch.cmdline_ptr = (unsigned long)cmdline;
+
+#ifdef CONFIG_KEXEC_HANDOVER
+	ret = kho_load_fdt(image);
+	if (ret)
+		goto out_err;
+#endif
 
 	return 0;
 

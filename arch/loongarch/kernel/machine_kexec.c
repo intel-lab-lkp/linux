@@ -6,6 +6,7 @@
  */
 #include <linux/compiler.h>
 #include <linux/cpu.h>
+#include <linux/efi.h>
 #include <linux/kexec.h>
 #include <linux/crash_dump.h>
 #include <linux/delay.h>
@@ -283,6 +284,32 @@ void machine_kexec(struct kimage *image)
 	pr_notice("System table addr: 0x%lx\n", systable_ptr);
 	pr_notice("We will call new kernel at 0x%lx\n", start_addr);
 	pr_notice("Bye ...\n");
+
+#ifdef CONFIG_KEXEC_HANDOVER
+	/*
+	 * Point the EFI FDTPTR config table entry at the modified FDT so the
+	 * second kernel picks up the linux,kho-fdt and linux,kho-scratch
+	 * properties via early_init_dt_check_kho().
+	 */
+	if (internal->fdt_mem) {
+		/*
+		 * FDT-based system: DEVICE_TREE_GUID already exists in the EFI
+		 * config table; just update its pointer to our KHO FDT.
+		 */
+		efi_system_table_t *st =
+			(efi_system_table_t *)TO_CACHE(systable_ptr);
+		efi_config_table_t *ct =
+			(efi_config_table_t *)TO_CACHE((unsigned long)st->tables);
+		unsigned long i;
+
+		for (i = 0; i < st->nr_tables; i++) {
+			if (!efi_guidcmp(ct[i].guid, DEVICE_TREE_GUID)) {
+				ct[i].table = (void *)internal->fdt_mem;
+				break;
+			}
+		}
+	}
+#endif
 
 	/* Make reboot code buffer available to the boot CPU. */
 	flush_cache_all();
