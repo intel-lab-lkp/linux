@@ -2094,6 +2094,9 @@ static int damon_sysfs_apply_inputs(struct damon_ctx *ctx,
 			sys_ctx->attrs->sample);
 	if (err)
 		return err;
+	err = damon_sysfs_add_perf_events(ctx, sys_ctx->attrs->sample);
+	if (err)
+		return err;
 	err = damon_sysfs_add_targets(ctx, sys_ctx->targets);
 	if (err)
 		return err;
