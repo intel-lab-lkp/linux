@@ -11304,6 +11304,14 @@ F:	Documentation/devicetree/bindings/rng/
 F:	drivers/char/hw_random/
 F:	include/linux/hw_random.h
 
+HARDWARE RANDOM NUMBER GENERATOR CORE [RUST]
+M:	Manos Pitsidianakis <manos@pitsidianak.is>
+M:	Herbert Xu <herbert@gondor.apana.org.au>
+L:	linux-crypto@vger.kernel.org
+L:	rust-for-linux@vger.kernel.org
+S:	Maintained
+F:	rust/kernel/hw_random.rs
+
 HARDWARE SPINLOCK CORE
 M:	Bjorn Andersson <andersson@kernel.org>
 R:	Baolin Wang <baolin.wang7@gmail.com>
