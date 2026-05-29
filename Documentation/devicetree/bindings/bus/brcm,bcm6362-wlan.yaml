@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/bus/brcm,bcm6362-wlan.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom BCM6362 on-chip WLAN SHIM bridge
+
+maintainers:
+  - Alessio Ferri <alessio.ferri@mythread.it>
+
+description: |
+  The BCM6362 SoC integrates a 2.4 GHz Broadcom WLAN block whose
+  register backplane uses the Broadcom AMBA (bcma) architecture. The
+  backplane is gated by a small SHIM bridge that holds the WLAN macro
+  in reset and disables its clocks until released by software. CFE
+  does not release this block, so software bring-up is required
+  before bcma can enumerate the backplane.
+
+  This binding describes the SHIM bridge node. The SHIM driver brings
+  the macro up and then populates the brcm,bus-axi child node, which
+  describes the bcma backplane behind the SHIM and is bound by the
+  bcma-host-soc driver. The SoC-specific configuration (big-endian
+  accessors, SHIM-attached topology, SHIM Control register peephole
+  pointer) is delivered to bcma via platform_data injected at
+  populate time, so the brcm,bus-axi child stays SoC-agnostic.
+
+properties:
+  compatible:
+    const: brcm,bcm6362-wlan
+
+  reg:
+    maxItems: 1
+    description: SHIM peephole registers.
+
+  reg-names:
+    items:
+      - const: shim
+
+  clocks:
+    maxItems: 1
+
+  resets:
+    items:
+      - description: SHIM macro reset
+      - description: SHIM ubus reset
+
+  reset-names:
+    items:
+      - const: shim
+      - const: shim-ubus
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 1
+
+  ranges: true
+
+patternProperties:
+  "^axi@[0-9a-f]+$":
+    type: object
+    description: The bcma AXI backplane behind the SHIM.
+    $ref: /schemas/types.yaml#
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - clocks
+  - resets
+  - reset-names
+  - '#address-cells'
+  - '#size-cells'
+  - ranges
+
+additionalProperties: false
+
+examples:
+  - |
+    wlan@10007000 {
+        compatible = "brcm,bcm6362-wlan";
+        reg = <0x10007000 0x100>;
+        reg-names = "shim";
+        clocks = <&periph_clk 11>;
+        resets = <&periph_rst 7>, <&periph_rst 17>;
+        reset-names = "shim", "shim-ubus";
+
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+
+        axi@10004000 {
+            compatible = "brcm,bus-axi";
+            reg = <0x10004000 0x1000>;
+            ranges = <0x00000000 0x10004000 0x00002000>;
+
+            #address-cells = <1>;
+            #size-cells = <1>;
+            #interrupt-cells = <1>;
+
+            interrupt-map-mask = <0x000fffff 0xffff>;
+            interrupt-map = <0x00005000 0 &periph_intc 0 12>;
+        };
+    };
