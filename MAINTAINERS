@@ -19964,6 +19964,7 @@ OPEN SENSOR FUSION IIO DRIVER
 M:	Jinseob Kim <kimjinseob88@gmail.com>
 S:	Maintained
 F:	Documentation/devicetree/bindings/iio/imu/opensensorfusion,osf-green.yaml
+F:	Documentation/iio/open-sensor-fusion-protocol-v0.rst
 
 OPEN FIRMWARE AND FLATTENED DEVICE TREE
 M:	Rob Herring <robh@kernel.org>
