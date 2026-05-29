@@ -1309,26 +1309,7 @@ static int i915_drm_resume(struct drm_device *dev)
 
 	intel_clock_gating_init(&dev_priv->drm);
 
-	if (intel_display_device_present(display))
-		intel_display_driver_resume_access(display);
-
-	intel_hpd_init(display);
-
-	intel_encoder_unblock_all_hpds(display);
-
 	intel_display_driver_pm_resume(display);
-
-	if (intel_display_device_present(display)) {
-		intel_display_driver_enable_user_access(display);
-		drm_kms_helper_poll_enable(dev);
-	}
-	intel_hpd_poll_disable(display);
-
-	intel_opregion_resume(display);
-
-	drm_client_dev_resume(dev);
-
-	intel_display_power_enable(display);
 
 	intel_gvt_resume(dev_priv);
 

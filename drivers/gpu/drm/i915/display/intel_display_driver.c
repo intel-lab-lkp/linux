@@ -43,6 +43,7 @@
 #include "intel_dp_tunnel.h"
 #include "intel_dpll.h"
 #include "intel_dpll_mgr.h"
+#include "intel_encoder.h"
 #include "intel_fb.h"
 #include "intel_fbc.h"
 #include "intel_fbdev.h"
@@ -761,6 +762,12 @@ void intel_display_driver_pm_resume(struct intel_display *display)
 	if (!HAS_DISPLAY(display))
 		return;
 
+	intel_display_driver_resume_access(display);
+
+	intel_hpd_init(display);
+
+	intel_encoder_unblock_all_hpds(display);
+
 	/* MST sideband requires HPD interrupts enabled */
 	intel_dp_mst_resume(display);
 
@@ -790,4 +797,15 @@ void intel_display_driver_pm_resume(struct intel_display *display)
 			"Restoring old state failed with %i\n", ret);
 	if (state)
 		drm_atomic_commit_put(state);
+
+	intel_display_driver_enable_user_access(display);
+	drm_kms_helper_poll_enable(display->drm);
+
+	intel_hpd_poll_disable(display);
+
+	intel_opregion_resume(display);
+
+	drm_client_dev_resume(display->drm);
+
+	intel_display_power_enable(display);
 }
