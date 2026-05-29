@@ -114,6 +114,9 @@ module_param_named(tdp_mmu, tdp_mmu_enabled, bool, 0444);
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(tdp_mmu_enabled);
 #endif
 
+bool __read_mostly eager_page_split = true;
+module_param(eager_page_split, bool, 0644);
+
 static int max_huge_page_level __read_mostly;
 static int tdp_root_level __read_mostly;
 static int max_tdp_level __read_mostly;

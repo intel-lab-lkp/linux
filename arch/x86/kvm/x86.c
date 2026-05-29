@@ -177,9 +177,6 @@ module_param(force_emulation_prefix, int, 0644);
 int __read_mostly pi_inject_timer = -1;
 module_param(pi_inject_timer, bint, 0644);
 
-bool __read_mostly eager_page_split = true;
-module_param(eager_page_split, bool, 0644);
-
 /* Enable/disable SMT_RSB bug mitigation */
 static bool __read_mostly mitigate_smt_rsb;
 module_param(mitigate_smt_rsb, bool, 0444);

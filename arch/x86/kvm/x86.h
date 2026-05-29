@@ -415,8 +415,6 @@ extern int pi_inject_timer;
 
 extern bool report_ignored_msrs;
 
-extern bool eager_page_split;
-
 static inline void kvm_pr_unimpl_wrmsr(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 {
 	if (report_ignored_msrs)

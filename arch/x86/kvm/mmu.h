@@ -13,6 +13,7 @@ extern bool tdp_mmu_enabled;
 #define tdp_mmu_enabled false
 #endif
 extern bool __read_mostly enable_mmio_caching;
+extern bool eager_page_split;
 
 #define PT_WRITABLE_SHIFT 1
 #define PT_USER_SHIFT 2
