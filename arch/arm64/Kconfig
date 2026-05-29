@@ -1315,13 +1315,20 @@ config QCOM_FALKOR_ERRATUM_E1041
 
 	  If unsure, say Y.
 
-config NVIDIA_CARMEL_CNP_ERRATUM
-	bool "NVIDIA Carmel CNP: CNP on Carmel semantically different than ARM cores"
+config ARM64_WORKAROUND_DISABLE_CNP
+	bool "Disable CNP on affected CPUs"
 	default y
 	help
-	  If CNP is enabled on Carmel cores, non-sharable TLBIs on a core will not
-	  invalidate shared TLB entries installed by a different core, as it would
-	  on standard ARM cores.
+	  This option disables the CNP (Common Not Private) feature on CPUs
+	  that have hardware errata affecting CNP behavior.
+
+	  On NVIDIA Carmel cores, CNP behaves differently than on standard ARM
+	  cores: non-shareable TLBIs on a core may not invalidate shared TLB
+	  entries installed by a different core.
+
+	  On Hisilicon HIP09 cores, TLB entries may be incorrectly shared
+	  between cores when TTBRx.CNP=1, leading to TLB conflicts and
+	  stale mappings.
 
 	  If unsure, say Y.
 
