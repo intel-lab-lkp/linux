@@ -30,6 +30,7 @@
 #include <linux/fileattr.h>
 #include <linux/filelock.h>
 #include <linux/mm.h>
+#include <linux/memcontrol.h>
 #include <linux/random.h>
 #include <linux/sched/signal.h>
 #include <linux/export.h>
@@ -1791,6 +1792,29 @@ static struct folio *shmem_swapin_cluster(swp_entry_t swap, gfp_t gfp,
 	return folio;
 }
 
+static unsigned long shmem_swapin_locality_orders(struct vm_fault *vmf,
+						  unsigned long orders)
+{
+	struct vm_area_struct *vma = vmf ? vmf->vma : NULL;
+	unsigned long candidates = orders & ~BIT(0);
+
+	/*
+	 * Shmem does not have anon-style PTE young density evidence. Start with
+	 * explicit VMA access hints; future shmem/page-cache readahead evidence
+	 * can be folded into this producer without changing common swapin policy.
+	 */
+	if (!vma)
+		return 0;
+
+	if (vma->vm_flags & VM_RAND_READ)
+		return 0;
+
+	if (vma->vm_flags & VM_SEQ_READ)
+		return candidates;
+
+	return 0;
+}
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 bool shmem_hpage_pmd_enabled(void)
 {
@@ -2020,18 +2044,22 @@ static struct folio *shmem_swap_alloc_folio(struct inode *inode,
 		struct vm_fault *vmf, pgoff_t index,
 		swp_entry_t entry, int order, gfp_t gfp)
 {
+	unsigned long locality_orders;
+	unsigned long orders;
 	pgoff_t ilx;
 	struct folio *folio;
 	struct mempolicy *mpol;
 	struct shmem_inode_info *info = SHMEM_I(inode);
 
-	if ((vmf && unlikely(userfaultfd_armed(vmf->vma))) ||
-	     !zswap_never_enabled())
+	if (vmf && unlikely(userfaultfd_armed(vmf->vma)))
 		order = 0;
 
 again:
+	orders = BIT(order);
+	locality_orders = shmem_swapin_locality_orders(vmf, orders);
 	mpol = shmem_get_pgoff_policy(info, index, order, &ilx);
-	folio = swapin_sync(entry, gfp, BIT(order), 0, vmf, mpol, ilx);
+	folio = swapin_sync(entry, gfp, orders, locality_orders, vmf, mpol,
+			    ilx);
 	mpol_cond_put(mpol);
 
 	if (!IS_ERR(folio))
@@ -2339,7 +2367,7 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	if (!folio_matches_swap_entry(folio, swap) ||
 	    shmem_confirm_swap(mapping, index, swap) < 0) {
 		error = -EEXIST;
-		goto unlock;
+		goto failed_swapcache;
 	}
 	if (!folio_test_uptodate(folio)) {
 		error = -EIO;
@@ -2369,6 +2397,8 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 	if (sgp == SGP_WRITE)
 		folio_mark_accessed(folio);
 
+	if (folio_test_large(folio))
+		memcg1_swapin(folio);
 	folio_put_swap(folio, NULL);
 	swap_cache_del_folio(folio);
 	folio_mark_dirty(folio);
@@ -2379,9 +2409,11 @@ static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 failed:
 	if (shmem_confirm_swap(mapping, index, swap) < 0)
 		error = -EEXIST;
+failed_swapcache:
+	if (folio && folio_test_large(folio) && folio_test_swapcache(folio))
+		memcg1_swapin(folio);
 	if (error == -EIO)
 		shmem_set_folio_swapin_error(inode, index, folio, swap);
-unlock:
 	if (folio)
 		folio_unlock(folio);
 failed_nolock:
