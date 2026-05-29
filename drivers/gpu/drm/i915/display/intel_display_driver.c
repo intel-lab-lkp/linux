@@ -66,6 +66,8 @@
 #include "intel_wm.h"
 #include "skl_watermark.h"
 
+static int __intel_display_driver_pm_suspend(struct intel_display *display, bool shutdown);
+
 bool intel_display_driver_probe_defer(struct pci_dev *pdev)
 {
 	struct drm_privacy_screen *privacy_screen;
@@ -686,18 +688,7 @@ void intel_display_driver_shutdown(struct intel_display *display)
 	if (!HAS_DISPLAY(display))
 		return;
 
-	intel_display_power_disable(display);
-
-	drm_client_dev_suspend(display->drm);
-	drm_kms_helper_poll_disable(display->drm);
-
-	intel_display_driver_disable_user_access(display);
-
-	drm_atomic_helper_shutdown(display->drm);
-
-	flush_workqueue(display->wq.cleanup);
-
-	intel_dp_mst_suspend(display);
+	__intel_display_driver_pm_suspend(display, true);
 
 	intel_encoder_block_all_hpds(display);
 
@@ -726,10 +717,9 @@ void intel_display_driver_shutdown_late(struct intel_display *display)
  * turn all crtc's off, but do not adjust state
  * This has to be paired with a call to intel_modeset_setup_hw_state.
  */
-int intel_display_driver_pm_suspend(struct intel_display *display)
+static int __intel_display_driver_pm_suspend(struct intel_display *display, bool shutdown)
 {
-	struct drm_atomic_commit *state;
-	int ret;
+	int ret = 0;
 
 	if (!HAS_DISPLAY(display))
 		return 0;
@@ -745,13 +735,19 @@ int intel_display_driver_pm_suspend(struct intel_display *display)
 	drm_kms_helper_poll_disable(display->drm);
 	intel_display_driver_disable_user_access(display);
 
-	state = drm_atomic_helper_suspend(display->drm);
-	ret = PTR_ERR_OR_ZERO(state);
-	if (ret)
-		drm_err(display->drm, "Suspending crtc's failed with %i\n",
-			ret);
-	else
-		display->restore.modeset_state = state;
+	if (shutdown) {
+		drm_atomic_helper_shutdown(display->drm);
+	} else {
+		struct drm_atomic_commit *state;
+
+		state = drm_atomic_helper_suspend(display->drm);
+		ret = PTR_ERR_OR_ZERO(state);
+		if (ret)
+			drm_err(display->drm, "Suspending crtc's failed with %i\n",
+				ret);
+		else
+			display->restore.modeset_state = state;
+	}
 
 	/* ensure all DPT VMAs have been unpinned for intel_dpt_suspend() */
 	flush_workqueue(display->wq.cleanup);
@@ -759,6 +755,11 @@ int intel_display_driver_pm_suspend(struct intel_display *display)
 	intel_dp_mst_suspend(display);
 
 	return ret;
+}
+
+int intel_display_driver_pm_suspend(struct intel_display *display)
+{
+	return __intel_display_driver_pm_suspend(display, false);
 }
 
 void intel_display_driver_pm_suspend_late(struct intel_display *display, bool s2idle)
