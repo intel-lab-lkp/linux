@@ -161,12 +161,6 @@
 #define KVM_HPAGE_MASK(x)	(~(KVM_HPAGE_SIZE(x) - 1))
 #define KVM_PAGES_PER_HPAGE(x)	(KVM_HPAGE_SIZE(x) / PAGE_SIZE)
 
-#define KVM_MEMSLOT_PAGES_TO_MMU_PAGES_RATIO 50
-#define KVM_MIN_ALLOC_MMU_PAGES 64UL
-#define KVM_MMU_HASH_SHIFT 12
-#define KVM_NUM_MMU_PAGES (1 << KVM_MMU_HASH_SHIFT)
-#define KVM_MIN_FREE_MMU_PAGES 5
-#define KVM_REFILL_PAGES 25
 #define KVM_MAX_CPUID_ENTRIES 256
 #define KVM_NR_VAR_MTRR 8
 
@@ -2153,38 +2147,6 @@ enum kvm_intr_type {
 	((vcpu) && (vcpu)->arch.handling_intr_from_guest && \
 	 (!!in_nmi() == ((vcpu)->arch.handling_intr_from_guest == KVM_HANDLING_NMI)))
 
-void __init kvm_mmu_x86_module_init(void);
-int kvm_mmu_vendor_module_init(void);
-void kvm_mmu_vendor_module_exit(void);
-
-void kvm_mmu_destroy(struct kvm_vcpu *vcpu);
-int kvm_mmu_create(struct kvm_vcpu *vcpu);
-int kvm_mmu_init_vm(struct kvm *kvm);
-void kvm_mmu_uninit_vm(struct kvm *kvm);
-
-void kvm_mmu_init_memslot_memory_attributes(struct kvm *kvm,
-					    struct kvm_memory_slot *slot);
-
-void kvm_mmu_after_set_cpuid(struct kvm_vcpu *vcpu);
-void kvm_mmu_reset_context(struct kvm_vcpu *vcpu);
-void kvm_mmu_slot_remove_write_access(struct kvm *kvm,
-				      const struct kvm_memory_slot *memslot,
-				      int start_level);
-void kvm_mmu_slot_try_split_huge_pages(struct kvm *kvm,
-				       const struct kvm_memory_slot *memslot,
-				       int target_level);
-void kvm_mmu_try_split_huge_pages(struct kvm *kvm,
-				  const struct kvm_memory_slot *memslot,
-				  u64 start, u64 end,
-				  int target_level);
-void kvm_mmu_recover_huge_pages(struct kvm *kvm,
-				const struct kvm_memory_slot *memslot);
-void kvm_mmu_slot_leaf_clear_dirty(struct kvm *kvm,
-				   const struct kvm_memory_slot *memslot);
-void kvm_mmu_invalidate_mmio_sptes(struct kvm *kvm, u64 gen);
-void kvm_mmu_change_mmu_pages(struct kvm *kvm, unsigned long kvm_nr_mmu_pages);
-void kvm_zap_gfn_range(struct kvm *kvm, gfn_t gfn_start, gfn_t gfn_end);
-
 /*
  * EMULTYPE_NO_DECODE - Set when re-emulating an instruction (after completing
  *			userspace I/O) to indicate that the emulation context
@@ -2334,25 +2296,6 @@ static inline int __kvm_irq_line_state(unsigned long *irq_state,
 void kvm_inject_nmi(struct kvm_vcpu *vcpu);
 int kvm_get_nr_pending_nmis(struct kvm_vcpu *vcpu);
 
-bool __kvm_mmu_unprotect_gfn_and_retry(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa,
-				       bool always_retry);
-
-static inline bool kvm_mmu_unprotect_gfn_and_retry(struct kvm_vcpu *vcpu,
-						   gpa_t cr2_or_gpa)
-{
-	return __kvm_mmu_unprotect_gfn_and_retry(vcpu, cr2_or_gpa, false);
-}
-
-void kvm_mmu_free_roots(struct kvm *kvm, struct kvm_mmu *mmu,
-			ulong roots_to_free);
-void kvm_mmu_free_guest_mode_roots(struct kvm *kvm, struct kvm_mmu *mmu);
-gpa_t kvm_mmu_gva_to_gpa_read(struct kvm_vcpu *vcpu, gva_t gva,
-			      struct x86_exception *exception);
-gpa_t kvm_mmu_gva_to_gpa_write(struct kvm_vcpu *vcpu, gva_t gva,
-			       struct x86_exception *exception);
-gpa_t kvm_mmu_gva_to_gpa_system(struct kvm_vcpu *vcpu, gva_t gva,
-				struct x86_exception *exception);
-
 bool kvm_apicv_activated(struct kvm *kvm);
 bool kvm_vcpu_apicv_activated(struct kvm_vcpu *vcpu);
 void __kvm_vcpu_update_apicv(struct kvm_vcpu *vcpu);
@@ -2384,19 +2327,6 @@ static inline void kvm_dec_apicv_irq_window_req(struct kvm *kvm)
 {
 	kvm_inc_or_dec_irq_window_inhibit(kvm, false);
 }
-
-int kvm_mmu_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, u64 error_code,
-		       void *insn, int insn_len);
-void kvm_mmu_print_sptes(struct kvm_vcpu *vcpu, gpa_t gpa, const char *msg);
-void kvm_mmu_invlpg(struct kvm_vcpu *vcpu, gva_t gva);
-void kvm_mmu_invalidate_addr(struct kvm_vcpu *vcpu, struct kvm_mmu *mmu,
-			     u64 addr, unsigned long roots);
-void kvm_mmu_invpcid_gva(struct kvm_vcpu *vcpu, gva_t gva, unsigned long pcid);
-void kvm_mmu_new_pgd(struct kvm_vcpu *vcpu, gpa_t new_pgd);
-
-void kvm_configure_mmu(bool enable_tdp, int tdp_forced_root_level,
-		       int tdp_max_root_level, int tdp_huge_page_level);
-
 
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
 #define kvm_arch_has_private_mem(kvm) ((kvm)->arch.has_private_mem)
