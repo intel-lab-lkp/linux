@@ -1761,7 +1761,6 @@ static void kvm_xen_check_poller(struct kvm_vcpu *vcpu, int port)
 static void __kvm_xen_set_evtchn_fast(struct kvm_vcpu *vcpu, int port_word_bit)
 {
 	struct gfn_to_pfn_cache *gpc = &vcpu->arch.xen.vcpu_info_cache;
-	bool kick_vcpu = false;
 
 	/* Now switch to the vCPU's vcpu_info to set the index and pending_sel */
 	CLASS(gpc_try_map_local, vcpu_info_map)(gpc, sizeof(struct vcpu_info));
@@ -1771,39 +1770,37 @@ static void __kvm_xen_set_evtchn_fast(struct kvm_vcpu *vcpu, int port_word_bit)
 	 * vCPU to deliver it for itself.
 	 */
 	if (IS_ERR(vcpu_info_map)) {
-		if (!test_and_set_bit(port_word_bit, &vcpu->arch.xen.evtchn_pending_sel))
-			kick_vcpu = true;
+		if (test_and_set_bit(port_word_bit, &vcpu->arch.xen.evtchn_pending_sel))
+			return;
 		goto out_kick;
 	}
 
 	if (IS_ENABLED(CONFIG_64BIT) && vcpu->kvm->arch.xen.long_mode) {
 		struct vcpu_info *vcpu_info = *vcpu_info_map;
 
-		if (!test_and_set_bit(port_word_bit, &vcpu_info->evtchn_pending_sel)) {
-			WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
-			kick_vcpu = true;
-		}
+		if (test_and_set_bit(port_word_bit, &vcpu_info->evtchn_pending_sel))
+			return;
+
+		WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
 	} else {
 		struct compat_vcpu_info *vcpu_info = *vcpu_info_map;
 
-		if (!test_and_set_bit(port_word_bit,
-					(unsigned long *)&vcpu_info->evtchn_pending_sel)) {
-			WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
-			kick_vcpu = true;
-		}
+		if (test_and_set_bit(port_word_bit,
+				     (unsigned long *)&vcpu_info->evtchn_pending_sel))
+			return;
+
+		WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
 	}
 
 	/* For the per-vCPU lapic vector, deliver it as MSI. */
-	if (kick_vcpu && vcpu->arch.xen.upcall_vector) {
+	if (vcpu->arch.xen.upcall_vector) {
 		kvm_xen_inject_vcpu_vector(vcpu);
-		kick_vcpu = false;
+		return;
 	}
 
 out_kick:
-	if (kick_vcpu) {
-		kvm_make_request(KVM_REQ_UNBLOCK, vcpu);
-		kvm_vcpu_kick(vcpu);
-	}
+	kvm_make_request(KVM_REQ_UNBLOCK, vcpu);
+	kvm_vcpu_kick(vcpu);
 }
 
 /*
