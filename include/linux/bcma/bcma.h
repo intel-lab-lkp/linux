@@ -362,6 +362,20 @@ struct bcma_bus {
 	/* We decided to share SPROM struct with SSB as long as we do not need
 	 * any hacks for BCMA. This simplifies drivers code. */
 	struct ssb_sprom sprom;
+
+	/* SoC quirks populated from struct bcma_host_soc_pdata when a
+	 * SHIM-attached parent bridge driver instantiates the bcma-host-soc
+	 * child platform_device. big_endian selects ioread/iowrite *be
+	 * helpers on the scan and host_soc accessor paths; shim_attached
+	 * tells scan.c that wrapper-less cores (NMW=NSW=0) are legitimate
+	 * on this backplane; shim_iomem points at the SoC-level SHIM
+	 * Control register peephole that host_soc.c routes per-core
+	 * BCMA_IOCTL / BCMA_RESET_CTL accesses through. shim_iomem is
+	 * borrowed from the parent and must not be unmapped here.
+	 */
+	bool big_endian;
+	bool shim_attached;
+	void __iomem *shim_iomem;
 };
 
 static inline u32 bcma_read8(struct bcma_device *core, u16 offset)
