@@ -209,6 +209,37 @@ static int hmm_dmirror_cmd(int fd,
 	return 0;
 }
 
+static int hmm_read_self_pagemap(void *addr, unsigned long npages,
+				 unsigned long page_size)
+{
+	const size_t entry_size = sizeof(uint64_t);
+	const off_t offset = ((uintptr_t)addr / page_size) * entry_size;
+	uint64_t *entries;
+	ssize_t nread;
+	int fd;
+
+	entries = malloc(npages * entry_size);
+	if (!entries)
+		return -ENOMEM;
+
+	fd = open("/proc/self/pagemap", O_RDONLY);
+	if (fd < 0) {
+		free(entries);
+		return -errno;
+	}
+
+	nread = pread(fd, entries, npages * entry_size, offset);
+	close(fd);
+	free(entries);
+
+	if (nread < 0)
+		return -errno;
+	if ((size_t)nread != npages * entry_size)
+		return -EIO;
+
+	return 0;
+}
+
 static void hmm_buffer_free(struct hmm_buffer *buffer)
 {
 	if (buffer == NULL)
@@ -2313,6 +2344,10 @@ TEST_F(hmm, migrate_anon_huge_fault)
 	ret = hmm_migrate_sys_to_dev(self->fd, buffer, npages);
 	ASSERT_EQ(ret, 0);
 	ASSERT_EQ(buffer->cpages, npages);
+
+	/* Exercise pagemap on a PMD device-private entry. */
+	ret = hmm_read_self_pagemap(buffer->ptr, npages, self->page_size);
+	ASSERT_EQ(ret, 0);
 
 	/* Check what the device read. */
 	for (i = 0, ptr = buffer->mirror; i < size / sizeof(*ptr); ++i)
