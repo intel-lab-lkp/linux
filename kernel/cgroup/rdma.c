@@ -23,14 +23,18 @@ enum rdmacg_limit_tokens {
 	RDMACG_HCA_HANDLE_MAX,
 	RDMACG_HCA_OBJECT_VAL,
 	RDMACG_HCA_OBJECT_MAX,
+	RDMACG_MR_MEM_VAL,
+	RDMACG_MR_MEM_MAX,
 	NR_RDMACG_LIMIT_TOKENS,
 };
 
 static const match_table_t rdmacg_limit_tokens = {
-	{ RDMACG_HCA_HANDLE_VAL,	"hca_handle=%d"	},
+	{ RDMACG_HCA_HANDLE_VAL,	"hca_handle=%d"		},
 	{ RDMACG_HCA_HANDLE_MAX,	"hca_handle=max"	},
-	{ RDMACG_HCA_OBJECT_VAL,	"hca_object=%d"	},
+	{ RDMACG_HCA_OBJECT_VAL,	"hca_object=%d"		},
 	{ RDMACG_HCA_OBJECT_MAX,	"hca_object=max"	},
+	{ RDMACG_MR_MEM_VAL,		"mr_mem=%d"		},
+	{ RDMACG_MR_MEM_MAX,		"mr_mem=max"		},
 	{ NR_RDMACG_LIMIT_TOKENS,	NULL			},
 };
 
@@ -55,6 +59,7 @@ enum rdmacg_file_type {
 static char const *rdmacg_resource_names[] = {
 	[RDMACG_RESOURCE_HCA_HANDLE]	= "hca_handle",
 	[RDMACG_RESOURCE_HCA_OBJECT]	= "hca_object",
+	[RDMACG_RESOURCE_MR_MEM]	= "mr_mem",
 };
 
 /* resource tracker for each resource of rdma cgroup */
@@ -565,6 +570,18 @@ static ssize_t rdmacg_resource_set_max(struct kernfs_open_file *of,
 		case RDMACG_HCA_OBJECT_MAX:
 			new_limits[RDMACG_RESOURCE_HCA_OBJECT] = S64_MAX;
 			enables |= BIT(RDMACG_RESOURCE_HCA_OBJECT);
+			break;
+		case RDMACG_MR_MEM_VAL:
+			if (match_s64(&args[0], &intval)) {
+				ret = -EINVAL;
+				goto parse_err;
+			}
+			new_limits[RDMACG_RESOURCE_MR_MEM] = intval;
+			enables |= BIT(RDMACG_RESOURCE_MR_MEM);
+			break;
+		case RDMACG_MR_MEM_MAX:
+			new_limits[RDMACG_RESOURCE_MR_MEM] = S64_MAX;
+			enables |= BIT(RDMACG_RESOURCE_MR_MEM);
 			break;
 		default:
 			ret = -EINVAL;

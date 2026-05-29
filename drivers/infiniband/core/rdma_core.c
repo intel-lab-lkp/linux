@@ -523,10 +523,19 @@ struct ib_uobject *rdma_alloc_begin_uobject(const struct uverbs_api_object *obj,
 	return ret;
 }
 
-static void alloc_abort_idr_uobject(struct ib_uobject *uobj)
+static void rdmacg_uncharge_uobj(struct ib_uobject *uobj)
 {
 	ib_rdmacg_uncharge(&uobj->cg_obj, uobj->context->device,
 			   RDMACG_RESOURCE_HCA_OBJECT, 1);
+	if (uobj->rdmacg_mr_mem_bytes)
+		ib_rdmacg_uncharge(&uobj->cg_obj, uobj->context->device,
+				   RDMACG_RESOURCE_MR_MEM,
+				   uobj->rdmacg_mr_mem_bytes);
+}
+
+static void alloc_abort_idr_uobject(struct ib_uobject *uobj)
+{
+	rdmacg_uncharge_uobj(uobj);
 
 	xa_erase(&uobj->ufile->idr, uobj->id);
 }
@@ -546,8 +555,7 @@ static int __must_check destroy_hw_idr_uobject(struct ib_uobject *uobj,
 	if (why == RDMA_REMOVE_ABORT)
 		return 0;
 
-	ib_rdmacg_uncharge(&uobj->cg_obj, uobj->context->device,
-			   RDMACG_RESOURCE_HCA_OBJECT, 1);
+	rdmacg_uncharge_uobj(uobj);
 
 	return 0;
 }

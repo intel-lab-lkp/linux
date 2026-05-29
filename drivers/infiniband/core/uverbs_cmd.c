@@ -764,6 +764,17 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 
 	uobj->object = mr;
 	uobj_put_obj_read(pd);
+
+	if (cmd.length > S64_MAX)
+		goto err_free;
+	if (cmd.length) {
+		ret = ib_rdmacg_try_charge(&uobj->cg_obj, uobj->context->device,
+					   RDMACG_RESOURCE_MR_MEM, cmd.length);
+		if (ret)
+			goto err_dereg;
+		uobj->rdmacg_mr_mem_bytes = cmd.length;
+	}
+
 	uobj_finalize_uobj_create(uobj, attrs);
 
 	resp.lkey = mr->lkey;
@@ -771,6 +782,8 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	resp.mr_handle = uobj->id;
 	return uverbs_response(attrs, &resp, sizeof(resp));
 
+err_dereg:
+	ib_dereg_mr_user(mr, &attrs->driver_udata);
 err_put:
 	uobj_put_obj_read(pd);
 err_free:
@@ -863,6 +876,20 @@ static int ib_uverbs_rereg_mr(struct uverbs_attr_bundle *attrs)
 		rdma_restrack_set_name(&new_mr->res, NULL);
 		rdma_restrack_add(&new_mr->res);
 
+		if ((cmd.flags & IB_MR_REREG_TRANS) && cmd.length) {
+			if (cmd.length > S64_MAX) {
+				ret = -EINVAL;
+				goto err_rereg_new_mr;
+			}
+			ret = ib_rdmacg_try_charge(&new_uobj->cg_obj,
+						   new_uobj->context->device,
+						   RDMACG_RESOURCE_MR_MEM,
+						   cmd.length);
+			if (ret)
+				goto err_rereg_new_mr;
+			new_uobj->rdmacg_mr_mem_bytes = cmd.length;
+		}
+
 		/*
 		 * The new uobj for the new HW object is put into the same spot
 		 * in the IDR and the old uobj & HW object is deleted.
@@ -880,6 +907,31 @@ static int ib_uverbs_rereg_mr(struct uverbs_attr_bundle *attrs)
 			atomic_inc(&new_pd->usecnt);
 		}
 		if (cmd.flags & IB_MR_REREG_TRANS) {
+			s64 delta;
+
+			if (cmd.length > S64_MAX) {
+				ret = -EINVAL;
+				goto put_new_uobj;
+			}
+			delta = (s64)cmd.length -
+				(s64)uobj->rdmacg_mr_mem_bytes;
+
+			if (delta > 0) {
+				ret = ib_rdmacg_try_charge(
+					&uobj->cg_obj,
+					uobj->context->device,
+					RDMACG_RESOURCE_MR_MEM,
+					delta);
+				if (ret)
+					goto put_new_uobj;
+			} else if (delta < 0) {
+				ib_rdmacg_uncharge(
+					&uobj->cg_obj,
+					uobj->context->device,
+					RDMACG_RESOURCE_MR_MEM,
+					-delta);
+			}
+			uobj->rdmacg_mr_mem_bytes = cmd.length;
 			mr->iova = cmd.hca_va;
 			mr->length = cmd.length;
 		}
@@ -894,6 +946,11 @@ static int ib_uverbs_rereg_mr(struct uverbs_attr_bundle *attrs)
 put_new_uobj:
 	if (new_uobj)
 		uobj_alloc_abort(new_uobj, attrs);
+err_rereg_new_mr:
+	if (new_uobj) {
+		rdma_alloc_abort_uobject(new_uobj, attrs, true);
+		new_uobj = NULL;
+	}
 put_uobj_pd:
 	if (cmd.flags & IB_MR_REREG_PD)
 		uobj_put_obj_read(new_pd);
