@@ -979,6 +979,11 @@ void llc_sk_free(struct sock *sk)
 	llc->state = LLC_CONN_OUT_OF_SVC;
 	/* Stop all (possibly) running timers */
 	llc_sk_stop_all_timers(sk, true);
+	/* Orphan the socket after timers are stopped; otherwise a pending
+	 * timer callback could dereference the NULL sk->sk_socket that
+	 * sock_orphan() sets.
+	 */
+	sock_orphan(sk);
 #ifdef DEBUG_LLC_CONN_ALLOC
 	printk(KERN_INFO "%s: unackq=%d, txq=%d\n", __func__,
 		skb_queue_len(&llc->pdu_unack_q),

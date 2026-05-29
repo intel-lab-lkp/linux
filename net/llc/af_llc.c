@@ -226,7 +226,6 @@ static int llc_ui_release(struct socket *sock)
 	}
 	netdev_put(llc->dev, &llc->dev_tracker);
 	sock_put(sk);
-	sock_orphan(sk);
 	sock->sk = NULL;
 	llc_sk_free(sk);
 out:
