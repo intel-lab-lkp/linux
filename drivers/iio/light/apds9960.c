@@ -1074,7 +1074,9 @@ static int apds9960_probe(struct i2c_client *client)
 	if (ret)
 		goto error_power_down;
 
-	pm_runtime_enable(&client->dev);
+	ret = devm_pm_runtime_enable(&client->dev);
+	if (ret)
+		return ret;
 	pm_runtime_set_autosuspend_delay(&client->dev, 5000);
 	pm_runtime_use_autosuspend(&client->dev);
 
@@ -1123,8 +1125,6 @@ static void apds9960_remove(struct i2c_client *client)
 	struct apds9960_data *data = iio_priv(indio_dev);
 
 	iio_device_unregister(indio_dev);
-	pm_runtime_disable(&client->dev);
-	pm_runtime_set_suspended(&client->dev);
 	apds9960_set_powermode(data, 0);
 }
 
