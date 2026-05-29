@@ -909,6 +909,19 @@ static inline size_t list_count_nodes(struct list_head *head)
 	     pos = n, n = list_next_entry(n, member))
 
 /**
+ * list_for_each_entry_mutable - iterate over list of given type safe against
+ * removal of list entry
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your list.
+ * @member:	the name of the list_head within the struct.
+ */
+#define list_for_each_entry_mutable(pos, head, member)			\
+	for (typeof(pos) __temp__ = list_next_entry(pos =		\
+	     list_first_entry(head, typeof(*pos), member), member);	\
+	     !list_entry_is_head(pos, head, member);			\
+	     pos = __temp__, __temp__ = list_next_entry(__temp__, member))
+
+/**
  * list_for_each_entry_safe_continue - continue list iteration safe against removal
  * @pos:	the type * to use as a loop cursor.
  * @n:		another type * to use as temporary storage
@@ -923,6 +936,22 @@ static inline size_t list_count_nodes(struct list_head *head)
 		n = list_next_entry(pos, member);				\
 	     !list_entry_is_head(pos, head, member);				\
 	     pos = n, n = list_next_entry(n, member))
+
+/**
+ * list_for_each_entry_mutable_continue - continue list iteration safe against
+ * removal of list entry
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your list.
+ * @member:	the name of the list_head within the struct.
+ *
+ * Iterate over list of given type, continuing after current point,
+ * safe against removal of list entry.
+ */
+#define list_for_each_entry_mutable_continue(pos, head, member)		\
+	for (typeof(pos) __temp__ = list_next_entry(pos =		\
+	     list_next_entry(pos, member), member);			\
+	     !list_entry_is_head(pos, head, member);			\
+	     pos = __temp__, __temp__ = list_next_entry(__temp__, member))
 
 /**
  * list_for_each_entry_safe_from - iterate over list from current point safe against removal
@@ -940,6 +969,21 @@ static inline size_t list_count_nodes(struct list_head *head)
 	     pos = n, n = list_next_entry(n, member))
 
 /**
+ * list_for_each_entry_mutable_from - iterate over list from current point safe
+ * against removal
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your list.
+ * @member:	the name of the list_head within the struct.
+ *
+ * Iterate over list of given type from current point, safe against
+ * removal of list entry.
+ */
+#define list_for_each_entry_mutable_from(pos, head, member)		\
+	for (typeof(pos) __temp__ = list_next_entry(pos, member);	\
+	     !list_entry_is_head(pos, head, member);			\
+	     pos = __temp__, __temp__ = list_next_entry(__temp__, member))
+
+/**
  * list_for_each_entry_safe_reverse - iterate backwards over list safe against removal
  * @pos:	the type * to use as a loop cursor.
  * @n:		another type * to use as temporary storage
@@ -954,6 +998,22 @@ static inline size_t list_count_nodes(struct list_head *head)
 		n = list_prev_entry(pos, member);			\
 	     !list_entry_is_head(pos, head, member); 			\
 	     pos = n, n = list_prev_entry(n, member))
+
+/**
+ * list_for_each_entry_mutable_reverse - iterate backwards over list safe against
+ * removal
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your list.
+ * @member:	the name of the list_head within the struct.
+ *
+ * Iterate backwards over list of given type, safe against removal
+ * of list entry.
+ */
+#define list_for_each_entry_mutable_reverse(pos, head, member)		\
+	for (typeof(pos) __temp__ = list_prev_entry(pos =		\
+	     list_last_entry(head, typeof(*pos), member), member);	\
+	     !list_entry_is_head(pos, head, member);			\
+	     pos = __temp__, __temp__ = list_prev_entry(__temp__, member))
 
 /**
  * list_safe_reset_next - reset a stale list_for_each_entry_safe loop

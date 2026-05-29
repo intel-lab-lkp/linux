@@ -287,6 +287,19 @@ static inline int list_empty(const struct list_head *head)
 	     pos = list_next_entry(pos, member))
 
 /**
+ * list_for_each_entry_mutable - iterate over list of given type safe against
+ * removal of list entry
+ * @pos:	the type * to use as a loop cursor.
+ * @head:	the head for your list.
+ * @member:	the name of the list_head within the struct.
+ */
+#define list_for_each_entry_mutable(pos, head, member)			\
+	for (typeof(pos) __temp__ = list_next_entry(pos =		\
+	     list_first_entry(head, typeof(*pos), member), member);	\
+	     !list_entry_is_head(pos, head, member);			\
+	     pos = __temp__, __temp__ = list_next_entry(__temp__, member))
+
+/**
  * list_for_each_entry_reverse - iterate backwards over list of given type.
  * @pos:	the type * to use as a loop cursor.
  * @head:	the head for your list.
