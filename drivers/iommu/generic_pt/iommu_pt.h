@@ -199,6 +199,59 @@ phys_addr_t DOMAIN_NS(iova_to_phys)(struct iommu_domain *domain,
 }
 EXPORT_SYMBOL_NS_GPL(DOMAIN_NS(iova_to_phys), "GENERIC_PT_IOMMU");
 
+static __always_inline int __do_iova_to_pgsize(struct pt_range *range,
+					       void *arg, unsigned int level,
+					       struct pt_table_p *table,
+					       pt_level_fn_t descend_fn)
+{
+	struct pt_state pts = pt_init(range, level, table);
+	size_t *pgsize = arg;
+
+	switch (pt_load_single_entry(&pts)) {
+	case PT_ENTRY_EMPTY:
+		return -ENOENT;
+	case PT_ENTRY_TABLE:
+		return pt_descend(&pts, arg, descend_fn);
+	case PT_ENTRY_OA:
+		*pgsize = BIT(pt_entry_oa_lg2sz(&pts));
+		return 0;
+	}
+	return -ENOENT;
+}
+PT_MAKE_LEVELS(__iova_to_pgsize, __do_iova_to_pgsize);
+
+/**
+ * iova_to_pgsize() - Return the page size of the mapping at the given IOVA
+ * @domain: Table to query
+ * @iova: IO virtual address to query
+ *
+ * Walk the IOMMU page table to determine the actual page size of the PTE
+ * entry that maps the given IOVA.
+ *
+ * Context: The caller must hold a read range lock that includes @iova.
+ *
+ * Return: The page size in bytes, or 0 if there is no translation.
+ */
+size_t DOMAIN_NS(iova_to_pgsize)(struct iommu_domain *domain,
+				 dma_addr_t iova)
+{
+	struct pt_iommu *iommu_table =
+		container_of(domain, struct pt_iommu, domain);
+	struct pt_range range;
+	size_t pgsize;
+	int ret;
+
+	ret = make_range(common_from_iommu(iommu_table), &range, iova, 1);
+	if (ret)
+		return 0;
+
+	ret = pt_walk_range(&range, __iova_to_pgsize, &pgsize);
+	if (ret)
+		return 0;
+	return pgsize;
+}
+EXPORT_SYMBOL_NS_GPL(DOMAIN_NS(iova_to_pgsize), "GENERIC_PT_IOMMU");
+
 struct pt_iommu_dirty_args {
 	struct iommu_dirty_bitmap *dirty;
 	unsigned int flags;

@@ -3890,6 +3890,7 @@ static struct iommu_domain identity_domain = {
 
 const struct iommu_domain_ops intel_fs_paging_domain_ops = {
 	IOMMU_PT_DOMAIN_OPS(x86_64),
+	IOMMU_PT_PGSIZE_OPS(x86_64),
 	.attach_dev = intel_iommu_attach_device,
 	.set_dev_pasid = intel_iommu_set_dev_pasid,
 	.iotlb_sync_map = intel_iommu_iotlb_sync_map,
@@ -3901,6 +3902,7 @@ const struct iommu_domain_ops intel_fs_paging_domain_ops = {
 
 const struct iommu_domain_ops intel_ss_paging_domain_ops = {
 	IOMMU_PT_DOMAIN_OPS(vtdss),
+	IOMMU_PT_PGSIZE_OPS(vtdss),
 	.attach_dev = intel_iommu_attach_device,
 	.set_dev_pasid = intel_iommu_set_dev_pasid,
 	.iotlb_sync_map = intel_iommu_iotlb_sync_map,

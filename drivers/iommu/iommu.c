@@ -2557,6 +2557,31 @@ phys_addr_t iommu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova)
 }
 EXPORT_SYMBOL_GPL(iommu_iova_to_phys);
 
+/**
+ * iommu_iova_to_pgsize - Get the page size of the mapping at a given IOVA
+ * @domain: IOMMU domain to query
+ * @iova: IO virtual address to query
+ *
+ * Walk the IOMMU page table to determine the actual page size of the PTE
+ * entry that maps the given IOVA. This reflects the real mapping granularity,
+ * not an inferred value from alignment.
+ *
+ * Returns the page size in bytes, or 0 if the mapping doesn't exist or the
+ * domain doesn't support this query.
+ */
+size_t iommu_iova_to_pgsize(struct iommu_domain *domain, dma_addr_t iova)
+{
+	if (domain->type == IOMMU_DOMAIN_IDENTITY ||
+	    domain->type == IOMMU_DOMAIN_BLOCKED)
+		return 0;
+
+	if (!domain->ops->iova_to_pgsize)
+		return 0;
+
+	return domain->ops->iova_to_pgsize(domain, iova);
+}
+EXPORT_SYMBOL_GPL(iommu_iova_to_pgsize);
+
 static size_t iommu_pgsize(struct iommu_domain *domain, unsigned long iova,
 			   phys_addr_t paddr, size_t size, size_t *count)
 {

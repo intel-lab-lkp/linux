@@ -2662,6 +2662,7 @@ static const struct pt_iommu_driver_ops amd_hw_driver_ops_v1 = {
 
 static const struct iommu_domain_ops amdv1_ops = {
 	IOMMU_PT_DOMAIN_OPS(amdv1),
+	IOMMU_PT_PGSIZE_OPS(amdv1),
 	.iotlb_sync_map = amd_iommu_iotlb_sync_map,
 	.flush_iotlb_all = amd_iommu_flush_iotlb_all,
 	.iotlb_sync = amd_iommu_iotlb_sync,
@@ -2740,6 +2741,7 @@ static struct iommu_domain *amd_iommu_domain_alloc_paging_v1(struct device *dev,
 
 static const struct iommu_domain_ops amdv2_ops = {
 	IOMMU_PT_DOMAIN_OPS(x86_64),
+	IOMMU_PT_PGSIZE_OPS(x86_64),
 	.iotlb_sync_map = amd_iommu_iotlb_sync_map,
 	.flush_iotlb_all = amd_iommu_flush_iotlb_all,
 	.iotlb_sync = amd_iommu_iotlb_sync,

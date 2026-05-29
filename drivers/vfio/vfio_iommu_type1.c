@@ -1177,7 +1177,7 @@ static long vfio_unmap_unpin(struct vfio_iommu *iommu, struct vfio_dma *dma,
 
 	iommu_iotlb_gather_init(&iotlb_gather);
 	while (pos < dma->size) {
-		size_t unmapped, len;
+		size_t unmapped, len, pgsize;
 		phys_addr_t phys, next;
 		dma_addr_t iova = dma->iova + pos;
 
@@ -1191,11 +1191,24 @@ static long vfio_unmap_unpin(struct vfio_iommu *iommu, struct vfio_dma *dma,
 		 * To optimize for fewer iommu_unmap() calls, each of which
 		 * may require hardware cache flushing, try to find the
 		 * largest contiguous physical memory chunk to unmap.
+		 *
+		 * Query the actual IOMMU PTE mapping granularity at this IOVA
+		 * to determine the guaranteed contiguous range. Use only the
+		 * remaining portion within the current PTE from our position,
+		 * in case we start from the middle of a large page mapping.
 		 */
-		for (len = PAGE_SIZE; pos + len < dma->size; len += PAGE_SIZE) {
+		pgsize = iommu_iova_to_pgsize(domain->domain, iova);
+		if (!pgsize)
+			pgsize = PAGE_SIZE;
+		len = pgsize - (iova & (pgsize - 1));
+		for (; pos + len < dma->size; len += pgsize) {
 			next = iommu_iova_to_phys(domain->domain, iova + len);
 			if (next != phys + len)
 				break;
+			pgsize = iommu_iova_to_pgsize(domain->domain,
+						      iova + len);
+			if (!pgsize)
+				pgsize = PAGE_SIZE;
 		}
 
 		/*
