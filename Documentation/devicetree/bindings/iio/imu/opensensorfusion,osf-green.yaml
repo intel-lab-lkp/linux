@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/imu/opensensorfusion,osf-green.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: OSF GREEN sensor aggregation board
+
+maintainers:
+  - Jinseob Kim <kimjinseob88@gmail.com>
+
+description: |
+  OSF GREEN is an STM32F405-based sensor aggregation board from the Open
+  Sensor Fusion open hardware project. It sends OSF0 capability, status, and
+  sample frames to a host over a UART link.
+
+  Open Sensor Fusion is not a generic industry standard. Public project and
+  hardware documentation is available at:
+
+    https://github.com/opensensorfusion
+    https://github.com/opensensorfusion/opensensorfusion-hardware
+
+allOf:
+  - $ref: /schemas/serial/serial-peripheral-props.yaml#
+
+properties:
+  compatible:
+    const: opensensorfusion,osf-green
+
+required:
+  - compatible
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    serial {
+        sensor {
+            compatible = "opensensorfusion,osf-green";
+        };
+    };
+
+...
