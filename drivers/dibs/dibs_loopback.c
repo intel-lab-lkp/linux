@@ -150,17 +150,21 @@ static int dibs_lo_unregister_dmb(struct dibs_dev *dibs, struct dibs_dmb *dmb)
 			break;
 		}
 	}
-	read_unlock_bh(&ldev->dmb_ht_lock);
-	if (!dmb_node)
+	if (!dmb_node) {
+		read_unlock_bh(&ldev->dmb_ht_lock);
 		return -EINVAL;
-
-	if (refcount_dec_and_test(&dmb_node->refcnt)) {
-		spin_lock_irqsave(&dibs->lock, flags);
-		dibs->dmb_clientid_arr[dmb_node->sba_idx] = NO_DIBS_CLIENT;
-		spin_unlock_irqrestore(&dibs->lock, flags);
-
-		__dibs_lo_unregister_dmb(ldev, dmb_node);
 	}
+	if (!refcount_dec_and_test(&dmb_node->refcnt)) {
+		read_unlock_bh(&ldev->dmb_ht_lock);
+		return 0;
+	}
+	read_unlock_bh(&ldev->dmb_ht_lock);
+
+	spin_lock_irqsave(&dibs->lock, flags);
+	dibs->dmb_clientid_arr[dmb_node->sba_idx] = NO_DIBS_CLIENT;
+	spin_unlock_irqrestore(&dibs->lock, flags);
+
+	__dibs_lo_unregister_dmb(ldev, dmb_node);
 	return 0;
 }
 
@@ -184,16 +188,10 @@ static int dibs_lo_attach_dmb(struct dibs_dev *dibs, struct dibs_dmb *dmb)
 			break;
 		}
 	}
-	if (!dmb_node) {
-		read_unlock_bh(&ldev->dmb_ht_lock);
-		return -EINVAL;
-	}
+	if (dmb_node && !refcount_inc_not_zero(&dmb_node->refcnt))
+		dmb_node = NULL;
 	read_unlock_bh(&ldev->dmb_ht_lock);
-
-	if (!refcount_inc_not_zero(&dmb_node->refcnt))
-		/* the dmb is being unregistered, but has
-		 * not been removed from the hash table.
-		 */
+	if (!dmb_node)
 		return -EINVAL;
 
 	/* provide dmb information */
@@ -220,14 +218,14 @@ static int dibs_lo_detach_dmb(struct dibs_dev *dibs, u64 token)
 			break;
 		}
 	}
-	if (!dmb_node) {
+	if (dmb_node && refcount_dec_and_test(&dmb_node->refcnt)) {
 		read_unlock_bh(&ldev->dmb_ht_lock);
-		return -EINVAL;
+		__dibs_lo_unregister_dmb(ldev, dmb_node);
+		return 0;
 	}
 	read_unlock_bh(&ldev->dmb_ht_lock);
-
-	if (refcount_dec_and_test(&dmb_node->refcnt))
-		__dibs_lo_unregister_dmb(ldev, dmb_node);
+	if (!dmb_node)
+		return -EINVAL;
 	return 0;
 }
 
