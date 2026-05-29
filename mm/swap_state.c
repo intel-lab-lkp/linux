@@ -21,6 +21,7 @@
 #include <linux/migrate.h>
 #include <linux/vmalloc.h>
 #include <linux/huge_mm.h>
+#include <linux/zswap.h>
 #include <linux/shmem_fs.h>
 #include "internal.h"
 #include "swap_table.h"
@@ -403,7 +404,8 @@ void __swap_cache_replace_folio(struct swap_cluster_info *ci,
 static struct folio *__swap_cache_alloc(struct swap_cluster_info *ci,
 					swp_entry_t targ_entry, gfp_t gfp,
 					unsigned int order, struct vm_fault *vmf,
-					struct mempolicy *mpol, pgoff_t ilx)
+					struct mempolicy *mpol, pgoff_t ilx,
+					bool defer_memcg1_swapin)
 {
 	int err;
 	swp_entry_t entry;
@@ -466,7 +468,8 @@ static struct folio *__swap_cache_alloc(struct swap_cluster_info *ci,
 	}
 
 	/* memsw uncharges swap when folio is added to swap cache */
-	memcg1_swapin(folio);
+	if (!defer_memcg1_swapin || !order)
+		memcg1_swapin(folio);
 	if (shadow)
 		workingset_refault(folio, shadow);
 
@@ -495,9 +498,12 @@ static struct folio *__swap_cache_alloc(struct swap_cluster_info *ci,
  * Return: Returns the folio if allocation succeeded and folio is in the swap
  * cache. Returns error code if failed due to race, OOM or invalid arguments.
  */
-struct folio *swap_cache_alloc_folio(swp_entry_t targ_entry, gfp_t gfp,
-				     unsigned long orders, struct vm_fault *vmf,
-				     struct mempolicy *mpol, pgoff_t ilx)
+static struct folio *__swap_cache_alloc_folio(swp_entry_t targ_entry,
+					      gfp_t gfp, unsigned long orders,
+					      struct vm_fault *vmf,
+					      struct mempolicy *mpol,
+					      pgoff_t ilx,
+					      bool defer_memcg1_swapin)
 {
 	int order, err;
 	struct folio *ret;
@@ -512,7 +518,8 @@ struct folio *swap_cache_alloc_folio(swp_entry_t targ_entry, gfp_t gfp,
 
 	do {
 		ret = __swap_cache_alloc(ci, targ_entry, gfp, order,
-					 vmf, mpol, ilx);
+					 vmf, mpol, ilx,
+					 defer_memcg1_swapin);
 		if (!IS_ERR(ret))
 			break;
 		err = PTR_ERR(ret);
@@ -523,6 +530,124 @@ struct folio *swap_cache_alloc_folio(swp_entry_t targ_entry, gfp_t gfp,
 	} while (orders);
 
 	return ret;
+}
+
+struct folio *swap_cache_alloc_folio(swp_entry_t targ_entry, gfp_t gfp,
+				     unsigned long orders, struct vm_fault *vmf,
+				     struct mempolicy *mpol, pgoff_t ilx)
+{
+	return __swap_cache_alloc_folio(targ_entry, gfp, orders, vmf,
+					mpol, ilx, false);
+}
+
+static struct folio *swap_cache_alloc_speculative_folio(swp_entry_t targ_entry,
+							gfp_t gfp,
+							unsigned long orders,
+							struct vm_fault *vmf,
+							struct mempolicy *mpol,
+							pgoff_t ilx)
+{
+	/*
+	 * Speculative large swapin may drop this fresh swapcache folio and
+	 * retry order-0 after backend or page-table revalidation. Keep the
+	 * cgroup v1 memsw swap owner until the caller commits the folio.
+	 */
+	return __swap_cache_alloc_folio(targ_entry, gfp, orders, vmf,
+					mpol, ilx, true);
+}
+
+static bool swapin_zeromap_same(swp_entry_t entry, unsigned int nr_pages)
+{
+	unsigned int ci_start = swp_cluster_offset(entry);
+	struct swap_cluster_info *ci = __swap_entry_to_cluster(entry);
+	bool is_zero;
+	unsigned int i;
+
+	if (ci_start + nr_pages > SWAPFILE_CLUSTER) {
+		VM_WARN_ON_ONCE(1);
+		return false;
+	}
+
+	rcu_read_lock();
+	if (!rcu_dereference(ci->table)) {
+		rcu_read_unlock();
+		return true;
+	}
+
+	is_zero = __swap_table_test_zero(ci, ci_start);
+	for (i = 1; i < nr_pages; i++) {
+		if (is_zero != __swap_table_test_zero(ci, ci_start + i)) {
+			rcu_read_unlock();
+			return false;
+		}
+	}
+	rcu_read_unlock();
+
+	return true;
+}
+
+static unsigned long swapin_admit_orders(swp_entry_t entry,
+					 unsigned long orders)
+{
+	unsigned long candidates = orders & ~BIT(0);
+	unsigned long admitted = orders & BIT(0);
+	int order;
+
+	if (!candidates)
+		return orders;
+
+	while (candidates) {
+		enum zswap_range_state state;
+		unsigned int nr_pages;
+		swp_entry_t range_entry;
+		bool admit = false;
+
+		order = fls_long(candidates) - 1;
+		if (order > MAX_PAGE_ORDER) {
+			candidates &= ~BIT(order);
+			continue;
+		}
+
+		nr_pages = 1U << order;
+		range_entry = swp_entry(swp_type(entry),
+					round_down(swp_offset(entry), nr_pages));
+		if (!swapin_zeromap_same(range_entry, nr_pages))
+			goto next;
+
+		state = zswap_probe_range(range_entry, nr_pages);
+		switch (state) {
+		case ZSWAP_RANGE_MIXED:
+			break;
+		case ZSWAP_RANGE_ALL_ZSWAP:
+		case ZSWAP_RANGE_NEVER_ENABLED:
+		case ZSWAP_RANGE_NO_ZSWAP:
+			admit = true;
+			break;
+		}
+
+next:
+		if (admit)
+			admitted |= BIT(order);
+		else
+			count_mthp_stat(order, MTHP_STAT_SWPIN_FALLBACK);
+		candidates &= ~BIT(order);
+	}
+
+	return admitted ? admitted : BIT(0);
+}
+
+static bool zswap_needs_order0_retry(struct folio *folio)
+{
+	if (!folio_test_large(folio))
+		return false;
+
+	/*
+	 * Admission sees only an advisory zswap snapshot. Recheck after the
+	 * large swapcache folio is installed; if the range became mixed, drop
+	 * the fresh folio before IO and let order-0 handle each slot.
+	 */
+	return zswap_probe_range(folio->swap, folio_nr_pages(folio)) ==
+	       ZSWAP_RANGE_MIXED;
 }
 
 /*
@@ -634,7 +759,8 @@ static struct folio *swap_cache_read_folio(swp_entry_t entry, gfp_t gfp,
 		folio = swap_cache_get_folio(entry);
 		if (folio)
 			return folio;
-		folio = swap_cache_alloc_folio(entry, gfp, BIT(0), NULL, mpol, ilx);
+		folio = swap_cache_alloc_folio(entry, gfp, BIT(0), NULL,
+					       mpol, ilx);
 	} while (PTR_ERR(folio) == -EEXIST);
 
 	if (IS_ERR_OR_NULL(folio))
@@ -677,18 +803,43 @@ struct folio *swapin_sync(swp_entry_t entry, gfp_t gfp, unsigned long orders,
 	struct folio *folio;
 	int ret;
 
+	orders = swapin_admit_orders(entry, orders);
+again:
 	do {
 		folio = swap_cache_get_folio(entry);
 		if (folio)
 			return folio;
-		folio = swap_cache_alloc_folio(entry, gfp, orders, vmf, mpol, ilx);
+		folio = swap_cache_alloc_speculative_folio(entry, gfp, orders,
+							   vmf, mpol, ilx);
 	} while (PTR_ERR(folio) == -EEXIST);
 
 	if (IS_ERR(folio))
 		return folio;
 
+	if (zswap_needs_order0_retry(folio)) {
+		count_mthp_stat(folio_order(folio), MTHP_STAT_SWPIN_FALLBACK);
+		/*
+		 * The folio is newly allocated, locked, clean and not uptodate;
+		 * no data has been read into it. Removing it only restores the
+		 * swap table entries so order-0 swapin can resolve a backend
+		 * race without attempting speculative large-folio zswapin.
+		 */
+		swap_cache_del_folio(folio);
+		folio_unlock(folio);
+		folio_put(folio);
+		orders = BIT(0);
+		goto again;
+	}
+
 	ret = swap_read_folio(folio, NULL);
-	VM_WARN_ON_ONCE(ret == -EAGAIN);
+	if (ret == -EAGAIN) {
+		count_mthp_stat(folio_order(folio), MTHP_STAT_SWPIN_FALLBACK);
+		swap_cache_del_folio(folio);
+		folio_unlock(folio);
+		folio_put(folio);
+		orders = BIT(0);
+		goto again;
+	}
 	return folio;
 }
 

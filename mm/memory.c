@@ -4538,6 +4538,24 @@ static inline bool should_try_to_free_swap(struct swap_info_struct *si,
 		folio_ref_count(folio) == (extra_refs + folio_nr_pages(folio));
 }
 
+static void memcg1_swapin_retry_folio(struct folio *folio,
+				      struct vm_fault *vmf)
+{
+	if (!folio_test_large(folio) || !folio_test_swapcache(folio))
+		return;
+
+	if (vmf->flags & FAULT_FLAG_RETRY_NOWAIT) {
+		if (!folio_trylock(folio))
+			return;
+	} else {
+		folio_lock(folio);
+	}
+
+	if (folio_test_large(folio) && folio_test_swapcache(folio))
+		memcg1_swapin(folio);
+	folio_unlock(folio);
+}
+
 static vm_fault_t pte_marker_clear(struct vm_fault *vmf)
 {
 	vmf->pte = pte_offset_map_lock(vmf->vma->vm_mm, vmf->pmd,
@@ -4857,8 +4875,10 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 
 	swapcache = folio;
 	ret |= folio_lock_or_retry(folio, vmf);
-	if (ret & VM_FAULT_RETRY)
+	if (ret & VM_FAULT_RETRY) {
+		memcg1_swapin_retry_folio(folio, vmf);
 		goto out_release;
+	}
 
 	page = folio_file_page(folio, swp_offset(entry));
 	/*
@@ -5067,6 +5087,8 @@ check_folio:
 	if (unlikely(folio != swapcache)) {
 		folio_add_new_anon_rmap(folio, vma, address, RMAP_EXCLUSIVE);
 		folio_add_lru_vma(folio, vma);
+		if (folio_test_large(swapcache))
+			memcg1_swapin(swapcache);
 		folio_put_swap(swapcache, NULL);
 	} else if (!folio_test_anon(folio)) {
 		/*
@@ -5076,6 +5098,8 @@ check_folio:
 		VM_WARN_ON_ONCE_FOLIO(folio_nr_pages(folio) != nr_pages, folio);
 		VM_WARN_ON_ONCE_FOLIO(folio_mapped(folio), folio);
 		folio_add_new_anon_rmap(folio, vma, address, rmap_flags);
+		if (folio_test_large(folio))
+			memcg1_swapin(folio);
 		folio_put_swap(folio, NULL);
 	} else {
 		VM_WARN_ON_ONCE(nr_pages != 1 && nr_pages != folio_nr_pages(folio));
@@ -5132,8 +5156,11 @@ out_nomap:
 	if (vmf->pte)
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
 out_page:
-	if (folio_test_swapcache(folio))
+	if (folio_test_swapcache(folio)) {
+		if (folio_test_large(folio))
+			memcg1_swapin(folio);
 		folio_free_swap(folio);
+	}
 	folio_unlock(folio);
 out_release:
 	folio_put(folio);

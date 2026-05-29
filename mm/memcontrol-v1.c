@@ -682,8 +682,8 @@ void __memcg1_swapout(struct folio *folio, struct swap_cluster_info *ci)
  * memcg1_swapin - uncharge swap slot on swapin
  * @folio: folio being swapped in
  *
- * Call this function after successfully adding the charged
- * folio to swapcache.
+ * Call this after the charged folio has been added to swapcache and the caller
+ * is no longer going to drop it back to swapped-out state.
  *
  * Context: The folio has to be in swap cache and locked.
  */
@@ -721,7 +721,9 @@ void memcg1_swapin(struct folio *folio)
 	id = __swap_cgroup_clear(ci, swp_cluster_offset(folio->swap),
 				 nr_pages);
 	swap_cluster_unlock(ci);
-	mem_cgroup_uncharge_swap(id, nr_pages);
+
+	if (id)
+		mem_cgroup_uncharge_swap(id, nr_pages);
 }
 #endif
 
