@@ -681,6 +681,34 @@ void intel_display_driver_unregister(struct intel_display *display)
 	intel_vga_unregister(display);
 }
 
+void intel_display_driver_shutdown(struct intel_display *display)
+{
+	if (!HAS_DISPLAY(display))
+		return;
+
+	intel_display_power_disable(display);
+
+	drm_client_dev_suspend(display->drm);
+	drm_kms_helper_poll_disable(display->drm);
+
+	intel_display_driver_disable_user_access(display);
+
+	drm_atomic_helper_shutdown(display->drm);
+
+	flush_workqueue(display->wq.cleanup);
+
+	intel_dp_mst_suspend(display);
+
+	intel_encoder_block_all_hpds(display);
+
+	intel_hpd_cancel_work(display);
+
+	intel_display_driver_suspend_access(display);
+
+	intel_encoder_suspend_all(display);
+	intel_encoder_shutdown_all(display);
+}
+
 void intel_display_driver_shutdown_late(struct intel_display *display)
 {
 	if (!HAS_DISPLAY(display))
