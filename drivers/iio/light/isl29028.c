@@ -615,7 +615,9 @@ static int isl29028_probe(struct i2c_client *client)
 	indio_dev->name = id->name;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 
-	pm_runtime_enable(&client->dev);
+	ret = devm_pm_runtime_enable(&client->dev);
+	if (ret)
+		return ret;
 	pm_runtime_set_autosuspend_delay(&client->dev,
 					 ISL29028_POWER_OFF_DELAY_MS);
 	pm_runtime_use_autosuspend(&client->dev);
@@ -637,9 +639,6 @@ static void isl29028_remove(struct i2c_client *client)
 	struct isl29028_chip *chip = iio_priv(indio_dev);
 
 	iio_device_unregister(indio_dev);
-
-	pm_runtime_disable(&client->dev);
-	pm_runtime_set_suspended(&client->dev);
 
 	isl29028_clear_configure_reg(chip);
 }
