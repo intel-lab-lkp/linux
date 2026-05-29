@@ -19,6 +19,7 @@
  * more details.
  */
 
+#include <linux/acpi.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
@@ -74,6 +75,39 @@ static void i2c_hid_of_power_down(struct i2chid_ops *ops)
 			       ihid_of->supplies);
 }
 
+#ifdef CONFIG_ACPI
+/* HID I²C Device: 3cdff6f7-4267-4555-ad05-b30a3d8938de */
+static guid_t i2c_hid_of_acpi_guid =
+	GUID_INIT(0x3CDFF6F7, 0x4267, 0x4555,
+		  0xAD, 0x05, 0xB3, 0x0A, 0x3D, 0x89, 0x38, 0xDE);
+
+/*
+ * Some devices, for example the Lenovo KaiTian N60d and Inspur CP300L3,
+ * declare their I2C HID touchpad with _HID "PRP0001" and _DSD compatible
+ * "hid-over-i2c" but lack the "hid-descr-addr" property. Use the _DSM
+ * method to obtain the HID descriptor address.
+ */
+static int i2c_hid_of_acpi_get_descriptor(struct device *dev)
+{
+	struct acpi_device *adev = ACPI_COMPANION(dev);
+	union acpi_object *obj;
+	u16 addr;
+
+	if (!adev)
+		return -ENODEV;
+
+	obj = acpi_evaluate_dsm_typed(acpi_device_handle(adev),
+				      &i2c_hid_of_acpi_guid, 1, 1, NULL,
+				      ACPI_TYPE_INTEGER);
+	if (!obj)
+		return -ENODEV;
+
+	addr = obj->integer.value;
+	ACPI_FREE(obj);
+	return addr;
+}
+#endif
+
 static int i2c_hid_of_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -92,6 +126,16 @@ static int i2c_hid_of_probe(struct i2c_client *client)
 	ihid_of->ops.power_down = i2c_hid_of_power_down;
 
 	ret = device_property_read_u32(dev, "hid-descr-addr", &val);
+#ifdef CONFIG_ACPI
+	if (ret) {
+		int dsm_ret = i2c_hid_of_acpi_get_descriptor(dev);
+
+		if (dsm_ret >= 0) {
+			val = dsm_ret;
+			ret = 0;
+		}
+	}
+#endif
 	if (ret) {
 		dev_err(dev, "HID register address not provided\n");
 		return -ENODEV;
