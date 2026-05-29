@@ -318,6 +318,21 @@ static int bcma_get_next_core(struct bcma_bus *bus, u32 __iomem **eromptr,
 		case BCMA_CORE_GCI:
 		/* Not used yet: case BCMA_CORE_OOB_ROUTER: */
 			break;
+		case BCMA_CORE_CHIPCOMMON:
+		case BCMA_CORE_80211:
+		case BCMA_CORE_SHIM:
+			/* SHIM-style mini-EROM SoCs publish CHIPCOMMON, the
+			 * IEEE 802.11 core and the SHIM core itself with
+			 * NMW=NSW=0 because clock and reset gating happens
+			 * at the SoC level via the SHIM Control register,
+			 * not via per-core DMP wrappers. host_soc.c sets
+			 * bus->shim_attached on those SoCs from pdata; the
+			 * strict NMW=NSW=0 rejection still applies to PCI-
+			 * attached cards and to SoCs without that quirk.
+			 */
+			if (bus->shim_attached)
+				break;
+			fallthrough;
 		default:
 			bcma_erom_skip_component(bus, eromptr);
 			return -ENXIO;
