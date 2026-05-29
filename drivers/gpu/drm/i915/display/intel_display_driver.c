@@ -714,6 +714,22 @@ int intel_display_driver_pm_suspend(struct intel_display *display)
 	return ret;
 }
 
+void intel_display_driver_pm_suspend_late(struct intel_display *display, bool s2idle)
+{
+	if (!HAS_DISPLAY(display))
+		return;
+
+	intel_display_power_suspend_late(display, s2idle);
+}
+
+void intel_display_driver_pm_resume_early(struct intel_display *display)
+{
+	if (!HAS_DISPLAY(display))
+		return;
+
+	intel_display_power_resume_early(display);
+}
+
 int
 __intel_display_driver_resume(struct intel_display *display,
 			      struct drm_atomic_commit *state,

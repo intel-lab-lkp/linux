@@ -335,7 +335,7 @@ void xe_display_pm_suspend_late(struct xe_device *xe)
 	if (!xe->info.probe_display)
 		return;
 
-	intel_display_power_suspend_late(display, s2idle);
+	intel_display_driver_pm_suspend_late(display, s2idle);
 }
 
 void xe_display_pm_resume_early(struct xe_device *xe)
@@ -345,7 +345,7 @@ void xe_display_pm_resume_early(struct xe_device *xe)
 	if (!xe->info.probe_display)
 		return;
 
-	intel_display_power_resume_early(display);
+	intel_display_driver_pm_resume_early(display);
 }
 
 void xe_display_pm_resume(struct xe_device *xe)
