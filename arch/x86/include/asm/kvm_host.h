@@ -2275,18 +2275,6 @@ static inline void kvm_inject_emulated_page_fault(struct kvm_vcpu *vcpu,
 
 bool kvm_require_dr(struct kvm_vcpu *vcpu, int dr);
 
-static inline int __kvm_irq_line_state(unsigned long *irq_state,
-				       int irq_source_id, int level)
-{
-	/* Logical OR for level trig interrupt */
-	if (level)
-		__set_bit(irq_source_id, irq_state);
-	else
-		__clear_bit(irq_source_id, irq_state);
-
-	return !!(*irq_state);
-}
-
 void kvm_inject_nmi(struct kvm_vcpu *vcpu);
 int kvm_get_nr_pending_nmis(struct kvm_vcpu *vcpu);
 
