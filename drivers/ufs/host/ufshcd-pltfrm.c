@@ -211,6 +211,143 @@ static void ufshcd_init_lanes_per_dir(struct ufs_hba *hba)
 }
 
 /**
+ * ufshcd_parse_tx_eq_settings_for_gear - Parse static TX EQ DT settings for one gear
+ * @hba: per adapter instance
+ * @gear: target HS gear
+ * @num_elems: expected number of elements per property
+ *
+ * Reads the txeq-preshoot-gN, txeq-deemphasis-gN, and (for G6)
+ * tx-precode-enable-gN device-tree properties and, if all are valid, stores
+ * them as static TX Equalization settings for the given gear.
+ */
+static void ufshcd_parse_tx_eq_settings_for_gear(struct ufs_hba *hba,
+						 int gear, const u32 num_elems)
+{
+	u32 precode_en[UFS_MAX_LANES * 2] = { 0 };
+	const u32 lpd = hba->lanes_per_direction;
+	struct ufshcd_tx_eq_params *params;
+	u32 deemphasis[UFS_MAX_LANES * 2];
+	u32 preshoot[UFS_MAX_LANES * 2];
+	struct device *dev = hba->dev;
+	char prop_name[MAX_PROP_SIZE];
+	int i, err, lane, count;
+
+	snprintf(prop_name, MAX_PROP_SIZE, "txeq-preshoot-g%d", gear);
+	count = of_property_count_u32_elems(dev->of_node, prop_name);
+	if (count <= 0)
+		return;
+
+	if (count != num_elems) {
+		dev_err(dev, "Property %s has invalid count (%d), expecting %u\n",
+			prop_name, count, num_elems);
+		return;
+	}
+
+	err = of_property_read_u32_array(dev->of_node, prop_name, preshoot, num_elems);
+	if (err) {
+		dev_err(dev, "Failed to read %s property, %d\n", prop_name, err);
+		return;
+	}
+
+	for (i = 0; i < num_elems; i++) {
+		if (preshoot[i] >= TX_HS_NUM_PRESHOOT) {
+			dev_err(dev, "An invalid TX EQ PreShoot (%d) provided in %s property\n",
+				preshoot[i], prop_name);
+			return;
+		}
+	}
+
+	snprintf(prop_name, MAX_PROP_SIZE, "txeq-deemphasis-g%d", gear);
+	count = of_property_count_u32_elems(dev->of_node, prop_name);
+	if (count <= 0) {
+		dev_err(dev, "Missing required %s property\n", prop_name);
+		return;
+	}
+
+	if (count != num_elems) {
+		dev_err(dev, "Property %s has invalid count (%d), expecting %u\n",
+			prop_name, count, num_elems);
+		return;
+	}
+
+	err = of_property_read_u32_array(dev->of_node, prop_name, deemphasis, num_elems);
+	if (err) {
+		dev_err(dev, "Failed to read %s property, %d\n", prop_name, err);
+		return;
+	}
+
+	for (i = 0; i < num_elems; i++) {
+		if (deemphasis[i] >= TX_HS_NUM_DEEMPHASIS) {
+			dev_err(dev, "An invalid TX EQ DeEmphasis (%d) provided in %s property\n",
+				deemphasis[i], prop_name);
+			return;
+		}
+	}
+
+	if (gear == UFS_HS_G6) {
+		snprintf(prop_name, MAX_PROP_SIZE, "tx-precode-enable-g%d", gear);
+		count = of_property_count_u32_elems(dev->of_node, prop_name);
+		if (count > 0) {
+			if (count != num_elems) {
+				dev_err(dev, "Property %s has invalid count (%d), expecting %u\n",
+					prop_name, count, num_elems);
+				return;
+			}
+
+			err = of_property_read_u32_array(dev->of_node, prop_name,
+							 precode_en, num_elems);
+			if (err) {
+				dev_err(dev, "Failed to read %s property, %d\n",
+					prop_name, err);
+				return;
+			}
+
+			for (i = 0; i < num_elems; i++) {
+				if (precode_en[i] > 1) {
+					dev_err(dev, "An invalid PrecodeEn (%d) provided in %s property\n",
+						precode_en[i], prop_name);
+					return;
+				}
+			}
+		}
+	}
+
+	params = &hba->tx_eq_params[gear - 1];
+	for (lane = 0; lane < lpd; lane++) {
+		params->host[lane].preshoot = preshoot[lane * 2];
+		params->host[lane].deemphasis = deemphasis[lane * 2];
+		params->host[lane].precode_en = precode_en[lane * 2];
+
+		params->device[lane].preshoot = preshoot[lane * 2 + 1];
+		params->device[lane].deemphasis = deemphasis[lane * 2 + 1];
+		params->device[lane].precode_en = precode_en[lane * 2 + 1];
+	}
+
+	params->is_valid = true;
+	params->is_static = true;
+}
+
+static void ufshcd_parse_static_tx_eq_settings(struct ufs_hba *hba)
+{
+	const u32 lpd = hba->lanes_per_direction;
+	const u32 num_elems = lpd * 2;
+	int gear;
+
+	if (!lpd) {
+		return;
+	}
+
+	if (lpd > UFS_MAX_LANES) {
+		dev_warn(hba->dev, "lanes_per_direction (%u) exceeds UFS_MAX_LANES (%u)\n",
+			 lpd, UFS_MAX_LANES);
+		return;
+	}
+
+	for (gear = UFS_HS_G1; gear <= UFS_HS_GEAR_MAX; gear++)
+		ufshcd_parse_tx_eq_settings_for_gear(hba, gear, num_elems);
+}
+
+/**
  * ufshcd_parse_clock_min_max_freq  - Parse MIN and MAX clocks freq
  * @hba: per adapter instance
  *
@@ -527,6 +664,8 @@ int ufshcd_pltfrm_init(struct platform_device *pdev,
 	}
 
 	ufshcd_init_lanes_per_dir(hba);
+
+	ufshcd_parse_static_tx_eq_settings(hba);
 
 	err = ufshcd_parse_operating_points(hba);
 	if (err) {
