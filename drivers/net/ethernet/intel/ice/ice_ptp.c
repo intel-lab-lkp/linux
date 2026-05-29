@@ -382,6 +382,7 @@ void ice_ptp_req_tx_single_tstamp(struct ice_ptp_tx *tx, u8 idx)
 	struct ice_ptp_port *ptp_port;
 	unsigned long flags;
 	struct sk_buff *skb;
+	struct device *dev;
 	struct ice_pf *pf;
 
 	if (!tx->init)
@@ -389,6 +390,7 @@ void ice_ptp_req_tx_single_tstamp(struct ice_ptp_tx *tx, u8 idx)
 
 	ptp_port = container_of(tx, struct ice_ptp_port, tx);
 	pf = ptp_port_to_pf(ptp_port);
+	dev = ice_pf_to_dev(pf);
 	params = &pf->hw.ptp.phy.e810;
 
 	/* Drop packets which have waited for more than 2 seconds */
@@ -408,7 +410,13 @@ void ice_ptp_req_tx_single_tstamp(struct ice_ptp_tx *tx, u8 idx)
 
 	spin_lock_irqsave(&params->atqbal_wq.lock, flags);
 
-	params->atqbal_flags |= ATQBAL_FLAGS_INTR_IN_PROGRESS;
+	if (test_and_set_bit(ATQBAL_FLAGS_INTR_IN_PROGRESS,
+			     params->atqbal_flags)) {
+		dev_dbg(dev, "%s: low latency interrupt request already in progress?\n",
+			__func__);
+		spin_unlock_irqrestore(&params->atqbal_wq.lock, flags);
+		return;
+	}
 
 	/* Write TS index to read to the PF register so the FW can read it */
 	wr32(&pf->hw, REG_LL_PROXY_H,
@@ -449,7 +457,8 @@ void ice_ptp_complete_tx_single_tstamp(struct ice_ptp_tx *tx)
 
 	spin_lock_irqsave(&params->atqbal_wq.lock, flags);
 
-	if (!(params->atqbal_flags & ATQBAL_FLAGS_INTR_IN_PROGRESS))
+	if (!test_and_clear_bit(ATQBAL_FLAGS_INTR_IN_PROGRESS,
+				params->atqbal_flags))
 		dev_dbg(dev, "%s: low latency interrupt request not in progress?\n",
 			__func__);
 
@@ -459,8 +468,6 @@ void ice_ptp_complete_tx_single_tstamp(struct ice_ptp_tx *tx)
 	reg_ll_high = rd32(&pf->hw, REG_LL_PROXY_H);
 
 	/* Wake up threads waiting on low latency interface */
-	params->atqbal_flags &= ~ATQBAL_FLAGS_INTR_IN_PROGRESS;
-
 	wake_up_locked(&params->atqbal_wq);
 
 	spin_unlock_irqrestore(&params->atqbal_wq.lock, flags);
@@ -2712,7 +2719,14 @@ bool ice_ptp_tx_tstamps_pending(struct ice_pf *pf)
 	struct ice_hw *hw = &pf->hw;
 	int ret;
 
-	/* Check software indicator */
+	/* E810 devices with support for the low latency timestamp interrupt
+	 * have specialized handling for timestamps. They should not
+	 * re-schedule the miscellaneous interrupt.
+	 */
+	if (hw->mac_type == ICE_MAC_E810 &&
+	    hw->dev_caps.ts_dev_info.ts_ll_int_read)
+		return false;
+
 	switch (pf->ptp.tx_interrupt_mode) {
 	case ICE_PTP_TX_INTERRUPT_NONE:
 		return false;

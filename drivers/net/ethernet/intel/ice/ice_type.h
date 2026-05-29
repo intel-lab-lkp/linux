@@ -859,12 +859,16 @@ struct ice_mbx_data {
 #define ICE_PORTS_PER_QUAD	4
 #define ICE_GET_QUAD_NUM(port) ((port) / ICE_PORTS_PER_QUAD)
 
-#define ATQBAL_FLAGS_INTR_IN_PROGRESS	BIT(0)
+enum ice_atqbal_flags {
+	ATQBAL_FLAGS_INTR_IN_PROGRESS,
+
+	ATQBAL_FLAGS_NBITS, /* must be last */
+};
 
 struct ice_e810_params {
 	/* The wait queue lock also protects the low latency interface */
 	wait_queue_head_t atqbal_wq;
-	unsigned int atqbal_flags;
+	DECLARE_BITMAP(atqbal_flags, ATQBAL_FLAGS_NBITS);
 };
 
 struct ice_eth56g_params {
