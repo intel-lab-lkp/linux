@@ -17,6 +17,8 @@
 #define ACPI_APEI_GHES_CPER_H
 
 #include <linux/atomic.h>
+#include <linux/device.h>
+#include <linux/notifier.h>
 #include <linux/workqueue.h>
 
 #include <acpi/ghes.h>
@@ -57,6 +59,7 @@
 	((struct ghes_vendor_record_entry *)(vendor_entry) + 1))
 
 extern struct gen_pool *ghes_estatus_pool;
+extern struct atomic_notifier_head ghes_report_chain;
 
 static inline bool is_hest_type_generic_v2(struct ghes *ghes)
 {
@@ -107,6 +110,23 @@ void ghes_estatus_cache_add(struct acpi_hest_generic *generic,
 			    struct acpi_hest_generic_status *estatus);
 void ghes_defer_non_standard_event(struct acpi_hest_generic_data *gdata,
 				   int sev);
+int ghes_severity(int severity);
+bool ghes_handle_memory_failure(struct acpi_hest_generic_data *gdata,
+				int sev, bool sync);
+bool ghes_handle_arm_hw_error(struct acpi_hest_generic_data *gdata,
+			      int sev, bool sync);
+void ghes_handle_aer(struct acpi_hest_generic_data *gdata);
+void ghes_log_hwerr(int sev, guid_t *sec_type);
+void __ghes_print_estatus(const char *pfx,
+			  const struct acpi_hest_generic *generic,
+			  const struct acpi_hest_generic_status *estatus);
+int ghes_print_estatus(const char *pfx,
+		       const struct acpi_hest_generic *generic,
+		       const struct acpi_hest_generic_status *estatus);
+void ghes_cper_handle_status(struct device *dev,
+			     const struct acpi_hest_generic *generic,
+			     const struct acpi_hest_generic_status *estatus,
+			     bool sync);
 void cxl_cper_post_prot_err(struct cxl_cper_sec_prot_err *prot_err,
 			    int severity);
 int cxl_cper_register_prot_err_work(struct work_struct *work);
