@@ -27,6 +27,7 @@
 
 #include <drm/amdgpu_drm.h>
 #include <drm/drm_gpusvm.h>
+#include <drm/drm_pagemap.h>
 #include <linux/atomic.h>
 #include <linux/kref.h>
 #include <linux/list.h>
@@ -43,6 +44,9 @@ struct amdgpu_svm_attr_tree;
 struct amdgpu_svm_attrs;
 struct drm_device;
 struct drm_file;
+
+#define AMDGPU_INTERCONNECT_VRAM	DRM_INTERCONNECT_DRIVER
+#define AMDGPU_INTERCONNECT_P2P		(AMDGPU_INTERCONNECT_VRAM + 1)
 
 enum amdgpu_svm_xnack_mode {
 	AMDGPU_SVM_XNACK_OFF,
