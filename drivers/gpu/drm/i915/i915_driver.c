@@ -1045,8 +1045,6 @@ void i915_driver_shutdown(struct drm_i915_private *i915)
 
 	intel_irq_suspend(i915);
 
-	intel_dmc_suspend(display);
-
 	i915_gem_suspend(i915);
 
 	/*
@@ -1116,8 +1114,6 @@ static int i915_drm_suspend(struct drm_device *dev)
 	intel_opregion_suspend(display, opregion_target_state);
 
 	dev_priv->suspend_count++;
-
-	intel_dmc_suspend(display);
 
 	enable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
 
