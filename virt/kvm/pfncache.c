@@ -29,12 +29,12 @@ void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm, unsigned long start,
 
 	spin_lock(&kvm->gpc_lock);
 	list_for_each_entry(gpc, &kvm->gpc_list, list) {
-		read_lock_irq(&gpc->lock);
+		read_lock(&gpc->lock);
 
 		/* Only a single page so no need to care about length */
 		if (gpc->valid && !is_error_noslot_pfn(gpc->pfn) &&
 		    gpc->uhva >= start && gpc->uhva < end) {
-			read_unlock_irq(&gpc->lock);
+			read_unlock(&gpc->lock);
 
 			/*
 			 * There is a small window here where the cache could
@@ -44,15 +44,15 @@ void gfn_to_pfn_cache_invalidate_start(struct kvm *kvm, unsigned long start,
 			 * acquired.
 			 */
 
-			write_lock_irq(&gpc->lock);
+			write_lock(&gpc->lock);
 			if (gpc->valid && !is_error_noslot_pfn(gpc->pfn) &&
 			    gpc->uhva >= start && gpc->uhva < end)
 				gpc->valid = false;
-			write_unlock_irq(&gpc->lock);
+			write_unlock(&gpc->lock);
 			continue;
 		}
 
-		read_unlock_irq(&gpc->lock);
+		read_unlock(&gpc->lock);
 	}
 	spin_unlock(&kvm->gpc_lock);
 }
@@ -184,7 +184,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 		mmu_seq = gpc->kvm->mmu_invalidate_seq;
 		smp_rmb();
 
-		write_unlock_irq(&gpc->lock);
+		write_unlock(&gpc->lock);
 
 		/*
 		 * If the previous iteration "failed" due to an mmu_notifier
@@ -225,7 +225,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 			goto out_error;
 		}
 
-		write_lock_irq(&gpc->lock);
+		write_lock(&gpc->lock);
 
 		/*
 		 * Other tasks must wait for _this_ refresh to complete before
@@ -248,7 +248,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 	return 0;
 
 out_error:
-	write_lock_irq(&gpc->lock);
+	write_lock(&gpc->lock);
 
 	return -EFAULT;
 }
@@ -269,7 +269,7 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned l
 
 	lockdep_assert_held(&gpc->refresh_lock);
 
-	write_lock_irq(&gpc->lock);
+	write_lock(&gpc->lock);
 
 	if (!gpc->active) {
 		ret = -EINVAL;
@@ -355,7 +355,7 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned l
 	unmap_old = (old_pfn != gpc->pfn);
 
 out_unlock:
-	write_unlock_irq(&gpc->lock);
+	write_unlock(&gpc->lock);
 
 	if (unmap_old)
 		gpc_unmap(old_pfn, old_khva);
@@ -417,9 +417,9 @@ static int __kvm_gpc_activate(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned 
 		 * refresh must not establish a mapping until the cache is
 		 * reachable by mmu_notifier events.
 		 */
-		write_lock_irq(&gpc->lock);
+		write_lock(&gpc->lock);
 		gpc->active = true;
-		write_unlock_irq(&gpc->lock);
+		write_unlock(&gpc->lock);
 	}
 	return __kvm_gpc_refresh(gpc, gpa, uhva);
 }
@@ -458,7 +458,7 @@ void kvm_gpc_deactivate(struct gfn_to_pfn_cache *gpc)
 		 * must stall mmu_notifier events until all users go away, i.e.
 		 * until gpc->lock is dropped and refresh is guaranteed to fail.
 		 */
-		write_lock_irq(&gpc->lock);
+		write_lock(&gpc->lock);
 		gpc->active = false;
 		gpc->valid = false;
 
@@ -473,7 +473,7 @@ void kvm_gpc_deactivate(struct gfn_to_pfn_cache *gpc)
 
 		old_pfn = gpc->pfn;
 		gpc->pfn = KVM_PFN_ERR_FAULT;
-		write_unlock_irq(&gpc->lock);
+		write_unlock(&gpc->lock);
 
 		spin_lock(&kvm->gpc_lock);
 		list_del(&gpc->list);
