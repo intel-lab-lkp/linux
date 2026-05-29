@@ -48,4 +48,4 @@ PWM fan control
     in the thermal framework as well.
 
 Fan curves:
-   If supported by the EC. Reading only.
+   If supported by the EC. Reading and writing.

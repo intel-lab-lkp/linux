@@ -8,9 +8,11 @@
 #include <linux/device.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
+#include <linux/kstrtox.h>
 #include <linux/math.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/overflow.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
@@ -129,6 +131,22 @@ static int cros_ec_hwmon_get_thermal_config(struct cros_ec_device *cros_ec, u8 i
 	req.sensor_num = index;
 	ret = cros_ec_cmd(cros_ec, 1, EC_CMD_THERMAL_GET_THRESHOLD,
 			  &req, sizeof(req), config, sizeof(*config));
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static int cros_ec_hwmon_set_thermal_config(struct cros_ec_device *cros_ec, u8 index,
+					    const struct ec_thermal_config *config)
+{
+	struct ec_params_thermal_set_threshold_v1 req = {};
+	int ret;
+
+	req.sensor_num = index;
+	req.cfg = *config;
+	ret = cros_ec_cmd(cros_ec, 1, EC_CMD_THERMAL_SET_THRESHOLD,
+			  &req, sizeof(req), NULL, 0);
 	if (ret < 0)
 		return ret;
 
@@ -417,14 +435,60 @@ static ssize_t temp_auto_point_temp_show(struct device *dev, struct device_attri
 	return sysfs_emit(buf, "%ld\n", cros_ec_hwmon_kelvin_to_millicelsius(temp));
 }
 
+static ssize_t temp_auto_point_temp_store(struct device *dev, struct device_attribute *attr,
+					  const char *buf, size_t size)
+{
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	struct cros_ec_hwmon_priv *priv = dev_get_drvdata(dev);
+	struct ec_thermal_config config;
+	u32 *temp_field;
+	s64 temp;
+	int ret;
+
+	ret = kstrtos64(buf, 10, &temp);
+	if (ret)
+		return ret;
+
+	temp = cros_ec_hwmon_millicelsius_to_kelvin(temp);
+
+	if (overflows_type(temp, config.temp_fan_off))
+		return -ERANGE;
+
+	guard(hwmon_lock)(dev);
+
+	ret = cros_ec_hwmon_get_thermal_config(priv->cros_ec, sattr->index, &config);
+	if (ret)
+		return ret;
+
+	if (cros_ec_hwmon_attr_is_temp_fan_off(sattr))
+		temp_field = &config.temp_fan_off;
+	else /* temp_fan_max */
+		temp_field = &config.temp_fan_max;
+
+	/* Only allow values which are more aggressive than the current ones */
+	if (temp > *temp_field)
+		return -EINVAL;
+
+	*temp_field = temp;
+
+	if (config.temp_fan_off > config.temp_fan_max)
+		return -EINVAL;
+
+	ret = cros_ec_hwmon_set_thermal_config(priv->cros_ec, sattr->index, &config);
+	if (ret)
+		return ret;
+
+	return size;
+}
+
 #define CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(_idx)					\
 	static SENSOR_DEVICE_ATTR_2_RO(temp ## _idx ## _auto_point1_pwm,		\
 				       temp_auto_point_pwm,  0, (_idx) - 1);		\
 	static SENSOR_DEVICE_ATTR_2_RO(temp ## _idx ## _auto_point2_pwm,		\
 				       temp_auto_point_pwm,  1, (_idx) - 1);		\
-	static SENSOR_DEVICE_ATTR_2_RO(temp ## _idx ## _auto_point1_temp,		\
+	static SENSOR_DEVICE_ATTR_2_RW(temp ## _idx ## _auto_point1_temp,		\
 				       temp_auto_point_temp,  0, (_idx) - 1);		\
-	static SENSOR_DEVICE_ATTR_2_RO(temp ## _idx ## _auto_point2_temp,		\
+	static SENSOR_DEVICE_ATTR_2_RW(temp ## _idx ## _auto_point2_temp,		\
 				       temp_auto_point_temp,  1, (_idx) - 1)		\
 
 #define CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(_idx)					\
