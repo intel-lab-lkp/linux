@@ -6,6 +6,7 @@
 #include <asm/fpu/xstate.h>
 #include <asm/mce.h>
 #include <asm/pvclock.h>
+#include "mmu.h"
 #include "regs.h"
 #include "kvm_emulate.h"
 #include "cpuid.h"
@@ -208,11 +209,6 @@ static inline bool x86_exception_has_error_code(unsigned int vector)
 			BIT(PF_VECTOR) | BIT(AC_VECTOR);
 
 	return (1U << vector) & exception_has_error_code;
-}
-
-static inline bool mmu_is_nested(struct kvm_vcpu *vcpu)
-{
-	return vcpu->arch.walk_mmu == &vcpu->arch.nested_mmu;
 }
 
 static inline u8 vcpu_virt_addr_bits(struct kvm_vcpu *vcpu)
