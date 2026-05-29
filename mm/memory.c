@@ -4556,6 +4556,35 @@ static void memcg1_swapin_retry_folio(struct folio *folio,
 	folio_unlock(folio);
 }
 
+static void set_swapin_ptes(struct vm_area_struct *vma,
+			    unsigned long address, pte_t *ptep, pte_t pte,
+			    unsigned int nr_pages, unsigned int fault_pte_idx,
+			    bool fault_only_young)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	pte_t old_pte;
+
+	if (!fault_only_young || nr_pages == 1) {
+		set_ptes(mm, address, ptep, pte, nr_pages);
+		return;
+	}
+
+	old_pte = pte_mkold(pte);
+	if (fault_pte_idx)
+		set_ptes(mm, address, ptep, old_pte, fault_pte_idx);
+
+	set_pte_at(mm, address + fault_pte_idx * PAGE_SIZE,
+		   ptep + fault_pte_idx,
+		   pte_mkyoung(pte_advance_pfn(pte, fault_pte_idx)));
+
+	fault_pte_idx++;
+	if (fault_pte_idx < nr_pages)
+		set_ptes(mm, address + fault_pte_idx * PAGE_SIZE,
+			 ptep + fault_pte_idx,
+			 pte_advance_pfn(old_pte, fault_pte_idx),
+			 nr_pages - fault_pte_idx);
+}
+
 static vm_fault_t pte_marker_clear(struct vm_fault *vmf)
 {
 	vmf->pte = pte_offset_map_lock(vmf->vma->vm_mm, vmf->pmd,
@@ -4628,6 +4657,157 @@ static vm_fault_t handle_pte_marker(struct vm_fault *vmf)
 }
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#define SWAPIN_ANON_YOUNG_MIN_PERCENT		75
+#define SWAPIN_ANON_MAX_FAULT_SKIP_SHIFT	2
+
+static bool swapin_anon_prev_young_dense(struct vm_fault *vmf,
+					 unsigned int order)
+{
+	struct vm_area_struct *vma;
+	unsigned int nr_pages;
+	unsigned int threshold;
+	unsigned long size;
+	unsigned long base, prev, addr;
+	struct folio *first = NULL;
+	unsigned int present = 0;
+	unsigned int young = 0;
+	pmd_t *pmd;
+	pmd_t pmdval;
+	spinlock_t *ptl; /* protects the previous PTE range */
+	pte_t *ptep;
+	unsigned int i;
+
+	if (!IS_ENABLED(CONFIG_MMU) || !arch_has_hw_pte_young() || !vmf ||
+	    !vmf->vma || !vmf->pmd || !order || order > MAX_PAGE_ORDER)
+		return false;
+
+	nr_pages = 1U << order;
+	threshold = DIV_ROUND_UP(nr_pages *
+				 SWAPIN_ANON_YOUNG_MIN_PERCENT, 100);
+	size = PAGE_SIZE << order;
+
+	vma = vmf->vma;
+	base = ALIGN_DOWN(vmf->address, size);
+	if (base < size)
+		return false;
+
+	prev = base - size;
+	if (prev < vma->vm_start || prev + size > vma->vm_end)
+		return false;
+
+	pmd = vmf->pmd;
+	if ((prev & PMD_MASK) != (base & PMD_MASK)) {
+		pmd = mm_find_pmd(vma->vm_mm, prev);
+		if (!pmd)
+			return false;
+	}
+
+	pmdval = pmdp_get_lockless(pmd);
+	if (!pmd_present(pmdval) || pmd_leaf(pmdval))
+		return false;
+
+	ptep = pte_offset_map_lock(vma->vm_mm, pmd, prev, &ptl);
+	if (!ptep)
+		return false;
+
+	for (i = 0, addr = prev; i < nr_pages; i++, addr += PAGE_SIZE) {
+		struct folio *folio;
+		pte_t pte = ptep_get(ptep + i);
+
+		if (!pte_present(pte))
+			break;
+
+		folio = vm_normal_folio(vma, addr, pte);
+		if (!folio || folio_order(folio) != order)
+			break;
+		if (!first)
+			first = folio;
+		else if (folio != first)
+			break;
+
+		present++;
+		if (pte_young(pte))
+			young++;
+	}
+
+	pte_unmap_unlock(ptep, ptl);
+	if (present != nr_pages)
+		return false;
+
+	return young >= threshold;
+}
+
+static bool swapin_anon_accessed_neighbour(struct vm_fault *vmf,
+					   unsigned int order)
+{
+	unsigned long size;
+	unsigned long base;
+	unsigned long fault_idx;
+	unsigned long max_skip;
+
+	if (!vmf || !vmf->vma || !order || order > MAX_PAGE_ORDER)
+		return false;
+
+	size = PAGE_SIZE << order;
+	base = ALIGN_DOWN(vmf->address, size);
+
+	/*
+	 * Without a sequential hint, require prior young-density evidence and
+	 * only allow faults near the start of the candidate range.
+	 */
+	fault_idx = (vmf->address - base) >> PAGE_SHIFT;
+	max_skip = (1UL << order) >> SWAPIN_ANON_MAX_FAULT_SKIP_SHIFT;
+	if (fault_idx > max_skip)
+		return false;
+
+	return swapin_anon_prev_young_dense(vmf, order);
+}
+
+static bool swapin_anon_fault_starts_range(struct vm_fault *vmf,
+					   unsigned int order)
+{
+	struct vm_area_struct *vma;
+	unsigned long size;
+	unsigned long base;
+	unsigned long first;
+
+	if (!vmf || !vmf->vma || !order || order > MAX_PAGE_ORDER)
+		return false;
+
+	vma = vmf->vma;
+	size = PAGE_SIZE << order;
+	base = ALIGN_DOWN(vmf->address, size);
+	first = ALIGN(vma->vm_start, size);
+
+	return base == first && vmf->address == base &&
+	       base + size <= vma->vm_end;
+}
+
+static unsigned long swapin_anon_locality_orders(struct vm_fault *vmf,
+						 unsigned long orders)
+{
+	struct vm_area_struct *vma = vmf ? vmf->vma : NULL;
+	unsigned long locality_orders = 0;
+	unsigned long candidates = orders & ~BIT(0);
+	int order;
+
+	if (vma && (vma->vm_flags & VM_RAND_READ))
+		return 0;
+
+	if (vma && (vma->vm_flags & VM_SEQ_READ))
+		return candidates;
+
+	while (candidates) {
+		order = fls_long(candidates) - 1;
+		if (swapin_anon_fault_starts_range(vmf, order) ||
+		    swapin_anon_accessed_neighbour(vmf, order))
+			locality_orders |= BIT(order);
+		candidates &= ~BIT(order);
+	}
+
+	return locality_orders;
+}
+
 /*
  * Check if the PTEs within a range are contiguous swap entries.
  */
@@ -4644,9 +4824,9 @@ static bool can_swapin_thp(struct vm_fault *vmf, pte_t *ptep, int nr_pages)
 	if (!pte_same(pte, pte_move_swp_offset(vmf->orig_pte, -idx)))
 		return false;
 	/*
-	 * swap_read_folio() can't handle the case a large folio is hybridly
-	 * from different backends. And they are likely corner cases. Similar
-	 * things might be added once zswap support large folios.
+	 * swap_read_folio() can't do mixed-backend large folio IO. The common
+	 * synchronous swapin path will recheck backend state and fall back to
+	 * order-0 if a zswap/disk race makes the range mixed.
 	 */
 	if (swap_pte_batch(ptep, nr_pages, pte) != nr_pages)
 		return false;
@@ -4693,14 +4873,6 @@ static unsigned long thp_swapin_suitable_orders(struct vm_fault *vmf)
 	if (unlikely(userfaultfd_armed(vma)))
 		return 0;
 
-	/*
-	 * A large swapped out folio could be partially or fully in zswap. We
-	 * lack handling for such cases, so fallback to swapping in order-0
-	 * folio.
-	 */
-	if (!zswap_never_enabled())
-		return 0;
-
 	entry = softleaf_from_pte(vmf->orig_pte);
 	/*
 	 * Get a list of all the (large) orders below PMD_ORDER that are enabled
@@ -4708,10 +4880,13 @@ static unsigned long thp_swapin_suitable_orders(struct vm_fault *vmf)
 	 */
 	orders = thp_vma_allowable_orders(vma, vma->vm_flags, TVA_PAGEFAULT,
 					  BIT(PMD_ORDER) - 1);
+	if (!orders)
+		return 0;
 	orders = thp_vma_suitable_orders(vma, vmf->address, orders);
+	if (!orders)
+		return 0;
 	orders = thp_swap_suitable_orders(swp_offset(entry),
 					  vmf->address, orders);
-
 	if (!orders)
 		return 0;
 
@@ -4738,6 +4913,12 @@ static unsigned long thp_swapin_suitable_orders(struct vm_fault *vmf)
 }
 #else /* !CONFIG_TRANSPARENT_HUGEPAGE */
 static unsigned long thp_swapin_suitable_orders(struct vm_fault *vmf)
+{
+	return 0;
+}
+
+static unsigned long swapin_anon_locality_orders(struct vm_fault *vmf,
+						 unsigned long orders)
 {
 	return 0;
 }
@@ -4777,6 +4958,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	unsigned long page_idx;
 	unsigned long address;
 	pte_t *ptep;
+	bool fault_only_young = false;
 
 	if (!pte_unmap_same(vmf))
 		goto out;
@@ -4845,13 +5027,22 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	if (folio)
 		swap_update_readahead(folio, vma, vmf->address);
 	if (!folio) {
-		/* Swapin bypasses readahead for SWP_SYNCHRONOUS_IO devices */
-		if (data_race(si->flags & SWP_SYNCHRONOUS_IO))
+		/*
+		 * Swapin bypasses readahead for SWP_SYNCHRONOUS_IO devices.
+		 * The swap device is pinned while checking the flag, matching
+		 * the existing fault path.
+		 */
+		if (data_race(si->flags & SWP_SYNCHRONOUS_IO)) {
+			unsigned long swapin_orders = thp_swapin_suitable_orders(vmf);
+			unsigned long locality_orders =
+				swapin_anon_locality_orders(vmf, swapin_orders);
+
 			folio = swapin_sync(entry, GFP_HIGHUSER_MOVABLE,
-					    thp_swapin_suitable_orders(vmf) | BIT(0),
-					    0, vmf, NULL, 0);
-		else
+					    swapin_orders | BIT(0),
+					    locality_orders, vmf, NULL, 0);
+		} else {
 			folio = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE, vmf);
+		}
 
 		if (IS_ERR_OR_NULL(folio)) {
 			/*
@@ -5110,9 +5301,12 @@ check_folio:
 
 	VM_BUG_ON(!folio_test_anon(folio) ||
 			(pte_write(pte) && !PageAnonExclusive(page)));
-	set_ptes(vma->vm_mm, address, ptep, pte, nr_pages);
-	arch_do_swap_page_nr(vma->vm_mm, vma, address,
-			pte, pte, nr_pages);
+	if (folio == swapcache && nr_pages == folio_nr_pages(folio) &&
+	    arch_has_hw_pte_young())
+		fault_only_young = swapin_fault_only_young(folio);
+	set_swapin_ptes(vma, address, ptep, pte, nr_pages, page_idx,
+			fault_only_young);
+	arch_do_swap_page_nr(vma->vm_mm, vma, address, pte, pte, nr_pages);
 
 	/*
 	 * Remove the swap entry and conditionally try to free up the swapcache.

@@ -748,6 +748,21 @@ static bool zswap_needs_order0_retry(struct folio *folio)
 }
 
 /*
+ * A speculative large swapin may install PTEs for pages that did not fault.
+ * Keep those non-faulting PTEs old so a later anon fault can report
+ * PTE-young density as caller-provided locality evidence without storing
+ * state in the VMA.
+ */
+bool swapin_fault_only_young(struct folio *folio)
+{
+	if (!folio_test_large(folio) || !folio_test_swapcache(folio))
+		return false;
+
+	return zswap_probe_range(folio->swap, folio_nr_pages(folio)) ==
+	       ZSWAP_RANGE_ALL_ZSWAP;
+}
+
+/*
  * If we are the only user, then try to free up the swap cache.
  *
  * Its ok to check the swapcache flag without the folio lock

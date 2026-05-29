@@ -327,6 +327,7 @@ struct folio *swapin_readahead(swp_entry_t entry, gfp_t flag,
 struct folio *swapin_sync(swp_entry_t entry, gfp_t flag, unsigned long orders,
 			  unsigned long locality_orders, struct vm_fault *vmf,
 			  struct mempolicy *mpol, pgoff_t ilx);
+bool swapin_fault_only_young(struct folio *folio);
 void swap_update_readahead(struct folio *folio, struct vm_area_struct *vma,
 			   unsigned long addr);
 
@@ -428,6 +429,11 @@ static inline struct folio *swapin_sync(
 static inline void swap_update_readahead(struct folio *folio,
 		struct vm_area_struct *vma, unsigned long addr)
 {
+}
+
+static inline bool swapin_fault_only_young(struct folio *folio)
+{
+	return false;
 }
 
 static inline int swap_writeout(struct folio *folio,
