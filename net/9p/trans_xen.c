@@ -14,6 +14,7 @@
 #include <xen/interface/io/9pfs.h>
 
 #include <linux/module.h>
+#include <linux/kref.h>
 #include <linux/spinlock.h>
 #include <linux/fs_context.h>
 #include <net/9p/9p.h>
@@ -54,6 +55,7 @@ struct xen_9pfs_front_priv {
 	struct xenbus_device *dev;
 	char *tag;
 	struct p9_client *client;
+	struct kref refcount;
 
 	struct xen_9pfs_dataring *rings;
 };
@@ -114,6 +116,8 @@ static bool p9_xen_write_todo(struct xen_9pfs_dataring *ring, RING_IDX size)
 		xen_9pfs_queued(prod, cons, XEN_9PFS_RING_SIZE(ring)) >= size;
 }
 
+static void xen_9pfs_front_release(struct kref *ref);
+
 static int p9_xen_request(struct p9_client *client, struct p9_req_t *p9_req)
 {
 	struct xen_9pfs_front_priv *priv;
@@ -128,9 +132,12 @@ static int p9_xen_request(struct p9_client *client, struct p9_req_t *p9_req)
 		if (priv->client == client)
 			break;
 	}
-	read_unlock(&xen_9pfs_lock);
-	if (list_entry_is_head(priv, &xen_9pfs_devs, list))
+	if (list_entry_is_head(priv, &xen_9pfs_devs, list)) {
+		read_unlock(&xen_9pfs_lock);
 		return -EINVAL;
+	}
+	kref_get(&priv->refcount);
+	read_unlock(&xen_9pfs_lock);
 
 	num = p9_req->tc.tag % XEN_9PFS_NUM_RINGS;
 	ring = &priv->rings[num];
@@ -165,6 +172,7 @@ again:
 	spin_unlock_irqrestore(&ring->lock, flags);
 	notify_remote_via_irq(ring->irq);
 	p9_req_put(client, p9_req);
+	kref_put(&priv->refcount, xen_9pfs_front_release);
 
 	return 0;
 }
@@ -317,6 +325,13 @@ static void xen_9pfs_front_free(struct xen_9pfs_front_priv *priv)
 	kfree(priv);
 }
 
+static void xen_9pfs_front_release(struct kref *ref)
+{
+	struct xen_9pfs_front_priv *priv =
+		container_of(ref, struct xen_9pfs_front_priv, refcount);
+	xen_9pfs_front_free(priv);
+}
+
 static void xen_9pfs_front_remove(struct xenbus_device *dev)
 {
 	struct xen_9pfs_front_priv *priv;
@@ -331,7 +346,7 @@ static void xen_9pfs_front_remove(struct xenbus_device *dev)
 	list_del(&priv->list);
 	write_unlock(&xen_9pfs_lock);
 
-	xen_9pfs_front_free(priv);
+	kref_put(&priv->refcount, xen_9pfs_front_release);
 }
 
 static int xen_9pfs_front_alloc_dataring(struct xenbus_device *dev,
@@ -450,6 +465,7 @@ static int xen_9pfs_front_init(struct xenbus_device *dev)
 	if (!priv)
 		return -ENOMEM;
 	priv->dev = dev;
+	kref_init(&priv->refcount);
 	priv->rings = kzalloc_objs(*priv->rings, XEN_9PFS_NUM_RINGS);
 	if (!priv->rings) {
 		kfree(priv);
