@@ -452,45 +452,6 @@ static int zynqmp_r5_rproc_stop(struct rproc *rproc)
 }
 
 /*
- * zynqmp_r5_mem_region_map()
- * @rproc: single R5 core's corresponding rproc instance
- * @mem: mem descriptor to map reserved memory-regions
- *
- * Callback to map va for memory-region's carveout.
- *
- * return 0 on success, otherwise non-zero value on failure
- */
-static int zynqmp_r5_mem_region_map(struct rproc *rproc,
-				    struct rproc_mem_entry *mem)
-{
-	void __iomem *va;
-
-	va = ioremap_wc(mem->dma, mem->len);
-	if (IS_ERR_OR_NULL(va))
-		return -ENOMEM;
-
-	mem->va = (void *)va;
-
-	return 0;
-}
-
-/*
- * zynqmp_r5_rproc_mem_unmap
- * @rproc: single R5 core's corresponding rproc instance
- * @mem: mem entry to unmap
- *
- * Unmap memory-region carveout
- *
- * return: always returns 0
- */
-static int zynqmp_r5_mem_region_unmap(struct rproc *rproc,
-				      struct rproc_mem_entry *mem)
-{
-	iounmap((void __iomem *)mem->va);
-	return 0;
-}
-
-/*
  * add_mem_regions_carveout()
  * @rproc: single R5 core's corresponding rproc instance
  *
@@ -526,8 +487,8 @@ static int add_mem_regions_carveout(struct rproc *rproc)
 			rproc_mem = rproc_mem_entry_init(&rproc->dev, NULL,
 							 (dma_addr_t)res.start,
 							 resource_size(&res), res.start,
-							 zynqmp_r5_mem_region_map,
-							 zynqmp_r5_mem_region_unmap,
+							 rproc_mem_entry_ioremap_wc,
+							 rproc_mem_entry_iounmap,
 							 "%.*s",
 							 strchrnul(res.name, '@') - res.name,
 							 res.name);
@@ -564,8 +525,8 @@ static int add_sram_carveouts(struct rproc *rproc)
 		rproc_mem = rproc_mem_entry_init(&rproc->dev, NULL,
 						 dma_addr,
 						 len, da,
-						 zynqmp_r5_mem_region_map,
-						 zynqmp_r5_mem_region_unmap,
+						 rproc_mem_entry_ioremap_wc,
+						 rproc_mem_entry_iounmap,
 						 sram->sram_res.name);
 		if (!rproc_mem) {
 			dev_err(&rproc->dev, "failed to add sram %s da=0x%x, size=0x%lx",
