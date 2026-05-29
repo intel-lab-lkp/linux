@@ -207,9 +207,15 @@ loongson_pcm_pointer(struct snd_soc_component *component,
 	desc = dma_desc_save(prtd);
 	addr = ((u64)desc->saddr_hi << 32) | desc->saddr;
 
-	x = bytes_to_frames(runtime, addr - runtime->dma_addr);
-	if (x == runtime->buffer_size)
+	if (addr < runtime->dma_addr ||
+	    addr >= runtime->dma_addr + runtime->dma_bytes) {
 		x = 0;
+	} else {
+		x = bytes_to_frames(runtime, addr - runtime->dma_addr);
+		if (x >= runtime->buffer_size)
+			x = 0;
+	}
+
 	return x;
 }
 
