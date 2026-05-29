@@ -653,13 +653,21 @@ static void swap_read_folio_bdev_async(struct folio *folio,
 	submit_bio(bio);
 }
 
-void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
+/*
+ * Return -EAGAIN only when a locked large swapcache folio hit a retryable
+ * zswap backend race. The caller owns that still-locked folio and must drop or
+ * retry it. Other zswap errors are still reported through the usual folio
+ * state: the folio is unlocked without PG_uptodate and the fault path will
+ * turn that into an I/O error.
+ */
+int swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 {
 	struct swap_info_struct *sis = __swap_entry_to_info(folio->swap);
 	bool synchronous = sis->flags & SWP_SYNCHRONOUS_IO;
 	bool workingset = folio_test_workingset(folio);
 	unsigned long pflags;
 	bool in_thrashing;
+	int ret = 0;
 
 	VM_BUG_ON_FOLIO(!folio_test_swapcache(folio) && !synchronous, folio);
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
@@ -681,8 +689,14 @@ void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 		goto finish;
 	}
 
-	if (zswap_load(folio) != -ENOENT)
+	ret = zswap_load(folio);
+	if (ret == -EAGAIN) {
+		VM_WARN_ON_ONCE_FOLIO(!folio_test_large(folio), folio);
 		goto finish;
+	}
+	if (ret != -ENOENT)
+		goto finish;
+	ret = 0;
 
 	/* We have to read from slower devices. Increase zswap protection. */
 	zswap_folio_swapin(folio);
@@ -701,6 +715,7 @@ finish:
 		psi_memstall_leave(&pflags);
 	}
 	delayacct_swapin_end();
+	return ret;
 }
 
 void __swap_read_unplug(struct swap_iocb *sio)

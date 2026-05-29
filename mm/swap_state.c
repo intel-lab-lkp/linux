@@ -628,6 +628,7 @@ static struct folio *swap_cache_read_folio(swp_entry_t entry, gfp_t gfp,
 					   struct swap_iocb **plug, bool readahead)
 {
 	struct folio *folio;
+	int ret;
 
 	do {
 		folio = swap_cache_get_folio(entry);
@@ -639,7 +640,13 @@ static struct folio *swap_cache_read_folio(swp_entry_t entry, gfp_t gfp,
 	if (IS_ERR_OR_NULL(folio))
 		return NULL;
 
-	swap_read_folio(folio, plug);
+	ret = swap_read_folio(folio, plug);
+	/*
+	 * Swap readahead allocates order-0 folios. -EAGAIN is reserved for
+	 * retryable large zswap backend races and must be handled by the
+	 * synchronous common swapin path.
+	 */
+	VM_WARN_ON_ONCE(ret == -EAGAIN);
 	if (readahead) {
 		folio_set_readahead(folio);
 		count_vm_event(SWAP_RA);
@@ -668,6 +675,7 @@ struct folio *swapin_sync(swp_entry_t entry, gfp_t gfp, unsigned long orders,
 			   struct vm_fault *vmf, struct mempolicy *mpol, pgoff_t ilx)
 {
 	struct folio *folio;
+	int ret;
 
 	do {
 		folio = swap_cache_get_folio(entry);
@@ -679,7 +687,8 @@ struct folio *swapin_sync(swp_entry_t entry, gfp_t gfp, unsigned long orders,
 	if (IS_ERR(folio))
 		return folio;
 
-	swap_read_folio(folio, NULL);
+	ret = swap_read_folio(folio, NULL);
+	VM_WARN_ON_ONCE(ret == -EAGAIN);
 	return folio;
 }
 
