@@ -1114,10 +1114,10 @@ static int i915_drm_prepare(struct drm_device *dev)
 	intel_pxp_suspend_prepare(i915->pxp);
 
 	/*
-	 * NB intel_display_driver_suspend() may issue new requests after we've
-	 * ostensibly marked the GPU as ready-to-sleep here. We need to
-	 * split out that work and pull it forward so that after point,
-	 * the GPU is not woken again.
+	 * NB intel_display_driver_pm_suspend() may issue new requests after
+	 * we've ostensibly marked the GPU as ready-to-sleep here. We need to
+	 * split out that work and pull it forward so that after point, the GPU
+	 * is not woken again.
 	 */
 	return i915_gem_backup_suspend(i915);
 }
@@ -1139,7 +1139,7 @@ static int i915_drm_suspend(struct drm_device *dev)
 		intel_display_driver_disable_user_access(display);
 	}
 
-	intel_display_driver_suspend(display);
+	intel_display_driver_pm_suspend(display);
 
 	intel_encoder_block_all_hpds(display);
 
@@ -1325,7 +1325,7 @@ static int i915_drm_resume(struct drm_device *dev)
 
 	intel_encoder_unblock_all_hpds(display);
 
-	intel_display_driver_resume(display);
+	intel_display_driver_pm_resume(display);
 
 	if (intel_display_device_present(display)) {
 		intel_display_driver_enable_user_access(display);

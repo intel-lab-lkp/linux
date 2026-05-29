@@ -330,7 +330,7 @@ void xe_display_pm_suspend(struct xe_device *xe)
 	if (intel_display_device_present(display)) {
 		drm_kms_helper_poll_disable(&xe->drm);
 		intel_display_driver_disable_user_access(display);
-		intel_display_driver_suspend(display);
+		intel_display_driver_pm_suspend(display);
 	}
 
 	intel_encoder_block_all_hpds(display);
@@ -360,7 +360,7 @@ void xe_display_pm_shutdown(struct xe_device *xe)
 	if (intel_display_device_present(display)) {
 		drm_kms_helper_poll_disable(&xe->drm);
 		intel_display_driver_disable_user_access(display);
-		intel_display_driver_suspend(display);
+		intel_display_driver_pm_suspend(display);
 	}
 
 	intel_encoder_block_all_hpds(display);
@@ -468,7 +468,7 @@ void xe_display_pm_resume(struct xe_device *xe)
 	intel_encoder_unblock_all_hpds(display);
 
 	if (intel_display_device_present(display)) {
-		intel_display_driver_resume(display);
+		intel_display_driver_pm_resume(display);
 		intel_display_driver_enable_user_access(display);
 		drm_kms_helper_poll_enable(&xe->drm);
 	}

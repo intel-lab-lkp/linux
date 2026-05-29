@@ -678,7 +678,7 @@ void intel_display_driver_unregister(struct intel_display *display)
  * turn all crtc's off, but do not adjust state
  * This has to be paired with a call to intel_modeset_setup_hw_state.
  */
-int intel_display_driver_suspend(struct intel_display *display)
+int intel_display_driver_pm_suspend(struct intel_display *display)
 {
 	struct drm_atomic_commit *state;
 	int ret;
@@ -741,7 +741,7 @@ __intel_display_driver_resume(struct intel_display *display,
 	return ret;
 }
 
-void intel_display_driver_resume(struct intel_display *display)
+void intel_display_driver_pm_resume(struct intel_display *display)
 {
 	struct drm_atomic_commit *state = display->restore.modeset_state;
 	struct drm_modeset_acquire_ctx ctx;
