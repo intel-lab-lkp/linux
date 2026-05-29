@@ -246,7 +246,7 @@ int ib_init_ucontext(struct uverbs_attr_bundle *attrs)
 	}
 
 	ret = ib_rdmacg_try_charge(&ucontext->cg_obj, ucontext->device,
-				   RDMACG_RESOURCE_HCA_HANDLE);
+				   RDMACG_RESOURCE_HCA_HANDLE, 1);
 	if (ret)
 		goto err;
 
@@ -285,7 +285,7 @@ int ib_init_ucontext(struct uverbs_attr_bundle *attrs)
 
 err_uncharge:
 	ib_rdmacg_uncharge(&ucontext->cg_obj, ucontext->device,
-			   RDMACG_RESOURCE_HCA_HANDLE);
+			   RDMACG_RESOURCE_HCA_HANDLE, 1);
 err:
 	mutex_unlock(&file->ucontext_lock);
 	up_read(&file->hw_destroy_rwsem);

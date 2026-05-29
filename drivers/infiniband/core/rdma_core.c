@@ -437,7 +437,7 @@ alloc_begin_idr_uobject(const struct uverbs_api_object *obj,
 		goto uobj_put;
 
 	ret = ib_rdmacg_try_charge(&uobj->cg_obj, uobj->context->device,
-				   RDMACG_RESOURCE_HCA_OBJECT);
+				   RDMACG_RESOURCE_HCA_OBJECT, 1);
 	if (ret)
 		goto remove;
 
@@ -526,7 +526,7 @@ struct ib_uobject *rdma_alloc_begin_uobject(const struct uverbs_api_object *obj,
 static void alloc_abort_idr_uobject(struct ib_uobject *uobj)
 {
 	ib_rdmacg_uncharge(&uobj->cg_obj, uobj->context->device,
-			   RDMACG_RESOURCE_HCA_OBJECT);
+			   RDMACG_RESOURCE_HCA_OBJECT, 1);
 
 	xa_erase(&uobj->ufile->idr, uobj->id);
 }
@@ -547,7 +547,7 @@ static int __must_check destroy_hw_idr_uobject(struct ib_uobject *uobj,
 		return 0;
 
 	ib_rdmacg_uncharge(&uobj->cg_obj, uobj->context->device,
-			   RDMACG_RESOURCE_HCA_OBJECT);
+			   RDMACG_RESOURCE_HCA_OBJECT, 1);
 
 	return 0;
 }
@@ -878,7 +878,7 @@ static void ufile_destroy_ucontext(struct ib_uverbs_file *ufile,
 	}
 
 	ib_rdmacg_uncharge(&ucontext->cg_obj, ib_dev,
-			   RDMACG_RESOURCE_HCA_HANDLE);
+			   RDMACG_RESOURCE_HCA_HANDLE, 1);
 
 	rdma_restrack_del(&ucontext->res);
 

@@ -36,18 +36,20 @@ void ib_device_unregister_rdmacg(struct ib_device *device)
 
 int ib_rdmacg_try_charge(struct ib_rdmacg_object *cg_obj,
 			 struct ib_device *device,
-			 enum rdmacg_resource_type resource_index)
+			 enum rdmacg_resource_type resource_index,
+			 s64 amount)
 {
 	return rdmacg_try_charge(&cg_obj->cg, &device->cg_device,
-				 resource_index);
+				 resource_index, amount);
 }
 EXPORT_SYMBOL(ib_rdmacg_try_charge);
 
 void ib_rdmacg_uncharge(struct ib_rdmacg_object *cg_obj,
 			struct ib_device *device,
-			enum rdmacg_resource_type resource_index)
+			enum rdmacg_resource_type resource_index,
+			s64 amount)
 {
 	rdmacg_uncharge(cg_obj->cg, &device->cg_device,
-			resource_index);
+			resource_index, amount);
 }
 EXPORT_SYMBOL(ib_rdmacg_uncharge);
