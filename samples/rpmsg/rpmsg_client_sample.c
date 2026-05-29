@@ -52,6 +52,7 @@ static int rpmsg_sample_probe(struct rpmsg_device *rpdev)
 {
 	int ret;
 	struct instance_data *idata;
+	ssize_t mtu;
 
 	dev_info(&rpdev->dev, "new channel: 0x%x -> 0x%x!\n",
 					rpdev->src, rpdev->dst);
@@ -61,6 +62,14 @@ static int rpmsg_sample_probe(struct rpmsg_device *rpdev)
 		return -ENOMEM;
 
 	dev_set_drvdata(&rpdev->dev, idata);
+
+	mtu = rpmsg_get_mtu(rpdev->ept);
+	if (mtu < 0) {
+		dev_warn(&rpdev->dev, "invalid rpmsg MTU size = %ld\n", mtu);
+		return mtu;
+	}
+
+	dev_info(&rpdev->dev, "rpmsg MTU size = %ld\n", mtu);
 
 	/* send a message to our remote processor */
 	ret = rpmsg_send(rpdev->ept, MSG, strlen(MSG));
