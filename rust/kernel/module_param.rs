@@ -132,9 +132,12 @@ impl<T> ModuleParamAccess<T> {
     }
 
     /// Get a shared reference to the parameter value.
+    ///
+    /// Returns a reference to the value supplied at module load time, or a
+    /// reference to the default value if the parameter has not been set.
     // Note: When sysfs access to parameters are enabled, we have to pass in a
     // held lock guard here.
-    pub fn value(&self) -> &T {
+    pub fn value_ref(&self) -> &T {
         self.value.as_ref().unwrap_or(&self.default)
     }
 
@@ -143,6 +146,16 @@ impl<T> ModuleParamAccess<T> {
     /// NOTE: In most cases it is not safe deref the returned pointer.
     pub const fn as_void_ptr(&self) -> *mut c_void {
         core::ptr::from_ref(self).cast_mut().cast()
+    }
+}
+
+impl<T: Copy> ModuleParamAccess<T> {
+    /// Get a copy of the parameter value.
+    ///
+    /// Returns the value supplied at module load time, or the default value
+    /// if the parameter has not been set.
+    pub fn value(&self) -> T {
+        self.value.copy().unwrap_or(self.default)
     }
 }
 
