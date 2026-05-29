@@ -17,10 +17,9 @@
 
 #define NV12_TILEY_TILE_WIDTH  128
 #define NV12_TILEY_TILE_HEIGHT  32
-
-/**************************************************************************
-**	Static functions declarations
-**************************************************************************/
+/*
+ * Static functions declarations
+ */
 static void frame_init_plane(struct ia_css_frame_plane *plane,
 			     unsigned int width,
 			     unsigned int stride,
@@ -75,11 +74,9 @@ static struct ia_css_frame *frame_create(unsigned int width,
 static unsigned
 ia_css_elems_bytes_from_info(
     const struct ia_css_frame_info *info);
-
-/**************************************************************************
-**	CSS API functions, exposed by ia_css.h
-**************************************************************************/
-
+/*
+ *	CSS API functions, exposed by ia_css.h
+ */
 int ia_css_frame_allocate_from_info(struct ia_css_frame **frame,
 	const struct ia_css_frame_info *info)
 {
@@ -141,9 +138,9 @@ void ia_css_frame_free(struct ia_css_frame *frame)
 	IA_CSS_LEAVE_PRIVATE("void");
 }
 
-/**************************************************************************
-**	Module public functions
-**************************************************************************/
+/*
+ *	Module public functions
+ */
 
 int ia_css_frame_check_info(const struct ia_css_frame_info *info)
 {
@@ -435,9 +432,9 @@ int ia_css_dma_configure_from_info(struct dma_port_config *config,
 	return 0;
 }
 
-/**************************************************************************
-**	Static functions
-**************************************************************************/
+/*
+ *	Static functions
+ */
 
 static void frame_init_plane(struct ia_css_frame_plane *plane,
 			     unsigned int width,
