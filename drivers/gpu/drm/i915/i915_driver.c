@@ -61,7 +61,6 @@
 #include "display/intel_dp.h"
 #include "display/intel_dpt.h"
 #include "display/intel_dram.h"
-#include "display/intel_encoder.h"
 #include "display/intel_fbdev.h"
 #include "display/intel_gmbus.h"
 #include "display/intel_hotplug.h"
@@ -1104,15 +1103,6 @@ static int i915_drm_suspend(struct drm_device *dev)
 	disable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
 
 	intel_display_driver_pm_suspend(display);
-
-	intel_encoder_block_all_hpds(display);
-
-	intel_hpd_cancel_work(display);
-
-	if (intel_display_device_present(display))
-		intel_display_driver_suspend_access(display);
-
-	intel_encoder_suspend_all(display);
 
 	intel_irq_suspend(dev_priv);
 

@@ -690,13 +690,6 @@ void intel_display_driver_shutdown(struct intel_display *display)
 
 	__intel_display_driver_pm_suspend(display, true);
 
-	intel_encoder_block_all_hpds(display);
-
-	intel_hpd_cancel_work(display);
-
-	intel_display_driver_suspend_access(display);
-
-	intel_encoder_suspend_all(display);
 	intel_encoder_shutdown_all(display);
 }
 
@@ -753,6 +746,14 @@ static int __intel_display_driver_pm_suspend(struct intel_display *display, bool
 	flush_workqueue(display->wq.cleanup);
 
 	intel_dp_mst_suspend(display);
+
+	intel_encoder_block_all_hpds(display);
+
+	intel_hpd_cancel_work(display);
+
+	intel_display_driver_suspend_access(display);
+
+	intel_encoder_suspend_all(display);
 
 	return ret;
 }

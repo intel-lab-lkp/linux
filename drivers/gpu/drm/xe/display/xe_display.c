@@ -30,7 +30,6 @@
 #include "intel_dmc_wl.h"
 #include "intel_dp.h"
 #include "intel_dram.h"
-#include "intel_encoder.h"
 #include "intel_fbdev.h"
 #include "intel_hdcp.h"
 #include "intel_hotplug.h"
@@ -296,15 +295,6 @@ void xe_display_pm_suspend(struct xe_device *xe)
 		return;
 
 	intel_display_driver_pm_suspend(display);
-
-	intel_encoder_block_all_hpds(display);
-
-	intel_hpd_cancel_work(display);
-
-	if (intel_display_device_present(display)) {
-		intel_display_driver_suspend_access(display);
-		intel_encoder_suspend_all(display);
-	}
 
 	intel_opregion_suspend(display, s2idle ? PCI_D1 : PCI_D3cold);
 
