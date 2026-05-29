@@ -332,6 +332,25 @@ static int parse_trace_event_arg(char *arg, struct fetch_insn *code,
 	return -ENOENT;
 }
 
+static int parse_trace_event(char *arg, struct fetch_insn *code,
+			     struct traceprobe_parse_context *ctx)
+{
+	int ret;
+
+	if (code->data)
+		return -EFAULT;
+	ret = parse_trace_event_arg(arg, code, ctx);
+	if (!ret)
+		return 0;
+	if (strcmp(arg, "comm") == 0 || strcmp(arg, "COMM") == 0) {
+		code->op = FETCH_OP_COMM;
+		return 0;
+	}
+	/* backward compatibility */
+	ctx->offset = 0;
+	return -EINVAL;
+}
+
 #ifdef CONFIG_PROBE_EVENTS_BTF_ARGS
 
 static u32 btf_type_int(const struct btf_type *t)
@@ -376,11 +395,17 @@ static bool btf_type_is_char_array(struct btf *btf, const struct btf_type *type)
 		&& BTF_INT_BITS(intdata) == 8;
 }
 
+static struct btf *ctx_btf(struct traceprobe_parse_context *ctx)
+{
+	return ctx->flags & TPARG_FL_TYPECAST ?
+		ctx->struct_btf : ctx->btf;
+}
+
 static int check_prepare_btf_string_fetch(char *typename,
 				struct fetch_insn **pcode,
 				struct traceprobe_parse_context *ctx)
 {
-	struct btf *btf = ctx->btf;
+	struct btf *btf = ctx_btf(ctx);
 
 	if (!btf || !ctx->last_type)
 		return 0;
@@ -554,22 +579,29 @@ static int parse_btf_field(char *fieldname, const struct btf_type *type,
 	struct fetch_insn *code = *pcode;
 	const struct btf_member *field;
 	u32 bitoffs, anon_offs;
+	bool is_struct = ctx->flags & TPARG_FL_TYPECAST;
+	struct btf *btf = ctx_btf(ctx);
 	char *next;
 	int is_ptr;
 	s32 tid;
 
 	do {
-		/* Outer loop for solving arrow operator ('->') */
-		if (BTF_INFO_KIND(type->info) != BTF_KIND_PTR) {
-			trace_probe_log_err(ctx->offset, NO_PTR_STRCT);
-			return -EINVAL;
+		if (!is_struct) {
+			/* Outer loop for solving arrow operator ('->') */
+			if (BTF_INFO_KIND(type->info) != BTF_KIND_PTR) {
+				trace_probe_log_err(ctx->offset, NO_PTR_STRCT);
+				return -EINVAL;
+			}
+
+			/* Convert a struct pointer type to a struct type */
+			type = btf_type_skip_modifiers(btf, type->type, &tid);
+			if (!type) {
+				trace_probe_log_err(ctx->offset, BAD_BTF_TID);
+				return -EINVAL;
+			}
 		}
-		/* Convert a struct pointer type to a struct type */
-		type = btf_type_skip_modifiers(ctx->btf, type->type, &tid);
-		if (!type) {
-			trace_probe_log_err(ctx->offset, BAD_BTF_TID);
-			return -EINVAL;
-		}
+		/* Only the first type can skip being a pointer */
+		is_struct = false;
 
 		bitoffs = 0;
 		do {
@@ -580,7 +612,7 @@ static int parse_btf_field(char *fieldname, const struct btf_type *type,
 				return is_ptr;
 
 			anon_offs = 0;
-			field = btf_find_struct_member(ctx->btf, type, fieldname,
+			field = btf_find_struct_member(btf, type, fieldname,
 						       &anon_offs);
 			if (IS_ERR(field)) {
 				trace_probe_log_err(ctx->offset, BAD_BTF_TID);
@@ -602,7 +634,7 @@ static int parse_btf_field(char *fieldname, const struct btf_type *type,
 				ctx->last_bitsize = 0;
 			}
 
-			type = btf_type_skip_modifiers(ctx->btf, field->type, &tid);
+			type = btf_type_skip_modifiers(btf, field->type, &tid);
 			if (!type) {
 				trace_probe_log_err(ctx->offset, BAD_BTF_TID);
 				return -EINVAL;
@@ -627,6 +659,7 @@ static int parse_btf_field(char *fieldname, const struct btf_type *type,
 	return 0;
 }
 
+
 static int __store_entry_arg(struct trace_probe *tp, int argnum);
 
 static int parse_btf_arg(char *varname,
@@ -640,7 +673,7 @@ static int parse_btf_arg(char *varname,
 	int i, is_ptr, ret;
 	u32 tid;
 
-	if (WARN_ON_ONCE(!ctx->funcname))
+	if (WARN_ON_ONCE(!ctx->funcname && !(ctx->flags & TPARG_FL_TEVENT)))
 		return -EINVAL;
 
 	is_ptr = split_next_field(varname, &field, ctx);
@@ -651,6 +684,16 @@ static int parse_btf_arg(char *varname,
 		trace_probe_log_err(ctx->offset + field - varname,
 				    NOSUP_DAT_ARG);
 		return -EOPNOTSUPP;
+	}
+
+	if (ctx->flags & TPARG_FL_TEVENT) {
+		ret = parse_trace_event(varname, code, ctx);
+		if (ret < 0)
+			return ret;
+		if (WARN_ON_ONCE(!(ctx->flags & TPARG_FL_TYPECAST)))
+			return -EINVAL;
+		type = ctx->last_struct;
+		goto found_type;
 	}
 
 	if (ctx->flags & TPARG_FL_RETURN && !strcmp(varname, "$retval")) {
@@ -709,6 +752,7 @@ static int parse_btf_arg(char *varname,
 
 found:
 	type = btf_type_skip_modifiers(ctx->btf, tid, &tid);
+found_type:
 	if (!type) {
 		trace_probe_log_err(ctx->offset, BAD_BTF_TID);
 		return -EINVAL;
@@ -727,7 +771,7 @@ found:
 static const struct fetch_type *find_fetch_type_from_btf_type(
 					struct traceprobe_parse_context *ctx)
 {
-	struct btf *btf = ctx->btf;
+	struct btf *btf = ctx_btf(ctx);
 	const char *typestr = NULL;
 
 	if (btf && ctx->last_type)
@@ -758,7 +802,71 @@ static int parse_btf_bitfield(struct fetch_insn **pcode,
 	return 0;
 }
 
-#else
+static int query_btf_struct(const char *sname, struct traceprobe_parse_context *ctx)
+{
+	int id;
+
+	if (!ctx->struct_btf) {
+		struct btf *btf;
+
+		id = bpf_find_btf_id(sname, BTF_KIND_STRUCT, &btf);
+		if (id < 0)
+			return id;
+		ctx->struct_btf = btf;
+	} else {
+		id = btf_find_by_name_kind(ctx->struct_btf, sname, BTF_KIND_STRUCT);
+		if (id < 0)
+			return id;
+	}
+
+	ctx->last_struct = btf_type_by_id(ctx->struct_btf, id);
+	return 0;
+}
+
+static int handle_typecast(char *arg, struct fetch_insn **pcode,
+			   struct fetch_insn *end,
+			   struct traceprobe_parse_context *ctx)
+{
+	char *tmp;
+	int ret;
+
+	/* Currently this only works for eprobes */
+	if (!(ctx->flags & TPARG_FL_TEVENT)) {
+		trace_probe_log_err(ctx->offset, TYPECAST_NOT_EVENT);
+		return -EINVAL;
+	}
+
+	tmp = strchr(arg, ')');
+	if (!tmp) {
+		trace_probe_log_err(ctx->offset + strlen(arg),
+				    DEREF_OPEN_BRACE);
+		return -EINVAL;
+	}
+	*tmp = '\0';
+	ret = query_btf_struct(arg + 1, ctx);
+	*tmp = ')';
+
+	if (ret < 0) {
+		trace_probe_log_err(ctx->offset + 1, NO_PTR_STRCT);
+		ret = -EINVAL;
+		goto out_put;
+	}
+
+	ctx->flags |= TPARG_FL_TYPECAST;
+	tmp++;
+
+	ctx->offset += tmp - arg;
+	ret = parse_btf_arg(tmp, pcode, end, ctx);
+	ctx->flags &= ~TPARG_FL_TYPECAST;
+	ctx->last_struct = NULL;
+out_put:
+	btf_put(ctx->struct_btf);
+	ctx->struct_btf = NULL;
+	return ret;
+}
+
+#else /* !CONFIG_PROBE_EVENTS_BTF_ARGS */
+
 static void clear_btf_context(struct traceprobe_parse_context *ctx)
 {
 	ctx->btf = NULL;
@@ -794,7 +902,15 @@ static int check_prepare_btf_string_fetch(char *typename,
 	return 0;
 }
 
-#endif
+static int handle_typecast(char *arg, struct fetch_insn **pcode,
+			   struct fetch_insn *end,
+			   struct traceprobe_parse_context *ctx)
+{
+	trace_probe_log_err(ctx->offset, NOSUP_BTFARG);
+	return -EOPNOTSUPP;
+}
+
+#endif /* CONFIG_PROBE_EVENTS_BTF_ARGS */
 
 #ifdef CONFIG_HAVE_FUNCTION_ARG_ACCESS_API
 
@@ -948,18 +1064,9 @@ static int parse_probe_vars(char *orig_arg, const struct fetch_type *t,
 	int len;
 
 	if (ctx->flags & TPARG_FL_TEVENT) {
-		if (code->data)
-			return -EFAULT;
-		ret = parse_trace_event_arg(arg, code, ctx);
-		if (!ret)
-			return 0;
-		if (strcmp(arg, "comm") == 0 || strcmp(arg, "COMM") == 0) {
-			code->op = FETCH_OP_COMM;
-			return 0;
-		}
-		/* backward compatibility */
-		ctx->offset = 0;
-		goto inval;
+		if (parse_trace_event(arg, code, ctx) < 0)
+			goto inval;
+		return 0;
 	}
 
 	if (str_has_prefix(arg, "retval")) {
@@ -1225,6 +1332,9 @@ parse_probe_arg(char *arg, const struct fetch_type *type,
 			else
 				code->op = FETCH_OP_IMM;
 		}
+		break;
+	case '(':
+		ret = handle_typecast(arg, pcode, end, ctx);
 		break;
 	default:
 		if (isalpha(arg[0]) || arg[0] == '_') {	/* BTF variable */
