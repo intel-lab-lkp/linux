@@ -123,6 +123,7 @@ struct damon_target {
  * @size:		The size of the accessed address range.
  * @cpu:		The id of the CPU that made the access.
  * @tid:		The task id of the task that made the access.
+ * @tgid:		Thread group id of the task that made the access.
  * @is_write:		Whether the access is write.
  *
  * Any DAMON API callers that notified access events can report the information
@@ -135,6 +136,7 @@ struct damon_access_report {
 	unsigned long size;
 	unsigned int cpu;
 	pid_t tid;
+	pid_t tgid;
 	bool is_write;
 /* private: */
 	unsigned long report_jiffies;	/* when this report is made */
@@ -501,6 +503,7 @@ struct damos_filter {
 };
 
 struct damon_ctx;
+struct damon_target_lookup;
 struct damos;
 
 /**
@@ -967,6 +970,67 @@ struct damon_sample_control {
 };
 
 /**
+ * struct damon_perf_event_attr - raw PMU event attr for access check.
+ *
+ * @type:		raw PMU event type.
+ * @config:		raw PMU event config.
+ * @config1:		raw PMU event config1.
+ * @config2:		raw PMU event config2.
+ * @sample_phys_addr:	whether to set PERF_SAMPLE_PHYS_ADDR in sample_type.
+ * @sample_weight_struct:	whether to set PERF_SAMPLE_WEIGHT_STRUCT in
+ *				sample_type.  PMUs that do not advertise
+ *				weight (e.g. AMD IBS Op) reject events with
+ *				this flag set, so it must be opt-in.
+ * @exclude_kernel:	exclude kernel-mode samples.
+ * @exclude_hv:		exclude hypervisor samples.
+ * @freq:		when true use @sample_freq, otherwise @sample_period.
+ * @sample_freq:	target sample rate when @freq is true.
+ * @sample_period:	period (samples-between-overflows) when @freq is false.
+ * @wakeup_events:	perf_event_attr.wakeup_events.
+ * @precise_ip:		precise sampling skid bound (PEBS-style PMUs).
+ */
+struct damon_perf_event_attr {
+	u32 type;
+	u64 config;
+	u64 config1;
+	u64 config2;
+	bool sample_phys_addr;
+	bool sample_weight_struct;
+	bool exclude_kernel;
+	bool exclude_hv;
+	bool freq;
+	u64 sample_freq;
+	u64 sample_period;
+	u32 wakeup_events;
+	u32 precise_ip;
+};
+
+/**
+ * struct damon_perf_event - perf event for access check.
+ *
+ * @attr:	Per-event PMU attribute (configured via sysfs).
+ * @priv:	Monitoring operations-specific data.
+ * @list:	List head for &damon_ctx->perf_events siblings.
+ * @hlist_node:	Tracks this event among cpuhp multi-instance entries.
+ * @init_complete:	Set after the synchronous online sweep finishes; gates
+ *		@any_cpu_failed writes from late hotplug callbacks.
+ * @any_cpu_failed:	Set by the cpuhp online callback if perf_event creation
+ *		fails on any CPU during the synchronous initial install.
+ * @ctx:	Back-pointer to the owning damon_ctx; the cpu_online callback
+ *		reads ctx->perf_events_active to decide whether to enable a
+ *		late-onlining CPU's event immediately after create.
+ */
+struct damon_perf_event {
+	struct damon_perf_event_attr attr;
+	void *priv;
+	struct list_head list;
+	struct hlist_node hlist_node;
+	bool init_complete;
+	bool any_cpu_failed;
+	struct damon_ctx *ctx;
+};
+
+/**
  * struct damon_ctx - Represents a context for each monitoring.  This is the
  * main interface that allows users to set the attributes and get the results
  * of the monitoring.
@@ -991,6 +1055,11 @@ struct damon_sample_control {
  * @addr_unit:	Scale factor for core to ops address conversion.
  * @min_region_sz:	Minimum region size.
  * @pause:	Pause kdamond main loop.
+ * @perf_events:	Head of perf events (&damon_perf_event) list.
+ * @perf_events_active:	Set while kdamond_fn has the perf events armed.
+ *		Cleared in the kdamond_fn done path before the events are
+ *		disabled; serves as the gate for damon_commit_perf_events()
+ *		and the kdamond_fn drain dispatch.
  */
 struct damon_ctx {
 	struct damon_attrs attrs;
@@ -1046,6 +1115,9 @@ struct damon_ctx {
 	unsigned long min_region_sz;
 	bool pause;
 
+	struct list_head perf_events;
+	bool perf_events_active;
+
 /* private: */
 	/* Head of monitoring targets (&damon_target) list. */
 	struct list_head adaptive_targets;
@@ -1054,6 +1126,14 @@ struct damon_ctx {
 
 	/* Per-ctx PRNG state for damon_rand(); kdamond is the sole consumer. */
 	struct rnd_state rnd_state;
+
+	/* Reusable drain-loop snapshot buffer (avoids per-tick kmalloc). */
+	struct {
+		struct damon_target_lookup *lookups;
+		unsigned int nr_lookups;
+		struct damon_region **region_buf;
+		unsigned int region_buf_cap;
+	} drain_snapshot;
 };
 
 /* Get a random number in [@l, @r) using @ctx's lockless PRNG. */
