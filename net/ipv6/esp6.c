@@ -131,7 +131,7 @@ static void esp_ssg_unref(struct xfrm_state *x, void *tmp, struct sk_buff *skb, 
 	 * Skip the first sg which comes from skb->data.
 	 */
 	if (already_unref || req->src != req->dst)
-		for (sg = sg_next(req->src); sg; sg = sg_next(sg))
+		for (sg = sg_next(already_unref ? esp_req_sg(aead, req) : req->src); sg; sg = sg_next(sg))
 			skb_page_unref(page_to_netmem(sg_page(sg)),
 				       skb->pp_recycle);
 }
