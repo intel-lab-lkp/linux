@@ -812,6 +812,41 @@ imap_spans_range(
 	return true;
 }
 
+/*
+ * If imap doesn't span the requested range but the immediately-following bmbt
+ * record is unwritten and physically contiguous, extend imap to cover it and
+ * report the merged range as unwritten.
+ */
+static bool
+imap_extend_into_unwritten(
+	struct xfs_inode	*ip,
+	struct xfs_bmbt_irec	*imap,
+	xfs_fileoff_t		end_fsb)
+{
+	struct xfs_bmbt_irec	next;
+	xfs_fileoff_t		next_off;
+	int			nimaps = 1;
+	int			error;
+
+	if (!xfs_bmap_is_written_extent(imap))
+		return false;
+
+	next_off = imap->br_startoff + imap->br_blockcount;
+	error = xfs_bmapi_read(ip, next_off, end_fsb - next_off, &next,
+			       &nimaps, 0);
+	if (error || nimaps == 0)
+		return false;
+
+	if (next.br_state != XFS_EXT_UNWRITTEN ||
+	    next.br_startblock != imap->br_startblock + imap->br_blockcount ||
+	    !imap_spans_range(&next, next_off, end_fsb))
+		return false;
+
+	imap->br_blockcount += next.br_blockcount;
+	imap->br_state = XFS_EXT_UNWRITTEN;
+	return true;
+}
+
 static bool
 xfs_bmap_hw_atomic_write_possible(
 	struct xfs_inode	*ip,
@@ -964,7 +999,14 @@ relock:
 	 */
 	if (flags & (IOMAP_NOWAIT | IOMAP_OVERWRITE_ONLY)) {
 		error = -EAGAIN;
-		if (!imap_spans_range(&imap, offset_fsb, end_fsb))
+		/*
+		 * Sequential append workloads with adaptive preallocation can
+		 * span the NORM->UNWRITTEN boundary that unwritten conversion
+		 * leaves behind. Try to coalesce the next contiguous unwritten record
+		 * into imap before returning -EAGAIN.
+		 */
+		if (!imap_spans_range(&imap, offset_fsb, end_fsb) &&
+		    !imap_extend_into_unwritten(ip, &imap, end_fsb))
 			goto out_unlock;
 	}
 
