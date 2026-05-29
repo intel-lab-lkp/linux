@@ -52,10 +52,7 @@ static inline void syscall_get_arguments(struct task_struct *task,
 					 struct pt_regs *regs,
 					 unsigned long *args)
 {
-	args[0] = regs->orig_d0;
-	args++;
-
-	memcpy(args, &regs->d1, 5 * sizeof(args[0]));
+	memcpy(args, &regs->d1, 6 * sizeof(args[0]));
 }
 
 static inline void syscall_set_arguments(struct task_struct *task,
