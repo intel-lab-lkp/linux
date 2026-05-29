@@ -1774,29 +1774,28 @@ static void __kvm_xen_set_evtchn_fast(struct kvm_vcpu *vcpu, int port_word_bit)
 	bool kick_vcpu = false;
 
 	/* Now switch to the vCPU's vcpu_info to set the index and pending_sel */
-	if (!read_trylock(&gpc->lock)) {
-		/*
-		 * Could not access the vcpu_info. Set the bit in-kernel and
-		 * prod the vCPU to deliver it for itself.
-		 */
+	CLASS(gpc_try_map_local, vcpu_info_map)(gpc, sizeof(struct vcpu_info));
+
+	/*
+	 * If the vcpu_info is inaccessible, set the bit in-kernel and prod the
+	 * vCPU to deliver it for itself.
+	 */
+	if (IS_ERR(vcpu_info_map)) {
 		if (!test_and_set_bit(port_word_bit, &vcpu->arch.xen.evtchn_pending_sel))
 			kick_vcpu = true;
 		goto out_kick;
 	}
-	if (!kvm_gpc_check(gpc, sizeof(struct vcpu_info))) {
-		if (!test_and_set_bit(port_word_bit, &vcpu->arch.xen.evtchn_pending_sel))
-			kick_vcpu = true;
-		goto out_unlock;
-	}
 
 	if (IS_ENABLED(CONFIG_64BIT) && vcpu->kvm->arch.xen.long_mode) {
-		struct vcpu_info *vcpu_info = gpc->khva;
+		struct vcpu_info *vcpu_info = *vcpu_info_map;
+
 		if (!test_and_set_bit(port_word_bit, &vcpu_info->evtchn_pending_sel)) {
 			WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
 			kick_vcpu = true;
 		}
 	} else {
-		struct compat_vcpu_info *vcpu_info = gpc->khva;
+		struct compat_vcpu_info *vcpu_info = *vcpu_info_map;
+
 		if (!test_and_set_bit(port_word_bit,
 					(unsigned long *)&vcpu_info->evtchn_pending_sel)) {
 			WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
@@ -1810,8 +1809,6 @@ static void __kvm_xen_set_evtchn_fast(struct kvm_vcpu *vcpu, int port_word_bit)
 		kick_vcpu = false;
 	}
 
-out_unlock:
-	read_unlock(&gpc->lock);
 out_kick:
 	if (kick_vcpu) {
 		kvm_make_request(KVM_REQ_UNBLOCK, vcpu);
@@ -1850,23 +1847,19 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 	if (xe->port >= max_evtchn_port(kvm))
 		return -EINVAL;
 
-	rc = -EWOULDBLOCK;
-
 	guard(srcu)(&kvm->srcu);
 
-	if (!read_trylock(&gpc->lock))
-		return rc;
-
-	if (!kvm_gpc_check(gpc, PAGE_SIZE))
-		goto out_unlock;
+	CLASS(gpc_try_map_local, shinfo_map)(gpc, PAGE_SIZE);
+	if (IS_ERR(shinfo_map))
+		return -EWOULDBLOCK;
 
 	if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
-		struct shared_info *shinfo = gpc->khva;
+		struct shared_info *shinfo = *shinfo_map;
 		pending_bits = (unsigned long *)&shinfo->evtchn_pending;
 		mask_bits = (unsigned long *)&shinfo->evtchn_mask;
 		port_word_bit = xe->port / 64;
 	} else {
-		struct compat_shared_info *shinfo = gpc->khva;
+		struct compat_shared_info *shinfo = *shinfo_map;
 		pending_bits = (unsigned long *)&shinfo->evtchn_pending;
 		mask_bits = (unsigned long *)&shinfo->evtchn_mask;
 		port_word_bit = xe->port / 32;
@@ -1887,9 +1880,6 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 	} else {
 		rc = 1; /* Delivered to the bitmap in shared_info. */
 	}
-
-out_unlock:
-	read_unlock(&gpc->lock);
 
 	if (rc == 1)
 		__kvm_xen_set_evtchn_fast(vcpu, port_word_bit);
