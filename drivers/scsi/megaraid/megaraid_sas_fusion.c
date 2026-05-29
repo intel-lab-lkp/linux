@@ -3589,6 +3589,8 @@ complete_cmd_fusion(struct megasas_instance *instance, u32 MSIxIndex,
 	while (d_val.u.low != cpu_to_le32(UINT_MAX) &&
 	       d_val.u.high != cpu_to_le32(UINT_MAX)) {
 
+		/* Read SIMD after ReplyFlags and d_val.word check */
+		dma_rmb();
 		smid = le16_to_cpu(reply_desc->SMID);
 		cmd_fusion = fusion->cmd_list[smid - 1];
 		scsi_io_req = (struct MPI2_RAID_SCSI_IO_REQUEST *)
