@@ -928,6 +928,14 @@ struct arm_smmu_device {
 #define ARM_SMMU_OPT_MSIPOLL		(1 << 2)
 #define ARM_SMMU_OPT_CMDQ_FORCE_SYNC	(1 << 3)
 #define ARM_SMMU_OPT_TEGRA241_CMDQV	(1 << 4)
+/*
+ * Tegra264 erratum: a TLB entry can survive an invalidation that races
+ * with concurrent traffic targeting the same entry. The software
+ * workaround is to issue every CFGI/TLBI command twice, each followed
+ * by CMD_SYNC. The second issue is guaranteed to evict the entry.
+ * ATC_INV commands are not affected and must not be doubled.
+ */
+#define ARM_SMMU_OPT_TLBI_TWICE		(1 << 5)
 	u32				options;
 
 	struct arm_smmu_cmdq		cmdq;
