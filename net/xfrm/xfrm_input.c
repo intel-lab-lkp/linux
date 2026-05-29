@@ -467,6 +467,7 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 {
 	const struct xfrm_state_afinfo *afinfo;
 	struct net *net = dev_net(skb->dev);
+	struct net_device *dev = skb->dev;
 	int err;
 	__be32 seq;
 	__be32 seq_hi;
@@ -730,6 +731,10 @@ resume_decapped:
 	if (err)
 		goto drop;
 
+	if (async && skb->dev != dev) {
+		dev_put(dev);
+		async = 0;
+	}
 	nf_reset_ct(skb);
 
 	if (decaps) {
