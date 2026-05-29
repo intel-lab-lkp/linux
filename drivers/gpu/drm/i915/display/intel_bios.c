@@ -3933,6 +3933,47 @@ intel_bios_encoder_get_cx0_vspeo(const struct intel_bios_encoder_data *devdata,
 	return vspeo;
 }
 
+const struct intel_ddi_buf_trans *
+intel_bios_encoder_get_combo_vspeo(const struct intel_bios_encoder_data *devdata,
+				   int idx)
+{
+	struct intel_display *display = devdata->display;
+	struct intel_ddi_buf_trans *vspeo = (void *) devdata->vspeo;
+	union intel_ddi_buf_trans_entry *entries = (void *) vspeo->entries;
+	const u32 *tables = display->vbt.vspeo.tables;
+	int num_columns = display->vbt.vspeo.num_columns;
+	int num_rows = display->vbt.vspeo.num_rows;
+	size_t offset = 0;
+	int level;
+
+	INTEL_DISPLAY_STATE_WARN(display,
+				 idx < COMBO_HIGH_VSWING_HBR3 ||
+				 idx > COMBO_LOW_VSWING_EDP_HBR3,
+				 "Combo requested invalid VS/PE-O table: %d\n", idx);
+
+	offset += idx * num_rows * num_columns;
+
+	for (level = 0; level < num_rows; level++) {
+
+		u32 dw2_swing_sel = tables[offset];
+		u32 dw7_n_scalar = tables[offset+1];
+		u32 dw4_cursor_coeff = tables[offset+2];
+		u32 dw4_post_cursor_2 = tables[offset+3];
+		u32 dw4_post_cursor_1 = tables[offset+4];
+
+		entries[level].icl.dw2_swing_sel = dw2_swing_sel;
+		entries[level].icl.dw7_n_scalar = dw7_n_scalar;
+		entries[level].icl.dw4_cursor_coeff = dw4_cursor_coeff;
+		entries[level].icl.dw4_post_cursor_2 = dw4_post_cursor_2;
+		entries[level].icl.dw4_post_cursor_1 = dw4_post_cursor_1;
+
+		offset += num_columns;
+	}
+
+	vspeo->num_entries = num_rows;
+	return vspeo;
+}
+
 bool intel_bios_encoder_is_dedicated_external(const struct intel_bios_encoder_data *devdata)
 {
 	return devdata->display->vbt.version >= 264 &&

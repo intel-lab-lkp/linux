@@ -1787,6 +1787,50 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 }
 
 static int
+jsl_get_combo_vspeo_index(struct intel_encoder *encoder,
+			  const struct intel_crtc_state *crtc_state)
+{
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+		if (use_edp_low_vswing(encoder)) {
+			if (crtc_state->port_clock > 540000)
+				return COMBO_HIGH_VSWING_HBR3;
+			else if (crtc_state->port_clock > 270000)
+				return COMBO_LOW_VSWING_EDP_HBR3;
+			else
+				return COMBO_LOW_VSWING_EDP_HBR2;
+		}
+	}
+
+	if (intel_crtc_has_dp_encoder(crtc_state))
+		return COMBO_HIGH_VSWING_HBR3;
+
+	return -EINVAL;
+}
+
+static int
+ehl_get_combo_vspeo_index(struct intel_encoder *encoder,
+			  const struct intel_crtc_state *crtc_state)
+{
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+		if (use_edp_low_vswing(encoder)) {
+			if (crtc_state->port_clock > 540000)
+				return COMBO_LOW_VSWING_EDP_HBR3;
+			else
+				return COMBO_LOW_VSWING_EDP_HBR2;
+		}
+	}
+
+	if (intel_crtc_has_dp_encoder(crtc_state)) {
+		if (crtc_state->port_clock > 270000)
+			return COMBO_LOW_VSWING_EDP_HBR2;
+		else
+			return COMBO_HIGH_VSWING_HBR3;
+	}
+
+	return -EINVAL;
+}
+
+static int
 snps_get_c10_vspeo_index(struct intel_encoder *encoder,
 			 const struct intel_crtc_state *crtc_state)
 {
@@ -1881,11 +1925,15 @@ void intel_ddi_buf_trans_init(struct intel_encoder *encoder)
 		else
 			encoder->get_buf_trans = tgl_get_dkl_buf_trans;
 	} else if (DISPLAY_VER(display) == 11) {
-		if (display->platform.jasperlake)
+		if (display->platform.jasperlake) {
 			encoder->get_buf_trans = jsl_get_combo_buf_trans;
-		else if (display->platform.elkhartlake)
+			encoder->get_phy_vspeo_index = jsl_get_combo_vspeo_index;
+			encoder->get_phy_vspeo = intel_bios_encoder_get_combo_vspeo;
+		} else if (display->platform.elkhartlake) {
 			encoder->get_buf_trans = ehl_get_combo_buf_trans;
-		else if (intel_encoder_is_combo(encoder))
+			encoder->get_phy_vspeo_index = ehl_get_combo_vspeo_index;
+			encoder->get_phy_vspeo = intel_bios_encoder_get_combo_vspeo;
+		} else if (intel_encoder_is_combo(encoder))
 			encoder->get_buf_trans = icl_get_combo_buf_trans;
 		else
 			encoder->get_buf_trans = icl_get_mg_buf_trans;

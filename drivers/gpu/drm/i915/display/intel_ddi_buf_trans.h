@@ -101,6 +101,12 @@ enum intel_c10_vspeo {
 	C10_EDP_HBR3
 };
 
+enum intel_combo_vspeo {
+	COMBO_HIGH_VSWING_HBR3 = 0,
+	COMBO_LOW_VSWING_EDP_HBR2,
+	COMBO_LOW_VSWING_EDP_HBR3
+};
+
 bool is_hobl_buf_trans(const struct intel_ddi_buf_trans *table);
 
 void intel_ddi_buf_trans_init(struct intel_encoder *encoder);

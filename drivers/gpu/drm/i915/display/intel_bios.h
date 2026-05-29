@@ -79,6 +79,9 @@ intel_bios_encoder_get_lt_vspeo(const struct intel_bios_encoder_data *devdata,
 const struct intel_ddi_buf_trans *
 intel_bios_encoder_get_cx0_vspeo(const struct intel_bios_encoder_data *devdata,
 				 int table);
+const struct intel_ddi_buf_trans *
+intel_bios_encoder_get_combo_vspeo(const struct intel_bios_encoder_data *devdata,
+				   int table);
 
 bool intel_bios_encoder_requests_vspeo(const struct intel_bios_encoder_data *devdata);
 bool intel_bios_encoder_supports_dvi(const struct intel_bios_encoder_data *devdata);
