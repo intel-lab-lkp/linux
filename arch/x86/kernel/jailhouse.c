@@ -68,7 +68,7 @@ static void __init jailhouse_timer_init(void)
 	lapic_timer_period = setup_data.v1.apic_khz * (1000 / HZ);
 }
 
-static unsigned long jailhouse_get_tsc(void)
+static unsigned int __init jailhouse_get_tsc(void)
 {
 	return precalibrated_tsc_khz;
 }
@@ -210,8 +210,6 @@ static void __init jailhouse_init_platform(void)
 	x86_init.mpparse.parse_smp_cfg		= jailhouse_parse_smp_config;
 	x86_init.pci.arch_init			= jailhouse_pci_arch_init;
 
-	x86_platform.calibrate_cpu		= jailhouse_get_tsc;
-	x86_platform.calibrate_tsc		= jailhouse_get_tsc;
 	x86_platform.get_wallclock		= jailhouse_get_wallclock;
 	x86_platform.legacy.rtc			= 0;
 	x86_platform.legacy.warm_reset		= 0;
@@ -293,5 +291,7 @@ const struct hypervisor_x86 x86_hyper_jailhouse __refconst = {
 	.detect			= jailhouse_detect,
 	.init.init_platform	= jailhouse_init_platform,
 	.init.x2apic_available	= jailhouse_x2apic_available,
+	.init.get_tsc_khz	= jailhouse_get_tsc,
+	.init.get_cpu_khz	= jailhouse_get_tsc,
 	.ignore_nopv		= true,
 };

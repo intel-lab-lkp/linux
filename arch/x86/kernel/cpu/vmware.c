@@ -64,7 +64,7 @@ struct vmware_steal_time {
 	u64 reserved[7];
 };
 
-static unsigned long vmware_tsc_khz __ro_after_init;
+static unsigned long vmware_tsc_khz __initdata;
 static u8 vmware_hypercall_mode     __ro_after_init;
 
 unsigned long vmware_hypercall_slow(unsigned long cmd,
@@ -137,7 +137,7 @@ static inline int __vmware_platform(void)
 	return eax != UINT_MAX && ebx == VMWARE_HYPERVISOR_MAGIC;
 }
 
-static unsigned long vmware_get_tsc_khz(void)
+static unsigned int __init vmware_get_tsc_khz(void)
 {
 	return vmware_tsc_khz;
 }
@@ -419,8 +419,8 @@ static void __init vmware_platform_setup(void)
 		}
 
 		vmware_tsc_khz = tsc_khz;
-		x86_platform.calibrate_tsc = vmware_get_tsc_khz;
-		x86_platform.calibrate_cpu = vmware_get_tsc_khz;
+		x86_init.hyper.get_tsc_khz = vmware_get_tsc_khz;
+		x86_init.hyper.get_cpu_khz = vmware_get_tsc_khz;
 
 #ifdef CONFIG_X86_LOCAL_APIC
 		/* Skip lapic calibration since we know the bus frequency. */
