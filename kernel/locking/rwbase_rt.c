@@ -153,8 +153,9 @@ static void __sched __rwbase_read_unlock(struct rwbase_rt *rwb,
 	struct rt_mutex_base *rtm = &rwb->rtmutex;
 	struct task_struct *owner;
 	DEFINE_RT_WAKE_Q(wqh);
+	unsigned long flags;
 
-	raw_spin_lock_irq(&rtm->wait_lock);
+	raw_spin_lock_irqsave(&rtm->wait_lock, flags);
 	/*
 	 * Wake the writer, i.e. the rtmutex owner. It might release the
 	 * rtmutex concurrently in the fast path (due to a signal), but to
@@ -167,7 +168,7 @@ static void __sched __rwbase_read_unlock(struct rwbase_rt *rwb,
 
 	/* Pairs with the preempt_enable in rt_mutex_wake_up_q() */
 	preempt_disable();
-	raw_spin_unlock_irq(&rtm->wait_lock);
+	raw_spin_unlock_irqrestore(&rtm->wait_lock, flags);
 	rt_mutex_wake_up_q(&wqh);
 }
 
