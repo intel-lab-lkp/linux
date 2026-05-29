@@ -176,7 +176,7 @@ fail:
 static int blk_ioctl_secure_erase(struct block_device *bdev, blk_mode_t mode,
 		void __user *argp)
 {
-	uint64_t start, len, end;
+	uint64_t start, len;
 	uint64_t range[2];
 	int err;
 
@@ -189,15 +189,13 @@ static int blk_ioctl_secure_erase(struct block_device *bdev, blk_mode_t mode,
 
 	start = range[0];
 	len = range[1];
-	if ((start & 511) || (len & 511))
-		return -EINVAL;
-	if (check_add_overflow(start, len, &end) ||
-	    end > bdev_nr_bytes(bdev))
-		return -EINVAL;
+	err = blk_validate_byte_range(bdev, start, len);
+	if (err)
+		return err;
 
 	inode_lock(bdev->bd_mapping->host);
 	filemap_invalidate_lock(bdev->bd_mapping);
-	err = truncate_bdev_range(bdev, mode, start, end - 1);
+	err = truncate_bdev_range(bdev, mode, start, start + len - 1);
 	if (!err)
 		err = blkdev_issue_secure_erase(bdev, start >> 9, len >> 9,
 						GFP_KERNEL);
@@ -211,7 +209,7 @@ static int blk_ioctl_zeroout(struct block_device *bdev, blk_mode_t mode,
 		unsigned long arg)
 {
 	uint64_t range[2];
-	uint64_t start, end, len;
+	uint64_t start, len;
 	int err;
 
 	if (!(mode & BLK_OPEN_WRITE))
@@ -222,21 +220,14 @@ static int blk_ioctl_zeroout(struct block_device *bdev, blk_mode_t mode,
 
 	start = range[0];
 	len = range[1];
-	end = start + len - 1;
-
-	if (start & 511)
-		return -EINVAL;
-	if (len & 511)
-		return -EINVAL;
-	if (end >= (uint64_t)bdev_nr_bytes(bdev))
-		return -EINVAL;
-	if (end < start)
-		return -EINVAL;
+	err = blk_validate_byte_range(bdev, start, len);
+	if (err)
+		return err;
 
 	/* Invalidate the page cache, including dirty pages */
 	inode_lock(bdev->bd_mapping->host);
 	filemap_invalidate_lock(bdev->bd_mapping);
-	err = truncate_bdev_range(bdev, mode, start, end);
+	err = truncate_bdev_range(bdev, mode, start, start + len - 1);
 	if (err)
 		goto fail;
 
