@@ -3268,17 +3268,11 @@ static void kvm_setup_guest_pvclock(struct pvclock_vcpu_time_info *ref_hv_clock,
 
 	memcpy(&hv_clock, ref_hv_clock, sizeof(hv_clock));
 
-	read_lock(&gpc->lock);
-	while (!kvm_gpc_check(gpc, offset + sizeof(*guest_hv_clock))) {
-		read_unlock(&gpc->lock);
+	CLASS(gpc_map_local, clock_map)(gpc, offset + sizeof(*guest_hv_clock));
+	if (IS_ERR(clock_map))
+		return;
 
-		if (kvm_gpc_refresh(gpc, offset + sizeof(*guest_hv_clock)))
-			return;
-
-		read_lock(&gpc->lock);
-	}
-
-	guest_hv_clock = (void *)(gpc->khva + offset);
+	guest_hv_clock = *clock_map + offset;
 
 	/*
 	 * This VCPU is paused, but it's legal for a guest to read another
@@ -3298,9 +3292,6 @@ static void kvm_setup_guest_pvclock(struct pvclock_vcpu_time_info *ref_hv_clock,
 	smp_wmb();
 
 	guest_hv_clock->version = ++hv_clock.version;
-
-	kvm_gpc_mark_dirty_in_slot(gpc);
-	read_unlock(&gpc->lock);
 
 	trace_kvm_pvclock_update(vcpu->vcpu_id, &hv_clock);
 }

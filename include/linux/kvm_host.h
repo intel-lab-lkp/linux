@@ -1535,6 +1535,44 @@ static inline bool kvm_gpc_is_hva_active(struct gfn_to_pfn_cache *gpc)
 	return gpc->active && kvm_is_error_gpa(gpc->gpa);
 }
 
+static inline void kvm_gpc_mark_dirty_in_slot(struct gfn_to_pfn_cache *gpc)
+{
+	lockdep_assert_held(&gpc->lock);
+
+	if (!gpc->memslot || gpc->never_dirty)
+		return;
+
+	mark_page_dirty_in_slot(gpc->kvm, gpc->memslot, gpa_to_gfn(gpc->gpa));
+}
+
+void **gpc_map_local_lock(struct gfn_to_pfn_cache *gpc, unsigned long len);
+void **gpc_try_map_local_lock(struct gfn_to_pfn_cache *gpc, unsigned long len);
+
+static inline void gpc_map_local_unlock(void **khva)
+{
+	struct gfn_to_pfn_cache *gpc = container_of(khva, struct gfn_to_pfn_cache, khva);
+
+	kvm_gpc_mark_dirty_in_slot(gpc);
+
+	read_unlock(&gpc->lock);
+}
+
+static inline void gpc_map_local_unlock_ro(void **khva)
+{
+	read_unlock(&container_of(khva, struct gfn_to_pfn_cache, khva)->lock);
+}
+
+#define DEFINE_GPC_CLASS(try, ro)						\
+DEFINE_CLASS(gpc##try##_map_local##ro, void **,					\
+	     if (!IS_ERR(_T)) gpc_map_local_unlock##ro(_T),			\
+	     gpc##try##_map_local_lock(gpc, len),				\
+	     struct gfn_to_pfn_cache *gpc, unsigned long len)			\
+
+DEFINE_GPC_CLASS(,);
+DEFINE_GPC_CLASS(_try,);
+DEFINE_GPC_CLASS(, _ro);
+DEFINE_GPC_CLASS(_try, _ro);
+
 void kvm_sigset_activate(struct kvm_vcpu *vcpu);
 void kvm_sigset_deactivate(struct kvm_vcpu *vcpu);
 
@@ -1928,16 +1966,6 @@ static inline bool kvm_is_gpa_in_memslot(struct kvm *kvm, gpa_t gpa)
 	unsigned long hva = gfn_to_hva(kvm, gpa_to_gfn(gpa));
 
 	return !kvm_is_error_hva(hva);
-}
-
-static inline void kvm_gpc_mark_dirty_in_slot(struct gfn_to_pfn_cache *gpc)
-{
-	lockdep_assert_held(&gpc->lock);
-
-	if (!gpc->memslot || gpc->never_dirty)
-		return;
-
-	mark_page_dirty_in_slot(gpc->kvm, gpc->memslot, gpa_to_gfn(gpc->gpa));
 }
 
 enum kvm_stat_kind {

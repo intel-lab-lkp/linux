@@ -484,3 +484,39 @@ void kvm_gpc_deactivate(struct gfn_to_pfn_cache *gpc)
 		gpc_unmap(old_pfn, old_khva);
 	}
 }
+
+void **gpc_try_map_local_lock(struct gfn_to_pfn_cache *gpc, unsigned long len)
+{
+	if (!read_trylock(&gpc->lock))
+		return ERR_PTR(-EWOULDBLOCK);
+
+	if (!kvm_gpc_check(gpc, len)) {
+		read_unlock(&gpc->lock);
+		return ERR_PTR(-EWOULDBLOCK);
+	}
+
+	return &gpc->khva;
+}
+
+void **gpc_map_local_lock(struct gfn_to_pfn_cache *gpc, unsigned long len)
+{
+	/*
+	 * Yes, this is an open-coded loop. But that's just what put_user()
+	 * does anyway. Page it in and retry the instruction. We're just a
+	 * little more honest about it.
+	 */
+	for (;;) {
+		int r;
+
+		read_lock(&gpc->lock);
+
+		if (kvm_gpc_check(gpc, len))
+			return &gpc->khva;
+
+		read_unlock(&gpc->lock);
+
+		r = kvm_gpc_refresh(gpc, len);
+		if (r)
+			return ERR_PTR(r);
+	}
+}
