@@ -5109,6 +5109,13 @@ L:	linux-usb@vger.kernel.org
 S:	Maintained
 F:	drivers/usb/gadget/udc/bcm63xx_udc.*
 
+BROADCOM BCM6362 WLAN SHIM BRIDGE DRIVER
+M:	Alessio Ferri <alessio.ferri@mythread.it>
+L:	linux-wireless@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/bus/brcm,bcm6362-wlan.yaml
+F:	drivers/bus/bcm6362-wlan-shim.c
+
 BROADCOM BCM7XXX ARM ARCHITECTURE
 M:	Florian Fainelli <florian.fainelli@broadcom.com>
 R:	Broadcom internal kernel review list <bcm-kernel-feedback-list@broadcom.com>

@@ -29,6 +29,19 @@ config ARM_INTEGRATOR_LM
 	  Say y here to enable support for the ARM Logic Module bus
 	  found on the ARM Integrator AP (Application Platform)
 
+config BCM6362_WLAN_SHIM
+	tristate "BCM6362 on-chip WLAN SHIM bridge"
+	depends on BMIPS_GENERIC || COMPILE_TEST
+	depends on OF
+	select BCMA
+	select BCMA_HOST_SOC
+	help
+	  Bring-up driver for the SHIM bridge that gates the integrated
+	  2.4 GHz WLAN block of the BCM6362 SoC. The driver releases the
+	  SHIM from reset, configures clocks, and then instantiates a
+	  bcma-host-soc child platform device whose bcma backplane is
+	  enumerated by the bcma driver.
+
 config BRCMSTB_GISB_ARB
 	tristate "Broadcom STB GISB bus arbiter"
 	depends on ARCH_BRCMSTB || BMIPS_GENERIC
