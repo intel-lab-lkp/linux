@@ -297,7 +297,7 @@ r535_gsp_msgq_recv(struct nvkm_gsp *gsp, u32 gsp_rpc_len, int *retries)
 	rpc = (struct nvfw_gsp_rpc *)mqe->data;
 
 	if (WARN_ON(rpc->length > max_rpc_size))
-		return NULL;
+		return ERR_PTR(-EINVAL);
 
 	buf = kvmalloc(max_t(u32, rpc->length, expected), GFP_KERNEL);
 	if (!buf)
@@ -488,7 +488,7 @@ retry:
 		}
 
 		r535_gsp_msg_done(gsp, rpc);
-		return NULL;
+		return ERR_PTR(-EIO);
 	}
 
 	for (i = 0; i < gsp->msgq.ntfy_nr; i++) {
@@ -512,7 +512,7 @@ retry:
 	if (*gsp->msgq.rptr != *gsp->msgq.wptr)
 		goto retry;
 
-	return NULL;
+	return ERR_PTR(-EIO);
 }
 
 int
