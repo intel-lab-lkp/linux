@@ -506,6 +506,19 @@ unsigned long zswap_total_pages(void)
 	return total;
 }
 
+/*
+ * Expose whether zswap reclaim pressure is active. This is a backend fact:
+ * zswap_check_limits() sets the state once the pool reaches the hard limit and
+ * keeps it set until the pool falls below the accept threshold.
+ */
+bool zswap_pool_reclaim_pressure(void)
+{
+	if (zswap_never_enabled())
+		return false;
+
+	return READ_ONCE(zswap_pool_reached_full);
+}
+
 static bool zswap_check_limits(void)
 {
 	unsigned long cur_pages = zswap_total_pages();
@@ -1557,6 +1570,37 @@ check_old:
 	}
 
 	return ret;
+}
+
+enum zswap_range_state zswap_probe_range(swp_entry_t swp,
+					 unsigned int nr_pages)
+{
+	unsigned int type = swp_type(swp);
+	pgoff_t offset = swp_offset(swp);
+	bool present = false, missing = false;
+	unsigned int i;
+
+	/*
+	 * This is an advisory, lockless snapshot for common swapin admission.
+	 * Callers must recheck before depending on an all-zswap range for IO:
+	 * concurrent writeback or invalidation can change the backend state.
+	 */
+	if (zswap_never_enabled())
+		return ZSWAP_RANGE_NEVER_ENABLED;
+
+	for (i = 0; i < nr_pages; i++) {
+		struct xarray *tree = swap_zswap_tree(swp_entry(type, offset + i));
+
+		if (xa_load(tree, offset + i))
+			present = true;
+		else
+			missing = true;
+
+		if (present && missing)
+			return ZSWAP_RANGE_MIXED;
+	}
+
+	return present ? ZSWAP_RANGE_ALL_ZSWAP : ZSWAP_RANGE_NO_ZSWAP;
 }
 
 /**

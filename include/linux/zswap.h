@@ -9,6 +9,18 @@ struct lruvec;
 
 extern atomic_long_t zswap_stored_pages;
 
+/*
+ * Advisory zswap occupancy snapshot for a swap range. This is not a complete
+ * backend classifier; callers must recheck before depending on ALL_ZSWAP for
+ * large-folio IO.
+ */
+enum zswap_range_state {
+	ZSWAP_RANGE_NEVER_ENABLED,
+	ZSWAP_RANGE_NO_ZSWAP,
+	ZSWAP_RANGE_ALL_ZSWAP,
+	ZSWAP_RANGE_MIXED,
+};
+
 #ifdef CONFIG_ZSWAP
 
 struct zswap_lruvec_state {
@@ -27,6 +39,9 @@ struct zswap_lruvec_state {
 unsigned long zswap_total_pages(void);
 bool zswap_store(struct folio *folio);
 int zswap_load(struct folio *folio);
+enum zswap_range_state zswap_probe_range(swp_entry_t swp,
+					 unsigned int nr_pages);
+bool zswap_pool_reclaim_pressure(void);
 void zswap_invalidate(swp_entry_t swp);
 int zswap_swapon(int type, unsigned long nr_pages);
 void zswap_swapoff(int type);
@@ -47,6 +62,17 @@ static inline bool zswap_store(struct folio *folio)
 static inline int zswap_load(struct folio *folio)
 {
 	return -ENOENT;
+}
+
+static inline enum zswap_range_state zswap_probe_range(swp_entry_t swp,
+						       unsigned int nr_pages)
+{
+	return ZSWAP_RANGE_NEVER_ENABLED;
+}
+
+static inline bool zswap_pool_reclaim_pressure(void)
+{
+	return false;
 }
 
 static inline void zswap_invalidate(swp_entry_t swp) {}
