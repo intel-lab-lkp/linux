@@ -46,3 +46,6 @@ PWM fan control
 
     If a fan is controllable, this driver will register that fan as a cooling device
     in the thermal framework as well.
+
+Fan curves:
+   If supported by the EC. Reading only.

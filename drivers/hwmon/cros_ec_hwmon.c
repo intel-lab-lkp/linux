@@ -7,6 +7,7 @@
 
 #include <linux/device.h>
 #include <linux/hwmon.h>
+#include <linux/hwmon-sysfs.h>
 #include <linux/math.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
@@ -16,6 +17,8 @@
 #include <linux/thermal.h>
 #include <linux/types.h>
 #include <linux/units.h>
+
+#define to_dev_attr(_attr) container_of_const(_attr, struct device_attribute, attr)
 
 #define DRV_NAME	"cros-ec-hwmon"
 
@@ -372,6 +375,141 @@ static umode_t cros_ec_hwmon_is_visible(const void *data, enum hwmon_sensor_type
 	return 0;
 }
 
+static bool cros_ec_hwmon_attr_is_temp_fan_off(const struct sensor_device_attribute_2 *attr)
+{
+	return attr->nr == 0;
+}
+
+static ssize_t temp_auto_point_pwm_show(struct device *dev, struct device_attribute *attr,
+					char *buf)
+{
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+
+	if (cros_ec_hwmon_attr_is_temp_fan_off(sattr))
+		return sysfs_emit(buf, "0\n");
+	else /* temp_fan_max */
+		return sysfs_emit(buf, "255\n");
+}
+
+static ssize_t temp_auto_point_temp_show(struct device *dev, struct device_attribute *attr,
+					 char *buf)
+{
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	struct cros_ec_hwmon_priv *priv = dev_get_drvdata(dev);
+	struct ec_thermal_config config;
+	u32 temp;
+	int ret;
+
+	scoped_guard(hwmon_lock, dev) {
+		ret = cros_ec_hwmon_get_thermal_config(priv->cros_ec, sattr->index, &config);
+		if (ret)
+			return ret;
+	}
+
+	if (cros_ec_hwmon_attr_is_temp_fan_off(sattr))
+		temp = config.temp_fan_off;
+	else /* temp_fan_max */
+		temp = config.temp_fan_max;
+
+	if (temp == 0)
+		return -ENODATA;
+
+	return sysfs_emit(buf, "%ld\n", cros_ec_hwmon_kelvin_to_millicelsius(temp));
+}
+
+#define CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(_idx)					\
+	static SENSOR_DEVICE_ATTR_2_RO(temp ## _idx ## _auto_point1_pwm,		\
+				       temp_auto_point_pwm,  0, (_idx) - 1);		\
+	static SENSOR_DEVICE_ATTR_2_RO(temp ## _idx ## _auto_point2_pwm,		\
+				       temp_auto_point_pwm,  1, (_idx) - 1);		\
+	static SENSOR_DEVICE_ATTR_2_RO(temp ## _idx ## _auto_point1_temp,		\
+				       temp_auto_point_temp,  0, (_idx) - 1);		\
+	static SENSOR_DEVICE_ATTR_2_RO(temp ## _idx ## _auto_point2_temp,		\
+				       temp_auto_point_temp,  1, (_idx) - 1)		\
+
+#define CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(_idx)					\
+	&sensor_dev_attr_temp ## _idx ## _auto_point1_pwm.dev_attr.attr,		\
+	&sensor_dev_attr_temp ## _idx ## _auto_point1_temp.dev_attr.attr,		\
+	&sensor_dev_attr_temp ## _idx ## _auto_point2_pwm.dev_attr.attr,		\
+	&sensor_dev_attr_temp ## _idx ## _auto_point2_temp.dev_attr.attr		\
+
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(1);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(2);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(3);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(4);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(5);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(6);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(7);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(8);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(9);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(10);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(11);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(12);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(13);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(14);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(15);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(16);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(17);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(18);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(19);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(20);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(21);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(22);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(23);
+CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS(24);
+
+static struct attribute *cros_ec_hwmon_fan_curve_attrs[] = {
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(1),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(2),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(3),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(4),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(5),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(6),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(7),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(8),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(9),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(10),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(11),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(12),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(13),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(14),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(15),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(16),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(17),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(18),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(19),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(20),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(21),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(22),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(23),
+	CROS_EC_HWMON_TEMP_AUTO_POINT_ATTRS_PTRS(24),
+	NULL
+};
+
+static_assert(ARRAY_SIZE(cros_ec_hwmon_fan_curve_attrs) ==
+	      ARRAY_SIZE(((struct cros_ec_hwmon_priv *)NULL)->temp_sensor_names) * 4 + 1);
+
+static umode_t cros_ec_hwmon_fan_curve_is_visible(struct kobject *kobj,
+						  struct attribute *attr, int idx)
+{
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(to_dev_attr(attr));
+	struct device *dev = kobj_to_dev(kobj);
+	struct cros_ec_hwmon_priv *priv = dev_get_drvdata(dev);
+
+	if (!priv->temp_threshold_supported)
+		return 0;
+
+	if (!priv->temp_sensor_names[sattr->index])
+		return 0;
+
+	return attr->mode;
+}
+
+static const struct attribute_group cros_ec_hwmon_fan_curve_group = {
+	.attrs		= cros_ec_hwmon_fan_curve_attrs,
+	.is_visible	= cros_ec_hwmon_fan_curve_is_visible,
+};
+
 static const struct hwmon_channel_info * const cros_ec_hwmon_info[] = {
 	HWMON_CHANNEL_INFO(chip, HWMON_C_REGISTER_TZ),
 	HWMON_CHANNEL_INFO(fan,
@@ -415,6 +553,7 @@ static const struct hwmon_channel_info * const cros_ec_hwmon_info[] = {
 };
 
 static const struct attribute_group *cros_ec_hwmon_groups[] = {
+	&cros_ec_hwmon_fan_curve_group,
 	NULL
 };
 
