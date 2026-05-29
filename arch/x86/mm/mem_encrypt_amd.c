@@ -376,7 +376,8 @@ static void __init __set_clr_pte_enc(pte_t *kpte, int level, bool enc)
 		 * ON SNP, the page state in the RMP table must happen
 		 * before the page table updates.
 		 */
-		early_snp_set_memory_shared((unsigned long)__va(d.pa), d.pa, 1);
+		early_snp_set_memory_shared((unsigned long)__va(d.pa), d.pa,
+					    d.size >> PAGE_SHIFT);
 	}
 
 	set_pte_enc_mask(kpte, d.pfn, d.new_pgprot);
@@ -386,7 +387,8 @@ static void __init __set_clr_pte_enc(pte_t *kpte, int level, bool enc)
 	 * add this page as private.
 	 */
 	if (enc)
-		early_snp_set_memory_private((unsigned long)__va(d.pa), d.pa, 1);
+		early_snp_set_memory_private((unsigned long)__va(d.pa), d.pa,
+					     d.size >> PAGE_SHIFT);
 }
 
 static int __init early_set_memory_enc_dec(unsigned long vaddr,
