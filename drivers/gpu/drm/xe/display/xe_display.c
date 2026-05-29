@@ -287,14 +287,11 @@ static bool suspend_to_idle(void)
 void xe_display_pm_suspend(struct xe_device *xe)
 {
 	struct intel_display *display = xe->display;
-	bool s2idle = suspend_to_idle();
 
 	if (!xe->info.probe_display)
 		return;
 
 	intel_display_driver_pm_suspend(display);
-
-	intel_opregion_suspend(display, s2idle ? PCI_D1 : PCI_D3cold);
 }
 
 void xe_display_pm_suspend_late(struct xe_device *xe)

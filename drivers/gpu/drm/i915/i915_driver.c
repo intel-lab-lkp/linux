@@ -1096,7 +1096,6 @@ static int i915_drm_suspend(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct intel_display *display = dev_priv->display;
-	pci_power_t opregion_target_state;
 
 	disable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
 
@@ -1109,9 +1108,6 @@ static int i915_drm_suspend(struct drm_device *dev)
 	i915_ggtt_suspend(to_gt(dev_priv)->ggtt);
 
 	i9xx_display_sr_save(display);
-
-	opregion_target_state = suspend_to_idle(dev_priv) ? PCI_D1 : PCI_D3cold;
-	intel_opregion_suspend(display, opregion_target_state);
 
 	dev_priv->suspend_count++;
 

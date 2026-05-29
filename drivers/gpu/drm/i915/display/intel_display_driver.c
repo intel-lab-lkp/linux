@@ -770,6 +770,8 @@ void intel_display_driver_pm_suspend_late(struct intel_display *display, bool s2
 	if (!HAS_DISPLAY(display))
 		return;
 
+	intel_opregion_suspend(display, s2idle ? PCI_D1 : PCI_D3cold);
+
 	intel_display_power_suspend_late(display, s2idle);
 }
 
