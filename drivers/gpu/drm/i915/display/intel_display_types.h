@@ -292,6 +292,11 @@ struct intel_encoder {
 	void (*set_signal_levels)(struct intel_encoder *encoder,
 				  const struct intel_crtc_state *crtc_state);
 
+	int (*get_phy_vspeo_index)(struct intel_encoder *encoder,
+				   const struct intel_crtc_state *crtc_state);
+	const struct intel_ddi_buf_trans *(*get_phy_vspeo)(const struct intel_bios_encoder_data *devdata,
+							   int idx);
+
 	enum hpd_pin hpd_pin;
 	enum intel_display_power_domain power_domain;
 

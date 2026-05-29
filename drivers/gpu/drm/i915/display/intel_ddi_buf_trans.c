@@ -1784,9 +1784,19 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 		return intel_get_buf_trans(&xe3plpd_lt_trans_dp14, n_entries);
 }
 
+static int
+_get_phy_vspeo_index(struct intel_encoder *encoder,
+		     const struct intel_crtc_state *crtc_state)
+{
+	return -EOPNOTSUPP;
+}
+
 void intel_ddi_buf_trans_init(struct intel_encoder *encoder)
 {
 	struct intel_display *display = to_intel_display(encoder);
+
+	encoder->get_phy_vspeo_index = _get_phy_vspeo_index;
+	encoder->get_phy_vspeo = NULL;
 
 	if (HAS_LT_PHY(display)) {
 		encoder->get_buf_trans = xe3plpd_get_lt_buf_trans;
@@ -1857,5 +1867,23 @@ const struct intel_ddi_buf_trans *intel_ddi_buf_trans_get(struct intel_encoder *
 							  const struct intel_crtc_state *crtc_state,
 							  int *n_entries)
 {
-	return encoder->get_buf_trans(encoder, crtc_state, n_entries);
+	struct intel_display *display = to_intel_display(encoder);
+	const struct intel_ddi_buf_trans *buf_trans;
+	bool vspeo;
+	int table;
+
+	vspeo = intel_bios_encoder_requests_vspeo(encoder->devdata);
+	if (!vspeo)
+		return encoder->get_buf_trans(encoder, crtc_state, n_entries);
+
+	table = encoder->get_phy_vspeo_index(encoder, crtc_state);
+	if (table < 0) {
+		drm_WARN_ONCE(display->drm, 1,
+			      "platform does not support VS/PE-O, setting default\n");
+
+		return encoder->get_buf_trans(encoder, crtc_state, n_entries);
+	}
+
+	buf_trans = encoder->get_phy_vspeo(encoder->devdata, table);
+	return intel_get_buf_trans(buf_trans, n_entries);
 }
