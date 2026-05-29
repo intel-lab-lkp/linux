@@ -1573,6 +1573,16 @@ DEFINE_GPC_CLASS(_try,);
 DEFINE_GPC_CLASS(, _ro);
 DEFINE_GPC_CLASS(_try, _ro);
 
+#define DEFINE_GPC_CLASS_EX(ro)							\
+DEFINE_CLASS(gpc_map_local##ro##_ex, void **,					\
+	     if (!IS_ERR(_T)) gpc_map_local_unlock##ro(_T),			\
+	     atomic ? gpc_try_map_local_lock(gpc, len) :			\
+		      gpc_map_local_lock(gpc, len),				\
+	     struct gfn_to_pfn_cache *gpc, unsigned long len, bool atomic)
+
+DEFINE_GPC_CLASS_EX();
+DEFINE_GPC_CLASS_EX(_ro);
+
 void kvm_sigset_activate(struct kvm_vcpu *vcpu);
 void kvm_sigset_deactivate(struct kvm_vcpu *vcpu);
 

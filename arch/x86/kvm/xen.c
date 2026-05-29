@@ -666,7 +666,6 @@ int __kvm_xen_has_interrupt(struct kvm_vcpu *v)
 {
 	struct gfn_to_pfn_cache *gpc = &v->arch.xen.vcpu_info_cache;
 	bool atomic = in_atomic() || !task_is_running(current);
-	u8 rc = 0;
 
 	/*
 	 * If the global upcall vector (HVMIRQ_callback_vector) is set and
@@ -676,44 +675,25 @@ int __kvm_xen_has_interrupt(struct kvm_vcpu *v)
 	/* No need for compat handling here */
 	BUILD_BUG_ON(offsetof(struct vcpu_info, evtchn_upcall_pending) !=
 		     offsetof(struct compat_vcpu_info, evtchn_upcall_pending));
-	BUILD_BUG_ON(sizeof(rc) !=
-		     sizeof_field(struct vcpu_info, evtchn_upcall_pending));
-	BUILD_BUG_ON(sizeof(rc) !=
+	BUILD_BUG_ON(sizeof_field(struct vcpu_info, evtchn_upcall_pending) !=
 		     sizeof_field(struct compat_vcpu_info, evtchn_upcall_pending));
 
-	if (atomic) {
-		if (!read_trylock(&gpc->lock))
-			return 1;
-	} else {
-		read_lock(&gpc->lock);
-	}
-	while (!kvm_gpc_check(gpc, sizeof(struct vcpu_info))) {
-		read_unlock(&gpc->lock);
+	/*
+	 * This function gets called from kvm_vcpu_block() after setting the
+	 * task to TASK_INTERRUPTIBLE, to see if it needs to wake immediately
+	 * from a HLT. So we really mustn't sleep. If the page ended up absent
+	 * at that point, just return 1 in order to trigger an immediate wake,
+	 * and we'll end up getting called again from a context where we *can*
+	 * fault in the page and wait for it.
+	 *
+	 * For normal, non-atomic usage, nothing can be done if userspace has
+	 * screwed up the vcpu_info mapping. No interrupts for you.
+	 */
+	CLASS(gpc_map_local_ro_ex, info_map)(gpc, sizeof(struct vcpu_info), atomic);
+	if (IS_ERR(info_map))
+		return atomic ? 1 : 0;
 
-		/*
-		 * This function gets called from kvm_vcpu_block() after setting the
-		 * task to TASK_INTERRUPTIBLE, to see if it needs to wake immediately
-		 * from a HLT. So we really mustn't sleep. If the page ended up absent
-		 * at that point, just return 1 in order to trigger an immediate wake,
-		 * and we'll end up getting called again from a context where we *can*
-		 * fault in the page and wait for it.
-		 */
-		if (atomic)
-			return 1;
-
-		if (kvm_gpc_refresh(gpc, sizeof(struct vcpu_info))) {
-			/*
-			 * If this failed, userspace has screwed up the
-			 * vcpu_info mapping. No interrupts for you.
-			 */
-			return 0;
-		}
-		read_lock(&gpc->lock);
-	}
-
-	rc = ((struct vcpu_info *)gpc->khva)->evtchn_upcall_pending;
-	read_unlock(&gpc->lock);
-	return rc;
+	return ((struct vcpu_info *)*info_map)->evtchn_upcall_pending;
 }
 
 int kvm_xen_hvm_set_attr(struct kvm *kvm, struct kvm_xen_hvm_attr *data)
