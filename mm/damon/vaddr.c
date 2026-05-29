@@ -7,11 +7,13 @@
 
 #define pr_fmt(fmt) "damon-va: " fmt
 
+#include <linux/cpuhotplug.h>
 #include <linux/highmem.h>
 #include <linux/hugetlb.h>
 #include <linux/mman.h>
 #include <linux/mmu_notifier.h>
 #include <linux/page_idle.h>
+#include <linux/perf_event.h>
 #include <linux/pagewalk.h>
 #include <linux/sched/mm.h>
 
@@ -957,6 +959,263 @@ static int damon_va_scheme_score(struct damon_ctx *context,
 	return DAMOS_MAX_SCORE;
 }
 
+#ifdef CONFIG_PERF_EVENTS
+
+#define DAMON_PERF_MAX_RECORDS	(1UL << 20)
+#define DAMON_PERF_INIT_RECORDS	(1UL << 15)
+
+/*
+ * NMI hot-path: avoid every heap dereference.  These handlers carry no
+ * pointer back to the per-event struct -- perf_event_create_kernel_counter
+ * is called with context = NULL.  Submission flows into the global
+ * per-CPU SPSC ring (damon_report_access -> kdamond_check_reported_accesses
+ * drains).
+ */
+static void damon_perf_overflow_vaddr(struct perf_event *perf_event,
+		struct perf_sample_data *data, struct pt_regs *regs)
+{
+	struct damon_access_report report;
+
+	if (!data || !data->addr)
+		return;
+
+	/* Drop kernel-VA hits -- only user-space VAs land in damon vaddr regions. */
+	if (data->addr >= TASK_SIZE)
+		return;
+
+	report = (struct damon_access_report){
+		.vaddr = data->addr & PAGE_MASK,
+		.size = PAGE_SIZE,
+		.cpu = smp_processor_id(),
+		.tid = current->pid,
+		.tgid = current->tgid,
+		.is_write = !!(data->data_src.mem_op & PERF_MEM_OP_STORE),
+	};
+	damon_report_access(&report);
+}
+
+static void damon_perf_overflow_paddr(struct perf_event *perf_event,
+		struct perf_sample_data *data, struct pt_regs *regs)
+{
+	struct damon_access_report report;
+
+	if (!data)
+		return;
+
+	/*
+	 * AMD IBS Op only populates data->phys_addr when
+	 * IBS_OP_DATA3.dc_phy_addr_valid is set; otherwise the field
+	 * carries a stale value.  Gate on sample_flags rather than testing
+	 * phys_addr for zero (which would also drop legitimate page 0).
+	 */
+	if (!(data->sample_flags & PERF_SAMPLE_PHYS_ADDR))
+		return;
+
+	report = (struct damon_access_report){
+		.paddr = data->phys_addr & PAGE_MASK,
+		.size = PAGE_SIZE,
+		.cpu = smp_processor_id(),
+		.is_write = !!(data->data_src.mem_op & PERF_MEM_OP_STORE),
+	};
+	damon_report_access(&report);
+}
+
+static enum cpuhp_state damon_perf_cpuhp_state;
+
+static void damon_perf_event_init_attr(struct damon_perf_event *event,
+		struct perf_event_attr *attr)
+{
+	*attr = (struct perf_event_attr) {
+		.size = sizeof(*attr),
+		.type = event->attr.type,
+		.config = event->attr.config,
+		.config1 = event->attr.config1,
+		.config2 = event->attr.config2,
+		.freq = event->attr.freq,
+		.sample_type = PERF_SAMPLE_TIME | PERF_SAMPLE_ADDR |
+			PERF_SAMPLE_PERIOD | PERF_SAMPLE_DATA_SRC |
+			(event->attr.sample_phys_addr ?
+				PERF_SAMPLE_PHYS_ADDR : 0) |
+			(event->attr.sample_weight_struct ?
+				PERF_SAMPLE_WEIGHT_STRUCT : 0),
+		.precise_ip = event->attr.precise_ip,
+		.pinned = 1,
+		.disabled = 1,
+		.wakeup_events = event->attr.wakeup_events,
+		.exclude_kernel = event->attr.exclude_kernel,
+		.exclude_hv = event->attr.exclude_hv,
+	};
+
+	/*
+	 * sample_period and sample_freq share storage in the kernel
+	 * perf_event_attr (union).  Select based on the freq toggle so
+	 * frequency-based callers (PEBS) and period-based callers
+	 * (AMD IBS Op MaxCnt) both work correctly.
+	 */
+	if (event->attr.freq)
+		attr->sample_freq = event->attr.sample_freq;
+	else
+		attr->sample_period = event->attr.sample_period;
+}
+
+static int damon_perf_cpu_online(unsigned int cpu, struct hlist_node *node)
+{
+	struct damon_perf_event *event = hlist_entry(node,
+			struct damon_perf_event, hlist_node);
+	struct damon_perf *perf = event->priv;
+	struct perf_event_attr attr;
+	struct perf_event *perf_event;
+	perf_overflow_handler_t handler;
+
+	if (!perf)
+		return 0;
+
+	damon_perf_event_init_attr(event, &attr);
+
+	/*
+	 * Pick a paddr- or vaddr-specific handler at create time so the
+	 * NMI fast path is statically branched.  Pass NULL as context --
+	 * handlers are stateless wrt the per-event struct, so the NMI
+	 * fast path performs no per-event heap dereference.  Submission
+	 * flows into the global per-CPU SPSC ring via damon_report_access().
+	 */
+	handler = event->attr.sample_phys_addr ?
+		damon_perf_overflow_paddr : damon_perf_overflow_vaddr;
+
+	perf_event = perf_event_create_kernel_counter(&attr, cpu, NULL,
+			handler, NULL);
+	if (IS_ERR(perf_event)) {
+		pr_warn_ratelimited("damon-perf: cpu %u event create failed: %ld\n",
+				cpu, PTR_ERR(perf_event));
+		if (!event->init_complete)
+			event->any_cpu_failed = true;
+		return 0;	/* never block CPU online */
+	}
+	*per_cpu_ptr(perf->event, cpu) = perf_event;
+	/*
+	 * Late-online CPU after the substrate is armed: events are created
+	 * with attr.disabled = 1 and would otherwise stay quiescent on this
+	 * CPU until the next arm walk.  Enable here so coverage matches the
+	 * already-online CPUs.
+	 */
+	if (event->ctx && READ_ONCE(event->ctx->perf_events_active))
+		perf_event_enable(perf_event);
+	return 0;
+}
+
+static int damon_perf_cpu_offline(unsigned int cpu, struct hlist_node *node)
+{
+	struct damon_perf_event *event = hlist_entry(node,
+			struct damon_perf_event, hlist_node);
+	struct damon_perf *perf = event->priv;
+	struct perf_event *perf_event;
+
+	if (!perf)
+		return 0;
+
+	perf_event = per_cpu(*perf->event, cpu);
+	if (perf_event) {
+		perf_event_disable(perf_event);
+		perf_event_release_kernel(perf_event);
+		*per_cpu_ptr(perf->event, cpu) = NULL;
+	}
+	return 0;
+}
+
+void damon_perf_event_arm(struct damon_perf_event *event)
+{
+	struct damon_perf *perf = event->priv;
+	struct perf_event *perf_event;
+	int cpu;
+
+	if (!perf)
+		return;
+
+	for_each_online_cpu(cpu) {
+		perf_event = *per_cpu_ptr(perf->event, cpu);
+		if (perf_event)
+			perf_event_enable(perf_event);
+	}
+}
+
+void damon_perf_event_disarm(struct damon_perf_event *event)
+{
+	struct damon_perf *perf = event->priv;
+	struct perf_event *perf_event;
+	int cpu;
+
+	if (!perf)
+		return;
+
+	for_each_online_cpu(cpu) {
+		perf_event = *per_cpu_ptr(perf->event, cpu);
+		if (perf_event)
+			perf_event_disable(perf_event);
+	}
+}
+
+int damon_perf_init(struct damon_ctx *ctx, struct damon_perf_event *event)
+{
+	struct damon_perf *perf;
+	int err = -ENOMEM;
+
+	perf = kzalloc(sizeof(*perf), GFP_KERNEL);
+	if (!perf)
+		return -ENOMEM;
+
+	perf->event = alloc_percpu(typeof(*perf->event));
+	if (!perf->event)
+		goto free_perf;
+
+	event->priv = perf;
+	event->ctx = ctx;
+	INIT_HLIST_NODE(&event->hlist_node);
+
+	/*
+	 * cpuhp_state_add_instance() invokes the online callback synchronously
+	 * for every currently-online CPU; late-online CPUs subsequently get
+	 * an event automatically and offline CPUs release theirs cleanly.
+	 */
+	err = cpuhp_state_add_instance(damon_perf_cpuhp_state,
+			&event->hlist_node);
+	if (err)
+		goto free_event;
+
+	event->init_complete = true;
+	if (event->any_cpu_failed) {
+		cpuhp_state_remove_instance(damon_perf_cpuhp_state,
+				&event->hlist_node);
+		err = -ENODEV;
+		goto free_event;
+	}
+
+	return 0;
+
+free_event:
+	free_percpu(perf->event);
+free_perf:
+	kfree(perf);
+	event->priv = NULL;
+	return err;
+}
+
+void damon_perf_cleanup(struct damon_ctx *ctx, struct damon_perf_event *event)
+{
+	struct damon_perf *perf = event->priv;
+
+	if (!perf)
+		return;
+
+	cpuhp_state_remove_instance(damon_perf_cpuhp_state,
+			&event->hlist_node);
+
+	free_percpu(perf->event);
+	kfree(perf);
+	event->priv = NULL;
+}
+
+#endif /* CONFIG_PERF_EVENTS */
+
 static int __init damon_va_initcall(void)
 {
 	struct damon_operations ops = {
@@ -978,6 +1237,14 @@ static int __init damon_va_initcall(void)
 	ops_fvaddr.id = DAMON_OPS_FVADDR;
 	ops_fvaddr.init = NULL;
 	ops_fvaddr.update = NULL;
+
+#ifdef CONFIG_PERF_EVENTS
+	err = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN, "damon/perf:online",
+			damon_perf_cpu_online, damon_perf_cpu_offline);
+	if (err < 0)
+		return err;
+	damon_perf_cpuhp_state = err;
+#endif
 
 	err = damon_register_ops(&ops);
 	if (err)
