@@ -11,6 +11,8 @@
 extern bool report_ignored_msrs;
 extern bool ignore_msrs;
 
+extern u32 __read_mostly kvm_nr_uret_msrs;
+
 static inline void kvm_pr_unimpl_wrmsr(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 {
 	if (report_ignored_msrs)
@@ -56,12 +58,38 @@ int kvm_get_set_one_reg(struct kvm_vcpu *vcpu, unsigned int ioctl,
 int kvm_get_reg_list(struct kvm_vcpu *vcpu,
 		     struct kvm_reg_list __user *user_list);
 
-void kvm_user_return_msr_cpu_online(void);
-void drop_user_return_notifiers(void);
-void kvm_destroy_user_return_msrs(void);
+void kvm_enable_efer_bits(u64);
+bool kvm_valid_efer(struct kvm_vcpu *vcpu, u64 efer);
+int kvm_emulate_msr_read(struct kvm_vcpu *vcpu, u32 index, u64 *data);
+int kvm_emulate_msr_write(struct kvm_vcpu *vcpu, u32 index, u64 data);
+int __kvm_emulate_msr_read(struct kvm_vcpu *vcpu, u32 index, u64 *data);
+int __kvm_emulate_msr_write(struct kvm_vcpu *vcpu, u32 index, u64 data);
+int kvm_msr_read(struct kvm_vcpu *vcpu, u32 index, u64 *data);
+int kvm_msr_write(struct kvm_vcpu *vcpu, u32 index, u64 data);
+int kvm_emulate_rdmsr(struct kvm_vcpu *vcpu);
+int kvm_emulate_rdmsr_imm(struct kvm_vcpu *vcpu, u32 msr, int reg);
+int kvm_emulate_wrmsr(struct kvm_vcpu *vcpu);
+int kvm_emulate_wrmsr_imm(struct kvm_vcpu *vcpu, u32 msr, int reg);
 
 fastpath_t handle_fastpath_wrmsr(struct kvm_vcpu *vcpu);
 fastpath_t handle_fastpath_wrmsr_imm(struct kvm_vcpu *vcpu, u32 msr, int reg);
+
+int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr);
+int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr);
+
+int kvm_add_user_return_msr(u32 msr);
+int kvm_find_user_return_msr(u32 msr);
+int kvm_set_user_return_msr(unsigned index, u64 val, u64 mask);
+u64 kvm_get_user_return_msr(unsigned int slot);
+
+static inline bool kvm_is_supported_user_return_msr(u32 msr)
+{
+	return kvm_find_user_return_msr(msr) >= 0;
+}
+
+void kvm_user_return_msr_cpu_online(void);
+void drop_user_return_notifiers(void);
+void kvm_destroy_user_return_msrs(void);
 
 int kvm_emulator_get_msr_with_filter(struct kvm_vcpu *vcpu, u32 msr_index,
 				     u64 *pdata);
