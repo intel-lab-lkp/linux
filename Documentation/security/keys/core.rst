@@ -600,6 +600,7 @@ The keyctl syscall functions are:
      A process must have link permission on the key for this function to be
      successful and write permission on both keyrings.  Any errors that can
      occur from KEYCTL_LINK also apply on the destination keyring here.
+     If the key and source keyring are protected, EPERM will be returned.
 
 
   *  Unlink a key or keyring from another keyring::

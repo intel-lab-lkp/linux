@@ -1582,7 +1582,8 @@ EXPORT_SYMBOL(key_unlink);
  *
  * Returns 0 if successful, -ENOTDIR if either keyring isn't a keyring,
  * -EKEYREVOKED if either keyring has been revoked, -ENFILE if the second
- * keyring is full, -EDQUOT if there is insufficient key data quota remaining
+ * keyring is full, -EPERM if this would remove a protected key from a
+ * protected keyring, -EDQUOT if there is insufficient key data quota remaining
  * to add another link or -ENOMEM if there's insufficient memory.  If
  * KEYCTL_MOVE_EXCL is set, then -EEXIST will be returned if there's already a
  * matching key in @to_keyring.
@@ -1607,6 +1608,10 @@ int key_move(struct key *key,
 	key_check(key);
 	key_check(from_keyring);
 	key_check(to_keyring);
+
+	if (test_bit(KEY_FLAG_KEEP, &from_keyring->flags) &&
+	    test_bit(KEY_FLAG_KEEP, &key->flags))
+		return -EPERM;
 
 	ret = __key_move_lock(from_keyring, to_keyring, &key->index_key);
 	if (ret < 0)

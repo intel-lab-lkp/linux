@@ -129,4 +129,17 @@ config KEY_NOTIFICATIONS
 	  This makes use of pipes to handle the notification buffer and
 	  provides KEYCTL_WATCH_KEY to enable/disable watches.
 
+config KEYS_KUNIT_TEST
+	tristate "KUnit tests for keyrings" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Build KUnit tests for keyring operations.
+	  These tests exercise keyring link and move behavior, including
+	  protection of KEY_FLAG_KEEP entries.
+	  They are intended for KUnit runs on developer kernels and are not
+	  needed for normal systems.
+
+	  If you are unsure how to answer this question, answer N.
+
 endif # KEYS

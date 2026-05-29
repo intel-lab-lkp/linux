@@ -590,6 +590,8 @@ error:
  * the caller Write permission.  There must also be a link in the from keyring
  * to the key.  If both keyrings are the same, nothing is done.
  *
+ * If the key and source keyring are protected, -EPERM will be returned.
+ *
  * If successful, 0 will be returned.
  */
 long keyctl_keyring_move(key_serial_t id, key_serial_t from_ringid,
