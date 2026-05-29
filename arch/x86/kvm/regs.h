@@ -437,6 +437,18 @@ static inline unsigned long kvm_get_segment_base(struct kvm_vcpu *vcpu, int seg)
 	return kvm_x86_call(get_segment_base)(vcpu, seg);
 }
 
+static inline void kvm_set_segment(struct kvm_vcpu *vcpu,
+				   struct kvm_segment *var, int seg)
+{
+	kvm_x86_call(set_segment)(vcpu, var, seg);
+}
+
+static inline void kvm_get_segment(struct kvm_vcpu *vcpu,
+				   struct kvm_segment *var, int seg)
+{
+	kvm_x86_call(get_segment)(vcpu, var, seg);
+}
+
 unsigned long kvm_get_linear_rip(struct kvm_vcpu *vcpu);
 bool kvm_is_linear_rip(struct kvm_vcpu *vcpu, unsigned long linear_rip);
 
