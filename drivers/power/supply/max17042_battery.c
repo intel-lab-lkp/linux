@@ -1298,7 +1298,7 @@ static SIMPLE_DEV_PM_OPS(max17042_pm_ops, max17042_suspend,
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id max17042_acpi_match[] = {
-	{ "MAX17047", MAXIM_DEVICE_TYPE_MAX17047 },
+	{ "MAX17047" },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, max17042_acpi_match);
@@ -1346,12 +1346,12 @@ static const struct i2c_device_id max17042_id[] = {
 MODULE_DEVICE_TABLE(i2c, max17042_id);
 
 static const struct platform_device_id max17042_platform_id[] = {
-	{ "max17042", MAXIM_DEVICE_TYPE_MAX17042 },
-	{ "max17047", MAXIM_DEVICE_TYPE_MAX17047 },
-	{ "max17050", MAXIM_DEVICE_TYPE_MAX17050 },
-	{ "max17055", MAXIM_DEVICE_TYPE_MAX17055 },
-	{ "max77705-battery", MAXIM_DEVICE_TYPE_MAX17047 },
-	{ "max77849-battery", MAXIM_DEVICE_TYPE_MAX17047 },
+	{ .name = "max17042" },
+	{ .name = "max17047" },
+	{ .name = "max17050" },
+	{ .name = "max17055" },
+	{ .name = "max77705-battery" },
+	{ .name = "max77849-battery" },
 	{ }
 };
 MODULE_DEVICE_TABLE(platform, max17042_platform_id);
