@@ -3319,6 +3319,14 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 
 	/* Use the readahead code, even if readahead is disabled */
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) && (vm_flags & VM_HUGEPAGE)) {
+		/*
+		 * Preserve PMD-sized readahead where it already fits in
+		 * the page cache. Otherwise cap the new fallback path at
+		 * 2MB: this is the common PMD-sized hugepage size, and it
+		 * avoids memory pressure from very large forced readahead
+		 * when mapping_max_folio_order() is high (for example,
+		 * 128MB with 64K base pages on arm64).
+		 */
 		if (HPAGE_PMD_ORDER <= MAX_PAGECACHE_ORDER) {
 			force_thp_readahead = true;
 			thp_order = HPAGE_PMD_ORDER;
