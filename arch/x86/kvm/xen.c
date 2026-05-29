@@ -1433,36 +1433,28 @@ static bool wait_pending_event(struct kvm_vcpu *vcpu, int nr_ports,
 	struct kvm *kvm = vcpu->kvm;
 	struct gfn_to_pfn_cache *gpc = &kvm->arch.xen.shinfo_cache;
 	unsigned long *pending_bits;
-	bool ret = true;
 	int i;
 
 	guard(srcu)(&kvm->srcu);
 
-	if (!read_trylock(&gpc->lock))
-		return ret;
+	CLASS(gpc_try_map_local_ro, shinfo_map)(gpc, PAGE_SIZE);
+	if (IS_ERR(shinfo_map))
+		return true;
 
-	if (!kvm_gpc_check(gpc, PAGE_SIZE))
-		goto out_rcu;
-
-	ret = false;
 	if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
-		struct shared_info *shinfo = gpc->khva;
+		struct shared_info *shinfo = *shinfo_map;
 		pending_bits = (unsigned long *)&shinfo->evtchn_pending;
 	} else {
-		struct compat_shared_info *shinfo = gpc->khva;
+		struct compat_shared_info *shinfo = *shinfo_map;
 		pending_bits = (unsigned long *)&shinfo->evtchn_pending;
 	}
 
 	for (i = 0; i < nr_ports; i++) {
-		if (test_bit(ports[i], pending_bits)) {
-			ret = true;
-			break;
-		}
+		if (test_bit(ports[i], pending_bits))
+			return true;
 	}
 
- out_rcu:
-	read_unlock(&gpc->lock);
-	return ret;
+	return false;
 }
 
 static bool kvm_xen_schedop_poll(struct kvm_vcpu *vcpu, bool longmode,
