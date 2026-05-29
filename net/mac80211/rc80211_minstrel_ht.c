@@ -323,6 +323,43 @@ minstrel_ht_is_legacy_group(int group)
 	       group == MINSTREL_OFDM_GROUP;
 }
 
+static bool
+minstrel_ht_txstat_valid_rate(struct ieee80211_tx_rate *rate)
+{
+	unsigned int bw;
+
+	if (rate->flags & IEEE80211_TX_RC_MCS)
+		return rate->idx < MINSTREL_MAX_STREAMS * 8;
+
+	if (!(rate->flags & IEEE80211_TX_RC_VHT_MCS))
+		return true;
+
+	bw = !!(rate->flags & IEEE80211_TX_RC_40_MHZ_WIDTH) +
+	     2 * !!(rate->flags & IEEE80211_TX_RC_80_MHZ_WIDTH);
+
+	return !(rate->flags & IEEE80211_TX_RC_160_MHZ_WIDTH) &&
+	       bw <= BW_80 &&
+	       ieee80211_rate_get_vht_nss(rate) <= MINSTREL_MAX_STREAMS &&
+	       ieee80211_rate_get_vht_mcs(rate) < MCS_GROUP_RATES;
+}
+
+static bool
+minstrel_ht_ri_txstat_valid_rate(struct rate_info *rate)
+{
+	if (rate->flags & RATE_INFO_FLAGS_MCS)
+		return rate->mcs < MINSTREL_MAX_STREAMS * 8;
+
+	if (!(rate->flags & RATE_INFO_FLAGS_VHT_MCS))
+		return true;
+
+	return (rate->bw == RATE_INFO_BW_20 ||
+		rate->bw == RATE_INFO_BW_40 ||
+		rate->bw == RATE_INFO_BW_80) &&
+	       rate->nss >= 1 &&
+	       rate->nss <= MINSTREL_MAX_STREAMS &&
+	       rate->mcs < MCS_GROUP_RATES;
+}
+
 /*
  * Look up an MCS group index based on mac80211 rate information
  */
@@ -1205,8 +1242,9 @@ minstrel_ht_txstat_valid(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 	if (!rate->count)
 		return false;
 
-	if (rate->flags & IEEE80211_TX_RC_MCS ||
-	    rate->flags & IEEE80211_TX_RC_VHT_MCS)
+	if ((rate->flags & IEEE80211_TX_RC_MCS ||
+	     rate->flags & IEEE80211_TX_RC_VHT_MCS) &&
+	    minstrel_ht_txstat_valid_rate(rate))
 		return true;
 
 	for (i = 0; i < ARRAY_SIZE(mp->cck_rates); i++)
@@ -1235,8 +1273,9 @@ minstrel_ht_ri_txstat_valid(struct minstrel_priv *mp,
 	if (!rate_status->try_count)
 		return false;
 
-	if (rate_status->rate_idx.flags & RATE_INFO_FLAGS_MCS ||
-	    rate_status->rate_idx.flags & RATE_INFO_FLAGS_VHT_MCS)
+	if ((rate_status->rate_idx.flags & RATE_INFO_FLAGS_MCS ||
+	     rate_status->rate_idx.flags & RATE_INFO_FLAGS_VHT_MCS) &&
+	    minstrel_ht_ri_txstat_valid_rate(&rate_status->rate_idx))
 		return true;
 
 	for (i = 0; i < ARRAY_SIZE(mp->cck_rates); i++) {
