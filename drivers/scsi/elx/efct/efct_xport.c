@@ -229,7 +229,7 @@ efct_xport_initialize(struct efct_xport *xport)
 	rc = efct_hw_init(&efct->hw);
 	if (rc) {
 		efc_log_err(efct, "efct_hw_init failure\n");
-		goto out;
+		goto hw_init_out;
 	}
 
 	rc = efct_scsi_tgt_new_device(efct);
@@ -256,7 +256,6 @@ tgt_dev_out:
 
 hw_init_out:
 	efct_hw_teardown(&efct->hw);
-out:
 	return rc;
 }
 
