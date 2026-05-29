@@ -1680,8 +1680,13 @@ static struct sk_buff *find_skb(struct netpoll *np, int len, int reserve)
 repeat:
 
 	skb = alloc_skb(len, GFP_ATOMIC);
-	if (!skb)
+	if (!skb) {
+		/* The pool is refilled with MAX_SKB_SIZE buffers */
+		if (WARN_ON_ONCE(len > MAX_SKB_SIZE))
+			return NULL;
+
 		skb = netcons_skb_pop(np);
+	}
 
 	if (!skb) {
 		if (++count < 10) {
