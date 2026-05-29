@@ -43,7 +43,6 @@ struct amdgpu_bo_list_entry {
 };
 
 struct amdgpu_bo_list {
-	struct rcu_head rhead;
 	struct kref refcount;
 	struct amdgpu_bo *gds_obj;
 	struct amdgpu_bo *gws_obj;
@@ -54,7 +53,7 @@ struct amdgpu_bo_list {
 	struct amdgpu_bo_list_entry entries[] __counted_by(num_entries);
 };
 
-int amdgpu_bo_list_get(struct amdgpu_fpriv *fpriv, int id,
+int amdgpu_bo_list_get(struct amdgpu_fpriv *fpriv, u32 id,
 		       struct amdgpu_bo_list **result);
 void amdgpu_bo_list_put(struct amdgpu_bo_list *list);
 int amdgpu_bo_create_list_entry_array(struct drm_amdgpu_bo_list_in *in,
