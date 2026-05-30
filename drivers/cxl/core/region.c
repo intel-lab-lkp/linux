@@ -559,10 +559,29 @@ static ssize_t interleave_granularity_show(struct device *dev,
 	return sysfs_emit(buf, "%d\n", p->interleave_granularity);
 }
 
+/**
+ * is_ig_allowed() - Validate region interleave granularity
+ * @cxlrd: root decoder
+ * @ig: proposed region interleave granularity in bytes
+ *
+ * Callers must have validated @ig through granularity_to_eig() first.
+ *
+ * Return: true for a non-interleaving root or any region granularity
+ * not larger than the root granularity.
+ */
+static inline bool is_ig_allowed(struct cxl_root_decoder *cxlrd, int ig)
+{
+	struct cxl_decoder *cxld = &cxlrd->cxlsd.cxld;
+
+	if (cxld->interleave_ways <= 1)
+		return true;
+
+	return ig <= cxld->interleave_granularity;
+}
+
 static int set_interleave_granularity(struct cxl_region *cxlr, int val)
 {
 	struct cxl_root_decoder *cxlrd = cxlr->cxlrd;
-	struct cxl_decoder *cxld = &cxlrd->cxlsd.cxld;
 	struct cxl_region_params *p = &cxlr->params;
 	int rc;
 	u16 ig;
@@ -571,15 +590,7 @@ static int set_interleave_granularity(struct cxl_region *cxlr, int val)
 	if (rc)
 		return rc;
 
-	/*
-	 * When the host-bridge is interleaved, disallow region granularity !=
-	 * root granularity. Regions with a granularity less than the root
-	 * interleave result in needing multiple endpoints to support a single
-	 * slot in the interleave (possible to support in the future). Regions
-	 * with a granularity greater than the root interleave result in invalid
-	 * DPA translations (invalid to support).
-	 */
-	if (cxld->interleave_ways > 1 && val != cxld->interleave_granularity)
+	if (!is_ig_allowed(cxlrd, val))
 		return -EINVAL;
 
 	lockdep_assert_held_write(&cxl_rwsem.region);
@@ -2125,6 +2136,32 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 
 	if (p->state < CXL_CONFIG_INTERLEAVE_ACTIVE) {
 		dev_dbg(&cxlr->dev, "interleave config missing\n");
+		return -ENXIO;
+	}
+
+	/* Apply the sysfs granularity rule to auto regions too. */
+	if (!is_ig_allowed(cxlrd, p->interleave_granularity)) {
+		dev_dbg(&cxlr->dev,
+			"ig %d incompatible with root ways %d ig %d\n",
+			p->interleave_granularity,
+			cxlrd->cxlsd.cxld.interleave_ways,
+			cxlrd->cxlsd.cxld.interleave_granularity);
+		return -ENXIO;
+	}
+
+	/*
+	 * Selector containment cannot prove span equality for 3-way family
+	 * roots because a 3-way interleave consumes no selector bits.
+	 */
+	if (!is_power_of_2(cxlrd->cxlsd.cxld.interleave_ways) &&
+	    (u64)p->interleave_ways * p->interleave_granularity !=
+	    (u64)cxlrd->cxlsd.cxld.interleave_ways *
+		    cxlrd->cxlsd.cxld.interleave_granularity) {
+		dev_dbg(&cxlr->dev,
+			"region ways*gran (%d*%d) != root ways*gran (%d*%d)\n",
+			p->interleave_ways, p->interleave_granularity,
+			cxlrd->cxlsd.cxld.interleave_ways,
+			cxlrd->cxlsd.cxld.interleave_granularity);
 		return -ENXIO;
 	}
 
