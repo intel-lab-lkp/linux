@@ -642,18 +642,10 @@ static void rxe_sock_put(struct sock *sk,
 	}
 }
 
-void rxe_net_del(struct ib_device *dev)
+/* release the per-net-namespace tunnel socket references held for @net */
+static void rxe_release_sockets(struct net *net)
 {
-	struct rxe_dev *rxe = container_of(dev, struct rxe_dev, ib_dev);
-	struct net_device *ndev;
 	struct sock *sk;
-	struct net *net;
-
-	ndev = rxe_ib_device_get_netdev(&rxe->ib_dev);
-	if (!ndev)
-		return;
-
-	net = dev_net(ndev);
 
 	sk = rxe_ns_pernet_sk4(net);
 	if (sk)
@@ -662,6 +654,26 @@ void rxe_net_del(struct ib_device *dev)
 	sk = rxe_ns_pernet_sk6(net);
 	if (sk)
 		rxe_sock_put(sk, rxe_ns_pernet_set_sk6, net);
+}
+
+/* release the socket references taken by a successful rxe_net_init() when a
+ * later step of device creation fails and rxe_net_del() will not be called
+ */
+void rxe_net_uninit(struct net_device *ndev)
+{
+	rxe_release_sockets(dev_net(ndev));
+}
+
+void rxe_net_del(struct ib_device *dev)
+{
+	struct rxe_dev *rxe = container_of(dev, struct rxe_dev, ib_dev);
+	struct net_device *ndev;
+
+	ndev = rxe_ib_device_get_netdev(&rxe->ib_dev);
+	if (!ndev)
+		return;
+
+	rxe_release_sockets(dev_net(ndev));
 
 	dev_put(ndev);
 }
