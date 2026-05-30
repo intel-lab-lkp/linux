@@ -370,6 +370,14 @@ static void tcf_action_cleanup(struct tc_action *p)
 	free_tcf(p);
 }
 
+/* RCU callback to free action after grace period */
+static void tcf_action_rcu_free(struct rcu_head *rcu)
+{
+	struct tc_action *p = container_of(rcu, struct tc_action, tcfa_rcu);
+
+	tcf_action_cleanup(p);
+}
+
 static int __tcf_action_put(struct tc_action *p, bool bind)
 {
 	struct tcf_idrinfo *idrinfo = p->idrinfo;
@@ -379,8 +387,8 @@ static int __tcf_action_put(struct tc_action *p, bool bind)
 			atomic_dec(&p->tcfa_bindcnt);
 		idr_remove(&idrinfo->action_idr, p->tcfa_index);
 		mutex_unlock(&idrinfo->lock);
+		call_rcu(&p->tcfa_rcu, tcf_action_rcu_free);
 
-		tcf_action_cleanup(p);
 		return 1;
 	}
 
@@ -620,7 +628,7 @@ static int tcf_idr_release_unsafe(struct tc_action *p)
 
 	if (refcount_dec_and_test(&p->tcfa_refcnt)) {
 		idr_remove(&p->idrinfo->action_idr, p->tcfa_index);
-		tcf_action_cleanup(p);
+		call_rcu(&p->tcfa_rcu, tcf_action_rcu_free);
 		return ACT_P_DELETED;
 	}
 
@@ -761,7 +769,7 @@ static int tcf_idr_delete_index(struct tcf_idrinfo *idrinfo, u32 index)
 						p->tcfa_index));
 			mutex_unlock(&idrinfo->lock);
 
-			tcf_action_cleanup(p);
+			call_rcu(&p->tcfa_rcu, tcf_action_rcu_free);
 			module_put(owner);
 			return 0;
 		}
