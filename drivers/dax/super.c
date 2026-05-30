@@ -116,11 +116,40 @@ EXPORT_SYMBOL_GPL(fs_dax_get_by_bdev);
 
 #if IS_ENABLED(CONFIG_FS_DAX)
 
+/**
+ * fs_put_dax() - release holder ownership of a dax_device
+ * @dax_dev: dax device to release (may be NULL)
+ * @holder: the holder pointer previously passed to fs_dax_get() or
+ *          fs_dax_get_by_bdev(); must match exactly, as it is used
+ *          in a cmpxchg to atomically release ownership
+ *
+ * Must only be called by the current holder. Clears holder_ops before
+ * holder_data to avoid a race where a concurrent fs_dax_get() could have
+ * its newly installed holder_ops overwritten.
+ */
 void fs_put_dax(struct dax_device *dax_dev, void *holder)
 {
-	if (dax_dev && holder &&
-	    cmpxchg(&dax_dev->holder_data, holder, NULL) == holder)
-		dax_dev->holder_ops = NULL;
+	if (dax_dev && holder) {
+		/*
+		 * Clear holder_ops before releasing holder_data. A concurrent
+		 * dax_holder_notify_failure() that sees NULL ops returns
+		 * -EOPNOTSUPP cleanly. A concurrent fs_dax_get() that acquires
+		 * holder_data after the cmpxchg below is guaranteed to observe
+		 * holder_ops=NULL first (cmpxchg provides release ordering), so
+		 * its subsequent store of new ops will not be overwritten.
+		 *
+		 * Two cases will trigger the WARN_ON():
+		 * - Caller is not the current holder; this is an API contract
+		 *   violation, and the holder will no longer get callbacks
+		 * - Holder calls this function twice; also a contract violation
+		 *
+		 * A lock would be necessary to guard against the contract
+		 * violations, but we WARN_ON() instead since violating the
+		 * contract is a bug
+		 */
+		WRITE_ONCE(dax_dev->holder_ops, NULL);
+		WARN_ON(cmpxchg(&dax_dev->holder_data, holder, NULL) != holder);
+	}
 	put_dax(dax_dev);
 }
 EXPORT_SYMBOL_GPL(fs_put_dax);
