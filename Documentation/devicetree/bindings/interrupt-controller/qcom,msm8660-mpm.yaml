@@ -1,0 +1,122 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/interrupt-controller/qcom,msm8660-mpm.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm MSM8x60 MPM wakeup interrupt controller
+
+maintainers:
+  - Herman van Hazendonk <github.com@herrie.org>
+
+description: |
+  The MSM Power Manager (MPM) on the MSM8x60 family (MSM8260/MSM8660/
+  APQ8060) is an always-on hardware block that keeps a set of wake
+  interrupts alive while the application processor is powered down.
+  On MSM8x60 the vMPM registers live INSIDE the RPM control block
+  (request regs at RPM_BASE + 0x9d8, status at RPM_BASE + 0xdf8), with
+  notification of new wake-source configuration delivered via the
+  qcom-apcs-ipc mailbox (writing GCC + 0x008 bit 1).
+
+  This binding is MSM8x60-specific. Newer Qualcomm SoCs (sm6375, etc.)
+  use the qcom,mpm binding which assumes a dedicated MPM SRAM region
+  and an IPCC mailbox — neither holds on MSM8x60. The driver lives at
+  drivers/irqchip/irq-msm8660-mpm.c.
+
+allOf:
+  - $ref: /schemas/interrupt-controller.yaml#
+
+properties:
+  compatible:
+    const: qcom,msm8660-mpm
+
+  interrupts:
+    maxItems: 1
+    description:
+      IPC IRQ raised by MPM when one of the enabled wake sources fires.
+      On MSM8x60 this is wired to GIC SPI 2.
+
+  qcom,rpm-syscon:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to the RPM control block exposed as a syscon. The vMPM
+      registers are accessed at offsets within this block.
+
+  qcom,mpm-offset:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      Offset of the vMPM register window within the RPM syscon. On
+      MSM8x60 this is 0x9d8. Status registers are at this offset + 0x420
+      (== 0xdf8 from RPM base).
+
+  mboxes:
+    maxItems: 1
+    description:
+      Mailbox channel used to notify MPM that the vMPM request
+      registers have been updated. On MSM8x60 this is the
+      qcom-apcs-ipc mailbox channel 1 (writes GCC + 0x008 bit 1).
+
+  interrupt-controller: true
+
+  '#interrupt-cells':
+    const: 2
+    description:
+      First cell is the MPM pin number / parent GIC SPI; second cell
+      is the trigger type.
+
+  qcom,mpm-pin-count:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Total number of MPM pins exposed.
+
+  qcom,mpm-pin-map:
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    items:
+      items:
+        - description: MPM pin number
+        - description: GIC SPI number this pin maps to
+    description: |
+      List of (MPM-pin, GIC-SPI) tuples for wake sources that have a
+      corresponding GIC IRQ. Consumers route their interrupts through
+      the MPM hierarchical irqdomain to take advantage of these
+      mappings.
+
+      Raw wake pins like SDC3/4 DATx (pins 21-24) are NOT listed
+      here — they have no GIC SPI mapping and are accessed through
+      the msm8660_mpm_set_pin_wake() / msm8660_mpm_enable_pin() C API
+      by consumer drivers.
+
+required:
+  - compatible
+  - interrupts
+  - qcom,rpm-syscon
+  - qcom,mpm-offset
+  - mboxes
+  - interrupt-controller
+  - '#interrupt-cells'
+  - qcom,mpm-pin-count
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    soc {
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        msm8660_mpm: interrupt-controller {
+            compatible = "qcom,msm8660-mpm";
+            qcom,rpm-syscon = <&rpm>;
+            qcom,mpm-offset = <0x9d8>;
+            interrupts = <GIC_SPI 2 IRQ_TYPE_EDGE_RISING>;
+            mboxes = <&gcc_ipc 1>;
+            interrupt-controller;
+            #interrupt-cells = <2>;
+            interrupt-parent = <&intc>;
+            qcom,mpm-pin-count = <64>;
+            qcom,mpm-pin-map = <25 100>,
+                               <26 50>,
+                               <27 79>;
+        };
+    };
