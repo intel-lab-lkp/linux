@@ -1249,6 +1249,9 @@ static umode_t ims_pcu_is_attr_visible(struct kobject *kobj,
 	struct ims_pcu *pcu = usb_get_intfdata(intf);
 	umode_t mode = attr->mode;
 
+	if (intf != pcu->ctrl_intf)
+		return 0;
+
 	if (pcu->bootloader_mode) {
 		if (attr != &dev_attr_update_firmware_status.attr &&
 		    attr != &dev_attr_update_firmware.attr &&
@@ -1487,6 +1490,9 @@ static umode_t ims_pcu_ofn_is_attr_visible(struct kobject *kobj,
 	struct usb_interface *intf = to_usb_interface(dev);
 	struct ims_pcu *pcu = usb_get_intfdata(intf);
 	umode_t mode = attr->mode;
+
+	if (intf != pcu->ctrl_intf)
+		return 0;
 
 	/*
 	 * PCU-B devices, both GEN_1 and GEN_2 do not have OFN sensor.
