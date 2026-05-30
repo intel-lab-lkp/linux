@@ -3938,7 +3938,8 @@ static int try_enable_preferred_console(struct console *newcon,
 	 * without matching. Accept the pre-enabled consoles only when match()
 	 * and setup() had a chance to be called.
 	 */
-	if (newcon->flags & CON_ENABLED && c->user_specified ==	user_specified)
+	if (i < MAX_CMDLINECONSOLES && (newcon->flags & CON_ENABLED) &&
+	    c->user_specified == user_specified)
 		return 0;
 
 	return -ENOENT;
