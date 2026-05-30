@@ -1383,10 +1383,8 @@ struct mm_struct *get_task_mm(struct task_struct *task)
 }
 EXPORT_SYMBOL_GPL(get_task_mm);
 
-static bool may_access_mm(struct mm_struct *mm, struct task_struct *task, unsigned int mode)
+static bool may_access_mm(struct task_struct *task, unsigned int mode)
 {
-	if (mm == current->mm)
-		return true;
 	if (ptrace_may_access(task, mode))
 		return true;
 	if ((mode & PTRACE_MODE_READ) && perfmon_capable())
@@ -1396,20 +1394,24 @@ static bool may_access_mm(struct mm_struct *mm, struct task_struct *task, unsign
 
 struct mm_struct *mm_access(struct task_struct *task, unsigned int mode)
 {
-	struct mm_struct *mm;
-	int err;
+	struct mm_struct *mm = READ_ONCE(task->mm);
 
-	err =  down_read_killable(&task->signal->exec_update_lock);
-	if (err)
-		return ERR_PTR(err);
+	if (!mm || (task->flags & PF_KTHREAD))
+		return ERR_PTR(-ESRCH);
 
-	mm = get_task_mm(task);
-	if (!mm) {
-		mm = ERR_PTR(-ESRCH);
-	} else if (!may_access_mm(mm, task, mode)) {
-		mmput(mm);
-		mm = ERR_PTR(-EACCES);
+	if (mm == current->mm) {
+		mmget(mm);
+		return mm;
 	}
+
+	if (down_read_killable(&task->signal->exec_update_lock))
+		return ERR_PTR(-EINTR);
+
+	if (may_access_mm(task, mode))
+		mm = get_task_mm(task) ?: ERR_PTR(-ESRCH);
+	else
+		mm = ERR_PTR(-EACCES);
+
 	up_read(&task->signal->exec_update_lock);
 
 	return mm;
