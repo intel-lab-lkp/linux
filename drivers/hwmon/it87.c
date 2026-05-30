@@ -3777,7 +3777,6 @@ MODULE_DEVICE_TABLE(dmi, it87_dmi_table);
 static int __init sm_it87_init(void)
 {
 	int sioaddr[2] = { REG_2E, REG_4E };
-	struct it87_sio_data sio_data;
 	unsigned short isa_address[2];
 	bool found = false;
 	int i, err;
@@ -3789,7 +3788,7 @@ static int __init sm_it87_init(void)
 	dmi_check_system(it87_dmi_table);
 
 	for (i = 0; i < ARRAY_SIZE(sioaddr); i++) {
-		memset(&sio_data, 0, sizeof(struct it87_sio_data));
+		struct it87_sio_data sio_data = { };
 		isa_address[i] = 0;
 		err = it87_find(sioaddr[i], &isa_address[i], &sio_data, i);
 		if (err || isa_address[i] == 0)
