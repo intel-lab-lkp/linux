@@ -284,6 +284,7 @@ static void usage(void)
 	"  -C, --container=PATH     Monitor the container at specified cgroup path\n"
 	"  -s, --sort=FIELD         Sort by delay field (default: cpu)\n"
 	"  -t, --type=FIELD         Display only specified delay type with avg/max/timestamp\n"
+	"                           (rows sorted by MAX for that type, largest first)\n"
 	"  -M, --memverbose         Display memory detailed information\n");
 	exit(0);
 }
@@ -822,6 +823,15 @@ static void get_task_delays(void)
 	closedir(dir);
 }
 
+static void field_delay_max_and_ts(const struct task_info *task,
+				     const struct field_desc *field,
+				     unsigned long long *max_ns,
+				     struct __kernel_timespec *max_ts);
+static void get_field_delay_values(const struct task_info *task,
+				   const struct field_desc *field,
+				   double *avg_ms, double *max_ms,
+				   struct __kernel_timespec *max_ts);
+
 /* Calculate average delay in milliseconds */
 static double average_ms(unsigned long long total, unsigned long long count)
 {
@@ -831,35 +841,39 @@ static double average_ms(unsigned long long total, unsigned long long count)
 }
 
 /*
- * Format __kernel_timespec to human readable string (YYYY-MM-DD HH:MM:SS)
+ * Format __kernel_timespec to human readable string (YYYY-MM-DDTHH:MM:SS)
  * Returns formatted string or "N/A" if timestamp is zero
  */
-static const char *format_timespec64(struct __kernel_timespec *ts)
+static const char *format_kernel_timespec(struct __kernel_timespec *ts)
 {
 	static char buffer[32];
-	struct tm *tm_info;
+	struct tm tm_info;
+	time_t time_sec;
 
-	/* Check if timestamp is zero (not set) or invalid (before year 2000) */
-	if ((ts->tv_sec == 0 && ts->tv_nsec == 0) || ts->tv_sec < 946684800) {
-		/* 946684800 is timestamp for 2000-01-01 00:00:00 UTC */
+	/* Check if timestamp is zero (not set) */
+	if (ts->tv_sec == 0 && ts->tv_nsec == 0)
 		return "N/A";
+
+	/* Avoid Y2038 truncation: check if timestamp fits in time_t on 32-bit platforms */
+	if (sizeof(time_sec) < sizeof(ts->tv_sec)) {
+		/* On 32-bit platforms, time_t may be 32-bit; check for overflow */
+		if (ts->tv_sec > (unsigned long long)(time_t)(-1))
+			return "N/A";
 	}
 
-	/* Check if timestamp is too large for time_t on 32-bit platforms */
-	if (sizeof(time_t) < sizeof(ts->tv_sec) && ts->tv_sec > (time_t)-1)
-		return "N/A";
+	time_sec = (time_t)ts->tv_sec;
 
-	tm_info = gmtime((const time_t *)&ts->tv_sec);
-	if (!tm_info)
+	/* Use thread-safe localtime_r */
+	if (localtime_r(&time_sec, &tm_info) == NULL)
 		return "N/A";
 
 	snprintf(buffer, sizeof(buffer), "%04d-%02d-%02dT%02d:%02d:%02d",
-		tm_info->tm_year + 1900,
-		tm_info->tm_mon + 1,
-		tm_info->tm_mday,
-		tm_info->tm_hour,
-		tm_info->tm_min,
-		tm_info->tm_sec);
+		tm_info.tm_year + 1900,
+		tm_info.tm_mon + 1,
+		tm_info.tm_mday,
+		tm_info.tm_hour,
+		tm_info.tm_min,
+		tm_info.tm_sec);
 
 	return buffer;
 }
@@ -874,6 +888,17 @@ static int compare_tasks(const void *a, const void *b)
 	unsigned long count1;
 	unsigned long count2;
 	double avg1, avg2;
+	unsigned long long max1, max2;
+	struct __kernel_timespec ts_scratch;
+
+	/* -t/--type: default sort by MAX column for the selected type (descending) */
+	if (cfg.display_mode == MODE_TYPE && cfg.type_field) {
+		field_delay_max_and_ts(t1, cfg.type_field, &max1, &ts_scratch);
+		field_delay_max_and_ts(t2, cfg.type_field, &max2, &ts_scratch);
+		if (max1 != max2)
+			return max2 > max1 ? 1 : -1;
+		return 0;
+	}
 
 	total1 = *(unsigned long long *)((char *)t1 + cfg.sort_field->total_offset);
 	total2 = *(unsigned long long *)((char *)t2 + cfg.sort_field->total_offset);
@@ -886,6 +911,46 @@ static int compare_tasks(const void *a, const void *b)
 		return avg2 > avg1 ? 1 : -1;
 
 	return 0;
+}
+
+/* Max delay (ns) and timestamp for field (shared by display and sort) */
+static void field_delay_max_and_ts(const struct task_info *task, const struct field_desc *field,
+				     unsigned long long *max_ns, struct __kernel_timespec *max_ts)
+{
+	if (!field) {
+		*max_ns = 0;
+		memset(max_ts, 0, sizeof(*max_ts));
+		return;
+	}
+
+	if (strcmp(field->name, "cpu") == 0) {
+		*max_ns = task->cpu_delay_max;
+		*max_ts = task->cpu_delay_max_ts;
+	} else if (strcmp(field->name, "blkio") == 0) {
+		*max_ns = task->blkio_delay_max;
+		*max_ts = task->blkio_delay_max_ts;
+	} else if (strcmp(field->name, "irq") == 0) {
+		*max_ns = task->irq_delay_max;
+		*max_ts = task->irq_delay_max_ts;
+	} else if (strcmp(field->name, "swapin") == 0) {
+		*max_ns = task->swapin_delay_max;
+		*max_ts = task->swapin_delay_max_ts;
+	} else if (strcmp(field->name, "freepages") == 0) {
+		*max_ns = task->freepages_delay_max;
+		*max_ts = task->freepages_delay_max_ts;
+	} else if (strcmp(field->name, "thrashing") == 0) {
+		*max_ns = task->thrashing_delay_max;
+		*max_ts = task->thrashing_delay_max_ts;
+	} else if (strcmp(field->name, "compact") == 0) {
+		*max_ns = task->compact_delay_max;
+		*max_ts = task->compact_delay_max_ts;
+	} else if (strcmp(field->name, "wpcopy") == 0) {
+		*max_ns = task->wpcopy_delay_max;
+		*max_ts = task->wpcopy_delay_max_ts;
+	} else {
+		*max_ns = 0;
+		memset(max_ts, 0, sizeof(*max_ts));
+	}
 }
 
 /* Get delay values for a specific field */
@@ -905,35 +970,7 @@ static void get_field_delay_values(const struct task_info *task, const struct fi
 	count = *(unsigned long long *)((char *)task + field->count_offset);
 	*avg_ms = average_ms(total, count);
 
-	/* Get max delay and timestamp based on field name */
-	if (strcmp(field->name, "cpu") == 0) {
-		max = task->cpu_delay_max;
-		*max_ts = task->cpu_delay_max_ts;
-	} else if (strcmp(field->name, "blkio") == 0) {
-		max = task->blkio_delay_max;
-		*max_ts = task->blkio_delay_max_ts;
-	} else if (strcmp(field->name, "irq") == 0) {
-		max = task->irq_delay_max;
-		*max_ts = task->irq_delay_max_ts;
-	} else if (strcmp(field->name, "swapin") == 0) {
-		max = task->swapin_delay_max;
-		*max_ts = task->swapin_delay_max_ts;
-	} else if (strcmp(field->name, "freepages") == 0) {
-		max = task->freepages_delay_max;
-		*max_ts = task->freepages_delay_max_ts;
-	} else if (strcmp(field->name, "thrashing") == 0) {
-		max = task->thrashing_delay_max;
-		*max_ts = task->thrashing_delay_max_ts;
-	} else if (strcmp(field->name, "compact") == 0) {
-		max = task->compact_delay_max;
-		*max_ts = task->compact_delay_max_ts;
-	} else if (strcmp(field->name, "wpcopy") == 0) {
-		max = task->wpcopy_delay_max;
-		*max_ts = task->wpcopy_delay_max_ts;
-	} else {
-		max = 0;
-		memset(max_ts, 0, sizeof(*max_ts));
-	}
+	field_delay_max_and_ts(task, field, &max, max_ts);
 	*max_ms = (double)max / 1000000.0;  /* Convert nanoseconds to milliseconds */
 }
 
@@ -1090,8 +1127,13 @@ static void display_results(int psi_ret)
 	}
 
 	/* Task delay output */
-	suc &= BOOL_FPRINT(out, "Top %d processes (sorted by %s delay):\n",
-			cfg.max_processes, get_name_by_field(cfg.sort_field));
+	if (cfg.display_mode == MODE_TYPE && cfg.type_field)
+		suc &= BOOL_FPRINT(out,
+			"Top %d processes (sorted by %s MAX delay, largest first):\n",
+			cfg.max_processes, get_name_by_field(cfg.type_field));
+	else
+		suc &= BOOL_FPRINT(out, "Top %d processes (sorted by %s delay):\n",
+				cfg.max_processes, get_name_by_field(cfg.sort_field));
 
 	if (cfg.display_mode == MODE_TYPE && cfg.type_field) {
 		/* Display mode for -t option: show only specified type with avg/max/timestamp */
@@ -1132,7 +1174,7 @@ static void display_results(int psi_ret)
 					&max_ms, &max_ts);
 
 			suc &= BOOL_FPRINT(out, "%12.2f %12.2f %20s\n",
-				avg_ms, max_ms, format_timespec64(&max_ts));
+				avg_ms, max_ms, format_kernel_timespec(&max_ts));
 		} else if (cfg.display_mode == MODE_MEMVERBOSE) {
 			suc &= BOOL_FPRINT(out, DELAY_FMT_MEMVERBOSE,
 				TASK_AVG(tasks[i], mem),
