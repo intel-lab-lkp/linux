@@ -193,12 +193,23 @@ next:
 
 int f2fs_start_gc_thread(struct f2fs_sb_info *sbi)
 {
-	struct f2fs_gc_kthread *gc_th;
+	struct f2fs_gc_kthread *gc_th = sbi->gc_thread;
+	struct task_struct *task;
+	bool allocated = false;
 	dev_t dev = sbi->sb->s_bdev->bd_dev;
 
-	gc_th = f2fs_kmalloc(sbi, sizeof(struct f2fs_gc_kthread), GFP_KERNEL);
-	if (!gc_th)
-		return -ENOMEM;
+	if (gc_th && READ_ONCE(gc_th->f2fs_gc_task))
+		return 0;
+
+	if (!gc_th) {
+		gc_th = f2fs_kmalloc(sbi, sizeof(*gc_th), GFP_KERNEL);
+		if (!gc_th)
+			return -ENOMEM;
+		init_waitqueue_head(&gc_th->gc_wait_queue_head);
+		init_waitqueue_head(&gc_th->fggc_wq);
+		sbi->gc_thread = gc_th;
+		allocated = true;
+	}
 
 	gc_th->urgent_sleep_time = DEF_GC_THREAD_URGENT_SLEEP_TIME;
 	gc_th->valid_thresh_ratio = DEF_GC_THREAD_VALID_THRESH_RATIO;
@@ -221,34 +232,35 @@ int f2fs_start_gc_thread(struct f2fs_sb_info *sbi)
 
 	gc_th->gc_wake = false;
 
-	sbi->gc_thread = gc_th;
-	init_waitqueue_head(&sbi->gc_thread->gc_wait_queue_head);
-	init_waitqueue_head(&sbi->gc_thread->fggc_wq);
-	sbi->gc_thread->f2fs_gc_task = kthread_run(gc_thread_func, sbi,
-			"f2fs_gc-%u:%u", MAJOR(dev), MINOR(dev));
-	if (IS_ERR(gc_th->f2fs_gc_task)) {
-		int err = PTR_ERR(gc_th->f2fs_gc_task);
+	task = kthread_run(gc_thread_func, sbi, "f2fs_gc-%u:%u",
+			   MAJOR(dev), MINOR(dev));
+	if (IS_ERR(task)) {
+		int err = PTR_ERR(task);
 
-		kfree(gc_th);
-		sbi->gc_thread = NULL;
+		if (allocated) {
+			kfree(gc_th);
+			sbi->gc_thread = NULL;
+		}
 		return err;
 	}
 
-	set_user_nice(gc_th->f2fs_gc_task,
-			PRIO_TO_NICE(sbi->critical_task_priority));
+	WRITE_ONCE(gc_th->f2fs_gc_task, task);
+	set_user_nice(task, PRIO_TO_NICE(sbi->critical_task_priority));
 	return 0;
 }
 
 void f2fs_stop_gc_thread(struct f2fs_sb_info *sbi)
 {
 	struct f2fs_gc_kthread *gc_th = sbi->gc_thread;
+	struct task_struct *task;
 
 	if (!gc_th)
 		return;
-	kthread_stop(gc_th->f2fs_gc_task);
+	task = xchg(&gc_th->f2fs_gc_task, NULL);
+	if (!task)
+		return;
+	kthread_stop(task);
 	wake_up_all(&gc_th->fggc_wq);
-	kfree(gc_th);
-	sbi->gc_thread = NULL;
 }
 
 static int select_gc_type(struct f2fs_sb_info *sbi, int gc_type)
