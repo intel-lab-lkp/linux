@@ -581,6 +581,53 @@ long ksm_get_self_merging_pages(void)
 	return strtol(buf, NULL, 10);
 }
 
+long ksm_get_pages_shared(void)
+{
+	int fd;
+	char buf[10];
+	ssize_t ret;
+	int saved_errno;
+
+	fd = open("/sys/kernel/mm/ksm/pages_shared", O_RDONLY);
+	if (fd < 0)
+		return -errno;
+
+	ret = pread(fd, buf, sizeof(buf) - 1, 0);
+	saved_errno = errno;
+	close(fd);
+	if (ret <= 0) {
+		if (ret == 0)
+			return -ENODATA;	/* unexpected EOF */
+		return -saved_errno;
+	}
+	buf[ret] = 0;
+	return strtol(buf, NULL, 10);
+}
+
+long ksm_get_pages_sharing(void)
+{
+	int fd;
+	char buf[10];
+	ssize_t ret;
+	int saved_errno;
+
+	fd = open("/sys/kernel/mm/ksm/pages_sharing", O_RDONLY);
+	if (fd < 0)
+		return -errno;
+
+	ret = pread(fd, buf, sizeof(buf) - 1, 0);
+	saved_errno = errno;
+	close(fd);
+	if (ret <= 0) {
+		if (ret == 0)
+			return -ENODATA;
+		return -saved_errno;
+	}
+	buf[ret] = 0;
+	return strtol(buf, NULL, 10);
+}
+
+
 long ksm_get_full_scans(void)
 {
 	int ksm_full_scans_fd;
