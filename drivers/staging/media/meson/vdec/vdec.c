@@ -380,6 +380,8 @@ vififo_free:
 			  sess->vififo_vaddr, sess->vififo_paddr);
 	sess->vififo_vaddr = NULL;
 bufs_done:
+	cancel_work_sync(&sess->esparser_queue_work);
+
 	mutex_lock(&core->lock);
 	if (core->cur_sess == sess)
 		core->cur_sess = NULL;
@@ -437,6 +439,8 @@ static void vdec_stop_streaming(struct vb2_queue *q)
 	struct vb2_v4l2_buffer *buf;
 	enum amvdec_status old_status;
 
+	cancel_work_sync(&sess->esparser_queue_work);
+
 	/*
 	 * Safely snapshot the status and clear the hardware owner inside
 	 * the mutex to prevent data races with concurrent STREAMON requests.
@@ -448,7 +452,11 @@ static void vdec_stop_streaming(struct vb2_queue *q)
 	sess->status = STATUS_STOPPED;
 	mutex_unlock(&core->lock);
 
-	/* Evaluate the hardware state using our snapshot */
+	if (q->type != V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+		if (old_status >= STATUS_RUNNING && codec_ops->drain)
+			codec_ops->drain(sess);
+	}
+
 	if (old_status == STATUS_RUNNING ||
 	    old_status == STATUS_INIT ||
 	    (old_status == STATUS_NEEDS_RESUME &&
@@ -472,16 +480,10 @@ static void vdec_stop_streaming(struct vb2_queue *q)
 	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		while ((buf = v4l2_m2m_src_buf_remove(sess->m2m_ctx)))
 			v4l2_m2m_buf_done(buf, VB2_BUF_STATE_ERROR);
-
 		sess->streamon_out = 0;
 	} else {
-		/* Drain remaining refs if was still running using the snapshot */
-		if (old_status >= STATUS_RUNNING && codec_ops->drain)
-			codec_ops->drain(sess);
-
 		while ((buf = v4l2_m2m_dst_buf_remove(sess->m2m_ctx)))
 			v4l2_m2m_buf_done(buf, VB2_BUF_STATE_ERROR);
-
 		sess->streamon_cap = 0;
 	}
 }
@@ -966,6 +968,8 @@ err_free_sess:
 static int vdec_close(struct file *file)
 {
 	struct amvdec_session *sess = file_to_amvdec_session(file);
+
+	cancel_work_sync(&sess->esparser_queue_work);
 
 	v4l2_m2m_ctx_release(sess->m2m_ctx);
 	v4l2_fh_del(&sess->fh, file);
