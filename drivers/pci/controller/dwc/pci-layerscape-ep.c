@@ -74,7 +74,6 @@ static irqreturn_t ls_pcie_ep_event_handler(int irq, void *dev_id)
 	struct ls_pcie_ep *pcie = dev_id;
 	struct dw_pcie *pci = pcie->pci;
 	u32 val, cfg;
-	u8 offset;
 
 	val = ls_pcie_pf_lut_readl(pcie, PEX_PF0_PME_MES_DR);
 	ls_pcie_pf_lut_writel(pcie, PEX_PF0_PME_MES_DR, val);
@@ -83,9 +82,6 @@ static irqreturn_t ls_pcie_ep_event_handler(int irq, void *dev_id)
 		return IRQ_NONE;
 
 	if (val & PEX_PF0_PME_MES_DR_LUD) {
-
-		offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
-
 		/*
 		 * The values of the Maximum Link Width and Supported Link
 		 * Speed from the Link Capabilities Register will be lost
@@ -93,7 +89,8 @@ static irqreturn_t ls_pcie_ep_event_handler(int irq, void *dev_id)
 		 * that configured by the Reset Configuration Word (RCW).
 		 */
 		dw_pcie_dbi_ro_wr_en(pci);
-		dw_pcie_writel_dbi(pci, offset + PCI_EXP_LNKCAP, pcie->lnkcap);
+		dw_pcie_writel_dbi(pci, pci->pcie_cap + PCI_EXP_LNKCAP,
+				   pcie->lnkcap);
 		dw_pcie_dbi_ro_wr_dis(pci);
 
 		cfg = ls_pcie_pf_lut_readl(pcie, PEX_PF0_CONFIG);
@@ -266,7 +263,7 @@ static int __init ls_pcie_ep_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, pcie);
 
-	offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
+	offset = dw_pcie_get_pcie_cap(pci);
 	pcie->lnkcap = dw_pcie_readl_dbi(pci, offset + PCI_EXP_LNKCAP);
 
 	ret = dw_pcie_ep_init(&pci->ep);
