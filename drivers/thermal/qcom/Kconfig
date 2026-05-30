@@ -32,6 +32,18 @@ config QCOM_SPMI_TEMP_ALARM
 	  real time die temperature if an ADC is present or an estimate of the
 	  temperature based upon the over temperature stage value.
 
+config QCOM_PM8901_TEMP_ALARM
+	tristate "Qualcomm PM8901 PMIC Temperature Alarm"
+	depends on MFD_PM8XXX || COMPILE_TEST
+	depends on THERMAL_OF
+	help
+	  This enables the thermal driver for the PM8901 PMIC over-temperature
+	  alarm block. PM8901 exposes a stage-based alarm (no raw ADC) with
+	  four selectable thresholds and three escalating stages. The driver
+	  registers a thermal-of sensor so a board device tree can declare
+	  trip points and a critical-trip action (orderly_poweroff). Used on
+	  HP TouchPad (APQ8060) where PM8901 supplies the secondary PMIC die.
+
 config QCOM_LMH
 	tristate "Qualcomm Limits Management Hardware"
 	depends on ARCH_QCOM || COMPILE_TEST
