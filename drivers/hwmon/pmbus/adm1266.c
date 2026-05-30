@@ -449,12 +449,10 @@ static int adm1266_config_nvmem(struct adm1266_data *data)
 static int adm1266_set_rtc(struct adm1266_data *data)
 {
 	time64_t kt;
-	char write_buf[6];
+	char write_buf[6] = { };
 	int i;
 
 	kt = ktime_get_real_seconds();
-
-	memset(write_buf, 0, sizeof(write_buf));
 
 	for (i = 0; i < 4; i++)
 		write_buf[2 + i] = (kt >> (i * 8)) & 0xFF;
