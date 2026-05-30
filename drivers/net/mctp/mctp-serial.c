@@ -537,12 +537,12 @@ struct test_chunk_tx {
 static void test_next_chunk_len(struct kunit *test)
 {
 	struct mctp_serial devx;
+	struct mctp_serial devx = { };
 	struct mctp_serial *dev = &devx;
 	int next;
 
 	const struct test_chunk_tx *params = test->param_value;
 
-	memset(dev, 0x0, sizeof(*dev));
 	memcpy(dev->txbuf, params->input, params->input_len);
 	dev->txlen = params->input_len;
 
