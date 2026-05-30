@@ -340,11 +340,20 @@ static int espintcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 
 	lock_sock(sk);
 
-	err = espintcp_push_msgs(sk, msg->msg_flags & MSG_DONTWAIT);
-	if (err < 0) {
-		if (err != -EAGAIN || !(msg->msg_flags & MSG_DONTWAIT))
-			err = -ENOBUFS;
-		goto unlock;
+	while (emsg->len) {
+		err = espintcp_push_msgs(sk, msg->msg_flags & MSG_DONTWAIT);
+		if (err < 0) {
+			if (err != -EAGAIN || !(msg->msg_flags & MSG_DONTWAIT))
+				err = -ENOBUFS;
+			goto unlock;
+		}
+
+		if (!emsg->len)
+			break;
+
+		err = sk_stream_wait_memory(sk, &timeo);
+		if (err)
+			goto unlock;
 	}
 
 	sk_msg_init(&emsg->skmsg);
