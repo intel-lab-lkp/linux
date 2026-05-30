@@ -272,7 +272,7 @@ static ssize_t ext2_dio_write_iter(struct kiocb *iocb, struct iov_iter *from)
 						 pos >> PAGE_SHIFT,
 						 endbyte >> PAGE_SHIFT);
 		if (ret > 0)
-			generic_write_sync(iocb, ret);
+			ret = generic_write_sync(iocb, ret);
 	}
 
 out_unlock:
