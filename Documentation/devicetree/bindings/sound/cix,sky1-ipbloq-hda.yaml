@@ -36,6 +36,10 @@ properties:
   resets:
     maxItems: 1
 
+  memory-region:
+    maxItems: 1
+    description: Reserved memory region used for HDA DMA buffers.
+
 required:
   - compatible
   - reg
@@ -43,6 +47,7 @@ required:
   - clocks
   - clock-names
   - resets
+  - memory-region
 
 unevaluatedProperties: false
 
@@ -59,4 +64,5 @@ examples:
         clock-names = "ipg", "per";
         resets = <&audss_rst 14>;
         model = "CIX SKY1 EVB HDA";
+        memory-region = <&audio_alsa_hda>;
     };
