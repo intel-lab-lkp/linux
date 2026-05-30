@@ -1437,7 +1437,6 @@ static int __init sensors_nct6683_init(void)
 {
 	struct nct6683_sio_data sio_data;
 	int sioaddr[2] = { 0x2e, 0x4e };
-	struct resource res;
 	bool found = false;
 	int address;
 	int i, err;
@@ -1454,6 +1453,8 @@ static int __init sensors_nct6683_init(void)
 	 * nct6683 hardware monitor, and call probe()
 	 */
 	for (i = 0; i < ARRAY_SIZE(pdev); i++) {
+		struct resource res = { };
+
 		address = nct6683_find(sioaddr[i], &sio_data);
 		if (address <= 0)
 			continue;
@@ -1471,7 +1472,6 @@ static int __init sensors_nct6683_init(void)
 		if (err)
 			goto exit_device_put;
 
-		memset(&res, 0, sizeof(res));
 		res.name = DRVNAME;
 		res.start = address + IOREGION_OFFSET;
 		res.end = address + IOREGION_OFFSET + IOREGION_LENGTH - 1;
