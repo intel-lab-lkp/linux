@@ -106,5 +106,3 @@ void __drm_atomic_helper_bridge_state_init(struct drm_bridge_state *state,
 					   struct drm_bridge *bridge);
 struct drm_bridge_state *
 drm_atomic_helper_bridge_create_state(struct drm_bridge *bridge);
-struct drm_bridge_state *
-drm_atomic_helper_bridge_reset(struct drm_bridge *bridge);
