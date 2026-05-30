@@ -194,6 +194,10 @@ static inline void da_monitor_destroy(void)
 	da_monitor_sync_hook();
 }
 
+#ifndef da_implicit_guard
+#define da_implicit_guard()
+#endif
+
 #elif RV_MON_TYPE == RV_MON_PER_CPU
 /*
  * Functions to define, init and get a per-cpu monitor.
@@ -243,6 +247,10 @@ static inline void da_monitor_destroy(void)
 	da_monitor_reset_all();
 	da_monitor_sync_hook();
 }
+
+#ifndef da_implicit_guard
+#define da_implicit_guard() guard(migrate)()
+#endif
 
 #elif RV_MON_TYPE == RV_MON_PER_TASK
 /*
@@ -700,6 +708,7 @@ static inline bool __da_handle_start_run_event(struct da_monitor *da_mon,
  */
 static inline void da_handle_event(enum events event)
 {
+	da_implicit_guard();
 	__da_handle_event(da_get_monitor(), event, 0);
 }
 
@@ -715,6 +724,7 @@ static inline void da_handle_event(enum events event)
  */
 static inline bool da_handle_start_event(enum events event)
 {
+	da_implicit_guard();
 	return __da_handle_start_event(da_get_monitor(), event, 0);
 }
 
@@ -726,6 +736,7 @@ static inline bool da_handle_start_event(enum events event)
  */
 static inline bool da_handle_start_run_event(enum events event)
 {
+	da_implicit_guard();
 	return __da_handle_start_run_event(da_get_monitor(), event, 0);
 }
 
