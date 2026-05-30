@@ -2220,7 +2220,15 @@ static int cxl_region_remove_target(struct device *dev, void *data)
 			p->nr_targets--;
 			cxled->state = CXL_DECODER_STATE_AUTO;
 			cxled->pos = -1;
-			p->targets[i] = NULL;
+
+			/*
+			 * Swap the last valid target into the slot to
+			 * ensure no invalid target in p->nr_targets range.
+			 * The targets array will be re-sorted during the
+			 * last endpoint decoder attaching again.
+			 */
+			p->targets[i] = p->targets[p->nr_targets];
+			p->targets[p->nr_targets] = NULL;
 
 			return 1;
 		}
