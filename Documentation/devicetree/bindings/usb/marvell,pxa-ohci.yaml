@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/marvell,pxa-ohci.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Marvell PXA OHCI USB Host Controller
+
+maintainers:
+  - Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+  - Alan Stern <stern@rowland.harvard.edu>
+
+allOf:
+  - $ref: usb-hcd.yaml#
+
+properties:
+  compatible:
+    const: marvell,pxa-ohci
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+  marvell,enable-port1:
+    type: boolean
+    description: Enable USB port 1 if present.
+
+  marvell,enable-port2:
+    type: boolean
+    description: Enable USB port 2 if present.
+
+  marvell,enable-port3:
+    type: boolean
+    description: Enable USB port 3 if present.
+
+  marvell,port-sense-low:
+    type: boolean
+    description: Port sense pin in low-active.
+
+  marvell,power-control-low:
+    type: boolean
+    description: Power control pin is low-active.
+
+  marvell,no-oc-protection:
+    type: boolean
+    description: Disable over-current protection.
+
+  marvell,oc-mode-perport:
+    type: boolean
+    description: Enable per-port over-current protection.
+
+  marvell,power-on-delay:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Power On to Power Good time in milliseconds.
+
+  marvell,port-mode:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [1, 2, 3]
+    description: |
+      Selects the mode of the ports.
+        1 = PMM_NPS_MODE
+        2 = PMM_GLOBAL_MODE
+        3 = PMM_PERPORT_MODE
+
+  marvell,power-budget:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: USB power budget.
+
+  vbus1-supply:
+    description: Regulator supplying VBUS for port 1.
+
+  vbus2-supply:
+    description: Regulator supplying VBUS for port 2.
+
+  vbus3-supply:
+    description: Regulator supplying VBUS for port 3.
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    usb@4c000000 {
+        compatible = "marvell,pxa-ohci";
+        reg = <0x4c000000 0x100000>;
+        interrupts = <3>;
+        clocks = <&clks 11>;
+        marvell,enable-port1;
+        marvell,port-mode = <2>; /* PMM_GLOBAL_MODE */
+    };
