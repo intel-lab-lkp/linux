@@ -352,6 +352,9 @@ v3d_csd_job_run(struct drm_sched_job *sched_job)
 		return NULL;
 	}
 
+	if (!job->args.cfg[0] || !job->args.cfg[1] || !job->args.cfg[2])
+		return NULL;
+
 	v3d->queue[V3D_CSD].active_job = &job->base;
 
 	v3d_invalidate_caches(v3d);
