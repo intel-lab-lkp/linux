@@ -4078,6 +4078,7 @@ out_null:
 struct sk_buff *validate_xmit_skb_list(struct sk_buff *skb, struct net_device *dev, bool *again)
 {
 	struct sk_buff *next, *head = NULL, *tail;
+	bool stolen = false;
 
 	for (; skb != NULL; skb = next) {
 		next = skb->next;
@@ -4087,8 +4088,11 @@ struct sk_buff *validate_xmit_skb_list(struct sk_buff *skb, struct net_device *d
 		skb->prev = skb;
 
 		skb = validate_xmit_skb(skb, dev, again);
-		if (!skb)
+		if (IS_ERR_OR_NULL(skb)) {
+			if (IS_ERR(skb))
+				stolen = true;
 			continue;
+		}
 
 		if (!head)
 			head = skb;
@@ -4099,6 +4103,8 @@ struct sk_buff *validate_xmit_skb_list(struct sk_buff *skb, struct net_device *d
 		 */
 		tail = skb->prev;
 	}
+	if (!head && stolen)
+		return ERR_PTR(-EINPROGRESS);
 	return head;
 }
 EXPORT_SYMBOL_GPL(validate_xmit_skb_list);
@@ -4858,8 +4864,13 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 			goto recursion_alert;
 
 		skb = validate_xmit_skb(skb, dev, &again);
-		if (!skb)
+		if (IS_ERR_OR_NULL(skb)) {
+			/* -EINPROGRESS: packet stolen by async xfrm crypto,
+			 * delivered via xfrm_dev_resume(). */
+			if (PTR_ERR(skb) == -EINPROGRESS)
+				rc = NET_XMIT_SUCCESS;
 			goto out;
+		}
 
 		HARD_TX_LOCK(dev, txq, cpu);
 
