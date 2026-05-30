@@ -66,6 +66,20 @@
 			drive-strength = <8>;
 		};
 	};
+
+	pinctrl_audss_hda: hda-cfg {
+		pins {
+			pinmux = <CIX_PAD_HDA_BITCLK_FUNC_HDA_BITCLK>,
+			       <CIX_PAD_HDA_RST_L_FUNC_HDA_RST_L>,
+			       <CIX_PAD_HDA_SDIN0_FUNC_HDA_SDIN0>,
+			       <CIX_PAD_HDA_SDOUT0_FUNC_HDA_SDOUT0>,
+			       <CIX_PAD_HDA_SYNC_FUNC_HDA_SYNC>,
+			       <CIX_PAD_HDA_SDIN1_FUNC_HDA_SDIN1>,
+			       <CIX_PAD_HDA_SDOUT1_FUNC_HDA_SDOUT1>;
+			bias-pull-down;
+			drive-strength = <20>;
+		};
+	};
 };
 
 &iomuxc_s5 {
@@ -80,6 +94,26 @@
 
 		};
 	};
+};
+
+&audss_cru {
+	status = "okay";
+};
+
+&audss_clk {
+	status = "okay";
+};
+
+&audss_rst {
+	status = "okay";
+};
+
+&audss_ipb_hda {
+	model = "Radxa Orion O6 HDA";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_audss_hda>;
+	memory-region = <&audio_alsa_hda>;
+	status = "okay";
 };
 
 &pcie_x8_rc {

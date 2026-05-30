@@ -6,6 +6,10 @@
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/clock/cix,sky1.h>
+#include <dt-bindings/clock/sky1-audss.h>
+#include <dt-bindings/reset/cix,sky1-system-control.h>
+#include <dt-bindings/reset/cix,sky1-s5-system-control.h>
+#include <dt-bindings/reset/sky1-reset-audss.h>
 #include "sky1-power.h"
 
 / {
@@ -152,6 +156,18 @@
 					cpu = <&cpu11>;
 				};
 			};
+		};
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		audio_alsa_hda: audio_alsa_hda@d0c00000 {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0xd0c00000 0x0 0x200000>;
+			no-map;
 		};
 	};
 
@@ -486,6 +502,46 @@
 			interrupts = <GIC_SPI 359 IRQ_TYPE_LEVEL_HIGH 0>;
 			#mbox-cells = <1>;
 			cix,mbox-dir = "rx";
+		};
+
+		audss_ipb_hda: hda@70c0000 {
+			compatible = "cix,sky1-ipbloq-hda";
+			reg = <0x0 0x070c0000 0x0 0x10000>;
+			interrupts = <GIC_SPI 234 IRQ_TYPE_LEVEL_HIGH 0>;
+			clocks = <&audss_clk CLK_HDA_SYS>,
+				 <&audss_clk CLK_HDA_HDA>;
+			clock-names = "ipg", "per";
+			resets = <&audss_rst AUDSS_HDA_SW_RST_N>;
+			status = "disabled";
+		};
+
+		audss_cru: system-controller@7110000 {
+			compatible = "cix,sky1-audss-cru", "simple-mfd", "syscon";
+			reg = <0x0 0x07110000 0x0 0x10000>;
+			status = "disabled";
+
+			audss_clk: clock-controller {
+				compatible = "cix,sky1-audss-clock";
+				power-domains = <&smc_devpd SKY1_PD_AUDIO>;
+				resets = <&s5_syscon SKY1_AUDIO_HIFI5_NOC_RESET_N>;
+				clocks = <&scmi_clk CLK_TREE_AUDIO_CLK0>,
+					 <&scmi_clk CLK_TREE_AUDIO_CLK1>,
+					 <&scmi_clk CLK_TREE_AUDIO_CLK2>,
+					 <&scmi_clk CLK_TREE_AUDIO_CLK3>,
+					 <&scmi_clk CLK_TREE_AUDIO_CLK4>,
+					 <&scmi_clk CLK_TREE_AUDIO_CLK5>;
+				clock-names = "audio_clk0", "audio_clk1",
+					      "audio_clk2", "audio_clk3",
+					      "audio_clk4", "audio_clk5";
+				#clock-cells = <1>;
+				status = "disabled";
+			};
+
+			audss_rst: reset-controller {
+				compatible = "cix,sky1-audss-reset";
+				#reset-cells = <1>;
+				status = "disabled";
+			};
 		};
 
 		mbox_sfh2ap: mailbox@8090000 {
