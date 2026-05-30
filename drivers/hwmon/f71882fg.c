@@ -2667,9 +2667,7 @@ static int __init f71882fg_init(void)
 {
 	int err;
 	int address;
-	struct f71882fg_sio_data sio_data;
-
-	memset(&sio_data, 0, sizeof(sio_data));
+	struct f71882fg_sio_data sio_data = { };
 
 	address = f71882fg_find(0x2e, &sio_data);
 	if (address < 0)
