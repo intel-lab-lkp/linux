@@ -496,8 +496,15 @@ static int loop_validate_file(struct file *file, struct block_device *bdev)
 		rmb();
 		f = l->lo_backing_file;
 	}
-	if (!S_ISREG(inode->i_mode) && !S_ISBLK(inode->i_mode))
+	if (S_ISBLK(inode->i_mode))
+		return 0;
+	if (!S_ISREG(inode->i_mode))
 		return -EINVAL;
+	switch (inode->i_sb->s_magic) {
+	case PROC_SUPER_MAGIC: /* e.g. "losetup -f /proc/sys/kernel/version" */
+	case SYSFS_MAGIC: /* e.g. "losetup -f /sys/power/state" */
+		return -EINVAL;
+	}
 	return 0;
 }
 
