@@ -72,8 +72,13 @@ nfs_file_open(struct inode *inode, struct file *filp)
 		return res;
 
 	res = nfs_open(inode, filp);
-	if (res == 0)
+	if (res == 0) {
 		filp->f_mode |= FMODE_CAN_ODIRECT;
+		/* flag NOWAIT on read-only O_DIRECT files only */
+		if ((filp->f_flags & O_DIRECT) &&
+		    !(filp->f_mode & FMODE_WRITE))
+			filp->f_mode |= FMODE_NOWAIT;
+	}
 	return res;
 }
 
@@ -704,6 +709,12 @@ ssize_t nfs_file_write(struct kiocb *iocb, struct iov_iter *from)
 	int error;
 
 	trace_nfs_file_write(iocb, from);
+
+	/*
+	 * FMODE_NOWAIT is not set for writable files
+	 */
+	if (WARN_ON_ONCE(iocb->ki_flags & IOCB_NOWAIT))
+		return -EAGAIN;
 
 	result = nfs_key_timeout_notify(file, inode);
 	if (result)
