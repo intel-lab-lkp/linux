@@ -1528,7 +1528,6 @@ static int __init sensors_nct6775_platform_init(void)
 	int i, err;
 	bool found = false;
 	int address;
-	struct resource res;
 	struct nct6775_sio_data sio_data;
 	int sioaddr[2] = { 0x2e, 0x4e };
 	enum sensor_access access = access_direct;
@@ -1562,6 +1561,8 @@ static int __init sensors_nct6775_platform_init(void)
 	 * nct6775 hardware monitor, and call probe()
 	 */
 	for (i = 0; i < ARRAY_SIZE(pdev); i++) {
+		struct resource res = { };
+
 		sio_data.sio_outb = superio_outb;
 		sio_data.sio_inb = superio_inb;
 		sio_data.sio_select = superio_select;
@@ -1596,7 +1597,6 @@ static int __init sensors_nct6775_platform_init(void)
 			goto exit_device_put;
 
 		if (sio_data.access == access_direct) {
-			memset(&res, 0, sizeof(res));
 			res.name = DRVNAME;
 			res.start = address + IOREGION_OFFSET;
 			res.end = address + IOREGION_OFFSET + IOREGION_LENGTH - 1;
