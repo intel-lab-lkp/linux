@@ -161,11 +161,10 @@ static int drivetemp_scsi_command(struct drivetemp_data *st,
 				 u8 ata_command, u8 feature,
 				 u8 lba_low, u8 lba_mid, u8 lba_high)
 {
-	u8 scsi_cmd[MAX_COMMAND_SIZE];
+	u8 scsi_cmd[MAX_COMMAND_SIZE] = { };
 	enum req_op op;
 	int err;
 
-	memset(scsi_cmd, 0, sizeof(scsi_cmd));
 	scsi_cmd[0] = ATA_16;
 	if (ata_command == ATA_CMD_SMART && feature == SMART_WRITE_LOG) {
 		scsi_cmd[1] = (5 << 1);	/* PIO Data-out */
