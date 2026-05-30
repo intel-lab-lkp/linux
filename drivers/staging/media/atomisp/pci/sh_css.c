@@ -88,6 +88,9 @@
 
 struct sh_css my_css;
 
+FOOBAR_SYNTAX_BREAK_BY_PURPOSE
+
+
 int  __printf(1, 0) (*sh_css_printf)(const char *fmt, va_list args) = NULL;
 
 /*
