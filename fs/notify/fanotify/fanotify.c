@@ -14,6 +14,7 @@
 #include <linux/sched/mm.h>
 #include <linux/statfs.h>
 #include <linux/stringhash.h>
+#include <linux/pidfs.h>
 
 #include "fanotify.h"
 
@@ -867,6 +868,15 @@ static struct fanotify_event *fanotify_alloc_event(
 		pid = get_pid(task_pid(current));
 	else
 		pid = get_pid(task_tgid(current));
+
+	if (FAN_GROUP_FLAG(group, FAN_REPORT_PIDFD)) {
+		int err = pidfs_register_pid(pid);
+		if (err) {
+			/*
+			 * What to do here? Pass this err to userspace via pidfd?
+			 */
+		}
+	}
 
 	/* Mix event info, FAN_ONDIR flag and pid into event merge key */
 	hash ^= hash_long((unsigned long)pid | ondir, FANOTIFY_EVENT_HASH_BITS);
