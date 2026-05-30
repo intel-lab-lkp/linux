@@ -593,6 +593,8 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 			goto err_free_ecam;
 	}
 
+	dw_pcie_get_pcie_cap(pci);
+
 	if (pci_msi_enabled()) {
 		pp->use_imsi_rx = !(pp->ops->msi_init ||
 				     of_property_present(np, "msi-parent") ||
