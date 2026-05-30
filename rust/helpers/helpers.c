@@ -57,6 +57,7 @@
 #include "cred.c"
 #include "device.c"
 #include "dma.c"
+#include "dma_fence.c"
 #include "dma-resv.c"
 #include "drm.c"
 #include "err.c"
