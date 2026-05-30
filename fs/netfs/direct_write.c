@@ -115,8 +115,9 @@ static int netfs_unbuffered_write(struct netfs_io_request *wreq)
 
 		/* Check if (re-)preparation failed. */
 		if (unlikely(test_bit(NETFS_SREQ_FAILED, &subreq->flags))) {
-			netfs_write_subrequest_terminated(subreq, subreq->error);
-			wreq->error = subreq->error;
+			ret = subreq->error;
+			wreq->error = ret;
+			netfs_write_subrequest_terminated(subreq, ret);
 			break;
 		}
 
