@@ -53,7 +53,7 @@ const struct nla_policy ethnl_header_policy_phy_stats[] = {
 	[ETHTOOL_A_HEADER_PHY_INDEX]		= NLA_POLICY_MIN(NLA_U32, 1),
 };
 
-int ethnl_sock_priv_set(struct sk_buff *skb, struct net_device *dev, u32 portid,
+int ethnl_sock_priv_set(struct sk_buff *skb, struct net *net, u32 portid,
 			enum ethnl_sock_type type)
 {
 	struct ethnl_sock_priv *sk_priv;
@@ -62,7 +62,7 @@ int ethnl_sock_priv_set(struct sk_buff *skb, struct net_device *dev, u32 portid,
 	if (IS_ERR(sk_priv))
 		return PTR_ERR(sk_priv);
 
-	sk_priv->dev = dev;
+	sk_priv->net = net;
 	sk_priv->portid = portid;
 	sk_priv->type = type;
 
@@ -526,13 +526,15 @@ static int ethnl_default_doit(struct sk_buff *skb, struct genl_info *info)
 		goto err_free;
 	ethnl_init_reply_data(reply_data, ops, req_info->dev);
 
-	rtnl_lock();
-	if (req_info->dev)
+	if (req_info->dev) {
+		rtnl_lock();
 		netdev_lock_ops(req_info->dev);
+	}
 	ret = ops->prepare_data(req_info, reply_data, info);
-	if (req_info->dev)
+	if (req_info->dev) {
 		netdev_unlock_ops(req_info->dev);
-	rtnl_unlock();
+		rtnl_unlock();
+	}
 	if (ret < 0)
 		goto err_dev;
 	ret = ops->reply_size(req_info, reply_data);
