@@ -14,6 +14,7 @@
 #include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_registers.h>
 #include <linux/soundwire/sdw_type.h>
+#include <linux/string_choices.h>
 #include <linux/swab.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
@@ -283,7 +284,6 @@ static void cs35l56_sdw_init(struct sdw_slave *peripheral)
 	}
 
 out:
-	pm_runtime_mark_last_busy(cs35l56->base.dev);
 	pm_runtime_put_autosuspend(cs35l56->base.dev);
 }
 
@@ -341,6 +341,14 @@ static int cs35l56_sdw_read_prop(struct sdw_slave *peripheral)
 	struct cs35l56_private *cs35l56 = dev_get_drvdata(&peripheral->dev);
 	struct sdw_slave_prop *prop = &peripheral->prop;
 	struct sdw_dpn_prop *ports;
+	u8 clock_stop_1 = false;
+	int ret;
+
+	ret = fwnode_property_read_u8(dev_fwnode(cs35l56->base.dev),
+				      "mipi-sdw-clock-stop-mode1-supported",
+				      &clock_stop_1);
+	if (ret == 0)
+		prop->clk_stop_mode1 = !!clock_stop_1;
 
 	ports = devm_kcalloc(cs35l56->base.dev, 2, sizeof(*ports), GFP_KERNEL);
 	if (!ports)
@@ -364,6 +372,9 @@ static int cs35l56_sdw_read_prop(struct sdw_slave *peripheral)
 	ports[1].ch_prep_timeout = 10;
 	prop->src_dpn_prop = &ports[1];
 
+	dev_dbg(&peripheral->dev, "clock stop mode 1 supported: %s\n",
+		str_yes_no(prop->clk_stop_mode1));
+
 	return 0;
 }
 
@@ -375,6 +386,7 @@ static int cs35l56_sdw_update_status(struct sdw_slave *peripheral,
 	switch (status) {
 	case SDW_SLAVE_ATTACHED:
 		dev_dbg(cs35l56->base.dev, "%s: ATTACHED\n", __func__);
+		cs35l56->sdw_in_clock_stop_1 = false;
 		if (cs35l56->sdw_attached)
 			break;
 
@@ -394,100 +406,41 @@ static int cs35l56_sdw_update_status(struct sdw_slave *peripheral,
 	return 0;
 }
 
-static int cs35l63_sdw_kick_divider(struct cs35l56_private *cs35l56,
-				    struct sdw_slave *peripheral)
-{
-	unsigned int curr_scale_reg, next_scale_reg;
-	int curr_scale, next_scale, ret;
-
-	if (!cs35l56->base.init_done)
-		return 0;
-
-	if (peripheral->bus->params.curr_bank) {
-		curr_scale_reg = SDW_SCP_BUSCLOCK_SCALE_B1;
-		next_scale_reg = SDW_SCP_BUSCLOCK_SCALE_B0;
-	} else {
-		curr_scale_reg = SDW_SCP_BUSCLOCK_SCALE_B0;
-		next_scale_reg = SDW_SCP_BUSCLOCK_SCALE_B1;
-	}
-
-	/*
-	 * Current clock scale value must be different to new value.
-	 * Modify current to guarantee this. If next still has the dummy
-	 * value we wrote when it was current, the core code has not set
-	 * a new scale so restore its original good value
-	 */
-	curr_scale = sdw_read_no_pm(peripheral, curr_scale_reg);
-	if (curr_scale < 0) {
-		dev_err(cs35l56->base.dev, "Failed to read current clock scale: %d\n", curr_scale);
-		return curr_scale;
-	}
-
-	next_scale = sdw_read_no_pm(peripheral, next_scale_reg);
-	if (next_scale < 0) {
-		dev_err(cs35l56->base.dev, "Failed to read next clock scale: %d\n", next_scale);
-		return next_scale;
-	}
-
-	if (next_scale == CS35L56_SDW_INVALID_BUS_SCALE) {
-		next_scale = cs35l56->old_sdw_clock_scale;
-		ret = sdw_write_no_pm(peripheral, next_scale_reg, next_scale);
-		if (ret < 0) {
-			dev_err(cs35l56->base.dev, "Failed to modify current clock scale: %d\n",
-				ret);
-			return ret;
-		}
-	}
-
-	cs35l56->old_sdw_clock_scale = curr_scale;
-	ret = sdw_write_no_pm(peripheral, curr_scale_reg, CS35L56_SDW_INVALID_BUS_SCALE);
-	if (ret < 0) {
-		dev_err(cs35l56->base.dev, "Failed to modify current clock scale: %d\n", ret);
-		return ret;
-	}
-
-	dev_dbg(cs35l56->base.dev, "Next bus scale: %#x\n", next_scale);
-
-	return 0;
-}
-
-static int cs35l56_sdw_bus_config(struct sdw_slave *peripheral,
-				  struct sdw_bus_params *params)
-{
-	struct cs35l56_private *cs35l56 = dev_get_drvdata(&peripheral->dev);
-
-	if ((cs35l56->base.type == 0x63) && (cs35l56->base.rev < 0xa1))
-		return cs35l63_sdw_kick_divider(cs35l56, peripheral);
-
-	return 0;
-}
-
 static int __maybe_unused cs35l56_sdw_clk_stop(struct sdw_slave *peripheral,
 					       enum sdw_clk_stop_mode mode,
 					       enum sdw_clk_stop_type type)
 {
 	struct cs35l56_private *cs35l56 = dev_get_drvdata(&peripheral->dev);
 
-	dev_dbg(cs35l56->base.dev, "%s: mode:%d type:%d\n", __func__, mode, type);
+	dev_dbg(cs35l56->base.dev, "%s: clock_stop_mode%d stage:%d\n", __func__, mode, type);
 
-	return 0;
+	switch (type) {
+	case SDW_CLK_POST_PREPARE:
+		if (mode == SDW_CLK_STOP_MODE1)
+			cs35l56->sdw_in_clock_stop_1 = true;
+		else
+			cs35l56->sdw_in_clock_stop_1 = false;
+		return 0;
+	default:
+		return 0;
+	}
 }
 
 static const struct sdw_slave_ops cs35l56_sdw_ops = {
 	.read_prop = cs35l56_sdw_read_prop,
 	.interrupt_callback = cs35l56_sdw_interrupt,
 	.update_status = cs35l56_sdw_update_status,
-	.bus_config = cs35l56_sdw_bus_config,
-#ifdef DEBUG
 	.clk_stop = cs35l56_sdw_clk_stop,
-#endif
 };
 
 static int __maybe_unused cs35l56_sdw_handle_unattach(struct cs35l56_private *cs35l56)
 {
 	struct sdw_slave *peripheral = cs35l56->sdw_peripheral;
 
-	if (peripheral->unattach_request) {
+	dev_dbg(cs35l56->base.dev, "attached:%u unattach_request:%u in_clock_stop_1:%u\n",
+		cs35l56->sdw_attached, peripheral->unattach_request, cs35l56->sdw_in_clock_stop_1);
+
+	if (cs35l56->sdw_in_clock_stop_1 || peripheral->unattach_request) {
 		/* Cannot access registers until bus is re-initialized. */
 		dev_dbg(cs35l56->base.dev, "Wait for initialization_complete\n");
 		if (!wait_for_completion_timeout(&peripheral->initialization_complete,
@@ -497,6 +450,7 @@ static int __maybe_unused cs35l56_sdw_handle_unattach(struct cs35l56_private *cs
 		}
 
 		peripheral->unattach_request = 0;
+		cs35l56->sdw_in_clock_stop_1 = false;
 
 		/*
 		 * Don't call regcache_mark_dirty(), we can't be sure that the
@@ -597,15 +551,15 @@ static int cs35l56_sdw_probe(struct sdw_slave *peripheral, const struct sdw_devi
 	case 0x3556:
 	case 0x3557:
 		regmap_config = &cs35l56_regmap_sdw;
-		cs35l56->base.fw_reg = &cs35l56_fw_reg;
 		break;
 	case 0x3563:
 		regmap_config = &cs35l63_regmap_sdw;
-		cs35l56->base.fw_reg = &cs35l63_fw_reg;
 		break;
 	default:
 		return -ENODEV;
 	}
+
+	cs35l56->base.type = ((unsigned int)id->driver_data) & 0xff;
 
 	cs35l56->base.regmap = devm_regmap_init(dev, &cs35l56_regmap_bus_sdw,
 					   peripheral, regmap_config);
@@ -624,7 +578,7 @@ static int cs35l56_sdw_probe(struct sdw_slave *peripheral, const struct sdw_devi
 	return 0;
 }
 
-static int cs35l56_sdw_remove(struct sdw_slave *peripheral)
+static void cs35l56_sdw_remove(struct sdw_slave *peripheral)
 {
 	struct cs35l56_private *cs35l56 = dev_get_drvdata(&peripheral->dev);
 
@@ -636,8 +590,6 @@ static int cs35l56_sdw_remove(struct sdw_slave *peripheral)
 	sdw_write_no_pm(peripheral, CS35L56_SDW_GEN_INT_STAT_1, 0xFF);
 
 	cs35l56_remove(cs35l56);
-
-	return 0;
 }
 
 static const struct dev_pm_ops cs35l56_sdw_pm = {

@@ -28,6 +28,7 @@
 #include <drm/bridge/analogix_dp.h>
 #include <drm/drm_of.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_simple_kms_helper.h>
 
@@ -170,12 +171,12 @@ static int rockchip_dp_get_modes(struct analogix_dp_plat_data *plat_data,
 {
 	struct drm_display_info *di = &connector->display_info;
 	/* VOP couldn't output YUV video format for eDP rightly */
-	u32 mask = DRM_COLOR_FORMAT_YCBCR444 | DRM_COLOR_FORMAT_YCBCR422;
+	u32 mask = BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR444) | BIT(DRM_OUTPUT_COLOR_FORMAT_YCBCR422);
 
 	if ((di->color_formats & mask)) {
 		DRM_DEBUG_KMS("Swapping display color format from YUV to RGB\n");
 		di->color_formats &= ~mask;
-		di->color_formats |= DRM_COLOR_FORMAT_RGB444;
+		di->color_formats |= BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444);
 		di->bpc = 8;
 	}
 
@@ -330,38 +331,29 @@ static int rockchip_dp_of_probe(struct rockchip_dp_device *dp)
 	struct device_node *np = dev->of_node;
 
 	dp->grf = syscon_regmap_lookup_by_phandle(np, "rockchip,grf");
-	if (IS_ERR(dp->grf)) {
-		DRM_DEV_ERROR(dev, "failed to get rockchip,grf property\n");
-		return PTR_ERR(dp->grf);
-	}
+	if (IS_ERR(dp->grf))
+		return dev_err_probe(dev, PTR_ERR(dp->grf),
+				     "failed to get rockchip,grf property\n");
 
-	dp->grfclk = devm_clk_get(dev, "grf");
-	if (PTR_ERR(dp->grfclk) == -ENOENT) {
-		dp->grfclk = NULL;
-	} else if (PTR_ERR(dp->grfclk) == -EPROBE_DEFER) {
-		return -EPROBE_DEFER;
-	} else if (IS_ERR(dp->grfclk)) {
-		DRM_DEV_ERROR(dev, "failed to get grf clock\n");
-		return PTR_ERR(dp->grfclk);
-	}
+	dp->grfclk = devm_clk_get_optional(dev, "grf");
+	if (IS_ERR(dp->grfclk))
+		return dev_err_probe(dev, PTR_ERR(dp->grfclk),
+				     "failed to get grf clock\n");
 
 	dp->pclk = devm_clk_get(dev, "pclk");
-	if (IS_ERR(dp->pclk)) {
-		DRM_DEV_ERROR(dev, "failed to get pclk property\n");
-		return PTR_ERR(dp->pclk);
-	}
+	if (IS_ERR(dp->pclk))
+		return dev_err_probe(dev, PTR_ERR(dp->pclk),
+				     "failed to get pclk property\n");
 
 	dp->rst = devm_reset_control_get(dev, "dp");
-	if (IS_ERR(dp->rst)) {
-		DRM_DEV_ERROR(dev, "failed to get dp reset control\n");
-		return PTR_ERR(dp->rst);
-	}
+	if (IS_ERR(dp->rst))
+		return dev_err_probe(dev, PTR_ERR(dp->rst),
+				     "failed to get dp reset control\n");
 
 	dp->apbrst = devm_reset_control_get_optional(dev, "apb");
-	if (IS_ERR(dp->apbrst)) {
-		DRM_DEV_ERROR(dev, "failed to get apb reset control\n");
-		return PTR_ERR(dp->apbrst);
-	}
+	if (IS_ERR(dp->apbrst))
+		return dev_err_probe(dev, PTR_ERR(dp->apbrst),
+				     "failed to get apb reset control\n");
 
 	return 0;
 }

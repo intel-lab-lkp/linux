@@ -467,7 +467,7 @@ static int br_fill_ifinfo(struct sk_buff *skb,
 	else
 		br = netdev_priv(dev);
 
-	br_debug(br, "br_fill_info event %d port %s master %s\n",
+	br_debug(br, "br_fill_ifinfo event %d port %s master %s\n",
 		     event, dev->name, br->dev->name);
 
 	nlh = nlmsg_put(skb, pid, seq, event, sizeof(*hdr), flags);
@@ -479,7 +479,7 @@ static int br_fill_ifinfo(struct sk_buff *skb,
 	hdr->__ifi_pad = 0;
 	hdr->ifi_type = dev->type;
 	hdr->ifi_index = dev->ifindex;
-	hdr->ifi_flags = dev_get_flags(dev);
+	hdr->ifi_flags = netif_get_flags(dev);
 	hdr->ifi_change = 0;
 
 	if (nla_put_string(skb, IFLA_IFNAME, dev->name) ||
@@ -1270,6 +1270,9 @@ static const struct nla_policy br_policy[IFLA_BR_MAX + 1] = {
 		NLA_POLICY_EXACT_LEN(sizeof(struct br_boolopt_multi)),
 	[IFLA_BR_FDB_N_LEARNED] = { .type = NLA_REJECT },
 	[IFLA_BR_FDB_MAX_LEARNED] = { .type = NLA_U32 },
+	[IFLA_BR_STP_MODE] = NLA_POLICY_RANGE(NLA_U32,
+					      BR_STP_MODE_AUTO,
+					      BR_STP_MODE_MAX),
 };
 
 static int br_changelink(struct net_device *brdev, struct nlattr *tb[],
@@ -1304,6 +1307,23 @@ static int br_changelink(struct net_device *brdev, struct nlattr *tb[],
 		err = br_set_ageing_time(br, nla_get_u32(data[IFLA_BR_AGEING_TIME]));
 		if (err)
 			return err;
+	}
+
+	if (data[IFLA_BR_STP_MODE]) {
+		u32 mode = nla_get_u32(data[IFLA_BR_STP_MODE]);
+
+		if (mode != br->stp_mode) {
+			bool stp_off = br->stp_enabled == BR_NO_STP ||
+				       (data[IFLA_BR_STP_STATE] &&
+					!nla_get_u32(data[IFLA_BR_STP_STATE]));
+
+			if (!stp_off) {
+				NL_SET_ERR_MSG_MOD(extack,
+						   "Can't change STP mode while STP is enabled");
+				return -EBUSY;
+			}
+		}
+		br->stp_mode = mode;
 	}
 
 	if (data[IFLA_BR_STP_STATE]) {
@@ -1634,6 +1654,7 @@ static size_t br_get_size(const struct net_device *brdev)
 	       nla_total_size(sizeof(u8)) +     /* IFLA_BR_NF_CALL_ARPTABLES */
 #endif
 	       nla_total_size(sizeof(struct br_boolopt_multi)) + /* IFLA_BR_MULTI_BOOLOPT */
+	       nla_total_size(sizeof(u32)) +    /* IFLA_BR_STP_MODE */
 	       0;
 }
 
@@ -1686,7 +1707,8 @@ static int br_fill_info(struct sk_buff *skb, const struct net_device *brdev)
 	    nla_put(skb, IFLA_BR_MULTI_BOOLOPT, sizeof(bm), &bm) ||
 	    nla_put_u32(skb, IFLA_BR_FDB_N_LEARNED,
 			atomic_read(&br->fdb_n_learned)) ||
-	    nla_put_u32(skb, IFLA_BR_FDB_MAX_LEARNED, br->fdb_max_learned))
+	    nla_put_u32(skb, IFLA_BR_FDB_MAX_LEARNED, br->fdb_max_learned) ||
+	    nla_put_u32(skb, IFLA_BR_STP_MODE, br->stp_mode))
 		return -EMSGSIZE;
 
 #ifdef CONFIG_BRIDGE_VLAN_FILTERING
@@ -1802,6 +1824,7 @@ static int br_fill_linkxstats(struct sk_buff *skb,
 			      const struct net_device *dev,
 			      int *prividx, int attr)
 {
+	unsigned int limit = U16_MAX - nla_total_size(0);
 	struct nlattr *nla __maybe_unused;
 	struct net_bridge_port *p = NULL;
 	struct net_bridge_vlan_group *vg;
@@ -1819,6 +1842,7 @@ static int br_fill_linkxstats(struct sk_buff *skb,
 		p = br_port_get_rtnl(dev);
 		if (!p)
 			return 0;
+		limit -= nla_total_size_64bit(sizeof(p->stp_xstats));
 		br = p->br;
 		vg = nbp_vlan_group(p);
 		break;
@@ -1833,6 +1857,9 @@ static int br_fill_linkxstats(struct sk_buff *skb,
 	if (vg) {
 		u16 pvid;
 
+#ifdef CONFIG_BRIDGE_IGMP_SNOOPING
+		limit -= nla_total_size_64bit(sizeof(struct br_mcast_stats));
+#endif
 		pvid = br_get_pvid(vg);
 		list_for_each_entry(v, &vg->vlan_list, vlist) {
 			struct bridge_vlan_xstats vxi;
@@ -1840,6 +1867,11 @@ static int br_fill_linkxstats(struct sk_buff *skb,
 
 			if (++vl_idx < *prividx)
 				continue;
+
+			if (skb_tail_pointer(skb) - (unsigned char *)nest +
+			    nla_total_size(sizeof(vxi)) >= limit)
+				goto nla_put_failure;
+
 			memset(&vxi, 0, sizeof(vxi));
 			vxi.vid = v->vid;
 			vxi.flags = v->flags;
