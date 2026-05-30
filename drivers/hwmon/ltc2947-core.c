@@ -273,10 +273,8 @@ static int ltc2947_alarm_read(struct ltc2947_data *st, const u8 reg,
 {
 	u8 offset = reg - LTC2947_REG_STATUS;
 	/* +1 to include status reg */
-	char alarms[LTC2947_ALERTS_SIZE + 1];
+	char alarms[LTC2947_ALERTS_SIZE + 1] = { };
 	int ret = 0;
-
-	memset(alarms, 0, sizeof(alarms));
 
 	ret = regmap_write(st->map, LTC2947_REG_PAGE_CTRL, LTC2947_PAGE0);
 	if (ret)
