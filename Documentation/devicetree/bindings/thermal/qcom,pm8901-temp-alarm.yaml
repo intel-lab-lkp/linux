@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/thermal/qcom,pm8901-temp-alarm.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm PM8901 PMIC Temperature Alarm
+
+maintainers:
+  - Herman van Hazendonk <github.com@herrie.org>
+
+description: |
+  PM8901 is a secondary PMIC paired with PM8058 on MSM8x60 family
+  (MSM8260/MSM8660/APQ8060) platforms. It exposes an over-temperature
+  alarm block at SSBI offset
+  0x23 (CTRL) / 0x24 (PWM) with four selectable thresholds and three
+  escalating stages. Unlike PM8058, there is no raw die-temperature
+  ADC channel — the driver decodes the stage + threshold pair into a
+  representative millicelsius value.
+
+  Two PMIC-internal interrupts are exposed: a stage-transition alarm
+  (TEMP_ALARM, PM8901 IRQ block 6 bit 4 == 52) and a hi-temp alarm
+  (TEMP_HI_ALARM, block 6 bit 5 == 53).
+
+  The driver registers a thermal-of sensor; board DTs declare trip
+  points and a critical-trip action against it.
+
+properties:
+  compatible:
+    const: qcom,pm8901-temp-alarm
+
+  reg:
+    description: SSBI offset of the temp-alarm CTRL register.
+    maxItems: 1
+
+  interrupts:
+    items:
+      - description: Stage-transition alarm interrupt (TEMP_ALARM).
+      - description: Hi-temperature alarm interrupt (TEMP_HI_ALARM).
+
+  interrupt-names:
+    items:
+      - const: alarm
+      - const: hi-alarm
+
+  "#thermal-sensor-cells":
+    const: 0
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - interrupt-names
+  - "#thermal-sensor-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    ssbi {
+      pmic {
+        compatible = "qcom,pm8901";
+        #interrupt-cells = <2>;
+        interrupt-controller;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        pm8901_temp: temp-alarm@23 {
+          compatible = "qcom,pm8901-temp-alarm";
+          reg = <0x23>;
+          interrupts = <52 IRQ_TYPE_EDGE_RISING>,
+                       <53 IRQ_TYPE_EDGE_RISING>;
+          interrupt-names = "alarm", "hi-alarm";
+          #thermal-sensor-cells = <0>;
+        };
+      };
+    };
