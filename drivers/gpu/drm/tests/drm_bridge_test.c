@@ -92,7 +92,7 @@ static const struct drm_bridge_funcs drm_test_bridge_atomic_funcs = {
 	.atomic_disable		= drm_test_bridge_atomic_disable,
 	.atomic_destroy_state	= drm_atomic_helper_bridge_destroy_state,
 	.atomic_duplicate_state	= drm_atomic_helper_bridge_duplicate_state,
-	.atomic_reset		= drm_atomic_helper_bridge_reset,
+	.atomic_create_state		= drm_atomic_helper_bridge_create_state,
 };
 
 KUNIT_DEFINE_ACTION_WRAPPER(drm_bridge_remove_wrapper,
