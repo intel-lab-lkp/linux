@@ -84,15 +84,20 @@ find_other_sources()
 all_sources()
 {
 	find_arch_include_sources ${SRCARCH} '*.[chS]'
+	find_arch_include_sources ${SRCARCH} '*.rs'
 	if [ -n "$archinclude" ]; then
 		find_arch_include_sources $archinclude '*.[chS]'
+		find_arch_include_sources $archinclude '*.rs'
 	fi
 	find_include_sources '*.[chS]'
+	find_include_sources '*.rs'
 	for arch in $ALLSOURCE_ARCHS
 	do
 		find_arch_sources $arch '*.[chS]'
+		find_arch_sources $arch '*.rs'
 	done
 	find_other_sources '*.[chS]'
+	find_other_sources '*.rs'
 }
 
 all_compiled_sources()
@@ -100,7 +105,7 @@ all_compiled_sources()
 	{
 		echo include/generated/autoconf.h
 		find $ignore -name "*.cmd" -exec \
-			grep -Poh '(?<=^  )\S+|(?<== )\S+[^\\](?=$)' {} \+ |
+			grep -Poh '(?<=^  )\S+\.([chS]|rs)|(?<== )\S+\.(?1)(?=$)' {} \+ |
 		awk '!a[$0]++'
 	} | xargs realpath -esq $([ -z "$KBUILD_ABS_SRCTREE" ] && echo --relative-to=.) |
 	sort -u
