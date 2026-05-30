@@ -1999,6 +1999,13 @@ static int rtl8365mb_setup(struct dsa_switch *ds)
 			cpu->trap_port = cpu_dp->index;
 	}
 	cpu->enable = cpu->mask > 0;
+
+	if (!cpu->enable) {
+		dev_err(priv->dev, "no upstream (CPU, Link) port defined\n");
+		ret = -EINVAL;
+		goto out_teardown_irq;
+	}
+
 	ret = rtl8365mb_cpu_config(priv);
 	if (ret)
 		goto out_teardown_irq;
@@ -2009,6 +2016,18 @@ static int rtl8365mb_setup(struct dsa_switch *ds)
 
 		if (dsa_is_unused_port(ds, i))
 			continue;
+
+		if (dsa_is_dsa_port(ds, i)) {
+			/* Cascading (DSA links) is not supported yet.
+			 * Historically, the driver has always been broken
+			 * without a dedicated CPU port because CPU tagging
+			 * would be disabled, rendering the switch entirely
+			 * non-functional for DSA operations.
+			 */
+			dev_err(ds->dev, "Cascading (DSA link) not supported\n");
+			ret = -EOPNOTSUPP;
+			goto out_teardown_irq;
+		}
 
 		/* Forward only to the CPU */
 		ret = rtl8365mb_port_set_isolation(priv, i, cpu->mask);
