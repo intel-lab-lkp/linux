@@ -671,6 +671,10 @@ struct drm_mode_config {
 	 */
 	struct drm_property *prop_out_fence_ptr;
 	/**
+	 * @page_flip_event_property: property to request page-flip events.
+	 */
+	struct drm_property *prop_page_flip_event;
+	/**
 	 * @prop_crtc_id: Default atomic plane property to specify the
 	 * &drm_crtc.
 	 */

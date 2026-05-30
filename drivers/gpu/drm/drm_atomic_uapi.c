@@ -466,6 +466,14 @@ static int drm_atomic_crtc_set_property(struct drm_crtc *crtc,
 			return -EFAULT;
 
 		set_out_fence_for_crtc(state->state, crtc, fence_ptr);
+	} else if (property == config->prop_page_flip_event) {
+		if (val != 1) {
+			drm_dbg_atomic(crtc->dev,
+				       "[CRTC:%d:%s] PAGE_FLIP_EVENT can only be set to 1",
+				       crtc->base.id, crtc->name);
+			return -EINVAL;
+		}
+		state->page_flip_event_requested = val;
 	} else if (property == crtc->scaling_filter_property) {
 		state->scaling_filter = val;
 	} else if (property == crtc->sharpness_strength_property) {
@@ -506,6 +514,8 @@ drm_atomic_crtc_get_property(struct drm_crtc *crtc,
 	else if (property == config->background_color_property)
 		*val = state->background_color;
 	else if (property == config->prop_out_fence_ptr)
+		*val = 0;
+	else if (property == config->prop_page_flip_event)
 		*val = 0;
 	else if (property == crtc->scaling_filter_property)
 		*val = state->scaling_filter;
@@ -1385,6 +1395,7 @@ static int prepare_signaling(struct drm_device *dev,
 	struct drm_connector *conn;
 	struct drm_connector_state *conn_state;
 	int i, c = 0, ret;
+	bool page_flip_event_requested;
 
 	if (arg->flags & DRM_MODE_ATOMIC_TEST_ONLY)
 		return 0;
@@ -1392,9 +1403,11 @@ static int prepare_signaling(struct drm_device *dev,
 	for_each_new_crtc_in_state(state, crtc, crtc_state, i) {
 		s32 __user *fence_ptr;
 
+		page_flip_event_requested = arg->flags & DRM_MODE_PAGE_FLIP_EVENT ||
+					    crtc_state->page_flip_event_requested;
 		fence_ptr = get_out_fence_for_crtc(crtc_state->state, crtc);
 
-		if (arg->flags & DRM_MODE_PAGE_FLIP_EVENT || fence_ptr) {
+		if (page_flip_event_requested || fence_ptr) {
 			struct drm_pending_vblank_event *e;
 
 			e = create_vblank_event(crtc, arg->user_data);
@@ -1404,7 +1417,7 @@ static int prepare_signaling(struct drm_device *dev,
 			crtc_state->event = e;
 		}
 
-		if (arg->flags & DRM_MODE_PAGE_FLIP_EVENT) {
+		if (page_flip_event_requested) {
 			struct drm_pending_vblank_event *e = crtc_state->event;
 
 			if (!file_priv)

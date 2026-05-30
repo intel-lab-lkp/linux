@@ -248,6 +248,11 @@ struct dma_fence *drm_crtc_create_fence(struct drm_crtc *crtc)
  *	The sharpness effect takes place post blending on the final composed output.
  *	If the feature is disabled, the content remains same without any sharpening effect
  *	and when this feature is applied, it enhances the clarity of the content.
+ * PAGE_FLIP_EVENT:
+ *	Atomic property for requesting a page-flip event on this CRTC.
+ *
+ *	The value of this property is an integer value which always reads as
+ *	zero and can be written with 1 to request the event.
  */
 
 __printf(6, 0)
@@ -322,6 +327,8 @@ static int __drm_crtc_init_with_planes(struct drm_device *dev, struct drm_crtc *
 					   config->prop_out_fence_ptr, 0);
 		drm_object_attach_property(&crtc->base,
 					   config->prop_vrr_enabled, 0);
+		drm_object_attach_property(&crtc->base,
+					   config->prop_page_flip_event, 0);
 	}
 
 	return 0;

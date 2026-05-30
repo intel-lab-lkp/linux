@@ -312,6 +312,12 @@ struct drm_crtc_state {
 	bool vrr_enabled;
 
 	/**
+	 * @page_flip_event_requested: indicates whether a page-flip event has
+	 * been requested on this CRTC.
+	 */
+	bool page_flip_event_requested;
+
+	/**
 	 * @self_refresh_active:
 	 *
 	 * Used by the self refresh helpers to denote when a self refresh
