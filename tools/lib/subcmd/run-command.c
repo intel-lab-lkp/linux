@@ -229,20 +229,64 @@ static int wait_or_whine(struct child_process *cmd, bool block)
 
 int check_if_command_finished(struct child_process *cmd)
 {
-#ifdef __linux__
 	char filename[6 + MAX_STRLEN_TYPE(typeof(cmd->pid)) + 7 + 1];
 	char status_line[256];
 	FILE *status_file;
+
+	if (cmd->finished)
+		return 1;
+	if (cmd->pid <= 0)
+		return 1;
 
 	/*
 	 * Check by reading /proc/<pid>/status as calling waitpid causes
 	 * stdout/stderr to be closed and data lost.
 	 */
 	sprintf(filename, "/proc/%u/status", cmd->pid);
+#ifdef __linux__
 	status_file = fopen(filename, "r");
 	if (status_file == NULL) {
-		/* Open failed assume finish_command was called. */
-		return true;
+		/*
+		 * fopen() can fail with ENOENT if the process has been reaped.
+		 * It can also fail with EMFILE/ENFILE if RLIMIT_NOFILE is reached,
+		 * or with EINTR/ENOMEM. Use kill(pid, 0) as a robust fallback
+		 * to distinguish between active processes and dead ones without
+		 * consuming file descriptors.
+		 */
+		if (errno == ENOENT)
+			return 1;
+		if (kill(cmd->pid, 0) < 0 && errno == ESRCH) {
+			waiting = waitpid(cmd->pid, &status, WNOHANG);
+			if (waiting == cmd->pid) {
+				int result;
+				int code;
+
+				cmd->finished = 1;
+				if (WIFSIGNALED(status)) {
+					result = -ERR_RUN_COMMAND_WAITPID_SIGNAL;
+				} else if (!WIFEXITED(status)) {
+					result = -ERR_RUN_COMMAND_WAITPID_NOEXIT;
+				} else {
+					code = WEXITSTATUS(status);
+					switch (code) {
+					case 127:
+						result = -ERR_RUN_COMMAND_EXEC;
+						break;
+					case 0:
+						result = 0;
+						break;
+					default:
+						result = -code;
+						break;
+					}
+				}
+				cmd->finish_result = result;
+				return 1;
+			}
+			if (waiting < 0 && errno == ECHILD)
+				return 1;
+		}
+		return 0;
 	}
 	while (fgets(status_line, sizeof(status_line), status_file) != NULL) {
 		char *p;
