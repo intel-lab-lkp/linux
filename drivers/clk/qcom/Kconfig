@@ -521,6 +521,15 @@ config MSM_LCC_8960
 	  Say Y if you want to use audio devices such as i2s, pcm,
 	  SLIMBus, etc.
 
+config MSM_LCC_8660
+	tristate "MSM8x60 LPASS Clock Controller"
+	depends on ARM || COMPILE_TEST
+	help
+	  Support for the LPASS clock controller on the MSM8x60 family
+	  (MSM8260/MSM8660/APQ8060). MSM8960 is the newer
+	  Krait-based generation handled separately by MSM_LCC_8960.
+	  Say Y if you want to use audio devices such as i2s, pcm, SLIMBus.
+
 config MDM_GCC_9607
 	tristate "MDM9607 Global Clock Controller"
 	depends on ARM || COMPILE_TEST
