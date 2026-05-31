@@ -241,8 +241,18 @@ int check_if_command_finished(struct child_process *cmd)
 	sprintf(filename, "/proc/%u/status", cmd->pid);
 	status_file = fopen(filename, "r");
 	if (status_file == NULL) {
-		/* Open failed assume finish_command was called. */
-		return true;
+		/*
+		 * fopen() can fail with ENOENT if the process has been reaped.
+		 * It can also fail with EMFILE/ENFILE if RLIMIT_NOFILE is reached,
+		 * or with EINTR/ENOMEM. Use kill(pid, 0) as a robust fallback
+		 * to distinguish between active processes and dead ones without
+		 * consuming file descriptors.
+		 */
+		if (errno == ENOENT)
+			return 1;
+		if (kill(cmd->pid, 0) == -1 && errno == ESRCH)
+			return 1;
+		return 0;
 	}
 	while (fgets(status_line, sizeof(status_line), status_file) != NULL) {
 		char *p;
