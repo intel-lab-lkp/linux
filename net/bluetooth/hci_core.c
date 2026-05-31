@@ -2664,7 +2664,6 @@ void hci_unregister_dev(struct hci_dev *hdev)
 	write_unlock(&hci_dev_list_lock);
 
 	synchronize_srcu(&hdev->srcu);
-	cleanup_srcu_struct(&hdev->srcu);
 
 	disable_work_sync(&hdev->rx_work);
 	disable_work_sync(&hdev->cmd_work);
@@ -2737,6 +2736,8 @@ void hci_release_dev(struct hci_dev *hdev)
 	kfree_skb(hdev->sent_cmd);
 	kfree_skb(hdev->req_skb);
 	kfree_skb(hdev->recv_event);
+
+	cleanup_srcu_struct(&hdev->srcu);
 	kfree(hdev);
 }
 EXPORT_SYMBOL(hci_release_dev);
