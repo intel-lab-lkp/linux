@@ -105,7 +105,8 @@ int ivpu_jsm_register_db(struct ivpu_device *vdev, u32 ctx_id, u32 db_id,
 	req.payload.register_db.host_ssid = ctx_id;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_REGISTER_DB_DONE, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(register_db));
 	if (ret)
 		ivpu_err_ratelimited(vdev, "Failed to register doorbell %u: %d\n", db_id, ret);
 
@@ -121,7 +122,8 @@ int ivpu_jsm_unregister_db(struct ivpu_device *vdev, u32 db_id)
 	req.payload.unregister_db.db_idx = db_id;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_UNREGISTER_DB_DONE, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(unregister_db));
 	if (ret)
 		ivpu_warn_ratelimited(vdev, "Failed to unregister doorbell %u: %d\n", db_id, ret);
 
@@ -140,7 +142,8 @@ int ivpu_jsm_get_heartbeat(struct ivpu_device *vdev, u32 engine, u64 *heartbeat)
 	req.payload.query_engine_hb.engine_idx = engine;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_QUERY_ENGINE_HB_DONE, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(query_engine_hb));
 	if (ret) {
 		ivpu_err_ratelimited(vdev, "Failed to get heartbeat from engine %d: %d\n",
 				     engine, ret);
@@ -162,7 +165,8 @@ int ivpu_jsm_reset_engine(struct ivpu_device *vdev, u32 engine, struct vpu_jsm_m
 	req.payload.engine_reset.engine_idx = engine;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_ENGINE_RESET_DONE, resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(engine_reset));
 	if (ret) {
 		ivpu_err_ratelimited(vdev, "Failed to reset engine %d: %d\n", engine, ret);
 		ivpu_pm_trigger_recovery(vdev, "Engine reset failed");
@@ -187,7 +191,8 @@ int ivpu_jsm_preempt_engine(struct ivpu_device *vdev, u32 engine, u32 preempt_id
 	req.payload.engine_preempt.preempt_id = preempt_id;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_ENGINE_PREEMPT_DONE, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(engine_preempt));
 	if (ret)
 		ivpu_err_ratelimited(vdev, "Failed to preempt engine %d: %d\n", engine, ret);
 
@@ -203,7 +208,8 @@ int ivpu_jsm_dyndbg_control(struct ivpu_device *vdev, char *command, size_t size
 	strscpy(req.payload.dyndbg_control.dyndbg_cmd, command, VPU_DYNDBG_CMD_MAX_LEN);
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_DYNDBG_CONTROL_RSP, &resp,
-				    VPU_IPC_CHAN_GEN_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_GEN_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(dyndbg_control));
 	if (ret)
 		ivpu_warn_ratelimited(vdev, "Failed to send command \"%s\": ret %d\n",
 				      command, ret);
@@ -219,7 +225,8 @@ int ivpu_jsm_trace_get_capability(struct ivpu_device *vdev, u32 *trace_destinati
 	int ret;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_TRACE_GET_CAPABILITY_RSP, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_BASE_SIZE);
 	if (ret) {
 		ivpu_warn_ratelimited(vdev, "Failed to get trace capability: %d\n", ret);
 		return ret;
@@ -243,7 +250,8 @@ int ivpu_jsm_trace_set_config(struct ivpu_device *vdev, u32 trace_level, u32 tra
 	req.payload.trace_config.trace_hw_component_mask = trace_hw_component_mask;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_TRACE_SET_CONFIG_RSP, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(trace_config));
 	if (ret)
 		ivpu_warn_ratelimited(vdev, "Failed to set config: %d\n", ret);
 
@@ -259,7 +267,8 @@ int ivpu_jsm_context_release(struct ivpu_device *vdev, u32 host_ssid)
 	req.payload.ssid_release.host_ssid = host_ssid;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_SSID_RELEASE_DONE, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(ssid_release));
 	if (ret)
 		ivpu_warn_ratelimited(vdev, "Failed to release context: %d\n", ret);
 
@@ -278,7 +287,8 @@ int ivpu_jsm_pwr_d0i3_enter(struct ivpu_device *vdev)
 	req.payload.pwr_d0i3_enter.send_response = 1;
 
 	ret = ivpu_ipc_send_receive_internal(vdev, &req, VPU_JSM_MSG_PWR_D0I3_ENTER_DONE, &resp,
-					     VPU_IPC_CHAN_GEN_CMD, vdev->timeout.d0i3_entry_msg);
+					     VPU_IPC_CHAN_GEN_CMD, vdev->timeout.d0i3_entry_msg,
+					     IVPU_JSM_MSG_SIZE(pwr_d0i3_enter));
 	if (ret)
 		return ret;
 
@@ -301,7 +311,8 @@ int ivpu_jsm_hws_create_cmdq(struct ivpu_device *vdev, u32 ctx_id, u32 cmdq_grou
 	req.payload.hws_create_cmdq.cmdq_size = cmdq_size;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_CREATE_CMD_QUEUE_RSP, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(hws_create_cmdq));
 	if (ret)
 		ivpu_warn_ratelimited(vdev, "Failed to create command queue: %d\n", ret);
 
@@ -318,7 +329,8 @@ int ivpu_jsm_hws_destroy_cmdq(struct ivpu_device *vdev, u32 ctx_id, u32 cmdq_id)
 	req.payload.hws_destroy_cmdq.cmdq_id = cmdq_id;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_DESTROY_CMD_QUEUE_RSP, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(hws_destroy_cmdq));
 	if (ret)
 		ivpu_warn_ratelimited(vdev, "Failed to destroy command queue: %d\n", ret);
 
@@ -339,7 +351,8 @@ int ivpu_jsm_hws_register_db(struct ivpu_device *vdev, u32 ctx_id, u32 cmdq_id, 
 	req.payload.hws_register_db.cmdq_size = cmdq_size;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_REGISTER_DB_DONE, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(hws_register_db));
 	if (ret)
 		ivpu_err_ratelimited(vdev, "Failed to register doorbell %u: %d\n", db_id, ret);
 
@@ -358,7 +371,8 @@ int ivpu_jsm_hws_resume_engine(struct ivpu_device *vdev, u32 engine)
 	req.payload.hws_resume_engine.engine_idx = engine;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_HWS_RESUME_ENGINE_DONE, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(hws_resume_engine));
 	if (ret) {
 		ivpu_err_ratelimited(vdev, "Failed to resume engine %d: %d\n", engine, ret);
 		ivpu_pm_trigger_recovery(vdev, "Engine resume failed");
@@ -384,7 +398,8 @@ int ivpu_jsm_hws_set_context_sched_properties(struct ivpu_device *vdev, u32 ctx_
 	req.payload.hws_set_context_sched_properties.grace_period_lower_priority = 0;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_SET_CONTEXT_SCHED_PROPERTIES_RSP, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(hws_set_context_sched_properties));
 	if (ret)
 		ivpu_warn_ratelimited(vdev, "Failed to set context sched properties: %d\n", ret);
 
@@ -404,7 +419,8 @@ int ivpu_jsm_hws_set_scheduling_log(struct ivpu_device *vdev, u32 engine_idx, u3
 	req.payload.hws_set_scheduling_log.notify_index = 0;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_HWS_SET_SCHEDULING_LOG_RSP, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(hws_set_scheduling_log));
 	if (ret)
 		ivpu_warn_ratelimited(vdev, "Failed to set scheduling log: %d\n", ret);
 
@@ -429,7 +445,8 @@ int ivpu_jsm_hws_setup_priority_bands(struct ivpu_device *vdev)
 	setup->normal_band_percentage = 10;
 
 	ret = ivpu_ipc_send_receive_internal(vdev, &req, VPU_JSM_MSG_SET_PRIORITY_BAND_SETUP_RSP,
-					     &resp, VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+					     &resp, VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+					     IVPU_JSM_MSG_SIZE(hws_priority_band_setup));
 	if (ret)
 		ivpu_warn_ratelimited(vdev, "Failed to set priority bands: %d\n", ret);
 
@@ -449,7 +466,8 @@ int ivpu_jsm_metric_streamer_start(struct ivpu_device *vdev, u64 metric_group_ma
 	req.payload.metric_streamer_start.buffer_size = buffer_size;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_METRIC_STREAMER_START_DONE, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(metric_streamer_start));
 	if (ret) {
 		ivpu_warn_ratelimited(vdev, "Failed to start metric streamer: ret %d\n", ret);
 		return ret;
@@ -467,7 +485,8 @@ int ivpu_jsm_metric_streamer_stop(struct ivpu_device *vdev, u64 metric_group_mas
 	req.payload.metric_streamer_stop.metric_group_mask = metric_group_mask;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_METRIC_STREAMER_STOP_DONE, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(metric_streamer_stop));
 	if (ret)
 		ivpu_warn_ratelimited(vdev, "Failed to stop metric streamer: ret %d\n", ret);
 
@@ -486,7 +505,8 @@ int ivpu_jsm_metric_streamer_update(struct ivpu_device *vdev, u64 metric_group_m
 	req.payload.metric_streamer_update.buffer_size = buffer_size;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_METRIC_STREAMER_UPDATE_DONE, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(metric_streamer_update));
 	if (ret) {
 		ivpu_warn_ratelimited(vdev, "Failed to update metric streamer: ret %d\n", ret);
 		return ret;
@@ -515,7 +535,8 @@ int ivpu_jsm_metric_streamer_info(struct ivpu_device *vdev, u64 metric_group_mas
 	req.payload.metric_streamer_start.buffer_size = buffer_size;
 
 	ret = ivpu_ipc_send_receive(vdev, &req, VPU_JSM_MSG_METRIC_STREAMER_INFO_DONE, &resp,
-				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+				    VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+				    IVPU_JSM_MSG_SIZE(metric_streamer_start));
 	if (ret) {
 		ivpu_warn_ratelimited(vdev, "Failed to get metric streamer info: ret %d\n", ret);
 		return ret;
@@ -543,7 +564,8 @@ int ivpu_jsm_dct_enable(struct ivpu_device *vdev, u32 active_us, u32 inactive_us
 	req.payload.pwr_dct_control.dct_inactive_us = inactive_us;
 
 	return ivpu_ipc_send_receive_internal(vdev, &req, VPU_JSM_MSG_DCT_ENABLE_DONE, &resp,
-					      VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+					      VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+					      IVPU_JSM_MSG_SIZE(pwr_dct_control));
 }
 
 int ivpu_jsm_dct_disable(struct ivpu_device *vdev)
@@ -552,7 +574,8 @@ int ivpu_jsm_dct_disable(struct ivpu_device *vdev)
 	struct vpu_jsm_msg resp;
 
 	return ivpu_ipc_send_receive_internal(vdev, &req, VPU_JSM_MSG_DCT_DISABLE_DONE, &resp,
-					      VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+					      VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+					      IVPU_JSM_MSG_BASE_SIZE);
 }
 
 int ivpu_jsm_state_dump(struct ivpu_device *vdev)
@@ -561,7 +584,8 @@ int ivpu_jsm_state_dump(struct ivpu_device *vdev)
 	struct vpu_jsm_msg resp;
 
 	return ivpu_ipc_send_receive_internal(vdev, &req, VPU_JSM_MSG_STATE_DUMP_RSP, &resp,
-					      VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm);
+					      VPU_IPC_CHAN_ASYNC_CMD, vdev->timeout.jsm,
+					      IVPU_JSM_MSG_BASE_SIZE);
 }
 
 int ivpu_jsm_state_dump_no_reply(struct ivpu_device *vdev)
@@ -569,5 +593,6 @@ int ivpu_jsm_state_dump_no_reply(struct ivpu_device *vdev)
 	struct vpu_jsm_msg req = { .type = VPU_JSM_MSG_STATE_DUMP };
 
 	return ivpu_ipc_send_and_wait(vdev, &req, VPU_IPC_CHAN_ASYNC_CMD,
-				      vdev->timeout.state_dump_msg);
+				      vdev->timeout.state_dump_msg,
+				      IVPU_JSM_MSG_BASE_SIZE);
 }

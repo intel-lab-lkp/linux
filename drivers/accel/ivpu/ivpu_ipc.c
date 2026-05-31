@@ -65,7 +65,7 @@ static void ivpu_ipc_mem_fini(struct ivpu_device *vdev)
 
 static int
 ivpu_ipc_tx_prepare(struct ivpu_device *vdev, struct ivpu_ipc_consumer *cons,
-		    struct vpu_jsm_msg *req)
+		    struct vpu_jsm_msg *req, u32 msg_size)
 {
 	struct ivpu_ipc_info *ipc = vdev->ipc;
 	struct ivpu_ipc_tx_buf *tx_buf;
@@ -97,8 +97,7 @@ ivpu_ipc_tx_prepare(struct ivpu_device *vdev, struct ivpu_ipc_consumer *cons,
 
 	memset(tx_buf, 0, sizeof(*tx_buf));
 	tx_buf->ipc.data_addr = jsm_vpu_addr;
-	/* TODO: Set data_size to actual JSM message size, not union of all messages */
-	tx_buf->ipc.data_size = sizeof(*req);
+	tx_buf->ipc.data_size = msg_size;
 	tx_buf->ipc.channel = cons->channel;
 	tx_buf->ipc.src_node = 0;
 	tx_buf->ipc.dst_node = 1;
@@ -210,7 +209,8 @@ void ivpu_ipc_consumer_del(struct ivpu_device *vdev, struct ivpu_ipc_consumer *c
 	ivpu_ipc_tx_release(vdev, cons->tx_vpu_addr);
 }
 
-int ivpu_ipc_send(struct ivpu_device *vdev, struct ivpu_ipc_consumer *cons, struct vpu_jsm_msg *req)
+int ivpu_ipc_send(struct ivpu_device *vdev, struct ivpu_ipc_consumer *cons,
+		  struct vpu_jsm_msg *req, u32 msg_size)
 {
 	struct ivpu_ipc_info *ipc = vdev->ipc;
 	int ret;
@@ -222,7 +222,7 @@ int ivpu_ipc_send(struct ivpu_device *vdev, struct ivpu_ipc_consumer *cons, stru
 		goto unlock;
 	}
 
-	ret = ivpu_ipc_tx_prepare(vdev, cons, req);
+	ret = ivpu_ipc_tx_prepare(vdev, cons, req, msg_size);
 	if (ret)
 		goto unlock;
 
@@ -296,7 +296,8 @@ int ivpu_ipc_receive(struct ivpu_device *vdev, struct ivpu_ipc_consumer *cons,
 int
 ivpu_ipc_send_receive_internal(struct ivpu_device *vdev, struct vpu_jsm_msg *req,
 			       enum vpu_ipc_msg_type expected_resp_type,
-			       struct vpu_jsm_msg *resp, u32 channel, unsigned long timeout_ms)
+			       struct vpu_jsm_msg *resp, u32 channel, unsigned long timeout_ms,
+			       u32 msg_size)
 {
 	struct ivpu_ipc_consumer cons;
 	int ret;
@@ -306,7 +307,7 @@ ivpu_ipc_send_receive_internal(struct ivpu_device *vdev, struct vpu_jsm_msg *req
 
 	ivpu_ipc_consumer_add(vdev, &cons, channel, NULL);
 
-	ret = ivpu_ipc_send(vdev, &cons, req);
+	ret = ivpu_ipc_send(vdev, &cons, req, msg_size);
 	if (ret) {
 		ivpu_warn_ratelimited(vdev, "IPC send failed: %d\n", ret);
 		goto consumer_del;
@@ -331,7 +332,7 @@ consumer_del:
 
 int ivpu_ipc_send_receive(struct ivpu_device *vdev, struct vpu_jsm_msg *req,
 			  enum vpu_ipc_msg_type expected_resp, struct vpu_jsm_msg *resp,
-			  u32 channel, unsigned long timeout_ms)
+			  u32 channel, unsigned long timeout_ms, u32 msg_size)
 {
 	struct vpu_jsm_msg hb_req = { .type = VPU_JSM_MSG_QUERY_ENGINE_HB };
 	struct vpu_jsm_msg hb_resp;
@@ -341,13 +342,15 @@ int ivpu_ipc_send_receive(struct ivpu_device *vdev, struct vpu_jsm_msg *req,
 	if (ret < 0)
 		return ret;
 
-	ret = ivpu_ipc_send_receive_internal(vdev, req, expected_resp, resp, channel, timeout_ms);
+	ret = ivpu_ipc_send_receive_internal(vdev, req, expected_resp, resp, channel, timeout_ms,
+					     msg_size);
 	if (ret != -ETIMEDOUT)
 		goto rpm_put;
 
 	hb_ret = ivpu_ipc_send_receive_internal(vdev, &hb_req, VPU_JSM_MSG_QUERY_ENGINE_HB_DONE,
 						&hb_resp, VPU_IPC_CHAN_ASYNC_CMD,
-						vdev->timeout.jsm);
+						vdev->timeout.jsm,
+						IVPU_JSM_MSG_BASE_SIZE);
 	if (hb_ret == -ETIMEDOUT)
 		ivpu_pm_trigger_recovery(vdev, "IPC timeout");
 
@@ -357,7 +360,7 @@ rpm_put:
 }
 
 int ivpu_ipc_send_and_wait(struct ivpu_device *vdev, struct vpu_jsm_msg *req,
-			   u32 channel, unsigned long timeout_ms)
+			   u32 channel, unsigned long timeout_ms, u32 msg_size)
 {
 	struct ivpu_ipc_consumer cons;
 	int ret;
@@ -368,7 +371,7 @@ int ivpu_ipc_send_and_wait(struct ivpu_device *vdev, struct vpu_jsm_msg *req,
 
 	ivpu_ipc_consumer_add(vdev, &cons, channel, NULL);
 
-	ret = ivpu_ipc_send(vdev, &cons, req);
+	ret = ivpu_ipc_send(vdev, &cons, req, msg_size);
 	if (ret) {
 		ivpu_warn_ratelimited(vdev, "IPC send failed: %d\n", ret);
 		goto consumer_del;
