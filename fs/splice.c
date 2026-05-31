@@ -1622,10 +1622,9 @@ retry:
 			*obuf = *ibuf;
 
 			/*
-			 * Don't inherit the gift and merge flags, we need to
+			 * Don't inherit the merge flag, we need to
 			 * prevent multiple steals of this page.
 			 */
-			obuf->flags &= ~PIPE_BUF_FLAG_GIFT;
 			obuf->flags &= ~PIPE_BUF_FLAG_CAN_MERGE;
 
 			obuf->len = len;
@@ -1711,10 +1710,9 @@ static ssize_t link_pipe(struct pipe_inode_info *ipipe,
 		*obuf = *ibuf;
 
 		/*
-		 * Don't inherit the gift and merge flag, we need to prevent
+		 * Don't inherit the merge flag, we need to prevent
 		 * multiple steals of this page.
 		 */
-		obuf->flags &= ~PIPE_BUF_FLAG_GIFT;
 		obuf->flags &= ~PIPE_BUF_FLAG_CAN_MERGE;
 
 		if (obuf->len > len)
