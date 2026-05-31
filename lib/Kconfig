@@ -41,6 +41,19 @@ config PACKING_KUNIT_TEST
 
 	  When in doubt, say N.
 
+config SG_SPLIT_KUNIT_TEST
+	tristate "KUnit tests for sg_split" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	select SG_SPLIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds KUnit tests for lib/sg_split.c.
+
+	  For more information on KUnit and unit tests in general,
+	  please refer to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  When in doubt, say N.
+
 config BITREVERSE
 	tristate
 
