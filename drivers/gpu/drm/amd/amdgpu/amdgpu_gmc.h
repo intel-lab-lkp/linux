@@ -39,7 +39,7 @@
 				0xff00000000000000ULL : 0xffff800000000000ULL)
 
 /*
- * Hardware is programmed as if the hole doesn't exists with start and end
+ * Hardware is programmed as if the hole doesn't exist with start and end
  * address values.
  *
  * This mask is used to remove the upper 16bits of the VA and so come up with
