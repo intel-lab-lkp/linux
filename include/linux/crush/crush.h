@@ -111,6 +111,7 @@ struct crush_rule {
  *  straw2          O(n)       optimal      optimal
  */
 enum {
+	CRUSH_ITEM_TYPE_DEVICE = 0,
 	CRUSH_BUCKET_UNIFORM = 1,
 	CRUSH_BUCKET_LIST = 2,
 	CRUSH_BUCKET_TREE = 3,
