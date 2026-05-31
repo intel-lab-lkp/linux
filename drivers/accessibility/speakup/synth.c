@@ -163,7 +163,7 @@ int spk_synth_is_alive_restart(struct spk_synth *synth)
 		/* restart */
 		synth->alive = 1;
 		synth_printf("%s", synth->init);
-		return 2; /* reenabled */
+		return 2; /* re-enabled */
 	}
 	pr_warn("%s: can't restart synth\n", synth->long_name);
 	return 0;
