@@ -6185,16 +6185,19 @@ static int __maybe_unused macb_runtime_resume(struct device *dev)
 {
 	struct net_device *netdev = dev_get_drvdata(dev);
 	struct macb *bp = netdev_priv(netdev);
+	struct clk_bulk_data clks[] = {
+		{ .clk = bp->pclk },
+		{ .clk = bp->hclk },
+		{ .clk = bp->tx_clk },
+		{ .clk = bp->rx_clk },
+		{ .clk = bp->tsu_clk },
+	};
 
-	if (!(device_may_wakeup(dev))) {
-		clk_prepare_enable(bp->pclk);
-		clk_prepare_enable(bp->hclk);
-		clk_prepare_enable(bp->tx_clk);
-		clk_prepare_enable(bp->rx_clk);
-		clk_prepare_enable(bp->tsu_clk);
-	} else if (!(bp->caps & MACB_CAPS_NEED_TSUCLK)) {
-		clk_prepare_enable(bp->tsu_clk);
-	}
+	if (!(device_may_wakeup(dev)))
+		return clk_bulk_prepare_enable(ARRAY_SIZE(clks), clks);
+
+	if (!(bp->caps & MACB_CAPS_NEED_TSUCLK))
+		return clk_prepare_enable(bp->tsu_clk);
 
 	return 0;
 }
