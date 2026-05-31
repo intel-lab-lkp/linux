@@ -604,9 +604,11 @@ int xfrm_output_resume(struct sock *sk, struct sk_buff *skb, int err)
 		if (!skb_dst(skb)->xfrm)
 			return dst_output(net, sk, skb);
 
+		rcu_read_lock();
 		err = nf_hook(skb_dst(skb)->ops->family,
 			      NF_INET_POST_ROUTING, net, sk, skb,
-			      NULL, skb_dst(skb)->dev, xfrm_output2);
+			      NULL, skb_dst_dev_rcu(skb), xfrm_output2);
+		rcu_read_unlock();
 		if (unlikely(err != 1))
 			goto out;
 	}

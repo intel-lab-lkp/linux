@@ -30,10 +30,15 @@ static int __xfrm4_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 int xfrm4_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
-	return NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
-			    net, sk, skb, skb->dev, skb_dst_dev(skb),
-			    __xfrm4_output,
-			    !(IPCB(skb)->flags & IPSKB_REROUTED));
+	int ret;
+
+	rcu_read_lock();
+	ret = NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
+			   net, sk, skb, skb->dev, skb_dst_dev_rcu(skb),
+			   __xfrm4_output,
+			   !(IPCB(skb)->flags & IPSKB_REROUTED));
+	rcu_read_unlock();
+	return ret;
 }
 
 void xfrm4_local_error(struct sk_buff *skb, u32 mtu)

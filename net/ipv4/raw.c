@@ -410,9 +410,11 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 				skb_transport_header(skb))->type);
 	}
 
+	rcu_read_lock();
 	err = NF_HOOK(NFPROTO_IPV4, NF_INET_LOCAL_OUT,
-		      net, sk, skb, NULL, rt->dst.dev,
+		      net, sk, skb, NULL, skb_dst_dev_rcu(skb),
 		      dst_output);
+	rcu_read_unlock();
 	if (err > 0)
 		err = net_xmit_errno(err);
 	if (err)
