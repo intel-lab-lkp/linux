@@ -208,6 +208,7 @@ gfp_t gfp_allowed_mask __read_mostly = GFP_BOOT_MASK;
 unsigned int pageblock_order __read_mostly;
 #endif
 
+static void free_has_hwpoisoned(struct page *page, unsigned int order);
 static void __free_pages_ok(struct page *page, unsigned int order,
 			    fpi_t fpi_flags);
 static void reserve_highatomic_pageblock(struct page *page, int order,
@@ -1309,6 +1310,14 @@ static inline void pgalloc_tag_sub_pages(struct alloc_tag *tag, unsigned int nr)
 
 #endif /* CONFIG_MEM_ALLOC_PROFILING */
 
+/*
+ * Returns
+ * - true: checks and preparations all good, caller can proceed freeing.
+ * - false: do not proceed freeing for one of the following reasons:
+ *   1. Some check failed so it is not safe to proceed freeing.
+ *   2. A compound page has some HWPoison pages. The healthy pages
+ *      are already safely freed, and the HWPoison ones isolated.
+ */
 static __always_inline bool __free_pages_prepare(struct page *page,
 		unsigned int order, fpi_t fpi_flags)
 {
@@ -1317,6 +1326,15 @@ static __always_inline bool __free_pages_prepare(struct page *page,
 	bool init = want_init_on_free();
 	bool compound = PageCompound(page);
 	struct folio *folio = page_folio(page);
+	/*
+	 * When dealing with compound page, PG_has_hwpoisoned is cleared
+	 * with PAGE_FLAGS_SECOND. So the check must be done first.
+	 *
+	 * Note we can't exclude PG_has_hwpoisoned from PAGE_FLAGS_SECOND.
+	 * Because PG_has_hwpoisoned == PG_active, free_page_is_bad() will
+	 * confuse and complaint that the first tail page is still active.
+	 */
+	bool should_fhh = compound && folio_test_has_hwpoisoned(folio);
 
 	if (fpi_flags & FPI_PREPARED)
 		return true;
@@ -1442,6 +1460,16 @@ static __always_inline bool __free_pages_prepare(struct page *page,
 	arch_free_page(page, order);
 
 	debug_pagealloc_unmap_pages(page, 1 << order);
+
+	/*
+	 * After breaking down compound page and dealing with page metadata
+	 * (e.g. page owner and page alloc tags), take a shortcut if this
+	 * was a compound page containing certain HWPoison subpages.
+	 */
+	if (should_fhh) {
+		free_has_hwpoisoned(page, order);
+		return false;
+	}
 
 	return true;
 }
@@ -6938,6 +6966,63 @@ static void __free_contig_range_common(unsigned long pfn, unsigned long nr_pages
 void __free_contig_range(unsigned long pfn, unsigned long nr_pages)
 {
 	__free_contig_range_common(pfn, nr_pages, /* is_frozen= */ false);
+}
+
+/*
+ * Given a high-order compound page containing certain number of HWPoison
+ * pages, free only the healthy ones.
+ *
+ * Pages must have passed free_pages_prepare(). Even if having HWPoison
+ * pages, breaking down compound page and updating metadata (e.g. page
+ * owner, alloc tag) can be done together during free_pages_prepare(),
+ * which simplifies the splitting here: unlike __split_unmapped_folio(),
+ * there is no need to turn split pages into a compound page or to carry
+ * metadata.
+ *
+ * It scans every raw page of the compound page and cause nontrivial overhead.
+ * So only use this when the compound page contains HWPoison page(s).
+ *
+ * This implementation needs rework in memdesc world.
+ */
+static void free_has_hwpoisoned(struct page *page, unsigned int order)
+{
+	unsigned long curr = page_to_pfn(page);
+	unsigned long end_pfn = curr + (1 << order);
+	unsigned long next;
+	unsigned long total_freed = 0;
+	unsigned long total_hwp = 0;
+
+	VM_WARN_ON(order == 0);
+	VM_WARN_ON(page->flags.f & PAGE_FLAGS_CHECK_AT_PREP);
+
+	while (curr < end_pfn) {
+		next = curr;
+
+		while (next < end_pfn && !PageHWPoison(pfn_to_page(next)))
+			++next;
+
+		if (next != end_pfn && PageHWPoison(pfn_to_page(next))) {
+			/*
+			 * Avoid accounting error when the page is freed
+			 * by unpoison_memory().
+			 */
+			clear_page_tag_ref(pfn_to_page(next));
+			++total_hwp;
+		}
+
+		free_prepared_contig_range(pfn_to_page(curr), next - curr);
+		total_freed += next - curr;
+
+		if (next == end_pfn)
+			break;
+
+		VM_WARN_ON(!PageHWPoison(pfn_to_page(next)));
+		curr = next + 1;
+	}
+
+	VM_WARN_ON(total_freed + total_hwp != (1 << order));
+	pr_info("Freed %#lx pages, excluded %lu HWPoison pages\n",
+		total_freed, total_hwp);
 }
 
 #ifdef CONFIG_CONTIG_ALLOC
