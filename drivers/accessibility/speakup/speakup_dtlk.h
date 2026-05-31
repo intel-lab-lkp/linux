@@ -41,7 +41,7 @@
 
 				/* data returned by Interrogate command */
 struct synth_settings {
-	u_short serial_number;	/* 0-7Fh:0-7Fh */
+	u16 serial_number;	/* 0-7Fh:0-7Fh */
 	u_char rom_version[24]; /* null terminated string */
 	u_char mode;		/* 0=Character; 1=Phoneme; 2=Text */
 	u_char punc_level;	/* nB; 0-7 */
