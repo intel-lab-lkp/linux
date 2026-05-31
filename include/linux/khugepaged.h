@@ -17,6 +17,10 @@ extern void khugepaged_enter_vma(struct vm_area_struct *vma,
 				 vm_flags_t vm_flags);
 extern void khugepaged_min_free_kbytes_update(void);
 extern bool current_is_khugepaged(void);
+extern void khugepaged_add_collapse_hint(struct mm_struct *mm,
+					struct vm_area_struct *vma,
+					unsigned long address,
+					int priority, int max_order);
 void collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 		bool install_pmd);
 
@@ -31,6 +35,9 @@ static inline void khugepaged_exit(struct mm_struct *mm)
 	if (mm_flags_test(MMF_VM_HUGEPAGE, mm))
 		__khugepaged_exit(mm);
 }
+
+#define NR_KHUGEPAGED_PRIORITY_LEVEL 2
+
 #else /* CONFIG_TRANSPARENT_HUGEPAGE */
 static inline void khugepaged_fork(struct mm_struct *mm, struct mm_struct *oldmm)
 {
@@ -54,6 +61,12 @@ static inline void khugepaged_min_free_kbytes_update(void)
 static inline bool current_is_khugepaged(void)
 {
 	return false;
+}
+static inline void khugepaged_add_collapse_hint(struct mm_struct *mm,
+					       struct vm_area_struct *vma,
+					       unsigned long address,
+					       int priority, int max_order)
+{
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 

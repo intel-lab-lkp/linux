@@ -99,6 +99,8 @@ static DEFINE_READ_MOSTLY_HASHTABLE(mm_slots_hash, MM_SLOTS_HASH_BITS);
 
 static struct kmem_cache *mm_slot_cache __ro_after_init;
 
+#define KHUGEPAGED_PRIORITY_QUEUE_MAX_FAIL 10
+
 #define KHUGEPAGED_MIN_MTHP_ORDER	2
 /*
  * mthp_collapse() does an iterative DFS over a binary tree, from
@@ -159,6 +161,53 @@ struct khugepaged_scan {
 static struct khugepaged_scan khugepaged_scan = {
 	.mm_head = LIST_HEAD_INIT(khugepaged_scan.mm_head),
 };
+
+/**
+ * struct khugepaged_collapse_hint - one collapse hint for a specific address
+ * @node:    list node on khugepaged_collapse_requests.hints
+ * @vma:     hint pointer to the target VMA
+ * @address: PMD-aligned virtual address inside @vma to attempt collapsing on
+ */
+struct khugepaged_collapse_hint {
+	struct list_head node;
+	struct vm_area_struct *vma;
+	unsigned long address;
+};
+
+/**
+ * struct khugepaged_collapse_requests - per-mm, per-priority collapse hints list
+ * @node:    list node on the matching khugepaged_priority_queue[] list
+ * @hints:   list of pending struct khugepaged_collapse_hint for this mm at
+ *           this priority level
+ *
+ * Each khugepaged_mm_slot embeds one request struct per priority level. At
+ * __khugepaged_enter() time, every request is added to the corresponding
+ * khugepaged_priority_queue[] list and stays on that list until the mm
+ * exits khugepaged. While queued, hints for the mm at a given priority are
+ * appended to that priority's @hints;
+ */
+struct khugepaged_collapse_requests {
+	struct list_head node;
+	struct list_head hints;
+};
+
+/**
+ * struct khugepaged_mm_slot - khugepaged information per mm that is being scanned
+ * @slot:    hash lookup from mm to mm_slot
+ * @request: per-mm collapse requests, one per priority level, each linked
+ *           into the corresponding khugepaged_priority_queue[] list
+ */
+struct khugepaged_mm_slot {
+	struct mm_slot slot;
+	struct khugepaged_collapse_requests request[NR_KHUGEPAGED_PRIORITY_LEVEL];
+};
+
+/*
+ * One queue per priority level. Lower index means higher priority. The
+ * scanner drains queues in ascending index order, so all hints at higher
+ * priority are processed before any hint at a lower priority.
+ */
+static struct list_head khugepaged_priority_queue[NR_KHUGEPAGED_PRIORITY_LEVEL];
 
 #ifdef CONFIG_SYSFS
 static ssize_t scan_sleep_millisecs_show(struct kobject *kobj,
@@ -500,9 +549,14 @@ int hugepage_madvise(struct vm_area_struct *vma,
 
 int __init khugepaged_init(void)
 {
-	mm_slot_cache = KMEM_CACHE(mm_slot, 0);
+	int i;
+
+	mm_slot_cache = KMEM_CACHE(khugepaged_mm_slot, 0);
 	if (!mm_slot_cache)
 		return -ENOMEM;
+
+	for (i = 0; i < NR_KHUGEPAGED_PRIORITY_LEVEL; i++)
+		INIT_LIST_HEAD(&khugepaged_priority_queue[i]);
 
 	khugepaged_pages_to_scan = HPAGE_PMD_NR * 8;
 	khugepaged_max_ptes_none = KHUGEPAGED_MAX_PTES_LIMIT;
@@ -560,20 +614,26 @@ static bool hugepage_enabled(void)
 
 void __khugepaged_enter(struct mm_struct *mm)
 {
+	struct khugepaged_mm_slot *khp_mm_slot;
 	struct mm_slot *slot;
 	int wakeup;
+	int i;
 
 	/* __khugepaged_exit() must not run from under us */
 	VM_BUG_ON_MM(collapse_test_exit(mm), mm);
 
-	slot = mm_slot_alloc(mm_slot_cache);
-	if (!slot)
+	khp_mm_slot = mm_slot_alloc(mm_slot_cache);
+	if (!khp_mm_slot)
 		return;
 
 	if (unlikely(mm_flags_test_and_set(MMF_VM_HUGEPAGE, mm))) {
-		mm_slot_free(mm_slot_cache, slot);
+		mm_slot_free(mm_slot_cache, khp_mm_slot);
 		return;
 	}
+
+	slot = &khp_mm_slot->slot;
+	for (i = 0; i < NR_KHUGEPAGED_PRIORITY_LEVEL; i++)
+		INIT_LIST_HEAD(&khp_mm_slot->request[i].hints);
 
 	spin_lock(&khugepaged_mm_lock);
 	mm_slot_insert(mm_slots_hash, mm, slot);
@@ -583,6 +643,12 @@ void __khugepaged_enter(struct mm_struct *mm)
 	 */
 	wakeup = list_empty(&khugepaged_scan.mm_head);
 	list_add_tail(&slot->mm_node, &khugepaged_scan.mm_head);
+	/*
+	 * Link this mm into every priority queue.
+	 */
+	for (i = 0; i < NR_KHUGEPAGED_PRIORITY_LEVEL; i++)
+		list_add_tail(&khp_mm_slot->request[i].node,
+			      &khugepaged_priority_queue[i]);
 	spin_unlock(&khugepaged_mm_lock);
 
 	mmgrab(mm);
@@ -613,23 +679,59 @@ void khugepaged_enter_vma(struct vm_area_struct *vma,
 		__khugepaged_enter(vma->vm_mm);
 }
 
+static void khugepaged_release_collapse_hints(
+			  struct khugepaged_collapse_requests *req)
+{
+	struct khugepaged_collapse_hint *hint, *tmp;
+
+	list_for_each_entry_safe(hint, tmp, &req->hints, node) {
+		list_del(&hint->node);
+		kfree(hint);
+	}
+}
+
+/*
+ * Caller must hold khugepaged_mm_lock when removing the request nodes from
+ * the priority queues;
+ */
+static void khugepaged_remove_priority_requests(struct khugepaged_mm_slot *khp_mm_slot)
+{
+	int i;
+
+	lockdep_assert_held(&khugepaged_mm_lock);
+	for (i = 0; i < NR_KHUGEPAGED_PRIORITY_LEVEL; i++)
+		list_del(&khp_mm_slot->request[i].node);
+}
+
+static void khugepaged_release_all_hints(struct khugepaged_mm_slot *khp_mm_slot)
+{
+	int i;
+
+	for (i = 0; i < NR_KHUGEPAGED_PRIORITY_LEVEL; i++)
+		khugepaged_release_collapse_hints(&khp_mm_slot->request[i]);
+}
+
 void __khugepaged_exit(struct mm_struct *mm)
 {
+	struct khugepaged_mm_slot *khp_mm_slot = NULL;
 	struct mm_slot *slot;
 	int free = 0;
 
 	spin_lock(&khugepaged_mm_lock);
 	slot = mm_slot_lookup(mm_slots_hash, mm);
 	if (slot && khugepaged_scan.mm_slot != slot) {
+		khp_mm_slot = mm_slot_entry(slot, struct khugepaged_mm_slot, slot);
 		hash_del(&slot->hash);
 		list_del(&slot->mm_node);
+		khugepaged_remove_priority_requests(khp_mm_slot);
 		free = 1;
 	}
 	spin_unlock(&khugepaged_mm_lock);
 
 	if (free) {
 		mm_flags_clear(MMF_VM_HUGEPAGE, mm);
-		mm_slot_free(mm_slot_cache, slot);
+		khugepaged_release_all_hints(khp_mm_slot);
+		mm_slot_free(mm_slot_cache, khp_mm_slot);
 		mmdrop(mm);
 	} else if (slot) {
 		/*
@@ -1804,6 +1906,8 @@ out:
 
 static void collect_mm_slot(struct mm_slot *slot)
 {
+	struct khugepaged_mm_slot *khp_mm_slot =
+		mm_slot_entry(slot, struct khugepaged_mm_slot, slot);
 	struct mm_struct *mm = slot->mm;
 
 	lockdep_assert_held(&khugepaged_mm_lock);
@@ -1812,6 +1916,7 @@ static void collect_mm_slot(struct mm_slot *slot)
 		/* free mm_slot */
 		hash_del(&slot->hash);
 		list_del(&slot->mm_node);
+		khugepaged_remove_priority_requests(khp_mm_slot);
 
 		/*
 		 * Not strictly needed because the mm exited already.
@@ -1820,7 +1925,8 @@ static void collect_mm_slot(struct mm_slot *slot)
 		 */
 
 		/* khugepaged_mm_lock actually not necessary for the below */
-		mm_slot_free(mm_slot_cache, slot);
+		khugepaged_release_all_hints(khp_mm_slot);
+		mm_slot_free(mm_slot_cache, khp_mm_slot);
 		mmdrop(mm);
 	}
 }
@@ -2848,6 +2954,211 @@ end:
 	return result;
 }
 
+/*
+ * khugepaged_add_collapse_hint - enqueue a collapse hint
+ * @mm:          target mm
+ * @vma:         hint pointer to the VMA covering @address (treated as a hint)
+ * @address:     virtual address; rounded down to HPAGE_PMD_SIZE
+ * @priority:    priority bucket the hint should land in. Lower number == higher
+ *               priority; must be in [0, NR_KHUGEPAGED_PRIORITY_LEVEL).
+ * @max_order:   max order of continuous pt entries inside this target pmd, used
+ *               to decide whether we need to collapse it.
+ *
+ * Tell khugepaged to prioritize collapsing the PMD covering @address in @mm.
+ * The next time collapse_scan_mm_slot() runs it will drain these entries
+ * before the regular round-robin scan, walking priority queues from
+ * highest priority (lowest index) to lowest.
+ *
+ * Hints are aggregated per-mm and per-priority: __khugepaged_enter()
+ * pre-installs one collapse_request per priority level on the matching
+ * khugepaged_priority_queue[] list, and this function appends a
+ * (vma, address) hint to the request that matches @priority.
+ *
+ * Caller must keep @vma alive across this call (mmap_lock, per-VMA lock,
+ * or a corresponding rmap-side lock such as anon_vma_lock_read /
+ * i_mmap_lock_read are all sufficient).
+ *
+ * @vma->vm_flags is read with collapse_allowable_orders().  When the
+ * caller does not hold mmap_lock or a per-VMA lock, the result is
+ * advisory; the real validation happens later in
+ * collapse_scan_one_priority_entry() under mmap_read_lock.
+ *
+ * Caller must also guarantee @mm is alive across this call so the underlying
+ * mm_slot cannot be freed while we append.
+ */
+void khugepaged_add_collapse_hint(struct mm_struct *mm,
+				 struct vm_area_struct *vma,
+				 unsigned long address,
+				 int priority, int max_order)
+{
+	struct khugepaged_mm_slot *khp_mm_slot;
+	struct khugepaged_collapse_hint *hint;
+	struct mm_slot *slot;
+	int orders;
+
+	if (!mm || !vma)
+		return;
+	if (priority < 0 || priority >= NR_KHUGEPAGED_PRIORITY_LEVEL)
+		return;
+
+	orders = collapse_allowable_orders(vma, vma->vm_flags, TVA_KHUGEPAGED);
+	if (highest_order(orders) <= max_order)
+		return;
+
+	/*
+	 * Make sure the mm is enrolled in khugepaged so that its embedded
+	 * collapse_request[] entries are on khugepaged_priority_queue[].
+	 */
+	khugepaged_enter_vma(vma, vma->vm_flags);
+	if (!mm_flags_test(MMF_VM_HUGEPAGE, mm))
+		return;
+
+	hint = kmalloc_obj(struct khugepaged_collapse_hint);
+	if (!hint)
+		return;
+
+	hint->vma = vma;
+	hint->address = address & HPAGE_PMD_MASK;
+
+	/*
+	 * Just use try lock to avoid lock contention because collapse hints are
+	 * just "best-effort" optimization.
+	 */
+	if (!spin_trylock(&khugepaged_mm_lock)) {
+		kfree(hint);
+		return;
+	}
+
+	slot = mm_slot_lookup(mm_slots_hash, mm);
+	if (!slot) {
+		spin_unlock(&khugepaged_mm_lock);
+		kfree(hint);
+		return;
+	}
+	khp_mm_slot = mm_slot_entry(slot, struct khugepaged_mm_slot, slot);
+	list_add_tail(&hint->node, &khp_mm_slot->request[priority].hints);
+	spin_unlock(&khugepaged_mm_lock);
+
+	wake_up_interruptible(&khugepaged_wait);
+}
+
+/*
+ * Each enrolled mm owns one request struct per priority level, all of which
+ * live on the matching khugepaged_priority_queue[] list for the lifetime of
+ * the mm_slot. The caller iterates priorities from highest to lowest, and
+ * call collapse_scan_one_priority_entry() to process all mms at this priority,
+ * and handle pending collapse hints for each mm. Repeat until either
+ * @progress_max is reached, the per-mm-slot failure exceeds certain threshold,
+ * or no hints remain for this mm at this priority.
+ *
+ * Caller must hold khugepaged_mm_lock.
+ *
+ * Returns 1 if an mm was processed at this priority, 0 if no mm on
+ * khugepaged_priority_queue[@priority] had any pending hints.
+ */
+static int collapse_scan_one_priority_entry(unsigned int progress_max,
+					     enum scan_result *result,
+					     struct collapse_control *cc,
+					     int priority,
+					     int *fail_count)
+	__releases(&khugepaged_mm_lock)
+	__acquires(&khugepaged_mm_lock)
+{
+	struct khugepaged_collapse_requests *iter_req;
+	struct khugepaged_mm_slot *khp_mm_slot = NULL, *iter_slot;
+	struct mm_struct *mm = NULL;
+	bool lock_dropped = true;
+
+	/*
+	 * We have to call mmget_not_zero() under khugepaged_mm_lock so that
+	 * __khugepaged_exit() cannot free the embedding khugepaged_mm_slot from
+	 * under us once we drop the spinlock.
+	 */
+	list_for_each_entry(iter_req, &khugepaged_priority_queue[priority], node) {
+		if (list_empty(&iter_req->hints))
+			continue;
+		iter_slot = container_of(iter_req, struct khugepaged_mm_slot,
+				    request[priority]);
+		if (mmget_not_zero(iter_slot->slot.mm)) {
+			khp_mm_slot = iter_slot;
+			mm = iter_slot->slot.mm;
+			break;
+		}
+	}
+	if (!khp_mm_slot)
+		return 0;
+
+	spin_unlock(&khugepaged_mm_lock);
+
+	/*
+	 * Drain hints for this mm while we hold mmap_read_lock.
+	 * collapse_single_pmd() may drop the mmap_lock; if so, try once to
+	 * retake it for the next hint.
+	 */
+	while (cc->progress < progress_max &&
+	       *fail_count < KHUGEPAGED_PRIORITY_QUEUE_MAX_FAIL) {
+		struct khugepaged_collapse_hint *hint = NULL;
+		struct vm_area_struct *vma;
+		unsigned long addr;
+
+		if (lock_dropped) {
+			if (!mmap_read_trylock(mm)) {
+				(*fail_count)++;
+				continue;
+			}
+			lock_dropped = false;
+		}
+
+		spin_lock(&khugepaged_mm_lock);
+		if (!list_empty(&khp_mm_slot->request[priority].hints)) {
+			hint = list_first_entry(&khp_mm_slot->request[priority].hints,
+						struct khugepaged_collapse_hint,
+						node);
+			list_del(&hint->node);
+		}
+		spin_unlock(&khugepaged_mm_lock);
+
+		if (!hint)
+			break;
+
+		cc->progress++;
+		addr = hint->address;
+
+		if (unlikely(collapse_test_exit_or_disable(mm))) {
+			kfree(hint);
+			break;
+		}
+
+		/*
+		 * Re-validate the cached VMA hint under mmap_read_lock. If the
+		 * address is now covered by a different VMA, or no VMA at all,
+		 * drop the entry. Note that the vma may be a different object
+		 * than the one passed in at enqueue time, but that's a false
+		 * positive that we can safely ignore.
+		 */
+		vma = vma_lookup(mm, addr);
+		if (!vma || vma != hint->vma)
+			goto skip_hint;
+		if (!collapse_allowable_orders(vma, vma->vm_flags, TVA_KHUGEPAGED))
+			goto skip_hint;
+		if (addr < ALIGN(vma->vm_start, HPAGE_PMD_SIZE) ||
+		    addr + HPAGE_PMD_SIZE > ALIGN_DOWN(vma->vm_end, HPAGE_PMD_SIZE))
+			goto skip_hint;
+
+		*result = collapse_single_pmd(addr, vma, &lock_dropped, cc);
+		if (*result != SCAN_SUCCEED)
+			(*fail_count)++;
+skip_hint:
+		kfree(hint);
+	}
+
+	if (!lock_dropped)
+		mmap_read_unlock(mm);
+	mmput(mm);
+	spin_lock(&khugepaged_mm_lock);
+	return 1;
+}
+
 static void collapse_scan_mm_slot(unsigned int progress_max,
 		enum scan_result *result, struct collapse_control *cc)
 	__releases(&khugepaged_mm_lock)
@@ -2858,9 +3169,34 @@ static void collapse_scan_mm_slot(unsigned int progress_max,
 	struct mm_struct *mm;
 	struct vm_area_struct *vma;
 	unsigned int progress_prev = cc->progress;
+	int priority_queue_fail_times = 0;
+	int prio;
 
 	lockdep_assert_held(&khugepaged_mm_lock);
 	*result = SCAN_FAIL;
+
+	/*
+	 * Drain explicit hints in priority order before the mm_slot scan.
+	 * Iterate priorities from highest (lowest index) to lowest. For each
+	 * priority, handle every mm with hints queued at that priority
+	 * before we move on to the next, lower priority.
+	 */
+	for (prio = 0; prio < NR_KHUGEPAGED_PRIORITY_LEVEL; prio++) {
+		while (priority_queue_fail_times < KHUGEPAGED_PRIORITY_QUEUE_MAX_FAIL &&
+			cc->progress < progress_max) {
+			if (collapse_scan_one_priority_entry(progress_max, result, cc,
+				prio, &priority_queue_fail_times) == 0)
+				break;
+		}
+
+		if (cc->progress >= progress_max ||
+		    priority_queue_fail_times >= KHUGEPAGED_PRIORITY_QUEUE_MAX_FAIL)
+			break;
+	}
+
+	if (list_empty(&khugepaged_scan.mm_head) ||
+	    cc->progress >= progress_max)
+		return;
 
 	if (khugepaged_scan.mm_slot) {
 		slot = khugepaged_scan.mm_slot;
