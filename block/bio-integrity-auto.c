@@ -38,6 +38,18 @@ static void bio_integrity_verify_fn(struct work_struct *work)
 	struct bio_integrity_data *bid =
 		container_of(work, struct bio_integrity_data, work);
 	struct bio *bio = bid->bio;
+	struct blk_integrity *bi = blk_get_integrity(bio->bi_bdev->bd_disk);
+
+	if (bi) {
+		unsigned int required = bio_integrity_bytes(bi, bio_sectors(bio));
+
+		if (unlikely(required > bid->bip.bip_iter.bi_size)) {
+			bio->bi_status = BLK_STS_PROTECTION;
+			bio_integrity_finish(bid);
+			bio_endio(bio);
+			return;
+		}
+	}
 
 	bio->bi_status = bio_integrity_verify(bio, &bid->saved_bio_iter);
 	bio_integrity_finish(bid);
