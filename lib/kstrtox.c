@@ -17,6 +17,7 @@
 #include <linux/export.h>
 #include <linux/kstrtox.h>
 #include <linux/math64.h>
+#include <linux/overflow.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 
@@ -406,6 +407,105 @@ int kstrtobool(const char *s, bool *res)
 	return -EINVAL;
 }
 EXPORT_SYMBOL(kstrtobool);
+
+static int _kstrtoudec64(const char *s, unsigned int scale, u64 *res)
+{
+	u64 _res = 0;
+	unsigned int rv_int, rv_frac;
+
+	rv_int = _parse_integer(s, 10, &_res);
+	if (rv_int & KSTRTOX_OVERFLOW)
+		return -ERANGE;
+	s += rv_int;
+
+	if (*s == '.')
+		s++; /* skip decimal point */
+
+	rv_frac = _parse_integer_limit_init(s, 10, _res, &_res, scale);
+	if (rv_frac & KSTRTOX_OVERFLOW)
+		return -ERANGE;
+	s += rv_frac;
+
+	if (!rv_int && !rv_frac && !isdigit(*s))
+		return -EINVAL; /* no digits at all */
+
+	while (isdigit(*s)) /* truncate digits */
+		s++;
+
+	if (*s == '\n')
+		s++;
+	if (*s)
+		return -EINVAL;
+
+	if (_res && (scale > (19 + rv_frac) || /* log10(2^64) = 19.26 */
+	    check_mul_overflow(_res, int_pow(10, scale - rv_frac), &_res)))
+		return -ERANGE;
+
+	*res = _res;
+	return 0;
+}
+
+/**
+ * kstrtoudec64() - Convert a string to an unsigned 64-bit value that represents
+ *		    a scaled decimal number.
+ * @s: The start of the string. The string must be null-terminated, and may also
+ *  include a single newline before its terminating null. The first character
+ *  may also be a plus sign, but not a minus sign. Digits beyond the specified
+ *  scale are ignored.
+ * @scale: The number of digits to the right of the decimal point. For example,
+ *  a scale of 2 would mean the number is represented with two decimal places,
+ *  so "123.45" would be represented as 12345.
+ * @res: Where to write the result of the conversion on success.
+ *
+ * Return: 0 on success, -ERANGE on overflow and -EINVAL on parsing error.
+ */
+noinline
+int kstrtoudec64(const char *s, unsigned int scale, u64 *res)
+{
+	if (s[0] == '+')
+		s++;
+	return _kstrtoudec64(s, scale, res);
+}
+EXPORT_SYMBOL(kstrtoudec64);
+
+/**
+ * kstrtodec64() - Convert a string to a signed 64-bit value that represents a
+ *		   scaled decimal number.
+ * @s: The start of the string. The string must be null-terminated, and may also
+ *  include a single newline before its terminating null. The first character
+ *  may also be a plus sign or a minus sign. Digits beyond the specified scale
+ *  are ignored.
+ * @scale: The number of digits to the right of the decimal point. For example,
+ *  a scale of 5 would mean the number is represented with five decimal places,
+ *  so "-3.141592" would be represented as -314159.
+ * @res: Where to write the result of the conversion on success.
+ *
+ * Return: 0 on success, -ERANGE on overflow and -EINVAL on parsing error.
+ */
+noinline
+int kstrtodec64(const char *s, unsigned int scale, s64 *res)
+{
+	u64 tmp;
+	int rv;
+
+	if (s[0] == '-') {
+		rv = _kstrtoudec64(s + 1, scale, &tmp);
+		if (rv < 0)
+			return rv;
+		if ((s64)-tmp > 0)
+			return -ERANGE;
+		*res = -tmp;
+	} else {
+		rv = kstrtoudec64(s, scale, &tmp);
+		if (rv < 0)
+			return rv;
+		if ((s64)tmp < 0)
+			return -ERANGE;
+		*res = tmp;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(kstrtodec64);
 
 /*
  * Since "base" would be a nonsense argument, this open-codes the
