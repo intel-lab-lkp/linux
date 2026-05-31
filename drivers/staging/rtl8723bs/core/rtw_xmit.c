@@ -2476,9 +2476,9 @@ struct xmit_buf *dequeue_pending_xmitbuf_under_survey(struct xmit_priv *pxmitpri
 
 			type = GetFrameSubType(pxmitbuf->pbuf + TXDESC_OFFSET);
 
-			if ((type == WIFI_PROBEREQ) ||
-				(type == WIFI_DATA_NULL) ||
-				(type == WIFI_QOS_DATA_NULL)) {
+			if (type == WIFI_PROBEREQ ||
+			    type == WIFI_DATA_NULL ||
+			    type == WIFI_QOS_DATA_NULL) {
 				list_del_init(&pxmitbuf->list);
 				break;
 			}
