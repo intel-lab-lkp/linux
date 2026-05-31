@@ -445,15 +445,17 @@ static int load_timings_from_dt(struct tegra_clk_emc *tegra,
 {
 	struct emc_timing *timings_ptr;
 	int child_count = of_get_child_count(node);
+	struct emc_timing *timings;
 	int i = 0, err;
 	size_t size;
 
 	size = (tegra->num_timings + child_count) * sizeof(struct emc_timing);
 
-	tegra->timings = krealloc(tegra->timings, size, GFP_KERNEL);
-	if (!tegra->timings)
+	timings = krealloc(tegra->timings, size, GFP_KERNEL);
+	if (!timings)
 		return -ENOMEM;
 
+	tegra->timings = timings;
 	timings_ptr = tegra->timings + tegra->num_timings;
 	tegra->num_timings += child_count;
 
