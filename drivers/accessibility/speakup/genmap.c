@@ -71,7 +71,6 @@ main(int argc, char *argv[])
 
 	open_input(NULL, argv[1]);
 	while (fgets(buffer, sizeof(buffer), infile)) {
-		lc++;
 		value = shift_state = 0;
 
 		cp = strtok(buffer, delims);
