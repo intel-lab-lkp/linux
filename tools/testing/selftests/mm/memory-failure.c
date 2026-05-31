@@ -18,6 +18,7 @@
 #include <linux/magic.h>
 #include <errno.h>
 
+#include "hugepage_settings.h"
 #include "vm_util.h"
 
 enum inject_type {
@@ -27,6 +28,7 @@ enum inject_type {
 
 enum result_type {
 	MADV_HARD_ANON,
+	MADV_HARD_ANON_HUGETLB,
 	MADV_HARD_CLEAN_PAGECACHE,
 	MADV_HARD_DIRTY_PAGECACHE,
 	MADV_SOFT_ANON,
@@ -47,6 +49,8 @@ FIXTURE(memory_failure)
 	int pagemap_fd;
 	int kpageflags_fd;
 	bool triggered;
+	/* Number of initial HugeTLB pages with default page size. */
+	unsigned long nr_hugetlb_pages;
 };
 
 FIXTURE_VARIANT(memory_failure)
@@ -157,11 +161,11 @@ static void check(struct __test_metadata *_metadata, FIXTURE_DATA(memory_failure
 		  void *vaddr, enum result_type type, int setjmp)
 {
 	unsigned long size;
+	unsigned long nr_hugetlb_pages;
 	uint64_t pfn_flags;
 
 	switch (type) {
 	case MADV_SOFT_ANON:
-	case MADV_HARD_CLEAN_PAGECACHE:
 	case MADV_SOFT_CLEAN_PAGECACHE:
 	case MADV_SOFT_DIRTY_PAGECACHE:
 		/* It is not expected to receive a SIGBUS signal. */
@@ -174,6 +178,7 @@ static void check(struct __test_metadata *_metadata, FIXTURE_DATA(memory_failure
 		ASSERT_NE(pagemap_get_pfn(self->pagemap_fd, vaddr), self->pfn);
 		break;
 	case MADV_HARD_ANON:
+	case MADV_HARD_ANON_HUGETLB:
 	case MADV_HARD_DIRTY_PAGECACHE:
 		/* The SIGBUS signal should have been received. */
 		ASSERT_EQ(setjmp, 1);
@@ -183,17 +188,36 @@ static void check(struct __test_metadata *_metadata, FIXTURE_DATA(memory_failure
 		ASSERT_EQ(siginfo.si_code, BUS_MCEERR_AR);
 		ASSERT_EQ(1UL << siginfo.si_addr_lsb, self->page_size);
 		ASSERT_EQ(siginfo.si_addr, vaddr);
-
-		/* XXX Check backing pte is hwpoison entry when supported. */
-		ASSERT_TRUE(pagemap_is_swapped(self->pagemap_fd, vaddr));
 		break;
 	default:
 		SKIP(return, "unexpected inject type %d.\n", type);
 	}
 
+	if (type == MADV_HARD_ANON || type == MADV_HARD_DIRTY_PAGECACHE) {
+		/*
+		 * Check backing pte is hwpoison entry when supported.
+		 * Although try_to_unmap_one() also installs hwpoison entry
+		 * for HugeTLB, pagemap_hugetlb_range() doesn't parse
+		 * swap entries at all.
+		 */
+		ASSERT_TRUE(pagemap_is_swapped(self->pagemap_fd, vaddr));
+	}
+
 	/* Check if the value of HardwareCorrupted has increased. */
 	ASSERT_EQ(get_hardware_corrupted_size(&size), 0);
-	ASSERT_EQ(size, self->corrupted_size + self->page_size / 1024);
+
+	if (type == MADV_HARD_ANON_HUGETLB) {
+		/*
+		 * Only one page is hardware corrupted; the rest should all be
+		 * released to buddy allocator.
+		 */
+		ASSERT_EQ(size, self->corrupted_size + getpagesize() / 1024);
+		/* HugeTLB should have lost the HWPoison HugeTLB page. */
+		nr_hugetlb_pages = hugetlb_nr_default_pages();
+		ASSERT_EQ(nr_hugetlb_pages + 1, self->nr_hugetlb_pages);
+	} else {
+		ASSERT_EQ(size, self->corrupted_size + self->page_size / 1024);
+	}
 
 	/* Check if HWPoison flag is set. */
 	ASSERT_EQ(pageflags_get(self->pfn, self->kpageflags_fd, &pfn_flags), 0);
@@ -245,6 +269,45 @@ TEST_F(memory_failure, anon)
 	cleanup(_metadata, self, addr);
 
 	ASSERT_EQ(munmap(addr, self->page_size), 0);
+}
+
+TEST_F(memory_failure, anon_hugetlb)
+{
+	char *addr;
+	int ret;
+	const unsigned long nr_alloc_hugetlb_pages = 4;
+	unsigned long alloc_size;
+
+	if (variant->type == MADV_SOFT)
+		SKIP(return, "Soft offline test is not implemented");
+
+	/* HugeTLB settings will be automatically restored when test exits. */
+	hugetlb_setup_default(nr_alloc_hugetlb_pages);
+
+	alloc_size = default_huge_page_size() * nr_alloc_hugetlb_pages;
+	self->page_size = default_huge_page_size();
+	self->nr_hugetlb_pages = hugetlb_nr_default_pages();
+
+	addr = mmap(0, alloc_size, PROT_READ | PROT_WRITE,
+		    MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
+	if (addr == MAP_FAILED)
+		SKIP(return, "mmap failed, not enough memory or 1G hugetlb not supported.\n");
+	memset(addr, 0xce, alloc_size);
+
+	prepare(_metadata, self, addr);
+
+	ret = sigsetjmp(signal_jmp_buf, 1);
+	if (!self->triggered) {
+		self->triggered = true;
+		ASSERT_EQ(variant->inject(self, addr), 0);
+		FORCE_READ(*addr);
+	}
+
+	check(_metadata, self, addr, MADV_HARD_ANON_HUGETLB, ret);
+
+	cleanup(_metadata, self, addr);
+
+	ASSERT_EQ(munmap(addr, alloc_size), 0);
 }
 
 static int prepare_file(const char *fname, unsigned long size)
