@@ -42,6 +42,7 @@ typedef __s16 s16;
 typedef __u8  u8;
 typedef __s8  s8;
 
+typedef unsigned long		ulong;
 typedef unsigned long long	ullong;
 
 #ifdef __CHECKER__
