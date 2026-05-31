@@ -100,6 +100,24 @@ static DEFINE_READ_MOSTLY_HASHTABLE(mm_slots_hash, MM_SLOTS_HASH_BITS);
 static struct kmem_cache *mm_slot_cache __ro_after_init;
 static struct kmem_cache *collapse_hint_cache __ro_after_init;
 
+/*
+ * Global lookup table used by khugepaged_add_collapse_hint() to deduplicate
+ * pending hints against an existing address. The key mixes mm and address
+ * but the dedup comparison only looks at @address. As a result, two
+ * different mms hinting the same address may collapse. This is rare
+ * since the aligned_addr is always 0 for the lower PMD_SHIFT bits, which
+ * normally gives mm struct about 2M size for scattering (for 4K paging).
+ * And it's also harmless if the collision happens.
+ */
+#define KHUGEPAGED_HINTS_HASH_BITS	9
+static DEFINE_HASHTABLE(khugepaged_hint_lookup, KHUGEPAGED_HINTS_HASH_BITS);
+
+static inline unsigned long khugepaged_hint_key(struct mm_struct *mm,
+						unsigned long aligned_addr)
+{
+	return (unsigned long)mm ^ aligned_addr;
+}
+
 #define KHUGEPAGED_PRIORITY_QUEUE_MAX_FAIL 10
 
 #define KHUGEPAGED_MIN_MTHP_ORDER	2
@@ -165,12 +183,15 @@ static struct khugepaged_scan khugepaged_scan = {
 
 /**
  * struct khugepaged_collapse_hint - one collapse hint for a specific address
- * @node:    list node on khugepaged_collapse_requests.hints
- * @vma:     hint pointer to the target VMA
- * @address: PMD-aligned virtual address inside @vma to attempt collapsing on
+ * @node:      list node on khugepaged_collapse_requests.hints
+ * @hash_node: hlist node on the global khugepaged_hint_lookup table, used
+ *             for deduplication.
+ * @vma:       hint pointer to the target VMA
+ * @address:   PMD-aligned virtual address inside @vma to attempt collapsing on
  */
 struct khugepaged_collapse_hint {
 	struct list_head node;
+	struct hlist_node hash_node;
 	struct vm_area_struct *vma;
 	unsigned long address;
 };
@@ -688,6 +709,29 @@ void khugepaged_enter_vma(struct vm_area_struct *vma,
 		__khugepaged_enter(vma->vm_mm);
 }
 
+/*
+ * Unhash any hints still queued under @req. Caller must hold
+ * khugepaged_mm_lock so we can safely unhash each hint from the global
+ * khugepaged_hint_lookup table.
+ */
+static void khugepaged_unhash_collapse_hints(
+			  struct khugepaged_collapse_requests *req)
+{
+	struct khugepaged_collapse_hint *hint, *tmp;
+
+	lockdep_assert_held(&khugepaged_mm_lock);
+
+	list_for_each_entry_safe(hint, tmp, &req->hints, node) {
+		hash_del(&hint->hash_node);
+	}
+}
+
+/*
+ * Free any hints still queued under @req. No lock need to be held. Caller
+ * must make sure the hints are already unhashed from the global
+ * khugepaged_hint_lookup table and the mm_slot is removed from the
+ * khugepaged_priority_queue[].
+ */
 static void khugepaged_release_collapse_hints(
 			  struct khugepaged_collapse_requests *req)
 {
@@ -712,6 +756,14 @@ static void khugepaged_remove_priority_requests(struct khugepaged_mm_slot *khp_m
 		list_del(&khp_mm_slot->request[i].node);
 }
 
+static void khugepaged_unhash_all_hints(struct khugepaged_mm_slot *khp_mm_slot)
+{
+	int i;
+
+	for (i = 0; i < NR_KHUGEPAGED_PRIORITY_LEVEL; i++)
+		khugepaged_unhash_collapse_hints(&khp_mm_slot->request[i]);
+}
+
 static void khugepaged_release_all_hints(struct khugepaged_mm_slot *khp_mm_slot)
 {
 	int i;
@@ -733,6 +785,7 @@ void __khugepaged_exit(struct mm_struct *mm)
 		hash_del(&slot->hash);
 		list_del(&slot->mm_node);
 		khugepaged_remove_priority_requests(khp_mm_slot);
+		khugepaged_unhash_all_hints(khp_mm_slot);
 		free = 1;
 	}
 	spin_unlock(&khugepaged_mm_lock);
@@ -1933,6 +1986,7 @@ static void collect_mm_slot(struct mm_slot *slot)
 		 * mm_flags_clear(MMF_VM_HUGEPAGE, mm);
 		 */
 
+		khugepaged_unhash_all_hints(khp_mm_slot);
 		/* khugepaged_mm_lock actually not necessary for the below */
 		khugepaged_release_all_hints(khp_mm_slot);
 		mm_slot_free(mm_slot_cache, khp_mm_slot);
@@ -3001,8 +3055,9 @@ void khugepaged_add_collapse_hint(struct mm_struct *mm,
 				 int priority, int max_order)
 {
 	struct khugepaged_mm_slot *khp_mm_slot;
-	struct khugepaged_collapse_hint *hint;
+	struct khugepaged_collapse_hint *hint, *existing;
 	struct mm_slot *slot;
+	unsigned long aligned_addr, key;
 	int orders;
 
 	if (!mm || !vma)
@@ -3022,12 +3077,15 @@ void khugepaged_add_collapse_hint(struct mm_struct *mm,
 	if (!mm_flags_test(MMF_VM_HUGEPAGE, mm))
 		return;
 
+	aligned_addr = address & HPAGE_PMD_MASK;
+	key = khugepaged_hint_key(mm, aligned_addr);
+
 	hint = kmem_cache_alloc(collapse_hint_cache, GFP_KERNEL);
 	if (!hint)
 		return;
 
 	hint->vma = vma;
-	hint->address = address & HPAGE_PMD_MASK;
+	hint->address = aligned_addr;
 
 	/*
 	 * Just use try lock to avoid lock contention because collapse hints are
@@ -3045,7 +3103,21 @@ void khugepaged_add_collapse_hint(struct mm_struct *mm,
 		return;
 	}
 	khp_mm_slot = mm_slot_entry(slot, struct khugepaged_mm_slot, slot);
+
+	/*
+	 * For deduplication. The comparison only checks @address here. See comments
+	 * above khugepaged_hint_lookup definition for details.
+	 */
+	hash_for_each_possible(khugepaged_hint_lookup, existing, hash_node, key) {
+		if (existing->address == aligned_addr) {
+			spin_unlock(&khugepaged_mm_lock);
+			kmem_cache_free(collapse_hint_cache, hint);
+			return;
+		}
+	}
+
 	list_add_tail(&hint->node, &khp_mm_slot->request[priority].hints);
+	hash_add(khugepaged_hint_lookup, &hint->hash_node, key);
 	spin_unlock(&khugepaged_mm_lock);
 
 	wake_up_interruptible(&khugepaged_wait);
@@ -3124,6 +3196,7 @@ static int collapse_scan_one_priority_entry(unsigned int progress_max,
 						struct khugepaged_collapse_hint,
 						node);
 			list_del(&hint->node);
+			hash_del(&hint->hash_node);
 		}
 		spin_unlock(&khugepaged_mm_lock);
 
