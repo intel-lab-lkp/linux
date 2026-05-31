@@ -161,6 +161,7 @@ static struct test_workload *workloads[] = {
 	&workload__landlock,
 	&workload__traploop,
 	&workload__inlineloop,
+	&workload__jitdump,
 
 #ifdef HAVE_RUST_SUPPORT
 	&workload__code_with_type,
@@ -544,6 +545,7 @@ static void print_line_highlighted(FILE *fp, const char *line, size_t len)
 		s = match + kw_len;
 	}
 }
+
 
 
 static void print_test_failure_snippet(FILE *fp, const char *buf)
