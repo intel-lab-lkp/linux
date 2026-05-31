@@ -1346,22 +1346,21 @@ mt7915_debugfs_write_fwlog(struct mt7915_dev *dev, const void *hdr, int hdrlen,
 {
 	static DEFINE_SPINLOCK(lock);
 	unsigned long flags;
-	void *dest;
+	u32 rec_len = len;
+
+	if (hdr)
+		rec_len += hdrlen;
 
 	spin_lock_irqsave(&lock, flags);
-	dest = relay_reserve(dev->relay_fwlog, hdrlen + len + 4);
-	if (dest) {
-		*(u32 *)dest = hdrlen + len;
-		dest += 4;
+	if (!relay_subbuf_avail(dev->relay_fwlog, sizeof(rec_len) + rec_len))
+		goto out;
 
-		if (hdrlen) {
-			memcpy(dest, hdr, hdrlen);
-			dest += hdrlen;
-		}
-
-		memcpy(dest, data, len);
-		relay_flush(dev->relay_fwlog);
-	}
+	__relay_write(dev->relay_fwlog, &rec_len, sizeof(rec_len));
+	if (hdr)
+		__relay_write(dev->relay_fwlog, hdr, hdrlen);
+	__relay_write(dev->relay_fwlog, data, len);
+	relay_flush(dev->relay_fwlog);
+out:
 	spin_unlock_irqrestore(&lock, flags);
 }
 
