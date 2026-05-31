@@ -18,6 +18,7 @@
  * @ops: DPLL device operations for this instance
  * @dpll_dev: pointer to registered DPLL device
  * @tracker: tracking object for the acquired reference
+ * @lock: per-DPLL mutex serializing all operations
  * @lock_status: last saved DPLL lock status
  * @pins: list of pins
  */
@@ -30,6 +31,7 @@ struct zl3073x_dpll {
 	struct dpll_device_ops		ops;
 	struct dpll_device		*dpll_dev;
 	dpll_tracker			tracker;
+	struct mutex			lock;
 	enum dpll_lock_status		lock_status;
 	struct list_head		pins;
 };
