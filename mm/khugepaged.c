@@ -3032,6 +3032,18 @@ end:
 }
 
 /*
+ * The caller needs to make sure the pmd is at least qualified for the
+ * lowest priority of collapsing since this function will always return
+ * a legal priority value.
+ */
+int get_khp_collapse_priority(int total, int young)
+{
+	if (young * 2 >= total)
+		return 0;
+	return NR_KHUGEPAGED_PRIORITY_LEVEL - 1;
+}
+
+/*
  * khugepaged_add_collapse_hint - enqueue a collapse hint
  * @mm:          target mm
  * @vma:         hint pointer to the VMA covering @address (treated as a hint)

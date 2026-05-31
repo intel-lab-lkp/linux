@@ -75,6 +75,7 @@
 #include <linux/userfaultfd_k.h>
 #include <linux/mm_inline.h>
 #include <linux/oom.h>
+#include <linux/khugepaged.h>
 
 #include <asm/tlb.h>
 
@@ -912,6 +913,12 @@ struct folio_referenced_arg {
 };
 
 /*
+ * acc_info is currently only used to track access patterns for khugepaged
+ * collapse hints. 3 entries are enough for most cases, and it's totally
+ * safe if we missed some hints.
+ */
+#define NR_ACC_INFO_EACH_ITER 3
+/*
  * arg: folio_referenced_arg will be passed
  */
 static bool folio_referenced_one(struct folio *folio,
@@ -921,6 +928,8 @@ static bool folio_referenced_one(struct folio *folio,
 	DEFINE_FOLIO_VMA_WALK(pvmw, folio, vma, address, 0);
 	int ptes = 0, referenced = 0;
 	unsigned int nr;
+	struct area_access_info acc_info[NR_ACC_INFO_EACH_ITER] = {0};
+	int acc_info_count = 0;
 
 	while (page_vma_mapped_walk(&pvmw)) {
 		address = pvmw.address;
@@ -979,8 +988,16 @@ static bool folio_referenced_one(struct folio *folio,
 		 * simplest approach is to disable this look-around optimization.
 		 */
 		if (lru_gen_enabled() && !lru_gen_switching() && pvmw.pte) {
-			if (lru_gen_look_around(&pvmw, nr))
+			struct area_access_info *acc_info_ptr = NULL;
+
+			/* If the acc_info is full, skip the remaining ones */
+			if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
+				acc_info_count < NR_ACC_INFO_EACH_ITER)
+				acc_info_ptr = &acc_info[acc_info_count];
+			if (lru_gen_look_around(&pvmw, nr, &acc_info_ptr))
 				referenced++;
+			if (acc_info_ptr && acc_info_ptr != &acc_info[acc_info_count])
+				acc_info_count++;
 		} else if (pvmw.pte) {
 			if (clear_flush_young_ptes_notify(vma, address, pvmw.pte, nr))
 				referenced++;
@@ -1017,6 +1034,14 @@ static bool folio_referenced_one(struct folio *folio,
 	if (referenced) {
 		pra->referenced++;
 		pra->vm_flags |= vma->vm_flags & ~VM_LOCKED;
+	}
+
+	for (--acc_info_count; acc_info_count >= 0; acc_info_count--) {
+		khugepaged_add_collapse_hint(vma->vm_mm, vma,
+			acc_info[acc_info_count].address,
+			get_khp_collapse_priority(acc_info[acc_info_count].total,
+				acc_info[acc_info_count].young),
+			acc_info[acc_info_count].max_order);
 	}
 
 	if (!pra->mapcount)

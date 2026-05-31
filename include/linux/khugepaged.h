@@ -17,6 +17,7 @@ extern void khugepaged_enter_vma(struct vm_area_struct *vma,
 				 vm_flags_t vm_flags);
 extern void khugepaged_min_free_kbytes_update(void);
 extern bool current_is_khugepaged(void);
+extern int get_khp_collapse_priority(int total, int young);
 extern void khugepaged_add_collapse_hint(struct mm_struct *mm,
 					struct vm_area_struct *vma,
 					unsigned long address,
@@ -62,6 +63,12 @@ static inline bool current_is_khugepaged(void)
 {
 	return false;
 }
+
+static inline int get_khp_collapse_priority(int total, int young)
+{
+	return 0;
+}
+
 static inline void khugepaged_add_collapse_hint(struct mm_struct *mm,
 					       struct vm_area_struct *vma,
 					       unsigned long address,

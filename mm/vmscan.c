@@ -3463,7 +3463,7 @@ static void walk_update_folio(struct lru_gen_mm_walk *walk, struct folio *folio,
 }
 
 static bool walk_pte_range(pmd_t *pmd, unsigned long start, unsigned long end,
-			   struct mm_walk *args)
+			   struct mm_walk *args, struct area_access_info *acc_info)
 {
 	int i;
 	bool dirty;
@@ -3472,6 +3472,7 @@ static bool walk_pte_range(pmd_t *pmd, unsigned long start, unsigned long end,
 	unsigned long addr;
 	int total = 0;
 	int young = 0;
+	int max_order = 0;
 	struct folio *last = NULL;
 	struct lru_gen_mm_walk *walk = args->private;
 	struct mem_cgroup *memcg = lruvec_memcg(walk->lruvec);
@@ -3522,6 +3523,7 @@ restart:
 						   max_nr, FPB_MERGE_YOUNG_DIRTY);
 			total += nr - 1;
 			walk->mm_stats[MM_LEAF_TOTAL] += nr - 1;
+			max_order = max(max_order, folio_order(folio));
 		}
 
 		if (!test_and_clear_young_ptes_notify(args->vma, addr, cur_pte, nr))
@@ -3550,6 +3552,9 @@ restart:
 	lazy_mmu_mode_disable();
 	pte_unmap_unlock(pte, ptl);
 
+	acc_info->young = young;
+	acc_info->max_order = max_order;
+	acc_info->total = total;
 	return suitable_to_scan(total, young);
 }
 
@@ -3667,6 +3672,7 @@ restart:
 	vma = args->vma;
 	for (i = pmd_index(start), addr = start; addr != end; i++, addr = next) {
 		pmd_t val = pmdp_get_lockless(pmd + i);
+		struct area_access_info acc_info = {0};
 
 		next = pmd_addr_end(addr, end);
 
@@ -3699,11 +3705,16 @@ restart:
 
 		walk->mm_stats[MM_NONLEAF_FOUND]++;
 
-		if (!walk_pte_range(&val, addr, next, args))
+		if (!walk_pte_range(&val, addr, next, args, &acc_info))
 			continue;
 
 		walk->mm_stats[MM_NONLEAF_ADDED]++;
 
+		/* When acc_info has valid value */
+		if (acc_info.total > 0)
+			khugepaged_add_collapse_hint(vma->vm_mm, vma, addr,
+				get_khp_collapse_priority(acc_info.total, acc_info.young),
+				acc_info.max_order);
 		/* carry over to the next generation */
 		update_bloom_filter(mm_state, walk->seq + 1, pmd + i);
 	}
@@ -4183,7 +4194,8 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
  * the PTE table to the Bloom filter. This forms a feedback loop between the
  * eviction and the aging.
  */
-bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr)
+bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr,
+			 struct area_access_info **acc_info_ptr)
 {
 	int i;
 	bool dirty;
@@ -4202,6 +4214,7 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr)
 	struct lru_gen_mm_state *mm_state;
 	unsigned long max_seq;
 	int gen;
+	unsigned int max_order = 0;
 
 	lockdep_assert_held(pvmw->ptl);
 	VM_WARN_ON_ONCE_FOLIO(folio_test_lru(folio), folio);
@@ -4265,6 +4278,7 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr)
 
 			nr = folio_pte_batch_flags(folio, NULL, pte, &ptent,
 						   max_nr, FPB_MERGE_YOUNG_DIRTY);
+			max_order = max(folio_order(folio), max_order);
 		}
 
 		if (!test_and_clear_young_ptes_notify(vma, addr, pte, nr))
@@ -4288,8 +4302,19 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr)
 	lazy_mmu_mode_disable();
 
 	/* feedback from rmap walkers to page table walkers */
-	if (mm_state && suitable_to_scan(i, young))
+	if (mm_state && suitable_to_scan(i, young)) {
+		if (*acc_info_ptr) {
+			struct area_access_info acc_info = {
+				.address = start,
+				.total = i,
+				.young = young,
+				.max_order = max_order
+			};
+			*(*acc_info_ptr) = acc_info;
+			(*acc_info_ptr)++;
+		}
 		update_bloom_filter(mm_state, max_seq, pvmw->pmd);
+	}
 
 	mem_cgroup_put(memcg);
 

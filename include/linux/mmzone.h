@@ -442,6 +442,18 @@ enum lruvec_flags {
 #endif /* !__GENERATING_BOUNDS_H */
 
 /*
+ * Used to get the young and total counts for a memory area,
+ * and also the maximum order of all the page table entries
+ * during scanning.
+ */
+struct area_access_info {
+	unsigned long address;
+	int total;
+	int young;
+	int max_order;
+};
+
+/*
  * Evictable folios are divided into multiple generations. The youngest and the
  * oldest generation numbers, max_seq and min_seq, are monotonically increasing.
  * They form a sliding window of a variable size [MIN_NR_GENS, MAX_NR_GENS]. An
@@ -689,7 +701,8 @@ struct lru_gen_memcg {
 
 void lru_gen_init_pgdat(struct pglist_data *pgdat);
 void lru_gen_init_lruvec(struct lruvec *lruvec);
-bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr);
+bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw, unsigned int nr,
+			 struct area_access_info **acc_info_ptr);
 
 void lru_gen_init_memcg(struct mem_cgroup *memcg);
 void lru_gen_exit_memcg(struct mem_cgroup *memcg);
@@ -712,7 +725,7 @@ static inline void lru_gen_init_lruvec(struct lruvec *lruvec)
 }
 
 static inline bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw,
-		unsigned int nr)
+		unsigned int nr, struct area_access_info **acc_info_ptr)
 {
 	return false;
 }
