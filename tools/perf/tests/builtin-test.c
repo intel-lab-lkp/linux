@@ -161,6 +161,7 @@ static struct test_workload *workloads[] = {
 	&workload__landlock,
 	&workload__traploop,
 	&workload__inlineloop,
+	&workload__jitdump,
 
 #ifdef HAVE_RUST_SUPPORT
 	&workload__code_with_type,
@@ -545,18 +546,7 @@ static void print_line_highlighted(FILE *fp, const char *line, size_t len)
 	}
 }
 
-static bool line_contains(const char *line, size_t len, const char *tok)
-{
-	size_t tok_len = strlen(tok);
-	const char *s = line;
 
-	while ((size_t)(s - line) + tok_len <= len) {
-		if (memcmp(s, tok, tok_len) == 0)
-			return true;
-		s++;
-	}
-	return false;
-}
 
 static void print_test_failure_snippet(FILE *fp, const char *buf)
 {
