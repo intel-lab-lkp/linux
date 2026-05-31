@@ -269,6 +269,30 @@ end:
 }
 
 /**
+ *	relay_subbuf_avail - ensure @length bytes fit in current sub-buffer
+ *	@chan: relay channel
+ *	@length: total number of bytes to check
+ *
+ *	Returns the per-cpu buffer if @length bytes fit, NULL otherwise.
+ *	Switches to the next sub-buffer if necessary but does NOT advance
+ *	the write offset.  Use __relay_write() to write into the returned
+ *	buffer.
+ *
+ *	Caller must prevent preemption and serialise against other writers.
+ */
+static inline struct rchan_buf *
+relay_subbuf_avail(struct rchan *chan, size_t length)
+{
+	struct rchan_buf *buf = *this_cpu_ptr(chan->buf);
+
+	if (unlikely(buf->offset + length > buf->chan->subbuf_size)) {
+		if (!relay_switch_subbuf(buf, length))
+			return NULL;
+	}
+	return buf;
+}
+
+/**
  *	subbuf_start_reserve - reserve bytes at the start of a sub-buffer
  *	@buf: relay channel buffer
  *	@length: number of bytes to reserve
