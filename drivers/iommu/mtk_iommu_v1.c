@@ -393,16 +393,27 @@ static size_t mtk_iommu_v1_unmap(struct iommu_domain *domain, unsigned long iova
 	return size;
 }
 
-static phys_addr_t mtk_iommu_v1_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova)
+static phys_addr_t mtk_iommu_v1_iova_to_phys_length(struct iommu_domain *domain,
+						    dma_addr_t iova,
+						    size_t *mapped_length)
 {
 	struct mtk_iommu_v1_domain *dom = to_mtk_domain(domain);
 	unsigned long flags;
 	phys_addr_t pa;
 
+	if (mapped_length)
+		*mapped_length = 0;
+
 	spin_lock_irqsave(&dom->pgtlock, flags);
 	pa = *(dom->pgt_va + (iova >> MT2701_IOMMU_PAGE_SHIFT));
 	pa = pa & (~(MT2701_IOMMU_PAGE_SIZE - 1));
 	spin_unlock_irqrestore(&dom->pgtlock, flags);
+
+	if (pa) {
+		pa |= (iova & (MT2701_IOMMU_PAGE_SIZE - 1));
+		if (mapped_length)
+			*mapped_length = MT2701_IOMMU_PAGE_SIZE;
+	}
 
 	return pa;
 }
@@ -590,7 +601,7 @@ static const struct iommu_ops mtk_iommu_v1_ops = {
 		.attach_dev	= mtk_iommu_v1_attach_device,
 		.map_pages	= mtk_iommu_v1_map,
 		.unmap_pages	= mtk_iommu_v1_unmap,
-		.iova_to_phys	= mtk_iommu_v1_iova_to_phys,
+		.iova_to_phys_length = mtk_iommu_v1_iova_to_phys_length,
 		.free		= mtk_iommu_v1_domain_free,
 	}
 };
