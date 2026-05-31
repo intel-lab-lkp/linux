@@ -336,8 +336,8 @@ static bool nf_flow_ip4_tunnel_proto(struct nf_flowtable_ctx *ctx,
 	if (iph->ttl <= 1)
 		return false;
 
-	if (iph->protocol == IPPROTO_IPIP) {
-		ctx->tun.proto = IPPROTO_IPIP;
+	if (iph->protocol == IPPROTO_IPIP || iph->protocol == IPPROTO_IPV6) {
+		ctx->tun.proto = iph->protocol;
 		ctx->tun.hdr_size = size;
 		ctx->offset += size;
 	}
@@ -466,21 +466,6 @@ static void nf_flow_encap_pop(struct nf_flowtable_ctx *ctx,
 	if (skb->protocol == htons(ETH_P_IP) ||
 	    skb->protocol == htons(ETH_P_IPV6))
 		nf_flow_ip_tunnel_pop(ctx, skb);
-}
-
-static struct flow_offload_tuple_rhash *
-nf_flow_offload_lookup(struct nf_flowtable_ctx *ctx,
-		       struct nf_flowtable *flow_table, struct sk_buff *skb)
-{
-	struct flow_offload_tuple tuple = {};
-
-	if (!nf_flow_skb_encap_protocol(ctx, skb, htons(ETH_P_IP)))
-		return NULL;
-
-	if (nf_flow_tuple_ip(ctx, skb, &tuple) < 0)
-		return NULL;
-
-	return flow_offload_lookup(flow_table, &tuple);
 }
 
 static int nf_flow_offload_forward(struct nf_flowtable_ctx *ctx,
@@ -612,19 +597,33 @@ static int nf_flow_tunnel_ipip_push(struct net *net, struct sk_buff *skb,
 				    struct flow_offload_tuple *tuple,
 				    __be32 *ip_daddr)
 {
-	struct iphdr *iph = (struct iphdr *)skb_network_header(skb);
 	struct rtable *rt = dst_rtable(tuple->dst_cache);
-	u8 tos = iph->tos, ttl = iph->ttl;
-	__be16 frag_off = iph->frag_off;
-	u32 headroom = sizeof(*iph);
+	__be16 frag_off = 0;
+	struct iphdr *iph;
+	u8 tos = 0, ttl;
+	u32 headroom;
 	int err;
+
+	if (tuple->tun.l3_proto == IPPROTO_IPV6) {
+		struct ipv6hdr *ip6h;
+
+		ip6h = (struct ipv6hdr *)skb_network_header(skb);
+		tos = ipv6_get_dsfield(ip6h);
+		ttl = ip6h->hop_limit;
+	} else {
+		iph = (struct iphdr *)skb_network_header(skb);
+		frag_off = iph->frag_off;
+		tos = iph->tos;
+		ttl = iph->ttl;
+	}
 
 	err = iptunnel_handle_offloads(skb, SKB_GSO_IPXIP4);
 	if (err)
 		return err;
 
-	skb_set_inner_ipproto(skb, IPPROTO_IPIP);
-	headroom += LL_RESERVED_SPACE(rt->dst.dev) + rt->dst.header_len;
+	skb_set_inner_ipproto(skb, tuple->tun.l3_proto);
+	headroom = sizeof(*iph) + LL_RESERVED_SPACE(rt->dst.dev) +
+		   rt->dst.header_len;
 	err = skb_cow_head(skb, headroom);
 	if (err)
 		return err;
@@ -635,6 +634,7 @@ static int nf_flow_tunnel_ipip_push(struct net *net, struct sk_buff *skb,
 	/* Push down and install the IP header. */
 	skb_push(skb, sizeof(*iph));
 	skb_reset_network_header(skb);
+	skb->protocol = htons(ETH_P_IP);
 
 	iph = ip_hdr(skb);
 	iph->version	= 4;
@@ -761,18 +761,6 @@ static int nf_flow_tunnel_push(struct net *net, struct sk_buff *skb,
 	}
 }
 
-static int nf_flow_tunnel_v6_push(struct net *net, struct sk_buff *skb,
-				  struct flow_offload_tuple *tuple,
-				  struct in6_addr **ip6_daddr,
-				  int encap_limit)
-{
-	if (tuple->tun_num)
-		return nf_flow_tunnel_ip6ip6_push(net, skb, tuple, ip6_daddr,
-						  encap_limit);
-
-	return 0;
-}
-
 static int nf_flow_encap_push(struct sk_buff *skb,
 			      struct flow_offload_tuple *tuple,
 			      struct net_device *outdev)
@@ -869,105 +857,6 @@ static unsigned int nf_flow_queue_xmit(struct net *net, struct sk_buff *skb,
 
 	return NF_STOLEN;
 }
-
-unsigned int
-nf_flow_offload_ip_hook(void *priv, struct sk_buff *skb,
-			const struct nf_hook_state *state)
-{
-	int encap_limit = IPV6_DEFAULT_TNL_ENCAP_LIMIT;
-	struct flow_offload_tuple_rhash *tuplehash;
-	struct nf_flowtable *flow_table = priv;
-	struct flow_offload_tuple *other_tuple;
-	enum flow_offload_tuple_dir dir;
-	struct nf_flowtable_ctx ctx = {
-		.in	= state->in,
-	};
-	struct nf_flow_xmit xmit = {};
-	struct in6_addr *ip6_daddr;
-	struct flow_offload *flow;
-	struct neighbour *neigh;
-	struct rtable *rt;
-	__be32 ip_daddr;
-	int ret;
-
-	tuplehash = nf_flow_offload_lookup(&ctx, flow_table, skb);
-	if (!tuplehash)
-		return NF_ACCEPT;
-
-	ret = nf_flow_offload_forward(&ctx, flow_table, tuplehash, skb,
-				      encap_limit);
-	if (ret < 0)
-		return NF_DROP;
-	else if (ret == 0)
-		return NF_ACCEPT;
-
-	if (unlikely(tuplehash->tuple.xmit_type == FLOW_OFFLOAD_XMIT_XFRM)) {
-		rt = dst_rtable(tuplehash->tuple.dst_cache);
-		memset(skb->cb, 0, sizeof(struct inet_skb_parm));
-		IPCB(skb)->iif = skb->dev->ifindex;
-		IPCB(skb)->flags = IPSKB_FORWARDED;
-		return nf_flow_xmit_xfrm(skb, state, &rt->dst);
-	}
-
-	dir = tuplehash->tuple.dir;
-	flow = container_of(tuplehash, struct flow_offload, tuplehash[dir]);
-	other_tuple = &flow->tuplehash[!dir].tuple;
-	ip_daddr = other_tuple->src_v4.s_addr;
-
-	if (nf_flow_tunnel_push(state->net, skb, other_tuple, &ip_daddr,
-				&ip6_daddr, encap_limit) < 0)
-		return NF_DROP;
-
-	switch (tuplehash->tuple.xmit_type) {
-	case FLOW_OFFLOAD_XMIT_NEIGH: {
-		struct dst_entry *dst;
-
-		xmit.outdev = dev_get_by_index_rcu(state->net, tuplehash->tuple.ifidx);
-		if (!xmit.outdev) {
-			flow_offload_teardown(flow);
-			return NF_DROP;
-		}
-		if (other_tuple->tun.encap_proto == AF_INET6 ||
-		    ctx.tun.proto == IPPROTO_IPV6) {
-			struct rt6_info *rt6;
-
-			rt6 = dst_rt6_info(tuplehash->tuple.dst_cache);
-			neigh = ip_neigh_gw6(rt6->dst.dev,
-					     rt6_nexthop(rt6, ip6_daddr));
-			dst = &rt6->dst;
-		} else {
-			rt = dst_rtable(tuplehash->tuple.dst_cache);
-			neigh = ip_neigh_gw4(rt->dst.dev,
-					     rt_nexthop(rt, ip_daddr));
-			dst = &rt->dst;
-		}
-		if (IS_ERR(neigh)) {
-			flow_offload_teardown(flow);
-			return NF_DROP;
-		}
-		xmit.dest = neigh->ha;
-		skb_dst_set_noref(skb, dst);
-		break;
-	}
-	case FLOW_OFFLOAD_XMIT_DIRECT:
-		xmit.outdev = dev_get_by_index_rcu(state->net, tuplehash->tuple.out.ifidx);
-		if (!xmit.outdev) {
-			flow_offload_teardown(flow);
-			return NF_DROP;
-		}
-		xmit.dest = tuplehash->tuple.out.h_dest;
-		xmit.source = tuplehash->tuple.out.h_source;
-		break;
-	default:
-		WARN_ON_ONCE(1);
-		return NF_DROP;
-	}
-	xmit.tuple = other_tuple;
-	xmit.needs_gso_segment = tuplehash->tuple.needs_gso_segment;
-
-	return nf_flow_queue_xmit(state->net, skb, &xmit);
-}
-EXPORT_SYMBOL_GPL(nf_flow_offload_ip_hook);
 
 static void nf_flow_nat_ipv6_tcp(struct sk_buff *skb, unsigned int thoff,
 				 struct in6_addr *addr,
@@ -1153,10 +1042,17 @@ static int nf_flow_offload_ipv6_forward(struct nf_flowtable_ctx *ctx,
 	flow = container_of(tuplehash, struct flow_offload, tuplehash[dir]);
 
 	mtu = flow->tuplehash[dir].tuple.mtu + ctx->offset;
-	if (flow->tuplehash[!dir].tuple.tun_num) {
+	switch (flow->tuplehash[!dir].tuple.tun.encap_proto) {
+	case AF_INET:
+		mtu -= sizeof(struct iphdr);
+		break;
+	case AF_INET6:
 		mtu -= sizeof(*ip6h);
 		if (encap_limit > 0)
 			mtu -= 8; /* encap limit option */
+		break;
+	default:
+		break;
 	}
 
 	if (unlikely(nf_flow_exceeds_mtu(skb, mtu)))
@@ -1192,6 +1088,25 @@ static int nf_flow_offload_ipv6_forward(struct nf_flowtable_ctx *ctx,
 }
 
 static struct flow_offload_tuple_rhash *
+nf_flow_offload_lookup(struct nf_flowtable_ctx *ctx,
+		       struct nf_flowtable *flow_table, struct sk_buff *skb)
+{
+	struct flow_offload_tuple tuple = {};
+
+	if (!nf_flow_skb_encap_protocol(ctx, skb, htons(ETH_P_IP)))
+		return NULL;
+
+	if (ctx->tun.proto == IPPROTO_IPV6) {
+		if (nf_flow_tuple_ipv6(ctx, skb, &tuple) < 0)
+			return NULL;
+	} else if (nf_flow_tuple_ip(ctx, skb, &tuple) < 0) {
+		return NULL;
+	}
+
+	return flow_offload_lookup(flow_table, &tuple);
+}
+
+static struct flow_offload_tuple_rhash *
 nf_flow_offload_ipv6_lookup(struct nf_flowtable_ctx *ctx,
 			    struct nf_flowtable *flow_table,
 			    struct sk_buff *skb)
@@ -1212,6 +1127,112 @@ nf_flow_offload_ipv6_lookup(struct nf_flowtable_ctx *ctx,
 }
 
 unsigned int
+nf_flow_offload_ip_hook(void *priv, struct sk_buff *skb,
+			const struct nf_hook_state *state)
+{
+	int encap_limit = IPV6_DEFAULT_TNL_ENCAP_LIMIT;
+	struct flow_offload_tuple_rhash *tuplehash;
+	struct nf_flowtable *flow_table = priv;
+	struct flow_offload_tuple *other_tuple;
+	enum flow_offload_tuple_dir dir;
+	struct nf_flowtable_ctx ctx = {
+		.in	= state->in,
+	};
+	struct nf_flow_xmit xmit = {};
+	struct in6_addr *ip6_daddr;
+	struct flow_offload *flow;
+	struct neighbour *neigh;
+	struct rtable *rt;
+	__be32 ip_daddr;
+	int ret;
+
+	tuplehash = nf_flow_offload_lookup(&ctx, flow_table, skb);
+	if (!tuplehash)
+		return NF_ACCEPT;
+
+	if (ctx.tun.proto == IPPROTO_IPV6)
+		ret = nf_flow_offload_ipv6_forward(&ctx, flow_table, tuplehash,
+						   skb, encap_limit);
+	else
+		ret = nf_flow_offload_forward(&ctx, flow_table, tuplehash, skb,
+					      encap_limit);
+	if (ret < 0)
+		return NF_DROP;
+	else if (ret == 0)
+		return NF_ACCEPT;
+
+	if (unlikely(tuplehash->tuple.xmit_type == FLOW_OFFLOAD_XMIT_XFRM)) {
+		rt = dst_rtable(tuplehash->tuple.dst_cache);
+		memset(skb->cb, 0, sizeof(struct inet_skb_parm));
+		IPCB(skb)->iif = skb->dev->ifindex;
+		IPCB(skb)->flags = IPSKB_FORWARDED;
+		return nf_flow_xmit_xfrm(skb, state, &rt->dst);
+	}
+
+	dir = tuplehash->tuple.dir;
+	flow = container_of(tuplehash, struct flow_offload, tuplehash[dir]);
+	other_tuple = &flow->tuplehash[!dir].tuple;
+	ip_daddr = other_tuple->src_v4.s_addr;
+	ip6_daddr = &other_tuple->src_v6;
+
+	if (nf_flow_tunnel_push(state->net, skb, other_tuple, &ip_daddr,
+				&ip6_daddr, encap_limit) < 0)
+		return NF_DROP;
+
+	switch (tuplehash->tuple.xmit_type) {
+	case FLOW_OFFLOAD_XMIT_NEIGH: {
+		struct dst_entry *dst;
+
+		xmit.outdev = dev_get_by_index_rcu(state->net, tuplehash->tuple.ifidx);
+		if (!xmit.outdev) {
+			flow_offload_teardown(flow);
+			return NF_DROP;
+		}
+		if (other_tuple->tun.encap_proto == AF_INET6 ||
+		    ctx.tun.proto == IPPROTO_IPV6) {
+			struct rt6_info *rt6;
+
+			rt6 = dst_rt6_info(tuplehash->tuple.dst_cache);
+			neigh = ip_neigh_gw6(rt6->dst.dev,
+					     rt6_nexthop(rt6, ip6_daddr));
+			dst = &rt6->dst;
+		} else {
+			rt = dst_rtable(tuplehash->tuple.dst_cache);
+			neigh = ip_neigh_gw4(rt->dst.dev,
+					     rt_nexthop(rt, ip_daddr));
+			dst = &rt->dst;
+		}
+		if (IS_ERR(neigh)) {
+			flow_offload_teardown(flow);
+			return NF_DROP;
+		}
+
+		xmit.dest = neigh->ha;
+		skb_dst_set_noref(skb, dst);
+		break;
+	}
+	case FLOW_OFFLOAD_XMIT_DIRECT:
+		xmit.outdev = dev_get_by_index_rcu(state->net, tuplehash->tuple.out.ifidx);
+		if (!xmit.outdev) {
+			flow_offload_teardown(flow);
+			return NF_DROP;
+		}
+
+		xmit.dest = tuplehash->tuple.out.h_dest;
+		xmit.source = tuplehash->tuple.out.h_source;
+		break;
+	default:
+		WARN_ON_ONCE(1);
+		return NF_DROP;
+	}
+	xmit.tuple = other_tuple;
+	xmit.needs_gso_segment = tuplehash->tuple.needs_gso_segment;
+
+	return nf_flow_queue_xmit(state->net, skb, &xmit);
+}
+EXPORT_SYMBOL_GPL(nf_flow_offload_ip_hook);
+
+unsigned int
 nf_flow_offload_ipv6_hook(void *priv, struct sk_buff *skb,
 			  const struct nf_hook_state *state)
 {
@@ -1228,6 +1249,7 @@ nf_flow_offload_ipv6_hook(void *priv, struct sk_buff *skb,
 	struct flow_offload *flow;
 	struct neighbour *neigh;
 	struct rt6_info *rt;
+	__be32 ip_daddr;
 	int ret;
 
 	tuplehash = nf_flow_offload_ipv6_lookup(&ctx, flow_table, skb);
@@ -1256,10 +1278,11 @@ nf_flow_offload_ipv6_hook(void *priv, struct sk_buff *skb,
 	dir = tuplehash->tuple.dir;
 	flow = container_of(tuplehash, struct flow_offload, tuplehash[dir]);
 	other_tuple = &flow->tuplehash[!dir].tuple;
+	ip_daddr = other_tuple->src_v4.s_addr;
 	ip6_daddr = &other_tuple->src_v6;
 
-	if (nf_flow_tunnel_v6_push(state->net, skb, other_tuple,
-				   &ip6_daddr, encap_limit) < 0)
+	if (nf_flow_tunnel_push(state->net, skb, other_tuple, &ip_daddr,
+				&ip6_daddr, encap_limit) < 0)
 		return NF_DROP;
 
 	switch (tuplehash->tuple.xmit_type) {
@@ -1273,10 +1296,8 @@ nf_flow_offload_ipv6_hook(void *priv, struct sk_buff *skb,
 		}
 		if (other_tuple->tun.encap_proto == AF_INET ||
 		    ctx.tun.proto == IPPROTO_IPIP) {
-			__be32 ip_daddr = other_tuple->src_v4.s_addr;
 			struct rtable *rt4;
 
-			skb->protocol = htons(ETH_P_IP);
 			rt4 = dst_rtable(tuplehash->tuple.dst_cache);
 			neigh = ip_neigh_gw4(rt4->dst.dev,
 					     rt_nexthop(rt4, ip_daddr));
