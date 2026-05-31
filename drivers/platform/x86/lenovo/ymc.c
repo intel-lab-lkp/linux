@@ -87,6 +87,9 @@ static void lenovo_ymc_notify(struct wmi_device *wdev, union acpi_object *data)
 	}
 	code = obj->integer.value;
 
+	/* strip upper bits (e.g. 0x50000) on newer devices */
+	code &= 0xFF;
+
 	if (!sparse_keymap_report_event(priv->input_dev, code, 1, true))
 		dev_warn(&wdev->dev, "Unknown key %d pressed\n", code);
 
