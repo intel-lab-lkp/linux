@@ -4409,12 +4409,8 @@ static struct dentry *atomic_open(const struct path *path, struct dentry *dentry
 
 	file->__f_path.dentry = DENTRY_NOT_SET;
 	file->__f_path.mnt = path->mnt;
-
-	if (O_IS_MKDIR(open_flag))
-		error = EINVAL;
-	else
-		error = dir->i_op->atomic_open(dir, dentry, file,
-					       open_to_namei_flags(open_flag), mode);
+	error = dir->i_op->atomic_open(dir, dentry, file,
+				       open_to_namei_flags(open_flag), mode);
 	d_lookup_done(dentry);
 	if (!error) {
 		if (file->f_mode & FMODE_OPENED) {
