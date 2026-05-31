@@ -2573,10 +2573,6 @@ phys_addr_t iommu_iova_to_phys_length(struct iommu_domain *domain,
 		return domain->ops->iova_to_phys_length(domain, iova,
 							mapped_length);
 
-	/* Fallback to legacy iova_to_phys without length info */
-	if (domain->ops->iova_to_phys)
-		return domain->ops->iova_to_phys(domain, iova);
-
 	return 0;
 }
 EXPORT_SYMBOL_GPL(iommu_iova_to_phys_length);
