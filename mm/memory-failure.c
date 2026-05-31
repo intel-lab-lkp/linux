@@ -163,6 +163,30 @@ static struct rb_root_cached pfn_space_itree = RB_ROOT_CACHED;
 static DEFINE_MUTEX(pfn_space_lock);
 
 /*
+ * Only for a HugeTLB page being handled by memory_failure(). The key
+ * difference to soft_offline() is that, no HWPoison subpage will make
+ * into buddy allocator after a successful dissolve_free_hugetlb_folio(),
+ * so take_page_off_buddy() is unnecessary.
+ */
+static int __hugepage_handle_poison(struct page *page)
+{
+	struct folio *folio = page_folio(page);
+
+	VM_WARN_ON_FOLIO(!folio_test_hwpoison(folio), folio);
+
+	/*
+	 * Can't use dissolve_free_hugetlb_folio() without a reliable
+	 * raw_hwp_list telling which subpage is HWPoison.
+	 */
+	if (folio_test_hugetlb_raw_hwp_unreliable(folio))
+		/* raw_hwp_list becomes unreliable when kmalloc() fails. */
+		return -ENOMEM;
+
+	return dissolve_free_hugetlb_folio(folio);
+}
+
+/*
+ * Only for a free or HugeTLB page being handled by soft_offline().
  * Return values:
  *   1:   the page is dissolved (if needed) and taken off from buddy,
  *   0:   the page is dissolved (if needed) and not taken off from buddy,
@@ -1166,11 +1190,11 @@ static int me_huge_page(struct page_state *ps, struct page *p)
 		 * subpages.
 		 */
 		folio_put(folio);
-		if (__page_handle_poison(p) > 0) {
+		if (__hugepage_handle_poison(p)) {
+			res = MF_FAILED;
+		} else {
 			page_ref_inc(p);
 			res = MF_RECOVERED;
-		} else {
-			res = MF_FAILED;
 		}
 	}
 
@@ -2076,11 +2100,11 @@ retry:
 	 */
 	if (res == MF_HUGETLB_FREED) {
 		folio_unlock(folio);
-		if (__page_handle_poison(p) > 0) {
+		if (__hugepage_handle_poison(p)) {
+			res = MF_FAILED;
+		} else {
 			page_ref_inc(p);
 			res = MF_RECOVERED;
-		} else {
-			res = MF_FAILED;
 		}
 		return action_result(pfn, MF_MSG_FREE_HUGE, res);
 	}
