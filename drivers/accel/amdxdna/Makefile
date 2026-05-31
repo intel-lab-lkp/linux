@@ -10,6 +10,7 @@ amdxdna-y := \
 	aie2_smu.o \
 	aie2_solver.o \
 	amdxdna_ctx.o \
+	amdxdna_debugfs.o \
 	amdxdna_gem.o \
 	amdxdna_iommu.o \
 	amdxdna_mailbox.o \
