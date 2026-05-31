@@ -201,7 +201,26 @@ The ``GPUMode`` (0x09) allows switching between Hybrid (Muxless) and Discrete
 take effect in the BIOS/Firmware.
 
 Fan Control
------------
+===========
+
 The system supports both automatic EC control and manual overrides. Command ID
 0x14 (``MaxFanSpeedSwitch``) is used to toggle manual control, while ID 0x15
 sets the actual PWM duty cycle.
+
+The driver exposes the two onboard fan loops to the Linux thermal framework as
+standard cooling devices:
+
+- ``bitland_main_fan``: Controls the combined CPU/GPU cooling loop.
+- ``bitland_sys_fan``: Controls the auxiliary chassis/system fan loop.
+
+Thermal framework cooling states range from 0 to 100 and map to hardware operations:
+
+- **State 0**: Restores autonomous EC fan curve control (Automatic mode).
+- **State 1-100**: Switches the loop to Manual mode, scaling the target hardware
+  speed linearly between the profile's safe minimum and maximum bounds via:
+  ``target_speed = min_val + ((state - 1) * (max_val - min_val) / 99)``
+
+The valid hardware boundaries (``min_val`` and ``max_val``) are evaluated
+dynamically at runtime during state changes. The driver checks both the currently
+active platform profile and the processor architecture (Intel vs. AMD via CPU
+vendor matching) to enforce the correct operational safety envelopes.

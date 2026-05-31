@@ -26,10 +26,12 @@
 #include <linux/notifier.h>
 #include <linux/platform_profile.h>
 #include <linux/pm.h>
+#include <linux/processor.h>
 #include <linux/power_supply.h>
 #include <linux/stddef.h>
 #include <linux/string.h>
 #include <linux/sysfs.h>
+#include <linux/thermal.h>
 #include <linux/unaligned.h>
 #include <linux/units.h>
 #include <linux/wmi.h>
@@ -37,6 +39,9 @@
 #define DRV_NAME		"bitland-mifs-wmi"
 #define BITLAND_MIFS_GUID	"B60BFB48-3E5B-49E4-A0E9-8CFFE1B3434B"
 #define BITLAND_EVENT_GUID	"46C93E13-EE9B-4262-8488-563BCA757FEF"
+
+#define BITLAND_FAN_CONTROL_AUTO      0
+#define BITLAND_FAN_CONTROL_MANUAL    1
 
 enum bitland_mifs_operation {
 	WMI_METHOD_GET	= 250,
@@ -150,6 +155,60 @@ struct bitland_fan_notify_data {
 	u16 speed;
 };
 
+enum bitland_fan_type {
+	BITLAND_FAN_CPU_GPU = 0,
+	BITLAND_FAN_SYS     = 1,
+	BITLAND_FAN_MAX,
+};
+
+struct bitland_fan_range {
+	u8 min;
+	u8 max;
+};
+
+struct bitland_cooling_dev {
+	struct bitland_mifs_wmi_data *data;
+	struct thermal_cooling_device *cdev;
+	enum bitland_fan_type type;
+	u8 cur_val;
+};
+
+/* Fan safety bounds indexed by [WMI_PP_MODE][FAN_TYPE] */
+static const struct bitland_fan_range intel_fan_ranges[4][BITLAND_FAN_MAX] = {
+	[WMI_PP_BALANCED] = {
+		[BITLAND_FAN_CPU_GPU] = { 26, 35 }, [BITLAND_FAN_SYS] = { 59, 69 },
+	},
+	[WMI_PP_PERFORMANCE] = {
+		[BITLAND_FAN_CPU_GPU] = { 32, 38 }, [BITLAND_FAN_SYS] = { 70, 80 },
+	},
+	[WMI_PP_QUIET] = {
+		[BITLAND_FAN_CPU_GPU] = { 19, 29 }, [BITLAND_FAN_SYS] = { 25, 64 },
+	},
+	[WMI_PP_FULL_SPEED] = {
+		[BITLAND_FAN_CPU_GPU] = { 40, 44 }, [BITLAND_FAN_SYS] = { 75, 82 },
+	},
+};
+
+static const struct bitland_fan_range amd_fan_ranges[4][BITLAND_FAN_MAX] = {
+	[WMI_PP_BALANCED] = {
+		[BITLAND_FAN_CPU_GPU] = { 26, 35 }, [BITLAND_FAN_SYS] = { 59, 69 },
+	},
+	[WMI_PP_PERFORMANCE] = {
+		[BITLAND_FAN_CPU_GPU] = { 32, 38 }, [BITLAND_FAN_SYS] = { 64, 72 },
+	},
+	[WMI_PP_QUIET] = {
+		[BITLAND_FAN_CPU_GPU] = { 19, 29 }, [BITLAND_FAN_SYS] = { 17, 64 },
+	},
+	[WMI_PP_FULL_SPEED] = {
+		[BITLAND_FAN_CPU_GPU] = { 40, 44 }, [BITLAND_FAN_SYS] = { 75, 82 },
+	},
+};
+
+static const char *const cooling_dev_labels[BITLAND_FAN_MAX] = {
+	[BITLAND_FAN_CPU_GPU] = "bitland_main_fan",
+	[BITLAND_FAN_SYS]     = "bitland_sys_fan",
+};
+
 struct bitland_mifs_wmi_data {
 	struct wmi_device *wdev;
 	struct mutex lock;		/* Protects WMI calls */
@@ -158,6 +217,7 @@ struct bitland_mifs_wmi_data {
 	struct input_dev *input_dev;
 	struct device *hwmon_dev;
 	struct device *pp_dev;
+	struct bitland_cooling_dev cooling_devs[BITLAND_FAN_MAX];
 	enum platform_profile_option saved_profile;
 };
 
@@ -182,6 +242,25 @@ static int bitland_mifs_wmi_call(struct bitland_mifs_wmi_data *data,
 	kfree(out_buf.data);
 
 	return 0;
+}
+
+static int bitland_get_wmi_profile(struct bitland_mifs_wmi_data *data)
+{
+	struct bitland_mifs_input input = {
+		.operation = WMI_METHOD_GET,
+		.function = WMI_FN_SYSTEM_PER_MODE,
+	};
+	struct bitland_mifs_output result;
+	int ret;
+
+	ret = bitland_mifs_wmi_call(data, &input, &result);
+	if (ret)
+		return ret;
+
+	if (result.data[0] >= 4)
+		return -EPROTO;
+
+	return result.data[0];
 }
 
 static int laptop_profile_get(struct device *dev,
@@ -405,6 +484,106 @@ static const struct hwmon_chip_info laptop_chip_info = {
 	.ops = &laptop_hwmon_ops,
 	.info = laptop_hwmon_info,
 };
+
+static int bitland_set_fan_hardware(struct bitland_cooling_dev *fan, bool manual, u8 speed)
+{
+	int ret;
+
+	struct bitland_mifs_input switch_input = {
+		.operation = WMI_METHOD_SET,
+		.function = WMI_FN_MAX_FAN_SWITCH,
+		.payload = {
+			[0] = (u8)fan->type,
+			[1] = manual ? BITLAND_FAN_CONTROL_MANUAL : BITLAND_FAN_CONTROL_AUTO,
+		},
+	};
+
+	ret = bitland_mifs_wmi_call(fan->data, &switch_input, NULL);
+	if (ret)
+		return ret;
+
+	if (!manual)
+		return 0;
+
+	struct bitland_mifs_input speed_input = {
+		.operation = WMI_METHOD_SET,
+		.function = WMI_FN_MAX_FAN_SPEED,
+		.payload = {
+			[0] = (u8)fan->type,
+			[1] = speed,
+		},
+	};
+
+	return bitland_mifs_wmi_call(fan->data, &speed_input, NULL);
+}
+
+static int bitland_cooling_get_max_state(struct thermal_cooling_device *cdev,
+					 unsigned long *state)
+{
+	*state = 100;
+	return 0;
+}
+
+static int bitland_cooling_get_cur_state(struct thermal_cooling_device *cdev,
+					 unsigned long *state)
+{
+	struct bitland_cooling_dev *fan = cdev->devdata;
+
+	*state = fan->cur_val;
+	return 0;
+}
+
+static int bitland_cooling_set_cur_state(struct thermal_cooling_device *cdev,
+					 unsigned long state)
+{
+	struct bitland_cooling_dev *fan = cdev->devdata;
+	struct bitland_mifs_wmi_data *data = fan->data;
+	const struct bitland_fan_range *range;
+	int profile_mode;
+	u8 target_speed;
+	int ret;
+
+	if (state > 100)
+		return -EINVAL;
+
+	if (state == 0) {
+		ret = bitland_set_fan_hardware(fan, false, 0);
+	} else {
+		profile_mode = bitland_get_wmi_profile(data);
+		if (profile_mode < 0)
+			return profile_mode;
+
+		if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+			range = &amd_fan_ranges[profile_mode][fan->type];
+		else
+			range = &intel_fan_ranges[profile_mode][fan->type];
+
+		/* Scale 1..100 map directly to current profile's safe min..max min-bound */
+		target_speed = range->min + ((state - 1) * (range->max - range->min) / 99);
+		ret = bitland_set_fan_hardware(fan, true, target_speed);
+	}
+
+	if (ret == 0)
+		fan->cur_val = state;
+
+	return ret;
+}
+
+static const struct thermal_cooling_device_ops bitland_cooling_ops = {
+	.get_max_state = bitland_cooling_get_max_state,
+	.get_cur_state = bitland_cooling_get_cur_state,
+	.set_cur_state = bitland_cooling_set_cur_state,
+};
+
+static void bitland_thermal_unregister_action(void *data)
+{
+	struct bitland_cooling_dev *fan = data;
+
+	if (fan->cdev) {
+		bitland_set_fan_hardware(fan, false, 0);
+		thermal_cooling_device_unregister(fan->cdev);
+	}
+}
 
 static int laptop_kbd_led_set(struct led_classdev *led_cdev,
 			      enum led_brightness value)
@@ -707,6 +886,23 @@ static int bitland_mifs_wmi_probe(struct wmi_device *wdev, const void *context)
 								   NULL);
 	if (IS_ERR(drv_data->hwmon_dev))
 		return PTR_ERR(drv_data->hwmon_dev);
+
+	for (int i = 0; i < BITLAND_FAN_MAX; i++) {
+		struct bitland_cooling_dev *fan = &drv_data->cooling_devs[i];
+
+		fan->data = drv_data;
+		fan->type = i;
+		fan->cur_val = 0;
+
+		fan->cdev = thermal_cooling_device_register(cooling_dev_labels[i],
+							    fan, &bitland_cooling_ops);
+		if (IS_ERR(fan->cdev))
+			return PTR_ERR(fan->cdev);
+
+		ret = devm_add_action_or_reset(&wdev->dev, bitland_thermal_unregister_action, fan);
+		if (ret)
+			return ret;
+	}
 
 	/* Register keyboard LED */
 	drv_data->kbd_led.max_brightness = 3;
