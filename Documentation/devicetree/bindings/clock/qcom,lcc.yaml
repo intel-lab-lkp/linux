@@ -12,9 +12,12 @@ maintainers:
 properties:
   compatible:
     enum:
+      - qcom,lcc-apq8060
       - qcom,lcc-apq8064
       - qcom,lcc-ipq8064
       - qcom,lcc-mdm9615
+      - qcom,lcc-msm8260
+      - qcom,lcc-msm8660
       - qcom,lcc-msm8960
 
   clocks:
@@ -46,7 +49,10 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,lcc-apq8060
               - qcom,lcc-apq8064
+              - qcom,lcc-msm8260
+              - qcom,lcc-msm8660
               - qcom,lcc-msm8960
     then:
       properties:
