@@ -242,7 +242,8 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_commit *state);
 static int amdgpu_dm_atomic_check(struct drm_device *dev,
 				  struct drm_atomic_commit *state);
 
-static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector);
+static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector,
+				  enum dc_detect_reason reason);
 static void handle_hpd_rx_irq(void *param);
 
 static void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
@@ -892,7 +893,7 @@ static void dmub_hpd_callback(struct amdgpu_device *adev,
 		if (notify->type == DMUB_NOTIFICATION_HPD) {
 			if (hpd_aconnector->dc_link->hpd_status == (notify->hpd_status == DP_HPD_PLUG))
 				drm_warn(adev_to_drm(adev), "DMUB reported hpd status unchanged. link_index=%u\n", link_index);
-			handle_hpd_irq_helper(hpd_aconnector);
+			handle_hpd_irq_helper(hpd_aconnector, DETECT_REASON_HPD);
 		} else if (notify->type == DMUB_NOTIFICATION_HPD_IRQ) {
 			handle_hpd_rx_irq(hpd_aconnector);
 		}
@@ -4357,7 +4358,8 @@ static void hdmi_hpd_debounce_work(struct work_struct *work)
 	}
 }
 
-static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector)
+static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector,
+				  enum dc_detect_reason reason)
 {
 	struct drm_connector *connector = &aconnector->base;
 	struct drm_device *dev = connector->dev;
@@ -4404,7 +4406,8 @@ static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector)
 		dm_restore_drm_connector_state(dev, connector);
 		drm_modeset_unlock_all(dev);
 
-		if (aconnector->base.force == DRM_FORCE_UNSPECIFIED)
+		if (aconnector->base.force == DRM_FORCE_UNSPECIFIED ||
+		    reason == DETECT_REASON_HPDRX)
 			drm_kms_helper_connector_hotplug_event(connector);
 	} else if (debounce_required) {
 		/*
@@ -4436,7 +4439,7 @@ static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector)
 
 		scoped_guard(mutex, &adev->dm.dc_lock) {
 			dc_exit_ips_for_hw_access(dc);
-			ret = dc_link_detect(aconnector->dc_link, DETECT_REASON_HPD);
+			ret = dc_link_detect(aconnector->dc_link, reason);
 		}
 		if (ret) {
 			/* w/a delay for certain panels */
@@ -4447,7 +4450,8 @@ static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector)
 			dm_restore_drm_connector_state(dev, connector);
 			drm_modeset_unlock_all(dev);
 
-			if (aconnector->base.force == DRM_FORCE_UNSPECIFIED)
+			if (aconnector->base.force == DRM_FORCE_UNSPECIFIED ||
+			    reason == DETECT_REASON_HPDRX)
 				drm_kms_helper_connector_hotplug_event(connector);
 		}
 	}
@@ -4457,7 +4461,7 @@ static void handle_hpd_irq(void *param)
 {
 	struct amdgpu_dm_connector *aconnector = (struct amdgpu_dm_connector *)param;
 
-	handle_hpd_irq_helper(aconnector);
+	handle_hpd_irq_helper(aconnector, DETECT_REASON_HPD);
 
 }
 
