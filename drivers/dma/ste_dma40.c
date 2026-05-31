@@ -86,7 +86,7 @@ struct stedma40_platform_data {
 #define D40_ALLOC_PHY		BIT(30)
 #define D40_ALLOC_LOG_FREE	0
 
-#define D40_MEMCPY_MAX_CHANS	8
+#define D40_MEMCPY_MAX_CHANS	6
 
 /* Reserved event lines for memcpy only. */
 #define DB8500_DMA_MEMCPY_EV_0	51
