@@ -285,8 +285,8 @@ bool dc_dmub_srv_wait_for_idle(struct dc_dmub_srv *dc_dmub_srv,
 
 		if (status != DMUB_STATUS_OK) {
 			DC_LOG_DEBUG("No reply for DMUB command: status=%d\n", status);
-			if (!dmub->debug.timeout_info.timeout_occured) {
-				dmub->debug.timeout_info.timeout_occured = true;
+			if (!dmub->debug.timeout_info.timeout_occurred) {
+				dmub->debug.timeout_info.timeout_occurred = true;
 				if (cmd_list)
 					dmub->debug.timeout_info.timeout_cmd = *cmd_list;
 				dmub->debug.timeout_info.timestamp = dm_get_timestamp(dc_dmub_srv->ctx);
