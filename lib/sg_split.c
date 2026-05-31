@@ -67,7 +67,7 @@ static int sg_calculate_split(struct scatterlist *in, int nents, int nb_splits,
 			size = *(++sizes);
 		}
 
-		if (!nb_splits)
+		if (nb_splits <= 0)
 			break;
 	}
 
