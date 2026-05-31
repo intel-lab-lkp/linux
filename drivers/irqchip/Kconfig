@@ -525,6 +525,29 @@ config QCOM_MPM
 	  MSM Power Manager driver to manage and configure wakeup
 	  IRQs for Qualcomm Technologies Inc (QTI) mobile chips.
 
+config QCOM_MSM8660_MPM
+	bool "MSM8x60 MPM wakeup interrupt controller"
+	depends on ARCH_QCOM
+	depends on MFD_SYSCON
+	depends on MAILBOX
+	select IRQ_DOMAIN_HIERARCHY
+	default y
+	help
+	  Platform driver for the MSM Power Manager (MPM) wakeup interrupt
+	  controller on the MSM8x60 family (MSM8260/MSM8660/APQ8060). The vMPM registers live inside
+	  the RPM control block, which makes the generic QCOM_MPM driver
+	  unusable here (it assumes a dedicated MPM SRAM region, an IPCC
+	  mailbox, and uses IRQCHIP_DECLARE early-init that races platform
+	  device creation).
+
+	  This driver replicates the legacy 2.6.35-palm arch/arm/mach-msm/
+	  mpm.c mechanism as a regular platform driver, accessing the vMPM
+	  registers via a syscon phandle to the RPM block and signaling the
+	  MPM via the qcom-apcs-ipc mailbox (writing to GCC + 0x008 bit 1).
+
+	  Required for cpuidle deep-sleep states (SPC/PC) and for
+	  WoWLAN-style wake-from-suspend on MSM8x60 SoCs.
+
 config CSKY_MPINTC
 	bool
 	depends on CSKY
