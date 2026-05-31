@@ -147,6 +147,15 @@ struct mthp_range {
 struct collapse_control {
 	bool is_khugepaged;
 
+	/*
+	 * True while khugepaged is draining a collapse hint queued via
+	 * khugepaged_add_collapse_hint(). Used by collapse_single_pmd() to
+	 * attribute a successful collapse to MTHP_STAT_KHUGEPAGED_COLLAPSE_HINT
+	 * or MTHP_STAT_KHUGEPAGED_COLLAPSE_NON_HINT. Only meaningful when the
+	 * collapse is initiated by khugepaged (is_khugepaged == true).
+	 */
+	bool from_priority_hint;
+
 	/* Num pages scanned per node */
 	u32 node_load[MAX_NUMNODES];
 
@@ -3012,8 +3021,13 @@ retry:
 		mmap_read_unlock(mm);
 	}
 end:
-	if (cc->is_khugepaged && result == SCAN_SUCCEED)
+	if (cc->is_khugepaged && result == SCAN_SUCCEED) {
 		++khugepaged_pages_collapsed;
+		count_mthp_stat(HPAGE_PMD_ORDER,
+				cc->from_priority_hint ?
+					MTHP_STAT_KHUGEPAGED_COLLAPSE_HINT :
+					MTHP_STAT_KHUGEPAGED_COLLAPSE_NON_HINT);
+	}
 	return result;
 }
 
@@ -3227,7 +3241,9 @@ static int collapse_scan_one_priority_entry(unsigned int progress_max,
 		    addr + HPAGE_PMD_SIZE > ALIGN_DOWN(vma->vm_end, HPAGE_PMD_SIZE))
 			goto skip_hint;
 
+		cc->from_priority_hint = true;
 		*result = collapse_single_pmd(addr, vma, &lock_dropped, cc);
+		cc->from_priority_hint = false;
 		if (*result != SCAN_SUCCEED)
 			(*fail_count)++;
 skip_hint:

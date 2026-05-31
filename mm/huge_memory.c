@@ -720,6 +720,8 @@ DEFINE_MTHP_STAT_ATTR(nr_anon_partially_mapped, MTHP_STAT_NR_ANON_PARTIALLY_MAPP
 DEFINE_MTHP_STAT_ATTR(collapse_exceed_swap_pte, MTHP_STAT_COLLAPSE_EXCEED_SWAP);
 DEFINE_MTHP_STAT_ATTR(collapse_exceed_none_pte, MTHP_STAT_COLLAPSE_EXCEED_NONE);
 DEFINE_MTHP_STAT_ATTR(collapse_exceed_shared_pte, MTHP_STAT_COLLAPSE_EXCEED_SHARED);
+DEFINE_MTHP_STAT_ATTR(khugepaged_collapse_hint, MTHP_STAT_KHUGEPAGED_COLLAPSE_HINT);
+DEFINE_MTHP_STAT_ATTR(khugepaged_collapse_non_hint, MTHP_STAT_KHUGEPAGED_COLLAPSE_NON_HINT);
 
 
 static struct attribute *anon_stats_attrs[] = {
@@ -775,6 +777,8 @@ static struct attribute *any_stats_attrs[] = {
 	&split_failed_attr.attr,
 	&collapse_alloc_attr.attr,
 	&collapse_alloc_failed_attr.attr,
+	&khugepaged_collapse_hint_attr.attr,
+	&khugepaged_collapse_non_hint_attr.attr,
 	NULL,
 };
 
