@@ -295,6 +295,19 @@ xfs_qm_need_dqattach(
 
 	if (!XFS_IS_QUOTA_ON(mp))
 		return false;
+	/*
+	 * The quota accounting flags in m_qflags are set from the mount options
+	 * before xfs_mountfs() runs, but the quota subsystem (mp->m_quotainfo)
+	 * is only initialised later in xfs_qm_mount_quotas(); it is also torn
+	 * down (and m_quotainfo set to NULL) before those flags are cleared when
+	 * quotas are turned off.  During those windows a background inodegc
+	 * worker inactivating an inode can reach here with XFS_IS_QUOTA_ON()
+	 * true but no quotainfo to look dquots up in, which would lead to a NULL
+	 * pointer dereference of mp->m_quotainfo in xfs_qm_dqget_inode().  There
+	 * are no dquots to attach in that state, so skip the attach.
+	 */
+	if (!mp->m_quotainfo)
+		return false;
 	if (!XFS_NOT_DQATTACHED(mp, ip))
 		return false;
 	if (xfs_is_quota_inode(&mp->m_sb, ip->i_ino))
