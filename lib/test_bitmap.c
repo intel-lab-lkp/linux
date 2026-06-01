@@ -234,6 +234,34 @@ static void __init test_find_nth_bit(void)
 	}
 }
 
+static void __init
+test_bitmap_find_next_zero_area_off(void)
+{
+	int bmap_len = 64 * 3;
+	DECLARE_BITMAP(bmap, bmap_len);
+
+	bitmap_set(bmap, 0, bmap_len);
+
+	bitmap_clear(bmap, 0, 8);
+	__clear_bit(50, bmap);
+	bitmap_clear(bmap, 60, 10);
+	__clear_bit(80, bmap);
+	bitmap_clear(bmap, 100, 10);
+	__clear_bit(120, bmap);
+	bitmap_clear(bmap, 160, 32);
+
+	expect_eq_uint(0,
+		bitmap_find_next_zero_area_off(bmap, bmap_len, 0, 8, 0, 0));
+	expect_eq_uint(60,
+		bitmap_find_next_zero_area_off(bmap, bmap_len, 1, 8, 0, 0));
+	expect_eq_uint(60,
+		bitmap_find_next_zero_area_off(bmap, bmap_len, 0, 10, 0, 0));
+	expect_eq_uint(160,
+		bitmap_find_next_zero_area_off(bmap, bmap_len, 0, 32, 0, 0));
+	expect_eq_uint(1,
+		!!(bitmap_find_next_zero_area_off(bmap, bmap_len, 0, 33, 0, 0) > bmap_len));
+}
+
 static void __init test_fill_set(void)
 {
 	DECLARE_BITMAP(bmap, 1024);
