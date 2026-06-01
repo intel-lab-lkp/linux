@@ -1831,7 +1831,8 @@ void intel_dp_start_link_train(struct intel_atomic_state *state,
 		return;
 	}
 
-	link_training->seq_train_failures++;
+	if (link_training->seq_train_failures < MAX_SEQ_TRAIN_FAILURES)
+		link_training->seq_train_failures++;
 
 	/*
 	 * Ignore the link failure in CI
