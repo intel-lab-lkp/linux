@@ -906,7 +906,7 @@ nf_flow_offload_ip_hook(void *priv, struct sk_buff *skb,
 		xmit.source = tuplehash->tuple.out.h_source;
 		break;
 	default:
-		WARN_ON_ONCE(1);
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return NF_DROP;
 	}
 	xmit.tuple = other_tuple;
@@ -1227,7 +1227,7 @@ nf_flow_offload_ipv6_hook(void *priv, struct sk_buff *skb,
 		xmit.source = tuplehash->tuple.out.h_source;
 		break;
 	default:
-		WARN_ON_ONCE(1);
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return NF_DROP;
 	}
 	xmit.tuple = other_tuple;

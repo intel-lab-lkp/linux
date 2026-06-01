@@ -1055,7 +1055,7 @@ static void flow_offload_work_handler(struct work_struct *work)
 			NF_FLOW_TABLE_STAT_DEC_ATOMIC(net, count_wq_stats);
 			break;
 		default:
-			WARN_ON_ONCE(1);
+			DEBUG_NET_WARN_ON_ONCE(1);
 	}
 
 	clear_bit(NF_FLOW_HW_PENDING, &offload->flow->flags);
@@ -1180,7 +1180,7 @@ static int nf_flow_table_block_setup(struct nf_flowtable *flowtable,
 		}
 		break;
 	default:
-		WARN_ON_ONCE(1);
+		DEBUG_NET_WARN_ON_ONCE(1);
 		err = -EOPNOTSUPP;
 	}
 	up_write(&flowtable->flow_block_lock);

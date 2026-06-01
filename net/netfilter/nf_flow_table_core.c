@@ -141,7 +141,7 @@ static int flow_offload_fill_route(struct flow_offload *flow,
 		flow_tuple->dst_cookie = flow_offload_dst_cookie(flow_tuple);
 		break;
 	default:
-		WARN_ON_ONCE(1);
+		DEBUG_NET_WARN_ON_ONCE(1);
 		break;
 	}
 	flow_tuple->xmit_type = route->tuple[dir].xmit_type;
@@ -534,7 +534,7 @@ static void nf_flow_table_extend_ct_timeout(struct nf_conn *ct)
 			new_timeout = nf_flow_table_tcp_timeout(ct);
 			break;
 		default:
-			WARN_ON_ONCE(1);
+			DEBUG_NET_WARN_ON_ONCE(1);
 			break;
 		}
 
