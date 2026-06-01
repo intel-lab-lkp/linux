@@ -2757,7 +2757,7 @@ static inline void *setup_object(struct kmem_cache *s, void *object)
 }
 
 static struct slab_sheaf *__alloc_empty_sheaf(struct kmem_cache *s, gfp_t gfp,
-					      unsigned int capacity)
+					      unsigned int capacity, int node)
 {
 	struct slab_sheaf *sheaf;
 	size_t sheaf_size;
@@ -2771,7 +2771,7 @@ static struct slab_sheaf *__alloc_empty_sheaf(struct kmem_cache *s, gfp_t gfp,
 		gfp |= __GFP_NO_OBJ_EXT;
 
 	sheaf_size = struct_size(sheaf, objects, capacity);
-	sheaf = kzalloc(sheaf_size, gfp);
+	sheaf = kzalloc_node(sheaf_size, gfp, node);
 
 	if (unlikely(!sheaf))
 		return NULL;
@@ -2791,7 +2791,7 @@ static inline struct slab_sheaf *alloc_empty_sheaf(struct kmem_cache *s,
 
 	gfp &= ~OBJCGS_CLEAR_MASK;
 
-	return __alloc_empty_sheaf(s, gfp, s->sheaf_capacity);
+	return __alloc_empty_sheaf(s, gfp, s->sheaf_capacity, numa_mem_id());
 }
 
 static void free_empty_sheaf(struct kmem_cache *s, struct slab_sheaf *sheaf)
@@ -5040,7 +5040,7 @@ kmem_cache_prefill_sheaf(struct kmem_cache *s, gfp_t gfp, unsigned int size)
 
 	if (unlikely(size > s->sheaf_capacity)) {
 
-		sheaf = __alloc_empty_sheaf(s, gfp, size);
+		sheaf = __alloc_empty_sheaf(s, gfp, size, numa_mem_id());
 		if (!sheaf)
 			return NULL;
 
@@ -7526,6 +7526,7 @@ static int init_percpu_sheaves(struct kmem_cache *s)
 
 	for_each_possible_cpu(cpu) {
 		struct slub_percpu_sheaves *pcs;
+		int mem_node;
 
 		pcs = per_cpu_ptr(s->cpu_sheaves, cpu);
 
@@ -7549,10 +7550,13 @@ static int init_percpu_sheaves(struct kmem_cache *s)
 		 * For kmalloc caches it's used temporarily during the initial
 		 * bootstrap.
 		 */
-		if (!s->sheaf_capacity)
+		if (!s->sheaf_capacity) {
 			pcs->main = &bootstrap_sheaf;
-		else
-			pcs->main = alloc_empty_sheaf(s, GFP_KERNEL);
+		} else {
+			mem_node = local_memory_node(cpu_to_node(cpu));
+			pcs->main = __alloc_empty_sheaf(s, GFP_KERNEL,
+					s->sheaf_capacity, mem_node);
+		}
 
 		if (!pcs->main)
 			return -ENOMEM;
@@ -8415,10 +8419,17 @@ static void __init bootstrap_cache_sheaves(struct kmem_cache *s)
 
 	for_each_possible_cpu(cpu) {
 		struct slub_percpu_sheaves *pcs;
+		int mem_node;
 
 		pcs = per_cpu_ptr(s->cpu_sheaves, cpu);
 
-		pcs->main = __alloc_empty_sheaf(s, GFP_KERNEL, capacity);
+		/*
+		 * Cannot use cpu_to_mem() here because it's only initialized
+		 * for online CPUs at this point (see __build_all_zonelists),
+		 * while we need to allocate sheaves for all possible CPUs.
+		 */
+		mem_node = local_memory_node(cpu_to_node(cpu));
+		pcs->main = __alloc_empty_sheaf(s, GFP_KERNEL, capacity, mem_node);
 
 		if (!pcs->main) {
 			failed = true;
