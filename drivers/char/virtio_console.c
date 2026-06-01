@@ -352,6 +352,7 @@ static void free_buf(struct port_buffer *buf, bool can_sleep)
 
 	for (i = 0; i < buf->sgpages; i++) {
 		struct page *page = sg_page(&buf->sg[i]);
+
 		if (!page)
 			break;
 		put_page(page);
@@ -1237,17 +1238,17 @@ static int init_port_console(struct port *port)
 	return 0;
 }
 
-static ssize_t show_port_name(struct device *dev,
-			      struct device_attribute *attr, char *buffer)
+static ssize_t name_show(struct device *dev,
+			 struct device_attribute *attr, char *buffer)
 {
 	struct port *port;
 
 	port = dev_get_drvdata(dev);
 
-	return sprintf(buffer, "%s\n", port->name);
+	return sysfs_emit(buffer, "%s\n", port->name);
 }
 
-static DEVICE_ATTR(name, S_IRUGO, show_port_name, NULL);
+static DEVICE_ATTR_RO(name);
 
 static struct attribute *port_sysfs_entries[] = {
 	&dev_attr_name.attr,
