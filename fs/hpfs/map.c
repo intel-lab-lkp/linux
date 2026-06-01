@@ -168,9 +168,41 @@ struct fnode *hpfs_map_fnode(struct super_block *s, ino_t ino, struct buffer_hea
 		return NULL;
 	}
 	if ((fnode = hpfs_map_sector(s, ino, bhp, FNODE_RD_AHEAD))) {
+		struct extended_attribute *ea;
+		struct extended_attribute *ea_end;
+
+		/*
+		 * The in-fnode EA region is walked by hpfs_get_ea(),
+		 * hpfs_read_ea() and hpfs_set_ea() using fnode_ea() and
+		 * fnode_end_ea(), which derive their bounds from on-disk
+		 * fields.  Validate those bounds unconditionally so that a
+		 * crafted image cannot cause the walk to escape the fnode
+		 * buffer regardless of the "chk" mount option.
+		 */
+		if (le16_to_cpu(fnode->ea_size_s) &&
+		    (le16_to_cpu(fnode->ea_offs) < 0xc4 ||
+		     le16_to_cpu(fnode->ea_offs) +
+		     le16_to_cpu(fnode->acl_size_s) +
+		     le16_to_cpu(fnode->ea_size_s) > 0x200)) {
+			hpfs_error(s,
+				"bad EA info in fnode %08lx: ea_offs == %04x ea_size_s == %04x",
+				(unsigned long)ino,
+				le16_to_cpu(fnode->ea_offs),
+				le16_to_cpu(fnode->ea_size_s));
+			goto bail;
+		}
+		ea = fnode_ea(fnode);
+		ea_end = fnode_end_ea(fnode);
+		while (ea != ea_end) {
+			if (ea > ea_end) {
+				hpfs_error(s, "bad EA in fnode %08lx",
+					(unsigned long)ino);
+				goto bail;
+			}
+			ea = next_ea(ea);
+		}
+
 		if (hpfs_sb(s)->sb_chk) {
-			struct extended_attribute *ea;
-			struct extended_attribute *ea_end;
 			if (le32_to_cpu(fnode->magic) != FNODE_MAGIC) {
 				hpfs_error(s, "bad magic on fnode %08lx",
 					(unsigned long)ino);
@@ -191,24 +223,6 @@ struct fnode *hpfs_map_fnode(struct super_block *s, ino_t ino, struct buffer_hea
 					    (unsigned long)ino);
 					goto bail;
 				}
-			}
-			if (le16_to_cpu(fnode->ea_size_s) && (le16_to_cpu(fnode->ea_offs) < 0xc4 ||
-			   le16_to_cpu(fnode->ea_offs) + le16_to_cpu(fnode->acl_size_s) + le16_to_cpu(fnode->ea_size_s) > 0x200)) {
-				hpfs_error(s,
-					"bad EA info in fnode %08lx: ea_offs == %04x ea_size_s == %04x",
-					(unsigned long)ino,
-					le16_to_cpu(fnode->ea_offs), le16_to_cpu(fnode->ea_size_s));
-				goto bail;
-			}
-			ea = fnode_ea(fnode);
-			ea_end = fnode_end_ea(fnode);
-			while (ea != ea_end) {
-				if (ea > ea_end) {
-					hpfs_error(s, "bad EA in fnode %08lx",
-						(unsigned long)ino);
-					goto bail;
-				}
-				ea = next_ea(ea);
 			}
 		}
 	}
