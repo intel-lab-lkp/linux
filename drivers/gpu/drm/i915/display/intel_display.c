@@ -5658,17 +5658,14 @@ int intel_modeset_all_pipes_late(struct intel_atomic_state *state,
 	return 0;
 }
 
-int intel_modeset_commit_pipes(struct intel_display *display,
-			       u8 pipe_mask,
-			       struct drm_modeset_acquire_ctx *ctx)
+int intel_modeset_commit_pipes_for_atomic_state(struct intel_atomic_state *intel_state,
+						u8 pipe_mask,
+						struct drm_modeset_acquire_ctx *ctx)
 {
-	struct drm_atomic_commit *state;
+	struct drm_atomic_commit *state = &intel_state->base;
+	struct intel_display *display = to_intel_display(intel_state);
 	struct intel_crtc *crtc;
 	int ret;
-
-	state = drm_atomic_commit_alloc(display->drm);
-	if (!state)
-		return -ENOMEM;
 
 	state->acquire_ctx = ctx;
 	to_intel_atomic_state(state)->internal = true;
@@ -5687,6 +5684,23 @@ int intel_modeset_commit_pipes(struct intel_display *display,
 
 	ret = drm_atomic_commit(state);
 out:
+	return ret;
+}
+
+int intel_modeset_commit_pipes(struct intel_display *display,
+			       u8 pipe_mask,
+			       struct drm_modeset_acquire_ctx *ctx)
+{
+	struct drm_atomic_commit *state;
+	int ret;
+
+	state = drm_atomic_commit_alloc(display->drm);
+	if (!state)
+		return -ENOMEM;
+
+	ret = intel_modeset_commit_pipes_for_atomic_state(to_intel_atomic_state(state),
+							  pipe_mask, ctx);
+
 	drm_atomic_commit_put(state);
 
 	return ret;
