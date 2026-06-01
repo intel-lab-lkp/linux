@@ -1111,7 +1111,9 @@ static int aw88261_request_firmware_file(struct aw88261 *aw88261)
 	dev_info(aw88261->aw_pa->dev, "loaded %s - size: %zu\n",
 			fw_name, cont ? cont->size : 0);
 
-	aw88261->aw_cfg = devm_kzalloc(aw88261->aw_pa->dev, cont->size + sizeof(int), GFP_KERNEL);
+	aw88261->aw_cfg = devm_kzalloc(aw88261->aw_pa->dev,
+				       sizeof(struct aw_container) + cont->size,
+				       GFP_KERNEL);
 	if (!aw88261->aw_cfg) {
 		release_firmware(cont);
 		return -ENOMEM;

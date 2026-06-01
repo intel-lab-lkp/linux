@@ -1148,7 +1148,9 @@ static int aw88081_request_firmware_file(struct aw88081 *aw88081)
 	dev_dbg(aw88081->aw_pa->dev, "loaded %s - size: %zu\n",
 			AW88081_ACF_FILE, cont ? cont->size : 0);
 
-	aw88081->aw_cfg = devm_kzalloc(aw88081->aw_pa->dev, cont->size + sizeof(int), GFP_KERNEL);
+	aw88081->aw_cfg = devm_kzalloc(aw88081->aw_pa->dev,
+				       sizeof(struct aw_container) + cont->size,
+				       GFP_KERNEL);
 	if (!aw88081->aw_cfg) {
 		release_firmware(cont);
 		return -ENOMEM;

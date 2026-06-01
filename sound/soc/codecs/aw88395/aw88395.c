@@ -475,7 +475,9 @@ static int aw88395_request_firmware_file(struct aw88395 *aw88395)
 	dev_info(aw88395->aw_pa->dev, "loaded %s - size: %zu\n",
 			AW88395_ACF_FILE, cont ? cont->size : 0);
 
-	aw88395->aw_cfg = devm_kzalloc(aw88395->aw_pa->dev, cont->size + sizeof(int), GFP_KERNEL);
+	aw88395->aw_cfg = devm_kzalloc(aw88395->aw_pa->dev,
+					sizeof(struct aw_container) + cont->size,
+					GFP_KERNEL);
 	if (!aw88395->aw_cfg) {
 		release_firmware(cont);
 		return -ENOMEM;
