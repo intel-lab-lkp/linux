@@ -750,7 +750,16 @@ static void iommu_ignore_device(struct amd_iommu *iommu, struct device *dev)
 	setup_aliases(iommu, dev);
 
 	pci_seg->rlookup_table[devid] = NULL;
-	memset(&dev_table[devid], 0, sizeof(struct dev_table_entry));
+
+	/* Clear DTE if we have a live entry */
+	if (dev_data) {
+		struct dev_table_entry new = {};
+
+		amd_iommu_make_clear_dte(dev_data, &new);
+		update_dte256(iommu, dev_data, &new);
+	} else {
+		memset(&dev_table[devid], 0, sizeof(struct dev_table_entry));
+	}
 }
 
 
