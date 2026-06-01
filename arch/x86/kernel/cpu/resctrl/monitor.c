@@ -25,11 +25,8 @@
 
 #include "internal.h"
 
-/*
- * Global boolean for rdt_monitor which is true if any
- * resource monitoring is enabled.
- */
-bool rdt_mon_capable;
+/* Global count of number of resource monitor functions that are enabled. */
+int rdt_mon_feature_count;
 
 #define CF(cf)	((unsigned long)(1048576 * (cf) + 0.5))
 
@@ -402,7 +399,7 @@ static __init int snc_get_config(void)
 	return ret;
 }
 
-int __init rdt_get_l3_mon_config(struct rdt_resource *r)
+void __init rdt_get_l3_mon_config(struct rdt_resource *r)
 {
 	unsigned int mbm_offset = boot_cpu_data.x86_cache_mbm_width_offset;
 	struct rdt_hw_resource *hw_res = resctrl_to_arch_res(r);
@@ -460,8 +457,6 @@ int __init rdt_get_l3_mon_config(struct rdt_resource *r)
 	}
 
 	r->mon_capable = true;
-
-	return 0;
 }
 
 void __init intel_rdt_mbm_apply_quirk(void)

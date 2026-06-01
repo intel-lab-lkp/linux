@@ -43,7 +43,7 @@ struct resctrl_pqr_state {
 DECLARE_PER_CPU(struct resctrl_pqr_state, pqr_state);
 
 extern bool rdt_alloc_capable;
-extern bool rdt_mon_capable;
+extern int rdt_mon_feature_count;
 
 DECLARE_STATIC_KEY_FALSE(rdt_enable_key);
 DECLARE_STATIC_KEY_FALSE(rdt_alloc_enable_key);
@@ -68,7 +68,7 @@ static inline void resctrl_arch_disable_alloc(void)
 
 static inline bool resctrl_arch_mon_capable(void)
 {
-	return rdt_mon_capable;
+	return !!rdt_mon_feature_count;
 }
 
 static inline void resctrl_arch_enable_mon(void)
