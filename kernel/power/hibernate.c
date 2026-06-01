@@ -324,6 +324,7 @@ __weak int arch_resume_nosmt(void)
 static int create_image(int platform_mode)
 {
 	int error;
+	int nosmt_err;
 
 	error = dpm_suspend_end(PMSG_FREEZE);
 	if (error) {
@@ -380,8 +381,11 @@ static int create_image(int platform_mode)
 	pm_sleep_enable_secondary_cpus();
 
 	/* Allow architectures to do nosmt-specific post-resume dances */
-	if (!in_suspend)
-		error = arch_resume_nosmt();
+	if (!in_suspend) {
+		nosmt_err = arch_resume_nosmt();
+		if (!error)
+			error = nosmt_err;
+	}
 
  Platform_finish:
 	platform_finish(platform_mode);
