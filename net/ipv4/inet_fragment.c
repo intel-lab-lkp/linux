@@ -243,8 +243,13 @@ void fqdir_pre_exit(struct fqdir *fqdir)
 			continue;
 		}
 		spin_lock_bh(&fq->lock);
-		if (!(fq->flags & INET_FRAG_COMPLETE))
+		if (!(fq->flags & INET_FRAG_COMPLETE)) {
 			inet_frag_queue_flush(fq, 0);
+			fq->flags |= INET_FRAG_COMPLETE;
+			fq->rb_fragments = RB_ROOT;
+			fq->fragments_tail = NULL;
+			fq->last_run_head = NULL;
+		}
 		spin_unlock_bh(&fq->lock);
 	}
 
