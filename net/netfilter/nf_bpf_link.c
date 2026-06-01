@@ -280,8 +280,10 @@ static bool nf_ptr_to_btf_id(struct bpf_insn_access_aux *info, const char *name)
 		return false;
 
 	type_id = btf_find_by_name_kind(btf, name, BTF_KIND_STRUCT);
-	if (WARN_ON_ONCE(type_id < 0))
+	if (unlikely(type_id < 0)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return false;
+	}
 
 	info->btf = btf;
 	info->btf_id = type_id;
