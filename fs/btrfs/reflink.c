@@ -183,6 +183,8 @@ static int clone_copy_inline_extent(struct btrfs_inode *inode,
 	if (new_key->offset > 0) {
 		ret = copy_inline_to_page(inode, new_key->offset,
 					  inline_data, size, datal, comp_type);
+		if (ret == 0 && new_key->offset + datal > i_size_read(&inode->vfs_inode))
+			i_size_write(&inode->vfs_inode, new_key->offset + datal);
 		goto out;
 	}
 
