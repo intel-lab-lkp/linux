@@ -52,8 +52,9 @@ nf_nat_redirect_ipv4(struct sk_buff *skb, const struct nf_nat_range2 *range,
 {
 	union nf_inet_addr newdst = {};
 
-	WARN_ON(hooknum != NF_INET_PRE_ROUTING &&
-		hooknum != NF_INET_LOCAL_OUT);
+	if (unlikely(hooknum != NF_INET_PRE_ROUTING &&
+		     hooknum != NF_INET_LOCAL_OUT))
+		DEBUG_NET_WARN_ON_ONCE(1);
 
 	/* Local packets: make them go to loopback */
 	if (hooknum == NF_INET_LOCAL_OUT) {

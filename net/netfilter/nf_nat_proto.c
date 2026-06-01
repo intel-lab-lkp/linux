@@ -373,7 +373,7 @@ unsigned int nf_nat_manip_pkt(struct sk_buff *skb, struct nf_conn *ct,
 			return NF_ACCEPT;
 		break;
 	default:
-		WARN_ON_ONCE(1);
+		DEBUG_NET_WARN_ON_ONCE(1);
 		break;
 	}
 
@@ -491,7 +491,7 @@ void nf_nat_csum_recalc(struct sk_buff *skb,
 #endif
 	}
 
-	WARN_ON_ONCE(1);
+	DEBUG_NET_WARN_ON_ONCE(1);
 }
 
 int nf_nat_icmp_reply_translation(struct sk_buff *skb,
@@ -509,7 +509,8 @@ int nf_nat_icmp_reply_translation(struct sk_buff *skb,
 	struct nf_conntrack_tuple target;
 	unsigned long statusbit;
 
-	WARN_ON(ctinfo != IP_CT_RELATED && ctinfo != IP_CT_RELATED_REPLY);
+	if (unlikely(ctinfo != IP_CT_RELATED && ctinfo != IP_CT_RELATED_REPLY))
+		DEBUG_NET_WARN_ON_ONCE(1);
 
 	if (skb_ensure_writable(skb, hdrlen + sizeof(*inside)))
 		return 0;
@@ -823,7 +824,8 @@ int nf_nat_icmpv6_reply_translation(struct sk_buff *skb,
 	struct nf_conntrack_tuple target;
 	unsigned long statusbit;
 
-	WARN_ON(ctinfo != IP_CT_RELATED && ctinfo != IP_CT_RELATED_REPLY);
+	if (unlikely(ctinfo != IP_CT_RELATED && ctinfo != IP_CT_RELATED_REPLY))
+		DEBUG_NET_WARN_ON_ONCE(1);
 
 	if (skb_ensure_writable(skb, hdrlen + sizeof(*inside)))
 		return 0;
@@ -1074,8 +1076,10 @@ int nf_nat_inet_register_fn(struct net *net, const struct nf_hook_ops *ops)
 {
 	int ret;
 
-	if (WARN_ON_ONCE(ops->pf != NFPROTO_INET))
+	if (ops->pf != NFPROTO_INET) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return -EINVAL;
+	}
 
 	ret = nf_nat_register_fn(net, NFPROTO_IPV6, ops, nf_nat_ipv6_ops,
 				 ARRAY_SIZE(nf_nat_ipv6_ops));

@@ -366,8 +366,10 @@ nf_nat_used_tuple_harder(const struct nf_conntrack_tuple *tuple,
 	if (thash->tuple.dst.dir == IP_CT_DIR_ORIGINAL)
 		goto out;
 
-	if (WARN_ON_ONCE(ct == ignored_conntrack))
+	if (unlikely(ct == ignored_conntrack)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		goto out;
+	}
 
 	flags = READ_ONCE(ct->status);
 	if (!nf_nat_may_kill(ct, flags))
@@ -773,11 +775,13 @@ nf_nat_setup_info(struct nf_conn *ct,
 	if (nf_ct_is_confirmed(ct))
 		return NF_ACCEPT;
 
-	WARN_ON(maniptype != NF_NAT_MANIP_SRC &&
-		maniptype != NF_NAT_MANIP_DST);
+	if (unlikely(maniptype != NF_NAT_MANIP_SRC && maniptype != NF_NAT_MANIP_DST))
+		DEBUG_NET_WARN_ON_ONCE(1);
 
-	if (WARN_ON(nf_nat_initialized(ct, maniptype)))
+	if (unlikely(nf_nat_initialized(ct, maniptype))) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return NF_DROP;
+	}
 
 	/* What we've got will look like inverse of reply. Normally
 	 * this is what is in the conntrack, except for prior
@@ -955,8 +959,8 @@ null_bind:
 		break;
 	default:
 		/* ESTABLISHED */
-		WARN_ON(ctinfo != IP_CT_ESTABLISHED &&
-			ctinfo != IP_CT_ESTABLISHED_REPLY);
+		if (unlikely(ctinfo != IP_CT_ESTABLISHED && ctinfo != IP_CT_ESTABLISHED_REPLY))
+			DEBUG_NET_WARN_ON_ONCE(1);
 		if (nf_nat_oif_changed(state->hook, ctinfo, nat, state->out))
 			goto oif_changed;
 	}
@@ -1143,8 +1147,10 @@ nfnetlink_parse_nat_setup(struct nf_conn *ct,
 	/* Should not happen, restricted to creating new conntracks
 	 * via ctnetlink.
 	 */
-	if (WARN_ON_ONCE(nf_nat_initialized(ct, manip)))
+	if (unlikely(nf_nat_initialized(ct, manip))) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return -EEXIST;
+	}
 
 	/* No NAT information has been passed, allocate the null-binding */
 	if (attr == NULL)
@@ -1181,8 +1187,10 @@ int nf_nat_register_fn(struct net *net, u8 pf, const struct nf_hook_ops *ops,
 	struct nf_hook_ops *nat_ops;
 	int i, ret;
 
-	if (WARN_ON_ONCE(pf >= ARRAY_SIZE(nat_net->nat_proto_net)))
+	if (unlikely(pf >= ARRAY_SIZE(nat_net->nat_proto_net))) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return -EINVAL;
+	}
 
 	nat_proto_net = &nat_net->nat_proto_net[pf];
 
@@ -1193,8 +1201,10 @@ int nf_nat_register_fn(struct net *net, u8 pf, const struct nf_hook_ops *ops,
 		}
 	}
 
-	if (WARN_ON_ONCE(i == ops_count))
+	if (unlikely(i == ops_count)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return -EINVAL;
+	}
 
 	mutex_lock(&nf_nat_proto_mutex);
 	if (!nat_proto_net->nat_hook_ops) {
@@ -1235,7 +1245,8 @@ int nf_nat_register_fn(struct net *net, u8 pf, const struct nf_hook_ops *ops,
 
 	nat_ops = nat_proto_net->nat_hook_ops;
 	priv = nat_ops[hooknum].priv;
-	if (WARN_ON_ONCE(!priv)) {
+	if (unlikely(!priv)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		mutex_unlock(&nf_nat_proto_mutex);
 		return -EOPNOTSUPP;
 	}
@@ -1264,8 +1275,10 @@ void nf_nat_unregister_fn(struct net *net, u8 pf, const struct nf_hook_ops *ops,
 	nat_proto_net = &nat_net->nat_proto_net[pf];
 
 	mutex_lock(&nf_nat_proto_mutex);
-	if (WARN_ON(nat_proto_net->users == 0))
+	if (unlikely(nat_proto_net->users == 0)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		goto unlock;
+	}
 
 	nat_proto_net->users--;
 
@@ -1276,8 +1289,10 @@ void nf_nat_unregister_fn(struct net *net, u8 pf, const struct nf_hook_ops *ops,
 			break;
 		}
 	}
-	if (WARN_ON_ONCE(i == ops_count))
+	if (unlikely(i == ops_count)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		goto unlock;
+	}
 	priv = nat_ops[hooknum].priv;
 	nf_hook_entries_delete_raw(&priv->entries, ops);
 

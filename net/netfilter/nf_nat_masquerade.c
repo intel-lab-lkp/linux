@@ -36,7 +36,8 @@ nf_nat_masquerade_ipv4(struct sk_buff *skb, unsigned int hooknum,
 	const struct rtable *rt;
 	__be32 newsrc, nh;
 
-	WARN_ON(hooknum != NF_INET_POST_ROUTING);
+	if (unlikely(hooknum != NF_INET_POST_ROUTING))
+		DEBUG_NET_WARN_ON_ONCE(1);
 
 	ct = nf_ct_get(skb, &ctinfo);
 
@@ -297,7 +298,8 @@ int nf_nat_masquerade_inet_register_notifiers(void)
 	int ret = 0;
 
 	mutex_lock(&masq_mutex);
-	if (WARN_ON_ONCE(masq_refcnt == UINT_MAX)) {
+	if (masq_refcnt == UINT_MAX) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		ret = -EOVERFLOW;
 		goto out_unlock;
 	}

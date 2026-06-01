@@ -53,8 +53,10 @@ static void pptp_nat_expected(struct nf_conn *ct,
 	struct nf_conn_nat *nat;
 
 	nat = nf_ct_nat_ext_add(ct);
-	if (WARN_ON_ONCE(!nat))
+	if (unlikely(!nat)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return;
+	}
 
 	nat_pptp_info = &nat->help.nat_pptp_info;
 	ct_pptp_info = nfct_help_data(master);
@@ -132,8 +134,10 @@ pptp_outbound_pkt(struct sk_buff *skb,
 	__be16 new_callid;
 	unsigned int cid_off;
 
-	if (WARN_ON_ONCE(!nat))
+	if (unlikely(!nat)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return NF_DROP;
+	}
 
 	nat_pptp_info = &nat->help.nat_pptp_info;
 	ct_pptp_info = nfct_help_data(ct);
@@ -204,8 +208,10 @@ pptp_exp_gre(struct nf_conntrack_expect *expect_orig,
 	struct nf_ct_pptp_master *ct_pptp_info;
 	struct nf_nat_pptp *nat_pptp_info;
 
-	if (WARN_ON_ONCE(!nat))
+	if (unlikely(!nat)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return;
+	}
 
 	nat_pptp_info = &nat->help.nat_pptp_info;
 	ct_pptp_info = nfct_help_data(ct);
@@ -241,8 +247,10 @@ pptp_inbound_pkt(struct sk_buff *skb,
 	__be16 new_pcid;
 	unsigned int pcid_off;
 
-	if (WARN_ON_ONCE(!nat))
+	if (unlikely(!nat)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return NF_DROP;
+	}
 
 	nat_pptp_info = &nat->help.nat_pptp_info;
 	new_pcid = nat_pptp_info->pns_call_id;
