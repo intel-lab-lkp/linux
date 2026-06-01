@@ -650,11 +650,18 @@ static int wacom_intuos_pad(struct wacom_wac *wacom)
 	input_report_key(input, KEY_CONTROLPANEL, menu);
 	input_report_key(input, KEY_INFO, info);
 
-	if (wacom->shared && wacom->shared->touch_input) {
-		input_report_switch(wacom->shared->touch_input,
-				    SW_MUTE_DEVICE,
-				    !wacom->shared->is_touch_on);
-		input_sync(wacom->shared->touch_input);
+	if (wacom->shared) {
+		struct input_dev *touch_input;
+
+		rcu_read_lock();
+		touch_input = rcu_dereference(wacom->shared->touch_input);
+		if (touch_input) {
+			input_report_switch(touch_input,
+					    SW_MUTE_DEVICE,
+					    !wacom->shared->is_touch_on);
+			input_sync(touch_input);
+		}
+		rcu_read_unlock();
 	}
 
 	input_report_abs(input, ABS_RX, strip1);
