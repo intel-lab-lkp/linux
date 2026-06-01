@@ -65,6 +65,10 @@ int getopt_auto(int argc, char **argv, const struct option *long_opts)
 		if (long_opts[i].val < 32 || long_opts[i].val > 127)
 			continue;
 
+		/* Skip digit characters to avoid conflicts with numeric arguments */
+		if (long_opts[i].val >= '0' && long_opts[i].val <= '9')
+			continue;
+
 		if (n + 4 >= sizeof(opts))
 			fatal("optstring buffer overflow");
 

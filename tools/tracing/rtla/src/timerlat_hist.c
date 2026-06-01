@@ -787,11 +787,24 @@ static struct common_params
 		static struct option long_options[] = {
 			{"auto",		required_argument,	0, 'a'},
 			{"bucket-size",		required_argument,	0, 'b'},
+			/* Common options */
+			{"cpus",		required_argument,	0, 'c'},
+			{"cgroup",		optional_argument,	0, 'C'},
+			{"debug",		no_argument,		0, 'D'},
+			{"duration",		required_argument,	0, 'd'},
+			{"event",		required_argument,	0, 'e'},
+			/* End common options */
 			{"entries",		required_argument,	0, 'E'},
 			{"help",		no_argument,		0, 'h'},
+			/* Common option */
+			{"house-keeping",	required_argument,	0, 'H'},
+			/* End common option */
 			{"irq",			required_argument,	0, 'i'},
 			{"nano",		no_argument,		0, 'n'},
 			{"period",		required_argument,	0, 'p'},
+			/* Common option */
+			{"priority",		required_argument,	0, 'P'},
+			/* End common option */
 			{"stack",		required_argument,	0, 's'},
 			{"thread",		required_argument,	0, 'T'},
 			{"trace",		optional_argument,	0, 't'},
@@ -818,9 +831,6 @@ static struct common_params
 			{"stack-format",	required_argument,	0, '\10'},
 			{0, 0, 0, 0}
 		};
-
-		if (common_parse_options(argc, argv, &params->common))
-			continue;
 
 		c = getopt_auto(argc, argv, long_options);
 
@@ -850,6 +860,35 @@ static struct common_params
 			    params->common.hist.bucket_size >= 1000000)
 				fatal("Bucket size needs to be > 0 and <= 1000000");
 			break;
+		case 'c':
+			if (parse_cpu_set(optarg, &params->common.monitored_cpus))
+				fatal("Invalid -c cpu list");
+			params->common.cpus = optarg;
+			break;
+		case 'C':
+			params->common.cgroup = 1;
+			params->common.cgroup_name = parse_optional_arg(argc, argv);
+			break;
+		case 'D':
+			config_debug = 1;
+			break;
+		case 'd':
+			params->common.duration = parse_seconds_duration(optarg);
+			if (!params->common.duration)
+				fatal("Invalid -d duration");
+			break;
+		case 'e':
+			{
+				struct trace_events *tevent;
+				tevent = trace_event_alloc(optarg);
+				if (!tevent)
+					fatal("Error alloc trace event");
+
+				if (params->common.events)
+					tevent->next = params->common.events;
+				params->common.events = tevent;
+			}
+			break;
 		case 'E':
 			params->common.hist.entries = get_llong_from_str(optarg);
 			if (params->common.hist.entries < 10 ||
@@ -859,6 +898,11 @@ static struct common_params
 		case 'h':
 		case '?':
 			timerlat_hist_usage();
+			break;
+		case 'H':
+			params->common.hk_cpus = 1;
+			if (parse_cpu_set(optarg, &params->common.hk_cpu_set))
+				fatal("Error parsing house keeping CPUs");
 			break;
 		case 'i':
 			params->common.stop_us = get_llong_from_str(optarg);
@@ -873,6 +917,11 @@ static struct common_params
 			params->timerlat_period_us = get_llong_from_str(optarg);
 			if (params->timerlat_period_us > 1000000)
 				fatal("Period longer than 1 s");
+			break;
+		case 'P':
+			if (parse_prio(optarg, &params->common.sched_param) == -1)
+				fatal("Invalid -P priority");
+			params->common.set_sched = 1;
 			break;
 		case 's':
 			params->print_stack = get_llong_from_str(optarg);
