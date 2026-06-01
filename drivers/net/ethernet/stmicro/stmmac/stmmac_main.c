@@ -5267,6 +5267,9 @@ static int stmmac_xdp_xmit_back(struct stmmac_priv *priv,
 	if (unlikely(!xdpf))
 		return STMMAC_XDP_CONSUMED;
 
+	if (unlikely(test_bit(STMMAC_DOWN, &priv->state)))
+		return STMMAC_XDP_CONSUMED;
+
 	queue = stmmac_xdp_get_tx_queue(priv, cpu);
 	nq = netdev_get_tx_queue(priv->dev, queue);
 
@@ -5308,7 +5311,9 @@ static int __stmmac_xdp_run_prog(struct stmmac_priv *priv,
 		res = stmmac_xdp_xmit_back(priv, xdp);
 		break;
 	case XDP_REDIRECT:
-		if (xdp_do_redirect(priv->dev, xdp, prog) < 0)
+		if (unlikely(test_bit(STMMAC_DOWN, &priv->state)))
+			res = STMMAC_XDP_CONSUMED;
+		else if (xdp_do_redirect(priv->dev, xdp, prog) < 0)
 			res = STMMAC_XDP_CONSUMED;
 		else
 			res = STMMAC_XDP_REDIRECT;
