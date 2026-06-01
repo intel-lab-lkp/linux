@@ -95,7 +95,7 @@ static void *image_load(struct kimage *image,
 		unsigned long headers_sz;
 		void *headers;
 
-		ret = prepare_elf_headers(&headers, &headers_sz);
+		ret = crash_prepare_headers(true, &headers, &headers_sz, NULL);
 		if (ret) {
 			pr_err("Preparing elf core header failed\n");
 			return ERR_PTR(ret);
