@@ -32,6 +32,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
+#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/mutex.h>
@@ -55,7 +56,9 @@
 	(FIELD_PREP(SENDER_ID_MASK, (s)) | FIELD_PREP(RECEIVER_ID_MASK, (r)))
 
 #define RXTX_MAP_MIN_BUFSZ_MASK	GENMASK(1, 0)
-#define RXTX_MAP_MIN_BUFSZ(x)	((x) & RXTX_MAP_MIN_BUFSZ_MASK)
+#define RXTX_MAP_MAX_BUFSZ_MASK	GENMASK(31, 16)
+#define RXTX_MAP_MIN_BUFSZ(x)	(FIELD_GET(RXTX_MAP_MIN_BUFSZ_MASK, (x)))
+#define RXTX_MAP_MAX_BUFSZ(x)	(FIELD_GET(RXTX_MAP_MAX_BUFSZ_MASK, (x)))
 
 #define FFA_MAX_NOTIFICATIONS		64
 
@@ -2086,11 +2089,13 @@ cleanup:
 	ffa_notifications_cleanup();
 }
 
+#define FFA_SUPPORTS_RXTX_MAX_BUFSZ(version)	((version) > FFA_VERSION_1_1)
+
 static int __init ffa_init(void)
 {
 	int ret;
 	u32 buf_sz;
-	size_t rxtx_bufsz = SZ_4K;
+	size_t rxtx_bufsz = SZ_4K, rxtx_max_bufsz = 0;
 
 	ret = ffa_transport_init(&invoke_ffa_fn);
 	if (ret)
@@ -2118,9 +2123,29 @@ static int __init ffa_init(void)
 			rxtx_bufsz = SZ_16K;
 		else
 			rxtx_bufsz = SZ_4K;
+
+		if (FFA_SUPPORTS_RXTX_MAX_BUFSZ(drv_info->version)) {
+			rxtx_max_bufsz = (size_t)RXTX_MAP_MAX_BUFSZ(buf_sz) * SZ_4K;
+			if (rxtx_max_bufsz != 0 && rxtx_max_bufsz < rxtx_bufsz) {
+				/*
+				 * Per spec the maximum must be >= the minimum, or
+				 * else zero if there is no size limit. If the SPMC
+				 * violates this constraint, use the minimum as the
+				 * effective maximum.
+				 */
+				rxtx_max_bufsz = rxtx_bufsz;
+			}
+		}
 	}
 
+	/*
+	 * alloc_pages_exact() allocates full pages. Use the full allocated
+	 * space up to the max supported by the SPMC.
+	 */
 	rxtx_bufsz = PAGE_ALIGN(rxtx_bufsz);
+	if (rxtx_max_bufsz)
+		rxtx_bufsz = min(rxtx_bufsz, rxtx_max_bufsz);
+
 	drv_info->rxtx_bufsz = rxtx_bufsz;
 	drv_info->rx_buffer = alloc_pages_exact(rxtx_bufsz, GFP_KERNEL);
 	if (!drv_info->rx_buffer) {
