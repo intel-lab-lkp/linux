@@ -412,13 +412,12 @@ int crash_load_dm_crypt_keys(struct kimage *image)
 	};
 	int r;
 
-
 	if (key_count <= 0) {
 		kexec_dprintk("No dm-crypt keys\n");
 		return 0;
 	}
 
-	if (!is_dm_key_reused) {
+	if (!is_dm_key_reused || unlikely(!keys_header)) {
 		image->dm_crypt_keys_addr = 0;
 		r = build_keys_header();
 		if (r) {
@@ -437,6 +436,7 @@ int crash_load_dm_crypt_keys(struct kimage *image)
 	if (r) {
 		pr_err("Failed to call kexec_add_buffer, ret=%d\n", r);
 		kvfree((void *)kbuf.buffer);
+		keys_header = NULL;
 		return r;
 	}
 	image->dm_crypt_keys_addr = kbuf.mem;
