@@ -512,7 +512,7 @@ static unsigned int ep93xx_pata_data_xfer(struct ata_queued_cmd *qc,
 		words++;
 	}
 
-	return words << 1;
+	return buflen;
 }
 
 /* Note: original code is ata_devchk */
