@@ -5658,33 +5658,27 @@ int intel_modeset_all_pipes_late(struct intel_atomic_state *state,
 	return 0;
 }
 
-int intel_modeset_commit_pipes_for_atomic_state(struct intel_atomic_state *intel_state,
+int intel_modeset_commit_pipes_for_atomic_state(struct intel_atomic_state *state,
 						u8 pipe_mask,
 						struct drm_modeset_acquire_ctx *ctx)
 {
-	struct drm_atomic_commit *state = &intel_state->base;
-	struct intel_display *display = to_intel_display(intel_state);
+	struct intel_display *display = to_intel_display(state);
 	struct intel_crtc *crtc;
-	int ret;
 
-	state->acquire_ctx = ctx;
-	to_intel_atomic_state(state)->internal = true;
+	state->base.acquire_ctx = ctx;
+	state->internal = true;
 
 	for_each_intel_crtc_in_pipe_mask(display, crtc, pipe_mask) {
 		struct intel_crtc_state *crtc_state =
-			intel_atomic_get_crtc_state(state, crtc);
+			intel_atomic_get_crtc_state(&state->base, crtc);
 
-		if (IS_ERR(crtc_state)) {
-			ret = PTR_ERR(crtc_state);
-			goto out;
-		}
+		if (IS_ERR(crtc_state))
+			return PTR_ERR(crtc_state);
 
 		crtc_state->uapi.connectors_changed = true;
 	}
 
-	ret = drm_atomic_commit(state);
-out:
-	return ret;
+	return drm_atomic_commit(&state->base);
 }
 
 int intel_modeset_commit_pipes(struct intel_display *display,
