@@ -1270,6 +1270,28 @@ link_recovery_autoretrain_pending(struct intel_dp_link_training *link_training)
 	return link_training->seq_train_failures == 1;
 }
 
+/*
+ * Automatic retraining is a driver-driven link recovery mechanism that
+ * retrains the link with the current userspace provided modeset
+ * configuration and link parameters.
+ *
+ * Autoretrain is allowed while the link configurations available for
+ * retraining, i.e. those not disabled yet via fallback selection, still
+ * make it possible to retrain the link for the current userspace provided
+ * modeset configuration.
+ *
+ * Once automatic retraining is no longer allowed, userspace driven link
+ * recovery via userspace notifications and userspace modesets takes over.
+ *
+ * See also:
+ *   - DOC: DisplayPort link training
+ */
+static bool
+link_recovery_autoretrain_allowed(struct intel_dp_link_training *link_training)
+{
+	return link_training->seq_train_failures < MAX_SEQ_TRAIN_FAILURES;
+}
+
 /**
  * intel_dp_stop_link_train - stop link training
  * @intel_dp: DP struct
@@ -1310,7 +1332,7 @@ void intel_dp_stop_link_train(struct intel_dp *intel_dp,
 	intel_hpd_unblock(encoder);
 
 	if (!display->hotplug.ignore_long_hpd &&
-	    link_training->seq_train_failures < MAX_SEQ_TRAIN_FAILURES) {
+	    link_recovery_autoretrain_allowed(link_training)) {
 		int delay_ms = link_recovery_autoretrain_pending(link_training) ? 0 : 2000;
 
 		intel_encoder_link_check_queue_work(encoder, delay_ms);
@@ -1837,7 +1859,7 @@ void intel_dp_start_link_train(struct intel_atomic_state *state,
 		return;
 	}
 
-	if (link_training->seq_train_failures < MAX_SEQ_TRAIN_FAILURES)
+	if (link_recovery_autoretrain_allowed(link_training))
 		link_training->seq_train_failures++;
 
 	/*
@@ -1857,7 +1879,7 @@ void intel_dp_start_link_train(struct intel_atomic_state *state,
 		return;
 	}
 
-	if (link_training->seq_train_failures < MAX_SEQ_TRAIN_FAILURES)
+	if (link_recovery_autoretrain_allowed(link_training))
 		return;
 
 	if (intel_dp_schedule_fallback_link_training(state, intel_dp, crtc_state))
@@ -2009,7 +2031,7 @@ intel_dp_needs_link_retrain(struct intel_dp *intel_dp)
 					intel_dp->lane_count))
 		return false;
 
-	if (link_training->seq_train_failures >= MAX_SEQ_TRAIN_FAILURES)
+	if (!link_recovery_autoretrain_allowed(link_training))
 		return false;
 
 	if (link_recovery_autoretrain_pending(link_training))
