@@ -8,6 +8,7 @@
 
 #define pr_fmt(fmt)	"kexec_file(Image): " fmt
 
+#include <linux/elf.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -92,16 +93,32 @@ static void *image_load(struct kimage *image,
 #ifdef CONFIG_CRASH_DUMP
 	if (image->type == KEXEC_TYPE_CRASH) {
 		/* load elf core header */
-		unsigned long headers_sz;
+		unsigned long headers_sz, pnum = 0;
 		void *headers;
 
-		ret = crash_prepare_headers(true, &headers, &headers_sz, NULL);
+		ret = crash_prepare_headers(true, &headers, &headers_sz, &pnum);
 		if (ret) {
 			pr_err("Preparing elf core header failed\n");
 			return ERR_PTR(ret);
 		}
 		image->elf_headers = headers;
 		image->elf_headers_sz = headers_sz;
+
+#ifdef CONFIG_CRASH_HOTPLUG
+		/*
+		 * The elfcorehdr segment size accounts for VMCOREINFO, kernel_map
+		 * maximum CPUs and maximum memory ranges.
+		 */
+		if (IS_ENABLED(CONFIG_MEMORY_HOTPLUG))
+			pnum = 2 + num_possible_cpus() + CONFIG_CRASH_MAX_MEMORY_RANGES;
+		else
+			pnum += 2 + num_possible_cpus();
+
+		if (pnum < (unsigned long)PN_XNUM)
+			image->elf_headers_sz = max(pnum_hdr_sz(pnum), headers_sz);
+		else
+			pr_err("number of Phdrs %lu exceeds max\n", pnum);
+#endif
 	}
 #endif
 

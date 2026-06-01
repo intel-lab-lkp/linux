@@ -10,11 +10,11 @@
 
 #define pr_fmt(fmt) "kexec_file: " fmt
 
+#include <linux/elf.h>
 #include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/kexec.h>
 #include <linux/libfdt.h>
-#include <linux/memblock.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
 #include <linux/slab.h>
@@ -38,38 +38,6 @@ int arch_kimage_file_post_load_cleanup(struct kimage *image)
 
 	return kexec_image_post_load_cleanup_default(image);
 }
-
-#ifdef CONFIG_CRASH_DUMP
-unsigned int arch_get_system_nr_ranges(void)
-{
-	/* for exclusion of crashkernel region */
-	unsigned int nr_ranges = 2 + crashk_cma_cnt + CRASH_HOTPLUG_SAFETY_PADDING;
-	phys_addr_t start, end;
-	u64 i;
-
-	for_each_mem_range(i, &start, &end)
-		nr_ranges++;
-
-	return nr_ranges;
-}
-
-int arch_crash_populate_cmem(struct crash_mem *cmem)
-{
-	phys_addr_t start, end;
-	u64 i;
-
-	for_each_mem_range(i, &start, &end) {
-		if (unlikely(cmem->nr_ranges >= cmem->max_nr_ranges))
-			return -EAGAIN;
-
-		cmem->ranges[cmem->nr_ranges].start = start;
-		cmem->ranges[cmem->nr_ranges].end = end - 1;
-		cmem->nr_ranges++;
-	}
-
-	return 0;
-}
-#endif
 
 /*
  * Tries to add the initrd and DTB to the image. If it is not possible to find
@@ -98,6 +66,12 @@ int load_other_segments(struct kimage *image,
 		kbuf.bufsz = image->elf_headers_sz;
 		kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
 		kbuf.memsz = image->elf_headers_sz;
+
+#ifdef CONFIG_CRASH_HOTPLUG
+		if (image->elf_headers_sz < pnum_hdr_sz(PN_XNUM))
+			image->elfcorehdr_index = image->nr_segments;
+#endif
+
 		kbuf.buf_align = SZ_64K; /* largest supported page size */
 		kbuf.buf_max = ULONG_MAX;
 		kbuf.top_down = true;
