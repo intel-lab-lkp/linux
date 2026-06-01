@@ -20,16 +20,25 @@ static unsigned int
 ebt_redirect_tg(struct sk_buff *skb, const struct xt_action_param *par)
 {
 	const struct ebt_redirect_info *info = par->targinfo;
+	const unsigned char *dev_addr;
 
 	if (skb_ensure_writable(skb, 0))
 		return EBT_DROP;
 
-	if (xt_hooknum(par) != NF_BR_BROUTING)
-		/* rcu_read_lock()ed by nf_hook_thresh */
-		ether_addr_copy(eth_hdr(skb)->h_dest,
-				br_port_get_rcu(xt_in(par))->br->dev->dev_addr);
-	else
-		ether_addr_copy(eth_hdr(skb)->h_dest, xt_in(par)->dev_addr);
+	if (xt_hooknum(par) != NF_BR_BROUTING) {
+		const struct net_bridge_port *port;
+
+		port = br_port_get_rcu(xt_in(par));
+		if (!port)
+			return EBT_DROP;
+
+		dev_addr = port->br->dev->dev_addr;
+	} else {
+		dev_addr = xt_in(par)->dev_addr;
+	}
+
+	ether_addr_copy(eth_hdr(skb)->h_dest, dev_addr);
+
 	skb->pkt_type = PACKET_HOST;
 	return info->target;
 }
