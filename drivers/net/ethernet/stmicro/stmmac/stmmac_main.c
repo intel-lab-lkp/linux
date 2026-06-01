@@ -292,16 +292,18 @@ static void __stmmac_disable_all_queues(struct stmmac_priv *priv)
 static void stmmac_disable_all_queues(struct stmmac_priv *priv)
 {
 	u8 rx_queues_cnt = priv->plat->rx_queues_to_use;
-	struct stmmac_rx_queue *rx_q;
 	u8 queue;
 
-	/* synchronize_rcu() needed for pending XDP buffers to drain */
 	for (queue = 0; queue < rx_queues_cnt; queue++) {
-		rx_q = &priv->dma_conf.rx_queue[queue];
-		if (rx_q->xsk_pool) {
-			synchronize_rcu();
-			break;
+		struct stmmac_channel *ch = &priv->channel[queue];
+
+		if (stmmac_xdp_is_enabled(priv) &&
+		    test_bit(queue, priv->af_xdp_zc_qps)) {
+			napi_synchronize(&ch->rxtx_napi);
+		} else {
+			napi_synchronize(&ch->rx_napi);
 		}
+
 	}
 
 	__stmmac_disable_all_queues(priv);
