@@ -1516,13 +1516,21 @@ static int omap_dma_chan_init(struct omap_dmadev *od)
 
 static void omap_dma_free(struct omap_dmadev *od)
 {
+	struct omap_chan *c;
+
 	while (!list_empty(&od->ddev.channels)) {
-		struct omap_chan *c = list_first_entry(&od->ddev.channels,
-			struct omap_chan, vc.chan.device_node);
+		c = list_first_entry(&od->ddev.channels,
+				     struct omap_chan, vc.chan.device_node);
 
 		list_del(&c->vc.chan.device_node);
 		tasklet_kill(&c->vc.task);
 		vchan_free_chan_resources(&c->vc);
+		if (c->vc.chan.client_count) {
+			dev_warn(od->ddev.dev,
+				 "chan%d freed with %u client(s)\n",
+				 c->dma_ch, c->vc.chan.client_count);
+			continue;
+		}
 		kfree(c);
 	}
 }
@@ -1870,15 +1878,19 @@ static void omap_dma_remove(struct platform_device *pdev)
 	if (pdev->dev.of_node)
 		of_dma_controller_free(pdev->dev.of_node);
 
-	irq = platform_get_irq(pdev, 1);
-	devm_free_irq(&pdev->dev, irq, od);
-
 	dma_async_device_unregister(&od->ddev);
 
 	if (!omap_dma_legacy(od)) {
-		/* Disable all interrupts */
-		omap_dma_glbl_write(od, IRQENABLE_L0, 0);
+		spin_lock_irq(&od->irq_lock);
+		od->irq_enable_mask = 0;
+		omap_dma_glbl_write(od, IRQENABLE_L1, 0);
+		spin_unlock_irq(&od->irq_lock);
+		omap_dma_glbl_read(od, IRQENABLE_L1);
 	}
+
+	irq = platform_get_irq(pdev, 1);
+	if (irq > 0)
+		devm_free_irq(&pdev->dev, irq, od);
 
 	omap_dma_free(od);
 
