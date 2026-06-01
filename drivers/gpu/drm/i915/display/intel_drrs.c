@@ -165,6 +165,12 @@ void intel_drrs_activate(const struct intel_crtc_state *crtc_state)
 
 	mutex_lock(&crtc->drrs.mutex);
 
+	/* don't re-arm DRRS if forcefully disabled by debugfs */
+	if (crtc->drrs.force_disabled) {
+		mutex_unlock(&crtc->drrs.mutex);
+		return;
+	}
+
 	crtc->drrs.cpu_transcoder = crtc_state->cpu_transcoder;
 	crtc->drrs.m_n = crtc_state->dp_m_n;
 	crtc->drrs.m2_n2 = crtc_state->dp_m2_n2;
@@ -375,6 +381,10 @@ static int intel_drrs_debugfs_ctl_set(void *data, u64 val)
 	}
 
 	drm_dbg_kms(display->drm, "Manually %sactivating DRRS\n", val ? "" : "de");
+
+	mutex_lock(&crtc->drrs.mutex);
+	crtc->drrs.force_disabled = !val;
+	mutex_unlock(&crtc->drrs.mutex);
 
 	if (val)
 		intel_drrs_activate(crtc_state);

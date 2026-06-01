@@ -1538,6 +1538,8 @@ struct intel_crtc {
 		unsigned int busy_frontbuffer_bits;
 		enum transcoder cpu_transcoder;
 		struct intel_link_m_n m_n, m2_n2;
+		/* Runtime override; set to keep DRRS off across commits. */
+		bool force_disabled;
 	} drrs;
 
 	struct {
