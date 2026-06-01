@@ -16,10 +16,12 @@
 
 #define pr_fmt(fmt)	"resctrl: " fmt
 
+#include <linux/cleanup.h>
 #include <linux/cpu.h>
 #include <linux/slab.h>
 #include <linux/err.h>
 #include <linux/cpuhotplug.h>
+#include <linux/mutex.h>
 
 #include <asm/cpu_device_id.h>
 #include <asm/msr.h>
@@ -776,12 +778,20 @@ static int resctrl_arch_offline_cpu(unsigned int cpu)
 	return 0;
 }
 
+static DEFINE_MUTEX(resctrl_arch_mount_lock);
+static int resctrl_arch_mount_entries;
+
 void resctrl_arch_pre_mount(void)
 {
 	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_PERF_PKG].r_resctrl;
 	int cpu;
 
-	if (!intel_aet_get_events())
+	guard(mutex)(&resctrl_arch_mount_lock);
+
+	if (++resctrl_arch_mount_entries > 1)
+		return;
+
+	if (!intel_aet_pre_mount())
 		return;
 
 	/*
@@ -794,6 +804,33 @@ void resctrl_arch_pre_mount(void)
 	rdt_mon_feature_count++;
 	for_each_online_cpu(cpu)
 		domain_add_cpu_mon(cpu, r);
+	mutex_unlock(&domain_list_lock);
+	cpus_read_unlock();
+}
+
+void resctrl_arch_unmount(void)
+{
+	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_PERF_PKG].r_resctrl;
+	int cpu;
+
+	guard(mutex)(&resctrl_arch_mount_lock);
+
+	if (--resctrl_arch_mount_entries > 0)
+		return;
+
+	WARN_ON(resctrl_arch_mount_entries < 0);
+
+	intel_aet_unmount();
+
+	if (!r->mon_capable)
+		return;
+
+	cpus_read_lock();
+	mutex_lock(&domain_list_lock);
+	for_each_online_cpu(cpu)
+		domain_remove_cpu_mon(cpu, r);
+	r->mon_capable = false;
+	rdt_mon_feature_count--;
 	mutex_unlock(&domain_list_lock);
 	cpus_read_unlock();
 }
@@ -1174,8 +1211,6 @@ late_initcall(resctrl_arch_late_init);
 
 static void __exit resctrl_arch_exit(void)
 {
-	intel_aet_exit();
-
 	cpuhp_remove_state(rdt_online);
 
 	resctrl_exit();

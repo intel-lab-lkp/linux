@@ -25,8 +25,8 @@
 #include <linux/intel_vsec.h>
 #include <linux/io.h>
 #include <linux/minmax.h>
-#include <linux/mutex.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/printk.h>
 #include <linux/rculist.h>
 #include <linux/rcupdate.h>
@@ -308,7 +308,7 @@ static void (*put_feature)(struct pmt_feature_group *p);
  * struct pmt_feature_group to indicate that its events are successfully
  * enabled.
  */
-bool intel_aet_get_events(void)
+static bool aet_get_events(void)
 {
 	struct pmt_feature_group *p;
 	enum pmt_feature_id pfid;
@@ -317,14 +317,14 @@ bool intel_aet_get_events(void)
 
 	for_each_event_group(peg) {
 		pfid = lookup_pfid((*peg)->pfname);
-		p = intel_pmt_get_regions_by_feature(pfid);
+		p = get_feature(pfid);
 		if (IS_ERR_OR_NULL(p))
 			continue;
 		if (enable_events(*peg, p)) {
 			(*peg)->pfg = p;
 			ret = true;
 		} else {
-			intel_pmt_put_feature_group(p);
+			put_feature(p);
 		}
 	}
 
@@ -353,15 +353,55 @@ void intel_aet_unregister_enumeration(void)
 }
 EXPORT_SYMBOL_NS_GPL(intel_aet_unregister_enumeration, "INTEL_PMT");
 
-void __exit intel_aet_exit(void)
+/*
+ * The pmt_telemetry module may not be loaded when the resctrl file system
+ * is mounted. Keep track of whether a hold was placed on the module to know
+ * whether to release it during unmount.
+ */
+static bool have_pmt_hold;
+
+bool intel_aet_pre_mount(void)
+{
+	bool ret;
+
+	guard(mutex)(&aet_register_lock);
+	if (!get_feature || !put_feature)
+		return false;
+
+	if (pmt_module) {
+		if (!try_module_get(pmt_module))
+			return false;
+		have_pmt_hold = true;
+	}
+
+	ret = aet_get_events();
+
+	if (!ret && pmt_module && have_pmt_hold) {
+		module_put(pmt_module);
+		have_pmt_hold = false;
+	}
+
+	return ret;
+}
+
+void intel_aet_unmount(void)
 {
 	struct event_group **peg;
 
+	guard(mutex)(&aet_register_lock);
 	for_each_event_group(peg) {
 		if ((*peg)->pfg) {
-			intel_pmt_put_feature_group((*peg)->pfg);
+			struct event_group *e = *peg;
+
+			for (int j = 0; j < e->num_events; j++)
+				resctrl_disable_mon_event(e->evts[j].id);
+			put_feature((*peg)->pfg);
 			(*peg)->pfg = NULL;
 		}
+	}
+	if (have_pmt_hold && pmt_module) {
+		module_put(pmt_module);
+		have_pmt_hold = false;
 	}
 }
 
