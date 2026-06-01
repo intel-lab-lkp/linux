@@ -333,7 +333,7 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 	 * @devid: unique device identifier in a remote host
 	 * @speed: usb device speed in a remote host
 	 */
-	if (sscanf(buf, "%u %u %u %u", &port, &sockfd, &devid, &speed) != 4)
+	if (sscanf(buf, "%u %d %u %u", &port, &sockfd, &devid, &speed) != 4)
 		return -EINVAL;
 	pdev_nr = port_to_pdev_nr(port);
 	rhport = port_to_rhport(port);
