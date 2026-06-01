@@ -1845,7 +1845,8 @@ static int nvme_rdma_route_resolved(struct nvme_rdma_queue *queue)
 	param.qp_num = queue->qp->qp_num;
 	param.flow_control = 1;
 
-	param.responder_resources = queue->device->dev->attrs.max_qp_rd_atom;
+	param.responder_resources = min_t(u32, U8_MAX,
+					  queue->device->dev->attrs.max_qp_rd_atom);
 	/* maximum retry count */
 	param.retry_count = 7;
 	param.rnr_retry_count = 7;

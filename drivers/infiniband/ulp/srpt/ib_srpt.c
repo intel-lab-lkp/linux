@@ -1884,7 +1884,7 @@ retry:
 	 * both both, as RDMA contexts will also post completions for the
 	 * RDMA READ case.
 	 */
-	qp_init->cap.max_send_wr = min(sq_size / 2, attrs->max_qp_wr);
+	qp_init->cap.max_send_wr = min_t(u32, sq_size / 2, attrs->max_qp_wr);
 	qp_init->cap.max_rdma_ctxs = sq_size / 2;
 	qp_init->cap.max_send_sge = attrs->max_send_sge;
 	qp_init->cap.max_recv_sge = 1;
@@ -2298,7 +2298,7 @@ static int srpt_cm_req_recv(struct srpt_device *const sdev,
 	 * depth to avoid that the initiator driver has to report QUEUE_FULL
 	 * to the SCSI mid-layer.
 	 */
-	ch->rq_size = min(MAX_SRPT_RQ_SIZE, sdev->device->attrs.max_qp_wr);
+	ch->rq_size = min_t(u32, MAX_SRPT_RQ_SIZE, sdev->device->attrs.max_qp_wr);
 	spin_lock_init(&ch->spinlock);
 	ch->state = CH_CONNECTING;
 	INIT_LIST_HEAD(&ch->cmd_wait_list);
@@ -3225,7 +3225,7 @@ static int srpt_add_one(struct ib_device *device)
 
 	sdev->lkey = sdev->pd->local_dma_lkey;
 
-	sdev->srq_size = min(srpt_srq_size, sdev->device->attrs.max_srq_wr);
+	sdev->srq_size = min_t(u32, srpt_srq_size, sdev->device->attrs.max_srq_wr);
 
 	srpt_use_srq(sdev, sdev->port[0].port_attrib.use_srq);
 

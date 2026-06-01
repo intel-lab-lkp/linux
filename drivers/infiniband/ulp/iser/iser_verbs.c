@@ -589,7 +589,7 @@ static void iser_route_handler(struct rdma_cm_id *cma_id)
 		goto failure;
 
 	memset(&conn_param, 0, sizeof conn_param);
-	conn_param.responder_resources = ib_dev->attrs.max_qp_rd_atom;
+	conn_param.responder_resources = min_t(u32, U8_MAX, ib_dev->attrs.max_qp_rd_atom);
 	conn_param.initiator_depth = 1;
 	conn_param.retry_count = 7;
 	conn_param.rnr_retry_count = 6;
