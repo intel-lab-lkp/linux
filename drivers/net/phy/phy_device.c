@@ -3778,6 +3778,8 @@ static int phy_probe(struct device *dev)
 	return 0;
 
 out:
+	phy_cleanup_ports(phydev);
+
 	sfp_bus_del_upstream(phydev->sfp_bus);
 	phydev->sfp_bus = NULL;
 
