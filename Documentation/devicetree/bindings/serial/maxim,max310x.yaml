@@ -40,6 +40,36 @@ properties:
     minItems: 1
     maxItems: 16
 
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+patternProperties:
+  "^serial@[0-3]$":
+    type: object
+    description:
+      A single UART channel of a multi-channel variant. Describe the
+      channel's RS-485 wiring here with the standard properties from
+      /schemas/serial/rs485.yaml#; being a serial node, the channel may
+      also host a serial slave device. Single-channel variants have no
+      such subnode - their settings stay on the chip node.
+
+    allOf:
+      - $ref: /schemas/serial/serial.yaml#
+      - $ref: /schemas/serial/rs485.yaml#
+
+    properties:
+      reg:
+        description: UART channel number on the chip.
+        maximum: 3
+
+    required:
+      - reg
+
+    unevaluatedProperties: false
+
 required:
   - compatible
   - reg
@@ -51,6 +81,32 @@ allOf:
   - $ref: /schemas/spi/spi-peripheral-props.yaml#
   - $ref: /schemas/serial/serial.yaml#
   - $ref: /schemas/serial/rs485.yaml#
+
+  # max3107 and max3108 are single-channel parts: there are no
+  # addressable channel subnodes, so RS-485 stays on the chip node.
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - maxim,max3107
+              - maxim,max3108
+    then:
+      properties:
+        "#address-cells": false
+        "#size-cells": false
+      patternProperties:
+        "^serial@[0-3]$": false
+
+  # max3109 has two UART channels: 0 and 1.
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: maxim,max3109
+    then:
+      patternProperties:
+        "^serial@[23]$": false
 
 unevaluatedProperties: false
 
@@ -70,5 +126,39 @@ examples:
             interrupts = <7 IRQ_TYPE_LEVEL_LOW>;
             gpio-controller;
             #gpio-cells = <2>;
+            rs485-rts-active-low;
+            linux,rs485-enabled-at-boot-time;
+        };
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        serial@0 {
+            compatible = "maxim,max14830";
+            reg = <0>;
+            spi-max-frequency = <26000000>;
+            clocks = <&xtal4m>;
+            clock-names = "xtal";
+            interrupt-parent = <&gpio3>;
+            interrupts = <7 IRQ_TYPE_LEVEL_LOW>;
+            gpio-controller;
+            #gpio-cells = <2>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            serial@0 {
+                reg = <0>;
+                rs485-rts-active-low;
+                linux,rs485-enabled-at-boot-time;
+            };
+
+            serial@2 {
+                reg = <2>;
+                rs485-rts-active-low;
+            };
         };
     };
