@@ -66,6 +66,12 @@
 
 struct intel_dp_link_training {
 	struct intel_dp *dp;
+
+	bool retrain_disabled;
+	/* Sequential link training failures after a passing LT */
+	int seq_train_failures;
+	int force_train_failure;
+	bool force_retrain;
 };
 
 static struct intel_dp_link_training *connector_to_link_training(struct intel_connector *connector)
@@ -1277,6 +1283,7 @@ intel_dp_128b132b_intra_hop(struct intel_dp *intel_dp,
 void intel_dp_stop_link_train(struct intel_dp *intel_dp,
 			      const struct intel_crtc_state *crtc_state)
 {
+	struct intel_dp_link_training *link_training = intel_dp->link.training;
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
 	int ret;
@@ -1297,8 +1304,8 @@ void intel_dp_stop_link_train(struct intel_dp *intel_dp,
 	intel_hpd_unblock(encoder);
 
 	if (!display->hotplug.ignore_long_hpd &&
-	    intel_dp->link.seq_train_failures < MAX_SEQ_TRAIN_FAILURES) {
-		int delay_ms = intel_dp->link.seq_train_failures ? 0 : 2000;
+	    link_training->seq_train_failures < MAX_SEQ_TRAIN_FAILURES) {
+		int delay_ms = link_training->seq_train_failures ? 0 : 2000;
 
 		intel_encoder_link_check_queue_work(encoder, delay_ms);
 	}
@@ -1791,6 +1798,8 @@ void intel_dp_start_link_train(struct intel_atomic_state *state,
 	struct intel_display *display = to_intel_display(state);
 	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
 	struct intel_encoder *encoder = &dig_port->base;
+	struct intel_dp_link_training *link_training =
+		intel_dp->link.training;
 	bool passed;
 	/*
 	 * Reinit the LTTPRs here to ensure that they are switched to
@@ -1814,15 +1823,15 @@ void intel_dp_start_link_train(struct intel_atomic_state *state,
 	else
 		passed = intel_dp_link_train_all_phys(intel_dp, crtc_state, lttpr_count);
 
-	if (intel_dp->link.force_train_failure) {
-		intel_dp->link.force_train_failure--;
+	if (link_training->force_train_failure) {
+		link_training->force_train_failure--;
 		lt_dbg(intel_dp, DP_PHY_DPRX, "Forcing link training failure\n");
 	} else if (passed) {
-		intel_dp->link.seq_train_failures = 0;
+		link_training->seq_train_failures = 0;
 		return;
 	}
 
-	intel_dp->link.seq_train_failures++;
+	link_training->seq_train_failures++;
 
 	/*
 	 * Ignore the link failure in CI
@@ -1841,13 +1850,13 @@ void intel_dp_start_link_train(struct intel_atomic_state *state,
 		return;
 	}
 
-	if (intel_dp->link.seq_train_failures < MAX_SEQ_TRAIN_FAILURES)
+	if (link_training->seq_train_failures < MAX_SEQ_TRAIN_FAILURES)
 		return;
 
 	if (intel_dp_schedule_fallback_link_training(state, intel_dp, crtc_state))
 		return;
 
-	intel_dp->link.retrain_disabled = true;
+	link_training->retrain_disabled = true;
 
 	if (!passed)
 		lt_err(intel_dp, DP_PHY_DPRX, "Can't reduce link training parameters after failure\n");
@@ -1946,17 +1955,13 @@ intel_dp_read_link_status(struct intel_dp *intel_dp, u8 link_status[DP_LINK_STAT
 
 bool intel_dp_link_training_get_force_retrain(struct intel_dp_link_training *link_training)
 {
-	struct intel_dp *intel_dp = link_training->dp;
-
-	return intel_dp->link.force_retrain;
+	return link_training->force_retrain;
 }
 
 static void intel_dp_link_training_set_force_retrain(struct intel_dp_link_training *link_training,
 						     bool forced)
 {
-	struct intel_dp *intel_dp = link_training->dp;
-
-	intel_dp->link.force_retrain = forced;
+	link_training->force_retrain = forced;
 }
 
 static bool
@@ -1997,10 +2002,10 @@ intel_dp_needs_link_retrain(struct intel_dp *intel_dp)
 					intel_dp->lane_count))
 		return false;
 
-	if (intel_dp->link.retrain_disabled)
+	if (link_training->retrain_disabled)
 		return false;
 
-	if (intel_dp->link.seq_train_failures)
+	if (link_training->seq_train_failures)
 		return true;
 
 	/* Retrain if link not ok */
@@ -2346,7 +2351,6 @@ static int i915_dp_force_link_training_failure_show(void *data, u64 *val)
 	struct intel_connector *connector = to_intel_connector(data);
 	struct intel_display *display = to_intel_display(connector);
 	struct intel_dp_link_training *link_training = connector_to_link_training(connector);
-	struct intel_dp *intel_dp = link_training->dp;
 	int err;
 
 	err = drm_modeset_lock_single_interruptible(&display->drm->mode_config.connection_mutex);
@@ -2355,7 +2359,7 @@ static int i915_dp_force_link_training_failure_show(void *data, u64 *val)
 
 	intel_dp_flush_connector_commits(connector);
 
-	*val = intel_dp->link.force_train_failure;
+	*val = link_training->force_train_failure;
 
 	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
 
@@ -2367,7 +2371,6 @@ static int i915_dp_force_link_training_failure_write(void *data, u64 val)
 	struct intel_connector *connector = to_intel_connector(data);
 	struct intel_display *display = to_intel_display(connector);
 	struct intel_dp_link_training *link_training = connector_to_link_training(connector);
-	struct intel_dp *intel_dp = link_training->dp;
 	int err;
 
 	if (val > 2)
@@ -2379,7 +2382,7 @@ static int i915_dp_force_link_training_failure_write(void *data, u64 val)
 
 	intel_dp_flush_connector_commits(connector);
 
-	intel_dp->link.force_train_failure = val;
+	link_training->force_train_failure = val;
 
 	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
 
@@ -2440,7 +2443,6 @@ static int i915_dp_link_retrain_disabled_show(struct seq_file *m, void *data)
 	struct intel_connector *connector = to_intel_connector(m->private);
 	struct intel_display *display = to_intel_display(connector);
 	struct intel_dp_link_training *link_training = connector_to_link_training(connector);
-	struct intel_dp *intel_dp = link_training->dp;
 	int err;
 
 	err = drm_modeset_lock_single_interruptible(&display->drm->mode_config.connection_mutex);
@@ -2449,7 +2451,7 @@ static int i915_dp_link_retrain_disabled_show(struct seq_file *m, void *data)
 
 	intel_dp_flush_connector_commits(connector);
 
-	seq_printf(m, "%s\n", str_yes_no(intel_dp->link.retrain_disabled));
+	seq_printf(m, "%s\n", str_yes_no(link_training->retrain_disabled));
 
 	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
 
@@ -2489,10 +2491,8 @@ void intel_dp_link_training_debugfs_add(struct intel_connector *connector)
 
 void intel_dp_link_training_reset(struct intel_dp_link_training *link_training)
 {
-	struct intel_dp *intel_dp = link_training->dp;
-
-	intel_dp->link.retrain_disabled = false;
-	intel_dp->link.seq_train_failures = 0;
+	link_training->retrain_disabled = false;
+	link_training->seq_train_failures = 0;
 }
 
 struct intel_dp_link_training *intel_dp_link_training_init(struct intel_dp *intel_dp)

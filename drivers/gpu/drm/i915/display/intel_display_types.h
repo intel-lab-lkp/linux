@@ -1854,11 +1854,6 @@ struct intel_dp {
 		int mst_probed_rate;
 		int force_lane_count;
 		int force_rate;
-		bool retrain_disabled;
-		/* Sequential link training failures after a passing LT */
-		int seq_train_failures;
-		int force_train_failure;
-		bool force_retrain;
 		struct intel_dp_link_training *training;
 	} link;
 	bool reset_link_params;
