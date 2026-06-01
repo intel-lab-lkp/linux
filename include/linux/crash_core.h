@@ -14,6 +14,12 @@ struct crash_mem {
 	struct range ranges[] __counted_by(max_nr_ranges);
 };
 
+#ifdef CONFIG_MEMORY_HOTPLUG
+#define CRASH_HOTPLUG_SAFETY_PADDING 128
+#else
+#define CRASH_HOTPLUG_SAFETY_PADDING 0
+#endif
+
 #ifdef CONFIG_CRASH_DUMP
 
 int crash_shrink_memory(unsigned long new_size);
