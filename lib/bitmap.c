@@ -432,7 +432,7 @@ unsigned long bitmap_find_next_zero_area_off(unsigned long *map,
 					     unsigned long align_mask,
 					     unsigned long align_offset)
 {
-	unsigned long index, end, i;
+	unsigned long index, end, i, index_bits_align, index_idx;
 again:
 	index = find_next_zero_bit(map, size, start);
 
@@ -442,8 +442,12 @@ again:
 	end = index + nr;
 	if (end > size)
 		return end;
-	i = find_next_bit(map, end, index);
-	if (i < end) {
+
+	index_bits_align = round_down(index, BITS_PER_LONG);
+	index_idx = index / BITS_PER_LONG;
+
+	i = find_last_bit(map + index_idx, end - index_bits_align) + index_bits_align;
+	if (i > index && i < end) {
 		start = i + 1;
 		goto again;
 	}
