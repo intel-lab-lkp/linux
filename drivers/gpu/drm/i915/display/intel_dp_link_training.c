@@ -85,13 +85,21 @@
  *   failures trigger further fallback selections and userspace
  *   notifications.
  *
+ * @INTEL_DP_LINK_RECOVERY_NO_FALLBACK:
+ *   Fallback selection is no longer possible, as no usable fallback link
+ *   configurations remain. Recovery must proceed via userspace modesets
+ *   using the remaining allowed link configuration. Userspace continues
+ *   to be notified of subsequent link training failures.
+ *
  * Describes the link recovery state used by the Intel DP link recovery
  * logic.
  *
  * See also:
  *   - link_recovery_autoretrain_pending()
  *   - link_recovery_autoretrain_allowed()
+ *   - link_recovery_has_no_fallback()
  *   - link_recovery_mark_train_failure()
+ *   - link_recovery_mark_no_fallback()
  *   - link_recovery_reset()
  */
 enum intel_dp_link_recovery_state {
@@ -102,6 +110,7 @@ enum intel_dp_link_recovery_state {
 	INTEL_DP_LINK_RECOVERY_IDLE,
 	INTEL_DP_LINK_RECOVERY_AUTORETRAIN_PENDING,
 	INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED,
+	INTEL_DP_LINK_RECOVERY_NO_FALLBACK,
 };
 
 struct intel_dp_link_training {
@@ -109,7 +118,6 @@ struct intel_dp_link_training {
 
 	enum intel_dp_link_recovery_state recovery_state;
 
-	bool retrain_disabled;
 	int force_train_failure;
 	bool force_retrain;
 };
@@ -1338,6 +1346,12 @@ link_recovery_autoretrain_allowed(struct intel_dp_link_training *link_training)
 	}
 }
 
+static bool
+link_recovery_has_no_fallback(struct intel_dp_link_training *link_training)
+{
+	return link_training->recovery_state == INTEL_DP_LINK_RECOVERY_NO_FALLBACK;
+}
+
 /*
  * Record a link training failure and advance the recovery state to
  * indicate the next required recovery step.
@@ -1367,6 +1381,12 @@ link_recovery_mark_train_failure(struct intel_dp_link_training *link_training)
 	return link_recovery_autoretrain_allowed(link_training);
 }
 
+/* Record that no more link fallback configuration is available. */
+static void
+link_recovery_mark_no_fallback(struct intel_dp_link_training *link_training)
+{
+	link_training->recovery_state = INTEL_DP_LINK_RECOVERY_NO_FALLBACK;
+}
 
 /**
  * link_recovery_reset - reset the link recovery state
@@ -1973,7 +1993,7 @@ void intel_dp_start_link_train(struct intel_atomic_state *state,
 	if (intel_dp_schedule_fallback_link_training(state, intel_dp, crtc_state))
 		return;
 
-	link_training->retrain_disabled = true;
+	link_recovery_mark_no_fallback(link_training);
 
 	if (!passed)
 		lt_err(intel_dp, DP_PHY_DPRX, "Can't reduce link training parameters after failure\n");
@@ -2568,7 +2588,8 @@ static int i915_dp_link_retrain_disabled_show(struct seq_file *m, void *data)
 
 	intel_dp_flush_connector_commits(connector);
 
-	seq_printf(m, "%s\n", str_yes_no(link_training->retrain_disabled));
+	/* TODO: Expose this via a debugfs entry reflecting what the state represents. */
+	seq_printf(m, "%s\n", str_yes_no(link_recovery_has_no_fallback(link_training)));
 
 	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
 
@@ -2608,7 +2629,6 @@ void intel_dp_link_training_debugfs_add(struct intel_connector *connector)
 
 void intel_dp_link_training_reset(struct intel_dp_link_training *link_training)
 {
-	link_training->retrain_disabled = false;
 	link_recovery_reset(link_training);
 }
 
