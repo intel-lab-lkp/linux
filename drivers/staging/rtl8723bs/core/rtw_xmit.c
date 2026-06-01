@@ -2083,7 +2083,7 @@ signed int xmitframe_enqueue_for_sleeping_sta(struct adapter *padapter, struct x
 			pstapriv->sta_dz_bitmap |= BIT(0);
 
 			if (update_tim)
-				update_beacon(padapter, WLAN_EID_TIM, NULL, true);
+				update_beacon(padapter, WLAN_EID_TIM, true);
 			else
 				chk_bmc_sleepq_cmd(padapter);
 
@@ -2138,7 +2138,7 @@ signed int xmitframe_enqueue_for_sleeping_sta(struct adapter *padapter, struct x
 
 				if (update_tim)
 					/* update BCN for TIM IE */
-					update_beacon(padapter, WLAN_EID_TIM, NULL, true);
+					update_beacon(padapter, WLAN_EID_TIM, true);
 			}
 
 			ret = true;
@@ -2333,7 +2333,7 @@ _exit:
 	spin_unlock_bh(&pxmitpriv->lock);
 
 	if (update_mask)
-		update_beacon(padapter, WLAN_EID_TIM, NULL, true);
+		update_beacon(padapter, WLAN_EID_TIM, true);
 }
 
 void xmit_delivery_enabled_frames(struct adapter *padapter, struct sta_info *psta)
@@ -2393,7 +2393,7 @@ void xmit_delivery_enabled_frames(struct adapter *padapter, struct sta_info *pst
 		if ((psta->sleepq_ac_len == 0) && (!psta->has_legacy_ac) && (wmmps_ac)) {
 			pstapriv->tim_bitmap &= ~BIT(psta->aid);
 
-			update_beacon(padapter, WLAN_EID_TIM, NULL, true);
+			update_beacon(padapter, WLAN_EID_TIM, true);
 		}
 	}
 

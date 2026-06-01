@@ -232,7 +232,7 @@ void expire_timeout_chk(struct adapter *padapter)
 
 					/* to update bcn with tim_bitmap for this station */
 					pstapriv->tim_bitmap |= BIT(psta->aid);
-					update_beacon(padapter, WLAN_EID_TIM, NULL, true);
+					update_beacon(padapter, WLAN_EID_TIM, true);
 
 					if (!pmlmeext->active_keep_alive_check)
 						continue;
@@ -739,7 +739,7 @@ void start_bss_network(struct adapter *padapter)
 		       rtw_get_capability((struct wlan_bssid_ex *)pnetwork));
 
 	if (pmlmeext->bstart_bss) {
-		update_beacon(padapter, WLAN_EID_TIM, NULL, true);
+		update_beacon(padapter, WLAN_EID_TIM, true);
 
 		/* issue beacon frame */
 		send_beacon(padapter);
@@ -1336,7 +1336,7 @@ static void update_bcn_rsn_ie(struct adapter *padapter)
 {
 }
 
-void update_beacon(struct adapter *padapter, u8 ie_id, u8 *oui, u8 tx)
+void update_beacon(struct adapter *padapter, u8 ie_id, u8 tx)
 {
 	struct mlme_priv *pmlmepriv;
 	struct mlme_ext_priv *pmlmeext;
@@ -1513,7 +1513,7 @@ void bss_cap_update_on_sta_join(struct adapter *padapter, struct sta_info *psta)
 			if ((pmlmeext->cur_wireless_mode > WIRELESS_11B) &&
 			    (pmlmepriv->num_sta_no_short_preamble == 1)) {
 				beacon_updated = true;
-				update_beacon(padapter, 0xFF, NULL, true);
+				update_beacon(padapter, 0xFF, true);
 			}
 		}
 	} else {
@@ -1525,7 +1525,7 @@ void bss_cap_update_on_sta_join(struct adapter *padapter, struct sta_info *psta)
 			if ((pmlmeext->cur_wireless_mode > WIRELESS_11B) &&
 			    (pmlmepriv->num_sta_no_short_preamble == 0)) {
 				beacon_updated = true;
-				update_beacon(padapter, 0xFF, NULL, true);
+				update_beacon(padapter, 0xFF, true);
 			}
 		}
 	}
@@ -1538,7 +1538,7 @@ void bss_cap_update_on_sta_join(struct adapter *padapter, struct sta_info *psta)
 
 			if (pmlmepriv->num_sta_non_erp == 1) {
 				beacon_updated = true;
-				update_beacon(padapter, WLAN_EID_ERP_INFO, NULL, true);
+				update_beacon(padapter, WLAN_EID_ERP_INFO, true);
 			}
 		}
 	} else {
@@ -1549,7 +1549,7 @@ void bss_cap_update_on_sta_join(struct adapter *padapter, struct sta_info *psta)
 
 			if (pmlmepriv->num_sta_non_erp == 0) {
 				beacon_updated = true;
-				update_beacon(padapter, WLAN_EID_ERP_INFO, NULL, true);
+				update_beacon(padapter, WLAN_EID_ERP_INFO, true);
 			}
 		}
 	}
@@ -1563,7 +1563,7 @@ void bss_cap_update_on_sta_join(struct adapter *padapter, struct sta_info *psta)
 			if ((pmlmeext->cur_wireless_mode > WIRELESS_11B) &&
 			    (pmlmepriv->num_sta_no_short_slot_time == 1)) {
 				beacon_updated = true;
-				update_beacon(padapter, 0xFF, NULL, true);
+				update_beacon(padapter, 0xFF, true);
 			}
 		}
 	} else {
@@ -1575,7 +1575,7 @@ void bss_cap_update_on_sta_join(struct adapter *padapter, struct sta_info *psta)
 			if ((pmlmeext->cur_wireless_mode > WIRELESS_11B) &&
 			    (pmlmepriv->num_sta_no_short_slot_time == 0)) {
 				beacon_updated = true;
-				update_beacon(padapter, 0xFF, NULL, true);
+				update_beacon(padapter, 0xFF, true);
 			}
 		}
 	}
@@ -1610,8 +1610,8 @@ void bss_cap_update_on_sta_join(struct adapter *padapter, struct sta_info *psta)
 	}
 
 	if (rtw_ht_operation_update(padapter) > 0) {
-		update_beacon(padapter, WLAN_EID_HT_CAPABILITY, NULL, false);
-		update_beacon(padapter, WLAN_EID_HT_OPERATION, NULL, true);
+		update_beacon(padapter, WLAN_EID_HT_CAPABILITY, false);
+		update_beacon(padapter, WLAN_EID_HT_OPERATION, true);
 	}
 
 	/* update associated stations cap. */
@@ -1633,7 +1633,7 @@ u8 bss_cap_update_on_sta_leave(struct adapter *padapter, struct sta_info *psta)
 		if (pmlmeext->cur_wireless_mode > WIRELESS_11B &&
 		    pmlmepriv->num_sta_no_short_preamble == 0){
 			beacon_updated = true;
-			update_beacon(padapter, 0xFF, NULL, true);
+			update_beacon(padapter, 0xFF, true);
 		}
 	}
 
@@ -1642,7 +1642,7 @@ u8 bss_cap_update_on_sta_leave(struct adapter *padapter, struct sta_info *psta)
 		pmlmepriv->num_sta_non_erp--;
 		if (pmlmepriv->num_sta_non_erp == 0) {
 			beacon_updated = true;
-			update_beacon(padapter, WLAN_EID_ERP_INFO, NULL, true);
+			update_beacon(padapter, WLAN_EID_ERP_INFO, true);
 		}
 	}
 
@@ -1652,7 +1652,7 @@ u8 bss_cap_update_on_sta_leave(struct adapter *padapter, struct sta_info *psta)
 		if (pmlmeext->cur_wireless_mode > WIRELESS_11B &&
 		    pmlmepriv->num_sta_no_short_slot_time == 0){
 			beacon_updated = true;
-			update_beacon(padapter, 0xFF, NULL, true);
+			update_beacon(padapter, 0xFF, true);
 		}
 	}
 
@@ -1672,8 +1672,8 @@ u8 bss_cap_update_on_sta_leave(struct adapter *padapter, struct sta_info *psta)
 	}
 
 	if (rtw_ht_operation_update(padapter) > 0) {
-		update_beacon(padapter, WLAN_EID_HT_CAPABILITY, NULL, false);
-		update_beacon(padapter, WLAN_EID_HT_OPERATION, NULL, true);
+		update_beacon(padapter, WLAN_EID_HT_CAPABILITY, false);
+		update_beacon(padapter, WLAN_EID_HT_OPERATION, true);
 	}
 
 	return beacon_updated;
