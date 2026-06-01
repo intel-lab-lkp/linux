@@ -975,6 +975,8 @@ static void macvlan_uninit(struct net_device *dev)
 	port->count -= 1;
 	if (!port->count)
 		macvlan_port_destroy(port->dev);
+
+	vlan->port = NULL;
 }
 
 static void macvlan_dev_get_stats64(struct net_device *dev,
@@ -1736,12 +1738,14 @@ static int macvlan_fill_info(struct sk_buff *skb,
 	}
 	if (nla_put_u32(skb, IFLA_MACVLAN_BC_QUEUE_LEN, vlan->bc_queue_len_req))
 		goto nla_put_failure;
-	if (nla_put_u32(skb, IFLA_MACVLAN_BC_QUEUE_LEN_USED,
-			READ_ONCE(port->bc_queue_len_used)))
-		goto nla_put_failure;
-	if (port->bc_cutoff != 1 &&
-	    nla_put_s32(skb, IFLA_MACVLAN_BC_CUTOFF, port->bc_cutoff))
-		goto nla_put_failure;
+	if (port) {
+		if (nla_put_u32(skb, IFLA_MACVLAN_BC_QUEUE_LEN_USED,
+				READ_ONCE(port->bc_queue_len_used)))
+			goto nla_put_failure;
+		if (port->bc_cutoff != 1 &&
+		    nla_put_s32(skb, IFLA_MACVLAN_BC_CUTOFF, port->bc_cutoff))
+			goto nla_put_failure;
+	}
 	return 0;
 
 nla_put_failure:
