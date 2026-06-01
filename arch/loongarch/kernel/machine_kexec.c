@@ -21,10 +21,6 @@
 #include <asm/cacheflush.h>
 #include <asm/page.h>
 
-/* 0x100000 ~ 0x200000 is safe */
-#define KEXEC_CONTROL_CODE	TO_CACHE(0x100000UL)
-#define KEXEC_CMDLINE_ADDR	TO_CACHE(0x108000UL)
-
 static unsigned long reboot_code_buffer;
 static cpumask_t cpus_in_crash = CPU_MASK_NONE;
 
@@ -43,19 +39,30 @@ int machine_kexec_prepare(struct kimage *kimage)
 {
 	int i;
 	char *bootloader = "kexec";
-	void *cmdline_ptr = (void *)KEXEC_CMDLINE_ADDR;
+	struct page *cmdline_page;
+	void *cmdline_ptr;
 
 	kimage->arch.efi_boot = fw_arg0;
 	kimage->arch.systable_ptr = fw_arg2;
 
+	/*
+	 * Allocate a separate control page for the kernel command line.
+	 * kimage_alloc_control_pages() ensures the page is not overwritten
+	 * by the kexec page-copy loop.
+	 */
+	cmdline_page = kimage_alloc_control_pages(kimage, 0);
+	if (!cmdline_page)
+		return -ENOMEM;
+	cmdline_ptr = page_to_virt(cmdline_page);
+
 	if (kimage->file_mode == 1) {
 		/*
-		 * kimage->cmdline_buf will be released in kexec_file_load, so copy
-		 * to the KEXEC_CMDLINE_ADDR safe area.
+		 * kimage->cmdline_buf will be released in kexec_file_load, so
+		 * copy it to the control page before it is freed.
 		 */
-		memcpy((void *)KEXEC_CMDLINE_ADDR, (void *)kimage->arch.cmdline_ptr,
-					strlen((char *)kimage->arch.cmdline_ptr) + 1);
-		kimage->arch.cmdline_ptr = (unsigned long)KEXEC_CMDLINE_ADDR;
+		memcpy(cmdline_ptr, (void *)kimage->arch.cmdline_ptr,
+		       strlen((char *)kimage->arch.cmdline_ptr) + 1);
+		kimage->arch.cmdline_ptr = (unsigned long)cmdline_ptr;
 	} else {
 		/* Find the command line */
 		for (i = 0; i < kimage->nr_segments; i++) {
@@ -73,9 +80,7 @@ int machine_kexec_prepare(struct kimage *kimage)
 	}
 
 	/* kexec/kdump need a safe page to save reboot_code_buffer */
-	kimage->control_code_page = virt_to_page((void *)KEXEC_CONTROL_CODE);
-
-	reboot_code_buffer = (unsigned long)page_address(kimage->control_code_page);
+	reboot_code_buffer = (unsigned long)page_to_virt(kimage->control_code_page);
 	memcpy((void *)reboot_code_buffer, relocate_new_kernel, relocate_new_kernel_size);
 
 #ifdef CONFIG_SMP
