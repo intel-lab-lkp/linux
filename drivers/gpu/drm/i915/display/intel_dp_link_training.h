@@ -13,6 +13,7 @@ struct intel_connector;
 struct intel_crtc_state;
 struct intel_dp;
 struct intel_dp_link_training;
+struct intel_encoder;
 
 int intel_dp_read_dprx_caps(struct intel_dp *intel_dp, u8 dpcd[DP_RECEIVER_CAP_SIZE]);
 int intel_dp_init_lttpr_and_dprx_caps(struct intel_dp *intel_dp);
@@ -54,6 +55,12 @@ static inline u8 intel_dp_training_pattern_symbol(u8 pattern)
 
 void intel_dp_128b132b_sdp_crc16(struct intel_dp *intel_dp,
 				 const struct intel_crtc_state *crtc_state);
+
+bool intel_dp_link_params_valid(struct intel_dp *intel_dp, int link_rate,
+				u8 lane_count);
+
+void intel_dp_link_check(struct intel_encoder *encoder);
+void intel_dp_check_link_state(struct intel_dp *intel_dp);
 
 void intel_dp_link_training_debugfs_add(struct intel_connector *connector);
 

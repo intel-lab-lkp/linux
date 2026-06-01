@@ -33,9 +33,11 @@
 #include "intel_display_utils.h"
 #include "intel_dp.h"
 #include "intel_dp_link_training.h"
+#include "intel_dp_mst.h"
 #include "intel_encoder.h"
 #include "intel_hdmi.h"
 #include "intel_hotplug.h"
+#include "intel_modeset_lock.h"
 #include "intel_panel.h"
 #include "intel_psr.h"
 
@@ -1866,6 +1868,203 @@ void intel_dp_128b132b_sdp_crc16(struct intel_dp *intel_dp,
 			   DP_SDP_CRC16_128B132B_EN);
 
 	lt_dbg(intel_dp, DP_PHY_DPRX, "DP2.0 SDP CRC16 for 128b/132b enabled\n");
+}
+
+bool intel_dp_link_params_valid(struct intel_dp *intel_dp, int link_rate,
+				u8 lane_count)
+{
+	/*
+	 * FIXME: we need to synchronize the current link parameters with
+	 * hardware readout. Currently fast link training doesn't work on
+	 * boot-up.
+	 */
+	if (link_rate == 0 ||
+	    link_rate > intel_dp->link.max_rate)
+		return false;
+
+	if (lane_count == 0 ||
+	    lane_count > intel_dp_max_lane_count(intel_dp))
+		return false;
+
+	return true;
+}
+
+static bool intel_dp_link_ok(struct intel_dp *intel_dp,
+			     u8 link_status[DP_LINK_STATUS_SIZE])
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
+	bool uhbr = intel_dp->link_rate >= 1000000;
+	bool ok;
+
+	if (uhbr)
+		ok = drm_dp_128b132b_lane_channel_eq_done(link_status,
+							  intel_dp->lane_count);
+	else
+		ok = drm_dp_channel_eq_ok(link_status, intel_dp->lane_count);
+
+	if (ok)
+		return true;
+
+	intel_dp_dump_link_status(intel_dp, DP_PHY_DPRX, link_status);
+	drm_dbg_kms(display->drm,
+		    "[ENCODER:%d:%s] %s link not ok, retraining\n",
+		    encoder->base.base.id, encoder->base.name,
+		    uhbr ? "128b/132b" : "8b/10b");
+
+	return false;
+}
+
+static int
+intel_dp_read_link_status(struct intel_dp *intel_dp, u8 link_status[DP_LINK_STATUS_SIZE])
+{
+	int err;
+
+	memset(link_status, 0, DP_LINK_STATUS_SIZE);
+
+	if (intel_dp_mst_active_streams(intel_dp) > 0)
+		err = drm_dp_dpcd_read_data(&intel_dp->aux, DP_LANE0_1_STATUS_ESI,
+					    link_status, DP_LINK_STATUS_SIZE - 2);
+	else
+		err = drm_dp_dpcd_read_phy_link_status(&intel_dp->aux, DP_PHY_DPRX,
+						       link_status);
+
+	if (err)
+		return err;
+
+	if (link_status[DP_LANE_ALIGN_STATUS_UPDATED - DP_LANE0_1_STATUS] &
+	    DP_DOWNSTREAM_PORT_STATUS_CHANGED)
+		WRITE_ONCE(intel_dp->downstream_port_changed, true);
+
+	return 0;
+}
+
+static bool
+intel_dp_needs_link_retrain(struct intel_dp *intel_dp)
+{
+	u8 link_status[DP_LINK_STATUS_SIZE];
+
+	if (!intel_dp->link.active)
+		return false;
+
+	/*
+	 * While PSR source HW is enabled, it will control main-link sending
+	 * frames, enabling and disabling it so trying to do a retrain will fail
+	 * as the link would or not be on or it could mix training patterns
+	 * and frame data at the same time causing retrain to fail.
+	 * Also when exiting PSR, HW will retrain the link anyways fixing
+	 * any link status error.
+	 */
+	if (intel_psr_enabled(intel_dp))
+		return false;
+
+	if (intel_dp->link.force_retrain)
+		return true;
+
+	if (intel_dp_read_link_status(intel_dp, link_status) < 0)
+		return false;
+
+	/*
+	 * Validate the cached values of intel_dp->link_rate and
+	 * intel_dp->lane_count before attempting to retrain.
+	 *
+	 * FIXME would be nice to user the crtc state here, but since
+	 * we need to call this from the short HPD handler that seems
+	 * a bit hard.
+	 */
+	if (!intel_dp_link_params_valid(intel_dp, intel_dp->link_rate,
+					intel_dp->lane_count))
+		return false;
+
+	if (intel_dp->link.retrain_disabled)
+		return false;
+
+	if (intel_dp->link.seq_train_failures)
+		return true;
+
+	/* Retrain if link not ok */
+	return !intel_dp_link_ok(intel_dp, link_status) &&
+		!intel_psr_link_ok(intel_dp);
+}
+
+static bool intel_dp_is_connected(struct intel_dp *intel_dp)
+{
+	struct intel_connector *connector = intel_dp->attached_connector;
+
+	return connector->base.status == connector_status_connected ||
+		intel_dp->is_mst;
+}
+
+static int intel_dp_retrain_link(struct intel_encoder *encoder,
+				 struct drm_modeset_acquire_ctx *ctx)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+	u8 pipe_mask;
+	int ret;
+
+	if (!intel_dp_is_connected(intel_dp))
+		return 0;
+
+	ret = drm_modeset_lock(&display->drm->mode_config.connection_mutex,
+			       ctx);
+	if (ret)
+		return ret;
+
+	if (!intel_dp_needs_link_retrain(intel_dp))
+		return 0;
+
+	ret = intel_dp_get_active_pipes(intel_dp, ctx, &pipe_mask);
+	if (ret)
+		return ret;
+
+	if (pipe_mask == 0)
+		return 0;
+
+	if (!intel_dp_needs_link_retrain(intel_dp))
+		return 0;
+
+	drm_dbg_kms(display->drm,
+		    "[ENCODER:%d:%s] retraining link (forced %s)\n",
+		    encoder->base.base.id, encoder->base.name,
+		    str_yes_no(intel_dp->link.force_retrain));
+
+	ret = intel_modeset_commit_pipes(display, pipe_mask, ctx);
+	if (ret == -EDEADLK)
+		return ret;
+
+	intel_dp->link.force_retrain = false;
+
+	if (ret)
+		drm_dbg_kms(display->drm,
+			    "[ENCODER:%d:%s] link retraining failed: %pe\n",
+			    encoder->base.base.id, encoder->base.name,
+			    ERR_PTR(ret));
+
+	return ret;
+}
+
+void intel_dp_link_check(struct intel_encoder *encoder)
+{
+	struct drm_modeset_acquire_ctx ctx;
+	int ret;
+
+	intel_modeset_lock_ctx_retry(&ctx, NULL, 0, ret)
+		ret = intel_dp_retrain_link(encoder, &ctx);
+}
+
+void intel_dp_check_link_state(struct intel_dp *intel_dp)
+{
+	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
+	struct intel_encoder *encoder = &dig_port->base;
+
+	if (!intel_dp_is_connected(intel_dp))
+		return;
+
+	if (!intel_dp_needs_link_retrain(intel_dp))
+		return;
+
+	intel_encoder_link_check_queue_work(encoder, 0);
 }
 
 static int i915_dp_force_link_rate_show(struct seq_file *m, void *data)
