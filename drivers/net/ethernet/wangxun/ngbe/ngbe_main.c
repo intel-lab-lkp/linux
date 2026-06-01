@@ -47,6 +47,28 @@ static const struct pci_device_id ngbe_pci_tbl[] = {
 	{ }
 };
 
+static void ngbe_soft_quiesce(struct wx *wx)
+{
+	if (test_and_set_bit(WX_STATE_DOWN, wx->state))
+		return;
+
+	wx_ptp_stop(wx);
+	phylink_stop(wx->phylink);
+	pci_clear_master(wx->pdev);
+	wx_napi_disable_all(wx);
+
+	clear_bit(WX_FLAG_NEED_PF_RESET, wx->flags);
+	timer_delete_sync(&wx->service_timer);
+
+	wx_clean_all_tx_rings(wx);
+	wx_clean_all_rx_rings(wx);
+
+	wx_free_irq(wx);
+	wx_free_isb_resources(wx);
+	wx_free_resources(wx);
+	phylink_disconnect_phy(wx->phylink);
+}
+
 /**
  *  ngbe_init_type_code - Initialize the shared code
  *  @wx: pointer to hardware structure
@@ -135,6 +157,7 @@ static int ngbe_sw_init(struct wx *wx)
 	wx->mbx.size = WX_VXMAILBOX_SIZE;
 	wx->setup_tc = ngbe_setup_tc;
 	wx->do_reset = ngbe_do_reset;
+	wx->soft_quiesce = ngbe_soft_quiesce;
 	set_bit(0, &wx->fwd_bitmask);
 
 	return 0;

@@ -296,6 +296,27 @@ void txgbe_up(struct wx *wx)
 	txgbe_up_complete(wx);
 }
 
+static void txgbe_soft_quiesce(struct wx *wx)
+{
+	if (test_and_set_bit(WX_STATE_DOWN, wx->state))
+		return;
+
+	wx_ptp_stop(wx);
+	phylink_stop(wx->phylink);
+	pci_clear_master(wx->pdev);
+	wx_napi_disable_all(wx);
+
+	clear_bit(WX_FLAG_NEED_PF_RESET, wx->flags);
+	timer_delete_sync(&wx->service_timer);
+
+	wx_clean_all_tx_rings(wx);
+	wx_clean_all_rx_rings(wx);
+
+	wx_free_irq(wx);
+	txgbe_free_misc_irq(wx->priv);
+	wx_free_resources(wx);
+}
+
 /**
  *  txgbe_init_type_code - Initialize the shared code
  *  @wx: pointer to hardware structure
@@ -412,6 +433,7 @@ static int txgbe_sw_init(struct wx *wx)
 
 	wx->setup_tc = txgbe_setup_tc;
 	wx->do_reset = txgbe_do_reset;
+	wx->soft_quiesce = txgbe_soft_quiesce;
 	set_bit(0, &wx->fwd_bitmask);
 
 	switch (wx->mac.type) {
