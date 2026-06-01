@@ -1813,7 +1813,7 @@ static int omap_dma_probe(struct platform_device *pdev)
 		}
 	}
 
-	rc = dma_async_device_register(&od->ddev);
+	rc = dmaenginem_async_device_register(&od->ddev);
 	if (rc) {
 		pr_warn("OMAP-DMA: failed to register slave DMA engine device: %d\n",
 			rc);
@@ -1838,7 +1838,6 @@ static int omap_dma_probe(struct platform_device *pdev)
 				of_dma_simple_xlate, &omap_dma_info);
 		if (rc) {
 			pr_warn("OMAP-DMA: failed to register DMA controller\n");
-			dma_async_device_unregister(&od->ddev);
 			spin_lock_irq(&od->irq_lock);
 			od->irq_enable_mask = 0;
 			omap_dma_glbl_write(od, IRQENABLE_L1, 0);
@@ -1870,15 +1869,12 @@ static int omap_dma_probe(struct platform_device *pdev)
 static void omap_dma_remove(struct platform_device *pdev)
 {
 	struct omap_dmadev *od = platform_get_drvdata(pdev);
-	int irq;
 
 	if (od->cfg->needs_busy_check || od->cfg->may_lose_context)
 		cpu_pm_unregister_notifier(&od->nb);
 
 	if (pdev->dev.of_node)
 		of_dma_controller_free(pdev->dev.of_node);
-
-	dma_async_device_unregister(&od->ddev);
 
 	if (!omap_dma_legacy(od)) {
 		spin_lock_irq(&od->irq_lock);
@@ -1887,10 +1883,6 @@ static void omap_dma_remove(struct platform_device *pdev)
 		spin_unlock_irq(&od->irq_lock);
 		omap_dma_glbl_read(od, IRQENABLE_L1);
 	}
-
-	irq = platform_get_irq(pdev, 1);
-	if (irq > 0)
-		devm_free_irq(&pdev->dev, irq, od);
 
 	omap_dma_free(od);
 
