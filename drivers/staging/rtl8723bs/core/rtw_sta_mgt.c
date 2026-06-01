@@ -249,7 +249,7 @@ struct	sta_info *rtw_alloc_stainfo(struct	sta_priv *pstapriv, u8 *hwaddr)
 
 		/* init recv timer */
 		timer_setup(&preorder_ctrl->reordering_ctrl_timer,
-				rtw_reordering_ctrl_timeout_handler, 0);
+			    rtw_reordering_ctrl_timeout_handler, 0);
 	}
 
 	/* init for DM */
