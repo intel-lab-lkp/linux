@@ -476,7 +476,8 @@ static int cttimeout_default_get(struct sk_buff *skb,
 		timeouts = &nf_generic_pernet(info->net)->timeout;
 		break;
 	default:
-		WARN_ONCE(1, "Missing timeouts for proto %d", l4proto->l4proto);
+		pr_warn_once("Missing timeouts for proto %d\n", l4proto->l4proto);
+		DEBUG_NET_WARN_ON_ONCE(1);
 		break;
 	}
 

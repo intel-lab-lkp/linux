@@ -117,8 +117,10 @@ int nfnetlink_subsys_register(const struct nfnetlink_subsystem *n)
 
 	/* Sanity-check attr_count size to avoid stack buffer overflow. */
 	for (cb_id = 0; cb_id < n->cb_count; cb_id++)
-		if (WARN_ON(n->cb[cb_id].attr_count > NFNL_MAX_ATTR_COUNT))
+		if (unlikely(n->cb[cb_id].attr_count > NFNL_MAX_ATTR_COUNT)) {
+			DEBUG_NET_WARN_ON_ONCE(1);
 			return -EINVAL;
+		}
 
 	nfnl_lock(n->subsys_id);
 	if (table[n->subsys_id].subsys) {
