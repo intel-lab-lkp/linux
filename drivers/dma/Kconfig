@@ -100,6 +100,17 @@ config ARM_DMA350
 	help
 	  Enable support for the Arm DMA-350 controller.
 
+config ATCDMAC300
+	bool "Andes DMA support"
+	depends on ARCH_ANDES
+	depends on OF
+	select DMA_ENGINE
+	help
+	  Enable support for the Andes ATCDMAC300 DMA controller.
+	  Select Y if your platform includes an ATCDMAC300 device that
+	  requires DMA engine support. This driver supports DMA_SLAVE,
+	  DMA_MEMCPY, and DMA_CYCLIC transfer modes.
+
 config AT_HDMAC
 	tristate "Atmel AHB DMA support"
 	depends on ARCH_AT91 || COMPILE_TEST
