@@ -1180,6 +1180,7 @@ struct task_struct {
 	unsigned long			last_switch_time;
 #endif
 	/* Filesystem information: */
+	struct fs_struct		*real_fs;
 	struct fs_struct		*fs;
 
 	/* Open file information: */
