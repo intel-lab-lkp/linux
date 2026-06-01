@@ -928,6 +928,14 @@ struct arm_smmu_device {
 #define ARM_SMMU_OPT_MSIPOLL		(1 << 2)
 #define ARM_SMMU_OPT_CMDQ_FORCE_SYNC	(1 << 3)
 #define ARM_SMMU_OPT_TEGRA241_CMDQV	(1 << 4)
+/*
+ * Tegra264 erratum: a TLB entry can survive an invalidation that races
+ * with concurrent traffic targeting the same entry. The software
+ * workaround is to issue every CFGI/TLBI command twice, each followed
+ * by CMD_SYNC. The second issue is guaranteed to evict the entry.
+ * ATC_INV commands are not affected and must not be doubled.
+ */
+#define ARM_SMMU_OPT_TLBI_TWICE		(1 << 5)
 	u32				options;
 
 	struct arm_smmu_cmdq		cmdq;
@@ -1210,6 +1218,38 @@ int arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
 				struct arm_smmu_cmdq *cmdq,
 				struct arm_smmu_cmd *cmds, int n,
 				bool sync);
+
+/*
+ * Returns true if @cmd is one of the CFGI_* or TLBI_* commands covered
+ * by the Tegra264 erratum (see ARM_SMMU_OPT_TLBI_TWICE) on an affected
+ * SMMU instance.
+ */
+static inline bool arm_smmu_cmd_needs_tlbi_twice(struct arm_smmu_device *smmu,
+						 struct arm_smmu_cmd *cmd)
+{
+	if (!(smmu->options & ARM_SMMU_OPT_TLBI_TWICE))
+		return false;
+
+	switch (FIELD_GET(CMDQ_0_OP, cmd->data[0])) {
+	case CMDQ_OP_CFGI_STE:
+	case CMDQ_OP_CFGI_ALL:
+	case CMDQ_OP_CFGI_CD:
+	case CMDQ_OP_CFGI_CD_ALL:
+	case CMDQ_OP_TLBI_NH_ALL:
+	case CMDQ_OP_TLBI_NH_ASID:
+	case CMDQ_OP_TLBI_NH_VA:
+	case CMDQ_OP_TLBI_NH_VAA:
+	case CMDQ_OP_TLBI_EL2_ALL:
+	case CMDQ_OP_TLBI_EL2_ASID:
+	case CMDQ_OP_TLBI_EL2_VA:
+	case CMDQ_OP_TLBI_S12_VMALL:
+	case CMDQ_OP_TLBI_S2_IPA:
+	case CMDQ_OP_TLBI_NSNH_ALL:
+		return true;
+	default:
+		return false;
+	}
+}
 
 #ifdef CONFIG_ARM_SMMU_V3_SVA
 bool arm_smmu_sva_supported(struct arm_smmu_device *smmu);
