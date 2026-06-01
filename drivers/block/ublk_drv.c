@@ -2082,8 +2082,14 @@ static void ublk_batch_queue_cmd(struct ublk_queue *ubq, struct request *rq, boo
 static void ublk_queue_cmd(struct ublk_queue *ubq, struct request *rq)
 {
 	struct io_uring_cmd *cmd = ubq->ios[rq->tag].cmd;
-	struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(cmd);
+	struct ublk_uring_cmd_pdu *pdu;
 
+	if (unlikely(!cmd)) {
+		__ublk_abort_rq(ubq, rq);
+		return;
+	}
+
+	pdu = ublk_get_uring_cmd_pdu(cmd);
 	pdu->req = rq;
 	io_uring_cmd_complete_in_task(cmd, ublk_cmd_tw_cb);
 }
