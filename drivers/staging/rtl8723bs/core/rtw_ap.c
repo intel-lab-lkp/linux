@@ -1336,84 +1336,6 @@ static void update_bcn_rsn_ie(struct adapter *padapter)
 {
 }
 
-static void update_bcn_wpa_ie(struct adapter *padapter)
-{
-}
-
-static void update_bcn_wmm_ie(struct adapter *padapter)
-{
-}
-
-static void update_bcn_wps_ie(struct adapter *padapter)
-{
-	u8 *pwps_ie = NULL;
-	u8 *pwps_ie_src;
-	u8 *premainder_ie;
-	u8 *pbackup_remainder_ie = NULL;
-
-	unsigned int wps_ielen = 0, wps_offset, remainder_ielen;
-	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
-	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
-	struct mlme_ext_info *pmlmeinfo = &pmlmeext->mlmext_info;
-	struct wlan_bssid_ex *pnetwork = &pmlmeinfo->network;
-	unsigned char *ie = pnetwork->ies;
-	u32 ielen = pnetwork->ie_length;
-
-	pwps_ie = rtw_get_wps_ie(ie + _FIXED_IE_LENGTH_,
-				 ielen - _FIXED_IE_LENGTH_,
-				 NULL,
-				 &wps_ielen);
-
-	if (!pwps_ie || wps_ielen == 0)
-		return;
-
-	pwps_ie_src = pmlmepriv->wps_beacon_ie;
-	if (!pwps_ie_src)
-		return;
-
-	wps_offset = (unsigned int)(pwps_ie - ie);
-
-	premainder_ie = pwps_ie + wps_ielen;
-
-	remainder_ielen = ielen - wps_offset - wps_ielen;
-
-	if (remainder_ielen)
-		pbackup_remainder_ie = kmemdup(premainder_ie, remainder_ielen, GFP_ATOMIC);
-
-	wps_ielen = (unsigned int)pwps_ie_src[1];/* to get ie data len */
-	if ((wps_offset + wps_ielen + 2 + remainder_ielen) <= MAX_IE_SZ) {
-		memcpy(pwps_ie, pwps_ie_src, wps_ielen + 2);
-		pwps_ie += (wps_ielen + 2);
-
-		if (pbackup_remainder_ie)
-			memcpy(pwps_ie, pbackup_remainder_ie, remainder_ielen);
-
-		/* update ie_length */
-		pnetwork->ie_length = wps_offset + (wps_ielen + 2) + remainder_ielen;
-	}
-
-	kfree(pbackup_remainder_ie);
-}
-
-static void update_bcn_p2p_ie(struct adapter *padapter)
-{
-}
-
-static void update_bcn_vendor_spec_ie(struct adapter *padapter, u8 *oui)
-{
-	if (!memcmp(RTW_WPA_OUI, oui, 4))
-		update_bcn_wpa_ie(padapter);
-
-	else if (!memcmp(WMM_OUI, oui, 4))
-		update_bcn_wmm_ie(padapter);
-
-	else if (!memcmp(WPS_OUI, oui, 4))
-		update_bcn_wps_ie(padapter);
-
-	else if (!memcmp(P2P_OUI, oui, 4))
-		update_bcn_p2p_ie(padapter);
-}
-
 void update_beacon(struct adapter *padapter, u8 ie_id, u8 *oui, u8 tx)
 {
 	struct mlme_priv *pmlmepriv;
@@ -1464,12 +1386,6 @@ void update_beacon(struct adapter *padapter, u8 ie_id, u8 *oui, u8 tx)
 	case WLAN_EID_HT_OPERATION:
 
 		update_bcn_htinfo_ie(padapter);
-
-		break;
-
-	case WLAN_EID_VENDOR_SPECIFIC:
-
-		update_bcn_vendor_spec_ie(padapter, oui);
 
 		break;
 
