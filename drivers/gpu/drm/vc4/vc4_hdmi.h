@@ -118,8 +118,6 @@ struct vc4_hdmi {
 	struct vc4_encoder encoder;
 	struct drm_connector connector;
 
-	struct delayed_work scrambling_work;
-
 	struct i2c_adapter *ddc;
 	void __iomem *hdmicore_regs;
 	void __iomem *hd_regs;
@@ -192,12 +190,6 @@ struct vc4_hdmi {
 	 * on? Protected by @mutex.
 	 */
 	bool packet_ram_enabled;
-
-	/**
-	 * @scdc_enabled: Is the HDMI controller currently running with
-	 * the scrambler on? Protected by @mutex.
-	 */
-	bool scdc_enabled;
 
 	/**
 	 * @output_bpc: Copy of @drm_connector_state.hdmi.output_bpc for
