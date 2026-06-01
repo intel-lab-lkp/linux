@@ -1,0 +1,128 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/ultrarisc,dp1000-pinctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: UltraRISC DP1000 Pin Controller
+
+maintainers:
+  - Jia Wang <wangjia@ultrarisc.com>
+
+description: |
+  UltraRISC RISC-V SoC DP1000 pin controller.
+  The controller manages ports A, B, C, D and LPC. Ports A-D default to
+  GPIO and provide additional SPI, UART, I2C, and PWM mux functions.
+  LPC pins default to the LPC interface and can be muxed to eSPI.
+  All pins also support pin configuration, including drive strength,
+  pull-up, and pull-down settings.
+
+properties:
+  compatible:
+    const: ultrarisc,dp1000-pinctrl
+
+  reg:
+    items:
+      - description: pin controller registers
+
+required:
+  - compatible
+  - reg
+
+patternProperties:
+  '.*-pins$':
+    type: object
+    unevaluatedProperties: false
+    allOf:
+      - $ref: /schemas/pinctrl/pincfg-node.yaml#
+      - $ref: /schemas/pinctrl/pinmux-node.yaml#
+      - if:
+          properties:
+            pins:
+              contains:
+                pattern: '^LPC([0-9]|1[0-2])$'
+        then:
+          properties:
+            function:
+              enum:
+                - lpc
+                - espi
+
+    properties:
+      pins:
+        description: List of pins affected by this state node.
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: string
+          oneOf:
+            - pattern: '^PA([0-9]|1[0-5])$'
+            - pattern: '^PB[0-7]$'
+            - pattern: '^PC[0-7]$'
+            - pattern: '^PD[0-7]$'
+            - pattern: '^LPC([0-9]|1[0-2])$'
+
+      function:
+        description: |
+          Mux function to select for the listed pins. Supported functions
+          depend on the selected pins and match the DP1000 hardware mux
+          table.
+        enum:
+          - gpio
+          - i2c0
+          - i2c1
+          - i2c2
+          - i2c3
+          - pwm0
+          - pwm1
+          - pwm2
+          - pwm3
+          - spi0
+          - spi1
+          - uart0
+          - uart1
+          - uart2
+          - uart3
+          - lpc
+          - espi
+
+      bias-disable: true
+      bias-high-impedance: true
+      bias-pull-up: true
+      bias-pull-down: true
+
+      drive-strength:
+        description: Output drive strength in mA.
+        enum: [20, 27, 33, 40]
+
+    required:
+      - pins
+      - function
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    soc {
+      #address-cells = <2>;
+      #size-cells = <2>;
+
+      pinctrl@11081000 {
+        compatible = "ultrarisc,dp1000-pinctrl";
+        reg = <0x0 0x11081000 0x0 0x1000>;
+
+        i2c0-pins {
+          pins = "PA12", "PA13";
+          function = "i2c0";
+          bias-pull-up;
+          drive-strength = <33>;
+        };
+
+        uart0-pins {
+          pins = "PA8", "PA9";
+          function = "uart0";
+          bias-pull-up;
+          drive-strength = <33>;
+        };
+      };
+    };
