@@ -7642,3 +7642,17 @@ u8 intel_dp_as_sdp_transmission_time(void)
 
 	return DP_PR_AS_SDP_SETUP_TIME_T1;
 }
+
+int intel_dp_link_init(struct intel_dp *intel_dp)
+{
+	intel_dp->link.training = intel_dp_link_training_init(intel_dp);
+	if (!intel_dp->link.training)
+		return -ENOMEM;
+
+	return 0;
+}
+
+void intel_dp_link_cleanup(struct intel_dp *intel_dp)
+{
+	intel_dp_link_training_cleanup(intel_dp->link.training);
+}

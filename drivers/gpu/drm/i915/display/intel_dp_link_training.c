@@ -62,6 +62,10 @@
 
 #define MAX_SEQ_TRAIN_FAILURES 2
 
+struct intel_dp_link_training {
+	struct intel_dp *dp;
+};
+
 static void intel_dp_reset_lttpr_common_caps(struct intel_dp *intel_dp)
 {
 	memset(intel_dp->lttpr_common_caps, 0, sizeof(intel_dp->lttpr_common_caps));
@@ -2232,4 +2236,22 @@ void intel_dp_link_training_debugfs_add(struct intel_connector *connector)
 
 	debugfs_create_file("i915_dp_link_retrain_disabled", 0444, root,
 			    connector, &i915_dp_link_retrain_disabled_fops);
+}
+
+struct intel_dp_link_training *intel_dp_link_training_init(struct intel_dp *intel_dp)
+{
+	struct intel_dp_link_training *link_training;
+
+	link_training = kzalloc_obj(*link_training);
+	if (!link_training)
+		return NULL;
+
+	link_training->dp = intel_dp;
+
+	return link_training;
+}
+
+void intel_dp_link_training_cleanup(struct intel_dp_link_training *link_training)
+{
+	kfree(link_training);
 }
