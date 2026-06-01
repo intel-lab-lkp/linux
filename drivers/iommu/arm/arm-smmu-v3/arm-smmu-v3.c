@@ -4206,6 +4206,7 @@ err_disable_pasid:
 	arm_smmu_disable_pasid(master);
 	arm_smmu_remove_master(master);
 err_free_master:
+	dev_iommu_priv_set(dev, NULL);
 	kfree(master);
 	return ERR_PTR(ret);
 }
