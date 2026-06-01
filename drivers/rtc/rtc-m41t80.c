@@ -1009,9 +1009,17 @@ static int m41t80_probe(struct i2c_client *client)
 
 	rc = devm_rtc_register_device(m41t80_data->rtc);
 	if (rc)
-		return rc;
+		goto err_wdt;
 
 	return 0;
+err_wdt:
+#ifdef CONFIG_RTC_DRV_M41T80_WDT
+	if (m41t80_data->features & M41T80_FEATURE_HT) {
+		misc_deregister(&wdt_dev);
+		unregister_reboot_notifier(&wdt_notifier);
+	}
+#endif
+	return rc;
 }
 
 static void m41t80_remove(struct i2c_client *client)
