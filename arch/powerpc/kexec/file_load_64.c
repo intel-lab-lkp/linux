@@ -649,6 +649,9 @@ unsigned int kexec_extra_fdt_size_ppc64(struct kimage *image, struct crash_mem *
 	struct device_node *dn;
 	unsigned int cpu_nodes = 0, extra_size = 0;
 
+	if (!rmem)
+		return 0;
+
 	// Budget some space for the password blob. There's already extra space
 	// for the key name
 	if (plpks_is_available())
