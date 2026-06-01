@@ -330,14 +330,17 @@ __tape_cancel_io(struct tape_device *device, struct tape_request *request)
 static int
 tape_assign_minor(struct tape_device *device)
 {
+	struct list_head *insert_before = &tape_device_list;
 	struct tape_device *tmp;
 	int minor;
 
 	minor = 0;
 	write_lock(&tape_device_lock);
 	list_for_each_entry(tmp, &tape_device_list, node) {
-		if (minor < tmp->first_minor)
+		if (minor < tmp->first_minor) {
+			insert_before = &tmp->node;
 			break;
+		}
 		minor += TAPE_MINORS_PER_DEV;
 	}
 	if (minor >= 256) {
@@ -345,7 +348,7 @@ tape_assign_minor(struct tape_device *device)
 		return -ENODEV;
 	}
 	device->first_minor = minor;
-	list_add_tail(&device->node, &tmp->node);
+	list_add_tail(&device->node, insert_before);
 	write_unlock(&tape_device_lock);
 	return 0;
 }
