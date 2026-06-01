@@ -19055,6 +19055,7 @@ F:	drivers/media/platform/nxp/imx8-isi/
 
 NXP i.MX 8MP DW100 V4L2 DRIVER
 M:	Xavier Roumegue <xavier.roumegue@oss.nxp.com>
+R:	Bryan O'Donoghue <bod@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/media/nxp,dw100.yaml
