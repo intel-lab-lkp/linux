@@ -65,6 +65,10 @@ void kvm_riscv_vcpu_config_ran_once(struct kvm_vcpu *vcpu)
 
 	if (vcpu->guest_debug)
 		cfg->hedeleg &= ~BIT(EXC_BREAKPOINT);
+
+	if (riscv_isa_extension_available(isa, ZICFILP) ||
+	    riscv_isa_extension_available(isa, ZICFISS))
+		cfg->hedeleg |= BIT(EXC_SOFTWARE_CHECK);
 }
 
 void kvm_riscv_vcpu_config_load(struct kvm_vcpu *vcpu)
