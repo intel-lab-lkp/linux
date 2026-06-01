@@ -62,14 +62,54 @@
 		lt_dbg(_intel_dp, _dp_phy, "Sink disconnected: " _format, ## __VA_ARGS__); \
 } while (0)
 
-#define MAX_SEQ_TRAIN_FAILURES 2
+/*
+ * enum intel_dp_link_recovery_state - LT recovery state
+ * @INTEL_DP_LINK_RECOVERY_IDLE:
+ *   No link training failure is currently tracked and no recovery is
+ *   in progress. This is the initial state after driver initialization,
+ *   power state transitions, sink (re-)connection, or after a successful
+ *   link training.
+ *
+ * @INTEL_DP_LINK_RECOVERY_AUTORETRAIN_PENDING:
+ *   A first link training failure has been observed and an automatic
+ *   retraining attempt with the same link parameters is pending. Exactly
+ *   one such attempt is allowed before switching to userspace-driven
+ *   recovery.
+ *
+ * @INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED:
+ *   Automatic retraining is no longer possible. At this point, a
+ *   fallback selection is made and userspace is notified to take over
+ *   recovery, performing modesets with parameters it determines are
+ *   required. The driver then selects a link configuration from the
+ *   remaining fallback configuration set. Subsequent link training
+ *   failures trigger further fallback selections and userspace
+ *   notifications.
+ *
+ * Describes the link recovery state used by the Intel DP link recovery
+ * logic.
+ *
+ * See also:
+ *   - link_recovery_autoretrain_pending()
+ *   - link_recovery_autoretrain_allowed()
+ *   - link_recovery_mark_train_failure()
+ *   - link_recovery_reset()
+ */
+enum intel_dp_link_recovery_state {
+	/*
+	 * Keep the enum values ordered from least to most severe
+	 * recovery state; helper logic relies on that ordering.
+	 */
+	INTEL_DP_LINK_RECOVERY_IDLE,
+	INTEL_DP_LINK_RECOVERY_AUTORETRAIN_PENDING,
+	INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED,
+};
 
 struct intel_dp_link_training {
 	struct intel_dp *dp;
 
+	enum intel_dp_link_recovery_state recovery_state;
+
 	bool retrain_disabled;
-	/* Sequential link training failures after a passing LT */
-	int seq_train_failures;
 	int force_train_failure;
 	bool force_retrain;
 };
@@ -1267,7 +1307,7 @@ intel_dp_128b132b_intra_hop(struct intel_dp *intel_dp,
 static bool
 link_recovery_autoretrain_pending(struct intel_dp_link_training *link_training)
 {
-	return link_training->seq_train_failures == 1;
+	return link_training->recovery_state == INTEL_DP_LINK_RECOVERY_AUTORETRAIN_PENDING;
 }
 
 /*
@@ -1289,7 +1329,13 @@ link_recovery_autoretrain_pending(struct intel_dp_link_training *link_training)
 static bool
 link_recovery_autoretrain_allowed(struct intel_dp_link_training *link_training)
 {
-	return link_training->seq_train_failures < MAX_SEQ_TRAIN_FAILURES;
+	switch (link_training->recovery_state) {
+	case INTEL_DP_LINK_RECOVERY_IDLE:
+	case INTEL_DP_LINK_RECOVERY_AUTORETRAIN_PENDING:
+		return true;
+	default:
+		return false;
+	}
 }
 
 /*
@@ -1307,12 +1353,20 @@ link_recovery_autoretrain_allowed(struct intel_dp_link_training *link_training)
 static bool
 link_recovery_mark_train_failure(struct intel_dp_link_training *link_training)
 {
-	if (link_recovery_autoretrain_allowed(link_training))
-		/* Move to autoretrain pending or autoretrain disabled state. */
-		link_training->seq_train_failures++;
+	switch (link_training->recovery_state) {
+	case INTEL_DP_LINK_RECOVERY_IDLE:
+		link_training->recovery_state = INTEL_DP_LINK_RECOVERY_AUTORETRAIN_PENDING;
+		break;
+	case INTEL_DP_LINK_RECOVERY_AUTORETRAIN_PENDING:
+		link_training->recovery_state = INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED;
+		break;
+	default:
+		break;
+	}
 
 	return link_recovery_autoretrain_allowed(link_training);
 }
+
 
 /**
  * link_recovery_reset - reset the link recovery state
@@ -1323,7 +1377,7 @@ link_recovery_mark_train_failure(struct intel_dp_link_training *link_training)
  */
 static void link_recovery_reset(struct intel_dp_link_training *link_training)
 {
-	link_training->seq_train_failures = 0;
+	link_training->recovery_state = INTEL_DP_LINK_RECOVERY_IDLE;
 }
 
 /**
