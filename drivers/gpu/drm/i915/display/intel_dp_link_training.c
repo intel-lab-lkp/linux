@@ -1315,6 +1315,18 @@ link_recovery_mark_train_failure(struct intel_dp_link_training *link_training)
 }
 
 /**
+ * link_recovery_reset - reset the link recovery state
+ * @link_training: link training state
+ *
+ * Reset the link recovery state to indicate that no link recovery is
+ * required.
+ */
+static void link_recovery_reset(struct intel_dp_link_training *link_training)
+{
+	link_training->seq_train_failures = 0;
+}
+
+/**
  * intel_dp_stop_link_train - stop link training
  * @intel_dp: DP struct
  * @crtc_state: state for CRTC attached to the encoder
@@ -1878,7 +1890,7 @@ void intel_dp_start_link_train(struct intel_atomic_state *state,
 		link_training->force_train_failure--;
 		lt_dbg(intel_dp, DP_PHY_DPRX, "Forcing link training failure\n");
 	} else if (passed) {
-		link_training->seq_train_failures = 0;
+		link_recovery_reset(link_training);
 		return;
 	}
 
@@ -2543,7 +2555,7 @@ void intel_dp_link_training_debugfs_add(struct intel_connector *connector)
 void intel_dp_link_training_reset(struct intel_dp_link_training *link_training)
 {
 	link_training->retrain_disabled = false;
-	link_training->seq_train_failures = 0;
+	link_recovery_reset(link_training);
 }
 
 struct intel_dp_link_training *intel_dp_link_training_init(struct intel_dp *intel_dp)
