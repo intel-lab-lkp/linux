@@ -321,6 +321,8 @@ static int device_process(struct vicodec_ctx *ctx,
 		q_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
 		if (comp_frame_size > ctx->comp_max_size)
 			return -EINVAL;
+		if (vb2_plane_size(&dst_vb->vb2_buf, 0) < q_dst->sizeimage)
+			return -EINVAL;
 		state->info = q_dst->info;
 		ret = v4l2_fwht_decode(state, p_src, p_dst);
 		if (ret < 0)
