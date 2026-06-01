@@ -130,8 +130,6 @@ void intel_flipq_init(struct intel_display *display)
 {
 	struct intel_crtc *crtc;
 
-	intel_dmc_wait_fw_load(display);
-
 	for_each_intel_crtc(display, crtc)
 		intel_flipq_crtc_init(crtc);
 }

@@ -960,6 +960,12 @@ void intel_modeset_setup_hw_state(struct intel_display *display,
 	intel_cmtg_sanitize(display);
 
 	/*
+	 * Wait for DMC firmware load to complete so that
+	 * intel_dmc_enable_pipe() below sees initialized HW registers.
+	 */
+	intel_dmc_wait_fw_load(display);
+
+	/*
 	 * intel_sanitize_plane_mapping() may need to do vblank
 	 * waits, so we need vblank interrupts restored beforehand.
 	 */
