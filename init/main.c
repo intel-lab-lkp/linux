@@ -103,6 +103,7 @@
 #include <linux/stackdepot.h>
 #include <linux/randomize_kstack.h>
 #include <linux/pidfs.h>
+#include <linux/fs_struct.h>
 #include <linux/ptdump.h>
 #include <linux/time_namespace.h>
 #include <linux/unaligned.h>
@@ -1584,6 +1585,8 @@ void __weak free_initmem(void)
 static int __ref kernel_init(void *unused)
 {
 	int ret;
+
+	init_userspace_fs();
 
 	/*
 	 * Wait until kthreadd is all set-up.
