@@ -222,7 +222,8 @@ struct	sta_info *rtw_alloc_stainfo(struct	sta_priv *pstapriv, u8 *hwaddr)
 
 	/*  Commented by Albert 2009/08/13 */
 	/*  For the SMC router, the sequence number of first packet of WPS handshake will be 0. */
-	/*  In this case, this packet will be dropped by recv_decache function if we use the 0x00 as the default value for tid_rxseq variable. */
+	/*  This packet will be dropped by recv_decache function */
+	/*  if we use the 0x00 as the default value for tid_rxseq variable. */
 	/*  So, we initialize the tid_rxseq variable as the 0xffff. */
 
 	for (i = 0; i < 16; i++)
