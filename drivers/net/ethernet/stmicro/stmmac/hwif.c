@@ -368,6 +368,9 @@ int stmmac_hwif_init(struct stmmac_priv *priv)
 		return -EINVAL;
 	}
 
+	/* Assign priv struct internally for easier processing */
+	mac->priv_data = priv;
+
 	/* Only use generic HW helpers if needed */
 	mac->desc = mac->desc ? : entry->desc;
 	mac->dma = mac->dma ? : entry->dma;

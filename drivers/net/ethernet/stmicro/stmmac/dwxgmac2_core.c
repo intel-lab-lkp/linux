@@ -97,10 +97,18 @@ static void dwxgmac2_rx_queue_enable(struct mac_device_info *hw, u8 mode,
 static void dwxgmac2_rx_queue_prio(struct mac_device_info *hw, u32 prio,
 				   u32 queue)
 {
+	const unsigned int numtc = hw->priv_data->dma_cap.numtc;
+	struct net_device *ndev = hw->priv_data->dev;
 	void __iomem *ioaddr = hw->pcsr;
 	u32 clear_mask = 0;
 	u32 ctrl2, ctrl3;
 	int i;
+
+	if (queue >= numtc) {
+		netdev_err(ndev, "%s: invalid TC queue %d, supported %d\n",
+			   __func__, queue, numtc);
+		return;
+	}
 
 	ctrl2 = readl(ioaddr + XGMAC_RXQ_CTRL2);
 	ctrl3 = readl(ioaddr + XGMAC_RXQ_CTRL3);
@@ -138,8 +146,16 @@ static void dwxgmac2_rx_queue_prio(struct mac_device_info *hw, u32 prio,
 static void dwxgmac2_tx_queue_prio(struct mac_device_info *hw, u32 prio,
 				   u32 queue)
 {
+	const unsigned int numtc = hw->priv_data->dma_cap.numtc;
+	struct net_device *ndev = hw->priv_data->dev;
 	void __iomem *ioaddr = hw->pcsr;
 	u32 value, reg;
+
+	if (queue >= numtc) {
+		netdev_err(ndev, "%s: invalid TC queue %d, supported %d\n",
+			   __func__, queue, numtc);
+		return;
+	}
 
 	reg = (queue < 4) ? XGMAC_TC_PRTY_MAP0 : XGMAC_TC_PRTY_MAP1;
 	if (queue >= 4)
@@ -207,6 +223,7 @@ static void dwxgmac2_prog_mtl_rx_algorithms(struct mac_device_info *hw,
 static void dwxgmac2_prog_mtl_tx_algorithms(struct mac_device_info *hw,
 					    u32 tx_alg)
 {
+	const unsigned int numtc = hw->priv_data->dma_cap.numtc;
 	void __iomem *ioaddr = hw->pcsr;
 	bool ets = true;
 	u32 value;
@@ -233,7 +250,7 @@ static void dwxgmac2_prog_mtl_tx_algorithms(struct mac_device_info *hw,
 	writel(value, ioaddr + XGMAC_MTL_OPMODE);
 
 	/* Set ETS if desired */
-	for (i = 0; i < MTL_MAX_TX_QUEUES; i++) {
+	for (i = 0; i < numtc; i++) {
 		value = readl(ioaddr + XGMAC_MTL_TCx_ETS_CONTROL(i));
 		value &= ~XGMAC_TSA;
 		if (ets)
@@ -246,7 +263,14 @@ static void dwxgmac2_set_mtl_tx_queue_weight(struct stmmac_priv *priv,
 					     struct mac_device_info *hw,
 					     u32 weight, u32 queue)
 {
+	const unsigned int numtc = priv->dma_cap.numtc;
 	void __iomem *ioaddr = hw->pcsr;
+
+	if (queue >= numtc) {
+		netdev_err(priv->dev, "%s: invalid TC queue %d, supported %d\n",
+			   __func__, queue, numtc);
+		return;
+	}
 
 	writel(weight, ioaddr + XGMAC_MTL_TCx_QUANTUM_WEIGHT(queue));
 }
@@ -273,8 +297,15 @@ static void dwxgmac2_config_cbs(struct stmmac_priv *priv,
 				u32 send_slope, u32 idle_slope,
 				u32 high_credit, u32 low_credit, u32 queue)
 {
+	const unsigned int numtc = priv->dma_cap.numtc;
 	void __iomem *ioaddr = hw->pcsr;
 	u32 value;
+
+	if (queue >= numtc) {
+		netdev_err(priv->dev, "%s: invalid TC queue %d, supported %d\n",
+			   __func__, queue, numtc);
+		return;
+	}
 
 	writel(send_slope, ioaddr + XGMAC_MTL_TCx_SENDSLOPE(queue));
 	writel(idle_slope, ioaddr + XGMAC_MTL_TCx_QUANTUM_WEIGHT(queue));
@@ -357,6 +388,8 @@ static void dwxgmac2_flow_ctrl(struct mac_device_info *hw, unsigned int duplex,
 			       unsigned int fc, unsigned int pause_time,
 			       u8 tx_cnt)
 {
+	const unsigned int numtc = hw->priv_data->dma_cap.numtc;
+	struct net_device *ndev = hw->priv_data->dev;
 	void __iomem *ioaddr = hw->pcsr;
 	u8 i;
 
@@ -365,6 +398,17 @@ static void dwxgmac2_flow_ctrl(struct mac_device_info *hw, unsigned int duplex,
 	if (fc & FLOW_TX) {
 		for (i = 0; i < tx_cnt; i++) {
 			u32 value = XGMAC_TFE;
+
+			if (i >= numtc) {
+				netdev_err(ndev,
+					   "%s: invalid TC queue %d, supported %d\n",
+					   __func__, i, numtc);
+				/* This will skip all other wrong channels,
+				 * but triggering this is preceded by warnings
+				 * from other functions, so limit the spam.
+				 */
+				break;
+			}
 
 			if (duplex)
 				value |= FIELD_PREP(XGMAC_PT, pause_time);
