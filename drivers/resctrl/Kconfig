@@ -29,3 +29,31 @@ config ARM64_MPAM_RESCTRL_FS
 	default y if ARM64_MPAM_DRIVER && RESCTRL_FS
 	select RESCTRL_RMID_DEPENDS_ON_CLOSID
 	select RESCTRL_ASSIGN_FIXED
+
+menuconfig RISCV_CBQRI_DRIVER
+	bool "RISC-V CBQRI driver"
+	depends on RISCV && RISCV_ISA_SSQOSID
+	help
+	  Capacity and Bandwidth QoS Register Interface (CBQRI) driver
+	  for RISC-V cache and memory-controller QoS resources. CBQRI
+	  exposes capacity allocation, bandwidth reservation, weighted
+	  bandwidth share, and per-MCID monitoring counters through the
+	  resctrl filesystem at /sys/fs/resctrl when RESCTRL_FS is also
+	  enabled.
+
+	  RISCV_ISA_SSQOSID provides the srmcfg CSR that tags each hart's
+	  memory traffic with the RCID and MCID consumed by CBQRI
+	  controllers.
+
+if RISCV_CBQRI_DRIVER
+
+config RISCV_CBQRI_DRIVER_DEBUG
+	bool "Enable debug messages from the CBQRI driver"
+	help
+	  Say yes here to enable debug messages from the CBQRI driver.
+
+	  This adds pr_debug() output covering controller probe and
+	  per-controller registration steps.  Useful when bringing up a
+	  new platform; otherwise leave disabled to avoid log noise.
+
+endif
