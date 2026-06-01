@@ -44,4 +44,15 @@ void i2c_hid_core_shutdown(struct i2c_client *client);
 
 extern const struct dev_pm_ops i2c_hid_core_pm;
 
+#ifdef CONFIG_ACPI
+struct device;
+int i2c_hid_core_acpi_get_descriptor(struct device *dev);
+#else
+struct device;
+static inline int i2c_hid_core_acpi_get_descriptor(struct device *dev)
+{
+	return -ENODEV;
+}
+#endif
+
 #endif
