@@ -248,7 +248,8 @@ static int ddebug_change(const struct ddebug_query *query,
 
 		/* match against the module name */
 		if (query->module &&
-		    !match_wildcard(query->module, di->mod_name))
+		    !match_wildcard(query->module, di->mod_name) &&
+		    !match_wildcard(query->module, kbasename(di->mod_name)))
 			continue;
 
 		if (query->class_string) {

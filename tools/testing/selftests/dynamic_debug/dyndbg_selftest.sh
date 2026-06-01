@@ -76,9 +76,9 @@ function handle_exit_code() {
 # $1 - pattern to match, pattern in $1 is enclosed by spaces for a match ""\s$1\s"
 # $2 - number of times the pattern passed in $1 is expected to match
 # $3 - optional can be set either to "-r" or "-v"
-#       "-r" means relaxed matching in this case pattern provided in $1 is passed
-#       as is without enclosing it with spaces
-#       "-v" prints matching lines
+#       "-r" means relaxed matching in this case pattern provided in
+#       $1 is passed as is without enclosing it with spaces "-v"
+#       prints matching lines
 # $4 - optional when $3 is set to "-r" then $4 can be used to pass "-v"
 function check_match_ct {
     pattern="\s$1\s"
@@ -223,7 +223,7 @@ function basic_tests {
     check_match_ct =p 0
 
     # module params are builtin to handle boot args
-    check_match_ct '\[params\]' 4 -r
+    check_match_ct '\[kernel/params\]' 4 -r
     ddcmd module params +mpf
     check_match_ct =pmf 4
 
@@ -238,8 +238,44 @@ EOF
     ddcmd =_
 }
 
+function test_subsystem_module_queries {
+    echo -e "${GREEN}# TEST_SUBSYTEM_MODULE_QUERIES ${NC}"
+    ddcmd =_
+
+    # Find how many 'main' modules we have in total (by basename)
+    # Use a more precise regex to avoid false positives like [irqdomain]
+    local total_main=$(grep -c "\[\([^]]*/\)\?main\]" /proc/dynamic_debug/control)
+    echo "# found $total_main total 'main' modules"
+
+    if [ $total_main -eq 0 ]; then
+        echo "SKIP - no 'main' modules found to test slashes"
+        return
+    fi
+
+    echo "# testing 'module */main'"
+    ddcmd module "*/main" +p
+    # This should match modules that HAVE a slash and end in /main
+    local slash_main=$(grep -c "\[[^]]*/main\]" /proc/dynamic_debug/control)
+    check_match_ct =p $slash_main -r
+
+    echo "# testing 'module init/main' (specific path)"
+    ddcmd =_
+    ddcmd module "init/main" +p
+    local init_main=$(grep -c "\[init/main\]" /proc/dynamic_debug/control)
+    check_match_ct =p $init_main
+
+    echo "# testing 'module main' (basename match)"
+    ddcmd =_
+    ddcmd module main +p
+    # This should match ALL $total_main entries due to kbasename matching
+    check_match_ct =p $total_main
+
+    ddcmd =_
+}
+
 tests_list=(
     basic_tests
+    test_subsystem_module_queries
 )
 
 # Run tests
