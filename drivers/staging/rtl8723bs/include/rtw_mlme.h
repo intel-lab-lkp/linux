@@ -45,7 +45,7 @@
 
 enum {
 	dot11_auth_algrthm_open = 0,
-	dot11AuthAlgrthm_Shared,
+	dot11_auth_algrthm_shared,
 	dot11_auth_algrthm_8021x,
 	dot11_auth_algrthm_auto,
 	dot11AuthAlgrthm_WAPI,
