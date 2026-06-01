@@ -1103,14 +1103,22 @@ bail:
  * ocfs2_shift_tree_depth() uses this to determine the # clusters
  * value for the new topmost tree record.
  */
-static inline u32 ocfs2_sum_rightmost_rec(struct ocfs2_extent_list  *el)
+static int ocfs2_sum_rightmost_rec(struct ocfs2_caching_info *ci,
+				   struct ocfs2_extent_list *el,
+				   u32 *result)
 {
-	int i;
+	u16 count = le16_to_cpu(el->l_count);
+	int i = le16_to_cpu(el->l_next_free_rec) - 1;
 
-	i = le16_to_cpu(el->l_next_free_rec) - 1;
+	if (i < 0 || i >= count)
+		return ocfs2_error(ocfs2_metadata_cache_get_super(ci),
+				   "Owner %llu has invalid l_next_free_rec %u (l_count %u)\n",
+				   (unsigned long long)ocfs2_metadata_cache_owner(ci),
+				   le16_to_cpu(el->l_next_free_rec), count);
 
-	return le32_to_cpu(el->l_recs[i].e_cpos) +
-		ocfs2_rec_clusters(el, &el->l_recs[i]);
+	*result = le32_to_cpu(el->l_recs[i].e_cpos) +
+		  ocfs2_rec_clusters(el, &el->l_recs[i]);
+	return 0;
 }
 
 /*
@@ -1199,8 +1207,16 @@ static int ocfs2_add_branch(handle_t *handle,
 	new_blocks = le16_to_cpu(el->l_tree_depth);
 
 	eb = (struct ocfs2_extent_block *)(*last_eb_bh)->b_data;
-	new_cpos = ocfs2_sum_rightmost_rec(&eb->h_list);
-	root_end = ocfs2_sum_rightmost_rec(et->et_root_el);
+	status = ocfs2_sum_rightmost_rec(et->et_ci, &eb->h_list, &new_cpos);
+	if (status < 0) {
+		mlog_errno(status);
+		goto bail;
+	}
+	status = ocfs2_sum_rightmost_rec(et->et_ci, et->et_root_el, &root_end);
+	if (status < 0) {
+		mlog_errno(status);
+		goto bail;
+	}
 
 	/*
 	 * If there is a gap before the root end and the real end
@@ -1430,7 +1446,11 @@ static int ocfs2_shift_tree_depth(handle_t *handle,
 		goto bail;
 	}
 
-	new_clusters = ocfs2_sum_rightmost_rec(eb_el);
+	status = ocfs2_sum_rightmost_rec(et->et_ci, eb_el, &new_clusters);
+	if (status < 0) {
+		mlog_errno(status);
+		goto bail;
+	}
 
 	/* update root_bh now */
 	le16_add_cpu(&root_el->l_tree_depth, 1);
