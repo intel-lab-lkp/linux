@@ -99,8 +99,10 @@ int qxl_gem_object_create_with_handle(struct qxl_device *qdev,
 	if (r)
 		return -ENOMEM;
 	r = drm_gem_handle_create(file_priv, local_gobj, handle);
-	if (r)
+	if (r) {
+		drm_gem_object_put(local_gobj);
 		return r;
+	}
 
 	if (gobj)
 		*gobj = local_gobj;
