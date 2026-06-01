@@ -97,6 +97,10 @@ xt_ct_set_helper(struct nf_conn *ct, const char *helper_name,
 		return -ENOMEM;
 	}
 
+	if (!refcount_inc_not_zero(&helper->ct_refcnt)) {
+		nf_conntrack_helper_put(helper);
+		return -ENOENT;
+	}
 	rcu_assign_pointer(help->helper, helper);
 	return 0;
 }
@@ -284,9 +288,6 @@ static void xt_ct_tg_destroy(const struct xt_tgdtor_param *par,
 	struct nf_conn_help *help;
 
 	if (ct) {
-		if (info->helper[0])
-			nf_queue_nf_hook_drop(par->net);
-
 		help = nfct_help(ct);
 		xt_ct_put_helper(help);
 
