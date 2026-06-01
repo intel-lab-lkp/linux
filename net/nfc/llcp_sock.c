@@ -384,11 +384,12 @@ void nfc_llcp_accept_unlink(struct sock *sk)
 
 	pr_debug("state %d\n", sk->sk_state);
 
-	list_del_init(&llcp_sock->accept_queue);
-	sk_acceptq_removed(llcp_sock->parent);
-	llcp_sock->parent = NULL;
-
-	sock_put(sk);
+	if (llcp_sock->parent) {
+		list_del_init(&llcp_sock->accept_queue);
+		sk_acceptq_removed(llcp_sock->parent);
+		llcp_sock->parent = NULL;
+		sock_put(sk);
+	}
 }
 
 void nfc_llcp_accept_enqueue(struct sock *parent, struct sock *sk)
@@ -622,7 +623,7 @@ static int llcp_sock_release(struct socket *sock)
 		list_for_each_entry_safe(lsk, n, &llcp_sock->accept_queue,
 					 accept_queue) {
 			accept_sk = &lsk->sk;
-			lock_sock(accept_sk);
+			lock_sock_nested(accept_sk, SINGLE_DEPTH_NESTING);
 
 			nfc_llcp_send_disconnect(lsk);
 			nfc_llcp_accept_unlink(accept_sk);

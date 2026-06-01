@@ -63,21 +63,33 @@ static void nfc_llcp_socket_purge(struct nfc_llcp_sock *sock)
 	}
 }
 
+static struct sock *nfc_llcp_sock_list_pop(struct llcp_sock_list *l)
+{
+	struct sock *sk;
+
+	write_lock(&l->lock);
+	sk = sk_head(&l->head);
+	if (sk) {
+		sock_hold(sk);
+		sk_del_node_init(sk);
+	}
+	write_unlock(&l->lock);
+
+	return sk;
+}
+
 static void nfc_llcp_socket_release(struct nfc_llcp_local *local, bool device,
 				    int err)
 {
 	struct sock *sk;
-	struct hlist_node *tmp;
 	struct nfc_llcp_sock *llcp_sock;
 
 	skb_queue_purge(&local->tx_queue);
 
-	write_lock(&local->sockets.lock);
-
-	sk_for_each_safe(sk, tmp, &local->sockets.head) {
+	while ((sk = nfc_llcp_sock_list_pop(&local->sockets))) {
 		llcp_sock = nfc_llcp_sock(sk);
 
-		bh_lock_sock(sk);
+		lock_sock(sk);
 
 		nfc_llcp_socket_purge(llcp_sock);
 
@@ -92,7 +104,8 @@ static void nfc_llcp_socket_release(struct nfc_llcp_local *local, bool device,
 						 &llcp_sock->accept_queue,
 						 accept_queue) {
 				accept_sk = &lsk->sk;
-				bh_lock_sock(accept_sk);
+				lock_sock_nested(accept_sk,
+						 SINGLE_DEPTH_NESTING);
 
 				nfc_llcp_accept_unlink(accept_sk);
 
@@ -101,7 +114,7 @@ static void nfc_llcp_socket_release(struct nfc_llcp_local *local, bool device,
 				accept_sk->sk_state = LLCP_CLOSED;
 				accept_sk->sk_state_change(sk);
 
-				bh_unlock_sock(accept_sk);
+				release_sock(accept_sk);
 			}
 		}
 
@@ -110,23 +123,18 @@ static void nfc_llcp_socket_release(struct nfc_llcp_local *local, bool device,
 		sk->sk_state = LLCP_CLOSED;
 		sk->sk_state_change(sk);
 
-		bh_unlock_sock(sk);
-
-		sk_del_node_init(sk);
+		release_sock(sk);
+		sock_put(sk);
 	}
-
-	write_unlock(&local->sockets.lock);
 
 	/* If we still have a device, we keep the RAW sockets alive */
 	if (device == true)
 		return;
 
-	write_lock(&local->raw_sockets.lock);
-
-	sk_for_each_safe(sk, tmp, &local->raw_sockets.head) {
+	while ((sk = nfc_llcp_sock_list_pop(&local->raw_sockets))) {
 		llcp_sock = nfc_llcp_sock(sk);
 
-		bh_lock_sock(sk);
+		lock_sock(sk);
 
 		nfc_llcp_socket_purge(llcp_sock);
 
@@ -135,12 +143,9 @@ static void nfc_llcp_socket_release(struct nfc_llcp_local *local, bool device,
 		sk->sk_state = LLCP_CLOSED;
 		sk->sk_state_change(sk);
 
-		bh_unlock_sock(sk);
-
-		sk_del_node_init(sk);
+		release_sock(sk);
+		sock_put(sk);
 	}
-
-	write_unlock(&local->raw_sockets.lock);
 }
 
 static struct nfc_llcp_local *nfc_llcp_local_get(struct nfc_llcp_local *local)
