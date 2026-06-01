@@ -3290,6 +3290,30 @@ static size_t copy_zero_to_iter(size_t bytes, struct iov_iter *i)
 	return written;
 }
 
+static size_t copy_pages_to_iter(struct folio *folio, size_t offset,
+		size_t bytes, struct iov_iter *i, int *error)
+{
+	struct page *page;
+	unsigned long off, nr, ret, written = 0;
+
+	do {
+		page = folio_page(folio, offset >> PAGE_SHIFT);
+		if (PageHWPoison(page)) {
+			*error = -EIO;
+			break;
+		}
+
+		off = offset_in_page(offset);
+		nr = min(PAGE_SIZE - off, bytes - written);
+
+		ret = copy_page_to_iter(page, off, nr, i);
+		offset += ret;
+		written += ret;
+	} while (written < bytes && ret == nr);
+
+	return written;
+}
+
 static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct file *file = iocb->ki_filp;
@@ -3302,10 +3326,8 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 
 	for (;;) {
 		struct folio *folio = NULL;
-		struct page *page = NULL;
 		unsigned long nr, ret;
 		loff_t end_offset, i_size = i_size_read(inode);
-		bool fallback_page_copy = false;
 		size_t fsize;
 
 		if (unlikely(iocb->ki_pos >= i_size))
@@ -3313,24 +3335,12 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 
 		index = iocb->ki_pos >> PAGE_SHIFT;
 		error = shmem_get_folio(inode, index, 0, &folio, SGP_READ);
+		if (folio)
+			folio_unlock(folio);
 		if (error) {
 			if (error == -EINVAL)
 				error = 0;
 			break;
-		}
-		if (folio) {
-			folio_unlock(folio);
-
-			page = folio_file_page(folio, index);
-			if (PageHWPoison(page)) {
-				folio_put(folio);
-				error = -EIO;
-				break;
-			}
-
-			if (folio_test_large(folio) &&
-			    folio_test_has_hwpoisoned(folio))
-				fallback_page_copy = true;
 		}
 
 		/*
@@ -3343,12 +3353,9 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 				folio_put(folio);
 			break;
 		}
-		end_offset = min_t(loff_t, i_size, iocb->ki_pos + to->count);
-		if (folio && likely(!fallback_page_copy))
-			fsize = folio_size(folio);
-		else
-			fsize = PAGE_SIZE;
+		fsize = folio ? folio_size(folio) : PAGE_SIZE;
 		offset = iocb->ki_pos & (fsize - 1);
+		end_offset = min_t(loff_t, i_size, iocb->ki_pos + to->count);
 		nr = min_t(loff_t, end_offset - iocb->ki_pos, fsize - offset);
 
 		if (folio) {
@@ -3357,12 +3364,8 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 			 * virtual addresses, take care about potential aliasing
 			 * before reading the page on the kernel side.
 			 */
-			if (mapping_writably_mapped(mapping)) {
-				if (likely(!fallback_page_copy))
-					flush_dcache_folio(folio);
-				else
-					flush_dcache_page(page);
-			}
+			if (mapping_writably_mapped(mapping))
+				flush_dcache_folio(folio);
 
 			/*
 			 * Mark the folio accessed if we read the beginning.
@@ -3373,10 +3376,10 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 			 * Ok, we have the page, and it's up-to-date, so
 			 * now we can copy it to user space...
 			 */
-			if (likely(!fallback_page_copy))
+			if (likely(!folio_contain_hwpoisoned_page(folio)))
 				ret = copy_folio_to_iter(folio, offset, nr, to);
 			else
-				ret = copy_page_to_iter(page, offset, nr, to);
+				ret = copy_pages_to_iter(folio, offset, nr, to, &error);
 			folio_put(folio);
 		} else if (user_backed_iter(to)) {
 			/*
@@ -3398,6 +3401,8 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		iocb->ki_pos += ret;
 
 		if (!iov_iter_count(to))
+			break;
+		if (unlikely(error))
 			break;
 		if (ret < nr) {
 			error = -EFAULT;
