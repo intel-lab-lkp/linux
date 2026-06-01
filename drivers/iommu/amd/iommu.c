@@ -737,6 +737,7 @@ static int iommu_init_device(struct amd_iommu *iommu, struct device *dev)
 static void iommu_ignore_device(struct amd_iommu *iommu, struct device *dev)
 {
 	struct amd_iommu_pci_seg *pci_seg = iommu->pci_seg;
+	struct iommu_dev_data *dev_data = dev_iommu_priv_get(dev);
 	struct dev_table_entry *dev_table = get_dev_table(iommu);
 	int devid, sbdf;
 
@@ -2477,8 +2478,7 @@ static struct iommu_device *amd_iommu_probe_device(struct device *dev)
 	if (ret) {
 		dev_err(dev, "Failed to initialize - trying to proceed anyway\n");
 		iommu_dev = ERR_PTR(ret);
-		iommu_ignore_device(iommu, dev);
-		goto out_err;
+		goto err_deinit;
 	}
 
 	amd_iommu_set_pci_msi_domain(dev, iommu);
@@ -2512,6 +2512,10 @@ static struct iommu_device *amd_iommu_probe_device(struct device *dev)
 	if (dev_is_pci(dev))
 		pci_prepare_ats(to_pci_dev(dev), PAGE_SHIFT);
 
+	return iommu_dev;
+
+err_deinit:
+	iommu_ignore_device(iommu, dev);
 out_err:
 	return iommu_dev;
 }
