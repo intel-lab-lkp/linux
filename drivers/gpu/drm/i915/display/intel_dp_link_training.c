@@ -42,6 +42,328 @@
 #include "intel_panel.h"
 #include "intel_psr.h"
 
+/**
+ * DOC: DisplayPort link training
+ *
+ * This documents the Intel DisplayPort link training implementation and
+ * its internal interfaces, with a current focus on link recovery.
+ *
+ * Documentation of the full link training procedure is not yet included.
+ *
+ * The Intel DP link recovery logic governs how the driver reacts to
+ * link training failures and to links that degrade asynchronously
+ * after a previously successful training. Recovery is first attempted
+ * via automatic retraining (``autoretrain``) and, when that is no
+ * longer possible, by selecting fallback link configurations and
+ * notifying userspace to recover the link via a modeset.
+ *
+ * Recovery sequence and userspace notification
+ * --------------------------------------------
+ *
+ * After the first link training failure following initialization or a
+ * previously successful training, recovery is first attempted by the
+ * driver via automatic retraining, without userspace involvement.
+ * During this phase, a given link configuration is attempted twice
+ * before being abandoned: after the initial link training failure, an
+ * automatic retraining modeset is performed with the same link
+ * parameters, constituting the second attempt.
+ *
+ * Once automatic retraining is no longer possible, recovery is delegated
+ * to userspace, which must select a new modeset configuration, as the
+ * kernel must not do so. From this point onwards, each link configuration
+ * may be attempted only once as userspace iterates through alternative
+ * configurations. A successful link training restores the automatic
+ * retraining model for subsequent failures.
+ *
+ * The failure of the last automatic retraining attempt is reported to
+ * userspace, and from that point onward the driver notifies userspace of
+ * each subsequent failure. This allows userspace to both initiate
+ * recovery via modesets and observe the outcome of those recovery
+ * attempts, even when no further fallback configurations remain.
+ *
+ * Link training failures are always reported to userspace, even when they
+ * result from a kernel-internal modeset. Such modesets only re-apply the
+ * existing userspace-provided state and must not modify it. A failure
+ * triggered by such a modeset is therefore treated the same as a link
+ * degradation after a previously successful training, and recovery is
+ * handled by userspace in place of the kernel caller.
+ *
+ * Contexts
+ * --------
+ *
+ * The following execution contexts (A/B/C) describe how the different
+ * recovery states are reached but are not themselves implementation
+ * states. The actual state machine is defined by &enum
+ * intel_dp_link_training_recovery_state.
+ *
+ * A. Modeset context:
+ *
+ *   Triggered by:
+ *     - link training during a modeset, or
+ *     - via the "i915_dp_force_link_training_failure" debugfs entry,
+ *       forcing this path by emulating a link training failure.
+ *
+ *   Transitions:
+ *     - A1 Link training succeeds.
+ *
+ *       A link check work to recover any degraded link is scheduled
+ *       (and handled if needed in context B).
+ *
+ *       State -> %INTEL_DP_LINK_RECOVERY_IDLE.
+ *
+ *     - A2 First link training fails after initialization or a previously
+ *       successful link training.
+ *
+ *       An automatic retraining work is scheduled (and handled in
+ *       context B) with the same link parameters with which the link
+ *       training failed.
+ *
+ *       State -> %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_PENDING.
+ *
+ *     - A3 Link training fails again after A2 or A3.
+ *
+ *       Through fallback selection, the driver attempts to restrict the
+ *       allowed link configurations for subsequent modesets. This may
+ *       be done either by lowering global limits (rate/lane caps), or by
+ *       disabling only the currently failing configuration while leaving
+ *       all other configurations allowed, even if they use higher rate or
+ *       lane count.
+ *
+ *       (The current implementation may still apply parameter capping as
+ *       a coarse fallback selection mechanism. This is transitional and is
+ *       expected to be replaced by a scheme that disables only the failing
+ *       configuration, rather than removing configurations that have not
+ *       been observed to fail and may still train successfully.)
+ *
+ *       This case may repeat in a loop:
+ *           %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED ->
+ *           %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED
+ *
+ *       via repeated A3a -> A3a transitions until the configuration fallback
+ *       space is exhausted, reaching the A3b terminal case.
+ *
+ *       - A3a Fallback selection succeeds.
+ *
+ *         Userspace is notified to retry the modeset.
+ *
+ *         State -> %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED.
+ *
+ *       - A3b Fallback selection fails.
+ *
+ *         Userspace is notified of the failure and may continue recovery
+ *         by retrying the modeset with the remaining allowed link
+ *         configuration.
+ *
+ *         State -> %INTEL_DP_LINK_RECOVERY_NO_FALLBACK.
+ *
+ * B. Automatic retraining context:
+ *
+ *   Triggered by:
+ *     - after a successful link training in context A1 followed by
+ *       asynchronous link degradation, or
+ *     - after the first failed link training attempt in context A2, or
+ *     - via the "i915_dp_force_link_retrain" debugfs entry, which may
+ *       bypass normal gating and force this path.
+ *
+ *   Transitions:
+ *     - B1 ``Autoretrain`` modeset check and link training succeeds.
+ *
+ *       The case is handled as in A1, scheduling a link check work to
+ *       recover any degraded link.
+ *
+ *       State -> %INTEL_DP_LINK_RECOVERY_IDLE.
+ *
+ *     - B2 ``Autoretrain`` modeset check succeeds but link training fails.
+ *
+ *       - B2a Previously the link degraded asynchronously (current state
+ *         is %INTEL_DP_LINK_RECOVERY_IDLE).
+ *
+ *         This corresponds to a first failure in a new failure
+ *         sequence and is handled as in A2: an automatic retraining
+ *         attempt is scheduled with the same link parameters.
+ *
+ *         State -> %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_PENDING.
+ *
+ *       - B2b Previously a link training failed (current state is
+ *         %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_PENDING).
+ *
+ *         In non-regular (debug-forced) scenarios this may also be
+ *         reached from
+ *         %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED or
+ *         %INTEL_DP_LINK_RECOVERY_NO_FALLBACK, effectively behaving
+ *         like a userspace-driven recovery attempt.
+ *
+ *         The failure is handled as in A3, performing a fallback selection:
+ *
+ *         State -> %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED (via A3a).
+ *
+ *         or
+ *
+ *         State -> %INTEL_DP_LINK_RECOVERY_NO_FALLBACK (via A3b).
+ *
+ *     - B3 ``Autoretrain`` modeset check fails (and hence the link training
+ *       cannot be started).
+ *
+ *       The modeset check may fail, for example, due to external conditions
+ *       such as changed shared link bandwidth, which can make previously
+ *       valid modeset parameters no longer acceptable.
+ *
+ *       In this case, automatic retraining is disabled without selecting
+ *       a fallback configuration. The driver hands recovery over to
+ *       userspace without modifying the allowed configuration set, so a
+ *       subsequent userspace modeset will retry with the current link
+ *       configuration. Userspace is in a better position to select new
+ *       modeset parameters (e.g. video mode or enabled outputs) that
+ *       satisfy the updated constraints, as the driver is only allowed
+ *       to retry the modeset with the existing userspace-provided modeset
+ *       configuration.
+ *
+ *       This policy preserves the normal retry model, where a given link
+ *       configuration is attempted twice in the automatic retraining
+ *       flow before being abandoned: after a first link training failure,
+ *       an automatic retraining modeset is performed with the same link
+ *       parameters, and if its atomic check passes, the link training
+ *       itself may either succeed or fail, constituting the second
+ *       attempt. In this case, however, the retry modeset's atomic check
+ *       failed, so no second link training attempt with those parameters
+ *       was performed, and selecting a fallback would cause that
+ *       configuration to be tried only once rather than twice.
+ *
+ *       The userspace-driven link recovery continues with subsequent
+ *       userspace modesets handled in A3.
+ *
+ *       State -> %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED.
+ *
+ * C. State reset context:
+ *
+ *   Triggered by:
+ *     - sink capability changes, or
+ *     - sink disconnect/reconnect, or
+ *     - system suspend/resume or power transitions where HPD
+ *       handling may have been suppressed, or
+ *     - successful link training.
+ *
+ *   Transitions:
+ *     - The recovery state is reset from any of the recovery states
+ *
+ *       State -> %INTEL_DP_LINK_RECOVERY_IDLE.
+ *
+ *       After reset, the driver may re-check link status and schedule
+ *       retraining if the link is found to remain degraded.
+ *
+ * State transition summary
+ * ------------------------
+ *
+ * - From %INTEL_DP_LINK_RECOVERY_IDLE
+ *
+ *   - To %INTEL_DP_LINK_RECOVERY_IDLE
+ *
+ *     - | In context: B1
+ *       | Action: no action
+ *
+ *   - To %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_PENDING
+ *
+ *     - | In contexts: A2, B2a
+ *       | Action: queue ``autoretrain`` work
+ *
+ *   - To %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED
+ *
+ *     - | In context: B3
+ *       | Action: notify userspace
+ *
+ * - From %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_PENDING
+ *
+ *   - To %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED
+ *
+ *     - | In contexts: A3a, B2b
+ *       | Action: select fallback configurations, notify userspace
+ *
+ *     - | In context: B3
+ *       | Action: notify userspace
+ *
+ *   - To %INTEL_DP_LINK_RECOVERY_NO_FALLBACK
+ *
+ *     - | In contexts: A3b, B2b
+ *       | Action: notify userspace
+ *
+ * - From %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED
+ *
+ *   - To %INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED
+ *
+ *     - | In contexts: A3a, B2b
+ *       | Action: select fallback configurations, notify userspace
+ *
+ *   - To %INTEL_DP_LINK_RECOVERY_NO_FALLBACK
+ *
+ *     - | In contexts: A3b, B2b
+ *       | Action: notify userspace
+ *
+ * - From %INTEL_DP_LINK_RECOVERY_NO_FALLBACK
+ *
+ *   - To %INTEL_DP_LINK_RECOVERY_NO_FALLBACK
+ *
+ *     - | In contexts: A3b
+ *       | Action: notify userspace
+ *
+ * - From any state
+ *
+ *   - To %INTEL_DP_LINK_RECOVERY_IDLE
+ *
+ *     - | In contexts: C
+ *       | Action: no action
+ *
+ * Recovery flows
+ * --------------
+ *
+ * Userspace modeset link recovery::
+ *
+ *                       [IDLE]
+ *                          |
+ *                          | userspace modeset link training fails
+ *                          | (autoretrain link recovery work scheduled)
+ *                          v
+ *               [AUTORETRAIN_PENDING]-- autoretrain link recovery succeeds -> [IDLE]
+ *                          |
+ *                          | autoretrain link recovery modeset check or link training fails
+ *                          |
+ *                       +--o--+
+ *  modeset check fails  |     | link training fails
+ *  (userspace notified) |     |
+ *                       |     o-------- no fallback (userspace notified) ---> [NO_FALLBACK]
+ *                       |     |
+ *   +-------------+     |     | fallback selected (userspace notified)
+ *   |             |     |     |
+ *   |             v     v     v
+ *   |        [AUTORETRAIN_DISABLED]--- userspace link recovery succeeds ----> [IDLE]
+ *   |                   |
+ *   |                   | userspace link recovery fails
+ *   |                   |
+ *   +-------------------o------------- no fallback (userspace notified) ----> [NO_FALLBACK]
+ *   fallback selected
+ *   (userspace notified)
+ *
+ * Asynchronous link degradation recovery::
+ *
+ *                       [IDLE]
+ *                          |
+ *                          | link degrades
+ *                          | (autoretrain link recovery performed)
+ *                          |
+ *                          o--- autoretrain link recovery succeeds ---> [IDLE]
+ *                          |
+ *                          | autoretrain link recovery modeset check or link training fails
+ *                          |
+ *                       +--o--+
+ *  modeset check fails  |     | link training fails
+ *  (userspace notified) |     | (autoretrain work scheduled)
+ *                       v     v
+ *  [AUTORETRAIN_DISABLED*]   [AUTORETRAIN_PENDING*]
+ *
+ * ``*`` marks states where the sequence continues from the corresponding state
+ * in the Userspace modeset link recovery flow above.
+ *
+ */
+
 #define LT_MSG_PREFIX			"[CONNECTOR:%d:%s][ENCODER:%d:%s][%s] "
 #define LT_MSG_ARGS(_intel_dp, _dp_phy)	(_intel_dp)->attached_connector->base.base.id, \
 					(_intel_dp)->attached_connector->base.name, \
@@ -96,6 +418,7 @@
  * logic.
  *
  * See also:
+ *   - DOC: DisplayPort link training
  *   - link_recovery_autoretrain_pending()
  *   - link_recovery_autoretrain_allowed()
  *   - link_recovery_has_no_fallback()
