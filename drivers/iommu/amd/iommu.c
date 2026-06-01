@@ -745,10 +745,12 @@ static void iommu_ignore_device(struct amd_iommu *iommu, struct device *dev)
 		return;
 
 	devid = PCI_SBDF_TO_DEVID(sbdf);
+
+	/* Clear aliases while rlookup is still valid */
+	setup_aliases(iommu, dev);
+
 	pci_seg->rlookup_table[devid] = NULL;
 	memset(&dev_table[devid], 0, sizeof(struct dev_table_entry));
-
-	setup_aliases(iommu, dev);
 }
 
 
