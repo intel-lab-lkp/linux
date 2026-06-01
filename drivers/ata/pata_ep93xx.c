@@ -688,7 +688,7 @@ static int ep93xx_pata_dma_init(struct ep93xx_pata_data *drv_data)
 	return 0;
 
 fail_release_rx:
-	dma_release_channel(drv_data->dma_rx_channel);
+	drv_data->dma_tx_channel = NULL;
 fail_release_dma:
 	ep93xx_pata_release_dma(drv_data);
 
