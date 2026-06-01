@@ -4993,8 +4993,29 @@ static void end_reshape_write(struct bio *bio)
 		      conf->mirrors[d].rdev;
 
 	if (bio->bi_status) {
-		/* FIXME should record badblock */
-		md_error(mddev, rdev);
+		set_bit(WriteErrorSeen, &rdev->flags);
+
+		/* rdev_set_badblocks returns true on success.
+		 * On failure, it has already called md_error() internally.
+		 * Use is_new=1 as reshape writes target the new layout
+		 * (new_data_offset).
+		 */
+		if (rdev_set_badblocks(rdev, r10_bio->devs[slot].addr,
+				       r10_bio->sectors, 1)) {
+			/* Queue async replacement for member devices
+			 * For replacement devices, do not trigger WantReplacement
+			 * to avoid circular replacement storms.
+			 */
+			if (!repl) {
+				if (!test_and_set_bit(WantReplacement, &rdev->flags))
+					set_bit(MD_RECOVERY_NEEDED,
+						&rdev->mddev->recovery);
+			}
+		}
+	} else {
+		/* Write succeeded, clear stale badblock records */
+		rdev_clear_badblocks(rdev, r10_bio->devs[slot].addr,
+				     r10_bio->sectors, 1);
 	}
 
 	rdev_dec_pending(rdev, mddev);
