@@ -734,6 +734,15 @@ static int iommu_init_device(struct amd_iommu *iommu, struct device *dev)
 	return 0;
 }
 
+static void amd_iommu_clear_device_dte(struct amd_iommu *iommu,
+				       struct iommu_dev_data *dev_data)
+{
+	struct dev_table_entry new = {};
+
+	amd_iommu_make_clear_dte(dev_data, &new);
+	update_dte256(iommu, dev_data, &new);
+}
+
 static void iommu_ignore_device(struct amd_iommu *iommu, struct device *dev)
 {
 	struct amd_iommu_pci_seg *pci_seg = iommu->pci_seg;
@@ -753,14 +762,10 @@ static void iommu_ignore_device(struct amd_iommu *iommu, struct device *dev)
 	pci_seg->rlookup_table[devid] = NULL;
 
 	/* Clear DTE if we have a live entry */
-	if (dev_data) {
-		struct dev_table_entry new = {};
-
-		amd_iommu_make_clear_dte(dev_data, &new);
-		update_dte256(iommu, dev_data, &new);
-	} else {
+	if (dev_data)
+		amd_iommu_clear_device_dte(iommu, dev_data);
+	else
 		memset(&dev_table[devid], 0, sizeof(struct dev_table_entry));
-	}
 }
 
 
@@ -2517,6 +2522,11 @@ static struct iommu_device *amd_iommu_probe_device(struct device *dev)
 err_deinit:
 	iommu_ignore_device(iommu, dev);
 out_err:
+	if (dev_data) {
+		amd_iommu_clear_device_dte(iommu, dev_data);
+		dev_data->dev = NULL;
+	}
+
 	return iommu_dev;
 }
 
