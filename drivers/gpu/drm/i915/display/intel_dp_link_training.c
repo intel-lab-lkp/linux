@@ -1944,9 +1944,25 @@ intel_dp_read_link_status(struct intel_dp *intel_dp, u8 link_status[DP_LINK_STAT
 	return 0;
 }
 
+bool intel_dp_link_training_get_force_retrain(struct intel_dp_link_training *link_training)
+{
+	struct intel_dp *intel_dp = link_training->dp;
+
+	return intel_dp->link.force_retrain;
+}
+
+static void intel_dp_link_training_set_force_retrain(struct intel_dp_link_training *link_training,
+						     bool forced)
+{
+	struct intel_dp *intel_dp = link_training->dp;
+
+	intel_dp->link.force_retrain = forced;
+}
+
 static bool
 intel_dp_needs_link_retrain(struct intel_dp *intel_dp)
 {
+	struct intel_dp_link_training *link_training = intel_dp->link.training;
 	u8 link_status[DP_LINK_STATUS_SIZE];
 
 	if (!intel_dp->link.active)
@@ -1963,7 +1979,7 @@ intel_dp_needs_link_retrain(struct intel_dp *intel_dp)
 	if (intel_psr_enabled(intel_dp))
 		return false;
 
-	if (intel_dp->link.force_retrain)
+	if (intel_dp_link_training_get_force_retrain(link_training))
 		return true;
 
 	if (intel_dp_read_link_status(intel_dp, link_status) < 0)
@@ -2005,6 +2021,8 @@ static int intel_dp_retrain_link(struct intel_encoder *encoder,
 {
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+	struct intel_dp_link_training *link_training =
+		intel_dp->link.training;
 	u8 pipe_mask;
 	int ret;
 
@@ -2032,13 +2050,13 @@ static int intel_dp_retrain_link(struct intel_encoder *encoder,
 	drm_dbg_kms(display->drm,
 		    "[ENCODER:%d:%s] retraining link (forced %s)\n",
 		    encoder->base.base.id, encoder->base.name,
-		    str_yes_no(intel_dp->link.force_retrain));
+		    str_yes_no(intel_dp_link_training_get_force_retrain(link_training)));
 
 	ret = intel_modeset_commit_pipes(display, pipe_mask, ctx);
 	if (ret == -EDEADLK)
 		return ret;
 
-	intel_dp->link.force_retrain = false;
+	intel_dp_link_training_set_force_retrain(link_training, false);
 
 	if (ret)
 		drm_dbg_kms(display->drm,
@@ -2376,7 +2394,6 @@ static int i915_dp_force_link_retrain_show(void *data, u64 *val)
 	struct intel_connector *connector = to_intel_connector(data);
 	struct intel_display *display = to_intel_display(connector);
 	struct intel_dp_link_training *link_training = connector_to_link_training(connector);
-	struct intel_dp *intel_dp = link_training->dp;
 	int err;
 
 	err = drm_modeset_lock_single_interruptible(&display->drm->mode_config.connection_mutex);
@@ -2385,7 +2402,7 @@ static int i915_dp_force_link_retrain_show(void *data, u64 *val)
 
 	intel_dp_flush_connector_commits(connector);
 
-	*val = intel_dp->link.force_retrain;
+	*val = intel_dp_link_training_get_force_retrain(link_training);
 
 	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
 
@@ -2406,7 +2423,7 @@ static int i915_dp_force_link_retrain_write(void *data, u64 val)
 
 	intel_dp_flush_connector_commits(connector);
 
-	intel_dp->link.force_retrain = val;
+	intel_dp_link_training_set_force_retrain(link_training, val);
 
 	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
 
