@@ -1479,9 +1479,21 @@ int ftrace_set_clr_event(struct trace_array *tr, char *buf, int set)
 int trace_set_clr_event(const char *system, const char *event, int set)
 {
 	struct trace_array *tr = top_trace_array();
+	int ret;
 
 	if (!tr)
 		return -ENODEV;
+
+	/*
+	 * Keep in-kernel event enabling consistent with tracefs event
+	 * enabling: once an event is being enabled, expand the boot-minimum
+	 * ring buffer to the configured default size before records arrive.
+	 */
+	if (set) {
+		ret = tracing_update_buffers(tr);
+		if (ret < 0)
+			return ret;
+	}
 
 	return __ftrace_set_clr_event(tr, NULL, system, event, set, NULL);
 }
@@ -1504,11 +1516,24 @@ int trace_array_set_clr_event(struct trace_array *tr, const char *system,
 		const char *event, bool enable)
 {
 	int set;
+	int ret;
 
 	if (!tr)
 		return -ENOENT;
 
 	set = (enable == true) ? 1 : 0;
+
+	/*
+	 * Keep in-kernel event enabling consistent with tracefs event
+	 * enabling: once an event is being enabled, expand the boot-minimum
+	 * ring buffer to the configured default size before records arrive.
+	 */
+	if (set) {
+		ret = tracing_update_buffers(tr);
+		if (ret < 0)
+			return ret;
+	}
+
 	return __ftrace_set_clr_event(tr, NULL, system, event, set, NULL);
 }
 EXPORT_SYMBOL_GPL(trace_array_set_clr_event);
