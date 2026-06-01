@@ -1251,6 +1251,9 @@ int ip_tunnel_changelink(struct net_device *dev, struct nlattr *tb[],
 	struct net *net = tunnel->net;
 	struct ip_tunnel_net *itn = net_generic(net, tunnel->ip_tnl_net_id);
 
+	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+		return -EPERM;
+
 	if (dev == itn->fb_tunnel_dev)
 		return -EINVAL;
 
