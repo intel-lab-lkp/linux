@@ -2868,11 +2868,10 @@ static void spi_nor_manufacturer_init_params(struct spi_nor *nor)
 
 /**
  * spi_nor_no_sfdp_init_params() - Initialize the flash's parameters and
- * settings based on nor->info->sfdp_flags. This method should be called only by
- * flashes that do not define SFDP tables. If the flash supports SFDP but the
- * information is wrong and the settings from this function can not be retrieved
- * by parsing SFDP, one should instead use the fixup hooks and update the wrong
- * bits.
+ * settings based on nor->info->sfdp_flags.
+ * If the flash supports SFDP but the information is wrong and the settings from
+ * this function can not be retrieved by parsing SFDP, one should instead use
+ * the fixup hooks and update the wrong bits.
  * @nor:	pointer to a 'struct spi_nor'.
  */
 static void spi_nor_no_sfdp_init_params(struct spi_nor *nor)
@@ -3053,43 +3052,25 @@ static int spi_nor_late_init_params(struct spi_nor *nor)
 }
 
 /**
- * spi_nor_sfdp_init_params_deprecated() - Deprecated way of initializing flash
- * parameters and settings based on JESD216 SFDP standard.
+ * spi_nor_try_parse_sfdp() - Tries to parse flash parameters based
+ * on JESD216 SFDP standard.
  * @nor:	pointer to a 'struct spi_nor'.
  *
  * The method has a roll-back mechanism: in case the SFDP parsing fails, the
- * legacy flash parameters and settings will be restored.
+ * flash parameters and settings will be restored.
  */
-static void spi_nor_sfdp_init_params_deprecated(struct spi_nor *nor)
+static int spi_nor_try_parse_sfdp(struct spi_nor *nor)
 {
 	struct spi_nor_flash_parameter sfdp_params;
+	int ret;
 
 	memcpy(&sfdp_params, nor->params, sizeof(sfdp_params));
 
-	if (spi_nor_parse_sfdp(nor))
+	ret = spi_nor_parse_sfdp(nor);
+	if (ret)
 		memcpy(nor->params, &sfdp_params, sizeof(*nor->params));
-}
 
-/**
- * spi_nor_init_params_deprecated() - Deprecated way of initializing flash
- * parameters and settings.
- * @nor:	pointer to a 'struct spi_nor'.
- *
- * The method assumes that flash doesn't support SFDP so it initializes flash
- * parameters in spi_nor_no_sfdp_init_params() which later on can be overwritten
- * when parsing SFDP, if supported.
- */
-static void spi_nor_init_params_deprecated(struct spi_nor *nor)
-{
-	spi_nor_no_sfdp_init_params(nor);
-
-	spi_nor_manufacturer_init_params(nor);
-
-	if (nor->info->no_sfdp_flags & (SPI_NOR_DUAL_READ |
-					SPI_NOR_QUAD_READ |
-					SPI_NOR_OCTAL_READ |
-					SPI_NOR_OCTAL_DTR_READ))
-		spi_nor_sfdp_init_params_deprecated(nor);
+	return ret;
 }
 
 /**
@@ -3152,7 +3133,8 @@ static void spi_nor_init_default_params(struct spi_nor *nor)
  *
  * 1/ Default flash parameters initialization. The initializations are done
  *    based on nor->info data:
- *		spi_nor_info_init_params()
+ *		spi_nor_init_default_params()
+ *		spi_nor_no_sfdp_init_params()
  *
  * which can be overwritten by:
  * 2/ Manufacturer flash parameters initialization. The initializations are
@@ -3163,7 +3145,7 @@ static void spi_nor_init_default_params(struct spi_nor *nor)
  * which can be overwritten by:
  * 3/ SFDP flash parameters initialization. JESD216 SFDP is a standard and
  *    should be more accurate that the above.
- *		spi_nor_parse_sfdp() or spi_nor_no_sfdp_init_params()
+ *		spi_nor_try_parse_sfdp()
  *
  *    Please note that there is a ->post_bfpt() fixup hook that can overwrite
  *    the flash parameters and settings immediately after parsing the Basic
@@ -3189,17 +3171,14 @@ static int spi_nor_init_params(struct spi_nor *nor)
 		return -ENOMEM;
 
 	spi_nor_init_default_params(nor);
+	spi_nor_no_sfdp_init_params(nor);
+	spi_nor_manufacturer_init_params(nor);
 
-	if (spi_nor_needs_sfdp(nor)) {
-		ret = spi_nor_parse_sfdp(nor);
-		if (ret) {
-			dev_err(nor->dev, "BFPT parsing failed. Please consider using SPI_NOR_SKIP_SFDP when declaring the flash\n");
-			return ret;
-		}
-	} else if (nor->info->no_sfdp_flags & SPI_NOR_SKIP_SFDP) {
-		spi_nor_no_sfdp_init_params(nor);
-	} else {
-		spi_nor_init_params_deprecated(nor);
+	ret = spi_nor_try_parse_sfdp(nor);
+	if (ret && spi_nor_needs_sfdp(nor)) {
+		dev_err(nor->dev,
+			"SFDP parsing failed. You need to manually declare the flash parameters.\n");
+		return ret;
 	}
 
 	ret = spi_nor_late_init_params(nor);

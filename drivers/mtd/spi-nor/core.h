@@ -545,7 +545,6 @@ struct flash_info {
 #define SPI_NOR_HAS_CMP			BIT(10)
 
 	u8 no_sfdp_flags;
-#define SPI_NOR_SKIP_SFDP		BIT(0)
 #define SECT_4K				BIT(1)
 #define SPI_NOR_DUAL_READ		BIT(3)
 #define SPI_NOR_QUAD_READ		BIT(4)
