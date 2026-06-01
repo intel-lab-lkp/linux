@@ -608,6 +608,14 @@ static const struct midr_range erratum_ac04_cpu_23_list[] = {
 };
 #endif
 
+#ifdef CONFIG_ARM64_WORKAROUND_DISABLE_CNP
+static const struct midr_range cnp_erratum_cpus[] = {
+	MIDR_ALL_VERSIONS(MIDR_NVIDIA_CARMEL),
+	MIDR_ALL_VERSIONS(MIDR_HISI_HIP09),
+	{},
+};
+#endif
+
 const struct arm64_cpu_capabilities arm64_errata[] = {
 #ifdef CONFIG_ARM64_WORKAROUND_CLEAN_CACHE
 	{
@@ -803,10 +811,9 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 #endif
 #ifdef CONFIG_ARM64_WORKAROUND_DISABLE_CNP
 	{
-		/* NVIDIA Carmel */
-		.desc = "NVIDIA Carmel CNP erratum",
+		.desc = "NVIDIA Carmel CNP erratum, or Hisilicon erratum 162100125",
 		.capability = ARM64_WORKAROUND_DISABLE_CNP,
-		ERRATA_MIDR_ALL_VERSIONS(MIDR_NVIDIA_CARMEL),
+		ERRATA_MIDR_RANGE_LIST(cnp_erratum_cpus),
 	},
 #endif
 #ifdef CONFIG_ARM64_WORKAROUND_TRBE_OVERWRITE_FILL_MODE
