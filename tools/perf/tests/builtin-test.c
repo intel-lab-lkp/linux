@@ -161,6 +161,7 @@ static struct test_workload *workloads[] = {
 	&workload__landlock,
 	&workload__traploop,
 	&workload__inlineloop,
+	&workload__jitdump,
 
 #ifdef HAVE_RUST_SUPPORT
 	&workload__code_with_type,
@@ -408,7 +409,7 @@ static int print_test_result(struct test_suite *t, int curr_suite, int curr_test
 		char prefix[32];
 		int len = snprintf(prefix, sizeof(prefix), "%3d.%1d:",
 				   curr_suite + 1, curr_test_case + 1);
-		int subw = len >= 4 ? width + 4 - len : width;
+		int subw = width + 4 > len ? width + 4 - len : 0;
 
 		pr_info("%s %-*s:", prefix, subw, test_description(t, curr_test_case));
 	} else
@@ -460,7 +461,7 @@ static int print_test_result(struct test_suite *t, int curr_suite, int curr_test
 		strbuf_addf(&junit_xml_buf,
 			    "    <testcase classname=\"%s\" name=\"%s\" time=\"%.2f\">\n",
 			    escaped_class, escaped_test, elapsed);
-		if (result == TEST_FAIL) {
+		if (result != TEST_OK && result != TEST_SKIP) {
 			strbuf_addf(&junit_xml_buf,
 				    "      <failure message=\"FAILED\">\n%s\n      </failure>\n",
 				    escaped_err);
@@ -496,7 +497,7 @@ static const char *find_next_keyword(const char *str, size_t max_len, size_t *kw
 		const char *s = str;
 		size_t len = strlen(fail_keywords[k]);
 
-		while ((size_t)(s - str) + len <= max_len) {
+		while ((size_t)(s - str) + len <= max_len && (!best || s < best)) {
 			size_t i;
 
 			for (i = 0; i < len; i++) {
@@ -544,6 +545,7 @@ static void print_line_highlighted(FILE *fp, const char *line, size_t len)
 		s = match + kw_len;
 	}
 }
+
 
 
 static void print_test_failure_snippet(FILE *fp, const char *buf)
@@ -776,6 +778,16 @@ static void finish_test(struct child_test **child_tests, int running_test, int c
 	}
 	/* Clean up child process. */
 	ret = finish_command(&child_test->process);
+	if (child_test->err_output.len > 0) {
+		struct strbuf merged = STRBUF_INIT;
+
+		if (child_test->err_output.buf)
+			strbuf_addstr(&merged, child_test->err_output.buf);
+		if (err_output.buf)
+			strbuf_addstr(&merged, err_output.buf);
+		strbuf_release(&err_output);
+		err_output = merged;
+	}
 	if (verbose > 1)
 		fprintf(stderr, "%s", err_output.buf);
 	else if (verbose == 1 && ret == TEST_FAIL)
@@ -814,6 +826,8 @@ static int finish_tests_parallel(struct child_test **child_tests, size_t num_tes
 	int last_running = -1;
 	size_t i;
 	int last_suite_printed = -1;
+	struct pollfd *old_pfds;
+	size_t *old_pfd_indices;
 
 	global_pfds = calloc(num_tests, sizeof(*pfds));
 	global_pfd_indices = calloc(num_tests, sizeof(*pfd_indices));
@@ -987,10 +1001,13 @@ static int finish_tests_parallel(struct child_test **child_tests, size_t num_tes
 		}
 	}
 
-	free(global_pfds);
-	free(global_pfd_indices);
+	old_pfds = global_pfds;
+	old_pfd_indices = global_pfd_indices;
+
 	global_pfds = NULL;
 	global_pfd_indices = NULL;
+	free(old_pfds);
+	free(old_pfd_indices);
 	return 0;
 }
 
@@ -1252,7 +1269,8 @@ err_out:
 		for (size_t x = 0; x < num_tests; x++)
 			finish_test(child_tests, x, num_tests, width);
 	}
-	print_tests_summary();
+	if (!err)
+		print_tests_summary();
 	free(global_pfds);
 	free(global_pfd_indices);
 	global_pfds = NULL;
