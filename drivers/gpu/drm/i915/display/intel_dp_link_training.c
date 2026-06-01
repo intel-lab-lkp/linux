@@ -27,6 +27,7 @@
 #include <drm/display/drm_dp_helper.h>
 #include <drm/drm_print.h>
 
+#include "intel_display.h"
 #include "intel_display_core.h"
 #include "intel_display_jiffies.h"
 #include "intel_display_types.h"
@@ -2165,6 +2166,8 @@ static int intel_dp_retrain_link(struct intel_encoder *encoder,
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
 	struct intel_dp_link_training *link_training =
 		intel_dp->link.training;
+	struct intel_atomic_state *state;
+	struct drm_atomic_commit *_state;
 	u8 pipe_mask;
 	int ret;
 
@@ -2194,9 +2197,15 @@ static int intel_dp_retrain_link(struct intel_encoder *encoder,
 		    encoder->base.base.id, encoder->base.name,
 		    str_yes_no(intel_dp_link_training_get_force_retrain(link_training)));
 
-	ret = intel_modeset_commit_pipes(display, pipe_mask, ctx);
+	_state = drm_atomic_commit_alloc(display->drm);
+	if (!_state)
+		return -ENOMEM;
+
+	state = to_intel_atomic_state(_state);
+
+	ret = intel_modeset_commit_pipes_for_atomic_state(state, pipe_mask, ctx);
 	if (ret == -EDEADLK)
-		return ret;
+		goto out;
 
 	intel_dp_link_training_set_force_retrain(link_training, false);
 
@@ -2205,6 +2214,8 @@ static int intel_dp_retrain_link(struct intel_encoder *encoder,
 			    "[ENCODER:%d:%s] link retraining failed: %pe\n",
 			    encoder->base.base.id, encoder->base.name,
 			    ERR_PTR(ret));
+out:
+	drm_atomic_commit_put(&state->base);
 
 	return ret;
 }
