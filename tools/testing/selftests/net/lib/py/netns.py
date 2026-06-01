@@ -2,8 +2,12 @@
 
 from .utils import ip
 import ctypes
+import os
 import random
 import string
+import subprocess
+import time
+from pathlib import Path
 
 libc = ctypes.cdll.LoadLibrary('libc.so.6')
 
@@ -32,6 +36,81 @@ class NetNS:
 
     def __repr__(self):
         return f"NetNS({self.name})"
+
+
+class UserNetNS:
+    """Network namespace owned by a non-init user namespace."""
+
+    def __init__(self):
+        self.name = ''.join(
+            random.choice(string.ascii_lowercase) for _ in range(8))
+        self.user_ns_path = f"/run/userns/{self.name}"
+        self.net_ns_path = f"/run/netns/{self.name}"
+        self._user_mounted = False
+        self._net_mounted = False
+        self._unshare = None
+
+        os.makedirs("/run/userns", exist_ok=True)
+        os.makedirs("/run/netns", exist_ok=True)
+
+        Path(self.user_ns_path).touch()
+        Path(self.net_ns_path).touch()
+
+        self._unshare = subprocess.Popen(
+            ["unshare", "--user", "--net", "--map-root-user",
+             "sleep", "infinity"])
+
+        try:
+            pid = self._unshare.pid
+            init_user = os.readlink("/proc/self/ns/user")
+            for _ in range(200):
+                try:
+                    if os.readlink(f"/proc/{pid}/ns/user") != init_user:
+                        break
+                except OSError:
+                    pass
+                time.sleep(0.01)
+            else:
+                raise RuntimeError("unshare child did not create userns")
+
+            subprocess.run(["mount", "--bind", f"/proc/{pid}/ns/user",
+                            self.user_ns_path], check=True)
+            self._user_mounted = True
+            subprocess.run(["mount", "--bind", f"/proc/{pid}/ns/net",
+                            self.net_ns_path], check=True)
+            self._net_mounted = True
+        except (OSError, RuntimeError, subprocess.CalledProcessError):
+            self._unshare.kill()
+            self._unshare.wait()
+            raise
+
+    def __del__(self):
+        if self._net_mounted:
+            subprocess.run(["umount", self.net_ns_path], check=False)
+            self._net_mounted = False
+        if self._user_mounted:
+            subprocess.run(["umount", self.user_ns_path], check=False)
+            self._user_mounted = False
+        if self._unshare and self._unshare.poll() is None:
+            self._unshare.kill()
+            self._unshare.wait()
+        for path in (self.net_ns_path, self.user_ns_path):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, ex_type, ex_value, ex_tb):
+        self.__del__()
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return f"UserNetNS({self.name})"
 
 
 class NetNSEnter:
