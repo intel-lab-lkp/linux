@@ -43,7 +43,7 @@ int arch_kimage_file_post_load_cleanup(struct kimage *image)
 unsigned int arch_get_system_nr_ranges(void)
 {
 	/* for exclusion of crashkernel region */
-	unsigned int nr_ranges = 2 + CRASH_HOTPLUG_SAFETY_PADDING;
+	unsigned int nr_ranges = 2 + crashk_cma_cnt + CRASH_HOTPLUG_SAFETY_PADDING;
 	phys_addr_t start, end;
 	u64 i;
 
