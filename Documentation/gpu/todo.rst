@@ -896,10 +896,11 @@ complection of submission.
 One minor feature still missing is a generic DRM IOCTL to query the error
 status of binary and timeline drm_syncobj.
 
-This should probably be improved by implementing the necessary kernel interface
-and adding support for that in the userspace stack.
+This was already improved by implementing the necessary kernel interface
+(patches are on the dri-devel mailing list ) but adding support for that in the
+userspace stack is still missing.
 
-Contact: Christian König
+Contact: Christian König, Michel Dänzer
 
 Level: Starter
 
