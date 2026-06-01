@@ -26,6 +26,15 @@
 /* Set this bit if the skcipher operation is not final. */
 #define CRYPTO_SKCIPHER_REQ_NOTFINAL	0x00000002
 
+/*
+ * Set in cra_flags by an skcipher algorithm that supports processing
+ * multiple data units in a single request.  See
+ * crypto_skcipher_set_data_unit_size().
+ *
+ * Type-specific flag in the 0xff000000 reserved range.
+ */
+#define CRYPTO_ALG_SKCIPHER_MULTI_DATA_UNIT	0x01000000
+
 struct scatterlist;
 
 /**
@@ -52,6 +61,22 @@ struct skcipher_request {
 
 struct crypto_skcipher {
 	unsigned int reqsize;
+
+	/*
+	 * Number of bytes in one data unit when batching multiple data units
+	 * per request.  0 means "single data unit per request" (legacy
+	 * behaviour).  Set via crypto_skcipher_set_data_unit_size().
+	 *
+	 * When non-zero, cryptlen must be a multiple of data_unit_size.  The
+	 * IV passed in skcipher_request::iv applies to the first data unit;
+	 * the algorithm advances the tweak between data units according to
+	 * the mode specification (e.g., LE128 multiply for XTS per
+	 * IEEE 1619).
+	 *
+	 * Only algorithms that advertise CRYPTO_ALG_SKCIPHER_MULTI_DATA_UNIT
+	 * in cra_flags accept a non-zero value.
+	 */
+	unsigned int data_unit_size;
 
 	struct crypto_tfm base;
 };
@@ -490,6 +515,66 @@ static inline unsigned int crypto_lskcipher_chunksize(
 	struct crypto_lskcipher *tfm)
 {
 	return crypto_lskcipher_alg(tfm)->co.chunksize;
+}
+
+/**
+ * crypto_skcipher_supports_multi_data_unit() - test multi-data-unit support
+ * @tfm: cipher handle
+ *
+ * Return: true if the algorithm advertises that it can process multiple
+ *	   data units in a single skcipher_request.
+ */
+static inline bool
+crypto_skcipher_supports_multi_data_unit(struct crypto_skcipher *tfm)
+{
+	return crypto_skcipher_alg_common(tfm)->base.cra_flags &
+		CRYPTO_ALG_SKCIPHER_MULTI_DATA_UNIT;
+}
+
+/**
+ * crypto_skcipher_set_data_unit_size() - set data unit size for the tfm
+ * @tfm: cipher handle
+ * @data_unit_size: data unit size in bytes; 0 disables multi-data-unit mode
+ *
+ * Configure the tfm to process multiple data units per request.  When set
+ * to a non-zero value, every subsequent encrypt/decrypt request must have
+ * cryptlen that is a multiple of @data_unit_size.  Each data unit is
+ * processed as if it were a separate request whose IV is derived from the
+ * preceding data unit's IV by the algorithm-specific tweak update rule:
+ * the implementation treats the caller-supplied IV as a 128-bit
+ * little-endian counter and adds the data-unit index for each subsequent
+ * data unit.
+ *
+ * The contents of req->iv after a multi-data-unit request returns are
+ * unspecified — callers MUST NOT rely on it being either the original
+ * value or the final-data-unit value.  Set a fresh IV before every
+ * request.
+ *
+ * The algorithm must advertise CRYPTO_ALG_SKCIPHER_MULTI_DATA_UNIT in its
+ * cra_flags.  @data_unit_size must be a positive multiple of the
+ * algorithm's cra_blocksize, otherwise -EINVAL is returned.
+ *
+ * Setting @data_unit_size to 0 reverts the tfm to single-data-unit
+ * behaviour and is always permitted.
+ *
+ * Return: 0 on success; -EOPNOTSUPP if the algorithm does not advertise
+ *	   multi-data-unit support; -EINVAL if @data_unit_size is not a
+ *	   positive multiple of the cipher block size.
+ */
+int crypto_skcipher_set_data_unit_size(struct crypto_skcipher *tfm,
+				       unsigned int data_unit_size);
+
+/**
+ * crypto_skcipher_data_unit_size() - obtain data unit size
+ * @tfm: cipher handle
+ *
+ * Return: configured data unit size in bytes; 0 if multi-data-unit mode
+ *	   is disabled.
+ */
+static inline unsigned int
+crypto_skcipher_data_unit_size(struct crypto_skcipher *tfm)
+{
+	return tfm->data_unit_size;
 }
 
 /**
