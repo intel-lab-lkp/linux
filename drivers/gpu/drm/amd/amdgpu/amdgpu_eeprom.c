@@ -21,6 +21,7 @@
  *
  */
 
+#include <linux/iopoll.h>
 #include "amdgpu_eeprom.h"
 #include "amdgpu.h"
 
@@ -153,15 +154,25 @@ static int __amdgpu_eeprom_xfer(struct i2c_adapter *i2c_adap, u32 eeprom_addr,
 			break;
 
 		if (!read) {
-			/* According to EEPROM specs the length of the
-			 * self-writing cycle, tWR (tW), is 10 ms.
-			 *
-			 * TODO: Use polling on ACK, aka Acknowledge
-			 * Polling, to minimize waiting for the
-			 * internal write cycle to complete, as it is
-			 * usually smaller than tWR (tW).
+			int ret;
+
+			/* Poll for ACK to detect when the self-timed
+			 * internal write cycle has completed, as per
+			 * Acknowledge Polling described in the AT24CM02
+			 * datasheet, Section 7.4. The SMU I2C adapter
+			 * used by these EEPROM paths does not support
+			 * zero-length messages, so use an offset-only
+			 * dummy write to probe for the ACK. The address
+			 * pointer update is harmless because each real
+			 * transfer reprograms it before use.
 			 */
-			msleep(10);
+			ret = read_poll_timeout(i2c_transfer, r,
+						 r == 1,
+						 200, 10 * USEC_PER_MSEC,
+						 false,
+						 i2c_adap, &msgs[0], 1);
+			if (ret)
+				break;
 		}
 	}
 
