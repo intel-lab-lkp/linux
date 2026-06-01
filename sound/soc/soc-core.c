@@ -2297,6 +2297,21 @@ static int snd_soc_bind_card(struct snd_soc_card *card)
 		if (!snd_soc_component_active(component))
 			pinctrl_pm_select_sleep_state(component->dev);
 
+	/*
+	 * Add device_link from card to component so that system_suspend
+	 * will be done in the correct order. The card must suspend first
+	 * to stop audio activity before the components suspend.
+	 */
+	for_each_card_components(card, component) {
+		if (!device_link_add(card->dev, component->dev,
+				     DL_FLAG_AUTOREMOVE_CONSUMER)) {
+			dev_warn(card->dev, "Failed to create device link to %s\n",
+				 dev_name(component->dev));
+			ret = -EINVAL;
+			goto probe_end;
+		}
+	}
+
 probe_end:
 	if (ret < 0)
 		soc_cleanup_card_resources(card);
