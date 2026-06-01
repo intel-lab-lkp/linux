@@ -206,6 +206,7 @@ static int snd_amd_acp_acpi_find_config(struct pci_dev *pci)
 				   ACPI_TYPE_INTEGER, &obj))
 		acp_flag = obj->integer.value;
 
+	acp_flag = 0x02;
 	return acp_flag;
 }
 
