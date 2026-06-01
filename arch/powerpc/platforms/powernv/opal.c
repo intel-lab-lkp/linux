@@ -73,6 +73,12 @@ static struct task_struct *kopald_tsk;
 static struct opal_msg *opal_msg;
 static u32 opal_msg_size __ro_after_init;
 
+/* Token cache for opal_check_token() */
+#define OPAL_TOKEN_CACHE_SIZE 256  /* Covers tokens 0-255, including OPAL_LAST (178) */
+static unsigned long opal_token_cache[BITS_TO_LONGS(OPAL_TOKEN_CACHE_SIZE)] __ro_after_init;
+static bool opal_token_cache_initialized __ro_after_init;
+static void opal_token_cache_init(void);
+
 void __init opal_configure_cores(void)
 {
 	u64 reinit_flags = 0;
@@ -1125,7 +1131,56 @@ EXPORT_SYMBOL_GPL(opal_flash_read);
 EXPORT_SYMBOL_GPL(opal_flash_write);
 EXPORT_SYMBOL_GPL(opal_flash_erase);
 EXPORT_SYMBOL_GPL(opal_prd_msg);
+
+/**
+ * opal_check_token - Check if an OPAL call token is supported
+ * @token: OPAL token number to check
+ *
+ * Returns 1 if supported, 0 if not.
+ * Uses a cached bitmap for fast lookups after initialization.
+ */
+int64_t opal_check_token(uint64_t token)
+{
+	/* Initialize if not done before */
+	if (!opal_token_cache_initialized) {
+		opal_token_cache_init();
+	}
+
+	/* Use cached result */
+	if (token < OPAL_TOKEN_CACHE_SIZE) {
+		return test_bit(token, opal_token_cache);
+	}
+
+	/* Fall back to direct OPAL call for out-of-range tokens */
+	return opal_check_token_call(token);
+}
 EXPORT_SYMBOL_GPL(opal_check_token);
+
+/**
+ * opal_token_cache_init - Initialize the OPAL token cache
+ *
+ * Called during opal_init() to populate the token cache by querying
+ * OPAL firmware for all tokens in the supported range.
+ */
+static void opal_token_cache_init(void)
+{
+	uint64_t token;
+	int64_t result;
+
+	pr_debug("Initializing OPAL token cache\n");
+
+	/* Query OPAL for each token and cache the result */
+	for (token = 0; token < OPAL_TOKEN_CACHE_SIZE; token++) {
+		result = opal_check_token_call(token);
+		if (result == 1)
+			set_bit(token, opal_token_cache);
+	}
+
+	/* Mark cache as initialized - enables fast path */
+	opal_token_cache_initialized = true;
+
+	pr_info("OPAL token cache initialized\n");
+}
 
 /* Convert a region of vmalloc memory to an opal sg list */
 struct opal_sg_list *opal_vmalloc_to_sg_list(void *vmalloc_addr,
