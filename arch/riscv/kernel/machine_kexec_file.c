@@ -47,7 +47,7 @@ static int get_nr_ram_ranges_callback(struct resource *res, void *arg)
 unsigned int arch_get_system_nr_ranges(void)
 {
 	/* For exclusion of crashkernel region */
-	unsigned int nr_ranges = 2 + CRASH_HOTPLUG_SAFETY_PADDING;
+	unsigned int nr_ranges = 2 + crashk_cma_cnt + CRASH_HOTPLUG_SAFETY_PADDING;
 
 	walk_system_ram_res(0, -1, &nr_ranges, get_nr_ram_ranges_callback);
 
