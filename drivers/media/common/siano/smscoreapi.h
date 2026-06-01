@@ -1117,6 +1117,8 @@ extern void smscore_onresponse(struct smscore_device_t *coredev,
 
 extern
 struct smscore_buffer_t *smscore_getbuffer(struct smscore_device_t *coredev);
+struct smscore_buffer_t *
+smscore_getbuffer_abortable(struct smscore_device_t *coredev, bool *abort);
 extern void smscore_putbuffer(struct smscore_device_t *coredev,
 			      struct smscore_buffer_t *cb);
 

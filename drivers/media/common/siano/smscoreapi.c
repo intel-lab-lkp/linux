@@ -1644,6 +1644,18 @@ struct smscore_buffer_t *smscore_getbuffer(struct smscore_device_t *coredev)
 }
 EXPORT_SYMBOL_GPL(smscore_getbuffer);
 
+struct smscore_buffer_t *
+smscore_getbuffer_abortable(struct smscore_device_t *coredev, bool *abort)
+{
+	struct smscore_buffer_t *cb = NULL;
+
+	wait_event(coredev->buffer_mng_waitq,
+		   READ_ONCE(*abort) || (cb = get_entry(coredev)));
+
+	return cb;
+}
+EXPORT_SYMBOL_GPL(smscore_getbuffer_abortable);
+
 /*
  * return buffer descriptor to a pool
  *
@@ -1654,8 +1666,8 @@ EXPORT_SYMBOL_GPL(smscore_getbuffer);
  */
 void smscore_putbuffer(struct smscore_device_t *coredev,
 		struct smscore_buffer_t *cb) {
-	wake_up_interruptible(&coredev->buffer_mng_waitq);
 	list_add_locked(&cb->entry, &coredev->buffers, &coredev->bufferslock);
+	wake_up(&coredev->buffer_mng_waitq);
 }
 EXPORT_SYMBOL_GPL(smscore_putbuffer);
 
