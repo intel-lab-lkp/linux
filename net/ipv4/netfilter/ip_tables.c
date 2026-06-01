@@ -254,7 +254,7 @@ ipt_do_table(void *priv,
 	acpar.hotdrop = false;
 	acpar.state   = state;
 
-	WARN_ON(!(table->valid_hooks & (1 << hook)));
+	DEBUG_NET_WARN_ON_ONCE(!(table->valid_hooks & (1 << hook)));
 	local_bh_disable();
 	addend = xt_write_recseq_begin();
 	private = READ_ONCE(table->private); /* Address dependency. */
@@ -279,7 +279,7 @@ ipt_do_table(void *priv,
 		const struct xt_entry_match *ematch;
 		struct xt_counters *counter;
 
-		WARN_ON(!e);
+		DEBUG_NET_WARN_ON_ONCE(!e);
 		if (!ip_packet_match(ip, indev, outdev,
 		    &e->ip, acpar.fragoff)) {
  no_match:
@@ -298,7 +298,7 @@ ipt_do_table(void *priv,
 		ADD_COUNTER(*counter, skb->len, 1);
 
 		t = ipt_get_target_c(e);
-		WARN_ON(!t->u.kernel.target);
+		DEBUG_NET_WARN_ON_ONCE(!t->u.kernel.target);
 
 #if IS_ENABLED(CONFIG_NETFILTER_XT_TARGET_TRACE)
 		/* The packet is traced: log it */

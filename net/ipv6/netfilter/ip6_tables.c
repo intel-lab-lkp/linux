@@ -275,7 +275,7 @@ ip6t_do_table(void *priv, struct sk_buff *skb,
 	acpar.hotdrop = false;
 	acpar.state   = state;
 
-	WARN_ON(!(table->valid_hooks & (1 << hook)));
+	DEBUG_NET_WARN_ON_ONCE(!(table->valid_hooks & (1 << hook)));
 
 	local_bh_disable();
 	addend = xt_write_recseq_begin();
@@ -301,7 +301,7 @@ ip6t_do_table(void *priv, struct sk_buff *skb,
 		const struct xt_entry_match *ematch;
 		struct xt_counters *counter;
 
-		WARN_ON(!e);
+		DEBUG_NET_WARN_ON_ONCE(!e);
 		acpar.thoff = 0;
 		if (!ip6_packet_match(skb, indev, outdev, &e->ipv6,
 		    &acpar.thoff, &acpar.fragoff, &acpar.hotdrop)) {
@@ -321,7 +321,7 @@ ip6t_do_table(void *priv, struct sk_buff *skb,
 		ADD_COUNTER(*counter, skb->len, 1);
 
 		t = ip6t_get_target_c(e);
-		WARN_ON(!t->u.kernel.target);
+		DEBUG_NET_WARN_ON_ONCE(!t->u.kernel.target);
 
 #if IS_ENABLED(CONFIG_NETFILTER_XT_TARGET_TRACE)
 		/* The packet is traced: log it */

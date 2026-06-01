@@ -161,7 +161,8 @@ static int socket_mt_enable_defrag(struct net *net, int family)
 		return nf_defrag_ipv6_enable(net);
 #endif
 	}
-	WARN_ONCE(1, "Unknown family %d\n", family);
+	pr_warn_once("xt_socket: Unknown family %d\n", family);
+	DEBUG_NET_WARN_ON_ONCE(1);
 	return 0;
 }
 

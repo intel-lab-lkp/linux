@@ -714,8 +714,10 @@ int xt_compat_add_offset(u_int8_t af, unsigned int offset, int delta)
 
 	WARN_ON(!mutex_is_locked(&xt[af].compat_mutex));
 
-	if (WARN_ON(!xp->compat_tab))
+	if (unlikely(!xp->compat_tab)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return -ENOMEM;
+	}
 
 	if (xp->cur >= xp->number)
 		return -EINVAL;
@@ -769,8 +771,10 @@ int xt_compat_init_offsets(u8 af, unsigned int number)
 	if (!number || number > (INT_MAX / sizeof(struct compat_delta)))
 		return -EINVAL;
 
-	if (WARN_ON(xt[af].compat_tab))
+	if (unlikely(xt[af].compat_tab)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return -EINVAL;
+	}
 
 	mem = sizeof(struct compat_delta) * number;
 	if (mem > XT_MAX_TABLE_SIZE)
@@ -1973,8 +1977,10 @@ int xt_register_template(const struct xt_table *table,
 	mutex_lock(&xt[af].mutex);
 
 	list_for_each_entry(t, &xt_templates[af], list) {
-		if (WARN_ON_ONCE(strcmp(table->name, t->name) == 0))
+		if (strcmp(table->name, t->name) == 0) {
+			DEBUG_NET_WARN_ON_ONCE(1);
 			goto out_unlock;
+		}
 	}
 
 	ret = -ENOMEM;

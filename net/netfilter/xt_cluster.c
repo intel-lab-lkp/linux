@@ -49,7 +49,7 @@ xt_cluster_hash(const struct nf_conn *ct,
 		hash = xt_cluster_hash_ipv6(nf_ct_orig_ipv6_src(ct), info);
 		break;
 	default:
-		WARN_ON(1);
+		DEBUG_NET_WARN_ON_ONCE(1);
 		break;
 	}
 
@@ -69,7 +69,7 @@ xt_cluster_is_multicast_addr(const struct sk_buff *skb, u_int8_t family)
 		is_multicast = ipv6_addr_is_multicast(&ipv6_hdr(skb)->daddr);
 		break;
 	default:
-		WARN_ON(1);
+		DEBUG_NET_WARN_ON_ONCE(1);
 		break;
 	}
 	return is_multicast;

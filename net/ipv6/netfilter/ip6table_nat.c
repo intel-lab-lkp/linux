@@ -66,8 +66,10 @@ static int ip6t_nat_register_lookups(struct net *net)
 	int i, ret;
 
 	table = xt_find_table(net, NFPROTO_IPV6, "nat");
-	if (WARN_ON_ONCE(!table))
+	if (unlikely(!table)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return -ENOENT;
+	}
 
 	xt_nat_net = net_generic(net, ip6table_nat_net_id);
 	ops = kmemdup(nf_nat_ipv6_ops, sizeof(nf_nat_ipv6_ops), GFP_KERNEL);

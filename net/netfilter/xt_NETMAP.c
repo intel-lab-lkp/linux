@@ -74,10 +74,6 @@ netmap_tg4(struct sk_buff *skb, const struct xt_action_param *par)
 	const struct nf_nat_ipv4_multi_range_compat *mr = par->targinfo;
 	struct nf_nat_range2 newrange;
 
-	WARN_ON(xt_hooknum(par) != NF_INET_PRE_ROUTING &&
-		xt_hooknum(par) != NF_INET_POST_ROUTING &&
-		xt_hooknum(par) != NF_INET_LOCAL_OUT &&
-		xt_hooknum(par) != NF_INET_LOCAL_IN);
 	ct = nf_ct_get(skb, &ctinfo);
 
 	netmask = ~(mr->range[0].min_ip ^ mr->range[0].max_ip);

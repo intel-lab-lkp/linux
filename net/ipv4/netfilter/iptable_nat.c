@@ -65,8 +65,10 @@ static int ipt_nat_register_lookups(struct net *net)
 
 	xt_nat_net = net_generic(net, iptable_nat_net_id);
 	table = xt_find_table(net, NFPROTO_IPV4, "nat");
-	if (WARN_ON_ONCE(!table))
+	if (unlikely(!table)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return -ENOENT;
+	}
 
 	ops = kmemdup(nf_nat_ipv4_ops, sizeof(nf_nat_ipv4_ops), GFP_KERNEL);
 	if (!ops)
