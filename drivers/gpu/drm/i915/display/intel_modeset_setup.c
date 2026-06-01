@@ -952,6 +952,12 @@ void intel_modeset_setup_hw_state(struct intel_display *display,
 
 	intel_modeset_readout_hw_state(display);
 
+	/*
+	 * Seed per-port FEC refcounts from the just-populated active
+	 * crtc_states before anything can issue an enable/disable.
+	 */
+	intel_ddi_seed_fec_refcounts(display);
+
 	/* HW state is read out, now we need to sanitize this mess. */
 	get_encoder_power_domains(display);
 

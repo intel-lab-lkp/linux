@@ -2096,6 +2096,47 @@ void intel_ddi_disable_clock(struct intel_encoder *encoder)
 		encoder->disable_clock(encoder);
 }
 
+/**
+ * intel_ddi_seed_fec_refcounts - Seed per-port FEC refcounts from active CRTCs
+ * @display: display device
+ *
+ * intel_digital_port::fec_active_streams is the per-port refcount that gates
+ * programming of the shared DP_TP_CTL_FEC_ENABLE bit. After initial HW state
+ * readout (driver load, resume, GPU reset takeover), the persistent
+ * crtc_state->fec_enable values reflect what HW currently has; we need to
+ * align the refcount with that so the first paired disable doesn't underflow
+ * and the next enable doesn't incorrectly skip programming the HW bit.
+ *
+ * Must be called once after intel_modeset_readout_hw_state(), before any new
+ * modeset commit can run.
+ */
+void intel_ddi_seed_fec_refcounts(struct intel_display *display)
+{
+	struct intel_crtc *crtc;
+
+	for_each_intel_crtc(display->drm, crtc) {
+		const struct intel_crtc_state *crtc_state =
+			to_intel_crtc_state(crtc->base.state);
+		struct intel_encoder *encoder;
+
+		if (!crtc_state->hw.active || !crtc_state->fec_enable)
+			continue;
+
+		for_each_intel_encoder(display->drm, encoder) {
+			struct intel_digital_port *dig_port;
+
+			if (encoder->base.crtc != &crtc->base)
+				continue;
+			if (!intel_encoder_is_dig_port(encoder))
+				continue;
+
+			dig_port = enc_to_dig_port(encoder);
+			dig_port->fec_active_streams++;
+			break;
+		}
+	}
+}
+
 void intel_ddi_sanitize_encoder_pll_mapping(struct intel_encoder *encoder)
 {
 	struct intel_display *display = to_intel_display(encoder);
@@ -2413,10 +2454,20 @@ static void intel_ddi_enable_fec(struct intel_encoder *encoder,
 				 const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(encoder);
+	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 	int i;
 	int ret;
 
 	if (!crtc_state->fec_enable)
+		return;
+
+	/*
+	 * FEC is link-wide: DP_TP_CTL_FEC_ENABLE is per-port while
+	 * crtc_state->fec_enable is per-stream. For DP MST, several streams
+	 * on this port share the bit. Only program HW on the first stream
+	 * needing FEC; subsequent streams just bump the refcount.
+	 */
+	if (dig_port->fec_active_streams++ > 0)
 		return;
 
 	intel_de_rmw(display, dp_tp_ctl_reg(encoder, crtc_state),
@@ -2454,8 +2505,23 @@ static void intel_ddi_disable_fec(struct intel_encoder *encoder,
 				  const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(encoder);
+	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 
 	if (!crtc_state->fec_enable)
+		return;
+
+	/*
+	 * FEC is a link-wide property and DP_TP_CTL_FEC_ENABLE is a per-port
+	 * register, but crtc_state->fec_enable is per-stream. For DP MST,
+	 * multiple streams on the same port share this bit. Refcount the
+	 * active FEC users on the port and only clear the HW bit when the
+	 * last user goes away, otherwise tearing down one MST stream would
+	 * disable FEC for sibling streams still using it.
+	 */
+	if (drm_WARN_ON(display->drm, dig_port->fec_active_streams <= 0))
+		return;
+
+	if (--dig_port->fec_active_streams > 0)
 		return;
 
 	intel_de_rmw(display, dp_tp_ctl_reg(encoder, crtc_state),

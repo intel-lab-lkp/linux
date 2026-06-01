@@ -1992,6 +1992,18 @@ struct intel_digital_port {
 	struct ref_tracker *ddi_io_wakeref;
 	struct ref_tracker *aux_wakeref;
 
+	/*
+	 * Number of active streams on this port currently using FEC.
+	 *
+	 * DP_TP_CTL_FEC_ENABLE is a per-port (link-wide) HW bit, but
+	 * crtc_state->fec_enable is per-stream. For DP MST several streams
+	 * share the same port and therefore the same FEC enable bit. Track
+	 * how many active streams want FEC so that the HW bit is only
+	 * programmed on the first enable and only cleared on the last
+	 * disable. Modified under the modeset locks.
+	 */
+	int fec_active_streams;
+
 	struct intel_tc_port *tc;
 
 	struct {
