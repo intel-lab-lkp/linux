@@ -100,6 +100,7 @@
  *   - link_recovery_autoretrain_allowed()
  *   - link_recovery_has_no_fallback()
  *   - link_recovery_mark_train_failure()
+ *   - link_recovery_mark_autoretrain_modeset_failure()
  *   - link_recovery_mark_no_fallback()
  *   - link_recovery_reset()
  */
@@ -1362,6 +1363,13 @@ link_recovery_has_no_fallback(struct intel_dp_link_training *link_training)
  * is no longer possible, via userspace modesets after fallback
  * selection.
  *
+ * Note that the error reported via this function is the error seen by
+ * the link training failure handler proper after an actual link
+ * training failure indicated by the sink device, and so the error and
+ * corresponding actions required are distinct from an autoretrain
+ * modeset failure. See link_recovery_mark_autoretrain_modeset_failure() to
+ * report a modeset failure.
+ *
  * See also:
  *   - DOC: DisplayPort link training
  */
@@ -1380,6 +1388,29 @@ link_recovery_mark_train_failure(struct intel_dp_link_training *link_training)
 	}
 
 	return link_recovery_autoretrain_allowed(link_training);
+}
+
+/*
+ * Record a failure of the autoretrain modeset before link training
+ * itself could run.
+ *
+ * Note that the error reported via this function and the corresponding
+ * expected actions are distinct from an actual link training failure:
+ * the modeset failed before a link training attempt could be performed.
+ * See link_recovery_mark_train_failure() to report an actual link
+ * training failure.
+ *
+ * Update the state to indicate that further recovery is to be delegated to
+ * userspace via a regular modeset.
+ *
+ * See also:
+ *   - DOC: DisplayPort link training
+ */
+static void
+link_recovery_mark_autoretrain_modeset_failure(struct intel_dp_link_training *link_training)
+{
+	if (link_recovery_autoretrain_allowed(link_training))
+		link_training->recovery_state = INTEL_DP_LINK_RECOVERY_AUTORETRAIN_DISABLED;
 }
 
 /* Record that no more link fallback configuration is available. */
@@ -2029,6 +2060,23 @@ bool intel_dp_link_params_valid(struct intel_dp *intel_dp, int link_rate,
 	 * FIXME: we need to synchronize the current link parameters with
 	 * hardware readout. Currently fast link training doesn't work on
 	 * boot-up.
+	 *
+	 * NOTE:
+	 * This may be called from both serialized (locked and synced against
+	 * async commit tails) and unserialized (e.g. HPD IRQ) contexts. It
+	 * uses the current max link limits as upper bounds to reject
+	 * obviously bogus values, even if those bounds may be observed in a
+	 * transient or slightly stale state.
+	 *
+	 * This is not a full validation of the link configuration. Even in
+	 * serialized contexts, additional constraints (e.g. source limitations,
+	 * bandwidth checks, and other atomic state dependencies) are only
+	 * verified during the atomic check of the subsequent commit.
+	 *
+	 * max_link_limits only provides independent upper bounds for rate and
+	 * lane count. Callers must not assume it is itself an allowed link
+	 * configuration. Although that happens to be true for now, it will
+	 * stop being guaranteed once fallback depends only on disabled configs.
 	 */
 	if (link_rate == 0 ||
 	    link_rate > intel_dp->link.max_rate)
@@ -2159,6 +2207,21 @@ static bool intel_dp_is_connected(struct intel_dp *intel_dp)
 		intel_dp->is_mst;
 }
 
+static void queue_modeset_retry_for_links_in_state(struct intel_atomic_state *state,
+						   struct intel_encoder *encoder,
+						   u8 pipe_mask)
+{
+	const struct intel_crtc_state *crtc_state;
+	struct intel_crtc *crtc;
+
+	for_each_new_intel_crtc_in_state(state, crtc, crtc_state) {
+		if (!(BIT(crtc->pipe) & pipe_mask))
+			continue;
+
+		intel_dp_queue_modeset_retry_for_link(state, encoder, crtc_state);
+	}
+}
+
 static int intel_dp_retrain_link(struct intel_encoder *encoder,
 				 struct drm_modeset_acquire_ctx *ctx)
 {
@@ -2209,11 +2272,23 @@ static int intel_dp_retrain_link(struct intel_encoder *encoder,
 
 	intel_dp_link_training_set_force_retrain(link_training, false);
 
-	if (ret)
+	if (ret) {
 		drm_dbg_kms(display->drm,
 			    "[ENCODER:%d:%s] link retraining failed: %pe\n",
 			    encoder->base.base.id, encoder->base.name,
 			    ERR_PTR(ret));
+		/*
+		 * intel_dp_needs_link_retrain() only performs a coarse check of
+		 * retrainability, so the modeset commit may still fail. Disable
+		 * further auto-retrain attempts in that case.
+		 *
+		 * A sink capability change may restore the retrainable state (see
+		 * intel_dp_update_sink_caps(), intel_dp_reset_link_params()),
+		 * allowing retraining to be attempted again.
+		 */
+		link_recovery_mark_autoretrain_modeset_failure(link_training);
+		queue_modeset_retry_for_links_in_state(state, encoder, pipe_mask);
+	}
 out:
 	drm_atomic_commit_put(&state->base);
 
@@ -2237,6 +2312,24 @@ void intel_dp_check_link_state(struct intel_dp *intel_dp)
 	if (!intel_dp_is_connected(intel_dp))
 		return;
 
+	/*
+	 * NOTE:
+	 * This may race with an ongoing modeset updating the max link limits
+	 * and, with that, the link's retrainability, so
+	 * intel_dp_needs_link_retrain() may observe stale state.
+	 *
+	 * This is harmless: stale params captured as valid may spuriously
+	 * allow retraining here, but the decision is rechecked later in a
+	 * properly serialized context.
+	 *
+	 * Conversely, stale params captured as invalid may skip retraining,
+	 * but that can only happen before the modeset has completed its own
+	 * link training for the new, valid configuration, after which the
+	 * link state is rechecked.
+	 *
+	 * See intel_dp_link_params_valid() for capturing and validating the
+	 * params.
+	 */
 	if (!intel_dp_needs_link_retrain(intel_dp))
 		return;
 
