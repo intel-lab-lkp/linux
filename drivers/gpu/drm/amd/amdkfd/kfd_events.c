@@ -548,7 +548,7 @@ int kfd_criu_checkpoint_events(struct kfd_process *p,
 	if (!num_events)
 		return 0;
 
-	ev_privs = kvzalloc(num_events * sizeof(*ev_privs), GFP_KERNEL);
+	ev_privs = kvcalloc(num_events, sizeof(*ev_privs), GFP_KERNEL);
 	if (!ev_privs)
 		return -ENOMEM;
 
