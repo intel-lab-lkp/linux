@@ -47,7 +47,7 @@ int iwl_pcie_gen2_apm_init(struct iwl_trans *trans)
 
 	iwl_pcie_apm_config(trans);
 
-	ret = iwl_finish_nic_init(trans);
+	ret = iwl_trans_activate_nic(trans);
 	if (ret)
 		return ret;
 
@@ -95,7 +95,9 @@ static void iwl_pcie_gen2_apm_stop(struct iwl_trans *trans, bool op_mode_leave)
 			      CSR_GP_CNTRL_REG_FLAG_INIT_DONE);
 }
 
-void iwl_trans_pcie_fw_reset_handshake(struct iwl_trans *trans)
+static void
+_iwl_trans_pcie_fw_reset_handshake(struct iwl_trans *trans,
+				   bool dump_on_timeout)
 {
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	int ret;
@@ -133,7 +135,7 @@ void iwl_trans_pcie_fw_reset_handshake(struct iwl_trans *trans)
 			"timeout waiting for FW reset ACK (inta_hw=0x%x, reset_done %d)\n",
 			inta_hw, reset_done);
 
-		if (!reset_done) {
+		if (!reset_done && dump_on_timeout) {
 			struct iwl_fw_error_dump_mode mode = {
 				.type = IWL_ERR_TYPE_RESET_HS_TIMEOUT,
 				.context = IWL_ERR_CONTEXT_FROM_OPMODE,
@@ -145,6 +147,11 @@ void iwl_trans_pcie_fw_reset_handshake(struct iwl_trans *trans)
 	}
 
 	trans_pcie->fw_reset_state = FW_RESET_IDLE;
+}
+
+void iwl_trans_pcie_fw_reset_handshake(struct iwl_trans *trans)
+{
+	_iwl_trans_pcie_fw_reset_handshake(trans, false);
 }
 
 static void _iwl_trans_pcie_gen2_stop_device(struct iwl_trans *trans)
@@ -163,7 +170,7 @@ static void _iwl_trans_pcie_gen2_stop_device(struct iwl_trans *trans)
 		 * should assume that the firmware is already dead.
 		 */
 		trans->state = IWL_TRANS_NO_FW;
-		iwl_trans_pcie_fw_reset_handshake(trans);
+		_iwl_trans_pcie_fw_reset_handshake(trans, true);
 	}
 
 	trans_pcie->is_down = true;
@@ -391,9 +398,9 @@ void iwl_trans_pcie_gen2_fw_alive(struct iwl_trans *trans)
 	mutex_unlock(&trans_pcie->mutex);
 
 	if (trans->mac_cfg->device_family >= IWL_DEVICE_FAMILY_BZ)
-		trans->step_urm = !!(iwl_read_umac_prph(trans,
-							CNVI_PMU_STEP_FLOW) &
-					CNVI_PMU_STEP_FLOW_FORCE_URM);
+		trans->step_urm = !!(iwl_read_prph(trans,
+						   CNVI_PMU_STEP_FLOW) &
+				     CNVI_PMU_STEP_FLOW_FORCE_URM);
 }
 
 static bool iwl_pcie_set_ltr(struct iwl_trans *trans)
@@ -546,8 +553,10 @@ again:
 	}
 
 	if (WARN_ON(trans->do_top_reset &&
-		    trans->mac_cfg->device_family < IWL_DEVICE_FAMILY_SC))
-		return -EINVAL;
+		    trans->mac_cfg->device_family < IWL_DEVICE_FAMILY_SC)) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	/* we need to wait later - set state */
 	if (trans->do_top_reset)
@@ -629,4 +638,24 @@ again:
 out:
 	mutex_unlock(&trans_pcie->mutex);
 	return ret;
+}
+
+void iwl_trans_pcie_gen2_op_mode_leave(struct iwl_trans *trans)
+{
+	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
+
+	mutex_lock(&trans_pcie->mutex);
+
+	/* disable interrupts - don't enable HW RF kill interrupt */
+	iwl_disable_interrupts(trans);
+
+	iwl_pcie_gen2_apm_stop(trans, true);
+
+	iwl_disable_interrupts(trans);
+
+	iwl_pcie_disable_ict(trans);
+
+	mutex_unlock(&trans_pcie->mutex);
+
+	iwl_pcie_synchronize_irqs(trans);
 }

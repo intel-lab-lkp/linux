@@ -66,6 +66,7 @@ int dev_change_flags(struct net_device *dev, unsigned int flags,
 
 	netdev_lock_ops(dev);
 	ret = netif_change_flags(dev, flags, extack);
+	netif_rx_mode_sync(dev);
 	netdev_unlock_ops(dev);
 
 	return ret;
@@ -285,6 +286,7 @@ int dev_set_promiscuity(struct net_device *dev, int inc)
 
 	netdev_lock_ops(dev);
 	ret = netif_set_promiscuity(dev, inc);
+	netif_rx_mode_sync(dev);
 	netdev_unlock_ops(dev);
 
 	return ret;
@@ -311,6 +313,7 @@ int dev_set_allmulti(struct net_device *dev, int inc)
 
 	netdev_lock_ops(dev);
 	ret = netif_set_allmulti(dev, inc, true);
+	netif_rx_mode_sync(dev);
 	netdev_unlock_ops(dev);
 
 	return ret;
@@ -367,3 +370,16 @@ void netdev_state_change(struct net_device *dev)
 	netdev_unlock_ops(dev);
 }
 EXPORT_SYMBOL(netdev_state_change);
+
+int dev_set_threaded(struct net_device *dev,
+		     enum netdev_napi_threaded threaded)
+{
+	int ret;
+
+	netdev_lock(dev);
+	ret = netif_set_threaded(dev, threaded);
+	netdev_unlock(dev);
+
+	return ret;
+}
+EXPORT_SYMBOL(dev_set_threaded);

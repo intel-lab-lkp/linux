@@ -10,6 +10,7 @@
 #include <net/netns/generic.h>
 #include <linux/proc_fs.h>
 
+#include <linux/netfilter_ipv4.h>
 #include <linux/netfilter_ipv6.h>
 #include <linux/netfilter/nf_synproxy.h>
 
@@ -198,6 +199,8 @@ synproxy_tstamp_adjust(struct sk_buff *skb, unsigned int protoff,
 
 	if (skb_ensure_writable(skb, optend))
 		return 0;
+
+	th = (struct tcphdr *)(skb->data + protoff);
 
 	while (optoff < optend) {
 		unsigned char *op = skb->data + optoff;

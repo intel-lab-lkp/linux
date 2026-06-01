@@ -19,6 +19,8 @@
 #include "cgroup_util.h"
 #include "../../clone3/clone3_selftests.h"
 
+bool cg_test_v1_named;
+
 /* Returns read len on success, or -errno on failure. */
 ssize_t read_text(const char *path, char *buf, size_t max_len)
 {
@@ -104,8 +106,9 @@ int cg_read_strcmp(const char *cgroup, const char *control,
 	/* Handle the case of comparing against empty string */
 	if (!expected)
 		return -1;
-	else
-		size = strlen(expected) + 1;
+
+	/* needs size > 1, otherwise cg_read() reads 0 bytes */
+	size = (expected[0] == '\0') ? 2 : strlen(expected) + 1;
 
 	buf = malloc(size);
 	if (!buf)
@@ -118,6 +121,21 @@ int cg_read_strcmp(const char *cgroup, const char *control,
 
 	ret = strcmp(expected, buf);
 	free(buf);
+	return ret;
+}
+
+int cg_read_strcmp_wait(const char *cgroup, const char *control,
+			    const char *expected)
+{
+	int i, ret;
+
+	for (i = 0; i < 100; i++) {
+		ret = cg_read_strcmp(cgroup, control, expected);
+		if (!ret)
+			return ret;
+		usleep(10000);
+	}
+
 	return ret;
 }
 
@@ -164,6 +182,27 @@ long cg_read_key_long(const char *cgroup, const char *control, const char *key)
 		return -1;
 
 	return atol(ptr + strlen(key));
+}
+
+long cg_read_key_long_poll(const char *cgroup, const char *control,
+			   const char *key, long expected, int retries,
+			   useconds_t wait_interval_us)
+{
+	long val = -1;
+	int i;
+
+	for (i = 0; i < retries; i++) {
+		val = cg_read_key_long(cgroup, control, key);
+		if (val < 0)
+			return val;
+
+		if (val == expected)
+			break;
+
+		usleep(wait_interval_us);
+	}
+
+	return val;
 }
 
 long cg_read_lc(const char *cgroup, const char *control)
@@ -361,7 +400,7 @@ int cg_enter_current(const char *cgroup)
 
 int cg_enter_current_thread(const char *cgroup)
 {
-	return cg_write(cgroup, "cgroup.threads", "0");
+	return cg_write(cgroup, CG_THREADS_FILE, "0");
 }
 
 int cg_run(const char *cgroup,
@@ -518,6 +557,18 @@ int proc_mount_contains(const char *option)
 		return read;
 
 	return strstr(buf, option) != NULL;
+}
+
+int cgroup_feature(const char *feature)
+{
+	char buf[PAGE_SIZE];
+	ssize_t read;
+
+	read = read_text("/sys/kernel/cgroup/features", buf, sizeof(buf));
+	if (read < 0)
+		return read;
+
+	return strstr(buf, feature) != NULL;
 }
 
 ssize_t proc_read_text(int pid, bool thread, const char *item, char *buf, size_t size)

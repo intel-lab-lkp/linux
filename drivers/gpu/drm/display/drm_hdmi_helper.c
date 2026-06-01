@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+#include <linux/export.h>
 #include <linux/module.h>
 
 #include <drm/display/drm_hdmi_helper.h>
@@ -44,7 +45,7 @@ int drm_hdmi_infoframe_set_hdr_metadata(struct hdmi_drm_infoframe *frame,
 
 	/* Sink EOTF is Bit map while infoframe is absolute values */
 	if (!is_eotf_supported(hdr_metadata->hdmi_metadata_type1.eotf,
-	    connector->hdr_sink_metadata.hdmi_type1.eotf))
+			       connector->display_info.hdr_sink_metadata.hdmi_type1.eotf))
 		DRM_DEBUG_KMS("Unknown EOTF %d\n", hdr_metadata->hdmi_metadata_type1.eotf);
 
 	err = hdmi_drm_infoframe_init(frame);
@@ -209,7 +210,8 @@ EXPORT_SYMBOL(drm_hdmi_avi_infoframe_content_type);
  */
 unsigned long long
 drm_hdmi_compute_mode_clock(const struct drm_display_mode *mode,
-			    unsigned int bpc, enum hdmi_colorspace fmt)
+			    unsigned int bpc,
+			    enum drm_output_color_format fmt)
 {
 	unsigned long long clock = mode->clock * 1000ULL;
 	unsigned int vic = drm_match_cea_mode(mode);
@@ -221,7 +223,7 @@ drm_hdmi_compute_mode_clock(const struct drm_display_mode *mode,
 	if (vic == 1 && bpc != 8)
 		return 0;
 
-	if (fmt == HDMI_COLORSPACE_YUV422) {
+	if (fmt == DRM_OUTPUT_COLOR_FORMAT_YCBCR422) {
 		/*
 		 * HDMI 1.0 Spec, section 6.5 - Pixel Encoding states that
 		 * YUV422 sends 24 bits over three channels, with Cb and Cr
@@ -247,7 +249,7 @@ drm_hdmi_compute_mode_clock(const struct drm_display_mode *mode,
 	 * specifies that YUV420 encoding is carried at a TMDS Character Rate
 	 * equal to half the pixel clock rate.
 	 */
-	if (fmt == HDMI_COLORSPACE_YUV420)
+	if (fmt == DRM_OUTPUT_COLOR_FORMAT_YCBCR420)
 		clock = clock / 2;
 
 	if (mode->flags & DRM_MODE_FLAG_DBLCLK)

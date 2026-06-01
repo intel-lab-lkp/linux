@@ -30,12 +30,12 @@ do {									\
 									\
 	if (fault_wanted)						\
 		__GUEST_ASSERT((vector) == UD_VECTOR,			\
-			       "Expected #UD on " insn " for testcase '0x%x', got '0x%x'", \
-			       testcase, vector);			\
+			       "Expected #UD on " insn " for testcase '0x%x', got %s", \
+			       testcase, ex_str(vector));		\
 	else								\
 		__GUEST_ASSERT(!(vector),				\
-			       "Expected success on " insn " for testcase '0x%x', got '0x%x'", \
-			       testcase, vector);			\
+			       "Expected success on " insn " for testcase '0x%x', got %s", \
+			       testcase, ex_str(vector));		\
 } while (0)
 
 static void guest_monitor_wait(void *arg)
@@ -67,13 +67,14 @@ static void guest_monitor_wait(void *arg)
 
 int main(int argc, char *argv[])
 {
-	uint64_t disabled_quirks;
+	u64 disabled_quirks;
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 	struct ucall uc;
 	int testcase;
 	char test[80];
 
+	TEST_REQUIRE(this_cpu_has(X86_FEATURE_MWAIT));
 	TEST_REQUIRE(kvm_has_cap(KVM_CAP_DISABLE_QUIRKS2));
 
 	ksft_print_header();

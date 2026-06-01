@@ -122,16 +122,29 @@
  * contradict to specs provided this delay is small enough.
  */
 
-#define IGMP_V1_SEEN(in_dev) \
-	(IPV4_DEVCONF_ALL_RO(dev_net(in_dev->dev), FORCE_IGMP_VERSION) == 1 || \
-	 IN_DEV_CONF_GET((in_dev), FORCE_IGMP_VERSION) == 1 || \
-	 ((in_dev)->mr_v1_seen && \
-	  time_before(jiffies, (in_dev)->mr_v1_seen)))
-#define IGMP_V2_SEEN(in_dev) \
-	(IPV4_DEVCONF_ALL_RO(dev_net(in_dev->dev), FORCE_IGMP_VERSION) == 2 || \
-	 IN_DEV_CONF_GET((in_dev), FORCE_IGMP_VERSION) == 2 || \
-	 ((in_dev)->mr_v2_seen && \
-	  time_before(jiffies, (in_dev)->mr_v2_seen)))
+static bool IGMP_V1_SEEN(const struct in_device *in_dev)
+{
+	unsigned long seen;
+
+	if (IPV4_DEVCONF_ALL_RO(dev_net(in_dev->dev), FORCE_IGMP_VERSION) == 1)
+		return true;
+	if (IN_DEV_CONF_GET((in_dev), FORCE_IGMP_VERSION) == 1)
+		return true;
+	seen = READ_ONCE(in_dev->mr_v1_seen);
+	return seen && time_before(jiffies, seen);
+}
+
+static bool IGMP_V2_SEEN(const struct in_device *in_dev)
+{
+	unsigned long seen;
+
+	if (IPV4_DEVCONF_ALL_RO(dev_net(in_dev->dev), FORCE_IGMP_VERSION) == 2)
+		return true;
+	if (IN_DEV_CONF_GET((in_dev), FORCE_IGMP_VERSION) == 2)
+		return true;
+	seen = READ_ONCE(in_dev->mr_v2_seen);
+	return seen && time_before(jiffies, seen);
+}
 
 static int unsolicited_report_interval(struct in_device *in_dev)
 {
@@ -227,7 +240,7 @@ static void igmp_start_timer(struct ip_mc_list *im, int max_delay)
 
 static void igmp_gq_start_timer(struct in_device *in_dev)
 {
-	int tv = get_random_u32_below(in_dev->mr_maxdelay);
+	int tv = get_random_u32_below(READ_ONCE(in_dev->mr_maxdelay));
 	unsigned long exp = jiffies + tv + 2;
 
 	if (in_dev->mr_gq_running &&
@@ -954,23 +967,21 @@ static bool igmp_heard_query(struct in_device *in_dev, struct sk_buff *skb,
 	int			max_delay;
 	int			mark = 0;
 	struct net		*net = dev_net(in_dev->dev);
-
+	unsigned long seen;
 
 	if (len == 8) {
+		seen = jiffies + READ_ONCE(in_dev->mr_qrv) * READ_ONCE(in_dev->mr_qi) +
+		       READ_ONCE(in_dev->mr_qri);
 		if (ih->code == 0) {
 			/* Alas, old v1 router presents here. */
 
 			max_delay = IGMP_QUERY_RESPONSE_INTERVAL;
-			in_dev->mr_v1_seen = jiffies +
-				(in_dev->mr_qrv * in_dev->mr_qi) +
-				in_dev->mr_qri;
+			WRITE_ONCE(in_dev->mr_v1_seen, seen);
 			group = 0;
 		} else {
 			/* v2 router present */
 			max_delay = ih->code*(HZ/IGMP_TIMER_SCALE);
-			in_dev->mr_v2_seen = jiffies +
-				(in_dev->mr_qrv * in_dev->mr_qi) +
-				in_dev->mr_qri;
+			WRITE_ONCE(in_dev->mr_v2_seen, seen);
 		}
 		/* cancel the interface change timer */
 		WRITE_ONCE(in_dev->mr_ifc_count, 0);
@@ -995,6 +1006,8 @@ static bool igmp_heard_query(struct in_device *in_dev, struct sk_buff *skb,
 		if (!max_delay)
 			max_delay = 1;	/* can't mod w/ 0 */
 	} else { /* v3 */
+		unsigned long mr_qi;
+
 		if (!pskb_may_pull(skb, sizeof(struct igmpv3_query)))
 			return true;
 
@@ -1009,21 +1022,22 @@ static bool igmp_heard_query(struct in_device *in_dev, struct sk_buff *skb,
 		max_delay = IGMPV3_MRC(ih3->code)*(HZ/IGMP_TIMER_SCALE);
 		if (!max_delay)
 			max_delay = 1;	/* can't mod w/ 0 */
-		in_dev->mr_maxdelay = max_delay;
+		WRITE_ONCE(in_dev->mr_maxdelay, max_delay);
 
 		/* RFC3376, 4.1.6. QRV and 4.1.7. QQIC, when the most recently
 		 * received value was zero, use the default or statically
 		 * configured value.
 		 */
-		in_dev->mr_qrv = ih3->qrv ?: READ_ONCE(net->ipv4.sysctl_igmp_qrv);
-		in_dev->mr_qi = IGMPV3_QQIC(ih3->qqic)*HZ ?: IGMP_QUERY_INTERVAL;
-
+		WRITE_ONCE(in_dev->mr_qrv,
+			   ih3->qrv ?: READ_ONCE(net->ipv4.sysctl_igmp_qrv));
+		mr_qi = IGMPV3_QQIC(ih3->qqic)*HZ ?: IGMP_QUERY_INTERVAL;
+		WRITE_ONCE(in_dev->mr_qi, mr_qi);
 		/* RFC3376, 8.3. Query Response Interval:
 		 * The number of seconds represented by the [Query Response
 		 * Interval] must be less than the [Query Interval].
 		 */
-		if (in_dev->mr_qri >= in_dev->mr_qi)
-			in_dev->mr_qri = (in_dev->mr_qi/HZ - 1)*HZ;
+		if (READ_ONCE(in_dev->mr_qri) >= mr_qi)
+			WRITE_ONCE(in_dev->mr_qri, (mr_qi/HZ - 1) * HZ);
 
 		if (!group) { /* general query */
 			if (ih3->nsrcs)
@@ -1187,7 +1201,7 @@ static void igmpv3_add_delrec(struct in_device *in_dev, struct ip_mc_list *im,
 	 * for deleted items allows change reports to use common code with
 	 * non-deleted or query-response MCA's.
 	 */
-	pmc = kzalloc(sizeof(*pmc), gfp);
+	pmc = kzalloc_obj(*pmc, gfp);
 	if (!pmc)
 		return;
 	spin_lock_init(&pmc->lock);
@@ -1532,7 +1546,7 @@ static void ____ip_mc_inc_group(struct in_device *in_dev, __be32 addr,
 		goto out;
 	}
 
-	im = kzalloc(sizeof(*im), gfp);
+	im = kzalloc_obj(*im, gfp);
 	if (!im)
 		goto out;
 
@@ -2075,7 +2089,7 @@ static int ip_mc_add1_src(struct ip_mc_list *pmc, int sfmode,
 		psf_prev = psf;
 	}
 	if (!psf) {
-		psf = kzalloc(sizeof(*psf), GFP_ATOMIC);
+		psf = kzalloc_obj(*psf, GFP_ATOMIC);
 		if (!psf)
 			return -ENOBUFS;
 		psf->sf_inaddr = *psfsrc;
@@ -2150,7 +2164,7 @@ static int sf_setstate(struct ip_mc_list *pmc)
 				if (dpsf->sf_inaddr == psf->sf_inaddr)
 					break;
 			if (!dpsf) {
-				dpsf = kmalloc(sizeof(*dpsf), GFP_ATOMIC);
+				dpsf = kmalloc_obj(*dpsf, GFP_ATOMIC);
 				if (!dpsf)
 					continue;
 				*dpsf = *psf;

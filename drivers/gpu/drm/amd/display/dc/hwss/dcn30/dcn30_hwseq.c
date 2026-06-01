@@ -36,6 +36,7 @@
 #include "dcn10/dcn10_cm_common.h"
 #include "dcn30/dcn30_cm_common.h"
 #include "reg_helper.h"
+#include "dcn10/dcn10_hubbub.h"
 #include "abm.h"
 #include "clk_mgr.h"
 #include "hubp.h"
@@ -50,10 +51,12 @@
 #include "dpcd_defs.h"
 #include "dcn20/dcn20_hwseq.h"
 #include "dcn30/dcn30_resource.h"
-#include "link.h"
+#include "link_service.h"
 #include "dc_state_priv.h"
+#include "dio/dcn10/dcn10_dio.h"
 
-
+#define TO_DCN_DCCG(dccg)\
+	container_of(dccg, struct dcn_dccg, base)
 
 #define DC_LOGGER_INIT(logger)
 
@@ -72,6 +75,7 @@
 void dcn30_log_color_state(struct dc *dc,
 			   struct dc_log_buffer_ctx *log_ctx)
 {
+	(void)log_ctx;
 	struct dc_context *dc_ctx = dc->ctx;
 	struct resource_pool *pool = dc->res_pool;
 	bool is_gamut_remap_available = false;
@@ -238,7 +242,7 @@ bool dcn30_set_blend_lut(
 	if (plane_state->blend_tf.type == TF_TYPE_HWPWL)
 		blend_lut = &plane_state->blend_tf.pwl;
 	else if (plane_state->blend_tf.type == TF_TYPE_DISTRIBUTED_POINTS) {
-		result = cm3_helper_translate_curve_to_hw_format(
+		result = cm3_helper_translate_curve_to_hw_format(plane_state->ctx,
 				&plane_state->blend_tf, &dpp_base->regamma_params, false);
 		if (!result)
 			return result;
@@ -333,8 +337,9 @@ bool dcn30_set_input_transfer_func(struct dc *dc,
 	if (plane_state->in_transfer_func.type == TF_TYPE_HWPWL)
 		params = &plane_state->in_transfer_func.pwl;
 	else if (plane_state->in_transfer_func.type == TF_TYPE_DISTRIBUTED_POINTS &&
-		cm3_helper_translate_curve_to_hw_format(&plane_state->in_transfer_func,
-				&dpp_base->degamma_params, false))
+		cm3_helper_translate_curve_to_hw_format(plane_state->ctx,
+							&plane_state->in_transfer_func,
+							&dpp_base->degamma_params, false))
 		params = &dpp_base->degamma_params;
 
 	result = dpp_base->funcs->dpp_program_gamcor_lut(dpp_base, params);
@@ -405,7 +410,7 @@ bool dcn30_set_output_transfer_func(struct dc *dc,
 				params = &stream->out_transfer_func.pwl;
 			else if (pipe_ctx->stream->out_transfer_func.type ==
 					TF_TYPE_DISTRIBUTED_POINTS &&
-					cm3_helper_translate_curve_to_hw_format(
+					cm3_helper_translate_curve_to_hw_format(stream->ctx,
 					&stream->out_transfer_func,
 					&mpc->blender_params, false))
 				params = &mpc->blender_params;
@@ -641,7 +646,7 @@ void dcn30_init_hw(struct dc *dc)
 	struct dc_bios *dcb = dc->ctx->dc_bios;
 	struct resource_pool *res_pool = dc->res_pool;
 	int i;
-	int edp_num;
+	unsigned int edp_num;
 	uint32_t backlight = MAX_BACKLIGHT_LEVEL;
 	uint32_t user_level = MAX_BACKLIGHT_LEVEL;
 
@@ -792,13 +797,13 @@ void dcn30_init_hw(struct dc *dc)
 	}
 
 	/* power AFMT HDMI memory TODO: may move to dis/en output save power*/
-	REG_WRITE(DIO_MEM_PWR_CTRL, 0);
+	if (dc->res_pool->dio && dc->res_pool->dio->funcs->mem_pwr_ctrl)
+		dc->res_pool->dio->funcs->mem_pwr_ctrl(dc->res_pool->dio, false);
 
 	if (!dc->debug.disable_clock_gate) {
 		/* enable all DCN clock gating */
-		REG_WRITE(DCCG_GATE_DISABLE_CNTL, 0);
-
-		REG_WRITE(DCCG_GATE_DISABLE_CNTL2, 0);
+		if (dc->res_pool->dccg && dc->res_pool->dccg->funcs && dc->res_pool->dccg->funcs->allow_clock_gating)
+			dc->res_pool->dccg->funcs->allow_clock_gating(dc->res_pool->dccg, true);
 
 		REG_UPDATE(DCFCLK_CNTL, DCFCLK_GATE_DIS, 0);
 	}
@@ -1179,6 +1184,7 @@ void dcn30_set_disp_pattern_generator(const struct dc *dc,
 		const struct tg_color *solid_color,
 		int width, int height, int offset)
 {
+	(void)dc;
 	pipe_ctx->stream_res.opp->funcs->opp_set_disp_pattern_generator(pipe_ctx->stream_res.opp, test_pattern,
 			color_space, color_depth, solid_color, width, height, offset);
 }
@@ -1226,5 +1232,57 @@ void dcn30_wait_for_all_pending_updates(const struct pipe_ctx *pipe_ctx)
 
 			udelay(1);
 		}
+	}
+}
+
+void dcn30_get_underflow_debug_data(const struct dc *dc,
+	struct timing_generator *tg,
+	struct dc_underflow_debug_data *out_data)
+{
+	(void)tg;
+	struct hubbub *hubbub = dc->res_pool->hubbub;
+
+	if (hubbub) {
+		if (hubbub->funcs->hubbub_read_reg_state) {
+			hubbub->funcs->hubbub_read_reg_state(hubbub, out_data->hubbub_reg_state);
+		}
+	}
+
+	for (int i = 0; i < MAX_PIPES; i++) {
+		struct hubp *hubp = dc->res_pool->hubps[i];
+		struct dpp *dpp = dc->res_pool->dpps[i];
+		struct output_pixel_processor *opp = dc->res_pool->opps[i];
+		struct display_stream_compressor *dsc = dc->res_pool->dscs[i];
+		struct mpc *mpc = dc->res_pool->mpc;
+		struct timing_generator *optc = dc->res_pool->timing_generators[i];
+		struct dccg *dccg = dc->res_pool->dccg;
+
+		if (hubp)
+			if (hubp->funcs->hubp_read_reg_state)
+				hubp->funcs->hubp_read_reg_state(hubp, out_data->hubp_reg_state[i]);
+
+		if (dpp)
+			if (dpp->funcs->dpp_read_reg_state)
+				dpp->funcs->dpp_read_reg_state(dpp, out_data->dpp_reg_state[i]);
+
+		if (opp)
+			if (opp->funcs->opp_read_reg_state)
+				opp->funcs->opp_read_reg_state(opp, out_data->opp_reg_state[i]);
+
+		if (dsc)
+			if (dsc->funcs->dsc_read_reg_state)
+				dsc->funcs->dsc_read_reg_state(dsc, out_data->dsc_reg_state[i]);
+
+		if (mpc)
+			if (mpc->funcs->mpc_read_reg_state)
+				mpc->funcs->mpc_read_reg_state(mpc, i, out_data->mpc_reg_state[i]);
+
+		if (optc)
+			if (optc->funcs->optc_read_reg_state)
+				optc->funcs->optc_read_reg_state(optc, out_data->optc_reg_state[i]);
+
+		if (dccg)
+			if (dccg->funcs->dccg_read_reg_state)
+				dccg->funcs->dccg_read_reg_state(dccg, out_data->dccg_reg_state[i]);
 	}
 }

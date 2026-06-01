@@ -14,7 +14,7 @@
  *
  * .. code-block:: c
  *
- *    #include "../kselftest_harness.h"
+ *    #include "kselftest_harness.h"
  *
  *    TEST(standalone_test) {
  *      do_some_stuff;
@@ -69,6 +69,15 @@
 #include <unistd.h>
 
 #include "kselftest.h"
+
+static inline void __kselftest_memset_safe(void *s, int c, size_t n)
+{
+	if (n > 0)
+		memset(s, c, n);
+}
+
+#define KSELFTEST_PRIO_TEST    20000
+#define KSELFTEST_PRIO_XFAIL   20001
 
 #define TEST_TIMEOUT_DEFAULT 30
 
@@ -185,7 +194,7 @@
 		  .fixture = &_fixture_global, \
 		  .termsig = _signal, \
 		  .timeout = TEST_TIMEOUT_DEFAULT, }; \
-	static void __attribute__((constructor)) _register_##test_name(void) \
+	static void __attribute__((constructor(KSELFTEST_PRIO_TEST))) _register_##test_name(void) \
 	{ \
 		__register_test(&_##test_name##_object); \
 	} \
@@ -229,7 +238,7 @@
 	FIXTURE_VARIANT(fixture_name); \
 	static struct __fixture_metadata _##fixture_name##_fixture_object = \
 		{ .name =  #fixture_name, }; \
-	static void __attribute__((constructor)) \
+	static void __attribute__((constructor(KSELFTEST_PRIO_TEST))) \
 	_register_##fixture_name##_data(void) \
 	{ \
 		__register_fixture(&_##fixture_name##_fixture_object); \
@@ -355,7 +364,7 @@
 		_##fixture_name##_##variant_name##_object = \
 		{ .name = #variant_name, \
 		  .data = &_##fixture_name##_##variant_name##_variant}; \
-	static void __attribute__((constructor)) \
+	static void __attribute__((constructor(KSELFTEST_PRIO_TEST))) \
 		_register_##fixture_name##_##variant_name(void) \
 	{ \
 		__register_fixture_variant(&_##fixture_name##_fixture_object, \
@@ -416,7 +425,7 @@
 				self = mmap(NULL, sizeof(*self), PROT_READ | PROT_WRITE, \
 					MAP_SHARED | MAP_ANONYMOUS, -1, 0); \
 			} else { \
-				memset(&self_private, 0, sizeof(self_private)); \
+				__kselftest_memset_safe(&self_private, 0, sizeof(self_private)); \
 				self = &self_private; \
 			} \
 		} \
@@ -459,7 +468,7 @@
 			fixture_name##_teardown(_metadata, self, variant); \
 	} \
 	static struct __test_metadata *_##fixture_name##_##test_name##_object; \
-	static void __attribute__((constructor)) \
+	static void __attribute__((constructor(KSELFTEST_PRIO_TEST))) \
 			_register_##fixture_name##_##test_name(void) \
 	{ \
 		struct __test_metadata *object = mmap(NULL, sizeof(*object), \
@@ -751,7 +760,7 @@
 	for (; _metadata->trigger; _metadata->trigger = \
 			__bail(_assert, _metadata))
 
-#define is_signed_type(var)       (!!(((__typeof__(var))(-1)) < (__typeof__(var))1))
+#define is_signed_var(var)	(!!(((__typeof__(var))(-1)) < (__typeof__(var))1))
 
 #define __EXPECT(_expected, _expected_str, _seen, _seen_str, _t, _assert) do { \
 	/* Avoid multiple evaluation of the cases */ \
@@ -759,7 +768,7 @@
 	__typeof__(_seen) __seen = (_seen); \
 	if (!(__exp _t __seen)) { \
 		/* Report with actual signedness to avoid weird output. */ \
-		switch (is_signed_type(__exp) * 2 + is_signed_type(__seen)) { \
+		switch (is_signed_var(__exp) * 2 + is_signed_var(__seen)) { \
 		case 0: { \
 			uintmax_t __exp_print = (uintmax_t)__exp; \
 			uintmax_t __seen_print = (uintmax_t)__seen; \
@@ -874,7 +883,7 @@ struct __test_xfail {
 		.fixture = &_##fixture_name##_fixture_object, \
 		.variant = &_##fixture_name##_##variant_name##_object, \
 	}; \
-	static void __attribute__((constructor)) \
+	static void __attribute__((constructor(KSELFTEST_PRIO_XFAIL))) \
 		_register_##fixture_name##_##variant_name##_##test_name##_xfail(void) \
 	{ \
 		_##fixture_name##_##variant_name##_##test_name##_xfail.test = \
@@ -1091,7 +1100,7 @@ static int test_harness_argv_check(int argc, char **argv)
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "hlF:f:V:v:t:T:r:")) != -1) {
+	while ((opt = getopt(argc, argv, "dhlF:f:V:v:t:T:r:")) != -1) {
 		switch (opt) {
 		case 'f':
 		case 'F':
@@ -1104,12 +1113,16 @@ static int test_harness_argv_check(int argc, char **argv)
 		case 'l':
 			test_harness_list_tests();
 			return KSFT_SKIP;
+		case 'd':
+			ksft_debug_enabled = true;
+			break;
 		case 'h':
 		default:
 			fprintf(stderr,
-				"Usage: %s [-h|-l] [-t|-T|-v|-V|-f|-F|-r name]\n"
+				"Usage: %s [-h|-l|-d] [-t|-T|-v|-V|-f|-F|-r name]\n"
 				"\t-h       print help\n"
 				"\t-l       list all tests\n"
+				"\t-d       enable debug prints\n"
 				"\n"
 				"\t-t name  include test\n"
 				"\t-T name  exclude test\n"
@@ -1142,8 +1155,9 @@ static bool test_enabled(int argc, char **argv,
 	int opt;
 
 	optind = 1;
-	while ((opt = getopt(argc, argv, "F:f:V:v:t:T:r:")) != -1) {
-		has_positive |= islower(opt);
+	while ((opt = getopt(argc, argv, "dF:f:V:v:t:T:r:")) != -1) {
+		if (opt != 'd')
+			has_positive |= islower(opt);
 
 		switch (tolower(opt)) {
 		case 't':
@@ -1211,7 +1225,16 @@ static void __run_test(struct __fixture_metadata *f,
 		t->exit_code = KSFT_FAIL;
 	} else if (child == 0) {
 		setpgrp();
+
+		/* Reset state inherited from the harness */
+		ksft_reset_state();
+
 		t->fn(t, variant);
+
+		if (__test_passed(t) && (ksft_get_fail_cnt() || ksft_get_error_cnt())) {
+			ksft_print_msg("Illegal usage of low-level ksft APIs in harness test\n");
+			t->exit_code = KSFT_FAIL;
+		}
 		_exit(t->exit_code);
 	} else {
 		t->pid = child;
@@ -1300,7 +1323,7 @@ static int test_harness_run(int argc, char **argv)
 	return KSFT_FAIL;
 }
 
-static void __attribute__((constructor)) __constructor_order_first(void)
+static void __attribute__((constructor(KSELFTEST_PRIO_TEST))) __constructor_order_first(void)
 {
 	__constructor_order_forward = true;
 }

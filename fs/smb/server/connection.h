@@ -7,6 +7,7 @@
 #define __KSMBD_CONNECTION_H__
 
 #include <linux/list.h>
+#include <linux/inet.h>
 #include <linux/ip.h>
 #include <net/sock.h>
 #include <net/tcp.h>
@@ -15,9 +16,12 @@
 #include <linux/kthread.h>
 #include <linux/nls.h>
 #include <linux/unicode.h>
+#include <linux/workqueue.h>
 
 #include "smb_common.h"
 #include "ksmbd_work.h"
+
+struct smbdirect_buffer_descriptor_v1;
 
 #define KSMBD_SOCKET_BACKLOG		16
 
@@ -31,7 +35,7 @@ enum {
 	KSMBD_SESS_RELEASING
 };
 
-struct ksmbd_stats {
+struct ksmbd_conn_stats {
 	atomic_t			open_files_count;
 	atomic64_t			request_served;
 };
@@ -46,11 +50,19 @@ struct ksmbd_conn {
 	struct mutex			srv_mutex;
 	int				status;
 	unsigned int			cli_cap;
+	bool				stop_called;
+	union {
+		__be32			inet_addr;
+#if IS_ENABLED(CONFIG_IPV6)
+		u8			inet6_addr[16];
+#endif
+	};
+	unsigned int			inet_hash;
 	char				*request_buf;
 	struct ksmbd_transport		*transport;
 	struct nls_table		*local_nls;
 	struct unicode_map		*um;
-	struct list_head		conns_list;
+	struct hlist_node		hlist;
 	struct rw_semaphore		session_lock;
 	/* smb session 1 per user */
 	struct xarray			sessions;
@@ -69,7 +81,7 @@ struct ksmbd_conn {
 	struct list_head		requests;
 	struct list_head		async_requests;
 	int				connection_type;
-	struct ksmbd_stats		stats;
+	struct ksmbd_conn_stats		stats;
 	char				ClientGUID[SMB2_CLIENT_GUID_SIZE];
 	struct ntlmssp_auth		ntlmssp;
 
@@ -109,6 +121,7 @@ struct ksmbd_conn {
 	bool				binding;
 	atomic_t			refcnt;
 	bool				is_aapl;
+	struct work_struct		release_work;
 };
 
 struct ksmbd_conn_ops {
@@ -117,7 +130,6 @@ struct ksmbd_conn_ops {
 };
 
 struct ksmbd_transport_ops {
-	int (*prepare)(struct ksmbd_transport *t);
 	void (*disconnect)(struct ksmbd_transport *t);
 	void (*shutdown)(struct ksmbd_transport *t);
 	int (*read)(struct ksmbd_transport *t, char *buf,
@@ -127,11 +139,11 @@ struct ksmbd_transport_ops {
 		      unsigned int remote_key);
 	int (*rdma_read)(struct ksmbd_transport *t,
 			 void *buf, unsigned int len,
-			 struct smb2_buffer_desc_v1 *desc,
+			 struct smbdirect_buffer_descriptor_v1 *desc,
 			 unsigned int desc_len);
 	int (*rdma_write)(struct ksmbd_transport *t,
 			  void *buf, unsigned int len,
-			  struct smb2_buffer_desc_v1 *desc,
+			  struct smbdirect_buffer_descriptor_v1 *desc,
 			  unsigned int desc_len);
 	void (*free_transport)(struct ksmbd_transport *kt);
 };
@@ -145,7 +157,8 @@ struct ksmbd_transport {
 #define KSMBD_TCP_SEND_TIMEOUT	(5 * HZ)
 #define KSMBD_TCP_PEER_SOCKADDR(c)	((struct sockaddr *)&((c)->peer_addr))
 
-extern struct list_head conn_list;
+#define CONN_HASH_BITS	12
+extern DECLARE_HASHTABLE(conn_list, CONN_HASH_BITS);
 extern struct rw_semaphore conn_list_lock;
 
 bool ksmbd_conn_alive(struct ksmbd_conn *conn);
@@ -153,15 +166,19 @@ void ksmbd_conn_wait_idle(struct ksmbd_conn *conn);
 int ksmbd_conn_wait_idle_sess_id(struct ksmbd_conn *curr_conn, u64 sess_id);
 struct ksmbd_conn *ksmbd_conn_alloc(void);
 void ksmbd_conn_free(struct ksmbd_conn *conn);
+struct ksmbd_conn *ksmbd_conn_get(struct ksmbd_conn *conn);
+void ksmbd_conn_put(struct ksmbd_conn *conn);
+int ksmbd_conn_wq_init(void);
+void ksmbd_conn_wq_destroy(void);
 bool ksmbd_conn_lookup_dialect(struct ksmbd_conn *c);
 int ksmbd_conn_write(struct ksmbd_work *work);
 int ksmbd_conn_rdma_read(struct ksmbd_conn *conn,
 			 void *buf, unsigned int buflen,
-			 struct smb2_buffer_desc_v1 *desc,
+			 struct smbdirect_buffer_descriptor_v1 *desc,
 			 unsigned int desc_len);
 int ksmbd_conn_rdma_write(struct ksmbd_conn *conn,
 			  void *buf, unsigned int buflen,
-			  struct smb2_buffer_desc_v1 *desc,
+			  struct smbdirect_buffer_descriptor_v1 *desc,
 			  unsigned int desc_len);
 void ksmbd_conn_enqueue_request(struct ksmbd_work *work);
 void ksmbd_conn_try_dequeue_request(struct ksmbd_work *work);
