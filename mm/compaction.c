@@ -1611,11 +1611,10 @@ static void fast_isolate_freepages(struct compact_control *cc)
 			freepage = page;
 		}
 
-		/* Reorder to so a future search skips recent pages */
-		move_freelist_head(freelist, freepage);
-
-		/* Isolate the page if available */
 		if (page) {
+			/* Reorder so a future search skips recent pages */
+			move_freelist_head(freelist, freepage);
+			/* Isolate the page if available */
 			if (__isolate_free_page(page, order)) {
 				set_page_private(page, order);
 				nr_isolated = 1 << order;
