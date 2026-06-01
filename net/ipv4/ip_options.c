@@ -283,6 +283,10 @@ int __ip_options_compile(struct net *net,
 		switch (*optptr) {
 		case IPOPT_SSRR:
 		case IPOPT_LSRR:
+			if (!skb && !ns_capable(net->user_ns, CAP_NET_RAW)) {
+				pp_ptr = optptr;
+				goto error;
+			}
 			if (optlen < 3) {
 				pp_ptr = optptr + 1;
 				goto error;
