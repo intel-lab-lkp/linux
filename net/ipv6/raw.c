@@ -64,20 +64,37 @@
 struct raw_hashinfo raw_v6_hashinfo;
 EXPORT_SYMBOL_GPL(raw_v6_hashinfo);
 
+static void raw_v6_addr_snapshot(struct in6_addr *dst,
+				 const struct in6_addr *src)
+{
+	dst->s6_addr32[0] = READ_ONCE(src->s6_addr32[0]);
+	dst->s6_addr32[1] = READ_ONCE(src->s6_addr32[1]);
+	dst->s6_addr32[2] = READ_ONCE(src->s6_addr32[2]);
+	dst->s6_addr32[3] = READ_ONCE(src->s6_addr32[3]);
+}
+
 bool raw_v6_match(struct net *net, const struct sock *sk, unsigned short num,
 		  const struct in6_addr *loc_addr,
 		  const struct in6_addr *rmt_addr, int dif, int sdif)
 {
-	if (inet_sk(sk)->inet_num != num ||
+	unsigned short match_num = READ_ONCE(inet_sk(sk)->inet_num);
+	int match_bound_dev_if = READ_ONCE(sk->sk_bound_dev_if);
+	struct in6_addr match_daddr;
+	struct in6_addr match_rcv_saddr;
+
+	raw_v6_addr_snapshot(&match_daddr, &sk->sk_v6_daddr);
+	raw_v6_addr_snapshot(&match_rcv_saddr, &sk->sk_v6_rcv_saddr);
+
+	if (match_num != num ||
 	    !net_eq(sock_net(sk), net) ||
-	    (!ipv6_addr_any(&sk->sk_v6_daddr) &&
-	     !ipv6_addr_equal(&sk->sk_v6_daddr, rmt_addr)) ||
-	    !raw_sk_bound_dev_eq(net, sk->sk_bound_dev_if,
+	    (!ipv6_addr_any(&match_daddr) &&
+	     !ipv6_addr_equal(&match_daddr, rmt_addr)) ||
+	    !raw_sk_bound_dev_eq(net, match_bound_dev_if,
 				 dif, sdif))
 		return false;
 
-	if (ipv6_addr_any(&sk->sk_v6_rcv_saddr) ||
-	    ipv6_addr_equal(&sk->sk_v6_rcv_saddr, loc_addr) ||
+	if (ipv6_addr_any(&match_rcv_saddr) ||
+	    ipv6_addr_equal(&match_rcv_saddr, loc_addr) ||
 	    (ipv6_addr_is_multicast(loc_addr) &&
 	     inet6_mc_check(sk, loc_addr, rmt_addr)))
 		return true;
