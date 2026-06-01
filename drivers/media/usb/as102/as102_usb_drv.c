@@ -405,11 +405,11 @@ failed_dvb:
 failed_stream:
 	usb_set_intfdata(intf, NULL);
 	usb_deregister_dev(intf, &as102_usb_class_driver);
+	kref_put(&as102_dev->kref, as102_usb_release);
 	return ret;
 failed:
-	usb_put_dev(as102_dev->bus_adap.usb_dev);
 	usb_set_intfdata(intf, NULL);
-	kfree(as102_dev);
+	kref_put(&as102_dev->kref, as102_usb_release);
 	return ret;
 }
 
