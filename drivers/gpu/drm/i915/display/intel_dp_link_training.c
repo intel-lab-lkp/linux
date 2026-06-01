@@ -312,12 +312,12 @@ int intel_dp_read_dprx_caps(struct intel_dp *intel_dp, u8 dpcd[DP_RECEIVER_CAP_S
  * transparent mode link training mode.
  *
  * Returns:
- *   >0  if LTTPRs were detected and the non-transparent LT mode was set. The
+ * - >0  if LTTPRs were detected and the non-transparent LT mode was
+ *       set. The DPRX capabilities are read out.
+ * -  0  if no LTTPRs or more than 8 LTTPRs were detected or in case of
+ *       a detection failure and the transparent LT mode was set. The
  *       DPRX capabilities are read out.
- *    0  if no LTTPRs or more than 8 LTTPRs were detected or in case of a
- *       detection failure and the transparent LT mode was set. The DPRX
- *       capabilities are read out.
- *   <0  Reading out the DPRX capabilities failed.
+ * - <0  Reading out the DPRX capabilities failed.
  */
 int intel_dp_init_lttpr_and_dprx_caps(struct intel_dp *intel_dp)
 {
