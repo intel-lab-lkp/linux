@@ -12,6 +12,7 @@
 #include <linux/nospec.h>
 #include <linux/vmalloc.h>
 #include <linux/percpu.h>
+#include <linux/cleanup.h>
 #include <net/gso.h>
 #include <net/ip.h>
 #include <net/dst.h>
@@ -1641,28 +1642,25 @@ static int mpls_dev_notify(struct notifier_block *this, unsigned long event,
 	unsigned int flags;
 	int err;
 
-	mutex_lock(&net->mpls.platform_mutex);
+	guard(mutex)(&net->mpls.platform_mutex);
 
 	if (event == NETDEV_REGISTER) {
 		mdev = mpls_add_dev(dev);
-		if (IS_ERR(mdev)) {
-			err = PTR_ERR(mdev);
-			goto err;
-		}
-
-		goto out;
+		if (IS_ERR(mdev))
+			return notifier_from_errno(PTR_ERR(mdev));
+		return NOTIFY_OK;
 	}
 
 	mdev = mpls_dev_get(net, dev);
 	if (!mdev)
-		goto out;
+		return NOTIFY_OK;
 
 	switch (event) {
 
 	case NETDEV_DOWN:
 		err = mpls_ifdown(dev, event);
 		if (err)
-			goto err;
+			return notifier_from_errno(err);
 		break;
 	case NETDEV_UP:
 		flags = netif_get_flags(dev);
@@ -1678,13 +1676,13 @@ static int mpls_dev_notify(struct notifier_block *this, unsigned long event,
 		} else {
 			err = mpls_ifdown(dev, event);
 			if (err)
-				goto err;
+				return notifier_from_errno(err);
 		}
 		break;
 	case NETDEV_UNREGISTER:
 		err = mpls_ifdown(dev, event);
 		if (err)
-			goto err;
+			return notifier_from_errno(err);
 
 		mdev = mpls_dev_get(net, dev);
 		if (mdev) {
@@ -1699,18 +1697,12 @@ static int mpls_dev_notify(struct notifier_block *this, unsigned long event,
 			mpls_dev_sysctl_unregister(dev, mdev);
 			err = mpls_dev_sysctl_register(dev, mdev);
 			if (err)
-				goto err;
+				return notifier_from_errno(err);
 		}
 		break;
 	}
 
-out:
-	mutex_unlock(&net->mpls.platform_mutex);
 	return NOTIFY_OK;
-
-err:
-	mutex_unlock(&net->mpls.platform_mutex);
-	return notifier_from_errno(err);
 }
 
 static struct notifier_block mpls_dev_notifier = {
@@ -2424,11 +2416,11 @@ static int mpls_getroute(struct sk_buff *in_skb, struct nlmsghdr *in_nlh,
 	u8 n_labels;
 	int err;
 
-	mutex_lock(&net->mpls.platform_mutex);
+	guard(mutex)(&net->mpls.platform_mutex);
 
 	err = mpls_valid_getroute_req(in_skb, in_nlh, tb, extack);
 	if (err < 0)
-		goto errout;
+		return err;
 
 	rtm = nlmsg_data(in_nlh);
 
@@ -2436,58 +2428,46 @@ static int mpls_getroute(struct sk_buff *in_skb, struct nlmsghdr *in_nlh,
 		u8 label_count;
 
 		if (nla_get_labels(tb[RTA_DST], 1, &label_count,
-				   &in_label, extack)) {
-			err = -EINVAL;
-			goto errout;
-		}
+				   &in_label, extack))
+			return -EINVAL;
 
-		if (!mpls_label_ok(net, &in_label, extack)) {
-			err = -EINVAL;
-			goto errout;
-		}
+		if (!mpls_label_ok(net, &in_label, extack))
+			return -EINVAL;
 	}
 
 	if (in_label < net->mpls.platform_labels)
 		rt = mpls_route_input(net, in_label);
-	if (!rt) {
-		err = -ENETUNREACH;
-		goto errout;
-	}
+	if (!rt)
+		return -ENETUNREACH;
 
 	if (rtm->rtm_flags & RTM_F_FIB_MATCH) {
 		skb = nlmsg_new(lfib_nlmsg_size(rt), GFP_KERNEL);
-		if (!skb) {
-			err = -ENOBUFS;
-			goto errout;
-		}
+		if (!skb)
+			return -ENOBUFS;
 
 		err = mpls_dump_route(skb, portid, in_nlh->nlmsg_seq,
 				      RTM_NEWROUTE, in_label, rt, 0);
 		if (err < 0) {
 			/* -EMSGSIZE implies BUG in lfib_nlmsg_size */
 			WARN_ON(err == -EMSGSIZE);
-			goto errout_free;
+			kfree_skb(skb);
+			return err;
 		}
 
-		err = rtnl_unicast(skb, net, portid);
-		goto errout;
+		return rtnl_unicast(skb, net, portid);
 	}
 
 	if (tb[RTA_NEWDST]) {
 		if (nla_get_labels(tb[RTA_NEWDST], MAX_NEW_LABELS, &n_labels,
-				   labels, extack) != 0) {
-			err = -EINVAL;
-			goto errout;
-		}
+				   labels, extack) != 0)
+			return -EINVAL;
 
 		hdr_size = n_labels * sizeof(struct mpls_shim_hdr);
 	}
 
 	skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
-	if (!skb) {
-		err = -ENOBUFS;
-		goto errout;
-	}
+	if (!skb)
+		return -ENOBUFS;
 
 	skb->protocol = htons(ETH_P_MPLS_UC);
 
@@ -2496,8 +2476,8 @@ static int mpls_getroute(struct sk_buff *in_skb, struct nlmsghdr *in_nlh,
 		int i;
 
 		if (skb_cow(skb, hdr_size)) {
-			err = -ENOBUFS;
-			goto errout_free;
+			kfree_skb(skb);
+			return -ENOBUFS;
 		}
 
 		skb_reserve(skb, hdr_size);
@@ -2516,8 +2496,8 @@ static int mpls_getroute(struct sk_buff *in_skb, struct nlmsghdr *in_nlh,
 
 	nh = mpls_select_multipath(rt, skb);
 	if (!nh) {
-		err = -ENETUNREACH;
-		goto errout_free;
+		kfree_skb(skb);
+		return -ENETUNREACH;
 	}
 
 	if (hdr_size) {
@@ -2528,8 +2508,8 @@ static int mpls_getroute(struct sk_buff *in_skb, struct nlmsghdr *in_nlh,
 	nlh = nlmsg_put(skb, portid, in_nlh->nlmsg_seq,
 			RTM_NEWROUTE, sizeof(*r), 0);
 	if (!nlh) {
-		err = -EMSGSIZE;
-		goto errout_free;
+		kfree_skb(skb);
+		return -EMSGSIZE;
 	}
 
 	r = nlmsg_data(nlh);
@@ -2542,36 +2522,38 @@ static int mpls_getroute(struct sk_buff *in_skb, struct nlmsghdr *in_nlh,
 	r->rtm_protocol = rt->rt_protocol;
 	r->rtm_flags	= 0;
 
-	if (nla_put_labels(skb, RTA_DST, 1, &in_label))
-		goto nla_put_failure;
+	if (nla_put_labels(skb, RTA_DST, 1, &in_label)) {
+		nlmsg_cancel(skb, nlh);
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
 
 	if (nh->nh_labels &&
 	    nla_put_labels(skb, RTA_NEWDST, nh->nh_labels,
-			   nh->nh_label))
-		goto nla_put_failure;
+			   nh->nh_label)) {
+		nlmsg_cancel(skb, nlh);
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
 
 	if (nh->nh_via_table != MPLS_NEIGH_TABLE_UNSPEC &&
 	    nla_put_via(skb, nh->nh_via_table, mpls_nh_via(rt, nh),
-			nh->nh_via_alen))
-		goto nla_put_failure;
+			nh->nh_via_alen)) {
+		nlmsg_cancel(skb, nlh);
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
+
 	dev = nh->nh_dev;
-	if (dev && nla_put_u32(skb, RTA_OIF, dev->ifindex))
-		goto nla_put_failure;
+	if (dev && nla_put_u32(skb, RTA_OIF, dev->ifindex)) {
+		nlmsg_cancel(skb, nlh);
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
 
 	nlmsg_end(skb, nlh);
 
-	err = rtnl_unicast(skb, net, portid);
-errout:
-	mutex_unlock(&net->mpls.platform_mutex);
-	return err;
-
-nla_put_failure:
-	nlmsg_cancel(skb, nlh);
-	err = -EMSGSIZE;
-errout_free:
-	mutex_unlock(&net->mpls.platform_mutex);
-	kfree_skb(skb);
-	return err;
+	return rtnl_unicast(skb, net, portid);
 }
 
 static int resize_platform_label_table(struct net *net, size_t limit)
