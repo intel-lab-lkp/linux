@@ -15883,6 +15883,7 @@ F:	include/uapi/linux/media.h
 
 MEDIA DRIVER FOR FREESCALE IMX PXP
 M:	Philipp Zabel <p.zabel@pengutronix.de>
+R:	Bryan O'Donoghue <bod@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 T:	git git://linuxtv.org/media.git
