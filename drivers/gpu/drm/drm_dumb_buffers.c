@@ -69,11 +69,8 @@ static int drm_mode_align_dumb(struct drm_mode_create_dumb *args,
 	if (!pitch)
 		return -EINVAL;
 
-	if (hw_pitch_align) {
+	if (hw_pitch_align)
 		pitch = roundup(pitch, hw_pitch_align);
-		if (pitch < hw_pitch_align)
-			return -EINVAL;
-	}
 
 	if (!hw_size_align)
 		hw_size_align = PAGE_SIZE;
@@ -82,7 +79,7 @@ static int drm_mode_align_dumb(struct drm_mode_create_dumb *args,
 
 	if (check_mul_overflow(args->height, pitch, &size))
 		return -EINVAL;
-	size = roundup(size, hw_size_align);
+	size = ALIGN(size, hw_size_align);
 	if (!size)
 		return -EINVAL;
 
@@ -199,13 +196,6 @@ int drm_mode_create_dumb(struct drm_device *dev,
 	if (!dev->driver->dumb_create)
 		return -ENOSYS;
 	if (!args->width || !args->height || !args->bpp)
-		return -EINVAL;
-
-	/* Reject unreasonable inputs early.  Dumb buffers are for software
-	 * rendering; nothing legitimate needs more than 8192x8192 at 32bpp.
-	 * This prevents overflows in downstream alignment helpers.
-	 */
-	if (args->width >= 8192 || args->height >= 8192 || args->bpp > 32)
 		return -EINVAL;
 
 	/* overflow checks for 32bit size calculations */
