@@ -57,6 +57,8 @@ void intel_dp_128b132b_sdp_crc16(struct intel_dp *intel_dp,
 
 void intel_dp_link_training_debugfs_add(struct intel_connector *connector);
 
+void intel_dp_link_training_reset(struct intel_dp_link_training *link_training);
+
 struct intel_dp_link_training *intel_dp_link_training_init(struct intel_dp *intel_dp);
 void intel_dp_link_training_cleanup(struct intel_dp_link_training *link_training);
 
