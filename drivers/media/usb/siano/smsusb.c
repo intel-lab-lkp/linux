@@ -58,6 +58,7 @@ struct smsusb_device_t {
 	unsigned char in_ep;
 	unsigned char out_ep;
 	enum smsusb_state state;
+	bool streaming;
 };
 
 static int smsusb_submit_urb(struct smsusb_device_t *dev,
@@ -71,8 +72,14 @@ static void do_submit_urb(struct work_struct *work)
 {
 	struct smsusb_urb_t *surb = container_of(work, struct smsusb_urb_t, wq);
 	struct smsusb_device_t *dev = surb->dev;
+	int rc;
 
-	smsusb_submit_urb(dev, surb);
+	if (!READ_ONCE(dev->streaming))
+		return;
+
+	rc = smsusb_submit_urb(dev, surb);
+	if (rc < 0 && READ_ONCE(dev->streaming))
+		pr_err("smsusb_submit_urb(...) failed\n");
 }
 
 /*
@@ -143,13 +150,15 @@ static void smsusb_onresponse(struct urb *urb)
 
 
 exit_and_resubmit:
-	INIT_WORK(&surb->wq, do_submit_urb);
-	schedule_work(&surb->wq);
+	if (READ_ONCE(dev->streaming))
+		schedule_work(&surb->wq);
 }
 
 static int smsusb_submit_urb(struct smsusb_device_t *dev,
 			     struct smsusb_urb_t *surb)
 {
+	int rc;
+
 	if (!surb->cb) {
 		/* This function can sleep */
 		surb->cb = smscore_getbuffer(dev->coredev);
@@ -168,19 +177,25 @@ static int smsusb_submit_urb(struct smsusb_device_t *dev,
 		smsusb_onresponse,
 		surb
 	);
-	surb->urb->transfer_flags |= URB_FREE_BUFFER;
+	rc = usb_submit_urb(surb->urb, GFP_ATOMIC);
+	if (rc) {
+		smscore_putbuffer(dev->coredev, surb->cb);
+		surb->cb = NULL;
+	}
 
-	return usb_submit_urb(surb->urb, GFP_ATOMIC);
+	return rc;
 }
 
 static void smsusb_stop_streaming(struct smsusb_device_t *dev)
 {
 	int i;
 
+	WRITE_ONCE(dev->streaming, false);
+
 	for (i = 0; i < MAX_URBS; i++) {
 		usb_kill_urb(dev->surbs[i].urb);
-		if (dev->surbs[i].wq.func)
-			cancel_work_sync(&dev->surbs[i].wq);
+		cancel_work_sync(&dev->surbs[i].wq);
+		usb_kill_urb(dev->surbs[i].urb);
 
 		if (dev->surbs[i].cb) {
 			smscore_putbuffer(dev->coredev, dev->surbs[i].cb);
@@ -192,6 +207,8 @@ static void smsusb_stop_streaming(struct smsusb_device_t *dev)
 static int smsusb_start_streaming(struct smsusb_device_t *dev)
 {
 	int i, rc;
+
+	WRITE_ONCE(dev->streaming, true);
 
 	for (i = 0; i < MAX_URBS; i++) {
 		rc = smsusb_submit_urb(dev, &dev->surbs[i]);
@@ -401,6 +418,11 @@ static int smsusb_init_device(struct usb_interface *intf, int board_id)
 	if (!dev)
 		return -ENOMEM;
 
+	for (i = 0; i < MAX_URBS; i++) {
+		dev->surbs[i].dev = dev;
+		INIT_WORK(&dev->surbs[i].wq, do_submit_urb);
+	}
+
 	memset(&params, 0, sizeof(params));
 	usb_set_intfdata(intf, dev);
 	dev->udev = interface_to_usbdev(intf);
@@ -467,7 +489,6 @@ static int smsusb_init_device(struct usb_interface *intf, int board_id)
 
 	/* initialize urbs */
 	for (i = 0; i < MAX_URBS; i++) {
-		dev->surbs[i].dev = dev;
 		dev->surbs[i].urb = usb_alloc_urb(0, GFP_KERNEL);
 		if (!dev->surbs[i].urb)
 			goto err_unregister_device;
