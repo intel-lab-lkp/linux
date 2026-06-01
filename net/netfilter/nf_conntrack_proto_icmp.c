@@ -117,7 +117,8 @@ int nf_conntrack_inet_error(struct nf_conn *tmpl, struct sk_buff *skb,
 	enum ip_conntrack_dir dir;
 	struct nf_conn *ct;
 
-	WARN_ON(skb_nfct(skb));
+	if (unlikely(skb_nfct(skb)))
+		DEBUG_NET_WARN_ON_ONCE(1);
 	zone = nf_ct_zone_tmpl(tmpl, skb, &tmp);
 
 	/* Are they talking about one of our connections? */

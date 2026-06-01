@@ -1244,7 +1244,7 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 	 * unconfirmed conntrack.
 	 */
 	if (unlikely(nf_ct_is_confirmed(ct))) {
-		WARN_ON_ONCE(1);
+		DEBUG_NET_WARN_ON_ONCE(1);
 		nf_conntrack_double_unlock(hash, reply_hash);
 		local_bh_enable();
 		return NF_DROP;

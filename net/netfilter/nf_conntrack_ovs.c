@@ -53,7 +53,7 @@ int nf_ct_helper(struct sk_buff *skb, struct nf_conn *ct,
 		break;
 	}
 	default:
-		WARN_ONCE(1, "helper invoked on non-IP family!");
+		DEBUG_NET_WARN_ONCE(1, "helper invoked on non-IP family!");
 		return NF_DROP;
 	}
 

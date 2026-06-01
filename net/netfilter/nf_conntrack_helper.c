@@ -198,8 +198,10 @@ int __nf_ct_try_assign_helper(struct nf_conn *ct, struct nf_conn *tmpl,
 	if (test_bit(IPS_HELPER_BIT, &ct->status))
 		return 0;
 
-	if (WARN_ON_ONCE(!tmpl))
+	if (unlikely(!tmpl)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
 		return 0;
+	}
 
 	help = nfct_help(tmpl);
 	if (help != NULL) {

@@ -599,7 +599,10 @@ int ct_sip_parse_header_uri(const struct nf_conn *ct, const char *dptr,
 
 	ret = ct_sip_walk_headers(ct, dptr, dataoff ? *dataoff : 0, datalen,
 				  type, in_header, matchoff, matchlen);
-	WARN_ON(ret < 0);
+	if (unlikely(ret < 0)) {
+		DEBUG_NET_WARN_ON_ONCE(1);
+		return -1;
+	}
 	if (ret == 0)
 		return ret;
 
