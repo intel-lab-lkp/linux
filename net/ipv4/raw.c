@@ -120,11 +120,14 @@ bool raw_v4_match(struct net *net, const struct sock *sk, unsigned short num,
 		  __be32 raddr, __be32 laddr, int dif, int sdif)
 {
 	const struct inet_sock *inet = inet_sk(sk);
+	unsigned short match_num = READ_ONCE(inet->inet_num);
+	__be32 match_rcv_saddr = READ_ONCE(inet->inet_rcv_saddr);
+	int match_bound_dev_if = READ_ONCE(sk->sk_bound_dev_if);
 
-	if (net_eq(sock_net(sk), net) && inet->inet_num == num	&&
+	if (net_eq(sock_net(sk), net) && match_num == num &&
 	    !(inet->inet_daddr && inet->inet_daddr != raddr) 	&&
-	    !(inet->inet_rcv_saddr && inet->inet_rcv_saddr != laddr) &&
-	    raw_sk_bound_dev_eq(net, sk->sk_bound_dev_if, dif, sdif))
+	    !(match_rcv_saddr && match_rcv_saddr != laddr) &&
+	    raw_sk_bound_dev_eq(net, match_bound_dev_if, dif, sdif))
 		return true;
 	return false;
 }
