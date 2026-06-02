@@ -372,7 +372,7 @@ static int hazptr_torture_reader(void *arg)
 	struct hazptr_torture *htp;
 	unsigned long lastsleep = jiffies;
 	long myid = (long)arg;
-	int mynumonline = myid;
+	int mynumonline = myid % nr_cpu_ids;
 	int pipe_count;
 	DEFINE_TORTURE_RANDOM(rand);
 
