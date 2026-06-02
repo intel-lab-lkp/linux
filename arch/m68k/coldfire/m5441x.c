@@ -10,6 +10,7 @@
 #include <linux/param.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <asm/machdep.h>
 #include <asm/coldfire.h>
@@ -238,6 +239,34 @@ static void __init m5441x_fec_init(void)
 {
 	__raw_writeb(0x03, MCFGPIO_PAR_FEC);
 }
+
+/*
+ * On-chip "robust" RTC. Exposes the time/calendar and the 2KB
+ * battery-backed standby RAM (rtc-m5441x driver).
+ */
+static struct resource m5441x_rtc_resource[] = {
+	{
+		.start	= MCFRTC_BASE,
+		.end	= MCFRTC_BASE + MCFRTC_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.start	= MCF_IRQ_RTC,
+		.end	= MCF_IRQ_RTC,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static int __init m5441x_rtc_init(void)
+{
+	struct platform_device *pdev;
+
+	pdev = platform_device_register_simple("rtc-m5441x", -1,
+					       m5441x_rtc_resource,
+					       ARRAY_SIZE(m5441x_rtc_resource));
+	return PTR_ERR_OR_ZERO(pdev);
+}
+arch_initcall(m5441x_rtc_init);
 
 void __init config_BSP(char *commandp, int size)
 {
