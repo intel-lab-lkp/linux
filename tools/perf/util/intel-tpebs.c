@@ -37,6 +37,7 @@ static pthread_t tpebs_reader_thread;
 static struct child_process tpebs_cmd;
 static int control_fd[2], ack_fd[2];
 static struct mutex tpebs_mtx;
+static bool tpebs_stopping;
 
 struct tpebs_retire_lat {
 	struct list_head nd;
@@ -320,8 +321,14 @@ static int tpebs_stop(void) EXCLUSIVE_LOCKS_REQUIRED(tpebs_mtx_get())
 {
 	int ret = 0;
 
+	if (tpebs_stopping)
+		return 0;
+
 	/* Like tpebs_start, we should only run tpebs_end once. */
 	if (tpebs_cmd.pid != 0) {
+		pid_t actual_pid = tpebs_cmd.pid;
+
+		tpebs_stopping = true;
 		tpebs_send_record_cmd(EVLIST_CTL_CMD_STOP_TAG);
 		tpebs_cmd.pid = 0;
 		mutex_unlock(tpebs_mtx_get());
@@ -332,8 +339,10 @@ static int tpebs_stop(void) EXCLUSIVE_LOCKS_REQUIRED(tpebs_mtx_get())
 		close(ack_fd[0]);
 		close(ack_fd[1]);
 		close(tpebs_cmd.out);
+		tpebs_cmd.pid = actual_pid;
 		ret = finish_command(&tpebs_cmd);
 		tpebs_cmd.pid = 0;
+		tpebs_stopping = false;
 		if (ret == -ERR_RUN_COMMAND_WAITPID_SIGNAL)
 			ret = 0;
 	}
