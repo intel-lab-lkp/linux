@@ -2694,6 +2694,54 @@ ice_sched_add_agg_cfg(struct ice_port_info *pi, u32 agg_id, u8 tc)
 }
 
 /**
+ * ice_alloc_agg_info - Allocate aggregator info structure
+ * @hw: pointer to the HW structure
+ * @min_id: the minimum ID to allocate
+ * @max_id: the maximum ID to allocate
+ * @agg_type: the aggregator node type
+ *
+ * Allocates a new aggregator info structure with an ID between min_id and
+ * max_id, inserting it into the agg_list xarray. If an exact ID is required,
+ * use the same value for both min_id and max_id.
+ *
+ * Context: Must be called while holding the scheduler lock.
+ *
+ * Return: the allocated aggregator info structure pointer, or an ERR_PTR on
+ * failure.
+ */
+static struct ice_sched_agg_info *
+ice_alloc_agg_info(struct ice_hw *hw, u32 min_id, u32 max_id,
+		   enum ice_agg_type agg_type)
+{
+	struct ice_sched_agg_info *agg_info;
+	u32 agg_id;
+	int status;
+
+	/* Create new entry for new aggregator ID */
+	agg_info = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*agg_info),
+				GFP_KERNEL);
+	if (!agg_info)
+		return ERR_PTR(-ENOMEM);
+
+	agg_info->agg_type = agg_type;
+	agg_info->tc_bitmap[0] = 0;
+
+	/* Initialize the aggregator VSI list head */
+	INIT_LIST_HEAD(&agg_info->agg_vsi_list);
+	agg_info->num_vsis = 0;
+
+	status = xa_alloc(&hw->agg_list, &agg_id, agg_info,
+			  XA_LIMIT(min_id, max_id), GFP_KERNEL);
+	if (status) {
+		devm_kfree(ice_hw_to_dev(hw), agg_info);
+		return ERR_PTR(status);
+	}
+	agg_info->agg_id = agg_id;
+
+	return agg_info;
+}
+
+/**
  * ice_sched_cfg_agg - configure aggregator node
  * @pi: port information structure
  * @agg_id: aggregator ID
@@ -2719,29 +2767,11 @@ ice_sched_cfg_agg(struct ice_port_info *pi, u32 agg_id,
 	u8 tc;
 
 	agg_info = xa_load(&hw->agg_list, agg_id);
-	if (!agg_info) {
-		/* Create new entry for new aggregator ID */
-		agg_info = devm_kzalloc(ice_hw_to_dev(hw), sizeof(*agg_info),
-					GFP_KERNEL);
-		if (!agg_info)
-			return -ENOMEM;
+	if (!agg_info)
+		agg_info = ice_alloc_agg_info(hw, agg_id, agg_id, agg_type);
+	if (IS_ERR(agg_info))
+		return PTR_ERR(agg_info);
 
-		agg_info->agg_id = agg_id;
-		agg_info->agg_type = agg_type;
-		agg_info->tc_bitmap[0] = 0;
-
-		/* Initialize the aggregator VSI list head */
-		INIT_LIST_HEAD(&agg_info->agg_vsi_list);
-		agg_info->num_vsis = 0;
-
-		/* Add new entry in aggregator array */
-		status = xa_insert(&hw->agg_list, agg_id, agg_info,
-				   GFP_KERNEL);
-		if (status) {
-			devm_kfree(ice_hw_to_dev(hw), agg_info);
-			return status;
-		}
-	}
 	/* Create aggregator node(s) for requested TC(s) */
 	ice_for_each_traffic_class(tc) {
 		if (!ice_is_tc_ena(*tc_bitmap, tc)) {
