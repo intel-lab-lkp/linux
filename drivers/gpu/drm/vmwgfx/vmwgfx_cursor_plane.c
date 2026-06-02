@@ -22,6 +22,9 @@
 #define VMW_CURSOR_SNOOP_WIDTH 64
 #define VMW_CURSOR_SNOOP_HEIGHT 64
 
+#define vmw_cursor_to_du(cursor_plane) \
+	container_of(cursor_plane, struct vmw_display_unit, cursor.base)
+
 struct vmw_svga_fifo_cmd_define_cursor {
 	u32 cmd;
 	SVGAFifoCmdDefineAlphaCursor cursor;
@@ -742,13 +745,14 @@ vmw_cursor_plane_atomic_update(struct drm_plane *plane,
 			       struct drm_atomic_commit *state)
 {
 	struct vmw_bo *bo;
-	struct drm_plane_state *new_state =
-		drm_atomic_get_new_plane_state(state, plane);
-	struct drm_plane_state *old_state =
-		drm_atomic_get_old_plane_state(state, plane);
-	struct drm_crtc *crtc = new_state->crtc ?: old_state->crtc;
+	struct drm_plane_state *new_state;
+
+	new_state = drm_atomic_get_new_plane_state(state, plane);
+	if (!new_state)
+		return;
+
 	struct vmw_private *dev_priv = vmw_priv(plane->dev);
-	struct vmw_display_unit *du = vmw_crtc_to_du(crtc);
+	struct vmw_display_unit *du = vmw_cursor_to_du(plane);
 	struct vmw_plane_state *vps = vmw_plane_state_to_vps(new_state);
 	s32 hotspot_x, hotspot_y, cursor_x, cursor_y;
 
