@@ -727,26 +727,6 @@ static void iocg_commit_bio(struct ioc_gq *iocg, struct bio *bio,
 	put_cpu_ptr(gcs);
 }
 
-static void iocg_lock(struct ioc_gq *iocg, bool lock_ioc, unsigned long *flags)
-{
-	if (lock_ioc) {
-		spin_lock_irqsave(&iocg->ioc->lock, *flags);
-		spin_lock(&iocg->waitq.lock);
-	} else {
-		spin_lock_irqsave(&iocg->waitq.lock, *flags);
-	}
-}
-
-static void iocg_unlock(struct ioc_gq *iocg, bool unlock_ioc, unsigned long *flags)
-{
-	if (unlock_ioc) {
-		spin_unlock(&iocg->waitq.lock);
-		spin_unlock_irqrestore(&iocg->ioc->lock, *flags);
-	} else {
-		spin_unlock_irqrestore(&iocg->waitq.lock, *flags);
-	}
-}
-
 #define CREATE_TRACE_POINTS
 #include <trace/events/iocost.h>
 
@@ -1585,13 +1565,17 @@ static enum hrtimer_restart iocg_waitq_timer_fn(struct hrtimer *timer)
 	struct ioc_gq *iocg = container_of(timer, struct ioc_gq, waitq_timer);
 	bool pay_debt = READ_ONCE(iocg->abs_vdebt);
 	struct ioc_now now;
-	unsigned long flags;
 
 	ioc_now(iocg->ioc, &now);
 
-	iocg_lock(iocg, pay_debt, &flags);
-	iocg_kick_waitq(iocg, pay_debt, &now);
-	iocg_unlock(iocg, pay_debt, &flags);
+	if (pay_debt) {
+		guard(spinlock_irqsave)(&iocg->ioc->lock);
+		guard(spinlock)(&iocg->waitq.lock);
+		iocg_kick_waitq(iocg, pay_debt, &now);
+	} else {
+		guard(spinlock_irqsave)(&iocg->waitq.lock);
+		iocg_kick_waitq(iocg, pay_debt, &now);
+	}
 
 	return HRTIMER_NORESTART;
 }
@@ -2706,7 +2690,6 @@ static void ioc_rqos_throttle(struct rq_qos *rqos, struct bio *bio)
 	u64 abs_cost, cost, vtime;
 	bool use_debt, ioc_locked;
 	enum over_budget_action action;
-	unsigned long flags;
 
 	/* bypass IOs if disabled, still initializing, or for root cgroup */
 	if (!ioc->enabled || !iocg || !iocg->level)
@@ -2745,10 +2728,18 @@ static void ioc_rqos_throttle(struct rq_qos *rqos, struct bio *bio)
 	use_debt = bio_issue_as_root_blkg(bio) || fatal_signal_pending(current);
 	ioc_locked = use_debt || READ_ONCE(iocg->abs_vdebt);
 retry_lock:
-	iocg_lock(iocg, ioc_locked, &flags);
-	action = iocg_handle_over_budget(rqos, iocg, bio, &now, &wait, use_debt,
-					 ioc_locked, abs_cost, cost);
-	iocg_unlock(iocg, ioc_locked, &flags);
+	if (ioc_locked) {
+		guard(spinlock_irqsave)(&iocg->ioc->lock);
+		guard(spinlock)(&iocg->waitq.lock);
+		action = iocg_handle_over_budget(rqos, iocg, bio, &now, &wait,
+						 use_debt, ioc_locked, abs_cost,
+						 cost);
+	} else {
+		guard(spinlock_irqsave)(&iocg->waitq.lock);
+		action = iocg_handle_over_budget(rqos, iocg, bio, &now, &wait,
+						 use_debt, ioc_locked, abs_cost,
+						 cost);
+	}
 	switch (action) {
 	case action_retry:
 		ioc_locked = true;
