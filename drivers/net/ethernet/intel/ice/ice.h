@@ -448,10 +448,10 @@ struct ice_vsi {
 	u8 old_numtc;
 	u16 old_ena_tc;
 
-	/* setup back reference, to which aggregator node this VSI
-	 * corresponds to
+	/* ID of the aggregator node this VSI was configured with at setup, or
+	 * negative if it was not configured with an aggregator node.
 	 */
-	struct ice_agg_node *agg_node;
+	s64 agg_id;
 
 	struct_group_tagged(ice_vsi_cfg_params, params,
 		struct ice_port_info *port_info; /* back pointer to port_info */
@@ -541,12 +541,10 @@ struct ice_eswitch {
 	bool is_running;
 };
 
-struct ice_agg_node {
-	u32 agg_id;
-#define ICE_MAX_VSIS_IN_AGG_NODE	64
-	u32 num_vsis;
-	u8 valid;
-};
+#define ICE_PF_AGG_NODE_ID_START	1
+#define ICE_PF_AGG_NODE_ID_END		32
+#define ICE_VF_AGG_NODE_ID_START	65
+#define ICE_VF_AGG_NODE_ID_END		96
 
 struct ice_pf_msix {
 	u32 cur;
@@ -660,13 +658,6 @@ struct ice_pf {
 	struct xarray dyn_ports;
 	struct xarray sf_nums;
 
-#define ICE_INVALID_AGG_NODE_ID		0
-#define ICE_PF_AGG_NODE_ID_START	1
-#define ICE_MAX_PF_AGG_NODES		32
-	struct ice_agg_node pf_agg_node[ICE_MAX_PF_AGG_NODES];
-#define ICE_VF_AGG_NODE_ID_START	65
-#define ICE_MAX_VF_AGG_NODES		32
-	struct ice_agg_node vf_agg_node[ICE_MAX_VF_AGG_NODES];
 	struct ice_dplls dplls;
 	struct device *hwmon_dev;
 	struct ice_health health_reporters;
