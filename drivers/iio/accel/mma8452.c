@@ -474,14 +474,14 @@ static int mma8452_read_raw(struct iio_dev *indio_dev,
 	int i, ret;
 
 	switch (mask) {
-	case IIO_CHAN_INFO_RAW:
-		if (!iio_device_claim_direct(indio_dev))
+	case IIO_CHAN_INFO_RAW: {
+		IIO_DEV_ACQUIRE_DIRECT_MODE(indio_dev, claim);
+		if (IIO_DEV_ACQUIRE_FAILED(claim))
 			return -EBUSY;
 
 		mutex_lock(&data->lock);
 		ret = mma8452_read(data, buffer);
 		mutex_unlock(&data->lock);
-		iio_device_release_direct(indio_dev);
 		if (ret < 0)
 			return ret;
 
@@ -490,6 +490,7 @@ static int mma8452_read_raw(struct iio_dev *indio_dev,
 			chan->scan_type.realbits - 1);
 
 		return IIO_VAL_INT;
+	}
 	case IIO_CHAN_INFO_SCALE:
 		i = data->data_cfg & MMA8452_DATA_CFG_FS_MASK;
 		*val = data->chip_info->mma_scales[i][0];
@@ -756,14 +757,11 @@ static int mma8452_write_raw(struct iio_dev *indio_dev,
 			     struct iio_chan_spec const *chan,
 			     int val, int val2, long mask)
 {
-	int ret;
-
-	if (!iio_device_claim_direct(indio_dev))
+	IIO_DEV_ACQUIRE_DIRECT_MODE(indio_dev, claim);
+	if (IIO_DEV_ACQUIRE_FAILED(claim))
 		return -EBUSY;
 
-	ret = __mma8452_write_raw(indio_dev, chan, val, val2, mask);
-	iio_device_release_direct(indio_dev);
-	return ret;
+	return __mma8452_write_raw(indio_dev, chan, val, val2, mask);
 }
 
 static int mma8452_get_event_regs(struct mma8452_data *data,
