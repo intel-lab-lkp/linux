@@ -98,7 +98,12 @@ static int livepatch_init(void)
 	 */
 	npids = npids_pending;
 
-	return klp_enable_patch(&patch);
+	ret = klp_enable_patch(&patch);
+	if (ret) {
+		sysfs_remove_file(klp_kobj, &klp_attr.attr);
+		kobject_put(klp_kobj);
+	}
+	return ret;
 }
 
 static void livepatch_exit(void)
