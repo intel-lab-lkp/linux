@@ -1518,6 +1518,38 @@ static struct clk_branch pmem_clk = {
 	},
 };
 
+/*
+ * Crypto Engine 2 (CE2) clock.
+ *
+ * On MSM8x60 the CE2 block at 0x18500000 is gated by a single hardware
+ * enable in GCC_CE2_HCLK_CTL (0x2740, BIT(4)). The vendor MSM8660
+ * clock-8x60.c routes both the "core" and "iface" consumer-name lookups
+ * to this one register, and the upstream QCE crypto driver requests
+ * both clock names via devm_clk_get_optional_enabled(). Without the
+ * clock present at probe the QCE MMIO window reads back 0x0 and DMA
+ * hangs indefinitely waiting for handshake signals that never arrive.
+ *
+ * Register a single clk_branch: the consumer DT can reference the same
+ * clock phandle twice under different clock-names ("core" and "iface"),
+ * which yields the same struct clk for both clk_get() calls. Per-
+ * consumer refcounting then works correctly and the single underlying
+ * enable bit is asserted while either consumer holds the clock
+ * prepared, instead of having two independent clk_branch structs
+ * racing the same hardware bit.
+ */
+static struct clk_branch ce2_h_clk = {
+	.halt_reg = 0x2fd4,
+	.halt_bit = 0,
+	.clkr = {
+		.enable_reg = 0x2740,
+		.enable_mask = BIT(4),
+		.hw.init = &(struct clk_init_data){
+			.name = "ce2_h_clk",
+			.ops = &clk_branch_ops,
+		},
+	},
+};
+
 static struct clk_rcg prng_src = {
 	.ns_reg = 0x2e80,
 	.p = {
@@ -2566,6 +2598,7 @@ static struct clk_regmap *gcc_msm8660_clks[] = {
 	[GP2_SRC] = &gp2_src.clkr,
 	[GP2_CLK] = &gp2_clk.clkr,
 	[PMEM_CLK] = &pmem_clk.clkr,
+	[CE2_H_CLK] = &ce2_h_clk.clkr,
 	[PRNG_SRC] = &prng_src.clkr,
 	[PRNG_CLK] = &prng_clk.clkr,
 	[SDC1_SRC] = &sdc1_src.clkr,
