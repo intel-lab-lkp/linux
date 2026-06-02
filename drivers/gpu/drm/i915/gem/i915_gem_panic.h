@@ -6,13 +6,6 @@
 
 #include <linux/types.h>
 
-struct drm_gem_object;
-struct drm_scanout_buffer;
-struct intel_panic;
-
-struct intel_panic *i915_gem_object_alloc_panic(void);
-int i915_gem_object_panic_setup(struct intel_panic *panic, struct drm_scanout_buffer *sb,
-				struct drm_gem_object *_obj, bool panic_tiling);
-void i915_gem_object_panic_finish(struct intel_panic *panic);
+extern const struct intel_display_panic_interface i915_display_panic_interface;
 
 #endif /* __I915_GEM_PANIC_H__ */
