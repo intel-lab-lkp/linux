@@ -21,6 +21,13 @@
 #include "portdrv.h"
 #include "../pci.h"
 
+static int pcie_aer_recovery_disable;
+
+void pci_no_aer_recovery(void)
+{
+	pcie_aer_recovery_disable = 1;
+}
+
 static pci_ers_result_t merge_result(enum pci_ers_result orig,
 				  enum pci_ers_result new)
 {
@@ -215,6 +222,14 @@ pci_ers_result_t pcie_do_recovery(struct pci_dev *dev,
 	struct pci_dev *bridge;
 	pci_ers_result_t status = PCI_ERS_RESULT_CAN_RECOVER;
 	struct pci_host_bridge *host = pci_find_host_bridge(dev->bus);
+
+	if (pcie_aer_recovery_disable) {
+		if (host->native_aer || pcie_ports_native) {
+			pcie_clear_device_status(dev);
+			pci_aer_clear_nonfatal_status(dev);
+		}
+		return status;
+	}
 
 	/*
 	 * If the error was detected by a Root Port, Downstream Port, RCEC,
