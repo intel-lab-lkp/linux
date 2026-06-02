@@ -76,9 +76,9 @@ function handle_exit_code() {
 # $1 - pattern to match, pattern in $1 is enclosed by spaces for a match ""\s$1\s"
 # $2 - number of times the pattern passed in $1 is expected to match
 # $3 - optional can be set either to "-r" or "-v"
-#       "-r" means relaxed matching in this case pattern provided in $1 is passed
-#       as is without enclosing it with spaces
-#       "-v" prints matching lines
+#       "-r" means relaxed matching in this case pattern provided in
+#       $1 is passed as is without enclosing it with spaces "-v"
+#       prints matching lines
 # $4 - optional when $3 is set to "-r" then $4 can be used to pass "-v"
 function check_match_ct {
     pattern="\s$1\s"
@@ -223,7 +223,7 @@ function basic_tests {
     check_match_ct =p 0
 
     # module params are builtin to handle boot args
-    check_match_ct '\[params\]' 4 -r
+    check_match_ct '\[kernel/params\]' 4 -r
     ddcmd module params +mpf
     check_match_ct =pmf 4
 
@@ -238,8 +238,93 @@ EOF
     ddcmd =_
 }
 
+function test_subsystem_module_queries {
+    echo -e "${GREEN}# TEST_SUBSYTEM_MODULE_QUERIES ${NC}"
+    ddcmd =_
+
+    # Find how many 'main' modules we have in total (by basename)
+    # Use a more precise regex to avoid false positives like [irqdomain]
+    local total_main=$(grep -c "\[\([^]]*/\)\?main\]" /proc/dynamic_debug/control)
+    echo "# found $total_main total 'main' modules"
+
+    if [ $total_main -eq 0 ]; then
+        echo "SKIP - no 'main' modules found to test slashes"
+        return
+    fi
+
+    echo "# testing 'module */main'"
+    ddcmd module "*/main" +p
+    # This should match modules that HAVE a slash and end in /main
+    local slash_main=$(grep -c "\[[^]]*/main\]" /proc/dynamic_debug/control)
+    check_match_ct =p $slash_main -r
+
+    echo "# testing 'module init/main' (specific path)"
+    ddcmd =_
+    ddcmd module "init/main" +p
+    local init_main=$(grep -c "\[init/main\]" /proc/dynamic_debug/control)
+    check_match_ct =p $init_main
+
+    echo "# testing 'module main' (basename match)"
+    ddcmd =_
+    ddcmd module main +p
+    # This should match ALL $total_main entries due to kbasename matching
+    check_match_ct =p $total_main
+
+    ddcmd =_
+}
+
+function test_hyphen_underscore {
+    echo -e "${GREEN}# TEST_HYPHEN_UNDERSCORE ${NC}"
+    ddcmd =_
+
+    # Find a module with a hyphen in its name (e.g., from the control file)
+    local mod_with_hyphen=$(grep -m1 "\[[^]]*-[^]]*\]" /proc/dynamic_debug/control | sed -n 's/.*\[\(.*\)\].*/\1/p')
+
+    if [ -z "$mod_with_hyphen" ]; then
+        echo "SKIP - no module with hyphen found in /proc/dynamic_debug/control"
+        return
+    fi
+
+    echo "# testing hyphen/underscore equivalence for module: $mod_with_hyphen"
+    local mod_with_underscore=$(echo "$mod_with_hyphen" | tr '-' '_')
+
+    # 1. Enable using literal hyphen name
+    echo "#   trying hyphen name: $mod_with_hyphen"
+    ddcmd module "$mod_with_hyphen" +p
+    local count_hyphen=$(grep -c "\[$mod_with_hyphen\]" /proc/dynamic_debug/control)
+    check_match_ct =p $count_hyphen -r
+
+    # 2. Disable and then enable using underscore name
+    ddcmd =_
+    echo "#   trying underscore name: $mod_with_underscore"
+    ddcmd module "$mod_with_underscore" +p
+    check_match_ct =p $count_hyphen -r
+
+    # 3. Try kbasename with hyphen (if it has a path)
+    local base_hyphen=$(basename "$mod_with_hyphen")
+    if [ "$base_hyphen" != "$mod_with_hyphen" ]; then
+        ddcmd =_
+        echo "#   trying hyphen kbasename: $base_hyphen"
+        ddcmd module "$base_hyphen" +p
+        local count_base=$(grep -c "\[\([^]]*/\)\?$base_hyphen\]" /proc/dynamic_debug/control)
+        check_match_ct =p $count_base -r
+    fi
+
+    # 4. Try kbasename with underscore
+    local base_underscore=$(echo "$base_hyphen" | tr '-' '_')
+    ddcmd =_
+    echo "#   trying underscore kbasename: $base_underscore"
+    ddcmd module "$base_underscore" +p
+    local count_base=$(grep -c "\[\([^]]*/\)\?$base_hyphen\]" /proc/dynamic_debug/control)
+    check_match_ct =p $count_base -r
+
+    ddcmd =_
+}
+
 tests_list=(
     basic_tests
+    test_subsystem_module_queries
+    test_hyphen_underscore
 )
 
 # Run tests
