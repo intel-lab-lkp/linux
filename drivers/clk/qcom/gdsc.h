@@ -75,6 +75,18 @@ struct gdsc {
  * transition completed after a fixed delay rather than polling status.
  */
 #define LEGACY_FOOTSWITCH	BIT(10)
+/*
+ * Keep the domain powered across runtime PM (its clocks may still gate via
+ * the clock framework) and only allow it to power-collapse on system
+ * suspend. Maps to GENPD_FLAG_RPM_ALWAYS_ON on the underlying genpd. Useful
+ * for blocks whose cold-start sequence is expensive enough that runtime
+ * power cycling causes user-visible latency or hardware corner-case bugs --
+ * e.g. the MSM8x60 a2xx (Adreno 220) graphics footswitch, whose first
+ * power-up after collapse forces a full microcode reload that can stall
+ * the shared MMSS AXI fabric when it coincides with an MDP display
+ * underrun.
+ */
+#define RPM_ALWAYS_ON	BIT(11)
 	struct reset_controller_dev	*rcdev;
 	unsigned int			*resets;
 	unsigned int			reset_count;

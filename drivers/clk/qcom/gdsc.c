@@ -632,6 +632,8 @@ skip_wait_config:
 
 	if (sc->flags & ALWAYS_ON)
 		sc->pd.flags |= GENPD_FLAG_ALWAYS_ON;
+	if (sc->flags & RPM_ALWAYS_ON)
+		sc->pd.flags |= GENPD_FLAG_RPM_ALWAYS_ON;
 	if (!sc->pd.power_off)
 		sc->pd.power_off = gdsc_disable;
 	if (!sc->pd.power_on)
