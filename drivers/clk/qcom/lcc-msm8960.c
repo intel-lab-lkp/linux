@@ -10,6 +10,7 @@
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/pm.h>
 #include <linux/clk-provider.h>
 #include <linux/regmap.h>
 
@@ -525,6 +526,13 @@ static int lcc_msm8960_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_unclaim;
 
+	/*
+	 * Stash the regmap so lcc_msm8960_resume() can re-apply the
+	 * LPASS Primary PLL mux selection without having to walk the
+	 * clock-provider tree. qcom_cc_really_probe() does not touch
+	 * platform drvdata, so this is safe.
+	 */
+	platform_set_drvdata(pdev, regmap);
 	return 0;
 
 err_unclaim:
@@ -552,12 +560,43 @@ static void lcc_msm8960_remove(struct platform_device *pdev)
 	mutex_unlock(&lcc_msm8960_bound_lock);
 }
 
+/*
+ * The LPASS power domain on at least the MSM8x60 family is collapsed
+ * during system sleep, which resets the LPASS Primary PLL Mux at 0xc4
+ * to its hardware default of 0 (PXO). Without re-asserting PLL4 here
+ * every LCC clock would silently come back sourced from PXO at 27 MHz
+ * and audio would produce wrong rates until the next reboot. The
+ * single-register write is idempotent on platforms that do not exhibit
+ * the collapse (the mux is already at 0x1 from probe), so it is safe
+ * to run unconditionally.
+ *
+ * Resume cannot defer; log with dev_err and propagate the raw errno
+ * rather than dev_err_probe (which silences EPROBE_DEFER).
+ */
+static int lcc_msm8960_resume(struct device *dev)
+{
+	struct regmap *regmap = dev_get_drvdata(dev);
+	int ret;
+
+	ret = regmap_write(regmap, 0xc4, 0x1);
+	if (ret)
+		dev_err(dev,
+			"failed to re-select PLL4 on LPASS Primary PLL Mux on resume: %d\n",
+			ret);
+	return ret;
+}
+
+static const struct dev_pm_ops lcc_msm8960_pm_ops = {
+	SYSTEM_SLEEP_PM_OPS(NULL, lcc_msm8960_resume)
+};
+
 static struct platform_driver lcc_msm8960_driver = {
 	.probe		= lcc_msm8960_probe,
 	.remove		= lcc_msm8960_remove,
 	.driver		= {
 		.name	= "lcc-msm8960",
 		.of_match_table = lcc_msm8960_match_table,
+		.pm	= pm_ptr(&lcc_msm8960_pm_ops),
 		/*
 		 * The probe path mutates file-static clk_rcg structures
 		 * (.freq_tbl pointers selected from the PLL4 L-register,
