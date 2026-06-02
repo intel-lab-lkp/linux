@@ -432,6 +432,9 @@ static void swap_cluster_free_table(struct swap_cluster_info *ci)
 	ci->zero_bitmap = NULL;
 #endif
 
+	kfree(ci->extend_table);
+	ci->extend_table = NULL;
+
 	table = (struct swap_table *)rcu_access_pointer(ci->table);
 	if (!table)
 		return;
@@ -1711,6 +1714,7 @@ restart:
 			goto failed;
 		}
 	} while (++ci_off < ci_end);
+	swap_extend_table_try_free(ci);
 	swap_cluster_unlock(ci);
 	return 0;
 failed:
