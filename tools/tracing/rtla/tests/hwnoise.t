@@ -19,4 +19,14 @@ check "enable a trace event trigger" \
 	"hwnoise -t -e osnoise:irq_noise --trigger=\"hist:key=desc,duration:sort=desc,duration:vals=hitcount\" -d 10s" \
 	0 "Saving event osnoise:irq_noise hist to osnoise_irq_noise_hist.txt"
 
+# Option parsing tests - verify attached numeric arguments work correctly
+check "verify -p with space" \
+	"hwnoise -p 100 -r 100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+check "verify -p without space (attached argument)" \
+	"hwnoise -p100 -r 100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+check "verify --period with equals" \
+	"hwnoise --period=100 -r 100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+check "verify --period with space" \
+	"hwnoise --period 100 -r 100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+
 test_end

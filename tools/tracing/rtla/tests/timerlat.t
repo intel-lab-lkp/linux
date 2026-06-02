@@ -51,6 +51,14 @@ check "verify --period with equals" \
 	"timerlat hist --period=100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
 check "verify --period with space" \
 	"timerlat hist --period 100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+check "verify timerlat top -p with space" \
+	"timerlat top -p 100 -c 0 -d 1s -q" 0 "" "no-irq and no-thread"
+check "verify timerlat top -p without space (attached argument)" \
+	"timerlat top -p100 -c 0 -d 1s -q" 0 "" "no-irq and no-thread"
+check "verify timerlat top --period with equals" \
+	"timerlat top --period=100 -c 0 -d 1s -q" 0 "" "no-irq and no-thread"
+check "verify timerlat top --period with space" \
+	"timerlat top --period 100 -c 0 -d 1s -q" 0 "" "no-irq and no-thread"
 
 # Actions tests
 check "trace output through -t" \

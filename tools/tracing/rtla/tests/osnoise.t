@@ -17,6 +17,24 @@ check "verify the  --trace param" \
 check "verify the --entries/-E param" \
 	"osnoise hist -P F:1 -c 0 -r 900000 -d 10s -b 10 -E 25"
 
+# Option parsing tests - verify attached numeric arguments work correctly
+check "verify -p with space" \
+	"osnoise hist -p 100 -r 100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+check "verify -p without space (attached argument)" \
+	"osnoise hist -p100 -r 100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+check "verify --period with equals" \
+	"osnoise hist --period=100 -r 100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+check "verify --period with space" \
+	"osnoise hist --period 100 -r 100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+check "verify osnoise top -p with space" \
+	"osnoise top -p 100 -r 100 -c 0 -d 1s -q" 0 "" "no-irq and no-thread"
+check "verify osnoise top -p without space (attached argument)" \
+	"osnoise top -p100 -r 100 -c 0 -d 1s -q" 0 "" "no-irq and no-thread"
+check "verify osnoise top --period with equals" \
+	"osnoise top --period=100 -r 100 -c 0 -d 1s -q" 0 "" "no-irq and no-thread"
+check "verify osnoise top --period with space" \
+	"osnoise top --period 100 -r 100 -c 0 -d 1s -q" 0 "" "no-irq and no-thread"
+
 # Test setting default period by putting an absurdly high period
 # and stopping on threshold.
 # If default period is not set, this will time out.
