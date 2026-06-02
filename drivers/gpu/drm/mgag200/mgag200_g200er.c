@@ -57,6 +57,55 @@ static void mgag200_g200er_reset_tagfifo(struct mga_device *mdev)
  * PIXPLLC
  */
 
+static enum drm_mode_status mgag200_g200er_pixpllc_mode_valid(struct drm_crtc *crtc,
+							      const struct drm_display_mode *mode)
+{
+	static const unsigned int vcomax = 1488000;
+	static const unsigned int vcomin = 1056000;
+	static const unsigned int pllreffreq = 48000;
+	static const unsigned int m_div_val[] = { 1, 2, 4, 8 };
+
+	long clock = mode->clock;
+	unsigned int delta, tmpdelta, permitteddelta;
+	int testr, testn, testm, testo;
+	unsigned int computed, vco;
+
+	if (clock <= 0)
+		return MODE_CLOCK_LOW;
+
+	delta = 0xffffffff;
+	permitteddelta = clock * 5 / 1000;
+
+	for (testr = 0; testr < 4; testr++) {
+		if (delta == 0)
+			break;
+		for (testn = 5; testn < 129; testn++) {
+			if (delta == 0)
+				break;
+			for (testm = 3; testm >= 0; testm--) {
+				if (delta == 0)
+					break;
+				for (testo = 5; testo < 33; testo++) {
+					vco = pllreffreq * (testn + 1) / (testr + 1);
+					if (vco < vcomin)
+						continue;
+					if (vco > vcomax)
+						continue;
+					computed = vco / (m_div_val[testm] * (testo + 1));
+					if (computed > clock)
+						tmpdelta = computed - clock;
+					else
+						tmpdelta = clock - computed;
+					if (tmpdelta < delta)
+						delta = tmpdelta;
+				}
+			}
+		}
+	}
+
+	return (delta > permitteddelta) ? MODE_CLOCK_RANGE : MODE_OK;
+}
+
 static int mgag200_g200er_pixpllc_atomic_check(struct drm_crtc *crtc,
 					       struct drm_atomic_state *new_state)
 {
@@ -267,6 +316,7 @@ static const struct mgag200_device_info mgag200_g200er_device_info =
 	MGAG200_DEVICE_INFO_INIT(2048, 2048, 55000, false, 1, 0, false);
 
 static const struct mgag200_device_funcs mgag200_g200er_device_funcs = {
+	.pixpllc_mode_valid = mgag200_g200er_pixpllc_mode_valid,
 	.pixpllc_atomic_check = mgag200_g200er_pixpllc_atomic_check,
 	.pixpllc_atomic_update = mgag200_g200er_pixpllc_atomic_update,
 };

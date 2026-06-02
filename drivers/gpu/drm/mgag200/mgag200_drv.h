@@ -249,6 +249,14 @@ struct mgag200_device_info {
 
 struct mgag200_device_funcs {
 	/*
+	 * Optional. Validate that @mode's pixel clock falls within the
+	 * model's PIXPLLC window. Called from mgag200_crtc_helper_mode_valid
+	 * so that out-of-range modes are filtered before atomic_check.
+	 */
+	enum drm_mode_status (*pixpllc_mode_valid)(struct drm_crtc *crtc,
+						   const struct drm_display_mode *mode);
+
+	/*
 	 * Validate that the given state can be programmed into PIXPLLC. On
 	 * success, the calculated parameters should be stored in the CRTC's
 	 * state in struct @mgag200_crtc_state.pixpllc.

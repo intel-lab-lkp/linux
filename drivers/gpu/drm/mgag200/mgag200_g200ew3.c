@@ -22,6 +22,50 @@ static void mgag200_g200ew3_init_registers(struct mga_device *mdev)
  * PIXPLLC
  */
 
+static enum drm_mode_status mgag200_g200ew3_pixpllc_mode_valid(struct drm_crtc *crtc,
+							       const struct drm_display_mode *mode)
+{
+	static const unsigned int vcomax = 800000;
+	static const unsigned int vcomin = 400000;
+	static const unsigned int pllreffreq = 25000;
+
+	long clock = mode->clock;
+	unsigned int delta, tmpdelta, permitteddelta;
+	unsigned int testp, testm, testn, testp2;
+	unsigned int computed;
+
+	if (clock <= 0)
+		return MODE_CLOCK_LOW;
+
+	delta = 0xffffffff;
+	permitteddelta = clock * 5 / 1000;
+
+	for (testp = 1; testp < 8; testp++) {
+		for (testp2 = 1; testp2 < 8; testp2++) {
+			if (testp < testp2)
+				continue;
+			if ((clock * testp * testp2) > vcomax)
+				continue;
+			if ((clock * testp * testp2) < vcomin)
+				continue;
+			for (testm = 1; testm < 26; testm++) {
+				for (testn = 32; testn < 2048; testn++) {
+					computed = (pllreffreq * testn) /
+						(testm * testp * testp2);
+					if (computed > clock)
+						tmpdelta = computed - clock;
+					else
+						tmpdelta = clock - computed;
+					if (tmpdelta < delta)
+						delta = tmpdelta;
+				}
+			}
+		}
+	}
+
+	return (delta > permitteddelta) ? MODE_CLOCK_RANGE : MODE_OK;
+}
+
 static int mgag200_g200ew3_pixpllc_atomic_check(struct drm_crtc *crtc,
 						struct drm_atomic_state *new_state)
 {
@@ -143,6 +187,7 @@ static const struct mgag200_device_info mgag200_g200ew3_device_info =
 	MGAG200_DEVICE_INFO_INIT(2048, 2048, 0, true, 0, 1, false);
 
 static const struct mgag200_device_funcs mgag200_g200ew3_device_funcs = {
+	.pixpllc_mode_valid = mgag200_g200ew3_pixpllc_mode_valid,
 	.pixpllc_atomic_check = mgag200_g200ew3_pixpllc_atomic_check,
 	.pixpllc_atomic_update = mgag200_g200wb_pixpllc_atomic_update, // same as G200WB
 };

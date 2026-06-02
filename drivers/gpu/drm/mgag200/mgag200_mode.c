@@ -583,6 +583,8 @@ enum drm_mode_status mgag200_crtc_helper_mode_valid(struct drm_crtc *crtc,
 {
 	struct mga_device *mdev = to_mga_device(crtc->dev);
 	const struct mgag200_device_info *info = mdev->info;
+	const struct mgag200_device_funcs *funcs = mdev->funcs;
+	enum drm_mode_status status;
 
 	/*
 	 * Some devices have additional limits on the size of the
@@ -603,6 +605,17 @@ enum drm_mode_status mgag200_crtc_helper_mode_valid(struct drm_crtc *crtc,
 	    mode->crtc_vdisplay > 2048 || mode->crtc_vsync_start > 4096 ||
 	    mode->crtc_vsync_end > 4096 || mode->crtc_vtotal > 4096) {
 		return MODE_BAD;
+	}
+
+	/*
+	 * Reject modes whose pixel clock falls outside the per-model PIXPLLC
+	 * window. Without this filter, pixpllc_atomic_check can return success
+	 * with zeroed PLL parameters and atomic_update would underflow.
+	 */
+	if (funcs->pixpllc_mode_valid) {
+		status = funcs->pixpllc_mode_valid(crtc, mode);
+		if (status != MODE_OK)
+			return status;
 	}
 
 	return MODE_OK;
