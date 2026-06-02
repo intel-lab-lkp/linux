@@ -252,6 +252,11 @@ struct renesas_i3c_xferqueue {
 	spinlock_t lock;
 };
 
+struct renesas_i3c_addr {
+	bool is_i2c;
+	u8 addr;
+};
+
 struct renesas_i3c {
 	struct i3c_master_controller base;
 	enum i3c_internal_state internal_state;
@@ -262,13 +267,14 @@ struct renesas_i3c {
 	u32 i3c_STDBR;
 	u32 extbr;
 	unsigned long rate;
-	u8 addrs[RENESAS_I3C_MAX_DEVS];
+	struct renesas_i3c_addr addrs[RENESAS_I3C_MAX_DEVS];
 	struct renesas_i3c_xferqueue xferqueue;
 	void __iomem *regs;
 	u32 *DATBASn;
 	struct clk_bulk_data *clks;
 	struct reset_control *presetn;
 	struct reset_control *tresetn;
+	bool resuming;
 	u8 num_clks;
 	u8 refclk_div;
 };
@@ -335,7 +341,7 @@ static int renesas_i3c_get_addr_pos(struct renesas_i3c *i3c, u8 addr)
 	int pos;
 
 	for (pos = 0; pos < i3c->maxdevs; pos++) {
-		if (addr == i3c->addrs[pos])
+		if (addr == i3c->addrs[pos].addr)
 			return pos;
 	}
 
@@ -480,8 +486,8 @@ static int renesas_i3c_reset(struct renesas_i3c *i3c)
 	renesas_writel(i3c->regs, BCTL, 0);
 	renesas_set_bit(i3c->regs, RSTCTL, RSTCTL_RI3CRST);
 
-	return read_poll_timeout_atomic(renesas_readl, val, !(val & RSTCTL_RI3CRST),
-					0, 1000, false, i3c->regs, RSTCTL);
+	return read_poll_timeout(renesas_readl, val, !(val & RSTCTL_RI3CRST),
+				 0, 1000, false, i3c->regs, RSTCTL);
 }
 
 static void renesas_i3c_hw_init(struct renesas_i3c *i3c)
@@ -641,8 +647,9 @@ static int renesas_i3c_daa(struct i3c_master_controller *m)
 {
 	struct renesas_i3c *i3c = to_renesas_i3c(m);
 	struct renesas_i3c_cmd *cmd;
-	u32 olddevs, newdevs;
 	u8 last_addr = 0, pos;
+	int last_i2c_pos = -1;
+	u32 olddevs, newdevs;
 	int ret;
 
 	struct renesas_i3c_xfer *xfer __free(kfree) = renesas_i3c_alloc_xfer(i3c, 1);
@@ -657,14 +664,33 @@ static int renesas_i3c_daa(struct i3c_master_controller *m)
 
 	/* Setting DATBASn registers for target devices. */
 	for (pos = 0; pos < i3c->maxdevs; pos++) {
-		if (olddevs & BIT(pos))
+		if (olddevs & BIT(pos)) {
+			/*
+			 * In case of resume, reassign DAs for all devices on the
+			 * bus to avoid failures when all i3c->maxdevs slots were
+			 * already occupied before suspend.
+			 *
+			 * Exclude I2C devices, as they are attached during probe,
+			 * at bus initialization time, and there are currently no
+			 * register updates associated with them.
+			 */
+			if (i3c->resuming) {
+				if (i3c->addrs[pos].is_i2c) {
+					last_i2c_pos = pos;
+				} else {
+					renesas_writel(i3c->regs, DATBAS(pos),
+						       i3c->DATBASn[pos]);
+				}
+			}
+
 			continue;
+		}
 
 		ret = i3c_master_get_free_addr(m, last_addr + 1);
 		if (ret < 0)
 			return -ENOSPC;
 
-		i3c->addrs[pos] = ret;
+		i3c->addrs[pos].addr = ret;
 		last_addr = ret;
 
 		renesas_writel(i3c->regs, DATBAS(pos), datbas_dvdyad_with_parity(ret));
@@ -674,9 +700,21 @@ static int renesas_i3c_daa(struct i3c_master_controller *m)
 	cmd = xfer->cmds;
 	cmd->rx_count = 0;
 
-	ret = renesas_i3c_get_free_pos(i3c);
-	if (ret < 0)
-		return ret;
+	if (i3c->resuming) {
+		/* Nothing to do if all slots are ocupied by I2C devices. */
+		if (last_i2c_pos == i3c->maxdevs - 1)
+			return 0;
+
+		/*
+		 * Do DAA for all the devices on the bus, if resuming, except
+		 * the I2C ones.
+		 */
+		ret = last_i2c_pos < 0 ? 0 : last_i2c_pos + 1;
+	} else {
+		ret = renesas_i3c_get_free_pos(i3c);
+		if (ret < 0)
+			return ret;
+	}
 
 	/*
 	 * Setup the command descriptor to start the ENTDAA command
@@ -694,7 +732,7 @@ static int renesas_i3c_daa(struct i3c_master_controller *m)
 
 	for (pos = 0; pos < i3c->maxdevs; pos++) {
 		if (newdevs & BIT(pos))
-			i3c_master_add_i3c_dev_locked(m, i3c->addrs[pos]);
+			i3c_master_add_i3c_dev_locked(m, i3c->addrs[pos].addr);
 	}
 
 	return 0;
@@ -876,11 +914,11 @@ static int renesas_i3c_attach_i3c_dev(struct i3c_dev_desc *dev)
 		return -ENOMEM;
 
 	data->index = pos;
-	i3c->addrs[pos] = dev->info.dyn_addr ? : dev->info.static_addr;
+	i3c->addrs[pos].addr = dev->info.dyn_addr ? : dev->info.static_addr;
 	i3c->free_pos &= ~BIT(pos);
 
 	renesas_writel(i3c->regs, DATBAS(pos), DATBAS_DVSTAD(dev->info.static_addr) |
-				    datbas_dvdyad_with_parity(i3c->addrs[pos]));
+				    datbas_dvdyad_with_parity(i3c->addrs[pos].addr));
 	i3c_dev_set_master_data(dev, data);
 
 	return 0;
@@ -898,19 +936,19 @@ static int renesas_i3c_reattach_i3c_dev(struct i3c_dev_desc *dev,
 
 	if (data->index != pos && pos >= 0) {
 		renesas_writel(i3c->regs, DATBAS(data->index), 0);
-		i3c->addrs[data->index] = 0;
+		i3c->addrs[data->index].addr = 0;
 		i3c->free_pos |= BIT(data->index);
 
 		data->index = pos;
 		i3c->free_pos &= ~BIT(data->index);
 	}
 
-	i3c->addrs[data->index] = dev->info.dyn_addr ? dev->info.dyn_addr :
+	i3c->addrs[data->index].addr = dev->info.dyn_addr ? dev->info.dyn_addr :
 							dev->info.static_addr;
 
 	renesas_writel(i3c->regs, DATBAS(data->index),
 		       DATBAS_DVSTAD(dev->info.static_addr) |
-		       datbas_dvdyad_with_parity(i3c->addrs[data->index]));
+		       datbas_dvdyad_with_parity(i3c->addrs[data->index].addr));
 
 	return 0;
 }
@@ -922,7 +960,7 @@ static void renesas_i3c_detach_i3c_dev(struct i3c_dev_desc *dev)
 	struct renesas_i3c *i3c = to_renesas_i3c(m);
 
 	i3c_dev_set_master_data(dev, NULL);
-	i3c->addrs[data->index] = 0;
+	i3c->addrs[data->index].addr = 0;
 	i3c->free_pos |= BIT(data->index);
 	kfree(data);
 }
@@ -1002,7 +1040,8 @@ static int renesas_i3c_attach_i2c_dev(struct i2c_dev_desc *dev)
 		return -ENOMEM;
 
 	data->index = pos;
-	i3c->addrs[pos] = dev->addr;
+	i3c->addrs[pos].addr = dev->addr;
+	i3c->addrs[pos].is_i2c = true;
 	i3c->free_pos &= ~BIT(pos);
 	i2c_dev_set_master_data(dev, data);
 
@@ -1016,7 +1055,8 @@ static void renesas_i3c_detach_i2c_dev(struct i2c_dev_desc *dev)
 	struct renesas_i3c *i3c = to_renesas_i3c(m);
 
 	i2c_dev_set_master_data(dev, NULL);
-	i3c->addrs[data->index] = 0;
+	i3c->addrs[data->index].addr = 0;
+	i3c->addrs[data->index].is_i2c = false;
 	i3c->free_pos |= BIT(data->index);
 	kfree(data);
 }
@@ -1435,7 +1475,7 @@ static void renesas_i3c_remove(struct platform_device *pdev)
 	i3c_master_unregister(&i3c->base);
 }
 
-static int renesas_i3c_suspend_noirq(struct device *dev)
+static int renesas_i3c_suspend(struct device *dev)
 {
 	struct renesas_i3c *i3c = dev_get_drvdata(dev);
 	int i, ret;
@@ -1466,10 +1506,10 @@ err_mark_resumed:
 	return ret;
 }
 
-static int renesas_i3c_resume_noirq(struct device *dev)
+static int renesas_i3c_resume(struct device *dev)
 {
 	struct renesas_i3c *i3c = dev_get_drvdata(dev);
-	int i, ret;
+	int ret;
 
 	ret = reset_control_deassert(i3c->tresetn);
 	if (ret)
@@ -1495,15 +1535,23 @@ static int renesas_i3c_resume_noirq(struct device *dev)
 	renesas_writel(i3c->regs, MSDVAD, MSDVAD_MDYADV |
 		       MSDVAD_MDYAD(i3c->dyn_addr));
 
-	/* Restore Device Address Table values. */
-	for (i = 0; i < i3c->maxdevs; i++)
-		renesas_writel(i3c->regs, DATBAS(i), i3c->DATBASn[i]);
-
 	/* I3C hw init. */
 	renesas_i3c_hw_init(i3c);
 
 	i2c_mark_adapter_resumed(&i3c->base.i2c);
 
+	i3c->resuming = true;
+
+	ret = i3c_master_do_daa_ext(&i3c->base, true);
+	if (ret)
+		dev_err(dev, "DAA failed on resume, ret=%d", ret);
+
+	i3c->resuming = false;
+
+	/*
+	 * I3C devices may have retained their dynamic address anyway. Do not
+	 * fail the resume because of DAA error.
+	 */
 	return 0;
 
 err_clks_disable:
@@ -1516,8 +1564,7 @@ err_tresetn:
 }
 
 static const struct dev_pm_ops renesas_i3c_pm_ops = {
-	NOIRQ_SYSTEM_SLEEP_PM_OPS(renesas_i3c_suspend_noirq,
-				  renesas_i3c_resume_noirq)
+	SYSTEM_SLEEP_PM_OPS(renesas_i3c_suspend, renesas_i3c_resume)
 };
 
 static const struct of_device_id renesas_i3c_of_ids[] = {
