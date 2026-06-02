@@ -1399,6 +1399,9 @@ F2FS_FEATURE_RO_ATTR(pin_file);
 F2FS_FEATURE_RO_ATTR(linear_lookup);
 #endif
 F2FS_FEATURE_RO_ATTR(packed_ssa);
+#ifdef CONFIG_F2FS_FS_ENCRYPTED_INLINE_DATA
+F2FS_FEATURE_RO_ATTR(encrypted_inline_data);
+#endif
 F2FS_FEATURE_RO_ATTR(fserror);
 
 #define ATTR_LIST(name) (&f2fs_attr_##name.attr)
@@ -1567,6 +1570,9 @@ static struct attribute *f2fs_feat_attrs[] = {
 	BASE_ATTR_LIST(linear_lookup),
 #endif
 	BASE_ATTR_LIST(packed_ssa),
+#ifdef CONFIG_F2FS_FS_ENCRYPTED_INLINE_DATA
+	BASE_ATTR_LIST(encrypted_inline_data),
+#endif
 	BASE_ATTR_LIST(fserror),
 	NULL,
 };
@@ -1604,6 +1610,7 @@ F2FS_SB_FEATURE_RO_ATTR(compression, COMPRESSION);
 F2FS_SB_FEATURE_RO_ATTR(readonly, RO);
 F2FS_SB_FEATURE_RO_ATTR(device_alias, DEVICE_ALIAS);
 F2FS_SB_FEATURE_RO_ATTR(packed_ssa, PACKED_SSA);
+F2FS_SB_FEATURE_RO_ATTR(encrypted_inline_data, ENCRYPTED_INLINE_DATA);
 
 static struct attribute *f2fs_sb_feat_attrs[] = {
 	ATTR_LIST(sb_encryption),
@@ -1622,6 +1629,7 @@ static struct attribute *f2fs_sb_feat_attrs[] = {
 	ATTR_LIST(sb_readonly),
 	ATTR_LIST(sb_device_alias),
 	ATTR_LIST(sb_packed_ssa),
+	ATTR_LIST(sb_encrypted_inline_data),
 	NULL,
 };
 ATTRIBUTE_GROUPS(f2fs_sb_feat);
