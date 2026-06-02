@@ -1165,6 +1165,13 @@ static int kvm_loongarch_cpucfg_set_attr(struct kvm_vcpu *vcpu,
 		if (val & ~valid)
 			return -EINVAL;
 
+		/*
+		 * Auto-enabled features (e.g. PV TLB flush) that userspace
+		 * is not aware of are preserved so that no QEMU changes are
+		 * needed for pure kernel-internal optimisations.
+		 */
+		val = (val | kvm->arch.pv_auto_features) & valid;
+
 		/* All vCPUs need set the same PV features */
 		if ((kvm->arch.pv_features & LOONGARCH_PV_FEAT_UPDATED)
 				&& ((kvm->arch.pv_features & valid) != val))
