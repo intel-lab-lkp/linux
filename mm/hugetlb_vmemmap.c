@@ -810,10 +810,6 @@ static struct zone *pfn_to_zone(unsigned nid, unsigned long pfn)
 
 	return NULL;
 }
-
-void __init hugetlb_vmemmap_init_late(int nid)
-{
-}
 #endif
 
 static const struct ctl_table hugetlb_vmemmap_sysctls[] = {
