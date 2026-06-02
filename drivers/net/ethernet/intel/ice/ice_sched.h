@@ -140,12 +140,6 @@ int ice_cfg_vsi_agg(struct ice_port_info *pi, u16 vsi_handle,
 		    u32 min_id, u32 max_id, u8 tc_bitmap,
 		    u32 *configured_id);
 int
-ice_cfg_agg(struct ice_port_info *pi, u32 agg_id,
-	    enum ice_agg_type agg_type, u8 tc_bitmap);
-int
-ice_move_vsi_to_agg(struct ice_port_info *pi, u32 agg_id, u16 vsi_handle,
-		    u8 tc_bitmap);
-int
 ice_cfg_q_bw_lmt(struct ice_port_info *pi, u16 vsi_handle, u8 tc,
 		 u16 q_handle, enum ice_rl_type rl_type, u32 bw);
 int
