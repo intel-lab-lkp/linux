@@ -1309,6 +1309,27 @@ static const struct nf_nat_hook nat_hook = {
 	.remove_nat_bysrc	= nf_nat_cleanup_conntrack,
 };
 
+/* Unconfirmed conntrack are also found in the bysource hash. */
+static void nf_nat_bysource_flush(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < nf_nat_htable_size; i++) {
+		spinlock_t *lock = &nf_nat_locks[i % CONNTRACK_LOCKS];
+		struct nf_conn *ct;
+		struct hlist_node *next;
+
+		spin_lock_bh(lock);
+		hlist_for_each_entry_safe(ct, next,
+					  &nf_nat_bysource[i], nat_bysource) {
+			hlist_del_rcu(&ct->nat_bysource);
+			set_bit(IPS_DYING_BIT, &ct->status);
+		}
+		spin_unlock_bh(lock);
+		cond_resched();
+	}
+}
+
 static int __init nf_nat_init(void)
 {
 	int ret, i;
@@ -1358,6 +1379,8 @@ static void __exit nf_nat_cleanup(void)
 	RCU_INIT_POINTER(nf_nat_hook, NULL);
 
 	synchronize_net();
+
+	nf_nat_bysource_flush();
 	kvfree(nf_nat_bysource);
 	unregister_pernet_subsys(&nat_net_ops);
 }
