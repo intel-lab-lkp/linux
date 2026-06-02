@@ -38,6 +38,12 @@ properties:
       - ethernet-phy-id001c.cad0
       - ethernet-phy-id001c.cb00
 
+  clocks:
+    maxItems: 1
+    description:
+      External clock connected to the PHY. If not specified it is assumed
+      that the PHY uses a fixed crystal or an internal oscillator.
+
   leds: true
 
   realtek,aldps-enable:

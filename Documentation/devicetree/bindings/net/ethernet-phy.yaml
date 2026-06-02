@@ -105,12 +105,6 @@ properties:
       1BR-10 names. The PHY must be configured to operate in BroadR-Reach mode
       by software.
 
-  clocks:
-    maxItems: 1
-    description:
-      External clock connected to the PHY. If not specified it is assumed
-      that the PHY uses a fixed crystal or an internal oscillator.
-
   enet-phy-lane-swap:
     $ref: /schemas/types.yaml#/definitions/flag
     description:
