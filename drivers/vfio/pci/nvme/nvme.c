@@ -837,9 +837,17 @@ static int nvmevf_pci_get_device_state(struct vfio_device *vdev,
 	return 0;
 }
 
+static int nvmevf_pci_get_data_size(struct vfio_device *vdev,
+                                  unsigned long *stop_copy_length)
+{
+      *stop_copy_length = MAX_MIGRATION_SIZE;
+      return 0;
+}
+
 static const struct vfio_migration_ops nvmevf_pci_mig_ops = {
 	.migration_set_state = nvmevf_pci_set_device_state,
 	.migration_get_state = nvmevf_pci_get_device_state,
+	.migration_get_data_size = nvmevf_pci_get_data_size,
 };
 
 static bool nvmevf_migration_supp(struct pci_dev *pdev)
