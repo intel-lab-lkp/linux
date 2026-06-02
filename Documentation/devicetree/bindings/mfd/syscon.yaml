@@ -269,12 +269,26 @@ properties:
   resets:
     maxItems: 1
 
+  ranges: true
+
 required:
   - compatible
   - reg
 
 allOf:
   - $ref: syscon-common.yaml#
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: renesas,r9a08g046-lvds-cmn
+    then:
+      properties:
+        ranges: true
+
+      required:
+        - ranges
 
 unevaluatedProperties: false
 
