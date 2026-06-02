@@ -420,6 +420,40 @@ lookup_mode=%s		 Control the directory lookup behavior for casefolded
 			     ================== ========================================
 ======================== ============================================================
 
+Encrypted inline data
+=====================
+
+F2FS normally disables inline data for encrypted regular files, since inline
+data is stored inside the inode block and does not pass through the regular
+block I/O path.  When a filesystem is formatted with the encrypted_inline_data
+feature, encrypted regular files may keep small file contents in the inode
+block.  The inline payload is encrypted with fscrypt contents-key semantics
+before it is written to the inode, and it is decrypted back to page-cache
+plaintext when it is read.
+
+This feature requires the encrypt feature on disk and kernel support for
+CONFIG_F2FS_FS_ENCRYPTED_INLINE_DATA.  It is intended to be used together with
+the inline_data mount option.  Files using filesystem-layer encryption reuse the
+normal software contents-key transform.  When the normal encrypted file
+contents path uses blk-crypto with a raw per-mode key, fscrypt can prepare a
+software contents-key transform when the filesystem-managed inline payload is
+read or written.
+Per-file inlinecrypt keys are not supported for encrypted inline data, to avoid
+per-file software transform memory growth.  Hardware-wrapped keys are not
+supported for encrypted inline data, so F2FS does not create encrypted inline
+payloads for such files and existing unsupported inline payloads fail rather
+than being interpreted with the wrong key.
+
+Encrypted inline data is stored in fscrypt contents-aligned units.  Therefore,
+the maximum plaintext size that can stay inline may be slightly smaller than the
+ordinary inline data capacity.  If an encrypted inline-data file is truncated
+from a non-zero offset, F2FS first converts the inline payload to normal data
+blocks and then applies the truncate operation.
+
+Recovery copies inline payloads as on-disk bytes.  Encryption and decryption are
+performed only when moving data between the inode inline area and page-cache
+plaintext.
+
 Debugfs Entries
 ===============
 
