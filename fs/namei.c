@@ -2042,11 +2042,11 @@ static noinline const char *pick_link(struct nameidata *nd, struct path *link,
 			unlikely(link->mnt->mnt_flags & MNT_NOSYMFOLLOW))
 		return ERR_PTR(-ELOOP);
 
+	if (nd->flags & LOOKUP_RCU) {
+		if (!try_to_unlazy(nd))
+			return ERR_PTR(-ECHILD);
+	}
 	if (unlikely(atime_needs_update(&last->link, inode))) {
-		if (nd->flags & LOOKUP_RCU) {
-			if (!try_to_unlazy(nd))
-				return ERR_PTR(-ECHILD);
-		}
 		touch_atime(&last->link);
 		cond_resched();
 	}
