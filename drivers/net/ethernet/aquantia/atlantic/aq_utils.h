@@ -15,20 +15,20 @@ static inline void aq_utils_obj_set(atomic_t *flags, u32 mask)
 {
 	unsigned long flags_old, flags_new;
 
+	flags_old = atomic_read(flags);
 	do {
-		flags_old = atomic_read(flags);
 		flags_new = flags_old | (mask);
-	} while (atomic_cmpxchg(flags, flags_old, flags_new) != flags_old);
+	} while (!atomic_try_cmpxchg(flags, &flags_old, flags_new));
 }
 
 static inline void aq_utils_obj_clear(atomic_t *flags, u32 mask)
 {
 	unsigned long flags_old, flags_new;
 
+	flags_old = atomic_read(flags);
 	do {
-		flags_old = atomic_read(flags);
 		flags_new = flags_old & ~(mask);
-	} while (atomic_cmpxchg(flags, flags_old, flags_new) != flags_old);
+	} while (!atomic_try_cmpxchg(flags, &flags_old, flags_new));
 }
 
 static inline bool aq_utils_obj_test(atomic_t *flags, u32 mask)
