@@ -103,6 +103,26 @@ static void usb_mouse_close(struct input_dev *dev)
 	usb_kill_urb(mouse->irq);
 }
 
+static void usb_mouse_set_boot_protocol(struct usb_device *dev,
+					struct usb_interface *intf)
+{
+	struct usb_host_interface *interface = intf->cur_altsetting;
+	int error;
+
+	/*
+	 * usbmouse does not parse report descriptors. Make the device produce
+	 * the fixed boot report format that the driver decodes.
+	 */
+	error = usb_control_msg_send(dev, 0, HID_REQ_SET_PROTOCOL,
+				     USB_DIR_OUT | USB_TYPE_CLASS |
+				     USB_RECIP_INTERFACE, HID_BOOT_PROTOCOL,
+				     interface->desc.bInterfaceNumber, NULL, 0,
+				     USB_CTRL_SET_TIMEOUT, GFP_KERNEL);
+	if (error < 0)
+		dev_dbg(&intf->dev, "failed to set boot protocol: %d\n",
+			error);
+}
+
 static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {
 	struct usb_device *dev = interface_to_usbdev(intf);
@@ -137,6 +157,8 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 	mouse->irq = usb_alloc_urb(0, GFP_KERNEL);
 	if (!mouse->irq)
 		goto fail2;
+
+	usb_mouse_set_boot_protocol(dev, intf);
 
 	mouse->usbdev = dev;
 	mouse->dev = input_dev;
