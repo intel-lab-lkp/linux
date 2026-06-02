@@ -406,6 +406,69 @@ int ima_queue_staged_delete_all(void)
 }
 
 /**
+ * ima_queue_delete_partial - Delete current measurements
+ * @req_value: Number of measurements to delete
+ *
+ * Delete the requested number of measurements from the current measurements
+ * list, and update the number of records and the binary run-time size
+ * accordingly.
+ *
+ * Refuse to delete current measurements if measurement is suspended, so that
+ * dump can be done in a lockless way and user space is notified about current
+ * measurements being carried over to the secondary kernel, so that it does not
+ * save them twice.
+ *
+ * Return: Zero on success, a negative value otherwise.
+ */
+int ima_queue_delete_partial(unsigned long req_value)
+{
+	unsigned long req_value_copy = req_value;
+	unsigned long size_to_remove = 0, num_to_remove = 0;
+	LIST_HEAD(ima_measurements_trim);
+	struct ima_queue_entry *qe;
+	int ret = 0;
+
+	/*
+	 * list_for_each_entry_rcu() without rcu_read_lock() is fine because
+	 * only list append can happen concurrently. No list replace due to the
+	 * staging/delete writers mutual exclusion.
+	 */
+	list_for_each_entry_rcu(qe, &ima_measurements, later, true) {
+		size_to_remove += get_binary_runtime_size(qe->entry);
+		num_to_remove++;
+
+		if (--req_value_copy == 0)
+			break;
+	}
+
+	/* Not enough records to delete. */
+	if (req_value_copy > 0)
+		return -ENOENT;
+
+	mutex_lock(&ima_extend_list_mutex);
+	if (ima_measurements_suspended) {
+		mutex_unlock(&ima_extend_list_mutex);
+		return -ESTALE;
+	}
+
+	/*
+	 * qe remains valid because ima_fs.c enforces single-writer exclusion.
+	 */
+	__list_cut_position(&ima_measurements_trim, &ima_measurements,
+			    &qe->later);
+
+	atomic_long_sub(num_to_remove, &ima_num_records[BINARY]);
+
+	if (IS_ENABLED(CONFIG_IMA_KEXEC))
+		binary_runtime_size[BINARY] -= size_to_remove;
+
+	mutex_unlock(&ima_extend_list_mutex);
+
+	ima_queue_delete(&ima_measurements_trim, false);
+	return ret;
+}
+
+/**
  * ima_queue_delete - Delete measurements
  * @head: List head measurements are deleted from
  * @flush_htable: Whether or not the hash table is being flushed
