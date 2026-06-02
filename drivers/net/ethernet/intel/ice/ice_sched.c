@@ -823,8 +823,10 @@ void ice_sched_clear_agg(struct ice_hw *hw)
 					 &agg_info->agg_vsi_list, list_entry) {
 			list_del(&agg_vsi_info->list_entry);
 			devm_kfree(ice_hw_to_dev(hw), agg_vsi_info);
+			agg_info->num_vsis--;
 		}
 		xa_erase(&hw->agg_list, index);
+		WARN_ON(agg_info->num_vsis > 0);
 		devm_kfree(ice_hw_to_dev(hw), agg_info);
 	}
 }
@@ -2072,6 +2074,7 @@ static void ice_sched_rm_agg_vsi_info(struct ice_port_info *pi, u16 vsi_handle)
 				list_del(&agg_vsi_info->list_entry);
 				devm_kfree(ice_hw_to_dev(pi->hw),
 					   agg_vsi_info);
+				agg_info->num_vsis--;
 				return;
 			}
 	}
@@ -2473,6 +2476,7 @@ ice_move_all_vsi_to_dflt_agg(struct ice_port_info *pi,
 		if (rm_vsi_info && !agg_vsi_info->tc_bitmap[0]) {
 			list_del(&agg_vsi_info->list_entry);
 			devm_kfree(ice_hw_to_dev(pi->hw), agg_vsi_info);
+			agg_info->num_vsis--;
 		}
 	}
 
@@ -2728,6 +2732,7 @@ ice_sched_cfg_agg(struct ice_port_info *pi, u32 agg_id,
 
 		/* Initialize the aggregator VSI list head */
 		INIT_LIST_HEAD(&agg_info->agg_vsi_list);
+		agg_info->num_vsis = 0;
 
 		/* Add new entry in aggregator array */
 		status = xa_insert(&hw->agg_list, agg_id, agg_info,
@@ -2915,6 +2920,7 @@ ice_sched_assoc_vsi_to_agg(struct ice_port_info *pi, u32 agg_id,
 		/* add VSI ID into the aggregator list */
 		agg_vsi_info->vsi_handle = vsi_handle;
 		list_add(&agg_vsi_info->list_entry, &agg_info->agg_vsi_list);
+		agg_info->num_vsis++;
 	}
 	/* Move VSI node to new aggregator node for requested TC(s) */
 	ice_for_each_traffic_class(tc) {
@@ -2933,6 +2939,7 @@ ice_sched_assoc_vsi_to_agg(struct ice_port_info *pi, u32 agg_id,
 	if (old_agg_vsi_info && !old_agg_vsi_info->tc_bitmap[0]) {
 		list_del(&old_agg_vsi_info->list_entry);
 		devm_kfree(ice_hw_to_dev(pi->hw), old_agg_vsi_info);
+		old_agg_info->num_vsis--;
 	}
 	return status;
 }
