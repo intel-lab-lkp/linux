@@ -106,7 +106,8 @@ void intel_parent_overlay_cleanup(struct intel_display *display);
 /* panic */
 struct intel_panic *intel_parent_panic_alloc(struct intel_display *display);
 int intel_parent_panic_setup(struct intel_display *display, struct intel_panic *panic,
-			     struct drm_scanout_buffer *sb, struct drm_gem_object *obj);
+			     struct drm_scanout_buffer *sb, struct drm_gem_object *obj,
+			     unsigned int (*tiling)(unsigned int x, unsigned int y, unsigned int width));
 void intel_parent_panic_finish(struct intel_display *display, struct intel_panic *panic);
 
 /* pc8 */

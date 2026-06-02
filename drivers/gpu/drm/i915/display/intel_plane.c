@@ -1580,17 +1580,17 @@ static int intel_get_scanout_buffer(struct drm_plane *plane,
 	if (fb == intel_fbdev_framebuffer(display->fbdev.fbdev)) {
 		intel_fbdev_get_map(display, &sb->map[0]);
 	} else {
+		unsigned int (*tiling)(unsigned int x, unsigned int y, unsigned int width) = NULL;
 		int ret;
 		/* Can't disable tiling if DPT is in use */
 		if (intel_fb_uses_dpt(&fb->base)) {
 			if (fb->base.format->cpp[0] != 4)
 				return -EOPNOTSUPP;
-			fb->panic_tiling = intel_get_tiling_func(fb->base.modifier);
-			if (!fb->panic_tiling)
+			tiling = intel_get_tiling_func(fb->base.modifier);
+			if (!tiling)
 				return -EOPNOTSUPP;
 		}
-		sb->private = fb;
-		ret = intel_parent_panic_setup(display, fb->panic, sb, obj);
+		ret = intel_parent_panic_setup(display, fb->panic, sb, obj, tiling);
 		if (ret)
 			return ret;
 	}

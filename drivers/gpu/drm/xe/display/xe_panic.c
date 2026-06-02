@@ -5,7 +5,6 @@
 #include <drm/drm_panic.h>
 #include <drm/intel/display_parent_interface.h>
 
-#include "intel_display_types.h"
 #include "xe_bo.h"
 #include "xe_panic.h"
 #include "xe_res_cursor.h"
@@ -17,6 +16,7 @@ struct intel_panic {
 	int page;
 
 	struct xe_bo *bo;
+	unsigned int (*tiling)(unsigned int x, unsigned int y, unsigned int width);
 };
 
 static void xe_panic_kunmap(struct intel_panic *panic)
@@ -37,14 +37,13 @@ static void xe_panic_kunmap(struct intel_panic *panic)
 static void xe_panic_page_set_pixel(struct drm_scanout_buffer *sb, unsigned int x,
 				    unsigned int y, u32 color)
 {
-	struct intel_framebuffer *fb = (struct intel_framebuffer *)sb->private;
-	struct intel_panic *panic = fb->panic;
+	struct intel_panic *panic = sb->private;
 	struct xe_bo *bo = panic->bo;
 	unsigned int new_page;
 	unsigned int offset;
 
-	if (fb->panic_tiling)
-		offset = fb->panic_tiling(sb->width, x, y);
+	if (panic->tiling)
+		offset = panic->tiling(sb->width, x, y);
 	else
 		offset = y * sb->pitch[0] + x * sb->format->cpp[0];
 
@@ -86,7 +85,8 @@ static struct intel_panic *xe_panic_alloc(void)
 }
 
 static int xe_panic_setup(struct intel_panic *panic, struct drm_scanout_buffer *sb,
-			  struct drm_gem_object *obj)
+			  struct drm_gem_object *obj,
+			  unsigned int (*tiling)(unsigned int x, unsigned int y, unsigned int width))
 {
 	struct xe_bo *bo = gem_to_xe_bo(obj);
 
@@ -95,8 +95,11 @@ static int xe_panic_setup(struct intel_panic *panic, struct drm_scanout_buffer *
 
 	panic->page = -1;
 	panic->bo = bo;
+	panic->tiling = tiling;
 
+	sb->private = panic;
 	sb->set_pixel = xe_panic_page_set_pixel;
+
 	return 0;
 }
 

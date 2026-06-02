@@ -5,7 +5,6 @@
 #include <drm/drm_panic.h>
 #include <drm/intel/display_parent_interface.h>
 
-#include "display/intel_display_types.h"
 #include "i915_gem_object.h"
 #include "i915_gem_panic.h"
 
@@ -13,6 +12,8 @@ struct intel_panic {
 	struct page **pages;
 	int page;
 	void *vaddr;
+
+	unsigned int (*tiling)(unsigned int x, unsigned int y, unsigned int width);
 };
 
 static void i915_panic_kunmap(struct intel_panic *panic)
@@ -45,8 +46,8 @@ static struct page **i915_gem_object_panic_pages(struct drm_i915_gem_object *obj
 static void i915_gem_object_panic_map_set_pixel(struct drm_scanout_buffer *sb, unsigned int x,
 						unsigned int y, u32 color)
 {
-	struct intel_framebuffer *fb = (struct intel_framebuffer *)sb->private;
-	unsigned int offset = fb->panic_tiling(sb->width, x, y);
+	struct intel_panic *panic = sb->private;
+	unsigned int offset = panic->tiling(sb->width, x, y);
 
 	iosys_map_wr(&sb->map[0], offset, u32, color);
 }
@@ -59,13 +60,12 @@ static void i915_gem_object_panic_map_set_pixel(struct drm_scanout_buffer *sb, u
 static void i915_gem_object_panic_page_set_pixel(struct drm_scanout_buffer *sb, unsigned int x,
 						 unsigned int y, u32 color)
 {
+	struct intel_panic *panic = sb->private;
 	unsigned int new_page;
 	unsigned int offset;
-	struct intel_framebuffer *fb = (struct intel_framebuffer *)sb->private;
-	struct intel_panic *panic = fb->panic;
 
-	if (fb->panic_tiling)
-		offset = fb->panic_tiling(sb->width, x, y);
+	if (panic->tiling)
+		offset = panic->tiling(sb->width, x, y);
 	else
 		offset = y * sb->pitch[0] + x * sb->format->cpp[0];
 
@@ -98,13 +98,14 @@ static struct intel_panic *i915_gem_object_alloc_panic(void)
  * pfn is not supported yet.
  */
 static int i915_gem_object_panic_setup(struct intel_panic *panic, struct drm_scanout_buffer *sb,
-				       struct drm_gem_object *_obj)
+				       struct drm_gem_object *_obj,
+				       unsigned int (*tiling)(unsigned int x, unsigned int y, unsigned int width))
 {
-	struct intel_framebuffer *fb = sb->private;
-	bool panic_tiling = fb->panic_tiling;
 	enum i915_map_type has_type;
 	struct drm_i915_gem_object *obj = to_intel_bo(_obj);
 	void *ptr;
+
+	sb->private = panic;
 
 	ptr = page_unpack_bits(obj->mm.mapping, &has_type);
 	if (ptr) {
@@ -113,8 +114,10 @@ static int i915_gem_object_panic_setup(struct intel_panic *panic, struct drm_sca
 		else
 			iosys_map_set_vaddr(&sb->map[0], ptr);
 
-		if (panic_tiling)
+		if (tiling) {
+			panic->tiling = tiling;
 			sb->set_pixel = i915_gem_object_panic_map_set_pixel;
+		}
 		return 0;
 	}
 	if (i915_gem_object_has_struct_page(obj)) {
@@ -122,6 +125,7 @@ static int i915_gem_object_panic_setup(struct intel_panic *panic, struct drm_sca
 		if (!panic->pages)
 			return -ENOMEM;
 		panic->page = -1;
+		panic->tiling = tiling;
 		sb->set_pixel = i915_gem_object_panic_page_set_pixel;
 		return 0;
 	}
