@@ -69,6 +69,9 @@ int erofs_init_metabuf(struct erofs_buf *buf, struct super_block *sb,
 {
 	struct erofs_sb_info *sbi = EROFS_SB(sb);
 
+	if (erofs_is_shutdown(sb))
+		return -EIO;
+
 	buf->file = NULL;
 	if (in_metabox) {
 		if (unlikely(!sbi->metabox_inode))
@@ -236,6 +239,9 @@ int erofs_map_dev(struct super_block *sb, struct erofs_map_dev *map)
 		}
 		up_read(&devs->rwsem);
 	}
+	if (erofs_is_shutdown(sb) ||
+	    (map->m_dif && READ_ONCE(map->m_dif->dead)))
+		return -EIO;
 	return 0;
 }
 

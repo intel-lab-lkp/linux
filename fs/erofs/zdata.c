@@ -1697,11 +1697,15 @@ static void z_erofs_submit_queue(struct z_erofs_frontend *f,
 			continue;
 		}
 
-		/* no device id here, thus it will always succeed */
 		mdev = (struct erofs_map_dev) {
 			.m_pa = round_down(pcl->pos, sb->s_blocksize),
 		};
-		(void)erofs_map_dev(sb, &mdev);
+		if (erofs_map_dev(sb, &mdev)) {
+			/* the backing device is gone; fail the batch */
+			q[JQ_SUBMIT]->eio = true;
+			qtail[JQ_SUBMIT] = &pcl->next;
+			continue;
+		}
 
 		cur = mdev.m_pa;
 		end = round_up(cur + pcl->pageofs_in + pcl->pclustersize,
@@ -1785,7 +1789,7 @@ drain_io:
 	 * although background is preferred, no one is pending for submission.
 	 * don't issue decompression but drop it directly instead.
 	 */
-	if (!*force_fg && !nr_bios) {
+	if (!*force_fg && !nr_bios && !q[JQ_SUBMIT]->eio) {
 		kvfree(q[JQ_SUBMIT]);
 		return;
 	}

@@ -153,8 +153,8 @@ static int erofs_init_device(struct erofs_buf *buf, struct super_block *sb,
 	} else if (!sbi->devs->flatdev) {
 		file = erofs_is_fileio_mode(sbi) ?
 				filp_open(dif->path, O_RDONLY | O_LARGEFILE, 0) :
-				bdev_file_open_by_path(dif->path,
-						BLK_OPEN_READ, sb->s_type, NULL);
+				fs_bdev_file_open_by_path(dif->path,
+						BLK_OPEN_READ, sb->s_type, sb);
 		if (IS_ERR(file)) {
 			if (file == ERR_PTR(-ENOTBLK))
 				return -EINVAL;
@@ -843,11 +843,16 @@ static int erofs_fc_reconfigure(struct fs_context *fc)
 
 static int erofs_release_device_info(int id, void *ptr, void *data)
 {
+	struct super_block *sb = data;
 	struct erofs_device_info *dif = ptr;
 
 	fs_put_dax(dif->dax_dev, NULL);
-	if (dif->file)
-		fput(dif->file);
+	if (dif->file) {
+		if (S_ISBLK(file_inode(dif->file)->i_mode))
+			fs_bdev_file_release(dif->file, sb);
+		else
+			fput(dif->file);
+	}
 	erofs_fscache_unregister_cookie(dif->fscache);
 	dif->fscache = NULL;
 	kfree(dif->path);
@@ -855,18 +860,19 @@ static int erofs_release_device_info(int id, void *ptr, void *data)
 	return 0;
 }
 
-static void erofs_free_dev_context(struct erofs_dev_context *devs)
+static void erofs_free_dev_context(struct erofs_dev_context *devs,
+				   struct super_block *sb)
 {
 	if (!devs)
 		return;
-	idr_for_each(&devs->tree, &erofs_release_device_info, NULL);
+	idr_for_each(&devs->tree, &erofs_release_device_info, sb);
 	idr_destroy(&devs->tree);
 	kfree(devs);
 }
 
-static void erofs_sb_free(struct erofs_sb_info *sbi)
+static void erofs_sb_free(struct erofs_sb_info *sbi, struct super_block *sb)
 {
-	erofs_free_dev_context(sbi->devs);
+	erofs_free_dev_context(sbi->devs, sb);
 	kfree(sbi->fsid);
 	kfree_sensitive(sbi->domain_id);
 	if (sbi->dif0.file)
@@ -879,8 +885,13 @@ static void erofs_fc_free(struct fs_context *fc)
 {
 	struct erofs_sb_info *sbi = fc->s_fs_info;
 
-	if (sbi) /* free here if an error occurs before transferring to sb */
-		erofs_sb_free(sbi);
+	/*
+	 * Freed here only if an error occurs before the sb is set up; at that
+	 * point no block-backed device has been claimed (that happens in
+	 * fill_super), so the NULL sb never reaches fs_bdev_file_release().
+	 */
+	if (sbi)
+		erofs_sb_free(sbi, NULL);
 }
 
 static const struct fs_context_operations erofs_context_ops = {
@@ -936,7 +947,7 @@ static void erofs_kill_sb(struct super_block *sb)
 	erofs_drop_internal_inodes(sbi);
 	fs_put_dax(sbi->dif0.dax_dev, NULL);
 	erofs_fscache_unregister_fs(sb);
-	erofs_sb_free(sbi);
+	erofs_sb_free(sbi, sb);
 	sb->s_fs_info = NULL;
 }
 
@@ -948,7 +959,7 @@ static void erofs_put_super(struct super_block *sb)
 	erofs_shrinker_unregister(sb);
 	erofs_xattr_prefixes_cleanup(sb);
 	erofs_drop_internal_inodes(sbi);
-	erofs_free_dev_context(sbi->devs);
+	erofs_free_dev_context(sbi->devs, sb);
 	sbi->devs = NULL;
 	erofs_fscache_unregister_fs(sb);
 }
@@ -1121,6 +1132,35 @@ static void erofs_evict_inode(struct inode *inode)
 	clear_inode(inode);
 }
 
+/*
+ * A blob device may back several erofs superblocks; fence only the affected
+ * one and keep the rest of the mount alive.  The primary device falls back to
+ * the generic teardown (return non-zero).
+ */
+static int erofs_remove_bdev(struct super_block *sb, struct block_device *bdev)
+{
+	struct erofs_dev_context *devs = EROFS_SB(sb)->devs;
+	struct erofs_device_info *dif;
+	int id;
+
+	if (bdev == sb->s_bdev)
+		return 1;
+
+	down_read(&devs->rwsem);
+	idr_for_each_entry(&devs->tree, dif, id) {
+		if (dif->file && S_ISBLK(file_inode(dif->file)->i_mode) &&
+		    file_bdev(dif->file)->bd_dev == bdev->bd_dev)
+			WRITE_ONCE(dif->dead, true);
+	}
+	up_read(&devs->rwsem);
+	return 0;
+}
+
+static void erofs_shutdown(struct super_block *sb)
+{
+	set_bit(EROFS_SB_SHUTDOWN, &EROFS_SB(sb)->flags);
+}
+
 const struct super_operations erofs_sops = {
 	.put_super = erofs_put_super,
 	.alloc_inode = erofs_alloc_inode,
@@ -1128,6 +1168,8 @@ const struct super_operations erofs_sops = {
 	.evict_inode = erofs_evict_inode,
 	.statfs = erofs_statfs,
 	.show_options = erofs_show_options,
+	.remove_bdev = erofs_remove_bdev,
+	.shutdown = erofs_shutdown,
 };
 
 module_init(erofs_module_init);

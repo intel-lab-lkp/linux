@@ -48,6 +48,7 @@ struct erofs_device_info {
 
 	erofs_blk_t blocks;
 	erofs_blk_t uniaddr;
+	bool dead;		/* backing device gone; fence I/O */
 };
 
 enum {
@@ -104,6 +105,7 @@ struct erofs_xattr_prefix_item {
 struct erofs_sb_info {
 	struct erofs_device_info dif0;
 	struct erofs_mount_opts opt;	/* options */
+	unsigned long flags;		/* see EROFS_SB_* */
 #ifdef CONFIG_EROFS_FS_ZIP
 	/* list for all registered superblocks, mainly for shrinker */
 	struct list_head list;
@@ -193,6 +195,14 @@ static inline bool erofs_is_fscache_mode(struct super_block *sb)
 {
 	return IS_ENABLED(CONFIG_EROFS_FS_ONDEMAND) &&
 			!erofs_is_fileio_mode(EROFS_SB(sb)) && !sb->s_bdev;
+}
+
+/* erofs_sb_info->flags */
+#define EROFS_SB_SHUTDOWN	0	/* primary device gone; fail all I/O */
+
+static inline bool erofs_is_shutdown(struct super_block *sb)
+{
+	return test_bit(EROFS_SB_SHUTDOWN, &EROFS_SB(sb)->flags);
 }
 
 enum {
