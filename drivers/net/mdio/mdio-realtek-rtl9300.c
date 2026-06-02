@@ -78,6 +78,7 @@
 
 #define MAX_PORTS				28
 #define MAX_SMI_BUSSES				4
+#define PORT_ABSENT				-1
 #define RAW_PAGE(priv)				((priv)->info->num_pages - 1)
 
 
@@ -118,23 +119,17 @@ struct otto_emdio_info {
 
 struct otto_emdio_chan {
 	struct otto_emdio_priv *priv;
-	u8 mdio_bus;
+	s8 port[PHY_MAX_ADDR];
 };
 
-static int otto_emdio_phy_to_port(struct mii_bus *bus, int phy_id)
+static int otto_emdio_phy_to_port(struct mii_bus *bus, unsigned int phy_id)
 {
 	struct otto_emdio_chan *chan = bus->priv;
-	struct otto_emdio_priv *priv;
-	int i;
 
-	priv = chan->priv;
+	if (phy_id >= PHY_MAX_ADDR || chan->port[phy_id] == PORT_ABSENT)
+		return -ENOENT;
 
-	for_each_set_bit(i, priv->valid_ports, priv->info->num_ports)
-		if (priv->smi_bus[i] == chan->mdio_bus &&
-		    priv->smi_addr[i] == phy_id)
-			return i;
-
-	return -ENOENT;
+	return chan->port[phy_id];
 }
 
 static struct otto_emdio_priv *otto_emdio_bus_to_priv(struct mii_bus *bus)
@@ -390,8 +385,8 @@ static int otto_emdio_probe_one(struct device *dev, struct otto_emdio_priv *priv
 {
 	struct otto_emdio_chan *chan;
 	struct mii_bus *bus;
-	u32 mdio_bus;
-	int err;
+	u32 mdio_bus, port;
+	int i, err;
 
 	err = fwnode_property_read_u32(node, "reg", &mdio_bus);
 	if (err)
@@ -427,10 +422,16 @@ static int otto_emdio_probe_one(struct device *dev, struct otto_emdio_priv *priv
 	}
 	bus->parent = dev;
 	chan = bus->priv;
-	chan->mdio_bus = mdio_bus;
 	chan->priv = priv;
 
 	snprintf(bus->id, MII_BUS_ID_SIZE, "%s-%d", dev_name(dev), mdio_bus);
+
+	/* setup reverse lookup bus/address -> port */
+	for (i = 0; i < PHY_MAX_ADDR; i++)
+		chan->port[i] = PORT_ABSENT;
+	for_each_set_bit(port, priv->valid_ports, priv->info->num_ports)
+		if (priv->smi_bus[port] == mdio_bus)
+			chan->port[priv->smi_addr[port]] = port;
 
 	err = devm_of_mdiobus_register(dev, bus, to_of_node(node));
 	if (err)
