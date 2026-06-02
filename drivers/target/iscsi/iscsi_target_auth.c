@@ -303,12 +303,8 @@ static int chap_server_compute_hash(
 	/*
 	 * Extract CHAP_N.
 	 */
-	if (extract_param(nr_in_ptr, "CHAP_N", MAX_CHAP_N_SIZE, chap_n,
-				&type) < 0) {
-		pr_err("Could not find CHAP_N.\n");
-		goto out;
-	}
-	if (type == HEX) {
+	ret = extract_param_str(nr_in_ptr, "CHAP_N", MAX_CHAP_N_SIZE, chap_n);
+	if (ret < 0) {
 		pr_err("Could not find CHAP_N.\n");
 		goto out;
 	}
