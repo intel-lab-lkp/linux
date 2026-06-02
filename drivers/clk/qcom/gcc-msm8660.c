@@ -54,6 +54,20 @@ static struct clk_regmap pll8_vote = {
 	},
 };
 
+/* PLL4 is the LPASS PLL, defined in LCC. This is the voting clock. */
+static struct clk_regmap pll4_vote = {
+	.enable_reg = 0x34c0,
+	.enable_mask = BIT(4),
+	.hw.init = &(struct clk_init_data){
+		.name = "pll4_vote",
+		.parent_data = &(const struct clk_parent_data){
+			.fw_name = "pll4", .name = "pll4",
+		},
+		.num_parents = 1,
+		.ops = &clk_pll_vote_ops,
+	},
+};
+
 enum {
 	P_PXO,
 	P_PLL8,
@@ -2543,6 +2557,7 @@ static struct clk_branch rpm_msg_ram_h_clk = {
 static struct clk_regmap *gcc_msm8660_clks[] = {
 	[PLL8] = &pll8.clkr,
 	[PLL8_VOTE] = &pll8_vote,
+	[PLL4_VOTE] = &pll4_vote,
 	[GSBI1_UART_SRC] = &gsbi1_uart_src.clkr,
 	[GSBI1_UART_CLK] = &gsbi1_uart_clk.clkr,
 	[GSBI2_UART_SRC] = &gsbi2_uart_src.clkr,

@@ -264,5 +264,6 @@
 #define PLL10					255
 #define PLL11					256
 #define PLL12					257
+#define PLL4_VOTE				258
 
 #endif
