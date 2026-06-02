@@ -67,7 +67,6 @@ struct ice_sched_agg_vsi_info {
 
 struct ice_sched_agg_info {
 	struct list_head agg_vsi_list;
-	struct list_head list_entry;
 	DECLARE_BITMAP(tc_bitmap, ICE_MAX_TRAFFIC_CLASS);
 	u32 agg_id;
 	enum ice_agg_type agg_type;
