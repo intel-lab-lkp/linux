@@ -6,7 +6,6 @@
 #include <drm/intel/display_parent_interface.h>
 
 #include "intel_display_types.h"
-#include "intel_fb.h"
 #include "xe_bo.h"
 #include "xe_panic.h"
 #include "xe_res_cursor.h"
@@ -16,6 +15,8 @@ struct intel_panic {
 	struct iosys_map vmap;
 
 	int page;
+
+	struct xe_bo *bo;
 };
 
 static void xe_panic_kunmap(struct intel_panic *panic)
@@ -38,7 +39,7 @@ static void xe_panic_page_set_pixel(struct drm_scanout_buffer *sb, unsigned int 
 {
 	struct intel_framebuffer *fb = (struct intel_framebuffer *)sb->private;
 	struct intel_panic *panic = fb->panic;
-	struct xe_bo *bo = gem_to_xe_bo(intel_fb_bo(&fb->base));
+	struct xe_bo *bo = panic->bo;
 	unsigned int new_page;
 	unsigned int offset;
 
@@ -93,6 +94,8 @@ static int xe_panic_setup(struct intel_panic *panic, struct drm_scanout_buffer *
 		return -ENODEV;
 
 	panic->page = -1;
+	panic->bo = bo;
+
 	sb->set_pixel = xe_panic_page_set_pixel;
 	return 0;
 }
