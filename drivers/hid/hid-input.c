@@ -2410,6 +2410,15 @@ EXPORT_SYMBOL_GPL(hidinput_connect);
 void hidinput_disconnect(struct hid_device *hid)
 {
 	struct hid_input *hidinput, *next;
+#ifdef CONFIG_HID_BATTERY_STRENGTH
+	{
+		struct hid_battery *bat, *tmp;
+
+		list_for_each_entry_safe(bat, tmp, &hid->batteries, list) {
+			list_del_init(&bat->list);
+		}
+	}
+#endif
 
 	list_for_each_entry_safe(hidinput, next, &hid->inputs, list) {
 		list_del(&hidinput->list);
