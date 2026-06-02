@@ -509,9 +509,13 @@ static void fn_show_ptregs(struct vc_data *vc)
 
 static void fn_hold(struct vc_data *vc)
 {
-	struct tty_struct *tty = vc->port.tty;
+	struct tty_struct *tty;
 
-	if (rep || !tty)
+	if (rep)
+		return;
+
+	tty = tty_port_tty_get(&vc->port);
+	if (!tty)
 		return;
 
 	/*
@@ -523,6 +527,8 @@ static void fn_hold(struct vc_data *vc)
 		start_tty(tty);
 	else
 		stop_tty(tty);
+
+	tty_kref_put(tty);
 }
 
 static void fn_num(struct vc_data *vc)
@@ -1431,9 +1437,8 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 	struct keyboard_notifier_param param = { .vc = vc, .value = keycode, .down = down };
 	int rc;
 
-	tty = vc->port.tty;
-
-	if (tty && (!tty->driver_data)) {
+	tty = tty_port_tty_get(&vc->port);
+	if (tty && !tty->driver_data) {
 		/* No driver data? Strange. Okay we fix it then. */
 		tty->driver_data = vc;
 	}
@@ -1486,6 +1491,7 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 	if (rep &&
 	    (!vc_kbd_mode(kbd, VC_REPEAT) ||
 	     (tty && !L_ECHO(tty) && tty_chars_in_buffer(tty)))) {
+		tty_kref_put(tty);
 		/*
 		 * Don't repeat a key if the input buffers are not empty and the
 		 * characters get aren't echoed locally. This makes key repeat
@@ -1493,6 +1499,7 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 		 */
 		return;
 	}
+	tty_kref_put(tty);
 
 	param.shift = shift_final = (shift_state | kbd->slockstate) ^ kbd->lockstate;
 	param.ledstate = kbd->ledflagstate;
