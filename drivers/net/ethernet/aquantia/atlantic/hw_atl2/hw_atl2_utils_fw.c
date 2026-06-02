@@ -121,6 +121,10 @@ static int aq_a2_fw_init(struct aq_hw_s *self)
 	u32 val;
 	int err;
 
+	err = hw_atl2_utils_get_filter_caps(self);
+	if (err)
+		return err;
+
 	hw_atl2_shared_buffer_get(self, link_control, link_control);
 	link_control.mode = AQ_HOST_MODE_ACTIVE;
 	hw_atl2_shared_buffer_write(self, link_control, link_control);
@@ -604,6 +608,79 @@ u32 hw_atl2_utils_get_fw_version(struct aq_hw_s *self)
 	return version.bundle.major << 24 |
 	       version.bundle.minor << 16 |
 	       version.bundle.build;
+}
+
+int hw_atl2_utils_get_filter_caps(struct aq_hw_s *self)
+{
+	struct hw_atl2_priv *priv = self->priv;
+	struct filter_caps_s filter_caps;
+	u32 tag_top;
+	int err;
+	u32 min_val;
+
+	err = hw_atl2_shared_buffer_read_safe(self, filter_caps, &filter_caps);
+	if (err)
+		return err;
+
+	priv->art_base_index = filter_caps.rslv_tbl_base_index * 8;
+	priv->art_count = filter_caps.rslv_tbl_count * 8;
+	if (priv->art_count == 0)
+		priv->art_count = 128;
+	priv->l2_filters_base_index = filter_caps.l2_filters_base_index;
+	priv->l2_filter_count = filter_caps.l2_filter_count;
+	priv->etype_filter_base_index = filter_caps.ethertype_filter_base_index;
+	priv->etype_filter_count = filter_caps.ethertype_filter_count;
+	priv->etype_filter_tag_top =
+		(priv->etype_filter_count >= HW_ATL2_RPF_ETYPE_TAGS) ?
+		 (HW_ATL2_RPF_ETYPE_TAGS) : (HW_ATL2_RPF_ETYPE_TAGS >> 1);
+	priv->vlan_filter_base_index = filter_caps.vlan_filter_base_index;
+	/* 0 - no tag, 1 - reserved for vlan-filter-offload filters */
+	tag_top =
+		  (filter_caps.vlan_filter_count == HW_ATL2_RPF_VLAN_FILTERS) ?
+		  (HW_ATL2_RPF_VLAN_FILTERS - 2) :
+		  (HW_ATL2_RPF_VLAN_FILTERS / 2 - 2);
+
+	if (filter_caps.vlan_filter_count > 2)
+		priv->vlan_filter_count = min_t(u32,
+						filter_caps.vlan_filter_count - 2,
+						tag_top);
+	else
+		priv->vlan_filter_count = 0;
+
+	priv->l3_v4_filter_base_index = filter_caps.l3_ip4_filter_base_index;
+	if (priv->l3_v4_filter_base_index >= HW_ATL2_RPF_L3L4_FILTERS) {
+		priv->l3_v4_filter_base_index = 0;
+		priv->l3_v4_filter_count = 0;
+	} else {
+		min_val = HW_ATL2_RPF_L3L4_FILTERS - 1 - priv->l3_v4_filter_base_index;
+		priv->l3_v4_filter_count = min_t(u32,
+						 filter_caps.l3_ip4_filter_count,
+						 min_val);
+	}
+
+	priv->l3_v6_filter_base_index = filter_caps.l3_ip6_filter_base_index;
+	if (priv->l3_v6_filter_base_index >= HW_ATL2_RPF_L3L4_FILTERS) {
+		priv->l3_v6_filter_base_index = 0;
+		priv->l3_v6_filter_count = 0;
+	} else {
+		min_val = HW_ATL2_RPF_L3L4_FILTERS - 1 - priv->l3_v6_filter_base_index;
+		priv->l3_v6_filter_count = min_t(u32,
+						 filter_caps.l3_ip6_filter_count,
+						 min_val);
+	}
+
+	priv->l4_filter_base_index = filter_caps.l4_filter_base_index;
+	if (priv->l4_filter_base_index >= HW_ATL2_RPF_L3L4_FILTERS) {
+		priv->l4_filter_base_index = 0;
+		priv->l4_filter_count = 0;
+	} else {
+		min_val = HW_ATL2_RPF_L3L4_FILTERS - 1 - priv->l4_filter_base_index;
+		priv->l4_filter_count = min_t(u32,
+					      filter_caps.l4_filter_count,
+					      min_val);
+	}
+
+	return 0;
 }
 
 int hw_atl2_utils_get_action_resolve_table_caps(struct aq_hw_s *self,
