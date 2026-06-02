@@ -759,6 +759,7 @@ static int ntfs_readdir(struct file *file, struct dir_context *actor)
 	u8 *name;
 	struct index_root *ir;
 	struct index_entry *next = NULL;
+	u8 *index_end;
 	struct ntfs_file_private *private = NULL;
 	int err = 0;
 	loff_t ie_pos = 2; /* initialize it with dot and dotdot size */
@@ -893,9 +894,22 @@ static int ntfs_readdir(struct file *file, struct dir_context *actor)
 	else
 		ictx->vcn_size_bits = NTFS_BLOCK_SIZE_BITS;
 
-	/* The first index entry. */
+	/*
+	 * entries_offset comes straight from the on-disk index root and is
+	 * not otherwise validated on this path (only index_length is checked
+	 * at inode-read time).  Bound the first entry before dereferencing it,
+	 * mirroring ntfs_lookup() and ntfs_index_block_inconsistent().
+	 */
+	index_end = (u8 *)&ir->index + le32_to_cpu(ir->index.index_length);
 	next = (struct index_entry *)((u8 *)&ir->index +
 			le32_to_cpu(ir->index.entries_offset));
+	if (le32_to_cpu(ir->index.entries_offset) < sizeof(struct index_header) ||
+	    (u8 *)next + sizeof(struct index_entry_header) > index_end) {
+		ntfs_error(sb, "Corrupt index root entries_offset in inode %llu",
+				ndir->mft_no);
+		err = -EIO;
+		goto out;
+	}
 
 	if (next->flags & INDEX_ENTRY_NODE) {
 		ictx->ia_ni = ntfs_ia_open(ictx, ictx->idx_ni);
