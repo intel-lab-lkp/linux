@@ -346,6 +346,12 @@ void fscrypt_enqueue_decrypt_work(struct work_struct *);
 
 struct page *fscrypt_encrypt_pagecache_blocks(struct folio *folio,
 		size_t len, size_t offs, gfp_t gfp_flags);
+
+bool fscrypt_supports_data_unit_inplace(const struct inode *inode);
+int fscrypt_prepare_data_unit_inplace(const struct inode *inode);
+int fscrypt_crypt_data_unit_inplace(const struct inode *inode,
+				    struct page *page, unsigned int len,
+				    unsigned int offs, u64 index, bool encrypt);
 int fscrypt_encrypt_block_inplace(const struct inode *inode, struct page *page,
 				  unsigned int len, unsigned int offs,
 				  u64 lblk_num);
@@ -517,6 +523,24 @@ static inline struct page *fscrypt_encrypt_pagecache_blocks(struct folio *folio,
 		size_t len, size_t offs, gfp_t gfp_flags)
 {
 	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline bool fscrypt_supports_data_unit_inplace(const struct inode *inode)
+{
+	return false;
+}
+
+static inline int fscrypt_prepare_data_unit_inplace(const struct inode *inode)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int fscrypt_crypt_data_unit_inplace(const struct inode *inode,
+						  struct page *page, unsigned int len,
+						  unsigned int offs, u64 index,
+						  bool encrypt)
+{
+	return -EOPNOTSUPP;
 }
 
 static inline int fscrypt_encrypt_block_inplace(const struct inode *inode,
