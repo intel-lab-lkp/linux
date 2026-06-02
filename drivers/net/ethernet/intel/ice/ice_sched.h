@@ -65,6 +65,8 @@ struct ice_sched_agg_vsi_info {
 	DECLARE_BITMAP(replay_tc_bitmap, ICE_MAX_TRAFFIC_CLASS);
 };
 
+#define ICE_MAX_VSIS_IN_AGG_NODE	64
+
 struct ice_sched_agg_info {
 	struct list_head agg_vsi_list;
 	DECLARE_BITMAP(tc_bitmap, ICE_MAX_TRAFFIC_CLASS);
@@ -134,6 +136,9 @@ int ice_rm_vsi_lan_cfg(struct ice_port_info *pi, u16 vsi_handle);
 int ice_rm_vsi_rdma_cfg(struct ice_port_info *pi, u16 vsi_handle);
 
 /* Tx scheduler rate limiter functions */
+int ice_cfg_vsi_agg(struct ice_port_info *pi, u16 vsi_handle,
+		    u32 min_id, u32 max_id, u8 tc_bitmap,
+		    u32 *configured_id);
 int
 ice_cfg_agg(struct ice_port_info *pi, u32 agg_id,
 	    enum ice_agg_type agg_type, u8 tc_bitmap);
