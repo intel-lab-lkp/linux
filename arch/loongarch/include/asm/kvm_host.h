@@ -158,8 +158,6 @@ enum emulation_result {
 };
 
 #define KVM_LARCH_FPU		(0x1 << 0)
-#define KVM_LARCH_LSX		(0x1 << 1)
-#define KVM_LARCH_LASX		(0x1 << 2)
 #define KVM_LARCH_LBT		(0x1 << 3)
 #define KVM_LARCH_PMU		(0x1 << 4)
 #define KVM_LARCH_SWCSR_LATEST	(0x1 << 5)
