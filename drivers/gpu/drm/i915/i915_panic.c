@@ -6,7 +6,7 @@
 
 #include "display/intel_display_types.h"
 #include "display/intel_fb.h"
-#include "gem/i915_gem_object.h"
+#include "gem/i915_gem_panic.h"
 
 #include "i915_panic.h"
 

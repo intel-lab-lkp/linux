@@ -167,6 +167,7 @@ gem-y += \
 	gem/i915_gem_object.o \
 	gem/i915_gem_object_frontbuffer.o \
 	gem/i915_gem_pages.o \
+	gem/i915_gem_panic.o \
 	gem/i915_gem_phys.o \
 	gem/i915_gem_pm.o \
 	gem/i915_gem_region.o \
