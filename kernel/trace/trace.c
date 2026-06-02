@@ -5732,7 +5732,7 @@ tracing_entries_write(struct file *filp, const char __user *ubuf,
 		return ret;
 
 	/* must have at least 1 entry */
-	if (!val)
+	if (!val || val > ULONG_MAX >> 10)
 		return -EINVAL;
 
 	/* value is in KB */
@@ -8202,6 +8202,9 @@ buffer_subbuf_size_write(struct file *filp, const char __user *ubuf,
 	ret = kstrtoul_from_user(ubuf, cnt, 10, &val);
 	if (ret)
 		return ret;
+
+	if (!val || val > ULONG_MAX / 1024)
+		return -EINVAL;
 
 	val *= 1024; /* value passed in is in KB */
 
