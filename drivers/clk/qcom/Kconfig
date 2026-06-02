@@ -546,6 +546,18 @@ config MSM_MMCC_8960
 	  Say Y if you want to support multimedia devices such as display,
 	  graphics, video encode/decode, camera, etc.
 
+config MSM_MMCC_8660
+	tristate "MSM8x60 Multimedia Clock Controller"
+	depends on ARM || COMPILE_TEST
+	select MSM_GCC_8660
+	select QCOM_COMMON_CLK
+	select QCOM_GDSC
+	help
+	  Support for the multimedia clock controller on the MSM8x60 family
+	  (MSM8260/MSM8660/APQ8060). Say Y if you want to support multimedia
+	  devices such as display, graphics, video encode/decode, camera, etc.
+	  on these Scorpion-class SoCs (e.g. HP TouchPad).
+
 config MSM_GCC_8953
 	tristate "MSM8953 Global Clock Controller"
 	select QCOM_GDSC
