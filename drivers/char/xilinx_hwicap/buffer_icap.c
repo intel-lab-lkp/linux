@@ -87,7 +87,7 @@
  **/
 u32 buffer_icap_get_status(struct hwicap_drvdata *drvdata)
 {
-	return in_be32(drvdata->base_address + XHI_STATUS_REG_OFFSET);
+	return ioread32be(drvdata->base_address + XHI_STATUS_REG_OFFSET);
 }
 
 /**
@@ -101,7 +101,7 @@ u32 buffer_icap_get_status(struct hwicap_drvdata *drvdata)
 static inline u32 buffer_icap_get_bram(void __iomem *base_address,
 		u32 offset)
 {
-	return in_be32(base_address + (offset << 2));
+	return ioread32be(base_address + (offset << 2));
 }
 
 /**
@@ -114,7 +114,7 @@ static inline u32 buffer_icap_get_bram(void __iomem *base_address,
  **/
 static inline bool buffer_icap_busy(void __iomem *base_address)
 {
-	u32 status = in_be32(base_address + XHI_STATUS_REG_OFFSET);
+	u32 status = ioread32be(base_address + XHI_STATUS_REG_OFFSET);
 	return (status & 1) == XHI_NOT_FINISHED;
 }
 
@@ -129,7 +129,7 @@ static inline bool buffer_icap_busy(void __iomem *base_address)
 static inline void buffer_icap_set_size(void __iomem *base_address,
 		u32 data)
 {
-	out_be32(base_address + XHI_SIZE_REG_OFFSET, data);
+	iowrite32be(data, base_address + XHI_SIZE_REG_OFFSET);
 }
 
 /**
@@ -143,7 +143,7 @@ static inline void buffer_icap_set_size(void __iomem *base_address,
 static inline void buffer_icap_set_offset(void __iomem *base_address,
 		u32 data)
 {
-	out_be32(base_address + XHI_BRAM_OFFSET_REG_OFFSET, data);
+	iowrite32be(data, base_address + XHI_BRAM_OFFSET_REG_OFFSET);
 }
 
 /**
@@ -159,7 +159,7 @@ static inline void buffer_icap_set_offset(void __iomem *base_address,
 static inline void buffer_icap_set_rnc(void __iomem *base_address,
 		u32 data)
 {
-	out_be32(base_address + XHI_RNC_REG_OFFSET, data);
+	iowrite32be(data, base_address + XHI_RNC_REG_OFFSET);
 }
 
 /**
@@ -174,7 +174,7 @@ static inline void buffer_icap_set_rnc(void __iomem *base_address,
 static inline void buffer_icap_set_bram(void __iomem *base_address,
 		u32 offset, u32 data)
 {
-	out_be32(base_address + (offset << 2), data);
+	iowrite32be(data, base_address + (offset << 2));
 }
 
 /**
@@ -255,7 +255,7 @@ static int buffer_icap_device_write(struct hwicap_drvdata *drvdata,
  **/
 void buffer_icap_reset(struct hwicap_drvdata *drvdata)
 {
-    out_be32(drvdata->base_address + XHI_STATUS_REG_OFFSET, 0xFEFE);
+    iowrite32be(0xFEFE, drvdata->base_address + XHI_STATUS_REG_OFFSET);
 }
 
 /**

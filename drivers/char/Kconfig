@@ -201,7 +201,7 @@ source "drivers/char/hw_random/Kconfig"
 
 config XILINX_HWICAP
 	tristate "Xilinx HWICAP Support"
-	depends on MICROBLAZE
+	depends on MICROBLAZE || COMPILE_TEST
 	help
 	  This option enables support for Xilinx Internal Configuration
 	  Access Port (ICAP) driver.  The ICAP is used on Xilinx Virtex

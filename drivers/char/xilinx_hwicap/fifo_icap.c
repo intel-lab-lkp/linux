@@ -94,7 +94,7 @@ static inline void fifo_icap_fifo_write(struct hwicap_drvdata *drvdata,
 		u32 data)
 {
 	dev_dbg(drvdata->dev, "fifo_write: %x\n", data);
-	out_be32(drvdata->base_address + XHI_WF_OFFSET, data);
+	iowrite32be(data, drvdata->base_address + XHI_WF_OFFSET);
 }
 
 /**
@@ -107,7 +107,7 @@ static inline void fifo_icap_fifo_write(struct hwicap_drvdata *drvdata,
  **/
 static inline u32 fifo_icap_fifo_read(struct hwicap_drvdata *drvdata)
 {
-	u32 data = in_be32(drvdata->base_address + XHI_RF_OFFSET);
+	u32 data = ioread32be(drvdata->base_address + XHI_RF_OFFSET);
 	dev_dbg(drvdata->dev, "fifo_read: %x\n", data);
 	return data;
 }
@@ -120,7 +120,7 @@ static inline u32 fifo_icap_fifo_read(struct hwicap_drvdata *drvdata)
 static inline void fifo_icap_set_read_size(struct hwicap_drvdata *drvdata,
 		u32 data)
 {
-	out_be32(drvdata->base_address + XHI_SZ_OFFSET, data);
+	iowrite32be(data, drvdata->base_address + XHI_SZ_OFFSET);
 }
 
 /**
@@ -129,7 +129,7 @@ static inline void fifo_icap_set_read_size(struct hwicap_drvdata *drvdata,
  **/
 static inline void fifo_icap_start_config(struct hwicap_drvdata *drvdata)
 {
-	out_be32(drvdata->base_address + XHI_CR_OFFSET, XHI_CR_WRITE_MASK);
+	iowrite32be(XHI_CR_WRITE_MASK, drvdata->base_address + XHI_CR_OFFSET);
 	dev_dbg(drvdata->dev, "configuration started\n");
 }
 
@@ -139,7 +139,7 @@ static inline void fifo_icap_start_config(struct hwicap_drvdata *drvdata)
  **/
 static inline void fifo_icap_start_readback(struct hwicap_drvdata *drvdata)
 {
-	out_be32(drvdata->base_address + XHI_CR_OFFSET, XHI_CR_READ_MASK);
+	iowrite32be(XHI_CR_READ_MASK, drvdata->base_address + XHI_CR_OFFSET);
 	dev_dbg(drvdata->dev, "readback started\n");
 }
 
@@ -163,7 +163,7 @@ static inline void fifo_icap_start_readback(struct hwicap_drvdata *drvdata)
  **/
 u32 fifo_icap_get_status(struct hwicap_drvdata *drvdata)
 {
-	u32 status = in_be32(drvdata->base_address + XHI_SR_OFFSET);
+	u32 status = ioread32be(drvdata->base_address + XHI_SR_OFFSET);
 	dev_dbg(drvdata->dev, "Getting status = %x\n", status);
 	return status;
 }
@@ -177,7 +177,7 @@ u32 fifo_icap_get_status(struct hwicap_drvdata *drvdata)
  **/
 static inline u32 fifo_icap_busy(struct hwicap_drvdata *drvdata)
 {
-	u32 status = in_be32(drvdata->base_address + XHI_SR_OFFSET);
+	u32 status = ioread32be(drvdata->base_address + XHI_SR_OFFSET);
 	return (status & XHI_SR_DONE_MASK) ? 0 : 1;
 }
 
@@ -190,7 +190,7 @@ static inline u32 fifo_icap_busy(struct hwicap_drvdata *drvdata)
 static inline u32 fifo_icap_write_fifo_vacancy(
 		struct hwicap_drvdata *drvdata)
 {
-	return in_be32(drvdata->base_address + XHI_WFV_OFFSET);
+	return ioread32be(drvdata->base_address + XHI_WFV_OFFSET);
 }
 
 /**
@@ -202,7 +202,7 @@ static inline u32 fifo_icap_write_fifo_vacancy(
 static inline u32 fifo_icap_read_fifo_occupancy(
 		struct hwicap_drvdata *drvdata)
 {
-	return in_be32(drvdata->base_address + XHI_RFO_OFFSET);
+	return ioread32be(drvdata->base_address + XHI_RFO_OFFSET);
 }
 
 /**
@@ -372,13 +372,11 @@ void fifo_icap_reset(struct hwicap_drvdata *drvdata)
 	 * Reset the device by setting/clearing the RESET bit in the
 	 * Control Register.
 	 */
-	reg_data = in_be32(drvdata->base_address + XHI_CR_OFFSET);
+	reg_data = ioread32be(drvdata->base_address + XHI_CR_OFFSET);
 
-	out_be32(drvdata->base_address + XHI_CR_OFFSET,
-				reg_data | XHI_CR_SW_RESET_MASK);
+	iowrite32be(reg_data | XHI_CR_SW_RESET_MASK, drvdata->base_address + XHI_CR_OFFSET);
 
-	out_be32(drvdata->base_address + XHI_CR_OFFSET,
-				reg_data & (~XHI_CR_SW_RESET_MASK));
+	iowrite32be(reg_data & (~XHI_CR_SW_RESET_MASK), drvdata->base_address + XHI_CR_OFFSET);
 
 }
 
@@ -393,12 +391,10 @@ void fifo_icap_flush_fifo(struct hwicap_drvdata *drvdata)
 	 * Flush the FIFO by setting/clearing the FIFO Clear bit in the
 	 * Control Register.
 	 */
-	reg_data = in_be32(drvdata->base_address + XHI_CR_OFFSET);
+	reg_data = ioread32be(drvdata->base_address + XHI_CR_OFFSET);
 
-	out_be32(drvdata->base_address + XHI_CR_OFFSET,
-				reg_data | XHI_CR_FIFO_CLR_MASK);
+	iowrite32be(reg_data | XHI_CR_FIFO_CLR_MASK, drvdata->base_address + XHI_CR_OFFSET);
 
-	out_be32(drvdata->base_address + XHI_CR_OFFSET,
-				reg_data & (~XHI_CR_FIFO_CLR_MASK));
+	iowrite32be(reg_data & (~XHI_CR_FIFO_CLR_MASK), drvdata->base_address + XHI_CR_OFFSET);
 }
 
