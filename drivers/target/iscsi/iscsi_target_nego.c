@@ -98,6 +98,43 @@ int extract_param(
 	return 0;
 }
 
+/* same as extract_param() above, but don't interpret any type-prefix */
+int extract_param_str(
+	const char *in_buf,
+	const char *pattern,
+	unsigned int max_length,
+	char *out_buf)
+{
+	char *ptr;
+	int len;
+
+	if (!in_buf || !pattern || !out_buf)
+		return -EINVAL;
+
+	ptr = strstr(in_buf, pattern);
+	if (!ptr)
+		return -ENOENT;
+
+	ptr = strstr(ptr, "=");
+	if (!ptr)
+		return -EINVAL;
+
+	ptr += 1;
+	len = strlen_semi(ptr);
+	if (len < 0)
+		return -EINVAL;
+
+	if (len >= max_length) {
+		pr_err("Length of input: %d exceeds max_length:"
+			" %d\n", len, max_length);
+		return -EINVAL;
+	}
+	memcpy(out_buf, ptr, len);
+	out_buf[len] = '\0';
+
+	return 0;
+}
+
 static struct iscsi_node_auth *iscsi_get_node_auth(struct iscsit_conn *conn)
 {
 	struct iscsi_portal_group *tpg;
