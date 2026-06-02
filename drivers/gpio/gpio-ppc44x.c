@@ -211,4 +211,7 @@ static struct platform_driver ppc44x_gpio_driver = {
 	},
 };
 
+MODULE_DESCRIPTION("PPC44x gpio driver");
+MODULE_LICENSE("GPL");
+
 module_platform_driver(ppc44x_gpio_driver);
