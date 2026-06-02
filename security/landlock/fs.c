@@ -1909,6 +1909,15 @@ static bool control_current_fowner(struct fown_struct *const fown)
 	if (!p)
 		return true;
 
+	/*
+	 * A process-group fowner fans the signal out to every member at
+	 * delivery time, so record the domain for any non single-process
+	 * target -- even when it resolves to current as the group head --
+	 * and let hook_file_send_sigiotask() check the live scope.
+	 */
+	if (fown->pid_type != PIDTYPE_PID && fown->pid_type != PIDTYPE_TGID)
+		return true;
+
 	return !same_thread_group(p, current);
 }
 
