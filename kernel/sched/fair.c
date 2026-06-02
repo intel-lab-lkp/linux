@@ -13674,6 +13674,7 @@ static inline void update_newidle_stats(struct sched_domain *sd, unsigned int su
 		ratio += sd->newidle_success;
 
 		sd->newidle_ratio = min(1024, ratio);
+		sd->newidle_window_pos = 0;
 		sd->newidle_call /= 2;
 		sd->newidle_success /= 2;
 	}
@@ -14371,16 +14372,23 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 
 			if (sched_feat(NI_RANDOM) && sd->newidle_ratio < 1024) {
 				/*
-				 * Throw a 1k sided dice; and only run
-				 * newidle_balance according to the success
-				 * rate.
+				 * Base on accumulator of Bresenham's line algorithm
+				 *
+				 * Accumulate ratio each time and trigger balance
+				 * when sum ≥ 1024.
+				 *
+				 * Ensures exactly ratio balances per 1024 calls
+				 * and distributes ratio balance operations uniformly
+				 * across every 1024 invocations.
 				 */
-				u32 d1k = sched_rng() % 1024;
 				weight = 1 + sd->newidle_ratio;
-				if (d1k > weight) {
+
+				sd->newidle_window_pos += weight;
+				if (sd->newidle_window_pos < 1024) {
 					update_newidle_stats(sd, 0);
 					continue;
 				}
+				sd->newidle_window_pos -= 1024;
 				weight = (1024 + weight/2) / weight;
 			}
 

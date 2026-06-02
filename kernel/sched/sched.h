@@ -1400,12 +1400,6 @@ static inline bool is_migration_disabled(struct task_struct *p)
 }
 
 DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
-DECLARE_PER_CPU(struct rnd_state, sched_rnd_state);
-
-static inline u32 sched_rng(void)
-{
-	return prandom_u32_state(this_cpu_ptr(&sched_rnd_state));
-}
 
 static __always_inline struct rq *__this_rq(void)
 {
