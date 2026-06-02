@@ -27,6 +27,11 @@
 #define GMEM_CLAMP_IO_MASK	BIT(0)
 #define GMEM_RESET_MASK		BIT(4)
 
+/* Legacy MSM8x60 footswitch register bits (single register layout) */
+#define LEGACY_FS_CLAMP_MASK		BIT(5)
+#define LEGACY_FS_ENABLE_MASK		BIT(8)
+#define LEGACY_FS_RETENTION_MASK	BIT(9)
+
 /* CFG_GDSCR */
 #define GDSC_POWER_UP_COMPLETE		BIT(16)
 #define GDSC_POWER_DOWN_COMPLETE	BIT(15)
@@ -62,6 +67,23 @@ static int gdsc_check_status(struct gdsc *sc, enum gdsc_status status)
 	unsigned int reg;
 	u32 val;
 	int ret;
+
+	/*
+	 * Legacy footswitches have no power-status bit: software has to
+	 * infer the state from the ENABLE bit it just wrote.
+	 */
+	if (sc->flags & LEGACY_FOOTSWITCH) {
+		ret = regmap_read(sc->regmap, sc->gdscr, &val);
+		if (ret)
+			return ret;
+		switch (status) {
+		case GDSC_ON:
+			return !!(val & LEGACY_FS_ENABLE_MASK);
+		case GDSC_OFF:
+			return !(val & LEGACY_FS_ENABLE_MASK);
+		}
+		return -EINVAL;
+	}
 
 	if (sc->flags & POLL_CFG_GDSCR)
 		reg = sc->gdscr + CFG_GDSCR_OFFSET;
@@ -120,6 +142,18 @@ static int gdsc_update_collapse_bit(struct gdsc *sc, bool val)
 {
 	u32 reg, mask;
 	int ret;
+
+	/*
+	 * Legacy footswitches do not have an inverted SW_COLLAPSE bit;
+	 * instead the same bit means ENABLE: clear to disable the rail,
+	 * set to enable it. Invert the caller's "collapse" intent.
+	 */
+	if (sc->flags & LEGACY_FOOTSWITCH) {
+		reg = sc->gdscr;
+		mask = LEGACY_FS_ENABLE_MASK;
+		return regmap_update_bits(sc->regmap, reg, mask,
+					  val ? 0 : mask);
+	}
 
 	if (sc->collapse_mask) {
 		reg = sc->collapse_ctrl;
@@ -240,6 +274,23 @@ static inline void gdsc_assert_clamp_io(struct gdsc *sc)
 			   GMEM_CLAMP_IO_MASK, 1);
 }
 
+/*
+ * Legacy MSM8x60 footswitches keep the I/O clamp bit in the main GDSCR
+ * (no separate clamp_io_ctrl register), so the helpers here use sc->gdscr.
+ */
+static inline int legacy_fs_deassert_clamp(struct gdsc *sc)
+{
+	return regmap_update_bits(sc->regmap, sc->gdscr,
+				  LEGACY_FS_CLAMP_MASK, 0);
+}
+
+static inline int legacy_fs_assert_clamp(struct gdsc *sc)
+{
+	return regmap_update_bits(sc->regmap, sc->gdscr,
+				  LEGACY_FS_CLAMP_MASK,
+				  LEGACY_FS_CLAMP_MASK);
+}
+
 static inline void gdsc_assert_reset_aon(struct gdsc *sc)
 {
 	regmap_update_bits(sc->regmap, sc->clamp_io_ctrl,
@@ -263,6 +314,55 @@ static int gdsc_enable(struct generic_pm_domain *domain)
 
 	if (sc->pwrsts == PWRSTS_ON)
 		return gdsc_deassert_reset(sc);
+
+	/*
+	 * Legacy MSM8x60 footswitch enable sequence:
+	 *   1. assert per-block resets (if SW_RESET)
+	 *   2. set ENABLE in GDSCR to power up the rail
+	 *   3. wait 2us for the rail to fully charge
+	 *   4. deassert resets
+	 *   5. clear CLAMP in GDSCR to release the I/O clamp
+	 *   6. wait 5us for clamps to release and signals to settle
+	 *
+	 * No status-bit polling -- the hardware does not expose one, so
+	 * the fixed delays below are the only safe synchronisation point.
+	 */
+	if (sc->flags & LEGACY_FOOTSWITCH) {
+		if (sc->flags & SW_RESET)
+			gdsc_assert_reset(sc);
+
+		ret = gdsc_update_collapse_bit(sc, false);
+		if (ret) {
+			/*
+			 * Power-up write failed -- release the reset we
+			 * just asserted so the block does not stay stuck
+			 * in reset for the rest of the system's lifetime.
+			 */
+			if (sc->flags & SW_RESET)
+				gdsc_deassert_reset(sc);
+			return ret;
+		}
+
+		udelay(2);
+
+		if (sc->flags & SW_RESET)
+			gdsc_deassert_reset(sc);
+
+		ret = legacy_fs_deassert_clamp(sc);
+		if (ret) {
+			/*
+			 * Rail is already powered up; if we cannot release
+			 * the I/O clamp, collapse the rail again to avoid
+			 * leaving the block live but isolated.
+			 */
+			gdsc_update_collapse_bit(sc, true);
+			return ret;
+		}
+
+		udelay(5);
+
+		return 0;
+	}
 
 	if (sc->flags & SW_RESET) {
 		gdsc_assert_reset(sc);
@@ -321,6 +421,31 @@ static int gdsc_disable(struct generic_pm_domain *domain)
 
 	if (sc->pwrsts == PWRSTS_ON)
 		return gdsc_assert_reset(sc);
+
+	/*
+	 * Legacy MSM8x60 footswitch disable sequence:
+	 *   1. assert per-block resets (if SW_RESET)
+	 *   2. set CLAMP in GDSCR to hold I/O at safe values across collapse
+	 *   3. clear ENABLE in GDSCR to collapse the rail
+	 */
+	if (sc->flags & LEGACY_FOOTSWITCH) {
+		if (sc->flags & SW_RESET)
+			gdsc_assert_reset(sc);
+
+		ret = legacy_fs_assert_clamp(sc);
+		if (ret) {
+			/*
+			 * Clamp programming failed -- release the reset we
+			 * just asserted so the block is not stranded in
+			 * reset, then surface the error.
+			 */
+			if (sc->flags & SW_RESET)
+				gdsc_deassert_reset(sc);
+			return ret;
+		}
+
+		return gdsc_update_collapse_bit(sc, true);
+	}
 
 	/* Turn off HW trigger mode if supported */
 	if (sc->flags & HW_CTRL) {
@@ -406,6 +531,27 @@ static int gdsc_init(struct gdsc *sc)
 	int on, ret;
 
 	/*
+	 * Legacy MSM8x60 footswitches share none of the modern GDSC
+	 * wait-time fields and have no HW trigger / SW override bits at
+	 * all, so skip the wait-config programming and jump straight to
+	 * the common state-sync block below.
+	 *
+	 * Clear the retention bit (BIT 9) so subsequent disable actually
+	 * power-collapses the rail rather than holding state. The vendor
+	 * MSM8x60 footswitch driver does the same one-shot clear at probe
+	 * for every footswitch; without it the reset-default value is
+	 * unspecified per board and a stuck-set retention bit would leave
+	 * the rail draining power while looking collapsed in software.
+	 */
+	if (sc->flags & LEGACY_FOOTSWITCH) {
+		ret = regmap_update_bits(sc->regmap, sc->gdscr,
+					 LEGACY_FS_RETENTION_MASK, 0);
+		if (ret)
+			return ret;
+		goto skip_wait_config;
+	}
+
+	/*
 	 * Disable HW trigger: collapse/restore occur based on registers writes.
 	 * Disable SW override: Use hardware state-machine for sequencing.
 	 * Configure wait time between states.
@@ -428,6 +574,7 @@ static int gdsc_init(struct gdsc *sc)
 	if (ret)
 		return ret;
 
+skip_wait_config:
 	/* Force gdsc ON if only ON state is supported */
 	if (sc->pwrsts == PWRSTS_ON) {
 		ret = gdsc_toggle_logic(sc, GDSC_ON, false);

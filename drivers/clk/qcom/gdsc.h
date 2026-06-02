@@ -68,6 +68,13 @@ struct gdsc {
 #define RETAIN_FF_ENABLE	BIT(7)
 #define NO_RET_PERIPH	BIT(8)
 #define HW_CTRL_TRIGGER	BIT(9)
+/*
+ * Legacy MSM8x60-family footswitch (a.k.a. "GFS"). Different register layout
+ * from the modern GDSC blocks: CLAMP at bit 5, ENABLE at bit 8, RETENTION at
+ * bit 9, and there is no power-status bit so software has to assume the
+ * transition completed after a fixed delay rather than polling status.
+ */
+#define LEGACY_FOOTSWITCH	BIT(10)
 	struct reset_controller_dev	*rcdev;
 	unsigned int			*resets;
 	unsigned int			reset_count;
