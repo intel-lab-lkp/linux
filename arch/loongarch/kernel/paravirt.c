@@ -12,7 +12,9 @@
 static int has_steal_clock;
 DEFINE_STATIC_KEY_FALSE(virt_preempt_key);
 DEFINE_STATIC_KEY_FALSE(virt_spin_lock_key);
+DEFINE_STATIC_KEY_FALSE(pv_tlb_flush_key);
 DEFINE_PER_CPU(struct kvm_steal_time, steal_time) __aligned(64);
+static DEFINE_PER_CPU(cpumask_var_t, __pv_cpu_mask);
 
 static bool steal_acc = true;
 
@@ -207,6 +209,58 @@ int __init pv_ipi_init(void)
 
 	return 0;
 }
+
+#ifdef CONFIG_SMP
+void kvm_flush_tlb_mask(const struct cpumask *cpumask,
+			       smp_call_func_t func, void *info)
+{
+	int cpu;
+	struct kvm_steal_time *src;
+	struct cpumask *flushmask = this_cpu_cpumask_var_ptr(__pv_cpu_mask);
+
+	cpumask_copy(flushmask, cpumask);
+
+	/*
+	 * We have to call flush only on online vCPUs. And
+	 * queue flush_on_enter for pre-empted vCPUs
+	 */
+	for_each_cpu(cpu, flushmask) {
+		u32 *ptr, old, new;
+
+		src = &per_cpu(steal_time, cpu);
+		ptr = (u32 *)&src->preempted;
+		old = READ_ONCE(*ptr);
+		if (!((u8)old & KVM_VCPU_PREEMPTED))
+			continue;
+
+		new = old | KVM_VCPU_FLUSH_TLB;
+		if (try_cmpxchg(ptr, &old, new))
+			__cpumask_clear_cpu(cpu, flushmask);
+	}
+
+	on_each_cpu_mask(flushmask, func, info, 1);
+}
+
+static int __init pv_tlb_flush_init(void)
+{
+	int cpu;
+
+	if (!kvm_pv_tlb_flush_supported())
+		return 0;
+
+	for_each_possible_cpu(cpu) {
+		if (!zalloc_cpumask_var_node(per_cpu_ptr(&__pv_cpu_mask, cpu),
+					    GFP_KERNEL, cpu_to_node(cpu)))
+			return -ENOMEM;
+	}
+
+	static_branch_enable(&pv_tlb_flush_key);
+	pr_info("KVM setup pv remote TLB flush\n");
+
+	return 0;
+}
+arch_initcall(pv_tlb_flush_init);
+#endif
 
 static int pv_enable_steal_time(void)
 {
