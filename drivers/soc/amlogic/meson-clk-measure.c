@@ -902,6 +902,11 @@ static struct regmap_config meson_clk_msr_regmap_config = {
 	.reg_stride = 4,
 };
 
+static void meson_msr_debugfs_remove(void *data)
+{
+	debugfs_remove_recursive(data);
+}
+
 static int meson_msr_probe(struct platform_device *pdev)
 {
 	const struct meson_msr_data *match_data;
@@ -967,7 +972,8 @@ static int meson_msr_probe(struct platform_device *pdev)
 				    &priv->data.msr_table[i], &clk_msr_fops);
 	}
 
-	return 0;
+	return devm_add_action_or_reset(&pdev->dev, meson_msr_debugfs_remove,
+					root);
 }
 
 static const struct msr_reg_offset msr_reg_offset = {
