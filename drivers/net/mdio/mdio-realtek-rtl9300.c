@@ -78,7 +78,6 @@
 
 #define MAX_PORTS       28
 #define MAX_SMI_BUSSES  4
-#define MAX_SMI_ADDR	0x1f
 #define RAW_PAGE(priv)	((priv)->info->num_pages - 1)
 
 
@@ -494,6 +493,9 @@ static int otto_emdio_map_ports(struct device *dev)
 		err = fwnode_property_read_u32(phy_fwnode, "reg", &addr);
 		if (err)
 			return err;
+
+		if (addr >= PHY_MAX_ADDR)
+			return dev_err_probe(dev, -EINVAL, "illegal smi address %d\n", addr);
 
 		__set_bit(pn, priv->valid_ports);
 		priv->smi_bus[pn] = bus;
