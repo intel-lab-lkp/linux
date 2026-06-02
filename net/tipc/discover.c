@@ -217,6 +217,20 @@ void tipc_disc_rcv(struct net *net, struct sk_buff *skb,
 	}
 	hdr = buf_msg(skb);
 
+	/* A discovery message carries the sender's media address within the
+	 * fixed-size header and, when 128-bit ids are advertised, a node id
+	 * appended after it.  A node always builds these messages at
+	 * MAX_H_SIZE + NODE_ID_LEN, so drop anything too short to hold what
+	 * is read below and keep msg2addr() and the node-id copy within the
+	 * received data.
+	 */
+	if (skb->len < MAX_H_SIZE ||
+	    ((caps & TIPC_NODE_ID128) && skb->len < MAX_H_SIZE + NODE_ID_LEN)) {
+		pr_warn_ratelimited("Rcv corrupt discovery message\n");
+		kfree_skb(skb);
+		return;
+	}
+
 	if (caps & TIPC_NODE_ID128)
 		memcpy(peer_id, msg_node_id(hdr), NODE_ID_LEN);
 	else
