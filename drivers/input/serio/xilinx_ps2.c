@@ -89,9 +89,9 @@ static int xps2_recv(struct xps2data *drvdata, u8 *byte)
 	int status = -1;
 
 	/* If there is data available in the PS/2 receiver, read it */
-	sr = in_be32(drvdata->base_address + XPS2_STATUS_OFFSET);
+	sr = ioread32be(drvdata->base_address + XPS2_STATUS_OFFSET);
 	if (sr & XPS2_STATUS_RX_FULL) {
-		*byte = in_be32(drvdata->base_address + XPS2_RX_DATA_OFFSET);
+		*byte = ioread32be(drvdata->base_address + XPS2_RX_DATA_OFFSET);
 		status = 0;
 	}
 
@@ -109,8 +109,8 @@ static irqreturn_t xps2_interrupt(int irq, void *dev_id)
 	int status;
 
 	/* Get the PS/2 interrupts and clear them */
-	intr_sr = in_be32(drvdata->base_address + XPS2_IPISR_OFFSET);
-	out_be32(drvdata->base_address + XPS2_IPISR_OFFSET, intr_sr);
+	intr_sr = ioread32be(drvdata->base_address + XPS2_IPISR_OFFSET);
+	iowrite32be(intr_sr, drvdata->base_address + XPS2_IPISR_OFFSET);
 
 	/* Check which interrupt is active */
 	if (intr_sr & XPS2_IPIXR_RX_OVF)
@@ -160,11 +160,11 @@ static int sxps2_write(struct serio *pserio, unsigned char c)
 	guard(spinlock_irqsave)(&drvdata->lock);
 
 	/* If the PS/2 transmitter is empty send a byte of data */
-	sr = in_be32(drvdata->base_address + XPS2_STATUS_OFFSET);
+	sr = ioread32be(drvdata->base_address + XPS2_STATUS_OFFSET);
 	if (sr & XPS2_STATUS_TX_FULL)
 		return -EAGAIN;
 
-	out_be32(drvdata->base_address + XPS2_TX_DATA_OFFSET, c);
+	iowrite32be(c, drvdata->base_address + XPS2_TX_DATA_OFFSET);
 	return 0;
 }
 
@@ -189,8 +189,8 @@ static int sxps2_open(struct serio *pserio)
 	}
 
 	/* start reception by enabling the interrupts */
-	out_be32(drvdata->base_address + XPS2_GIER_OFFSET, XPS2_GIER_GIE_MASK);
-	out_be32(drvdata->base_address + XPS2_IPIER_OFFSET, XPS2_IPIXR_RX_ALL);
+	iowrite32be(XPS2_GIER_GIE_MASK, drvdata->base_address + XPS2_GIER_OFFSET);
+	iowrite32be(XPS2_IPIXR_RX_ALL, drvdata->base_address + XPS2_IPIER_OFFSET);
 	(void)xps2_recv(drvdata, &c);
 
 	return 0;		/* success */
@@ -207,8 +207,8 @@ static void sxps2_close(struct serio *pserio)
 	struct xps2data *drvdata = pserio->port_data;
 
 	/* Disable the PS2 interrupts */
-	out_be32(drvdata->base_address + XPS2_GIER_OFFSET, 0x00);
-	out_be32(drvdata->base_address + XPS2_IPIER_OFFSET, 0x00);
+	iowrite32be(0x00, drvdata->base_address + XPS2_GIER_OFFSET);
+	iowrite32be(0x00, drvdata->base_address + XPS2_IPIER_OFFSET);
 	free_irq(drvdata->irq, drvdata);
 }
 
@@ -278,13 +278,13 @@ static int xps2_of_probe(struct platform_device *ofdev)
 	}
 
 	/* Disable all the interrupts, just in case */
-	out_be32(drvdata->base_address + XPS2_IPIER_OFFSET, 0);
+	iowrite32be(0, drvdata->base_address + XPS2_IPIER_OFFSET);
 
 	/*
 	 * Reset the PS2 device and abort any current transaction,
 	 * to make sure we have the PS2 in a good state.
 	 */
-	out_be32(drvdata->base_address + XPS2_SRST_OFFSET, XPS2_SRST_RESET);
+	iowrite32be(XPS2_SRST_RESET, drvdata->base_address + XPS2_SRST_OFFSET);
 
 	dev_info(dev, "Xilinx PS2 at 0x%08llX mapped to 0x%p, irq=%d\n",
 		 (unsigned long long)phys_addr, drvdata->base_address,
