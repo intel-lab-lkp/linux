@@ -627,13 +627,11 @@ static int imx8mq_phy_power_on(struct phy *phy)
 
 	ret = clk_prepare_enable(imx_phy->clk);
 	if (ret)
-		return ret;
+		goto disable_vbus;
 
 	ret = clk_prepare_enable(imx_phy->alt_clk);
-	if (ret) {
-		clk_disable_unprepare(imx_phy->clk);
-		return ret;
-	}
+	if (ret)
+		goto disable_clk;
 
 	/* Disable rx term override */
 	value = readl(imx_phy->base + PHY_CTRL6);
@@ -641,6 +639,13 @@ static int imx8mq_phy_power_on(struct phy *phy)
 	writel(value, imx_phy->base + PHY_CTRL6);
 
 	return 0;
+
+disable_clk:
+	clk_disable_unprepare(imx_phy->clk);
+disable_vbus:
+	regulator_disable(imx_phy->vbus);
+
+	return ret;
 }
 
 static int imx8mq_phy_power_off(struct phy *phy)
