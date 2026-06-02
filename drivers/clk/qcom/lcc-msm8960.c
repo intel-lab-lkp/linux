@@ -453,6 +453,7 @@ MODULE_DEVICE_TABLE(of, lcc_msm8960_match_table);
 static int lcc_msm8960_probe(struct platform_device *pdev)
 {
 	u32 val;
+	int ret;
 	struct regmap *regmap;
 
 	/* patch for the cxo <-> pxo difference */
@@ -468,7 +469,10 @@ static int lcc_msm8960_probe(struct platform_device *pdev)
 		return PTR_ERR(regmap);
 
 	/* Use the correct frequency plan depending on speed of PLL4 */
-	regmap_read(regmap, 0x4, &val);
+	ret = regmap_read(regmap, 0x4, &val);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "failed to read PLL4 L register\n");
 	if (val == 0x12) {
 		slimbus_src.freq_tbl = clk_tbl_aif_osr_492;
 		mi2s_osr_src.freq_tbl = clk_tbl_aif_osr_492;
@@ -479,7 +483,10 @@ static int lcc_msm8960_probe(struct platform_device *pdev)
 		pcm_src.freq_tbl = clk_tbl_pcm_492;
 	}
 	/* Enable PLL4 source on the LPASS Primary PLL Mux */
-	regmap_write(regmap, 0xc4, 0x1);
+	ret = regmap_write(regmap, 0xc4, 0x1);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "failed to select PLL4 on LPASS Primary PLL Mux\n");
 
 	return qcom_cc_really_probe(&pdev->dev, &lcc_msm8960_desc, regmap);
 }
