@@ -1690,6 +1690,17 @@ static int fs_bdev_register(struct file *bdev_file, struct super_block *sb)
 	sb->s_count++;
 	spin_unlock(&sb_lock);
 
+	/*
+	 * Don't bring a filesystem up on a frozen device.  The entry is already
+	 * published, so a freeze either is seen here or finds it and waits in
+	 * super_lock() until this mount is born or (on -EBUSY) dies.  The mount
+	 * aborts, so the entry is torn down without rebalancing @fs_bdev_active.
+	 */
+	if (atomic_read(&file_bdev(bdev_file)->bd_fsfreeze_count) > 0) {
+		fs_bdev_holder_put(h);
+		return -EBUSY;
+	}
+
 	return 0;
 }
 
@@ -1801,16 +1812,6 @@ int setup_bdev_super(struct super_block *sb, int sb_flags,
 		return -EACCES;
 	}
 
-	/*
-	 * It is enough to check bdev was not frozen before we set
-	 * s_bdev as freezing will wait until SB_BORN is set.
-	 */
-	if (atomic_read(&bdev->bd_fsfreeze_count) > 0) {
-		if (fc)
-			warnf(fc, "%pg: Can't mount, blockdev is frozen", bdev);
-		fs_bdev_file_release(bdev_file, sb);
-		return -EBUSY;
-	}
 	spin_lock(&sb_lock);
 	sb->s_bdev_file = bdev_file;
 	sb->s_bdev = bdev;
