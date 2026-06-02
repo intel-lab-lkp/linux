@@ -2117,44 +2117,28 @@ void ice_cfg_sw_rx_lldp(struct ice_pf *pf, bool enable)
 static void ice_set_agg_vsi(struct ice_vsi *vsi)
 {
 	struct device *dev = ice_pf_to_dev(vsi->back);
-	struct ice_agg_node *agg_node_iter = NULL;
-	u32 agg_id = ICE_INVALID_AGG_NODE_ID;
-	struct ice_agg_node *agg_node = NULL;
-	int node_offset, max_agg_nodes = 0;
-	struct ice_port_info *port_info;
-	struct ice_pf *pf = vsi->back;
-	u32 agg_node_id_start = 0;
-	int status;
+	u32 min_id, max_id, agg_id;
+	int err;
+
+	vsi->agg_id = -1;
 
 	/* create (as needed) scheduler aggregator node and move VSI into
 	 * corresponding aggregator node
 	 * - PF aggregator node to contains VSIs of type _PF and _CTRL
 	 * - VF aggregator nodes will contain VF VSI
 	 */
-	port_info = pf->hw.port_info;
-	if (!port_info)
-		return;
-
 	switch (vsi->type) {
 	case ICE_VSI_CTRL:
 	case ICE_VSI_CHNL:
 	case ICE_VSI_LB:
 	case ICE_VSI_PF:
 	case ICE_VSI_SF:
-		max_agg_nodes = ICE_MAX_PF_AGG_NODES;
-		agg_node_id_start = ICE_PF_AGG_NODE_ID_START;
-		agg_node_iter = &pf->pf_agg_node[0];
+		min_id = ICE_PF_AGG_NODE_ID_START;
+		max_id = ICE_PF_AGG_NODE_ID_END;
 		break;
 	case ICE_VSI_VF:
-		/* user can create 'n' VFs on a given PF, but since max children
-		 * per aggregator node can be only 64. Following code handles
-		 * aggregator(s) for VF VSIs, either selects a agg_node which
-		 * was already created provided num_vsis < 64, otherwise
-		 * select next available node, which will be created
-		 */
-		max_agg_nodes = ICE_MAX_VF_AGG_NODES;
-		agg_node_id_start = ICE_VF_AGG_NODE_ID_START;
-		agg_node_iter = &pf->vf_agg_node[0];
+		min_id = ICE_VF_AGG_NODE_ID_START;
+		max_id = ICE_VF_AGG_NODE_ID_END;
 		break;
 	default:
 		/* other VSI type, handle later if needed */
@@ -2163,70 +2147,17 @@ static void ice_set_agg_vsi(struct ice_vsi *vsi)
 		return;
 	}
 
-	/* find the appropriate aggregator node */
-	for (node_offset = 0; node_offset < max_agg_nodes; node_offset++) {
-		/* see if we can find space in previously created
-		 * node if num_vsis < 64, otherwise skip
-		 */
-		if (agg_node_iter->num_vsis &&
-		    agg_node_iter->num_vsis == ICE_MAX_VSIS_IN_AGG_NODE) {
-			agg_node_iter++;
-			continue;
-		}
-
-		if (agg_node_iter->valid &&
-		    agg_node_iter->agg_id != ICE_INVALID_AGG_NODE_ID) {
-			agg_id = agg_node_iter->agg_id;
-			agg_node = agg_node_iter;
-			break;
-		}
-
-		/* find unclaimed agg_id */
-		if (agg_node_iter->agg_id == ICE_INVALID_AGG_NODE_ID) {
-			agg_id = node_offset + agg_node_id_start;
-			agg_node = agg_node_iter;
-			break;
-		}
-		/* move to next agg_node */
-		agg_node_iter++;
-	}
-
-	if (!agg_node)
-		return;
-
-	/* if selected aggregator node was not created, create it */
-	if (!agg_node->valid) {
-		status = ice_cfg_agg(port_info, agg_id, ICE_AGG_TYPE_AGG,
-				     (u8)vsi->tc_cfg.ena_tc);
-		if (status) {
-			dev_err(dev, "unable to create aggregator node with agg_id %u\n",
-				agg_id);
-			return;
-		}
-		/* aggregator node is created, store the needed info */
-		agg_node->valid = true;
-		agg_node->agg_id = agg_id;
-	}
-
-	/* move VSI to corresponding aggregator node */
-	status = ice_move_vsi_to_agg(port_info, agg_id, vsi->idx,
-				     (u8)vsi->tc_cfg.ena_tc);
-	if (status) {
-		dev_err(dev, "unable to move VSI idx %u into aggregator %u node",
-			vsi->idx, agg_id);
+	err = ice_cfg_vsi_agg(vsi->back->hw.port_info, vsi->idx, min_id,
+			      max_id, (u8)vsi->tc_cfg.ena_tc, &agg_id);
+	if (err) {
+		dev_err(dev, "Unable to associate VSI with an aggregator node, %pe\n",
+			ERR_PTR(err));
 		return;
 	}
 
-	/* keep active children count for aggregator node */
-	agg_node->num_vsis++;
-
-	/* cache the 'agg_id' in VSI, so that after reset - VSI will be moved
-	 * to aggregator node
-	 */
-	vsi->agg_node = agg_node;
-	dev_dbg(dev, "successfully moved VSI idx %u tc_bitmap 0x%x) into aggregator node %d which has num_vsis %u\n",
-		vsi->idx, vsi->tc_cfg.ena_tc, vsi->agg_node->agg_id,
-		vsi->agg_node->num_vsis);
+	vsi->agg_id = agg_id;
+	dev_dbg(dev, "successfully moved VSI idx %u tc_bitmap 0x%x into aggregator node %u\n",
+		vsi->idx, vsi->tc_cfg.ena_tc, agg_id);
 }
 
 static int ice_vsi_cfg_tc_lan(struct ice_pf *pf, struct ice_vsi *vsi)
@@ -2562,16 +2493,6 @@ void ice_vsi_decfg(struct ice_vsi *vsi)
 	ice_vsi_free_q_vectors(vsi);
 	ice_vsi_put_qs(vsi);
 	ice_vsi_free_arrays(vsi);
-
-	/* SR-IOV determines needed MSIX resources all at once instead of per
-	 * VSI since when VFs are spawned we know how many VFs there are and how
-	 * many interrupts each VF needs. SR-IOV MSIX resources are also
-	 * cleared in the same manner.
-	 */
-
-	if (vsi->type == ICE_VSI_VF &&
-	    vsi->agg_node && vsi->agg_node->valid)
-		vsi->agg_node->num_vsis--;
 }
 
 /**
@@ -2624,8 +2545,7 @@ ice_vsi_setup(struct ice_pf *pf, struct ice_vsi_cfg_params *params)
 		ice_vsi_cfg_sw_lldp(vsi, true, true);
 	}
 
-	if (!vsi->agg_node)
-		ice_set_agg_vsi(vsi);
+	ice_set_agg_vsi(vsi);
 
 	return vsi;
 
