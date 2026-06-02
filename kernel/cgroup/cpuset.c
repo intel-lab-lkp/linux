@@ -2965,7 +2965,7 @@ out:
 	if (force_sd_rebuild)
 		rebuild_sched_domains_locked();
 	free_tmpmasks(&tmpmask);
-	return 0;
+	return err ? -EINVAL : 0;
 }
 
 static struct cpuset *cpuset_attach_old_cs;
