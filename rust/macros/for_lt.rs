@@ -176,7 +176,7 @@ impl<'a> Prover<'a> {
     }
 }
 
-pub(crate) fn for_lt(input: HigherRankedType) -> TokenStream {
+pub(crate) fn covariant_for_lt(input: HigherRankedType) -> TokenStream {
     let (ty, lifetime) = match input {
         HigherRankedType::Explicit { lifetime, ty, .. } => (ty, lifetime),
         HigherRankedType::Implicit { ty } => {
@@ -235,7 +235,7 @@ pub(crate) fn for_lt(input: HigherRankedType) -> TokenStream {
     );
 
     quote!(
-        ::kernel::types::for_lt::UnsafeForLtImpl::<
+        ::kernel::types::for_lt::CovariantForLtImpl::<
             dyn for<#lifetime> ::kernel::types::for_lt::WithLt<#lifetime, Of = #ty>,
             #ty_static,
             {
