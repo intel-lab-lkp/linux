@@ -2799,30 +2799,6 @@ ice_sched_cfg_agg(struct ice_port_info *pi, u32 agg_id,
 }
 
 /**
- * ice_cfg_agg - config aggregator node
- * @pi: port information structure
- * @agg_id: aggregator ID
- * @agg_type: aggregator type queue, VSI, or aggregator group
- * @tc_bitmap: bits TC bitmap
- *
- * This function configures aggregator node(s).
- */
-int
-ice_cfg_agg(struct ice_port_info *pi, u32 agg_id, enum ice_agg_type agg_type,
-	    u8 tc_bitmap)
-{
-	unsigned long bitmap = tc_bitmap;
-	int status;
-
-	mutex_lock(&pi->sched_lock);
-	status = ice_sched_cfg_agg(pi, agg_id, agg_type, &bitmap);
-	if (!status)
-		status = ice_save_agg_tc_bitmap(pi, agg_id, &bitmap);
-	mutex_unlock(&pi->sched_lock);
-	return status;
-}
-
-/**
  * ice_get_agg_vsi_info - get the aggregator ID
  * @agg_info: aggregator info
  * @vsi_handle: software VSI handle
@@ -3071,32 +3047,6 @@ ice_sched_cfg_node_bw_alloc(struct ice_hw *hw, struct ice_sched_node *node,
 
 	/* Configure element */
 	return ice_sched_update_elem(hw, node, &buf);
-}
-
-/**
- * ice_move_vsi_to_agg - moves VSI to new or default aggregator
- * @pi: port information structure
- * @agg_id: aggregator ID
- * @vsi_handle: software VSI handle
- * @tc_bitmap: TC bitmap of enabled TC(s)
- *
- * Move or associate VSI to a new or default aggregator node.
- */
-int
-ice_move_vsi_to_agg(struct ice_port_info *pi, u32 agg_id, u16 vsi_handle,
-		    u8 tc_bitmap)
-{
-	unsigned long bitmap = tc_bitmap;
-	int status;
-
-	mutex_lock(&pi->sched_lock);
-	status = ice_sched_assoc_vsi_to_agg(pi, agg_id, vsi_handle,
-					    (unsigned long *)&bitmap);
-	if (!status)
-		status = ice_save_agg_vsi_tc_bitmap(pi, agg_id, vsi_handle,
-						    (unsigned long *)&bitmap);
-	mutex_unlock(&pi->sched_lock);
-	return status;
 }
 
 /**
