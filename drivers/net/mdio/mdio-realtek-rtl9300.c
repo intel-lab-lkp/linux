@@ -438,20 +438,25 @@ static int otto_emdio_map_ports(struct device *dev)
 				     dev_fwnode(parent));
 
 	fwnode_for_each_child_node_scoped(ports, port) {
-		struct device_node *mdio_dn;
 		u32 addr;
 		u32 bus;
 		u32 pn;
 
-		struct device_node *phy_dn __free(device_node) =
-			of_parse_phandle(to_of_node(port), "phy-handle", 0);
+		struct fwnode_handle *phy_fwnode __free(fwnode_handle) =
+			fwnode_find_reference(port, "phy-handle", 0);
 		/* skip ports without phys */
-		if (!phy_dn)
+		if (IS_ERR(phy_fwnode))
 			continue;
 
-		mdio_dn = phy_dn->parent;
+		struct fwnode_handle *bus_fwnode __free(fwnode_handle) =
+			fwnode_get_parent(phy_fwnode);
+		if (!bus_fwnode)
+			continue;
+
+		struct fwnode_handle *ctrl_fwnode __free(fwnode_handle) =
+			fwnode_get_parent(bus_fwnode);
 		/* only map ports that are connected to this mdio-controller */
-		if (mdio_dn->parent != dev->of_node)
+		if (ctrl_fwnode != dev_fwnode(dev))
 			continue;
 
 		err = fwnode_property_read_u32(port, "reg", &pn);
@@ -464,14 +469,14 @@ static int otto_emdio_map_ports(struct device *dev)
 		if (test_bit(pn, priv->valid_ports))
 			return dev_err_probe(dev, -EINVAL, "duplicated port number %d\n", pn);
 
-		err = of_property_read_u32(mdio_dn, "reg", &bus);
+		err = fwnode_property_read_u32(bus_fwnode, "reg", &bus);
 		if (err)
 			return err;
 
 		if (bus >= priv->info->num_buses)
 			return dev_err_probe(dev, -EINVAL, "illegal smi bus number %d\n", bus);
 
-		err = of_property_read_u32(phy_dn, "reg", &addr);
+		err = fwnode_property_read_u32(phy_fwnode, "reg", &addr);
 		if (err)
 			return err;
 
