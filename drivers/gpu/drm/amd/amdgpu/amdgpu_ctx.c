@@ -817,15 +817,15 @@ struct dma_fence *amdgpu_ctx_get_fence(struct amdgpu_ctx *ctx,
 	return fence;
 }
 
-static void amdgpu_ctx_set_entity_priority(struct amdgpu_ctx *ctx,
-					   struct amdgpu_ctx_entity *aentity,
-					   int hw_ip,
-					   int32_t priority)
+static int amdgpu_ctx_set_entity_priority(struct amdgpu_ctx *ctx,
+					  struct amdgpu_ctx_entity *aentity,
+					  int hw_ip,
+					  int32_t priority)
 {
 	struct amdgpu_device *adev = ctx->mgr->adev;
-	unsigned int hw_prio;
 	struct drm_gpu_scheduler **scheds = NULL;
-	unsigned num_scheds;
+	unsigned int hw_prio, num_scheds;
+	int ret = 0;
 
 	/* set sw priority */
 	drm_sched_entity_set_priority(&aentity->entity,
@@ -837,16 +837,18 @@ static void amdgpu_ctx_set_entity_priority(struct amdgpu_ctx *ctx,
 		hw_prio = array_index_nospec(hw_prio, AMDGPU_RING_PRIO_MAX);
 		scheds = adev->gpu_sched[hw_ip][hw_prio].sched;
 		num_scheds = adev->gpu_sched[hw_ip][hw_prio].num_scheds;
-		drm_sched_entity_modify_sched(&aentity->entity, scheds,
-					      num_scheds);
+		ret = drm_sched_entity_modify_sched(&aentity->entity, scheds,
+						    num_scheds);
 	}
+
+	return ret;
 }
 
-void amdgpu_ctx_priority_override(struct amdgpu_ctx *ctx,
-				  int32_t priority)
+int amdgpu_ctx_priority_override(struct amdgpu_ctx *ctx, int32_t priority)
 {
 	int32_t ctx_prio;
 	unsigned i, j;
+	int ret;
 
 	ctx->override_priority = priority;
 
@@ -857,10 +859,15 @@ void amdgpu_ctx_priority_override(struct amdgpu_ctx *ctx,
 			if (!ctx->entities[i][j])
 				continue;
 
-			amdgpu_ctx_set_entity_priority(ctx, ctx->entities[i][j],
-						       i, ctx_prio);
+			ret = amdgpu_ctx_set_entity_priority(ctx,
+							     ctx->entities[i][j],
+							     i, ctx_prio);
+			if (ret)
+				return ret;
 		}
 	}
+
+	return 0;
 }
 
 int amdgpu_ctx_wait_prev_fence(struct amdgpu_ctx *ctx,

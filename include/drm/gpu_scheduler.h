@@ -120,23 +120,31 @@ struct drm_sched_entity {
 	 */
 	struct drm_sched_entity_stats	*stats;
 
-	/**
-	 * @sched_list:
-	 *
-	 * A list of schedulers (struct drm_gpu_scheduler).  Jobs from this entity can
-	 * be scheduled on any scheduler on this list.
-	 *
-	 * This can be modified by calling drm_sched_entity_modify_sched().
-	 * Locking is entirely up to the driver, see the above function for more
-	 * details.
-	 *
-	 * This will be set to NULL if &num_sched_list equals 1 and @rq has been
-	 * set already.
-	 *
-	 * FIXME: This means priority changes through
-	 * drm_sched_entity_set_priority() will be lost henceforth in this case.
-	 */
-	struct drm_gpu_scheduler        **sched_list;
+	union {
+		/**
+		 * @sched_list:
+		 *
+		 * A list of schedulers (struct drm_gpu_scheduler).  Jobs from
+		 * this entity can be scheduled on any scheduler on this list.
+		 *
+		 * This can be modified by calling
+		 * drm_sched_entity_modify_sched(). Locking is entirely up to
+		 * the driver, see the above function for more details.
+		 */
+		struct drm_gpu_scheduler        **sched_list;
+
+		/**
+		 * @sched:
+		 *
+		 * A single struct drm_gpu_scheduler jobs from this entity will
+		 * be scheduled on.
+		 *
+		 * This can be modified by calling
+		 * drm_sched_entity_modify_sched(). Locking is entirely up to
+		 * the driver, see the above function for more details.
+		 */
+		struct drm_gpu_scheduler        *sched;
+	};
 
 	/**
 	 * @num_sched_list:
@@ -699,9 +707,9 @@ void drm_sched_entity_destroy(struct drm_sched_entity *entity);
 void drm_sched_entity_set_priority(struct drm_sched_entity *entity,
 				   enum drm_sched_priority priority);
 int drm_sched_entity_error(struct drm_sched_entity *entity);
-void drm_sched_entity_modify_sched(struct drm_sched_entity *entity,
-				   struct drm_gpu_scheduler **sched_list,
-				   unsigned int num_sched_list);
+int drm_sched_entity_modify_sched(struct drm_sched_entity *entity,
+				  struct drm_gpu_scheduler **sched_list,
+				  unsigned int num_sched_list);
 
 /**
  * struct drm_sched_pending_job_iter - DRM scheduler pending job iterator state

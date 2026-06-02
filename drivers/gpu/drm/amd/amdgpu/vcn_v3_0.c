@@ -1900,8 +1900,7 @@ static int vcn_v3_0_limit_sched(struct amdgpu_cs_parser *p,
 
 	scheds = p->adev->gpu_sched[AMDGPU_HW_IP_VCN_DEC]
 		[AMDGPU_RING_PRIO_DEFAULT].sched;
-	drm_sched_entity_modify_sched(job->base.entity, scheds, 1);
-	return 0;
+	return drm_sched_entity_modify_sched(job->base.entity, scheds, 1);
 }
 
 static int vcn_v3_0_dec_msg(struct amdgpu_cs_parser *p, struct amdgpu_job *job,
