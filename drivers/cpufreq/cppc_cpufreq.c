@@ -50,7 +50,7 @@ struct cppc_freq_invariance {
 static DEFINE_PER_CPU(struct cppc_freq_invariance, cppc_freq_inv);
 static struct kthread_worker *kworker_fie;
 
-static int cppc_perf_from_fbctrs(u64 reference_perf,
+static u64 cppc_perf_from_fbctrs(u64 reference_perf,
 				 struct cppc_perf_fb_ctrs *fb_ctrs_t0,
 				 struct cppc_perf_fb_ctrs *fb_ctrs_t1);
 
@@ -750,7 +750,7 @@ static inline u64 get_delta(u64 t1, u64 t0)
 	return (u32)t1 - (u32)t0;
 }
 
-static int cppc_perf_from_fbctrs(u64 reference_perf,
+static u64 cppc_perf_from_fbctrs(u64 reference_perf,
 				 struct cppc_perf_fb_ctrs *fb_ctrs_t0,
 				 struct cppc_perf_fb_ctrs *fb_ctrs_t1)
 {
@@ -771,19 +771,71 @@ static int cppc_perf_from_fbctrs(u64 reference_perf,
 	return (reference_perf * delta_delivered) / delta_reference;
 }
 
-static int cppc_get_perf_ctrs_sample(int cpu,
+/* CPPC read noise floor for early retry exit. */
+static DEFINE_PER_CPU(u64, err_floor);
+
+#define CPPC_SAMPLE_MAX_RETRIES	200
+
+static int cppc_get_perf_ctrs_sample(int cpu, u64 ref,
 				     struct cppc_perf_fb_ctrs *fb_ctrs_t0,
 				     struct cppc_perf_fb_ctrs *fb_ctrs_t1)
 {
 	int ret;
+	s64 last_delivered = 0;
+	u64 smallest_error = 0;
+	int tries = 0;
+	u64 min_counts = ref * 2000;
 
-	ret = cppc_get_perf_ctrs(cpu, fb_ctrs_t0);
+	/* Two subsequent reads with the same offset avoids one off large jitter values */
+	for (int x = 0; x < 10; x++) {
+		ret = cppc_get_perf_ctrs(cpu, fb_ctrs_t0);
+		if (ret)
+			return ret;
+
+		ret = cppc_get_perf_ctrs(cpu, fb_ctrs_t1);
+		if (ret)
+			return ret;
+
+		if (last_delivered == cppc_perf_from_fbctrs(ref, fb_ctrs_t0, fb_ctrs_t1))
+			break;
+
+		last_delivered = cppc_perf_from_fbctrs(ref, fb_ctrs_t0, fb_ctrs_t1);
+	}
+	last_delivered = 0;
+again:
+	ndelay(100);
+
+	ret = cppc_get_perf_ctrs(cpu, fb_ctrs_t1);
 	if (ret)
 		return ret;
 
-	udelay(2); /* 2usec delay between sampling */
+	/*
+	 * We want at least two significant figures, if the counts are low, then there
+	 * can be rounding errors that show up as frequency that is swinging around a few hundred
+	 * Mhz. OTOH, if the delay gets too long the clock rate can be affected.
+	 * So we want it exactly long enough to have sufficient counter turn over, and
+	 * a repeatable low error value.
+	 */
+	if ((get_delta(fb_ctrs_t1->reference, fb_ctrs_t0->reference) < min_counts) ||
+	    (get_delta(fb_ctrs_t1->delivered, fb_ctrs_t0->delivered) < min_counts)) {
+		s64 delivered = cppc_perf_from_fbctrs(ref, fb_ctrs_t0, fb_ctrs_t1);
+		u64 error = abs(last_delivered - delivered);
 
-	return cppc_get_perf_ctrs(cpu, fb_ctrs_t1);
+		if (smallest_error == 0 || smallest_error > error)
+			smallest_error = error;
+
+		if (error > per_cpu(err_floor, cpu)) {
+			last_delivered = delivered;
+			tries++;
+			if (tries < CPPC_SAMPLE_MAX_RETRIES)
+				goto again;
+		}
+	}
+
+	/* compute a running error */
+	per_cpu(err_floor, cpu) = (per_cpu(err_floor, cpu) + smallest_error) / 2;
+
+	return ret;
 }
 
 static unsigned int cppc_cpufreq_get_rate(unsigned int cpu)
@@ -799,7 +851,9 @@ static unsigned int cppc_cpufreq_get_rate(unsigned int cpu)
 
 	cpu_data = policy->driver_data;
 
-	ret = cppc_get_perf_ctrs_sample(cpu, &fb_ctrs_t0, &fb_ctrs_t1);
+	ret = cppc_get_perf_ctrs_sample(cpu, cpu_data->perf_caps.reference_perf,
+					&fb_ctrs_t0, &fb_ctrs_t1);
+
 	if (ret) {
 		if (ret == -EFAULT)
 			/* Any of the associated CPPC regs is 0. */
