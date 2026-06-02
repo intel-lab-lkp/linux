@@ -52,10 +52,16 @@ static void vmw_bo_free(struct ttm_buffer_object *bo)
 		WARN_ON(vbo != res->guest_memory_bo);
 		WARN_ON(!res->guest_memory_bo);
 		if (res->guest_memory_bo) {
+			int ret = 0;
 			/* Reserve and switch the backing mob. */
 			mutex_lock(&res->dev_priv->cmdbuf_mutex);
 			(void)vmw_resource_reserve(res, false, true);
+			ret = ttm_bo_reserve(bo, false, false, NULL);
+			if (ret != 0)
+				drm_warn(&res->dev_priv->drm,
+					 "%s: failed reserve\n", __func__);
 			vmw_resource_mob_detach(res);
+			ttm_bo_unreserve(bo);
 			if (res->dirty)
 				res->func->dirty_free(res);
 			if (res->coherent)
