@@ -1940,10 +1940,20 @@ static int
 xfs_inodegc_inactivate(
 	struct xfs_inode	*ip)
 {
-	int			error;
+	int			error = 0;
 
 	trace_xfs_inode_inactivating(ip);
-	error = xfs_inactive(ip);
+
+	/*
+	 * If the filesystem has been shut down - for example a mount that failed
+	 * after background inactivation was enabled - do not inactivate the
+	 * inode.  Inactivation modifies the persistent metadata and its
+	 * transactions cannot complete on a shut down mount anyway, and the
+	 * subsystems it relies on (e.g. quota, mp->m_quotainfo) may not be set
+	 * up.  Just make the inode reclaimable so it can be freed.
+	 */
+	if (!xfs_is_shutdown(ip->i_mount))
+		error = xfs_inactive(ip);
 	xfs_inodegc_set_reclaimable(ip);
 	return error;
 
