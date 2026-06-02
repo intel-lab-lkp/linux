@@ -1688,6 +1688,10 @@ static inline int virtqueue_add_packed(struct vring_virtqueue *vq,
 					     &addr, &len, premapped, attr))
 				goto unmap_release;
 
+			desc[i].addr = cpu_to_le64(addr);
+			desc[i].len = cpu_to_le32(len);
+			desc[i].id = cpu_to_le16(id);
+
 			flags = cpu_to_le16(vq->packed.avail_used_flags |
 				    (++c == total_sg ? 0 : VRING_DESC_F_NEXT) |
 				    (n < out_sgs ? 0 : VRING_DESC_F_WRITE));
@@ -1695,10 +1699,6 @@ static inline int virtqueue_add_packed(struct vring_virtqueue *vq,
 				head_flags = flags;
 			else
 				desc[i].flags = flags;
-
-			desc[i].addr = cpu_to_le64(addr);
-			desc[i].len = cpu_to_le32(len);
-			desc[i].id = cpu_to_le16(id);
 
 			if (unlikely(vq->use_map_api)) {
 				vq->packed.desc_extra[curr].addr = premapped ?
