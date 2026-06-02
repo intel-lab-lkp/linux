@@ -2554,7 +2554,7 @@ EXPORT_SYMBOL_GPL(iommu_detach_group);
  * Like iommu_iova_to_phys() but additionally returns the page size of the
  * PTE mapping at @iova through @mapped_length.
  *
- * Return: The physical address for the given IOVA, or PHYS_ADDR_MAX if no translation.
+ * Return: The physical address for the given IOVA, or 0 if no translation.
  */
 phys_addr_t iommu_iova_to_phys_length(struct iommu_domain *domain,
 				       dma_addr_t iova,
@@ -2566,16 +2566,8 @@ phys_addr_t iommu_iova_to_phys_length(struct iommu_domain *domain,
 	if (domain->type == IOMMU_DOMAIN_IDENTITY)
 		return iova;
 
-	if (!domain->ops->iova_to_phys_length) {
-		/* Fallback to legacy iova_to_phys without length info */
-		if (domain->ops->iova_to_phys) {
-			phys_addr_t phys = domain->ops->iova_to_phys(domain, iova);
-			if (phys && mapped_length)
-				*mapped_length = PAGE_SIZE;
-			return phys ? phys : PHYS_ADDR_MAX;
-		}
+	if (!domain->ops->iova_to_phys_length)
 		return PHYS_ADDR_MAX;
-	}
 
 	return domain->ops->iova_to_phys_length(domain, iova, mapped_length);
 }
