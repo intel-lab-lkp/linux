@@ -600,3 +600,15 @@ void pci_tph_init(struct pci_dev *pdev)
 	save_size = sizeof(u32) + num_entries * sizeof(u16);
 	pci_add_ext_cap_save_buffer(pdev, PCI_EXT_CAP_ID_TPH, save_size);
 }
+
+/**
+ * pcie_tph_supported - Check if device has TPH capability
+ * @pdev: PCI device to query
+ *
+ * Return: true if device exposes TPH capability, false otherwise
+ */
+bool pcie_tph_supported(struct pci_dev *pdev)
+{
+	return !!pdev->tph_cap;
+}
+EXPORT_SYMBOL(pcie_tph_supported);
