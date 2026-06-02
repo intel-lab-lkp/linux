@@ -341,7 +341,7 @@ enum {
  * requests will inherit GFP_NOFS implicitly.
  *
  * %GFP_USER is for userspace allocations that also need to be directly
- * accessibly by the kernel or hardware. It is typically used by hardware
+ * accessible by the kernel or hardware. It is typically used by hardware
  * for buffers that are mapped to userspace (e.g. graphics) that hardware
  * still must DMA to. cpuset limits are enforced for these allocations.
  *
