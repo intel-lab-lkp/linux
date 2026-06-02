@@ -1031,13 +1031,12 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 			return -ENXIO;
 		}
 
-		if (size == 0) {
-			dev_warn(&port->dev,
-				 "decoder%d.%d: Committed with zero size\n",
-				 port->id, cxld->id);
-			return -ENXIO;
-		}
 		port->commit_end = cxld->id;
+
+		if (size == 0)
+			dev_dbg(&port->dev,
+				"decoder%d.%d: Committed with zero size\n",
+				port->id, cxld->id);
 	} else {
 		if (cxled) {
 			struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
@@ -1094,6 +1093,10 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 	}
 
 	if (!committed)
+		return 0;
+
+	/* Committed zero-size decoder has nothing to reserve in DPA. */
+	if (size == 0)
 		return 0;
 
 	dpa_size = div_u64_rem(size, cxld->interleave_ways, &remainder);
