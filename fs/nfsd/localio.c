@@ -40,8 +40,8 @@
  * avoid all the NFS overhead with reads, writes and commits.
  *
  * On successful return, returned nfsd_file will have its nf_net member
- * set. Caller (NFS client) is responsible for calling nfsd_net_put and
- * nfsd_file_put (via nfs_to_nfsd_file_put_local).
+ * set. Caller (NFS client) is responsible for calling nfsd_file_put
+ * (via nfs_to_nfsd_file_put_local), which also releases the nfsd_net ref.
  */
 static struct nfsd_file *
 nfsd_open_local_fh(struct net *net, struct auth_domain *dom,

@@ -45,6 +45,7 @@ struct nfsd_file {
 #define NFSD_FILE_REFERENCED	(2)
 #define NFSD_FILE_GC		(3)
 #define NFSD_FILE_RECENT	(4)
+#define NFSD_FILE_NET_HELD	(5)
 	unsigned long		nf_flags;
 	refcount_t		nf_ref;
 	unsigned char		nf_may;
@@ -66,7 +67,7 @@ void nfsd_file_cache_shutdown(void);
 int nfsd_file_cache_start_net(struct net *net);
 void nfsd_file_cache_shutdown_net(struct net *net);
 void nfsd_file_put(struct nfsd_file *nf);
-struct net *nfsd_file_put_local(struct nfsd_file __rcu **nf);
+void nfsd_file_put_local(struct nfsd_file __rcu **nf);
 struct nfsd_file *nfsd_file_get(struct nfsd_file *nf);
 struct file *nfsd_file_file(struct nfsd_file *nf);
 void nfsd_file_close_inode_sync(struct inode *inode);

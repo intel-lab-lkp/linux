@@ -62,7 +62,7 @@ struct nfsd_localio_operations {
 						const struct nfs_fh *,
 						struct nfsd_file __rcu **pnf,
 						const fmode_t);
-	struct net *(*nfsd_file_put_local)(struct nfsd_file __rcu **);
+	void (*nfsd_file_put_local)(struct nfsd_file __rcu **);
 	struct file *(*nfsd_file_file)(struct nfsd_file *);
 	void (*nfsd_file_dio_alignment)(struct nfsd_file *,
 					u32 *, u32 *, u32 *);
@@ -96,12 +96,7 @@ static inline void nfs_to_nfsd_file_put_local(struct nfsd_file __rcu **localio)
 	 * must prevent nfsd shutdown from completing as nfs_close_local_fh()
 	 * does by blocking the nfs_uuid from being finally put.
 	 */
-	struct net *net;
-
-	net = nfs_to->nfsd_file_put_local(localio);
-
-	if (net)
-		nfs_to_nfsd_net_put(net);
+	nfs_to->nfsd_file_put_local(localio);
 }
 
 #else   /* CONFIG_NFS_LOCALIO */

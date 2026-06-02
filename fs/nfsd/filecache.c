@@ -295,6 +295,9 @@ nfsd_file_free(struct nfsd_file *nf)
 	if (WARN_ON_ONCE(!list_empty(&nf->nf_lru)))
 		return;
 
+	if (test_bit(NFSD_FILE_NET_HELD, &nf->nf_flags))
+		put_net(nf->nf_net);
+
 	call_rcu(&nf->nf_rcu, nfsd_file_slab_free);
 }
 
@@ -375,24 +378,28 @@ nfsd_file_put(struct nfsd_file *nf)
 }
 
 /**
- * nfsd_file_put_local - put nfsd_file reference and arm nfsd_net_put in caller
+ * nfsd_file_put_local - put nfsd_file reference and release nfsd_net ref
  * @pnf: nfsd_file of which to put the reference
  *
- * First save the associated net to return to caller, then put
- * the reference of the nfsd_file.
+ * Drops both the nfsd_file reference and the associated nfsd_net
+ * reference.  The nfsd_net ref is released before the file ref so
+ * that put_net() inside nfsd_file_free() cannot drop the last net
+ * namespace reference while the caller still needs it.
  */
-struct net *
+void
 nfsd_file_put_local(struct nfsd_file __rcu **pnf)
 {
 	struct nfsd_file *nf;
-	struct net *net = NULL;
 
 	nf = unrcu_pointer(xchg(pnf, NULL));
 	if (nf) {
-		net = nf->nf_net;
+		struct net *net = nf->nf_net;
+
+		rcu_read_lock();
+		nfsd_net_put(net);
+		rcu_read_unlock();
 		nfsd_file_put(nf);
 	}
-	return net;
 }
 
 /**
@@ -433,9 +440,20 @@ nfsd_file_dispose_list_delayed(struct list_head *dispose)
 	while (!list_empty(dispose)) {
 		struct nfsd_file *nf = list_first_entry(dispose,
 						struct nfsd_file, nf_gc);
-		struct nfsd_net *nn = net_generic(nf->nf_net, nfsd_net_id);
+		struct nfsd_net *nn;
 		struct svc_serv *serv;
 
+		/*
+		 * Pin the net namespace so nf_net stays valid while the
+		 * file sits on the per-net dispose list.  Callers (the GC
+		 * worker, shrinker, and fsnotify callbacks) always run
+		 * before nfsd_net_exit(), so nf_net is still live here.
+		 * The matching put_net() is in nfsd_file_free().
+		 */
+		get_net(nf->nf_net);
+		set_bit(NFSD_FILE_NET_HELD, &nf->nf_flags);
+
+		nn = net_generic(nf->nf_net, nfsd_net_id);
 		spin_lock(&nn->fcache_dispose_lock);
 		list_move_tail(&nf->nf_gc, &nn->fcache_dispose_list);
 		spin_unlock(&nn->fcache_dispose_lock);
