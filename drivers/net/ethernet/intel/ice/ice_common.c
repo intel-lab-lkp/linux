@@ -1052,6 +1052,7 @@ int ice_init_hw(struct ice_hw *hw)
 	hw->evb_veb = true;
 
 	xa_init_flags(&hw->sched_node_ids, XA_FLAGS_ALLOC);
+	xa_init_flags(&hw->agg_list, XA_FLAGS_ALLOC);
 
 	/* Query the allocated resources for Tx scheduler */
 	status = ice_sched_query_res_alloc(hw);
@@ -1091,7 +1092,6 @@ int ice_init_hw(struct ice_hw *hw)
 		status = -EIO;
 		goto err_unroll_sched;
 	}
-	INIT_LIST_HEAD(&hw->agg_list);
 	/* Initialize max burst size */
 	if (!hw->max_burst_size)
 		ice_cfg_rl_burst_size(hw, ICE_SCHED_DFLT_BURST_SIZE);
@@ -1147,6 +1147,7 @@ err_unroll_sched:
 	ice_sched_cleanup_all(hw);
 err_unroll_xarray:
 	xa_destroy(&hw->sched_node_ids);
+	xa_destroy(&hw->agg_list);
 err_unroll_alloc:
 	devm_kfree(ice_hw_to_dev(hw), hw->port_info);
 err_unroll_cqinit:
@@ -1189,6 +1190,7 @@ void ice_deinit_hw(struct ice_hw *hw)
 	ice_clear_all_vsi_ctx(hw);
 
 	xa_destroy(&hw->sched_node_ids);
+	xa_destroy(&hw->agg_list);
 }
 
 /**
