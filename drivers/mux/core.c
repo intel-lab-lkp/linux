@@ -586,13 +586,13 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 	if (!mux_chip)
 		return ERR_PTR(-EPROBE_DEFER);
 
+	struct device *mux_dev __free(put_device) = &mux_chip->dev;
 	controller = 0;
 	if (state) {
 		if (args.args_count > 2 || args.args_count == 0 ||
 		    (args.args_count < 2 && mux_chip->controllers > 1)) {
 			dev_err(dev, "%pOF: wrong #mux-state-cells for %pOF\n",
 				np, args.np);
-			put_device(&mux_chip->dev);
 			return ERR_PTR(-EINVAL);
 		}
 
@@ -608,7 +608,6 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 		    (!args.args_count && mux_chip->controllers > 1)) {
 			dev_err(dev, "%pOF: wrong #mux-control-cells for %pOF\n",
 				np, args.np);
-			put_device(&mux_chip->dev);
 			return ERR_PTR(-EINVAL);
 		}
 
@@ -619,7 +618,6 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 	if (controller >= mux_chip->controllers) {
 		dev_err(dev, "%pOF: bad mux controller %u specified in %pOF\n",
 			np, controller, args.np);
-		put_device(&mux_chip->dev);
 		return ERR_PTR(-EINVAL);
 	}
 
