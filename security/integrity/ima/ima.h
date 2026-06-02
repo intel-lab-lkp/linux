@@ -343,6 +343,7 @@ extern atomic_long_t ima_num_records[BINARY__LAST];
 extern atomic_long_t ima_num_violations;
 extern struct hlist_head __rcu *ima_htable;
 extern struct mutex ima_extend_list_mutex;
+extern bool ima_flush_htable;
 
 static inline unsigned int ima_hash_key(u8 *digest)
 {
