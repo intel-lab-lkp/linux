@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config CAN_MSCAN
-	depends on PPC
+	depends on PPC || COMPILE_TEST
+	depends on HAS_IOMEM
 	tristate "Support for Freescale MSCAN based chips"
 	help
 	  The Motorola Scalable Controller Area Network (MSCAN) definition
