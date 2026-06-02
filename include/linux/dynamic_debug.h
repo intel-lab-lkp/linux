@@ -91,8 +91,8 @@ struct _ddebug_info {
 
 struct ddebug_class_param {
 	union {
-		unsigned long *bits;
-		unsigned int *lvl;
+		u64 *bits;
+		u64 *lvl;
 	};
 	char flags[8];
 	const struct ddebug_class_map *map;
