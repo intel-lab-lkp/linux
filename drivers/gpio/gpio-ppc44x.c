@@ -203,8 +203,4 @@ static struct platform_driver ppc4xx_gpio_driver = {
 	},
 };
 
-static int __init ppc4xx_gpio_init(void)
-{
-	return platform_driver_register(&ppc4xx_gpio_driver);
-}
-arch_initcall(ppc4xx_gpio_init);
+module_platform_driver(ppc4xx_gpio_driver);
