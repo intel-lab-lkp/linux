@@ -51,34 +51,34 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 
-#define RTL9300_NUM_BUSES		4
-#define RTL9300_NUM_PAGES		4096
-#define RTL9300_NUM_PORTS		28
-#define SMI_GLB_CTRL			0xca00
-#define   GLB_CTRL_INTF_SEL(intf)	BIT(16 + (intf))
-#define SMI_PORT0_15_POLLING_SEL	0xca08
-#define RTL9300_SMI_ACCESS_PHY_CTRL_0	0xcb70
-#define RTL9300_SMI_ACCESS_PHY_CTRL_1	0xcb74
-#define   PHY_CTRL_REG_ADDR		GENMASK(24, 20)
-#define   PHY_CTRL_PARK_PAGE		GENMASK(19, 15)
-#define   PHY_CTRL_MAIN_PAGE		GENMASK(14, 3)
-#define   PHY_CTRL_WRITE		BIT(2)
-#define   PHY_CTRL_READ			0
-#define   PHY_CTRL_TYPE_C45		BIT(1)
-#define   PHY_CTRL_TYPE_C22		0
-#define   PHY_CTRL_CMD			BIT(0)
-#define   PHY_CTRL_FAIL			BIT(25)
-#define RTL9300_SMI_ACCESS_PHY_CTRL_2	0xcb78
-#define   PHY_CTRL_INDATA		GENMASK(31, 16)
-#define   PHY_CTRL_DATA			GENMASK(15, 0)
-#define RTL9300_SMI_ACCESS_PHY_CTRL_3	0xcb7c
-#define   PHY_CTRL_MMD_DEVAD		GENMASK(20, 16)
-#define   PHY_CTRL_MMD_REG		GENMASK(15, 0)
-#define SMI_PORT0_5_ADDR_CTRL		0xcb80
+#define RTL9300_NUM_BUSES			4
+#define RTL9300_NUM_PAGES			4096
+#define RTL9300_NUM_PORTS			28
+#define SMI_GLB_CTRL				0xca00
+#define   GLB_CTRL_INTF_SEL(intf)		BIT(16 + (intf))
+#define SMI_PORT0_15_POLLING_SEL		0xca08
+#define RTL9300_SMI_ACCESS_PHY_CTRL_0		0xcb70
+#define RTL9300_SMI_ACCESS_PHY_CTRL_1		0xcb74
+#define   PHY_CTRL_REG_ADDR			GENMASK(24, 20)
+#define   PHY_CTRL_PARK_PAGE			GENMASK(19, 15)
+#define   PHY_CTRL_MAIN_PAGE			GENMASK(14, 3)
+#define   PHY_CTRL_WRITE			BIT(2)
+#define   PHY_CTRL_READ				0
+#define   PHY_CTRL_TYPE_C45			BIT(1)
+#define   PHY_CTRL_TYPE_C22			0
+#define   PHY_CTRL_CMD				BIT(0)
+#define   PHY_CTRL_FAIL				BIT(25)
+#define RTL9300_SMI_ACCESS_PHY_CTRL_2		0xcb78
+#define   PHY_CTRL_INDATA			GENMASK(31, 16)
+#define   PHY_CTRL_DATA				GENMASK(15, 0)
+#define RTL9300_SMI_ACCESS_PHY_CTRL_3		0xcb7c
+#define   PHY_CTRL_MMD_DEVAD			GENMASK(20, 16)
+#define   PHY_CTRL_MMD_REG			GENMASK(15, 0)
+#define SMI_PORT0_5_ADDR_CTRL			0xcb80
 
-#define MAX_PORTS       28
-#define MAX_SMI_BUSSES  4
-#define RAW_PAGE(priv)	((priv)->info->num_pages - 1)
+#define MAX_PORTS				28
+#define MAX_SMI_BUSSES				4
+#define RAW_PAGE(priv)				((priv)->info->num_pages - 1)
 
 
 struct otto_emdio_cmd_regs {
