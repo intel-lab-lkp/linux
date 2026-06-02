@@ -201,11 +201,12 @@ int drm_mode_create_dumb(struct drm_device *dev,
 	if (!args->width || !args->height || !args->bpp)
 		return -EINVAL;
 
-	/* Reject unreasonable inputs early.  Dumb buffers are for software
-	 * rendering; nothing legitimate needs more than 8192x8192 at 32bpp.
-	 * This prevents overflows in downstream alignment helpers.
+	/*
+	 * Reject unreasonable inputs early. Dumb buffers are for software
+	 * rendering; nothing legitimate needs more than 16384x16384 at
+	 * 64 bpp. This prevents overflows in downstream alignment helpers.
 	 */
-	if (args->width >= 8192 || args->height >= 8192 || args->bpp > 32)
+	if (args->width > 16384 || args->height > 16384 || args->bpp > 64)
 		return -EINVAL;
 
 	/* overflow checks for 32bit size calculations */
