@@ -1494,7 +1494,7 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 		init_server_timeout(fc, timeout);
 
 		fm->sb->s_bdi->ra_pages =
-				min(fm->sb->s_bdi->ra_pages, ra_pages);
+				min_t(unsigned int, ra_pages, fc->max_pages);
 		fc->minor = arg->minor;
 		fc->max_write = arg->minor < 5 ? 4096 : arg->max_write;
 		fc->max_write = max_t(unsigned, 4096, fc->max_write);
