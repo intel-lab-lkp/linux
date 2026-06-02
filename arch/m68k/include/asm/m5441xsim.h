@@ -28,6 +28,13 @@
 #define	MCF_RCR_SWRESET		0x80		/* Software reset bit */
 #define	MCF_RCR_FRCSTOUT	0x40		/* Force external reset */
 
+#define	MCF_RSR_SOFT		0x20		/* Last reset caused by software */
+#define	MCF_RSR_LOC		0x10		/* Last reset caused by PLL loss of clock */
+#define	MCF_RSR_POR		0x08		/* Last reset caused by power-on */
+#define	MCF_RSR_EXT		0x04		/* Last reset caused by external pin */
+#define	MCF_RSR_WDRCORE		0x02		/* Last reset caused by core watchdog */
+#define	MCF_RSR_LOL		0x01		/* Last reset caused by PLL loss of lock */
+
 /*
  *  Interrupt Controller Modules.
  */
