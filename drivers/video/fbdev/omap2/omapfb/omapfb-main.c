@@ -1099,8 +1099,11 @@ static int omapfb_mmap(struct fb_info *fbi, struct vm_area_struct *vma)
 
 	rg = omapfb_get_mem_region(ofbi->region);
 
-	start = omapfb_get_region_paddr(ofbi);
-	len = fix->smem_len;
+	if (ofbi->rotation_type == OMAP_DSS_ROT_VRFB)
+		start = rg->vrfb.paddr[0];
+	else
+		start = rg->paddr;
+	len = rg->size;
 
 	DBG("user mmap region start %lx, len %d, off %lx\n", start, len,
 			vma->vm_pgoff << PAGE_SHIFT);
