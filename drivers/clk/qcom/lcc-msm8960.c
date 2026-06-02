@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/bitops.h>
 #include <linux/err.h>
+#include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -450,11 +451,37 @@ static const struct of_device_id lcc_msm8960_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, lcc_msm8960_match_table);
 
+/*
+ * The probe path mutates file-static clk_rcg structures (.freq_tbl
+ * pointers selected from the PLL4 L-register, and pxo_parent_data /
+ * lcc_pxo_pll4 for the MDM9615 cxo override). All clk_rcg objects in
+ * this file are registered by pointer through qcom_cc_really_probe(),
+ * so a second concurrent probe of the same driver would race both that
+ * registration and the freq_tbl assignment. Enforce single-instance
+ * binding with a static flag protected by an internal mutex.
+ */
+static bool lcc_msm8960_bound;
+static DEFINE_MUTEX(lcc_msm8960_bound_lock);
+
 static int lcc_msm8960_probe(struct platform_device *pdev)
 {
 	u32 val;
 	int ret;
 	struct regmap *regmap;
+
+	mutex_lock(&lcc_msm8960_bound_lock);
+	if (lcc_msm8960_bound) {
+		mutex_unlock(&lcc_msm8960_bound_lock);
+		return dev_err_probe(&pdev->dev, -EBUSY,
+			"only a single LCC instance is supported\n");
+	}
+	/*
+	 * Claim ownership inside the same locked region as the check
+	 * so a second concurrent probe cannot pass the check before
+	 * we set the flag.
+	 */
+	lcc_msm8960_bound = true;
+	mutex_unlock(&lcc_msm8960_bound_lock);
 
 	/* patch for the cxo <-> pxo difference */
 	if (of_device_is_compatible(pdev->dev.of_node, "qcom,lcc-mdm9615")) {
@@ -465,14 +492,18 @@ static int lcc_msm8960_probe(struct platform_device *pdev)
 	}
 
 	regmap = qcom_cc_map(pdev, &lcc_msm8960_desc);
-	if (IS_ERR(regmap))
-		return PTR_ERR(regmap);
+	if (IS_ERR(regmap)) {
+		ret = PTR_ERR(regmap);
+		goto err_unclaim;
+	}
 
 	/* Use the correct frequency plan depending on speed of PLL4 */
 	ret = regmap_read(regmap, 0x4, &val);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret,
-				     "failed to read PLL4 L register\n");
+	if (ret) {
+		dev_err_probe(&pdev->dev, ret,
+			      "failed to read PLL4 L register\n");
+		goto err_unclaim;
+	}
 	if (val == 0x12) {
 		slimbus_src.freq_tbl = clk_tbl_aif_osr_492;
 		mi2s_osr_src.freq_tbl = clk_tbl_aif_osr_492;
@@ -484,18 +515,64 @@ static int lcc_msm8960_probe(struct platform_device *pdev)
 	}
 	/* Enable PLL4 source on the LPASS Primary PLL Mux */
 	ret = regmap_write(regmap, 0xc4, 0x1);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret,
-				     "failed to select PLL4 on LPASS Primary PLL Mux\n");
+	if (ret) {
+		dev_err_probe(&pdev->dev, ret,
+			      "failed to select PLL4 on LPASS Primary PLL Mux\n");
+		goto err_unclaim;
+	}
 
-	return qcom_cc_really_probe(&pdev->dev, &lcc_msm8960_desc, regmap);
+	ret = qcom_cc_really_probe(&pdev->dev, &lcc_msm8960_desc, regmap);
+	if (ret)
+		goto err_unclaim;
+
+	return 0;
+
+err_unclaim:
+	mutex_lock(&lcc_msm8960_bound_lock);
+	lcc_msm8960_bound = false;
+	mutex_unlock(&lcc_msm8960_bound_lock);
+	return ret;
+}
+
+/*
+ * Clear the singleton bound flag so a future probe can succeed.
+ *
+ * .suppress_bind_attrs = true below blocks the sysfs bind/unbind path,
+ * which is the rebind race window we care about. However, the driver
+ * core can still call .remove via device removal (DT overlay removal,
+ * hot-unplug). Without clearing the flag here, the next probe of a
+ * fresh instance would fail with -EBUSY. The probe and remove on the
+ * same device are serialised by device_lock so this clear does not
+ * race the devm cleanup of the previous instance.
+ */
+static void lcc_msm8960_remove(struct platform_device *pdev)
+{
+	mutex_lock(&lcc_msm8960_bound_lock);
+	lcc_msm8960_bound = false;
+	mutex_unlock(&lcc_msm8960_bound_lock);
 }
 
 static struct platform_driver lcc_msm8960_driver = {
 	.probe		= lcc_msm8960_probe,
+	.remove		= lcc_msm8960_remove,
 	.driver		= {
 		.name	= "lcc-msm8960",
 		.of_match_table = lcc_msm8960_match_table,
+		/*
+		 * The probe path mutates file-static clk_rcg structures
+		 * (.freq_tbl pointers selected from the PLL4 L-register,
+		 * pxo_parent_data switched to cxo for MDM9615) that are
+		 * then registered by pointer through qcom_cc_really_probe().
+		 * A sysfs unbind + rebind would either race the previous
+		 * instance's devm teardown of those clocks or silently
+		 * leave pxo_parent_data stuck on its previous compatible's
+		 * setting (e.g. MDM9615 -> MSM8960 stuck on cxo). Block
+		 * sysfs bind / unbind to remove both hazards; non-sysfs
+		 * removal (DT overlay, hot-unplug) is serialised against
+		 * probe by device_lock so .remove just clears the singleton
+		 * flag and lets devm undo the clock registrations.
+		 */
+		.suppress_bind_attrs = true,
 	},
 };
 module_platform_driver(lcc_msm8960_driver);
