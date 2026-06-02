@@ -283,9 +283,18 @@ static bool tipc_update_nametbl(struct net *net, struct distr_item *i,
 	struct tipc_socket_addr sk;
 	struct tipc_uaddr ua;
 	u32 key = ntohl(i->key);
+	u32 lower = ntohl(i->lower);
+	u32 upper = ntohl(i->upper);
+
+	/* A peer-advertised binding with lower > upper can never be matched
+	 * or withdrawn and would leak the publication; the local bind path
+	 * rejects such ranges, so reject ranges learned from the network too.
+	 */
+	if (lower > upper)
+		return false;
 
 	tipc_uaddr(&ua, TIPC_SERVICE_RANGE, TIPC_CLUSTER_SCOPE,
-		   ntohl(i->type), ntohl(i->lower), ntohl(i->upper));
+		   ntohl(i->type), lower, upper);
 	sk.ref = ntohl(i->port);
 	sk.node = node;
 
