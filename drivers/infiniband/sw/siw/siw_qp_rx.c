@@ -844,6 +844,25 @@ int siw_proc_rresp(struct siw_qp *qp)
 	}
 	mem_p = *mem;
 
+	/*
+	 * siw_rresp_check_ntoh() validates the cumulative length only on
+	 * the last DDP segment (!more_ddp_segs), and siw_check_sge() above
+	 * resolves the sink memory only on the first fragment. A peer that
+	 * keeps DDP_FLAG_LAST clear and streams more payload than the
+	 * outstanding RREAD requested therefore drives wqe->processed past
+	 * the validated sink buffer, writing out of bounds. Bound every
+	 * segment as siw_proc_send()/siw_proc_write() already do.
+	 */
+	if (unlikely(wqe->processed + srx->fpdu_part_rem > wqe->bytes)) {
+		siw_dbg_qp(qp, "rresp len: %d + %d > %d\n",
+			   wqe->processed, srx->fpdu_part_rem, wqe->bytes);
+		wqe->wc_status = SIW_WC_LOC_LEN_ERR;
+		siw_init_terminate(qp, TERM_ERROR_LAYER_DDP,
+				   DDP_ETYPE_TAGGED_BUF,
+				   DDP_ECODE_T_BASE_BOUNDS, 0);
+		return -EINVAL;
+	}
+
 	bytes = min(srx->fpdu_part_rem, srx->skb_new);
 	rv = siw_rx_data(mem_p, srx, &frx->pbl_idx,
 			 sge->laddr + wqe->processed, bytes);
