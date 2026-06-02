@@ -467,24 +467,20 @@ static void ice_vf_rebuild_aggregator_node_cfg(struct ice_vsi *vsi)
 	struct device *dev;
 	int status;
 
-	if (!vsi->agg_node)
-		return;
-
 	dev = ice_pf_to_dev(pf);
-	if (vsi->agg_node->num_vsis == ICE_MAX_VSIS_IN_AGG_NODE) {
-		dev_dbg(dev,
-			"agg_id %u already has reached max_num_vsis %u\n",
-			vsi->agg_node->agg_id, vsi->agg_node->num_vsis);
+
+	if (vsi->agg_id < 0 || vsi->agg_id > U32_MAX) {
+		dev_dbg(dev, "VSI idx %u does not have a valid aggregator node ID stored\n",
+			vsi->idx);
 		return;
 	}
 
-	status = ice_move_vsi_to_agg(pf->hw.port_info, vsi->agg_node->agg_id,
-				     vsi->idx, vsi->tc_cfg.ena_tc);
+	status = ice_cfg_vsi_agg(pf->hw.port_info, vsi->idx,
+				 (u32)vsi->agg_id, (u32)vsi->agg_id,
+				 (u8)vsi->tc_cfg.ena_tc, NULL);
 	if (status)
-		dev_dbg(dev, "unable to move VSI idx %u into aggregator %u node",
-			vsi->idx, vsi->agg_node->agg_id);
-	else
-		vsi->agg_node->num_vsis++;
+		dev_dbg(dev, "unable to move VSI idx %u into aggregator node %lld\n",
+			vsi->idx, vsi->agg_id);
 }
 
 /**
