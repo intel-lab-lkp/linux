@@ -2073,8 +2073,10 @@ static void idpf_tx_splitq_clean(struct idpf_tx_queue *tx_q, u16 end,
 	struct idpf_tx_buf *tx_buf;
 
 	if (descs_only) {
-		/* Bump ring index to mark as cleaned. */
-		tx_q->next_to_clean = end;
+		/* Bump ring index to mark as cleaned and sync with
+		 * IDPF_DESC_UNUSED called from idpf_txq_has_room.
+		 */
+		smp_store_release(&tx_q->next_to_clean, end);
 		return;
 	}
 
@@ -2111,7 +2113,8 @@ fetch_next_txq_desc:
 		idpf_tx_splitq_clean_bump_ntc(tx_q, ntc, tx_desc, tx_buf);
 	}
 
-	tx_q->next_to_clean = ntc;
+	/* Sync with IDPF_DESC_UNUSED called from idpf_txq_has_room. */
+	smp_store_release(&tx_q->next_to_clean, ntc);
 }
 
 /**
