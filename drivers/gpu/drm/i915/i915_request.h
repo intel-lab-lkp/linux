@@ -325,6 +325,9 @@ struct i915_request {
 	struct i915_request_watchdog {
 		struct llist_node link;
 		struct hrtimer timer;
+		ktime_t running_since;
+		ktime_t preempted_at;
+		ktime_t total_run_time;
 	} watchdog;
 
 	/*

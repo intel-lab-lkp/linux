@@ -676,6 +676,7 @@ bool __i915_request_submit(struct i915_request *request)
 active:
 	clear_bit(I915_FENCE_FLAG_PQUEUE, &request->fence.flags);
 	set_bit(I915_FENCE_FLAG_ACTIVE, &request->fence.flags);
+	request->watchdog.running_since = ktime_get();
 
 	/*
 	 * XXX Rollback bonded-execution on __i915_request_unsubmit()?
@@ -731,6 +732,15 @@ void __i915_request_unsubmit(struct i915_request *request)
 	 */
 	GEM_BUG_ON(!test_bit(I915_FENCE_FLAG_ACTIVE, &request->fence.flags));
 	clear_bit_unlock(I915_FENCE_FLAG_ACTIVE, &request->fence.flags);
+	if (ktime_to_ns(request->watchdog.running_since)) {
+		ktime_t now = ktime_get();
+
+		request->watchdog.total_run_time =
+			ktime_add(request->watchdog.total_run_time,
+				  ktime_sub(now, request->watchdog.running_since));
+		request->watchdog.preempted_at = now;
+		request->watchdog.running_since = 0;
+	}
 	if (test_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT, &request->fence.flags))
 		i915_request_cancel_breadcrumb(request);
 

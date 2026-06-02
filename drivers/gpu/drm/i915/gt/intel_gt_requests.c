@@ -249,9 +249,16 @@ void intel_gt_watchdog_work(struct work_struct *work)
 
 	llist_for_each_entry_safe(rq, rn, first, watchdog.link) {
 		if (!i915_request_completed(rq)) {
+			ktime_t timeout = rq->context->watchdog.timeout_us * NSEC_PER_USEC;
+			ktime_t total = rq->watchdog.total_run_time;
 			struct dma_fence *f = &rq->fence;
 			const char __rcu *timeline;
 			const char __rcu *driver;
+
+			if (i915_request_is_running(rq) ||
+			    (i915_request_started(rq) && total < timeout)) {
+				continue;
+			}
 
 			rcu_read_lock();
 			driver = dma_fence_driver_name(f);
