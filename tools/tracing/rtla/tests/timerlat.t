@@ -42,6 +42,16 @@ check "verify -c/--cpus" \
 check "hist test in nanoseconds" \
 	"timerlat hist -i 2 -c 0 -n -d 10s" 2 "ns"
 
+# Option parsing tests - verify attached numeric arguments work correctly
+check "verify -p with space" \
+	"timerlat hist -p 100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+check "verify -p without space (attached argument)" \
+	"timerlat hist -p100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+check "verify --period with equals" \
+	"timerlat hist --period=100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+check "verify --period with space" \
+	"timerlat hist --period 100 -c 0 -d 1s" 0 "" "no-irq and no-thread"
+
 # Actions tests
 check "trace output through -t" \
 	"timerlat hist -T 2 -t" 2 "^  Saving trace to timerlat_trace.txt$"
