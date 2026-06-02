@@ -4251,7 +4251,7 @@ qla2x00_mem_alloc(struct qla_hw_data *ha, uint16_t req_len, uint16_t rsp_len,
 					ql_dbg_pci(ql_dbg_init, ha->pdev,
 					    0xe0ee, "%s: failed alloc dsd\n",
 					    __func__);
-					return -ENOMEM;
+					goto fail_dma_pool;
 				}
 				ha->dif_bundle_kallocs++;
 
@@ -4535,6 +4535,14 @@ fail_free_ms_iocb:
 fail_dma_pool:
 	if (ql2xenabledif) {
 		struct dsd_dma *dsd, *nxt;
+
+		list_for_each_entry_safe(dsd, nxt, &ha->pool.good.head, list) {
+			list_del(&dsd->list);
+			dma_pool_free(ha->dif_bundl_pool, dsd->dsd_addr, dsd->dsd_list_dma);
+			ha->dif_bundle_dma_allocs--;
+			kfree(dsd);
+			ha->dif_bundle_kallocs--;
+		}
 
 		list_for_each_entry_safe(dsd, nxt, &ha->pool.unusable.head,
 		    list) {
