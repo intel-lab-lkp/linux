@@ -255,8 +255,14 @@ void blk_mq_unfreeze_queue_non_owner(struct request_queue *q)
 EXPORT_SYMBOL_GPL(blk_mq_unfreeze_queue_non_owner);
 
 /*
- * FIXME: replace the scsi_internal_device_*block_nowait() calls in the
- * mpt3sas driver such that this function can be removed.
+ * Mark a request queue as quiesced without waiting for in-flight dispatches
+ * to finish.  Callers that need to ensure dispatch has drained must follow
+ * this with blk_mq_wait_quiesce_done() on the queue's tag_set, or use
+ * blk_mq_quiesce_queue() which combines both steps.
+ *
+ * This split exists so multiple queues (e.g. all LUNs on a SCSI host, or all
+ * queues in a tag_set) can be quiesced without sleeping per queue, then
+ * waited on once at tag_set scope.
  */
 void blk_mq_quiesce_queue_nowait(struct request_queue *q)
 {
