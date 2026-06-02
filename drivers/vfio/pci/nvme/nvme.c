@@ -329,13 +329,13 @@ static int nvmevf_get_ctrl_state(struct pci_dev *dev,
 		return ret;
 	}
 
+	hdr = local_buf;
 	if (le16_to_cpu(hdr->nvmecss) > NVME_LM_MAX_NVMECS ||
 	    le16_to_cpu(hdr->vss) > NVME_LM_MAX_VSD) {
 		kfree(local_buf);
 		return -EINVAL;
 	}
 
-	hdr = local_buf;
 	len = hdr_len + 4 * (le16_to_cpu(hdr->nvmecss) + le16_to_cpu(hdr->vss));
 
 	kfree(local_buf);
