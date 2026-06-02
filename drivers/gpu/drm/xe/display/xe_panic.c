@@ -84,10 +84,10 @@ static struct intel_panic *xe_panic_alloc(void)
 	return panic;
 }
 
-static int xe_panic_setup(struct intel_panic *panic, struct drm_scanout_buffer *sb)
+static int xe_panic_setup(struct intel_panic *panic, struct drm_scanout_buffer *sb,
+			  struct drm_gem_object *obj)
 {
-	struct intel_framebuffer *fb = (struct intel_framebuffer *)sb->private;
-	struct xe_bo *bo = gem_to_xe_bo(intel_fb_bo(&fb->base));
+	struct xe_bo *bo = gem_to_xe_bo(obj);
 
 	if (xe_bo_is_vram(bo) && !xe_bo_is_visible_vram(bo))
 		return -ENODEV;

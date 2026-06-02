@@ -1590,7 +1590,7 @@ static int intel_get_scanout_buffer(struct drm_plane *plane,
 				return -EOPNOTSUPP;
 		}
 		sb->private = fb;
-		ret = intel_parent_panic_setup(display, fb->panic, sb);
+		ret = intel_parent_panic_setup(display, fb->panic, sb, obj);
 		if (ret)
 			return ret;
 	}

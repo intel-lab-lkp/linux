@@ -5,7 +5,6 @@
 #include <drm/drm_panic.h>
 #include <drm/intel/display_parent_interface.h>
 
-#include "display/intel_fb.h"
 #include "display/intel_display_types.h"
 #include "i915_gem_object.h"
 #include "i915_gem_panic.h"
@@ -98,10 +97,10 @@ static struct intel_panic *i915_gem_object_alloc_panic(void)
  * Use current vaddr if it exists, or setup a list of pages.
  * pfn is not supported yet.
  */
-static int i915_gem_object_panic_setup(struct intel_panic *panic, struct drm_scanout_buffer *sb)
+static int i915_gem_object_panic_setup(struct intel_panic *panic, struct drm_scanout_buffer *sb,
+				       struct drm_gem_object *_obj)
 {
 	struct intel_framebuffer *fb = sb->private;
-	struct drm_gem_object *_obj = intel_fb_bo(&fb->base);
 	bool panic_tiling = fb->panic_tiling;
 	enum i915_map_type has_type;
 	struct drm_i915_gem_object *obj = to_intel_bo(_obj);
