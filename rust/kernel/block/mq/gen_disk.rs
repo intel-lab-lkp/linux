@@ -11,7 +11,6 @@ use crate::{
     error::{self, from_err_ptr, Result},
     fmt::{self, Write},
     prelude::*,
-    static_lock_class,
     str::NullTerminatedFormatter,
     sync::Arc,
     types::{ForeignOwnable, ScopeGuard},
@@ -36,6 +35,43 @@ impl Default for GenDiskBuilder {
             capacity_sectors: 0,
         }
     }
+}
+
+/// A wrapper type for safely passing "struct gendisk_lkclass" argument.
+///
+/// This type can only be instantiated via the [`my_gendisk_lkclass!`] macro.
+pub struct GenDiskLockClass(pub(crate) *mut bindings::gendisk_lkclass);
+
+impl GenDiskLockClass {
+    /// Retrieve the underlying raw pointer.
+    pub(crate) fn as_ptr(&self) -> *mut bindings::gendisk_lkclass {
+        self.0
+    }
+}
+
+#[doc(hidden)]
+pub mod __internal {
+    use super::*;
+
+    /// Internal constructor used ONLY by the `my_gendisk_lkclass!` macro.
+    ///
+    /// SAFETY: `ptr` must point to a valid static `gendisk_lkclass` instance.
+    pub const unsafe fn new_lock_class(ptr: *mut bindings::gendisk_lkclass) -> GenDiskLockClass {
+        GenDiskLockClass(ptr)
+    }
+}
+
+/// Helper macro to generate a unique caller-local static lock class struct
+#[macro_export]
+macro_rules! my_gendisk_lkclass {
+    () => {{
+        static mut LKCLASS: $crate::bindings::gendisk_lkclass = $crate::bindings::gendisk_lkclass {
+            bio_lkclass: const { unsafe { ::core::mem::zeroed() } },
+            open_mutex_lkclass: const { unsafe { ::core::mem::zeroed() } },
+        };
+
+        unsafe { $crate::block::mq::gen_disk::__internal::new_lock_class(&raw mut LKCLASS) }
+    }};
 }
 
 impl GenDiskBuilder {
@@ -100,6 +136,7 @@ impl GenDiskBuilder {
         name: fmt::Arguments<'_>,
         tagset: Arc<TagSet<T>>,
         queue_data: T::QueueData,
+        lkclass: GenDiskLockClass,
     ) -> Result<GenDisk<T>> {
         let data = queue_data.into_foreign();
         let recover_data = ScopeGuard::new(|| {
@@ -121,7 +158,7 @@ impl GenDiskBuilder {
                 tagset.raw_tag_set(),
                 &mut lim,
                 data,
-                static_lock_class!().as_ptr(),
+                lkclass.as_ptr(),
             )
         })?;
 
