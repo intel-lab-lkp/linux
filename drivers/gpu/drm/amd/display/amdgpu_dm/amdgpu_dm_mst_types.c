@@ -757,7 +757,7 @@ void dm_handle_mst_sideband_msg_ready_event(
 			break;
 		}
 
-		DRM_DEBUG_DRIVER("ESI %02x %02x %02x\n", esi[0], esi[1], esi[2]);
+		DRM_DEBUG_DRIVER("ESI %3ph\n", esi);
 
 		switch (msg_rdy_type) {
 		case DOWN_REP_MSG_RDY_EVENT:
