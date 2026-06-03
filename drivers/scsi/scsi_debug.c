@@ -5887,7 +5887,7 @@ static int resp_report_zones(struct scsi_cmnd *scp,
 {
 	unsigned int rep_max_zones, nrz = 0;
 	int ret = 0;
-	u32 alloc_len, rep_opts, rep_len;
+	u32 alloc_len, arr_len, rep_opts, rep_len;
 	bool partial;
 	u64 lba, zs_lba;
 	u8 *arr = NULL, *desc;
@@ -5911,9 +5911,14 @@ static int resp_report_zones(struct scsi_cmnd *scp,
 		return check_condition_result;
 	}
 
-	rep_max_zones = (alloc_len - 64) >> ilog2(RZONES_DESC_HD);
+	if (alloc_len > RZONES_DESC_HD)
+		rep_max_zones = (alloc_len - RZONES_DESC_HD) >>
+				ilog2(RZONES_DESC_HD);
+	else
+		rep_max_zones = 0;
+	arr_len = RZONES_DESC_HD + rep_max_zones * RZONES_DESC_HD;
 
-	arr = kzalloc(alloc_len, GFP_ATOMIC | __GFP_NOWARN);
+	arr = kzalloc(arr_len, GFP_ATOMIC | __GFP_NOWARN);
 	if (!arr) {
 		mk_sense_buffer(scp, ILLEGAL_REQUEST, INSUFF_RES_ASC,
 				INSUFF_RES_ASCQ);
