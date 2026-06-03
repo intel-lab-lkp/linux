@@ -373,6 +373,10 @@ impl InnerThread {
     }
 
     fn looper_enter(&mut self) {
+        if self.looper_flags & LOOPER_ENTERED != 0 {
+            self.looper_flags |= LOOPER_INVALID;
+            return;
+        }
         self.looper_flags |= LOOPER_ENTERED;
         if self.looper_flags & LOOPER_REGISTERED != 0 {
             self.looper_flags |= LOOPER_INVALID;
