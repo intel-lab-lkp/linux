@@ -212,8 +212,8 @@ static void drm_sched_start_timeout_unlocked(struct drm_gpu_scheduler *sched)
 void drm_sched_tdr_queue_imm(struct drm_gpu_scheduler *sched)
 {
 	spin_lock(&sched->job_list_lock);
-	sched->timeout = 0;
-	drm_sched_start_timeout(sched);
+	if (!list_empty(&sched->pending_list))
+		mod_delayed_work(sched->timeout_wq, &sched->work_tdr, 0);
 	spin_unlock(&sched->job_list_lock);
 }
 EXPORT_SYMBOL(drm_sched_tdr_queue_imm);
