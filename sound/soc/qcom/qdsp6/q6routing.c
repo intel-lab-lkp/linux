@@ -381,7 +381,7 @@ int q6routing_stream_open(int fedai_id, int perf_mode,
 
 	pdata = &routing_data->port_data[session->port_id];
 
-	mutex_lock(&routing_data->lock);
+	guard(mutex)(&routing_data->lock);
 	session->fedai_id = fedai_id;
 
 	session->path_type = pdata->path_type;
@@ -396,10 +396,8 @@ int q6routing_stream_open(int fedai_id, int perf_mode,
 			      session->channels, topology, perf_mode,
 			      session->bits_per_sample, 0, 0);
 
-	if (IS_ERR_OR_NULL(copp)) {
-		mutex_unlock(&routing_data->lock);
+	if (IS_ERR_OR_NULL(copp))
 		return -EINVAL;
-	}
 
 	copp_idx = q6adm_get_copp_id(copp);
 	set_bit(copp_idx, &session->copp_map);
@@ -417,7 +415,6 @@ int q6routing_stream_open(int fedai_id, int perf_mode,
 		q6adm_matrix_map(routing_data->dev, session->path_type,
 				 payload, perf_mode);
 	}
-	mutex_unlock(&routing_data->lock);
 
 	return 0;
 }
@@ -1070,7 +1067,7 @@ static int routing_hw_params(struct snd_soc_component *component,
 
 	session = &data->port_data[be_id];
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 
 	session->path_type = path_type;
 	session->sample_rate = params_rate(params);
@@ -1087,7 +1084,6 @@ static int routing_hw_params(struct snd_soc_component *component,
 		break;
 	}
 
-	mutex_unlock(&data->lock);
 	return 0;
 }
 
