@@ -285,6 +285,8 @@ fail:
 	bio_release_pages(bio, false);
 	bio_clear_flag(bio, BIO_REFFED);
 	bio_put(bio);
+	if (bio == &dio->bio)
+		bio_put(bio);
 	blk_finish_plug(&plug);
 	return ret;
 }
