@@ -252,7 +252,7 @@ int q6core_get_svc_api_info(int svc_id, struct q6core_svc_api_info *ainfo)
 	if (!g_core || !ainfo)
 		return 0;
 
-	mutex_lock(&g_core->lock);
+	guard(mutex)(&g_core->lock);
 	if (!g_core->is_version_requested) {
 		if (q6core_get_fwk_versions(g_core) == -ENOTSUPP)
 			q6core_get_svc_versions(g_core);
@@ -287,8 +287,6 @@ int q6core_get_svc_api_info(int svc_id, struct q6core_svc_api_info *ainfo)
 		}
 	}
 
-	mutex_unlock(&g_core->lock);
-
 	return ret;
 }
 EXPORT_SYMBOL_GPL(q6core_get_svc_api_info);
@@ -306,7 +304,7 @@ bool q6core_is_adsp_ready(void)
 	if (!g_core)
 		return false;
 
-	mutex_lock(&g_core->lock);
+	guard(mutex)(&g_core->lock);
 	timeout = jiffies + msecs_to_jiffies(ADSP_STATE_READY_TIMEOUT_MS);
 	for (;;) {
 		if (__q6core_is_adsp_ready(g_core)) {
@@ -320,7 +318,6 @@ bool q6core_is_adsp_ready(void)
 		}
 	}
 
-	mutex_unlock(&g_core->lock);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(q6core_is_adsp_ready);
