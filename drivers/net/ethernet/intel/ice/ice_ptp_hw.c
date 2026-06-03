@@ -4521,8 +4521,8 @@ ice_read_phy_tstamp_ll_e810(struct ice_hw *hw, u8 idx, u8 *hi, u32 *lo)
 
 	/* Wait for any pending in-progress low latency interrupt */
 	err = wait_event_interruptible_locked_irq(params->atqbal_wq,
-						  !(params->atqbal_flags &
-						    ATQBAL_FLAGS_INTR_IN_PROGRESS));
+						  !test_bit(ATQBAL_FLAGS_INTR_IN_PROGRESS,
+							    params->atqbal_flags));
 	if (err) {
 		spin_unlock_irq(&params->atqbal_wq.lock);
 		return err;
@@ -4754,8 +4754,8 @@ static int ice_ptp_prep_phy_adj_ll_e810(struct ice_hw *hw, s32 adj)
 
 	/* Wait for any pending in-progress low latency interrupt */
 	err = wait_event_interruptible_locked_irq(params->atqbal_wq,
-						  !(params->atqbal_flags &
-						    ATQBAL_FLAGS_INTR_IN_PROGRESS));
+						  !test_bit(ATQBAL_FLAGS_INTR_IN_PROGRESS,
+							    params->atqbal_flags));
 	if (err) {
 		spin_unlock_irq(&params->atqbal_wq.lock);
 		return err;
@@ -4846,8 +4846,8 @@ static int ice_ptp_prep_phy_incval_ll_e810(struct ice_hw *hw, u64 incval)
 
 	/* Wait for any pending in-progress low latency interrupt */
 	err = wait_event_interruptible_locked_irq(params->atqbal_wq,
-						  !(params->atqbal_flags &
-						    ATQBAL_FLAGS_INTR_IN_PROGRESS));
+						  !test_bit(ATQBAL_FLAGS_INTR_IN_PROGRESS,
+							    params->atqbal_flags));
 	if (err) {
 		spin_unlock_irq(&params->atqbal_wq.lock);
 		return err;
