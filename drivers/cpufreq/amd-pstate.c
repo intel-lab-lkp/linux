@@ -27,6 +27,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/smp.h>
+#include <linux/cpumask.h>
 #include <linux/sched.h>
 #include <linux/cpufreq.h>
 #include <linux/compiler.h>
@@ -88,6 +89,8 @@ static struct cpufreq_driver amd_pstate_epp_driver;
 static int cppc_state = AMD_PSTATE_UNDEFINED;
 static bool amd_pstate_prefcore = true;
 static bool dynamic_epp;
+/* EPP support capability cached for driver mode switches. */
+static bool epp_supported;
 static struct quirk_entry *quirks;
 
 /*
@@ -1772,6 +1775,11 @@ int amd_pstate_update_status(const char *buf, size_t size)
 	if (mode_idx < 0)
 		return mode_idx;
 
+	if (mode_idx == AMD_PSTATE_ACTIVE && !epp_supported) {
+		pr_warn("EPP is not supported by this processor, active mode rejected\n");
+		return -ENODEV;
+	}
+
 	if (mode_state_machine[cppc_state][mode_idx]) {
 		guard(mutex)(&amd_pstate_driver_lock);
 		return mode_state_machine[cppc_state][mode_idx](mode_idx);
@@ -2229,6 +2237,36 @@ static bool amd_cppc_supported(void)
 	return true;
 }
 
+static bool amd_pstate_epp_supported(void)
+{
+	unsigned int cpu = cpumask_first(cpu_online_mask);
+	u64 epp;
+	int ret;
+
+	/*
+	 * On symmetric x86 systems, CPPC EPP support is uniform across all
+	 * CPUs. Probing the first online CPU is sufficient to determine
+	 * system-wide capability.
+	 */
+	ret = cppc_get_epp_perf(cpu, &epp);
+	if (!ret)
+		return true;
+
+	/*
+	 * We treat EPP support as a tri-state:
+	 * - Success (0): EPP is supported.
+	 * - Unsupported (-EOPNOTSUPP): EPP is definitively unsupported.
+	 * - Unknown error (others): Warn about the unexpected failure, but
+	 *   default to assuming support to avoid false negatives (this may
+	 *   be revisited if transient errors cause driver instability).
+	 */
+	if (ret == -EOPNOTSUPP)
+		return false;
+
+	pr_warn("Unable to determine EPP capability: %d\n", ret);
+	return true;
+}
+
 static int __init amd_pstate_init(void)
 {
 	struct device *dev_root;
@@ -2250,6 +2288,12 @@ static int __init amd_pstate_init(void)
 	/* don't keep reloading if cpufreq_driver exists */
 	if (cpufreq_get_current_driver())
 		return -EEXIST;
+
+	epp_supported = amd_pstate_epp_supported();
+	if (cppc_state == AMD_PSTATE_ACTIVE && !epp_supported) {
+		pr_warn("EPP not supported, falling back to passive mode\n");
+		cppc_state = AMD_PSTATE_PASSIVE;
+	}
 
 	quirks = NULL;
 
