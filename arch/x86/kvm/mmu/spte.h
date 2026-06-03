@@ -357,17 +357,6 @@ static inline bool is_last_spte(u64 pte, int level)
 	return (level == PG_LEVEL_4K) || is_large_pte(pte);
 }
 
-static inline bool is_executable_pte(u64 spte)
-{
-	/*
-	 * For now, return true if either the XS or XU bit is set
-	 * This function is only used for fast_page_fault,
-	 * which never processes shadow EPT, and regular page
-	 * tables always have XS==XU.
-	 */
-	return (spte & (shadow_xs_mask | shadow_xu_mask | shadow_nx_mask)) != shadow_nx_mask;
-}
-
 static inline kvm_pfn_t spte_to_pfn(u64 pte)
 {
 	return (pte & SPTE_BASE_ADDR_MASK) >> PAGE_SHIFT;
@@ -496,20 +485,35 @@ static inline bool is_mmu_writable_spte(u64 spte)
 }
 
 /*
- * Returns true if the access indicated by @fault is allowed by the existing
- * SPTE protections.  Note, the caller is responsible for checking that the
- * SPTE is a shadow-present, leaf SPTE (either before or after).
+ * Returns true if the access indicated by @fault is forbidden by the existing
+ * SPTE protections.
  */
-static inline bool is_access_allowed(struct kvm_page_fault *fault, u64 spte)
+static inline bool spte_permission_fault(struct kvm_mmu *mmu, u64 spte,
+					 struct kvm_page_fault *fault)
 {
-	if (fault->exec)
-		return is_executable_pte(spte);
+	unsigned int pfec = fault->error_code;
+	int index = pfec >> 1;
+	int pte_access;
 
-	if (fault->write)
-		return is_writable_pte(spte);
+	if (!is_shadow_present_pte(spte))
+		return true;
 
-	/* Fault was on Read access */
-	return spte & PT_PRESENT_MASK;
+	BUILD_BUG_ON(PT_PRESENT_MASK != ACC_READ_MASK);
+	BUILD_BUG_ON(PT_WRITABLE_MASK != ACC_WRITE_MASK);
+	BUILD_BUG_ON(VMX_EPT_READABLE_MASK != ACC_READ_MASK);
+	BUILD_BUG_ON(VMX_EPT_WRITABLE_MASK != ACC_WRITE_MASK);
+
+	/* strip nested paging fault error codes */
+	pte_access = spte & (PT_PRESENT_MASK | PT_WRITABLE_MASK);
+	if (shadow_nx_mask) {
+		pte_access |= spte & shadow_user_mask ? ACC_USER_MASK : 0;
+		pte_access |= spte & shadow_nx_mask ? 0 : ACC_EXEC_MASK;
+	} else {
+		pte_access |= spte & shadow_xs_mask ? ACC_EXEC_MASK : 0;
+		pte_access |= spte & shadow_xu_mask ? ACC_USER_EXEC_MASK : 0;
+	}
+
+	return (mmu->fmt.permissions[index] >> pte_access) & 1;
 }
 
 /*

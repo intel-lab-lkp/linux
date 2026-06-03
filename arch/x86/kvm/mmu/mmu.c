@@ -3670,6 +3670,7 @@ static u64 *fast_pf_get_last_sptep(struct kvm_vcpu *vcpu, gpa_t gpa, u64 *spte)
  */
 static int fast_page_fault(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 {
+	struct kvm_mmu *mmu;
 	struct kvm_mmu_page *sp;
 	int ret = RET_PF_INVALID;
 	u64 spte;
@@ -3679,6 +3680,7 @@ static int fast_page_fault(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 	if (!page_fault_can_be_fast(vcpu->kvm, fault))
 		return ret;
 
+	mmu = vcpu->arch.mmu;
 	walk_shadow_page_lockless_begin(vcpu);
 
 	do {
@@ -3714,7 +3716,7 @@ static int fast_page_fault(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 		 * Need not check the access of upper level table entries since
 		 * they are always ACC_ALL.
 		 */
-		if (is_access_allowed(fault, spte)) {
+		if (!spte_permission_fault(mmu, spte, fault)) {
 			ret = RET_PF_SPURIOUS;
 			break;
 		}
@@ -3737,7 +3739,7 @@ static int fast_page_fault(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 		 * that were write-protected for dirty-logging or access
 		 * tracking are handled here.  Don't bother checking if the
 		 * SPTE is writable to prioritize running with A/D bits enabled.
-		 * The is_access_allowed() check above handles the common case
+		 * The spte_permission_fault() check above handles the common case
 		 * of the fault being spurious, and the SPTE is known to be
 		 * shadow-present, i.e. except for access tracking restoration
 		 * making the new SPTE writable, the check is wasteful.
@@ -3762,7 +3764,7 @@ static int fast_page_fault(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 
 		/* Verify that the fault can be handled in the fast path */
 		if (new_spte == spte ||
-		    !is_access_allowed(fault, new_spte))
+		    spte_permission_fault(mmu, new_spte, fault))
 			break;
 
 		/*
@@ -5675,6 +5677,12 @@ static void update_permission_bitmask(struct kvm_pagewalk *w, bool tdp, bool ept
 				    is_cr0_wp(w), is_efer_nx(w));
 }
 
+static void update_spte_permission_bitmask(struct kvm_mmu *mmu, bool tdp, bool ept)
+{
+	__update_permission_bitmask(&mmu->fmt, tdp, ept,
+				    mmu->root_role.cr4_smep, false, true, true);
+}
+
 /*
 * PKU is an additional mechanism by which the paging controls access to
 * user-mode addresses based on the value in the PKRU register.  Protection
@@ -5884,6 +5892,7 @@ static void init_kvm_tdp_mmu(struct kvm_vcpu *vcpu,
 	context->page_fault = kvm_tdp_page_fault;
 	context->sync_spte = NULL;
 
+	update_spte_permission_bitmask(context, true, shadow_xs_mask);
 	reset_tdp_shadow_zero_bits_mask(context);
 }
 
@@ -5902,6 +5911,7 @@ static void shadow_mmu_init_context(struct kvm_vcpu *vcpu, struct kvm_mmu *conte
 	else
 		paging32_init_context(context);
 
+	update_spte_permission_bitmask(context, context == &vcpu->arch.guest_mmu, false);
 	reset_shadow_zero_bits_mask(vcpu, context);
 }
 
@@ -6030,6 +6040,8 @@ void kvm_init_shadow_ept_mmu(struct kvm_vcpu *vcpu, bool execonly,
 		update_permission_bitmask(ngpa_walk, true, true);
 		ngpa_walk->fmt.pkru_mask = 0;
 		reset_rsvds_bits_mask_ept(vcpu, execonly, huge_page_level);
+
+		update_spte_permission_bitmask(context, true, true);
 		reset_ept_shadow_zero_bits_mask(context, execonly);
 	}
 
