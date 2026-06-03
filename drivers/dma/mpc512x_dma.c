@@ -304,13 +304,13 @@ static void mpc_dma_execute(struct mpc_dma_chan *mchan)
 
 	if (mdma->is_mpc8308) {
 		/* MPC8308, no request lines, software initiated start */
-		out_8(&mdma->regs->dmassrt, cid);
+		iowrite8(cid, &mdma->regs->dmassrt);
 	} else if (first->will_access_peripheral) {
 		/* Peripherals involved, start by external request signal */
-		out_8(&mdma->regs->dmaserq, cid);
+		iowrite8(cid, &mdma->regs->dmaserq);
 	} else {
 		/* Memory to memory transfer, software initiated start */
-		out_8(&mdma->regs->dmassrt, cid);
+		iowrite8(cid, &mdma->regs->dmassrt);
 	}
 }
 
@@ -328,8 +328,8 @@ static void mpc_dma_irq_process(struct mpc_dma *mdma, u32 is, u32 es, int off)
 
 		spin_lock(&mchan->lock);
 
-		out_8(&mdma->regs->dmacint, ch + off);
-		out_8(&mdma->regs->dmacerr, ch + off);
+		iowrite8(ch + off, &mdma->regs->dmacint);
+		iowrite8(ch + off, &mdma->regs->dmacerr);
 
 		/* Check error status */
 		if (es & (1 << ch))
@@ -352,7 +352,7 @@ static irqreturn_t mpc_dma_irq(int irq, void *data)
 	uint es;
 
 	/* Save error status register */
-	es = in_be32(&mdma->regs->dmaes);
+	es = ioread32be(&mdma->regs->dmaes);
 	spin_lock(&mdma->error_status_lock);
 	if ((es & MPC_DMA_DMAES_VLD) && mdma->error_status == 0)
 		mdma->error_status = es;
@@ -360,11 +360,11 @@ static irqreturn_t mpc_dma_irq(int irq, void *data)
 
 	/* Handle interrupt on each channel */
 	if (mdma->dma.chancnt > 32) {
-		mpc_dma_irq_process(mdma, in_be32(&mdma->regs->dmainth),
-					in_be32(&mdma->regs->dmaerrh), 32);
+		mpc_dma_irq_process(mdma, ioread32be(&mdma->regs->dmainth),
+					ioread32be(&mdma->regs->dmaerrh), 32);
 	}
-	mpc_dma_irq_process(mdma, in_be32(&mdma->regs->dmaintl),
-					in_be32(&mdma->regs->dmaerrl), 0);
+	mpc_dma_irq_process(mdma, ioread32be(&mdma->regs->dmaintl),
+					ioread32be(&mdma->regs->dmaerrl), 0);
 
 	/* Schedule tasklet */
 	tasklet_schedule(&mdma->tasklet);
@@ -535,7 +535,7 @@ static int mpc_dma_alloc_chan_resources(struct dma_chan *chan)
 	spin_unlock_irqrestore(&mchan->lock, flags);
 
 	/* Enable Error Interrupt */
-	out_8(&mdma->regs->dmaseei, chan->chan_id);
+	iowrite8(chan->chan_id, &mdma->regs->dmaseei);
 
 	return 0;
 }
@@ -576,7 +576,7 @@ static void mpc_dma_free_chan_resources(struct dma_chan *chan)
 		kfree(mdesc);
 
 	/* Disable Error Interrupt */
-	out_8(&mdma->regs->dmaceei, chan->chan_id);
+	iowrite8(chan->chan_id, &mdma->regs->dmaceei);
 }
 
 /* Send all pending descriptor to hardware */
@@ -885,7 +885,7 @@ static int mpc_dma_device_terminate_all(struct dma_chan *chan)
 	/* Disable channel requests */
 	spin_lock_irqsave(&mchan->lock, flags);
 
-	out_8(&mdma->regs->dmacerq, chan->chan_id);
+	iowrite8(chan->chan_id, &mdma->regs->dmacerq);
 	list_splice_tail_init(&mchan->prepared, &mchan->free);
 	list_splice_tail_init(&mchan->queued, &mchan->free);
 	list_splice_tail_init(&mchan->active, &mchan->free);
@@ -1020,38 +1020,38 @@ static int mpc_dma_probe(struct platform_device *op)
 	 */
 	if (mdma->is_mpc8308) {
 		/* MPC8308 has 16 channels and lacks some registers */
-		out_be32(&mdma->regs->dmacr, MPC_DMA_DMACR_ERCA);
+		iowrite32be(MPC_DMA_DMACR_ERCA, &mdma->regs->dmacr);
 
 		/* enable snooping */
-		out_be32(&mdma->regs->dmagpor, MPC_DMA_DMAGPOR_SNOOP_ENABLE);
+		iowrite32be(MPC_DMA_DMAGPOR_SNOOP_ENABLE, &mdma->regs->dmagpor);
 		/* Disable error interrupts */
-		out_be32(&mdma->regs->dmaeeil, 0);
+		iowrite32be(0, &mdma->regs->dmaeeil);
 
 		/* Clear interrupts status */
-		out_be32(&mdma->regs->dmaintl, 0xFFFF);
-		out_be32(&mdma->regs->dmaerrl, 0xFFFF);
+		iowrite32be(0xFFFF, &mdma->regs->dmaintl);
+		iowrite32be(0xFFFF, &mdma->regs->dmaerrl);
 	} else {
-		out_be32(&mdma->regs->dmacr, MPC_DMA_DMACR_EDCG |
+		iowrite32be(MPC_DMA_DMACR_EDCG |
 						MPC_DMA_DMACR_ERGA |
-						MPC_DMA_DMACR_ERCA);
+						MPC_DMA_DMACR_ERCA, &mdma->regs->dmacr);
 
 		/* Disable hardware DMA requests */
-		out_be32(&mdma->regs->dmaerqh, 0);
-		out_be32(&mdma->regs->dmaerql, 0);
+		iowrite32be(0, &mdma->regs->dmaerqh);
+		iowrite32be(0, &mdma->regs->dmaerql);
 
 		/* Disable error interrupts */
-		out_be32(&mdma->regs->dmaeeih, 0);
-		out_be32(&mdma->regs->dmaeeil, 0);
+		iowrite32be(0, &mdma->regs->dmaeeih);
+		iowrite32be(0, &mdma->regs->dmaeeil);
 
 		/* Clear interrupts status */
-		out_be32(&mdma->regs->dmainth, 0xFFFFFFFF);
-		out_be32(&mdma->regs->dmaintl, 0xFFFFFFFF);
-		out_be32(&mdma->regs->dmaerrh, 0xFFFFFFFF);
-		out_be32(&mdma->regs->dmaerrl, 0xFFFFFFFF);
+		iowrite32be(0xFFFFFFFF, &mdma->regs->dmainth);
+		iowrite32be(0xFFFFFFFF, &mdma->regs->dmaintl);
+		iowrite32be(0xFFFFFFFF, &mdma->regs->dmaerrh);
+		iowrite32be(0xFFFFFFFF, &mdma->regs->dmaerrl);
 
 		/* Route interrupts to IPIC */
-		out_be32(&mdma->regs->dmaihsa, 0);
-		out_be32(&mdma->regs->dmailsa, 0);
+		iowrite32be(0, &mdma->regs->dmaihsa);
+		iowrite32be(0, &mdma->regs->dmailsa);
 	}
 
 	/* Register DMA engine */
