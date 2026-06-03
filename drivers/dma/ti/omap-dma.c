@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/omap-dma.h>
 #include <linux/platform_device.h>
+#include <linux/rcupdate.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/of.h>
@@ -1853,8 +1854,10 @@ static void omap_dma_remove(struct platform_device *pdev)
 	struct omap_dmadev *od = platform_get_drvdata(pdev);
 	int irq;
 
-	if (od->cfg->may_lose_context)
+	if (od->cfg->may_lose_context) {
 		cpu_pm_unregister_notifier(&od->nb);
+		synchronize_rcu();
+	}
 
 	if (pdev->dev.of_node)
 		of_dma_controller_free(pdev->dev.of_node);
