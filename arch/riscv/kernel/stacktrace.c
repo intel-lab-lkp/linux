@@ -139,7 +139,7 @@ static bool print_trace_address(void *arg, unsigned long pc)
 {
 	const char *loglvl = arg;
 
-	print_ip_sym(loglvl, pc);
+	printk("%s[<%px>] %pB\n", loglvl, (void *)pc, (void *)pc);
 	return true;
 }
 
