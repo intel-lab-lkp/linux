@@ -2065,7 +2065,8 @@ config 8xxx_WDT
 
 config PIKA_WDT
 	tristate "PIKA FPGA Watchdog"
-	depends on WARP || (PPC64 && COMPILE_TEST)
+	depends on WARP || COMPILE_TEST
+	depends on HAS_IOMEM
 	default WARP
 	help
 	  This enables the watchdog in the PIKA FPGA. Currently used on
