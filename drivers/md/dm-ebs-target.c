@@ -212,8 +212,12 @@ static void __ebs_process_bios(struct work_struct *ws)
 			write = true;
 			r = __ebs_rw_bio(ec, REQ_OP_WRITE, bio);
 		} else if (bio_op(bio) == REQ_OP_DISCARD) {
-			__ebs_forget_bio(ec, bio);
-			r = __ebs_discard_bio(ec, bio);
+			if (write)
+				r = dm_bufio_write_dirty_buffers(ec->bufio);
+			if (!r) {
+				__ebs_forget_bio(ec, bio);
+				r = __ebs_discard_bio(ec, bio);
+			}
 		}
 
 		if (r < 0)
