@@ -2545,15 +2545,55 @@ void iommu_detach_group(struct iommu_domain *domain, struct iommu_group *group)
 }
 EXPORT_SYMBOL_GPL(iommu_detach_group);
 
+/**
+ * iommu_iova_to_phys_length - Translate IOVA and return mapping page size
+ * @domain: IOMMU domain to query
+ * @iova: IO virtual address to translate
+ * @mapped_length: Output parameter for the PTE page size (e.g. 4KB/2MB/1GB)
+ *
+ * Like iommu_iova_to_phys() but additionally returns the page size of the
+ * PTE mapping at @iova through @mapped_length.
+ *
+ * Return: The physical address for the given IOVA, or PHYS_ADDR_MAX if no
+ *         translation exists.
+ */
+phys_addr_t iommu_iova_to_phys_length(struct iommu_domain *domain,
+				       dma_addr_t iova,
+				       size_t *mapped_length)
+{
+	phys_addr_t phys;
+
+	if (domain->type == IOMMU_DOMAIN_IDENTITY) {
+		if (mapped_length)
+			*mapped_length = PAGE_SIZE;
+		return iova;
+	}
+
+	if (mapped_length)
+		*mapped_length = 0;
+
+	if (domain->ops->iova_to_phys_length)
+		return domain->ops->iova_to_phys_length(domain, iova, mapped_length);
+
+	/* Fallback to legacy iova_to_phys without length info */
+	if (!domain->ops->iova_to_phys)
+		return PHYS_ADDR_MAX;
+
+	phys = domain->ops->iova_to_phys(domain, iova);
+	if (!phys)
+		return PHYS_ADDR_MAX;
+
+	if (mapped_length)
+		*mapped_length = PAGE_SIZE;
+	return phys;
+}
+EXPORT_SYMBOL_GPL(iommu_iova_to_phys_length);
+
 phys_addr_t iommu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova)
 {
-	if (domain->type == IOMMU_DOMAIN_IDENTITY)
-		return iova;
+	phys_addr_t phys = iommu_iova_to_phys_length(domain, iova, NULL);
 
-	if (domain->type == IOMMU_DOMAIN_BLOCKED)
-		return 0;
-
-	return domain->ops->iova_to_phys(domain, iova);
+	return (phys == PHYS_ADDR_MAX) ? 0 : phys;
 }
 EXPORT_SYMBOL_GPL(iommu_iova_to_phys);
 
