@@ -83,11 +83,57 @@ static inline u32 bytes_to_nvme_numd(size_t len)
 	return (len >> 2) - 1;
 }
 
+/*
+ * Resolve the NVMe controller id (SCID) of the secondary controller backing
+ * this VF. Host-managed migration commands are submitted on the PF (migration
+ * manager) admin queue but must name the controller being migrated -- the VF's
+ * secondary controller, not the PF. Using the PF's own controller id here would
+ * suspend the manager itself and freeze the admin queue. Query the PF's
+ * Secondary Controller List (Identify CNS 0x15) and match the entry whose VFN
+ * equals this VF's SR-IOV number.
+ */
+static int nvmevf_query_vf_cntlid(struct pci_dev *dev, int vf_id, u16 *cntlid)
+{
+	struct nvme_secondary_ctrl_list *list;
+	struct nvme_command c = { };
+	int ret, i, num;
+
+	list = kzalloc(sizeof(*list), GFP_KERNEL);
+	if (!list)
+		return -ENOMEM;
+
+	c.identify.opcode = nvme_admin_identify;
+	c.identify.cns = NVME_ID_CNS_SCNDRY_CTRL_LIST;
+
+	ret = nvme_submit_vf_cmd(dev, &c, NULL, list, sizeof(*list));
+	if (ret) {
+		dev_warn(&dev->dev,
+			 "Identify secondary controller list failed (ret=0x%x)\n",
+			 ret);
+		goto out;
+	}
+
+	num = min_t(int, list->num, NVME_VFIO_MAX_SEC_CTRLS);
+	for (i = 0; i < num; i++) {
+		if (le16_to_cpu(list->entries[i].vfn) == vf_id) {
+			*cntlid = le16_to_cpu(list->entries[i].scid);
+			ret = 0;
+			goto out;
+		}
+	}
+
+	dev_warn(&dev->dev, "no secondary controller found for VF %d\n", vf_id);
+	ret = -ENODEV;
+out:
+	kfree(list);
+	return ret;
+}
+
 static int nvmevf_cmd_suspend_device(struct nvmevf_pci_core_device *nvmevf_dev)
 {
 	struct pci_dev *dev = nvmevf_dev->core_device.pdev;
 	struct nvme_command c = { };
-	u32 cdw11 = NVME_LM_SUSPEND_TYPE_SUSPEND << 16 | nvme_get_ctrl_id(dev);
+	u32 cdw11 = NVME_LM_SUSPEND_TYPE_SUSPEND << 16 | nvmevf_dev->cntlid;
 	int ret;
 
 	c.lm.send.opcode = nvme_admin_lm_send;
@@ -114,7 +160,7 @@ static int nvmevf_cmd_resume_device(struct nvmevf_pci_core_device *nvmevf_dev)
 
 	c.lm.send.opcode = nvme_admin_lm_send;
 	c.lm.send.cdw10 = cpu_to_le32(NVME_LM_SEND_SEL_RESUME);
-	c.lm.send.cdw11 = cpu_to_le32(nvme_get_ctrl_id(dev));
+	c.lm.send.cdw11 = cpu_to_le32(nvmevf_dev->cntlid);
 
 	ret = nvme_submit_vf_cmd(dev, &c, NULL, NULL, 0);
 	if (ret) {
@@ -310,7 +356,7 @@ static int nvmevf_get_ctrl_state(struct pci_dev *dev,
 	struct nvme_lm_ctrl_state *hdr;
 	/* Make sure hdr_len is a multiple of 4 */
 	size_t hdr_len = ALIGN(sizeof(*hdr), 4);
-	__u16 id = nvme_get_ctrl_id(dev);
+	__u16 id = nvmevf_drvdata(dev)->cntlid;
 	void *local_buf;
 	size_t len;
 	int ret;
@@ -519,7 +565,7 @@ static int nvmevf_cmd_set_ctrl_state(struct nvmevf_pci_core_device *nvmevf_dev,
 	u32 sel = NVME_LM_SEND_SEL_SET_CTRL_STATE;
 	/* assume that data buffer is big enough to hold state in one cmd */
 	u32 mos = NVME_LM_SEQIND_ONLY;
-	u32 cntlid = nvme_get_ctrl_id(dev);
+	u32 cntlid = nvmevf_dev->cntlid;
 	u32 csvi = NVME_LM_CSVI;
 	u32 csuuidi = NVME_LM_CSUUIDI;
 	int ret;
@@ -908,6 +954,16 @@ static int nvmevf_migration_init_dev(struct vfio_device *core_vdev)
 	if (vf_id < 0)
 		return ret;
 	nvmevf_dev->vf_id = vf_id + 1;
+
+	/*
+	 * Resolve the VF's secondary controller id now so that the migration
+	 * commands target the VF being migrated rather than the PF manager.
+	 */
+	ret = nvmevf_query_vf_cntlid(pdev, nvmevf_dev->vf_id,
+				     &nvmevf_dev->cntlid);
+	if (ret)
+		return ret;
+
 	core_vdev->migration_flags = VFIO_MIGRATION_STOP_COPY;
 
 	mutex_init(&nvmevf_dev->state_mutex);

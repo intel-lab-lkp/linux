@@ -19,9 +19,37 @@ struct nvmevf_migration_file {
 	size_t total_length;
 };
 
+/*
+ * Identify Secondary Controller List (CNS 0x15) wire format. Used to map a
+ * VF's SR-IOV number (VFN) to the secondary controller's NVMe controller id
+ * (SCID), which is the controller that host-managed migration commands must
+ * target. Layout matches the NVMe base spec: a 32-byte header followed by up
+ * to 127 32-byte secondary controller entries (4096 bytes total).
+ */
+#define NVME_VFIO_MAX_SEC_CTRLS	127
+
+struct nvme_secondary_ctrl_entry {
+	__le16	scid;
+	__le16	pcid;
+	__u8	scs;
+	__u8	rsvd5[3];
+	__le16	vfn;
+	__le16	nvq;
+	__le16	nvi;
+	__u8	rsvd14[18];
+};
+
+struct nvme_secondary_ctrl_list {
+	__u8	num;
+	__u8	rsvd[31];
+	struct nvme_secondary_ctrl_entry entries[NVME_VFIO_MAX_SEC_CTRLS];
+};
+
 struct nvmevf_pci_core_device {
 	struct vfio_pci_core_device core_device;
 	int vf_id;
+	/* NVMe controller id (SCID) of this VF's secondary controller */
+	u16 cntlid;
 	u8 migrate_cap:1;
 	u8 deferred_reset:1;
 	/* protect migration state */
