@@ -1035,7 +1035,7 @@ static int afe_apr_send_pkt(struct q6afe *afe, struct apr_pkt *pkt,
 	struct aprv2_ibasic_rsp_result_t *result;
 	int ret;
 
-	mutex_lock(&afe->lock);
+	guard(mutex)(&afe->lock);
 	if (port) {
 		wait = &port->wait;
 		result = &port->result;
@@ -1050,8 +1050,7 @@ static int afe_apr_send_pkt(struct q6afe *afe, struct apr_pkt *pkt,
 	ret = apr_send_pkt(afe->apr, pkt);
 	if (ret < 0) {
 		dev_err(afe->dev, "packet not transmitted (%d)\n", ret);
-		ret = -EINVAL;
-		goto err;
+		return -EINVAL;
 	}
 
 	ret = wait_event_timeout(*wait, (result->opcode == rsp_opcode),
@@ -1065,9 +1064,6 @@ static int afe_apr_send_pkt(struct q6afe *afe, struct apr_pkt *pkt,
 	} else {
 		ret = 0;
 	}
-
-err:
-	mutex_unlock(&afe->lock);
 
 	return ret;
 }
