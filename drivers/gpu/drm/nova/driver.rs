@@ -3,6 +3,7 @@
 use kernel::{
     auxiliary,
     device::{
+        Bound,
         Core,
         DeviceContext, //
     },
@@ -13,7 +14,7 @@ use kernel::{
     },
     prelude::*,
     sync::aref::ARef,
-    types::ForLt, //
+    types::CovariantForLt, //
 };
 
 use crate::file::File;
@@ -30,9 +31,8 @@ pub(crate) struct Nova<'bound> {
 /// Convienence type alias for the DRM device type for this driver
 pub(crate) type NovaDevice<Ctx = drm::Registered> = drm::Device<NovaDriver, Ctx>;
 
-#[pin_data]
-pub(crate) struct NovaData {
-    pub(crate) adev: ARef<auxiliary::Device>,
+pub(crate) struct NovaData<'bound> {
+    pub(crate) adev: &'bound auxiliary::Device<Bound>,
 }
 
 const INFO: drm::DriverInfo = drm::DriverInfo {
@@ -65,10 +65,10 @@ impl auxiliary::Driver for NovaDriver {
         adev: &'bound auxiliary::Device<Core<'_>>,
         _info: &'bound Self::IdInfo,
     ) -> impl PinInit<Self::Data<'bound>, Error> + 'bound {
-        let data = try_pin_init!(NovaData { adev: adev.into() });
-
-        let drm = drm::UnregisteredDevice::<Self>::new(adev, data)?;
-        let reg = drm::Registration::new(adev.as_ref(), drm, (), 0)?;
+        let drm = drm::UnregisteredDevice::<Self>::new(adev, Ok(()))?;
+        let reg_data = NovaData { adev };
+        // SAFETY: We never bypass the destructor of `reg`.
+        let reg = unsafe { drm::Registration::new_with_lt(adev.as_ref(), drm, reg_data, 0)? };
 
         Ok(Nova {
             drm: reg.device().into(),
@@ -79,8 +79,8 @@ impl auxiliary::Driver for NovaDriver {
 
 #[vtable]
 impl drm::Driver for NovaDriver {
-    type Data = NovaData;
-    type RegistrationData = ForLt!(());
+    type Data = ();
+    type RegistrationData = CovariantForLt!(NovaData<'_>);
     type File = File;
     type Object<Ctx: drm::DeviceContext> = gem::Object<NovaObject, Ctx>;
     type ParentDevice<Ctx: DeviceContext> = auxiliary::Device<Ctx>;
