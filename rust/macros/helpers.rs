@@ -4,6 +4,7 @@ use proc_macro2::TokenStream;
 use quote::ToTokens;
 use syn::{
     parse::{
+        discouraged::Speculative,
         Parse,
         ParseStream, //
     },
@@ -51,6 +52,20 @@ pub(crate) fn file() -> String {
     #[cfg(CONFIG_RUSTC_HAS_SPAN_FILE)]
     {
         proc_macro::Span::call_site().file()
+    }
+}
+
+pub(crate) fn try_parse<T>(
+    input: ParseStream<'_>,
+    parser: impl FnOnce(ParseStream<'_>) -> Result<T>,
+) -> Result<T> {
+    let fork = input.fork();
+    match parser(&fork) {
+        Ok(value) => {
+            input.advance_to(&fork);
+            Ok(value)
+        }
+        Err(e) => Err(e),
     }
 }
 

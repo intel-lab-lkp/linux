@@ -4,7 +4,7 @@
 
 use kernel::alloc::flags;
 use kernel::configfs;
-use kernel::configfs::configfs_attrs;
+use kernel::macros::configfs_attrs;
 use kernel::new_mutex;
 use kernel::page::PAGE_SIZE;
 use kernel::prelude::*;
