@@ -1784,6 +1784,24 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 		return intel_get_buf_trans(&xe3plpd_lt_trans_dp14, n_entries);
 }
 
+static const struct intel_ddi_buf_trans *
+xe3plpd_get_lt_vspeo_buf_trans(struct intel_encoder *encoder,
+			       const struct intel_crtc_state *crtc_state,
+			       int *n_entries)
+{
+	const struct intel_ddi_buf_trans *buf_trans;
+
+	buf_trans = encoder->get_buf_trans(encoder, crtc_state, n_entries);
+	if (intel_crtc_has_dp_encoder(crtc_state)) {
+		if (intel_dp_is_uhbr(crtc_state))
+			return intel_bios_get_lt_vspeo(encoder->devdata, buf_trans, 5);
+		else
+			return intel_bios_get_lt_vspeo(encoder->devdata, buf_trans, 4);
+	}
+
+	return buf_trans;
+}
+
 void intel_ddi_buf_trans_init(struct intel_encoder *encoder)
 {
 	struct intel_display *display = to_intel_display(encoder);
@@ -1857,5 +1875,22 @@ const struct intel_ddi_buf_trans *intel_ddi_buf_trans_get(struct intel_encoder *
 							  const struct intel_crtc_state *crtc_state,
 							  int *n_entries)
 {
-	return encoder->get_buf_trans(encoder, crtc_state, n_entries);
+	struct intel_display *display = to_intel_display(encoder);
+	const struct intel_ddi_buf_trans *buf_trans;
+
+	if (!encoder->devdata)
+		return encoder->get_buf_trans(encoder, crtc_state, n_entries);
+
+	if (!intel_bios_encoder_requests_vspeo(encoder->devdata))
+		return encoder->get_buf_trans(encoder, crtc_state, n_entries);
+
+	if (!intel_bios_encoder_allocated_vspeo(encoder->devdata))
+		return encoder->get_buf_trans(encoder, crtc_state, n_entries);
+
+	if (HAS_LT_PHY(display))
+		buf_trans = xe3plpd_get_lt_vspeo_buf_trans(encoder, crtc_state, n_entries);
+	else
+		buf_trans = encoder->get_buf_trans(encoder, crtc_state, n_entries);
+
+	return intel_get_buf_trans(buf_trans, n_entries);
 }
