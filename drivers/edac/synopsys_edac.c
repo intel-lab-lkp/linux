@@ -1120,8 +1120,10 @@ static int edac_create_sysfs_attributes(struct mem_ctl_info *mci)
 	if (rc < 0)
 		return rc;
 	rc = device_create_file(&mci->dev, &dev_attr_inject_data_poison);
-	if (rc < 0)
+	if (rc < 0) {
+		device_remove_file(&mci->dev, &dev_attr_inject_data_error);
 		return rc;
+	}
 	return 0;
 }
 
@@ -1431,7 +1433,7 @@ static int mc_probe(struct platform_device *pdev)
 		if (rc) {
 			edac_printk(KERN_ERR, EDAC_MC,
 					"Failed to create sysfs entries\n");
-			goto free_edac_mc;
+			goto del_mc;
 		}
 	}
 
@@ -1448,6 +1450,10 @@ static int mc_probe(struct platform_device *pdev)
 
 	return rc;
 
+#ifdef CONFIG_EDAC_DEBUG
+del_mc:
+	edac_mc_del_mc(&pdev->dev);
+#endif
 free_edac_mc:
 	edac_mc_free(mci);
 
