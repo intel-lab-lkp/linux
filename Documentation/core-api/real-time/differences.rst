@@ -128,7 +128,7 @@ PREEMPT_RT, the timer must be marked with the HRTIMER_MODE_HARD flag.
 Memory allocation
 -----------------
 
-The memory allocation APIs, such as kmalloc() and alloc_pages(), require a
+The memory allocation APIs, such as kmalloc_obj() and alloc_pages(), require a
 gfp_t flag to indicate the allocation context. On non-PREEMPT_RT kernels, it is
 necessary to use GFP_ATOMIC when allocating memory from interrupt context or
 from sections where preemption is disabled. This is because the allocator must
