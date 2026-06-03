@@ -5350,6 +5350,7 @@ EXPORT_SYMBOL(__kmalloc_noprof);
 void *_kmalloc_nolock_noprof(DECL_TOKEN_PARAMS(size, token), gfp_t gfp_flags, int node)
 {
 	gfp_t alloc_gfp = __GFP_NOWARN | __GFP_NOMEMALLOC | gfp_flags;
+	size_t bucket_size = size;
 	struct kmem_cache *s;
 	bool can_retry = true;
 	void *ret;
@@ -5372,9 +5373,9 @@ void *_kmalloc_nolock_noprof(DECL_TOKEN_PARAMS(size, token), gfp_t gfp_flags, in
 		return NULL;
 
 retry:
-	if (unlikely(size > KMALLOC_MAX_CACHE_SIZE))
+	if (unlikely(bucket_size > KMALLOC_MAX_CACHE_SIZE))
 		return NULL;
-	s = kmalloc_slab(size, NULL, alloc_gfp, PASS_TOKEN_PARAM(token));
+	s = kmalloc_slab(bucket_size, NULL, alloc_gfp, PASS_TOKEN_PARAM(token));
 
 	if (!(s->flags & __CMPXCHG_DOUBLE) && !kmem_cache_debug(s))
 		/*
@@ -5408,7 +5409,7 @@ retry:
 	 */
 	if (!ret && can_retry) {
 		/* pick the next kmalloc bucket */
-		size = s->object_size + 1;
+		bucket_size = s->object_size + 1;
 		/*
 		 * Another alternative is to
 		 * if (memcg) alloc_gfp &= ~__GFP_ACCOUNT;
