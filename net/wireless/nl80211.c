@@ -12051,6 +12051,12 @@ static int nl80211_parse_counter_offsets(struct cfg80211_registered_device *rdev
 			return -EINVAL;
 	}
 
+	if (!!params->he_cap != !!params->he_oper)
+		return -EINVAL;
+
+	if (!!params->eht_cap != !!params->eht_oper)
+		return -EINVAL;
+
 	return 0;
 }
 
