@@ -1785,6 +1785,52 @@ xe3plpd_get_lt_buf_trans(struct intel_encoder *encoder,
 }
 
 static const struct intel_ddi_buf_trans *
+jsl_get_combo_vspeo_buf_trans(struct intel_encoder *encoder,
+			      const struct intel_crtc_state *crtc_state,
+			      int *n_entries)
+{
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+		if (use_edp_low_vswing(encoder)) {
+			if (crtc_state->port_clock > 540000)
+				return intel_bios_get_combo_vspeo(encoder->devdata, 0);
+			else if (crtc_state->port_clock > 270000)
+				return intel_bios_get_combo_vspeo(encoder->devdata, 2);
+			else
+				return intel_bios_get_combo_vspeo(encoder->devdata, 1);
+		}
+	}
+
+	if (intel_crtc_has_dp_encoder(crtc_state))
+		return intel_bios_get_combo_vspeo(encoder->devdata, 0);
+
+	return encoder->get_buf_trans(encoder, crtc_state, n_entries);
+}
+
+static const struct intel_ddi_buf_trans *
+ehl_get_combo_vspeo_buf_trans(struct intel_encoder *encoder,
+			      const struct intel_crtc_state *crtc_state,
+			      int *n_entries)
+{
+	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP)) {
+		if (use_edp_low_vswing(encoder)) {
+			if (crtc_state->port_clock > 540000)
+				return intel_bios_get_combo_vspeo(encoder->devdata, 2);
+			else
+				return intel_bios_get_combo_vspeo(encoder->devdata, 1);
+		}
+	}
+
+	if (intel_crtc_has_dp_encoder(crtc_state)) {
+		if (crtc_state->port_clock > 270000)
+			return intel_bios_get_combo_vspeo(encoder->devdata, 1);
+		else
+			return intel_bios_get_combo_vspeo(encoder->devdata, 0);
+	}
+
+	return encoder->get_buf_trans(encoder, crtc_state, n_entries);
+}
+
+static const struct intel_ddi_buf_trans *
 mtl_get_c10_vspeo_buf_trans(struct intel_encoder *encoder,
 			    const struct intel_crtc_state *crtc_state,
 			    int *n_entries)
@@ -1931,6 +1977,13 @@ const struct intel_ddi_buf_trans *intel_ddi_buf_trans_get(struct intel_encoder *
 			buf_trans = mtl_get_c10_vspeo_buf_trans(encoder, crtc_state, n_entries);
 		else
 			buf_trans = mtl_get_c20_vspeo_buf_trans(encoder, crtc_state, n_entries);
+	} else if (DISPLAY_VER(display) == 11) {
+		if (display->platform.jasperlake)
+			buf_trans = jsl_get_combo_vspeo_buf_trans(encoder, crtc_state, n_entries);
+		else if (display->platform.elkhartlake)
+			buf_trans = ehl_get_combo_vspeo_buf_trans(encoder, crtc_state, n_entries);
+		else
+			buf_trans = encoder->get_buf_trans(encoder, crtc_state, n_entries);
 	} else {
 		buf_trans = encoder->get_buf_trans(encoder, crtc_state, n_entries);
 	}

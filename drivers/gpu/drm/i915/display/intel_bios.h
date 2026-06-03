@@ -80,6 +80,9 @@ intel_bios_get_lt_vspeo(const struct intel_bios_encoder_data *devdata,
 const struct intel_ddi_buf_trans *
 intel_bios_get_cx0_vspeo(const struct intel_bios_encoder_data *devdata,
 			 int idx);
+const struct intel_ddi_buf_trans *
+intel_bios_get_combo_vspeo(const struct intel_bios_encoder_data *devdata,
+			   int idx);
 
 bool intel_bios_encoder_allocated_vspeo(const struct intel_bios_encoder_data *devdata);
 bool intel_bios_encoder_requests_vspeo(const struct intel_bios_encoder_data *devdata);
