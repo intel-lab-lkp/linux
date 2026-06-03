@@ -908,7 +908,7 @@ static int aie2_get_hwctx_status(struct amdxdna_client *client,
 	struct amdxdna_drm_get_array array_args;
 	struct amdxdna_dev *xdna = client->xdna;
 	struct amdxdna_client *tmp_client;
-	int ret;
+	int ret = 0;
 
 	drm_WARN_ON(&xdna->ddev, !mutex_is_locked(&xdna->dev_lock));
 
@@ -923,7 +923,7 @@ static int aie2_get_hwctx_status(struct amdxdna_client *client,
 	}
 
 	args->buffer_size -= (u32)(array_args.buffer - args->buffer);
-	return 0;
+	return ret;
 }
 
 static int aie2_query_resource_info(struct amdxdna_client *client,
@@ -1105,7 +1105,7 @@ static int aie2_query_ctx_status_array(struct amdxdna_client *client,
 	struct amdxdna_drm_get_array array_args;
 	struct amdxdna_dev *xdna = client->xdna;
 	struct amdxdna_client *tmp_client;
-	int ret;
+	int ret = 0;
 
 	drm_WARN_ON(&xdna->ddev, !mutex_is_locked(&xdna->dev_lock));
 
@@ -1131,7 +1131,7 @@ static int aie2_query_ctx_status_array(struct amdxdna_client *client,
 	args->num_element = (u32)((array_args.buffer - args->buffer) /
 				  args->element_size);
 
-	return 0;
+	return ret;
 }
 
 static int aie2_get_array(struct amdxdna_client *client,
