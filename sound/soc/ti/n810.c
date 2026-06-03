@@ -14,7 +14,6 @@
 #include <sound/pcm.h>
 #include <sound/soc.h>
 
-#include <asm/mach-types.h>
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/platform_data/asoc-ti-mcbsp.h>
