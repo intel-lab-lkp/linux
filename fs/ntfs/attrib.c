@@ -845,11 +845,49 @@ char *ntfs_attr_name_get(const struct ntfs_volume *vol, const __le16 *uname,
 	return NULL;
 }
 
+/*
+ * ntfs_attr_list_is_valid - sanity check an in-memory $ATTRIBUTE_LIST
+ * @al_start:	start of the attribute list buffer
+ * @size:	length of the attribute list in bytes
+ *
+ * Verify that [@al_start, @al_start + @size) is a well-formed sequence of
+ * attr_list_entry records.  Each record's fixed header must lie within the
+ * buffer before any of its fields are dereferenced, its length must cover
+ * the fixed header plus the name, and the records must tile the buffer
+ * exactly.  Return true if valid, false otherwise.
+ */
+bool ntfs_attr_list_is_valid(const u8 *al_start, s64 size)
+{
+	const u8 *al = al_start;
+	const u8 *al_end = al_start + size;
+
+	while (al < al_end) {
+		const struct attr_list_entry *ale =
+				(const struct attr_list_entry *)al;
+		u16 ale_len;
+
+		/* The fixed header must be in bounds before it is parsed. */
+		if (al + offsetof(struct attr_list_entry, name) > al_end)
+			return false;
+		ale_len = le16_to_cpu(ale->length);
+		if (ale->name_offset != sizeof(struct attr_list_entry))
+			return false;
+		if ((u32)ale->name_offset +
+		    (u32)ale->name_length * sizeof(__le16) > ale_len ||
+		    al + ale_len > al_end)
+			return false;
+		if (ale->type == AT_UNUSED)
+			return false;
+		if (MSEQNO_LE(ale->mft_reference) == 0)
+			return false;
+		al += ale_len;
+	}
+	return al == al_end;
+}
+
 int load_attribute_list(struct ntfs_inode *base_ni, u8 *al_start, const s64 size)
 {
 	struct inode *attr_vi = NULL;
-	u8 *al;
-	struct attr_list_entry *ale;
 
 	if (!al_start || size <= 0)
 		return -EINVAL;
@@ -871,19 +909,7 @@ int load_attribute_list(struct ntfs_inode *base_ni, u8 *al_start, const s64 size
 	}
 	iput(attr_vi);
 
-	for (al = al_start; al < al_start + size; al += le16_to_cpu(ale->length)) {
-		ale = (struct attr_list_entry *)al;
-		if (ale->name_offset != sizeof(struct attr_list_entry))
-			break;
-		if (le16_to_cpu(ale->length) <= ale->name_offset + ale->name_length ||
-		    al + le16_to_cpu(ale->length) > al_start + size)
-			break;
-		if (ale->type == AT_UNUSED)
-			break;
-		if (MSEQNO_LE(ale->mft_reference) == 0)
-			break;
-	}
-	if (al != al_start + size) {
+	if (!ntfs_attr_list_is_valid(al_start, size)) {
 		ntfs_error(base_ni->vol->sb, "Corrupt attribute list, mft = %llu",
 			   base_ni->mft_no);
 		return -EIO;
