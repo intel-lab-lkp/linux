@@ -151,7 +151,6 @@ struct flow_offload_tuple {
 	u16				dir:2,
 					xmit_type:3,
 					encap_num:2,
-					needs_gso_segment:1,
 					tun_num:2,
 					in_vlan_ingress:2;
 	u16				mtu;

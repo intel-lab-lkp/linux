@@ -771,7 +771,6 @@ struct nf_flow_xmit {
 	const void		*source;
 	struct net_device	*outdev;
 	struct flow_offload_tuple *tuple;
-	bool			needs_gso_segment;
 };
 
 static void __nf_flow_queue_xmit(struct net *net, struct sk_buff *skb,
@@ -792,41 +791,10 @@ static void __nf_flow_queue_xmit(struct net *net, struct sk_buff *skb,
 	dev_queue_xmit(skb);
 }
 
-static unsigned int nf_flow_encap_gso_xmit(struct net *net, struct sk_buff *skb,
-					   struct nf_flow_xmit *xmit)
-{
-	struct sk_buff *segs, *nskb;
-
-	segs = skb_gso_segment(skb, 0);
-	if (IS_ERR(segs))
-		return NF_DROP;
-
-	if (segs)
-		consume_skb(skb);
-	else
-		segs = skb;
-
-	skb_list_walk_safe(segs, segs, nskb) {
-		skb_mark_not_on_list(segs);
-
-		if (nf_flow_encap_push(segs, xmit->tuple, xmit->outdev) < 0) {
-			kfree_skb(segs);
-			kfree_skb_list(nskb);
-			return NF_STOLEN;
-		}
-		__nf_flow_queue_xmit(net, segs, xmit);
-	}
-
-	return NF_STOLEN;
-}
-
 static unsigned int nf_flow_queue_xmit(struct net *net, struct sk_buff *skb,
 				       struct nf_flow_xmit *xmit)
 {
 	if (xmit->tuple->encap_num) {
-		if (skb_is_gso(skb) && xmit->needs_gso_segment)
-			return nf_flow_encap_gso_xmit(net, skb, xmit);
-
 		if (nf_flow_encap_push(skb, xmit->tuple, xmit->outdev) < 0)
 			return NF_DROP;
 	}
@@ -910,7 +878,6 @@ nf_flow_offload_ip_hook(void *priv, struct sk_buff *skb,
 		return NF_DROP;
 	}
 	xmit.tuple = other_tuple;
-	xmit.needs_gso_segment = tuplehash->tuple.needs_gso_segment;
 
 	return nf_flow_queue_xmit(state->net, skb, &xmit);
 }
@@ -1231,7 +1198,6 @@ nf_flow_offload_ipv6_hook(void *priv, struct sk_buff *skb,
 		return NF_DROP;
 	}
 	xmit.tuple = other_tuple;
-	xmit.needs_gso_segment = tuplehash->tuple.needs_gso_segment;
 
 	return nf_flow_queue_xmit(state->net, skb, &xmit);
 }
