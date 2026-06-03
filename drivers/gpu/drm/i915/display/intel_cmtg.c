@@ -323,14 +323,11 @@ void intel_cmtg_set_m_n(const struct intel_crtc_state *crtc_state)
 	intel_de_write(display, PIPE_LINK_N1(display, cmtg_transcoder), m_n->link_n);
 }
 
-void intel_cmtg_enable_sync(const struct intel_crtc_state *crtc_state)
+static void intel_cmtg_enable_sync(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	u32 cmtg_ctl;
-
-	if (!intel_cmtg_is_allowed(crtc_state))
-		return;
 
 	cmtg_ctl = CMTG_SYNC_TO_PORT | CMTG_ENABLE;
 
@@ -342,14 +339,11 @@ void intel_cmtg_enable_sync(const struct intel_crtc_state *crtc_state)
 	}
 }
 
-void intel_cmtg_enable_ddi(const struct intel_crtc_state *crtc_state)
+static void intel_cmtg_enable_ddi(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
-
-	if (!intel_cmtg_is_allowed(crtc_state))
-		return;
 
 	intel_de_rmw(display, TRANS_DDI_FUNC_CTL2(display, cpu_transcoder), 0, CMTG_SECONDARY_MODE);
 	intel_de_rmw(display, CMTG_SCANLINE_GB1(cpu_transcoder), 0, CMTG_HW_GB_ENABLE);
@@ -406,7 +400,7 @@ void intel_cmtg_disable_interrupt(const struct intel_crtc_state *crtc_state)
 #define DC3CO_ENTRY_LATENCY	55
 #define DC3CO_EXIT_LATENCY	40
 
-void intel_cmtg_set_hwgb(const struct intel_crtc_state *crtc_state)
+static void intel_cmtg_set_hwgb(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
@@ -414,9 +408,6 @@ void intel_cmtg_set_hwgb(const struct intel_crtc_state *crtc_state)
 	u32 dc5_exit_latency;
 	u32 line_time_us = 75;
 	u32 val;
-
-	if (!intel_cmtg_is_allowed(crtc_state))
-		return;
 
 	if (crtc_state->linetime)
 		line_time_us = DIV_ROUND_UP(crtc_state->linetime, 8);
@@ -432,4 +423,14 @@ void intel_cmtg_set_hwgb(const struct intel_crtc_state *crtc_state)
 	      REG_FIELD_PREP(CMTG_HW_GB_UP_LW_BG_DIFF_MASK, 1);
 
 	intel_de_write(display, CMTG_HW_GB(cpu_transcoder), val);
+}
+
+void intel_cmtg_program(const struct intel_crtc_state *crtc_state)
+{
+	if (!intel_cmtg_is_allowed(crtc_state))
+		return;
+
+	intel_cmtg_enable_sync(crtc_state);
+	intel_cmtg_set_hwgb(crtc_state);
+	intel_cmtg_enable_ddi(crtc_state);
 }

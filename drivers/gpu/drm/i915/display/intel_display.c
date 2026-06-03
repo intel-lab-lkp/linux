@@ -1790,6 +1790,11 @@ static void hsw_crtc_disable(struct intel_atomic_state *state,
 		intel_atomic_get_old_crtc_state(state, crtc);
 	struct intel_crtc *pipe_crtc;
 
+	if (crtc->cmtg.enabled) {
+		intel_cmtg_set_clk_select(old_crtc_state);
+		intel_cmtg_disable(old_crtc_state);
+		intel_cmtg_disable_interrupt(old_crtc_state);
+	}
 	/*
 	 * FIXME collapse everything to one hook.
 	 * Need care with mst->ddi interactions.
@@ -6878,6 +6883,12 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 	if (intel_crtc_needs_fastset(new_crtc_state) &&
 	    old_crtc_state->inherited)
 		intel_crtc_arm_fifo_underrun(crtc, new_crtc_state);
+
+	if (crtc->cmtg.enabled && (intel_crtc_vrr_enabling(state, crtc))) {
+		intel_cmtg_set_clk_select(new_crtc_state);
+		intel_cmtg_disable(new_crtc_state);
+		intel_cmtg_disable_interrupt(new_crtc_state);
+	}
 }
 
 static void intel_old_crtc_state_disables(struct intel_atomic_state *state,
@@ -7546,6 +7557,19 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 
 	/* FIXME probably need to sequence this properly */
 	intel_program_dpkgc_latency(state);
+
+	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state) {
+		bool modeset = intel_crtc_needs_modeset(new_crtc_state);
+
+		/*
+		 * TODO: CMTG needs to be restored on DC6 exit and DC3co entry condition
+		 * need to be checked before calling CMTG functions.
+		 */
+		if (modeset && new_crtc_state->hw.active && !crtc->cmtg.enabled) {
+			intel_cmtg_program(new_crtc_state);
+			intel_cmtg_enable_interrupt(new_crtc_state);
+		}
+	}
 
 	intel_wait_for_vblank_workers(state);
 
