@@ -180,7 +180,7 @@ static inline void kvm_mmu_refresh_passthrough_bits(struct kvm_vcpu *vcpu,
 	 * still refresh gva_walk, so as to honor L2's CR0.WP when translating
 	 * L2 GVAs to GPAs.
 	 */
-	if (!tdp_enabled || w == &vcpu->arch.guest_mmu.w)
+	if (!tdp_enabled || w == &vcpu->arch.ngpa_walk)
 		return;
 
 	__kvm_mmu_refresh_passthrough_bits(vcpu, w);
@@ -306,7 +306,7 @@ static inline gpa_t kvm_translate_gpa(struct kvm_vcpu *vcpu,
 				      struct x86_exception *exception,
 				      u64 pte_access)
 {
-	if (!mmu_is_nested(vcpu) || w == &vcpu->arch.guest_mmu.w)
+	if (!mmu_is_nested(vcpu) || w == &vcpu->arch.ngpa_walk)
 		return gpa;
 	return kvm_x86_ops.nested_ops->translate_nested_gpa(vcpu, gpa, access,
 							    exception,
