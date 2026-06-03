@@ -1904,8 +1904,6 @@ static int b43legacy_gpio_init(struct b43legacy_wldev *dev)
 		mask |= 0x0200;
 		set |= 0x0200;
 	}
-	if (dev->dev->id.revision >= 2)
-		mask  |= 0x0010; /* FIXME: This is redundant. */
 
 #ifdef CONFIG_SSB_DRIVER_PCICORE
 	pcidev = bus->pcicore.dev;
