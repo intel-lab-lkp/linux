@@ -2465,6 +2465,18 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 	if (err)
 		goto unbind_filter;
 
+	if (FL_KEY_IS_MASKED(&mask->key, eth)) {
+		struct Qdisc *q = tp->chain->block->q;
+
+		if (q && qdisc_dev(q)->hard_header_len <
+				sizeof(struct flow_dissector_key_eth_addrs)) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Device does not have an Ethernet header");
+			err = -EINVAL;
+			goto unbind_filter;
+		}
+	}
+
 	fl_mask_update_range(mask);
 	fl_set_masked_key(&fnew->mkey, &fnew->key, mask);
 
