@@ -3653,12 +3653,18 @@ static int partition_tape(struct sdebug_dev_info *devip, int nbr_partitions,
 
 	if (part_0_size + part_1_size > TAPE_UNITS)
 		return -1;
+	if (nbr_partitions > 1 && part_1_size <= 0)
+		return -1;
 	devip->tape_eop[0] = part_0_size;
 	devip->tape_blocks[0]->fl_size = TAPE_BLOCK_EOD_FLAG;
 	devip->tape_eop[1] = part_1_size;
-	devip->tape_blocks[1] = devip->tape_blocks[0] +
-			devip->tape_eop[0];
-	devip->tape_blocks[1]->fl_size = TAPE_BLOCK_EOD_FLAG;
+	if (nbr_partitions > 1) {
+		devip->tape_blocks[1] = devip->tape_blocks[0] +
+				devip->tape_eop[0];
+		devip->tape_blocks[1]->fl_size = TAPE_BLOCK_EOD_FLAG;
+	} else {
+		devip->tape_blocks[1] = NULL;
+	}
 
 	for (i = 0 ; i < TAPE_MAX_PARTITIONS; i++)
 		devip->tape_location[i] = 0;
