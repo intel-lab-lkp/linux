@@ -1454,6 +1454,9 @@ int lmLogClose(struct super_block *sb)
 		/*
 		 *	in-line log in host file system
 		 */
+		/* wait for lazy commit thread to finish txEnd() */
+		wait_event(log->syncwait, !log->active &&
+			   !test_bit(log_SYNCBARRIER, &log->flag));
 		rc = lmLogShutdown(log);
 		kfree(log);
 		goto out;
@@ -1478,6 +1481,9 @@ int lmLogClose(struct super_block *sb)
 	/*
 	 *	external log as separate logical volume
 	 */
+	/* wait for lazy commit thread to finish txEnd() */
+	wait_event(log->syncwait, !log->active &&
+		   !test_bit(log_SYNCBARRIER, &log->flag));
 	list_del(&log->journal_list);
 	bdev_file = log->bdev_file;
 	rc = lmLogShutdown(log);

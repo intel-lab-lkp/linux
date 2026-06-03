@@ -560,6 +560,9 @@ void txEnd(tid_t tid)
 
 			goto wakeup;
 		}
+
+		/* wakeup lmLogClose waiting for all txn completion */
+		TXN_WAKEUP(&log->syncwait);
 	}
 
 	TXN_UNLOCK();
