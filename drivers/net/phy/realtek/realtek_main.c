@@ -2659,6 +2659,47 @@ static int rtlgen_sfp_get_features(struct phy_device *phydev)
 	return 0;
 }
 
+static int rtl8116af_sfp_get_features(struct phy_device *phydev)
+{
+	linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT,
+			 phydev->supported);
+
+	phydev->speed = SPEED_1000;
+	phydev->duplex = DUPLEX_FULL;
+
+	phydev->port = PORT_FIBRE;
+
+	return 0;
+}
+
+static int rtl8116af_sfp_read_status(struct phy_device *phydev)
+{
+	int val, err;
+
+	err = genphy_update_link(phydev);
+	if (err)
+		return err;
+
+	if (!phydev->link)
+		return 0;
+
+	val = phy_read(phydev, MII_BMCR);
+	if (val < 0)
+		return val;
+
+	if (val & BMCR_SPEED1000)
+		phydev->speed = SPEED_1000;
+	else if (val & BMCR_SPEED100)
+		phydev->speed = SPEED_100;
+
+	if (val & BMCR_FULLDPLX)
+		phydev->duplex = DUPLEX_FULL;
+	else
+		phydev->duplex = DUPLEX_HALF;
+
+	return 0;
+}
+
 static int rtlgen_sfp_read_status(struct phy_device *phydev)
 {
 	int val, err;
@@ -2941,6 +2982,19 @@ static struct phy_driver realtek_drvs[] = {
 		.get_features	= rtlgen_sfp_get_features,
 		.config_aneg	= rtlgen_sfp_config_aneg,
 		.read_status	= rtlgen_sfp_read_status,
+		.suspend	= genphy_suspend,
+		.resume		= rtlgen_resume,
+		.read_page	= rtl821x_read_page,
+		.write_page	= rtl821x_write_page,
+		.read_mmd	= rtl822x_read_mmd,
+		.write_mmd	= rtl822x_write_mmd,
+	}, {
+		PHY_ID_MATCH_EXACT(PHY_ID_RTL8116AF_DUMMY),
+		.name		= "RTL8116af PHY Mode",
+		.flags		= PHY_IS_INTERNAL,
+		.get_features	= rtl8116af_sfp_get_features,
+		.config_aneg	= rtlgen_sfp_config_aneg,
+		.read_status	= rtl8116af_sfp_read_status,
 		.suspend	= genphy_suspend,
 		.resume		= rtlgen_resume,
 		.read_page	= rtl821x_read_page,
