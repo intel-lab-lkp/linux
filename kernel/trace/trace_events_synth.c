@@ -839,8 +839,10 @@ static struct synth_field *parse_synth_field(int argc, char **argv,
 			seq_buf_puts(&s, "__data_loc ");
 			seq_buf_puts(&s, field->type);
 
-			if (WARN_ON_ONCE(!seq_buf_buffer_left(&s)))
+			if (WARN_ON_ONCE(!seq_buf_buffer_left(&s))) {
+				kfree(type);
 				goto free;
+			}
 			s.buffer[s.len] = '\0';
 
 			kfree(field->type);
