@@ -44,6 +44,41 @@ properties:
     maxItems: 1
     description: USB suspend pin (active high, output)
 
+  dc-current-limit-gpios:
+    minItems: 1
+    maxItems: 4
+    description:
+      GPIOs controlling DC input current limit via resistor mux.
+      Used with dc-current-limit-mapping to select charging current.
+
+  dc-current-limit-mapping:
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    minItems: 2
+    maxItems: 16
+    description: |
+      Array of (current_microamps, gpio_bit_pattern) pairs defining available
+      DC current limits. The gpio_bit_pattern is applied to dc-current-limit-gpios
+      to select that current level.
+    items:
+      items:
+        - description: Current limit in microamps
+        - description: GPIO bit pattern value
+
+  usb-current-limit-gpios:
+    maxItems: 1
+    description:
+      GPIO controlling USB input current limit.
+      Low = usb-current-limit-values[0], High = usb-current-limit-values[1].
+
+  usb-current-limit-values:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 2
+    maxItems: 2
+    default: [100000, 500000]
+    description:
+      USB current limits in microamps for GPIO low and high states.
+      Default is 100mA (low) and 500mA (high) per USB specification.
+
 required:
   - compatible
 
@@ -64,4 +99,27 @@ examples:
       flt-gpios = <&gpio2 2 GPIO_ACTIVE_LOW>;
       chg-gpios = <&gpio3 15 GPIO_ACTIVE_LOW>;
       cen-gpios = <&gpio2 5 GPIO_ACTIVE_LOW>;
+    };
+  - |
+    /* Example with DC and USB current limit control */
+    #include <dt-bindings/gpio/gpio.h>
+    charger-with-current-limit {
+      compatible = "maxim,max8903";
+      dok-gpios = <&gpio2 3 GPIO_ACTIVE_LOW>;
+      flt-gpios = <&gpio2 2 GPIO_ACTIVE_LOW>;
+      chg-gpios = <&gpio3 15 GPIO_ACTIVE_LOW>;
+      cen-gpios = <&gpio2 5 GPIO_ACTIVE_LOW>;
+      dcm-gpios = <&gpio2 6 GPIO_ACTIVE_HIGH>;
+
+      /* DC input current limit via IDC resistor mux */
+      dc-current-limit-gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>,
+                               <&gpio1 1 GPIO_ACTIVE_HIGH>;
+      dc-current-limit-mapping = <750000 0>,  /* GPIO[1:0]=0b00 */
+                                 <900000 1>,  /* GPIO[1:0]=0b01 */
+                                 <1400000 3>, /* GPIO[1:0]=0b11 */
+                                 <2000000 2>; /* GPIO[1:0]=0b10 */
+
+      /* USB current control */
+      usb-current-limit-gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
+      usb-current-limit-values = <100000 500000>; /* 100mA / 500mA */
     };
