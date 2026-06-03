@@ -312,7 +312,8 @@ int squashfs_read_data(struct super_block *sb, u64 index, int length,
 		struct bvec_iter_all iter_all = {};
 		struct bio_vec *bvec = bvec_init_iter_all(&iter_all);
 
-		if (index + 2 > msblk->bytes_used) {
+		if (index > msblk->bytes_used ||
+		    msblk->bytes_used - index < 2) {
 			res = -EIO;
 			goto out;
 		}
@@ -349,7 +350,8 @@ int squashfs_read_data(struct super_block *sb, u64 index, int length,
 		      compressed ? "" : "un", length);
 	}
 	if (length <= 0 || length > output->length ||
-			(index + length) > msblk->bytes_used) {
+	    index > msblk->bytes_used ||
+	    (u64)length > msblk->bytes_used - index) {
 		res = -EIO;
 		goto out;
 	}
