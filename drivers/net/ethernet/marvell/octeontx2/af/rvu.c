@@ -3545,6 +3545,7 @@ static void rvu_update_module_params(struct rvu *rvu)
 static int rvu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct device *dev = &pdev->dev;
+	bool sriov_done = false;
 	struct rvu *rvu;
 	int    err;
 
@@ -3634,25 +3635,26 @@ static int rvu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_flr;
 	}
 
-	err = rvu_register_dl(rvu);
-	if (err) {
-		dev_err(dev, "%s: Failed to register devlink\n", __func__);
-		goto err_irq;
-	}
-
 	rvu_setup_rvum_blk_revid(rvu);
 
 	/* Enable AF's VFs (if any) */
 	err = rvu_enable_sriov(rvu);
 	if (err) {
 		dev_err(dev, "%s: Failed to enable sriov\n", __func__);
-		goto err_dl;
+		goto err_irq;
+	}
+	sriov_done = true;
+
+	mutex_init(&rvu->rswitch.switch_lock);
+
+	err = rvu_register_dl(rvu);
+	if (err) {
+		dev_err(dev, "%s: Failed to register devlink\n", __func__);
+		goto err_irq;
 	}
 
 	/* Initialize debugfs */
 	rvu_dbg_init(rvu);
-
-	mutex_init(&rvu->rswitch.switch_lock);
 
 	if (rvu->fwdata)
 		ptp_start(rvu, rvu->fwdata->sclk, rvu->fwdata->ptp_ext_clk_rate,
@@ -3662,10 +3664,10 @@ static int rvu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	rvu_alloc_cint_qint_mem(rvu, &rvu->pf[RVU_AFPF], BLKADDR_NIX0,
 				(rvu->hw->block[BLKADDR_NIX0].lf.max));
 	return 0;
-err_dl:
-	rvu_unregister_dl(rvu);
 err_irq:
 	rvu_unregister_interrupts(rvu);
+	if (sriov_done)
+		rvu_disable_sriov(rvu);
 err_flr:
 	rvu_flr_wq_destroy(rvu);
 err_mbox:
