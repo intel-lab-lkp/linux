@@ -3278,14 +3278,14 @@ static int otx2_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (err)
 		goto err_mcam_flow_del;
 
-	err = otx2_register_dl(pf);
-	if (err)
-		goto err_mcam_flow_del;
-
 	/* Initialize SR-IOV resources */
 	err = otx2_sriov_vfcfg_init(pf);
 	if (err)
-		goto err_pf_sriov_init;
+		goto err_shutdown_tc;
+
+	err = otx2_register_dl(pf);
+	if (err)
+		goto err_sriov_cleannup;
 
 	/* Enable link notifications */
 	otx2_cgx_config_linkevents(pf, true);
@@ -3293,7 +3293,7 @@ static int otx2_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	pf->af_xdp_zc_qidx = bitmap_zalloc(qcount, GFP_KERNEL);
 	if (!pf->af_xdp_zc_qidx) {
 		err = -ENOMEM;
-		goto err_sriov_cleannup;
+		goto err_dl_unregister;
 	}
 
 #ifdef CONFIG_DCB
@@ -3310,10 +3310,11 @@ static int otx2_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 err_free_zc_bmap:
 	bitmap_free(pf->af_xdp_zc_qidx);
 #endif
+err_dl_unregister:
+	otx2_unregister_dl(pf);
 err_sriov_cleannup:
 	otx2_sriov_vfcfg_cleanup(pf);
-err_pf_sriov_init:
-	otx2_unregister_dl(pf);
+err_shutdown_tc:
 	otx2_shutdown_tc(pf);
 err_mcam_flow_del:
 	otx2_mcam_flow_del(pf);
