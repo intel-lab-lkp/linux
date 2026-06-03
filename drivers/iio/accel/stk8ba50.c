@@ -7,11 +7,17 @@
  * STK8BA50 7-bit I2C address: 0x18.
  */
 
+#include <linux/array_size.h>
+#include <linux/bits.h>
+#include <linux/dev_printk.h>
+#include <linux/errno.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
-#include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mod_devicetable.h>
+#include <linux/mutex.h>
+#include <linux/pm.h>
+#include <linux/sysfs.h>
 #include <linux/types.h>
 #include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
@@ -19,6 +25,7 @@
 #include <linux/iio/trigger.h>
 #include <linux/iio/triggered_buffer.h>
 #include <linux/iio/trigger_consumer.h>
+#include <linux/iio/types.h>
 
 #define STK8BA50_REG_XOUT			0x02
 #define STK8BA50_REG_YOUT			0x04
