@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/export.h>
+#include <linux/acpi.h>
 #include <linux/bitops.h>
 #include <linux/dmi.h>
 #include <linux/elf.h>
@@ -11,6 +12,8 @@
 #include <linux/random.h>
 #include <linux/topology.h>
 #include <linux/platform_data/x86/amd-fch.h>
+
+#include <acpi/actbl2.h>
 #include <asm/processor.h>
 #include <asm/apic.h>
 #include <asm/cacheinfo.h>
@@ -1342,14 +1345,44 @@ static const char * const s5_reset_reason_txt[] = {
 	[31] = "a software sync flood event occurred",
 };
 
+/*
+ * "AMD Family 1Ah Models 00h–0Fh and Models 10h–1Fh ACPI v6.5 Porting Guide"
+ * specifies the vendor-specific GUID of FCH::PM::S5_RESET_STATUS record as
+ * "1f425831-da46-4f65-9296-3c4d44c387ab" alongside the format of reset reason.
+ */
+#define S5_RESET_STATUS_GUID GUID_INIT(0x1f425831, 0xda46, 0x4f65, 0x92, 0x96,\
+				       0x3c, 0x4d, 0x44, 0xc3, 0x87, 0xab)
+
 static __init int print_s5_reset_status_mmio(void)
 {
+	struct reset_status_record {
+		struct acpi_phat_vendor_element		header;
+		u32					s5_reset_status;
+	} __packed *record;
+	guid_t guid = S5_RESET_STATUS_GUID;
 	void __iomem *addr;
 	u32 value;
 	int i;
 
 	if (!cpu_feature_enabled(X86_FEATURE_ZEN))
 		return 0;
+
+	record = (void *)acpi_phat_get_vendor_reset_reason(&guid);
+	if (!IS_ERR(record)) {
+		bool record_valid = false;
+
+		/* Sanity check before using the parsed record. */
+		if (record->header.length == sizeof(*record)) {
+			pr_debug("Using ACPI PHAT record for S5_RESET_STATUS\n");
+			value = record->s5_reset_status;
+			record_valid = true;
+		}
+
+		acpi_phat_put_vendor_reset_reason((void *)record);
+
+		if (record_valid)
+			goto parse_status;
+	}
 
 	addr = ioremap(FCH_PM_BASE + FCH_PM_S5_RESET_STATUS, sizeof(value));
 	if (!addr)
@@ -1374,6 +1407,7 @@ static __init int print_s5_reset_status_mmio(void)
 	iowrite32(value, addr);
 	iounmap(addr);
 
+parse_status:
 	for (i = 0; i < ARRAY_SIZE(s5_reset_reason_txt); i++) {
 		if (!(value & BIT(i)))
 			continue;
