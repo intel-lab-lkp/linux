@@ -102,18 +102,26 @@ irq_pool_find_least_loaded(struct mlx5_irq_pool *pool, const struct cpumask *req
 	struct mlx5_irq *iter;
 	int irq_refcount = 0;
 	unsigned long index;
+	cpumask_var_t tmp;
 
 	lockdep_assert_held(&pool->lock);
+
+	if (!alloc_cpumask_var(&tmp, GFP_ATOMIC))
+		return NULL;
+
 	xa_for_each_range(&pool->irqs, index, iter, start, end) {
 		struct cpumask *iter_mask = mlx5_irq_get_affinity_mask(iter);
 		int iter_refcount = mlx5_irq_read_locked(iter);
 
-		if (!cpumask_subset(iter_mask, req_mask))
+		cpumask_and(tmp, iter_mask, cpu_online_mask);
+		if (!cpumask_subset(tmp, req_mask))
 			/* skip IRQs with a mask which is not subset of req_mask */
 			continue;
-		if (iter_refcount < pool->min_threshold)
+		if (iter_refcount < pool->min_threshold) {
 			/* If we found an IRQ with less than min_thres, return it */
+			free_cpumask_var(tmp);
 			return iter;
+		}
 		if (!irq || iter_refcount < irq_refcount) {
 			/* In case we won't find an IRQ with less than min_thres,
 			 * keep a pointer to the least used IRQ
@@ -122,6 +130,8 @@ irq_pool_find_least_loaded(struct mlx5_irq_pool *pool, const struct cpumask *req
 			irq = iter;
 		}
 	}
+
+	free_cpumask_var(tmp);
 	return irq;
 }
 
