@@ -224,9 +224,9 @@ BUILD_MMU_ROLE_REGS_ACCESSOR(efer, lma, EFER_LMA);
  * and the vCPU may be incorrect/irrelevant.
  */
 #define BUILD_MMU_ROLE_ACCESSOR(base_or_ext, reg, name)		\
-static inline bool __maybe_unused is_##reg##_##name(struct kvm_mmu *mmu)	\
+static inline bool __maybe_unused is_##reg##_##name(struct kvm_pagewalk *w)	\
 {								\
-	return !!(mmu->w.cpu_role. base_or_ext . reg##_##name);	\
+	return !!(w->cpu_role. base_or_ext . reg##_##name);	\
 }
 BUILD_MMU_ROLE_ACCESSOR(base, cr0, wp);
 BUILD_MMU_ROLE_ACCESSOR(ext,  cr4, pse);
@@ -237,19 +237,19 @@ BUILD_MMU_ROLE_ACCESSOR(ext,  cr4, la57);
 BUILD_MMU_ROLE_ACCESSOR(base, efer, nx);
 BUILD_MMU_ROLE_ACCESSOR(ext,  efer, lma);
 
-static inline bool has_pferr_fetch(struct kvm_mmu *mmu)
+static inline bool has_pferr_fetch(struct kvm_pagewalk *w)
 {
-	return mmu->w.cpu_role.ext.has_pferr_fetch;
+	return w->cpu_role.ext.has_pferr_fetch;
 }
 
-static inline bool is_cr0_pg(struct kvm_mmu *mmu)
+static inline bool is_cr0_pg(struct kvm_pagewalk *w)
 {
-        return mmu->w.cpu_role.base.level > 0;
+        return w->cpu_role.base.level > 0;
 }
 
-static inline bool is_cr4_pae(struct kvm_mmu *mmu)
+static inline bool is_cr4_pae(struct kvm_pagewalk *w)
 {
-        return !mmu->w.cpu_role.base.has_4_byte_gpte;
+        return !w->cpu_role.base.has_4_byte_gpte;
 }
 
 static struct kvm_mmu_role_regs vcpu_to_role_regs(struct kvm_vcpu *vcpu)
@@ -5389,9 +5389,9 @@ static void reset_guest_rsvds_bits_mask(struct kvm_vcpu *vcpu,
 {
 	__reset_rsvds_bits_mask(&context->w.guest_rsvd_check,
 				vcpu->arch.reserved_gpa_bits,
-				context->w.cpu_role.base.level, is_efer_nx(context),
+				context->w.cpu_role.base.level, is_efer_nx(&context->w),
 				guest_cpu_cap_has(vcpu, X86_FEATURE_GBPAGES),
-				is_cr4_pse(context),
+				is_cr4_pse(&context->w),
 				guest_cpuid_is_amd_compatible(vcpu));
 }
 
@@ -5573,10 +5573,10 @@ static void update_permission_bitmask(struct kvm_mmu *mmu, bool tdp, bool ept)
 	const u16 w = ACC_BITS_MASK(ACC_WRITE_MASK);
 	const u16 r = ACC_BITS_MASK(ACC_READ_MASK);
 
-	bool cr4_smep = is_cr4_smep(mmu);
-	bool cr4_smap = is_cr4_smap(mmu);
-	bool cr0_wp = is_cr0_wp(mmu);
-	bool efer_nx = is_efer_nx(mmu);
+	bool cr4_smep = is_cr4_smep(&mmu->w);
+	bool cr4_smap = is_cr4_smap(&mmu->w);
+	bool cr0_wp = is_cr0_wp(&mmu->w);
+	bool efer_nx = is_efer_nx(&mmu->w);
 
 	/*
 	 * In hardware, page fault error codes are generated (as the name
@@ -5699,10 +5699,10 @@ static void update_pkru_bitmask(struct kvm_mmu *mmu)
 
 	mmu->pkru_mask = 0;
 
-	if (!is_cr4_pke(mmu))
+	if (!is_cr4_pke(&mmu->w))
 		return;
 
-	wp = is_cr0_wp(mmu);
+	wp = is_cr0_wp(&mmu->w);
 
 	for (bit = 0; bit < ARRAY_SIZE(mmu->permissions); ++bit) {
 		unsigned pfec, pkey_bits;
@@ -5739,7 +5739,7 @@ static void update_pkru_bitmask(struct kvm_mmu *mmu)
 static void reset_guest_paging_metadata(struct kvm_vcpu *vcpu,
 					struct kvm_mmu *mmu)
 {
-	if (!is_cr0_pg(mmu))
+	if (!is_cr0_pg(&mmu->w))
 		return;
 
 	reset_guest_rsvds_bits_mask(vcpu, mmu);
@@ -5810,7 +5810,7 @@ void __kvm_mmu_refresh_passthrough_bits(struct kvm_vcpu *vcpu,
 	BUILD_BUG_ON((KVM_MMU_CR0_ROLE_BITS & KVM_POSSIBLE_CR0_GUEST_BITS) != X86_CR0_WP);
 	BUILD_BUG_ON((KVM_MMU_CR4_ROLE_BITS & KVM_POSSIBLE_CR4_GUEST_BITS));
 
-	if (is_cr0_wp(mmu) == cr0_wp)
+	if (is_cr0_wp(&mmu->w) == cr0_wp)
 		return;
 
 	mmu->w.cpu_role.base.cr0_wp = cr0_wp;
@@ -5885,9 +5885,9 @@ static void init_kvm_tdp_mmu(struct kvm_vcpu *vcpu,
 	context->w.get_pdptr = kvm_pdptr_read;
 	context->w.get_guest_pgd = get_guest_cr3;
 
-	if (!is_cr0_pg(context))
+	if (!is_cr0_pg(&context->w))
 		context->w.gva_to_gpa = nonpaging_gva_to_gpa;
-	else if (is_cr4_pae(context))
+	else if (is_cr4_pae(&context->w))
 		context->w.gva_to_gpa = paging64_gva_to_gpa;
 	else
 		context->w.gva_to_gpa = paging32_gva_to_gpa;
@@ -5907,9 +5907,9 @@ static void shadow_mmu_init_context(struct kvm_vcpu *vcpu, struct kvm_mmu *conte
 	context->w.cpu_role.as_u64 = cpu_role.as_u64;
 	context->root_role.word = root_role.word;
 
-	if (!is_cr0_pg(context))
+	if (!is_cr0_pg(&context->w))
 		nonpaging_init_context(context);
-	else if (is_cr4_pae(context))
+	else if (is_cr4_pae(&context->w))
 		paging64_init_context(context);
 	else
 		paging32_init_context(context);

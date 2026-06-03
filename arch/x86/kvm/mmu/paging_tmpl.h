@@ -134,7 +134,7 @@ static inline int FNAME(is_present_gpte)(struct kvm_pagewalk *w,
 	 * For EPT, an entry is present if any of bits 2:0 are set.
 	 * With mode-based execute control, bit 10 also indicates presence.
 	 */
-	return pte & (7 | (w->cpu_role.base.cr4_smep ? VMX_EPT_USER_EXECUTABLE_MASK : 0));
+	return pte & (7 | (is_cr4_smep(w) ? VMX_EPT_USER_EXECUTABLE_MASK : 0));
 #endif
 }
 
@@ -316,7 +316,6 @@ static int FNAME(walk_addr_generic)(struct guest_walker *walker,
 				    struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 				    gpa_t addr, u64 access)
 {
-	struct kvm_mmu *mmu = container_of(w, struct kvm_mmu, w);
 	int ret;
 	pt_element_t pte;
 	pt_element_t __user *ptep_user;
@@ -492,7 +491,7 @@ retry_walk:
 
 error:
 	errcode |= write_fault | user_fault;
-	if (fetch_fault && has_pferr_fetch(mmu))
+	if (fetch_fault && has_pferr_fetch(w))
 		errcode |= PFERR_FETCH_MASK;
 
 	walker->fault.vector = PF_VECTOR;
@@ -536,7 +535,7 @@ error:
 		 * ACC_*_MASK flags!
 		 */
 		walker->fault.exit_qualification |= EPT_VIOLATION_RWX_TO_PROT(pte_access);
-		if (mmu_has_mbec(mmu))
+		if (is_cr4_smep(w))
 			walker->fault.exit_qualification |=
 				EPT_VIOLATION_USER_EXEC_TO_PROT(pte_access);
 	}
@@ -840,7 +839,7 @@ static int FNAME(page_fault)(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault
 	 * otherwise KVM will cache incorrect access information in the SPTE.
 	 */
 	if (fault->write && !(walker.pte_access & ACC_WRITE_MASK) &&
-	    !is_cr0_wp(vcpu->arch.mmu) && !fault->user && fault->slot) {
+	    !is_cr0_wp(&vcpu->arch.mmu->w) && !fault->user && fault->slot) {
 		walker.pte_access |= ACC_WRITE_MASK;
 		walker.pte_access &= ~ACC_USER_MASK;
 
@@ -850,7 +849,7 @@ static int FNAME(page_fault)(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault
 		 * then we should prevent the kernel from executing it
 		 * if SMEP is enabled.
 		 */
-		if (is_cr4_smep(vcpu->arch.mmu))
+		if (is_cr4_smep(&vcpu->arch.mmu->w))
 			walker.pte_access &= ~ACC_EXEC_MASK;
 	}
 #endif
