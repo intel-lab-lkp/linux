@@ -1180,7 +1180,7 @@ int ext4_block_write_begin(handle_t *handle, struct folio *folio,
 	unsigned int blocksize = i_blocksize(inode);
 	struct buffer_head *bh, *head, *wait[2];
 	int nr_wait = 0;
-	int i;
+	unsigned int i;
 	bool should_journal_data = ext4_should_journal_data(inode);
 
 	BUG_ON(!folio_test_locked(folio));
@@ -1191,17 +1191,18 @@ int ext4_block_write_begin(handle_t *handle, struct folio *folio,
 	head = folio_buffers(folio);
 	if (!head)
 		head = create_empty_buffers(folio, blocksize, 0);
-	block = EXT4_PG_TO_LBLK(inode, folio->index);
+	if (from == to)
+		return 0;
+	block_start = round_down(from, blocksize);
+	block = EXT4_PG_TO_LBLK(inode, folio->index) +
+		(block_start >> inode->i_blkbits);
+	bh = head;
+	for (i = 0; i < block_start; i += blocksize)
+		bh = bh->b_this_page;
 
-	for (bh = head, block_start = 0; bh != head || !block_start;
-	    block++, block_start = block_end, bh = bh->b_this_page) {
+	for (; block_start < to;
+	     block++, block_start = block_end, bh = bh->b_this_page) {
 		block_end = block_start + blocksize;
-		if (block_end <= from || block_start >= to) {
-			if (folio_test_uptodate(folio)) {
-				set_buffer_uptodate(bh);
-			}
-			continue;
-		}
 		if (WARN_ON_ONCE(buffer_new(bh)))
 			clear_buffer_new(bh);
 		if (!buffer_mapped(bh)) {

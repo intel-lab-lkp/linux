@@ -2092,6 +2092,44 @@ int __block_write_begin(struct folio *folio, loff_t pos, unsigned len,
 }
 EXPORT_SYMBOL(__block_write_begin);
 
+static struct buffer_head *folio_buffer_seek(struct buffer_head *head,
+					     unsigned int blocksize,
+					     size_t offset,
+					     size_t *block_start)
+{
+	size_t nr = offset / blocksize;
+
+	*block_start = nr * blocksize;
+	while (nr--)
+		head = head->b_this_page;
+	return head;
+}
+
+static void block_commit_write_range(struct buffer_head *head,
+				     unsigned int blocksize, size_t from,
+				     size_t to)
+{
+	size_t block_start, block_end;
+	struct buffer_head *bh;
+
+	if (from == to)
+		return;
+	if (WARN_ON_ONCE(to > folio_size(head->b_folio)))
+		return;
+
+	bh = folio_buffer_seek(head, blocksize, from, &block_start);
+	do {
+		block_end = block_start + blocksize;
+		set_buffer_uptodate(bh);
+		mark_buffer_dirty(bh);
+		if (buffer_new(bh))
+			clear_buffer_new(bh);
+
+		block_start = block_end;
+		bh = bh->b_this_page;
+	} while (block_start < to && bh != head);
+}
+
 void block_commit_write(struct folio *folio, size_t from, size_t to)
 {
 	size_t block_start, block_end;
@@ -2103,6 +2141,19 @@ void block_commit_write(struct folio *folio, size_t from, size_t to)
 	if (!bh)
 		return;
 	blocksize = bh->b_size;
+
+	/*
+	 * Large folios can carry hundreds of buffer_heads.  For partial writes,
+	 * keep commit work local to the written range; partially uptodate
+	 * reads remain governed by the buffer state.
+	 */
+	if (folio_test_large(folio) && from < to &&
+	    folio_test_uptodate(folio) &&
+	    to <= folio_size(folio) &&
+	    (from != 0 || to != folio_size(folio))) {
+		block_commit_write_range(head, blocksize, from, to);
+		return;
+	}
 
 	block_start = 0;
 	do {
