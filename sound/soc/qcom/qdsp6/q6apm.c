@@ -44,9 +44,8 @@ static struct audioreach_graph *q6apm_get_audioreach_graph(struct q6apm *apm, ui
 	struct audioreach_graph *graph;
 	int id;
 
-	mutex_lock(&apm->lock);
-	graph = idr_find(&apm->graph_idr, graph_id);
-	mutex_unlock(&apm->lock);
+	scoped_guard(mutex, &apm->lock)
+		graph = idr_find(&apm->graph_idr, graph_id);
 
 	if (graph) {
 		kref_get(&graph->refcount);
@@ -74,16 +73,15 @@ static struct audioreach_graph *q6apm_get_audioreach_graph(struct q6apm *apm, ui
 		return ERR_CAST(err);
 	}
 
-	mutex_lock(&apm->lock);
-	id = idr_alloc(&apm->graph_idr, graph, graph_id, graph_id + 1, GFP_KERNEL);
-	if (id < 0) {
-		dev_err(apm->dev, "Unable to allocate graph id (%d)\n", graph_id);
-		kfree(graph->graph);
-		kfree(graph);
-		mutex_unlock(&apm->lock);
-		return ERR_PTR(id);
+	scoped_guard(mutex, &apm->lock) {
+		id = idr_alloc(&apm->graph_idr, graph, graph_id, graph_id + 1, GFP_KERNEL);
+		if (id < 0) {
+			dev_err(apm->dev, "Unable to allocate graph id (%d)\n", graph_id);
+			kfree(graph->graph);
+			kfree(graph);
+			return ERR_PTR(id);
+		}
 	}
-	mutex_unlock(&apm->lock);
 
 	kref_init(&graph->refcount);
 
@@ -131,9 +129,8 @@ static void q6apm_put_audioreach_graph(struct kref *ref)
 
 	audioreach_graph_mgmt_cmd(graph, APM_CMD_GRAPH_CLOSE);
 
-	mutex_lock(&apm->lock);
-	graph = idr_remove(&apm->graph_idr, graph->id);
-	mutex_unlock(&apm->lock);
+	scoped_guard(mutex, &apm->lock)
+		graph = idr_remove(&apm->graph_idr, graph->id);
 
 	kfree(graph->graph);
 	kfree(graph);
@@ -280,20 +277,16 @@ int q6apm_alloc_fragments(struct q6apm_graph *graph, unsigned int dir, phys_addr
 	else
 		data = &graph->tx_data;
 
-	mutex_lock(&graph->lock);
+	guard(mutex)(&graph->lock);
 
 	data->dsp_buf = 0;
 
-	if (data->buf) {
-		mutex_unlock(&graph->lock);
+	if (data->buf)
 		return 0;
-	}
 
 	buf = kzalloc_objs(struct audio_buffer, periods);
-	if (!buf) {
-		mutex_unlock(&graph->lock);
+	if (!buf)
 		return -ENOMEM;
-	}
 
 	if (dir == SNDRV_PCM_STREAM_PLAYBACK)
 		data = &graph->rx_data;
@@ -312,8 +305,6 @@ int q6apm_alloc_fragments(struct q6apm_graph *graph, unsigned int dir, phys_addr
 		}
 	}
 	data->num_periods = periods;
-
-	mutex_unlock(&graph->lock);
 
 	return 0;
 }
@@ -484,23 +475,22 @@ int q6apm_write_async(struct q6apm_graph *graph, uint32_t len, uint32_t msw_ts,
 
 	write_buffer = (void *)pkt + GPR_HDR_SIZE;
 
-	mutex_lock(&graph->lock);
-	ab = &graph->rx_data.buf[graph->rx_data.dsp_buf];
+	scoped_guard(mutex, &graph->lock) {
+		ab = &graph->rx_data.buf[graph->rx_data.dsp_buf];
 
-	write_buffer->buf_addr_lsw = lower_32_bits(ab->phys);
-	write_buffer->buf_addr_msw = upper_32_bits(ab->phys);
-	write_buffer->buf_size = len;
-	write_buffer->timestamp_lsw = lsw_ts;
-	write_buffer->timestamp_msw = msw_ts;
-	write_buffer->mem_map_handle = graph->info->mem_map_handle;
-	write_buffer->flags = wflags;
+		write_buffer->buf_addr_lsw = lower_32_bits(ab->phys);
+		write_buffer->buf_addr_msw = upper_32_bits(ab->phys);
+		write_buffer->buf_size = len;
+		write_buffer->timestamp_lsw = lsw_ts;
+		write_buffer->timestamp_msw = msw_ts;
+		write_buffer->mem_map_handle = graph->info->mem_map_handle;
+		write_buffer->flags = wflags;
 
-	graph->rx_data.dsp_buf++;
+		graph->rx_data.dsp_buf++;
 
-	if (graph->rx_data.dsp_buf >= graph->rx_data.num_periods)
-		graph->rx_data.dsp_buf = 0;
-
-	mutex_unlock(&graph->lock);
+		if (graph->rx_data.dsp_buf >= graph->rx_data.num_periods)
+			graph->rx_data.dsp_buf = 0;
+	}
 
 	return gpr_send_port_pkt(graph->port, pkt);
 }
@@ -520,21 +510,20 @@ int q6apm_read(struct q6apm_graph *graph)
 
 	read_buffer = (void *)pkt + GPR_HDR_SIZE;
 
-	mutex_lock(&graph->lock);
-	port = &graph->tx_data;
-	ab = &port->buf[port->dsp_buf];
+	scoped_guard(mutex, &graph->lock) {
+		port = &graph->tx_data;
+		ab = &port->buf[port->dsp_buf];
 
-	read_buffer->buf_addr_lsw = lower_32_bits(ab->phys);
-	read_buffer->buf_addr_msw = upper_32_bits(ab->phys);
-	read_buffer->mem_map_handle = graph->info->mem_map_handle;
-	read_buffer->buf_size = ab->size;
+		read_buffer->buf_addr_lsw = lower_32_bits(ab->phys);
+		read_buffer->buf_addr_msw = upper_32_bits(ab->phys);
+		read_buffer->mem_map_handle = graph->info->mem_map_handle;
+		read_buffer->buf_size = ab->size;
 
-	port->dsp_buf++;
+		port->dsp_buf++;
 
-	if (port->dsp_buf >= port->num_periods)
-		port->dsp_buf = 0;
-
-	mutex_unlock(&graph->lock);
+		if (port->dsp_buf >= port->num_periods)
+			port->dsp_buf = 0;
+	}
 
 	return gpr_send_port_pkt(graph->port, pkt);
 }
@@ -583,12 +572,12 @@ static int graph_callback(const struct gpr_resp_pkt *data, void *priv, int op)
 		if (!graph->ar_graph)
 			break;
 		client_event = APM_CLIENT_EVENT_DATA_WRITE_DONE;
-		mutex_lock(&graph->lock);
-		token = hdr->token & APM_WRITE_TOKEN_MASK;
+		scoped_guard(mutex, &graph->lock) {
+			token = hdr->token & APM_WRITE_TOKEN_MASK;
 
-		done = data->payload;
-		phys = graph->rx_data.buf[token].phys;
-		mutex_unlock(&graph->lock);
+			done = data->payload;
+			phys = graph->rx_data.buf[token].phys;
+		}
 		/* token numbering starts at 0 */
 		atomic_set(&graph->rx_data.hw_ptr, token + 1);
 		if (lower_32_bits(phys) == done->buf_addr_lsw &&
@@ -607,10 +596,10 @@ static int graph_callback(const struct gpr_resp_pkt *data, void *priv, int op)
 		if (!graph->ar_graph)
 			break;
 		client_event = APM_CLIENT_EVENT_DATA_READ_DONE;
-		mutex_lock(&graph->lock);
-		rd_done = data->payload;
-		phys = graph->tx_data.buf[hdr->token].phys;
-		mutex_unlock(&graph->lock);
+		scoped_guard(mutex, &graph->lock) {
+			rd_done = data->payload;
+			phys = graph->tx_data.buf[hdr->token].phys;
+		}
 		/* token numbering starts at 0 */
 		atomic_set(&graph->tx_data.hw_ptr, hdr->token + 1);
 
