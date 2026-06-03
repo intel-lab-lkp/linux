@@ -225,4 +225,35 @@ static inline void __scx_cmask_set(u32 cid, struct scx_cmask *m)
 	*__scx_cmask_word(cid, m) |= BIT_U64(cid & 63);
 }
 
+/**
+ * scx_cmask_test - test whether @cid is set in @m
+ * @cid: cid to test
+ * @m: cmask to test
+ *
+ * Return %false if @cid is outside @m's active range. Otherwise return the
+ * bit's value. Read via READ_ONCE so callers can race set/clear writers.
+ */
+static inline bool scx_cmask_test(u32 cid, const struct scx_cmask *m)
+{
+	if (!__scx_cmask_contains(cid, m))
+		return false;
+	return READ_ONCE(*__scx_cmask_word(cid, m)) & BIT_U64(cid & 63);
+}
+
+/**
+ * scx_cmask_for_each_cid - iterate set cids in @m
+ * @cid: s32 loop var that receives each set cid in turn
+ * @m: cmask to iterate
+ *
+ * Visits set bits within @m's active range in ascending order. Relies on the
+ * head/tail-zero invariant of bits[], so no per-cid range check is needed.
+ */
+#define scx_cmask_for_each_cid(cid, m)						\
+	for (u64 __bs = (m)->base & ~63u, __wi = 0,				\
+		     __nw = SCX_CMASK_NR_WORDS((m)->nr_cids);			\
+	     __wi < __nw; __wi++)						\
+		for (u64 __w = READ_ONCE((m)->bits[__wi]);			\
+		     __w && ((cid) = __bs + __wi * 64 + __ffs64(__w), true);	\
+		     __w &= __w - 1)
+
 #endif /* _KERNEL_SCHED_EXT_CID_H */
