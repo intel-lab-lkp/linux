@@ -27,6 +27,9 @@ int vfio_device_fops_cdev_open(struct inode *inode, struct file *filep)
 	struct vfio_device_file *df;
 	int ret;
 
+	if (vfio_device_is_noiommu(device) && !capable(CAP_SYS_RAWIO))
+		return -EPERM;
+
 	/* Paired with the put in vfio_device_fops_release() */
 	if (!vfio_device_try_get_registration(device))
 		return -ENODEV;
