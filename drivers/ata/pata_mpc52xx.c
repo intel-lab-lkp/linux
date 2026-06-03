@@ -730,10 +730,10 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	if ((prop) && (proplen >= 4))
 		udma_mask = ATA_UDMA2 & ((1 << (*prop + 1)) - 1);
 
-	ata_irq = irq_of_parse_and_map(op->dev.of_node, 0);
-	if (!ata_irq) {
+	ata_irq = platform_get_irq(op, 0);
+	if (ata_irq < 0) {
 		dev_err(&op->dev, "error mapping irq\n");
-		return -EINVAL;
+		return ata_irq;
 	}
 
 	/* Prepare our private structure */
@@ -796,7 +796,6 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	irq_dispose_mapping(task_irq);
 	bcom_ata_release(dmatsk);
  err1:
-	irq_dispose_mapping(ata_irq);
 	return rv;
 }
 
@@ -813,7 +812,6 @@ static void mpc52xx_ata_remove(struct platform_device *op)
 	task_irq = bcom_get_task_irq(priv->dmatsk);
 	irq_dispose_mapping(task_irq);
 	bcom_ata_release(priv->dmatsk);
-	irq_dispose_mapping(priv->ata_irq);
 }
 
 #ifdef CONFIG_PM_SLEEP
