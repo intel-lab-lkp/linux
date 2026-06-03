@@ -133,15 +133,18 @@ static struct dst_entry *rxe_find_route6(struct rxe_qp *qp,
 					 struct in6_addr *saddr,
 					 struct in6_addr *daddr)
 {
+	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
 	struct dst_entry *ndst;
 	struct flowi6 fl6 = {};
+	struct sock *sk;
 
 	fl6.flowi6_oif = ndev->ifindex;
 	memcpy(&fl6.saddr, saddr, sizeof(*saddr));
 	memcpy(&fl6.daddr, daddr, sizeof(*daddr));
 	fl6.flowi6_proto = IPPROTO_UDP;
 
-	ndst = ip6_dst_lookup_flow(net, rxe_ns_pernet_sk6(net), &fl6, NULL);
+	sk = READ_ONCE(rxe->sk6);
+	ndst = ip6_dst_lookup_flow(net, sk, &fl6, NULL);
 	if (IS_ERR(ndst)) {
 		rxe_dbg_qp(qp, "no route to %pI6\n", daddr);
 		return NULL;
@@ -611,8 +614,10 @@ const char *rxe_parent_name(struct rxe_dev *rxe, unsigned int port_num)
 
 int rxe_net_add(const char *ibdev_name, struct net_device *ndev)
 {
-	int err;
 	struct rxe_dev *rxe = NULL;
+	struct net *net;
+	struct sock *sk;
+	int err;
 
 	rxe = ib_alloc_device(rxe_dev, ib_dev);
 	if (!rxe)
@@ -626,6 +631,19 @@ int rxe_net_add(const char *ibdev_name, struct net_device *ndev)
 		return err;
 	}
 
+	net = dev_net(ndev);
+
+	rxe_ns_lock(net);
+
+	sk = rxe_ns_pernet_sk6(net);
+	if (!sk) {
+		rxe_ns_unlock(net);
+		ib_dealloc_device(&rxe->ib_dev);
+		return -EINVAL;
+	}
+	rxe->sk6 = sk;
+
+	rxe_ns_unlock(net);
 	return 0;
 }
 
@@ -655,6 +673,8 @@ void rxe_net_del(struct ib_device *dev)
 
 	net = dev_net(ndev);
 
+	rxe_ns_lock(net);
+
 	sk = rxe_ns_pernet_sk4(net);
 	if (sk)
 		rxe_sock_put(sk, rxe_ns_pernet_set_sk4, net);
@@ -662,6 +682,9 @@ void rxe_net_del(struct ib_device *dev)
 	sk = rxe_ns_pernet_sk6(net);
 	if (sk)
 		rxe_sock_put(sk, rxe_ns_pernet_set_sk6, net);
+
+	rxe->sk6 = NULL;
+	rxe_ns_unlock(net);
 
 	dev_put(ndev);
 }
@@ -754,52 +777,67 @@ static struct notifier_block rxe_net_notifier = {
 
 static int rxe_net_ipv4_init(struct net *net)
 {
-	struct sock *sk;
 	struct socket *sock;
+	struct sock *sk;
+	int ret = 0;
 
+	rxe_ns_lock(net);
 	sk = rxe_ns_pernet_sk4(net);
 	if (sk) {
 		sock_hold(sk);
-		return 0;
+		ret = 0;
+		goto out_unlock;
 	}
 
 	sock = rxe_setup_udp_tunnel(net, htons(ROCE_V2_UDP_DPORT), false);
 	if (IS_ERR(sock)) {
 		pr_err("Failed to create IPv4 UDP tunnel\n");
-		return -1;
+		ret = -1;
+		goto out_unlock;
 	}
+
 	rxe_ns_pernet_set_sk4(net, sock->sk);
 
-	return 0;
+out_unlock:
+	rxe_ns_unlock(net);
+	return ret;
 }
 
 static int rxe_net_ipv6_init(struct net *net)
 {
+	int ret = 0;
 #if IS_ENABLED(CONFIG_IPV6)
-	struct sock *sk;
 	struct socket *sock;
+	struct sock *sk;
 
+	rxe_ns_lock(net);
 	sk = rxe_ns_pernet_sk6(net);
 	if (sk) {
 		sock_hold(sk);
-		return 0;
+		ret = 0;
+		goto out_unlock;
 	}
 
 	sock = rxe_setup_udp_tunnel(net, htons(ROCE_V2_UDP_DPORT), true);
 	if (PTR_ERR(sock) == -EAFNOSUPPORT) {
 		pr_warn("IPv6 is not supported, can not create a UDPv6 socket\n");
-		return 0;
+		ret = 0;
+		goto out_unlock;
 	}
 
 	if (IS_ERR(sock)) {
 		pr_err("Failed to create IPv6 UDP tunnel\n");
-		return -1;
+		ret = -1;
+		goto out_unlock;
 	}
 
 	rxe_ns_pernet_set_sk6(net, sock->sk);
 
+out_unlock:
+	rxe_ns_unlock(net);
+
 #endif
-	return 0;
+	return ret;
 }
 
 int rxe_register_notifier(void)
@@ -840,9 +878,11 @@ int rxe_net_init(struct net_device *ndev)
 
 err_out:
 	/* If ipv6 error, release ipv4 resource */
+	rxe_ns_lock(net);
 	sk = rxe_ns_pernet_sk4(net);
 	if (sk)
 		rxe_sock_put(sk, rxe_ns_pernet_set_sk4, net);
+	rxe_ns_unlock(net);
 
 	return err;
 }
