@@ -1137,6 +1137,7 @@ static int mpu3050_trigger_probe(struct iio_dev *indio_dev, int irq)
 
 err_iio_trigger:
 	free_irq(mpu3050->irq, mpu3050->trig);
+	mpu3050->irq = 0;
 
 	return ret;
 }
@@ -1260,7 +1261,7 @@ err_iio_device_register:
 	pm_runtime_get_sync(dev);
 	pm_runtime_put_noidle(dev);
 	pm_runtime_disable(dev);
-	if (irq)
+	if (mpu3050->irq)
 		free_irq(mpu3050->irq, mpu3050->trig);
 	iio_triggered_buffer_cleanup(indio_dev);
 err_power_down:
