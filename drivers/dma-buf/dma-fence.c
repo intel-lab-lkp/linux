@@ -599,7 +599,7 @@ void dma_fence_release(struct kref *kref)
 		 * so that the callbacks know this signal is due to an error.
 		 */
 		dma_fence_lock_irqsave(fence, flags);
-		fence->error = -EDEADLK;
+		dma_fence_set_error(fence, -EDEADLK);
 		dma_fence_signal_locked(fence);
 		dma_fence_unlock_irqrestore(fence, flags);
 	}
