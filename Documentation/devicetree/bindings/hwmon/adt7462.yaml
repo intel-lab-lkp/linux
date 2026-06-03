@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwmon/adt7462.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ADT7462 hwmon sensor
+
+maintainers:
+  - Kory Maincent <kory.maincent@bootlin.com>
+
+description: |
+  The ADT7462 is a temperature and voltage monitor and a PWM fan controller.
+
+  It can monitor temperature in up to three remote locations, as well as
+  its ambient temperature.
+  There are up to four PWM outputs to control fans.
+  The ADT7462 supports high frequency PWM for 4-wire fans and low frequency
+  PWM for 2-wire and 3-wire fans. Up to eight TACH inputs can be used to
+  measure the speed of 3-wire and 4-wire fans. There are up to 13 voltage
+  monitoring inputs, ranging from 12 V to 0.9 V.
+
+  Datasheet:
+  https://www.onsemi.com/pdf/datasheet/adt7462-d.pdf
+
+  Description taken from onsemiconductors specification sheets, with minor
+  rephrasing.
+
+properties:
+  compatible:
+    enum:
+      - adi,adt7462
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      hwmon@5c {
+        compatible = "adi,adt7462";
+        reg = <0x5c>;
+      };
+    };
