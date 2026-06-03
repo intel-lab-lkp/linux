@@ -3758,8 +3758,14 @@ static long btrfs_ioctl_qgroup_limit(struct file *file, void __user *arg)
 		goto drop_write;
 	}
 
-	/* 1 BTRFS_QGROUP_LIMIT_KEY item. */
-	trans = btrfs_start_transaction(root, 1);
+	/*
+	 * 1 BTRFS_QGROUP_LIMIT_KEY item.
+	 *
+	 * Do not enforce the current qgroup limit while changing that limit,
+	 * otherwise a qgroup that already reached its limit cannot have the
+	 * limit increased or disabled.
+	 */
+	trans = btrfs_start_transaction_no_qgroup_enforce(root, 1);
 	if (IS_ERR(trans)) {
 		ret = PTR_ERR(trans);
 		goto drop_write;
