@@ -1680,13 +1680,9 @@ int nsim_drv_probe(struct nsim_bus_dev *nsim_bus_dev)
 		goto err_devlink_unlock;
 	}
 
-	err = devl_register(devlink);
-	if (err)
-		goto err_vfc_free;
-
 	err = nsim_dev_resources_register(devlink);
 	if (err)
-		goto err_dl_unregister;
+		goto err_vfc_free;
 
 	err = devl_params_register(devlink, nsim_devlink_params,
 				   ARRAY_SIZE(nsim_devlink_params));
@@ -1733,9 +1729,14 @@ int nsim_drv_probe(struct nsim_bus_dev *nsim_bus_dev)
 		goto err_hwstats_exit;
 
 	nsim_dev->esw_mode = DEVLINK_ESWITCH_MODE_LEGACY;
+	err = devl_register(devlink);
+	if (err)
+		goto err_port_del_all;
 	devl_unlock(devlink);
 	return 0;
 
+err_port_del_all:
+	nsim_dev_port_del_all(nsim_dev);
 err_hwstats_exit:
 	nsim_dev_hwstats_exit(nsim_dev);
 err_psample_exit:
@@ -1757,8 +1758,6 @@ err_params_unregister:
 			       ARRAY_SIZE(nsim_devlink_params));
 err_resource_unregister:
 	devl_resources_unregister(devlink);
-err_dl_unregister:
-	devl_unregister(devlink);
 err_vfc_free:
 	kfree(nsim_dev->vfconfigs);
 err_devlink_unlock:
@@ -1797,6 +1796,7 @@ void nsim_drv_remove(struct nsim_bus_dev *nsim_bus_dev)
 	struct devlink *devlink = priv_to_devlink(nsim_dev);
 
 	devl_lock(devlink);
+	devl_unregister(devlink);
 	nsim_dev_reload_destroy(nsim_dev);
 
 	nsim_bpf_dev_exit(nsim_dev);
@@ -1804,7 +1804,6 @@ void nsim_drv_remove(struct nsim_bus_dev *nsim_bus_dev)
 	devl_params_unregister(devlink, nsim_devlink_params,
 			       ARRAY_SIZE(nsim_devlink_params));
 	devl_resources_unregister(devlink);
-	devl_unregister(devlink);
 	kfree(nsim_dev->vfconfigs);
 	kfree(nsim_dev->fa_cookie);
 	mutex_destroy(&nsim_dev->progs_list_lock);
