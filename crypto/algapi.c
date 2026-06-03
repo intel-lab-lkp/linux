@@ -447,6 +447,7 @@ int crypto_register_alg(struct crypto_alg *alg)
 
 		p = kmemdup(p, algsize + sizeof(*alg), GFP_KERNEL);
 		if (!p)
+			crypto_alg_put(alg);
 			return -ENOMEM;
 
 		alg = (void *)(p + algsize);
