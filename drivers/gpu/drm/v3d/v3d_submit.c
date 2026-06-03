@@ -189,12 +189,11 @@ v3d_job_add_syncobjs(struct v3d_job *job, struct drm_file *file_priv,
 	int ret = 0;
 
 	if (!has_multisync) {
-		ret = drm_sched_job_add_syncobj_dependency(&job->base, file_priv,
-							   in_sync, 0);
-		// TODO: Investigate why this was filtered out for the IOCTL.
-		if (ret && ret != -ENOENT)
-			return ret;
-		return 0;
+		/* Ignore syncobj if its handle is zero */
+		if (in_sync)
+			ret = drm_sched_job_add_syncobj_dependency(&job->base, file_priv,
+								   in_sync, 0);
+		return ret;
 	}
 
 	if (se->in_sync_count && se->wait_stage == job->queue) {
@@ -208,11 +207,13 @@ v3d_job_add_syncobjs(struct v3d_job *job, struct drm_file *file_priv,
 				return -EFAULT;
 			}
 
-			ret = drm_sched_job_add_syncobj_dependency(&job->base,
-								   file_priv, in.handle, 0);
-			// TODO: Investigate why this was filtered out for the IOCTL.
-			if (ret && ret != -ENOENT)
-				return ret;
+			/* Ignore syncobj if its handle is zero */
+			if (in.handle) {
+				ret = drm_sched_job_add_syncobj_dependency(&job->base,
+									   file_priv, in.handle, 0);
+				if (ret)
+					return ret;
+			}
 		}
 	}
 
