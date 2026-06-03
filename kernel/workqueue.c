@@ -3261,6 +3261,7 @@ __acquires(&pool->lock)
 {
 	struct pool_workqueue *pwq = get_work_pwq(work);
 	struct worker_pool *pool = worker->pool;
+	DEFINE_WAKE_Q(wakeq);
 	unsigned long work_data;
 	int lockdep_start_depth, rcu_start_depth;
 	bool bh_draining = pool->flags & POOL_BH_DRAINING;
@@ -3315,7 +3316,7 @@ __acquires(&pool->lock)
 	 * chain execution of the pending work items for WORKER_NOT_RUNNING
 	 * workers such as the UNBOUND and CPU_INTENSIVE ones.
 	 */
-	kick_pool(pool);
+	kick_pool_pick(pool, &wakeq);
 
 	/*
 	 * Record the last pool and clear PENDING which should be the last
@@ -3326,7 +3327,8 @@ __acquires(&pool->lock)
 	set_work_pool_and_clear_pending(work, pool->id, pool_offq_flags(pool));
 
 	pwq->stats[PWQ_STAT_STARTED]++;
-	raw_spin_unlock_irq(&pool->lock);
+	/* deferred kick_pool_pick() wakeup, issued outside pool->lock */
+	raw_spin_unlock_irq_wake(&pool->lock, &wakeq);
 
 	rcu_start_depth = rcu_preempt_depth();
 	lockdep_start_depth = lockdep_depth(current);
