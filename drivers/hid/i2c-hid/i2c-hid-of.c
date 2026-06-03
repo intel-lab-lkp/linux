@@ -74,6 +74,13 @@ static void i2c_hid_of_power_down(struct i2chid_ops *ops)
 			       ihid_of->supplies);
 }
 
+static void i2c_hid_of_restore_sequence(struct i2chid_ops *ops)
+{
+	struct i2c_hid_of *ihid_of = container_of(ops, struct i2c_hid_of, ops);
+
+	i2c_hid_core_acpi_get_descriptor(&ihid_of->client->dev);
+}
+
 static int i2c_hid_of_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -92,6 +99,37 @@ static int i2c_hid_of_probe(struct i2c_client *client)
 	ihid_of->ops.power_down = i2c_hid_of_power_down;
 
 	ret = device_property_read_u32(dev, "hid-descr-addr", &val);
+	if (ret) {
+		/*
+		 * Some devices, for example the Lenovo KaiTian N60d and Inspur
+		 * CP300L3, declare their I2C HID touchpad with _HID "PRP0001"
+		 * and _DSD compatible "hid-over-i2c" but lack the
+		 * "hid-descr-addr" property. Fall back to _DSM to obtain the
+		 * HID descriptor address.
+		 */
+		int dsm_ret = i2c_hid_core_acpi_get_descriptor(dev);
+
+		if (dsm_ret >= 0) {
+			dev_warn(dev,
+				 "hid-descr-addr NOT found, using _DSM fallback. Contact vendor for firmware update!\n");
+			val = dsm_ret;
+
+			ihid_of->ops.restore_sequence = i2c_hid_of_restore_sequence;
+			/*
+			 * Firmware providing the descriptor address only
+			 * through _DSM may also lack "post-power-on-delay-ms"
+			 * or "post-reset-deassert-delay-ms", leaving the
+			 * driver without enough delay before the first HID
+			 * descriptor read. Set safe defaults to avoid reading
+			 * the descriptor before the device has finished its
+			 * internal power-on reset.
+			 */
+			ihid_of->post_power_delay_ms = 250;
+			ihid_of->post_reset_delay_ms = 250;
+
+			ret = 0;
+		}
+	}
 	if (ret) {
 		dev_err(dev, "HID register address not provided\n");
 		return -ENODEV;
