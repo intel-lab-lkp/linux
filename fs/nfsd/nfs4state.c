@@ -2351,11 +2351,28 @@ static int nfsd4_register_conn(struct nfsd4_conn *conn)
 	return register_xpt_user(conn->cn_xprt, &conn->cn_xpt_user);
 }
 
+/*
+ * Derive the transport fairness key from the v4.1 clientid, so that all of a
+ * client's connections (bound to its session) share one key and the sunrpc
+ * fair-queue dispatcher schedules them as a single client rather than per
+ * transport.  cl_boot is the server's boot time and is effectively always
+ * nonzero, so this overrides the source-address default that
+ * svc_xprt_fairq_key() would otherwise use.
+ */
+static unsigned long nfsd4_fairq_key(const clientid_t *clid)
+{
+	u64 id = ((u64)clid->cl_boot << 32) | clid->cl_id;
+
+	return (unsigned long)(id ^ (id >> 32));
+}
+
 static void nfsd4_init_conn(struct svc_rqst *rqstp, struct nfsd4_conn *conn, struct nfsd4_session *ses)
 {
 	int ret;
 
 	nfsd4_hash_conn(conn, ses);
+	conn->cn_xprt->xpt_fairq_key =
+		nfsd4_fairq_key(&ses->se_client->cl_clientid);
 	ret = nfsd4_register_conn(conn);
 	if (ret)
 		/* oops; xprt is already down: */
