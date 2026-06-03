@@ -194,23 +194,45 @@ static ssize_t nfs_direct_extract_pages(struct nfs_direct_req *dreq,
 		return result;
 
 	npages = (result + pgbase + PAGE_SIZE - 1) >> PAGE_SHIFT;
-	for (i = 0; i < npages; i++) {
+	for (i = 0; i < npages; ) {
+		unsigned int chunk_len, folio_offset;
+		unsigned int nr_to_add = 1;
 		struct nfs_page *req;
-		unsigned int req_len = min_t(size_t, result - bytes, PAGE_SIZE - pgbase);
+		struct folio *folio;
 
-		req = nfs_page_create_from_page(dreq->ctx, pagevec[i],
-						pinned, pgbase, *pos,
-						req_len);
+		folio = page_folio(pagevec[i]);
+		folio_offset = (folio_page_idx(folio, pagevec[i]) << PAGE_SHIFT) + pgbase;
+		chunk_len = min_t(size_t, result - bytes, PAGE_SIZE - pgbase);
+
+		while (i + nr_to_add < npages) {
+			struct page *next_page = pagevec[i + nr_to_add];
+			struct page *prev_page = pagevec[i + nr_to_add - 1];
+
+			if (page_folio(next_page) != folio ||
+			    next_page != prev_page + 1)
+				break;
+
+			chunk_len += min_t(size_t, result - bytes - chunk_len, PAGE_SIZE);
+			nr_to_add++;
+		}
+
+		req = nfs_page_create_from_folio(dreq->ctx, folio,
+						  pinned, folio_offset,
+						  chunk_len);
 		if (IS_ERR(req)) {
 			if (!bytes)
 				bytes = PTR_ERR(req);
 			break;
 		}
 
+		req->wb_index = *pos >> PAGE_SHIFT;
+		req->wb_offset = *pos;
+
 		list_add_tail(&req->wb_list, list);
 		pgbase = 0;
-		bytes += req_len;
-		*pos += req_len;
+		bytes += chunk_len;
+		*pos += chunk_len;
+		i += nr_to_add;
 	}
 
 	if (i < npages) {
