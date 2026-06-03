@@ -711,7 +711,7 @@ struct leaf_0x12_1 {
 	u32					: 32; // Reserved
 	// ecx
 	u32	xfrm_x87			:  1, // Enclave XFRM.X87
-		xfrm_sse			:  1, // Enclave XFRM.SEE
+		xfrm_sse			:  1, // Enclave XFRM.SSE
 		xfrm_avx			:  1, // Enclave XFRM.AVX
 		xfrm_mpx_bndregs		:  1, // Enclave XFRM.BNDREGS (MPX BND0-BND3 registers)
 		xfrm_mpx_bndcsr			:  1, // Enclave XFRM.BNDCSR (MPX BNDCFGU/BNDSTATUS registers)
@@ -771,7 +771,7 @@ struct leaf_0x14_0 {
 	u32	topa_output			:  1, // ToPA output scheme
 		topa_multiple_entries		:  1, // ToPA tables can hold multiple entries
 		single_range_output		:  1, // Single-range output
-		trance_transport_output		:  1, // Trace Transport subsystem output
+		trace_transport_output		:  1, // Trace Transport subsystem output
 						: 27, // Reserved
 		ip_payloads_lip			:  1; // IP payloads have LIP values (CS base included)
 	// edx
@@ -1380,7 +1380,7 @@ struct leaf_0x4c780002_0 {
 		amd_e400			:  1, // CPU is among the affected by Erratum 400
 		cpu_meltdown			:  1, // CPU affected by meltdown; needs kernel page table isolation
 		spectre_v1			:  1, // CPU affected by Spectre variant 1 with conditional branches
-		specture_v2			:  1, // CPU affected by Spectre variant 2 with indirect branches
+		spectre_v2			:  1, // CPU affected by Spectre variant 2 with indirect branches
 		spec_store_bypass		:  1, // CPU affected by speculative store bypass attack
 		l1tf				:  1, // CPU affected by L1 Terminal Fault
 		mds				:  1, // CPU affected by Microarchitectural data sampling

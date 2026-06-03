@@ -433,7 +433,7 @@
       0x12,         1,  eax,       7,    secs_attr_kss          , Key Separation and Sharing
       0x12,         1,  eax,      10,    secs_attr_aexnotify    , Enclave threads: AEX notifications
       0x12,         1,  ecx,       0,    xfrm_x87               , Enclave XFRM.X87
-      0x12,         1,  ecx,       1,    xfrm_sse               , Enclave XFRM.SEE
+      0x12,         1,  ecx,       1,    xfrm_sse               , Enclave XFRM.SSE
       0x12,         1,  ecx,       2,    xfrm_avx               , Enclave XFRM.AVX
       0x12,         1,  ecx,       3,    xfrm_mpx_bndregs       , Enclave XFRM.BNDREGS (MPX BND0-BND3 registers)
       0x12,         1,  ecx,       4,    xfrm_mpx_bndcsr        , Enclave XFRM.BNDCSR (MPX BNDCFGU/BNDSTATUS registers)
@@ -466,7 +466,7 @@
       0x14,         0,  ecx,       0,    topa_output            , ToPA output scheme
       0x14,         0,  ecx,       1,    topa_multiple_entries  , ToPA tables can hold multiple entries
       0x14,         0,  ecx,       2,    single_range_output    , Single-range output
-      0x14,         0,  ecx,       3,    trance_transport_output, Trace Transport subsystem output
+      0x14,         0,  ecx,       3,    trace_transport_output , Trace Transport subsystem output
       0x14,         0,  ecx,      31,    ip_payloads_lip        , IP payloads have LIP values (CS base included)
       0x14,         1,  eax,     2:0,    num_address_ranges     , Number of configurable Address Ranges
       0x14,         1,  eax,   31:16,    mtc_periods_bmp        , MTC period encodings bitmap
