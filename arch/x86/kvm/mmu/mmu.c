@@ -5901,7 +5901,7 @@ static void shadow_mmu_init_context(struct kvm_vcpu *vcpu, struct kvm_mmu *conte
 	reset_shadow_zero_bits_mask(vcpu, context);
 }
 
-static void kvm_init_shadow_mmu(struct kvm_vcpu *vcpu,
+static void init_kvm_shadow_mmu(struct kvm_vcpu *vcpu,
 				union kvm_cpu_role cpu_role)
 {
 	struct kvm_mmu *context = &vcpu->arch.root_mmu;
@@ -6033,12 +6033,6 @@ void kvm_init_shadow_ept_mmu(struct kvm_vcpu *vcpu, bool execonly,
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_init_shadow_ept_mmu);
 
-static void init_kvm_softmmu(struct kvm_vcpu *vcpu,
-			     union kvm_cpu_role cpu_role)
-{
-	kvm_init_shadow_mmu(vcpu, cpu_role);
-}
-
 void kvm_init_mmu(struct kvm_vcpu *vcpu)
 {
 	struct kvm_mmu_role_regs regs = vcpu_to_role_regs(vcpu);
@@ -6050,7 +6044,7 @@ void kvm_init_mmu(struct kvm_vcpu *vcpu)
 		if (tdp_enabled)
 			init_kvm_tdp_mmu(vcpu, cpu_role);
 		else
-			init_kvm_softmmu(vcpu, cpu_role);
+			init_kvm_shadow_mmu(vcpu, cpu_role);
 	}
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_init_mmu);
