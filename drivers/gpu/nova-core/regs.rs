@@ -131,6 +131,22 @@ register! {
         23:0    adr_63_40;
     }
 
+    /// Low bits of the physical system memory address used by the GPU to perform sysmembar
+    /// operations on Hopper (see [`crate::fb::SysmemFlush`]).
+    ///
+    /// Unlike the Ampere `NV_PFB_NISO_FLUSH_SYSMEM_ADDR` registers, which encode the address with
+    /// an 8-bit right-shift, the Hopper FBHUB registers take the raw address split into lower and
+    /// upper halves. Hardware ignores bits 7:0 of the LO register.
+    pub(crate) NV_PFB_FBHUB_PCIE_FLUSH_SYSMEM_ADDR_LO(u32) @ 0x00100a34 {
+        31:0    adr => u32;
+    }
+
+    /// High bits of the physical system memory address used by the GPU to perform sysmembar
+    /// operations on Hopper (see [`crate::fb::SysmemFlush`]).
+    pub(crate) NV_PFB_FBHUB_PCIE_FLUSH_SYSMEM_ADDR_HI(u32) @ 0x00100a38 {
+        19:0    adr;
+    }
+
     pub(crate) NV_PFB_PRI_MMU_LOCAL_MEMORY_RANGE(u32) @ 0x00100ce0 {
         30:30   ecc_mode_enabled => bool;
         9:4     lower_mag;
@@ -179,15 +195,16 @@ register! {
         19:0    adr;
     }
 
-    // GB20x sysmem flush registers, relative to the FBHUB0 base. Unlike the older
-    // NV_PFB_NISO_FLUSH_SYSMEM_ADDR registers which encode the address with an 8-bit
-    // right-shift, these take the raw address split into lower and upper halves. Hardware
+    // GB20x sysmem flush registers, relative to the FBHUB0 base. Like the Hopper
+    // NV_PFB_FBHUB_PCIE_FLUSH_SYSMEM_ADDR registers, and unlike the older
+    // NV_PFB_NISO_FLUSH_SYSMEM_ADDR registers (which encode the address with an 8-bit
+    // right-shift), these take the raw address split into lower and upper halves. Hardware
     // ignores bits 7:0 of the LO register.
-    pub(crate) NV_PFB_FBHUB_PCIE_FLUSH_SYSMEM_ADDR_LO(u32) @ Fbhub0Base + 0x00001d58 {
+    pub(crate) NV_PFB_FBHUB0_PCIE_FLUSH_SYSMEM_ADDR_LO(u32) @ Fbhub0Base + 0x00001d58 {
         31:0    adr => u32;
     }
 
-    pub(crate) NV_PFB_FBHUB_PCIE_FLUSH_SYSMEM_ADDR_HI(u32) @ Fbhub0Base + 0x00001d5c {
+    pub(crate) NV_PFB_FBHUB0_PCIE_FLUSH_SYSMEM_ADDR_HI(u32) @ Fbhub0Base + 0x00001d5c {
         19:0    adr;
     }
 }
