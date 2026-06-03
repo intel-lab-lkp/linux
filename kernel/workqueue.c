@@ -216,12 +216,13 @@ struct worker_pool {
 	int			nr_idle;	/* L: currently idle workers */
 
 	struct list_head	idle_list;	/* L: list of idle workers */
+	struct list_head	kicked_list;	/* L: workers kicked but not yet running */
 	struct timer_list	idle_timer;	/* L: worker idle timeout */
 	struct work_struct      idle_cull_work; /* L: worker idle cleanup */
 
 	struct timer_list	mayday_timer;	  /* L: SOS timer for workers */
 
-	/* a workers is either on busy_hash or idle_list, or the manager */
+	/* a worker is either on busy_hash, idle_list, kicked_list, or the manager */
 	DECLARE_HASHTABLE(busy_hash, BUSY_WORKER_HASH_ORDER);
 						/* L: hash of busy workers */
 
@@ -1031,6 +1032,13 @@ static inline void worker_clr_flags(struct worker *worker, unsigned int flags)
 /* Return the first idle worker.  Called with pool->lock held. */
 static struct worker *first_idle_worker(struct worker_pool *pool)
 {
+	/*
+	 * Prefer an already-kicked worker so back-to-back kicks coalesce
+	 * onto the same cache-hot worker (LIFO reuse).
+	 */
+	if (!list_empty(&pool->kicked_list))
+		return list_first_entry(&pool->kicked_list, struct worker, entry);
+
 	if (unlikely(list_empty(&pool->idle_list)))
 		return NULL;
 
@@ -1310,6 +1318,16 @@ static bool kick_pool(struct worker_pool *pool)
 		}
 	}
 #endif
+	/*
+	 * Move @worker to pool->kicked_list so a concurrent idle_cull_fn()
+	 * (which only walks pool->idle_list) cannot reap it before it
+	 * consumes the just-enqueued work.  worker_leave_idle() removes the
+	 * worker from whichever list it sits on; worker_enter_idle() puts
+	 * it back on pool->idle_list on completion.  first_idle_worker()
+	 * peeks kicked_list first, so back-to-back kicks still coalesce
+	 * onto the same cache-hot worker (LIFO reuse).
+	 */
+	list_move(&worker->entry, &pool->kicked_list);
 	wake_up_process(p);
 	return true;
 }
@@ -4896,6 +4914,7 @@ static int init_worker_pool(struct worker_pool *pool)
 	pool->last_progress_ts = jiffies;
 	INIT_LIST_HEAD(&pool->worklist);
 	INIT_LIST_HEAD(&pool->idle_list);
+	INIT_LIST_HEAD(&pool->kicked_list);
 	hash_init(pool->busy_hash);
 
 	timer_setup(&pool->idle_timer, idle_worker_timeout, TIMER_DEFERRABLE);
