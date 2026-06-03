@@ -9,6 +9,7 @@
 #include <linux/sched/mm.h>
 #include <linux/errno.h>
 #include <linux/freezer.h>
+#include <linux/hash.h>
 #include <linux/slab.h>
 #include <net/sock.h>
 #include <linux/sunrpc/addr.h>
@@ -43,6 +44,193 @@ static int svc_conn_age_period = 6*60;
 /* List of registered transport classes */
 static DEFINE_SPINLOCK(svc_xprt_class_lock);
 static LIST_HEAD(svc_xprt_class_list);
+
+/*
+ * Per-client fair-queue dispatch.
+ *
+ * The default dispatcher keeps all ready transports in one lockless FIFO
+ * (svc_pool.sp_xprts), so a client's share of nfsd service scales with its
+ * connection count.  When fair queueing is enabled (svc_set_fairq()), ready
+ * transports are instead grouped into buckets by their fairness key
+ * (svc_xprt_fairq_key()) and dispatched round-robin across the non-empty
+ * buckets, so each client gets one turn per round however many connections it
+ * holds.
+ *
+ * Buckets are a fixed hash array: distinct clients almost always land in
+ * distinct buckets, and a collision merely shares a turn between two clients,
+ * never drops work.  The structure is guarded by a single per-pool spinlock
+ * taken only on this opt-in path; the default FIFO fast path is untouched.
+ */
+#define SVC_FAIRQ_BITS		8
+#define SVC_FAIRQ_BUCKETS	(1U << SVC_FAIRQ_BITS)
+
+struct svc_fairq_bucket {
+	struct list_head	fb_xprts;	/* ready transports, FIFO order */
+	struct list_head	fb_active;	/* link in fq_active when non-empty */
+};
+
+struct svc_fairq {
+	spinlock_t		fq_lock;
+	unsigned int		fq_nr;		/* total transports queued */
+	struct list_head	fq_active;	/* non-empty buckets, RR order */
+	struct svc_fairq_bucket	fq_buckets[SVC_FAIRQ_BUCKETS];
+};
+
+static struct svc_fairq *svc_fairq_alloc(void)
+{
+	struct svc_fairq *fq;
+	unsigned int i;
+
+	fq = kzalloc(sizeof(*fq), GFP_KERNEL);
+	if (!fq)
+		return NULL;
+	spin_lock_init(&fq->fq_lock);
+	INIT_LIST_HEAD(&fq->fq_active);
+	for (i = 0; i < SVC_FAIRQ_BUCKETS; i++) {
+		INIT_LIST_HEAD(&fq->fq_buckets[i].fb_xprts);
+		INIT_LIST_HEAD(&fq->fq_buckets[i].fb_active);
+	}
+	return fq;
+}
+
+static void svc_fairq_free(struct svc_fairq *fq)
+{
+	kfree(fq);
+}
+
+/**
+ * svc_set_fairq - enable or disable per-client fair-queue dispatch
+ * @serv: service whose pools to (re)configure
+ * @enable: %true to group ready transports by client and dispatch round-robin
+ *
+ * Allocates (or frees) a fair-queue structure for every pool of @serv.  Must
+ * be called while the service is quiescent -- before any thread is started or
+ * transport queued -- because it changes how ready transports are tracked.
+ *
+ * Return: 0 on success, or -ENOMEM if a structure could not be allocated, in
+ * which case @serv is left with fair queueing disabled.
+ */
+int svc_set_fairq(struct svc_serv *serv, bool enable)
+{
+	unsigned int i;
+
+	/* Drop any existing fair-queue state. */
+	for (i = 0; i < serv->sv_nrpools; i++) {
+		svc_fairq_free(serv->sv_pools[i].sp_fairq);
+		serv->sv_pools[i].sp_fairq = NULL;
+	}
+	if (!enable)
+		return 0;
+
+	for (i = 0; i < serv->sv_nrpools; i++) {
+		serv->sv_pools[i].sp_fairq = svc_fairq_alloc();
+		if (!serv->sv_pools[i].sp_fairq)
+			goto out_free;
+	}
+	return 0;
+
+out_free:
+	while (i-- > 0) {
+		svc_fairq_free(serv->sv_pools[i].sp_fairq);
+		serv->sv_pools[i].sp_fairq = NULL;
+	}
+	return -ENOMEM;
+}
+EXPORT_SYMBOL_GPL(svc_set_fairq);
+
+static struct svc_fairq_bucket *svc_fairq_bucket(struct svc_fairq *fq,
+						 struct svc_xprt *xprt)
+{
+	return &fq->fq_buckets[hash_long(svc_xprt_fairq_key(xprt),
+					 SVC_FAIRQ_BITS)];
+}
+
+/*
+ * Add a ready transport to its client's bucket, FIFO within the bucket.
+ * Enqueue can run in softirq context (socket data_ready), so all acquisitions
+ * of fq_lock disable bottom halves.
+ */
+static void svc_fairq_enqueue(struct svc_fairq *fq, struct svc_xprt *xprt)
+{
+	struct svc_fairq_bucket *b = svc_fairq_bucket(fq, xprt);
+
+	spin_lock_bh(&fq->fq_lock);
+	if (list_empty(&b->fb_xprts))
+		list_add_tail(&b->fb_active, &fq->fq_active);
+	list_add_tail(&xprt->xpt_fairq, &b->fb_xprts);
+	WRITE_ONCE(fq->fq_nr, fq->fq_nr + 1);
+	spin_unlock_bh(&fq->fq_lock);
+}
+
+/*
+ * Round-robin across clients: take the bucket at the head of the active list,
+ * pop its oldest transport, then rotate the bucket to the tail (or drop it if
+ * it has no more ready transports).  Each client thus gets one turn per cycle
+ * regardless of how many connections it has queued.
+ */
+static struct svc_xprt *svc_fairq_dequeue(struct svc_fairq *fq)
+{
+	struct svc_fairq_bucket *b;
+	struct svc_xprt *xprt = NULL;
+
+	spin_lock_bh(&fq->fq_lock);
+	if (!list_empty(&fq->fq_active)) {
+		b = list_first_entry(&fq->fq_active, struct svc_fairq_bucket,
+				     fb_active);
+		xprt = list_first_entry(&b->fb_xprts, struct svc_xprt,
+					xpt_fairq);
+		list_del(&xprt->xpt_fairq);
+		WRITE_ONCE(fq->fq_nr, fq->fq_nr - 1);
+		list_del_init(&b->fb_active);
+		if (!list_empty(&b->fb_xprts))
+			list_add_tail(&b->fb_active, &fq->fq_active);
+		svc_xprt_get(xprt);
+	}
+	spin_unlock_bh(&fq->fq_lock);
+	return xprt;
+}
+
+/*
+ * Lockless emptiness hint for the sleep/wake decision.  Correctness against a
+ * concurrent enqueue relies on the full barrier the sleeper executes
+ * (llist_add() of itself to sp_idle_threads) pairing with the smp_mb() that
+ * svc_xprt_enqueue() issues before waking an idle thread -- the same
+ * store-buffer pattern lwq_enqueue()'s cmpxchg provides on the default path.
+ */
+static bool svc_fairq_empty(struct svc_fairq *fq)
+{
+	return READ_ONCE(fq->fq_nr) == 0;
+}
+
+/* Remove and delete all queued transports belonging to @net (namespace down). */
+static void svc_fairq_clean_net(struct svc_fairq *fq, struct net *net)
+{
+	struct svc_xprt *xprt, *tmp;
+	unsigned int i;
+	LIST_HEAD(dying);
+
+	spin_lock_bh(&fq->fq_lock);
+	for (i = 0; i < SVC_FAIRQ_BUCKETS; i++) {
+		struct svc_fairq_bucket *b = &fq->fq_buckets[i];
+
+		list_for_each_entry_safe(xprt, tmp, &b->fb_xprts, xpt_fairq) {
+			if (xprt->xpt_net != net)
+				continue;
+			list_move_tail(&xprt->xpt_fairq, &dying);
+			WRITE_ONCE(fq->fq_nr, fq->fq_nr - 1);
+		}
+		if (list_empty(&b->fb_xprts))
+			list_del_init(&b->fb_active);
+	}
+	spin_unlock_bh(&fq->fq_lock);
+
+	while (!list_empty(&dying)) {
+		xprt = list_first_entry(&dying, struct svc_xprt, xpt_fairq);
+		list_del_init(&xprt->xpt_fairq);
+		set_bit(XPT_CLOSE, &xprt->xpt_flags);
+		svc_delete_xprt(xprt);
+	}
+}
 
 /* SMP locking strategy:
  *
@@ -523,7 +711,19 @@ void svc_xprt_enqueue(struct svc_xprt *xprt)
 
 	percpu_counter_inc(&pool->sp_sockets_queued);
 	xprt->xpt_qtime = ktime_get();
-	lwq_enqueue(&xprt->xpt_ready, &pool->sp_xprts);
+	if (pool->sp_fairq) {
+		svc_fairq_enqueue(pool->sp_fairq, xprt);
+		/*
+		 * Order the enqueue before the idle-thread scan below, so a
+		 * thread that just found no work and added itself to the idle
+		 * list is guaranteed to be seen here.  lwq_enqueue()'s cmpxchg
+		 * supplies this barrier on the default path; the locked fair
+		 * enqueue is release-only, so issue it explicitly.
+		 */
+		smp_mb();
+	} else {
+		lwq_enqueue(&xprt->xpt_ready, &pool->sp_xprts);
+	}
 
 	svc_pool_wake_idle_thread(pool);
 }
@@ -535,6 +735,9 @@ EXPORT_SYMBOL_GPL(svc_xprt_enqueue);
 static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
 {
 	struct svc_xprt	*xprt = NULL;
+
+	if (pool->sp_fairq)
+		return svc_fairq_dequeue(pool->sp_fairq);
 
 	xprt = lwq_dequeue(&pool->sp_xprts, struct svc_xprt, xpt_ready);
 	if (xprt)
@@ -759,8 +962,12 @@ svc_thread_should_sleep(struct svc_rqst *rqstp)
 		return false;
 
 	/* was a socket queued? */
-	if (!lwq_empty(&pool->sp_xprts))
+	if (pool->sp_fairq) {
+		if (!svc_fairq_empty(pool->sp_fairq))
+			return false;
+	} else if (!lwq_empty(&pool->sp_xprts)) {
 		return false;
+	}
 
 	/* are we shutting down? */
 	if (svc_thread_should_stop(rqstp))
@@ -1191,6 +1398,11 @@ static void svc_clean_up_xprts(struct svc_serv *serv, struct net *net)
 	for (i = 0; i < serv->sv_nrpools; i++) {
 		struct svc_pool *pool = &serv->sv_pools[i];
 		struct llist_node *q, **t1, *t2;
+
+		if (pool->sp_fairq) {
+			svc_fairq_clean_net(pool->sp_fairq, net);
+			continue;
+		}
 
 		q = lwq_dequeue_all(&pool->sp_xprts);
 		lwq_for_each_safe(xprt, t1, t2, &q, xpt_ready) {

@@ -33,12 +33,16 @@
  * have one pool per NUMA node.  This optimisation reduces cross-
  * node traffic on multi-node NUMA NFS servers.
  */
+struct svc_fairq;
+
 struct svc_pool {
 	unsigned int		sp_id;		/* pool id; also node id on NUMA */
 	unsigned int		sp_nrthreads;	/* # of threads currently running in pool */
 	unsigned int		sp_nrthrmin;	/* Min number of threads to run per pool */
 	unsigned int		sp_nrthrmax;	/* Max requested number of threads in pool */
 	struct lwq		sp_xprts;	/* pending transports */
+	struct svc_fairq	*sp_fairq;	/* per-client fair-queue dispatch
+						 * state; NULL => sp_xprts FIFO */
 	struct list_head	sp_all_threads;	/* all server threads */
 	struct llist_head	sp_idle_threads; /* idle server threads */
 
@@ -465,6 +469,7 @@ struct svc_serv *  svc_create_pooled(struct svc_program *prog,
 				     struct svc_stat *stats,
 				     unsigned int bufsize,
 				     int (*threadfn)(void *data));
+int		   svc_set_fairq(struct svc_serv *serv, bool enable);
 int		   svc_set_pool_threads(struct svc_serv *serv, struct svc_pool *pool,
 					unsigned int min_threads, unsigned int max_threads);
 int		   svc_set_num_threads(struct svc_serv *serv, unsigned int min_threads,

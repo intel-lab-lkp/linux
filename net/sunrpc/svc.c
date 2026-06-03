@@ -656,6 +656,8 @@ svc_destroy(struct svc_serv **servp)
 	if (serv->sv_is_pooled)
 		svc_pool_map_put();
 
+	svc_set_fairq(serv, false);
+
 	for (i = 0; i < serv->sv_nrpools; i++) {
 		struct svc_pool *pool = &serv->sv_pools[i];
 
