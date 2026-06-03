@@ -42,6 +42,9 @@
  * The scheduler first picks the cgroup to run and then schedule the tasks
  * within by using nested weighted vtime scheduling by default. The
  * cgroup-internal scheduling can be switched to FIFO with the -f option.
+ *
+ * Note: Requires cgroup v2 (uses BPF_MAP_TYPE_CGRP_STORAGE and cgroup v2
+ * BPF kfuncs, neither of which are available on cgroup v1).
  */
 #include <scx/common.bpf.h>
 #include "scx_flatcg.h"
