@@ -498,14 +498,11 @@ static void nested_ept_init_mmu_context(struct kvm_vcpu *vcpu)
 	vcpu->arch.mmu->w.get_pdptr       = kvm_pdptr_read;
 
 	vcpu->arch.mmu->w.inject_page_fault = nested_ept_inject_page_fault;
-
-	vcpu->arch.gva_walk              = &vcpu->arch.ngva_walk;
 }
 
 static void nested_ept_uninit_mmu_context(struct kvm_vcpu *vcpu)
 {
 	vcpu->arch.mmu = &vcpu->arch.root_mmu;
-	vcpu->arch.gva_walk = &vcpu->arch.root_mmu.w;
 }
 
 static bool nested_vmx_is_page_fault_vmexit(struct vmcs12 *vmcs12,

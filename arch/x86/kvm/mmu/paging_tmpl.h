@@ -541,7 +541,7 @@ error:
 	}
 #endif
 	walker->fault.address = addr;
-	walker->fault.nested_page_fault = w != vcpu->arch.gva_walk;
+	walker->fault.nested_page_fault = w != &vcpu->arch.gva_walk;
 	walker->fault.async_page_fault = false;
 
 	trace_kvm_mmu_walker_error(walker->fault.error_code);
@@ -894,7 +894,7 @@ static gpa_t FNAME(gva_to_gpa)(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 
 #ifndef CONFIG_X86_64
 	/* A 64-bit GVA should be impossible on 32-bit KVM. */
-	WARN_ON_ONCE((addr >> 32) && w == vcpu->arch.gva_walk);
+	WARN_ON_ONCE((addr >> 32) && w == &vcpu->arch.gva_walk);
 #endif
 
 	r = FNAME(walk_addr_generic)(&walker, vcpu, w, addr, access);
