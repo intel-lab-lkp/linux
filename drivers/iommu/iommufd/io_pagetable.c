@@ -859,6 +859,86 @@ int iopt_unmap_iova(struct io_pagetable *iopt, unsigned long iova,
 	return iopt_unmap_iova_range(iopt, iova, iova_last, unmapped);
 }
 
+#ifdef CONFIG_IOMMUFD_NOIOMMU
+int iopt_get_phys(struct io_pagetable *iopt, unsigned long iova, u64 *paddr,
+		  u64 *length)
+{
+	struct iopt_area *area;
+	struct iopt_pages *pages;
+	u64 max_length = *length;
+	u64 tmp_length = 0;
+	u64 tmp_paddr = 0;
+	int rc = 0;
+
+	down_read(&iopt->iova_rwsem);
+	area = iopt_area_iter_first(iopt, iova, iova);
+	if (!area || !area->pages) {
+		rc = -ENOENT;
+		goto unlock_exit;
+	}
+
+	pages = area->pages;
+	mutex_lock(&pages->mutex);
+	if (iopt_dmabuf_revoked(pages)) {
+		rc = -EINVAL;
+		goto unlock_pages;
+	}
+
+	if (!area->storage_domain ||
+	    area->storage_domain->owner != &iommufd_noiommu_ops) {
+		rc = -EOPNOTSUPP;
+		goto unlock_pages;
+	}
+
+	*paddr = iommu_iova_to_phys(area->storage_domain, iova);
+	if (!*paddr) {
+		rc = -EINVAL;
+		goto unlock_pages;
+	}
+
+	tmp_length = PAGE_SIZE - offset_in_page(iova);
+	tmp_paddr = *paddr;
+	/*
+	 * Scan the domain for the contiguous physical address length so that
+	 * userspace search can be optimized for fewer ioctls. A max_length of
+	 * 0 means no limit.
+	 */
+	while (iova < iopt_area_last_iova(area)) {
+		unsigned long next_iova;
+		u64 next_paddr;
+
+		if (max_length && tmp_length >= max_length)
+			break;
+
+		if (check_add_overflow(iova, PAGE_SIZE, &next_iova))
+			break;
+
+		if (next_iova > iopt_area_last_iova(area))
+			break;
+
+		next_paddr = iommu_iova_to_phys(area->storage_domain, next_iova);
+
+		if (!next_paddr || next_paddr != tmp_paddr + PAGE_SIZE)
+			break;
+
+		iova = next_iova;
+		tmp_paddr += PAGE_SIZE;
+		tmp_length += PAGE_SIZE;
+	}
+
+	if (max_length && tmp_length > max_length)
+		tmp_length = max_length;
+	*length = tmp_length;
+
+unlock_pages:
+	mutex_unlock(&pages->mutex);
+unlock_exit:
+	up_read(&iopt->iova_rwsem);
+
+	return rc;
+}
+#endif
+
 int iopt_unmap_all(struct io_pagetable *iopt, unsigned long *unmapped)
 {
 	/* If the IOVAs are empty then unmap all succeeds */
