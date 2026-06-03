@@ -2002,7 +2002,8 @@ int ntfs_read_inode_mount(struct inode *vi)
 				goto em_put_err_out;
 			if (!al_entry->length)
 				goto em_put_err_out;
-			if ((u8 *)al_entry + 6 > al_end ||
+			if ((u8 *)al_entry + offsetof(struct attr_list_entry, name) >
+			    al_end ||
 			    (u8 *)al_entry + le16_to_cpu(al_entry->length) > al_end)
 				goto em_put_err_out;
 			next_al_entry = (struct attr_list_entry *)((u8 *)al_entry +
