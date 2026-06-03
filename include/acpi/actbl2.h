@@ -2844,6 +2844,20 @@ struct acpi_phat_health_data {
 	u32 device_specific_offset;	/* Zero if no Device-specific data */
 };
 
+struct acpi_phat_device_data {
+	u8 supported_sources;
+	u8 source;
+	u8 sub_source;
+	u8 reason;
+	u16 vendor_count;		/* Zero if no Vendor specific data */
+};
+
+struct acpi_phat_vendor_element {
+	u8 vendor_guid[16];
+	u16 length;
+	u16 revision;
+};
+
 /* Values for Health field above */
 
 #define ACPI_PHAT_ERRORS_FOUND          0
