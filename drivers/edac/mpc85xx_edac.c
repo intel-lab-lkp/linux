@@ -555,14 +555,17 @@ static int mpc85xx_l2_err_probe(struct platform_device *op)
 	}
 
 	if (edac_op_state == EDAC_OPSTATE_INT) {
-		pdata->irq = irq_of_parse_and_map(op->dev.of_node, 0);
+		pdata->irq = platform_get_irq(op, 0);
+		if (pdata->irq < 0) {
+			res = pdata->irq;
+			goto err;
+		}
 		res = devm_request_irq(&op->dev, pdata->irq,
 				       mpc85xx_l2_isr, IRQF_SHARED,
 				       "[EDAC] L2 err", edac_dev);
 		if (res < 0) {
 			pr_err("%s: Unable to request irq %d for MPC85xx L2 err\n",
 				__func__, pdata->irq);
-			irq_dispose_mapping(pdata->irq);
 			res = -ENODEV;
 			goto err2;
 		}
@@ -596,10 +599,8 @@ static void mpc85xx_l2_err_remove(struct platform_device *op)
 
 	edac_dbg(0, "\n");
 
-	if (edac_op_state == EDAC_OPSTATE_INT) {
+	if (edac_op_state == EDAC_OPSTATE_INT)
 		out_be32(pdata->l2_vbase + MPC85XX_L2_ERRINTEN, 0);
-		irq_dispose_mapping(pdata->irq);
-	}
 
 	out_be32(pdata->l2_vbase + MPC85XX_L2_ERRDIS, orig_l2_err_disable);
 	edac_device_del_device(&op->dev);
