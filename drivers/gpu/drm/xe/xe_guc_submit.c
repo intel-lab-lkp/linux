@@ -1640,8 +1640,15 @@ trigger_reset:
 
 	/* Mark all outstanding jobs as bad, thus completing them */
 	xe_sched_job_set_error(job, err);
-	drm_sched_for_each_pending_job(tmp_job, &sched->base, NULL)
-		xe_sched_job_set_error(to_xe_sched_job(tmp_job), -ECANCELED);
+
+	/*
+	 * For kernel queues (migration), don't cancel other pending jobs.
+	 * They belong to different VMs sharing the same scheduler and will
+	 * be resubmitted after GT reset recovers the hardware.
+	 */
+	if (!(q->flags & EXEC_QUEUE_FLAG_KERNEL))
+		drm_sched_for_each_pending_job(tmp_job, &sched->base, NULL)
+			xe_sched_job_set_error(to_xe_sched_job(tmp_job), -ECANCELED);
 
 	if (xe_exec_queue_is_multi_queue(q)) {
 		xe_guc_exec_queue_group_start(q);
