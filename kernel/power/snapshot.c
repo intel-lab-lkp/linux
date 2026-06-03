@@ -1380,7 +1380,7 @@ static struct page *saveable_page(struct zone *zone, unsigned long pfn)
 		return NULL;
 
 	page = pfn_to_online_page(pfn);
-	if (!page || page_zone(page) != zone)
+	if (unlikely(!page || page_zone(page) != zone))
 		return NULL;
 
 	BUG_ON(PageHighMem(page));
@@ -1388,14 +1388,14 @@ static struct page *saveable_page(struct zone *zone, unsigned long pfn)
 	if (swsusp_page_is_forbidden(page) || swsusp_page_is_free(page))
 		return NULL;
 
-	if (PageOffline(page))
+	if (unlikely(PageOffline(page)))
 		return NULL;
 
-	if (PageReserved(page)
-	    && (!kernel_page_present(page) || pfn_is_nosave(pfn)))
+	if (unlikely(PageReserved(page)
+	    && (!kernel_page_present(page) || pfn_is_nosave(pfn))))
 		return NULL;
 
-	if (page_is_guard(page))
+	if (unlikely(page_is_guard(page)))
 		return NULL;
 
 	return page;
