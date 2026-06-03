@@ -85,6 +85,13 @@ static const struct axp20x_info axp221_info = {
 	.shutdown_mask = AXP20X_PEK_SHUTDOWN_MASK,
 };
 
+static const struct axp20x_info axp313a_info = {
+	.startup_time = NULL,
+	.startup_mask = 0,
+	.shutdown_time = NULL,
+	.shutdown_mask = 0,
+};
+
 static ssize_t axp20x_show_attr(struct device *dev,
 				const struct axp20x_time *time,
 				unsigned int mask, char *buf)
@@ -92,6 +99,9 @@ static ssize_t axp20x_show_attr(struct device *dev,
 	struct axp20x_pek *axp20x_pek = dev_get_drvdata(dev);
 	unsigned int val;
 	int ret, i;
+
+	if (!time)
+		return -EOPNOTSUPP;
 
 	ret = regmap_read(axp20x_pek->axp20x->regmap, AXP20X_PEK_KEY, &val);
 	if (ret != 0)
@@ -136,6 +146,9 @@ static ssize_t axp20x_store_attr(struct device *dev,
 	int ret, i;
 	unsigned int val, idx = 0;
 	unsigned int best_err = UINT_MAX;
+
+	if (!time)
+		return -EOPNOTSUPP;
 
 	ret = kstrtouint(buf, 10, &val);
 	if (ret)
@@ -395,7 +408,7 @@ static const struct platform_device_id axp_pek_id_match[] = {
 	},
 	{
 		.name = "axp313a-pek",
-		.driver_data = (kernel_ulong_t)&axp20x_info,
+		.driver_data = (kernel_ulong_t)&axp313a_info,
 	},
 	{ /* sentinel */ }
 };
