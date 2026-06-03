@@ -7804,6 +7804,22 @@ sub process {
 			ERROR("UNINITIALIZED_PTR_WITH_FREE",
 			      "pointer '$1' with __free attribute should be initialized\n" . $herecurr);
 		}
+
+# check alloc_workqueue() flags parameter (2nd argument) for WQ_PERCPU, WQ_UNBOUND presence
+		if ($line =~ /\balloc_workqueue\s*\(/ &&
+			$stat =~ /\balloc_workqueue\s*\(\s*[^,]+\s*,\s*([^,]+)/s) {
+			my $flags = $1;
+			my $has_percpu = $flags =~ /\bWQ_PERCPU\b/;
+			my $has_unbound = $flags =~ /\bWQ_UNBOUND\b/;
+
+			if ($has_percpu && $has_unbound) {
+				ERROR("ALLOC_WORKQUEUE_FLAGS",
+				      "alloc_workqueue() second parameter should not contain both WQ_PERCPU and WQ_UNBOUND\n" . $herecurr);
+			} elsif (!$has_percpu && !$has_unbound) {
+				ERROR("ALLOC_WORKQUEUE_FLAGS",
+				      "alloc_workqueue() second parameter should specify either WQ_PERCPU or WQ_UNBOUND\n" . $herecurr);
+			}
+		}
 	}
 
 	# If we have no input at all, then there is nothing to report on
