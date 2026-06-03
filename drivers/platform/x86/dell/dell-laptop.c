@@ -2551,6 +2551,7 @@ fail_backlight:
 	if (mute_led_registered)
 		led_classdev_unregister(&mute_led_cdev);
 fail_led:
+	dell_laptop_unregister_notifier(&dell_laptop_notifier);
 	dell_battery_exit();
 	dell_cleanup_rfkill();
 fail_rfkill:
