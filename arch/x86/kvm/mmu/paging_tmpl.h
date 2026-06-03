@@ -138,19 +138,19 @@ static inline int FNAME(is_present_gpte)(struct kvm_pagewalk *w,
 #endif
 }
 
-static bool FNAME(is_bad_mt_xwr)(struct rsvd_bits_validate *rsvd_check, u64 gpte)
+static bool FNAME(is_bad_mt_xwr)(struct kvm_page_format *fmt, u64 gpte)
 {
 #if PTTYPE != PTTYPE_EPT
 	return false;
 #else
-	return __is_bad_mt_xwr(rsvd_check, gpte);
+	return __is_bad_mt_xwr(fmt, gpte);
 #endif
 }
 
 static bool FNAME(is_rsvd_bits_set)(struct kvm_page_format *fmt, u64 gpte, int level)
 {
-	return __is_rsvd_bits_set(&fmt->guest_rsvd_check, gpte, level) ||
-	       FNAME(is_bad_mt_xwr)(&fmt->guest_rsvd_check, gpte);
+	return __is_rsvd_bits_set(fmt, gpte, level) ||
+	       FNAME(is_bad_mt_xwr)(fmt, gpte);
 }
 
 static bool FNAME(prefetch_invalid_gpte)(struct kvm_vcpu *vcpu,
