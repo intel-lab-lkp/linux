@@ -1521,8 +1521,10 @@ static void omap_dma_free(struct omap_dmadev *od)
 		struct omap_chan *c = list_first_entry(&od->ddev.channels,
 			struct omap_chan, vc.chan.device_node);
 
+		omap_dma_terminate_all(&c->vc.chan);
 		list_del(&c->vc.chan.device_node);
 		tasklet_kill(&c->vc.task);
+		vchan_free_chan_resources(&c->vc);
 		kfree(c);
 	}
 }
