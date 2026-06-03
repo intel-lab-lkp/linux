@@ -434,3 +434,12 @@ void intel_cmtg_program(const struct intel_crtc_state *crtc_state)
 	intel_cmtg_set_hwgb(crtc_state);
 	intel_cmtg_enable_ddi(crtc_state);
 }
+
+void intel_cmtg_restore(const struct intel_crtc_state *crtc_state)
+{
+	intel_cmtg_set_clk_select(crtc_state);
+	intel_cmtg_set_timings(crtc_state, false);
+	intel_cmtg_set_vrr_timings(crtc_state);
+	intel_cmtg_set_vrr_ctl(crtc_state);
+	intel_cmtg_set_m_n(crtc_state);
+}
