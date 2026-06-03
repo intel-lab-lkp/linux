@@ -85,6 +85,13 @@ static const struct axp20x_info axp221_info = {
 	.shutdown_mask = AXP20X_PEK_SHUTDOWN_MASK,
 };
 
+static const struct axp20x_info axp313a_info = {
+	.startup_time = NULL,
+	.startup_mask = 0,
+	.shutdown_time = NULL,
+	.shutdown_mask = 0,
+};
+
 static ssize_t axp20x_show_attr(struct device *dev,
 				const struct axp20x_time *time,
 				unsigned int mask, char *buf)
@@ -413,6 +420,10 @@ static const struct platform_device_id axp_pek_id_match[] = {
 	{
 		.name = "axp221-pek",
 		.driver_data = (kernel_ulong_t)&axp221_info,
+	},
+	{
+		.name = "axp313a-pek",
+		.driver_data = (kernel_ulong_t)&axp313a_info,
 	},
 	{ /* sentinel */ }
 };
