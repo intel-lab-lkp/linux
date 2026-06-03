@@ -1818,9 +1818,9 @@ static int omap_dma_probe(struct platform_device *pdev)
 			spin_unlock_irq(&od->irq_lock);
 			omap_dma_glbl_read(od, IRQENABLE_L1);
 		}
+		omap_dma_free(od);
 		if (od->ll123_supported)
 			dma_pool_destroy(od->desc_pool);
-		omap_dma_free(od);
 		return rc;
 	}
 
@@ -1842,9 +1842,9 @@ static int omap_dma_probe(struct platform_device *pdev)
 				spin_unlock_irq(&od->irq_lock);
 				omap_dma_glbl_read(od, IRQENABLE_L1);
 			}
+			omap_dma_free(od);
 			if (od->ll123_supported)
 				dma_pool_destroy(od->desc_pool);
-			omap_dma_free(od);
 			return rc;
 		}
 	}
@@ -1888,10 +1888,10 @@ static void omap_dma_remove(struct platform_device *pdev)
 		omap_dma_glbl_write(od, IRQENABLE_L0, 0);
 	}
 
+	omap_dma_free(od);
+
 	if (od->ll123_supported)
 		dma_pool_destroy(od->desc_pool);
-
-	omap_dma_free(od);
 }
 
 static const struct omap_dma_config omap2420_data = {
