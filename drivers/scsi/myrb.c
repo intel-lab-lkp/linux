@@ -1669,7 +1669,7 @@ static int myrb_pdev_sdev_init(struct scsi_device *sdev)
 	struct myrb_pdev_state *pdev_info;
 	unsigned short status;
 
-	if (sdev->id > MYRB_MAX_TARGETS)
+	if (sdev->id >= MYRB_MAX_TARGETS)
 		return -ENXIO;
 
 	pdev_info = kzalloc_obj(*pdev_info);
