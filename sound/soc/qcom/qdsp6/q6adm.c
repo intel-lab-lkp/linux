@@ -92,9 +92,8 @@ static struct q6copp *q6adm_find_copp(struct q6adm *adm, int port_idx,
 {
 	struct q6copp *c;
 	struct q6copp *ret = NULL;
-	unsigned long flags;
 
-	spin_lock_irqsave(&adm->copps_list_lock, flags);
+	guard(spinlock_irqsave)(&adm->copps_list_lock);
 	list_for_each_entry(c, &adm->copps_list, node) {
 		if ((port_idx == c->afe_port) && (copp_idx == c->copp_idx)) {
 			ret = c;
@@ -102,8 +101,6 @@ static struct q6copp *q6adm_find_copp(struct q6adm *adm, int port_idx,
 			break;
 		}
 	}
-
-	spin_unlock_irqrestore(&adm->copps_list_lock, flags);
 
 	return ret;
 
@@ -116,14 +113,13 @@ static int q6adm_apr_send_copp_pkt(struct q6adm *adm, struct q6copp *copp,
 	uint32_t opcode = pkt->hdr.opcode;
 	int ret;
 
-	mutex_lock(&adm->lock);
+	guard(mutex)(&adm->lock);
 	copp->result.opcode = 0;
 	copp->result.status = 0;
 	ret = apr_send_pkt(adm->apr, pkt);
 	if (ret < 0) {
 		dev_err(dev, "Failed to send APR packet\n");
-		ret = -EINVAL;
-		goto err;
+		return -EINVAL;
 	}
 
 	/* Wait for the callback with copp id */
@@ -146,8 +142,6 @@ static int q6adm_apr_send_copp_pkt(struct q6adm *adm, struct q6copp *copp,
 		ret = -EINVAL;
 	}
 
-err:
-	mutex_unlock(&adm->lock);
 	return ret;
 }
 
@@ -172,17 +166,16 @@ static void q6adm_free_copp(struct kref *ref)
 {
 	struct q6copp *c = container_of(ref, struct q6copp, refcount);
 	struct q6adm *adm = c->adm;
-	unsigned long flags;
 	int ret;
 
 	ret = q6adm_device_close(adm, c, c->afe_port, c->copp_idx);
 	if (ret < 0)
 		dev_err(adm->dev, "Failed to close copp %d\n", ret);
 
-	spin_lock_irqsave(&adm->copps_list_lock, flags);
-	clear_bit(c->copp_idx, &adm->copp_bitmap[c->afe_port]);
-	list_del(&c->node);
-	spin_unlock_irqrestore(&adm->copps_list_lock, flags);
+	scoped_guard(spinlock_irqsave, &adm->copps_list_lock) {
+		clear_bit(c->copp_idx, &adm->copp_bitmap[c->afe_port]);
+		list_del(&c->node);
+	}
 	kfree(c);
 }
 
@@ -306,9 +299,8 @@ static struct q6copp *q6adm_find_matching_copp(struct q6adm *adm,
 {
 	struct q6copp *c;
 	struct q6copp *ret = NULL;
-	unsigned long flags;
 
-	spin_lock_irqsave(&adm->copps_list_lock, flags);
+	guard(spinlock_irqsave)(&adm->copps_list_lock);
 
 	list_for_each_entry(c, &adm->copps_list, node) {
 		if ((port_id == c->afe_port) && (topology == c->topology) &&
@@ -318,7 +310,6 @@ static struct q6copp *q6adm_find_matching_copp(struct q6adm *adm,
 			kref_get(&c->refcount);
 		}
 	}
-	spin_unlock_irqrestore(&adm->copps_list_lock, flags);
 
 	return ret;
 }
@@ -384,7 +375,6 @@ struct q6copp *q6adm_open(struct device *dev, int port_id, int path, int rate,
 {
 	struct q6adm *adm = dev_get_drvdata(dev->parent);
 	struct q6copp *copp;
-	unsigned long flags;
 	int ret = 0;
 
 	if (port_id < 0) {
@@ -399,15 +389,13 @@ struct q6copp *q6adm_open(struct device *dev, int port_id, int path, int rate,
 		return copp;
 	}
 
-	spin_lock_irqsave(&adm->copps_list_lock, flags);
-	copp = q6adm_alloc_copp(adm, port_id);
-	if (IS_ERR(copp)) {
-		spin_unlock_irqrestore(&adm->copps_list_lock, flags);
-		return ERR_CAST(copp);
-	}
+	scoped_guard(spinlock_irqsave, &adm->copps_list_lock) {
+		copp = q6adm_alloc_copp(adm, port_id);
+		if (IS_ERR(copp))
+			return ERR_CAST(copp);
 
-	list_add_tail(&copp->node, &adm->copps_list);
-	spin_unlock_irqrestore(&adm->copps_list_lock, flags);
+		list_add_tail(&copp->node, &adm->copps_list);
+	}
 
 	kref_init(&copp->refcount);
 	copp->topology = topology;
@@ -518,7 +506,7 @@ int q6adm_matrix_map(struct device *dev, int path,
 		kref_put(&copp->refcount, q6adm_free_copp);
 	}
 
-	mutex_lock(&adm->lock);
+	guard(mutex)(&adm->lock);
 	adm->result.status = 0;
 	adm->result.opcode = 0;
 
@@ -526,7 +514,7 @@ int q6adm_matrix_map(struct device *dev, int path,
 	if (ret < 0) {
 		dev_err(dev, "routing for stream %d failed ret %d\n",
 		       payload_map.session_id, ret);
-		goto fail_cmd;
+		return ret;
 	}
 	ret = wait_event_timeout(adm->matrix_map_wait,
 				 adm->result.opcode == pkt->hdr.opcode,
@@ -534,17 +522,13 @@ int q6adm_matrix_map(struct device *dev, int path,
 	if (!ret) {
 		dev_err(dev, "routing for stream %d failed\n",
 		       payload_map.session_id);
-		ret = -ETIMEDOUT;
-		goto fail_cmd;
+		return -ETIMEDOUT;
 	} else if (adm->result.status > 0) {
 		dev_err(dev, "DSP returned error[%d]\n",
 			adm->result.status);
-		ret = -EINVAL;
-		goto fail_cmd;
+		return -EINVAL;
 	}
 
-fail_cmd:
-	mutex_unlock(&adm->lock);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(q6adm_matrix_map);
