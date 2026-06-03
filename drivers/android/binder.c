@@ -5801,6 +5801,10 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			ret = -EINVAL;
 			goto err;
 		}
+		if (max_threads > rlimit(RLIMIT_NPROC)) {
+			ret = -EINVAL;
+			goto err;
+		}
 		binder_inner_proc_lock(proc);
 		proc->max_threads = max_threads;
 		binder_inner_proc_unlock(proc);
