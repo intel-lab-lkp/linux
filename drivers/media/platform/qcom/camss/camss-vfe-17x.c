@@ -507,21 +507,36 @@ static void vfe_isr_reg_update(struct vfe_device *vfe, enum vfe_line_id line_id)
  */
 static void vfe_isr_wm_done(struct vfe_device *vfe, u8 wm)
 {
-	struct vfe_line *line = &vfe->line[vfe->wm_output_map[wm]];
+	struct vfe_line *line;
 	struct camss_buffer *ready_buf;
 	struct vfe_output *output;
 	unsigned long flags;
+	int wm_output;
 	u32 index;
 	u64 ts = ktime_get_ns();
 
+	/*
+	 * Some VFE modes route data to secondary WMs that aren't mapped
+	 * to output lines. Silently ignore their IRQs.
+	 *
+	 * vfe->wm_output_map[wm] is written from the stream stop/start
+	 * paths under output_lock held as a mutex; this ISR runs in
+	 * atomic context and cannot take it. Snapshot the value once
+	 * with READ_ONCE() so the check below and the array index that
+	 * follows operate on the same value: otherwise a concurrent
+	 * write of VFE_LINE_NONE (-1) between the two loads would let
+	 * the function pass the check and then dereference
+	 * &vfe->line[-1].
+	 */
+	wm_output = READ_ONCE(vfe->wm_output_map[wm]);
+	if (wm_output == VFE_LINE_NONE)
+		return;
+
+	line = &vfe->line[wm_output];
+
 	spin_lock_irqsave(&vfe->output_lock, flags);
 
-	if (vfe->wm_output_map[wm] == VFE_LINE_NONE) {
-		dev_err_ratelimited(vfe->camss->dev,
-				    "Received wm done for unmapped index\n");
-		goto out_unlock;
-	}
-	output = &vfe->line[vfe->wm_output_map[wm]].output;
+	output = &line->output;
 
 	ready_buf = output->buf[0];
 	if (!ready_buf) {
