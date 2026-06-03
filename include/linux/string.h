@@ -25,7 +25,7 @@ extern void *memdup_user_nul(const void __user *, size_t);
  * @n: number of array members to copy
  * @size: size of one array member
  *
- * Return: an ERR_PTR() on failure. Result is physically
+ * Returns: an ERR_PTR() on failure. Result is physically
  * contiguous, to be freed by kfree().
  */
 static inline __realloc_size(2, 3)
@@ -45,7 +45,7 @@ void *memdup_array_user(const void __user *src, size_t n, size_t size)
  * @n: number of array members to copy
  * @size: size of one array member
  *
- * Return: an ERR_PTR() on failure. Result may be not
+ * Returns: an ERR_PTR() on failure. Result may be not
  * physically contiguous. Use kvfree() to free.
  */
 static inline __realloc_size(2, 3)
@@ -106,7 +106,8 @@ ssize_t sized_strscpy(char *, const char *, size_t);
  * doesn't unnecessarily force the tail of the destination buffer to be
  * zero padded. If padding is desired please use strscpy_pad().
  *
- * Returns the number of characters copied in @dst (not including the
+ * Returns:
+ * The number of characters copied in @dst (not including the
  * trailing %NUL) or -E2BIG if @size is 0 or the copy from @src was
  * truncated.
  */
@@ -289,7 +290,7 @@ char *strreplace(char *str, char old, char new);
  * @s: The memory area
  * @n: The size of the area
  *
- * Return: True if the area of memory is all 0's.
+ * Returns: True if the area of memory is all 0's.
  */
 static inline bool mem_is_zero(const void *s, size_t n)
 {
@@ -332,6 +333,10 @@ int __sysfs_match_string(const char * const *array, size_t n, const char *s);
  * @_s: string to match with
  *
  * Helper for __sysfs_match_string(). Calculates the size of @a automatically.
+ *
+ * Returns:
+ * The index of the matching string in the array or negative error code
+ * otherwise.
  */
 #define sysfs_match_string(_a, _s) __sysfs_match_string(_a, ARRAY_SIZE(_a), _s)
 
