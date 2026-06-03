@@ -4,6 +4,7 @@
 
 #ifdef __KERNEL__
 #include <linux/jump_label.h>
+#include <linux/align.h>
 
 /* Written 2002 by Andi Kleen */
 
@@ -99,6 +100,37 @@ static __always_inline void memcpy_flushcache(void *dst, const void *src, size_t
 		}
 	}
 	__memcpy_flushcache(dst, src, cnt);
+}
+
+/*
+ * Only map memcpy_streaming() to memcpy_flushcache() when the destination
+ * is already 8-byte aligned and the size can be handled without cached
+ * head/tail fragments in __memcpy_flushcache().
+ */
+static __always_inline bool memcpy_flushcache_nt_safe(const void *dst,
+						      size_t cnt)
+{
+	unsigned long d = (unsigned long)dst;
+
+	return cnt && IS_ALIGNED(d, 8) && IS_ALIGNED(cnt, 4);
+}
+
+#define __HAVE_ARCH_MEMCPY_STREAMING 1
+static __always_inline void memcpy_streaming(void *dst, const void *src,
+					     size_t cnt)
+{
+	if (!cnt)
+		return;
+
+	if (memcpy_flushcache_nt_safe(dst, cnt))
+		memcpy_flushcache(dst, src, cnt);
+	else
+		memcpy(dst, src, cnt);
+}
+
+static __always_inline void memcpy_streaming_drain(void)
+{
+	asm volatile("sfence" : : : "memory");
 }
 #endif
 
