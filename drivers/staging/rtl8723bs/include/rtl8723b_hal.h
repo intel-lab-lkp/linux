@@ -71,6 +71,8 @@ struct rt_firmware_hdr {
 
 #define DRIVER_EARLY_INT_TIME_8723B  0x05
 #define BCN_DMA_ATIME_INT_TIME_8723B 0x02
+#define TBTT_PROHIBIT_TIME_8723B     0x6404
+#define BCN_AIFS_CFG_8723B           0x660F
 
 /* for 8723B */
 /* TX 32K, RX 16K, Page size 128B for TX, 8B for RX */
