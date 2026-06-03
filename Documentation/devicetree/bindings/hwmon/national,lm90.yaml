@@ -12,38 +12,67 @@ maintainers:
 
 properties:
   compatible:
-    enum:
-      - adi,adm1032
-      - adi,adt7461
-      - adi,adt7461a
-      - adi,adt7481
-      - dallas,max6646
-      - dallas,max6647
-      - dallas,max6649
-      - dallas,max6654
-      - dallas,max6657
-      - dallas,max6658
-      - dallas,max6659
-      - dallas,max6680
-      - dallas,max6681
-      - dallas,max6695
-      - dallas,max6696
-      - gmt,g781
-      - national,lm86
-      - national,lm89
-      - national,lm90
-      - national,lm99
-      - nuvoton,nct7716
-      - nuvoton,nct7717
-      - nuvoton,nct7718
-      - nxp,sa56004
-      - onnn,nct72
-      - onnn,nct214
-      - onnn,nct218
-      - onnn,nct1008
-      - ti,tmp451
-      - ti,tmp461
-      - winbond,w83l771
+    oneOf:
+      - enum:
+          - adi,adm1032
+          - adi,adt7461
+          - adi,adt7461a
+          - adi,adt7481
+          - dallas,max6646
+          - dallas,max6647
+          - dallas,max6649
+          - dallas,max6654
+          - dallas,max6657
+          - dallas,max6658
+          - dallas,max6659
+          - dallas,max6680
+          - dallas,max6681
+          - dallas,max6695
+          - dallas,max6696
+          - gmt,g781
+          - national,lm86
+          - national,lm89
+          - national,lm90
+          - national,lm99
+          - nuvoton,nct7716
+          - nuvoton,nct7717
+          - nuvoton,nct7718
+          - nxp,sa56004
+          - onnn,nct72
+          - onnn,nct214
+          - onnn,nct218
+          - onnn,nct1008
+          - smsc,emc1402
+          - smsc,emc1403
+          - smsc,emc1404
+          - smsc,emc1428
+          - ti,tmp451
+          - ti,tmp461
+          - winbond,w83l771
+
+      - items:
+          - enum:
+              - smsc,emc1412
+              - smsc,emc1422
+              - smsc,emc1442
+          - const: smsc,emc1402
+
+      - items:
+          - enum:
+              - smsc,emc1413
+              - smsc,emc1423
+          - const: smsc,emc1403
+
+      - items:
+          - enum:
+              - smsc,emc1414
+              - smsc,emc1424
+          - const: smsc,emc1404
+
+      - items:
+          - enum:
+              - smsc,emc1438
+          - const: smsc,emc1428
 
   interrupts:
     items:
@@ -169,6 +198,7 @@ allOf:
               - national,lm99
               - nuvoton,nct7718
               - nxp,sa56004
+              - smsc,emc1428
               - winbond,w83l771
     then:
       patternProperties:
@@ -190,6 +220,21 @@ allOf:
           properties:
             temperature-offset-millicelsius:
               maximum: 127937
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - smsc,emc1402
+              - smsc,emc1403
+              - smsc,emc1404
+    then:
+      patternProperties:
+        "^channel@([0-2])$":
+          properties:
+            temperature-offset-millicelsius:
+              maximum: 255875
 
 additionalProperties: false
 
