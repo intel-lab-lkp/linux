@@ -1288,7 +1288,31 @@ void crash_smp_send_stop(void)
 		return;
 	crash_stop = 1;
 
+	/*
+	 * Stop the normal way first: IPI_CPU_STOP escalating to a pseudo-NMI
+	 * IPI. Every CPU that responds saves its state via crash_save_cpu()
+	 * and parks in cpu_park_loop() with its online bit cleared -- the
+	 * standard kdump stop, identical to a kernel without SDEI. Crucially
+	 * those CPUs stay in a clean, potentially-reusable state.
+	 */
 	smp_send_stop();
+
+	/*
+	 * Whatever is still online didn't respond -- typically a CPU wedged
+	 * with interrupts masked. The plain IPI can't reach it, and a fleet
+	 * that declines the pseudo-NMI hot-path cost has no NMI IPI to
+	 * escalate to. Hit only the survivors with the SDEI cross-CPU NMI
+	 * (no-op if SDEI isn't active, or if everything already stopped):
+	 * firmware delivers out of EL3 regardless of PSTATE.DAIF, and the
+	 * handler captures crash_save_cpu() state from the wedged context
+	 * before parking the CPU.
+	 *
+	 * SDEI is deliberately last: an SDEI-stopped CPU never completes its
+	 * event (it parks inside the handler, so EL3 retains its dispatch
+	 * slot until reset), which is strictly less recoverable than a normal
+	 * stop. We pay that only for CPUs that left no other way to reach them.
+	 */
+	sdei_nmi_crash_smp_send_stop();
 
 	sdei_handler_abort();
 }

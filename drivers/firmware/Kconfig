@@ -49,6 +49,7 @@ config ARM_SDEI_NMI
 	      hung-task auxiliary dumps)
 	    - the hardlockup watchdog backend, when HARDLOCKUP_DETECTOR is
 	      also enabled
+	    - crash_smp_send_stop()              (panic / kdump path)
 
 	  The driver registers a handler for the SDEI software-signalled
 	  event (event 0) and reaches a target CPU by signalling it with

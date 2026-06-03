@@ -29,6 +29,11 @@
  *     hardlockup_all_cpu_backtrace, soft-lockup/hung-task secondary
  *     dumps all reach interrupt-masked CPUs.
  *
+ *   - sdei_nmi_crash_smp_send_stop() — override for arm64's
+ *     crash_smp_send_stop(); the panic/kdump last resort for CPUs that
+ *     didn't answer the normal stop IPI, capturing the wedged context
+ *     into the vmcore before parking the CPU.
+ *
  *   - the hardlockup-detector backend (watchdog_hardlockup_enable/
  *     disable/probe()), when CONFIG_HARDLOCKUP_DETECTOR is also on.
  *     ARM_SDEI_NMI selects HAVE_HARDLOCKUP_DETECTOR_ARCH, so the
@@ -50,11 +55,15 @@
 #define pr_fmt(fmt) "sdei_nmi: " fmt
 
 #include <linux/arm_sdei.h>
+#include <linux/cpu.h>
 #include <linux/cpufreq.h>
 #include <linux/cpumask.h>
+#include <linux/delay.h>
+#include <linux/err.h>
 #include <linux/hrtimer.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/kexec.h>
 #include <linux/nmi.h>
 #include <linux/percpu-defs.h>
 #include <linux/perf_event.h>
@@ -72,8 +81,66 @@ static bool sdei_nmi_available;
 
 #define SDEI_NMI_EVENT			0
 
+/*
+ * Crash-stop dispatch lives on the same SDEI event 0 as everything else.
+ * The requesting CPU sets sdei_nmi_crash_stop_requested for each target
+ * before signalling event 0; the target's handler clears it, saves crash
+ * state, parks, and sets sdei_nmi_crash_stop_acked so the requester knows
+ * the target is down.
+ *
+ * Using a per-CPU flag rather than a separate SDEI event avoids needing
+ * extra registrations from firmware. The SDEI_EVENT_SIGNAL SMC is itself
+ * a write barrier, so a WRITE_ONCE() before the signal is sufficient
+ * ordering against the handler's READ_ONCE() on the target.
+ */
+static DEFINE_PER_CPU(unsigned long, sdei_nmi_crash_stop_requested);
+static DEFINE_PER_CPU(unsigned long, sdei_nmi_crash_stop_acked);
+
 static int sdei_nmi_handler(u32 event, struct pt_regs *regs, void *arg)
 {
+	int cpu = smp_processor_id();
+
+	if (READ_ONCE(*this_cpu_ptr(&sdei_nmi_crash_stop_requested))) {
+		WRITE_ONCE(*this_cpu_ptr(&sdei_nmi_crash_stop_requested), 0);
+
+		/*
+		 * Capture the wedged context for kdump while pt_regs still
+		 * points at the interrupted PC. This is the main motivation
+		 * for using SDEI here: the plain IPI stop path can't reach an
+		 * interrupt-masked CPU (and the fleet declines pseudo-NMI to
+		 * keep the IRQ-mask hot path cheap), so crash_save_cpu() for
+		 * that CPU would otherwise record nothing useful.
+		 */
+		crash_save_cpu(regs, cpu);
+		set_cpu_online(cpu, false);
+
+		/* publish the crash state/offline before the requester sees the ack */
+		smp_wmb();
+		WRITE_ONCE(*this_cpu_ptr(&sdei_nmi_crash_stop_acked), 1);
+
+		/*
+		 * Park forever from within the SDEI handler. We deliberately
+		 * do NOT issue SDEI_EVENT_COMPLETE: the framework's return
+		 * path restores firmware's saved interrupted context, which
+		 * would land the CPU back wherever it was running (often
+		 * do_idle, which then notices cpu_is_offline=true and BUGs
+		 * at cpuhp_report_idle_dead). Returning the modified pt_regs
+		 * doesn't help -- arch/arm64/kernel/sdei.c::do_sdei_event
+		 * only honours a PC override via its IRQ-state heuristic
+		 * and otherwise hands EL3 its own saved-context slot back.
+		 *
+		 * Trade-off: EL3 firmware retains ~one saved-context slot
+		 * per parked CPU until the next hardware reset (~hundreds of
+		 * bytes per CPU). The CPU itself is parked in cpu_park_loop
+		 * exactly as if IPI_CPU_STOP had stopped it; recoverability
+		 * is unchanged versus the existing path (neither is
+		 * recoverable without hardware reset, since PSCI sees the
+		 * CPU as ALREADY_ON in both cases).
+		 */
+		cpu_park_loop();
+		/* unreachable */
+	}
+
 	/*
 	 * Both consumers no-op on a CPU that wasn't actually requested:
 	 * nmi_cpu_backtrace() unless this CPU's bit is set in the global
@@ -84,7 +151,7 @@ static int sdei_nmi_handler(u32 event, struct pt_regs *regs, void *arg)
 	 */
 	nmi_cpu_backtrace(regs);
 #ifdef CONFIG_HARDLOCKUP_DETECTOR_COUNTS_HRTIMER
-	watchdog_hardlockup_check(smp_processor_id(), regs);
+	watchdog_hardlockup_check(cpu, regs);
 #endif
 	return SDEI_EV_HANDLED;
 }
@@ -130,6 +197,74 @@ bool sdei_nmi_trigger_cpumask_backtrace(const cpumask_t *mask, int exclude_cpu)
 
 	nmi_trigger_cpumask_backtrace(mask, exclude_cpu,
 				      sdei_nmi_raise_backtrace);
+	return true;
+}
+
+/*
+ * Last-resort half of arm64's crash_smp_send_stop() (see
+ * arch/arm64/kernel/smp.c). The caller runs the normal IPI / pseudo-NMI
+ * stop first; whatever is left in cpu_online_mask by the time we're
+ * called are the CPUs that didn't respond -- wedged with interrupts
+ * masked, unreachable by those paths. We snapshot that residual mask,
+ * set each survivor's per-CPU crash-stop request flag, signal event 0
+ * at it, and poll for acks. The handler captures crash_save_cpu() state
+ * and parks the CPU (without completing the SDEI event, see
+ * sdei_nmi_handler()).
+ *
+ * Because SDEI-stopped CPUs are less recoverable than normally-stopped
+ * ones, this is intentionally the fallback, not the first choice -- it
+ * only ever runs against CPUs the normal path already gave up on.
+ *
+ * Returns true when SDEI was active and this path ran (even if some CPU
+ * failed to ack within the timeout, or there were no survivors to stop);
+ * false when SDEI isn't active, leaving the caller's normal-path result
+ * as the final word.
+ */
+bool sdei_nmi_crash_smp_send_stop(void)
+{
+	unsigned int this_cpu, cpu, remaining;
+	unsigned long timeout;
+	cpumask_t mask;
+
+	if (!sdei_nmi_available)
+		return false;
+
+	this_cpu = smp_processor_id();
+	cpumask_copy(&mask, cpu_online_mask);
+	cpumask_clear_cpu(this_cpu, &mask);
+	if (cpumask_empty(&mask))
+		return true;
+
+	for_each_cpu(cpu, &mask) {
+		WRITE_ONCE(per_cpu(sdei_nmi_crash_stop_acked, cpu), 0);
+		WRITE_ONCE(per_cpu(sdei_nmi_crash_stop_requested, cpu), 1);
+	}
+	/* Publish flags before the SMCs read them on the target side. */
+	smp_wmb();
+
+	for_each_cpu(cpu, &mask)
+		sdei_nmi_fire(cpu);
+
+	/*
+	 * Poll up to 100ms -- same order as the kernel's existing pseudo-NMI
+	 * stop wait (10ms) plus headroom for the SDEI round-trip on slow
+	 * firmware.
+	 */
+	timeout = USEC_PER_MSEC * 100;
+	while (timeout--) {
+		remaining = 0;
+		for_each_cpu(cpu, &mask)
+			if (!READ_ONCE(per_cpu(sdei_nmi_crash_stop_acked, cpu)))
+				remaining++;
+		if (!remaining)
+			break;
+		udelay(1);
+	}
+
+	if (remaining)
+		pr_warn("crash_stop: %u CPU(s) did not ack within 100ms\n",
+			remaining);
+
 	return true;
 }
 

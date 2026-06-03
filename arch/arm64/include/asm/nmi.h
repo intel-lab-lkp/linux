@@ -13,9 +13,15 @@
  */
 #ifdef CONFIG_ARM_SDEI_NMI
 bool sdei_nmi_trigger_cpumask_backtrace(const cpumask_t *mask, int exclude_cpu);
+bool sdei_nmi_crash_smp_send_stop(void);
 #else
 static inline bool sdei_nmi_trigger_cpumask_backtrace(const cpumask_t *mask,
 						      int exclude_cpu)
+{
+	return false;
+}
+
+static inline bool sdei_nmi_crash_smp_send_stop(void)
 {
 	return false;
 }
