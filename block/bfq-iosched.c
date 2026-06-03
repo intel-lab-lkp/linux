@@ -2645,6 +2645,9 @@ static void bfq_end_wr(struct bfq_data *bfqd)
 	struct bfq_queue *bfqq;
 	int i;
 
+#ifdef CONFIG_BFQ_GROUP_IOSCHED
+	mutex_lock(&bfqd->queue->blkcg_mutex);
+#endif
 	spin_lock_irq(&bfqd->lock);
 
 	for (i = 0; i < bfqd->num_actuators; i++) {
@@ -2656,6 +2659,9 @@ static void bfq_end_wr(struct bfq_data *bfqd)
 	bfq_end_wr_async(bfqd);
 
 	spin_unlock_irq(&bfqd->lock);
+#ifdef CONFIG_BFQ_GROUP_IOSCHED
+	mutex_unlock(&bfqd->queue->blkcg_mutex);
+#endif
 }
 
 static sector_t bfq_io_struct_pos(void *io_struct, bool request)
