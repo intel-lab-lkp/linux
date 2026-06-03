@@ -106,7 +106,7 @@ static struct scsi_driver sr_template = {
 static unsigned long sr_index_bits[SR_DISKS / BITS_PER_LONG];
 static DEFINE_SPINLOCK(sr_index_lock);
 
-static struct lock_class_key sr_bio_compl_lkclass;
+static struct gendisk_lkclass sr_bio_compl_lkclass;
 
 static int sr_open(struct cdrom_device_info *, int);
 static void sr_release(struct cdrom_device_info *);

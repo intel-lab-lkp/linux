@@ -61,7 +61,7 @@ impl NullBlkDevice {
             .logical_block_size(block_size)?
             .physical_block_size(block_size)?
             .rotational(rotational)
-            .build(fmt!("{}", name.to_str()?), tagset, queue_data)
+            .build(fmt!("{}", name.to_str()?), tagset, queue_data, kernel::my_gendisk_lkclass!())
     }
 }
 

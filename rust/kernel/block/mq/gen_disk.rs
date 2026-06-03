@@ -11,7 +11,6 @@ use crate::{
     error::{self, from_err_ptr, Result},
     fmt::{self, Write},
     prelude::*,
-    static_lock_class,
     str::NullTerminatedFormatter,
     sync::Arc,
     types::{ForeignOwnable, ScopeGuard},
@@ -36,6 +35,19 @@ impl Default for GenDiskBuilder {
             capacity_sectors: 0,
         }
     }
+}
+
+/// Helper macro to generate a unique caller-local static lock class struct
+#[macro_export]
+macro_rules! my_gendisk_lkclass {
+    () => {{
+        static mut LKCLASS: $crate::bindings::gendisk_lkclass = $crate::bindings::gendisk_lkclass {
+            bio_lkclass: const { unsafe { ::core::mem::zeroed() } },
+            open_mutex_lkclass: const { unsafe { ::core::mem::zeroed() } },
+        };
+
+        unsafe { &raw mut LKCLASS }
+    }};
 }
 
 impl GenDiskBuilder {
@@ -100,6 +112,7 @@ impl GenDiskBuilder {
         name: fmt::Arguments<'_>,
         tagset: Arc<TagSet<T>>,
         queue_data: T::QueueData,
+        lkclass: *mut bindings::gendisk_lkclass,
     ) -> Result<GenDisk<T>> {
         let data = queue_data.into_foreign();
         let recover_data = ScopeGuard::new(|| {
@@ -121,7 +134,7 @@ impl GenDiskBuilder {
                 tagset.raw_tag_set(),
                 &mut lim,
                 data,
-                static_lock_class!().as_ptr(),
+                lkclass,
             )
         })?;
 
