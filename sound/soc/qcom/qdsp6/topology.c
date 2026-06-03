@@ -32,9 +32,8 @@ static struct audioreach_graph_info *audioreach_tplg_alloc_graph_info(struct q6a
 	struct audioreach_graph_info *info;
 	int ret;
 
-	mutex_lock(&apm->lock);
-	info = idr_find(&apm->graph_info_idr, graph_id);
-	mutex_unlock(&apm->lock);
+	scoped_guard(mutex, &apm->lock)
+		info = idr_find(&apm->graph_info_idr, graph_id);
 
 	if (info) {
 		*found = true;
@@ -48,9 +47,8 @@ static struct audioreach_graph_info *audioreach_tplg_alloc_graph_info(struct q6a
 
 	INIT_LIST_HEAD(&info->sg_list);
 
-	mutex_lock(&apm->lock);
-	ret = idr_alloc_u32(&apm->graph_info_idr, info, &graph_id, graph_id, GFP_KERNEL);
-	mutex_unlock(&apm->lock);
+	scoped_guard(mutex, &apm->lock)
+		ret = idr_alloc_u32(&apm->graph_info_idr, info, &graph_id, graph_id, GFP_KERNEL);
 
 	if (ret < 0) {
 		dev_err(apm->dev, "Failed to allocate Graph ID (%x)\n", graph_id);
@@ -82,9 +80,8 @@ static struct audioreach_sub_graph *audioreach_tplg_alloc_sub_graph(struct q6apm
 		return ERR_PTR(-EINVAL);
 
 	/* Find if there is already a matching sub-graph */
-	mutex_lock(&apm->lock);
-	sg = idr_find(&apm->sub_graphs_idr, sub_graph_id);
-	mutex_unlock(&apm->lock);
+	scoped_guard(mutex, &apm->lock)
+		sg = idr_find(&apm->sub_graphs_idr, sub_graph_id);
 
 	if (sg) {
 		*found = true;
@@ -98,9 +95,10 @@ static struct audioreach_sub_graph *audioreach_tplg_alloc_sub_graph(struct q6apm
 
 	INIT_LIST_HEAD(&sg->container_list);
 
-	mutex_lock(&apm->lock);
-	ret = idr_alloc_u32(&apm->sub_graphs_idr, sg, &sub_graph_id, sub_graph_id, GFP_KERNEL);
-	mutex_unlock(&apm->lock);
+	scoped_guard(mutex, &apm->lock)
+		ret = idr_alloc_u32(&apm->sub_graphs_idr, sg,
+				&sub_graph_id, sub_graph_id,
+				GFP_KERNEL);
 
 	if (ret < 0) {
 		dev_err(apm->dev, "Failed to allocate Sub-Graph Instance ID (%x)\n", sub_graph_id);
@@ -124,9 +122,8 @@ static struct audioreach_container *audioreach_tplg_alloc_container(struct q6apm
 	if (!container_id)
 		return ERR_PTR(-EINVAL);
 
-	mutex_lock(&apm->lock);
-	cont = idr_find(&apm->containers_idr, container_id);
-	mutex_unlock(&apm->lock);
+	scoped_guard(mutex, &apm->lock)
+		cont = idr_find(&apm->containers_idr, container_id);
 
 	if (cont) {
 		*found = true;
@@ -140,9 +137,10 @@ static struct audioreach_container *audioreach_tplg_alloc_container(struct q6apm
 
 	INIT_LIST_HEAD(&cont->modules_list);
 
-	mutex_lock(&apm->lock);
-	ret = idr_alloc_u32(&apm->containers_idr, cont, &container_id, container_id, GFP_KERNEL);
-	mutex_unlock(&apm->lock);
+	scoped_guard(mutex, &apm->lock)
+		ret = idr_alloc_u32(&apm->containers_idr, cont,
+				&container_id, container_id,
+				GFP_KERNEL);
 
 	if (ret < 0) {
 		dev_err(apm->dev, "Failed to allocate Container Instance ID (%x)\n", container_id);
@@ -167,9 +165,8 @@ static struct audioreach_module *audioreach_tplg_alloc_module(struct q6apm *apm,
 	struct audioreach_module *mod;
 	int ret;
 
-	mutex_lock(&apm->lock);
-	mod = idr_find(&apm->modules_idr, module_id);
-	mutex_unlock(&apm->lock);
+	scoped_guard(mutex, &apm->lock)
+		mod = idr_find(&apm->modules_idr, module_id);
 
 	if (mod) {
 		*found = true;
@@ -180,15 +177,17 @@ static struct audioreach_module *audioreach_tplg_alloc_module(struct q6apm *apm,
 	if (!mod)
 		return ERR_PTR(-ENOMEM);
 
-	mutex_lock(&apm->lock);
-	if (!module_id) { /* alloc module id dynamically */
-		ret = idr_alloc_cyclic(&apm->modules_idr, mod,
-				       AR_MODULE_DYNAMIC_INSTANCE_ID_START,
-				       AR_MODULE_DYNAMIC_INSTANCE_ID_END, GFP_KERNEL);
-	} else {
-		ret = idr_alloc_u32(&apm->modules_idr, mod, &module_id, module_id, GFP_KERNEL);
+	scoped_guard(mutex, &apm->lock) {
+		if (!module_id) { /* alloc module id dynamically */
+			ret = idr_alloc_cyclic(&apm->modules_idr, mod,
+					       AR_MODULE_DYNAMIC_INSTANCE_ID_START,
+					       AR_MODULE_DYNAMIC_INSTANCE_ID_END, GFP_KERNEL);
+		} else {
+			ret = idr_alloc_u32(&apm->modules_idr, mod,
+					&module_id, module_id,
+					GFP_KERNEL);
+		}
 	}
-	mutex_unlock(&apm->lock);
 
 	if (ret < 0) {
 		dev_err(apm->dev, "Failed to allocate Module Instance ID (%x)\n", module_id);
@@ -966,7 +965,7 @@ static int audioreach_widget_unload(struct snd_soc_component *scomp,
 
 	cont = mod->container;
 
-	mutex_lock(&apm->lock);
+	guard(mutex)(&apm->lock);
 	idr_remove(&apm->modules_idr, mod->instance_id);
 	cont->num_modules--;
 
@@ -996,8 +995,6 @@ static int audioreach_widget_unload(struct snd_soc_component *scomp,
 			}
 		}
 	}
-
-	mutex_unlock(&apm->lock);
 
 	return 0;
 }
@@ -1106,9 +1103,8 @@ static void audioreach_connect_sub_graphs(struct q6apm *apm,
 {
 	struct audioreach_graph_info *info;
 
-	mutex_lock(&apm->lock);
-	info = idr_find(&apm->graph_info_idr, m2->graph_id);
-	mutex_unlock(&apm->lock);
+	scoped_guard(mutex, &apm->lock)
+		info = idr_find(&apm->graph_info_idr, m2->graph_id);
 
 	if (connect) {
 		info->src_mod_inst_id = m1->module_instance_id;
@@ -1130,9 +1126,8 @@ static bool audioreach_is_vmixer_connected(struct q6apm *apm,
 {
 	const struct audioreach_graph_info *info;
 
-	mutex_lock(&apm->lock);
-	info = idr_find(&apm->graph_info_idr, m2->graph_id);
-	mutex_unlock(&apm->lock);
+	scoped_guard(mutex, &apm->lock)
+		info = idr_find(&apm->graph_info_idr, m2->graph_id);
 
 	if (info->dst_mod_inst_id == m2->module_instance_id &&
 	    info->src_mod_inst_id == m1->module_instance_id)
