@@ -1113,6 +1113,23 @@ DECLARE_RTL_COND(rtl_ocp_gphy_cond)
 	return RTL_R32(tp, GPHY_OCP) & OCPAR_FLAG;
 }
 
+/* Work around a hw issue with RTL8168g PHY, the quirk disables
+ * PHY MCU interrupts before PHY power-down.
+ */
+static void rtl8168g_phy_suspend_quirk(struct rtl8169_private *tp, int value)
+{
+	switch (tp->mac_version) {
+	case RTL_GIGA_MAC_VER_40:
+		if (value & BMCR_RESET || !(value & BMCR_PDOWN))
+			rtl_eri_set_bits(tp, 0x1a8, 0xfc000000);
+		else
+			rtl_eri_clear_bits(tp, 0x1a8, 0xfc000000);
+		break;
+	default:
+		break;
+	}
+};
+
 static void r8168_phy_ocp_write(struct rtl8169_private *tp, u32 reg, u32 data)
 {
 	if (rtl_ocp_reg_failure(reg))
@@ -1123,19 +1140,20 @@ static void r8168_phy_ocp_write(struct rtl8169_private *tp, u32 reg, u32 data)
 	rtl_loop_wait_low(tp, &rtl_ocp_gphy_cond, 25, 10);
 }
 
-static int r8168_phy_ocp_read(struct rtl8169_private *tp, u32 reg)
+static void r8168g_mdio_write(struct rtl8169_private *tp, int reg, int value)
 {
-	if (rtl_ocp_reg_failure(reg))
-		return 0;
+	if (reg == 0x1f) {
+		tp->ocp_base = value ? value << 4 : OCP_STD_PHY_BASE;
+		return;
+	}
 
-	/* Return dummy MII_PHYSID2 in SFP mode to match SFP PHY driver */
-	if (tp->sfp_mode && reg == (OCP_STD_PHY_BASE + 2 * MII_PHYSID2))
-		return PHY_ID_RTL_DUMMY_SFP & 0xffff;
+	if (tp->ocp_base != OCP_STD_PHY_BASE)
+		reg -= 0x10;
 
-	RTL_W32(tp, GPHY_OCP, reg << 15);
+	if (tp->ocp_base == OCP_STD_PHY_BASE && reg == MII_BMCR)
+		rtl8168g_phy_suspend_quirk(tp, value);
 
-	return rtl_loop_wait_high(tp, &rtl_ocp_gphy_cond, 25, 10) ?
-		(RTL_R32(tp, GPHY_OCP) & 0xffff) : -ETIMEDOUT;
+	r8168_phy_ocp_write(tp, tp->ocp_base + reg * 2, value);
 }
 
 static void __r8168_mac_ocp_write(struct rtl8169_private *tp, u32 reg, u32 data)
@@ -1175,6 +1193,21 @@ static u16 r8168_mac_ocp_read(struct rtl8169_private *tp, u32 reg)
 	raw_spin_unlock_irqrestore(&tp->mac_ocp_lock, flags);
 
 	return val;
+}
+
+static int r8168_phy_ocp_read(struct rtl8169_private *tp, u32 reg)
+{
+	if (rtl_ocp_reg_failure(reg))
+		return 0;
+
+	/* Return dummy MII_PHYSID2 in SFP mode to match SFP PHY driver */
+	if (tp->sfp_mode && reg == (OCP_STD_PHY_BASE + 2 * MII_PHYSID2))
+		return PHY_ID_RTL_DUMMY_SFP & 0xffff;
+
+	RTL_W32(tp, GPHY_OCP, reg << 15);
+
+	return rtl_loop_wait_high(tp, &rtl_ocp_gphy_cond, 25, 10) ?
+		(RTL_R32(tp, GPHY_OCP) & 0xffff) : -ETIMEDOUT;
 }
 
 static void r8168_mac_ocp_modify(struct rtl8169_private *tp, u32 reg, u16 mask,
@@ -1227,39 +1260,6 @@ static void rtl_sfp_reset(struct rtl8169_private *tp)
 {
 	if (tp->mac_version == RTL_GIGA_MAC_VER_80)
 		r8127_sfp_sds_phy_reset(tp);
-}
-
-/* Work around a hw issue with RTL8168g PHY, the quirk disables
- * PHY MCU interrupts before PHY power-down.
- */
-static void rtl8168g_phy_suspend_quirk(struct rtl8169_private *tp, int value)
-{
-	switch (tp->mac_version) {
-	case RTL_GIGA_MAC_VER_40:
-		if (value & BMCR_RESET || !(value & BMCR_PDOWN))
-			rtl_eri_set_bits(tp, 0x1a8, 0xfc000000);
-		else
-			rtl_eri_clear_bits(tp, 0x1a8, 0xfc000000);
-		break;
-	default:
-		break;
-	}
-};
-
-static void r8168g_mdio_write(struct rtl8169_private *tp, int reg, int value)
-{
-	if (reg == 0x1f) {
-		tp->ocp_base = value ? value << 4 : OCP_STD_PHY_BASE;
-		return;
-	}
-
-	if (tp->ocp_base != OCP_STD_PHY_BASE)
-		reg -= 0x10;
-
-	if (tp->ocp_base == OCP_STD_PHY_BASE && reg == MII_BMCR)
-		rtl8168g_phy_suspend_quirk(tp, value);
-
-	r8168_phy_ocp_write(tp, tp->ocp_base + reg * 2, value);
 }
 
 static int r8168g_mdio_read(struct rtl8169_private *tp, int reg)
