@@ -86,8 +86,10 @@ struct xe_pagefault {
 		u8 engine_class;
 		/** @consumer.engine_instance: engine instance */
 		u8 engine_instance;
+		/** @consumer.srcid: ID of hardware unit producing fault */
+		u8 srcid;
 		/** @consumer.reserved: reserved bits for future expansion */
-		u64 reserved;
+		u8 reserved[7];
 	} consumer;
 	/**
 	 * @producer: State for the producer (i.e., HW/FW interface). Populated
