@@ -286,7 +286,7 @@ static void mox_ecc_number_to_bin(void *dst, const u32 *src)
 
 	cpu_to_be32_array(tmp, src, MOX_ECC_NUM_WORDS);
 
-	memcpy(dst, (void *)tmp + 2, MOX_ECC_NUM_LEN);
+	memcpy(dst, (u8 *)tmp + 2, MOX_ECC_NUM_LEN);
 }
 
 static void mox_ecc_public_key_to_bin(void *dst, u32 src_first,
