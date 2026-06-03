@@ -6037,43 +6037,37 @@ static void init_kvm_softmmu(struct kvm_vcpu *vcpu,
 	context->w.get_guest_pgd     = get_guest_cr3;
 }
 
-static void init_kvm_nested_mmu(struct kvm_vcpu *vcpu,
+static void init_kvm_ngva_walk(struct kvm_vcpu *vcpu,
 				union kvm_cpu_role new_mode)
 {
-	struct kvm_mmu *g_context = &vcpu->arch.nested_mmu;
+	struct kvm_pagewalk *g_context = &vcpu->arch.ngva_walk;
 
-	if (new_mode.as_u64 == g_context->w.cpu_role.as_u64)
+	if (new_mode.as_u64 == g_context->cpu_role.as_u64)
 		return;
 
-	g_context->w.cpu_role.as_u64   = new_mode.as_u64;
-	g_context->w.inject_page_fault = kvm_inject_page_fault;
-	g_context->w.get_pdptr         = kvm_pdptr_read;
-	g_context->w.get_guest_pgd     = get_guest_cr3;
-
-	/*
-	 * L2 page tables are never shadowed, so there is no need to sync
-	 * SPTEs.
-	 */
-	g_context->sync_spte         = NULL;
+	g_context->cpu_role.as_u64   = new_mode.as_u64;
+	g_context->inject_page_fault = kvm_inject_page_fault;
+	g_context->get_pdptr         = kvm_pdptr_read;
+	g_context->get_guest_pgd     = get_guest_cr3;
 
 	/*
 	 * Note that arch.mmu->gva_to_gpa translates l2_gpa to l1_gpa using
 	 * L1's nested page tables (e.g. EPT12). The nested translation
-	 * of l2_gva to l1_gpa is done by arch.nested_mmu.gva_to_gpa using
+	 * of l2_gva to l1_gpa is done by arch.ngva_walk.gva_to_gpa using
 	 * L2's page tables as the first level of translation and L1's
 	 * nested page tables as the second level of translation. Basically
-	 * the gva_to_gpa functions between mmu and nested_mmu are swapped.
+	 * the gva_to_gpa functions between mmu and ngva_walk are swapped.
 	 */
 	if (!is_paging(vcpu))
-		g_context->w.gva_to_gpa = nonpaging_gva_to_gpa;
+		g_context->gva_to_gpa = nonpaging_gva_to_gpa;
 	else if (is_long_mode(vcpu))
-		g_context->w.gva_to_gpa = paging64_gva_to_gpa;
+		g_context->gva_to_gpa = paging64_gva_to_gpa;
 	else if (is_pae(vcpu))
-		g_context->w.gva_to_gpa = paging64_gva_to_gpa;
+		g_context->gva_to_gpa = paging64_gva_to_gpa;
 	else
-		g_context->w.gva_to_gpa = paging32_gva_to_gpa;
+		g_context->gva_to_gpa = paging32_gva_to_gpa;
 
-	reset_guest_paging_metadata(vcpu, &g_context->w);
+	reset_guest_paging_metadata(vcpu, g_context);
 }
 
 void kvm_init_mmu(struct kvm_vcpu *vcpu)
@@ -6082,7 +6076,7 @@ void kvm_init_mmu(struct kvm_vcpu *vcpu)
 	union kvm_cpu_role cpu_role = kvm_calc_cpu_role(vcpu, &regs);
 
 	if (mmu_is_nested(vcpu))
-		init_kvm_nested_mmu(vcpu, cpu_role);
+		init_kvm_ngva_walk(vcpu, cpu_role);
 	else if (tdp_enabled)
 		init_kvm_tdp_mmu(vcpu, cpu_role);
 	else
@@ -6106,10 +6100,9 @@ void kvm_mmu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	 */
 	vcpu->arch.root_mmu.root_role.invalid = 1;
 	vcpu->arch.guest_mmu.root_role.invalid = 1;
-	vcpu->arch.nested_mmu.root_role.invalid = 1;
 	vcpu->arch.root_mmu.w.cpu_role.ext.valid = 0;
 	vcpu->arch.guest_mmu.w.cpu_role.ext.valid = 0;
-	vcpu->arch.nested_mmu.w.cpu_role.ext.valid = 0;
+	vcpu->arch.ngva_walk.cpu_role.ext.valid = 0;
 	kvm_mmu_reset_context(vcpu);
 
 	KVM_BUG_ON(!kvm_can_set_cpuid_and_feature_msrs(vcpu), vcpu->kvm);
@@ -6611,7 +6604,7 @@ void kvm_mmu_invalidate_addr(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 			return;
 
 		kvm_x86_call(flush_tlb_gva)(vcpu, addr);
-		if (w == &vcpu->arch.nested_mmu.w)
+		if (w == &vcpu->arch.ngva_walk)
 			return;
 	}
 

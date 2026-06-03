@@ -499,7 +499,7 @@ static void nested_ept_init_mmu_context(struct kvm_vcpu *vcpu)
 
 	vcpu->arch.mmu->w.inject_page_fault = nested_ept_inject_page_fault;
 
-	vcpu->arch.gva_walk              = &vcpu->arch.nested_mmu.w;
+	vcpu->arch.gva_walk              = &vcpu->arch.ngva_walk;
 }
 
 static void nested_ept_uninit_mmu_context(struct kvm_vcpu *vcpu)

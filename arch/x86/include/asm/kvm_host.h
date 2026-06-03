@@ -896,11 +896,10 @@ struct kvm_vcpu_arch {
 	 * walking and not for faulting since we never handle l2 page faults on
 	 * the host.
 	 */
-	struct kvm_mmu nested_mmu;
+	struct kvm_pagewalk ngva_walk;
 
 	/*
-	 * Pointer to the mmu context currently used for
-	 * gva_to_gpa translations.
+	 * Pagewalk context used for gva_to_gpa translations.
 	 */
 	struct kvm_pagewalk *gva_walk;
 
