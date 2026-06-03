@@ -383,7 +383,7 @@ SYM_FUNC_START(call_on_irq_stack)
 	addi	sp, sp, -STACKFRAME_SIZE_ON_STACK
 	REG_S	ra, STACKFRAME_RA(sp)
 	REG_S	s0, STACKFRAME_FP(sp)
-	addi	s0, sp, STACKFRAME_SIZE_ON_STACK
+	addi	s0, sp, STACKFRAME_SIZE
 
 	/* Switch to the per-CPU shadow call stack */
 	scs_save_current
@@ -399,7 +399,7 @@ SYM_FUNC_START(call_on_irq_stack)
 	scs_load_current
 
 	/* Switch back to the thread stack and restore ra and s0 */
-	addi	sp, s0, -STACKFRAME_SIZE_ON_STACK
+	addi	sp, s0, -STACKFRAME_SIZE
 	REG_L	ra, STACKFRAME_RA(sp)
 	REG_L	s0, STACKFRAME_FP(sp)
 	addi	sp, sp, STACKFRAME_SIZE_ON_STACK
