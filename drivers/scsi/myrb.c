@@ -3115,6 +3115,7 @@ static int DAC960_PD_hw_init(struct pci_dev *pdev,
 	if (!request_region(cb->io_addr, 0x80, "myrb")) {
 		dev_err(&pdev->dev, "IO port 0x%lx busy\n",
 			(unsigned long)cb->io_addr);
+		cb->io_addr = 0;
 		return -EBUSY;
 	}
 	DAC960_PD_disable_intr(base);
@@ -3281,6 +3282,7 @@ static int DAC960_P_hw_init(struct pci_dev *pdev,
 	if (!request_region(cb->io_addr, 0x80, "myrb")) {
 		dev_err(&pdev->dev, "IO port 0x%lx busy\n",
 			(unsigned long)cb->io_addr);
+		cb->io_addr = 0;
 		return -EBUSY;
 	}
 	DAC960_PD_disable_intr(base);
