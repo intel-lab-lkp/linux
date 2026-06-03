@@ -39,6 +39,7 @@ config ARM_SDE_INTERFACE
 config ARM_SDEI_NMI
 	bool "SDEI-based cross-CPU NMI service (arm64)"
 	depends on ARM64 && ARM_SDE_INTERFACE
+	select HARDLOCKUP_DETECTOR_COUNTS_HRTIMER if HARDLOCKUP_DETECTOR
 	help
 	  Provides SDEI-based cross-CPU NMI delivery for hooks that need
 	  to reach interrupt-masked CPUs on silicon that lacks FEAT_NMI:
@@ -46,6 +47,8 @@ config ARM_SDEI_NMI
 	    - arch_trigger_cpumask_backtrace()  (sysrq-l, RCU stalls,
 	      hardlockup_all_cpu_backtrace, soft-lockup secondary dumps,
 	      hung-task auxiliary dumps)
+	    - the hardlockup watchdog backend, when HARDLOCKUP_DETECTOR is
+	      also enabled
 
 	  The driver registers a handler for the SDEI software-signalled
 	  event (event 0) and reaches a target CPU by signalling it with
