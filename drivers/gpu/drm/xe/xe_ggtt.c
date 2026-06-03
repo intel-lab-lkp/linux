@@ -115,6 +115,8 @@ struct xe_ggtt {
 	u64 start;
 	/** @size: Total usable size of this GGTT */
 	u64 size;
+	/** @entire_size: complete size of the accessible GGTT, reserved regions inclusive */
+	u64 entire_size;
 	/**
 	 * @flags: Flags for this GGTT.
 	 * Acceptable flags:
@@ -406,7 +408,8 @@ int xe_ggtt_init_early(struct xe_ggtt *ggtt)
 			return -ENOMEM;
 		}
 		ggtt_start = wopcm;
-		ggtt_size = (gsm_size / 8) * (u64)XE_PAGE_SIZE - ggtt_start;
+		ggtt->entire_size = (gsm_size / 8) * (u64)XE_PAGE_SIZE;
+		ggtt_size = ggtt->entire_size - ggtt_start;
 	} else {
 		ggtt_start = xe_tile_sriov_vf_ggtt_base(ggtt->tile);
 		ggtt_size = xe_tile_sriov_vf_ggtt(ggtt->tile);
@@ -417,6 +420,7 @@ int xe_ggtt_init_early(struct xe_ggtt *ggtt)
 				    ggtt_start, ggtt_start + ggtt_size - 1);
 			return -ERANGE;
 		}
+		ggtt->entire_size = ggtt_size;
 	}
 
 	ggtt->gsm = ggtt->tile->mmio.regs + SZ_8M;
@@ -460,6 +464,10 @@ static void xe_ggtt_initial_clear(struct xe_ggtt *ggtt)
 	mutex_lock(&ggtt->lock);
 	drm_mm_for_each_hole(hole, &ggtt->mm, start, end)
 		xe_ggtt_clear(ggtt, ggtt->start + start, end - start);
+
+	end = ggtt->start + ggtt->size;
+	if (ggtt->entire_size > end)
+		xe_ggtt_clear(ggtt, end, ggtt->entire_size - end);
 
 	xe_ggtt_invalidate(ggtt);
 	mutex_unlock(&ggtt->lock);
