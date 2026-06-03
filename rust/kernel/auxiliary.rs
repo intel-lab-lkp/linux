@@ -20,7 +20,7 @@ use crate::{
     },
     prelude::*,
     types::{
-        ForLt,
+        CovariantForLt,
         ForeignOwnable,
         Opaque, //
     },
@@ -272,16 +272,16 @@ impl Device<device::Bound> {
 
     /// Returns a pinned reference to the registration data set by the registering (parent) driver.
     ///
-    /// `F` is the [`ForLt`](trait@ForLt) encoding of the data type. The returned
+    /// `F` is the [`CovariantForLt`](trait@CovariantForLt) encoding of the data type. The returned
     /// reference has its lifetime shortened from `'static` to `&self`'s borrow lifetime via
-    /// [`ForLt::cast_ref`].
+    /// [`CovariantForLt::cast_ref`].
     ///
     /// Returns [`EINVAL`] if `F` does not match the type used by the parent driver when calling
     /// [`Registration::new()`].
     ///
     /// Returns [`ENOENT`] if no registration data has been set, e.g. when the device was
     /// registered by a C driver.
-    pub fn registration_data<F: ForLt + 'static>(&self) -> Result<Pin<&F::Of<'_>>> {
+    pub fn registration_data<F: CovariantForLt + 'static>(&self) -> Result<Pin<&F::Of<'_>>> {
         // SAFETY: By the type invariant, `self.as_raw()` is a valid `struct auxiliary_device`.
         let ptr = unsafe { (*self.as_raw()).registration_data_rust };
         if ptr.is_null() {
@@ -399,8 +399,9 @@ struct RegistrationData<T> {
 /// This type represents the registration of a [`struct auxiliary_device`]. When its parent device
 /// is unbound, the corresponding auxiliary device will be unregistered from the system.
 ///
-/// The type parameter `F` is a [`ForLt`](trait@ForLt) encoding of the registration
-/// data type. For non-lifetime-parameterized types, use [`ForLt!(T)`](macro@ForLt).
+/// The type parameter `F` is a [`CovariantForLt`](trait@CovariantForLt) encoding of the
+/// registration data type. For non-lifetime-parameterized types, use
+/// [`CovariantForLt!(T)`](macro@CovariantForLt).
 /// The data can be accessed by the auxiliary driver through [`Device::registration_data()`].
 ///
 /// # Invariants
@@ -408,12 +409,12 @@ struct RegistrationData<T> {
 /// `self.adev` always holds a valid pointer to an initialized and registered
 /// [`struct auxiliary_device`] whose `registration_data_rust` field points to a
 /// valid `Pin<KBox<RegistrationData<F::Of<'static>>>>`.
-pub struct Registration<'a, F: ForLt + 'static> {
+pub struct Registration<'a, F: CovariantForLt + 'static> {
     adev: NonNull<bindings::auxiliary_device>,
     _phantom: PhantomData<F::Of<'a>>,
 }
 
-impl<'a, F: ForLt> Registration<'a, F>
+impl<'a, F: CovariantForLt> Registration<'a, F>
 where
     for<'b> F::Of<'b>: Send + Sync,
 {
@@ -525,7 +526,7 @@ where
     }
 }
 
-impl<F: ForLt> Drop for Registration<'_, F> {
+impl<F: CovariantForLt> Drop for Registration<'_, F> {
     fn drop(&mut self) {
         // SAFETY: By the type invariant of `Self`, `self.adev.as_ptr()` is a valid registered
         // `struct auxiliary_device`.
@@ -547,7 +548,7 @@ impl<F: ForLt> Drop for Registration<'_, F> {
 }
 
 // SAFETY: A `Registration` of a `struct auxiliary_device` can be released from any thread.
-unsafe impl<F: ForLt> Send for Registration<'_, F> where for<'a> F::Of<'a>: Send {}
+unsafe impl<F: CovariantForLt> Send for Registration<'_, F> where for<'a> F::Of<'a>: Send {}
 
 // SAFETY: `Registration` does not expose any methods or fields that need synchronization.
-unsafe impl<F: ForLt> Sync for Registration<'_, F> where for<'a> F::Of<'a>: Send {}
+unsafe impl<F: CovariantForLt> Sync for Registration<'_, F> where for<'a> F::Of<'a>: Send {}

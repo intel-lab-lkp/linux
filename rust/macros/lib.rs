@@ -491,14 +491,13 @@ pub fn kunit_tests(attr: TokenStream, input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Obtain a type that implements [`ForLt`] for the given higher-ranked type.
+/// Obtain a type that implements [`CovariantForLt`] for the given higher-ranked type.
 ///
-/// Please refer to the documentation of the [`ForLt`] trait.
+/// Please refer to the documentation of the [`CovariantForLt`] trait.
 ///
-/// [`ForLt`]: trait.ForLt.html
+/// [`CovariantForLt`]: trait.CovariantForLt.html
 #[proc_macro]
-// The macro shares the name with the trait.
 #[allow(non_snake_case)]
-pub fn ForLt(input: TokenStream) -> TokenStream {
-    for_lt::for_lt(parse_macro_input!(input)).into()
+pub fn CovariantForLt(input: TokenStream) -> TokenStream {
+    for_lt::covariant_for_lt(parse_macro_input!(input)).into()
 }

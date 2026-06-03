@@ -13,7 +13,7 @@ use kernel::{
     driver,
     pci,
     prelude::*,
-    types::ForLt,
+    types::CovariantForLt,
     InPlaceModule, //
 };
 
@@ -60,8 +60,8 @@ struct ParentDriver;
 
 #[allow(clippy::type_complexity)]
 struct ParentData<'bound> {
-    _reg0: auxiliary::Registration<'bound, ForLt!(Data<'_>)>,
-    _reg1: auxiliary::Registration<'bound, ForLt!(Data<'_>)>,
+    _reg0: auxiliary::Registration<'bound, CovariantForLt!(Data<'_>)>,
+    _reg1: auxiliary::Registration<'bound, CovariantForLt!(Data<'_>)>,
 }
 
 kernel::pci_device_table!(
@@ -115,7 +115,7 @@ impl pci::Driver for ParentDriver {
 
 impl ParentDriver {
     fn connect(adev: &auxiliary::Device<Bound>) -> Result {
-        let data = adev.registration_data::<ForLt!(Data<'_>)>()?;
+        let data = adev.registration_data::<CovariantForLt!(Data<'_>)>()?;
         let pdev = data.parent;
 
         dev_info!(
