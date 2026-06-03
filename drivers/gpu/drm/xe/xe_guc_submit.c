@@ -1543,7 +1543,8 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
 	if (!exec_queue_killed(q))
 		wedged = guc_submit_hint_wedged(exec_queue_to_guc(q));
 
-	set_exec_queue_banned(q);
+	if (!(q->flags & EXEC_QUEUE_FLAG_KERNEL))
+		set_exec_queue_banned(q);
 
 	/* Kick job / queue off hardware */
 	if (!wedged && (exec_queue_enabled(primary) ||
