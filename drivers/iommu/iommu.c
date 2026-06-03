@@ -2561,8 +2561,6 @@ phys_addr_t iommu_iova_to_phys_length(struct iommu_domain *domain,
 				       dma_addr_t iova,
 				       size_t *mapped_length)
 {
-	phys_addr_t phys;
-
 	if (domain->type == IOMMU_DOMAIN_IDENTITY) {
 		if (mapped_length)
 			*mapped_length = PAGE_SIZE;
@@ -2572,20 +2570,10 @@ phys_addr_t iommu_iova_to_phys_length(struct iommu_domain *domain,
 	if (mapped_length)
 		*mapped_length = 0;
 
-	if (domain->ops->iova_to_phys_length)
-		return domain->ops->iova_to_phys_length(domain, iova, mapped_length);
-
-	/* Fallback to legacy iova_to_phys without length info */
-	if (!domain->ops->iova_to_phys)
+	if (!domain->ops->iova_to_phys_length)
 		return PHYS_ADDR_MAX;
 
-	phys = domain->ops->iova_to_phys(domain, iova);
-	if (!phys)
-		return PHYS_ADDR_MAX;
-
-	if (mapped_length)
-		*mapped_length = PAGE_SIZE;
-	return phys;
+	return domain->ops->iova_to_phys_length(domain, iova, mapped_length);
 }
 EXPORT_SYMBOL_GPL(iommu_iova_to_phys_length);
 
