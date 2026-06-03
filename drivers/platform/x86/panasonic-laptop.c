@@ -507,6 +507,76 @@ out:
 	return result;
 }
 
+/* on newer models (ex: CF-SR4), fan mode can be set */
+/* check if this is available */
+
+static acpi_status check_fan_mode_present(void)
+{
+	acpi_status status = AE_OK;
+	acpi_handle handle;
+
+	/* check if read and set are available */
+	/* read fan speed profile */
+	status = acpi_get_handle(NULL, "\\_SB.PC00.LPCB.EC0.CEFM", &handle);
+	if (ACPI_FAILURE(status))
+		goto out;
+	/* set fan speed profile */
+	status = acpi_get_handle(NULL, "\\_SB.PC00.LPCB.EC0.SEFM", &handle);
+	if (ACPI_FAILURE(status))
+		goto out;
+
+out:
+	return status;
+}
+
+/* get fan mode state */
+
+static int get_fan_mode_state(void)
+{
+	acpi_status status;
+	unsigned long long state;
+
+	/* bios default is zero which seems to be some sort of performance mode */
+	status = acpi_evaluate_integer(NULL, "\\_SB.PC00.LPCB.EC0.CEFM", NULL, &state);
+	if (ACPI_FAILURE(status)) {
+		pr_err("evaluation error _SB.PC00.LPCB.EC0.CEFM\n");
+		state = -EIO;
+	}
+	int result = (int)state;
+	return result;
+}
+
+/* set fan mode */
+
+static int set_fan_mode_state(int new_state)
+{
+	int result;
+	acpi_status status;
+
+	result = get_fan_mode_state();
+	if (result < 0)
+		goto out;
+	if (new_state == result)
+		goto out;
+
+	union acpi_object param[1];
+	struct acpi_object_list input;
+
+	param[0].type = ACPI_TYPE_INTEGER;
+	param[0].integer.value = new_state;
+	input.count = 1; /* takes one arg */
+	input.pointer = param;
+
+	status = acpi_evaluate_object(NULL, "\\_SB.PC00.LPCB.EC0.SEFM",
+			&input, NULL);
+	if (ACPI_FAILURE(status)) {
+		pr_err("_SB.PC00.LPCB.EC0.SEFM evaluation failed\n");
+		return -EINVAL;
+	}
+out:
+	return result;
+}
+
 
 /* sysfs user interface functions */
 
@@ -778,6 +848,29 @@ static ssize_t cdpower_store(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
+static ssize_t fan_mode_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	int state = get_fan_mode_state();
+
+	if (state < 0)
+		return state;
+
+	return sysfs_emit(buf, "%d\n", state);
+}
+
+static ssize_t fan_mode_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	int err, val;
+
+	err = kstrtoint(buf, 10, &val);
+	if (err)
+		return err;
+	set_fan_mode_state(val);
+	return count;
+}
+
 static DEVICE_ATTR_RO(numbatt);
 static DEVICE_ATTR_RO(lcdtype);
 static DEVICE_ATTR_RW(mute);
@@ -787,6 +880,7 @@ static DEVICE_ATTR_RW(ac_brightness);
 static DEVICE_ATTR_RW(dc_brightness);
 static DEVICE_ATTR_RW(current_brightness);
 static DEVICE_ATTR_RW(cdpower);
+static DEVICE_ATTR_RW(fan_mode);
 
 static umode_t pcc_sysfs_is_visible(struct kobject *kobj, struct attribute *attr, int idx)
 {
@@ -803,6 +897,9 @@ static umode_t pcc_sysfs_is_visible(struct kobject *kobj, struct attribute *attr
 	if (attr == &dev_attr_current_brightness.attr)
 		return (pcc->num_sifr > SINF_CUR_BRIGHT) ? attr->mode : 0;
 
+	if (attr == &dev_attr_fan_mode.attr) /* mostly present on newer models */
+		return (ACPI_SUCCESS(check_fan_mode_present())) ? attr->mode : 0;
+
 	return attr->mode;
 }
 
@@ -816,6 +913,7 @@ static struct attribute *pcc_sysfs_entries[] = {
 	&dev_attr_dc_brightness.attr,
 	&dev_attr_current_brightness.attr,
 	&dev_attr_cdpower.attr,
+	&dev_attr_fan_mode.attr,
 	NULL,
 };
 
