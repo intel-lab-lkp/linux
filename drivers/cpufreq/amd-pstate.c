@@ -27,6 +27,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/smp.h>
+#include <linux/cpumask.h>
 #include <linux/sched.h>
 #include <linux/cpufreq.h>
 #include <linux/compiler.h>
@@ -88,6 +89,8 @@ static struct cpufreq_driver amd_pstate_epp_driver;
 static int cppc_state = AMD_PSTATE_UNDEFINED;
 static bool amd_pstate_prefcore = true;
 static bool dynamic_epp;
+/* EPP support capability cached for driver mode switches. */
+static bool epp_supported;
 static struct quirk_entry *quirks;
 
 /*
@@ -1619,6 +1622,10 @@ static void amd_pstate_driver_cleanup(void)
 static int amd_pstate_set_driver(int mode_idx)
 {
 	if (mode_idx >= AMD_PSTATE_DISABLE && mode_idx < AMD_PSTATE_MAX) {
+		if (mode_idx == AMD_PSTATE_ACTIVE && !epp_supported) {
+			pr_debug("EPP is not supported by this processor\n");
+			return -ENODEV;
+		}
 		cppc_state = mode_idx;
 		if (cppc_state == AMD_PSTATE_DISABLE)
 			pr_info("driver is explicitly disabled\n");
@@ -2227,6 +2234,22 @@ static bool amd_cppc_supported(void)
 	return true;
 }
 
+static bool amd_pstate_epp_supported(void)
+{
+	unsigned int cpu = cpumask_first(cpu_online_mask);
+	u64 epp;
+	int ret;
+
+	ret = cppc_get_epp_perf(cpu, &epp);
+	if (!ret)
+		return true;
+
+	if (ret != -EOPNOTSUPP)
+		pr_warn("Unable to determine EPP capability: %d\n", ret);
+
+	return false;
+}
+
 static int __init amd_pstate_init(void)
 {
 	struct device *dev_root;
@@ -2277,6 +2300,12 @@ static int __init amd_pstate_init(void)
 	if (cppc_state == AMD_PSTATE_DISABLE) {
 		pr_info("driver load is disabled, boot with specific mode to enable this\n");
 		return -ENODEV;
+	}
+
+	epp_supported = amd_pstate_epp_supported();
+	if (cppc_state == AMD_PSTATE_ACTIVE && !epp_supported) {
+		pr_warn("EPP not supported, falling back to passive mode\n");
+		cppc_state = AMD_PSTATE_PASSIVE;
 	}
 
 	/* capability check */
