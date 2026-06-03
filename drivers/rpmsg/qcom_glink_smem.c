@@ -86,9 +86,14 @@ static size_t glink_smem_rx_avail(struct qcom_glink_pipe *np)
 	tail = le32_to_cpu(*pipe->tail);
 
 	if (head < tail)
-		return pipe->native.length - tail + head;
+		len = pipe->native.length - tail + head;
 	else
-		return head - tail;
+		len = head - tail;
+
+	if (WARN_ON_ONCE(len > pipe->native.length))
+		len = 0;
+
+	return len;
 }
 
 static void glink_smem_rx_peek(struct qcom_glink_pipe *np,
@@ -102,6 +107,9 @@ static void glink_smem_rx_peek(struct qcom_glink_pipe *np,
 	tail += offset;
 	if (tail >= pipe->native.length)
 		tail -= pipe->native.length;
+
+	if (WARN_ON_ONCE(tail >= pipe->native.length))
+		return;
 
 	len = min_t(size_t, count, pipe->native.length - tail);
 	if (len)
@@ -141,6 +149,9 @@ static size_t glink_smem_tx_avail(struct qcom_glink_pipe *np)
 	else
 		avail = tail - head;
 
+	if (WARN_ON_ONCE(avail > pipe->native.length))
+		avail = 0;
+
 	if (avail < (FIFO_FULL_RESERVE + TX_BLOCKED_CMD_RESERVE))
 		avail = 0;
 	else
@@ -154,6 +165,9 @@ static unsigned int glink_smem_tx_write_one(struct glink_smem_pipe *pipe,
 					    const void *data, size_t count)
 {
 	size_t len;
+
+	if (WARN_ON_ONCE(head >= pipe->native.length))
+		return head;
 
 	len = min_t(size_t, count, pipe->native.length - head);
 	if (len)
