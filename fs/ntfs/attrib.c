@@ -1187,9 +1187,14 @@ find_attr_list_attr:
 		 * we have reached the right one or the search has failed.
 		 */
 		if (lowest_vcn && (u8 *)next_al_entry >= al_start &&
-				(u8 *)next_al_entry + 6 < al_end &&
+				(u8 *)next_al_entry +
+						offsetof(struct attr_list_entry, name) <= al_end &&
 				(u8 *)next_al_entry + le16_to_cpu(
 					next_al_entry->length) <= al_end &&
+				(!next_al_entry->name_length ||
+				 (u8 *)next_al_entry + next_al_entry->name_offset +
+				 next_al_entry->name_length * sizeof(__le16) <=
+						al_end) &&
 				le64_to_cpu(next_al_entry->lowest_vcn) <=
 					lowest_vcn &&
 				next_al_entry->type == al_entry->type &&
