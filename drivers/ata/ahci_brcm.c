@@ -415,6 +415,7 @@ out_disable_platform_phys:
 out_disable_phys:
 	brcm_sata_phys_disable(priv);
 	ahci_platform_disable_regulators(hpriv);
+	reset_control_rearm(priv->rcdev_rescal);
 out_disable_clks:
 	ahci_platform_disable_clks(hpriv);
 	return ret;
