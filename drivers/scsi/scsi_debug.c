@@ -5903,6 +5903,10 @@ static int resp_report_zones(struct scsi_cmnd *scp,
 	alloc_len = get_unaligned_be32(cmd + 10);
 	if (alloc_len == 0)
 		return 0;	/* not an error */
+	if (alloc_len < RZONES_DESC_HD) {
+		mk_sense_buffer(scp, ILLEGAL_REQUEST, INVALID_FIELD_IN_CDB, 0);
+		return check_condition_result;
+	}
 	rep_opts = cmd[14] & 0x3f;
 	partial = cmd[14] & 0x80;
 
