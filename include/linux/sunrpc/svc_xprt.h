@@ -55,7 +55,13 @@ struct svc_xprt {
 	struct kref		xpt_ref;
 	ktime_t			xpt_qtime;
 	struct list_head	xpt_list;
-	struct lwq_node		xpt_ready;
+	union {
+		struct lwq_node		xpt_ready;	/* lockless FIFO (default) */
+		struct list_head	xpt_fairq;	/* fair-queue bucket link */
+	};
+	unsigned long		xpt_fairq_key;	/* opaque per-client fairness
+						 * identity; 0 => derive from
+						 * source address (xpt_remote) */
 	unsigned long		xpt_flags;
 
 	struct svc_serv		*xpt_server;	/* service for transport */
@@ -155,6 +161,44 @@ static inline bool svc_xprt_is_dead(const struct svc_xprt *xprt)
 {
 	return (test_bit(XPT_DEAD, &xprt->xpt_flags) != 0) ||
 		(test_bit(XPT_CLOSE, &xprt->xpt_flags) != 0);
+}
+
+/*
+ * Per-transport fairness key.  The fair-queue dispatcher groups ready
+ * transports by this key and round-robins across keys, so that service is
+ * shared per client rather than per transport.
+ *
+ * sunrpc supplies a default derived from the peer's source *address*; the
+ * source port is deliberately excluded so that a client's several connections
+ * (e.g. nconnect, or a fan of data movers) share a single key.  An upper layer
+ * that knows a better identity -- e.g. nfsd stamping an NFSv4.1 clientid in
+ * nfsd4_init_conn() -- may set xpt_fairq_key directly; a nonzero value
+ * overrides the default.
+ */
+static inline unsigned long svc_xprt_fairq_default_key(const struct svc_xprt *xprt)
+{
+	const struct sockaddr *sa = (const struct sockaddr *)&xprt->xpt_remote;
+
+	switch (sa->sa_family) {
+	case AF_INET:
+		return (unsigned long)
+			((const struct sockaddr_in *)sa)->sin_addr.s_addr;
+	case AF_INET6: {
+		const struct in6_addr *a =
+			&((const struct sockaddr_in6 *)sa)->sin6_addr;
+
+		return (unsigned long)(a->s6_addr32[0] ^ a->s6_addr32[1] ^
+				       a->s6_addr32[2] ^ a->s6_addr32[3]);
+	}
+	default:
+		return (unsigned long)sa->sa_family;
+	}
+}
+
+static inline unsigned long svc_xprt_fairq_key(const struct svc_xprt *xprt)
+{
+	return xprt->xpt_fairq_key ? xprt->xpt_fairq_key
+				   : svc_xprt_fairq_default_key(xprt);
 }
 
 int	svc_reg_xprt_class(struct svc_xprt_class *);
