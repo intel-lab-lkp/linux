@@ -80,6 +80,11 @@ static inline bool page_mte_tagged(struct page *page)
  */
 static inline bool try_page_mte_tagging(struct page *page)
 {
+	extern struct page *__zero_page;
+
+	if (page == __zero_page)
+		return false;
+
 	VM_WARN_ON_ONCE(folio_test_hugetlb(page_folio(page)));
 
 	if (!test_and_set_bit(PG_mte_lock, &page->flags.f))
