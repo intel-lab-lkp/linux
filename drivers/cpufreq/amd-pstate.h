@@ -128,6 +128,8 @@ struct amd_cpudata {
 	u8	epp_default_dc;
 	bool	dynamic_epp;
 	bool	raw_epp;
+	/* Indicates that EPP has been successfully programmed at least once since boot. */
+	bool	epp_hw_programmed;
 	struct notifier_block power_nb;
 
 	/* platform profile */

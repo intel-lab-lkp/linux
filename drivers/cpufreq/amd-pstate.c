@@ -424,7 +424,13 @@ static int shmem_set_epp(struct cpufreq_policy *policy, u8 epp)
 					  epp != epp_cached);
 	}
 
-	if (epp == epp_cached)
+	/*
+	 * After the first successful programming, the cached EPP value
+	 * becomes authoritative (representing driver intent rather than
+	 * dynamic firmware state), allowing us to skip redundant hardware
+	 * writes when the EPP value is unchanged.
+	 */
+	if (cpudata->epp_hw_programmed && epp == epp_cached)
 		return 0;
 
 	perf_ctrls.energy_perf = epp;
@@ -434,6 +440,7 @@ static int shmem_set_epp(struct cpufreq_policy *policy, u8 epp)
 		return ret;
 	}
 
+	cpudata->epp_hw_programmed = true;
 	value = READ_ONCE(cpudata->cppc_req_cached);
 	FIELD_MODIFY(AMD_CPPC_EPP_PERF_MASK, &value, epp);
 	WRITE_ONCE(cpudata->cppc_req_cached, value);
