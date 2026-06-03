@@ -859,6 +859,46 @@ static int isc_try_configure_pipeline(struct isc_device *isc)
 	return 0;
 }
 
+static bool isc_format_is_yuv(u32 fourcc)
+{
+	switch (fourcc) {
+	case V4L2_PIX_FMT_YUV420:
+	case V4L2_PIX_FMT_YUV422P:
+	case V4L2_PIX_FMT_YUYV:
+	case V4L2_PIX_FMT_UYVY:
+	case V4L2_PIX_FMT_VYUY:
+		return true;
+	default:
+		return false;
+	}
+}
+
+/*
+ * isc_update_cbhs_ctrls() - Activate/deactivate CBHS controls
+ *
+ * Called from isc_set_fmt(), isc_link_validate(), and isc_ctrl_init().
+ * At isc_ctrl_init() time isc->config.bits_pipeline is zero (no format
+ * has been negotiated yet), so all CBHS controls are initially marked
+ * inactive.  They become active once a format that includes CBHS in the
+ * pipeline is configured via VIDIOC_S_FMT or link validation.  Hue and
+ * saturation operate in YCbCr space, so they activate only when the
+ * output format is YUV.
+ */
+static void isc_update_cbhs_ctrls(struct isc_device *isc)
+{
+	bool cbhs_active = isc->config.bits_pipeline & CBHS_ENABLE;
+	bool chroma_active = cbhs_active && isc_format_is_yuv(isc->config.fourcc);
+
+	if (isc->brightness_ctrl)
+		v4l2_ctrl_activate(isc->brightness_ctrl, cbhs_active);
+	if (isc->contrast_ctrl)
+		v4l2_ctrl_activate(isc->contrast_ctrl, cbhs_active);
+	if (isc->hue_ctrl)
+		v4l2_ctrl_activate(isc->hue_ctrl, chroma_active);
+	if (isc->saturation_ctrl)
+		v4l2_ctrl_activate(isc->saturation_ctrl, chroma_active);
+}
+
 static int isc_try_fmt(struct isc_device *isc, struct v4l2_format *f)
 {
 	struct v4l2_pix_format *pixfmt = &f->fmt.pix;
@@ -902,6 +942,7 @@ static int isc_set_fmt(struct isc_device *isc, struct v4l2_format *f)
 	/* make the try configuration active */
 	isc->config = isc->try_config;
 	isc->fmt = isc->try_fmt;
+	isc_update_cbhs_ctrls(isc);
 
 	dev_dbg(isc->dev, "ISC set_fmt to %.4s @%dx%d\n",
 		(char *)&f->fmt.pix.pixelformat,
@@ -989,6 +1030,7 @@ static int isc_link_validate(struct media_link *link)
 		return ret;
 
 	isc->config = isc->try_config;
+	isc_update_cbhs_ctrls(isc);
 
 	dev_dbg(isc->dev, "New ISC configuration in place\n");
 
@@ -1457,6 +1499,14 @@ static int isc_s_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_CONTRAST:
 		ctrls->contrast = ctrl->val & ISC_CBC_CONTRAST_MASK;
 		break;
+	case V4L2_CID_HUE:
+		if (isc->has_cbhs)
+			ctrls->hue = ctrl->val & ISC_CBHS_HUE_MASK;
+		break;
+	case V4L2_CID_SATURATION:
+		if (isc->has_cbhs)
+			ctrls->saturation = ctrl->val & ISC_CBHS_SAT_MASK;
+		break;
 	case V4L2_CID_GAMMA:
 		ctrls->gamma_index = ctrl->val;
 		break;
@@ -1646,7 +1696,24 @@ static int isc_ctrl_init(struct isc_device *isc)
 
 	ctrls->brightness = 0;
 
-	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_BRIGHTNESS, -1024, 1023, 1, 0);
+	isc->brightness_ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_BRIGHTNESS,
+						 -1024, 1023, 1, 0);
+	if (isc->has_cbhs) {
+		/*
+		 * CBHS_HUE is a signed 9-bit value in degrees.
+		 * CBHS_SAT is Q4 unsigned 7-bit, 16 = 1.0x.
+		 * Initialize the kernel-side state to neutral here so the
+		 * first config_cbc() call after streaming starts does not
+		 * write zero (grayscale) to the hardware.
+		 */
+		ctrls->hue = 0;
+		ctrls->saturation = 16;
+		isc->hue_ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HUE,
+						  -180, 180, 1, 0);
+		isc->saturation_ctrl = v4l2_ctrl_new_std(hdl, ops,
+							 V4L2_CID_SATURATION,
+							 0, 127, 1, 16);
+	}
 	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_GAMMA, 0, isc->gamma_max, 1,
 			  isc->gamma_default);
 	isc->awb_ctrl = v4l2_ctrl_new_std(hdl, &isc_awb_ops,
@@ -1665,6 +1732,7 @@ static int isc_ctrl_init(struct isc_device *isc)
 	}
 
 	v4l2_ctrl_activate(isc->do_wb_ctrl, false);
+	isc_update_cbhs_ctrls(isc);
 
 	isc->r_gain_ctrl = v4l2_ctrl_new_custom(hdl, &isc_r_gain_ctrl, NULL);
 	isc->b_gain_ctrl = v4l2_ctrl_new_custom(hdl, &isc_b_gain_ctrl, NULL);

@@ -264,7 +264,8 @@ static void isc_sama5d2_config_ctrls(struct isc_device *isc,
 
 	ctrls->contrast = 256;
 
-	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_CONTRAST, -2048, 2047, 1, 256);
+	isc->contrast_ctrl = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_CONTRAST,
+					       -2048, 2047, 1, 256);
 }
 
 static void isc_sama5d2_config_dpc(struct isc_device *isc)

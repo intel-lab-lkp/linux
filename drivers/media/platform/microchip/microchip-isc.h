@@ -139,6 +139,8 @@ struct isc_ctrls {
 
 	u32 brightness;
 	u32 contrast;
+	u32 hue;
+	u32 saturation;
 	u8 gamma_index;
 #define ISC_WB_NONE	0
 #define ISC_WB_AUTO	1
@@ -336,6 +338,10 @@ struct isc_device {
 		struct v4l2_ctrl	*b_off_ctrl;
 		struct v4l2_ctrl	*gr_off_ctrl;
 		struct v4l2_ctrl	*gb_off_ctrl;
+		struct v4l2_ctrl	*brightness_ctrl;
+		struct v4l2_ctrl	*contrast_ctrl;
+		struct v4l2_ctrl	*hue_ctrl;
+		struct v4l2_ctrl	*saturation_ctrl;
 	};
 
 #define GAMMA_ENTRIES	64
@@ -343,6 +349,7 @@ struct isc_device {
 	const u32	(*gamma_table)[GAMMA_ENTRIES];
 	u32		gamma_max;
 	u32		gamma_default;
+	bool		has_cbhs;
 
 	u32		max_width;
 	u32		max_height;
