@@ -2935,6 +2935,7 @@ static void tb_stop(struct tb *tb)
 	struct tb_cm *tcm = tb_priv(tb);
 	struct tb_tunnel *tunnel;
 	struct tb_tunnel *n;
+	struct tb_port *port;
 
 	cancel_delayed_work(&tcm->remove_work);
 	/* tunnels are only present after everything has been initialized */
@@ -2947,6 +2948,16 @@ static void tb_stop(struct tb *tb)
 		if (tb_tunnel_is_dma(tunnel))
 			tb_tunnel_deactivate(tunnel);
 		tb_tunnel_put(tunnel);
+	}
+	/*
+	 * Assert DPR to drive SBTX low, signalling disconnect and avoiding
+	 * ~60 s of link polling before warm reset on shutdown.
+	 */
+	tb_switch_for_each_port(tb->root_switch, port) {
+		if (!tb_port_is_null(port) || !tb_port_has_remote(port))
+			continue;
+		if (tb_port_reset(port))
+			tb_port_dbg(port, "DPR on shutdown failed, continuing\n");
 	}
 	tb_switch_remove(tb->root_switch);
 	tcm->hotplug_active = false; /* signal tb_handle_hotplug to quit */
