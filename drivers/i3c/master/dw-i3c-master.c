@@ -243,6 +243,12 @@
 #define AMD_I3C_OD_PP_TIMING		BIT(1)
 #define DW_I3C_DISABLE_RUNTIME_PM_QUIRK	BIT(2)
 
+/* Minimum GETMRL payload (read_len only; no IBI byte). */
+#define GET_MRL_MIN_LEN 2
+
+/* Maximum number of retries for CCC commands */
+#define DW_I3C_CCC_MAX_RETRIES 2
+
 struct dw_i3c_cmd {
 	u32 cmd_lo;
 	u32 cmd_hi;
@@ -708,11 +714,46 @@ static void dw_i3c_master_bus_cleanup(struct i3c_master_controller *m)
 	dw_i3c_master_disable(master);
 }
 
+static bool dw_i3c_ccc_get_len_mismatch(u8 ccc_id, u16 req_len, u16 rx_len)
+{
+	if (ccc_id != I3C_CCC_GETMRL)
+		return rx_len < req_len;
+
+	/*
+	 * GETMRL returns 2 or 3 bytes; core sets req_len accordingly.
+	 * If the buffer is larger, only enforce the minimum valid size.
+	 */
+	if (req_len <= sizeof(struct i3c_ccc_mrl))
+		return rx_len < req_len;
+
+	return rx_len < GET_MRL_MIN_LEN;
+}
+
+static void dw_i3c_ccc_map_err(struct i3c_ccc_cmd *ccc,
+			       struct dw_i3c_cmd *cmd,
+			       bool data_len_mismatch, int *ret)
+{
+	u8 err = cmd->error;
+
+	if (err == RESPONSE_ERROR_IBA_NACK ||
+	    err == RESPONSE_ERROR_ADDRESS_NACK) {
+		ccc->err = I3C_ERROR_M2;
+	} else if (err == RESPONSE_ERROR_FRAME) {
+		ccc->err = I3C_ERROR_M0;
+	} else if (data_len_mismatch && err == RESPONSE_NO_ERROR && !*ret) {
+		ccc->err = I3C_ERROR_M0;
+		*ret = -EIO;
+	}
+}
+
 static int dw_i3c_ccc_set(struct dw_i3c_master *master,
 			  struct i3c_ccc_cmd *ccc)
 {
 	struct dw_i3c_cmd *cmd;
+	bool data_len_mismatch;
 	int ret, pos = 0;
+
+	ccc->err = I3C_ERROR_UNKNOWN;
 
 	if (ccc->id & I3C_CCC_DIRECT) {
 		pos = dw_i3c_master_get_addr_pos(master, ccc->dests[0].addr);
@@ -742,8 +783,14 @@ static int dw_i3c_ccc_set(struct dw_i3c_master *master,
 		dw_i3c_master_dequeue_xfer(master, xfer);
 
 	ret = xfer->ret;
-	if (xfer->cmds[0].error == RESPONSE_ERROR_IBA_NACK)
-		ccc->err = I3C_ERROR_M2;
+	cmd = &xfer->cmds[0];
+	/*
+	 * RESPONSE_PORT_DATA_LEN reports bytes transferred; on SET CCCs
+	 * this reflects the write count (stored in cmd->rx_len).
+	 */
+	data_len_mismatch = ccc->dests[0].payload.len &&
+			    cmd->rx_len < ccc->dests[0].payload.len;
+	dw_i3c_ccc_map_err(ccc, cmd, data_len_mismatch, &ret);
 
 	return ret;
 }
@@ -751,11 +798,17 @@ static int dw_i3c_ccc_set(struct dw_i3c_master *master,
 static int dw_i3c_ccc_get(struct dw_i3c_master *master, struct i3c_ccc_cmd *ccc)
 {
 	struct dw_i3c_cmd *cmd;
+	u16 req_len;
+	bool rx_len_mismatch;
 	int ret, pos;
+
+	ccc->err = I3C_ERROR_UNKNOWN;
 
 	pos = dw_i3c_master_get_addr_pos(master, ccc->dests[0].addr);
 	if (pos < 0)
 		return pos;
+
+	req_len = ccc->dests[0].payload.len;
 
 	struct dw_i3c_xfer *xfer __free(kfree) = dw_i3c_master_alloc_xfer(master, 1);
 	if (!xfer)
@@ -763,9 +816,9 @@ static int dw_i3c_ccc_get(struct dw_i3c_master *master, struct i3c_ccc_cmd *ccc)
 
 	cmd = xfer->cmds;
 	cmd->rx_buf = ccc->dests[0].payload.data;
-	cmd->rx_len = ccc->dests[0].payload.len;
+	cmd->rx_len = req_len;
 
-	cmd->cmd_hi = COMMAND_PORT_ARG_DATA_LEN(ccc->dests[0].payload.len) |
+	cmd->cmd_hi = COMMAND_PORT_ARG_DATA_LEN(req_len) |
 		      COMMAND_PORT_TRANSFER_ARG;
 
 	cmd->cmd_lo = COMMAND_PORT_READ_TRANSFER |
@@ -780,8 +833,12 @@ static int dw_i3c_ccc_get(struct dw_i3c_master *master, struct i3c_ccc_cmd *ccc)
 		dw_i3c_master_dequeue_xfer(master, xfer);
 
 	ret = xfer->ret;
-	if (xfer->cmds[0].error == RESPONSE_ERROR_IBA_NACK)
-		ccc->err = I3C_ERROR_M2;
+	cmd = &xfer->cmds[0];
+	rx_len_mismatch = dw_i3c_ccc_get_len_mismatch(ccc->id, req_len,
+						      cmd->rx_len);
+	dw_i3c_ccc_map_err(ccc, cmd, rx_len_mismatch, &ret);
+	if (!ret)
+		ccc->dests[0].payload.len = cmd->rx_len;
 
 	return ret;
 }
@@ -796,6 +853,7 @@ static int dw_i3c_master_send_ccc_cmd(struct i3c_master_controller *m,
 				      struct i3c_ccc_cmd *ccc)
 {
 	struct dw_i3c_master *master = to_dw_i3c_master(m);
+	int retries = DW_I3C_CCC_MAX_RETRIES;
 	int ret = 0;
 
 	if (ccc->id == I3C_CCC_ENTDAA)
@@ -816,10 +874,11 @@ static int dw_i3c_master_send_ccc_cmd(struct i3c_master_controller *m,
 		return ret;
 	}
 
-	if (ccc->rnw)
-		ret = dw_i3c_ccc_get(master, ccc);
-	else
-		ret = dw_i3c_ccc_set(master, ccc);
+	do {
+		ret = ccc->rnw ? dw_i3c_ccc_get(master, ccc)
+					   : dw_i3c_ccc_set(master, ccc);
+	} while (--retries &&
+			 ret && (ccc->err == I3C_ERROR_M0 || ccc->err == I3C_ERROR_M2));
 
 	pm_runtime_put_autosuspend(master->dev);
 	return ret;
