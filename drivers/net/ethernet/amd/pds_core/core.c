@@ -494,6 +494,7 @@ void pdsc_teardown(struct pdsc *pdsc, bool removing)
 
 int pdsc_start(struct pdsc *pdsc)
 {
+	pci_set_master(pdsc->pdev);
 	pds_core_intr_mask(&pdsc->intr_ctrl[pdsc->adminqcq.intx],
 			   PDS_CORE_INTR_MASK_CLEAR);
 
@@ -504,14 +505,15 @@ void pdsc_stop(struct pdsc *pdsc)
 {
 	int i;
 
-	if (!pdsc->intr_info)
-		return;
-
 	/* Mask interrupts that are in use */
-	for (i = 0; i < pdsc->nintrs; i++)
-		if (pdsc->intr_info[i].vector)
-			pds_core_intr_mask(&pdsc->intr_ctrl[i],
-					   PDS_CORE_INTR_MASK_SET);
+	if (pdsc->intr_info) {
+		for (i = 0; i < pdsc->nintrs; i++)
+			if (pdsc->intr_info[i].vector)
+				pds_core_intr_mask(&pdsc->intr_ctrl[i],
+						   PDS_CORE_INTR_MASK_SET);
+	}
+
+	pci_clear_master(pdsc->pdev);
 }
 
 static void pdsc_adminq_wait_and_dec_once_unused(struct pdsc *pdsc)
