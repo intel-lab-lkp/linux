@@ -382,7 +382,8 @@ static ssize_t read_file_mod_stats(struct file *file, char __user *user_buf,
 	mutex_lock(&module_mutex);
 
 
-	list_for_each_entry_rcu(mod_fail, &dup_failed_modules, list) {
+	list_for_each_entry_rcu(mod_fail, &dup_failed_modules, list,
+				lockdep_is_held(&module_mutex)) {
 		if (WARN_ON_ONCE(++count_failed >= MAX_FAILED_MOD_PRINT))
 			goto out_unlock;
 		len += scnprintf(buf + len, size - len, "%25s\t%15lu\t%25s\n", mod_fail->name,
