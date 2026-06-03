@@ -559,6 +559,12 @@ static irqreturn_t imx_mu_isr_th(int irq, void *p)
 			imx_mu_xcr_set_act(priv, cp, IMX_MU_RCR, IMX_MU_xCR_RIEn(priv->dcfg->type, cp->idx));
 		break;
 
+	case IMX_MU_TYPE_RXDB:
+		cp->pending = false;
+		priv->dcfg->rxdb(priv, cp);
+		imx_mu_xcr_set_act(priv, cp, IMX_MU_GIER, IMX_MU_xCR_GIEn(priv->dcfg->type, cp->idx));
+		break;
+
 	default:
 		dev_warn_ratelimited(priv->dev, "Unhandled channel type %d\n",
 				     cp->type);
@@ -617,7 +623,9 @@ static irqreturn_t imx_mu_isr(int irq, void *p)
 		ret = IRQ_WAKE_THREAD;
 	} else if ((val == IMX_MU_xSR_GIPn(priv->dcfg->type, cp->idx)) &&
 		   (cp->type == IMX_MU_TYPE_RXDB)) {
-		priv->dcfg->rxdb(priv, cp);
+		cp->pending = true;
+		imx_mu_xcr_rmw(priv, IMX_MU_GIER, 0, IMX_MU_xCR_GIEn(priv->dcfg->type, cp->idx));
+		ret = IRQ_WAKE_THREAD;
 	} else {
 		dev_warn_ratelimited(priv->dev, "Not handled interrupt\n");
 		return IRQ_NONE;
