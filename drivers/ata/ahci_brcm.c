@@ -491,7 +491,7 @@ static int brcm_ahci_probe(struct platform_device *pdev)
 		return ret;
 	ret = reset_control_deassert(priv->rcdev_ahci);
 	if (ret)
-		return ret;
+		goto out_reset;
 
 	ret = ahci_platform_enable_clks(hpriv);
 	if (ret)
