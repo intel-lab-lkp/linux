@@ -283,6 +283,16 @@ OK with that, then perhaps consider mailing security@kernel.org or
 reading about http://oss-security.openwall.org/wiki/mailing-lists/distros
 as possible alternative mechanisms.
 
+AI-generated fixes
+~~~~~~~~~~~~~~~~~~
+
+AI-generated fixes should carry the ``Assisted-by:`` tag.
+
+Maintainers should treat AI-generated fixes as equivalent to a bug report.
+Taking over and submitting an alternative fix is normally frowned upon.
+It is okay to do so for AI-generated fixes, however, if the posted patch
+is far from the desired implementation. The original reporter must be
+acknowledged with a ``Reported-by:`` tag in those cases.
 
 Co-posting changes to user space components
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
