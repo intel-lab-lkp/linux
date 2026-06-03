@@ -16,6 +16,7 @@
 
 /* iova structure */
 struct iova {
+	struct llist_node	deferred_free;
 	unsigned long	pfn_hi; /* Highest allocated pfn */
 	unsigned long	pfn_lo; /* Lowest allocated pfn */
 };
@@ -31,6 +32,8 @@ struct iova_domain {
 	unsigned long	start_pfn;	/* Lower limit for this domain */
 	unsigned long	dma_32bit_pfn;
 	unsigned long	max32_alloc_size; /* Size of last failed allocation */
+	struct llist_head deferred_frees;
+	struct delayed_work deferred_free_work;
 
 	struct iova_rcache	*rcaches;
 	struct hlist_node	cpuhp_dead;

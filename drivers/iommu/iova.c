@@ -7,6 +7,7 @@
 
 #include <linux/iova.h>
 #include <linux/kmemleak.h>
+#include <linux/llist.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
@@ -26,6 +27,7 @@ static unsigned long iova_rcache_get(struct iova_domain *iovad,
 static void free_iova_rcaches(struct iova_domain *iovad);
 static void free_cpu_cached_iovas(unsigned int cpu, struct iova_domain *iovad);
 static void free_global_cached_iovas(struct iova_domain *iovad);
+static void iova_deferred_free_work(struct work_struct *work);
 
 void
 init_iova_domain(struct iova_domain *iovad, unsigned long granule,
@@ -46,6 +48,8 @@ init_iova_domain(struct iova_domain *iovad, unsigned long granule,
 	iovad->start_pfn = start_pfn;
 	iovad->dma_32bit_pfn = 1UL << (32 - iova_shift(iovad));
 	iovad->max32_alloc_size = iovad->dma_32bit_pfn;
+	init_llist_head(&iovad->deferred_frees);
+	INIT_DELAYED_WORK(&iovad->deferred_free_work, iova_deferred_free_work);
 }
 EXPORT_SYMBOL_GPL(init_iova_domain);
 
@@ -156,7 +160,13 @@ private_find_iova(struct iova_domain *iovad, unsigned long pfn)
 	return mas_walk(&mas);
 }
 
-static void remove_iova(struct iova_domain *iovad, struct iova *iova)
+/*
+ * Remove an IOVA entry from the maple tree. Returns true on success.
+ * On failure (maple tree node allocation under GFP_ATOMIC failed),
+ * returns false — the entry remains in the tree and the caller must
+ * not free the struct iova.
+ */
+static bool remove_iova(struct iova_domain *iovad, struct iova *iova)
 {
 	MA_STATE(mas, &iovad->mtree, iova->pfn_lo, iova->pfn_hi);
 
@@ -165,7 +175,36 @@ static void remove_iova(struct iova_domain *iovad, struct iova *iova)
 	if (iova->pfn_lo < iovad->dma_32bit_pfn)
 		iovad->max32_alloc_size = iovad->dma_32bit_pfn;
 
-	mas_store_gfp(&mas, NULL, GFP_ATOMIC);
+	if (mas_store_gfp(&mas, NULL, GFP_ATOMIC))
+		return false;
+	return true;
+}
+
+static void iova_deferred_free_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct iova_domain *iovad = container_of(dwork, struct iova_domain,
+						 deferred_free_work);
+	struct llist_node *list = llist_del_all(&iovad->deferred_frees);
+	struct llist_node *node, *next;
+
+	llist_for_each_safe(node, next, list) {
+		struct iova *iova = container_of(node, struct iova,
+						 deferred_free);
+		unsigned long flags;
+
+		spin_lock_irqsave(&iovad->iova_lock, flags);
+		if (remove_iova(iovad, iova))
+			free_iova_mem(iova);
+		else
+			llist_add(&iova->deferred_free,
+				  &iovad->deferred_frees);
+		spin_unlock_irqrestore(&iovad->iova_lock, flags);
+	}
+
+	if (!llist_empty(&iovad->deferred_frees))
+		schedule_delayed_work(&iovad->deferred_free_work,
+				      msecs_to_jiffies(10));
 }
 
 /**
@@ -199,9 +238,15 @@ __free_iova(struct iova_domain *iovad, struct iova *iova)
 	unsigned long flags;
 
 	spin_lock_irqsave(&iovad->iova_lock, flags);
-	remove_iova(iovad, iova);
+	if (remove_iova(iovad, iova)) {
+		spin_unlock_irqrestore(&iovad->iova_lock, flags);
+		free_iova_mem(iova);
+		return;
+	}
 	spin_unlock_irqrestore(&iovad->iova_lock, flags);
-	free_iova_mem(iova);
+	llist_add(&iova->deferred_free, &iovad->deferred_frees);
+	schedule_delayed_work(&iovad->deferred_free_work,
+			      msecs_to_jiffies(10));
 }
 EXPORT_SYMBOL_GPL(__free_iova);
 
@@ -224,9 +269,15 @@ free_iova(struct iova_domain *iovad, unsigned long pfn)
 		spin_unlock_irqrestore(&iovad->iova_lock, flags);
 		return;
 	}
-	remove_iova(iovad, iova);
+	if (remove_iova(iovad, iova)) {
+		spin_unlock_irqrestore(&iovad->iova_lock, flags);
+		free_iova_mem(iova);
+		return;
+	}
 	spin_unlock_irqrestore(&iovad->iova_lock, flags);
-	free_iova_mem(iova);
+	llist_add(&iova->deferred_free, &iovad->deferred_frees);
+	schedule_delayed_work(&iovad->deferred_free_work,
+			      msecs_to_jiffies(10));
 }
 EXPORT_SYMBOL_GPL(free_iova);
 
@@ -317,6 +368,15 @@ void put_iova_domain(struct iova_domain *iovad)
 
 	if (iovad->rcaches)
 		iova_domain_free_rcaches(iovad);
+
+	cancel_delayed_work_sync(&iovad->deferred_free_work);
+
+	/*
+	 * Deferred entries are still in the maple tree, so the
+	 * mas_for_each loop below frees them along with everything else.
+	 * Just discard the deferred list without double-freeing.
+	 */
+	llist_del_all(&iovad->deferred_frees);
 
 	mas_for_each(&mas, iova, ULONG_MAX)
 		free_iova_mem(iova);
@@ -481,11 +541,19 @@ iova_magazine_free_pfns(struct iova_magazine *mag, struct iova_domain *iovad)
 		if (WARN_ON(!iova))
 			continue;
 
-		remove_iova(iovad, iova);
-		free_iova_mem(iova);
+		if (remove_iova(iovad, iova)) {
+			free_iova_mem(iova);
+		} else {
+			llist_add(&iova->deferred_free,
+				  &iovad->deferred_frees);
+		}
 	}
 
 	spin_unlock_irqrestore(&iovad->iova_lock, flags);
+
+	if (!llist_empty(&iovad->deferred_frees))
+		schedule_delayed_work(&iovad->deferred_free_work,
+				      msecs_to_jiffies(10));
 
 	mag->size = 0;
 }
