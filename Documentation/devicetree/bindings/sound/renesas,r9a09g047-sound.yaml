@@ -42,13 +42,8 @@ properties:
   "#clock-cells":
     const: 0
 
-  "#address-cells":
-    const: 1
-
-  "#size-cells":
-    const: 0
-
   clocks:
+    minItems: 47
     maxItems: 47
 
   clock-names:
@@ -105,6 +100,7 @@ properties:
     maxItems: 1
 
   resets:
+    minItems: 14
     maxItems: 14
 
   reset-names:
@@ -143,11 +139,12 @@ properties:
               through the list to find a free channel.
 
           dma-names:
-            maxItems: 5
-            allOf:
-              - items:
-                  enum:
-                    - tx
+            items:
+              - const: tx
+              - const: tx
+              - const: tx
+              - const: tx
+              - const: tx
 
         required:
           - dmas
@@ -203,12 +200,22 @@ properties:
               falls through the list to find a free channel.
 
           dma-names:
-            maxItems: 10
-            allOf:
-              - items:
-                  enum:
-                    - tx
-                    - rx
+            items:
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+
+        required:
+          - interrupts
+          - dmas
+          - dma-names
 
   ssiu:
     type: object
@@ -229,12 +236,17 @@ properties:
               falls through the list to find a free channel.
 
           dma-names:
-            maxItems: 10
-            allOf:
-              - items:
-                  enum:
-                    - tx
-                    - rx
+            items:
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
+              - enum: [ tx, rx ]
 
         required:
           - dmas
@@ -261,10 +273,9 @@ properties:
           - interrupts
 
   ports:
-    $ref: audio-graph-port.yaml#/definitions/port-base
-    unevaluatedProperties: false
+    $ref: /schemas/graph.yaml#/properties/ports
     patternProperties:
-      '^port@[0-9a-f]+$':
+      '^port(@[0-9a-f]+)?$':
         $ref: audio-graph-port.yaml#/definitions/port-base
         unevaluatedProperties: false
         properties:
@@ -276,6 +287,8 @@ properties:
             properties:
               playback:
                 $ref: /schemas/types.yaml#/definitions/phandle-array
+                items:
+                  maxItems: 1
                 description:
                   Ordered list of phandles to the in-SoC modules used
                   by this DAI in the playback direction. Each phandle
@@ -285,6 +298,8 @@ properties:
                   from CPU to off-SoC endpoint.
               capture:
                 $ref: /schemas/types.yaml#/definitions/phandle-array
+                items:
+                  maxItems: 1
                 description:
                   Ordered list of phandles to the in-SoC modules used
                   by this DAI in the capture direction. Each phandle
@@ -311,8 +326,6 @@ examples:
     #include <dt-bindings/interrupt-controller/arm-gic.h>
 
     sound@13c00000 {
-      #sound-dai-cells = <1>;
-      #clock-cells = <0>;
       compatible = "renesas,r9a09g047-sound";
       reg = <0x13c00000 0x10000>,
             <0x13c20000 0x10000>,
@@ -320,6 +333,8 @@ examples:
             <0x13c31000 0x1f000>,
             <0x13c50000 0x10000>;
       reg-names = "scu", "adg", "ssiu", "ssi", "audmapp";
+      #sound-dai-cells = <1>;
+      #clock-cells = <0>;
       clocks = <&cpg 245>,
                <&cpg 385>, <&cpg 386>,
                <&cpg 387>, <&cpg 388>,
