@@ -1811,6 +1811,13 @@ static int omap_dma_probe(struct platform_device *pdev)
 	if (rc) {
 		pr_warn("OMAP-DMA: failed to register slave DMA engine device: %d\n",
 			rc);
+		if (!omap_dma_legacy(od)) {
+			spin_lock_irq(&od->irq_lock);
+			od->irq_enable_mask = 0;
+			omap_dma_glbl_write(od, IRQENABLE_L1, 0);
+			spin_unlock_irq(&od->irq_lock);
+			omap_dma_glbl_read(od, IRQENABLE_L1);
+		}
 		if (od->ll123_supported)
 			dma_pool_destroy(od->desc_pool);
 		omap_dma_free(od);
@@ -1828,6 +1835,13 @@ static int omap_dma_probe(struct platform_device *pdev)
 		if (rc) {
 			pr_warn("OMAP-DMA: failed to register DMA controller\n");
 			dma_async_device_unregister(&od->ddev);
+			if (!omap_dma_legacy(od)) {
+				spin_lock_irq(&od->irq_lock);
+				od->irq_enable_mask = 0;
+				omap_dma_glbl_write(od, IRQENABLE_L1, 0);
+				spin_unlock_irq(&od->irq_lock);
+				omap_dma_glbl_read(od, IRQENABLE_L1);
+			}
 			if (od->ll123_supported)
 				dma_pool_destroy(od->desc_pool);
 			omap_dma_free(od);
