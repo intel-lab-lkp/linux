@@ -1139,8 +1139,19 @@ impl Process {
         thread.release();
     }
 
-    fn set_max_threads(&self, max: u32) {
+    fn set_max_threads(&self, max: u32) -> Result {
+        // Cap at the calling task's RLIMIT_NPROC, following the same pattern
+        // as io_uring (io-wq.c) for limiting kernel-side thread creation.
+        // SAFETY: current is valid, signal and rlim are always initialized.
+        let nproc_limit = unsafe {
+            let task = kernel::current!().as_ptr();
+            (*(*(*task).signal).rlim.as_ptr().add(bindings::RLIMIT_NPROC as usize)).rlim_cur
+        };
+        if (max as u64) > (nproc_limit as u64) {
+            return Err(EINVAL);
+        }
         self.inner.lock().max_threads = max;
+        Ok(())
     }
 
     fn set_oneway_spam_detection_enabled(&self, enabled: u32) {
@@ -1574,7 +1585,7 @@ impl Process {
     ) -> Result {
         let thread = this.get_current_thread()?;
         match cmd {
-            uapi::BINDER_SET_MAX_THREADS => this.set_max_threads(reader.read()?),
+            uapi::BINDER_SET_MAX_THREADS => this.set_max_threads(reader.read()?)?,
             uapi::BINDER_THREAD_EXIT => this.remove_thread(thread),
             uapi::BINDER_SET_CONTEXT_MGR => this.set_as_manager(None, &thread)?,
             uapi::BINDER_SET_CONTEXT_MGR_EXT => {
