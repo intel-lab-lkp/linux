@@ -573,6 +573,11 @@ void amdgpu_dm_update_connector_after_detect(
 		amdgpu_dm_update_freesync_caps(connector, aconnector->drm_edid, true);
 		amdgpu_dm_update_connector_ext_caps(aconnector);
 		dm_set_panel_type(aconnector);
+
+		if (aconnector->hdmi_comp_auto) {
+			if (sink->sink_signal != SIGNAL_TYPE_HDMI_FRL)
+				sink->sink_signal = SIGNAL_TYPE_HDMI_FRL;
+		}
 	} else {
 		hdmi_cec_unset_edid(aconnector);
 		drm_dp_cec_unset_edid(&aconnector->dm_dp_aux.aux);
