@@ -1265,6 +1265,7 @@
 			clocks = <&cpg CPG_MOD 0xa3>, <&cpg CPG_MOD 0xa5>,
 				 <&cpg CPG_MOD 0xa4>, <&cpg CPG_MOD 0xa6>;
 			clock-names = "core", "clkh", "cd", "aclk";
+			max-frequency = <200000000>;
 			resets = <&cpg 0xa7>;
 			power-domains = <&cpg>;
 			status = "disabled";
@@ -1285,6 +1286,7 @@
 			clocks = <&cpg CPG_MOD 0xa7>, <&cpg CPG_MOD 0xa9>,
 				 <&cpg CPG_MOD 0xa8>, <&cpg CPG_MOD 0xaa>;
 			clock-names = "core", "clkh", "cd", "aclk";
+			max-frequency = <200000000>;
 			resets = <&cpg 0xa8>;
 			power-domains = <&cpg>;
 			status = "disabled";
@@ -1305,6 +1307,7 @@
 			clocks = <&cpg CPG_MOD 0xab>, <&cpg CPG_MOD 0xad>,
 				 <&cpg CPG_MOD 0xac>, <&cpg CPG_MOD 0xae>;
 			clock-names = "core", "clkh", "cd", "aclk";
+			max-frequency = <200000000>;
 			resets = <&cpg 0xa9>;
 			power-domains = <&cpg>;
 			status = "disabled";
