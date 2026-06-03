@@ -9,7 +9,6 @@
 #include <linux/pm_domain.h>
 #include <linux/pm_opp.h>
 #include <linux/pm_runtime.h>
-#include <linux/reset.h>
 
 #include "iris_core.h"
 #include "iris_resources.h"
@@ -70,7 +69,7 @@ int iris_opp_set_rate(struct device *dev, unsigned long freq)
 	return dev_pm_opp_set_opp(dev, opp);
 }
 
-int iris_enable_power_domains(struct iris_core *core, struct device *pd_dev)
+int iris_enable_power_domain_and_clocks(struct iris_core *core, struct iris_power_domain *pd)
 {
 	int ret;
 
@@ -78,66 +77,20 @@ int iris_enable_power_domains(struct iris_core *core, struct device *pd_dev)
 	if (ret)
 		return ret;
 
-	ret = pm_runtime_get_sync(pd_dev);
+	ret = pm_runtime_get_sync(pd->dev);
 	if (ret < 0)
 		return ret;
+
+	ret = clk_bulk_prepare_enable(pd->clk_cnt, pd->clocks);
+	if (ret)
+		pm_runtime_put_sync(pd->dev);
 
 	return ret;
 }
 
-int iris_disable_power_domains(struct iris_core *core, struct device *pd_dev)
+void iris_disable_power_domain_and_clocks(struct iris_core *core, struct iris_power_domain *pd)
 {
-	int ret;
-
-	ret = iris_opp_set_rate(core->dev, 0);
-	if (ret)
-		return ret;
-
-	pm_runtime_put_sync(pd_dev);
-
-	return 0;
-}
-
-static struct clk *iris_get_clk_by_type(struct iris_core *core, enum platform_clk_type clk_type)
-{
-	const struct platform_clk_data *clk_tbl;
-	u32 clk_cnt, i, j;
-
-	clk_tbl = core->iris_platform_data->clk_tbl;
-	clk_cnt = core->iris_platform_data->clk_tbl_size;
-
-	for (i = 0; i < clk_cnt; i++) {
-		if (clk_tbl[i].clk_type == clk_type) {
-			for (j = 0; core->clock_tbl && j < core->clk_count; j++) {
-				if (!strcmp(core->clock_tbl[j].id, clk_tbl[i].clk_name))
-					return core->clock_tbl[j].clk;
-			}
-		}
-	}
-
-	return NULL;
-}
-
-int iris_prepare_enable_clock(struct iris_core *core, enum platform_clk_type clk_type)
-{
-	struct clk *clock;
-
-	clock = iris_get_clk_by_type(core, clk_type);
-	if (!clock)
-		return -ENOENT;
-
-	return clk_prepare_enable(clock);
-}
-
-int iris_disable_unprepare_clock(struct iris_core *core, enum platform_clk_type clk_type)
-{
-	struct clk *clock;
-
-	clock = iris_get_clk_by_type(core, clk_type);
-	if (!clock)
-		return -EINVAL;
-
-	clk_disable_unprepare(clock);
-
-	return 0;
+	clk_bulk_disable_unprepare(pd->clk_cnt, pd->clocks);
+	iris_opp_set_rate(core->dev, 0);
+	pm_runtime_put_sync(pd->dev);
 }
