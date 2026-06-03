@@ -17,9 +17,11 @@
 #include <linux/of.h>
 #include <asm/acpi.h>
 #include <asm/alternative.h>
+#include <asm/asm-extable.h>
 #include <asm/bugs.h>
 #include <asm/cacheflush.h>
 #include <asm/cpufeature.h>
+#include <asm/csr.h>
 #include <asm/hwcap.h>
 #include <asm/text-patching.h>
 #include <asm/hwprobe.h>
@@ -160,6 +162,32 @@ static int riscv_ext_d_validate(const struct riscv_isa_ext_data *data,
 	if (!IS_ENABLED(CONFIG_FPU))
 		return -EINVAL;
 
+	return 0;
+}
+
+static int riscv_ext_h_validate(const struct riscv_isa_ext_data *data,
+				const unsigned long *isa_bitmap)
+{
+	unsigned long val, ret = 1;
+
+	/*
+	 * The H extension may be advertised by firmware (DT/ACPI) even
+	 * when the underlying hardware does not implement it, or when
+	 * M-mode firmware has not delegated hypervisor CSR access to
+	 * S-mode.  Probe CSR_HGATP under an exception-table fixup: if
+	 * the read traps with an illegal instruction, ret stays 1.
+	 */
+	asm volatile(
+		"1:	csrr	%0, " __stringify(CSR_HGATP) "\n"
+		"	li	%1, 0\n"
+		"2:\n"
+		_ASM_EXTABLE(1b, 2b)
+		: "=r" (val), "+r" (ret));
+
+	if (ret) {
+		pr_err("H detected in ISA string, disabling as CSR_HGATP is not accessible\n");
+		return -EINVAL;
+	}
 	return 0;
 }
 
@@ -498,7 +526,7 @@ const struct riscv_isa_ext_data riscv_isa_ext[] = {
 	__RISCV_ISA_EXT_DATA(q, RISCV_ISA_EXT_q),
 	__RISCV_ISA_EXT_SUPERSET(c, RISCV_ISA_EXT_c, riscv_c_exts),
 	__RISCV_ISA_EXT_SUPERSET_VALIDATE(v, RISCV_ISA_EXT_v, riscv_v_exts, riscv_ext_vector_float_validate),
-	__RISCV_ISA_EXT_DATA(h, RISCV_ISA_EXT_h),
+	__RISCV_ISA_EXT_DATA_VALIDATE(h, RISCV_ISA_EXT_h, riscv_ext_h_validate),
 	__RISCV_ISA_EXT_SUPERSET_VALIDATE(zicbom, RISCV_ISA_EXT_ZICBOM, riscv_xlinuxenvcfg_exts, riscv_ext_zicbom_validate),
 	__RISCV_ISA_EXT_DATA_VALIDATE(zicbop, RISCV_ISA_EXT_ZICBOP, riscv_ext_zicbop_validate),
 	__RISCV_ISA_EXT_SUPERSET_VALIDATE(zicboz, RISCV_ISA_EXT_ZICBOZ, riscv_xlinuxenvcfg_exts, riscv_ext_zicboz_validate),
