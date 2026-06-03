@@ -2654,6 +2654,33 @@ int set_direct_map_default_noflush(struct page *page)
 	return __set_pages_p(page, 1);
 }
 
+void arch_try_collapse_direct_map(struct page *page)
+{
+	pgprotval_t mask = pgprot_val(PAGE_KERNEL) & (_PAGE_DIRTY | _PAGE_GLOBAL);
+	unsigned long addr;
+	struct cpa_data cpa = { .vaddr = &addr,
+				.pgd = NULL,
+				.numpages = 1,
+				.mask_set = __pgprot(mask),
+				.mask_clr = __pgprot(0),
+				.flags = CPA_NO_CHECK_ALIAS };
+
+	if (PageHighMem(page) || debug_pagealloc_enabled())
+		return;
+
+	addr = (unsigned long)page_address(page);
+
+	/*
+	 * set_direct_map_default_noflush() only restores _PAGE_PRESENT and
+	 * _PAGE_RW. Put back the other PAGE_KERNEL bits needed for a restored
+	 * direct-map PTE to match the rest of the range.
+	 */
+	if (__change_page_attr_set_clr(&cpa, 1))
+		return;
+
+	cpa_collapse_large_pages(&cpa);
+}
+
 int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
 {
 	if (valid)
