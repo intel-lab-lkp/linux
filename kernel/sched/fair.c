@@ -13423,7 +13423,9 @@ more_balance:
 			 * if the curr task on busiest CPU can't be
 			 * moved to this_cpu:
 			 */
-			if (!cpumask_test_cpu(this_cpu, busiest->curr->cpus_ptr)) {
+			if (!cpumask_test_cpu(this_cpu, busiest->curr->cpus_ptr) ||
+				(busiest->curr->sched_class == &fair_sched_class &&
+				!busiest->curr->on_rq)) {
 				raw_spin_rq_unlock_irqrestore(busiest, flags);
 				goto out_one_pinned;
 			}
@@ -13455,10 +13457,8 @@ more_balance:
 		sd->nr_balance_failed = 0;
 	}
 
-	if (likely(!active_balance) || need_active_balance(&env)) {
-		/* We were unbalanced, so reset the balancing interval */
-		sd->balance_interval = sd->min_interval;
-	}
+	/* We were unbalanced, so reset the balancing interval */
+	sd->balance_interval = sd->min_interval;
 
 	goto out;
 
