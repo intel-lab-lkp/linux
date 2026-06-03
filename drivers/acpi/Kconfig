@@ -607,6 +607,17 @@ config ACPI_PRMT
 	  substantially increase computational overhead related to the
 	  initialization of some server systems.
 
+config ACPI_PHAT
+	bool "ACPI PHAT Record parsing support"
+	depends on X86 && ACPI && CPU_SUP_AMD
+	default y
+	help
+	  The Platform Health Assessment Table (PHAT) allows platforms to
+	  expose read-only data for diagnostics and health assessments.
+
+	  Enable this feature to access generic helpers for parsing PHAT
+	  data records.
+
 endif	# ACPI
 
 config X86_PM_TIMER

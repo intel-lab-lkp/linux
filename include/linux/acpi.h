@@ -1627,6 +1627,20 @@ extern int acpi_ffh_address_space_arch_handler(acpi_integer *value,
 static inline void acpi_init_ffh(void) { }
 #endif
 
+#ifdef CONFIG_ACPI_PHAT
+struct acpi_phat_vendor_element *acpi_phat_get_vendor_reset_reason(guid_t *guid);
+void acpi_phat_put_vendor_reset_reason(struct acpi_phat_vendor_element *reason);
+#else
+static inline struct acpi_phat_vendor_element *
+acpi_phat_get_vendor_reset_reason(guid_t *guid)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+static inline void
+acpi_phat_put_vendor_reset_reason(struct acpi_phat_vendor_element *reason) { }
+#endif
+
 #ifdef CONFIG_ACPI
 extern void acpi_device_notify(struct device *dev);
 extern void acpi_device_notify_remove(struct device *dev);
