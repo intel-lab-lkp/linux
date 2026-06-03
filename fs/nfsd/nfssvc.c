@@ -36,6 +36,18 @@
 #define NFSDDBG_FACILITY	NFSDDBG_SVC
 
 atomic_t			nfsd_th_cnt = ATOMIC_INIT(0);
+
+/*
+ * Per-client fair-queue dispatch.  When set, ready connections are scheduled
+ * round-robin per client (NFSv4.1 clientid, else source address) rather than
+ * per transport, so a client cannot grab a larger share of nfsd threads by
+ * opening more connections.  Read at service creation, so a change takes
+ * effect at the next nfsd start (thread count 0 -> N).
+ */
+static bool			nfsd_fairq;
+module_param_named(fairq, nfsd_fairq, bool, 0644);
+MODULE_PARM_DESC(fairq, "schedule nfsd service fairly per client (default off)");
+
 static int			nfsd(void *vrqstp);
 #if defined(CONFIG_NFSD_V2_ACL) || defined(CONFIG_NFSD_V3_ACL)
 static int			nfsd_acl_rpcbind_set(struct net *,
@@ -633,6 +645,13 @@ int nfsd_create_serv(struct net *net)
 	if (serv == NULL) {
 		percpu_ref_exit(&nn->nfsd_net_ref);
 		return -ENOMEM;
+	}
+
+	error = svc_set_fairq(serv, nfsd_fairq);
+	if (error) {
+		svc_destroy(&serv);
+		percpu_ref_exit(&nn->nfsd_net_ref);
+		return error;
 	}
 
 	error = svc_bind(serv, net);
