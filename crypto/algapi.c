@@ -446,8 +446,10 @@ int crypto_register_alg(struct crypto_alg *alg)
 		u8 *p = (u8 *)alg - algsize;
 
 		p = kmemdup(p, algsize + sizeof(*alg), GFP_KERNEL);
-		if (!p)
+		if (!p) {
+			crypto_alg_put(alg);
 			return -ENOMEM;
+		}
 
 		alg = (void *)(p + algsize);
 		alg->cra_destroy = crypto_free_alg;
