@@ -585,7 +585,7 @@ int audioreach_send_cmd_sync(struct device *dev, gpr_device_t *gdev,
 	const struct gpr_hdr *hdr = &pkt->hdr;
 	int rc;
 
-	mutex_lock(cmd_lock);
+	guard(mutex)(cmd_lock);
 	result->opcode = 0;
 	result->status = 0;
 
@@ -597,7 +597,7 @@ int audioreach_send_cmd_sync(struct device *dev, gpr_device_t *gdev,
 		rc = -EINVAL;
 
 	if (rc < 0)
-		goto err;
+		return rc;
 
 	if (rsp_opcode)
 		rc = wait_event_timeout(*cmd_wait, (result->opcode == hdr->opcode) ||
@@ -616,8 +616,6 @@ int audioreach_send_cmd_sync(struct device *dev, gpr_device_t *gdev,
 		rc = 0;
 	}
 
-err:
-	mutex_unlock(cmd_lock);
 	return rc;
 }
 EXPORT_SYMBOL_GPL(audioreach_send_cmd_sync);
@@ -1424,7 +1422,7 @@ void audioreach_graph_free_buf(struct q6apm_graph *graph)
 {
 	struct audioreach_graph_data *port;
 
-	mutex_lock(&graph->lock);
+	guard(mutex)(&graph->lock);
 	port = &graph->rx_data;
 	port->num_periods = 0;
 	kfree(port->buf);
@@ -1434,7 +1432,6 @@ void audioreach_graph_free_buf(struct q6apm_graph *graph)
 	port->num_periods = 0;
 	kfree(port->buf);
 	port->buf = NULL;
-	mutex_unlock(&graph->lock);
 }
 EXPORT_SYMBOL_GPL(audioreach_graph_free_buf);
 
