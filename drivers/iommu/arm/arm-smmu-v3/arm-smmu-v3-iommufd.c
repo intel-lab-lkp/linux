@@ -350,53 +350,72 @@ static int arm_vsmmu_convert_user_cmd(struct arm_vsmmu *vsmmu,
 	return 0;
 }
 
+static int arm_vsmmu_cache_invalidate_batch(struct arm_vsmmu *vsmmu,
+					    struct iommu_user_data_array *array,
+					    u32 *idx)
+{
+	struct arm_vsmmu_invalidation_cmd cmds[CMDQ_BATCH_ENTRIES - 1];
+	struct arm_smmu_device *smmu = vsmmu->smmu;
+	struct iommu_user_data_array batch = {
+		.type = array->type,
+		.entry_len = array->entry_len,
+	};
+	unsigned int num, i;
+	int ret, issue_ret;
+
+	static_assert(sizeof(*cmds) == 2 * sizeof(u64));
+
+	/* Copy one batch of the user array in a single bulk copy */
+	num = min_t(u32, array->entry_num - *idx, ARRAY_SIZE(cmds));
+	batch.uptr = array->uptr + array->entry_len * *idx;
+	batch.entry_num = num;
+	ret = iommu_copy_struct_from_full_user_array(
+		cmds, sizeof(*cmds), &batch,
+		IOMMU_VIOMMU_INVALIDATE_DATA_ARM_SMMUV3);
+	if (ret)
+		return ret;
+
+	/* Convert in place; only the converted prefix may be issued */
+	for (i = 0; i < num; i++) {
+		ret = arm_vsmmu_convert_user_cmd(vsmmu, &cmds[i]);
+		if (ret) {
+			num = i;
+			break;
+		}
+	}
+	if (!num)
+		return ret;
+
+	/* FIXME always uses the main cmdq rather than trying to group by type */
+	issue_ret = arm_smmu_cmdq_issue_cmdlist(smmu, &smmu->cmdq, cmds->cmd,
+						num, true);
+	if (issue_ret)
+		return issue_ret;
+
+	*idx += num;
+	return ret;
+}
+
 int arm_vsmmu_cache_invalidate(struct iommufd_viommu *viommu,
 			       struct iommu_user_data_array *array)
 {
 	struct arm_vsmmu *vsmmu = container_of(viommu, struct arm_vsmmu, core);
-	struct arm_smmu_device *smmu = vsmmu->smmu;
-	struct arm_vsmmu_invalidation_cmd *last;
-	struct arm_vsmmu_invalidation_cmd *cmds;
-	struct arm_vsmmu_invalidation_cmd *cur;
-	struct arm_vsmmu_invalidation_cmd *end;
-	int ret;
+	u32 issued = 0;
+	int ret = 0;
 
-	cmds = kzalloc_objs(*cmds, array->entry_num);
-	if (!cmds)
-		return -ENOMEM;
-	cur = cmds;
-	end = cmds + array->entry_num;
-
-	static_assert(sizeof(*cmds) == 2 * sizeof(u64));
-	ret = iommu_copy_struct_from_full_user_array(
-		cmds, sizeof(*cmds), array,
-		IOMMU_VIOMMU_INVALIDATE_DATA_ARM_SMMUV3);
-	if (ret)
-		goto out;
-
-	last = cmds;
-	while (cur != end) {
-		ret = arm_vsmmu_convert_user_cmd(vsmmu, cur);
-		if (ret)
-			goto out;
-
-		/* FIXME work in blocks of CMDQ_BATCH_ENTRIES and copy each block? */
-		cur++;
-		if (cur != end && (cur - last) != CMDQ_BATCH_ENTRIES - 1)
-			continue;
-
-		/* FIXME always uses the main cmdq rather than trying to group by type */
-		ret = arm_smmu_cmdq_issue_cmdlist(smmu, &smmu->cmdq, last->cmd,
-						  cur - last, true);
-		if (ret) {
-			cur--;
-			goto out;
-		}
-		last = cur;
+	if (array->type != IOMMU_VIOMMU_INVALIDATE_DATA_ARM_SMMUV3) {
+		array->entry_num = 0;
+		return -EINVAL;
 	}
-out:
-	array->entry_num = cur - cmds;
-	kfree(cmds);
+
+	while (issued != array->entry_num) {
+		/* Process and issue the command(s) in batch */
+		ret = arm_vsmmu_cache_invalidate_batch(vsmmu, array, &issued);
+		if (ret)
+			break;
+	}
+
+	array->entry_num = issued;
 	return ret;
 }
 
