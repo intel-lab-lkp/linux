@@ -3977,27 +3977,22 @@ xelpd_program_plane_pre_csc_lut(struct intel_dsb *dsb,
 			   PLANE_PRE_CSC_GAMC_INDEX_ENH(pipe, plane, 0),
 			   PLANE_PAL_PREC_AUTO_INCREMENT);
 
-	if (pre_csc_lut) {
-		for (i = 0; i < lut_size + 3; i++) {
+	for (i = 0; i < lut_size + 3; i++) {
+		if (pre_csc_lut) {
 			if (i < lut_size)
 				lut_val = drm_color_lut32_extract(pre_csc_lut[i].green, 24);
 			/* else duplicate last lut_val */
-
-			intel_de_write_dsb(display, dsb,
-					   PLANE_PRE_CSC_GAMC_DATA_ENH(pipe, plane, 0),
-					   lut_val);
-		}
-	} else {
-		for (i = 0; i < lut_size + 3; i++) {
+		} else {
 			if (i < lut_size)
 				lut_val = (i * ((1 << 24) - 1)) / (lut_size - 1);
 			else
 				lut_val = 1 << 24;
-
-			intel_de_write_dsb(display, dsb,
-					   PLANE_PRE_CSC_GAMC_DATA_ENH(pipe, plane, 0),
-					   lut_val);
 		}
+
+		intel_de_write_dsb(display, dsb,
+				   PLANE_PRE_CSC_GAMC_DATA_ENH(pipe, plane, 0),
+				   lut_val);
+
 	}
 
 	intel_de_write_dsb(display, dsb, PLANE_PRE_CSC_GAMC_INDEX_ENH(pipe, plane, 0), 0);
