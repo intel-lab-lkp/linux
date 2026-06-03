@@ -2139,22 +2139,6 @@ void rtw_update_registrypriv_dev_network(struct adapter *adapter)
 
 	pdev_network->rssi = 0;
 
-	switch (pregistrypriv->wireless_mode) {
-	case WIRELESS_11B:
-		pdev_network->network_type_in_use = (Ndis802_11DS);
-		break;
-	case WIRELESS_11G:
-	case WIRELESS_11BG:
-	case WIRELESS_11_24N:
-	case WIRELESS_11G_24N:
-	case WIRELESS_11BG_24N:
-		pdev_network->network_type_in_use = (Ndis802_11OFDM24);
-		break;
-	default:
-		/*  TODO */
-		break;
-	}
-
 	pdev_network->configuration.ds_config = (pregistrypriv->channel);
 
 	if (cur_network->network.infrastructure_mode == Ndis802_11IBSS)

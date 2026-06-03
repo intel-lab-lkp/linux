@@ -23,14 +23,6 @@ struct ndis_802_11_ssid {
 	u8  ssid[32];
 };
 
-enum ndis_802_11_network_type {
-	Ndis802_11FH,
-	Ndis802_11DS,
-	Ndis802_11OFDM5,
-	Ndis802_11OFDM24,
-	Ndis802_11NetworkTypeMax    /*  not a real type, defined as an upper bound */
-};
-
 /*
 	FW will only save the channel number in DSConfig.
 	ODI Handler will convert the channel number to freq. number.
@@ -65,7 +57,7 @@ struct ndis_80211_var_ie {
 /* Length is the 4 bytes multiples of the sum of
  * ETH_ALEN + 2 +
  * sizeof (struct ndis_802_11_ssid) + sizeof (u32) +
- * sizeof (long) + sizeof (enum ndis_802_11_network_type) +
+ * sizeof (long) +
  * sizeof (struct ndis_802_11_conf) + sizeof (NDIS_802_11_RATES_EX) + ie_length
  *
  * Except for ie_length, all other fields are fixed length. Therefore, we can
@@ -159,7 +151,6 @@ struct wlan_bssid_ex {
 	struct ndis_802_11_ssid  ssid;
 	u32  privacy;
 	long  rssi;/* in dBM, raw data , get from PHY) */
-	enum ndis_802_11_network_type  network_type_in_use;
 	struct ndis_802_11_conf  configuration;
 	enum ndis_802_11_network_infrastructure  infrastructure_mode;
 	NDIS_802_11_RATES_EX  supported_rates;

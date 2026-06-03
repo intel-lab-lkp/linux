@@ -3971,8 +3971,6 @@ u8 collect_bss_info(struct adapter *padapter, union recv_frame *precv_frame, str
 		memcpy(bssid->supported_rates + i, (p + 2), len);
 	}
 
-	bssid->network_type_in_use = Ndis802_11OFDM24;
-
 	if (bssid->ie_length < 12)
 		return _FAIL;
 
