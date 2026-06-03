@@ -272,6 +272,34 @@ the case today. Please follow the standard stable rules in
 :ref:`Documentation/process/stable-kernel-rules.rst <stable_kernel_rules>`,
 and make sure you include appropriate Fixes tags!
 
+Bug fixes
+~~~~~~~~~
+
+Unless explicitly excluded all bug fixes should be targeting the ``net``
+tree and contain an appropriate Fixes tag.
+
+Obvious exclusions:
+
+ - fixes for bugs which only exist in ``net-next`` should target ``net-next``
+   (please still include the Fixes tag in the commit message)
+ - bugs which cannot be reached, e.g. in code paths not executed given
+   current in-tree callers
+ - fixes for compiler warnings and typos
+
+Fixes for selftests and selftest-related infrastructure (most notably
+including the ``netdevsim`` driver) are only considered ``net``-worthy
+if they substantially reduce the flakiness of the test.
+
+Additionally, netdev does not consider bugs to be ``net``-worthy
+if they fulfill **all** of the following criteria:
+ - bug is in a hardware device driver;
+ - bug is either a missing error handling or is part of the error handling flow;
+ - bug was discovered by a static analysis / AI tool;
+ - bug was triggered/observed only with kernel changes or fault injection.
+Fixes for such bugs should default to ``net-next`` and should **not** contain
+a Fixes tag. Networking or driver maintainers may redirect such fixes to ``net``
+at their discretion if they consider the condition to be relevant enough.
+
 Security fixes
 ~~~~~~~~~~~~~~
 
