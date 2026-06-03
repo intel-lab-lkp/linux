@@ -262,7 +262,8 @@ config CRYPTO_DEV_TALITOS
 	select CRYPTO_HASH
 	select CRYPTO_LIB_DES
 	select HW_RANDOM
-	depends on FSL_SOC
+	depends on FSL_SOC || COMPILE_TEST
+	depends on HAS_IOMEM
 	help
 	  Say 'Y' here to use the Freescale Security Engine (SEC)
 	  to offload cryptographic algorithm computation.
