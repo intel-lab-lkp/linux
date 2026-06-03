@@ -297,12 +297,12 @@ static int q6asm_apr_send_session_pkt(struct q6asm *a, struct audio_client *ac,
 	struct apr_hdr *hdr = &pkt->hdr;
 	int rc;
 
-	mutex_lock(&ac->cmd_lock);
+	guard(mutex)(&ac->cmd_lock);
 	ac->result.opcode = 0;
 	ac->result.status = 0;
 	rc = apr_send_pkt(a->adev, pkt);
 	if (rc < 0)
-		goto err;
+		return rc;
 
 	if (rsp_opcode)
 		rc = wait_event_timeout(a->mem_wait,
@@ -323,8 +323,6 @@ static int q6asm_apr_send_session_pkt(struct q6asm *a, struct audio_client *ac,
 		rc = -EINVAL;
 	}
 
-err:
-	mutex_unlock(&ac->cmd_lock);
 	return rc;
 }
 
@@ -371,11 +369,8 @@ static int __q6asm_memory_unmap(struct audio_client *ac,
 static void q6asm_audio_client_free_buf(struct audio_client *ac,
 					struct audio_port_data *port)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&ac->lock, flags);
-	port->num_periods = 0;
-	spin_unlock_irqrestore(&ac->lock, flags);
+	scoped_guard(spinlock_irqsave, &ac->lock)
+		port->num_periods = 0;
 	kfree(port->buf);
 	port->buf = NULL;
 }
@@ -427,7 +422,6 @@ static int __q6asm_memory_map_regions(struct audio_client *ac, int dir,
 	struct audio_port_data *port = NULL;
 	struct audio_buffer *ab = NULL;
 	struct apr_pkt *pkt;
-	unsigned long flags;
 	uint32_t num_regions, buf_sz;
 	int i, pkt_size;
 
@@ -464,17 +458,17 @@ static int __q6asm_memory_map_regions(struct audio_client *ac, int dir,
 	cmd->num_regions = num_regions;
 	cmd->property_flag = 0x00;
 
-	spin_lock_irqsave(&ac->lock, flags);
-	port = &ac->port[dir];
+	scoped_guard(spinlock_irqsave, &ac->lock) {
+		port = &ac->port[dir];
 
-	for (i = 0; i < num_regions; i++) {
-		ab = &port->buf[i];
-		mregions->shm_addr_lsw = lower_32_bits(ab->phys);
-		mregions->shm_addr_msw = upper_32_bits(ab->phys);
-		mregions->mem_size_bytes = buf_sz;
-		++mregions;
+		for (i = 0; i < num_regions; i++) {
+			ab = &port->buf[i];
+			mregions->shm_addr_lsw = lower_32_bits(ab->phys);
+			mregions->shm_addr_msw = upper_32_bits(ab->phys);
+			mregions->mem_size_bytes = buf_sz;
+			++mregions;
+		}
 	}
-	spin_unlock_irqrestore(&ac->lock, flags);
 
 	return q6asm_apr_send_session_pkt(a, ac, pkt, ASM_CMDRSP_SHARED_MEM_MAP_REGIONS);
 }
@@ -495,38 +489,32 @@ int q6asm_map_memory_regions(unsigned int dir, struct audio_client *ac,
 			     size_t period_sz, unsigned int periods)
 {
 	struct audio_buffer *buf;
-	unsigned long flags;
 	int cnt;
 	int rc;
 
-	spin_lock_irqsave(&ac->lock, flags);
-	if (ac->port[dir].buf) {
-		dev_err(ac->dev, "Buffer already allocated\n");
-		spin_unlock_irqrestore(&ac->lock, flags);
-		return 0;
-	}
-
-	buf = kzalloc_objs(*buf, periods, GFP_ATOMIC);
-	if (!buf) {
-		spin_unlock_irqrestore(&ac->lock, flags);
-		return -ENOMEM;
-	}
-
-
-	ac->port[dir].buf = buf;
-
-	buf[0].phys = phys;
-	buf[0].size = period_sz;
-
-	for (cnt = 1; cnt < periods; cnt++) {
-		if (period_sz > 0) {
-			buf[cnt].phys = buf[0].phys + (cnt * period_sz);
-			buf[cnt].size = period_sz;
+	scoped_guard(spinlock_irqsave, &ac->lock) {
+		if (ac->port[dir].buf) {
+			dev_err(ac->dev, "Buffer already allocated\n");
+			return 0;
 		}
-	}
-	ac->port[dir].num_periods = periods;
 
-	spin_unlock_irqrestore(&ac->lock, flags);
+		buf = kzalloc_objs(*buf, periods, GFP_ATOMIC);
+		if (!buf)
+			return -ENOMEM;
+
+		ac->port[dir].buf = buf;
+
+		buf[0].phys = phys;
+		buf[0].size = period_sz;
+
+		for (cnt = 1; cnt < periods; cnt++) {
+			if (period_sz > 0) {
+				buf[cnt].phys = buf[0].phys + (cnt * period_sz);
+				buf[cnt].size = period_sz;
+			}
+		}
+		ac->port[dir].num_periods = periods;
+	}
 
 	rc = __q6asm_memory_map_regions(ac, dir, period_sz, periods, 1);
 	if (rc < 0) {
@@ -542,14 +530,12 @@ static void q6asm_audio_client_release(struct kref *ref)
 {
 	struct audio_client *ac;
 	struct q6asm *a;
-	unsigned long flags;
 
 	ac = container_of(ref, struct audio_client, refcount);
 	a = ac->q6asm;
 
-	spin_lock_irqsave(&a->slock, flags);
-	a->session[ac->session] = NULL;
-	spin_unlock_irqrestore(&a->slock, flags);
+	scoped_guard(spinlock_irqsave, &a->slock)
+		a->session[ac->session] = NULL;
 
 	kfree(ac);
 }
@@ -842,7 +828,6 @@ struct audio_client *q6asm_audio_client_alloc(struct device *dev, q6asm_cb cb,
 {
 	struct q6asm *a = dev_get_drvdata(dev->parent);
 	struct audio_client *ac;
-	unsigned long flags;
 
 	ac = q6asm_get_audio_client(a, session_id + 1);
 	if (ac) {
@@ -854,9 +839,8 @@ struct audio_client *q6asm_audio_client_alloc(struct device *dev, q6asm_cb cb,
 	if (!ac)
 		return ERR_PTR(-ENOMEM);
 
-	spin_lock_irqsave(&a->slock, flags);
-	a->session[session_id + 1] = ac;
-	spin_unlock_irqrestore(&a->slock, flags);
+	scoped_guard(spinlock_irqsave, &a->slock)
+		a->session[session_id + 1] = ac;
 	ac->session = session_id + 1;
 	ac->cb = cb;
 	ac->dev = dev;
@@ -880,20 +864,19 @@ static int q6asm_ac_send_cmd_sync(struct audio_client *ac, struct apr_pkt *pkt)
 	struct apr_hdr *hdr = &pkt->hdr;
 	int rc;
 
-	mutex_lock(&ac->cmd_lock);
+	guard(mutex)(&ac->cmd_lock);
 	ac->result.opcode = 0;
 	ac->result.status = 0;
 
 	rc = apr_send_pkt(ac->adev, pkt);
 	if (rc < 0)
-		goto err;
+		return rc;
 
 	rc = wait_event_timeout(ac->cmd_wait,
 				(ac->result.opcode == hdr->opcode), 5 * HZ);
 	if (!rc) {
 		dev_err(ac->dev, "CMD %x timeout\n", hdr->opcode);
-		rc =  -ETIMEDOUT;
-		goto err;
+		return -ETIMEDOUT;
 	}
 
 	if (ac->result.status > 0) {
@@ -904,9 +887,6 @@ static int q6asm_ac_send_cmd_sync(struct audio_client *ac, struct apr_pkt *pkt)
 		rc = 0;
 	}
 
-
-err:
-	mutex_unlock(&ac->cmd_lock);
 	return rc;
 }
 
@@ -1402,7 +1382,6 @@ int q6asm_read(struct audio_client *ac, uint32_t stream_id)
 	struct audio_port_data *port;
 	struct audio_buffer *ab;
 	struct apr_pkt *pkt;
-	unsigned long flags;
 	int pkt_size = APR_HDR_SIZE + sizeof(*read);
 	int rc = 0;
 
@@ -1413,25 +1392,25 @@ int q6asm_read(struct audio_client *ac, uint32_t stream_id)
 	pkt = p;
 	read = p + APR_HDR_SIZE;
 
-	spin_lock_irqsave(&ac->lock, flags);
-	port = &ac->port[SNDRV_PCM_STREAM_CAPTURE];
-	q6asm_add_hdr(ac, &pkt->hdr, pkt_size, false, stream_id);
-	ab = &port->buf[port->dsp_buf];
-	pkt->hdr.opcode = ASM_DATA_CMD_READ_V2;
-	read->buf_addr_lsw = lower_32_bits(ab->phys);
-	read->buf_addr_msw = upper_32_bits(ab->phys);
-	read->mem_map_handle = port->mem_map_handle;
+	scoped_guard(spinlock_irqsave, &ac->lock) {
+		port = &ac->port[SNDRV_PCM_STREAM_CAPTURE];
+		q6asm_add_hdr(ac, &pkt->hdr, pkt_size, false, stream_id);
+		ab = &port->buf[port->dsp_buf];
+		pkt->hdr.opcode = ASM_DATA_CMD_READ_V2;
+		read->buf_addr_lsw = lower_32_bits(ab->phys);
+		read->buf_addr_msw = upper_32_bits(ab->phys);
+		read->mem_map_handle = port->mem_map_handle;
 
-	read->buf_size = ab->size;
-	read->seq_id = port->dsp_buf;
-	pkt->hdr.token = port->dsp_buf;
+		read->buf_size = ab->size;
+		read->seq_id = port->dsp_buf;
+		pkt->hdr.token = port->dsp_buf;
 
-	port->dsp_buf++;
+		port->dsp_buf++;
 
-	if (port->dsp_buf >= port->num_periods)
-		port->dsp_buf = 0;
+		if (port->dsp_buf >= port->num_periods)
+			port->dsp_buf = 0;
+	}
 
-	spin_unlock_irqrestore(&ac->lock, flags);
 	rc = apr_send_pkt(ac->adev, pkt);
 	if (rc == pkt_size)
 		rc = 0;
@@ -1515,7 +1494,6 @@ int q6asm_write_async(struct audio_client *ac, uint32_t stream_id, uint32_t len,
 	struct asm_data_cmd_write_v2 *write;
 	struct audio_port_data *port;
 	struct audio_buffer *ab;
-	unsigned long flags;
 	struct apr_pkt *pkt;
 	int pkt_size = APR_HDR_SIZE + sizeof(*write);
 	int rc = 0;
@@ -1527,30 +1505,30 @@ int q6asm_write_async(struct audio_client *ac, uint32_t stream_id, uint32_t len,
 	pkt = p;
 	write = p + APR_HDR_SIZE;
 
-	spin_lock_irqsave(&ac->lock, flags);
-	port = &ac->port[SNDRV_PCM_STREAM_PLAYBACK];
-	q6asm_add_hdr(ac, &pkt->hdr, pkt_size, false, stream_id);
+	scoped_guard(spinlock_irqsave, &ac->lock) {
+		port = &ac->port[SNDRV_PCM_STREAM_PLAYBACK];
+		q6asm_add_hdr(ac, &pkt->hdr, pkt_size, false, stream_id);
 
-	ab = &port->buf[port->dsp_buf];
-	pkt->hdr.token = port->dsp_buf | (len << ASM_WRITE_TOKEN_LEN_SHIFT);
-	pkt->hdr.opcode = ASM_DATA_CMD_WRITE_V2;
-	write->buf_addr_lsw = lower_32_bits(ab->phys);
-	write->buf_addr_msw = upper_32_bits(ab->phys);
-	write->buf_size = len;
-	write->seq_id = port->dsp_buf;
-	write->timestamp_lsw = lsw_ts;
-	write->timestamp_msw = msw_ts;
-	write->mem_map_handle =
-	    ac->port[SNDRV_PCM_STREAM_PLAYBACK].mem_map_handle;
+		ab = &port->buf[port->dsp_buf];
+		pkt->hdr.token = port->dsp_buf | (len << ASM_WRITE_TOKEN_LEN_SHIFT);
+		pkt->hdr.opcode = ASM_DATA_CMD_WRITE_V2;
+		write->buf_addr_lsw = lower_32_bits(ab->phys);
+		write->buf_addr_msw = upper_32_bits(ab->phys);
+		write->buf_size = len;
+		write->seq_id = port->dsp_buf;
+		write->timestamp_lsw = lsw_ts;
+		write->timestamp_msw = msw_ts;
+		write->mem_map_handle =
+		    ac->port[SNDRV_PCM_STREAM_PLAYBACK].mem_map_handle;
 
-	write->flags = wflags;
+		write->flags = wflags;
 
-	port->dsp_buf++;
+		port->dsp_buf++;
 
-	if (port->dsp_buf >= port->num_periods)
-		port->dsp_buf = 0;
+		if (port->dsp_buf >= port->num_periods)
+			port->dsp_buf = 0;
+	}
 
-	spin_unlock_irqrestore(&ac->lock, flags);
 	rc = apr_send_pkt(ac->adev, pkt);
 	if (rc == pkt_size)
 		rc = 0;
