@@ -434,9 +434,9 @@ static int cpm_i2c_setup(struct cpm_i2c *cpm)
 
 	init_waitqueue_head(&cpm->i2c_wait);
 
-	cpm->irq = irq_of_parse_and_map(ofdev->dev.of_node, 0);
-	if (!cpm->irq)
-		return -EINVAL;
+	cpm->irq = platform_get_irq(ofdev, 0);
+	if (cpm->irq < 0)
+		return cpm->irq;
 
 	/* Install interrupt handler. */
 	ret = request_irq(cpm->irq, cpm_i2c_interrupt, 0, "cpm_i2c",
