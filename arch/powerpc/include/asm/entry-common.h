@@ -253,16 +253,17 @@ static inline void arch_interrupt_enter_prepare(struct pt_regs *regs)
 static inline void arch_interrupt_exit_prepare(struct pt_regs *regs)
 {
 	if (user_mode(regs)) {
-		BUG_ON(regs_is_unrecoverable(regs));
-		BUG_ON(regs_irqs_disabled(regs));
+		WARN_ON(regs_is_unrecoverable(regs));
+		WARN_ON(regs_irqs_disabled(regs));
 		/*
 		 * We don't need to restore AMR on the way back to userspace for KUAP.
 		 * AMR can only have been unlocked if we interrupted the kernel.
 		 */
 		kuap_assert_locked();
-
-		local_irq_disable();
 	}
+
+	/* irqentry_exit expects to be called with interrupts disabled */
+	local_irq_disable();
 }
 
 static inline void arch_interrupt_async_enter_prepare(struct pt_regs *regs)
