@@ -3967,12 +3967,10 @@ xelpd_program_plane_pre_csc_lut(struct intel_dsb *dsb,
 	enum pipe pipe = to_intel_plane(state->plane)->pipe;
 	enum plane_id plane = to_intel_plane(state->plane)->id;
 	const struct drm_color_lut32 *pre_csc_lut = plane_state->hw.degamma_lut->data;
-	u32 i, lut_size;
-	u32 lut_val = 1 << 24;
+	int i, lut_size = 128;
+	u32 lut_val;
 
 	if (icl_is_hdr_plane(display, plane)) {
-		lut_size = 128;
-
 		intel_de_write_dsb(display, dsb,
 				   PLANE_PRE_CSC_GAMC_INDEX_ENH(pipe, plane, 0),
 				   PLANE_PAL_PREC_AUTO_INCREMENT);
@@ -3995,10 +3993,11 @@ xelpd_program_plane_pre_csc_lut(struct intel_dsb *dsb,
 			} while (i++ < 130);
 		} else {
 			for (i = 0; i < lut_size; i++) {
-				u32 v = (i * ((1 << 24) - 1)) / (lut_size - 1);
+				lut_val = (i * ((1 << 24) - 1)) / (lut_size - 1);
 
 				intel_de_write_dsb(display, dsb,
-						   PLANE_PRE_CSC_GAMC_DATA_ENH(pipe, plane, 0), v);
+						   PLANE_PRE_CSC_GAMC_DATA_ENH(pipe, plane, 0),
+						   lut_val);
 			}
 
 			do {
