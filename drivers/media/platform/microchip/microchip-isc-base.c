@@ -1467,11 +1467,20 @@ static void isc_wb_update(struct isc_ctrls *ctrls)
 		/* Combine stretch and grey-world gains; result stays in Q9. */
 		gain = (s_gain * gw_gain) >> 9;
 
-		ctrls->gain[c] = clamp_val(gain, 0, GENMASK(12, 0));
+		/*
+		 * Smooth gain updates with an exponential weighted average
+		 * to suppress per-frame flicker:
+		 *   gain = (3 * gain_old + gain_new) / 4   (alpha = 0.25)
+		 * Clamp to the hardware register width to prevent unbounded
+		 * accumulation under degenerate (near-empty histogram) inputs.
+		 */
+		ctrls->gain[c] = (3 * ctrls->gain[c] + gain) / 4;
+		ctrls->gain[c] = min_t(u32, ctrls->gain[c], GENMASK(12, 0));
 
 		dev_dbg(isc->dev,
-			"isc wb: c=%u black=%u avg=%u s_gain=%u gw_gain=%u gain=%u",
-			c, hist_min, channel_avg, s_gain, gw_gain, gain);
+			"isc wb: c=%u black=%u avg=%u s_gain=%u gw_gain=%u gain=%u\n",
+			c, hist_min, channel_avg, s_gain, gw_gain,
+			ctrls->gain[c]);
 	}
 }
 
