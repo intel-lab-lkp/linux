@@ -261,7 +261,7 @@ next:
 		return -EINVAL;
 	}
 	dom = strim(dom);
-	list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
+	list_for_each_entry_rcu(d, &r->ctrl_domains, hdr.list, lockdep_is_cpus_held()) {
 		if (d->hdr.id == dom_id) {
 			data.buf = dom;
 			data.closid = rdtgrp->closid;
@@ -397,7 +397,7 @@ static void show_doms(struct seq_file *s, struct resctrl_schema *schema,
 
 	if (resource_name)
 		seq_printf(s, "%*s:", max_name_width, resource_name);
-	list_for_each_entry(dom, &r->ctrl_domains, hdr.list) {
+	list_for_each_entry_rcu(dom, &r->ctrl_domains, hdr.list, lockdep_is_cpus_held()) {
 		if (sep)
 			seq_puts(s, ";");
 
@@ -534,6 +534,8 @@ struct rdt_domain_hdr *resctrl_find_domain(struct list_head *h, int id,
 {
 	struct rdt_domain_hdr *d;
 	struct list_head *l;
+
+	lockdep_assert_cpus_held();
 
 	list_for_each(l, h) {
 		d = list_entry(l, struct rdt_domain_hdr, list);
@@ -717,7 +719,7 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 		 * struct mon_data. Search all domains in the resource for
 		 * one that matches this cache id.
 		 */
-		list_for_each_entry(d, &r->mon_domains, hdr.list) {
+		list_for_each_entry_rcu(d, &r->mon_domains, hdr.list, lockdep_is_cpus_held()) {
 			if (d->ci_id == domid) {
 				cpu = cpumask_any(&d->hdr.cpu_mask);
 				ci = get_cpu_cacheinfo_level(cpu, RESCTRL_L3_CACHE);
@@ -817,7 +819,7 @@ static int resctrl_io_alloc_init_cbm(struct resctrl_schema *s, u32 closid)
 	/* Keep CDP_CODE and CDP_DATA of io_alloc CLOSID's CBM in sync. */
 	if (resctrl_arch_get_cdp_enabled(r->rid)) {
 		peer_type = resctrl_peer_type(s->conf_type);
-		list_for_each_entry(d, &s->res->ctrl_domains, hdr.list)
+		list_for_each_entry_rcu(d, &s->res->ctrl_domains, hdr.list, lockdep_is_cpus_held())
 			memcpy(&d->staged_config[peer_type],
 			       &d->staged_config[s->conf_type],
 			       sizeof(d->staged_config[0]));
@@ -980,7 +982,7 @@ next:
 	}
 
 	dom = strim(dom);
-	list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
+	list_for_each_entry_rcu(d, &r->ctrl_domains, hdr.list, lockdep_is_cpus_held()) {
 		if (update_all || d->hdr.id == dom_id) {
 			data.buf = dom;
 			data.mode = RDT_MODE_SHAREABLE;
