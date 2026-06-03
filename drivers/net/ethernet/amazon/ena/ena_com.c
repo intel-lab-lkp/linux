@@ -1822,23 +1822,31 @@ int ena_com_phc_get_timestamp(struct ena_com_dev *ena_dev, u64 *timestamp)
 				   "PHC get time request 0x%x failed (device error)\n",
 				   phc->req_id);
 			phc->stats.phc_err_dv++;
-		} else if (resp->error_flags & ENA_PHC_ERROR_FLAGS) {
-			/* Device updated req_id during blocking time but got
-			 * a PHC error, this occurs if device:
-			 * - exceeded the get time request limit
-			 * - received an invalid timestamp
-			 */
-			netdev_err(ena_dev->net_device,
-				   "PHC get time request 0x%x failed (error 0x%x)\n",
-				   phc->req_id,
-				   resp->error_flags);
-			phc->stats.phc_err_ts += !!(resp->error_flags &
-				ENA_ADMIN_PHC_ERROR_FLAG_TIMESTAMP);
 		} else {
-			/* Device updated req_id during blocking time
-			 * with valid timestamp
+			/* Ensure PHC payload is read after req_id update
+			 * is observed
 			 */
-			phc->stats.phc_exp++;
+			dma_rmb();
+
+			if (resp->error_flags & ENA_PHC_ERROR_FLAGS) {
+				/* Device updated req_id during blocking
+				 * time but got a PHC error, this occurs
+				 * if device:
+				 * - exceeded the get time request limit
+				 * - received an invalid timestamp
+				 */
+				netdev_err(ena_dev->net_device,
+					   "PHC get time request 0x%x failed (error 0x%x)\n",
+					   phc->req_id,
+					   resp->error_flags);
+				phc->stats.phc_err_ts += !!(resp->error_flags &
+					ENA_ADMIN_PHC_ERROR_FLAG_TIMESTAMP);
+			} else {
+				/* Device updated req_id during blocking
+				 * time with valid timestamp
+				 */
+				phc->stats.phc_exp++;
+			}
 		}
 	}
 
@@ -1879,6 +1887,11 @@ int ena_com_phc_get_timestamp(struct ena_com_dev *ena_dev, u64 *timestamp)
 			 */
 			continue;
 		}
+
+		/* Ensure PHC payload (timestamp, error_flags) is read
+		 * after req_id update is observed
+		 */
+		dma_rmb();
 
 		/* req_id was updated by the device which indicates that
 		 * PHC timestamp and error_flags are updated too,
