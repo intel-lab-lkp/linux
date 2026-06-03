@@ -325,7 +325,7 @@ static int pdsfc_validate_rpc(struct pdsfc_dev *pdsfc,
 						  rpc->in.ep);
 		if (IS_ERR(operations)) {
 			mutex_unlock(&ep_info->lock);
-			return -ENOMEM;
+			return PTR_ERR(operations);
 		}
 		ep_info->operations = operations;
 	}
