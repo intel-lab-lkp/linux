@@ -7755,11 +7755,11 @@ static int raid5_create_ctx_pool(struct r5conf *conf)
 	int size;
 
 	if (mddev_is_dm(conf->mddev))
-		size = BITS_TO_LONGS(RAID5_MAX_REQ_STRIPES);
+		size = BITS_TO_LONGS(RAID5_MAX_REQ_STRIPES + 1);
 	else
 		size = BITS_TO_LONGS(
-			queue_max_hw_sectors(conf->mddev->gendisk->queue) >>
-			RAID5_STRIPE_SHIFT(conf));
+			(queue_max_hw_sectors(conf->mddev->gendisk->queue) >>
+			 RAID5_STRIPE_SHIFT(conf)) + 1);
 
 	conf->ctx_size = struct_size(ctx, sectors_to_do, size);
 	conf->ctx_pool = mempool_create_kmalloc_pool(NR_RAID_BIOS,
