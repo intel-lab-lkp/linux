@@ -5390,7 +5390,7 @@ static void __reset_rsvds_bits_mask(struct rsvd_bits_validate *rsvd_check,
 static void reset_guest_rsvds_bits_mask(struct kvm_vcpu *vcpu,
 					struct kvm_pagewalk *w)
 {
-	__reset_rsvds_bits_mask(&w->guest_rsvd_check,
+	__reset_rsvds_bits_mask(&w->fmt.guest_rsvd_check,
 				vcpu->arch.reserved_gpa_bits,
 				w->cpu_role.base.level, is_efer_nx(w),
 				guest_cpu_cap_has(vcpu, X86_FEATURE_GBPAGES),
@@ -5439,7 +5439,7 @@ static void __reset_rsvds_bits_mask_ept(struct rsvd_bits_validate *rsvd_check,
 static void reset_rsvds_bits_mask_ept(struct kvm_vcpu *vcpu,
 		bool execonly, int huge_page_level)
 {
-	__reset_rsvds_bits_mask_ept(&vcpu->arch.ngpa_walk.guest_rsvd_check,
+	__reset_rsvds_bits_mask_ept(&vcpu->arch.ngpa_walk.fmt.guest_rsvd_check,
 				    vcpu->arch.reserved_gpa_bits, execonly,
 				    huge_page_level);
 }
@@ -5593,7 +5593,7 @@ static void update_permission_bitmask(struct kvm_pagewalk *pw, bool tdp, bool ep
 	 * permission_fault() to indicate accesses that are *not* subject to
 	 * SMAP restrictions.
 	 */
-	for (index = 0; index < ARRAY_SIZE(pw->permissions); ++index) {
+	for (index = 0; index < ARRAY_SIZE(pw->fmt.permissions); ++index) {
 		unsigned pfec = index << 1;
 
 		/*
@@ -5667,7 +5667,7 @@ static void update_permission_bitmask(struct kvm_pagewalk *pw, bool tdp, bool ep
 				smapf = (pfec & (PFERR_RSVD_MASK|PFERR_FETCH_MASK)) ? 0 : kf;
 		}
 
-		pw->permissions[index] = ff | uf | wf | rf | smapf;
+		pw->fmt.permissions[index] = ff | uf | wf | rf | smapf;
 	}
 }
 
@@ -5700,14 +5700,14 @@ static void update_pkru_bitmask(struct kvm_pagewalk *w)
 	unsigned bit;
 	bool wp;
 
-	w->pkru_mask = 0;
+	w->fmt.pkru_mask = 0;
 
 	if (!is_cr4_pke(w))
 		return;
 
 	wp = is_cr0_wp(w);
 
-	for (bit = 0; bit < ARRAY_SIZE(w->permissions); ++bit) {
+	for (bit = 0; bit < ARRAY_SIZE(w->fmt.permissions); ++bit) {
 		unsigned pfec, pkey_bits;
 		bool check_pkey, check_write, ff, uf, wf, pte_user;
 
@@ -5735,7 +5735,7 @@ static void update_pkru_bitmask(struct kvm_pagewalk *w)
 		/* PKRU.WD stops write access. */
 		pkey_bits |= (!!check_write) << 1;
 
-		w->pkru_mask |= (pkey_bits & 3) << pfec;
+		w->fmt.pkru_mask |= (pkey_bits & 3) << pfec;
 	}
 }
 
@@ -6024,7 +6024,7 @@ void kvm_init_shadow_ept_mmu(struct kvm_vcpu *vcpu, bool execonly,
 		context->sync_spte = ept_sync_spte;
 
 		update_permission_bitmask(ngpa_walk, true, true);
-		ngpa_walk->pkru_mask = 0;
+		ngpa_walk->fmt.pkru_mask = 0;
 		reset_rsvds_bits_mask_ept(vcpu, execonly, huge_page_level);
 		reset_ept_shadow_zero_bits_mask(context, execonly);
 	}

@@ -217,15 +217,16 @@ static inline u8 permission_fault(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 	u64 implicit_access = access & PFERR_IMPLICIT_ACCESS;
 	bool not_smap = ((rflags & X86_EFLAGS_AC) | implicit_access) == X86_EFLAGS_AC;
 	int index = (pfec | (not_smap ? PFERR_RSVD_MASK : 0)) >> 1;
+	struct kvm_page_format *fmt = &w->fmt;
 	u32 errcode = PFERR_PRESENT_MASK;
 	bool fault;
 
 	kvm_mmu_refresh_passthrough_bits(vcpu, w);
 
-	fault = (w->permissions[index] >> pte_access) & 1;
+	fault = (fmt->permissions[index] >> pte_access) & 1;
 
 	WARN_ON_ONCE(pfec & (PFERR_PK_MASK | PFERR_SS_MASK | PFERR_RSVD_MASK));
-	if (unlikely(w->pkru_mask)) {
+	if (unlikely(fmt->pkru_mask)) {
 		u32 pkru_bits, offset;
 
 		/*
@@ -239,7 +240,7 @@ static inline u8 permission_fault(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 		/* clear present bit, replace PFEC.RSVD with ACC_USER_MASK. */
 		offset = (pfec & ~1) | ((pte_access & PT_USER_MASK) ? PFERR_RSVD_MASK : 0);
 
-		pkru_bits &= w->pkru_mask >> offset;
+		pkru_bits &= fmt->pkru_mask >> offset;
 		errcode |= -pkru_bits & PFERR_PK_MASK;
 		fault |= (pkru_bits != 0);
 	}
