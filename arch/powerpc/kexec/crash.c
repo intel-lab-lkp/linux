@@ -28,6 +28,7 @@
 #include <asm/interrupt.h>
 #include <asm/kexec_ranges.h>
 #include <asm/crashdump-ppc64.h>
+#include <asm/hvcall.h>
 
 /*
  * The primary CPU waits a while for all secondary CPUs to enter. This is to
@@ -352,6 +353,28 @@ int crash_shutdown_unregister(crash_shutdown_t handler)
 }
 EXPORT_SYMBOL(crash_shutdown_unregister);
 
+/**
+ * stop_watchdogs - Stop active watchdogs before entering kdump kernel
+ * On pseries LPAR systems, watchdogs configured from userspace remain
+ * active after a kernel panic because userspace services are not shut
+ * down on the kdump crash path. If a watchdog expires while the kdump
+ * kernel is collecting the dump, PHYP resets the LPAR and dump capture
+ * fails
+ *
+ *   0x200UL : watchdog stop operation
+ *   -1      : watchdog number, disable all watchdogs
+ */
+static void stop_watchdogs(void)
+{
+	if (firmware_has_feature(FW_FEATURE_LPAR)) {
+		int rc;
+
+		rc = plpar_hcall_norets_notrace(H_WATCHDOG, 0x200UL, -1);
+		if (rc != H_SUCCESS && rc != H_NOOP)
+			pr_warn("crash: failed to stop watchdogs\n");
+	}
+}
+
 void default_machine_crash_shutdown(struct pt_regs *regs)
 {
 	volatile unsigned int i;
@@ -359,6 +382,8 @@ void default_machine_crash_shutdown(struct pt_regs *regs)
 
 	if (TRAP(regs) == INTERRUPT_SYSTEM_RESET)
 		is_via_system_reset = 1;
+
+	stop_watchdogs();
 
 	if (IS_ENABLED(CONFIG_SMP))
 		crash_smp_send_stop();
