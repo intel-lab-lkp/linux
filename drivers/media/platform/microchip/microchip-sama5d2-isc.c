@@ -442,6 +442,8 @@ static int microchip_isc_probe(struct platform_device *pdev)
 
 	isc->gamma_table = isc_sama5d2_gamma_table;
 	isc->gamma_max = 2;
+	/* Index 2 in the SAMA5D2 table is gamma 1/2.2 (sRGB). */
+	isc->gamma_default = 2;
 
 	isc->max_width = ISC_SAMA5D2_MAX_SUPPORT_WIDTH;
 	isc->max_height = ISC_SAMA5D2_MAX_SUPPORT_HEIGHT;
