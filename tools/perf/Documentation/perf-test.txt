@@ -69,3 +69,9 @@ OPTIONS
 
 --list-workloads::
 	List the available workloads to use with -w/--workload.
+
+--workload-ctl=fifo:ctl-fifo[,ack-fifo]::
+	Write 'enable' to ctl-fifo before running the workload and 'disable'
+	before returning. If ack-fifo is provided, the workload runner waits for
+	an 'ack' response after each command. This scopes the recording to only
+	the workload if used with 'perf record -D 1 --control ...'.
