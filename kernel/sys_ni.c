@@ -270,6 +270,9 @@ COND_SYSCALL(pkey_free);
 /* memfd_secret */
 COND_SYSCALL(memfd_secret);
 
+/* memfd_tripwire */
+COND_SYSCALL(memfd_tripwire);
+
 /*
  * Architecture specific weak syscall entries.
  */

@@ -1309,6 +1309,15 @@ config SECRETMEM
 	  memory areas visible only in the context of the owning process and
 	  not mapped to other processes and other kernel page tables.
 
+config MEMFD_TRIPWIRE
+	bool "Enable memfd_tripwire() system call"
+	depends on MMU
+	help
+	  Enable the memfd_tripwire() system call, which creates an anonymous
+	  shared memory region with built-in write notification support. The
+	  returned file descriptor supports poll() for detecting writes to the
+	  mapped memory and an ioctl for re-arming notifications.
+
 config ANON_VMA_NAME
 	bool "Anonymous VMA name support"
 	depends on PROC_FS && ADVISE_SYSCALLS && MMU
