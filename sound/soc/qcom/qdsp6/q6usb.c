@@ -61,30 +61,27 @@ static int q6usb_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_usb_device *sdev;
 	int ret = -EINVAL;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	/* No active chip index */
 	if (list_empty(&data->devices))
-		goto out;
+		return ret;
 
 	sdev = list_last_entry(&data->devices, struct snd_soc_usb_device, list);
 
 	ret = snd_soc_usb_find_supported_format(sdev->chip_idx, params, direction);
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	q6usb_afe = q6afe_port_get_from_id(cpu_dai->dev, USB_RX);
 	if (IS_ERR(q6usb_afe)) {
 		ret = PTR_ERR(q6usb_afe);
-		goto out;
+		return ret;
 	}
 
 	/* Notify audio DSP about the devices being offloaded */
 	ret = afe_port_send_usb_dev_param(q6usb_afe, sdev->card_idx,
 					  sdev->ppcm_idx[sdev->num_playback - 1]);
-
-out:
-	mutex_unlock(&data->mutex);
 
 	return ret;
 }
@@ -203,15 +200,14 @@ static int q6usb_update_offload_route(struct snd_soc_component *component, int c
 {
 	struct q6usb_port_data *data = dev_get_drvdata(component->dev);
 	struct snd_soc_usb_device *sdev;
-	int ret = 0;
 	int idx = -1;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	if (list_empty(&data->devices) ||
 	    direction == SNDRV_PCM_STREAM_CAPTURE) {
-		ret = -ENODEV;
-		goto out;
+		route[0] = idx;
+		return -ENODEV;
 	}
 
 	sdev = list_last_entry(&data->devices, struct snd_soc_usb_device, list);
@@ -227,11 +223,9 @@ static int q6usb_update_offload_route(struct snd_soc_component *component, int c
 				q6usb_get_pcm_id(component);
 	}
 
-out:
 	route[0] = idx;
-	mutex_unlock(&data->mutex);
 
-	return ret;
+	return 0;
 }
 
 static int q6usb_alsa_connection_cb(struct snd_soc_usb *usb,
@@ -244,7 +238,7 @@ static int q6usb_alsa_connection_cb(struct snd_soc_usb *usb,
 
 	data = dev_get_drvdata(usb->component->dev);
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 	if (connected) {
 		if (data->hs_jack)
 			snd_jack_report(data->hs_jack->jack, SND_JACK_USB);
@@ -257,7 +251,6 @@ static int q6usb_alsa_connection_cb(struct snd_soc_usb *usb,
 		if (data->hs_jack)
 			snd_jack_report(data->hs_jack->jack, 0);
 	}
-	mutex_unlock(&data->mutex);
 
 	return 0;
 }
@@ -284,12 +277,11 @@ static int q6usb_component_set_jack(struct snd_soc_component *component,
 {
 	struct q6usb_port_data *data = dev_get_drvdata(component->dev);
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 	if (jack)
 		q6usb_component_enable_jack(data, jack);
 	else
 		q6usb_component_disable_jack(data);
-	mutex_unlock(&data->mutex);
 
 	return 0;
 }
