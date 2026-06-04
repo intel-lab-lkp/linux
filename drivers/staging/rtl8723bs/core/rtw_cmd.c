@@ -1801,8 +1801,8 @@ void rtw_survey_cmd_callback(struct adapter *padapter,  struct cmd_obj *pcmd)
 	struct	mlme_priv *pmlmepriv = &padapter->mlmepriv;
 
 	if (pcmd->res != H2C_SUCCESS) {
-		/* TODO: cancel timer and do timeout handler directly... */
-		_set_timer(&pmlmepriv->scan_to_timer, 1);
+		timer_delete_sync(&pmlmepriv->scan_to_timer);
+		rtw_scan_timeout_handler(&pmlmepriv->scan_to_timer);
 	}
 
 	/*  free cmd */
@@ -1829,8 +1829,8 @@ void rtw_joinbss_cmd_callback(struct adapter *padapter,  struct cmd_obj *pcmd)
 	struct	mlme_priv *pmlmepriv = &padapter->mlmepriv;
 
 	if (pcmd->res != H2C_SUCCESS) {
-		/* TODO: cancel timer and do timeout handler directly... */
-		_set_timer(&pmlmepriv->assoc_timer, 1);
+		timer_delete_sync(&pmlmepriv->assoc_timer);
+		_rtw_join_timeout_handler(&pmlmepriv->assoc_timer);
 	}
 
 	rtw_free_cmd_obj(pcmd);
