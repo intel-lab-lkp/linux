@@ -53,6 +53,7 @@ static int zpci_iov_link_virtfn(struct pci_dev *pdev, struct pci_dev *virtfn, in
 		return rc;
 
 	virtfn->is_virtfn = 1;
+	virtfn->is_sriov = 1;
 	virtfn->multifunction = 0;
 	virtfn->physfn = pci_dev_get(pdev);
 

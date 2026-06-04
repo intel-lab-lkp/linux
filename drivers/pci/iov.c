@@ -326,6 +326,7 @@ static struct pci_dev *pci_iov_scan_device(struct pci_dev *dev, int id,
 	virtfn->vendor = dev->vendor;
 	virtfn->device = iov->vf_device;
 	virtfn->is_virtfn = 1;
+	virtfn->is_sriov = 1;
 	virtfn->physfn = pci_dev_get(dev);
 	virtfn->no_command_memory = 1;
 
@@ -897,6 +898,7 @@ found:
 		iov->dev = dev;
 
 	dev->sriov = iov;
+	dev->is_sriov = 1;
 	dev->is_physfn = 1;
 	rc = compute_max_vf_buses(dev);
 	if (rc)
@@ -906,6 +908,7 @@ found:
 
 fail_max_buses:
 	dev->sriov = NULL;
+	dev->is_sriov = 0;
 	dev->is_physfn = 0;
 failed:
 	for (i = 0; i < PCI_SRIOV_NUM_BARS; i++) {
@@ -926,6 +929,7 @@ static void sriov_release(struct pci_dev *dev)
 
 	kfree(dev->sriov);
 	dev->sriov = NULL;
+	dev->is_sriov = 0;
 }
 
 static void sriov_restore_vf_rebar_state(struct pci_dev *dev)

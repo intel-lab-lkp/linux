@@ -479,6 +479,7 @@ struct pci_dev {
 	unsigned int	state_saved:1;
 	unsigned int	is_physfn:1;
 	unsigned int	is_virtfn:1;
+	unsigned int	is_sriov:1;		/* SR-IOV is enabled on this device (PF or VF) */
 	unsigned int	is_hotplug_bridge:1;
 	unsigned int	is_pciehp:1;
 	unsigned int	shpc_managed:1;		/* SHPC owned by shpchp */
@@ -606,12 +607,12 @@ static inline struct pci_dev *pci_physfn(struct pci_dev *dev)
 
 static inline bool pci_is_sriov_physfn(const struct pci_dev *dev)
 {
-	return dev->is_physfn;
+	return dev->is_physfn && dev->is_sriov;
 }
 
 static inline bool pci_is_sriov_virtfn(const struct pci_dev *dev)
 {
-	return dev->is_virtfn;
+	return dev->is_virtfn && dev->is_sriov;
 }
 
 struct pci_dev *pci_alloc_dev(struct pci_bus *bus);
