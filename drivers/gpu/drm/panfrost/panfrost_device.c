@@ -282,9 +282,15 @@ int panfrost_device_init(struct panfrost_device *pfdev)
 	if (err)
 		goto out_job;
 
+	err = panfrost_gem_shrinker_init(pfdev);
+	if (err)
+		goto out_perfcnt;
+
 	panfrost_gem_init(pfdev);
 
 	return 0;
+out_perfcnt:
+	panfrost_perfcnt_fini(pfdev);
 out_job:
 	panfrost_jm_fini(pfdev);
 out_mmu:
@@ -306,6 +312,7 @@ out_pm_domain:
 
 void panfrost_device_fini(struct panfrost_device *pfdev)
 {
+	panfrost_gem_shrinker_fini(pfdev);
 	panfrost_perfcnt_fini(pfdev);
 	panfrost_jm_fini(pfdev);
 	panfrost_mmu_fini(pfdev);
