@@ -326,6 +326,25 @@ static void reduce_unnecessary_ve(void)
 	enable_cpu_topology_enumeration();
 }
 
+static int tdx_memory_post_plug(u64 addr, u64 size)
+{
+	u64 end;
+
+	if (!PAGE_ALIGNED(addr) || !PAGE_ALIGNED(size))
+		return -EINVAL;
+
+	if (check_add_overflow(addr, size, &end))
+		return -EINVAL;
+
+	if (tdx_accept_memory(addr, end))
+		return 0;
+
+	pr_err("Failed to accept memory [0x%llx, 0x%llx)\n",
+	       (unsigned long long)addr, (unsigned long long)end);
+
+	return -EINVAL;
+}
+
 static void tdx_setup(u64 *cc_mask)
 {
 	struct tdx_module_args args = {};
@@ -359,6 +378,8 @@ static void tdx_setup(u64 *cc_mask)
 	disable_sept_ve(td_attr);
 
 	reduce_unnecessary_ve();
+
+	set_memory_post_plug_callback(tdx_memory_post_plug);
 }
 
 /*
