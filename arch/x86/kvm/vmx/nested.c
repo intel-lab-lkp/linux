@@ -4998,7 +4998,6 @@ static void nested_vmx_restore_host_state(struct kvm_vcpu *vcpu)
 	 * happen for VMFail, but we get here if the check was caught by
 	 * the processor and therefore the guest CR3 was loaded prematurely.
 	 */
-	kvm_mmu_unload(vcpu);
 	if (nested_vmx_load_cr3(vcpu, vmcs_readl(GUEST_CR3), false, !enable_ept, &ignored))
 		nested_vmx_abort(vcpu, VMX_ABORT_LOAD_HOST_PDPTE_FAIL);
 	if (enable_ept && is_pae_paging(vcpu))
