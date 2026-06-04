@@ -118,7 +118,7 @@ static void hyp_trace_clock_enable(struct hyp_trace_clock *hyp_clock, bool enabl
 		hyp_clock->running = false;
 	}
 
-	ktime_get_snapshot_id(&snap, CLOCK_BOOTTIME);
+	ktime_get_snapshot_id(CLOCK_BOOTTIME, &snap);
 
 	hyp_clock->boot = ktime_to_ns(snap.systime);
 	hyp_clock->cycles = snap.cycles;
