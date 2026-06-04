@@ -58,6 +58,8 @@ void *xe_svm_private_page_owner(struct xe_vm *vm, bool force_smem)
 	return force_smem ? NULL : vm->svm.peer.owner;
 }
 
+#define XE_SVM_ATTR_RETRY_MAX 3
+
 static bool xe_svm_range_in_vram(struct xe_svm_range *range)
 {
 	/*
@@ -127,6 +129,34 @@ static void xe_svm_range_free(struct drm_gpusvm_range *range)
 	kfree(range);
 }
 
+static void xe_svm_range_set_unmapped(struct xe_svm_range *range,
+				      const struct mmu_notifier_range *mmu_range)
+{
+	u64 new_start = max_t(u64, xe_svm_range_start(range), mmu_range->start);
+	u64 new_end = min_t(u64, xe_svm_range_end(range), mmu_range->end);
+
+	drm_gpusvm_range_set_unmapped(&range->base, mmu_range);
+	if (range->base.pages.flags.partial_unmap) {
+		if (range->partial_unmap.start || range->partial_unmap.end) {
+			/*
+			 * Coalesce overlapping or adjacent intervals.
+			 * Disjoint ranges cannot be tracked in one interval
+			 * without covering still-mapped memory.
+			 */
+			if (new_start <= range->partial_unmap.end &&
+			    new_end >= range->partial_unmap.start) {
+				range->partial_unmap.start =
+					min(range->partial_unmap.start, new_start);
+				range->partial_unmap.end =
+					max(range->partial_unmap.end, new_end);
+			}
+		} else {
+			range->partial_unmap.start = new_start;
+			range->partial_unmap.end = new_end;
+		}
+	}
+}
+
 static void
 xe_svm_garbage_collector_add_range(struct xe_vm *vm, struct xe_svm_range *range,
 				   const struct mmu_notifier_range *mmu_range)
@@ -135,12 +165,14 @@ xe_svm_garbage_collector_add_range(struct xe_vm *vm, struct xe_svm_range *range,
 
 	range_debug(range, "GARBAGE COLLECTOR ADD");
 
-	drm_gpusvm_range_set_unmapped(&range->base, mmu_range);
-
 	spin_lock(&vm->svm.garbage_collector.lock);
+
+	xe_svm_range_set_unmapped(range, mmu_range);
+
 	if (list_empty(&range->garbage_collector_link))
 		list_add_tail(&range->garbage_collector_link,
 			      &vm->svm.garbage_collector.range_list);
+
 	spin_unlock(&vm->svm.garbage_collector.lock);
 
 	queue_work(xe->usm.pf_wq, &vm->svm.garbage_collector.work);
@@ -380,9 +412,10 @@ static int xe_svm_range_set_default_attr(struct xe_vm *vm, u64 start, u64 end)
 static int xe_svm_garbage_collector(struct xe_vm *vm)
 {
 	struct xe_svm_range *range;
-	u64 range_start;
-	u64 range_end;
-	int err, ret = 0;
+	u64 unmap_start;
+	u64 unmap_end;
+	int err;
+	int retry_count;
 
 	lockdep_assert_held_write(&vm->lock);
 
@@ -397,8 +430,18 @@ static int xe_svm_garbage_collector(struct xe_vm *vm)
 		if (!range)
 			break;
 
-		range_start = xe_svm_range_start(range);
-		range_end = xe_svm_range_end(range);
+		if (range->base.pages.flags.partial_unmap &&
+		    range->partial_unmap.start && range->partial_unmap.end) {
+			unmap_start = range->partial_unmap.start;
+			unmap_end = range->partial_unmap.end;
+		} else {
+			unmap_start = xe_svm_range_start(range);
+			unmap_end = xe_svm_range_end(range);
+		}
+
+		/* Clear consumed state before dropping lock. */
+		range->partial_unmap.start = 0;
+		range->partial_unmap.end = 0;
 
 		list_del(&range->garbage_collector_link);
 		spin_unlock(&vm->svm.garbage_collector.lock);
@@ -412,17 +455,31 @@ static int xe_svm_garbage_collector(struct xe_vm *vm)
 			return err;
 		}
 
-		err = xe_svm_range_set_default_attr(vm, range_start, range_end);
-		if (err) {
-			if (err == -EAGAIN)
-				ret = -EAGAIN;
-			else
-				return err;
-		}
+		/*
+		 * Retry if the VMA was recreated while rebuilding attrs.
+		 * Repeated failures mean the topology is not converging.
+		 */
+		retry_count = 0;
+
+		do {
+			err = xe_svm_range_set_default_attr(vm, unmap_start, unmap_end);
+			if (err == -EAGAIN && ++retry_count > XE_SVM_ATTR_RETRY_MAX) {
+				drm_err(&vm->xe->drm,
+					"SET_ATTR retry limit exceeded for [0x%llx-0x%llx]\n",
+					unmap_start, unmap_end);
+				xe_vm_kill(vm, true);
+				return -EIO;
+			}
+		} while (err == -EAGAIN);
+
+		if (err)
+			drm_warn(&vm->xe->drm,
+				 "SET_ATTR failed for [0x%llx-0x%llx]: %pe\n",
+				 unmap_start, unmap_end, ERR_PTR(err));
 	}
 	spin_unlock(&vm->svm.garbage_collector.lock);
 
-	return ret;
+	return 0;
 }
 
 static void xe_svm_garbage_collector_work_func(struct work_struct *w)

@@ -46,6 +46,16 @@ struct xe_svm_range {
 	 * range. Protected by GPU SVM notifier lock.
 	 */
 	u8 tile_invalidated;
+	/**
+	 * @partial_unmap: Structure to hold partial unmap range info.
+	 * Valid only if partial unmap is in effect.
+	 */
+	struct {
+		/** @start: Start address of the partial unmap range */
+		u64 start;
+		/** @end: End address of the partial unmap range */
+		u64 end;
+	} partial_unmap;
 };
 
 /**
