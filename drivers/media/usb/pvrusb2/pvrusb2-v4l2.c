@@ -1215,13 +1215,10 @@ static void pvr2_v4l2_dev_init(struct pvr2_v4l2_dev *dip,
 		mindevnum = nr_ptr[unit_number];
 	}
 	pvr2_hdw_set_v4l2_dev(hdw, &dip->devbase);
-	if ((video_register_device(&dip->devbase,
-				   dip->v4l_type, mindevnum) < 0) &&
-	    (video_register_device(&dip->devbase,
-				   dip->v4l_type, -1) < 0)) {
+	if (video_register_device(&dip->devbase,
+				   dip->v4l_type, mindevnum) < 0)
 		pr_err(KBUILD_MODNAME
 			": Failed to register pvrusb2 v4l device\n");
-	}
 
 	pr_info("pvrusb2: registered device %s [%s]\n",
 	       video_device_node_name(&dip->devbase),
