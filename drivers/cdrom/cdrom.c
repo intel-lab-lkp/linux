@@ -276,6 +276,7 @@
 #include <linux/times.h>
 #include <linux/uaccess.h>
 #include <scsi/scsi_common.h>
+#include <linux/overflow.h>
 
 /* used to tell the module to turn on full debugging messages */
 static bool debug;
@@ -1341,7 +1342,7 @@ static int cdrom_slot_status(struct cdrom_device_info *cdi, int slot)
 	if (cdi->sanyo_slot)
 		return CDS_NO_INFO;
 	
-	info = kmalloc_obj(*info);
+	info = kzalloc(struct_size(info, slots, cdi->capacity), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
 
@@ -1370,7 +1371,7 @@ int cdrom_number_of_slots(struct cdrom_device_info *cdi)
 	/* cdrom_read_mech_status requires a valid value for capacity: */
 	cdi->capacity = 0; 
 
-	info = kmalloc_obj(*info);
+	info = kzalloc(struct_size(info, slots, cdi->capacity), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
 
@@ -1429,7 +1430,7 @@ static int cdrom_select_disc(struct cdrom_device_info *cdi, int slot)
 		return cdrom_load_unload(cdi, -1);
 	}
 
-	info = kmalloc_obj(*info);
+	info = kzalloc(struct_size(info, slots, cdi->capacity), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
 
@@ -2334,7 +2335,7 @@ static int cdrom_ioctl_media_changed(struct cdrom_device_info *cdi,
 	/* Prevent arg from speculatively bypassing the length check */
 	arg = array_index_nospec(arg, cdi->capacity);
 
-	info = kmalloc_obj(*info);
+	info = kzalloc(struct_size(info, slots, cdi->capacity), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
 
