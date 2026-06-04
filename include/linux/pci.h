@@ -480,6 +480,7 @@ struct pci_dev {
 	unsigned int	is_physfn:1;
 	unsigned int	is_virtfn:1;
 	unsigned int	is_sriov:1;		/* SR-IOV is enabled on this device (PF or VF) */
+	unsigned int	is_siov:1;		/* SIOV is enabled on this device (PF or VF/SDI) */
 	unsigned int	is_hotplug_bridge:1;
 	unsigned int	is_pciehp:1;
 	unsigned int	shpc_managed:1;		/* SHPC owned by shpchp */
@@ -549,6 +550,9 @@ struct pci_dev {
 	u16		ats_cap;	/* ATS Capability offset */
 	u8		ats_stu;	/* ATS Smallest Translation Unit */
 #endif
+#ifdef CONFIG_PCI_SIOV
+	struct pci_siov	*siov;		/* PF: Scalable IOV info */
+#endif
 #ifdef CONFIG_PCI_PRI
 	u16		pri_cap;	/* PRI Capability offset */
 	u32		pri_reqs_alloc; /* Number of PRI requests allocated */
@@ -598,7 +602,7 @@ struct pci_dev {
 
 static inline struct pci_dev *pci_physfn(struct pci_dev *dev)
 {
-#ifdef CONFIG_PCI_IOV
+#if defined(CONFIG_PCI_IOV) || defined(CONFIG_PCI_SIOV)
 	if (dev->is_virtfn)
 		dev = dev->physfn;
 #endif
@@ -613,6 +617,16 @@ static inline bool pci_is_sriov_physfn(const struct pci_dev *dev)
 static inline bool pci_is_sriov_virtfn(const struct pci_dev *dev)
 {
 	return dev->is_virtfn && dev->is_sriov;
+}
+
+static inline bool pci_is_siov_physfn(const struct pci_dev *dev)
+{
+	return dev->is_physfn && dev->is_siov;
+}
+
+static inline bool pci_is_siov_virtfn(const struct pci_dev *dev)
+{
+	return dev->is_virtfn && dev->is_siov;
 }
 
 struct pci_dev *pci_alloc_dev(struct pci_bus *bus);

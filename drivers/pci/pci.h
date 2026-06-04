@@ -683,6 +683,19 @@ struct pci_sriov {
 	bool		drivers_autoprobe; /* Auto probing of VFs by driver */
 };
 
+/* Scalable I/O Virtualization */
+struct pci_siov {
+	struct pci_dev	*self;		/* This PF */
+	u32		cap;		/* SIOV Capabilities */
+	u16		pos;		/* Capability position */
+	u16		total_SDIs;	/* Total SDIs associated with the PF */
+	u16		num_SDIs;	/* Number of SDIs currently enabled */
+	u16		offset;		/* First SDI Routing ID offset */
+	u16		stride;		/* Following SDI stride */
+	u16		driver_max_SDIs;/* Max num SDIs driver supports */
+	u8		max_SDI_buses;	/* Max buses consumed by SDIs */
+};
+
 #ifdef CONFIG_PCI_DOE
 void pci_doe_init(struct pci_dev *pdev);
 void pci_doe_destroy(struct pci_dev *pdev);

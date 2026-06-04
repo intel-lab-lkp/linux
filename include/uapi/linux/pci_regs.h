@@ -763,7 +763,8 @@
 #define PCI_EXT_CAP_ID_DEV3	0x2F	/* Device 3 Capability/Control/Status */
 #define PCI_EXT_CAP_ID_IDE	0x30    /* Integrity and Data Encryption */
 #define PCI_EXT_CAP_ID_PL_64GT	0x31	/* Physical Layer 64.0 GT/s */
-#define PCI_EXT_CAP_ID_MAX	PCI_EXT_CAP_ID_PL_64GT
+#define PCI_EXT_CAP_ID_SIOV	0x38	/* Scalable I/O Virtualization */
+#define PCI_EXT_CAP_ID_MAX	PCI_EXT_CAP_ID_SIOV
 
 #define PCI_EXT_CAP_DSN_SIZEOF	12
 #define PCI_EXT_CAP_MCAST_ENDPOINT_SIZEOF 40
@@ -1004,6 +1005,15 @@
 #define  PCI_SRIOV_VFM_MO	0x2	/* Active.MigrateOut */
 #define  PCI_SRIOV_VFM_AV	0x3	/* Active.Available */
 #define PCI_EXT_CAP_SRIOV_SIZEOF 0x40
+
+/* Scalable I/O Virtualization */
+#define PCI_SIOV_CAP		0x04	/* SIOV Capabilities */
+#define PCI_SIOV_TOTAL_SDI	0x08	/* Total SDIs */
+#define PCI_SIOV_STATUS		0x0B	/* SIOV Status */
+#define PCI_SIOV_STATUS_ENABLED 0x01	/* At least one SDI is enabled */
+#define PCI_SIOV_SDI_OFFSET	0x0C	/* First SDI Offset */
+#define PCI_SIOV_SDI_STRIDE	0x0E	/* SDI Stride */
+#define PCI_EXT_CAP_SIOV_SIZEOF	0x10
 
 #define PCI_LTR_MAX_SNOOP_LAT	0x4
 #define PCI_LTR_MAX_NOSNOOP_LAT	0x6

@@ -164,6 +164,17 @@ config PCI_IOV
 
 	  If unsure, say N.
 
+config PCI_SIOV
+	bool "PCI Scalable IOV support"
+	select PCI_ATS
+	help
+	  Scalable I/O Virtualization is a PCIe feature that allows devices
+	  to expose lightweight Scalable Device Interfaces (SDIs). Unlike
+	  SR-IOV Virtual Functions, SDIs have no config space or BARs and
+	  rely on software to compose the control path.
+
+	  If unsure, say N.
+
 config PCI_NPEM
 	bool "Native PCIe Enclosure Management"
 	depends on LEDS_CLASS=y
