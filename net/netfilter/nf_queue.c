@@ -24,6 +24,27 @@
 
 static const struct nf_queue_handler __rcu *nf_queue_handler;
 
+#if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
+static struct net_device *nf_queue_bridge_dev(const struct sk_buff *skb,
+					      const struct nf_hook_state *state)
+{
+	struct dst_entry *dst = skb_dst(skb);
+	struct net_device *dev;
+
+	if (state->pf != NFPROTO_BRIDGE || !nf_bridge_info_exists(skb))
+		return NULL;
+
+	if (!dst || !(dst->flags & DST_FAKE_RTABLE))
+		return NULL;
+
+	dev = READ_ONCE(dst->dev);
+	if (!dev || dev == blackhole_netdev)
+		return NULL;
+
+	return dev;
+}
+#endif
+
 /*
  * Hook for nfnetlink_queue to register its queue handler.
  * We do this so that most of the NFQUEUE code can be modular.
@@ -68,6 +89,8 @@ static void nf_queue_entry_release_refs(struct nf_queue_entry *entry)
 		nf_queue_sock_put(state->sk);
 
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
+	if (entry->bridge_dev)
+		dev_put(entry->bridge_dev);
 	dev_put(entry->physin);
 	dev_put(entry->physout);
 #endif
@@ -85,6 +108,7 @@ static void __nf_queue_entry_init_physdevs(struct nf_queue_entry *entry)
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	const struct sk_buff *skb = entry->skb;
 
+	entry->bridge_dev = NULL;
 	if (nf_bridge_info_exists(skb)) {
 		entry->physin = nf_bridge_get_physindev(skb, entry->state.net);
 		entry->physout = nf_bridge_get_physoutdev(skb);
@@ -108,6 +132,9 @@ bool nf_queue_entry_get_refs(struct nf_queue_entry *entry)
 	dev_hold(state->out);
 
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
+	entry->bridge_dev = nf_queue_bridge_dev(entry->skb, state);
+	if (entry->bridge_dev)
+		dev_hold(entry->bridge_dev);
 	dev_hold(entry->physin);
 	dev_hold(entry->physout);
 #endif
