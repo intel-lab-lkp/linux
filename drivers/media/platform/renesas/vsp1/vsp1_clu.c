@@ -235,8 +235,10 @@ struct vsp1_clu *vsp1_clu_create(struct vsp1_device *vsp1)
 	 */
 	clu->pool = vsp1_dl_body_pool_create(clu->entity.vsp1, 3, CLU_SIZE + 1,
 					     0);
-	if (!clu->pool)
-		return ERR_PTR(-ENOMEM);
+	if (!clu->pool) {
+		ret = -ENOMEM;
+		goto error;
+	}
 
 	/* Initialize the control handler. */
 	v4l2_ctrl_handler_init(&clu->ctrls, 2);
@@ -248,11 +250,14 @@ struct vsp1_clu *vsp1_clu_create(struct vsp1_device *vsp1)
 	if (clu->ctrls.error) {
 		dev_err(vsp1->dev, "clu: failed to initialize controls\n");
 		ret = clu->ctrls.error;
-		vsp1_entity_destroy(&clu->entity);
-		return ERR_PTR(ret);
+		goto error;
 	}
 
 	v4l2_ctrl_handler_setup(&clu->ctrls);
 
 	return clu;
+
+error:
+	vsp1_entity_destroy(&clu->entity);
+	return ERR_PTR(ret);
 }

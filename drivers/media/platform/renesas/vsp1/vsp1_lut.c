@@ -194,8 +194,10 @@ struct vsp1_lut *vsp1_lut_create(struct vsp1_device *vsp1)
 	 * both the queued and pending dl entries.
 	 */
 	lut->pool = vsp1_dl_body_pool_create(vsp1, 3, LUT_SIZE, 0);
-	if (!lut->pool)
-		return ERR_PTR(-ENOMEM);
+	if (!lut->pool) {
+		ret = -ENOMEM;
+		goto error;
+	}
 
 	/* Initialize the control handler. */
 	v4l2_ctrl_handler_init(&lut->ctrls, 1);
@@ -206,11 +208,14 @@ struct vsp1_lut *vsp1_lut_create(struct vsp1_device *vsp1)
 	if (lut->ctrls.error) {
 		dev_err(vsp1->dev, "lut: failed to initialize controls\n");
 		ret = lut->ctrls.error;
-		vsp1_entity_destroy(&lut->entity);
-		return ERR_PTR(ret);
+		goto error;
 	}
 
 	v4l2_ctrl_handler_setup(&lut->ctrls);
 
 	return lut;
+
+error:
+	vsp1_entity_destroy(&lut->entity);
+	return ERR_PTR(ret);
 }
