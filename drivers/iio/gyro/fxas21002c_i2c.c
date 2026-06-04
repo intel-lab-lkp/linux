@@ -25,8 +25,8 @@ static int fxas21002c_i2c_probe(struct i2c_client *i2c)
 
 	regmap = devm_regmap_init_i2c(i2c, &fxas21002c_regmap_i2c_conf);
 	if (IS_ERR(regmap)) {
-		dev_err(&i2c->dev, "Failed to register i2c regmap: %ld\n",
-			PTR_ERR(regmap));
+		dev_err(&i2c->dev, "Failed to register i2c regmap: %pe\n",
+			regmap);
 		return PTR_ERR(regmap);
 	}
 
