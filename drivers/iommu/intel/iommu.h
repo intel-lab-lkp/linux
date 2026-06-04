@@ -1383,6 +1383,11 @@ static inline bool dmar_is_disabled(void)
 	return dmar_state < 0;
 }
 
+static inline bool dmar_is_force_on(void)
+{
+	return dmar_state == DMAR_ENABLED_FORCE;
+}
+
 bool dmar_can_force_on(enum dmar_force_on force_on);
 
 extern int dmar_disabled;

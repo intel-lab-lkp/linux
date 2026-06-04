@@ -53,10 +53,9 @@ static int rwbf_quirk;
 #define rwbf_required(iommu)	(rwbf_quirk || cap_rwbf((iommu)->cap))
 
 /*
- * set to 1 to panic kernel if can't successfully enable VT-d
+ * set to 1 to avoid kernel panic if can't successfully enable VT-d
  * (used when kernel is launched w/ TXT)
  */
-static int force_on = 0;
 int intel_iommu_tboot_noforce;
 
 #define ROOT_ENTRY_NR (VTD_PAGE_SIZE/sizeof(struct root_entry))
@@ -1708,7 +1707,7 @@ static int __init init_dmars(void)
 			 * we always have to disable PMRs or DMA may fail on
 			 * this device
 			 */
-			if (force_on)
+			if (dmar_is_force_on())
 				iommu_disable_protect_mem_regions(iommu);
 			continue;
 		}
@@ -1800,7 +1799,7 @@ static int init_iommu_hw(void)
 			 * we always have to disable PMRs or DMA may fail on
 			 * this device
 			 */
-			if (force_on)
+			if (dmar_is_force_on())
 				iommu_disable_protect_mem_regions(iommu);
 			continue;
 		}
@@ -1861,7 +1860,7 @@ static void iommu_resume(void *data)
 	unsigned long flag;
 
 	if (init_iommu_hw()) {
-		if (force_on)
+		if (dmar_is_force_on())
 			panic("tboot: IOMMU setup failed, DMAR can not resume!\n");
 		else
 			WARN(1, "IOMMU setup failed, DMAR can not resume!\n");
@@ -2129,7 +2128,7 @@ static int intel_iommu_add(struct dmar_drhd_unit *dmaru)
 		/*
 		 * we always have to disable PMRs or DMA may fail on this device
 		 */
-		if (force_on)
+		if (dmar_is_force_on())
 			iommu_disable_protect_mem_regions(iommu);
 		return 0;
 	}
@@ -2482,13 +2481,13 @@ static bool has_external_pci(void)
 	return false;
 }
 
-static int __init platform_optin_force_iommu(void)
+static void __init platform_optin_force_iommu(void)
 {
 	if (!dmar_platform_optin() || !dmar_can_force_on(DMAR_FORCEON_PLATFORM))
-		return 0;
+		return;
 
 	if (!has_external_pci())
-		return 0;
+		return;
 
 	/*
 	 * If Intel-IOMMU is disabled by default, we will apply identity
@@ -2501,8 +2500,6 @@ static int __init platform_optin_force_iommu(void)
 
 	dmar_state = DMAR_ENABLED_FORCE;
 	dmar_disabled = 0;
-
-	return 1;
 }
 
 static int __init probe_acpi_namespace_devices(void)
@@ -2542,10 +2539,10 @@ static int __init probe_acpi_namespace_devices(void)
 	return 0;
 }
 
-static __init int tboot_force_iommu(void)
+static __init void tboot_force_iommu(void)
 {
 	if (!tboot_enabled() || intel_iommu_tboot_noforce)
-		return 0;
+		return;
 
 	if (!dmar_can_force_on(DMAR_FORCEON_TBOOT))
 		panic("tboot: Failed to force IOMMU on\n");
@@ -2556,8 +2553,6 @@ static __init int tboot_force_iommu(void)
 	dmar_state = DMAR_ENABLED_FORCE;
 	dmar_disabled = 0;
 	no_iommu = 0;
-
-	return 1;
 }
 
 int __init intel_iommu_init(void)
@@ -2570,17 +2565,18 @@ int __init intel_iommu_init(void)
 	 * Intel IOMMU is required for a TXT/tboot launch or platform
 	 * opt in, so enforce that.
 	 */
-	force_on = tboot_force_iommu() || platform_optin_force_iommu();
+	tboot_force_iommu();
+	platform_optin_force_iommu();
 
 	down_write(&dmar_global_lock);
 	if (dmar_table_init()) {
-		if (force_on)
+		if (dmar_is_force_on())
 			panic("tboot: Failed to initialize DMAR table\n");
 		goto out_free_dmar;
 	}
 
 	if (dmar_dev_scope_init() < 0) {
-		if (force_on)
+		if (dmar_is_force_on())
 			panic("tboot: Failed to initialize DMAR device scope\n");
 		goto out_free_dmar;
 	}
@@ -2634,7 +2630,7 @@ int __init intel_iommu_init(void)
 
 	ret = init_dmars();
 	if (ret) {
-		if (force_on)
+		if (dmar_is_force_on())
 			panic("tboot: Failed to initialize DMARs\n");
 		pr_err("Initialization failed\n");
 		goto out_free_dmar;
