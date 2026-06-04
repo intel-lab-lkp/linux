@@ -42,7 +42,6 @@ use gem::{
 ///
 /// This is used with [`Object::new()`] to control various properties that can only be set when
 /// initially creating a shmem-backed GEM object.
-#[derive(Default)]
 pub struct ObjectConfig<'a, T: DriverObject, C: DeviceContext = Registered> {
     /// Whether to set the write-combine map flag.
     pub map_wc: bool,
@@ -51,6 +50,16 @@ pub struct ObjectConfig<'a, T: DriverObject, C: DeviceContext = Registered> {
     ///
     /// The newly created [`Object`] will hold an owned refcount to `parent_resv_obj` if specified.
     pub parent_resv_obj: Option<&'a Object<T, C>>,
+}
+
+impl<'a, T: DriverObject, C: DeviceContext> Default for ObjectConfig<'a, T, C> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self {
+            map_wc: false,
+            parent_resv_obj: None,
+        }
+    }
 }
 
 /// A shmem-backed GEM object.
