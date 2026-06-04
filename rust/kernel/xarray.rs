@@ -216,10 +216,8 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
     where
         F: FnOnce(NonNull<c_void>) -> U,
     {
-        // SAFETY: `self.xa.xa` is always valid by the type invariant.
-        let ptr = unsafe { bindings::xa_load(self.xa.xa.get(), index) };
-        let ptr = NonNull::new(ptr.cast())?;
-        Some(f(ptr))
+        let mut state = XArrayState::new(self, index);
+        Some(f(state.load()?))
     }
 
     /// Provides a reference to the element at the given index.
@@ -333,14 +331,12 @@ impl<'a, T: ForeignOwnable> GuardRef for &mut Guard<'a, T> {
 ///
 /// - `state` is always a valid `bindings::xa_state`.
 /// - `state.xa` aliases the xarray reachable through `guard`.
-#[expect(dead_code)]
 pub(crate) struct XArrayState<R: GuardRef> {
     guard: R,
     state: bindings::xa_state,
 }
 
 impl<R: GuardRef> XArrayState<R> {
-    #[expect(dead_code)]
     fn new(guard: R, index: usize) -> Self {
         let xa_ptr = guard.xa_ptr();
         // INVARIANT: `state` is initialized to a valid `xa_state` whose `xa` field aliases the
@@ -360,6 +356,14 @@ impl<R: GuardRef> XArrayState<R> {
                 xa_lru: null_mut(),
             },
         }
+    }
+
+    fn load(&mut self) -> Option<NonNull<c_void>> {
+        // SAFETY: `self.state` is a valid `xa_state` by the type invariant. By the same
+        // invariant, `self.state.xa` aliases the xarray reachable through `self.guard`, whose
+        // lock we hold.
+        let ptr = unsafe { bindings::xas_load(&raw mut self.state) };
+        NonNull::new(ptr.cast())
     }
 }
 
