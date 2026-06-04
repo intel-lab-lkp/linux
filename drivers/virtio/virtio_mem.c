@@ -1416,8 +1416,8 @@ static uint64_t virtio_mem_send_request(struct virtio_mem *vm,
 	return virtio16_to_cpu(vm->vdev, vm->resp.type);
 }
 
-static int virtio_mem_send_plug_request(struct virtio_mem *vm, uint64_t addr,
-					uint64_t size)
+static int _virtio_mem_send_plug_request(struct virtio_mem *vm, uint64_t addr,
+					 uint64_t size)
 {
 	const uint64_t nb_vm_blocks = size / vm->device_block_size;
 	const struct virtio_mem_req req = {
@@ -1426,9 +1426,6 @@ static int virtio_mem_send_plug_request(struct virtio_mem *vm, uint64_t addr,
 		.u.plug.nb_blocks = cpu_to_virtio16(vm->vdev, nb_vm_blocks),
 	};
 	int rc = -ENOMEM;
-
-	if (atomic_read(&vm->config_changed))
-		return -EAGAIN;
 
 	dev_dbg(&vm->vdev->dev, "plugging memory: 0x%llx - 0x%llx\n", addr,
 		addr + size - 1);
@@ -1454,8 +1451,8 @@ static int virtio_mem_send_plug_request(struct virtio_mem *vm, uint64_t addr,
 	return rc;
 }
 
-static int virtio_mem_send_unplug_request(struct virtio_mem *vm, uint64_t addr,
-					  uint64_t size)
+static int _virtio_mem_send_unplug_request(struct virtio_mem *vm, uint64_t addr,
+					   uint64_t size)
 {
 	const uint64_t nb_vm_blocks = size / vm->device_block_size;
 	const struct virtio_mem_req req = {
@@ -1464,9 +1461,6 @@ static int virtio_mem_send_unplug_request(struct virtio_mem *vm, uint64_t addr,
 		.u.unplug.nb_blocks = cpu_to_virtio16(vm->vdev, nb_vm_blocks),
 	};
 	int rc = -ENOMEM;
-
-	if (atomic_read(&vm->config_changed))
-		return -EAGAIN;
 
 	dev_dbg(&vm->vdev->dev, "unplugging memory: 0x%llx - 0x%llx\n", addr,
 		addr + size - 1);
@@ -1487,6 +1481,72 @@ static int virtio_mem_send_unplug_request(struct virtio_mem *vm, uint64_t addr,
 
 	dev_dbg(&vm->vdev->dev, "unplugging memory failed: %d\n", rc);
 	return rc;
+}
+
+static int virtio_mem_send_plug_request(struct virtio_mem *vm, uint64_t addr,
+					uint64_t size)
+{
+	int ret;
+
+	if (atomic_read(&vm->config_changed))
+		return -EAGAIN;
+
+	ret = _virtio_mem_send_plug_request(vm, addr, size);
+	if (ret)
+		return ret;
+
+	/*
+	 * If memory acceptance fails, we cannot safely rollback to the pre-plug
+	 * state because the unplug operation may also fail (e.g., hypervisor
+	 * out of memory, VM migration in progress). Additionally, acceptance
+	 * failures may be partial, leaving some pages accepted and others not,
+	 * creating inconsistent memory state that is difficult to track and
+	 * recover from.
+	 *
+	 * Rather than attempting complex state recovery that may fail, we treat
+	 * acceptance failure as a critical error and return -EINVAL. This causes
+	 * the caller to set the broken flag and stop processing further requests,
+	 * preventing potential memory corruption or system instability. As a
+	 * consequence, the hypervisor-side memory for the failing range is
+	 * leaked for the lifetime of the device.
+	 */
+	if (memory_post_plug_call(addr, size))
+		return -EINVAL;
+
+	return 0;
+}
+
+static int virtio_mem_send_unplug_request(struct virtio_mem *vm, uint64_t addr,
+					  uint64_t size)
+{
+	int ret;
+
+	if (atomic_read(&vm->config_changed))
+		return -EAGAIN;
+
+	/*
+	 * If memory release fails, treat it as a critical error similar to
+	 * acceptance failure. See virtio_mem_send_plug_request() for detailed
+	 * rationale on why we avoid complex error recovery.
+	 */
+	ret = memory_pre_unplug_call(addr, size);
+	if (ret)
+		return -EINVAL;
+
+	ret = _virtio_mem_send_unplug_request(vm, addr, size);
+	/*
+	 * If the hypervisor unplug request fails (e.g., out of memory, VM
+	 * migration), the operation will be retried later. Since we already
+	 * released the memory from TDX perspective, we must re-accept it to
+	 * restore consistent state for the next retry. If re-acceptance fails,
+	 * treat it as critical error to prevent state corruption. As a
+	 * consequence, the hypervisor-side memory for the failing range is
+	 * leaked for the lifetime of the device.
+	 */
+	if (ret && memory_post_plug_call(addr, size))
+		return -EINVAL;
+
+	return ret;
 }
 
 static int virtio_mem_send_unplug_all_request(struct virtio_mem *vm)
