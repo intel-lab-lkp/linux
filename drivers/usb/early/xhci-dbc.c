@@ -95,6 +95,9 @@ static void __iomem * __init xdbc_map_pci_mmio(u32 bus, u32 dev, u32 func)
 		return early_ioremap(val64, sz64);
 	}
 
+	/* Do not fill all fixed page slots in one go. */
+	fixmap_size = fixmap_size / 2;
+
 	/*
 	 * Base address size is greater than fixed size boot mappings,
 	 * hence iterate over the region one fixmap_size at a time.
@@ -110,6 +113,14 @@ static void __iomem * __init xdbc_map_pci_mmio(u32 bus, u32 dev, u32 func)
 				early_iounmap(base, fixmap_size);
 				base = early_ioremap(val64 + offset, XDBC_MAPPING_SIZE);
 			}
+
+			pr_notice("Found CAPS_DEBUG: mapped size: %llu, \
+				  fixmap_size: %llu, offset: %d, page_size:%d\n",
+				  mapped_size, fixmap_size, offset, 1 << PAGE_SHIFT);
+
+			early_iounmap(base, fixmap_size);
+			base = early_ioremap(val64+offset, fixmap_size);
+
 			break;
 		}
 
@@ -681,17 +692,7 @@ int __init early_xdbc_parse_parameter(char *s, int keep_early)
 	if (!xdbc.xhci_base)
 		return -EINVAL;
 
-	/* Locate DbC registers: */
-	offset = xhci_find_next_ext_cap(xdbc.xhci_base, 0, XHCI_EXT_CAPS_DEBUG);
-	if (!offset) {
-		pr_notice("xhci host doesn't support debug capability\n");
-		early_iounmap(xdbc.xhci_base, xdbc.xhci_base_length);
-		xdbc.xhci_base = NULL;
-		xdbc.xhci_base_length = 0;
-
-		return -ENODEV;
-	}
-	xdbc.xdbc_reg = (struct xdbc_regs __iomem *)(xdbc.xhci_base + offset);
+	xdbc.xdbc_reg = (struct xdbc_regs __iomem *)(xdbc.xhci_base);
 
 	return 0;
 }
