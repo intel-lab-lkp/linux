@@ -104,12 +104,19 @@ irqreturn_t iris_hfi_isr_handler(int irq, void *data)
 	if (!core)
 		return IRQ_NONE;
 
+	if (!pm_runtime_get_if_in_use(core->dev)) {
+		enable_irq(irq);
+		return IRQ_HANDLED;
+	}
+
 	mutex_lock(&core->lock);
 	pm_runtime_mark_last_busy(core->dev);
 	iris_vpu_clear_interrupt(core);
 	mutex_unlock(&core->lock);
 
 	core->hfi_response_ops->hfi_response_handler(core);
+
+	pm_runtime_put_autosuspend(core->dev);
 
 	if (!iris_vpu_watchdog(core, core->intr_status))
 		enable_irq(irq);
