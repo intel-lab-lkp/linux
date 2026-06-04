@@ -12,7 +12,11 @@
 
 void iris_core_deinit(struct iris_core *core)
 {
-	pm_runtime_resume_and_get(core->dev);
+	int ret;
+
+	ret = pm_runtime_resume_and_get(core->dev);
+	if (ret)
+		return;
 
 	mutex_lock(&core->lock);
 	if (core->state != IRIS_CORE_DEINIT) {
