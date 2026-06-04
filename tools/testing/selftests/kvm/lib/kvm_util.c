@@ -15,6 +15,7 @@
 #include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/sysinfo.h>
 #include <unistd.h>
 #include <linux/kernel.h>
 
@@ -660,6 +661,54 @@ void kvm_print_vcpu_pinning_help(void)
 	       "     To leave the application task unpinned, drop the final entry:\n\n"
 	       "         %s -v 3 -c 22,23,24\n\n"
 	       "     (default: no pinning)\n", name, name);
+}
+
+void kvm_print_vcpu_affinity(struct kvm_vcpu *vcpu, pid_t tid)
+{
+	int nprocs = get_nprocs();
+	bool first_range = true;
+	int i, start = -1;
+	cpu_set_t cpus;
+
+	kvm_sched_getaffinity(tid, sizeof(cpus), &cpus);
+
+	/*
+	 * Output format examples:
+	 * - Single CPU:  "vCPU 0 (TID 1234) affined to pCPU(s): 2"
+	 * - List:        "vCPU 0 (TID 1234) affined to pCPU(s): 0,2,4"
+	 * - Range:       "vCPU 0 (TID 1234) affined to pCPU(s): 0-7"
+	 * - Mixed:       "vCPU 0 (TID 1234) affined to pCPU(s): 0-3,8,10-12"
+	 */
+	printf("vCPU %u (TID %d) affined to pCPU(s): ", vcpu->id, tid);
+
+	for (i = 0; i <= nprocs; i++) {
+		/*
+		 * Iterate to nprocs (inclusive) to ensure that if the last pCPU
+		 * is part of a range, the 'else' block triggers one final time
+		 * to flush that range to stdout.
+		 */
+		if (i < nprocs && CPU_ISSET(i, &cpus)) {
+			if (start == -1)
+				start = i;
+			continue;
+		}
+
+		if (start != -1) {
+			int end = i - 1;
+
+			if (!first_range)
+				printf(",");
+
+			if (start == end)
+				printf("%d", start);
+			else
+				printf("%d-%d", start, end);
+
+			start = -1;
+			first_range = false;
+		}
+	}
+	printf("\n");
 }
 
 void pin_task_to_random_cpu(pthread_t task, cpu_set_t *possible_cpus)

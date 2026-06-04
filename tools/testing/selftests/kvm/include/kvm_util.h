@@ -1117,6 +1117,7 @@ static inline int pin_self_to_any_cpu(void)
 void kvm_print_vcpu_pinning_help(void);
 void kvm_parse_vcpu_pinning(const char *pcpus_string, u32 vcpu_to_pcpu[],
 			    int nr_vcpus);
+void kvm_print_vcpu_affinity(struct kvm_vcpu *vcpu, pid_t tid);
 
 unsigned long vm_compute_max_gfn(struct kvm_vm *vm);
 unsigned int vm_calc_num_guest_pages(enum vm_guest_mode mode, size_t size);

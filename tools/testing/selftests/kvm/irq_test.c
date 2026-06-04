@@ -319,6 +319,8 @@ int main(int argc, char **argv)
 					print_proc_irq_smp_affinity(irq);
 					print_proc_irq_effective_affinity(irq);
 				}
+				if (migrate_vcpus)
+					kvm_print_vcpu_affinity(vcpu, vcpu_tids[vcpu->id]);
 
 				TEST_FAIL("vCPU %d timed out waiting for IRQ from GSI %d (Vector 0x%x) !\n",
 					  vcpu->id, gsi, vector);
