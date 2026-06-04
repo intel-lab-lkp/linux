@@ -33,6 +33,12 @@ struct hisi_ptt {
 	struct perf_session *session;
 	struct machine *machine;
 	u32 pmu_type;
+	u32 version;
+};
+
+static int hisi_ptt_pkt_size[] = {
+	[HISI_PTT_4DW_PKT]	= 16,
+	[HISI_PTT_8DW_PKT]	= 32,
 };
 
 static enum hisi_ptt_pkt_type hisi_ptt_check_packet_type(unsigned char *buf)
@@ -45,8 +51,7 @@ static enum hisi_ptt_pkt_type hisi_ptt_check_packet_type(unsigned char *buf)
 	return HISI_PTT_4DW_PKT;
 }
 
-static void hisi_ptt_dump(struct hisi_ptt *ptt __maybe_unused,
-			  unsigned char *buf, size_t len)
+static void hisi_ptt_dump(struct hisi_ptt *ptt, unsigned char *buf, size_t len)
 {
 	const char *color = PERF_COLOR_BLUE;
 	struct hisi_ptt_pkt_buf pkt_buf;
@@ -56,6 +61,7 @@ static void hisi_ptt_dump(struct hisi_ptt *ptt __maybe_unused,
 	pkt_buf.pkt_type = hisi_ptt_check_packet_type(buf);
 	pkt_buf.len = round_down(len, hisi_ptt_pkt_size[pkt_buf.pkt_type]);
 	pkt_buf.pkt_msg_type = HISI_PTT_PKT_TYPE_UNKNOWN;
+	pkt_buf.version = ptt->version;
 	color_fprintf(stdout, color, ". ... HISI PTT data: size %zu bytes\n",
 		      pkt_buf.len);
 
@@ -146,12 +152,13 @@ static bool hisi_ptt_evsel_is_auxtrace(struct perf_session *session,
 	return evsel->core.attr.type == ptt->pmu_type;
 }
 
-static void hisi_ptt_print_info(__u64 type)
+static void hisi_ptt_print_info(__u64 type, u32 version)
 {
 	if (!dump_trace)
 		return;
 
 	fprintf(stdout, "  PMU Type           %" PRId64 "\n", (s64) type);
+	fprintf(stdout, "  Tracer Version     %" PRIu32 "\n", version);
 }
 
 int hisi_ptt_process_auxtrace_info(union perf_event *event,
@@ -159,10 +166,13 @@ int hisi_ptt_process_auxtrace_info(union perf_event *event,
 {
 	struct perf_record_auxtrace_info *auxtrace_info = &event->auxtrace_info;
 	struct hisi_ptt *ptt;
+	size_t priv_size;
 
-	if (auxtrace_info->header.size < HISI_PTT_AUXTRACE_PRIV_SIZE +
+	if (auxtrace_info->header.size < HISI_PTT_AUXTRACE_PRIV_SIZE_V1 +
 				sizeof(struct perf_record_auxtrace_info))
 		return -EINVAL;
+	priv_size = auxtrace_info->header.size -
+		    sizeof(struct perf_record_auxtrace_info);
 
 	ptt = zalloc(sizeof(*ptt));
 	if (!ptt)
@@ -172,7 +182,8 @@ int hisi_ptt_process_auxtrace_info(union perf_event *event,
 	ptt->machine = &session->machines.host; /* No kvm support */
 	ptt->auxtrace_type = auxtrace_info->type;
 	ptt->pmu_type = auxtrace_info->priv[0];
-
+	ptt->version = priv_size >= HISI_PTT_AUXTRACE_PRIV_SIZE_V2 ?
+		       (u32)auxtrace_info->priv[1] : HISI_PTT_DECODER_V1;
 	ptt->auxtrace.process_event = hisi_ptt_process_event;
 	ptt->auxtrace.process_auxtrace_event = hisi_ptt_process_auxtrace_event;
 	ptt->auxtrace.flush_events = hisi_ptt_flush;
@@ -181,7 +192,7 @@ int hisi_ptt_process_auxtrace_info(union perf_event *event,
 	ptt->auxtrace.evsel_is_auxtrace = hisi_ptt_evsel_is_auxtrace;
 	session->auxtrace = &ptt->auxtrace;
 
-	hisi_ptt_print_info(auxtrace_info->priv[0]);
+	hisi_ptt_print_info(auxtrace_info->priv[0], ptt->version);
 
 	return 0;
 }

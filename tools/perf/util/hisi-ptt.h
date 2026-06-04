@@ -8,7 +8,9 @@
 #define INCLUDE__PERF_HISI_PTT_H__
 
 #define HISI_PTT_PMU_NAME		"hisi_ptt"
-#define HISI_PTT_AUXTRACE_PRIV_SIZE	sizeof(u64)
+#define HISI_PTT_AUXTRACE_PRIV_SIZE_V1	sizeof(u64)
+#define HISI_PTT_AUXTRACE_PRIV_SIZE_V2	(2 * sizeof(u64))
+#define HISI_PTT_AUXTRACE_PRIV_SIZE	HISI_PTT_AUXTRACE_PRIV_SIZE_V2
 
 struct auxtrace_record *hisi_ptt_recording_init(int *err,
 						struct perf_pmu *hisi_ptt_pmu);

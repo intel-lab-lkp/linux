@@ -14,16 +14,13 @@
 #define HISI_PTT_IS_8DW_PKT		GENMASK(31, 11)
 #define HISI_PTT_MAX_SPACE_LEN		10
 #define HISI_PTT_FIELD_LENGTH		4
+#define HISI_PTT_DECODER_V1		1
+#define HISI_PTT_DECODER_V2		2
 
 enum hisi_ptt_pkt_type {
 	HISI_PTT_4DW_PKT,
 	HISI_PTT_8DW_PKT,
 	HISI_PTT_PKT_MAX
-};
-
-static int hisi_ptt_pkt_size[] = {
-	[HISI_PTT_4DW_PKT]	= 16,
-	[HISI_PTT_8DW_PKT]	= 32,
 };
 
 enum hisi_ptt_pkt_msg_type {
@@ -43,6 +40,7 @@ struct hisi_ptt_pkt_buf {
 	size_t len;
 	enum hisi_ptt_pkt_type pkt_type;
 	enum hisi_ptt_pkt_msg_type pkt_msg_type;
+	uint32_t version;
 };
 
 int hisi_ptt_pkt_desc(struct hisi_ptt_pkt_buf *pkt_buf);

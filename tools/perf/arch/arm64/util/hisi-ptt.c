@@ -24,6 +24,7 @@
 #include "../../../util/record.h"
 #include "../../../util/session.h"
 #include "../../../util/tsc.h"
+#include "../../../util/hisi-ptt-decoder/hisi-ptt-pkt-decoder.h"
 
 #define KiB(x) ((x) * 1024)
 #define MiB(x) ((x) * 1024 * 1024)
@@ -58,6 +59,7 @@ static int hisi_ptt_info_fill(struct auxtrace_record *itr,
 
 	auxtrace_info->type = PERF_AUXTRACE_HISI_PTT;
 	auxtrace_info->priv[0] = hisi_ptt_pmu->type;
+	auxtrace_info->priv[1] = HISI_PTT_DECODER_V2;
 
 	return 0;
 }
