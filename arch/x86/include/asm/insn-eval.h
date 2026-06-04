@@ -9,6 +9,7 @@
 #include <linux/compiler.h>
 #include <linux/bug.h>
 #include <linux/err.h>
+#include <asm/insn.h>
 #include <asm/ptrace.h>
 
 #define INSN_CODE_SEG_ADDR_SZ(params) ((params >> 4) & 0xf)
@@ -45,5 +46,29 @@ enum insn_mmio_type {
 enum insn_mmio_type insn_decode_mmio(struct insn *insn, int *bytes);
 
 bool insn_is_nop(struct insn *insn);
+
+/*
+ * Write @val into *@reg with x86 partial-register-write semantics: a 1-
+ * or 2-byte write leaves the upper bits of the destination untouched; a
+ * 4-byte write zero-extends to 64 bits (matching IN[BWL], MOV[BWL]
+ * etc.); an 8-byte write overwrites the full register.
+ */
+static inline void insn_assign_reg(unsigned long *reg, u64 val, int bytes)
+{
+	switch (bytes) {
+	case 1:
+		*reg = (*reg & ~0xfful)   | (val & 0xff);
+		break;
+	case 2:
+		*reg = (*reg & ~0xfffful) | (val & 0xffff);
+		break;
+	case 4:
+		*reg = (u32)val;
+		break;
+	case 8:
+		*reg = val;
+		break;
+	}
+}
 
 #endif /* _ASM_X86_INSN_EVAL_H */
