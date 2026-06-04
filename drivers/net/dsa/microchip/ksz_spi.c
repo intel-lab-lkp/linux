@@ -161,7 +161,8 @@ static int ksz_spi_probe(struct spi_device *spi)
 		 chip->chip_id == KSZ8794_CHIP_ID ||
 		 chip->chip_id == KSZ8765_CHIP_ID)
 		regmap_config = ksz8795_regmap_config;
-	else if (chip->chip_id == KSZ8895_CHIP_ID ||
+	else if (chip->chip_id == KSZ8995XA_CHIP_ID ||
+		 chip->chip_id == KSZ8895_CHIP_ID ||
 		 chip->chip_id == KSZ8864_CHIP_ID)
 		regmap_config = ksz8863_regmap_config;
 	else
@@ -185,7 +186,10 @@ static int ksz_spi_probe(struct spi_device *spi)
 		dev->pdata = spi->dev.platform_data;
 
 	/* setup spi */
-	spi->mode = SPI_MODE_3;
+	if (chip->chip_id == KSZ8995XA_CHIP_ID)
+		spi->mode = SPI_MODE_0;
+	else
+		spi->mode = SPI_MODE_3;
 	ret = spi_setup(spi);
 	if (ret)
 		return ret;
@@ -240,6 +244,10 @@ static const struct of_device_id ksz_dt_ids[] = {
 		.data = &ksz_switch_chips[KSZ8795]
 	},
 	{
+		.compatible = "micrel,ks8995",
+		.data = &ksz_switch_chips[KSZ8995XA]
+	},
+	{
 		.compatible = "microchip,ksz8463",
 		.data = &ksz_switch_chips[KSZ8463]
 	},
@@ -270,6 +278,10 @@ static const struct of_device_id ksz_dt_ids[] = {
 	{
 		.compatible = "microchip,ksz8895",
 		.data = &ksz_switch_chips[KSZ8895]
+	},
+	{
+		.compatible = "microchip,ksz8995xa",
+		.data = &ksz_switch_chips[KSZ8995XA]
 	},
 	{
 		.compatible = "microchip,ksz9477",
@@ -332,6 +344,7 @@ static const struct of_device_id ksz_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, ksz_dt_ids);
 
 static const struct spi_device_id ksz_spi_ids[] = {
+	{ "ks8995" },
 	{ "ksz8463" },
 	{ "ksz8765" },
 	{ "ksz8794" },
@@ -340,6 +353,7 @@ static const struct spi_device_id ksz_spi_ids[] = {
 	{ "ksz8864" },
 	{ "ksz8873" },
 	{ "ksz8895" },
+	{ "ksz8995" },
 	{ "ksz9477" },
 	{ "ksz9896" },
 	{ "ksz9897" },
