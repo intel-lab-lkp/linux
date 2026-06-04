@@ -911,6 +911,9 @@ struct fuse_conn {
 	/** Passthrough support for read/write IO */
 	unsigned int passthrough:1;
 
+	/* does fuse server support compound operations? */
+	unsigned int compound_ops:1;
+
 	/* Use pages instead of pointer for kernel I/O */
 	unsigned int use_pages_for_kvec_io:1;
 
@@ -1271,6 +1274,35 @@ static inline ssize_t fuse_simple_idmap_request(struct mnt_idmap *idmap,
 
 int fuse_simple_background(struct fuse_mount *fm, struct fuse_args *args,
 			   gfp_t gfp_flags);
+
+/*
+ * One subrequest in a compound.  @dep_index is FUSE_COMPOUND_NO_DEP, or
+ * the index of an earlier op in the array whose output should be used to
+ * fill in this op's nodeid before dispatch.  @error receives the per-op
+ * status after fuse_compound_send() returns.
+ */
+struct fuse_compound_op {
+	struct fuse_args	*arg;
+	int			*error;
+	u8			dep_index;
+};
+
+/*
+ * Compound wrapper.  Embeds fuse_args as the first member so the device
+ * layer can container_of() back to the operation array.  The in_header
+ * and out_header fields are reserved-only today but reach the wire so
+ * future extensions can attach compound-level metadata.
+ */
+struct fuse_compound_args {
+	struct fuse_args	args;
+	struct fuse_compound_op *ops;
+	unsigned int		count;
+	struct fuse_compound_in	 in_header;
+	struct fuse_compound_out out_header;
+};
+
+int fuse_compound_send(struct fuse_mount *fm,
+		       struct fuse_compound_op *ops, unsigned int count);
 
 /**
  * Assign a unique id to a fuse request

@@ -595,7 +595,14 @@ static int fuse_uring_copy_from_ring(struct fuse_ring *ring,
 	cs.is_uring = true;
 	cs.req = req;
 
-	err = fuse_copy_out_args(&cs, args, ring_in_out.payload_sz);
+	if (args->opcode == FUSE_COMPOUND) {
+		/* Stream compound response directly into operation buffers */
+		struct fuse_compound_args *compound =
+			container_of(args, struct fuse_compound_args, args);
+		err = fuse_copy_compound_out_args(&cs, compound);
+	} else {
+		err = fuse_copy_out_args(&cs, args, ring_in_out.payload_sz);
+	}
 	fuse_copy_finish(&cs);
 	return err;
 }
@@ -627,6 +634,27 @@ static int fuse_uring_args_to_ring(struct fuse_ring *ring, struct fuse_req *req,
 	cs.is_uring = true;
 	cs.req = req;
 
+	if (args->opcode == FUSE_COMPOUND) {
+		/*
+		 * Treat fuse_compound_in as the per-op header: it goes
+		 * into ent->headers->op_in (matching the placement of any
+		 * other op-specific header on the io-uring transport),
+		 * while the per-subop stream flows through ent->payload.
+		 */
+		struct fuse_compound_args *compound =
+			container_of(args, struct fuse_compound_args, args);
+
+		err = copy_to_user(&ent->headers->op_in, &compound->in_header,
+				   sizeof(compound->in_header));
+		if (err) {
+			pr_info_ratelimited("Copying the compound header failed.\n");
+			return -EFAULT;
+		}
+
+		err = fuse_copy_compound_in_args(&cs, compound);
+		goto out_finish;
+	}
+
 	if (num_args > 0) {
 		/*
 		 * Expectation is that the first argument is the per op header.
@@ -648,6 +676,7 @@ static int fuse_uring_args_to_ring(struct fuse_ring *ring, struct fuse_req *req,
 	/* copy the payload */
 	err = fuse_copy_args(&cs, num_args, args->in_pages,
 			     (struct fuse_arg *)in_args, 0);
+out_finish:
 	fuse_copy_finish(&cs);
 	if (err) {
 		pr_info_ratelimited("%s fuse_copy_args failed\n", __func__);

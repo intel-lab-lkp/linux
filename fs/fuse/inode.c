@@ -1030,6 +1030,15 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	fc->name_max = FUSE_NAME_LOW_MAX;
 	fc->timeout.req_timeout = 0;
 
+	/*
+	 * Compound support is discovered by trial: assume the server
+	 * implements it and clear the flag on the first -ENOSYS reply.
+	 * Unlike most connection features there is no FUSE_INIT flag, so
+	 * default-on is correct here even though other capability bits
+	 * default to zero.
+	 */
+	fc->compound_ops = 1;
+
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_backing_files_init(fc);
 
