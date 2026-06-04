@@ -300,7 +300,7 @@ static void pid_put_sample(struct timechart *tchart, int pid, int type,
 	sample->type = type;
 	sample->next = c->samples;
 	sample->cpu = cpu;
-	sample->backtrace = backtrace ? strdup(backtrace) : NULL;
+	sample->backtrace = backtrace;
 	c->samples = sample;
 
 	if (sample->type == TYPE_RUNNING && end > start && start > 0) {
@@ -429,12 +429,14 @@ static void sched_wakeup(struct timechart *tchart, int cpu, u64 timestamp,
 	struct per_pid *p;
 	struct wake_event *we = zalloc(sizeof(*we));
 
-	if (!we)
+	if (!we) {
+		free((char *)backtrace);
 		return;
+	}
 
 	we->time = timestamp;
 	we->waker = waker;
-	we->backtrace = backtrace ? strdup(backtrace) : NULL;
+	we->backtrace = backtrace;
 
 	if ((flags & TRACE_FLAG_HARDIRQ) || (flags & TRACE_FLAG_SOFTIRQ))
 		we->waker = -1;
@@ -461,20 +463,28 @@ static void sched_switch(struct timechart *tchart, int cpu, u64 timestamp,
 			 const char *backtrace)
 {
 	struct per_pid *p = NULL, *prev_p;
+	bool backtrace_used = false;
 
 	prev_p = find_create_pid(tchart, prev_pid);
 
 	p = find_create_pid(tchart, next_pid);
 
-	if (prev_p->current && prev_p->current->state != TYPE_NONE)
+	if (prev_p->current && prev_p->current->state != TYPE_NONE) {
 		pid_put_sample(tchart, prev_pid, TYPE_RUNNING, cpu,
 			       prev_p->current->state_since, timestamp,
 			       backtrace);
+		backtrace_used = true;
+	}
 	if (p && p->current) {
-		if (p->current->state != TYPE_NONE)
+		if (p->current->state != TYPE_NONE) {
+			if (backtrace && backtrace_used)
+				backtrace = strdup(backtrace);
+
 			pid_put_sample(tchart, next_pid, p->current->state, cpu,
 				       p->current->state_since, timestamp,
 				       backtrace);
+			backtrace_used = true;
+		}
 
 		p->current->state_since = timestamp;
 		p->current->state = TYPE_RUNNING;
@@ -488,6 +498,9 @@ static void sched_switch(struct timechart *tchart, int cpu, u64 timestamp,
 		if (prev_state == 0)
 			prev_p->current->state = TYPE_WAITING;
 	}
+
+	if (!backtrace_used)
+		free((char *)backtrace);
 }
 
 /*
@@ -655,7 +668,6 @@ process_sample_sched_wakeup(struct timechart *tchart,
 
 	backtrace = cat_backtrace(sample, &tchart->session->machines.host);
 	sched_wakeup(tchart, sample->cpu, sample->time, waker, wakee, flags, backtrace);
-	free((char *)backtrace);
 	return 0;
 }
 
@@ -678,7 +690,6 @@ process_sample_sched_switch(struct timechart *tchart,
 	backtrace = cat_backtrace(sample, &tchart->session->machines.host);
 	sched_switch(tchart, sample->cpu, sample->time, prev_pid, next_pid,
 		     prev_state, backtrace);
-	free((char *)backtrace);
 	return 0;
 }
 
