@@ -99,6 +99,17 @@ config OF_IRQ
 config OF_RESERVED_MEM
 	def_bool OF_EARLY_FLATTREE
 
+config OF_RESERVED_MEM_DYNAMIC_REGIONS
+	int "Maximum count of the dynamic reserved memory regions"
+	depends on OF_RESERVED_MEM
+	default 64
+	range 1 256
+	help
+	  Allows to define proper dynamic reserved memory regions number
+	  according to DTS configuration.
+
+	  If unsure, leave the default value "64".
+
 config OF_RESOLVE
 	bool
 

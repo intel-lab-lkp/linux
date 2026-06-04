@@ -348,7 +348,7 @@ int __init fdt_scan_reserved_mem(void)
 			count++;
 
 		if (dynamic_nodes_cnt >= MAX_RESERVED_REGIONS) {
-			pr_err_once("Reserved memory: reached MAX_RESERVED_REGIONS(%d)\n",
+			pr_err_once("Reserved memory: reached MAX_RESERVED_REGIONS(%d), try expanding CONFIG_OF_RESERVED_MEM_DYNAMIC_REGIONS.\n",
 				    MAX_RESERVED_REGIONS);
 			continue;
 		}
