@@ -296,6 +296,7 @@ static int create_space_info(struct btrfs_fs_info *info, u64 flags)
 {
 
 	struct btrfs_space_info *space_info;
+	struct btrfs_space_info *sub_group = NULL;
 	int ret = 0;
 
 	space_info = kzalloc_obj(*space_info, GFP_NOFS);
@@ -316,11 +317,15 @@ static int create_space_info(struct btrfs_fs_info *info, u64 flags)
 
 		if (ret)
 			goto out_free;
+		sub_group = space_info->sub_group[0];
 	}
 
 	ret = btrfs_sysfs_add_space_info_type(space_info);
-	if (ret)
+	if (ret) {
+		if (sub_group)
+			btrfs_sysfs_remove_space_info(sub_group);
 		return ret;
+	}
 
 	list_add(&space_info->list, &info->space_info);
 	if (flags & BTRFS_BLOCK_GROUP_DATA)
