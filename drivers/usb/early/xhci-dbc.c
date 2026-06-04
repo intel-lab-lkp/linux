@@ -35,10 +35,13 @@ static bool early_console_keep;
 static inline void xdbc_trace(const char *fmt, ...) { }
 #endif /* XDBC_TRACE */
 
+#define XDBC_MAPPING_SIZE 56
+
 static void __iomem * __init xdbc_map_pci_mmio(u32 bus, u32 dev, u32 func)
 {
-	u64 val64, sz64, mask64;
+	u64 val64, sz64, mask64, fixmap_size, mapped_size;
 	void __iomem *base;
+	int offset;
 	u32 val, sz;
 	u8 byte;
 
@@ -85,8 +88,46 @@ static void __iomem * __init xdbc_map_pci_mmio(u32 bus, u32 dev, u32 func)
 
 	xdbc.xhci_start = val64;
 	xdbc.xhci_length = sz64;
-	base = early_ioremap(val64, sz64);
-	xdbc.xhci_base_length = sz64;
+
+	fixmap_size = NR_FIX_BTMAPS << PAGE_SHIFT;
+	if (sz64 < fixmap_size) {
+		xdbc.xhci_base_length = sz64;
+		return early_ioremap(val64, sz64);
+	}
+
+	/*
+	 * Base address size is greater than fixed size boot mappings,
+	 * hence iterate over the region one fixmap_size at a time.
+	 */
+	base = early_ioremap(val64, fixmap_size);
+	offset = xhci_find_next_ext_cap(base, 0, 0);
+	mapped_size = fixmap_size;
+
+	while (mapped_size <= sz64) {
+		val = readl(base + offset);
+		if (XHCI_EXT_CAPS_ID(val) == XHCI_EXT_CAPS_DEBUG) {
+			if (offset + XDBC_MAPPING_SIZE > fixmap_size) {
+				early_iounmap(base, fixmap_size);
+				base = early_ioremap(val64 + offset, XDBC_MAPPING_SIZE);
+			}
+			break;
+		}
+
+		/*
+		 * Find offset to next xhci-ext capability, remap if the offset
+		 * is out of bounds of the already mapped region.
+		 */
+		offset = xhci_find_next_ext_cap(base, offset, 0);
+		if (!offset) {
+			early_iounmap(base, fixmap_size);
+			base = early_ioremap(val64 + mapped_size, fixmap_size);
+			mapped_size += fixmap_size;
+
+			offset = xhci_find_next_ext_cap(base, 0, 0);
+		}
+	}
+
+	xdbc.xhci_base_length = fixmap_size;
 
 	return base;
 }
