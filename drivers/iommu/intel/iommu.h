@@ -1364,6 +1364,9 @@ enum dmar_force_on {
  * - DMAR_DISABLED_USER
  *     disabled by user opts ("intel_iommu=off" or "iommu=off").
  *
+ * - DMAR_DISABLED_FW
+ *     disabled due to firmware opt-out (DMAR_REMAP_OPT_OUT)
+ *
  * - '0' is invalid, compared to decide dmar enabled vs. disabled
  *
  */
@@ -1371,6 +1374,7 @@ enum dmar_force_on {
 #define DMAR_ENABLED		1
 #define DMAR_DISABLED_AUTO	-1
 #define DMAR_DISABLED_USER	-2
+#define DMAR_DISABLED_FW	-3
 extern int dmar_state;
 
 static inline bool dmar_is_enabled(void)
