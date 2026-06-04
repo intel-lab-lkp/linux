@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Realtek SoC drivers
+#
+menu "Realtek SoC drivers"
+        depends on ARCH_REALTEK || COMPILE_TEST
+
+config RTD_IO_LEVEL_DETECT
+	tristate "Realtek DHC I/O Level Detector"
+	depends on PINCTRL_RTD
+	select MFD_SYSCON
+	default ARCH_REALTEK
+	help
+	  Enable support for the Realtek DHC I/O level detector.
+
+	  This driver handles the auto-detection of I/O signaling levels
+	  (such as 1.8V and 3.3V) and dynamically configures the pad states
+	  for specific IP blocks.
+
+endmenu
+
