@@ -308,6 +308,8 @@ EXPORT_SYMBOL_GPL(xhci_sideband_check);
  * @sb: sideband instance for this usb device
  * @num_seg: number of event ring segments to allocate
  * @ip_autoclear: IP autoclearing support such as MSI implemented
+ * @imod_interval: interrupt moderation interval
+ * @intr_num: interrupter number
  *
  * Sets up a xhci interrupter that can be used for this sideband accessed usb
  * device. Transfer events for this device can be routed to this interrupters
@@ -389,6 +391,8 @@ EXPORT_SYMBOL_GPL(xhci_sideband_interrupter_id);
 /**
  * xhci_sideband_register - register a sideband for a usb device
  * @intf: usb interface associated with the sideband device
+ * @type: sideband type
+ * @notify_client: callback for notifying the client of events
  *
  * Allows for clients to utilize XHCI interrupters and fetch transfer and event
  * ring parameters for executing data transfers.
