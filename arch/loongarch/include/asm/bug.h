@@ -22,14 +22,27 @@
 #ifndef CONFIG_GENERIC_BUG
 #define __BUG_ENTRY(cond_str, flags)
 #else
+
+#ifdef COMPILE_OFFSETS
 #define __BUG_ENTRY(cond_str, flags)				\
-		.pushsection __bug_table, "aw";			\
+		.pushsection __bug_table, "awM", @progbits, 0;	\
 		.align 2;					\
 	10000:	.long 10001f - .;				\
 		_BUGVERBOSE_LOCATION(WARN_CONDITION_STR(cond_str) __FILE__, __LINE__) \
 		.short flags;					\
 		.popsection;					\
 	10001:
+#else
+#include <generated/asm-offsets.h>
+#define __BUG_ENTRY(cond_str, flags)				\
+		.pushsection __bug_table, "awM", @progbits, BUG_ENTRY_SIZE; \
+		.align 2;					\
+	10000:	.long 10001f - .;				\
+		_BUGVERBOSE_LOCATION(WARN_CONDITION_STR(cond_str) __FILE__, __LINE__) \
+		.short flags;					\
+		.popsection;					\
+	10001:
+#endif
 #endif
 
 #define ASM_BUG_FLAGS(cond_str, flags)				\

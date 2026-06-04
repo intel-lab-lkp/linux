@@ -23,9 +23,16 @@
 #define JUMP_LABEL_TYPE		".quad "
 #endif
 
+#ifdef COMPILE_OFFSETS
+#define JUMP_ENTRY_SIZE 0
+#else
+#include <generated/asm-offsets.h>
+#endif
+
 /* This macro is also expanded on the Rust side. */
 #define JUMP_TABLE_ENTRY(key, label)			\
-	 ".pushsection	__jump_table, \"aw\"	\n\t"	\
+	 ".pushsection	__jump_table, \"awM\", @progbits, " \
+			__stringify(JUMP_ENTRY_SIZE) "\n\t" \
 	 ".align	" __stringify(PTRLOG) "	\n\t"	\
 	 ".long		1b - ., " label " - .	\n\t"	\
 	 JUMP_LABEL_TYPE  key " - .		\n\t"	\

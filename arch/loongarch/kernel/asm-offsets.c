@@ -18,6 +18,10 @@
 #include <asm/ftrace.h>
 #include <asm/sigframe.h>
 #include <vdso/datapage.h>
+#include <asm/alternative.h>
+#include <asm/extable.h>
+#include <asm/bug.h>
+#include <asm/jump_label.h>
 
 static void __used output_ptreg_defines(void)
 {
@@ -321,5 +325,37 @@ static void __used output_vdso_defines(void)
 	COMMENT("LoongArch vDSO offsets.");
 
 	DEFINE(__VDSO_PAGES, VDSO_NR_PAGES);
+	BLANK();
+}
+
+static void __used output_extable_defines(void)
+{
+	COMMENT("LoongArch exception table entry offsets.");
+
+	DEFINE(EXTABLE_SIZE, sizeof(struct exception_table_entry));
+	BLANK();
+}
+
+static void __used output_alt_instr_defines(void)
+{
+	COMMENT("LoongArch alternative instructions offsets.");
+
+	DEFINE(ALT_INSTR_SIZE, sizeof(struct alt_instr));
+	BLANK();
+}
+
+static void __used output_bug_defines(void)
+{
+	COMMENT("LoongArch bug entry offsets.");
+
+	DEFINE(BUG_ENTRY_SIZE, sizeof(struct bug_entry));
+	BLANK();
+}
+
+static void __used output_jump_label_defines(void)
+{
+	COMMENT("LoongArch jump entry offsets.");
+
+	DEFINE(JUMP_ENTRY_SIZE, sizeof(struct jump_entry));
 	BLANK();
 }

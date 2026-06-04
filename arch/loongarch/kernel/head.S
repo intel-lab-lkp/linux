@@ -12,6 +12,7 @@
 #include <asm/regdef.h>
 #include <asm/loongarch.h>
 #include <asm/stackframe.h>
+#include <generated/asm-offsets.h>
 
 #ifdef CONFIG_EFI_STUB
 
