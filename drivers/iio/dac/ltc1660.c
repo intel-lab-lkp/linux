@@ -167,8 +167,8 @@ static int ltc1660_probe(struct spi_device *spi)
 	priv = iio_priv(indio_dev);
 	priv->regmap = devm_regmap_init_spi(spi, &ltc1660_regmap_config);
 	if (IS_ERR(priv->regmap)) {
-		dev_err(&spi->dev, "failed to register spi regmap %ld\n",
-			PTR_ERR(priv->regmap));
+		dev_err(&spi->dev, "failed to register spi regmap %pe\n",
+			priv->regmap);
 		return PTR_ERR(priv->regmap);
 	}
 
