@@ -497,14 +497,14 @@ static int rzg2l_gpt_probe(struct platform_device *pdev)
 
 	rate = clk_get_rate(clk);
 	if (!rate)
-		return dev_err_probe(dev, -EINVAL, "The gpt clk rate is 0");
+		return dev_err_probe(dev, -EINVAL, "The gpt clk rate is 0\n");
 
 	/*
 	 * Refuse clk rates > 1 GHz to prevent overflow later for computing
 	 * period and duty cycle.
 	 */
 	if (rate > NSEC_PER_SEC)
-		return dev_err_probe(dev, -EINVAL, "The gpt clk rate is > 1GHz");
+		return dev_err_probe(dev, -EINVAL, "The gpt clk rate is > 1GHz\n");
 
 	/*
 	 * Rate is in MHz and is always integer for peripheral clk
@@ -513,7 +513,7 @@ static int rzg2l_gpt_probe(struct platform_device *pdev)
 	 */
 	rzg2l_gpt->rate_khz = rate / KILO;
 	if (rzg2l_gpt->rate_khz * KILO != rate)
-		return dev_err_probe(dev, -EINVAL, "Rate is not multiple of 1000");
+		return dev_err_probe(dev, -EINVAL, "Rate is not multiple of 1000\n");
 
 	ret = rzg2l_gpt_poeg_init(pdev, rzg2l_gpt);
 	if (ret)
