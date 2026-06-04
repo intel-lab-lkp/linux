@@ -18,6 +18,7 @@ static u64 timeout_ns = 2ULL * 1000 * 1000 * 1000;
 static bool guest_ready_for_irqs[KVM_MAX_VCPUS];
 static bool guest_received_irq[KVM_MAX_VCPUS];
 static bool irq_affinity;
+static bool block_vcpus;
 static bool done;
 
 #define GUEST_RECEIVED_IRQ(__vcpu)	\
@@ -43,8 +44,12 @@ static void guest_code(void)
 
 	WRITE_ONCE(guest_ready_for_irqs[guest_get_vcpu_id()], true);
 
-	while (!READ_ONCE(done))
-		cpu_relax();
+	while (!READ_ONCE(done)) {
+		if (block_vcpus)
+			hlt();
+		else
+			cpu_relax();
+	}
 
 	GUEST_DONE();
 }
@@ -111,10 +116,11 @@ static void kvm_route_msi(struct kvm_vm *vm, u32 gsi, struct kvm_vcpu *vcpu,
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-d <segment:bus:device.function>] [-h]\n", name);
+	printf("Usage: %s [-a] [-b] [-d <segment:bus:device.function>] [-h]\n", name);
 	printf("\n");
 	printf("Tests KVM IRQ injection via irqfd using an emulated eventfd.\n");
 	printf("-a	Randomly affinitize the device's host IRQ to different physical CPUs throughout the test\n");
+	printf("-b	Block vCPUs (e.g. HLT) instead of spinning in guest-mode\n");
 	printf("-d	Use a VFIO device to send MSI-X interrupts instead of using an emulated eventfd\n");
 	printf("\n");
 	exit(KSFT_FAIL);
@@ -149,10 +155,13 @@ int main(int argc, char **argv)
 	unsigned int irq;
 	int irq_cpu;
 
-	while ((c = getopt(argc, argv, "ad:h")) != -1) {
+	while ((c = getopt(argc, argv, "abd:h")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
+			break;
+		case 'b':
+			block_vcpus = true;
 			break;
 		case 'd':
 			device_bdf = optarg;
@@ -188,6 +197,8 @@ int main(int argc, char **argv)
 	       gsi, vector, nr_irqs);
 
 	kvm_assign_irqfd(vm, gsi, eventfd);
+
+	sync_global_to_guest(vm, block_vcpus);
 
 	for (i = 0; i < nr_vcpus; i++)
 		pthread_create(&vcpu_threads[i], NULL, vcpu_thread_main, vcpus[i]);
@@ -247,8 +258,19 @@ int main(int argc, char **argv)
 
 	WRITE_AND_SYNC_TO_GUEST(vm, done, true);
 
-	for (i = 0; i < nr_vcpus; i++)
+	for (i = 0; i < nr_vcpus; i++) {
+		/*
+		 * Verify that sending an interrupt to a halted vCPU wakes it
+		 * up. If the vCPU does not wake up, the call to pthread_join(),
+		 * below, will hang.
+		 */
+		if (block_vcpus) {
+			kvm_route_msi(vm, gsi, vcpus[i], vector);
+			trigger_interrupt(device, eventfd);
+		}
+
 		pthread_join(vcpu_threads[i], NULL);
+	}
 
 	if (irq_affinity_fp)
 		fclose(irq_affinity_fp);
