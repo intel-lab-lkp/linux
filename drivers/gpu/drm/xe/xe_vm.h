@@ -181,6 +181,20 @@ static inline bool xe_vma_is_userptr(struct xe_vma *vma)
 		!xe_vma_is_cpu_addr_mirror(vma);
 }
 
+/**
+ * xe_vma_has_cpu_autoreset_active() - Check if VMA is still CPU-only
+ * @vma: VMA to check
+ *
+ * The caller must hold vm->lock (read or write).
+ *
+ * Return: true if CPU-only autoreset is armed, false after the first GPU touch.
+ */
+static inline bool xe_vma_has_cpu_autoreset_active(struct xe_vma *vma)
+{
+	lockdep_assert_held(&xe_vma_vm(vma)->lock);
+	return vma->cpu_autoreset_active;
+}
+
 struct xe_vma *xe_vm_find_vma_by_addr(struct xe_vm *vm, u64 page_addr);
 
 int xe_vma_need_vram_for_atomic(struct xe_device *xe, struct xe_vma *vma, bool is_atomic);

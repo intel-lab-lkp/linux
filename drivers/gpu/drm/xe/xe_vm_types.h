@@ -52,6 +52,11 @@ struct xe_vm_pgtable_update_op;
 #define XE_VMA_DUMPABLE		(DRM_GPUVA_USERBITS << 8)
 #define XE_VMA_SYSTEM_ALLOCATOR	(DRM_GPUVA_USERBITS << 9)
 #define XE_VMA_MADV_AUTORESET	(DRM_GPUVA_USERBITS << 10)
+/*
+ * Pipeline-only bit used to carry cpu_autoreset_active through MAP/REMAP.
+ * It must not be stored persistently in vma->gpuva.flags.
+ */
+#define XE_VMA_CPU_AUTORESET_ACTIVE	(DRM_GPUVA_USERBITS << 11)
 
 /**
  * struct xe_vma_mem_attr - memory attributes associated with vma
@@ -156,6 +161,14 @@ struct xe_vma {
 
 	/** @tile_staged: bind is staged for this VMA */
 	u8 tile_staged;
+
+	/**
+	 * @cpu_autoreset_active: CPU mirror VMA has not been GPU-faulted yet.
+	 *
+	 * Set for MADVISE_AUTORESET CPU mirror VMAs and cleared on the first
+	 * successful GPU fault. Protected by vm->lock.
+	 */
+	bool cpu_autoreset_active;
 
 	/**
 	 * @skip_invalidation: Used in madvise to avoid invalidation
