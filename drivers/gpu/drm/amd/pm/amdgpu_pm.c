@@ -244,6 +244,10 @@ static ssize_t amdgpu_set_power_dpm_state(struct device *dev,
 	enum amd_pm_state_type  state;
 	int ret;
 
+	/* Reject empty/whitespace strings - fuzzing found this is not validated */
+	if (count == 0 || sysfs_streq(buf, ""))
+		return -EINVAL;
+
 	if (sysfs_streq(buf, "battery"))
 		state = POWER_STATE_TYPE_BATTERY;
 	else if (sysfs_streq(buf, "balanced"))
@@ -363,6 +367,10 @@ static ssize_t amdgpu_set_power_dpm_force_performance_level(struct device *dev,
 	struct amdgpu_device *adev = drm_to_adev(ddev);
 	enum amd_dpm_forced_level level;
 	int ret = 0;
+
+	/* Reject empty/whitespace strings - fuzzing found this is not validated */
+	if (count == 0 || sysfs_streq(buf, ""))
+		return -EINVAL;
 
 	if (sysfs_streq(buf, "low"))
 		level = AMD_DPM_FORCED_LEVEL_LOW;
@@ -902,6 +910,10 @@ static ssize_t amdgpu_set_pp_features(struct device *dev,
 	uint64_t featuremask;
 	int ret;
 
+	/* Reject empty/whitespace strings - fuzzing found kstrtou64 accepts "" as 0 */
+	if (count == 0 || sysfs_streq(buf, ""))
+		return -EINVAL;
+
 	ret = kstrtou64(buf, 0, &featuremask);
 	if (ret)
 		return -EINVAL;
@@ -1026,6 +1038,10 @@ static ssize_t amdgpu_read_mask(const char *buf, size_t count, uint32_t *mask)
 	size_t bytes;
 
 	*mask = 0;
+
+	/* Reject empty/whitespace strings - fuzzing found this is not validated */
+	if (count == 0 || sysfs_streq(buf, ""))
+		return -EINVAL;
 
 	bytes = min(count, sizeof(buf_cpy) - 1);
 	memcpy(buf_cpy, buf, bytes);
@@ -1378,6 +1394,10 @@ static ssize_t amdgpu_set_pp_power_profile_mode(struct device *dev,
 	long int profile_mode = 0;
 	const char delimiter[3] = {' ', '\n', '\0'};
 
+	/* Reject empty/whitespace strings - fuzzing found this is not validated */
+	if (count == 0 || sysfs_streq(buf, ""))
+		return -EINVAL;
+
 	tmp[0] = *(buf);
 	tmp[1] = '\0';
 	ret = kstrtol(tmp, 0, &profile_mode);
@@ -1613,6 +1633,10 @@ static ssize_t amdgpu_set_thermal_throttling_logging(struct device *dev,
 	ret = kstrtol(buf, 0, &throttling_logging_interval);
 	if (ret)
 		return ret;
+
+	/* Reject negative values - only 0 (disable) or 1-3600 (seconds) are valid */
+	if (throttling_logging_interval < 0)
+		return -EINVAL;
 
 	if (throttling_logging_interval > 3600)
 		return -EINVAL;
@@ -1862,12 +1886,12 @@ static ssize_t amdgpu_set_smartshift_bias(struct device *dev,
 {
 	struct drm_device *ddev = dev_get_drvdata(dev);
 	struct amdgpu_device *adev = drm_to_adev(ddev);
-	int r = 0;
+	int r;
 	int bias = 0;
 
 	r = kstrtoint(buf, 10, &bias);
 	if (r)
-		goto out;
+		return r;
 
 	r = amdgpu_pm_get_access(adev);
 	if (r < 0)
@@ -1879,14 +1903,12 @@ static ssize_t amdgpu_set_smartshift_bias(struct device *dev,
 		bias = AMDGPU_SMARTSHIFT_MIN_BIAS;
 
 	amdgpu_smartshift_bias = bias;
-	r = count;
 
 	/* TODO: update bias level with SMU message */
 
-out:
 	amdgpu_pm_put_access(adev);
 
-	return r;
+	return count;
 }
 
 static int ss_power_attr_update(struct amdgpu_device *adev, struct amdgpu_device_attr *attr,
@@ -2034,20 +2056,31 @@ static int pp_dpm_clk_default_attr_update(struct amdgpu_device *adev, struct amd
 		       gc_ver == IP_VERSION(11, 0, 3)) && adev->vcn.num_vcn_inst >= 2))
 			*states = ATTR_STATE_UNSUPPORTED;
 	} else if (DEVICE_ATTR_IS(pp_dpm_pcie)) {
-		if (gc_ver == IP_VERSION(9, 4, 2) ||
-		    amdgpu_is_multi_aid(adev))
+		if (amdgpu_is_multi_aid(adev))
 			*states = ATTR_STATE_UNSUPPORTED;
 	}
 
 	switch (gc_ver) {
 	case IP_VERSION(9, 4, 1):
-	case IP_VERSION(9, 4, 2):
-		/* the Mi series card does not support standalone mclk/socclk/fclk level setting */
+		/* Arcturus does not support standalone mclk/socclk/fclk level setting */
 		if (DEVICE_ATTR_IS(pp_dpm_mclk) ||
 		    DEVICE_ATTR_IS(pp_dpm_socclk) ||
 		    DEVICE_ATTR_IS(pp_dpm_fclk)) {
 			dev_attr->attr.mode &= ~S_IWUGO;
 			dev_attr->store = NULL;
+		}
+		break;
+	case IP_VERSION(9, 4, 2):
+		if (DEVICE_ATTR_IS(pp_dpm_mclk) ||
+		    DEVICE_ATTR_IS(pp_dpm_socclk)) {
+			/* Aldebaran mclk/socclk DPM only supports voltage control,
+			 * not allow to set dpm level directly */
+			dev_attr->attr.mode &= ~S_IWUGO;
+			dev_attr->store = NULL;
+		} else if (DEVICE_ATTR_IS(pp_dpm_fclk) ||
+			   DEVICE_ATTR_IS(pp_dpm_pcie)) {
+			/* Aldebaran does not support fclk/pcie dpm */
+			*states = ATTR_STATE_UNSUPPORTED;
 		}
 		break;
 	default:
@@ -2505,12 +2538,12 @@ static ssize_t amdgpu_set_pm_policy_attr(struct device *dev,
 		.dev_attr = __ATTR(_name, 0644, amdgpu_get_pm_policy_attr, \
 				   amdgpu_set_pm_policy_attr),             \
 		.id = PP_PM_POLICY_##_id,                                  \
-	};
+	}
 
 #define AMDGPU_PM_POLICY_ATTR_VAR(_name) pm_policy_attr_##_name.dev_attr.attr
 
-AMDGPU_PM_POLICY_ATTR(soc_pstate, SOC_PSTATE)
-AMDGPU_PM_POLICY_ATTR(xgmi_plpd, XGMI_PLPD)
+AMDGPU_PM_POLICY_ATTR(soc_pstate, SOC_PSTATE);
+AMDGPU_PM_POLICY_ATTR(xgmi_plpd, XGMI_PLPD);
 
 static struct attribute *pm_policy_attrs[] = {
 	&AMDGPU_PM_POLICY_ATTR_VAR(soc_pstate),
