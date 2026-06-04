@@ -38,6 +38,21 @@
  *    DW1 [                     Header DW1                            ]
  *    DW2 [                     Header DW2                            ]
  *    DW3 [                     Header DW3                            ]
+ *
+ * Header DW2 for MWr/Msg/MsgD/FetchAdd/Swap/CAS/IORd/IOWr is like:
+ *   bits   [   31   ][     30:23      ][22][21][20][  19:16  ][   15:0   ]
+ *          |---------|----------------|----|---|--|-----------|----------|
+ *   fields [Reserved][Request Segment][RSV][TV][T][Tag<13:10>][Header DW2]
+ *
+ * Header DW3 for CfgRd0/CfgWr0/CfgRd1/CfgWr1 is like:
+ *   bits   [   31   ][       30:23        ][22][21][20][  19:16  ][   15:0   ]
+ *          |---------|--------------------|----|---|--|-----------|----------|
+ *   fields [Reserved][Destination Segment][DSV][TV][T][Tag<13:10>][Header DW3]
+ *
+ * Header DW3 for Cpl/CplD/CplLk/CplDlk is like:
+ *   bits   [       31:24       ][       23:16      ][15][  14:6   ][5][4][   3:0    ]
+ *          |--------------------|------------------|----|---------|--|---|----------|
+ *   fields [Destination Segment][Completer Segment][DSV][Reserved][TV][T][Tag<13:10>]
  */
 
 enum hisi_ptt_8dw_pkt_field_type {
@@ -127,6 +142,45 @@ union hisi_ptt_field_data {
 		uint32_t type : 5;
 		uint32_t format : 3;
 	} dw0_8dw;
+	/*
+	 * Header DW2 for MWr/Msg/MsgD/FetchAdd/Swap/CAS/IORd/IOWr TLPs.
+	 * Affects both 4DW and 8DW format.
+	 */
+	struct {
+		uint32_t header_dw2 : 16;
+		uint32_t tag : 4;
+		uint32_t t : 1;
+		uint32_t tv : 1;
+		uint32_t rsv : 1;
+		uint32_t request_segment : 8;
+		uint32_t reserved : 1;
+	} dw2_mixed;
+	/*
+	 * Header DW3 for CfgRd0/CfgWr0/CfgRd1/CfgWr1 TLPs.
+	 * Affects both 4DW and 8DW format.
+	 */
+	struct {
+		uint32_t header_dw3 : 16;
+		uint32_t tag : 4;
+		uint32_t t : 1;
+		uint32_t tv : 1;
+		uint32_t dsv : 1;
+		uint32_t destination_segment : 8;
+		uint32_t reserved : 1;
+	} dw3_cfg;
+	/*
+	 * Header DW3 for Cpl/CplD/CplLk/CplDlk TLPs.
+	 * Affects both 4DW and 8DW format.
+	 */
+	struct {
+		uint32_t tag : 4;
+		uint32_t t : 1;
+		uint32_t tv : 1;
+		uint32_t reserved : 9;
+		uint32_t dsv : 1;
+		uint32_t completer_segment : 8;
+		uint32_t destination_segment : 8;
+	} dw3_cpl;
 	uint32_t value;
 };
 
@@ -211,6 +265,85 @@ static void hisi_ptt_print_head0(struct hisi_ptt_pkt_buf *pkt_buf)
 	pkt_buf->pos += HISI_PTT_FIELD_LENGTH;
 }
 
+static void hisi_ptt_print_head1(struct hisi_ptt_pkt_buf *pkt_buf)
+{
+	const char *color = PERF_COLOR_BLUE;
+	union hisi_ptt_field_data dw;
+
+	dw.value = le32_to_cpu(*(__le32 *)(pkt_buf->buf + pkt_buf->pos));
+	hisi_ptt_print_raw_record(pkt_buf->pos, dw.value);
+	color_fprintf(stdout, color, "  %s\n",
+		      pkt_buf->pkt_type == HISI_PTT_4DW_PKT ?
+		      hisi_ptt_4dw_pkt_field_name[HISI_PTT_4DW_HEAD1] :
+		      hisi_ptt_8dw_pkt_field_name[HISI_PTT_8DW_HEAD1]);
+
+	pkt_buf->pos += HISI_PTT_FIELD_LENGTH;
+}
+
+static void hisi_ptt_print_head2(struct hisi_ptt_pkt_buf *pkt_buf)
+{
+	const char *color = PERF_COLOR_BLUE;
+	union hisi_ptt_field_data dw;
+
+	dw.value = le32_to_cpu(*(__le32 *)(pkt_buf->buf + pkt_buf->pos));
+	hisi_ptt_print_raw_record(pkt_buf->pos, dw.value);
+
+	if (pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_MWR ||
+	    pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_MSG ||
+	    pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_ATOM ||
+	    pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_IO)
+		color_fprintf(stdout, color,
+			      "  %s %x %s %x %s %x %s %x %s %x %s %x %s %x\n",
+			      "Reserved", dw.dw2_mixed.reserved,
+			      "Request Segment", dw.dw2_mixed.request_segment,
+			      "RSV", dw.dw2_mixed.rsv, "TV", dw.dw2_mixed.tv,
+			      "T", dw.dw2_mixed.t, "Tag", dw.dw2_mixed.tag,
+			      "Header DW2", dw.dw2_mixed.header_dw2);
+	else
+		color_fprintf(stdout, color, "  %s\n",
+			      pkt_buf->pkt_type == HISI_PTT_4DW_PKT ?
+			      hisi_ptt_4dw_pkt_field_name[HISI_PTT_4DW_HEAD2] :
+			      hisi_ptt_8dw_pkt_field_name[HISI_PTT_8DW_HEAD2]);
+
+	pkt_buf->pos += HISI_PTT_FIELD_LENGTH;
+}
+
+static void hisi_ptt_print_head3(struct hisi_ptt_pkt_buf *pkt_buf)
+{
+	const char *color = PERF_COLOR_BLUE;
+	union hisi_ptt_field_data dw;
+
+	dw.value = le32_to_cpu(*(__le32 *)(pkt_buf->buf + pkt_buf->pos));
+	hisi_ptt_print_raw_record(pkt_buf->pos, dw.value);
+
+	if (pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_CPL)
+		color_fprintf(stdout, color,
+			      "  %s %x %s %x %s %x %s %x %s %x %s %x %s %x\n",
+			      "Destination Segment",
+			      dw.dw3_cpl.destination_segment,
+			      "Completer Segment", dw.dw3_cpl.completer_segment,
+			      "DSV", dw.dw3_cpl.dsv,
+			      "Reserved", dw.dw3_cpl.reserved,
+			      "TV", dw.dw3_cpl.tv, "T", dw.dw3_cpl.t,
+			      "Tag", dw.dw3_cpl.tag);
+	else if (pkt_buf->pkt_msg_type == HISI_PTT_PKT_TYPE_CFG)
+		color_fprintf(stdout, color,
+			      "  %s %x %s %x %s %x %s %x %s %x %s %x %s %x\n",
+			      "Reserved", dw.dw3_cfg.reserved,
+			      "Destination Segment",
+			      dw.dw3_cfg.destination_segment,
+			      "DSV", dw.dw3_cfg.dsv, "TV", dw.dw3_cfg.tv,
+			      "T", dw.dw3_cfg.t, "Tag", dw.dw3_cfg.tag,
+			      "Header DW3", dw.dw3_cfg.header_dw3);
+	else
+		color_fprintf(stdout, color, "  %s\n",
+			      pkt_buf->pkt_type == HISI_PTT_4DW_PKT ?
+			      hisi_ptt_4dw_pkt_field_name[HISI_PTT_4DW_HEAD3] :
+			      hisi_ptt_8dw_pkt_field_name[HISI_PTT_8DW_HEAD3]);
+
+	pkt_buf->pos += HISI_PTT_FIELD_LENGTH;
+}
+
 static int hisi_ptt_8dw_pkt_desc(struct hisi_ptt_pkt_buf *pkt_buf)
 {
 	int i;
@@ -222,12 +355,24 @@ static int hisi_ptt_8dw_pkt_desc(struct hisi_ptt_pkt_buf *pkt_buf)
 			continue;
 		}
 
-		if (i == HISI_PTT_8DW_HEAD0) {
+		switch (i) {
+		case HISI_PTT_8DW_HEAD0:
 			hisi_ptt_print_head0(pkt_buf);
-			continue;
+			break;
+		case HISI_PTT_8DW_HEAD1:
+			hisi_ptt_print_head1(pkt_buf);
+			break;
+		case HISI_PTT_8DW_HEAD2:
+			hisi_ptt_print_head2(pkt_buf);
+			break;
+		case HISI_PTT_8DW_HEAD3:
+			hisi_ptt_print_head3(pkt_buf);
+			break;
+		default:
+			hisi_ptt_print_pkt(pkt_buf,
+					   hisi_ptt_8dw_pkt_field_name[i]);
+			break;
 		}
-
-		hisi_ptt_print_pkt(pkt_buf, hisi_ptt_8dw_pkt_field_name[i]);
 	}
 
 	return hisi_ptt_pkt_size[HISI_PTT_8DW_PKT];
@@ -235,12 +380,10 @@ static int hisi_ptt_8dw_pkt_desc(struct hisi_ptt_pkt_buf *pkt_buf)
 
 static int hisi_ptt_4dw_pkt_desc(struct hisi_ptt_pkt_buf *pkt_buf)
 {
-	int i;
-
 	hisi_ptt_print_head0(pkt_buf);
-
-	for (i = HISI_PTT_4DW_HEAD1; i < HISI_PTT_4DW_TYPE_MAX; i++)
-		hisi_ptt_print_pkt(pkt_buf, hisi_ptt_4dw_pkt_field_name[i]);
+	hisi_ptt_print_head1(pkt_buf);
+	hisi_ptt_print_head2(pkt_buf);
+	hisi_ptt_print_head3(pkt_buf);
 
 	return hisi_ptt_pkt_size[HISI_PTT_4DW_PKT];
 }
