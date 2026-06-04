@@ -927,7 +927,22 @@ EXPORT_SYMBOL_GPL(__irq_alloc_descs);
  */
 unsigned int irq_get_next_irq(unsigned int offset)
 {
-	return irq_find_at_or_after(offset);
+	unsigned int irq;
+	const unsigned int nr_irqs = irq_get_nr_irqs();
+
+	irq = irq_find_at_or_after(offset);
+
+	/*
+	 * Defend against corrupted IRQ descriptors violating the monotonic
+	 * iterator contract. Returning a value lower than the offset will
+	 * cause catastrophic unsigned underflows in callers.
+	 */
+	if (WARN_ONCE(irq < offset && irq < nr_irqs,
+		      "genirq: Corrupted IRQ descriptor detected: irq %u < offset %u\n",
+		      irq, offset))
+		return nr_irqs;
+
+	return irq;
 }
 
 struct irq_desc *__irq_get_desc_lock(unsigned int irq, unsigned long *flags, bool bus,
