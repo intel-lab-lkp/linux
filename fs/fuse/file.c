@@ -144,8 +144,56 @@ static void fuse_file_put(struct fuse_file *ff, bool sync)
 	}
 }
 
+static int fuse_compound_open_getattr(struct fuse_mount *fm, u64 nodeid,
+				      struct inode *inode,
+				      unsigned int open_flags, int opcode,
+				      struct fuse_open_out *outopenp)
+{
+	struct fuse_attr_out attr_outarg = {};
+	struct fuse_args open_args = {};
+	struct fuse_args getattr_args = {};
+	struct fuse_open_in open_in = {};
+	struct fuse_getattr_in getattr_in = {};
+	int open_error = 0, getattr_error = 0;
+	struct fuse_compound_op ops[2] = {
+		{ .arg = &open_args,    .error = &open_error,
+		  .dep_index = FUSE_COMPOUND_NO_DEP },
+		{ .arg = &getattr_args, .error = &getattr_error,
+		  .dep_index = FUSE_COMPOUND_NO_DEP },
+	};
+	int err;
+
+	fuse_open_args_fill(fm, &open_args, nodeid, opcode, open_flags,
+			    &open_in, outopenp);
+	fuse_getattr_args_fill(&getattr_args, nodeid, &getattr_in, &attr_outarg);
+
+	err = fuse_compound_send(fm, ops, 2);
+	if (err)
+		return err;
+
+	/*
+	 * Open succeeded if open_error == 0; the getattr part is best
+	 * effort.  If the server returned invalid or wrong-type attrs as
+	 * part of the compound, mark the inode bad (matching fuse_do_getattr)
+	 * but do not fail the open -- otherwise we would leak the just-
+	 * acquired file handle on the server side.
+	 */
+	if (!getattr_error) {
+		if (fuse_invalid_attr(&attr_outarg.attr) ||
+		    inode_wrong_type(inode, attr_outarg.attr.mode))
+			fuse_make_bad(inode);
+		else
+			fuse_change_attributes(inode, &attr_outarg.attr, NULL,
+					       ATTR_TIMEOUT(&attr_outarg),
+					       fuse_get_attr_version(fm->fc));
+	}
+
+	return open_error;
+}
+
 struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
-				 unsigned int open_flags, bool isdir)
+				struct inode *inode,
+				unsigned int open_flags, bool isdir)
 {
 	struct fuse_conn *fc = fm->fc;
 	struct fuse_file *ff;
@@ -171,9 +219,25 @@ struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
 	if (open) {
 		/* Store outarg for fuse_finish_open() */
 		struct fuse_open_out *outargp = &ff->args->open_outarg;
+		bool try_compound = false;
 		int err;
 
-		err = fuse_send_open(fm, nodeid, open_flags, opcode, outargp);
+		if (inode) {
+			struct fuse_inode *fi = get_fuse_inode(inode);
+
+			try_compound = (open_flags & O_APPEND) ||
+				time_before64(fi->i_time, get_jiffies_64()) ||
+				(fi->inval_mask & STATX_BASIC_STATS);
+		}
+
+		if (try_compound)
+			err = fuse_compound_open_getattr(fm, nodeid, inode,
+							 open_flags, opcode,
+							 outargp);
+		else
+			err = fuse_send_open(fm, nodeid, open_flags, opcode,
+					     outargp);
+
 		if (!err) {
 			ff->fh = outargp->fh;
 			ff->open_flags = outargp->open_flags;
@@ -203,7 +267,8 @@ struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
 int fuse_do_open(struct fuse_mount *fm, u64 nodeid, struct file *file,
 		 bool isdir)
 {
-	struct fuse_file *ff = fuse_file_open(fm, nodeid, file->f_flags, isdir);
+	struct fuse_file *ff = fuse_file_open(fm, nodeid, file_inode(file),
+					      file->f_flags, isdir);
 
 	if (!IS_ERR(ff))
 		file->private_data = ff;
