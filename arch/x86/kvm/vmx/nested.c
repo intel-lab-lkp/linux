@@ -4953,6 +4953,7 @@ static inline u64 nested_vmx_get_vmcs01_guest_efer(struct vcpu_vmx *vmx)
 
 static void nested_vmx_restore_host_state(struct kvm_vcpu *vcpu)
 {
+	enum vm_entry_failure_code ignored;
 	struct vmcs12 *vmcs12 = get_vmcs12(vcpu);
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	struct vmx_msr_entry g, h;
@@ -4990,19 +4991,18 @@ static void nested_vmx_restore_host_state(struct kvm_vcpu *vcpu)
 	vmx_set_cr4(vcpu, vmcs_readl(CR4_READ_SHADOW));
 
 	nested_ept_uninit_mmu_context(vcpu);
-	vcpu->arch.cr3 = vmcs_readl(GUEST_CR3);
-	kvm_register_mark_available(vcpu, VCPU_REG_CR3);
 
 	/*
-	 * Use ept_save_pdptrs(vcpu) to load the MMU's cached PDPTRs
-	 * from vmcs01 (if necessary).  The PDPTRs are not loaded on
-	 * VMFail, like everything else we just need to ensure our
-	 * software model is up-to-date.
+	 * Now that nested EPT has been disabled, load the MMU's CR3 and
+	 * possibly PDPTRs from vmcs01 (if necessary).  This should not
+	 * happen for VMFail, but we get here if the check was caught by
+	 * the processor and therefore the guest CR3 was loaded prematurely.
 	 */
+	kvm_mmu_unload(vcpu);
+	if (nested_vmx_load_cr3(vcpu, vmcs_readl(GUEST_CR3), false, !enable_ept, &ignored))
+		nested_vmx_abort(vcpu, VMX_ABORT_LOAD_HOST_PDPTE_FAIL);
 	if (enable_ept && is_pae_paging(vcpu))
 		ept_save_pdptrs(vcpu);
-
-	kvm_mmu_reset_context(vcpu);
 
 	/*
 	 * This nasty bit of open coding is a compromise between blindly
