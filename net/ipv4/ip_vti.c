@@ -596,6 +596,10 @@ static int vti_changelink(struct net_device *dev, struct nlattr *tb[],
 	struct ip_tunnel_parm_kern p;
 	__u32 fwmark = t->fwmark;
 
+	if (!net_eq(t->net, dev_net(dev)) &&
+	    !ns_capable(t->net->user_ns, CAP_NET_ADMIN))
+		return -EPERM;
+
 	vti_netlink_parms(data, &p, &fwmark);
 	return ip_tunnel_changelink(dev, tb, &p, fwmark);
 }
