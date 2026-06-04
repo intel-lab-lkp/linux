@@ -493,8 +493,7 @@ static void sched_switch(struct timechart *tchart, int cpu, u64 timestamp,
  * Returns a malloc'd backtrace string built via open_memstream, or NULL
  * on error.  Caller must free() the returned pointer.
  */
-static char *cat_backtrace(union perf_event *event,
-			   struct perf_sample *sample,
+static char *cat_backtrace(struct perf_sample *sample,
 			   struct machine *machine)
 {
 	struct addr_location al;
@@ -516,9 +515,8 @@ static char *cat_backtrace(union perf_event *event,
 		goto exit;
 
 	if (machine__resolve(machine, &al, sample) < 0) {
-		pr_err("problem processing %s (%u) event at offset %#" PRIx64 ", skipping it.\n",
-		       perf_event__name(event->header.type), event->header.type,
-		       sample->file_offset);
+		pr_err("problem processing SAMPLE (%u) event at offset %#" PRIx64 ", skipping it.\n",
+		       PERF_RECORD_SAMPLE, sample->file_offset);
 		goto exit;
 	}
 
@@ -578,7 +576,7 @@ typedef int (*tracepoint_handler)(struct timechart *tchart,
 				  const char *backtrace);
 
 static int process_sample_event(const struct perf_tool *tool,
-				union perf_event *event,
+				union perf_event *event __maybe_unused,
 				struct perf_sample *sample,
 				struct machine *machine)
 {
@@ -595,7 +593,7 @@ static int process_sample_event(const struct perf_tool *tool,
 
 	if (evsel->handler != NULL) {
 		tracepoint_handler f = evsel->handler;
-		char *backtrace = cat_backtrace(event, sample, machine);
+		char *backtrace = cat_backtrace(sample, machine);
 
 		ret = f(tchart, sample, backtrace);
 		free(backtrace);
