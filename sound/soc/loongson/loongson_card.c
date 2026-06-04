@@ -2,8 +2,9 @@
 //
 // Loongson ASoC Audio Machine driver
 //
-// Copyright (C) 2023 Loongson Technology Corporation Limited
+// Copyright (C) 2023-2026 Loongson Technology Corporation Limited
 // Author: Yingkun Meng <mengyingkun@loongson.cn>
+//         Binbin Zhou <zhoubinbin@loongson.cn>
 //
 
 #include <linux/module.h>
@@ -18,6 +19,19 @@ static char codec_name[SND_ACPI_I2C_ID_LEN];
 struct loongson_card_data {
 	struct snd_soc_card snd_card;
 	unsigned int mclk_fs;
+	const struct loongson_card_config *cfg;
+};
+
+struct loongson_card_config {
+	unsigned int fmt;
+};
+
+static const struct loongson_card_config ls2k1000_card_config = {
+	.fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_IB_NF | SND_SOC_DAIFMT_CBC_CFC,
+};
+
+static const struct loongson_card_config ls2k0300_forever_pi_card_config = {
+	.fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBC_CFC,
 };
 
 static int loongson_card_hw_params(struct snd_pcm_substream *substream,
@@ -45,7 +59,7 @@ static int loongson_card_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
-	return 0;
+	return snd_soc_runtime_set_dai_fmt(rtd, ls_card->cfg->fmt);
 }
 
 static const struct snd_soc_ops loongson_ops = {
@@ -61,8 +75,6 @@ static struct snd_soc_dai_link loongson_dai_links[] = {
 	{
 		.name = "Loongson Audio Port",
 		.stream_name = "Loongson Audio",
-		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_IB_NF
-			| SND_SOC_DAIFMT_CBC_CFC,
 		SND_SOC_DAILINK_REG(analog),
 		.ops = &loongson_ops,
 	},
@@ -175,6 +187,10 @@ static int loongson_asoc_card_probe(struct platform_device *pdev)
 	if (!ls_priv)
 		return -ENOMEM;
 
+	ls_priv->cfg = (const struct loongson_card_config *)device_get_match_data(dev);
+	if (!ls_priv->cfg)
+		return -EINVAL;
+
 	card = &ls_priv->snd_card;
 
 	card->dev = dev;
@@ -200,7 +216,15 @@ static int loongson_asoc_card_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id loongson_asoc_dt_ids[] = {
-	{ .compatible = "loongson,ls-audio-card" },
+	/* Loongson-2K1000/Loongson-2K2000/LS7A */
+	{
+		.compatible = "loongson,ls-audio-card",
+		.data = &ls2k1000_card_config
+	},
+	{
+		.compatible = "loongson,ls2k0300-forever-pi-audio-card",
+		.data = &ls2k0300_forever_pi_card_config
+	},
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, loongson_asoc_dt_ids);
