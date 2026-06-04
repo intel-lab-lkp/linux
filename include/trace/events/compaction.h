@@ -76,6 +76,32 @@ DEFINE_EVENT(mm_compaction_isolate_template, mm_compaction_fast_isolate_freepage
 );
 
 #ifdef CONFIG_COMPACTION
+TRACE_EVENT(mm_compaction_isolate_folio,
+
+	TP_PROTO(unsigned long pfn,
+		isolate_mode_t mode,
+		unsigned long flags),
+
+	TP_ARGS(pfn, mode, flags),
+
+	TP_STRUCT__entry(
+		__field(unsigned long, pfn)
+		__field(isolate_mode_t, mode)
+		__field(unsigned long, flags)
+	),
+
+	TP_fast_assign(
+		__entry->pfn = pfn;
+		__entry->mode = mode;
+		__entry->flags = flags;
+	),
+
+	TP_printk("pfn=0x%lx mode=0x%x flags=%s",
+		__entry->pfn,
+		__entry->mode,
+		show_page_flags(__entry->flags & PAGEFLAGS_MASK))
+);
+
 TRACE_EVENT(mm_compaction_migratepages,
 
 	TP_PROTO(unsigned int nr_migratepages,

@@ -1223,6 +1223,8 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 isolate_success:
 		list_add(&folio->lru, &cc->migratepages);
 isolate_success_no_list:
+		trace_mm_compaction_isolate_folio(folio_pfn(folio), mode,
+						  folio->flags.f);
 		cc->nr_migratepages += folio_nr_pages(folio);
 		nr_isolated += folio_nr_pages(folio);
 		nr_scanned += folio_nr_pages(folio) - 1;
