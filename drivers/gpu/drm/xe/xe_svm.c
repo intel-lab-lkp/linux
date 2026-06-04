@@ -914,6 +914,15 @@ int xe_svm_init(struct xe_vm *vm)
 			drm_pagemap_release_owner(&vm->svm.peer);
 			return err;
 		}
+
+		/* Initialize after gpusvm. */
+		err = xe_vm_madvise_init(vm);
+		if (err) {
+			drm_gpusvm_fini(&vm->svm.gpusvm);
+			xe_svm_put_pagemaps(vm);
+			drm_pagemap_release_owner(&vm->svm.peer);
+			return err;
+		}
 	} else {
 		err = drm_gpusvm_init(&vm->svm.gpusvm, "Xe SVM (simple)",
 				      &vm->xe->drm, NULL, 0, 0, 0, NULL,

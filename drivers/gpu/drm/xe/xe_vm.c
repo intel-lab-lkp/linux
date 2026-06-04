@@ -1816,6 +1816,8 @@ err_close:
 err_svm_fini:
 	if (flags & XE_VM_FLAG_FAULT_MODE) {
 		vm->size = 0; /* close the vm */
+		/* Safe if madvise init did not run. */
+		xe_vm_madvise_fini(vm);
 		xe_svm_fini(vm);
 	}
 err_no_resv:
@@ -1959,6 +1961,18 @@ void xe_vm_close_and_put(struct xe_vm *vm)
 		list_del_init(&vma->combined_links.destroy);
 		xe_vma_destroy_unlocked(vma);
 	}
+
+	/*
+	 * The VM is closed here, so no new ioctl should enter. Drop vm->lock
+	 * while draining madvise workers because they take vm->lock.
+	 */
+	xe_assert(vm->xe, xe_vm_is_closed(vm));
+	up_write(&vm->lock);
+
+	if (vm->flags & XE_VM_FLAG_FAULT_MODE)
+		xe_vm_madvise_fini(vm);
+
+	down_write(&vm->lock);
 
 	xe_svm_fini(vm);
 

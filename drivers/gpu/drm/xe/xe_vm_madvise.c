@@ -28,6 +28,7 @@ struct xe_vmas_in_madvise_range {
 	int num_vmas;
 	bool has_bo_vmas;
 	bool has_svm_userptr_vmas;
+	bool has_cpu_addr_mirror_vmas;
 };
 
 /**
@@ -70,7 +71,11 @@ static int get_vmas(struct xe_vm *vm, struct xe_vmas_in_madvise_range *madvise_r
 
 		if (xe_vma_bo(vma))
 			madvise_range->has_bo_vmas = true;
-		else if (xe_vma_is_cpu_addr_mirror(vma) || xe_vma_is_userptr(vma))
+		else if (xe_vma_is_cpu_addr_mirror(vma)) {
+			/* CPU mirror VMAs use the SVM notifier lock. */
+			madvise_range->has_svm_userptr_vmas = true;
+			madvise_range->has_cpu_addr_mirror_vmas = true;
+		} else if (xe_vma_is_userptr(vma))
 			madvise_range->has_svm_userptr_vmas = true;
 
 		if (madvise_range->num_vmas == max_vmas) {
@@ -297,7 +302,12 @@ static u8 xe_zap_ptes_in_madvise_range(struct xe_vm *vm, u64 start, u64 end)
 			continue;
 
 		if (xe_vma_is_cpu_addr_mirror(vma)) {
-			tile_mask |= xe_svm_ranges_zap_ptes_in_range(vm,
+			/*
+			 * CPU-only mirror VMAs have no GPU PTEs yet.
+			 * Once GPU-touched, SVM zap applies.
+			 */
+			if (!xe_vma_has_cpu_autoreset_active(vma))
+				tile_mask |= xe_svm_ranges_zap_ptes_in_range(vm,
 								      xe_vma_start(vma),
 								      xe_vma_end(vma));
 		} else {
@@ -559,6 +569,32 @@ static bool check_bo_args_are_sane(struct xe_vm *vm, struct xe_vma **vmas,
 	}
 	return true;
 }
+
+/*
+ * Clear AUTORESET on CPU mirror VMAs in [start, end). Registration may
+ * fail after the VMA was split or merged, so do not rely on exact match.
+ */
+static void xe_vm_madvise_clear_autoreset_range(struct xe_vm *vm,
+						u64 start, u64 end)
+{
+	u64 addr = start;
+
+	lockdep_assert_held_write(&vm->lock);
+
+	while (addr < end) {
+		struct xe_vma *vma;
+
+		vma = xe_vm_find_overlapping_vma(vm, addr, end - addr);
+		if (!vma)
+			break;
+
+		if (xe_vma_is_cpu_addr_mirror(vma))
+			vma->gpuva.flags &= ~XE_VMA_MADV_AUTORESET;
+
+		addr = xe_vma_end(vma);
+	}
+}
+
 /**
  * xe_vm_madvise_ioctl - Handle MADVise ioctl for a VM
  * @dev: DRM device pointer
@@ -590,6 +626,11 @@ int xe_vm_madvise_ioctl(struct drm_device *dev, void *data, struct drm_file *fil
 	struct drm_exec exec;
 	int err, attr_type;
 	bool do_retained;
+	struct {
+		u64 start;
+		u64 end;
+	} *notifier_ranges = NULL;
+	int num_notifier_ranges = 0;
 
 	vm = xe_vm_lookup(xef, args->vm_id);
 	if (XE_IOCTL_DBG(xe, !vm))
@@ -661,6 +702,20 @@ int xe_vm_madvise_ioctl(struct drm_device *dev, void *data, struct drm_file *fil
 		}
 	}
 
+	/*
+	 * Allocate before taking BO dma-resv locks. GFP_KERNEL may enter
+	 * reclaim, which can reach TTM shrinkers and dma-resv locks.
+	 */
+	if (madvise_range.has_cpu_addr_mirror_vmas) {
+		notifier_ranges = kvmalloc_array(madvise_range.num_vmas,
+						 sizeof(*notifier_ranges),
+						 GFP_KERNEL);
+		if (!notifier_ranges) {
+			err = -ENOMEM;
+			goto free_vmas;
+		}
+	}
+
 	if (madvise_range.has_bo_vmas) {
 		if (args->type == DRM_XE_MEM_RANGE_ATTR_ATOMIC) {
 			if (!check_bo_args_are_sane(vm, madvise_range.vmas,
@@ -708,7 +763,7 @@ int xe_vm_madvise_ioctl(struct drm_device *dev, void *data, struct drm_file *fil
 	/* Ensure the madvise function exists for this type */
 	if (!madvise_funcs[attr_type]) {
 		err = -EINVAL;
-		goto err_fini;
+		goto err_unlock_notifier;
 	}
 
 	madvise_funcs[attr_type](xe, vm, madvise_range.vmas, madvise_range.num_vmas, args,
@@ -717,8 +772,28 @@ int xe_vm_madvise_ioctl(struct drm_device *dev, void *data, struct drm_file *fil
 	err = xe_vm_invalidate_madvise_range(vm, madvise_range.addr,
 					     madvise_range.addr + args->range);
 
+err_unlock_notifier:
 	if (madvise_range.has_svm_userptr_vmas)
 		xe_svm_notifier_unlock(vm);
+
+	if (err)
+		goto err_fini;
+
+	if (madvise_range.has_cpu_addr_mirror_vmas) {
+		for (int i = 0; i < madvise_range.num_vmas; i++) {
+			struct xe_vma *vma = madvise_range.vmas[i];
+
+			if (!xe_vma_is_cpu_addr_mirror(vma))
+				continue;
+			if (!(vma->gpuva.flags & XE_VMA_MADV_AUTORESET))
+				continue;
+			if (!xe_vma_has_cpu_autoreset_active(vma))
+				continue;
+			notifier_ranges[num_notifier_ranges].start = xe_vma_start(vma);
+			notifier_ranges[num_notifier_ranges].end   = xe_vma_end(vma);
+			num_notifier_ranges++;
+		}
+	}
 
 err_fini:
 	if (madvise_range.has_bo_vmas)
@@ -730,6 +805,30 @@ madv_fini:
 	xe_madvise_details_fini(&details);
 unlock_vm:
 	up_write(&vm->lock);
+
+	if (!err) {
+		for (int i = 0; i < num_notifier_ranges; i++) {
+			int ret = xe_vm_madvise_register_notifier_range(vm,
+							notifier_ranges[i].start,
+							notifier_ranges[i].end);
+			if (ret) {
+				drm_warn(&vm->xe->drm,
+					 "Failed to register madvise notifier [%#llx-%#llx]: %d\n",
+					 notifier_ranges[i].start,
+					 notifier_ranges[i].end, ret);
+				/*
+				 * Disable AUTORESET, but keep cpu_autoreset_active.
+				 * The VMA is still CPU-only.
+				 */
+				down_write(&vm->lock);
+				xe_vm_madvise_clear_autoreset_range(vm,
+								    notifier_ranges[i].start,
+								    notifier_ranges[i].end);
+				up_write(&vm->lock);
+			}
+		}
+	}
+	kvfree(notifier_ranges);
 
 	/* Write retained value to user after releasing all locks */
 	if (!err && do_retained)
