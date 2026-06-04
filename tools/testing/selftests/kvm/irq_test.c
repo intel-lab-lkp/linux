@@ -11,11 +11,13 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/eventfd.h>
+#include <sys/sysinfo.h>
 #include <libvfio.h>
 
 static u64 timeout_ns = 2ULL * 1000 * 1000 * 1000;
 static bool guest_ready_for_irqs[KVM_MAX_VCPUS];
 static bool guest_received_irq[KVM_MAX_VCPUS];
+static bool irq_affinity;
 static bool done;
 
 #define GUEST_RECEIVED_IRQ(__vcpu)	\
@@ -109,9 +111,10 @@ static void kvm_route_msi(struct kvm_vm *vm, u32 gsi, struct kvm_vcpu *vcpu,
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-d <segment:bus:device.function>] [-h]\n", name);
+	printf("Usage: %s [-a] [-d <segment:bus:device.function>] [-h]\n", name);
 	printf("\n");
 	printf("Tests KVM IRQ injection via irqfd using an emulated eventfd.\n");
+	printf("-a	Randomly affinitize the device's host IRQ to different physical CPUs throughout the test\n");
 	printf("-d	Use a VFIO device to send MSI-X interrupts instead of using an emulated eventfd\n");
 	printf("\n");
 	exit(KSFT_FAIL);
@@ -139,13 +142,18 @@ int main(int argc, char **argv)
 	struct vfio_pci_device *device = NULL;
 	int nr_irqs = 1000, nr_vcpus = 1;
 	const char *device_bdf = NULL;
+	FILE *irq_affinity_fp = NULL;
 	int i, j, c, msix, eventfd;
 	struct iommu *iommu;
 	struct kvm_vm *vm;
 	unsigned int irq;
+	int irq_cpu;
 
-	while ((c = getopt(argc, argv, "d:h")) != -1) {
+	while ((c = getopt(argc, argv, "ad:h")) != -1) {
 		switch (c) {
+		case 'a':
+			irq_affinity = true;
+			break;
 		case 'd':
 			device_bdf = optarg;
 			break;
@@ -168,7 +176,11 @@ int main(int argc, char **argv)
 		eventfd = device->msi_eventfds[msix];
 		printf("Using device %s MSI-X[%d] (IRQ-%u)\n", device_bdf, msix,
 		       irq);
+		if (irq_affinity)
+			irq_affinity_fp = open_proc_irq_smp_affinity_list(irq);
 	} else {
+		TEST_ASSERT(!irq_affinity,
+			    "Setting IRQ affinity (-a) requires a backing device (-d)");
 		eventfd = kvm_new_eventfd();
 	}
 
@@ -187,11 +199,22 @@ int main(int argc, char **argv)
 			continue;
 	}
 
+	/*
+	 * Suppress a false positive maybe-uninitialized compiler warning due
+	 * to conditional changes in IRQ affinity.
+	 */
+	irq_cpu = -1;
+
 	for (i = 0; i < nr_irqs; i++) {
 		struct kvm_vcpu *vcpu = vcpus[i % nr_vcpus];
 		struct timespec start;
 
 		kvm_route_msi(vm, gsi, vcpu, vector);
+
+		if (irq_affinity_fp) {
+			irq_cpu = kvm_random_u64(&kvm_rng) % get_nprocs();
+			write_proc_irq_smp_affinity_list(irq_affinity_fp, irq, irq_cpu);
+		}
 
 		for (j = 0; j < nr_vcpus; j++)
 			TEST_ASSERT(!GUEST_RECEIVED_IRQ(vcpus[j]),
@@ -205,9 +228,18 @@ int main(int argc, char **argv)
 			if (GUEST_RECEIVED_IRQ(vcpu))
 				break;
 
-			if (timespec_to_ns(timespec_elapsed(start)) > timeout_ns)
+			if (timespec_to_ns(timespec_elapsed(start)) > timeout_ns) {
+				printf("Timeout waiting for interrupt!\n");
+				printf("  vCPU: %d\n", vcpu->id);
+				if (irq_affinity_fp) {
+					printf("  irq_cpu: %d\n", irq_cpu);
+					print_proc_irq_smp_affinity(irq);
+					print_proc_irq_effective_affinity(irq);
+				}
+
 				TEST_FAIL("vCPU %d timed out waiting for IRQ from GSI %d (Vector 0x%x) !\n",
 					  vcpu->id, gsi, vector);
+			}
 		}
 
 		WRITE_AND_SYNC_TO_GUEST(vm, guest_received_irq[vcpu->id], false);
@@ -217,6 +249,9 @@ int main(int argc, char **argv)
 
 	for (i = 0; i < nr_vcpus; i++)
 		pthread_join(vcpu_threads[i], NULL);
+
+	if (irq_affinity_fp)
+		fclose(irq_affinity_fp);
 
 	printf("Test passed!\n");
 
