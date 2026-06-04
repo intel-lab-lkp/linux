@@ -57,9 +57,8 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		seq_puts(m, " loongarch32s");
 	if (isa & LOONGARCH_CPU_ISA_LA64)
 		seq_puts(m, " loongarch64");
-	seq_puts(m, "\n");
 
-	seq_puts(m, "Features\t\t:");
+	seq_puts(m, "\nFeatures\t\t:");
 	if (cpu_has_cpucfg)
 		seq_puts(m, " cpucfg");
 	if (cpu_has_lam)
