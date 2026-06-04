@@ -45,7 +45,7 @@ static int inv_icm45600_i3c_probe(struct i3c_device *i3cdev)
 	regmap = devm_regmap_init_i3c(i3cdev, &inv_icm45600_regmap_config);
 	if (IS_ERR(regmap))
 		return dev_err_probe(&i3cdev->dev, PTR_ERR(regmap),
-					"Failed to register i3c regmap %ld\n", PTR_ERR(regmap));
+					"Failed to register i3c regmap %pe\n", regmap);
 
 	ret = regmap_read(regmap, INV_ICM45600_REG_WHOAMI, &whoami);
 	if (ret)
