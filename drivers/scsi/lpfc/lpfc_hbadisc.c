@@ -5993,7 +5993,8 @@ lpfc_free_tx(struct lpfc_hba *phba, struct lpfc_nodelist *ndlp)
 
 		if (ulp_command == CMD_ELS_REQUEST64_CR ||
 		    ulp_command == CMD_XMIT_ELS_RSP64_CX) {
-			lpfc_sli_issue_abort_iotag(phba, pring, iocb, NULL);
+			lpfc_sli_issue_abort_iotag(phba, pring, iocb, false,
+						   NULL);
 		}
 	}
 	spin_unlock_irq(&phba->hbalock);

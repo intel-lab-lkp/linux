@@ -743,7 +743,7 @@ __lpfc_nvme_ls_abort(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp,
 	spin_unlock(&pring->ring_lock);
 
 	if (foundit)
-		lpfc_sli_issue_abort_iotag(phba, pring, wqe, NULL);
+		lpfc_sli_issue_abort_iotag(phba, pring, wqe, false, NULL);
 	spin_unlock_irq(&phba->hbalock);
 
 	if (foundit)
