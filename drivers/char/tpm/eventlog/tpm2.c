@@ -54,30 +54,37 @@ static void *tpm2_bios_measurements_start(struct seq_file *m, loff_t *pos)
 	size = struct_size(event_header, event, event_header->event_size);
 
 	if (*pos == 0) {
-		if (addr + size < limit) {
-			if ((event_header->event_type == 0) &&
-			    (event_header->event_size == 0))
-				return NULL;
-			return SEQ_START_TOKEN;
-		}
+		if (addr + size > limit)
+			return NULL;
+		if (event_header->event_type == 0 &&
+		    event_header->event_size == 0)
+			return NULL;
+		return SEQ_START_TOKEN;
 	}
 
 	if (*pos > 0) {
 		addr += size;
+		if (addr >= limit)
+			return NULL;
 		event = addr;
 		size = calc_tpm2_event_size(event, event_header);
-		if ((addr + size >=  limit) || (size == 0))
+		if ((addr + size > limit) || size == 0)
 			return NULL;
 	}
 
 	for (i = 0; i < (*pos - 1); i++) {
+		if (addr >= limit)
+			return NULL;
 		event = addr;
 		size = calc_tpm2_event_size(event, event_header);
 
-		if ((addr + size >= limit) || (size == 0))
+		if ((addr + size > limit) || size == 0)
 			return NULL;
 		addr += size;
 	}
+
+	if (addr >= limit)
+		return NULL;
 
 	return addr;
 }
@@ -115,7 +122,7 @@ static void *tpm2_bios_measurements_next(struct seq_file *m, void *v,
 	event = v;
 
 	event_size = calc_tpm2_event_size(event, event_header);
-	if (((v + event_size) >= limit) || (event_size == 0))
+	if (((v + event_size) > limit) || event_size == 0)
 		return NULL;
 
 	return v;
