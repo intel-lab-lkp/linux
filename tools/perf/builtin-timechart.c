@@ -56,6 +56,7 @@ struct timechart {
 	struct per_pid		*all_data;
 	struct power_event	*power_events;
 	struct wake_event	*wake_events;
+	struct perf_session	*session;
 	int			proc_num;
 	unsigned int		numcpus;
 	u64			min_freq,	/* Lowest CPU frequency seen */
@@ -578,7 +579,7 @@ typedef int (*tracepoint_handler)(struct timechart *tchart,
 static int process_sample_event(const struct perf_tool *tool,
 				union perf_event *event __maybe_unused,
 				struct perf_sample *sample,
-				struct machine *machine)
+				struct machine *machine __maybe_unused)
 {
 	struct timechart *tchart = container_of(tool, struct timechart, tool);
 	struct evsel *evsel = sample->evsel;
@@ -593,10 +594,8 @@ static int process_sample_event(const struct perf_tool *tool,
 
 	if (evsel->handler != NULL) {
 		tracepoint_handler f = evsel->handler;
-		char *backtrace = cat_backtrace(sample, machine);
 
-		ret = f(tchart, sample, backtrace);
-		free(backtrace);
+		ret = f(tchart, sample, NULL);
 	}
 
 	return ret;
@@ -656,7 +655,10 @@ process_sample_sched_wakeup(struct timechart *tchart,
 			 sample->file_offset, sample->cpu);
 		return -1;
 	}
+
+	backtrace = cat_backtrace(sample, &tchart->session->machines.host);
 	sched_wakeup(tchart, sample->cpu, sample->time, waker, wakee, flags, backtrace);
+	free((char *)backtrace);
 	return 0;
 }
 
@@ -675,8 +677,11 @@ process_sample_sched_switch(struct timechart *tchart,
 			 sample->file_offset, sample->cpu);
 		return -1;
 	}
+
+	backtrace = cat_backtrace(sample, &tchart->session->machines.host);
 	sched_switch(tchart, sample->cpu, sample->time, prev_pid, next_pid,
 		     prev_state, backtrace);
+	free((char *)backtrace);
 	return 0;
 }
 
@@ -1661,6 +1666,7 @@ static int __cmd_timechart(struct timechart *tchart, const char *output_name)
 	if (IS_ERR(session))
 		return PTR_ERR(session);
 
+	tchart->session = session;
 	symbol__init(perf_session__env(session));
 
 	(void)perf_header__process_sections(&session->header,
