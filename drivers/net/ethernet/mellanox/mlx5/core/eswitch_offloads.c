@@ -43,6 +43,7 @@
 #include "esw/acl/ofld.h"
 #include "rdma.h"
 #include "en.h"
+#include "en_rep.h"
 #include "fs_core.h"
 #include "lib/mlx5.h"
 #include "lib/devcom.h"
@@ -3675,6 +3676,7 @@ static void esw_offloads_vport_metadata_cleanup(struct mlx5_eswitch *esw,
 
 	WARN_ON(vport->metadata != vport->default_metadata);
 	mlx5_esw_match_metadata_free(esw, vport->default_metadata);
+	vport->default_metadata = 0;
 }
 
 static void esw_offloads_metadata_uninit(struct mlx5_eswitch *esw)
@@ -3709,6 +3711,38 @@ static int esw_offloads_metadata_init(struct mlx5_eswitch *esw)
 metadata_err:
 	esw_offloads_metadata_uninit(esw);
 	return err;
+}
+
+/* Deferred metadata init for SD devices: allocate vport metadata
+ * Safe to call multiple times - subsequent calls are no-ops.
+ */
+int mlx5_esw_offloads_init_deferred_metadata(struct mlx5_eswitch *esw)
+{
+	struct mlx5_vport *manager;
+	int err;
+
+	if (!mlx5_eswitch_vport_match_metadata_enabled(esw))
+		return 0;
+
+	manager = mlx5_eswitch_get_vport(esw, esw->manager_vport);
+	if (IS_ERR(manager))
+		return PTR_ERR(manager);
+
+	/* Sanity check: skip if metadata was already initialized */
+	if (manager->default_metadata)
+		return 0;
+
+	err = esw_offloads_metadata_init(esw);
+	if (err)
+		return err;
+
+	/* Manager vport don't have a rep/netdev loaded but its ingress ACL
+	 * was programmed with metadata=0 in esw_create_offloads_acl_tables() -
+	 * refresh it explicitly.
+	 */
+	mlx5_esw_acl_ingress_vport_metadata_update(esw, esw->manager_vport, 0);
+
+	return 0;
 }
 
 int
@@ -4053,7 +4087,17 @@ int esw_offloads_enable(struct mlx5_eswitch *esw)
 	if (err)
 		goto err_roce;
 
-	err = esw_offloads_metadata_init(esw);
+	/* SD devices defer metadata init until SD is ready and
+	 * mlx5_sd_pf_num_get() can return the correct pf_num.
+	 */
+	if (!mlx5_get_sd(esw->dev)) {
+		err = esw_offloads_metadata_init(esw);
+	} else if (mlx5_eswitch_vport_match_metadata_enabled(esw)) {
+		struct mlx5_vport *uplink =
+			mlx5_eswitch_get_vport(esw, MLX5_VPORT_UPLINK);
+
+		err = esw_offloads_vport_metadata_setup(esw, uplink);
+	}
 	if (err)
 		goto err_metadata;
 
