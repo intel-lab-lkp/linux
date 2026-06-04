@@ -2800,8 +2800,7 @@ static int user_seq_show(struct seq_file *m, void *p)
 
 	mutex_unlock(&group->reg_mutex);
 
-	seq_puts(m, "\n");
-	seq_printf(m, "Active: %d\n", active);
+	seq_printf(m, "\nActive: %d\n", active);
 	seq_printf(m, "Busy: %d\n", busy);
 
 	return 0;
