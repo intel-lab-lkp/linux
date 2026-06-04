@@ -125,6 +125,32 @@
 		method = "smc";
 	};
 
+	io_level_detector: io-level-detector {
+		compatible = "realtek,rtd1625-io-detect";
+		pinctrl-names = "rgmii_1v8", "rgmii_3v3",
+				"sdio_1v8", "sdio_3v3",
+				"csi_1v8", "csi_3v3",
+				"sd_1v8", "sd_3v3",
+				"uart1_1v8", "uart1_3v3",
+				"aio_1v8", "aio_3v3",
+				"emmc_1v8", "emmc_3v3";
+		pinctrl-0 = <&rgmii_vsel_1v8_pins>;
+		pinctrl-1 = <&rgmii_vsel_3v3_pins>;
+		pinctrl-2 = <&sdio_vsel_1v8_pins>;
+		pinctrl-3 = <&sdio_vsel_3v3_pins>;
+		pinctrl-4 = <&csi_vsel_1v8_pins>;
+		pinctrl-5 = <&csi_vsel_3v3_pins>;
+		pinctrl-6 = <&sd_vsel_1v8_pins>;
+		pinctrl-7 = <&sd_vsel_3v3_pins>;
+		pinctrl-8 = <&uart1_vsel_1v8_pins>;
+		pinctrl-9 = <&uart1_vsel_3v3_pins>;
+		pinctrl-10 = <&aio_vsel_1v8_pins>;
+		pinctrl-11 = <&aio_vsel_3v3_pins>;
+		pinctrl-12 = <&emmc_vsel_1v8_pins>;
+		pinctrl-13 = <&emmc_vsel_3v3_pins>;
+		realtek,iso-pinctrl = <&iso_pinctrl>;
+	};
+
 	soc@0 {
 		compatible = "simple-bus";
 		ranges = <0x0 0x0 0x0 0x40000>, /* boot code */
@@ -164,3 +190,5 @@
 		};
 	};
 };
+
+#include "kent-pinctrl.dtsi"

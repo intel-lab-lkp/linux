@@ -1,0 +1,108 @@
+// SPDX-License-Identifier: (GPL-2.0-or-later OR BSD-2-Clause)
+/*
+ * Copyright (c) 2022-2026 Realtek Semiconductor Corp.
+ */
+
+&iso_pinctrl {
+	aio_vsel_1v8_pins: aio-vsel-1v8-pins {
+		pins = "gpio_98", "gpio_99", "gpio_100", "gpio_101", "gpio_102", "gpio_103",
+		       "gpio_104", "gpio_105", "gpio_106", "gpio_107", "gpio_108", "gpio_109",
+		       "gpio_110", "gpio_111", "gpio_112";
+		power-source = <0>;
+		input-threshold-voltage-microvolt = <1800000>;
+	};
+
+	aio_vsel_3v3_pins: aio-vsel-3v3-pins {
+		pins = "gpio_98", "gpio_99", "gpio_100", "gpio_101", "gpio_102", "gpio_103",
+		       "gpio_104", "gpio_105", "gpio_106", "gpio_107", "gpio_108", "gpio_109",
+		       "gpio_110", "gpio_111", "gpio_112";
+		power-source = <1>;
+		input-threshold-voltage-microvolt = <3300000>;
+	};
+
+	csi_vsel_1v8_pins: csi-vsel-1v8-pins {
+		pins = "csi_vdsel";
+		function = "csi_1v8";
+	};
+
+	csi_vsel_3v3_pins: csi-vsel-3v3-pins {
+		pins = "csi_vdsel";
+		function = "csi_3v3";
+	};
+
+	rgmii_vsel_1v8_pins: rgmii-vsel-1v8-pins {
+		pins = "rgmii_vdsel";
+		function = "rgmii_1v8";
+	};
+
+	rgmii_vsel_3v3_pins: rgmii-vsel-3v3-pins {
+		pins = "rgmii_vdsel";
+		function = "rgmii_3v3";
+	};
+
+	sdio_vsel_1v8_pins: sdio-vsel-1v8-pins {
+		pins = "gpio_45", "gpio_46", "gpio_47", "gpio_48", "gpio_49", "gpio_50";
+		power-source = <0>;
+	};
+
+	sdio_vsel_3v3_pins: sdio-vsel-3v3-pins {
+		pins = "gpio_45", "gpio_46", "gpio_47", "gpio_48", "gpio_49", "gpio_50";
+		power-source = <1>;
+	};
+
+	uart1_vsel_1v8_pins: uart1-vsel-1v8-pins {
+		pins = "gpio_8", "gpio_9", "gpio_10", "gpio_11";
+		power-source = <0>;
+		input-threshold-voltage-microvolt = <1800000>;
+	};
+
+	uart1_vsel_3v3_pins: uart1-vsel-3v3-pins {
+		pins = "gpio_8", "gpio_9", "gpio_10", "gpio_11";
+		power-source = <1>;
+		input-threshold-voltage-microvolt = <3300000>;
+	};
+};
+
+&main2_pinctrl {
+	emmc_vsel_1v8_pins: emmc-vsel-1v8-pins {
+		pins = "emmc_rst_n",
+			"emmc_dd_sb",
+			"emmc_clk",
+			"emmc_cmd",
+			"emmc_data_0",
+			"emmc_data_1",
+			"emmc_data_2",
+			"emmc_data_3",
+			"emmc_data_4",
+			"emmc_data_5",
+			"emmc_data_6",
+			"emmc_data_7";
+		power-source = <0>;
+	};
+
+	emmc_vsel_3v3_pins: emmc-vsel-3v3-pins {
+		pins = "emmc_rst_n",
+			"emmc_dd_sb",
+			"emmc_clk",
+			"emmc_cmd",
+			"emmc_data_0",
+			"emmc_data_1",
+			"emmc_data_2",
+			"emmc_data_3",
+			"emmc_data_4",
+			"emmc_data_5",
+			"emmc_data_6",
+			"emmc_data_7";
+		power-source = <1>;
+	};
+
+	sd_vsel_1v8_pins: sd-vsel-1v8-pins {
+		pins = "gpio_40", "gpio_41", "hif_clk", "hif_data", "hif_en", "hif_rdy";
+		power-source = <0>;
+	};
+
+	sd_vsel_3v3_pins: sd-vsel-3v3-pins {
+		pins = "gpio_40", "gpio_41", "hif_clk", "hif_data", "hif_en", "hif_rdy";
+		power-source = <1>;
+	};
+};
