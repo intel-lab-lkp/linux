@@ -353,6 +353,38 @@ int genphy_c45_soft_reset(struct phy_device *phydev)
 EXPORT_SYMBOL_GPL(genphy_c45_soft_reset);
 
 /**
+ * genphy_c45_config_master_slave - Configure Master/Slave setting for C45 PHYs
+ * @phydev: target phy_device struct
+ *
+ * Description: Configures the Master/Slave manual setting in the
+ * 10GBASE-T control register (MMD 7, Register 0x0020) according to
+ * IEEE 802.3 standards.
+ */
+int genphy_c45_config_master_slave(struct phy_device *phydev)
+{
+	u16 val = 0;
+
+	switch (phydev->master_slave_set) {
+	case MASTER_SLAVE_CFG_MASTER_FORCE:
+		val = MDIO_AN_10GBT_CTRL_MS_ENABLE | MDIO_AN_10GBT_CTRL_MS_VALUE;
+		break;
+	case MASTER_SLAVE_CFG_SLAVE_FORCE:
+		val = MDIO_AN_10GBT_CTRL_MS_ENABLE;
+		break;
+	case MASTER_SLAVE_CFG_UNKNOWN:
+	case MASTER_SLAVE_CFG_MASTER_PREFERRED:
+	case MASTER_SLAVE_CFG_SLAVE_PREFERRED:
+	default:
+		break;
+	}
+
+	return phy_modify_mmd_changed(phydev, MDIO_MMD_AN, MDIO_AN_10GBT_CTRL,
+				      MDIO_AN_10GBT_CTRL_MS_ENABLE |
+				      MDIO_AN_10GBT_CTRL_MS_VALUE, val);
+}
+EXPORT_SYMBOL_GPL(genphy_c45_config_master_slave);
+
+/**
  * genphy_c45_restart_aneg - Enable and restart auto-negotiation
  * @phydev: target phy_device struct
  *
