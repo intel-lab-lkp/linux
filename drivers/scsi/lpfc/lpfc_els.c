@@ -2440,6 +2440,20 @@ lpfc_issue_els_plogi(struct lpfc_vport *vport, uint32_t did, uint8_t retry)
 
 	ret = lpfc_sli_issue_iocb(phba, LPFC_ELS_RING, elsiocb, 0);
 	if (ret) {
+		lpfc_vlog_msg(vport, KERN_NOTICE,
+			      LOG_ELS | LOG_DISCOVERY | LOG_NODE,
+			      "0157 PLOGI WQE Put returned %d\n",
+			      ret);
+
+		/* Under heavy vpi counts, the driver's host_index can catch up
+		 * to the hba_index causing a put error. Catch this case and
+		 * put the IO on phba->txq.
+		 */
+		if (ret == IOCB_FAILED_PUT && phba->sli_rev == LPFC_SLI_REV4) {
+			lpfc_sli4_queue_io_for_retry(phba, elsiocb, false);
+			return 0;
+		}
+
 		lpfc_els_free_iocb(phba, elsiocb);
 		lpfc_nlp_put(ndlp);
 		return 1;
@@ -2766,7 +2780,21 @@ lpfc_issue_els_prli(struct lpfc_vport *vport, struct lpfc_nodelist *ndlp,
 	}
 
 	rc = lpfc_sli_issue_iocb(phba, LPFC_ELS_RING, elsiocb, 0);
-	if (rc == IOCB_ERROR) {
+	if (rc) {
+		lpfc_vlog_msg(vport, KERN_NOTICE,
+			      LOG_ELS | LOG_DISCOVERY | LOG_NODE,
+			      "0155 PRLI WQE Put returned %d\n",
+			      rc);
+
+		/* Under heavy vpi counts, the driver's host_index can catch up
+		 * to the hba_index causing a put error. Catch this case and
+		 * put the IO on phba->txq.
+		 */
+		if (rc == IOCB_FAILED_PUT && phba->sli_rev == LPFC_SLI_REV4) {
+			lpfc_sli4_queue_io_for_retry(phba, elsiocb, false);
+			return 0;
+		}
+
 		lpfc_els_free_iocb(phba, elsiocb);
 		lpfc_nlp_put(ndlp);
 		return 1;
@@ -5982,7 +6010,21 @@ lpfc_els_rsp_acc(struct lpfc_vport *vport, uint32_t flag,
 	}
 
 	rc = lpfc_sli_issue_iocb(phba, LPFC_ELS_RING, elsiocb, 0);
-	if (rc == IOCB_ERROR) {
+	if (rc) {
+		lpfc_vlog_msg(vport, KERN_NOTICE,
+			      LOG_ELS | LOG_DISCOVERY | LOG_NODE,
+			      "0154 LS_ACC WQE Put returned %d\n",
+			      rc);
+
+		/* Under heavy vpi counts, the driver's host_index can catch up
+		 * to the hba_index causing a put error. Catch this case and
+		 * put the IO on phba->txq.
+		 */
+		if (rc == IOCB_FAILED_PUT && phba->sli_rev == LPFC_SLI_REV4) {
+			lpfc_sli4_queue_io_for_retry(phba, elsiocb, false);
+			return 0;
+		}
+
 		lpfc_els_free_iocb(phba, elsiocb);
 		lpfc_nlp_put(ndlp);
 		return 1;
@@ -10583,6 +10625,7 @@ lpfc_els_unsol_buffer(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 	uint8_t rjt_exp, rjt_err = 0, init_link = 0;
 	struct lpfc_wcqe_complete *wcqe_cmpl = NULL;
 	LPFC_MBOXQ_t *mbox;
+	u16 rcv_oxid;
 
 	if (!vport || !elsiocb->cmd_dmabuf)
 		goto dropit;
@@ -10652,11 +10695,18 @@ lpfc_els_unsol_buffer(struct lpfc_hba *phba, struct lpfc_sli_ring *pring,
 	if ((cmd & ELS_CMD_MASK) == ELS_CMD_RSCN) {
 		cmd &= ELS_CMD_MASK;
 	}
+
+	/* Fetch the incoming ox_id for SLI4 only - SLI3 can't do this. */
+	rcv_oxid = 0xffff;
+	if (phba->sli_rev == LPFC_SLI_REV4)
+		rcv_oxid = get_job_rcvoxid(phba, elsiocb);
+
 	/* ELS command <elsCmd> received from NPORT <did> */
 	lpfc_printf_vlog(vport, KERN_INFO, LOG_ELS,
 			 "0112 ELS command x%x received from NPORT x%x "
-			 "refcnt %d Data: x%x x%lx x%x x%x\n",
-			 cmd, did, kref_read(&ndlp->kref), vport->port_state,
+			 "refcnt %d rcvoxid x%x Data: x%x x%lx x%x x%x\n",
+			 cmd, did, kref_read(&ndlp->kref),
+			 rcv_oxid, vport->port_state,
 			 vport->fc_flag, vport->fc_myDID, vport->fc_prevDID);
 
 	/* reject till our FLOGI completes or PLOGI assigned DID via PT2PT */
