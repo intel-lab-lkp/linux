@@ -293,8 +293,8 @@ static int ping_probe(struct platform_device *pdev)
 
 	data->gpiod_ping = devm_gpiod_get(dev, "ping", GPIOD_OUT_LOW);
 	if (IS_ERR(data->gpiod_ping)) {
-		dev_err(dev, "failed to get ping-gpios: err=%ld\n",
-						PTR_ERR(data->gpiod_ping));
+		dev_err(dev, "failed to get ping-gpios: err=%pe\n",
+			data->gpiod_ping);
 		return PTR_ERR(data->gpiod_ping);
 	}
 
