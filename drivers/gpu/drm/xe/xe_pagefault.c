@@ -215,8 +215,16 @@ static int xe_pagefault_service(struct xe_pagefault *pf)
 		err = xe_pagefault_handle_vma(gt, vma, atomic);
 
 unlock_vm:
-	if (!err)
+	if (!err) {
+		/* Re-fetch, fault handling may have replaced the VMA. */
+		vma = xe_vm_find_vma_by_addr(vm, pf->consumer.page_addr);
 		vm->usm.last_fault_vma = vma;
+
+		/* First successful GPU fault ends CPU-only state. */
+		if (vma && xe_vma_is_cpu_addr_mirror(vma) &&
+		    xe_vma_has_cpu_autoreset_active(vma))
+			xe_vma_gpu_touch(vma);
+	}
 	up_write(&vm->lock);
 	xe_vm_put(vm);
 

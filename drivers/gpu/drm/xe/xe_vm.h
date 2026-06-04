@@ -450,4 +450,17 @@ static inline struct drm_exec *xe_vm_validation_exec(struct xe_vm *vm)
 	((READ_ONCE(tile_present) & ~READ_ONCE(tile_invalidated)) & BIT((tile)->id))
 
 void xe_vma_mem_attr_copy(struct xe_vma_mem_attr *to, struct xe_vma_mem_attr *from);
+
+/**
+ * xe_vma_gpu_touch() - Mark a VMA as no longer CPU-only
+ * @vma: VMA to update
+ *
+ * Clear cpu_autoreset_active after the first successful GPU fault-in.
+ * Caller must hold vm->lock in write mode.
+ */
+static inline void xe_vma_gpu_touch(struct xe_vma *vma)
+{
+	lockdep_assert_held_write(&xe_vma_vm(vma)->lock);
+	vma->cpu_autoreset_active = false;
+}
 #endif
