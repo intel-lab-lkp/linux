@@ -4419,12 +4419,6 @@ int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
 	if (esw_mode_from_devlink(mode, &mlx5_mode))
 		return -EINVAL;
 
-	if (mlx5_mode == MLX5_ESWITCH_OFFLOADS && mlx5_get_sd(esw->dev)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Can't change E-Switch mode to switchdev when multi-PF netdev (Socket Direct) is configured.");
-		return -EPERM;
-	}
-
 	if (mlx5_fw_reset_in_progress(esw->dev)) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Can't change eswitch mode during firmware reset");
