@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/string_choices.h>
 #include <linux/vmalloc.h>
 #include <linux/mm.h>
 #include <linux/io.h>
@@ -181,9 +182,8 @@ unsigned long sq_remap(unsigned long phys, unsigned int size,
 		goto out;
 
 	psz = (size + (PAGE_SIZE - 1)) >> PAGE_SHIFT;
-	pr_info("sqremap: %15s  [%4d page%s]  va 0x%08lx   pa 0x%08lx\n",
-		likely(map->name) ? map->name : "???",
-		psz, psz == 1 ? " " : "s",
+	pr_info("sqremap: %15s  [%4d page%-1s]  va 0x%08lx   pa 0x%08lx\n",
+		map->name ?: "???", psz, str_plural(psz),
 		map->sq_addr, map->addr);
 
 	sq_mapping_list_add(map);
