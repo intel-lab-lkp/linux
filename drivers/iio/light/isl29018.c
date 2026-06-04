@@ -727,7 +727,16 @@ static int isl29018_probe(struct i2c_client *client)
 	mutex_init(&chip->lock);
 
 	chip->type = dev_id;
+	/*
+	 * Allow boards that mount the sensor behind tinted / coated cover
+	 * glass to bake the optical-loss compensation into firmware via
+	 * "isil,cover-comp-gain", following the precedent set by
+	 * tsl2563.c. The value seeds calibscale (default 1), so userspace
+	 * can still retune through in_illuminance0_calibscale.
+	 */
 	chip->calibscale = 1;
+	device_property_read_u32(&client->dev, "isil,cover-comp-gain",
+				 &chip->calibscale);
 	chip->ucalibscale = 0;
 	chip->int_time = ISL29018_INT_TIME_16;
 	chip->scale = isl29018_scales[chip->int_time][0];
