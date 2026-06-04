@@ -61,6 +61,7 @@
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
 #include <linux/prefetch.h>
+#include <linux/ptp_classify.h>
 #include <linux/rtnetlink.h>
 #include <linux/tcp.h>
 #include <asm/irq.h>
@@ -1247,6 +1248,52 @@ static u32 rtase_tx_csum(struct sk_buff *skb, const struct net_device *dev)
 	return csum_cmd;
 }
 
+static bool rtase_skb_is_udp(struct sk_buff *skb)
+{
+	int no = skb_network_offset(skb);
+	struct ipv6hdr *i6h, _i6h;
+	struct iphdr *ih, _ih;
+
+	switch (vlan_get_protocol(skb)) {
+	case htons(ETH_P_IP):
+		ih = skb_header_pointer(skb, no, sizeof(_ih), &_ih);
+		return ih && ih->protocol == IPPROTO_UDP;
+	case htons(ETH_P_IPV6):
+		i6h = skb_header_pointer(skb, no, sizeof(_i6h), &_i6h);
+		return i6h && i6h->nexthdr == IPPROTO_UDP;
+	default:
+		return false;
+	}
+}
+
+static bool rtase_skb_pad(struct sk_buff *skb)
+{
+	u32 trans_data_len;
+	u16 dest_port;
+	u32 pad_len;
+
+	if (!skb_transport_header_was_set(skb))
+		return true;
+
+	trans_data_len = skb_tail_pointer(skb) - skb_transport_header(skb);
+	if (trans_data_len < offsetof(struct udphdr, len) ||
+	    trans_data_len >= RTASE_MIN_PAD_LEN)
+		return true;
+
+	if (!rtase_skb_is_udp(skb))
+		return true;
+
+	dest_port = ntohs(udp_hdr(skb)->dest);
+
+	if (dest_port == PTP_EV_PORT || dest_port == PTP_GEN_PORT) {
+		pad_len = RTASE_MIN_PAD_LEN - trans_data_len;
+		if (__skb_put_padto(skb, skb->len + pad_len, false))
+			return false;
+	}
+
+	return true;
+}
+
 static int rtase_xmit_frags(struct rtase_ring *ring, struct sk_buff *skb,
 			    u32 opts1, u32 opts2)
 {
@@ -1359,6 +1406,9 @@ static netdev_tx_t rtase_start_xmit(struct sk_buff *skb,
 	} else if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		opts2 |= rtase_tx_csum(skb, dev);
 	}
+
+	if (!rtase_skb_pad(skb))
+		goto err_dma_0;
 
 	frags = rtase_xmit_frags(ring, skb, opts1, opts2);
 	if (unlikely(frags < 0))
