@@ -521,6 +521,24 @@ static void test_gs_hostwide_counters(struct kunit *test)
 	kvmppc_gsb_free(gsb);
 }
 
+static int init_gs_test_suite(struct kunit_suite *suite)
+{
+	long rc;
+	unsigned long host_capabilities;
+	struct kunit_case *test_case;
+
+	/* Enable test suite only if APIv2 is supported */
+	rc = plpar_guest_get_capabilities(0, &host_capabilities);
+
+	if (rc != H_SUCCESS) {
+		/* Skip all testcases if no APIv2 support */
+		kunit_suite_for_each_test_case(suite, test_case)
+			WRITE_ONCE(test_case->status, KUNIT_SKIPPED);
+	}
+
+	return 0;
+}
+
 static struct kunit_case guest_state_buffer_testcases[] = {
 	KUNIT_CASE(test_creating_buffer),
 	KUNIT_CASE(test_adding_element),
@@ -535,6 +553,7 @@ static struct kunit_case guest_state_buffer_testcases[] = {
 static struct kunit_suite guest_state_buffer_test_suite = {
 	.name = "guest_state_buffer_test",
 	.test_cases = guest_state_buffer_testcases,
+	.suite_init = init_gs_test_suite,
 };
 
 kunit_test_suites(&guest_state_buffer_test_suite);
