@@ -92,10 +92,6 @@ static void fsl_ifc_ctrl_remove(struct platform_device *dev)
 	if (ctrl->nand_irq > 0)
 		free_irq(ctrl->nand_irq, ctrl);
 	free_irq(ctrl->irq, ctrl);
-
-	iounmap(ctrl->gregs);
-
-	dev_set_drvdata(&dev->dev, NULL);
 }
 
 /*
@@ -213,11 +209,9 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 	dev_set_drvdata(&dev->dev, fsl_ifc_ctrl_dev);
 
 	/* IOMAP the entire IFC region */
-	fsl_ifc_ctrl_dev->gregs = of_iomap(dev->dev.of_node, 0);
-	if (!fsl_ifc_ctrl_dev->gregs) {
-		dev_err(&dev->dev, "failed to get memory region\n");
-		return -ENODEV;
-	}
+	fsl_ifc_ctrl_dev->gregs = devm_platform_ioremap_resource(dev, 0);
+	if (IS_ERR(fsl_ifc_ctrl_dev->gregs))
+		return PTR_ERR(fsl_ifc_ctrl_dev->gregs);
 
 	if (of_property_read_bool(dev->dev.of_node, "little-endian")) {
 		fsl_ifc_ctrl_dev->little_endian = true;
@@ -248,15 +242,14 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 	fsl_ifc_ctrl_dev->irq = platform_get_irq(dev, 0);
 	if (fsl_ifc_ctrl_dev->irq < 0) {
 		dev_err(&dev->dev, "failed to get irq resource for IFC\n");
-		ret = fsl_ifc_ctrl_dev->irq;
-		goto err;
+		return fsl_ifc_ctrl_dev->irq;
 	}
 
 	fsl_ifc_ctrl_dev->dev = &dev->dev;
 
 	ret = fsl_ifc_ctrl_init(fsl_ifc_ctrl_dev);
 	if (ret < 0)
-		goto err;
+		return ret;
 
 	init_waitqueue_head(&fsl_ifc_ctrl_dev->nand_wait);
 
@@ -265,15 +258,11 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 	if (ret != 0) {
 		dev_err(&dev->dev, "failed to install irq (%d)\n",
 			fsl_ifc_ctrl_dev->irq);
-		goto err;
+		goto err_free_irq;
 	}
 
 	/* get the nand machine irq */
 	fsl_ifc_ctrl_dev->nand_irq = platform_get_irq_optional(dev, 1);
-	if (fsl_ifc_ctrl_dev->nand_irq < 0) {
-		ret = fsl_ifc_ctrl_dev->nand_irq;
-		goto err_free_irq;
-	}
 	if (fsl_ifc_ctrl_dev->nand_irq > 0) {
 		ret = request_irq(fsl_ifc_ctrl_dev->nand_irq, fsl_ifc_nand_irq,
 				0, "fsl-ifc-nand", fsl_ifc_ctrl_dev);
@@ -296,8 +285,6 @@ err_free_nandirq:
 		free_irq(fsl_ifc_ctrl_dev->nand_irq, fsl_ifc_ctrl_dev);
 err_free_irq:
 	free_irq(fsl_ifc_ctrl_dev->irq, fsl_ifc_ctrl_dev);
-err:
-	iounmap(fsl_ifc_ctrl_dev->gregs);
 	return ret;
 }
 
