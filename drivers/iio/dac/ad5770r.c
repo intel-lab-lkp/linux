@@ -607,8 +607,8 @@ static int ad5770r_probe(struct spi_device *spi)
 
 	regmap = devm_regmap_init_spi(spi, &ad5770r_spi_regmap_config);
 	if (IS_ERR(regmap)) {
-		dev_err(&spi->dev, "Error initializing spi regmap: %ld\n",
-			PTR_ERR(regmap));
+		dev_err(&spi->dev, "Error initializing spi regmap: %pe\n",
+			regmap);
 		return PTR_ERR(regmap);
 	}
 	st->regmap = regmap;
