@@ -1188,12 +1188,21 @@ static void usbg_aborted_task(struct se_cmd *se_cmd);
 
 static void usbg_submit_tmr(struct usbg_cmd *cmd)
 {
+	struct tcm_usbg_nexus *tv_nexus;
 	struct se_session *se_sess;
 	struct se_cmd *se_cmd;
 	int flags = TARGET_SCF_ACK_KREF;
 
 	se_cmd = &cmd->se_cmd;
-	se_sess = cmd->fu->tpg->tpg_nexus->tvn_se_sess;
+	tv_nexus = cmd->fu->tpg->tpg_nexus;
+	if (!tv_nexus) {
+		struct usb_gadget *gadget = fuas_to_gadget(cmd->fu);
+
+		dev_err(&gadget->dev, "Missing nexus for TMR, ignoring command\n");
+		return;
+	}
+
+	se_sess = tv_nexus->tvn_se_sess;
 
 	target_submit_tmr(se_cmd, se_sess,
 			  cmd->response_iu.add_response_info,
@@ -1271,12 +1280,21 @@ static void usbg_cmd_work(struct work_struct *work)
 skip:
 	if (cmd->tmr_rsp == RC_OVERLAPPED_TAG) {
 		struct f_uas *fu = cmd->fu;
+		struct tcm_usbg_nexus *tv_nexus;
 		struct se_session *se_sess;
 		struct uas_stream *stream = NULL;
 		struct hlist_node *tmp;
 		struct usbg_cmd *active_cmd = NULL;
 
-		se_sess = cmd->fu->tpg->tpg_nexus->tvn_se_sess;
+		tv_nexus = fu->tpg->tpg_nexus;
+		if (!tv_nexus) {
+			struct usb_gadget *gadget = fuas_to_gadget(fu);
+
+			dev_err(&gadget->dev, "Missing nexus for overlapped tag, ignoring command\n");
+			return;
+		}
+
+		se_sess = tv_nexus->tvn_se_sess;
 
 		hash_for_each_possible_safe(fu->stream_hash, stream, tmp, node, cmd->tag) {
 			int i = stream - &fu->stream[0];
