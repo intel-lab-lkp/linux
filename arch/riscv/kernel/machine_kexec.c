@@ -91,6 +91,19 @@ machine_kexec_prepare(struct kimage *image)
 void
 machine_kexec_cleanup(struct kimage *image)
 {
+	void *control_code_buffer;
+
+	if (image->type == KEXEC_TYPE_CRASH || !image->control_code_page)
+		return;
+
+	/*
+	 * machine_kexec_prepare() called set_memory_x() on the control
+	 * code page for non-crash images. Revert it before kimage_free()
+	 * returns the page to the buddy allocator, so we do not leak an
+	 * executable page back into general allocation.
+	 */
+	control_code_buffer = page_address(image->control_code_page);
+	set_memory_nx((unsigned long)control_code_buffer, 1);
 }
 
 
