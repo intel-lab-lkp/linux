@@ -207,8 +207,6 @@ struct tid_ampdu_tx {
 /**
  * struct tid_ampdu_rx - TID aggregation information (Rx).
  *
- * @reorder_buf: buffer to reorder incoming aggregated MPDUs. An MPDU may be an
- *	A-MSDU with individually reported subframes.
  * @reorder_buf_filtered: bitmap indicating where there are filtered frames in
  *	the reorder buffer that should be ignored when releasing frames
  * @reorder_time: jiffies when skb was added
@@ -228,6 +226,8 @@ struct tid_ampdu_tx {
  *	and ssn.
  * @removed: this session is removed (but might have been found due to RCU)
  * @started: this session has started (head ssn or higher was received)
+ * @reorder_buf: buffer to reorder incoming aggregated MPDUs. An MPDU may be an
+ *	A-MSDU with individually reported subframes.
  *
  * This structure's lifetime is managed by RCU, assignments to
  * the array holding it must hold the aggregation mutex.
@@ -241,7 +241,6 @@ struct tid_ampdu_rx {
 	struct rcu_head rcu_head;
 	spinlock_t reorder_lock;
 	u64 reorder_buf_filtered;
-	struct sk_buff_head *reorder_buf;
 	unsigned long *reorder_time;
 	struct sta_info *sta;
 	struct timer_list session_timer;
@@ -256,6 +255,7 @@ struct tid_ampdu_rx {
 	u8 auto_seq:1,
 	   removed:1,
 	   started:1;
+	struct sk_buff_head reorder_buf[];
 };
 
 /**

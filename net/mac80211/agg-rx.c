@@ -50,8 +50,6 @@ static void ieee80211_free_tid_rx(struct rcu_head *h)
 
 	for (i = 0; i < tid_rx->buf_size; i++)
 		__skb_queue_purge(&tid_rx->reorder_buf[i]);
-	kfree(tid_rx->reorder_buf);
-	kfree(tid_rx->reorder_time);
 	kfree(tid_rx);
 }
 
@@ -294,6 +292,7 @@ void __ieee80211_start_rx_ba_session(struct sta_info *sta,
 	};
 	int i, ret = -EOPNOTSUPP;
 	u16 status = WLAN_STATUS_REQUEST_DECLINED;
+	size_t alloc_size;
 	u16 max_buf_size;
 
 	lockdep_assert_wiphy(sta->local->hw.wiphy);
@@ -412,9 +411,13 @@ void __ieee80211_start_rx_ba_session(struct sta_info *sta,
 	}
 
 	/* prepare A-MPDU MLME for Rx aggregation */
-	tid_agg_rx = kzalloc_obj(*tid_agg_rx);
+	alloc_size = struct_size(tid_agg_rx, reorder_buf, buf_size);
+	alloc_size += sizeof(*tid_agg_rx->reorder_time) * buf_size;
+	tid_agg_rx = kzalloc(alloc_size, GFP_KERNEL);
 	if (!tid_agg_rx)
 		goto end;
+
+	tid_agg_rx->reorder_time = (void *)(tid_agg_rx->reorder_buf + buf_size);
 
 	spin_lock_init(&tid_agg_rx->reorder_lock);
 
@@ -426,18 +429,6 @@ void __ieee80211_start_rx_ba_session(struct sta_info *sta,
 	timer_setup(&tid_agg_rx->reorder_timer,
 		    sta_rx_agg_reorder_timer_expired, 0);
 
-	/* prepare reordering buffer */
-	tid_agg_rx->reorder_buf =
-		kzalloc_objs(struct sk_buff_head, buf_size);
-	tid_agg_rx->reorder_time =
-		kcalloc(buf_size, sizeof(unsigned long), GFP_KERNEL);
-	if (!tid_agg_rx->reorder_buf || !tid_agg_rx->reorder_time) {
-		kfree(tid_agg_rx->reorder_buf);
-		kfree(tid_agg_rx->reorder_time);
-		kfree(tid_agg_rx);
-		goto end;
-	}
-
 	for (i = 0; i < buf_size; i++)
 		__skb_queue_head_init(&tid_agg_rx->reorder_buf[i]);
 
@@ -445,8 +436,6 @@ void __ieee80211_start_rx_ba_session(struct sta_info *sta,
 	ht_dbg(sta->sdata, "Rx A-MPDU request on %pM tid %d result %d\n",
 	       sta->sta.addr, tid, ret);
 	if (ret) {
-		kfree(tid_agg_rx->reorder_buf);
-		kfree(tid_agg_rx->reorder_time);
 		kfree(tid_agg_rx);
 		goto end;
 	}
