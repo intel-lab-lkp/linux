@@ -1121,7 +1121,25 @@ static bool tdx_enc_status_changed(unsigned long vaddr, int numpages, bool enc)
 {
 	phys_addr_t start = __pa(vaddr);
 	phys_addr_t end   = __pa(vaddr + numpages * PAGE_SIZE);
+	bool release_required = !enc && tdx_page_release_supported;
 
+	/*
+	 * For private->shared conversion, release memory pages first.
+	 * This transitions pages from accepted to pending state to be
+	 * more robust with buggy VMM, e.g., VMM may keep old pages,
+	 * when converting back to private, re-accept error triggers.
+	 */
+	if (release_required && !tdx_release_memory(start, end))
+		return false;
+
+	/*
+	 * Update the GPA mapping state. If this fails, we cannot rollback
+	 * by calling tdx_accept_memory() because tdx_map_gpa() may have
+	 * partially succeeded, creating a mix of shared and private pages.
+	 * Attempting to accept the entire range would fail on pages that
+	 * are still in shared state, and we have no way to determine which
+	 * pages are in which state after partial failure.
+	 */
 	if (!tdx_map_gpa(start, end, enc))
 		return false;
 
