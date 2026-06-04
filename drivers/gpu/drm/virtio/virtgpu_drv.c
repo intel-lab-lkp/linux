@@ -138,7 +138,10 @@ static void virtio_gpu_remove(struct virtio_device *vdev)
 
 	virtio_gpu_release_vqs(dev);
 	drm_dev_unplug(dev);
-	drm_atomic_helper_shutdown(dev);
+
+	if (drm_core_check_feature(dev, DRIVER_ATOMIC))
+		drm_atomic_helper_shutdown(dev);
+
 	virtio_gpu_deinit(dev);
 	drm_dev_put(dev);
 }
