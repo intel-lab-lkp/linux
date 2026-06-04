@@ -164,9 +164,6 @@ machine_kexec_prepare(struct kimage *image)
 		memcpy(control_code_buffer, riscv_kexec_relocate,
 			riscv_kexec_relocate_size);
 
-		/* Mark the control page executable */
-		set_memory_x((unsigned long) control_code_buffer, 1);
-
 		WRITE_ONCE(riscv_kexec_relocate_entry_pa,
 			   __pa_symbol(&riscv_kexec_relocate_entry));
 	} else {
@@ -262,11 +259,15 @@ machine_kexec(struct kimage *image)
 {
 	struct kimage_arch *internal = &image->arch;
 	unsigned long jump_addr = (unsigned long) image->start;
-	unsigned long first_ind_entry = (unsigned long) &image->head;
+	/*
+	 * The relocate body runs entirely with the MMU off (the wrapper
+	 * drops SATP before jumping into control_code_buffer), so the very
+	 * first entry must be a physical address.
+	 */
+	unsigned long first_ind_entry = __pa(&image->head);
 	unsigned long this_cpu_id = __smp_processor_id();
 	unsigned long this_hart_id = cpuid_to_hartid_map(this_cpu_id);
 	unsigned long fdt_addr = internal->fdt_addr;
-	void *control_code_buffer = page_address(image->control_code_page);
 	riscv_kexec_method kexec_method = NULL;
 
 #ifdef CONFIG_SMP
@@ -274,10 +275,20 @@ machine_kexec(struct kimage *image)
 		"Some CPUs may be stale, kdump will be unreliable.\n");
 #endif
 
-	if (image->type != KEXEC_TYPE_CRASH)
-		kexec_method = control_code_buffer;
-	else
+	if (image->type != KEXEC_TYPE_CRASH) {
+		kexec_method = (riscv_kexec_method) &riscv_kexec_relocate_entry;
+		/*
+		 * Publish the per-image control_code_buffer PA at dispatch
+		 * time rather than in machine_kexec_prepare(). machine_kexec()
+		 * only runs once the image has been fully loaded and committed
+		 * as kexec_image, so the global cannot be left pointing at a
+		 * page freed by a failed load.
+		 */
+		WRITE_ONCE(riscv_kexec_cc_buffer_pa,
+			   __pa(page_address(image->control_code_page)));
+	} else {
 		kexec_method = (riscv_kexec_method) &riscv_kexec_norelocate;
+	}
 
 	pr_notice("Will call new kernel at %08lx from hart id %lx\n",
 		  jump_addr, this_hart_id);
