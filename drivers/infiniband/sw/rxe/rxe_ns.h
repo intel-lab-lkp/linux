@@ -20,6 +20,9 @@ static inline void rxe_ns_pernet_set_sk6(struct net *net, struct sock *sk)
 }
 #endif /* IPv6 */
 
+void rxe_ns_lock(struct net *net);
+void rxe_ns_unlock(struct net *net);
+
 int rxe_namespace_init(void);
 void rxe_namespace_exit(void);
 
