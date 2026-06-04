@@ -13,6 +13,22 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 
+/*
+ * Serial bus slew rates. Rates are expressed as range between the two
+ * values with the midpoint as the typical rate. For the final value of
+ * 2ns, 2ns is considered the max value with no expressed minimum or
+ * typical value.
+ */
+enum inv_icm42607_slew_rate {
+	INV_ICM42607_SLEW_RATE_20_60NS,
+	INV_ICM42607_SLEW_RATE_12_36NS,
+	INV_ICM42607_SLEW_RATE_6_19NS,
+	INV_ICM42607_SLEW_RATE_4_14NS,
+	INV_ICM42607_SLEW_RATE_2_8NS,
+	INV_ICM42607_SLEW_RATE_2NS,
+	INV_ICM42607_SLEW_RATE_NB
+};
+
 enum inv_icm42607_sensor_mode {
 	INV_ICM42607_SENSOR_MODE_OFF,
 	INV_ICM42607_SENSOR_MODE_STANDBY,
