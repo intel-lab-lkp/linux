@@ -28,7 +28,7 @@ int omap_crypto_align_sg(struct scatterlist **sg, int total, int bs,
 			 struct scatterlist *new_sg, u16 flags,
 			 u8 flags_shift, unsigned long *dd_flags);
 void omap_crypto_cleanup(struct scatterlist *sg, struct scatterlist *orig,
-			 int offset, int len, u8 flags_shift,
+			 size_t offset, size_t len, u8 flags_shift,
 			 unsigned long flags);
 
 #endif

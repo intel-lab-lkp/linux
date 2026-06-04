@@ -156,11 +156,11 @@ EXPORT_SYMBOL_GPL(omap_crypto_align_sg);
 
 static void omap_crypto_copy_data(struct scatterlist *src,
 				  struct scatterlist *dst,
-				  int offset, int len)
+				  size_t offset, size_t len)
 {
-	int amt;
+	size_t amt;
 	void *srcb, *dstb;
-	int srco = 0, dsto = offset;
+	size_t srco = 0, dsto = offset;
 
 	while (src && dst && len) {
 		if (srco >= src->length) {
@@ -175,8 +175,7 @@ static void omap_crypto_copy_data(struct scatterlist *src,
 			continue;
 		}
 
-		amt = min(src->length - srco, dst->length - dsto);
-		amt = min(len, amt);
+		amt = min3(src->length - srco, dst->length - dsto, len);
 
 		srcb = kmap_atomic(sg_page(src)) + srco + src->offset;
 		dstb = kmap_atomic(sg_page(dst)) + dsto + dst->offset;
@@ -195,7 +194,7 @@ static void omap_crypto_copy_data(struct scatterlist *src,
 }
 
 void omap_crypto_cleanup(struct scatterlist *sg, struct scatterlist *orig,
-			 int offset, int len, u8 flags_shift,
+			 size_t offset, size_t len, u8 flags_shift,
 			 unsigned long flags)
 {
 	void *buf;
