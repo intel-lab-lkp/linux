@@ -12,6 +12,7 @@
 
 #include <linux/dma-resv.h>
 #include <linux/kref.h>
+#include <linux/maple_tree.h>
 #include <linux/mmu_notifier.h>
 #include <linux/scatterlist.h>
 
@@ -30,6 +31,36 @@ struct xe_sync_entry;
 struct xe_user_fence;
 struct xe_vm;
 struct xe_vm_pgtable_update_op;
+
+/**
+ * struct xe_madvise_notifier - MMU notifier for madvise autoreset
+ *
+ * Tracks CPU munmap on CPU mirror VMAs and queues work to reset attrs.
+ * The callback stores one widened interval without allocating. The worker
+ * walks the CPU mm and resets only holes inside that interval.
+ */
+struct xe_madvise_notifier {
+	/** @mmu_notifier: MMU interval notifier */
+	struct mmu_interval_notifier mmu_notifier;
+	/** @vm: VM this notifier belongs to (holds reference via xe_vm_get) */
+	struct xe_vm *vm;
+	/** @vma_start: Start address of VMA being tracked */
+	u64 vma_start;
+	/** @vma_end: End address of VMA being tracked */
+	u64 vma_end;
+	/** @link: Entry on vm->svm.madvise_notifier_list. */
+	struct list_head link;
+	/** @work_lock: Serialises pending interval state. */
+	spinlock_t work_lock;
+	/** @work_pending: Pending interval is available for the worker. */
+	bool work_pending;
+	/** @work_start: Start of the pending interval. */
+	u64 work_start;
+	/** @work_end: End of the pending interval. */
+	u64 work_end;
+	/** @work: Work item queued on CPU munmap. */
+	struct work_struct work;
+};
 
 #if IS_ENABLED(CONFIG_DRM_XE_DEBUG)
 #define TEST_VM_OPS_ERROR
@@ -248,6 +279,36 @@ struct xe_vm {
 		struct xe_pagemap *pagemaps[XE_MAX_TILES_PER_DEVICE];
 		/** @svm.peer: Used for pagemap connectivity computations. */
 		struct drm_pagemap_peer peer;
+
+		/**
+		 * @svm.madvise_notifiers: Active madvise notifiers, keyed by
+		 * [vma_start, vma_end - 1]. The maple tree uses its own internal
+		 * spinlock for data integrity. Insertions happen under vm->lock
+		 * write; teardown is serialized by teardown_rwsem write.
+		 */
+		struct maple_tree madvise_notifiers;
+
+		/**
+		 * @svm.madvise_notifier_list: VM-owned list of all madvise notifiers.
+		 *
+		 * The maple tree is only a lookup index. Teardown walks this list.
+		 * Protected by vm->lock.
+		 */
+		struct list_head madvise_notifier_list;
+
+		/** @svm.madvise_work: Workqueue for async munmap processing */
+		struct {
+			/** @svm.madvise_work.wq: Workqueue */
+			struct workqueue_struct *wq;
+
+			/**
+			 * @svm.madvise_work.teardown_rwsem: Guards VM teardown.
+			 *
+			 * Callbacks take read via trylock; fini takes write.
+			 * A failed trylock means teardown started; bail immediately.
+			 */
+			struct rw_semaphore teardown_rwsem;
+		} madvise_work;
 	} svm;
 
 	struct xe_device *xe;

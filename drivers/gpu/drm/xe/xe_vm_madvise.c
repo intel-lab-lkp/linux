@@ -6,6 +6,8 @@
 #include "xe_vm_madvise.h"
 
 #include <linux/nospec.h>
+#include <linux/maple_tree.h>
+#include <linux/workqueue.h>
 #include <drm/xe_drm.h>
 
 #include "xe_bo.h"
@@ -14,6 +16,10 @@
 #include "xe_svm.h"
 #include "xe_tlb_inval.h"
 #include "xe_vm.h"
+#include "xe_macros.h"
+
+/* Lockdep class for teardown_rwsem */
+static struct lock_class_key xe_madvise_teardown_key;
 
 struct xe_vmas_in_madvise_range {
 	u64 addr;
@@ -730,5 +736,503 @@ unlock_vm:
 		err = xe_madvise_purgeable_retained_to_user(&details);
 put_vm:
 	xe_vm_put(vm);
+	return err;
+}
+
+/**
+ * xe_vma_reset_to_default_attrs - Reset madvise attrs to defaults
+ * @vma: VMA to reset
+ */
+static void xe_vma_reset_to_default_attrs(struct xe_vma *vma)
+{
+	struct xe_vma_mem_attr default_attr = {
+		.preferred_loc.devmem_fd = DRM_XE_PREFERRED_LOC_DEFAULT_DEVICE,
+		.preferred_loc.migration_policy = DRM_XE_MIGRATE_ALL_PAGES,
+		.default_pat_index = vma->attr.default_pat_index,
+		.pat_index = vma->attr.default_pat_index,
+		.atomic_access = DRM_XE_ATOMIC_UNDEFINED,
+		.purgeable_state = XE_MADV_PURGEABLE_WILLNEED,
+	};
+
+	xe_vma_mem_attr_copy(&vma->attr, &default_attr);
+}
+
+/**
+ * xe_vm_madvise_process_unmap - Reset attrs for a GPUVA range
+ * @vm: VM
+ * @start: start of range
+ * @end: end of range
+ *
+ * Process CPU-only VMAs overlapping [@start, @end).
+ *
+ * Return: 0 on success, negative error otherwise.
+ */
+static int xe_vm_madvise_process_unmap(struct xe_vm *vm, u64 start, u64 end)
+{
+	u64 addr = start;
+	int err;
+
+	lockdep_assert_held_write(&vm->lock);
+
+	if (xe_vm_is_closed_or_banned(vm))
+		return 0;
+
+	while (addr < end) {
+		struct xe_vma *vma;
+		u64 seg_start, seg_end;
+		bool has_default_attr;
+
+		vma = xe_vm_find_overlapping_vma(vm, addr, end - addr);
+		if (!vma)
+			break;
+
+		/* GPU-touched VMAs are handled by SVM. */
+		if (!xe_vma_has_cpu_autoreset_active(vma)) {
+			addr = xe_vma_end(vma);
+			continue;
+		}
+
+		has_default_attr = xe_vma_has_default_mem_attrs(vma);
+		seg_start = max(addr, xe_vma_start(vma));
+		seg_end = min(end, xe_vma_end(vma));
+
+		/* Merge adjacent default-attr VMAs when possible. */
+		if (has_default_attr &&
+		    xe_vma_start(vma) >= start &&
+		    xe_vma_end(vma) <= end) {
+			seg_start = xe_vma_start(vma);
+			seg_end = xe_vma_end(vma);
+			xe_vm_find_cpu_addr_mirror_vma_range(vm, &seg_start, &seg_end);
+			if (xe_vma_start(vma) == seg_start && xe_vma_end(vma) == seg_end) {
+				/* Nothing to merge. */
+				addr = seg_end;
+				continue;
+			}
+		} else if (xe_vma_start(vma) == seg_start && xe_vma_end(vma) == seg_end) {
+			/* Exact VMA match, reset in place. */
+			xe_vma_reset_to_default_attrs(vma);
+			addr = seg_end;
+			continue;
+		}
+
+		err = xe_vm_alloc_cpu_addr_mirror_vma(vm, seg_start, seg_end - seg_start);
+		if (err) {
+			if (err == -ENOENT) {
+				/* VMA was removed before the worker ran. */
+				addr = seg_end;
+				continue;
+			}
+			return err;
+		}
+
+		addr = seg_end;
+	}
+
+	return 0;
+}
+
+/**
+ * xe_vm_madvise_process_unmap_holes - Reset attrs for CPU holes
+ * @vm: VM
+ * @mm: mm backing the CPU mirror
+ * @start: start of the pending interval
+ * @end: end of the pending interval
+ *
+ * Walk [@start, @end) and process only ranges not covered by a CPU VMA.
+ * Mapped ranges are skipped so partial-unmap siblings keep their attrs.
+ *
+ * Caller must hold vm->lock for write and mmap_read_lock(@mm).
+ *
+ * Return: 0 on success, negative error otherwise.
+ */
+static int xe_vm_madvise_process_unmap_holes(struct xe_vm *vm,
+					     struct mm_struct *mm,
+					     u64 start, u64 end)
+{
+	u64 addr = start;
+
+	lockdep_assert_held_write(&vm->lock);
+	mmap_assert_locked(mm);
+
+	while (addr < end) {
+		struct vm_area_struct *cpu_vma;
+		u64 hole_start, hole_end;
+		int err;
+
+		cpu_vma = find_vma(mm, addr);
+
+		if (cpu_vma && cpu_vma->vm_start <= addr) {
+			addr = min_t(u64, cpu_vma->vm_end, end);
+			continue;
+		}
+
+		hole_start = addr;
+		hole_end = cpu_vma ? min_t(u64, cpu_vma->vm_start, end) : end;
+
+		err = xe_vm_madvise_process_unmap(vm, hole_start, hole_end);
+		if (err)
+			return err;
+
+		addr = hole_end;
+	}
+
+	return 0;
+}
+
+/**
+ * xe_madvise_work_func - Worker to process pending unmap events
+ * @w: work_struct embedded in xe_madvise_notifier
+ *
+ * Drains pending intervals recorded by the callback. The worker loops so
+ * events queued while it is running are not lost.
+ */
+static void xe_madvise_work_func(struct work_struct *w)
+{
+	struct xe_madvise_notifier *notifier =
+		container_of(w, struct xe_madvise_notifier, work);
+	struct xe_vm *vm = notifier->vm;
+
+	for (;;) {
+		struct mm_struct *mm;
+		u64 start, end;
+		int err;
+
+		spin_lock(&notifier->work_lock);
+		if (!notifier->work_pending) {
+			spin_unlock(&notifier->work_lock);
+			break;
+		}
+		start = notifier->work_start;
+		end = notifier->work_end;
+		notifier->work_pending = false;
+		spin_unlock(&notifier->work_lock);
+
+		/* The mm is going away, teardown will clean up. */
+		mm = vm->svm.gpusvm.mm;
+		if (!mm || !mmget_not_zero(mm))
+			break;
+
+		down_write(&vm->lock);
+		mmap_read_lock(mm);
+
+		err = xe_vm_madvise_process_unmap_holes(vm, mm, start, end);
+
+		mmap_read_unlock(mm);
+		up_write(&vm->lock);
+		mmput(mm);
+
+		if (err)
+			drm_warn(&vm->xe->drm,
+				 "madvise autoreset failed [%#llx-%#llx]: %d\n",
+				 start, end, err);
+	}
+}
+
+/**
+ * xe_madvise_notifier_callback - MMU notifier callback for CPU munmap
+ * @mni: mmu_interval_notifier
+ * @range: mmu_notifier_range
+ * @cur_seq: current sequence number
+ *
+ * Records one pending interval without allocating. Later events widen it.
+ * The worker checks the CPU mm before resetting attributes.
+ *
+ * Return: false for non-blockable invalidations, true otherwise.
+ */
+static bool xe_madvise_notifier_callback(struct mmu_interval_notifier *mni,
+					 const struct mmu_notifier_range *range,
+					 unsigned long cur_seq)
+{
+	struct xe_madvise_notifier *notifier =
+		container_of(mni, struct xe_madvise_notifier, mmu_notifier);
+	struct xe_vm *vm = notifier->vm;
+	u64 adj_start, adj_end;
+
+	if (range->event != MMU_NOTIFY_UNMAP)
+		return true;
+
+	if (!mmu_notifier_range_blockable(range))
+		return false;
+
+	if (xe_vm_is_closed(vm))
+		return true;
+
+	mmu_interval_set_seq(mni, cur_seq);
+
+	/* Clamp to notifier boundaries and ignore non-overlap. */
+	adj_start = max_t(u64, range->start, notifier->vma_start);
+	adj_end = min_t(u64, range->end, notifier->vma_end);
+
+	if (adj_start >= adj_end)
+		return true;
+
+	/* Bail if teardown started; trylock fails once fini holds write. */
+	if (!down_read_trylock(&vm->svm.madvise_work.teardown_rwsem))
+		return true;
+
+	/* fini may have NULLed wq before we got here; check under read lock. */
+	if (!vm->svm.madvise_work.wq)
+		goto out;
+
+	spin_lock(&notifier->work_lock);
+	if (notifier->work_pending) {
+		/*
+		 * Widen pending work. The worker only resets CPU holes,
+		 * so mapped siblings are left untouched.
+		 */
+		notifier->work_start = min(notifier->work_start, adj_start);
+		notifier->work_end = max(notifier->work_end, adj_end);
+	} else {
+		notifier->work_start = adj_start;
+		notifier->work_end = adj_end;
+		notifier->work_pending = true;
+	}
+	spin_unlock(&notifier->work_lock);
+
+	queue_work(vm->svm.madvise_work.wq, &notifier->work);
+
+out:
+	up_read(&vm->svm.madvise_work.teardown_rwsem);
+	return true;
+}
+
+static const struct mmu_interval_notifier_ops xe_madvise_notifier_ops = {
+	.invalidate = xe_madvise_notifier_callback,
+};
+
+/**
+ * xe_vm_madvise_init - Initialize madvise notifier infrastructure
+ * @vm: VM
+ *
+ * Sets up workqueue for async munmap processing.
+ *
+ * Return: 0 on success, -ENOMEM on failure
+ */
+int xe_vm_madvise_init(struct xe_vm *vm)
+{
+	/* Already initialized. */
+	if (vm->svm.madvise_work.wq)
+		return 0;
+
+	mt_init(&vm->svm.madvise_notifiers);
+	INIT_LIST_HEAD(&vm->svm.madvise_notifier_list);
+
+	/* Separate class for notifier teardown. */
+	__init_rwsem(&vm->svm.madvise_work.teardown_rwsem,
+		     "xe_madvise_teardown", &xe_madvise_teardown_key);
+
+	/* Not used from reclaim paths. */
+	vm->svm.madvise_work.wq = alloc_workqueue("xe_madvise", WQ_UNBOUND, 0);
+	if (!vm->svm.madvise_work.wq) {
+		mtree_destroy(&vm->svm.madvise_notifiers);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static void xe_madvise_notifier_free(struct xe_madvise_notifier *notifier)
+{
+	xe_vm_put(notifier->vm);
+	kfree(notifier);
+}
+
+static void xe_madvise_notifier_remove_and_free(struct xe_madvise_notifier *notifier)
+{
+	mmu_interval_notifier_remove(&notifier->mmu_notifier);
+	cancel_work_sync(&notifier->work);
+	xe_madvise_notifier_free(notifier);
+}
+
+static struct xe_madvise_notifier *
+xe_madvise_notifier_alloc(struct xe_vm *vm, u64 start, u64 end)
+{
+	struct xe_madvise_notifier *notifier;
+
+	notifier = kzalloc_obj(*notifier, GFP_KERNEL);
+	if (!notifier)
+		return NULL;
+
+	notifier->vm = xe_vm_get(vm);
+	notifier->vma_start = start;
+	notifier->vma_end = end;
+	INIT_LIST_HEAD(&notifier->link);
+	spin_lock_init(&notifier->work_lock);
+	notifier->work_pending = false;
+	INIT_WORK(&notifier->work, xe_madvise_work_func);
+
+	return notifier;
+}
+
+static bool xe_madvise_notifier_exact(const struct xe_madvise_notifier *notifier,
+				      u64 start, u64 end)
+{
+	return notifier->vma_start == start && notifier->vma_end == end;
+}
+
+static bool xe_madvise_notifier_fully_covered(const struct xe_madvise_notifier *notifier,
+					      u64 start, u64 end)
+{
+	/*
+	 * Broader notifiers may still cover split siblings, so only remove
+	 * notifiers fully covered by the new range.
+	 */
+	return notifier->vma_start >= start && notifier->vma_end <= end;
+}
+
+/**
+ * xe_vm_madvise_fini - Cleanup all madvise notifiers
+ * @vm: VM
+ *
+ * Tears down notifiers and drains workqueue. Safe if init partially failed.
+ */
+void xe_vm_madvise_fini(struct xe_vm *vm)
+{
+	struct xe_madvise_notifier *notifier, *next;
+	struct workqueue_struct *wq;
+	LIST_HEAD(tmp);
+
+	/* Nothing to do if init never ran. */
+	if (!vm->svm.madvise_work.wq)
+		return;
+
+	/* Block new callbacks. */
+	down_write(&vm->svm.madvise_work.teardown_rwsem);
+
+	/* Stage all owned notifiers from the VM list. */
+	list_for_each_entry_safe(notifier, next,
+				 &vm->svm.madvise_notifier_list, link) {
+		list_del_init(&notifier->link);
+		list_add_tail(&notifier->link, &tmp);
+	}
+
+	/* VM is closed; safe to destroy the tree. */
+	mtree_destroy(&vm->svm.madvise_notifiers);
+
+	/* NULL wq so late callbacks bail. */
+	wq = vm->svm.madvise_work.wq;
+	vm->svm.madvise_work.wq = NULL;
+
+	up_write(&vm->svm.madvise_work.teardown_rwsem);
+
+	/*
+	 * Remove notifiers outside rwsem; remove() may block on mmap_lock.
+	 */
+	list_for_each_entry(notifier, &tmp, link)
+		mmu_interval_notifier_remove(&notifier->mmu_notifier);
+
+	/* Drain work before freeing; workers reference notifier via container_of. */
+	if (wq) {
+		drain_workqueue(wq);
+		destroy_workqueue(wq);
+	}
+
+	/* Safe to free now: no callbacks can fire, no workers are running. */
+	list_for_each_entry_safe(notifier, next, &tmp, link) {
+		list_del(&notifier->link);
+		xe_madvise_notifier_free(notifier);
+	}
+}
+
+/**
+ * xe_vm_madvise_register_notifier_range - Register MMU notifier for address range
+ * @vm: VM
+ * @start: Start address (page-aligned)
+ * @end: End address (page-aligned)
+ *
+ * Registers interval notifier for munmap tracking. Uses addresses (not VMA pointers)
+ * to avoid UAF after dropping vm->lock. Deduplicates by range.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int xe_vm_madvise_register_notifier_range(struct xe_vm *vm, u64 start, u64 end)
+{
+	struct xe_madvise_notifier *notifier, *old, *tmp;
+	struct xe_madvise_notifier *existing;
+	LIST_HEAD(displaced);
+	int err;
+
+	if (!IS_ALIGNED(start, PAGE_SIZE) || !IS_ALIGNED(end, PAGE_SIZE))
+		return -EINVAL;
+
+	if (WARN_ON_ONCE(end <= start))
+		return -EINVAL;
+
+	if (!vm->svm.gpusvm.mm)
+		return -EINVAL;
+
+	notifier = xe_madvise_notifier_alloc(vm, start, end);
+	if (!notifier)
+		return -ENOMEM;
+
+	/* Insert before vm->lock, this may take mmap_lock. */
+	err = mmu_interval_notifier_insert(&notifier->mmu_notifier,
+					   vm->svm.gpusvm.mm,
+					   start, end - start,
+					   &xe_madvise_notifier_ops);
+	if (err) {
+		xe_madvise_notifier_free(notifier);
+		return err;
+	}
+
+	/* Dedup and store under vm->lock. */
+	down_write(&vm->lock);
+
+	if (xe_vm_is_closed_or_banned(vm)) {
+		err = -ENOENT;
+		goto unlock_remove_new;
+	}
+
+	/* Dedup by stored range; tree slots can be fragmented by partial overlap. */
+	list_for_each_entry(existing, &vm->svm.madvise_notifier_list, link) {
+		if (xe_madvise_notifier_exact(existing, start, end)) {
+			err = 0;
+			goto unlock_remove_new;
+		}
+	}
+
+	/*
+	 * Store first. The VM list owns notifier lifetime, so there is
+	 * nothing to restore on failure.
+	 */
+	err = mtree_store_range(&vm->svm.madvise_notifiers, start, end - 1,
+				notifier, GFP_KERNEL);
+	if (err)
+		goto unlock_remove_new;
+
+	/* Keep the new notifier reachable for teardown. */
+	list_add_tail(&notifier->link, &vm->svm.madvise_notifier_list);
+
+	/*
+	 * Drop fully covered old notifiers. Broader notifiers may still cover
+	 * split siblings, so leave them alive.
+	 */
+	list_for_each_entry_safe(old, tmp, &vm->svm.madvise_notifier_list, link) {
+		if (old == notifier)
+			continue;
+		if (!xe_madvise_notifier_fully_covered(old, start, end))
+			continue;
+
+		list_del_init(&old->link);
+		list_add(&old->link, &displaced);
+	}
+
+	up_write(&vm->lock);
+
+	/*
+	 * Remove outside vm->lock. remove_and_free() drains callbacks and
+	 * work before freeing the notifier.
+	 */
+	list_for_each_entry_safe(old, tmp, &displaced, link) {
+		list_del_init(&old->link);
+		xe_madvise_notifier_remove_and_free(old);
+	}
+
+	return 0;
+
+unlock_remove_new:
+	up_write(&vm->lock);
+	xe_madvise_notifier_remove_and_free(notifier);
+
 	return err;
 }
