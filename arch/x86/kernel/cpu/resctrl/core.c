@@ -1012,6 +1012,7 @@ static __init void check_quirks(void)
 
 static __init bool get_rdt_resources(void)
 {
+	erdt_init();
 	rdt_alloc_capable = get_rdt_alloc_resources();
 	rdt_mon_capable = get_rdt_mon_resources();
 
@@ -1130,20 +1131,24 @@ static int __init resctrl_arch_late_init(void)
 
 	check_quirks();
 
-	if (!get_rdt_resources())
-		return -ENODEV;
+	if (!get_rdt_resources()) {
+		ret = -ENODEV;
+		goto out;
+	}
 
 	state = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
 				  "x86/resctrl/cat:online:",
 				  resctrl_arch_online_cpu,
 				  resctrl_arch_offline_cpu);
-	if (state < 0)
-		return state;
+	if (state < 0) {
+		ret = state;
+		goto out;
+	}
 
 	ret = resctrl_init();
 	if (ret) {
 		cpuhp_remove_state(state);
-		return ret;
+		goto out;
 	}
 	rdt_online = state;
 
@@ -1154,6 +1159,10 @@ static int __init resctrl_arch_late_init(void)
 		pr_info("%s monitoring detected\n", r->name);
 
 	return 0;
+
+out:
+	erdt_exit();
+	return ret;
 }
 
 late_initcall(resctrl_arch_late_init);
@@ -1165,6 +1174,8 @@ static void __exit resctrl_arch_exit(void)
 	cpuhp_remove_state(rdt_online);
 
 	resctrl_exit();
+
+	erdt_exit();
 }
 
 __exitcall(resctrl_arch_exit);
