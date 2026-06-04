@@ -8,7 +8,10 @@ use core::{
     iter,
     marker::PhantomData,
     pin::Pin,
-    ptr::NonNull, //
+    ptr::{
+        null_mut,
+        NonNull, //
+    },
 };
 use kernel::{
     alloc,
@@ -295,6 +298,67 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
             // NB: `XA_ZERO_ENTRY` is never returned by functions belonging to the Normal XArray
             // API; such entries present as `NULL`.
             Ok(unsafe { T::try_from_foreign(old) })
+        }
+    }
+}
+
+/// A reference to a [`Guard`], either shared or mutable, that exposes the
+/// underlying xarray pointer and the value type stored in the array.
+pub(crate) trait GuardRef {
+    type Value: ForeignOwnable;
+    fn xa_ptr(&self) -> *mut bindings::xarray;
+}
+
+impl<'a, T: ForeignOwnable> GuardRef for &Guard<'a, T> {
+    type Value = T;
+    fn xa_ptr(&self) -> *mut bindings::xarray {
+        self.xa.xa.get()
+    }
+}
+
+impl<'a, T: ForeignOwnable> GuardRef for &mut Guard<'a, T> {
+    type Value = T;
+    fn xa_ptr(&self) -> *mut bindings::xarray {
+        self.xa.xa.get()
+    }
+}
+
+/// Internal state for XArray iteration and entry operations.
+///
+/// `R` is the borrow held on the guard: either `&Guard` for read-only callers
+/// or `&mut Guard` for entry-style APIs that need to surrender the borrow back
+/// via [`XArrayState::into_guard`].
+///
+/// # Invariants
+///
+/// - `state` is always a valid `bindings::xa_state`.
+/// - `state.xa` aliases the xarray reachable through `guard`.
+#[expect(dead_code)]
+pub(crate) struct XArrayState<R: GuardRef> {
+    guard: R,
+    state: bindings::xa_state,
+}
+
+impl<R: GuardRef> XArrayState<R> {
+    #[expect(dead_code)]
+    fn new(guard: R, index: usize) -> Self {
+        let xa_ptr = guard.xa_ptr();
+        // INVARIANT: `state` is initialized to a valid `xa_state` whose `xa` field aliases the
+        // xarray reachable through `guard`.
+        Self {
+            guard,
+            state: bindings::xa_state {
+                xa: xa_ptr,
+                xa_index: index,
+                xa_shift: 0,
+                xa_sibs: 0,
+                xa_offset: 0,
+                xa_pad: 0,
+                xa_node: bindings::XAS_RESTART as *mut bindings::xa_node,
+                xa_alloc: null_mut(),
+                xa_update: None,
+                xa_lru: null_mut(),
+            },
         }
     }
 }
