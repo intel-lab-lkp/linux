@@ -272,10 +272,8 @@ static int c_show(struct seq_file *m, void *v)
 			if (cpu_have_feature(j))
 				seq_printf(m, " %s", hwcap_str[j]);
 	}
-	seq_puts(m, "\n");
 
-	seq_printf(m, "CPU implementer\t: 0x%02x\n",
-		   MIDR_IMPLEMENTOR(midr));
+	seq_printf(m, "\nCPU implementer\t: 0x%02x\n", MIDR_IMPLEMENTOR(midr));
 	seq_puts(m, "CPU architecture: 8\n");
 	seq_printf(m, "CPU variant\t: 0x%x\n", MIDR_VARIANT(midr));
 	seq_printf(m, "CPU part\t: 0x%03x\n", MIDR_PARTNUM(midr));
