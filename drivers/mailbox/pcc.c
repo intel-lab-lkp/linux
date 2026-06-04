@@ -270,6 +270,9 @@ static int pcc_mbox_error_check_and_clear(struct pcc_chan_info *pchan)
 	u64 val;
 	int ret;
 
+	if (pchan->type == ACPI_PCCT_TYPE_EXT_PCC_SLAVE_SUBSPACE)
+		return 0;
+
 	ret = pcc_chan_reg_read(&pchan->error, &val);
 	if (ret)
 		return ret;
