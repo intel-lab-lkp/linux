@@ -109,9 +109,8 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		seq_puts(m, " mips64r5");
 	if (cpu_has_mips64r6)
 		seq_puts(m, " mips64r6");
-	seq_puts(m, "\n");
 
-	seq_puts(m, "ASEs implemented\t:");
+	seq_puts(m, "\nASEs implemented\t:");
 	if (cpu_has_mips16)
 		seq_puts(m, " mips16");
 	if (cpu_has_mips16e2)
