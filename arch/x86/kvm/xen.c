@@ -1798,6 +1798,7 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 	int port_word_bit;
 	bool kick_vcpu = false;
 	int vcpu_idx, idx, rc;
+	bool long_mode;
 
 	vcpu_idx = READ_ONCE(xe->vcpu_idx);
 	if (vcpu_idx >= 0)
@@ -1809,7 +1810,10 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 		WRITE_ONCE(xe->vcpu_idx, vcpu->vcpu_idx);
 	}
 
-	if (xe->port >= max_evtchn_port(kvm))
+	long_mode = IS_ENABLED(CONFIG_64BIT) && READ_ONCE(kvm->arch.xen.long_mode);
+
+	if (xe->port >= (long_mode ? EVTCHN_2L_NR_CHANNELS :
+				     COMPAT_EVTCHN_2L_NR_CHANNELS))
 		return -EINVAL;
 
 	rc = -EWOULDBLOCK;
@@ -1820,7 +1824,7 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 	if (!kvm_gpc_check(gpc, PAGE_SIZE))
 		goto out_rcu;
 
-	if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
+	if (long_mode) {
 		struct shared_info *shinfo = gpc->khva;
 		pending_bits = (unsigned long *)&shinfo->evtchn_pending;
 		mask_bits = (unsigned long *)&shinfo->evtchn_mask;
@@ -1861,7 +1865,7 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 			goto out_rcu;
 		}
 
-		if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
+		if (long_mode) {
 			struct vcpu_info *vcpu_info = gpc->khva;
 			if (!test_and_set_bit(port_word_bit, &vcpu_info->evtchn_pending_sel)) {
 				WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
