@@ -980,6 +980,17 @@ static inline bool sec_usage_check(struct f2fs_sb_info *sbi, unsigned int secno)
 {
 	if (is_cursec(sbi, secno) || (sbi->cur_victim_sec == secno))
 		return true;
+	if (f2fs_sb_has_device_alias(sbi) && f2fs_is_multi_device(sbi)) {
+		int i;
+		block_t start_blk = START_BLOCK(sbi, GET_SEG_FROM_SEC(sbi, secno));
+
+		for (i = 0; i < sbi->s_ndevs; i++) {
+			if (FDEV(i).is_excluding &&
+				start_blk >= FDEV(i).start_blk &&
+				start_blk <= FDEV(i).end_blk)
+				return true;
+		}
+	}
 	return false;
 }
 
