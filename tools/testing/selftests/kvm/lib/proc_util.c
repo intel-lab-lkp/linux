@@ -38,3 +38,23 @@ unsigned int vfio_msix_to_host_irq(const char *device_bdf, int msix)
 	return (unsigned int)irq;
 }
 
+FILE *open_proc_irq_smp_affinity_list(unsigned int irq)
+{
+	char path[PATH_MAX];
+	FILE *fp;
+
+	snprintf(path, sizeof(path), "/proc/irq/%u/smp_affinity_list", irq);
+	fp = fopen(path, "w");
+	TEST_ASSERT(fp, "fopen(%s) failed", path);
+
+	return fp;
+}
+
+void write_proc_irq_smp_affinity_list(FILE *fp, unsigned int irq, int irq_cpu)
+{
+	int ret;
+
+	ret = fprintf(fp, "%d\n", irq_cpu);
+	TEST_ASSERT(ret > 0, "Failed to affinitize IRQ-%u to CPU %d", irq, irq_cpu);
+	fflush(fp);
+}
