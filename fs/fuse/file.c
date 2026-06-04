@@ -23,6 +23,33 @@
 #include <linux/task_io_accounting_ops.h>
 #include <linux/iomap.h>
 
+/*
+ * Helper function to initialize fuse_args for OPEN/OPENDIR operations
+ */
+static void fuse_open_args_fill(struct fuse_mount *fm, struct fuse_args *args,
+				u64 nodeid, int opcode, unsigned int open_flags,
+				struct fuse_open_in *inarg,
+				struct fuse_open_out *outarg)
+{
+	inarg->flags = open_flags & ~(O_CREAT | O_EXCL | O_NOCTTY);
+
+	if (!fm->fc->atomic_o_trunc)
+		inarg->flags &= ~O_TRUNC;
+
+	if (fm->fc->handle_killpriv_v2 &&
+	    (inarg->flags & O_TRUNC) && !capable(CAP_FSETID))
+		inarg->open_flags |= FUSE_OPEN_KILL_SUIDGID;
+
+	args->opcode = opcode;
+	args->nodeid = nodeid;
+	args->in_numargs = 1;
+	args->in_args[0].size = sizeof(*inarg);
+	args->in_args[0].value = inarg;
+	args->out_numargs = 1;
+	args->out_args[0].size = sizeof(*outarg);
+	args->out_args[0].value = outarg;
+}
+
 static int fuse_send_open(struct fuse_mount *fm, u64 nodeid,
 			  unsigned int open_flags, int opcode,
 			  struct fuse_open_out *outargp)
@@ -31,23 +58,8 @@ static int fuse_send_open(struct fuse_mount *fm, u64 nodeid,
 	FUSE_ARGS(args);
 
 	memset(&inarg, 0, sizeof(inarg));
-	inarg.flags = open_flags & ~(O_CREAT | O_EXCL | O_NOCTTY);
-	if (!fm->fc->atomic_o_trunc)
-		inarg.flags &= ~O_TRUNC;
 
-	if (fm->fc->handle_killpriv_v2 &&
-	    (inarg.flags & O_TRUNC) && !capable(CAP_FSETID)) {
-		inarg.open_flags |= FUSE_OPEN_KILL_SUIDGID;
-	}
-
-	args.opcode = opcode;
-	args.nodeid = nodeid;
-	args.in_numargs = 1;
-	args.in_args[0].size = sizeof(inarg);
-	args.in_args[0].value = &inarg;
-	args.out_numargs = 1;
-	args.out_args[0].size = sizeof(*outargp);
-	args.out_args[0].value = outargp;
+	fuse_open_args_fill(fm, &args, nodeid, opcode, open_flags, &inarg, outargp);
 
 	return fuse_simple_request(fm, &args);
 }
