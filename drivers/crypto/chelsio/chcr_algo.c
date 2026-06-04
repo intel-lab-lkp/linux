@@ -1877,7 +1877,10 @@ static int chcr_ahash_finup(struct ahash_request *req)
 	req_ctx->hctx_wr.processed += params.sg_len;
 	skb->dev = u_ctx->lldi.ports[0];
 	set_wr_txq(skb, CPL_PRIORITY_DATA, req_ctx->txqidx);
-	chcr_send_wr(skb);
+	if (chcr_send_wr(skb)) {
+		error = -EIO;
+		goto unmap;
+	}
 	return -EINPROGRESS;
 unmap:
 	chcr_hash_dma_unmap(&u_ctx->lldi.pdev->dev, req);
