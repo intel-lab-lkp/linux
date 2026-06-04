@@ -46,6 +46,7 @@
 #include "fs_core.h"
 #include "lib/mlx5.h"
 #include "lib/devcom.h"
+#include "lib/sd.h"
 #include "lib/eq.h"
 #include "lib/fs_chains.h"
 #include "en_tc.h"
@@ -3164,6 +3165,9 @@ static void esw_unset_master_egress_rule(struct mlx5_core_dev *dev,
 	vport = mlx5_eswitch_get_vport(dev->priv.eswitch,
 				       dev->priv.eswitch->manager_vport);
 
+	if (!vport->egress.acl)
+		return;
+
 	esw_acl_egress_ofld_bounce_rule_destroy(vport, MLX5_CAP_GEN(slave_dev, vhca_id));
 
 	if (xa_empty(&vport->egress.offloads.bounce_rules)) {
@@ -3181,6 +3185,9 @@ int mlx5_eswitch_offloads_single_fdb_add_one(struct mlx5_eswitch *master_esw,
 				     slave_esw->dev);
 	if (err)
 		return err;
+
+	if (!mlx5_sd_is_primary(slave_esw->dev))
+		return 0;
 
 	err = esw_set_master_egress_rule(master_esw->dev,
 					 slave_esw->dev, max_slaves);
@@ -3401,7 +3408,7 @@ void mlx5_esw_offloads_devcom_init(struct mlx5_eswitch *esw,
 		return;
 
 	if ((MLX5_VPORT_MANAGER(esw->dev) || mlx5_core_is_ecpf_esw_manager(esw->dev)) &&
-	    !mlx5_lag_is_supported(esw->dev))
+	    (!mlx5_lag_is_supported(esw->dev) && !mlx5_get_sd(esw->dev)))
 		return;
 
 	xa_init(&esw->paired);
@@ -4219,11 +4226,6 @@ int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
 	if (IS_ERR(esw))
 		return PTR_ERR(esw);
 
-	if (mlx5_fw_reset_in_progress(esw->dev)) {
-		NL_SET_ERR_MSG_MOD(extack, "Can't change eswitch mode during firmware reset");
-		return -EBUSY;
-	}
-
 	if (esw_mode_from_devlink(mode, &mlx5_mode))
 		return -EINVAL;
 
@@ -4233,11 +4235,18 @@ int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
 		return -EPERM;
 	}
 
+	if (mlx5_fw_reset_in_progress(esw->dev)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Can't change eswitch mode during firmware reset");
+		return -EBUSY;
+	}
+
 	/* Avoid try_lock, active/inactive mode change is not restricted */
 	if (mlx5_devlink_switchdev_active_mode_change(esw, mode))
 		return 0;
 
 	mlx5_lag_disable_change(esw->dev);
+
 	err = mlx5_esw_try_lock(esw);
 	if (err < 0) {
 		NL_SET_ERR_MSG_MOD(extack, "Can't change mode, E-Switch is busy");
@@ -4304,6 +4313,9 @@ skip:
 	esw->eswitch_operation_in_progress = false;
 unlock:
 	mlx5_esw_unlock(esw);
+	/* Shared FDB activation is creating LAG which is changing reps. */
+	if (!err)
+		mlx5_sd_eswitch_mode_set(esw->dev, mlx5_mode);
 enable_lag:
 	mlx5_lag_enable_change(esw->dev);
 	return err;
