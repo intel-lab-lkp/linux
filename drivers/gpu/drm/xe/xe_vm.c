@@ -1106,7 +1106,11 @@ static struct xe_vma *xe_vma_create(struct xe_vm *vm,
 	vma->gpuva.vm = &vm->gpuvm;
 	vma->gpuva.va.addr = start;
 	vma->gpuva.va.range = end - start + 1;
-	vma->gpuva.flags = flags;
+	/* Pipeline-only, do not store in gpuva.flags. */
+	vma->gpuva.flags = flags & ~XE_VMA_CPU_AUTORESET_ACTIVE;
+	vma->cpu_autoreset_active =
+		(flags & XE_VMA_SYSTEM_ALLOCATOR) &&
+		(flags & XE_VMA_CPU_AUTORESET_ACTIVE);
 
 	for_each_tile(tile, vm->xe, id)
 		vma->tile_mask |= 0x1 << id;
@@ -2480,8 +2484,10 @@ vm_bind_ioctl_ops_create(struct xe_vm *vm, struct xe_vma_ops *vops,
 				op->map.vma_flags |= XE_VMA_SYSTEM_ALLOCATOR;
 			if (flags & DRM_XE_VM_BIND_FLAG_DUMPABLE)
 				op->map.vma_flags |= XE_VMA_DUMPABLE;
-			if (flags & DRM_XE_VM_BIND_FLAG_MADVISE_AUTORESET)
+			if (flags & DRM_XE_VM_BIND_FLAG_MADVISE_AUTORESET) {
 				op->map.vma_flags |= XE_VMA_MADV_AUTORESET;
+				op->map.vma_flags |= XE_VMA_CPU_AUTORESET_ACTIVE;
+			}
 			op->map.request_decompress = flags & DRM_XE_VM_BIND_FLAG_DECOMPRESS;
 			op->map.pat_index = pat_index;
 			op->map.invalidate_on_bind =
@@ -2801,6 +2807,9 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
 			};
 
 			flags |= op->map.vma_flags & XE_VMA_CREATE_MASK;
+			/* Forward pipeline-only state. */
+			if (op->map.vma_flags & XE_VMA_CPU_AUTORESET_ACTIVE)
+				flags |= XE_VMA_CPU_AUTORESET_ACTIVE;
 
 			vma = new_vma(vm, &op->base.map, &default_attr,
 				      flags);
@@ -2843,6 +2852,10 @@ static int vm_bind_ioctl_ops_parse(struct xe_vm *vm, struct drm_gpuva_ops *ops,
 			op->remap.old_range = op->remap.range;
 
 			flags |= op->base.remap.unmap->va->flags & XE_VMA_CREATE_MASK;
+			/* Forward pipeline-only state. */
+			if (xe_vma_has_cpu_autoreset_active(old))
+				flags |= XE_VMA_CPU_AUTORESET_ACTIVE;
+
 			if (op->base.remap.prev) {
 				vma = new_vma(vm, op->base.remap.prev,
 					      &old->attr, flags);
@@ -4694,6 +4707,17 @@ int xe_vma_need_vram_for_atomic(struct xe_device *xe, struct xe_vma *vma, bool i
 	}
 }
 
+/* Add pipeline-only autoreset state when rebuilding a VMA. */
+static unsigned int xe_vma_effective_create_flags(struct xe_vma *vma)
+{
+	unsigned int flags = vma->gpuva.flags;
+
+	if (xe_vma_has_cpu_autoreset_active(vma))
+		flags |= XE_VMA_CPU_AUTORESET_ACTIVE;
+
+	return flags;
+}
+
 static int xe_vm_alloc_vma(struct xe_vm *vm,
 			   struct drm_gpuvm_map_req *map_req,
 			   bool is_madvise)
@@ -4729,19 +4753,24 @@ static int xe_vm_alloc_vma(struct xe_vm *vm,
 		if (!is_madvise) {
 			if (__op->op == DRM_GPUVA_OP_UNMAP) {
 				vma = gpuva_to_vma(op->base.unmap.va);
-				XE_WARN_ON(!xe_vma_has_default_mem_attrs(vma));
+				/* AUTORESET VMAs may carry madvise-managed attrs. */
+				XE_WARN_ON(!xe_vma_has_default_mem_attrs(vma) &&
+					   !(vma->gpuva.flags & XE_VMA_MADV_AUTORESET));
 				default_pat = vma->attr.default_pat_index;
-				vma_flags = vma->gpuva.flags;
+				vma_flags = xe_vma_effective_create_flags(vma);
 			}
 
 			if (__op->op == DRM_GPUVA_OP_REMAP) {
 				vma = gpuva_to_vma(op->base.remap.unmap->va);
 				default_pat = vma->attr.default_pat_index;
-				vma_flags = vma->gpuva.flags;
+				vma_flags = xe_vma_effective_create_flags(vma);
 			}
 
 			if (__op->op == DRM_GPUVA_OP_MAP) {
 				op->map.vma_flags |= vma_flags & XE_VMA_CREATE_MASK;
+				/* Forward pipeline-only state. */
+				if (vma_flags & XE_VMA_CPU_AUTORESET_ACTIVE)
+					op->map.vma_flags |= XE_VMA_CPU_AUTORESET_ACTIVE;
 				op->map.pat_index = default_pat;
 			}
 		} else {
@@ -4750,7 +4779,7 @@ static int xe_vm_alloc_vma(struct xe_vm *vm,
 				xe_assert(vm->xe, !remap_op);
 				xe_assert(vm->xe, xe_vma_has_no_bo(vma));
 				remap_op = true;
-				vma_flags = vma->gpuva.flags;
+				vma_flags = xe_vma_effective_create_flags(vma);
 			}
 
 			if (__op->op == DRM_GPUVA_OP_MAP) {
@@ -4763,6 +4792,9 @@ static int xe_vm_alloc_vma(struct xe_vm *vm,
 				 * unmapping.
 				 */
 				op->map.vma_flags |= vma_flags & XE_VMA_CREATE_MASK;
+				/* Forward pipeline-only state. */
+				if (vma_flags & XE_VMA_CPU_AUTORESET_ACTIVE)
+					op->map.vma_flags |= XE_VMA_CPU_AUTORESET_ACTIVE;
 			}
 		}
 		print_op(vm->xe, __op);
