@@ -1692,10 +1692,27 @@ int st_lsm6dsx_set_page(struct st_lsm6dsx_hw *hw, bool enable)
 	return err;
 }
 
+static int st_lsm6dsx_get_page(struct st_lsm6dsx_hw *hw, bool *enable)
+{
+	const struct st_lsm6dsx_shub_settings *hub_settings;
+	unsigned int data;
+	int err;
+
+	hub_settings = &hw->settings->shub_settings;
+	err = regmap_read(hw->regmap, hub_settings->page_mux.addr, &data);
+	if (err < 0)
+		return err;
+
+	*enable = data & hub_settings->page_mux.mask;
+
+	return 0;
+}
+
 static int st_lsm6dsx_check_whoami(struct st_lsm6dsx_hw *hw, int id,
 				   const char **name)
 {
 	int err, i, j, data;
+	bool enable;
 
 	for (i = 0; i < ARRAY_SIZE(st_lsm6dsx_sensor_settings); i++) {
 		for (j = 0; j < ST_LSM6DSX_MAX_ID; j++) {
@@ -1712,6 +1729,30 @@ static int st_lsm6dsx_check_whoami(struct st_lsm6dsx_hw *hw, int id,
 		return -ENODEV;
 	}
 
+	hw->settings = &st_lsm6dsx_sensor_settings[i];
+
+	if (hw->settings->shub_settings.page_mux.addr) {
+		/*
+		 * whoami is not available in the shub register page.
+		 * Deselect the shub page if needed so whoami can be
+		 * correctly read.
+		 */
+		err = st_lsm6dsx_get_page(hw, &enable);
+		if (err < 0) {
+			dev_err(hw->dev, "failed to get shub page\n");
+			return err;
+		}
+
+		if (enable) {
+			dev_warn(hw->dev, "shub page selected; clearing it\n");
+			err = st_lsm6dsx_set_page(hw, false);
+			if (err < 0) {
+				dev_err(hw->dev, "failed to clear shub page\n");
+				return err;
+			}
+		}
+	}
+
 	err = regmap_read(hw->regmap, ST_LSM6DSX_REG_WHOAMI_ADDR, &data);
 	if (err < 0) {
 		dev_err(hw->dev, "failed to read whoami register\n");
@@ -1724,7 +1765,6 @@ static int st_lsm6dsx_check_whoami(struct st_lsm6dsx_hw *hw, int id,
 	}
 
 	*name = st_lsm6dsx_sensor_settings[i].id[j].name;
-	hw->settings = &st_lsm6dsx_sensor_settings[i];
 
 	return 0;
 }
