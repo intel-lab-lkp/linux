@@ -54,14 +54,31 @@ static struct atm_vcc *find_get_vcc(struct atm_vcc *vcc)
 
 static void sigd_put_skb(struct sk_buff *skb)
 {
-	if (!sigd) {
+	struct atm_vcc *vcc;
+	struct sock *sk;
+
+	vcc = find_get_vcc(READ_ONCE(sigd));
+	if (!vcc) {
 		pr_debug("atmsvc: no signaling daemon\n");
 		kfree_skb(skb);
 		return;
 	}
-	atm_force_charge(sigd, skb->truesize);
-	skb_queue_tail(&sk_atm(sigd)->sk_receive_queue, skb);
-	sk_atm(sigd)->sk_data_ready(sk_atm(sigd));
+	sk = sk_atm(vcc);
+
+	/* Pairs with sock_orphan() in sigd_close(). */
+	read_lock_bh(&sk->sk_callback_lock);
+	if (sock_flag(sk, SOCK_DEAD)) {
+		read_unlock_bh(&sk->sk_callback_lock);
+		sock_put(sk);
+		kfree_skb(skb);
+		return;
+	}
+	atm_force_charge(vcc, skb->truesize);
+	skb_queue_tail(&sk->sk_receive_queue, skb);
+	sk->sk_data_ready(sk);
+	read_unlock_bh(&sk->sk_callback_lock);
+
+	sock_put(sk);
 }
 
 static void modify_qos(struct atm_vcc *vcc, struct atmsvc_msg *msg)
@@ -257,6 +274,9 @@ static void sigd_close(struct atm_vcc *vcc)
 	if (skb_peek(&sk_atm(vcc)->sk_receive_queue))
 		pr_err("closing with requests pending\n");
 	skb_queue_purge(&sk_atm(vcc)->sk_receive_queue);
+
+	/* Make a concurrent sigd_put_skb() observe SOCK_DEAD and bail. */
+	sock_orphan(sk_atm(vcc));
 
 	read_lock(&vcc_sklist_lock);
 	for (i = 0; i < VCC_HTABLE_SIZE; ++i) {
