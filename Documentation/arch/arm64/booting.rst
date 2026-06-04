@@ -55,9 +55,6 @@ not exceed 2 megabytes in size. Since the dtb will be mapped cacheable
 using blocks of up to 2 megabytes in size, it must not be placed within
 any 2M region which must be mapped with any specific attributes.
 
-NOTE: versions prior to v4.2 also require that the DTB be placed within
-the 512 MB region starting at text_offset bytes below the kernel Image.
-
 3. Decompress the kernel image
 ------------------------------
 
@@ -93,18 +90,14 @@ Header notes:
 
 - As of v3.17, all fields are little endian unless stated otherwise.
 
+- As of v5.10, text_offset is always 0.
+
 - code0/code1 are responsible for branching to stext.
 
 - when booting through EFI, code0/code1 are initially skipped.
   res5 is an offset to the PE header and the PE header has the EFI
   entry point (efi_stub_entry).  When the stub has done its work, it
   jumps to code0 to resume the normal boot process.
-
-- Prior to v3.17, the endianness of text_offset was not specified.  In
-  these cases image_size is zero and text_offset is 0x80000 in the
-  endianness of the kernel.  Where image_size is non-zero image_size is
-  little-endian and must be respected.  Where image_size is zero,
-  text_offset can be assumed to be 0x80000.
 
 - The flags field (introduced in v3.17) is a little-endian 64-bit field
   composed as follows:
@@ -135,12 +128,9 @@ Header notes:
   end of the kernel image. The amount of space required will vary
   depending on selected features, and is effectively unbound.
 
-The Image must be placed text_offset bytes from a 2MB aligned base
-address anywhere in usable system RAM and called there. The region
-between the 2 MB aligned base address and the start of the image has no
-special significance to the kernel, and may be used for other purposes.
-At least image_size bytes from the start of the image must be free for
-use by the kernel.
+The Image must be placed at a 2MB aligned base address anywhere in
+usable system RAM and called there.  At least image_size bytes from
+the start of the image must be free for use by the kernel.
 NOTE: versions prior to v4.6 cannot make use of memory below the
 physical offset of the Image so it is recommended that the Image be
 placed as close as possible to the start of system RAM.
