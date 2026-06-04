@@ -274,10 +274,8 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		seq_puts(m, " mm_sysad");
 	if (cpu_has_mm_full)
 		seq_puts(m, " mm_full");
-	seq_puts(m, "\n");
 
-	seq_printf(m, "shadow register sets\t: %d\n",
-		      cpu_data[n].srsets);
+	seq_printf(m, "\nshadow register sets\t: %d\n", cpu_data[n].srsets);
 	seq_printf(m, "kscratch registers\t: %d\n",
 		      hweight8(cpu_data[n].kscratch_mask));
 	seq_printf(m, "package\t\t\t: %d\n", cpu_data[n].package);
