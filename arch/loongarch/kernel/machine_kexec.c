@@ -21,8 +21,14 @@
 #include <asm/cacheflush.h>
 #include <asm/page.h>
 
-/* 0x100000 ~ 0x200000 is safe */
-#define KEXEC_CONTROL_CODE	TO_CACHE(0x100000UL)
+/*
+ * The kexec'd kernel reads its command line from this pointer early in
+ * boot, so the command line must live in memory the new kernel will not
+ * reuse.  Keep it at a fixed address in the first 2MB, which both the
+ * current and the kexec'd kernel always keep reserved (see
+ * memblock_reserve(PHYS_OFFSET, 0x200000) in arch/loongarch/kernel/mem.c).
+ * 0x108000 does not overlap QEMU's machine FDT at 0x100000.
+ */
 #define KEXEC_CMDLINE_ADDR	TO_CACHE(0x108000UL)
 
 static unsigned long reboot_code_buffer;
@@ -72,9 +78,14 @@ int machine_kexec_prepare(struct kimage *kimage)
 		}
 	}
 
-	/* kexec/kdump need a safe page to save reboot_code_buffer */
-	kimage->control_code_page = virt_to_page((void *)KEXEC_CONTROL_CODE);
-
+	/*
+	 * kexec/kdump need a safe page to save reboot_code_buffer.  Reuse the
+	 * control_code_page allocated by the kexec core (as arm64 and riscv
+	 * do) instead of a fixed address: the trampoline is only executed by
+	 * the current kernel before entering the new kernel, so it needs no
+	 * fixed or reserved location.  This also stops machine_kexec_prepare()
+	 * from overwriting QEMU's machine FDT at 0x100000.
+	 */
 	reboot_code_buffer = (unsigned long)page_address(kimage->control_code_page);
 	memcpy((void *)reboot_code_buffer, relocate_new_kernel, relocate_new_kernel_size);
 
