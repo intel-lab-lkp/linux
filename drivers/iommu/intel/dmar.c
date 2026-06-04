@@ -915,14 +915,60 @@ dmar_validate_one_drhd(struct acpi_dmar_header *entry, void *arg)
 	return 0;
 }
 
+/*
+ * Centralized helper for deciding the force_on policy
+ *
+ * dmar disabled states (for DMA Remapping) are defined from stronger
+ * disables (more negative values) to weaker disables (less negative
+ * values).
+ *
+ * When a force_on type is passed in, it is associated to a reference
+ * level for comparison. force_on is permitted when dmar is in a
+ * disabled state less negative than the reference level (if dmar is
+ * enabled then the check is always true).
+ *
+ * For supported force_on types:
+ *
+ * - DMAR_FORCEON_TBOOT: tboot strictly requires DMA remapping for secure
+ *   boot hence supersedes any user opts ("iommu=off" or "intel_iommu=off")
+ *   and weaker disables.
+ *
+ * - DMAR_FORCEON_PLATFORM: external-facing devices requires DMA
+ *   remapping to prevent malicious downstream external devices from
+ *   composing DMA attacks. force_on is permitted only if dmar is disabled
+ *   by build configurations (CONFIG_INTEL_IOMMU_DEFAULT_ON=off).
+ */
+bool dmar_can_force_on(enum dmar_force_on force_on)
+{
+	int level;
+
+	switch (force_on) {
+	case DMAR_FORCEON_TBOOT:
+		level = DMAR_DISABLED_USER;
+		break;
+	case DMAR_FORCEON_PLATFORM:
+		level = DMAR_DISABLED_AUTO;
+		break;
+	default:
+		pr_warn("Unsupported force_on type (%d)\n", force_on);
+		/* '0' means returning true only when dmar is enabled */
+		level = 0;
+		break;
+	}
+
+	return dmar_state >= level;
+}
+
 static bool dmar_required(void)
 {
-	/* tboot supersedes any user/platform opt */
-	if (!intel_iommu_tboot_noforce && tboot_enabled())
+	if (dmar_is_enabled())
 		return true;
 
-	if (!no_iommu && (!dmar_disabled || dmar_platform_optin()))
-		return true;
+	if (!intel_iommu_tboot_noforce && tboot_enabled())
+		return dmar_can_force_on(DMAR_FORCEON_TBOOT);
+
+	if (dmar_platform_optin())
+		return dmar_can_force_on(DMAR_FORCEON_PLATFORM);
 
 	return false;
 }
@@ -936,6 +982,9 @@ void __init detect_intel_iommu(void)
 	};
 
 	down_write(&dmar_global_lock);
+	if (no_iommu)
+		dmar_state = DMAR_DISABLED_USER;
+
 	ret = dmar_table_detect();
 	if (!ret)
 		ret = dmar_walk_dmar_table((struct acpi_table_dmar *)dmar_tbl,
