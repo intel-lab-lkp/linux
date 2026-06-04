@@ -2453,4 +2453,24 @@ int offline_and_remove_memory(u64 start, u64 size)
 	return rc;
 }
 EXPORT_SYMBOL_GPL(offline_and_remove_memory);
+
+static memory_pre_unplug_callback_t memory_pre_unplug_callback __ro_after_init;
+
+void set_memory_pre_unplug_callback(memory_pre_unplug_callback_t callback)
+{
+	/* Fatal error to set callback twice in boot stage */
+	if (memory_pre_unplug_callback)
+		panic("memory_pre_unplug_callback is already registered\n");
+
+	memory_pre_unplug_callback = callback;
+}
+
+int memory_pre_unplug_call(u64 addr, u64 size)
+{
+	if (!memory_pre_unplug_callback)
+		return 0;
+
+	return (*memory_pre_unplug_callback)(addr, size);
+}
+EXPORT_SYMBOL_GPL(memory_pre_unplug_call);
 #endif /* CONFIG_MEMORY_HOTREMOVE */

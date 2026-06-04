@@ -29,6 +29,7 @@ enum mmop {
 };
 
 typedef int (*memory_post_plug_callback_t)(u64 addr, u64 size);
+typedef int (*memory_pre_unplug_callback_t)(u64 addr, u64 size);
 
 #ifdef CONFIG_MEMORY_HOTPLUG
 struct page *pfn_to_online_page(unsigned long pfn);
@@ -279,6 +280,9 @@ extern int remove_memory(u64 start, u64 size);
 extern void __remove_memory(u64 start, u64 size);
 extern int offline_and_remove_memory(u64 start, u64 size);
 
+void set_memory_pre_unplug_callback(memory_pre_unplug_callback_t callback);
+int memory_pre_unplug_call(u64 addr, u64 size);
+
 #else
 static inline void try_offline_node(int nid) {}
 
@@ -294,6 +298,12 @@ static inline int remove_memory(u64 start, u64 size)
 }
 
 static inline void __remove_memory(u64 start, u64 size) {}
+
+static inline void set_memory_pre_unplug_callback(memory_pre_unplug_callback_t callback) {}
+static inline int memory_pre_unplug_call(u64 addr, u64 size)
+{
+	return 0;
+}
 #endif /* CONFIG_MEMORY_HOTREMOVE */
 
 #ifdef CONFIG_MEMORY_HOTPLUG
