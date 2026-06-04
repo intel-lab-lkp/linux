@@ -686,6 +686,20 @@ Contact: Thomas Zimmermann <tzimmermann@suse.de>
 
 Level: Advanced
 
+Device address type wrappers
+-----------------------------
+
+The ``SizeConstants`` trait provides ``SZ_*`` constants as associated constants
+on ``u32``, ``u64``, and ``usize``. Device-centric APIs such as GPU VM
+management and buddy allocators could benefit from newtype wrappers around these
+integer types to represent device addresses and sizes. A separate marker trait
+could then serve as a generic bound for those wrappers. See the `original
+discussion <https://lore.kernel.org/all/DHJJJNP5T5FZ.2HWBMOEEKH9ZR@kernel.org/>`_.
+
+Contact: Danilo Krummrich <dakr@kernel.org>
+
+Level: Intermediate
+
 Better Testing
 ==============
 
