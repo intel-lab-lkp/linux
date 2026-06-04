@@ -19,6 +19,85 @@
 #include <linux/irq.h>
 
 /*
+ * Trampoline page tables. Both the VA(trampoline)->PA and the
+ * PA(trampoline)->PA identity mapping are installed in this single
+ * pgd; the lower-level tables are shared so the two mappings can
+ * coexist even if they happen to collide at any level (the walker
+ * only populates entries that are still zero).
+ *
+ * Pre-allocate for the largest paging mode (Sv57). Levels that the
+ * runtime mode does not use simply waste a page or two of BSS, in
+ * exchange for a builder that is infallible and safe to run from
+ * the panic path.
+ */
+static pgd_t kexec_tramp_pgd[PTRS_PER_PGD] __aligned(PAGE_SIZE);
+#ifdef CONFIG_64BIT
+static p4d_t kexec_tramp_p4d[PTRS_PER_P4D] __aligned(PAGE_SIZE);
+static pud_t kexec_tramp_pud[PTRS_PER_PUD] __aligned(PAGE_SIZE);
+static pmd_t kexec_tramp_pmd[PTRS_PER_PMD] __aligned(PAGE_SIZE);
+#endif
+static pte_t kexec_tramp_pte[PTRS_PER_PTE] __aligned(PAGE_SIZE);
+
+static void map_tramp_page(unsigned long va, unsigned long pa)
+{
+	pgd_t *pgd = kexec_tramp_pgd + pgd_index(va);
+
+#ifdef CONFIG_64BIT
+	p4d_t *p4d;
+	pud_t *pud;
+	pmd_t *pmd;
+
+	if (pgtable_l5_enabled) {
+		if (pgd_val(*pgd) == 0)
+			set_pgd(pgd, pfn_pgd(PFN_DOWN(__pa_symbol(kexec_tramp_p4d)),
+					     PAGE_TABLE));
+		p4d = kexec_tramp_p4d + p4d_index(va);
+	} else {
+		p4d = (p4d_t *)pgd;
+	}
+
+	if (pgtable_l4_enabled) {
+		if (p4d_val(*p4d) == 0)
+			set_p4d(p4d, pfn_p4d(PFN_DOWN(__pa_symbol(kexec_tramp_pud)),
+					     PAGE_TABLE));
+		pud = kexec_tramp_pud + pud_index(va);
+	} else {
+		pud = (pud_t *)p4d;
+	}
+
+	if (pud_val(*pud) == 0)
+		set_pud(pud, pfn_pud(PFN_DOWN(__pa_symbol(kexec_tramp_pmd)),
+				     PAGE_TABLE));
+	pmd = kexec_tramp_pmd + pmd_index(va);
+
+	if (pmd_val(*pmd) == 0)
+		set_pmd(pmd, pfn_pmd(PFN_DOWN(__pa_symbol(kexec_tramp_pte)),
+				     PAGE_TABLE));
+#else
+	/* Sv32: PGD points directly to the PTE table. */
+	if (pgd_val(*pgd) == 0)
+		set_pgd(pgd, pfn_pgd(PFN_DOWN(__pa_symbol(kexec_tramp_pte)),
+				     PAGE_TABLE));
+#endif
+
+	set_pte(kexec_tramp_pte + pte_index(va),
+		pfn_pte(PFN_DOWN(pa), PAGE_KERNEL_EXEC));
+}
+
+static void riscv_kexec_build_tramp(unsigned long va, unsigned long pa)
+{
+	/* VA -> PA: map the trampoline page via its kernel VA. */
+	map_tramp_page(va, pa);
+
+	/*
+	 * PA -> PA: identity-map the same page so the second-pass code
+	 * can keep executing after the kernel VA mapping is dropped.
+	 */
+	map_tramp_page(pa, pa);
+}
+
+
+/*
  * machine_kexec_prepare - Initialize kexec
  *
  * This function is called from do_kexec_load, when the user has
@@ -73,6 +152,14 @@ machine_kexec_prepare(struct kimage *image)
 
 		/* Mark the control page executable */
 		set_memory_x((unsigned long) control_code_buffer, 1);
+	} else {
+		/*
+		 * Crash kexec uses riscv_kexec_norelocate as a trampoline.
+		 * Pre-build the trampoline page tables here so the panic
+		 * path only has to switch satp and jump.
+		 */
+		riscv_kexec_build_tramp((unsigned long)__kexec_tramp_text_start,
+					__pa_symbol(__kexec_tramp_text_start));
 	}
 
 	return 0;
