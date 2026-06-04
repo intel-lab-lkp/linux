@@ -1214,7 +1214,7 @@ void serial_test_token(void)
 		struct bpffs_opts opts = {
 			/* allow BTF loading */
 			.cmds = bit(BPF_BTF_LOAD) | bit(BPF_MAP_CREATE) | bit(BPF_PROG_LOAD),
-			.maps = bit(BPF_MAP_TYPE_STRUCT_OPS),
+			.maps = bit(BPF_MAP_TYPE_STRUCT_OPS) | bit(BPF_MAP_TYPE_ARRAY),
 			.progs = bit(BPF_PROG_TYPE_STRUCT_OPS),
 			.attachs = ~0ULL,
 		};
@@ -1225,7 +1225,7 @@ void serial_test_token(void)
 		struct bpffs_opts opts = {
 			/* allow BTF loading */
 			.cmds = bit(BPF_BTF_LOAD) | bit(BPF_MAP_CREATE) | bit(BPF_PROG_LOAD),
-			.maps = bit(BPF_MAP_TYPE_STRUCT_OPS),
+			.maps = bit(BPF_MAP_TYPE_STRUCT_OPS) | bit(BPF_MAP_TYPE_ARRAY),
 			.progs = bit(BPF_PROG_TYPE_STRUCT_OPS),
 			.attachs = ~0ULL,
 		};
@@ -1236,7 +1236,7 @@ void serial_test_token(void)
 		struct bpffs_opts opts = {
 			/* allow BTF loading */
 			.cmds = bit(BPF_BTF_LOAD) | bit(BPF_MAP_CREATE) | bit(BPF_PROG_LOAD),
-			.maps = bit(BPF_MAP_TYPE_STRUCT_OPS),
+			.maps = bit(BPF_MAP_TYPE_STRUCT_OPS) | bit(BPF_MAP_TYPE_ARRAY),
 			.progs = bit(BPF_PROG_TYPE_STRUCT_OPS),
 			.attachs = ~0ULL,
 		};
