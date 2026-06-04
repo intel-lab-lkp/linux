@@ -339,6 +339,29 @@ static void create_cc_param_debugfs(struct hns_roce_dev *hr_dev,
 	}
 }
 
+static int gsi_sl_debugfs_read(struct seq_file *seq, void *data)
+{
+	struct hns_roce_dev *hr_dev = data;
+
+	seq_printf(seq, "%u\n", hr_dev->gsi_sl);
+	return 0;
+}
+
+static ssize_t gsi_sl_debugfs_write(char *buf, size_t count, void *data)
+{
+	struct hns_roce_dev *hr_dev = data;
+	u32 val;
+
+	if (kstrtou32(buf, 0, &val))
+		return -EINVAL;
+
+	if (val > MAX_SERVICE_LEVEL)
+		return -EINVAL;
+
+	hr_dev->gsi_sl = val;
+	return count;
+}
+
 /* debugfs for device */
 void hns_roce_register_debugfs(struct hns_roce_dev *hr_dev)
 {
@@ -349,6 +372,13 @@ void hns_roce_register_debugfs(struct hns_roce_dev *hr_dev)
 
 	create_sw_stat_debugfs(hr_dev, dbgfs->root);
 	create_cc_param_debugfs(hr_dev, dbgfs->root);
+
+	dbgfs->gsi_sl_seqfile.read = gsi_sl_debugfs_read;
+	dbgfs->gsi_sl_seqfile.write = gsi_sl_debugfs_write;
+	dbgfs->gsi_sl_seqfile.data = hr_dev;
+	debugfs_create_file("gsi_sl", 0600, dbgfs->root,
+			    &dbgfs->gsi_sl_seqfile,
+			    &hns_debugfs_seqfile_fops);
 }
 
 void hns_roce_unregister_debugfs(struct hns_roce_dev *hr_dev)
