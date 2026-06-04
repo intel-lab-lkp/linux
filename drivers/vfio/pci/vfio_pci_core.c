@@ -29,6 +29,7 @@
 #include <linux/sched/mm.h>
 #include <linux/iommufd.h>
 #include <linux/pci-p2pdma.h>
+#include <linux/pci-tph.h>
 #if IS_ENABLED(CONFIG_EEH)
 #include <asm/eeh.h>
 #endif
@@ -1535,6 +1536,72 @@ static int vfio_pci_core_feature_tph_enable(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 
+static int vfio_pci_core_feature_tph_cpu_st(struct vfio_pci_core_device *vdev,
+			u32 flags,
+			struct vfio_device_feature_tph_cpu_st __user *arg,
+			size_t argsz)
+{
+	struct vfio_device_feature_tph_cpu_st cpu_st;
+	struct pci_dev *pdev = vdev->pdev;
+	enum tph_mem_type mtype;
+	void __user *uptr;
+	bool extended;
+	int i, ret;
+	u32 *cpus;
+	u16 *sts;
+	u16 st;
+
+	if (!vdev->tph_permit)
+		return -EOPNOTSUPP;
+
+	ret = vfio_check_feature(flags, argsz, VFIO_DEVICE_FEATURE_GET,
+				 sizeof(cpu_st));
+	if (ret <= 0)
+		return ret;
+
+	if (copy_from_user(&cpu_st, arg, sizeof(cpu_st)))
+		return -EFAULT;
+
+	if (cpu_st.flags & ~(VFIO_TPH_CPU_ST_MEM_TYPE_MASK |
+			     VFIO_TPH_CPU_ST_REQ_TYPE_MASK) ||
+		cpu_st.count == 0 || cpu_st.count > nr_cpu_ids ||
+		cpu_st.reserved != 0)
+		return -EINVAL;
+
+	uptr = u64_to_user_ptr(cpu_st.data_uptr);
+	cpus = memdup_array_user(uptr, cpu_st.count, sizeof(u32));
+	if (IS_ERR(cpus))
+		return PTR_ERR(cpus);
+
+	sts = kcalloc(cpu_st.count, sizeof(u16), GFP_KERNEL);
+	if (!sts) {
+		ret = -ENOMEM;
+		goto out_free_cpus;
+	}
+
+	mtype = (cpu_st.flags & VFIO_TPH_CPU_ST_MEM_TYPE_MASK) ==
+		VFIO_TPH_CPU_ST_MEM_TYPE_VM ? TPH_MEM_TYPE_VM : TPH_MEM_TYPE_PM;
+	extended = !!(cpu_st.flags & VFIO_TPH_CPU_ST_REQ_TYPE_MASK);
+
+	for (i = 0; i < cpu_st.count; i++) {
+		ret = pcie_tph_get_cpu_st_explicit(pdev, mtype, extended,
+						   cpus[i], &st);
+		if (ret)
+			goto out_free_sts;
+		sts[i] = st;
+	}
+
+	ret = copy_to_user(uptr, sts, cpu_st.count * sizeof(u16));
+	if (ret)
+		ret = -EFAULT;
+
+out_free_sts:
+	kfree(sts);
+out_free_cpus:
+	kfree(cpus);
+	return ret;
+}
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
@@ -1555,6 +1622,9 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 		return vfio_pci_core_feature_dma_buf(vdev, flags, arg, argsz);
 	case VFIO_DEVICE_FEATURE_TPH_ENABLE:
 		return vfio_pci_core_feature_tph_enable(vdev, flags, argsz);
+	case VFIO_DEVICE_FEATURE_TPH_CPU_ST:
+		return vfio_pci_core_feature_tph_cpu_st(vdev, flags,
+							arg, argsz);
 	default:
 		return -ENOTTY;
 	}
