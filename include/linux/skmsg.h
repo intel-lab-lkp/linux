@@ -283,6 +283,15 @@ static inline void sk_msg_sg_copy(struct sk_msg *msg, u32 i, bool copy_state)
 	} while (1);
 }
 
+static inline void sk_msg_sg_copy_one(struct sk_msg *dst, u32 dst_i,
+				      const struct sk_msg *src, u32 src_i)
+{
+	if (test_bit(src_i, src->sg.copy))
+		__set_bit(dst_i, dst->sg.copy);
+	else
+		__clear_bit(dst_i, dst->sg.copy);
+}
+
 static inline void sk_msg_sg_copy_set(struct sk_msg *msg, u32 start)
 {
 	sk_msg_sg_copy(msg, start, true);
