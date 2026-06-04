@@ -299,6 +299,11 @@ static bool nf_flow_exceeds_mtu(const struct sk_buff *skb, unsigned int mtu)
 
 static inline bool nf_flow_dst_check(struct flow_offload_tuple *tuple)
 {
+	if (tuple->tun_num &&
+	    tuple->xmit_type == FLOW_OFFLOAD_XMIT_DIRECT &&
+	    !dst_check(tuple->tun_dst_cache, tuple->tun_dst_cookie))
+		return false;
+
 	if (tuple->xmit_type != FLOW_OFFLOAD_XMIT_NEIGH &&
 	    tuple->xmit_type != FLOW_OFFLOAD_XMIT_XFRM)
 		return true;
@@ -597,7 +602,9 @@ static int nf_flow_tunnel_ipip_push(struct net *net, struct sk_buff *skb,
 				    __be32 *ip_daddr)
 {
 	struct iphdr *iph = (struct iphdr *)skb_network_header(skb);
-	struct rtable *rt = dst_rtable(tuple->dst_cache);
+	struct dst_entry *dst = tuple->xmit_type == FLOW_OFFLOAD_XMIT_DIRECT ?
+				tuple->tun_dst_cache : tuple->dst_cache;
+	struct rtable *rt = dst_rtable(dst);
 	u8 tos = iph->tos, ttl = iph->ttl;
 	__be16 frag_off = iph->frag_off;
 	u32 headroom = sizeof(*iph);
@@ -660,7 +667,9 @@ static int nf_flow_tunnel_ip6ip6_push(struct net *net, struct sk_buff *skb,
 {
 	struct ipv6hdr *ip6h = (struct ipv6hdr *)skb_network_header(skb);
 	u8 hop_limit = ip6h->hop_limit, proto = IPPROTO_IPV6;
-	struct rtable *rt = dst_rtable(tuple->dst_cache);
+	struct dst_entry *dst = tuple->xmit_type == FLOW_OFFLOAD_XMIT_DIRECT ?
+				tuple->tun_dst_cache : tuple->dst_cache;
+	struct rtable *rt = dst_rtable(dst);
 	__u8 dsfield = ipv6_get_dsfield(ip6h);
 	struct flowi6 fl6 = {
 		.daddr = tuple->tun.src_v6,
