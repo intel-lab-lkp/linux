@@ -86,12 +86,7 @@ static int fsl_ifc_ctrl_init(struct fsl_ifc_ctrl *ctrl)
 
 static void fsl_ifc_ctrl_remove(struct platform_device *dev)
 {
-	struct fsl_ifc_ctrl *ctrl = dev_get_drvdata(&dev->dev);
-
 	of_platform_depopulate(&dev->dev);
-	if (ctrl->nand_irq > 0)
-		free_irq(ctrl->nand_irq, ctrl);
-	free_irq(ctrl->irq, ctrl);
 }
 
 /*
@@ -253,39 +248,31 @@ static int fsl_ifc_ctrl_probe(struct platform_device *dev)
 
 	init_waitqueue_head(&fsl_ifc_ctrl_dev->nand_wait);
 
-	ret = request_irq(fsl_ifc_ctrl_dev->irq, fsl_ifc_ctrl_irq, IRQF_SHARED,
-			  "fsl-ifc", fsl_ifc_ctrl_dev);
+	ret = devm_request_irq(&dev->dev, fsl_ifc_ctrl_dev->irq,
+			       fsl_ifc_ctrl_irq, IRQF_SHARED,
+			       "fsl-ifc", fsl_ifc_ctrl_dev);
 	if (ret != 0) {
 		dev_err(&dev->dev, "failed to install irq (%d)\n",
 			fsl_ifc_ctrl_dev->irq);
-		goto err_free_irq;
+		return ret;
 	}
 
 	/* get the nand machine irq */
 	fsl_ifc_ctrl_dev->nand_irq = platform_get_irq_optional(dev, 1);
 	if (fsl_ifc_ctrl_dev->nand_irq > 0) {
-		ret = request_irq(fsl_ifc_ctrl_dev->nand_irq, fsl_ifc_nand_irq,
-				0, "fsl-ifc-nand", fsl_ifc_ctrl_dev);
+		ret = devm_request_irq(&dev->dev,
+				       fsl_ifc_ctrl_dev->nand_irq,
+				       fsl_ifc_nand_irq, 0,
+				       "fsl-ifc-nand", fsl_ifc_ctrl_dev);
 		if (ret != 0) {
 			dev_err(&dev->dev, "failed to install irq (%d)\n",
 				fsl_ifc_ctrl_dev->nand_irq);
-			goto err_free_irq;
+			return ret;
 		}
 	}
 
 	/* legacy dts may still use "simple-bus" compatible */
-	ret = of_platform_default_populate(dev->dev.of_node, NULL, &dev->dev);
-	if (ret)
-		goto err_free_nandirq;
-
-	return 0;
-
-err_free_nandirq:
-	if (fsl_ifc_ctrl_dev->nand_irq > 0)
-		free_irq(fsl_ifc_ctrl_dev->nand_irq, fsl_ifc_ctrl_dev);
-err_free_irq:
-	free_irq(fsl_ifc_ctrl_dev->irq, fsl_ifc_ctrl_dev);
-	return ret;
+	return of_platform_default_populate(dev->dev.of_node, NULL, &dev->dev);
 }
 
 static const struct of_device_id fsl_ifc_match[] = {
