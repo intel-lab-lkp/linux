@@ -567,6 +567,8 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 
 	vdev->reset_works = !ret;
 
+	/* Reset TPH status on new user session */
+	pcie_disable_tph(vdev->pdev);
 	ret = vfio_pci_tph_init(vdev);
 	if (ret)
 		goto out_disable_device;
@@ -696,6 +698,8 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 	kfree(vdev->region);
 	vdev->region = NULL; /* don't krealloc a freed pointer */
 
+	/* Reset TPH status on session exit */
+	pcie_disable_tph(vdev->pdev);
 	vfio_pci_tph_deinit(vdev);
 	vfio_config_free(vdev);
 
