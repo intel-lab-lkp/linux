@@ -5,6 +5,7 @@
 //! C header: [`include/linux/xarray.h`](srctree/include/linux/xarray.h)
 
 use core::{
+    convert::Infallible,
     iter,
     marker::PhantomData,
     pin::Pin,
@@ -23,11 +24,17 @@ use kernel::{
     bindings,
     build_assert, //
     error::{
+        code::*,
         to_result,
         Error,
         Result, //
     },
     ffi::c_void,
+    mm::sheaf::{
+        KMemCache,
+        SBox,
+        StaticSheaf, //
+    },
     types::{
         ForeignOwnable,
         NotThreadSafe,
@@ -35,11 +42,53 @@ use kernel::{
     },
 };
 use pin_init::{
+    init,
     pin_data,
     pin_init,
     pinned_drop,
+    Init,
     PinInit, //
 };
+
+/// Sheaf of preallocated [`XArray`] nodes.
+pub type XArraySheaf<'a> = StaticSheaf<'a, XArrayNode>;
+
+/// Returns a reference to the global XArray node cache.
+///
+/// This provides access to the kernel's `radix_tree_node_cachep`, which is the
+/// slab cache used for allocating internal XArray nodes. This cache can be used
+/// to create sheaves for preallocating XArray nodes.
+pub fn xarray_kmem_cache() -> &'static KMemCache<XArrayNode> {
+    // SAFETY: `radix_tree_node_cachep` is a valid, statically initialized
+    // kmem_cache that remains valid for the lifetime of the kernel. The cache
+    // is configured for `xa_node` objects which match our `XArrayNode` type.
+    unsafe { KMemCache::from_raw(bindings::radix_tree_node_cachep) }
+}
+
+/// An preallocated XArray node.
+///
+/// This represents a single preallocated internal node for an XArray.
+pub struct XArrayNode {
+    node: Opaque<bindings::xa_node>,
+}
+
+impl kernel::mm::sheaf::KMemCacheInit<XArrayNode> for XArrayNode {
+    fn init() -> impl Init<Self, Infallible> {
+        init!(Self {
+            // SAFETY:
+            // - This initialization cannot fail and will never return `Err`.
+            // - The xa_node does not move during initalization.
+            node <- unsafe {
+                pin_init::init_from_closure(
+                    |place: *mut Opaque<bindings::xa_node>| -> Result<(), Infallible> {
+                        bindings::radix_tree_node_ctor(place.cast::<c_void>());
+                        Ok(())
+                    },
+                )
+            }
+        })
+    }
+}
 
 /// An array which efficiently maps sparse integer indices to owned objects.
 ///
@@ -137,15 +186,22 @@ impl<T: ForeignOwnable> XArray<T> {
         let mut index = 0;
 
         // SAFETY: `self.xa` is always valid by the type invariant.
-        iter::once(unsafe {
-            bindings::xa_find(self.xa.get(), &mut index, usize::MAX, bindings::XA_PRESENT)
-        })
-        .chain(iter::from_fn(move || {
-            // SAFETY: `self.xa` is always valid by the type invariant.
-            Some(unsafe {
-                bindings::xa_find_after(self.xa.get(), &mut index, usize::MAX, bindings::XA_PRESENT)
-            })
-        }))
+        Iterator::chain(
+            iter::once(unsafe {
+                bindings::xa_find(self.xa.get(), &mut index, usize::MAX, bindings::XA_PRESENT)
+            }),
+            iter::from_fn(move || {
+                // SAFETY: `self.xa` is always valid by the type invariant.
+                Some(unsafe {
+                    bindings::xa_find_after(
+                        self.xa.get(),
+                        &mut index,
+                        usize::MAX,
+                        bindings::XA_PRESENT,
+                    )
+                })
+            }),
+        )
         .map_while(|ptr| NonNull::new(ptr.cast()))
     }
 
@@ -166,7 +222,6 @@ impl<T: ForeignOwnable> XArray<T> {
     pub fn lock(&self) -> Guard<'_, T> {
         // SAFETY: `self.xa` is always valid by the type invariant.
         unsafe { bindings::xa_lock(self.xa.get()) };
-
         Guard {
             xa: self,
             _not_send: NotThreadSafe,
@@ -250,7 +305,7 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
     ///
     /// match guard.entry(42) {
     ///     Entry::Vacant(entry) => {
-    ///         entry.insert(KBox::new(0x1337u32, GFP_KERNEL)?)?;
+    ///         entry.insert(KBox::new(0x1337u32, GFP_ATOMIC)?, None)?;
     ///     }
     ///     Entry::Occupied(_) => unreachable!("We did not insert an entry yet"),
     /// }
@@ -455,6 +510,45 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
             Ok(unsafe { T::try_from_foreign(old) })
         }
     }
+
+    /// Inserts a value and returns an occupied entry for further operations.
+    ///
+    /// If a value is already present, the operation fails.
+    ///
+    /// This method will not drop the XArray lock. If memory allocation is
+    /// required for the operation to succeed, the user should supply memory
+    /// through the `preload` argument.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::{prelude::*, xarray::{AllocKind, XArray}};
+    /// let mut xa = KBox::pin_init(XArray::<KBox<u32>>::new(AllocKind::Alloc), GFP_KERNEL)?;
+    /// let mut guard = xa.lock();
+    ///
+    /// assert_eq!(guard.get(42), None);
+    ///
+    /// let value = KBox::new(0x1337u32, GFP_ATOMIC)?;
+    /// let entry = guard.insert_entry(42, value, None)?;
+    /// let borrowed = entry.into_mut();
+    /// assert_eq!(borrowed, &0x1337);
+    ///
+    /// # Ok::<(), kernel::error::Error>(())
+    /// ```
+    pub fn insert_entry<'b>(
+        &'b mut self,
+        index: usize,
+        value: T,
+        preload: Option<&mut XArraySheaf<'_>>,
+    ) -> Result<OccupiedEntry<'a, 'b, T>, StoreError<T>> {
+        match self.entry(index) {
+            Entry::Vacant(entry) => entry.insert_entry(value, preload),
+            Entry::Occupied(_) => Err(StoreError {
+                error: EBUSY,
+                value,
+            }),
+        }
+    }
 }
 
 /// A reference to a [`Guard`], either shared or mutable, that exposes the
@@ -491,6 +585,30 @@ impl<'a, T: ForeignOwnable> GuardRef for &mut Guard<'a, T> {
 pub(crate) struct XArrayState<R: GuardRef> {
     guard: R,
     state: bindings::xa_state,
+}
+
+impl<R: GuardRef> Drop for XArrayState<R> {
+    fn drop(&mut self) {
+        free_xa_alloc(&mut self.state);
+    }
+}
+
+fn free_xa_alloc(state: &mut bindings::xa_state) {
+    if !state.xa_alloc.is_null() {
+        // SAFETY:
+        // - `xa_alloc` is only set via `SBox::into_ptr()` in `insert()` where
+        //   the node comes from an `XArraySheaf` backed by `radix_tree_node_cachep`.
+        // - `xa_alloc` points to a valid, initialized `XArrayNode`.
+        // - The caller has exclusive ownership of `xa_alloc`, and no other
+        //   `SBox` or reference exists for this value.
+        drop(unsafe {
+            SBox::<XArrayNode>::static_from_ptr(
+                bindings::radix_tree_node_cachep,
+                state.xa_alloc.cast(),
+            )
+        });
+        state.xa_alloc = null_mut();
+    }
 }
 
 impl<R: GuardRef> XArrayState<R> {
@@ -536,15 +654,36 @@ impl<R: GuardRef> XArrayState<R> {
         to_result(unsafe { bindings::xas_error(&self.state) })
     }
 
-    fn insert(&mut self, value: R::Value) -> Result<*mut c_void, StoreError<R::Value>> {
+    fn insert(
+        &mut self,
+        value: R::Value,
+        mut preload: Option<&mut XArraySheaf<'_>>,
+    ) -> Result<*mut c_void, StoreError<R::Value>> {
         let new = R::Value::into_foreign(value).cast();
 
-        // SAFETY: `self.state` is a valid `xa_state` by the type invariant. By the same
-        // invariant, `self.state.xa` aliases the xarray reachable through `self.guard`,
-        // whose lock we hold. `new` came from `R::Value::into_foreign`.
-        unsafe { bindings::xas_store(&mut self.state, new) };
+        loop {
+            // SAFETY: `self.state` is a valid `xa_state` by the type invariant. By the same
+            // invariant, `self.state.xa` aliases the xarray reachable through `self.guard`,
+            // whose lock we hold. `new` came from `R::Value::into_foreign`.
+            unsafe { bindings::xas_store(&mut self.state, new) };
 
-        self.status().map(|()| new).map_err(|error| {
+            match self.status() {
+                Ok(()) => break Ok(new),
+                Err(ENOMEM) => {
+                    debug_assert!(self.state.xa_alloc.is_null());
+                    let node = match preload.as_mut().map(|sheaf| sheaf.alloc().ok_or(ENOMEM)) {
+                        None => break Err(ENOMEM),
+                        Some(Err(e)) => break Err(e),
+                        Some(Ok(node)) => node,
+                    };
+
+                    self.state.xa_alloc = node.into_ptr().cast();
+                    continue;
+                }
+                Err(e) => break Err(e),
+            }
+        }
+        .map_err(|error| {
             // SAFETY: `new` came from `R::Value::into_foreign` and `xas_store` does not take
             // ownership of the value on error.
             let value = unsafe { R::Value::from_foreign(new) };
@@ -554,9 +693,15 @@ impl<R: GuardRef> XArrayState<R> {
 }
 
 impl<'a, 'b, T: ForeignOwnable> XArrayState<&'b mut Guard<'a, T>> {
-    /// Consumes `self` and returns the inner `&mut Guard`.
+    /// Consumes `self`, releases any preallocated node held in `xa_alloc`, and
+    /// returns the inner `&mut Guard`.
     pub(crate) fn into_guard(self) -> &'b mut Guard<'a, T> {
-        self.guard
+        // Suppress the `Drop` impl so we can move `guard` out by hand.
+        let mut this = core::mem::ManuallyDrop::new(self);
+        free_xa_alloc(&mut this.state);
+        // SAFETY: `ManuallyDrop` prevents `Drop::drop` from running, so this is the only place
+        // that consumes `guard`. `state` has no other resources after `free_xa_alloc`.
+        unsafe { core::ptr::read(&this.guard) }
     }
 }
 
