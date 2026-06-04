@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+# Copyright 2026 Realtek Semiconductor Corporation
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/soc/realtek/realtek,rtd1625-io-detect.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Realtek DHC I/O Level Detector
+
+maintainers:
+  - Tzuyi Chang <tychang@realtek.com>
+
+description: |
+  The Realtek DHC I/O Level Detector is a hardware block that detects I/O
+  signaling levels (such as 1.8V or 3.3V) to determine the correct pad
+  configurations for specific IP blocks.
+
+properties:
+  compatible:
+    const: realtek,rtd1625-io-detect
+
+  pinctrl-names:
+    items:
+      - const: rgmii_1v8
+      - const: rgmii_3v3
+      - const: sdio_1v8
+      - const: sdio_3v3
+      - const: csi_1v8
+      - const: csi_3v3
+      - const: sd_1v8
+      - const: sd_3v3
+      - const: uart1_1v8
+      - const: uart1_3v3
+      - const: aio_1v8
+      - const: aio_3v3
+      - const: emmc_1v8
+      - const: emmc_3v3
+
+  realtek,iso-pinctrl:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Pinctrl phandle containing I/O detection registers.
+
+required:
+  - compatible
+  - pinctrl-names
+  - realtek,iso-pinctrl
+
+additionalProperties: false
+
+examples:
+  - |
+    io-detect {
+        compatible = "realtek,rtd1625-io-detect";
+        pinctrl-names = "rgmii_1v8", "rgmii_3v3",
+                        "sdio_1v8", "sdio_3v3",
+                        "csi_1v8", "csi_3v3",
+                        "sd_1v8", "sd_3v3",
+                        "uart1_1v8", "uart1_3v3",
+                        "aio_1v8", "aio_3v3",
+                        "emmc_1v8", "emmc_3v3";
+        pinctrl-0 = <&rgmii_vsel_1v8_pins>;
+        pinctrl-1 = <&rgmii_vsel_3v3_pins>;
+        pinctrl-2 = <&sdio_vsel_1v8_pins>;
+        pinctrl-3 = <&sdio_vsel_3v3_pins>;
+        pinctrl-4 = <&csi_vsel_1v8_pins>;
+        pinctrl-5 = <&csi_vsel_3v3_pins>;
+        pinctrl-6 = <&sd_vsel_1v8_pins>;
+        pinctrl-7 = <&sd_vsel_3v3_pins>;
+        pinctrl-8 = <&uart1_vsel_1v8_pins>;
+        pinctrl-9 = <&uart1_vsel_3v3_pins>;
+        pinctrl-10 = <&aio_vsel_1v8_pins>;
+        pinctrl-11 = <&aio_vsel_3v3_pins>;
+        pinctrl-12 = <&emmc_vsel_1v8_pins>;
+        pinctrl-13 = <&emmc_vsel_3v3_pins>;
+        realtek,iso-pinctrl = <&iso_pinctrl>;
+    };
