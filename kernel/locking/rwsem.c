@@ -85,7 +85,8 @@
  * Bit  0    - writer locked bit
  * Bit  1    - waiters present bit
  * Bit  2    - lock handoff bit
- * Bits 3-7  - reserved
+ * Bit  3    - writer phase bit
+ * Bits 4-7  - reserved
  * Bits 8-62 - 55-bit reader count
  * Bit  63   - read fail bit
  *
@@ -94,7 +95,8 @@
  * Bit  0    - writer locked bit
  * Bit  1    - waiters present bit
  * Bit  2    - lock handoff bit
- * Bits 3-7  - reserved
+ * Bit  3    - writer phase bit
+ * Bits 4-7  - reserved
  * Bits 8-30 - 23-bit reader count
  * Bit  31   - read fail bit
  *
@@ -106,10 +108,11 @@
  * atomic_long_fetch_add() is used to obtain reader lock, whereas
  * atomic_long_cmpxchg() will be used to obtain writer lock.
  *
- * There are three places where the lock handoff bit may be set or cleared.
- * 1) rwsem_mark_wake() for readers		-- set, clear
- * 2) rwsem_try_write_lock() for writers	-- set, clear
- * 3) rwsem_del_waiter()			-- clear
+ * There are three places where the lock handoff bit and writer phase bit
+ * may be set or cleared.
+ * 1) rwsem_mark_wake()		-- set, clear
+ * 2) rwsem_try_write_lock()		-- clear
+ * 3) rwsem_del_waiter()		-- clear
  *
  * For all the above cases, wait_lock will be held. A writer must also
  * be the first one in the wait_list to be eligible for setting the handoff
@@ -118,6 +121,7 @@
 #define RWSEM_WRITER_LOCKED	(1UL << 0)
 #define RWSEM_FLAG_WAITERS	(1UL << 1)
 #define RWSEM_FLAG_HANDOFF	(1UL << 2)
+#define RWSEM_FLAG_WRITER_PHASE	(1UL << 3)
 #define RWSEM_FLAG_READFAIL	(1UL << (BITS_PER_LONG - 1))
 
 #define RWSEM_READER_SHIFT	8
@@ -126,7 +130,9 @@
 #define RWSEM_WRITER_MASK	RWSEM_WRITER_LOCKED
 #define RWSEM_LOCK_MASK		(RWSEM_WRITER_MASK|RWSEM_READER_MASK)
 #define RWSEM_READ_FAILED_MASK	(RWSEM_WRITER_MASK|RWSEM_FLAG_WAITERS|\
-				 RWSEM_FLAG_HANDOFF|RWSEM_FLAG_READFAIL)
+				 RWSEM_FLAG_HANDOFF |\
+				 RWSEM_FLAG_WRITER_PHASE |\
+				 RWSEM_FLAG_READFAIL)
 
 /*
  * All writes to owner are protected by WRITE_ONCE() to make sure that
@@ -396,7 +402,8 @@ rwsem_del_waiter(struct rw_semaphore *sem, struct rwsem_waiter *waiter)
 	lockdep_assert_held(&sem->wait_lock);
 	if (__rwsem_del_waiter(sem, waiter))
 		return true;
-	atomic_long_andnot(RWSEM_FLAG_HANDOFF | RWSEM_FLAG_WAITERS, &sem->count);
+	atomic_long_andnot(RWSEM_FLAG_HANDOFF | RWSEM_FLAG_WAITERS |
+			   RWSEM_FLAG_WRITER_PHASE, &sem->count);
 	return false;
 }
 
@@ -444,12 +451,13 @@ static void rwsem_mark_wake(struct rw_semaphore *sem,
 
 	if (waiter->type == RWSEM_WAITING_FOR_WRITE) {
 		if (wake_type == RWSEM_WAKE_ANY) {
+			atomic_long_or(RWSEM_FLAG_WRITER_PHASE, &sem->count);
 			/*
 			 * Mark writer at the front of the queue for wakeup.
 			 * Until the task is actually later awoken later by
 			 * the caller, other writers are able to steal it.
 			 * Readers, on the other hand, will block as they
-			 * will notice the queued writer.
+			 * will notice the writer phase.
 			 */
 			wake_q_add(wake_q, waiter->task);
 			lockevent_inc(rwsem_wake_writer);
@@ -554,13 +562,17 @@ static void rwsem_mark_wake(struct rw_semaphore *sem,
 		adjustment -= RWSEM_FLAG_WAITERS;
 		if (oldcount & RWSEM_FLAG_HANDOFF)
 			adjustment -= RWSEM_FLAG_HANDOFF;
+		if (oldcount & RWSEM_FLAG_WRITER_PHASE)
+			adjustment -= RWSEM_FLAG_WRITER_PHASE;
 	} else if (woken) {
 		/*
 		 * When we've woken a reader, we no longer need to force
-		 * writers to give up the lock and we can clear HANDOFF.
+		 * writers to give up the lock and we can clear writer phase.
 		 */
 		if (oldcount & RWSEM_FLAG_HANDOFF)
 			adjustment -= RWSEM_FLAG_HANDOFF;
+		if (oldcount & RWSEM_FLAG_WRITER_PHASE)
+			adjustment -= RWSEM_FLAG_WRITER_PHASE;
 	}
 
 	if (adjustment)
@@ -663,7 +675,8 @@ static inline bool rwsem_try_write_lock(struct rw_semaphore *sem,
 			new &= ~RWSEM_FLAG_HANDOFF;
 
 			if (list_empty(&first->list))
-				new &= ~RWSEM_FLAG_WAITERS;
+				new &= ~(RWSEM_FLAG_WAITERS |
+					 RWSEM_FLAG_WRITER_PHASE);
 		}
 	} while (!atomic_long_try_cmpxchg_acquire(&sem->count, &count, new));
 
@@ -1033,7 +1046,8 @@ rwsem_down_read_slowpath(struct rw_semaphore *sem, long count, unsigned int stat
 	/*
 	 * Reader optimistic lock stealing.
 	 */
-	if (!(count & (RWSEM_WRITER_LOCKED | RWSEM_FLAG_HANDOFF))) {
+	if (!(count & (RWSEM_WRITER_LOCKED | RWSEM_FLAG_HANDOFF |
+		       RWSEM_FLAG_WRITER_PHASE))) {
 		rwsem_set_reader_owned(sem);
 		lockevent_inc(rwsem_rlock_steal);
 
@@ -1175,7 +1189,8 @@ rwsem_down_write_slowpath(struct rw_semaphore *sem, int state)
 	} else {
 		INIT_LIST_HEAD(&waiter.list);
 		sem->first_waiter = &waiter;
-		atomic_long_or(RWSEM_FLAG_WAITERS, &sem->count);
+		atomic_long_or(RWSEM_FLAG_WAITERS | RWSEM_FLAG_WRITER_PHASE,
+			       &sem->count);
 	}
 
 	/* wait until we successfully acquire the lock */
