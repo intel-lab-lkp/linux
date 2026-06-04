@@ -366,7 +366,7 @@ static bool nf_flow_ip6_tunnel_proto(struct nf_flowtable_ctx *ctx,
 		return false;
 
 	if (nexthdr == IPPROTO_IPV6) {
-		ctx->tun.hdr_size = hdrlen;
+		ctx->tun.hdr_size = hdrlen - ctx->offset;
 		ctx->tun.proto = IPPROTO_IPV6;
 	}
 	ctx->offset += ctx->tun.hdr_size;
