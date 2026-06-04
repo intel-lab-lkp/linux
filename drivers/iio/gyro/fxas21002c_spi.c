@@ -26,8 +26,8 @@ static int fxas21002c_spi_probe(struct spi_device *spi)
 
 	regmap = devm_regmap_init_spi(spi, &fxas21002c_regmap_spi_conf);
 	if (IS_ERR(regmap)) {
-		dev_err(&spi->dev, "Failed to register spi regmap: %ld\n",
-			PTR_ERR(regmap));
+		dev_err(&spi->dev, "Failed to register spi regmap: %pe\n",
+			regmap);
 		return PTR_ERR(regmap);
 	}
 
