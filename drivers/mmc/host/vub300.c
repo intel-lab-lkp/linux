@@ -2342,6 +2342,16 @@ static int vub300_probe(struct usb_interface *interface,
 
 err_delete_timer:
 	timer_delete_sync(&vub300->inactivity_timer);
+	/*
+	 * vub300 may have async references via queued deadwork. Drop the
+	 * timer and initial references and let the last kref put release the
+	 * host through the proper destructor.
+	 */
+	kref_put(&vub300->kref, vub300_delete);	/* timer's kref */
+	kref_put(&vub300->kref, vub300_delete);	/* init's kref */
+
+	return retval;
+
 err_free_host:
 	mmc_free_host(mmc);
 	/*
