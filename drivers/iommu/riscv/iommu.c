@@ -1385,6 +1385,13 @@ static struct iommu_device *riscv_iommu_probe_device(struct device *dev)
 
 	dev_iommu_priv_set(dev, info);
 
+	/*
+	 * During shutdown, however, the IOMMU may be removed first, leading
+	 * to issues. To avoid this, a device link is added which enforces
+	 * the correct removal order.
+	 */
+	device_link_add(dev, fwspec->iommu_fwnode->dev, DL_FLAG_AUTOREMOVE_CONSUMER);
+
 	return &iommu->iommu;
 }
 
