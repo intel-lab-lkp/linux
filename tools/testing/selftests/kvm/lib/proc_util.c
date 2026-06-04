@@ -58,3 +58,33 @@ void write_proc_irq_smp_affinity_list(FILE *fp, unsigned int irq, int irq_cpu)
 	TEST_ASSERT(ret > 0, "Failed to affinitize IRQ-%u to CPU %d", irq, irq_cpu);
 	fflush(fp);
 }
+
+static void print_proc_irq_file(unsigned int irq, const char *file)
+{
+	char path[PATH_MAX];
+	char buf[256];
+	FILE *fp;
+
+	snprintf(path, sizeof(path), "/proc/irq/%u/%s", irq, file);
+	fp = fopen(path, "r");
+	if (!fp) {
+		printf("  Failed to open %s\n", path);
+		return;
+	}
+
+	if (fgets(buf, sizeof(buf), fp)) {
+		buf[strcspn(buf, "\n")] = 0;
+		printf("  %s: %s\n", path, buf);
+	}
+	fclose(fp);
+}
+
+void print_proc_irq_smp_affinity(unsigned int irq)
+{
+	print_proc_irq_file(irq, "smp_affinity");
+}
+
+void print_proc_irq_effective_affinity(unsigned int irq)
+{
+	print_proc_irq_file(irq, "effective_affinity");
+}
