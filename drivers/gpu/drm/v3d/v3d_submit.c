@@ -368,19 +368,6 @@ v3d_submit_process_post_deps(struct v3d_submit *submit, struct drm_syncobj *sync
 	}
 }
 
-static void
-v3d_push_job(struct v3d_job *job)
-{
-	drm_sched_job_arm(&job->base);
-
-	job->done_fence = dma_fence_get(&job->base.s_fence->finished);
-
-	/* put by scheduler job completion */
-	kref_get(&job->refcount);
-
-	drm_sched_entity_push_job(&job->base);
-}
-
 static int
 v3d_submit_jobs(struct v3d_submit *submit, struct drm_syncobj *sync_out,
 		struct v3d_submit_ext *se)
@@ -393,15 +380,22 @@ v3d_submit_jobs(struct v3d_submit *submit, struct drm_syncobj *sync_out,
 	for (int i = 0; i < submit->job_count; i++) {
 		struct v3d_job *job = submit->jobs[i];
 
-		v3d_push_job(job);
+		drm_sched_job_arm(&job->base);
+		job->done_fence = dma_fence_get(&job->base.s_fence->finished);
 
-		if (i + 1 < submit->job_count) {
-			ret = drm_sched_job_add_dependency(&submit->jobs[i + 1]->base,
-							   dma_fence_get(job->done_fence));
-			if (ret)
-				goto err;
-		}
+		/* put by scheduler job completion */
+		kref_get(&job->refcount);
 	}
+
+	for (int i = 1; i < submit->job_count; i++) {
+		ret = drm_sched_job_add_dependency(&submit->jobs[i]->base,
+						   dma_fence_get(submit->jobs[i - 1]->done_fence));
+		if (ret)
+			goto err;
+	}
+
+	for (int i = 0; i < submit->job_count; i++)
+		drm_sched_entity_push_job(&submit->jobs[i]->base);
 
 	mutex_unlock(&v3d->sched_lock);
 
@@ -414,7 +408,18 @@ v3d_submit_jobs(struct v3d_submit *submit, struct drm_syncobj *sync_out,
 	return 0;
 
 err:
+	/* Mark every armed job as failed so run_job() skips execution */
+	for (int i = 0; i < submit->job_count; i++)
+		dma_fence_set_error(&submit->jobs[i]->base.s_fence->finished, ret);
+
+	for (int i = 0; i < submit->job_count; i++)
+		drm_sched_entity_push_job(&submit->jobs[i]->base);
+
 	mutex_unlock(&v3d->sched_lock);
+
+	v3d_submit_unlock_reservations(submit);
+	v3d_submit_put_jobs(submit);
+
 	return ret;
 }
 
@@ -1102,14 +1107,13 @@ v3d_submit_cl_ioctl(struct drm_device *dev, void *data,
 
 	ret = v3d_submit_jobs(&submit, sync_out, &se);
 	if (ret)
-		goto fail_unreserve;
+		goto fail_submit;
 
 	return 0;
 
-fail_unreserve:
-	v3d_submit_unlock_reservations(&submit);
 fail:
 	v3d_submit_cleanup_jobs(&submit);
+fail_submit:
 	v3d_submit_put_post_deps(sync_out, &se);
 
 	return ret;
@@ -1200,14 +1204,13 @@ v3d_submit_tfu_ioctl(struct drm_device *dev, void *data,
 
 	ret = v3d_submit_jobs(&submit, sync_out, &se);
 	if (ret)
-		goto fail_unreserve;
+		goto fail_submit;
 
 	return 0;
 
-fail_unreserve:
-	v3d_submit_unlock_reservations(&submit);
 fail:
 	v3d_submit_cleanup_jobs(&submit);
+fail_submit:
 	v3d_submit_put_post_deps(sync_out, &se);
 
 	return ret;
@@ -1276,14 +1279,13 @@ v3d_submit_csd_ioctl(struct drm_device *dev, void *data,
 
 	ret = v3d_submit_jobs(&submit, sync_out, &se);
 	if (ret)
-		goto fail_unreserve;
+		goto fail_submit;
 
 	return 0;
 
-fail_unreserve:
-	v3d_submit_unlock_reservations(&submit);
 fail:
 	v3d_submit_cleanup_jobs(&submit);
+fail_submit:
 	v3d_submit_put_post_deps(sync_out, &se);
 
 	return ret;
@@ -1384,14 +1386,13 @@ v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 
 	ret = v3d_submit_jobs(&submit, NULL, &se);
 	if (ret)
-		goto fail_unreserve;
+		goto fail_submit;
 
 	return 0;
 
-fail_unreserve:
-	v3d_submit_unlock_reservations(&submit);
 fail:
 	v3d_submit_cleanup_jobs(&submit);
+fail_submit:
 	v3d_submit_put_post_deps(NULL, &se);
 
 	return ret;
