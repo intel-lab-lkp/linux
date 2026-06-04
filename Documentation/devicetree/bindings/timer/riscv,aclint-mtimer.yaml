@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/timer/riscv,aclint-mtimer.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: RISC-V Advanced Core Local Interruptor (ACLINT) Machine-level Timer
+
+maintainers:
+  - Joel Stanley <jms@oss.tenstorrent.com>
+
+description:
+  The RISC-V machine-level timer exposes the memory-mapped mtime and per-hart
+  mtimecmp registers defined in The RISC-V Instruction Set Manual, Volume II
+  Privileged Architecture, 3.2.1. Machine Timer (mtime and mtimecmp) Registers.
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - tenstorrent,atlantis-aclint-mtimer
+          - qemu,aclint-mtimer
+      - const: riscv,aclint-mtimer
+
+  reg:
+    items:
+      - description: MTIMECMP registers, one per hart
+      - description: MTIME register
+
+  reg-names:
+    items:
+      - const: mtimecmp
+      - const: mtime
+
+  interrupts-extended:
+    minItems: 1
+    maxItems: 4095
+
+required:
+  - compatible
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    timer@ac000000 {
+      compatible = "tenstorrent,atlantis-aclint-mtimer", "riscv,aclint-mtimer";
+      reg = <0xac000000 0x8000>, <0xac008000 0x8000>;
+      reg-names = "mtimecmp", "mtime";
+      interrupts-extended = <&cpu1intc 7>,
+                            <&cpu2intc 7>,
+                            <&cpu3intc 7>,
+                            <&cpu4intc 7>;
+    };
+...
