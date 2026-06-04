@@ -50,6 +50,13 @@ struct xe_madvise_notifier {
 	u64 vma_end;
 	/** @link: Entry on vm->svm.madvise_notifier_list. */
 	struct list_head link;
+	/**
+	 * @active: Fast-path callback gate.
+	 *
+	 * Read locklessly by the MMU notifier callback. The worker still checks
+	 * cpu_autoreset_active under vm->lock before resetting attrs.
+	 */
+	bool active;
 	/** @work_lock: Serialises pending interval state. */
 	spinlock_t work_lock;
 	/** @work_pending: Pending interval is available for the worker. */

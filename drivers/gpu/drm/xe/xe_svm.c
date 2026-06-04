@@ -24,6 +24,7 @@
 #include "xe_vm.h"
 #include "xe_vm_types.h"
 #include "xe_vram_types.h"
+#include "xe_vm_madvise.h"
 
 /* Identifies subclasses of struct drm_pagemap_peer */
 #define XE_PEER_PAGEMAP ((void *)0ul)

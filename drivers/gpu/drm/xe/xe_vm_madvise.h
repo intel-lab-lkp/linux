@@ -20,5 +20,6 @@ int xe_vm_madvise_ioctl(struct drm_device *dev, void *data,
 int xe_vm_madvise_init(struct xe_vm *vm);
 void xe_vm_madvise_fini(struct xe_vm *vm);
 int xe_vm_madvise_register_notifier_range(struct xe_vm *vm, u64 start, u64 end);
+void xe_vm_madvise_gpu_touch(struct xe_vm *vm, struct xe_vma *vma);
 
 #endif

@@ -19,6 +19,7 @@
 #include "xe_svm.h"
 #include "xe_trace_bo.h"
 #include "xe_vm.h"
+#include "xe_vm_madvise.h"
 
 /**
  * DOC: Xe page faults
@@ -222,8 +223,10 @@ unlock_vm:
 
 		/* First successful GPU fault ends CPU-only state. */
 		if (vma && xe_vma_is_cpu_addr_mirror(vma) &&
-		    xe_vma_has_cpu_autoreset_active(vma))
+		    xe_vma_has_cpu_autoreset_active(vma)) {
 			xe_vma_gpu_touch(vma);
+			xe_vm_madvise_gpu_touch(vm, vma);
+		}
 	}
 	up_write(&vm->lock);
 	xe_vm_put(vm);

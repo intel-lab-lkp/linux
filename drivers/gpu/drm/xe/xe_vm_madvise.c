@@ -948,7 +948,7 @@ static bool xe_madvise_notifier_callback(struct mmu_interval_notifier *mni,
 	struct xe_vm *vm = notifier->vm;
 	u64 adj_start, adj_end;
 
-	if (range->event != MMU_NOTIFY_UNMAP)
+	if (range->event != MMU_NOTIFY_UNMAP || !READ_ONCE(notifier->active))
 		return true;
 
 	if (!mmu_notifier_range_blockable(range))
@@ -1057,6 +1057,7 @@ xe_madvise_notifier_alloc(struct xe_vm *vm, u64 start, u64 end)
 	notifier->vma_start = start;
 	notifier->vma_end = end;
 	INIT_LIST_HEAD(&notifier->link);
+	WRITE_ONCE(notifier->active, true);
 	spin_lock_init(&notifier->work_lock);
 	notifier->work_pending = false;
 	INIT_WORK(&notifier->work, xe_madvise_work_func);
@@ -1186,6 +1187,7 @@ int xe_vm_madvise_register_notifier_range(struct xe_vm *vm, u64 start, u64 end)
 	/* Dedup by stored range; tree slots can be fragmented by partial overlap. */
 	list_for_each_entry(existing, &vm->svm.madvise_notifier_list, link) {
 		if (xe_madvise_notifier_exact(existing, start, end)) {
+			WRITE_ONCE(existing->active, true);
 			err = 0;
 			goto unlock_remove_new;
 		}
@@ -1235,4 +1237,47 @@ unlock_remove_new:
 	xe_madvise_notifier_remove_and_free(notifier);
 
 	return err;
+}
+
+/**
+ * xe_vm_deactivate_madvise_notifier_for_range - Disable callbacks for a VMA
+ * @vm: VM
+ * @start: VMA start
+ * @end: VMA end
+ */
+static void xe_vm_deactivate_madvise_notifier_for_range(struct xe_vm *vm, u64 start, u64 end)
+{
+	struct xe_madvise_notifier *notifier;
+	unsigned long index = start;
+
+	lockdep_assert_held_write(&vm->lock);
+
+	if (!vm->svm.madvise_work.wq)
+		return;
+
+	/*
+	 * Only exact-match notifiers are disabled. Broader notifiers may still
+	 * cover CPU-only split siblings.
+	 */
+	mt_for_each(&vm->svm.madvise_notifiers, notifier, index, end - 1)
+		if (notifier->vma_start == start && notifier->vma_end == end)
+			WRITE_ONCE(notifier->active, false);
+}
+
+/**
+ * xe_vm_madvise_gpu_touch - Disable madvise notifier after GPU touch
+ * @vm: VM
+ * @vma: GPU-touched VMA
+ */
+void xe_vm_madvise_gpu_touch(struct xe_vm *vm, struct xe_vma *vma)
+{
+	lockdep_assert_held_write(&vm->lock);
+
+	/* Only AUTORESET VMAs have madvise notifiers. */
+	if (!(vma->gpuva.flags & XE_VMA_MADV_AUTORESET))
+		return;
+
+	xe_vm_deactivate_madvise_notifier_for_range(vm,
+						xe_vma_start(vma),
+						xe_vma_end(vma));
 }
