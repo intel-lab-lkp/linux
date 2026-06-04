@@ -49,6 +49,13 @@ struct sigframe {
 };
 
 struct rt_sigframe {
+	/*
+	 * Home area for the handler's register arguments: the MicroBlaze
+	 * ABI lets the callee store r5..r10 at [r1+4]..[r1+28], and r1
+	 * points at this frame when the handler is entered.  Without the
+	 * gap those stores corrupt info/uc.
+	 */
+	unsigned long abi_gap[8];
 	struct siginfo info;
 	struct ucontext uc;
 	unsigned long tramp[2];	/* signal trampoline */
