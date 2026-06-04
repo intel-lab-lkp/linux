@@ -75,10 +75,8 @@ xfs_zoned_show_stats(
 	struct xfs_zone_info	*zi = mp->m_zone_info;
 	struct xfs_open_zone	*oz;
 
-	seq_puts(m, "\n");
-
-	seq_printf(m, "\tuser free RT blocks: %lld\n",
-		xfs_sum_freecounter(mp, XC_FREE_RTEXTENTS));
+	seq_printf(m, "\n\tuser free RT blocks: %lld\n",
+		   xfs_sum_freecounter(mp, XC_FREE_RTEXTENTS));
 	seq_printf(m, "\treserved free RT blocks: %lld\n",
 		mp->m_free[XC_FREE_RTEXTENTS].res_avail);
 	seq_printf(m, "\tuser available RT blocks: %lld\n",
