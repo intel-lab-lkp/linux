@@ -19,13 +19,12 @@ int efs_get_block(struct inode *inode, sector_t iblock,
 	if (create)
 		return error;
 	if (iblock >= inode->i_blocks) {
-#ifdef DEBUG
 		/*
 		 * i have no idea why this happens as often as it does
 		 */
-		pr_warn("%s(): block %d >= %ld (filesize %ld)\n",
-			__func__, block, inode->i_blocks, inode->i_size);
-#endif
+		pr_debug("EFS: block %llu >= %llu (filesize %lld)\n",
+			 (unsigned long long)iblock, (unsigned long long)inode->i_blocks,
+			 (long long)inode->i_size);
 		return 0;
 	}
 	phys = efs_map_block(inode, iblock);
@@ -43,13 +42,12 @@ int efs_bmap(struct inode *inode, efs_block_t block) {
 
 	/* are we about to read past the end of a file ? */
 	if (!(block < inode->i_blocks)) {
-#ifdef DEBUG
 		/*
 		 * i have no idea why this happens as often as it does
 		 */
-		pr_warn("%s(): block %d >= %ld (filesize %ld)\n",
-			__func__, block, inode->i_blocks, inode->i_size);
-#endif
+		pr_debug("EFS: block %llu >= %llu (filesize %lld)\n",
+			 (unsigned long long)block, (unsigned long long)inode->i_blocks,
+			 (long long)inode->i_size);
 		return 0;
 	}
 
