@@ -1862,7 +1862,7 @@ static int samsung_dsim_register_te_irq(struct samsung_dsim *dsi, struct device 
 	int te_gpio_irq;
 	int ret;
 
-	dsi->te_gpio = devm_gpiod_get_optional(dev, "te", GPIOD_IN);
+	dsi->te_gpio = gpiod_get_optional(dev, "te", GPIOD_IN);
 	if (!dsi->te_gpio)
 		return 0;
 	else if (IS_ERR(dsi->te_gpio))
@@ -1875,6 +1875,7 @@ static int samsung_dsim_register_te_irq(struct samsung_dsim *dsi, struct device 
 	if (ret) {
 		dev_err(dsi->dev, "request interrupt failed with %d\n", ret);
 		gpiod_put(dsi->te_gpio);
+		dsi->te_gpio = NULL;
 		return ret;
 	}
 
@@ -1886,6 +1887,7 @@ static void samsung_dsim_unregister_te_irq(struct samsung_dsim *dsi)
 	if (dsi->te_gpio) {
 		free_irq(gpiod_to_irq(dsi->te_gpio), dsi);
 		gpiod_put(dsi->te_gpio);
+		dsi->te_gpio = NULL;
 	}
 }
 
