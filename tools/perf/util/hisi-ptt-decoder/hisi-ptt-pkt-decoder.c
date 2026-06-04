@@ -74,7 +74,8 @@ static const char * const hisi_ptt_4dw_pkt_field_name[] = {
 	[HISI_PTT_4DW_HEAD3]	= "Header DW3",
 };
 
-union hisi_ptt_4dw {
+union hisi_ptt_field_data {
+	/* Header DW0 for 4DW format */
 	struct {
 		uint32_t time : 11;
 		uint32_t len : 10;
@@ -84,7 +85,7 @@ union hisi_ptt_4dw {
 		uint32_t t9 : 1;
 		uint32_t type : 5;
 		uint32_t format : 2;
-	};
+	} dw0_4dw;
 	uint32_t value;
 };
 
@@ -128,15 +129,15 @@ static int hisi_ptt_8dw_pkt_desc(const unsigned char *buf, int pos)
 static void hisi_ptt_4dw_print_dw0(const unsigned char *buf, int pos)
 {
 	const char *color = PERF_COLOR_BLUE;
-	union hisi_ptt_4dw dw0;
+	union hisi_ptt_field_data dw;
 	uint8_t byte;
 	int i;
 
-	dw0.value = le32_to_cpu(*(__le32 *)(buf + pos));
+	dw.value = le32_to_cpu(*(__le32 *)(buf + pos));
 	printf(".");
 	color_fprintf(stdout, color, "  %08x: ", pos);
 	for (i = 0; i < HISI_PTT_FIELD_LENGTH; i++) {
-		byte = (dw0.value >> (24 - i * 8)) & 0xFF;
+		byte = (dw.value >> (24 - i * 8)) & 0xFF;
 		color_fprintf(stdout, color, "%02x ", byte);
 	}
 	for (i = 0; i < HISI_PTT_MAX_SPACE_LEN; i++)
@@ -144,9 +145,10 @@ static void hisi_ptt_4dw_print_dw0(const unsigned char *buf, int pos)
 
 	color_fprintf(stdout, color,
 		      "  %s %x %s %x %s %x %s %x %s %x %s %x %s %x %s %x\n",
-		      "Format", dw0.format, "Type", dw0.type, "T9", dw0.t9,
-		      "T8", dw0.t8, "TH", dw0.th, "SO", dw0.so, "Length",
-		      dw0.len, "Time", dw0.time);
+		      "Format", dw.dw0_4dw.format, "Type", dw.dw0_4dw.type,
+		      "T9", dw.dw0_4dw.t9, "T8", dw.dw0_4dw.t8,
+		      "TH", dw.dw0_4dw.th, "SO", dw.dw0_4dw.so,
+		      "Length", dw.dw0_4dw.len, "Time", dw.dw0_4dw.time);
 }
 
 static int hisi_ptt_4dw_pkt_desc(const unsigned char *buf, int pos)
