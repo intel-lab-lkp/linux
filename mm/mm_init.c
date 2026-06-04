@@ -1476,14 +1476,11 @@ static void __ref setup_usemap(struct zone *zone)
 	unsigned long usemapsize = usemap_size(zone->zone_start_pfn,
 					       zone->spanned_pages);
 	zone->pageblock_flags = NULL;
-	if (usemapsize) {
+	if (usemapsize)
 		zone->pageblock_flags =
-			memblock_alloc_node(usemapsize, SMP_CACHE_BYTES,
-					    zone_to_nid(zone));
-		if (!zone->pageblock_flags)
-			panic("Failed to allocate %ld bytes for zone %s pageblock flags on node %d\n",
-			      usemapsize, zone->name, zone_to_nid(zone));
-	}
+			memblock_alloc_node_or_panic(usemapsize,
+						     SMP_CACHE_BYTES,
+						     zone_to_nid(zone));
 }
 #else
 static inline void setup_usemap(struct zone *zone) {}

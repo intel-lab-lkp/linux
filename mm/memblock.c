@@ -1843,6 +1843,28 @@ void *__init __memblock_alloc_or_panic(phys_addr_t size, phys_addr_t align,
 	return addr;
 }
 
+/**
+ * __memblock_alloc_node_or_panic - Try to allocate memory on a node and panic on failure
+ * @size: size of memory block to be allocated in bytes
+ * @align: alignment of the region and block's size
+ * @nid: nid of the free area to find, %NUMA_NO_NODE for any node
+ * @func: caller func name
+ *
+ * This function attempts to allocate memory on a specific node using memblock_alloc_node,
+ * and in case of failure, it calls panic with the formatted message.
+ * This function should not be used directly, please use the macro memblock_alloc_node_or_panic.
+ */
+void *__init __memblock_alloc_node_or_panic(phys_addr_t size, phys_addr_t align,
+					     int nid, const char *func)
+{
+	void *addr = memblock_alloc_node(size, align, nid);
+
+	if (unlikely(!addr))
+		panic("%s: Failed to allocate %pap bytes on node %d\n",
+		      func, &size, nid);
+	return addr;
+}
+
 /*
  * Remaining API functions
  */

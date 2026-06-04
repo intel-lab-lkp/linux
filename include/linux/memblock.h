@@ -433,6 +433,12 @@ void *__memblock_alloc_or_panic(phys_addr_t size, phys_addr_t align,
 #define memblock_alloc_or_panic(size, align)    \
 	 __memblock_alloc_or_panic(size, align, __func__)
 
+void *__memblock_alloc_node_or_panic(phys_addr_t size, phys_addr_t align,
+				     int nid, const char *func);
+
+#define memblock_alloc_node_or_panic(size, align, nid)    \
+	 __memblock_alloc_node_or_panic(size, align, nid, __func__)
+
 static inline void *memblock_alloc_raw(phys_addr_t size,
 					       phys_addr_t align)
 {

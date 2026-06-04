@@ -1191,9 +1191,8 @@ static void __init alloc_runtime_data(int cpu)
 {
 	struct sev_es_runtime_data *data;
 
-	data = memblock_alloc_node(sizeof(*data), PAGE_SIZE, cpu_to_node(cpu));
-	if (!data)
-		panic("Can't allocate SEV-ES runtime data");
+	data = memblock_alloc_node_or_panic(sizeof(*data), PAGE_SIZE,
+					    cpu_to_node(cpu));
 
 	per_cpu(runtime_data, cpu) = data;
 
