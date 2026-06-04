@@ -94,9 +94,8 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		seq_puts(m, " lbt_arm");
 	if (cpu_has_lbt_mips)
 		seq_puts(m, " lbt_mips");
-	seq_puts(m, "\n");
 
-	seq_printf(m, "Hardware Watchpoint\t: %s", str_yes_no(cpu_has_watch));
+	seq_printf(m, "\nHardware Watchpoint\t: %s", str_yes_no(cpu_has_watch));
 	if (cpu_has_watch) {
 		seq_printf(m, ", iwatch count: %d, dwatch count: %d",
 		      cpu_data[n].watch_ireg_count, cpu_data[n].watch_dreg_count);
