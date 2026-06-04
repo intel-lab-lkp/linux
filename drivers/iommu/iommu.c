@@ -862,6 +862,7 @@ static int iommu_insert_resv_region(struct iommu_resv_region *new,
 				    struct list_head *regions)
 {
 	struct iommu_resv_region *iter, *tmp, *nr, *top;
+	struct list_head *pos;
 	LIST_HEAD(stack);
 
 	nr = iommu_alloc_resv_region(new->start, new->length,
@@ -870,12 +871,14 @@ static int iommu_insert_resv_region(struct iommu_resv_region *new,
 		return -ENOMEM;
 
 	/* First add the new element based on start address sorting */
-	list_for_each_entry(iter, regions, list) {
+	list_for_each(pos, regions) {
+		iter = list_entry(pos, struct iommu_resv_region, list);
+
 		if (nr->start < iter->start ||
 		    (nr->start == iter->start && nr->type <= iter->type))
 			break;
 	}
-	list_add_tail(&nr->list, &iter->list);
+	list_add_tail(&nr->list, pos);
 
 	/* Merge overlapping segments of type nr->type in @regions, if any */
 	list_for_each_entry_safe(iter, tmp, regions, list) {
