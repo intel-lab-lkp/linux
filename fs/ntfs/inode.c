@@ -581,6 +581,17 @@ err_corrupt_attr:
 		p2 = (u8 *)file_name_attr + le32_to_cpu(attr->data.resident.value_length);
 		if (p2 < (u8 *)attr || p2 > p)
 			goto err_corrupt_attr;
+		/*
+		 * The name is converted below; file_name_length is an on-disk
+		 * u8 that is not otherwise cross-checked, so make sure the name
+		 * fits within the resident value before it is read.
+		 */
+		if (le32_to_cpu(attr->data.resident.value_length) <
+				offsetof(struct file_name_attr, file_name) ||
+		    offsetof(struct file_name_attr, file_name) +
+				file_name_attr->file_name_length * sizeof(__le16) >
+				le32_to_cpu(attr->data.resident.value_length))
+			goto err_corrupt_attr;
 		/* This attribute is ok, but is it in the $Extend directory? */
 		if (MREF_LE(file_name_attr->parent_directory) == FILE_Extend) {
 			unsigned char *s;
