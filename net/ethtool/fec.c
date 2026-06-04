@@ -116,6 +116,7 @@ static int fec_prepare_data(const struct ethnl_req_info *req_base,
 		ethtool_stats_init((u64 *)&stats, sizeof(stats) / 8);
 		ethtool_stats_init((u64 *)data->fec_stat_hist.values,
 				   sizeof(data->fec_stat_hist.values) / 8);
+		data->fec_stat_hist.ranges = NULL;
 		dev->ethtool_ops->get_fec_stats(dev, &stats,
 						&data->fec_stat_hist);
 
