@@ -33,6 +33,7 @@ struct panfrost_perfcnt {
 	struct panfrost_file_priv *user;
 	struct mutex lock;
 	struct completion dump_comp;
+	atomic_t hw_reset_happened;
 };
 
 static void panfrost_perfcnt_gpu_disable(struct panfrost_device *pfdev)
@@ -57,8 +58,12 @@ void panfrost_perfcnt_sample_done(struct panfrost_device *pfdev)
 
 static int panfrost_perfcnt_dump_locked(struct panfrost_device *pfdev)
 {
+	struct panfrost_perfcnt *perfcnt = pfdev->perfcnt;
 	u64 gpuva;
 	int ret;
+
+	if (atomic_read(&perfcnt->hw_reset_happened))
+		return -EIO;
 
 	reinit_completion(&pfdev->perfcnt->dump_comp);
 	gpuva = pfdev->perfcnt->mapping->mmnode.start << PAGE_SHIFT;
@@ -140,6 +145,15 @@ static int panfrost_perfcnt_enable_locked(struct panfrost_device *pfdev,
 		goto err_vunmap;
 	}
 
+	/* If a reset is ongoing, the AS we get right below will be torn
+	 * down, so rather than waiting until this becomes obvious in a
+	 * perfcnt_dump() ioctl, we ask the user to try again slightly later.
+	 */
+	if (atomic_read(&pfdev->reset.pending)) {
+		ret = -EAGAIN;
+		goto err_vunmap;
+	}
+
 	ret = panfrost_mmu_as_get(pfdev, perfcnt->mapping->mmu);
 	if (ret < 0)
 		goto err_vunmap;
@@ -173,6 +187,16 @@ static int panfrost_perfcnt_enable_locked(struct panfrost_device *pfdev,
 	if (panfrost_has_hw_issue(pfdev, HW_ISSUE_8186))
 		gpu_write(pfdev, GPU_PRFCNT_TILER_EN, 0xffffffff);
 
+	/* If a reset happened, we've no way of knowing whether it was between the time we called
+	 * panfrost_mmu_as_get() or before perfcnt_enable(), so clearing this flag and going forward
+	 * isn't possible. We must clear the flag and try again in the hopes no resets will happen
+	 * between this and the next ioctl invocation.
+	 */
+	if (atomic_cmpxchg(&perfcnt->hw_reset_happened, 1, 0)) {
+		ret = EAGAIN;
+		goto err_disable;
+	}
+
 	/* The BO ref is retained by the mapping. */
 	drm_gem_object_put(&bo->base);
 
@@ -180,6 +204,8 @@ static int panfrost_perfcnt_enable_locked(struct panfrost_device *pfdev,
 
 	return 0;
 
+err_disable:
+	panfrost_perfcnt_gpu_disable(pfdev);
 err_vunmap:
 	drm_gem_vunmap(&bo->base, &map);
 err_put_mapping:
@@ -209,7 +235,8 @@ static int panfrost_perfcnt_disable_locked(struct panfrost_device *pfdev,
 	drm_gem_vunmap(&perfcnt->mapping->obj->base.base, &map);
 	perfcnt->buf = NULL;
 	panfrost_gem_close(&perfcnt->mapping->obj->base.base, file_priv);
-	panfrost_mmu_as_put(pfdev, perfcnt->mapping->mmu);
+	if (!atomic_read(&perfcnt->hw_reset_happened))
+		panfrost_mmu_as_put(pfdev, perfcnt->mapping->mmu);
 	panfrost_gem_mapping_put(perfcnt->mapping);
 	perfcnt->mapping = NULL;
 	pm_runtime_put_autosuspend(pfdev->base.dev);
@@ -345,4 +372,21 @@ void panfrost_perfcnt_fini(struct panfrost_device *pfdev)
 {
 	/* Disable everything before leaving. */
 	panfrost_perfcnt_gpu_disable(pfdev);
+}
+
+void panfrost_perfcnt_reset(struct panfrost_device *pfdev)
+{
+	struct panfrost_perfcnt *perfcnt = pfdev->perfcnt;
+
+	/* Since this function will be called either from a scheduled HW reset
+	 * or a runtime resume, tearing down any perfcnt resources means we're
+	 * doomed to deadlocking with perfcnt_{enable/disable}, since we'd have
+	 * to take the perfecnt lock. On top of that, it'd also violate DMA fence
+	 * signalling rules because GFP_KERNEL allocations are made with the perfcnt
+	 * lock taken in perfcnt_enable. In light of this, the only thing we can do
+	 * is disabling perfcnt unconditionally, and notifying the perfcnt user of
+	 * the reset having happpened so that they can take recovery measures.
+	 */
+	panfrost_perfcnt_gpu_disable(pfdev);
+	atomic_set(&perfcnt->hw_reset_happened, 1);
 }
