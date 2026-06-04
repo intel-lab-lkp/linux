@@ -39,6 +39,7 @@ struct pwrkey_drv_data {
 	int keycode;
 	int keystate;  /* 1:pressed */
 	int wakeup;
+	bool suspended; /* Track suspend state */
 	struct timer_list check_timer;
 	struct input_dev *input;
 	u8 minor_rev;
@@ -92,6 +93,15 @@ static irqreturn_t imx_snvs_pwrkey_interrupt(int irq, void *dev_id)
 			input_sync(input);
 			pm_relax(input->dev.parent);
 		} else {
+			/*
+			 * Report key press events directly in interrupt handler to prevent event
+			 * loss during system suspend.
+			 */
+			if (pdata->suspended) {
+				pdata->keystate = 1;
+				input_report_key(input, pdata->keycode, 1);
+				input_sync(input);
+			}
 			mod_timer(&pdata->check_timer,
 			          jiffies + msecs_to_jiffies(DEBOUNCE_TIME));
 		}
@@ -219,6 +229,30 @@ static int imx_snvs_pwrkey_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int __maybe_unused imx_snvs_pwrkey_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct pwrkey_drv_data *pdata = platform_get_drvdata(pdev);
+
+	pdata->suspended = true;
+
+	return 0;
+}
+
+static int __maybe_unused imx_snvs_pwrkey_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct pwrkey_drv_data *pdata = platform_get_drvdata(pdev);
+
+	pdata->suspended = false;
+
+	return 0;
+}
+
+static SIMPLE_DEV_PM_OPS(imx_snvs_pwrkey_pm_ops,
+			 imx_snvs_pwrkey_suspend,
+			 imx_snvs_pwrkey_resume);
+
 static const struct of_device_id imx_snvs_pwrkey_ids[] = {
 	{ .compatible = "fsl,sec-v4.0-pwrkey" },
 	{ /* sentinel */ }
@@ -229,6 +263,7 @@ static struct platform_driver imx_snvs_pwrkey_driver = {
 	.driver = {
 		.name = "snvs_pwrkey",
 		.of_match_table = imx_snvs_pwrkey_ids,
+		.pm   = &imx_snvs_pwrkey_pm_ops,
 	},
 	.probe = imx_snvs_pwrkey_probe,
 };
