@@ -1390,7 +1390,6 @@ static inline bool dmar_is_force_on(void)
 
 bool dmar_can_force_on(enum dmar_force_on force_on);
 
-extern int dmar_disabled;
 extern int intel_iommu_enabled;
 extern int intel_iommu_tboot_noforce;
 

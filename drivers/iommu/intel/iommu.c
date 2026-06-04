@@ -199,7 +199,6 @@ int dmar_state = DMAR_ENABLED;
 #else
 int dmar_state = DMAR_DISABLED_AUTO;
 #endif
-int dmar_disabled = !IS_ENABLED(CONFIG_INTEL_IOMMU_DEFAULT_ON);
 int intel_iommu_sm = IS_ENABLED(CONFIG_INTEL_IOMMU_SCALABLE_MODE_DEFAULT_ON);
 
 int intel_iommu_enabled = 0;
@@ -241,11 +240,9 @@ static int __init intel_iommu_setup(char *str)
 	while (*str) {
 		if (!strncmp(str, "on", 2)) {
 			dmar_state = DMAR_ENABLED;
-			dmar_disabled = 0;
 			pr_info("IOMMU enabled\n");
 		} else if (!strncmp(str, "off", 3)) {
 			dmar_state = DMAR_DISABLED_USER;
-			dmar_disabled = 1;
 			pr_info("IOMMU disabled\n");
 		} else if (!strncmp(str, "igfx_off", 8)) {
 			disable_igfx_iommu = 1;
@@ -2366,7 +2363,7 @@ void intel_iommu_shutdown(void)
 	struct dmar_drhd_unit *drhd;
 	struct intel_iommu *iommu = NULL;
 
-	if (no_iommu || dmar_disabled)
+	if (dmar_is_disabled())
 		return;
 
 	/*
@@ -2499,7 +2496,6 @@ static void __init platform_optin_force_iommu(void)
 	}
 
 	dmar_state = DMAR_ENABLED_FORCE;
-	dmar_disabled = 0;
 }
 
 static int __init probe_acpi_namespace_devices(void)
@@ -2551,7 +2547,6 @@ static __init void tboot_force_iommu(void)
 		pr_warn("Forcing Intel-IOMMU to enabled\n");
 
 	dmar_state = DMAR_ENABLED_FORCE;
-	dmar_disabled = 0;
 	no_iommu = 0;
 }
 
@@ -2594,7 +2589,7 @@ int __init intel_iommu_init(void)
 	if (!no_iommu)
 		intel_iommu_debugfs_init();
 
-	if (no_iommu || dmar_disabled) {
+	if (dmar_is_disabled()) {
 		/*
 		 * We exit the function here to ensure IOMMU's remapping and
 		 * mempool aren't setup, which means that the IOMMU's PMRs
