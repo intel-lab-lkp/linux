@@ -1959,6 +1959,10 @@ static int ctnetlink_change_helper(struct nf_conn *ct,
 			/* we had a helper before ... */
 			nf_ct_remove_expectations(ct);
 			RCU_INIT_POINTER(help->helper, NULL);
+			if (helper->destroy) {
+				synchronize_rcu();
+				helper->destroy(ct);
+			}
 			if (refcount_dec_and_test(&helper->ct_refcnt))
 				kfree_rcu(helper, rcu);
 		}
