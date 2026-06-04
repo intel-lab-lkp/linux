@@ -1052,6 +1052,7 @@ struct compact_control {
 					 * ensure forward progress.
 					 */
 	bool alloc_contig;		/* alloc_contig_range allocation */
+	bool allow_unevictable;		/* Allow isolation of unevictable folios */
 };
 
 /*

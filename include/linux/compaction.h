@@ -106,6 +106,7 @@ bool compaction_zonelist_suitable(struct alloc_context *ac, int order,
 extern void __meminit kcompactd_run(int nid);
 extern void __meminit kcompactd_stop(int nid);
 extern void wakeup_kcompactd(pg_data_t *pgdat, int order, int highest_zoneidx);
+extern bool compaction_allow_unevictable(void);
 
 #else
 static inline void reset_isolation_suitable(pg_data_t *pgdat)
@@ -129,6 +130,11 @@ static inline void kcompactd_stop(int nid)
 static inline void wakeup_kcompactd(pg_data_t *pgdat,
 				int order, int highest_zoneidx)
 {
+}
+
+static inline bool compaction_allow_unevictable(void)
+{
+	return true;
 }
 
 #endif /* CONFIG_COMPACTION */
