@@ -6,6 +6,7 @@ use kernel::{
         OptionalClk, //
     },
     device::{
+        Bound,
         Core,
         Device,
         DeviceContext, //
@@ -29,6 +30,7 @@ use kernel::{
     sizes::SZ_2M,
     sync::{
         aref::ARef,
+        Arc,
         Mutex, //
     },
     time,
@@ -37,9 +39,11 @@ use kernel::{
 
 use crate::{
     file::TyrDrmFileData,
+    fw::Firmware,
     gem::BoData,
     gpu,
     gpu::GpuInfo,
+    mmu::Mmu,
     regs::gpu_control::*, //
 };
 
@@ -49,7 +53,6 @@ pub(crate) struct TyrDrmDriver;
 
 /// Convenience type alias for the DRM device type for this driver.
 pub(crate) type TyrDrmDevice<Ctx = drm::Registered> = drm::Device<TyrDrmDriver, Ctx>;
-
 pub(crate) struct TyrPlatformDriver;
 
 #[pin_data(PinnedDrop)]
@@ -58,15 +61,23 @@ pub(crate) struct TyrPlatformDriverData<'bound> {
     _reg: drm::Registration<'bound, TyrDrmDriver>,
 }
 
+/// Resources kept alive by the DRM registration.
 #[pin_data]
-pub(crate) struct TyrDrmDeviceData {
-    pub(crate) pdev: ARef<platform::Device>,
+pub(crate) struct TyrDrmRegistrationData<'bound> {
+    /// Parent platform device.
+    pub(crate) pdev: &'bound platform::Device<Bound>,
+
+    /// Firmware sections.
+    pub(crate) fw: Firmware<'bound>,
 
     #[pin]
     clks: Mutex<Clocks>,
 
     #[pin]
     regulators: Mutex<Regulators>,
+
+    /// GPU MMIO register mapping.
+    pub(crate) iomem: Arc<IoMem<'bound>>,
 
     /// Some information on the GPU.
     ///
@@ -119,7 +130,7 @@ impl platform::Driver for TyrPlatformDriver {
         let sram_regulator = Regulator::<regulator::Enabled>::get(pdev.as_ref(), c"sram")?;
 
         let request = pdev.io_request_by_index(0).ok_or(ENODEV)?;
-        let iomem = request.iomap_sized::<SZ_2M>()?;
+        let iomem = Arc::new(request.iomap_sized::<SZ_2M>()?, GFP_KERNEL)?;
 
         issue_soft_reset(pdev.as_ref(), &iomem)?;
         gpu::l2_power_on(pdev.as_ref(), &iomem)?;
@@ -135,10 +146,23 @@ impl platform::Driver for TyrPlatformDriver {
         // other threads of execution.
         unsafe { pdev.dma_set_mask_and_coherent(DmaMask::try_new(pa_bits)?)? };
 
-        let platform: ARef<platform::Device> = pdev.into();
+        let unreg_dev = drm::UnregisteredDevice::<TyrDrmDriver>::new(pdev, Ok(()))?;
 
-        let data = try_pin_init!(TyrDrmDeviceData {
-                pdev: platform.clone(),
+        let mmu = Mmu::new(iomem.as_arc_borrow(), &gpu_info)?;
+
+        let firmware = Firmware::new(
+            pdev,
+            iomem.clone(),
+            &unreg_dev,
+            mmu.as_arc_borrow(),
+            &gpu_info,
+        )?;
+
+        firmware.boot()?;
+
+        let reg_data = try_pin_init!(TyrDrmRegistrationData {
+                pdev,
+                fw: firmware,
                 clks <- new_mutex!(Clocks {
                     core: core_clk,
                     stacks: stacks_clk,
@@ -148,11 +172,14 @@ impl platform::Driver for TyrPlatformDriver {
                     _mali: mali_regulator,
                     _sram: sram_regulator,
                 }),
+                iomem,
                 gpu_info,
         });
 
-        let tdev = drm::UnregisteredDevice::<TyrDrmDriver>::new(pdev, data)?;
-        let reg = drm::Registration::new(pdev.as_ref(), tdev, (), 0)?;
+        // SAFETY: `reg` is stored in the platform driver data and is not leaked or
+        // forgotten, so it is dropped before the `'bound` registration data can become
+        // invalid.
+        let reg = unsafe { drm::Registration::new_with_lt(pdev.as_ref(), unreg_dev, reg_data, 0)? };
 
         let driver = TyrPlatformDriverData {
             _device: reg.device().into(),
@@ -183,8 +210,8 @@ const INFO: drm::DriverInfo = drm::DriverInfo {
 
 #[vtable]
 impl drm::Driver for TyrDrmDriver {
-    type Data = TyrDrmDeviceData;
-    type RegistrationData = ForLt!(());
+    type Data = ();
+    type RegistrationData = ForLt!(TyrDrmRegistrationData<'_>);
     type File = TyrDrmFileData;
     type Object<R: drm::DeviceContext> = drm::gem::shmem::Object<BoData, R>;
     type ParentDevice<Ctx: DeviceContext> = platform::Device<Ctx>;
