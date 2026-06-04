@@ -1445,7 +1445,7 @@ config_pwr_mode:
  *
  * Return: 0 upon success; -EBUSY upon timeout.
  */
-static int ufshcd_clock_scaling_prepare(struct ufs_hba *hba, u64 timeout_us)
+static int ufshcd_clock_scaling_prepare(struct ufs_hba *hba)
 {
 	int ret = 0;
 	/*
@@ -1453,16 +1453,13 @@ static int ufshcd_clock_scaling_prepare(struct ufs_hba *hba, u64 timeout_us)
 	 * clock scaling is in progress
 	 */
 	mutex_lock(&hba->host->scan_mutex);
-	blk_mq_quiesce_tagset(&hba->host->tag_set);
 	mutex_lock(&hba->wb_mutex);
 	down_write(&hba->clk_scaling_lock);
 
-	if (!hba->clk_scaling.is_allowed ||
-	    ufshcd_wait_for_pending_cmds(hba, timeout_us)) {
+	if (!hba->clk_scaling.is_allowed) {
 		ret = -EBUSY;
 		up_write(&hba->clk_scaling_lock);
 		mutex_unlock(&hba->wb_mutex);
-		blk_mq_unquiesce_tagset(&hba->host->tag_set);
 		mutex_unlock(&hba->host->scan_mutex);
 		goto out;
 	}
@@ -1478,7 +1475,6 @@ static void ufshcd_clock_scaling_unprepare(struct ufs_hba *hba, int err)
 {
 	up_write(&hba->clk_scaling_lock);
 	mutex_unlock(&hba->wb_mutex);
-	blk_mq_unquiesce_tagset(&hba->host->tag_set);
 	mutex_unlock(&hba->host->scan_mutex);
 
 	/* Enable Write Booster if current gear requires it else disable it */
@@ -1506,7 +1502,7 @@ static int ufshcd_devfreq_scale(struct ufs_hba *hba, unsigned long freq,
 
 	new_gear = ufshcd_vops_freq_to_gear_speed(hba, freq);
 
-	ret = ufshcd_clock_scaling_prepare(hba, 1 * USEC_PER_SEC);
+	ret = ufshcd_clock_scaling_prepare(hba);
 	if (ret)
 		return ret;
 
