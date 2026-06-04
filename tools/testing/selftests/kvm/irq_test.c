@@ -18,6 +18,8 @@ static u64 timeout_ns = 2ULL * 1000 * 1000 * 1000;
 static bool guest_ready_for_irqs[KVM_MAX_VCPUS];
 static bool guest_received_irq[KVM_MAX_VCPUS];
 static bool guest_received_nmi[KVM_MAX_VCPUS];
+static pid_t vcpu_tids[KVM_MAX_VCPUS];
+static bool migrate_vcpus;
 static bool irq_affinity;
 static bool block_vcpus;
 static bool done;
@@ -67,10 +69,21 @@ static void *vcpu_thread_main(void *arg)
 	struct kvm_vcpu *vcpu = arg;
 	struct ucall uc;
 
+	WRITE_ONCE(vcpu_tids[vcpu->id], kvm_gettid());
+
 	vcpu_run(vcpu);
 	TEST_ASSERT_EQ(UCALL_DONE, get_ucall(vcpu, &uc));
 
 	return NULL;
+}
+
+static void migrate_vcpu_threads(int nr_vcpus, pthread_t *vcpu_threads,
+				 cpu_set_t *available_cpus)
+{
+	int i;
+
+	for (i = 0; i < nr_vcpus; i++)
+		pin_task_to_random_cpu(vcpu_threads[i], available_cpus);
 }
 
 static int vfio_setup_msi(struct vfio_pci_device *device)
@@ -131,7 +144,7 @@ static void kvm_clear_gsi_routes(struct kvm_vm *vm)
 
 static void help(const char *name)
 {
-	printf("Usage: %s [-a] [-b] [-c] [-d <segment:bus:device.function>] [-h] [-i nr_irqs] [-n]\n", name);
+	printf("Usage: %s [-a] [-b] [-c] [-d <segment:bus:device.function>] [-h] [-i nr_irqs] [-m] [-n]\n", name);
 	printf("\n");
 	printf("Tests KVM IRQ injection via irqfd using an emulated eventfd.\n");
 	printf("-a	Randomly affinitize the device's host IRQ to different physical CPUs throughout the test\n");
@@ -139,6 +152,7 @@ static void help(const char *name)
 	printf("-c	Destroy and recreate KVM's GSI routing table in between some interrupts\n");
 	printf("-d	Use a VFIO device to send MSI-X interrupts instead of using an emulated eventfd\n");
 	printf("-i	The number of IRQs to generate during the test\n");
+	printf("-m	Pin vCPU threads to random physical CPUs throughout the test\n");
 	printf("-n	Deliver 50 percent of IRQs as non-maskable interrupts\n");
 	printf("\n");
 	exit(KSFT_FAIL);
@@ -169,13 +183,14 @@ int main(int argc, char **argv)
 	FILE *irq_affinity_fp = NULL;
 	int i, j, c, msix, eventfd;
 	bool clear_routes = false;
+	cpu_set_t available_cpus;
 	bool use_nmi = false;
 	struct iommu *iommu;
 	struct kvm_vm *vm;
 	unsigned int irq;
 	int irq_cpu;
 
-	while ((c = getopt(argc, argv, "abcd:hi:n")) != -1) {
+	while ((c = getopt(argc, argv, "abcd:hi:mn")) != -1) {
 		switch (c) {
 		case 'a':
 			irq_affinity = true;
@@ -191,6 +206,9 @@ int main(int argc, char **argv)
 			break;
 		case 'i':
 			nr_irqs = atoi_positive("Number of IRQs", optarg);
+			break;
+		case 'm':
+			migrate_vcpus = true;
 			break;
 		case 'n':
 			use_nmi = true;
@@ -246,6 +264,14 @@ int main(int argc, char **argv)
 	 */
 	irq_cpu = -1;
 
+	if (migrate_vcpus) {
+		kvm_sched_getaffinity(vcpu_tids[0], sizeof(available_cpus), &available_cpus);
+
+		if (nr_vcpus > CPU_COUNT(&available_cpus)) {
+			printf("There are more vCPUs than pCPUs; refusing to migrate.\n");
+			migrate_vcpus = false;
+		}
+	}
 	for (i = 0; i < nr_irqs; i++) {
 		const bool do_clear_routes = clear_routes && (i & BIT(3));
 		const bool do_use_nmi = use_nmi && (i & BIT(2));
@@ -261,6 +287,9 @@ int main(int argc, char **argv)
 			irq_cpu = kvm_random_u64(&kvm_rng) % get_nprocs();
 			write_proc_irq_smp_affinity_list(irq_affinity_fp, irq, irq_cpu);
 		}
+
+		if (migrate_vcpus && vcpu->id == 0)
+			migrate_vcpu_threads(nr_vcpus, vcpu_threads, &available_cpus);
 
 		for (j = 0; j < nr_vcpus; j++) {
 			TEST_ASSERT(!GUEST_RECEIVED_IRQ(vcpus[j]),
