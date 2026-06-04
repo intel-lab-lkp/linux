@@ -41,6 +41,16 @@ SECTIONS
 		ENTRY_TEXT
 		IRQENTRY_TEXT
 		SOFTIRQENTRY_TEXT
+#ifdef CONFIG_KEXEC_CORE
+		. = ALIGN(PAGE_SIZE);
+		__kexec_tramp_text_start = .;
+		KEEP(*(.kexec.tramp.text))
+		KEEP(*(.kexec.tramp.text.*))
+		__kexec_tramp_text_end = .;
+		ASSERT((__kexec_tramp_text_end - __kexec_tramp_text_start) <= PAGE_SIZE,
+		       ".kexec.tramp.text exceeds PAGE_SIZE");
+		. = ALIGN(PAGE_SIZE);
+#endif
 		_etext = .;
 	}
 
