@@ -1067,6 +1067,11 @@ void
 xfs_buf_item_done(
 	struct xfs_buf		*bp)
 {
+	if (bp->b_log_item->bli_item.li_log->l_cilp) {
+		down_read(&bp->b_log_item->bli_item.li_log->l_cilp->xc_ctx_lock);
+		list_del_init(&bp->b_log_item->bli_item.li_cil);
+		up_read(&bp->b_log_item->bli_item.li_log->l_cilp->xc_ctx_lock);
+	}
 	/*
 	 * If we are forcibly shutting down, this may well be off the AIL
 	 * already. That's because we simulate the log-committed callbacks to
