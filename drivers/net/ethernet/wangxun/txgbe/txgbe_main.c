@@ -212,15 +212,21 @@ static void txgbe_reset(struct wx *wx)
 		wx_ptp_reset(wx);
 }
 
-static void txgbe_disable_device(struct wx *wx)
+static int txgbe_disable_device(struct wx *wx)
 {
 	struct net_device *netdev = wx->netdev;
+	int ret = 0;
 	u32 i;
 
 	if (test_and_set_bit(WX_STATE_DOWN, wx->state))
-		return;
+		return 0;
 
-	wx_disable_pcie_master(wx);
+	ret = wx_disable_pcie_master(wx);
+	if (ret) {
+		wx_soft_quiesce(wx);
+		return ret;
+	}
+
 	/* disable receives */
 	wx_disable_rx(wx);
 
@@ -270,11 +276,18 @@ static void txgbe_disable_device(struct wx *wx)
 
 	/* Disable the Tx DMA engine */
 	wr32m(wx, WX_TDM_CTL, WX_TDM_CTL_TE, 0);
+
+	return 0;
 }
 
-void txgbe_down(struct wx *wx)
+int txgbe_down(struct wx *wx)
 {
-	txgbe_disable_device(wx);
+	int ret = 0;
+
+	ret = txgbe_disable_device(wx);
+	if (ret)
+		return ret;
+
 	txgbe_reset(wx);
 
 	switch (wx->mac.type) {
@@ -295,6 +308,8 @@ void txgbe_down(struct wx *wx)
 
 	wx_clean_all_tx_rings(wx);
 	wx_clean_all_rx_rings(wx);
+
+	return 0;
 }
 
 void txgbe_up(struct wx *wx)
@@ -302,6 +317,18 @@ void txgbe_up(struct wx *wx)
 	wx_configure(wx);
 	wx_ptp_init(wx);
 	txgbe_up_complete(wx);
+}
+
+static void txgbe_down_suspend(struct wx *wx)
+{
+	phylink_stop(wx->phylink);
+
+	wx_clean_all_tx_rings(wx);
+	wx_clean_all_rx_rings(wx);
+
+	wx_free_irq(wx);
+	txgbe_free_misc_irq(wx->priv);
+	wx_free_resources(wx);
 }
 
 /**
@@ -420,6 +447,7 @@ static int txgbe_sw_init(struct wx *wx)
 
 	wx->setup_tc = txgbe_setup_tc;
 	wx->do_reset = txgbe_do_reset;
+	wx->down_suspend = txgbe_down_suspend;
 	set_bit(0, &wx->fwd_bitmask);
 
 	switch (wx->mac.type) {
@@ -556,7 +584,8 @@ static void txgbe_dev_shutdown(struct pci_dev *pdev)
 
 	wx_control_hw(wx, false);
 
-	pci_disable_device(pdev);
+	if (!test_and_set_bit(WX_STATE_DISABLED, wx->state))
+		pci_disable_device(pdev);
 }
 
 static void txgbe_shutdown(struct pci_dev *pdev)
@@ -606,13 +635,16 @@ int txgbe_setup_tc(struct net_device *dev, u8 tc)
 
 static void txgbe_reinit_locked(struct wx *wx)
 {
+	int ret;
+
 	netif_trans_update(wx->netdev);
 
 	mutex_lock(&wx->reset_lock);
 	set_bit(WX_STATE_RESETTING, wx->state);
 
-	txgbe_down(wx);
-	txgbe_up(wx);
+	ret = txgbe_down(wx);
+	if (!ret)
+		txgbe_up(wx);
 
 	clear_bit(WX_STATE_RESETTING, wx->state);
 	mutex_unlock(&wx->reset_lock);
@@ -908,6 +940,7 @@ static int txgbe_probe(struct pci_dev *pdev,
 		goto err_remove_phy;
 
 	pci_set_drvdata(pdev, wx);
+	pci_save_state(pdev);
 
 	netif_tx_stop_all_queues(netdev);
 
@@ -982,7 +1015,8 @@ static void txgbe_remove(struct pci_dev *pdev)
 	kfree(wx->mac_table);
 	wx_clear_interrupt_scheme(wx);
 
-	pci_disable_device(pdev);
+	if (!test_and_set_bit(WX_STATE_DISABLED, wx->state))
+		pci_disable_device(pdev);
 }
 
 static struct pci_driver txgbe_driver = {
@@ -992,6 +1026,7 @@ static struct pci_driver txgbe_driver = {
 	.remove   = txgbe_remove,
 	.shutdown = txgbe_shutdown,
 	.sriov_configure = wx_pci_sriov_configure,
+	.err_handler = &wx_err_handler,
 };
 
 module_pci_driver(txgbe_driver);

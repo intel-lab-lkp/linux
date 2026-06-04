@@ -310,7 +310,7 @@ struct txgbe_fdir_filter {
 
 extern char txgbe_driver_name[];
 
-void txgbe_down(struct wx *wx);
+int txgbe_down(struct wx *wx);
 void txgbe_up(struct wx *wx);
 int txgbe_setup_tc(struct net_device *dev, u8 tc);
 void txgbe_do_reset(struct net_device *netdev, bool reinit);

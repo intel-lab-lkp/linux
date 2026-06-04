@@ -78,13 +78,17 @@ static int txgbe_set_ringparam(struct net_device *netdev,
 		goto clear_reset;
 	}
 
-	txgbe_down(wx);
+	err = txgbe_down(wx);
+	if (err)
+		goto free_temp;
 
 	wx_set_ring(wx, new_tx_count, new_rx_count, temp_ring);
 	kvfree(temp_ring);
 
 	txgbe_up(wx);
 
+free_temp:
+	kvfree(temp_ring);
 clear_reset:
 	clear_bit(WX_STATE_RESETTING, wx->state);
 	mutex_unlock(&wx->reset_lock);
