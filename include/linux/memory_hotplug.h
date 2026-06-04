@@ -28,6 +28,8 @@ enum mmop {
 	MMOP_ONLINE_MOVABLE,
 };
 
+typedef int (*memory_post_plug_callback_t)(u64 addr, u64 size);
+
 #ifdef CONFIG_MEMORY_HOTPLUG
 struct page *pfn_to_online_page(unsigned long pfn);
 
@@ -177,6 +179,9 @@ static inline void pgdat_kswapd_lock_init(pg_data_t *pgdat)
 	mutex_init(&pgdat->kswapd_lock);
 }
 
+void set_memory_post_plug_callback(memory_post_plug_callback_t callback);
+int memory_post_plug_call(u64 addr, u64 size);
+
 #else /* ! CONFIG_MEMORY_HOTPLUG */
 #define pfn_to_online_page(pfn)			\
 ({						\
@@ -222,6 +227,12 @@ static inline bool mhp_supports_memmap_on_memory(void)
 static inline void pgdat_kswapd_lock(pg_data_t *pgdat) {}
 static inline void pgdat_kswapd_unlock(pg_data_t *pgdat) {}
 static inline void pgdat_kswapd_lock_init(pg_data_t *pgdat) {}
+
+static inline void set_memory_post_plug_callback(memory_post_plug_callback_t callback) {}
+static inline int memory_post_plug_call(u64 addr, u64 size)
+{
+	return 0;
+}
 #endif /* ! CONFIG_MEMORY_HOTPLUG */
 
 /*

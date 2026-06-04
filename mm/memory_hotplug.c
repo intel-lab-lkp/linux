@@ -1731,6 +1731,26 @@ bool mhp_range_allowed(u64 start, u64 size, bool need_mapping)
 	return false;
 }
 
+static memory_post_plug_callback_t memory_post_plug_callback __ro_after_init;
+
+void set_memory_post_plug_callback(memory_post_plug_callback_t callback)
+{
+	/* Fatal error to set callback twice in boot stage */
+	if (memory_post_plug_callback)
+		panic("memory_post_plug_callback is already registered\n");
+
+	memory_post_plug_callback = callback;
+}
+
+int memory_post_plug_call(u64 addr, u64 size)
+{
+	if (!memory_post_plug_callback)
+		return 0;
+
+	return (*memory_post_plug_callback)(addr, size);
+}
+EXPORT_SYMBOL_GPL(memory_post_plug_call);
+
 #ifdef CONFIG_MEMORY_HOTREMOVE
 /*
  * Scan pfn range [start,end) to find movable/migratable pages (LRU and
