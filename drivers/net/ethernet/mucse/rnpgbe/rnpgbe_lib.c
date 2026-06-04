@@ -623,11 +623,16 @@ static int rnpgbe_poll(struct napi_struct *napi, int budget)
 			clean_complete = false;
 	}
 
+	if (test_bit(__MUCSE_DOWN, &q_vector->mucse->state))
+		clean_complete = true;
+
 	if (!clean_complete)
 		return budget;
 
-	if (likely(napi_complete_done(napi, work_done)))
-		rnpgbe_irq_enable_queues(q_vector);
+	if (likely(napi_complete_done(napi, work_done))) {
+		if (!test_bit(__MUCSE_DOWN, &q_vector->mucse->state))
+			rnpgbe_irq_enable_queues(q_vector);
+	}
 
 	return work_done;
 }
@@ -645,6 +650,7 @@ static int rnpgbe_poll(struct napi_struct *napi, int budget)
 int rnpgbe_request_mbx_irq(struct mucse *mucse)
 {
 	struct pci_dev *pdev = mucse->pdev;
+	struct mucse_hw *hw = &mucse->hw;
 	int err = 0;
 
 	snprintf(mucse->mbx_name, sizeof(mucse->mbx_name),
@@ -660,6 +666,9 @@ int rnpgbe_request_mbx_irq(struct mucse *mucse)
 				  mucse);
 	}
 
+	if (!err)
+		hw->mbx.irq_en = true;
+
 	return err;
 }
 
@@ -670,8 +679,10 @@ int rnpgbe_request_mbx_irq(struct mucse *mucse)
 void rnpgbe_free_mbx_irq(struct mucse *mucse)
 {
 	struct pci_dev *pdev = mucse->pdev;
+	struct mucse_hw *hw = &mucse->hw;
 
 	free_irq(pci_irq_vector(pdev, 0), mucse);
+	hw->mbx.irq_en = false;
 }
 
 /**
@@ -1277,8 +1288,35 @@ static void rnpgbe_clean_all_rx_rings(struct mucse *mucse)
 void rnpgbe_down(struct mucse *mucse)
 {
 	struct net_device *netdev = mucse->netdev;
+	struct mucse_hw *hw = &mucse->hw;
+	unsigned long flags;
+	int err;
 
 	set_bit(__MUCSE_DOWN, &mucse->state);
+	cancel_delayed_work_sync(&mucse->serv_task);
+
+	spin_lock_irqsave(&mucse->link_lock, flags);
+	hw->link = false;
+	hw->speed = 0;
+	hw->duplex = 0;
+	mucse->flags &= ~M_FLAG_NEED_LINK_UPDATE;
+	spin_unlock_irqrestore(&mucse->link_lock, flags);
+	rnpgbe_set_link(hw, false);
+
+	err = rnpgbe_send_notify(hw, false, mucse_fw_link_report_en);
+	if (err) {
+		dev_warn(&hw->pdev->dev, "Send link report to hw failed %d\n",
+			 err);
+		dev_warn(&hw->pdev->dev, "Fw will still report link event\n");
+	}
+
+	err = rnpgbe_send_notify(hw, false, mucse_fw_portup);
+	if (err) {
+		dev_warn(&hw->pdev->dev, "Send port down to hw failed %d\n",
+			 err);
+		dev_warn(&hw->pdev->dev, "Port is not truly down\n");
+	}
+	netif_carrier_off(netdev);
 	netif_tx_stop_all_queues(netdev);
 	netif_tx_disable(netdev);
 	rnpgbe_napi_disable_all(mucse);
@@ -1294,6 +1332,9 @@ void rnpgbe_down(struct mucse *mucse)
 void rnpgbe_up_complete(struct mucse *mucse)
 {
 	struct net_device *netdev = mucse->netdev;
+	struct mucse_hw *hw = &mucse->hw;
+	unsigned long flags;
+	int err;
 
 	if (mucse->flags & (M_FLAG_MSIX_EN | M_FLAG_MSIX_SINGLE_EN))
 		rnpgbe_configure_msix(mucse);
@@ -1306,6 +1347,31 @@ void rnpgbe_up_complete(struct mucse *mucse)
 	netif_tx_start_all_queues(netdev);
 	for (int i = 0; i < mucse->num_rx_queues; i++)
 		mucse_ring_wr32(mucse->rx_ring[i], RNPGBE_RX_START, 1);
+
+	err = rnpgbe_send_notify(hw, true, mucse_fw_portup);
+	if (err) {
+		dev_warn(&hw->pdev->dev, "Send portup to hw failed %d\n", err);
+		dev_warn(&hw->pdev->dev, "Port is not truly up\n");
+	}
+
+	spin_lock_irqsave(&mucse->link_lock, flags);
+	hw->link = false;
+	hw->speed = 0;
+	hw->duplex = 0;
+	mucse->flags &= ~M_FLAG_NEED_LINK_UPDATE;
+	/* echo driver down to hw */
+	mucse_hw_wr32(hw, RNPGBE_LINK_ST, M_DEFAULT_ST);
+	spin_unlock_irqrestore(&mucse->link_lock, flags);
+
+	err = rnpgbe_send_notify(hw, true, mucse_fw_link_report_en);
+	if (err) {
+		dev_warn(&hw->pdev->dev, "Send link report to hw failed %d\n",
+			 err);
+		dev_warn(&hw->pdev->dev, "Fw will not report link event\n");
+	}
+
+	queue_delayed_work(system_wq, &mucse->serv_task,
+			   msecs_to_jiffies(500));
 }
 
 /**
@@ -1961,4 +2027,114 @@ void rnpgbe_configure_rx(struct mucse *mucse)
 	dma_axi_ctl = mucse_hw_rd32(hw, RNPGBE_DMA_AXI_EN);
 	dma_axi_ctl |= RX_AXI_RW_EN;
 	mucse_hw_wr32(hw, RNPGBE_DMA_AXI_EN, dma_axi_ctl);
+}
+
+/**
+ * rnpgbe_process_link_event - Update the link status
+ * @mucse: pointer to the device private structure
+ *
+ * @return: link status
+ **/
+static int rnpgbe_process_link_event(struct mucse *mucse)
+{
+	struct net_device *netdev = mucse->netdev;
+	struct mucse_hw *hw = &mucse->hw;
+	unsigned long flags;
+	bool link;
+	int speed;
+	u8 duplex;
+
+	/* lockless fast-path ,serv_task retry handles race */
+	if (!(mucse->flags & M_FLAG_NEED_LINK_UPDATE))
+		return hw->link;
+
+	spin_lock_irqsave(&mucse->link_lock, flags);
+
+	link = hw->link;
+	speed = hw->speed;
+	duplex = hw->duplex;
+
+	mucse->flags &= ~M_FLAG_NEED_LINK_UPDATE;
+	spin_unlock_irqrestore(&mucse->link_lock, flags);
+
+	if (link) {
+		netdev_info(netdev, "NIC Link is Up %d Mbps, %s Duplex\n",
+			    speed,
+			    duplex ? "Full" : "Half");
+	}
+
+	return link;
+}
+
+/**
+ * rnpgbe_link_is_up - Update netif_carrier status and
+ * print link up message
+ * @mucse: pointer to the device private structure
+ **/
+static void rnpgbe_link_is_up(struct mucse *mucse)
+{
+	struct net_device *netdev = mucse->netdev;
+	struct mucse_hw *hw = &mucse->hw;
+
+	/* Only continue if link was previously down */
+	if (netif_carrier_ok(netdev))
+		return;
+	rnpgbe_set_link(hw, true);
+	netif_carrier_on(netdev);
+}
+
+/**
+ * rnpgbe_link_is_down - Update netif_carrier status and
+ * print link down message
+ * @mucse: pointer to the private structure
+ **/
+static void rnpgbe_link_is_down(struct mucse *mucse)
+{
+	struct net_device *netdev = mucse->netdev;
+	struct mucse_hw *hw = &mucse->hw;
+
+	/* Only continue if link was up previously */
+	if (!netif_carrier_ok(netdev))
+		return;
+	netdev_info(netdev, "NIC Link is Down\n");
+	rnpgbe_set_link(hw, false);
+	netif_carrier_off(netdev);
+}
+
+/**
+ * rnpgbe_process_link_subtask - Check and bring link up
+ * @mucse: pointer to the device private structure
+ **/
+static void rnpgbe_process_link_subtask(struct mucse *mucse)
+{
+	/* if interface is down do nothing */
+	if (test_bit(__MUCSE_DOWN, &mucse->state))
+		return;
+
+	if (rnpgbe_process_link_event(mucse))
+		rnpgbe_link_is_up(mucse);
+	else
+		rnpgbe_link_is_down(mucse);
+}
+
+/**
+ * rnpgbe_service_task - Manages and runs subtasks
+ * @work: pointer to work_struct containing our data
+ **/
+void rnpgbe_service_task(struct work_struct *work)
+{
+	struct mucse *mucse = container_of(work, struct mucse, serv_task.work);
+
+	if (test_bit(__MUCSE_DOWN, &mucse->state))
+		return;
+
+	rnpgbe_process_link_subtask(mucse);
+
+	/* Periodic requeue is intentional: future patches will add
+	 * statistics polling and other housekeeping tasks beyond
+	 * link state handling.
+	 */
+	if (!test_bit(__MUCSE_DOWN, &mucse->state))
+		queue_delayed_work(system_wq, &mucse->serv_task,
+				   msecs_to_jiffies(500));
 }

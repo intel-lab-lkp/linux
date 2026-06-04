@@ -17,25 +17,33 @@ enum rnpgbe_boards {
 	board_n210
 };
 
+struct mbx_req_cookie {
+	int timeout;
+	struct completion comp;
+	/* must match sizeof(struct mbx_fw_cmd_reply) */
+	u8 cmd[56];
+};
+
 struct mucse_mbx_info {
 	u32 timeout_us;
 	u32 delay_us;
 	u16 fw_req;
 	u16 fw_ack;
+	struct mbx_req_cookie cookie;
 	/* lock for only one use mbx */
 	struct mutex lock;
 	/* fw <--> pf mbx */
+	bool irq_en;
 	u32 fwpf_shm_base;
 	u32 pf2fw_mbx_ctrl;
 	u32 fwpf_mbx_mask;
 	u32 fwpf_ctrl_base;
 };
 
-/* Enum for firmware notification modes,
- * more modes (e.g., portup, link_report) will be added in future
- **/
 enum {
 	mucse_fw_powerup,
+	mucse_fw_portup,
+	mucse_fw_link_report_en,
 };
 
 struct mucse_hw {
@@ -44,8 +52,11 @@ struct mucse_hw {
 	struct pci_dev *pdev;
 	struct mucse_mbx_info mbx;
 	int port;
+	int speed;
+	bool link;
 	u16 cycles_per_us;
 	u8 pfvfnum;
+	u8 duplex;
 };
 
 struct rnpgbe_tx_desc {
@@ -210,6 +221,7 @@ struct mucse {
 #define M_FLAG_MSI_EN              BIT(0)
 #define M_FLAG_MSIX_SINGLE_EN      BIT(1)
 #define M_FLAG_MSIX_EN             BIT(2)
+#define M_FLAG_NEED_LINK_UPDATE    BIT(3)
 	u32 flags;
 	struct mucse_ring *tx_ring[RNPGBE_MAX_QUEUES]
 		____cacheline_aligned_in_smp;
@@ -224,6 +236,8 @@ struct mucse {
 	int num_rx_queues;
 	char mbx_name[32];
 	unsigned long state;
+	struct delayed_work serv_task;
+	spinlock_t link_lock; /* spinlock for link update */
 };
 
 int rnpgbe_get_permanent_mac(struct mucse_hw *hw, u8 *perm_addr);
@@ -232,6 +246,7 @@ int rnpgbe_send_notify(struct mucse_hw *hw,
 		       bool enable,
 		       int mode);
 int rnpgbe_init_hw(struct mucse_hw *hw, int board_type);
+void rnpgbe_set_link(struct mucse_hw *hw, bool linkup);
 
 /* Device IDs */
 #define PCI_VENDOR_ID_MUCSE               0x8848
