@@ -31,8 +31,8 @@ static int adxl355_i2c_probe(struct i2c_client *client)
 
 	regmap = devm_regmap_init_i2c(client, &adxl355_i2c_regmap_config);
 	if (IS_ERR(regmap)) {
-		dev_err(&client->dev, "Error initializing i2c regmap: %ld\n",
-			PTR_ERR(regmap));
+		dev_err(&client->dev, "Error initializing i2c regmap: %pe\n",
+			regmap);
 
 		return PTR_ERR(regmap);
 	}

@@ -21,8 +21,8 @@ static int kxsd9_spi_probe(struct spi_device *spi)
 	spi->mode = SPI_MODE_0;
 	regmap = devm_regmap_init_spi(spi, &config);
 	if (IS_ERR(regmap)) {
-		dev_err(&spi->dev, "%s: regmap allocation failed: %ld\n",
-			__func__, PTR_ERR(regmap));
+		dev_err(&spi->dev, "%s: regmap allocation failed: %pe\n",
+			__func__, regmap);
 		return PTR_ERR(regmap);
 	}
 
