@@ -2647,9 +2647,7 @@ static void pwm_dbg_show(struct pwm_chip *chip, struct seq_file *s)
 		if (test_bit(PWMF_REQUESTED, &pwm->flags))
 			seq_puts(s, " requested");
 
-		seq_puts(s, "\n");
-
-		seq_printf(s, "  requested configuration: %3sabled, %llu/%llu ns, %s polarity",
+		seq_printf(s, "\n  requested configuration: %3sabled, %llu/%llu ns, %s polarity",
 			   state.enabled ? "en" : "dis", state.duty_cycle, state.period,
 			   state.polarity ? "inverse" : "normal");
 		if (state.usage_power)
