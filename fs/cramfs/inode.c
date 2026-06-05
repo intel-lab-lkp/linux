@@ -697,13 +697,37 @@ static int cramfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	return 0;
 }
 
+static bool cramfs_read_dirent(struct inode *inode, unsigned int offset,
+			       struct cramfs_inode *de, char **name,
+			       int *namelen)
+{
+	loff_t remaining;
+
+	if (offset > inode->i_size)
+		return false;
+	remaining = inode->i_size - offset;
+	if (remaining < sizeof(*de))
+		return false;
+
+	memcpy(de,
+	       cramfs_read(inode->i_sb, OFFSET(inode) + offset, sizeof(*de)),
+	       sizeof(*de));
+	*namelen = de->namelen << 2;
+	if (*namelen > remaining - sizeof(*de))
+		return false;
+
+	*name = *namelen ? cramfs_read(inode->i_sb,
+				       OFFSET(inode) + offset + sizeof(*de),
+				       *namelen) : NULL;
+	return true;
+}
+
 /*
  * Read a cramfs directory entry.
  */
 static int cramfs_readdir(struct file *file, struct dir_context *ctx)
 {
 	struct inode *inode = file_inode(file);
-	struct super_block *sb = inode->i_sb;
 	char *buf;
 	unsigned int offset;
 
@@ -721,6 +745,7 @@ static int cramfs_readdir(struct file *file, struct dir_context *ctx)
 
 	while (offset < inode->i_size) {
 		struct cramfs_inode *de;
+		struct cramfs_inode entry;
 		unsigned long nextoffset;
 		char *name;
 		ino_t ino;
@@ -728,18 +753,22 @@ static int cramfs_readdir(struct file *file, struct dir_context *ctx)
 		int namelen;
 
 		mutex_lock(&read_mutex);
-		de = cramfs_read(sb, OFFSET(inode) + offset, sizeof(*de)+CRAMFS_MAXPATHLEN);
-		name = (char *)(de+1);
-
 		/*
 		 * Namelengths on disk are shifted by two
 		 * and the name padded out to 4-byte boundaries
 		 * with zeroes.
 		 */
-		namelen = de->namelen << 2;
-		memcpy(buf, name, namelen);
-		ino = cramino(de, OFFSET(inode) + offset);
-		mode = de->mode;
+		de = &entry;
+		if (!cramfs_read_dirent(inode, offset, de, &name,
+					&namelen)) {
+			mutex_unlock(&read_mutex);
+			kfree(buf);
+			return -EIO;
+		}
+		if (namelen)
+			memcpy(buf, name, namelen);
+		ino = cramino(&entry, OFFSET(inode) + offset);
+		mode = entry.mode;
 		mutex_unlock(&read_mutex);
 		nextoffset = offset + sizeof(*de) + namelen;
 		for (;;) {
@@ -773,18 +802,25 @@ static struct dentry *cramfs_lookup(struct inode *dir, struct dentry *dentry, un
 	sorted = CRAMFS_SB(dir->i_sb)->flags & CRAMFS_FLAG_SORTED_DIRS;
 	while (offset < dir->i_size) {
 		struct cramfs_inode *de;
+		struct cramfs_inode entry;
 		char *name;
 		int namelen, retval;
 		int dir_off = OFFSET(dir) + offset;
 
-		de = cramfs_read(dir->i_sb, dir_off, sizeof(*de)+CRAMFS_MAXPATHLEN);
-		name = (char *)(de+1);
+		de = &entry;
+		if (!cramfs_read_dirent(dir, offset, de, &name, &namelen)) {
+			inode = ERR_PTR(-EIO);
+			goto out;
+		}
+		if (!namelen) {
+			inode = ERR_PTR(-EIO);
+			goto out;
+		}
 
 		/* Try to take advantage of sorted directories */
 		if (sorted && (dentry->d_name.name[0] < name[0]))
 			break;
 
-		namelen = de->namelen << 2;
 		offset += sizeof(*de) + namelen;
 
 		/* Quick check that the name is roughly the right length */
@@ -806,7 +842,7 @@ static struct dentry *cramfs_lookup(struct inode *dir, struct dentry *dentry, un
 		if (retval > 0)
 			continue;
 		if (!retval) {
-			inode = get_cramfs_inode(dir->i_sb, de, dir_off);
+			inode = get_cramfs_inode(dir->i_sb, &entry, dir_off);
 			break;
 		}
 		/* else (retval < 0) */
