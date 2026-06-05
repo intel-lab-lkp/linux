@@ -319,15 +319,17 @@ static unsigned int nf_flow_xmit_xfrm(struct sk_buff *skb,
 static bool nf_flow_ip4_tunnel_proto(struct nf_flowtable_ctx *ctx,
 				     struct sk_buff *skb)
 {
-	struct iphdr *iph;
+	struct iphdr *iph, _iph;
 	u16 size;
 
-	if (!pskb_may_pull(skb, sizeof(*iph) + ctx->offset))
+	iph = skb_header_pointer(skb, ctx->offset, sizeof(*iph), &_iph);
+	if (!iph)
 		return false;
 
-	iph = (struct iphdr *)(skb_network_header(skb) + ctx->offset);
-	size = iph->ihl << 2;
+	if (iph->ihl < 5)
+		return false;
 
+	size = iph->ihl << 2;
 	if (ip_is_fragment(iph) || unlikely(ip_has_options(size)))
 		return false;
 
@@ -335,9 +337,9 @@ static bool nf_flow_ip4_tunnel_proto(struct nf_flowtable_ctx *ctx,
 		return false;
 
 	if (iph->protocol == IPPROTO_IPIP) {
-		ctx->tun.proto = IPPROTO_IPIP;
+		ctx->tun.proto = iph->protocol;
 		ctx->tun.hdr_size = size;
-		ctx->offset += size;
+		ctx->offset += ctx->tun.hdr_size;
 	}
 
 	return true;
