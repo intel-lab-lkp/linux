@@ -142,7 +142,16 @@ static inline bool should_fail_futex(bool fshared)
 struct futex_hash_bucket {
 	atomic_t waiters;
 	spinlock_t lock;
-	struct plist_head chain;
+	/*
+	 * Keep the plist_head chain on its own cacheline. Lockless
+	 * futex_hb_waiters_pending() readers and lock contenders touch
+	 * the (waiters, lock) line; the lock holder modifies chain on
+	 * every wake/queue. perf c2c on a busy 176-core AMD host showed
+	 * this bucket cacheline as the #1 HITM source (129 Lcl + 31 Rmt
+	 * in 5s), hit by 156 distinct CPUs at offset 0x4 (lock) and
+	 * 0x8/0x10 (chain.{next,prev}).
+	 */
+	struct plist_head chain ____cacheline_aligned_in_smp;
 	struct futex_private_hash *priv;
 } ____cacheline_aligned_in_smp;
 
