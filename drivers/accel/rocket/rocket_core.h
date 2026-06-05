@@ -48,7 +48,6 @@ struct rocket_core {
 
 	struct {
 		struct workqueue_struct *wq;
-		struct work_struct work;
 		atomic_t pending;
 	} reset;
 

@@ -393,14 +393,6 @@ static enum drm_gpu_sched_stat rocket_job_timedout(struct drm_sched_job *sched_j
 	return DRM_GPU_SCHED_STAT_RESET;
 }
 
-static void rocket_reset_work(struct work_struct *work)
-{
-	struct rocket_core *core;
-
-	core = container_of(work, struct rocket_core, reset.work);
-	rocket_reset(core, NULL);
-}
-
 static const struct drm_sched_backend_ops rocket_sched_ops = {
 	.run_job = rocket_job_run,
 	.timedout_job = rocket_job_timedout,
@@ -444,7 +436,6 @@ int rocket_job_init(struct rocket_core *core)
 	};
 	int ret;
 
-	INIT_WORK(&core->reset.work, rocket_reset_work);
 	spin_lock_init(&core->fence_lock);
 	mutex_init(&core->job_lock);
 
@@ -488,7 +479,6 @@ void rocket_job_fini(struct rocket_core *core)
 {
 	drm_sched_fini(&core->sched);
 
-	cancel_work_sync(&core->reset.work);
 	destroy_workqueue(core->reset.wq);
 }
 
