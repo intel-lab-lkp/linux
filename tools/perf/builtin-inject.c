@@ -253,6 +253,12 @@ static int perf_event__repipe_attr(const struct perf_tool *tool,
 				return -ENOMEM;
 			memcpy(stripped_event, event, event->header.size);
 			stripped_event->attr.attr.sample_type &= ASLR_SUPPORTED_SAMPLE_TYPE;
+			if (stripped_event->attr.attr.size >=
+			    (offsetof(struct perf_event_attr, sample_regs_user) + sizeof(u64)))
+				stripped_event->attr.attr.sample_regs_user = 0;
+			if (stripped_event->attr.attr.size >=
+			    (offsetof(struct perf_event_attr, sample_regs_intr) + sizeof(u64)))
+				stripped_event->attr.attr.sample_regs_intr = 0;
 
 			if (stripped_event->attr.attr.type == PERF_TYPE_BREAKPOINT)
 				stripped_event->attr.attr.bp_addr = 0;
@@ -295,8 +301,13 @@ static int perf_event__repipe_attr(const struct perf_tool *tool,
 
 	attr.size = sizeof(struct perf_event_attr);
 	attr.sample_type &= ~PERF_SAMPLE_AUX;
-	if (inject->aslr)
+	if (inject->aslr) {
 		attr.sample_type &= ASLR_SUPPORTED_SAMPLE_TYPE;
+		if (attr.type == PERF_TYPE_BREAKPOINT)
+			attr.bp_addr = 0;
+		attr.sample_regs_user = 0;
+		attr.sample_regs_intr = 0;
+	}
 
 	if (inject->itrace_synth_opts.add_last_branch) {
 		attr.sample_type |= PERF_SAMPLE_BRANCH_STACK;
@@ -2618,6 +2629,9 @@ static int __cmd_inject(struct perf_inject *inject)
 
 
 
+		if (inject->aslr)
+			aslr_tool__strip_evlist(inject->session->tool, session->evlist);
+
 		session->header.data_offset = output_data_offset;
 		session->header.data_size = inject->bytes_written;
 		perf_session__inject_header(session, session->evlist, fd, &inj_fc.fc,
@@ -2876,6 +2890,18 @@ int cmd_inject(int argc, const char **argv)
 	if (zstd_init(&(inject.session->zstd_data), 0) < 0)
 		pr_warning("Decompression initialization failed.\n");
 
+	if (inject.aslr) {
+		struct evsel *evsel;
+
+		evlist__for_each_entry(inject.session->evlist, evsel) {
+			ret = aslr_tool__cache_orig_attrs(tool, evsel);
+			if (ret) {
+				pr_err("Failed to cache original attributes: %d\n", ret);
+				goto out_delete;
+			}
+		}
+	}
+
 	/* Save original section info before feature bits change */
 	ret = save_section_info(&inject);
 	if (ret)
@@ -2894,10 +2920,17 @@ int cmd_inject(int argc, const char **argv)
 		 * the input.
 		 */
 		if (!data.is_pipe) {
+			if (inject.aslr)
+				aslr_tool__strip_evlist(tool, inject.session->evlist);
+
 			ret = perf_event__synthesize_for_pipe(&inject.tool,
 							      inject.session,
 							      &inject.output,
 							      perf_event__repipe);
+
+			if (inject.aslr)
+				aslr_tool__restore_evlist(tool, inject.session->evlist);
+
 			if (ret < 0)
 				goto out_delete;
 		}
@@ -2962,17 +2995,6 @@ int cmd_inject(int argc, const char **argv)
 		goto out_delete;
 
 	ret = __cmd_inject(&inject);
-
-	if (inject.aslr) {
-		struct evsel *evsel;
-
-		evlist__for_each_entry(inject.session->evlist, evsel) {
-			evsel->core.attr.sample_type &= ASLR_SUPPORTED_SAMPLE_TYPE;
-
-			if (evsel->core.attr.type == PERF_TYPE_BREAKPOINT)
-				evsel->core.attr.bp_addr = 0;
-		}
-	}
 
 	guest_session__exit(&inject.guest_session);
 
