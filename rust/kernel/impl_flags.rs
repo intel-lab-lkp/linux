@@ -16,6 +16,12 @@
 ///   ([`::core::ops::BitOr`], [`::core::ops::BitAnd`], etc.).
 /// - Utility methods such as `.contains()` to check flags.
 ///
+/// An optional visibility specifier in the inner-field position of the
+/// bitmask struct controls the visibility of the generated `bits`
+/// accessor. Declare it `pub` (e.g., `pub struct Permissions(pub u32)`)
+/// to expose the raw integer outside the defining module — useful when
+/// passing the value to C APIs. Omit it to keep `bits` private.
+///
 /// # Examples
 ///
 /// ```
@@ -24,7 +30,7 @@
 /// impl_flags!(
 ///     /// Represents multiple permissions.
 ///     #[derive(Debug, Clone, Default, Copy, PartialEq, Eq)]
-///     pub struct Permissions(u32);
+///     pub struct Permissions(pub u32);
 ///
 ///     /// Represents a single permission.
 ///     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,12 +71,18 @@
 /// let negated = !read_only;
 /// assert!(negated.contains(Permission::Write));
 /// assert!(!negated.contains(Permission::Read));
+///
+/// // The `pub` in `pub struct Permissions(pub u32)` makes `bits` callable
+/// // from outside the defining module, returning the raw integer
+/// // representation — useful for passing the value to a C API.
+/// let raw: u32 = read_only.bits();
+/// assert_eq!(raw, Permission::Read as u32);
 /// ```
 #[macro_export]
 macro_rules! impl_flags {
     (
         $(#[$outer_flags:meta])*
-        $vis_flags:vis struct $flags:ident($ty:ty);
+        $vis_flags:vis struct $flags:ident($inner_vis:vis $ty:ty);
 
         $(#[$outer_flag:meta])*
         $vis_flag:vis enum $flag:ident {
@@ -266,6 +278,17 @@ macro_rules! impl_flags {
             #[inline]
             pub fn contains_all(self, flags: $flags) -> bool {
                 (self.0 & flags.0) == flags.0
+            }
+
+            /// Return a copy of the inner representation of the flags.
+            ///
+            /// The visibility of this method is controlled by the optional
+            /// visibility specifier in the inner-field position of the
+            /// bitmask struct declaration.
+            #[inline]
+            #[allow(dead_code)]
+            $inner_vis fn bits(self) -> $ty {
+                self.0
             }
         }
     };
