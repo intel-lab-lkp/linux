@@ -10,6 +10,8 @@
 #ifndef _INTERNAL_HANDSHAKE_H
 #define _INTERNAL_HANDSHAKE_H
 
+#include <linux/tagset.h>
+
 /* Per-net namespace context */
 struct handshake_net {
 	spinlock_t		hn_lock;	/* protects next 3 fields */
@@ -34,6 +36,7 @@ struct handshake_req {
 	const struct handshake_proto	*hr_proto;
 	struct sock			*hr_sk;
 	void				(*hr_odestruct)(struct sock *sk);
+	struct tagset			hr_tags;
 
 	/* Always the last field */
 	char				hr_priv[];
@@ -86,6 +89,9 @@ struct handshake_req *handshake_req_hash_lookup(struct sock *sk);
 struct handshake_req *handshake_req_next(struct handshake_net *hn, int class);
 int handshake_req_submit(struct socket *sock, struct handshake_req *req,
 			 gfp_t flags);
+bool handshake_try_complete(struct handshake_req *req);
+void handshake_finish_complete(struct handshake_req *req, unsigned int status,
+			       struct genl_info *info);
 void handshake_complete(struct handshake_req *req, unsigned int status,
 			struct genl_info *info);
 bool handshake_req_cancel(struct sock *sk);

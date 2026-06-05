@@ -16,6 +16,7 @@
 
 #include <net/sock.h>
 #include <net/genetlink.h>
+#include <net/handshake.h>
 #include <net/netns/generic.h>
 
 #include <kunit/visibility.h>
@@ -133,11 +134,83 @@ out_status:
 	return err;
 }
 
+/*
+ * Pick up session tags from the DONE downcall payload into a
+ * caller-owned tagset. No handshake_req fields are mutated here:
+ * concurrent DONE handlers each populate a private tagset, and
+ * the winner of the completion gate publishes its set into
+ * req->hr_tags by struct assignment.
+ *
+ * Return: 0 if tags were processed (some may have been dropped on
+ * per-tag or bulk allocation pressure, or truncated at
+ * HANDSHAKE_MAX_SESSIONTAGS); a negative errno if the payload was
+ * rejected and no tags collected.
+ */
+static int handshake_get_sessiontags(struct tagset *tags,
+				     struct genl_info *info)
+{
+	unsigned int count = 0;
+	struct nlattr *nla;
+	int rem;
+
+	/*
+	 * Reject embedded NUL bytes only. NLA_STRING payloads may
+	 * arrive with or without a trailing NUL, and nla_strdup()
+	 * appends the terminator when copying into the tagset.
+	 * NLA_NUL_STRING would accept a NUL at any offset, and the
+	 * YAML schema cannot express "no NUL except as terminator,"
+	 * so the check belongs here.
+	 */
+	nlmsg_for_each_attr_type(nla, HANDSHAKE_A_DONE_TAG, info->nlhdr,
+				 GENL_HDRLEN, rem) {
+		const char *src = nla_data(nla);
+		size_t srclen = nla_len(nla);
+
+		if (srclen > 0 && src[srclen - 1] == '\0')
+			srclen--;
+		if (srclen == 0 || memchr(src, '\0', srclen))
+			return -EINVAL;
+		count++;
+	}
+	if (count == 0)
+		return 0;
+	if (count > HANDSHAKE_MAX_SESSIONTAGS) {
+		pr_warn_once("handshake: too many session tags (%u > %u)\n",
+			     count, HANDSHAKE_MAX_SESSIONTAGS);
+		count = HANDSHAKE_MAX_SESSIONTAGS;
+	}
+	if (!tagset_alloc(tags, count, GFP_KERNEL)) {
+		pr_warn_once("handshake: dropping session tags under memory pressure\n");
+		return 0;
+	}
+
+	nlmsg_for_each_attr_type(nla, HANDSHAKE_A_DONE_TAG, info->nlhdr,
+				 GENL_HDRLEN, rem) {
+		char *tag;
+
+		/*
+		 * The first pass may have clamped count to
+		 * HANDSHAKE_MAX_SESSIONTAGS. Stop here to avoid
+		 * alloc/free churn on excess attributes.
+		 */
+		if (tagset_count(tags) >= count)
+			break;
+
+		tag = nla_strdup(nla, GFP_KERNEL);
+		if (!tag)
+			continue;
+		if (!tagset_add(tags, tag))
+			kfree(tag);
+	}
+	return 0;
+}
+
 int handshake_nl_done_doit(struct sk_buff *skb, struct genl_info *info)
 {
 	struct net *net = sock_net(skb->sk);
 	struct handshake_req *req;
 	struct socket *sock;
+	DEFINE_TAGSET(tags);
 	int fd, status, err;
 
 	if (GENL_REQ_ATTR_CHECK(info, HANDSHAKE_A_DONE_SOCKFD))
@@ -161,10 +234,42 @@ int handshake_nl_done_doit(struct sk_buff *skb, struct genl_info *info)
 	status = -EIO;
 	if (info->attrs[HANDSHAKE_A_DONE_STATUS])
 		status = nla_get_u32(info->attrs[HANDSHAKE_A_DONE_STATUS]);
+	err = 0;
+	if (!status) {
+		int ret = handshake_get_sessiontags(&tags, info);
 
-	handshake_complete(req, status, info);
+		if (ret < 0) {
+			err = ret;
+			trace_handshake_cmd_done_err(net, req, sock->sk, err);
+			status = -EIO;
+		}
+	}
+
+	/*
+	 * Take the unique-completer gate after collection so the gate
+	 * region contains no GFP_KERNEL allocations. handshake_req_cancel()
+	 * observers must not see the gate as taken while sleeping work
+	 * remains here, or they will free callback data while the consumer
+	 * callback is still pending.
+	 */
+	if (!handshake_try_complete(req)) {
+		trace_handshake_cmd_done_err(net, req, sock->sk, -EBUSY);
+		tagset_destroy(&tags);
+		sockfd_put(sock);
+		return -EBUSY;
+	}
+
+	/*
+	 * Publish the locally-collected tagset. req->hr_tags was
+	 * initialized empty by handshake_req_alloc() and no other writer
+	 * can reach it past the gate, so a struct assignment cleanly
+	 * transfers ownership of the heap-allocated tag array.
+	 */
+	req->hr_tags = tags;
+
+	handshake_finish_complete(req, status, info);
 	sockfd_put(sock);
-	return 0;
+	return err;
 }
 
 static unsigned int handshake_net_id;

@@ -10,6 +10,14 @@
 #ifndef _NET_HANDSHAKE_H
 #define _NET_HANDSHAKE_H
 
+#include <linux/tagset.h>
+
+/*
+ * Per-handshake cap on session tags. Bounds the cost of
+ * tagset_intersection() in consumer authorization checks.
+ */
+#define HANDSHAKE_MAX_SESSIONTAGS	64
+
 enum {
 	TLS_NO_KEYRING = 0,
 	TLS_NO_PEERID = 0,
@@ -17,8 +25,24 @@ enum {
 	TLS_NO_PRIVKEY = 0,
 };
 
+/**
+ * typedef tls_done_func_t - TLS handshake completion callback
+ * @data: opaque context pointer set via tls_handshake_args.ta_data
+ * @status: zero on success, otherwise a negative errno
+ * @peerid: serial number of peer identity key, or TLS_NO_PEERID
+ * @tags: session tags assigned by the handshake agent
+ *
+ * Invoked when a TLS handshake completes, either successfully or with
+ * an error. The @tags parameter points to session metadata assigned
+ * by the handshake agent based on certificate policy evaluation. The
+ * tagset is empty when the handshake failed or no policies matched.
+ *
+ * The @tags pointer is valid only for the duration of this callback.
+ * Callers requiring persistent access must copy via tagset_copy().
+ */
 typedef void	(*tls_done_func_t)(void *data, int status,
-				   key_serial_t peerid);
+				   key_serial_t peerid,
+				   const struct tagset *tags);
 
 struct tls_handshake_args {
 	struct socket		*ta_sock;

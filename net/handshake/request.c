@@ -79,6 +79,7 @@ static void handshake_req_destroy(struct handshake_req *req)
 		req->hr_proto->hp_destroy(req);
 	rhashtable_remove_fast(&handshake_rhashtbl, &req->hr_rhash,
 			       handshake_rhash_params);
+	tagset_destroy(&req->hr_tags);
 	kfree(req);
 }
 
@@ -124,6 +125,7 @@ struct handshake_req *handshake_req_alloc(const struct handshake_proto *proto,
 		return NULL;
 
 	INIT_LIST_HEAD(&req->hr_list);
+	tagset_init(&req->hr_tags);
 	req->hr_proto = proto;
 	return req;
 }
@@ -284,19 +286,67 @@ out_err:
 }
 EXPORT_SYMBOL(handshake_req_submit);
 
-void handshake_complete(struct handshake_req *req, unsigned int status,
-			struct genl_info *info)
+/**
+ * handshake_try_complete - Take the unique-completer gate
+ * @req: handshake request being completed
+ *
+ * The DONE netlink op runs with parallel_ops, so duplicate or
+ * concurrent DONE downcalls for the same socket can both reach
+ * the same @req. The gate ensures that exactly one caller drives
+ * completion to the consumer.
+ *
+ * The gate is also observable via handshake_req_cancel(): once
+ * taken, cancel returns %false to indicate completion is in
+ * flight. Callers must therefore not perform sleeping work
+ * between handshake_try_complete() and handshake_finish_complete(),
+ * or a concurrent cancel will see the gate taken while the
+ * consumer callback has not yet run, and may free callback data
+ * out from under it.
+ *
+ * Return: %true if the caller has won the gate and is now
+ * responsible for calling handshake_finish_complete(); %false
+ * otherwise.
+ */
+bool handshake_try_complete(struct handshake_req *req)
+{
+	return !test_and_set_bit(HANDSHAKE_F_REQ_COMPLETED, &req->hr_flags);
+}
+
+/**
+ * handshake_finish_complete - Deliver completion to the consumer
+ * @req: handshake request being completed
+ * @status: completion status to deliver
+ * @info: netlink message context, or NULL
+ *
+ * Caller must have won the gate via handshake_try_complete().
+ * Finalizes hr_tags, invokes the consumer's done callback, and
+ * drops the sock reference taken at submit.
+ */
+void handshake_finish_complete(struct handshake_req *req, unsigned int status,
+			       struct genl_info *info)
 {
 	struct sock *sk = req->hr_sk;
 	struct net *net = sock_net(sk);
 
-	if (!test_and_set_bit(HANDSHAKE_F_REQ_COMPLETED, &req->hr_flags)) {
-		trace_handshake_complete(net, req, sk, status);
-		req->hr_proto->hp_done(req, status, info);
+	trace_handshake_complete(net, req, sk, status);
+	/*
+	 * Finalize unconditionally so consumers may call
+	 * tagset_is_member() and tagset_intersection() without
+	 * tripping the !ts_finalized WARN on paths where no DONE
+	 * tags were collected.
+	 */
+	tagset_finalize(&req->hr_tags);
+	req->hr_proto->hp_done(req, status, info);
 
-		/* Handshake request is no longer pending */
-		sock_put(sk);
-	}
+	/* Handshake request is no longer pending */
+	sock_put(sk);
+}
+
+void handshake_complete(struct handshake_req *req, unsigned int status,
+			struct genl_info *info)
+{
+	if (handshake_try_complete(req))
+		handshake_finish_complete(req, status, info);
 }
 EXPORT_SYMBOL_IF_KUNIT(handshake_complete);
 
