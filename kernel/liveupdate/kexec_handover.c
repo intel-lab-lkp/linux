@@ -744,7 +744,8 @@ static void __init scratch_size_update(void)
 {
 	/*
 	 * If fixed sizes are not provided via command line, calculate them
-	 * now.
+	 * now. Use RSRV_KERN to count allocated memory, but remove HugeTLB
+	 * allocations from it because they never get allocated from scratch.
 	 */
 	if (scratch_scale) {
 		phys_addr_t size;
@@ -752,12 +753,19 @@ static void __init scratch_size_update(void)
 		size = memblock_reserved_size_flags(ARCH_LOW_ADDRESS_LIMIT,
 						    NUMA_NO_NODE,
 						    MEMBLOCK_RSRV_KERN);
+		size -= memblock_reserved_size_flags(ARCH_LOW_ADDRESS_LIMIT,
+						     NUMA_NO_NODE,
+						     MEMBLOCK_RSRV_HUGETLB);
+
 		size = size * scratch_scale / 100;
 		scratch_size_lowmem = size;
 
 		size = memblock_reserved_size_flags(MEMBLOCK_ALLOC_ANYWHERE,
 						    NUMA_NO_NODE,
 						    MEMBLOCK_RSRV_KERN);
+		size -= memblock_reserved_size_flags(MEMBLOCK_ALLOC_ANYWHERE,
+						     NUMA_NO_NODE,
+						     MEMBLOCK_RSRV_HUGETLB);
 		size = size * scratch_scale / 100 - scratch_size_lowmem;
 		scratch_size_global = size;
 	}
@@ -777,6 +785,9 @@ static phys_addr_t __init scratch_size_node(int nid)
 	if (scratch_scale) {
 		size = memblock_reserved_size_flags(MEMBLOCK_ALLOC_ANYWHERE,
 						    nid, MEMBLOCK_RSRV_KERN);
+		/* Do not count HugeTLB pages. */
+		size -= memblock_reserved_size_flags(MEMBLOCK_ALLOC_ANYWHERE,
+						     nid, MEMBLOCK_RSRV_HUGETLB);
 		size = size * scratch_scale / 100;
 	} else {
 		size = scratch_size_pernode;
