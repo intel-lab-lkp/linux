@@ -199,12 +199,14 @@ impl<T: ?Sized, B: Backend> Lock<T, B> {
 /// protected by the lock.
 #[must_use = "the lock unlocks immediately when the guard is unused"]
 pub struct Guard<'a, T: ?Sized, B: Backend> {
-    pub(crate) lock: &'a Lock<T, B>,
-    pub(crate) state: B::GuardState,
+    lock: &'a Lock<T, B>,
+    state: B::GuardState,
     _not_send: NotThreadSafe,
 }
 
-// SAFETY: `Guard` is sync when the data protected by the lock is also sync.
+// SAFETY: `Guard` is sync when the data protected by the lock is also sync. The lock reference
+// returned by `lock_ref` cannot outlive the guard borrow, and `lock_ref` is only available when
+// `Lock` itself is `Sync`.
 unsafe impl<T: Sync + ?Sized, B: Backend> Sync for Guard<'_, T, B> {}
 
 impl<'a, T: ?Sized, B: Backend> Guard<'a, T, B> {
@@ -219,7 +221,7 @@ impl<'a, T: ?Sized, B: Backend> Guard<'a, T, B> {
     /// # use kernel::{new_spinlock, sync::lock::{Backend, Guard, Lock}};
     /// # use pin_init::stack_pin_init;
     ///
-    /// fn assert_held<T, B: Backend>(guard: &Guard<'_, T, B>, lock: &Lock<T, B>) {
+    /// fn assert_held<T: Send, B: Backend>(guard: &Guard<'_, T, B>, lock: &Lock<T, B>) {
     ///     // Address-equal means the same lock.
     ///     assert!(core::ptr::eq(guard.lock_ref(), lock));
     /// }
@@ -234,7 +236,10 @@ impl<'a, T: ?Sized, B: Backend> Guard<'a, T, B> {
     /// // `g` originates from `l`.
     /// assert_held(&g, &l);
     /// ```
-    pub fn lock_ref(&self) -> &'a Lock<T, B> {
+    pub fn lock_ref(&self) -> &Lock<T, B>
+    where
+        Lock<T, B>: Sync,
+    {
         self.lock
     }
 
