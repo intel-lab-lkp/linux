@@ -235,11 +235,10 @@ EXPORT_SYMBOL_GPL(exynos_get_pmu_regmap_by_phandle);
 static int __gs101_cpu_pmu_online(unsigned int cpu)
 	__must_hold(&pmu_context->cpupm_lock)
 {
-	unsigned int cpuhint = smp_processor_id();
 	u32 reg, mask;
 
 	/* clear cpu inform hint */
-	regmap_write(pmu_context->pmureg, GS101_CPU_INFORM(cpuhint),
+	regmap_write(pmu_context->pmureg, GS101_CPU_INFORM(cpu),
 		     CPU_INFORM_CLEAR);
 
 	mask = BIT(cpu);
@@ -296,12 +295,10 @@ static int gs101_cpuhp_pmu_online(unsigned int cpu)
 static int __gs101_cpu_pmu_offline(unsigned int cpu)
 	__must_hold(&pmu_context->cpupm_lock)
 {
-	unsigned int cpuhint = smp_processor_id();
 	u32 reg, mask;
 
 	/* set cpu inform hint */
-	regmap_write(pmu_context->pmureg, GS101_CPU_INFORM(cpuhint),
-		     CPU_INFORM_C2);
+	regmap_write(pmu_context->pmureg, GS101_CPU_INFORM(cpu), CPU_INFORM_C2);
 
 	mask = BIT(cpu);
 	regmap_update_bits(pmu_context->pmuintrgen, GS101_GRP2_INTR_BID_ENABLE,
