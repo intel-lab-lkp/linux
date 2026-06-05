@@ -437,6 +437,9 @@ void cache_tag_flush_range(struct dmar_domain *domain, unsigned long start,
 
 	spin_lock_irqsave(&domain->cache_lock, flags);
 	list_for_each_entry(tag, &domain->cache_tags, node) {
+		unsigned long flush_addr = addr;
+		unsigned long flush_mask = mask;
+
 		if (iommu && iommu != tag->iommu)
 			qi_batch_flush_descs(iommu, domain->qi_batch);
 		iommu = tag->iommu;
@@ -444,7 +447,7 @@ void cache_tag_flush_range(struct dmar_domain *domain, unsigned long start,
 		switch (tag->type) {
 		case CACHE_TAG_IOTLB:
 		case CACHE_TAG_NESTING_IOTLB:
-			cache_tag_flush_iotlb(domain, tag, addr, mask, ih);
+			cache_tag_flush_iotlb(domain, tag, flush_addr, flush_mask, ih);
 			break;
 		case CACHE_TAG_NESTING_DEVTLB:
 			/*
@@ -454,15 +457,15 @@ void cache_tag_flush_range(struct dmar_domain *domain, unsigned long start,
 			 * affected by a change in S2. So just flush the entire
 			 * device cache.
 			 */
-			addr = 0;
-			mask = MAX_AGAW_PFN_WIDTH;
+			flush_addr = 0;
+			flush_mask = MAX_AGAW_PFN_WIDTH;
 			fallthrough;
 		case CACHE_TAG_DEVTLB:
-			cache_tag_flush_devtlb_psi(domain, tag, addr, mask);
+			cache_tag_flush_devtlb_psi(domain, tag, flush_addr, flush_mask);
 			break;
 		}
 
-		trace_cache_tag_flush_range(tag, start, end, addr, mask);
+		trace_cache_tag_flush_range(tag, start, end, flush_addr, flush_mask);
 	}
 	qi_batch_flush_descs(iommu, domain->qi_batch);
 	spin_unlock_irqrestore(&domain->cache_lock, flags);
