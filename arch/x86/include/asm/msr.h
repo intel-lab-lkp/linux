@@ -257,7 +257,7 @@ int msr_clear_bit(u32 msr, u8 bit);
 
 #ifdef CONFIG_SMP
 int rdmsr_on_cpu(unsigned int cpu, u32 msr_no, u64 *q);
-int wrmsr_on_cpu(unsigned int cpu, u32 msr_no, u32 l, u32 h);
+int wrmsr_on_cpu(unsigned int cpu, u32 msr_no, u64 q);
 int wrmsrq_on_cpu(unsigned int cpu, u32 msr_no, u64 q);
 void rdmsr_on_cpus(const struct cpumask *mask, u32 msr_no, struct msr __percpu *msrs);
 void wrmsr_on_cpus(const struct cpumask *mask, u32 msr_no, struct msr __percpu *msrs);
@@ -273,9 +273,9 @@ static inline int rdmsr_on_cpu(unsigned int cpu, u32 msr_no, u64 *q)
 	rdmsrq(msr_no, *q);
 	return 0;
 }
-static inline int wrmsr_on_cpu(unsigned int cpu, u32 msr_no, u32 l, u32 h)
+static inline int wrmsr_on_cpu(unsigned int cpu, u32 msr_no, u64 q)
 {
-	wrmsr(msr_no, l, h);
+	wrmsrq(msr_no, q);
 	return 0;
 }
 static inline int wrmsrq_on_cpu(unsigned int cpu, u32 msr_no, u64 q)
@@ -291,7 +291,7 @@ static inline void rdmsr_on_cpus(const struct cpumask *m, u32 msr_no,
 static inline void wrmsr_on_cpus(const struct cpumask *m, u32 msr_no,
 				struct msr __percpu *msrs)
 {
-	wrmsr_on_cpu(0, msr_no, raw_cpu_read(msrs->l), raw_cpu_read(msrs->h));
+	wrmsrq_on_cpu(0, msr_no, raw_cpu_read(msrs->q));
 }
 static inline int rdmsr_safe_on_cpu(unsigned int cpu, u32 msr_no,
 				    u32 *l, u32 *h)
