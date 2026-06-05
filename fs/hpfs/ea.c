@@ -9,6 +9,29 @@
 
 #include "hpfs_fn.h"
 
+static bool hpfs_ea_ext_fits(struct super_block *s, secno a, int ano,
+			     unsigned int pos, unsigned int len,
+			     unsigned int size)
+{
+	if (pos > len || size > len - pos) {
+		hpfs_error(s, "EA record doesn't fit, %s %08x, pos %08x, len %08x",
+			   ano ? "anode" : "sectors", a, pos, len);
+		return false;
+	}
+	return true;
+}
+
+static bool hpfs_ea_indirect_ok(struct super_block *s, secno a, int ano,
+				unsigned int pos, struct extended_attribute *ea)
+{
+	if (ea_indirect(ea) && ea_valuelen(ea) != 8) {
+		hpfs_error(s, "ea_indirect(ea) set while ea->valuelen!=8, %s %08x, pos %08x",
+			   ano ? "anode" : "sectors", a, pos);
+		return false;
+	}
+	return true;
+}
+
 /* Remove external extended attributes. ano specifies whether a is a 
    direct sector where eas starts or an anode */
 
@@ -24,12 +47,12 @@ void hpfs_ea_ext_remove(struct super_block *s, secno a, int ano, unsigned len)
 			return;
 		}
 		if (hpfs_ea_read(s, a, ano, pos, 4, ex)) return;
+		if (!hpfs_ea_ext_fits(s, a, ano, pos, len,
+				      5 + ea->namelen + ea_valuelen(ea)))
+			return;
+		if (!hpfs_ea_indirect_ok(s, a, ano, pos, ea))
+			return;
 		if (ea_indirect(ea)) {
-			if (ea_valuelen(ea) != 8) {
-				hpfs_error(s, "ea_indirect(ea) set while ea->valuelen!=8, %s %08x, pos %08x",
-					ano ? "anode" : "sectors", a, pos);
-				return;
-			}
 			if (hpfs_ea_read(s, a, ano, pos + 4, ea->namelen + 9, ex+4))
 				return;
 			hpfs_ea_remove(s, ea_sec(ea), ea_in_anode(ea), ea_len(ea));
@@ -75,7 +98,8 @@ int hpfs_read_ea(struct super_block *s, struct fnode *fnode, char *key,
 		char *buf, int size)
 {
 	unsigned pos;
-	int ano, len;
+	unsigned int len;
+	int ano;
 	secno a;
 	char ex[4 + 255 + 1 + 8];
 	struct extended_attribute *ea;
@@ -102,6 +126,11 @@ int hpfs_read_ea(struct super_block *s, struct fnode *fnode, char *key,
 			return -EIO;
 		}
 		if (hpfs_ea_read(s, a, ano, pos, 4, ex)) return -EIO;
+		if (!hpfs_ea_ext_fits(s, a, ano, pos, len,
+				      5 + ea->namelen + ea_valuelen(ea)))
+			return -EIO;
+		if (!hpfs_ea_indirect_ok(s, a, ano, pos, ea))
+			return -EIO;
 		if (hpfs_ea_read(s, a, ano, pos + 4, ea->namelen + 1 + (ea_indirect(ea) ? 8 : 0), ex + 4))
 			return -EIO;
 		if (!strcmp(ea->name, key)) {
@@ -131,7 +160,8 @@ char *hpfs_get_ea(struct super_block *s, struct fnode *fnode, char *key, int *si
 {
 	char *ret;
 	unsigned pos;
-	int ano, len;
+	unsigned int len;
+	int ano;
 	secno a;
 	struct extended_attribute *ea;
 	struct extended_attribute *ea_end = fnode_end_ea(fnode);
@@ -160,6 +190,11 @@ char *hpfs_get_ea(struct super_block *s, struct fnode *fnode, char *key, int *si
 			return NULL;
 		}
 		if (hpfs_ea_read(s, a, ano, pos, 4, ex)) return NULL;
+		if (!hpfs_ea_ext_fits(s, a, ano, pos, len,
+				      5 + ea->namelen + ea_valuelen(ea)))
+			return NULL;
+		if (!hpfs_ea_indirect_ok(s, a, ano, pos, ea))
+			return NULL;
 		if (hpfs_ea_read(s, a, ano, pos + 4, ea->namelen + 1 + (ea_indirect(ea) ? 8 : 0), ex + 4))
 			return NULL;
 		if (!strcmp(ea->name, key)) {
@@ -193,7 +228,8 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, const char *key,
 	fnode_secno fno = inode->i_ino;
 	struct super_block *s = inode->i_sb;
 	unsigned pos;
-	int ano, len;
+	unsigned int len;
+	int ano;
 	secno a;
 	unsigned char h[4];
 	struct extended_attribute *ea;
@@ -221,6 +257,11 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, const char *key,
 			return;
 		}
 		if (hpfs_ea_read(s, a, ano, pos, 4, ex)) return;
+		if (!hpfs_ea_ext_fits(s, a, ano, pos, len,
+				      5 + ea->namelen + ea_valuelen(ea)))
+			return;
+		if (!hpfs_ea_indirect_ok(s, a, ano, pos, ea))
+			return;
 		if (hpfs_ea_read(s, a, ano, pos + 4, ea->namelen + 1 + (ea_indirect(ea) ? 8 : 0), ex + 4))
 			return;
 		if (!strcmp(ea->name, key)) {
