@@ -59,6 +59,8 @@ enum hp_ec_offsets {
 #define HP_POWER_LIMIT_DEFAULT	 0x00
 #define HP_POWER_LIMIT_NO_CHANGE 0xFF
 
+#define HP_BATTERY_THRESHOLD_CAP 0x37
+
 #define zero_if_sup(tmp) (zero_insize_support?0:sizeof(tmp)) // use when zero insize is required
 
 enum hp_thermal_profile_omen_v0 {
@@ -448,6 +450,7 @@ static struct notifier_block platform_power_source_nb;
 static enum platform_profile_option active_platform_profile;
 static bool platform_profile_support;
 static bool zero_insize_support;
+static bool battery_threshold_support;
 
 static struct rfkill *wifi_rfkill;
 static struct rfkill *bluetooth_rfkill;
@@ -1129,6 +1132,22 @@ static struct attribute *hp_wmi_attrs[] = {
 	NULL,
 };
 ATTRIBUTE_GROUPS(hp_wmi);
+
+static int hp_battery_threshold_check(void)
+{
+	u8 buffer[128] = {0};
+	int ret;
+	ret = hp_wmi_perform_query(HP_BATTERY_THRESHOLD_CAP, HPWMI_READ, buffer, 128, 128);
+	if (ret != 0) {
+		battery_threshold_support = false;
+		return -1;
+	}
+	if (buffer[28] == 0xAA) {
+		battery_threshold_support = true;
+		return 0;
+	}
+	return false;
+}
 
 static void hp_wmi_notify(union acpi_object *obj, void *context)
 {
@@ -2285,6 +2304,12 @@ static int __init hp_wmi_bios_setup(struct platform_device *device)
 	if (!hp_wmi_bios_2009_later()) {
 		if (hp_wmi_rfkill_setup(device))
 			hp_wmi_rfkill2_setup(device);
+	}
+
+	err = hp_battery_threshold_check();
+
+	if (err == 0) {
+		pr_info("Battery Threshold is supported");
 	}
 
 	err = hp_wmi_hwmon_init();
