@@ -1291,7 +1291,32 @@ static int mpu3050_runtime_suspend(struct device *dev)
 
 static int mpu3050_runtime_resume(struct device *dev)
 {
-	return mpu3050_power_up(iio_priv(dev_get_drvdata(dev)));
+	struct mpu3050 *mpu3050 = iio_priv(dev_get_drvdata(dev));
+	int ret;
+
+	ret = mpu3050_power_up(mpu3050);
+	if (ret)
+		return ret;
+
+	/*
+	 * mpu3050_power_up() only clears the SLEEP bit; it leaves the
+	 * full-scale, low-pass filter and sample rate divisor at the
+	 * chip's power-on defaults. Restore them from the driver's
+	 * cached state so the hardware matches what userspace observes
+	 * via the IIO ABI (in_anglvel_sampling_frequency, in_anglvel_scale)
+	 * across a suspend/resume cycle. Without this the chip continues
+	 * to deliver samples at chip-default rate after the first
+	 * autosuspend cycle, until the next IIO_CHAN_INFO_RAW read
+	 * incidentally reprograms it.
+	 */
+	ret = mpu3050_start_sampling(mpu3050);
+	if (ret) {
+		dev_err(dev, "failed to restore sampling config on resume\n");
+		mpu3050_power_down(mpu3050);
+		return ret;
+	}
+
+	return 0;
 }
 
 DEFINE_RUNTIME_DEV_PM_OPS(mpu3050_dev_pm_ops, mpu3050_runtime_suspend,
