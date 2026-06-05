@@ -414,6 +414,16 @@ static int vidioc_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 		.step_height = 1,
 	};
 
+	/*
+	 * Technically 4:2:2 YUV formats don't need a step_height of 2.
+	 * But for the RGA3 this is explicitly documented in  section 5.6.3
+	 * of the RK3588 TRM Part 2.
+	 * And the RGA2 vendor driver also checks that the height (and width)
+	 * is aligned to 2 when a YUV format is used.
+	 *
+	 * Therefore be safe and always align width and height to 2
+	 * when a YUV format is used.
+	 */
 	if (v4l2_is_format_yuv(v4l2_format_info(pix_fmt->pixelformat))) {
 		frmsize.step_width = 2;
 		frmsize.step_height = 2;
