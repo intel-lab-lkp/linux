@@ -5,6 +5,7 @@
 
 #include <linux/err.h>
 #include <linux/errno.h>
+#include <linux/kho/abi/radix_tree.h>
 #include <linux/mutex_types.h>
 #include <linux/types.h>
 
@@ -24,10 +25,8 @@
  * Client code is responsible for allocating the root node of the tree,
  * initializing the mutex lock, and managing its lifecycle. It must use the
  * tree data structures defined in the KHO ABI,
- * `include/linux/kho/abi/kexec_handover.h`.
+ * `include/linux/kho/abi/radix_tree.h`.
  */
-
-struct kho_radix_node;
 
 struct kho_radix_tree {
 	struct kho_radix_node *root;

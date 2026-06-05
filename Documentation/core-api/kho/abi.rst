@@ -25,8 +25,7 @@ memblock preservation ABI
 KHO persistent memory tracker ABI
 =================================
 
-.. kernel-doc:: include/linux/kho/abi/kexec_handover.h
-  :doc: KHO persistent memory tracker
+.. kernel-doc:: include/linux/kho/abi/radix_tree.h
 
 KHO serialization block ABI
 ===========================

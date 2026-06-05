@@ -11,7 +11,7 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/kho/abi/kexec_handover.h>
-#include <linux/kho_radix_tree.h>
+#include <linux/kho/radix_tree.h>
 #include <linux/mm.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
