@@ -9,13 +9,13 @@
  *
  * The Kexec Handover ABI for preserving vmalloc'ed memory is defined by
  * a set of structures and helper macros. The layout of these structures is a
- * stable contract between kernels and is versioned by the KHO_FDT_COMPATIBLE
+ * stable contract between kernels and is versioned by the KHO_VMALLOC_COMPATIBLE
  * string.
  *
  * This interface is a contract. Any modification to the structure fields,
  * compatible strings, or the layout of the serialization structures defined
  * here constitutes a breaking change. Such changes require incrementing the
- * version number in the `KHO_FDT_COMPATIBLE` string to prevent a new kernel
+ * version number in the `KHO_VMALLOC_COMPATIBLE` string to prevent a new kernel
  * from misinterpreting data from an old kernel.
  *
  * Changes are allowed provided the compatibility version is incremented;
@@ -35,6 +35,8 @@
 
 #include <linux/types.h>
 #include <asm/page.h>
+
+#define KHO_VMALLOC_COMPATIBLE "vmalloc-v1"
 
 /* Helper macro to define a union for a serializable pointer. */
 #define DECLARE_KHOSER_PTR(name, type)	\

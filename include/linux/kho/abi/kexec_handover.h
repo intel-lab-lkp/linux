@@ -10,6 +10,7 @@
 #define _LINUX_KHO_ABI_KEXEC_HANDOVER_H
 #include <linux/kho/abi/compat.h>
 #include <linux/kho/abi/radix_tree.h>
+#include <linux/kho/abi/vmalloc.h>
 
 /**
  * DOC: Kexec Handover ABI
@@ -87,7 +88,8 @@
 #define KHO_FDT_COMPAT_BASE "kho-v4"
 #define KHO_FDT_COMPATIBLE						\
 	KHO_FDT_COMPAT_BASE						\
-	KHO_SUB_COMPAT(KHO_RADIX_COMPATIBLE)
+	KHO_SUB_COMPAT(KHO_RADIX_COMPATIBLE)				\
+	KHO_SUB_COMPAT(KHO_VMALLOC_COMPATIBLE)
 
 /* The FDT property for the preserved memory map. */
 #define KHO_FDT_MEMORY_MAP_PROP_NAME "preserved-memory-map"

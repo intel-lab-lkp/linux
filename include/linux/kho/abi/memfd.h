@@ -11,7 +11,9 @@
 #ifndef _LINUX_KHO_ABI_MEMFD_H
 #define _LINUX_KHO_ABI_MEMFD_H
 
+#include <linux/kho/abi/compat.h>
 #include <linux/kho/abi/kexec_handover.h>
+#include <linux/kho/abi/luo.h>
 #include <linux/kho/abi/vmalloc.h>
 #include <linux/types.h>
 
@@ -89,6 +91,11 @@ struct memfd_luo_ser {
 } __packed;
 
 /* The compatibility string for memfd file handler */
-#define MEMFD_LUO_FH_COMPATIBLE	"memfd-v2"
+#define MEMFD_LUO_FH_COMPAT_BASE "memfd-v2"
+#define MEMFD_LUO_FH_COMPATIBLE						\
+	MEMFD_LUO_FH_COMPAT_BASE					\
+	KHO_SUB_COMPAT(KHO_VMALLOC_COMPATIBLE)
+
+static_assert(KHO_COMPAT_ALIGN(MEMFD_LUO_FH_COMPATIBLE) <= LIVEUPDATE_HNDL_COMPAT_LENGTH);
 
 #endif /* _LINUX_KHO_ABI_MEMFD_H */
