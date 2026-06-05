@@ -46,8 +46,7 @@ flags-y += -fasynchronous-unwind-tables
 # Reset cf protections enabled by compiler default
 flags-y += $(call cc-option, -fcf-protection=none)
 flags-$(X86_USER_SHADOW_STACK) += $(call cc-option, -fcf-protection=return)
-# When user space IBT is supported, enable this.
-# flags-$(CONFIG_USER_IBT) += $(call cc-option, -fcf-protection=branch)
+flags-$(CONFIG_X86_USER_IBT) += $(call cc-option, -fcf-protection=branch)
 
 flags-$(CONFIG_MITIGATION_RETPOLINE) += $(RETPOLINE_VDSO_CFLAGS)
 
