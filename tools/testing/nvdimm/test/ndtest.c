@@ -207,8 +207,14 @@ static int ndtest_config_get(struct ndtest_dimm *p, unsigned int buf_len,
 {
 	unsigned int len;
 
-	if ((hdr->in_offset + hdr->in_length) > LABEL_SIZE)
+	if (buf_len < sizeof(*hdr) || hdr->in_length > buf_len - sizeof(*hdr))
 		return -EINVAL;
+
+	if (hdr->in_offset > LABEL_SIZE ||
+	    hdr->in_length > LABEL_SIZE - hdr->in_offset) {
+		hdr->status = -EINVAL;
+		return 0;
+	}
 
 	hdr->status = 0;
 	len = min(hdr->in_length, LABEL_SIZE - hdr->in_offset);
@@ -221,10 +227,20 @@ static int ndtest_config_set(struct ndtest_dimm *p, unsigned int buf_len,
 			     struct nd_cmd_set_config_hdr *hdr)
 {
 	unsigned int len;
+	u32 *status;
 
-	if ((hdr->in_offset + hdr->in_length) > LABEL_SIZE)
+	if (buf_len < sizeof(*hdr) + sizeof(*status) ||
+	    hdr->in_length > buf_len - sizeof(*hdr) - sizeof(*status))
 		return -EINVAL;
 
+	status = (void *)hdr + sizeof(*hdr) + hdr->in_length;
+	if (hdr->in_offset > LABEL_SIZE ||
+	    hdr->in_length > LABEL_SIZE - hdr->in_offset) {
+		*status = -EINVAL;
+		return 0;
+	}
+
+	*status = 0;
 	len = min(hdr->in_length, LABEL_SIZE - hdr->in_offset);
 	memcpy(p->label_area + hdr->in_offset, hdr->in_buf, len);
 
