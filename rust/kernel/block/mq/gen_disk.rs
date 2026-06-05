@@ -198,9 +198,11 @@ pub struct GenDisk<T: Operations> {
     gendisk: *mut bindings::gendisk,
 }
 
-// SAFETY: `GenDisk` is an owned pointer to a `struct gendisk` and an `Arc` to a
-// `TagSet` It is safe to send this to other threads as long as T is Send.
-unsafe impl<T: Operations + Send> Send for GenDisk<T> {}
+// SAFETY: `GenDisk` owns a `struct gendisk` and keeps the associated `TagSet`
+// alive via the `Arc`; it does not own a value of type `T`. If a `GenDisk` is
+// dropped on another thread, `Drop::drop` reclaims `T::QueueData`, so
+// `T::QueueData` must be `Send`.
+unsafe impl<T: Operations> Send for GenDisk<T> where T::QueueData: Send {}
 
 impl<T: Operations> Drop for GenDisk<T> {
     fn drop(&mut self) {

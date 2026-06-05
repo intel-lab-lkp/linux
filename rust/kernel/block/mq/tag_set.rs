@@ -31,6 +31,17 @@ pub struct TagSet<T: Operations> {
     _p: PhantomData<T>,
 }
 
+// SAFETY: `TagSet` does not own a value of type `T`; `T` is only used to
+// select the blk-mq operations vtable. The wrapped `struct blk_mq_tag_set` is
+// only exposed to Rust as an opaque handle, and concurrent access to it is
+// synchronized by the blk-mq core.
+unsafe impl<T: Operations> Send for TagSet<T> {}
+
+// SAFETY: `TagSet` does not provide safe access to the interior of the wrapped
+// `struct blk_mq_tag_set`; concurrent access to it is synchronized by the
+// blk-mq core.
+unsafe impl<T: Operations> Sync for TagSet<T> {}
+
 impl<T: Operations> TagSet<T> {
     /// Try to create a new tag set
     pub fn new(
