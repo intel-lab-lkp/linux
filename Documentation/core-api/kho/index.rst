@@ -86,6 +86,9 @@ Public API
 .. kernel-doc:: kernel/liveupdate/kho_radix.c
   :export:
 
+.. kernel-doc:: kernel/liveupdate/kho_vmalloc.c
+  :export:
+
 KHO Serialization Blocks API
 ============================
 

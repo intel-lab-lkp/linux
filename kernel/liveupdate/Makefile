@@ -9,7 +9,8 @@ luo-y :=								\
 
 kho-y :=								\
 		kexec_handover.o					\
-		kho_radix.o
+		kho_radix.o						\
+		kho_vmalloc.o
 
 obj-$(CONFIG_KEXEC_HANDOVER)		+= kho.o
 obj-$(CONFIG_KEXEC_HANDOVER_DEBUG)	+= kexec_handover_debug.o

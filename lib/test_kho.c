@@ -20,6 +20,7 @@
 #include <linux/vmalloc.h>
 #include <linux/kexec_handover.h>
 #include <linux/kho/abi/kexec_handover.h>
+#include <linux/kho/vmalloc.h>
 
 #include <net/checksum.h>
 
