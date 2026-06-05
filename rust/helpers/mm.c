@@ -48,3 +48,43 @@ __rust_helper void rust_helper_vma_end_read(struct vm_area_struct *vma)
 {
 	vma_end_read(vma);
 }
+
+unsigned int rust_helper_memalloc_noio_save(void)
+{
+	return memalloc_noio_save();
+}
+
+void rust_helper_memalloc_noio_restore(unsigned int flags)
+{
+	memalloc_noio_restore(flags);
+}
+
+unsigned int rust_helper_memalloc_nofs_save(void)
+{
+	return memalloc_nofs_save();
+}
+
+void rust_helper_memalloc_nofs_restore(unsigned int flags)
+{
+	memalloc_nofs_restore(flags);
+}
+
+unsigned int rust_helper_memalloc_noreclaim_save(void)
+{
+	return memalloc_noreclaim_save();
+}
+
+void rust_helper_memalloc_noreclaim_restore(unsigned int flags)
+{
+	memalloc_noreclaim_restore(flags);
+}
+
+unsigned int rust_helper_memalloc_pin_save(void)
+{
+	return memalloc_pin_save();
+}
+
+void rust_helper_memalloc_pin_restore(unsigned int flags)
+{
+	memalloc_pin_restore(flags);
+}
