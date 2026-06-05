@@ -34,3 +34,7 @@ targets += nova-core/exports_nova_core_generated.h
 
 $(obj)/nova-core/nova_core_exports.o: $(obj)/nova-core/exports_nova_core_generated.h
 CFLAGS_nova-core/nova_core_exports.o := -I $(objtree)/$(obj)/nova-core
+
+# Output nova-core's crate metadata for use by nova-drm at compile time.
+RUSTFLAGS_nova-core/nova_core.o += \
+	--emit=metadata=$(objtree)/$(obj)/nova-core/libnova_core.rmeta
