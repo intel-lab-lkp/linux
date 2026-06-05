@@ -278,10 +278,11 @@ nvkm_falcon_fw_ctor_hs(const struct nvkm_falcon_fw_func *func, const char *name,
 
 	if (bl) {
 		nvkm_firmware_put(blob);
+		blob = NULL;
 
 		ret = nvkm_firmware_load_name(subdev, bl, "", ver, &blob);
 		if (ret)
-			return ret;
+			goto done;
 
 		hdr = nvfw_bin_hdr(subdev, blob->data);
 		desc = nvfw_bl_desc(subdev, blob->data + hdr->header_offset);
