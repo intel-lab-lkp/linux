@@ -137,7 +137,7 @@ RZV2H_RSPI_TX(writew, u16)
 RZV2H_RSPI_TX(writeb, u8)
 RZV2H_RSPI_RX(readl, u32)
 RZV2H_RSPI_RX(readw, u16)
-RZV2H_RSPI_RX(readl, u8)
+RZV2H_RSPI_RX(readb, u8)
 
 static void rzv2h_rspi_reg_rmw(const struct rzv2h_rspi_priv *rspi,
 				int reg_offs, u32 bit_mask, u32 value)
