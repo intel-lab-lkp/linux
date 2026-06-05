@@ -584,7 +584,7 @@ static int mock_get_log(struct cxl_memdev_state *mds, struct cxl_mbox_cmd *cmd)
 		return -EINVAL;
 	if (length > cxl_mbox->payload_size)
 		return -EINVAL;
-	if (offset + length > sizeof(mock_cel))
+	if (offset > sizeof(mock_cel) || length > sizeof(mock_cel) - offset)
 		return -EINVAL;
 	if (!uuid_equal(&gl->uuid, &uuid))
 		return -EINVAL;
