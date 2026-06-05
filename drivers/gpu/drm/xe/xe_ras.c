@@ -3,6 +3,8 @@
  * Copyright © 2026 Intel Corporation
  */
 
+#include <linux/debugfs.h>
+
 #include "xe_bo.h"
 #include "xe_assert.h"
 #include "xe_device_types.h"
@@ -521,6 +523,39 @@ enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe)
 err:
 	return XE_RAS_RECOVERY_ACTION_RESET;
 }
+
+#ifdef CONFIG_DRM_XE_DEBUG
+static ssize_t inject_punit_error_write(struct file *f, const char __user *ubuf,
+					size_t size, loff_t *pos)
+{
+	struct xe_device *xe = f->private_data;
+	u32 val;
+	int ret;
+
+	ret = kstrtouint_from_user(ubuf, size, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val != 1)
+		return -EINVAL;
+
+	punit_error_handler(xe);
+
+	return size;
+}
+
+static const struct file_operations inject_punit_error_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.write = inject_punit_error_write,
+};
+
+void xe_ras_debugfs_register(struct xe_device *xe, struct dentry *root)
+{
+	debugfs_create_file("inject_punit_error", 0200, root, xe,
+			    &inject_punit_error_fops);
+}
+#endif /* CONFIG_DRM_XE_DEBUG */
 
 static struct pci_dev *find_usp_dev(struct pci_dev *pdev)
 {

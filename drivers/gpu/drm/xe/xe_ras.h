@@ -16,4 +16,11 @@ void xe_ras_counter_threshold_crossed(struct xe_device *xe,
 void xe_ras_init(struct xe_device *xe);
 enum xe_ras_recovery_action xe_ras_process_errors(struct xe_device *xe);
 
+#ifdef CONFIG_DRM_XE_DEBUG
+struct dentry;
+void xe_ras_debugfs_register(struct xe_device *xe, struct dentry *root);
+#else
+static inline void xe_ras_debugfs_register(struct xe_device *xe, struct dentry *root) {}
+#endif
+
 #endif
