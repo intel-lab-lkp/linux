@@ -516,6 +516,7 @@
 						      * and purposes if CLEAR_CPU_BUF_VM is set).
 						      */
 #define X86_FEATURE_X2AVIC_EXT		(21*32+20) /* AMD SVM x2AVIC support for 4k vCPUs */
+#define X86_FEATURE_USER_IBT		(21*32+21) /* Indirect Branch Tracking for user mode applications */
 
 /*
  * BUG word(s)

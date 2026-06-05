@@ -1863,6 +1863,24 @@ config X86_USER_SHADOW_STACK
 
 	  If unsure, say N.
 
+config X86_USER_IBT
+	bool "X86 userspace indirect branch tracking"
+	depends on X86_64
+	depends on X86_USER_SHADOW_STACK
+	select X86_CET
+	help
+	  Support Indirect Branch Tracking protection for userspace
+	  applications. IBT is a hardware-supported coarse-grained
+	  forward-edge Control Flow Integrity protection feature.
+	  It enforces that all indirect calls must land on an ENDBR
+	  instruction. Applications must be enabled to use it, and old
+	  userspace does not get protection "for free". Enables the
+	  PR_CFI_BRANCH_LANDING_PADS prctl CFI option.
+
+	  CPUs supporting IBT were first released in 2021.
+
+	  If unsure, say N.
+
 config INTEL_TDX_HOST
 	bool "Intel Trust Domain Extensions (TDX) host support"
 	depends on CPU_SUP_INTEL
