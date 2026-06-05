@@ -167,18 +167,12 @@ static void amdxdna_drm_close(struct drm_device *ddev, struct drm_file *filp)
 {
 	struct amdxdna_client *client = filp->driver_priv;
 	struct amdxdna_dev *xdna = to_xdna_dev(ddev);
-	int idx;
 
 	XDNA_DBG(xdna, "closing pid %d", client->pid);
-
-	if (!drm_dev_enter(&xdna->ddev, &idx))
-		return;
 
 	mutex_lock(&xdna->dev_lock);
 	amdxdna_client_cleanup(client);
 	mutex_unlock(&xdna->dev_lock);
-
-	drm_dev_exit(idx);
 }
 
 static int amdxdna_drm_get_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
@@ -436,14 +430,8 @@ static void amdxdna_remove(struct pci_dev *pdev)
 	amdxdna_sysfs_fini(xdna);
 
 	mutex_lock(&xdna->dev_lock);
-	client = list_first_entry_or_null(&xdna->client_list,
-					  struct amdxdna_client, node);
-	while (client) {
-		amdxdna_client_cleanup(client);
-
-		client = list_first_entry_or_null(&xdna->client_list,
-						  struct amdxdna_client, node);
-	}
+	list_for_each_entry(client, &xdna->client_list, node)
+		amdxdna_hwctx_remove_all(client);
 
 	xdna->dev_info->ops->fini(xdna);
 	mutex_unlock(&xdna->dev_lock);
