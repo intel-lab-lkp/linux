@@ -14,7 +14,6 @@
 #include <media/v4l2-device.h>
 
 #define RGA_NAME "rockchip-rga"
-
 #define DEFAULT_WIDTH 100
 #define DEFAULT_HEIGHT 100
 
@@ -34,6 +33,16 @@ struct rga_dma_desc {
 struct rockchip_rga_version {
 	u32 major;
 	u32 minor;
+};
+
+struct rga_core {
+	struct device *dev;
+	void __iomem *regs;
+	struct clk_bulk_data *clks;
+	int num_clks;
+
+	struct rockchip_rga *rga;
+	struct rga_ctx *curr;
 };
 
 struct rga_ctx {
@@ -70,10 +79,6 @@ struct rockchip_rga {
 	struct v4l2_m2m_dev *m2m_dev;
 	struct video_device *vfd;
 
-	struct device *dev;
-	void __iomem *regs;
-	struct clk_bulk_data *clks;
-	int num_clks;
 	struct rockchip_rga_version version;
 
 	/* vfd lock */
@@ -81,9 +86,9 @@ struct rockchip_rga {
 	/* ctrl parm lock */
 	spinlock_t ctrl_lock;
 
-	struct rga_ctx *curr;
-
 	const struct rga_hw *hw;
+
+	struct rga_core *cores[];
 };
 
 struct rga_addrs {
@@ -119,22 +124,22 @@ int rga_check_scaling(const struct rga_hw *hw, const struct v4l2_rect *crop_in,
 extern const struct vb2_ops rga_qops;
 
 /* RGA Hardware */
-static inline void rga_write(struct rockchip_rga *rga, u32 reg, u32 value)
+static inline void rga_write(struct rga_core *core, u32 reg, u32 value)
 {
-	writel(value, rga->regs + reg);
+	writel(value, core->regs + reg);
 };
 
-static inline u32 rga_read(struct rockchip_rga *rga, u32 reg)
+static inline u32 rga_read(struct rga_core *core, u32 reg)
 {
-	return readl(rga->regs + reg);
+	return readl(core->regs + reg);
 };
 
-static inline void rga_mod(struct rockchip_rga *rga, u32 reg, u32 val, u32 mask)
+static inline void rga_mod(struct rga_core *core, u32 reg, u32 val, u32 mask)
 {
-	u32 temp = rga_read(rga, reg) & ~(mask);
+	u32 temp = rga_read(core, reg) & ~(mask);
 
 	temp |= val & mask;
-	rga_write(rga, reg, temp);
+	rga_write(core, reg, temp);
 };
 
 #define RGA_FEATURE_FLIP	BIT(0)
@@ -155,10 +160,10 @@ struct rga_hw {
 	 * Requires that the cmdbuf is already zeroed.
 	 */
 	void (*setup_cmdbuf)(struct rga_ctx *ctx);
-	void (*start)(struct rockchip_rga *rga,
+	void (*start)(struct rga_core *core,
 		      struct rga_vb_buffer *src, struct rga_vb_buffer *dst);
-	bool (*handle_irq)(struct rockchip_rga *rga);
-	struct rockchip_rga_version (*get_version)(struct rockchip_rga *rga);
+	bool (*handle_irq)(struct rga_core *core);
+	struct rockchip_rga_version (*get_version)(struct rga_core *core);
 	void *(*adjust_and_map_format)(struct rga_ctx *ctx,
 				       struct v4l2_pix_format_mplane *format,
 				       bool is_output);

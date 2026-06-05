@@ -11,6 +11,7 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
 #include <linux/sched.h>
@@ -35,11 +36,12 @@ static void device_run(void *prv)
 {
 	struct rga_ctx *ctx = prv;
 	struct rockchip_rga *rga = ctx->rga;
+	struct rga_core *core = rga->cores[0];
 	struct vb2_v4l2_buffer *src, *dst;
 	unsigned long flags;
 	int ret;
 
-	ret = pm_runtime_resume_and_get(rga->dev);
+	ret = pm_runtime_resume_and_get(core->dev);
 	if (ret < 0) {
 		v4l2_m2m_buf_done_and_job_finish(rga->m2m_dev, ctx->fh.m2m_ctx,
 						 VB2_BUF_STATE_ERROR);
@@ -54,27 +56,28 @@ static void device_run(void *prv)
 	}
 	spin_unlock_irqrestore(&rga->ctrl_lock, flags);
 
-	rga->curr = ctx;
+	core->curr = ctx;
 
 	src = v4l2_m2m_next_src_buf(ctx->fh.m2m_ctx);
 	src->sequence = ctx->osequence++;
 
 	dst = v4l2_m2m_next_dst_buf(ctx->fh.m2m_ctx);
 
-	rga->hw->start(rga, vb_to_rga(src), vb_to_rga(dst));
+	rga->hw->start(core, vb_to_rga(src), vb_to_rga(dst));
 }
 
 static irqreturn_t rga_isr(int irq, void *prv)
 {
-	struct rockchip_rga *rga = prv;
+	struct rga_core *core = prv;
+	struct rockchip_rga *rga = core->rga;
 
-	if (rga->hw->handle_irq(rga)) {
+	if (rga->hw->handle_irq(core)) {
 		struct vb2_v4l2_buffer *src, *dst;
-		struct rga_ctx *ctx = rga->curr;
+		struct rga_ctx *ctx = core->curr;
 
 		WARN_ON(!ctx);
 
-		rga->curr = NULL;
+		core->curr = NULL;
 
 		src = v4l2_m2m_src_buf_remove(ctx->fh.m2m_ctx);
 		dst = v4l2_m2m_dst_buf_remove(ctx->fh.m2m_ctx);
@@ -90,7 +93,7 @@ static irqreturn_t rga_isr(int irq, void *prv)
 		v4l2_m2m_buf_done(dst, VB2_BUF_STATE_DONE);
 		v4l2_m2m_job_finish(rga->m2m_dev, ctx->fh.m2m_ctx);
 
-		pm_runtime_put_autosuspend(rga->dev);
+		pm_runtime_put_autosuspend(core->dev);
 	}
 
 	return IRQ_HANDLED;
@@ -118,7 +121,7 @@ queue_init(void *priv, struct vb2_queue *src_vq, struct vb2_queue *dst_vq)
 	src_vq->buf_struct_size = sizeof(struct rga_vb_buffer);
 	src_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	src_vq->lock = &ctx->rga->mutex;
-	src_vq->dev = ctx->rga->v4l2_dev.dev;
+	src_vq->dev = ctx->rga->cores[0]->dev;
 
 	ret = vb2_queue_init(src_vq);
 	if (ret)
@@ -136,7 +139,7 @@ queue_init(void *priv, struct vb2_queue *src_vq, struct vb2_queue *dst_vq)
 	dst_vq->buf_struct_size = sizeof(struct rga_vb_buffer);
 	dst_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	dst_vq->lock = &ctx->rga->mutex;
-	dst_vq->dev = ctx->rga->v4l2_dev.dev;
+	dst_vq->dev = ctx->rga->cores[0]->dev;
 
 	return vb2_queue_init(dst_vq);
 }
@@ -275,7 +278,7 @@ static int rga_open(struct file *file)
 		return -ENOMEM;
 
 	/* Create CMD buffer */
-	ctx->cmdbuf_virt = dma_alloc_attrs(rga->dev, rga->hw->cmdbuf_size,
+	ctx->cmdbuf_virt = dma_alloc_attrs(rga->cores[0]->dev, rga->hw->cmdbuf_size,
 					   &ctx->cmdbuf_phy, GFP_KERNEL,
 					   DMA_ATTR_WRITE_COMBINE);
 	if (!ctx->cmdbuf_virt) {
@@ -322,7 +325,7 @@ static int rga_open(struct file *file)
 unlock_mutex:
 	mutex_unlock(&rga->mutex);
 rel_cmdbuf:
-	dma_free_attrs(rga->dev, rga->hw->cmdbuf_size, ctx->cmdbuf_virt,
+	dma_free_attrs(rga->cores[0]->dev, rga->hw->cmdbuf_size, ctx->cmdbuf_virt,
 		       ctx->cmdbuf_phy, DMA_ATTR_WRITE_COMBINE);
 rel_ctx:
 	kfree(ctx);
@@ -342,7 +345,7 @@ static int rga_release(struct file *file)
 	v4l2_fh_del(&ctx->fh, file);
 	v4l2_fh_exit(&ctx->fh);
 
-	dma_free_attrs(rga->dev, rga->hw->cmdbuf_size, ctx->cmdbuf_virt,
+	dma_free_attrs(rga->cores[0]->dev, rga->hw->cmdbuf_size, ctx->cmdbuf_virt,
 		       ctx->cmdbuf_phy, DMA_ATTR_WRITE_COMBINE);
 
 	kfree(ctx);
@@ -689,26 +692,26 @@ static const struct video_device rga_videodev = {
 	.device_caps = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING,
 };
 
-static int rga_parse_dt(struct rockchip_rga *rga)
+static int rga_parse_dt(struct rga_core *core)
 {
 	struct reset_control *core_rst, *axi_rst, *ahb_rst;
 	int ret;
 
-	core_rst = devm_reset_control_get(rga->dev, "core");
+	core_rst = devm_reset_control_get(core->dev, "core");
 	if (IS_ERR(core_rst)) {
-		dev_err(rga->dev, "failed to get core reset controller\n");
+		dev_err(core->dev, "failed to get core reset controller\n");
 		return PTR_ERR(core_rst);
 	}
 
-	axi_rst = devm_reset_control_get(rga->dev, "axi");
+	axi_rst = devm_reset_control_get(core->dev, "axi");
 	if (IS_ERR(axi_rst)) {
-		dev_err(rga->dev, "failed to get axi reset controller\n");
+		dev_err(core->dev, "failed to get axi reset controller\n");
 		return PTR_ERR(axi_rst);
 	}
 
-	ahb_rst = devm_reset_control_get(rga->dev, "ahb");
+	ahb_rst = devm_reset_control_get(core->dev, "ahb");
 	if (IS_ERR(ahb_rst)) {
-		dev_err(rga->dev, "failed to get ahb reset controller\n");
+		dev_err(core->dev, "failed to get ahb reset controller\n");
 		return PTR_ERR(ahb_rst);
 	}
 
@@ -724,12 +727,12 @@ static int rga_parse_dt(struct rockchip_rga *rga)
 	udelay(1);
 	reset_control_deassert(ahb_rst);
 
-	ret = devm_clk_bulk_get_all(rga->dev, &rga->clks);
+	ret = devm_clk_bulk_get_all(core->dev, &core->clks);
 	if (ret < 0) {
-		dev_err(rga->dev, "failed to get clocks\n");
+		dev_err(core->dev, "failed to get clocks\n");
 		return ret;
 	}
-	rga->num_clks = ret;
+	core->num_clks = ret;
 
 	return 0;
 }
@@ -780,6 +783,7 @@ static int rga_disable_multicore(struct device *dev)
 static int rga_probe(struct platform_device *pdev)
 {
 	struct rockchip_rga *rga;
+	struct rga_core *core;
 	struct video_device *vfd;
 	int ret = 0;
 	int irq;
@@ -791,7 +795,7 @@ static int rga_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	rga = devm_kzalloc(&pdev->dev, sizeof(*rga), GFP_KERNEL);
+	rga = devm_kzalloc(&pdev->dev, sizeof(*rga) + 1 * sizeof(*rga->cores), GFP_KERNEL);
 	if (!rga)
 		return -ENOMEM;
 
@@ -799,20 +803,25 @@ static int rga_probe(struct platform_device *pdev)
 	if (!rga->hw)
 		return dev_err_probe(&pdev->dev, -ENODEV, "failed to get match data\n");
 
-	rga->dev = &pdev->dev;
 	spin_lock_init(&rga->ctrl_lock);
 	mutex_init(&rga->mutex);
 
-	ret = rga_parse_dt(rga);
+	core = devm_kzalloc(&pdev->dev, sizeof(*core), GFP_KERNEL);
+	core->rga = rga;
+	core->dev = &pdev->dev;
+
+	rga->cores[0] = core;
+
+	ret = rga_parse_dt(core);
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "Unable to parse OF data\n");
 
-	pm_runtime_set_autosuspend_delay(rga->dev, 50);
-	pm_runtime_enable(rga->dev);
+	pm_runtime_set_autosuspend_delay(core->dev, 50);
+	pm_runtime_enable(core->dev);
 
-	rga->regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(rga->regs)) {
-		ret = PTR_ERR(rga->regs);
+	core->regs = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(core->regs)) {
+		ret = PTR_ERR(core->regs);
 		goto err_put_clk;
 	}
 
@@ -822,17 +831,17 @@ static int rga_probe(struct platform_device *pdev)
 		goto err_put_clk;
 	}
 
-	ret = devm_request_irq(rga->dev, irq, rga_isr,
+	ret = devm_request_irq(core->dev, irq, rga_isr,
 			       rga_has_internal_iommu(rga) ? 0 : IRQF_SHARED,
-			       dev_name(rga->dev), rga);
+			       dev_name(core->dev), core);
 	if (ret < 0) {
-		dev_err(rga->dev, "failed to request irq\n");
+		dev_err(core->dev, "failed to request irq\n");
 		goto err_put_clk;
 	}
 
-	ret = dma_set_mask_and_coherent(rga->dev, DMA_BIT_MASK(32));
+	ret = dma_set_mask_and_coherent(core->dev, DMA_BIT_MASK(32));
 	if (ret) {
-		dev_err(rga->dev, "32-bit DMA not supported");
+		dev_err(core->dev, "32-bit DMA not supported");
 		goto err_put_clk;
 	}
 
@@ -852,7 +861,7 @@ static int rga_probe(struct platform_device *pdev)
 	video_set_drvdata(vfd, rga);
 	rga->vfd = vfd;
 
-	platform_set_drvdata(pdev, rga);
+	platform_set_drvdata(pdev, core);
 	rga->m2m_dev = v4l2_m2m_init(&rga_m2m_ops);
 	if (IS_ERR(rga->m2m_dev)) {
 		v4l2_err(&rga->v4l2_dev, "Failed to init mem2mem device\n");
@@ -860,16 +869,16 @@ static int rga_probe(struct platform_device *pdev)
 		goto rel_vdev;
 	}
 
-	ret = pm_runtime_resume_and_get(rga->dev);
+	ret = pm_runtime_resume_and_get(core->dev);
 	if (ret < 0)
 		goto rel_m2m;
 
-	rga->version = rga->hw->get_version(rga);
+	rga->version = rga->hw->get_version(core);
 
 	v4l2_info(&rga->v4l2_dev, "HW Version: 0x%02x.%02x\n",
 		  rga->version.major, rga->version.minor);
 
-	pm_runtime_put(rga->dev);
+	pm_runtime_put(core->dev);
 
 	ret = video_register_device(vfd, VFL_TYPE_VIDEO, -1);
 	if (ret) {
@@ -889,14 +898,15 @@ rel_vdev:
 unreg_v4l2_dev:
 	v4l2_device_unregister(&rga->v4l2_dev);
 err_put_clk:
-	pm_runtime_disable(rga->dev);
+	pm_runtime_disable(core->dev);
 
 	return ret;
 }
 
 static void rga_remove(struct platform_device *pdev)
 {
-	struct rockchip_rga *rga = platform_get_drvdata(pdev);
+	struct rga_core *core = platform_get_drvdata(pdev);
+	struct rockchip_rga *rga = core->rga;
 
 	v4l2_info(&rga->v4l2_dev, "Removing\n");
 
@@ -904,23 +914,23 @@ static void rga_remove(struct platform_device *pdev)
 	video_unregister_device(rga->vfd);
 	v4l2_device_unregister(&rga->v4l2_dev);
 
-	pm_runtime_disable(rga->dev);
+	pm_runtime_disable(core->dev);
 }
 
 static int __maybe_unused rga_runtime_suspend(struct device *dev)
 {
-	struct rockchip_rga *rga = dev_get_drvdata(dev);
+	struct rga_core *core = dev_get_drvdata(dev);
 
-	clk_bulk_disable_unprepare(rga->num_clks, rga->clks);
+	clk_bulk_disable_unprepare(core->num_clks, core->clks);
 
 	return 0;
 }
 
 static int __maybe_unused rga_runtime_resume(struct device *dev)
 {
-	struct rockchip_rga *rga = dev_get_drvdata(dev);
+	struct rga_core *core = dev_get_drvdata(dev);
 
-	return clk_bulk_prepare_enable(rga->num_clks, rga->clks);
+	return clk_bulk_prepare_enable(core->num_clks, core->clks);
 }
 
 static const struct dev_pm_ops rga_pm = {

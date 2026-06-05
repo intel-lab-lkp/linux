@@ -93,7 +93,7 @@ static int rga_buf_init(struct vb2_buffer *vb)
 	n_desc = DIV_ROUND_UP(size, PAGE_SIZE);
 
 	rbuf->n_desc = n_desc;
-	rbuf->dma_desc = dma_alloc_coherent(rga->dev,
+	rbuf->dma_desc = dma_alloc_coherent(rga->cores[0]->dev,
 					    rbuf->n_desc * sizeof(*rbuf->dma_desc),
 					    &rbuf->dma_desc_pa, GFP_KERNEL);
 	if (!rbuf->dma_desc)
@@ -191,7 +191,7 @@ static void rga_buf_cleanup(struct vb2_buffer *vb)
 	if (!rga_has_internal_iommu(rga))
 		return;
 
-	dma_free_coherent(rga->dev, rbuf->n_desc * sizeof(*rbuf->dma_desc),
+	dma_free_coherent(rga->cores[0]->dev, rbuf->n_desc * sizeof(*rbuf->dma_desc),
 			  rbuf->dma_desc, rbuf->dma_desc_pa);
 }
 
