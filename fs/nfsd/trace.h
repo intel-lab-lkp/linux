@@ -467,6 +467,25 @@ TRACE_EVENT(nfsd_export_update,
 	)
 );
 
+TRACE_EVENT(nfsd_export_tags_denied,
+	TP_PROTO(
+		const struct svc_export *exp
+	),
+	TP_ARGS(exp),
+	TP_STRUCT__entry(
+		__string(path, exp->ex_path.dentry->d_name.name)
+		__string(auth_domain, exp->ex_client->name)
+	),
+	TP_fast_assign(
+		__assign_str(path);
+		__assign_str(auth_domain);
+	),
+	TP_printk("path=%s domain=%s",
+		__get_str(path),
+		__get_str(auth_domain)
+	)
+);
+
 DECLARE_EVENT_CLASS(nfsd_io_class,
 	TP_PROTO(struct svc_rqst *rqstp,
 		 struct svc_fh	*fhp,

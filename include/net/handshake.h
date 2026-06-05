@@ -11,10 +11,14 @@
 #define _NET_HANDSHAKE_H
 
 #include <linux/tagset.h>
+#include <uapi/linux/handshake.h>
 
 /*
  * Per-handshake cap on session tags. Bounds the cost of
  * tagset_intersection() in consumer authorization checks.
+ * The per-tag byte limit is HANDSHAKE_SESSION_TAG_MAX_LEN,
+ * generated from Documentation/netlink/specs/handshake.yaml
+ * and enforced by the netlink policy at the kernel boundary.
  */
 #define HANDSHAKE_MAX_SESSIONTAGS	64
 

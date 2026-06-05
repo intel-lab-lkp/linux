@@ -18,6 +18,7 @@
 #include <linux/exportfs.h>
 #include <linux/sunrpc/svc_xprt.h>
 #include <net/genetlink.h>
+#include <net/handshake.h>
 #include <uapi/linux/nfsd_netlink.h>
 
 #include "nfsd.h"
@@ -627,6 +628,7 @@ static void svc_export_release(struct rcu_head *rcu_head)
 	struct svc_export *exp = container_of(rcu_head, struct svc_export,
 			ex_rcu);
 
+	tagset_destroy(&exp->ex_allow_tags);
 	nfsd4_fslocs_free(&exp->ex_fslocs);
 	export_stats_destroy(exp->ex_stats);
 	kfree(exp->ex_stats);
@@ -1285,6 +1287,55 @@ static int xprtsec_parse(char **mesg, char *buf, struct svc_export *exp)
 	return 0;
 }
 
+static int tags_parse(char **mesg, char *buf, struct tagset *tags)
+{
+	unsigned int i, listsize;
+	int err;
+
+	/* more than one allow_tags */
+	if (tags->ts_finalized)
+		return -EINVAL;
+
+	err = get_uint(mesg, &listsize);
+	if (err)
+		return -EINVAL;
+	if (listsize == 0 || listsize > NFSD_MAX_ALLOW_TAGS)
+		return -EINVAL;
+	if (!tagset_alloc(tags, listsize, GFP_KERNEL))
+		return -ENOMEM;
+
+	for (i = 0; i < listsize; i++) {
+		int len;
+
+		len = qword_get(mesg, buf, PAGE_SIZE);
+		if (len <= 0 || len > HANDSHAKE_SESSION_TAG_MAX_LEN)
+			return -EINVAL;
+		if (strlen(buf) != len)
+			return -EINVAL;
+		if (!tagset_add_dup(tags, buf, GFP_KERNEL))
+			return -ENOMEM;
+	}
+	tagset_finalize(tags);
+
+	return 0;
+}
+
+/*
+ * Session tags are issued only with an mTLS handshake, so an
+ * allow_tags list is meaningful only when xprtsec resolves to
+ * mtls alone. Reject combinations that would otherwise let
+ * plaintext or anonymous-TLS peers reach the export without
+ * ever consulting the tag list. Every producer of a svc_export
+ * must apply this check after it has resolved both fields.
+ */
+static int check_allow_tags(const struct svc_export *exp)
+{
+	if (!tagset_is_empty(&exp->ex_allow_tags) &&
+	    exp->ex_xprtsec_modes != NFSEXP_XPRTSEC_MTLS)
+		return -EINVAL;
+	return 0;
+}
+
 static inline int
 nfsd_uuid_parse(char **mesg, char *buf, unsigned char **puuid)
 {
@@ -1346,6 +1397,7 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 	exp.cd = cd;
 	exp.ex_devid_map = NULL;
 	exp.ex_xprtsec_modes = NFSEXP_XPRTSEC_ALL;
+	tagset_init(&exp.ex_allow_tags);
 
 	/* expiry */
 	err = get_expiry(&mesg, &exp.h.expiry_time);
@@ -1389,6 +1441,8 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 				err = secinfo_parse(&mesg, buf, &exp);
 			else if (strcmp(buf, "xprtsec") == 0)
 				err = xprtsec_parse(&mesg, buf, &exp);
+			else if (strcmp(buf, "allow_tags") == 0)
+				err = tags_parse(&mesg, buf, &exp.ex_allow_tags);
 			else
 				/* quietly ignore unknown words and anything
 				 * following. Newer user-space can try to set
@@ -1398,6 +1452,10 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 			if (err)
 				goto out4;
 		}
+
+		err = check_allow_tags(&exp);
+		if (err)
+			goto out4;
 
 		err = check_export(&exp.ex_path, &exp.ex_flags, exp.ex_uuid);
 		if (err)
@@ -1441,6 +1499,7 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 	} else
 		err = -ENOMEM;
 out4:
+	tagset_destroy(&exp.ex_allow_tags);
 	nfsd4_fslocs_free(&exp.ex_fslocs);
 	kfree(exp.ex_uuid);
 out3:
@@ -1568,6 +1627,8 @@ static void export_update(struct cache_head *cnew, struct cache_head *citem)
 		new->ex_flavors[i] = item->ex_flavors[i];
 	}
 	new->ex_xprtsec_modes = item->ex_xprtsec_modes;
+	new->ex_allow_tags = item->ex_allow_tags;
+	tagset_init(&item->ex_allow_tags);
 }
 
 static struct cache_head *svc_export_alloc(void)
@@ -1587,6 +1648,8 @@ static struct cache_head *svc_export_alloc(void)
 		kfree(i);
 		return NULL;
 	}
+
+	tagset_init(&i->ex_allow_tags);
 
 	return &i->h;
 }
@@ -1815,8 +1878,14 @@ __be32 check_xprtsec_policy(struct svc_export *exp, struct svc_rqst *rqstp)
 	}
 	if (exp->ex_xprtsec_modes & NFSEXP_XPRTSEC_MTLS) {
 		if (test_bit(XPT_TLS_SESSION, &xprt->xpt_flags) &&
-		    test_bit(XPT_PEER_AUTH, &xprt->xpt_flags))
-			return nfs_ok;
+		    test_bit(XPT_PEER_AUTH, &xprt->xpt_flags)) {
+			if (tagset_is_empty(&exp->ex_allow_tags))
+				return nfs_ok;
+			if (tagset_intersection(&xprt->xpt_handshake_tags,
+						&exp->ex_allow_tags))
+				return nfs_ok;
+			trace_nfsd_export_tags_denied(exp);
+		}
 	}
 	return nfserr_wrongsec;
 }

@@ -7,6 +7,7 @@
 
 #include <linux/sunrpc/cache.h>
 #include <linux/percpu_counter.h>
+#include <linux/tagset.h>
 #include <uapi/linux/nfsd/export.h>
 #include <linux/nfs4.h>
 
@@ -47,6 +48,15 @@ struct exp_flavor_info {
 	u32	flags;
 };
 
+/*
+ * Cap on the number of tags in an export's allow_tags list. This
+ * is an export policy limit, independent of the per-handshake cap
+ * on session tags (HANDSHAKE_MAX_SESSIONTAGS). It bounds the cost
+ * of the tagset_intersection() that check_xprtsec_policy() runs
+ * per request against a tagged export.
+ */
+#define NFSD_MAX_ALLOW_TAGS	64
+
 /* Per-export stats */
 enum {
 	EXP_STATS_FH_STALE,
@@ -78,6 +88,7 @@ struct svc_export {
 	struct rcu_head		ex_rcu;
 	unsigned long		ex_xprtsec_modes;
 	struct export_stats	*ex_stats;
+	struct tagset		ex_allow_tags;
 };
 
 /* an "export key" (expkey) maps a filehandlefragement to an
