@@ -564,11 +564,16 @@ static int starfive_wdt_suspend(struct device *dev)
 {
 	struct starfive_wdt *wdt = dev_get_drvdata(dev);
 
-	/* Save watchdog state, and turn it off. */
-	wdt->reload = starfive_wdt_get_count(wdt);
-
-	/* Note that WTCNT doesn't need to be saved. */
-	starfive_wdt_stop(wdt);
+	/*
+	 * Only access the hardware while the device is runtime-resumed; if
+	 * runtime PM has already suspended the device, its clocks are gated
+	 * and a register read/write would trigger a synchronous external
+	 * abort.  WTCNT does not need to be saved.
+	 */
+	if (!pm_runtime_status_suspended(dev)) {
+		wdt->reload = starfive_wdt_get_count(wdt);
+		starfive_wdt_stop(wdt);
+	}
 
 	return pm_runtime_force_suspend(dev);
 }
@@ -582,12 +587,27 @@ static int starfive_wdt_resume(struct device *dev)
 	if (ret)
 		return ret;
 
+	/*
+	 * pm_runtime_force_resume() leaves the device in whichever runtime
+	 * PM state it was in before system suspend.  Only restore hardware
+	 * state when the device is actually resumed; otherwise the register
+	 * writes below would race with gated clocks.
+	 */
+	if (pm_runtime_status_suspended(dev))
+		return 0;
+
 	starfive_wdt_unlock(wdt);
-	/* Restore watchdog state. */
 	starfive_wdt_set_reload_count(wdt, wdt->reload);
 	starfive_wdt_lock(wdt);
 
-	if (watchdog_active(&wdt->wdd))
+	/*
+	 * Restart the hardware on resume for both userspace-opened
+	 * watchdogs (WDOG_ACTIVE) and watchdogs started via early_enable
+	 * (WDOG_HW_RUNNING).  Checking only WDOG_ACTIVE leaves the
+	 * early_enable case stopped after a suspend/resume cycle even
+	 * though the framework still considers the hardware running.
+	 */
+	if (watchdog_active(&wdt->wdd) || watchdog_hw_running(&wdt->wdd))
 		return starfive_wdt_start(wdt);
 
 	return 0;
