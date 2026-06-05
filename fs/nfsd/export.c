@@ -831,6 +831,7 @@ static struct svc_export *svc_export_update(struct svc_export *new,
 static struct svc_export *svc_export_lookup(struct svc_export *);
 static int check_export(const struct path *path, int *flags,
 			unsigned char *uuid);
+static int check_allow_tags(const struct svc_export *exp);
 
 /**
  * nfsd_nl_parse_one_export - parse one svc_export entry from a netlink message
@@ -845,14 +846,14 @@ static int check_export(const struct path *path, int *flags,
 static int nfsd_nl_parse_one_export(struct cache_detail *cd,
 				    struct nlattr *attr)
 {
-	struct nlattr *tb[NFSD_A_SVC_EXPORT_FSID + 1];
+	struct nlattr *tb[NFSD_A_SVC_EXPORT_ALLOW_TAGS + 1];
 	struct auth_domain *dom = NULL;
 	struct svc_export exp = {}, *expp;
 	struct nlattr *secinfo_attr;
 	struct timespec64 boot;
 	int err, rem;
 
-	err = nla_parse_nested(tb, NFSD_A_SVC_EXPORT_FSID, attr,
+	err = nla_parse_nested(tb, NFSD_A_SVC_EXPORT_ALLOW_TAGS, attr,
 			       nfsd_svc_export_nl_policy, NULL);
 	if (err)
 		return err;
@@ -993,6 +994,68 @@ static int nfsd_nl_parse_one_export(struct cache_detail *cd,
 			}
 		}
 
+		/* allow-tags (multi-attr string) */
+		if (tb[NFSD_A_SVC_EXPORT_ALLOW_TAGS]) {
+			struct nlattr *tag_attr;
+			unsigned int count = 0;
+
+			/*
+			 * The NLA_STRING policy does not guarantee a
+			 * terminating NUL, so each tag is copied with
+			 * the length-aware nla_strdup(). Embedded NUL
+			 * bytes are rejected here because the policy
+			 * cannot express that check; a tag containing
+			 * one could never match a handshake-supplied
+			 * tag, which net/handshake rejects the same
+			 * way.
+			 */
+			nla_for_each_nested_type(tag_attr,
+						 NFSD_A_SVC_EXPORT_ALLOW_TAGS,
+						 attr, rem) {
+				const char *src = nla_data(tag_attr);
+				size_t srclen = nla_len(tag_attr);
+
+				if (srclen > 0 && src[srclen - 1] == '\0')
+					srclen--;
+				if (srclen == 0 ||
+				    memchr(src, '\0', srclen)) {
+					err = -EINVAL;
+					goto out_uuid;
+				}
+				count++;
+			}
+			if (count > NFSD_MAX_ALLOW_TAGS) {
+				err = -EINVAL;
+				goto out_uuid;
+			}
+			if (!tagset_alloc(&exp.ex_allow_tags, count,
+					  GFP_KERNEL)) {
+				err = -ENOMEM;
+				goto out_uuid;
+			}
+			nla_for_each_nested_type(tag_attr,
+						 NFSD_A_SVC_EXPORT_ALLOW_TAGS,
+						 attr, rem) {
+				char *tag;
+
+				tag = nla_strdup(tag_attr, GFP_KERNEL);
+				if (!tag) {
+					err = -ENOMEM;
+					goto out_uuid;
+				}
+				if (!tagset_add(&exp.ex_allow_tags, tag)) {
+					kfree(tag);
+					err = -ENOMEM;
+					goto out_uuid;
+				}
+			}
+			tagset_finalize(&exp.ex_allow_tags);
+		}
+
+		err = check_allow_tags(&exp);
+		if (err)
+			goto out_uuid;
+
 		err = check_export(&exp.ex_path, &exp.ex_flags,
 				   exp.ex_uuid);
 		if (err)
@@ -1026,6 +1089,7 @@ static int nfsd_nl_parse_one_export(struct cache_detail *cd,
 	}
 
 out_uuid:
+	tagset_destroy(&exp.ex_allow_tags);
 	kfree(exp.ex_uuid);
 out_fslocs:
 	nfsd4_fslocs_free(&exp.ex_fslocs);
