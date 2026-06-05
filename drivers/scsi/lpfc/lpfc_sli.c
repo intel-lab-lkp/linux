@@ -2914,7 +2914,19 @@ lpfc_sli_def_mbox_cmpl(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 			    ndlp->nlp_defer_did != NLP_EVT_NOTHING_PENDING) {
 				clear_bit(NLP_UNREG_INP, &ndlp->nlp_flag);
 				ndlp->nlp_defer_did = NLP_EVT_NOTHING_PENDING;
-				lpfc_issue_els_plogi(vport, ndlp->nlp_DID, 0);
+
+				if (!test_bit(NLP_DELAY_TMO, &ndlp->nlp_flag) &&
+				    ndlp->nlp_last_elscmd == ELS_CMD_PLOGI) {
+					rc = lpfc_issue_els_plogi(vport,
+								  ndlp->nlp_DID,
+								  0);
+					if (!rc) {
+						ndlp->nlp_prev_state =
+							ndlp->nlp_state;
+						lpfc_nlp_set_state(vport, ndlp,
+							   NLP_STE_PLOGI_ISSUE);
+					}
+				}
 			} else {
 				clear_bit(NLP_UNREG_INP, &ndlp->nlp_flag);
 			}
@@ -2967,52 +2979,55 @@ lpfc_sli4_unreg_rpi_cmpl_clr(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb)
 	bool unreg_inp;
 
 	ndlp = pmb->ctx_ndlp;
-	if (pmb->u.mb.mbxCommand == MBX_UNREG_LOGIN) {
+	if (pmb->u.mb.mbxCommand == MBX_UNREG_LOGIN && ndlp) {
 		if (phba->sli_rev == LPFC_SLI_REV4 &&
 		    (bf_get(lpfc_sli_intf_if_type,
 		     &phba->sli4_hba.sli_intf) >=
 		     LPFC_SLI_INTF_IF_TYPE_2)) {
-			if (ndlp) {
-				lpfc_printf_vlog(
-					 vport, KERN_INFO,
+			lpfc_printf_vlog(vport, KERN_INFO,
 					 LOG_MBOX | LOG_SLI | LOG_NODE,
-					 "0010 UNREG_LOGIN vpi:x%x "
-					 "rpi:%x DID:%x defer x%x flg x%lx "
-					 "x%px\n",
+					 "0010 UNREG_LOGIN vpi:x%x rpi:%x "
+					 "DID:%x defer x%x flg x%lx x%px\n",
 					 vport->vpi, ndlp->nlp_rpi,
 					 ndlp->nlp_DID, ndlp->nlp_defer_did,
-					 ndlp->nlp_flag,
-					 ndlp);
+					 ndlp->nlp_flag, ndlp);
 
-				/* Cleanup the nlp_flag now that the UNREG RPI
-				 * has completed.
-				 */
-				unreg_inp = test_and_clear_bit(NLP_UNREG_INP,
-							       &ndlp->nlp_flag);
-				clear_bit(NLP_LOGO_ACC, &ndlp->nlp_flag);
+			/* Cleanup the nlp_flag now that the UNREG RPI
+			 * has completed.
+			 */
+			unreg_inp = test_and_clear_bit(NLP_UNREG_INP,
+						       &ndlp->nlp_flag);
+			clear_bit(NLP_LOGO_ACC, &ndlp->nlp_flag);
 
-				/* Check to see if there are any deferred
-				 * events to process
-				 */
-				if (unreg_inp &&
-				    ndlp->nlp_defer_did !=
-				    NLP_EVT_NOTHING_PENDING) {
-					lpfc_printf_vlog(
-						vport, KERN_INFO,
-						LOG_MBOX | LOG_SLI | LOG_NODE,
-						"4111 UNREG cmpl deferred "
-						"clr x%x on "
-						"NPort x%x Data: x%x x%px\n",
-						ndlp->nlp_rpi, ndlp->nlp_DID,
-						ndlp->nlp_defer_did, ndlp);
-					ndlp->nlp_defer_did =
-						NLP_EVT_NOTHING_PENDING;
-					lpfc_issue_els_plogi(
-						vport, ndlp->nlp_DID, 0);
+			/* Check to see if there are any deferred
+			 * events to process
+			 */
+			if (unreg_inp &&
+			    ndlp->nlp_defer_did != NLP_EVT_NOTHING_PENDING) {
+				lpfc_printf_vlog(vport, KERN_INFO,
+						 LOG_MBOX | LOG_SLI | LOG_NODE,
+						 "4111 UNREG cmpl deferred "
+						 "clr x%x on  NPort x%x "
+						 "Data: x%x x%x x%px\n",
+						 ndlp->nlp_rpi, ndlp->nlp_DID,
+						 ndlp->nlp_defer_did,
+						 ndlp->nlp_last_elscmd, ndlp);
+				ndlp->nlp_defer_did = NLP_EVT_NOTHING_PENDING;
+
+				if (!test_bit(NLP_DELAY_TMO, &ndlp->nlp_flag) &&
+				    ndlp->nlp_last_elscmd == ELS_CMD_PLOGI) {
+					if (lpfc_issue_els_plogi(vport,
+								 ndlp->nlp_DID,
+								 0))
+						goto out;
+
+					ndlp->nlp_prev_state = ndlp->nlp_state;
+					lpfc_nlp_set_state(vport, ndlp,
+							   NLP_STE_PLOGI_ISSUE);
 				}
-
-				lpfc_nlp_put(ndlp);
 			}
+out:
+			lpfc_nlp_put(ndlp);
 		}
 	}
 
