@@ -1548,6 +1548,73 @@ static void write_svg_file(struct timechart *tchart, const char *filename)
 	svg_close();
 }
 
+static void timechart__release(struct timechart *tchart)
+{
+	struct per_pid *p = tchart->all_data;
+	struct power_event *pwr = tchart->power_events;
+	struct wake_event *we = tchart->wake_events;
+
+	while (p) {
+		struct per_pid *next_pid = p->next;
+		struct per_pidcomm *c = p->all;
+
+		while (c) {
+			struct per_pidcomm *next_comm = c->next;
+			struct cpu_sample *cs = c->samples;
+			struct io_sample *ios = c->io_samples;
+
+			while (cs) {
+				struct cpu_sample *next = cs->next;
+
+				zfree(&cs->backtrace);
+				cs->next = NULL;
+				free(cs);
+
+				cs = next;
+			}
+
+			while (ios) {
+				struct io_sample *next = ios->next;
+
+				ios->next = NULL;
+				free(ios);
+
+				ios = next;
+			}
+
+			zfree(&c->comm);
+			c->next = NULL;
+			free(c);
+
+			c = next_comm;
+		}
+
+		p->next = NULL;
+		free(p);
+
+		p = next_pid;
+	}
+
+	while (pwr) {
+		struct power_event *next = pwr->next;
+
+		pwr->next = NULL;
+		free(pwr);
+
+		pwr = next;
+	}
+
+	while (we) {
+		struct wake_event *next = we->next;
+
+		zfree(&we->backtrace);
+		we->next = NULL;
+		free(we);
+
+		we = next;
+	}
+}
+
 static int process_header(struct perf_file_section *section __maybe_unused,
 			  struct perf_header *ph,
 			  int feat,
@@ -2079,6 +2146,7 @@ int cmd_timechart(int argc, const char **argv)
 
 	ret = __cmd_timechart(&tchart, output_name);
 out:
+	timechart__release(&tchart);
 	zfree(&cpus_cstate_start_times);
 	zfree(&cpus_cstate_state);
 	zfree(&cpus_pstate_start_times);
