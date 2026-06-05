@@ -72,7 +72,7 @@ static int kvm_xen_shared_info_init(struct kvm *kvm)
 	BUILD_BUG_ON(offsetof(struct shared_info, wc) != 0xc00);
 	BUILD_BUG_ON(offsetof(struct shared_info, wc_sec_hi) != 0xc0c);
 
-	if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
+	if (kvm_xen_has_64bit_shinfo(kvm)) {
 		struct shared_info *shinfo = gpc->khva;
 
 		wc_sec_hi = &shinfo->wc_sec_hi;
@@ -390,7 +390,7 @@ static void kvm_xen_update_runstate_guest(struct kvm_vcpu *v, bool atomic)
 	BUILD_BUG_ON(sizeof_field(struct vcpu_runstate_info, time) !=
 		     sizeof(vx->runstate_times));
 
-	if (IS_ENABLED(CONFIG_64BIT) && v->kvm->arch.xen.long_mode) {
+	if (kvm_xen_has_64bit_shinfo(v->kvm)) {
 		user_len = sizeof(struct vcpu_runstate_info);
 		times_ofs = offsetof(struct vcpu_runstate_info,
 				     state_entry_time);
@@ -661,7 +661,7 @@ void kvm_xen_inject_pending_events(struct kvm_vcpu *v)
 	}
 
 	/* Now gpc->khva is a valid kernel address for the vcpu_info */
-	if (IS_ENABLED(CONFIG_64BIT) && v->kvm->arch.xen.long_mode) {
+	if (kvm_xen_has_64bit_shinfo(v->kvm)) {
 		struct vcpu_info *vi = gpc->khva;
 
 		asm volatile(LOCK_PREFIX "orq %0, %1\n"
@@ -978,7 +978,7 @@ int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 		 * address, that's actually OK. kvm_xen_update_runstate_guest()
 		 * will cope.
 		 */
-		if (IS_ENABLED(CONFIG_64BIT) && vcpu->kvm->arch.xen.long_mode)
+		if (kvm_xen_has_64bit_shinfo(vcpu->kvm))
 			sz = sizeof(struct vcpu_runstate_info);
 		else
 			sz = sizeof(struct compat_vcpu_runstate_info);
@@ -1424,7 +1424,7 @@ static int kvm_xen_hypercall_complete_userspace(struct kvm_vcpu *vcpu)
 
 static inline int max_evtchn_port(struct kvm *kvm)
 {
-	if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode)
+	if (kvm_xen_has_64bit_shinfo(kvm))
 		return EVTCHN_2L_NR_CHANNELS;
 	else
 		return COMPAT_EVTCHN_2L_NR_CHANNELS;
@@ -1446,7 +1446,7 @@ static bool wait_pending_event(struct kvm_vcpu *vcpu, int nr_ports,
 		goto out_rcu;
 
 	ret = false;
-	if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
+	if (kvm_xen_has_64bit_shinfo(kvm)) {
 		struct shared_info *shinfo = gpc->khva;
 		pending_bits = (unsigned long *)&shinfo->evtchn_pending;
 	} else {
@@ -1820,7 +1820,7 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 	if (!kvm_gpc_check(gpc, PAGE_SIZE))
 		goto out_rcu;
 
-	if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
+	if (kvm_xen_has_64bit_shinfo(kvm)) {
 		struct shared_info *shinfo = gpc->khva;
 		pending_bits = (unsigned long *)&shinfo->evtchn_pending;
 		mask_bits = (unsigned long *)&shinfo->evtchn_mask;
@@ -1861,7 +1861,7 @@ int kvm_xen_set_evtchn_fast(struct kvm_xen_evtchn *xe, struct kvm *kvm)
 			goto out_rcu;
 		}
 
-		if (IS_ENABLED(CONFIG_64BIT) && kvm->arch.xen.long_mode) {
+		if (kvm_xen_has_64bit_shinfo(kvm)) {
 			struct vcpu_info *vcpu_info = gpc->khva;
 			if (!test_and_set_bit(port_word_bit, &vcpu_info->evtchn_pending_sel)) {
 				WRITE_ONCE(vcpu_info->evtchn_upcall_pending, 1);
