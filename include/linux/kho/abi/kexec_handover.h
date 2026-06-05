@@ -278,6 +278,14 @@ enum kho_radix_consts {
 			     KHO_TABLE_SIZE_LOG2) + 1,
 };
 
+/*
+ * The maximum key width this radix tree can track.
+ *
+ * This value isn't ABI itself, but it is derived from values that are ABI.
+ */
+#define KHO_RADIX_KEY_WIDTH (((KHO_TREE_MAX_DEPTH - 1) * KHO_TABLE_SIZE_LOG2) + \
+			     KHO_BITMAP_SIZE_LOG2)
+
 struct kho_radix_node {
 	u64 table[1 << KHO_TABLE_SIZE_LOG2];
 };
