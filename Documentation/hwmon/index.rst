@@ -242,6 +242,7 @@ Hardware Monitoring Kernel Drivers
    smsc47m192
    smsc47m1
    sparx5-temp
+   sq24860
    spd5118
    stpddc60
    surface_fan
