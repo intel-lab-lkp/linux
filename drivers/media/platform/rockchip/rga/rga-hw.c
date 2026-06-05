@@ -474,10 +474,14 @@ static bool rga_handle_irq(struct rockchip_rga *rga)
 	return intr & RGA_INT_COMMAND_FINISHED;
 }
 
-static void rga_get_version(struct rockchip_rga *rga)
+static struct rockchip_rga_version rga_get_version(struct rockchip_rga *rga)
 {
-	rga->version.major = (rga_read(rga, RGA_VERSION_INFO) >> 24) & 0xFF;
-	rga->version.minor = (rga_read(rga, RGA_VERSION_INFO) >> 20) & 0x0F;
+	u32 version = rga_read(rga, RGA_VERSION_INFO);
+
+	return (struct rockchip_rga_version) {
+		.major = (version >> 24) & 0xFF,
+		.minor = (version >> 20) & 0x0F,
+	};
 }
 
 static struct rga_fmt formats[] = {

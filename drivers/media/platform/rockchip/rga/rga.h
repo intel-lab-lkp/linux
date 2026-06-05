@@ -158,7 +158,7 @@ struct rga_hw {
 	void (*start)(struct rockchip_rga *rga,
 		      struct rga_vb_buffer *src, struct rga_vb_buffer *dst);
 	bool (*handle_irq)(struct rockchip_rga *rga);
-	void (*get_version)(struct rockchip_rga *rga);
+	struct rockchip_rga_version (*get_version)(struct rockchip_rga *rga);
 	void *(*adjust_and_map_format)(struct rga_ctx *ctx,
 				       struct v4l2_pix_format_mplane *format,
 				       bool is_output);
