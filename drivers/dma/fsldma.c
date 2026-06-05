@@ -1027,26 +1027,6 @@ static irqreturn_t fsldma_ctrl_irq(int irq, void *data)
 	return IRQ_RETVAL(handled);
 }
 
-static void fsldma_free_irqs(struct fsldma_device *fdev)
-{
-	struct fsldma_chan *chan;
-	int i;
-
-	if (fdev->irq) {
-		dev_dbg(fdev->dev, "free per-controller IRQ\n");
-		free_irq(fdev->irq, fdev);
-		return;
-	}
-
-	for (i = 0; i < FSL_DMA_MAX_CHANS_PER_DEVICE; i++) {
-		chan = fdev->chan[i];
-		if (chan && chan->irq) {
-			chan_dbg(chan, "free per-channel IRQ\n");
-			free_irq(chan->irq, chan);
-		}
-	}
-}
-
 static int fsldma_request_irqs(struct fsldma_device *fdev)
 {
 	struct fsldma_chan *chan;
@@ -1056,9 +1036,8 @@ static int fsldma_request_irqs(struct fsldma_device *fdev)
 	/* if we have a per-controller IRQ, use that */
 	if (fdev->irq) {
 		dev_dbg(fdev->dev, "request per-controller IRQ\n");
-		ret = request_irq(fdev->irq, fsldma_ctrl_irq, IRQF_SHARED,
-				  "fsldma-controller", fdev);
-		return ret;
+		return devm_request_irq(fdev->dev, fdev->irq, fsldma_ctrl_irq,
+				       IRQF_SHARED, "fsldma-controller", fdev);
 	}
 
 	/* no per-controller IRQ, use the per-channel IRQs */
@@ -1069,34 +1048,19 @@ static int fsldma_request_irqs(struct fsldma_device *fdev)
 
 		if (chan->irq <= 0) {
 			chan_err(chan, "interrupts property missing in device tree\n");
-			ret = -ENODEV;
-			goto out_unwind;
+			return -ENODEV;
 		}
 
 		chan_dbg(chan, "request per-channel IRQ\n");
-		ret = request_irq(chan->irq, fsldma_chan_irq, IRQF_SHARED,
-				  "fsldma-chan", chan);
+		ret = devm_request_irq(fdev->dev, chan->irq, fsldma_chan_irq,
+				       IRQF_SHARED, "fsldma-chan", chan);
 		if (ret) {
 			chan_err(chan, "unable to request per-channel IRQ\n");
-			goto out_unwind;
+			return ret;
 		}
 	}
 
 	return 0;
-
-out_unwind:
-	for (/* none */; i >= 0; i--) {
-		chan = fdev->chan[i];
-		if (!chan)
-			continue;
-
-		if (chan->irq <= 0)
-			continue;
-
-		free_irq(chan->irq, chan);
-	}
-
-	return ret;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1303,8 +1267,6 @@ static void fsldma_of_remove(struct platform_device *op)
 
 	fdev = platform_get_drvdata(op);
 	dma_async_device_unregister(&fdev->common);
-
-	fsldma_free_irqs(fdev);
 
 	for (i = 0; i < FSL_DMA_MAX_CHANS_PER_DEVICE; i++) {
 		if (fdev->chan[i])
