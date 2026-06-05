@@ -2050,13 +2050,12 @@ out_unlock:
 
 	/*
 	 * Mark the page dirty only if the fault is handled successfully,
-	 * making sure we adjust the canonical IPA if the mapping size has
-	 * been updated (via a THP upgrade, for example).
+	 * mapping size is forced to PAGE_SIZE if dirty logging is enabled,
+	 * so we don't have to adjust the canonical IPA here.
 	 */
 	if (writable && !ret) {
-		phys_addr_t ipa = gfn_to_gpa(get_canonical_gfn(s2fd, s2vi));
-		ipa &= ~(mapping_size - 1);
-		mark_page_dirty_in_slot(kvm, s2fd->memslot, gpa_to_gfn(ipa));
+		gfn_t canonical_gfn = get_canonical_gfn(s2fd, s2vi);
+		mark_page_dirty_in_slot(kvm, s2fd->memslot, canonical_gfn);
 	}
 
 	if (ret != -EAGAIN)
