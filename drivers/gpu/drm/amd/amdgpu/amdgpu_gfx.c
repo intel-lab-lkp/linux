@@ -1686,8 +1686,10 @@ static int amdgpu_gfx_run_cleaner_shader_job(struct amdgpu_ring *ring)
 	f = amdgpu_job_submit(job);
 
 	r = dma_fence_wait(f, false);
-	if (r)
+	if (r) {
+		dma_fence_put(f);
 		goto err;
+	}
 
 	dma_fence_put(f);
 
