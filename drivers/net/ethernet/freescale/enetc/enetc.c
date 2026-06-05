@@ -2892,11 +2892,15 @@ static void enetc_clear_interrupts(struct enetc_ndev_priv *priv)
 static int enetc_phylink_connect(struct net_device *ndev)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
+	struct enetc_si *si = priv->si;
 	struct ethtool_keee edata;
 	int err;
 
 	if (!priv->phylink) {
 		/* phy-less mode */
+		if (si->ops->vf_reg_link_status_notifier)
+			return si->ops->vf_reg_link_status_notifier(si);
+
 		netif_carrier_on(ndev);
 		return 0;
 	}
@@ -2968,6 +2972,7 @@ int enetc_open(struct net_device *ndev)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
 	struct enetc_bdr_resource *tx_res, *rx_res;
+	struct enetc_si *si = priv->si;
 	bool extended;
 	int err;
 
@@ -3010,6 +3015,8 @@ err_alloc_rx:
 err_alloc_tx:
 	if (priv->phylink)
 		phylink_disconnect_phy(priv->phylink);
+	else if (si->ops->vf_unreg_link_status_notifier)
+		si->ops->vf_unreg_link_status_notifier(si);
 err_phy_connect:
 	enetc_free_irqs(priv);
 err_setup_irqs:
@@ -3050,6 +3057,7 @@ EXPORT_SYMBOL_GPL(enetc_stop);
 int enetc_close(struct net_device *ndev)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
+	struct enetc_si *si = priv->si;
 
 	enetc_stop(ndev);
 
@@ -3057,6 +3065,9 @@ int enetc_close(struct net_device *ndev)
 		phylink_stop(priv->phylink);
 		phylink_disconnect_phy(priv->phylink);
 	} else {
+		if (si->ops->vf_unreg_link_status_notifier)
+			si->ops->vf_unreg_link_status_notifier(si);
+
 		netif_carrier_off(ndev);
 	}
 
