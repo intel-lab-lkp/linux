@@ -131,7 +131,7 @@ static void __wrmsr_safe_on_cpu(void *info)
 	rv->err = wrmsr_safe(rv->msr_no, rv->reg.l, rv->reg.h);
 }
 
-int rdmsr_safe_on_cpu(unsigned int cpu, u32 msr_no, u32 *l, u32 *h)
+int rdmsr_safe_on_cpu(unsigned int cpu, u32 msr_no, u64 *q)
 {
 	struct msr_info_completion rv;
 	call_single_data_t csd;
@@ -148,8 +148,7 @@ int rdmsr_safe_on_cpu(unsigned int cpu, u32 msr_no, u32 *l, u32 *h)
 		wait_for_completion(&rv.done);
 		err = rv.msr.err;
 	}
-	*l = rv.msr.reg.l;
-	*h = rv.msr.reg.h;
+	*q = rv.msr.reg.q;
 
 	return err;
 }
@@ -189,11 +188,9 @@ EXPORT_SYMBOL(wrmsrq_safe_on_cpu);
 
 int rdmsrq_safe_on_cpu(unsigned int cpu, u32 msr_no, u64 *q)
 {
-	u32 low, high;
 	int err;
 
-	err = rdmsr_safe_on_cpu(cpu, msr_no, &low, &high);
-	*q = (u64)high << 32 | low;
+	err = rdmsr_safe_on_cpu(cpu, msr_no, q);
 
 	return err;
 }
