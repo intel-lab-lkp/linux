@@ -741,7 +741,7 @@ static int rga_parse_dt(struct rga_core *core)
 static int rga_core_bind(struct device *dev, struct device *master, void *data)
 {
 	struct platform_device *pdev = to_platform_device(dev);
-	struct rockchip_rga *rga;
+	struct rockchip_rga *rga = data;
 	struct rga_core *core;
 	struct video_device *vfd;
 	int ret = 0;
@@ -749,17 +749,6 @@ static int rga_core_bind(struct device *dev, struct device *master, void *data)
 
 	if (!pdev->dev.of_node)
 		return -ENODEV;
-
-	rga = devm_kzalloc(&pdev->dev, sizeof(*rga) + 1 * sizeof(*rga->cores), GFP_KERNEL);
-	if (!rga)
-		return -ENOMEM;
-
-	rga->hw = of_device_get_match_data(&pdev->dev);
-	if (!rga->hw)
-		return dev_err_probe(&pdev->dev, -ENODEV, "failed to get match data\n");
-
-	spin_lock_init(&rga->ctrl_lock);
-	mutex_init(&rga->mutex);
 
 	core = devm_kzalloc(&pdev->dev, sizeof(*core), GFP_KERNEL);
 	core->rga = rga;
@@ -947,9 +936,10 @@ static struct platform_driver rga_core_pdrv = {
 
 static int rga_bind(struct device *dev)
 {
+	struct rockchip_rga *rga = dev_get_drvdata(dev);
 	int ret;
 
-	ret = component_bind_all(dev, NULL);
+	ret = component_bind_all(dev, rga);
 	if (ret) {
 		dev_err(dev, "component bind failed\n");
 		return ret;
@@ -974,6 +964,8 @@ static int rga_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct component_match *match = NULL;
 	struct device_node *core_node;
+	struct rockchip_rga *rga;
+	u8 num_cores = 0;
 
 	if (!match_desc)
 		return dev_err_probe(dev, -ENODEV, "missing platform data\n");
@@ -985,6 +977,7 @@ static int rga_probe(struct platform_device *pdev)
 		of_node_get(core_node);
 		component_match_add_release(dev, &match, component_release_of,
 					    component_compare_of, core_node);
+		num_cores++;
 
 		/*
 		 * As multi core is not implemented yet,
@@ -999,6 +992,19 @@ static int rga_probe(struct platform_device *pdev)
 		return dev_err_probe(
 			dev, -ENODEV,
 			"no matching available component devices found\n");
+
+	rga = devm_kzalloc(dev, sizeof(*rga) + num_cores * sizeof(*rga->cores), GFP_KERNEL);
+	if (!rga)
+		return -ENOMEM;
+
+	rga->hw = match_desc->data;
+	if (!rga->hw)
+		return dev_err_probe(dev, -ENODEV, "failed to get match data\n");
+
+	spin_lock_init(&rga->ctrl_lock);
+	mutex_init(&rga->mutex);
+
+	dev_set_drvdata(dev, rga);
 
 	return component_master_add_with_match(dev, &rga_master_ops, match);
 }
