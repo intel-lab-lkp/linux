@@ -1165,6 +1165,7 @@ alloc_encrypted:
 				else if (ret == -ENOMEM)
 					goto wait_for_memory;
 				else if (ctx->open_rec && ret == -ENOSPC) {
+					msg_pl = &ctx->open_rec->msg_plaintext;
 					if (msg_pl->cork_bytes) {
 						ret = 0;
 						goto send_end;
