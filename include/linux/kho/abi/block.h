@@ -14,7 +14,7 @@
  * This interface is a contract. Any modification to the structure fields,
  * compatible strings, or the layout of the `__packed` serialization
  * structures defined here constitutes a breaking change. Such changes require
- * incrementing the version number in the `KHO_FDT_COMPATIBLE` string to
+ * incrementing the version number in the `KHO_BLOCK_COMPATIBLE` string to
  * prevent a new kernel from misinterpreting data from an old kernel.
  *
  * Changes are allowed provided the compatibility version is incremented;
@@ -27,6 +27,8 @@
 
 #include <asm/page.h>
 #include <linux/types.h>
+
+#define KHO_BLOCK_COMPATIBLE "block-v1"
 
 /**
  * KHO_BLOCK_SIZE - The size of each serialization block.
