@@ -2585,6 +2585,8 @@ int amdgpu_ttm_clear_buffer(struct amdgpu_bo *bo,
 	}
 err:
 	mutex_unlock(&entity->lock);
+	dma_fence_put(*fence);
+	*fence = NULL;
 
 	return r;
 }
