@@ -459,8 +459,11 @@ static int omap_rng_probe(struct platform_device *pdev)
 	}
 
 	priv->clk = devm_clk_get(&pdev->dev, NULL);
-	if (PTR_ERR(priv->clk) == -EPROBE_DEFER)
-		return -EPROBE_DEFER;
+	if (PTR_ERR(priv->clk) == -EPROBE_DEFER) {
+		priv->clk = NULL;
+		ret = -EPROBE_DEFER;
+		goto err_register;
+	}
 	if (!IS_ERR(priv->clk)) {
 		ret = clk_prepare_enable(priv->clk);
 		if (ret) {
@@ -468,11 +471,21 @@ static int omap_rng_probe(struct platform_device *pdev)
 				"Unable to enable the clk: %d\n", ret);
 			goto err_register;
 		}
+	} else {
+		/*
+		 * No optional clock present; make priv->clk safe for the
+		 * unconditional clk_disable_unprepare() in err_register and
+		 * in omap_rng_remove().
+		 */
+		priv->clk = NULL;
 	}
 
 	priv->clk_reg = devm_clk_get(&pdev->dev, "reg");
-	if (PTR_ERR(priv->clk_reg) == -EPROBE_DEFER)
-		return -EPROBE_DEFER;
+	if (PTR_ERR(priv->clk_reg) == -EPROBE_DEFER) {
+		priv->clk_reg = NULL;
+		ret = -EPROBE_DEFER;
+		goto err_register;
+	}
 	if (!IS_ERR(priv->clk_reg)) {
 		ret = clk_prepare_enable(priv->clk_reg);
 		if (ret) {
@@ -481,6 +494,9 @@ static int omap_rng_probe(struct platform_device *pdev)
 				ret);
 			goto err_register;
 		}
+	} else {
+		/* Same rationale as for priv->clk above. */
+		priv->clk_reg = NULL;
 	}
 
 	ret = (dev->of_node) ? of_get_omap_rng_device_details(priv, pdev) :
