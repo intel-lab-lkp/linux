@@ -2325,6 +2325,22 @@ static struct phy_device *lan7801_phy_init(struct lan78xx_net *dev)
 		buf |= HW_CFG_CLK125_EN_;
 		buf |= HW_CFG_REFCLK25_EN_;
 		ret = lan78xx_write_reg(dev, HW_CFG, buf);
+
+		/* Nothing programs MAC_CR for the fixed link: reset() only
+		 * sets speed/duplex for the 7800, so the 7801 is left at
+		 * 10M/half and mangles every frame it sends.  Force it to
+		 * match the 1G/full fphy_status above.
+		 */
+		ret = lan78xx_read_reg(dev, MAC_CR, &buf);
+		if (ret < 0)
+			return NULL;
+		buf &= ~(MAC_CR_AUTO_DUPLEX_ | MAC_CR_AUTO_SPEED_ |
+			 MAC_CR_ADP_ | MAC_CR_GMII_EN_ |
+			 MAC_CR_SPEED_MASK_);
+		buf |= MAC_CR_SPEED_1000_ | MAC_CR_FULL_DUPLEX_;
+		ret = lan78xx_write_reg(dev, MAC_CR, buf);
+		if (ret < 0)
+			return NULL;
 	} else {
 		if (!phydev->drv) {
 			netdev_err(dev->net, "no PHY driver found\n");
