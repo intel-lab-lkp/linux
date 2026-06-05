@@ -73,6 +73,10 @@ static int adfs_checkdiscrecord(struct adfs_discrecord *dr)
 	if (le32_to_cpu(dr->disc_size_high) >> dr->log2secsize)
 		return 1;
 
+	/* disc size must contain at least one filesystem block */
+	if (adfs_disc_size(dr) < (1ULL << dr->log2secsize))
+		return 1;
+
 	/*
 	 * Maximum idlen is limited to 16 bits for new directories by
 	 * the three-byte storage of an indirect disc address.  For
