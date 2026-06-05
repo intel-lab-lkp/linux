@@ -15,10 +15,14 @@ override CFLAGS += -Wall -g -I$(CURDIR)/include
 ALL_TARGETS := bootconfig
 ALL_PROGRAMS := $(patsubst %,$(OUTPUT)%,$(ALL_TARGETS))
 
-all: $(ALL_PROGRAMS) test
+all: $(ALL_PROGRAMS)
 
+# bootconfig is a build host tool: Kbuild's prepare hook runs it on the
+# build machine to render the embedded cmdline, so always compile it with
+# $(HOSTCC). Using $(CC) would cross-compile it under ARCH=... builds and
+# fail to exec on the host ("Exec format error").
 $(OUTPUT)bootconfig: main.c include/linux/bootconfig.h $(LIBSRC)
-	$(CC) $(filter %.c,$^) $(CFLAGS) $(LDFLAGS) -o $@
+	$(HOSTCC) $(filter %.c,$^) $(CFLAGS) $(LDFLAGS) -o $@
 
 test: $(ALL_PROGRAMS) test-bootconfig.sh
 	./test-bootconfig.sh $(OUTPUT)
