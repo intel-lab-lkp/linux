@@ -428,23 +428,30 @@ static int setup_cpuhp_and_cpuidle(struct device *dev)
 	 * syscon provided regmap.
 	 */
 	ret = of_address_to_resource(intr_gen_node, 0, &intrgen_res);
-	of_node_put(intr_gen_node);
+	if (ret) {
+		of_node_put(intr_gen_node);
+		return ret;
+	}
 
 	virt_addr = devm_ioremap(dev, intrgen_res.start,
 				 resource_size(&intrgen_res));
-	if (!virt_addr)
+	if (!virt_addr) {
+		of_node_put(intr_gen_node);
 		return -ENOMEM;
+	}
 
 	pmu_context->pmuintrgen = devm_regmap_init_mmio(dev, virt_addr,
 							&regmap_pmu_intr);
 	if (IS_ERR(pmu_context->pmuintrgen)) {
 		dev_err(dev, "failed to initialize pmu-intr-gen regmap\n");
+		of_node_put(intr_gen_node);
 		return PTR_ERR(pmu_context->pmuintrgen);
 	}
 
 	/* register custom mmio regmap with syscon */
 	ret = of_syscon_register_regmap(intr_gen_node,
 					pmu_context->pmuintrgen);
+	of_node_put(intr_gen_node);
 	if (ret)
 		return ret;
 
