@@ -508,12 +508,21 @@ static int st_sensors_read_axis_data(struct iio_dev *indio_dev,
 	if (err < 0)
 		return err;
 
-	if (byte_for_channel == 1)
+	if (byte_for_channel == 1) {
 		*data = (s8)*outdata;
-	else if (byte_for_channel == 2)
-		*data = (s16)get_unaligned_le16(outdata);
-	else if (byte_for_channel == 3)
-		*data = (s32)sign_extend32(get_unaligned_le24(outdata), 23);
+	} else if (byte_for_channel == 2) {
+		if (ch->scan_type.endianness == IIO_BE)
+			*data = (s16)get_unaligned_be16(outdata);
+		else
+			*data = (s16)get_unaligned_le16(outdata);
+	} else if (byte_for_channel == 3) {
+		if (ch->scan_type.endianness == IIO_BE)
+			*data = (s32)sign_extend32(get_unaligned_be24(outdata),
+						   23);
+		else
+			*data = (s32)sign_extend32(get_unaligned_le24(outdata),
+						   23);
+	}
 
 	return 0;
 }
