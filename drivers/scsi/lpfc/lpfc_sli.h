@@ -1,7 +1,7 @@
 /*******************************************************************
  * This file is part of the Emulex Linux Device Driver for         *
  * Fibre Channel Host Bus Adapters.                                *
- * Copyright (C) 2017-2024 Broadcom. All Rights Reserved. The term *
+ * Copyright (C) 2017-2026 Broadcom. All Rights Reserved. The term *
  * “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.     *
  * Copyright (C) 2004-2016 Emulex.  All rights reserved.           *
  * EMULEX and SLI are trademarks of Emulex.                        *
@@ -123,6 +123,7 @@ struct lpfc_iocbq {
 #define LPFC_IO_NVMET		0x800000 /* NVMET command */
 #define LPFC_IO_VMID            0x1000000 /* VMID tagged IO */
 #define LPFC_IO_CMF		0x4000000 /* CMF command */
+#define LPFC_IO_IN_RETRY	0x8000000 /* Caller is retrying IO. */
 
 	uint32_t drvrTimeout;	/* driver timeout in seconds */
 	struct lpfc_vport *vport;/* virtual port pointer */
@@ -160,6 +161,7 @@ struct lpfc_iocbq {
 #define IOCB_ABORTED        4
 #define IOCB_ABORTING	    5
 #define IOCB_NORESOURCE	    6
+#define IOCB_FAILED_PUT     7
 
 #define SLI_WQE_RET_WQE    1    /* Return WQE if cmd ring full */
 

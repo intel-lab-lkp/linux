@@ -536,8 +536,11 @@ int lpfc_bsg_timeout(struct bsg_job *);
 int lpfc_bsg_ct_unsol_event(struct lpfc_hba *, struct lpfc_sli_ring *,
 			     struct lpfc_iocbq *);
 int lpfc_bsg_ct_unsol_abort(struct lpfc_hba *, struct hbq_dmabuf *);
-void __lpfc_sli_ringtx_put(struct lpfc_hba *, struct lpfc_sli_ring *,
-	struct lpfc_iocbq *);
+void lpfc_sli4_queue_io_for_retry(struct lpfc_hba *phba,
+				  struct lpfc_iocbq *iocb,
+				  bool head);
+void __lpfc_sli_ringtx_put(struct lpfc_hba *phba, struct lpfc_sli_ring *ring,
+			   struct lpfc_iocbq *iocb, bool head);
 struct lpfc_iocbq *lpfc_sli_ringtx_get(struct lpfc_hba *,
 	struct lpfc_sli_ring *);
 int __lpfc_sli_issue_iocb(struct lpfc_hba *, uint32_t,
