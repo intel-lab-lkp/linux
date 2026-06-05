@@ -260,11 +260,11 @@ static int amd_hfi_set_state(unsigned int cpu, bool state)
 {
 	int ret;
 
-	ret = wrmsrq_on_cpu(cpu, MSR_AMD_WORKLOAD_CLASS_CONFIG, state ? 1 : 0);
+	ret = wrmsr_on_cpu(cpu, MSR_AMD_WORKLOAD_CLASS_CONFIG, state ? 1 : 0);
 	if (ret)
 		return ret;
 
-	return wrmsrq_on_cpu(cpu, MSR_AMD_WORKLOAD_HRST, 0x1);
+	return wrmsr_on_cpu(cpu, MSR_AMD_WORKLOAD_HRST, 0x1);
 }
 
 /**
