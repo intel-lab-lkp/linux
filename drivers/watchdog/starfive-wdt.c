@@ -460,17 +460,17 @@ static int starfive_wdt_probe(struct platform_device *pdev)
 	if (pm_runtime_enabled(&pdev->dev)) {
 		ret = pm_runtime_resume_and_get(&pdev->dev);
 		if (ret < 0)
-			return ret;
+			goto err_pm_disable;
 	} else {
 		/* runtime PM is disabled but clocks need to be enabled */
 		ret = starfive_wdt_enable_clock(wdt);
 		if (ret)
-			return ret;
+			goto err_pm_disable;
 	}
 
 	ret = starfive_wdt_reset_init(&pdev->dev);
 	if (ret)
-		goto err_exit;
+		goto err_put_pm;
 
 	watchdog_set_drvdata(&wdt->wdd, wdt);
 	wdt->wdd.info = &starfive_wdt_info;
@@ -482,7 +482,7 @@ static int starfive_wdt_probe(struct platform_device *pdev)
 	if (!wdt->freq) {
 		dev_err(&pdev->dev, "get clock rate failed.\n");
 		ret = -EINVAL;
-		goto err_exit;
+		goto err_put_pm;
 	}
 
 	wdt->wdd.min_timeout = 1;
@@ -498,7 +498,7 @@ static int starfive_wdt_probe(struct platform_device *pdev)
 	if (early_enable) {
 		ret = starfive_wdt_start(wdt);
 		if (ret)
-			goto err_exit;
+			goto err_put_pm;
 		set_bit(WDOG_HW_RUNNING, &wdt->wdd.status);
 	} else {
 		starfive_wdt_stop(wdt);
@@ -506,7 +506,7 @@ static int starfive_wdt_probe(struct platform_device *pdev)
 
 	ret = watchdog_register_device(&wdt->wdd);
 	if (ret)
-		goto err_exit;
+		goto err_put_pm;
 
 	if (!early_enable) {
 		if (pm_runtime_enabled(&pdev->dev)) {
@@ -520,8 +520,12 @@ static int starfive_wdt_probe(struct platform_device *pdev)
 
 err_unregister_wdt:
 	watchdog_unregister_device(&wdt->wdd);
-err_exit:
-	starfive_wdt_disable_clock(wdt);
+err_put_pm:
+	if (pm_runtime_enabled(&pdev->dev))
+		pm_runtime_put_sync(&pdev->dev);
+	else
+		starfive_wdt_disable_clock(wdt);
+err_pm_disable:
 	pm_runtime_disable(&pdev->dev);
 
 	return ret;
