@@ -6481,6 +6481,7 @@ err_vq:
 static int virtnet_alloc_queues(struct virtnet_info *vi)
 {
 	int i;
+	int weight = napi_weight > 0 ? napi_weight : NAPI_POLL_WEIGHT;
 
 	if (vi->has_cvq) {
 		vi->ctrl = kzalloc_obj(*vi->ctrl);
@@ -6500,10 +6501,10 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 		vi->rq[i].pages = NULL;
 		netif_napi_add_config(vi->dev, &vi->rq[i].napi, virtnet_poll,
 				      i);
-		vi->rq[i].napi.weight = napi_weight;
+		vi->rq[i].napi.weight = weight;
 		netif_napi_add_tx_weight(vi->dev, &vi->sq[i].napi,
 					 virtnet_poll_tx,
-					 napi_tx ? napi_weight : 0);
+					 napi_tx ? weight : 0);
 
 		sg_init_table(vi->rq[i].sg, ARRAY_SIZE(vi->rq[i].sg));
 		ewma_pkt_len_init(&vi->rq[i].mrg_avg_pkt_len);
