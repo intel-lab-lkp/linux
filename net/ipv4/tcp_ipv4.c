@@ -1783,6 +1783,7 @@ exit:
 	return NULL;
 put_and_exit:
 	newinet->inet_opt = NULL;
+	tcp_clear_sock_ops_cb_flags(newsk);
 	inet_csk_prepare_forced_close(newsk);
 	tcp_done(newsk);
 	goto exit;
