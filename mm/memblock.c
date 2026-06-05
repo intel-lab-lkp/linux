@@ -1893,7 +1893,8 @@ phys_addr_t __init_memblock memblock_reserved_size(void)
 	return memblock.reserved.total_size;
 }
 
-phys_addr_t __init_memblock memblock_reserved_kern_size(phys_addr_t limit, int nid)
+phys_addr_t __init_memblock memblock_reserved_size_flags(phys_addr_t limit, int nid,
+							 enum memblock_flags flags)
 {
 	struct memblock_region *r;
 	phys_addr_t total = 0;
@@ -1908,7 +1909,7 @@ phys_addr_t __init_memblock memblock_reserved_kern_size(phys_addr_t limit, int n
 			size = limit - r->base;
 
 		if (nid == memblock_get_region_node(r) || !numa_valid_node(nid))
-			if (r->flags & MEMBLOCK_RSRV_KERN)
+			if (r->flags & flags)
 				total += size;
 	}
 
@@ -1930,7 +1931,8 @@ phys_addr_t __init_memblock memblock_reserved_kern_size(phys_addr_t limit, int n
 unsigned long __init memblock_estimated_nr_free_pages(void)
 {
 	return PHYS_PFN(memblock_phys_mem_size() -
-			memblock_reserved_kern_size(MEMBLOCK_ALLOC_ANYWHERE, NUMA_NO_NODE));
+			memblock_reserved_size_flags(MEMBLOCK_ALLOC_ANYWHERE, NUMA_NO_NODE,
+						     MEMBLOCK_RSRV_KERN));
 }
 
 /* lowest address */
