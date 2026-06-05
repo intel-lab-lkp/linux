@@ -206,7 +206,6 @@ struct inv_mpu6050_state {
 	u8 irq_mask;
 	unsigned skip_samples;
 	struct inv_sensors_timestamp timestamp;
-	struct regulator *vdd_supply;
 	struct regulator *vddio_supply;
 	bool magn_disabled;
 	s32 magn_raw_to_gauss[3];
