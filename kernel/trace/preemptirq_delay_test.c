@@ -14,6 +14,7 @@
 #include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/printk.h>
+#include <linux/cpumask.h>
 #include <linux/string.h>
 #include <linux/sysfs.h>
 #include <linux/completion.h>
@@ -151,6 +152,15 @@ static int preemptirq_run_test(void)
 {
 	struct task_struct *task;
 	char task_name[50];
+
+	if (cpu_affinity > -1) {
+		unsigned int cpu = cpu_affinity;
+
+		if (cpu >= nr_cpu_ids || !cpu_possible(cpu)) {
+			pr_err("cpu_affinity:%d, invalid CPU\n", cpu_affinity);
+			return -EINVAL;
+		}
+	}
 
 	init_completion(&done);
 
