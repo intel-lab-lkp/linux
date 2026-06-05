@@ -590,7 +590,7 @@ static int inj_bank_set(void *data, u64 val)
 	u64 cap;
 
 	/* Get bank count on target CPU so we can handle non-uniform values. */
-	rdmsrq_on_cpu(m->extcpu, MSR_IA32_MCG_CAP, &cap);
+	rdmsr_on_cpu(m->extcpu, MSR_IA32_MCG_CAP, &cap);
 	n_banks = cap & MCG_BANKCNT_MASK;
 
 	if (val >= n_banks) {
@@ -614,7 +614,7 @@ static int inj_bank_set(void *data, u64 val)
 	if (cpu_feature_enabled(X86_FEATURE_SMCA)) {
 		u64 ipid;
 
-		if (rdmsrq_on_cpu(m->extcpu, MSR_AMD64_SMCA_MCx_IPID(val), &ipid)) {
+		if (rdmsr_on_cpu(m->extcpu, MSR_AMD64_SMCA_MCx_IPID(val), &ipid)) {
 			pr_err("Error reading IPID on CPU%d\n", m->extcpu);
 			return -EINVAL;
 		}
