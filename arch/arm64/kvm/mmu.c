@@ -161,11 +161,6 @@ static int kvm_mmu_split_huge_pages(struct kvm *kvm, phys_addr_t addr,
 	return ret;
 }
 
-static bool memslot_is_logging(struct kvm_memory_slot *memslot)
-{
-	return memslot->dirty_bitmap && !(memslot->flags & KVM_MEM_READONLY);
-}
-
 /**
  * kvm_arch_flush_remote_tlbs() - flush all VM TLB entries for v7/8
  * @kvm:	pointer to kvm structure.
@@ -1748,7 +1743,7 @@ static short kvm_s2_resolve_vma_size(const struct kvm_s2_fault_desc *s2fd,
 {
 	short vma_shift;
 
-	if (memslot_is_logging(s2fd->memslot)) {
+	if (kvm_slot_dirty_track_enabled(s2fd->memslot)) {
 		s2vi->max_map_size = PAGE_SIZE;
 		vma_shift = PAGE_SHIFT;
 	} else {
@@ -1953,7 +1948,7 @@ static int kvm_s2_fault_compute_prot(const struct kvm_s2_fault_desc *s2fd,
 	*prot = KVM_PGTABLE_PROT_R;
 
 	if (s2vi->map_writable && (s2vi->device ||
-				   !memslot_is_logging(s2fd->memslot) ||
+				   !kvm_slot_dirty_track_enabled(s2fd->memslot) ||
 				   kvm_is_write_fault(s2fd->vcpu)))
 		*prot |= KVM_PGTABLE_PROT_W;
 
@@ -2084,7 +2079,7 @@ static int user_mem_abort(const struct kvm_s2_fault_desc *s2fd)
 	 * and a write fault needs to collapse a block entry into a table.
 	 */
 	memcache = get_mmu_memcache(s2fd->vcpu);
-	if (!perm_fault || (memslot_is_logging(s2fd->memslot) &&
+	if (!perm_fault || (kvm_slot_dirty_track_enabled(s2fd->memslot) &&
 			    kvm_is_write_fault(s2fd->vcpu))) {
 		ret = topup_mmu_memcache(s2fd->vcpu, memcache);
 		if (ret)
