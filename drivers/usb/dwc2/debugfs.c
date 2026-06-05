@@ -252,8 +252,7 @@ static int ep_show(struct seq_file *seq, void *v)
 		   dwc2_readl(hsotg, DIEPTSIZ(index)),
 		   dwc2_readl(hsotg, DOEPTSIZ(index)));
 
-	seq_puts(seq, "\n");
-	seq_printf(seq, "mps %d\n", ep->ep.maxpacket);
+	seq_printf(seq, "\nmps %d\n", ep->ep.maxpacket);
 	seq_printf(seq, "total_data=%ld\n", ep->total_data);
 
 	seq_printf(seq, "request list (%p,%p):\n",
