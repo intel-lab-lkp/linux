@@ -385,6 +385,8 @@ static int tcf_csum_sctp(struct sk_buff *skb, unsigned int ihl,
 static int tcf_csum_ipv4(struct sk_buff *skb, u32 update_flags)
 {
 	const struct iphdr *iph;
+	unsigned int ihl;
+	unsigned int ipl;
 	int ntkoff;
 
 	ntkoff = skb_network_offset(skb);
@@ -393,41 +395,43 @@ static int tcf_csum_ipv4(struct sk_buff *skb, u32 update_flags)
 		goto fail;
 
 	iph = ip_hdr(skb);
+	if (iph->version != 4 || iph->ihl < 5)
+		return 1;
+
+	ihl = iph->ihl * 4;
+	ipl = ntohs(iph->tot_len);
+	if (ipl < ihl)
+		return 1;
 
 	switch (iph->frag_off & htons(IP_OFFSET) ? 0 : iph->protocol) {
 	case IPPROTO_ICMP:
 		if (update_flags & TCA_CSUM_UPDATE_FLAG_ICMP)
-			if (!tcf_csum_ipv4_icmp(skb, iph->ihl * 4,
-						ntohs(iph->tot_len)))
+			if (!tcf_csum_ipv4_icmp(skb, ihl, ipl))
 				goto fail;
 		break;
 	case IPPROTO_IGMP:
 		if (update_flags & TCA_CSUM_UPDATE_FLAG_IGMP)
-			if (!tcf_csum_ipv4_igmp(skb, iph->ihl * 4,
-						ntohs(iph->tot_len)))
+			if (!tcf_csum_ipv4_igmp(skb, ihl, ipl))
 				goto fail;
 		break;
 	case IPPROTO_TCP:
 		if (update_flags & TCA_CSUM_UPDATE_FLAG_TCP)
-			if (!tcf_csum_ipv4_tcp(skb, iph->ihl * 4,
-					       ntohs(iph->tot_len)))
+			if (!tcf_csum_ipv4_tcp(skb, ihl, ipl))
 				goto fail;
 		break;
 	case IPPROTO_UDP:
 		if (update_flags & TCA_CSUM_UPDATE_FLAG_UDP)
-			if (!tcf_csum_ipv4_udp(skb, iph->ihl * 4,
-					       ntohs(iph->tot_len), 0))
+			if (!tcf_csum_ipv4_udp(skb, ihl, ipl, 0))
 				goto fail;
 		break;
 	case IPPROTO_UDPLITE:
 		if (update_flags & TCA_CSUM_UPDATE_FLAG_UDPLITE)
-			if (!tcf_csum_ipv4_udp(skb, iph->ihl * 4,
-					       ntohs(iph->tot_len), 1))
+			if (!tcf_csum_ipv4_udp(skb, ihl, ipl, 1))
 				goto fail;
 		break;
 	case IPPROTO_SCTP:
 		if ((update_flags & TCA_CSUM_UPDATE_FLAG_SCTP) &&
-		    !tcf_csum_sctp(skb, iph->ihl * 4, ntohs(iph->tot_len)))
+		    !tcf_csum_sctp(skb, ihl, ipl))
 			goto fail;
 		break;
 	}
