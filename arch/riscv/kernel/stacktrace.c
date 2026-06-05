@@ -46,32 +46,36 @@ static inline int fp_is_valid(unsigned long fp, unsigned long sp)
 }
 
 void notrace walk_stackframe(struct task_struct *task, struct pt_regs *regs,
-			     bool (*fn)(void *, unsigned long), void *arg)
+			     bool (*fn)(void *, unsigned long, bool), void *arg)
 {
 	unsigned long fp, sp, pc;
 	int graph_idx = 0;
 	int level = 0;
+	bool is_ra;
 
 	if (regs) {
 		fp = frame_pointer(regs);
 		sp = user_stack_pointer(regs);
 		pc = instruction_pointer(regs);
+		is_ra = false;	/* exact instruction pointer */
 	} else if (task == NULL || task == current) {
 		fp = (unsigned long)__builtin_frame_address(0);
 		sp = current_stack_pointer;
 		pc = (unsigned long)walk_stackframe;
+		is_ra = false;	/* function entry address */
 		level = -1;
 	} else {
 		/* task blocked in __switch_to */
 		fp = task->thread.s[0];
 		sp = task->thread.sp;
 		pc = task->thread.ra;
+		is_ra = true;	/* return address */
 	}
 
 	for (;;) {
 		struct stackframe *frame;
 
-		if (unlikely(!__kernel_text_address(pc) || (level++ >= 0 && !fn(arg, pc))))
+		if (unlikely(!__kernel_text_address(pc) || (level++ >= 0 && !fn(arg, pc, is_ra))))
 			break;
 
 		if (unlikely(!fp_is_valid(fp, sp)))
@@ -84,18 +88,21 @@ void notrace walk_stackframe(struct task_struct *task, struct pt_regs *regs,
 			/* We hit function where ra is not saved on the stack */
 			fp = frame->ra;
 			pc = regs->ra;
+			is_ra = true;	/* return address */
 		} else {
 			fp = READ_ONCE_TASK_STACK(task, frame->fp);
 			pc = READ_ONCE_TASK_STACK(task, frame->ra);
 			pc = ftrace_graph_ret_addr(task, &graph_idx, pc,
 						   &frame->ra);
+			is_ra = true;	/* return address */
 			if (pc >= (unsigned long)handle_exception &&
 			    pc < (unsigned long)&ret_from_exception_end) {
-				if (unlikely(!fn(arg, pc)))
+				if (unlikely(!fn(arg, pc, is_ra)))
 					break;
 
 				pc = ((struct pt_regs *)sp)->epc;
 				fp = ((struct pt_regs *)sp)->s0;
+				is_ra = false;	/* exact instruction pointer */
 			}
 		}
 
@@ -105,41 +112,58 @@ void notrace walk_stackframe(struct task_struct *task, struct pt_regs *regs,
 #else /* !CONFIG_FRAME_POINTER */
 
 void notrace walk_stackframe(struct task_struct *task,
-	struct pt_regs *regs, bool (*fn)(void *, unsigned long), void *arg)
+	struct pt_regs *regs, bool (*fn)(void *, unsigned long, bool), void *arg)
 {
 	unsigned long sp, pc;
 	unsigned long *ksp;
+	bool is_ra;
 
 	if (regs) {
 		sp = user_stack_pointer(regs);
 		pc = instruction_pointer(regs);
+		is_ra = false;	/* exact instruction pointer */
 	} else if (task == NULL || task == current) {
 		sp = current_stack_pointer;
 		pc = (unsigned long)walk_stackframe;
+		is_ra = false;	/* function entry address */
 	} else {
 		/* task blocked in __switch_to */
 		sp = task->thread.sp;
 		pc = task->thread.ra;
+		is_ra = true;	/* return address */
 	}
 
 	if (unlikely(sp & 0x7))
 		return;
 
+	/*
+	 * Scan the stack for kernel text addresses.  Without frame pointers
+	 * we cannot distinguish return addresses from other saved text
+	 * addresses (e.g. pt_regs->epc), so all stack values are treated
+	 * as return addresses (is_ra = true).  This means pt_regs->epc
+	 * values found during the scan may be displayed with %pB instead
+	 * of the correct %pS, which can cause misattribution when the
+	 * exact IP is at offset 0 of a function.
+	 */
 	ksp = (unsigned long *)sp;
 	while (!kstack_end(ksp)) {
-		if (__kernel_text_address(pc) && unlikely(!fn(arg, pc)))
+		if (__kernel_text_address(pc) && unlikely(!fn(arg, pc, is_ra)))
 			break;
 		pc = READ_ONCE_NOCHECK(*ksp++);
+		is_ra = true;
 	}
 }
 
 #endif /* CONFIG_FRAME_POINTER */
 
-static bool print_trace_address(void *arg, unsigned long pc)
+static bool print_trace_address(void *arg, unsigned long pc, bool is_ra)
 {
 	const char *loglvl = arg;
 
-	print_ip_sym(loglvl, pc);
+	if (is_ra)
+		printk("%s[<%px>] %pB\n", loglvl, (void *)pc, (void *)pc);
+	else
+		printk("%s[<%px>] %pS\n", loglvl, (void *)pc, (void *)pc);
 	return true;
 }
 
@@ -155,7 +179,7 @@ void show_stack(struct task_struct *task, unsigned long *sp, const char *loglvl)
 	dump_backtrace(NULL, task, loglvl);
 }
 
-static bool save_wchan(void *arg, unsigned long pc)
+static bool save_wchan(void *arg, unsigned long pc, bool is_ra)
 {
 	if (!in_sched_functions(pc)) {
 		unsigned long *p = arg;
@@ -176,10 +200,22 @@ unsigned long __get_wchan(struct task_struct *task)
 	return pc;
 }
 
+struct stack_walk_cookie {
+	stack_trace_consume_fn consume;
+	void *cookie;
+};
+
+static bool stack_walk_wrapper(void *arg, unsigned long pc, bool is_ra)
+{
+	struct stack_walk_cookie *ctx = arg;
+	return ctx->consume(ctx->cookie, pc);
+}
+
 noinline noinstr void arch_stack_walk(stack_trace_consume_fn consume_entry, void *cookie,
 		     struct task_struct *task, struct pt_regs *regs)
 {
-	walk_stackframe(task, regs, consume_entry, cookie);
+	struct stack_walk_cookie ctx = { .consume = consume_entry, .cookie = cookie };
+	walk_stackframe(task, regs, stack_walk_wrapper, &ctx);
 }
 
 /*

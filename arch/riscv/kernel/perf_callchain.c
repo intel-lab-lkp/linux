@@ -11,6 +11,11 @@ static bool fill_callchain(void *entry, unsigned long pc)
 	return perf_callchain_store(entry, pc) == 0;
 }
 
+static bool fill_callchain_walk(void *entry, unsigned long pc, bool is_ra)
+{
+	return fill_callchain(entry, pc);
+}
+
 /*
  * This will be called when the target is in user mode
  * This function will only be called when we use
@@ -44,5 +49,5 @@ void perf_callchain_kernel(struct perf_callchain_entry_ctx *entry,
 		return;
 	}
 
-	walk_stackframe(NULL, regs, fill_callchain, entry);
+	walk_stackframe(NULL, regs, fill_callchain_walk, entry);
 }
