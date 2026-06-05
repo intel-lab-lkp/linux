@@ -1076,9 +1076,9 @@ static int psr_capability_show(struct seq_file *m, void *data)
 	seq_printf(m, "Sink support: %s", str_yes_no(link->dpcd_caps.psr_info.psr_version != 0));
 	if (link->dpcd_caps.psr_info.psr_version)
 		seq_printf(m, " [0x%02x]", link->dpcd_caps.psr_info.psr_version);
-	seq_puts(m, "\n");
 
-	seq_printf(m, "Driver support: %s", str_yes_no(link->psr_settings.psr_feature_enabled));
+	seq_printf(m, "\nDriver support: %s",
+		   str_yes_no(link->psr_settings.psr_feature_enabled));
 	if (link->psr_settings.psr_version)
 		seq_printf(m, " [0x%02x]", link->psr_settings.psr_version);
 	seq_puts(m, "\n");
