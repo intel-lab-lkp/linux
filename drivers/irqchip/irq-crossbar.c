@@ -5,6 +5,7 @@
  *  Copyright (C) 2013 Texas Instruments Incorporated - http://www.ti.com
  *  Author: Sricharan R <r.sricharan@ti.com>
  */
+#include "linux/of.h"
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/irqchip.h>
@@ -197,6 +198,7 @@ static int __init crossbar_of_init(struct device_node *node)
 	u32 max = 0, entry, reg_size;
 	int i, size, reserved = 0;
 	const __be32 *irqsr;
+	const char *pname;
 	int ret = -ENOMEM;
 
 	cb = kzalloc_obj(*cb);
@@ -231,14 +233,21 @@ static int __init crossbar_of_init(struct device_node *node)
 	for (i = 0; i < max; i++)
 		cb->irq_map[i] = IRQ_FREE;
 
-	/* Get and mark reserved irqs */
-	irqsr = of_get_property(node, "ti,irqs-reserved", &size);
+	/*
+	 * Get and mark reserved irqs
+	 * try new property name first, fall back to old name for compatibility
+	 * on older device trees.
+	 */
+	pname = of_property_present(node, "ti,crossbar-irqs-reserved") ?
+		"ti,crossbar-irqs-reserved" : "ti,irqs-reserved";
+
+	irqsr = of_get_property(node, pname, &size);
 	if (irqsr) {
 		size /= sizeof(__be32);
 
 		for (i = 0; i < size; i++) {
 			of_property_read_u32_index(node,
-						   "ti,irqs-reserved",
+						   pname,
 						   i, &entry);
 			if (entry >= max) {
 				pr_err("Invalid reserved entry\n");
