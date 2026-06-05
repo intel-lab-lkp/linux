@@ -1129,6 +1129,18 @@ svcauth_tls_accept(struct svc_rqst *rqstp)
 		return SVC_DENIED;
 	}
 
+	/*
+	 * AUTH_TLS initiates a handshake. Refuse it on a transport
+	 * that already has a TLS session: a second handshake would
+	 * destroy xpt_handshake_tags. This test can pass before a
+	 * concurrent handshake completes; svc_tcp_handshake()
+	 * rechecks under XPT_BUSY before destroying the tags.
+	 */
+	if (test_bit(XPT_TLS_SESSION, &xprt->xpt_flags)) {
+		rqstp->rq_auth_stat = rpc_autherr_badcred;
+		return SVC_DENIED;
+	}
+
 	/* Signal that mapping to nobody uid/gid is required */
 	cred->cr_uid = INVALID_UID;
 	cred->cr_gid = INVALID_GID;

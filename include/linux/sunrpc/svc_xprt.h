@@ -9,6 +9,7 @@
 #define SUNRPC_SVC_XPRT_H
 
 #include <linux/sunrpc/svc.h>
+#include <linux/tagset.h>
 
 struct module;
 
@@ -79,6 +80,7 @@ struct svc_xprt {
 	const struct cred	*xpt_cred;
 	struct rpc_xprt		*xpt_bc_xprt;	/* NFSv4.1 backchannel */
 	struct rpc_xprt_switch	*xpt_bc_xps;	/* NFSv4.1 backchannel */
+	struct tagset		xpt_handshake_tags;	/* TLS session tags */
 };
 
 /* flag bits for xpt_flags */
