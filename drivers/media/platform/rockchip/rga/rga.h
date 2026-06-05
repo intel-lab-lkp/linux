@@ -71,7 +71,6 @@ struct rockchip_rga {
 	struct video_device *vfd;
 
 	struct device *dev;
-	struct regmap *grf;
 	void __iomem *regs;
 	struct clk_bulk_data *clks;
 	int num_clks;
