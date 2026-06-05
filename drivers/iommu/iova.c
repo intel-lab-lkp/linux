@@ -621,6 +621,9 @@ iova_magazine_free_pfns(struct iova_magazine *mag, struct iova_domain *iovad)
 	unsigned long flags;
 	int i;
 
+	if (!mag)
+		return;
+
 	spin_lock_irqsave(&iovad->iova_rbtree_lock, flags);
 
 	for (i = 0 ; i < mag->size; ++i) {
@@ -737,14 +740,7 @@ int iova_domain_init_rcaches(struct iova_domain *iovad)
 		}
 		for_each_possible_cpu(cpu) {
 			cpu_rcache = per_cpu_ptr(rcache->cpu_rcaches, cpu);
-
 			spin_lock_init(&cpu_rcache->lock);
-			cpu_rcache->loaded = iova_magazine_alloc(GFP_KERNEL);
-			cpu_rcache->prev = iova_magazine_alloc(GFP_KERNEL);
-			if (!cpu_rcache->loaded || !cpu_rcache->prev) {
-				ret = -ENOMEM;
-				goto out_err;
-			}
 		}
 	}
 
@@ -777,7 +773,19 @@ static bool __iova_rcache_insert(struct iova_domain *iovad,
 	cpu_rcache = raw_cpu_ptr(rcache->cpu_rcaches);
 	spin_lock_irqsave(&cpu_rcache->lock, flags);
 
+	if (!cpu_rcache->loaded) {
+		cpu_rcache->loaded = iova_magazine_alloc(GFP_ATOMIC | __GFP_NOWARN);
+		if (!cpu_rcache->loaded)
+			goto unlock;
+	}
+
 	if (!iova_magazine_full(cpu_rcache->loaded)) {
+		can_insert = true;
+	} else if (!cpu_rcache->prev) {
+		cpu_rcache->prev = iova_magazine_alloc(GFP_ATOMIC | __GFP_NOWARN);
+		if (!cpu_rcache->prev)
+			goto unlock;
+		swap(cpu_rcache->prev, cpu_rcache->loaded);
 		can_insert = true;
 	} else if (!iova_magazine_full(cpu_rcache->prev)) {
 		swap(cpu_rcache->prev, cpu_rcache->loaded);
@@ -799,6 +807,7 @@ static bool __iova_rcache_insert(struct iova_domain *iovad,
 	if (can_insert)
 		iova_magazine_push(cpu_rcache->loaded, iova_pfn);
 
+unlock:
 	spin_unlock_irqrestore(&cpu_rcache->lock, flags);
 
 	return can_insert;
@@ -831,9 +840,9 @@ static unsigned long __iova_rcache_get(struct iova_rcache *rcache,
 	cpu_rcache = raw_cpu_ptr(rcache->cpu_rcaches);
 	spin_lock_irqsave(&cpu_rcache->lock, flags);
 
-	if (!iova_magazine_empty(cpu_rcache->loaded)) {
+	if (cpu_rcache->loaded && !iova_magazine_empty(cpu_rcache->loaded)) {
 		has_pfn = true;
-	} else if (!iova_magazine_empty(cpu_rcache->prev)) {
+	} else if (cpu_rcache->prev && !iova_magazine_empty(cpu_rcache->prev)) {
 		swap(cpu_rcache->prev, cpu_rcache->loaded);
 		has_pfn = true;
 	} else {
