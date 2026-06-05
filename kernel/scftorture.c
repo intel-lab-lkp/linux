@@ -661,6 +661,11 @@ static int __init scf_torture_init(void)
 	// Worker tasks invoking smp_call_function().
 	if (nthreads < 0)
 		nthreads = num_online_cpus();
+	if (nthreads == 0) {
+		SCFTORTOUT_ERRSTRING("nthreads must be positive");
+		firsterr = -EINVAL;
+		goto unwind;
+	}
 	scf_stats_p = kzalloc_objs(scf_stats_p[0], nthreads);
 	if (!scf_stats_p) {
 		SCFTORTOUT_ERRSTRING("out of memory");
