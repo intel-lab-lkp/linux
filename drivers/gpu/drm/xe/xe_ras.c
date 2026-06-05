@@ -209,8 +209,46 @@ static enum xe_ras_recovery_action handle_core_compute_errors(struct xe_ras_erro
 	return XE_RAS_RECOVERY_ACTION_RECOVERED;
 }
 
+#ifdef CONFIG_PCIEAER
+static void pcie_suppress_surprise_link_down(struct pci_dev *usp)
+{
+	u32 aer_uncorr_mask;
+	u16 aer_cap;
+
+	aer_cap = usp->aer_cap;
+	if (!aer_cap) {
+		dev_dbg(&usp->dev,
+			"AER capability not present\n");
+		return;
+	}
+
+	pci_read_config_dword(usp, aer_cap + PCI_ERR_UNCOR_MASK, &aer_uncorr_mask);
+	aer_uncorr_mask |= PCI_ERR_UNC_SURPDN;
+	pci_write_config_dword(usp, aer_cap + PCI_ERR_UNCOR_MASK, aer_uncorr_mask);
+	dev_dbg(&usp->dev, "Surprise Link Down masked for cold reset\n");
+}
+#endif /* CONFIG_PCIEAER */
+
 static void punit_error_handler(struct xe_device *xe)
 {
+#ifdef CONFIG_PCIEAER
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+	struct pci_dev *vsp, *usp;
+
+	/*
+	 * Device Hierarchy:
+	 *
+	 * Root Port --> Upstream Switch Port (USP) --> Virtual Switch Port (VSP) --> SGunit
+	 *
+	 * Cold reset power-cycles the slot, dropping the PCIe link. The
+	 * slot triggers a spurious Surprise Link Down AER event on the USP.
+	 */
+	vsp = pci_upstream_bridge(pdev);
+	usp = vsp ? pci_upstream_bridge(vsp) : NULL;
+
+	if (usp)
+		pcie_suppress_surprise_link_down(usp);
+#endif
 	xe_device_set_wedged_method(xe, DRM_WEDGE_RECOVERY_COLD_RESET);
 	xe_device_declare_wedged(xe);
 }
