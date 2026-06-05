@@ -76,6 +76,7 @@ impl configfs::GroupOperations for Config {
                     name: name.try_into()?,
                 }),
             }),
+            core::iter::empty(),
         ))
     }
 }
