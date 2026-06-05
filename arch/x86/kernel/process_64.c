@@ -59,6 +59,7 @@
 #include <asm/fsgsbase.h>
 #include <asm/fred.h>
 #include <asm/msr.h>
+#include <asm/ibt.h>
 #ifdef CONFIG_IA32_EMULATION
 /* Not included via unistd.h */
 #include <asm/unistd_32_ia32.h>
@@ -540,6 +541,7 @@ start_thread_common(struct pt_regs *regs, unsigned long new_ip,
 	}
 
 	reset_thread_features();
+	reset_thread_ibt();
 
 	loadsegment(fs, 0);
 	loadsegment(es, _ds);

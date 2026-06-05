@@ -114,4 +114,18 @@ static inline void ibt_restore(u64 save) { }
 
 #define ENDBR_INSN_SIZE		(4*HAS_KERNEL_IBT)
 
+#ifndef __ASSEMBLER__
+
+#include <linux/prctl.h>
+
+#define PR_CFI_SUPPORTED_STATUS_MASK (PR_CFI_ENABLE | PR_CFI_DISABLE | PR_CFI_LOCK)
+
+#ifdef CONFIG_X86_USER_IBT
+void reset_thread_ibt(void);
+#else
+static inline void reset_thread_ibt(void) {}
+#endif /* CONFIG_X86_USER_IBT */
+
+#endif /* __ASSEMBLER__ */
+
 #endif /* _ASM_X86_IBT_H */
