@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/property.h>
 #include <linux/sysfs.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
@@ -627,6 +628,40 @@ int st_magn_common_probe(struct iio_dev *indio_dev)
 
 	mdata->current_fullscale = &mdata->sensor_settings->fs.fs_avl[0];
 	mdata->odr = mdata->sensor_settings->odr.odr_avl[0].hz;
+
+	/*
+	 * Allow the device tree to override the default full-scale. Hardware
+	 * such as the LSM303DLH magnetometer on the HP TouchPad picks up
+	 * enough DC bias from nearby PCB structures that the chip-default
+	 * highest-sensitivity range saturates the X axis to a sentinel
+	 * 0xF000 immediately at probe; selecting a less sensitive range via
+	 * st,fullscale-mg fixes that without requiring userspace to write
+	 * in_magn_*_scale at startup.
+	 */
+	{
+		u32 fs_mg;
+
+		if (!device_property_read_u32(parent, "st,fullscale-mg",
+					      &fs_mg)) {
+			struct st_sensor_fullscale *fs =
+				&mdata->sensor_settings->fs;
+			int i;
+
+			for (i = 0; i < ST_SENSORS_FULLSCALE_AVL_MAX; i++) {
+				if (!fs->fs_avl[i].num)
+					break;
+				if (fs->fs_avl[i].num == fs_mg) {
+					mdata->current_fullscale =
+						&fs->fs_avl[i];
+					break;
+				}
+			}
+			if (mdata->current_fullscale->num != fs_mg)
+				dev_warn(parent,
+					 "st,fullscale-mg=%u not supported, using %u\n",
+					 fs_mg, mdata->current_fullscale->num);
+		}
+	}
 
 	if (!pdata)
 		pdata = (struct st_sensors_platform_data *)&default_magn_pdata;
