@@ -756,6 +756,12 @@ impl<T> UniqueArc<T> {
             inner: unsafe { Arc::from_inner(KBox::leak(inner).into()) },
         })
     }
+
+    /// Return a raw pointer to the data in this unique arc.
+    #[inline]
+    pub fn as_ptr(this: &Self) -> *const T {
+        Arc::as_ptr(&this.inner)
+    }
 }
 
 impl<T> UniqueArc<MaybeUninit<T>> {
