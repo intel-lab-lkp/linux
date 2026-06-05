@@ -26,6 +26,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/pm_runtime.h>
 #include <linux/bitfield.h>
+#include <linux/phylink.h>
 #include <linux/prefetch.h>
 #include <linux/ipv6.h>
 #include <linux/unaligned.h>
@@ -775,6 +776,8 @@ struct rtl8169_private {
 	struct r8169_led_classdev *leds;
 
 	u32 ocp_base;
+	struct phylink *phylink;
+	struct phylink_config phylink_config;
 };
 
 typedef void (*rtl_generic_fct)(struct rtl8169_private *tp);
@@ -2554,9 +2557,6 @@ static void rtl8169_init_phy(struct rtl8169_private *tp)
 	if (tp->sfp_mode)
 		rtl_sfp_init(tp);
 
-	/* We may have called phy_speed_down before */
-	phy_speed_up(tp->phydev);
-
 	genphy_soft_reset(tp->phydev);
 }
 
@@ -2658,13 +2658,10 @@ static void rtl_jumbo_config(struct rtl8169_private *tp)
 		pcie_set_readrq(tp->pci_dev, readrq);
 
 	/* Chip doesn't support pause in jumbo mode */
-	if (jumbo) {
-		linkmode_clear_bit(ETHTOOL_LINK_MODE_Pause_BIT,
-				   tp->phydev->advertising);
-		linkmode_clear_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT,
-				   tp->phydev->advertising);
-		phy_start_aneg(tp->phydev);
-	}
+	if (jumbo)
+		tp->phylink_config.mac_capabilities &= ~(MAC_SYM_PAUSE | MAC_ASYM_PAUSE);
+	else
+		tp->phylink_config.mac_capabilities |= (MAC_SYM_PAUSE | MAC_ASYM_PAUSE);
 }
 
 DECLARE_RTL_COND(rtl_chipcmd_cond)
@@ -2779,7 +2776,7 @@ static void rtl_prepare_power_down(struct rtl8169_private *tp)
 		rtl_ephy_write(tp, 0x19, 0xff64);
 
 	if (device_may_wakeup(tp_to_dev(tp))) {
-		phy_speed_down(tp->phydev, false);
+		phylink_speed_down(tp->phylink, false);
 		rtl_wol_enable_rx(tp);
 	}
 }
@@ -4139,10 +4136,16 @@ static int rtl8169_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct rtl8169_private *tp = netdev_priv(dev);
 
+	if (netif_running(dev))
+		phylink_stop(tp->phylink);
+
 	WRITE_ONCE(dev->mtu, new_mtu);
 	netdev_update_features(dev);
 	rtl_jumbo_config(tp);
 	rtl_set_eee_txidle_timer(tp);
+
+	if (netif_running(dev))
+		phylink_start(tp->phylink);
 
 	return 0;
 }
@@ -4962,41 +4965,15 @@ static void rtl_enable_tx_lpi(struct rtl8169_private *tp, bool enable)
 	}
 }
 
-static void r8169_phylink_handler(struct net_device *ndev)
-{
-	struct rtl8169_private *tp = netdev_priv(ndev);
-	struct device *d = tp_to_dev(tp);
-
-	tp->current_speed = tp->phydev->speed;
-	if (netif_carrier_ok(ndev)) {
-		rtl_link_chg_patch(tp, tp->current_speed);
-		rtl_enable_tx_lpi(tp, tp->phydev->enable_tx_lpi);
-		pm_request_resume(d);
-	} else {
-		pm_runtime_idle(d);
-	}
-
-	phy_print_status(tp->phydev);
-}
-
 static int r8169_phy_connect(struct rtl8169_private *tp)
 {
-	struct phy_device *phydev = tp->phydev;
-	phy_interface_t phy_mode;
 	int ret;
 
-	phy_mode = tp->supports_gmii ? PHY_INTERFACE_MODE_GMII :
-		   PHY_INTERFACE_MODE_MII;
-
-	ret = phy_connect_direct(tp->dev, phydev, r8169_phylink_handler,
-				 phy_mode);
-	if (ret)
+	ret = phylink_connect_phy(tp->phylink, tp->phydev);
+	if (ret) {
+		netdev_err(tp->dev, "failed to connect phy\n");
 		return ret;
-
-	if (!tp->supports_gmii)
-		phy_set_max_speed(phydev, SPEED_100);
-
-	phy_attached_info(phydev);
+	}
 
 	return 0;
 }
@@ -5007,7 +4984,7 @@ static void rtl8169_down(struct rtl8169_private *tp)
 	/* Clear all task flags */
 	bitmap_zero(tp->wk.flags, RTL_FLAG_MAX);
 
-	phy_stop(tp->phydev);
+	phylink_stop(tp->phylink);
 
 	/* Reset SerDes PHY to bring down fiber link */
 	if (tp->sfp_mode)
@@ -5035,11 +5012,14 @@ static void rtl8169_up(struct rtl8169_private *tp)
 	phy_init_hw(tp->phydev);
 	phy_resume(tp->phydev);
 	rtl8169_init_phy(tp);
+
+	/* We may have called phy_speed_down before */
+	phylink_speed_up(tp->phylink);
 	napi_enable(&tp->napi);
 	enable_work(&tp->wk.work);
 	rtl_reset_work(tp);
 
-	phy_start(tp->phydev);
+	phylink_start(tp->phylink);
 }
 
 static int rtl8169_close(struct net_device *dev)
@@ -5055,7 +5035,7 @@ static int rtl8169_close(struct net_device *dev)
 
 	free_irq(tp->irq, tp);
 
-	phy_disconnect(tp->phydev);
+	phylink_disconnect_phy(tp->phylink);
 
 	dma_free_coherent(&pdev->dev, R8169_RX_RING_BYTES, tp->RxDescArray,
 			  tp->RxPhyAddr);
@@ -5288,6 +5268,8 @@ static void rtl_remove_one(struct pci_dev *pdev)
 		r8169_remove_leds(tp->leds);
 
 	unregister_netdev(tp->dev);
+	if (tp->phylink)
+		phylink_destroy(tp->phylink);
 
 	if (tp->dash_type != RTL_DASH_NONE)
 		rtl8168_driver_stop(tp);
@@ -5474,10 +5456,8 @@ static int r8169_mdio_register(struct rtl8169_private *tp)
 		return -EUNATCH;
 	}
 
-	tp->phydev->mac_managed_pm = true;
 	if (rtl_supports_eee(tp))
 		phy_support_eee(tp->phydev);
-	phy_support_asym_pause(tp->phydev);
 
 	/* mimic behavior of r8125/r8126 vendor drivers */
 	if (tp->mac_version == RTL_GIGA_MAC_VER_61)
@@ -5597,6 +5577,92 @@ static bool rtl_aspm_is_safe(struct rtl8169_private *tp)
 		return true;
 
 	return false;
+}
+
+static void rtl_mac_link_down(struct phylink_config *config, unsigned int mode,
+			      phy_interface_t interface)
+{
+	struct rtl8169_private *tp = container_of(config, struct rtl8169_private, phylink_config);
+
+	tp->current_speed = SPEED_UNKNOWN;
+	pm_runtime_idle(tp_to_dev(tp));
+}
+
+static void rtl_mac_link_up(struct phylink_config *config, struct phy_device *phydev,
+			    unsigned int mode, phy_interface_t interface,
+			    int speed, int duplex, bool tx_pause, bool rx_pause)
+{
+	struct rtl8169_private *tp = container_of(config, struct rtl8169_private, phylink_config);
+
+	struct device *d = tp_to_dev(tp);
+
+	tp->current_speed = speed;
+	rtl_link_chg_patch(tp, speed);
+
+	if (phydev)
+		rtl_enable_tx_lpi(tp, phydev->enable_tx_lpi);
+
+	pm_request_resume(d);
+}
+
+static struct phylink_pcs *rtl_mac_select_pcs(struct phylink_config *config,
+					      phy_interface_t interface)
+{
+	return NULL;
+}
+
+static void rtl_mac_config(struct phylink_config *config, unsigned int mode,
+			   const struct phylink_link_state *state)
+{
+}
+
+static const struct phylink_mac_ops rtl_phylink_mac_ops = {
+	.mac_select_pcs = rtl_mac_select_pcs,
+	.mac_config = rtl_mac_config,
+	.mac_link_down  = rtl_mac_link_down,
+	.mac_link_up    = rtl_mac_link_up,
+};
+
+static int rtl_init_phylink(struct rtl8169_private *tp)
+{
+	struct phylink *pl;
+	phy_interface_t phy_mode;
+
+	tp->phylink_config.dev = &tp->dev->dev;
+	tp->phylink_config.type = PHYLINK_NETDEV;
+	tp->phylink_config.mac_managed_pm = true;
+
+	tp->phylink_config.mac_capabilities = MAC_ASYM_PAUSE | MAC_SYM_PAUSE;
+
+	if (tp->sfp_mode) {
+		phy_mode = PHY_INTERFACE_MODE_INTERNAL;
+		tp->phylink_config.mac_capabilities |= MAC_10000FD;
+	} else {
+		tp->phylink_config.mac_capabilities |= MAC_10 | MAC_100;
+		phy_mode = PHY_INTERFACE_MODE_INTERNAL;
+
+		if (tp->mac_version == RTL_GIGA_MAC_VER_80)
+			tp->phylink_config.mac_capabilities |= MAC_1000FD | MAC_2500FD |
+							       MAC_5000FD | MAC_10000FD;
+		else if (tp->mac_version == RTL_GIGA_MAC_VER_70)
+			tp->phylink_config.mac_capabilities |= MAC_1000FD |
+							       MAC_2500FD | MAC_5000FD;
+		else if (tp->mac_version >= RTL_GIGA_MAC_VER_61)
+			tp->phylink_config.mac_capabilities |= MAC_1000FD | MAC_2500FD;
+		else
+			if (tp->supports_gmii)
+				tp->phylink_config.mac_capabilities |= MAC_1000FD;
+	}
+
+	__set_bit(phy_mode, tp->phylink_config.supported_interfaces);
+	pl = phylink_create(&tp->phylink_config, tp_to_dev(tp)->fwnode,
+			    phy_mode, &rtl_phylink_mac_ops);
+	if (IS_ERR(pl))
+		return PTR_ERR(pl);
+
+	tp->phylink = pl;
+
+	return 0;
 }
 
 static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -5789,13 +5855,21 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	pci_set_drvdata(pdev, tp);
 
-	rc = r8169_mdio_register(tp);
+	rc = rtl_init_phylink(tp);
 	if (rc)
 		return rc;
 
-	rc = register_netdev(dev);
-	if (rc)
+	rc = r8169_mdio_register(tp);
+	if (rc) {
+		phylink_destroy(tp->phylink);
 		return rc;
+	}
+
+	rc = register_netdev(dev);
+	if (rc) {
+		phylink_destroy(tp->phylink);
+		return rc;
+	}
 
 	if (IS_ENABLED(CONFIG_R8169_LEDS)) {
 		if (rtl_is_8125(tp))
