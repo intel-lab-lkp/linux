@@ -3078,6 +3078,10 @@ enum skl_power_gate {
 #define  DC_STATE_EN_DC9		(1 << 3)
 #define  DC_STATE_EN_UPTO_DC6		(2 << 0)
 #define  DC_STATE_EN_UPTO_DC5_DC6_MASK   0x3
+/* display version 20+ */
+#define  DC_STATE_EN_CSR_MASK_CMTG_1	REG_BIT(11)
+/* display version 13+, except dg2 */
+#define  DC_STATE_EN_CSR_MASK_CMTG_0	REG_BIT(10)
 
 #define  DC_STATE_DEBUG                  _MMIO(0x45520)
 #define  DC_STATE_DEBUG_MASK_CORES	(1 << 0)
