@@ -926,6 +926,12 @@ int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 				break;
 			}
 
+			r = -ENXIO;
+			if (!IS_ALIGNED(data->u.gpa,
+					kvm_xen_has_64bit_shinfo(vcpu->kvm) ?
+					sizeof(unsigned long) : sizeof(u32)))
+				break;
+
 			r = kvm_gpc_activate(&vcpu->arch.xen.vcpu_info_cache,
 					     data->u.gpa, sizeof(struct vcpu_info));
 		} else {
@@ -934,6 +940,12 @@ int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 				r = 0;
 				break;
 			}
+
+			r = -ENXIO;
+			if (!IS_ALIGNED(data->u.hva,
+					kvm_xen_has_64bit_shinfo(vcpu->kvm) ?
+					sizeof(unsigned long) : sizeof(u32)))
+				break;
 
 			r = kvm_gpc_activate_hva(&vcpu->arch.xen.vcpu_info_cache,
 						 data->u.hva, sizeof(struct vcpu_info));
