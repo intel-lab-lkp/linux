@@ -755,10 +755,9 @@ int svc_rdma_prepare_reply_chunk(struct svcxprt_rdma *rdma,
 }
 
 /*
- * Cap contiguous RDMA Read sink allocations at order-4.
- * Higher orders risk allocation failure under
- * __GFP_NORETRY, which would negate the benefit of the
- * contiguous fast path.
+ * Cap contiguous RDMA Read sink allocations at order-4. Higher orders risk
+ * allocation failure under GFP_NOWAIT, which would negate the benefit of
+ * the contiguous fast path.
  */
 #define SVC_RDMA_CONTIG_MAX_ORDER	4
 
@@ -767,9 +766,11 @@ int svc_rdma_prepare_reply_chunk(struct svcxprt_rdma *rdma,
  * @nr_pages: number of pages needed
  * @order: on success, set to the allocation order
  *
- * Attempts a higher-order allocation, falling back to smaller orders.
- * The returned pages are split immediately so each sub-page has its
- * own refcount and can be freed independently.
+ * Attempts a higher-order allocation, falling back to smaller orders. The
+ * allocation is opportunistic: it takes pages only from the free lists,
+ * without direct reclaim, so it fails fast under memory pressure. The
+ * returned pages are split immediately so each sub-page has its own
+ * refcount and can be freed independently.
  *
  * Returns a pointer to the first page on success, or NULL if even
  * order-1 allocation fails.
@@ -784,8 +785,7 @@ svc_rdma_alloc_read_pages(unsigned int nr_pages, unsigned int *order)
 		SVC_RDMA_CONTIG_MAX_ORDER);
 
 	while (o >= 1) {
-		page = alloc_pages(GFP_KERNEL | __GFP_NORETRY | __GFP_NOWARN,
-				   o);
+		page = alloc_pages(GFP_NOWAIT, o);
 		if (page) {
 			split_page(page, o);
 			*order = o;
