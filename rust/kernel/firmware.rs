@@ -106,10 +106,17 @@ impl Firmware {
 
     /// Returns the requested firmware as `&[u8]`.
     pub fn data(&self) -> &[u8] {
+        let size = self.size();
+
+        if size == 0 {
+            return &[];
+        }
+
         // SAFETY: `self.as_raw()` is valid by the type invariant. Additionally,
         // `bindings::firmware` guarantees, if successfully requested, that
         // `bindings::firmware::data` has a size of `bindings::firmware::size` bytes.
-        unsafe { core::slice::from_raw_parts((*self.as_raw()).data, self.size()) }
+        // For non-zero `size`, this also means `bindings::firmware::data` is not NULL.
+        unsafe { core::slice::from_raw_parts((*self.as_raw()).data, size) }
     }
 }
 
