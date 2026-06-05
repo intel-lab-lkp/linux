@@ -76,19 +76,22 @@ static void enetc4_pf_get_si_primary_mac(struct enetc_hw *hw, int si,
 }
 
 static void enetc4_pf_set_si_mac_promisc(struct enetc_hw *hw, int si,
-					 bool uc_promisc, bool mc_promisc)
+					 enum enetc_mac_addr_type type,
+					 bool en)
 {
 	u32 val = enetc_port_rd(hw, ENETC4_PSIPMMR);
 
-	if (uc_promisc)
-		val |= PSIPMMR_SI_MAC_UP(si);
-	else
-		val &= ~PSIPMMR_SI_MAC_UP(si);
-
-	if (mc_promisc)
-		val |= PSIPMMR_SI_MAC_MP(si);
-	else
-		val &= ~PSIPMMR_SI_MAC_MP(si);
+	if (type == UC) {
+		if (en)
+			val |= PSIPMMR_SI_MAC_UP(si);
+		else
+			val &= ~PSIPMMR_SI_MAC_UP(si);
+	} else if (type == MC) {
+		if (en)
+			val |= PSIPMMR_SI_MAC_MP(si);
+		else
+			val &= ~PSIPMMR_SI_MAC_MP(si);
+	}
 
 	enetc_port_wr(hw, ENETC4_PSIPMMR, val);
 }
@@ -105,6 +108,16 @@ static void enetc4_pf_set_si_mc_hash_filter(struct enetc_hw *hw, int si,
 {
 	enetc_port_wr(hw, ENETC4_PSIMMHFR0(si), lower_32_bits(hash));
 	enetc_port_wr(hw, ENETC4_PSIMMHFR1(si), upper_32_bits(hash));
+}
+
+static void enetc4_pf_set_si_mac_hash_filter(struct enetc_hw *hw, int si,
+					     enum enetc_mac_addr_type type,
+					     u64 hash)
+{
+	if (type == UC)
+		enetc4_pf_set_si_uc_hash_filter(hw, si, hash);
+	else if (type == MC)
+		enetc4_pf_set_si_mc_hash_filter(hw, si, hash);
 }
 
 static void enetc4_pf_set_loopback(struct net_device *ndev, bool en)
@@ -273,6 +286,8 @@ static void enetc4_pf_set_mac_filter(struct enetc_pf *pf, int type)
 static const struct enetc_pf_ops enetc4_pf_ops = {
 	.set_si_primary_mac = enetc4_pf_set_si_primary_mac,
 	.get_si_primary_mac = enetc4_pf_get_si_primary_mac,
+	.set_si_mac_promisc = enetc4_pf_set_si_mac_promisc,
+	.set_si_mac_hash_filter = enetc4_pf_set_si_mac_hash_filter,
 };
 
 static int enetc4_pf_struct_init(struct enetc_si *si)
@@ -513,7 +528,10 @@ static void enetc4_psi_do_set_rx_mode(struct work_struct *work)
 		type = ENETC_MAC_FILTER_TYPE_ALL;
 	}
 
-	enetc4_pf_set_si_mac_promisc(hw, 0, uc_promisc, mc_promisc);
+	mutex_lock(&pf->msg_lock);
+	enetc4_pf_set_si_mac_promisc(hw, 0, UC, uc_promisc);
+	enetc4_pf_set_si_mac_promisc(hw, 0, MC, mc_promisc);
+	mutex_unlock(&pf->msg_lock);
 
 	if (uc_promisc) {
 		enetc4_pf_set_si_uc_hash_filter(hw, 0, 0);

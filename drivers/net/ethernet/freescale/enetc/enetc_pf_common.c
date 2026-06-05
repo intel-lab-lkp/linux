@@ -468,6 +468,7 @@ int enetc_pf_set_vf_trust(struct net_device *ndev, int vf, bool setting)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
 	struct enetc_pf *pf = enetc_si_priv(priv->si);
+	struct enetc_hw *hw = &pf->si->hw;
 	struct enetc_vf_state *vf_state;
 
 	if (vf >= pf->total_vfs)
@@ -476,10 +477,26 @@ int enetc_pf_set_vf_trust(struct net_device *ndev, int vf, bool setting)
 	vf_state = &pf->vf_state[vf];
 	mutex_lock(&vf_state->lock);
 
-	if (setting)
+	if (setting) {
 		vf_state->flags |= ENETC_VF_FLAG_TRUSTED;
-	else
+	} else {
 		vf_state->flags &= ~ENETC_VF_FLAG_TRUSTED;
+
+		/* Clear MAC hash filters and disable MAC promiscuous modes
+		 * if the VF is untrusted.
+		 */
+		if (pf->ops->set_si_mac_hash_filter) {
+			pf->ops->set_si_mac_hash_filter(hw, vf + 1, UC, 0);
+			pf->ops->set_si_mac_hash_filter(hw, vf + 1, MC, 0);
+		}
+
+		mutex_lock(&pf->msg_lock);
+		if (pf->ops->set_si_mac_promisc) {
+			pf->ops->set_si_mac_promisc(hw, vf + 1, UC, false);
+			pf->ops->set_si_mac_promisc(hw, vf + 1, MC, false);
+		}
+		mutex_unlock(&pf->msg_lock);
+	}
 
 	mutex_unlock(&vf_state->lock);
 

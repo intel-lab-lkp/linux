@@ -101,6 +101,115 @@ vf_state_unlock:
 	return pf_msg;
 }
 
+static u16 enetc_msg_set_vf_mac_hash_filter(struct enetc_pf *pf, int vf_id,
+					    void *vf_msg)
+{
+	struct enetc_vf_state *vf_state = &pf->vf_state[vf_id];
+	struct enetc_msg_mac_hash_filter *msg = vf_msg;
+	struct enetc_hw *hw = &pf->si->hw;
+	u16 pf_msg = ENETC_PF_MSG_SUCCESS;
+	int si_id = vf_id + 1;
+	u64 hash_tbl;
+	int type;
+
+	mutex_lock(&vf_state->lock);
+
+	if (!(vf_state->flags & ENETC_VF_FLAG_TRUSTED)) {
+		pf_msg = ENETC_PF_MSG_PERM_DENY;
+		goto vf_state_unlock;
+	}
+
+	if (!pf->ops->set_si_mac_hash_filter) {
+		pf_msg = ENETC_PF_MSG_NOTSUPP;
+		goto vf_state_unlock;
+	}
+
+	/* Currently, hardware only supports 64 bits table size */
+	if (FIELD_GET(ENETC_MSG_MAC_HASH_SIZE, msg->sz_type) !=
+	    ENETC_MAC_HASH_TABLE_SIZE_64) {
+		pf_msg = ENETC_PF_MSG_NOTSUPP;
+		goto vf_state_unlock;
+	}
+
+	type = FIELD_GET(ENETC_MSG_MAC_TYPE, msg->sz_type);
+	hash_tbl = (u64)msg->hash_tbl[1] << 32 | msg->hash_tbl[0];
+	if (type == ENETC_MAC_FILTER_TYPE_UC) {
+		pf->ops->set_si_mac_hash_filter(hw, si_id, UC, hash_tbl);
+	} else if (type == ENETC_MAC_FILTER_TYPE_MC) {
+		pf->ops->set_si_mac_hash_filter(hw, si_id, MC, hash_tbl);
+	} else if (type == ENETC_MAC_FILTER_TYPE_ALL) {
+		if (!msg->hdr.len) {
+			pf_msg = FIELD_PREP(ENETC_PF_MSG_CLASS_ID,
+					    ENETC_MSG_CLASS_ID_INVALID_MSG_LEN);
+			goto vf_state_unlock;
+		}
+
+		pf->ops->set_si_mac_hash_filter(hw, si_id, UC, hash_tbl);
+		hash_tbl = (u64)msg->hash_tbl[3] << 32 | msg->hash_tbl[2];
+		pf->ops->set_si_mac_hash_filter(hw, si_id, MC, hash_tbl);
+	}
+
+vf_state_unlock:
+	mutex_unlock(&vf_state->lock);
+
+	return pf_msg;
+}
+
+static u16 enetc_msg_set_vf_mac_promisc_mode(struct enetc_pf *pf, int vf_id,
+					     void *vf_msg)
+{
+	struct enetc_vf_state *vf_state = &pf->vf_state[vf_id];
+	struct enetc_msg_mac_promisc_mode *msg = vf_msg;
+	u16 pf_msg = ENETC_PF_MSG_SUCCESS;
+	struct enetc_hw *hw = &pf->si->hw;
+	bool promisc, flush_macs;
+	int si_id = vf_id + 1;
+	int type;
+
+	mutex_lock(&vf_state->lock);
+	if (msg->config & ENETC_MSG_MAC_PROMISC_MODE) {
+		if (!(vf_state->flags & ENETC_VF_FLAG_TRUSTED)) {
+			pf_msg = ENETC_PF_MSG_PERM_DENY;
+			goto vf_state_unlock;
+		}
+	}
+
+	if (!pf->ops->set_si_mac_promisc) {
+		pf_msg = ENETC_PF_MSG_NOTSUPP;
+		goto vf_state_unlock;
+	}
+
+	flush_macs = !!(msg->config & ENETC_MSG_MAC_FLUSH_MACS);
+	if (flush_macs && !pf->ops->set_si_mac_hash_filter) {
+		pf_msg = ENETC_PF_MSG_NOTSUPP;
+		goto vf_state_unlock;
+	}
+
+	type = FIELD_GET(ENETC_MSG_MAC_TYPE, msg->config);
+	promisc = !!(msg->config & ENETC_MSG_MAC_PROMISC_MODE);
+
+	mutex_lock(&pf->msg_lock);
+
+	if (type & ENETC_MAC_FILTER_TYPE_UC)
+		pf->ops->set_si_mac_promisc(hw, si_id, UC, promisc);
+
+	if (type & ENETC_MAC_FILTER_TYPE_MC)
+		pf->ops->set_si_mac_promisc(hw, si_id, MC, promisc);
+
+	mutex_unlock(&pf->msg_lock);
+
+	if ((type & ENETC_MAC_FILTER_TYPE_UC) && flush_macs)
+		pf->ops->set_si_mac_hash_filter(hw, si_id, UC, 0);
+
+	if ((type & ENETC_MAC_FILTER_TYPE_MC) && flush_macs)
+		pf->ops->set_si_mac_hash_filter(hw, si_id, MC, 0);
+
+vf_state_unlock:
+	mutex_unlock(&vf_state->lock);
+
+	return pf_msg;
+}
+
 static u16 enetc_msg_handle_mac_filter(struct enetc_pf *pf, int vf_id,
 				       void *vf_msg)
 {
@@ -109,6 +218,10 @@ static u16 enetc_msg_handle_mac_filter(struct enetc_pf *pf, int vf_id,
 	switch (msg_hdr->cmd_id) {
 	case ENETC_MSG_SET_PRIMARY_MAC:
 		return enetc_msg_set_vf_primary_mac_addr(pf, vf_id, vf_msg);
+	case ENETC_MSG_SET_MAC_HASH_TABLE:
+		return enetc_msg_set_vf_mac_hash_filter(pf, vf_id, vf_msg);
+	case ENETC_MSG_SET_MAC_PROMISC_MODE:
+		return enetc_msg_set_vf_mac_promisc_mode(pf, vf_id, vf_msg);
 	default:
 		return ENETC_PF_MSG_NOTSUPP;
 	}
