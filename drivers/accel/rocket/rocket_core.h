@@ -41,14 +41,13 @@ struct rocket_core {
 
 	struct iommu_group *iommu_group;
 
-	struct mutex job_lock;
-	struct rocket_job *in_flight_job;
+	/* Task currently running on the hardware. */
+	struct rocket_task *in_flight_task;
 
 	spinlock_t fence_lock;
 
 	struct {
 		struct workqueue_struct *wq;
-		atomic_t pending;
 	} reset;
 
 	struct drm_gpu_scheduler sched;

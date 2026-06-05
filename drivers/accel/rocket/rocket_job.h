@@ -10,13 +10,29 @@
 #include "rocket_core.h"
 #include "rocket_drv.h"
 
+/*
+ * A task is one hardware submission. Each task is its own drm_sched_job,
+ * so every submission to the NPU flows through run_job().
+ */
 struct rocket_task {
+	struct drm_sched_job base;
+
+	/* Inference this task belongs to. */
+	struct rocket_job *job;
+
 	u64 regcmd;
 	u32 regcmd_count;
+
+	/* Fence signaled by the IRQ handler once the hardware completes it. */
+	struct dma_fence *done_fence;
 };
 
+/* An inference: the whole userspace submission, made of one or more tasks. */
 struct rocket_job {
-	struct drm_sched_job base;
+	struct kref refcount;
+
+	/* Set when the inference must be abandoned (a task timed out). */
+	atomic_t cancelled;
 
 	struct rocket_device *rdev;
 
@@ -28,17 +44,13 @@ struct rocket_job {
 
 	struct rocket_task *tasks;
 	u32 task_count;
-	u32 next_task_idx;
 
-	/* Fence to be signaled by drm-sched once its done with the job */
 	struct dma_fence *inference_done_fence;
-
-	/* Fence to be signaled by IRQ handler when the job is complete. */
-	struct dma_fence *done_fence;
 
 	struct rocket_iommu_domain *domain;
 
-	struct kref refcount;
+	/* Core the domain is attached to. */
+	struct rocket_core *core;
 };
 
 int rocket_ioctl_submit(struct drm_device *dev, void *data, struct drm_file *file);
