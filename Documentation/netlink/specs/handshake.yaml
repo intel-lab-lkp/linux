@@ -13,6 +13,10 @@ doc: Netlink protocol to request a transport layer security handshake.
 
 definitions:
   -
+    name: session-tag-max-len
+    type: const
+    value: 255
+  -
     type: enum
     name: handler-class
     value-start: 0
@@ -87,6 +91,12 @@ attribute-sets:
         name: remote-auth
         type: u32
         multi-attr: true
+      -
+        name: tag
+        type: string
+        checks:
+          max-len: session-tag-max-len
+        multi-attr: true
 
 operations:
   list:
@@ -124,6 +134,7 @@ operations:
             - status
             - sockfd
             - remote-auth
+            - tag
 
 mcast-groups:
   list:
