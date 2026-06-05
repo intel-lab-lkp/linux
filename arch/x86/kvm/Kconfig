@@ -240,4 +240,16 @@ config KVM_MAX_NR_VCPUS
 	  the memory footprint of each KVM guest, regardless of how many vCPUs are
 	  created for a given VM.
 
+config KVM_DSM_IRQ_FORWARD
+	bool "KVM DSM interrupt forwarding support"
+	depends on KVM && KVM_INTEL
+	default n
+	help
+	  Provide support for interrupt forwarding in distributed KVM.
+	  When enabled, guest ICR/ICR2 writes are intercepted and
+	  forwarded to userspace via KVM_EXIT_DSM_SEND_IRQ exit,
+	  allowing cross-node IPI delivery in a distributed KVM setup.
+	  This feature can be used independently of the full DSM memory
+	  coherence framework.
+
 endif # VIRTUALIZATION

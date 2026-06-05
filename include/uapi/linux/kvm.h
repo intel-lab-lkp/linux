@@ -194,6 +194,17 @@ struct kvm_exit_snp_req_certs {
 #define KVM_EXIT_ARM_LDST64B      42
 #define KVM_EXIT_SNP_REQ_CERTS    43
 
+#ifdef CONFIG_KVM_DSM_IRQ_FORWARD
+/* DSM exit reason: distributed APIC region access */
+#define KVM_EXIT_DAPIC            44
+/* DSM exit reason: IPI forwarding to userspace */
+#define KVM_EXIT_DSM_SEND_IRQ     45
+/* DSM exit reason: X2APIC ICR write forwarding to userspace */
+#define KVM_EXIT_DSM_X2_ICR       46
+/* DSM exit reason: APIC base MSR write forwarding to userspace */
+#define KVM_EXIT_DSM_APIC_BASE    47
+#endif
+
 /* For KVM_EXIT_INTERNAL_ERROR */
 /* Emulate instruction failed. */
 #define KVM_INTERNAL_ERROR_EMULATION	1
@@ -243,7 +254,27 @@ struct kvm_run {
 	__u64 psw_addr; /* psw lower half */
 #endif
 	union {
-		/* KVM_EXIT_UNKNOWN */
+#ifdef CONFIG_KVM_DSM_IRQ_FORWARD
+		/* DSM IPI forwarding data (KVM_EXIT_DSM_SEND_IRQ) */
+		struct {
+			__u32 id;
+			__u32 val;
+			__u32 val2;
+			__u32 dest_id;
+		} lapic_irq;
+		/* DSM X2APIC write data (KVM_EXIT_DSM_X2APIC) */
+		struct {
+			__u32 id;
+			__u64 data;
+		} x2apic;
+		/* DSM APIC base write data (KVM_EXIT_DSM_APIC_BASE) */
+		struct {
+			__u32 id;
+			bool host;
+			__u32 index;
+			__u64 data;
+		} x2msr_base;
+#endif
 		struct {
 			__u64 hardware_exit_reason;
 		} hw;
