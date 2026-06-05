@@ -1110,12 +1110,12 @@ static void draw_wakeups(struct timechart *tchart)
 					c = c->next;
 				}
 				c = p->all;
-				while (c) {
-					if (p->pid == we->waker && !from) {
+				while (c && (!from || !to)) {
+					if (c->Y && p->pid == we->waker && !from) {
 						from = c->Y;
 						task_from = strdup(c->comm);
 					}
-					if (p->pid == we->wakee && !to) {
+					if (c->Y && p->pid == we->wakee && !to) {
 						to = c->Y;
 						task_to = strdup(c->comm);
 					}
