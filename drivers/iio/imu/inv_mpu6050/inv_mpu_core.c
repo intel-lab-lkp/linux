@@ -1862,6 +1862,7 @@ static int inv_mpu_core_disable_regulator_vddio(struct inv_mpu6050_state *st)
 static void inv_mpu_core_disable_regulator_action(void *_data)
 {
 	struct inv_mpu6050_state *st = _data;
+	struct device *dev = regmap_get_device(st->map);
 	int result;
 
 	result = regulator_disable(st->vdd_supply);
@@ -1869,7 +1870,8 @@ static void inv_mpu_core_disable_regulator_action(void *_data)
 		dev_err(regmap_get_device(st->map),
 			"Failed to disable vdd regulator: %d\n", result);
 
-	inv_mpu_core_disable_regulator_vddio(st);
+	if (!pm_runtime_status_suspended(dev))
+		inv_mpu_core_disable_regulator_vddio(st);
 }
 
 static void inv_mpu_pm_disable(void *data)
@@ -1970,6 +1972,11 @@ int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 	}
 	msleep(INV_MPU6050_POWER_UP_TIME);
 
+	/* set pm_runtime active early for disable vddio resource cleanup */
+	result = pm_runtime_set_active(dev);
+	if (result)
+		return result;
+
 	result = inv_mpu_core_enable_regulator_vddio(st);
 	if (result) {
 		regulator_disable(st->vdd_supply);
@@ -2015,9 +2022,6 @@ int inv_mpu_core_probe(struct regmap *regmap, int irq, const char *name,
 	}
 
 	/* chip init is done, turning on runtime power management */
-	result = pm_runtime_set_active(dev);
-	if (result)
-		goto error_power_off;
 	pm_runtime_get_noresume(dev);
 	pm_runtime_enable(dev);
 	pm_runtime_set_autosuspend_delay(dev, INV_MPU6050_SUSPEND_DELAY_MS);
