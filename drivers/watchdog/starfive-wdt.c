@@ -557,7 +557,19 @@ static void starfive_wdt_shutdown(struct platform_device *pdev)
 {
 	struct starfive_wdt *wdt = platform_get_drvdata(pdev);
 
-	starfive_wdt_pm_stop(&wdt->wdd);
+	/*
+	 * Only drop a runtime PM reference when we actually hold one.  The
+	 * watchdog framework increments it via pm_start() on open; when
+	 * early_enable started the hardware without an open, the reference
+	 * was taken at probe time and the framework state reads as
+	 * WDOG_HW_RUNNING without WDOG_ACTIVE.  In the inactive-and-not-
+	 * running case there is nothing for us to do and dropping the
+	 * counter unconditionally would underflow it.
+	 */
+	if (watchdog_active(&wdt->wdd))
+		starfive_wdt_pm_stop(&wdt->wdd);
+	else if (test_bit(WDOG_HW_RUNNING, &wdt->wdd.status))
+		starfive_wdt_stop(wdt);
 }
 
 static int starfive_wdt_suspend(struct device *dev)
