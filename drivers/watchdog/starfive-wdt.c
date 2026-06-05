@@ -386,9 +386,17 @@ static int starfive_wdt_pm_start(struct watchdog_device *wdd)
 static int starfive_wdt_pm_stop(struct watchdog_device *wdd)
 {
 	struct starfive_wdt *wdt = watchdog_get_drvdata(wdd);
+	int ret;
 
 	starfive_wdt_stop(wdt);
-	return pm_runtime_put_sync(wdd->parent);
+	ret = pm_runtime_put_sync(wdd->parent);
+	/*
+	 * pm_runtime_put_sync() can return 1 when the device is still in
+	 * use (and therefore did not actually suspend).  That is not an
+	 * error from the caller's point of view; only propagate negative
+	 * return values.
+	 */
+	return ret < 0 ? ret : 0;
 }
 
 static int starfive_wdt_set_timeout(struct watchdog_device *wdd,
@@ -503,7 +511,7 @@ static int starfive_wdt_probe(struct platform_device *pdev)
 	if (!early_enable) {
 		if (pm_runtime_enabled(&pdev->dev)) {
 			ret = pm_runtime_put_sync(&pdev->dev);
-			if (ret)
+			if (ret < 0)
 				goto err_unregister_wdt;
 		}
 	}
