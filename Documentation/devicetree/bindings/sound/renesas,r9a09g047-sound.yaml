@@ -42,13 +42,8 @@ properties:
   "#clock-cells":
     const: 0
 
-  "#address-cells":
-    const: 1
-
-  "#size-cells":
-    const: 0
-
   clocks:
+    minItems: 47
     maxItems: 47
 
   clock-names:
@@ -105,6 +100,7 @@ properties:
     maxItems: 1
 
   resets:
+    minItems: 14
     maxItems: 14
 
   reset-names:
@@ -143,11 +139,10 @@ properties:
               through the list to find a free channel.
 
           dma-names:
+            minItems: 1
             maxItems: 5
-            allOf:
-              - items:
-                  enum:
-                    - tx
+            items:
+              const: tx
 
         required:
           - dmas
@@ -203,12 +198,15 @@ properties:
               falls through the list to find a free channel.
 
           dma-names:
+            minItems: 1
             maxItems: 10
-            allOf:
-              - items:
-                  enum:
-                    - tx
-                    - rx
+            items:
+              enum: [ tx, rx ]
+
+        required:
+          - interrupts
+          - dmas
+          - dma-names
 
   ssiu:
     type: object
@@ -229,12 +227,10 @@ properties:
               falls through the list to find a free channel.
 
           dma-names:
+            minItems: 1
             maxItems: 10
-            allOf:
-              - items:
-                  enum:
-                    - tx
-                    - rx
+            items:
+              enum: [ tx, rx ]
 
         required:
           - dmas
@@ -261,10 +257,9 @@ properties:
           - interrupts
 
   ports:
-    $ref: audio-graph-port.yaml#/definitions/port-base
-    unevaluatedProperties: false
+    $ref: /schemas/graph.yaml#/properties/ports
     patternProperties:
-      '^port@[0-9a-f]+$':
+      '^port(@[0-9a-f]+)?$':
         $ref: audio-graph-port.yaml#/definitions/port-base
         unevaluatedProperties: false
         properties:
@@ -276,6 +271,8 @@ properties:
             properties:
               playback:
                 $ref: /schemas/types.yaml#/definitions/phandle-array
+                items:
+                  maxItems: 1
                 description:
                   Ordered list of phandles to the in-SoC modules used
                   by this DAI in the playback direction. Each phandle
@@ -285,6 +282,8 @@ properties:
                   from CPU to off-SoC endpoint.
               capture:
                 $ref: /schemas/types.yaml#/definitions/phandle-array
+                items:
+                  maxItems: 1
                 description:
                   Ordered list of phandles to the in-SoC modules used
                   by this DAI in the capture direction. Each phandle
@@ -308,11 +307,10 @@ unevaluatedProperties: false
 
 examples:
   - |
+    #include <dt-bindings/clock/renesas,r9a09g047-cpg.h>
     #include <dt-bindings/interrupt-controller/arm-gic.h>
 
     sound@13c00000 {
-      #sound-dai-cells = <1>;
-      #clock-cells = <0>;
       compatible = "renesas,r9a09g047-sound";
       reg = <0x13c00000 0x10000>,
             <0x13c20000 0x10000>,
@@ -320,31 +318,33 @@ examples:
             <0x13c31000 0x1f000>,
             <0x13c50000 0x10000>;
       reg-names = "scu", "adg", "ssiu", "ssi", "audmapp";
-      clocks = <&cpg 245>,
-               <&cpg 385>, <&cpg 386>,
-               <&cpg 387>, <&cpg 388>,
-               <&cpg 389>, <&cpg 390>,
-               <&cpg 391>, <&cpg 392>,
-               <&cpg 393>, <&cpg 394>,
-               <&cpg 372>, <&cpg 373>,
-               <&cpg 374>, <&cpg 375>,
-               <&cpg 376>, <&cpg 377>,
-               <&cpg 378>, <&cpg 379>,
-               <&cpg 380>, <&cpg 381>,
-               <&cpg 370>, <&cpg 371>,
-               <&cpg 370>, <&cpg 371>,
-               <&cpg 368>, <&cpg 369>,
-               <&cpg 251>, <&cpg 252>,
-               <&cpg 253>, <&cpg 250>,
-               <&cpg 384>,
-               <&cpg 246>, <&cpg 247>,
-               <&cpg 382>,
-               <&cpg 352>, <&cpg 353>,
-               <&cpg 354>, <&cpg 355>,
-               <&cpg 356>, <&cpg 357>,
-               <&cpg 358>, <&cpg 359>,
-               <&cpg 360>, <&cpg 361>,
-               <&cpg 248>, <&cpg 249>;
+      #sound-dai-cells = <1>;
+      #clock-cells = <0>;
+      clocks = <&cpg CPG_MOD 245>,
+               <&cpg CPG_MOD 385>, <&cpg CPG_MOD 386>,
+               <&cpg CPG_MOD 387>, <&cpg CPG_MOD 388>,
+               <&cpg CPG_MOD 389>, <&cpg CPG_MOD 390>,
+               <&cpg CPG_MOD 391>, <&cpg CPG_MOD 392>,
+               <&cpg CPG_MOD 393>, <&cpg CPG_MOD 394>,
+               <&cpg CPG_MOD 372>, <&cpg CPG_MOD 373>,
+               <&cpg CPG_MOD 374>, <&cpg CPG_MOD 375>,
+               <&cpg CPG_MOD 376>, <&cpg CPG_MOD 377>,
+               <&cpg CPG_MOD 378>, <&cpg CPG_MOD 379>,
+               <&cpg CPG_MOD 380>, <&cpg CPG_MOD 381>,
+               <&cpg CPG_MOD 370>, <&cpg CPG_MOD 371>,
+               <&cpg CPG_MOD 370>, <&cpg CPG_MOD 371>,
+               <&cpg CPG_MOD 368>, <&cpg CPG_MOD 369>,
+               <&cpg CPG_MOD 251>, <&cpg CPG_MOD 252>,
+               <&cpg CPG_MOD 253>, <&cpg CPG_MOD 250>,
+               <&cpg CPG_MOD 384>,
+               <&cpg CPG_MOD 246>, <&cpg CPG_MOD 247>,
+               <&cpg CPG_MOD 382>,
+               <&cpg CPG_MOD 352>, <&cpg CPG_MOD 353>,
+               <&cpg CPG_MOD 354>, <&cpg CPG_MOD 355>,
+               <&cpg CPG_MOD 356>, <&cpg CPG_MOD 357>,
+               <&cpg CPG_MOD 358>, <&cpg CPG_MOD 359>,
+               <&cpg CPG_MOD 360>, <&cpg CPG_MOD 361>,
+               <&cpg CPG_MOD 248>, <&cpg CPG_MOD 249>;
       clock-names = "ssi-all",
                     "ssi-0", "ssi-1",
                     "ssi-2", "ssi-3",
