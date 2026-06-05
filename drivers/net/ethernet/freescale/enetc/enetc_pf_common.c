@@ -480,7 +480,9 @@ int enetc_pf_set_vf_trust(struct net_device *ndev, int vf, bool setting)
 	if (setting) {
 		vf_state->flags |= ENETC_VF_FLAG_TRUSTED;
 	} else {
-		vf_state->flags &= ~ENETC_VF_FLAG_TRUSTED;
+		vf_state->flags &= ~(ENETC_VF_FLAG_TRUSTED |
+				     ENETC_VF_FLAG_UC_PROMISC |
+				     ENETC_VF_FLAG_MC_PROMISC);
 
 		/* Clear MAC hash filters and disable MAC promiscuous modes
 		 * if the VF is untrusted.
