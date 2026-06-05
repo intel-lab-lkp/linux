@@ -1454,31 +1454,40 @@ err_function:
 	return err;
 }
 
+static void mlx5_uninit_one_devl_locked(struct mlx5_core_dev *dev);
+
 int mlx5_init_one(struct mlx5_core_dev *dev)
 {
 	struct devlink *devlink = priv_to_devlink(dev);
 	int err;
 
 	devl_lock(devlink);
+	err = mlx5_init_one_devl_locked(dev);
+	if (err)
+		goto unlock;
+
 	if (dev->shd) {
 		err = devl_nested_devlink_set(dev->shd, devlink);
 		if (err)
-			goto unlock;
+			goto err_uninit;
 	}
+
 	devl_register(devlink);
-	err = mlx5_init_one_devl_locked(dev);
-	if (err)
-		devl_unregister(devlink);
+	devl_unlock(devlink);
+	return 0;
+
+err_uninit:
+	mlx5_uninit_one_devl_locked(dev);
 unlock:
 	devl_unlock(devlink);
 	return err;
 }
 
-void mlx5_uninit_one(struct mlx5_core_dev *dev)
+static void mlx5_uninit_one_devl_locked(struct mlx5_core_dev *dev)
 {
 	struct devlink *devlink = priv_to_devlink(dev);
 
-	devl_lock(devlink);
+	devl_assert_locked(devlink);
 	mutex_lock(&dev->intf_state_mutex);
 
 	mlx5_hwmon_dev_unregister(dev);
@@ -1501,7 +1510,15 @@ void mlx5_uninit_one(struct mlx5_core_dev *dev)
 	mlx5_function_teardown(dev, true);
 out:
 	mutex_unlock(&dev->intf_state_mutex);
+}
+
+void mlx5_uninit_one(struct mlx5_core_dev *dev)
+{
+	struct devlink *devlink = priv_to_devlink(dev);
+
+	devl_lock(devlink);
 	devl_unregister(devlink);
+	mlx5_uninit_one_devl_locked(dev);
 	devl_unlock(devlink);
 }
 
@@ -1636,7 +1653,6 @@ int mlx5_init_one_light(struct mlx5_core_dev *dev)
 	int err;
 
 	devl_lock(devlink);
-	devl_register(devlink);
 	dev->state = MLX5_DEVICE_STATE_UP;
 	err = mlx5_function_enable(dev, true, mlx5_tout_ms(dev, FW_PRE_INIT_TIMEOUT));
 	if (err) {
@@ -1656,6 +1672,7 @@ int mlx5_init_one_light(struct mlx5_core_dev *dev)
 		goto query_hca_caps_err;
 	}
 
+	devl_register(devlink);
 	devl_unlock(devlink);
 	return 0;
 
@@ -1663,7 +1680,6 @@ query_hca_caps_err:
 	mlx5_function_disable(dev, true);
 out:
 	dev->state = MLX5_DEVICE_STATE_INTERNAL_ERROR;
-	devl_unregister(devlink);
 	devl_unlock(devlink);
 	return err;
 }
@@ -1673,8 +1689,8 @@ void mlx5_uninit_one_light(struct mlx5_core_dev *dev)
 	struct devlink *devlink = priv_to_devlink(dev);
 
 	devl_lock(devlink);
-	mlx5_devlink_params_unregister(priv_to_devlink(dev));
 	devl_unregister(devlink);
+	mlx5_devlink_params_unregister(priv_to_devlink(dev));
 	devl_unlock(devlink);
 	if (dev->state != MLX5_DEVICE_STATE_UP)
 		return;
