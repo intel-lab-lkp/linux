@@ -260,6 +260,141 @@ static int mpu3050_set_8khz_samplerate(struct mpu3050 *mpu3050)
 	return ret;
 }
 
+/*
+ * mpu3050_fifo_read_one() - capture and return one combined sample frame
+ *
+ * The MPU-3050's direct gyro register file (XOUT_H..ZOUT_L) exhibits a
+ * stale-byte hazard on at least the apq8060 i2c controller path: on
+ * many devices the first byte of the X high register and the entire Z
+ * pair return constant 0xFF / 0x0000 even when the chip is otherwise
+ * sampling and the userspace i2c-dev path returns sensible values.
+ *
+ * The chip's on-chip FIFO does not have this problem because the
+ * sample assembly happens inside the chip and the host only reads a
+ * fully-formed frame from FIFO_R. Configure the FIFO to capture TEMP
+ * plus all three gyro axes (8 bytes per sample, no footer), drain any
+ * stale data with a FIFO reset, wait one sample period, then read a
+ * single complete frame.
+ */
+/*
+ * Size of one FIFO sample frame captured by mpu3050_fifo_read_one():
+ * three big-endian s16 gyro words (X, Y, Z). Temperature is read
+ * separately from its register file because the FIFO-captured TEMP
+ * occasionally returns a stale/partial value while gyro words remain
+ * consistent.
+ */
+#define MPU3050_FIFO_FRAME_BYTES	6
+
+static int mpu3050_fifo_read_one(struct mpu3050 *mpu3050, __be16 frame[3])
+{
+	__be16 raw_count;
+	u16 fifocnt;
+	int retries;
+	int cleanup_err;
+	int ret;
+
+	/*
+	 * Slow the chip down to 250 Hz for the duration of this read so
+	 * exactly one fresh sample lands in the FIFO during the wait below.
+	 * At the previously-set 8 kHz the FIFO accumulates a sample every
+	 * 125 us and can race the bulk_read of FIFO_COUNT_H / FIFO_R,
+	 * producing per-axis byte hazards in the readback even though the
+	 * oldest 8 bytes are nominally a clean frame.
+	 *
+	 * The chip is left at 250 Hz when this function returns; the next
+	 * caller will run mpu3050_set_8khz_samplerate() again (which does
+	 * a full chip reset) so there is nothing to restore here.
+	 * mpu3050->lpf and mpu3050->divisor remain the user-configured
+	 * values across this function, so sysfs
+	 * in_anglvel_sampling_frequency continues to report the right
+	 * thing via mpu3050_get_freq().
+	 */
+	ret = regmap_write(mpu3050->map, MPU3050_DLPF_FS_SYNC,
+			   mpu3050->fullscale << MPU3050_FS_SHIFT |
+			   MPU3050_DLPF_CFG_20HZ);
+	if (ret)
+		goto disable;
+	ret = regmap_write(mpu3050->map, MPU3050_SMPLRT_DIV, 3);
+	if (ret)
+		goto disable;
+
+	/*
+	 * Capture only gyro X, Y, Z into the FIFO. The temperature slot
+	 * is deliberately omitted: the chip occasionally writes a stale
+	 * TEMP_H/L pair into the FIFO that differs from the live register
+	 * by ~7C, and there's no obvious sync the host can use to detect
+	 * which samples are affected. Reading TEMP straight from the
+	 * register file (which mpu3050_read_raw() does for IIO_TEMP) does
+	 * not have this hazard.
+	 */
+	ret = regmap_write(mpu3050->map, MPU3050_FIFO_EN,
+			   MPU3050_FIFO_EN_GYRO_XOUT |
+			   MPU3050_FIFO_EN_GYRO_YOUT |
+			   MPU3050_FIFO_EN_GYRO_ZOUT);
+	if (ret)
+		goto disable;
+
+	/*
+	 * Enable FIFO read-out and assert FIFO_RST in a single write so the
+	 * chip atomically resets the write pointer with capture already on.
+	 * Two separate writes (FIFO_RST then FIFO_EN) leave the FIFO in a
+	 * brief transient state where the first sample after re-enable can
+	 * land at a non-zero offset, producing per-byte-shifted frames in
+	 * the readback below. This matches the mpu3050_trigger_handler()
+	 * pattern.
+	 */
+	ret = regmap_write(mpu3050->map, MPU3050_USR_CTRL,
+			   MPU3050_USR_CTRL_FIFO_EN |
+			   MPU3050_USR_CTRL_FIFO_RST);
+	if (ret)
+		goto disable;
+
+	/*
+	 * Wait for at least one sample to land. At 250 Hz that's nominally
+	 * 4 ms; the retry loop gives a generous margin so a stretched i2c
+	 * clock or NEW sample-rate-change settle time doesn't trip the
+	 * timeout.
+	 */
+	for (retries = 0; retries < 10; retries++) {
+		usleep_range(2000, 4000);
+		ret = regmap_bulk_read(mpu3050->map, MPU3050_FIFO_COUNT_H,
+				       &raw_count, sizeof(raw_count));
+		if (ret)
+			goto disable;
+		fifocnt = be16_to_cpu(raw_count);
+		if (fifocnt >= MPU3050_FIFO_FRAME_BYTES)
+			break;
+	}
+
+	if (fifocnt < MPU3050_FIFO_FRAME_BYTES) {
+		dev_dbg(mpu3050->dev, "FIFO timeout (%u bytes)\n", fifocnt);
+		ret = -ETIMEDOUT;
+		goto disable;
+	}
+
+	ret = regmap_bulk_read(mpu3050->map, MPU3050_FIFO_R, frame,
+			       MPU3050_FIFO_FRAME_BYTES);
+
+disable:
+	/*
+	 * Tear FIFO capture down so the next _raw read starts clean and a
+	 * subsequent buffered/triggered mode setup isn't confused by stale
+	 * FIFO_EN bits. Cleanup write failures are logged but not
+	 * propagated: we prefer to return the original read error (if
+	 * any) rather than mask it with a teardown error, and there is no
+	 * useful recovery path from a transport failure here anyway.
+	 */
+	cleanup_err = regmap_write(mpu3050->map, MPU3050_FIFO_EN, 0);
+	if (cleanup_err)
+		dev_dbg(mpu3050->dev,
+			"FIFO_EN teardown write failed: %d\n", cleanup_err);
+	cleanup_err = regmap_write(mpu3050->map, MPU3050_USR_CTRL, 0);
+	if (cleanup_err)
+		dev_dbg(mpu3050->dev,
+			"USR_CTRL teardown write failed: %d\n", cleanup_err);
+	return ret;
+}
+
 static int mpu3050_read_raw(struct iio_dev *indio_dev,
 			    struct iio_chan_spec const *chan,
 			    int *val, int *val2,
@@ -267,6 +402,7 @@ static int mpu3050_read_raw(struct iio_dev *indio_dev,
 {
 	struct mpu3050 *mpu3050 = iio_priv(indio_dev);
 	int ret;
+	__be16 frame[3];
 	__be16 raw_val;
 
 	switch (mask) {
@@ -333,6 +469,13 @@ static int mpu3050_read_raw(struct iio_dev *indio_dev,
 
 		switch (chan->type) {
 		case IIO_TEMP:
+			/*
+			 * TEMP_H/L is read directly from the register file.
+			 * The FIFO-captured TEMP slot occasionally returns
+			 * stale data while gyro words are still consistent,
+			 * so we deliberately do not pipe TEMP through the
+			 * FIFO path used by IIO_ANGL_VEL below.
+			 */
 			ret = regmap_bulk_read(mpu3050->map, MPU3050_TEMP_H,
 					       &raw_val, sizeof(raw_val));
 			if (ret) {
@@ -340,25 +483,24 @@ static int mpu3050_read_raw(struct iio_dev *indio_dev,
 					"error reading temperature\n");
 				goto out_read_raw_unlock;
 			}
-
 			*val = (s16)be16_to_cpu(raw_val);
 			ret = IIO_VAL_INT;
-
 			goto out_read_raw_unlock;
 		case IIO_ANGL_VEL:
-			ret = regmap_bulk_read(mpu3050->map,
-				       MPU3050_AXIS_REGS(chan->scan_index-1),
-				       &raw_val,
-				       sizeof(raw_val));
+			ret = mpu3050_fifo_read_one(mpu3050, frame);
 			if (ret) {
 				dev_err(mpu3050->dev,
-					"error reading axis data\n");
+					"error reading sample frame from FIFO: %d\n",
+					ret);
 				goto out_read_raw_unlock;
 			}
-
-			*val = be16_to_cpu(raw_val);
+			/*
+			 * frame[0..2] = XOUT/YOUT/ZOUT in the order the chip
+			 * packs gyro words into the FIFO. scan_index is 1..3
+			 * for X/Y/Z so subtract one to land on the frame.
+			 */
+			*val = (s16)be16_to_cpu(frame[chan->scan_index - 1]);
 			ret = IIO_VAL_INT;
-
 			goto out_read_raw_unlock;
 		default:
 			ret = -EINVAL;
