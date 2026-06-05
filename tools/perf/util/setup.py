@@ -105,4 +105,5 @@ setup(name='perf',
       license='GPLv2',
       url='http://perf.wiki.kernel.org',
       ext_modules=[perf],
+      data_files=[('', [f'{src_perf}/python/perf.pyi'])],
       cmdclass={'build_ext': build_ext, 'install_lib': install_lib})
