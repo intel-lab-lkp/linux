@@ -7,13 +7,19 @@
 
 use pin_init::Wrapper;
 
-use crate::{bindings, prelude::*, sync::rcu, types::Opaque};
-use core::{
-    marker::PhantomData,
-    ops::Deref,
-    ptr::drop_in_place,
-    sync::atomic::{AtomicBool, Ordering},
+use crate::{
+    bindings,
+    prelude::*,
+    sync::{
+        atomic::{
+            ordering,
+            AtomicFlag, //
+        },
+        rcu,
+    },
+    types::Opaque,
 };
+use core::{marker::PhantomData, ops::Deref, ptr::drop_in_place};
 
 /// An object that can become inaccessible at runtime.
 ///
@@ -65,7 +71,7 @@ use core::{
 /// ```
 #[pin_data(PinnedDrop)]
 pub struct Revocable<T> {
-    is_available: AtomicBool,
+    is_available: AtomicFlag,
     #[pin]
     data: Opaque<T>,
 }
@@ -84,7 +90,7 @@ impl<T> Revocable<T> {
     /// Creates a new revocable instance of the given data.
     pub fn new<E>(data: impl PinInit<T, E>) -> impl PinInit<Self, E> {
         try_pin_init!(Self {
-            is_available: AtomicBool::new(true),
+            is_available: AtomicFlag::new(true),
             data <- Opaque::pin_init(data),
         }? E)
     }
@@ -98,9 +104,9 @@ impl<T> Revocable<T> {
     /// because another CPU may be waiting to complete the revocation of this object.
     pub fn try_access(&self) -> Option<RevocableGuard<'_, T>> {
         let guard = rcu::read_lock();
-        if self.is_available.load(Ordering::Relaxed) {
-            // Since `self.is_available` is true, data is initialised and has to remain valid
-            // because the RCU read side lock prevents it from being dropped.
+        if self.try_claim() {
+            // Since `try_claim` succeeded while the RCU read side lock is held, data is
+            // initialised and synchronized revocation cannot drop it before the guard is dropped.
             Some(RevocableGuard::new(self.data.get(), guard))
         } else {
             None
@@ -116,9 +122,9 @@ impl<T> Revocable<T> {
     /// allowed to sleep because another CPU may be waiting to complete the revocation of this
     /// object.
     pub fn try_access_with_guard<'a>(&'a self, _guard: &'a rcu::Guard) -> Option<&'a T> {
-        if self.is_available.load(Ordering::Relaxed) {
-            // SAFETY: Since `self.is_available` is true, data is initialised and has to remain
-            // valid because the RCU read side lock prevents it from being dropped.
+        if self.try_claim() {
+            // SAFETY: Since `try_claim` succeeded while the RCU read side lock is held, data is
+            // initialised and synchronized revocation cannot drop it before `_guard` is dropped.
             Some(unsafe { &*self.data.get() })
         } else {
             None
@@ -153,11 +159,21 @@ impl<T> Revocable<T> {
         unsafe { &*self.data.get() }
     }
 
+    fn try_claim(&self) -> bool {
+        // Use cmpxchg rather than load so a racing access cannot succeed with the old value after
+        // revocation's xchg has changed the flag to false.
+        self.is_available
+            .cmpxchg(true, true, ordering::Acquire)
+            .is_ok()
+    }
+
     /// # Safety
     ///
-    /// Callers must ensure that there are no more concurrent users of the revocable object.
+    /// If `SYNC` is `false`, callers must ensure that there are no more concurrent users of the
+    /// revocable object, and that no new calls to [`Self::try_access`] or
+    /// [`Self::try_access_with_guard`] can race with revocation.
     unsafe fn revoke_internal<const SYNC: bool>(&self) -> bool {
-        let revoke = self.is_available.swap(false, Ordering::Relaxed);
+        let revoke = self.is_available.xchg(false, ordering::Full);
 
         if revoke {
             if SYNC {
@@ -165,8 +181,8 @@ impl<T> Revocable<T> {
                 unsafe { bindings::synchronize_rcu() };
             }
 
-            // SAFETY: We know `self.data` is valid because only one CPU can succeed the
-            // `compare_exchange` above that takes `is_available` from `true` to `false`.
+            // SAFETY: We know `self.data` is valid because only one CPU can observe
+            // `is_available` as `true` in the `xchg` above.
             unsafe { drop_in_place(self.data.get()) };
         }
 
@@ -183,7 +199,9 @@ impl<T> Revocable<T> {
     ///
     /// # Safety
     ///
-    /// Callers must ensure that there are no more concurrent users of the revocable object.
+    /// Callers must ensure that there are no more concurrent users of the revocable object, and
+    /// that no new calls to [`Self::try_access`] or [`Self::try_access_with_guard`] can race with
+    /// revocation.
     pub unsafe fn revoke_nosync(&self) -> bool {
         // SAFETY: By the safety requirement of this function, the caller ensures that nobody is
         // accessing the data anymore and hence we don't have to wait for the grace period to
