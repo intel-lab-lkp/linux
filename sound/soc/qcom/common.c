@@ -23,6 +23,40 @@ static const struct snd_soc_dapm_widget qcom_jack_snd_widgets[] = {
 	SND_SOC_DAPM_SPK("DP7 Jack", NULL),
 };
 
+/**
+ * asoc_qcom_of_xlate_dai_name - Resolve a sound-dai phandle argument to a
+ *                               DAI name by searching the DAI driver array.
+ * @dai_drv:  Array of DAI drivers registered by the component.
+ * @num_dai:  Number of entries in @dai_drv.
+ * @args:     Phandle arguments from the sound-dai property; args[0] is the
+ *            DAI ID.
+ * @dai_name: Output pointer set to the matched DAI name on success.
+ *
+ * Returns 0 on success, -EINVAL if args_count != 1 or no match is found.
+ */
+int asoc_qcom_of_xlate_dai_name(const struct snd_soc_dai_driver *dai_drv,
+				int num_dai,
+				const struct of_phandle_args *args,
+				const char **dai_name)
+{
+	int id, i;
+
+	if (args->args_count != 1)
+		return -EINVAL;
+
+	id = args->args[0];
+
+	for (i = 0; i < num_dai; i++) {
+		if (dai_drv[i].id == id) {
+			*dai_name = dai_drv[i].name;
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(asoc_qcom_of_xlate_dai_name);
+
 int qcom_snd_parse_of(struct snd_soc_card *card)
 {
 	struct device_node *np;
