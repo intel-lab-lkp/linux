@@ -401,3 +401,11 @@ config ENERGY_MODEL
 	  The exact usage of the energy model is subsystem-dependent.
 
 	  If in doubt, say N.
+
+config PM_SLEEP_SMP_CPU_ZERO_STRICT
+	bool "Disallow boot CPU (CPU0) offline"
+	depends on HOTPLUG_CPU
+	depends on SUSPEND
+	help
+	  Disallow boot CPU (CPU0) offline when the suspend_ops->enter()
+	  has to be executed by boot CPU.
