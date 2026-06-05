@@ -1320,6 +1320,13 @@ static int __init lock_torture_init(void)
 			cxt.nrealreaders_stress = cxt.nrealwriters_stress;
 		}
 
+		if (cxt.nrealwriters_stress == 0 &&
+		    cxt.nrealreaders_stress == 0) {
+			pr_alert("lock-torture: must run at least one locking thread\n");
+			firsterr = -EINVAL;
+			goto unwind;
+		}
+
 		if (nreaders_stress) {
 			cxt.lrsa = kmalloc_objs(*cxt.lrsa,
 						cxt.nrealreaders_stress);
