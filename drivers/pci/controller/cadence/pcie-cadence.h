@@ -117,6 +117,8 @@ struct cdns_pcie {
  * @no_inbound_map: Whether inbound mapping is supported
  * @quirk_broken_aspm_l0s: Disable ASPM L0s support as quirk
  * @quirk_broken_aspm_l1: Disable ASPM L1 support as quirk
+ * @skip_link_polling: Skip link polling in resume if link was down before
+ *		       suspend, to avoid long delay in resume
  */
 struct cdns_pcie_rc {
 	struct cdns_pcie	pcie;
@@ -131,6 +133,7 @@ struct cdns_pcie_rc {
 	unsigned int            no_inbound_map:1;
 	unsigned int            quirk_broken_aspm_l0s:1;
 	unsigned int            quirk_broken_aspm_l1:1;
+	unsigned int		skip_link_polling:1;
 };
 
 /**
