@@ -925,7 +925,7 @@ static int bond_option_mode_set(struct bonding *bond,
 	 * enabled in 8023ad mode. Therefore, only clear broadcast_neighbor
 	 * to 0.
 	 */
-	bond->params.broadcast_neighbor = 0;
+	WRITE_ONCE(bond->params.broadcast_neighbor, 0);
 
 	if (bond->dev->reg_state == NETREG_REGISTERED) {
 		bool update = false;
@@ -1900,7 +1900,7 @@ static int bond_option_broadcast_neigh_set(struct bonding *bond,
 	if (bond->params.broadcast_neighbor == newval->value)
 		return 0;
 
-	bond->params.broadcast_neighbor = newval->value;
+	WRITE_ONCE(bond->params.broadcast_neighbor, newval->value);
 	if (bond->dev->flags & IFF_UP) {
 		if (bond->params.broadcast_neighbor)
 			static_branch_inc(&bond_bcast_neigh_enabled);
