@@ -11,8 +11,9 @@
 #ifndef _LINUX_KHO_ABI_MEMFD_H
 #define _LINUX_KHO_ABI_MEMFD_H
 
-#include <linux/types.h>
 #include <linux/kho/abi/kexec_handover.h>
+#include <linux/kho/abi/vmalloc.h>
+#include <linux/types.h>
 
 /**
  * DOC: memfd Live Update ABI

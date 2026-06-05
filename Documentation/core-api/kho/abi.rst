@@ -13,8 +13,7 @@ Core Kexec Handover ABI
 vmalloc preservation ABI
 ========================
 
-.. kernel-doc:: include/linux/kho/abi/kexec_handover.h
-   :doc: Kexec Handover ABI for vmalloc Preservation
+.. kernel-doc:: include/linux/kho/abi/vmalloc.h
 
 memblock preservation ABI
 =========================
