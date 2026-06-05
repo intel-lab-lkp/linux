@@ -2561,6 +2561,10 @@ static int apic_mmio_write(struct kvm_vcpu *vcpu, struct kvm_io_device *this,
 	struct kvm_lapic *apic = to_lapic(this);
 	unsigned int offset = address - apic->base_address;
 	u32 val;
+#ifdef CONFIG_KVM_DSM_IRQ_FORWARD
+	u32 reg;
+	u32 dest_id = 0;
+#endif
 
 	if (!apic_mmio_in_range(apic, address))
 		return -EOPNOTSUPP;
@@ -2582,6 +2586,32 @@ static int apic_mmio_write(struct kvm_vcpu *vcpu, struct kvm_io_device *this,
 		return 0;
 
 	val = *(u32*)data;
+
+#ifdef CONFIG_KVM_DSM_IRQ_FORWARD
+	reg = offset & 0xff0;
+	if (reg == APIC_ICR || reg == APIC_ICR2) {
+		kvm_lapic_reg_write(apic, reg, val);
+		if (reg == APIC_ICR) {
+			if (apic_x2apic_mode(apic)) {
+				dest_id = kvm_lapic_get_reg(apic, APIC_ICR2);
+			} else {
+				dest_id = kvm_lapic_get_reg(apic, APIC_ICR2);
+				dest_id = GET_XAPIC_DEST_FIELD(dest_id);
+			}
+		} else {
+			dest_id = GET_XAPIC_DEST_FIELD(val);
+		}
+
+		vcpu->arch.dsm_irq_forward_pending = true;
+		vcpu->arch.dsm_irq_forward_reg = reg;
+		vcpu->arch.dsm_irq_forward_val = val;
+		vcpu->arch.dsm_irq_forward_dest_id = dest_id;
+
+		kvm_make_request(KVM_REQ_DSM_IRQ_FORWARD, vcpu);
+
+		return 0;
+	}
+#endif
 
 	kvm_lapic_reg_write(apic, offset & 0xff0, val);
 
