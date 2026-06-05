@@ -217,10 +217,10 @@ again.
 
    There is a catch: 'localmodconfig' is likely to disable kernel features you
    did not use since you booted your Linux -- like drivers for currently
-   disconnected peripherals or a virtualization software not haven't used yet.
-   You can reduce or nearly eliminate that risk with tricks the reference
-   section outlines; but when building a kernel just for quick testing purposes
-   it is often negligible if such features are missing. But you should keep that
+   disconnected peripherals or virtualization software not currently in use. You
+   can reduce or nearly eliminate that risk with tricks the reference section
+   outlines; but when building a kernel just for quick testing purposes it is
+   often negligible if such features are missing. But you should keep that
    aspect in mind when using a kernel built with this make target, as it might
    be the reason why something you only use occasionally stopped working.
 
