@@ -271,6 +271,8 @@ static int calc_sizes(struct drm_device *ddev,
 	}
 
 	if (weight) {
+		int i;
+
 		dev_dbg(ddev->dev, "op %d: W:%d:0x%llx-0x%llx\n",
 			op, st->weight[0].region, st->weight[0].base,
 			st->weight[0].base + st->weight[0].length - 1);
@@ -280,6 +282,14 @@ static int calc_sizes(struct drm_device *ddev,
 		info->region_size[st->weight[0].region] =
 			max(info->region_size[st->weight[0].region],
 			    st->weight[0].base + st->weight[0].length);
+		for (i = 1; i < ARRAY_SIZE(st->weight); i++) {
+			if (st->weight[i].base == U64_MAX ||
+			    st->weight[i].length == U32_MAX)
+				continue;
+			info->region_size[st->weight[0].region] =
+				max(info->region_size[st->weight[0].region],
+				    st->weight[i].base + st->weight[i].length);
+		}
 	}
 
 	if (scale) {
@@ -292,6 +302,11 @@ static int calc_sizes(struct drm_device *ddev,
 		info->region_size[st->scale[0].region] =
 			max(info->region_size[st->scale[0].region],
 			    st->scale[0].base + st->scale[0].length);
+		if (st->scale[1].base != U64_MAX &&
+		    st->scale[1].length != U32_MAX)
+			info->region_size[st->scale[0].region] =
+				max(info->region_size[st->scale[0].region],
+				    st->scale[1].base + st->scale[1].length);
 	}
 
 	len = feat_matrix_length(info, &st->ofm, st->ofm.width,
