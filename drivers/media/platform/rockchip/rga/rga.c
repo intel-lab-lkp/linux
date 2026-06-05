@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
+#include <linux/iommu.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
@@ -757,6 +758,19 @@ static int rga_core_bind(struct device *dev, struct device *master, void *data)
 		  version.major, version.minor);
 
 	if (rga->num_cores) {
+		/* Attach to the first cores iommu */
+		struct iommu_domain *domain = iommu_get_domain_for_dev(rga->cores[0]->dev);
+
+		if (IS_ERR(domain)) {
+			dev_err(core->dev, "Couldn't get domain of the first core\n");
+			return PTR_ERR(domain);
+		}
+		ret = iommu_attach_device(domain, core->dev);
+		if (ret) {
+			dev_err(core->dev, "Couldn't attach to the domain of the first core\n");
+			return ret;
+		}
+
 		/* we are not the first core, expect that we have the same version */
 		if (rga->version.major != version.major || rga->version.minor != version.minor)
 			v4l2_warn(&rga->v4l2_dev, "Detected multi-core setup with different core versions!\n");
