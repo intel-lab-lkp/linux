@@ -511,8 +511,8 @@ static long isst_if_msr_cmd_req(u8 *cmd_ptr, int *write_only, int resume)
 	} else {
 		u64 data;
 
-		ret = rdmsrq_safe_on_cpu(msr_cmd->logical_cpu,
-					 msr_cmd->msr, &data);
+		ret = rdmsr_safe_on_cpu(msr_cmd->logical_cpu,
+					msr_cmd->msr, &data);
 		if (!ret) {
 			msr_cmd->data = data;
 			*write_only = 0;
