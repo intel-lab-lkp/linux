@@ -619,7 +619,7 @@ following:
      - Orphan file allocated. This is the special file for more efficient
        tracking of unlinked but still open inodes. When there may be any
        entries in the file, we additionally set proper rocompat feature
-       (RO_COMPAT_ORPHAN_PRESENT).
+       (RO_COMPAT_ORPHAN_PRESENT). (COMPAT_ORPHAN_FILE)
 
 .. _super_incompat:
 
