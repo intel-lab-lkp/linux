@@ -331,6 +331,8 @@ static int pedit_l4_skb_offset(struct sk_buff *skb, int *hoffset, const int head
 
 		if (!iph)
 			goto out;
+		if (iph->ihl < 5 || iph->protocol != header_type)
+			goto out;
 		*hoffset = noff + iph->ihl * 4;
 		ret = 0;
 		break;
