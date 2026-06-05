@@ -15,17 +15,27 @@ description:
 
 properties:
   compatible:
-    items:
-      - enum:
-          - cix,sky1-system-control
-          - cix,sky1-s5-system-control
-      - const: syscon
+    oneOf:
+      - items:
+          - enum:
+              - cix,sky1-system-control
+              - cix,sky1-s5-system-control
+          - const: syscon
+      - items:
+          - const: cix,sky1-audss-system-control
+          - const: simple-mfd
+          - const: syscon
 
   reg:
     maxItems: 1
 
   '#reset-cells':
     const: 1
+
+  clock-controller:
+    $ref: /schemas/clock/cix,sky1-audss-clock.yaml#
+    description:
+      AUDSS internal clock provider (cix,sky1-audss-system-control only).
 
 required:
   - compatible
@@ -39,4 +49,23 @@ examples:
       compatible = "cix,sky1-system-control", "syscon";
       reg = <0x4160000 0x100>;
       #reset-cells = <1>;
+    };
+  - |
+    #include <dt-bindings/reset/cix,sky1-audss-system-control.h>
+
+    audss_syscon: system-controller@7110000 {
+        compatible = "cix,sky1-audss-system-control", "simple-mfd", "syscon";
+        reg = <0x7110000 0x10000>;
+        #reset-cells = <1>;
+
+        clock-controller {
+            compatible = "cix,sky1-audss-clock";
+            power-domains = <&smc_devpd 0>;
+            #clock-cells = <1>;
+            clocks = <&scmi_clk 0>, <&scmi_clk 1>, <&scmi_clk 2>,
+                     <&scmi_clk 3>, <&scmi_clk 4>, <&scmi_clk 5>;
+            clock-names = "audio_clk0", "audio_clk1", "audio_clk2",
+                          "audio_clk3", "audio_clk4", "audio_clk5";
+            resets = <&src 0>;
+        };
     };
