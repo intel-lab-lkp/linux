@@ -1024,8 +1024,12 @@ int drm_gem_change_handle_ioctl(struct drm_device *dev, void *data,
 	if (!drm_core_check_feature(dev, DRIVER_GEM))
 		return -EOPNOTSUPP;
 
-	/* idr_alloc() limitation. */
-	if (args->new_handle > INT_MAX)
+	/*
+	 * idr_alloc() limitation.
+	 * Reject handle 0 (invalid in DRM) and strictly bound
+	 * to < INT_MAX to avoid signed integer overflow in handle + 1.
+	 */
+	if (args->new_handle == 0 || args->new_handle >= INT_MAX)
 		return -EINVAL;
 	handle = args->new_handle;
 
