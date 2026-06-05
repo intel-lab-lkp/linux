@@ -1305,6 +1305,9 @@ static int iterate_backrefs(u64 ino, u64 offset, u64 num_bytes, u64 root_id,
 	struct backref_ctx *bctx = ctx_;
 	struct clone_root *clone_root;
 
+	if (fatal_signal_pending(current))
+		return -EINTR;
+
 	/* First check if the root is in the list of accepted clone sources */
 	clone_root = bsearch((void *)(uintptr_t)root_id, bctx->sctx->clone_roots,
 			     bctx->sctx->clone_roots_cnt,
@@ -5674,6 +5677,9 @@ static int send_extent_data(struct send_ctx *sctx, struct btrfs_path *path,
 		u64 size = min(len - sent, read_size);
 		int ret;
 
+		if (fatal_signal_pending(current))
+			return -EINTR;
+
 		ret = send_write(sctx, offset + sent, size);
 		if (ret < 0)
 			return ret;
@@ -7152,6 +7158,9 @@ static int changed_cb(struct btrfs_path *left_path,
 	if (right_path && right_path->nodes[0])
 		ASSERT(test_bit(EXTENT_BUFFER_UNMAPPED,
 				&right_path->nodes[0]->bflags));
+
+	if (fatal_signal_pending(current))
+		return -EINTR;
 
 	if (result == BTRFS_COMPARE_TREE_SAME) {
 		if (key->type == BTRFS_INODE_REF_KEY ||
