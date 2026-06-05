@@ -14,7 +14,23 @@ obj-$(CONFIG_TRACE_GPU_MEM)		+= trace/
 # system supports cross-crate dependencies natively.
 
 obj-$(CONFIG_NOVA_CORE) += nova-core.o
-nova-core-y := nova-core/nova_core.o
+nova-core-y := nova-core/nova_core.o nova-core/nova_core_exports.o
 
 obj-$(CONFIG_DRM_NOVA) += nova-drm.o
 nova-drm-y := drm/nova/nova.o
+
+# Slightly adapted from rust/Makefile's rust_exports, restricted to Rust v0
+# mangled symbols.
+rust_exports = $(NM) -p --defined-only $(1) | awk '$$2~/(T|R|D|B)/ && $$3~/^_R/ && $$3!~/_(init|cleanup)_module$$/ && $$3!~/__(pfx|cfi|odr_asan)/ { printf $(2),$$3 }'
+
+quiet_cmd_exports = EXPORTS $@
+      cmd_exports = \
+	$(call rust_exports,$<,"EXPORT_SYMBOL_RUST_GPL(%s);\n") > $@
+
+$(obj)/nova-core/exports_nova_core_generated.h: $(obj)/nova-core/nova_core.o FORCE
+	$(call if_changed,exports)
+
+targets += nova-core/exports_nova_core_generated.h
+
+$(obj)/nova-core/nova_core_exports.o: $(obj)/nova-core/exports_nova_core_generated.h
+CFLAGS_nova-core/nova_core_exports.o := -I $(objtree)/$(obj)/nova-core
