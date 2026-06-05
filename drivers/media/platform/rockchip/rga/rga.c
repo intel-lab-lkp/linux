@@ -740,20 +740,48 @@ static int rga_parse_dt(struct rga_core *core)
 
 static int rga_core_bind(struct device *dev, struct device *master, void *data)
 {
-	struct platform_device *pdev = to_platform_device(dev);
 	struct rockchip_rga *rga = data;
+	struct rga_core *core = dev_get_drvdata(dev);
+	int ret = 0;
+
+	core->rga = rga;
+
+	ret = pm_runtime_resume_and_get(core->dev);
+	if (ret < 0)
+		return ret;
+
+	rga->version = rga->hw->get_version(core);
+
+	v4l2_info(&rga->v4l2_dev, "HW Version: 0x%02x.%02x\n",
+		  rga->version.major, rga->version.minor);
+
+	pm_runtime_put(core->dev);
+
+	rga->cores[0] = core;
+
+	return 0;
+}
+
+static const struct component_ops rga_core_ops = {
+	.bind = rga_core_bind,
+};
+
+static int rga_core_probe(struct platform_device *pdev)
+{
 	struct rga_core *core;
+	const struct rga_hw *hw;
 	int ret = 0;
 	int irq;
 
 	if (!pdev->dev.of_node)
 		return -ENODEV;
 
-	core = devm_kzalloc(&pdev->dev, sizeof(*core), GFP_KERNEL);
-	core->rga = rga;
-	core->dev = &pdev->dev;
+	hw = of_device_get_match_data(&pdev->dev);
+	if (!hw)
+		return dev_err_probe(&pdev->dev, -ENODEV, "failed to get match data\n");
 
-	rga->cores[0] = core;
+	core = devm_kzalloc(&pdev->dev, sizeof(*core), GFP_KERNEL);
+	core->dev = &pdev->dev;
 
 	ret = rga_parse_dt(core);
 	if (ret)
@@ -775,7 +803,7 @@ static int rga_core_bind(struct device *dev, struct device *master, void *data)
 	}
 
 	ret = devm_request_irq(core->dev, irq, rga_isr,
-			       rga_has_internal_iommu(rga) ? 0 : IRQF_SHARED,
+			       hw->has_internal_iommu ? 0 : IRQF_SHARED,
 			       dev_name(core->dev), core);
 	if (ret < 0) {
 		dev_err(core->dev, "failed to request irq\n");
@@ -790,16 +818,11 @@ static int rga_core_bind(struct device *dev, struct device *master, void *data)
 
 	platform_set_drvdata(pdev, core);
 
-	ret = pm_runtime_resume_and_get(core->dev);
-	if (ret < 0)
-		goto err_put_clk;
-
-	rga->version = rga->hw->get_version(core);
-
-	v4l2_info(&rga->v4l2_dev, "HW Version: 0x%02x.%02x\n",
-		  rga->version.major, rga->version.minor);
-
-	pm_runtime_put(core->dev);
+	ret = component_add(&pdev->dev, &rga_core_ops);
+	if (ret < 0) {
+		dev_err(&pdev->dev, "failed to register component: %d", ret);
+		return ret;
+	}
 
 	return 0;
 
@@ -809,35 +832,13 @@ err_put_clk:
 	return ret;
 }
 
-static void rga_core_unbind(struct device *dev, struct device *master,
-			    void *data)
-{
-	struct rga_core *core = dev_get_drvdata(dev);
-
-	pm_runtime_disable(core->dev);
-}
-
-static const struct component_ops rga_core_ops = {
-	.bind = rga_core_bind,
-	.unbind = rga_core_unbind,
-};
-
-static int rga_core_probe(struct platform_device *pdev)
-{
-	int ret = 0;
-
-	ret = component_add(&pdev->dev, &rga_core_ops);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "failed to register component: %d", ret);
-		return ret;
-	}
-
-	return 0;
-}
-
 static void rga_core_remove(struct platform_device *pdev)
 {
+	struct rga_core *core = platform_get_drvdata(pdev);
+
 	component_del(&pdev->dev, &rga_core_ops);
+
+	pm_runtime_disable(core->dev);
 }
 
 static int __maybe_unused rga_runtime_suspend(struct device *dev)
