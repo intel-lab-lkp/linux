@@ -1882,6 +1882,7 @@ static int amd_pstate_epp_cpu_init(struct cpufreq_policy *policy)
 	struct amd_cpudata *cpudata;
 	union perf_cached perf;
 	struct device *dev;
+	s16 default_epp;
 	int ret;
 
 	/*
@@ -1931,6 +1932,27 @@ static int amd_pstate_epp_cpu_init(struct cpufreq_policy *policy)
 
 	policy->boost_supported = READ_ONCE(cpudata->boost_supported);
 
+	/* Cache the firmware programmed EPP */
+	default_epp = amd_pstate_get_epp(cpudata);
+	if (default_epp < 0) {
+		ret = default_epp;
+		goto free_cpudata1;
+	}
+	FIELD_MODIFY(AMD_CPPC_EPP_PERF_MASK, &cpudata->cppc_req_cached, default_epp);
+
+	/*
+	 * Shared memory based systems may require the AUTO_SEL_ENABLE register
+	 * to be toggled on to function correctly. Since the first call to
+	 * amd_pstate_set_epp() may bail out early if the desired EPP is
+	 * same as the one configured by the firmware, attempt to toggle the
+	 * AUTO_SEL_ENABLE here, independent of EPP programming.
+	 */
+	if (!cpu_feature_enabled(X86_FEATURE_CPPC)) {
+		ret = cppc_set_auto_sel(policy->cpu, 1);
+		if (ret)
+			pr_warn("failed to enable auto_sel for cpu %d: %d\n", policy->cpu, ret);
+	}
+
 	/*
 	 * Set the policy to provide a valid fallback value in case
 	 * the default cpufreq governor is neither powersave nor performance.
@@ -1938,7 +1960,7 @@ static int amd_pstate_epp_cpu_init(struct cpufreq_policy *policy)
 	if (amd_pstate_acpi_pm_profile_server() ||
 	    amd_pstate_acpi_pm_profile_undefined()) {
 		policy->policy = CPUFREQ_POLICY_PERFORMANCE;
-		cpudata->epp_default_ac = cpudata->epp_default_dc = amd_pstate_get_epp(cpudata);
+		cpudata->epp_default_ac = cpudata->epp_default_dc = default_epp;
 		cpudata->current_profile = PLATFORM_PROFILE_PERFORMANCE;
 	} else {
 		policy->policy = CPUFREQ_POLICY_POWERSAVE;
