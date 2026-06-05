@@ -7815,7 +7815,8 @@ static int raid5_set_limits(struct mddev *mddev)
 	 * might be to turn DISCARD into WRITE_ZEROES requests, as that is
 	 * required to be safe.
 	 */
-	if (!devices_handle_discard_safely ||
+	if ((!devices_handle_discard_safely &&
+	     mddev->bitmap_id != ID_LLBITMAP) ||
 	    lim.max_discard_sectors < (stripe >> 9) ||
 	    lim.discard_granularity < stripe)
 		lim.max_hw_discard_sectors = 0;
