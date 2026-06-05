@@ -19,6 +19,7 @@ DAMON is a Linux kernel subsystem for efficient :ref:`data access monitoring
 
    faq
    design
+   tlb_flush
    api
    maintainer-profile
 
