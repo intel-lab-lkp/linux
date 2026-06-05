@@ -458,6 +458,8 @@ int enetc_init_sriov_resources(struct enetc_pf *pf)
 	for (int i = 0; i < pf->total_vfs; i++)
 		mutex_init(&pf->vf_state[i].lock);
 
+	mutex_init(&pf->msg_lock);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(enetc_init_sriov_resources);

@@ -60,6 +60,10 @@ struct enetc_pf {
 	const struct enetc_pf_ops *ops;
 
 	int num_mfe;	/* number of mac address filter table entries */
+	/* Message lock, prevent concurrent access */
+	struct mutex msg_lock;
+	u16 link_status_ms_mask;
+
 };
 
 #define phylink_to_enetc_pf(config) \
