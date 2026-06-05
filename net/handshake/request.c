@@ -311,6 +311,7 @@ bool handshake_try_complete(struct handshake_req *req)
 {
 	return !test_and_set_bit(HANDSHAKE_F_REQ_COMPLETED, &req->hr_flags);
 }
+EXPORT_SYMBOL_IF_KUNIT(handshake_try_complete);
 
 /**
  * handshake_finish_complete - Deliver completion to the consumer
@@ -341,6 +342,7 @@ void handshake_finish_complete(struct handshake_req *req, unsigned int status,
 	/* Handshake request is no longer pending */
 	sock_put(sk);
 }
+EXPORT_SYMBOL_IF_KUNIT(handshake_finish_complete);
 
 void handshake_complete(struct handshake_req *req, unsigned int status,
 			struct genl_info *info)
