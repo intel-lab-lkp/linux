@@ -31,7 +31,7 @@ static void __wrmsr_on_cpu(void *info)
 	wrmsr(rv->msr_no, reg->l, reg->h);
 }
 
-int rdmsr_on_cpu(unsigned int cpu, u32 msr_no, u32 *l, u32 *h)
+int rdmsr_on_cpu(unsigned int cpu, u32 msr_no, u64 *q)
 {
 	int err;
 	struct msr_info rv;
@@ -40,8 +40,7 @@ int rdmsr_on_cpu(unsigned int cpu, u32 msr_no, u32 *l, u32 *h)
 
 	rv.msr_no = msr_no;
 	err = smp_call_function_single(cpu, __rdmsr_on_cpu, &rv, 1);
-	*l = rv.reg.l;
-	*h = rv.reg.h;
+	*q = rv.reg.q;
 
 	return err;
 }
