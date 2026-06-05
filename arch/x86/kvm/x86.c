@@ -7634,6 +7634,46 @@ set_pit2_out:
 		r = kvm_vm_ioctl_set_msr_filter(kvm, &filter);
 		break;
 	}
+#ifdef CONFIG_KVM_DSM_IRQ_FORWARD
+	case KVM_DSM_IPI: {
+		struct kvm_dipi_params params;
+		struct kvm_vcpu *vcpu = NULL;
+		u32 reg;
+		u32 val;
+
+		r = 0;
+		if (copy_from_user(&params, argp, sizeof(params)))
+			goto out;
+		vcpu = kvm_get_vcpu(kvm, params.vcpu_id);
+		reg = params.val;
+		val = params.val2;
+		kvm_lapic_reg_write_remote(vcpu->arch.apic, reg, val, params.dest_id);
+		break;
+	}
+	case KVM_DSM_X2APIC: {
+		struct kvm_x2apic_params params;
+		struct kvm_vcpu *vcpu = NULL;
+
+		r = 0;
+		if (copy_from_user(&params, argp, sizeof(params)))
+			goto out;
+
+		vcpu = kvm_get_vcpu(kvm, params.vcpu_id);
+		kvm_x2apic_icr_write_fast(vcpu->arch.apic, params.data);
+		break;
+	}
+	case KVM_DSM_APIC_BASE: {
+		struct kvm_apic_base_params params;
+		struct kvm_vcpu *vcpu = NULL;
+
+		r = 0;
+		if (copy_from_user(&params, argp, sizeof(params)))
+			goto out;
+		vcpu = kvm_get_vcpu(kvm, params.vcpu_id);
+		kvm_apic_set_base(vcpu, params.data, params.host);
+		break;
+	}
+#endif
 	default:
 		r = -ENOTTY;
 	}
