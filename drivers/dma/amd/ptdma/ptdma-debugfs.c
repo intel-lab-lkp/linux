@@ -41,9 +41,8 @@ static int pt_debugfs_info_show(struct seq_file *s, void *p)
 	regval = ioread32(pt->io_regs + CMD_PT_VERSION);
 
 	seq_printf(s, "    Version: %d\n", regval & RI_VERSION_NUM);
-	seq_puts(s, "    Engines:");
-	seq_puts(s, "\n");
-	seq_printf(s, "     Queues: %d\n", (regval & RI_NUM_VQM) >> RI_NVQM_SHIFT);
+	seq_printf(s, "    Engines:\n     Queues: %d\n",
+		   (regval & RI_NUM_VQM) >> RI_NVQM_SHIFT);
 
 	return 0;
 }
