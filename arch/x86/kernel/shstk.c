@@ -150,6 +150,7 @@ static int shstk_setup(void)
 {
 	struct thread_shstk *shstk = &current->thread.shstk;
 	unsigned long addr, size;
+	u64 msrval;
 
 	/* Already enabled */
 	if (features_enabled(ARCH_SHSTK_SHSTK))
@@ -166,7 +167,10 @@ static int shstk_setup(void)
 
 	fpregs_lock_and_load();
 	wrmsrq(MSR_IA32_PL3_SSP, addr + size);
-	wrmsrq(MSR_IA32_U_CET, CET_SHSTK_EN);
+	rdmsrq(MSR_IA32_U_CET, msrval);
+	msrval &= ~CET_WRSS_EN;
+	msrval |= CET_SHSTK_EN;
+	wrmsrq(MSR_IA32_U_CET, msrval);
 	fpregs_unlock();
 
 	shstk->base = addr;
@@ -520,6 +524,8 @@ unlock:
 
 static int shstk_disable(void)
 {
+	u64 msrval;
+
 	if (!cpu_feature_enabled(X86_FEATURE_USER_SHSTK))
 		return -EOPNOTSUPP;
 
@@ -528,8 +534,10 @@ static int shstk_disable(void)
 		return 0;
 
 	fpregs_lock_and_load();
+	rdmsrq(MSR_IA32_U_CET, msrval);
 	/* Disable WRSS too when disabling shadow stack */
-	wrmsrq(MSR_IA32_U_CET, 0);
+	msrval &= ~(CET_SHSTK_EN | CET_WRSS_EN);
+	wrmsrq(MSR_IA32_U_CET, msrval);
 	wrmsrq(MSR_IA32_PL3_SSP, 0);
 	fpregs_unlock();
 
