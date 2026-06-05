@@ -2046,7 +2046,7 @@ static int spmi_pmic_arb_register_buses(struct spmi_pmic_arb *pmic_arb,
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *node = dev->of_node;
-	int ret;
+	int ret = 0;
 
 	/* legacy mode doesn't provide child node for the bus */
 	if (of_device_is_compatible(node, "qcom,spmi-pmic-arb"))
