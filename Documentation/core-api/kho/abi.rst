@@ -10,6 +10,11 @@ Core Kexec Handover ABI
 .. kernel-doc:: include/linux/kho/abi/kexec_handover.h
    :doc: Kexec Handover ABI
 
+KHO Compatibility ABI
+=====================
+
+.. kernel-doc:: include/linux/kho/abi/compat.h
+
 vmalloc preservation ABI
 ========================
 

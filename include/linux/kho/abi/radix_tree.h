@@ -20,7 +20,7 @@
  * This interface is a contract. Any modification to the structure fields,
  * compatible strings, or the layout of the serialization structures defined
  * here constitutes a breaking change. Such changes require incrementing the
- * version number in the `KHO_FDT_COMPATIBLE` string to prevent a new kernel
+ * version number in the `KHO_RADIX_COMPATIBLE` string to prevent a new kernel
  * from misinterpreting data from an old kernel.
  *
  * Changes are allowed provided the compatibility version is incremented;
@@ -93,6 +93,8 @@
  * 512KB bitmap can cover a 16GB memory range for 0-order pages with PAGE_SIZE =
  * 4KB.
  */
+
+#define KHO_RADIX_COMPATIBLE "radix-v1"
 
 /*
  * Defines constants for the KHO radix tree structure, used to track preserved

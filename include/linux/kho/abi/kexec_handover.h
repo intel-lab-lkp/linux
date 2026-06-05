@@ -8,9 +8,8 @@
 
 #ifndef _LINUX_KHO_ABI_KEXEC_HANDOVER_H
 #define _LINUX_KHO_ABI_KEXEC_HANDOVER_H
-#include <linux/types.h>
-
-#include <asm/page.h>
+#include <linux/kho/abi/compat.h>
+#include <linux/kho/abi/radix_tree.h>
 
 /**
  * DOC: Kexec Handover ABI
@@ -85,7 +84,10 @@
  */
 
 /* The compatible string for the KHO FDT root node. */
-#define KHO_FDT_COMPATIBLE "kho-v4"
+#define KHO_FDT_COMPAT_BASE "kho-v4"
+#define KHO_FDT_COMPATIBLE						\
+	KHO_FDT_COMPAT_BASE						\
+	KHO_SUB_COMPAT(KHO_RADIX_COMPATIBLE)
 
 /* The FDT property for the preserved memory map. */
 #define KHO_FDT_MEMORY_MAP_PROP_NAME "preserved-memory-map"
