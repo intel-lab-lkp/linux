@@ -16,6 +16,7 @@
 
 #include <dt-bindings/reset/cix,sky1-system-control.h>
 #include <dt-bindings/reset/cix,sky1-s5-system-control.h>
+#include <dt-bindings/reset/cix,sky1-audss-system-control.h>
 
 #define SKY1_RESET_SLEEP_MIN_US		50
 #define SKY1_RESET_SLEEP_MAX_US		100
@@ -258,6 +259,34 @@ static const struct sky1_src_variant variant_sky1_fch = {
 	.signals_num = ARRAY_SIZE(sky1_src_fch_signals),
 };
 
+enum {
+	AUDSS_SW_RST = 0x78,
+};
+
+static const struct sky1_src_signal sky1_audss_signals[SKY1_AUDSS_SW_RESET_NUM] = {
+	[AUDSS_I2S0_SW_RST_N]   = { AUDSS_SW_RST, BIT(0) },
+	[AUDSS_I2S1_SW_RST_N]   = { AUDSS_SW_RST, BIT(1) },
+	[AUDSS_I2S2_SW_RST_N]   = { AUDSS_SW_RST, BIT(2) },
+	[AUDSS_I2S3_SW_RST_N]   = { AUDSS_SW_RST, BIT(3) },
+	[AUDSS_I2S4_SW_RST_N]   = { AUDSS_SW_RST, BIT(4) },
+	[AUDSS_I2S5_SW_RST_N]   = { AUDSS_SW_RST, BIT(5) },
+	[AUDSS_I2S6_SW_RST_N]   = { AUDSS_SW_RST, BIT(6) },
+	[AUDSS_I2S7_SW_RST_N]   = { AUDSS_SW_RST, BIT(7) },
+	[AUDSS_I2S8_SW_RST_N]   = { AUDSS_SW_RST, BIT(8) },
+	[AUDSS_I2S9_SW_RST_N]   = { AUDSS_SW_RST, BIT(9) },
+	[AUDSS_WDT_SW_RST_N]    = { AUDSS_SW_RST, BIT(10) },
+	[AUDSS_TIMER_SW_RST_N]  = { AUDSS_SW_RST, BIT(11) },
+	[AUDSS_MB0_SW_RST_N]    = { AUDSS_SW_RST, BIT(12) },
+	[AUDSS_MB1_SW_RST_N]    = { AUDSS_SW_RST, BIT(13) },
+	[AUDSS_HDA_SW_RST_N]    = { AUDSS_SW_RST, BIT(14) },
+	[AUDSS_DMAC_SW_RST_N]   = { AUDSS_SW_RST, BIT(15) },
+};
+
+static const struct sky1_src_variant variant_sky1_audss = {
+	.signals = sky1_audss_signals,
+	.signals_num = ARRAY_SIZE(sky1_audss_signals),
+};
+
 static struct sky1_src *to_sky1_src(struct reset_controller_dev *rcdev)
 {
 	return container_of(rcdev, struct sky1_src, rcdev);
@@ -329,6 +358,8 @@ static int sky1_reset_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	variant = of_device_get_match_data(dev);
+	if (!variant)
+		return -ENODEV;
 
 	sky1src->regmap = device_node_to_regmap(dev->of_node);
 	if (IS_ERR(sky1src->regmap)) {
@@ -347,8 +378,9 @@ static int sky1_reset_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id sky1_sysreg_of_match[] = {
-	{ .compatible = "cix,sky1-system-control", .data = &variant_sky1_fch},
-	{ .compatible = "cix,sky1-s5-system-control", .data = &variant_sky1},
+	{ .compatible = "cix,sky1-system-control", .data = &variant_sky1_fch },
+	{ .compatible = "cix,sky1-s5-system-control", .data = &variant_sky1 },
+	{ .compatible = "cix,sky1-audss-system-control", .data = &variant_sky1_audss },
 	{},
 };
 MODULE_DEVICE_TABLE(of, sky1_sysreg_of_match);
