@@ -46,10 +46,6 @@ struct rocket_core {
 
 	spinlock_t fence_lock;
 
-	struct {
-		struct workqueue_struct *wq;
-	} reset;
-
 	struct drm_gpu_scheduler sched;
 	u64 fence_context;
 	u64 emit_seqno;

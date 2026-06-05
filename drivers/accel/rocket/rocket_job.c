@@ -467,33 +467,20 @@ int rocket_job_init(struct rocket_core *core)
 		return ret;
 	}
 
-	core->reset.wq = alloc_ordered_workqueue("rocket-reset-%d", 0, core->index);
-	if (!core->reset.wq)
-		return -ENOMEM;
-
 	core->fence_context = dma_fence_context_alloc(1);
 
-	args.timeout_wq = core->reset.wq;
 	ret = drm_sched_init(&core->sched, &args);
 	if (ret) {
 		dev_err(core->dev, "Failed to create scheduler: %d.", ret);
-		goto err_sched;
+		return ret;
 	}
 
 	return 0;
-
-err_sched:
-	drm_sched_fini(&core->sched);
-
-	destroy_workqueue(core->reset.wq);
-	return ret;
 }
 
 void rocket_job_fini(struct rocket_core *core)
 {
 	drm_sched_fini(&core->sched);
-
-	destroy_workqueue(core->reset.wq);
 }
 
 int rocket_job_open(struct rocket_file_priv *rocket_priv)
