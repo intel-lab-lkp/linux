@@ -32,8 +32,9 @@
 #define CRUSH_MAX_DEVICE_WEIGHT (100u * 0x10000u)
 #define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
 
-#define CRUSH_ITEM_UNDEF  0x7ffffffe  /* undefined result (internal use only) */
-#define CRUSH_ITEM_NONE   0x7fffffff  /* no result */
+#define CRUSH_ITEM_TYPE_DEVICE  0            /* leaf device (OSD) */
+#define CRUSH_ITEM_UNDEF        0x7ffffffe   /* undefined result (internal use only) */
+#define CRUSH_ITEM_NONE         0x7fffffff   /* no result */
 
 /*
  * CRUSH uses user-defined "rules" to describe how inputs should be
