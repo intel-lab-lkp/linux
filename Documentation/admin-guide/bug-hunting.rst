@@ -63,8 +63,8 @@ Documentation/admin-guide/tainted-kernels.rst, "being loaded" is
 annotated with "+", and "being unloaded" is annotated with "-".
 
 
-Where is the Oops message is located?
--------------------------------------
+Where is the Oops message located?
+----------------------------------
 
 Normally the Oops text is read from the kernel buffers by klogd and
 handed to ``syslogd`` which writes it to a syslog file, typically
@@ -72,7 +72,7 @@ handed to ``syslogd`` which writes it to a syslog file, typically
 systemd, it may also be stored by the ``journald`` daemon, and accessed
 by running ``journalctl`` command.
 
-Sometimes ``klogd`` dies, in which case you can run ``dmesg > file`` to
+Sometimes ``klogd`` dies. In that case you can run ``dmesg > file`` to
 read the data from the kernel buffers and save it.  Or you can
 ``cat /proc/kmsg > file``, however you have to break in to stop the transfer,
 since ``kmsg`` is a "never ending file".
