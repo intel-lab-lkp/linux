@@ -97,6 +97,12 @@
 #define JUMBO_9K	(9 * SZ_1K - VLAN_ETH_HLEN - ETH_FCS_LEN)
 #define JUMBO_16K	(SZ_16K - VLAN_ETH_HLEN - ETH_FCS_LEN)
 
+#define OCP_SDS_ADDR_REG	0xEB10
+#define OCP_SDS_CMD_REG		0xEB0E
+#define OCP_SDS_DATA_REG	0xEB14
+#define SDS_CMD_READ		0x0001
+#define RTL_SDS_C22_BASE	0x40
+
 static const struct rtl_chip_info {
 	u32 mask;
 	u32 val;
@@ -729,6 +735,12 @@ enum rtl_dash_type {
 	RTL_DASH_25_BP,
 };
 
+enum rtl_sfp_mode {
+	RTL_SFP_NONE,
+	RTL_SFP_8168_AF,
+	RTL_SFP_8127_ATF,
+};
+
 struct rtl8169_private {
 	void __iomem *mmio_addr;	/* memory map physical address */
 	struct pci_dev *pci_dev;
@@ -737,6 +749,7 @@ struct rtl8169_private {
 	struct napi_struct napi;
 	enum mac_version mac_version;
 	enum rtl_dash_type dash_type;
+	enum rtl_sfp_mode sfp_mode;
 	u32 cur_rx; /* Index into the Rx descriptor buffer of next Rx pkt. */
 	u32 cur_tx; /* Index into the Tx descriptor buffer of next Rx pkt. */
 	u32 dirty_tx;
@@ -764,7 +777,6 @@ struct rtl8169_private {
 	unsigned supports_gmii:1;
 	unsigned aspm_manageable:1;
 	unsigned dash_enabled:1;
-	bool sfp_mode:1;
 	dma_addr_t counters_phys_addr;
 	struct rtl8169_counters *counters;
 	struct rtl8169_tc_offsets tc_offset;
@@ -778,6 +790,7 @@ struct rtl8169_private {
 	u32 ocp_base;
 	struct phylink *phylink;
 	struct phylink_config phylink_config;
+	struct phylink_pcs pcs;
 };
 
 typedef void (*rtl_generic_fct)(struct rtl8169_private *tp);
@@ -1133,7 +1146,7 @@ static int r8168_phy_ocp_read(struct rtl8169_private *tp, u32 reg)
 		return 0;
 
 	/* Return dummy MII_PHYSID2 in SFP mode to match SFP PHY driver */
-	if (tp->sfp_mode && reg == (OCP_STD_PHY_BASE + 2 * MII_PHYSID2))
+	if (tp->sfp_mode == RTL_SFP_8127_ATF && reg == (OCP_STD_PHY_BASE + 2 * MII_PHYSID2))
 		return PHY_ID_RTL_DUMMY_SFP & 0xffff;
 
 	RTL_W32(tp, GPHY_OCP, reg << 15);
@@ -1285,6 +1298,13 @@ static void mac_mcu_write(struct rtl8169_private *tp, int reg, int value)
 	}
 
 	r8168_mac_ocp_write(tp, tp->ocp_base + reg, value);
+}
+
+static bool rtl_is_8116af(struct rtl8169_private *tp)
+{
+	return tp->mac_version == RTL_GIGA_MAC_VER_52 &&
+		(r8168_mac_ocp_read(tp, 0xdc00) & 0x0078) == 0x0030 &&
+		(r8168_mac_ocp_read(tp, 0xd006) & 0x00ff) == 0x0000;
 }
 
 static int mac_mcu_read(struct rtl8169_private *tp, int reg)
@@ -1580,6 +1600,20 @@ static bool rtl_dash_is_enabled(struct rtl8169_private *tp)
 	default:
 		return false;
 	}
+}
+
+static enum rtl_sfp_mode rtl_get_sfp_mode(struct rtl8169_private *tp)
+{
+	if (rtl_is_8125(tp)) {
+		u16 data = r8168_mac_ocp_read(tp, 0xd006);
+
+		if ((data & 0xff) == 0x07)
+			return RTL_SFP_8127_ATF;
+	} else if (rtl_is_8116af(tp)) {
+		return RTL_SFP_8168_AF;
+	}
+
+	return RTL_SFP_NONE;
 }
 
 static enum rtl_dash_type rtl_get_dash_type(struct rtl8169_private *tp)
@@ -2397,7 +2431,7 @@ static int rtl8169_set_link_ksettings(struct net_device *ndev,
 	int duplex = cmd->base.duplex;
 	int speed = cmd->base.speed;
 
-	if (!tp->sfp_mode)
+	if (tp->sfp_mode != RTL_SFP_8127_ATF)
 		return phylink_ethtool_ksettings_set(tp->phylink, cmd);
 
 	if (cmd->base.autoneg != AUTONEG_DISABLE)
@@ -2509,9 +2543,10 @@ void r8169_apply_firmware(struct rtl8169_private *tp)
 		tp->ocp_base = OCP_STD_PHY_BASE;
 
 		/* PHY soft reset may still be in progress */
-		phy_read_poll_timeout(tp->phydev, MII_BMCR, val,
-				      !(val & BMCR_RESET),
-				      50000, 600000, true);
+		if (tp->phydev)
+			phy_read_poll_timeout(tp->phydev, MII_BMCR, val,
+					      !(val & BMCR_RESET),
+					      50000, 600000, true);
 	}
 }
 
@@ -2562,7 +2597,7 @@ static void rtl8169_init_phy(struct rtl8169_private *tp)
 	    tp->pci_dev->subsystem_device == 0xe000)
 		phy_write_paged(tp->phydev, 0x0001, 0x10, 0xf01b);
 
-	if (tp->sfp_mode)
+	if (tp->sfp_mode == RTL_SFP_8127_ATF)
 		rtl_sfp_init(tp);
 
 	genphy_soft_reset(tp->phydev);
@@ -3697,12 +3732,14 @@ static void rtl_hw_start_8117(struct rtl8169_private *tp)
 
 	rtl_pcie_state_l2l3_disable(tp);
 
-	rg_saw_cnt = phy_read_paged(tp->phydev, 0x0c42, 0x13) & 0x3fff;
-	if (rg_saw_cnt > 0) {
-		u16 sw_cnt_1ms_ini;
+	if (tp->phydev) {
+		rg_saw_cnt = phy_read_paged(tp->phydev, 0x0c42, 0x13) & 0x3fff;
+		if (rg_saw_cnt > 0) {
+			u16 sw_cnt_1ms_ini;
 
-		sw_cnt_1ms_ini = (16000000 / rg_saw_cnt) & 0x0fff;
-		r8168_mac_ocp_modify(tp, 0xd412, 0x0fff, sw_cnt_1ms_ini);
+			sw_cnt_1ms_ini = (16000000 / rg_saw_cnt) & 0x0fff;
+			r8168_mac_ocp_modify(tp, 0xd412, 0x0fff, sw_cnt_1ms_ini);
+		}
 	}
 
 	r8168_mac_ocp_modify(tp, 0xe056, 0x00f0, 0x0000);
@@ -4879,7 +4916,7 @@ static irqreturn_t rtl8169_interrupt(int irq, void *dev_instance)
 		goto out;
 	}
 
-	if (status & LinkChg)
+	if (status & LinkChg && tp->phydev)
 		phy_mac_interrupt(tp->phydev);
 
 	rtl_irq_disable(tp);
@@ -4995,7 +5032,7 @@ static void rtl8169_down(struct rtl8169_private *tp)
 	phylink_stop(tp->phylink);
 
 	/* Reset SerDes PHY to bring down fiber link */
-	if (tp->sfp_mode)
+	if (tp->sfp_mode == RTL_SFP_8127_ATF)
 		rtl_sfp_reset(tp);
 
 	rtl8169_update_counters(tp);
@@ -5017,9 +5054,11 @@ static void rtl8169_up(struct rtl8169_private *tp)
 		rtl8168_driver_start(tp);
 
 	pci_set_master(tp->pci_dev);
-	phy_init_hw(tp->phydev);
-	phy_resume(tp->phydev);
-	rtl8169_init_phy(tp);
+	if (tp->phydev) {
+		phy_init_hw(tp->phydev);
+		phy_resume(tp->phydev);
+		rtl8169_init_phy(tp);
+	}
 
 	/* We may have called phy_speed_down before */
 	phylink_speed_up(tp->phylink);
@@ -5100,9 +5139,11 @@ static int rtl_open(struct net_device *dev)
 	if (retval < 0)
 		goto err_release_fw_2;
 
-	retval = r8169_phy_connect(tp);
-	if (retval)
-		goto err_free_irq;
+	if (tp->phydev) {
+		retval = r8169_phy_connect(tp);
+		if (retval)
+			goto err_free_irq;
+	}
 
 	rtl8169_up(tp);
 	rtl8169_init_counter_offsets(tp);
@@ -5616,6 +5657,10 @@ static void rtl_mac_link_up(struct phylink_config *config, struct phy_device *ph
 static struct phylink_pcs *rtl_mac_select_pcs(struct phylink_config *config,
 					      phy_interface_t interface)
 {
+	struct rtl8169_private *tp = container_of(config, struct rtl8169_private, phylink_config);
+
+	if (interface == PHY_INTERFACE_MODE_1000BASEX || interface == PHY_INTERFACE_MODE_SGMII)
+		return &tp->pcs;
 	return NULL;
 }
 
@@ -5624,11 +5669,67 @@ static void rtl_mac_config(struct phylink_config *config, unsigned int mode,
 {
 }
 
+static u16 rtl8116af_sds_read(struct rtl8169_private *tp, u16 sds_reg)
+{
+	r8168_mac_ocp_write(tp, OCP_SDS_ADDR_REG, sds_reg);
+	r8168_mac_ocp_write(tp, OCP_SDS_CMD_REG, SDS_CMD_READ);
+	return r8168_mac_ocp_read(tp, OCP_SDS_DATA_REG);
+}
+
+static void rtl8169_pcs_get_state(struct phylink_pcs *pcs,
+				  unsigned int neg_mode,
+				  struct phylink_link_state *state)
+{
+	struct rtl8169_private *tp = container_of(pcs, struct rtl8169_private, pcs);
+	u16 bmsr, lpa;
+
+	bmsr = rtl8116af_sds_read(tp, RTL_SDS_C22_BASE + MII_BMSR);
+	lpa = rtl8116af_sds_read(tp, RTL_SDS_C22_BASE + MII_LPA);
+
+	state->link = !!(bmsr & BMSR_LSTATUS);
+	state->an_complete = !!(bmsr & BMSR_ANEGCOMPLETE);
+	if (state->link) {
+		state->speed = SPEED_1000;
+		state->duplex = DUPLEX_FULL;
+	} else {
+		state->speed = SPEED_UNKNOWN;
+		state->duplex = DUPLEX_UNKNOWN;
+	}
+
+	if (lpa & LPA_1000XPAUSE)
+		state->pause |= MLO_PAUSE_RX | MLO_PAUSE_TX;
+}
+
+static int rtl8169_pcs_config(struct phylink_pcs *pcs, unsigned int mode,
+			      phy_interface_t interface,
+			      const unsigned long *advertising,
+			      bool permit_pause_to_mac)
+{
+	return 0;
+}
+
+static int rtl8169_pcs_validate(struct phylink_pcs *pcs, unsigned long *supported,
+				const struct phylink_link_state *state)
+{
+	return 0;
+}
+
+static void rtl8169_pcs_an_restart(struct phylink_pcs *pcs)
+{
+}
+
 static const struct phylink_mac_ops rtl_phylink_mac_ops = {
 	.mac_select_pcs = rtl_mac_select_pcs,
 	.mac_config = rtl_mac_config,
 	.mac_link_down  = rtl_mac_link_down,
 	.mac_link_up    = rtl_mac_link_up,
+};
+
+static const struct phylink_pcs_ops r8169_pcs_ops = {
+	.pcs_validate = rtl8169_pcs_validate,
+	.pcs_get_state = rtl8169_pcs_get_state,
+	.pcs_config = rtl8169_pcs_config,
+	.pcs_an_restart = rtl8169_pcs_an_restart,
 };
 
 static int rtl_init_phylink(struct rtl8169_private *tp)
@@ -5642,10 +5743,19 @@ static int rtl_init_phylink(struct rtl8169_private *tp)
 
 	tp->phylink_config.mac_capabilities = MAC_ASYM_PAUSE | MAC_SYM_PAUSE;
 
-	if (tp->sfp_mode) {
+	switch (tp->sfp_mode) {
+	case RTL_SFP_8168_AF:
+		tp->pcs.ops = &r8169_pcs_ops;
+		tp->pcs.poll = true;
+		tp->phylink_config.default_an_inband = true;
+		phy_mode = PHY_INTERFACE_MODE_1000BASEX;
+		tp->phylink_config.mac_capabilities |= MAC_1000FD;
+		break;
+	case RTL_SFP_8127_ATF:
 		phy_mode = PHY_INTERFACE_MODE_INTERNAL;
 		tp->phylink_config.mac_capabilities |= MAC_10000FD;
-	} else {
+		break;
+	default:
 		tp->phylink_config.mac_capabilities |= MAC_10 | MAC_100;
 		phy_mode = PHY_INTERFACE_MODE_INTERNAL;
 
@@ -5660,6 +5770,7 @@ static int rtl_init_phylink(struct rtl8169_private *tp)
 		else
 			if (tp->supports_gmii)
 				tp->phylink_config.mac_capabilities |= MAC_1000FD;
+		break;
 	}
 
 	__set_bit(phy_mode, tp->phylink_config.supported_interfaces);
@@ -5754,12 +5865,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 	tp->aspm_manageable = !rc;
 
-	if (rtl_is_8125(tp)) {
-		u16 data = r8168_mac_ocp_read(tp, 0xd006);
-
-		if ((data & 0xff) == 0x07)
-			tp->sfp_mode = true;
-	}
+	tp->sfp_mode = rtl_get_sfp_mode(tp);
 
 	tp->dash_type = rtl_get_dash_type(tp);
 	tp->dash_enabled = rtl_dash_is_enabled(tp);
@@ -5867,10 +5973,12 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (rc)
 		return rc;
 
-	rc = r8169_mdio_register(tp);
-	if (rc) {
-		phylink_destroy(tp->phylink);
-		return rc;
+	if (tp->sfp_mode != RTL_SFP_8168_AF) {
+		rc = r8169_mdio_register(tp);
+		if (rc) {
+			phylink_destroy(tp->phylink);
+			return rc;
+		}
 	}
 
 	rc = register_netdev(dev);
