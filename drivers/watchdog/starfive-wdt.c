@@ -546,6 +546,19 @@ static void starfive_wdt_remove(struct platform_device *pdev)
 	starfive_wdt_stop(wdt);
 	watchdog_unregister_device(&wdt->wdd);
 
+	/*
+	 * watchdog_unregister_device() only calls our pm_stop op when
+	 * WDOG_ACTIVE is set.  When early_enable started the hardware at
+	 * probe time and userspace never opened the watchdog, the framework
+	 * state is WDOG_HW_RUNNING without WDOG_ACTIVE: the unregister path
+	 * leaves the runtime PM reference taken at probe outstanding.  Drop
+	 * it here before disabling runtime PM so the usage counter does not
+	 * leak.
+	 */
+	if (test_bit(WDOG_HW_RUNNING, &wdt->wdd.status) &&
+	    pm_runtime_enabled(&pdev->dev))
+		pm_runtime_put_sync(&pdev->dev);
+
 	if (pm_runtime_enabled(&pdev->dev))
 		pm_runtime_disable(&pdev->dev);
 	else
