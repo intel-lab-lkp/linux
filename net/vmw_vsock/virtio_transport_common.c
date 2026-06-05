@@ -1571,15 +1571,20 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 	vsock_addr_init(&vchild->remote_addr, le64_to_cpu(hdr->src_cid),
 			le32_to_cpu(hdr->src_port));
 
-	ret = vsock_assign_transport(vchild, vsk);
-	/* Transport assigned (looking at remote_addr) must be the same
-	 * where we received the request.
+	/* Lock the parent listener socket to synchronize with a potential
+	 * simultaneous shutdown thread running __vsock_release().
 	 */
-	if (ret || vchild->transport != &t->transport) {
+	lock_sock(sk);
+
+	/* Check if the listener socket was shut down while we were
+	 * creating and configuring the child socket.
+	 */
+	if (sk->sk_shutdown == SHUTDOWN_MASK) {
+		release_sock(sk);
 		release_sock(child);
 		virtio_transport_reset_no_sock(t, skb, sock_net(sk));
 		sock_put(child);
-		return ret;
+		return -ESHUTDOWN;
 	}
 
 	sk_acceptq_added(sk);
@@ -1590,6 +1595,8 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 	vsock_enqueue_accept(sk, child);
 	virtio_transport_send_response(vchild, skb);
 
+	/* Safely release both locked objects */
+	release_sock(sk);
 	release_sock(child);
 
 	sk->sk_data_ready(sk);
