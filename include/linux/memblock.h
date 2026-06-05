@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/mm.h>
 #include <asm/dma.h>
+#include <linux/kexec_handover.h>
 
 extern unsigned long max_low_pfn;
 extern unsigned long min_low_pfn;
@@ -618,7 +619,7 @@ bool memblock_is_kho_scratch_memory(phys_addr_t addr);
 static inline enum migratetype kho_scratch_migratetype(unsigned long pfn,
 						       enum migratetype mt)
 {
-	if (memblock_is_kho_scratch_memory(PFN_PHYS(pfn)))
+	if (kho_scratch_overlap(PFN_PHYS(pfn), pageblock_nr_pages << PAGE_SHIFT))
 		return MIGRATE_CMA;
 	return mt;
 }
