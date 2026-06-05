@@ -2177,6 +2177,22 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
 			result = -ERESTARTSYS;
 			break;
 		}
+
+		/*
+		 * The wait below is queued on to_check->sleep, which is embedded
+		 * in a runtime that may belong to a linked substream.  Link/unlink
+		 * paths take snd_pcm_link_rwsem for write before moving streams
+		 * between groups and detaching runtimes, so take it for read while
+		 * the wait entry is queued.
+		 *
+		 * Drop and re-take the stream lock so the lock order matches
+		 * snd_pcm_link() and snd_pcm_unlink(): link_rwsem first, then the
+		 * stream/group lock.
+		 */
+		snd_pcm_stream_unlock_irq(substream);
+		down_read(&snd_pcm_link_rwsem);
+		snd_pcm_stream_lock_irq(substream);
+
 		/* find a substream to drain */
 		to_check = NULL;
 		group = snd_pcm_stream_group_ref(substream);
@@ -2190,8 +2206,14 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
 			}
 		}
 		snd_pcm_group_unref(group, substream);
-		if (!to_check)
+
+		if (!to_check) {
+			snd_pcm_stream_unlock_irq(substream);
+			up_read(&snd_pcm_link_rwsem);
+			snd_pcm_stream_lock_irq(substream);
 			break; /* all drained */
+		}
+
 		/*
 		 * Cache the runtime fields needed after unlock.
 		 * A concurrent close() on the linked stream may free
@@ -2218,14 +2240,10 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
 		tout = schedule_timeout(tout);
 
 		snd_pcm_stream_lock_irq(substream);
-		group = snd_pcm_stream_group_ref(substream);
-		snd_pcm_group_for_each_entry(s, substream) {
-			if (s->runtime == to_check) {
-				remove_wait_queue(&to_check->sleep, &wait);
-				break;
-			}
-		}
-		snd_pcm_group_unref(group, substream);
+		remove_wait_queue(&to_check->sleep, &wait);
+		snd_pcm_stream_unlock_irq(substream);
+		up_read(&snd_pcm_link_rwsem);
+		snd_pcm_stream_lock_irq(substream);
 
 		if (card->shutdown) {
 			result = -ENODEV;
