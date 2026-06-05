@@ -273,4 +273,11 @@ empty. The handshake layer always delivers a finalized tagset to
 the callback, so consumers may call tagset_is_member() and
 tagset_intersection() unconditionally without a separate guard.
 
+The tagset delivered to the consumer may contain fewer tags than
+the handshake agent assigned. The kernel caps the per-DONE tag
+count at HANDSHAKE_MAX_SESSIONTAGS, and individual tags within
+the cap may be dropped under memory pressure. The cap rides on
+every ACCEPT reply so the agent can size its DONE-side tag list
+to it; see Documentation/netlink/specs/handshake.yaml.
+
 See Documentation/core-api/tagset.rst for the complete tagset API.

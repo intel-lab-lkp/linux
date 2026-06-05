@@ -78,6 +78,9 @@ attribute-sets:
       -
         name: keyring
         type: u32
+      -
+        name: max-tags
+        type: u32
   -
     name: done
     attributes:
@@ -123,6 +126,7 @@ operations:
             - certificate
             - peername
             - keyring
+            - max-tags
     -
       name: done
       doc: Handler reports handshake completion
