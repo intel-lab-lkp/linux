@@ -4009,8 +4009,18 @@ repeat:
 			err = -EFSCORRUPTED;
 			goto put_folio;
 		}
-		f2fs_submit_page_read(use_cow ? F2FS_I(inode)->cow_inode :
-						inode,
+		/*
+		 * Although the block is stored in the COW inode, the folio
+		 * belongs to @inode and its data was encrypted (or left as
+		 * plaintext) using @inode's context, not the COW inode's; see
+		 * f2fs_encrypt_one_page(), which keys off fio->page->mapping->
+		 * host.  fscrypt_decrypt_pagecache_blocks() likewise operates
+		 * on folio->mapping->host.  Read with @inode so the post-read
+		 * decryption decision matches the folio's owner; otherwise an
+		 * unencrypted @inode whose COW inode is encrypted would hit a
+		 * NULL ->i_crypt_info during decryption.
+		 */
+		f2fs_submit_page_read(inode,
 				      NULL, /* can't write to fsverity files */
 				      folio, blkaddr, 0, true);
 
