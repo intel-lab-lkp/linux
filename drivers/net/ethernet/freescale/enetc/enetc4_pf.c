@@ -225,11 +225,12 @@ static void enetc4_pf_set_mac_hash_filter(struct enetc_pf *pf, int type)
 	struct net_device *ndev = pf->si->ndev;
 	struct enetc_mac_filter *mac_filter;
 	struct enetc_hw *hw = &pf->si->hw;
+	struct enetc_si *si = pf->si;
 	struct netdev_hw_addr *ha;
 
 	netif_addr_lock_bh(ndev);
 	if (type & ENETC_MAC_FILTER_TYPE_UC) {
-		mac_filter = &pf->mac_filter[UC];
+		mac_filter = &si->mac_filter[UC];
 		enetc_reset_mac_addr_filter(mac_filter);
 		netdev_for_each_uc_addr(ha, ndev)
 			enetc_add_mac_addr_ht_filter(mac_filter, ha->addr);
@@ -239,7 +240,7 @@ static void enetc4_pf_set_mac_hash_filter(struct enetc_pf *pf, int type)
 	}
 
 	if (type & ENETC_MAC_FILTER_TYPE_MC) {
-		mac_filter = &pf->mac_filter[MC];
+		mac_filter = &si->mac_filter[MC];
 		enetc_reset_mac_addr_filter(mac_filter);
 		netdev_for_each_mc_addr(ha, ndev)
 			enetc_add_mac_addr_ht_filter(mac_filter, ha->addr);
