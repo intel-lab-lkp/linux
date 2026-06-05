@@ -638,11 +638,17 @@ void kvm_xen_inject_vcpu_vector(struct kvm_vcpu *v)
  */
 void kvm_xen_inject_pending_events(struct kvm_vcpu *v)
 {
-	unsigned long evtchn_pending_sel = READ_ONCE(v->arch.xen.evtchn_pending_sel);
 	struct gfn_to_pfn_cache *gpc = &v->arch.xen.vcpu_info_cache;
+	bool has_64bit_shinfo = kvm_xen_has_64bit_shinfo(v->kvm);
+	union evtchn_pending_sel {
+		u64 sel64;
+		u32 sel32[2];
+	} pending, *sel_addr;
+	struct vcpu_info *vi;
 	unsigned long flags;
 
-	if (!evtchn_pending_sel)
+	pending.sel64 = READ_ONCE(v->arch.xen.evtchn_pending_sel);
+	if (!pending.sel64)
 		return;
 
 	/*
@@ -661,30 +667,49 @@ void kvm_xen_inject_pending_events(struct kvm_vcpu *v)
 	}
 
 	/* Now gpc->khva is a valid kernel address for the vcpu_info */
-	if (kvm_xen_has_64bit_shinfo(v->kvm)) {
-		struct vcpu_info *vi = gpc->khva;
+	vi = gpc->khva;
+	sel_addr = gpc->khva + (has_64bit_shinfo ?
+				offsetof(struct vcpu_info, evtchn_pending_sel) :
+				offsetof(struct compat_vcpu_info, evtchn_pending_sel));
 
+	if (has_64bit_shinfo && IS_ALIGNED((unsigned long)sel_addr, sizeof(u64))) {
+		/*
+		 * 64-bit shinfo with 8-byte aligned vcpu_info (the common
+		 * case): use a single 64-bit atomic.
+		 */
 		asm volatile(LOCK_PREFIX "orq %0, %1\n"
 			     "notq %0\n"
 			     LOCK_PREFIX "andq %0, %2\n"
-			     : "=r" (evtchn_pending_sel),
-			       "+m" (vi->evtchn_pending_sel),
+			     : "=r" (pending.sel64),
+			       "+m" (sel_addr->sel64),
 			       "+m" (v->arch.xen.evtchn_pending_sel)
-			     : "0" (evtchn_pending_sel));
-		WRITE_ONCE(vi->evtchn_upcall_pending, 1);
+			     : "0" (pending.sel64));
 	} else {
-		u32 evtchn_pending_sel32 = evtchn_pending_sel;
-		struct compat_vcpu_info *vi = gpc->khva;
-
-		asm volatile(LOCK_PREFIX "orl %0, %1\n"
-			     "notl %0\n"
-			     LOCK_PREFIX "andl %0, %2\n"
-			     : "=r" (evtchn_pending_sel32),
-			       "+m" (vi->evtchn_pending_sel),
-			       "+m" (v->arch.xen.evtchn_pending_sel)
-			     : "0" (evtchn_pending_sel32));
-		WRITE_ONCE(vi->evtchn_upcall_pending, 1);
+		/*
+		 * Use 32-bit operations to avoid splitlock on a vcpu_info
+		 * that is only 4-byte aligned (registered in 32-bit mode).
+		 * The loop copes with the extremely rare case that the
+		 * vcpu_info was registered in 32-bit mode and only enforced
+		 * 4-byte alignment, and then the VM was latched to 64-bit
+		 * mode afterwards. Which Xen tolerates, so so should KVM.
+		 */
+		int i = 0;
+		do {
+			asm volatile(LOCK_PREFIX "orl %0, %1\n"
+				     "notl %0\n"
+				     LOCK_PREFIX "andl %0, %2\n"
+				     : "=r" (pending.sel32[i]),
+				       "+m" (sel_addr->sel32[i]),
+				       "+m" (((u32 *)&v->arch.xen.evtchn_pending_sel)[i])
+				     : "0" (pending.sel32[i]));
+			i++;
+		} while (has_64bit_shinfo && i < 2 && pending.sel32[i]);
 	}
+
+	/* Assert that there is no need for compat for evtchn_upcall_pending */
+	BUILD_BUG_ON(offsetof(struct vcpu_info, evtchn_upcall_pending) !=
+		     offsetof(struct compat_vcpu_info, evtchn_upcall_pending));
+	WRITE_ONCE(vi->evtchn_upcall_pending, 1);
 
 	kvm_gpc_mark_dirty_in_slot(gpc);
 	read_unlock_irqrestore(&gpc->lock, flags);
