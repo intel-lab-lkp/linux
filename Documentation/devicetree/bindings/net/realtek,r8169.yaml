@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/realtek,r8169.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Realtek r8169 family PCIe Ethernet Controllers
+
+maintainers:
+  - Heiner Kallweit <hkallweit1@gmail.com>
+
+description:
+  PCI function node properties for fixed/soldered Realtek Ethernet
+  controllers driven by the r8169 driver.
+
+allOf:
+  - $ref: ethernet-controller.yaml#
+
+properties:
+  compatible:
+    enum:
+      - pci10ec,8125  # RTL8125 2.5GbE
+      - pci10ec,8126  # RTL8126 5GbE
+      - pci10ec,8127  # RTL8127
+      - pci10ec,8161  # RTL8168 variant
+      - pci10ec,8162  # RTL8168 variant
+      - pci10ec,8168  # RTL8168/8111 GbE
+
+  reg:
+    maxItems: 1
+
+  local-mac-address: true
+  mac-address: true
+  nvmem-cells: true
+  nvmem-cell-names: true
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    pcie {
+        #address-cells = <3>;
+        #size-cells = <2>;
+
+        ethernet@0,0 {
+            compatible = "pci10ec,8125";
+            reg = <0x10000 0 0 0 0>;
+            local-mac-address = [00 00 00 00 00 00];
+        };
+    };
