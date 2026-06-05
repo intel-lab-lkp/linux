@@ -1834,6 +1834,7 @@ static int timechart__io_record(int argc, const char **argv, const char *output_
 		"syscalls:sys_exit_select",
 	};
 	unsigned int poll_events_nr = ARRAY_SIZE(poll_events);
+	int ret;
 
 	rec_argc = common_args_nr +
 		disk_events_nr * 4 +
@@ -1852,7 +1853,7 @@ static int timechart__io_record(int argc, const char **argv, const char *output_
 
 	p = rec_argv;
 	for (i = 0; i < common_args_nr; i++)
-		*p++ = strdup(common_args[i]);
+		*p++ = common_args[i];
 
 	for (i = 0; i < disk_events_nr; i++) {
 		if (!is_valid_tracepoint(disk_events[i])) {
@@ -1861,7 +1862,7 @@ static int timechart__io_record(int argc, const char **argv, const char *output_
 		}
 
 		*p++ = "-e";
-		*p++ = strdup(disk_events[i]);
+		*p++ = disk_events[i];
 		*p++ = "--filter";
 		*p++ = filter;
 	}
@@ -1872,7 +1873,7 @@ static int timechart__io_record(int argc, const char **argv, const char *output_
 		}
 
 		*p++ = "-e";
-		*p++ = strdup(net_events[i]);
+		*p++ = net_events[i];
 		*p++ = "--filter";
 		*p++ = filter;
 	}
@@ -1883,7 +1884,7 @@ static int timechart__io_record(int argc, const char **argv, const char *output_
 		}
 
 		*p++ = "-e";
-		*p++ = strdup(poll_events[i]);
+		*p++ = poll_events[i];
 		*p++ = "--filter";
 		*p++ = filter;
 	}
@@ -1891,7 +1892,11 @@ static int timechart__io_record(int argc, const char **argv, const char *output_
 	for (i = 0; i < (unsigned int)argc; i++)
 		*p++ = argv[i];
 
-	return cmd_record(rec_argc, rec_argv);
+	ret = cmd_record(rec_argc, rec_argv);
+
+	free(rec_argv);
+	free(filter);
+	return ret;
 }
 
 
@@ -1902,6 +1907,7 @@ static int timechart__record(struct timechart *tchart, int argc, const char **ar
 	const char **rec_argv;
 	const char **p;
 	unsigned int record_elems;
+	int ret;
 
 	const char * const common_args[] = {
 		"record", "-a", "-R", "-c", "1", "-o", output_data,
@@ -1966,24 +1972,27 @@ static int timechart__record(struct timechart *tchart, int argc, const char **ar
 
 	p = rec_argv;
 	for (i = 0; i < common_args_nr; i++)
-		*p++ = strdup(common_args[i]);
+		*p++ = common_args[i];
 
 	for (i = 0; i < backtrace_args_no; i++)
-		*p++ = strdup(backtrace_args[i]);
+		*p++ = backtrace_args[i];
 
 	for (i = 0; i < tasks_args_nr; i++)
-		*p++ = strdup(tasks_args[i]);
+		*p++ = tasks_args[i];
 
 	for (i = 0; i < power_args_nr; i++)
-		*p++ = strdup(power_args[i]);
+		*p++ = power_args[i];
 
 	for (i = 0; i < old_power_args_nr; i++)
-		*p++ = strdup(old_power_args[i]);
+		*p++ = old_power_args[i];
 
 	for (j = 0; j < (unsigned int)argc; j++)
 		*p++ = argv[j];
 
-	return cmd_record(rec_argc, rec_argv);
+	ret = cmd_record(rec_argc, rec_argv);
+
+	free(rec_argv);
+	return ret;
 }
 
 static int
