@@ -8,15 +8,15 @@
  */
 
 #include <linux/buffer_head.h>
+#include <linux/cleanup.h>
 #include <linux/string.h>
 #include <linux/exportfs.h>
 #include "efs.h"
 
+DEFINE_FREE(brelease, struct buffer_head *, if (_T) brelse(_T))
 
 static efs_ino_t efs_find_entry(struct inode *inode, const char *name, int len)
 {
-	struct buffer_head *bh;
-
 	int			slot, namelen;
 	char			*nameptr;
 	struct efs_dir		*dirblock;
@@ -30,7 +30,8 @@ static efs_ino_t efs_find_entry(struct inode *inode, const char *name, int len)
 
 	for(block = 0; block < inode->i_blocks; block++) {
 
-		bh = sb_bread(inode->i_sb, efs_bmap(inode, block));
+		struct buffer_head *bh __free(brelease) = sb_bread(inode->i_sb,
+								   bfs_bmap(inode, block));
 		if (!bh) {
 			pr_err("%s(): failed to read dir block %d\n",
 			       __func__, block);
@@ -41,7 +42,6 @@ static efs_ino_t efs_find_entry(struct inode *inode, const char *name, int len)
 
 		if (be16_to_cpu(dirblock->magic) != EFS_DIRBLK_MAGIC) {
 			pr_err("%s(): invalid directory block\n", __func__);
-			brelse(bh);
 			return 0;
 		}
 
@@ -53,11 +53,9 @@ static efs_ino_t efs_find_entry(struct inode *inode, const char *name, int len)
 
 			if ((namelen == len) && (!memcmp(name, nameptr, len))) {
 				inodenum = be32_to_cpu(dirslot->inode);
-				brelse(bh);
 				return inodenum;
 			}
 		}
-		brelse(bh);
 	}
 	return 0;
 }
