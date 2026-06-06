@@ -906,10 +906,9 @@ static struct dentry *afs_lookup_atsys(struct inode *dir, struct dentry *dentry)
 
 	_enter("");
 
-	ret = ERR_PTR(-ENOMEM);
 	p = buf = kmalloc(AFSNAMEMAX, GFP_KERNEL);
 	if (!buf)
-		goto out_p;
+		return ERR_PTR(-ENOMEM);
 	if (dentry->d_name.len > 4) {
 		memcpy(p, dentry->d_name.name, dentry->d_name.len - 4);
 		p += dentry->d_name.len - 4;
@@ -941,7 +940,6 @@ static struct dentry *afs_lookup_atsys(struct inode *dir, struct dentry *dentry)
 out_s:
 	afs_put_sysnames(subs);
 	kfree(buf);
-out_p:
 	return ret;
 }
 
