@@ -586,7 +586,11 @@ int __init fadump_reserve_mem(void)
 	else
 		mem_boundary = memblock_end_of_DRAM();
 
-	base = fw_dump.boot_mem_top;
+	if (fw_dump.dump_active)
+		base = fw_dump.boot_mem_top;
+	else
+		base = mem_boundary / 2;
+
 	size = get_fadump_area_size();
 	fw_dump.reserve_dump_area_size = size;
 	if (fw_dump.dump_active) {
