@@ -409,14 +409,12 @@ static void phase2(u8 *rc4key, const u8 *tk, const u16 *p1k, u16 iv16)
 	rc4key[2] = Lo8(iv16);
 	rc4key[3] = Lo8((PPK[5] ^ TK16(0)) >> 1);
 
-
 	/* Copy 96 bits of PPK[0..5] to RC4KEY[4..15]  (little-endian)       */
 	for (i = 0; i < 6; i++) {
 		rc4key[4 + 2 * i] = Lo8(PPK[i]);
 		rc4key[5 + 2 * i] = Hi8(PPK[i]);
 	}
 }
-
 
 /* The hlen isn't include the IV */
 u32 rtw_tkip_encrypt(struct adapter *padapter, u8 *pxmitframe)
@@ -490,7 +488,6 @@ u32 rtw_tkip_encrypt(struct adapter *padapter, u8 *pxmitframe)
 	}
 	return res;
 }
-
 
 /* The hlen isn't include the IV */
 u32 rtw_tkip_decrypt(struct adapter *padapter, u8 *precvframe)
@@ -593,10 +590,7 @@ exit:
 	return res;
 }
 
-
 /* 3			=====AES related ===== */
-
-
 
 #define MAX_MSG_SIZE	2048
 
