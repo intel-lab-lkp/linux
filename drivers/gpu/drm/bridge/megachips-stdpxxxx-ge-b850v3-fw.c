@@ -168,7 +168,7 @@ static int ge_b850v3_lvds_create_connector(struct drm_bridge *bridge)
 				 &ge_b850v3_lvds_connector_funcs,
 				 DRM_MODE_CONNECTOR_DisplayPort);
 	if (ret) {
-		DRM_ERROR("Failed to initialize connector with drm\n");
+		drm_err(bridge->dev, "Failed to initialize connector with drm\n");
 		return ret;
 	}
 
