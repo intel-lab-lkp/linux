@@ -6322,7 +6322,7 @@ bnx2_setup_int_mode(struct bnx2 *bp, int dis_msi)
 	msix_vecs = min(msix_vecs, RX_MAX_RINGS);
 
 	bp->irq_tbl[0].handler = bnx2_interrupt;
-	strcpy(bp->irq_tbl[0].name, bp->dev->name);
+	strscpy(bp->irq_tbl[0].name, bp->dev->name);
 	bp->irq_nvecs = 1;
 	bp->irq_tbl[0].vector = bp->pdev->irq;
 
