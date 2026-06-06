@@ -46,6 +46,9 @@ struct omap_irq_wait * omap_irq_wait_init(struct drm_device *dev,
 	struct omap_irq_wait *wait = kzalloc_obj(*wait);
 	unsigned long flags;
 
+	if (!wait)
+		return NULL;
+
 	init_waitqueue_head(&wait->wq);
 	wait->irqmask = irqmask;
 	wait->count = count;
@@ -64,6 +67,9 @@ int omap_irq_wait(struct drm_device *dev, struct omap_irq_wait *wait,
 	struct omap_drm_private *priv = dev->dev_private;
 	unsigned long flags;
 	int ret;
+
+	if (!wait)
+		return -ENOMEM;
 
 	ret = wait_event_timeout(wait->wq, (wait->count <= 0), timeout);
 
