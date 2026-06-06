@@ -623,10 +623,11 @@ static void platform_device_release_full(struct device *dev)
 struct platform_device *platform_device_alloc(const char *name, int id)
 {
 	struct platform_object *pa;
+	size_t len = strlen(name);
 
-	pa = kzalloc(sizeof(*pa) + strlen(name) + 1, GFP_KERNEL);
+	pa = kzalloc(sizeof(*pa) + len + 1, GFP_KERNEL);
 	if (pa) {
-		strcpy(pa->name, name);
+		memcpy(pa->name, name, len);
 		pa->pdev.name = pa->name;
 		pa->pdev.id = id;
 		device_initialize(&pa->pdev.dev);
