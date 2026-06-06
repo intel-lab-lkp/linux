@@ -525,8 +525,7 @@ struct airoha_irq_bank {
 struct airoha_qdma {
 	struct airoha_eth *eth;
 	void __iomem *regs;
-
-	atomic_t users;
+	int users;
 
 	struct airoha_irq_bank irq_banks[AIROHA_MAX_NUM_IRQ_BANKS];
 
