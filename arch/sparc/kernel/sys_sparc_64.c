@@ -30,7 +30,6 @@
 #include <linux/context_tracking.h>
 #include <linux/timex.h>
 #include <linux/uaccess.h>
-#include <linux/hugetlb.h>
 
 #include <asm/utrap.h>
 #include <asm/unistd.h>
@@ -90,8 +89,6 @@ static inline unsigned long COLOR_ALIGN(unsigned long addr,
 
 static unsigned long get_align_mask(struct file *filp, unsigned long flags)
 {
-	if (filp && is_file_hugepages(filp))
-		return huge_page_mask_align(filp);
 	if (filp || (flags & MAP_SHARED))
 		return PAGE_MASK & (SHMLBA - 1);
 
@@ -105,16 +102,12 @@ unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr, unsi
 	unsigned long task_size = TASK_SIZE;
 	int do_color_align;
 	struct vm_unmapped_area_info info = {};
-	bool file_hugepage = false;
-
-	if (filp && is_file_hugepages(filp))
-		file_hugepage = true;
 
 	if (flags & MAP_FIXED) {
 		/* We do not accept a shared mapping if it would violate
 		 * cache aliasing constraints.
 		 */
-		if (!file_hugepage && (flags & MAP_SHARED) &&
+		if ((flags & MAP_SHARED) &&
 		    ((addr - (pgoff << PAGE_SHIFT)) & (SHMLBA - 1)))
 			return -EINVAL;
 		return addr;
@@ -126,7 +119,7 @@ unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr, unsi
 		return -ENOMEM;
 
 	do_color_align = 0;
-	if ((filp || (flags & MAP_SHARED)) && !file_hugepage)
+	if ((filp || (flags & MAP_SHARED)))
 		do_color_align = 1;
 
 	if (addr) {
@@ -145,8 +138,7 @@ unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr, unsi
 	info.low_limit = TASK_UNMAPPED_BASE;
 	info.high_limit = min(task_size, VA_EXCLUDE_START);
 	info.align_mask = get_align_mask(filp, flags);
-	if (!file_hugepage)
-		info.align_offset = pgoff << PAGE_SHIFT;
+	info.align_offset = pgoff << PAGE_SHIFT;
 	addr = vm_unmapped_area(&info);
 
 	if ((addr & ~PAGE_MASK) && task_size > VA_EXCLUDE_END) {
@@ -170,19 +162,15 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
 	unsigned long addr = addr0;
 	int do_color_align;
 	struct vm_unmapped_area_info info = {};
-	bool file_hugepage = false;
 
 	/* This should only ever run for 32-bit processes.  */
 	BUG_ON(!test_thread_flag(TIF_32BIT));
-
-	if (filp && is_file_hugepages(filp))
-		file_hugepage = true;
 
 	if (flags & MAP_FIXED) {
 		/* We do not accept a shared mapping if it would violate
 		 * cache aliasing constraints.
 		 */
-		if (!file_hugepage && (flags & MAP_SHARED) &&
+		if ((flags & MAP_SHARED) &&
 		    ((addr - (pgoff << PAGE_SHIFT)) & (SHMLBA - 1)))
 			return -EINVAL;
 		return addr;
@@ -192,7 +180,7 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
 		return -ENOMEM;
 
 	do_color_align = 0;
-	if ((filp || (flags & MAP_SHARED)) && !file_hugepage)
+	if ((filp || (flags & MAP_SHARED)))
 		do_color_align = 1;
 
 	/* requesting a specific address */
@@ -213,8 +201,7 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
 	info.low_limit = PAGE_SIZE;
 	info.high_limit = mm->mmap_base;
 	info.align_mask = get_align_mask(filp, flags);
-	if (!file_hugepage)
-		info.align_offset = pgoff << PAGE_SHIFT;
+	info.align_offset = pgoff << PAGE_SHIFT;
 	addr = vm_unmapped_area(&info);
 
 	/*
