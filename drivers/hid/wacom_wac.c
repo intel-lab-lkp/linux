@@ -1206,6 +1206,9 @@ static int wacom_intuos_bt_irq(struct wacom_wac *wacom, size_t len)
 	int i = 1;
 	unsigned power_raw, battery_capacity, bat_charging, ps_connected;
 
+	if (!data)
+		return 0;
+
 	switch (data[0]) {
 	case 0x04:
 		if (len < 32) {
