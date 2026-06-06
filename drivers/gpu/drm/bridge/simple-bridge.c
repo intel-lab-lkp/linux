@@ -56,7 +56,7 @@ static int simple_bridge_get_modes(struct drm_connector *connector)
 	if (sbridge->bridge.next_bridge->ops & DRM_BRIDGE_OP_EDID) {
 		drm_edid = drm_bridge_edid_read(sbridge->bridge.next_bridge, connector);
 		if (!drm_edid)
-			DRM_INFO("EDID read failed. Fallback to standard modes\n");
+			drm_info(connector->dev, "EDID read failed. Fallback to standard modes\n");
 	} else {
 		drm_edid = NULL;
 	}
@@ -123,7 +123,7 @@ static int simple_bridge_attach(struct drm_bridge *bridge,
 					  sbridge->info->connector_type,
 					  sbridge->bridge.next_bridge->ddc);
 	if (ret) {
-		DRM_ERROR("Failed to initialize connector\n");
+		drm_err(bridge->dev, "Failed to initialize connector\n");
 		return ret;
 	}
 
@@ -140,7 +140,7 @@ static void simple_bridge_enable(struct drm_bridge *bridge)
 	if (sbridge->vdd) {
 		ret = regulator_enable(sbridge->vdd);
 		if (ret)
-			DRM_ERROR("Failed to enable vdd regulator: %d\n", ret);
+			drm_err(bridge->dev, "Failed to enable vdd regulator: %d\n", ret);
 	}
 
 	gpiod_set_value_cansleep(sbridge->enable, 1);
