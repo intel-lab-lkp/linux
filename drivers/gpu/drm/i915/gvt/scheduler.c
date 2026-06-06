@@ -698,6 +698,7 @@ intel_vgpu_shadow_mm_pin(struct intel_vgpu_workload *workload)
 
 	ret = intel_vgpu_pin_mm(workload->shadow_mm);
 	if (ret) {
+		intel_vgpu_unpin_mm(workload->shadow_mm);
 		gvt_vgpu_err("fail to vgpu pin mm\n");
 		return ret;
 	}
