@@ -1069,11 +1069,10 @@ static void kgdbts_run_tests(void)
 
 static int __init kgdbts_option_setup(char *opt)
 {
-	if (strlen(opt) >= MAX_CONFIG_LEN) {
+	if (strscpy(config, opt) < 0) {
+		config[0] = 0;
 		printk(KERN_ERR "kgdbts: config string too long\n");
-		return 1;
 	}
-	strcpy(config, opt);
 	return 1;
 }
 
@@ -1144,7 +1143,7 @@ static int param_set_kgdbts_var(const char *kmessage,
 
 	/* Only copy in the string if the init function has not run yet */
 	if (configured < 0) {
-		strcpy(config, kmessage);
+		strscpy(config, kmessage);
 		return 0;
 	}
 
@@ -1153,7 +1152,7 @@ static int param_set_kgdbts_var(const char *kmessage,
 		return -EBUSY;
 	}
 
-	strcpy(config, kmessage);
+	strscpy(config, kmessage);
 	/* Chop out \n char as a result of echo */
 	if (len && config[len - 1] == '\n')
 		config[len - 1] = '\0';
