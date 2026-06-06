@@ -55,7 +55,7 @@ static int tfp410_get_modes(struct drm_connector *connector)
 	if (dvi->bridge.next_bridge->ops & DRM_BRIDGE_OP_EDID) {
 		drm_edid = drm_bridge_edid_read(dvi->bridge.next_bridge, connector);
 		if (!drm_edid)
-			DRM_INFO("EDID read failed. Fallback to standard modes\n");
+			drm_info(connector->dev, "EDID read failed. Fallback to standard modes\n");
 	} else {
 		drm_edid = NULL;
 	}
