@@ -1526,7 +1526,7 @@ static int bond_option_primary_set(struct bonding *bond,
 		if (strncmp(slave->dev->name, primary, IFNAMSIZ) == 0) {
 			slave_dbg(bond->dev, slave->dev, "Setting as primary slave\n");
 			rcu_assign_pointer(bond->primary_slave, slave);
-			strcpy(bond->params.primary, slave->dev->name);
+			strscpy(bond->params.primary, slave->dev->name);
 			bond->force_primary = true;
 			bond_select_active_slave(bond);
 			goto out;
