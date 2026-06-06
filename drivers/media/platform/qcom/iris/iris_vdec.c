@@ -23,6 +23,13 @@ int iris_vdec_inst_init(struct iris_inst *inst)
 
 	inst->fmt_src = kzalloc_obj(*inst->fmt_src);
 	inst->fmt_dst = kzalloc_obj(*inst->fmt_dst);
+	if (!inst->fmt_src || !inst->fmt_dst) {
+		kfree(inst->fmt_src);
+		kfree(inst->fmt_dst);
+		inst->fmt_src = NULL;
+		inst->fmt_dst = NULL;
+		return -ENOMEM;
+	}
 
 	inst->fw_min_count = MIN_BUFFERS;
 
