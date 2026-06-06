@@ -33,8 +33,9 @@ static bool erdt_enabled_flag;
 
 static DEFINE_XARRAY(erdt_domain_xa);
 
-#define ERDT_VALID_VERSION		1
-#define RMDD_FLAG_CPU_DOMAIN		BIT(0)
+#define ERDT_VALID_VERSION			1
+#define CMRC_VALID_INDEX_FUNC_VERSION		1
+#define RMDD_FLAG_CPU_DOMAIN			BIT(0)
 
 static u32 valid_subtbl_mask;
 
@@ -136,6 +137,7 @@ static void erdt_iounmap_domain(struct erdt_domain_info *domain)
 static void cleanup_one_domain(struct erdt_domain_info *d)
 {
 	erdt_iounmap_domain(d);
+	kfree(d->cmrc);
 	kfree(d);
 }
 
@@ -145,6 +147,40 @@ static __init bool cacd_init(struct erdt_domain_info *d, struct acpi_subtbl_hdr_
 	*l3_cache_id = get_l3_cache_id_from_cacd((struct acpi_erdt_cacd *)subtbl);
 
 	return *l3_cache_id != -1;
+}
+
+static __init bool cmrc_init(struct erdt_domain_info *d, struct acpi_subtbl_hdr_16 *subtbl)
+{
+	struct acpi_erdt_cmrc *cmrc = (struct acpi_erdt_cmrc *)subtbl;
+
+	if (subtbl->length < sizeof(*cmrc)) {
+		pr_warn(FW_BUG "Truncated CMRC subtable\n");
+		return false;
+	}
+
+	if (cmrc->index_fn != CMRC_VALID_INDEX_FUNC_VERSION) {
+		pr_info("Unknown CMRC index function %d\n", cmrc->index_fn);
+		return false;
+	}
+
+	if (!cmrc->clump_size) {
+		pr_warn(FW_BUG "CMRC clump_size is zero\n");
+		return false;
+	}
+
+	d->base[ERDT_MMIO_CMRC_BASE] = erdt_ioremap_checked(cmrc->cmt_reg_base,
+							    cmrc->cmt_reg_size, "CMRC base");
+	if (!d->base[ERDT_MMIO_CMRC_BASE])
+		return false;
+
+	d->cmrc = kmemdup(cmrc, subtbl->length, GFP_KERNEL);
+	if (!d->cmrc) {
+		iounmap(d->base[ERDT_MMIO_CMRC_BASE]);
+		d->base[ERDT_MMIO_CMRC_BASE] = NULL;
+		return false;
+	}
+
+	return true;
 }
 
 static inline struct acpi_subtbl_hdr_16 *rmdd_subtbl(struct acpi_erdt_rmdd *rmdd)
@@ -207,6 +243,10 @@ static __init bool parse_rmdd_entry(struct acpi_subtbl_hdr_16 *rmdd_hdr)
 		case ACPI_ERDT_TYPE_CACD:
 			if (cacd_init(domain_info, subtbl, &l3_cache_id))
 				subtbl_mask |= BIT(ACPI_ERDT_TYPE_CACD);
+			break;
+		case ACPI_ERDT_TYPE_CMRC:
+			if (cmrc_init(domain_info, subtbl))
+				subtbl_mask |= BIT(ACPI_ERDT_TYPE_CMRC);
 			break;
 		default:
 			break;
