@@ -689,6 +689,14 @@ static int virtblk_report_zones(struct gendisk *disk, sector_t sector,
 
 		nz = min_t(u64, virtio64_to_cpu(vblk->vdev, report->nr_zones),
 			   nr_zones);
+		/*
+		 * The device-reported nr_zones is untrusted; clamp it to the
+		 * number of descriptors that actually fit in the report buffer
+		 * so a malicious or buggy device cannot drive the parse loop
+		 * past the allocation.
+		 */
+		nz = min_t(u64, nz,
+			   (buflen - sizeof(*report)) / sizeof(report->zones[0]));
 		if (!nz)
 			break;
 
