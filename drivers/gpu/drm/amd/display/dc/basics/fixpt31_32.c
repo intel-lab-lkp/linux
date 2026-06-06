@@ -284,7 +284,7 @@ struct fixed31_32 dc_fixpt_cos(struct fixed31_32 arg)
 				dc_fixpt_mul(
 					square,
 					res),
-				n * (n - 1)));
+				(long long)n * (n - 1)));
 
 		n -= 2;
 	} while (n != 0);
@@ -503,6 +503,7 @@ struct fixed31_32 dc_fixpt_from_int_dy(unsigned int int_value,
 	unsigned int integer_bits,
 	unsigned int fractional_bits)
 {
+	(void)integer_bits;
 	struct fixed31_32 fixpt_value = dc_fixpt_from_int(int_value);
 
 	fixpt_value.value |= (long long)frac_value << (FIXED31_32_BITS_PER_FRACTIONAL_PART - fractional_bits);

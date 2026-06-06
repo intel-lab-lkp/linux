@@ -857,7 +857,7 @@ static int amd_spi_probe(struct platform_device *pdev)
 	/* Allocate storage for host and driver private data */
 	host = devm_spi_alloc_host(dev, sizeof(struct amd_spi));
 	if (!host)
-		return dev_err_probe(dev, -ENOMEM, "Error allocating SPI host\n");
+		return -ENOMEM;
 
 	amd_spi = spi_controller_get_devdata(host);
 	amd_spi->io_remap_addr = devm_platform_ioremap_resource(pdev, 0);
@@ -868,7 +868,7 @@ static int amd_spi_probe(struct platform_device *pdev)
 	dev_dbg(dev, "io_remap_address: %p\n", amd_spi->io_remap_addr);
 
 	amd_spi->version = (uintptr_t)device_get_match_data(dev);
-	host->bus_num = 0;
+	host->bus_num = (amd_spi->version == AMD_HID2_SPI) ? 2 : 0;
 
 	return amd_spi_probe_common(dev, host);
 }

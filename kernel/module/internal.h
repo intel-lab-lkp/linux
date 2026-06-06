@@ -53,10 +53,11 @@ extern const size_t modinfo_attrs_count;
 /* Provided by the linker */
 extern const struct kernel_symbol __start___ksymtab[];
 extern const struct kernel_symbol __stop___ksymtab[];
-extern const struct kernel_symbol __start___ksymtab_gpl[];
-extern const struct kernel_symbol __stop___ksymtab_gpl[];
 extern const u32 __start___kcrctab[];
-extern const u32 __start___kcrctab_gpl[];
+extern const u8 __start___kflagstab[];
+
+#define KMOD_PATH_LEN 256
+extern char modprobe_path[];
 
 struct load_info {
 	const char *name;
@@ -107,6 +108,13 @@ struct find_symbol_arg {
 	const u32 *crc;
 	const struct kernel_symbol *sym;
 	enum mod_license license;
+};
+
+/* modules using other modules */
+struct module_use {
+	struct list_head source_list;
+	struct list_head target_list;
+	struct module *source, *target;
 };
 
 int mod_verify_sig(const void *mod, struct load_info *info);

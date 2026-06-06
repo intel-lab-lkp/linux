@@ -33,11 +33,13 @@
 #include "vsp1_lif.h"
 #include "vsp1_lut.h"
 #include "vsp1_pipe.h"
+#include "vsp1_regs.h"
 #include "vsp1_rwpf.h"
 #include "vsp1_sru.h"
 #include "vsp1_uds.h"
 #include "vsp1_uif.h"
 #include "vsp1_video.h"
+#include "vsp1_vspx.h"
 
 /* -----------------------------------------------------------------------------
  * Interrupt Handling
@@ -238,8 +240,12 @@ static void vsp1_destroy_entities(struct vsp1_device *vsp1)
 		media_device_unregister(&vsp1->media_dev);
 	media_device_cleanup(&vsp1->media_dev);
 
-	if (!vsp1->info->uapi)
-		vsp1_drm_cleanup(vsp1);
+	if (!vsp1->info->uapi) {
+		if (vsp1->info->version == VI6_IP_VERSION_MODEL_VSPX_GEN4)
+			vsp1_vspx_cleanup(vsp1);
+		else
+			vsp1_drm_cleanup(vsp1);
+	}
 }
 
 static int vsp1_create_entities(struct vsp1_device *vsp1)
@@ -490,7 +496,10 @@ static int vsp1_create_entities(struct vsp1_device *vsp1)
 
 		ret = media_device_register(mdev);
 	} else {
-		ret = vsp1_drm_init(vsp1);
+		if (vsp1->info->version == VI6_IP_VERSION_MODEL_VSPX_GEN4)
+			ret = vsp1_vspx_init(vsp1);
+		else
+			ret = vsp1_drm_init(vsp1);
 	}
 
 done:
@@ -502,7 +511,9 @@ done:
 
 int vsp1_reset_wpf(struct vsp1_device *vsp1, unsigned int index)
 {
+	u32 version = vsp1->version & VI6_IP_VERSION_MODEL_MASK;
 	unsigned int timeout;
+	int ret = 0;
 	u32 status;
 
 	status = vsp1_read(vsp1, VI6_STATUS);
@@ -523,7 +534,11 @@ int vsp1_reset_wpf(struct vsp1_device *vsp1, unsigned int index)
 		return -ETIMEDOUT;
 	}
 
-	return 0;
+	if (version == VI6_IP_VERSION_MODEL_VSPD_GEN3 ||
+	    version == VI6_IP_VERSION_MODEL_VSPD_GEN4)
+		ret = rcar_fcp_soft_reset(vsp1->fcp);
+
+	return ret;
 }
 
 static int vsp1_device_init(struct vsp1_device *vsp1)
@@ -607,7 +622,7 @@ void vsp1_device_put(struct vsp1_device *vsp1)
  * Power Management
  */
 
-static int __maybe_unused vsp1_pm_suspend(struct device *dev)
+static int vsp1_pm_suspend(struct device *dev)
 {
 	struct vsp1_device *vsp1 = dev_get_drvdata(dev);
 
@@ -623,7 +638,7 @@ static int __maybe_unused vsp1_pm_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused vsp1_pm_resume(struct device *dev)
+static int vsp1_pm_resume(struct device *dev)
 {
 	struct vsp1_device *vsp1 = dev_get_drvdata(dev);
 
@@ -639,7 +654,7 @@ static int __maybe_unused vsp1_pm_resume(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused vsp1_pm_runtime_suspend(struct device *dev)
+static int vsp1_pm_runtime_suspend(struct device *dev)
 {
 	struct vsp1_device *vsp1 = dev_get_drvdata(dev);
 
@@ -649,7 +664,7 @@ static int __maybe_unused vsp1_pm_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused vsp1_pm_runtime_resume(struct device *dev)
+static int vsp1_pm_runtime_resume(struct device *dev)
 {
 	struct vsp1_device *vsp1 = dev_get_drvdata(dev);
 	int ret;
@@ -682,8 +697,8 @@ done:
 }
 
 static const struct dev_pm_ops vsp1_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(vsp1_pm_suspend, vsp1_pm_resume)
-	SET_RUNTIME_PM_OPS(vsp1_pm_runtime_suspend, vsp1_pm_runtime_resume, NULL)
+	SYSTEM_SLEEP_PM_OPS(vsp1_pm_suspend, vsp1_pm_resume)
+	RUNTIME_PM_OPS(vsp1_pm_runtime_suspend, vsp1_pm_runtime_resume, NULL)
 };
 
 /* -----------------------------------------------------------------------------
@@ -851,6 +866,13 @@ static const struct vsp1_device_info vsp1_device_infos[] = {
 		.uif_count = 2,
 		.wpf_count = 1,
 		.num_bru_inputs = 5,
+	}, {
+		.version = VI6_IP_VERSION_MODEL_VSPX_GEN4,
+		.model = "VSP2-X",
+		.gen = 4,
+		.features = VSP1_HAS_IIF,
+		.rpf_count = 2,
+		.wpf_count = 1,
 	},
 };
 
@@ -936,8 +958,7 @@ static int vsp1_probe(struct platform_device *pdev)
 		vsp1->fcp = rcar_fcp_get(fcp_node);
 		of_node_put(fcp_node);
 		if (IS_ERR(vsp1->fcp)) {
-			dev_dbg(&pdev->dev, "FCP not found (%ld)\n",
-				PTR_ERR(vsp1->fcp));
+			dev_dbg(&pdev->dev, "FCP not found (%pe)\n", vsp1->fcp);
 			return PTR_ERR(vsp1->fcp);
 		}
 
@@ -1024,7 +1045,7 @@ static struct platform_driver vsp1_platform_driver = {
 	.remove		= vsp1_remove,
 	.driver		= {
 		.name	= "vsp1",
-		.pm	= &vsp1_pm_ops,
+		.pm	= pm_ptr(&vsp1_pm_ops),
 		.of_match_table = vsp1_of_match,
 	},
 };

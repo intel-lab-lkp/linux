@@ -65,7 +65,7 @@ int amdgpu_si_copy_bytes_to_smc(struct amdgpu_device *adev,
 
 	addr = smc_start_address;
 
-	spin_lock_irqsave(&adev->smc_idx_lock, flags);
+	spin_lock_irqsave(&adev->reg.smc.lock, flags);
 	while (byte_count >= 4) {
 		/* SMC address space is BE */
 		data = (src[0] << 24) | (src[1] << 16) | (src[2] << 8) | src[3];
@@ -109,7 +109,7 @@ int amdgpu_si_copy_bytes_to_smc(struct amdgpu_device *adev,
 	}
 
 done:
-	spin_unlock_irqrestore(&adev->smc_idx_lock, flags);
+	spin_unlock_irqrestore(&adev->reg.smc.lock, flags);
 
 	return ret;
 }
@@ -172,20 +172,42 @@ PPSMC_Result amdgpu_si_send_msg_to_smc(struct amdgpu_device *adev,
 {
 	u32 tmp;
 	int i;
+	int usec_timeout;
+
+	/* SMC seems to process some messages exceptionally slowly. */
+	switch (msg) {
+	case PPSMC_MSG_NoForcedLevel:
+	case PPSMC_MSG_SetEnabledLevels:
+	case PPSMC_MSG_SetForcedLevels:
+	case PPSMC_MSG_DisableULV:
+	case PPSMC_MSG_SwitchToSwState:
+		usec_timeout = 1000000; /* 1 sec */
+		break;
+	default:
+		usec_timeout = 200000; /* 200 ms */
+		break;
+	}
 
 	if (!amdgpu_si_is_smc_running(adev))
 		return PPSMC_Result_Failed;
 
 	WREG32(mmSMC_MESSAGE_0, msg);
 
-	for (i = 0; i < adev->usec_timeout; i++) {
+	for (i = 0; i < usec_timeout; i++) {
 		tmp = RREG32(mmSMC_RESP_0);
 		if (tmp != 0)
 			break;
 		udelay(1);
 	}
 
-	return (PPSMC_Result)RREG32(mmSMC_RESP_0);
+	tmp = RREG32(mmSMC_RESP_0);
+	if (tmp == 0) {
+		drm_warn(adev_to_drm(adev),
+			"%s timeout on message: %x (SMC_SCRATCH0: %x)\n",
+			__func__, msg, RREG32(mmSMC_SCRATCH0));
+	}
+
+	return (PPSMC_Result)tmp;
 }
 
 PPSMC_Result amdgpu_si_wait_for_smc_inactive(struct amdgpu_device *adev)
@@ -230,7 +252,7 @@ int amdgpu_si_load_smc_ucode(struct amdgpu_device *adev, u32 limit)
 	if (ucode_size & 3)
 		return -EINVAL;
 
-	spin_lock_irqsave(&adev->smc_idx_lock, flags);
+	spin_lock_irqsave(&adev->reg.smc.lock, flags);
 	WREG32(mmSMC_IND_INDEX_0, ucode_start_address);
 	WREG32_P(mmSMC_IND_ACCESS_CNTL, SMC_IND_ACCESS_CNTL__AUTO_INCREMENT_IND_0_MASK, ~SMC_IND_ACCESS_CNTL__AUTO_INCREMENT_IND_0_MASK);
 	while (ucode_size >= 4) {
@@ -243,7 +265,7 @@ int amdgpu_si_load_smc_ucode(struct amdgpu_device *adev, u32 limit)
 		ucode_size -= 4;
 	}
 	WREG32_P(mmSMC_IND_ACCESS_CNTL, 0, ~SMC_IND_ACCESS_CNTL__AUTO_INCREMENT_IND_0_MASK);
-	spin_unlock_irqrestore(&adev->smc_idx_lock, flags);
+	spin_unlock_irqrestore(&adev->reg.smc.lock, flags);
 
 	return 0;
 }
@@ -254,11 +276,11 @@ int amdgpu_si_read_smc_sram_dword(struct amdgpu_device *adev, u32 smc_address,
 	unsigned long flags;
 	int ret;
 
-	spin_lock_irqsave(&adev->smc_idx_lock, flags);
+	spin_lock_irqsave(&adev->reg.smc.lock, flags);
 	ret = si_set_smc_sram_address(adev, smc_address, limit);
 	if (ret == 0)
 		*value = RREG32(mmSMC_IND_DATA_0);
-	spin_unlock_irqrestore(&adev->smc_idx_lock, flags);
+	spin_unlock_irqrestore(&adev->reg.smc.lock, flags);
 
 	return ret;
 }
@@ -269,11 +291,11 @@ int amdgpu_si_write_smc_sram_dword(struct amdgpu_device *adev, u32 smc_address,
 	unsigned long flags;
 	int ret;
 
-	spin_lock_irqsave(&adev->smc_idx_lock, flags);
+	spin_lock_irqsave(&adev->reg.smc.lock, flags);
 	ret = si_set_smc_sram_address(adev, smc_address, limit);
 	if (ret == 0)
 		WREG32(mmSMC_IND_DATA_0, value);
-	spin_unlock_irqrestore(&adev->smc_idx_lock, flags);
+	spin_unlock_irqrestore(&adev->reg.smc.lock, flags);
 
 	return ret;
 }

@@ -30,9 +30,8 @@
 #include <linux/hid.h>
 #include <linux/input.h>
 #include <linux/leds.h>
+#include <linux/unaligned.h>
 #include <linux/workqueue.h>
-
-#include <linux/platform_profile.h>
 
 #include "hid-ids.h"
 
@@ -150,6 +149,14 @@ static const __u8 lenovo_tpIIbtkbd_need_fixup_collection[] = {
 	0x81, 0x01,		/*   Input (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position) */
 };
 
+static const __u8 lenovo_yoga7x_kbd_need_fixup_collection[] = {
+	0x15, 0x00,	// Logical Minimum (0)
+	0x25, 0x65,	// Logical Maximum (101)
+	0x05, 0x07,	// Usage Page (Keyboard)
+	0x19, 0x00,	// Usage Minimum (0)
+	0x29, 0xDD,	// Usage Maximum (221)
+};
+
 static const __u8 *lenovo_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 		unsigned int *rsize)
 {
@@ -177,6 +184,13 @@ static const __u8 *lenovo_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 			rdesc[256] = 0x01; /* report count = 0x01 */
 			rdesc[258] = 0x00; /* input = 0x00 */
 			rdesc[260] = 0x01; /* report count (2) = 0x01 */
+		}
+		break;
+	case I2C_DEVICE_ID_ITE_LENOVO_YOGA_SLIM_7X_KEYBOARD:
+		if (*rsize == 176 &&
+		    memcmp(&rdesc[52], lenovo_yoga7x_kbd_need_fixup_collection,
+			  sizeof(lenovo_yoga7x_kbd_need_fixup_collection)) == 0) {
+			rdesc[55] = rdesc[61]; // logical maximum = usage maximum
 		}
 		break;
 	}
@@ -734,7 +748,7 @@ static int lenovo_raw_event_TP_X12_tab(struct hid_device *hdev, u32 raw_data)
 				report_key_event(input, KEY_RFKILL);
 				return 1;
 			}
-			platform_profile_cycle();
+			report_key_event(input, KEY_PERFORMANCE);
 			return 1;
 		case TP_X12_RAW_HOTKEY_FN_F10:
 			/* TAB1 has PICKUP Phone and TAB2 use Snipping tool*/
@@ -780,8 +794,8 @@ static int lenovo_raw_event(struct hid_device *hdev,
 	 */
 	if (unlikely((hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB
 			|| hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB2)
-			&& size >= 3 && report->id == 0x03))
-		return lenovo_raw_event_TP_X12_tab(hdev, le32_to_cpu(*(__le32 *)data));
+			&& size >= 4 && report->id == 0x03))
+		return lenovo_raw_event_TP_X12_tab(hdev, get_unaligned_le32(data));
 
 	return 0;
 }
@@ -1409,7 +1423,6 @@ err:
 	return ret;
 }
 
-#ifdef CONFIG_PM
 static int lenovo_reset_resume(struct hid_device *hdev)
 {
 	switch (hdev->product) {
@@ -1425,7 +1438,6 @@ static int lenovo_reset_resume(struct hid_device *hdev)
 
 	return 0;
 }
-#endif
 
 static void lenovo_remove_tpkbd(struct hid_device *hdev)
 {
@@ -1540,6 +1552,8 @@ static const struct hid_device_id lenovo_devices[] = {
 		     USB_VENDOR_ID_LENOVO, USB_DEVICE_ID_LENOVO_X12_TAB) },
 	{ HID_DEVICE(BUS_USB, HID_GROUP_GENERIC,
 		     USB_VENDOR_ID_LENOVO, USB_DEVICE_ID_LENOVO_X12_TAB2) },
+	{ HID_DEVICE(BUS_I2C, HID_GROUP_GENERIC,
+		     USB_VENDOR_ID_ITE, I2C_DEVICE_ID_ITE_LENOVO_YOGA_SLIM_7X_KEYBOARD) },
 	{ }
 };
 
@@ -1555,9 +1569,7 @@ static struct hid_driver lenovo_driver = {
 	.raw_event = lenovo_raw_event,
 	.event = lenovo_event,
 	.report_fixup = lenovo_report_fixup,
-#ifdef CONFIG_PM
-	.reset_resume = lenovo_reset_resume,
-#endif
+	.reset_resume = pm_ptr(lenovo_reset_resume),
 };
 module_hid_driver(lenovo_driver);
 

@@ -66,6 +66,8 @@ static const struct otx2_stat otx2_queue_stats[] = {
 	{ "frames", 1 },
 };
 
+#define OTX2_FEC_MAX_INDEX 4
+
 static const unsigned int otx2_n_dev_stats = ARRAY_SIZE(otx2_dev_stats);
 static const unsigned int otx2_n_drv_stats = ARRAY_SIZE(otx2_drv_stats);
 static const unsigned int otx2_n_queue_stats = ARRAY_SIZE(otx2_queue_stats);
@@ -418,6 +420,14 @@ static int otx2_set_ringparam(struct net_device *netdev,
 	 */
 	if (rx_count < pfvf->hw.rq_skid)
 		rx_count =  pfvf->hw.rq_skid;
+
+	if (ring->rx_pending < 16) {
+		netdev_err(netdev,
+			   "rx ring size %u invalid, min is 16\n",
+			   ring->rx_pending);
+		return -EINVAL;
+	}
+
 	rx_count = Q_COUNT(Q_SIZE(rx_count, 3));
 
 	/* Due pipelining impact minimum 2000 unused SQ CQE's
@@ -558,6 +568,13 @@ static int otx2_set_coalesce(struct net_device *netdev,
 	}
 
 	return 0;
+}
+
+static u32 otx2_get_rx_ring_count(struct net_device *dev)
+{
+	struct otx2_nic *pfvf = netdev_priv(dev);
+
+	return pfvf->hw.rx_queues;
 }
 
 static int otx2_get_rss_hash_opts(struct net_device *dev,
@@ -734,10 +751,6 @@ static int otx2_get_rxnfc(struct net_device *dev,
 	int ret = -EOPNOTSUPP;
 
 	switch (nfc->cmd) {
-	case ETHTOOL_GRXRINGS:
-		nfc->data = pfvf->hw.rx_queues;
-		ret = 0;
-		break;
 	case ETHTOOL_GRXCLSRLCNT:
 		if (netif_running(dev) && ntuple) {
 			nfc->rule_cnt = pfvf->flow_cfg->nr_flows;
@@ -796,35 +809,75 @@ static u32 otx2_get_rxfh_indir_size(struct net_device *dev)
 	return  MAX_RSS_INDIR_TBL_SIZE;
 }
 
-static int otx2_rss_ctx_delete(struct otx2_nic *pfvf, int ctx_id)
+static int otx2_create_rxfh(struct net_device *dev,
+			    struct ethtool_rxfh_context *ctx,
+			    const struct ethtool_rxfh_param *rxfh,
+			    struct netlink_ext_ack *extack)
 {
-	struct otx2_rss_info *rss = &pfvf->hw.rss_info;
+	struct otx2_nic *pfvf = netdev_priv(dev);
+	struct otx2_rss_info *rss;
+	unsigned int queues;
+	u32 *ind_tbl;
+	int idx;
 
-	otx2_rss_ctx_flow_del(pfvf, ctx_id);
-	kfree(rss->rss_ctx[ctx_id]);
-	rss->rss_ctx[ctx_id] = NULL;
+	rss = &pfvf->hw.rss_info;
+	queues = pfvf->hw.rx_queues;
+
+	if (rxfh->hfunc && rxfh->hfunc != ETH_RSS_HASH_TOP)
+		return -EOPNOTSUPP;
+	ctx->hfunc = ETH_RSS_HASH_TOP;
+
+	if (!rss->enable) {
+		netdev_err(dev, "RSS is disabled, cannot change settings\n");
+		return -EIO;
+	}
+
+	ind_tbl = rxfh->indir;
+	if (!ind_tbl) {
+		ind_tbl = ethtool_rxfh_context_indir(ctx);
+		for (idx = 0; idx < rss->rss_size; idx++)
+			ind_tbl[idx] = ethtool_rxfh_indir_default(idx, queues);
+	}
+
+	otx2_set_rss_table(pfvf, rxfh->rss_context, ind_tbl);
+	return 0;
+}
+
+static int otx2_modify_rxfh(struct net_device *dev,
+			    struct ethtool_rxfh_context *ctx,
+			    const struct ethtool_rxfh_param *rxfh,
+			    struct netlink_ext_ack *extack)
+{
+	struct otx2_nic *pfvf = netdev_priv(dev);
+
+	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
+	    rxfh->hfunc != ETH_RSS_HASH_TOP)
+		return -EOPNOTSUPP;
+
+	if (!pfvf->hw.rss_info.enable) {
+		netdev_err(dev, "RSS is disabled, cannot change settings\n");
+		return -EIO;
+	}
+
+	if (rxfh->indir)
+		otx2_set_rss_table(pfvf, rxfh->rss_context, rxfh->indir);
 
 	return 0;
 }
 
-static int otx2_rss_ctx_create(struct otx2_nic *pfvf,
-			       u32 *rss_context)
+static int otx2_remove_rxfh(struct net_device *dev,
+			    struct ethtool_rxfh_context *ctx,
+			    u32 rss_context,
+			    struct netlink_ext_ack *extack)
 {
-	struct otx2_rss_info *rss = &pfvf->hw.rss_info;
-	u8 ctx;
+	struct otx2_nic *pfvf = netdev_priv(dev);
 
-	for (ctx = 0; ctx < MAX_RSS_GROUPS; ctx++) {
-		if (!rss->rss_ctx[ctx])
-			break;
+	if (!pfvf->hw.rss_info.enable) {
+		netdev_err(dev, "RSS is disabled, cannot change settings\n");
+		return -EIO;
 	}
-	if (ctx == MAX_RSS_GROUPS)
-		return -EINVAL;
 
-	rss->rss_ctx[ctx] = kzalloc(sizeof(*rss->rss_ctx[ctx]), GFP_KERNEL);
-	if (!rss->rss_ctx[ctx])
-		return -ENOMEM;
-	*rss_context = ctx;
-
+	otx2_rss_ctx_flow_del(pfvf, rss_context);
 	return 0;
 }
 
@@ -833,22 +886,13 @@ static int otx2_set_rxfh(struct net_device *dev,
 			 struct ethtool_rxfh_param *rxfh,
 			 struct netlink_ext_ack *extack)
 {
-	u32 rss_context = DEFAULT_RSS_CONTEXT_GROUP;
 	struct otx2_nic *pfvf = netdev_priv(dev);
-	struct otx2_rss_ctx *rss_ctx;
 	struct otx2_rss_info *rss;
-	int ret, idx;
+	int idx;
 
 	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
 	    rxfh->hfunc != ETH_RSS_HASH_TOP)
 		return -EOPNOTSUPP;
-
-	if (rxfh->rss_context)
-		rss_context = rxfh->rss_context;
-
-	if (rss_context != ETH_RXFH_CONTEXT_ALLOC &&
-	    rss_context >= MAX_RSS_GROUPS)
-		return -EINVAL;
 
 	rss = &pfvf->hw.rss_info;
 
@@ -861,21 +905,12 @@ static int otx2_set_rxfh(struct net_device *dev,
 		memcpy(rss->key, rxfh->key, sizeof(rss->key));
 		otx2_set_rss_key(pfvf);
 	}
-	if (rxfh->rss_delete)
-		return otx2_rss_ctx_delete(pfvf, rss_context);
 
-	if (rss_context == ETH_RXFH_CONTEXT_ALLOC) {
-		ret = otx2_rss_ctx_create(pfvf, &rss_context);
-		rxfh->rss_context = rss_context;
-		if (ret)
-			return ret;
-	}
 	if (rxfh->indir) {
-		rss_ctx = rss->rss_ctx[rss_context];
 		for (idx = 0; idx < rss->rss_size; idx++)
-			rss_ctx->ind_tbl[idx] = rxfh->indir[idx];
+			rss->ind_tbl[idx] = rxfh->indir[idx];
 	}
-	otx2_set_rss_table(pfvf, rss_context);
+	otx2_set_rss_table(pfvf, DEFAULT_RSS_CONTEXT_GROUP, NULL);
 
 	return 0;
 }
@@ -884,9 +919,7 @@ static int otx2_set_rxfh(struct net_device *dev,
 static int otx2_get_rxfh(struct net_device *dev,
 			 struct ethtool_rxfh_param *rxfh)
 {
-	u32 rss_context = DEFAULT_RSS_CONTEXT_GROUP;
 	struct otx2_nic *pfvf = netdev_priv(dev);
-	struct otx2_rss_ctx *rss_ctx;
 	struct otx2_rss_info *rss;
 	u32 *indir = rxfh->indir;
 	int idx, rx_queues;
@@ -894,32 +927,21 @@ static int otx2_get_rxfh(struct net_device *dev,
 	rss = &pfvf->hw.rss_info;
 
 	rxfh->hfunc = ETH_RSS_HASH_TOP;
-	if (rxfh->rss_context)
-		rss_context = rxfh->rss_context;
-
 	if (!indir)
 		return 0;
 
-	if (!rss->enable && rss_context == DEFAULT_RSS_CONTEXT_GROUP) {
+	if (!rss->enable) {
 		rx_queues = pfvf->hw.rx_queues;
 		for (idx = 0; idx < MAX_RSS_INDIR_TBL_SIZE; idx++)
 			indir[idx] = ethtool_rxfh_indir_default(idx, rx_queues);
 		return 0;
 	}
-	if (rss_context >= MAX_RSS_GROUPS)
-		return -ENOENT;
 
-	rss_ctx = rss->rss_ctx[rss_context];
-	if (!rss_ctx)
-		return -ENOENT;
-
-	if (indir) {
-		for (idx = 0; idx < rss->rss_size; idx++) {
-			/* Ignore if the rx queue is AF_XDP zero copy enabled */
-			if (test_bit(rss_ctx->ind_tbl[idx], pfvf->af_xdp_zc_qidx))
-				continue;
-			indir[idx] = rss_ctx->ind_tbl[idx];
-		}
+	for (idx = 0; idx < rss->rss_size; idx++) {
+		/* Ignore if the rx queue is AF_XDP zero copy enabled */
+		if (test_bit(rss->ind_tbl[idx], pfvf->af_xdp_zc_qidx))
+			continue;
+		indir[idx] = rss->ind_tbl[idx];
 	}
 	if (rxfh->key)
 		memcpy(rxfh->key, rss->key, sizeof(rss->key));
@@ -1011,15 +1033,14 @@ static int otx2_get_fecparam(struct net_device *netdev,
 		ETHTOOL_FEC_BASER,
 		ETHTOOL_FEC_RS,
 		ETHTOOL_FEC_BASER | ETHTOOL_FEC_RS};
-#define FEC_MAX_INDEX 4
-	if (pfvf->linfo.fec < FEC_MAX_INDEX)
-		fecparam->active_fec = fec[pfvf->linfo.fec];
+
+	fecparam->active_fec = fec[pfvf->linfo.fec];
 
 	rsp = otx2_get_fwdata(pfvf);
 	if (IS_ERR(rsp))
 		return PTR_ERR(rsp);
 
-	if (rsp->fwdata.supported_fec < FEC_MAX_INDEX) {
+	if (rsp->fwdata.supported_fec < OTX2_FEC_MAX_INDEX) {
 		if (!rsp->fwdata.supported_fec)
 			fecparam->fec = ETHTOOL_FEC_NONE;
 		else
@@ -1274,7 +1295,8 @@ end:
 }
 
 static void otx2_get_fec_stats(struct net_device *netdev,
-			       struct ethtool_fec_stats *fec_stats)
+			       struct ethtool_fec_stats *fec_stats,
+			       struct ethtool_fec_hist *hist)
 {
 	struct otx2_nic *pfvf = netdev_priv(netdev);
 	struct cgx_fw_data *rsp;
@@ -1307,12 +1329,12 @@ static void otx2_get_fec_stats(struct net_device *netdev,
 }
 
 static const struct ethtool_ops otx2_ethtool_ops = {
-	.cap_rss_ctx_supported	= true,
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
 				     ETHTOOL_COALESCE_MAX_FRAMES |
 				     ETHTOOL_COALESCE_USE_ADAPTIVE,
 	.supported_ring_params  = ETHTOOL_RING_USE_RX_BUF_LEN |
 				  ETHTOOL_RING_USE_CQE_SIZE,
+	.rxfh_max_num_contexts	= MAX_RSS_GROUPS,
 	.get_link		= otx2_get_link,
 	.get_drvinfo		= otx2_get_drvinfo,
 	.get_strings		= otx2_get_strings,
@@ -1326,12 +1348,16 @@ static const struct ethtool_ops otx2_ethtool_ops = {
 	.set_coalesce		= otx2_set_coalesce,
 	.get_rxnfc		= otx2_get_rxnfc,
 	.set_rxnfc              = otx2_set_rxnfc,
+	.get_rx_ring_count	= otx2_get_rx_ring_count,
 	.get_rxfh_key_size	= otx2_get_rxfh_key_size,
 	.get_rxfh_indir_size	= otx2_get_rxfh_indir_size,
 	.get_rxfh		= otx2_get_rxfh,
 	.set_rxfh		= otx2_set_rxfh,
 	.get_rxfh_fields	= otx2_get_rss_hash_opts,
 	.set_rxfh_fields	= otx2_set_rss_hash_opts,
+	.create_rxfh_context	= otx2_create_rxfh,
+	.modify_rxfh_context	= otx2_modify_rxfh,
+	.remove_rxfh_context	= otx2_remove_rxfh,
 	.get_msglevel		= otx2_get_msglevel,
 	.set_msglevel		= otx2_set_msglevel,
 	.get_pauseparam		= otx2_get_pauseparam,
@@ -1426,12 +1452,12 @@ static int otx2vf_get_link_ksettings(struct net_device *netdev,
 }
 
 static const struct ethtool_ops otx2vf_ethtool_ops = {
-	.cap_rss_ctx_supported	= true,
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
 				     ETHTOOL_COALESCE_MAX_FRAMES |
 				     ETHTOOL_COALESCE_USE_ADAPTIVE,
 	.supported_ring_params  = ETHTOOL_RING_USE_RX_BUF_LEN |
 				  ETHTOOL_RING_USE_CQE_SIZE,
+	.rxfh_max_num_contexts	= MAX_RSS_GROUPS,
 	.get_link		= otx2_get_link,
 	.get_drvinfo		= otx2vf_get_drvinfo,
 	.get_strings		= otx2vf_get_strings,
@@ -1441,12 +1467,16 @@ static const struct ethtool_ops otx2vf_ethtool_ops = {
 	.get_channels		= otx2_get_channels,
 	.get_rxnfc		= otx2_get_rxnfc,
 	.set_rxnfc              = otx2_set_rxnfc,
+	.get_rx_ring_count	= otx2_get_rx_ring_count,
 	.get_rxfh_key_size	= otx2_get_rxfh_key_size,
 	.get_rxfh_indir_size	= otx2_get_rxfh_indir_size,
 	.get_rxfh		= otx2_get_rxfh,
 	.set_rxfh		= otx2_set_rxfh,
 	.get_rxfh_fields	= otx2_get_rss_hash_opts,
 	.set_rxfh_fields	= otx2_set_rss_hash_opts,
+	.create_rxfh_context	= otx2_create_rxfh,
+	.modify_rxfh_context	= otx2_modify_rxfh,
+	.remove_rxfh_context	= otx2_remove_rxfh,
 	.get_ringparam		= otx2_get_ringparam,
 	.set_ringparam		= otx2_set_ringparam,
 	.get_coalesce		= otx2_get_coalesce,

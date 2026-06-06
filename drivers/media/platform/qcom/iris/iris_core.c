@@ -15,10 +15,12 @@ void iris_core_deinit(struct iris_core *core)
 	pm_runtime_resume_and_get(core->dev);
 
 	mutex_lock(&core->lock);
-	iris_fw_unload(core);
-	iris_vpu_power_off(core);
-	iris_hfi_queues_deinit(core);
-	core->state = IRIS_CORE_DEINIT;
+	if (core->state != IRIS_CORE_DEINIT) {
+		iris_fw_unload(core);
+		iris_vpu_power_off(core);
+		iris_hfi_queues_deinit(core);
+		core->state = IRIS_CORE_DEINIT;
+	}
 	mutex_unlock(&core->lock);
 
 	pm_runtime_put_sync(core->dev);
@@ -70,6 +72,10 @@ int iris_core_init(struct iris_core *core)
 		goto error_power_off;
 
 	ret = iris_vpu_boot_firmware(core);
+	if (ret)
+		goto error_unload_fw;
+
+	ret = iris_vpu_switch_to_hwmode(core);
 	if (ret)
 		goto error_unload_fw;
 

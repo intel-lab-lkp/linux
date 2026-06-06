@@ -1462,7 +1462,7 @@ static int i40e_set_link_ksettings(struct net_device *netdev,
 			netdev_info(netdev,
 				    "Set phy config failed, err %pe aq_err %s\n",
 				    ERR_PTR(status),
-				    i40e_aq_str(hw, hw->aq.asq_last_status));
+				    libie_aq_str(hw->aq.asq_last_status));
 			err = -EAGAIN;
 			goto done;
 		}
@@ -1472,7 +1472,7 @@ static int i40e_set_link_ksettings(struct net_device *netdev,
 			netdev_dbg(netdev,
 				   "Updating link info failed with err %pe aq_err %s\n",
 				   ERR_PTR(status),
-				   i40e_aq_str(hw, hw->aq.asq_last_status));
+				   libie_aq_str(hw->aq.asq_last_status));
 
 	} else {
 		netdev_info(netdev, "Nothing changed, exiting without setting anything.\n");
@@ -1520,7 +1520,7 @@ static int i40e_set_fec_cfg(struct net_device *netdev, u8 fec_cfg)
 			netdev_info(netdev,
 				    "Set phy config failed, err %pe aq_err %s\n",
 				    ERR_PTR(status),
-				    i40e_aq_str(hw, hw->aq.asq_last_status));
+				    libie_aq_str(hw->aq.asq_last_status));
 			err = -EAGAIN;
 			goto done;
 		}
@@ -1534,7 +1534,7 @@ static int i40e_set_fec_cfg(struct net_device *netdev, u8 fec_cfg)
 			netdev_dbg(netdev,
 				   "Updating link info failed with err %pe aq_err %s\n",
 				   ERR_PTR(status),
-				   i40e_aq_str(hw, hw->aq.asq_last_status));
+				   libie_aq_str(hw->aq.asq_last_status));
 	}
 
 done:
@@ -1641,7 +1641,7 @@ static int i40e_nway_reset(struct net_device *netdev)
 	if (ret) {
 		netdev_info(netdev, "link restart failed, err %pe aq_err %s\n",
 			    ERR_PTR(ret),
-			    i40e_aq_str(hw, hw->aq.asq_last_status));
+			    libie_aq_str(hw->aq.asq_last_status));
 		return -EIO;
 	}
 
@@ -1758,19 +1758,19 @@ static int i40e_set_pauseparam(struct net_device *netdev,
 	if (aq_failures & I40E_SET_FC_AQ_FAIL_GET) {
 		netdev_info(netdev, "Set fc failed on the get_phy_capabilities call with err %pe aq_err %s\n",
 			    ERR_PTR(status),
-			    i40e_aq_str(hw, hw->aq.asq_last_status));
+			    libie_aq_str(hw->aq.asq_last_status));
 		err = -EAGAIN;
 	}
 	if (aq_failures & I40E_SET_FC_AQ_FAIL_SET) {
 		netdev_info(netdev, "Set fc failed on the set_phy_config call with err %pe aq_err %s\n",
 			    ERR_PTR(status),
-			    i40e_aq_str(hw, hw->aq.asq_last_status));
+			    libie_aq_str(hw->aq.asq_last_status));
 		err = -EAGAIN;
 	}
 	if (aq_failures & I40E_SET_FC_AQ_FAIL_UPDATE) {
 		netdev_info(netdev, "Set fc failed on the get_link_info call with err %pe aq_err %s\n",
 			    ERR_PTR(status),
-			    i40e_aq_str(hw, hw->aq.asq_last_status));
+			    libie_aq_str(hw->aq.asq_last_status));
 		err = -EAGAIN;
 	}
 
@@ -1918,13 +1918,13 @@ static int i40e_get_eeprom(struct net_device *netdev,
 		ret_val = i40e_aq_read_nvm(hw, 0x0, offset, len,
 				(u8 *)eeprom_buff + (I40E_NVM_SECTOR_SIZE * i),
 				last, NULL);
-		if (ret_val && hw->aq.asq_last_status == I40E_AQ_RC_EPERM) {
+		if (ret_val && hw->aq.asq_last_status == LIBIE_AQ_RC_EPERM) {
 			dev_info(&pf->pdev->dev,
 				 "read NVM failed, invalid offset 0x%x\n",
 				 offset);
 			break;
 		} else if (ret_val &&
-			   hw->aq.asq_last_status == I40E_AQ_RC_EACCES) {
+			   hw->aq.asq_last_status == LIBIE_AQ_RC_EACCES) {
 			dev_info(&pf->pdev->dev,
 				 "read NVM failed, access, offset 0x%x\n",
 				 offset);
@@ -2011,18 +2011,6 @@ static void i40e_get_drvinfo(struct net_device *netdev,
 	drvinfo->n_priv_flags = I40E_PRIV_FLAGS_STR_LEN;
 	if (pf->hw.pf_id == 0)
 		drvinfo->n_priv_flags += I40E_GL_PRIV_FLAGS_STR_LEN;
-}
-
-static u32 i40e_get_max_num_descriptors(struct i40e_pf *pf)
-{
-	struct i40e_hw *hw = &pf->hw;
-
-	switch (hw->mac.type) {
-	case I40E_MAC_XL710:
-		return I40E_MAX_NUM_DESCRIPTORS_XL710;
-	default:
-		return I40E_MAX_NUM_DESCRIPTORS;
-	}
 }
 
 static void i40e_get_ringparam(struct net_device *netdev,
@@ -2132,8 +2120,7 @@ static int i40e_set_ringparam(struct net_device *netdev,
 		netdev_info(netdev,
 			    "Changing Tx descriptor count from %d to %d.\n",
 			    vsi->tx_rings[0]->count, new_tx_count);
-		tx_rings = kcalloc(tx_alloc_queue_pairs,
-				   sizeof(struct i40e_ring), GFP_KERNEL);
+		tx_rings = kzalloc_objs(struct i40e_ring, tx_alloc_queue_pairs);
 		if (!tx_rings) {
 			err = -ENOMEM;
 			goto done;
@@ -2171,8 +2158,8 @@ static int i40e_set_ringparam(struct net_device *netdev,
 		netdev_info(netdev,
 			    "Changing Rx descriptor count from %d to %d\n",
 			    vsi->rx_rings[0]->count, new_rx_count);
-		rx_rings = kcalloc(vsi->alloc_queue_pairs,
-				   sizeof(struct i40e_ring), GFP_KERNEL);
+		rx_rings = kzalloc_objs(struct i40e_ring,
+					vsi->alloc_queue_pairs);
 		if (!rx_rings) {
 			err = -ENOMEM;
 			goto free_tx;
@@ -3522,6 +3509,20 @@ no_input_set:
 }
 
 /**
+ * i40e_get_rx_ring_count - get RX ring count
+ * @netdev: network interface device structure
+ *
+ * Return: number of RX rings.
+ **/
+static u32 i40e_get_rx_ring_count(struct net_device *netdev)
+{
+	struct i40e_netdev_priv *np = netdev_priv(netdev);
+	struct i40e_vsi *vsi = np->vsi;
+
+	return vsi->rss_size;
+}
+
+/**
  * i40e_get_rxnfc - command to get RX flow classification rules
  * @netdev: network interface device structure
  * @cmd: ethtool rxnfc command
@@ -3538,10 +3539,6 @@ static int i40e_get_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *cmd,
 	int ret = -EOPNOTSUPP;
 
 	switch (cmd->cmd) {
-	case ETHTOOL_GRXRINGS:
-		cmd->data = vsi->rss_size;
-		ret = 0;
-		break;
 	case ETHTOOL_GRXCLSRLCNT:
 		cmd->rule_cnt = pf->fdir_pf_active_filters;
 		/* report total rule count */
@@ -3627,6 +3624,7 @@ static int i40e_set_rxfh_fields(struct net_device *netdev,
 		   ((u64)i40e_read_rx_ctl(hw, I40E_PFQF_HENA(1)) << 32);
 	DECLARE_BITMAP(flow_pctypes, FLOW_PCTYPES_SIZE);
 	u64 i_set, i_setc;
+	u8 flow_id;
 
 	bitmap_zero(flow_pctypes, FLOW_PCTYPES_SIZE);
 
@@ -3710,20 +3708,14 @@ static int i40e_set_rxfh_fields(struct net_device *netdev,
 		return -EINVAL;
 	}
 
-	if (bitmap_weight(flow_pctypes, FLOW_PCTYPES_SIZE)) {
-		u8 flow_id;
+	for_each_set_bit(flow_id, flow_pctypes, FLOW_PCTYPES_SIZE) {
+		i_setc = (u64)i40e_read_rx_ctl(hw, I40E_GLQF_HASH_INSET(0, flow_id)) |
+			 ((u64)i40e_read_rx_ctl(hw, I40E_GLQF_HASH_INSET(1, flow_id)) << 32);
+		i_set = i40e_get_rss_hash_bits(&pf->hw, nfc, i_setc);
 
-		for_each_set_bit(flow_id, flow_pctypes, FLOW_PCTYPES_SIZE) {
-			i_setc = (u64)i40e_read_rx_ctl(hw, I40E_GLQF_HASH_INSET(0, flow_id)) |
-				 ((u64)i40e_read_rx_ctl(hw, I40E_GLQF_HASH_INSET(1, flow_id)) << 32);
-			i_set = i40e_get_rss_hash_bits(&pf->hw, nfc, i_setc);
-
-			i40e_write_rx_ctl(hw, I40E_GLQF_HASH_INSET(0, flow_id),
-					  (u32)i_set);
-			i40e_write_rx_ctl(hw, I40E_GLQF_HASH_INSET(1, flow_id),
-					  (u32)(i_set >> 32));
-			hena |= BIT_ULL(flow_id);
-		}
+		i40e_write_rx_ctl(hw, I40E_GLQF_HASH_INSET(0, flow_id), (u32)i_set);
+		i40e_write_rx_ctl(hw, I40E_GLQF_HASH_INSET(1, flow_id), (u32)(i_set >> 32));
+		hena |= BIT_ULL(flow_id);
 	}
 
 	i40e_write_rx_ctl(hw, I40E_PFQF_HENA(0), (u32)hena);
@@ -3978,7 +3970,7 @@ static int i40e_add_flex_offset(struct list_head *flex_pit_list,
 {
 	struct i40e_flex_pit *new_pit, *entry;
 
-	new_pit = kzalloc(sizeof(*entry), GFP_KERNEL);
+	new_pit = kzalloc_obj(*entry);
 	if (!new_pit)
 		return -ENOMEM;
 
@@ -4869,7 +4861,7 @@ static int i40e_add_fdir_ethtool(struct i40e_vsi *vsi,
 		q_index = ring;
 	}
 
-	input = kzalloc(sizeof(*input), GFP_KERNEL);
+	input = kzalloc_obj(*input);
 
 	if (!input)
 		return -ENOMEM;
@@ -5249,9 +5241,9 @@ static int i40e_set_priv_flags(struct net_device *dev, u32 flags)
 	DECLARE_BITMAP(orig_flags, I40E_PF_FLAGS_NBITS);
 	DECLARE_BITMAP(new_flags, I40E_PF_FLAGS_NBITS);
 	struct i40e_netdev_priv *np = netdev_priv(dev);
-	enum i40e_admin_queue_err adq_err;
 	struct i40e_vsi *vsi = np->vsi;
 	struct i40e_pf *pf = vsi->back;
+	enum libie_aq_err adq_err;
 	u32 reset_needed = 0;
 	int status;
 	u32 i, j;
@@ -5371,12 +5363,11 @@ flags_complete:
 		valid_flags = I40E_AQ_SET_SWITCH_CFG_PROMISC;
 		ret = i40e_aq_set_switch_config(&pf->hw, sw_flags, valid_flags,
 						0, NULL);
-		if (ret && pf->hw.aq.asq_last_status != I40E_AQ_RC_ESRCH) {
+		if (ret && pf->hw.aq.asq_last_status != LIBIE_AQ_RC_ESRCH) {
 			dev_info(&pf->pdev->dev,
 				 "couldn't set switch config bits, err %pe aq_err %s\n",
 				 ERR_PTR(ret),
-				 i40e_aq_str(&pf->hw,
-					     pf->hw.aq.asq_last_status));
+				 libie_aq_str(pf->hw.aq.asq_last_status));
 			/* not a fatal problem, just keep going */
 		}
 	}
@@ -5438,16 +5429,16 @@ flags_complete:
 			if (status) {
 				adq_err = pf->hw.aq.asq_last_status;
 				switch (adq_err) {
-				case I40E_AQ_RC_EEXIST:
+				case LIBIE_AQ_RC_EEXIST:
 					dev_warn(&pf->pdev->dev,
 						 "FW LLDP agent is already running\n");
 					reset_needed = 0;
 					break;
-				case I40E_AQ_RC_EPERM:
+				case LIBIE_AQ_RC_EPERM:
 					dev_warn(&pf->pdev->dev,
 						 "Device configuration forbids SW from starting the LLDP agent.\n");
 					return -EINVAL;
-				case I40E_AQ_RC_EAGAIN:
+				case LIBIE_AQ_RC_EAGAIN:
 					dev_warn(&pf->pdev->dev,
 						 "Stop FW LLDP agent command is still being processed, please try again in a second.\n");
 					return -EBUSY;
@@ -5455,8 +5446,7 @@ flags_complete:
 					dev_warn(&pf->pdev->dev,
 						 "Starting FW LLDP agent failed: error: %pe, %s\n",
 						 ERR_PTR(status),
-						 i40e_aq_str(&pf->hw,
-							     adq_err));
+						 libie_aq_str(adq_err));
 					return -EINVAL;
 				}
 			}
@@ -5821,6 +5811,7 @@ static const struct ethtool_ops i40e_ethtool_ops = {
 	.set_msglevel		= i40e_set_msglevel,
 	.get_rxnfc		= i40e_get_rxnfc,
 	.set_rxnfc		= i40e_set_rxnfc,
+	.get_rx_ring_count	= i40e_get_rx_ring_count,
 	.self_test		= i40e_diag_test,
 	.get_strings		= i40e_get_strings,
 	.get_eee		= i40e_get_eee,
