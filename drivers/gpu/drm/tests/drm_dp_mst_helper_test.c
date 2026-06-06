@@ -552,7 +552,7 @@ static void drm_test_dp_mst_sideband_msg_req_decode(struct kunit *test)
 static void
 drm_dp_mst_sideband_msg_req_desc(const struct drm_dp_mst_sideband_msg_req_test *t, char *desc)
 {
-	strcpy(desc, t->desc);
+	strscpy(desc, t->desc, KUNIT_PARAM_DESC_SIZE);
 }
 
 KUNIT_ARRAY_PARAM(drm_dp_mst_sideband_msg_req, drm_dp_mst_sideband_msg_req_cases,
