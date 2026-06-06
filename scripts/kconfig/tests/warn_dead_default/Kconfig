@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config A
+	bool
+
+config B
+	bool
+
+config UNCONDITIONAL
+	int
+	default 1
+	default 2
+
+config CONDITIONAL
+	int
+	default 1 if A
+	default 2 if A
+	default 3 if B
+
+config CONDITIONAL_COMMUTATIVE
+	int
+	default 1 if A && B
+	default 2 if B && A
+
+config CONTROL
+	int
+	default 1 if A
+	default 2 if B
+	default 3
+
+choice
+	prompt "test choice"
+	default C
+	default D
+
+	config C
+		bool "C"
+	config D
+		bool "D"
+endchoice

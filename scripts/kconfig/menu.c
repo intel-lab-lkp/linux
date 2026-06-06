@@ -242,13 +242,33 @@ static int menu_validate_number(struct symbol *sym, struct symbol *sym2)
 
 static void sym_check_prop(struct symbol *sym)
 {
-	struct property *prop;
+	struct property *prev, *prop;
 	struct symbol *sym2;
 	char *use;
 
 	for (prop = sym->prop; prop; prop = prop->next) {
 		switch (prop->type) {
 		case P_DEFAULT:
+			for_all_defaults(sym, prev) {
+				if (prev == prop)
+					break;
+				if (expr_is_yes(prev->visible.expr)) {
+					if (!expr_eq(prev->expr, prop->expr))
+						prop_warn(prop,
+							"default for '%s' is unreachable: earlier default at %s:%d is unconditional",
+							sym->name ? sym->name : "<choice>",
+							prev->filename, prev->lineno);
+					break;
+				}
+				if (expr_eq(prev->visible.expr, prop->visible.expr)) {
+					if (!expr_eq(prev->expr, prop->expr))
+						prop_warn(prop,
+							"default for '%s' has the same condition as the earlier default at %s:%d",
+							sym->name ? sym->name : "<choice>",
+							prev->filename, prev->lineno);
+					break;
+				}
+			}
 			if ((sym->type == S_STRING || sym->type == S_INT || sym->type == S_HEX) &&
 			    prop->expr->type != E_SYMBOL)
 				prop_warn(prop,

@@ -1,0 +1,4 @@
+Kconfig:12:warning: default for 'UNCONDITIONAL' is unreachable: earlier default at Kconfig:11 is unconditional
+Kconfig:17:warning: default for 'CONDITIONAL' has the same condition as the earlier default at Kconfig:16
+Kconfig:23:warning: default for 'CONDITIONAL_COMMUTATIVE' has the same condition as the earlier default at Kconfig:22
+Kconfig:34:warning: default for '<choice>' is unreachable: earlier default at Kconfig:33 is unconditional
