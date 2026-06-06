@@ -746,7 +746,7 @@ static int kvaser_usb_hydra_map_channel(struct kvaser_usb *dev, u16 transid,
 	if (!cmd)
 		return -ENOMEM;
 
-	strcpy(cmd->map_ch_req.name, name);
+	strscpy(cmd->map_ch_req.name, name);
 	cmd->header.cmd_no = CMD_MAP_CHANNEL_REQ;
 	kvaser_usb_hydra_set_cmd_dest_he
 				(cmd, KVASER_USB_HYDRA_HE_ADDRESS_ROUTER);
