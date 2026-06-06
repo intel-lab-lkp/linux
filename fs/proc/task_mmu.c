@@ -162,13 +162,13 @@ static void unlock_ctx_vma(struct proc_maps_locking_ctx *lock_ctx)
 	}
 }
 
-static inline bool lock_vma_range(struct seq_file *m,
-				  struct proc_maps_locking_ctx *lock_ctx)
+static inline int lock_vma_range(struct seq_file *m,
+				 struct proc_maps_locking_ctx *lock_ctx)
 {
 	rcu_read_lock();
 	reset_lock_ctx(lock_ctx);
 
-	return true;
+	return 0;
 }
 
 static inline void unlock_vma_range(struct proc_maps_locking_ctx *lock_ctx)
@@ -245,10 +245,10 @@ static inline void unlock_ctx_mm(struct proc_maps_locking_ctx *lock_ctx)
 	mmap_read_unlock(lock_ctx->mm);
 }
 
-static inline bool lock_vma_range(struct seq_file *m,
+static inline int lock_vma_range(struct seq_file *m,
 				  struct proc_maps_locking_ctx *lock_ctx)
 {
-	return lock_ctx_mm(lock_ctx) == 0;
+	return lock_ctx_mm(lock_ctx);
 }
 
 static inline void unlock_vma_range(struct proc_maps_locking_ctx *lock_ctx)
@@ -311,6 +311,7 @@ static void *m_start(struct seq_file *m, loff_t *ppos)
 	struct proc_maps_locking_ctx *lock_ctx;
 	loff_t last_addr = *ppos;
 	struct mm_struct *mm;
+	int err;
 
 	/* See m_next(). Zero at the start or after lseek. */
 	if (last_addr == SENTINEL_VMA_END)
@@ -328,11 +329,12 @@ static void *m_start(struct seq_file *m, loff_t *ppos)
 		return NULL;
 	}
 
-	if (!lock_vma_range(m, lock_ctx)) {
+	err = lock_vma_range(m, lock_ctx);
+	if (err) {
 		mmput(mm);
 		put_task_struct(priv->task);
 		priv->task = NULL;
-		return ERR_PTR(-EINTR);
+		return ERR_PTR(err);
 	}
 
 	/*
