@@ -1076,6 +1076,9 @@ static int pci_register_host_bridge(struct pci_host_bridge *bridge)
 	/* Create legacy_io and legacy_mem files for this bus */
 	pci_create_legacy_files(bus);
 
+	/* Create procfs directory for this bus */
+	pci_proc_attach_bus(bus);
+
 	if (parent)
 		dev_info(parent, "PCI host bridge to bus %s\n", name);
 	else
@@ -1283,6 +1286,9 @@ add_dev:
 
 	/* Create legacy_io and legacy_mem files for this bus */
 	pci_create_legacy_files(child);
+
+	/* Create procfs directory for this bus */
+	pci_proc_attach_bus(child);
 
 	return child;
 }
