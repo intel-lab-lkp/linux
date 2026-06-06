@@ -1149,10 +1149,10 @@ static int nvmet_rdma_init_srqs(struct nvmet_rdma_device *ndev)
 		return 0;
 	}
 
-	ndev->srq_size = min(ndev->device->attrs.max_srq_wr,
-			     nvmet_rdma_srq_size);
-	ndev->srq_count = min(ndev->device->num_comp_vectors,
-			      ndev->device->attrs.max_srq);
+	ndev->srq_size = min_t(u32, ndev->device->attrs.max_srq_wr,
+			       nvmet_rdma_srq_size);
+	ndev->srq_count = min_t(u32, ndev->device->num_comp_vectors,
+				ndev->device->attrs.max_srq);
 
 	ndev->srqs = kzalloc_objs(*ndev->srqs, ndev->srq_count);
 	if (!ndev->srqs)
@@ -1197,7 +1197,7 @@ nvmet_rdma_find_get_device(struct rdma_cm_id *cm_id)
 	struct nvmet_port *nport = port->nport;
 	struct nvmet_rdma_device *ndev;
 	int inline_page_count;
-	int inline_sge_count;
+	u32 inline_sge_count;
 	int ret;
 
 	mutex_lock(&device_list_mutex);
@@ -1213,7 +1213,8 @@ nvmet_rdma_find_get_device(struct rdma_cm_id *cm_id)
 
 	inline_page_count = num_pages(nport->inline_data_size);
 	inline_sge_count = max(cm_id->device->attrs.max_sge_rd,
-				cm_id->device->attrs.max_recv_sge) - 1;
+				cm_id->device->attrs.max_recv_sge);
+	inline_sge_count = inline_sge_count ? inline_sge_count - 1 : 0;
 	if (inline_page_count > inline_sge_count) {
 		pr_warn("inline_data_size %d cannot be supported by device %s. Reducing to %lu.\n",
 			nport->inline_data_size, cm_id->device->name,
@@ -1553,8 +1554,9 @@ static int nvmet_rdma_cm_accept(struct rdma_cm_id *cm_id,
 
 	param.rnr_retry_count = 7;
 	param.flow_control = 1;
-	param.initiator_depth = min_t(u8, p->initiator_depth,
-		queue->dev->device->attrs.max_qp_init_rd_atom);
+	param.initiator_depth = min3(p->initiator_depth,
+				     queue->dev->device->attrs.max_qp_init_rd_atom,
+				     U8_MAX);
 	param.private_data = &priv;
 	param.private_data_len = sizeof(priv);
 	priv.recfmt = cpu_to_le16(NVME_RDMA_CM_FMT_1_0);
