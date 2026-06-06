@@ -602,8 +602,10 @@ msm_gem_vm_sm_step_remap(struct drm_gpuva_op *op, void *arg)
 
 	if (op->remap.prev) {
 		prev_vma = vma_from_op(arg, op->remap.prev);
-		if (WARN_ON(IS_ERR(prev_vma)))
-			return PTR_ERR(prev_vma);
+		if (WARN_ON(IS_ERR(prev_vma))) {
+			ret = PTR_ERR(prev_vma);
+			goto drop_ref;
+		}
 
 		vm_dbg("prev_vma: %p:%p: %016llx %016llx", vm, prev_vma, prev_vma->va.addr, prev_vma->va.range);
 		to_msm_vma(prev_vma)->mapped = mapped;
@@ -612,8 +614,10 @@ msm_gem_vm_sm_step_remap(struct drm_gpuva_op *op, void *arg)
 
 	if (op->remap.next) {
 		next_vma = vma_from_op(arg, op->remap.next);
-		if (WARN_ON(IS_ERR(next_vma)))
-			return PTR_ERR(next_vma);
+		if (WARN_ON(IS_ERR(next_vma))) {
+			ret = PTR_ERR(next_vma);
+			goto drop_ref;
+		}
 
 		vm_dbg("next_vma: %p:%p: %016llx %016llx", vm, next_vma, next_vma->va.addr, next_vma->va.range);
 		to_msm_vma(next_vma)->mapped = mapped;
@@ -623,6 +627,7 @@ msm_gem_vm_sm_step_remap(struct drm_gpuva_op *op, void *arg)
 	if (!mapped)
 		drm_gpuvm_bo_evict(vm_bo, true);
 
+drop_ref:
 	/* Drop the previous ref: */
 	drm_gpuvm_bo_put(vm_bo);
 
