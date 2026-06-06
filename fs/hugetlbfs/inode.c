@@ -204,7 +204,30 @@ hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
 	if (addr)
 		addr0 = ALIGN(addr, huge_page_size(h));
 
-	return mm_get_unmapped_area_vmflags(file, addr0, len, pgoff, flags, 0);
+	/*
+	 * hugetlb mappings need to be huge page aligned.
+	 * mm_get_unmapped_area_vmflags() only gives back PAGE_SIZE aligned
+	 * areas.
+	 *
+	 * Extend the requested unmapped area for the worse case scenario:
+	 * the address comes back and needs to be aligned up to by one small
+	 * page short of a large page.
+	 */
+	len += huge_page_size(h) - PAGE_SIZE;
+	/*
+	 * pgoff is being used for coloring, but hugetlb mappings need strict
+	 * alignment, so it is always ignored by special casing it down the road.
+	 * Set it to 0 here, so we do not need to be hugetlb-aware later on.
+	 */
+	pgoff = 0;
+	addr0 = mm_get_unmapped_area_vmflags(file, addr0, len, pgoff, flags, 0);
+	if (IS_ERR_VALUE(addr0))
+		return addr0;
+
+	/* Align the address to the next huge_page_size boundary */
+	addr0 = ALIGN(addr0, huge_page_size(h));
+
+	return addr0;
 }
 
 /*

@@ -1091,7 +1091,7 @@ bool is_raw_hwpoison_page_in_hugepage(struct page *page);
 
 static inline unsigned long huge_page_mask_align(struct file *file)
 {
-	return PAGE_MASK & ~huge_page_mask(hstate_file(file));
+	return 0;
 }
 
 #else	/* CONFIG_HUGETLB_PAGE */
