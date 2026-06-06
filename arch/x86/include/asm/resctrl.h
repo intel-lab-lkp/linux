@@ -40,6 +40,8 @@ struct resctrl_pqr_state {
 	u32			default_closid;
 };
 
+bool erdt_enabled(void);
+
 DECLARE_PER_CPU(struct resctrl_pqr_state, pqr_state);
 
 extern bool rdt_alloc_capable;
