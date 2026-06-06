@@ -522,8 +522,8 @@ static int iris_hfi_gen2_handle_session_drain(struct iris_inst *inst,
 static void iris_hfi_gen2_read_input_subcr_params(struct iris_inst *inst)
 {
 	struct iris_inst_hfi_gen2 *inst_hfi_gen2 = to_iris_inst_hfi_gen2(inst);
-	struct v4l2_pix_format_mplane *pixmp_ip = &inst->fmt_src->fmt.pix_mp;
-	struct v4l2_pix_format_mplane *pixmp_op = &inst->fmt_dst->fmt.pix_mp;
+	struct v4l2_pix_format_mplane *pixmp_ip = &inst->fmt_src.fmt.pix_mp;
+	struct v4l2_pix_format_mplane *pixmp_op = &inst->fmt_dst.fmt.pix_mp;
 	u32 primaries, matrix_coeff, transfer_char;
 	struct hfi_subscription_params subsc_params;
 	u32 colour_description_present_flag;
@@ -817,8 +817,8 @@ static int iris_hfi_gen2_handle_system_response(struct iris_core *core,
 static void iris_hfi_gen2_init_src_change_param(struct iris_inst *inst)
 {
 	struct iris_inst_hfi_gen2 *inst_hfi_gen2 = to_iris_inst_hfi_gen2(inst);
-	struct v4l2_pix_format_mplane *pixmp_ip = &inst->fmt_src->fmt.pix_mp;
-	struct v4l2_pix_format_mplane *pixmp_op = &inst->fmt_dst->fmt.pix_mp;
+	struct v4l2_pix_format_mplane *pixmp_ip = &inst->fmt_src.fmt.pix_mp;
+	struct v4l2_pix_format_mplane *pixmp_op = &inst->fmt_dst.fmt.pix_mp;
 	u32 bottom_offset = (pixmp_ip->height - inst->crop.height);
 	u32 right_offset = (pixmp_ip->width - inst->crop.width);
 	struct hfi_subscription_params *subsc_params;

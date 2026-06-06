@@ -66,9 +66,9 @@ static u32 iris_yuv_buffer_size_nv12(struct iris_inst *inst)
 	struct v4l2_format *f;
 
 	if (inst->domain == DECODER)
-		f = inst->fmt_dst;
+		f = &inst->fmt_dst;
 	else
-		f = inst->fmt_src;
+		f = &inst->fmt_src;
 
 	y_stride = ALIGN(f->fmt.pix_mp.width, Y_STRIDE_ALIGN);
 	uv_stride = ALIGN(f->fmt.pix_mp.width, UV_STRIDE_ALIGN);
@@ -173,12 +173,12 @@ static u32 iris_yuv_buffer_size_qc08c(struct iris_inst *inst)
 	u32 y_plane, uv_plane, y_stride, uv_stride;
 	u32 uv_meta_stride, uv_meta_plane;
 	u32 y_meta_stride, y_meta_plane;
-	struct v4l2_format *f = NULL;
+	struct v4l2_format *f;
 
 	if (inst->domain == DECODER)
-		f = inst->fmt_dst;
+		f = &inst->fmt_dst;
 	else
-		f = inst->fmt_src;
+		f = &inst->fmt_src;
 
 	y_meta_stride = ALIGN(DIV_ROUND_UP(f->fmt.pix_mp.width, META_STRIDE_ALIGNED >> 1),
 			      META_STRIDE_ALIGNED);
@@ -235,7 +235,7 @@ static u32 iris_enc_bitstream_buffer_size(struct iris_inst *inst)
 	int bitrate_mode, frame_rc;
 	struct v4l2_format *f;
 
-	f = inst->fmt_dst;
+	f = &inst->fmt_dst;
 
 	bitrate_mode = inst->fw_caps[BITRATE_MODE].value;
 	frame_rc = inst->fw_caps[FRAME_RC_ENABLE].value;
@@ -266,7 +266,7 @@ int iris_get_buffer_size(struct iris_inst *inst,
 		case BUF_INPUT:
 			return iris_dec_bitstream_buffer_size(inst);
 		case BUF_OUTPUT:
-			if (inst->fmt_dst->fmt.pix_mp.pixelformat == V4L2_PIX_FMT_QC08C)
+			if (inst->fmt_dst.fmt.pix_mp.pixelformat == V4L2_PIX_FMT_QC08C)
 				return iris_yuv_buffer_size_qc08c(inst);
 			else
 				return iris_yuv_buffer_size_nv12(inst);
@@ -278,7 +278,7 @@ int iris_get_buffer_size(struct iris_inst *inst,
 	} else {
 		switch (buffer_type) {
 		case BUF_INPUT:
-			if (inst->fmt_src->fmt.pix_mp.pixelformat == V4L2_PIX_FMT_QC08C)
+			if (inst->fmt_src.fmt.pix_mp.pixelformat == V4L2_PIX_FMT_QC08C)
 				return iris_yuv_buffer_size_qc08c(inst);
 			else
 				return iris_yuv_buffer_size_nv12(inst);

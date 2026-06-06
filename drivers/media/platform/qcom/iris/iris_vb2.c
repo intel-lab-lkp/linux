@@ -34,8 +34,8 @@ static int iris_check_resolution_supported(struct iris_inst *inst)
 	struct platform_inst_caps *caps;
 
 	caps = inst->core->iris_platform_data->inst_caps;
-	width = inst->fmt_src->fmt.pix_mp.width;
-	height = inst->fmt_src->fmt.pix_mp.height;
+	width = inst->fmt_src.fmt.pix_mp.width;
+	height = inst->fmt_src.fmt.pix_mp.height;
 
 	min_width = caps->min_frame_width;
 	max_width = caps->max_frame_width;
@@ -113,7 +113,7 @@ int iris_vb2_queue_setup(struct vb2_queue *q,
 	}
 
 	core = inst->core;
-	f = V4L2_TYPE_IS_OUTPUT(q->type) ? inst->fmt_src : inst->fmt_dst;
+	f = V4L2_TYPE_IS_OUTPUT(q->type) ? &inst->fmt_src : &inst->fmt_dst;
 
 	if (*num_planes) {
 		if (*num_planes != f->fmt.pix_mp.num_planes ||

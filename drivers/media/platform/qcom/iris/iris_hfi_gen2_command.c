@@ -198,8 +198,8 @@ static int iris_hfi_gen2_set_bitstream_resolution(struct iris_inst *inst, u32 pl
 	u32 resolution;
 
 	if (inst->domain == DECODER) {
-		width = inst->fmt_src->fmt.pix_mp.width;
-		height = inst->fmt_src->fmt.pix_mp.height;
+		width = inst->fmt_src.fmt.pix_mp.width;
+		height = inst->fmt_src.fmt.pix_mp.height;
 		resolution = iris_hfi_get_aligned_resolution(inst, width, height);
 		inst_hfi_gen2->src_subcr_params.bitstream_resolution = resolution;
 		payload_type = HFI_PAYLOAD_U32;
@@ -235,13 +235,13 @@ static int iris_hfi_gen2_set_crop_offsets(struct iris_inst *inst, u32 plane)
 
 	if (inst->domain == DECODER) {
 		if (V4L2_TYPE_IS_OUTPUT(plane)) {
-			bottom_offset = (inst->fmt_src->fmt.pix_mp.height - inst->crop.height);
-			right_offset = (inst->fmt_src->fmt.pix_mp.width - inst->crop.width);
+			bottom_offset = (inst->fmt_src.fmt.pix_mp.height - inst->crop.height);
+			right_offset = (inst->fmt_src.fmt.pix_mp.width - inst->crop.width);
 			left_offset = inst->crop.left;
 			top_offset = inst->crop.top;
 		} else {
-			bottom_offset = (inst->fmt_dst->fmt.pix_mp.height - inst->compose.height);
-			right_offset = (inst->fmt_dst->fmt.pix_mp.width - inst->compose.width);
+			bottom_offset = (inst->fmt_dst.fmt.pix_mp.height - inst->compose.height);
+			right_offset = (inst->fmt_dst.fmt.pix_mp.width - inst->compose.width);
 			left_offset = inst->compose.left;
 			top_offset = inst->compose.top;
 		}
@@ -356,7 +356,7 @@ static int iris_hfi_gen2_set_picture_order_count(struct iris_inst *inst, u32 pla
 static int iris_hfi_gen2_set_colorspace(struct iris_inst *inst, u32 plane)
 {
 	struct iris_inst_hfi_gen2 *inst_hfi_gen2 = to_iris_inst_hfi_gen2(inst);
-	struct v4l2_pix_format_mplane *pixmp = &inst->fmt_src->fmt.pix_mp;
+	struct v4l2_pix_format_mplane *pixmp = &inst->fmt_src.fmt.pix_mp;
 	u32 video_signal_type_present_flag = 0, color_info;
 	u32 matrix_coeff = HFI_MATRIX_COEFF_RESERVED;
 	u32 video_format = UNSPECIFIED_COLOR_FORMAT;
@@ -480,11 +480,11 @@ static int iris_hfi_gen2_set_colorformat(struct iris_inst *inst, u32 plane)
 	u32 hfi_colorformat, pixelformat;
 
 	if (inst->domain == DECODER) {
-		pixelformat = inst->fmt_dst->fmt.pix_mp.pixelformat;
+		pixelformat = inst->fmt_dst.fmt.pix_mp.pixelformat;
 		hfi_colorformat = pixelformat == V4L2_PIX_FMT_NV12 ?
 			HFI_COLOR_FMT_NV12 : HFI_COLOR_FMT_NV12_UBWC;
 	} else {
-		pixelformat = inst->fmt_src->fmt.pix_mp.pixelformat;
+		pixelformat = inst->fmt_src.fmt.pix_mp.pixelformat;
 		hfi_colorformat = pixelformat == V4L2_PIX_FMT_NV12 ?
 			HFI_COLOR_FMT_NV12 : HFI_COLOR_FMT_NV12_UBWC;
 	}
@@ -505,13 +505,13 @@ static int iris_hfi_gen2_set_linear_stride_scanline(struct iris_inst *inst, u32 
 	u32 payload[2];
 
 	if (inst->domain == DECODER) {
-		pixelformat = inst->fmt_dst->fmt.pix_mp.pixelformat;
-		stride_y = inst->fmt_dst->fmt.pix_mp.width;
-		scanline_y = inst->fmt_dst->fmt.pix_mp.height;
+		pixelformat = inst->fmt_dst.fmt.pix_mp.pixelformat;
+		stride_y = inst->fmt_dst.fmt.pix_mp.width;
+		scanline_y = inst->fmt_dst.fmt.pix_mp.height;
 	} else {
-		pixelformat = inst->fmt_src->fmt.pix_mp.pixelformat;
-		stride_y = ALIGN(inst->fmt_src->fmt.pix_mp.width, 128);
-		scanline_y = ALIGN(inst->fmt_src->fmt.pix_mp.height, 32);
+		pixelformat = inst->fmt_src.fmt.pix_mp.pixelformat;
+		stride_y = ALIGN(inst->fmt_src.fmt.pix_mp.width, 128);
+		scanline_y = ALIGN(inst->fmt_src.fmt.pix_mp.height, 32);
 	}
 
 	stride_uv = stride_y;

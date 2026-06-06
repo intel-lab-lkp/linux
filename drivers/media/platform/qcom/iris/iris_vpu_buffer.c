@@ -708,7 +708,7 @@ static u32 hfi_buffer_ibc_av1d(u32 frame_width, u32 frame_height)
 static u32 iris_vpu_dec_bin_size(struct iris_inst *inst)
 {
 	u32 num_vpp_pipes = inst->core->iris_platform_data->num_vpp_pipe;
-	struct v4l2_format *f = inst->fmt_src;
+	struct v4l2_format *f = &inst->fmt_src;
 	u32 height = f->fmt.pix_mp.height;
 	u32 width = f->fmt.pix_mp.width;
 
@@ -727,7 +727,7 @@ static u32 iris_vpu_dec_bin_size(struct iris_inst *inst)
 static u32 iris_vpu_dec_comv_size(struct iris_inst *inst)
 {
 	u32 num_comv = VIDEO_MAX_FRAME;
-	struct v4l2_format *f = inst->fmt_src;
+	struct v4l2_format *f = &inst->fmt_src;
 	u32 height = f->fmt.pix_mp.height;
 	u32 width = f->fmt.pix_mp.width;
 
@@ -778,7 +778,7 @@ static u32 iris_vpu_dec_dpb_size(struct iris_inst *inst)
 static u32 iris_vpu_dec_non_comv_size(struct iris_inst *inst)
 {
 	u32 num_vpp_pipes = inst->core->iris_platform_data->num_vpp_pipe;
-	struct v4l2_format *f = inst->fmt_src;
+	struct v4l2_format *f = &inst->fmt_src;
 	u32 height = f->fmt.pix_mp.height;
 	u32 width = f->fmt.pix_mp.width;
 
@@ -793,7 +793,7 @@ static u32 iris_vpu_dec_non_comv_size(struct iris_inst *inst)
 static u32 iris_vpu_dec_line_size(struct iris_inst *inst)
 {
 	u32 num_vpp_pipes = inst->core->iris_platform_data->num_vpp_pipe;
-	struct v4l2_format *f = inst->fmt_src;
+	struct v4l2_format *f = &inst->fmt_src;
 	u32 height = f->fmt.pix_mp.height;
 	u32 width = f->fmt.pix_mp.width;
 	bool is_opb = false;
@@ -825,17 +825,17 @@ static u32 iris_vpu_dec_scratch1_size(struct iris_inst *inst)
 static inline u32 iris_vpu_enc_get_bitstream_width(struct iris_inst *inst)
 {
 	if (is_rotation_90_or_270(inst))
-		return inst->fmt_dst->fmt.pix_mp.height;
+		return inst->fmt_dst.fmt.pix_mp.height;
 	else
-		return inst->fmt_dst->fmt.pix_mp.width;
+		return inst->fmt_dst.fmt.pix_mp.width;
 }
 
 static inline u32 iris_vpu_enc_get_bitstream_height(struct iris_inst *inst)
 {
 	if (is_rotation_90_or_270(inst))
-		return inst->fmt_dst->fmt.pix_mp.width;
+		return inst->fmt_dst.fmt.pix_mp.width;
 	else
-		return inst->fmt_dst->fmt.pix_mp.height;
+		return inst->fmt_dst.fmt.pix_mp.height;
 }
 
 static inline u32 size_bin_bitstream_enc(u32 width, u32 height,
@@ -936,7 +936,7 @@ static u32 iris_vpu_enc_bin_size(struct iris_inst *inst)
 
 static u32 iris_vpu_dec_partial_size(struct iris_inst *inst)
 {
-	struct v4l2_format *f = inst->fmt_src;
+	struct v4l2_format *f = &inst->fmt_src;
 	u32 height = f->fmt.pix_mp.height;
 	u32 width = f->fmt.pix_mp.width;
 
@@ -1417,8 +1417,8 @@ static u32 iris_vpu_enc_arp_size(struct iris_inst *inst)
 
 inline bool is_scaling_enabled(struct iris_inst *inst)
 {
-	struct v4l2_pix_format_mplane *dst_fmt = &inst->fmt_dst->fmt.pix_mp;
-	struct v4l2_pix_format_mplane *src_fmt = &inst->fmt_src->fmt.pix_mp;
+	struct v4l2_pix_format_mplane *dst_fmt = &inst->fmt_dst.fmt.pix_mp;
+	struct v4l2_pix_format_mplane *src_fmt = &inst->fmt_src.fmt.pix_mp;
 
 	return dst_fmt->width != src_fmt->width ||
 		dst_fmt->height != src_fmt->height;
@@ -1686,7 +1686,7 @@ static u32 iris_vpu_enc_scratch2_size(struct iris_inst *inst)
 static u32 iris_vpu_enc_vpss_size(struct iris_inst *inst)
 {
 	u32 ds_enable = is_scaling_enabled(inst);
-	struct v4l2_format *f = inst->fmt_dst;
+	struct v4l2_format *f = &inst->fmt_dst;
 	u32 height = f->fmt.pix_mp.height;
 	u32 width = f->fmt.pix_mp.width;
 
@@ -1759,7 +1759,7 @@ static u32 iris_vpu4x_dec_line_size(struct iris_inst *inst)
 {
 	u32 num_vpp_pipes = inst->core->iris_platform_data->num_vpp_pipe;
 	u32 out_min_count = inst->buffers[BUF_OUTPUT].min_count;
-	struct v4l2_format *f = inst->fmt_src;
+	struct v4l2_format *f = &inst->fmt_src;
 	u32 height = f->fmt.pix_mp.height;
 	u32 width = f->fmt.pix_mp.width;
 	bool is_opb = false;
@@ -1983,7 +1983,7 @@ static u32 iris_vpu4x_enc_line_size(struct iris_inst *inst)
 {
 	u32 num_vpp_pipes = inst->core->iris_platform_data->num_vpp_pipe;
 	u32 lcu_size = inst->codec == V4L2_PIX_FMT_HEVC ? 32 : 16;
-	struct v4l2_format *f = inst->fmt_dst;
+	struct v4l2_format *f = &inst->fmt_dst;
 	u32 height = f->fmt.pix_mp.height;
 	u32 width = f->fmt.pix_mp.width;
 

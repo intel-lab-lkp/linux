@@ -15,8 +15,8 @@
 static void iris_hfi_gen1_read_changed_params(struct iris_inst *inst,
 					      struct hfi_msg_event_notify_pkt *pkt)
 {
-	struct v4l2_pix_format_mplane *pixmp_ip = &inst->fmt_src->fmt.pix_mp;
-	struct v4l2_pix_format_mplane *pixmp_op = &inst->fmt_dst->fmt.pix_mp;
+	struct v4l2_pix_format_mplane *pixmp_ip = &inst->fmt_src.fmt.pix_mp;
+	struct v4l2_pix_format_mplane *pixmp_op = &inst->fmt_dst.fmt.pix_mp;
 	u32 num_properties_changed = pkt->event_data2;
 	u8 *data_ptr = (u8 *)&pkt->ext_event_data[0];
 	u32 primaries, matrix_coeff, transfer_char;

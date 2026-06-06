@@ -21,12 +21,9 @@ int iris_vdec_inst_init(struct iris_inst *inst)
 	struct iris_core *core = inst->core;
 	struct v4l2_format *f;
 
-	inst->fmt_src = kzalloc_obj(*inst->fmt_src);
-	inst->fmt_dst = kzalloc_obj(*inst->fmt_dst);
-
 	inst->fw_min_count = MIN_BUFFERS;
 
-	f = inst->fmt_src;
+	f = &inst->fmt_src;
 	f->type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	f->fmt.pix_mp.width = DEFAULT_WIDTH;
 	f->fmt.pix_mp.height = DEFAULT_HEIGHT;
@@ -39,7 +36,7 @@ int iris_vdec_inst_init(struct iris_inst *inst)
 	inst->buffers[BUF_INPUT].min_count = iris_vpu_buf_count(inst, BUF_INPUT);
 	inst->buffers[BUF_INPUT].size = f->fmt.pix_mp.plane_fmt[0].sizeimage;
 
-	f = inst->fmt_dst;
+	f = &inst->fmt_dst;
 	f->type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	f->fmt.pix_mp.pixelformat = V4L2_PIX_FMT_NV12;
 	f->fmt.pix_mp.width = ALIGN(DEFAULT_WIDTH, 128);
@@ -166,7 +163,7 @@ int iris_vdec_try_fmt(struct iris_inst *inst, struct v4l2_format *f)
 	switch (f->type) {
 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
 		if (!fmt) {
-			f_inst = inst->fmt_src;
+			f_inst = &inst->fmt_src;
 			f->fmt.pix_mp.width = f_inst->fmt.pix_mp.width;
 			f->fmt.pix_mp.height = f_inst->fmt.pix_mp.height;
 			f->fmt.pix_mp.pixelformat = f_inst->fmt.pix_mp.pixelformat;
@@ -174,7 +171,7 @@ int iris_vdec_try_fmt(struct iris_inst *inst, struct v4l2_format *f)
 		break;
 	case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
 		if (!fmt) {
-			f_inst = inst->fmt_dst;
+			f_inst = &inst->fmt_dst;
 			f->fmt.pix_mp.pixelformat = f_inst->fmt.pix_mp.pixelformat;
 			f->fmt.pix_mp.width = f_inst->fmt.pix_mp.width;
 			f->fmt.pix_mp.height = f_inst->fmt.pix_mp.height;
@@ -182,7 +179,7 @@ int iris_vdec_try_fmt(struct iris_inst *inst, struct v4l2_format *f)
 
 		src_q = v4l2_m2m_get_src_vq(m2m_ctx);
 		if (vb2_is_streaming(src_q)) {
-			f_inst = inst->fmt_src;
+			f_inst = &inst->fmt_src;
 			f->fmt.pix_mp.height = f_inst->fmt.pix_mp.height;
 			f->fmt.pix_mp.width = f_inst->fmt.pix_mp.width;
 		}
@@ -225,7 +222,7 @@ int iris_vdec_s_fmt(struct iris_inst *inst, struct v4l2_format *f)
 		if (!(find_format(inst, f->fmt.pix_mp.pixelformat, f->type)))
 			return -EINVAL;
 
-		fmt = inst->fmt_src;
+		fmt = &inst->fmt_src;
 		fmt->type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 		fmt->fmt.pix_mp.pixelformat = f->fmt.pix_mp.pixelformat;
 		inst->codec = fmt->fmt.pix_mp.pixelformat;
@@ -243,7 +240,7 @@ int iris_vdec_s_fmt(struct iris_inst *inst, struct v4l2_format *f)
 		fmt->fmt.pix_mp.ycbcr_enc = f->fmt.pix_mp.ycbcr_enc;
 		fmt->fmt.pix_mp.quantization = f->fmt.pix_mp.quantization;
 
-		output_fmt = inst->fmt_dst;
+		output_fmt = &inst->fmt_dst;
 		output_fmt->fmt.pix_mp.colorspace = f->fmt.pix_mp.colorspace;
 		output_fmt->fmt.pix_mp.xfer_func = f->fmt.pix_mp.xfer_func;
 		output_fmt->fmt.pix_mp.ycbcr_enc = f->fmt.pix_mp.ycbcr_enc;
@@ -263,7 +260,7 @@ int iris_vdec_s_fmt(struct iris_inst *inst, struct v4l2_format *f)
 		if (!(find_format(inst, f->fmt.pix_mp.pixelformat, f->type)))
 			return -EINVAL;
 
-		fmt = inst->fmt_dst;
+		fmt = &inst->fmt_dst;
 		fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 		fmt->fmt.pix_mp.pixelformat = f->fmt.pix_mp.pixelformat;
 		fmt->fmt.pix_mp.width = ALIGN(f->fmt.pix_mp.width, 128);

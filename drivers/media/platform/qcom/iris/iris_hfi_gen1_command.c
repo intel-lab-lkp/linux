@@ -737,8 +737,8 @@ static int iris_hfi_gen1_set_resolution(struct iris_inst *inst, u32 plane)
 
 	if (!iris_drc_pending(inst) && !(inst->sub_state & IRIS_INST_SUB_FIRST_IPSC)) {
 		fs.buffer_type = HFI_BUFFER_INPUT;
-		fs.width = inst->fmt_src->fmt.pix_mp.width;
-		fs.height = inst->fmt_src->fmt.pix_mp.height;
+		fs.width = inst->fmt_src.fmt.pix_mp.width;
+		fs.height = inst->fmt_src.fmt.pix_mp.height;
 
 		ret = hfi_gen1_set_property(inst, ptype, &fs, sizeof(fs));
 		if (ret)
@@ -749,8 +749,8 @@ static int iris_hfi_gen1_set_resolution(struct iris_inst *inst, u32 plane)
 	else
 		fs.buffer_type = HFI_BUFFER_OUTPUT;
 
-	fs.width = inst->fmt_dst->fmt.pix_mp.width;
-	fs.height = inst->fmt_dst->fmt.pix_mp.height;
+	fs.width = inst->fmt_dst.fmt.pix_mp.width;
+	fs.height = inst->fmt_dst.fmt.pix_mp.height;
 
 	return hfi_gen1_set_property(inst, ptype, &fs, sizeof(fs));
 }
@@ -773,7 +773,7 @@ static int iris_hfi_gen1_set_raw_format(struct iris_inst *inst, u32 plane)
 	int ret;
 
 	if (inst->domain == DECODER) {
-		pixelformat = inst->fmt_dst->fmt.pix_mp.pixelformat;
+		pixelformat = inst->fmt_dst.fmt.pix_mp.pixelformat;
 		if (iris_split_mode_enabled(inst)) {
 			fmt.buffer_type = HFI_BUFFER_OUTPUT;
 			fmt.format = HFI_COLOR_FORMAT_NV12_UBWC;
@@ -795,7 +795,7 @@ static int iris_hfi_gen1_set_raw_format(struct iris_inst *inst, u32 plane)
 			ret = hfi_gen1_set_property(inst, ptype, &fmt, sizeof(fmt));
 		}
 	} else {
-		pixelformat = inst->fmt_src->fmt.pix_mp.pixelformat;
+		pixelformat = inst->fmt_src.fmt.pix_mp.pixelformat;
 		fmt.buffer_type = HFI_BUFFER_INPUT;
 		fmt.format = pixelformat == V4L2_PIX_FMT_NV12 ?
 			HFI_COLOR_FORMAT_NV12 : HFI_COLOR_FORMAT_NV12_UBWC;
@@ -810,7 +810,7 @@ static int iris_hfi_gen1_set_format_constraints(struct iris_inst *inst, u32 plan
 	const u32 ptype = HFI_PROPERTY_PARAM_UNCOMPRESSED_PLANE_ACTUAL_CONSTRAINTS_INFO;
 	struct hfi_uncompressed_plane_actual_constraints_info pconstraint;
 
-	if (inst->fmt_dst->fmt.pix_mp.pixelformat == V4L2_PIX_FMT_QC08C)
+	if (inst->fmt_dst.fmt.pix_mp.pixelformat == V4L2_PIX_FMT_QC08C)
 		return 0;
 
 	pconstraint.buffer_type = HFI_BUFFER_OUTPUT2;
@@ -967,13 +967,13 @@ static int iris_hfi_gen1_set_stride(struct iris_inst *inst, u32 plane)
 	plane_actual_info.buffer_type = HFI_BUFFER_INPUT;
 	plane_actual_info.num_planes = 2;
 	plane_actual_info.plane_format[0].actual_stride =
-		ALIGN(inst->fmt_src->fmt.pix_mp.width, 128);
+		ALIGN(inst->fmt_src.fmt.pix_mp.width, 128);
 	plane_actual_info.plane_format[0].actual_plane_buffer_height =
-		ALIGN(inst->fmt_src->fmt.pix_mp.height, 32);
+		ALIGN(inst->fmt_src.fmt.pix_mp.height, 32);
 	plane_actual_info.plane_format[1].actual_stride =
-		ALIGN(inst->fmt_src->fmt.pix_mp.width, 128);
+		ALIGN(inst->fmt_src.fmt.pix_mp.width, 128);
 	plane_actual_info.plane_format[1].actual_plane_buffer_height =
-		(ALIGN(inst->fmt_src->fmt.pix_mp.height, 32)) / 2;
+		(ALIGN(inst->fmt_src.fmt.pix_mp.height, 32)) / 2;
 
 	return hfi_gen1_set_property(inst, ptype, &plane_actual_info, sizeof(plane_actual_info));
 }

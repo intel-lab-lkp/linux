@@ -64,7 +64,7 @@ static int iris_set_interconnects(struct iris_inst *inst)
 static int iris_vote_interconnects(struct iris_inst *inst)
 {
 	struct icc_vote_data *vote_data = &inst->icc_data;
-	struct v4l2_format *inp_f = inst->fmt_src;
+	struct v4l2_format *inp_f = &inst->fmt_src;
 
 	vote_data->width = inp_f->fmt.pix_mp.width;
 	vote_data->height = inp_f->fmt.pix_mp.height;

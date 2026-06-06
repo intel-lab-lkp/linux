@@ -83,8 +83,8 @@ struct iris_inst {
 	struct mutex			ctx_q_lock;/* lock to serialize queues related ioctls */
 	struct mutex			lock; /* lock to serialize forward and reverse threads */
 	struct v4l2_fh			fh;
-	struct v4l2_format		*fmt_src;
-	struct v4l2_format		*fmt_dst;
+	struct v4l2_format		fmt_src;
+	struct v4l2_format		fmt_dst;
 	struct v4l2_ctrl_handler	ctrl_handler;
 	enum domain_type		domain;
 	struct iris_hfi_rect_desc	crop;

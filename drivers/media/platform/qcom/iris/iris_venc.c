@@ -19,15 +19,7 @@ int iris_venc_inst_init(struct iris_inst *inst)
 	struct iris_core *core = inst->core;
 	struct v4l2_format *f;
 
-	inst->fmt_src = kzalloc_obj(*inst->fmt_src);
-	inst->fmt_dst = kzalloc_obj(*inst->fmt_dst);
-	if (!inst->fmt_src || !inst->fmt_dst) {
-		kfree(inst->fmt_src);
-		kfree(inst->fmt_dst);
-		return -ENOMEM;
-	}
-
-	f = inst->fmt_dst;
+	f = &inst->fmt_dst;
 	f->type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	f->fmt.pix_mp.width = DEFAULT_WIDTH;
 	f->fmt.pix_mp.height = DEFAULT_HEIGHT;
@@ -44,7 +36,7 @@ int iris_venc_inst_init(struct iris_inst *inst)
 	inst->buffers[BUF_OUTPUT].min_count = iris_vpu_buf_count(inst, BUF_OUTPUT);
 	inst->buffers[BUF_OUTPUT].size = f->fmt.pix_mp.plane_fmt[0].sizeimage;
 
-	f = inst->fmt_src;
+	f = &inst->fmt_src;
 	f->type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	f->fmt.pix_mp.pixelformat = V4L2_PIX_FMT_NV12;
 	f->fmt.pix_mp.width = ALIGN(DEFAULT_WIDTH, 128);
@@ -194,7 +186,7 @@ int iris_venc_try_fmt(struct iris_inst *inst, struct v4l2_format *f)
 	switch (f->type) {
 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
 		if (!fmt) {
-			f_inst = inst->fmt_src;
+			f_inst = &inst->fmt_src;
 			f->fmt.pix_mp.width = f_inst->fmt.pix_mp.width;
 			f->fmt.pix_mp.height = f_inst->fmt.pix_mp.height;
 			f->fmt.pix_mp.pixelformat = f_inst->fmt.pix_mp.pixelformat;
@@ -202,7 +194,7 @@ int iris_venc_try_fmt(struct iris_inst *inst, struct v4l2_format *f)
 		break;
 	case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
 		if (!fmt) {
-			f_inst = inst->fmt_dst;
+			f_inst = &inst->fmt_dst;
 			f->fmt.pix_mp.width = f_inst->fmt.pix_mp.width;
 			f->fmt.pix_mp.height = f_inst->fmt.pix_mp.height;
 			f->fmt.pix_mp.pixelformat = f_inst->fmt.pix_mp.pixelformat;
@@ -234,15 +226,15 @@ static int iris_venc_s_fmt_output(struct iris_inst *inst, struct v4l2_format *f)
 
 	codec_align = venc_fmt->pixfmt == V4L2_PIX_FMT_HEVC ? 32 : 16;
 
-	fmt = inst->fmt_dst;
+	fmt = &inst->fmt_dst;
 	fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	/*
 	 * If output format size != input format size,
 	 * it is considered a scaling case,
 	 * and the scaled size needs to be saved.
 	 */
-	if (f->fmt.pix_mp.width != inst->fmt_src->fmt.pix_mp.width ||
-	    f->fmt.pix_mp.height != inst->fmt_src->fmt.pix_mp.height) {
+	if (f->fmt.pix_mp.width != inst->fmt_src.fmt.pix_mp.width ||
+	    f->fmt.pix_mp.height != inst->fmt_src.fmt.pix_mp.height) {
 		inst->enc_scale_width = f->fmt.pix_mp.width;
 		inst->enc_scale_height = f->fmt.pix_mp.height;
 		fmt->fmt.pix_mp.width = ALIGN(f->fmt.pix_mp.width, codec_align);
@@ -278,7 +270,7 @@ static int iris_venc_s_fmt_input(struct iris_inst *inst, struct v4l2_format *f)
 	if (!(find_format(inst, f->fmt.pix_mp.pixelformat, f->type)))
 		return -EINVAL;
 
-	fmt = inst->fmt_src;
+	fmt = &inst->fmt_src;
 	fmt->type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	fmt->fmt.pix_mp.width = ALIGN(f->fmt.pix_mp.width, 128);
 	fmt->fmt.pix_mp.height = ALIGN(f->fmt.pix_mp.height, 32);
@@ -292,7 +284,7 @@ static int iris_venc_s_fmt_input(struct iris_inst *inst, struct v4l2_format *f)
 	fmt->fmt.pix_mp.ycbcr_enc = f->fmt.pix_mp.ycbcr_enc;
 	fmt->fmt.pix_mp.quantization = f->fmt.pix_mp.quantization;
 
-	output_fmt = inst->fmt_dst;
+	output_fmt = &inst->fmt_dst;
 	output_fmt->fmt.pix_mp.width = fmt->fmt.pix_mp.width;
 	output_fmt->fmt.pix_mp.height = fmt->fmt.pix_mp.height;
 	output_fmt->fmt.pix_mp.colorspace = fmt->fmt.pix_mp.colorspace;
@@ -379,17 +371,17 @@ int iris_venc_s_selection(struct iris_inst *inst, struct v4l2_selection *s)
 		s->r.left = 0;
 		s->r.top = 0;
 
-		if (s->r.width > inst->fmt_src->fmt.pix_mp.width ||
-		    s->r.height > inst->fmt_src->fmt.pix_mp.height)
+		if (s->r.width > inst->fmt_src.fmt.pix_mp.width ||
+		    s->r.height > inst->fmt_src.fmt.pix_mp.height)
 			return -EINVAL;
 
 		inst->crop.left = s->r.left;
 		inst->crop.top = s->r.top;
 		inst->crop.width = s->r.width;
 		inst->crop.height = s->r.height;
-		inst->fmt_dst->fmt.pix_mp.width = inst->crop.width;
-		inst->fmt_dst->fmt.pix_mp.height = inst->crop.height;
-		return iris_venc_s_fmt_output(inst, inst->fmt_dst);
+		inst->fmt_dst.fmt.pix_mp.width = inst->crop.width;
+		inst->fmt_dst.fmt.pix_mp.height = inst->crop.height;
+		return iris_venc_s_fmt_output(inst, &inst->fmt_dst);
 	default:
 		return -EINVAL;
 	}

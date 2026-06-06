@@ -300,8 +300,6 @@ int iris_close(struct file *filp)
 	mutex_unlock(&inst->lock);
 	mutex_destroy(&inst->ctx_q_lock);
 	mutex_destroy(&inst->lock);
-	kfree(inst->fmt_src);
-	kfree(inst->fmt_dst);
 	kfree(inst);
 
 	return 0;
@@ -360,9 +358,9 @@ static int iris_g_fmt_vid_mplane(struct file *filp, void *fh, struct v4l2_format
 
 	mutex_lock(&inst->lock);
 	if (V4L2_TYPE_IS_OUTPUT(f->type))
-		*f = *inst->fmt_src;
+		*f = inst->fmt_src;
 	else if (V4L2_TYPE_IS_CAPTURE(f->type))
-		*f = *inst->fmt_dst;
+		*f = inst->fmt_dst;
 	else
 		ret = -EINVAL;
 
@@ -494,8 +492,8 @@ static int iris_g_selection(struct file *filp, void *fh, struct v4l2_selection *
 		switch (s->target) {
 		case V4L2_SEL_TGT_CROP_BOUNDS:
 		case V4L2_SEL_TGT_CROP_DEFAULT:
-			s->r.width = inst->fmt_src->fmt.pix_mp.width;
-			s->r.height = inst->fmt_src->fmt.pix_mp.height;
+			s->r.width = inst->fmt_src.fmt.pix_mp.width;
+			s->r.height = inst->fmt_src.fmt.pix_mp.height;
 			break;
 		case V4L2_SEL_TGT_CROP:
 			s->r.width = inst->crop.width;
