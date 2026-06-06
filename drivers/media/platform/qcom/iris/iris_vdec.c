@@ -19,10 +19,21 @@
 int iris_vdec_inst_init(struct iris_inst *inst)
 {
 	struct iris_core *core = inst->core;
+	struct v4l2_format *fmt_src, *fmt_dst;
 	struct v4l2_format *f;
 
-	inst->fmt_src = kzalloc_obj(*inst->fmt_src);
-	inst->fmt_dst = kzalloc_obj(*inst->fmt_dst);
+	fmt_src = kzalloc_obj(*fmt_src);
+	if (!fmt_src)
+		return -ENOMEM;
+
+	fmt_dst = kzalloc_obj(*fmt_dst);
+	if (!fmt_dst) {
+		kfree(fmt_src);
+		return -ENOMEM;
+	}
+
+	inst->fmt_src = fmt_src;
+	inst->fmt_dst = fmt_dst;
 
 	inst->fw_min_count = MIN_BUFFERS;
 
