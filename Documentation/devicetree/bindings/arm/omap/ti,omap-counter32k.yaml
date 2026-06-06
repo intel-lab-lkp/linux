@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/omap/ti,omap-counter32k.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments OMAP Counter-32K
+
+maintainers:
+  - Eduard Bostina <egbostina@gmail.com>
+
+properties:
+  compatible:
+    oneOf:
+      - const: ti,omap-counter32k
+      - items:
+          - const: ti,am4372-counter32k
+          - const: ti,omap-counter32k
+
+  reg:
+    maxItems: 1
+
+  ti,hwmods:
+    description: Name of the hwmod associated to the counter
+    $ref: /schemas/types.yaml#/definitions/string-array
+    items:
+      - const: counter_32k
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    counter@4a304000 {
+        compatible = "ti,omap-counter32k";
+        reg = <0x4a304000 0x20>;
+        ti,hwmods = "counter_32k";
+    };
