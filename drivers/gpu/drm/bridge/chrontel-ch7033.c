@@ -302,7 +302,7 @@ static int ch7033_bridge_attach(struct drm_bridge *bridge,
 					  priv->next_bridge->type,
 					  priv->next_bridge->ddc);
 	if (ret) {
-		DRM_ERROR("Failed to initialize connector\n");
+		drm_err(bridge->dev, "Failed to initialize connector\n");
 		return ret;
 	}
 
