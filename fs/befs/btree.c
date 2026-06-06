@@ -219,6 +219,21 @@ befs_bt_read_node(struct super_block *sb, const befs_data_stream *ds,
 	node->head.all_key_length =
 	    fs16_to_cpu(sb, node->od_node->all_key_length);
 
+	/*
+	 * od_node points into a single block_size buffer_head.  Reject
+	 * nodes whose (untrusted) key counts/lengths would push the
+	 * keylen-index or value arrays past the end of that block, which
+	 * would otherwise cause out-of-bounds reads in befs_bt_get_key()
+	 * and befs_bt_valarray().
+	 */
+	if (ALIGN(sizeof(befs_btree_nodehead) + node->head.all_key_length, 8) +
+	    (size_t)node->head.all_key_count * (sizeof(fs16) + sizeof(fs64)) >
+	    BEFS_SB(sb)->block_size) {
+		befs_error(sb, "corrupt b+tree node: keys (%u/%u) exceed block size",
+			   node->head.all_key_count, node->head.all_key_length);
+		return BEFS_ERR;
+	}
+
 	befs_debug(sb, "<--- %s", __func__);
 	return BEFS_OK;
 }
@@ -678,7 +693,7 @@ befs_bt_get_key(struct super_block *sb, struct befs_btree_node *node,
 	char *keystart;
 	fs16 *keylen_index;
 
-	if (index < 0 || index > node->head.all_key_count) {
+	if (index < 0 || index >= node->head.all_key_count) {
 		*keylen = 0;
 		return NULL;
 	}
