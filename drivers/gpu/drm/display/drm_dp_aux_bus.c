@@ -305,6 +305,7 @@ int of_dp_aux_populate_bus(struct drm_dp_aux *aux,
 		 * of kfree() directly for error cases.
 		 */
 		put_device(&aux_ep->dev);
+		of_node_put(np);
 
 		goto err_did_set_populated;
 	}
