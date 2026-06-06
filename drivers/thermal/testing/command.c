@@ -150,6 +150,8 @@ static ssize_t tt_command_process(char *s)
 	if (arg) {
 		*arg = '\0';
 		arg++;
+	} else {
+		arg = s + strlen(s);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(tt_command_strings); i++) {
