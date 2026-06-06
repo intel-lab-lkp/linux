@@ -1362,9 +1362,14 @@ static void tipc_sk_conn_proto_rcv(struct tipc_sock *tsk, struct sk_buff *skb,
 			__skb_queue_tail(xmitq, skb);
 		return;
 	} else if (mtyp == CONN_ACK) {
+		u16 conn_ack = msg_conn_ack(hdr);
+
+		if (conn_ack > tsk->snt_unacked)
+			goto exit;
+
 		was_cong = tsk_conn_cong(tsk);
 		tipc_sk_push_backlog(tsk, msg_nagle_ack(hdr));
-		tsk->snt_unacked -= msg_conn_ack(hdr);
+		tsk->snt_unacked -= conn_ack;
 		if (tsk->peer_caps & TIPC_BLOCK_FLOWCTL)
 			tsk->snd_win = msg_adv_win(hdr);
 		if (was_cong && !tsk_conn_cong(tsk))
