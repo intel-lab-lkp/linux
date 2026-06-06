@@ -48,7 +48,6 @@ enum clock_rate {
 /* TI SND9039 PMIC register set */
 #define LDO9_REG	0x49
 #define LDO10_REG	0x4a
-#define LDO11_REG	0x4b
 
 #define LDO_2P8V_ON	0x2f /* 0x2e selects 2.85V ...      */
 #define LDO_2P8V_OFF	0x2e /* ... bottom bit is "enabled" */
@@ -98,8 +97,6 @@ static struct gmin_subdev gmin_subdevs[MAX_SUBDEVS];
 #define PMIC_ACPI_AXP		"INT33F4"	/* XPower AXP288 PMIC */
 #define PMIC_ACPI_TI		"INT33F5"	/* Dollar Cove TI PMIC */
 #define PMIC_ACPI_CRYSTALCOVE	"INT33FD"	/* Crystal Cove PMIC */
-
-#define PMIC_PLATFORM_TI	"intel_soc_pmic_chtdc_ti"
 
 static enum {
 	PMIC_UNSET = 0,
