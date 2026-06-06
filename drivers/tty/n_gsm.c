@@ -1806,12 +1806,12 @@ static void gsm_control_rls(struct gsm_mux *gsm, const u8 *data, int clen)
 	int len = clen;
 	const u8 *dp = data;
 
-	while (gsm_read_ea(&addr, *dp++) == 0) {
+	while (len > 0) {
+		if (gsm_read_ea(&addr, *dp++))
+			break;
 		len--;
-		if (len == 0)
-			return;
 	}
-	/* Must be at least one byte following ea */
+	/* Must be at least one byte following the EA */
 	len--;
 	if (len <= 0)
 		return;
