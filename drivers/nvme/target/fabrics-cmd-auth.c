@@ -496,11 +496,30 @@ u32 nvmet_auth_receive_data_len(struct nvmet_req *req)
 	return le32_to_cpu(req->cmd->auth_receive.al);
 }
 
+static u32 nvmet_auth_receive_min_len(struct nvmet_req *req)
+{
+	struct nvmet_ctrl *ctrl = req->sq->ctrl;
+	u32 hash_len = 0;
+
+	switch (req->sq->dhchap_step) {
+	case NVME_AUTH_DHCHAP_MESSAGE_CHALLENGE:
+		return 0;
+	case NVME_AUTH_DHCHAP_MESSAGE_SUCCESS1:
+		if (req->sq->dhchap_c2)
+			hash_len = nvme_auth_hmac_hash_len(ctrl->shash_id);
+
+		return sizeof(struct nvmf_auth_dhchap_success1_data) + hash_len;
+	default:
+		return sizeof(struct nvmf_auth_dhchap_failure_data);
+	}
+}
+
 void nvmet_execute_auth_receive(struct nvmet_req *req)
 {
 	struct nvmet_ctrl *ctrl = req->sq->ctrl;
 	void *d;
 	u32 al;
+	u32 min_len;
 	u16 status = 0;
 
 	if (req->cmd->auth_receive.secp != NVME_AUTH_DHCHAP_PROTOCOL_IDENTIFIER) {
@@ -531,6 +550,14 @@ void nvmet_execute_auth_receive(struct nvmet_req *req)
 	if (!nvmet_check_transfer_len(req, al)) {
 		pr_debug("%s: transfer length mismatch (%u)\n", __func__, al);
 		return;
+	}
+
+	min_len = nvmet_auth_receive_min_len(req);
+	if (al < min_len) {
+		status = NVME_SC_INVALID_FIELD | NVME_STATUS_DNR;
+		req->error_loc =
+			offsetof(struct nvmf_auth_receive_command, al);
+		goto done;
 	}
 
 	d = kmalloc(al, GFP_KERNEL);
