@@ -54,13 +54,15 @@ static int ptn3460_read_bytes(struct ptn3460_bridge *ptn_bridge, char addr,
 
 	ret = i2c_master_send(ptn_bridge->client, &addr, 1);
 	if (ret < 0) {
-		DRM_ERROR("Failed to send i2c command, ret=%d\n", ret);
+		dev_err(&ptn_bridge->client->dev,
+			"Failed to send i2c command, ret=%d\n", ret);
 		return ret;
 	}
 
 	ret = i2c_master_recv(ptn_bridge->client, buf, len);
 	if (ret < 0) {
-		DRM_ERROR("Failed to recv i2c data, ret=%d\n", ret);
+		dev_err(&ptn_bridge->client->dev,
+			"Failed to recv i2c data, ret=%d\n", ret);
 		return ret;
 	}
 
@@ -78,7 +80,8 @@ static int ptn3460_write_byte(struct ptn3460_bridge *ptn_bridge, char addr,
 
 	ret = i2c_master_send(ptn_bridge->client, buf, ARRAY_SIZE(buf));
 	if (ret < 0) {
-		DRM_ERROR("Failed to send i2c command, ret=%d\n", ret);
+		dev_err(&ptn_bridge->client->dev,
+			"Failed to send i2c command, ret=%d\n", ret);
 		return ret;
 	}
 
@@ -94,7 +97,8 @@ static int ptn3460_select_edid(struct ptn3460_bridge *ptn_bridge)
 	ret = ptn3460_write_byte(ptn_bridge, PTN3460_EDID_SRAM_LOAD_ADDR,
 			ptn_bridge->edid_emulation);
 	if (ret) {
-		DRM_ERROR("Failed to transfer EDID to sram, ret=%d\n", ret);
+		dev_err(&ptn_bridge->client->dev,
+			"Failed to transfer EDID to sram, ret=%d\n", ret);
 		return ret;
 	}
 
@@ -104,7 +108,8 @@ static int ptn3460_select_edid(struct ptn3460_bridge *ptn_bridge)
 
 	ret = ptn3460_write_byte(ptn_bridge, PTN3460_EDID_EMULATION_ADDR, val);
 	if (ret) {
-		DRM_ERROR("Failed to write EDID value, ret=%d\n", ret);
+		dev_err(&ptn_bridge->client->dev,
+			"Failed to write EDID value, ret=%d\n", ret);
 		return ret;
 	}
 
@@ -134,7 +139,7 @@ static void ptn3460_pre_enable(struct drm_bridge *bridge)
 
 	ret = ptn3460_select_edid(ptn_bridge);
 	if (ret)
-		DRM_ERROR("Select EDID failed ret=%d\n", ret);
+		drm_err(bridge->dev, "Select EDID failed ret=%d\n", ret);
 
 	ptn_bridge->enabled = true;
 }
@@ -166,10 +171,8 @@ static const struct drm_edid *ptn3460_edid_read(struct drm_bridge *bridge,
 	ptn3460_pre_enable(&ptn_bridge->bridge);
 
 	edid = kmalloc(EDID_LENGTH, GFP_KERNEL);
-	if (!edid) {
-		DRM_ERROR("Failed to allocate EDID\n");
+	if (!edid)
 		goto out;
-	}
 
 	ret = ptn3460_read_bytes(ptn_bridge, PTN3460_EDID_ADDR, edid,
 				 EDID_LENGTH);
@@ -233,7 +236,7 @@ static int ptn3460_bridge_attach(struct drm_bridge *bridge,
 	ret = drm_connector_init(bridge->dev, &ptn_bridge->connector,
 			&ptn3460_connector_funcs, DRM_MODE_CONNECTOR_LVDS);
 	if (ret) {
-		DRM_ERROR("Failed to initialize connector with drm\n");
+		drm_err(bridge->dev, "Failed to initialize connector with drm\n");
 		return ret;
 	}
 	drm_connector_helper_add(&ptn_bridge->connector,
@@ -289,7 +292,7 @@ static int ptn3460_probe(struct i2c_client *client)
 						GPIOD_OUT_LOW);
 	if (IS_ERR(ptn_bridge->gpio_rst_n)) {
 		ret = PTR_ERR(ptn_bridge->gpio_rst_n);
-		DRM_ERROR("cannot get gpio_rst_n %d\n", ret);
+		dev_err(dev, "cannot get gpio_rst_n %d\n", ret);
 		return ret;
 	}
 
