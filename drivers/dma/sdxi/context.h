@@ -7,6 +7,7 @@
 #define DMA_SDXI_CONTEXT_H
 
 #include <linux/dma-mapping.h>
+#include <linux/io.h>
 #include <linux/types.h>
 
 #include "hw.h"
@@ -57,5 +58,10 @@ struct sdxi_cxt {
 };
 
 int sdxi_admin_cxt_init(struct sdxi_dev *sdxi);
+
+static inline void sdxi_cxt_push_doorbell(struct sdxi_cxt *cxt, u64 index)
+{
+	writeq(index, cxt->db);
+}
 
 #endif /* DMA_SDXI_CONTEXT_H */
