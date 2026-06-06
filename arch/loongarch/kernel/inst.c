@@ -9,8 +9,32 @@
 
 #include <asm/cacheflush.h>
 #include <asm/inst.h>
+#include <linux/kprobes.h>
 
 static DEFINE_RAW_SPINLOCK(patch_lock);
+
+static void __kprobes *patch_map(void *addr, const unsigned int fixmap)
+{
+	phys_addr_t phys;
+
+	if ((unsigned long)addr < vm_map_base) {
+		return addr;
+	} else if (IS_ENABLED(CONFIG_STRICT_MODULE_RWX)) {
+		struct page *page = vmalloc_to_page(addr);
+
+		BUG_ON(!page);
+		phys = page_to_phys(page) + offset_in_page(addr);
+	} else {
+		return addr;
+	}
+
+	return (void *)set_fixmap_offset(fixmap, phys);
+}
+
+static void __kprobes patch_unmap(int fixmap)
+{
+	clear_fixmap(fixmap);
+}
 
 void simu_pc(struct pt_regs *regs, union loongarch_instruction insn)
 {
@@ -208,12 +232,15 @@ int larch_insn_write(void *addr, u32 insn)
 {
 	int ret;
 	unsigned long flags = 0;
+	void *waddr = addr;
 
 	if ((unsigned long)addr & 3)
 		return -EINVAL;
 
 	raw_spin_lock_irqsave(&patch_lock, flags);
-	ret = copy_to_kernel_nofault(addr, &insn, LOONGARCH_INSN_SIZE);
+	waddr = patch_map(addr, FIX_TEXT_POKE0);
+	ret = copy_to_kernel_nofault(waddr, &insn, LOONGARCH_INSN_SIZE);
+	patch_unmap(FIX_TEXT_POKE0);
 	raw_spin_unlock_irqrestore(&patch_lock, flags);
 
 	return ret;
