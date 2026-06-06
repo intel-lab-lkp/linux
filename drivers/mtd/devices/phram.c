@@ -268,10 +268,8 @@ static int phram_setup(const char *val)
 	uint32_t rem;
 	int i, ret;
 
-	if (strnlen(val, sizeof(buf)) >= sizeof(buf))
+	if (strscpy(buf, val) < 0)
 		parse_err("parameter too long\n");
-
-	strcpy(str, val);
 	kill_final_newline(str);
 
 	for (i = 0; i < 4; i++)
