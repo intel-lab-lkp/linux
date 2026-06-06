@@ -156,9 +156,8 @@ static int __init devt_from_devname(const char *name, dev_t *devt)
 	char s[32];
 	char *p;
 
-	if (strlen(name) > 31)
+	if (strscpy(s, name) < 0)
 		return -EINVAL;
-	strcpy(s, name);
 	for (p = s; *p; p++) {
 		if (*p == '/')
 			*p = '!';
