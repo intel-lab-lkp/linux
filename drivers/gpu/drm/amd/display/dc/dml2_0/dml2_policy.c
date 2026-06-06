@@ -157,7 +157,8 @@ int dml2_policy_build_synthetic_soc_states(struct dml2_policy_build_synthetic_so
 			num_uclk_dpms++;
 	}
 
-	if (!max_dcfclk_mhz || !max_dispclk_mhz || !max_dppclk_mhz || !max_phyclk_mhz || !max_dtbclk_mhz)
+	if (!max_dcfclk_mhz || !max_dispclk_mhz || !max_dppclk_mhz || !max_phyclk_mhz ||
+		!max_dtbclk_mhz || !max_fclk_mhz)
 		return -1;
 
 	p->out_states->num_states = 0;
