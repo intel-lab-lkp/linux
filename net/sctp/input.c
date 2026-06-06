@@ -1197,12 +1197,25 @@ static struct sctp_association *__sctp_rcv_asconf_lookup(
 	struct sctp_af *af;
 	union sctp_addr_param *param;
 	union sctp_addr paddr;
+	unsigned int param_space;
+	unsigned int plen;
 
 	if (ntohs(ch->length) < sizeof(*asconf) + sizeof(struct sctp_paramhdr))
 		return NULL;
 
+	param_space = ntohs(ch->length) - sizeof(*asconf);
+
 	/* Skip over the ADDIP header and find the Address parameter */
 	param = (union sctp_addr_param *)(asconf + 1);
+
+	/* The whole address parameter must lie within the chunk before
+	 * af->from_addr_param() reads the variable-length address; otherwise a
+	 * truncated trailing ASCONF chunk lets it read uninitialized bytes past
+	 * the parameter.
+	 */
+	plen = ntohs(param->p.length);
+	if (plen < sizeof(struct sctp_paramhdr) || plen > param_space)
+		return NULL;
 
 	af = sctp_get_af_specific(param_type2af(param->p.type));
 	if (unlikely(!af))
