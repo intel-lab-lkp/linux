@@ -9,12 +9,17 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/kconfig.h>
 #include <linux/minmax.h>
 #include <linux/ratelimit.h>
 #include <linux/types.h>
 #include <asm/byteorder.h>
 
 #include "hw.h"
+
+#if IS_ENABLED(CONFIG_KUNIT)
+int __must_check sdxi_encode_size32(u64 size, __le32 *dest);
+#endif
 
 static inline void sdxi_desc_vl_expect(const struct sdxi_desc *desc, bool expected)
 {
@@ -79,6 +84,26 @@ static inline struct sdxi_cxt_range sdxi_cxt_range_single(u16 nr)
 {
 	return sdxi_cxt_range(nr, nr);
 }
+
+void sdxi_serialize_nop(struct sdxi_desc *desc);
+
+struct sdxi_copy {
+	dma_addr_t src;
+	dma_addr_t dst;
+	u64 len;
+	u16 src_akey;
+	u16 dst_akey;
+};
+
+int sdxi_encode_copy(struct sdxi_desc *desc,
+		     const struct sdxi_copy *params);
+
+struct sdxi_intr {
+	u16 akey;
+};
+
+int sdxi_encode_intr(struct sdxi_desc *desc,
+		     const struct sdxi_intr *params);
 
 struct sdxi_cxt_start {
 	struct sdxi_cxt_range range;
