@@ -415,12 +415,11 @@ static int block2mtd_setup2(const char *val)
 	unsigned long timeout = MTD_DEFAULT_TIMEOUT;
 	int i, ret;
 
-	if (strnlen(val, sizeof(buf)) >= sizeof(buf)) {
+	if (strscpy(buf, val) < 0) {
 		pr_err("parameter too long\n");
 		return 0;
 	}
 
-	strcpy(str, val);
 	kill_final_newline(str);
 
 	for (i = 0; i < BLOCK2MTD_PARAM_MAX_COUNT; i++)
