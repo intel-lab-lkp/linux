@@ -17,6 +17,7 @@ see the :doc:`admin guide <../admin-guide/mm/index>`.
    page_allocation
    vmalloc
    slab
+   slab-isolation
    highmem
    page_reclaim
    swap
