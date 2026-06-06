@@ -677,7 +677,7 @@ static int efx_xdp_xmit(struct net_device *dev, int n, struct xdp_frame **xdpfs,
 
 static void efx_update_name(struct efx_nic *efx)
 {
-	strcpy(efx->name, efx->net_dev->name);
+	strscpy(efx->name, efx->net_dev->name);
 	efx_siena_mtd_rename(efx);
 	efx_siena_set_channel_names(efx);
 }
