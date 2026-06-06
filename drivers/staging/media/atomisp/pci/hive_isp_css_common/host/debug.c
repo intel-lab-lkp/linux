@@ -12,7 +12,6 @@
 #include "debug_private.h"
 #endif /* __INLINE_DEBUG__ */
 
-#define __INLINE_SP__
 #include "sp.h"
 
 #include "assert_support.h"

@@ -28,9 +28,6 @@
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
 
-/* Assume max number of ACC stages */
-#define MAX_ACC_STAGES	20
-
 /* Ideally, this should come from CSS headers */
 #define NO_LINK -1
 

@@ -29,20 +29,6 @@
 #include "atomisp_internal.h"
 #include "mmu/isp_mmu.h"
 
-/*
- * 64-bit x86 processor physical address layout:
- * 0		- 0x7fffffff		DDR RAM	(2GB)
- * 0x80000000	- 0xffffffff		MMIO	(2GB)
- * 0x100000000	- 0x3fffffffffff	DDR RAM	(64TB)
- * So if the system has more than 2GB DDR memory, the lower 2GB occupies the
- * physical address 0 - 0x7fffffff and the rest will start from 0x100000000.
- * We have to make sure memory is allocated from the lower 2GB for devices
- * that are only 32-bit capable(e.g. the ISP MMU).
- *
- * For any confusion, contact bin.gao@intel.com.
- */
-#define NR_PAGES_2GB	(SZ_2G / PAGE_SIZE)
-
 static void free_mmu_map(struct isp_mmu *mmu, unsigned int start_isp_virt,
 			 unsigned int end_isp_virt);
 

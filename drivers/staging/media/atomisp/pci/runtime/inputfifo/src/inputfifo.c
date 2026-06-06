@@ -10,9 +10,7 @@
 
 #include "device_access.h"
 
-#define __INLINE_SP__
 #include "sp.h"
-#define __INLINE_ISP__
 #include "isp.h"
 #define __INLINE_IRQ__
 #include "irq.h"
@@ -21,7 +19,6 @@
 
 #define __INLINE_EVENT__
 #include "event_fifo.h"
-#define __INLINE_SP__
 
 #include "input_system.h"	/* MIPI_PREDICTOR_NONE,... */
 

@@ -36,13 +36,6 @@
 
 #include "device_access.h"
 
-/* Timeouts to wait for all subdevs to be registered */
-#define SUBDEV_WAIT_TIMEOUT		50 /* ms */
-#define SUBDEV_WAIT_TIMEOUT_MAX_COUNT	40 /* up to 2 seconds */
-
-/* G-Min addition: pull this in from intel_mid_pm.h */
-#define CSTATE_EXIT_LATENCY_C1  1
-
 /* cross component debug message flag */
 int dbg_level;
 module_param(dbg_level, int, 0644);
