@@ -90,6 +90,42 @@ static void sdxi_write_fn_gsr(struct sdxi_dev *sdxi, enum sdxi_fn_gsr cmd)
 	sdxi_write64(sdxi, SDXI_MMIO_CTL0, ctl0);
 }
 
+/*
+ * Transition the function from stopped state to active.
+ * See SDXI 1.0 4.1 SDXI Function State.
+ */
+static int sdxi_dev_start(struct sdxi_dev *sdxi)
+{
+	enum sdxi_fn_gsv status = sdxi_dev_gsv(sdxi);
+	int ret;
+
+	if (status != SDXI_GSV_STOP) {
+		dev_err(sdxi->dev,
+			"can't activate busy device (unexpected gsv: %s)\n",
+			gsv_str(status));
+		return -EBUSY;
+	}
+
+	sdxi_write_fn_gsr(sdxi, SDXI_GSRV_ACTIVE);
+
+	ret = sdxi_dev_gsv_poll(sdxi, status,
+				status == SDXI_GSV_ACTIVE ||
+				status == SDXI_GSV_ERROR);
+	if (ret) {
+		dev_err(sdxi->dev, "activation timed out, current state: %s\n",
+			gsv_str(status));
+		return ret;
+	}
+
+	if (status == SDXI_GSV_ERROR) {
+		dev_err(sdxi->dev, "went to error state during activation\n");
+		return -EIO;
+	}
+
+	dev_dbg(sdxi->dev, "activated\n");
+	return 0;
+}
+
 /* Get the device to the GSV_STOP state. */
 static int sdxi_dev_stop(struct sdxi_dev *sdxi)
 {
@@ -229,7 +265,11 @@ static int sdxi_fn_activate(struct sdxi_dev *sdxi)
 	if (err)
 		return err;
 
-	return 0;
+	/*
+	 * SDXI 1.0 4.1.8.9: Set MMIO_CTL0.fn_gsr to GSRV_ACTIVE and
+	 * wait for MMIO_STS0.fn_gsv to reach GSV_ACTIVE or GSV_ERROR.
+	 */
+	return sdxi_dev_start(sdxi);
 }
 
 static int sdxi_device_init(struct sdxi_dev *sdxi)
@@ -289,6 +329,14 @@ int sdxi_register(struct device *dev, const struct sdxi_bus_ops *ops)
 	return sdxi_device_init(sdxi);
 }
 EXPORT_SYMBOL_NS_GPL(sdxi_register, "SDXI");
+
+void sdxi_unregister(struct device *dev)
+{
+	struct sdxi_dev *sdxi = dev_get_drvdata(dev);
+
+	sdxi_dev_stop(sdxi);
+}
+EXPORT_SYMBOL_NS_GPL(sdxi_unregister, "SDXI");
 
 MODULE_AUTHOR("Wei Huang");
 MODULE_AUTHOR("Nathan Lynch");
