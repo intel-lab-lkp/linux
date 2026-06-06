@@ -5,6 +5,7 @@ sdxi-core-y := \
 	context.o     \
 	descriptor.o  \
 	device.o      \
+	dma.o         \
 	ring.o
 
 obj-$(CONFIG_SDXI_PCI) += sdxi-pci.o

@@ -4,6 +4,7 @@ config SDXI_CORE
 	# SDXI 1.0 9 MMIO Control Registers.
 	depends on 64BIT
 	select DMA_ENGINE
+	select DMA_VIRTUAL_CHANNELS
 	help
 	  Enable support for Smart Data Accelerator Interface (SDXI)
 	  Platform Data Mover devices. SDXI is a vendor-neutral
