@@ -599,6 +599,7 @@ void __init setup_arch(char **cmdline_p)
 	fdt_setup();
 	memblock_init();
 	pagetable_init();
+	early_fixmap_init();
 	bootcmdline_init(cmdline_p);
 	parse_early_param();
 	reserve_initrd_mem();

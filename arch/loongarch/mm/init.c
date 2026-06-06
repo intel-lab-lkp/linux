@@ -36,6 +36,69 @@
 #include <asm/pgalloc.h>
 #include <asm/tlb.h>
 
+#define SPAN_NR_ENTRIES(vstart, vend, shift) \
+	((((vend) - 1) >> (shift)) - ((vstart) >> (shift)) + 1)
+
+#define NR_BM_PTE_TABLES \
+	SPAN_NR_ENTRIES(FIXADDR_START, FIXADDR_TOP, PMD_SHIFT)
+
+#define __BM_TABLE_IDX(addr, shift) \
+	(((addr) >> (shift)) - (FIXADDR_START >> (shift)))
+
+#define BM_PTE_TABLE_IDX(addr)  __BM_TABLE_IDX(addr, PMD_SHIFT)
+
+static pte_t bm_pte[NR_BM_PTE_TABLES][PTRS_PER_PTE] __page_aligned_bss;
+static pmd_t bm_pmd[PTRS_PER_PMD] __page_aligned_bss __maybe_unused;
+static pud_t bm_pud[PTRS_PER_PUD] __page_aligned_bss __maybe_unused;
+
+static inline pte_t *fixmap_pte(unsigned long addr)
+{
+	return &bm_pte[BM_PTE_TABLE_IDX(addr)][pte_index(addr)];
+}
+
+void __init early_fixmap_init(void)
+{
+	unsigned long addr = FIXADDR_START;
+	unsigned long end = FIXADDR_TOP;
+
+	pgd_t *pgd = pgd_offset_k(addr);
+	p4d_t *p4d = p4d_offset(pgd, addr);
+	pud_t *pud;
+	pmd_t *pmd;
+
+	unsigned long next;
+
+	if (p4d_none(p4dp_get(p4d))) {
+		pud = bm_pud;
+		p4d_populate(&init_mm, p4d, pud);
+#ifndef __PAGETABLE_PUD_FOLDED
+		pud_init(pud);
+#endif
+}
+
+	pud = pud_offset(p4d, addr);
+	if (pud_none(pudp_get(pud))) {
+		pmd = bm_pmd;
+		pud_populate(&init_mm, pud, pmd);
+#ifndef __PAGETABLE_PMD_FOLDED
+		pmd_init(pmd);
+#endif
+}
+
+	pmd = pmd_offset(pud, addr);
+	do {
+		next = pmd_addr_end(addr, end);
+		if (!pmd_present(pmdp_get(pmd))) {
+			pte_t *pte;
+
+			pte = bm_pte[BM_PTE_TABLE_IDX(addr)];
+			pmd_populate_kernel(&init_mm, pmd, pte);
+			kernel_pte_init(pte);
+		}
+	} while (pmd++, addr = next, addr != end);
+
+}
+
 int __ref page_is_ram(unsigned long pfn)
 {
 	unsigned long addr = PFN_PHYS(pfn);
@@ -193,7 +256,7 @@ pte_t * __init populate_kernel_pte(unsigned long addr)
 	return pte_offset_kernel(pmd, addr);
 }
 
-void __init __set_fixmap(enum fixed_addresses idx,
+void  __set_fixmap(enum fixed_addresses idx,
 			       phys_addr_t phys, pgprot_t flags)
 {
 	unsigned long addr = __fix_to_virt(idx);
@@ -201,11 +264,7 @@ void __init __set_fixmap(enum fixed_addresses idx,
 
 	BUG_ON(idx <= FIX_HOLE || idx >= __end_of_fixed_addresses);
 
-	ptep = populate_kernel_pte(addr);
-	if (!pte_none(ptep_get(ptep))) {
-		pte_ERROR(*ptep);
-		return;
-	}
+	ptep = fixmap_pte(addr);
 
 	if (pgprot_val(flags))
 		set_pte(ptep, pfn_pte(phys >> PAGE_SHIFT, flags));
