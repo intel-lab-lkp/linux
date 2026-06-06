@@ -76,7 +76,7 @@ static int panel_bridge_attach(struct drm_bridge *bridge,
 				 &panel_bridge_connector_funcs,
 				 panel_bridge->connector_type);
 	if (ret) {
-		DRM_ERROR("Failed to initialize connector\n");
+		drm_err(bridge->dev, "Failed to initialize connector\n");
 		return ret;
 	}
 
