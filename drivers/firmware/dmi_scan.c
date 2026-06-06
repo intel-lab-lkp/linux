@@ -80,7 +80,7 @@ static const char * __init dmi_string(const struct dmi_header *dm, u8 s)
 	len = strlen(bp) + 1;
 	str = dmi_alloc(len);
 	if (str != NULL)
-		strcpy(str, bp);
+		memcpy(str, bp, len);
 
 	return str;
 }
@@ -290,17 +290,19 @@ static void __init dmi_save_type(const struct dmi_header *dm, int slot,
 static void __init dmi_save_one_device(int type, const char *name)
 {
 	struct dmi_device *dev;
+	size_t len;
 
 	/* No duplicate device */
 	if (dmi_find_device(type, name, NULL))
 		return;
 
-	dev = dmi_alloc(sizeof(*dev) + strlen(name) + 1);
+	len = strlen(name) + 1;
+	dev = dmi_alloc(sizeof(*dev) + len);
 	if (!dev)
 		return;
 
 	dev->type = type;
-	strcpy((char *)(dev + 1), name);
+	memcpy((char *)(dev + 1), name, len);
 	dev->name = (char *)(dev + 1);
 	dev->device_data = NULL;
 	list_add(&dev->list, &dmi_devices);
@@ -374,13 +376,15 @@ static void __init dmi_save_dev_pciaddr(int instance, int segment, int bus,
 					int devfn, const char *name, int type)
 {
 	struct dmi_dev_onboard *dev;
+	size_t len;
 
 	/* Ignore invalid values */
 	if (type == DMI_DEV_TYPE_DEV_SLOT &&
 	    segment == 0xFFFF && bus == 0xFF && devfn == 0xFF)
 		return;
 
-	dev = dmi_alloc(sizeof(*dev) + strlen(name) + 1);
+	len = strlen(name) + 1;
+	dev = dmi_alloc(sizeof(*dev) + len);
 	if (!dev)
 		return;
 
@@ -389,7 +393,7 @@ static void __init dmi_save_dev_pciaddr(int instance, int segment, int bus,
 	dev->bus = bus;
 	dev->devfn = devfn;
 
-	strcpy((char *)&dev[1], name);
+	memcpy((char *)&dev[1], name, len);
 	dev->dev.type = type;
 	dev->dev.name = (char *)&dev[1];
 	dev->dev.device_data = dev;
