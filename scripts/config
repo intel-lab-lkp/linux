@@ -71,35 +71,31 @@ txt_append() {
 	local anchor="$1"
 	local insert="$2"
 	local infile="$3"
-	local tmpfile="$infile.swp"
 
 	# sed append cmd: 'a\' + newline + text + newline
 	cmd="$(printf "a\\%b$insert" "\n")"
 
-	sed -E -e "/$anchor/$cmd" "$infile" >"$tmpfile"
-	# replace original file with the edited one
-	mv "$tmpfile" "$infile"
+	# We don't really need a backup file, but in-place editing with backup
+	# skipped is not portable due to different implementations parsing
+	# arguments in incompatible manners.
+	# Create a backup file anyway to ensure portability. The file will be
+	# deleted on exit.
+	sed -E -i.swp -e "/$anchor/$cmd" "$infile"
 }
 
 txt_subst() {
 	local before="$1"
 	local after="$2"
 	local infile="$3"
-	local tmpfile="$infile.swp"
 
-	sed -E -e "s$SED_DELIM$before$SED_DELIM$after$SED_DELIM" "$infile" >"$tmpfile"
-	# replace original file with the edited one
-	mv "$tmpfile" "$infile"
+	sed -E -i.swp -e "s$SED_DELIM$before$SED_DELIM$after$SED_DELIM" "$infile"
 }
 
 txt_delete() {
 	local text="$1"
 	local infile="$2"
-	local tmpfile="$infile.swp"
 
-	sed -E -e "/$text/d" "$infile" >"$tmpfile"
-	# replace original file with the edited one
-	mv "$tmpfile" "$infile"
+	sed -E -i.swp -e "/$text/d" "$infile"
 }
 
 set_var() {
@@ -141,6 +137,8 @@ set -- "${CMDS[@]}"
 if [ "$1" = "" ] ; then
 	usage
 fi
+
+trap 'rm -f "$FN.swp"' EXIT
 
 MUNGE_CASE=yes
 while [ "$1" != "" ] ; do
