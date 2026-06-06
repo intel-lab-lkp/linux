@@ -3160,6 +3160,7 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 	unsigned char *buf;
 	unsigned char initiator_str[TRANSPORT_IQN_LEN];
 	char *iport_ptr = NULL, i_buf[PR_REG_ISID_ID_LEN] = { };
+	char isid_buf[PR_REG_ISID_LEN] = { };
 	u32 tid_len, tmp_tid_len;
 	int new_reg = 0, type, scope, matching_iname;
 	sense_reason_t ret;
@@ -3291,6 +3292,22 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 			" initiator_str from Transport ID\n");
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out;
+	}
+
+	/*
+	 * For an iSCSI TransportID, iport_ptr aliases directly into the data
+	 * buffer mapped above.  When that buffer spans more than one page it is
+	 * a vmap() region that transport_kunmap_data_sg() is about to vunmap(),
+	 * tearing down the kernel mapping and leaving iport_ptr dangling for
+	 * every consumer below.  Copy the ISID into caller-owned storage now,
+	 * while the mapping is still live.  strscpy_pad() NUL-terminates and
+	 * zero-fills the tail so the later 8-byte get_unaligned_be64() read in
+	 * __core_scsi3_do_alloc_registration() stays in-bounds and deterministic
+	 * even for an ISID shorter than 8 bytes.
+	 */
+	if (iport_ptr) {
+		strscpy_pad(isid_buf, iport_ptr, sizeof(isid_buf));
+		iport_ptr = isid_buf;
 	}
 
 	transport_kunmap_data_sg(cmd);
