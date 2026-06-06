@@ -1917,6 +1917,25 @@ DECLARE_PCI_FIXUP_CLASS_FINAL(PCI_VENDOR_ID_JMICRON, PCI_ANY_ID, PCI_CLASS_STORA
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_JMICRON, 0x2362, quirk_jmicron_async_suspend);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_JMICRON, 0x236f, quirk_jmicron_async_suspend);
 
+/*
+ * MSI Raider A18 HX A9WJG (MS-182L) exposes ACP and Azalia as separate PCI
+ * functions, but ACPI uses shared power gating for both.  If they suspend or
+ * resume in parallel, the HDA controller may become unresponsive.
+ */
+static void quirk_msi_a18_audio_async_suspend(struct pci_dev *dev)
+{
+	if (dev->subsystem_vendor != 0x1462 ||
+	    dev->subsystem_device != 0x14a5)
+		return;
+
+	device_disable_async_suspend(&dev->dev);
+	pci_info(dev, "async suspend disabled to avoid audio power-on ordering issue\n");
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AMD, 0x15e2,
+			quirk_msi_a18_audio_async_suspend);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_AMD, 0x15e3,
+			quirk_msi_a18_audio_async_suspend);
+
 #ifdef CONFIG_X86_IO_APIC
 static void quirk_alder_ioapic(struct pci_dev *pdev)
 {
