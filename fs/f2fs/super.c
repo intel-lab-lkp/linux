@@ -5009,6 +5009,38 @@ static void f2fs_tuning_parameters(struct f2fs_sb_info *sbi)
 	sbi->readdir_ra = true;
 }
 
+static void f2fs_restore_device_alias(struct f2fs_sb_info *sbi)
+{
+	struct inode *root = d_inode(sbi->sb->s_root);
+	struct f2fs_dir_entry *de;
+	struct folio *folio;
+	int i;
+
+	if (!f2fs_sb_has_device_alias(sbi))
+		return;
+
+	for (i = 1; i < sbi->s_ndevs; i++) {
+		char *name = strrchr(FDEV(i).path, '/');
+		struct qstr qstr;
+
+		name = name ? name + 1 : FDEV(i).path;
+		qstr.name = name;
+		qstr.len = strlen(name);
+
+		de = f2fs_find_entry(root, &qstr, &folio);
+		if (de) {
+			struct inode *inode = f2fs_iget(sbi->sb, le32_to_cpu(de->ino));
+
+			if (!IS_ERR(inode)) {
+				if (IS_DEVICE_ALIASING(inode))
+					FDEV(i).has_alias = true;
+				iput(inode);
+			}
+			f2fs_folio_put(folio, 0);
+		}
+	}
+}
+
 static int f2fs_fill_super(struct super_block *sb, struct fs_context *fc)
 {
 	struct f2fs_fs_context *ctx = fc->fs_private;
@@ -5443,6 +5475,8 @@ reset_checkpoint:
 	f2fs_update_time(sbi, CP_TIME);
 	f2fs_update_time(sbi, REQ_TIME);
 	clear_sbi_flag(sbi, SBI_CP_DISABLED_QUICK);
+
+	f2fs_restore_device_alias(sbi);
 
 	sbi->umount_lock_holder = NULL;
 	return 0;

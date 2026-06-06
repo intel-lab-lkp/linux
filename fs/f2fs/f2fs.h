@@ -1405,6 +1405,8 @@ struct f2fs_dev_info {
 	unsigned int total_segments;
 	block_t start_blk;
 	block_t end_blk;
+	bool has_alias;
+	bool is_excluding;
 #ifdef CONFIG_BLK_DEV_ZONED
 	unsigned int nr_blkz;		/* Total number of zones */
 	unsigned long *blkz_seq;	/* Bitmap indicating sequential zones */
@@ -4007,7 +4009,10 @@ int f2fs_create_flush_cmd_control(struct f2fs_sb_info *sbi);
 int f2fs_flush_device_cache(struct f2fs_sb_info *sbi);
 void f2fs_destroy_flush_cmd_control(struct f2fs_sb_info *sbi, bool free);
 void f2fs_invalidate_blocks(struct f2fs_sb_info *sbi, block_t addr,
-						unsigned int len);
+				unsigned int len);
+void f2fs_reserve_device_alias(struct f2fs_sb_info *sbi, block_t addr,
+				unsigned int len);
+
 bool f2fs_is_checkpointed_data(struct f2fs_sb_info *sbi, block_t blkaddr);
 int f2fs_start_discard_thread(struct f2fs_sb_info *sbi);
 void f2fs_drop_discard_cmd(struct f2fs_sb_info *sbi);
@@ -4229,6 +4234,8 @@ void f2fs_build_gc_manager(struct f2fs_sb_info *sbi);
 int f2fs_gc_range(struct f2fs_sb_info *sbi,
 		unsigned int start_seg, unsigned int end_seg,
 		bool dry_run, unsigned int dry_run_sections);
+void f2fs_reset_gc_victim_resource(struct f2fs_sb_info *sbi,
+		unsigned int start, unsigned int end);
 int f2fs_resize_fs(struct file *filp, __u64 block_count);
 int __init f2fs_create_garbage_collection_cache(void);
 void f2fs_destroy_garbage_collection_cache(void);
