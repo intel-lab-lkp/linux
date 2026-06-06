@@ -466,6 +466,9 @@ repeat:
 				inode->i_size = symlink_len;
 				while (slen > 1) {
 					rootflag = 0;
+					/* keep the component within the SL record */
+					if (slp->len + 2 > slen)
+						break;
 					switch (slp->flags & ~1) {
 					case 0:
 						inode->i_size +=
@@ -621,6 +624,14 @@ static char *get_symlink_chunk(char *rpnt, struct rock_ridge *rr, char *plimit)
 	slp = &rr->u.SL.link;
 	while (slen > 1) {
 		rootflag = 0;
+		/*
+		 * A component is a two-byte header (flags, len) followed by
+		 * len bytes of text, i.e. slp->len + 2 bytes.  Stop if it does
+		 * not fit in the bytes left in the SL record, otherwise the
+		 * memcpy() of slp->text below reads past the record.
+		 */
+		if (slp->len + 2 > slen)
+			break;
 		switch (slp->flags & ~1) {
 		case 0:
 			if (slp->len > plimit - rpnt)
