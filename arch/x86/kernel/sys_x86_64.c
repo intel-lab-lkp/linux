@@ -18,7 +18,6 @@
 #include <linux/random.h>
 #include <linux/uaccess.h>
 #include <linux/elf.h>
-#include <linux/hugetlb.h>
 
 #include <asm/elf.h>
 #include <asm/ia32.h>
@@ -28,8 +27,6 @@
  */
 static unsigned long get_align_mask(struct file *filp)
 {
-	if (filp && is_file_hugepages(filp))
-		return huge_page_mask_align(filp);
 	/* handle 32- and 64-bit case with a single conditional */
 	if (va_align.flags < 0 || !(va_align.flags & (2 - mmap_is_ia32())))
 		return 0;
@@ -151,10 +148,8 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr, unsigned long len,
 	info.length = len;
 	info.low_limit = begin;
 	info.high_limit = end;
-	if (!(filp && is_file_hugepages(filp))) {
-		info.align_offset = pgoff << PAGE_SHIFT;
-		info.start_gap = stack_guard_placement(vm_flags);
-	}
+	info.align_offset = pgoff << PAGE_SHIFT;
+	info.start_gap = stack_guard_placement(vm_flags);
 	if (filp) {
 		info.align_mask = get_align_mask(filp);
 		info.align_offset += get_align_bits();
@@ -205,10 +200,8 @@ get_unmapped_area:
 		info.low_limit = PAGE_SIZE;
 
 	info.high_limit = get_mmap_base(0);
-	if (!(filp && is_file_hugepages(filp))) {
-		info.start_gap = stack_guard_placement(vm_flags);
-		info.align_offset = pgoff << PAGE_SHIFT;
-	}
+	info.start_gap = stack_guard_placement(vm_flags);
+	info.align_offset = pgoff << PAGE_SHIFT;
 
 	/*
 	 * If hint address is above DEFAULT_MAP_WINDOW, look for unmapped area
