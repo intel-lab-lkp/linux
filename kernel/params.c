@@ -279,7 +279,7 @@ int param_set_charp(const char *val, const struct kernel_param *kp)
 		*(char **)kp->arg = kmalloc_parameter(len + 1);
 		if (!*(char **)kp->arg)
 			return -ENOMEM;
-		strcpy(*(char **)kp->arg, val);
+		memcpy(*(char **)kp->arg, val, len + 1);
 	} else
 		*(const char **)kp->arg = val;
 
