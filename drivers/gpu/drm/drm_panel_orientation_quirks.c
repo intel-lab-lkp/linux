@@ -364,6 +364,15 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "G1617-01")
 		},
 		.driver_data = (void *)&lcd1080x1920_rightside_up,
+	}, {	/*
+	 * HUION Kamvas Studio 16
+	 * DMI has "Kavmas" spelling error, matched intentionally here
+	 */
+		.matches = {
+		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "HUION"),
+		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Kavmas Studio 16"),
+		},
+		.driver_data = (void *)&lcd2560x1440_bottom_up,
 	}, {	/* I.T.Works TW891 */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "To be filled by O.E.M."),
