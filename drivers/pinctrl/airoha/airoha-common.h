@@ -56,7 +56,8 @@
 	}
 
 /* MUX */
-#define REG_GPIO_2ND_I2C_MODE			0x0214
+#define AN7581_REG_GPIO_2ND_I2C_MODE		0x0214
+#define EN7523_REG_GPIO_2ND_I2C_MODE		0x0210
 #define GPIO_MDC_IO_MASTER_MODE_MODE		BIT(14)
 #define GPIO_I2C_MASTER_MODE_MODE		BIT(13)
 #define GPIO_I2S_MODE_MASK			BIT(12)
@@ -73,7 +74,8 @@
 #define GSW_TOD_1PPS_MODE_MASK			BIT(1)
 #define GPIO_2ND_I2C_MODE_MASK			BIT(0)
 
-#define REG_GPIO_SPI_CS1_MODE			0x0218
+#define AN7581_REG_GPIO_SPI_CS1_MODE		0x0218
+#define EN7523_REG_GPIO_SPI_CS1_MODE		0x0214
 #define GPIO_PCM_SPI_CS4_MODE_MASK		BIT(21)
 #define GPIO_PCM_SPI_CS3_MODE_MASK		BIT(20)
 #define GPIO_PCM_SPI_CS2_MODE_P156_MASK		BIT(19)
@@ -91,7 +93,8 @@
 #define GPIO_SPI_CS2_MODE_MASK			BIT(1)
 #define GPIO_SPI_CS1_MODE_MASK			BIT(0)
 
-#define REG_GPIO_PON_MODE			0x021c
+#define AN7581_REG_GPIO_PON_MODE		0x021c
+#define EN7523_REG_GPIO_PON_MODE		0x0218
 #define GPIO_PARALLEL_NAND_MODE_MASK		BIT(14)
 #define GPIO_SGMII_MDIO_MODE_MASK		BIT(13)
 #define GPIO_PCIE_RESET2_MASK			BIT(12)
@@ -108,11 +111,14 @@
 #define GPIO_EMMC_MODE_MASK			BIT(1)
 #define GPIO_PON_MODE_MASK			BIT(0)
 
-#define REG_NPU_UART_EN				0x0224
+#define AN7581_REG_NPU_UART_EN			0x0224
+#define EN7523_REG_NPU_UART_EN			0x0220
 #define JTAG_UDI_EN_MASK			BIT(4)
 #define JTAG_DFD_EN_MASK			BIT(3)
+#define NPU_UART_EN_MASK			BIT(2)
 
-#define REG_FORCE_GPIO_EN			0x0228
+#define AN7581_REG_FORCE_GPIO_EN		0x0228
+#define EN7523_REG_FORCE_GPIO_EN		0x0224
 #define FORCE_GPIO_EN(n)			BIT(n)
 
 /* LED MAP */
@@ -142,6 +148,10 @@
 #define SPI_MOSI_E2_MASK			BIT(13)
 #define SPI_CLK_E2_MASK				BIT(12)
 #define SPI_CS0_E2_MASK				BIT(11)
+#define EN7523_SPI_MISO_E2_MASK			BIT(13)
+#define EN7523_SPI_MOSI_E2_MASK			BIT(12)
+#define EN7523_SPI_CLK_E2_MASK			BIT(11)
+#define EN7523_SPI_CS0_E2_MASK			BIT(10)
 #define PCIE2_RESET_E2_MASK			BIT(10)
 #define PCIE1_RESET_E2_MASK			BIT(9)
 #define PCIE0_RESET_E2_MASK			BIT(8)
@@ -159,6 +169,10 @@
 #define SPI_MOSI_E4_MASK			BIT(13)
 #define SPI_CLK_E4_MASK				BIT(12)
 #define SPI_CS0_E4_MASK				BIT(11)
+#define EN7523_SPI_MISO_E4_MASK			BIT(13)
+#define EN7523_SPI_MOSI_E4_MASK			BIT(12)
+#define EN7523_SPI_CLK_E4_MASK			BIT(11)
+#define EN7523_SPI_CS0_E4_MASK			BIT(10)
 #define PCIE2_RESET_E4_MASK			BIT(10)
 #define PCIE1_RESET_E4_MASK			BIT(9)
 #define PCIE0_RESET_E4_MASK			BIT(8)
@@ -181,6 +195,10 @@
 #define SPI_MOSI_PU_MASK			BIT(13)
 #define SPI_CLK_PU_MASK				BIT(12)
 #define SPI_CS0_PU_MASK				BIT(11)
+#define EN7523_SPI_MISO_PU_MASK			BIT(13)
+#define EN7523_SPI_MOSI_PU_MASK			BIT(12)
+#define EN7523_SPI_CLK_PU_MASK			BIT(11)
+#define EN7523_SPI_CS0_PU_MASK			BIT(10)
 #define PCIE2_RESET_PU_MASK			BIT(10)
 #define PCIE1_RESET_PU_MASK			BIT(9)
 #define PCIE0_RESET_PU_MASK			BIT(8)
@@ -198,6 +216,10 @@
 #define SPI_MOSI_PD_MASK			BIT(13)
 #define SPI_CLK_PD_MASK				BIT(12)
 #define SPI_CS0_PD_MASK				BIT(11)
+#define EN7523_SPI_MISO_PD_MASK			BIT(13)
+#define EN7523_SPI_MOSI_PD_MASK			BIT(12)
+#define EN7523_SPI_CLK_PD_MASK			BIT(11)
+#define EN7523_SPI_CS0_PD_MASK			BIT(10)
 #define PCIE2_RESET_PD_MASK			BIT(10)
 #define PCIE1_RESET_PD_MASK			BIT(9)
 #define PCIE0_RESET_PD_MASK			BIT(8)
@@ -322,12 +344,12 @@
 		.regmap_size = 1,			\
 	}						\
 
-#define AIROHA_PINCTRL_PHY_LED0(gpio, mux_val, map_mask, map_val)	\
+#define AIROHA_PINCTRL_PHY_LED0(variant, gpio, mux_val, map_mask, map_val)	\
 	{								\
 		.name = (gpio),						\
 		.regmap[0] = {						\
 			AIROHA_FUNC_MUX,				\
-			REG_GPIO_2ND_I2C_MODE,				\
+			variant##_REG_GPIO_2ND_I2C_MODE,		\
 			(mux_val),					\
 			(mux_val),					\
 		},							\
@@ -340,12 +362,12 @@
 		.regmap_size = 2,					\
 	}
 
-#define AIROHA_PINCTRL_PHY_LED1(gpio, mux_val, map_mask, map_val)	\
+#define AIROHA_PINCTRL_PHY_LED1(variant, gpio, mux_val, map_mask, map_val)	\
 	{								\
 		.name = (gpio),						\
 		.regmap[0] = {						\
 			AIROHA_FUNC_MUX,				\
-			REG_GPIO_2ND_I2C_MODE,				\
+			variant##_REG_GPIO_2ND_I2C_MODE,		\
 			(mux_val),					\
 			(mux_val),					\
 		},							\
@@ -449,7 +471,7 @@ enum airoha_pinctrl_confs_type {
 	AIROHA_PINCTRL_CONFS_DRIVE_E4,
 	AIROHA_PINCTRL_CONFS_PCIE_RST_OD,
 
-	AIROHA_PINCTRL_CONFS_MAX,
+	AIROHA_PINCTRL_CONFS_MAX
 };
 
 struct airoha_pinctrl {
