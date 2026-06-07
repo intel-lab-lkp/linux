@@ -30,6 +30,11 @@
 #define KSZ88X3_REG_FVID_AND_HOST_MODE  0xC6
 #define KSZ88X3_PORT3_RMII_CLK_INTERNAL BIT(3)
 
+#define REG_SW_ID_0			0x00
+#define REG_SW_ID_1			0x01
+
+#define SW_START_SWITCH			BIT(0)
+
 #define REG_SW_CTRL_0			0x02
 
 #define SW_NEW_BACKOFF			BIT(7)
@@ -94,6 +99,8 @@
 #define SW_LED_LINK_ACT			1
 #define SW_LED_LINK_ACT_DUPLEX		2
 #define SW_LED_LINK_DUPLEX		3
+
+#define SW_SPECIAL_TAG			BIT(0) /* KSZ8995XA only */
 
 #define REG_SW_CTRL_10			0x0C
 
