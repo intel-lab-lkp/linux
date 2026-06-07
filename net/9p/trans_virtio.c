@@ -377,7 +377,7 @@ static int p9_get_mapped_pages(struct virtio_chan *chan,
 }
 
 static void handle_rerror(struct p9_req_t *req, int in_hdr_len,
-			  size_t offs, struct page **pages)
+			  size_t offs, struct page **pages, int in_nr_pages)
 {
 	unsigned size, n;
 	void *to = req->rc.sdata + in_hdr_len;
@@ -398,6 +398,8 @@ static void handle_rerror(struct p9_req_t *req, int in_hdr_len,
 	n = PAGE_SIZE - offs;
 	if (size > n) {
 		memcpy_from_page(to, *pages++, offs, n);
+		if (in_nr_pages < 2)
+			return;
 		offs = 0;
 		to += n;
 		size -= n;
@@ -535,7 +537,7 @@ req_retry_pinned:
 	// RERROR needs reply (== error string) in static data
 	if (READ_ONCE(req->status) == REQ_STATUS_RCVD &&
 	    unlikely(req->rc.sdata[4] == P9_RERROR))
-		handle_rerror(req, in_hdr_len, offs, in_pages);
+		handle_rerror(req, in_hdr_len, offs, in_pages, in_nr_pages);
 
 	/*
 	 * Non kernel buffers are pinned, unpin them
