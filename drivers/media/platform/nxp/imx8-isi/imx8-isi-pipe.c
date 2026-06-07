@@ -448,6 +448,7 @@ static int mxc_isi_pipe_enum_mbus_code(struct v4l2_subdev *sd,
 }
 
 static int mxc_isi_pipe_set_fmt(struct v4l2_subdev *sd,
+				const struct v4l2_subdev_client_info *ci,
 				struct v4l2_subdev_state *state,
 				struct v4l2_subdev_format *fmt)
 {
@@ -543,6 +544,7 @@ static int mxc_isi_pipe_set_fmt(struct v4l2_subdev *sd,
 }
 
 static int mxc_isi_pipe_get_selection(struct v4l2_subdev *sd,
+				      const struct v4l2_subdev_client_info *ci,
 				      struct v4l2_subdev_state *state,
 				      struct v4l2_subdev_selection *sel)
 {
@@ -602,6 +604,7 @@ static int mxc_isi_pipe_get_selection(struct v4l2_subdev *sd,
 }
 
 static int mxc_isi_pipe_set_selection(struct v4l2_subdev *sd,
+				      const struct v4l2_subdev_client_info *ci,
 				      struct v4l2_subdev_state *state,
 				      struct v4l2_subdev_selection *sel)
 {

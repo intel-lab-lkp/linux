@@ -136,7 +136,7 @@ static int __subdev_set_format(struct cal_ctx *ctx,
 
 	*mbus_fmt = *fmt;
 
-	ret = v4l2_subdev_call_state_active(sd, pad, set_fmt, &sd_fmt);
+	ret = v4l2_subdev_call_state_active(sd, pad, set_fmt, NULL, &sd_fmt);
 	if (ret)
 		return ret;
 
@@ -281,7 +281,7 @@ static int cal_legacy_s_fmt_vid_cap(struct file *file, void *priv,
 	ctx->v_fmt.fmt.pix.field = sd_fmt.format.field;
 	cal_calc_format_size(ctx, fmtinfo, &ctx->v_fmt);
 
-	v4l2_subdev_call_state_active(sd, pad, set_fmt, &sd_fmt);
+	v4l2_subdev_call_state_active(sd, pad, set_fmt, NULL, &sd_fmt);
 
 	ctx->fmtinfo = fmtinfo;
 	*f = ctx->v_fmt;

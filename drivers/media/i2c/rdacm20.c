@@ -442,7 +442,7 @@ static const struct v4l2_subdev_video_ops rdacm20_video_ops = {
 static const struct v4l2_subdev_pad_ops rdacm20_subdev_pad_ops = {
 	.enum_mbus_code = rdacm20_enum_mbus_code,
 	.get_fmt	= rdacm20_get_fmt,
-	.set_fmt	= rdacm20_get_fmt,
+	.set_fmt	= v4l2_subdev_get_fmt_ci,
 };
 
 static const struct v4l2_subdev_ops rdacm20_subdev_ops = {

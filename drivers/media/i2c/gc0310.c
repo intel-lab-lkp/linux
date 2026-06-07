@@ -362,6 +362,7 @@ static void gc0310_fill_format(struct v4l2_mbus_framefmt *fmt)
 }
 
 static int gc0310_get_selection(struct v4l2_subdev *sd,
+				const struct v4l2_subdev_client_info *ci,
 				struct v4l2_subdev_state *state,
 				struct v4l2_subdev_selection *sel)
 {
@@ -534,7 +535,7 @@ static const struct v4l2_subdev_pad_ops gc0310_pad_ops = {
 	.enum_mbus_code = gc0310_enum_mbus_code,
 	.enum_frame_size = gc0310_enum_frame_size,
 	.get_fmt = v4l2_subdev_get_fmt,
-	.set_fmt = v4l2_subdev_get_fmt, /* Only 1 fixed mode supported */
+	.set_fmt = v4l2_subdev_get_fmt_ci, /* Only 1 fixed mode supported */
 	.get_selection = gc0310_get_selection,
 	.set_selection = gc0310_get_selection,
 	.enable_streams = gc0310_enable_streams,
