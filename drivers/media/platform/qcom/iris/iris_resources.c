@@ -80,9 +80,13 @@ int iris_enable_power_domains(struct iris_core *core, struct device *pd_dev)
 
 	ret = pm_runtime_resume_and_get(pd_dev);
 	if (ret)
-		return ret;
+		goto err_opp;
 
 	return 0;
+
+err_opp:
+	iris_opp_set_rate(core->dev, 0);
+	return ret;
 }
 
 int iris_disable_power_domains(struct iris_core *core, struct device *pd_dev)
