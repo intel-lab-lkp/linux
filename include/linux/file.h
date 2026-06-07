@@ -70,6 +70,7 @@ extern struct file *fget_task_next(struct task_struct *task, unsigned int *fd);
 extern void __f_unlock_pos(struct file *);
 
 struct fd fdget(unsigned int fd);
+struct fd fdget_except(unsigned int fd, fmode_t mask);
 struct fd fdget_raw(unsigned int fd);
 struct fd fdget_pos(unsigned int fd);
 
@@ -81,6 +82,7 @@ static inline void fdput_pos(struct fd f)
 }
 
 DEFINE_CLASS(fd, struct fd, fdput(_T), fdget(fd), int fd)
+DEFINE_CLASS(fd_except, struct fd, fdput(_T), fdget_except(fd, mask), int fd, fmode_t mask)
 DEFINE_CLASS(fd_raw, struct fd, fdput(_T), fdget_raw(fd), int fd)
 DEFINE_CLASS(fd_pos, struct fd, fdput_pos(_T), fdget_pos(fd), int fd)
 
