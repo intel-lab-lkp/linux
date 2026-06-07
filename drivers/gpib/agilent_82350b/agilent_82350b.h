@@ -54,6 +54,7 @@ struct agilent_82350b_priv {
 	unsigned short card_mode_bits;
 	unsigned short event_status_bits;
 	enum board_model model;
+	bool regions_requested;
 	bool using_fifos;
 };
 

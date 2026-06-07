@@ -634,68 +634,103 @@ static int agilent_82350b_generic_attach(struct gpib_board *board,
 				dev_dbg(board->gpib_dev, "HP/Agilent 82350A board found\n");
 			} else {
 				dev_err(board->gpib_dev, "no 82350/82351 board found\n");
-				return -ENODEV;
+				retval = -ENODEV;
+				goto err_detach;
 			}
 		}
 	}
 	if (pci_enable_device(a_priv->pci_device)) {
 		dev_err(board->gpib_dev, "error enabling pci device\n");
-		return -EIO;
+		retval = -EIO;
+		goto err_detach;
 	}
-	if (pci_request_regions(a_priv->pci_device, DRV_NAME))
-		return -ENOMEM;
+	if (pci_request_regions(a_priv->pci_device, DRV_NAME)) {
+		retval = -ENOMEM;
+		goto err_detach;
+	}
+	a_priv->regions_requested = true;
 	switch (a_priv->model) {
 	case MODEL_82350A:
 		a_priv->plx_base = ioremap(pci_resource_start(a_priv->pci_device, PLX_MEM_REGION),
 					   pci_resource_len(a_priv->pci_device, PLX_MEM_REGION));
+		if (!a_priv->plx_base) {
+			retval = -ENOMEM;
+			goto err_detach;
+		}
 		dev_dbg(board->gpib_dev, "plx base address remapped to 0x%p\n", a_priv->plx_base);
 		a_priv->gpib_base = ioremap(pci_resource_start(a_priv->pci_device,
 							       GPIB_82350A_REGION),
 					    pci_resource_len(a_priv->pci_device,
 							     GPIB_82350A_REGION));
+		if (!a_priv->gpib_base) {
+			retval = -ENOMEM;
+			goto err_detach;
+		}
 		dev_dbg(board->gpib_dev, "chip base address remapped to 0x%p\n", a_priv->gpib_base);
 		tms_priv->mmiobase = a_priv->gpib_base + TMS9914_BASE_REG;
 		a_priv->sram_base = ioremap(pci_resource_start(a_priv->pci_device,
 							       SRAM_82350A_REGION),
 					    pci_resource_len(a_priv->pci_device,
 							     SRAM_82350A_REGION));
+		if (!a_priv->sram_base) {
+			retval = -ENOMEM;
+			goto err_detach;
+		}
 		dev_dbg(board->gpib_dev, "sram base address remapped to 0x%p\n", a_priv->sram_base);
 		a_priv->borg_base = ioremap(pci_resource_start(a_priv->pci_device,
 							       BORG_82350A_REGION),
 					    pci_resource_len(a_priv->pci_device,
 							     BORG_82350A_REGION));
+		if (!a_priv->borg_base) {
+			retval = -ENOMEM;
+			goto err_detach;
+		}
 		dev_dbg(board->gpib_dev, "borg base address remapped to 0x%p\n", a_priv->borg_base);
 
 		retval = init_82350a_hardware(board, config);
 		if (retval < 0)
-			return retval;
+			goto err_detach;
 		break;
 	case MODEL_82350B:
 	case MODEL_82351A:
 		a_priv->gpib_base = ioremap(pci_resource_start(a_priv->pci_device, GPIB_REGION),
 					    pci_resource_len(a_priv->pci_device, GPIB_REGION));
+		if (!a_priv->gpib_base) {
+			retval = -ENOMEM;
+			goto err_detach;
+		}
 		dev_dbg(board->gpib_dev, "chip base address remapped to 0x%p\n", a_priv->gpib_base);
 		tms_priv->mmiobase = a_priv->gpib_base + TMS9914_BASE_REG;
 		a_priv->sram_base = ioremap(pci_resource_start(a_priv->pci_device, SRAM_REGION),
 					    pci_resource_len(a_priv->pci_device, SRAM_REGION));
+		if (!a_priv->sram_base) {
+			retval = -ENOMEM;
+			goto err_detach;
+		}
 		dev_dbg(board->gpib_dev, "sram base address remapped to 0x%p\n", a_priv->sram_base);
 		a_priv->misc_base = ioremap(pci_resource_start(a_priv->pci_device, MISC_REGION),
 					    pci_resource_len(a_priv->pci_device, MISC_REGION));
+		if (!a_priv->misc_base) {
+			retval = -ENOMEM;
+			goto err_detach;
+		}
 		dev_dbg(board->gpib_dev, "misc base address remapped to 0x%p\n", a_priv->misc_base);
 		break;
 	default:
 		dev_err(board->gpib_dev, "invalid board\n");
-		return -ENODEV;
+		retval = -ENODEV;
+		goto err_detach;
 	}
 
 	retval = test_sram(board);
 	if (retval < 0)
-		return retval;
+		goto err_detach;
 
 	if (request_irq(a_priv->pci_device->irq, agilent_82350b_interrupt,
 			IRQF_SHARED, DRV_NAME, board)) {
 		dev_err(board->gpib_dev, "failed to obtain irq %d\n", a_priv->pci_device->irq);
-		return -EIO;
+		retval = -EIO;
+		goto err_detach;
 	}
 	a_priv->irq = a_priv->pci_device->irq;
 	dev_dbg(board->gpib_dev, " IRQ %d\n", a_priv->irq);
@@ -730,6 +765,10 @@ static int agilent_82350b_generic_attach(struct gpib_board *board,
 	tms9914_online(board, tms_priv);
 
 	return 0;
+
+err_detach:
+	agilent_82350b_detach(board);
+	return retval;
 }
 
 static int agilent_82350b_unaccel_attach(struct gpib_board *board,
@@ -756,20 +795,21 @@ static void agilent_82350b_detach(struct gpib_board *board)
 		tms_priv = &a_priv->tms9914_priv;
 		if (a_priv->irq)
 			free_irq(a_priv->irq, board);
-		if (a_priv->gpib_base) {
+		if (a_priv->gpib_base)
 			tms9914_board_reset(tms_priv);
-			if (a_priv->misc_base)
-				iounmap(a_priv->misc_base);
-			if (a_priv->borg_base)
-				iounmap(a_priv->borg_base);
-			if (a_priv->sram_base)
-				iounmap(a_priv->sram_base);
-			if (a_priv->gpib_base)
-				iounmap(a_priv->gpib_base);
-			if (a_priv->plx_base)
-				iounmap(a_priv->plx_base);
+
+		if (a_priv->misc_base)
+			iounmap(a_priv->misc_base);
+		if (a_priv->borg_base)
+			iounmap(a_priv->borg_base);
+		if (a_priv->sram_base)
+			iounmap(a_priv->sram_base);
+		if (a_priv->gpib_base)
+			iounmap(a_priv->gpib_base);
+		if (a_priv->plx_base)
+			iounmap(a_priv->plx_base);
+		if (a_priv->regions_requested)
 			pci_release_regions(a_priv->pci_device);
-		}
 		if (a_priv->pci_device)
 			pci_dev_put(a_priv->pci_device);
 	}
