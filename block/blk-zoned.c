@@ -1502,7 +1502,9 @@ static bool blk_zone_wplug_handle_write(struct bio *bio, unsigned int nr_segs)
 		goto queue_bio;
 
 	if (!blk_zone_wplug_prepare_bio(zwplug, bio)) {
+		bio_clear_flag(bio, BIO_ZONE_WRITE_PLUGGING);
 		spin_unlock_irqrestore(&zwplug->lock, flags);
+		disk_put_zone_wplug(zwplug);
 		bio_io_error(bio);
 		return true;
 	}
