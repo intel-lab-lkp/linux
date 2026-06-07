@@ -141,4 +141,20 @@
 #define TF_NON_OFFLOAD_V(x)	((x) << TF_NON_OFFLOAD_S)
 #define TF_NON_OFFLOAD_F	TF_NON_OFFLOAD_V(1)
 
+#define TCB_T_RTT_TS_RECENT_AGE_W    6
+#define TCB_T_RTT_TS_RECENT_AGE_S    0
+#define TCB_T_RTT_TS_RECENT_AGE_M    0xffffffffULL
+#define TCB_T_RTT_TS_RECENT_AGE_V(x) ((x) << TCB_T_RTT_TS_RECENT_AGE_S)
+
+#define TF_MIGRATING_S    0
+#define TF_MIGRATING_V(x) ((x) << TF_MIGRATING_S)
+
+#define TF_RECV_TSTMP_S    53
+#define TF_RECV_TSTMP_V(x) ((__u64)(x) << TF_RECV_TSTMP_S)
+
+#define TF_PEND_CTL1_S    56
+#define TF_PEND_CTL1_V(x) ((__u64)(x) << TF_PEND_CTL1_S)
+
+#define TF_PEND_CTL2_S    57
+#define TF_PEND_CTL2_V(x) ((__u64)(x) << TF_PEND_CTL2_S)
 #endif /* __T4_TCB_H */

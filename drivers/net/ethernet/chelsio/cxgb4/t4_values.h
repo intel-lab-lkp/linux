@@ -119,18 +119,26 @@
 
 /* CIM register field values.
  */
-#define X_MBOWNER_FW			1
-#define X_MBOWNER_PL			2
+#define MBOWNER_FW_X			1
+#define MBOWNER_PL_X			2
 
 /* PCI-E definitions */
 #define WINDOW_SHIFT_X		10
 #define PCIEOFST_SHIFT_X	10
+#define T7_MEMOFST_SHIFT_X	4
 
 /* TP_VLAN_PRI_MAP controls which subset of fields will be present in the
  * Compressed Filter Tuple for LE filters.  Each bit set in TP_VLAN_PRI_MAP
  * selects for a particular field being present.  These fields, when present
  * in the Compressed Filter Tuple, have the following widths in bits.
  */
+#define FT_FIRST_S                      FCOE_S
+#define FT_LAST_S                       FRAGMENTATION_S
+
+#define T7_FT_FIRST_S                   IPSECIDX_S
+#define T7_FT_LAST_S                    TCPFLAGS_S
+
+#define FT_IPSECIDX_W                   12
 #define FT_FCOE_W                       1
 #define FT_PORT_W                       3
 #define FT_VNIC_ID_W                    17
@@ -141,6 +149,9 @@
 #define FT_MACMATCH_W                   9
 #define FT_MPSHITTYPE_W                 3
 #define FT_FRAGMENTATION_W              1
+#define FT_ROCE_W			1
+#define FT_SYNONLY_W			1
+#define FT_TCPFLAGS_W			12
 
 /* Some of the Compressed Filter Tuple fields have internal structure.  These
  * bit shifts/masks describe those structures.  All shifts are relative to the
