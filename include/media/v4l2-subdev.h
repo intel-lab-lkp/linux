@@ -1475,6 +1475,24 @@ int v4l2_subdev_get_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
 			struct v4l2_subdev_format *format);
 
 /**
+ * v4l2_subdev_get_fmt_ci() - Get pad format using get_fmt pad op
+ * @sd: subdevice
+ * @ci: client info
+ * @state: subdevice state
+ * @format: pointer to &struct v4l2_subdev_format
+ *
+ * Obtain the sub-device format by calling the sub-device get_fmt pad op. This
+ * is intended to be used as the set_fmt callback when the callback just needs
+ * to return the format.
+ *
+ * Returns 0 on success, error value otherwise.
+ */
+int v4l2_subdev_get_fmt_ci(struct v4l2_subdev *sd,
+			   const struct v4l2_subdev_client_info *ci,
+			   struct v4l2_subdev_state *state,
+			   struct v4l2_subdev_format *format);
+
+/**
  * v4l2_subdev_get_frame_interval() - Fill frame interval based on state
  * @sd: subdevice
  * @state: subdevice state

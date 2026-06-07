@@ -1937,6 +1937,15 @@ int v4l2_subdev_get_fmt(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
 }
 EXPORT_SYMBOL_GPL(v4l2_subdev_get_fmt);
 
+int v4l2_subdev_get_fmt_ci(struct v4l2_subdev *sd,
+			   const struct v4l2_subdev_client_info *ci,
+			   struct v4l2_subdev_state *state,
+			   struct v4l2_subdev_format *format)
+{
+	return v4l2_subdev_call(sd, pad, get_fmt, state, format);
+}
+EXPORT_SYMBOL_GPL(v4l2_subdev_get_fmt_ci);
+
 int v4l2_subdev_get_frame_interval(struct v4l2_subdev *sd,
 				   struct v4l2_subdev_state *state,
 				   struct v4l2_subdev_frame_interval *fi)
