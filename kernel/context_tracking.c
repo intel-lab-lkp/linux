@@ -332,7 +332,7 @@ EXPORT_SYMBOL_GPL(ct_idle_exit);
  * If your architecture's idle loop does do upcalls to user mode (or does
  * anything else that results in unbalanced calls to the irq_enter() and
  * irq_exit() functions), RCU will give you what you deserve, good and hard.
- * But very infrequently and irreproducibly.
+ * But very infrequently and irreproducible.
  *
  * Use things like work queues to work around this limitation.
  *
