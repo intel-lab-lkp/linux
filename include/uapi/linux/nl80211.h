@@ -1818,6 +1818,10 @@ enum nl80211_commands {
  * @NL80211_ATTR_STA_INFO: information about a station, part of station info
  *	given for %NL80211_CMD_GET_STATION, nested attribute containing
  *	info as possible, see &enum nl80211_sta_info.
+ *	In the per-link dump messages produced when %NL80211_ATTR_STA_DUMP_LINK_STATS
+ *	is requested, the top-level occurrence of this attribute is empty.
+ *	Per-link statistics are carried inside %NL80211_ATTR_MLO_LINKS;
+ *	see %NL80211_ATTR_STA_DUMP_LINK_STATS for the full message layout.
  *
  * @NL80211_ATTR_WIPHY_BANDS: Information about an operating bands,
  *	consisting of a nested array.
@@ -2904,7 +2908,11 @@ enum nl80211_commands {
  * @NL80211_ATTR_MLO_LINK_ID: A (u8) link ID for use with MLO, to be used with
  *	various commands that need a link ID to operate.
  * @NL80211_ATTR_MLO_LINKS: A nested array of links, each containing some
- *	per-link information and a link ID.
+ *	per-link information and a link ID. In %NL80211_CMD_NEW_STATION
+ *	responses produced by a %NL80211_ATTR_STA_DUMP_LINK_STATS dump,
+ *	each link entry additionally carries %NL80211_ATTR_STA_INFO with
+ *	per-link station statistics and %NL80211_ATTR_MAC with the
+ *	link-specific MAC address.
  * @NL80211_ATTR_MLD_ADDR: An MLD address, used with various commands such as
  *	authenticate/associate.
  *
@@ -3164,6 +3172,26 @@ enum nl80211_commands {
  *
  * @NL80211_ATTR_NPCA_PRIMARY_FREQ: NPCA primary channel (u32)
  * @NL80211_ATTR_NPCA_PUNCT_BITMAP: NPCA puncturing bitmap (u32)
+ *
+ * @NL80211_ATTR_STA_DUMP_LINK_STATS: Request flag for %NL80211_CMD_GET_STATION
+ *	(dump mode only). When set on an MLD station, the dump produces two
+ *	%NL80211_CMD_NEW_STATION messages per station per dump call:
+ *
+ *	1. An aggregated-stats message whose top-level %NL80211_ATTR_STA_INFO
+ *	   contains MLO-combined statistics (same content as a dump without
+ *	   this flag).
+ *
+ *	2. For each active link, a per-link message containing
+ *	   %NL80211_ATTR_MLO_LINKS with a single link entry. Each entry holds
+ *	   %NL80211_ATTR_MLO_LINK_ID, the link-specific %NL80211_ATTR_MAC,
+ *	   and %NL80211_ATTR_STA_INFO with per-link statistics (see
+ *	   &enum nl80211_sta_info). The top-level %NL80211_ATTR_STA_INFO in
+ *	   this message is intentionally empty; it is present solely for ABI
+ *	   compatibility with parsers that require %NL80211_ATTR_STA_INFO to
+ *	   be present in every %NL80211_CMD_NEW_STATION message.
+ *
+ *	The aggregated message always precedes the per-link messages for the
+ *	same station within a dump sequence.
  *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
@@ -3762,6 +3790,8 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_NPCA_PRIMARY_FREQ,
 	NL80211_ATTR_NPCA_PUNCT_BITMAP,
+
+	NL80211_ATTR_STA_DUMP_LINK_STATS,
 
 	/* add attributes here, update the policy in nl80211.c */
 

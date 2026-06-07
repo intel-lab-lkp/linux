@@ -54,6 +54,8 @@ enum nl80211_dump_station_phase {
 struct nl80211_dump_station_ctx {
 	int sta_idx;
 	enum nl80211_dump_station_phase phase;
+	int link_idx;
+	bool dump_link_stats;
 	u8 mac_addr[ETH_ALEN];
 	struct station_info sinfo;
 };
@@ -1126,6 +1128,7 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_NPCA_PRIMARY_FREQ] = { .type = NLA_U32 },
 	[NL80211_ATTR_NPCA_PUNCT_BITMAP] =
 		NLA_POLICY_FULL_RANGE(NLA_U32, &nl80211_punct_bitmap_range),
+	[NL80211_ATTR_STA_DUMP_LINK_STATS] = { .type = NLA_FLAG },
 };
 
 /* policy for the key attributes */
@@ -7874,6 +7877,185 @@ static bool nl80211_put_signal(struct sk_buff *msg, u8 mask, s8 *signal,
 	return true;
 }
 
+static int nl80211_fill_link_station(struct sk_buff *msg,
+				     struct cfg80211_registered_device *rdev,
+				     struct link_station_info *link_sinfo)
+{
+	struct nlattr *bss_param, *link_sinfoattr;
+
+#define PUT_LINK_SINFO(attr, memb, type) do {				\
+	BUILD_BUG_ON(sizeof(type) == sizeof(u64));			\
+	if (link_sinfo->filled & BIT_ULL(NL80211_STA_INFO_ ## attr) &&	\
+	    nla_put_ ## type(msg, NL80211_STA_INFO_ ## attr,		\
+			     link_sinfo->memb))				\
+		goto nla_put_failure;					\
+	} while (0)
+#define PUT_LINK_SINFO_U64(attr, memb) do {				\
+	if (link_sinfo->filled & BIT_ULL(NL80211_STA_INFO_ ## attr) &&	\
+	    nla_put_u64_64bit(msg, NL80211_STA_INFO_ ## attr,		\
+			      link_sinfo->memb, NL80211_STA_INFO_PAD))	\
+		goto nla_put_failure;					\
+	} while (0)
+
+	link_sinfoattr = nla_nest_start_noflag(msg, NL80211_ATTR_STA_INFO);
+	if (!link_sinfoattr)
+		goto nla_put_failure;
+
+	PUT_LINK_SINFO(INACTIVE_TIME, inactive_time, u32);
+
+	if (link_sinfo->filled & (BIT_ULL(NL80211_STA_INFO_RX_BYTES) |
+			     BIT_ULL(NL80211_STA_INFO_RX_BYTES64)) &&
+	    nla_put_u32(msg, NL80211_STA_INFO_RX_BYTES,
+			(u32)link_sinfo->rx_bytes))
+		goto nla_put_failure;
+
+	if (link_sinfo->filled & (BIT_ULL(NL80211_STA_INFO_TX_BYTES) |
+			     BIT_ULL(NL80211_STA_INFO_TX_BYTES64)) &&
+	    nla_put_u32(msg, NL80211_STA_INFO_TX_BYTES,
+			(u32)link_sinfo->tx_bytes))
+		goto nla_put_failure;
+
+	PUT_LINK_SINFO_U64(RX_BYTES64, rx_bytes);
+	PUT_LINK_SINFO_U64(TX_BYTES64, tx_bytes);
+	PUT_LINK_SINFO_U64(RX_DURATION, rx_duration);
+	PUT_LINK_SINFO_U64(TX_DURATION, tx_duration);
+
+	if (wiphy_ext_feature_isset(&rdev->wiphy,
+				    NL80211_EXT_FEATURE_AIRTIME_FAIRNESS))
+		PUT_LINK_SINFO(AIRTIME_WEIGHT, airtime_weight, u16);
+
+	switch (rdev->wiphy.signal_type) {
+	case CFG80211_SIGNAL_TYPE_MBM:
+		PUT_LINK_SINFO(SIGNAL, signal, u8);
+		PUT_LINK_SINFO(SIGNAL_AVG, signal_avg, u8);
+		break;
+	default:
+		break;
+	}
+	if (link_sinfo->filled & BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL)) {
+		if (!nl80211_put_signal(msg, link_sinfo->chains,
+					link_sinfo->chain_signal,
+					NL80211_STA_INFO_CHAIN_SIGNAL))
+			goto nla_put_failure;
+	}
+	if (link_sinfo->filled & BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL_AVG)) {
+		if (!nl80211_put_signal(msg, link_sinfo->chains,
+					link_sinfo->chain_signal_avg,
+					NL80211_STA_INFO_CHAIN_SIGNAL_AVG))
+			goto nla_put_failure;
+	}
+	if (link_sinfo->filled & BIT_ULL(NL80211_STA_INFO_TX_BITRATE)) {
+		if (!nl80211_put_sta_rate(msg, &link_sinfo->txrate,
+					  NL80211_STA_INFO_TX_BITRATE))
+			goto nla_put_failure;
+	}
+	if (link_sinfo->filled & BIT_ULL(NL80211_STA_INFO_RX_BITRATE)) {
+		if (!nl80211_put_sta_rate(msg, &link_sinfo->rxrate,
+					  NL80211_STA_INFO_RX_BITRATE))
+			goto nla_put_failure;
+	}
+
+	PUT_LINK_SINFO(RX_PACKETS, rx_packets, u32);
+	PUT_LINK_SINFO(TX_PACKETS, tx_packets, u32);
+	PUT_LINK_SINFO(TX_RETRIES, tx_retries, u32);
+	PUT_LINK_SINFO(TX_FAILED, tx_failed, u32);
+	PUT_LINK_SINFO(EXPECTED_THROUGHPUT, expected_throughput, u32);
+	PUT_LINK_SINFO(BEACON_LOSS, beacon_loss_count, u32);
+
+	if (link_sinfo->filled & BIT_ULL(NL80211_STA_INFO_BSS_PARAM)) {
+		bss_param = nla_nest_start_noflag(msg,
+						  NL80211_STA_INFO_BSS_PARAM);
+		if (!bss_param)
+			goto nla_put_failure;
+
+		if (((link_sinfo->bss_param.flags &
+		      BSS_PARAM_FLAGS_CTS_PROT) &&
+		     nla_put_flag(msg, NL80211_STA_BSS_PARAM_CTS_PROT)) ||
+		    ((link_sinfo->bss_param.flags &
+		      BSS_PARAM_FLAGS_SHORT_PREAMBLE) &&
+		     nla_put_flag(msg,
+				  NL80211_STA_BSS_PARAM_SHORT_PREAMBLE)) ||
+		    ((link_sinfo->bss_param.flags &
+		      BSS_PARAM_FLAGS_SHORT_SLOT_TIME) &&
+		     nla_put_flag(msg,
+				  NL80211_STA_BSS_PARAM_SHORT_SLOT_TIME)) ||
+		    nla_put_u8(msg, NL80211_STA_BSS_PARAM_DTIM_PERIOD,
+			       link_sinfo->bss_param.dtim_period) ||
+		    nla_put_u16(msg, NL80211_STA_BSS_PARAM_BEACON_INTERVAL,
+				link_sinfo->bss_param.beacon_interval))
+			goto nla_put_failure;
+
+		nla_nest_end(msg, bss_param);
+	}
+
+	PUT_LINK_SINFO_U64(RX_DROP_MISC, rx_dropped_misc);
+	PUT_LINK_SINFO_U64(BEACON_RX, rx_beacon);
+	PUT_LINK_SINFO(BEACON_SIGNAL_AVG, rx_beacon_signal_avg, u8);
+	PUT_LINK_SINFO(RX_MPDUS, rx_mpdu_count, u32);
+	PUT_LINK_SINFO(FCS_ERROR_COUNT, fcs_err_count, u32);
+	if (wiphy_ext_feature_isset(&rdev->wiphy,
+				    NL80211_EXT_FEATURE_ACK_SIGNAL_SUPPORT)) {
+		PUT_LINK_SINFO(ACK_SIGNAL, ack_signal, u8);
+		PUT_LINK_SINFO(ACK_SIGNAL_AVG, avg_ack_signal, s8);
+	}
+
+#undef PUT_LINK_SINFO
+#undef PUT_LINK_SINFO_U64
+
+	if (link_sinfo->pertid) {
+		struct nlattr *tidsattr;
+		int tid;
+
+		tidsattr = nla_nest_start_noflag(msg,
+						 NL80211_STA_INFO_TID_STATS);
+		if (!tidsattr)
+			goto nla_put_failure;
+
+		for (tid = 0; tid < IEEE80211_NUM_TIDS + 1; tid++) {
+			struct cfg80211_tid_stats *tidstats;
+			struct nlattr *tidattr;
+
+			tidstats = &link_sinfo->pertid[tid];
+
+			if (!tidstats->filled)
+				continue;
+
+			tidattr = nla_nest_start_noflag(msg, tid + 1);
+			if (!tidattr)
+				goto nla_put_failure;
+
+#define PUT_TIDVAL_U64(attr, memb) do {					\
+	if (tidstats->filled & BIT(NL80211_TID_STATS_ ## attr) &&	\
+	    nla_put_u64_64bit(msg, NL80211_TID_STATS_ ## attr,		\
+			      tidstats->memb, NL80211_TID_STATS_PAD))	\
+		goto nla_put_failure;					\
+	} while (0)
+
+			PUT_TIDVAL_U64(RX_MSDU, rx_msdu);
+			PUT_TIDVAL_U64(TX_MSDU, tx_msdu);
+			PUT_TIDVAL_U64(TX_MSDU_RETRIES, tx_msdu_retries);
+			PUT_TIDVAL_U64(TX_MSDU_FAILED, tx_msdu_failed);
+
+#undef PUT_TIDVAL_U64
+			if ((tidstats->filled &
+			     BIT(NL80211_TID_STATS_TXQ_STATS)) &&
+			    !nl80211_put_txq_stats(msg, &tidstats->txq_stats,
+						   NL80211_TID_STATS_TXQ_STATS))
+				goto nla_put_failure;
+
+			nla_nest_end(msg, tidattr);
+		}
+
+		nla_nest_end(msg, tidsattr);
+	}
+
+	nla_nest_end(msg, link_sinfoattr);
+	return 0;
+
+nla_put_failure:
+	return -EMSGSIZE;
+}
+
 static int nl80211_put_sta_info_common(struct sk_buff *msg,
 				       struct cfg80211_registered_device *rdev,
 				       struct station_info *sinfo)
@@ -8347,6 +8529,86 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
+static int nl80211_send_link_station(struct sk_buff *msg,
+				     struct netlink_callback *cb,
+				     struct cfg80211_registered_device *rdev,
+				     struct wireless_dev *wdev,
+				     const u8 *mac_addr,
+				     struct station_info *sinfo,
+				     int link_idx)
+{
+	void *hdr;
+	struct nlattr *links, *link;
+	struct link_station_info *link_sinfo;
+	struct nlattr *sinfoattr;
+	int err;
+
+	hdr = nl80211hdr_put(msg, NETLINK_CB(cb->skb).portid,
+			     cb->nlh->nlmsg_seq, NLM_F_MULTI,
+			     NL80211_CMD_NEW_STATION);
+	if (!hdr)
+		return -EMSGSIZE;
+
+	if ((wdev->netdev &&
+	     nla_put_u32(msg, NL80211_ATTR_IFINDEX, wdev->netdev->ifindex)) ||
+	    nla_put_u64_64bit(msg, NL80211_ATTR_WDEV, wdev_id(wdev),
+			      NL80211_ATTR_PAD) ||
+	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, mac_addr) ||
+	    nla_put_u32(msg, NL80211_ATTR_GENERATION, sinfo->generation)) {
+		err = -EMSGSIZE;
+		goto err_cancel;
+	}
+
+	sinfoattr = nla_nest_start_noflag(msg, NL80211_ATTR_STA_INFO);
+	if (!sinfoattr) {
+		err = -EMSGSIZE;
+		goto err_cancel;
+	}
+
+	link_sinfo = sinfo->links[link_idx];
+	if (!link_sinfo) {
+		err = -ENOENT;
+		goto err_cancel;
+	}
+
+	nla_nest_end(msg, sinfoattr);
+	if (!is_valid_ether_addr(link_sinfo->addr)) {
+		err = -EADDRNOTAVAIL;
+		goto err_cancel;
+	}
+
+	links = nla_nest_start(msg, NL80211_ATTR_MLO_LINKS);
+	if (!links) {
+		err = -EMSGSIZE;
+		goto err_cancel;
+	}
+
+	link = nla_nest_start(msg, link_idx + 1);
+	if (!link) {
+		err = -EMSGSIZE;
+		goto err_cancel;
+	}
+
+	if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_idx) ||
+	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, link_sinfo->addr)) {
+		err = -EMSGSIZE;
+		goto err_cancel;
+	}
+
+	err = nl80211_fill_link_station(msg, rdev, link_sinfo);
+	if (err)
+		goto err_cancel;
+
+	nla_nest_end(msg, link);
+	nla_nest_end(msg, links);
+	genlmsg_end(msg, hdr);
+	return 0;
+
+err_cancel:
+	genlmsg_cancel(msg, hdr);
+	return err;
+}
+
 static int nl80211_dump_station(struct sk_buff *skb,
 				struct netlink_callback *cb)
 {
@@ -8354,13 +8616,22 @@ static int nl80211_dump_station(struct sk_buff *skb,
 	struct wireless_dev *wdev;
 	struct nl80211_dump_station_cb *cb_data = (void *)cb->ctx;
 	struct nl80211_dump_station_ctx *ctx = cb_data->ctx;
+	struct nlattr **attrbuf = NULL;
 	int err, ret;
 
 	NL_ASSERT_CTX_FITS(struct nl80211_dump_station_cb);
 
-	err = nl80211_prepare_wdev_dump(cb, &rdev, &wdev, NULL);
-	if (err)
+	if (!ctx) {
+		attrbuf = kzalloc_objs(*attrbuf, NUM_NL80211_ATTR);
+		if (!attrbuf)
+			return -ENOMEM;
+	}
+
+	err = nl80211_prepare_wdev_dump(cb, &rdev, &wdev, attrbuf);
+	if (err) {
+		kfree(attrbuf);
 		return err;
+	}
 
 	/* nl80211_prepare_wdev_dump acquired it in the successful case */
 	__acquire(&rdev->wiphy.mtx);
@@ -8369,14 +8640,21 @@ static int nl80211_dump_station(struct sk_buff *skb,
 	if (!ctx) {
 		ctx = kzalloc_obj(*ctx);
 		if (!ctx) {
+			kfree(attrbuf);
 			err = -ENOMEM;
 			goto out_err;
 		}
 
 		ctx->phase = NL80211_DUMP_STA_PHASE_AGGREGATED;
 		ctx->sta_idx = 0;
+		ctx->link_idx = 0;
+		ctx->dump_link_stats =
+			!!attrbuf[NL80211_ATTR_STA_DUMP_LINK_STATS];
 		cb_data->ctx = ctx;
 	}
+
+	kfree(attrbuf);
+	attrbuf = NULL;
 
 	if (!wdev->netdev && wdev->iftype != NL80211_IFTYPE_NAN) {
 		err = -EINVAL;
@@ -8388,9 +8666,9 @@ static int nl80211_dump_station(struct sk_buff *skb,
 		goto out_err;
 	}
 
-	/* Phase 0: dump aggregated station info */
-	if (ctx->phase == NL80211_DUMP_STA_PHASE_AGGREGATED) {
-		while (true) {
+	while (true) {
+		/* Phase 0: dump aggregated station info */
+		if (ctx->phase == NL80211_DUMP_STA_PHASE_AGGREGATED) {
 			memset(&ctx->sinfo, 0, sizeof(ctx->sinfo));
 			for (int i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
 				ctx->sinfo.links[i] =
@@ -8428,15 +8706,45 @@ static int nl80211_dump_station(struct sk_buff *skb,
 				goto out_err_release;
 			}
 
-			/* Reset ctx for next station */
-			cfg80211_sinfo_release_content(&ctx->sinfo);
-			ctx->sta_idx++;
+			ctx->phase = NL80211_DUMP_STA_PHASE_PER_LINK;
 		}
-	}
 
-	ctx->phase = NL80211_DUMP_STA_PHASE_AGGREGATED;
-	err = skb->len;
-	goto out_err;
+		/* Phase 1: dump per-link station info */
+		if (ctx->phase == NL80211_DUMP_STA_PHASE_PER_LINK &&
+		    ctx->dump_link_stats && ctx->sinfo.valid_links) {
+			while (ctx->link_idx < IEEE80211_MLD_MAX_NUM_LINKS) {
+				if (!(ctx->sinfo.valid_links &
+				      BIT(ctx->link_idx))) {
+					ctx->link_idx++;
+					continue;
+				}
+
+				ret = nl80211_send_link_station(skb, cb, rdev,
+								wdev,
+								ctx->mac_addr,
+								&ctx->sinfo,
+								ctx->link_idx);
+				if (ret == -EMSGSIZE) {
+					err = skb->len;
+					goto out_err;
+				}
+
+				if (ret < 0) {
+					err = ret;
+					goto out_err_release;
+				}
+
+				ctx->link_idx++;
+			}
+		}
+
+		/* Reset ctx for next station */
+		cfg80211_sinfo_release_content(&ctx->sinfo);
+		memset(&ctx->sinfo, 0, sizeof(ctx->sinfo));
+		ctx->sta_idx++;
+		ctx->phase = NL80211_DUMP_STA_PHASE_AGGREGATED;
+		ctx->link_idx = 0;
+	}
 
 out_err_release:
 	cfg80211_sinfo_release_content(&ctx->sinfo);
