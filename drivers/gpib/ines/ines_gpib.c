@@ -1145,6 +1145,10 @@ static int ines_gpib_config(struct pcmcia_device *link)
 		return -ENODEV;
 	}
 	virt = ioremap(link->resource[2]->start, resource_size(link->resource[2]));
+	if (!virt) {
+		ines_gpib_release(link);
+		return -ENOMEM;
+	}
 	writeb((link->resource[2]->start >> 2) & 0xff, virt + 0xf0); // IOWindow base
 	iounmap(virt);
 
