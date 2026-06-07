@@ -415,7 +415,7 @@ static int atp_calculate_abs(struct atp *dev, int offset, int nb_sensors,
 		 * by scale. Mostly noise.
 		 */
 		if ((dev->smooth[i] >> ATP_SCALE) > 0) {
-			pcum += dev->smooth[i] * i;
+			pcum += dev->smooth[i] * (i - 4);
 			psum += dev->smooth[i];
 		}
 	}
