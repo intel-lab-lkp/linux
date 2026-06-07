@@ -298,13 +298,22 @@ static u32 cramfs_get_block_range(struct inode *inode, u32 pgoff, u32 *pages)
 {
 	struct cramfs_sb_info *sbi = CRAMFS_SB(inode->i_sb);
 	int i;
-	u32 *blockptrs, first_block_addr;
+	u32 *blockptrs, first_block_addr, data_addr;
 
 	/*
 	 * We can dereference memory directly here as this code may be
 	 * reached only when there is a direct filesystem image mapping
 	 * available in memory.
+	 *
+	 * The block pointer array lives at OFFSET(inode) inside the image.
+	 * OFFSET() and the block pointers are taken from the (untrusted)
+	 * on-disk inode, so bound every access to the image the same way
+	 * cramfs_direct_read() does before dereferencing it.
 	 */
+	if (OFFSET(inode) > sbi->size ||
+	    ((u64)pgoff + *pages) * 4 > sbi->size - OFFSET(inode))
+		return 0;
+
 	blockptrs = (u32 *)(sbi->linear_virt_addr + OFFSET(inode) + pgoff * 4);
 	first_block_addr = blockptrs[0] & ~CRAMFS_BLK_FLAGS;
 	i = 0;
@@ -324,7 +333,14 @@ static u32 cramfs_get_block_range(struct inode *inode, u32 pgoff, u32 *pages)
 	} while (++i < *pages);
 
 	*pages = i;
-	return first_block_addr << CRAMFS_BLK_DIRECT_PTR_SHIFT;
+
+	/* The mapped data range must also lie within the image. */
+	data_addr = first_block_addr << CRAMFS_BLK_DIRECT_PTR_SHIFT;
+	if (data_addr > sbi->size ||
+	    (u64)*pages * PAGE_SIZE > sbi->size - data_addr)
+		return 0;
+
+	return data_addr;
 }
 
 #ifdef CONFIG_MMU
@@ -345,9 +361,21 @@ static bool cramfs_last_page_is_shared(struct inode *inode)
 	if (!partial)
 		return false;
 	last_page = inode->i_size >> PAGE_SHIFT;
+
+	/*
+	 * The block pointer and the tail data are read directly from the
+	 * image at offsets derived from the untrusted on-disk inode; bound
+	 * both accesses to the image.  On any overflow treat the last page
+	 * as shared so the caller falls back to the bounded paging path.
+	 */
+	if (OFFSET(inode) > sbi->size ||
+	    ((u64)last_page + 1) * 4 > sbi->size - OFFSET(inode))
+		return true;
 	blockptrs = (u32 *)(sbi->linear_virt_addr + OFFSET(inode));
 	blockaddr = blockptrs[last_page] & ~CRAMFS_BLK_FLAGS;
 	blockaddr <<= CRAMFS_BLK_DIRECT_PTR_SHIFT;
+	if (blockaddr > sbi->size || sbi->size - blockaddr < PAGE_SIZE)
+		return true;
 	tail_data = sbi->linear_virt_addr + blockaddr + partial;
 	return memchr_inv(tail_data, 0, PAGE_SIZE - partial) ? true : false;
 }
