@@ -40,9 +40,9 @@
 		#size-cells = <2>;
 		ranges;
 
-		framebuffer0: framebuffer@a000000 {
+		framebuffer {
 			compatible = "simple-framebuffer";
-			reg = <0x0 0xe1000000 0x0 (2700 * 1224 * 4)>;
+			memory-region = <&cont_splash_mem>;
 			width = <1224>;
 			height = <2700>;
 			stride = <(1224 * 4)>;
