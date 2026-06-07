@@ -191,7 +191,7 @@ synproxy_tstamp_adjust(struct sk_buff *skb, unsigned int protoff,
 		       const struct nf_conn_synproxy *synproxy)
 {
 	unsigned int optoff, optend;
-	__be32 *ptr, old;
+	__be32 old;
 
 	if (synproxy->tsoff == 0)
 		return 1;
@@ -221,18 +221,22 @@ synproxy_tstamp_adjust(struct sk_buff *skb, unsigned int protoff,
 			if (op[0] == TCPOPT_TIMESTAMP &&
 			    op[1] == TCPOLEN_TIMESTAMP) {
 				if (CTINFO2DIR(ctinfo) == IP_CT_DIR_REPLY) {
-					ptr = (__be32 *)&op[2];
-					old = *ptr;
-					*ptr = htonl(ntohl(*ptr) -
-						     synproxy->tsoff);
+					u32 tsval = get_unaligned_be32(&op[2]);
+					u32 new_tsval = tsval - synproxy->tsoff;
+
+					old = cpu_to_be32(tsval);
+					put_unaligned_be32(new_tsval, &op[2]);
+					inet_proto_csum_replace4(&th->check, skb,
+								 old, cpu_to_be32(new_tsval), false);
 				} else {
-					ptr = (__be32 *)&op[6];
-					old = *ptr;
-					*ptr = htonl(ntohl(*ptr) +
-						     synproxy->tsoff);
+					u32 tsecr = get_unaligned_be32(&op[6]);
+					u32 new_tsecr = tsecr + synproxy->tsoff;
+
+					old = cpu_to_be32(tsecr);
+					put_unaligned_be32(new_tsecr, &op[6]);
+					inet_proto_csum_replace4(&th->check, skb,
+								 old, cpu_to_be32(new_tsecr), false);
 				}
-				inet_proto_csum_replace4(&th->check, skb,
-							 old, *ptr, false);
 				return 1;
 			}
 			optoff += op[1];
