@@ -26,7 +26,8 @@ TEST_GEN_PROGS := \
 	futex_numa_mpol \
 	futex_waitv \
 	futex_numa \
-	robust_list
+	robust_list \
+	futex_lock_pi_exiting
 
 TEST_PROGS := run.sh
 
