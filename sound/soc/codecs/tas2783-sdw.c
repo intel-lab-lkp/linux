@@ -100,6 +100,8 @@ struct tas2783_prv {
 	wait_queue_head_t fw_wait;
 	bool fw_dl_task_done;
 	bool fw_dl_success;
+	/* use fallback fw name */
+	bool fw_using_fallback;
 };
 
 static const struct reg_default tas2783_reg_default[] = {
@@ -725,6 +727,8 @@ static s32 tas_fw_get_next_file(const u8 *data, struct tas_fw_file *file)
 	return file->length + sizeof(u32) * 5;
 }
 
+static s32 tas_io_init(struct device *dev, struct sdw_slave *slave);
+
 static void tas2783_fw_ready(const struct firmware *fmw, void *context)
 {
 	struct tas2783_prv *tas_dev =
@@ -732,6 +736,7 @@ static void tas2783_fw_ready(const struct firmware *fmw, void *context)
 	const u8 *buf = NULL;
 	s32  img_sz, ret = 0, cur_file = 0;
 	s32 offset = 0;
+	bool try_load_fallback = false;
 
 	struct tas_fw_hdr *hdr __free(kfree) = kzalloc_obj(*hdr);
 	struct tas_fw_file *file __free(kfree) = kzalloc_obj(*file);
@@ -740,11 +745,21 @@ static void tas2783_fw_ready(const struct firmware *fmw, void *context)
 		goto out;
 	}
 
+	/* firmware binary not found*/
 	if (!fmw || !fmw->data) {
-		/* firmware binary not found*/
-		dev_err(tas_dev->dev,
-			"Failed to read fw binary %s\n",
-			tas_dev->rca_binaryname);
+		if (!tas_dev->fw_using_fallback) {
+			tas_dev->fw_using_fallback = true;
+			try_load_fallback = true;
+
+			dev_info(tas_dev->dev,
+				"Failed to read preferred fw binary: %s\n",
+				tas_dev->rca_binaryname);
+		} else {
+			dev_err(tas_dev->dev,
+				"Failed to read fallback fw binary %s\n",
+				tas_dev->rca_binaryname);
+		}
+
 		ret = -EINVAL;
 		goto out;
 	}
@@ -800,6 +815,11 @@ out:
 	wake_up(&tas_dev->fw_wait);
 	if (fmw)
 		release_firmware(fmw);
+
+	if (try_load_fallback) {
+		dev_info(tas_dev->dev, "Attempting fallback fw load\n");
+		tas_io_init(tas_dev->dev, tas_dev->sdw_peripheral);
+	}
 }
 
 static inline s32 tas_clear_latch(struct tas2783_prv *priv)
@@ -1105,13 +1125,16 @@ static void tas_generate_fw_name(struct sdw_slave *slave, char *name, size_t siz
 	bool pci_found = false;
 #if IS_ENABLED(CONFIG_PCI)
 	struct device *dev = &slave->dev;
+	struct tas2783_prv *tas_dev = dev_get_drvdata(&slave->dev);
 	struct pci_dev *pci = NULL;
+	const char *fw_uid_prefix = tas_dev->fw_using_fallback ? "" : "0x";
 
 	for (; dev; dev = dev->parent) {
 		if (dev->bus == &pci_bus_type) {
 			pci = to_pci_dev(dev);
-			scnprintf(name, size, "%04X-%1X-%1X.bin",
-				  pci->subsystem_device, bus->link_id, unique_id);
+			scnprintf(name, size, "%04X-%1X-%s%1X.bin",
+				  pci->subsystem_device, bus->link_id,
+				  fw_uid_prefix, unique_id);
 			pci_found = true;
 			break;
 		}
@@ -1316,6 +1339,7 @@ static s32 tas_sdw_probe(struct sdw_slave *peripheral,
 	mutex_init(&tas_dev->calib_lock);
 	mutex_init(&tas_dev->pde_lock);
 
+	tas_dev->fw_using_fallback = false;
 	init_waitqueue_head(&tas_dev->fw_wait);
 	dev_set_drvdata(dev, tas_dev);
 	regmap = devm_regmap_init_sdw_mbq_cfg(&peripheral->dev,
