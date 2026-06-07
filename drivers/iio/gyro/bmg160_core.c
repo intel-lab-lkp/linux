@@ -313,8 +313,7 @@ static int bmg160_set_power_state(struct bmg160_data *data, bool on)
 		ret = pm_runtime_put_autosuspend(dev);
 
 	if (ret < 0) {
-		dev_err(dev, "Failed: bmg160_set_power_state for %d\n", on);
-
+		dev_err(dev, "Failed: %s for %d\n", __func__, on);
 		if (on)
 			pm_runtime_put_noidle(dev);
 
