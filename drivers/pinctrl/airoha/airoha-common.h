@@ -476,4 +476,6 @@ struct airoha_pinctrl_match_data {
 	const struct airoha_pinctrl_confs_info confs_info[AIROHA_PINCTRL_CONFS_MAX];
 };
 
+int airoha_pinctrl_probe(struct platform_device *pdev);
+
 #endif

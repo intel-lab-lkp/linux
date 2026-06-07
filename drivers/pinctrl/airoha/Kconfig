@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0-only
+menu "Airoha pinctrl drivers"
+	depends on ARCH_AIROHA || COMPILE_TEST
 
-# For ARMv8 SoCs
 config PINCTRL_AIROHA
-	tristate "Airoha AN7581/AN7583 pin control"
+	tristate "Airoha pin control"
 	depends on OF
-	depends on ARM64 || COMPILE_TEST
 	depends on ARCH_AIROHA || COMPILE_TEST
 	select PINMUX
 	select GENERIC_PINCONF
@@ -13,6 +13,20 @@ config PINCTRL_AIROHA
 	select GPIOLIB
 	select GPIOLIB_IRQCHIP
 	select REGMAP_MMIO
+	imply PINCTRL_AIROHA_AN7581
+	imply PINCTRL_AIROHA_AN7583
 	help
 	  Say yes here to support pin controller and gpio driver
-	  on Airoha EN7581/AN7583 SoC.
+	  on Airoha SoC.
+
+config PINCTRL_AIROHA_AN7581
+	tristate "AN7581 pinctrl"
+	depends on ARM64 || COMPILE_TEST
+	depends on PINCTRL_AIROHA
+
+config PINCTRL_AIROHA_AN7583
+	tristate "AN7583 pinctrl"
+	depends on ARM64 || COMPILE_TEST
+	depends on PINCTRL_AIROHA
+
+endmenu
