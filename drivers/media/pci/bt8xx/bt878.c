@@ -445,6 +445,10 @@ static int bt878_probe(struct pci_dev *dev, const struct pci_device_id *pci_id)
 	bt->bt878_mem = (unsigned char *) bt->bt878_adr;
 #else
 	bt->bt878_mem = ioremap(bt->bt878_adr, 0x1000);
+	if (!bt->bt878_mem) {
+		result = -ENOMEM;
+		goto fail1;
+	}
 #endif
 
 	/* clear interrupt mask */
@@ -486,6 +490,12 @@ static int bt878_probe(struct pci_dev *dev, const struct pci_device_id *pci_id)
       fail2:
 	free_irq(bt->irq, bt);
       fail1:
+#ifndef __sparc__
+	if (bt->bt878_mem) {
+		iounmap(bt->bt878_mem);
+		bt->bt878_mem = NULL;
+	}
+#endif
 	release_mem_region(pci_resource_start(bt->dev, 0),
 			   pci_resource_len(bt->dev, 0));
       fail0:
