@@ -1427,6 +1427,18 @@ config RTC_DRV_NTXEC
 
 comment "on-CPU RTC drivers"
 
+config RTC_DRV_M5441X
+	tristate "Freescale MCF5441x on-chip RTC"
+	depends on M5441x || COMPILE_TEST
+	help
+	  If you say yes here you get support for the on-chip "robust"
+	  real time clock found on Freescale MCF5441x ColdFire SoCs,
+	  including its 2KB battery-backed standby RAM exposed through the
+	  nvmem framework.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called rtc-m5441x.
+
 config RTC_DRV_ASM9260
 	tristate "Alphascale asm9260 RTC"
 	depends on MACH_ASM9260 || COMPILE_TEST
