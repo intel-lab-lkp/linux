@@ -459,9 +459,13 @@ static struct rtree_node *alloc_rtree_node(gfp_t gfp_mask, int safe_needed,
 }
 
 /**
- * add_rtree_block - Add a new leave node to the radix tree.
+ * add_rtree_block - Add a new leaf node to the radix tree of a memory zone.
+ * @zone: The memory zone's radix tree bitmap to extend with a new leaf block.
+ * @gfp_mask: GFP mask for the allocation.
+ * @safe_needed: Get pages not used before hibernation (restore only)
+ * @ca: Pointer to a linked list of pages ("a chain") to allocate from
  *
- * The leave nodes need to be allocated in order to keep the leaves
+ * The leaf nodes need to be allocated in order to keep the leaves
  * linked list in order. This is guaranteed by the zone->blocks
  * counter.
  */
