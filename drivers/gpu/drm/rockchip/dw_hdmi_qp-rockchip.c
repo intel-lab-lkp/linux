@@ -23,7 +23,6 @@
 #include <drm/drm_bridge_connector.h>
 #include <drm/drm_of.h>
 #include <drm/drm_probe_helper.h>
-#include <drm/drm_simple_kms_helper.h>
 
 #include "rockchip_drm_drv.h"
 
@@ -159,6 +158,10 @@ dw_hdmi_qp_rockchip_encoder_atomic_check(struct drm_encoder *encoder,
 
 	return ret;
 }
+
+static const struct drm_encoder_funcs dw_hdmi_qp_rockchip_encoder_funcs = {
+	.destroy	= drm_encoder_cleanup,
+};
 
 static const struct
 drm_encoder_helper_funcs dw_hdmi_qp_rockchip_encoder_helper_funcs = {
@@ -586,7 +589,8 @@ static int dw_hdmi_qp_rockchip_bind(struct device *dev, struct device *master,
 		return ret;
 
 	drm_encoder_helper_add(encoder, &dw_hdmi_qp_rockchip_encoder_helper_funcs);
-	drm_simple_encoder_init(drm, encoder, DRM_MODE_ENCODER_TMDS);
+	drm_encoder_init(drm, encoder, &dw_hdmi_qp_rockchip_encoder_funcs,
+			 DRM_MODE_ENCODER_TMDS, NULL);
 
 	platform_set_drvdata(pdev, hdmi);
 
