@@ -14,6 +14,7 @@
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
 #include <linux/module.h>
+#include <linux/minmax.h>
 #include <linux/swap.h>
 #include <linux/falloc.h>
 #include <linux/uio.h>
@@ -1066,7 +1067,7 @@ static void fuse_send_readpages(struct fuse_io_args *ia, struct file *file,
 			return;
 	} else {
 		res = fuse_simple_request(fm, &ap->args);
-		err = res < 0 ? res : 0;
+		err = min_t(int, res, 0);
 	}
 	fuse_readpages_end(fm, &ap->args, err);
 }
@@ -2895,7 +2896,7 @@ fuse_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	if (io->async) {
 		bool blocking = io->blocking;
 
-		fuse_aio_complete(io, ret < 0 ? ret : 0, -1);
+		fuse_aio_complete(io, min_t(int, ret, 0), -1);
 
 		/* we have a non-extending, async request, so return */
 		if (!blocking)
