@@ -303,7 +303,7 @@ static int __cxl_find_regblock_instance(struct pci_dev *pdev, enum cxl_regloc_ty
 {
 	u32 regloc_size, regblocks;
 	int instance = 0;
-	int regloc, i;
+	int regloc, i, rc;
 
 	*map = (struct cxl_register_map) {
 		.host = &pdev->dev,
@@ -315,7 +315,9 @@ static int __cxl_find_regblock_instance(struct pci_dev *pdev, enum cxl_regloc_ty
 	if (!regloc)
 		return -ENXIO;
 
-	pci_read_config_dword(pdev, regloc + PCI_DVSEC_HEADER1, &regloc_size);
+	rc = pci_read_config_dword(pdev, regloc + PCI_DVSEC_HEADER1, &regloc_size);
+	if (rc)
+		return pcibios_err_to_errno(rc);
 	regloc_size = PCI_DVSEC_HEADER1_LEN(regloc_size);
 
 	regloc += PCI_DVSEC_CXL_REG_LOCATOR_BLOCK1;
@@ -324,8 +326,12 @@ static int __cxl_find_regblock_instance(struct pci_dev *pdev, enum cxl_regloc_ty
 	for (i = 0; i < regblocks; i++, regloc += 8) {
 		u32 reg_lo, reg_hi;
 
-		pci_read_config_dword(pdev, regloc, &reg_lo);
-		pci_read_config_dword(pdev, regloc + 4, &reg_hi);
+		rc = pci_read_config_dword(pdev, regloc, &reg_lo);
+		if (rc)
+			return pcibios_err_to_errno(rc);
+		rc = pci_read_config_dword(pdev, regloc + 4, &reg_hi);
+		if (rc)
+			return pcibios_err_to_errno(rc);
 
 		if (!cxl_decode_regblock(pdev, reg_lo, reg_hi, map))
 			continue;
