@@ -311,8 +311,7 @@ static int bmc150_magn_set_odr(struct bmc150_magn_data *data, int val)
 			ret = regmap_update_bits(data->regmap,
 						 BMC150_MAGN_REG_OPMODE_ODR,
 						 BMC150_MAGN_MASK_ODR,
-						 bmc150_magn_samp_freq_table[i].
-						 reg_val <<
+						 bmc150_magn_samp_freq_table[i].reg_val <<
 						 BMC150_MAGN_SHIFT_ODR);
 			if (ret < 0)
 				return ret;
