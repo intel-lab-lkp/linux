@@ -7,6 +7,36 @@
 #include "cudbg_if.h"
 #include "cudbg_lib_common.h"
 
+void release_scratch_buff(struct cudbg_buffer *pscratch_buff,
+			  struct cudbg_buffer *pdbg_buff)
+{
+	pdbg_buff->size += pscratch_buff->size;
+	memset(pscratch_buff->data, 0, pscratch_buff->size);
+	pscratch_buff->data = NULL;
+	pscratch_buff->offset = 0;
+	pscratch_buff->size = 0;
+}
+
+int get_scratch_buff(struct cudbg_buffer *pdbg_buff, u32 size,
+		     struct cudbg_buffer *pscratch_buff)
+{
+	u32 scratch_offset;
+	int rc = 0;
+
+	scratch_offset = pdbg_buff->size - size;
+	if (pdbg_buff->offset > (int)scratch_offset || pdbg_buff->size < size) {
+		rc = CUDBG_STATUS_NO_MEM;
+		goto err;
+	} else {
+		pscratch_buff->data = (char *)pdbg_buff->data + scratch_offset;
+		pscratch_buff->offset = 0;
+		pscratch_buff->size = size;
+		pdbg_buff->size -= size;
+	}
+err:
+	return rc;
+}
+
 int cudbg_get_buff(struct cudbg_init *pdbg_init,
 		   struct cudbg_buffer *pdbg_buff, u32 size,
 		   struct cudbg_buffer *pin_buff)

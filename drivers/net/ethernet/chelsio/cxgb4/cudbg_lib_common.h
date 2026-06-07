@@ -67,6 +67,10 @@ struct cudbg_error {
 #define CDUMP_MAX_COMP_BUF_SIZE ((64 * 1024) - 1)
 #define CUDBG_CHUNK_SIZE ((CDUMP_MAX_COMP_BUF_SIZE / 1024) * 1024)
 
+void release_scratch_buff(struct cudbg_buffer *pscratch_buff,
+			  struct cudbg_buffer *pdbg_buff);
+int get_scratch_buff(struct cudbg_buffer *pdbg_buff, u32 size,
+		     struct cudbg_buffer *pscratch_buff);
 int cudbg_get_buff(struct cudbg_init *pdbg_init,
 		   struct cudbg_buffer *pdbg_buff, u32 size,
 		   struct cudbg_buffer *pin_buff);
