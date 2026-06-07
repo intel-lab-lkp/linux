@@ -228,15 +228,22 @@ static bool ext4_overwrite_io(struct inode *inode,
 	map.m_len = EXT4_MAX_BLOCKS(len, pos, blkbits);
 	blklen = map.m_len;
 
-	err = ext4_map_blocks(NULL, inode, &map, 0);
-	if (err != blklen)
-		return false;
-	/*
-	 * 'err==len' means that all of the blocks have been preallocated,
-	 * regardless of whether they have been initialized or not. We need to
-	 * check m_flags to distinguish the unwritten extents.
-	 */
-	*unwritten = !(map.m_flags & EXT4_MAP_MAPPED);
+	*unwritten = false;
+
+	while (blklen > 0) {
+		map.m_len = blklen;
+		err = ext4_map_blocks(NULL, inode, &map, 0);
+		/*
+		 * err <= 0 means a hole or error; the write needs block
+		 * allocation so it cannot be treated as an overwrite.
+		 */
+		if (err <= 0)
+			return false;
+		if (!(map.m_flags & EXT4_MAP_MAPPED))
+			*unwritten = true;
+		blklen -= err;
+		map.m_lblk += err;
+	}
 	return true;
 }
 
