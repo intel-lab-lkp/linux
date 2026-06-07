@@ -1031,13 +1031,17 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 			return -ENXIO;
 		}
 
-		if (size == 0) {
-			dev_warn(&port->dev,
-				 "decoder%d.%d: Committed with zero size\n",
-				 port->id, cxld->id);
-			return -ENXIO;
-		}
 		port->commit_end = cxld->id;
+
+		/*
+		 * CXL r3.2 8.2.4.20.12 permits committing an HDM decoder with
+		 * size 0. Enumerate it into the topology with its HW-reported
+		 * LOCK state instead of aborting the port.
+		 */
+		if (size == 0)
+			dev_dbg(&port->dev,
+				"decoder%d.%d: Committed with zero size\n",
+				port->id, cxld->id);
 	} else {
 		if (cxled) {
 			struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
@@ -1095,6 +1099,15 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 
 	if (!committed)
 		return 0;
+
+	/*
+	 * A committed zero-size decoder reserves no DPA, but still advance
+	 * the port's DPA watermark.
+	 */
+	if (size == 0) {
+		port->hdm_end = cxld->id;
+		return 0;
+	}
 
 	dpa_size = div_u64_rem(size, cxld->interleave_ways, &remainder);
 	if (remainder) {
