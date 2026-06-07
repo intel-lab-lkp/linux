@@ -77,7 +77,7 @@ static int __damon_va_three_regions(struct mm_struct *mm,
 	struct damon_addr_range first_gap = {0}, second_gap = {0};
 	VMA_ITERATOR(vmi, mm, 0);
 	struct vm_area_struct *vma, *prev = NULL;
-	unsigned long start;
+	unsigned long start = 0, last_vma_end = 0;
 
 	/*
 	 * Find the two biggest gaps so that first_gap > second_gap > others.
@@ -104,6 +104,7 @@ static int __damon_va_three_regions(struct mm_struct *mm,
 		}
 next:
 		prev = vma;
+		last_vma_end = vma->vm_end;
 	}
 	rcu_read_unlock();
 
@@ -120,7 +121,7 @@ next:
 	regions[1].start = ALIGN(first_gap.end, DAMON_MIN_REGION_SZ);
 	regions[1].end = ALIGN(second_gap.start, DAMON_MIN_REGION_SZ);
 	regions[2].start = ALIGN(second_gap.end, DAMON_MIN_REGION_SZ);
-	regions[2].end = ALIGN(prev->vm_end, DAMON_MIN_REGION_SZ);
+	regions[2].end = ALIGN(last_vma_end, DAMON_MIN_REGION_SZ);
 
 	return 0;
 }
@@ -140,9 +141,7 @@ static int damon_va_three_regions(struct damon_target *t,
 	if (!mm)
 		return -EINVAL;
 
-	mmap_read_lock(mm);
 	rc = __damon_va_three_regions(mm, regions);
-	mmap_read_unlock(mm);
 
 	mmput(mm);
 	return rc;
