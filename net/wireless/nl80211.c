@@ -39,6 +39,39 @@ static int nl80211_crypto_settings(struct cfg80211_registered_device *rdev,
 
 /* the netlink family */
 static struct genl_family nl80211_fam;
+/**
+ * enum nl80211_dump_station_phase - station dump fragmentation phases
+ * @NL80211_DUMP_STA_PHASE_AGGREGATED: send aggregated (MLO-combined) station
+ *	statistics for the station entry
+ * @NL80211_DUMP_STA_PHASE_PER_LINK: send per-link statistics for each active
+ *	MLO link of the station; only used when dump_link_stats is set
+ */
+enum nl80211_dump_station_phase {
+	NL80211_DUMP_STA_PHASE_AGGREGATED = 0,
+	NL80211_DUMP_STA_PHASE_PER_LINK   = 1,
+};
+
+struct nl80211_dump_station_ctx {
+	int sta_idx;
+	enum nl80211_dump_station_phase phase;
+	u8 mac_addr[ETH_ALEN];
+	struct station_info sinfo;
+};
+
+/**
+ * struct nl80211_dump_station_cb - state stored in netlink_callback::ctx
+ * @wiphy_idx: args[0] - wiphy index from nl80211_prepare_wdev_dump
+ * @wdev_id: args[1] - wdev identifier from nl80211_prepare_wdev_dump
+ * @ctx: args[2] - dump station context pointer
+ *
+ * args[0] and args[1] are reserved by nl80211_prepare_wdev_dump().
+ * The ctx pointer must live at args[2] to avoid corrupting those fields.
+ */
+struct nl80211_dump_station_cb {
+	long wiphy_idx;
+	long wdev_id;
+	struct nl80211_dump_station_ctx *ctx;
+};
 
 /* multicast groups */
 enum nl80211_multicast_groups {
@@ -8279,22 +8312,71 @@ static void cfg80211_sta_set_mld_sinfo(struct station_info *sinfo)
 	sinfo->filled &= ~BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL_AVG);
 }
 
+static int
+nl80211_send_accumulated_station(struct sk_buff *msg,
+				 struct netlink_callback *cb,
+				 struct cfg80211_registered_device *rdev,
+				 struct wireless_dev *wdev,
+				 const u8 *mac_addr,
+				 struct station_info *sinfo)
+{
+	void *hdr;
+
+	hdr = nl80211hdr_put(msg, NETLINK_CB(cb->skb).portid,
+			     cb->nlh->nlmsg_seq, NLM_F_MULTI,
+			     NL80211_CMD_NEW_STATION);
+	if (!hdr)
+		return -EMSGSIZE;
+
+	if ((wdev->netdev &&
+	     nla_put_u32(msg, NL80211_ATTR_IFINDEX, wdev->netdev->ifindex)) ||
+	    nla_put_u64_64bit(msg, NL80211_ATTR_WDEV, wdev_id(wdev),
+			      NL80211_ATTR_PAD) ||
+	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, mac_addr) ||
+	    nla_put_u32(msg, NL80211_ATTR_GENERATION, sinfo->generation))
+		goto nla_put_failure;
+
+	if (nl80211_put_sta_info_common(msg, rdev, sinfo))
+		goto nla_put_failure;
+
+	genlmsg_end(msg, hdr);
+	return 0;
+
+nla_put_failure:
+	genlmsg_cancel(msg, hdr);
+	return -EMSGSIZE;
+}
+
 static int nl80211_dump_station(struct sk_buff *skb,
 				struct netlink_callback *cb)
 {
-	struct station_info sinfo;
 	struct cfg80211_registered_device *rdev;
 	struct wireless_dev *wdev;
-	u8 mac_addr[ETH_ALEN];
-	int sta_idx = cb->args[2];
-	bool sinfo_alloc = false;
-	int err, i;
+	struct nl80211_dump_station_cb *cb_data = (void *)cb->ctx;
+	struct nl80211_dump_station_ctx *ctx = cb_data->ctx;
+	int err, ret;
+
+	NL_ASSERT_CTX_FITS(struct nl80211_dump_station_cb);
 
 	err = nl80211_prepare_wdev_dump(cb, &rdev, &wdev, NULL);
 	if (err)
 		return err;
+
 	/* nl80211_prepare_wdev_dump acquired it in the successful case */
 	__acquire(&rdev->wiphy.mtx);
+
+	/* First invocation: allocate ctx */
+	if (!ctx) {
+		ctx = kzalloc_obj(*ctx);
+		if (!ctx) {
+			err = -ENOMEM;
+			goto out_err;
+		}
+
+		ctx->phase = NL80211_DUMP_STA_PHASE_AGGREGATED;
+		ctx->sta_idx = 0;
+		cb_data->ctx = ctx;
+	}
 
 	if (!wdev->netdev && wdev->iftype != NL80211_IFTYPE_NAN) {
 		err = -EINVAL;
@@ -8306,53 +8388,75 @@ static int nl80211_dump_station(struct sk_buff *skb,
 		goto out_err;
 	}
 
-	while (1) {
-		memset(&sinfo, 0, sizeof(sinfo));
-
-		for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
-			sinfo.links[i] =
-				kzalloc_obj(*sinfo.links[0]);
-			if (!sinfo.links[i]) {
-				err = -ENOMEM;
-				goto out_err;
+	/* Phase 0: dump aggregated station info */
+	if (ctx->phase == NL80211_DUMP_STA_PHASE_AGGREGATED) {
+		while (true) {
+			memset(&ctx->sinfo, 0, sizeof(ctx->sinfo));
+			for (int i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
+				ctx->sinfo.links[i] =
+					kzalloc_obj(*ctx->sinfo.links[0]);
+				if (!ctx->sinfo.links[i]) {
+					err = -ENOMEM;
+					goto out_err_release;
+				}
 			}
-			sinfo_alloc = true;
+
+			err = rdev_dump_station(rdev, wdev, ctx->sta_idx,
+						ctx->mac_addr, &ctx->sinfo);
+			if (err == -ENOENT) {
+				err = skb->len;
+				goto out_err_release;
+			}
+
+			if (err)
+				goto out_err_release;
+
+			if (ctx->sinfo.valid_links)
+				cfg80211_sta_set_mld_sinfo(&ctx->sinfo);
+
+			ret = nl80211_send_accumulated_station(skb, cb, rdev,
+							       wdev,
+							       ctx->mac_addr,
+							       &ctx->sinfo);
+			if (ret == -EMSGSIZE) {
+				err = skb->len;
+				goto out_err_release;
+			}
+
+			if (ret < 0) {
+				err = ret;
+				goto out_err_release;
+			}
+
+			/* Reset ctx for next station */
+			cfg80211_sinfo_release_content(&ctx->sinfo);
+			ctx->sta_idx++;
 		}
-
-		err = rdev_dump_station(rdev, wdev, sta_idx,
-					mac_addr, &sinfo);
-		if (err == -ENOENT)
-			break;
-		if (err)
-			goto out_err;
-
-		if (sinfo.valid_links)
-			cfg80211_sta_set_mld_sinfo(&sinfo);
-
-		/* reset the sinfo_alloc flag as nl80211_send_station()
-		 * always releases sinfo
-		 */
-		sinfo_alloc = false;
-
-		if (nl80211_send_station(skb, NL80211_CMD_NEW_STATION,
-				NETLINK_CB(cb->skb).portid,
-				cb->nlh->nlmsg_seq, NLM_F_MULTI,
-				rdev, wdev, mac_addr,
-				&sinfo) < 0)
-			goto out;
-
-		sta_idx++;
 	}
 
- out:
-	cb->args[2] = sta_idx;
+	ctx->phase = NL80211_DUMP_STA_PHASE_AGGREGATED;
 	err = skb->len;
- out_err:
-	if (sinfo_alloc)
-		cfg80211_sinfo_release_content(&sinfo);
+	goto out_err;
+
+out_err_release:
+	cfg80211_sinfo_release_content(&ctx->sinfo);
+	memset(&ctx->sinfo, 0, sizeof(ctx->sinfo));
+out_err:
 	wiphy_unlock(&rdev->wiphy);
 
 	return err;
+}
+
+static int nl80211_dump_station_done(struct netlink_callback *cb)
+{
+	struct nl80211_dump_station_cb *cb_data = (void *)cb->ctx;
+	struct nl80211_dump_station_ctx *ctx = cb_data->ctx;
+
+	if (ctx) {
+		cfg80211_sinfo_release_content(&ctx->sinfo);
+		kfree(ctx);
+	}
+	return 0;
 }
 
 static int nl80211_get_station(struct sk_buff *skb, struct genl_info *info)
@@ -19319,6 +19423,14 @@ static const struct genl_ops nl80211_ops[] = {
 		/* can be retrieved by unprivileged users */
 		.internal_flags = IFLAGS(NL80211_FLAG_NEED_WIPHY),
 	},
+	{
+		.cmd = NL80211_CMD_GET_STATION,
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+		.doit = nl80211_get_station,
+		.dumpit = nl80211_dump_station,
+		.done = nl80211_dump_station_done,
+		.internal_flags = IFLAGS(NL80211_FLAG_NEED_WDEV),
+	},
 };
 
 static const struct genl_small_ops nl80211_small_ops[] = {
@@ -19417,13 +19529,6 @@ static const struct genl_small_ops nl80211_small_ops[] = {
 		.doit = nl80211_stop_ap,
 		.internal_flags = IFLAGS(NL80211_FLAG_NEED_NETDEV_UP |
 					 NL80211_FLAG_MLO_VALID_LINK_ID),
-	},
-	{
-		.cmd = NL80211_CMD_GET_STATION,
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-		.doit = nl80211_get_station,
-		.dumpit = nl80211_dump_station,
-		.internal_flags = IFLAGS(NL80211_FLAG_NEED_WDEV),
 	},
 	{
 		.cmd = NL80211_CMD_SET_STATION,
