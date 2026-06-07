@@ -113,7 +113,8 @@ static int perf_mmap__aio_bind(struct mmap *map, int idx, struct perf_cpu cpu, i
 		if (node < 0)
 			return 0;
 		node_index = node;
-		node_mask = bitmap_zalloc(node_index + 1);
+		/* mbind's maxnode is node_index + 2 — allocate to match */
+		node_mask = bitmap_zalloc(node_index + 2);
 		if (!node_mask) {
 			pr_err("Failed to allocate node mask for mbind: error %m\n");
 			return -1;
