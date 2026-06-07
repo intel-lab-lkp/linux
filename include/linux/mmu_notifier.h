@@ -643,6 +643,10 @@ static inline void mmu_notifier_synchronize(void)
 {
 }
 
+static inline void mmu_notifier_oom_enter(struct mm_struct *mm)
+{
+}
+
 #endif /* CONFIG_MMU_NOTIFIER */
 
 #endif /* _LINUX_MMU_NOTIFIER_H */
