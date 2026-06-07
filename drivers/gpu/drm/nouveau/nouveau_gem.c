@@ -898,6 +898,17 @@ revalidate:
 			cmd = chan->push.addr + ((chan->dma.cur + 2) << 2);
 			cmd |= 0x20000000;
 			if (unlikely(cmd != req->suffix0)) {
+				if (unlikely(push[i].offset +
+					     push[i].length < 8 ||
+					     push[i].offset +
+					     push[i].length >
+					     nvbo->bo.base.size)) {
+					NV_PRINTK(err, cli, "push %d buffer not within bo\n", i);
+					WIND_RING(chan);
+					ret = -EINVAL;
+					goto out;
+				}
+
 				if (!nvbo->kmap.virtual) {
 					ret = ttm_bo_kmap(&nvbo->bo, 0,
 							  PFN_UP(nvbo->bo.base.size),
