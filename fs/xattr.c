@@ -697,7 +697,8 @@ retry:
 
 static int path_setxattrat(int dfd, const char __user *pathname,
 			   unsigned int at_flags, const char __user *name,
-			   const void __user *value, size_t size, int flags)
+			   const void __user *value, size_t size, int flags,
+			   fmode_t mask)
 {
 	struct xattr_name kname;
 	struct kernel_xattr_ctx ctx = {
@@ -722,7 +723,7 @@ static int path_setxattrat(int dfd, const char __user *pathname,
 
 	CLASS(filename_maybe_null, filename)(pathname, at_flags);
 	if (!filename && dfd >= 0) {
-		CLASS(fd, f)(dfd);
+		CLASS(fd_except, f)(dfd, mask);
 		if (fd_empty(f))
 			error = -EBADF;
 		else
@@ -755,14 +756,15 @@ SYSCALL_DEFINE6(setxattrat, int, dfd, const char __user *, pathname, unsigned in
 
 	return path_setxattrat(dfd, pathname, at_flags, name,
 			       u64_to_user_ptr(args.value), args.size,
-			       args.flags);
+			       args.flags, 0);
 }
 
 SYSCALL_DEFINE5(setxattr, const char __user *, pathname,
 		const char __user *, name, const void __user *, value,
 		size_t, size, int, flags)
 {
-	return path_setxattrat(AT_FDCWD, pathname, 0, name, value, size, flags);
+	return path_setxattrat(AT_FDCWD, pathname, 0, name, value, size, flags,
+			       FMODE_PATH);
 }
 
 SYSCALL_DEFINE5(lsetxattr, const char __user *, pathname,
@@ -770,14 +772,14 @@ SYSCALL_DEFINE5(lsetxattr, const char __user *, pathname,
 		size_t, size, int, flags)
 {
 	return path_setxattrat(AT_FDCWD, pathname, AT_SYMLINK_NOFOLLOW, name,
-			       value, size, flags);
+			       value, size, flags, FMODE_PATH);
 }
 
 SYSCALL_DEFINE5(fsetxattr, int, fd, const char __user *, name,
 		const void __user *,value, size_t, size, int, flags)
 {
 	return path_setxattrat(fd, NULL, AT_EMPTY_PATH, name,
-			       value, size, flags);
+			       value, size, flags, FMODE_PATH);
 }
 
 /*
@@ -842,7 +844,7 @@ retry:
 
 static ssize_t path_getxattrat(int dfd, const char __user *pathname,
 			       unsigned int at_flags, const char __user *name,
-			       void __user *value, size_t size)
+			       void __user *value, size_t size, fmode_t mask)
 {
 	struct xattr_name kname;
 	struct kernel_xattr_ctx ctx = {
@@ -862,7 +864,7 @@ static ssize_t path_getxattrat(int dfd, const char __user *pathname,
 
 	CLASS(filename_maybe_null, filename)(pathname, at_flags);
 	if (!filename && dfd >= 0) {
-		CLASS(fd, f)(dfd);
+		CLASS(fd_except, f)(dfd, mask);
 		if (fd_empty(f))
 			return -EBADF;
 		return file_getxattr(fd_file(f), &ctx);
@@ -896,26 +898,28 @@ SYSCALL_DEFINE6(getxattrat, int, dfd, const char __user *, pathname, unsigned in
 		return -EINVAL;
 
 	return path_getxattrat(dfd, pathname, at_flags, name,
-			       u64_to_user_ptr(args.value), args.size);
+			       u64_to_user_ptr(args.value), args.size, 0);
 }
 
 SYSCALL_DEFINE4(getxattr, const char __user *, pathname,
 		const char __user *, name, void __user *, value, size_t, size)
 {
-	return path_getxattrat(AT_FDCWD, pathname, 0, name, value, size);
+	return path_getxattrat(AT_FDCWD, pathname, 0, name, value, size,
+			       FMODE_PATH);
 }
 
 SYSCALL_DEFINE4(lgetxattr, const char __user *, pathname,
 		const char __user *, name, void __user *, value, size_t, size)
 {
 	return path_getxattrat(AT_FDCWD, pathname, AT_SYMLINK_NOFOLLOW, name,
-			       value, size);
+			       value, size, FMODE_PATH);
 }
 
 SYSCALL_DEFINE4(fgetxattr, int, fd, const char __user *, name,
 		void __user *, value, size_t, size)
 {
-	return path_getxattrat(fd, NULL, AT_EMPTY_PATH, name, value, size);
+	return path_getxattrat(fd, NULL, AT_EMPTY_PATH, name, value, size,
+			       FMODE_PATH);
 }
 
 /*
@@ -979,7 +983,7 @@ retry:
 
 static ssize_t path_listxattrat(int dfd, const char __user *pathname,
 				unsigned int at_flags, char __user *list,
-				size_t size)
+				size_t size, fmode_t mask)
 {
 	int lookup_flags;
 
@@ -988,7 +992,7 @@ static ssize_t path_listxattrat(int dfd, const char __user *pathname,
 
 	CLASS(filename_maybe_null, filename)(pathname, at_flags);
 	if (!filename) {
-		CLASS(fd, f)(dfd);
+		CLASS(fd_except, f)(dfd, mask);
 		if (fd_empty(f))
 			return -EBADF;
 		return file_listxattr(fd_file(f), list, size);
@@ -1002,24 +1006,26 @@ SYSCALL_DEFINE5(listxattrat, int, dfd, const char __user *, pathname,
 		unsigned int, at_flags,
 		char __user *, list, size_t, size)
 {
-	return path_listxattrat(dfd, pathname, at_flags, list, size);
+	return path_listxattrat(dfd, pathname, at_flags, list, size, 0);
 }
 
 SYSCALL_DEFINE3(listxattr, const char __user *, pathname, char __user *, list,
 		size_t, size)
 {
-	return path_listxattrat(AT_FDCWD, pathname, 0, list, size);
+	return path_listxattrat(AT_FDCWD, pathname, 0, list, size, FMODE_PATH);
 }
 
 SYSCALL_DEFINE3(llistxattr, const char __user *, pathname, char __user *, list,
 		size_t, size)
 {
-	return path_listxattrat(AT_FDCWD, pathname, AT_SYMLINK_NOFOLLOW, list, size);
+	return path_listxattrat(AT_FDCWD, pathname, AT_SYMLINK_NOFOLLOW, list,
+				size, FMODE_PATH);
 }
 
 SYSCALL_DEFINE3(flistxattr, int, fd, char __user *, list, size_t, size)
 {
-	return path_listxattrat(fd, NULL, AT_EMPTY_PATH, list, size);
+	return path_listxattrat(fd, NULL, AT_EMPTY_PATH, list, size,
+				FMODE_PATH);
 }
 
 /*
@@ -1070,7 +1076,8 @@ retry:
 }
 
 static int path_removexattrat(int dfd, const char __user *pathname,
-			      unsigned int at_flags, const char __user *name)
+			      unsigned int at_flags, const char __user *name,
+			      fmode_t mask)
 {
 	struct xattr_name kname;
 	unsigned int lookup_flags;
@@ -1085,7 +1092,7 @@ static int path_removexattrat(int dfd, const char __user *pathname,
 
 	CLASS(filename_maybe_null, filename)(pathname, at_flags);
 	if (!filename) {
-		CLASS(fd, f)(dfd);
+		CLASS(fd_except, f)(dfd, mask);
 		if (fd_empty(f))
 			return -EBADF;
 		return file_removexattr(fd_file(f), &kname);
@@ -1097,24 +1104,25 @@ static int path_removexattrat(int dfd, const char __user *pathname,
 SYSCALL_DEFINE4(removexattrat, int, dfd, const char __user *, pathname,
 		unsigned int, at_flags, const char __user *, name)
 {
-	return path_removexattrat(dfd, pathname, at_flags, name);
+	return path_removexattrat(dfd, pathname, at_flags, name, 0);
 }
 
 SYSCALL_DEFINE2(removexattr, const char __user *, pathname,
 		const char __user *, name)
 {
-	return path_removexattrat(AT_FDCWD, pathname, 0, name);
+	return path_removexattrat(AT_FDCWD, pathname, 0, name, FMODE_PATH);
 }
 
 SYSCALL_DEFINE2(lremovexattr, const char __user *, pathname,
 		const char __user *, name)
 {
-	return path_removexattrat(AT_FDCWD, pathname, AT_SYMLINK_NOFOLLOW, name);
+	return path_removexattrat(AT_FDCWD, pathname, AT_SYMLINK_NOFOLLOW, name,
+				  FMODE_PATH);
 }
 
 SYSCALL_DEFINE2(fremovexattr, int, fd, const char __user *, name)
 {
-	return path_removexattrat(fd, NULL, AT_EMPTY_PATH, name);
+	return path_removexattrat(fd, NULL, AT_EMPTY_PATH, name, FMODE_PATH);
 }
 
 int xattr_list_one(char **buffer, ssize_t *remaining_size, const char *name)
