@@ -486,21 +486,21 @@ static int bm1390_chip_init(struct bm1390_data *data)
 	if (ret)
 		return ret;
 
-	msleep(1);
+	usleep_range(1000, 2000);
 
 	ret = regmap_write_bits(data->regmap, BM1390_REG_RESET,
 				BM1390_MASK_RESET, BM1390_RESET);
 	if (ret)
 		return ret;
 
-	msleep(1);
+	usleep_range(1000, 2000);
 
 	ret = regmap_write_bits(data->regmap, BM1390_REG_RESET,
 				BM1390_MASK_RESET, BM1390_RESET_RELEASE);
 	if (ret)
 		return ret;
 
-	msleep(1);
+	usleep_range(1000, 2000);
 
 	ret = regmap_reinit_cache(data->regmap, &bm1390_regmap);
 	if (ret) {
@@ -575,7 +575,7 @@ static int bm1390_fifo_disable(struct iio_dev *idev)
 	struct bm1390_data *data = iio_priv(idev);
 	int ret;
 
-	msleep(1);
+	usleep_range(1000, 2000);
 
 	guard(mutex)(&data->mutex);
 	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
