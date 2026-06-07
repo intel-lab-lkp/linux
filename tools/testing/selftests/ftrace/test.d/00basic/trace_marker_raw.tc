@@ -15,6 +15,11 @@ is_little_endian() {
 }
 
 little=`is_little_endian`
+raw_data_align=4
+
+if kconfig_enabled CONFIG_HAVE_64BIT_ALIGNED_ACCESS; then
+       raw_data_align=8
+fi
 
 make_str() {
 	id=$1
@@ -60,7 +65,8 @@ test_multiple_writes() {
 	echo stop > trace_marker
 
 	# Check to make sure the number of entries is the id (rounded up by 4)
-	awk '/.*: # [0-9a-f]* / {
+	# or is (((id + 3) rounded by 8) + 4) if raw_data_align is 8
+	awk -v data_align=$raw_data_align '/.*: # [0-9a-f]* / {
 			print;
 			cnt = -1;
 			for (i = 0; i < NF; i++) {
@@ -69,8 +75,12 @@ test_multiple_writes() {
 					i++;
 					cnt = strtonum("0x" $i);
 					num = NF - (i + 1);
-					# The number of items is always rounded up by 4
-					cnt2 = int((cnt + 3) / 4) * 4;
+					# The number of items is rounded up by 4
+					# or is (8 * N + 4) if data_align is 8
+					if (data_align == 4)
+						cnt2 = int((cnt + 3) / 4) * 4;
+					else
+						cnt2 = int((cnt + 3) / 8) * 8 + 4;
 					if (cnt2 != num) {
 						exit 1;
 					}

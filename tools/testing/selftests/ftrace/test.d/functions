@@ -177,6 +177,39 @@ check_awk_strtonum() { # strtonum is GNU awk extension
     awk 'BEGIN{strtonum("0x1")}'
 }
 
+# a helper to check if a kconfig is enabled or not
+# return value: 0 (if kconfig is enabled)
+#               1 (if kconfig is not enabled)
+#               2 (if the config files don't exist or are unreadable)
+kconfig_enabled() { # config-name
+    local config="$1"
+    local uname_r=`uname -r`
+    local config_file
+
+    case "$config" in
+    CONFIG_*) ;;
+    *) config="CONFIG_$config" ;;
+    esac
+
+    if [ -f /proc/config.gz ] && zgrep --version >/dev/null 2>&1; then
+        zgrep -Eq "^${config}=(y|m)$" /proc/config.gz 2>/dev/null
+        return $?
+    fi
+
+    for config_file in \
+        /boot/config-$uname_r \
+        /lib/modules/$uname_r/config \
+        /lib/modules/$uname_r/build/.config
+    do
+        if [ -f "$config_file" ]; then
+            grep -Eq "^${config}=(y|m)$" "$config_file"
+            return $?
+        fi
+    done
+
+    return 2
+}
+
 LOCALHOST=127.0.0.1
 
 yield() {
