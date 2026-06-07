@@ -216,18 +216,12 @@ static bool zram_can_store_page(struct zram *zram)
 	return !zram->limit_pages || alloced_pages <= zram->limit_pages;
 }
 
-#if PAGE_SIZE != 4096
 static inline bool is_partial_io(struct bio_vec *bvec)
 {
+	if (PAGE_SIZE == 4096)
+		return false;
 	return bvec->bv_len != PAGE_SIZE;
 }
-#define ZRAM_PARTIAL_IO		1
-#else
-static inline bool is_partial_io(struct bio_vec *bvec)
-{
-	return false;
-}
-#endif
 
 #if defined CONFIG_ZRAM_WRITEBACK || defined CONFIG_ZRAM_MULTI_COMP
 struct zram_pp_slot {
@@ -1510,7 +1504,8 @@ static int read_from_bdev(struct zram *zram, struct page *page, u32 index,
 {
 	atomic64_inc(&zram->stats.bd_reads);
 	if (!parent) {
-		if (WARN_ON_ONCE(!IS_ENABLED(ZRAM_PARTIAL_IO)))
+		/* Sub-page I/O only exists on non-4K PAGE_SIZE builds. */
+		if (WARN_ON_ONCE(PAGE_SIZE == 4096))
 			return -EIO;
 		return read_from_bdev_sync(zram, page, index, blk_idx);
 	}
