@@ -5456,6 +5456,14 @@ out:
 	reloc_chunk_end(fs_info);
 out_put_bg:
 	btrfs_put_block_group(bg);
+	/*
+	 * Ensure no concurrent btrfs_reloc_cow_block() is still using rc.
+	 * After unset_reloc_control() new callers will see reloc_ctl == NULL
+	 * and return immediately. But callers that read reloc_ctl before unset
+	 * are still in a transaction. Wait for the current transaction to
+	 * complete so all such callers have finished using rc.
+	 */
+	btrfs_commit_current_transaction(fs_info->tree_root);
 	free_reloc_control(rc);
 	return ret;
 }
