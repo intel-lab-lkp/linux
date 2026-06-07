@@ -1983,7 +1983,7 @@ struct binder_task_work_cb {
  * It is not safe to call ksys_close() during the binder_ioctl()
  * function if there is a chance that binder's own file descriptor
  * might be closed. This is to meet the requirements for using
- * fdget() (see comments for __fget_light()). Therefore use
+ * fdget_except() (see the comments there). Therefore use
  * task_work_add() to schedule the close operation once we have
  * returned from binder_ioctl(). This function is a callback
  * for that mechanism and does the actual ksys_close() on the

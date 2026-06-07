@@ -1177,7 +1177,7 @@ EXPORT_SYMBOL(fget_task_next);
  *
  * See also the documentation in rust/kernel/file.rs.
  */
-static inline struct fd __fget_light(unsigned int fd, fmode_t mask)
+struct fd fdget_except(unsigned int fd, fmode_t mask)
 {
 	struct files_struct *files = current->files;
 	struct file *file;
@@ -1203,21 +1203,7 @@ static inline struct fd __fget_light(unsigned int fd, fmode_t mask)
 		return CLONED_FD(file);
 	}
 }
-struct fd fdget(unsigned int fd)
-{
-	return __fget_light(fd, FMODE_PATH);
-}
-EXPORT_SYMBOL(fdget);
-
-struct fd fdget_except(unsigned int fd, fmode_t mask)
-{
-	return __fget_light(fd, mask);
-}
-
-struct fd fdget_raw(unsigned int fd)
-{
-	return __fget_light(fd, 0);
-}
+EXPORT_SYMBOL(fdget_except);
 
 /*
  * Try to avoid f_pos locking. We only need it if the
