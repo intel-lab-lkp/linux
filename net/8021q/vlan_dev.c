@@ -471,6 +471,9 @@ static void vlan_dev_change_rx_flags(struct net_device *dev, int change)
 {
 	struct net_device *real_dev = vlan_dev_priv(dev)->real_dev;
 
+	if (!net_eq(dev_net(dev), dev_net(real_dev)))
+		return;
+
 	if (change & IFF_ALLMULTI)
 		dev_set_allmulti(real_dev, dev->flags & IFF_ALLMULTI ? 1 : -1);
 	if (change & IFF_PROMISC)
@@ -479,8 +482,13 @@ static void vlan_dev_change_rx_flags(struct net_device *dev, int change)
 
 static void vlan_dev_set_rx_mode(struct net_device *vlan_dev)
 {
-	dev_mc_sync(vlan_dev_priv(vlan_dev)->real_dev, vlan_dev);
-	dev_uc_sync(vlan_dev_priv(vlan_dev)->real_dev, vlan_dev);
+	struct net_device *real_dev = vlan_dev_priv(vlan_dev)->real_dev;
+
+	if (!net_eq(dev_net(vlan_dev), dev_net(real_dev)))
+		return;
+
+	dev_mc_sync(real_dev, vlan_dev);
+	dev_uc_sync(real_dev, vlan_dev);
 }
 
 static __be16 vlan_parse_protocol(const struct sk_buff *skb)
