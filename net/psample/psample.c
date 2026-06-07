@@ -485,6 +485,9 @@ void psample_sample_packet(struct psample_group *group,
 
 		if (skb_copy_bits(skb, 0, nla_data(nla), data_len))
 			goto error;
+
+		memset((unsigned char *)nla + nla->nla_len, 0,
+		       nla_padlen(data_len));
 	}
 
 #ifdef CONFIG_INET
