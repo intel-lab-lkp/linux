@@ -130,7 +130,8 @@ int __init init_r4k_clocksource(void)
 	 * R2 onwards makes the count accessible to user mode so it can be used
 	 * by the VDSO (HWREna is configured by configure_hwrena()).
 	 */
-	if (cpu_has_mips_r2_r6 && rdhwr_count_usable())
+	if (IS_ENABLED(CONFIG_GENERIC_GETTIMEOFDAY) &&
+	    cpu_has_mips_r2_r6 && rdhwr_count_usable())
 		clocksource_mips.vdso_clock_mode = VDSO_CLOCKMODE_R4K;
 
 	clocksource_register_hz(&clocksource_mips, mips_hpt_frequency);
