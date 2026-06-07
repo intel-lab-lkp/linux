@@ -66,9 +66,14 @@ static int set_tcb_field(struct adapter *adap, struct filter_entry *f,
 
 	req = (struct cpl_set_tcb_field *)__skb_put_zero(skb, sizeof(*req));
 	INIT_TP_WR_CPL(req, CPL_SET_TCB_FIELD, ftid);
-	req->reply_ctrl = htons(REPLY_CHAN_V(0) |
-				QUEUENO_V(adap->sge.fw_evtq.abs_id) |
-				NO_REPLY_V(no_reply));
+	if (CHELSIO_CHIP_VERSION(adap->params.chip) >= CHELSIO_T7)
+		req->reply_ctrl = htons(T7_REPLY_CHAN_V(0) |
+					T7_QUEUENO_V(adap->sge.fw_evtq.abs_id) |
+					NO_REPLY_V(no_reply));
+	else
+		req->reply_ctrl = htons(REPLY_CHAN_V(0) |
+					QUEUENO_V(adap->sge.fw_evtq.abs_id) |
+					NO_REPLY_V(no_reply));
 	req->word_cookie = htons(TCB_WORD_V(word) | TCB_COOKIE_V(ftid));
 	req->mask = cpu_to_be64(mask);
 	req->val = cpu_to_be64(val);
@@ -249,32 +254,54 @@ static int validate_filter(struct net_device *dev,
 			   struct ch_filter_specification *fs)
 {
 	struct adapter *adapter = netdev2adap(dev);
-	u32 fconf, iconf;
+	u32 fconf, iconf, chip_ver;
 
+	chip_ver = CHELSIO_CHIP_VERSION(adapter->params.chip);
 	/* Check for unconfigured fields being used. */
 	iconf = adapter->params.tp.ingress_config;
 	fconf = fs->hash ? adapter->params.tp.filter_mask :
 			   adapter->params.tp.vlan_pri_map;
 
-	if (unsupported(fconf, FCOE_F, fs->val.fcoe, fs->mask.fcoe) ||
-	    unsupported(fconf, PORT_F, fs->val.iport, fs->mask.iport) ||
-	    unsupported(fconf, TOS_F, fs->val.tos, fs->mask.tos) ||
-	    unsupported(fconf, ETHERTYPE_F, fs->val.ethtype,
-			fs->mask.ethtype) ||
-	    unsupported(fconf, MACMATCH_F, fs->val.macidx, fs->mask.macidx) ||
-	    unsupported(fconf, MPSHITTYPE_F, fs->val.matchtype,
-			fs->mask.matchtype) ||
-	    unsupported(fconf, FRAGMENTATION_F, fs->val.frag, fs->mask.frag) ||
-	    unsupported(fconf, PROTOCOL_F, fs->val.proto, fs->mask.proto) ||
-	    unsupported(fconf, VNIC_ID_F, fs->val.pfvf_vld,
-			fs->mask.pfvf_vld) ||
-	    unsupported(fconf, VNIC_ID_F, fs->val.ovlan_vld,
-			fs->mask.ovlan_vld) ||
-	    unsupported(fconf, VNIC_ID_F, fs->val.encap_vld,
-			fs->mask.encap_vld) ||
-	    unsupported(fconf, VLAN_F, fs->val.ivlan_vld, fs->mask.ivlan_vld))
-		return -EOPNOTSUPP;
-
+	if (chip_ver >= CHELSIO_T7) {
+		if (unsupported(fconf, T7_FCOE_F, fs->val.fcoe, fs->mask.fcoe) ||
+		    unsupported(fconf, T7_PORT_F, fs->val.iport, fs->mask.iport) ||
+		    unsupported(fconf, T7_TOS_F, fs->val.tos, fs->mask.tos) ||
+		    unsupported(fconf, T7_ETHERTYPE_F, fs->val.ethtype,
+				fs->mask.ethtype) ||
+		    unsupported(fconf, T7_MACMATCH_F, fs->val.macidx, fs->mask.macidx) ||
+		    unsupported(fconf, T7_MPSHITTYPE_F, fs->val.matchtype,
+				fs->mask.matchtype) ||
+		    unsupported(fconf, T7_FRAGMENTATION_F, fs->val.frag, fs->mask.frag) ||
+		    unsupported(fconf, T7_PROTOCOL_F, fs->val.proto, fs->mask.proto) ||
+		    unsupported(fconf, T7_VNIC_ID_F, fs->val.pfvf_vld,
+				fs->mask.pfvf_vld) ||
+		    unsupported(fconf, T7_VNIC_ID_F, fs->val.ovlan_vld,
+				fs->mask.ovlan_vld) ||
+		    unsupported(fconf, T7_VNIC_ID_F, fs->val.encap_vld,
+				fs->mask.encap_vld) ||
+		    unsupported(fconf, T7_VLAN_F, fs->val.ivlan_vld, fs->mask.ivlan_vld) ||
+		    unsupported(fconf, SYNONLY_F, fs->val.synonly, fs->mask.synonly))
+			return -EOPNOTSUPP;
+	} else {
+		if (unsupported(fconf, FCOE_F, fs->val.fcoe, fs->mask.fcoe) ||
+		    unsupported(fconf, PORT_F, fs->val.iport, fs->mask.iport) ||
+		    unsupported(fconf, TOS_F, fs->val.tos, fs->mask.tos) ||
+		    unsupported(fconf, ETHERTYPE_F, fs->val.ethtype,
+				fs->mask.ethtype) ||
+		    unsupported(fconf, MACMATCH_F, fs->val.macidx, fs->mask.macidx) ||
+		    unsupported(fconf, MPSHITTYPE_F, fs->val.matchtype,
+				fs->mask.matchtype) ||
+		    unsupported(fconf, FRAGMENTATION_F, fs->val.frag, fs->mask.frag) ||
+		    unsupported(fconf, PROTOCOL_F, fs->val.proto, fs->mask.proto) ||
+		    unsupported(fconf, VNIC_ID_F, fs->val.pfvf_vld,
+				fs->mask.pfvf_vld) ||
+		    unsupported(fconf, VNIC_ID_F, fs->val.ovlan_vld,
+				fs->mask.ovlan_vld) ||
+		    unsupported(fconf, VNIC_ID_F, fs->val.encap_vld,
+				fs->mask.encap_vld) ||
+		    unsupported(fconf, VLAN_F, fs->val.ivlan_vld, fs->mask.ivlan_vld))
+			return -EOPNOTSUPP;
+	}
 	/* T4 inconveniently uses the same FT_VNIC_ID_W bits for both the Outer
 	 * VLAN Tag and PF/VF/VFvld fields based on VNIC_F being set
 	 * in TP_INGRESS_CONFIG.  Hense the somewhat crazy checks
@@ -292,6 +319,8 @@ static int validate_filter(struct net_device *dev,
 	if (unsupported(iconf, VNIC_F, fs->val.pfvf_vld, fs->mask.pfvf_vld) ||
 	    (is_field_set(fs->val.ovlan_vld, fs->mask.ovlan_vld) &&
 	     (iconf & VNIC_F)))
+		return -EOPNOTSUPP;
+	if (chip_ver <= CHELSIO_T6 && is_field_set(fs->val.synonly, fs->mask.synonly))
 		return -EOPNOTSUPP;
 	if (fs->val.pf > 0x7 || fs->val.vf > 0x7f)
 		return -ERANGE;
@@ -993,7 +1022,9 @@ void clear_filter(struct adapter *adap, struct filter_entry *f)
 		t4_free_encap_mac_filt(adap, pi->viid,
 				       f->fs.val.ovlan & 0x1ff, 0);
 
-	if ((f->fs.hash || is_t6(adap->params.chip)) && f->fs.type)
+	if ((f->fs.hash ||
+	     (CHELSIO_CHIP_VERSION(adap->params.chip) >= CHELSIO_T6)) &&
+	    f->fs.type)
 		cxgb4_clip_release(f->dev, (const u32 *)&f->fs.val.lip, 1);
 
 	/* The zeroing of the filter rule below clears the filter valid,
@@ -1296,11 +1327,48 @@ static void mk_act_open_req6(struct filter_entry *f, struct sk_buff *skb,
 			     unsigned int qid_filterid, struct adapter *adap)
 {
 	struct cpl_t6_act_open_req6 *t6req = NULL;
+	struct cpl_t7_act_open_req6 *t7req = NULL;
 	struct cpl_act_open_req6 *req = NULL;
+	u32 chip_ver, opt2;
+	u64 opt0;
 
-	t6req = (struct cpl_t6_act_open_req6 *)__skb_put(skb, sizeof(*t6req));
-	INIT_TP_WR(t6req, 0);
-	req = (struct cpl_act_open_req6 *)t6req;
+	chip_ver = CHELSIO_CHIP_VERSION(adap->params.chip);
+
+	opt0 = cpu_to_be64(NAGLE_V(f->fs.newvlan == VLAN_REMOVE ||
+				   f->fs.newvlan == VLAN_REWRITE) |
+				DELACK_V(f->fs.hitcnts) |
+				L2T_IDX_V(f->l2t ? f->l2t->idx : 0) |
+				SMAC_SEL_V((cxgb4_port_viid(f->dev) &
+					    0x7F) << 1) |
+				TX_CHAN_V(f->fs.eport) |
+				NO_CONG_V(f->fs.rpttid) |
+				ULP_MODE_V(f->fs.nat_mode ?
+					   ULP_MODE_TCPDDP : ULP_MODE_NONE) |
+				TCAM_BYPASS_F | NON_OFFLOAD_F);
+	opt2 = cpu_to_be32(RSS_QUEUE_VALID_F |
+			   RSS_QUEUE_V(f->fs.iq) |
+			   TX_QUEUE_V(f->fs.nat_mode) |
+			   T5_OPT_2_VALID_F |
+			   RX_CHANNEL_V(cxgb4_port_e2cchan(f->dev)) |
+			   PACE_V((f->fs.maskhash) |
+				   ((f->fs.dirsteerhash) << 1)));
+
+	if (chip_ver >= CHELSIO_T7) {
+		t7req = (struct cpl_t7_act_open_req6 *)__skb_put(skb, sizeof(*t7req));
+		INIT_TP_WR(t7req, 0);
+		req = (struct cpl_act_open_req6 *)t7req;
+		t7req->opt0 = opt0;
+		t7req->opt2 = opt2;
+		t7req->params = cpu_to_be64(T7_FILTER_TUPLE_V(hash_filter_ntuple(&f->fs, f->dev)));
+	} else {
+		t6req = (struct cpl_t6_act_open_req6 *)__skb_put(skb, sizeof(*t6req));
+		INIT_TP_WR(t6req, 0);
+		req = (struct cpl_act_open_req6 *)t6req;
+		t6req->opt0 = opt0;
+		t6req->opt2 = opt2;
+		t6req->params = cpu_to_be64(FILTER_TUPLE_V(hash_filter_ntuple(&f->fs, f->dev)));
+	}
+
 	OPCODE_TID(req) = htonl(MK_OPCODE_TID(CPL_ACT_OPEN_REQ6, qid_filterid));
 	req->local_port = cpu_to_be16(f->fs.val.lport);
 	req->peer_port = cpu_to_be16(f->fs.val.fport);
@@ -1308,63 +1376,56 @@ static void mk_act_open_req6(struct filter_entry *f, struct sk_buff *skb,
 	req->local_ip_lo = *(((__be64 *)&f->fs.val.lip) + 1);
 	req->peer_ip_hi = *(__be64 *)(&f->fs.val.fip);
 	req->peer_ip_lo = *(((__be64 *)&f->fs.val.fip) + 1);
-	req->opt0 = cpu_to_be64(NAGLE_V(f->fs.newvlan == VLAN_REMOVE ||
-					f->fs.newvlan == VLAN_REWRITE) |
-				DELACK_V(f->fs.hitcnts) |
-				L2T_IDX_V(f->l2t ? f->l2t->idx : 0) |
-				SMAC_SEL_V((cxgb4_port_viid(f->dev) &
-					    0x7F) << 1) |
-				TX_CHAN_V(f->fs.eport) |
-				NO_CONG_V(f->fs.rpttid) |
-				ULP_MODE_V(f->fs.nat_mode ?
-					   ULP_MODE_TCPDDP : ULP_MODE_NONE) |
-				TCAM_BYPASS_F | NON_OFFLOAD_F);
-	t6req->params = cpu_to_be64(FILTER_TUPLE_V(hash_filter_ntuple(&f->fs,
-								      f->dev)));
-	t6req->opt2 = htonl(RSS_QUEUE_VALID_F |
-			    RSS_QUEUE_V(f->fs.iq) |
-			    TX_QUEUE_V(f->fs.nat_mode) |
-			    T5_OPT_2_VALID_F |
-			    RX_CHANNEL_V(cxgb4_port_e2cchan(f->dev)) |
-			    PACE_V((f->fs.maskhash) |
-				   ((f->fs.dirsteerhash) << 1)));
 }
 
 static void mk_act_open_req(struct filter_entry *f, struct sk_buff *skb,
 			    unsigned int qid_filterid, struct adapter *adap)
 {
 	struct cpl_t6_act_open_req *t6req = NULL;
+	struct cpl_t7_act_open_req *t7req = NULL;
 	struct cpl_act_open_req *req = NULL;
+	u32 chip_ver, opt2;
+	u64 opt0;
 
-	t6req = (struct cpl_t6_act_open_req *)__skb_put(skb, sizeof(*t6req));
-	INIT_TP_WR(t6req, 0);
-	req = (struct cpl_act_open_req *)t6req;
-	OPCODE_TID(req) = htonl(MK_OPCODE_TID(CPL_ACT_OPEN_REQ, qid_filterid));
+	chip_ver = CHELSIO_CHIP_VERSION(adap->params.chip);
+
+	opt0 = cpu_to_be64(NAGLE_V(f->fs.newvlan == VLAN_REMOVE ||
+				   f->fs.newvlan == VLAN_REWRITE) |
+			   DELACK_V(f->fs.hitcnts) |
+			   L2T_IDX_V(f->l2t ? f->l2t->idx : 0) |
+			   SMAC_SEL_V((cxgb4_port_viid(f->dev) &
+				       0x7F) << 1) |
+			   TX_CHAN_V(f->fs.eport) |
+			   NO_CONG_V(f->fs.rpttid) |
+			   ULP_MODE_V(f->fs.nat_mode ?
+				      ULP_MODE_TCPDDP : ULP_MODE_NONE) |
+			   TCAM_BYPASS_F | NON_OFFLOAD_F);
+	opt2 = cpu_to_be32(RSS_QUEUE_VALID_F |
+			   RSS_QUEUE_V(f->fs.iq) |
+			   TX_QUEUE_V(f->fs.nat_mode) |
+			   T5_OPT_2_VALID_F |
+			   RX_CHANNEL_V(cxgb4_port_e2cchan(f->dev)) |
+			   PACE_V((f->fs.maskhash) |
+				  ((f->fs.dirsteerhash) << 1)));
+	if (chip_ver >= CHELSIO_T7) {
+		t7req = (struct cpl_t7_act_open_req *)__skb_put(skb, sizeof(*t7req));
+		INIT_TP_WR(t7req, 0);
+		req = (struct cpl_act_open_req *)t7req;
+		t7req->opt0 = opt0;
+		t7req->opt2 = opt2;
+		t7req->params = cpu_to_be64(T7_FILTER_TUPLE_V(hash_filter_ntuple(&f->fs, f->dev)));
+	} else {
+		t6req = (struct cpl_t6_act_open_req *)__skb_put(skb, sizeof(*t6req));
+		INIT_TP_WR(t6req, 0);
+		req = (struct cpl_act_open_req *)t6req;
+		t6req->opt0 = opt0;
+		t6req->opt2 = opt2;
+		t6req->params = cpu_to_be64(FILTER_TUPLE_V(hash_filter_ntuple(&f->fs, f->dev)));
+	}
+
+	OPCODE_TID(req) = htonl(MK_OPCODE_TID(CPL_ACT_OPEN_REQ6, qid_filterid));
 	req->local_port = cpu_to_be16(f->fs.val.lport);
 	req->peer_port = cpu_to_be16(f->fs.val.fport);
-	memcpy(&req->local_ip, f->fs.val.lip, 4);
-	memcpy(&req->peer_ip, f->fs.val.fip, 4);
-	req->opt0 = cpu_to_be64(NAGLE_V(f->fs.newvlan == VLAN_REMOVE ||
-					f->fs.newvlan == VLAN_REWRITE) |
-				DELACK_V(f->fs.hitcnts) |
-				L2T_IDX_V(f->l2t ? f->l2t->idx : 0) |
-				SMAC_SEL_V((cxgb4_port_viid(f->dev) &
-					    0x7F) << 1) |
-				TX_CHAN_V(f->fs.eport) |
-				NO_CONG_V(f->fs.rpttid) |
-				ULP_MODE_V(f->fs.nat_mode ?
-					   ULP_MODE_TCPDDP : ULP_MODE_NONE) |
-				TCAM_BYPASS_F | NON_OFFLOAD_F);
-
-	t6req->params = cpu_to_be64(FILTER_TUPLE_V(hash_filter_ntuple(&f->fs,
-								      f->dev)));
-	t6req->opt2 = htonl(RSS_QUEUE_VALID_F |
-			    RSS_QUEUE_V(f->fs.iq) |
-			    TX_QUEUE_V(f->fs.nat_mode) |
-			    T5_OPT_2_VALID_F |
-			    RX_CHANNEL_V(cxgb4_port_e2cchan(f->dev)) |
-			    PACE_V((f->fs.maskhash) |
-				   ((f->fs.dirsteerhash) << 1)));
 }
 
 static int cxgb4_set_hash_filter(struct net_device *dev,
@@ -1663,9 +1724,9 @@ int __cxgb4_set_filter(struct net_device *dev, int ftid,
 	if (ret)
 		goto free_tid;
 
-	if (is_t6(adapter->params.chip) && fs->type &&
+	if (chip_ver >= CHELSIO_T6 && fs->type &&
 	    ipv6_addr_type((const struct in6_addr *)fs->val.lip) !=
-	    IPV6_ADDR_ANY) {
+		    IPV6_ADDR_ANY) {
 		ret = cxgb4_clip_get(dev, (const u32 *)&fs->val.lip, 1);
 		if (ret)
 			goto free_tid;
@@ -2140,12 +2201,13 @@ void filter_rpl(struct adapter *adap, const struct cpl_set_tcb_rpl *rpl)
 
 void init_hash_filter(struct adapter *adap)
 {
-	u32 reg;
+	u32 reg, chip_ver;
 
+	chip_ver = CHELSIO_CHIP_VERSION(adap->params.chip);
 	/* On T6, verify the necessary register configs and warn the user in
 	 * case of improper config
 	 */
-	if (is_t6(adap->params.chip)) {
+	if (chip_ver >= CHELSIO_T6) {
 		if (is_offload(adap)) {
 			if (!(t4_read_reg(adap, TP_GLOBAL_CONFIG_A)
 			   & ACTIVEFILTERCOUNTS_F)) {
