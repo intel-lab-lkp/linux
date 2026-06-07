@@ -759,6 +759,11 @@ static int tcf_ife_decode(struct sk_buff *skb, const struct tc_action *a,
 		return TC_ACT_SHOT;
 	}
 
+	if (!pskb_may_pull(skb, ETH_HLEN)) {
+		qstats_drop_inc(this_cpu_ptr(ife->common.cpu_qstats));
+		return TC_ACT_SHOT;
+	}
+
 	skb->protocol = eth_type_trans(skb, skb->dev);
 	skb_reset_network_header(skb);
 
