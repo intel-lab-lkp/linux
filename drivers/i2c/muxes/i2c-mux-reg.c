@@ -141,6 +141,8 @@ static int i2c_mux_reg_probe_fw(struct regmux *mux, struct device *dev)
 	if (!device_property_read_u32(dev, "idle-state", &mux->data.idle))
 		mux->data.idle_in_use = true;
 
+	device_property_read_u32(dev, "base-bus-num", &mux->data.base_nr);
+
 	return 0;
 }
 
@@ -197,7 +199,7 @@ static int i2c_mux_reg_probe(struct platform_device *pdev)
 		muxc->deselect = i2c_mux_reg_deselect;
 
 	for (i = 0; i < mux->data.n_values; i++) {
-		nr = mux->data.base_nr ? (mux->data.base_nr + i) : 0;
+		nr = mux->data.base_nr ? (mux->data.base_nr + mux->data.values[i]) : 0;
 
 		ret = i2c_mux_add_adapter(muxc, nr, mux->data.values[i]);
 		if (ret)
