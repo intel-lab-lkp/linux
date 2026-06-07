@@ -851,6 +851,14 @@ out:
 	return err;
 }
 
+static bool ntfs_is_reserved_lxattr(const char *name)
+{
+	return !strcmp(name, "$LXUID") ||
+	       !strcmp(name, "$LXGID") ||
+	       !strcmp(name, "$LXMOD") ||
+	       !strcmp(name, "$LXDEV");
+}
+
 /*
  * ntfs_setxattr - inode_operations::setxattr
  */
@@ -952,6 +960,11 @@ set_new_fa:
 			mark_inode_dirty(&ni->vfs_inode);
 		}
 		ni_unlock(ni);
+		goto out;
+	}
+
+	if (ntfs_is_reserved_lxattr(name)) {
+		err = -EPERM;
 		goto out;
 	}
 
