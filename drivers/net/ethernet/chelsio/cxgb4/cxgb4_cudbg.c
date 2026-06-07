@@ -64,6 +64,22 @@ static const struct cxgb4_collect_entity cxgb4_collect_hw_dump[] = {
 	{ CUDBG_UP_CIM_INDIRECT, cudbg_collect_up_cim_indirect },
 	{ CUDBG_PBT_TABLE, cudbg_collect_pbt_tables },
 	{ CUDBG_HMA_INDIRECT, cudbg_collect_hma_indirect },
+	{ CUDBG_CIM_IBQ_TP2, cudbg_collect_cim_ibq_tp2 },
+	{ CUDBG_CIM_IBQ_TP3, cudbg_collect_cim_ibq_tp3 },
+	{ CUDBG_CIM_IBQ_IPC1, cudbg_collect_cim_ibq_ipc1 },
+	{ CUDBG_CIM_IBQ_IPC2, cudbg_collect_cim_ibq_ipc2 },
+	{ CUDBG_CIM_IBQ_IPC3, cudbg_collect_cim_ibq_ipc3 },
+	{ CUDBG_CIM_IBQ_IPC4, cudbg_collect_cim_ibq_ipc4 },
+	{ CUDBG_CIM_IBQ_IPC5, cudbg_collect_cim_ibq_ipc5 },
+	{ CUDBG_CIM_IBQ_IPC6, cudbg_collect_cim_ibq_ipc6 },
+	{ CUDBG_CIM_IBQ_IPC7, cudbg_collect_cim_ibq_ipc7 },
+	{ CUDBG_CIM_OBQ_IPC1, cudbg_collect_cim_obq_ipc1 },
+	{ CUDBG_CIM_OBQ_IPC2, cudbg_collect_cim_obq_ipc2 },
+	{ CUDBG_CIM_OBQ_IPC3, cudbg_collect_cim_obq_ipc3 },
+	{ CUDBG_CIM_OBQ_IPC4, cudbg_collect_cim_obq_ipc4 },
+	{ CUDBG_CIM_OBQ_IPC5, cudbg_collect_cim_obq_ipc5 },
+	{ CUDBG_CIM_OBQ_IPC6, cudbg_collect_cim_obq_ipc6 },
+	{ CUDBG_CIM_OBQ_IPC7, cudbg_collect_cim_obq_ipc7 },
 };
 
 static const struct cxgb4_collect_entity cxgb4_collect_flash_dump[] = {

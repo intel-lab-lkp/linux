@@ -165,13 +165,61 @@ int cudbg_collect_qdesc(struct cudbg_init *pdbg_init,
 int cudbg_collect_flash(struct cudbg_init *pdbg_init,
 			struct cudbg_buffer *dbg_buff,
 			struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_ibq_tp2(struct cudbg_init *pdbg_init,
+			      struct cudbg_buffer *dbg_buff,
+			      struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_ibq_tp3(struct cudbg_init *pdbg_init,
+			      struct cudbg_buffer *dbg_buff,
+			      struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_ibq_ipc1(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_ibq_ipc2(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_ibq_ipc3(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_ibq_ipc4(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_ibq_ipc5(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_ibq_ipc6(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_ibq_ipc7(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_obq_ipc1(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_obq_ipc2(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_obq_ipc3(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_obq_ipc4(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_obq_ipc5(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_obq_ipc6(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
+int cudbg_collect_cim_obq_ipc7(struct cudbg_init *pdbg_init,
+			       struct cudbg_buffer *dbg_buff,
+			       struct cudbg_error *cudbg_err);
 
 u32 cudbg_get_entity_length(struct adapter *adap, u32 entity);
 struct cudbg_entity_hdr *cudbg_get_entity_hdr(void *outbuf, int i);
 void cudbg_align_debug_buffer(struct cudbg_buffer *dbg_buff,
 			      struct cudbg_entity_hdr *entity_hdr);
 u32 cudbg_cim_obq_size(struct adapter *padap, int qid);
-int cudbg_dump_context_size(struct adapter *padap);
+int cudbg_dump_context_size(struct adapter *padap, u8 sge_ctxt_size);
 
 int cudbg_fill_meminfo(struct adapter *padap,
 		       struct cudbg_meminfo *meminfo_buff);
