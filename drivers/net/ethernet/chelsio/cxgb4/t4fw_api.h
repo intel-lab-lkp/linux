@@ -35,6 +35,8 @@
 #ifndef _T4FW_INTERFACE_H_
 #define _T4FW_INTERFACE_H_
 
+#include <linux/if_ether.h>
+
 enum fw_retval {
 	FW_SUCCESS		= 0,	/* completed successfully */
 	FW_EPERM		= 1,	/* operation not permitted */
@@ -434,6 +436,13 @@ struct fw_filter2_wr {
 #define FW_FILTER_WR_RX_RPL_IQ_G(x)     \
 	(((x) >> FW_FILTER_WR_RX_RPL_IQ_S) & FW_FILTER_WR_RX_RPL_IQ_M)
 
+#define FW_FILTER2_WR_SWAPMAC_S	 0
+#define FW_FILTER2_WR_SWAPMAC_M	 0x1
+#define FW_FILTER2_WR_SWAPMAC_V(x)      ((x) << FW_FILTER2_WR_SWAPMAC_S)
+#define FW_FILTER2_WR_SWAPMAC_G(x) \
+	(((x) >> FW_FILTER2_WR_SWAPMAC_S) & FW_FILTER2_WR_SWAPMAC_M)
+#define FW_FILTER2_WR_SWAPMAC_F	 FW_FILTER2_WR_SWAPMAC_V(1U)
+
 #define FW_FILTER2_WR_FILTER_TYPE_S	1
 #define FW_FILTER2_WR_FILTER_TYPE_M	0x1
 #define FW_FILTER2_WR_FILTER_TYPE_V(x)	((x) << FW_FILTER2_WR_FILTER_TYPE_S)
@@ -459,6 +468,13 @@ struct fw_filter2_wr {
 #define FW_FILTER2_WR_ULP_TYPE_V(x)	((x) << FW_FILTER2_WR_ULP_TYPE_S)
 #define FW_FILTER2_WR_ULP_TYPE_G(x)     \
 	(((x) >> FW_FILTER2_WR_ULP_TYPE_S) & FW_FILTER2_WR_ULP_TYPE_M)
+
+#define FW_FILTER2_WR_TX_LOOP_S	 29
+#define FW_FILTER2_WR_TX_LOOP_M	 0x1
+#define FW_FILTER2_WR_TX_LOOP_V(x)      ((x) << FW_FILTER2_WR_TX_LOOP_S)
+#define FW_FILTER2_WR_TX_LOOP_G(x)      \
+	    (((x) >> FW_FILTER2_WR_TX_LOOP_S) & FW_FILTER2_WR_TX_LOOP_M)
+#define FW_FILTER2_WR_TX_LOOP_F	 FW_FILTER2_WR_TX_LOOP_V(1U)
 
 #define FW_FILTER_WR_MACI_S     23
 #define FW_FILTER_WR_MACI_M     0x1ff
@@ -1882,6 +1898,12 @@ struct fw_eq_eth_cmd {
 #define FW_EQ_ETH_CMD_EQSTOP_V(x)	((x) << FW_EQ_ETH_CMD_EQSTOP_S)
 #define FW_EQ_ETH_CMD_EQSTOP_F	FW_EQ_ETH_CMD_EQSTOP_V(1U)
 
+#define FW_EQ_ETH_CMD_COREGROUP_S      16
+#define FW_EQ_ETH_CMD_COREGROUP_M      0x3f
+#define FW_EQ_ETH_CMD_COREGROUP_V(x)   ((x) << FW_EQ_ETH_CMD_COREGROUP_S)
+#define FW_EQ_ETH_CMD_COREGROUP_G(x) \
+	(((x) >> FW_EQ_ETH_CMD_COREGROUP_S) & FW_EQ_ETH_CMD_COREGROUP_M)
+
 #define FW_EQ_ETH_CMD_EQID_S	0
 #define FW_EQ_ETH_CMD_EQID_M	0xfffff
 #define FW_EQ_ETH_CMD_EQID_V(x)	((x) << FW_EQ_ETH_CMD_EQID_S)
@@ -2009,6 +2031,12 @@ struct fw_eq_ctrl_cmd {
 
 #define FW_EQ_CTRL_CMD_CMPLIQID_S	20
 #define FW_EQ_CTRL_CMD_CMPLIQID_V(x)	((x) << FW_EQ_CTRL_CMD_CMPLIQID_S)
+
+#define FW_EQ_CTRL_CMD_COREGROUP_S     16
+#define FW_EQ_CTRL_CMD_COREGROUP_M     0x3f
+#define FW_EQ_CTRL_CMD_COREGROUP_V(x)  ((x) << FW_EQ_CTRL_CMD_COREGROUP_S)
+#define FW_EQ_CTRL_CMD_COREGROUP_G(x) \
+	(((x) >> FW_EQ_CTRL_CMD_COREGROUP_S) & FW_EQ_CTRL_CMD_COREGROUP_M)
 
 #define FW_EQ_CTRL_CMD_EQID_S		0
 #define FW_EQ_CTRL_CMD_EQID_M		0xfffff
@@ -2597,7 +2625,7 @@ struct fw_acl_vlan_cmd {
 #define FW_ACL_VLAN_CMD_EN_M		0x1
 #define FW_ACL_VLAN_CMD_EN_V(x)		((x) << FW_ACL_VLAN_CMD_EN_S)
 #define FW_ACL_VLAN_CMD_EN_G(x)         \
-	(((x) >> S_FW_ACL_VLAN_CMD_EN_S) & FW_ACL_VLAN_CMD_EN_M)
+	(((x) >> FW_ACL_VLAN_CMD_EN_S_S) & FW_ACL_VLAN_CMD_EN_M)
 #define FW_ACL_VLAN_CMD_EN_F            FW_ACL_VLAN_CMD_EN_V(1U)
 
 #define FW_ACL_VLAN_CMD_DROPNOVLAN_S	7
@@ -3107,8 +3135,26 @@ enum fw_port_type {
 	FW_PORT_TYPE_SFP28,
 	FW_PORT_TYPE_KR_SFP28,
 	FW_PORT_TYPE_KR_XLAUI,
+	/* Applicable on T7 */
+	FW_PORT_TYPE_BARE_LINK_50G    = 23,   /* No, 1, 50G */
+	FW_PORT_TYPE_BARE_LINK_100G   = 24,   /* No, 2, 100G/50G */
+	FW_PORT_TYPE_BARE_LINK_200G   = 25,   /* No, 4, 200G/100G/50G */
+	FW_PORT_TYPE_SFP56	      = 26,   /* No, 1, 50G/25G */
+	FW_PORT_TYPE_QSFP56	      = 27,   /* No, 4, 200G/100G/50G/25G */
+	FW_PORT_TYPE_QSFP56_4_50G     = 28,   /* No, 1, 50G */
+	FW_PORT_TYPE_KR_50G	      = 29,   /* No, 1, 50G */
+	FW_PORT_TYPE_KR2_100G	      = 30,   /* No, 2, 100G/50G */
+	FW_PORT_TYPE_KR4_200G	      = 31,   /* No, 4, 200G/100G/50G */
+	FW_PORT_TYPE_QSFP56_2_50G     = 32,   /* No, 1, 50G */
+	FW_PORT_TYPE_OSFP	      = 33,   /* No, 8, 400G/200G/100G/50G */
+	FW_PORT_TYPE_QSFPDD	      = 34,   /* No, 8, 400G/200G/100G/50G  */
+	FW_PORT_TYPE_OSFP_2_200G      = 35,   /* No, 4, 200G/100G/50G */
+	FW_PORT_TYPE_QSFP_4_100G      = 36,   /* No, 2, 100G/50G */
+	FW_PORT_TYPE_QSFPDD_2_200G    = 37,   /* No, 4, 200G/100G/50G */
+	FW_PORT_TYPE_KR8_400G	      = 38,   /* No, 8, 400G/200G/100G/50G? */
+	FW_PORT_TYPE_MAX,
 
-	FW_PORT_TYPE_NONE = FW_PORT_CMD_PTYPE_M
+	FW_PORT_TYPE_NONE = FW_PORT_CMD_PORTTYPE32_M
 };
 
 enum fw_port_module_type {
@@ -3119,6 +3165,7 @@ enum fw_port_module_type {
 	FW_PORT_MOD_TYPE_TWINAX_PASSIVE,
 	FW_PORT_MOD_TYPE_TWINAX_ACTIVE,
 	FW_PORT_MOD_TYPE_LRM,
+	FW_PORT_MOD_TYPE_DR,
 	FW_PORT_MOD_TYPE_ERROR		= FW_PORT_CMD_MODTYPE_M - 3,
 	FW_PORT_MOD_TYPE_UNKNOWN	= FW_PORT_CMD_MODTYPE_M - 2,
 	FW_PORT_MOD_TYPE_NOTSUPPORTED	= FW_PORT_CMD_MODTYPE_M - 1,
@@ -3770,13 +3817,17 @@ struct fw_hdr {
 	__u32   reserved3;
 	__u32   reserved4;
 	__be32  flags;
-	__be32  reserved6[23];
+	__be32  reserved6[4];
+	__u8    reserved7[3];
+	__u8    dsign_len;
+	__u8    dsign[72];	      /* fw binary digital signature */
 };
 
 enum fw_hdr_chip {
 	FW_HDR_CHIP_T4,
 	FW_HDR_CHIP_T5,
-	FW_HDR_CHIP_T6
+	FW_HDR_CHIP_T6,
+	FW_HDR_CHIP_T7
 };
 
 #define FW_HDR_FW_VER_MAJOR_S	24
@@ -3888,7 +3939,9 @@ struct fw_devlog_cmd {
 	__u8   r2[7];
 	__be32 memtype_devlog_memaddr16_devlog;
 	__be32 memsize_devlog;
-	__be32 r3[2];
+	__u8   num_devlog;
+	__u8   r3[3];
+	__be32 r4;
 };
 
 #define FW_DEVLOG_CMD_MEMTYPE_DEVLOG_S		28
@@ -3915,8 +3968,14 @@ struct fw_devlog_cmd {
  */
 #define PCIE_FW_PF_DEVLOG		7
 
+#define PCIE_FW_PF_DEVLOG_COUNT_MSB_S  31
+#define PCIE_FW_PF_DEVLOG_COUNT_MSB_M  0x1
+#define PCIE_FW_PF_DEVLOG_COUNT_MSB_V(x) ((x) << PCIE_FW_PF_DEVLOG_COUNT_MSB_S)
+#define PCIE_FW_PF_DEVLOG_COUNT_MSB_G(x) \
+	(((x) >> PCIE_FW_PF_DEVLOG_COUNT_MSB_S) & PCIE_FW_PF_DEVLOG_COUNT_MSB_M)
+
 #define PCIE_FW_PF_DEVLOG_NENTRIES128_S	28
-#define PCIE_FW_PF_DEVLOG_NENTRIES128_M	0xf
+#define PCIE_FW_PF_DEVLOG_NENTRIES128_M	0x7
 #define PCIE_FW_PF_DEVLOG_NENTRIES128_V(x) \
 	((x) << PCIE_FW_PF_DEVLOG_NENTRIES128_S)
 #define PCIE_FW_PF_DEVLOG_NENTRIES128_G(x) \
@@ -3929,8 +3988,15 @@ struct fw_devlog_cmd {
 #define PCIE_FW_PF_DEVLOG_ADDR16_G(x) \
 	(((x) >> PCIE_FW_PF_DEVLOG_ADDR16_S) & PCIE_FW_PF_DEVLOG_ADDR16_M)
 
+#define PCIE_FW_PF_DEVLOG_COUNT_LSB_S  3
+#define PCIE_FW_PF_DEVLOG_COUNT_LSB_M  0x1
+#define PCIE_FW_PF_DEVLOG_COUNT_LSB_V(x) \
+	((x) << PCIE_FW_PF_DEVLOG_COUNT_LSB_S)
+#define PCIE_FW_PF_DEVLOG_COUNT_LSB_G(x) \
+	(((x) >> PCIE_FW_PF_DEVLOG_COUNT_LSB_S) & PCIE_FW_PF_DEVLOG_COUNT_LSB_M)
+
 #define PCIE_FW_PF_DEVLOG_MEMTYPE_S	0
-#define PCIE_FW_PF_DEVLOG_MEMTYPE_M	0xf
+#define PCIE_FW_PF_DEVLOG_MEMTYPE_M	0x7
 #define PCIE_FW_PF_DEVLOG_MEMTYPE_V(x)	((x) << PCIE_FW_PF_DEVLOG_MEMTYPE_S)
 #define PCIE_FW_PF_DEVLOG_MEMTYPE_G(x) \
 	(((x) >> PCIE_FW_PF_DEVLOG_MEMTYPE_S) & PCIE_FW_PF_DEVLOG_MEMTYPE_M)
