@@ -117,7 +117,7 @@ static int call_usermodehelper_keys(const char *path, char **argv, char **envp,
  */
 static int call_sbin_request_key(struct key *authkey, void *aux)
 {
-	static char const request_key[] = "/sbin/request-key";
+	static const char request_key[] = CONFIG_REQUEST_KEY_PATH;
 	struct request_key_auth *rka = get_request_key_auth(authkey);
 	const struct cred *cred = current_cred();
 	key_serial_t prkey, sskey;

@@ -40,6 +40,15 @@ config KEYS_REQUEST_CACHE
 	  key.  Pathwalk will call multiple methods for each dentry traversed
 	  (permission, d_revalidate, lookup, getxattr, getacl, ...).
 
+config REQUEST_KEY_PATH
+	string "Path to the request-key binary"
+	default "/sbin/request-key"
+	help
+	  Path of the request-key usermode helper binary.
+
+	  This program is invoked by the kernel when the kernel is asked for
+	  a key that it doesn't have immediately available.
+
 config PERSISTENT_KEYRINGS
 	bool "Enable register of persistent per-UID keyrings"
 	help
