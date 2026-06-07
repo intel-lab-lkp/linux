@@ -14,6 +14,7 @@
 #include "cxgb4_tc_flower.h"
 
 #define EEPROM_MAGIC 0x38E2F10C
+#define RSS_HASH_KEY_SIZE 40
 
 static u32 get_msglevel(struct net_device *dev)
 {
@@ -358,7 +359,7 @@ static void get_stats(struct net_device *dev, struct ethtool_stats *stats,
 	int i;
 	u64 *p0;
 
-	t4_get_port_stats_offset(adapter, pi->tx_chan,
+	t4_get_port_stats_offset(adapter, pi->lport,
 				 (struct port_stats *)data,
 				 &pi->stats_base);
 
@@ -440,10 +441,13 @@ static int from_fw_port_mod_type(enum fw_port_type port_type,
 		   port_type == FW_PORT_TYPE_CR4_QSFP ||
 		   port_type == FW_PORT_TYPE_CR_QSFP ||
 		   port_type == FW_PORT_TYPE_CR2_QSFP ||
-		   port_type == FW_PORT_TYPE_SFP28) {
+		   port_type == FW_PORT_TYPE_SFP28 ||
+		   port_type == FW_PORT_TYPE_SFP56 ||
+		   port_type == FW_PORT_TYPE_QSFP56) {
 		if (mod_type == FW_PORT_MOD_TYPE_LR ||
 		    mod_type == FW_PORT_MOD_TYPE_SR ||
 		    mod_type == FW_PORT_MOD_TYPE_ER ||
+		    mod_type == FW_PORT_MOD_TYPE_DR ||
 		    mod_type == FW_PORT_MOD_TYPE_LRM)
 			return PORT_FIBRE;
 		else if (mod_type == FW_PORT_MOD_TYPE_TWINAX_PASSIVE ||
@@ -595,6 +599,20 @@ static void fw_caps_to_lmm(enum fw_port_type port_type,
 	case FW_PORT_TYPE_CR2_QSFP:
 		SET_LMM(FIBRE);
 		FW_CAPS_TO_LMM(SPEED_50G, 50000baseSR2_Full);
+		break;
+
+	case FW_PORT_TYPE_SFP56:
+		SET_LMM(FIBRE);
+		FW_CAPS_TO_LMM(SPEED_50G, 50000baseSR2_Full);
+		FW_CAPS_TO_LMM(SPEED_25G, 25000baseCR_Full);
+		break;
+
+	case FW_PORT_TYPE_QSFP56:
+		SET_LMM(FIBRE);
+		FW_CAPS_TO_LMM(SPEED_200G, 200000baseSR2_Full);
+		FW_CAPS_TO_LMM(SPEED_100G, 100000baseCR4_Full);
+		FW_CAPS_TO_LMM(SPEED_50G, 50000baseSR2_Full);
+		FW_CAPS_TO_LMM(SPEED_25G, 25000baseCR_Full);
 		break;
 
 	case FW_PORT_TYPE_KR4_100G:
@@ -1193,7 +1211,7 @@ static int eeprom_rd_phys(struct adapter *adap, unsigned int phys_addr, u32 *v)
 	int vaddr = t4_eeprom_ptov(phys_addr, adap->pf, EEPROMPFSIZE);
 
 	if (vaddr >= 0)
-		vaddr = pci_read_vpd(adap->pdev, vaddr, sizeof(u32), v);
+		vaddr = cxgb4_pci_read_vpd(adap, vaddr, sizeof(u32), v);
 	return vaddr < 0 ? vaddr : 0;
 }
 
@@ -1202,7 +1220,7 @@ static int eeprom_wr_phys(struct adapter *adap, unsigned int phys_addr, u32 v)
 	int vaddr = t4_eeprom_ptov(phys_addr, adap->pf, EEPROMPFSIZE);
 
 	if (vaddr >= 0)
-		vaddr = pci_write_vpd(adap->pdev, vaddr, sizeof(u32), &v);
+		vaddr = cxgb4_pci_write_vpd(adap, vaddr, sizeof(u32), &v);
 	return vaddr < 0 ? vaddr : 0;
 }
 
@@ -1576,6 +1594,11 @@ static int get_ts_info(struct net_device *dev, struct kernel_ethtool_ts_info *ts
 	return 0;
 }
 
+static u32 get_rss_key_size(struct net_device *dev)
+{
+	return RSS_HASH_KEY_SIZE;
+}
+
 static u32 get_rss_table_size(struct net_device *dev)
 {
 	const struct port_info *pi = netdev_priv(dev);
@@ -1592,6 +1615,17 @@ static int get_rss_table(struct net_device *dev,
 	rxfh->hfunc = ETH_RSS_HASH_TOP;
 	if (!rxfh->indir)
 		return 0;
+
+	if (rxfh->key) {
+		u32 key[10];
+
+		t4_read_rss_key(pi->adapter, key, true);
+
+		/* RSS hash keys are read in order TP_RSS_SECRET_KEY9..0 */
+		for (int i = 0; i < 10; i++)
+			((u32 *)rxfh->key)[i] = be32_to_cpu(key[9 - i]);
+	}
+
 	while (n--)
 		rxfh->indir[n] = pi->rss[n];
 	return 0;
@@ -1607,10 +1641,19 @@ static int set_rss_table(struct net_device *dev,
 	/* We require at least one supported parameter to be changed and no
 	 * change in any of the unsupported parameters
 	 */
-	if (rxfh->key ||
-	    (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
-	     rxfh->hfunc != ETH_RSS_HASH_TOP))
+	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
+	    rxfh->hfunc != ETH_RSS_HASH_TOP)
 		return -EOPNOTSUPP;
+
+	if (rxfh->key) {
+		u32 key[10];
+
+		/* RSS hash keys are written in order TP_RSS_SECRET_KEY9..0 */
+		for (int i = 0; i < 10; i++)
+			key[i] = cpu_to_be32(((u32 *)rxfh->key)[9 - i]);
+		t4_write_rss_key(pi->adapter, key, -1, true);
+	}
+
 	if (!rxfh->indir)
 		return 0;
 
@@ -1629,7 +1672,6 @@ static struct filter_entry *cxgb4_get_filter_entry(struct adapter *adap,
 						   u32 ftid)
 {
 	struct tid_info *t = &adap->tids;
-
 	if (ftid >= t->hpftid_base && ftid < t->hpftid_base + t->nhpftids)
 		return &t->hpftid_tab[ftid - t->hpftid_base];
 
@@ -2022,12 +2064,12 @@ static int cxgb4_get_module_info(struct net_device *dev,
 	case FW_PORT_TYPE_SFP:
 	case FW_PORT_TYPE_QSA:
 	case FW_PORT_TYPE_SFP28:
-		ret = t4_i2c_rd(adapter, adapter->mbox, pi->tx_chan,
+		ret = t4_i2c_rd(adapter, adapter->mbox, pi->lport,
 				I2C_DEV_ADDR_A0, SFF_8472_COMP_ADDR,
 				SFF_8472_COMP_LEN, &sff8472_comp);
 		if (ret)
 			return ret;
-		ret = t4_i2c_rd(adapter, adapter->mbox, pi->tx_chan,
+		ret = t4_i2c_rd(adapter, adapter->mbox, pi->lport,
 				I2C_DEV_ADDR_A0, SFP_DIAG_TYPE_ADDR,
 				SFP_DIAG_TYPE_LEN, &sff_diag_type);
 		if (ret)
@@ -2050,7 +2092,7 @@ static int cxgb4_get_module_info(struct net_device *dev,
 	case FW_PORT_TYPE_CR_QSFP:
 	case FW_PORT_TYPE_CR2_QSFP:
 	case FW_PORT_TYPE_CR4_QSFP:
-		ret = t4_i2c_rd(adapter, adapter->mbox, pi->tx_chan,
+		ret = t4_i2c_rd(adapter, adapter->mbox, pi->lport,
 				I2C_DEV_ADDR_A0, SFF_REV_ADDR,
 				SFF_REV_LEN, &sff_rev);
 		/* For QSFP type ports, revision value >= 3
@@ -2083,14 +2125,14 @@ static int cxgb4_get_module_eeprom(struct net_device *dev,
 
 	memset(data, 0, eprom->len);
 	if (offset + len <= I2C_PAGE_SIZE)
-		return t4_i2c_rd(adapter, adapter->mbox, pi->tx_chan,
+		return t4_i2c_rd(adapter, adapter->mbox, pi->lport,
 				 I2C_DEV_ADDR_A0, offset, len, data);
 
 	/* offset + len spans 0xa0 and 0xa1 pages */
 	if (offset <= I2C_PAGE_SIZE) {
 		/* read 0xa0 page */
 		len = I2C_PAGE_SIZE - offset;
-		ret =  t4_i2c_rd(adapter, adapter->mbox, pi->tx_chan,
+		ret =  t4_i2c_rd(adapter, adapter->mbox, pi->lport,
 				 I2C_DEV_ADDR_A0, offset, len, data);
 		if (ret)
 			return ret;
@@ -2101,7 +2143,7 @@ static int cxgb4_get_module_eeprom(struct net_device *dev,
 		len = eprom->len - len;
 	}
 	/* Read additional optical diagnostics from page 0xa2 if supported */
-	return t4_i2c_rd(adapter, adapter->mbox, pi->tx_chan, I2C_DEV_ADDR_A2,
+	return t4_i2c_rd(adapter, adapter->mbox, pi->lport, I2C_DEV_ADDR_A2,
 			 offset, len, &data[eprom->len - len]);
 }
 
@@ -2205,6 +2247,7 @@ static const struct ethtool_ops cxgb_ethtool_ops = {
 	.get_rxnfc         = get_rxnfc,
 	.set_rxnfc         = set_rxnfc,
 	.get_rx_ring_count = get_rx_ring_count,
+	.get_rxfh_key_size = get_rss_key_size,
 	.get_rxfh_indir_size = get_rss_table_size,
 	.get_rxfh	   = get_rss_table,
 	.set_rxfh	   = set_rss_table,

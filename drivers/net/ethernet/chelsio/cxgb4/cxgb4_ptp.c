@@ -103,12 +103,14 @@ void cxgb4_ptp_read_hwstamp(struct adapter *adapter, struct port_info *pi)
 
 	skb_ts = skb_hwtstamps(adapter->ptp_tx_skb);
 
-	tx_ts = t4_read_reg(adapter,
-			    T5_PORT_REG(pi->port_id, MAC_PORT_TX_TS_VAL_LO));
-
-	tx_ts |= (u64)t4_read_reg(adapter,
-				  T5_PORT_REG(pi->port_id,
-					      MAC_PORT_TX_TS_VAL_HI)) << 32;
+	if (CHELSIO_CHIP_VERSION(adapter->params.chip) >= CHELSIO_T7)
+		tx_ts = t4_read_reg64(adapter,
+				      T7_PORT_REG(pi->port_id,
+						  T7_MAC_PORT_TX_TS_VAL_LO));
+	else
+		tx_ts = t4_read_reg64(adapter,
+				      T5_PORT_REG(pi->port_id,
+						  MAC_PORT_TX_TS_VAL_LO));
 	skb_ts->hwtstamp = ns_to_ktime(tx_ts);
 	skb_tstamp_tx(adapter->ptp_tx_skb, skb_ts);
 	dev_kfree_skb_any(adapter->ptp_tx_skb);
@@ -319,9 +321,12 @@ static int cxgb4_ptp_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
 					       ptp_clock_info);
 	u64 ns;
 
-	ns = t4_read_reg(adapter, T5_PORT_REG(0, MAC_PORT_PTP_SUM_LO_A));
-	ns |= (u64)t4_read_reg(adapter,
-			       T5_PORT_REG(0, MAC_PORT_PTP_SUM_HI_A)) << 32;
+	if (CHELSIO_CHIP_VERSION(adapter->params.chip) >= CHELSIO_T7)
+		ns = t4_read_reg64(adapter,
+				   T7_PORT_REG(0, MAC_PORT_PTP_SUM_LO_A));
+	else
+		ns = t4_read_reg64(adapter,
+				   T5_PORT_REG(0, MAC_PORT_PTP_SUM_LO_A));
 
 	/* convert to timespec*/
 	*ts = ns_to_timespec64(ns);
@@ -432,7 +437,7 @@ void cxgb4_ptp_init(struct adapter *adapter)
 	spin_lock_init(&adapter->ptp_lock);
 
 	adapter->ptp_clock = ptp_clock_register(&adapter->ptp_clock_info,
-						&adapter->pdev->dev);
+						adapter->pdev_dev);
 	if (IS_ERR_OR_NULL(adapter->ptp_clock)) {
 		adapter->ptp_clock = NULL;
 		dev_err(adapter->pdev_dev,
