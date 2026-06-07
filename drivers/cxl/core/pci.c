@@ -852,7 +852,7 @@ static int update_gpf_port_dvsec(struct pci_dev *pdev, int dvsec, int phase)
 		pci_dbg(pdev, "Port GPF phase %d timeout: %d0 secs\n",
 			phase, GPF_TIMEOUT_BASE_MAX);
 
-	return rc;
+	return pcibios_err_to_errno(rc);
 }
 
 int cxl_gpf_port_setup(struct cxl_dport *dport)
