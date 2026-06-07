@@ -368,6 +368,8 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 {
 	int error, node, cpu;
 	struct drv_dev_and_id ddi = { drv, dev, id };
+	bool node_invalid, cpu_in_node = false;
+	const struct cpumask *node_cpus;
 
 	/*
 	 * Execute driver initialization on node where the device is
@@ -376,14 +378,27 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 	 */
 	node = dev_to_node(&dev->dev);
 	dev->is_probed = 1;
+	node_invalid = node < 0 || node >= MAX_NUMNODES || !node_online(node);
+	node_cpus = node_invalid ? cpu_online_mask : cpumask_of_node(node);
+
+	/*
+	 * If the current task is a wq kworker activated by queue_work_on()
+	 * below, the kworker is affined to a designated CPU and won't be
+	 * switched to another one. So the current CPU can be checked to see
+	 * if it is in the right node.
+	 */
+	if (current->flags & PF_WQ_WORKER) {
+		cpu_in_node = cpumask_test_cpu(get_cpu(), node_cpus);
+		put_cpu();
+	}
 
 	cpu_hotplug_disable();
 	/*
 	 * Prevent nesting work_on_cpu() for the case where a Virtual Function
-	 * device is probed from work_on_cpu() of the Physical device.
+	 * device is probed from work_on_cpu() of the Physical device or when
+	 * the current CPU is in the desired node.
 	 */
-	if (node < 0 || node >= MAX_NUMNODES || !node_online(node) ||
-	    pci_physfn_is_probed(dev)) {
+	if (node_invalid || cpu_in_node || pci_physfn_is_probed(dev)) {
 		error = local_pci_probe(&ddi);
 	} else {
 		struct pci_probe_arg arg = { .ddi = &ddi };
@@ -397,8 +412,7 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 		 * targets.
 		 */
 		rcu_read_lock();
-		cpu = cpumask_any_and(cpumask_of_node(node),
-				      housekeeping_cpumask(HK_TYPE_DOMAIN));
+		cpu = cpumask_any_and(node_cpus, housekeeping_cpumask(HK_TYPE_DOMAIN));
 
 		if (cpu < nr_cpu_ids) {
 			struct workqueue_struct *wq = pci_probe_wq;
