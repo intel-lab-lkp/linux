@@ -35,7 +35,9 @@ properties:
   '#dma-cells':
     const: 1
     description:
-      The DMA request number for the peripheral device.
+      The single cell is the DMA request number for the peripheral device.
+      See <dt-bindings/dma/spacemit,k1-pdma.h> for the list of valid request
+      numbers.
 
 required:
   - compatible
