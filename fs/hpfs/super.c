@@ -349,8 +349,7 @@ HPFS filesystem options:\n\
       umask=xxx         set mode of files that don't have mode specified in eas\n\
       case=lower        lowercase all files\n\
       case=asis         do not lowercase files (default)\n\
-      check=none        no fs checks - kernel may crash on corrupted filesystem\n\
-      check=normal      do some checks - it should not crash (default)\n\
+      check=normal      do some checks - kernel should not crash (default)\n\
       check=strict      do extra time-consuming checks, used for debugging\n\
       errors=continue   continue on errors\n\
       errors=remount-ro remount read-only if errors found (default)\n\
@@ -616,7 +615,9 @@ static int hpfs_fill_super(struct super_block *s, struct fs_context *fc)
 		if (sbi->sb_err == 0)
 			pr_err("Proceeding, but your filesystem could be corrupted if you delete files or directories\n");
 	}
-	if (sbi->sb_chk) {
+	if (!ctx->chk)
+		pr_info_once("check=none was obsoleted. Treating as check=normal.\n");
+	{
 		unsigned a;
 		if (le32_to_cpu(superblock->dir_band_end) - le32_to_cpu(superblock->dir_band_start) + 1 != le32_to_cpu(superblock->n_dir_band) ||
 		    le32_to_cpu(superblock->dir_band_end) < le32_to_cpu(superblock->dir_band_start) || le32_to_cpu(superblock->n_dir_band) > 0x4000) {
@@ -633,8 +634,7 @@ static int hpfs_fill_super(struct super_block *s, struct fs_context *fc)
 			goto bail4;
 		}
 		sbi->sb_dirband_size = a;
-	} else
-		pr_err("You really don't want any checks? You are crazy...\n");
+	}
 
 	/* Load code page table */
 	if (le32_to_cpu(spareblock->n_code_pages))

@@ -178,7 +178,7 @@ static secno alloc_in_bmp(struct super_block *s, secno near, unsigned n, unsigne
 	} while (i != nr);
 	rt:
 	if (ret) {
-		if (hpfs_sb(s)->sb_chk && ((ret >> 14) != (bs >> 14) || (le32_to_cpu(bmp[(ret & 0x3fff) >> 5]) | ~(((1 << n) - 1) << (ret & 0x1f))) != 0xffffffff)) {
+		if (((ret >> 14) != (bs >> 14) || (le32_to_cpu(bmp[(ret & 0x3fff) >> 5]) | ~(((1 << n) - 1) << (ret & 0x1f))) != 0xffffffff)) {
 			hpfs_error(s, "Allocation doesn't work! Wanted %d, allocated at %08x", n, ret);
 			ret = 0;
 			goto b;
@@ -404,7 +404,7 @@ int hpfs_check_free_dnodes(struct super_block *s, int n)
 
 void hpfs_free_dnode(struct super_block *s, dnode_secno dno)
 {
-	if (hpfs_sb(s)->sb_chk) if (dno & 3) {
+	if (dno & 3) {
 		hpfs_error(s, "hpfs_free_dnode: dnode %08x not aligned", dno);
 		return;
 	}
