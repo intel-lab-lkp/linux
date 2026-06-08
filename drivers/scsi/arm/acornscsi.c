@@ -2681,11 +2681,9 @@ static int acornscsi_host_reset(struct scsi_cmnd *SCpnt)
  */
 static const char *acornscsi_info(struct Scsi_Host *host)
 {
-    static char string[100], *p;
+    static char string[100];
 
-    p = string;
-    
-    p += sprintf(string, "%s at port %08lX irq %d v%d.%d.%d"
+    sprintf(string, "%s at port %08lX irq %d v%d.%d.%d"
 #ifdef CONFIG_SCSI_ACORNSCSI_SYNC
     " SYNC"
 #endif
