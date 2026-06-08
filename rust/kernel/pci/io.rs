@@ -10,11 +10,12 @@ use crate::{
     io::{
         Io,
         IoCapable,
-        IoKnownSize,
         Mmio,
-        MmioRaw, //
+        MmioRaw,
+        Region, //
     },
-    prelude::*, //
+    prelude::*,
+    ptr::KnownSize, //
 };
 use core::{
     marker::PhantomData,
@@ -46,28 +47,21 @@ impl ConfigSpaceSize {
     }
 }
 
-/// Marker type for normal (256-byte) PCI configuration space.
-pub struct Normal;
+/// Alias for normal (256-byte) PCI configuration space.
+pub type Normal = Region<256>;
 
-/// Marker type for extended (4096-byte) PCIe configuration space.
-pub struct Extended;
+/// Alias for extended (4096-byte) PCIe configuration space.
+pub type Extended = Region<4096>;
 
 /// Trait for PCI configuration space size markers.
 ///
 /// This trait is implemented by [`Normal`] and [`Extended`] to provide
 /// compile-time knowledge of the configuration space size.
-pub trait ConfigSpaceKind {
-    /// The size of this configuration space in bytes.
-    const SIZE: usize;
-}
+pub trait ConfigSpaceKind: KnownSize {}
 
-impl ConfigSpaceKind for Normal {
-    const SIZE: usize = 256;
-}
+impl ConfigSpaceKind for Normal {}
 
-impl ConfigSpaceKind for Extended {
-    const SIZE: usize = 4096;
-}
+impl ConfigSpaceKind for Extended {}
 
 /// The PCI configuration space of a device.
 ///
@@ -77,7 +71,7 @@ impl ConfigSpaceKind for Extended {
 /// The generic parameter `S` indicates the maximum size of the configuration space.
 /// Use [`Normal`] for 256-byte legacy configuration space or [`Extended`] for
 /// 4096-byte PCIe extended configuration space (default).
-pub struct ConfigSpace<'a, S: ConfigSpaceKind = Extended> {
+pub struct ConfigSpace<'a, S: ?Sized + ConfigSpaceKind = Extended> {
     pub(crate) pdev: &'a Device<device::Bound>,
     _marker: PhantomData<S>,
 }
@@ -85,7 +79,7 @@ pub struct ConfigSpace<'a, S: ConfigSpaceKind = Extended> {
 /// Implements [`IoCapable`] on [`ConfigSpace`] for `$ty` using `$read_fn` and `$write_fn`.
 macro_rules! impl_config_space_io_capable {
     ($ty:ty, $read_fn:ident, $write_fn:ident) => {
-        impl<'a, S: ConfigSpaceKind> IoCapable<$ty> for ConfigSpace<'a, S> {
+        impl<'a, S: ?Sized + ConfigSpaceKind> IoCapable<$ty> for ConfigSpace<'a, S> {
             unsafe fn io_read(&self, address: usize) -> $ty {
                 let mut val: $ty = 0;
 
@@ -118,7 +112,9 @@ impl_config_space_io_capable!(u8, pci_read_config_byte, pci_write_config_byte);
 impl_config_space_io_capable!(u16, pci_read_config_word, pci_write_config_word);
 impl_config_space_io_capable!(u32, pci_read_config_dword, pci_write_config_dword);
 
-impl<'a, S: ConfigSpaceKind> Io for ConfigSpace<'a, S> {
+impl<'a, S: ?Sized + ConfigSpaceKind> Io for ConfigSpace<'a, S> {
+    type Target = S;
+
     /// Returns the base address of the I/O region. It is always 0 for configuration space.
     #[inline]
     fn addr(&self) -> usize {
@@ -130,10 +126,6 @@ impl<'a, S: ConfigSpaceKind> Io for ConfigSpace<'a, S> {
     fn maxsize(&self) -> usize {
         self.pdev.cfg_size().into_raw()
     }
-}
-
-impl<'a, S: ConfigSpaceKind> IoKnownSize for ConfigSpace<'a, S> {
-    const MIN_SIZE: usize = S::SIZE;
 }
 
 /// A PCI BAR to perform I/O-Operations on.
