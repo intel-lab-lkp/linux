@@ -374,20 +374,21 @@ intel_th_device_alloc(struct intel_th *th, unsigned int type, const char *name,
 {
 	struct device *parent;
 	struct intel_th_device *thdev;
+	size_t name_len = strlen(name) + 1;
 
 	if (type == INTEL_TH_OUTPUT)
 		parent = &th->hub->dev;
 	else
 		parent = th->dev;
 
-	thdev = kzalloc(sizeof(*thdev) + strlen(name) + 1, GFP_KERNEL);
+	thdev = kzalloc_flex(*thdev, name, name_len);
 	if (!thdev)
 		return NULL;
 
 	thdev->id = id;
 	thdev->type = type;
 
-	strcpy(thdev->name, name);
+	memcpy(thdev->name, name, name_len);
 	device_initialize(&thdev->dev);
 	thdev->dev.bus = &intel_th_bus;
 	thdev->dev.type = intel_th_device_type[type];
