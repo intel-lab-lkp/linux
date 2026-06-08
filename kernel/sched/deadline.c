@@ -205,11 +205,22 @@ void __dl_add(struct dl_bw *dl_b, u64 tsk_bw, int cpus)
 	__dl_update(dl_b, -((s32)tsk_bw / cpus));
 }
 
+static inline u64 get_dl_groups_bw(void)
+{
+#ifdef CONFIG_RT_GROUP_SCHED
+	return to_ratio(root_task_group.dl_bandwidth.dl_period,
+			root_task_group.dl_bandwidth.dl_runtime);
+#else
+	return 0;
+#endif
+}
+
 static inline bool
 __dl_overflow(struct dl_bw *dl_b, unsigned long cap, u64 old_bw, u64 new_bw)
 {
 	return dl_b->bw != -1 &&
-	       cap_scale(dl_b->bw, cap) < dl_b->total_bw - old_bw + new_bw;
+	       cap_scale(dl_b->bw, cap) < dl_b->total_bw - old_bw + new_bw
+					+ cap_scale(get_dl_groups_bw(), cap);
 }
 
 static inline
@@ -3490,8 +3501,9 @@ int sched_dl_global_validate(void)
 	u64 period = global_rt_period();
 	u64 new_bw = to_ratio(period, runtime);
 	u64 cookie = ++dl_cookie;
+	u64 dl_groups_root = get_dl_groups_bw();
 	struct dl_bw *dl_b;
-	int cpu, cpus, ret = 0;
+	int cpu, cap, cpus, ret = 0;
 	unsigned long flags;
 
 	/*
@@ -3506,10 +3518,12 @@ int sched_dl_global_validate(void)
 			goto next;
 
 		dl_b = dl_bw_of(cpu);
+		cap = dl_bw_capacity(cpu);
 		cpus = dl_bw_cpus(cpu);
 
 		raw_spin_lock_irqsave(&dl_b->lock, flags);
-		if (new_bw * cpus < dl_b->total_bw)
+		if (new_bw * cpus < dl_b->total_bw +
+				    cap_scale(dl_groups_root, cap))
 			ret = -EBUSY;
 		raw_spin_unlock_irqrestore(&dl_b->lock, flags);
 
