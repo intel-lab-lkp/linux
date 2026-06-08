@@ -26,6 +26,7 @@
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_tcq.h>
 #include <scsi/scsi_transport.h>
+#include <scsi/scsi_devinfo.h>
 #include <linux/libata.h>
 #include <linux/hdreg.h>
 #include <linux/uaccess.h>
@@ -4745,12 +4746,30 @@ void ata_scsi_scan_host(struct ata_port *ap, int sync)
 			sdev = __scsi_add_device(ap->scsi_host, channel, id, 0,
 						 NULL);
 			if (!IS_ERR(sdev)) {
-				dev->sdev[0] = sdev;
-				ata_scsi_assign_ofnode(dev, ap);
+				/*
+				 * For multi-LUN ATAPI (BLIST_FORCELUN), bump
+				 * dev->nr_luns to the host max so the LUN
+				 * routing in atapi_xlat() accepts the probe
+				 * INQUIRYs to LUN > 0, then trigger the
+				 * sequential scan.  pdt_1f_for_no_lun, set
+				 * during LUN 0 configure, ensures
+				 * non-responding LUNs are silently skipped;
+				 * dev->sdev[] is populated by
+				 * ata_scsi_dev_config() during the scan.
+				 */
+				if (dev->class == ATA_DEV_ATAPI &&
+				    sdev->sdev_bflags & BLIST_FORCELUN) {
+					dev->nr_luns = ap->scsi_host->max_lun;
+					scsi_scan_target(
+						&ap->scsi_host->shost_gendev,
+						channel, id, SCAN_WILD_CARD,
+						SCSI_SCAN_RESCAN);
+				}
 				scsi_device_put(sdev);
-			} else {
-				dev->sdev[0] = NULL;
 			}
+
+			if (dev->sdev[0])
+				ata_scsi_assign_ofnode(dev, ap);
 		}
 	}
 
