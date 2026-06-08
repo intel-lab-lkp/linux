@@ -360,8 +360,7 @@ int btrfs_fileattr_set(struct mnt_idmap *idmap,
 		 */
 		if (S_ISREG(inode->vfs_inode.i_mode)) {
 			if (inode->vfs_inode.i_size == 0)
-				inode_flags &= ~(BTRFS_INODE_NODATACOW |
-						 BTRFS_INODE_NODATASUM);
+				inode_flags &= ~BTRFS_INODE_NODATACOW;
 		} else {
 			inode_flags &= ~BTRFS_INODE_NODATACOW;
 		}
