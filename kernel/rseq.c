@@ -302,11 +302,18 @@ static void rseq_slowpath_update_usr(struct pt_regs *regs)
 
 	if (unlikely(!rseq_update_usr(t, regs, &ids))) {
 		/*
-		 * Clear the errors just in case this might survive magically, but
-		 * leave the rest intact.
+		 * rseq_update_usr() sets rseq_event::fatal only on corrupt
+		 * user data, which keeps its SIGSEGV. A clear fatal bit is an
+		 * unresolved page fault on a still-registered rseq area (e.g.
+		 * a CoW that cannot be charged to an OOM-locked memcg): that
+		 * is transient, so leave the cached IDs untouched and retry on
+		 * a later return to user instead of killing the task.
 		 */
+		bool fatal = t->rseq.event.fatal;
+
 		t->rseq.event.error = 0;
-		force_sig(SIGSEGV);
+		if (fatal)
+			force_sig(SIGSEGV);
 	}
 }
 
