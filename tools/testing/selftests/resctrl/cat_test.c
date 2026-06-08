@@ -402,3 +402,204 @@ struct resctrl_test l2_noncont_cat_test = {
 	.feature_check = noncont_cat_feature_check,
 	.run_test = noncont_cat_run_test,
 };
+
+/*
+ * L3_CAT_OCCUP - Verify that a CAT allocation bounds cache occupancy.
+ *
+ * Unlike L3_CAT (which measures interference between groups and needs an
+ * exclusive cache portion), this test gives a control group a strict subset
+ * of the CBM, then runs a benchmark whose buffer spans the *whole* cache -
+ * i.e. much larger than the allocation. With CAT enforced, the group can
+ * only keep its allocated portion resident, so llc_occupancy settles near
+ * the allocation size. Without enforcement occupancy would instead climb
+ * towards the full cache. This works even when all CBM bits are shareable
+ * (where L3_CAT is skipped).
+ */
+#define CAT_OCCUP_RESULT_FILE		"result_cat_occup"
+#define CAT_OCCUP_NUM_OF_RUNS		5
+
+static int cat_occup_cpu;
+
+static int cat_occup_init(const struct resctrl_val_param *param, int domain_id)
+{
+	char schemata[64];
+
+	sprintf(llc_occup_path, CON_MON_LCC_OCCUP_PATH, RESCTRL_PATH,
+		param->ctrlgrp, domain_id);
+
+	/*
+	 * Confine the benchmark to the allocated portion *before* it starts
+	 * filling (resctrl_val() calls init() before forking the benchmark),
+	 * so occupancy reflects the restricted CBM from the first sample.
+	 */
+	snprintf(schemata, sizeof(schemata), "%lx", param->mask);
+
+	return write_schemata(param->ctrlgrp, schemata, cat_occup_cpu, "L3");
+}
+
+static int cat_occup_setup(const struct resctrl_test *test,
+			   const struct user_params *uparams,
+			   struct resctrl_val_param *p)
+{
+	if (p->num_of_runs >= CAT_OCCUP_NUM_OF_RUNS)
+		return END_OF_TESTS;
+
+	p->num_of_runs++;
+
+	return 0;
+}
+
+static int cat_occup_measure(const struct user_params *uparams,
+			     struct resctrl_val_param *param, pid_t bm_pid)
+{
+	sleep(1);
+	return measure_llc_resctrl(param->filename, bm_pid);
+}
+
+static int cat_occup_check_results(struct resctrl_val_param *param,
+				   size_t alloc_span, size_t cache_size,
+				   int no_of_bits)
+{
+	char *token_array[8], temp[512];
+	unsigned long occu, max_occu = 0, ceiling, floor;
+	int runs = 0;
+	int fail = 0;
+	FILE *fp;
+
+	/*
+	 * Check every sample, not an average: CAT is a hard limit, so a single
+	 * sample above the allocation is a real violation that an average
+	 * could mask.
+	 */
+	ceiling = alloc_span + (cache_size - alloc_span) / 2;
+	floor = alloc_span / 2;
+
+	ksft_print_msg("Checking for pass/fail\n");
+	fp = fopen(param->filename, "r");
+	if (!fp) {
+		ksft_perror("Error in opening file");
+
+		return -1;
+	}
+
+	while (fgets(temp, sizeof(temp), fp)) {
+		char *token = strtok(temp, ":\t");
+		int fields = 0;
+
+		while (token) {
+			token_array[fields++] = token;
+			token = strtok(NULL, ":\t");
+		}
+
+		/* Field 3 is the resctrl-reported llc_occupancy value. */
+		occu = strtoul(token_array[3], NULL, 0);
+		runs++;
+
+		if (occu > max_occu)
+			max_occu = occu;
+
+		if (occu > ceiling) {
+			ksft_print_msg("Fail: run %d occupancy %lu exceeds ceiling %lu\n",
+				       runs, occu, ceiling);
+			fail = 1;
+		}
+	}
+	fclose(fp);
+
+	if (!runs) {
+		ksft_print_msg("No occupancy samples collected\n");
+		return -1;
+	}
+
+	if (max_occu < floor) {
+		ksft_print_msg("Fail: peak occupancy %lu never reached floor %lu\n",
+			       max_occu, floor);
+		fail = 1;
+	}
+
+	ksft_print_msg("%s CAT confines occupancy to the allocated %d-bit portion\n",
+		       fail ? "Fail:" : "Pass:", no_of_bits);
+	ksft_print_msg("occupancy=%lu alloc=%zu full=%zu ceiling=%lu floor=%lu\n",
+		       max_occu, alloc_span, cache_size, ceiling, floor);
+
+	return fail;
+}
+
+static void cat_occup_test_cleanup(void)
+{
+	remove(CAT_OCCUP_RESULT_FILE);
+}
+
+static int cat_occup_run_test(const struct resctrl_test *test,
+			      const struct user_params *uparams)
+{
+	struct fill_buf_param fill_buf = {};
+	unsigned long cache_total_size = 0;
+	unsigned long full_mask;
+	int count_of_bits;
+	size_t alloc_span;
+	int n, ret;
+
+	ret = get_full_cbm(test->resource, &full_mask);
+	if (ret)
+		return ret;
+
+	ret = get_cache_size(uparams->cpu, test->resource, &cache_total_size);
+	if (ret)
+		return ret;
+	ksft_print_msg("Cache size :%lu\n", cache_total_size);
+
+	count_of_bits = count_bits(full_mask);
+
+	/*
+	 * Allocate a strict subset of the cache so the benchmark buffer
+	 * is larger than the allocation and CAT has something to enforce.
+	 */
+	n = uparams->bits ? : count_of_bits / 2;
+	if (n < 1 || n >= count_of_bits) {
+		ksft_print_msg("Invalid number of CBM bits %d, expected 1 to %d\n",
+			       n, count_of_bits - 1);
+		return -1;
+	}
+
+	struct resctrl_val_param param = {
+		.ctrlgrp	= "c1",
+		.filename	= CAT_OCCUP_RESULT_FILE,
+		.mask		= ~(full_mask << n) & full_mask,
+		.num_of_runs	= 0,
+		.init		= cat_occup_init,
+		.setup		= cat_occup_setup,
+		.measure	= cat_occup_measure,
+	};
+
+	alloc_span = cache_portion_size(cache_total_size, param.mask, full_mask);
+
+	/* Benchmark buffer spans the full cache: larger than the allocation. */
+	fill_buf.buf_size = cache_total_size;
+	fill_buf.memflush = uparams->fill_buf ? uparams->fill_buf->memflush : true;
+	param.fill_buf = &fill_buf;
+	cat_occup_cpu = uparams->cpu;
+
+	remove(param.filename);
+
+	ret = resctrl_val(test, uparams, &param);
+	if (ret)
+		return ret;
+
+	return cat_occup_check_results(&param, alloc_span, cache_total_size, n);
+}
+
+static bool cat_occup_feature_check(const struct resctrl_test *test)
+{
+	return test_resource_feature_check(test) &&
+	       resctrl_mon_feature_exists("L3_MON", "llc_occupancy");
+}
+
+struct resctrl_test l3_cat_occup_test = {
+	.name = "L3_CAT_OCCUP",
+	.group = "CAT",
+	.resource = "L3",
+	.feature_check = cat_occup_feature_check,
+	.run_test = cat_occup_run_test,
+	.cleanup = cat_occup_test_cleanup,
+};
