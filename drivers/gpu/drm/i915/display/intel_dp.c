@@ -2494,7 +2494,8 @@ bool intel_dp_needs_8b10b_fec(const struct intel_crtc_state *crtc_state,
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP))
 		return false;
 
-	return dsc_enabled_on_crtc || intel_fec_enabled_on_link(crtc_state);
+	return dsc_enabled_on_crtc || intel_fec_enabled_on_link(crtc_state) ||
+		crtc_state->has_panel_replay;
 }
 
 void intel_dp_dsc_reset_config(struct intel_crtc_state *crtc_state)
@@ -3677,6 +3678,8 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 		return -EINVAL;
 
 	intel_psr_pre_compute_config(intel_dp, pipe_config, conn_state);
+
+	pipe_config->fec_enable = intel_dp_needs_8b10b_fec(pipe_config, false);
 
 	/*
 	 * Try to respect downstream TMDS clock limits first, if

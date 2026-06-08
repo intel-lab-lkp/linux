@@ -642,6 +642,8 @@ static int mst_stream_compute_link_for_joined_pipes(struct intel_encoder *encode
 
 	intel_psr_pre_compute_config(intel_dp, pipe_config, conn_state);
 
+	pipe_config->fec_enable = intel_dp_needs_8b10b_fec(pipe_config, true);
+
 	/* enable compression if the mode doesn't fit available BW */
 	if (dsc_needed) {
 		int dsc_slice_count;
