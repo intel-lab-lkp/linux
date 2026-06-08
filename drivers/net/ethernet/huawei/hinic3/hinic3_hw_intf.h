@@ -53,6 +53,17 @@ static inline void mgmt_msg_params_init_default(struct mgmt_msg_params *msg_para
 	msg_params->timeout_ms = 0;
 }
 
+static inline void
+mgmt_msg_params_init_in_out(struct mgmt_msg_params *msg_params, void *in_buf,
+			    void *out_buf, u32 in_buf_size, u32 out_buf_size)
+{
+	msg_params->buf_in = in_buf;
+	msg_params->buf_out = out_buf;
+	msg_params->in_size = in_buf_size;
+	msg_params->expected_out_size = out_buf_size;
+	msg_params->timeout_ms = 0;
+}
+
 enum cfg_cmd {
 	CFG_CMD_GET_DEV_CAP = 0,
 };
