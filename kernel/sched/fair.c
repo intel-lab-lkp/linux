@@ -9315,7 +9315,7 @@ idle:
 static struct task_struct *
 fair_server_pick_task(struct sched_dl_entity *dl_se, struct rq_flags *rf)
 {
-	return pick_task_fair(dl_se->rq, rf);
+	return pick_task_fair(dl_se->my_q, rf);
 }
 
 void fair_server_init(struct rq *rq)
@@ -9324,7 +9324,7 @@ void fair_server_init(struct rq *rq)
 
 	init_dl_entity(dl_se);
 
-	dl_server_init(dl_se, rq, fair_server_pick_task);
+	dl_server_init(dl_se, &rq->dl, rq, fair_server_pick_task);
 }
 
 /*

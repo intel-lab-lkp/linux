@@ -3252,7 +3252,7 @@ ext_server_pick_task(struct sched_dl_entity *dl_se, struct rq_flags *rf)
 	if (!scx_enabled())
 		return NULL;
 
-	return do_pick_task_scx(dl_se->rq, rf, true);
+	return do_pick_task_scx(dl_se->my_q, rf, true);
 }
 
 /*
@@ -3264,7 +3264,7 @@ void ext_server_init(struct rq *rq)
 
 	init_dl_entity(dl_se);
 
-	dl_server_init(dl_se, rq, ext_server_pick_task);
+	dl_server_init(dl_se, &rq->dl, rq, ext_server_pick_task);
 }
 
 #ifdef CONFIG_SCHED_CORE
