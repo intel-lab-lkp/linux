@@ -70,9 +70,9 @@ static int cxl_mem_probe(struct device *dev)
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlmd->cxlds);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
-	struct device *endpoint_parent;
 	struct cxl_dport *dport;
 	struct dentry *dentry;
+	bool rch = false;
 	int rc;
 
 	if (!cxlds->media_ready)
@@ -107,8 +107,7 @@ static int cxl_mem_probe(struct device *dev)
 	if (rc)
 		return rc;
 
-	struct cxl_port *parent_port __free(put_cxl_port) =
-		cxl_mem_find_port(cxlmd, &dport);
+	struct cxl_port *parent_port __free(put_cxl_port) = cxl_mem_find_port(cxlmd, NULL);
 	if (!parent_port) {
 		dev_err(dev, "CXL port topology not found\n");
 		return -ENXIO;
@@ -123,21 +122,57 @@ static int cxl_mem_probe(struct device *dev)
 		}
 	}
 
-	if (dport->rch)
-		endpoint_parent = parent_port->uport_dev;
-	else
-		endpoint_parent = &parent_port->dev;
-
-	scoped_guard(device, endpoint_parent) {
-		if (!endpoint_parent->driver) {
-			dev_err(dev, "CXL port topology %s not enabled\n",
-				dev_name(endpoint_parent));
+	scoped_guard(device, &parent_port->dev) {
+		/*
+		 * Re-fetch dport under the port lock to close the TOCTOU
+		 * window between cxl_mem_find_port()'s lockless xa_load() and
+		 * this guard acquisition.  A concurrent surprise removal can
+		 * free the dport in that window.
+		 */
+		dport = cxl_find_dport_by_dev(parent_port, cxlmd->dev.parent->parent);
+		if (!dport) {
+			dev_err(dev, "CXL port topology %s not found\n",
+				dev_name(&parent_port->dev));
 			return -ENXIO;
 		}
+		rch = dport->rch;
 
-		rc = devm_cxl_add_endpoint(endpoint_parent, cxlmd, dport);
-		if (rc)
-			return rc;
+		if (!rch) {
+			if (!parent_port->dev.driver) {
+				dev_err(dev, "CXL port topology %s not enabled\n",
+					dev_name(&parent_port->dev));
+				return -ENXIO;
+			}
+			rc = devm_cxl_add_endpoint(&parent_port->dev, cxlmd, dport);
+			if (rc)
+				return rc;
+		}
+	}
+
+	if (rch) {
+		struct device *uport_dev = parent_port->uport_dev;
+
+		scoped_guard(device, uport_dev) {
+			if (!uport_dev->driver) {
+				dev_err(dev, "CXL port topology %s not enabled\n",
+					dev_name(uport_dev));
+				return -ENXIO;
+			}
+			/*
+			 * Re-fetch dport under uport_dev lock.  uport_dev->mutex
+			 * is held for the full devres teardown sequence including
+			 * free_dport()/kfree(), so this excludes concurrent
+			 * hotplug removal through the entire dereference.
+			 */
+			dport = cxl_find_dport_by_dev(parent_port, cxlmd->dev.parent->parent);
+			if (!dport) {
+				dev_err(dev, "CXL RCH dport not found\n");
+				return -ENXIO;
+			}
+			rc = devm_cxl_add_endpoint(uport_dev, cxlmd, dport);
+			if (rc)
+				return rc;
+		}
 	}
 
 	if (cxlmd->attach) {

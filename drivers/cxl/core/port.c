@@ -1092,8 +1092,18 @@ static void cxl_dport_remove(void *data)
 	struct cxl_dport *dport = data;
 	struct cxl_port *port = dport->port;
 
+	/*
+	 * For non-root ports the port lock is already held by the caller
+	 * via devres_release_all() during driver unbind, which holds
+	 * port->dev.mutex throughout.  Acquiring it again unconditionally
+	 * would deadlock.  Use cond_cxl_root_lock() which only acquires
+	 * when the port is a root port and the lock is therefore not yet
+	 * held.
+	 */
+	cond_cxl_root_lock(port);
 	port->nr_dports--;
 	xa_erase(&port->dports, (unsigned long) dport->dport_dev);
+	cond_cxl_root_unlock(port);
 	put_device(dport->dport_dev);
 }
 

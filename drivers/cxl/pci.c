@@ -708,10 +708,10 @@ static ssize_t rcd_pcie_cap_emit(struct device *dev, u16 offset, char *buf, size
 {
 	struct cxl_dev_state *cxlds = dev_get_drvdata(dev);
 	struct cxl_memdev *cxlmd = cxlds->cxlmd;
-	struct device *root_dev;
 	struct cxl_dport *dport;
+	struct device *root_dev;
 	struct cxl_port *root __free(put_cxl_port) =
-		cxl_mem_find_port(cxlmd, &dport);
+		cxl_mem_find_port(cxlmd, NULL);
 
 	if (!root)
 		return -ENXIO;
@@ -720,11 +720,18 @@ static ssize_t rcd_pcie_cap_emit(struct device *dev, u16 offset, char *buf, size
 	if (!root_dev)
 		return -ENXIO;
 
-	if (!dport->regs.rcd_pcie_cap)
-		return -ENXIO;
-
 	guard(device)(root_dev);
 	if (!root_dev->driver)
+		return -ENXIO;
+
+	/*
+	 * Fetch dport under uport_dev lock to protect against concurrent
+	 * hotplug removal. uport_dev->mutex is held for the entire devres
+	 * teardown sequence including free_dport(), so holding it here
+	 * excludes concurrent kfree(dport).
+	 */
+	dport = cxl_find_dport_by_dev(root, cxlmd->dev.parent->parent);
+	if (!dport || !dport->regs.rcd_pcie_cap)
 		return -ENXIO;
 
 	switch (width) {
