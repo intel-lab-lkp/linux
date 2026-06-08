@@ -1710,12 +1710,12 @@ static void c2h_wk_callback(struct work_struct *work)
 			c2h_evt_clear(adapter);
 		} else {
 			c2h_evt = kmalloc(16, GFP_ATOMIC);
-			if (c2h_evt) {
-				/* This C2H event is not read, read & clear now */
-				if (c2h_evt_read_88xx(adapter, c2h_evt) != _SUCCESS) {
-					kfree(c2h_evt);
-					continue;
-				}
+			if (!c2h_evt)
+				continue;
+			/* This C2H event is not read, read & clear now */
+			if (c2h_evt_read_88xx(adapter, c2h_evt) != _SUCCESS) {
+				kfree(c2h_evt);
+				continue;
 			}
 		}
 
