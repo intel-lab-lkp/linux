@@ -2022,7 +2022,11 @@ static int __emulate_int_real(struct x86_emulate_ctxt *ctxt, int irq)
 	gva_t eip_addr;
 	u16 cs, eip;
 
-	/* TODO: Add limit checks */
+	ops->get_idt(ctxt, &dt);
+
+	if (dt.size < (irq << 2) + 3)
+		return emulate_gp(ctxt, 0);
+
 	ctxt->src.val = ctxt->eflags;
 	rc = em_push(ctxt);
 	if (rc != X86EMUL_CONTINUE)
@@ -2039,8 +2043,6 @@ static int __emulate_int_real(struct x86_emulate_ctxt *ctxt, int irq)
 	rc = em_push(ctxt);
 	if (rc != X86EMUL_CONTINUE)
 		return rc;
-
-	ops->get_idt(ctxt, &dt);
 
 	eip_addr = dt.address + (irq << 2);
 	cs_addr = dt.address + (irq << 2) + 2;
