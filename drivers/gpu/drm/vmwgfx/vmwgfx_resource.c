@@ -402,7 +402,7 @@ static int vmw_resource_do_validate(struct vmw_resource *res,
 		if (res->guest_memory_bo->dirty && !res->dirty) {
 			ret = func->dirty_alloc(res);
 			if (ret)
-				return ret;
+				goto out_bind_failed;
 		} else if (!res->guest_memory_bo->dirty && res->dirty) {
 			func->dirty_free(res);
 		}
