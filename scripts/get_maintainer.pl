@@ -29,6 +29,7 @@ my $email_usename = 1;
 my $email_maintainer = 1;
 my $email_reviewer = 1;
 my $email_fixes = 1;
+my $email_mentioned = 0;
 my $email_list = 1;
 my $email_moderated_list = 1;
 my $email_subscriber_list = 0;
@@ -76,6 +77,7 @@ my $exit = 0;
 
 my @files = ();
 my @fixes = ();			# If a patch description includes Fixes: lines
+my @mentioned = ();		# If a patch description mentiones a patch
 my @range = ();
 my @keyword_tvi = ();
 my @file_emails = ();
@@ -262,6 +264,7 @@ if (!GetOptions(
 		'n!' => \$email_usename,
 		'l!' => \$email_list,
 		'fixes!' => \$email_fixes,
+		'mentioned!' => \$email_mentioned,
 		'moderated!' => \$email_moderated_list,
 		's!' => \$email_subscriber_list,
 		'multiline!' => \$output_multiline,
@@ -603,6 +606,8 @@ foreach my $file (@ARGV) {
 		push(@files, $filename2);
 	    } elsif (m/^Fixes:\s+([0-9a-fA-F]{6,40})/) {
 		push(@fixes, $1) if ($email_fixes);
+	    } elsif (m/\s+([0-9a-fA-F]{6,40})/) {
+		push(@mentioned, $1) if ($email_mentioned);
 	    } elsif (m/^\+\+\+\s+(\S+)/ or m/^---\s+(\S+)/) {
 		my $filename = $1;
 		$filename =~ s@^[^/]*/@@;
@@ -634,6 +639,7 @@ foreach my $file (@ARGV) {
 
 @file_emails = uniq(@file_emails);
 @fixes = uniq(@fixes);
+@mentioned = uniq(@mentioned);
 
 my %email_hash_name;
 my %email_hash_address;
@@ -1026,6 +1032,10 @@ sub get_maintainers {
 	vcs_add_commit_signers($fix, "blamed_fixes");
     }
 
+   foreach my $mention (@mentioned) {
+	vcs_add_commit_signers($mention, "in mentioned Patch");
+    }
+
     my @to = ();
     if ($email || $email_list) {
 	if ($email) {
@@ -1094,6 +1104,7 @@ MAINTAINER field selection options:
     --substatus => show subsystem status if not Maintained (default: match --roles when output is tty)"
     --file-emails => add email addresses found in -f file (default: 0 (off))
     --fixes => for patches, add signatures of commits with 'Fixes: <commit>' (default: 1 (on))
+    --mentioned => for patches, add signatures in mentioned commits with hashes between 6 and 40 chars long (default: 1 (on))
   --scm => print SCM tree(s) if any
   --status => print status if any
   --subsystem => print subsystem name if any
