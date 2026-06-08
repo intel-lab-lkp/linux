@@ -558,7 +558,8 @@ fetch_next_txq_desc:
 	} while (likely(budget));
 
 	ntc += tx_q->desc_count;
-	tx_q->next_to_clean = ntc;
+	/* Sync with IDPF_DESC_UNUSED called from idpf_tx_singleq_frame. */
+	smp_store_release(&tx_q->next_to_clean, ntc);
 
 	*cleaned += ss.packets;
 

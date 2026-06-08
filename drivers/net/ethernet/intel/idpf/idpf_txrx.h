@@ -119,9 +119,12 @@ do {								\
 #define IDPF_RXD_EOF_SPLITQ		VIRTCHNL2_RX_FLEX_DESC_ADV_STATUS0_EOF_M
 #define IDPF_RXD_EOF_SINGLEQ		VIRTCHNL2_RX_BASE_DESC_STATUS_EOF_M
 
-#define IDPF_DESC_UNUSED(txq)     \
-	((((txq)->next_to_clean > (txq)->next_to_use) ? 0 : (txq)->desc_count) + \
-	(txq)->next_to_clean - (txq)->next_to_use - 1)
+#define IDPF_DESC_UNUSED(txq)						\
+({									\
+	unsigned int ntc = smp_load_acquire(&(txq)->next_to_clean);	\
+	unsigned int ntu = READ_ONCE((txq)->next_to_use);		\
+	(ntc > ntu ? 0 : (txq)->desc_count) + ntc - ntu - 1;		\
+})
 
 #define IDPF_TX_COMPLQ_OVERFLOW_THRESH(txcq)	((txcq)->desc_count >> 1)
 /* Determine the absolute number of completions pending, i.e. the number of
