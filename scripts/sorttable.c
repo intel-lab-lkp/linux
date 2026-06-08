@@ -895,13 +895,19 @@ static int do_file(char const *const fname, void *addr)
 #ifdef MCOUNT_SORT_ENABLED
 		sort_reloc = true;
 		rela_type = 0x403;
-		/* arm64 uses patchable function entry placing before function */
+#endif
+		/* fallthrough */
+	case EM_RISCV:
+#ifdef MCOUNT_SORT_ENABLED
+		/*
+		 * risc-v and arm64 use patchable function entry that stores
+		 * 8 bytes of nops before the function
+		 */
 		before_func = 8;
 #endif
 		/* fallthrough */
 	case EM_386:
 	case EM_LOONGARCH:
-	case EM_RISCV:
 	case EM_S390:
 	case EM_X86_64:
 		custom_sort = sort_relative_table_with_data;
