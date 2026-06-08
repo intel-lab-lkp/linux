@@ -14,7 +14,6 @@
 #include "test_util.h"
 #include "kvm_util.h"
 #include "processor.h"
-#include "apic.h"
 
 #include <asm/pvclock-abi.h>
 
@@ -262,10 +261,12 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
+static volatile uint32_t vcpu_counter;
+
 static void guest_code_stable_bit(void)
 {
-	uint32_t apic_id = GET_APIC_ID_FIELD(xapic_read_reg(APIC_ID));
-	uint64_t gpa = KVMCLOCK_GPA + apic_id * sizeof(struct pvclock_vcpu_time_info);
+	uint32_t idx = __atomic_fetch_add(&vcpu_counter, 1, __ATOMIC_SEQ_CST);
+	uint64_t gpa = KVMCLOCK_GPA + idx * sizeof(struct pvclock_vcpu_time_info);
 
 	wrmsr(MSR_KVM_SYSTEM_TIME_NEW, gpa | KVM_MSR_ENABLED);
 	GUEST_SYNC(0);

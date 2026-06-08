@@ -8674,6 +8674,8 @@ __init int vmx_hardware_setup(void)
 
 	if (cpu_has_vmx_tsc_scaling() && boot_cpu_has(X86_FEATURE_CONSTANT_TSC))
 		kvm_caps.has_tsc_control = true;
+	else
+		vmcs_config.cpu_based_2nd_exec_ctrl &= ~SECONDARY_EXEC_TSC_SCALING;
 
 	kvm_caps.max_tsc_scaling_ratio = KVM_VMX_TSC_MULTIPLIER_MAX;
 	kvm_caps.tsc_scaling_ratio_frac_bits = 48;

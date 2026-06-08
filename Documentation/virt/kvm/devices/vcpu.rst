@@ -243,9 +243,9 @@ Returns:
 Specifies the guest's TSC offset relative to the host's TSC. The guest's
 TSC is then derived by the following equation:
 
-  guest_tsc = ((host_tsc * tsc_scale_ratio) >> tsc_scale_bits) + KVM_VCPU_TSC_OFFSET
+  guest_tsc = ((host_tsc * tsc_ratio) >> tsc_frac_bits) + KVM_VCPU_TSC_OFFSET
 
-The values of tsc_scale_ratio and tsc_scale_bits can be obtained using
+The values of tsc_ratio and tsc_frac_bits can be obtained using
 the KVM_VCPU_TSC_SCALE attribute.
 
 This attribute is useful to adjust the guest's TSC on live migration,
