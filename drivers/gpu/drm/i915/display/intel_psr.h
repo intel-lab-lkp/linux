@@ -48,7 +48,8 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 			      struct intel_crtc_state *crtc_state,
 			      struct drm_connector_state *conn_state);
 void intel_psr_pre_compute_config(struct intel_dp *intel_dp,
-				  struct intel_crtc_state *crtc_state);
+				  struct intel_crtc_state *crtc_state,
+				  struct drm_connector_state *conn_state);
 void intel_psr_get_config(struct intel_encoder *encoder,
 			  struct intel_crtc_state *pipe_config);
 void intel_psr_irq_handler(struct intel_dp *intel_dp, u32 psr_iir);

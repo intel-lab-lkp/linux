@@ -1820,7 +1820,34 @@ static bool _panel_replay_compute_config(struct intel_crtc_state *crtc_state,
 	struct intel_connector *connector =
 		to_intel_connector(conn_state->connector);
 	struct intel_dp *intel_dp = intel_attached_dp(connector);
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	if (crtc_state->dsc.compression_enable &&
+	    connector->dp.panel_replay_caps.dsc_support ==
+	    INTEL_DP_PANEL_REPLAY_DSC_NOT_SUPPORTED) {
+		drm_dbg_kms(display->drm,
+			    "Panel Replay not enabled because it's not supported with DSC\n");
+		return false;
+	}
+
+	if (!intel_dp_is_edp(intel_dp))
+		return true;
+
+	/* Remaining checks are for eDP only */
+
+	if (!alpm_config_valid(intel_dp, crtc_state, true, true, false))
+		return false;
+
+	return true;
+}
+
+static bool _panel_replay_pre_compute_config(struct intel_dp *intel_dp,
+					     struct intel_crtc_state *crtc_state,
+					     struct drm_connector_state *conn_state)
+{
 	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_connector *connector =
+		to_intel_connector(conn_state->connector);
 	struct intel_hdcp *hdcp = &connector->hdcp;
 
 	if (!CAN_PANEL_REPLAY(intel_dp))
@@ -1837,14 +1864,6 @@ static bool _panel_replay_compute_config(struct intel_crtc_state *crtc_state,
 	if (crtc_state->crc_enabled) {
 		drm_dbg_kms(display->drm,
 			    "Panel Replay not enabled because it would inhibit pipe CRC calculation\n");
-		return false;
-	}
-
-	if (crtc_state->dsc.compression_enable &&
-	    connector->dp.panel_replay_caps.dsc_support ==
-	    INTEL_DP_PANEL_REPLAY_DSC_NOT_SUPPORTED) {
-		drm_dbg_kms(display->drm,
-			    "Panel Replay not enabled because it's not supported with DSC\n");
 		return false;
 	}
 
@@ -1884,9 +1903,6 @@ static bool _panel_replay_compute_config(struct intel_crtc_state *crtc_state,
 			    "Panel Replay is not supported with HDCP\n");
 		return false;
 	}
-
-	if (!alpm_config_valid(intel_dp, crtc_state, true, true, false))
-		return false;
 
 	return true;
 }
@@ -1928,7 +1944,8 @@ void intel_psr_set_non_psr_pipes(struct intel_dp *intel_dp,
 }
 
 void intel_psr_pre_compute_config(struct intel_dp *intel_dp,
-				  struct intel_crtc_state *crtc_state)
+				  struct intel_crtc_state *crtc_state,
+				  struct drm_connector_state *conn_state)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
@@ -1962,6 +1979,9 @@ void intel_psr_pre_compute_config(struct intel_dp *intel_dp,
 	}
 
 	crtc_state->has_psr = true;
+	crtc_state->has_panel_replay =
+		_panel_replay_pre_compute_config(intel_dp, crtc_state,
+						 conn_state);
 }
 
 void intel_psr_compute_config(struct intel_dp *intel_dp,
@@ -1976,7 +1996,8 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 
 	/* Only used for state verification. */
 	crtc_state->panel_replay_dsc_support = connector->dp.panel_replay_caps.dsc_support;
-	crtc_state->has_panel_replay = _panel_replay_compute_config(crtc_state, conn_state);
+	if (crtc_state->has_panel_replay)
+		crtc_state->has_panel_replay = _panel_replay_compute_config(crtc_state, conn_state);
 
 	crtc_state->has_psr = crtc_state->has_panel_replay ? true :
 		_psr_compute_config(intel_dp, crtc_state, conn_state);

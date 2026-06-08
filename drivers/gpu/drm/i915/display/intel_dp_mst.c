@@ -640,7 +640,7 @@ static int mst_stream_compute_link_for_joined_pipes(struct intel_encoder *encode
 		return -EINVAL;
 	}
 
-	intel_psr_pre_compute_config(intel_dp, pipe_config);
+	intel_psr_pre_compute_config(intel_dp, pipe_config, conn_state);
 
 	/* enable compression if the mode doesn't fit available BW */
 	if (dsc_needed) {
