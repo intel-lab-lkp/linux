@@ -213,6 +213,18 @@ static enum rq_end_io_ret flush_end_io(struct request *flush_rq,
 
 	if (!req_ref_put_and_test(flush_rq)) {
 		fq->rq_status = error;
+
+		/*
+		 * The timeout processing flow holds the reference count
+		 * of flush_rq. If the last reference count is held by the
+		 * timeout processing flow, the status of flush_rq must be
+		 * changed to MQ_RQ_IDLE in advance. Otherwise, a deadlock
+		 * occurs when blk_mq_tagset_wait_completed_request() is
+		 * called in the timeout processing flow.
+		 */
+		if (req_ref_read(flush_rq) == 1 &&
+		    flush_rq->rq_flags & RQF_TIMED_OUT)
+			WRITE_ONCE(flush_rq->state, MQ_RQ_IDLE);
 		spin_unlock_irqrestore(&fq->mq_flush_lock, flags);
 		return RQ_END_IO_NONE;
 	}
