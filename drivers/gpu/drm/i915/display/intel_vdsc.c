@@ -431,7 +431,7 @@ void intel_dsc_enable_on_crtc(struct intel_crtc_state *crtc_state)
 	crtc_state->dsc.compression_enable = true;
 }
 
-bool intel_dsc_enabled_on_link(const struct intel_crtc_state *crtc_state)
+bool intel_fec_enabled_on_link(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 

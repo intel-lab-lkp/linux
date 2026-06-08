@@ -1740,7 +1740,7 @@ static bool intel_sel_update_config_valid(struct intel_crtc_state *crtc_state,
 		if (!connector->dp.panel_replay_caps.su_support)
 			goto unsupported;
 
-		if (intel_dsc_enabled_on_link(crtc_state) &&
+		if (crtc_state->dsc.compression_enable &&
 		    connector->dp.panel_replay_caps.dsc_support !=
 		    INTEL_DP_PANEL_REPLAY_DSC_SELECTIVE_UPDATE) {
 			drm_dbg_kms(display->drm,
@@ -1840,7 +1840,7 @@ static bool _panel_replay_compute_config(struct intel_crtc_state *crtc_state,
 		return false;
 	}
 
-	if (intel_dsc_enabled_on_link(crtc_state) &&
+	if (crtc_state->dsc.compression_enable &&
 	    connector->dp.panel_replay_caps.dsc_support ==
 	    INTEL_DP_PANEL_REPLAY_DSC_NOT_SUPPORTED) {
 		drm_dbg_kms(display->drm,
@@ -3235,7 +3235,7 @@ verify_panel_replay_dsc_state(const struct intel_crtc_state *crtc_state)
 		return;
 
 	drm_WARN_ON(display->drm,
-		    intel_dsc_enabled_on_link(crtc_state) &&
+		    crtc_state->dsc.compression_enable &&
 		    crtc_state->panel_replay_dsc_support ==
 		    INTEL_DP_PANEL_REPLAY_DSC_NOT_SUPPORTED);
 }
