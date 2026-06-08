@@ -1174,7 +1174,9 @@ static struct sk_buff *bnxt_rx_multi_page_skb(struct bnxt *bp,
 	unsigned int len = offset_and_len & 0xffff;
 	struct page *page = data;
 	u16 prod = rxr->rx_prod;
+	unsigned int frag_off;
 	struct sk_buff *skb;
+	void *frag_start;
 	int err;
 
 	err = bnxt_alloc_rx_data(bp, rxr, prod, GFP_ATOMIC);
@@ -1185,13 +1187,15 @@ static struct sk_buff *bnxt_rx_multi_page_skb(struct bnxt *bp,
 	dma_addr -= bp->rx_dma_offset;
 	dma_sync_single_for_cpu(&bp->pdev->dev, dma_addr, rxr->rx_page_size,
 				bp->rx_dir);
-	skb = napi_build_skb(data_ptr - bp->rx_offset, rxr->rx_page_size);
+	frag_off = dma_addr - page_pool_get_dma_addr(page);
+	frag_start = page_address(page) + frag_off;
+	skb = napi_build_skb(frag_start, rxr->rx_page_size);
 	if (!skb) {
 		page_pool_recycle_direct(rxr->page_pool, page);
 		return NULL;
 	}
 	skb_mark_for_recycle(skb);
-	skb_reserve(skb, bp->rx_offset);
+	skb_reserve(skb, data_ptr - (u8 *)frag_start);
 	__skb_put(skb, len);
 
 	return skb;
