@@ -595,7 +595,7 @@ static inline void set_page_refcounted(struct page *page)
 {
 	VM_BUG_ON_PAGE(PageTail(page), page);
 	VM_BUG_ON_PAGE(page_ref_count(page), page);
-	set_page_count(page, 1);
+	init_page_count(page);
 }
 
 static inline void set_pages_refcounted(struct page *page, unsigned long nr_pages)

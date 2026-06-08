@@ -1715,7 +1715,7 @@ static void dmirror_devmem_folio_split(struct folio *head, struct folio *tail)
 	if (tail == NULL) {
 		folio_reset_order(rfolio);
 		rfolio->mapping = NULL;
-		folio_set_count(rfolio, 1);
+		folio_init_count(rfolio);
 		return;
 	}
 
@@ -1729,7 +1729,7 @@ static void dmirror_devmem_folio_split(struct folio *head, struct folio *tail)
 
 	folio_page(tail, 0)->mapping = folio_page(head, 0)->mapping;
 	tail->pgmap = head->pgmap;
-	folio_set_count(page_folio(rpage_tail), 1);
+	folio_init_count(page_folio(rpage_tail));
 }
 
 static const struct dev_pagemap_ops dmirror_devmem_ops = {
