@@ -451,8 +451,8 @@ static void __init kernfs_mutex_init(void)
 
 static void __init kernfs_lock_init(void)
 {
-	kernfs_locks = kmalloc_obj(struct kernfs_global_locks);
-	WARN_ON(!kernfs_locks);
+	kernfs_locks = kmalloc_obj(struct kernfs_global_locks,
+				   GFP_KERNEL | __GFP_NOFAIL);
 
 	kernfs_mutex_init();
 }
