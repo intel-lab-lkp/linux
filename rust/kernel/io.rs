@@ -226,7 +226,7 @@ pub trait IoCapable<T> {
     ///
     /// - The range `[address..address + size_of::<T>()]` must be within the bounds of `Self`.
     /// - `address` must be aligned.
-    unsafe fn io_read(&self, address: usize) -> T;
+    unsafe fn io_read(self, address: usize) -> T;
 
     /// Performs an I/O write of `value` at `address`.
     ///
@@ -234,7 +234,7 @@ pub trait IoCapable<T> {
     ///
     /// - The range `[address..address + size_of::<T>()]` must be within the bounds of `Self`.
     /// - `address` must be aligned.
-    unsafe fn io_write(&self, value: T, address: usize);
+    unsafe fn io_write(self, value: T, address: usize);
 }
 
 /// Describes a given I/O location: its offset, width, and type to convert the raw value from and
@@ -301,21 +301,21 @@ impl_usize_ioloc!(u8, u16, u32, u64);
 ///
 /// For MMIO regions, all widths (u8, u16, u32, and u64 on 64-bit systems) are typically
 /// supported. For PCI configuration space, u8, u16, and u32 are supported but u64 is not.
-pub trait Io {
+pub trait Io: Copy {
     /// Type of this I/O region. For untyped regions, [`Region`] can be used.
     type Target: ?Sized + KnownSize;
 
     /// Returns the base address of this mapping.
-    fn addr(&self) -> usize;
+    fn addr(self) -> usize;
 
     /// Returns the maximum size of this mapping.
-    fn maxsize(&self) -> usize;
+    fn maxsize(self) -> usize;
 
     /// Returns the absolute I/O address for a given `offset`,
     /// performing compile-time bound checks.
     // Always inline to optimize out error path of `build_assert`.
     #[inline(always)]
-    fn io_addr_assert<U>(&self, offset: usize) -> usize {
+    fn io_addr_assert<U>(self, offset: usize) -> usize {
         // We cannot check alignment with `offset_valid` using `self.addr()`. So set 0 for it and
         // ensure alignment by checking that the alignment of `U` is smaller or equal to the
         // alignment of `Self::Target`.
@@ -328,7 +328,7 @@ pub trait Io {
     /// Returns the absolute I/O address for a given `offset`,
     /// performing runtime bound checks.
     #[inline]
-    fn io_addr<U>(&self, offset: usize) -> Result<usize> {
+    fn io_addr<U>(self, offset: usize) -> Result<usize> {
         if !offset_valid::<U>(self.addr(), offset, self.maxsize()) {
             return Err(EINVAL);
         }
@@ -340,7 +340,7 @@ pub trait Io {
 
     /// Fallible 8-bit read with runtime bounds check.
     #[inline(always)]
-    fn try_read8(&self, offset: usize) -> Result<u8>
+    fn try_read8(self, offset: usize) -> Result<u8>
     where
         usize: IoLoc<Self::Target, u8, IoType = u8>,
         Self: IoCapable<u8>,
@@ -350,7 +350,7 @@ pub trait Io {
 
     /// Fallible 16-bit read with runtime bounds check.
     #[inline(always)]
-    fn try_read16(&self, offset: usize) -> Result<u16>
+    fn try_read16(self, offset: usize) -> Result<u16>
     where
         usize: IoLoc<Self::Target, u16, IoType = u16>,
         Self: IoCapable<u16>,
@@ -360,7 +360,7 @@ pub trait Io {
 
     /// Fallible 32-bit read with runtime bounds check.
     #[inline(always)]
-    fn try_read32(&self, offset: usize) -> Result<u32>
+    fn try_read32(self, offset: usize) -> Result<u32>
     where
         usize: IoLoc<Self::Target, u32, IoType = u32>,
         Self: IoCapable<u32>,
@@ -370,7 +370,7 @@ pub trait Io {
 
     /// Fallible 64-bit read with runtime bounds check.
     #[inline(always)]
-    fn try_read64(&self, offset: usize) -> Result<u64>
+    fn try_read64(self, offset: usize) -> Result<u64>
     where
         usize: IoLoc<Self::Target, u64, IoType = u64>,
         Self: IoCapable<u64>,
@@ -380,7 +380,7 @@ pub trait Io {
 
     /// Fallible 8-bit write with runtime bounds check.
     #[inline(always)]
-    fn try_write8(&self, value: u8, offset: usize) -> Result
+    fn try_write8(self, value: u8, offset: usize) -> Result
     where
         usize: IoLoc<Self::Target, u8, IoType = u8>,
         Self: IoCapable<u8>,
@@ -390,7 +390,7 @@ pub trait Io {
 
     /// Fallible 16-bit write with runtime bounds check.
     #[inline(always)]
-    fn try_write16(&self, value: u16, offset: usize) -> Result
+    fn try_write16(self, value: u16, offset: usize) -> Result
     where
         usize: IoLoc<Self::Target, u16, IoType = u16>,
         Self: IoCapable<u16>,
@@ -400,7 +400,7 @@ pub trait Io {
 
     /// Fallible 32-bit write with runtime bounds check.
     #[inline(always)]
-    fn try_write32(&self, value: u32, offset: usize) -> Result
+    fn try_write32(self, value: u32, offset: usize) -> Result
     where
         usize: IoLoc<Self::Target, u32, IoType = u32>,
         Self: IoCapable<u32>,
@@ -410,7 +410,7 @@ pub trait Io {
 
     /// Fallible 64-bit write with runtime bounds check.
     #[inline(always)]
-    fn try_write64(&self, value: u64, offset: usize) -> Result
+    fn try_write64(self, value: u64, offset: usize) -> Result
     where
         usize: IoLoc<Self::Target, u64, IoType = u64>,
         Self: IoCapable<u64>,
@@ -420,7 +420,7 @@ pub trait Io {
 
     /// Infallible 8-bit read with compile-time bounds check.
     #[inline(always)]
-    fn read8(&self, offset: usize) -> u8
+    fn read8(self, offset: usize) -> u8
     where
         usize: IoLoc<Self::Target, u8, IoType = u8>,
         Self: IoCapable<u8>,
@@ -430,7 +430,7 @@ pub trait Io {
 
     /// Infallible 16-bit read with compile-time bounds check.
     #[inline(always)]
-    fn read16(&self, offset: usize) -> u16
+    fn read16(self, offset: usize) -> u16
     where
         usize: IoLoc<Self::Target, u16, IoType = u16>,
         Self: IoCapable<u16>,
@@ -440,7 +440,7 @@ pub trait Io {
 
     /// Infallible 32-bit read with compile-time bounds check.
     #[inline(always)]
-    fn read32(&self, offset: usize) -> u32
+    fn read32(self, offset: usize) -> u32
     where
         usize: IoLoc<Self::Target, u32, IoType = u32>,
         Self: IoCapable<u32>,
@@ -450,7 +450,7 @@ pub trait Io {
 
     /// Infallible 64-bit read with compile-time bounds check.
     #[inline(always)]
-    fn read64(&self, offset: usize) -> u64
+    fn read64(self, offset: usize) -> u64
     where
         usize: IoLoc<Self::Target, u64, IoType = u64>,
         Self: IoCapable<u64>,
@@ -460,7 +460,7 @@ pub trait Io {
 
     /// Infallible 8-bit write with compile-time bounds check.
     #[inline(always)]
-    fn write8(&self, value: u8, offset: usize)
+    fn write8(self, value: u8, offset: usize)
     where
         usize: IoLoc<Self::Target, u8, IoType = u8>,
         Self: IoCapable<u8>,
@@ -470,7 +470,7 @@ pub trait Io {
 
     /// Infallible 16-bit write with compile-time bounds check.
     #[inline(always)]
-    fn write16(&self, value: u16, offset: usize)
+    fn write16(self, value: u16, offset: usize)
     where
         usize: IoLoc<Self::Target, u16, IoType = u16>,
         Self: IoCapable<u16>,
@@ -480,7 +480,7 @@ pub trait Io {
 
     /// Infallible 32-bit write with compile-time bounds check.
     #[inline(always)]
-    fn write32(&self, value: u32, offset: usize)
+    fn write32(self, value: u32, offset: usize)
     where
         usize: IoLoc<Self::Target, u32, IoType = u32>,
         Self: IoCapable<u32>,
@@ -490,7 +490,7 @@ pub trait Io {
 
     /// Infallible 64-bit write with compile-time bounds check.
     #[inline(always)]
-    fn write64(&self, value: u64, offset: usize)
+    fn write64(self, value: u64, offset: usize)
     where
         usize: IoLoc<Self::Target, u64, IoType = u64>,
         Self: IoCapable<u64>,
@@ -521,7 +521,7 @@ pub trait Io {
     /// }
     /// ```
     #[inline(always)]
-    fn try_read<T, L>(&self, location: L) -> Result<T>
+    fn try_read<T, L>(self, location: L) -> Result<T>
     where
         L: IoLoc<Self::Target, T>,
         Self: IoCapable<L::IoType>,
@@ -555,7 +555,7 @@ pub trait Io {
     /// }
     /// ```
     #[inline(always)]
-    fn try_write<T, L>(&self, location: L, value: T) -> Result
+    fn try_write<T, L>(self, location: L, value: T) -> Result
     where
         L: IoLoc<Self::Target, T>,
         Self: IoCapable<L::IoType>,
@@ -601,7 +601,7 @@ pub trait Io {
     /// }
     /// ```
     #[inline(always)]
-    fn try_write_reg<T, L, V>(&self, value: V) -> Result
+    fn try_write_reg<T, L, V>(self, value: V) -> Result
     where
         L: IoLoc<Self::Target, T>,
         V: LocatedRegister<Self::Target, Location = L, Value = T>,
@@ -634,7 +634,7 @@ pub trait Io {
     /// }
     /// ```
     #[inline(always)]
-    fn try_update<T, L, F>(&self, location: L, f: F) -> Result
+    fn try_update<T, L, F>(self, location: L, f: F) -> Result
     where
         L: IoLoc<Self::Target, T>,
         Self: IoCapable<L::IoType>,
@@ -673,7 +673,7 @@ pub trait Io {
     /// }
     /// ```
     #[inline(always)]
-    fn read<T, L>(&self, location: L) -> T
+    fn read<T, L>(self, location: L) -> T
     where
         L: IoLoc<Self::Target, T>,
         Self: IoCapable<L::IoType>,
@@ -705,7 +705,7 @@ pub trait Io {
     /// }
     /// ```
     #[inline(always)]
-    fn write<T, L>(&self, location: L, value: T)
+    fn write<T, L>(self, location: L, value: T)
     where
         L: IoLoc<Self::Target, T>,
         Self: IoCapable<L::IoType>,
@@ -748,7 +748,7 @@ pub trait Io {
     /// }
     /// ```
     #[inline(always)]
-    fn write_reg<T, L, V>(&self, value: V)
+    fn write_reg<T, L, V>(self, value: V)
     where
         L: IoLoc<Self::Target, T>,
         V: LocatedRegister<Self::Target, Location = L, Value = T>,
@@ -781,7 +781,7 @@ pub trait Io {
     /// }
     /// ```
     #[inline(always)]
-    fn update<T, L, F>(&self, location: L, f: F)
+    fn update<T, L, F>(self, location: L, f: F)
     where
         L: IoLoc<Self::Target, T>,
         Self: IoCapable<L::IoType>,
@@ -802,13 +802,13 @@ pub trait Io {
 macro_rules! impl_mmio_io_capable {
     ($mmio:ident, $(#[$attr:meta])* $ty:ty, $read_fn:ident, $write_fn:ident) => {
         $(#[$attr])*
-        impl<const SIZE: usize> IoCapable<$ty> for $mmio<SIZE> {
-            unsafe fn io_read(&self, address: usize) -> $ty {
+        impl<const SIZE: usize> IoCapable<$ty> for &$mmio<SIZE> {
+            unsafe fn io_read(self, address: usize) -> $ty {
                 // SAFETY: By the trait invariant `address` is a valid address for MMIO operations.
                 unsafe { bindings::$read_fn(address as *const c_void) }
             }
 
-            unsafe fn io_write(&self, value: $ty, address: usize) {
+            unsafe fn io_write(self, value: $ty, address: usize) {
                 // SAFETY: By the trait invariant `address` is a valid address for MMIO operations.
                 unsafe { bindings::$write_fn(value, address as *mut c_void) }
             }
@@ -829,18 +829,18 @@ impl_mmio_io_capable!(
     writeq
 );
 
-impl<const SIZE: usize> Io for Mmio<SIZE> {
+impl<'a, const SIZE: usize> Io for &'a Mmio<SIZE> {
     type Target = Region<SIZE>;
 
     /// Returns the base address of this mapping.
     #[inline]
-    fn addr(&self) -> usize {
+    fn addr(self) -> usize {
         self.0.addr()
     }
 
     /// Returns the maximum size of this mapping.
     #[inline]
-    fn maxsize(&self) -> usize {
+    fn maxsize(self) -> usize {
         self.0.maxsize()
     }
 }
@@ -867,16 +867,16 @@ impl<const SIZE: usize> Mmio<SIZE> {
 #[repr(transparent)]
 pub struct RelaxedMmio<const SIZE: usize = 0>(Mmio<SIZE>);
 
-impl<const SIZE: usize> Io for RelaxedMmio<SIZE> {
+impl<'a, const SIZE: usize> Io for &'a RelaxedMmio<SIZE> {
     type Target = Region<SIZE>;
 
     #[inline]
-    fn addr(&self) -> usize {
+    fn addr(self) -> usize {
         self.0.addr()
     }
 
     #[inline]
-    fn maxsize(&self) -> usize {
+    fn maxsize(self) -> usize {
         self.0.maxsize()
     }
 }
