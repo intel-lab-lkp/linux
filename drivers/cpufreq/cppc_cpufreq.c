@@ -901,6 +901,13 @@ static void cppc_cpufreq_update_limits(struct cpufreq_policy *policy)
 	policy->boost_supported = highest_perf >
 				  cpu_data->perf_caps.nominal_perf;
 
+	/*
+	 * Update the topology capacity to reflect the changed
+	 * highest performance so that the scheduler and the
+	 * frequency invariance engine use up-to-date values.
+	 */
+	topology_update_cpu_capacity(policy->cpu, &cpu_data->perf_caps);
+
 	policy->cpuinfo.max_freq = cppc_perf_to_khz(&cpu_data->perf_caps,
 			policy->boost_enabled ?
 			highest_perf : cpu_data->perf_caps.nominal_perf);
