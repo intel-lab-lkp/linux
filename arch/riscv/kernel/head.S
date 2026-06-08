@@ -16,6 +16,8 @@
 #include <asm/scs.h>
 #include <asm/xip_fixup.h>
 #include <asm/usercfi.h>
+#include <asm/alternative.h>
+#include <asm/errata_list.h>
 #include "efi-header.S"
 
 __HEAD
@@ -196,7 +198,7 @@ secondary_start_sbi:
 	 *  - receive an early trap, before setup_trap_vector finished
 	 *  - fail in smp_callin(), as a successful one wouldn't return
 	 */
-	wfi
+	ALT_WFI
 	j .Lsecondary_park
 
 .align 2
