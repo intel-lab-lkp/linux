@@ -8298,7 +8298,7 @@ void __init init_idle(struct task_struct *idle, int cpu)
 	idle->sched_class = &idle_sched_class;
 	ftrace_graph_init_idle_task(idle, cpu);
 	vtime_init_idle(idle, cpu);
-	sprintf(idle->comm, "%s/%d", INIT_TASK_COMM, cpu);
+	scnprintf(idle->comm, sizeof(idle->comm), "%s/%d", INIT_TASK_COMM, cpu);
 }
 
 int cpuset_cpumask_can_shrink(const struct cpumask *cur,
