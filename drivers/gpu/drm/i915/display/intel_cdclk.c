@@ -2149,7 +2149,8 @@ static bool cdclk_compute_crawl_and_squash_midpoint(struct intel_display *displa
 
 static bool pll_enable_wa_needed(struct intel_display *display)
 {
-	return (DISPLAY_VERx100(display) == 2000 ||
+	return (DISPLAY_VERx100(display) == 3000 ||
+		DISPLAY_VERx100(display) == 2000 ||
 		DISPLAY_VERx100(display) == 1400 ||
 		display->platform.dg2) &&
 		display->cdclk.hw.vco > 0;

@@ -382,8 +382,10 @@ calculate_max_scale(struct intel_crtc *crtc,
 
 		if (scaler_id == 0)
 			*max_vscale = 0x30000 - 1;
-		else
+		else {
+			*max_hscale = 0x10000;
 			*max_vscale = 0x10000;
+		}
 	} else if (DISPLAY_VER(display) >= 10 || !is_yuv_semiplanar) {
 		*max_hscale = 0x30000 - 1;
 		*max_vscale = 0x30000 - 1;

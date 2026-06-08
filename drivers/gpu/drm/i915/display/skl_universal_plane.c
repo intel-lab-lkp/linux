@@ -264,12 +264,58 @@ bool icl_is_hdr_plane(struct intel_display *display, enum plane_id plane_id)
 }
 
 static int icl_plane_min_cdclk(const struct intel_crtc_state *crtc_state,
-			       const struct intel_plane_state *plane_state)
+                   const struct intel_plane_state *plane_state)
 {
-	unsigned int pixel_rate = intel_plane_pixel_rate(crtc_state, plane_state);
+    struct intel_display *display = to_intel_display(crtc_state);
+    unsigned int pixel_rate = intel_plane_pixel_rate(crtc_state, plane_state);
 
-	/* two pixels per clock */
-	return DIV_ROUND_UP(pixel_rate, 2);
+    if (DISPLAY_VER(display) >= 30) {
+        unsigned int src_w = drm_rect_width(&plane_state->uapi.src) >> 16;
+        unsigned int dst_w = drm_rect_width(&plane_state->uapi.dst);
+        unsigned int src_h = drm_rect_height(&plane_state->uapi.src) >> 16;
+        unsigned int dst_h = drm_rect_height(&plane_state->uapi.dst);
+        const unsigned int ppc = 2;
+
+        /*
+         * "Resolution Support" PPC-granularity:
+         *   Hscale_PPC = (src_w / dst_w) * PPC
+         *   int_part = floor(Hscale_PPC)
+         *   frac = Hscale_PPC - int_part
+         *   adjusted_frac = frac > 0 ? 1/ROUNDUP(1/frac) : 0
+         *   H_down = int_part/PPC + adjusted_frac
+         *   min_cdclk = crtc_clock * H_down * V_down / PPC
+         */
+        if (dst_w && dst_h && src_w > dst_w) {
+            unsigned int hscale_ppc = src_w * ppc;
+            unsigned int int_part = hscale_ppc / dst_w;
+            unsigned int frac_num = hscale_ppc % dst_w;
+            unsigned int v_num = max(src_h, dst_h);
+            u64 num;
+
+            if (frac_num) {
+                unsigned int recip_ceil = DIV_ROUND_UP(dst_w, frac_num);
+                /* H_down = (int_part * recip_ceil + ppc) / (ppc * recip_ceil) */
+                unsigned int h_num = int_part * recip_ceil + ppc;
+                unsigned int h_den = ppc * recip_ceil;
+
+                num = mul_u32_u32(crtc_state->pixel_rate, h_num);
+                num *= v_num;
+                return DIV_ROUND_UP_ULL(num,
+                            (u64)h_den * ppc * dst_h);
+            }
+
+            /* frac == 0: H_down = int_part / ppc exactly */
+            num = mul_u32_u32(crtc_state->pixel_rate, int_part);
+            num *= v_num;
+            return DIV_ROUND_UP_ULL(num, (u64)ppc * ppc * dst_h);
+        }
+
+        /* No horizontal downscale */
+        return DIV_ROUND_UP(pixel_rate, ppc);
+    }
+
+    /* two pixels per clock */
+    return DIV_ROUND_UP(pixel_rate, 2);
 }
 
 static void
