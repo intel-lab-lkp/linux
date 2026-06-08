@@ -139,7 +139,7 @@ impl<'a, S: ?Sized + ConfigSpaceKind> Io for &ConfigSpace<'a, S> {
 /// memory mapped PCI BAR and its size.
 pub struct Bar<'a, const SIZE: usize = 0> {
     pdev: &'a Device<device::Bound>,
-    io: MmioRaw<SIZE>,
+    io: MmioRaw<crate::io::Region<SIZE>>,
     num: i32,
 }
 
@@ -179,7 +179,7 @@ impl<'a, const SIZE: usize> Bar<'a, SIZE> {
             return Err(ENOMEM);
         }
 
-        let io = match MmioRaw::new(ioptr, len as usize) {
+        let io = match MmioRaw::new_region(ioptr, len as usize) {
             Ok(io) => io,
             Err(err) => {
                 // SAFETY:
