@@ -978,8 +978,9 @@ void llc_sk_free(struct sock *sk)
 {
 	struct llc_sock *llc = llc_sk(sk);
 
-	llc->state = LLC_CONN_OUT_OF_SVC;
-	/* Stop all (possibly) running timers */
+	spin_lock_bh(&sk->sk_lock.slock);
+	WRITE_ONCE(llc->state, LLC_CONN_OUT_OF_SVC);
+	spin_unlock_bh(&sk->sk_lock.slock);
 	llc_sk_stop_all_timers(sk, true);
 #ifdef DEBUG_LLC_CONN_ALLOC
 	printk(KERN_INFO "%s: unackq=%d, txq=%d\n", __func__,
