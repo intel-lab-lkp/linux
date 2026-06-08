@@ -268,6 +268,7 @@ static int sama5d4_wdt_probe(struct platform_device *pdev)
 						: AT91_WDT_WDDIS;
 
 	watchdog_set_drvdata(wdd, wdt);
+	platform_set_drvdata(pdev, wdt);
 
 	regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(regs))
@@ -318,8 +319,6 @@ static int sama5d4_wdt_probe(struct platform_device *pdev)
 	ret = devm_watchdog_register_device(dev, wdd);
 	if (ret)
 		return ret;
-
-	platform_set_drvdata(pdev, wdt);
 
 	dev_info(dev, "initialized (timeout = %d sec, nowayout = %d)\n",
 		 wdd->timeout, nowayout);
