@@ -92,12 +92,12 @@ bfad_iocmd_ioc_get_info(struct bfad_s *bfad, void *cmd)
 	iocmd->host = im_port->shost->host_no;
 	spin_unlock_irqrestore(&bfad->bfad_lock, flags);
 
-	strcpy(iocmd->name, bfad->adapter_name);
-	strcpy(iocmd->port_name, bfad->port_name);
-	strcpy(iocmd->hwpath, bfad->pci_name);
+	strscpy(iocmd->name, bfad->adapter_name);
+	strscpy(iocmd->port_name, bfad->port_name);
+	strscpy(iocmd->hwpath, bfad->pci_name);
 
 	/* set adapter hw path */
-	strcpy(iocmd->adapter_hwpath, bfad->pci_name);
+	strscpy(iocmd->adapter_hwpath, bfad->pci_name);
 	for (i = 0; iocmd->adapter_hwpath[i] != ':' && i < BFA_STRING_32; i++)
 		;
 	for (; iocmd->adapter_hwpath[++i] != ':' && i < BFA_STRING_32; )
@@ -118,12 +118,11 @@ bfad_iocmd_ioc_get_attr(struct bfad_s *bfad, void *cmd)
 	spin_unlock_irqrestore(&bfad->bfad_lock, flags);
 
 	/* fill in driver attr info */
-	strcpy(iocmd->ioc_attr.driver_attr.driver, BFAD_DRIVER_NAME);
-	strscpy(iocmd->ioc_attr.driver_attr.driver_ver,
-		BFAD_DRIVER_VERSION, BFA_VERSION_LEN);
-	strcpy(iocmd->ioc_attr.driver_attr.fw_ver,
+	strscpy(iocmd->ioc_attr.driver_attr.driver, BFAD_DRIVER_NAME);
+	strscpy(iocmd->ioc_attr.driver_attr.driver_ver, BFAD_DRIVER_VERSION);
+	strscpy(iocmd->ioc_attr.driver_attr.fw_ver,
 		iocmd->ioc_attr.adapter_attr.fw_ver);
-	strcpy(iocmd->ioc_attr.driver_attr.bios_ver,
+	strscpy(iocmd->ioc_attr.driver_attr.bios_ver,
 		iocmd->ioc_attr.adapter_attr.optrom_ver);
 
 	/* copy chip rev info first otherwise it will be overwritten */
@@ -200,9 +199,9 @@ bfad_iocmd_ioc_set_name(struct bfad_s *bfad, void *cmd, unsigned int v_cmd)
 	struct bfa_bsg_ioc_name_s *iocmd = (struct bfa_bsg_ioc_name_s *) cmd;
 
 	if (v_cmd == IOCMD_IOC_SET_ADAPTER_NAME)
-		strcpy(bfad->adapter_name, iocmd->name);
+		strscpy(bfad->adapter_name, iocmd->name);
 	else if (v_cmd == IOCMD_IOC_SET_PORT_NAME)
-		strcpy(bfad->port_name, iocmd->name);
+		strscpy(bfad->port_name, iocmd->name);
 
 	iocmd->status = BFA_STATUS_OK;
 	return 0;
