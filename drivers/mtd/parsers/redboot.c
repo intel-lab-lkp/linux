@@ -249,7 +249,7 @@ nogood:
 	nullname = (char *)&parts[nrparts];
 #ifdef CONFIG_MTD_REDBOOT_PARTS_UNALLOCATED
 	if (nulllen > 0)
-		strcpy(nullname, nullstring);
+		memcpy(nullname, nullstring, nulllen);
 #endif
 	names = nullname + nulllen;
 
@@ -264,11 +264,13 @@ nogood:
 	}
 #endif
 	for ( ; i < nrparts; i++) {
+		int len;
 		parts[i].size = fl->img->size;
 		parts[i].offset = fl->img->flash_base;
 		parts[i].name = names;
 
-		strcpy(names, fl->img->name);
+		len = strscpy(names, fl->img->name, namelen);
+		BUG_ON(len < 0);
 #ifdef CONFIG_MTD_REDBOOT_PARTS_READONLY
 		if (!strcmp(names, "RedBoot") ||
 		    !strcmp(names, "RedBoot config") ||
@@ -276,7 +278,8 @@ nogood:
 			parts[i].mask_flags = MTD_WRITEABLE;
 		}
 #endif
-		names += strlen(names) + 1;
+		names += len + 1;
+		namelen -= len + 1;
 
 #ifdef CONFIG_MTD_REDBOOT_PARTS_UNALLOCATED
 		if (fl->next && fl->img->flash_base + fl->img->size + master->erasesize <= fl->next->img->flash_base) {
