@@ -361,6 +361,14 @@ Initialization
     indicated by the decoder sending a ``V4L2_EVENT_SOURCE_CHANGE`` event with
     ``changes`` set to ``V4L2_EVENT_SRC_CH_RESOLUTION``.
 
+    .. note::
+
+       Decoders that set the ``V4L2_FMT_FLAG_DYN_RESOLUTION`` flag for the
+       coded format will always emit an initial ``V4L2_EVENT_SOURCE_CHANGE``
+       event with ``V4L2_EVENT_SRC_CH_RESOLUTION`` during this phase. Clients
+       can use this flag to determine whether the decoder will signal the
+       initial resolution before producing decoded frames.
+
     * It is not an error if the first buffer does not contain enough data for
       this to occur. Processing of the buffers will continue as long as more
       data is needed.
