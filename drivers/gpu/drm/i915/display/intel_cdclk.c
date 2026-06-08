@@ -1598,6 +1598,26 @@ static int bxt_calc_cdclk(struct intel_display *display, int min_cdclk)
 	return display->cdclk.max_cdclk_freq;
 }
 
+/*
+ * Lowest cdclk_table entry that satisfies min_cdclk AND keeps the
+ * supplied VCO. Returns 0 if no such entry exists.
+ */
+static int bxt_calc_cdclk_for_vco(struct intel_display *display,
+				  int min_cdclk, int vco)
+{
+	const struct intel_cdclk_vals *table = display->cdclk.table;
+	int i;
+
+	for (i = 0; table[i].refclk; i++) {
+		if (table[i].refclk == display->cdclk.hw.ref &&
+		    table[i].cdclk >= min_cdclk &&
+		    display->cdclk.hw.ref * table[i].ratio == vco)
+			return table[i].cdclk;
+	}
+
+	return 0;
+}
+
 static int bxt_calc_cdclk_pll_vco(struct intel_display *display, int cdclk)
 {
 	const struct intel_cdclk_vals *table = display->cdclk.table;
@@ -3299,6 +3319,33 @@ static int bxt_modeset_calc_cdclk(struct intel_atomic_state *state)
 
 	cdclk = bxt_calc_cdclk(display, min_cdclk);
 	vco = bxt_calc_cdclk_pll_vco(display, cdclk);
+
+	/*
+	 * Guard against VCO-changing CDCLK transitions that cause pipe FIFO
+	 * underruns. When crawling up from VCO 614400 the intermediate
+	 * frequencies are below min_cdclk; when crawling down from VCO
+	 * 1382400 the DBUF ratio changes mid-modeset before watermarks are
+	 * reprogrammed. Prefer a same-VCO cdclk_table entry (pure squash,
+	 * no DBUF ratio change); only fall back to max_cdclk_freq when no
+	 * such entry can satisfy min_cdclk.
+	 */
+	if (HAS_CDCLK_SQUASH(display) && HAS_CDCLK_CRAWL(display) &&
+	    display->cdclk.hw.vco > 0 && vco > 0 &&
+	    display->cdclk.hw.vco != vco) {
+		if (cdclk > display->cdclk.hw.cdclk) {
+			int same_vco_cdclk;
+
+			same_vco_cdclk = bxt_calc_cdclk_for_vco(display, min_cdclk,
+								display->cdclk.hw.vco);
+			if (same_vco_cdclk)
+				cdclk = same_vco_cdclk;
+			else
+				cdclk = display->cdclk.max_cdclk_freq;
+		} else {
+			cdclk = display->cdclk.hw.cdclk;
+		}
+		vco = bxt_calc_cdclk_pll_vco(display, cdclk);
+	}
 
 	cdclk_state->logical.vco = vco;
 	cdclk_state->logical.cdclk = cdclk;
