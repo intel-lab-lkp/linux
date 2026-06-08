@@ -14,6 +14,10 @@ use crate::{
     ptr::{
         Alignment,
         KnownSize, //
+    },
+    transmute::{
+        AsBytes,
+        FromBytes, //
     }, //
 };
 
@@ -91,6 +95,11 @@ impl<const SIZE: usize> KnownSize for Region<SIZE> {
         (p as *const [u8]).len()
     }
 }
+
+// SAFETY: I/O regions can compose of arbitrary bytes.
+unsafe impl<const SIZE: usize> kernel::transmute::FromBytes for Region<SIZE> {}
+// SAFETY: Values read from I/O are always treated as initialized.
+unsafe impl<const SIZE: usize> kernel::transmute::AsBytes for Region<SIZE> {}
 
 /// Raw representation of an MMIO region.
 ///
@@ -295,6 +304,53 @@ pub trait Io<'a>: IoBase<'a> {
     #[inline]
     fn size(self) -> usize {
         KnownSize::size(Self::Backend::as_ptr(self.as_view()))
+    }
+
+    /// Try to convert into a different typed I/O view.
+    ///
+    /// The target type must be of same or smaller size to current type, and the current view must
+    /// be properly aligned for the target type.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use kernel::io::{
+    ///     io_project,
+    ///     Mmio,
+    ///     Io,
+    ///     Region,
+    /// };
+    /// struct MyStruct { field: u32, }
+    ///
+    /// // SAFETY: All bit patterns are acceptable values for `MyStruct`.
+    /// unsafe impl kernel::transmute::FromBytes for MyStruct {};
+    /// // SAFETY: Instances of `MyStruct` have no uninitialized portions.
+    /// unsafe impl kernel::transmute::AsBytes for MyStruct {};
+    ///
+    /// # fn test(mmio: &Mmio<'_, Region>) -> Result {
+    /// // let mmio: Mmio<Region>;
+    /// let whole: Mmio<'_, MyStruct> = mmio.try_cast()?;
+    /// # Ok::<(), Error>(()) }
+    /// ```
+    #[inline]
+    fn try_cast<U>(self) -> Result<<Self::Backend as IoBackend>::View<'a, U>>
+    where
+        Self::Target: FromBytes + AsBytes,
+        U: FromBytes + AsBytes,
+    {
+        let view = self.as_view();
+        let ptr = Self::Backend::as_ptr(view);
+
+        if size_of::<U>() > KnownSize::size(ptr) {
+            return Err(EINVAL);
+        }
+
+        if ptr.addr() % align_of::<U>() != 0 {
+            return Err(EINVAL);
+        }
+
+        // SAFETY: We have checked bounds and alignment, so this is a valid projection.
+        Ok(unsafe { Self::Backend::project_view(view, ptr.cast()) })
     }
 
     /// Returns a view for a given `offset`, performing compile-time bound checks.
@@ -983,3 +1039,78 @@ impl_mmio_io_capable!(RelaxedMmioBackend, u32, readl_relaxed, writel_relaxed);
 // MMIO regions on 64-bit systems also support 64-bit accesses.
 #[cfg(CONFIG_64BIT)]
 impl_mmio_io_capable!(RelaxedMmioBackend, u64, readq_relaxed, writeq_relaxed);
+
+// This helper turns associated functions to methods so it can be invoked in macro.
+// Used by `io_project!()` only.
+#[doc(hidden)]
+#[derive(Clone, Copy)]
+pub struct ProjectHelper<T>(pub T);
+
+impl<'a, T> ProjectHelper<T>
+where
+    T: Io<'a, Backend: IoBackend<View<'a, T::Target> = T>>,
+{
+    // These helper methods must not have symbols present in binary to avoid confusion.
+    #[inline(always)]
+    pub fn as_ptr(self) -> *mut T::Target {
+        T::Backend::as_ptr(self.0)
+    }
+
+    /// # Safety
+    ///
+    /// Same as `IoBackend::project_view`
+    #[inline(always)]
+    pub unsafe fn project_view<U: ?Sized + KnownSize>(
+        self,
+        ptr: *mut U,
+    ) -> <T::Backend as IoBackend>::View<'a, U> {
+        // SAFETY: Per safety requirement.
+        unsafe { T::Backend::project_view::<T::Target, _>(self.0, ptr) }
+    }
+}
+
+/// Project an I/O type to a subview of it.
+///
+/// The syntax is of form `io_project!(io, proj)` where `io` is an expression to a type that
+/// implements [`Io`] and `proj` is a [projection specification](kernel::ptr::project!).
+///
+/// In addition to projecting from [`Io`], you may also project from a [`View`] of an [`Io`].
+///
+/// # Examples
+///
+/// ```
+/// use kernel::io::{
+///     io_project,
+///     Mmio,
+/// };
+/// struct MyStruct { field: u32, }
+///
+/// // SAFETY: All bit patterns are acceptable values for `MyStruct`.
+/// unsafe impl kernel::transmute::FromBytes for MyStruct {};
+/// // SAFETY: Instances of `MyStruct` have no uninitialized portions.
+/// unsafe impl kernel::transmute::AsBytes for MyStruct {};
+///
+/// # fn test(mmio: Mmio<'_, [MyStruct]>) -> Result {
+/// // let mmio: Mmio<[MyStruct]>;
+/// let field: Mmio<'_, u32> = io_project!(mmio, [try: 1].field);
+/// let whole: Mmio<'_, MyStruct> = io_project!(mmio, [try: 2]);
+/// let nested: Mmio<'_, u32> = io_project!(whole, .field);
+/// # Ok::<(), Error>(()) }
+/// ```
+#[macro_export]
+#[doc(hidden)]
+macro_rules! io_project {
+    ($io:expr, $($proj:tt)*) => {{
+        #[allow(unused)]
+        use $crate::io::IoBase as _;
+        let view = $crate::io::ProjectHelper($io.as_view());
+        let ptr = $crate::ptr::project!(
+            mut view.as_ptr(), $($proj)*
+        );
+        #[allow(unused_unsafe)]
+        // SAFETY: `ptr` is a projection.
+        unsafe { view.project_view(ptr) }
+    }};
+}
+#[doc(inline)]
+pub use crate::io_project;
