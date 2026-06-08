@@ -95,6 +95,7 @@ obj-y				+= sunplus/
 obj-$(CONFIG_PINCTRL_SUNXI)	+= sunxi/
 obj-$(CONFIG_ARCH_TEGRA)	+= tegra/
 obj-y				+= ti/
+obj-$(CONFIG_PINCTRL_ULTRARISC)	+= ultrarisc/
 obj-$(CONFIG_PINCTRL_UNIPHIER)	+= uniphier/
 obj-$(CONFIG_PINCTRL_VISCONTI)	+= visconti/
 obj-$(CONFIG_ARCH_VT8500)	+= vt8500/
