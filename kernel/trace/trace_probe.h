@@ -431,6 +431,7 @@ struct traceprobe_parse_context {
 	unsigned int flags;
 	int offset;
 	int nested_level;
+	int prefix_bitoffs;	/* The bit offset of the prefix field of typecast */
 };
 
 #define TRACEPROBE_MAX_NESTED_LEVEL 3
@@ -571,7 +572,8 @@ extern int traceprobe_define_arg_fields(struct trace_event_call *event_call,
 	C(EVENT_TOO_BIG,	"Event too big (too many fields?)"),  \
 	C(TYPECAST_NOT_EVENT,	"Typecasts are only for eprobe fields"), \
 	C(TYPECAST_REQ_FIELD,	"Typecast requires a field access"),	\
-	C(TOO_MANY_NESTED,	"Too many nested typecasts/dereferences"),
+	C(TOO_MANY_NESTED,	"Too many nested typecasts/dereferences"), \
+	C(TYPECAST_NOT_ALIGNED,	"Typecast field option is not byte-aligned"),
 
 #undef C
 #define C(a, b)		TP_ERR_##a
