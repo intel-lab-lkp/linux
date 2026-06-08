@@ -227,22 +227,21 @@ static inline unsigned long ppc_kallsyms_lookup_name(const char *name)
 #ifdef CONFIG_PPC64_ELF_ABI_V1
 	/* check for dot variant */
 	char dot_name[1 + KSYM_NAME_LEN];
-	bool dot_appended = false;
+	bool prepend_dot = name[0] != '.';
+	size_t len = strnlen(name, KSYM_NAME_LEN);
 
-	if (strnlen(name, KSYM_NAME_LEN) >= KSYM_NAME_LEN)
+	if (len == KSYM_NAME_LEN)
 		return 0;
 
-	if (name[0] != '.') {
+	if (prepend_dot) {
 		dot_name[0] = '.';
-		dot_name[1] = '\0';
-		strlcat(dot_name, name, sizeof(dot_name));
-		dot_appended = true;
+		memcpy(dot_name + 1, name, len + 1);
 	} else {
-		dot_name[0] = '\0';
-		strlcat(dot_name, name, sizeof(dot_name));
+		memcpy(dot_name, name, len + 1);
 	}
+
 	addr = kallsyms_lookup_name(dot_name);
-	if (!addr && dot_appended)
+	if (!addr && prepend_dot)
 		/* Let's try the original non-dot symbol lookup	*/
 		addr = kallsyms_lookup_name(name);
 #elif defined(CONFIG_PPC64_ELF_ABI_V2)
