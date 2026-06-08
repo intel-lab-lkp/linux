@@ -203,6 +203,9 @@ module_param(mitigate_smt_rsb, bool, 0444);
  * usermode, e.g. SYSCALL MSRs and TSC_AUX, can be deferred until the CPU
  * returns to userspace, i.e. the kernel can run with the guest's value.
  */
+#ifdef CONFIG_X86_64
+static bool kvm_get_time_and_clockread(s64 *kernel_ns, u64 *tsc_timestamp);
+#endif
 #define KVM_MAX_NR_USER_RETURN_MSRS 16
 
 struct kvm_user_return_msrs {
@@ -2854,14 +2857,23 @@ static void kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 *user_value)
 {
 	u64 data = user_value ? *user_value : 0;
 	struct kvm *kvm = vcpu->kvm;
-	u64 offset, ns, elapsed;
+	u64 offset, host_tsc, elapsed;
+	s64 ns;
 	unsigned long flags;
 	bool matched = false;
 	bool synchronizing = false;
 
 	raw_spin_lock_irqsave(&kvm->arch.tsc_write_lock, flags);
-	offset = kvm_compute_l1_tsc_offset(vcpu, rdtsc(), data);
-	ns = get_kvmclock_base_ns();
+
+#ifdef CONFIG_X86_64
+	if (!kvm_get_time_and_clockread(&ns, &host_tsc))
+#endif
+	{
+		host_tsc = rdtsc();
+		ns = get_kvmclock_base_ns();
+	}
+
+	offset = kvm_compute_l1_tsc_offset(vcpu, host_tsc, data);
 	elapsed = ns - kvm->arch.last_tsc_nsec;
 
 	if (vcpu->arch.virtual_tsc_khz) {
@@ -2904,12 +2916,25 @@ static void kvm_synchronize_tsc(struct kvm_vcpu *vcpu, u64 *user_value)
          */
 	if (synchronizing &&
 	    vcpu->arch.virtual_tsc_khz == kvm->arch.last_tsc_khz) {
+		/*
+		 * If synchronizing, the "last written" TSC value/time
+		 * recorded by __kvm_synchronize_tsc() should not change
+		 * (i.e. should be precisely the same as the existing
+		 * generation).
+		 */
+		data = kvm->arch.last_tsc_write;
+
 		if (!kvm_check_tsc_unstable()) {
 			offset = kvm->arch.cur_tsc_offset;
+			ns = kvm->arch.cur_tsc_nsec;
 		} else {
+			/*
+			 * ...unless the TSC is unstable and has to be
+			 * synthesised from the host clock in nanoseconds.
+			 */
 			u64 delta = nsec_to_cycles(vcpu, elapsed);
 			data += delta;
-			offset = kvm_compute_l1_tsc_offset(vcpu, rdtsc(), data);
+			offset = kvm_compute_l1_tsc_offset(vcpu, host_tsc, data);
 		}
 		matched = true;
 	}
