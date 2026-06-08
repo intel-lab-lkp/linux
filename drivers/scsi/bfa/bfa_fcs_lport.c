@@ -1086,7 +1086,7 @@ void
 bfa_fcs_lport_set_symname(struct bfa_fcs_lport_s *port,
 				char *symname)
 {
-	strcpy(port->port_cfg.sym_name.symname, symname);
+	strscpy(port->port_cfg.sym_name.symname, symname);
 
 	if (bfa_sm_cmp_state(port, bfa_fcs_lport_sm_online))
 		bfa_fcs_lport_ns_util_send_rspn_id(
