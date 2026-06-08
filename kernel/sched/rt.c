@@ -1,3 +1,4 @@
+#pragma GCC diagnostic ignored "-Wunused-function"
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Real-Time Scheduling Class (mapped to the SCHED_FIFO and SCHED_RR
@@ -2256,54 +2257,6 @@ unlock:
 	mutex_unlock(&rt_constraints_mutex);
 
 	return err;
-}
-
-int sched_group_set_rt_runtime(struct task_group *tg, long rt_runtime_us)
-{
-	u64 rt_runtime, rt_period;
-
-	rt_period = ktime_to_ns(tg->rt_bandwidth.rt_period);
-	rt_runtime = (u64)rt_runtime_us * NSEC_PER_USEC;
-	if (rt_runtime_us < 0)
-		rt_runtime = RUNTIME_INF;
-	else if ((u64)rt_runtime_us > U64_MAX / NSEC_PER_USEC)
-		return -EINVAL;
-
-	return tg_set_rt_bandwidth(tg, rt_period, rt_runtime);
-}
-
-long sched_group_rt_runtime(struct task_group *tg)
-{
-	u64 rt_runtime_us;
-
-	if (tg->rt_bandwidth.rt_runtime == RUNTIME_INF)
-		return -1;
-
-	rt_runtime_us = tg->rt_bandwidth.rt_runtime;
-	do_div(rt_runtime_us, NSEC_PER_USEC);
-	return rt_runtime_us;
-}
-
-int sched_group_set_rt_period(struct task_group *tg, u64 rt_period_us)
-{
-	u64 rt_runtime, rt_period;
-
-	if (rt_period_us > U64_MAX / NSEC_PER_USEC)
-		return -EINVAL;
-
-	rt_period = rt_period_us * NSEC_PER_USEC;
-	rt_runtime = tg->rt_bandwidth.rt_runtime;
-
-	return tg_set_rt_bandwidth(tg, rt_period, rt_runtime);
-}
-
-long sched_group_rt_period(struct task_group *tg)
-{
-	u64 rt_period_us;
-
-	rt_period_us = ktime_to_ns(tg->rt_bandwidth.rt_period);
-	do_div(rt_period_us, NSEC_PER_USEC);
-	return rt_period_us;
 }
 
 int sched_rt_can_attach(struct task_group *tg)

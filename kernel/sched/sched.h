@@ -607,10 +607,6 @@ extern void start_cfs_bandwidth(struct cfs_bandwidth *cfs_b);
 extern void unthrottle_cfs_rq(struct cfs_rq *cfs_rq);
 extern bool cfs_task_bw_constrained(struct task_struct *p);
 
-extern int sched_group_set_rt_runtime(struct task_group *tg, long rt_runtime_us);
-extern int sched_group_set_rt_period(struct task_group *tg, u64 rt_period_us);
-extern long sched_group_rt_runtime(struct task_group *tg);
-extern long sched_group_rt_period(struct task_group *tg);
 extern int sched_rt_can_attach(struct task_group *tg);
 
 extern struct task_group *sched_create_group(struct task_group *parent);
