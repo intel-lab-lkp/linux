@@ -730,18 +730,29 @@ static inline bool can_fill_pool(void)
 		return true;
 
 	/*
-	 * On RT enabled kernels the pool refill must happen in preemptible
-	 * context and the task must not be blocked on a lock as that could
-	 * corrupt the PI state when blocking on a lock in the allocation path.
+	 * On RT enabled kernels, the task must not be blocked on a lock as
+	 * that could corrupt the PI state when blocking on a lock in the
+	 * allocation path.
 	 */
-	if (preemptible() && !debug_objects_is_pi_blocked_on())
+	if (debug_objects_is_pi_blocked_on())
+		return false;
+
+	/*
+	 * On RT enabled kernels the pool refill should happen in preemptible
+	 * context.
+	 */
+	if (preemptible())
 		return true;
 
 	/*
-	 * Allow refilling to happen early in the boot with disabled interrupts
-	 * as long as the scheduler is not operational.
+	 * Though during system boot before scheduling is set up, preemption is
+	 * disabled and the pool can get exhausted. Before scheduling is active
+	 * a task cannot be blocked on a sleeping lock, but it might hold a lock
+	 * and if interrupted then hard interrupt context might run into a lock
+	 * inversion. So exclude hard interrupt context from allocations before
+	 * scheduling is active.
 	 */
-	return system_state < SYSTEM_SCHEDULING;
+	return system_state < SYSTEM_SCHEDULING && !in_hardirq();
 }
 
 static void debug_objects_fill_pool(void)
