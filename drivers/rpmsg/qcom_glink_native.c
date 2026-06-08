@@ -481,8 +481,7 @@ static int qcom_glink_send_open_req(struct qcom_glink *glink,
 				    struct glink_channel *channel)
 {
 	DEFINE_RAW_FLEX(struct glink_msg, req, data, GLINK_NAME_SIZE);
-	int name_len = strlen(channel->name) + 1;
-	int req_len = ALIGN(sizeof(*req) + name_len, 8);
+	int name_len, req_len;
 	int ret;
 	unsigned long flags;
 
@@ -498,14 +497,20 @@ static int qcom_glink_send_open_req(struct qcom_glink *glink,
 
 	channel->lcid = ret;
 
+	name_len = strscpy_pad(req->data, channel->name, GLINK_NAME_SIZE);
+	if (name_len < 0)
+		name_len = GLINK_NAME_SIZE;
+	else
+		name_len++;
+
 	req->cmd = cpu_to_le16(GLINK_CMD_OPEN);
 	req->param1 = cpu_to_le16(channel->lcid);
 	req->param2 = cpu_to_le32(name_len);
-	strcpy(req->data, channel->name);
 
 	trace_qcom_glink_cmd_open_tx(glink->label, channel->name,
 				     channel->lcid, channel->rcid);
 
+	req_len = ALIGN(sizeof(*req) + name_len, 8);
 	ret = qcom_glink_tx(glink, req, req_len, NULL, 0, true);
 	if (ret)
 		goto remove_idr;
