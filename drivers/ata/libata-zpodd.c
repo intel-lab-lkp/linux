@@ -185,7 +185,7 @@ void zpodd_enable_run_wake(struct ata_device *dev)
 {
 	struct zpodd *zpodd = dev->zpodd;
 
-	sdev_disable_disk_events(dev->sdev);
+	sdev_disable_disk_events(ata_dev_scsi_device(dev, 0));
 
 	zpodd->powered_off = true;
 	acpi_pm_set_device_wakeup(&dev->tdev, true);
@@ -233,14 +233,14 @@ void zpodd_post_poweron(struct ata_device *dev)
 	zpodd->zp_sampled = false;
 	zpodd->zp_ready = false;
 
-	sdev_enable_disk_events(dev->sdev);
+	sdev_enable_disk_events(ata_dev_scsi_device(dev, 0));
 }
 
 static void zpodd_wake_dev(acpi_handle handle, u32 event, void *context)
 {
 	struct ata_device *ata_dev = context;
 	struct zpodd *zpodd = ata_dev->zpodd;
-	struct device *dev = &ata_dev->sdev->sdev_gendev;
+	struct device *dev = &ata_dev_scsi_device(ata_dev, 0)->sdev_gendev;
 
 	if (event == ACPI_NOTIFY_DEVICE_WAKE && pm_runtime_suspended(dev)) {
 		zpodd->from_notify = true;
