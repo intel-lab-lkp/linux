@@ -568,16 +568,18 @@ static void dev_watchdog(struct timer_list *t)
 				dev->netdev_ops->ndo_tx_timeout(dev, i);
 				netif_unfreeze_queues(dev);
 			}
-			if (!mod_timer(&dev->watchdog_timer,
-				       round_jiffies(oldest_start +
-						     dev->watchdog_timeo)))
-				release = false;
+			mod_timer(&dev->watchdog_timer,
+				  round_jiffies(oldest_start +
+						dev->watchdog_timeo));
+			release = false;
 		}
 	}
-	spin_unlock(&dev->tx_global_lock);
-
+	if (timer_pending(&dev->watchdog_timer))
+		release = false;
 	if (release)
 		netdev_put(dev, &dev->watchdog_dev_tracker);
+
+	spin_unlock(&dev->tx_global_lock);
 }
 
 void netdev_watchdog_up(struct net_device *dev)
@@ -586,10 +588,14 @@ void netdev_watchdog_up(struct net_device *dev)
 		return;
 	if (dev->watchdog_timeo <= 0)
 		dev->watchdog_timeo = 5*HZ;
+	spin_lock_bh(&dev->tx_global_lock);
 	if (!mod_timer(&dev->watchdog_timer,
-		       round_jiffies(jiffies + dev->watchdog_timeo)))
-		netdev_hold(dev, &dev->watchdog_dev_tracker,
-			    GFP_ATOMIC);
+		       round_jiffies(jiffies + dev->watchdog_timeo))) {
+		if (IS_ERR_OR_NULL(dev->watchdog_dev_tracker))
+			netdev_hold(dev, &dev->watchdog_dev_tracker,
+				    GFP_ATOMIC);
+	}
+	spin_unlock_bh(&dev->tx_global_lock);
 }
 EXPORT_SYMBOL_GPL(netdev_watchdog_up);
 
@@ -614,8 +620,6 @@ void netif_carrier_on(struct net_device *dev)
 			return;
 		atomic_inc(&dev->carrier_up_count);
 		linkwatch_fire_event(dev);
-		if (netif_running(dev))
-			netdev_watchdog_up(dev);
 	}
 }
 EXPORT_SYMBOL(netif_carrier_on);
