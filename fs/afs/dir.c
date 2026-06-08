@@ -901,7 +901,7 @@ static struct dentry *afs_lookup_atsys(struct inode *dir, struct dentry *dentry)
 	struct afs_net *net = afs_i2net(dir);
 	struct dentry *ret;
 	char *buf, *p, *name;
-	int len, i;
+	int name_len, len, i;
 
 	_enter("");
 
@@ -922,13 +922,14 @@ static struct dentry *afs_lookup_atsys(struct inode *dir, struct dentry *dentry)
 
 	for (i = 0; i < subs->nr; i++) {
 		name = subs->subs[i];
-		len = dentry->d_name.len - 4 + strlen(name);
+		name_len = strlen(name);
+		len = dentry->d_name.len - 4 + name_len;
 		if (len >= AFSNAMEMAX) {
 			ret = ERR_PTR(-ENAMETOOLONG);
 			goto out_s;
 		}
 
-		strcpy(p, name);
+		memcpy(p, name, name_len + 1);
 		ret = lookup_noperm(&QSTR(buf), dentry->d_parent);
 		if (IS_ERR(ret) || d_is_positive(ret))
 			goto out_s;
