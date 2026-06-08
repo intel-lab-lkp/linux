@@ -896,6 +896,7 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	struct intel_vblank_evade_ctx evade;
 	struct intel_plane_state *old_pipe_states[4] = {};
 	struct intel_plane_state *new_pipe_states[4] = {};
+	struct intel_crtc_state *pipe_crtc_states[4] = {};
 	struct intel_plane *pipe_planes[4] = {};
 	struct intel_crtc *pipe_crtcs[4] = {};
 	struct intel_crtc *pipe_crtc;
@@ -977,6 +978,7 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 
 	pipe_planes[num_pipes] = plane;
 	pipe_crtcs[num_pipes] = crtc;
+	pipe_crtc_states[num_pipes] = crtc_state;
 	old_pipe_states[num_pipes] = old_plane_state;
 	new_pipe_states[num_pipes] = new_plane_state;
 	num_pipes++;
@@ -1032,6 +1034,7 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 
 		pipe_planes[num_pipes] = pipe_plane;
 		pipe_crtcs[num_pipes] = pipe_crtc;
+		pipe_crtc_states[num_pipes] = pipe_crtc_state;
 		old_pipe_states[num_pipes] = old_pipe_plane_state;
 		new_pipe_states[num_pipes] = new_pipe_plane_state;
 		num_pipes++;
@@ -1087,11 +1090,17 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 		local_irq_disable();
 	}
 
-	if (new_plane_state->uapi.visible) {
-		intel_plane_update_noarm(NULL, plane, crtc_state, new_plane_state);
-		intel_plane_update_arm(NULL, plane, crtc_state, new_plane_state);
-	} else {
-		intel_plane_disable_arm(NULL, plane, crtc_state);
+	for (int i = 0; i < num_pipes; i++) {
+		if (new_pipe_states[i]->uapi.visible) {
+			intel_plane_update_noarm(NULL, pipe_planes[i],
+						 pipe_crtc_states[i],
+						 new_pipe_states[i]);
+			intel_plane_update_arm(NULL, pipe_planes[i],
+					       pipe_crtc_states[i],
+					       new_pipe_states[i]);
+		} else {
+			intel_plane_disable_arm(NULL, pipe_planes[i], pipe_crtc_states[i]);
+		}
 	}
 
 	local_irq_enable();
