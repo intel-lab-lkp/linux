@@ -46,6 +46,13 @@ struct hiddev_list {
 	struct mutex thread_lock;
 };
 
+static void hiddev_kref_free(struct kref *kref)
+{
+	struct hiddev *hiddev = container_of(kref, struct hiddev, kref);
+
+	kfree(hiddev);
+}
+
 /*
  * Find a report, given the report's type and ID.  The ID can be specified
  * indirectly by REPORT_ID_FIRST (which returns the first report of the given
@@ -227,15 +234,11 @@ static int hiddev_release(struct inode * inode, struct file * file)
 		if (list->hiddev->exist) {
 			hid_hw_close(list->hiddev->hid);
 			hid_hw_power(list->hiddev->hid, PM_HINT_NORMAL);
-		} else {
-			mutex_unlock(&list->hiddev->existancelock);
-			kfree(list->hiddev);
-			vfree(list);
-			return 0;
 		}
 	}
-
 	mutex_unlock(&list->hiddev->existancelock);
+
+	kref_put(&list->hiddev->kref, hiddev_kref_free);
 	vfree(list);
 
 	return 0;
@@ -298,9 +301,19 @@ static int hiddev_open(struct inode *inode, struct file *file)
 	hid = usb_get_intfdata(intf);
 	hiddev = hid->hiddev;
 
+	/*
+	 * kref_get_unless_zero() checks if we've already dropped
+	 * the last reference; bail out early in this case
+	 */
+	if (!hiddev || !kref_get_unless_zero(&hiddev->kref))
+		return -ENODEV;
+
 	mutex_lock(&hiddev->existancelock);
 	res = hiddev->exist ? __hiddev_open(hiddev, file) : -ENODEV;
 	mutex_unlock(&hiddev->existancelock);
+
+	if (res < 0)
+		kref_put(&hiddev->kref, hiddev_kref_free);
 
 	return res;
 }
@@ -893,6 +906,7 @@ int hiddev_connect(struct hid_device *hid, unsigned int force)
 	if (!(hiddev = kzalloc_obj(struct hiddev)))
 		return -ENOMEM;
 
+	kref_init(&hiddev->kref);
 	init_waitqueue_head(&hiddev->wait);
 	INIT_LIST_HEAD(&hiddev->list);
 	spin_lock_init(&hiddev->list_lock);
@@ -904,7 +918,7 @@ int hiddev_connect(struct hid_device *hid, unsigned int force)
 	if (retval) {
 		hid_err(hid, "Not able to get a minor for this device\n");
 		hid->hiddev = NULL;
-		kfree(hiddev);
+		kref_put(&hiddev->kref, hiddev_kref_free);
 		return retval;
 	}
 
@@ -933,13 +947,11 @@ void hiddev_disconnect(struct hid_device *hid)
 
 	mutex_lock(&hiddev->existancelock);
 	hiddev->exist = 0;
-
 	if (hiddev->open) {
 		hid_hw_close(hiddev->hid);
 		wake_up_interruptible(&hiddev->wait);
-		mutex_unlock(&hiddev->existancelock);
-	} else {
-		mutex_unlock(&hiddev->existancelock);
-		kfree(hiddev);
 	}
+	mutex_unlock(&hiddev->existancelock);
+
+	kref_put(&hiddev->kref, hiddev_kref_free);
 }

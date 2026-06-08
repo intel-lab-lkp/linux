@@ -24,6 +24,7 @@ struct hiddev {
 	int minor;
 	int exist;
 	int open;
+	struct kref kref;
 	struct mutex existancelock;
 	wait_queue_head_t wait;
 	struct hid_device *hid;
