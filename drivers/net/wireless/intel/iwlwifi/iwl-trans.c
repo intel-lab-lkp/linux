@@ -31,6 +31,7 @@ iwl_trans_get_restart_data(struct device *dev)
 {
 	struct iwl_trans_dev_restart_data *tmp, *data = NULL;
 	const char *name = dev_name(dev);
+	size_t name_len;
 
 	spin_lock(&restart_data_lock);
 	list_for_each_entry(tmp, &restart_data_list, list) {
@@ -44,11 +45,12 @@ iwl_trans_get_restart_data(struct device *dev)
 	if (data)
 		return data;
 
-	data = kzalloc_flex(*data, name, strlen(name) + 1, GFP_ATOMIC);
+	name_len = strlen(name) + 1;
+	data = kzalloc_flex(*data, name, name_len, GFP_ATOMIC);
 	if (!data)
 		return NULL;
 
-	strcpy(data->name, name);
+	memcpy(data->name, name, name_len);
 	spin_lock(&restart_data_lock);
 	list_add_tail(&data->list, &restart_data_list);
 	spin_unlock(&restart_data_lock);
