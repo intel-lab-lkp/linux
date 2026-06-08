@@ -3770,9 +3770,7 @@ void intel_psr_flush(struct intel_display *display,
 		if (intel_dp->psr.pause_counter)
 			goto unlock;
 
-		if (origin == ORIGIN_FLIP ||
-		    (origin == ORIGIN_CURSOR_UPDATE &&
-		     !intel_dp->psr.psr2_sel_fetch_enabled)) {
+		if (origin == ORIGIN_FLIP) {
 			tgl_dc3co_flush_locked(intel_dp, frontbuffer_bits, origin);
 			goto unlock;
 		}
