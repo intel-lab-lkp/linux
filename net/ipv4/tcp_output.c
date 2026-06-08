@@ -1748,7 +1748,7 @@ static void tcp_queue_skb(struct sock *sk, struct sk_buff *skb)
 /* Initialize TSO segments for a packet. */
 static int tcp_set_skb_tso_segs(struct sk_buff *skb, unsigned int mss_now)
 {
-	int tso_segs;
+	int tso_size, tso_segs;
 
 	if (skb->len <= mss_now) {
 		/* Avoid the costly divide in the normal
@@ -1758,8 +1758,9 @@ static int tcp_set_skb_tso_segs(struct sk_buff *skb, unsigned int mss_now)
 		tcp_skb_pcount_set(skb, 1);
 		return 1;
 	}
-	TCP_SKB_CB(skb)->tcp_gso_size = mss_now;
-	tso_segs = DIV_ROUND_UP(skb->len, mss_now);
+	tso_size = tcp_tso_seglen(mss_now);
+	TCP_SKB_CB(skb)->tcp_gso_size = tso_size;
+	tso_segs = DIV_ROUND_UP(skb->len, tso_size);
 	tcp_skb_pcount_set(skb, tso_segs);
 	return tso_segs;
 }
@@ -2207,12 +2208,14 @@ static bool tcp_minshall_check(const struct tcp_sock *tp)
  * if ((skb->len % mss) != 0)
  *        tp->snd_sml = TCP_SKB_CB(skb)->end_seq;
  * But we can avoid doing the divide again given we already have
- *  skb_pcount = skb->len / mss_now
+ *  skb_pcount = skb->len / tcp_skb_seglen(skb)
  */
 static void tcp_minshall_update(struct tcp_sock *tp, unsigned int mss_now,
 				const struct sk_buff *skb)
 {
-	if (skb->len < tcp_skb_pcount(skb) * mss_now)
+	u32 seglen = tcp_skb_pcount(skb) == 1 ? mss_now : tcp_skb_mss(skb);
+
+	if (skb->len < tcp_skb_pcount(skb) * seglen)
 		tp->snd_sml = TCP_SKB_CB(skb)->end_seq;
 }
 
@@ -2245,7 +2248,7 @@ static bool tcp_nagle_check(bool partial, const struct tcp_sock *tp,
  * for every 2^9 usec (aka 512 us) of RTT, so that the RTT-based allowance
  * is below 1500 bytes after 6 * ~500 usec = 3ms.
  */
-static u32 tcp_tso_autosize(const struct sock *sk, unsigned int mss_now,
+static u32 tcp_tso_autosize(const struct sock *sk, unsigned int tso_size,
 			    int min_tso_segs)
 {
 	unsigned long bytes;
@@ -2259,7 +2262,7 @@ static u32 tcp_tso_autosize(const struct sock *sk, unsigned int mss_now,
 
 	bytes = min_t(unsigned long, bytes, sk->sk_gso_max_size);
 
-	return max_t(u32, bytes / mss_now, min_tso_segs);
+	return max_t(u32, bytes / tso_size, min_tso_segs);
 }
 
 /* Return the number of segments we want in the skb we are transmitting.
@@ -2274,14 +2277,14 @@ static u32 tcp_tso_segs(struct sock *sk, unsigned int mss_now)
 			ca_ops->min_tso_segs(sk) :
 			READ_ONCE(sock_net(sk)->ipv4.sysctl_tcp_min_tso_segs);
 
-	tso_segs = tcp_tso_autosize(sk, mss_now, min_tso);
+	tso_segs = tcp_tso_autosize(sk, tcp_tso_seglen(mss_now), min_tso);
 	return min_t(u32, tso_segs, sk->sk_gso_max_segs);
 }
 
 /* Returns the portion of skb which can be sent right away */
 static unsigned int tcp_mss_split_point(const struct sock *sk,
 					const struct sk_buff *skb,
-					unsigned int mss_now,
+					unsigned int seglen,
 					unsigned int max_segs,
 					int nonagle)
 {
@@ -2289,7 +2292,7 @@ static unsigned int tcp_mss_split_point(const struct sock *sk,
 	u32 partial, needed, window, max_len;
 
 	window = tcp_wnd_end(tp) - TCP_SKB_CB(skb)->seq;
-	max_len = mss_now * max_segs;
+	max_len = seglen * max_segs;
 
 	if (likely(max_len <= window && skb != tcp_write_queue_tail(sk)))
 		return max_len;
@@ -2299,7 +2302,7 @@ static unsigned int tcp_mss_split_point(const struct sock *sk,
 	if (max_len <= needed)
 		return max_len;
 
-	partial = needed % mss_now;
+	partial = needed % seglen;
 	/* If last segment is not a full MSS, check if Nagle rules allow us
 	 * to include this last segment in this skb.
 	 * Otherwise, we'll split the skb at last MSS boundary
@@ -2337,7 +2340,8 @@ static int tcp_init_tso_segs(struct sk_buff *skb, unsigned int mss_now)
 {
 	int tso_segs = tcp_skb_pcount(skb);
 
-	if (!tso_segs || (tso_segs > 1 && tcp_skb_mss(skb) != mss_now))
+	if (!tso_segs ||
+	    (tso_segs > 1 && tcp_skb_mss(skb) != tcp_tso_seglen(mss_now)))
 		return tcp_set_skb_tso_segs(skb, mss_now);
 
 	return tso_segs;
@@ -2444,7 +2448,7 @@ static int tso_fragment(struct sock *sk, struct sk_buff *skb, unsigned int len,
 static bool tcp_tso_should_defer(struct sock *sk, struct sk_buff *skb,
 				 bool *is_cwnd_limited,
 				 bool *is_rwnd_limited,
-				 u32 max_segs)
+				 u32 max_len)
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 	u32 send_win, cong_win, limit, in_flight, threshold;
@@ -2479,7 +2483,7 @@ static bool tcp_tso_should_defer(struct sock *sk, struct sk_buff *skb,
 	limit = min(send_win, cong_win);
 
 	/* If a full-sized TSO skb can be sent, do it. */
-	if (limit >= max_segs * tp->mss_cache)
+	if (limit >= max_len)
 		goto send_now;
 
 	/* Middle in queue won't get any more data, full sendable already? */
@@ -2956,10 +2960,10 @@ static void tcp_grow_skb(struct sock *sk, struct sk_buff *skb, int amount)
 static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 			   int push_one, gfp_t gfp)
 {
+	u32 cwnd_quota, max_segs, max_len;
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct sk_buff *skb;
 	unsigned int tso_segs, sent_pkts;
-	u32 cwnd_quota, max_segs;
 	int result;
 	bool is_cwnd_limited = false, is_rwnd_limited = false;
 
@@ -3007,7 +3011,9 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 				break;
 		}
 		cwnd_quota = min(cwnd_quota, max_segs);
-		missing_bytes = cwnd_quota * mss_now - skb->len;
+
+		max_len = max(mss_now, cwnd_quota * tcp_tso_seglen(mss_now));
+		missing_bytes = max_len - skb->len;
 		if (missing_bytes > 0)
 			tcp_grow_skb(sk, skb, missing_bytes);
 
@@ -3026,13 +3032,13 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		} else {
 			if (!push_one &&
 			    tcp_tso_should_defer(sk, skb, &is_cwnd_limited,
-						 &is_rwnd_limited, max_segs))
+						 &is_rwnd_limited, max_len))
 				break;
 		}
 
 		limit = mss_now;
 		if (tso_segs > 1 && !tcp_urg_mode(tp))
-			limit = tcp_mss_split_point(sk, skb, mss_now,
+			limit = tcp_mss_split_point(sk, skb, tcp_tso_seglen(mss_now),
 						    cwnd_quota,
 						    nonagle);
 
@@ -3193,10 +3199,10 @@ void tcp_send_loss_probe(struct sock *sk)
 	if (WARN_ON(!pcount))
 		goto rearm_timer;
 
-	if ((pcount > 1) && (skb->len > (pcount - 1) * mss)) {
+	if ((pcount > 1) && (skb->len > (pcount - 1) * tcp_tso_seglen(mss))) {
 		if (unlikely(tcp_fragment(sk, TCP_FRAG_IN_RTX_QUEUE, skb,
-					  (pcount - 1) * mss, mss,
-					  GFP_ATOMIC)))
+					  (pcount - 1) *  tcp_tso_seglen(mss),
+					  mss, GFP_ATOMIC)))
 			goto rearm_timer;
 		skb = skb_rb_next(skb);
 	}
@@ -3204,7 +3210,7 @@ void tcp_send_loss_probe(struct sock *sk)
 	if (WARN_ON(!skb || !tcp_skb_pcount(skb)))
 		goto rearm_timer;
 
-	if (__tcp_retransmit_skb(sk, skb, 1))
+	if (__tcp_retransmit_skb(sk, skb, mss))
 		goto rearm_timer;
 
 	tp->tlp_retrans = 1;
@@ -3539,13 +3545,14 @@ static void tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *to,
  * state updates are done by the caller.  Returns non-zero if an
  * error occurred which prevented the send.
  */
-int __tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs)
+int __tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int max_len)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	unsigned int cur_mss;
 	int diff, len, err;
 	int avail_wnd;
+	int segs;
 
 	/* Inconclusive MTU probe */
 	if (icsk->icsk_mtup.probe_size)
@@ -3595,7 +3602,7 @@ start:
 		avail_wnd = cur_mss;
 	}
 
-	len = cur_mss * segs;
+	len = max_len;
 	if (len > avail_wnd) {
 		len = rounddown(avail_wnd, cur_mss);
 		if (!len)
@@ -3684,10 +3691,10 @@ out:
 	return err;
 }
 
-int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs)
+int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int max_len)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-	int err = __tcp_retransmit_skb(sk, skb, segs);
+	int err = __tcp_retransmit_skb(sk, skb, max_len);
 
 	if (err == 0) {
 #if FASTRETRANS_DEBUG > 0
@@ -3721,6 +3728,7 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 	struct tcp_sock *tp = tcp_sk(sk);
 	bool rearm_timer = false;
 	u32 max_segs;
+	u32 mss_now;
 	int mib_idx;
 
 	if (!tp->packets_out)
@@ -3728,9 +3736,11 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 
 	rtx_head = tcp_rtx_queue_head(sk);
 	skb = tp->retransmit_skb_hint ?: rtx_head;
-	max_segs = tcp_tso_segs(sk, tcp_current_mss(sk));
+	mss_now = tcp_current_mss(sk);
+	max_segs = tcp_tso_segs(sk, mss_now);
 	skb_rbtree_walk_from(skb) {
 		__u8 sacked;
+		u32 max_len;
 		int segs;
 
 		if (tcp_pacing_check(sk))
@@ -3748,6 +3758,7 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 		 * we need to make sure not sending too bigs TSO packets
 		 */
 		segs = min_t(int, segs, max_segs);
+		max_len = max_t(u32, mss_now, segs * tcp_tso_seglen(mss_now));
 
 		if (tp->retrans_out >= tp->lost_out) {
 			break;
@@ -3769,7 +3780,7 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 		if (tcp_small_queue_check(sk, skb, 1))
 			break;
 
-		if (tcp_retransmit_skb(sk, skb, segs))
+		if (tcp_retransmit_skb(sk, skb, max_len))
 			break;
 
 		NET_ADD_STATS(sock_net(sk), mib_idx, tcp_skb_pcount(skb));
