@@ -789,7 +789,8 @@ static void parse_opts(int argc, char **argv)
 	setup_sockaddr(cfg_family, daddr, &cfg_dst_addr);
 	setup_sockaddr(cfg_family, saddr, &cfg_src_addr);
 
-	if (cfg_payload_len > max_payload_len)
+	if (cfg_payload_len > max_payload_len &&
+	    (strcmp(cfg_test, "tcp") != 0 || cfg_family != PF_INET6))
 		error(1, 0, "-s: payload exceeds max (%d)", max_payload_len);
 	if (cfg_cork_mixed && (!cfg_zerocopy || !cfg_cork))
 		error(1, 0, "-m: cork_mixed requires corking and zerocopy");
