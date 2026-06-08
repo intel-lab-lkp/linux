@@ -21,7 +21,6 @@
 #include <linux/libata.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/types.h>
 
@@ -730,18 +729,14 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	if ((prop) && (proplen >= 4))
 		udma_mask = ATA_UDMA2 & ((1 << (*prop + 1)) - 1);
 
-	ata_irq = irq_of_parse_and_map(op->dev.of_node, 0);
-	if (!ata_irq) {
-		dev_err(&op->dev, "error mapping irq\n");
-		return -EINVAL;
-	}
+	ata_irq = platform_get_irq(op, 0);
+	if (ata_irq < 0)
+		return ata_irq;
 
 	/* Prepare our private structure */
 	priv = devm_kzalloc(&op->dev, sizeof(*priv), GFP_KERNEL);
-	if (!priv) {
-		rv = -ENOMEM;
-		goto err1;
-	}
+	if (!priv)
+		return -ENOMEM;
 
 	priv->ipb_period = 1000000000 / (ipb_freq / 1000);
 	priv->ata_regs = ata_regs;
@@ -762,8 +757,7 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	dmatsk = bcom_ata_init(MAX_DMA_BUFFERS, MAX_DMA_BUFFER_SIZE);
 	if (!dmatsk) {
 		dev_err(&op->dev, "bestcomm initialization failed\n");
-		rv = -ENOMEM;
-		goto err1;
+		return -ENOMEM;
 	}
 
 	task_irq = bcom_get_task_irq(dmatsk);
@@ -796,8 +790,6 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	free_irq(task_irq, priv);
  err_free_task:
 	bcom_ata_release(dmatsk);
- err1:
-	irq_dispose_mapping(ata_irq);
 	return rv;
 }
 
@@ -814,7 +806,6 @@ static void mpc52xx_ata_remove(struct platform_device *op)
 	task_irq = bcom_get_task_irq(priv->dmatsk);
 	free_irq(task_irq, priv);
 	bcom_ata_release(priv->dmatsk);
-	irq_dispose_mapping(priv->ata_irq);
 }
 
 #ifdef CONFIG_PM_SLEEP
