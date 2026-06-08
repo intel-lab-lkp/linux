@@ -37,7 +37,8 @@ static int llc_exec_conn_trans_actions(struct sock *sk,
 				       const struct llc_conn_state_trans *trans,
 				       struct sk_buff *ev);
 static const struct llc_conn_state_trans *llc_qualify_conn_ev(struct sock *sk,
-							      struct sk_buff *skb);
+							      struct sk_buff *skb,
+							      u8 state);
 
 /* Offset table on connection states transition diagram */
 static int llc_offset_table[NBR_CONN_STATES][NBR_CONN_EV];
@@ -358,12 +359,15 @@ static int llc_conn_service(struct sock *sk, struct sk_buff *skb)
 {
 	const struct llc_conn_state_trans *trans;
 	struct llc_sock *llc = llc_sk(sk);
+	u8 state = READ_ONCE(llc->state);
 	int rc = 1;
 
-	if (llc->state > NBR_CONN_STATES)
+	if (state == LLC_CONN_OUT_OF_SVC)
+		return 0;
+	if (state > NBR_CONN_STATES)
 		goto out;
 	rc = 0;
-	trans = llc_qualify_conn_ev(sk, skb);
+	trans = llc_qualify_conn_ev(sk, skb, state);
 	if (trans) {
 		rc = llc_exec_conn_trans_actions(sk, trans, skb);
 		if (!rc && trans->next_state != NO_STATE_CHANGE) {
@@ -385,20 +389,20 @@ out:
  *	Returns pointer to found transition on success, %NULL otherwise.
  */
 static const struct llc_conn_state_trans *llc_qualify_conn_ev(struct sock *sk,
-							      struct sk_buff *skb)
+							      struct sk_buff *skb,
+							      u8 state)
 {
 	const struct llc_conn_state_trans **next_trans;
 	const llc_conn_ev_qfyr_t *next_qualifier;
 	struct llc_conn_state_ev *ev = llc_conn_ev(skb);
-	struct llc_sock *llc = llc_sk(sk);
 	struct llc_conn_state *curr_state =
-					&llc_conn_state_table[llc->state - 1];
+					&llc_conn_state_table[state - 1];
 
 	/* search thru events for this state until
 	 * list exhausted or until no more
 	 */
 	for (next_trans = curr_state->transitions +
-		llc_find_offset(llc->state - 1, ev->type);
+		llc_find_offset(state - 1, ev->type);
 	     (*next_trans)->ev; next_trans++) {
 		if (!((*next_trans)->ev)(sk, skb)) {
 			/* got POSSIBLE event match; the event may require
