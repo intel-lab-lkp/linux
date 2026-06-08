@@ -6354,11 +6354,11 @@ struct mddev *md_alloc(dev_t dev, char *name)
 	disk->first_minor = unit << shift;
 	disk->minors = 1 << shift;
 	if (name)
-		strcpy(disk->disk_name, name);
+		strscpy(disk->disk_name, name);
 	else if (partitioned)
-		sprintf(disk->disk_name, "md_d%d", unit);
+		snprintf(disk->disk_name, sizeof (disk->disk_name), "md_d%d", unit);
 	else
-		sprintf(disk->disk_name, "md%d", unit);
+		snprintf(disk->disk_name, sizeof (disk->disk_name), "md%d", unit);
 	disk->fops = &md_fops;
 	disk->private_data = mddev;
 
