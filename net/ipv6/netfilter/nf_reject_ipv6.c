@@ -8,6 +8,7 @@
 #include <net/ip6_route.h>
 #include <net/ip6_fib.h>
 #include <net/ip6_checksum.h>
+#include <net/ndisc.h>
 #include <net/netfilter/ipv6/nf_reject.h>
 #include <linux/netfilter_ipv6.h>
 #include <linux/netfilter_bridge.h>
@@ -104,7 +105,7 @@ struct sk_buff *nf_reject_skb_v6_tcp_reset(struct net *net,
 }
 EXPORT_SYMBOL_GPL(nf_reject_skb_v6_tcp_reset);
 
-static bool nf_skb_is_icmp6_unreach(const struct sk_buff *skb)
+static bool nf_skb_is_icmp6_unreach_or_redirect(const struct sk_buff *skb)
 {
 	const struct ipv6hdr *ip6h = ipv6_hdr(skb);
 	u8 proto = ip6h->nexthdr;
@@ -127,7 +128,7 @@ static bool nf_skb_is_icmp6_unreach(const struct sk_buff *skb)
 	if (!tp)
 		return false;
 
-	return *tp == ICMPV6_DEST_UNREACH;
+	return *tp == ICMPV6_DEST_UNREACH || *tp == NDISC_REDIRECT;
 }
 
 struct sk_buff *nf_reject_skb_v6_unreach(struct net *net,
@@ -143,8 +144,13 @@ struct sk_buff *nf_reject_skb_v6_unreach(struct net *net,
 	if (!nf_reject_ip6hdr_validate(oldskb))
 		return NULL;
 
-	/* Don't reply to ICMPV6_DEST_UNREACH with ICMPV6_DEST_UNREACH */
-	if (nf_skb_is_icmp6_unreach(oldskb))
+	/* Don't reply to ICMPV6_DEST_UNREACH with ICMPV6_DEST_UNREACH, and
+	 * per RFC 4443 section 2.4(e.2) never originate an ICMPv6 error in
+	 * response to an ICMPv6 Redirect. The L3 reject path enforces this
+	 * via icmpv6_send()/is_ineligible(); this bridge/netdev path builds
+	 * the packet itself, so it must check explicitly.
+	 */
+	if (nf_skb_is_icmp6_unreach_or_redirect(oldskb))
 		return NULL;
 
 	/* Include "As much of invoking packet as possible without the ICMPv6
