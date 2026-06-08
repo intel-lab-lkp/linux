@@ -425,6 +425,7 @@ extern void dl_server_init(struct sched_dl_entity *dl_se, struct dl_rq *dl_rq,
 		    struct rq *served_rq,
 		    dl_server_pick_f pick_task);
 extern void sched_init_dl_servers(void);
+extern void dl_init_tg(struct sched_dl_entity *dl_se, u64 rt_runtime, u64 rt_period);
 
 extern void fair_server_init(struct rq *rq);
 extern void ext_server_init(struct rq *rq);
@@ -2043,6 +2044,10 @@ static inline struct rq *_this_rq_lock_irq(struct rq_flags *rf) __acquires_ret
 
 	return rq;
 }
+
+DEFINE_LOCK_GUARD_1(raw_spin_rq_lock_irq, struct rq,
+		    raw_spin_rq_lock_irq(_T->lock),
+		    raw_spin_rq_unlock_irq(_T->lock))
 
 #ifdef CONFIG_NUMA
 

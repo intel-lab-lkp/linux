@@ -335,6 +335,37 @@ void cancel_inactive_timer(struct sched_dl_entity *dl_se)
 	cancel_dl_timer(dl_se, &dl_se->inactive_timer);
 }
 
+#ifdef CONFIG_RT_GROUP_SCHED
+void dl_init_tg(struct sched_dl_entity *dl_se, u64 rt_runtime, u64 rt_period)
+{
+	struct rq *rq = container_of_const(dl_se->dl_rq, struct rq, dl);
+	int is_active;
+	u64 new_bw;
+
+	guard(raw_spin_rq_lock_irq)(rq);
+	is_active = dl_se->my_q->rt.rt_nr_running > 0;
+
+	update_rq_clock(rq);
+	dl_server_stop(dl_se);
+
+	new_bw = to_ratio(rt_period, rt_runtime);
+	dl_rq_change_utilization(rq, dl_se, new_bw);
+
+	dl_se->dl_runtime  = rt_runtime;
+	dl_se->dl_deadline = rt_period;
+	dl_se->dl_period   = rt_period;
+
+	dl_se->runtime = 0;
+	dl_se->deadline = 0;
+
+	dl_se->dl_bw = new_bw;
+	dl_se->dl_density = new_bw;
+
+	if (is_active)
+		dl_server_start(dl_se);
+}
+#endif
+
 static void dl_change_utilization(struct task_struct *p, u64 new_bw)
 {
 	WARN_ON_ONCE(p->dl.flags & SCHED_FLAG_SUGOV);
