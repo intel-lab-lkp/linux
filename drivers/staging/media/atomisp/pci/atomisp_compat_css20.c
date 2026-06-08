@@ -1775,10 +1775,10 @@ void atomisp_css_stop(struct atomisp_sub_device *asd, bool in_reset)
 
 	if (!in_reset) {
 		struct atomisp_stream_env *stream_env;
-		int i, j;
+		int k, j;
 
-		for (i = 0; i < ATOMISP_INPUT_STREAM_NUM; i++) {
-			stream_env = &asd->stream_env[i];
+		for (k = 0; k < ATOMISP_INPUT_STREAM_NUM; k++) {
+			stream_env = &asd->stream_env[k];
 			for (j = 0; j < IA_CSS_PIPE_ID_NUM; j++) {
 				ia_css_pipe_config_defaults(
 				    &stream_env->pipe_configs[j]);

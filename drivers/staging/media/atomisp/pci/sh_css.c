@@ -7975,22 +7975,22 @@ ia_css_stream_create(const struct ia_css_stream_config *stream_config,
 	}
 
 	for (i = 0; i < num_pipes; i++) {
-		struct ia_css_resolution effective_res;
+		struct ia_css_resolution pipe_effective_res;
 
 		curr_pipe = pipes[i];
 		/* set current stream */
 		curr_pipe->stream = curr_stream;
 		/* take over effective info */
 
-		effective_res = curr_pipe->config.input_effective_res;
-		if (effective_res.height == 0 || effective_res.width == 0) {
-			effective_res = curr_pipe->stream->config.input_config.effective_res;
+		pipe_effective_res = curr_pipe->config.input_effective_res;
+		if (pipe_effective_res.height == 0 || pipe_effective_res.width == 0) {
+			pipe_effective_res = curr_pipe->stream->config.input_config.effective_res;
 
-			curr_pipe->config.input_effective_res = effective_res;
+			curr_pipe->config.input_effective_res = pipe_effective_res;
 		}
 		IA_CSS_LOG("effective_res=%dx%d",
-			   effective_res.width,
-			   effective_res.height);
+			   pipe_effective_res.width,
+			   pipe_effective_res.height);
 	}
 
 	err = ia_css_stream_isp_parameters_init(curr_stream);
