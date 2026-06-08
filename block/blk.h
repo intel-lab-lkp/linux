@@ -660,6 +660,18 @@ static inline bool should_fail_request(struct block_device *part,
 }
 #endif /* CONFIG_FAIL_MAKE_REQUEST */
 
+void blk_error_injection_init(struct gendisk *disk);
+void blk_error_injection_exit(struct gendisk *disk);
+bool __blk_error_inject(struct bio *bio);
+static inline bool blk_error_inject(struct bio *bio)
+{
+	if (!IS_ENABLED(CONFIG_BLK_ERROR_INJECTION))
+		return false;
+	if (!test_bit(GD_ERROR_INJECT, &bio->bi_bdev->bd_disk->state))
+		return false;
+	return __blk_error_inject(bio);
+}
+
 /*
  * Optimized request reference counting. Ideally we'd make timeouts be more
  * clever, as that's the only reason we need references at all... But until
