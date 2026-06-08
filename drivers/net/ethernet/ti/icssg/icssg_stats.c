@@ -62,6 +62,7 @@ void emac_update_hardware_stats(struct prueth_emac *emac)
 
 	spin_unlock(&prueth->stats_lock);
 }
+EXPORT_SYMBOL_GPL(emac_update_hardware_stats);
 
 void icssg_stats_work_handler(struct work_struct *work)
 {
@@ -74,7 +75,7 @@ void icssg_stats_work_handler(struct work_struct *work)
 }
 EXPORT_SYMBOL_GPL(icssg_stats_work_handler);
 
-int emac_get_stat_by_name(struct prueth_emac *emac, char *stat_name)
+u64 emac_get_stat_by_name(struct prueth_emac *emac, char *stat_name)
 {
 	int i;
 
@@ -91,5 +92,6 @@ int emac_get_stat_by_name(struct prueth_emac *emac, char *stat_name)
 	}
 
 	netdev_err(emac->ndev, "Invalid stats %s\n", stat_name);
-	return -EINVAL;
+	return ~0ULL;
 }
+EXPORT_SYMBOL_GPL(emac_get_stat_by_name);

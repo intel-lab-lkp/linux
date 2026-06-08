@@ -14,6 +14,7 @@
 #include <linux/etherdevice.h>
 #include <linux/genalloc.h>
 #include <linux/if_hsr.h>
+#include <linux/if_link.h>
 #include <linux/if_vlan.h>
 #include <linux/interrupt.h>
 #include <linux/io-64-nonatomic-hi-lo.h>
@@ -1633,6 +1634,94 @@ int prueth_xsk_wakeup(struct net_device *ndev, u32 qid, u32 flags)
 	return 0;
 }
 
+/**
+ * prueth_ndo_get_offload_stats - Fill standard LRE counters from ICSSG.
+ * @attr_id: Stats attribute ID; only IFLA_STATS_LINK_XSTATS is handled.
+ * @dev:     Slave net_device (port A) whose offload stats are requested.
+ * @sp:      Output pointer; cast to struct hsr_lre_stats *.
+ *
+ * Called by the HSR stack via ndo_get_offload_stats on the slave A device.
+ * Fetches the per-port PA stat register snapshots for port A and port B,
+ * and fills the IEC-62439-3 per-port LRE counters.  Port C (interlink)
+ * counters are not available in ICSSG hardware and remain at ~0ULL.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if the device does not support
+ *         HSR offload statistics for the requested attribute.
+ */
+static int prueth_ndo_get_offload_stats(int attr_id,
+					const struct net_device *dev,
+					void *sp)
+{
+	struct hsr_lre_stats *stats = sp;
+	struct prueth_emac *emac0;
+	struct prueth_emac *emac1;
+	struct prueth_emac *emac = netdev_priv(dev);
+	struct prueth *prueth = emac->prueth;
+
+	if (attr_id != IFLA_STATS_LINK_XSTATS)
+		return -EOPNOTSUPP;
+
+	if (!prueth->is_hsr_offload_mode)
+		return -EOPNOTSUPP;
+
+	emac0 = prueth->emac[PRUETH_MAC0];
+	emac1 = prueth->emac[PRUETH_MAC1];
+
+	if (!prueth->pa_stats)
+		return -EOPNOTSUPP;
+
+	/* Initialise all fields to ~0ULL ("unsupported"); only port A and B
+	 * counters are filled — port C and aggregate counters are not
+	 * available in ICSSG hardware.
+	 */
+	memset(stats, 0xff, sizeof(*stats));
+
+	emac_update_hardware_stats(emac0);
+	stats->cnt_tx_a =
+		emac_get_stat_by_name(emac0, "FW_LRE_CNT_TX");
+	stats->cnt_rx_a =
+		emac_get_stat_by_name(emac0, "FW_LRE_CNT_RX");
+	stats->cnt_unique_a =
+		emac_get_stat_by_name(emac0, "FW_LRE_CNT_UNIQUE_RX");
+	stats->cnt_duplicate_a =
+		emac_get_stat_by_name(emac0, "FW_LRE_CNT_DUPLICATE_RX");
+	stats->cnt_multi_a =
+		emac_get_stat_by_name(emac0, "FW_LRE_CNT_MULTIPLE_RX");
+	stats->cnt_own_rx_a =
+		emac_get_stat_by_name(emac0, "FW_LRE_CNT_OWN_RX");
+	/* lreCntErrWrongLan is PRP only */
+	stats->cnt_err_wrong_lan_a =
+		emac_get_stat_by_name(emac0, "FW_LRE_CNT_ERRWRONGLAN");
+
+	emac_update_hardware_stats(emac1);
+	stats->cnt_tx_b =
+		emac_get_stat_by_name(emac1, "FW_LRE_CNT_TX");
+	stats->cnt_rx_b =
+		emac_get_stat_by_name(emac1, "FW_LRE_CNT_RX");
+	stats->cnt_unique_b =
+		emac_get_stat_by_name(emac1, "FW_LRE_CNT_UNIQUE_RX");
+	stats->cnt_duplicate_b =
+		emac_get_stat_by_name(emac1, "FW_LRE_CNT_DUPLICATE_RX");
+	stats->cnt_multi_b =
+		emac_get_stat_by_name(emac1, "FW_LRE_CNT_MULTIPLE_RX");
+	stats->cnt_own_rx_b =
+		emac_get_stat_by_name(emac1, "FW_LRE_CNT_OWN_RX");
+	stats->cnt_err_wrong_lan_b =
+		emac_get_stat_by_name(emac1, "FW_LRE_CNT_ERRWRONGLAN");
+
+	return 0;
+}
+
+static bool prueth_ndo_has_offload_stats(const struct net_device *dev,
+					 int attr_id)
+{
+	struct prueth_emac *emac = netdev_priv(dev);
+	struct prueth *prueth = emac->prueth;
+
+	return attr_id == IFLA_STATS_LINK_XSTATS &&
+	       prueth->is_hsr_offload_mode && prueth->pa_stats;
+}
+
 static const struct net_device_ops emac_netdev_ops = {
 	.ndo_open = emac_ndo_open,
 	.ndo_stop = emac_ndo_stop,
@@ -1652,6 +1741,8 @@ static const struct net_device_ops emac_netdev_ops = {
 	.ndo_hwtstamp_get = icssg_ndo_get_ts_config,
 	.ndo_hwtstamp_set = icssg_ndo_set_ts_config,
 	.ndo_xsk_wakeup = prueth_xsk_wakeup,
+	.ndo_has_offload_stats = prueth_ndo_has_offload_stats,
+	.ndo_get_offload_stats = prueth_ndo_get_offload_stats,
 };
 
 static int prueth_netdev_init(struct prueth *prueth,
