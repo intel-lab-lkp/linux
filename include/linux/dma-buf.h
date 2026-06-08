@@ -114,6 +114,37 @@ struct dma_buf_ops {
 	void (*unpin)(struct dma_buf_attachment *attach);
 
 	/**
+	 * @get_tph:
+	 * @dmabuf: DMA buffer for which to retrieve TPH metadata
+	 * @extended: false to request the 8-bit ST namespace, true to request
+	 *            the 16-bit Extended ST namespace
+	 * @steering_tag: Returns the raw TPH steering tag for the requested
+	 *                namespace
+	 * @ph: Returns the TPH processing hint (2-bit value)
+	 *
+	 * Return the TPH (TLP Processing Hints) metadata associated with this
+	 * DMA buffer for the requested steering-tag namespace. 8-bit ST and
+	 * 16-bit Extended ST are distinct namespaces in the PCIe TPH ST table
+	 * and may both be present with different values, so the exporter must
+	 * select the value that matches @extended and must not substitute one
+	 * for the other.
+	 *
+	 * The exporter owns the completing address space for @dmabuf and
+	 * therefore decides whether it can derive meaningful TPH metadata for
+	 * that completer. The dma-buf core treats the returned ST/PH tuple as
+	 * opaque transport metadata; importers that support TPH place it on
+	 * outbound TLPs, while exporters that cannot derive a useful tuple
+	 * simply return -EOPNOTSUPP.
+	 *
+	 * Return 0 on success, or -EOPNOTSUPP if no metadata is available for
+	 * the requested namespace.
+	 *
+	 * This callback is optional.
+	 */
+	int (*get_tph)(struct dma_buf *dmabuf, bool extended,
+		       u16 *steering_tag, u8 *ph);
+
+	/**
 	 * @map_dma_buf:
 	 *
 	 * This is called by dma_buf_map_attachment() and is used to map a
