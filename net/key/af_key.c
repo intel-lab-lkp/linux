@@ -1195,7 +1195,7 @@ static struct xfrm_state * pfkey_msg2xfrm_state(struct net *net,
 			err = -ENOMEM;
 			goto out;
 		}
-		strcpy(x->aalg->alg_name, a->name);
+		strscpy(x->aalg->alg_name, a->name);
 		x->aalg->alg_key_len = 0;
 		if (key) {
 			x->aalg->alg_key_len = key->sadb_key_bits;
@@ -1217,7 +1217,7 @@ static struct xfrm_state * pfkey_msg2xfrm_state(struct net *net,
 				err = -ENOMEM;
 				goto out;
 			}
-			strcpy(x->calg->alg_name, a->name);
+			strscpy(x->calg->alg_name, a->name);
 			x->props.calgo = sa->sadb_sa_encrypt;
 		} else {
 			int keysize = 0;
@@ -1234,7 +1234,7 @@ static struct xfrm_state * pfkey_msg2xfrm_state(struct net *net,
 				err = -ENOMEM;
 				goto out;
 			}
-			strcpy(x->ealg->alg_name, a->name);
+			strscpy(x->ealg->alg_name, a->name);
 			x->ealg->alg_key_len = 0;
 			if (key) {
 				x->ealg->alg_key_len = key->sadb_key_bits;
