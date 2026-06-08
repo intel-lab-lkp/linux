@@ -619,10 +619,29 @@ mt76u_process_rx_queue(struct mt76_dev *dev, struct mt76_queue *q)
 		mt76u_submit_rx_buf(dev, qid, urb);
 	}
 	if (qid == MT_RXQ_MAIN) {
+		struct napi_struct *napi = &dev->usb.napi;
+
 		local_bh_disable();
-		mt76_rx_poll_complete(dev, MT_RXQ_MAIN, NULL);
+		/* Drive a container NAPI so the RX path can use
+		 * napi_gro_receive(): napi_schedule_prep() marks it SCHED and
+		 * napi_complete_done() flushes the coalesced GRO list. The poll
+		 * handler is never actually invoked by the core.
+		 */
+		if (dev->usb.napi_dev && napi_schedule_prep(napi)) {
+			mt76_rx_poll_complete(dev, MT_RXQ_MAIN, napi);
+			napi_complete_done(napi, 1);
+		} else {
+			mt76_rx_poll_complete(dev, MT_RXQ_MAIN, NULL);
+		}
 		local_bh_enable();
 	}
+}
+
+/* Never invoked by the core: the RX worker drives GRO via the napi manually. */
+static int mt76u_napi_poll(struct napi_struct *napi, int budget)
+{
+	napi_complete(napi);
+	return 0;
 }
 
 static void mt76u_rx_worker(struct mt76_worker *w)
@@ -1051,6 +1070,13 @@ void mt76u_queues_deinit(struct mt76_dev *dev)
 	mt76u_stop_rx(dev);
 	mt76u_stop_tx(dev);
 
+	if (dev->usb.napi_dev) {
+		napi_disable(&dev->usb.napi);
+		netif_napi_del(&dev->usb.napi);
+		free_netdev(dev->usb.napi_dev);
+		dev->usb.napi_dev = NULL;
+	}
+
 	mt76u_free_rx(dev);
 	mt76u_free_tx(dev);
 }
@@ -1114,6 +1140,14 @@ int __mt76u_init(struct mt76_dev *dev, struct usb_interface *intf,
 
 	sched_set_fifo_low(usb->rx_worker.task);
 	sched_set_fifo_low(usb->status_worker.task);
+
+	/* container netdev + NAPI used only to enable GRO on the RX path */
+	usb->napi_dev = alloc_netdev_dummy(0);
+	if (!usb->napi_dev)
+		return -ENOMEM;
+	strscpy(usb->napi_dev->name, "mt76u-rx", sizeof(usb->napi_dev->name));
+	netif_napi_add(usb->napi_dev, &usb->napi, mt76u_napi_poll);
+	napi_enable(&usb->napi);
 
 	return 0;
 }

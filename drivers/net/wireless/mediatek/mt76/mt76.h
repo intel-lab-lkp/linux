@@ -668,6 +668,10 @@ struct mt76_usb {
 	struct mt76_worker status_worker;
 	struct mt76_worker rx_worker;
 
+	/* container NAPI used only to batch GRO for the RX worker */
+	struct net_device *napi_dev;
+	struct napi_struct napi;
+
 	struct work_struct stat_work;
 
 	u8 out_ep[__MT_EP_OUT_MAX];
