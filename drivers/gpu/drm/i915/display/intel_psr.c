@@ -1434,8 +1434,9 @@ static bool _compute_psr2_sdp_prior_scanline_indication(struct intel_crtc_state 
 	if ((hblank_ns - req_ns) > 100)
 		return true;
 
-	/* Not supported <13 / Wa_22012279113:adl-p */
-	if (DISPLAY_VER(display) < 14 || intel_dp->edp_dpcd[0] < DP_EDP_14b)
+	/* Not supported <14 / Wa_22012279113:adl-p */
+	if (intel_dp_is_edp(intel_dp) && (DISPLAY_VER(display) < 14 ||
+					  intel_dp->edp_dpcd[0] < DP_EDP_14b))
 		return false;
 
 	crtc_state->req_psr2_sdp_prior_scanline = true;
