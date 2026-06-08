@@ -5,7 +5,8 @@
 //! C header: [`include/asm-generic/io.h`](srctree/include/asm-generic/io.h)
 
 use core::{
-    marker::PhantomData, //
+    marker::PhantomData,
+    mem::MaybeUninit, //
 };
 
 use crate::{
@@ -229,6 +230,63 @@ pub trait IoCapable<T>: IoBackend {
     fn io_write<'a>(view: Self::View<'a, T>, value: T);
 }
 
+/// Trait indicating that an I/O backend supports memory copy operations.
+///
+/// # Safety
+///
+/// If [`Self::is_mapped`] is overridden, it must be correct per documentation.
+pub unsafe trait IoCopyable: IoBackend {
+    /// Whether the pointers for this I/O backend are in the CPU address space, and are coherently
+    /// mapped.
+    ///
+    /// When this returns true, `Self::as_ptr(view)` must return a valid and aligned pointer. The
+    /// pointer may be accessed with byte-wise atomic memory copy or volatile read/write.
+    ///
+    /// This is not an associated constants to support backends where the view may be conditionally
+    /// mapped. This method should be marked as `#[inline(always)]` if it always returns true, so
+    /// `build_assert!()` in `copy_{from,to}io` can see it.
+    #[inline]
+    fn is_mapped<T: ?Sized + KnownSize>(_view: Self::View<'_, T>) -> bool {
+        false
+    }
+
+    /// Copy contents of `view` to `buffer`.
+    ///
+    /// # Safety
+    ///
+    /// - `buffer` is valid for volatile write for `view.size()` bytes.
+    #[inline]
+    unsafe fn copy_from_io(view: Self::View<'_, [u8]>, buffer: *mut u8) {
+        build_assert!(Self::is_mapped(view));
+
+        let ptr = Self::as_ptr(view);
+
+        // Use `bindings::memcpy` instead of copy_nonoverlapping for volatile.
+        // SAFETY:
+        // - `is_mapped` guarantees `ptr` is in CPU address space and valid for read.
+        // - `buffer` is valid for write for `view.size()` bytes which is equal to `ptr.len()`.
+        unsafe { bindings::memcpy(buffer.cast(), ptr.cast(), ptr.len()) };
+    }
+
+    /// Copy `size` bytes from `buffer` to `address`.
+    ///
+    /// # Safety
+    ///
+    /// - `buffer` is valid for volatile read for `view.size()` bytes.
+    #[inline]
+    unsafe fn copy_to_io(view: Self::View<'_, [u8]>, buffer: *const u8) {
+        build_assert!(Self::is_mapped(view));
+
+        let ptr = Self::as_ptr(view);
+
+        // Use `bindings::memcpy` instead of copy_nonoverlapping for volatile.
+        // SAFETY:
+        // - `is_mapped` guarantees `ptr` is in CPU address space and valid for write.
+        // - `buffer` is valid for read for `view.size()` bytes which is equal to `ptr.len()`.
+        unsafe { bindings::memcpy(ptr.cast(), buffer.cast(), ptr.len()) };
+    }
+}
+
 /// Describes a given I/O location: its offset, width, and type to convert the raw value from and
 /// into.
 ///
@@ -304,6 +362,24 @@ pub trait Io<'a>: IoBase<'a> {
     #[inline]
     fn size(self) -> usize {
         KnownSize::size(Self::Backend::as_ptr(self.as_view()))
+    }
+
+    /// Returns the length of the slice in number of elements.
+    #[inline]
+    fn len<T>(self) -> usize
+    where
+        Self: Io<'a, Target = [T]>,
+    {
+        Self::Backend::as_ptr(self.as_view()).len()
+    }
+
+    /// Returns `true` if the slice has a length of 0.
+    #[inline]
+    fn is_empty<T>(self) -> bool
+    where
+        Self: Io<'a, Target = [T]>,
+    {
+        self.len() == 0
     }
 
     /// Try to convert into a different typed I/O view.
@@ -395,6 +471,264 @@ pub trait Io<'a>: IoBase<'a> {
         Self::Target: Sized,
     {
         Self::Backend::io_write(self.as_view(), value)
+    }
+
+    /// Copy-read from I/O memory.
+    ///
+    /// There is no atomicity guarantee.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use kernel::io::*;
+    /// # fn test_copy_read(mmio: Mmio<'_, [u8; 6]>) {
+    /// // let mmio: Mmio<'_, [u8; 6]>;
+    /// let val: [u8; 6] = mmio.copy_read();
+    /// # }
+    /// ```
+    #[inline]
+    fn copy_read(self) -> Self::Target
+    where
+        Self::Backend: IoCopyable,
+        Self::Target: Sized + FromBytes,
+    {
+        let view = self.as_view();
+
+        // Optimized path if I/O backend is CPU mapped.
+        if Self::Backend::is_mapped(view) {
+            let ptr = Self::Backend::as_ptr(view);
+            // SAFETY:
+            // - `is_mapped` guarantees `ptr` is valid for read in CPU address space.
+            // - Using read_volatile() here so that race with hardware is well-defined.
+            // - Using read_volatile() here is not sound if it races with other CPU per Rust
+            //   rules, but this is allowed per LKMM.
+            return unsafe { ptr.read_volatile() };
+        }
+
+        // Project `self` to `[u8]`.
+        let ptr = Self::Backend::as_ptr(view);
+        // SAFETY: This is a identity projection.
+        let slice_view = unsafe {
+            Self::Backend::project_view(
+                view,
+                core::ptr::slice_from_raw_parts_mut::<u8>(ptr.cast(), size_of::<Self::Target>()),
+            )
+        };
+
+        let mut buf = MaybeUninit::<Self::Target>::uninit();
+        // SAFETY: `buf.as_mut_ptr()` is valid for write for `size_of::<T>()` bytes.
+        unsafe { Self::Backend::copy_from_io(slice_view, buf.as_mut_ptr().cast()) };
+        // SAFETY: T: FromBytes` guarantee that all bit patterns are valid.
+        unsafe { buf.assume_init() }
+    }
+
+    /// Copy-write to I/O memory.
+    ///
+    /// There is no atomicity guarantee.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use kernel::io::*;
+    /// # fn test_copy_write(mmio: Mmio<'_, [u8; 6]>) {
+    /// // let mmio: Mmio<'_, [u8; 6]>;
+    /// mmio.copy_write([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+    /// # }
+    /// ```
+    #[inline]
+    fn copy_write(self, value: Self::Target)
+    where
+        Self::Backend: IoCopyable,
+        Self::Target: Sized + AsBytes,
+    {
+        let view = self.as_view();
+
+        // Optimized path if I/O backend is CPU mapped.
+        if Self::Backend::is_mapped(view) {
+            let ptr = Self::Backend::as_ptr(view);
+            // SAFETY:
+            // - `is_mapped` guarantees `ptr` is valid for write in CPU address space.
+            // - Using write_volatile() here so that race with hardware is well-defined.
+            // - Using write_volatile() here is not sound if it races with other CPU per Rust
+            //   rules, but this is allowed per LKMM.
+            unsafe { ptr.write_volatile(value) };
+            return;
+        }
+
+        // Project `self` to `[u8]`.
+        let ptr = Self::Backend::as_ptr(view);
+        // SAFETY: This is a identity projection.
+        let slice_view = unsafe {
+            Self::Backend::project_view(
+                view,
+                core::ptr::slice_from_raw_parts_mut::<u8>(ptr.cast(), size_of::<Self::Target>()),
+            )
+        };
+
+        // SAFETY: `&raw const value` is valid for read for `size_of::<T>()` bytes.
+        unsafe { Self::Backend::copy_to_io(slice_view, (&raw const value).cast()) };
+        core::mem::forget(value);
+    }
+
+    /// Copy bytes from slice to I/O memory.
+    ///
+    /// The length of `self` must be the same as `data`, similar to [`[u8]::copy_from_slice`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use kernel::io::*;
+    /// # fn test_copy_write(mmio: Mmio<'_, [u8]>) {
+    /// // let mmio: Mmio<'_, [u8]>;
+    /// mmio.copy_from_slice(&[0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+    /// # }
+    /// ```
+    #[inline]
+    fn copy_from_slice(self, data: &[u8])
+    where
+        Self::Backend: IoCopyable,
+        Self: Io<'a, Target = [u8]>,
+    {
+        assert_eq!(self.len(), data.len());
+
+        // SAFETY: `data.as_ptr()` is valid for read for `self.size()` bytes.
+        unsafe {
+            Self::Backend::copy_to_io(self.as_view(), data.as_ptr());
+        }
+    }
+
+    /// Copy bytes from I/O memory to slice.
+    ///
+    /// The length of `self` must be the same as `data`, similar to [`[u8]::copy_from_slice`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use kernel::io::*;
+    /// # fn test_copy_write(mmio: Mmio<'_, [u8]>) {
+    /// // let mmio: Mmio<'_, [u8]>;
+    /// let mut buf = [0; 6];
+    /// mmio.copy_to_slice(&mut buf);
+    /// # }
+    /// ```
+    #[inline]
+    fn copy_to_slice(self, data: &mut [u8])
+    where
+        Self::Backend: IoCopyable,
+        Self: Io<'a, Target = [u8]>,
+    {
+        assert_eq!(self.len(), data.len());
+
+        // SAFETY: `data.as_ptr()` is valid for write for `self.size()` bytes.
+        unsafe {
+            Self::Backend::copy_from_io(self.as_view(), data.as_mut_ptr());
+        }
+    }
+
+    /// Copy bytes from `data` I/O slice to the `self`.
+    ///
+    /// The length of `self` must be the same as `data`, similar to [`[u8]::copy_from_slice`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use kernel::io::*;
+    /// # fn test_copy_write(dst: Mmio<'_, [u8]>, src: Mmio<'_, [u8]>) {
+    /// // let dst: Mmio<'_, [u8]>;
+    /// // let src: Mmio<'_, [u8]>;
+    /// dst.copy_from_io_slice(src);
+    /// # }
+    /// ```
+    fn copy_from_io_slice<'b, T>(self, data: T)
+    where
+        Self::Backend: IoCopyable,
+        Self: Io<'a, Target = [u8]>,
+        T: Io<'b, Target = [u8], Backend: IoCopyable>,
+    {
+        fn copy_from_io_slice_via_buffer<
+            'a,
+            'b,
+            T: Io<'a, Target = [u8], Backend: IoCopyable>,
+            U: Io<'b, Target = [u8], Backend: IoCopyable>,
+        >(
+            dest: T,
+            src: U,
+        ) {
+            let mut buf = MaybeUninit::<[u8; 256]>::uninit();
+
+            let mut offset = 0;
+            let mut len = dest.len();
+
+            while len != 0 {
+                let copy_len = core::cmp::min(len, 256);
+
+                // SAFETY: `buf.as_mut_ptr()` is valid for write for `copy_len` bytes as `copy_len
+                // <= 256`.
+                unsafe {
+                    U::Backend::copy_from_io(
+                        io_project!(src, [panic: offset..][panic: ..copy_len]),
+                        buf.as_mut_ptr().cast(),
+                    )
+                };
+
+                // SAFETY: `buf.as_ptr()` is valid for read for `copy_len` bytes as `copy_len <=
+                // 256`.
+                unsafe {
+                    T::Backend::copy_to_io(
+                        io_project!(dest, [panic: offset..][panic: ..copy_len]),
+                        buf.as_ptr().cast(),
+                    )
+                };
+
+                offset += copy_len;
+                len -= copy_len;
+            }
+        }
+
+        assert_eq!(self.len(), data.len());
+
+        let dst_view = self.as_view();
+        let src_view = data.as_view();
+
+        if T::Backend::is_mapped(src_view) {
+            // SAFETY: `T::Backend::as_ptr(src_view)` is valid for read for `data.len()`
+            // bytes.
+            unsafe {
+                Self::Backend::copy_to_io(self.as_view(), T::Backend::as_ptr(src_view).cast())
+            }
+        } else if Self::Backend::is_mapped(dst_view) {
+            // SAFETY: `Self::Backend::as_ptr(dst_view)` is valid for write for `data.len()`
+            // bytes.
+            unsafe {
+                T::Backend::copy_from_io(data.as_view(), Self::Backend::as_ptr(dst_view).cast())
+            }
+        } else {
+            copy_from_io_slice_via_buffer(dst_view, src_view)
+        }
+    }
+
+    /// Copy bytes from `self` to the `data` I/O slice.
+    ///
+    /// The length of `self` must be the same as `data`, similar to [`[u8]::copy_from_slice`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use kernel::io::*;
+    /// # fn test_copy_write(dst: Mmio<'_, [u8]>, src: Mmio<'_, [u8]>) {
+    /// // let dst: Mmio<'_, [u8]>;
+    /// // let src: Mmio<'_, [u8]>;
+    /// src.copy_to_io_slice(dst);
+    /// # }
+    /// ```
+    #[inline]
+    fn copy_to_io_slice<'b, T>(self, data: T)
+    where
+        Self::Backend: IoCopyable,
+        Self: Io<'a, Target = [u8]>,
+        T: Io<'b, Target = [u8], Backend: IoCopyable>,
+    {
+        data.copy_from_io_slice(self)
     }
 
     /// Returns a view for a given `offset`, performing compile-time bound checks.
@@ -987,6 +1321,29 @@ impl_mmio_io_capable!(MmioBackend, u32, readl, writel);
 #[cfg(CONFIG_64BIT)]
 impl_mmio_io_capable!(MmioBackend, u64, readq, writeq);
 
+// SAFETY: `is_mapped` is not overridden.
+unsafe impl IoCopyable for MmioBackend {
+    #[inline]
+    unsafe fn copy_from_io(view: Self::View<'_, [u8]>, buffer: *mut u8) {
+        // SAFETY:
+        // - `view.ptr` is valid MMIO memory for `view.size()` bytes.
+        // - `buffer` is valid for write for `view.size()` bytes.
+        unsafe {
+            bindings::memcpy_fromio(buffer.cast(), view.ptr.cast(), view.size());
+        }
+    }
+
+    #[inline]
+    unsafe fn copy_to_io(view: Self::View<'_, [u8]>, buffer: *const u8) {
+        // SAFETY:
+        // - `view.ptr` is valid MMIO memory for `view.size()` bytes.
+        // - `buffer` is valid for read for `view.size()` bytes.
+        unsafe {
+            bindings::memcpy_toio(view.ptr.cast(), buffer.cast(), view.size());
+        }
+    }
+}
+
 /// [`Mmio`] but using relaxed accessors.
 ///
 /// This type provides an implementation of [`Io`] that uses relaxed I/O MMIO operands instead of
@@ -1141,6 +1498,14 @@ impl_sysmem_io_capable!(u16);
 impl_sysmem_io_capable!(u32);
 #[cfg(CONFIG_64BIT)]
 impl_sysmem_io_capable!(u64);
+
+// SAFETY: `SysMem::as_ptr` is mapped to the CPU address space.
+unsafe impl IoCopyable for SysMemBackend {
+    #[inline(always)]
+    fn is_mapped<T: ?Sized + KnownSize>(_view: Self::View<'_, T>) -> bool {
+        true
+    }
+}
 
 /// System memory region.
 ///

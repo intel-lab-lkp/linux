@@ -18,6 +18,7 @@ use crate::{
         IoBackend,
         IoBase,
         IoCapable,
+        IoCopyable,
         SysMem,
         SysMemBackend, //
     },
@@ -1193,6 +1194,14 @@ where
     #[inline]
     fn io_write<'a>(view: Self::View<'a, T>, value: T) {
         SysMemBackend::io_write(view.cpu_addr, value)
+    }
+}
+
+// SAFETY: `CoherentView::as_ptr` is mapped to CPU address space.
+unsafe impl IoCopyable for CoherentBackend {
+    #[inline(always)]
+    fn is_mapped<T: ?Sized + KnownSize>(_view: Self::View<'_, T>) -> bool {
+        true
     }
 }
 

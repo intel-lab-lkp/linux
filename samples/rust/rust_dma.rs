@@ -12,7 +12,11 @@ use kernel::{
         Device,
         DmaMask, //
     },
-    io::io_read,
+    io::{
+        io_project,
+        io_read,
+        Io, //
+    },
     page, pci,
     prelude::*,
     scatterlist::{Owned, SGTable},
@@ -74,11 +78,11 @@ impl pci::Driver for DmaSampleDriver {
             // SAFETY: There are no concurrent calls to DMA allocation and mapping primitives.
             unsafe { pdev.dma_set_mask_and_coherent(mask)? };
 
-            let mut ca: CoherentBox<[MyStruct]> =
-                CoherentBox::zeroed_slice(pdev.as_ref(), TEST_VALUES.len(), GFP_KERNEL)?;
+            let ca: Coherent<[MyStruct]> =
+                Coherent::zeroed_slice(pdev.as_ref(), TEST_VALUES.len(), GFP_KERNEL)?;
 
             for (i, value) in TEST_VALUES.into_iter().enumerate() {
-                ca.init_at(i, MyStruct::new(value.0, value.1))?;
+                io_project!(ca, [panic: i]).copy_write(MyStruct::new(value.0, value.1));
             }
 
             let size = 4 * page::PAGE_SIZE;
@@ -88,7 +92,7 @@ impl pci::Driver for DmaSampleDriver {
 
             Ok(try_pin_init!(Self {
                 pdev: pdev.into(),
-                ca: ca.into(),
+                ca,
                 sgt <- sgt,
             }))
         })
