@@ -88,6 +88,7 @@ parameters, info versions, and other features it supports.
    ionic
    iosm
    ixgbe
+   ixd
    kvaser_pciefd
    kvaser_usb
    mlx4
