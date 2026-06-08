@@ -1779,9 +1779,6 @@ static bool _psr_compute_config(struct intel_dp *intel_dp,
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	int entry_setup_frames;
 
-	if (!CAN_PSR(intel_dp) || !display->params.enable_psr)
-		return false;
-
 	/*
 	 * Currently PSR doesn't work reliably with VRR enabled.
 	 */
@@ -1907,6 +1904,15 @@ static bool _panel_replay_pre_compute_config(struct intel_dp *intel_dp,
 	return true;
 }
 
+static bool _psr_pre_compute_config(struct intel_dp *intel_dp,
+				    struct intel_crtc_state *crtc_state,
+				    struct drm_connector_state *conn_state)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+
+	return CAN_PSR(intel_dp) && display->params.enable_psr;
+}
+
 static bool intel_psr_needs_wa_18037818876(struct intel_dp *intel_dp,
 					   struct intel_crtc_state *crtc_state)
 {
@@ -1952,19 +1958,30 @@ void intel_psr_pre_compute_config(struct intel_dp *intel_dp,
 
 	if (!psr_global_enabled(intel_dp)) {
 		drm_dbg_kms(display->drm, "PSR disabled by flag\n");
-		return;
+		goto out_psr_disable;
 	}
 
 	if (intel_dp->psr.sink_not_reliable) {
 		drm_dbg_kms(display->drm,
 			    "PSR sink implementation is not reliable\n");
-		return;
+		goto out_psr_disable;
 	}
+
+	crtc_state->has_psr = crtc_state->has_panel_replay =
+		_panel_replay_pre_compute_config(intel_dp, crtc_state,
+						 conn_state);
+
+	if (!crtc_state->has_psr)
+		crtc_state->has_psr = _psr_pre_compute_config(intel_dp, crtc_state,
+							      conn_state);
+
+	if (!crtc_state->has_psr)
+		goto out_psr_disable;
 
 	if (adjusted_mode->flags & DRM_MODE_FLAG_INTERLACE) {
 		drm_dbg_kms(display->drm,
 			    "PSR condition failed: Interlaced mode enabled\n");
-		return;
+		goto out_psr_disable;
 	}
 
 	/*
@@ -1975,13 +1992,13 @@ void intel_psr_pre_compute_config(struct intel_dp *intel_dp,
 	if (crtc_state->joiner_pipes) {
 		drm_dbg_kms(display->drm,
 			    "PSR disabled due to joiner\n");
-		return;
+		goto out_psr_disable;
 	}
 
-	crtc_state->has_psr = true;
-	crtc_state->has_panel_replay =
-		_panel_replay_pre_compute_config(intel_dp, crtc_state,
-						 conn_state);
+	return;
+
+out_psr_disable:
+	crtc_state->has_psr = crtc_state->has_panel_replay = false;
 }
 
 void intel_psr_compute_config(struct intel_dp *intel_dp,
