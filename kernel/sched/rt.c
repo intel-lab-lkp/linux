@@ -284,9 +284,19 @@ int alloc_rt_sched_group(struct task_group *tg, struct task_group *parent)
 	return 1;
 }
 
+static struct sched_rt_entity *pick_next_rt_entity(struct rt_rq *rt_rq);
+
 static struct task_struct *rt_server_pick(struct sched_dl_entity *dl_se, struct rq_flags *rf)
 {
-	return NULL;
+	struct rt_rq *rt_rq = &dl_se->my_q->rt;
+	struct task_struct *p;
+
+	if (!sched_rt_runnable(dl_se->my_q))
+		return NULL;
+
+	p = rt_task_of(pick_next_rt_entity(rt_rq));
+
+	return p;
 }
 
 #else /* !CONFIG_RT_GROUP_SCHED */
@@ -314,6 +324,9 @@ static inline int rt_overloaded(struct rq *rq)
 
 static inline void rt_set_overload(struct rq *rq)
 {
+	if (is_dl_group(&rq->rt))
+		return;
+
 	if (!rq->online)
 		return;
 
@@ -333,6 +346,9 @@ static inline void rt_set_overload(struct rq *rq)
 
 static inline void rt_clear_overload(struct rq *rq)
 {
+	if (is_dl_group(&rq->rt))
+		return;
+
 	if (!rq->online)
 		return;
 
@@ -392,7 +408,7 @@ static void enqueue_pushable_task(struct rt_rq *rt_rq, struct task_struct *p)
 		rt_rq->highest_prio.next = p->prio;
 
 	if (!rt_rq->overloaded) {
-		rt_set_overload(global_rq_of_rt_rq(rt_rq));
+		rt_set_overload(rq_of_rt_rq(rt_rq));
 		rt_rq->overloaded = 1;
 	}
 }
@@ -410,7 +426,7 @@ static void dequeue_pushable_task(struct rt_rq *rt_rq, struct task_struct *p)
 		rt_rq->highest_prio.next = MAX_RT_PRIO-1;
 
 		if (rt_rq->overloaded) {
-			rt_clear_overload(global_rq_of_rt_rq(rt_rq));
+			rt_clear_overload(rq_of_rt_rq(rt_rq));
 			rt_rq->overloaded = 0;
 		}
 	}
@@ -511,6 +527,7 @@ static inline int rt_se_prio(struct sched_rt_entity *rt_se)
 static void update_curr_rt(struct rq *rq)
 {
 	struct task_struct *donor = rq->donor;
+	struct rt_rq *rt_rq;
 	s64 delta_exec;
 
 	if (donor->sched_class != &rt_sched_class)
@@ -520,21 +537,32 @@ static void update_curr_rt(struct rq *rq)
 	if (unlikely(delta_exec <= 0))
 		return;
 
-	if (!rt_bandwidth_enabled())
+	if (!rt_group_sched_enabled())
 		return;
+
+	if (!dl_bandwidth_enabled())
+		return;
+
+	rt_rq = rt_rq_of_se(&donor->rt);
+	if (is_dl_group(rt_rq)) {
+		struct sched_dl_entity *dl_se = dl_group_of(rt_rq);
+
+		dl_server_update(dl_se, delta_exec);
+	}
 }
 
 static void
 inc_rt_prio_smp(struct rt_rq *rt_rq, int prio, int prev_prio)
 {
-	struct rq *rq = rq_of_rt_rq(rt_rq);
+	struct rq *rq;
 
 	/*
 	 * Change rq's cpupri only if rt_rq is the top queue.
 	 */
-	if (IS_ENABLED(CONFIG_RT_GROUP_SCHED) && &rq->rt != rt_rq)
+	if (is_dl_group(rt_rq))
 		return;
 
+	rq = rq_of_rt_rq(rt_rq);
 	if (rq->online && prio < prev_prio)
 		cpupri_set(&rq->rd->cpupri, rq->cpu, prio);
 }
@@ -542,14 +570,15 @@ inc_rt_prio_smp(struct rt_rq *rt_rq, int prio, int prev_prio)
 static void
 dec_rt_prio_smp(struct rt_rq *rt_rq, int prio, int prev_prio)
 {
-	struct rq *rq = rq_of_rt_rq(rt_rq);
+	struct rq *rq;
 
 	/*
 	 * Change rq's cpupri only if rt_rq is the top queue.
 	 */
-	if (IS_ENABLED(CONFIG_RT_GROUP_SCHED) && &rq->rt != rt_rq)
+	if (is_dl_group(rt_rq))
 		return;
 
+	rq = rq_of_rt_rq(rt_rq);
 	if (rq->online && rt_rq->highest_prio.curr != prev_prio)
 		cpupri_set(&rq->rd->cpupri, rq->cpu, rt_rq->highest_prio.curr);
 }
@@ -610,6 +639,15 @@ void inc_rt_tasks(struct sched_rt_entity *rt_se, struct rt_rq *rt_rq)
 	rt_rq->rr_nr_running += is_rr_task(rt_se);
 
 	inc_rt_prio(rt_rq, rt_se_prio(rt_se));
+
+	if (is_dl_group(rt_rq)) {
+		struct sched_dl_entity *dl_se = dl_group_of(rt_rq);
+
+		if (!dl_se->dl_throttled)
+			add_nr_running(global_rq_of_rt_rq(rt_rq), 1);
+	}
+
+	add_nr_running(rq_of_rt_rq(rt_rq), 1);
 }
 
 static inline
@@ -620,6 +658,15 @@ void dec_rt_tasks(struct sched_rt_entity *rt_se, struct rt_rq *rt_rq)
 	rt_rq->rr_nr_running -= is_rr_task(rt_se);
 
 	dec_rt_prio(rt_rq, rt_se_prio(rt_se));
+
+	if (is_dl_group(rt_rq)) {
+		struct sched_dl_entity *dl_se = dl_group_of(rt_rq);
+
+		if (!dl_se->dl_throttled)
+			sub_nr_running(global_rq_of_rt_rq(rt_rq), 1);
+	}
+
+	sub_nr_running(rq_of_rt_rq(rt_rq), 1);
 }
 
 /*
@@ -805,6 +852,13 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 
 	check_schedstat_required();
 	update_stats_wait_start_rt(rt_rq_of_se(rt_se), rt_se);
+
+	/* Task arriving in an idle group of tasks. */
+	if (is_dl_group(rt_rq) && rt_rq->rt_nr_running == 0) {
+		struct sched_dl_entity *dl_se = dl_group_of(rt_rq);
+
+		dl_server_start(dl_se);
+	}
 
 	enqueue_rt_entity(rt_se, flags);
 
