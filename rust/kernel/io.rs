@@ -96,8 +96,8 @@ impl<const SIZE: usize> KnownSize for Region<SIZE> {
 /// the represented MMIO region does exist or is properly mapped.
 ///
 /// Instead, the bus specific MMIO implementation must convert this raw representation into an
-/// `Mmio` instance providing the actual memory accessors. Only by the conversion into an `Mmio`
-/// structure any guarantees are given.
+/// `MmioOwned` instance providing the actual memory accessors. Only by the conversion into an
+/// `MmioOwned` structure any guarantees are given.
 pub struct MmioRaw<T: ?Sized> {
     /// Pointer is in I/O address space.
     ///
@@ -172,7 +172,7 @@ impl<T: ?Sized + KnownSize> MmioRaw<T> {
 ///     ffi::c_void,
 ///     io::{
 ///         Io,
-///         Mmio,
+///         MmioOwned,
 ///         MmioRaw,
 ///         PhysAddr,
 ///         Region,
@@ -208,11 +208,11 @@ impl<T: ?Sized + KnownSize> MmioRaw<T> {
 /// }
 ///
 /// impl<const SIZE: usize> Deref for IoMem<SIZE> {
-///    type Target = Mmio<SIZE>;
+///    type Target = MmioOwned<SIZE>;
 ///
 ///    fn deref(&self) -> &Self::Target {
 ///         // SAFETY: The memory range stored in `self` has been properly mapped in `Self::new`.
-///         unsafe { Mmio::from_raw(&self.0) }
+///         unsafe { MmioOwned::from_raw(&self.0) }
 ///    }
 /// }
 ///
@@ -226,7 +226,7 @@ impl<T: ?Sized + KnownSize> MmioRaw<T> {
 /// # }
 /// ```
 #[repr(transparent)]
-pub struct Mmio<const SIZE: usize = 0>(MmioRaw<Region<SIZE>>);
+pub struct MmioOwned<const SIZE: usize = 0>(MmioRaw<Region<SIZE>>);
 
 /// Checks whether an access of type `U` at the given `base` and the given `offset`
 /// is valid within this region.
@@ -538,10 +538,10 @@ pub trait Io: Copy {
     /// ```no_run
     /// use kernel::io::{
     ///     Io,
-    ///     Mmio,
+    ///     MmioOwned,
     /// };
     ///
-    /// fn do_reads(io: &Mmio) -> Result {
+    /// fn do_reads(io: &MmioOwned) -> Result {
     ///     // 32-bit read from address `0x10`.
     ///     let v: u32 = io.try_read(0x10)?;
     ///
@@ -572,10 +572,10 @@ pub trait Io: Copy {
     /// ```no_run
     /// use kernel::io::{
     ///     Io,
-    ///     Mmio,
+    ///     MmioOwned,
     /// };
     ///
-    /// fn do_writes(io: &Mmio) -> Result {
+    /// fn do_writes(io: &MmioOwned) -> Result {
     ///     // 32-bit write of value `1` at address `0x10`.
     ///     io.try_write(0x10, 1u32)?;
     ///
@@ -610,7 +610,7 @@ pub trait Io: Copy {
     /// use kernel::io::{
     ///     register,
     ///     Io,
-    ///     Mmio,
+    ///     MmioOwned,
     /// };
     ///
     /// register! {
@@ -626,7 +626,7 @@ pub trait Io: Copy {
     ///     }
     /// }
     ///
-    /// fn do_write_reg(io: &Mmio) -> Result {
+    /// fn do_write_reg(io: &MmioOwned) -> Result {
     ///
     ///     io.try_write_reg(VERSION::new(1, 0))
     /// }
@@ -655,10 +655,10 @@ pub trait Io: Copy {
     /// ```no_run
     /// use kernel::io::{
     ///     Io,
-    ///     Mmio,
+    ///     MmioOwned,
     /// };
     ///
-    /// fn do_update(io: &Mmio<0x1000>) -> Result {
+    /// fn do_update(io: &MmioOwned<0x1000>) -> Result {
     ///     io.try_update(0x10, |v: u32| {
     ///         v + 1
     ///     })
@@ -692,10 +692,10 @@ pub trait Io: Copy {
     /// ```no_run
     /// use kernel::io::{
     ///     Io,
-    ///     Mmio,
+    ///     MmioOwned,
     /// };
     ///
-    /// fn do_reads(io: &Mmio<0x1000>) {
+    /// fn do_reads(io: &MmioOwned<0x1000>) {
     ///     // 32-bit read from address `0x10`.
     ///     let v: u32 = io.read(0x10);
     ///
@@ -724,10 +724,10 @@ pub trait Io: Copy {
     /// ```no_run
     /// use kernel::io::{
     ///     Io,
-    ///     Mmio,
+    ///     MmioOwned,
     /// };
     ///
-    /// fn do_writes(io: &Mmio<0x1000>) {
+    /// fn do_writes(io: &MmioOwned<0x1000>) {
     ///     // 32-bit write of value `1` at address `0x10`.
     ///     io.write(0x10, 1u32);
     ///
@@ -758,7 +758,7 @@ pub trait Io: Copy {
     /// use kernel::io::{
     ///     register,
     ///     Io,
-    ///     Mmio,
+    ///     MmioOwned,
     /// };
     ///
     /// register! {
@@ -774,7 +774,7 @@ pub trait Io: Copy {
     ///     }
     /// }
     ///
-    /// fn do_write_reg(io: &Mmio<0x1000>) {
+    /// fn do_write_reg(io: &MmioOwned<0x1000>) {
     ///     io.write_reg(VERSION::new(1, 0));
     /// }
     /// ```
@@ -802,10 +802,10 @@ pub trait Io: Copy {
     /// ```no_run
     /// use kernel::io::{
     ///     Io,
-    ///     Mmio,
+    ///     MmioOwned,
     /// };
     ///
-    /// fn do_update(io: &Mmio<0x1000>) {
+    /// fn do_update(io: &MmioOwned<0x1000>) {
     ///     io.update(0x10, |v: u32| {
     ///         v + 1
     ///     })
@@ -848,19 +848,19 @@ macro_rules! impl_mmio_io_capable {
 }
 
 // MMIO regions support 8, 16, and 32-bit accesses.
-impl_mmio_io_capable!(Mmio, u8, readb, writeb);
-impl_mmio_io_capable!(Mmio, u16, readw, writew);
-impl_mmio_io_capable!(Mmio, u32, readl, writel);
+impl_mmio_io_capable!(MmioOwned, u8, readb, writeb);
+impl_mmio_io_capable!(MmioOwned, u16, readw, writew);
+impl_mmio_io_capable!(MmioOwned, u32, readl, writel);
 // MMIO regions on 64-bit systems also support 64-bit accesses.
 impl_mmio_io_capable!(
-    Mmio,
+    MmioOwned,
     #[cfg(CONFIG_64BIT)]
     u64,
     readq,
     writeq
 );
 
-impl<'a, const SIZE: usize> Io for &'a Mmio<SIZE> {
+impl<'a, const SIZE: usize> Io for &'a MmioOwned<SIZE> {
     type Target = Region<SIZE>;
 
     /// Returns the base address of this mapping.
@@ -876,27 +876,28 @@ impl<'a, const SIZE: usize> Io for &'a Mmio<SIZE> {
     }
 }
 
-impl<const SIZE: usize> Mmio<SIZE> {
-    /// Converts an `MmioRaw` into an `Mmio` instance, providing the accessors to the MMIO mapping.
+impl<const SIZE: usize> MmioOwned<SIZE> {
+    /// Converts an `MmioRaw` into an `MmioOwned` instance, providing the accessors to the MMIO
+    /// mapping.
     ///
     /// # Safety
     ///
     /// Callers must ensure that `addr` is the start of a valid I/O mapped memory region of size
     /// `maxsize`.
     pub unsafe fn from_raw(raw: &MmioRaw<Region<SIZE>>) -> &Self {
-        // SAFETY: `Mmio` is a transparent wrapper around `MmioRaw`.
+        // SAFETY: `MmioOwned` is a transparent wrapper around `MmioRaw`.
         unsafe { &*core::ptr::from_ref(raw).cast() }
     }
 }
 
-/// [`Mmio`] wrapper using relaxed accessors.
+/// [`MmioOwned`] wrapper using relaxed accessors.
 ///
 /// This type provides an implementation of [`Io`] that uses relaxed I/O MMIO operands instead of
 /// the regular ones.
 ///
-/// See [`Mmio::relaxed`] for a usage example.
+/// See [`MmioOwned::relaxed`] for a usage example.
 #[repr(transparent)]
-pub struct RelaxedMmio<const SIZE: usize = 0>(Mmio<SIZE>);
+pub struct RelaxedMmio<const SIZE: usize = 0>(MmioOwned<SIZE>);
 
 impl<'a, const SIZE: usize> Io for &'a RelaxedMmio<SIZE> {
     type Target = Region<SIZE>;
@@ -912,7 +913,7 @@ impl<'a, const SIZE: usize> Io for &'a RelaxedMmio<SIZE> {
     }
 }
 
-impl<const SIZE: usize> Mmio<SIZE> {
+impl<const SIZE: usize> MmioOwned<SIZE> {
     /// Returns a [`RelaxedMmio`] reference that performs relaxed I/O operations.
     ///
     /// Relaxed accessors do not provide ordering guarantees with respect to DMA or memory accesses
@@ -923,19 +924,19 @@ impl<const SIZE: usize> Mmio<SIZE> {
     /// ```no_run
     /// use kernel::io::{
     ///     Io,
-    ///     Mmio,
+    ///     MmioOwned,
     ///     RelaxedMmio,
     /// };
     ///
-    /// fn do_io(io: &Mmio<0x100>) {
+    /// fn do_io(io: &MmioOwned<0x100>) {
     ///     // The access is performed using `readl_relaxed` instead of `readl`.
     ///     let v = io.relaxed().read32(0x10);
     /// }
     ///
     /// ```
     pub fn relaxed(&self) -> &RelaxedMmio<SIZE> {
-        // SAFETY: `RelaxedMmio` is `#[repr(transparent)]` over `Mmio`, so `Mmio<SIZE>` and
-        // `RelaxedMmio<SIZE>` have identical layout.
+        // SAFETY: `RelaxedMmio` is `#[repr(transparent)]` over `MmioOwned`, so `MmioOwned<SIZE>`
+        // and `RelaxedMmio<SIZE>` have identical layout.
         unsafe { core::mem::transmute(self) }
     }
 }

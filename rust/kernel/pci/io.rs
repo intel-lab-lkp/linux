@@ -10,7 +10,7 @@ use crate::{
     io::{
         Io,
         IoCapable,
-        Mmio,
+        MmioOwned,
         MmioRaw,
         Region, //
     },
@@ -242,11 +242,11 @@ impl<const SIZE: usize> Drop for Bar<'_, SIZE> {
 }
 
 impl<const SIZE: usize> Deref for Bar<'_, SIZE> {
-    type Target = Mmio<SIZE>;
+    type Target = MmioOwned<SIZE>;
 
     fn deref(&self) -> &Self::Target {
         // SAFETY: By the type invariant of `Self`, the MMIO range in `self.io` is properly mapped.
-        unsafe { Mmio::from_raw(&self.io) }
+        unsafe { MmioOwned::from_raw(&self.io) }
     }
 }
 
