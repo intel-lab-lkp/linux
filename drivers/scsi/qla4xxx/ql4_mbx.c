@@ -1370,7 +1370,7 @@ int qla4xxx_about_firmware(struct scsi_qla_host *ha)
 	       sizeof(about_fw->fw_build_date));
 	memcpy(ha->fw_info.fw_build_time, about_fw->fw_build_time,
 	       sizeof(about_fw->fw_build_time));
-	strcpy((char *)ha->fw_info.fw_build_user,
+	strscpy(ha->fw_info.fw_build_user,
 	       skip_spaces((char *)about_fw->fw_build_user));
 	ha->fw_info.fw_load_source = le16_to_cpu(about_fw->fw_load_source);
 	ha->fw_info.iscsi_major = le16_to_cpu(about_fw->iscsi_major);
@@ -1379,7 +1379,7 @@ int qla4xxx_about_firmware(struct scsi_qla_host *ha)
 	ha->fw_info.bootload_minor = le16_to_cpu(about_fw->bootload_minor);
 	ha->fw_info.bootload_patch = le16_to_cpu(about_fw->bootload_patch);
 	ha->fw_info.bootload_build = le16_to_cpu(about_fw->bootload_build);
-	strcpy((char *)ha->fw_info.extended_timestamp,
+	strscpy(ha->fw_info.extended_timestamp,
 	       skip_spaces((char *)about_fw->extended_timestamp));
 
 	ha->fw_uptime_secs = le32_to_cpu(mbox_sts[5]);
