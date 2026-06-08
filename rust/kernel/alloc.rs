@@ -126,6 +126,11 @@ impl NumaNode {
         }
         Ok(Self(node))
     }
+
+    /// Returns the raw NUMA node identifier as an `i32`.
+    pub fn id(&self) -> i32 {
+        self.0
+    }
 }
 
 /// Specify necessary constant to pass the information to Allocator that the caller doesn't care
