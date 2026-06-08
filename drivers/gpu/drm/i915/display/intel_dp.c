@@ -2494,7 +2494,7 @@ bool intel_dp_needs_8b10b_fec(const struct intel_crtc_state *crtc_state,
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP))
 		return false;
 
-	return dsc_enabled_on_crtc || intel_dsc_enabled_on_link(crtc_state);
+	return dsc_enabled_on_crtc || intel_fec_enabled_on_link(crtc_state);
 }
 
 void intel_dp_dsc_reset_config(struct intel_crtc_state *crtc_state)

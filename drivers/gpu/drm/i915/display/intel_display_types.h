@@ -1335,7 +1335,7 @@ struct intel_crtc_state {
 	/* Display Stream compression state */
 	struct {
 		/* Only used for state computation, not read out from the HW. */
-		bool compression_enabled_on_link;
+		bool fec_enabled_on_link;
 		bool compression_enable;
 		struct intel_dsc_slice_config {
 			int pipes_per_line;
