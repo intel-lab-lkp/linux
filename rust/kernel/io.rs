@@ -186,7 +186,7 @@ const fn offset_valid<U>(base: usize, offset: usize, size: usize) -> bool {
 /// operation.
 pub trait IoBackend {
     /// View type for this I/O backend.
-    type View<'a, T: ?Sized + KnownSize>: Io<'a, Backend = Self, Target = T>;
+    type View<'a, T: ?Sized + KnownSize>: IoBase<'a, Backend = Self, Target = T>;
 
     /// Convert a `view` to a raw pointer for projection.
     fn as_ptr<'a, T: ?Sized + KnownSize>(view: Self::View<'a, T>) -> *mut T;
@@ -269,13 +269,10 @@ impl_usize_ioloc!(u8, u16, u32, u64);
 /// Types implementing this trait (e.g. MMIO BARs or PCI config regions)
 /// can perform I/O operations on regions of memory.
 ///
-/// The [`Io`] trait provides:
-/// - Method to convert into [`IoBackend::View`].
-/// - Helper methods for offset validation and address calculation
-/// - Fallible (runtime checked) accessors for different data widths
-///
-/// Which I/O methods are available depends on the associated [`IoBackend`] implementation.
-pub trait Io<'a>: Copy {
+/// This trait defines which backend shall be used for I/O operations and provides a method to
+/// convert into [`IoBackend::View`]. Users should use the [`Io`] trait which provides the actual
+/// methods to perform I/O operations.
+pub trait IoBase<'a>: Copy {
     /// Type that defines all I/O operations.
     type Backend: IoBackend;
 
@@ -284,6 +281,21 @@ pub trait Io<'a>: Copy {
 
     /// Return a view that covers the full region.
     fn as_view(self) -> <Self::Backend as IoBackend>::View<'a, Self::Target>;
+}
+
+/// Extension trait to provide I/O operation methods to types that implement [`IoBase`].
+///
+/// This trait provides:
+/// - Helper methods for offset validation and address calculation
+/// - Fallible (runtime checked) accessors for different data widths
+///
+/// Which I/O methods are available depends on the associated [`IoBackend`] implementation.
+pub trait Io<'a>: IoBase<'a> {
+    /// Returns the size of this I/O region.
+    #[inline]
+    fn size(self) -> usize {
+        KnownSize::size(Self::Backend::as_ptr(self.as_view()))
+    }
 
     /// Returns a view for a given `offset`, performing compile-time bound checks.
     // Always inline to optimize out error path of `build_assert`.
@@ -771,6 +783,8 @@ pub trait Io<'a>: Copy {
     }
 }
 
+impl<'a, T: IoBase<'a>> Io<'a> for T {}
+
 /// A view of memory-mapped I/O region.
 ///
 /// # Invariant
@@ -811,7 +825,7 @@ unsafe impl<T: ?Sized + Sync> Send for Mmio<'_, T> {}
 // SAFETY: `Mmio<'_, T>` is conceptually `&T` but in I/O memory.
 unsafe impl<T: ?Sized + Sync> Sync for Mmio<'_, T> {}
 
-impl<'a, T: ?Sized + KnownSize> Io<'a> for Mmio<'a, T> {
+impl<'a, T: ?Sized + KnownSize> IoBase<'a> for Mmio<'a, T> {
     type Backend = MmioBackend;
     type Target = T;
 
@@ -921,7 +935,7 @@ impl IoBackend for RelaxedMmioBackend {
     }
 }
 
-impl<'a, T: ?Sized + KnownSize> Io<'a> for RelaxedMmio<'a, T> {
+impl<'a, T: ?Sized + KnownSize> IoBase<'a> for RelaxedMmio<'a, T> {
     type Backend = RelaxedMmioBackend;
     type Target = T;
 
