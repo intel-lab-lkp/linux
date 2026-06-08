@@ -53,6 +53,7 @@ TEST_PROGS := \
 	ipv6_force_forwarding.sh \
 	ipv6_route_update_soft_lockup.sh \
 	ipvtap_test.sh \
+	jumbogram.sh \
 	l2_tos_ttl_inherit.sh \
 	l2tp.sh \
 	link_netns.py \
@@ -147,6 +148,8 @@ TEST_GEN_FILES := \
 	ipsec \
 	ipv6_flowlabel \
 	ipv6_flowlabel_mgr \
+	jumbogram_rx \
+	jumbogram_tx \
 	msg_zerocopy \
 	nettest \
 	psock_fanout \
