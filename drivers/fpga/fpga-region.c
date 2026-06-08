@@ -81,6 +81,101 @@ static void fpga_region_put(struct fpga_region *region)
 }
 
 /**
+ * fpga_region_add_variant - add a new variant to the FPGA region
+ * @region: FPGA region
+ * @name: string identifier for the variant
+ * @is_enabled: whether this variant is the currently enabled variant
+ * @priv: private data to be associated with the variant
+ *
+ * Allocates a new variant and adds it to the region's variant list.
+ * If @is_enabled is true, this variant is marked as the enabled variant.
+ *
+ * Return: 0 on success, or -ENOMEM on memory allocation failure.
+ */
+int fpga_region_add_variant(struct fpga_region *region, const char *name,
+			    bool is_enabled, void *priv)
+{
+	struct fpga_variant *variant;
+	char *variant_name;
+
+	variant_name = devm_kstrdup(&region->dev, name, GFP_KERNEL);
+	if (!variant_name)
+		return -ENOMEM;
+
+	variant = devm_kzalloc(&region->dev, sizeof(*variant), GFP_KERNEL);
+	if (!variant)
+		return -ENOMEM;
+
+	variant->priv = priv;
+	variant->name = variant_name;
+
+	mutex_lock(&region->variant_mutex);
+	if (is_enabled)
+		region->enabled_variant = variant;
+
+	list_add_tail(&variant->node, &region->variant_list);
+	mutex_unlock(&region->variant_mutex);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(fpga_region_add_variant);
+
+/**
+ * fpga_region_program_variant - switch the variant of an FPGA region
+ * @region: FPGA region
+ * @name: string identifier of the variant to enable
+ *
+ * Get the requested variant from the region's variant list. If found,
+ * and it is not already active, removes the currently enabled variant via
+ * the remove_variant() callback and applies the requested one  via the
+ * apply_variant() callback.
+ *
+ * Return: 0 on success, -EINVAL if the variant is not found, or a negative
+ * error code passed up from the apply_variant() callback.
+ */
+int fpga_region_program_variant(struct fpga_region *region, const char *name)
+{
+	struct fpga_variant *variant;
+	bool found_variant = false;
+	int ret = -EINVAL;
+
+	mutex_lock(&region->variant_mutex);
+
+	list_for_each_entry(variant, &region->variant_list, node) {
+		if (sysfs_streq(variant->name, name)) {
+			found_variant = true;
+			break;
+		}
+	}
+
+	if (!found_variant)
+		goto out_unlock;
+
+	if (region->enabled_variant == variant) {
+		ret = 0;
+		goto out_unlock;
+	}
+
+	if (region->enabled_variant && region->remove_variant)
+		region->remove_variant(region, region->enabled_variant);
+
+	if (region->apply_variant) {
+		ret = region->apply_variant(region, variant);
+		if (ret) {
+			dev_err(&region->dev, "Variant programming failed!\n");
+			region->enabled_variant = NULL;
+		} else {
+			region->enabled_variant = variant;
+		}
+	}
+
+out_unlock:
+	mutex_unlock(&region->variant_mutex);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(fpga_region_program_variant);
+
+/**
  * fpga_region_program_fpga - program FPGA
  *
  * @region: FPGA region
@@ -174,11 +269,75 @@ static ssize_t compat_id_show(struct device *dev,
 
 static DEVICE_ATTR_RO(compat_id);
 
+static ssize_t variants_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct fpga_region *region = to_fpga_region(dev);
+	struct fpga_variant *variant;
+	int len = 0;
+
+	mutex_lock(&region->variant_mutex);
+	list_for_each_entry(variant, &region->variant_list, node)
+		len += sysfs_emit_at(buf, len, "%s\n", variant->name);
+	mutex_unlock(&region->variant_mutex);
+
+	return len;
+}
+static DEVICE_ATTR_RO(variants);
+
+static ssize_t enabled_variant_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct fpga_region *region = to_fpga_region(dev);
+	ssize_t len = 0;
+
+	mutex_lock(&region->variant_mutex);
+	if (region->enabled_variant)
+		len = sysfs_emit(buf, "%s\n", region->enabled_variant->name);
+	mutex_unlock(&region->variant_mutex);
+
+	return len;
+}
+
+static ssize_t enabled_variant_store(struct device *dev, struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct fpga_region *region = to_fpga_region(dev);
+	int ret;
+
+	ret = fpga_region_program_variant(region, buf);
+
+	return ret ? ret : count;
+}
+static DEVICE_ATTR_RW(enabled_variant);
+
+static struct attribute *fpga_region_variant_attrs[] = {
+	&dev_attr_enabled_variant.attr,
+	&dev_attr_variants.attr,
+	NULL,
+};
+
+static umode_t fpga_region_variant_is_visible(struct kobject *kobj, struct attribute *attr, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct fpga_region *region = to_fpga_region(dev);
+
+	return region->apply_variant ? attr->mode : 0;
+}
+
+static const struct attribute_group fpga_region_variant_group = {
+	.attrs = fpga_region_variant_attrs,
+	.is_visible = fpga_region_variant_is_visible,
+};
+
 static struct attribute *fpga_region_attrs[] = {
 	&dev_attr_compat_id.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(fpga_region);
+
+static const struct attribute_group *fpga_region_variant_groups[] = {
+	&fpga_region_variant_group,
+	NULL,
+};
 
 /**
  * __fpga_region_register_full - create and register an FPGA Region device
@@ -216,14 +375,19 @@ __fpga_region_register_full(struct device *parent, const struct fpga_region_info
 	region->priv = info->priv;
 	region->get_bridges = info->get_bridges;
 	region->ops_owner = owner;
+	region->apply_variant = info->apply_variant;
+	region->remove_variant = info->remove_variant;
 
 	mutex_init(&region->mutex);
+	mutex_init(&region->variant_mutex);
 	INIT_LIST_HEAD(&region->bridge_list);
+	INIT_LIST_HEAD(&region->variant_list);
 
 	region->dev.class = &fpga_region_class;
 	region->dev.parent = parent;
 	region->dev.of_node = parent->of_node;
 	region->dev.id = id;
+	region->dev.groups = fpga_region_variant_groups;
 
 	ret = dev_set_name(&region->dev, "region%d", id);
 	if (ret)
@@ -280,6 +444,13 @@ EXPORT_SYMBOL_GPL(__fpga_region_register);
  */
 void fpga_region_unregister(struct fpga_region *region)
 {
+	mutex_lock(&region->variant_mutex);
+	if (region->enabled_variant && region->remove_variant) {
+		region->remove_variant(region, region->enabled_variant);
+		region->enabled_variant = NULL;
+	}
+	mutex_unlock(&region->variant_mutex);
+
 	device_unregister(&region->dev);
 }
 EXPORT_SYMBOL_GPL(fpga_region_unregister);
