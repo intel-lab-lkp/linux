@@ -140,7 +140,9 @@ static int restore_vfp_context(char __user **auxp)
 static int restore_sigframe(struct pt_regs *regs, struct sigframe __user *sf)
 {
 	struct sigcontext context;
+#if defined(CONFIG_IWMMXT) || defined(CONFIG_VFP)
 	char __user *aux;
+#endif
 	sigset_t set;
 	int err;
 
@@ -171,6 +173,7 @@ static int restore_sigframe(struct pt_regs *regs, struct sigframe __user *sf)
 
 	err |= !valid_user_regs(regs);
 
+#if defined(CONFIG_IWMMXT) || defined(CONFIG_VFP)
 	aux = (char __user *) sf->uc.uc_regspace;
 #ifdef CONFIG_IWMMXT
 	if (err == 0)
@@ -180,6 +183,7 @@ static int restore_sigframe(struct pt_regs *regs, struct sigframe __user *sf)
 	if (err == 0)
 		err |= restore_vfp_context(&aux);
 #endif
+#endif /* defined(CONFIG_IWMMXT) || defined(CONFIG_VFP) */
 
 	return err;
 }
