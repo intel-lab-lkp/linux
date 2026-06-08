@@ -1401,6 +1401,7 @@ static int atomisp_pci_probe(struct pci_dev *pdev, const struct pci_device_id *i
 	err = atomisp_register_entities(isp);
 	if (err < 0) {
 		dev_err(&pdev->dev, "atomisp_register_entities failed (%d)\n", err);
+		atomisp_subdev_unregister_entities(&isp->asd);
 		goto error_uninitialize_modules;
 	}
 
