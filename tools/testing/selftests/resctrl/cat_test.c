@@ -682,3 +682,156 @@ struct resctrl_test l3_cat_validate_test = {
 	.feature_check = test_resource_feature_check,
 	.run_test = cat_validate_run_test,
 };
+
+/*
+ * L3_BIT_USAGE - Verify info/L3/bit_usage reflects the allocation.
+ *
+ * bit_usage annotates each cache portion: 'X'/'S' mean a portion is used by
+ * software, 'H'/'0' mean it is not. With only the root group present, a
+ * portion is software-used exactly when it is in the root CBM, so bit_usage
+ * must track the CBM bit-for-bit.
+ */
+#define BIT_USAGE_LEN	256
+
+static bool bit_usage_sw_used(char c)
+{
+	return c == 'X' || c == 'S';
+}
+
+static bool bit_usage_not_used(char c)
+{
+	return c == 'H' || c == '0';
+}
+
+static int bit_usage_for_domain(const char *resource, int domain_id,
+				char *out, size_t len)
+{
+	char path[1024], raw[BIT_USAGE_LEN], *tok, *save;
+	FILE *fp;
+
+	snprintf(path, sizeof(path), "%s/%s/bit_usage", INFO_PATH, resource);
+	fp = fopen(path, "r");
+	if (!fp) {
+		ksft_perror("Error opening bit_usage");
+		return -1;
+	}
+	if (!fgets(raw, sizeof(raw), fp)) {
+		ksft_perror("Error reading bit_usage");
+		fclose(fp);
+		return -1;
+	}
+	fclose(fp);
+
+	/* bit_usage is "id=chars;id=chars;..."; return the chars for domain_id. */
+	for (tok = strtok_r(raw, ";\n", &save); tok; tok = strtok_r(NULL, ";\n", &save)) {
+		char *eq = strchr(tok, '=');
+
+		if (!eq)
+			continue;
+		*eq = '\0';
+		if (atoi(tok) == domain_id) {
+			snprintf(out, len, "%s", eq + 1);
+			return 0;
+		}
+	}
+
+	ksft_print_msg("No bit_usage entry for domain %d\n", domain_id);
+	return -1;
+}
+
+static int bit_usage_check_mask(const struct resctrl_test *test, int cpu,
+				int domain_id, unsigned long mask,
+				int count_of_bits)
+{
+	char schemata[64], usage[BIT_USAGE_LEN];
+	int i, ret;
+
+	snprintf(schemata, sizeof(schemata), "%lx", mask);
+	ret = write_schemata("", schemata, cpu, test->resource);
+	if (ret) {
+		ksft_print_msg("Failed to set CBM 0x%lx\n", mask);
+		return ret;
+	}
+
+	ret = bit_usage_for_domain(test->resource, domain_id, usage, sizeof(usage));
+	if (ret)
+		return ret;
+
+	if (strlen(usage) != count_of_bits) {
+		ksft_print_msg("bit_usage \"%s\" has %zu chars, expected %d\n",
+			       usage, strlen(usage), count_of_bits);
+		return 1;
+	}
+
+	/* bit_usage prints the highest portion first, so usage[0] is bit N-1. */
+	for (i = 0; i < count_of_bits; i++) {
+		int bit = count_of_bits - 1 - i;
+		bool in_cbm = (mask >> bit) & 1;
+		char c = usage[i];
+
+		if (!bit_usage_sw_used(c) && !bit_usage_not_used(c)) {
+			ksft_print_msg("Unexpected bit_usage char '%c' for CBM 0x%lx\n",
+				       c, mask);
+			return 1;
+		}
+		if (in_cbm != bit_usage_sw_used(c)) {
+			ksft_print_msg("CBM 0x%lx portion %d shows '%c', %s allocation\n",
+				       mask, bit, c, in_cbm ? "in" : "not in");
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+static int bit_usage_run_test(const struct resctrl_test *test,
+			      const struct user_params *uparams)
+{
+	unsigned long full_mask, masks[3];
+	char schemata[64];
+	int count_of_bits, domain_id, i, ret;
+
+	ret = get_full_cbm(test->resource, &full_mask);
+	if (ret)
+		return ret;
+
+	ret = get_domain_id(test->resource, uparams->cpu, &domain_id);
+	if (ret < 0)
+		return ret;
+
+	count_of_bits = count_bits(full_mask);
+
+	masks[0] = full_mask;					/* every portion */
+	masks[1] = create_bit_mask(0, count_of_bits / 2);	/* low half */
+	masks[2] = full_mask & ~masks[1];			/* high half */
+
+	for (i = 0; i < 3; i++) {
+		ret = bit_usage_check_mask(test, uparams->cpu, domain_id,
+					   masks[i], count_of_bits);
+		if (ret)
+			break;
+	}
+
+	/* Restore the root group to the full CBM. */
+	snprintf(schemata, sizeof(schemata), "%lx", full_mask);
+	write_schemata("", schemata, uparams->cpu, test->resource);
+
+	if (!ret)
+		ksft_print_msg("Pass: bit_usage reflects the allocation\n");
+
+	return ret;
+}
+
+static bool bit_usage_feature_check(const struct resctrl_test *test)
+{
+	return test_resource_feature_check(test) &&
+	       resource_info_file_exists(test->resource, "bit_usage");
+}
+
+struct resctrl_test l3_bit_usage_test = {
+	.name = "L3_BIT_USAGE",
+	.group = "CAT",
+	.resource = "L3",
+	.feature_check = bit_usage_feature_check,
+	.run_test = bit_usage_run_test,
+};
