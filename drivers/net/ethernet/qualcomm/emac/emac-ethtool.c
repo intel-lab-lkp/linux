@@ -95,7 +95,7 @@ static void emac_get_strings(struct net_device *netdev, u32 stringset, u8 *data)
 
 	switch (stringset) {
 	case ETH_SS_PRIV_FLAGS:
-		strcpy(data, "single-pause-mode");
+		strscpy(data, "single-pause-mode", ETH_GSTRING_LEN);
 		break;
 
 	case ETH_SS_STATS:
