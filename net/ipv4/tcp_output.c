@@ -1990,19 +1990,30 @@ static inline int __tcp_mtu_to_mss(struct sock *sk, int pmtu)
 {
 	const struct tcp_sock *tp = tcp_sk(sk);
 	const struct inet_connection_sock *icsk = inet_csk(sk);
+	unsigned int ext_hdr_len;
 	int mss_now;
+
+	ext_hdr_len = icsk->icsk_ext_hdr_len;
+
+	/* Take into account added jumbogram HBH header. */
+	if (unlikely(pmtu - sizeof(struct ipv6hdr) > IPV6_MAXPLEN))
+		ext_hdr_len += sizeof(struct hop_jumbo_hdr);
 
 	/* Calculate base mss without TCP options:
 	   It is MMS_S - sizeof(tcphdr) of rfc1122
 	 */
 	mss_now = pmtu - icsk->icsk_af_ops->net_header_len - sizeof(struct tcphdr);
 
-	/* Clamp it (mss_clamp does not include tcp options) */
-	if (mss_now > tp->rx_opt.mss_clamp)
+	/* Clamp it (mss_clamp does not include tcp options).
+	 * An mss of 65535 means we should rely entirely on PMTU discovery
+	 * (RFC2675, RFC6691).
+	 */
+	if (mss_now > tp->rx_opt.mss_clamp &&
+	    likely(tp->rx_opt.mss_clamp < IPV6_MAXPLEN))
 		mss_now = tp->rx_opt.mss_clamp;
 
 	/* Now subtract optional transport overhead */
-	mss_now -= icsk->icsk_ext_hdr_len;
+	mss_now -= ext_hdr_len;
 
 	/* Then reserve room for full set of TCP options and 8 bytes of data */
 	mss_now = max(mss_now,
