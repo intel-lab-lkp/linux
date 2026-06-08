@@ -3281,14 +3281,14 @@ static int gfar_probe(struct platform_device *ofdev)
 	for (i = 0; i < priv->num_grps; i++) {
 		struct gfar_priv_grp *grp = &priv->gfargrp[i];
 		if (priv->device_flags & FSL_GIANFAR_DEV_HAS_MULTI_INTR) {
-			sprintf(gfar_irq(grp, TX)->name, "%s%s%c%s",
-				dev->name, "_g", '0' + i, "_tx");
-			sprintf(gfar_irq(grp, RX)->name, "%s%s%c%s",
-				dev->name, "_g", '0' + i, "_rx");
-			sprintf(gfar_irq(grp, ER)->name, "%s%s%c%s",
-				dev->name, "_g", '0' + i, "_er");
+			snprintf(gfar_irq(grp, TX)->name, sizeof (gfar_irq(grp, ER)->name),
+				 "%s_g%c_tx", dev->name, '0' + i);
+			snprintf(gfar_irq(grp, RX)->name, sizeof (gfar_irq(grp, ER)->name),
+				 "%s_g%c_rx", dev->name, '0' + i);
+			snprintf(gfar_irq(grp, ER)->name, sizeof (gfar_irq(grp, ER)->name),
+				 "%s_g%c-er", dev->name, '0' + i);
 		} else
-			strcpy(gfar_irq(grp, TX)->name, dev->name);
+			strscpy(gfar_irq(grp, TX)->name, dev->name);
 	}
 
 	/* Initialize the filer table */
