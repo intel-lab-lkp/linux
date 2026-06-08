@@ -2838,9 +2838,16 @@ static int cgx_print_stats(struct seq_file *s, int lmac_id)
 	int stat = 0, err = 0;
 	u64 tx_stat, rx_stat;
 	struct rvu *rvu;
+	struct pci_dev *pdev = NULL;
 
-	rvu = pci_get_drvdata(pci_get_device(PCI_VENDOR_ID_CAVIUM,
-					     PCI_DEVID_OCTEONTX2_RVU_AF, NULL));
+	pdev = pci_get_device(PCI_VENDOR_ID_CAVIUM,
+			      PCI_DEVID_OCTEONTX2_RVU_AF, NULL);
+	if (!pdev)
+		return -ENODEV;
+
+	rvu = pci_get_drvdata(pdev);
+	pci_dev_put(pdev);
+
 	if (!rvu)
 		return -ENODEV;
 
@@ -2958,8 +2965,13 @@ static int cgx_print_dmac_flt(struct seq_file *s, int lmac_id)
 	u64 cfg, mac;
 	int pf;
 
-	rvu = pci_get_drvdata(pci_get_device(PCI_VENDOR_ID_CAVIUM,
-					     PCI_DEVID_OCTEONTX2_RVU_AF, NULL));
+	pdev = pci_get_device(PCI_VENDOR_ID_CAVIUM,
+			      PCI_DEVID_OCTEONTX2_RVU_AF, NULL);
+	if (!pdev)
+		return -ENODEV;
+
+	rvu = pci_get_drvdata(pdev);
+	pci_dev_put(pdev);
 	if (!rvu)
 		return -ENODEV;
 
@@ -3014,9 +3026,16 @@ static int cgx_print_fwdata(struct seq_file *s, int lmac_id)
 	struct phy_s *phy;
 	struct rvu *rvu;
 	int cgx_id, i;
+	struct pci_dev *pdev = NULL;
 
-	rvu = pci_get_drvdata(pci_get_device(PCI_VENDOR_ID_CAVIUM,
-					     PCI_DEVID_OCTEONTX2_RVU_AF, NULL));
+	pdev = pci_get_device(PCI_VENDOR_ID_CAVIUM,
+			      PCI_DEVID_OCTEONTX2_RVU_AF, NULL);
+	if (!pdev)
+		return -ENODEV;
+
+	rvu = pci_get_drvdata(pdev);
+	pci_dev_put(pdev);
+
 	if (!rvu)
 		return -ENODEV;
 
