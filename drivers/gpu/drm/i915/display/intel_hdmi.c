@@ -71,7 +71,7 @@
 
 bool intel_hdmi_is_frl(u32 clock)
 {
-	u32 rates[] = { 300000, 600000, 800000, 1000000, 1200000 };
+	static const u32 rates[] = { 300000, 600000, 800000, 1000000, 1200000 };
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(rates); i++)
