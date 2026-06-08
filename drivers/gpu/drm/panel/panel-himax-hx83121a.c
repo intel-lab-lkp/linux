@@ -34,7 +34,9 @@ struct himax {
 	struct drm_dsc_config dsc;
 	struct gpio_desc *reset_gpio;
 	struct regulator_bulk_data *supplies;
+	struct regulator *bl_supply;
 	struct backlight_device *backlight;
+	bool backlight_enabled;
 };
 
 struct panel_desc {
@@ -195,7 +197,27 @@ static int himax_bl_update_status(struct backlight_device *bl)
 {
 	struct himax *ctx = bl_get_data(bl);
 	u16 brightness = backlight_get_brightness(bl);
+	int ret = 0;
+
+	if (!brightness) {
+		if (ctx->backlight_enabled)
+			ret = regulator_disable(ctx->bl_supply);
+		if (ret)
+			return ret;
+
+		ctx->backlight_enabled = false;
+
+		return 0;
+	}
+
 	/* TODO: brightness to raw map table */
+	if (!ctx->backlight_enabled)
+		ret = regulator_enable(ctx->bl_supply);
+	if (ret)
+		return ret;
+
+	ctx->backlight_enabled = true;
+
 	return mipi_dsi_dcs_set_display_brightness_large(to_primary_dsi(ctx),
 							 brightness);
 }
@@ -647,6 +669,10 @@ static int himax_probe(struct mipi_dsi_device *dsi)
 	ctx->panel.prepare_prev_first = true;
 
 	if (desc->has_dcs_backlight) {
+		ctx->bl_supply = devm_regulator_get_optional(dev, "bl");
+		if (IS_ERR(ctx->bl_supply))
+			return dev_err_probe(dev, PTR_ERR(ctx->bl_supply),
+					     "Failed to get backlight supply\n");
 		ctx->backlight = himax_create_backlight(ctx);
 		if (IS_ERR(ctx->backlight))
 			return dev_err_probe(dev, PTR_ERR(ctx->backlight),
