@@ -3942,10 +3942,11 @@ static void switched_from_scx(struct rq *rq, struct task_struct *p)
 	 * scx_disable_task() would WARN on the non-%ENABLED state and trigger a
 	 * NONE -> READY validation failure.
 	 */
-	if (scx_get_task_state(p) == SCX_TASK_NONE)
-		return;
+	if (scx_get_task_state(p) != SCX_TASK_NONE)
+		scx_disable_task(scx_task_sched(p), p);
 
-	scx_disable_task(scx_task_sched(p), p);
+	p->scx.dsq_vtime = 0;
+	p->scx.slice = 0;
 }
 
 static void switched_to_scx(struct rq *rq, struct task_struct *p) {}
