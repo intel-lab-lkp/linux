@@ -3628,6 +3628,9 @@ int mlx5e_close(struct net_device *netdev)
 
 	mutex_lock(&priv->state_lock);
 	mlx5e_modify_admin_state(priv->mdev, MLX5_PORT_DOWN);
+	if (test_bit(MLX5E_STATE_OPENED, &priv->state) &&
+	    netif_carrier_ok(netdev))
+		netdev_info(netdev, "Link down\n");
 	err = mlx5e_close_locked(netdev);
 	mutex_unlock(&priv->state_lock);
 
