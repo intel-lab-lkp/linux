@@ -976,6 +976,10 @@ select_task_rq_rt(struct task_struct *p, int cpu, int flags)
 	struct rq *rq;
 	bool test;
 
+	/* Just return the task_cpu for processes inside task groups */
+	if (is_dl_group(rt_rq_of_se(&p->rt)))
+		goto out;
+
 	/* For anything but wake ups, just return the task_cpu */
 	if (!(flags & (WF_TTWU | WF_FORK)))
 		goto out;
@@ -1065,21 +1069,25 @@ static void check_preempt_equal_prio(struct rq *rq, struct task_struct *p)
 	resched_curr(rq);
 }
 
-static int balance_rt(struct rq *rq, struct task_struct *p, struct rq_flags *rf)
+static int balance_rt(struct rq *global_rq, struct task_struct *p, struct rq_flags *rf)
 {
-	if (!on_rt_rq(&p->rt) && need_pull_rt_task(rq, p)) {
+	struct rt_rq *rt_rq = rt_rq_of_se(&p->rt);
+
+	if (!on_rt_rq(&p->rt) && need_pull_rt_task(rq_of_rt_rq(rt_rq), p)) {
 		/*
 		 * This is OK, because current is on_cpu, which avoids it being
 		 * picked for load-balance and preemption/IRQs are still
 		 * disabled avoiding further scheduler activity on it and we've
 		 * not yet started the picking loop.
 		 */
-		rq_unpin_lock(rq, rf);
-		pull_rt_rq_task(&rq->rt);
-		rq_repin_lock(rq, rf);
+		rq_unpin_lock(global_rq, rf);
+		pull_rt_rq_task(rt_rq);
+		rq_repin_lock(global_rq, rf);
 	}
 
-	return sched_stop_runnable(rq) || sched_dl_runnable(rq) || sched_rt_runnable(rq);
+	return sched_stop_runnable(global_rq) ||
+	       sched_dl_runnable(global_rq) ||
+	       sched_rt_runnable(global_rq);
 }
 
 /*
@@ -1241,6 +1249,13 @@ static void put_prev_task_rt(struct rq *rq, struct task_struct *p, struct task_s
 	 */
 	if (on_rt_rq(&p->rt) && p->nr_cpus_allowed > 1)
 		enqueue_pushable_task(rt_rq, p);
+
+	if (is_dl_group(rt_rq)) {
+		struct sched_dl_entity *dl_se = dl_group_of(rt_rq);
+
+		if (dl_se->dl_throttled)
+			rt_queue_push_tasks(rt_rq);
+	}
 }
 
 /* Only try algorithms three times */
@@ -2050,12 +2065,21 @@ static void switching_to_rt(struct rq *rq, struct task_struct *p) {}
  */
 static void switched_to_rt(struct rq *rq, struct task_struct *p)
 {
+	struct rt_rq *rt_rq = rt_rq_of_se(&p->rt);
+
 	/*
 	 * If we are running, update the avg_rt tracking, as the running time
 	 * will now on be accounted into the latter.
 	 */
 	if (task_current(rq, p)) {
 		update_rt_rq_load_avg(rq_clock_pelt(rq), rq, 0);
+
+		if (is_dl_group(rt_rq)) {
+			struct sched_dl_entity *dl_se = dl_group_of(rt_rq);
+
+			p->dl_server = dl_se;
+		}
+
 		return;
 	}
 
@@ -2066,7 +2090,7 @@ static void switched_to_rt(struct rq *rq, struct task_struct *p)
 	 */
 	if (task_on_rq_queued(p)) {
 		if (p->nr_cpus_allowed > 1 && rq->rt.overloaded)
-			rt_queue_push_tasks(rt_rq_of_se(&p->rt));
+			rt_queue_push_tasks(rt_rq);
 
 		if (p->prio < rq->donor->prio && cpu_online(cpu_of(rq)))
 			resched_curr(rq);
