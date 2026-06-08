@@ -1040,6 +1040,120 @@ impl_mmio_io_capable!(RelaxedMmioBackend, u32, readl_relaxed, writel_relaxed);
 #[cfg(CONFIG_64BIT)]
 impl_mmio_io_capable!(RelaxedMmioBackend, u64, readq_relaxed, writeq_relaxed);
 
+/// I/O Backend for system memory.
+pub struct SysMemBackend;
+
+impl IoBackend for SysMemBackend {
+    type View<'a, T: ?Sized + KnownSize> = SysMem<'a, T>;
+
+    #[inline]
+    fn as_ptr<'a, T: ?Sized + KnownSize>(view: Self::View<'a, T>) -> *mut T {
+        view.ptr
+    }
+
+    #[inline]
+    unsafe fn project_view<'a, T: ?Sized + KnownSize, U: ?Sized + KnownSize>(
+        _view: Self::View<'a, T>,
+        ptr: *mut U,
+    ) -> Self::View<'a, U> {
+        // INVARIANT: Per safety requirement, `ptr` is projection from `view`, so it is also a valid
+        // kernel accessible memory region.
+        SysMem {
+            ptr,
+            phantom: PhantomData,
+        }
+    }
+}
+
+/// Implements [`IoCapable`] on `SysMemBackend` for `$ty` using `read_volatile` and
+/// `write_volatile`.
+macro_rules! impl_sysmem_io_capable {
+    ($ty:ty) => {
+        impl IoCapable<$ty> for SysMemBackend {
+            fn io_read(view: SysMem<'_, $ty>) -> $ty {
+                // SAFETY:
+                // - Per type invariant, `ptr` is valid and aligned.
+                // - Using read_volatile() here so that race with hardware is well-defined.
+                // - Using read_volatile() here is not sound if it races with other CPU per Rust
+                //   rules, but this is allowed per LKMM.
+                // - The macro is only used on primitives so all bit patterns are valid.
+                unsafe { view.ptr.read_volatile() }
+            }
+
+            fn io_write(view: SysMem<'_, $ty>, value: $ty) {
+                // SAFETY:
+                // - Per type invariant, `ptr` is valid and aligned.
+                // - Using write_volatile() here so that race with hardware is well-defined.
+                // - Using write_volatile() here is not sound if it races with other CPU per Rust
+                //   rules, but this is allowed per LKMM.
+                unsafe { view.ptr.write_volatile(value) }
+            }
+        }
+    };
+}
+
+impl_sysmem_io_capable!(u8);
+impl_sysmem_io_capable!(u16);
+impl_sysmem_io_capable!(u32);
+#[cfg(CONFIG_64BIT)]
+impl_sysmem_io_capable!(u64);
+
+/// System memory region.
+///
+/// Provides `Io` trait implementation for kernel virtual address ranges,
+/// using volatile read/write to safely access shared memory that may be
+/// concurrently accessed by external hardware.
+///
+/// # Invariants
+///
+/// `self.ptr.addr() .. self.ptr.addr() + KnownSize::size(self.ptr)` is valid and aligned kernel
+/// accessible memory region for the lifetime `'a`.
+pub struct SysMem<'a, T: ?Sized> {
+    ptr: *mut T,
+    phantom: PhantomData<&'a ()>,
+}
+
+impl<T: ?Sized> Copy for SysMem<'_, T> {}
+impl<T: ?Sized> Clone for SysMem<'_, T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T: ?Sized> SysMem<'a, T> {
+    /// Create a `SysMem` from a raw pointer.
+    ///
+    /// # Safety
+    ///
+    /// `ptr.addr() .. ptr.addr() + KnownSize::size(ptr)` must be valid and aligned kernel
+    /// accessible memory region for the lifetime `'a`.
+    #[inline]
+    pub unsafe fn new(ptr: *mut T) -> Self {
+        // INVARIANT: Per safety requirement.
+        Self {
+            ptr,
+            phantom: PhantomData,
+        }
+    }
+
+    /// Obtain the raw pointer to the memory.
+    #[inline]
+    pub fn as_ptr(self) -> *mut T {
+        self.ptr
+    }
+}
+
+impl<'a, T: ?Sized + KnownSize> IoBase<'a> for SysMem<'a, T> {
+    type Backend = SysMemBackend;
+    type Target = T;
+
+    #[inline]
+    fn as_view(self) -> <Self::Backend as IoBackend>::View<'a, Self::Target> {
+        self
+    }
+}
+
 // This helper turns associated functions to methods so it can be invoked in macro.
 // Used by `io_project!()` only.
 #[doc(hidden)]
