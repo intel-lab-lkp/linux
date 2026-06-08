@@ -794,7 +794,6 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 
  err_free_irq:
 	free_irq(task_irq, priv);
-	irq_dispose_mapping(task_irq);
  err_free_task:
 	bcom_ata_release(dmatsk);
  err1:
@@ -814,7 +813,6 @@ static void mpc52xx_ata_remove(struct platform_device *op)
 	/* Clean up DMA */
 	task_irq = bcom_get_task_irq(priv->dmatsk);
 	free_irq(task_irq, priv);
-	irq_dispose_mapping(task_irq);
 	bcom_ata_release(priv->dmatsk);
 	irq_dispose_mapping(priv->ata_irq);
 }
