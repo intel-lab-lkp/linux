@@ -1767,17 +1767,22 @@ int __init l2x0_of_init(u32 aux_val, u32 aux_mask)
 	u32 cache_id, old_aux;
 	u32 cache_level = 2;
 	bool nosync = false;
+	int ret;
 
 	np = of_find_matching_node(NULL, l2x0_ids);
 	if (!np)
 		return -ENODEV;
 
-	if (of_address_to_resource(np, 0, &res))
-		return -ENODEV;
+	if (of_address_to_resource(np, 0, &res)) {
+		ret = -ENODEV;
+		goto out_put_node;
+	}
 
 	l2x0_base = ioremap(res.start, resource_size(&res));
-	if (!l2x0_base)
-		return -ENOMEM;
+	if (!l2x0_base) {
+		ret = -ENOMEM;
+		goto out_put_node;
+	}
 
 	l2x0_saved_regs.phy_base = res.start;
 
@@ -1821,6 +1826,10 @@ int __init l2x0_of_init(u32 aux_val, u32 aux_mask)
 	else
 		cache_id = readl_relaxed(l2x0_base + L2X0_CACHE_ID);
 
-	return __l2c_init(data, aux_val, aux_mask, cache_id, nosync);
+	ret = __l2c_init(data, aux_val, aux_mask, cache_id, nosync);
+
+out_put_node:
+	of_node_put(np);
+	return ret;
 }
 #endif
