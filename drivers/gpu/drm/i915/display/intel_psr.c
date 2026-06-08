@@ -1927,12 +1927,10 @@ void intel_psr_set_non_psr_pipes(struct intel_dp *intel_dp,
 		~BIT(to_intel_crtc(crtc_state->uapi.crtc)->pipe);
 }
 
-void intel_psr_compute_config(struct intel_dp *intel_dp,
-			      struct intel_crtc_state *crtc_state,
-			      struct drm_connector_state *conn_state)
+void intel_psr_pre_compute_config(struct intel_dp *intel_dp,
+				  struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
-	struct intel_connector *connector = to_intel_connector(conn_state->connector);
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 
 	if (!psr_global_enabled(intel_dp)) {
@@ -1962,6 +1960,19 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 			    "PSR disabled due to joiner\n");
 		return;
 	}
+
+	crtc_state->has_psr = true;
+}
+
+void intel_psr_compute_config(struct intel_dp *intel_dp,
+			      struct intel_crtc_state *crtc_state,
+			      struct drm_connector_state *conn_state)
+{
+	struct intel_connector *connector =
+		to_intel_connector(conn_state->connector);
+
+	if (!crtc_state->has_psr)
+		return;
 
 	/* Only used for state verification. */
 	crtc_state->panel_replay_dsc_support = connector->dp.panel_replay_caps.dsc_support;
