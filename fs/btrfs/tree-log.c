@@ -6174,7 +6174,7 @@ static int add_conflicting_inode(struct btrfs_trans_handle *trans,
 	 *    some inode from it to some other directory).
 	 */
 	if (IS_ERR(inode)) {
-		int ret = PTR_ERR(inode);
+		ret = PTR_ERR(inode);
 
 		if (ret != -ENOENT)
 			goto out;
