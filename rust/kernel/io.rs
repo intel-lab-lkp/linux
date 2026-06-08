@@ -246,6 +246,38 @@ const fn offset_valid<U>(base: usize, offset: usize, size: usize) -> bool {
     }
 }
 
+/// I/O backends.
+///
+/// This is an abstract representation to be implemented by arbitrary I/O
+/// backends (e.g. MMIO, PCI config space, etc.).
+///
+/// The base trait only defines the projection operations; which I/O methods are available depends
+/// on which [`IoCapable<T>`] traits are implemented for the type. For example, for MMIO regions,
+/// all widths (u8, u16, u32, and u64 on 64-bit systems) are typically supported. For PCI
+/// configuration space, u8, u16, and u32 are supported but u64 is not.
+///
+/// This trait is separate from the `Io` trait as multiple different I/O types may share the same
+/// operation.
+pub trait IoBackend {
+    /// View type for this I/O backend.
+    type View<'a, T: ?Sized + KnownSize>: Io<'a, Backend = Self, Target = T>;
+
+    /// Convert a `view` to a raw pointer for projection.
+    fn as_ptr<'a, T: ?Sized + KnownSize>(view: Self::View<'a, T>) -> *mut T;
+
+    /// Project `view` to its subregion indicated by `ptr`.
+    ///
+    /// If input `view` is valid, returned view must also be valid.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be a projection of `Self::as_ptr(view)`.
+    unsafe fn project_view<'a, T: ?Sized + KnownSize, U: ?Sized + KnownSize>(
+        view: Self::View<'a, T>,
+        ptr: *mut U,
+    ) -> Self::View<'a, U>;
+}
+
 /// Trait indicating that an I/O backend supports operations of a certain type and providing an
 /// implementation for these operations.
 ///
@@ -254,22 +286,12 @@ const fn offset_valid<U>(base: usize, offset: usize, size: usize) -> bool {
 /// For example, a PCI configuration space may implement `IoCapable<u8>`, `IoCapable<u16>`,
 /// and `IoCapable<u32>`, but not `IoCapable<u64>`, while an MMIO region on a 64-bit
 /// system might implement all four.
-pub trait IoCapable<T> {
-    /// Performs an I/O read of type `T` at `address` and returns the result.
-    ///
-    /// # Safety
-    ///
-    /// - The range `[address..address + size_of::<T>()]` must be within the bounds of `Self`.
-    /// - `address` must be aligned.
-    unsafe fn io_read(self, address: usize) -> T;
+pub trait IoCapable<T>: IoBackend {
+    /// Performs an I/O read of type `T` at `view` and returns the result.
+    fn io_read<'a>(view: Self::View<'a, T>) -> T;
 
-    /// Performs an I/O write of `value` at `address`.
-    ///
-    /// # Safety
-    ///
-    /// - The range `[address..address + size_of::<T>()]` must be within the bounds of `Self`.
-    /// - `address` must be aligned.
-    unsafe fn io_write(self, value: T, address: usize);
+    /// Performs an I/O write of `value` at `view`.
+    fn io_write<'a>(view: Self::View<'a, T>, value: T);
 }
 
 /// Describes a given I/O location: its offset, width, and type to convert the raw value from and
@@ -321,56 +343,54 @@ impl_usize_ioloc!(u8, u16, u32, u64);
 /// Types implementing this trait (e.g. MMIO BARs or PCI config regions)
 /// can perform I/O operations on regions of memory.
 ///
-/// This is an abstract representation to be implemented by arbitrary I/O
-/// backends (e.g. MMIO, PCI config space, etc.).
-///
 /// The [`Io`] trait provides:
-/// - Base address and size information
+/// - Method to convert into [`IoBackend::View`].
 /// - Helper methods for offset validation and address calculation
 /// - Fallible (runtime checked) accessors for different data widths
 ///
-/// Which I/O methods are available depends on which [`IoCapable<T>`] traits
-/// are implemented for the type.
-///
-/// # Examples
-///
-/// For MMIO regions, all widths (u8, u16, u32, and u64 on 64-bit systems) are typically
-/// supported. For PCI configuration space, u8, u16, and u32 are supported but u64 is not.
-pub trait Io: Copy {
+/// Which I/O methods are available depends on the associated [`IoBackend`] implementation.
+pub trait Io<'a>: Copy {
+    /// Type that defines all I/O operations.
+    type Backend: IoBackend;
+
     /// Type of this I/O region. For untyped regions, [`Region`] can be used.
     type Target: ?Sized + KnownSize;
 
-    /// Returns the base address of this mapping.
-    fn addr(self) -> usize;
+    /// Return a view that covers the full region.
+    fn as_view(self) -> <Self::Backend as IoBackend>::View<'a, Self::Target>;
 
-    /// Returns the maximum size of this mapping.
-    fn maxsize(self) -> usize;
-
-    /// Returns the absolute I/O address for a given `offset`,
-    /// performing compile-time bound checks.
+    /// Returns a view for a given `offset`, performing compile-time bound checks.
     // Always inline to optimize out error path of `build_assert`.
     #[inline(always)]
-    fn io_addr_assert<U>(self, offset: usize) -> usize {
-        // We cannot check alignment with `offset_valid` using `self.addr()`. So set 0 for it and
+    fn io_addr_assert<U>(self, offset: usize) -> <Self::Backend as IoBackend>::View<'a, U> {
+        // We cannot check alignment with `offset_valid` using `ptr.addr()`. So set 0 for it and
         // ensure alignment by checking that the alignment of `U` is smaller or equal to the
         // alignment of `Self::Target`.
         const_assert!(Alignment::of::<U>().as_usize() <= Self::Target::MIN_ALIGN.as_usize());
         build_assert!(offset_valid::<U>(0, offset, Self::Target::MIN_SIZE));
 
-        self.addr() + offset
+        let view = self.as_view();
+        let ptr = Self::Backend::as_ptr(view);
+        let projected_ptr = ptr.cast::<U>().wrapping_byte_add(offset);
+        // SAFETY: `offset_valid` checks for size and alignment and therefore `projected_ptr` is a
+        // valid projection.
+        unsafe { Self::Backend::project_view(view, projected_ptr) }
     }
 
-    /// Returns the absolute I/O address for a given `offset`,
-    /// performing runtime bound checks.
+    /// Returns a view for a given `offset`, performing runtime bound checks.
     #[inline]
-    fn io_addr<U>(self, offset: usize) -> Result<usize> {
-        if !offset_valid::<U>(self.addr(), offset, self.maxsize()) {
+    fn io_addr<U>(self, offset: usize) -> Result<<Self::Backend as IoBackend>::View<'a, U>> {
+        let view = self.as_view();
+        let ptr = Self::Backend::as_ptr(view);
+
+        if !offset_valid::<U>(ptr.addr(), offset, KnownSize::size(ptr)) {
             return Err(EINVAL);
         }
 
-        // Probably no need to check, since the safety requirements of `Self::new` guarantee that
-        // this can't overflow.
-        self.addr().checked_add(offset).ok_or(EINVAL)
+        let projected_ptr = ptr.cast::<U>().wrapping_byte_add(offset);
+        // SAFETY: `offset_valid` checks for size and alignment and therefore `projected_ptr` is a
+        // valid projection.
+        Ok(unsafe { Self::Backend::project_view(view, projected_ptr) })
     }
 
     /// Fallible 8-bit read with runtime bounds check.
@@ -378,7 +398,7 @@ pub trait Io: Copy {
     fn try_read8(self, offset: usize) -> Result<u8>
     where
         usize: IoLoc<Self::Target, u8, IoType = u8>,
-        Self: IoCapable<u8>,
+        Self::Backend: IoCapable<u8>,
     {
         self.try_read(offset)
     }
@@ -388,7 +408,7 @@ pub trait Io: Copy {
     fn try_read16(self, offset: usize) -> Result<u16>
     where
         usize: IoLoc<Self::Target, u16, IoType = u16>,
-        Self: IoCapable<u16>,
+        Self::Backend: IoCapable<u16>,
     {
         self.try_read(offset)
     }
@@ -398,7 +418,7 @@ pub trait Io: Copy {
     fn try_read32(self, offset: usize) -> Result<u32>
     where
         usize: IoLoc<Self::Target, u32, IoType = u32>,
-        Self: IoCapable<u32>,
+        Self::Backend: IoCapable<u32>,
     {
         self.try_read(offset)
     }
@@ -408,7 +428,7 @@ pub trait Io: Copy {
     fn try_read64(self, offset: usize) -> Result<u64>
     where
         usize: IoLoc<Self::Target, u64, IoType = u64>,
-        Self: IoCapable<u64>,
+        Self::Backend: IoCapable<u64>,
     {
         self.try_read(offset)
     }
@@ -418,7 +438,7 @@ pub trait Io: Copy {
     fn try_write8(self, value: u8, offset: usize) -> Result
     where
         usize: IoLoc<Self::Target, u8, IoType = u8>,
-        Self: IoCapable<u8>,
+        Self::Backend: IoCapable<u8>,
     {
         self.try_write(offset, value)
     }
@@ -428,7 +448,7 @@ pub trait Io: Copy {
     fn try_write16(self, value: u16, offset: usize) -> Result
     where
         usize: IoLoc<Self::Target, u16, IoType = u16>,
-        Self: IoCapable<u16>,
+        Self::Backend: IoCapable<u16>,
     {
         self.try_write(offset, value)
     }
@@ -438,7 +458,7 @@ pub trait Io: Copy {
     fn try_write32(self, value: u32, offset: usize) -> Result
     where
         usize: IoLoc<Self::Target, u32, IoType = u32>,
-        Self: IoCapable<u32>,
+        Self::Backend: IoCapable<u32>,
     {
         self.try_write(offset, value)
     }
@@ -448,7 +468,7 @@ pub trait Io: Copy {
     fn try_write64(self, value: u64, offset: usize) -> Result
     where
         usize: IoLoc<Self::Target, u64, IoType = u64>,
-        Self: IoCapable<u64>,
+        Self::Backend: IoCapable<u64>,
     {
         self.try_write(offset, value)
     }
@@ -458,7 +478,7 @@ pub trait Io: Copy {
     fn read8(self, offset: usize) -> u8
     where
         usize: IoLoc<Self::Target, u8, IoType = u8>,
-        Self: IoCapable<u8>,
+        Self::Backend: IoCapable<u8>,
     {
         self.read(offset)
     }
@@ -468,7 +488,7 @@ pub trait Io: Copy {
     fn read16(self, offset: usize) -> u16
     where
         usize: IoLoc<Self::Target, u16, IoType = u16>,
-        Self: IoCapable<u16>,
+        Self::Backend: IoCapable<u16>,
     {
         self.read(offset)
     }
@@ -478,7 +498,7 @@ pub trait Io: Copy {
     fn read32(self, offset: usize) -> u32
     where
         usize: IoLoc<Self::Target, u32, IoType = u32>,
-        Self: IoCapable<u32>,
+        Self::Backend: IoCapable<u32>,
     {
         self.read(offset)
     }
@@ -488,7 +508,7 @@ pub trait Io: Copy {
     fn read64(self, offset: usize) -> u64
     where
         usize: IoLoc<Self::Target, u64, IoType = u64>,
-        Self: IoCapable<u64>,
+        Self::Backend: IoCapable<u64>,
     {
         self.read(offset)
     }
@@ -498,7 +518,7 @@ pub trait Io: Copy {
     fn write8(self, value: u8, offset: usize)
     where
         usize: IoLoc<Self::Target, u8, IoType = u8>,
-        Self: IoCapable<u8>,
+        Self::Backend: IoCapable<u8>,
     {
         self.write(offset, value)
     }
@@ -508,7 +528,7 @@ pub trait Io: Copy {
     fn write16(self, value: u16, offset: usize)
     where
         usize: IoLoc<Self::Target, u16, IoType = u16>,
-        Self: IoCapable<u16>,
+        Self::Backend: IoCapable<u16>,
     {
         self.write(offset, value)
     }
@@ -518,7 +538,7 @@ pub trait Io: Copy {
     fn write32(self, value: u32, offset: usize)
     where
         usize: IoLoc<Self::Target, u32, IoType = u32>,
-        Self: IoCapable<u32>,
+        Self::Backend: IoCapable<u32>,
     {
         self.write(offset, value)
     }
@@ -528,7 +548,7 @@ pub trait Io: Copy {
     fn write64(self, value: u64, offset: usize)
     where
         usize: IoLoc<Self::Target, u64, IoType = u64>,
-        Self: IoCapable<u64>,
+        Self::Backend: IoCapable<u64>,
     {
         self.write(offset, value)
     }
@@ -560,12 +580,10 @@ pub trait Io: Copy {
     fn try_read<T, L>(self, location: L) -> Result<T>
     where
         L: IoLoc<Self::Target, T>,
-        Self: IoCapable<L::IoType>,
+        Self::Backend: IoCapable<L::IoType>,
     {
-        let address = self.io_addr::<L::IoType>(location.offset())?;
-
-        // SAFETY: `address` has been validated by `io_addr`.
-        Ok(unsafe { self.io_read(address) }.into())
+        let view = self.io_addr::<L::IoType>(location.offset())?;
+        Ok(Self::Backend::io_read(view).into())
     }
 
     /// Generic fallible write with runtime bounds check.
@@ -595,14 +613,11 @@ pub trait Io: Copy {
     fn try_write<T, L>(self, location: L, value: T) -> Result
     where
         L: IoLoc<Self::Target, T>,
-        Self: IoCapable<L::IoType>,
+        Self::Backend: IoCapable<L::IoType>,
     {
-        let address = self.io_addr::<L::IoType>(location.offset())?;
+        let view = self.io_addr::<L::IoType>(location.offset())?;
         let io_value = value.into();
-
-        // SAFETY: `address` has been validated by `io_addr`.
-        unsafe { self.io_write(io_value, address) }
-
+        Self::Backend::io_write(view, io_value);
         Ok(())
     }
 
@@ -643,7 +658,7 @@ pub trait Io: Copy {
     where
         L: IoLoc<Self::Target, T>,
         V: LocatedRegister<Self::Target, Location = L, Value = T>,
-        Self: IoCapable<L::IoType>,
+        Self::Backend: IoCapable<L::IoType>,
     {
         let (location, value) = value.into_io_op();
 
@@ -676,17 +691,14 @@ pub trait Io: Copy {
     fn try_update<T, L, F>(self, location: L, f: F) -> Result
     where
         L: IoLoc<Self::Target, T>,
-        Self: IoCapable<L::IoType>,
+        Self::Backend: IoCapable<L::IoType>,
         F: FnOnce(T) -> T,
     {
-        let address = self.io_addr::<L::IoType>(location.offset())?;
+        let view = self.io_addr::<L::IoType>(location.offset())?;
 
-        // SAFETY: `address` has been validated by `io_addr`.
-        let value: T = unsafe { self.io_read(address) }.into();
+        let value: T = Self::Backend::io_read(view).into();
         let io_value = f(value).into();
-
-        // SAFETY: `address` has been validated by `io_addr`.
-        unsafe { self.io_write(io_value, address) }
+        Self::Backend::io_write(view, io_value);
 
         Ok(())
     }
@@ -716,12 +728,10 @@ pub trait Io: Copy {
     fn read<T, L>(self, location: L) -> T
     where
         L: IoLoc<Self::Target, T>,
-        Self: IoCapable<L::IoType>,
+        Self::Backend: IoCapable<L::IoType>,
     {
-        let address = self.io_addr_assert::<L::IoType>(location.offset());
-
-        // SAFETY: `address` has been validated by `io_addr_assert`.
-        unsafe { self.io_read(address) }.into()
+        let view = self.io_addr_assert::<L::IoType>(location.offset());
+        Self::Backend::io_read(view).into()
     }
 
     /// Generic infallible write with compile-time bounds check.
@@ -749,13 +759,11 @@ pub trait Io: Copy {
     fn write<T, L>(self, location: L, value: T)
     where
         L: IoLoc<Self::Target, T>,
-        Self: IoCapable<L::IoType>,
+        Self::Backend: IoCapable<L::IoType>,
     {
-        let address = self.io_addr_assert::<L::IoType>(location.offset());
+        let view = self.io_addr_assert::<L::IoType>(location.offset());
         let io_value = value.into();
-
-        // SAFETY: `address` has been validated by `io_addr_assert`.
-        unsafe { self.io_write(io_value, address) }
+        Self::Backend::io_write(view, io_value);
     }
 
     /// Generic infallible write of a fully-located register value.
@@ -794,7 +802,7 @@ pub trait Io: Copy {
     where
         L: IoLoc<Self::Target, T>,
         V: LocatedRegister<Self::Target, Location = L, Value = T>,
-        Self: IoCapable<L::IoType>,
+        Self::Backend: IoCapable<L::IoType>,
     {
         let (location, value) = value.into_io_op();
 
@@ -827,17 +835,13 @@ pub trait Io: Copy {
     fn update<T, L, F>(self, location: L, f: F)
     where
         L: IoLoc<Self::Target, T>,
-        Self: IoCapable<L::IoType>,
+        Self::Backend: IoCapable<L::IoType>,
         F: FnOnce(T) -> T,
     {
-        let address = self.io_addr_assert::<L::IoType>(location.offset());
-
-        // SAFETY: `address` has been validated by `io_addr_assert`.
-        let value: T = unsafe { self.io_read(address) }.into();
+        let view = self.io_addr_assert::<L::IoType>(location.offset());
+        let value: T = Self::Backend::io_read(view).into();
         let io_value = f(value).into();
-
-        // SAFETY: `address` has been validated by `io_addr_assert`.
-        unsafe { self.io_write(io_value, address) }
+        Self::Backend::io_write(view, io_value);
     }
 }
 
@@ -881,78 +885,76 @@ unsafe impl<T: ?Sized + Sync> Send for Mmio<'_, T> {}
 // SAFETY: `Mmio<'_, T>` is conceptually `&T` but in I/O memory.
 unsafe impl<T: ?Sized + Sync> Sync for Mmio<'_, T> {}
 
-impl<T: ?Sized + KnownSize> Io for Mmio<'_, T> {
+impl<'a, T: ?Sized + KnownSize> Io<'a> for Mmio<'a, T> {
+    type Backend = MmioBackend;
     type Target = T;
 
     #[inline]
-    fn addr(self) -> usize {
-        self.ptr.addr()
-    }
-
-    #[inline]
-    fn maxsize(self) -> usize {
-        KnownSize::size(self.ptr)
+    fn as_view(self) -> Mmio<'a, T> {
+        self
     }
 }
 
-/// Implements [`IoCapable`] on `$mmio` for `$ty` using `$read_fn` and `$write_fn`.
+/// I/O Backend for memory-mapped I/O.
+pub struct MmioBackend;
+
+impl IoBackend for MmioBackend {
+    type View<'a, T: ?Sized + KnownSize> = Mmio<'a, T>;
+
+    #[inline]
+    fn as_ptr<'a, T: ?Sized + KnownSize>(view: Self::View<'a, T>) -> *mut T {
+        view.ptr
+    }
+
+    #[inline]
+    unsafe fn project_view<'a, T: ?Sized + KnownSize, U: ?Sized + KnownSize>(
+        _view: Self::View<'a, T>,
+        ptr: *mut U,
+    ) -> Self::View<'a, U> {
+        // INVARIANT: Per safety requirement, `ptr` is projection from `view`, so it is also a valid
+        // memory-mapped I/O region.
+        Mmio {
+            ptr,
+            phantom: PhantomData,
+        }
+    }
+}
+
+/// Implements [`IoCapable`] on `$backend` for `$ty` using `$read_fn` and `$write_fn`.
 macro_rules! impl_mmio_io_capable {
-    ($mmio:ident, $(#[$attr:meta])* $ty:ty, $read_fn:ident, $write_fn:ident) => {
-        $(#[$attr])*
-        impl<T: ?Sized> IoCapable<$ty> for $mmio<'_, T> {
+    ($backend: ident, $ty:ty, $read_fn:ident, $write_fn:ident) => {
+        impl IoCapable<$ty> for $backend {
             #[inline]
-            unsafe fn io_read(self, address: usize) -> $ty {
-                // SAFETY: By the trait invariant `address` is a valid address for MMIO operations.
-                unsafe { bindings::$read_fn(address as *const c_void) }
+            fn io_read(view: <$backend as IoBackend>::View<'_, $ty>) -> $ty {
+                // SAFETY: By the type invariant, `view.ptr` is a valid address for MMIO operations.
+                unsafe { bindings::$read_fn(view.ptr.cast_const().cast()) }
             }
 
             #[inline]
-            unsafe fn io_write(self, value: $ty, address: usize) {
-                // SAFETY: By the trait invariant `address` is a valid address for MMIO operations.
-                unsafe { bindings::$write_fn(value, address as *mut c_void) }
+            fn io_write(view: <$backend as IoBackend>::View<'_, $ty>, value: $ty) {
+                // SAFETY: By the type invariant, `view.ptr` is a valid address for MMIO operations.
+                unsafe { bindings::$write_fn(value, view.ptr.cast()) }
             }
         }
     };
 }
 
 // MMIO regions support 8, 16, and 32-bit accesses.
-impl_mmio_io_capable!(Mmio, u8, readb, writeb);
-impl_mmio_io_capable!(Mmio, u16, readw, writew);
-impl_mmio_io_capable!(Mmio, u32, readl, writel);
+impl_mmio_io_capable!(MmioBackend, u8, readb, writeb);
+impl_mmio_io_capable!(MmioBackend, u16, readw, writew);
+impl_mmio_io_capable!(MmioBackend, u32, readl, writel);
 // MMIO regions on 64-bit systems also support 64-bit accesses.
 #[cfg(CONFIG_64BIT)]
-impl_mmio_io_capable!(Mmio, u64, readq, writeq);
+impl_mmio_io_capable!(MmioBackend, u64, readq, writeq);
 
-impl<'a, const SIZE: usize> Io for &'a MmioOwned<SIZE> {
+impl<'a, const SIZE: usize> Io<'a> for &'a MmioOwned<SIZE> {
+    type Backend = MmioBackend;
     type Target = Region<SIZE>;
 
-    /// Returns the base address of this mapping.
     #[inline]
-    fn addr(self) -> usize {
-        self.0.addr()
-    }
-
-    /// Returns the maximum size of this mapping.
-    #[inline]
-    fn maxsize(self) -> usize {
-        self.0.size()
-    }
-}
-
-impl<'a, const SIZE: usize, T> IoCapable<T> for &'a MmioOwned<SIZE>
-where
-    Mmio<'a, Region<SIZE>>: IoCapable<T>,
-{
-    #[inline]
-    unsafe fn io_read(self, address: usize) -> T {
-        // SAFETY: Per safety requirement.
-        unsafe { self.as_view().io_read(address) }
-    }
-
-    #[inline]
-    unsafe fn io_write(self, value: T, address: usize) {
-        // SAFETY: Per safety requirement.
-        unsafe { self.as_view().io_write(value, address) }
+    fn as_view(self) -> Mmio<'a, Self::Target> {
+        // SAFETY: `Mmio` has same invariant as `MmioOwned`
+        unsafe { Mmio::from_raw(self.0) }
     }
 }
 
@@ -967,13 +969,6 @@ impl<const SIZE: usize> MmioOwned<SIZE> {
     pub unsafe fn from_raw(raw: &MmioRaw<Region<SIZE>>) -> &Self {
         // SAFETY: `MmioOwned` is a transparent wrapper around `MmioRaw`.
         unsafe { &*core::ptr::from_ref(raw).cast() }
-    }
-
-    /// Return a view that covers the full region.
-    #[inline]
-    pub fn as_view(&self) -> Mmio<'_, Region<SIZE>> {
-        // SAFETY: `Mmio` has same invariant as `MmioOwned`.
-        unsafe { Mmio::from_raw(self.0) }
     }
 }
 
@@ -1000,17 +995,38 @@ impl<T: ?Sized> Clone for RelaxedMmio<'_, T> {
     }
 }
 
-impl<T: ?Sized + KnownSize> Io for RelaxedMmio<'_, T> {
-    type Target = T;
+/// I/O Backend for memory-mapped I/O, with relaxed access semantics.
+pub struct RelaxedMmioBackend;
+
+impl IoBackend for RelaxedMmioBackend {
+    type View<'a, T: ?Sized + KnownSize> = RelaxedMmio<'a, T>;
 
     #[inline]
-    fn addr(self) -> usize {
-        self.ptr.addr()
+    fn as_ptr<'a, T: ?Sized + KnownSize>(view: Self::View<'a, T>) -> *mut T {
+        view.ptr
     }
 
     #[inline]
-    fn maxsize(self) -> usize {
-        KnownSize::size(self.ptr)
+    unsafe fn project_view<'a, T: ?Sized + KnownSize, U: ?Sized + KnownSize>(
+        _view: Self::View<'a, T>,
+        ptr: *mut U,
+    ) -> Self::View<'a, U> {
+        // INVARIANT: Per safety requirement, `ptr` is projection from `view`, so it is also a valid
+        // memory-mapped I/O region.
+        RelaxedMmio {
+            ptr,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<'a, T: ?Sized + KnownSize> Io<'a> for RelaxedMmio<'a, T> {
+    type Backend = RelaxedMmioBackend;
+    type Target = T;
+
+    #[inline]
+    fn as_view(self) -> RelaxedMmio<'a, T> {
+        self
     }
 }
 
@@ -1046,14 +1062,9 @@ impl<'a, T: ?Sized> Mmio<'a, T> {
 }
 
 // MMIO regions support 8, 16, and 32-bit accesses.
-impl_mmio_io_capable!(RelaxedMmio, u8, readb_relaxed, writeb_relaxed);
-impl_mmio_io_capable!(RelaxedMmio, u16, readw_relaxed, writew_relaxed);
-impl_mmio_io_capable!(RelaxedMmio, u32, readl_relaxed, writel_relaxed);
+impl_mmio_io_capable!(RelaxedMmioBackend, u8, readb_relaxed, writeb_relaxed);
+impl_mmio_io_capable!(RelaxedMmioBackend, u16, readw_relaxed, writew_relaxed);
+impl_mmio_io_capable!(RelaxedMmioBackend, u32, readl_relaxed, writel_relaxed);
 // MMIO regions on 64-bit systems also support 64-bit accesses.
-impl_mmio_io_capable!(
-    RelaxedMmio,
-    #[cfg(CONFIG_64BIT)]
-    u64,
-    readq_relaxed,
-    writeq_relaxed
-);
+#[cfg(CONFIG_64BIT)]
+impl_mmio_io_capable!(RelaxedMmioBackend, u64, readq_relaxed, writeq_relaxed);
