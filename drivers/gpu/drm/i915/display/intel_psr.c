@@ -1851,8 +1851,15 @@ static bool _panel_replay_compute_config(struct intel_crtc_state *crtc_state,
 	crtc_state->link_off_after_as_sdp_when_pr_active = compute_link_off_after_as_sdp_when_pr_active(connector);
 	crtc_state->disable_as_sdp_when_pr_active = compute_disable_as_sdp_when_pr_active(connector);
 
-	if (!intel_dp_is_edp(intel_dp))
+	if (!intel_dp_is_edp(intel_dp)) {
+		if (!intel_dp_supports_fec(intel_dp, connector, crtc_state)) {
+			drm_dbg_kms(display->drm,
+				    "Panel Replay not enabled because FEC not supported\n");
+			return false;
+		}
+
 		return true;
+	}
 
 	/* Remaining checks are for eDP only */
 
