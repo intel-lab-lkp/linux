@@ -186,6 +186,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&gmac0_rgmii_0_cfg>, <&gmac0_phy_0_cfg>;
 	phy-mode = "rgmii-id";
+	tx-internal-delay-ps = <400>;
 	phy-handle = <&phy0>;
 	status = "okay";
 
