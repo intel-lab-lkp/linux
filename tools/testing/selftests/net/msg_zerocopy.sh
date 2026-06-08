@@ -7,7 +7,7 @@ set -e
 
 readonly DEV="veth0"
 readonly DUMMY_DEV="dummy0"
-readonly DEV_MTU=65535
+readonly DEV_MTU=200000
 readonly BIN="./msg_zerocopy"
 
 readonly RAND="$(mktemp -u XXXXXX)"
@@ -29,6 +29,7 @@ if [[ "$#" -eq "0" ]]; then
 
 	$0 4 tcp -t 1 || ret=1
 	$0 6 tcp -t 1 || ret=1
+	$0 6 tcp -t 1 -s 100000 || ret=1
 	$0 4 udp -t 1 || ret=1
 	$0 6 udp -t 1 || ret=1
 
