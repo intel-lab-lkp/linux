@@ -3648,6 +3648,53 @@ void intel_dbuf_mbus_post_ddb_update(struct intel_atomic_state *state)
 
 }
 
+/*
+ * Pre-program shrinking plane DDBs and wait a vblank so HW retires
+ * the old (larger) ranges before the main commit places new/grown planes
+ * into the freed space. Avoids the brief DDB overlap that causes pipe
+ * FIFO underruns. Only handles pure shrinks (new range contained in old);
+ * swaps are not handled here.
+ */
+static void skl_dbuf_pre_shrink(struct intel_atomic_state *state)
+{
+	struct intel_display *display = to_intel_display(state);
+	const struct intel_crtc_state *old_cs, *new_cs;
+	struct intel_crtc *crtc;
+
+	if (DISPLAY_VER(display) != 30)
+		return;
+
+	for_each_oldnew_intel_crtc_in_state(state, crtc, old_cs, new_cs) {
+		struct intel_plane *plane;
+		bool need_wait = false;
+
+		if (!old_cs->hw.active || !new_cs->hw.active)
+			continue;
+
+		for_each_intel_plane_on_crtc(display->drm, crtc, plane) {
+			enum plane_id pid = plane->id;
+			enum pipe pipe = crtc->pipe;
+			const struct skl_ddb_entry *o = &old_cs->wm.skl.plane_ddb[pid];
+			const struct skl_ddb_entry *n = &new_cs->wm.skl.plane_ddb[pid];
+			u16 osz = skl_ddb_entry_size(o), nsz = skl_ddb_entry_size(n);
+
+			if (pid == PLANE_CURSOR || !osz || !nsz || nsz >= osz ||
+			    n->start < o->start || n->end > o->end)
+				continue;
+
+			intel_de_write(display, PLANE_BUF_CFG(pipe, pid),
+				       PLANE_BUF_END(n->end - 1) | PLANE_BUF_START(n->start));
+			/* Arm by re-writing PLANE_SURF (same value -> no visible flip). */
+			intel_de_write(display, PLANE_SURF(pipe, pid),
+				       intel_de_read(display, PLANE_SURF(pipe, pid)));
+			need_wait = true;
+		}
+
+		if (need_wait)
+			intel_crtc_wait_for_next_vblank(crtc);
+	}
+}
+
 void intel_dbuf_pre_plane_update(struct intel_atomic_state *state)
 {
 	struct intel_display *display = to_intel_display(state);
@@ -3659,6 +3706,8 @@ void intel_dbuf_pre_plane_update(struct intel_atomic_state *state)
 
 	if (!new_dbuf_state)
 		return;
+
+	skl_dbuf_pre_shrink(state);
 
 	old_slices = old_dbuf_state->enabled_slices;
 	new_slices = old_dbuf_state->enabled_slices | new_dbuf_state->enabled_slices;
