@@ -972,6 +972,7 @@ static int vmw_buffer_prime_to_surface_base(struct vmw_private *dev_priv,
 
 	*base_p = base;
 out:
+	ttm_base_object_unref(&base);
 	vmw_user_bo_unref(&bo);
 
 	return ret;
