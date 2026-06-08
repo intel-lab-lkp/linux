@@ -57,7 +57,7 @@ struct key *afs_request_key(struct afs_cell *cell)
 			      cell->net->net, NULL);
 	if (IS_ERR(key)) {
 		if (PTR_ERR(key) != -ENOKEY) {
-			_leave(" = %ld", PTR_ERR(key));
+			_leave(" = %pe", key);
 			return key;
 		}
 
@@ -91,7 +91,7 @@ struct key *afs_request_key_rcu(struct afs_cell *cell)
 				  cell->net->net);
 	if (IS_ERR(key)) {
 		if (PTR_ERR(key) != -ENOKEY) {
-			_leave(" = %ld", PTR_ERR(key));
+			_leave(" = %pe", key);
 			return key;
 		}
 
@@ -451,7 +451,7 @@ int afs_permission(struct mnt_idmap *idmap, struct inode *inode,
 	} else {
 		key = afs_request_key(vnode->volume->cell);
 		if (IS_ERR(key)) {
-			_leave(" = %ld [key]", PTR_ERR(key));
+			_leave(" = %pe [key]", key);
 			return PTR_ERR(key);
 		}
 
