@@ -963,7 +963,7 @@ static unsigned int tcp_xmit_size_goal(struct sock *sk, u32 mss_now,
 	u16 gso_size;
 
 	if (!large_allowed)
-		return mss_now;
+		return min(IPV6_MAXPLEN, mss_now);
 
 	/* Note : tcp_tso_autosize() will eventually split this later */
 	new_size_goal = tcp_bound_to_half_wnd(tp, sk->sk_gso_max_size);
