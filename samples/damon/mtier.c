@@ -118,6 +118,9 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 	} else {
 		addr.start = promote ? node1_start_addr : node0_start_addr;
 		addr.end = promote ? node1_end_addr : node0_end_addr;
+
+		if (addr.start >= addr.end)
+			goto free_out;
 	}
 
 	region = damon_new_region(addr.start, addr.end);
