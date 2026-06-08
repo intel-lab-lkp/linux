@@ -663,18 +663,26 @@ static inline void hypervisor_ppn_remove(PPN64 pfn)
  */
 
 static inline char *mksstat_init_record_time(mksstat_kern_stats_t stat_idx,
-	MKSGuestStatCounterTime *pstat, MKSGuestStatInfoEntry *pinfo, char *pstrs)
+	MKSGuestStatCounterTime *pstat, MKSGuestStatInfoEntry *pinfo, char *pstrs, char *lim)
 {
-	char *const pstrd = pstrs + strlen(mksstat_kern_name_desc[stat_idx][0]) + 1;
-	strcpy(pstrs, mksstat_kern_name_desc[stat_idx][0]);
-	strcpy(pstrd, mksstat_kern_name_desc[stat_idx][1]);
+	char *pstrd;
+	int len;
+
+	len = strscpy(pstrs, mksstat_kern_name_desc[stat_idx][0], lim - pstrs);
+	if (len < 0)
+		return pstrs;
+
+	pstrd = pstrs + len + 1;
+	len = strscpy(pstrd, mksstat_kern_name_desc[stat_idx][1], lim - pstrd);
+	if (len < 0)
+		return pstrs;
 
 	pinfo[stat_idx].name.s = pstrs;
 	pinfo[stat_idx].description.s = pstrd;
 	pinfo[stat_idx].flags = MKS_GUEST_STAT_FLAG_TIME;
 	pinfo[stat_idx].stat.counterTime = &pstat[stat_idx];
 
-	return pstrd + strlen(mksstat_kern_name_desc[stat_idx][1]) + 1;
+	return pstrd + len + 1;
 }
 
 /**
@@ -709,8 +717,8 @@ static int mksstat_init_kern_id(struct page **ppage)
 
 	/* Set up all kernel-internal counters and corresponding structures */
 	pstrs_acc = pstrs;
-	pstrs_acc = mksstat_init_record_time(MKSSTAT_KERN_EXECBUF, pstat, pinfo, pstrs_acc);
-	pstrs_acc = mksstat_init_record_time(MKSSTAT_KERN_COTABLE_RESIZE, pstat, pinfo, pstrs_acc);
+	pstrs_acc = mksstat_init_record_time(MKSSTAT_KERN_EXECBUF, pstat, pinfo, pstrs_acc, pstrs + PAGE_SIZE);
+	pstrs_acc = mksstat_init_record_time(MKSSTAT_KERN_COTABLE_RESIZE, pstat, pinfo, pstrs_acc, pstrs + PAGE_SIZE);
 
 	/* Add new counters above, in their order of appearance in mksstat_kern_stats_t */
 
