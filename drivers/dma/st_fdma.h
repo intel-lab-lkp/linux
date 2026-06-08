@@ -136,13 +136,13 @@ struct st_fdma_dev {
 
 	int irq;
 
-	struct st_fdma_chan *chans;
-
 	spinlock_t dreq_lock;
 	unsigned long dreq_mask;
 
 	u32 nr_channels;
 	char fw_name[FW_NAME_SIZE];
+
+	struct st_fdma_chan chans[] __counted_by(nr_channels);
 };
 
 /* Peripheral Registers*/
