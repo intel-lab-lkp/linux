@@ -96,7 +96,7 @@ static int __init ubiblock_set_param(const char *val,
 				     const struct kernel_param *kp)
 {
 	int i, ret;
-	size_t len;
+	ssize_t len;
 	struct ubiblock_param *param;
 	char buf[UBIBLOCK_PARAM_LEN];
 	char *pbuf = &buf[0];
@@ -105,19 +105,17 @@ static int __init ubiblock_set_param(const char *val,
 	if (!val)
 		return -EINVAL;
 
-	len = strnlen(val, UBIBLOCK_PARAM_LEN);
+	len = strscpy(buf, val);
 	if (len == 0) {
 		pr_warn("UBI: block: empty 'block=' parameter - ignored\n");
 		return 0;
 	}
 
-	if (len == UBIBLOCK_PARAM_LEN) {
+	if (len < 0) {
 		pr_err("UBI: block: parameter \"%s\" is too long, max. is %d\n",
 		       val, UBIBLOCK_PARAM_LEN);
 		return -EINVAL;
 	}
-
-	strcpy(buf, val);
 
 	/* Get rid of the final newline */
 	if (buf[len - 1] == '\n')
@@ -137,12 +135,12 @@ static int __init ubiblock_set_param(const char *val,
 		ret = kstrtoint(tokens[1], 10, &param->vol_id);
 		if (ret < 0) {
 			param->vol_id = -1;
-			strcpy(param->name, tokens[1]);
+			strscpy(param->name, tokens[1]);
 		}
 
 	} else {
 		/* One parameter: must be device path */
-		strcpy(param->name, tokens[0]);
+		strscpy(param->name, tokens[0]);
 		param->ubi_num = -1;
 		param->vol_id = -1;
 	}
