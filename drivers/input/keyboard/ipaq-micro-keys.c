@@ -23,7 +23,7 @@
 struct ipaq_micro_keys {
 	struct ipaq_micro *micro;
 	struct input_dev *input;
-	u16 *codes;
+	u16 codes[];
 };
 
 static const u16 micro_keycodes[] = {
@@ -90,10 +90,11 @@ static int micro_key_probe(struct platform_device *pdev)
 	int error;
 	int i;
 
-	keys = devm_kzalloc(&pdev->dev, sizeof(*keys), GFP_KERNEL);
+	keys = devm_kzalloc(&pdev->dev, struct_size(keys, codes, ARRAY_SIZE(micro_keycodes)), GFP_KERNEL);
 	if (!keys)
 		return -ENOMEM;
 
+	memcpy(keys->codes, micro_keycodes, ARRAY_SIZE(micro_keycodes) * sizeof(*keys->codes));
 	keys->micro = dev_get_drvdata(pdev->dev.parent);
 
 	keys->input = devm_input_allocate_device(&pdev->dev);
@@ -102,10 +103,6 @@ static int micro_key_probe(struct platform_device *pdev)
 
 	keys->input->keycodesize = sizeof(micro_keycodes[0]);
 	keys->input->keycodemax = ARRAY_SIZE(micro_keycodes);
-	keys->codes = devm_kmemdup_array(&pdev->dev, micro_keycodes, keys->input->keycodemax,
-					 keys->input->keycodesize, GFP_KERNEL);
-	if (!keys->codes)
-		return -ENOMEM;
 
 	keys->input->keycode = keys->codes;
 
