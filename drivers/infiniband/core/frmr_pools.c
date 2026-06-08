@@ -443,6 +443,9 @@ int ib_frmr_pools_set_pinned(struct ib_device *device, struct ib_frmr_key *key,
 
 end:
 	spin_unlock(&pool->lock);
+	if (ret && i < needed_handles)
+		pools->pool_ops->destroy_frmrs(device, &handles[i],
+					       needed_handles - i);
 	kfree(handles);
 
 schedule_aging:
