@@ -132,7 +132,13 @@ do_test() {
 	local gw_gro=$2
 	local gw_tso=$3
 	local ser_gro=$4
+	local mtu=$5
 	local ret="PASS"
+
+	ip -n $CLIENT_NS link set link0 mtu "$mtu"
+	ip -n $ROUTER_NS link set link1 mtu "$mtu"
+	ip -n $ROUTER_NS link set link2 mtu "$mtu"
+	ip -n $SERVER_NS link set link3 mtu "$mtu"
 
 	ip net exec $CLIENT_NS ethtool -K link0 tso $cli_tso
 	ip net exec $ROUTER_NS ethtool -K link1 gro $gw_gro
@@ -151,18 +157,20 @@ do_test() {
 
 	stop_counter link1 $ROUTER_NS
 	stop_counter link3 $SERVER_NS
-	printf "%-9s %-8s %-8s %-8s: [%s]\n" \
-		$cli_tso $gw_gro $gw_tso $ser_gro $ret
+	printf "%-9s %-8s %-8s %-9s %-7s: [%s]\n" \
+		$cli_tso $gw_gro $gw_tso $ser_gro $mtu $ret
 	test $ret = "PASS"
 }
 
 testup() {
-	echo "CLI GSO | GW GRO | GW GSO | SER GRO" && \
-	do_test "on"  "on"  "on"  "on"  && \
-	do_test "on"  "off" "on"  "off" && \
-	do_test "off" "on"  "on"  "on"  && \
-	do_test "on"  "on"  "off" "on"  && \
-	do_test "off" "on"  "off" "on"
+	echo "CLI GSO | GW GRO | GW GSO | SER GRO | MTU" && \
+	do_test "on"  "on"  "on"  "on"    1500 && \
+	do_test "on"  "off" "on"  "off"   1500 && \
+	do_test "off" "on"  "on"  "on"    1500 && \
+	do_test "on"  "on"  "off" "on"    1500 && \
+	do_test "off" "on"  "off" "on"    1500 && \
+	do_test "on"  "off" "on"  "off"  66000 && \
+	do_test "on"  "off" "on"  "off" 200000
 }
 
 if ! netperf -V &> /dev/null; then
