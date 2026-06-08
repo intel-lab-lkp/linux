@@ -92,7 +92,8 @@ static void destroy_all_handles_in_queue(struct ib_device *device,
 	u32 count;
 
 	while (pop_frmr_handles_page(pool, queue, &page, &count)) {
-		pools->pool_ops->destroy_frmrs(device, page->handles, count);
+		pools->pool_ops->destroy_frmrs(device, &pool->key,
+					       page->handles, count);
 		kfree(page);
 	}
 }
@@ -136,7 +137,8 @@ static bool age_pinned_pool(struct ib_device *device, struct ib_frmr_pool *pool)
 	spin_unlock(&pool->lock);
 
 	if (destroyed)
-		pools->pool_ops->destroy_frmrs(device, handles, destroyed);
+		pools->pool_ops->destroy_frmrs(device, &pool->key, handles,
+					       destroyed);
 	kfree(handles);
 	return has_work;
 }
@@ -453,9 +455,11 @@ schedule_aging:
 }
 
 static int get_frmr_from_pool(struct ib_device *device,
-			      struct ib_frmr_pool *pool, struct ib_mr *mr)
+			      struct ib_frmr_pool *pool, struct ib_mr *mr,
+			      bool *reused)
 {
 	struct ib_frmr_pools *pools = device->frmr_pools;
+	bool local_reused = false;
 	u32 handle;
 	int err;
 
@@ -464,6 +468,7 @@ static int get_frmr_from_pool(struct ib_device *device,
 		if (pool->inactive_queue.ci > 0) {
 			handle = pop_handle_from_queue_locked(
 				&pool->inactive_queue);
+			local_reused = true;
 		} else {
 			spin_unlock(&pool->lock);
 			err = pools->pool_ops->create_frmrs(device, &pool->key,
@@ -474,6 +479,7 @@ static int get_frmr_from_pool(struct ib_device *device,
 		}
 	} else {
 		handle = pop_handle_from_queue_locked(&pool->queue);
+		local_reused = true;
 	}
 
 	pool->in_use++;
@@ -484,6 +490,8 @@ static int get_frmr_from_pool(struct ib_device *device,
 
 	mr->frmr.pool = pool;
 	mr->frmr.handle = handle;
+	if (reused)
+		*reused = local_reused;
 
 	return 0;
 }
@@ -493,10 +501,12 @@ static int get_frmr_from_pool(struct ib_device *device,
  *
  * @device: The device to pop the FRMR handle from.
  * @mr: The MR to pop the FRMR handle from.
+ * @reused: Optional output that reports whether the returned handle was
+ *	    reused from the pool instead of freshly created.
  *
  * Returns 0 on success, negative error code on failure.
  */
-int ib_frmr_pool_pop(struct ib_device *device, struct ib_mr *mr)
+int ib_frmr_pool_pop(struct ib_device *device, struct ib_mr *mr, bool *reused)
 {
 	struct ib_frmr_pools *pools = device->frmr_pools;
 	struct ib_frmr_pool *pool;
@@ -509,7 +519,7 @@ int ib_frmr_pool_pop(struct ib_device *device, struct ib_mr *mr)
 			return PTR_ERR(pool);
 	}
 
-	return get_frmr_from_pool(device, pool, mr);
+	return get_frmr_from_pool(device, pool, mr, reused);
 }
 EXPORT_SYMBOL(ib_frmr_pool_pop);
 
