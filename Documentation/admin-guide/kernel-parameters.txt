@@ -49,6 +49,7 @@
 	PCI	PCI bus support is enabled.
 	PCIE	PCI Express support is enabled.
 	PCMCIA	The PCMCIA subsystem is enabled.
+	PM	Power Management support is enabled.
 	PNP	Plug & Play support is enabled.
 	PPC	PowerPC architecture is enabled.
 	PPT	Parallel port support is enabled.
@@ -5408,6 +5409,13 @@ Kernel parameters
 			platform machine description specific power_save
 			function to NULL. On Idle the CPU just reduces
 			execution priority.
+
+	power.dpm_watchdog_enabled=
+			[PM] Enable or disable the device suspend/resume
+			watchdog (DPM watchdog).  Requires CONFIG_PM_SLEEP and
+			CONFIG_DPM_WATCHDOG enabled.
+			Format: <bool>
+			Default value is set by CONFIG_DPM_WATCHDOG_DEFAULT_ENABLED.
 
 	ppc_strict_facility_enable
 			[PPC,ENABLE] This option catches any kernel floating point,
