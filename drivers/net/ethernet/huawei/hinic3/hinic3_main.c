@@ -180,6 +180,7 @@ static int hinic3_sw_init(struct net_device *netdev)
 
 	mutex_init(&nic_dev->port_state_mutex);
 	mutex_init(&nic_dev->change_res_mutex);
+	spin_lock_init(&nic_dev->coal_lock);
 
 	nic_dev->q_params.sq_depth = HINIC3_SQ_DEPTH;
 	nic_dev->q_params.rq_depth = HINIC3_RQ_DEPTH;
