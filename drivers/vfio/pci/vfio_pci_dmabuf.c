@@ -2,7 +2,9 @@
 /* Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.
  */
 #include <linux/dma-buf-mapping.h>
+#include <linux/mutex.h>
 #include <linux/pci-p2pdma.h>
+#include <linux/pci-tph.h>
 #include <linux/dma-resv.h>
 
 #include "vfio_pci_priv.h"
@@ -19,7 +21,14 @@ struct vfio_pci_dma_buf {
 	u32 nr_ranges;
 	struct kref kref;
 	struct completion comp;
-	u8 revoked : 1;
+	/* @tph_lock serializes TPH SET vs get_tph on the TPH fields below. */
+	struct mutex tph_lock;
+	u8 tph_st_valid:1;
+	u8 tph_st_ext_valid:1;
+	u8 tph_ph:2;
+	u8 tph_st;
+	u16 tph_st_ext;
+	u8 revoked:1;
 };
 
 static int vfio_pci_dma_buf_attach(struct dma_buf *dmabuf,
@@ -69,6 +78,25 @@ vfio_pci_dma_buf_map(struct dma_buf_attachment *attachment,
 	return ret;
 }
 
+static int vfio_pci_dma_buf_get_tph(struct dma_buf *dmabuf, bool extended,
+				    u16 *steering_tag, u8 *ph)
+{
+	struct vfio_pci_dma_buf *priv = dmabuf->priv;
+
+	guard(mutex)(&priv->tph_lock);
+	if (extended) {
+		if (!priv->tph_st_ext_valid)
+			return -EOPNOTSUPP;
+		*steering_tag = priv->tph_st_ext;
+	} else {
+		if (!priv->tph_st_valid)
+			return -EOPNOTSUPP;
+		*steering_tag = priv->tph_st;
+	}
+	*ph = priv->tph_ph;
+	return 0;
+}
+
 static void vfio_pci_dma_buf_unmap(struct dma_buf_attachment *attachment,
 				   struct sg_table *sgt,
 				   enum dma_data_direction dir)
@@ -95,12 +123,14 @@ static void vfio_pci_dma_buf_release(struct dma_buf *dmabuf)
 		up_write(&priv->vdev->memory_lock);
 		vfio_device_put_registration(&priv->vdev->vdev);
 	}
+	mutex_destroy(&priv->tph_lock);
 	kfree(priv->phys_vec);
 	kfree(priv);
 }
 
 static const struct dma_buf_ops vfio_pci_dmabuf_ops = {
 	.attach = vfio_pci_dma_buf_attach,
+	.get_tph = vfio_pci_dma_buf_get_tph,
 	.map_dma_buf = vfio_pci_dma_buf_map,
 	.unmap_dma_buf = vfio_pci_dma_buf_unmap,
 	.release = vfio_pci_dma_buf_release,
@@ -265,6 +295,7 @@ int vfio_pci_core_feature_dma_buf(struct vfio_pci_core_device *vdev, u32 flags,
 		ret = -ENOMEM;
 		goto err_free_ranges;
 	}
+	mutex_init(&priv->tph_lock);
 	priv->phys_vec = kzalloc_objs(*priv->phys_vec, get_dma_buf.nr_ranges);
 	if (!priv->phys_vec) {
 		ret = -ENOMEM;
@@ -327,9 +358,68 @@ err_dev_put:
 err_free_phys:
 	kfree(priv->phys_vec);
 err_free_priv:
+	mutex_destroy(&priv->tph_lock);
 	kfree(priv);
 err_free_ranges:
 	kfree(dma_ranges);
+	return ret;
+}
+
+int vfio_pci_core_feature_dma_buf_tph(struct vfio_pci_core_device *vdev,
+				      u32 flags,
+				      struct vfio_device_feature_dma_buf_tph __user *arg,
+				      size_t argsz)
+{
+	struct vfio_device_feature_dma_buf_tph set_tph;
+	struct vfio_pci_dma_buf *priv;
+	struct dma_buf *dmabuf;
+	int ret;
+
+	if (!pcie_tph_supported(vdev->pdev))
+		return -EOPNOTSUPP;
+
+	ret = vfio_check_feature(flags, argsz, VFIO_DEVICE_FEATURE_SET,
+				 sizeof(set_tph));
+	if (ret != 1)
+		return ret;
+
+	if (copy_from_user(&set_tph, arg, sizeof(set_tph)))
+		return -EFAULT;
+
+	if (set_tph.flags & ~(VFIO_DMA_BUF_TPH_ST | VFIO_DMA_BUF_TPH_ST_EXT))
+		return -EINVAL;
+
+	/* PCIe TLP Processing Hint is a 2-bit field. */
+	if (set_tph.ph & ~0x3)
+		return -EINVAL;
+
+	dmabuf = dma_buf_get(set_tph.dmabuf_fd);
+	if (IS_ERR(dmabuf))
+		return PTR_ERR(dmabuf);
+
+	if (dmabuf->ops != &vfio_pci_dmabuf_ops) {
+		ret = -EINVAL;
+		goto out_put;
+	}
+
+	priv = dmabuf->priv;
+	if (priv->vdev != vdev) {
+		ret = -EINVAL;
+		goto out_put;
+	}
+
+	scoped_guard(mutex, &priv->tph_lock) {
+		priv->tph_st = set_tph.steering_tag;
+		priv->tph_st_ext = set_tph.steering_tag_ext;
+		priv->tph_ph = set_tph.ph;
+		priv->tph_st_valid = !!(set_tph.flags & VFIO_DMA_BUF_TPH_ST);
+		priv->tph_st_ext_valid =
+			!!(set_tph.flags & VFIO_DMA_BUF_TPH_ST_EXT);
+	}
+	ret = 0;
+
+out_put:
+	dma_buf_put(dmabuf);
 	return ret;
 }
 

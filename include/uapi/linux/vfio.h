@@ -1534,6 +1534,51 @@ struct vfio_device_feature_dma_buf {
  */
 #define VFIO_DEVICE_FEATURE_MIG_PRECOPY_INFOv2  12
 
+/**
+ * Upon VFIO_DEVICE_FEATURE_SET associate TPH (TLP Processing Hints) metadata
+ * with a vfio-exported dma-buf. The dma-buf must have been created by
+ * VFIO_DEVICE_FEATURE_DMA_BUF on this device, and the device must expose the
+ * TPH Extended Capability (otherwise the ioctl returns -EOPNOTSUPP).
+ *
+ * dmabuf_fd is the file descriptor returned by VFIO_DEVICE_FEATURE_DMA_BUF.
+ *
+ * 8-bit ST (steering_tag) and 16-bit Extended ST (steering_tag_ext) are
+ * distinct namespaces in the PCIe TPH ST table and may both be present with
+ * different values. Userspace should populate the value(s) it has from the
+ * firmware ST table for this device and set the matching VFIO_DMA_BUF_TPH_ST /
+ * VFIO_DMA_BUF_TPH_ST_EXT bit in @flags. An importer requests a specific
+ * width and receives the matching value; if the requested width is not
+ * present, the importer is told TPH is unavailable for this dma-buf.
+ *
+ * This publishes the PCI SIG-defined ST/PH tuple for a VFIO-owned PCIe
+ * completer. The dma-buf core treats the tuple as opaque completer-owned
+ * metadata; an importer simply requests the namespace it supports and places
+ * the returned value on generated TLPs.
+ *
+ * @flags == 0 clears any previously published metadata.
+ *
+ * ph is the 2-bit TLP Processing Hint and must be in the range [0, 3].
+ *
+ * Userspace is responsible for setting TPH on the dma-buf before handing the
+ * fd to the importer. Calling SET again replaces the previously published
+ * values; racing a SET against an importer that is already consuming the
+ * dma-buf is a userspace ordering problem.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+#define VFIO_DEVICE_FEATURE_DMA_BUF_TPH 13
+
+#define VFIO_DMA_BUF_TPH_ST		(1 << 0)  /* steering_tag valid */
+#define VFIO_DMA_BUF_TPH_ST_EXT		(1 << 1)  /* steering_tag_ext valid */
+
+struct vfio_device_feature_dma_buf_tph {
+	__s32	dmabuf_fd;
+	__u32	flags;
+	__u16	steering_tag_ext;
+	__u8	steering_tag;
+	__u8	ph;
+};
+
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**
