@@ -221,7 +221,7 @@ static bool __initdata fb_probed;
 void __init efi_earlycon_reprobe(void)
 {
 	if (fb_probed)
-		setup_earlycon("efifb");
+		setup_earlycon("efifb", 0);
 }
 
 static int __init efi_earlycon_setup(struct earlycon_device *device,

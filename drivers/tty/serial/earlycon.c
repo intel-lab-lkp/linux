@@ -135,10 +135,13 @@ static int __init parse_options(struct earlycon_device *device, char *options)
 	return 0;
 }
 
-static int __init register_earlycon(char *buf, const struct earlycon_id *match)
+static int __init register_earlycon(char *buf, unsigned int uart_clk_freq,
+				    const struct earlycon_id *match)
 {
 	int err;
 	struct uart_port *port = &early_console_dev.port;
+
+	port->uartclk = uart_clk_freq;
 
 	/* On parsing error, pass the options buf to the setup function */
 	if (buf && !parse_options(&early_console_dev, buf))
@@ -164,7 +167,8 @@ static int __init register_earlycon(char *buf, const struct earlycon_id *match)
 
 /**
  *	setup_earlycon - match and register earlycon console
- *	@buf:	earlycon param string
+ *	@buf:		earlycon param string
+ *	@uart_clk_freq:	uart clock frequency in Hz or 0 for BASE_BAUD*16
  *
  *	Registers the earlycon console matching the earlycon specified
  *	in the param string @buf. Acceptable param strings are of the form
@@ -177,10 +181,13 @@ static int __init register_earlycon(char *buf, const struct earlycon_id *match)
  *	<options> string in the 'options' parameter; all other forms set
  *	the parameter to NULL.
  *
+ *	If the uart clock frequency is specified in the 'options' parameter,
+ *	the value of the param @uart_clk_freq will be ignored.
+ *
  *	Returns 0 if an attempt to register the earlycon was made,
  *	otherwise negative error code
  */
-int __init setup_earlycon(char *buf)
+int __init setup_earlycon(char *buf, unsigned int uart_clk_freq)
 {
 	const struct earlycon_id *match;
 	bool empty_compatible = true;
@@ -209,7 +216,7 @@ again:
 		} else
 			buf = NULL;
 
-		return register_earlycon(buf, match);
+		return register_earlycon(buf, uart_clk_freq, match);
 	}
 
 	if (empty_compatible) {
@@ -241,7 +248,7 @@ static int __init param_setup_earlycon(char *buf)
 		}
 	}
 
-	err = setup_earlycon(buf);
+	err = setup_earlycon(buf, 0);
 	if (err == -ENOENT || err == -EALREADY)
 		return 0;
 	return err;
