@@ -366,7 +366,7 @@ extern void sched_dl_do_global(void);
 extern int  sched_dl_overflow(struct task_struct *p, int policy, const struct sched_attr *attr);
 extern void __setparam_dl(struct task_struct *p, const struct sched_attr *attr);
 extern void __getparam_dl(struct task_struct *p, struct sched_attr *attr, unsigned int flags);
-extern bool __checkparam_dl(const struct sched_attr *attr);
+extern bool __checkparam_dl(const struct sched_attr *attr, bool allow_zero_runtime);
 extern bool dl_param_changed(struct task_struct *p, const struct sched_attr *attr);
 extern int  dl_cpuset_cpumask_can_shrink(const struct cpumask *cur, const struct cpumask *trial);
 extern int  dl_bw_deactivate(int cpu);
@@ -425,6 +425,7 @@ extern void dl_server_init(struct sched_dl_entity *dl_se, struct dl_rq *dl_rq,
 		    struct rq *served_rq,
 		    dl_server_pick_f pick_task);
 extern void sched_init_dl_servers(void);
+extern int dl_check_tg(unsigned long total);
 extern void dl_init_tg(struct sched_dl_entity *dl_se, u64 rt_runtime, u64 rt_period);
 
 extern void fair_server_init(struct rq *rq);
@@ -607,6 +608,12 @@ extern void start_cfs_bandwidth(struct cfs_bandwidth *cfs_b);
 extern void unthrottle_cfs_rq(struct cfs_rq *cfs_rq);
 extern bool cfs_task_bw_constrained(struct task_struct *p);
 
+extern int tg_rt_bandwidth(struct task_group *tg,
+			   long *rt_period_us, long *rt_runtime_us);
+extern int tg_rt_internal_bandwidth(struct task_group *tg,
+				    long *rt_period_us, long *rt_runtime_us);
+extern int tg_set_rt_bandwidth(struct task_group *tg,
+			       u64 rt_period_us, u64 rt_runtime_us);
 extern int sched_rt_can_attach(struct task_group *tg);
 
 extern struct task_group *sched_create_group(struct task_group *parent);
@@ -2045,6 +2052,14 @@ DEFINE_LOCK_GUARD_1(raw_spin_rq_lock_irq, struct rq,
 		    raw_spin_rq_lock_irq(_T->lock),
 		    raw_spin_rq_unlock_irq(_T->lock))
 
+extern struct mutex sched_rt_handler_mutex;
+extern void sched_rt_handler_mutex_lock(void);
+extern void sched_rt_handler_mutex_unlock(void);
+
+DEFINE_LOCK_GUARD_0(sched_rt_handler,
+		    sched_rt_handler_mutex_lock(),
+		    sched_rt_handler_mutex_unlock())
+
 #ifdef CONFIG_NUMA
 
 enum numa_topology_type {
@@ -2938,6 +2953,7 @@ extern void init_cfs_throttle_work(struct task_struct *p);
 #define MAX_BW			((1ULL << MAX_BW_BITS) - 1)
 
 extern u64 to_ratio(u64 period, u64 runtime);
+extern u64 from_ratio(u64 period, u64 bw);
 
 extern void init_entity_runnable_average(struct sched_entity *se);
 extern void post_init_entity_util_avg(struct task_struct *p);

@@ -346,10 +346,45 @@ void cancel_inactive_timer(struct sched_dl_entity *dl_se)
 	cancel_dl_timer(dl_se, &dl_se->inactive_timer);
 }
 
+/*
+ * Used for dl_bw check and update, used under sched_rt_handler()::mutex and
+ * sched_domains_mutex.
+ */
+u64 dl_cookie;
+
 #ifdef CONFIG_RT_GROUP_SCHED
+int dl_check_tg(unsigned long total)
+{
+	int which_cpu;
+	int cap;
+	struct dl_bw *dl_b;
+	u64 gen = ++dl_cookie;
+
+	lockdep_assert_held(&sched_domains_mutex);
+	lockdep_assert_held(&sched_rt_handler_mutex);
+
+	for_each_possible_cpu(which_cpu) {
+		guard(rcu_sched)();
+
+		if (!dl_bw_visited(which_cpu, gen)) {
+			cap = dl_bw_capacity(which_cpu);
+			dl_b = dl_bw_of(which_cpu);
+
+			guard(raw_spinlock_irqsave)(&dl_b->lock);
+
+			if (dl_b->bw != -1 &&
+			    cap_scale(dl_b->bw, cap) < dl_b->total_bw + cap_scale(total, cap))
+				return 0;
+		}
+
+	}
+
+	return 1;
+}
+
 void dl_init_tg(struct sched_dl_entity *dl_se, u64 rt_runtime, u64 rt_period)
 {
-	struct rq *rq = container_of_const(dl_se->dl_rq, struct rq, dl);
+	struct rq *rq = rq_of_dl_se(dl_se);
 	int is_active;
 	u64 new_bw;
 
@@ -3497,12 +3532,6 @@ DEFINE_SCHED_CLASS(dl) = {
 #endif
 };
 
-/*
- * Used for dl_bw check and update, used under sched_rt_handler()::mutex and
- * sched_domains_mutex.
- */
-u64 dl_cookie;
-
 int sched_dl_global_validate(void)
 {
 	u64 runtime = global_rt_runtime();
@@ -3513,6 +3542,9 @@ int sched_dl_global_validate(void)
 	struct dl_bw *dl_b;
 	int cpu, cap, cpus, ret = 0;
 	unsigned long flags;
+
+	lockdep_assert_held(&sched_domains_mutex);
+	lockdep_assert_held(&sched_rt_handler_mutex);
 
 	/*
 	 * Here we want to check the bandwidth not being set to some
@@ -3565,6 +3597,9 @@ void sched_dl_do_global(void)
 	struct dl_bw *dl_b;
 	int cpu;
 	unsigned long flags;
+
+	lockdep_assert_held(&sched_domains_mutex);
+	lockdep_assert_held(&sched_rt_handler_mutex);
 
 	if (global_rt_runtime() != RUNTIME_INF)
 		new_bw = to_ratio(global_rt_period(), global_rt_runtime());
@@ -3711,7 +3746,7 @@ void __getparam_dl(struct task_struct *p, struct sched_attr *attr, unsigned int 
  * below 2^63 ns (we have to check both sched_deadline and
  * sched_period, as the latter can be zero).
  */
-bool __checkparam_dl(const struct sched_attr *attr)
+bool __checkparam_dl(const struct sched_attr *attr, bool allow_zero_runtime)
 {
 	u64 period, max, min;
 
@@ -3720,14 +3755,16 @@ bool __checkparam_dl(const struct sched_attr *attr)
 		return true;
 
 	/* deadline != 0 */
-	if (attr->sched_deadline == 0)
+	if ((!allow_zero_runtime || attr->sched_runtime != 0) &&
+	    attr->sched_deadline == 0)
 		return false;
 
 	/*
 	 * Since we truncate DL_SCALE bits, make sure we're at least
 	 * that big.
 	 */
-	if (attr->sched_runtime < (1ULL << DL_SCALE))
+	if ((!allow_zero_runtime || attr->sched_runtime != 0) &&
+	    attr->sched_runtime < (1ULL << DL_SCALE))
 		return false;
 
 	/*
@@ -3750,7 +3787,8 @@ bool __checkparam_dl(const struct sched_attr *attr)
 	max = (u64)READ_ONCE(sysctl_sched_dl_period_max) * NSEC_PER_USEC;
 	min = (u64)READ_ONCE(sysctl_sched_dl_period_min) * NSEC_PER_USEC;
 
-	if (period < min || period > max)
+	if ((!allow_zero_runtime || period != 0) &&
+	    (period < min || period > max))
 		return false;
 
 	return true;

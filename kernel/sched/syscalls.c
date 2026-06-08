@@ -528,7 +528,7 @@ recheck:
 	 */
 	if (attr->sched_priority > MAX_RT_PRIO-1)
 		return -EINVAL;
-	if ((dl_policy(policy) && !__checkparam_dl(attr)) ||
+	if ((dl_policy(policy) && !__checkparam_dl(attr, false)) ||
 	    (rt_policy(policy) != (attr->sched_priority != 0)))
 		return -EINVAL;
 

@@ -1179,6 +1179,7 @@ extern int rcu_expedited;
 extern int rcu_normal;
 
 DEFINE_LOCK_GUARD_0(rcu, rcu_read_lock(), rcu_read_unlock())
+DEFINE_LOCK_GUARD_0(rcu_sched, rcu_read_lock_sched(), rcu_read_unlock_sched())
 DECLARE_LOCK_GUARD_0_ATTRS(rcu, __acquires_shared(RCU), __releases_shared(RCU))
 
 #endif /* __LINUX_RCUPDATE_H */

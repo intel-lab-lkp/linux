@@ -2522,4 +2522,6 @@ extern void migrate_enable(void);
 
 DEFINE_LOCK_GUARD_0(migrate, migrate_disable(), migrate_enable())
 
+DEFINE_LOCK_GUARD_0(sched_domains, sched_domains_mutex_lock(), sched_domains_mutex_unlock())
+
 #endif

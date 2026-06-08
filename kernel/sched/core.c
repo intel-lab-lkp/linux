@@ -4815,6 +4815,14 @@ u64 to_ratio(u64 period, u64 runtime)
 	return div64_u64(runtime << BW_SHIFT, period);
 }
 
+u64 from_ratio(u64 period, u64 bw)
+{
+	if (bw == BW_UNIT)
+		return RUNTIME_INF;
+
+	return (bw * period) >> BW_SHIFT;
+}
+
 /*
  * wake_up_new_task - wake up a newly created task for the first time.
  *
@@ -10415,6 +10423,41 @@ static ssize_t cpu_max_write(struct kernfs_open_file *of,
 }
 #endif /* CONFIG_CFS_BANDWIDTH */
 
+#ifdef CONFIG_RT_GROUP_SCHED
+static int cpu_rt_max_show(struct seq_file *sf, void *v)
+{
+	struct task_group *tg = css_tg(seq_css(sf));
+	long period_us, runtime_us;
+
+	tg_rt_bandwidth(tg, &period_us, &runtime_us);
+	cpu_period_quota_print(sf, period_us, runtime_us);
+	return 0;
+}
+
+static int cpu_rt_internal_show(struct seq_file *sf, void *v)
+{
+	struct task_group *tg = css_tg(seq_css(sf));
+	long period_us, runtime_us;
+
+	tg_rt_internal_bandwidth(tg, &period_us, &runtime_us);
+	cpu_period_quota_print(sf, period_us, runtime_us);
+	return 0;
+}
+
+static ssize_t cpu_rt_max_write(struct kernfs_open_file *of,
+			        char *buf, size_t nbytes, loff_t off)
+{
+	struct task_group *tg = css_tg(of_css(of));
+	u64 period_us, runtime_us;
+	int ret;
+
+	ret = cpu_period_quota_parse(buf, &period_us, &runtime_us);
+	if (!ret)
+		ret = tg_set_rt_bandwidth(tg, period_us, runtime_us);
+	return ret ?: nbytes;
+}
+#endif /* CONFIG_RT_GROUP_SCHED */
+
 static struct cftype cpu_files[] = {
 #ifdef CONFIG_GROUP_SCHED_WEIGHT
 	{
@@ -10450,6 +10493,18 @@ static struct cftype cpu_files[] = {
 		.write_u64 = cpu_burst_write_u64,
 	},
 #endif /* CONFIG_CFS_BANDWIDTH */
+#ifdef CONFIG_RT_GROUP_SCHED
+	{
+		.name = "rt.max",
+		.seq_show = cpu_rt_max_show,
+		.write = cpu_rt_max_write,
+	},
+	{
+		.name = "rt.internal",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = cpu_rt_internal_show,
+	},
+#endif /* CONFIG_RT_GROUP_SCHED */
 #ifdef CONFIG_UCLAMP_TASK_GROUP
 	{
 		.name = "uclamp.min",
