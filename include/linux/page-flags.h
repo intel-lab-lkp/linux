@@ -1110,6 +1110,7 @@ bool is_free_buddy_page(const struct page *page);
  */
 TESTPAGEFLAG(MovableOps, movable_ops, PF_NO_TAIL);
 SETPAGEFLAG(MovableOps, movable_ops, PF_NO_TAIL);
+FOLIO_TEST_FLAG(MovableOpsIsolated, movable_ops_isolated)
 /*
  * A movable_ops page has this flag set while it is isolated for migration.
  * This flag primarily protects against concurrent migration attempts.
@@ -1137,6 +1138,12 @@ static inline bool page_has_movable_ops(const struct page *page)
 {
 	return PageMovableOps(page) &&
 	       (PageOffline(page) || PageZsmalloc(page));
+}
+
+static inline bool folio_has_movable_ops(struct folio *folio)
+{
+	return PageMovableOps(&folio->page) &&
+		(PageOffline(&folio->page) || PageZsmalloc(&folio->page));
 }
 
 static __always_inline int PageAnonExclusive(const struct page *page)

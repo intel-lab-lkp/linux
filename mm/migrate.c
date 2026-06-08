@@ -96,6 +96,11 @@ static const struct movable_operations *page_movable_ops(struct page *page)
 	return NULL;
 }
 
+static const struct movable_operations *folio_movable_ops(struct folio *folio)
+{
+	return page_movable_ops(&folio->page);
+}
+
 /**
  * isolate_movable_ops_page - isolate a movable_ops page for migration
  * @page: The page.
