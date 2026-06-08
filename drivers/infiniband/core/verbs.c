@@ -398,8 +398,11 @@ int ib_dealloc_pd_user(struct ib_pd *pd, struct ib_udata *udata)
 	}
 
 	ret = pd->device->ops.dealloc_pd(pd, udata);
-	if (ret)
+	if (ret) {
+		rdma_restrack_del(&pd->res);
+		kfree(pd);
 		return ret;
+	}
 
 	rdma_restrack_del(&pd->res);
 	kfree(pd);
