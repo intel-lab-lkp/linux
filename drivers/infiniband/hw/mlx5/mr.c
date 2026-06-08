@@ -1436,15 +1436,18 @@ static int __mlx5_ib_dereg_mr(struct ib_mr *ibmr)
 			mr->klm_mr = NULL;
 		}
 
-		if (mlx5_core_destroy_psv(dev->mdev,
-					  mr->sig->psv_memory.psv_idx))
-			mlx5_ib_warn(dev, "failed to destroy mem psv %d\n",
-				     mr->sig->psv_memory.psv_idx);
-		if (mlx5_core_destroy_psv(dev->mdev, mr->sig->psv_wire.psv_idx))
-			mlx5_ib_warn(dev, "failed to destroy wire psv %d\n",
-				     mr->sig->psv_wire.psv_idx);
-		kfree(mr->sig);
-		mr->sig = NULL;
+		if (mr->sig) {
+			if (mlx5_core_destroy_psv(dev->mdev,
+						  mr->sig->psv_memory.psv_idx))
+				mlx5_ib_warn(dev, "failed to destroy mem psv %d\n",
+					     mr->sig->psv_memory.psv_idx);
+			if (mlx5_core_destroy_psv(dev->mdev,
+						  mr->sig->psv_wire.psv_idx))
+				mlx5_ib_warn(dev, "failed to destroy wire psv %d\n",
+					     mr->sig->psv_wire.psv_idx);
+			kfree(mr->sig);
+			mr->sig = NULL;
+		}
 	}
 
 	/* Stop DMA */
