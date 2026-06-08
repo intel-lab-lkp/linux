@@ -50,17 +50,6 @@ allOf:
       properties:
         compatible:
           contains:
-            const: simple-mfd
-    then:
-      properties:
-        compatible:
-          minItems: 3
-          maxItems: 5
-
-  - if:
-      properties:
-        compatible:
-          contains:
             const: simple-bus
     then:
       # simple-bus conflicts with syscon - if a device is a system controller
