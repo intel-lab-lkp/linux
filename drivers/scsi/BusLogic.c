@@ -3451,13 +3451,17 @@ static void blogic_msg(enum blogic_msglevel msglevel, char *fmt,
 	va_end(args);
 	if (msglevel == BLOGIC_ANNOUNCE_LEVEL) {
 		static int msglines = 0;
-		strcpy(&adapter->msgbuf[adapter->msgbuflen], buf);
-		adapter->msgbuflen += len;
+		if (adapter->msgbuflen + len < sizeof (adapter->msgbuf)) {
+			memcpy(&adapter->msgbuf[adapter->msgbuflen], buf, len + 1);
+			adapter->msgbuflen += len;
+		}
 		if (++msglines <= 2)
 			printk("%sscsi: %s", blogic_msglevelmap[msglevel], buf);
 	} else if (msglevel == BLOGIC_INFO_LEVEL) {
-		strcpy(&adapter->msgbuf[adapter->msgbuflen], buf);
-		adapter->msgbuflen += len;
+		if (adapter->msgbuflen + len < sizeof (adapter->msgbuf)) {
+			memcpy(&adapter->msgbuf[adapter->msgbuflen], buf, len + 1);
+			adapter->msgbuflen += len;
+		}
 		if (begin) {
 			if (buf[0] != '\n' || len > 1)
 				printk("%sscsi%d: %s", blogic_msglevelmap[msglevel], adapter->host_no, buf);
