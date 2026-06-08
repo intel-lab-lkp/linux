@@ -547,20 +547,29 @@ static inline bool
 dma_fence_is_signaled(struct dma_fence *fence)
 {
 	const struct dma_fence_ops *ops;
+	unsigned long flags;
+	bool signaled;
 
 	if (dma_fence_test_signaled_flag(fence))
 		return true;
 
 	rcu_read_lock();
 	ops = rcu_dereference(fence->ops);
-	if (ops && ops->signaled && ops->signaled(fence)) {
+	if (!ops || !ops->signaled) {
 		rcu_read_unlock();
-		dma_fence_signal(fence);
-		return true;
+		return false;
 	}
+
+	dma_fence_lock_irqsave(fence, flags);
+	signaled = ops->signaled(fence);
+
+	if (signaled)
+		dma_fence_signal_locked(fence);
+
+	dma_fence_unlock_irqrestore(fence, flags);
 	rcu_read_unlock();
 
-	return false;
+	return signaled;
 }
 
 /**

@@ -629,7 +629,8 @@ EXPORT_SYMBOL(dma_fence_free);
 static bool __dma_fence_enable_signaling(struct dma_fence *fence)
 {
 	const struct dma_fence_ops *ops;
-	bool was_set;
+	bool was_set, success;
+	unsigned long flags;
 
 	dma_fence_assert_held(fence);
 
@@ -644,7 +645,10 @@ static bool __dma_fence_enable_signaling(struct dma_fence *fence)
 	if (!was_set && ops && ops->enable_signaling) {
 		trace_dma_fence_enable_signal(fence);
 
-		if (!ops->enable_signaling(fence)) {
+		dma_fence_lock_irqsave(fence, flags);
+		success = ops->enable_signaling(fence);
+		dma_fence_unlock_irqrestore(fence, flags);
+		if (!success) {
 			rcu_read_unlock();
 			dma_fence_signal_locked(fence);
 			return false;
@@ -1020,11 +1024,20 @@ EXPORT_SYMBOL(dma_fence_wait_any_timeout);
 void dma_fence_set_deadline(struct dma_fence *fence, ktime_t deadline)
 {
 	const struct dma_fence_ops *ops;
+	unsigned long flags;
 
 	rcu_read_lock();
 	ops = rcu_dereference(fence->ops);
-	if (ops && ops->set_deadline && !dma_fence_is_signaled(fence))
+	if (!ops || !ops->set_deadline) {
+		rcu_read_unlock();
+		return;
+	}
+
+	dma_fence_lock_irqsave(fence, flags);
+	if (!dma_fence_is_signaled_locked(fence))
 		ops->set_deadline(fence, deadline);
+
+	dma_fence_unlock_irqrestore(fence, flags);
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL(dma_fence_set_deadline);
@@ -1166,14 +1179,18 @@ EXPORT_SYMBOL(dma_fence_init64);
  */
 const char __rcu *dma_fence_driver_name(struct dma_fence *fence)
 {
+	const char __rcu *name = "detached-driver";
 	const struct dma_fence_ops *ops;
+	unsigned long flags;
 
 	/* RCU protection is required for safe access to returned string */
 	ops = rcu_dereference(fence->ops);
+	dma_fence_lock_irqsave(fence, flags);
 	if (!dma_fence_test_signaled_flag(fence))
-		return (const char __rcu *)ops->get_driver_name(fence);
-	else
-		return (const char __rcu *)"detached-driver";
+		name = ops->get_driver_name(fence);
+	dma_fence_unlock_irqrestore(fence, flags);
+
+	return name;
 }
 EXPORT_SYMBOL(dma_fence_driver_name);
 
@@ -1199,13 +1216,17 @@ EXPORT_SYMBOL(dma_fence_driver_name);
  */
 const char __rcu *dma_fence_timeline_name(struct dma_fence *fence)
 {
+	const char __rcu *name = "signaled-timeline";
 	const struct dma_fence_ops *ops;
+	unsigned long flags;
 
 	/* RCU protection is required for safe access to returned string */
 	ops = rcu_dereference(fence->ops);
+	dma_fence_lock_irqsave(fence, flags);
 	if (!dma_fence_test_signaled_flag(fence))
-		return (const char __rcu *)ops->get_driver_name(fence);
-	else
-		return (const char __rcu *)"signaled-timeline";
+		name = ops->get_driver_name(fence);
+	dma_fence_unlock_irqrestore(fence, flags);
+
+	return name;
 }
 EXPORT_SYMBOL(dma_fence_timeline_name);
