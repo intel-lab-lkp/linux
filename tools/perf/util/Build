@@ -98,6 +98,7 @@ perf-util-y += trace-event-scripting.o
 perf-util-$(CONFIG_LIBTRACEEVENT) += trace-event.o
 perf-util-$(CONFIG_LIBTRACEEVENT) += trace-event-parse.o
 perf-util-$(CONFIG_LIBTRACEEVENT) += trace-event-read.o
+perf-util-$(CONFIG_LIBTRACEEVENT) += trace-dat.o
 perf-util-y += sort.o
 perf-util-y += hist.o
 perf-util-y += util.o
