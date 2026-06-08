@@ -86,6 +86,38 @@ void init_rt_rq(struct rt_rq *rt_rq)
 
 #ifdef CONFIG_RT_GROUP_SCHED
 
+DEFINE_MUTEX(rt_constraints_mutex);
+
+const struct dl_bandwidth *dl_bandwidth_read(struct task_group *tg)
+{
+	int held;
+
+	if (IS_ENABLED(CONFIG_LOCKDEP) && debug_locks) {
+		held = 0;
+		if (lockdep_is_held(&rt_constraints_mutex)) {
+			__assume_ctx_lock(&rt_constraints_mutex);
+			held = 1;
+		}
+
+		if (lockdep_is_held(dl_bw_lock_of_tg(tg))) {
+			__assume_ctx_lock(dl_bw_lock_of_tg(tg));
+			held = 1;
+		}
+
+		lockdep_assert(held);
+	}
+
+	return (const struct dl_bandwidth *)&tg->dl_bandwidth;
+}
+
+struct dl_bandwidth *dl_bandwidth_write(struct task_group *tg)
+{
+	lockdep_assert_held(&rt_constraints_mutex);
+	lockdep_assert_held(dl_bw_lock_of_tg(tg));
+
+	return &tg->dl_bandwidth;
+}
+
 void unregister_rt_sched_group(struct task_group *tg)
 {
 
@@ -95,17 +127,6 @@ void free_rt_sched_group(struct task_group *tg)
 {
 	if (!rt_group_sched_enabled())
 		return;
-}
-
-void init_tg_rt_entry(struct task_group *tg, struct rt_rq *rt_rq,
-		struct sched_rt_entity *rt_se, int cpu,
-		struct sched_rt_entity *parent)
-{
-	rt_rq->highest_prio.curr = MAX_RT_PRIO-1;
-	rt_rq->tg = tg;
-
-	tg->rt_rq[cpu] = rt_rq;
-	tg->rt_se[cpu] = rt_se;
 }
 
 int alloc_rt_sched_group(struct task_group *tg, struct task_group *parent)
@@ -1802,8 +1823,6 @@ DEFINE_SCHED_CLASS(rt) = {
 /*
  * Ensure that the real time constraints are schedulable.
  */
-static DEFINE_MUTEX(rt_constraints_mutex);
-
 static inline int tg_has_rt_tasks(struct task_group *tg)
 {
 	struct task_struct *task;
