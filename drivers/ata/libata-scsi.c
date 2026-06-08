@@ -2953,6 +2953,15 @@ static unsigned int atapi_xlat(struct ata_queued_cmd *qc)
 	memset(qc->cdb, 0, dev->cdb_len);
 	memcpy(qc->cdb, scmd->cmnd, scmd->cmd_len);
 
+	/*
+	 * SCSI-2 CDB LUN encoding: bits 7:5 of byte 1 (3-bit field).
+	 * The SCSI layer caps the LUN at shost->max_lun (<= ATAPI_MAX_LUN),
+	 * so this should never trip; warn and reject if it does.
+	 */
+	if (WARN_ON_ONCE(scmd->device->lun >= dev->nr_luns))
+		return AC_ERR_INVALID;
+	qc->cdb[1] = (qc->cdb[1] & 0x1f) | ((u8)scmd->device->lun << 5);
+
 	qc->complete_fn = atapi_qc_complete;
 
 	qc->tf.flags |= ATA_TFLAG_ISADDR | ATA_TFLAG_DEVICE;
@@ -3062,6 +3071,29 @@ static struct ata_device *__ata_scsi_find_dev(struct ata_port *ap,
 					      const struct scsi_device *scsidev)
 {
 	int devno;
+
+	/*
+	 * Non-zero LUN is only legal for ATAPI devices, since they can
+	 * legitimately expose more than one LUN (PD/CD combos, CD changers).
+	 * Handle that case up front so the LUN-0 path below stays unchanged.
+	 */
+	if (unlikely(scsidev->lun)) {
+		struct ata_device *dev;
+
+		if (!sata_pmp_attached(ap)) {
+			if (unlikely(scsidev->channel))
+				return NULL;
+			devno = scsidev->id;
+		} else {
+			if (unlikely(scsidev->id))
+				return NULL;
+			devno = scsidev->channel;
+		}
+		dev = ata_find_dev(ap, devno);
+		if (!dev || dev->class != ATA_DEV_ATAPI)
+			return NULL;
+		return dev;
+	}
 
 	/* skip commands not addressed to targets we simulate */
 	if (!sata_pmp_attached(ap)) {
