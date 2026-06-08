@@ -2512,7 +2512,7 @@ static int mwifiex_register_dev(struct mwifiex_adapter *adapter)
 		if ((val & card->reg->host_strap_mask) == card->reg->host_strap_value)
 			firmware = card->firmware_sdiouart;
 	}
-	strcpy(adapter->fw_name, firmware);
+	strscpy(adapter->fw_name, firmware);
 
 	if (card->fw_dump_enh) {
 		adapter->mem_type_mapping_tbl = generic_mem_type_map;
