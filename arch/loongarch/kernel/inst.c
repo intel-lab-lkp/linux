@@ -207,13 +207,31 @@ int larch_insn_read(void *addr, u32 *insnp)
 int larch_insn_write(void *addr, u32 insn)
 {
 	int ret;
+	int err = 0;
+	size_t start;
 	unsigned long flags = 0;
 
 	if ((unsigned long)addr & 3)
 		return -EINVAL;
 
+	start = round_down((size_t)addr, PAGE_SIZE);
+
 	raw_spin_lock_irqsave(&patch_lock, flags);
+
+	err = set_memory_rw(start, 1);
+	if (err) {
+		pr_info("%s: set_memory_rw() failed\n", __func__);
+		return err;
+	}
+
 	ret = copy_to_kernel_nofault(addr, &insn, LOONGARCH_INSN_SIZE);
+
+	err = set_memory_rox(start, 1);
+	if (err) {
+		pr_info("%s: set_memory_rox() failed\n", __func__);
+		return err;
+	}
+
 	raw_spin_unlock_irqrestore(&patch_lock, flags);
 
 	return ret;
