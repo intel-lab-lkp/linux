@@ -1871,6 +1871,12 @@ static int check_inode_ref(struct extent_buffer *leaf,
 				ptr, end, namelen);
 			return -EUCLEAN;
 		}
+		if (unlikely(namelen > BTRFS_NAME_LEN)) {
+			inode_ref_err(leaf, slot,
+				"inode ref name too long, namelen %u max %u",
+				namelen, BTRFS_NAME_LEN);
+			return -EUCLEAN;
+		}
 
 		/*
 		 * NOTE: In theory we should record all found index numbers
@@ -1911,6 +1917,36 @@ static int check_inode_extref(struct extent_buffer *leaf,
 			return -EUCLEAN;
 		}
 		ptr += sizeof(*extref) + namelen;
+	}
+	return 0;
+}
+
+static int check_root_ref(struct extent_buffer *leaf, int slot)
+{
+	struct btrfs_root_ref *ref;
+	u32 item_size = btrfs_item_size(leaf, slot);
+	u16 namelen;
+
+	if (unlikely(item_size < sizeof(*ref))) {
+		generic_err(leaf, slot,
+			"invalid root ref item size, have %u expect >= %zu",
+			item_size, sizeof(*ref));
+		return -EUCLEAN;
+	}
+
+	ref = btrfs_item_ptr(leaf, slot, struct btrfs_root_ref);
+	namelen = btrfs_root_ref_name_len(leaf, ref);
+	if (unlikely(sizeof(*ref) + namelen != item_size)) {
+		generic_err(leaf, slot,
+			"invalid root ref name len, have %u expect %zu",
+			namelen, item_size - sizeof(*ref));
+		return -EUCLEAN;
+	}
+	if (unlikely(namelen > BTRFS_NAME_LEN)) {
+		generic_err(leaf, slot,
+			"root ref name too long, namelen %u max %u",
+			namelen, BTRFS_NAME_LEN);
+		return -EUCLEAN;
 	}
 	return 0;
 }
@@ -2225,6 +2261,10 @@ static enum btrfs_tree_block_status check_leaf_item(struct extent_buffer *leaf,
 		break;
 	case BTRFS_ROOT_ITEM_KEY:
 		ret = check_root_item(leaf, key, slot);
+		break;
+	case BTRFS_ROOT_REF_KEY:
+	case BTRFS_ROOT_BACKREF_KEY:
+		ret = check_root_ref(leaf, slot);
 		break;
 	case BTRFS_EXTENT_ITEM_KEY:
 	case BTRFS_METADATA_ITEM_KEY:
