@@ -917,6 +917,25 @@ EXPORT_SYMBOL(__drm_atomic_helper_bridge_state_init);
 struct drm_bridge_state *
 drm_atomic_helper_bridge_reset(struct drm_bridge *bridge)
 {
+	return drm_atomic_helper_bridge_create_state(bridge);
+}
+EXPORT_SYMBOL(drm_atomic_helper_bridge_reset);
+
+/**
+ * drm_atomic_helper_bridge_create_state - default
+ *              &drm_bridge_funcs.atomic_create_state hook for bridges
+ * @bridge: bridge object
+ *
+ * Allocates and initializes pristine @drm_bridge_state.
+ *
+ * This is useful for drivers that don't subclass @drm_bridge_state.
+ *
+ * RETURNS:
+ * Pointer to new bridge state, or ERR_PTR on failure.
+ */
+struct drm_bridge_state *
+drm_atomic_helper_bridge_create_state(struct drm_bridge *bridge)
+{
 	struct drm_bridge_state *bridge_state;
 
 	bridge_state = kzalloc_obj(*bridge_state);
@@ -926,4 +945,4 @@ drm_atomic_helper_bridge_reset(struct drm_bridge *bridge)
 	__drm_atomic_helper_bridge_state_init(bridge_state, bridge);
 	return bridge_state;
 }
-EXPORT_SYMBOL(drm_atomic_helper_bridge_reset);
+EXPORT_SYMBOL(drm_atomic_helper_bridge_create_state);
