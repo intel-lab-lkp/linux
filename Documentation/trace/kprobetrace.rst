@@ -55,6 +55,9 @@ Synopsis of kprobe_events
   $comm		: Fetch current task comm.
   $current      : Fetch the address of the current task_struct.
   +|-[u]OFFS(FETCHARG) : Fetch memory at FETCHARG +|- OFFS address.(\*3)(\*4)
+  +CPU(FETCHARG) : Fetch memory at FETCHARG address on the CPU specified by CPU.
+                  This is useful for fetching per-CPU variables.
+  +PCPU(FETCHARG) : Fetch memory address at FETCHARG address on the per-CPU area.
   \IMM		: Store an immediate value to the argument.
   NAME=FETCHARG : Set NAME as the argument name of FETCHARG.
   FETCHARG:TYPE : Set TYPE as the type of FETCHARG. Currently, basic types
