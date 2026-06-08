@@ -254,7 +254,7 @@ static bool amdxdna_hmm_invalidate(struct mmu_interval_notifier *mni,
 
 	xdna = to_xdna_dev(to_gobj(abo)->dev);
 	XDNA_DBG(xdna, "Invalidating range 0x%lx, 0x%lx, type %d",
-		 mapp->vma->vm_start, mapp->vma->vm_end, abo->type);
+		 mapp->range.start, mapp->range.end, abo->type);
 
 	if (!mmu_notifier_range_blockable(range))
 		return false;
@@ -284,21 +284,26 @@ static const struct mmu_interval_notifier_ops amdxdna_hmm_ops = {
 	.invalidate = amdxdna_hmm_invalidate,
 };
 
-static void amdxdna_hmm_unregister(struct amdxdna_gem_obj *abo,
-				   struct vm_area_struct *vma)
+static void amdxdna_hmm_unregister(struct amdxdna_gem_obj *abo, bool unreg_all)
 {
 	struct amdxdna_dev *xdna = to_xdna_dev(to_gobj(abo)->dev);
 	struct amdxdna_umap *mapp;
 
+	if (!unreg_all) {
+		down_read(&xdna->notifier_lock);
+		mapp = list_last_entry(&abo->mem.umap_list, struct amdxdna_umap, node);
+		queue_work(xdna->notifier_wq, &mapp->hmm_unreg_work);
+		mapp->unmapped = true;
+		up_read(&xdna->notifier_lock);
+
+		return;
+	}
+
 	down_read(&xdna->notifier_lock);
 	list_for_each_entry(mapp, &abo->mem.umap_list, node) {
-		if (!vma || mapp->vma == vma) {
-			if (!mapp->unmapped) {
-				queue_work(xdna->notifier_wq, &mapp->hmm_unreg_work);
-				mapp->unmapped = true;
-			}
-			if (vma)
-				break;
+		if (!mapp->unmapped) {
+			queue_work(xdna->notifier_wq, &mapp->hmm_unreg_work);
+			mapp->unmapped = true;
 		}
 	}
 	up_read(&xdna->notifier_lock);
@@ -308,12 +313,9 @@ static void amdxdna_umap_release(struct kref *ref)
 {
 	struct amdxdna_umap *mapp = container_of(ref, struct amdxdna_umap, refcnt);
 	struct amdxdna_gem_obj *abo = mapp->abo;
-	struct vm_area_struct *vma = mapp->vma;
 	struct amdxdna_dev *xdna;
 
 	mmu_interval_notifier_remove(&mapp->notifier);
-	if (is_import_bo(abo) && vma->vm_file && vma->vm_file->f_mapping)
-		mapping_clear_unevictable(vma->vm_file->f_mapping);
 
 	xdna = to_xdna_dev(to_gobj(mapp->abo)->dev);
 	down_write(&xdna->notifier_lock);
@@ -377,13 +379,10 @@ static int amdxdna_hmm_register(struct amdxdna_gem_obj *abo,
 	mapp->range.start = vma->vm_start;
 	mapp->range.end = vma->vm_end;
 	mapp->range.default_flags = HMM_PFN_REQ_FAULT;
-	mapp->vma = vma;
 	mapp->abo = abo;
 	kref_init(&mapp->refcnt);
 
 	INIT_WORK(&mapp->hmm_unreg_work, amdxdna_hmm_unreg_work);
-	if (is_import_bo(abo) && vma->vm_file && vma->vm_file->f_mapping)
-		mapping_set_unevictable(vma->vm_file->f_mapping);
 
 	down_write(&xdna->notifier_lock);
 	if (list_empty(&abo->mem.umap_list))
@@ -494,7 +493,7 @@ static int amdxdna_gem_obj_mmap(struct drm_gem_object *gobj,
 	return 0;
 
 hmm_unreg:
-	amdxdna_hmm_unregister(abo, vma);
+	amdxdna_hmm_unregister(abo, false);
 	return ret;
 }
 
@@ -616,7 +615,7 @@ static void amdxdna_gem_obj_free(struct drm_gem_object *gobj)
 	struct amdxdna_dev *xdna = to_xdna_dev(gobj->dev);
 	struct amdxdna_gem_obj *abo = to_xdna_obj(gobj);
 
-	amdxdna_hmm_unregister(abo, NULL);
+	amdxdna_hmm_unregister(abo, true);
 	flush_workqueue(xdna->notifier_wq);
 
 	if (abo->pinned)
