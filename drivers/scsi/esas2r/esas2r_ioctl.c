@@ -431,7 +431,7 @@ static int csmi_ioctl_callback(struct esas2r_adapter *a,
 	{
 		struct atto_csmi_get_driver_info *gdi = &ioctl_csmi->drvr_info;
 
-		strcpy(gdi->description, esas2r_get_model_name(a));
+		strscpy(gdi->description, esas2r_get_model_name(a));
 		gdi->csmi_major_rev = CSMI_MAJOR_REV;
 		gdi->csmi_minor_rev = CSMI_MINOR_REV;
 		break;
@@ -829,10 +829,10 @@ static int hba_ioctl_callback(struct esas2r_adapter *a,
 		gai->num_ports = ESAS2R_NUM_PHYS;
 		gai->num_phys = ESAS2R_NUM_PHYS;
 
-		strcpy(gai->firmware_rev, a->fw_rev);
-		strcpy(gai->flash_rev, a->flash_rev);
-		strcpy(gai->model_name_short, esas2r_get_model_name_short(a));
-		strcpy(gai->model_name, esas2r_get_model_name(a));
+		strscpy(gai->firmware_rev, a->fw_rev);
+		strscpy(gai->flash_rev, a->flash_rev);
+		strscpy(gai->model_name_short, esas2r_get_model_name_short(a));
+		strscpy(gai->model_name, esas2r_get_model_name(a));
 
 		gai->num_targets = ESAS2R_MAX_TARGETS;
 
