@@ -1315,6 +1315,7 @@ parse_probe_arg(char *arg, const struct fetch_type *type,
 		struct fetch_insn **pcode, struct fetch_insn *end,
 		struct traceprobe_parse_context *ctx)
 {
+	static const char *THIS_CPU_PTR_STR = "this_cpu_ptr(";
 	struct fetch_insn *code = *pcode;
 	unsigned long param;
 	int deref = FETCH_OP_DEREF;
@@ -1426,6 +1427,7 @@ parse_probe_arg(char *arg, const struct fetch_type *type,
 			ctx->offset += (tmp + 1 - arg) + (arg[0] != '-' ? 1 : 0);
 			arg = tmp + 1;
 		}
+handle_deref:
 		tmp = strrchr(arg, ')');
 		if (!tmp) {
 			trace_probe_log_err(ctx->offset + strlen(arg),
@@ -1476,6 +1478,11 @@ parse_probe_arg(char *arg, const struct fetch_type *type,
 		ret = handle_typecast(arg, pcode, end, ctx);
 		break;
 	default:
+		if (str_has_prefix(arg, THIS_CPU_PTR_STR)) {
+			arg += strlen(THIS_CPU_PTR_STR);
+			deref = FETCH_OP_CPU_PTR;
+			goto handle_deref;
+		}
 		if (isalpha(arg[0]) || arg[0] == '_') {	/* BTF variable */
 			if (!tparg_is_function_entry(ctx->flags) &&
 			    !tparg_is_function_return(ctx->flags)) {
