@@ -17610,40 +17610,41 @@ static char *tg3_phy_string(struct tg3 *tp)
 	}
 }
 
-static char *tg3_bus_string(struct tg3 *tp, char *str)
+static void tg3_bus_string(struct tg3 *tp, const char **str_a, const char **str_b, const char **str_c)
 {
 	if (tg3_flag(tp, PCI_EXPRESS)) {
-		strcpy(str, "PCI Express");
-		return str;
+		*str_a =  "PCI Express";
+		*str_b = "";
+		*str_c = "";
+		return;
 	} else if (tg3_flag(tp, PCIX_MODE)) {
 		u32 clock_ctrl = tr32(TG3PCI_CLOCK_CTRL) & 0x1f;
 
-		strcpy(str, "PCIX:");
+		*str_a =  "PCIX:";
 
 		if ((clock_ctrl == 7) ||
 		    ((tr32(GRC_MISC_CFG) & GRC_MISC_CFG_BOARD_ID_MASK) ==
 		     GRC_MISC_CFG_BOARD_ID_5704CIOBE))
-			strcat(str, "133MHz");
+			*str_b = "133MHz";
 		else if (clock_ctrl == 0)
-			strcat(str, "33MHz");
+			*str_b = "33MHz";
 		else if (clock_ctrl == 2)
-			strcat(str, "50MHz");
+			*str_b = "50MHz";
 		else if (clock_ctrl == 4)
-			strcat(str, "66MHz");
+			*str_b = "66MHz";
 		else if (clock_ctrl == 6)
-			strcat(str, "100MHz");
+			*str_b = "100MHz";
 	} else {
-		strcpy(str, "PCI:");
+		*str_a =  "PCI:";
 		if (tg3_flag(tp, PCI_HIGH_SPEED))
-			strcat(str, "66MHz");
+			*str_b = "66MHz";
 		else
-			strcat(str, "33MHz");
+			*str_b = "33MHz";
 	}
 	if (tg3_flag(tp, PCI_32BIT))
-		strcat(str, ":32-bit");
+		*str_c = ":32-bit";
 	else
-		strcat(str, ":64-bit");
-	return str;
+		*str_c = ":64-bit";
 }
 
 static void tg3_init_coal(struct tg3 *tp)
@@ -17684,7 +17685,7 @@ static int tg3_init_one(struct pci_dev *pdev,
 	struct tg3 *tp;
 	int i, err;
 	u32 sndmbx, rcvmbx, intmbx;
-	char str[40];
+	const char *str_a, *str_b, *str_c;
 	u64 dma_mask, persist_dma_mask;
 	netdev_features_t features = 0;
 	u8 addr[ETH_ALEN] __aligned(2);
@@ -18008,10 +18009,11 @@ static int tg3_init_one(struct pci_dev *pdev,
 			tp->ptp_clock = NULL;
 	}
 
-	netdev_info(dev, "Tigon3 [partno(%s) rev %04x] (%s) MAC address %pM\n",
+	tg3_bus_string(tp, &str_a, &str_b, &str_c);
+	netdev_info(dev, "Tigon3 [partno(%s) rev %04x] (%s%s%s) MAC address %pM\n",
 		    tp->board_part_number,
 		    tg3_chip_rev_id(tp),
-		    tg3_bus_string(tp, str),
+		    str_a, str_b, str_c,
 		    dev->dev_addr);
 
 	if (!(tp->phy_flags & TG3_PHYFLG_IS_CONNECTED)) {
