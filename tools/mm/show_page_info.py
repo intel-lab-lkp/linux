@@ -91,7 +91,6 @@ def show_page_state(page, addr, mm, pid, task):
             "Page Virtual": hex(page_to_virt(page).value_()),
             "Page Refcount": page._refcount.counter.value_(),
             "Page Mapcount": page._mapcount.counter.value_(),
-            "Page Index": hex(page.__folio_index.value_()),
             "Page Memcg Data": hex(page.memcg_data.value_()),
         }
 
