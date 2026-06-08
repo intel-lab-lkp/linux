@@ -1225,6 +1225,7 @@ static long
 _ctl_getiocinfo(struct MPT3SAS_ADAPTER *ioc, void __user *arg)
 {
 	struct mpt3_ioctl_iocinfo karg;
+	const char *ver = "";
 
 	dctlprintk(ioc, ioc_info(ioc, "%s: enter\n",
 				 __func__));
@@ -1241,15 +1242,13 @@ _ctl_getiocinfo(struct MPT3SAS_ADAPTER *ioc, void __user *arg)
 	karg.pci_information.u.bits.function = PCI_FUNC(ioc->pdev->devfn);
 	karg.pci_information.segment_id = pci_domain_nr(ioc->pdev->bus);
 	karg.firmware_version = ioc->facts.FWVersion.Word;
-	strcpy(karg.driver_version, ioc->driver_name);
-	strcat(karg.driver_version, "-");
 	switch  (ioc->hba_mpi_version_belonged) {
 	case MPI2_VERSION:
 		if (ioc->is_warpdrive)
 			karg.adapter_type = MPT2_IOCTL_INTERFACE_SAS2_SSS6200;
 		else
 			karg.adapter_type = MPT2_IOCTL_INTERFACE_SAS2;
-		strcat(karg.driver_version, MPT2SAS_DRIVER_VERSION);
+		ver = MPT2SAS_DRIVER_VERSION;
 		break;
 	case MPI25_VERSION:
 	case MPI26_VERSION:
@@ -1257,9 +1256,11 @@ _ctl_getiocinfo(struct MPT3SAS_ADAPTER *ioc, void __user *arg)
 			karg.adapter_type = MPT3_IOCTL_INTERFACE_SAS35;
 		else
 			karg.adapter_type = MPT3_IOCTL_INTERFACE_SAS3;
-		strcat(karg.driver_version, MPT3SAS_DRIVER_VERSION);
+		ver = MPT3SAS_DRIVER_VERSION;
 		break;
 	}
+	snprintf(karg.driver_version, sizeof (karg.driver_version), "%s-%s",
+		 ioc->driver_name, ver);
 	karg.bios_version = le32_to_cpu(ioc->bios_pg3.BiosVersion);
 
 	karg.driver_capability |= MPT3_IOCTL_IOCINFO_DRIVER_CAP_MCTP_PASSTHRU;
