@@ -249,7 +249,7 @@ ifdef CONFIG_LTO_CLANG
 cmd_ld_single = $(if $(objtool-enabled)$(is-single-obj-m), ; $(LD) $(ld_flags) -r -o $(tmp-target) $@; mv $(tmp-target) $@)
 endif
 
-quiet_cmd_cc_o_c = CC $(quiet_modtag)  $@
+quiet_cmd_cc_o_c = CC $(quiet_modtag)  $(call normalize_path,$@)
       cmd_cc_o_c = $(CC) $(c_flags) -c -o $@ $< \
 		$(cmd_ld_single) \
 		$(cmd_objtool)
@@ -264,7 +264,7 @@ define rule_cc_o_c
 	$(call cmd,warn_shared_object)
 endef
 
-quiet_cmd_as_o_S = AS $(quiet_modtag)  $@
+quiet_cmd_as_o_S = AS $(quiet_modtag)  $(call normalize_path,$@)
       cmd_as_o_S = $(CC) $(a_flags) -c -o $@ $< $(cmd_objtool)
 
 define rule_as_o_S
