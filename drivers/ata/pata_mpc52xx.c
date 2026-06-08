@@ -767,11 +767,11 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	}
 
 	task_irq = bcom_get_task_irq(dmatsk);
-	rv = devm_request_irq(&op->dev, task_irq, &mpc52xx_ata_task_irq, 0,
-				"ATA task", priv);
+	rv = request_irq(task_irq, &mpc52xx_ata_task_irq, 0,
+			  "ATA task", priv);
 	if (rv) {
 		dev_err(&op->dev, "error requesting DMA IRQ\n");
-		goto err2;
+		goto err_free_task;
 	}
 	priv->dmatsk = dmatsk;
 
@@ -779,7 +779,7 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	rv = mpc52xx_ata_hw_init(priv);
 	if (rv) {
 		dev_err(&op->dev, "error initializing hardware\n");
-		goto err2;
+		goto err_free_irq;
 	}
 
 	/* Register ourselves to libata */
@@ -787,13 +787,15 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 				  mwdma_mask, udma_mask);
 	if (rv) {
 		dev_err(&op->dev, "error registering with ATA layer\n");
-		goto err2;
+		goto err_free_irq;
 	}
 
 	return 0;
 
- err2:
+ err_free_irq:
+	free_irq(task_irq, priv);
 	irq_dispose_mapping(task_irq);
+ err_free_task:
 	bcom_ata_release(dmatsk);
  err1:
 	irq_dispose_mapping(ata_irq);
@@ -811,6 +813,7 @@ static void mpc52xx_ata_remove(struct platform_device *op)
 
 	/* Clean up DMA */
 	task_irq = bcom_get_task_irq(priv->dmatsk);
+	free_irq(task_irq, priv);
 	irq_dispose_mapping(task_irq);
 	bcom_ata_release(priv->dmatsk);
 	irq_dispose_mapping(priv->ata_irq);
