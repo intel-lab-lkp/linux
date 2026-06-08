@@ -231,20 +231,52 @@ static int create_sysfs_entry_channel(struct hidma_mgmt_dev *mdev, char *name,
 	return sysfs_create_file(parent, &chattr->attr.attr);
 }
 
-int hidma_mgmt_init_sys(struct hidma_mgmt_dev *mdev)
+static void hidma_mgmt_uninit_sys(struct hidma_mgmt_dev *mdev,
+				  unsigned int sysfs_count,
+				  unsigned int chroot_count)
 {
 	unsigned int i;
-	int rc;
+
+	for (i = 0; i < sysfs_count; i++) {
+		struct attribute attr = { .name = hidma_mgmt_files[i].name };
+
+		sysfs_remove_file(&mdev->pdev->dev.kobj, &attr);
+	}
+
+	for (i = 0; i < chroot_count; i++) {
+		kobject_put(mdev->chroots[i]);
+		mdev->chroots[i] = NULL;
+	}
+
+	if (mdev->chanops) {
+		kobject_put(mdev->chanops);
+		mdev->chanops = NULL;
+	}
+}
+
+static void hidma_mgmt_uninit_sys_action(void *data)
+{
+	struct hidma_mgmt_dev *mdev = data;
+
+	hidma_mgmt_uninit_sys(mdev, ARRAY_SIZE(hidma_mgmt_files),
+			      mdev->dma_channels);
+}
+
+int hidma_mgmt_init_sys(struct hidma_mgmt_dev *mdev)
+{
+	unsigned int chroot_count = 0;
+	unsigned int sysfs_count = 0;
+	unsigned int i;
 	int required;
-	struct kobject *chanops;
+	int rc;
 
 	required = sizeof(*mdev->chroots) * mdev->dma_channels;
 	mdev->chroots = devm_kmalloc(&mdev->pdev->dev, required, GFP_KERNEL);
 	if (!mdev->chroots)
 		return -ENOMEM;
 
-	chanops = kobject_create_and_add("chanops", &mdev->pdev->dev.kobj);
-	if (!chanops)
+	mdev->chanops = kobject_create_and_add("chanops", &mdev->pdev->dev.kobj);
+	if (!mdev->chanops)
 		return -ENOMEM;
 
 	/* create each channel directory here */
@@ -252,9 +284,12 @@ int hidma_mgmt_init_sys(struct hidma_mgmt_dev *mdev)
 		char name[20];
 
 		snprintf(name, sizeof(name), "chan%d", i);
-		mdev->chroots[i] = kobject_create_and_add(name, chanops);
-		if (!mdev->chroots[i])
-			return -ENOMEM;
+		mdev->chroots[i] = kobject_create_and_add(name, mdev->chanops);
+		if (!mdev->chroots[i]) {
+			rc = -ENOMEM;
+			goto err_uninit;
+		}
+		chroot_count++;
 	}
 
 	/* populate common parameters */
@@ -262,7 +297,9 @@ int hidma_mgmt_init_sys(struct hidma_mgmt_dev *mdev)
 		rc = create_sysfs_entry(mdev, hidma_mgmt_files[i].name,
 					hidma_mgmt_files[i].mode);
 		if (rc)
-			return rc;
+			goto err_uninit;
+
+		sysfs_count++;
 	}
 
 	/* populate parameters that are per channel */
@@ -271,15 +308,21 @@ int hidma_mgmt_init_sys(struct hidma_mgmt_dev *mdev)
 						(S_IRUGO | S_IWUGO), i,
 						mdev->chroots[i]);
 		if (rc)
-			return rc;
+			goto err_uninit;
 
 		rc = create_sysfs_entry_channel(mdev, "weight",
 						(S_IRUGO | S_IWUGO), i,
 						mdev->chroots[i]);
 		if (rc)
-			return rc;
+			goto err_uninit;
 	}
 
-	return 0;
+	return devm_add_action_or_reset(&mdev->pdev->dev,
+					hidma_mgmt_uninit_sys_action, mdev);
+
+err_uninit:
+	hidma_mgmt_uninit_sys(mdev, sysfs_count, chroot_count);
+
+	return rc;
 }
 EXPORT_SYMBOL_GPL(hidma_mgmt_init_sys);

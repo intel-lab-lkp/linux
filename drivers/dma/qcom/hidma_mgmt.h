@@ -24,6 +24,7 @@ struct hidma_mgmt_dev {
 	resource_size_t addrsize;
 
 	struct kobject **chroots;
+	struct kobject *chanops;
 	struct platform_device *pdev;
 };
 
