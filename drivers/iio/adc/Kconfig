@@ -33,7 +33,8 @@ config AB8500_GPADC
 	  and USB voltages integral to the U8500 platform.
 
 config AD_SIGMA_DELTA
-	tristate
+	tristate "Analog Devices Sigma-Delta Modulator support" if COMPILE_TEST
+	depends on SPI
 	select IIO_BUFFER
 	select IIO_BUFFER_DMAENGINE
 	select IIO_TRIGGERED_BUFFER
