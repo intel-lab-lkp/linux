@@ -909,13 +909,10 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	 * PSR2 selective fetch also requires the slow path as
 	 * PSR2 plane and transcoder registers can only be updated during
 	 * vblank.
-	 *
-	 * FIXME joiner fastpath would be good
 	 */
 	if (!crtc_state->hw.active ||
 	    intel_crtc_needs_modeset(crtc_state) ||
-	    intel_crtc_needs_fastset(crtc_state) ||
-	    crtc_state->joiner_pipes)
+	    intel_crtc_needs_fastset(crtc_state))
 		goto slow;
 
 	/*
@@ -1113,14 +1110,13 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	 */
 	for (int i = 0; i < num_pipes; i++) {
 		struct intel_plane_state *old_pipe = old_pipe_states[i];
-		struct intel_crtc *owner_crtc = pipe_crtcs[i];
 
 		if (old_pipe->ggtt_vma != new_pipe_states[i]->ggtt_vma) {
 			drm_vblank_work_init(&old_pipe->unpin_work,
-					     &owner_crtc->base,
+					     &crtc->base,
 					     intel_cursor_unpin_work);
 			drm_vblank_work_schedule(&old_pipe->unpin_work,
-						 drm_crtc_accurate_vblank_count(&owner_crtc->base) + 1,
+						 drm_crtc_accurate_vblank_count(&crtc->base) + 1,
 						 false);
 			old_pipe_states[i] = NULL;
 		} else {
