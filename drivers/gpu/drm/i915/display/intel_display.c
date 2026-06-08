@@ -5403,8 +5403,12 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	if (display->dpll.mgr)
 		PIPE_CONF_CHECK_P(intel_dpll);
 
-	/* FIXME convert everything over the dpll_mgr */
-	if (display->dpll.mgr || HAS_GMCH(display))
+	/*
+	 * LT PHY PLL readout is only partially reliable and the PLL state
+	 * is already verified via intel_dpll_state_verify(). Avoid false
+	 * positives from the generic pipe state comparison.
+	 */
+	if ((display->dpll.mgr || HAS_GMCH(display)) && !HAS_LT_PHY(display))
 		PIPE_CONF_CHECK_PLL(dpll_hw_state);
 
 	PIPE_CONF_CHECK_X(dsi_pll.ctrl);
