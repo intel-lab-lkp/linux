@@ -20,7 +20,6 @@
 #include <linux/delay.h>
 #include <linux/libata.h>
 #include <linux/of.h>
-#include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/types.h>
 
@@ -671,7 +670,7 @@ static int mpc52xx_ata_init_one(struct device *dev,
 static int mpc52xx_ata_probe(struct platform_device *op)
 {
 	unsigned int ipb_freq;
-	struct resource res_mem;
+	struct resource *res_mem;
 	int ata_irq = 0;
 	struct mpc52xx_ata __iomem *ata_regs;
 	struct mpc52xx_ata_priv *priv = NULL;
@@ -688,25 +687,9 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 		return -ENODEV;
 	}
 
-	/* Get device base address from device tree, request the region
-	 * and ioremap it. */
-	rv = of_address_to_resource(op->dev.of_node, 0, &res_mem);
-	if (rv) {
-		dev_err(&op->dev, "could not determine device base address\n");
-		return rv;
-	}
-
-	if (!devm_request_mem_region(&op->dev, res_mem.start,
-				     sizeof(*ata_regs), DRV_NAME)) {
-		dev_err(&op->dev, "error requesting register region\n");
-		return -EBUSY;
-	}
-
-	ata_regs = devm_ioremap(&op->dev, res_mem.start, sizeof(*ata_regs));
-	if (!ata_regs) {
-		dev_err(&op->dev, "error mapping device registers\n");
-		return -ENOMEM;
-	}
+	ata_regs = devm_platform_get_and_ioremap_resource(op, 0, &res_mem);
+	if (IS_ERR(ata_regs))
+		return PTR_ERR(ata_regs);
 
 	/*
 	 * By default, all DMA modes are disabled for the MPC5200.  Some
@@ -740,7 +723,7 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 
 	priv->ipb_period = 1000000000 / (ipb_freq / 1000);
 	priv->ata_regs = ata_regs;
-	priv->ata_regs_pa = res_mem.start;
+	priv->ata_regs_pa = res_mem->start;
 	priv->ata_irq = ata_irq;
 	priv->csel = -1;
 	priv->mpc52xx_ata_dma_last_write = -1;
@@ -777,7 +760,7 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	}
 
 	/* Register ourselves to libata */
-	rv = mpc52xx_ata_init_one(&op->dev, priv, res_mem.start,
+	rv = mpc52xx_ata_init_one(&op->dev, priv, res_mem->start,
 				  mwdma_mask, udma_mask);
 	if (rv) {
 		dev_err(&op->dev, "error registering with ATA layer\n");
