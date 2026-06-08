@@ -780,10 +780,15 @@ static int renesas_i3c_daa(struct i3c_master_controller *m)
 
 	renesas_i3c_wait_xfer(i3c, xfer);
 
-	newdevs = GENMASK(i3c->maxdevs - cmd->rx_count - 1, first_i3c_pos);
-	/* Re-attach all the I3C devices on resume. */
-	if (!i3c->resuming)
-		newdevs &= ~olddevs;
+	/* Skip attaching if there are failures on the xfer. */
+	if (xfer->ret) {
+		newdevs = 0;
+	} else {
+		newdevs = GENMASK(i3c->maxdevs - cmd->rx_count - 1, first_i3c_pos);
+		/* Re-attach all the I3C devices on resume. */
+		if (!i3c->resuming)
+			newdevs &= ~olddevs;
+	}
 
 	for (pos = 0; pos < i3c->maxdevs; pos++) {
 		if (!(newdevs & BIT(pos)))
