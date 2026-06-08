@@ -1222,7 +1222,7 @@ static void __devlink_port_type_set(struct devlink_port *devlink_port,
 			devlink_port->type_eth.ifindex = netdev->ifindex;
 			BUILD_BUG_ON(sizeof(devlink_port->type_eth.ifname) !=
 				     sizeof(netdev->name));
-			strcpy(devlink_port->type_eth.ifname, netdev->name);
+			strscpy(devlink_port->type_eth.ifname, netdev->name);
 		}
 		break;
 	case DEVLINK_PORT_TYPE_IB:
