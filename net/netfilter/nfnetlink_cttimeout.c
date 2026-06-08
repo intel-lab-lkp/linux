@@ -165,7 +165,7 @@ static int cttimeout_new_timeout(struct sk_buff *skb,
 	if (ret < 0)
 		goto err;
 
-	strcpy(timeout->name, nla_data(cda[CTA_TIMEOUT_NAME]));
+	strscpy(timeout->name, nla_data(cda[CTA_TIMEOUT_NAME]));
 	timeout->timeout.l3num = l3num;
 	timeout->timeout.l4proto = l4proto;
 	refcount_set(&timeout->refcnt, 1);
