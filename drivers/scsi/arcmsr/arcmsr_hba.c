@@ -753,9 +753,39 @@ static bool arcmsr_alloc_io_queue(struct AdapterControlBlock *acb)
 	return rtn;
 }
 
+static void arcmsr_free_xor_buffer(struct AdapterControlBlock *acb, int entries)
+{
+	struct Xor_sg *xor_phys;
+	void **xor_virt;
+	int i;
+
+	if (!acb->xorVirt)
+		return;
+	xor_phys = (struct Xor_sg *)(acb->xorVirt +
+		sizeof(struct HostRamBuf));
+	xor_virt = (void **)((unsigned long)acb->xorVirt +
+		(unsigned long)acb->xorVirtOffset);
+	for (i = 0; i < entries; i++) {
+		if (xor_phys->xorPhys) {
+			dma_free_coherent(&acb->pdev->dev,
+					  ARCMSR_XOR_SEG_SIZE,
+					  *xor_virt, xor_phys->xorPhys);
+			xor_phys->xorPhys = 0;
+			*xor_virt = NULL;
+		}
+		xor_phys++;
+		xor_virt++;
+	}
+	dma_free_coherent(&acb->pdev->dev, acb->init2cfg_size,
+			  acb->xorVirt, acb->xorPhys);
+	acb->xorVirt = NULL;
+	acb->xorPhys = 0;
+	acb->xorVirtOffset = 0;
+	acb->xor_mega = 0;
+}
+
 static int arcmsr_alloc_xor_buffer(struct AdapterControlBlock *acb)
 {
-	int rc = 0;
 	struct pci_dev *pdev = acb->pdev;
 	void *dma_coherent;
 	dma_addr_t dma_coherent_handle;
@@ -771,6 +801,10 @@ static int arcmsr_alloc_xor_buffer(struct AdapterControlBlock *acb)
 		(sizeof(struct XorHandle) * acb->xor_mega);
 	dma_coherent = dma_alloc_coherent(&pdev->dev, acb->init2cfg_size,
 		&dma_coherent_handle, GFP_KERNEL);
+	if (!dma_coherent) {
+		acb->xor_mega = 0;
+		return -ENOMEM;
+	}
 	acb->xorVirt = dma_coherent;
 	acb->xorPhys = dma_coherent_handle;
 	pXorPhys = (struct Xor_sg *)((unsigned long)dma_coherent +
@@ -792,8 +826,8 @@ static int arcmsr_alloc_xor_buffer(struct AdapterControlBlock *acb)
 		} else {
 			pr_info("arcmsr%d: alloc max XOR buffer = 0x%x MB\n",
 				acb->host->host_no, i);
-			rc = -ENOMEM;
-			break;
+			arcmsr_free_xor_buffer(acb, i);
+			return -ENOMEM;
 		}
 	}
 	pRamBuf = (struct HostRamBuf *)acb->xorVirt;
@@ -801,7 +835,7 @@ static int arcmsr_alloc_xor_buffer(struct AdapterControlBlock *acb)
 	pRamBuf->hrbSize = i * ARCMSR_XOR_SEG_SIZE;
 	pRamBuf->hrbRes[0] = 0;
 	pRamBuf->hrbRes[1] = 0;
-	return rc;
+	return 0;
 }
 
 static int arcmsr_alloc_ccb_pool(struct AdapterControlBlock *acb)
@@ -895,8 +929,10 @@ static int arcmsr_alloc_ccb_pool(struct AdapterControlBlock *acb)
 		break;
 	}
 	if ((acb->firm_PicStatus >> 24) & 0x0f) {
-		if (arcmsr_alloc_xor_buffer(acb))
+		if (arcmsr_alloc_xor_buffer(acb)) {
+			arcmsr_free_ccb_pool(acb);
 			return -ENOMEM;
+		}
 	}
 	return 0;
 }
@@ -2083,29 +2119,7 @@ static void arcmsr_stop_adapter_bgrb(struct AdapterControlBlock *acb)
 
 static void arcmsr_free_ccb_pool(struct AdapterControlBlock *acb)
 {
-	if (acb->xor_mega) {
-		struct Xor_sg *pXorPhys;
-		void **pXorVirt;
-		int i;
-
-		pXorPhys = (struct Xor_sg *)(acb->xorVirt +
-			sizeof(struct HostRamBuf));
-		pXorVirt = (void **)((unsigned long)acb->xorVirt +
-			(unsigned long)acb->xorVirtOffset);
-		for (i = 0; i < acb->xor_mega; i++) {
-			if (pXorPhys->xorPhys) {
-				dma_free_coherent(&acb->pdev->dev,
-					ARCMSR_XOR_SEG_SIZE,
-					*pXorVirt, pXorPhys->xorPhys);
-				pXorPhys->xorPhys = 0;
-				*pXorVirt = NULL;
-			}
-			pXorPhys++;
-			pXorVirt++;
-		}
-		dma_free_coherent(&acb->pdev->dev, acb->init2cfg_size,
-			acb->xorVirt, acb->xorPhys);
-	}
+	arcmsr_free_xor_buffer(acb, acb->xor_mega);
 	dma_free_coherent(&acb->pdev->dev, acb->uncache_size, acb->dma_coherent, acb->dma_coherent_handle);
 }
 
