@@ -182,8 +182,19 @@ static void kmb_dsi_clk_disable(struct kmb_dsi *kmb_dsi)
 
 void kmb_dsi_host_unregister(struct kmb_dsi *kmb_dsi)
 {
-	kmb_dsi_clk_disable(kmb_dsi);
-	mipi_dsi_host_unregister(kmb_dsi->host);
+	struct device *dev;
+
+	if (kmb_dsi)
+		kmb_dsi_clk_disable(kmb_dsi);
+
+	if (!dsi_host || !dsi_host->dev)
+		return;
+
+	mipi_dsi_host_unregister(dsi_host);
+
+	dev = dsi_host->dev;
+	dsi_host->dev = NULL;
+	put_device(dev);
 }
 
 /*
@@ -217,6 +228,7 @@ static const struct mipi_dsi_host_ops kmb_dsi_host_ops = {
 int kmb_dsi_host_bridge_init(struct device *dev)
 {
 	struct device_node *encoder_node, *dsi_out;
+	int ret;
 
 	/* Create and register MIPI DSI host */
 	if (!dsi_host) {
@@ -230,12 +242,20 @@ int kmb_dsi_host_bridge_init(struct device *dev)
 			dsi_device = kzalloc_obj(*dsi_device);
 			if (!dsi_device) {
 				kfree(dsi_host);
+				dsi_host = NULL;
 				return -ENOMEM;
 			}
 		}
+	}
 
-		dsi_host->dev = dev;
-		mipi_dsi_host_register(dsi_host);
+	if (!dsi_host->dev) {
+		dsi_host->dev = get_device(dev);
+		ret = mipi_dsi_host_register(dsi_host);
+		if (ret) {
+			put_device(dsi_host->dev);
+			dsi_host->dev = NULL;
+			return ret;
+		}
 	}
 
 	/* Find ADV7535 node and initialize it */
@@ -1410,7 +1430,6 @@ int kmb_dsi_mode_set(struct kmb_dsi *kmb_dsi, struct drm_display_mode *mode,
 struct kmb_dsi *kmb_dsi_init(struct platform_device *pdev)
 {
 	struct kmb_dsi *kmb_dsi;
-	struct device *dev = get_device(&pdev->dev);
 
 	kmb_dsi = devm_kzalloc(dev, sizeof(*kmb_dsi), GFP_KERNEL);
 	if (!kmb_dsi) {
@@ -1420,6 +1439,8 @@ struct kmb_dsi *kmb_dsi_init(struct platform_device *pdev)
 
 	kmb_dsi->host = dsi_host;
 	kmb_dsi->host->ops = &kmb_dsi_host_ops;
+	kmb_dsi->dev = &pdev->dev;
+	kmb_dsi->pdev = pdev;
 
 	dsi_device->host = kmb_dsi->host;
 	kmb_dsi->device = dsi_device;

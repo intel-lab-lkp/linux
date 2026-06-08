@@ -479,7 +479,7 @@ static void kmb_remove(struct platform_device *pdev)
 
 static int kmb_probe(struct platform_device *pdev)
 {
-	struct device *dev = get_device(&pdev->dev);
+	struct device *dev = &pdev->dev;
 	struct kmb_drm_private *kmb;
 	int ret = 0;
 	struct device_node *dsi_in;
@@ -515,20 +515,24 @@ static int kmb_probe(struct platform_device *pdev)
 
 	of_node_put(dsi_in);
 	of_node_put(dsi_node);
-	ret = kmb_dsi_host_bridge_init(get_device(&dsi_pdev->dev));
+	ret = kmb_dsi_host_bridge_init(&dsi_pdev->dev);
 
-	if (ret == -EPROBE_DEFER) {
-		return -EPROBE_DEFER;
-	} else if (ret) {
-		DRM_ERROR("probe failed to initialize DSI host bridge\n");
-		return ret;
+	if (ret) {
+		if (ret != -EPROBE_DEFER) {
+			DRM_ERROR("probe failed to initialize DSI host bridge\n");
+			kmb_dsi_host_unregister(NULL);
+		}
+		goto err_put_dsi_pdev;
 	}
 
 	/* Create DRM device */
 	kmb = devm_drm_dev_alloc(dev, &kmb_driver,
 				 struct kmb_drm_private, drm);
-	if (IS_ERR(kmb))
-		return PTR_ERR(kmb);
+	if (IS_ERR(kmb)) {
+		ret = PTR_ERR(kmb);
+		kmb_dsi_host_unregister(NULL);
+		goto err_put_dsi_pdev;
+	}
 
 	dev_set_drvdata(dev, &kmb->drm);
 
@@ -537,11 +541,11 @@ static int kmb_probe(struct platform_device *pdev)
 	if (IS_ERR(kmb->kmb_dsi)) {
 		drm_err(&kmb->drm, "failed to initialize DSI\n");
 		ret = PTR_ERR(kmb->kmb_dsi);
-		goto err_free1;
+		dev_set_drvdata(dev, NULL);
+		kmb_dsi_host_unregister(NULL);
+		goto err_put_dsi_pdev;
 	}
 
-	kmb->kmb_dsi->dev = &dsi_pdev->dev;
-	kmb->kmb_dsi->pdev = dsi_pdev;
 	ret = kmb_hw_init(&kmb->drm, 0);
 	if (ret)
 		goto err_free1;
@@ -565,6 +569,7 @@ static int kmb_probe(struct platform_device *pdev)
 
 	drm_client_setup(&kmb->drm, NULL);
 
+	put_device(&dsi_pdev->dev);
 	return 0;
 
  err_register:
@@ -577,6 +582,9 @@ static int kmb_probe(struct platform_device *pdev)
  err_free1:
 	dev_set_drvdata(dev, NULL);
 	kmb_dsi_host_unregister(kmb->kmb_dsi);
+
+ err_put_dsi_pdev:
+	put_device(&dsi_pdev->dev);
 
 	return ret;
 }
