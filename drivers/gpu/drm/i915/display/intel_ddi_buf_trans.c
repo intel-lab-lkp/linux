@@ -1857,5 +1857,26 @@ const struct intel_ddi_buf_trans *intel_ddi_buf_trans_get(struct intel_encoder *
 							  const struct intel_crtc_state *crtc_state,
 							  int *n_entries)
 {
+	struct intel_display *display = to_intel_display(encoder);
+	const struct intel_bios_encoder_data *devdata = encoder->devdata;
+	const struct intel_ddi_buf_trans *buf_trans = NULL;
+	bool has_edp, has_dp, is_uhbr;
+	int port_clock;
+
+	has_edp = intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP);
+	has_dp = intel_crtc_has_dp_encoder(crtc_state);
+	is_uhbr = intel_dp_is_uhbr(crtc_state);
+	port_clock = crtc_state->port_clock;
+
+	if (DISPLAY_VER(display) >= 14) {
+		if (intel_encoder_is_c10phy(encoder))
+			buf_trans = intel_bios_get_c10_vspeo(devdata, has_dp, port_clock, has_edp);
+		else
+			buf_trans = intel_bios_get_c20_vspeo(devdata, has_dp, is_uhbr);
+	}
+
+	if (buf_trans)
+		return intel_get_buf_trans(buf_trans, n_entries);
+
 	return encoder->get_buf_trans(encoder, crtc_state, n_entries);
 }
