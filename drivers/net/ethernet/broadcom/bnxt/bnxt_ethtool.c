@@ -5542,18 +5542,19 @@ void bnxt_ethtool_init(struct bnxt *bp)
 		test_info->timeout = HWRM_CMD_TIMEOUT;
 	for (i = 0; i < bp->num_tests; i++) {
 		char *str = test_info->string[i];
+		int sz = sizeof (test_info->string[i]);
 		char *fw_str = resp->test_name[i];
 
 		if (i == BNXT_MACLPBK_TEST_IDX) {
-			strcpy(str, "Mac loopback test (offline)");
+			strscpy(str, "Mac loopback test (offline)", sz);
 		} else if (i == BNXT_PHYLPBK_TEST_IDX) {
-			strcpy(str, "Phy loopback test (offline)");
+			strscpy(str, "Phy loopback test (offline)", sz);
 		} else if (i == BNXT_EXTLPBK_TEST_IDX) {
-			strcpy(str, "Ext loopback test (offline)");
+			strscpy(str, "Ext loopback test (offline)", sz);
 		} else if (i == BNXT_IRQ_TEST_IDX) {
-			strcpy(str, "Interrupt_test (offline)");
+			strscpy(str, "Interrupt_test (offline)", sz);
 		} else {
-			snprintf(str, ETH_GSTRING_LEN, "%s test (%s)",
+			snprintf(str, sz, "%s test (%s)",
 				 fw_str, test_info->offline_mask & (1 << i) ?
 					"offline" : "online");
 		}
