@@ -1425,9 +1425,11 @@ static int veth_close(struct net_device *dev)
 	return 0;
 }
 
+#define MAX_MTU IP6_MAX_JUMBOGRAM_MTU
+
 static int is_valid_veth_mtu(int mtu)
 {
-	return mtu >= ETH_MIN_MTU && mtu <= ETH_MAX_MTU;
+	return mtu >= ETH_MIN_MTU && mtu <= MAX_MTU;
 }
 
 static int veth_alloc_queues(struct net_device *dev)
@@ -1628,7 +1630,7 @@ static int veth_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 
 			if (peer) {
 				peer->hw_features |= NETIF_F_GSO_SOFTWARE;
-				peer->max_mtu = ETH_MAX_MTU;
+				peer->max_mtu = MAX_MTU;
 			}
 		}
 		bpf_prog_put(old_prog);
@@ -1754,7 +1756,7 @@ static void veth_setup(struct net_device *dev)
 	dev->needs_free_netdev = true;
 	dev->priv_destructor = veth_dev_free;
 	dev->pcpu_stat_type = NETDEV_PCPU_STAT_TSTATS;
-	dev->max_mtu = ETH_MAX_MTU;
+	dev->max_mtu = MAX_MTU;
 
 	dev->hw_features = VETH_FEATURES;
 	dev->hw_enc_features = VETH_FEATURES;
