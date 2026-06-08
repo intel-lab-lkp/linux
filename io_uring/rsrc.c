@@ -860,7 +860,7 @@ static struct io_rsrc_node *io_sqe_buffer_register(struct io_ring_ctx *ctx,
 	struct io_rsrc_node *node;
 	unsigned long off;
 	size_t size;
-	int ret, nr_pages, i;
+	int ret, nr_pages, i, orig_nr_pages;
 	struct io_imu_folio_data data;
 	bool coalesced = false;
 
@@ -881,7 +881,10 @@ static struct io_rsrc_node *io_sqe_buffer_register(struct io_ring_ctx *ctx,
 		return ERR_PTR(-ENOMEM);
 
 	ret = -ENOMEM;
-	pages = io_pin_pages((unsigned long) iov->iov_base, iov->iov_len,
+	orig_nr_pages = ((unsigned long)iov->iov_base + iov->iov_len
+			 + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	orig_nr_pages -= (unsigned long)iov->iov_base >> PAGE_SHIFT;
+	pages = io_pin_pages_fast_path((unsigned long) iov->iov_base, iov->iov_len,
 				&nr_pages);
 	if (IS_ERR(pages)) {
 		ret = PTR_ERR(pages);
@@ -915,6 +918,8 @@ static struct io_rsrc_node *io_sqe_buffer_register(struct io_ring_ctx *ctx,
 	imu->dir = IO_IMU_DEST | IO_IMU_SOURCE;
 	if (coalesced)
 		imu->folio_shift = data.folio_shift;
+	else if (nr_pages == 1 && orig_nr_pages > 1)
+		imu->folio_shift = folio_shift(page_folio(pages[0]));
 	refcount_set(&imu->refs, 1);
 
 	off = (unsigned long)iov->iov_base & ~PAGE_MASK;

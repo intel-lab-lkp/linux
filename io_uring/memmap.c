@@ -37,11 +37,11 @@ static bool io_mem_alloc_compound(struct page **pages, int nr_pages,
 	return true;
 }
 
-struct page **io_pin_pages(unsigned long uaddr, unsigned long len, int *npages)
+struct page **io_pin_pages_alloc(unsigned long uaddr, unsigned long len,
+					unsigned long *nr_pages_out)
 {
 	unsigned long start, end, nr_pages;
 	struct page **pages;
-	int ret;
 
 	if (check_add_overflow(uaddr, len, &end))
 		return ERR_PTR(-EOVERFLOW);
@@ -60,11 +60,73 @@ struct page **io_pin_pages(unsigned long uaddr, unsigned long len, int *npages)
 	if (!pages)
 		return ERR_PTR(-ENOMEM);
 
+	*nr_pages_out = nr_pages;
+	return pages;
+}
+
+struct page **io_pin_pages(unsigned long uaddr, unsigned long len, int *npages)
+{
+	unsigned long nr_pages;
+	struct page **pages;
+	int ret;
+
+	pages = io_pin_pages_alloc(uaddr, len, &nr_pages);
+	if (IS_ERR(pages))
+		return pages;
+
 	ret = pin_user_pages_fast(uaddr, nr_pages, FOLL_WRITE | FOLL_LONGTERM,
 					pages);
 	/* success, mapped all pages */
 	if (ret == nr_pages) {
 		*npages = nr_pages;
+		return pages;
+	}
+
+	/* partial map, or didn't map anything */
+	if (ret >= 0) {
+		/* if we did partial map, release any pages we did get */
+		if (ret)
+			unpin_user_pages(pages, ret);
+		ret = -EFAULT;
+	}
+	kvfree(pages);
+	return ERR_PTR(ret);
+}
+
+struct page **io_pin_pages_fast_path(unsigned long uaddr, unsigned long len, int *npages)
+{
+	unsigned long nr_pages;
+	struct page **pages;
+	int ret;
+
+	pages = io_pin_pages_alloc(uaddr, len, &nr_pages);
+	if (IS_ERR(pages))
+		return pages;
+
+	ret = pin_user_pages_fast(uaddr, nr_pages, FOLL_WRITE | FOLL_LONGTERM,
+					pages);
+	/* success, mapped all pages */
+	if (ret == nr_pages) {
+		struct folio *folio = page_folio(pages[0]);
+
+		if (nr_pages > 1 && folio_test_hugetlb(folio) &&
+		    page_folio(pages[nr_pages - 1]) == folio) {
+			struct page **huge_pages;
+
+			huge_pages = kvmalloc_objs(struct page *, 1, GFP_KERNEL_ACCOUNT);
+			if (!huge_pages) {
+				*npages = nr_pages;
+				return pages;
+			}
+			unpin_user_folio(folio, nr_pages - 1);
+
+			huge_pages[0] = pages[0];
+			kvfree(pages);
+			pages = huge_pages;
+			*npages = 1;
+		} else {
+			*npages = nr_pages;
+		}
 		return pages;
 	}
 
