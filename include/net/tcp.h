@@ -747,8 +747,8 @@ void tcp_skb_entail(struct sock *sk, struct sk_buff *skb);
 void tcp_mark_push(struct tcp_sock *tp, struct sk_buff *skb);
 void __tcp_push_pending_frames(struct sock *sk, unsigned int cur_mss,
 			       int nonagle);
-int __tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs);
-int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs);
+int __tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int max_len);
+int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int max_len);
 void tcp_retransmit_timer(struct sock *sk);
 void tcp_xmit_retransmit_queue(struct sock *);
 void tcp_simple_retransmit(struct sock *);
@@ -1217,6 +1217,14 @@ static inline void tcp_skb_pcount_set(struct sk_buff *skb, int segs)
 static inline void tcp_skb_pcount_add(struct sk_buff *skb, int segs)
 {
 	TCP_SKB_CB(skb)->tcp_gso_segs += segs;
+}
+
+/* Return the segment length we want for the given MSS. We cap the segment
+ * length to prevent the segments from becoming jumbograms.
+ */
+static inline u16 tcp_tso_seglen(u32 mss_now)
+{
+	return min_t(u32, GSO_BY_FRAGS - MAX_TCP_HEADER, mss_now);
 }
 
 /* This is valid iff skb is in write queue and tcp_skb_pcount() > 1. */

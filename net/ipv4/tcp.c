@@ -960,6 +960,7 @@ static unsigned int tcp_xmit_size_goal(struct sock *sk, u32 mss_now,
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	u32 new_size_goal, size_goal;
+	u16 gso_size;
 
 	if (!large_allowed)
 		return mss_now;
@@ -968,12 +969,13 @@ static unsigned int tcp_xmit_size_goal(struct sock *sk, u32 mss_now,
 	new_size_goal = tcp_bound_to_half_wnd(tp, sk->sk_gso_max_size);
 
 	/* We try hard to avoid divides here */
-	size_goal = tp->gso_segs * mss_now;
+	gso_size = tcp_tso_seglen(mss_now);
+	size_goal = tp->gso_segs * gso_size;
 	if (unlikely(new_size_goal < size_goal ||
-		     new_size_goal >= size_goal + mss_now)) {
-		tp->gso_segs = min_t(u16, new_size_goal / mss_now,
+		     new_size_goal >= size_goal + gso_size)) {
+		tp->gso_segs = min_t(u16, new_size_goal / gso_size,
 				     sk->sk_gso_max_segs);
-		size_goal = tp->gso_segs * mss_now;
+		size_goal = tp->gso_segs * gso_size;
 	}
 
 	return max(size_goal, mss_now);
