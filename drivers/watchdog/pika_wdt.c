@@ -117,6 +117,7 @@ static int pikawdt_open(struct inode *inode, struct file *file)
 	if (test_and_set_bit(0, &pikawdt_private.open))
 		return -EBUSY;
 
+	timer_setup(&pikawdt_private.timer, pikawdt_ping, 0);
 	pikawdt_start();
 
 	return stream_open(inode, file);
@@ -129,7 +130,7 @@ static int pikawdt_release(struct inode *inode, struct file *file)
 {
 	/* stop internal ping */
 	if (!pikawdt_private.expect_close)
-		timer_delete(&pikawdt_private.timer);
+		timer_shutdown_sync(&pikawdt_private.timer);
 
 	clear_bit(0, &pikawdt_private.open);
 	pikawdt_private.expect_close = 0;
@@ -291,6 +292,7 @@ static void __exit pikawdt_exit(void)
 {
 	misc_deregister(&pikawdt_miscdev);
 
+	timer_shutdown_sync(&pikawdt_private.timer);
 	iounmap(pikawdt_private.fpga);
 }
 
