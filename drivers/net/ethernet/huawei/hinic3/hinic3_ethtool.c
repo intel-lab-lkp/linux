@@ -16,6 +16,7 @@
 #include "hinic3_hw_comm.h"
 #include "hinic3_nic_dev.h"
 #include "hinic3_nic_cfg.h"
+#include "hinic3_rss.h"
 
 #define HINIC3_MGMT_VERSION_MAX_LEN     32
 /* Coalesce time properties in microseconds */
@@ -1245,6 +1246,14 @@ static const struct ethtool_ops hinic3_ethtool_ops = {
 	.get_pause_stats                = hinic3_get_pause_stats,
 	.get_coalesce                   = hinic3_get_coalesce,
 	.set_coalesce                   = hinic3_set_coalesce,
+	.get_rxnfc                      = hinic3_get_rxnfc,
+	.set_rxnfc                      = hinic3_set_rxnfc,
+	.get_channels                   = hinic3_get_channels,
+	.set_channels                   = hinic3_set_channels,
+	.get_rxfh_indir_size            = hinic3_get_rxfh_indir_size,
+	.get_rxfh_key_size              = hinic3_get_rxfh_key_size,
+	.get_rxfh                       = hinic3_get_rxfh,
+	.set_rxfh                       = hinic3_set_rxfh,
 };
 
 void hinic3_set_ethtool_ops(struct net_device *netdev)
