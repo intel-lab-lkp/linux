@@ -20,6 +20,7 @@ static struct resctrl_test *resctrl_tests[] = {
 	&cmt_test,
 	&l3_cat_test,
 	&l3_cat_occup_test,
+	&l3_cat_validate_test,
 	&l3_noncont_cat_test,
 	&l2_noncont_cat_test,
 };

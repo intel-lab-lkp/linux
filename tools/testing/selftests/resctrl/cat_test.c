@@ -603,3 +603,82 @@ struct resctrl_test l3_cat_occup_test = {
 	.run_test = cat_occup_run_test,
 	.cleanup = cat_occup_test_cleanup,
 };
+
+/*
+ * L3_CAT_VALIDATE - Verify the kernel rejects invalid L3 CBM writes.
+ *
+ * CAT allocation accepts a Capacity Bit Mask (CBM). The kernel must reject
+ * masks that cannot represent a valid allocation: an empty mask, a mask with
+ * bits outside cbm_mask, or (where the platform requires it) a mask with
+ * fewer than min_cbm_bits bits. A rejected schemata write makes
+ * write_schemata() return non-zero, which is the signal this test checks.
+ */
+static int cat_validate_run_test(const struct resctrl_test *test,
+				 const struct user_params *uparams)
+{
+	unsigned long full_mask, bad_mask;
+	unsigned int min_cbm_bits, start;
+	char schemata[64];
+	int count_of_bits, ret;
+
+	ret = get_full_cbm(test->resource, &full_mask);
+	if (ret)
+		return ret;
+
+	ret = resource_info_unsigned_get(test->resource, "min_cbm_bits",
+					 &min_cbm_bits);
+	if (ret)
+		return ret;
+
+	count_of_bits = count_bits(full_mask);
+
+	/* A valid full CBM must be accepted */
+	snprintf(schemata, sizeof(schemata), "%lx", full_mask);
+	if (write_schemata("", schemata, uparams->cpu, test->resource)) {
+		ksft_print_msg("Valid CBM 0x%lx was rejected\n", full_mask);
+		return 1;
+	}
+
+	/* An empty mask must be rejected. */
+	if (!write_schemata("", "0", uparams->cpu, test->resource)) {
+		ksft_print_msg("Empty CBM was accepted, must be rejected\n");
+		return 1;
+	}
+
+	/* A mask with a bit outside cbm_mask must be rejected. */
+	bad_mask = full_mask | (1UL << count_of_bits);
+	snprintf(schemata, sizeof(schemata), "%lx", bad_mask);
+	if (!write_schemata("", schemata, uparams->cpu, test->resource)) {
+		ksft_print_msg("Out-of-range CBM 0x%lx was accepted, must be rejected\n",
+			       bad_mask);
+		return 1;
+	}
+
+	/*
+	 * A mask with fewer than min_cbm_bits bits must be rejected. When
+	 * min_cbm_bits is 1 the only sub-minimum mask is the empty mask
+	 * This case only applies when the platform requires more contiguous bits.
+	 */
+	if (min_cbm_bits > 1) {
+		count_contiguous_bits(full_mask, &start);
+		bad_mask = create_bit_mask(start, min_cbm_bits - 1);
+		snprintf(schemata, sizeof(schemata), "%lx", bad_mask);
+		if (!write_schemata("", schemata, uparams->cpu, test->resource)) {
+			ksft_print_msg("CBM 0x%lx with too few bits was accepted\n",
+				       bad_mask);
+			return 1;
+		}
+	}
+
+	ksft_print_msg("Pass: CAT rejects invalid CBM writes\n");
+
+	return 0;
+}
+
+struct resctrl_test l3_cat_validate_test = {
+	.name = "L3_CAT_VALIDATE",
+	.group = "CAT",
+	.resource = "L3",
+	.feature_check = test_resource_feature_check,
+	.run_test = cat_validate_run_test,
+};
