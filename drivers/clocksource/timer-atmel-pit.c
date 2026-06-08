@@ -12,7 +12,9 @@
 #include <linux/clk.h>
 #include <linux/clockchips.h>
 #include <linux/interrupt.h>
+#include <linux/io.h>
 #include <linux/irq.h>
+#include <linux/irqdomain.h>
 #include <linux/kernel.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -185,13 +187,13 @@ static int __init at91sam926x_pit_dt_init(struct device_node *node)
 	if (IS_ERR(data->mck)) {
 		pr_err("Unable to get mck clk\n");
 		ret = PTR_ERR(data->mck);
-		goto exit;
+		goto exit_iounmap;
 	}
 
 	ret = clk_prepare_enable(data->mck);
 	if (ret) {
 		pr_err("Unable to enable mck\n");
-		goto exit;
+		goto exit_clk_put;
 	}
 
 	/* Get the interrupts property */
@@ -199,7 +201,7 @@ static int __init at91sam926x_pit_dt_init(struct device_node *node)
 	if (!data->irq) {
 		pr_err("Unable to get IRQ from DT\n");
 		ret = -EINVAL;
-		goto exit;
+		goto exit_clk_disable;
 	}
 
 	/*
@@ -227,7 +229,7 @@ static int __init at91sam926x_pit_dt_init(struct device_node *node)
 	ret = clocksource_register_hz(&data->clksrc, pit_rate);
 	if (ret) {
 		pr_err("Failed to register clocksource\n");
-		goto exit;
+		goto exit_pit_disable;
 	}
 
 	/* Set up irq handler */
@@ -237,7 +239,7 @@ static int __init at91sam926x_pit_dt_init(struct device_node *node)
 	if (ret) {
 		pr_err("Unable to setup IRQ\n");
 		clocksource_unregister(&data->clksrc);
-		goto exit;
+		goto exit_pit_disable;
 	}
 
 	/* Set up and register clockevents */
@@ -256,6 +258,15 @@ static int __init at91sam926x_pit_dt_init(struct device_node *node)
 
 	return 0;
 
+exit_pit_disable:
+	pit_write(data->base, AT91_PIT_MR, 0);
+	irq_dispose_mapping(data->irq);
+exit_clk_disable:
+	clk_disable_unprepare(data->mck);
+exit_clk_put:
+	clk_put(data->mck);
+exit_iounmap:
+	iounmap(data->base);
 exit:
 	kfree(data);
 	return ret;
