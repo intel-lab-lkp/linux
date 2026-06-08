@@ -169,11 +169,12 @@ static irqreturn_t sama5d4_wdt_irq_handler(int irq, void *dev_id)
 	else
 		reg = wdt_read(wdt, AT91_WDT_SR);
 
-	if (reg) {
-		pr_crit("Atmel Watchdog Software Reset\n");
-		emergency_restart();
-		pr_crit("Reboot didn't succeed\n");
-	}
+	if (!reg)
+		return IRQ_NONE;
+
+	pr_crit("Atmel Watchdog Software Reset\n");
+	emergency_restart();
+	pr_crit("Reboot didn't succeed\n");
 
 	return IRQ_HANDLED;
 }
@@ -197,11 +198,11 @@ static int of_sama5d4_wdt_init(struct device_node *np, struct sama5d4_wdt *wdt)
 	return 0;
 }
 
-static int sama5d4_wdt_init(struct sama5d4_wdt *wdt)
+static int sama5d4_wdt_init(struct sama5d4_wdt *wdt, unsigned int timeout)
 {
 	u32 reg, val;
 
-	val = WDT_SEC2TICKS(WDT_DEFAULT_TIMEOUT);
+	val = WDT_SEC2TICKS(timeout);
 	/*
 	 * When booting and resuming, the bootloader may have changed the
 	 * watchdog configuration.
@@ -305,7 +306,7 @@ static int sama5d4_wdt_probe(struct platform_device *pdev)
 		set_bit(WDOG_HW_RUNNING, &wdd->status);
 	}
 
-	ret = sama5d4_wdt_init(wdt);
+	ret = sama5d4_wdt_init(wdt, wdd->timeout);
 	if (ret)
 		return ret;
 
@@ -358,7 +359,7 @@ static int sama5d4_wdt_resume_early(struct device *dev)
 	 * This should only be done when the registers are lost on suspend but
 	 * there is no way to get this information right now.
 	 */
-	sama5d4_wdt_init(wdt);
+	sama5d4_wdt_init(wdt, wdt->wdd.timeout);
 
 	if (watchdog_active(&wdt->wdd))
 		sama5d4_wdt_start(&wdt->wdd);
