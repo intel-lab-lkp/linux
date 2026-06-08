@@ -391,7 +391,7 @@ static int qcom_ec_probe(struct i2c_client *client)
 		ec_cdev->fan_id = i + 1;
 		ec_cdev->parent_dev = dev;
 
-		ec_cdev->cdev = devm_thermal_of_cooling_device_register(dev, NULL, name, ec_cdev,
+		ec_cdev->cdev = devm_thermal_of_cooling_device_register(dev, 0, NULL, ec_cdev,
 									&qcom_ec_thermal_ops);
 		if (IS_ERR(ec_cdev->cdev)) {
 			return dev_err_probe(dev, PTR_ERR(ec_cdev->cdev),
