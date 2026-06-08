@@ -1481,8 +1481,10 @@ static int memory_node__read(struct memory_node *n, unsigned long idx)
 
 static void memory_node__delete_nodes(struct memory_node *nodesp, u64 cnt)
 {
-	for (u64 i = 0; i < cnt; i++)
+	for (u64 i = 0; i < cnt; i++) {
 		bitmap_free(nodesp[i].set);
+		nodesp[i].set = NULL;
+	}
 
 	free(nodesp);
 }
