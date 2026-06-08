@@ -550,8 +550,8 @@ int hfsplus_setxattr(struct inode *inode, const char *name,
 	xattr_name = kmalloc(xattr_name_len, GFP_KERNEL);
 	if (!xattr_name)
 		return -ENOMEM;
-	strcpy(xattr_name, prefix);
-	strcpy(xattr_name + prefixlen, name);
+	memcpy(xattr_name, prefix, prefixlen);
+	strscpy(xattr_name + prefixlen, name, xattr_name_len - prefixlen);
 	res = __hfsplus_setxattr(inode, xattr_name, value, size, flags);
 	kfree(xattr_name);
 
@@ -698,6 +698,7 @@ ssize_t hfsplus_getxattr(struct inode *inode, const char *name,
 			 void *value, size_t size,
 			 const char *prefix, size_t prefixlen)
 {
+	size_t xattr_name_len = NLS_MAX_CHARSET_SIZE * HFSPLUS_ATTR_MAX_STRLEN + 1;
 	int res;
 	char *xattr_name;
 
@@ -705,13 +706,12 @@ ssize_t hfsplus_getxattr(struct inode *inode, const char *name,
 		inode->i_ino, name ? name : NULL,
 		prefix ? prefix : NULL);
 
-	xattr_name = kmalloc(NLS_MAX_CHARSET_SIZE * HFSPLUS_ATTR_MAX_STRLEN + 1,
-			     GFP_KERNEL);
+	xattr_name = kmalloc(xattr_name_len, GFP_KERNEL);
 	if (!xattr_name)
 		return -ENOMEM;
 
-	strcpy(xattr_name, prefix);
-	strcpy(xattr_name + prefixlen, name);
+	memcpy(xattr_name, prefix, prefixlen);
+	strscpy(xattr_name + prefixlen, name, xattr_name_len - prefixlen);
 
 	res = __hfsplus_getxattr(inode, xattr_name, value, size);
 	kfree(xattr_name);
