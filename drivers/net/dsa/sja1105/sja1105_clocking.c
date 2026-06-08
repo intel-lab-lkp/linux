@@ -6,6 +6,7 @@
 #include "sja1105.h"
 
 #define SJA1105_SIZE_CGU_CMD	4
+#define SJA1105_SIZE_ACU_CMD	4
 #define SJA1110_BASE_MCSS_CLK	SJA1110_CGU_ADDR(0x70)
 #define SJA1110_BASE_TIMER_CLK	SJA1110_CGU_ADDR(0x74)
 
@@ -34,6 +35,29 @@ struct sja1105_cfg_pad_mii_id {
 	u64 txc_delay;
 	u64 txc_bypass;
 	u64 txc_pd;
+};
+
+struct sja1110_pin_cfg_mii_tx {
+	u64 d32_ods;
+	u64 d32_pupd;
+	u64 d10_ods;
+	u64 d10_pupd;
+	u64 ctrl_ods;
+	u64 ctrl_pupd;
+	u64 clk_pol;
+	u64 clk_src;
+	u64 clk_ods;
+	u64 clk_pupd;
+};
+
+struct sja1110_pin_cfg_mii_rx {
+	u64 d32_pupd;
+	u64 d10_pupd;
+	u64 ctrl_pupd;
+	u64 clk_pol;
+	u64 clk_src;
+	u64 clk_ods;
+	u64 clk_pupd;
 };
 
 /* UM10944 Table 82.
@@ -814,6 +838,179 @@ int sja1105_clocking_setup(struct sja1105_private *priv)
 
 	for (port = 0; port < ds->num_ports; port++) {
 		rc = sja1105_clocking_setup_port(priv, port);
+		if (rc < 0)
+			return rc;
+	}
+	return 0;
+}
+
+static void
+sja1110_acu_pin_cfg_mii_tx_packing(void *buf, struct sja1110_pin_cfg_mii_tx *cmd,
+				   enum packing_op op)
+{
+	const int size = 4;
+
+	sja1105_packing(buf, &cmd->d32_ods,   28, 27, size, op);
+	sja1105_packing(buf, &cmd->d32_pupd,  25, 24, size, op);
+	sja1105_packing(buf, &cmd->d10_ods,   20, 19, size, op);
+	sja1105_packing(buf, &cmd->d10_pupd,  17, 16, size, op);
+	sja1105_packing(buf, &cmd->ctrl_ods,  12, 11, size, op);
+	sja1105_packing(buf, &cmd->ctrl_pupd,  9,  8, size, op);
+	sja1105_packing(buf, &cmd->clk_pol,    7,  7, size, op);
+	sja1105_packing(buf, &cmd->clk_src,    6,  5, size, op);
+	sja1105_packing(buf, &cmd->clk_ods,    4,  3, size, op);
+	sja1105_packing(buf, &cmd->clk_pupd,   1,  0, size, op);
+}
+
+static int sja1110_acu_rmii_ext_tx_clk_config(struct sja1105_private *priv,
+					      int port)
+{
+	const struct sja1105_regs *regs = priv->info->regs;
+	struct sja1110_pin_cfg_mii_tx pin_cfg_mii_tx = {0};
+	u8 packed_buf[SJA1105_SIZE_ACU_CMD] = {0};
+
+	if (regs->pad_mii_tx[port] == SJA1105_RSV_ADDR)
+		return 0;
+
+	/* Payload */
+	pin_cfg_mii_tx.d32_ods   = 2; /* TXD[3:2] output stage drive-strength: */
+				      /*   FAST Medium noise / Fast speed (default) */
+	pin_cfg_mii_tx.d32_pupd  = 2; /* TXD[3:2] pull-up/-down: */
+				      /*   PLAIN Pull-up/-down disabled (default) */
+	pin_cfg_mii_tx.d10_ods   = 2; /* TXD[1:0] output stage drive-strength: */
+				      /*   FAST Medium noise / Fast speed (default) */
+	pin_cfg_mii_tx.d10_pupd  = 2; /* TXD[1:0] pull-up/-down: */
+				      /*   PLAIN Pull-up/-down disabled (default) */
+	pin_cfg_mii_tx.ctrl_ods  = 2; /* TX_EN / TX_ER output stage drive-strength: */
+				      /*   FAST Medium noise / Fast speed (default) */
+	pin_cfg_mii_tx.ctrl_pupd = 2; /* TX_EN / TX_ER (weak) pull-up/-down: */
+				      /*   PLAIN Pull-up/-down disabled (default) */
+	pin_cfg_mii_tx.clk_pol   = 0; /* TX_CLK output polarity: */
+				      /*   NORMAL Not inverted (default) */
+	pin_cfg_mii_tx.clk_src   = 3; /* TX_CLK source: */
+				      /*   RXC RX_CLK used */
+	pin_cfg_mii_tx.clk_ods   = 2; /* TX_CLK output stage drive-strength: */
+				      /*   FAST Medium noise / Fast speed (default) */
+	pin_cfg_mii_tx.clk_pupd  = 2; /* TX_CLK (weak) pull-up/-down: */
+				      /*   PLAIN Pull-up/-down disabled (default) */
+	sja1110_acu_pin_cfg_mii_tx_packing(packed_buf, &pin_cfg_mii_tx, PACK);
+
+	return sja1105_xfer_buf(priv, SPI_WRITE, regs->pad_mii_tx[port],
+				packed_buf, SJA1105_SIZE_ACU_CMD);
+}
+
+static void
+sja1110_acu_pin_cfg_mii_rx_packing(void *buf, struct sja1110_pin_cfg_mii_rx *cmd,
+				   enum packing_op op)
+{
+	const int size = 4;
+
+	sja1105_packing(buf, &cmd->d32_pupd,  25, 24, size, op);
+	sja1105_packing(buf, &cmd->d10_pupd,  17, 16, size, op);
+	sja1105_packing(buf, &cmd->ctrl_pupd,  9,  8, size, op);
+	sja1105_packing(buf, &cmd->clk_pol,    7,  7, size, op);
+	sja1105_packing(buf, &cmd->clk_src,    6,  5, size, op);
+	sja1105_packing(buf, &cmd->clk_ods,    4,  3, size, op);
+	sja1105_packing(buf, &cmd->clk_pupd,   1,  0, size, op);
+}
+
+static int sja1110_acu_rmii_ext_rx_clk_config(struct sja1105_private *priv,
+					      int port)
+{
+	const struct sja1105_regs *regs = priv->info->regs;
+	struct sja1110_pin_cfg_mii_rx pin_cfg_mii_rx = {0};
+	u8 packed_buf[SJA1105_SIZE_ACU_CMD] = {0};
+
+	if (regs->pad_mii_rx[port] == SJA1105_RSV_ADDR)
+		return 0;
+
+	/* Payload */
+	pin_cfg_mii_rx.d32_pupd  = 2; /* RXD[3:2] pull-up/-down: */
+				      /*   PLAIN Pull-up/-down disabled (default) */
+	pin_cfg_mii_rx.d10_pupd  = 2; /* RXD[1:0] pull-up/-down: */
+				      /*   PLAIN Pull-up/-down disabled (default) */
+	pin_cfg_mii_rx.ctrl_pupd = 2; /* RX_DV / RX_ER pull-up/-down: */
+				      /*   PLAIN Pull-up/-down disabled (default) */
+	pin_cfg_mii_rx.clk_pol   = 0; /* RX_CLK output polarity: */
+				      /*   NORMAL Not inverted (default) */
+	pin_cfg_mii_rx.clk_src   = 1; /* RX_CLK source: */
+				      /*   EXTERNAL Clock sourced from external*/
+	pin_cfg_mii_rx.clk_ods   = 2; /* RX_CLK output stage drive-strength: */
+				      /*   FAST Medium noise / Fast speed (default) */
+	pin_cfg_mii_rx.clk_pupd  = 2; /* RX_CLK pull-up/-down: */
+				      /*   PLAIN Pull-up/-down disabled (default) */
+	sja1110_acu_pin_cfg_mii_rx_packing(packed_buf, &pin_cfg_mii_rx, PACK);
+
+	return sja1105_xfer_buf(priv, SPI_WRITE, regs->pad_mii_rx[port],
+				packed_buf, SJA1105_SIZE_ACU_CMD);
+}
+
+static int sja1110_rmii_clocking_setup(struct sja1105_private *priv, int port,
+				       sja1105_mii_role_t role)
+{
+	struct device *dev = priv->ds->dev;
+	int rc;
+
+	dev_dbg(dev, "Configuring RMII-%s clocking\n",
+		(role == XMII_MAC) ? "MAC" : "PHY");
+	if (role == XMII_PHY) {
+		rc = sja1110_acu_rmii_ext_tx_clk_config(priv, port);
+		if (rc)
+			return rc;
+
+		rc = sja1110_acu_rmii_ext_rx_clk_config(priv, port);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
+int sja1110_clocking_setup_port(struct sja1105_private *priv, int port)
+{
+	struct sja1105_xmii_params_entry *mii;
+	struct device *dev = priv->ds->dev;
+	sja1105_phy_interface_t phy_mode;
+	sja1105_mii_role_t role;
+	int rc;
+
+	mii = priv->static_config.tables[BLK_IDX_XMII_PARAMS].entries;
+
+	/* RGMII etc */
+	phy_mode = mii->xmii_mode[port];
+	/* MAC or PHY, for applicable types (not RGMII) */
+	role = mii->phy_mac[port];
+
+	switch (phy_mode) {
+	case XMII_MODE_RMII:
+		rc = sja1110_rmii_clocking_setup(priv, port, role);
+		break;
+	case XMII_MODE_MII:
+	case XMII_MODE_RGMII:
+	case XMII_MODE_SGMII:
+		/* Nothing to do in the CGU/ACU for MII/RGMII/SGMII */
+		rc = 0;
+		break;
+	default:
+		dev_err(dev, "Invalid interface mode specified: %d\n",
+			phy_mode);
+		return -EINVAL;
+	}
+	if (rc) {
+		dev_err(dev, "Clocking setup for port %d failed: %d\n",
+			port, rc);
+	}
+
+	return rc;
+}
+
+int sja1110_clocking_setup(struct sja1105_private *priv)
+{
+	struct dsa_switch *ds = priv->ds;
+	int port, rc;
+
+	for (port = 0; port < ds->num_ports; port++) {
+		rc = sja1110_clocking_setup_port(priv, port);
 		if (rc < 0)
 			return rc;
 	}
