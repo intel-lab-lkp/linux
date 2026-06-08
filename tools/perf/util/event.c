@@ -14,6 +14,7 @@
 #include <linux/perf_event.h>
 #include "cpumap.h"
 #include "dso.h"
+#include "env.h"
 #include "event.h"
 #include "debug.h"
 #include "hist.h"
@@ -835,9 +836,13 @@ int machine__resolve(struct machine *machine, struct addr_location *al,
 
 	if (al->cpu >= 0) {
 		struct perf_env *env = machine->env;
+		struct cpu_topology_map *topo;
 
-		if (env && env->cpu)
-			al->socket = env->cpu[al->cpu].socket_id;
+		if (env) {
+			topo = perf_env__get_cpu_topology(env, (struct perf_cpu){ al->cpu });
+			if (topo)
+				al->socket = topo->socket_id;
+		}
 	}
 
 	/* Account for possible out-of-order switch events. */
