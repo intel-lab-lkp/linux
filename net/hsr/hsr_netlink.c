@@ -11,6 +11,8 @@
 #include <linux/kernel.h>
 #include <net/rtnetlink.h>
 #include <net/genetlink.h>
+#include <uapi/linux/if_link.h>
+#include <uapi/linux/hsr_netlink.h>
 #include "hsr_main.h"
 #include "hsr_device.h"
 #include "hsr_framereg.h"
@@ -189,15 +191,129 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
+/*
+ * Number of real HSR_XSTATS_* u64 counter attributes.
+ * Real counters run from HSR_XSTATS_CNT_TX_A(1) through
+ * HSR_XSTATS_CNT_OWN_RX_B(25); HSR_XSTATS_PAD is not a counter.
+ */
+#define HSR_XSTATS_CNT_ATTRS (HSR_XSTATS_PAD - 1)
+
+static size_t hsr_get_linkxstats_size(const struct net_device *dev, int attr)
+{
+	if (attr != IFLA_STATS_LINK_XSTATS)
+		return 0;
+
+	/* Nest header (LINK_XSTATS_TYPE_HSR) + one u64 nla per counter */
+	return nla_total_size(0) +
+	       HSR_XSTATS_CNT_ATTRS * nla_total_size_64bit(sizeof(u64));
+}
+
+/* Put a u64 counter attribute; skip if value is ~0ULL (unsupported). */
+static int hsr_put_stat(struct sk_buff *skb, int attr_id, u64 val)
+{
+	if (val == ~0ULL)
+		return 0;
+	return nla_put_u64_64bit(skb, attr_id, val, HSR_XSTATS_PAD);
+}
+
+static int hsr_fill_linkxstats(struct sk_buff *skb,
+			       const struct net_device *dev,
+			       int *prividx, int attr)
+{
+	struct hsr_lre_stats stats;
+	struct hsr_port *port;
+	struct hsr_priv *hsr = netdev_priv(dev);
+	struct nlattr *nest;
+	int s_prividx = *prividx;
+	int err;
+
+	if (attr != IFLA_STATS_LINK_XSTATS)
+		return 0;
+
+	*prividx = 0;
+
+	nest = nla_nest_start_noflag(skb, LINK_XSTATS_TYPE_HSR);
+	if (!nest)
+		return -EMSGSIZE;
+
+	/* Initialise all counters to ~0ULL ("unsupported") */
+	memset(&stats, 0xff, sizeof(stats));
+
+	/* Ask the offload driver (if any) via ndo_get_offload_stats on slave A.
+	 * Guard with ndo_has_offload_stats so we only call drivers that
+	 * explicitly declare support for IFLA_STATS_LINK_XSTATS, avoiding
+	 * spurious -EINVAL from drivers that implement the NDO for a different
+	 * attr_id (e.g. IFLA_OFFLOAD_XSTATS_CPU_HIT).
+	 */
+	port = hsr_port_get_hsr(hsr, HSR_PT_SLAVE_A);
+	if (port) {
+		const struct net_device_ops *ops = port->dev->netdev_ops;
+
+		if (ops->ndo_has_offload_stats &&
+		    ops->ndo_has_offload_stats(port->dev,
+					       IFLA_STATS_LINK_XSTATS) &&
+		    ops->ndo_get_offload_stats) {
+			err = ops->ndo_get_offload_stats(IFLA_STATS_LINK_XSTATS,
+							 port->dev, &stats);
+			if (err && err != -EOPNOTSUPP) {
+				nla_nest_cancel(skb, nest);
+				return err;
+			}
+		}
+	}
+
+#define PUT_STAT(attr, field) \
+	do { \
+		if (HSR_XSTATS_##attr < s_prividx) \
+			break; \
+		if (hsr_put_stat(skb, HSR_XSTATS_##attr, stats.field)) { \
+			*prividx = HSR_XSTATS_##attr; \
+			nla_nest_end(skb, nest); \
+			return -EMSGSIZE; \
+		} \
+	} while (0)
+
+	PUT_STAT(CNT_TX_A,		cnt_tx_a);
+	PUT_STAT(CNT_TX_B,		cnt_tx_b);
+	PUT_STAT(CNT_TX_C,		cnt_tx_c);
+	PUT_STAT(CNT_RX_A,		cnt_rx_a);
+	PUT_STAT(CNT_RX_B,		cnt_rx_b);
+	PUT_STAT(CNT_RX_C,		cnt_rx_c);
+	PUT_STAT(CNT_ERR_WRONG_LAN_A,	cnt_err_wrong_lan_a);
+	PUT_STAT(CNT_ERR_WRONG_LAN_B,	cnt_err_wrong_lan_b);
+	PUT_STAT(CNT_ERR_WRONG_LAN_C,	cnt_err_wrong_lan_c);
+	PUT_STAT(CNT_ERRORS_A,		cnt_errors_a);
+	PUT_STAT(CNT_ERRORS_B,		cnt_errors_b);
+	PUT_STAT(CNT_ERRORS_C,		cnt_errors_c);
+	PUT_STAT(CNT_UNIQUE_A,		cnt_unique_a);
+	PUT_STAT(CNT_UNIQUE_B,		cnt_unique_b);
+	PUT_STAT(CNT_UNIQUE_C,		cnt_unique_c);
+	PUT_STAT(CNT_DUPLICATE_A,	cnt_duplicate_a);
+	PUT_STAT(CNT_DUPLICATE_B,	cnt_duplicate_b);
+	PUT_STAT(CNT_DUPLICATE_C,	cnt_duplicate_c);
+	PUT_STAT(CNT_MULTI_A,		cnt_multi_a);
+	PUT_STAT(CNT_MULTI_B,		cnt_multi_b);
+	PUT_STAT(CNT_MULTI_C,		cnt_multi_c);
+	PUT_STAT(CNT_OWN_RX_A,		cnt_own_rx_a);
+	PUT_STAT(CNT_OWN_RX_B,		cnt_own_rx_b);
+
+#undef PUT_STAT
+
+	nla_nest_end(skb, nest);
+	return 0;
+}
+
 static struct rtnl_link_ops hsr_link_ops __read_mostly = {
-	.kind		= "hsr",
-	.maxtype	= IFLA_HSR_MAX,
-	.policy		= hsr_policy,
-	.priv_size	= sizeof(struct hsr_priv),
-	.setup		= hsr_dev_setup,
-	.newlink	= hsr_newlink,
-	.dellink	= hsr_dellink,
-	.fill_info	= hsr_fill_info,
+	.kind			= "hsr",
+	.maxtype		= IFLA_HSR_MAX,
+	.policy			= hsr_policy,
+	.priv_size		= sizeof(struct hsr_priv),
+	.setup			= hsr_dev_setup,
+	.newlink		= hsr_newlink,
+	.dellink		= hsr_dellink,
+	.fill_info		= hsr_fill_info,
+	.get_linkxstats_size	= hsr_get_linkxstats_size,
+	.fill_linkxstats	= hsr_fill_linkxstats,
 };
 
 /* attribute policy */
