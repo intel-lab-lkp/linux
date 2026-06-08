@@ -448,3 +448,12 @@ pub type NotThreadSafe = PhantomData<*mut ()>;
 /// [`NotThreadSafe`]: type@NotThreadSafe
 #[allow(non_upper_case_globals)]
 pub const NotThreadSafe: NotThreadSafe = PhantomData;
+
+/// General purpose sum type with two cases.
+#[derive(Clone, Copy)]
+pub enum Either<L, R> {
+    /// A value of type `L`.
+    Left(L),
+    /// A value of type `R`.
+    Right(R),
+}
