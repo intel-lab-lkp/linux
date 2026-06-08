@@ -1656,7 +1656,7 @@ static unsigned int fib6_mtu(const struct fib6_result *res)
 		rcu_read_unlock();
 	}
 
-	mtu = min_t(unsigned int, mtu, IP6_MAX_MTU);
+	mtu = min_t(unsigned int, mtu, IP6_MAX_JUMBOGRAM_MTU);
 
 	return mtu - lwtunnel_headroom(nh->fib_nh_lws, mtu);
 }

@@ -196,6 +196,12 @@ static inline bool ipv6_l3mdev_skb(__u16 flags)
 #define IP6CB(skb)	((struct inet6_skb_parm*)((skb)->cb))
 #define IP6CBMTU(skb)	((struct ip6_mtuinfo *)((skb)->cb))
 
+/* IPv6 jumbogram payload length is stored into a 32bit field, but cap the max
+ * MTU to INT_MAX because MTUs and packet lengths are sometimes represented as
+ * signed ints.
+ */
+#define IP6_MAX_JUMBOGRAM_MTU INT_MAX
+
 static inline int inet6_iif(const struct sk_buff *skb)
 {
 	bool l3_slave = ipv6_l3mdev_skb(IP6CB(skb)->flags);

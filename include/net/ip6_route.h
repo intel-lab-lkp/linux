@@ -38,8 +38,9 @@ struct route_info {
 #define RT6_LOOKUP_F_IGNORE_LINKSTATE	0x00000040
 #define RT6_LOOKUP_F_DST_NOREF		0x00000080
 
-/* We do not (yet ?) support IPv6 jumbograms (RFC 2675)
- * Unlike IPv4, hdr->seg_len doesn't include the IPv6 header
+/* We do not (yet ?) fully support IPv6 jumbograms (RFC 2675) for all protocols.
+ * Where jumbograms are supported, IP6_MAX_JUMBOGRAM_MTU should be used instead.
+ * Unlike IPv4, hdr->seg_len doesn't include the IPv6 header.
  */
 #define IP6_MAX_MTU (0xFFFF + sizeof(struct ipv6hdr))
 
