@@ -1378,5 +1378,67 @@
         "teardown": [
             "$TC actions flush action ife"
         ]
+    },
+    {
+        "id": "8a7c",
+        "name": "Decode malformed ife frame with truncated inner ethernet header",
+        "category": [
+            "actions",
+            "ife",
+            "scapy"
+        ],
+        "plugins": {
+            "requires": [
+                "nsPlugin",
+                "scapyPlugin"
+            ]
+        },
+        "setup": [
+            [
+                "$TC actions flush action ife",
+                0,
+                1,
+                255
+            ],
+            [
+                "$TC qdisc del dev $DEV1 clsact",
+                0,
+                1,
+                2,
+                255
+            ],
+            "$IP link set dev $DEV1 mtu 65535",
+            "$TC qdisc add dev $DEV1 clsact",
+            "$TC filter add dev $DEV1 ingress protocol 0xed3e prio 1 flower action ife decode pipe"
+        ],
+        "cmdUnderTest": "$TC -s -j filter show dev $DEV1 ingress",
+        "scapy": {
+            "iface": "$DEV0",
+            "count": 1,
+            "mtu": 65535,
+            "packet": "Ether(dst='ff:ff:ff:ff:ff:ff', type=0xED3E)/Raw(b'\\x00\\x02' + b'\\xcc' * 14 + b'\\xdd' * (5000 - 16 - 14))"
+        },
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s -j filter show dev $DEV1 ingress",
+        "matchJSON": [
+            {
+                "kind": "flower"
+            },
+            {
+                "options": {
+                    "actions": [
+                        {
+                            "kind": "ife",
+                            "stats": {
+                                "packets": 1
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "teardown": [
+            "$TC qdisc del dev $DEV1 clsact"
+        ]
     }
 ]

@@ -50,5 +50,11 @@ class SubPlugin(TdcPlugin):
             if '$' in scapyinfo['iface']:
                 tpl = Template(scapyinfo['iface'])
                 scapyinfo['iface'] = tpl.safe_substitute(NAMES)
+            if 'mtu' in scapyinfo:
+                subprocess.run(
+                    [NAMES['IP'], 'link', 'set', 'dev',
+                     scapyinfo['iface'], 'mtu', str(scapyinfo['mtu'])],
+                    check=True, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, env=ENVIR)
             for count in range(scapyinfo['count']):
                 sendp(pkt, iface=scapyinfo['iface'])
