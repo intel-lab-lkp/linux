@@ -100,8 +100,8 @@ impl<const SIZE: usize> KnownSize for Region<SIZE> {
 /// the represented MMIO region does exist or is properly mapped.
 ///
 /// Instead, the bus specific MMIO implementation must convert this raw representation into an
-/// `MmioOwned` instance providing the actual memory accessors. Only by the conversion into an
-/// `MmioOwned` structure any guarantees are given.
+/// `Mmio` instance providing the actual memory accessors. Only by the conversion into an `Mmio`
+/// structure any guarantees are given.
 pub struct MmioRaw<T: ?Sized> {
     /// Pointer is in I/O address space.
     ///
@@ -157,80 +157,6 @@ impl<T: ?Sized + KnownSize> MmioRaw<T> {
         KnownSize::size(self.ptr)
     }
 }
-
-/// IO-mapped memory region.
-///
-/// The creator (usually a subsystem / bus such as PCI) is responsible for creating the
-/// mapping, performing an additional region request etc.
-///
-/// # Invariant
-///
-/// `addr` is the start and `maxsize` the length of valid I/O mapped memory region of size
-/// `maxsize`.
-///
-/// # Examples
-///
-/// ```no_run
-/// use kernel::{
-///     bindings,
-///     ffi::c_void,
-///     io::{
-///         Io,
-///         MmioOwned,
-///         MmioRaw,
-///         PhysAddr,
-///         Region,
-///     },
-/// };
-/// use core::ops::Deref;
-///
-/// // See also `pci::Bar` for a real example.
-/// struct IoMem<const SIZE: usize>(MmioRaw<Region<SIZE>>);
-///
-/// impl<const SIZE: usize> IoMem<SIZE> {
-///     /// # Safety
-///     ///
-///     /// [`paddr`, `paddr` + `SIZE`) must be a valid MMIO region that is mappable into the CPUs
-///     /// virtual address space.
-///     unsafe fn new(paddr: usize) -> Result<Self>{
-///         // SAFETY: By the safety requirements of this function [`paddr`, `paddr` + `SIZE`) is
-///         // valid for `ioremap`.
-///         let addr = unsafe { bindings::ioremap(paddr as PhysAddr, SIZE) };
-///         if addr.is_null() {
-///             return Err(ENOMEM);
-///         }
-///
-///         Ok(IoMem(MmioRaw::new_region(addr as usize, SIZE)?))
-///     }
-/// }
-///
-/// impl<const SIZE: usize> Drop for IoMem<SIZE> {
-///     fn drop(&mut self) {
-///         // SAFETY: `self.0.addr()` is guaranteed to be properly mapped by `Self::new`.
-///         unsafe { bindings::iounmap(self.0.addr() as *mut c_void); };
-///     }
-/// }
-///
-/// impl<const SIZE: usize> Deref for IoMem<SIZE> {
-///    type Target = MmioOwned<SIZE>;
-///
-///    fn deref(&self) -> &Self::Target {
-///         // SAFETY: The memory range stored in `self` has been properly mapped in `Self::new`.
-///         unsafe { MmioOwned::from_raw(&self.0) }
-///    }
-/// }
-///
-///# fn no_run() -> Result<(), Error> {
-/// // SAFETY: Invalid usage for example purposes.
-/// let iomem = unsafe { IoMem::<{ core::mem::size_of::<u32>() }>::new(0xBAAAAAAD)? };
-/// iomem.write32(0x42, 0x0);
-/// assert!(iomem.try_write32(0x42, 0x0).is_ok());
-/// assert!(iomem.try_write32(0x42, 0x4).is_err());
-/// # Ok(())
-/// # }
-/// ```
-#[repr(transparent)]
-pub struct MmioOwned<const SIZE: usize = 0>(MmioRaw<Region<SIZE>>);
 
 /// Checks whether an access of type `U` at the given `base` and the given `offset`
 /// is valid within this region.
@@ -946,31 +872,6 @@ impl_mmio_io_capable!(MmioBackend, u32, readl, writel);
 // MMIO regions on 64-bit systems also support 64-bit accesses.
 #[cfg(CONFIG_64BIT)]
 impl_mmio_io_capable!(MmioBackend, u64, readq, writeq);
-
-impl<'a, const SIZE: usize> Io<'a> for &'a MmioOwned<SIZE> {
-    type Backend = MmioBackend;
-    type Target = Region<SIZE>;
-
-    #[inline]
-    fn as_view(self) -> Mmio<'a, Self::Target> {
-        // SAFETY: `Mmio` has same invariant as `MmioOwned`
-        unsafe { Mmio::from_raw(self.0) }
-    }
-}
-
-impl<const SIZE: usize> MmioOwned<SIZE> {
-    /// Converts an `MmioRaw` into an `MmioOwned` instance, providing the accessors to the MMIO
-    /// mapping.
-    ///
-    /// # Safety
-    ///
-    /// Callers must ensure that `addr` is the start of a valid I/O mapped memory region of size
-    /// `maxsize`.
-    pub unsafe fn from_raw(raw: &MmioRaw<Region<SIZE>>) -> &Self {
-        // SAFETY: `MmioOwned` is a transparent wrapper around `MmioRaw`.
-        unsafe { &*core::ptr::from_ref(raw).cast() }
-    }
-}
 
 /// [`Mmio`] but using relaxed accessors.
 ///
