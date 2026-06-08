@@ -1341,6 +1341,16 @@ struct rq {
 	struct list_head	cfsb_csd_list;
 #endif
 
+#ifdef CONFIG_RT_GROUP_SCHED
+	/*
+	 * Balance callbacks operate only on global runqueues.
+	 * These pointers allow referencing cgroup specific runqueues
+	 * for balancing operations.
+	 */
+	struct rq		*rq_to_push_from;
+	struct rq		*rq_to_pull_to;
+#endif
+
 	atomic_t		nr_iowait;
 } __no_randomize_layout;
 
@@ -3366,6 +3376,11 @@ static inline struct rt_rq *rt_rq_of_se(struct sched_rt_entity *rt_se)
 	return rt_se->rt_rq;
 }
 
+static inline struct task_group *tg_of_se(struct sched_rt_entity *rt_se)
+{
+	return rt_rq_of_se(rt_se)->tg;
+}
+
 static inline int is_dl_group(struct rt_rq *rt_rq)
 {
 	return rt_rq->tg != &root_task_group;
@@ -3382,6 +3397,9 @@ static inline struct sched_dl_entity *dl_group_of(struct rt_rq *rt_rq)
 	return rt_rq->tg->dl_se[rq_of_rt_rq(rt_rq)->cpu];
 }
 
+#define rq_to_push_from(rq) ((rq)->rq_to_push_from)
+#define rq_to_pull_to(rq) ((rq)->rq_to_pull_to)
+#define dl_se_of_tg(tg, cpu) ((tg)->dl_se[(cpu)])
 #define dl_bw_lock_of_tg(tg) (&(tg)->dl_bandwidth.dl_runtime_lock)
 #else
 static inline struct task_struct *rt_task_of(struct sched_rt_entity *rt_se)
@@ -3406,6 +3424,11 @@ static inline struct rt_rq *rt_rq_of_se(struct sched_rt_entity *rt_se)
 	return &rq->rt;
 }
 
+static inline struct task_group *tg_of_se(struct sched_rt_entity *rt_se)
+{
+	return &root_task_group;
+}
+
 static inline int is_dl_group(struct rt_rq *rt_rq)
 {
 	return 0;
@@ -3416,6 +3439,9 @@ static inline struct sched_dl_entity *dl_group_of(struct rt_rq *rt_rq)
 	return NULL;
 }
 
+#define rq_to_push_from(rq) (rq)
+#define rq_to_pull_to(rq) (rq)
+#define dl_se_of_tg(tg, cpu) ((struct sched_dl_entity*)NULL)
 #define dl_bw_lock_of_tg(tg) ((raw_spinlock_t*)NULL)
 #endif
 
