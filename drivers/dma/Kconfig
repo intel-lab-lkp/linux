@@ -242,7 +242,7 @@ config FSL_QDMA
 
 config FSL_RAID
 	tristate "Freescale RAID engine Support"
-	depends on FSL_SOC && !ASYNC_TX_ENABLE_CHANNEL_SWITCH
+	depends on (FSL_SOC && !ASYNC_TX_ENABLE_CHANNEL_SWITCH) || COMPILE_TEST
 	select DMA_ENGINE
 	select DMA_ENGINE_RAID
 	help
@@ -448,7 +448,7 @@ config MOXART_DMA
 	select DMA_VIRTUAL_CHANNELS
 	help
 	  Enable support for the MOXA ART SoC DMA controller.
- 
+
 	  Say Y here if you enabled MMP ADMA, otherwise say N.
 
 config MPC512X_DMA
