@@ -1497,7 +1497,7 @@ static int ubi_mtd_param_parse(const char *val, const struct kernel_param *kp)
 		return 0;
 	}
 
-	strcpy(buf, val);
+	strscpy(buf, val);
 
 	/* Get rid of the final newline */
 	if (buf[len - 1] == '\n')
@@ -1512,7 +1512,7 @@ static int ubi_mtd_param_parse(const char *val, const struct kernel_param *kp)
 	}
 
 	p = &mtd_dev_param[mtd_devs];
-	strcpy(&p->name[0], tokens[0]);
+	strscpy(p->name, tokens[0]);
 
 	token = tokens[1];
 	if (token) {
