@@ -271,6 +271,10 @@ static bool amdxdna_hmm_invalidate(struct mmu_interval_notifier *mni,
 	if (range->event == MMU_NOTIFY_UNMAP) {
 		down_write(&xdna->notifier_lock);
 		if (!mapp->unmapped) {
+			if (is_import_bo(abo) && mapp->vma->vm_file &&
+			    mapp->vma->vm_file->f_mapping)
+				mapping_clear_unevictable(mapp->vma->vm_file->f_mapping);
+
 			queue_work(xdna->notifier_wq, &mapp->hmm_unreg_work);
 			mapp->unmapped = true;
 		}
@@ -308,12 +312,9 @@ static void amdxdna_umap_release(struct kref *ref)
 {
 	struct amdxdna_umap *mapp = container_of(ref, struct amdxdna_umap, refcnt);
 	struct amdxdna_gem_obj *abo = mapp->abo;
-	struct vm_area_struct *vma = mapp->vma;
 	struct amdxdna_dev *xdna;
 
 	mmu_interval_notifier_remove(&mapp->notifier);
-	if (is_import_bo(abo) && vma->vm_file && vma->vm_file->f_mapping)
-		mapping_clear_unevictable(vma->vm_file->f_mapping);
 
 	xdna = to_xdna_dev(to_gobj(mapp->abo)->dev);
 	down_write(&xdna->notifier_lock);
