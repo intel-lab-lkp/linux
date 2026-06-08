@@ -77,10 +77,10 @@ static inline void pikawdt_reset(void)
 	 *           seconds. Valid ranges are 1 to 15 seconds. The value can
 	 *           be modified dynamically.
 	 */
-	unsigned reset = in_be32(pikawdt_private.fpga + 0x14);
+	unsigned reset = ioread32be(pikawdt_private.fpga + 0x14);
 	/* enable with max timeout - 15 seconds */
 	reset |= (1 << 7) + (WDT_HW_TIMEOUT << 8);
-	out_be32(pikawdt_private.fpga + 0x14, reset);
+	iowrite32be(reset, pikawdt_private.fpga + 0x14);
 }
 
 /*
@@ -243,7 +243,7 @@ static int __init pikawdt_init(void)
 		return -ENOMEM;
 	}
 
-	ident.firmware_version = in_be32(pikawdt_private.fpga + 0x1c) & 0xffff;
+	ident.firmware_version = ioread32be(pikawdt_private.fpga + 0x1c) & 0xffff;
 
 	/* POST information is in the sd area. */
 	np = of_find_compatible_node(NULL, NULL, "pika,fpga-sd");
@@ -265,7 +265,7 @@ static int __init pikawdt_init(void)
 	 * Bit 31,   WDOG: Set to 1 when the last reset was caused by a watchdog
 	 *           timeout.
 	 */
-	post1 = in_be32(fpga + 0x40);
+	post1 = ioread32be(fpga + 0x40);
 	if (post1 & 0x80000000)
 		pikawdt_private.bootstatus = WDIOF_CARDRESET;
 
