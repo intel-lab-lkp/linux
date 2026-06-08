@@ -26,15 +26,32 @@ check_prereqs()
 		echo $msg efivarfs is not mounted on $efivarfs_mount >&2
 		exit $ksft_skip
 	fi
+
+	# Determine whether efivarfs is mounted read-only or read-write
+	# and store the result ("ro" or "rw") in the global efivarfs_mode.
+	if grep -q "^\S\+ $efivarfs_mount efivarfs ro[, ]" /proc/mounts; then
+		efivarfs_mode=ro
+	else
+		efivarfs_mode=rw
+	fi
 }
 
 run_test()
 {
 	local test="$1"
+	# Second (optional) argument: "rw" if the test needs a writable
+	# efivarfs. Such tests are skipped when efivarfs is mounted read-only.
+	local need_rw="$2"
 
 	echo "--------------------"
 	echo "running $test"
 	echo "--------------------"
+
+	if [ "$need_rw" = "rw" ] && [ "$efivarfs_mode" = "ro" ]; then
+		echo "  [SKIP] efivarfs is mounted read-only," \
+		     "skipping test that requires write access" >&2
+		return
+	fi
 
 	if [ "$(type -t $test)" = 'function' ]; then
 		( $test )
@@ -74,7 +91,7 @@ test_create_empty()
 {
 	local file=$efivarfs_mount/$FUNCNAME-$test_guid
 
-	: > $file
+	: 2>/dev/null > $file
 
 	if [ -e $file ]; then
 		echo "$file can be created without writing" >&2
@@ -361,18 +378,23 @@ check_prereqs
 
 rc=0
 
-run_test test_create
+if [ "$efivarfs_mode" = "ro" ]; then
+	echo "efivarfs is mounted read-only on $efivarfs_mount;" \
+	     "tests that require write access will be skipped" >&2
+fi
+
+run_test test_create rw
 run_test test_create_empty
-run_test test_create_read
-run_test test_delete
-run_test test_zero_size_delete
-run_test test_open_unlink
-run_test test_valid_filenames
+run_test test_create_read rw
+run_test test_delete rw
+run_test test_zero_size_delete rw
+run_test test_open_unlink rw
+run_test test_valid_filenames rw
 run_test test_invalid_filenames
-run_test test_no_set_size
+run_test test_no_set_size rw
 setup_test_multiple
-run_test test_multiple_zero_size
-run_test test_multiple_create
-run_test test_multiple_delete_on_write
+run_test test_multiple_zero_size rw
+run_test test_multiple_create rw
+run_test test_multiple_delete_on_write rw
 
 exit $rc
