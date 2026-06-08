@@ -74,6 +74,10 @@ const struct intel_bios_encoder_data *
 intel_bios_encoder_data_lookup(struct intel_display *display, enum port port);
 
 const struct intel_ddi_buf_trans *
+intel_bios_get_lt_vspeo(const struct intel_bios_encoder_data *devdata,
+			const struct intel_ddi_buf_trans *buf_trans,
+			bool has_dp, bool is_uhbr);
+const struct intel_ddi_buf_trans *
 intel_bios_get_c20_vspeo(const struct intel_bios_encoder_data *devdata,
 			 bool has_dp, bool is_uhbr);
 const struct intel_ddi_buf_trans *

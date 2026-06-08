@@ -3873,6 +3873,49 @@ validate_vspeo(const struct intel_bios_encoder_data *devdata, bool has_dp)
 }
 
 const struct intel_ddi_buf_trans *
+intel_bios_get_lt_vspeo(const struct intel_bios_encoder_data *devdata,
+			const struct intel_ddi_buf_trans *buf_trans,
+			bool has_dp, bool is_uhbr)
+{
+	struct intel_display *display;
+	union intel_ddi_buf_trans_entry *entries;
+	int num_columns, num_rows, level, idx;
+	struct intel_ddi_buf_trans *vspeo;
+	const u32 *tables;
+	size_t offset = 0;
+
+	if (!validate_vspeo(devdata, has_dp))
+		return NULL;
+
+	display = devdata->display;
+	entries = (void *)vspeo->entries;
+	tables = display->vbt.vspeo.tables;
+	num_columns = display->vbt.vspeo.num_columns;
+	num_rows = display->vbt.vspeo.num_rows;
+	idx = is_uhbr ? 5 : 4;
+
+	offset += idx * num_rows * num_columns;
+
+	for (level = 0; level < num_rows; level++) {
+		u8 txswing = buf_trans->entries[level].lt.txswing;
+		u8 txswing_level = buf_trans->entries[level].lt.txswing_level;
+		u32 main_cursor = tables[offset];
+		u32 pre_cursor = tables[offset + 1];
+		u32 post_cursor = tables[offset + 2];
+
+		entries[level].lt.txswing = txswing;
+		entries[level].lt.txswing_level = txswing_level;
+		entries[level].lt.main_cursor = main_cursor;
+		entries[level].lt.pre_cursor = pre_cursor;
+		entries[level].lt.post_cursor = post_cursor;
+
+		offset += num_columns;
+	}
+
+	return vspeo;
+}
+
+const struct intel_ddi_buf_trans *
 intel_bios_get_c20_vspeo(const struct intel_bios_encoder_data *devdata,
 			 bool has_dp, bool is_uhbr)
 {

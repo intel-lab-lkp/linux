@@ -1868,7 +1868,9 @@ const struct intel_ddi_buf_trans *intel_ddi_buf_trans_get(struct intel_encoder *
 	is_uhbr = intel_dp_is_uhbr(crtc_state);
 	port_clock = crtc_state->port_clock;
 
-	if (DISPLAY_VER(display) >= 14) {
+	if (HAS_LT_PHY(display)) {
+		buf_trans = intel_bios_get_lt_vspeo(devdata, buf_trans, has_dp, is_uhbr);
+	} else if (DISPLAY_VER(display) >= 14) {
 		if (intel_encoder_is_c10phy(encoder))
 			buf_trans = intel_bios_get_c10_vspeo(devdata, has_dp, port_clock, has_edp);
 		else
