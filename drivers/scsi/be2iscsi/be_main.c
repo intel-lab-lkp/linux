@@ -5568,7 +5568,7 @@ static int beiscsi_dev_probe(struct pci_dev *pcidev,
 
 	ret = beiscsi_init_sliport(phba);
 	if (ret)
-		goto free_hba;
+		goto free_port;
 
 	spin_lock_init(&phba->io_sgl_lock);
 	spin_lock_init(&phba->mgmt_sgl_lock);
