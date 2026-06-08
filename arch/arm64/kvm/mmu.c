@@ -1899,18 +1899,26 @@ static int kvm_s2_fault_pin_pfn(const struct kvm_s2_fault_desc *s2fd,
 				struct kvm_s2_fault_vma_info *s2vi)
 {
 	int ret;
+	unsigned int flags = FOLL_INTERRUPTIBLE;
 
 	ret = kvm_s2_fault_get_vma_info(s2fd, s2vi);
 	if (ret)
 		return ret;
 
+	if (kvm_is_write_fault(s2fd->vcpu))
+		flags |= FOLL_WRITE;
+
 	s2vi->pfn = __kvm_faultin_pfn(s2fd->memslot, get_canonical_gfn(s2fd, s2vi),
-				      kvm_is_write_fault(s2fd->vcpu) ? FOLL_WRITE : 0,
+				      flags,
 				      &s2vi->map_writable, &s2vi->page);
 	if (unlikely(is_error_noslot_pfn(s2vi->pfn))) {
 		if (s2vi->pfn == KVM_PFN_ERR_HWPOISON) {
 			kvm_send_hwpoison_signal(s2fd->hva, __ffs(s2vi->vma_pagesize));
 			return 0;
+		}
+		if (is_sigpending_pfn(s2vi->pfn)) {
+			kvm_handle_signal_exit(s2fd->vcpu);
+			return -EINTR;
 		}
 		return -EFAULT;
 	}
