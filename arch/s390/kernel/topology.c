@@ -3,8 +3,7 @@
  *    Copyright IBM Corp. 2007, 2011
  */
 
-#define KMSG_COMPONENT "cpu"
-#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
+#define pr_fmt(fmt) "cpu: " fmt
 
 #include <linux/cpufeature.h>
 #include <linux/workqueue.h>
@@ -193,17 +192,21 @@ static void tl_to_masks(struct sysinfo_15_1_x *info)
 	end = (union topology_entry *)((unsigned long)info + info->length);
 	while (tle < end) {
 		switch (tle->nl) {
+		/*
+		 * Adjust drawer_id, book_id, and socked_id so they match the
+		 * numbering scheme of e.g. the hardware management console.
+		 */
 		case 3:
 			drawer = drawer->next;
-			drawer->id = tle->container.id;
+			drawer->id = tle->container.id - 1;
 			break;
 		case 2:
 			book = book->next;
-			book->id = tle->container.id;
+			book->id = tle->container.id - 1;
 			break;
 		case 1:
 			socket = socket->next;
-			socket->id = tle->container.id;
+			socket->id = tle->container.id - 1;
 			break;
 		case 0:
 			add_cpus_to_mask(&tle->cpu, drawer, book, socket);
@@ -509,33 +512,27 @@ int topology_cpu_init(struct cpu *cpu)
 	return rc;
 }
 
-static const struct cpumask *cpu_thread_mask(int cpu)
-{
-	return &cpu_topology[cpu].thread_mask;
-}
-
-
 const struct cpumask *cpu_coregroup_mask(int cpu)
 {
 	return &cpu_topology[cpu].core_mask;
 }
 
-static const struct cpumask *cpu_book_mask(int cpu)
+static const struct cpumask *tl_book_mask(struct sched_domain_topology_level *tl, int cpu)
 {
 	return &cpu_topology[cpu].book_mask;
 }
 
-static const struct cpumask *cpu_drawer_mask(int cpu)
+static const struct cpumask *tl_drawer_mask(struct sched_domain_topology_level *tl, int cpu)
 {
 	return &cpu_topology[cpu].drawer_mask;
 }
 
 static struct sched_domain_topology_level s390_topology[] = {
-	{ cpu_thread_mask, cpu_smt_flags, SD_INIT_NAME(SMT) },
-	{ cpu_coregroup_mask, cpu_core_flags, SD_INIT_NAME(MC) },
-	{ cpu_book_mask, SD_INIT_NAME(BOOK) },
-	{ cpu_drawer_mask, SD_INIT_NAME(DRAWER) },
-	{ cpu_cpu_mask, SD_INIT_NAME(PKG) },
+	SDTL_INIT(tl_smt_mask, cpu_smt_flags, SMT),
+	SDTL_INIT(tl_mc_mask, cpu_core_flags, MC),
+	SDTL_INIT(tl_book_mask, NULL, BOOK),
+	SDTL_INIT(tl_drawer_mask, NULL, DRAWER),
+	SDTL_INIT(tl_pkg_mask, NULL, PKG),
 	{ NULL, },
 };
 

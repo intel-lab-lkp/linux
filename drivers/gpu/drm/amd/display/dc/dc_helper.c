@@ -108,6 +108,7 @@ static void set_reg_field_values(struct dc_reg_value_masks *field_value_mask,
 		uint8_t shift1, uint32_t mask1, uint32_t field_value1,
 		va_list ap)
 {
+	(void)addr;
 	uint32_t shift, mask, field_value;
 	int i = 1;
 
@@ -732,7 +733,7 @@ char *dce_version_to_string(const int version)
 	case DCN_VERSION_3_03:
 		return "DCN 3.0.3";
 	case DCN_VERSION_3_1:
-		return "DCN 3.1";
+		return "DCN 3.1.2";
 	case DCN_VERSION_3_14:
 		return "DCN 3.1.4";
 	case DCN_VERSION_3_15:
@@ -751,7 +752,14 @@ char *dce_version_to_string(const int version)
 		return "DCN 3.6";
 	case DCN_VERSION_4_01:
 		return "DCN 4.0.1";
+	case DCN_VERSION_4_2:
+		return "DCN 4.2";
 	default:
 		return "Unknown";
 	}
+}
+
+bool dc_supports_vrr(const enum dce_version v)
+{
+	return v >= DCE_VERSION_8_0;
 }

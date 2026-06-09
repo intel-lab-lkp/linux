@@ -51,11 +51,15 @@ static int ipcomp_post_acomp(struct sk_buff *skb, int err, int hlen)
 	struct scatterlist *dsg;
 	int len, dlen;
 
-	if (unlikely(err))
-		goto out_free_req;
+	if (unlikely(!req))
+		return err;
 
 	extra = acomp_request_extra(req);
 	dsg = extra->sg;
+
+	if (unlikely(err))
+		goto out_free_req;
+
 	dlen = req->dlen;
 
 	pskb_trim_unique(skb, 0);
@@ -84,10 +88,10 @@ static int ipcomp_post_acomp(struct sk_buff *skb, int err, int hlen)
 		skb_shinfo(skb)->nr_frags++;
 	} while ((dlen -= len));
 
-	for (; dsg; dsg = sg_next(dsg))
+out_free_req:
+	for (; dsg && sg_page(dsg); dsg = sg_next(dsg))
 		__free_page(sg_page(dsg));
 
-out_free_req:
 	acomp_request_free(req);
 	return err;
 }
@@ -97,7 +101,7 @@ static int ipcomp_input_done2(struct sk_buff *skb, int err)
 	struct ip_comp_hdr *ipch = ip_comp_hdr(skb);
 	const int plen = skb->len;
 
-	skb_reset_transport_header(skb);
+	skb->transport_header = skb->network_header + sizeof(*ipch);
 
 	return ipcomp_post_acomp(skb, err, 0) ?:
 	       skb->len < (plen + sizeof(ip_comp_hdr)) ? -EINVAL :
@@ -313,7 +317,6 @@ void ipcomp_destroy(struct xfrm_state *x)
 	struct ipcomp_data *ipcd = x->data;
 	if (!ipcd)
 		return;
-	xfrm_state_delete_tunnel(x);
 	ipcomp_free_data(ipcd);
 	kfree(ipcd);
 }
@@ -337,7 +340,7 @@ int ipcomp_init_state(struct xfrm_state *x, struct netlink_ext_ack *extack)
 	}
 
 	err = -ENOMEM;
-	ipcd = kzalloc(sizeof(*ipcd), GFP_KERNEL);
+	ipcd = kzalloc_obj(*ipcd);
 	if (!ipcd)
 		goto out;
 
