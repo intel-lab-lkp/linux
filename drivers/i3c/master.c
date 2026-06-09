@@ -26,6 +26,12 @@ static DEFINE_MUTEX(i3c_core_lock);
 static int __i3c_first_dynamic_bus_num;
 static BLOCKING_NOTIFIER_HEAD(i3c_bus_notifier);
 
+#define I3C_CCC_GETMRL_LEN_SHORT	2
+#define I3C_CCC_GETMRL_LEN_FULL		3
+#define I3C_CCC_GETMXDS_LEN_SHORT	2
+#define I3C_CCC_GETMXDS_LEN_FULL	5
+#define I3C_CCC_MAX_RETRIES	2
+
 /**
  * i3c_bus_maintenance_lock - Lock the bus for a maintenance operation
  * @bus: I3C bus to take the lock on
@@ -925,6 +931,61 @@ static void i3c_ccc_cmd_init(struct i3c_ccc_cmd *cmd, bool rnw, u8 id,
 	cmd->err = I3C_ERROR_UNKNOWN;
 }
 
+static bool i3c_ccc_get_payload_ok(u8 id, u16 req_len, u16 actual_len)
+{
+	if (actual_len > req_len)
+		return false;
+
+	if (!req_len)
+		return actual_len == 0;
+
+	if (id == I3C_CCC_GETMRL)
+		return actual_len == I3C_CCC_GETMRL_LEN_SHORT ||
+		       actual_len == I3C_CCC_GETMRL_LEN_FULL;
+
+	if (id == I3C_CCC_GETMXDS)
+		return actual_len == I3C_CCC_GETMXDS_LEN_SHORT ||
+		       actual_len == I3C_CCC_GETMXDS_LEN_FULL;
+
+	return actual_len == req_len;
+}
+
+static int i3c_ccc_validate_payload_len(struct i3c_ccc_cmd *cmd,
+					const u16 *req_lens)
+{
+	unsigned int i;
+
+	if (!cmd->rnw)
+		return 0;
+
+	for (i = 0; i < cmd->ndests; i++) {
+		u16 actual = cmd->dests[i].payload.len;
+		u16 req = req_lens[i];
+
+		if (!i3c_ccc_get_payload_ok(cmd->id, req, actual)) {
+			cmd->err = I3C_ERROR_M0;
+			return -EIO;
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * M0: transient frame errors.
+ * M2: address-header NACK (I3C spec section 5.1.2.2.3), e.g. when a target
+ *     simultaneously asserts an IBI or Controller Role Request and neither
+ *     side ACKs. Software should re-issue the transfer; the controller wins
+ *     arbitration after Repeated START.
+ *
+ * Retries apply to GET CCCs only; SET CCCs are not retried to avoid
+ * repeating side-effecting commands.
+ */
+static bool i3c_ccc_err_retriable(enum i3c_error_code err)
+{
+	return err == I3C_ERROR_M0 || err == I3C_ERROR_M2;
+}
+
 /**
  * i3c_master_send_ccc_cmd_locked() - send a CCC (Common Command Codes)
  * @master: master used to send frames on the bus
@@ -936,8 +997,16 @@ static void i3c_ccc_cmd_init(struct i3c_ccc_cmd *cmd, bool rnw, u8 id,
 static int i3c_master_send_ccc_cmd_locked(struct i3c_master_controller *master,
 					  struct i3c_ccc_cmd *cmd)
 {
+	u16 req_len;
+	u16 *req_lens = NULL;
+	u16 *req_lens_alloc = NULL;
+	unsigned int i;
+	int ret, retries;
+
 	if (!cmd || !master)
 		return -EINVAL;
+
+	retries = cmd->rnw ? I3C_CCC_MAX_RETRIES : 1;
 
 	if (WARN_ON(master->init_done &&
 		    !rwsem_is_locked(&master->bus.lock)))
@@ -953,7 +1022,47 @@ static int i3c_master_send_ccc_cmd_locked(struct i3c_master_controller *master,
 	    !master->ops->supports_ccc_cmd(master, cmd))
 		return -EOPNOTSUPP;
 
-	return master->ops->send_ccc_cmd(master, cmd);
+	if (cmd->rnw && cmd->dests && cmd->ndests) {
+		if (cmd->ndests == 1) {
+			req_len = cmd->dests[0].payload.len;
+			req_lens = &req_len;
+		} else {
+			req_lens_alloc = kmalloc_array(cmd->ndests,
+						       sizeof(*req_lens_alloc),
+						       GFP_KERNEL);
+			if (!req_lens_alloc)
+				return -ENOMEM;
+
+			req_lens = req_lens_alloc;
+			for (i = 0; i < cmd->ndests; i++)
+				req_lens[i] = cmd->dests[i].payload.len;
+		}
+	}
+
+	do {
+		cmd->err = I3C_ERROR_UNKNOWN;
+		if (req_lens) {
+			for (i = 0; i < cmd->ndests; i++)
+				cmd->dests[i].payload.len = req_lens[i];
+		}
+		ret = master->ops->send_ccc_cmd(master, cmd);
+		if (!ret && req_lens)
+			ret = i3c_ccc_validate_payload_len(cmd, req_lens);
+	} while (--retries && ret && i3c_ccc_err_retriable(cmd->err));
+
+	if (ret && req_lens) {
+		/*
+		 * Drivers may update payload.len to the actual RX count;
+		 * restore the requested length so callers can safely adjust
+		 * it on error (e.g. i3c_master_getmxds_locked()).
+		 */
+		for (i = 0; i < cmd->ndests; i++)
+			cmd->dests[i].payload.len = req_lens[i];
+	}
+
+	kfree(req_lens_alloc);
+
+	return ret;
 }
 
 static struct i2c_dev_desc *
