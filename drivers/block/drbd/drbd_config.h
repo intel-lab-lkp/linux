@@ -7,7 +7,7 @@
 #ifndef DRBD_CONFIG_H
 #define DRBD_CONFIG_H
 
-extern const char *drbd_buildtag(void);
+const char *drbd_buildtag(void);
 
 #define REL_VERSION "8.4.11"
 #define PRO_VERSION_MIN 86

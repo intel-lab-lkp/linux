@@ -264,20 +264,18 @@ struct bio_and_error {
 	int error;
 };
 
-extern void start_new_tl_epoch(struct drbd_connection *connection);
-extern void drbd_req_destroy(struct kref *kref);
-extern int __req_mod(struct drbd_request *req, enum drbd_req_event what,
-		struct drbd_peer_device *peer_device,
-		struct bio_and_error *m);
-extern void complete_master_bio(struct drbd_device *device,
-		struct bio_and_error *m);
-extern void request_timer_fn(struct timer_list *t);
-extern void tl_restart(struct drbd_connection *connection, enum drbd_req_event what);
-extern void _tl_restart(struct drbd_connection *connection, enum drbd_req_event what);
-extern void tl_abort_disk_io(struct drbd_device *device);
+void start_new_tl_epoch(struct drbd_connection *connection);
+void drbd_req_destroy(struct kref *kref);
+int __req_mod(struct drbd_request *req, enum drbd_req_event what,
+	      struct drbd_peer_device *peer_device, struct bio_and_error *m);
+void complete_master_bio(struct drbd_device *device, struct bio_and_error *m);
+void request_timer_fn(struct timer_list *t);
+void tl_restart(struct drbd_connection *connection, enum drbd_req_event what);
+void _tl_restart(struct drbd_connection *connection, enum drbd_req_event what);
+void tl_abort_disk_io(struct drbd_device *device);
 
 /* this is in drbd_main.c */
-extern void drbd_restart_request(struct drbd_request *req);
+void drbd_restart_request(struct drbd_request *req);
 
 /* use this if you don't want to deal with calling complete_master_bio()
  * outside the spinlock, e.g. when walking some list on cleanup. */
@@ -319,6 +317,6 @@ static inline int req_mod(struct drbd_request *req,
 	return rv;
 }
 
-extern bool drbd_should_do_remote(union drbd_dev_state);
+bool drbd_should_do_remote(union drbd_dev_state);
 
 #endif

@@ -109,7 +109,7 @@ extern struct ratelimit_state drbd_ratelimit_state;
 extern struct idr drbd_devices; /* RCU, updates: genl_lock() */
 extern struct list_head drbd_resources; /* RCU, updates: genl_lock() */
 
-extern const char *cmdname(enum drbd_packet cmd);
+const char *cmdname(enum drbd_packet cmd);
 
 /* for sending/receiving the bitmap,
  * possibly in some encoding scheme */
@@ -129,8 +129,8 @@ struct bm_xfer_ctx {
 	unsigned bytes[2];
 };
 
-extern void INFO_bm_xfer_stats(struct drbd_peer_device *peer_device,
-			       const char *direction, struct bm_xfer_ctx *c);
+void INFO_bm_xfer_stats(struct drbd_peer_device *peer_device,
+			const char *direction, struct bm_xfer_ctx *c);
 
 static inline void bm_xfer_ctx_bit_to_word_offset(struct bm_xfer_ctx *c)
 {
@@ -151,7 +151,7 @@ static inline void bm_xfer_ctx_bit_to_word_offset(struct bm_xfer_ctx *c)
 #endif
 }
 
-extern unsigned int drbd_header_size(struct drbd_connection *connection);
+unsigned int drbd_header_size(struct drbd_connection *connection);
 
 /**********************************************************************/
 enum drbd_thread_state {
@@ -195,10 +195,10 @@ struct drbd_device_work {
 
 #include "drbd_interval.h"
 
-extern int drbd_wait_misc(struct drbd_device *, struct drbd_interval *);
+int drbd_wait_misc(struct drbd_device *, struct drbd_interval *);
 
-extern void lock_all_resources(void);
-extern void unlock_all_resources(void);
+void lock_all_resources(void);
+void unlock_all_resources(void);
 
 struct drbd_request {
 	struct drbd_work w;
@@ -559,7 +559,7 @@ struct fifo_buffer {
 	int total; /* sum of all values */
 	int values[] __counted_by(size);
 };
-extern struct fifo_buffer *fifo_alloc(unsigned int fifo_size);
+struct fifo_buffer *fifo_alloc(unsigned int fifo_size);
 
 /* flag bits per connection */
 enum {
@@ -998,93 +998,108 @@ enum dds_flags {
 	DDSF_NO_RESYNC = 2, /* Do not run a resync for the new space */
 };
 
-extern void drbd_init_set_defaults(struct drbd_device *device);
-extern int  drbd_thread_start(struct drbd_thread *thi);
-extern void _drbd_thread_stop(struct drbd_thread *thi, int restart, int wait);
+void drbd_init_set_defaults(struct drbd_device *device);
+int drbd_thread_start(struct drbd_thread *thi);
+void _drbd_thread_stop(struct drbd_thread *thi, int restart, int wait);
 #ifdef CONFIG_SMP
-extern void drbd_thread_current_set_cpu(struct drbd_thread *thi);
+void drbd_thread_current_set_cpu(struct drbd_thread *thi);
 #else
 #define drbd_thread_current_set_cpu(A) ({})
 #endif
-extern void tl_release(struct drbd_connection *, unsigned int barrier_nr,
-		       unsigned int set_size);
-extern void tl_clear(struct drbd_connection *);
-extern void drbd_free_sock(struct drbd_connection *connection);
-extern int drbd_send(struct drbd_connection *connection, struct socket *sock,
-		     void *buf, size_t size, unsigned msg_flags);
-extern int drbd_send_all(struct drbd_connection *, struct socket *, void *, size_t,
-			 unsigned);
+void tl_release(struct drbd_connection *, unsigned int barrier_nr,
+		unsigned int set_size);
+void tl_clear(struct drbd_connection *);
+void drbd_free_sock(struct drbd_connection *connection);
+int drbd_send(struct drbd_connection *connection, struct socket *sock,
+	      void *buf, size_t size, unsigned msg_flags);
+int drbd_send_all(struct drbd_connection *, struct socket *, void *, size_t,
+		  unsigned);
 
-extern int __drbd_send_protocol(struct drbd_connection *connection, enum drbd_packet cmd);
-extern int drbd_send_protocol(struct drbd_connection *connection);
-extern int drbd_send_uuids(struct drbd_peer_device *);
-extern int drbd_send_uuids_skip_initial_sync(struct drbd_peer_device *);
-extern void drbd_gen_and_send_sync_uuid(struct drbd_peer_device *);
-extern int drbd_send_sizes(struct drbd_peer_device *, int trigger_reply, enum dds_flags flags);
-extern int drbd_send_state(struct drbd_peer_device *, union drbd_state s);
-extern int drbd_send_current_state(struct drbd_peer_device *);
-extern int drbd_send_sync_param(struct drbd_peer_device *);
-extern void drbd_send_b_ack(struct drbd_connection *connection, u32 barrier_nr,
-			    u32 set_size);
-extern int drbd_send_ack(struct drbd_peer_device *, enum drbd_packet,
-			 struct drbd_peer_request *);
-extern void drbd_send_ack_rp(struct drbd_peer_device *, enum drbd_packet,
-			     struct p_block_req *rp);
-extern void drbd_send_ack_dp(struct drbd_peer_device *, enum drbd_packet,
-			     struct p_data *dp, int data_size);
-extern int drbd_send_ack_ex(struct drbd_peer_device *, enum drbd_packet,
-			    sector_t sector, int blksize, u64 block_id);
-extern int drbd_send_out_of_sync(struct drbd_peer_device *, struct drbd_request *);
-extern int drbd_send_block(struct drbd_peer_device *, enum drbd_packet,
-			   struct drbd_peer_request *);
-extern int drbd_send_dblock(struct drbd_peer_device *, struct drbd_request *req);
-extern int drbd_send_drequest(struct drbd_peer_device *, int cmd,
-			      sector_t sector, int size, u64 block_id);
-extern int drbd_send_drequest_csum(struct drbd_peer_device *, sector_t sector,
-				   int size, void *digest, int digest_size,
-				   enum drbd_packet cmd);
-extern int drbd_send_ov_request(struct drbd_peer_device *, sector_t sector, int size);
+int __drbd_send_protocol(struct drbd_connection *connection,
+			 enum drbd_packet cmd);
+int drbd_send_protocol(struct drbd_connection *connection);
+int drbd_send_uuids(struct drbd_peer_device *);
+int drbd_send_uuids_skip_initial_sync(struct drbd_peer_device *);
+void drbd_gen_and_send_sync_uuid(struct drbd_peer_device *);
+int drbd_send_sizes(struct drbd_peer_device *, int trigger_reply,
+		    enum dds_flags flags);
+int drbd_send_state(struct drbd_peer_device *, union drbd_state s);
+int drbd_send_current_state(struct drbd_peer_device *);
+int drbd_send_sync_param(struct drbd_peer_device *);
+void drbd_send_b_ack(struct drbd_connection *connection, u32 barrier_nr,
+		     u32 set_size);
+int drbd_send_ack(struct drbd_peer_device *, enum drbd_packet,
+		  struct drbd_peer_request *);
+void drbd_send_ack_rp(struct drbd_peer_device *, enum drbd_packet,
+		      struct p_block_req *rp);
+void drbd_send_ack_dp(struct drbd_peer_device *, enum drbd_packet,
+		      struct p_data *dp, int data_size);
+int drbd_send_ack_ex(struct drbd_peer_device *, enum drbd_packet,
+		     sector_t sector, int blksize, u64 block_id);
+int drbd_send_out_of_sync(struct drbd_peer_device *, struct drbd_request *);
+int drbd_send_block(struct drbd_peer_device *, enum drbd_packet,
+		    struct drbd_peer_request *);
+int drbd_send_dblock(struct drbd_peer_device *, struct drbd_request *req);
+int drbd_send_drequest(struct drbd_peer_device *, int cmd, sector_t sector,
+		       int size, u64 block_id);
+int drbd_send_drequest_csum(struct drbd_peer_device *, sector_t sector,
+			    int size, void *digest, int digest_size,
+			    enum drbd_packet cmd);
+int drbd_send_ov_request(struct drbd_peer_device *, sector_t sector, int size);
 
-extern int drbd_send_bitmap(struct drbd_device *device, struct drbd_peer_device *peer_device);
-extern void drbd_send_sr_reply(struct drbd_peer_device *, enum drbd_state_rv retcode);
-extern void conn_send_sr_reply(struct drbd_connection *connection, enum drbd_state_rv retcode);
-extern int drbd_send_rs_deallocated(struct drbd_peer_device *, struct drbd_peer_request *);
-extern void drbd_backing_dev_free(struct drbd_device *device, struct drbd_backing_dev *ldev);
-extern void drbd_device_cleanup(struct drbd_device *device);
-extern void drbd_print_uuids(struct drbd_device *device, const char *text);
-extern void drbd_queue_unplug(struct drbd_device *device);
+int drbd_send_bitmap(struct drbd_device *device,
+		     struct drbd_peer_device *peer_device);
+void drbd_send_sr_reply(struct drbd_peer_device *, enum drbd_state_rv retcode);
+void conn_send_sr_reply(struct drbd_connection *connection,
+			enum drbd_state_rv retcode);
+int drbd_send_rs_deallocated(struct drbd_peer_device *,
+			     struct drbd_peer_request *);
+void drbd_backing_dev_free(struct drbd_device *device,
+			   struct drbd_backing_dev *ldev);
+void drbd_device_cleanup(struct drbd_device *device);
+void drbd_print_uuids(struct drbd_device *device, const char *text);
+void drbd_queue_unplug(struct drbd_device *device);
 
-extern void conn_md_sync(struct drbd_connection *connection);
-extern void drbd_md_write(struct drbd_device *device, void *buffer);
-extern void drbd_md_sync(struct drbd_device *device);
-extern int  drbd_md_read(struct drbd_device *device, struct drbd_backing_dev *bdev);
-extern void drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(local);
-extern void _drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(local);
-extern void drbd_uuid_new_current(struct drbd_device *device) __must_hold(local);
-extern void drbd_uuid_set_bm(struct drbd_device *device, u64 val) __must_hold(local);
-extern void drbd_uuid_move_history(struct drbd_device *device) __must_hold(local);
-extern void __drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(local);
-extern void drbd_md_set_flag(struct drbd_device *device, int flags) __must_hold(local);
-extern void drbd_md_clear_flag(struct drbd_device *device, int flags)__must_hold(local);
-extern int drbd_md_test_flag(struct drbd_backing_dev *, int);
-extern void drbd_md_mark_dirty(struct drbd_device *device);
-extern void drbd_queue_bitmap_io(struct drbd_device *device,
-				 int (*io_fn)(struct drbd_device *, struct drbd_peer_device *),
-				 void (*done)(struct drbd_device *, int),
-				 char *why, enum bm_flag flags,
-				 struct drbd_peer_device *peer_device);
-extern int drbd_bitmap_io(struct drbd_device *device,
-		int (*io_fn)(struct drbd_device *, struct drbd_peer_device *),
-		char *why, enum bm_flag flags,
-		struct drbd_peer_device *peer_device);
-extern int drbd_bitmap_io_from_worker(struct drbd_device *device,
-		int (*io_fn)(struct drbd_device *, struct drbd_peer_device *),
-		char *why, enum bm_flag flags,
-		struct drbd_peer_device *peer_device);
-extern int drbd_bmio_set_n_write(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local);
-extern int drbd_bmio_clear_n_write(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local);
+void conn_md_sync(struct drbd_connection *connection);
+void drbd_md_write(struct drbd_device *device, void *buffer);
+void drbd_md_sync(struct drbd_device *device);
+int drbd_md_read(struct drbd_device *device, struct drbd_backing_dev *bdev);
+void drbd_uuid_set(struct drbd_device *device, int idx, u64 val)
+	__must_hold(local);
+void _drbd_uuid_set(struct drbd_device *device, int idx, u64 val)
+	__must_hold(local);
+void drbd_uuid_new_current(struct drbd_device *device) __must_hold(local);
+void drbd_uuid_set_bm(struct drbd_device *device, u64 val) __must_hold(local);
+void drbd_uuid_move_history(struct drbd_device *device) __must_hold(local);
+void __drbd_uuid_set(struct drbd_device *device, int idx, u64 val)
+	__must_hold(local);
+void drbd_md_set_flag(struct drbd_device *device, int flags) __must_hold(local);
+void drbd_md_clear_flag(struct drbd_device *device, int flags)
+	__must_hold(local);
+int drbd_md_test_flag(struct drbd_backing_dev *, int);
+void drbd_md_mark_dirty(struct drbd_device *device);
+void drbd_queue_bitmap_io(struct drbd_device *device,
+			  int (*io_fn)(struct drbd_device *,
+				       struct drbd_peer_device *),
+			  void (*done)(struct drbd_device *, int), char *why,
+			  enum bm_flag flags,
+			  struct drbd_peer_device *peer_device);
+int drbd_bitmap_io(struct drbd_device *device,
+		   int (*io_fn)(struct drbd_device *,
+				struct drbd_peer_device *),
+		   char *why, enum bm_flag flags,
+		   struct drbd_peer_device *peer_device);
+int drbd_bitmap_io_from_worker(struct drbd_device *device,
+			       int (*io_fn)(struct drbd_device *,
+					    struct drbd_peer_device *),
+			       char *why, enum bm_flag flags,
+			       struct drbd_peer_device *peer_device);
+int drbd_bmio_set_n_write(struct drbd_device *device,
+			  struct drbd_peer_device *peer_device)
+	__must_hold(local);
+int drbd_bmio_clear_n_write(struct drbd_device *device,
+			    struct drbd_peer_device *peer_device)
+	__must_hold(local);
 
 /* Meta data layout
  *
@@ -1275,56 +1290,62 @@ struct bm_extent {
 #define DRBD_MAX_BATCH_BIO_SIZE	 (AL_UPDATES_PER_TRANSACTION/2*AL_EXTENT_SIZE)
 #define DRBD_MAX_BBIO_SECTORS    (DRBD_MAX_BATCH_BIO_SIZE >> 9)
 
-extern int  drbd_bm_init(struct drbd_device *device);
-extern int  drbd_bm_resize(struct drbd_device *device, sector_t sectors, int set_new_bits);
-extern void drbd_bm_cleanup(struct drbd_device *device);
-extern void drbd_bm_set_all(struct drbd_device *device);
-extern void drbd_bm_clear_all(struct drbd_device *device);
+int drbd_bm_init(struct drbd_device *device);
+int drbd_bm_resize(struct drbd_device *device, sector_t sectors,
+		   int set_new_bits);
+void drbd_bm_cleanup(struct drbd_device *device);
+void drbd_bm_set_all(struct drbd_device *device);
+void drbd_bm_clear_all(struct drbd_device *device);
 /* set/clear/test only a few bits at a time */
-extern int  drbd_bm_set_bits(
-		struct drbd_device *device, unsigned long s, unsigned long e);
-extern int  drbd_bm_clear_bits(
-		struct drbd_device *device, unsigned long s, unsigned long e);
-extern int drbd_bm_count_bits(
-	struct drbd_device *device, const unsigned long s, const unsigned long e);
+int drbd_bm_set_bits(struct drbd_device *device, unsigned long s,
+		     unsigned long e);
+int drbd_bm_clear_bits(struct drbd_device *device, unsigned long s,
+		       unsigned long e);
+int drbd_bm_count_bits(struct drbd_device *device, const unsigned long s,
+		       const unsigned long e);
 /* bm_set_bits variant for use while holding drbd_bm_lock,
  * may process the whole bitmap in one go */
-extern void _drbd_bm_set_bits(struct drbd_device *device,
-		const unsigned long s, const unsigned long e);
-extern int  drbd_bm_test_bit(struct drbd_device *device, unsigned long bitnr);
-extern int  drbd_bm_e_weight(struct drbd_device *device, unsigned long enr);
-extern int  drbd_bm_read(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local);
-extern void drbd_bm_mark_for_writeout(struct drbd_device *device, int page_nr);
-extern int  drbd_bm_write(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local);
-extern void drbd_bm_reset_al_hints(struct drbd_device *device) __must_hold(local);
-extern int  drbd_bm_write_hinted(struct drbd_device *device) __must_hold(local);
-extern int  drbd_bm_write_lazy(struct drbd_device *device, unsigned upper_idx) __must_hold(local);
-extern int drbd_bm_write_all(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local);
-extern int  drbd_bm_write_copy_pages(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local);
-extern size_t	     drbd_bm_words(struct drbd_device *device);
-extern unsigned long drbd_bm_bits(struct drbd_device *device);
-extern sector_t      drbd_bm_capacity(struct drbd_device *device);
+void _drbd_bm_set_bits(struct drbd_device *device, const unsigned long s,
+		       const unsigned long e);
+int drbd_bm_test_bit(struct drbd_device *device, unsigned long bitnr);
+int drbd_bm_e_weight(struct drbd_device *device, unsigned long enr);
+int drbd_bm_read(struct drbd_device *device,
+		 struct drbd_peer_device *peer_device) __must_hold(local);
+void drbd_bm_mark_for_writeout(struct drbd_device *device, int page_nr);
+int drbd_bm_write(struct drbd_device *device,
+		  struct drbd_peer_device *peer_device) __must_hold(local);
+void drbd_bm_reset_al_hints(struct drbd_device *device) __must_hold(local);
+int drbd_bm_write_hinted(struct drbd_device *device) __must_hold(local);
+int drbd_bm_write_lazy(struct drbd_device *device, unsigned upper_idx)
+	__must_hold(local);
+int drbd_bm_write_all(struct drbd_device *device,
+		      struct drbd_peer_device *peer_device) __must_hold(local);
+int drbd_bm_write_copy_pages(struct drbd_device *device,
+			     struct drbd_peer_device *peer_device)
+	__must_hold(local);
+size_t drbd_bm_words(struct drbd_device *device);
+unsigned long drbd_bm_bits(struct drbd_device *device);
+sector_t drbd_bm_capacity(struct drbd_device *device);
 
 #define DRBD_END_OF_BITMAP	(~(unsigned long)0)
-extern unsigned long drbd_bm_find_next(struct drbd_device *device, unsigned long bm_fo);
+unsigned long drbd_bm_find_next(struct drbd_device *device,
+				unsigned long bm_fo);
 /* bm_find_next variants for use while you hold drbd_bm_lock() */
-extern unsigned long _drbd_bm_find_next(struct drbd_device *device, unsigned long bm_fo);
-extern unsigned long _drbd_bm_find_next_zero(struct drbd_device *device, unsigned long bm_fo);
-extern unsigned long _drbd_bm_total_weight(struct drbd_device *device);
-extern unsigned long drbd_bm_total_weight(struct drbd_device *device);
+unsigned long _drbd_bm_find_next(struct drbd_device *device,
+				 unsigned long bm_fo);
+unsigned long _drbd_bm_find_next_zero(struct drbd_device *device,
+				      unsigned long bm_fo);
+unsigned long _drbd_bm_total_weight(struct drbd_device *device);
+unsigned long drbd_bm_total_weight(struct drbd_device *device);
 /* for receive_bitmap */
-extern void drbd_bm_merge_lel(struct drbd_device *device, size_t offset,
-		size_t number, unsigned long *buffer);
+void drbd_bm_merge_lel(struct drbd_device *device, size_t offset, size_t number,
+		       unsigned long *buffer);
 /* for _drbd_send_bitmap */
-extern void drbd_bm_get_lel(struct drbd_device *device, size_t offset,
-		size_t number, unsigned long *buffer);
+void drbd_bm_get_lel(struct drbd_device *device, size_t offset, size_t number,
+		     unsigned long *buffer);
 
-extern void drbd_bm_lock(struct drbd_device *device, char *why, enum bm_flag flags);
-extern void drbd_bm_unlock(struct drbd_device *device);
+void drbd_bm_lock(struct drbd_device *device, char *why, enum bm_flag flags);
+void drbd_bm_unlock(struct drbd_device *device);
 /* drbd_main.c */
 
 extern struct kmem_cache *drbd_request_cache;
@@ -1352,35 +1373,39 @@ extern struct bio_set drbd_io_bio_set;
 
 extern struct mutex resources_mutex;
 
-extern enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsigned int minor);
-extern void drbd_destroy_device(struct kref *kref);
-extern void drbd_delete_device(struct drbd_device *device);
+enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx,
+				      unsigned int minor);
+void drbd_destroy_device(struct kref *kref);
+void drbd_delete_device(struct drbd_device *device);
 
-extern struct drbd_resource *drbd_create_resource(const char *name);
-extern void drbd_free_resource(struct drbd_resource *resource);
+struct drbd_resource *drbd_create_resource(const char *name);
+void drbd_free_resource(struct drbd_resource *resource);
 
-extern int set_resource_options(struct drbd_resource *resource, struct res_opts *res_opts);
-extern struct drbd_connection *conn_create(const char *name, struct res_opts *res_opts);
-extern void drbd_destroy_connection(struct kref *kref);
-extern struct drbd_connection *conn_get_by_addrs(void *my_addr, int my_addr_len,
-					    void *peer_addr, int peer_addr_len);
-extern struct drbd_resource *drbd_find_resource(const char *name);
-extern void drbd_destroy_resource(struct kref *kref);
-extern void conn_free_crypto(struct drbd_connection *connection);
+int set_resource_options(struct drbd_resource *resource,
+			 struct res_opts *res_opts);
+struct drbd_connection *conn_create(const char *name,
+				    struct res_opts *res_opts);
+void drbd_destroy_connection(struct kref *kref);
+struct drbd_connection *conn_get_by_addrs(void *my_addr, int my_addr_len,
+					  void *peer_addr, int peer_addr_len);
+struct drbd_resource *drbd_find_resource(const char *name);
+void drbd_destroy_resource(struct kref *kref);
+void conn_free_crypto(struct drbd_connection *connection);
 
 /* drbd_req */
-extern void do_submit(struct work_struct *ws);
-extern void __drbd_make_request(struct drbd_device *, struct bio *);
+void do_submit(struct work_struct *ws);
+void __drbd_make_request(struct drbd_device *, struct bio *);
 void drbd_submit_bio(struct bio *bio);
 
 /* drbd_nl.c */
 
 extern struct mutex notification_mutex;
 
-extern void drbd_suspend_io(struct drbd_device *device);
-extern void drbd_resume_io(struct drbd_device *device);
-extern char *ppsize(char *buf, unsigned long long size);
-extern sector_t drbd_new_dev_size(struct drbd_device *, struct drbd_backing_dev *, sector_t, int);
+void drbd_suspend_io(struct drbd_device *device);
+void drbd_resume_io(struct drbd_device *device);
+char *ppsize(char *buf, unsigned long long size);
+sector_t drbd_new_dev_size(struct drbd_device *, struct drbd_backing_dev *,
+			   sector_t, int);
 enum determine_dev_size {
 	DS_ERROR_SHRINK = -3,
 	DS_ERROR_SPACE_MD = -2,
@@ -1390,41 +1415,46 @@ enum determine_dev_size {
 	DS_GREW = 2,
 	DS_GREW_FROM_ZERO = 3,
 };
-extern enum determine_dev_size
-drbd_determine_dev_size(struct drbd_device *, enum dds_flags, struct resize_parms *) __must_hold(local);
-extern void resync_after_online_grow(struct drbd_device *);
-extern void drbd_reconsider_queue_parameters(struct drbd_device *device,
-			struct drbd_backing_dev *bdev, struct o_qlim *o);
-extern enum drbd_state_rv drbd_set_role(struct drbd_device *device,
-					enum drbd_role new_role,
-					int force);
-extern bool conn_try_outdate_peer(struct drbd_connection *connection);
-extern void conn_try_outdate_peer_async(struct drbd_connection *connection);
-extern enum drbd_peer_state conn_khelper(struct drbd_connection *connection, char *cmd);
-extern int drbd_khelper(struct drbd_device *device, char *cmd);
+enum determine_dev_size drbd_determine_dev_size(struct drbd_device *,
+						enum dds_flags,
+						struct resize_parms *)
+	__must_hold(local);
+void resync_after_online_grow(struct drbd_device *);
+void drbd_reconsider_queue_parameters(struct drbd_device *device,
+				      struct drbd_backing_dev *bdev,
+				      struct o_qlim *o);
+enum drbd_state_rv drbd_set_role(struct drbd_device *device,
+				 enum drbd_role new_role, int force);
+bool conn_try_outdate_peer(struct drbd_connection *connection);
+void conn_try_outdate_peer_async(struct drbd_connection *connection);
+enum drbd_peer_state conn_khelper(struct drbd_connection *connection,
+				  char *cmd);
+int drbd_khelper(struct drbd_device *device, char *cmd);
 
 /* drbd_worker.c */
 /* bi_end_io handlers */
-extern void drbd_md_endio(struct bio *bio);
-extern void drbd_peer_request_endio(struct bio *bio);
-extern void drbd_request_endio(struct bio *bio);
-extern int drbd_worker(struct drbd_thread *thi);
+void drbd_md_endio(struct bio *bio);
+void drbd_peer_request_endio(struct bio *bio);
+void drbd_request_endio(struct bio *bio);
+int drbd_worker(struct drbd_thread *thi);
 enum drbd_ret_code drbd_resync_after_valid(struct drbd_device *device, int o_minor);
 void drbd_resync_after_changed(struct drbd_device *device);
-extern void drbd_start_resync(struct drbd_device *device, enum drbd_conns side);
-extern void resume_next_sg(struct drbd_device *device);
-extern void suspend_other_sg(struct drbd_device *device);
-extern int drbd_resync_finished(struct drbd_peer_device *peer_device);
+void drbd_start_resync(struct drbd_device *device, enum drbd_conns side);
+void resume_next_sg(struct drbd_device *device);
+void suspend_other_sg(struct drbd_device *device);
+int drbd_resync_finished(struct drbd_peer_device *peer_device);
 /* maybe rather drbd_main.c ? */
-extern void *drbd_md_get_buffer(struct drbd_device *device, const char *intent);
-extern void drbd_md_put_buffer(struct drbd_device *device);
-extern int drbd_md_sync_page_io(struct drbd_device *device,
-		struct drbd_backing_dev *bdev, sector_t sector, enum req_op op);
-extern void drbd_ov_out_of_sync_found(struct drbd_peer_device *peer_device,
-		sector_t sector, int size);
-extern void wait_until_done_or_force_detached(struct drbd_device *device,
-		struct drbd_backing_dev *bdev, unsigned int *done);
-extern void drbd_rs_controller_reset(struct drbd_peer_device *peer_device);
+void *drbd_md_get_buffer(struct drbd_device *device, const char *intent);
+void drbd_md_put_buffer(struct drbd_device *device);
+int drbd_md_sync_page_io(struct drbd_device *device,
+			 struct drbd_backing_dev *bdev, sector_t sector,
+			 enum req_op op);
+void drbd_ov_out_of_sync_found(struct drbd_peer_device *peer_device,
+			       sector_t sector, int size);
+void wait_until_done_or_force_detached(struct drbd_device *device,
+				       struct drbd_backing_dev *bdev,
+				       unsigned int *done);
+void drbd_rs_controller_reset(struct drbd_peer_device *peer_device);
 
 static inline void ov_out_of_sync_print(struct drbd_peer_device *peer_device)
 {
@@ -1438,48 +1468,48 @@ static inline void ov_out_of_sync_print(struct drbd_peer_device *peer_device)
 	device->ov_last_oos_size = 0;
 }
 
-
-extern void drbd_csum_bio(struct crypto_shash *, struct bio *, void *);
-extern void drbd_csum_ee(struct crypto_shash *, struct drbd_peer_request *,
-			 void *);
+void drbd_csum_bio(struct crypto_shash *, struct bio *, void *);
+void drbd_csum_ee(struct crypto_shash *, struct drbd_peer_request *, void *);
 /* worker callbacks */
-extern int w_e_end_data_req(struct drbd_work *, int);
-extern int w_e_end_rsdata_req(struct drbd_work *, int);
-extern int w_e_end_csum_rs_req(struct drbd_work *, int);
-extern int w_e_end_ov_reply(struct drbd_work *, int);
-extern int w_e_end_ov_req(struct drbd_work *, int);
-extern int w_ov_finished(struct drbd_work *, int);
-extern int w_resync_timer(struct drbd_work *, int);
-extern int w_send_write_hint(struct drbd_work *, int);
-extern int w_send_dblock(struct drbd_work *, int);
-extern int w_send_read_req(struct drbd_work *, int);
-extern int w_restart_disk_io(struct drbd_work *, int);
-extern int w_send_out_of_sync(struct drbd_work *, int);
+int w_e_end_data_req(struct drbd_work *, int);
+int w_e_end_rsdata_req(struct drbd_work *, int);
+int w_e_end_csum_rs_req(struct drbd_work *, int);
+int w_e_end_ov_reply(struct drbd_work *, int);
+int w_e_end_ov_req(struct drbd_work *, int);
+int w_ov_finished(struct drbd_work *, int);
+int w_resync_timer(struct drbd_work *, int);
+int w_send_write_hint(struct drbd_work *, int);
+int w_send_dblock(struct drbd_work *, int);
+int w_send_read_req(struct drbd_work *, int);
+int w_restart_disk_io(struct drbd_work *, int);
+int w_send_out_of_sync(struct drbd_work *, int);
 
-extern void resync_timer_fn(struct timer_list *t);
-extern void start_resync_timer_fn(struct timer_list *t);
+void resync_timer_fn(struct timer_list *t);
+void start_resync_timer_fn(struct timer_list *t);
 
-extern void drbd_endio_write_sec_final(struct drbd_peer_request *peer_req);
+void drbd_endio_write_sec_final(struct drbd_peer_request *peer_req);
 
 /* drbd_receiver.c */
-extern int drbd_issue_discard_or_zero_out(struct drbd_device *device,
-		sector_t start, unsigned int nr_sectors, int flags);
-extern int drbd_receiver(struct drbd_thread *thi);
-extern int drbd_ack_receiver(struct drbd_thread *thi);
-extern void drbd_send_acks_wf(struct work_struct *ws);
-extern bool drbd_rs_c_min_rate_throttle(struct drbd_device *device);
-extern bool drbd_rs_should_slow_down(struct drbd_peer_device *peer_device, sector_t sector,
-		bool throttle_if_app_is_waiting);
-extern int drbd_submit_peer_request(struct drbd_peer_request *peer_req);
-extern int drbd_free_peer_reqs(struct drbd_device *, struct list_head *);
-extern struct drbd_peer_request *drbd_alloc_peer_req(struct drbd_peer_device *, u64,
-						     sector_t, unsigned int,
-						     unsigned int,
-						     gfp_t) __must_hold(local);
-extern void drbd_free_peer_req(struct drbd_device *device, struct drbd_peer_request *req);
-extern struct page *drbd_alloc_pages(struct drbd_peer_device *, unsigned int, bool);
-extern void _drbd_clear_done_ee(struct drbd_device *device, struct list_head *to_be_freed);
-extern int drbd_connected(struct drbd_peer_device *);
+int drbd_issue_discard_or_zero_out(struct drbd_device *device, sector_t start,
+				   unsigned int nr_sectors, int flags);
+int drbd_receiver(struct drbd_thread *thi);
+int drbd_ack_receiver(struct drbd_thread *thi);
+void drbd_send_acks_wf(struct work_struct *ws);
+bool drbd_rs_c_min_rate_throttle(struct drbd_device *device);
+bool drbd_rs_should_slow_down(struct drbd_peer_device *peer_device,
+			      sector_t sector, bool throttle_if_app_is_waiting);
+int drbd_submit_peer_request(struct drbd_peer_request *peer_req);
+int drbd_free_peer_reqs(struct drbd_device *, struct list_head *);
+struct drbd_peer_request *drbd_alloc_peer_req(struct drbd_peer_device *, u64,
+					      sector_t, unsigned int,
+					      unsigned int, gfp_t)
+	__must_hold(local);
+void drbd_free_peer_req(struct drbd_device *device,
+			struct drbd_peer_request *req);
+struct page *drbd_alloc_pages(struct drbd_peer_device *, unsigned int, bool);
+void _drbd_clear_done_ee(struct drbd_device *device,
+			 struct list_head *to_be_freed);
+int drbd_connected(struct drbd_peer_device *);
 
 /* sets the number of 512 byte sectors of our virtual device */
 void drbd_set_my_capacity(struct drbd_device *device, sector_t size);
@@ -1512,32 +1542,36 @@ extern struct proc_dir_entry *drbd_proc;
 int drbd_seq_show(struct seq_file *seq, void *v);
 
 /* drbd_actlog.c */
-extern bool drbd_al_begin_io_prepare(struct drbd_device *device, struct drbd_interval *i);
-extern int drbd_al_begin_io_nonblock(struct drbd_device *device, struct drbd_interval *i);
-extern void drbd_al_begin_io_commit(struct drbd_device *device);
-extern bool drbd_al_begin_io_fastpath(struct drbd_device *device, struct drbd_interval *i);
-extern void drbd_al_begin_io(struct drbd_device *device, struct drbd_interval *i);
-extern void drbd_al_complete_io(struct drbd_device *device, struct drbd_interval *i);
-extern void drbd_rs_complete_io(struct drbd_device *device, sector_t sector);
-extern int drbd_rs_begin_io(struct drbd_device *device, sector_t sector);
-extern int drbd_try_rs_begin_io(struct drbd_peer_device *peer_device, sector_t sector);
-extern void drbd_rs_cancel_all(struct drbd_device *device);
-extern int drbd_rs_del_all(struct drbd_device *device);
-extern void drbd_rs_failed_io(struct drbd_peer_device *peer_device,
-		sector_t sector, int size);
-extern void drbd_advance_rs_marks(struct drbd_peer_device *peer_device, unsigned long still_to_go);
+bool drbd_al_begin_io_prepare(struct drbd_device *device,
+			      struct drbd_interval *i);
+int drbd_al_begin_io_nonblock(struct drbd_device *device,
+			      struct drbd_interval *i);
+void drbd_al_begin_io_commit(struct drbd_device *device);
+bool drbd_al_begin_io_fastpath(struct drbd_device *device,
+			       struct drbd_interval *i);
+void drbd_al_begin_io(struct drbd_device *device, struct drbd_interval *i);
+void drbd_al_complete_io(struct drbd_device *device, struct drbd_interval *i);
+void drbd_rs_complete_io(struct drbd_device *device, sector_t sector);
+int drbd_rs_begin_io(struct drbd_device *device, sector_t sector);
+int drbd_try_rs_begin_io(struct drbd_peer_device *peer_device, sector_t sector);
+void drbd_rs_cancel_all(struct drbd_device *device);
+int drbd_rs_del_all(struct drbd_device *device);
+void drbd_rs_failed_io(struct drbd_peer_device *peer_device, sector_t sector,
+		       int size);
+void drbd_advance_rs_marks(struct drbd_peer_device *peer_device,
+			   unsigned long still_to_go);
 
 enum update_sync_bits_mode { RECORD_RS_FAILED, SET_OUT_OF_SYNC, SET_IN_SYNC };
-extern int __drbd_change_sync(struct drbd_peer_device *peer_device, sector_t sector, int size,
-		enum update_sync_bits_mode mode);
+int __drbd_change_sync(struct drbd_peer_device *peer_device, sector_t sector,
+		       int size, enum update_sync_bits_mode mode);
 #define drbd_set_in_sync(peer_device, sector, size) \
 	__drbd_change_sync(peer_device, sector, size, SET_IN_SYNC)
 #define drbd_set_out_of_sync(peer_device, sector, size) \
 	__drbd_change_sync(peer_device, sector, size, SET_OUT_OF_SYNC)
 #define drbd_rs_failed_io(peer_device, sector, size) \
 	__drbd_change_sync(peer_device, sector, size, RECORD_RS_FAILED)
-extern void drbd_al_shrink(struct drbd_device *device);
-extern int drbd_al_initialize(struct drbd_device *, void *);
+void drbd_al_shrink(struct drbd_device *device);
+int drbd_al_initialize(struct drbd_device *, void *);
 
 /* drbd_nl.c */
 /* state info broadcast */
@@ -1556,28 +1590,20 @@ struct sib_info {
 };
 void drbd_bcast_event(struct drbd_device *device, const struct sib_info *sib);
 
-extern int notify_resource_state(struct sk_buff *,
-				  unsigned int,
-				  struct drbd_resource *,
-				  struct resource_info *,
-				  enum drbd_notification_type);
-extern int notify_device_state(struct sk_buff *,
-				unsigned int,
-				struct drbd_device *,
-				struct device_info *,
-				enum drbd_notification_type);
-extern int notify_connection_state(struct sk_buff *,
-				    unsigned int,
-				    struct drbd_connection *,
-				    struct connection_info *,
-				    enum drbd_notification_type);
-extern int notify_peer_device_state(struct sk_buff *,
-				     unsigned int,
-				     struct drbd_peer_device *,
-				     struct peer_device_info *,
-				     enum drbd_notification_type);
-extern void notify_helper(enum drbd_notification_type, struct drbd_device *,
-			  struct drbd_connection *, const char *, int);
+int notify_resource_state(struct sk_buff *, unsigned int,
+			  struct drbd_resource *, struct resource_info *,
+			  enum drbd_notification_type);
+int notify_device_state(struct sk_buff *, unsigned int, struct drbd_device *,
+			struct device_info *, enum drbd_notification_type);
+int notify_connection_state(struct sk_buff *, unsigned int,
+			    struct drbd_connection *, struct connection_info *,
+			    enum drbd_notification_type);
+int notify_peer_device_state(struct sk_buff *, unsigned int,
+			     struct drbd_peer_device *,
+			     struct peer_device_info *,
+			     enum drbd_notification_type);
+void notify_helper(enum drbd_notification_type, struct drbd_device *,
+		   struct drbd_connection *, const char *, int);
 
 /*
  * inline helper functions
@@ -1822,7 +1848,7 @@ drbd_device_post_work(struct drbd_device *device, int work_bit)
 	}
 }
 
-extern void drbd_flush_workqueue(struct drbd_work_queue *work_queue);
+void drbd_flush_workqueue(struct drbd_work_queue *work_queue);
 
 /* To get the ack_receiver out of the blocking network stack,
  * so it can change its sk_rcvtimeo from idle- to ping-timeout,
@@ -1841,19 +1867,19 @@ static inline void request_ping(struct drbd_connection *connection)
 	wake_ack_receiver(connection);
 }
 
-extern void *conn_prepare_command(struct drbd_connection *, struct drbd_socket *);
-extern void *drbd_prepare_command(struct drbd_peer_device *, struct drbd_socket *);
-extern int conn_send_command(struct drbd_connection *, struct drbd_socket *,
-			     enum drbd_packet, unsigned int, void *,
-			     unsigned int);
-extern int drbd_send_command(struct drbd_peer_device *, struct drbd_socket *,
-			     enum drbd_packet, unsigned int, void *,
-			     unsigned int);
+void *conn_prepare_command(struct drbd_connection *, struct drbd_socket *);
+void *drbd_prepare_command(struct drbd_peer_device *, struct drbd_socket *);
+int conn_send_command(struct drbd_connection *, struct drbd_socket *,
+		      enum drbd_packet, unsigned int, void *, unsigned int);
+int drbd_send_command(struct drbd_peer_device *, struct drbd_socket *,
+		      enum drbd_packet, unsigned int, void *, unsigned int);
 
-extern int drbd_send_ping(struct drbd_connection *connection);
-extern int drbd_send_ping_ack(struct drbd_connection *connection);
-extern int drbd_send_state_req(struct drbd_peer_device *, union drbd_state, union drbd_state);
-extern int conn_send_state_req(struct drbd_connection *, union drbd_state, union drbd_state);
+int drbd_send_ping(struct drbd_connection *connection);
+int drbd_send_ping_ack(struct drbd_connection *connection);
+int drbd_send_state_req(struct drbd_peer_device *, union drbd_state,
+			union drbd_state);
+int conn_send_state_req(struct drbd_connection *, union drbd_state,
+			union drbd_state);
 
 static inline void drbd_thread_stop(struct drbd_thread *thi)
 {
@@ -2023,7 +2049,7 @@ static inline int _get_ldev_if_state(struct drbd_device *device, enum drbd_disk_
 	return io_allowed;
 }
 #else
-extern int _get_ldev_if_state(struct drbd_device *device, enum drbd_disk_state mins);
+int _get_ldev_if_state(struct drbd_device *device, enum drbd_disk_state mins);
 #endif
 
 /* this throttles on-the-fly application requests
