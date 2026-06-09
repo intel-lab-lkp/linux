@@ -304,6 +304,15 @@ static bool try_to_map_unused_to_zeropage(struct page_vma_mapped_walk *pvmw,
 	if (PageCompound(page) || PageHWPoison(page))
 		return false;
 
+	/*
+	 * Let KSM handle the zero-filled page deduplication according to its
+	 * own rate limit (pages_to_scan) and policy (use_zero_pages). Without
+	 * this, a KSM-triggered THP split would remap all zero-filled subpages
+	 * to the shared zeropage as a side effect.
+	 */
+	if (ksm_is_running() && (pvmw->vma->vm_flags & VM_MERGEABLE))
+		return false;
+
 	VM_BUG_ON_PAGE(!PageAnon(page), page);
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
 	VM_BUG_ON_PAGE(pte_present(old_pte), page);
