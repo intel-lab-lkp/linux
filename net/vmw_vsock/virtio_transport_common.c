@@ -367,6 +367,10 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
 	do {
 		struct sk_buff *skb;
 		size_t skb_len;
+		struct iov_iter saved_iter;
+
+		if (info->msg)
+			saved_iter = info->msg->msg_iter;
 
 		skb_len = min(max_skb_len, rest_len);
 
@@ -375,6 +379,8 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
 						 src_cid, src_port,
 						 dst_cid, dst_port);
 		if (!skb) {
+			if (info->msg)
+				info->msg->msg_iter = saved_iter;
 			ret = -ENOMEM;
 			break;
 		}
@@ -382,8 +388,11 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
 		virtio_transport_inc_tx_pkt(vvs, skb);
 
 		ret = t_ops->send_pkt(skb, info->net);
-		if (ret < 0)
+		if (ret < 0) {
+			if (info->msg)
+				info->msg->msg_iter = saved_iter;
 			break;
+		}
 
 		/* Both virtio and vhost 'send_pkt()' returns 'skb_len',
 		 * but for reliability use 'ret' instead of 'skb_len'.
