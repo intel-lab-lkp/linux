@@ -1509,15 +1509,22 @@ static int insert_dirty_subvol(struct btrfs_trans_handle *trans,
 	btrfs_set_root_drop_level(reloc_root_item, 0);
 	btrfs_set_root_refs(reloc_root_item, 0);
 	ret = btrfs_update_reloc_root(trans, root);
-	if (ret)
-		return ret;
-
+	/*
+	 * Even if an error happened, add the root to the dirty_subvol_roots
+	 * list, so that clean_dirty_subvols() will set the root->reloc_root to
+	 * NULL and merge_reloc_roots() frees the root (with a call to
+	 * free_reloc_roots()), otherwise we have a use-after-free when
+	 * btrfs_update_reloc_root() above returns an error, as the root has a
+	 * ->reloc_root field pointing to a reloc root we already freed and
+	 * during unmount we will call btrfs_put_root() against this already
+	 * freed reloc root.
+	 */
 	if (list_empty(&root->reloc_dirty_list)) {
 		btrfs_grab_root(root);
 		list_add_tail(&root->reloc_dirty_list, &rc->dirty_subvol_roots);
 	}
 
-	return 0;
+	return ret;
 }
 
 static int clean_dirty_subvols(struct reloc_control *rc)
