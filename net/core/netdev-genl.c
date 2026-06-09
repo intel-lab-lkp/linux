@@ -1091,7 +1091,10 @@ int netdev_nl_bind_rx_doit(struct sk_buff *skb, struct genl_info *info)
 			goto err_unbind;
 	}
 
-	nla_put_u32(rsp, NETDEV_A_DMABUF_ID, binding->id);
+	err = nla_put_u32(rsp, NETDEV_A_DMABUF_ID, binding->id);
+	if (err)
+		goto err_unbind;
+
 	genlmsg_end(rsp, hdr);
 
 	err = genlmsg_reply(rsp, info);
@@ -1227,7 +1230,10 @@ int netdev_nl_bind_tx_doit(struct sk_buff *skb, struct genl_info *info)
 		goto err_unlock_bind_dev;
 	}
 
-	nla_put_u32(rsp, NETDEV_A_DMABUF_ID, binding->id);
+	err = nla_put_u32(rsp, NETDEV_A_DMABUF_ID, binding->id);
+	if (err)
+		goto err_unbind;
+
 	genlmsg_end(rsp, hdr);
 
 	if (bind_dev != netdev)
@@ -1237,6 +1243,8 @@ int netdev_nl_bind_tx_doit(struct sk_buff *skb, struct genl_info *info)
 
 	return genlmsg_reply(rsp, info);
 
+err_unbind:
+	net_devmem_unbind_dmabuf(binding);
 err_unlock_bind_dev:
 	if (bind_dev != netdev)
 		netdev_unlock(bind_dev);
@@ -1394,7 +1402,12 @@ int netdev_nl_queue_create_doit(struct sk_buff *skb, struct genl_info *info)
 
 	netdev_rx_queue_lease(rxq, rxq_lease);
 
-	nla_put_u32(rsp, NETDEV_A_QUEUE_ID, queue_id);
+	err = nla_put_u32(rsp, NETDEV_A_QUEUE_ID, queue_id);
+	if (err) {
+		WARN_ON_ONCE(1); /* we can't delete the queue, ID must fit in */
+		goto err_unlease;
+	}
+
 	genlmsg_end(rsp, hdr);
 
 	netdev_unlock(dev_lease);
@@ -1404,6 +1417,8 @@ int netdev_nl_queue_create_doit(struct sk_buff *skb, struct genl_info *info)
 
 	return genlmsg_reply(rsp, info);
 
+err_unlease:
+	netdev_rx_queue_unlease(rxq, rxq_lease);
 err_unlock_dev_lease:
 	netdev_unlock(dev_lease);
 err_put_netns:
