@@ -58,6 +58,16 @@ properties:
       The array should contain a gpio entry for each PMIC Glink connector, in reg order.
       It is defined that GPIO active level means "CC2" or Reversed/Flipped orientation.
 
+  qcom,thermal-mitigation:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    description:
+      Array of fast charge current limit values for different system thermal
+      mitigation levels. This should be a flat array that denotes the maximum
+      charging current (in uA) for each thermal level. Elements should be listed
+      in monotonically decreasing (non-increasing) order.
+    minItems: 1
+    maxItems: 10
+
   nvmem-cells:
     minItems: 3
     maxItems: 3
