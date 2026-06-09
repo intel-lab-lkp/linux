@@ -358,6 +358,24 @@ static inline bool net_initialized(const struct net *net)
 	return READ_ONCE(net->list.next);
 }
 
+/**
+ * net_admin_capable - test for CAP_NET_ADMIN over a network namespace
+ * @net: namespace whose state the operation would change
+ * @cur: namespace the operation runs in, e.g. dev_net(dev)
+ *
+ * Returns true when @net is @cur, where CAP_NET_ADMIN was already
+ * checked for the running namespace, or when the caller holds
+ * CAP_NET_ADMIN over @net. rtnl changelink paths use this: a device can
+ * be moved so its state lives in a namespace other than the one the
+ * request runs in, and the cap must then be held over that namespace.
+ */
+static inline bool net_admin_capable(const struct net *net,
+				     const struct net *cur)
+{
+	return net_eq(net, cur) ||
+	       ns_capable(net->user_ns, CAP_NET_ADMIN);
+}
+
 static inline void __netns_tracker_alloc(struct net *net,
 					 netns_tracker *tracker,
 					 bool refcounted,
