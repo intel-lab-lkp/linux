@@ -266,8 +266,10 @@ int iommufd_object_remove(struct iommufd_ctx *ictx,
 	 */
 	if (!zerod_wait_cnt) {
 		ret = iommufd_object_dec_wait(ictx, obj);
-		if (WARN_ON(ret))
+		if (WARN_ON(ret)) {
+			refcount_dec(&obj->wait_cnt);
 			return ret;
+		}
 	}
 
 	iommufd_object_ops[obj->type].destroy(obj);
