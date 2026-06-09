@@ -378,6 +378,8 @@ static int dualpi2_skb_classify(struct dualpi2_sched_data *q,
 #endif
 		cb->classified = TC_H_MIN(res.classid) < __DUALPI2_C_MAX ?
 			TC_H_MIN(res.classid) : DUALPI2_C_CLASSIC;
+	} else {
+		cb->classified = DUALPI2_C_CLASSIC;
 	}
 	return NET_XMIT_SUCCESS;
 }
