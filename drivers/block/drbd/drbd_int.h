@@ -1337,8 +1337,12 @@ void drbd_bm_merge_lel(struct drbd_device *device, size_t offset, size_t number,
 void drbd_bm_get_lel(struct drbd_device *device, size_t offset, size_t number,
 		     unsigned long *buffer);
 
-void drbd_bm_lock(struct drbd_device *device, char *why, enum bm_flag flags);
-void drbd_bm_unlock(struct drbd_device *device);
+token_context_lock(drbd_dev_bm_lock);
+
+void drbd_bm_lock(struct drbd_device *device, char *why, enum bm_flag flags)
+	__acquires(drbd_dev_bm_lock);
+void drbd_bm_unlock(struct drbd_device *device)
+	__releases(drbd_dev_bm_lock);
 /* drbd_main.c */
 
 extern struct kmem_cache *drbd_request_cache;

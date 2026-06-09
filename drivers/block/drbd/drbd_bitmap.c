@@ -122,9 +122,12 @@ static void __bm_print_lock_info(struct drbd_device *device, const char *func)
 }
 
 void drbd_bm_lock(struct drbd_device *device, char *why, enum bm_flag flags)
+	__acquires(drbd_dev_bm_lock)
+	__acquires(&device->bitmap->bm_change)
 {
 	struct drbd_bitmap *b = device->bitmap;
 
+	__acquire(drbd_dev_bm_lock);
 	mutex_lock(&b->bm_change);
 	if (BM_LOCKED_MASK & b->bm_flags)
 		drbd_err(device, "FIXME bitmap already locked in bm_lock\n");
@@ -135,6 +138,8 @@ void drbd_bm_lock(struct drbd_device *device, char *why, enum bm_flag flags)
 }
 
 void drbd_bm_unlock(struct drbd_device *device)
+	__releases(drbd_dev_bm_lock)
+	__releases(&device->bitmap->bm_change)
 {
 	struct drbd_bitmap *b = device->bitmap;
 
@@ -145,6 +150,7 @@ void drbd_bm_unlock(struct drbd_device *device)
 	b->bm_why  = NULL;
 	b->bm_task = NULL;
 	mutex_unlock(&b->bm_change);
+	__release(drbd_dev_bm_lock);
 }
 
 /* we store some "meta" info about our pages in page->private */
