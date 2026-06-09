@@ -2,7 +2,7 @@
 
 //! Pre-defined atomic types
 
-use crate::static_assert;
+use crate::prelude::*;
 use core::mem::{align_of, size_of};
 use ffi::c_void;
 

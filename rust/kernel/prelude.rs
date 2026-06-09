@@ -79,9 +79,6 @@ pub use super::{
         VVec,
         Vec, //
     },
-    build_assert,
-    build_error,
-    const_assert,
     current,
     dev_alert,
     dev_crit,
@@ -105,12 +102,19 @@ pub use super::{
     pr_info,
     pr_notice,
     pr_warn,
-    static_assert,
     str::CStrExt as _,
     try_init,
     try_pin_init,
     uaccess::UserPtr,
     ThisModule, //
+};
+
+#[doc(no_inline)]
+pub use crate::build_assert::{
+    build_assert,
+    build_error,
+    const_assert,
+    static_assert, //
 };
 
 // `super::std_vendor` is hidden, which makes the macro inline for some reason.
