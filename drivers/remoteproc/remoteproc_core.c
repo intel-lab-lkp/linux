@@ -1110,7 +1110,7 @@ unroll_registration:
 	return ret;
 }
 
-static void rproc_stop_subdevices(struct rproc *rproc, bool crashed)
+static int rproc_stop_subdevices(struct rproc *rproc, bool crashed)
 {
 	struct rproc_subdev *subdev;
 	int ret;
@@ -1118,10 +1118,14 @@ static void rproc_stop_subdevices(struct rproc *rproc, bool crashed)
 	list_for_each_entry_reverse(subdev, &rproc->subdevs, node) {
 		if (subdev->stop) {
 			ret = subdev->stop(subdev, crashed);
-			if (ret)
-				dev_warn(&rproc->dev, "subdev stop failed: %d\n", ret);
+			if (ret) {
+				dev_err(&rproc->dev, "subdev stop failed: %d\n", ret);
+				return ret;
+			}
 		}
 	}
+
+	return 0;
 }
 
 static void rproc_unprepare_subdevices(struct rproc *rproc)
@@ -1712,7 +1716,12 @@ static int rproc_stop(struct rproc *rproc, bool crashed)
 		return -EINVAL;
 
 	/* Stop any subdevices for the remote processor */
-	rproc_stop_subdevices(rproc, crashed);
+	ret = rproc_stop_subdevices(rproc, crashed);
+	if (ret) {
+		dev_err(dev, "failed to stop subdevices for %s: %d\n",
+			rproc->name, ret);
+		return ret;
+	}
 
 	/* the installed resource table is no longer accessible */
 	ret = rproc_reset_rsc_table_on_stop(rproc);
@@ -1751,7 +1760,12 @@ static int __rproc_detach(struct rproc *rproc)
 		return -EINVAL;
 
 	/* Stop any subdevices for the remote processor */
-	rproc_stop_subdevices(rproc, false);
+	ret = rproc_stop_subdevices(rproc, false);
+	if (ret) {
+		dev_err(dev, "failed to stop subdevices for %s: %d\n",
+			rproc->name, ret);
+		return ret;
+	}
 
 	/* the installed resource table is no longer accessible */
 	ret = rproc_reset_rsc_table_on_detach(rproc);
