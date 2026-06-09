@@ -549,19 +549,10 @@ _req_st_cond(struct drbd_device *device, union drbd_state mask,
 	return rv;
 }
 
-/**
- * drbd_req_state() - Perform an eventually cluster wide state change
- * @device:	DRBD device.
- * @mask:	mask of state bits to change.
- * @val:	value of new state bits.
- * @f:		flags
- *
- * Should not be called directly, use drbd_request_state() or
- * _drbd_request_state().
- */
-static enum drbd_state_rv
-drbd_req_state(struct drbd_device *device, union drbd_state mask,
-	       union drbd_state val, enum chg_state_flags f)
+static enum drbd_state_rv __drbd_req_state(struct drbd_device *device,
+					   union drbd_state mask,
+					   union drbd_state val,
+					   enum chg_state_flags f)
 {
 	struct completion done;
 	unsigned long flags;
@@ -571,8 +562,6 @@ drbd_req_state(struct drbd_device *device, union drbd_state mask,
 
 	init_completion(&done);
 
-	if (f & CS_SERIALIZE)
-		mutex_lock(device->state_mutex);
 	if (f & CS_INHIBIT_MD_IO)
 		buffer = drbd_md_get_buffer(device, __func__);
 
@@ -629,6 +618,30 @@ drbd_req_state(struct drbd_device *device, union drbd_state mask,
 abort:
 	if (buffer)
 		drbd_md_put_buffer(device);
+
+	return rv;
+}
+
+/**
+ * drbd_req_state() - Perform an eventually cluster wide state change
+ * @device:	DRBD device.
+ * @mask:	mask of state bits to change.
+ * @val:	value of new state bits.
+ * @f:		flags
+ *
+ * Should not be called directly, use drbd_request_state() or
+ * _drbd_request_state().
+ */
+static enum drbd_state_rv drbd_req_state(struct drbd_device *device,
+					 union drbd_state mask,
+					 union drbd_state val,
+					 enum chg_state_flags f)
+{
+	enum drbd_state_rv rv;
+
+	if (f & CS_SERIALIZE)
+		mutex_lock(device->state_mutex);
+	rv = __drbd_req_state(device, mask, val, f & ~CS_SERIALIZE);
 	if (f & CS_SERIALIZE)
 		mutex_unlock(device->state_mutex);
 
