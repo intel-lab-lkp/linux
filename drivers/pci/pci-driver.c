@@ -368,6 +368,8 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 {
 	int error, node, cpu;
 	struct drv_dev_and_id ddi = { drv, dev, id };
+	bool node_invalid, affine_to_node;
+	const struct cpumask *node_cpus;
 
 	/*
 	 * Execute driver initialization on node where the device is
@@ -376,14 +378,24 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 	 */
 	node = dev_to_node(&dev->dev);
 	dev->is_probed = 1;
+	node_invalid = node < 0 || node >= MAX_NUMNODES || !node_online(node);
+
+	if (node_invalid) {
+		node_cpus = cpu_online_mask;
+		affine_to_node = false;
+	} else {
+		node_cpus = cpumask_of_node(node);
+		/* Check if the current task is affined to the right node */
+		affine_to_node = cpumask_subset(current->cpus_ptr, node_cpus);
+	}
 
 	cpu_hotplug_disable();
 	/*
-	 * Prevent nesting work_on_cpu() for the case where a Virtual Function
-	 * device is probed from work_on_cpu() of the Physical device.
+	 * Prevent nesting queue_work_on() for the case where a Virtual Function
+	 * device is probed from queue_work_on() of the Physical function or
+	 * when the current task is affined to the right node.
 	 */
-	if (node < 0 || node >= MAX_NUMNODES || !node_online(node) ||
-	    pci_physfn_is_probed(dev)) {
+	if (node_invalid || affine_to_node || pci_physfn_is_probed(dev)) {
 		error = local_pci_probe(&ddi);
 	} else {
 		struct pci_probe_arg arg = { .ddi = &ddi };
@@ -410,8 +422,7 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 		 * targets.
 		 */
 		rcu_read_lock();
-		cpu = cpumask_any_and(cpumask_of_node(node),
-				      housekeeping_cpumask(HK_TYPE_DOMAIN));
+		cpu = cpumask_any_and(node_cpus, housekeeping_cpumask(HK_TYPE_DOMAIN));
 
 		if (cpu < nr_cpu_ids) {
 			struct workqueue_struct *wq = pci_probe_wq;
