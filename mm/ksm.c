@@ -3015,6 +3015,12 @@ int ksm_madvise(struct vm_area_struct *vma, unsigned long start,
 }
 EXPORT_SYMBOL_GPL(ksm_madvise);
 
+bool ksm_is_running(void)
+{
+	return ksm_run & KSM_RUN_MERGE;
+}
+EXPORT_SYMBOL_GPL(ksm_is_running);
+
 int __ksm_enter(struct mm_struct *mm)
 {
 	struct ksm_mm_slot *mm_slot;
