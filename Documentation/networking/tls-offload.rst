@@ -104,6 +104,29 @@ at the end of kernel structures (see :c:member:`driver_state` members
 in ``include/net/tls.h``) to avoid additional allocations and pointer
 dereferences.
 
+When the offloaded connection is destroyed the core calls
+the :c:member:`tls_dev_del` callback so the driver can release per-direction
+state:
+
+.. code-block:: c
+
+	void (*tls_dev_del)(struct net_device *netdev,
+			    struct tls_context *ctx,
+			    enum tls_offload_ctx_dir direction);
+
+``tls_dev_del`` is mandatory whenever ``tls_dev_add`` is provided.
+
+The third TLS device callback is :c:member:`tls_dev_resync`, called by the core
+to synchronize the TCP stream with the record boundaries:
+
+.. code-block:: c
+
+	int (*tls_dev_resync)(struct net_device *netdev,
+			      struct sock *sk, u32 seq, u8 *rcd_sn,
+			      enum tls_offload_ctx_dir direction);
+
+See the `Resync handling`_ section for details.
+
 TX
 --
 
@@ -380,6 +403,12 @@ records continue to be received fully encrypted stack retries the
 synchronization with an exponential back off (first after 2 encrypted
 records, then after 4 records, after 8, after 16... up until every
 128 records).
+
+Rekey
+=====
+
+Offload does not currently support TLS 1.3, therefore key rotation
+is not a concern for offloaded connections at this point.
 
 Error handling
 ==============
