@@ -3591,15 +3591,18 @@ int drbd_nl_get_connections_dumpit(struct sk_buff *skb, struct netlink_callback 
 				err = drbd_nl_put_dump_connections_result(
 					skb, cb, resource, NULL,
 					ERR_RES_NOT_KNOWN);
-				goto out;
+				rcu_read_unlock();
+				goto ret;
 			}
 			cb->args[0] = (long)resource;
 			cb->args[1] = SINGLE_RESOURCE;
 		}
 	}
 	if (!resource) {
-		if (list_empty(&drbd_resources))
-			goto out;
+		if (list_empty(&drbd_resources)) {
+			rcu_read_unlock();
+			goto ret;
+		}
 		resource = list_first_entry(&drbd_resources, struct drbd_resource, resources);
 		kref_get(&resource->kref);
 		cb->args[0] = (long)resource;
@@ -3653,8 +3656,9 @@ found_resource:
 
 out:
 	rcu_read_unlock();
-	if (resource)
-		mutex_unlock(&resource->conf_update);
+	mutex_unlock(&resource->conf_update);
+
+ret:
 	if (err)
 		return err;
 	return skb->len;
