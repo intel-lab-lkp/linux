@@ -4103,7 +4103,7 @@ fail:
 	if (nr_shmem_dropped)
 		shmem_uncharge(mapping->host, nr_shmem_dropped);
 
-	if (!ret && is_anon && !folio_is_device_private(folio))
+	if (!ret && is_anon && !folio_is_device_private(folio) && split_underused_thp)
 		ttu_flags = TTU_USE_SHARED_ZEROPAGE;
 
 	remap_page(folio, 1 << old_order, ttu_flags);
