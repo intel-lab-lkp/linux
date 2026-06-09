@@ -775,6 +775,13 @@ static int normal_end_io(struct dm_target *ti, struct bio *bio,
 		unsigned long flags;
 
 		spin_lock_irqsave(&lc->blocks_lock, flags);
+		if (*error) {
+			if (block->flags & LOG_FLUSH_FLAG)
+				list_splice_init(&block->list, &lc->unflushed_blocks);
+			spin_unlock_irqrestore(&lc->blocks_lock, flags);
+			free_pending_block(lc, block);
+			return DM_ENDIO_DONE;
+		}
 		if (block->flags & LOG_FLUSH_FLAG) {
 			list_splice_tail_init(&block->list, &lc->logging_blocks);
 			list_add_tail(&block->list, &lc->logging_blocks);
