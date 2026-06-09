@@ -23,6 +23,7 @@
    usage
    reclaim
    lru_sort
+   stat
 
 
 
