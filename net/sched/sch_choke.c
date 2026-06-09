@@ -371,7 +371,7 @@ static int choke_change(struct Qdisc *sch, struct nlattr *opt,
 		return -EINVAL;
 
 	mask = roundup_pow_of_two(ctl->limit + 1) - 1;
-	if (mask != q->tab_mask) {
+	if (mask != q->tab_mask || sch->q.qlen > ctl->limit) {
 		struct sk_buff **ntab;
 
 		ntab = kvzalloc_objs(struct sk_buff *, mask + 1);
@@ -390,7 +390,7 @@ static int choke_change(struct Qdisc *sch, struct nlattr *opt,
 				q->head = (q->head + 1) & q->tab_mask;
 				if (!skb)
 					continue;
-				if (tail < mask) {
+				if (tail < ctl->limit) {
 					ntab[tail++] = skb;
 					continue;
 				}
