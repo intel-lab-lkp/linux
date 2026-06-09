@@ -326,10 +326,16 @@ int dvb_usb_adapter_frontend_init(struct dvb_usb_adapter *adap)
 
 	ret = dvb_create_media_graph(&adap->dvb_adap, true);
 	if (ret)
-		return ret;
+		goto err_fe_cleanup;
 
 	ret = dvb_usb_media_device_register(adap);
+	if (ret)
+		goto err_fe_cleanup;
 
+	return ret;
+
+err_fe_cleanup:
+	dvb_usb_adapter_frontend_exit(adap);
 	return ret;
 }
 
