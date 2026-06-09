@@ -1729,10 +1729,10 @@ drm_gem_lru_scan(struct drm_device *dev,
 
 		dma_resv_unlock(obj->resv);
 
+tail:
 		if (ticket)
 			ww_acquire_fini(ticket);
 
-tail:
 		drm_gem_object_put(obj);
 		mutex_lock(&dev->gem_lru_mutex);
 	}
