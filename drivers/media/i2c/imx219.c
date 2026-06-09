@@ -420,7 +420,33 @@ static void imx219_get_binning(struct v4l2_subdev_state *state, u8 *bin_h,
 
 }
 
-static inline u32 imx219_get_rate_factor(struct v4l2_subdev_state *state)
+/*
+ * When doing the special binning the sensor does the averaging in the analogue
+ * domain (before ADC) for both H/V dimensions and reads out only a quarter of
+ * the pixels. The sensor programming model convolutes this by never changing
+ * the line length values and expecting frame length to be in units of 2xLines.
+ *
+ * FLL = (output height + vblank) / 2
+ *
+ * If we go ahead with it and set `vblank = FLL - height` it would make the
+ * control value negative.
+ *
+ * So we instead keep the userspace sane by adjusting the blanking controls to
+ * match the sensor read-out instead of the broken register model.
+ *
+ * Thus compensate LLP in the other direction,
+ *
+ * LLP = (output width + hblank) * 2
+ *
+ * So the blanking values are:
+ *
+ * vblank = FLL * 2 - height
+ * hblank = LLP / 2 - width
+ *
+ * where FLL and LLP are the values in the registers using the sensor
+ * programming model.
+ */
+static inline u32 imx219_get_fll_factor(struct v4l2_subdev_state *state)
 {
 	u8 bin_h, bin_v;
 
@@ -440,12 +466,12 @@ static int imx219_set_ctrl(struct v4l2_ctrl *ctrl)
 	struct i2c_client *client = v4l2_get_subdevdata(&imx219->sd);
 	const struct v4l2_mbus_framefmt *format;
 	struct v4l2_subdev_state *state;
-	u32 rate_factor;
+	u32 fll_factor;
 	int ret = 0;
 
 	state = v4l2_subdev_get_locked_active_state(&imx219->sd);
 	format = v4l2_subdev_state_get_format(state, 0);
-	rate_factor = imx219_get_rate_factor(state);
+	fll_factor = imx219_get_fll_factor(state);
 
 	if (ctrl->id == V4L2_CID_VBLANK) {
 		int exposure_max, exposure_def;
@@ -478,7 +504,7 @@ static int imx219_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_EXPOSURE:
 		cci_write(imx219->regmap, IMX219_REG_EXPOSURE,
-			  ctrl->val / rate_factor, &ret);
+			  ctrl->val / fll_factor, &ret);
 		break;
 	case V4L2_CID_DIGITAL_GAIN:
 		cci_write(imx219->regmap, IMX219_REG_DIGITAL_GAIN,
@@ -495,11 +521,11 @@ static int imx219_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_VBLANK:
 		cci_write(imx219->regmap, IMX219_REG_FRM_LENGTH_A,
-			  (format->height + ctrl->val) / rate_factor, &ret);
+			  (format->height + ctrl->val) / fll_factor, &ret);
 		break;
 	case V4L2_CID_HBLANK:
 		cci_write(imx219->regmap, IMX219_REG_LINE_LENGTH_A,
-			  format->width + ctrl->val, &ret);
+			  (format->width + ctrl->val) * fll_factor, &ret);
 		break;
 	case V4L2_CID_TEST_PATTERN_RED:
 		cci_write(imx219->regmap, IMX219_REG_TESTP_RED,
@@ -884,6 +910,7 @@ static int imx219_set_pad_format(struct v4l2_subdev *sd,
 		int exposure_def;
 		int hblank, llp_min;
 		int pixel_rate;
+		int fll_factor;
 
 		/* Update limits and set FPS to default */
 		ret = __v4l2_ctrl_modify_range(imx219->vblank, IMX219_VBLANK_MIN,
@@ -910,20 +937,28 @@ static int imx219_set_pad_format(struct v4l2_subdev *sd,
 			return ret;
 
 		/*
-		 * With analog binning the default minimum line length of 3448
-		 * can cause artefacts with RAW10 formats, because the ADC
-		 * operates on two lines together. So we switch to a higher
-		 * minimum of 3560.
+		 * With special analog binning the default minimum line length
+		 * of 3448 can cause artefacts with RAW10 formats because the
+		 * sensor is averaging 4 pixels in analogue domain as opposed
+		 * to just 2, increasing the minimum time to read it out.
+		 *
+		 * So we switch to a higher minimum of 3560.
 		 */
 		imx219_get_binning(state, &bin_h, &bin_v);
 		llp_min = (bin_h & bin_v) == IMX219_BINNING_X2_ANALOG ?
 				  IMX219_BINNED_LLP_MIN : IMX219_LLP_MIN;
+
+		fll_factor = imx219_get_fll_factor(state);
 		ret = __v4l2_ctrl_modify_range(imx219->hblank,
-					       llp_min - mode->width,
-					       IMX219_LLP_MAX - mode->width, 1,
-					       llp_min - mode->width);
+					       (llp_min / fll_factor) -
+					       mode->width,
+					       (IMX219_LLP_MAX / fll_factor) -
+					       mode->width, 1,
+					       (llp_min / fll_factor) -
+					       mode->width);
 		if (ret)
 			return ret;
+
 		/*
 		 * Retain PPL setting from previous mode so that the
 		 * line time does not change on a mode change.
@@ -936,9 +971,7 @@ static int imx219_set_pad_format(struct v4l2_subdev *sd,
 		if (ret)
 			return ret;
 
-		/* Scale the pixel rate based on the mode specific factor */
-		pixel_rate = imx219_get_pixel_rate(imx219) *
-			     imx219_get_rate_factor(state);
+		pixel_rate = imx219_get_pixel_rate(imx219);
 		ret = __v4l2_ctrl_modify_range(imx219->pixel_rate, pixel_rate,
 					       pixel_rate, 1, pixel_rate);
 		if (ret)
