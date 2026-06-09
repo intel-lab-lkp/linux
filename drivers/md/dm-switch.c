@@ -358,17 +358,23 @@ static const unsigned char hex_table[256] = {
 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
 };
 
-static __always_inline unsigned long parse_hex(const char **string)
+static __always_inline bool parse_hex(const char **string, unsigned long *out)
 {
 	unsigned char d;
 	unsigned long r = 0;
 
 	while ((d = hex_table[(unsigned char)**string]) < 16) {
-		r = (r << 4) | d;
+		if (r > (ULONG_MAX >> 4))
+			return false;
+		r <<= 4;
+		if (r > ULONG_MAX - d)
+			return false;
+		r |= d;
 		(*string)++;
 	}
 
-	return r;
+	*out = r;
+	return true;
 }
 
 static int process_set_region_mappings(struct switch_ctx *sctx,
@@ -389,7 +395,8 @@ static int process_set_region_mappings(struct switch_ctx *sctx,
 				DMWARN("invalid set_region_mappings argument: '%s'", argv[i]);
 				return -EINVAL;
 			}
-			cycle_length = parse_hex(&string);
+			if (!parse_hex(&string, &cycle_length))
+				return -EINVAL;
 			if (unlikely(*string != ',')) {
 				DMWARN("invalid set_region_mappings argument: '%s'", argv[i]);
 				return -EINVAL;
@@ -399,7 +406,8 @@ static int process_set_region_mappings(struct switch_ctx *sctx,
 				DMWARN("invalid set_region_mappings argument: '%s'", argv[i]);
 				return -EINVAL;
 			}
-			num_write = parse_hex(&string);
+			if (!parse_hex(&string, &num_write))
+				return -EINVAL;
 			if (unlikely(*string)) {
 				DMWARN("invalid set_region_mappings argument: '%s'", argv[i]);
 				return -EINVAL;
@@ -429,7 +437,8 @@ static int process_set_region_mappings(struct switch_ctx *sctx,
 		if (*string == ':')
 			region_index++;
 		else {
-			region_index = parse_hex(&string);
+			if (!parse_hex(&string, &region_index))
+				return -EINVAL;
 			if (unlikely(*string != ':')) {
 				DMWARN("invalid set_region_mappings argument: '%s'", argv[i]);
 				return -EINVAL;
@@ -442,7 +451,8 @@ static int process_set_region_mappings(struct switch_ctx *sctx,
 			return -EINVAL;
 		}
 
-		path_nr = parse_hex(&string);
+		if (!parse_hex(&string, &path_nr))
+			return -EINVAL;
 		if (unlikely(*string)) {
 			DMWARN("invalid set_region_mappings argument: '%s'", argv[i]);
 			return -EINVAL;
