@@ -401,9 +401,18 @@ static int cache_setup_properties(unsigned int cpu)
 	else if (!acpi_disabled)
 		ret = cache_setup_acpi(cpu);
 
-	// Assume there is no cache information available in DT/ACPI from now.
-	if (ret && use_arch_cache_info())
+	/*
+	 * If DT/ACPI lacks cache nodes but the arch can derive the topology
+	 * from CPU registers (e.g. arm64 reading CLIDR_EL1), fall back to
+	 * that path instead of propagating the error.  Otherwise the very
+	 * first CPU processed trips a misleading "Unable to detect cache
+	 * hierarchy" warning, because use_arch_info is only set after the
+	 * first failure.
+	 */
+	if (ret && use_arch_cache_info()) {
 		use_arch_info = true;
+		ret = 0;
+	}
 
 	return ret;
 }
