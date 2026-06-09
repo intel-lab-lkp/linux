@@ -1774,6 +1774,8 @@ static int htb_change_class(struct Qdisc *sch, u32 classid,
 	struct tc_htb_opt *hopt;
 	u64 rate64, ceil64;
 	int warn = 0;
+	bool reactivate;
+	u32 new_prio;
 
 	/* extract all subattrs from opt attr */
 	if (!opt)
@@ -2023,6 +2025,7 @@ static int htb_change_class(struct Qdisc *sch, u32 classid,
 
 	psched_ratecfg_precompute(&cl->rate, &hopt->rate, rate64);
 	psched_ratecfg_precompute(&cl->ceil, &hopt->ceil, ceil64);
+	new_prio = min_t(u32, hopt->prio, TC_HTB_NUMPRIO - 1);
 
 	/* it used to be a nasty bug here, we have to check that node
 	 * is really leaf before changing cl->leaf !
@@ -2043,8 +2046,15 @@ static int htb_change_class(struct Qdisc *sch, u32 classid,
 		}
 		if (hopt->quantum)
 			cl->quantum = hopt->quantum;
-		if ((cl->prio = hopt->prio) >= TC_HTB_NUMPRIO)
-			cl->prio = TC_HTB_NUMPRIO - 1;
+
+		reactivate = cl->prio_activity && cl->prio != new_prio;
+		if (reactivate)
+			htb_deactivate(q, cl);
+
+		cl->prio = new_prio;
+
+		if (reactivate)
+			htb_activate(q, cl);
 	}
 
 	cl->buffer = PSCHED_TICKS2NS(hopt->buffer);
