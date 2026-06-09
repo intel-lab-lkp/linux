@@ -569,8 +569,8 @@ mtype_gc(struct work_struct *work)
 	set = gc->set;
 	h = set->data;
 
-	spin_lock_bh(&set->lock);
-	t = ipset_dereference_set(h->table, set);
+	rcu_read_lock_bh();
+	t = rcu_dereference_bh(h->table);
 	atomic_inc(&t->uref);
 	numof_locks = ahash_numof_locks(t->htable_bits);
 	r = gc->region++;
@@ -580,7 +580,6 @@ mtype_gc(struct work_struct *work)
 	next_run = (IPSET_GC_PERIOD(set->timeout) * HZ) / numof_locks;
 	if (next_run < HZ/10)
 		next_run = HZ/10;
-	spin_unlock_bh(&set->lock);
 
 	mtype_gc_do(set, h, t, r);
 
@@ -588,6 +587,7 @@ mtype_gc(struct work_struct *work)
 		pr_debug("Table destroy after resize by expire: %p\n", t);
 		mtype_ahash_destroy(set, t, false);
 	}
+	rcu_read_unlock_bh();
 
 	queue_delayed_work(system_power_efficient_wq, &gc->dwork, next_run);
 
@@ -865,9 +865,7 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	if (elements >= maxelem) {
 		u32 e;
 		if (SET_WITH_TIMEOUT(set)) {
-			rcu_read_unlock_bh();
 			mtype_gc_do(set, h, t, r);
-			rcu_read_lock_bh();
 		}
 		maxelem = h->maxelem;
 		elements = 0;
@@ -876,7 +874,6 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 		if (elements >= maxelem && SET_WITH_FORCEADD(set))
 			forceadd = true;
 	}
-	rcu_read_unlock_bh();
 
 	spin_lock_bh(&t->hregion[r].lock);
 	n = rcu_dereference_bh(hbucket(t, key));
@@ -1034,6 +1031,7 @@ out:
 		pr_debug("Table destroy after resize by add: %p\n", t);
 		mtype_ahash_destroy(set, t, false);
 	}
+	rcu_read_unlock_bh();
 	return ret;
 }
 
@@ -1062,7 +1060,6 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	key = HKEY(value, h->initval, t->htable_bits);
 	r = ahash_region(key);
 	atomic_inc(&t->uref);
-	rcu_read_unlock_bh();
 
 	spin_lock_bh(&t->hregion[r].lock);
 	n = rcu_dereference_bh(hbucket(t, key));
@@ -1148,6 +1145,7 @@ out:
 		pr_debug("Table destroy after resize by del: %p\n", t);
 		mtype_ahash_destroy(set, t, false);
 	}
+	rcu_read_unlock_bh();
 	return ret;
 }
 
