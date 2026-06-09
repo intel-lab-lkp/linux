@@ -228,7 +228,7 @@ static inline int arch_within_stack_frames(const void * const stack,
 static inline void arch_setup_new_exec(void) { }
 #endif
 
-void arch_task_cache_init(void); /* for CONFIG_SH */
+void arch_task_cache_init(void);
 void arch_release_task_struct(struct task_struct *tsk);
 int arch_dup_task_struct(struct task_struct *dst,
 				struct task_struct *src);
