@@ -549,7 +549,7 @@ static void free_context_table(struct intel_iommu *iommu)
 	iommu->root_entry = NULL;
 }
 
-#ifdef CONFIG_DMAR_DEBUG
+#ifdef CONFIG_DMAR_FAULT_DEBUG
 static void pgtable_walk(struct intel_iommu *iommu, unsigned long pfn,
 			 u8 bus, u8 devfn, struct dma_pte *parent, int level)
 {

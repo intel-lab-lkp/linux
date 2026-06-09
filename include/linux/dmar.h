@@ -126,7 +126,7 @@ static inline int dmar_res_noop(struct acpi_dmar_header *hdr, void *arg)
 	return 0;
 }
 
-#ifdef CONFIG_DMAR_DEBUG
+#ifdef CONFIG_DMAR_FAULT_DEBUG
 void dmar_fault_dump_ptes(struct intel_iommu *iommu, u16 source_id,
 			  unsigned long long addr, u32 pasid);
 #else
