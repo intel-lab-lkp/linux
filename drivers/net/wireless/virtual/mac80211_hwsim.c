@@ -15,6 +15,7 @@
  */
 
 #include <linux/list.h>
+#include <linux/completion.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <net/dst.h>
@@ -31,6 +32,7 @@
 #include <net/genetlink.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
+#include <linux/refcount.h>
 #include <linux/rhashtable.h>
 #include <linux/nospec.h>
 #include <linux/virtio.h>
@@ -688,6 +690,8 @@ struct mac80211_hwsim_data {
 	int channels, idx;
 	bool use_chanctx;
 	bool destroy_on_close;
+	refcount_t ref;
+	struct completion ref_done;
 	u32 portid;
 	char alpha2[2];
 	const struct ieee80211_regdomain *regd;
@@ -795,7 +799,22 @@ struct hwsim_radiotap_ack_hdr {
 
 static struct mac80211_hwsim_data *get_hwsim_data_ref_from_addr(const u8 *addr)
 {
-	return rhashtable_lookup_fast(&hwsim_radios_rht, addr, hwsim_rht_params);
+	struct mac80211_hwsim_data *data;
+
+	spin_lock_bh(&hwsim_radio_lock);
+	data = rhashtable_lookup_fast(&hwsim_radios_rht, addr,
+				      hwsim_rht_params);
+	if (data && !refcount_inc_not_zero(&data->ref))
+		data = NULL;
+	spin_unlock_bh(&hwsim_radio_lock);
+
+	return data;
+}
+
+static void hwsim_data_put(struct mac80211_hwsim_data *data)
+{
+	if (refcount_dec_and_test(&data->ref))
+		complete(&data->ref_done);
 }
 
 /* MAC80211_HWSIM netlink family */
@@ -4124,6 +4143,7 @@ out:
 	data->pmsr_request_wdev = NULL;
 
 	mutex_unlock(&data->mutex);
+	hwsim_data_put(data);
 	return err;
 }
 
@@ -5620,6 +5640,8 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 
 	data = hw->priv;
 	data->hw = hw;
+	refcount_set(&data->ref, 1);
+	init_completion(&data->ref_done);
 
 	data->dev = device_create(&hwsim_class, NULL, 0, hw, "hwsim%d", idx);
 	if (IS_ERR(data->dev)) {
@@ -6127,6 +6149,9 @@ static void mac80211_hwsim_del_radio(struct mac80211_hwsim_data *data,
 				     const char *hwname,
 				     struct genl_info *info)
 {
+	hwsim_data_put(data);
+	wait_for_completion(&data->ref_done);
+
 	hwsim_mcast_del_radio(data->idx, hwname, info);
 	debugfs_remove_recursive(data->debugfs);
 	ieee80211_unregister_hw(data->hw);
@@ -6239,7 +6264,7 @@ static int hwsim_tx_info_frame_received_nl(struct sk_buff *skb_2,
 {
 
 	struct ieee80211_hdr *hdr;
-	struct mac80211_hwsim_data *data2;
+	struct mac80211_hwsim_data *data2 = NULL;
 	struct ieee80211_tx_info *txi;
 	struct hwsim_tx_rate *tx_attempts;
 	u64 ret_skb_cookie;
@@ -6326,8 +6351,11 @@ static int hwsim_tx_info_frame_received_nl(struct sk_buff *skb_2,
 		txi->flags |= IEEE80211_TX_STAT_NOACK_TRANSMITTED;
 
 	ieee80211_tx_status_irqsafe(data2->hw, skb);
+	hwsim_data_put(data2);
 	return 0;
 out:
+	if (data2)
+		hwsim_data_put(data2);
 	return -EINVAL;
 
 }
@@ -6335,7 +6363,7 @@ out:
 static int hwsim_cloned_frame_received_nl(struct sk_buff *skb_2,
 					  struct genl_info *info)
 {
-	struct mac80211_hwsim_data *data2;
+	struct mac80211_hwsim_data *data2 = NULL;
 	struct ieee80211_rx_status rx_status;
 	struct ieee80211_hdr *hdr;
 	const u8 *dst;
@@ -6439,10 +6467,13 @@ static int hwsim_cloned_frame_received_nl(struct sk_buff *skb_2,
 
 	mac80211_hwsim_rx(data2, &rx_status, skb);
 
+	hwsim_data_put(data2);
 	return 0;
 err:
 	pr_debug("mac80211_hwsim: error occurred in %s\n", __func__);
 out:
+	if (data2)
+		hwsim_data_put(data2);
 	dev_kfree_skb(skb);
 	return -EINVAL;
 }
