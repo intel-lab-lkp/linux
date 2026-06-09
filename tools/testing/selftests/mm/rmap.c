@@ -430,4 +430,90 @@ TEST_F(migrate, ksm)
 	propagate_children(_metadata, data);
 }
 
+static void prepare_pages(struct global_data *data, int nr_pages)
+{
+	/* Allocate exactly pages for the test */
+	data->mapsize = nr_pages * getpagesize();
+	data->region = mmap(NULL, data->mapsize, PROT_READ | PROT_WRITE,
+			    MAP_PRIVATE | MAP_ANON, -1, 0);
+	if (data->region == MAP_FAILED)
+		ksft_exit_fail_perror("mmap failed");
+
+	/* Fill all pages with identical content to encourage KSM merging */
+	memset(data->region, 0x77, data->mapsize);
+}
+
+static int mremap_merge_and_migrate(struct global_data *data)
+{
+	int ret;
+	void *old_region;
+	void *new_region;
+	int nr_pages = 32;
+	long merging_pages;
+
+	prepare_pages(data, nr_pages);
+
+	if (ksm_start() < 0)
+		return FAIL_ON_CHECK;
+
+	old_region = data->region;
+	/*
+	 * Mremap the second half region to the first half location (FIXED).
+	 */
+	new_region = mremap(old_region + data->mapsize / 2, data->mapsize / 2,
+			    data->mapsize / 2, MREMAP_MAYMOVE | MREMAP_FIXED,
+			    old_region);
+	if (new_region == MAP_FAILED) {
+		ksft_print_msg("mremap failed: %s\n", strerror(errno));
+		return FAIL_ON_CHECK;
+	}
+	data->region = new_region;
+	data->mapsize /= 2;	/* mapping is now half of original */
+
+	if (ksm_start() < 0)
+		return FAIL_ON_CHECK;
+
+	/* Attempt to migrate the merged KSM page */
+	ret = try_to_move_page(data->region);
+	if (ret != 0) {
+		ksft_print_msg("migration of KSM page after mremap failed\n");
+		return FAIL_ON_CHECK;
+	}
+
+	/* Ensure ksmd scan two turns at least to update ksm counters */
+	if (ksm_start() < 0)
+		return FAIL_ON_CHECK;
+
+	merging_pages = ksm_get_self_merging_pages();
+	printf("merging_pages:%ld\n", merging_pages);
+	if (merging_pages != nr_pages / 2) {
+		ksft_print_msg("Unexpected KSM counters: ksm_merging_pages=%ld,expected=%d\n",
+			       merging_pages, nr_pages / 2);
+		return FAIL_ON_CHECK;
+	}
+
+	return 0;
+}
+
+
+TEST_F(migrate, ksm_and_mremap)
+{
+	struct global_data *data = &self->data;
+	int ret;
+
+	/* Skip if KSM is not available */
+	if (ksm_stop() < 0)
+		SKIP(return, "accessing \"/sys/kernel/mm/ksm/run\" failed");
+	if (ksm_get_full_scans() < 0)
+		SKIP(return, "accessing \"/sys/kernel/mm/ksm/full_scan\" failed");
+
+	ret = prctl(PR_SET_MEMORY_MERGE, 1, 0, 0, 0);
+	if (ret < 0 && errno == EINVAL)
+		SKIP(return, "PR_SET_MEMORY_MERGE not supported");
+	else if (ret)
+		ksft_exit_fail_perror("PR_SET_MEMORY_MERGE=1 failed");
+
+	ASSERT_EQ(mremap_merge_and_migrate(data), 0);
+}
+
 TEST_HARNESS_MAIN
