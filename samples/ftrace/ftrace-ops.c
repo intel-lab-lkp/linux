@@ -190,6 +190,11 @@ static int __init ftrace_ops_sample_init(void)
 		tracer_irrelevant = ops_func_count;
 	}
 
+	if (!nr_function_calls) {
+		pr_err("nr_function_calls must be non-zero\n");
+		return -EINVAL;
+	}
+
 	pr_info("registering:\n"
 		"  relevant ops: %u\n"
 		"    tracee: %ps\n"
