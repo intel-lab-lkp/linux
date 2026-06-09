@@ -2066,6 +2066,7 @@ static int fuse_notify_prune(struct fuse_conn *fc, unsigned int size,
 			     struct fuse_copy_state *cs)
 {
 	struct fuse_notify_prune_out outarg;
+	unsigned int payload;
 	const unsigned int batch = 512;
 	u64 *nodeids __free(kfree) = kmalloc(sizeof(u64) * batch, GFP_KERNEL);
 	unsigned int num, i;
@@ -2081,7 +2082,8 @@ static int fuse_notify_prune(struct fuse_conn *fc, unsigned int size,
 	if (err)
 		return err;
 
-	if (size - sizeof(outarg) != outarg.count * sizeof(u64))
+	payload = size - sizeof(outarg);
+	if (payload % sizeof(u64) || payload / sizeof(u64) != outarg.count)
 		return -EINVAL;
 
 	for (; outarg.count; outarg.count -= num) {
