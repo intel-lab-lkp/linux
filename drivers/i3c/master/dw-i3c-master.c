@@ -751,11 +751,14 @@ static int dw_i3c_ccc_set(struct dw_i3c_master *master,
 static int dw_i3c_ccc_get(struct dw_i3c_master *master, struct i3c_ccc_cmd *ccc)
 {
 	struct dw_i3c_cmd *cmd;
+	u16 req_len;
 	int ret, pos;
 
 	pos = dw_i3c_master_get_addr_pos(master, ccc->dests[0].addr);
 	if (pos < 0)
 		return pos;
+
+	req_len = ccc->dests[0].payload.len;
 
 	struct dw_i3c_xfer *xfer __free(kfree) = dw_i3c_master_alloc_xfer(master, 1);
 	if (!xfer)
@@ -763,9 +766,9 @@ static int dw_i3c_ccc_get(struct dw_i3c_master *master, struct i3c_ccc_cmd *ccc)
 
 	cmd = xfer->cmds;
 	cmd->rx_buf = ccc->dests[0].payload.data;
-	cmd->rx_len = ccc->dests[0].payload.len;
+	cmd->rx_len = req_len;
 
-	cmd->cmd_hi = COMMAND_PORT_ARG_DATA_LEN(ccc->dests[0].payload.len) |
+	cmd->cmd_hi = COMMAND_PORT_ARG_DATA_LEN(req_len) |
 		      COMMAND_PORT_TRANSFER_ARG;
 
 	cmd->cmd_lo = COMMAND_PORT_READ_TRANSFER |
@@ -780,7 +783,10 @@ static int dw_i3c_ccc_get(struct dw_i3c_master *master, struct i3c_ccc_cmd *ccc)
 		dw_i3c_master_dequeue_xfer(master, xfer);
 
 	ret = xfer->ret;
-	if (xfer->cmds[0].error == RESPONSE_ERROR_IBA_NACK)
+	cmd = &xfer->cmds[0];
+	if (!ret)
+		ccc->dests[0].payload.len = cmd->rx_len;
+	if (cmd->error == RESPONSE_ERROR_IBA_NACK)
 		ccc->err = I3C_ERROR_M2;
 
 	return ret;
