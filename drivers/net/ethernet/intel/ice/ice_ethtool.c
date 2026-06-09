@@ -1065,11 +1065,11 @@ static int ice_lbtest_prepare_rings(struct ice_vsi *vsi)
 
 	status = ice_vsi_setup_rx_rings(vsi);
 	if (status)
-		goto err_setup_rx_ring;
+		goto err_start_rx_ring;
 
 	status = ice_vsi_cfg_lan(vsi);
 	if (status)
-		goto err_setup_rx_ring;
+		goto err_start_rx_ring;
 
 	status = ice_vsi_start_all_rx_rings(vsi);
 	if (status)
@@ -1079,7 +1079,6 @@ static int ice_lbtest_prepare_rings(struct ice_vsi *vsi)
 
 err_start_rx_ring:
 	ice_vsi_free_rx_rings(vsi);
-err_setup_rx_ring:
 	ice_vsi_stop_lan_tx_rings(vsi, ICE_NO_RESET, 0);
 err_setup_tx_ring:
 	ice_vsi_free_tx_rings(vsi);
