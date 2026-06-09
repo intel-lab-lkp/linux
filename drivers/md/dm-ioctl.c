@@ -227,10 +227,8 @@ static struct hash_cell *alloc_cell(const char *name, const char *uuid,
 		return NULL;
 
 	hc->name = kstrdup(name, GFP_KERNEL);
-	if (!hc->name) {
-		kfree(hc);
-		return NULL;
-	}
+	if (!hc->name)
+		goto free_hc;
 
 	if (!uuid)
 		hc->uuid = NULL;
@@ -239,6 +237,7 @@ static struct hash_cell *alloc_cell(const char *name, const char *uuid,
 		hc->uuid = kstrdup(uuid, GFP_KERNEL);
 		if (!hc->uuid) {
 			kfree(hc->name);
+free_hc:
 			kfree(hc);
 			return NULL;
 		}

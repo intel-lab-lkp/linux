@@ -915,8 +915,7 @@ static struct mirror_set *alloc_context(unsigned int nr_mirrors,
 	ms->io_client = dm_io_client_create();
 	if (IS_ERR(ms->io_client)) {
 		ti->error = "Error creating dm_io client";
-		kfree(ms);
-		return NULL;
+		goto free_ms;
 	}
 
 	ms->rh = dm_region_hash_create(ms, dispatch_bios, wakeup_mirrord,
@@ -926,6 +925,7 @@ static struct mirror_set *alloc_context(unsigned int nr_mirrors,
 	if (IS_ERR(ms->rh)) {
 		ti->error = "Error creating dirty region hash";
 		dm_io_client_destroy(ms->io_client);
+free_ms:
 		kfree(ms);
 		return NULL;
 	}

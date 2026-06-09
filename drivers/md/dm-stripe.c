@@ -148,10 +148,8 @@ static int stripe_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		sc->stripes_shift = __ffs(stripes);
 
 	r = dm_set_target_max_io_len(ti, chunk_size);
-	if (r) {
-		kfree(sc);
-		return r;
-	}
+	if (r)
+		goto free_sc;
 
 	ti->num_flush_bios = stripes;
 	ti->num_discard_bios = stripes;
@@ -176,6 +174,7 @@ static int stripe_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 			ti->error = "Couldn't parse stripe destination";
 			while (i--)
 				dm_put_device(ti, sc->stripe[i].dev);
+free_sc:
 			kfree(sc);
 			return r;
 		}
