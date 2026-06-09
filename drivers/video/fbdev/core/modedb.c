@@ -627,7 +627,7 @@ int fb_find_mode(struct fb_var_screeninfo *var,
 		 unsigned int default_bpp)
 {
 	char *mode_option_buf = NULL;
-	int i;
+	int i, ret;
 
 	/* Set up defaults */
 	if (!db) {
@@ -724,10 +724,9 @@ int fb_find_mode(struct fb_var_screeninfo *var,
 			res_specified = 1;
 		}
 done:
-		kfree(mode_option_buf);
 		if (cvt) {
 			struct fb_videomode cvt_mode;
-			int ret;
+			int cvt_ret;
 
 			DPRINTK("CVT mode %dx%d@%dHz%s%s%s\n", xres, yres,
 				(refresh) ? refresh : 60,
@@ -745,11 +744,12 @@ done:
 			else
 				cvt_mode.vmode &= ~FB_VMODE_INTERLACED;
 
-			ret = fb_find_mode_cvt(&cvt_mode, margins, rb);
+			cvt_ret = fb_find_mode_cvt(&cvt_mode, margins, rb);
 
-			if (!ret && !fb_try_mode(var, info, &cvt_mode, bpp)) {
+			if (!cvt_ret && !fb_try_mode(var, info, &cvt_mode, bpp)) {
 				DPRINTK("modedb CVT: CVT mode ok\n");
-				return 1;
+				ret = 1;
+				goto out;
 			}
 
 			DPRINTK("CVT mode invalid, getting mode from database\n");
@@ -793,8 +793,10 @@ done:
 				if (!interlace_specified ||
 				    db_interlace == interlace)
 					if (refresh_specified &&
-					    db[i].refresh == refresh)
-						return 1;
+					    db[i].refresh == refresh) {
+						ret = 1;
+						goto out;
+					}
 
 				if (score < diff) {
 					diff = score;
@@ -804,7 +806,8 @@ done:
 		}
 		if (best != -1) {
 			fb_try_mode(var, info, &db[best], bpp);
-			return (refresh_specified) ? 2 : 1;
+			ret = (refresh_specified) ? 2 : 1;
+			goto out;
 		}
 
 		diff = 2 * (xres + yres);
@@ -831,21 +834,29 @@ done:
 		}
 		if (best != -1) {
 			fb_try_mode(var, info, &db[best], bpp);
-			return 5;
+			ret = 5;
+			goto out;
 		}
 	}
 
 	DPRINTK("Trying default video mode\n");
-	if (!fb_try_mode(var, info, default_mode, default_bpp))
-		return 3;
+	if (!fb_try_mode(var, info, default_mode, default_bpp)) {
+		ret = 3;
+		goto out;
+	}
 
 	DPRINTK("Trying all modes\n");
 	for (i = 0; i < dbsize; i++)
-		if (!fb_try_mode(var, info, &db[i], default_bpp))
-			return 4;
+		if (!fb_try_mode(var, info, &db[i], default_bpp)) {
+			ret = 4;
+			goto out;
+		}
 
 	DPRINTK("No valid mode found\n");
-	return 0;
+	ret = 0;
+out:
+	kfree(mode_option_buf);
+	return ret;
 }
 
 /**
