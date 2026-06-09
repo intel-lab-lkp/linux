@@ -3529,15 +3529,56 @@ int drbd_adm_dump_connections_done(struct netlink_callback *cb)
 
 enum { SINGLE_RESOURCE, ITERATE_RESOURCES };
 
+static int drbd_nl_put_dump_connections_result(
+	struct sk_buff *skb, struct netlink_callback *cb,
+	struct drbd_resource *resource, struct drbd_connection *connection,
+	enum drbd_ret_code retcode)
+{
+	struct drbd_genlmsghdr *dh;
+
+	dh = genlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
+			 &drbd_nl_family, NLM_F_MULTI,
+			 DRBD_ADM_GET_CONNECTIONS);
+	if (!dh)
+		return -ENOMEM;
+	dh->ret_code = retcode;
+	dh->minor = -1U;
+	if (retcode == NO_ERROR) {
+		struct connection_statistics connection_statistics;
+		struct connection_info connection_info;
+		struct net_conf *net_conf;
+		int err;
+
+		err = nla_put_drbd_cfg_context(skb, resource, connection, NULL);
+		if (err)
+			return err;
+		net_conf = rcu_dereference(connection->net_conf);
+		if (net_conf) {
+			err = net_conf_to_skb(skb, net_conf);
+			if (err)
+				return err;
+		}
+		connection_to_info(&connection_info, connection);
+		err = connection_info_to_skb(skb, &connection_info);
+		if (err)
+			return err;
+		connection_statistics.conn_congested =
+			test_bit(NET_CONGESTED, &connection->flags);
+		err = connection_statistics_to_skb(skb, &connection_statistics);
+		if (err)
+			return err;
+		cb->args[2] = (long)connection;
+	}
+	genlmsg_end(skb, dh);
+	return 0;
+}
+
 int drbd_nl_get_connections_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	struct nlattr *resource_filter;
 	struct drbd_resource *resource = NULL, *next_resource;
 	struct drbd_connection *connection;
-	int err = 0, retcode;
-	struct drbd_genlmsghdr *dh;
-	struct connection_info connection_info;
-	struct connection_statistics connection_statistics;
+	int err = 0;
 
 	rcu_read_lock();
 	resource = (struct drbd_resource *)cb->args[0];
@@ -3545,10 +3586,13 @@ int drbd_nl_get_connections_dumpit(struct sk_buff *skb, struct netlink_callback 
 		resource_filter = find_cfg_context_attr(cb->nlh,
 				DRBD_A_DRBD_CFG_CONTEXT_CTX_RESOURCE_NAME);
 		if (resource_filter) {
-			retcode = ERR_RES_NOT_KNOWN;
 			resource = drbd_find_resource(nla_data(resource_filter));
-			if (!resource)
-				goto put_result;
+			if (!resource) {
+				err = drbd_nl_put_dump_connections_result(
+					skb, cb, resource, NULL,
+					ERR_RES_NOT_KNOWN);
+				goto out;
+			}
 			cb->args[0] = (long)resource;
 			cb->args[1] = SINGLE_RESOURCE;
 		}
@@ -3579,8 +3623,9 @@ found_connection:
 	list_for_each_entry_continue_rcu(connection, &resource->connections, connections) {
 		if (!has_net_conf(connection))
 			continue;
-		retcode = NO_ERROR;
-		goto put_result;  /* only one iteration */
+		err = drbd_nl_put_dump_connections_result(skb, cb, resource,
+							  connection, NO_ERROR);
+		goto out; /* only one iteration */
 	}
 
 no_more_connections:
@@ -3603,41 +3648,8 @@ found_resource:
 		cb->args[2] = 0;
 		goto next_resource;
 	}
-	goto out;  /* no more resources */
 
-put_result:
-	dh = genlmsg_put(skb, NETLINK_CB(cb->skb).portid,
-			cb->nlh->nlmsg_seq, &drbd_nl_family,
-			NLM_F_MULTI, DRBD_ADM_GET_CONNECTIONS);
-	err = -ENOMEM;
-	if (!dh)
-		goto out;
-	dh->ret_code = retcode;
-	dh->minor = -1U;
-	if (retcode == NO_ERROR) {
-		struct net_conf *net_conf;
-
-		err = nla_put_drbd_cfg_context(skb, resource, connection, NULL);
-		if (err)
-			goto out;
-		net_conf = rcu_dereference(connection->net_conf);
-		if (net_conf) {
-			err = net_conf_to_skb(skb, net_conf);
-			if (err)
-				goto out;
-		}
-		connection_to_info(&connection_info, connection);
-		err = connection_info_to_skb(skb, &connection_info);
-		if (err)
-			goto out;
-		connection_statistics.conn_congested = test_bit(NET_CONGESTED, &connection->flags);
-		err = connection_statistics_to_skb(skb, &connection_statistics);
-		if (err)
-			goto out;
-		cb->args[2] = (long)connection;
-	}
-	genlmsg_end(skb, dh);
-	err = 0;
+	/* no more resources */
 
 out:
 	rcu_read_unlock();
