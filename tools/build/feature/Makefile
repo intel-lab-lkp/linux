@@ -147,6 +147,9 @@ $(OUTPUT)test-libcap.bin:
 $(OUTPUT)test-libelf.bin:
 	$(BUILD) -lelf
 
+$(OUTPUT)test-libnvme.bin:
+	$(BUILD) -lnvme
+
 $(OUTPUT)test-eventfd.bin:
 	$(BUILD)
 
