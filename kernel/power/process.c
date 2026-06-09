@@ -108,7 +108,7 @@ static int try_to_freeze_tasks(bool user_only)
 			what, elapsed_msecs / 1000, elapsed_msecs % 1000);
 	}
 
-	return todo ? -EBUSY : 0;
+	return wakeup ? -ECANCELED : todo ? -EBUSY : 0;
 }
 
 /**

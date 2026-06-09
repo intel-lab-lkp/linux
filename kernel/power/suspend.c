@@ -469,7 +469,7 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 			trace_suspend_resume(TPS("machine_suspend"),
 				state, false);
 		} else if (*wakeup) {
-			error = -EBUSY;
+			error = -ECANCELED;
 		}
 		syscore_resume();
 	}
