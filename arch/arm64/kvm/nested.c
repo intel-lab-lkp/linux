@@ -1393,8 +1393,16 @@ static int kvm_translate_vncr(struct kvm_vcpu *vcpu, bool *is_gmem)
 
 	*is_gmem = kvm_slot_has_gmem(memslot);
 	if (!*is_gmem) {
-		pfn = __kvm_faultin_pfn(memslot, gfn, write_fault ? FOLL_WRITE : 0,
-					&writable, &page);
+		unsigned int flags = FOLL_INTERRUPTIBLE;
+
+		if (write_fault)
+			flags |= FOLL_WRITE;
+
+		pfn = __kvm_faultin_pfn(memslot, gfn, flags, &writable, &page);
+		if (is_sigpending_pfn(pfn)) {
+			kvm_handle_signal_exit(vcpu);
+			return -EINTR;
+		}
 		if (is_error_noslot_pfn(pfn) || (write_fault && !writable))
 			return -EFAULT;
 	} else {
@@ -1519,6 +1527,13 @@ int kvm_handle_vncr_abort(struct kvm_vcpu *vcpu)
 			/* Hack to deal with POE until we get kernel support */
 			inject_vncr_perm(vcpu);
 			break;
+		case -EINTR:
+			/*
+			 * The fault-in was interrupted by a pending signal;
+			 * kvm_translate_vncr() has already set up the signal
+			 * exit. Return to userspace and retry on re-entry.
+			 */
+			return -EINTR;
 		case 0:
 			break;
 		}
