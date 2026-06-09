@@ -195,7 +195,7 @@ struct drbd_device_work {
 
 #include "drbd_interval.h"
 
-int drbd_wait_misc(struct drbd_device *, struct drbd_interval *);
+extern struct mutex resources_mutex;
 
 void lock_all_resources(void);
 void unlock_all_resources(void);
@@ -1094,6 +1094,7 @@ int drbd_bmio_set_n_write(struct drbd_device *device,
 			  struct drbd_peer_device *peer_device);
 int drbd_bmio_clear_n_write(struct drbd_device *device,
 			    struct drbd_peer_device *peer_device);
+int drbd_wait_misc(struct drbd_device *device, struct drbd_interval *i);
 
 /* Meta data layout
  *
@@ -1362,8 +1363,6 @@ extern struct bio_set drbd_md_io_bio_set;
 
 /* And a bio_set for cloning */
 extern struct bio_set drbd_io_bio_set;
-
-extern struct mutex resources_mutex;
 
 enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx,
 				      unsigned int minor);
