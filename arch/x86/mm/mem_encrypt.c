@@ -53,14 +53,13 @@ static void print_mem_encrypt_feature_info(void)
 	case CC_VENDOR_AMD:
 		pr_cont("AMD");
 
-		/* Secure Memory Encryption */
-		if (cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT)) {
 		/*
-		 * SME is mutually exclusive with any of the SEV
-		 * features below.
-		*/
+		 * Secure Memory Encryption is mutually exclusive with
+		 * any of the SEV features below.
+		 */
+		if (cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT)) {
 			pr_cont(" SME\n");
-			return;
+			break;
 		}
 
 		/* Secure Encrypted Virtualization */
