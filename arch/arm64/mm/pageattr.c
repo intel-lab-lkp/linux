@@ -3,6 +3,7 @@
  * Copyright (c) 2014, The Linux Foundation. All rights reserved.
  */
 #include <linux/kernel.h>
+#include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/mem_encrypt.h>
@@ -145,6 +146,18 @@ static int __change_memory_common(unsigned long start, unsigned long size,
 	    pgprot_val(clear_mask) != PTE_PRESENT_INVALID)
 		flush_tlb_kernel_range(start, start + size);
 	return ret;
+}
+
+bool arch_make_pages_readonly(struct page *page, int nr_pages)
+{
+	unsigned long addr = (unsigned long)page_address(page);
+
+	if (!can_set_direct_map())
+		return false;
+
+	return !__change_memory_common(addr, PAGE_SIZE * nr_pages,
+				       __pgprot(PTE_RDONLY),
+				       __pgprot(PTE_WRITE));
 }
 
 static int change_memory_common(unsigned long addr, int numpages,
