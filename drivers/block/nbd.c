@@ -1469,6 +1469,7 @@ static void nbd_config_put(struct nbd_device *nbd)
 }
 
 static int nbd_start_device(struct nbd_device *nbd)
+	__must_hold(&nbd->config_lock)
 {
 	struct nbd_config *config = nbd->config;
 	int num_connections = config->num_connections;
@@ -1541,6 +1542,7 @@ retry:
 }
 
 static int nbd_start_device_ioctl(struct nbd_device *nbd)
+	__must_hold(nbd->config_lock)
 {
 	struct nbd_config *config = nbd->config;
 	int ret;
@@ -1592,6 +1594,7 @@ static void nbd_set_cmd_timeout(struct nbd_device *nbd, u64 timeout)
 /* Must be called with config_lock held */
 static int __nbd_ioctl(struct block_device *bdev, struct nbd_device *nbd,
 		       unsigned int cmd, unsigned long arg)
+	__must_hold(nbd->config_lock)
 {
 	struct nbd_config *config = nbd->config;
 	loff_t bytesize;
