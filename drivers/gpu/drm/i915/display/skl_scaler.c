@@ -389,7 +389,7 @@ static int intel_atomic_setup_scaler(struct intel_crtc_state *crtc_state,
 				     int num_scalers_need, struct intel_crtc *crtc,
 				     const char *name, int idx,
 				     struct intel_plane_state *plane_state,
-				     int *scaler_id, bool casf_scaler)
+				     int *scaler_id)
 {
 	struct intel_display *display = to_intel_display(crtc);
 	struct intel_crtc_scaler_state *scaler_state = &crtc_state->scaler_state;
@@ -397,17 +397,8 @@ static int intel_atomic_setup_scaler(struct intel_crtc_state *crtc_state,
 	int hscale = 0;
 	int vscale = 0;
 
-	if (*scaler_id < 0) {
-		if (casf_scaler) {
-			if (HAS_CASF(display) && crtc->num_scalers >= 2 &&
-			    !scaler_state->scalers[1].in_use) {
-				scaler_state->scalers[1].in_use = true;
-				*scaler_id = 1;
-			}
-		} else {
-			*scaler_id = intel_allocate_scaler(scaler_state, crtc);
-		}
-	}
+	if (*scaler_id < 0)
+		*scaler_id = intel_allocate_scaler(scaler_state, crtc);
 
 	if (drm_WARN(display->drm, *scaler_id < 0,
 		     "Cannot find scaler for %s:%d\n", name, idx))
@@ -534,16 +525,26 @@ static int intel_atomic_setup_scaler(struct intel_crtc_state *crtc_state,
 static int setup_crtc_scaler(struct intel_atomic_state *state,
 			     struct intel_crtc *crtc)
 {
+	struct intel_display *display = to_intel_display(state);
 	struct intel_crtc_state *crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 	struct intel_crtc_scaler_state *scaler_state =
 		&crtc_state->scaler_state;
 
+	if (scaler_state->scaler_id < 0) {
+		if (crtc_state->pch_pfit.casf.enable) {
+			if (HAS_CASF(display) && crtc->num_scalers >= 2 &&
+			    !scaler_state->scalers[1].in_use) {
+				scaler_state->scalers[1].in_use = true;
+				scaler_state->scaler_id = 1;
+			}
+		}
+	}
+
 	return intel_atomic_setup_scaler(crtc_state,
 					 hweight32(scaler_state->scaler_users),
 					 crtc, "CRTC", crtc->base.base.id,
-					 NULL, &scaler_state->scaler_id,
-					 crtc_state->pch_pfit.casf.enable);
+					 NULL, &scaler_state->scaler_id);
 }
 
 static int setup_plane_scaler(struct intel_atomic_state *state,
@@ -578,8 +579,7 @@ static int setup_plane_scaler(struct intel_atomic_state *state,
 	return intel_atomic_setup_scaler(crtc_state,
 					 hweight32(scaler_state->scaler_users),
 					 crtc, "PLANE", plane->base.base.id,
-					 plane_state, &plane_state->scaler_id,
-					 false);
+					 plane_state, &plane_state->scaler_id);
 }
 
 /**
