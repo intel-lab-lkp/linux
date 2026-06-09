@@ -84,6 +84,7 @@ struct htable {
 	atomic_t uref;		/* References for dumping and gc */
 	u8 htable_bits;		/* size of hash table == 2^htable_bits */
 	u32 maxelem;		/* Maxelem per region */
+	spinlock_t gc_lock;	/* Lock to exclude gc and resize */
 	struct ip_set_region *hregion;	/* Region locks and ext sizes */
 	struct hbucket __rcu *bucket[]; /* hashtable buckets */
 };
@@ -581,7 +582,9 @@ mtype_gc(struct work_struct *work)
 	if (next_run < HZ/10)
 		next_run = HZ/10;
 
+	spin_lock_bh(&t->gc_lock);
 	mtype_gc_do(set, h, t, r);
+	spin_unlock_bh(&t->gc_lock);
 
 	if (atomic_dec_and_test(&t->uref) && atomic_read(&t->ref)) {
 		pr_debug("Table destroy after resize by expire: %p\n", t);
@@ -646,6 +649,7 @@ mtype_resize(struct ip_set *set, bool retried)
 #endif
 	orig = ipset_dereference_bh_nfnl(h->table);
 	htable_bits = orig->htable_bits;
+	spin_lock_bh(&orig->gc_lock);
 
 retry:
 	ret = 0;
@@ -759,6 +763,8 @@ retry:
 	/* There can't be any other writer. */
 	rcu_assign_pointer(h->table, t);
 
+	spin_unlock_bh(&orig->gc_lock);
+
 	/* Give time to other readers of the set */
 	synchronize_rcu();
 
@@ -797,6 +803,7 @@ cleanup:
 	mtype_ahash_destroy(set, t, false);
 	if (ret == -EAGAIN)
 		goto retry;
+	spin_unlock_bh(&orig->gc_lock);
 	goto out;
 
 hbwarn:
@@ -1617,6 +1624,7 @@ IPSET_TOKEN(HTYPE, _create)(struct net *net, struct ip_set *set,
 	}
 	t->htable_bits = hbits;
 	t->maxelem = h->maxelem / ahash_numof_locks(hbits);
+	spin_lock_init(&t->gc_lock);
 	RCU_INIT_POINTER(h->table, t);
 
 	INIT_LIST_HEAD(&h->ad);
