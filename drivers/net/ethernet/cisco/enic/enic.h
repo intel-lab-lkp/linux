@@ -315,6 +315,7 @@ struct enic {
 	 */
 	struct completion mbox_comp;
 	u8 mbox_expected_reply;
+	bool mbox_initialized;
 
 	/* PF: per-VF MBOX state, allocated when SRIOV V2 is enabled */
 	struct enic_vf_state {
