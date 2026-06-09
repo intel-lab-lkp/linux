@@ -3330,6 +3330,9 @@ static int parse_cblock_range(struct cache *cache, const char *str,
 	r = sscanf(str, "%llu-%llu%c", &b, &e, &dummy);
 
 	if (r == 2) {
+		if (b > U32_MAX || e > U32_MAX)
+			return -EINVAL;
+
 		result->begin = to_cblock(b);
 		result->end = to_cblock(e);
 		return 0;
@@ -3341,8 +3344,11 @@ static int parse_cblock_range(struct cache *cache, const char *str,
 	r = sscanf(str, "%llu%c", &b, &dummy);
 
 	if (r == 1) {
+		if (b > U32_MAX || b == U32_MAX)
+			return -EINVAL;
+
 		result->begin = to_cblock(b);
-		result->end = to_cblock(from_cblock(result->begin) + 1u);
+		result->end = to_cblock(b + 1);
 		return 0;
 	}
 
