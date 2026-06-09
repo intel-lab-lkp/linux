@@ -709,6 +709,8 @@ static int log_writes_map(struct dm_target *ti, struct bio *bio)
 		WARN_ON(flush_bio || fua_bio);
 		if (lc->device_supports_discard)
 			goto map_bio;
+		free_pending_block(lc, block);
+		pb->block = NULL;
 		bio_endio(bio);
 		return DM_MAPIO_SUBMITTED;
 	}
