@@ -1454,6 +1454,9 @@ int ext4_read_inline_dir(struct file *file,
 			/* for other entry, the real offset in
 			 * the buf has to be tuned accordingly.
 			 */
+			if (i - extra_offset + ext4_dir_rec_len(1, NULL) >
+			    inline_size)
+				break;
 			de = (struct ext4_dir_entry_2 *)
 				(dir_buf + i - extra_offset);
 			/* It's too expensive to do a full
@@ -1488,10 +1491,20 @@ int ext4_read_inline_dir(struct file *file,
 			continue;
 		}
 
+		/*
+		 * de lives at dir_buf + ctx->pos - extra_offset, so the dirent
+		 * header must fit within inline_size.  ctx->pos is a signed,
+		 * lseek()-controlled loff_t: check the lower bound first, or
+		 * ctx->pos < extra_offset underflows and points de before dir_buf.
+		 */
+		if (ctx->pos < extra_offset ||
+		    ctx->pos - extra_offset + ext4_dir_rec_len(1, NULL) >
+		    inline_size)
+			goto out;
 		de = (struct ext4_dir_entry_2 *)
 			(dir_buf + ctx->pos - extra_offset);
 		if (ext4_check_dir_entry(inode, file, de, iloc.bh, dir_buf,
-					 extra_size, ctx->pos))
+					 inline_size, ctx->pos))
 			goto out;
 		if (le32_to_cpu(de->inode)) {
 			if (!dir_emit(ctx, de->name, de->name_len,
