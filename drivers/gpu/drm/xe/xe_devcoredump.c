@@ -335,7 +335,8 @@ static void devcoredump_snapshot(struct xe_devcoredump *coredump,
 	ss->boot_time = ktime_get_boottime();
 
 	if (q->vm && q->vm->xef) {
-		process_name = q->vm->xef->process_name;
+		if (q->vm->xef->process_name)
+			process_name = q->vm->xef->process_name;
 		ss->pid = q->vm->xef->pid;
 	}
 

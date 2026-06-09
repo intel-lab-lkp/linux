@@ -1590,7 +1590,8 @@ trigger_reset:
 	}
 
 	if (q->vm && q->vm->xef) {
-		process_name = q->vm->xef->process_name;
+		if (q->vm->xef->process_name)
+			process_name = q->vm->xef->process_name;
 		pid = q->vm->xef->pid;
 	}
 
