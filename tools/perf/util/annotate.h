@@ -38,6 +38,7 @@ enum perf_disassembler {
 	PERF_DISASM_UNKNOWN = 0,
 	PERF_DISASM_LLVM,
 	PERF_DISASM_CAPSTONE,
+	PERF_DISASM_LIBASM,
 	PERF_DISASM_OBJDUMP,
 };
 #define MAX_DISASSEMBLERS (PERF_DISASM_OBJDUMP + 1)
@@ -484,6 +485,8 @@ int hist_entry__tty_annotate2(struct hist_entry *he, struct evsel *evsel);
 
 void annotation_options__init(void);
 void annotation_options__exit(void);
+int annotation_options__add_disassemblers_str(struct annotation_options *options,
+					      const char *str);
 
 void annotation_config__init(void);
 

@@ -2233,6 +2233,7 @@ const char * const perf_disassembler__strs[] = {
 	[PERF_DISASM_UNKNOWN]  = "unknown",
 	[PERF_DISASM_LLVM]     = "llvm",
 	[PERF_DISASM_CAPSTONE] = "capstone",
+	[PERF_DISASM_LIBASM]   = "libasm",
 	[PERF_DISASM_OBJDUMP]  = "objdump",
 };
 
@@ -2254,8 +2255,8 @@ static void annotation_options__add_disassembler(struct annotation_options *opti
 	pr_err("Failed to add disassembler %d\n", dis);
 }
 
-static int annotation_options__add_disassemblers_str(struct annotation_options *options,
-						const char *str)
+int annotation_options__add_disassemblers_str(struct annotation_options *options,
+					     const char *str)
 {
 	while (str && *str != '\0') {
 		const char *comma = strchr(str, ',');
@@ -2372,6 +2373,9 @@ static void annotation_options__default_init_disassemblers(struct annotation_opt
 		/* Already initialized. */
 		return;
 	}
+#ifdef HAVE_LIBASM_SUPPORT
+	annotation_options__add_disassembler(options, PERF_DISASM_LIBASM);
+#endif
 #ifdef HAVE_LIBLLVM_SUPPORT
 	annotation_options__add_disassembler(options, PERF_DISASM_LLVM);
 #endif
