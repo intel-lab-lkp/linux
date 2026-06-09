@@ -40,6 +40,28 @@ const struct file_operations vxfs_dir_operations = {
 	.setlease =		generic_setlease,
 };
 
+static bool vxfs_dirent_valid(struct vxfs_sb_info *sbi,
+			      struct vxfs_direct *de, loff_t pos,
+			      loff_t limit, unsigned long bsize)
+{
+	unsigned int block_off = pos & (bsize - 1);
+	unsigned int reclen = fs16_to_cpu(sbi, de->d_reclen);
+	unsigned int namelen = fs16_to_cpu(sbi, de->d_namelen);
+
+	if (reclen < VXFS_NAMEMIN)
+		return false;
+	if (reclen & (VXFS_DIRPAD - 1))
+		return false;
+	if (reclen > bsize - block_off)
+		return false;
+	if (reclen > limit - pos)
+		return false;
+	if (namelen > reclen - VXFS_NAMEMIN)
+		return false;
+
+	return true;
+}
+
 
 /**
  * vxfs_find_entry - find a mathing directory entry for a dentry
@@ -96,6 +118,10 @@ vxfs_find_entry(struct inode *ip, struct dentry *dp, struct page **ppp)
 				break;
 			}
 
+			if (!vxfs_dirent_valid(sbi, de, pos, limit, bsize)) {
+				vxfs_put_page(pp);
+				return NULL;
+			}
 			pg_ofs += fs16_to_cpu(sbi, de->d_reclen);
 			pos += fs16_to_cpu(sbi, de->d_reclen);
 			if (!de->d_ino)
@@ -246,6 +272,10 @@ vxfs_readdir(struct file *fp, struct dir_context *ctx)
 				break;
 			}
 
+			if (!vxfs_dirent_valid(sbi, de, pos, limit, bsize)) {
+				vxfs_put_page(pp);
+				return -EIO;
+			}
 			pg_ofs += fs16_to_cpu(sbi, de->d_reclen);
 			pos += fs16_to_cpu(sbi, de->d_reclen);
 			if (!de->d_ino)
