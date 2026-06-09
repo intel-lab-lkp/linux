@@ -1571,6 +1571,7 @@ core_scsi3_decode_spec_i_port(
 				continue;
 			dest_rtpi = tmp_lun->lun_tpg->tpg_rtpi;
 
+			kfree(iport_ptr);
 			iport_ptr = NULL;
 			tid_found = target_parse_pr_out_transport_id(tmp_tpg,
 					ptr, &tid_len, &iport_ptr, i_str);
@@ -1808,9 +1809,11 @@ core_scsi3_decode_spec_i_port(
 		core_scsi3_tpg_undepend_item(dest_tpg);
 	}
 
+	kfree(iport_ptr);
 	return 0;
 out_unmap:
 	transport_kunmap_data_sg(cmd);
+	kfree(iport_ptr);
 out:
 	/*
 	 * For the failure case, release everything from tid_dest_list
@@ -3532,10 +3535,12 @@ after_iport_check:
 	core_scsi3_update_and_write_aptpl(cmd->se_dev, aptpl);
 
 	core_scsi3_put_pr_reg(dest_pr_reg);
+	kfree(iport_ptr);
 	return 0;
 out:
 	if (buf)
 		transport_kunmap_data_sg(cmd);
+	kfree(iport_ptr);
 	if (dest_se_deve)
 		core_scsi3_lunacl_undepend_item(dest_se_deve);
 	if (dest_node_acl)

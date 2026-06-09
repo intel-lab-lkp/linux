@@ -19,6 +19,7 @@
 #include <linux/hex.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/slab.h>
 #include <linux/ctype.h>
 #include <linux/spinlock.h>
 #include <linux/export.h>
@@ -367,6 +368,21 @@ static bool iscsi_parse_pr_out_transport_id(
 			*p = tolower(*p);
 			p++;
 		}
+		/*
+		 * The loop above advanced p past the ISID; *port_nexus_ptr still
+		 * holds the ISID start.  Replace the borrowed buffer alias with an
+		 * owned heap copy so callers can safely use the ISID past the
+		 * buffer lifetime (e.g. after transport_kunmap_data_sg() in
+		 * register_and_move).  kzalloc() zero-fills to PR_REG_ISID_LEN
+		 * bytes so the 8-byte get_unaligned_be64() read in
+		 * __core_scsi3_do_alloc_registration() stays in-bounds even for
+		 * an ISID shorter than 8 characters.
+		 */
+		p = *port_nexus_ptr;
+		*port_nexus_ptr = kzalloc(PR_REG_ISID_LEN, GFP_KERNEL);
+		if (!*port_nexus_ptr)
+			return false;
+		strscpy_pad(*port_nexus_ptr, p, PR_REG_ISID_LEN);
 	} else
 		*port_nexus_ptr = NULL;
 
