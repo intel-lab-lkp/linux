@@ -100,8 +100,11 @@ static int allocate_gic_irq(struct irq_domain *domain, unsigned virq,
 	fwspec.param[2] = IRQ_TYPE_LEVEL_HIGH;
 
 	err = irq_domain_alloc_irqs_parent(domain, virq, 1, &fwspec);
-	if (err)
+	if (err) {
+		raw_spin_lock(&cb->lock);
 		cb->irq_map[i] = IRQ_FREE;
+		raw_spin_lock(&cb->lock);
+	}
 	else
 		cb->write(i, hwirq);
 
