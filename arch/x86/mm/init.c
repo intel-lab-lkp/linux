@@ -3,6 +3,7 @@
 #include <linux/ioport.h>
 #include <linux/swap.h>
 #include <linux/memblock.h>
+#include <linux/mm.h>
 #include <linux/swapfile.h>
 #include <linux/swapops.h>
 #include <linux/kmemleak.h>
@@ -37,6 +38,14 @@
 #include <trace/events/tlb.h>
 
 #include "mm_internal.h"
+
+bool arch_make_pages_readonly(struct page *page, int nr_pages)
+{
+	if (PageHighMem(page))
+		return false;
+
+	return !set_memory_ro((unsigned long)page_address(page), nr_pages);
+}
 
 /*
  * Tables translating between page_cache_type_t and pte encoding.
