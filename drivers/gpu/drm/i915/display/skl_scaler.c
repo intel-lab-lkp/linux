@@ -333,21 +333,9 @@ static bool scaler_has_casf(struct intel_display *display, int scaler_id)
 }
 
 static int intel_allocate_scaler(struct intel_crtc_scaler_state *scaler_state,
-				 struct intel_crtc *crtc,
-				 bool casf_scaler)
+				 struct intel_crtc *crtc)
 {
-	struct intel_display *display = to_intel_display(crtc);
 	int scaler_id;
-
-	if (casf_scaler) {
-		if (HAS_CASF(display) && crtc->num_scalers >= 2 &&
-		    !scaler_state->scalers[1].in_use) {
-			scaler_state->scalers[1].in_use = true;
-			return 1;
-		}
-
-		return -1;
-	}
 
 	for (scaler_id = 0; scaler_id < crtc->num_scalers; scaler_id++) {
 		if (!scaler_state->scalers[scaler_id].in_use) {
@@ -409,8 +397,17 @@ static int intel_atomic_setup_scaler(struct intel_crtc_state *crtc_state,
 	int hscale = 0;
 	int vscale = 0;
 
-	if (*scaler_id < 0)
-		*scaler_id = intel_allocate_scaler(scaler_state, crtc, casf_scaler);
+	if (*scaler_id < 0) {
+		if (casf_scaler) {
+			if (HAS_CASF(display) && crtc->num_scalers >= 2 &&
+			    !scaler_state->scalers[1].in_use) {
+				scaler_state->scalers[1].in_use = true;
+				*scaler_id = 1;
+			}
+		} else {
+			*scaler_id = intel_allocate_scaler(scaler_state, crtc);
+		}
+	}
 
 	if (drm_WARN(display->drm, *scaler_id < 0,
 		     "Cannot find scaler for %s:%d\n", name, idx))
