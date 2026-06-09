@@ -163,6 +163,11 @@ static int parse_cache_opts(struct dm_pcache *pcache, struct dm_arg_set *as,
 	if (ret)
 		return -EINVAL;
 
+	if (argc & 1) {
+		*error = "Invalid number of cache option arguments";
+		return -EINVAL;
+	}
+
 	while (argc) {
 		arg = dm_shift_arg(as);
 		argc--;
