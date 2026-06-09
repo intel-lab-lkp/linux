@@ -4488,7 +4488,12 @@ static inline void netdev_tracker_free(struct net_device *dev,
 				       netdevice_tracker *tracker)
 {
 #ifdef CONFIG_NET_DEV_REFCNT_TRACKER
-	ref_tracker_free(&dev->refcnt_tracker, tracker);
+	if (!tracker) {
+		ref_tracker_free(&dev->refcnt_tracker, NULL);
+	} else if (!IS_ERR(*tracker)) {
+		ref_tracker_free(&dev->refcnt_tracker, tracker);
+		*tracker = ERR_PTR(-EEXIST);
+	}
 #endif
 }
 
