@@ -2308,12 +2308,18 @@ static void cake_reset(struct Qdisc *sch)
 		cake_clear_tin(sch, c);
 }
 
+static const struct netlink_range_validation_signed cake_overhead_range = {
+	.min = -64,
+	.max = 256,
+};
+
 static const struct nla_policy cake_policy[TCA_CAKE_MAX + 1] = {
 	[TCA_CAKE_BASE_RATE64]   = { .type = NLA_U64 },
 	[TCA_CAKE_DIFFSERV_MODE] = { .type = NLA_U32 },
 	[TCA_CAKE_ATM]		 = { .type = NLA_U32 },
 	[TCA_CAKE_FLOW_MODE]     = { .type = NLA_U32 },
-	[TCA_CAKE_OVERHEAD]      = { .type = NLA_S32 },
+	[TCA_CAKE_OVERHEAD]      =
+		NLA_POLICY_FULL_RANGE_SIGNED(NLA_S32, &cake_overhead_range),
 	[TCA_CAKE_RTT]		 = { .type = NLA_U32 },
 	[TCA_CAKE_TARGET]	 = { .type = NLA_U32 },
 	[TCA_CAKE_AUTORATE]      = { .type = NLA_U32 },
