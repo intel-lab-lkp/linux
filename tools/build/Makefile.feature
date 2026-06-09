@@ -118,6 +118,7 @@ FEATURE_TESTS_EXTRA :=                  \
          hello                          \
          babeltrace2-ctf-writer         \
          libcapstone                    \
+         libasm                         \
          libcheck                       \
          libbfd-liberty                 \
          libbfd-liberty-z               \
@@ -150,6 +151,7 @@ FEATURE_DISPLAY ?=              \
          numa_num_possible_cpus \
          libpython              \
          libcapstone            \
+         libasm                 \
          llvm-perf              \
          zlib                   \
          lzma                   \
