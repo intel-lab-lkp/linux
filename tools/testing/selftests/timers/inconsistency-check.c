@@ -28,13 +28,13 @@
 #include <sys/timex.h>
 #include <string.h>
 #include <signal.h>
-#include <include/vdso/time64.h>
 #include "kselftest.h"
 
 /* CLOCK_HWSPECIFIC == CLOCK_SGI_CYCLE (Deprecated) */
 #define CLOCK_HWSPECIFIC		10
 
 #define CALLS_PER_LOOP 64
+#define NSEC_PER_SEC 1000000000ULL
 
 char *clockstring(int clockid)
 {

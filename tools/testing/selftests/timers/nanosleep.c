@@ -27,10 +27,9 @@
 #include <sys/timex.h>
 #include <string.h>
 #include <signal.h>
-#include <include/vdso/time64.h>
 #include "kselftest.h"
 
-/* CLOCK_HWSPECIFIC == CLOCK_SGI_CYCLE (Deprecated) */
+#define NSEC_PER_SEC 1000000000ULL
 #define CLOCK_HWSPECIFIC		10
 
 #define UNSUPPORTED 0xf00f
