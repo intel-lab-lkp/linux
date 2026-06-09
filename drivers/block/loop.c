@@ -98,25 +98,22 @@ static DEFINE_MUTEX(loop_validate_mutex);
  * loop_global_lock_killable() - take locks for safe loop_validate_file() test
  *
  * @lo: struct loop_device
- * @global: true if @lo is about to bind another "struct loop_device", false otherwise
  *
  * Returns 0 on success, -EINTR otherwise.
  *
- * Since loop_validate_file() traverses on other "struct loop_device" if
- * is_loop_device() is true, we need a global lock for serializing concurrent
+ * Since loop_validate_file() traverses on other "struct loop_device", we need a
+ * global lock for serializing concurrent
  * loop_configure()/loop_change_fd()/__loop_clr_fd() calls.
  */
-static int loop_global_lock_killable(struct loop_device *lo, bool global)
+static int loop_global_lock_killable(struct loop_device *lo)
 {
 	int err;
 
-	if (global) {
-		err = mutex_lock_killable(&loop_validate_mutex);
-		if (err)
-			return err;
-	}
+	err = mutex_lock_killable(&loop_validate_mutex);
+	if (err)
+		return err;
 	err = mutex_lock_killable(&lo->lo_mutex);
-	if (err && global)
+	if (err)
 		mutex_unlock(&loop_validate_mutex);
 	return err;
 }
@@ -125,13 +122,11 @@ static int loop_global_lock_killable(struct loop_device *lo, bool global)
  * loop_global_unlock() - release locks taken by loop_global_lock_killable()
  *
  * @lo: struct loop_device
- * @global: true if @lo was about to bind another "struct loop_device", false otherwise
  */
-static void loop_global_unlock(struct loop_device *lo, bool global)
+static void loop_global_unlock(struct loop_device *lo)
 {
 	mutex_unlock(&lo->lo_mutex);
-	if (global)
-		mutex_unlock(&loop_validate_mutex);
+	mutex_unlock(&loop_validate_mutex);
 }
 
 static int max_part;
@@ -596,11 +591,19 @@ static int loop_change_fd(struct loop_device *lo, struct block_device *bdev,
 	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 1);
 
 	is_loop = is_loop_device(file);
-	error = loop_global_lock_killable(lo, is_loop);
-	if (error)
-		goto out_putf;
-	error = __loop_change_fd(lo, bdev, file, &old_file, &partscan);
-	loop_global_unlock(lo, is_loop);
+	if (is_loop) {
+		error = loop_global_lock_killable(lo);
+		if (error)
+			goto out_putf;
+		error = __loop_change_fd(lo, bdev, file, &old_file, &partscan);
+		loop_global_unlock(lo);
+	} else {
+		error = mutex_lock_killable(&lo->lo_mutex);
+		if (error)
+			goto out_putf;
+		error = __loop_change_fd(lo, bdev, file, &old_file, &partscan);
+		mutex_unlock(&lo->lo_mutex);
+	}
 	if (error)
 		goto out_putf;
 
@@ -1095,11 +1098,21 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 			goto out_putf;
 	}
 
-	error = loop_global_lock_killable(lo, is_loop);
-	if (error)
-		goto out_bdev;
-	error = __loop_configure(lo, mode, bdev, config, file, &partscan);
-	loop_global_unlock(lo, is_loop);
+	if (is_loop) {
+		error = loop_global_lock_killable(lo);
+		if (error)
+			goto out_bdev;
+		error = __loop_configure(lo, mode, bdev, config, file,
+					 &partscan);
+		loop_global_unlock(lo);
+	} else {
+		error = mutex_lock_killable(&lo->lo_mutex);
+		if (error)
+			goto out_bdev;
+		error = __loop_configure(lo, mode, bdev, config, file,
+					 &partscan);
+		mutex_unlock(&lo->lo_mutex);
+	}
 	if (error)
 		goto out_bdev;
 	if (partscan)
@@ -1210,11 +1223,11 @@ static int loop_clr_fd(struct loop_device *lo)
 	 * which loop_configure()/loop_change_fd() found via fget() was this
 	 * loop device.
 	 */
-	err = loop_global_lock_killable(lo, true);
+	err = loop_global_lock_killable(lo);
 	if (err)
 		return err;
 	if (lo->lo_state != Lo_bound) {
-		loop_global_unlock(lo, true);
+		loop_global_unlock(lo);
 		return -ENXIO;
 	}
 	/*
@@ -1226,7 +1239,7 @@ static int loop_clr_fd(struct loop_device *lo)
 	lo->lo_flags |= LO_FLAGS_AUTOCLEAR;
 	if (disk_openers(lo->lo_disk) == 1)
 		WRITE_ONCE(lo->lo_state, Lo_rundown);
-	loop_global_unlock(lo, true);
+	loop_global_unlock(lo);
 
 	return 0;
 }
