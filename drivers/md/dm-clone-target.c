@@ -1316,10 +1316,10 @@ static int clone_map(struct dm_target *ti, struct bio *bio)
 	struct clone *clone = ti->private;
 	unsigned long region_nr;
 
-	atomic_inc(&clone->ios_in_flight);
-
 	if (unlikely(get_clone_mode(clone) == CM_FAIL))
 		return DM_MAPIO_KILL;
+
+	atomic_inc(&clone->ios_in_flight);
 
 	/*
 	 * REQ_PREFLUSH bios carry no data:
