@@ -271,12 +271,24 @@ struct drm_colorop {
 	enum drm_colorop_type type;
 
 	/**
-	 * @next:
+	 * @pipeline_head:
 	 *
 	 * Read-only
-	 * Pointer to next drm_colorop in pipeline
+	 * List head for the pipeline. Only valid if this drm_colorop object is the
+	 * head of a pipeline. Will be an empty list for all other drm_colorop objects.
+	 * Invariant once the pipeline has been constructed. So does not need locking.
 	 */
-	struct drm_colorop *next;
+	struct list_head pipeline_head;
+
+	/**
+	 * @pipeline_list:
+	 *
+	 * Read-only
+	 * List entry within the @pipeline_head list of the pipeline that this colorop
+	 * is part of. Invariant once the pipeline has been constructed. So does not
+	 * need locking.
+	 */
+	struct list_head pipeline_list;
 
 	/**
 	 * @type_property:

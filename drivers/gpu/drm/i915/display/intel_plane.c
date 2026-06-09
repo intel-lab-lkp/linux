@@ -413,21 +413,23 @@ intel_plane_color_copy_uapi_to_hw_state(struct intel_atomic_state *state,
 					const struct intel_plane_state *from_plane_state,
 					struct intel_crtc *crtc)
 {
-	struct drm_colorop *iter_colorop, *colorop;
+	struct drm_colorop *iter_colorop, *colorop, *pipeline;
 	struct drm_colorop_state *new_colorop_state;
 	struct intel_colorop *intel_colorop;
 	struct drm_property_blob *blob;
-	struct intel_crtc_state *new_crtc_state = state ?
-		intel_atomic_get_new_crtc_state(state, crtc) : NULL;
+	struct intel_crtc_state *new_crtc_state;
 	bool changed = false;
 	int i = 0;
 
 	if (!state)
 		return;
 
-	iter_colorop = from_plane_state->uapi.color_pipeline;
+	pipeline = from_plane_state->uapi.color_pipeline;
+	if (!pipeline)
+		return;
 
-	while (iter_colorop) {
+	WARN_ON(!list_is_first(&pipeline->pipeline_list, &pipeline->pipeline_head));
+	list_for_each_entry(iter_colorop, &pipeline->pipeline_head, pipeline_list) {
 		for_each_new_colorop_in_state(&state->base, colorop, new_colorop_state, i) {
 			if (new_colorop_state->colorop == iter_colorop) {
 				blob = new_colorop_state->bypass ? NULL : new_colorop_state->data;
@@ -437,9 +439,9 @@ intel_plane_color_copy_uapi_to_hw_state(struct intel_atomic_state *state,
 									    blob);
 			}
 		}
-		iter_colorop = iter_colorop->next;
 	}
 
+	new_crtc_state = intel_atomic_get_new_crtc_state(state, crtc);
 	if (new_crtc_state && changed)
 		new_crtc_state->plane_color_changed = true;
 }

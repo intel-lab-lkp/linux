@@ -813,9 +813,13 @@ static int drm_atomic_plane_check(const struct drm_plane_state *old_plane_state,
 }
 
 static void drm_atomic_colorop_print_state(struct drm_printer *p,
+					   struct drm_colorop **pipeline,
 					   const struct drm_colorop_state *state)
 {
 	struct drm_colorop *colorop = state->colorop;
+
+	if (!*pipeline)
+		*pipeline = colorop;
 
 	drm_printf(p, "colorop[%u]:\n", colorop->base.id);
 	drm_printf_indent(p, 1, "type=%s\n", drm_get_colorop_type_name(colorop->type));
@@ -849,7 +853,12 @@ static void drm_atomic_colorop_print_state(struct drm_printer *p,
 		break;
 	}
 
-	drm_printf_indent(p, 1, "next=%d\n", colorop->next ? colorop->next->base.id : 0);
+	if (list_is_last(&colorop->pipeline_list, &(*pipeline)->pipeline_head)) {
+		*pipeline = NULL;
+		return;
+	}
+
+	drm_printf_indent(p, 1, "next=%d\n", list_next_entry(colorop, pipeline_list)->base.id);
 }
 
 static void drm_atomic_plane_print_state(struct drm_printer *p,
@@ -2045,7 +2054,7 @@ static void __drm_state_dump(struct drm_device *dev, struct drm_printer *p,
 			     bool take_locks)
 {
 	struct drm_mode_config *config = &dev->mode_config;
-	struct drm_colorop *colorop;
+	struct drm_colorop *colorop, *colorop_pipeline = NULL;
 	struct drm_plane *plane;
 	struct drm_crtc *crtc;
 	struct drm_connector *connector;
@@ -2058,7 +2067,7 @@ static void __drm_state_dump(struct drm_device *dev, struct drm_printer *p,
 	list_for_each_entry(colorop, &config->colorop_list, head) {
 		if (take_locks)
 			drm_modeset_lock(&colorop->plane->mutex, NULL);
-		drm_atomic_colorop_print_state(p, colorop->state);
+		drm_atomic_colorop_print_state(p, &colorop_pipeline, colorop->state);
 		if (take_locks)
 			drm_modeset_unlock(&colorop->plane->mutex);
 	}

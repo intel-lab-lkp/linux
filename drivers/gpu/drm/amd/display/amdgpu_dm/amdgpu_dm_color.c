@@ -1592,21 +1592,21 @@ __set_dm_plane_colorop_multiplier(struct drm_plane_state *plane_state,
 static int
 __set_dm_plane_colorop_shaper(struct drm_plane_state *plane_state,
 			      struct dc_plane_state *dc_plane_state,
-			      struct drm_colorop *colorop)
+			      struct drm_colorop *pipeline)
 {
-	struct drm_colorop *old_colorop;
+	struct drm_colorop *old_colorop, *colorop;
 	struct drm_colorop_state *colorop_state = NULL, *new_colorop_state;
 	struct drm_atomic_commit *state = plane_state->state;
 	enum dc_transfer_func_predefined default_tf = TRANSFER_FUNCTION_LINEAR;
 	struct dc_transfer_func *tf = &dc_plane_state->in_shaper_func;
 	const struct drm_color_lut32 *shaper_lut;
-	struct drm_device *dev = colorop->dev;
+	struct drm_device *dev = pipeline->dev;
 	bool enabled = false;
 	u32 shaper_size;
 	int i = 0, ret = 0;
 
 	/* 1D Curve - SHAPER TF */
-	old_colorop = colorop;
+	old_colorop = pipeline;
 	for_each_new_colorop_in_state(state, colorop, new_colorop_state, i) {
 		if (new_colorop_state->colorop == old_colorop &&
 		    (BIT(new_colorop_state->curve_1d_type) & amdgpu_dm_supported_shaper_tfs)) {
@@ -1627,11 +1627,11 @@ __set_dm_plane_colorop_shaper(struct drm_plane_state *plane_state,
 	}
 
 	/* 1D LUT - SHAPER LUT */
-	colorop = old_colorop->next;
-	if (!colorop) {
+	if (list_is_last(&old_colorop->pipeline_list, &pipeline->pipeline_head)) {
 		drm_dbg(dev, "no Shaper LUT colorop found\n");
 		return -EINVAL;
 	}
+	colorop = list_next_entry(old_colorop, pipeline_list);
 
 	old_colorop = colorop;
 	for_each_new_colorop_in_state(state, colorop, new_colorop_state, i) {
@@ -1755,20 +1755,20 @@ __set_dm_plane_colorop_3dlut(struct drm_plane_state *plane_state,
 static int
 __set_dm_plane_colorop_blend(struct drm_plane_state *plane_state,
 			     struct dc_plane_state *dc_plane_state,
-			     struct drm_colorop *colorop)
+			     struct drm_colorop *pipeline)
 {
-	struct drm_colorop *old_colorop;
+	struct drm_colorop *old_colorop, *colorop;
 	struct drm_colorop_state *colorop_state = NULL, *new_colorop_state;
 	struct drm_atomic_commit *state = plane_state->state;
 	enum dc_transfer_func_predefined default_tf = TRANSFER_FUNCTION_LINEAR;
 	struct dc_transfer_func *tf = &dc_plane_state->blend_tf;
 	const struct drm_color_lut32 *blend_lut = NULL;
-	struct drm_device *dev = colorop->dev;
+	struct drm_device *dev = pipeline->dev;
 	uint32_t blend_size = 0;
 	int i = 0;
 
 	/* 1D Curve - BLND TF */
-	old_colorop = colorop;
+	old_colorop = pipeline;
 	for_each_new_colorop_in_state(state, colorop, new_colorop_state, i) {
 		if (new_colorop_state->colorop == old_colorop &&
 		    (BIT(new_colorop_state->curve_1d_type) & amdgpu_dm_supported_blnd_tfs)) {
@@ -1787,11 +1787,11 @@ __set_dm_plane_colorop_blend(struct drm_plane_state *plane_state,
 	}
 
 	/* 1D Curve - BLND LUT */
-	colorop = old_colorop->next;
-	if (!colorop) {
+	if (list_is_last(&old_colorop->pipeline_list, &pipeline->pipeline_head)) {
 		drm_dbg(dev, "no Blend LUT colorop found\n");
 		return -EINVAL;
 	}
+	colorop = list_next_entry(old_colorop, pipeline_list);
 
 	old_colorop = colorop;
 	for_each_new_colorop_in_state(state, colorop, new_colorop_state, i) {
@@ -1873,14 +1873,15 @@ static int
 amdgpu_dm_plane_set_colorop_properties(struct drm_plane_state *plane_state,
 				       struct dc_plane_state *dc_plane_state)
 {
-	struct drm_colorop *colorop = plane_state->color_pipeline;
+	struct drm_colorop *pipeline = plane_state->color_pipeline;
+	struct drm_colorop *colorop = pipeline;
 	struct drm_device *dev = plane_state->plane->dev;
 	struct amdgpu_device *adev = drm_to_adev(dev);
 	bool has_3dlut = adev->dm.dc->caps.color.dpp.hw_3d_lut || adev->dm.dc->caps.color.mpc.preblend;
 	int ret;
 
 	/* 1D Curve - DEGAM TF */
-	if (!colorop)
+	if (!pipeline)
 		return -EINVAL;
 
 	ret = __set_dm_plane_colorop_degamma(plane_state, dc_plane_state, colorop);
@@ -1888,71 +1889,74 @@ amdgpu_dm_plane_set_colorop_properties(struct drm_plane_state *plane_state,
 		return ret;
 
 	/* Multiplier */
-	colorop = colorop->next;
-	if (!colorop) {
+	if (list_is_last(&colorop->pipeline_list, &pipeline->pipeline_head)) {
 		drm_dbg(dev, "no multiplier colorop found\n");
 		return -EINVAL;
 	}
 
+	colorop = list_next_entry(colorop, pipeline_list);
 	ret = __set_dm_plane_colorop_multiplier(plane_state, dc_plane_state, colorop);
 	if (ret)
 		return ret;
 
 	/* 3x4 matrix */
-	colorop = colorop->next;
-	if (!colorop) {
+	if (list_is_last(&colorop->pipeline_list, &pipeline->pipeline_head)) {
 		drm_dbg(dev, "no 3x4 matrix colorop found\n");
 		return -EINVAL;
 	}
 
+	colorop = list_next_entry(colorop, pipeline_list);
 	ret = __set_dm_plane_colorop_3x4_matrix(plane_state, dc_plane_state, colorop);
 	if (ret)
 		return ret;
 
 	if (has_3dlut) {
 		/* 1D Curve & LUT - SHAPER TF & LUT */
-		colorop = colorop->next;
-		if (!colorop) {
+		if (list_is_last(&colorop->pipeline_list, &pipeline->pipeline_head)) {
 			drm_dbg(dev, "no Shaper TF colorop found\n");
 			return -EINVAL;
 		}
 
+		colorop = list_next_entry(colorop, pipeline_list);
 		ret = __set_dm_plane_colorop_shaper(plane_state, dc_plane_state, colorop);
 		if (ret)
 			return ret;
 
 		/* Shaper LUT colorop is already handled, just skip here */
-		colorop = colorop->next;
-		if (!colorop)
+		if (list_is_last(&colorop->pipeline_list, &pipeline->pipeline_head)) {
+			drm_dbg(dev, "no Shaper LUT colorop found\n");
 			return -EINVAL;
+		}
+		colorop = list_next_entry(colorop, pipeline_list);
 
 		/* 3D LUT */
-		colorop = colorop->next;
-		if (!colorop) {
+		if (list_is_last(&colorop->pipeline_list, &pipeline->pipeline_head)) {
 			drm_dbg(dev, "no 3D LUT colorop found\n");
 			return -EINVAL;
 		}
 
+		colorop = list_next_entry(colorop, pipeline_list);
 		ret = __set_dm_plane_colorop_3dlut(plane_state, dc_plane_state, colorop);
 		if (ret)
 			return ret;
 	}
 
 	/* 1D Curve & LUT - BLND TF & LUT */
-	colorop = colorop->next;
-	if (!colorop) {
+	if (list_is_last(&colorop->pipeline_list, &pipeline->pipeline_head)) {
 		drm_dbg(dev, "no Blend TF colorop found\n");
 		return -EINVAL;
 	}
 
+	colorop = list_next_entry(colorop, pipeline_list);
 	ret = __set_dm_plane_colorop_blend(plane_state, dc_plane_state, colorop);
 	if (ret)
 		return ret;
 
 	/* BLND LUT colorop is already handled, just skip here */
-	colorop = colorop->next;
-	if (!colorop)
+	if (list_is_last(&colorop->pipeline_list, &pipeline->pipeline_head)) {
+		drm_dbg(dev, "no Blend LUT colorop found\n");
 		return -EINVAL;
+	}
 
 	return 0;
 }

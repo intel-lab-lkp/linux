@@ -194,9 +194,12 @@ static void pre_blend_color_transform(const struct vkms_plane_state *plane_state
 				      struct line_buffer *output_buffer)
 {
 	struct pixel_argb_s32 pixel;
+	struct drm_colorop *pipeline = plane_state->base.base.color_pipeline;
+
+	WARN_ON(!list_is_first(&pipeline->pipeline_list, &pipeline->pipeline_head));
 
 	for (size_t x = 0; x < output_buffer->n_pixels; x++) {
-		struct drm_colorop *colorop = plane_state->base.base.color_pipeline;
+		struct drm_colorop *colorop;
 
 		/*
 		 * Some operations, such as applying a BT709 encoding matrix,
@@ -213,7 +216,7 @@ static void pre_blend_color_transform(const struct vkms_plane_state *plane_state
 		pixel.g = output_buffer->pixels[x].g;
 		pixel.b = output_buffer->pixels[x].b;
 
-		while (colorop) {
+		list_for_each_entry(colorop, &pipeline->pipeline_head, pipeline_list) {
 			struct drm_colorop_state *colorop_state;
 
 			colorop_state = colorop->state;
@@ -223,8 +226,6 @@ static void pre_blend_color_transform(const struct vkms_plane_state *plane_state
 
 			if (!colorop_state->bypass)
 				apply_colorop(&pixel, colorop);
-
-			colorop = colorop->next;
 		}
 
 		/* clamp values */

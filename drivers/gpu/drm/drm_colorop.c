@@ -109,7 +109,8 @@ static int drm_plane_colorop_init(struct drm_device *dev, struct drm_colorop *co
 	colorop->dev = dev;
 	colorop->type = type;
 	colorop->plane = plane;
-	colorop->next = NULL;
+	INIT_LIST_HEAD(&colorop->pipeline_list);
+	INIT_LIST_HEAD(&colorop->pipeline_head);
 	colorop->funcs = funcs;
 
 	list_add_tail(&colorop->head, &config->colorop_list);
@@ -628,16 +629,13 @@ const char *drm_get_colorop_lut3d_interpolation_name(enum drm_colorop_lut3d_inte
  */
 void drm_colorop_add_to_pipeline(struct drm_colorop *pipeline, struct drm_colorop *colorop)
 {
-	struct drm_colorop *last = pipeline;
+	struct drm_colorop *last;
 
-	/* Head entry does not need processing */
-	if (colorop == pipeline)
-		return;
+	last = list_last_entry_or_null(&pipeline->pipeline_head, struct drm_colorop, pipeline_list);
 
-	while (last->next)
-		last = last->next;
+	if (last)
+		drm_object_property_set_value(&last->base, last->next_property, colorop->base.id);
 
-	drm_object_property_set_value(&last->base, last->next_property, colorop->base.id);
-	last->next = colorop;
+	list_add_tail(&colorop->pipeline_list, &pipeline->pipeline_head);
 }
 EXPORT_SYMBOL(drm_colorop_add_to_pipeline);
