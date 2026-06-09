@@ -163,5 +163,84 @@ then
   test_disassembler "libasm" "libasm"
 fi
 
+test_bpf_disassembler() {
+  disassembler=$1
+  feature=$2
+
+  if [ -n "${feature}" ]
+  then
+    if ! perf check feature "${feature}" > /dev/null 2>&1
+    then
+      echo "Skip BPF JIT test for ${disassembler} (feature ${feature} not supported)"
+      return 0
+    fi
+  fi
+
+  echo "Test BPF JIT annotate with disassembler: ${disassembler}"
+
+  if ! perf annotate --no-demangle -i "${perfdata}" --stdio "${bpf_sym}" \
+      --disassembler "${disassembler}" 2> /dev/null > "${perfout}"
+  then
+    echo "BPF JIT annotate with ${disassembler} [Failed: perf annotate error]"
+    err=1
+    return 0
+  fi
+
+  if ! grep -q "${disasm_regex}" "${perfout}"
+  then
+    echo "BPF JIT annotate with ${disassembler} [Failed: missing disasm output]"
+    err=1
+    return 0
+  fi
+
+  echo "BPF JIT annotate with ${disassembler} [Success]"
+  return 0
+}
+
+test_bpf() {
+  echo "Test annotate with BPF JIT output"
+
+  if ! perf check -q feature libbpf-strings ; then
+    echo "BPF annotation test [Skipped - libbpf-strings not supported]"
+    return 0
+  fi
+
+  bpftmp=$(mktemp -d /tmp/__perf_test.bpf.XXXXXX)
+  bpf_perfdata="${bpftmp}/perf.data"
+
+  if ! perf record -a -e cycles -F 4000 -o "${bpf_perfdata}" -- sleep 1 2> /dev/null
+  then
+    echo "BPF annotation test [Skipped - perf record -a failed, probably no privileges]"
+    rm -rf "${bpftmp}"
+    return 0
+  fi
+
+  bpf_sym=$(perf report --stdio -i "${bpf_perfdata}" 2>/dev/null | \
+      grep -E -o 'bpf_prog_[0-9a-f]{16}_[0-9A-Za-z_]*' | head -1)
+
+  if [ -z "${bpf_sym}" ]; then
+    echo "BPF annotation test [Skipped - no JITted BPF symbols with samples found]"
+    rm -rf "${bpftmp}"
+    return 0
+  fi
+
+  # temporarily override perfdata so test_bpf_disassembler uses the right file
+  local old_perfdata="${perfdata}"
+  perfdata="${bpf_perfdata}"
+
+  test_bpf_disassembler "objdump" ""
+  test_bpf_disassembler "llvm" "libLLVM"
+  test_bpf_disassembler "capstone" "libcapstone"
+  test_bpf_disassembler "libasm" "libasm"
+
+  perfdata="${old_perfdata}"
+  rm -rf "${bpftmp}"
+}
+
+if [ "${err}" -eq 0 ]
+then
+  test_bpf
+fi
+
 cleanup
 exit $err
