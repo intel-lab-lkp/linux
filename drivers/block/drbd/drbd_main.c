@@ -128,25 +128,6 @@ static const struct block_device_operations drbd_ops = {
 	.release	= drbd_release,
 };
 
-#ifdef __CHECKER__
-/* When checking with sparse, and this is an inline function, sparse will
-   give tons of false positives. When this is a real functions sparse works.
- */
-int _get_ldev_if_state(struct drbd_device *device, enum drbd_disk_state mins)
-{
-	int io_allowed;
-
-	atomic_inc(&device->local_cnt);
-	io_allowed = (device->state.disk >= mins);
-	if (!io_allowed) {
-		if (atomic_dec_and_test(&device->local_cnt))
-			wake_up(&device->misc_wait);
-	}
-	return io_allowed;
-}
-
-#endif
-
 /**
  * tl_release() - mark as BARRIER_ACKED all requests in the corresponding transfer log epoch
  * @connection:	DRBD connection.

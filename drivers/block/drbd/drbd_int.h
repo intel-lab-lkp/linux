@@ -2033,8 +2033,8 @@ static inline void put_ldev(struct drbd_device *device)
 	}
 }
 
-#ifndef __CHECKER__
-static inline int _get_ldev_if_state(struct drbd_device *device, enum drbd_disk_state mins)
+static inline int _get_ldev_if_state(struct drbd_device *device,
+				     enum drbd_disk_state mins)
 {
 	int io_allowed;
 
@@ -2048,9 +2048,6 @@ static inline int _get_ldev_if_state(struct drbd_device *device, enum drbd_disk_
 		put_ldev(device);
 	return io_allowed;
 }
-#else
-int _get_ldev_if_state(struct drbd_device *device, enum drbd_disk_state mins);
-#endif
 
 /* this throttles on-the-fly application requests
  * according to max_buffers settings;
