@@ -339,14 +339,22 @@ static int intel_allocate_scaler(struct intel_crtc_scaler_state *scaler_state,
 	struct intel_display *display = to_intel_display(crtc);
 	int scaler_id;
 
-	if (casf_scaler && !HAS_CASF(display))
-		return -1;
+	if (casf_scaler) {
+		if (!HAS_CASF(display))
+			return -1;
+
+		if (crtc->num_scalers < 2)
+			return -1;
+
+		if (scaler_state->scalers[1].in_use)
+			return -1;
+
+		scaler_state->scalers[1].in_use = true;
+		return 1;
+	}
 
 	for (scaler_id = 0; scaler_id < crtc->num_scalers; scaler_id++) {
 		if (scaler_state->scalers[scaler_id].in_use)
-			continue;
-
-		if (casf_scaler && scaler_id != 1)
 			continue;
 
 		scaler_state->scalers[scaler_id].in_use = true;
