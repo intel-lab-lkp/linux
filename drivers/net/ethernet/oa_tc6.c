@@ -1111,6 +1111,8 @@ static irqreturn_t oa_tc6_macphy_threaded_irq(int irq, void *data)
 
 	while (tc6->int_flag || (tc6->waiting_tx_skb && tc6->tx_credits)) {
 		ret = oa_tc6_try_spi_transfer(tc6);
+		if (ret == -EAGAIN)
+			continue;
 		if (ret)
 			break;
 	}
