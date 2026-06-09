@@ -57,6 +57,7 @@
 #include "hashmap.h"
 #include "hist.h"
 #include "hwmon_pmu.h"
+#include "nvme_pmu.h"
 #include "intel-tpebs.h"
 #include "memswap.h"
 #include "off_cpu.h"
@@ -2207,6 +2208,8 @@ int evsel__read_counter(struct evsel *evsel, int cpu_map_idx, int thread)
 
 	if (evsel__is_hwmon(evsel))
 		return evsel__hwmon_pmu_read(evsel, cpu_map_idx, thread);
+	if (evsel__is_nvme(evsel))
+		return evsel__nvme_pmu_read(evsel, cpu_map_idx, thread);
 
 	if (evsel__is_drm(evsel))
 		return evsel__drm_pmu_read(evsel, cpu_map_idx, thread);
@@ -2947,8 +2950,12 @@ fallback_missing_features:
 	}
 	if (evsel__is_hwmon(evsel)) {
 		err = evsel__hwmon_pmu_open(evsel, threads,
-					    start_cpu_map_idx,
-					    end_cpu_map_idx);
+					    start_cpu_map_idx, end_cpu_map_idx);
+		goto out;
+	}
+	if (evsel__is_nvme(evsel)) {
+		err = evsel__nvme_pmu_open(evsel, threads,
+					   start_cpu_map_idx, end_cpu_map_idx);
 		goto out;
 	}
 	if (evsel__is_drm(evsel)) {
