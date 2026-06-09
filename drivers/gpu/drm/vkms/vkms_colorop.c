@@ -41,6 +41,8 @@ static int vkms_initialize_color_pipeline(struct drm_plane *plane, struct drm_pr
 	if (ret)
 		goto cleanup;
 
+	drm_colorop_add_to_pipeline(ops[0], ops[i]);
+
 	list->type = ops[i]->base.id;
 
 	i++;
@@ -58,7 +60,7 @@ static int vkms_initialize_color_pipeline(struct drm_plane *plane, struct drm_pr
 	if (ret)
 		goto cleanup;
 
-	drm_colorop_set_next_property(ops[i - 1], ops[i]);
+	drm_colorop_add_to_pipeline(ops[0], ops[i]);
 
 	i++;
 
@@ -75,7 +77,7 @@ static int vkms_initialize_color_pipeline(struct drm_plane *plane, struct drm_pr
 	if (ret)
 		goto cleanup;
 
-	drm_colorop_set_next_property(ops[i - 1], ops[i]);
+	drm_colorop_add_to_pipeline(ops[0], ops[i]);
 
 	i++;
 
@@ -93,7 +95,7 @@ static int vkms_initialize_color_pipeline(struct drm_plane *plane, struct drm_pr
 	if (ret)
 		goto cleanup;
 
-	drm_colorop_set_next_property(ops[i - 1], ops[i]);
+	drm_colorop_add_to_pipeline(ops[0], ops[i]);
 
 	list->name = kasprintf(GFP_KERNEL, "Color Pipeline %d", ops[0]->base.id);
 
