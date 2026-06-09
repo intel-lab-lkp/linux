@@ -250,14 +250,6 @@ config SND_MPC52xx_SOC_PCM030
 	  Say Y if you want to add support for sound on the Phytec pcm030
 	  baseboard.
 
-config SND_MPC52xx_SOC_EFIKA
-	tristate "SoC AC97 Audio support for bbplan Efika and STAC9766"
-	depends on PPC_EFIKA
-	select SND_SOC_MPC5200_AC97
-	select SND_SOC_STAC9766
-	help
-	  Say Y if you want to add support for sound on the Efika.
-
 endif # SND_POWERPC_SOC
 
 config SND_SOC_IMX_PCM_FIQ
