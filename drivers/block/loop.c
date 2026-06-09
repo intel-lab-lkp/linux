@@ -981,14 +981,93 @@ static void loop_update_limits(struct loop_device *lo, struct queue_limits *lim,
 		lim->discard_granularity = 0;
 }
 
+static int __loop_configure(struct loop_device *lo, blk_mode_t mode,
+			    struct block_device *bdev,
+			    const struct loop_config *config, struct file *file,
+			    bool *partscan)
+{
+	struct queue_limits lim;
+	loff_t size;
+	int error;
+
+	if (lo->lo_state != Lo_unbound)
+		return -EBUSY;
+
+	error = loop_validate_file(file, bdev);
+	if (error)
+		return error;
+
+	if ((config->info.lo_flags & ~LOOP_CONFIGURE_SETTABLE_FLAGS) != 0)
+		return -EINVAL;
+
+	error = loop_set_status_from_info(lo, &config->info);
+	if (error)
+		return error;
+	lo->lo_flags = config->info.lo_flags;
+
+	if (!(file->f_mode & FMODE_WRITE) || !(mode & BLK_OPEN_WRITE) ||
+	    !file->f_op->write_iter)
+		lo->lo_flags |= LO_FLAGS_READ_ONLY;
+
+	if (!lo->workqueue) {
+		lo->workqueue = alloc_workqueue("loop%d",
+						WQ_UNBOUND | WQ_FREEZABLE,
+						0, lo->lo_number);
+		if (!lo->workqueue)
+			return -ENOMEM;
+	}
+
+	/* suppress uevents while reconfiguring the device */
+	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 1);
+
+	disk_force_media_change(lo->lo_disk);
+	set_disk_ro(lo->lo_disk, (lo->lo_flags & LO_FLAGS_READ_ONLY) != 0);
+
+	lo->lo_device = bdev;
+	loop_assign_backing_file(lo, file);
+
+	lim = queue_limits_start_update(lo->lo_queue);
+	loop_update_limits(lo, &lim, config->block_size);
+	/* No need to freeze the queue as the device isn't bound yet. */
+	error = queue_limits_commit_update(lo->lo_queue, &lim);
+	if (error)
+		return error;
+
+	/*
+	 * We might switch to direct I/O mode for the loop device, write back
+	 * all dirty data the page cache now that so that the individual I/O
+	 * operations don't have to do that.
+	 */
+	vfs_fsync(file, 0);
+
+	loop_update_dio(lo);
+	loop_sysfs_init(lo);
+
+	size = lo_calculate_size(lo, file);
+	loop_set_size(lo, size);
+
+	/* Order wrt reading lo_state in loop_validate_file(). */
+	wmb();
+
+	WRITE_ONCE(lo->lo_state, Lo_bound);
+	if (part_shift)
+		lo->lo_flags |= LO_FLAGS_PARTSCAN;
+	*partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
+	if (*partscan)
+		clear_bit(GD_SUPPRESS_PART_SCAN, &lo->lo_disk->state);
+
+	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
+	kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
+
+	return 0;
+}
+
 static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 			  struct block_device *bdev,
 			  const struct loop_config *config)
 {
 	struct file *file = fget(config->fd);
-	struct queue_limits lim;
 	int error;
-	loff_t size;
 	bool partscan;
 	bool is_loop;
 
@@ -1019,82 +1098,10 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 	error = loop_global_lock_killable(lo, is_loop);
 	if (error)
 		goto out_bdev;
-
-	error = -EBUSY;
-	if (lo->lo_state != Lo_unbound)
-		goto out_unlock;
-
-	error = loop_validate_file(file, bdev);
-	if (error)
-		goto out_unlock;
-
-	if ((config->info.lo_flags & ~LOOP_CONFIGURE_SETTABLE_FLAGS) != 0) {
-		error = -EINVAL;
-		goto out_unlock;
-	}
-
-	error = loop_set_status_from_info(lo, &config->info);
-	if (error)
-		goto out_unlock;
-	lo->lo_flags = config->info.lo_flags;
-
-	if (!(file->f_mode & FMODE_WRITE) || !(mode & BLK_OPEN_WRITE) ||
-	    !file->f_op->write_iter)
-		lo->lo_flags |= LO_FLAGS_READ_ONLY;
-
-	if (!lo->workqueue) {
-		lo->workqueue = alloc_workqueue("loop%d",
-						WQ_UNBOUND | WQ_FREEZABLE,
-						0, lo->lo_number);
-		if (!lo->workqueue) {
-			error = -ENOMEM;
-			goto out_unlock;
-		}
-	}
-
-	/* suppress uevents while reconfiguring the device */
-	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 1);
-
-	disk_force_media_change(lo->lo_disk);
-	set_disk_ro(lo->lo_disk, (lo->lo_flags & LO_FLAGS_READ_ONLY) != 0);
-
-	lo->lo_device = bdev;
-	loop_assign_backing_file(lo, file);
-
-	lim = queue_limits_start_update(lo->lo_queue);
-	loop_update_limits(lo, &lim, config->block_size);
-	/* No need to freeze the queue as the device isn't bound yet. */
-	error = queue_limits_commit_update(lo->lo_queue, &lim);
-	if (error)
-		goto out_unlock;
-
-	/*
-	 * We might switch to direct I/O mode for the loop device, write back
-	 * all dirty data the page cache now that so that the individual I/O
-	 * operations don't have to do that.
-	 */
-	vfs_fsync(file, 0);
-
-	loop_update_dio(lo);
-	loop_sysfs_init(lo);
-
-	size = lo_calculate_size(lo, file);
-	loop_set_size(lo, size);
-
-	/* Order wrt reading lo_state in loop_validate_file(). */
-	wmb();
-
-	WRITE_ONCE(lo->lo_state, Lo_bound);
-	if (part_shift)
-		lo->lo_flags |= LO_FLAGS_PARTSCAN;
-	partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
-	if (partscan)
-		clear_bit(GD_SUPPRESS_PART_SCAN, &lo->lo_disk->state);
-
-	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
-	kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
-
+	error = __loop_configure(lo, mode, bdev, config, file, &partscan);
 	loop_global_unlock(lo, is_loop);
+	if (error)
+		goto out_bdev;
 	if (partscan)
 		loop_reread_partitions(lo);
 
@@ -1103,8 +1110,6 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 
 	return 0;
 
-out_unlock:
-	loop_global_unlock(lo, is_loop);
 out_bdev:
 	if (!(mode & BLK_OPEN_EXCL))
 		bd_abort_claiming(bdev, loop_configure);
