@@ -2012,7 +2012,7 @@ static ssize_t f_uac2_opts_##name##_store(struct config_item *item,	\
 					  const char *page, size_t len)	\
 {									\
 	struct f_uac2_opts *opts = to_f_uac2_opts(item);		\
-	char *split_page = NULL;					\
+	char *p, *split_page = NULL;					\
 	int ret = -EINVAL;						\
 	char *token;							\
 	u32 num;							\
@@ -2026,8 +2026,8 @@ static ssize_t f_uac2_opts_##name##_store(struct config_item *item,	\
 									\
 	i = 0;								\
 	memset(opts->name##s, 0x00, sizeof(opts->name##s));		\
-	split_page = kstrdup(page, GFP_KERNEL);				\
-	while ((token = strsep(&split_page, ",")) != NULL) {		\
+	split_page = p = kstrdup(page, GFP_KERNEL);			\
+	while ((token = strsep(&p, ",")) != NULL) {			\
 		ret = kstrtou32(token, 0, &num);			\
 		if (ret)						\
 			goto end;					\
