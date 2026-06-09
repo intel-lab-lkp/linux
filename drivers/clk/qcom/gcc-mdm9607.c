@@ -121,7 +121,7 @@ static struct clk_alpha_pll gpll2_early = {
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
 	.clkr = {
 		.enable_reg = 0x45000,
-		.enable_mask = BIT(3), /* Yeah, apparently it's not 2 */
+		.enable_mask = BIT(3), /* BIT(2) is used for BIMC PLL */
 		.hw.init = &(struct clk_init_data)
 		{
 			.name = "gpll2_early",
@@ -192,32 +192,35 @@ static struct clk_rcg2 apss_ahb_clk_src = {
 	},
 };
 
-static struct clk_pll bimc_pll = {
-	.l_reg = 0x23004,
-	.m_reg = 0x23008,
-	.n_reg = 0x2300c,
-	.config_reg = 0x23010,
-	.mode_reg = 0x23000,
-	.status_reg = 0x2301c,
-	.status_bit = 17,
-	.clkr.hw.init = &(struct clk_init_data){
-		.name = "bimc_pll",
-		.parent_data = &(const struct clk_parent_data){
-			.fw_name = "xo",
+static struct clk_alpha_pll bimc_pll_early = {
+	.offset = 0x23000,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
+	.clkr = {
+		.enable_reg = 0x45000,
+		.enable_mask = BIT(2),
+		.hw.init = &(struct clk_init_data) {
+			.name = "bimc_pll_early",
+			.parent_data = &(const struct clk_parent_data){
+				.fw_name = "xo",
+			},
+			.num_parents = 1,
+			/* Avoid rate changes for shared clock */
+			.ops = &clk_alpha_pll_fixed_ops,
 		},
-		.num_parents = 1,
-		.ops = &clk_pll_ops,
 	},
 };
 
-static struct clk_regmap bimc_pll_vote = {
-	.enable_reg = 0x45000,
-	.enable_mask = BIT(3),
-	.hw.init = &(struct clk_init_data){
-		.name = "bimc_pll_vote",
-		.parent_hws = (const struct clk_hw *[]){ &bimc_pll.clkr.hw },
+static struct clk_alpha_pll_postdiv bimc_pll = {
+	.offset = 0x23000,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
+	.clkr.hw.init = &(struct clk_init_data) {
+		.name = "bimc_pll",
+		.parent_hws = (const struct clk_hw*[]) {
+			&bimc_pll_early.clkr.hw,
+		},
 		.num_parents = 1,
-		.ops = &clk_pll_vote_ops,
+		/* Avoid rate changes for shared clock */
+		.ops = &clk_alpha_pll_postdiv_ro_ops,
 	},
 };
 
@@ -230,7 +233,7 @@ static const struct parent_map gcc_xo_gpll0_bimc_map[] = {
 static const struct clk_parent_data gcc_xo_gpll0_bimc[] = {
 	{ .fw_name = "xo" },
 	{ .hw = &gpll0.clkr.hw },
-	{ .hw = &bimc_pll_vote.hw },
+	{ .hw = &bimc_pll.clkr.hw },
 };
 
 static const struct freq_tbl ftbl_pcnoc_bfdcd_clk_src[] = {
@@ -1482,7 +1485,7 @@ static struct clk_regmap *gcc_mdm9607_clocks[] = {
 	[GPLL2] = &gpll2.clkr,
 	[GPLL2_EARLY] = &gpll2_early.clkr,
 	[BIMC_PLL] = &bimc_pll.clkr,
-	[BIMC_PLL_VOTE] = &bimc_pll_vote,
+	[BIMC_PLL_EARLY] = &bimc_pll_early.clkr,
 	[BIMC_DDR_CLK_SRC] = &bimc_ddr_clk_src.clkr,
 	[PCNOC_BFDCD_CLK_SRC] = &pcnoc_bfdcd_clk_src.clkr,
 	[SYSTEM_NOC_BFDCD_CLK_SRC] = &system_noc_bfdcd_clk_src.clkr,

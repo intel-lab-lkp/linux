@@ -76,8 +76,8 @@
 #define GCC_USB_HS_SYSTEM_CLK			67
 #define GCC_APSS_TCU_CLK				68
 #define GCC_MSS_Q6_BIMC_AXI_CLK			69
-#define BIMC_PLL						70
-#define BIMC_PLL_VOTE					71
+#define BIMC_PLL_EARLY						70
+#define BIMC_PLL					71
 #define BIMC_DDR_CLK_SRC				72
 #define BLSP1_UART3_APPS_CLK_SRC		73
 #define BLSP1_UART4_APPS_CLK_SRC		74
