@@ -77,12 +77,22 @@ vxfs_read_olt(struct super_block *sbp, u_long bsize)
 		goto fail;
 	}
 
-	oaddr = bp->b_data + fs32_to_cpu(infp, op->olt_size);
 	eaddr = bp->b_data + (infp->vsi_oltsize * sbp->s_blocksize);
+	oaddr = bp->b_data + fs32_to_cpu(infp, op->olt_size);
+	if (oaddr < bp->b_data + sizeof(*op) || oaddr > eaddr) {
+		pr_notice("vxfs: invalid olt header size\n");
+		goto fail;
+	}
 
 	while (oaddr < eaddr) {
 		struct vxfs_oltcommon	*ocp =
 			(struct vxfs_oltcommon *)oaddr;
+		u32 size = fs32_to_cpu(infp, ocp->olt_size);
+
+		if (size < sizeof(*ocp) || size > eaddr - oaddr) {
+			pr_notice("vxfs: invalid olt record size\n");
+			goto fail;
+		}
 		
 		switch (fs32_to_cpu(infp, ocp->olt_type)) {
 		case VXFS_OLT_FSHEAD:
@@ -93,7 +103,7 @@ vxfs_read_olt(struct super_block *sbp, u_long bsize)
 			break;
 		}
 
-		oaddr += fs32_to_cpu(infp, ocp->olt_size);
+		oaddr += size;
 	}
 
 	brelse(bp);
