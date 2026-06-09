@@ -221,10 +221,17 @@ static unsigned long imsic_mrif_atomic_rmw(struct imsic_mrif *mrif,
 	unsigned long old_val = 0, tmp = 0;
 
 	__asm__ __volatile__ (
+#ifdef CONFIG_32BIT
 		"0:	lr.w.aq   %1, %0\n"
 		"	and       %2, %1, %3\n"
 		"	or        %2, %2, %4\n"
 		"	sc.w.rl   %2, %2, %0\n"
+#else
+		"0:	lr.d.aq   %1, %0\n"
+		"	and       %2, %1, %3\n"
+		"	or        %2, %2, %4\n"
+		"	sc.d.rl   %2, %2, %0\n"
+#endif
 		"	bnez      %2, 0b"
 		: "+A" (*ptr), "+r" (old_val), "+r" (tmp)
 		: "r" (~wr_mask), "r" (new_val & wr_mask)
