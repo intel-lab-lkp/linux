@@ -613,6 +613,13 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 		if (val && !colorop)
 			return -EACCES;
 
+		/* Colorop must be the start of a pipeline, not the middle */
+		if (colorop && !list_is_first(&colorop->pipeline_list, &colorop->pipeline_head)) {
+			drm_dbg_atomic(plane->dev, "[PLANE:%d:%s] Colorop %d is not head of a pipeline\n",
+				plane->base.id, plane->name, colorop->index);
+			return -EINVAL;
+		}
+
 		set_colorop_for_plane(state, colorop);
 	} else if (property == config->prop_fb_damage_clips) {
 		ret = drm_property_replace_blob_from_id(dev,
