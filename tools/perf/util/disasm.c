@@ -22,6 +22,7 @@
 #include "capstone.h"
 #include "debug.h"
 #include "disasm.h"
+#include "libasm.h"
 #include "dso.h"
 #include "dwarf-regs.h"
 #include "env.h"
@@ -1621,6 +1622,10 @@ int symbol__disassemble(struct symbol *sym, struct annotate_args *args)
 		case PERF_DISASM_CAPSTONE:
 			args->options->disassembler_used = PERF_DISASM_CAPSTONE;
 			err = symbol__disassemble_capstone(symfs_filename, sym, args);
+			break;
+		case PERF_DISASM_LIBASM:
+			args->options->disassembler_used = PERF_DISASM_LIBASM;
+			err = symbol__disassemble_libasm(symfs_filename, sym, args);
 			break;
 		case PERF_DISASM_OBJDUMP:
 			args->options->disassembler_used = PERF_DISASM_OBJDUMP;

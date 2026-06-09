@@ -12,6 +12,7 @@ perf-util-y += block-range.o
 perf-util-y += build-id.o
 perf-util-y += cacheline.o
 perf-util-$(CONFIG_LIBCAPSTONE) += capstone.o
+perf-util-$(CONFIG_LIBASM) += libasm.o
 perf-util-y += config.o
 perf-util-y += copyfile.o
 perf-util-y += ctype.o
