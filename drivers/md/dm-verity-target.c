@@ -1262,8 +1262,10 @@ static int verity_parse_opt_args(struct dm_arg_set *as, struct dm_verity *v,
 			continue;
 
 		} else if (!strcasecmp(arg_name, DM_VERITY_OPT_TASKLET_VERIFY)) {
-			v->use_bh_wq = true;
-			static_branch_inc(&use_bh_wq_enabled);
+			if (!v->use_bh_wq) {
+				v->use_bh_wq = true;
+				static_branch_inc(&use_bh_wq_enabled);
+			}
 			continue;
 
 		} else if (verity_is_fec_opt_arg(arg_name)) {
