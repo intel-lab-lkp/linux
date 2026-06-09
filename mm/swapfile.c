@@ -118,16 +118,12 @@ static atomic_t proc_poll_event = ATOMIC_INIT(0);
 atomic_t nr_rotate_swap = ATOMIC_INIT(0);
 
 struct percpu_swap_cluster {
-	struct swap_info_struct *si[SWAP_NR_ORDERS];
-	unsigned long offset[SWAP_NR_ORDERS];
+	struct swap_info_struct **si;
+	unsigned long *offset;
 	local_lock_t lock;
 };
 
-static DEFINE_PER_CPU(struct percpu_swap_cluster, percpu_swap_cluster) = {
-	.si = { NULL },
-	.offset = { SWAP_ENTRY_INVALID },
-	.lock = INIT_LOCAL_LOCK(),
-};
+static struct percpu_swap_cluster __percpu *percpu_swap_cluster;
 
 unsigned int swap_slots_in_cluster __read_mostly;
 bool swap_table_use_page __read_mostly;
@@ -545,7 +541,7 @@ swap_cluster_populate(struct swap_info_struct *si,
 	 * Only cluster isolation from the allocator does table allocation.
 	 * Swap allocator uses percpu clusters and holds the local lock.
 	 */
-	lockdep_assert_held(&this_cpu_ptr(&percpu_swap_cluster)->lock);
+	lockdep_assert_held(&this_cpu_ptr(percpu_swap_cluster)->lock);
 	if (!(si->flags & SWP_SOLIDSTATE))
 		lockdep_assert_held(&si->global_cluster_lock);
 	lockdep_assert_held(&ci->lock);
@@ -562,7 +558,7 @@ swap_cluster_populate(struct swap_info_struct *si,
 	spin_unlock(&ci->lock);
 	if (!(si->flags & SWP_SOLIDSTATE))
 		spin_unlock(&si->global_cluster_lock);
-	local_unlock(&percpu_swap_cluster.lock);
+	local_unlock(&percpu_swap_cluster->lock);
 
 	ret = swap_cluster_alloc_table(ci, __GFP_HIGH | __GFP_NOMEMALLOC |
 					   GFP_KERNEL);
@@ -575,7 +571,7 @@ swap_cluster_populate(struct swap_info_struct *si,
 	 * could happen with ignoring the percpu cluster is fragmentation,
 	 * which is acceptable since this fallback and race is rare.
 	 */
-	local_lock(&percpu_swap_cluster.lock);
+	local_lock(&percpu_swap_cluster->lock);
 	if (!(si->flags & SWP_SOLIDSTATE))
 		spin_lock(&si->global_cluster_lock);
 	spin_lock(&ci->lock);
@@ -1016,8 +1012,10 @@ out:
 	relocate_cluster(si, ci);
 	swap_cluster_unlock(ci);
 	if (si->flags & SWP_SOLIDSTATE) {
-		this_cpu_write(percpu_swap_cluster.offset[order], next);
-		this_cpu_write(percpu_swap_cluster.si[order], si);
+		struct percpu_swap_cluster *pcp_sc = this_cpu_ptr(percpu_swap_cluster);
+
+		pcp_sc->offset[order] = next;
+		pcp_sc->si[order] = si;
 	} else {
 		si->global_cluster->next[order] = next;
 	}
@@ -1178,7 +1176,7 @@ new_cluster:
 		goto done;
 
 	/* Order 0 stealing from higher order */
-	for (int o = 1; o < SWAP_NR_ORDERS; o++) {
+	for (int o = 1; o < swap_nr_orders(); o++) {
 		/*
 		 * Clusters here have at least one usable slots and can't fail order 0
 		 * allocation, but reclaim may drop si->lock and race with another user.
@@ -1376,13 +1374,14 @@ static bool swap_alloc_fast(struct folio *folio)
 	struct swap_cluster_info *ci;
 	struct swap_info_struct *si;
 	unsigned int offset;
+	struct percpu_swap_cluster *pcp_sc = this_cpu_ptr(percpu_swap_cluster);
 
 	/*
 	 * Once allocated, swap_info_struct will never be completely freed,
 	 * so checking it's liveness by get_swap_device_info is enough.
 	 */
-	si = this_cpu_read(percpu_swap_cluster.si[order]);
-	offset = this_cpu_read(percpu_swap_cluster.offset[order]);
+	si = pcp_sc->si[order];
+	offset = pcp_sc->offset[order];
 	if (!si || !offset || !get_swap_device_info(si))
 		return false;
 
@@ -1770,10 +1769,10 @@ int folio_alloc_swap(struct folio *folio)
 	}
 
 again:
-	local_lock(&percpu_swap_cluster.lock);
+	local_lock(&percpu_swap_cluster->lock);
 	if (!swap_alloc_fast(folio))
 		swap_alloc_slow(folio);
-	local_unlock(&percpu_swap_cluster.lock);
+	local_unlock(&percpu_swap_cluster->lock);
 
 	if (!order && unlikely(!folio_test_swapcache(folio))) {
 		if (swap_sync_discard())
@@ -2166,6 +2165,7 @@ swp_entry_t swap_alloc_hibernation_slot(int type)
 	unsigned long pcp_offset, offset = SWAP_ENTRY_INVALID;
 	struct swap_cluster_info *ci;
 	swp_entry_t entry = {0};
+	struct percpu_swap_cluster *pcp_sc;
 
 	if (!si)
 		goto fail;
@@ -2174,9 +2174,10 @@ swp_entry_t swap_alloc_hibernation_slot(int type)
 	 * Try the local cluster first if it matches the device. If
 	 * not, try grab a new cluster and override local cluster.
 	 */
-	local_lock(&percpu_swap_cluster.lock);
-	pcp_si = this_cpu_read(percpu_swap_cluster.si[0]);
-	pcp_offset = this_cpu_read(percpu_swap_cluster.offset[0]);
+	local_lock(&percpu_swap_cluster->lock);
+	pcp_sc = this_cpu_ptr(percpu_swap_cluster);
+	pcp_si = pcp_sc->si[0];
+	pcp_offset = pcp_sc->offset[0];
 	if (pcp_si == si && pcp_offset) {
 		ci = swap_cluster_lock(si, pcp_offset);
 		if (cluster_is_usable(ci, 0))
@@ -2186,7 +2187,7 @@ swp_entry_t swap_alloc_hibernation_slot(int type)
 	}
 	if (!offset)
 		offset = cluster_alloc_swap_entry(si, NULL);
-	local_unlock(&percpu_swap_cluster.lock);
+	local_unlock(&percpu_swap_cluster->lock);
 	if (offset)
 		entry = swp_entry(si->type, offset);
 
@@ -3090,6 +3091,16 @@ static void wait_for_allocation(struct swap_info_struct *si)
 	}
 }
 
+static void free_swap_info_arrays(struct swap_info_struct *si)
+{
+	kfree(si->global_cluster);
+	si->global_cluster = NULL;
+	kfree(si->nonfull_clusters);
+	si->nonfull_clusters = NULL;
+	kfree(si->frag_clusters);
+	si->frag_clusters = NULL;
+}
+
 static void free_swap_cluster_info(struct swap_cluster_info *cluster_info,
 				   unsigned long maxpages)
 {
@@ -3118,17 +3129,17 @@ static void free_swap_cluster_info(struct swap_cluster_info *cluster_info,
 static void flush_percpu_swap_cluster(struct swap_info_struct *si)
 {
 	int cpu, i;
-	struct swap_info_struct **pcp_si;
+	struct percpu_swap_cluster *pcp_sc;
 
 	for_each_possible_cpu(cpu) {
-		pcp_si = per_cpu_ptr(percpu_swap_cluster.si, cpu);
+		pcp_sc = per_cpu_ptr(percpu_swap_cluster, cpu);
 		/*
 		 * Invalidate the percpu swap cluster cache, si->users
 		 * is dead, so no new user will point to it, just flush
 		 * any existing user.
 		 */
-		for (i = 0; i < SWAP_NR_ORDERS; i++)
-			cmpxchg(&pcp_si[i], si, NULL);
+		for (i = 0; i < swap_nr_orders(); i++)
+			cmpxchg(&pcp_sc->si[i], si, NULL);
 	}
 }
 
@@ -3240,8 +3251,7 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	arch_swap_invalidate_area(p->type);
 	zswap_swapoff(p->type);
 	mutex_unlock(&swapon_mutex);
-	kfree(p->global_cluster);
-	p->global_cluster = NULL;
+	free_swap_info_arrays(p);
 	free_swap_cluster_info(cluster_info, maxpages);
 
 	inode = mapping->host;
@@ -3592,6 +3602,7 @@ static int setup_swap_clusters_info(struct swap_info_struct *si,
 	struct swap_cluster_info *cluster_info;
 	int err = -ENOMEM;
 	unsigned long i;
+	unsigned int nr_orders = swap_nr_orders();
 
 	cluster_info = kvzalloc_objs(*cluster_info, nr_clusters);
 	if (!cluster_info)
@@ -3600,11 +3611,19 @@ static int setup_swap_clusters_info(struct swap_info_struct *si,
 	for (i = 0; i < nr_clusters; i++)
 		spin_lock_init(&cluster_info[i].lock);
 
+	si->nonfull_clusters = kmalloc_objs(*si->nonfull_clusters, nr_orders);
+	if (!si->nonfull_clusters)
+		goto err;
+
+	si->frag_clusters = kmalloc_objs(*si->frag_clusters, nr_orders);
+	if (!si->frag_clusters)
+		goto err;
+
 	if (!(si->flags & SWP_SOLIDSTATE)) {
-		si->global_cluster = kmalloc_obj(*si->global_cluster);
+		si->global_cluster = kmalloc_flex(*si->global_cluster, next, nr_orders);
 		if (!si->global_cluster)
 			goto err;
-		for (i = 0; i < SWAP_NR_ORDERS; i++)
+		for (i = 0; i < nr_orders; i++)
 			si->global_cluster->next[i] = SWAP_ENTRY_INVALID;
 		spin_lock_init(&si->global_cluster_lock);
 	}
@@ -3640,7 +3659,7 @@ static int setup_swap_clusters_info(struct swap_info_struct *si,
 	INIT_LIST_HEAD(&si->full_clusters);
 	INIT_LIST_HEAD(&si->discard_clusters);
 
-	for (i = 0; i < SWAP_NR_ORDERS; i++) {
+	for (i = 0; i < nr_orders; i++) {
 		INIT_LIST_HEAD(&si->nonfull_clusters[i]);
 		INIT_LIST_HEAD(&si->frag_clusters[i]);
 	}
@@ -3660,6 +3679,7 @@ static int setup_swap_clusters_info(struct swap_info_struct *si,
 	si->cluster_info = cluster_info;
 	return 0;
 err:
+	free_swap_info_arrays(si);
 	free_swap_cluster_info(cluster_info, maxpages);
 	return err;
 }
@@ -3868,8 +3888,7 @@ free_swap_zswap:
 bad_swap_unlock_inode:
 	inode_unlock(inode);
 bad_swap:
-	kfree(si->global_cluster);
-	si->global_cluster = NULL;
+	free_swap_info_arrays(si);
 	inode = NULL;
 	destroy_swap_extents(si, swap_file);
 	free_swap_cluster_info(si->cluster_info, si->max);
@@ -3983,6 +4002,10 @@ void __folio_throttle_swaprate(struct folio *folio, gfp_t gfp)
 
 static int __init swapfile_init(void)
 {
+	unsigned int nr_orders = swap_nr_orders();
+	struct percpu_swap_cluster *pcp_sc;
+	int cpu;
+
 	swapfile_maximum_size = arch_max_swapfile_size();
 
 	swap_slots_in_cluster = generic_swap_slots_in_clusters();
@@ -3999,6 +4022,24 @@ static int __init swapfile_init(void)
 				    struct_size_t(struct swap_table, entries,
 					    SWAPFILE_CLUSTER),
 				    0, SLAB_PANIC | SLAB_TYPESAFE_BY_RCU, NULL);
+
+	percpu_swap_cluster = alloc_percpu(struct percpu_swap_cluster);
+	if (!percpu_swap_cluster)
+		panic("%s: alloc_percpu failed for percpu_swap_cluster\n", __func__);
+
+	for_each_possible_cpu(cpu) {
+		int node = cpu_to_mem(cpu);
+
+		pcp_sc = per_cpu_ptr(percpu_swap_cluster, cpu);
+		local_lock_init(&pcp_sc->lock);
+		pcp_sc->si = kcalloc_node(nr_orders, sizeof(*pcp_sc->si),
+					GFP_KERNEL, node);
+		pcp_sc->offset = kcalloc_node(nr_orders, sizeof(*pcp_sc->offset),
+					    GFP_KERNEL, node);
+		if (!pcp_sc->si || !pcp_sc->offset)
+			panic("%s: per-CPU kcalloc failed for cpu:%d, node:%d\n",
+					__func__, cpu, node);
+	}
 
 #ifdef CONFIG_MIGRATION
 	if (swapfile_maximum_size >= (1UL << SWP_MIG_TOTAL_BITS))
