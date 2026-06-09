@@ -47,6 +47,7 @@ FILES=                                          \
          test-timerfd.bin                       \
          test-babeltrace2-ctf-writer.bin        \
          test-libcapstone.bin			\
+         test-libasm.bin			\
          test-libcheck.bin			\
          test-compile-32.bin                    \
          test-compile-x32.bin                   \
@@ -184,6 +185,11 @@ ifeq ($(findstring -static,${LDFLAGS}),-static)
   DWARFLIBS += -ldl
 endif
 
+ASMLIBS := -lasm -ldw -lelf
+ifeq ($(findstring -static,${LDFLAGS}),-static)
+  ASMLIBS += -lz -llzma -lbz2 -lzstd
+endif
+
 $(OUTPUT)test-libdw.bin:
 	$(BUILD) $(DWLIBS)
 
@@ -310,6 +316,9 @@ $(OUTPUT)test-babeltrace2-ctf-writer.bin:
 
 $(OUTPUT)test-libcapstone.bin:
 	$(BUILD) # -lcapstone provided by $(FEATURE_CHECK_LDFLAGS-libcapstone)
+
+$(OUTPUT)test-libasm.bin:
+	$(BUILD) $(ASMLIBS)
 
 $(OUTPUT)test-libcheck.bin:
 	$(BUILD) # -lcheck is provided by $(FEATURE_CHECK_LDFLAGS-libcheck)
