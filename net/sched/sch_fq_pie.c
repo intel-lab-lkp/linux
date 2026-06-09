@@ -284,6 +284,19 @@ begin:
 	return skb;
 }
 
+static void fq_pie_clamp_active_deficits(struct fq_pie_sched_data *q,
+					 u32 quantum)
+{
+	struct fq_pie_flow *flow;
+
+	list_for_each_entry(flow, &q->new_flows, flowchain)
+		if (READ_ONCE(flow->deficit) > quantum)
+			WRITE_ONCE(flow->deficit, quantum);
+	list_for_each_entry(flow, &q->old_flows, flowchain)
+		if (READ_ONCE(flow->deficit) > quantum)
+			WRITE_ONCE(flow->deficit, quantum);
+}
+
 static int fq_pie_change(struct Qdisc *sch, struct nlattr *opt,
 			 struct netlink_ext_ack *extack)
 {
@@ -340,8 +353,10 @@ static int fq_pie_change(struct Qdisc *sch, struct nlattr *opt,
 		WRITE_ONCE(q->p_params.beta,
 			   nla_get_u32(tb[TCA_FQ_PIE_BETA]));
 
-	if (tb[TCA_FQ_PIE_QUANTUM])
+	if (tb[TCA_FQ_PIE_QUANTUM]) {
+		fq_pie_clamp_active_deficits(q, nla_get_u32(tb[TCA_FQ_PIE_QUANTUM]));
 		WRITE_ONCE(q->quantum, nla_get_u32(tb[TCA_FQ_PIE_QUANTUM]));
+	}
 
 	if (tb[TCA_FQ_PIE_MEMORY_LIMIT])
 		WRITE_ONCE(q->memory_limit,
