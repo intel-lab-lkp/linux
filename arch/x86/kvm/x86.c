@@ -5485,24 +5485,31 @@ static int kvm_vcpu_ioctl_x86_set_mce(struct kvm_vcpu *vcpu,
 	if ((mce->status & MCI_STATUS_UC) && (mcg_cap & MCG_CTL_P) &&
 	    vcpu->arch.mcg_ctl != ~(u64)0)
 		return 0;
-	/*
-	 * if IA32_MCi_CTL is not all 1s, the uncorrected error
-	 * reporting is disabled for the bank
-	 */
-	if ((mce->status & MCI_STATUS_UC) && banks[0] != ~(u64)0)
-		return 0;
+
 	if (mce->status & MCI_STATUS_UC) {
+		/*
+		 * Per the SDM, error logging always happens independently of
+		 * IA32_MCi_CTL
+		 */
+		if (banks[1] & MCI_STATUS_VAL)
+			mce->status |= MCI_STATUS_OVER;
+		banks[2] = mce->addr;
+		banks[3] = mce->misc;
+		banks[1] = mce->status;
+
+		/*
+		 * if IA32_MCi_CTL is not all 1s, the uncorrected error
+		 * reporting is disabled for the bank
+		 */
+		if (banks[0] != ~(u64)0)
+			return 0;
+
 		if ((vcpu->arch.mcg_status & MCG_STATUS_MCIP) ||
 		    !kvm_is_cr4_bit_set(vcpu, X86_CR4_MCE)) {
 			kvm_make_request(KVM_REQ_TRIPLE_FAULT, vcpu);
 			return 0;
 		}
-		if (banks[1] & MCI_STATUS_VAL)
-			mce->status |= MCI_STATUS_OVER;
-		banks[2] = mce->addr;
-		banks[3] = mce->misc;
 		vcpu->arch.mcg_status = mce->mcg_status;
-		banks[1] = mce->status;
 		kvm_queue_exception(vcpu, MC_VECTOR);
 	} else if (!(banks[1] & MCI_STATUS_VAL)
 		   || !(banks[1] & MCI_STATUS_UC)) {
