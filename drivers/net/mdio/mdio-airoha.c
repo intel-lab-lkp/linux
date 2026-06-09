@@ -245,8 +245,10 @@ static int airoha_mdio_probe(struct platform_device *pdev)
 		freq = 2500000;
 
 	ret = clk_set_rate(priv->clk, freq);
-	if (ret)
+	if (ret) {
+		reset_control_assert(priv->reset);
 		return ret;
+	}
 
 	ret = devm_of_mdiobus_register(dev, bus, dev->of_node);
 	if (ret) {
