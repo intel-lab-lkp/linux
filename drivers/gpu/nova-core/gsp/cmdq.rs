@@ -20,6 +20,10 @@ use kernel::{
     ptr,
     sync::{
         aref::ARef,
+        barrier::{
+            dma_mb,
+            Write, //
+        },
         Mutex, //
     },
     time::Delta,
@@ -274,6 +278,9 @@ impl DmaGspMem {
             (rx - 1, 0)
         };
 
+        // ORDERING: control dependency provides necessary LOAD->STORE ordering.
+        // `dma_mb(Full)` may be used here if we don't want to rely on control dependency.
+
         // SAFETY:
         // - `data` was created from a valid pointer, and `rx` and `tx` are in the
         //   `0..MSGQ_NUM_PAGES` range per the invariants of `cpu_write_ptr` and `gsp_read_ptr`,
@@ -443,6 +450,9 @@ impl DmaGspMem {
 
     // Informs the GSP that it can process `elem_count` new pages from the command queue.
     fn advance_cpu_write_ptr(&mut self, elem_count: u32) {
+        // ORDERING: Ensure all command data is visible before updateing ring buffer pointer.
+        dma_mb(Write);
+
         super::fw::gsp_mem::advance_cpu_write_ptr(&self.0, elem_count)
     }
 }
