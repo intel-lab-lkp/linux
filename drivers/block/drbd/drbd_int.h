@@ -2002,9 +2002,6 @@ static inline bool is_sync_state(enum drbd_conns connection_state)
  *
  * You have to call put_ldev() when finished working with device->ldev.
  */
-#define get_ldev_if_state(_device, _min_state)				\
-	(_get_ldev_if_state((_device), (_min_state)) ?			\
-	 ({ __acquire(x); true; }) : false)
 #define get_ldev(_device) get_ldev_if_state(_device, D_INCONSISTENT)
 
 static inline void put_ldev(struct drbd_device *device)
@@ -2033,8 +2030,8 @@ static inline void put_ldev(struct drbd_device *device)
 	}
 }
 
-static inline int _get_ldev_if_state(struct drbd_device *device,
-				     enum drbd_disk_state mins)
+static inline int get_ldev_if_state(struct drbd_device *device,
+				    enum drbd_disk_state mins)
 {
 	int io_allowed;
 
