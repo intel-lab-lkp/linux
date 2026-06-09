@@ -217,6 +217,8 @@ int gfs2_glock_nq_m(unsigned int num_gh, struct gfs2_holder *ghs);
 void gfs2_glock_dq_m(unsigned int num_gh, struct gfs2_holder *ghs);
 void gfs2_dump_glock(struct seq_file *seq, struct gfs2_glock *gl,
 			    bool fsid);
+void gfs2_dump_glock_locked(struct seq_file *seq, struct gfs2_glock *gl,
+			    bool fsid);
 #define GLOCK_BUG_ON(gl,x) do { if (unlikely(x)) {		\
 			gfs2_dump_glock(NULL, gl, true);	\
 			BUG(); } } while(0)

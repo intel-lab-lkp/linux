@@ -342,7 +342,7 @@ void gfs2_consist_inode_i(struct gfs2_inode *ip,
 		(unsigned long long)ip->i_no_formal_ino,
 		(unsigned long long)ip->i_no_addr,
 		function, file, line);
-	gfs2_dump_glock(NULL, ip->i_gl, 1);
+	gfs2_dump_glock_locked(NULL, ip->i_gl, true);
 	gfs2_withdraw(sdp);
 }
 
@@ -364,7 +364,7 @@ void gfs2_consist_rgrpd_i(struct gfs2_rgrpd *rgd,
 		"function = %s, file = %s, line = %u\n",
 		(unsigned long long)rgd->rd_addr,
 		function, file, line);
-	gfs2_dump_glock(NULL, rgd->rd_gl, 1);
+	gfs2_dump_glock_locked(NULL, rgd->rd_gl, true);
 	gfs2_withdraw(sdp);
 }
 

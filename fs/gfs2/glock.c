@@ -2100,7 +2100,7 @@ void gfs2_glock_thaw(struct gfs2_sbd *sdp)
 	glock_hash_walk(thaw_glock, sdp);
 }
 
-static void dump_glock(struct seq_file *seq, struct gfs2_glock *gl, bool fsid)
+void gfs2_dump_glock_locked(struct seq_file *seq, struct gfs2_glock *gl, bool fsid)
 {
 	spin_lock(&gl->gl_lockref.lock);
 	gfs2_dump_glock(seq, gl, fsid);
@@ -2109,7 +2109,7 @@ static void dump_glock(struct seq_file *seq, struct gfs2_glock *gl, bool fsid)
 
 static void dump_glock_func(struct gfs2_glock *gl)
 {
-	dump_glock(NULL, gl, true);
+	gfs2_dump_glock_locked(NULL, gl, true);
 }
 
 static void withdraw_glock(struct gfs2_glock *gl)
@@ -2537,7 +2537,7 @@ static void gfs2_glock_seq_stop(struct seq_file *seq, void *iter_ptr)
 
 static int gfs2_glock_seq_show(struct seq_file *seq, void *iter_ptr)
 {
-	dump_glock(seq, iter_ptr, false);
+	gfs2_dump_glock_locked(seq, iter_ptr, false);
 	return 0;
 }
 
