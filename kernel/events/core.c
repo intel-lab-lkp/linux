@@ -3199,6 +3199,15 @@ perf_install_in_context(struct perf_event_context *ctx,
 	 */
 	smp_mb();
 again:
+	if (task == current) {
+		unsigned long flags;
+		preempt_disable();
+		local_irq_save(flags);
+		__perf_install_in_context(event);
+		local_irq_restore(flags);
+		preempt_enable();
+		return;
+	}
 	if (!task_function_call(task, __perf_install_in_context, event))
 		return;
 
