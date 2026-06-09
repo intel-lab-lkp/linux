@@ -461,7 +461,6 @@ drm_get_colorop_lut1d_interpolation_name(enum drm_colorop_lut1d_interpolation_ty
 const char *
 drm_get_colorop_lut3d_interpolation_name(enum drm_colorop_lut3d_interpolation_type type);
 
-void drm_colorop_set_next_property(struct drm_colorop *colorop, struct drm_colorop *next);
 void drm_colorop_add_to_pipeline(struct drm_colorop *pipeline, struct drm_colorop *colorop);
 
 #endif /* __DRM_COLOROP_H__ */

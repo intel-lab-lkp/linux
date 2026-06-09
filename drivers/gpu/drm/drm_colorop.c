@@ -618,22 +618,6 @@ const char *drm_get_colorop_lut3d_interpolation_name(enum drm_colorop_lut3d_inte
 }
 
 /**
- * drm_colorop_set_next_property - sets the next pointer
- * @colorop: drm colorop
- * @next: next colorop
- *
- * Should be used when constructing the color pipeline
- */
-void drm_colorop_set_next_property(struct drm_colorop *colorop, struct drm_colorop *next)
-{
-	drm_object_property_set_value(&colorop->base,
-				      colorop->next_property,
-				      next ? next->base.id : 0);
-	colorop->next = next;
-}
-EXPORT_SYMBOL(drm_colorop_set_next_property);
-
-/**
  * drm_colorop_add_to_pipeline - adds the given colorop to a color pipeline
  * @pipeline: drm colorop pipeline
  * @colorop: drm colorop to add
