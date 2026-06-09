@@ -630,6 +630,7 @@ mtype_resize(struct ip_set *set, bool retried)
 	struct htable *t, *orig;
 	u8 pos, htable_bits;
 	size_t hsize, dsize = set->dsize;
+	struct ip_set_ext replay = { .context = IPSET_EXT_CONTEXT_REPLAY };
 #ifdef IP_SET_HASH_WITH_NETS
 	u8 flags;
 	struct mtype_elem *tmp;
@@ -779,7 +780,7 @@ retry:
 		if (x->ad == IPSET_ADD) {
 			mtype_add(set, &x->d, &x->ext, &x->mext, x->flags);
 		} else {
-			mtype_del(set, &x->d, NULL, NULL, 0);
+			mtype_del(set, &x->d, &replay, &replay, 0);
 		}
 		list_del(l);
 		kfree(l);
@@ -1007,7 +1008,7 @@ overwrite_extensions:
 	ret = 0;
 resize:
 	spin_unlock_bh(&t->hregion[r].lock);
-	if (atomic_read(&t->ref) && ext->target) {
+	if (atomic_read(&t->ref) && ext->context == IPSET_EXT_CONTEXT_TARGET) {
 		/* Resize is in process and kernel side add, save values */
 		struct mtype_resize_ad *x;
 
@@ -1095,9 +1096,10 @@ mtype_del(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 			mtype_del_cidr(set, h,
 				       NCIDR_PUT(DCIDR_GET(d->cidr, j)), j);
 #endif
-		ip_set_ext_destroy(set, data);
+		if (ext->context != IPSET_EXT_CONTEXT_REPLAY)
+			ip_set_ext_destroy(set, data);
 
-		if (atomic_read(&t->ref) && ext->target) {
+		if (atomic_read(&t->ref) && ext->context == IPSET_EXT_CONTEXT_TARGET) {
 			/* Resize is in process and kernel side del,
 			 * save values
 			 */

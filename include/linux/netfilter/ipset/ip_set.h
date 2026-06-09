@@ -113,6 +113,12 @@ struct ip_set_skbinfo {
 	u16 __pad;
 };
 
+enum ip_set_ext_context {
+	IPSET_EXT_CONTEXT_NONE = 0,
+	IPSET_EXT_CONTEXT_TARGET = 1,
+	IPSET_EXT_CONTEXT_REPLAY = 2,
+};
+
 struct ip_set_ext {
 	struct ip_set_skbinfo skbinfo;
 	u64 packets;
@@ -121,7 +127,7 @@ struct ip_set_ext {
 	u32 timeout;
 	u8 packets_op;
 	u8 bytes_op;
-	bool target;
+	u8 context;
 };
 
 #define ext_timeout(e, s)	\
@@ -530,7 +536,8 @@ nf_inet_addr_mask_inplace(union nf_inet_addr *a1,
 }
 
 #define IP_SET_INIT_KEXT(skb, opt, set)			\
-	{ .bytes = (skb)->len, .packets = 1, .target = true,\
+	{ .bytes = (skb)->len, .packets = 1,		\
+	  .context = IPSET_EXT_CONTEXT_TARGET,		\
 	  .timeout = ip_set_adt_opt_timeout(opt, set) }
 
 #define IP_SET_INIT_UEXT(set)				\
