@@ -365,6 +365,14 @@ static const struct nla_policy fq_codel_policy[TCA_FQ_CODEL_MAX + 1] = {
 	[TCA_FQ_CODEL_CE_THRESHOLD_MASK] = { .type = NLA_U8 },
 };
 
+static void fq_codel_set_can_bypass(struct Qdisc *sch)
+{
+	if (sch->limit >= 1)
+		sch->flags |= TCQ_F_CAN_BYPASS;
+	else
+		sch->flags &= ~TCQ_F_CAN_BYPASS;
+}
+
 static int fq_codel_change(struct Qdisc *sch, struct nlattr *opt,
 			   struct netlink_ext_ack *extack)
 {
@@ -423,9 +431,11 @@ static int fq_codel_change(struct Qdisc *sch, struct nlattr *opt,
 			   (interval * NSEC_PER_USEC) >> CODEL_SHIFT);
 	}
 
-	if (tb[TCA_FQ_CODEL_LIMIT])
+	if (tb[TCA_FQ_CODEL_LIMIT]) {
 		WRITE_ONCE(sch->limit,
 			   nla_get_u32(tb[TCA_FQ_CODEL_LIMIT]));
+		fq_codel_set_can_bypass(sch);
+	}
 
 	if (tb[TCA_FQ_CODEL_ECN])
 		WRITE_ONCE(q->cparams.ecn,
@@ -515,10 +525,7 @@ static int fq_codel_init(struct Qdisc *sch, struct nlattr *opt,
 			codel_vars_init(&flow->cvars);
 		}
 	}
-	if (sch->limit >= 1)
-		sch->flags |= TCQ_F_CAN_BYPASS;
-	else
-		sch->flags &= ~TCQ_F_CAN_BYPASS;
+	fq_codel_set_can_bypass(sch);
 
 	sch->flags |= TCQ_F_DEQUEUE_DROPS;
 

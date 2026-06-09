@@ -97,6 +97,14 @@ static const struct nla_policy codel_policy[TCA_CODEL_MAX + 1] = {
 	[TCA_CODEL_CE_THRESHOLD]= { .type = NLA_U32 },
 };
 
+static void codel_set_can_bypass(struct Qdisc *sch)
+{
+	if (sch->limit >= 1)
+		sch->flags |= TCQ_F_CAN_BYPASS;
+	else
+		sch->flags &= ~TCQ_F_CAN_BYPASS;
+}
+
 static int codel_change(struct Qdisc *sch, struct nlattr *opt,
 			struct netlink_ext_ack *extack)
 {
@@ -133,9 +141,11 @@ static int codel_change(struct Qdisc *sch, struct nlattr *opt,
 			   ((u64)interval * NSEC_PER_USEC) >> CODEL_SHIFT);
 	}
 
-	if (tb[TCA_CODEL_LIMIT])
+	if (tb[TCA_CODEL_LIMIT]) {
 		WRITE_ONCE(sch->limit,
 			   nla_get_u32(tb[TCA_CODEL_LIMIT]));
+		codel_set_can_bypass(sch);
+	}
 
 	if (tb[TCA_CODEL_ECN])
 		WRITE_ONCE(q->params.ecn,
@@ -176,10 +186,7 @@ static int codel_init(struct Qdisc *sch, struct nlattr *opt,
 			return err;
 	}
 
-	if (sch->limit >= 1)
-		sch->flags |= TCQ_F_CAN_BYPASS;
-	else
-		sch->flags &= ~TCQ_F_CAN_BYPASS;
+	codel_set_can_bypass(sch);
 
 	sch->flags |= TCQ_F_DEQUEUE_DROPS;
 
