@@ -2811,24 +2811,6 @@ static int ext4_do_writepages(struct mpage_da_data *mpd)
 		goto out_writepages;
 
 	/*
-	 * If we have inline data and arrive here, it means that
-	 * we will soon create the block for the 1st page, so
-	 * we'd better clear the inline data here.
-	 */
-	if (ext4_has_inline_data(inode)) {
-		/* Just inode will be modified... */
-		handle = ext4_journal_start(inode, EXT4_HT_INODE, 1);
-		if (IS_ERR(handle)) {
-			ret = PTR_ERR(handle);
-			goto out_writepages;
-		}
-		BUG_ON(ext4_test_inode_state(inode,
-				EXT4_STATE_MAY_INLINE_DATA));
-		ext4_destroy_inline_data(handle, inode);
-		ext4_journal_stop(handle);
-	}
-
-	/*
 	 * data=journal mode does not do delalloc so we just need to writeout /
 	 * journal already mapped buffers. On the other hand we need to commit
 	 * transaction to make data stable. We expect all the data to be
@@ -3037,6 +3019,35 @@ static int ext4_writepages(struct address_space *mapping,
 	ret = ext4_emergency_state(sb);
 	if (unlikely(ret))
 		return ret;
+
+	/*
+	 * Clearing inline data acquires xattr_sem, which ranks above
+	 * s_writepages_rwsem.  Do it here before taking the rwsem to avoid
+	 * a circular dependency:
+	 *   ext4_writepages (s_writepages_rwsem) -> ext4_destroy_inline_data
+	 *     (xattr_sem)
+	 *   ext4_xattr_block_set (xattr_sem) -> iput -> ext4_writepages
+	 *     (s_writepages_rwsem)
+	 *
+	 * This is only needed in the ext4_writepages() path.  The other
+	 * caller of ext4_do_writepages() -- ext4_normal_submit_inode_data_buffers
+	 * (jbd2 commit callback) -- cannot encounter inline data because jbd2
+	 * only tracks inodes with block-mapped dirty ranges registered via
+	 * ext4_jbd2_inode_add_write(), and all such callers either bail out
+	 * for inline data inodes (e.g. ext4_journalled_write_end) or are
+	 * unreachable for them (ext4_map_blocks, ext4_block_zero_eof).
+	 */
+	if (ext4_has_inline_data(mapping->host)) {
+		handle_t *handle;
+
+		handle = ext4_journal_start(mapping->host, EXT4_HT_INODE, 1);
+		if (IS_ERR(handle))
+			return PTR_ERR(handle);
+		BUG_ON(ext4_test_inode_state(mapping->host,
+				EXT4_STATE_MAY_INLINE_DATA));
+		ext4_destroy_inline_data(handle, mapping->host);
+		ext4_journal_stop(handle);
+	}
 
 	alloc_ctx = ext4_writepages_down_read(sb);
 	ret = ext4_do_writepages(&mpd);
