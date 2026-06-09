@@ -350,12 +350,10 @@ static int intel_allocate_scaler(struct intel_crtc_scaler_state *scaler_state,
 	}
 
 	for (scaler_id = 0; scaler_id < crtc->num_scalers; scaler_id++) {
-		if (scaler_state->scalers[scaler_id].in_use)
-			continue;
-
-		scaler_state->scalers[scaler_id].in_use = true;
-
-		return scaler_id;
+		if (!scaler_state->scalers[scaler_id].in_use) {
+			scaler_state->scalers[scaler_id].in_use = true;
+			return scaler_id;
+		}
 	}
 
 	return -1;
