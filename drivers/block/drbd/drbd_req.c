@@ -951,7 +951,8 @@ static bool remote_due_to_read_balancing(struct drbd_device *device, sector_t se
  *
  * Only way out: remove the conflicting intervals from the tree.
  */
-static void complete_conflicting_writes(struct drbd_request *req)
+static void complete_conflicting_writes(struct drbd_resource *resource,
+					struct drbd_request *req)
 {
 	DEFINE_WAIT(wait);
 	struct drbd_device *device = req->device;
@@ -974,9 +975,9 @@ static void complete_conflicting_writes(struct drbd_request *req)
 		/* Indicate to wake up device->misc_wait on progress.  */
 		prepare_to_wait(&device->misc_wait, &wait, TASK_UNINTERRUPTIBLE);
 		i->waiting = true;
-		spin_unlock_irq(&device->resource->req_lock);
+		spin_unlock_irq(&resource->req_lock);
 		schedule();
-		spin_lock_irq(&device->resource->req_lock);
+		spin_lock_irq(&resource->req_lock);
 	}
 	finish_wait(&device->misc_wait, &wait);
 }
@@ -1329,7 +1330,7 @@ static void drbd_send_and_submit(struct drbd_device *device, struct drbd_request
 		/* This may temporarily give up the req_lock,
 		 * but will re-aquire it before it returns here.
 		 * Needs to be before the check on drbd_suspended() */
-		complete_conflicting_writes(req);
+		complete_conflicting_writes(resource, req);
 		/* no more giving up req_lock from now on! */
 
 		/* check for congestion, and potentially stop sending
