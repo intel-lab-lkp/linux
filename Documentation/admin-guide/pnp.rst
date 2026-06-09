@@ -203,12 +203,12 @@ The New Way
 
    ex::
 
-	static const struct pnp_id pnp_dev_table[] = {
+	static const struct pnp_device_id pnp_dev_table[] = {
 		/* Standard LPT Printer Port */
-		{.id = "PNP0400", .driver_data = 0},
+		{ .id = "PNP0400" },
 		/* ECP Printer Port */
-		{.id = "PNP0401", .driver_data = 0},
-		{.id = ""}
+		{ .id = "PNP0401" },
+		{ }
 	};
 
    Please note that the character 'X' can be used as a wild card in the function
@@ -217,14 +217,14 @@ The New Way
    ex::
 
 	/* Unknown PnP modems */
-	{	"PNPCXXX",		UNKNOWN_DEV	},
+	{ .id = "PNPCXXX", .driver_data = UNKNOWN_DEV },
 
    Supported PnP card IDs can optionally be defined.
    ex::
 
-	static const struct pnp_id pnp_card_table[] = {
-		{	"ANYDEVS",		0	},
-		{	"",			0	}
+	static const struct pnp_device_id pnp_card_table[] = {
+		{ .id = "ANYDEVS" },
+		{ }
 	};
 
 2. Optionally define probe and remove functions.  It may make sense not to
@@ -234,14 +234,13 @@ The New Way
    ex::
 
 	static int
-	serial_pnp_probe(struct pnp_dev * dev, const struct pnp_id *card_id, const
-			struct pnp_id *dev_id)
+	serial_pnp_probe(struct pnp_dev *dev, const struct pnp_device_id *dev_id)
 	{
 	. . .
 
    ex::
 
-	static void serial_pnp_remove(struct pnp_dev * dev)
+	static void serial_pnp_remove(struct pnp_dev *dev)
 	{
 	. . .
 
@@ -253,7 +252,6 @@ The New Way
 
 	static struct pnp_driver serial_pnp_driver = {
 		.name		= "serial",
-		.card_id_table	= pnp_card_table,
 		.id_table	= pnp_dev_table,
 		.probe		= serial_pnp_probe,
 		.remove		= serial_pnp_remove,
