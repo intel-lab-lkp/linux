@@ -523,6 +523,49 @@ static int loop_check_backing_file(struct file *file)
 	return 0;
 }
 
+static int __loop_change_fd(struct loop_device *lo, struct block_device *bdev,
+			    struct file *file, struct file **old_file,
+			    bool *partscan)
+{
+	unsigned int memflags;
+	int error;
+
+	if (lo->lo_state != Lo_bound)
+		return -ENXIO;
+
+	/* the loop device has to be read-only */
+	if (!(lo->lo_flags & LO_FLAGS_READ_ONLY))
+		return -EINVAL;
+
+	error = loop_validate_file(file, bdev);
+	if (error)
+		return error;
+
+	*old_file = lo->lo_backing_file;
+
+	/* size of the new backing store needs to be the same */
+	if (lo_calculate_size(lo, file) != lo_calculate_size(lo, *old_file))
+		return -EINVAL;
+
+	/*
+	 * We might switch to direct I/O mode for the loop device, write back
+	 * all dirty data the page cache now that so that the individual I/O
+	 * operations don't have to do that.
+	 */
+	vfs_fsync(file, 0);
+
+	/* and ... switch */
+	disk_force_media_change(lo->lo_disk);
+	memflags = blk_mq_freeze_queue(lo->lo_queue);
+	mapping_set_gfp_mask((*old_file)->f_mapping, lo->old_gfp_mask);
+	loop_assign_backing_file(lo, file);
+	loop_update_dio(lo);
+	blk_mq_unfreeze_queue(lo->lo_queue, memflags);
+	*partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
+
+	return 0;
+}
+
 /*
  * loop_change_fd switched the backing store of a loopback device to
  * a new file. This is useful for operating system installers to free up
@@ -536,7 +579,6 @@ static int loop_change_fd(struct loop_device *lo, struct block_device *bdev,
 {
 	struct file *file = fget(arg);
 	struct file *old_file;
-	unsigned int memflags;
 	int error;
 	bool partscan;
 	bool is_loop;
@@ -557,43 +599,10 @@ static int loop_change_fd(struct loop_device *lo, struct block_device *bdev,
 	error = loop_global_lock_killable(lo, is_loop);
 	if (error)
 		goto out_putf;
-	error = -ENXIO;
-	if (lo->lo_state != Lo_bound)
-		goto out_err;
-
-	/* the loop device has to be read-only */
-	error = -EINVAL;
-	if (!(lo->lo_flags & LO_FLAGS_READ_ONLY))
-		goto out_err;
-
-	error = loop_validate_file(file, bdev);
-	if (error)
-		goto out_err;
-
-	old_file = lo->lo_backing_file;
-
-	error = -EINVAL;
-
-	/* size of the new backing store needs to be the same */
-	if (lo_calculate_size(lo, file) != lo_calculate_size(lo, old_file))
-		goto out_err;
-
-	/*
-	 * We might switch to direct I/O mode for the loop device, write back
-	 * all dirty data the page cache now that so that the individual I/O
-	 * operations don't have to do that.
-	 */
-	vfs_fsync(file, 0);
-
-	/* and ... switch */
-	disk_force_media_change(lo->lo_disk);
-	memflags = blk_mq_freeze_queue(lo->lo_queue);
-	mapping_set_gfp_mask(old_file->f_mapping, lo->old_gfp_mask);
-	loop_assign_backing_file(lo, file);
-	loop_update_dio(lo);
-	blk_mq_unfreeze_queue(lo->lo_queue, memflags);
-	partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
+	error = __loop_change_fd(lo, bdev, file, &old_file, &partscan);
 	loop_global_unlock(lo, is_loop);
+	if (error)
+		goto out_putf;
 
 	/*
 	 * Flush loop_validate_file() before fput(), for l->lo_backing_file
@@ -618,8 +627,6 @@ done:
 	kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
 	return error;
 
-out_err:
-	loop_global_unlock(lo, is_loop);
 out_putf:
 	fput(file);
 	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
