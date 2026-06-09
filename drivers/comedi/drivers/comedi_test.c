@@ -256,7 +256,8 @@ static int waveform_ai_cmdtest(struct comedi_device *dev,
 			       struct comedi_cmd *cmd)
 {
 	int err = 0;
-	unsigned int arg, limit;
+	unsigned int arg, limit, min_scan_arg;
+	u64 min_scan_time;
 
 	/* Step 1 : check if triggers are trivially valid */
 
@@ -291,10 +292,8 @@ static int waveform_ai_cmdtest(struct comedi_device *dev,
 	if (cmd->convert_src == TRIG_NOW) {
 		err |= comedi_check_trigger_arg_is(&cmd->convert_arg, 0);
 	} else {	/* cmd->convert_src == TRIG_TIMER */
-		if (cmd->scan_begin_src == TRIG_FOLLOW) {
-			err |= comedi_check_trigger_arg_min(&cmd->convert_arg,
-							    NSEC_PER_USEC);
-		}
+		err |= comedi_check_trigger_arg_min(&cmd->convert_arg,
+						    NSEC_PER_USEC);
 	}
 
 	if (cmd->scan_begin_src == TRIG_FOLLOW) {
@@ -341,7 +340,12 @@ static int waveform_ai_cmdtest(struct comedi_device *dev,
 		arg = NSEC_PER_USEC * DIV_ROUND_CLOSEST(arg, NSEC_PER_USEC);
 		if (cmd->convert_src == TRIG_TIMER) {
 			/* but ensure scan_begin_arg is large enough */
-			arg = max(arg, cmd->convert_arg * cmd->scan_end_arg);
+			min_scan_time = (u64)cmd->convert_arg * cmd->scan_end_arg;
+			if (min_scan_time > UINT_MAX)
+				min_scan_arg = UINT_MAX;
+			else
+				min_scan_arg = min_scan_time;
+			arg = max(arg, min_scan_arg);
 		}
 		err |= comedi_check_trigger_arg_is(&cmd->scan_begin_arg, arg);
 	}
