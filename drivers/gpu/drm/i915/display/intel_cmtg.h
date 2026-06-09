@@ -22,5 +22,6 @@ bool intel_cmtg_is_allowed(const struct intel_crtc_state *crtc_state);
 void intel_cmtg_enable_interrupt(const struct intel_crtc_state *crtc_state);
 void intel_cmtg_disable_interrupt(const struct intel_crtc_state *crtc_state);
 void intel_cmtg_program(const struct intel_crtc_state *crtc_state);
+void intel_cmtg_restore(const struct intel_crtc_state *crtc_state);
 
 #endif /* __INTEL_CMTG_H__ */
