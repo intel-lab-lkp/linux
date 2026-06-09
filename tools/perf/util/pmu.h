@@ -45,6 +45,8 @@ enum pmu_kind {
 	PERF_PMU_KIND_DRM,
 	/* A perf tool provided HWMON PMU. */
 	PERF_PMU_KIND_HWMON,
+	/* A perf tool provided NVME PMU. */
+	PERF_PMU_KIND_NVME,
 	/* Perf tool provided PMU for tool events like time. */
 	PERF_PMU_KIND_TOOL,
 	/* A testing PMU kind. */
@@ -53,7 +55,9 @@ enum pmu_kind {
 
 enum {
 	PERF_PMU_TYPE_PE_START    = 0,
-	PERF_PMU_TYPE_PE_END      = 0xFFFDFFFF,
+	PERF_PMU_TYPE_PE_END      = 0xFFFCFFFF,
+	PERF_PMU_TYPE_NVME_START  = 0xFFFD0000,
+	PERF_PMU_TYPE_NVME_END    = 0xFFFDFFFF,
 	PERF_PMU_TYPE_DRM_START   = 0xFFFE0000,
 	PERF_PMU_TYPE_DRM_END     = 0xFFFEFFFF,
 	PERF_PMU_TYPE_HWMON_START = 0xFFFF0000,
@@ -363,6 +367,8 @@ static inline enum pmu_kind perf_pmu__kind(const struct perf_pmu *pmu)
 	type = pmu->type;
 	if (type <= PERF_PMU_TYPE_PE_END)
 		return PERF_PMU_KIND_PE;
+	if (type <= PERF_PMU_TYPE_NVME_END)
+		return PERF_PMU_KIND_NVME;
 	if (type <= PERF_PMU_TYPE_DRM_END)
 		return PERF_PMU_KIND_DRM;
 	if (type <= PERF_PMU_TYPE_HWMON_END)

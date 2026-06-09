@@ -202,6 +202,10 @@ struct evsel {
 			struct xyarray *start_times;
 			struct xyarray *accumulated_times;
 		} process_time;
+		/* For NVMe events */
+		struct {
+			struct xyarray *initial_values;
+		} nvme;
 	};
 	/* Is the tool's fd for /proc/pid/stat or /proc/stat. */
 	bool pid_stat;

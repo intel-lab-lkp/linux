@@ -17,6 +17,7 @@
 #include "pmus.h"
 #include "pmu.h"
 #include "hwmon_pmu.h"
+#include "nvme_pmu.h"
 #include "tool_pmu.h"
 #include "print-events.h"
 #include "strbuf.h"
@@ -44,18 +45,21 @@ enum perf_tool_pmu_type {
 	PERF_TOOL_PMU_TYPE_PE_OTHER,
 	PERF_TOOL_PMU_TYPE_TOOL,
 	PERF_TOOL_PMU_TYPE_HWMON,
+	PERF_TOOL_PMU_TYPE_NVME,
 	PERF_TOOL_PMU_TYPE_DRM,
 
 #define PERF_TOOL_PMU_TYPE_PE_CORE_MASK (1 << PERF_TOOL_PMU_TYPE_PE_CORE)
 #define PERF_TOOL_PMU_TYPE_PE_OTHER_MASK (1 << PERF_TOOL_PMU_TYPE_PE_OTHER)
 #define PERF_TOOL_PMU_TYPE_TOOL_MASK (1 << PERF_TOOL_PMU_TYPE_TOOL)
 #define PERF_TOOL_PMU_TYPE_HWMON_MASK (1 << PERF_TOOL_PMU_TYPE_HWMON)
+#define PERF_TOOL_PMU_TYPE_NVME_MASK (1 << PERF_TOOL_PMU_TYPE_NVME)
 #define PERF_TOOL_PMU_TYPE_DRM_MASK (1 << PERF_TOOL_PMU_TYPE_DRM)
 
 #define PERF_TOOL_PMU_TYPE_ALL_MASK (PERF_TOOL_PMU_TYPE_PE_CORE_MASK |	\
 					PERF_TOOL_PMU_TYPE_PE_OTHER_MASK | \
 					PERF_TOOL_PMU_TYPE_TOOL_MASK |	\
 					PERF_TOOL_PMU_TYPE_HWMON_MASK | \
+					PERF_TOOL_PMU_TYPE_NVME_MASK | \
 					PERF_TOOL_PMU_TYPE_DRM_MASK)
 };
 static unsigned int read_pmu_types;
@@ -175,12 +179,15 @@ struct perf_pmu *perf_pmus__find(const char *name)
 		return pmu;
 
 	/* Looking up an individual perf event PMU failed, check if a tool PMU should be read. */
-	if (!strncmp(name, "hwmon_", 6))
-		to_read_pmus |= PERF_TOOL_PMU_TYPE_HWMON_MASK;
-	else if (!strncmp(name, "drm_", 4))
+	if (!strncmp(name, "hwmon_", 6)) {
+		to_read_pmus = PERF_TOOL_PMU_TYPE_HWMON_MASK;
+	} else if (!strncmp(name, "nvme_", 5)) {
+		to_read_pmus = PERF_TOOL_PMU_TYPE_NVME_MASK;
+	} else if (!strncmp(name, "drm_", 4)) {
 		to_read_pmus |= PERF_TOOL_PMU_TYPE_DRM_MASK;
-	else if (!strcmp(name, "tool"))
+	} else if (!strcmp(name, "tool")) {
 		to_read_pmus |= PERF_TOOL_PMU_TYPE_TOOL_MASK;
+	}
 
 	if (to_read_pmus) {
 		pmu_read_sysfs(to_read_pmus);
@@ -278,6 +285,10 @@ skip_pe_pmus:
 	if ((to_read_types & PERF_TOOL_PMU_TYPE_HWMON_MASK) != 0 &&
 	    (read_pmu_types & PERF_TOOL_PMU_TYPE_HWMON_MASK) == 0)
 		perf_pmus__read_hwmon_pmus(&other_pmus);
+
+	if ((to_read_types & PERF_TOOL_PMU_TYPE_NVME_MASK) != 0 &&
+	    (read_pmu_types & PERF_TOOL_PMU_TYPE_NVME_MASK) == 0)
+		perf_pmus__read_nvme_pmus(&other_pmus);
 
 	if ((to_read_types & PERF_TOOL_PMU_TYPE_DRM_MASK) != 0 &&
 	    (read_pmu_types & PERF_TOOL_PMU_TYPE_DRM_MASK) == 0)
@@ -387,6 +398,10 @@ struct perf_pmu *perf_pmus__scan_for_event(struct perf_pmu *pmu, const char *eve
 		if (strlen(event) > 4 && strncmp("drm-", event, 4) == 0)
 			to_read_pmus |= PERF_TOOL_PMU_TYPE_DRM_MASK;
 
+		/* Could the event be an nvme event? */
+		if (nvme_pmu__have_event(NULL, event))
+			to_read_pmus |= PERF_TOOL_PMU_TYPE_NVME_MASK;
+
 		pmu_read_sysfs(to_read_pmus);
 		pmu = list_prepare_entry(pmu, &core_pmus, list);
 	}
@@ -424,11 +439,14 @@ struct perf_pmu *perf_pmus__scan_matching_wildcard(struct perf_pmu *pmu, const c
 		 */
 		if (strisglob(wildcard)) {
 			to_read_pmus |= PERF_TOOL_PMU_TYPE_HWMON_MASK |
+				PERF_TOOL_PMU_TYPE_NVME_MASK |
 				PERF_TOOL_PMU_TYPE_DRM_MASK;
 		} else if (strlen(wildcard) >= 4 && strncmp("drm_", wildcard, 4) == 0) {
 			to_read_pmus |= PERF_TOOL_PMU_TYPE_DRM_MASK;
 		} else if (strlen(wildcard) >= 5 && strncmp("hwmon", wildcard, 5) == 0) {
 			to_read_pmus |= PERF_TOOL_PMU_TYPE_HWMON_MASK;
+		} else if (strlen(wildcard) >= 4 && strncmp("nvme", wildcard, 4) == 0) {
+			to_read_pmus |= PERF_TOOL_PMU_TYPE_NVME_MASK;
 		}
 
 		pmu_read_sysfs(to_read_pmus);

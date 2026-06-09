@@ -22,6 +22,7 @@
 #include "pmu.h"
 #include "drm_pmu.h"
 #include "hwmon_pmu.h"
+#include "nvme_pmu.h"
 #include "pmus.h"
 #include "tool_pmu.h"
 #include "tp_pmu.h"
@@ -1687,6 +1688,8 @@ int perf_pmu__config_terms(const struct perf_pmu *pmu,
 
 	if (perf_pmu__is_hwmon(pmu))
 		return hwmon_pmu__config_terms(pmu, attr, terms, err);
+	if (perf_pmu__is_nvme(pmu))
+		return nvme_pmu__config_terms(pmu, attr, terms, err);
 	if (perf_pmu__is_drm(pmu))
 		return drm_pmu__config_terms(pmu, attr, terms, err);
 
@@ -1849,6 +1852,10 @@ int perf_pmu__check_alias(struct perf_pmu *pmu, struct parse_events_terms *head_
 
 	if (perf_pmu__is_hwmon(pmu)) {
 		ret = hwmon_pmu__check_alias(head_terms, info, err);
+		goto out;
+	}
+	if (perf_pmu__is_nvme(pmu)) {
+		ret = nvme_pmu__check_alias(head_terms, info, err);
 		goto out;
 	}
 	if (perf_pmu__is_drm(pmu)) {
@@ -2071,6 +2078,8 @@ bool perf_pmu__have_event(struct perf_pmu *pmu, const char *name)
 		return tp_pmu__have_event(pmu, name);
 	if (perf_pmu__is_hwmon(pmu))
 		return hwmon_pmu__have_event(pmu, name);
+	if (perf_pmu__is_nvme(pmu))
+		return nvme_pmu__have_event(pmu, name);
 	if (perf_pmu__is_drm(pmu))
 		return drm_pmu__have_event(pmu, name);
 	if (perf_pmu__find_alias(pmu, name, /*load=*/ true) != NULL)
@@ -2092,6 +2101,8 @@ size_t perf_pmu__num_events(struct perf_pmu *pmu)
 		return tp_pmu__num_events(pmu);
 	if (perf_pmu__is_hwmon(pmu))
 		return hwmon_pmu__num_events(pmu);
+	if (perf_pmu__is_nvme(pmu))
+		return nvme_pmu__num_events(pmu);
 	if (perf_pmu__is_drm(pmu))
 		return drm_pmu__num_events(pmu);
 
@@ -2223,6 +2234,8 @@ int perf_pmu__for_each_event(struct perf_pmu *pmu, bool skip_duplicate_pmus,
 		return tp_pmu__for_each_event(pmu, state, cb);
 	if (perf_pmu__is_hwmon(pmu))
 		return hwmon_pmu__for_each_event(pmu, state, cb);
+	if (perf_pmu__is_nvme(pmu))
+		return nvme_pmu__for_each_event(pmu, state, cb);
 	if (perf_pmu__is_drm(pmu))
 		return drm_pmu__for_each_event(pmu, state, cb);
 
@@ -2714,6 +2727,8 @@ void perf_pmu__delete(struct perf_pmu *pmu)
 
 	if (perf_pmu__is_hwmon(pmu))
 		hwmon_pmu__exit(pmu);
+	if (perf_pmu__is_nvme(pmu))
+		nvme_pmu__exit(pmu);
 	else if (perf_pmu__is_drm(pmu))
 		drm_pmu__exit(pmu);
 

@@ -20,6 +20,7 @@ perf-util-y += disasm.o
 perf-util-y += env.o
 perf-util-y += event.o
 perf-util-y += evlist.o
+perf-util-y += nvme_pmu.o
 perf-util-y += sideband_evlist.o
 perf-util-y += evsel.o
 perf-util-y += evsel_fprintf.o
