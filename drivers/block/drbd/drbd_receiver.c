@@ -288,6 +288,7 @@ static int drbd_finish_peer_reqs(struct drbd_device *device)
 
 static void _drbd_wait_ee_list_empty(struct drbd_device *device,
 				     struct list_head *head)
+	__must_hold(&device->resource->req_lock)
 {
 	DEFINE_WAIT(wait);
 
@@ -897,6 +898,8 @@ randomize:
 	if (drbd_send_protocol(connection) == -EOPNOTSUPP)
 		return -1;
 
+	/* context_unsafe() because of two locking loops */
+	context_unsafe(
 	/* Prevent a race between resync-handshake and
 	 * being promoted to Primary.
 	 *
@@ -914,6 +917,7 @@ randomize:
 
 	idr_for_each_entry(&connection->peer_devices, peer_device, vnr)
 		mutex_unlock(peer_device->device->state_mutex);
+	);
 
 	rcu_read_lock();
 	idr_for_each_entry(&connection->peer_devices, peer_device, vnr) {
@@ -2231,6 +2235,7 @@ static blk_opf_t wire_flags_to_bio(struct drbd_connection *connection, u32 dpf)
 
 static void fail_postponed_requests(struct drbd_device *device, sector_t sector,
 				    unsigned int size)
+	__must_hold(&device->resource->req_lock)
 {
 	struct drbd_peer_device *peer_device = first_peer_device(device);
 	struct drbd_interval *i;
@@ -2257,6 +2262,7 @@ static void fail_postponed_requests(struct drbd_device *device, sector_t sector,
 
 static int handle_write_conflicts(struct drbd_device *device,
 				  struct drbd_peer_request *peer_req)
+	__must_hold(&device->resource->req_lock)
 {
 	struct drbd_connection *connection = peer_req->peer_device->connection;
 	bool resolve_conflicts = test_bit(RESOLVE_CONFLICTS, &connection->flags);

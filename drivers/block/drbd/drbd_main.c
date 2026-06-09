@@ -3659,6 +3659,7 @@ int drbd_wait_misc(struct drbd_device *device, struct drbd_interval *i)
 }
 
 void lock_all_resources(void)
+	__context_unsafe(locking loop)
 {
 	struct drbd_resource *resource;
 	int __maybe_unused i = 0;
@@ -3670,6 +3671,7 @@ void lock_all_resources(void)
 }
 
 void unlock_all_resources(void)
+	__context_unsafe(locking loop)
 {
 	struct drbd_resource *resource;
 

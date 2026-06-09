@@ -197,8 +197,8 @@ struct drbd_device_work {
 
 extern struct mutex resources_mutex;
 
-void lock_all_resources(void);
-void unlock_all_resources(void);
+void lock_all_resources(void) __acquires(&resources_mutex);
+void unlock_all_resources(void) __releases(&resources_mutex);
 
 struct drbd_request {
 	struct drbd_work w;
@@ -1094,7 +1094,8 @@ int drbd_bmio_set_n_write(struct drbd_device *device,
 			  struct drbd_peer_device *peer_device);
 int drbd_bmio_clear_n_write(struct drbd_device *device,
 			    struct drbd_peer_device *peer_device);
-int drbd_wait_misc(struct drbd_device *device, struct drbd_interval *i);
+int drbd_wait_misc(struct drbd_device *device, struct drbd_interval *i)
+	__must_hold(&device->resource->req_lock);
 
 /* Meta data layout
  *
@@ -1859,12 +1860,20 @@ static inline void request_ping(struct drbd_connection *connection)
 	wake_ack_receiver(connection);
 }
 
-void *conn_prepare_command(struct drbd_connection *, struct drbd_socket *);
-void *drbd_prepare_command(struct drbd_peer_device *, struct drbd_socket *);
-int conn_send_command(struct drbd_connection *, struct drbd_socket *,
-		      enum drbd_packet, unsigned int, void *, unsigned int);
-int drbd_send_command(struct drbd_peer_device *, struct drbd_socket *,
-		      enum drbd_packet, unsigned int, void *, unsigned int);
+void *conn_prepare_command(struct drbd_connection *connection,
+			   struct drbd_socket *sock)
+	__cond_acquires(true, &sock->mutex);
+void *drbd_prepare_command(struct drbd_peer_device *peer_device, struct drbd_socket *sock)
+	__cond_acquires(true, &sock->mutex);
+int conn_send_command(struct drbd_connection *connection,
+		      struct drbd_socket *sock,
+		      enum drbd_packet cmd, unsigned int header_size,
+		      void *data, unsigned int size)
+	__releases(&sock->mutex);
+int drbd_send_command(struct drbd_peer_device *peer_device, struct drbd_socket *sock,
+		      enum drbd_packet cmd, unsigned int header_size,
+		      void *data, unsigned int size)
+	__releases(&sock->mutex);
 
 int drbd_send_ping(struct drbd_connection *connection);
 int drbd_send_ping_ack(struct drbd_connection *connection);

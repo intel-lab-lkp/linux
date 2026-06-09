@@ -953,6 +953,7 @@ static bool remote_due_to_read_balancing(struct drbd_device *device, sector_t se
  */
 static void complete_conflicting_writes(struct drbd_resource *resource,
 					struct drbd_request *req)
+	__must_hold(&resource->req_lock)
 {
 	DEFINE_WAIT(wait);
 	struct drbd_device *device = req->device;

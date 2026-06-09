@@ -713,6 +713,7 @@ int drbd_request_detach_interruptible(struct drbd_device *device)
 enum drbd_state_rv
 _drbd_request_state_holding_state_mutex(struct drbd_device *device, union drbd_state mask,
 		    union drbd_state val, enum chg_state_flags f)
+	__must_hold(&device->state_mutex)
 {
 	enum drbd_state_rv rv;
 
@@ -2306,6 +2307,7 @@ _conn_rq_cond(struct drbd_connection *connection, union drbd_state mask, union d
 enum drbd_state_rv
 _conn_request_state(struct drbd_connection *connection, union drbd_state mask, union drbd_state val,
 		    enum chg_state_flags flags)
+	__context_unsafe(conditional locking)
 {
 	enum drbd_state_rv rv = SS_SUCCESS;
 	struct after_conn_state_chg_work *acscw;
