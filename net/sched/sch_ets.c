@@ -249,6 +249,8 @@ static int ets_class_change(struct Qdisc *sch, u32 classid, u32 parentid,
 
 	sch_tree_lock(sch);
 	cl->quantum = quantum;
+	if (cl_is_active(cl))
+		cl->deficit = quantum;
 	sch_tree_unlock(sch);
 
 	ets_offload_change(sch);
