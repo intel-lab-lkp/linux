@@ -164,6 +164,12 @@ static inline void sme_dvmsync_batch(struct arch_tlbflush_unmap_batch *batch)
 
 typedef void (*tlbi_op)(u64 arg);
 
+static __always_inline void vae1(u64 arg)
+{
+	__tlbi(vae1, arg);
+	__tlbi_user(vae1, arg);
+}
+
 static __always_inline void vae1is(u64 arg)
 {
 	__tlbi(vae1is, arg);
@@ -308,6 +314,74 @@ static inline void __tlbi_sync_s1ish_hyp(void)
 	__repeat_tlbi_sync(vale2is, 0);
 }
 
+typedef unsigned __bitwise tlbf_t;
+
+/* No special behaviour. */
+#define TLBF_NONE		((__force tlbf_t)0)
+
+/* Invalidate tlb entries only, leaving the page table walk cache intact. */
+#define TLBF_NOWALKCACHE	((__force tlbf_t)BIT(0))
+
+/* Skip the trailing dsb after issuing tlbi. */
+#define TLBF_NOSYNC		((__force tlbf_t)BIT(1))
+
+/* Suppress tlb notifier callbacks for this flush operation. */
+#define TLBF_NONOTIFY		((__force tlbf_t)BIT(2))
+
+/* Perform the tlbi locally without broadcasting to other CPUs. */
+#define TLBF_NOBROADCAST	((__force tlbf_t)BIT(3))
+
+/*
+ * Determines whether the user tlbi invalidation can be performed only on the
+ * local CPU or whether it needs to be broadcast. (Returns true for local).
+ * Additionally issues appropriate barrier to ensure prior pgtable updates are
+ * visible to the table walker. Must be paired with flush_tlb_user_post().
+ */
+static inline bool flush_tlb_user_pre(struct mm_struct *mm, tlbf_t flags)
+{
+	unsigned int self, active;
+	bool local;
+
+	migrate_disable();
+
+	if (flags & TLBF_NOBROADCAST) {
+		dsb(nshst);
+		return true;
+	}
+
+	self = smp_processor_id();
+
+	/*
+	 * The load of mm->context.active_cpu must not be reordered before the
+	 * store to the pgtable that necessitated this flush. This ensures that
+	 * if the value read is our cpu id, then no other cpu can have seen the
+	 * old pgtable value and therefore does not need this old value to be
+	 * flushed from its tlb. But we don't want to upgrade the dsb(ishst),
+	 * needed to make the pgtable updates visible to the walker, to a
+	 * dsb(ish) by default. So speculatively load without a barrier and if
+	 * it indicates our cpu id, then upgrade the barrier and re-load.
+	 */
+	active = READ_ONCE(mm->context.active_cpu);
+	if (active == self) {
+		dsb(ish);
+		active = READ_ONCE(mm->context.active_cpu);
+	} else {
+		dsb(ishst);
+	}
+
+	local = active == self;
+	if (!local)
+		migrate_enable();
+
+	return local;
+}
+
+static inline void flush_tlb_user_post(bool local)
+{
+	if (local)
+		migrate_enable();
+}
+
 /*
  *	TLB Invalidation
  *	================
@@ -408,12 +482,20 @@ static inline void flush_tlb_all(void)
 static inline void flush_tlb_mm(struct mm_struct *mm)
 {
 	unsigned long asid;
+	bool local;
 
-	dsb(ishst);
+	local = flush_tlb_user_pre(mm, TLBF_NONE);
 	asid = __TLBI_VADDR(0, ASID(mm));
-	__tlbi(aside1is, asid);
-	__tlbi_user(aside1is, asid);
-	__tlbi_sync_s1ish(mm);
+	if (local) {
+		__tlbi(aside1, asid);
+		__tlbi_user(aside1, asid);
+		dsb(nsh);
+	} else {
+		__tlbi(aside1is, asid);
+		__tlbi_user(aside1is, asid);
+		__tlbi_sync_s1ish(mm);
+	}
+	flush_tlb_user_post(local);
 	mmu_notifier_arch_invalidate_secondary_tlbs(mm, 0, -1UL);
 }
 
@@ -475,6 +557,12 @@ static inline void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
  *    operations can only span an even number of pages. We save this for last to
  *    ensure 64KB start alignment is maintained for the LPA2 case.
  */
+static __always_inline void rvae1(u64 arg)
+{
+	__tlbi(rvae1, arg);
+	__tlbi_user(rvae1, arg);
+}
+
 static __always_inline void rvae1is(u64 arg)
 {
 	__tlbi(rvae1is, arg);
@@ -573,23 +661,6 @@ static inline bool __flush_tlb_range_limit_excess(unsigned long pages,
 	return pages >= (MAX_DVM_OPS * stride) >> PAGE_SHIFT;
 }
 
-typedef unsigned __bitwise tlbf_t;
-
-/* No special behaviour. */
-#define TLBF_NONE		((__force tlbf_t)0)
-
-/* Invalidate tlb entries only, leaving the page table walk cache intact. */
-#define TLBF_NOWALKCACHE	((__force tlbf_t)BIT(0))
-
-/* Skip the trailing dsb after issuing tlbi. */
-#define TLBF_NOSYNC		((__force tlbf_t)BIT(1))
-
-/* Suppress tlb notifier callbacks for this flush operation. */
-#define TLBF_NONOTIFY		((__force tlbf_t)BIT(2))
-
-/* Perform the tlbi locally without broadcasting to other CPUs. */
-#define TLBF_NOBROADCAST	((__force tlbf_t)BIT(3))
-
 static __always_inline void __do_flush_tlb_range(struct vm_area_struct *vma,
 					unsigned long start, unsigned long end,
 					unsigned long stride, int tlb_level,
@@ -597,6 +668,7 @@ static __always_inline void __do_flush_tlb_range(struct vm_area_struct *vma,
 {
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long asid, pages;
+	bool local;
 
 	pages = (end - start) >> PAGE_SHIFT;
 
@@ -605,10 +677,9 @@ static __always_inline void __do_flush_tlb_range(struct vm_area_struct *vma,
 		return;
 	}
 
-	if (!(flags & TLBF_NOBROADCAST))
-		dsb(ishst);
-	else
-		dsb(nshst);
+	local = flush_tlb_user_pre(mm, flags);
+	if (local && !(flags & TLBF_NOBROADCAST))
+		flags |= TLBF_NOBROADCAST;
 
 	asid = ASID(mm);
 
@@ -622,8 +693,8 @@ static __always_inline void __do_flush_tlb_range(struct vm_area_struct *vma,
 					asid, tlb_level);
 		break;
 	case TLBF_NOBROADCAST:
-		/* Combination unused */
-		BUG();
+		__flush_s1_tlb_range_op(vae1, start, pages, stride,
+					asid, tlb_level);
 		break;
 	case TLBF_NOWALKCACHE | TLBF_NOBROADCAST:
 		__flush_s1_tlb_range_op(vale1, start, pages, stride,
@@ -640,6 +711,8 @@ static __always_inline void __do_flush_tlb_range(struct vm_area_struct *vma,
 		else
 			dsb(nsh);
 	}
+
+	flush_tlb_user_post(local);
 }
 
 static inline void __flush_tlb_range(struct vm_area_struct *vma,

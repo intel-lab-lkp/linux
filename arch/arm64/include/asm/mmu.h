@@ -16,6 +16,17 @@
 #include <linux/refcount.h>
 #include <asm/cpufeature.h>
 
+/*
+ * Sentinal values for mm_context_t::active_cpu. ACTIVE_CPU_NONE indicates the
+ * mm has never been active on any CPU. ACTIVE_CPU_MULTIPLE indicates the mm
+ * has been active on multiple CPUs. Any other value is the ID of the single
+ * CPU that the mm has been active on.
+ */
+enum active_cpu {
+	ACTIVE_CPU_NONE = UINT_MAX,
+	ACTIVE_CPU_MULTIPLE = UINT_MAX - 1,
+};
+
 typedef struct {
 	atomic64_t	id;
 #ifdef CONFIG_COMPAT
@@ -25,6 +36,7 @@ typedef struct {
 	void		*vdso;
 	unsigned long	flags;
 	u8		pkey_allocation_map;
+	unsigned int	active_cpu;
 } mm_context_t;
 
 /*

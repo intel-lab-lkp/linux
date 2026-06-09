@@ -172,6 +172,8 @@ init_new_context(struct task_struct *tsk, struct mm_struct *mm)
 	/* pkey 0 is the default, so always reserve it. */
 	mm->context.pkey_allocation_map = BIT(0);
 
+	WRITE_ONCE(mm->context.active_cpu, ACTIVE_CPU_NONE);
+
 	return 0;
 }
 

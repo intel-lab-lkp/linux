@@ -214,9 +214,10 @@ set_asid:
 
 void check_and_switch_context(struct mm_struct *mm)
 {
-	unsigned long flags;
-	unsigned int cpu;
+	unsigned int cpu = smp_processor_id();
 	u64 asid, old_active_asid;
+	unsigned int active;
+	unsigned long flags;
 
 	if (system_supports_cnp())
 		cpu_set_reserved_ttbr0();
@@ -251,7 +252,6 @@ void check_and_switch_context(struct mm_struct *mm)
 		atomic64_set(&mm->context.id, asid);
 	}
 
-	cpu = smp_processor_id();
 	if (cpumask_test_and_clear_cpu(cpu, &tlb_flush_pending))
 		local_flush_tlb_all();
 
@@ -261,6 +261,30 @@ void check_and_switch_context(struct mm_struct *mm)
 switch_mm_fastpath:
 
 	arm64_apply_bp_hardening();
+
+	/*
+	 * Update mm->context.active_cpu in such a manner that we avoid cmpxchg
+	 * and dsb unless we definitely need it. If initially ACTIVE_CPU_NONE
+	 * then we are the first cpu to run so set it to our id. If initially
+	 * any id other than ours, we are the second cpu to run so set it to
+	 * ACTIVE_CPU_MULTIPLE. If we update the value then we must issue
+	 * dsb(ishst) to ensure stores to mm->context.active_cpu are ordered
+	 * against the TTBR0 write in cpu_switch_mm()/uaccess_enable(); the
+	 * store must be visible to another cpu before this cpu could have
+	 * populated any TLB entries based on the pgtables that will be
+	 * installed.
+	 */
+	active = READ_ONCE(mm->context.active_cpu);
+	if (active != cpu && active != ACTIVE_CPU_MULTIPLE) {
+		if (active == ACTIVE_CPU_NONE)
+			active = cmpxchg_relaxed(&mm->context.active_cpu,
+						 ACTIVE_CPU_NONE, cpu);
+
+		if (active != ACTIVE_CPU_NONE)
+			WRITE_ONCE(mm->context.active_cpu, ACTIVE_CPU_MULTIPLE);
+
+		dsb(ishst);
+	}
 
 	/*
 	 * Defer TTBR0_EL1 setting for user threads to uaccess_enable() when
