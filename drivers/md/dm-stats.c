@@ -895,7 +895,7 @@ static int dm_stats_print(struct dm_stats *stats, int id,
 
 		DMEMIT("%llu+%llu %llu %llu %llu %llu %llu %llu %llu %llu %d %llu %llu %llu %llu",
 		       (unsigned long long)start,
-		       (unsigned long long)step,
+		       (unsigned long long)(end - start),
 		       shared->tmp.ios[READ],
 		       shared->tmp.merges[READ],
 		       shared->tmp.sectors[READ],
