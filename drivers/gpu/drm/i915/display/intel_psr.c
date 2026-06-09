@@ -3446,10 +3446,12 @@ static int intel_psr_fastset_force(struct intel_display *display)
 retry:
 	drm_connector_list_iter_begin(display->drm, &conn_iter);
 	drm_for_each_connector_iter(conn, &conn_iter) {
+		struct intel_connector *intel_connector = to_intel_connector(conn);
 		struct drm_connector_state *conn_state;
 		struct drm_crtc_state *crtc_state;
 
-		if (conn->connector_type != DRM_MODE_CONNECTOR_eDP)
+		if (!intel_connector->dp.psr_caps.support &&
+		    !intel_connector->dp.panel_replay_caps.support)
 			continue;
 
 		conn_state = drm_atomic_get_connector_state(state, conn);
