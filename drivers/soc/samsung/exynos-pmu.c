@@ -157,6 +157,28 @@ static const struct mfd_cell exynos_pmu_devs[] = {
 	{ .name = "exynos-clkout", },
 };
 
+/*
+ * Look up the regmap of an already-probed exynos-pmu device. The caller
+ * retains ownership of @pmu_np; this helper does not take a reference.
+ */
+static struct regmap *exynos_get_pmu_regmap_by_node(struct device_node *pmu_np)
+{
+	struct device *dev;
+
+	/*
+	 * Determine if exynos-pmu device has probed and therefore regmap
+	 * has been created and can be returned to the caller. Otherwise we
+	 * return -EPROBE_DEFER.
+	 */
+	dev = driver_find_device_by_of_node(&exynos_pmu_driver.driver, pmu_np);
+	if (!dev)
+		return ERR_PTR(-EPROBE_DEFER);
+
+	put_device(dev);
+
+	return syscon_node_to_regmap(pmu_np);
+}
+
 /**
  * exynos_get_pmu_regmap() - Obtain pmureg regmap
  *
@@ -174,7 +196,7 @@ struct regmap *exynos_get_pmu_regmap(void)
 	if (!np)
 		return ERR_PTR(-ENODEV);
 
-	regmap = exynos_get_pmu_regmap_by_phandle(np, NULL);
+	regmap = exynos_get_pmu_regmap_by_node(np);
 	of_node_put(np);
 
 	return regmap;
@@ -184,44 +206,31 @@ EXPORT_SYMBOL_GPL(exynos_get_pmu_regmap);
 /**
  * exynos_get_pmu_regmap_by_phandle() - Obtain pmureg regmap via phandle
  * @np: Device node holding PMU phandle property
- * @propname: Name of property holding phandle value
+ * @propname: Name of property holding phandle value (must not be NULL)
  *
  * Find the pmureg regmap previously configured in probe() and return regmap
  * pointer.
  *
- * Return: A pointer to regmap if found or ERR_PTR error value.
+ * Return: A pointer to regmap on success or an ERR_PTR() error value;
+ *         -EINVAL if @propname is NULL.
  */
 struct regmap *exynos_get_pmu_regmap_by_phandle(struct device_node *np,
 						const char *propname)
 {
 	struct device_node *pmu_np;
-	struct device *dev;
+	struct regmap *regmap;
 
-	if (propname)
-		pmu_np = of_parse_phandle(np, propname, 0);
-	else
-		pmu_np = np;
+	if (!propname)
+		return ERR_PTR(-EINVAL);
 
+	pmu_np = of_parse_phandle(np, propname, 0);
 	if (!pmu_np)
 		return ERR_PTR(-ENODEV);
 
-	/*
-	 * Determine if exynos-pmu device has probed and therefore regmap
-	 * has been created and can be returned to the caller. Otherwise we
-	 * return -EPROBE_DEFER.
-	 */
-	dev = driver_find_device_by_of_node(&exynos_pmu_driver.driver,
-					    (void *)pmu_np);
+	regmap = exynos_get_pmu_regmap_by_node(pmu_np);
+	of_node_put(pmu_np);
 
-	if (propname)
-		of_node_put(pmu_np);
-
-	if (!dev)
-		return ERR_PTR(-EPROBE_DEFER);
-
-	put_device(dev);
-
-	return syscon_node_to_regmap(pmu_np);
+	return regmap;
 }
 EXPORT_SYMBOL_GPL(exynos_get_pmu_regmap_by_phandle);
 
