@@ -387,8 +387,21 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 		error = local_pci_probe(&ddi);
 	} else {
 		struct pci_probe_arg arg = { .ddi = &ddi };
+		struct lock_class_key key;
 
-		INIT_WORK_ONSTACK(&arg.work, local_pci_probe_callback);
+		/*
+		 * A nested pci_call_probe() via a work func will produce a
+		 * false positive lockdep recursive locking warning. Use
+		 * lockdep_register_key() to provision a dynamic key to
+		 * suppress this warning when the current task is a wq kworker.
+		 */
+		if (current->flags & PF_WQ_WORKER) {
+			lockdep_register_key(&key);
+			INIT_WORK_ONSTACK_KEY(&arg.work, local_pci_probe_callback, &key);
+		} else {
+			INIT_WORK_ONSTACK(&arg.work, local_pci_probe_callback);
+		}
+
 		/*
 		 * The target election and the enqueue of the work must be within
 		 * the same RCU read side section so that when the workqueue pool
@@ -415,6 +428,8 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 		}
 
 		destroy_work_on_stack(&arg.work);
+		if (current->flags & PF_WQ_WORKER)
+			lockdep_unregister_key(&key);
 	}
 
 	dev->is_probed = 0;
