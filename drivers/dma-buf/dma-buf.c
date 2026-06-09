@@ -857,7 +857,7 @@ static int dma_buf_wrap_sg_table(struct sg_table **sg_table)
 	struct dma_buf_sg_table_wrapper *to;
 	int i, ret;
 
-	if (!IS_ENABLED(CONFIG_DMABUF_DEBUG))
+	if (!IS_ENABLED(CONFIG_DEBUG))
 		return 0;
 
 	/*
@@ -896,7 +896,7 @@ static void dma_buf_unwrap_sg_table(struct sg_table **sg_table)
 {
 	struct dma_buf_sg_table_wrapper *copy;
 
-	if (!IS_ENABLED(CONFIG_DMABUF_DEBUG))
+	if (!IS_ENABLED(CONFIG_DEBUG))
 		return;
 
 	copy = container_of(*sg_table, typeof(*copy), wrapper);
