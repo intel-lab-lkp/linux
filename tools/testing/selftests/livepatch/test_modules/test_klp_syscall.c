@@ -18,6 +18,8 @@
 #define FN_PREFIX __s390x_
 #elif defined(__aarch64__)
 #define FN_PREFIX __arm64_
+#elif defined(__riscv)
+#define FN_PREFIX __riscv_
 #else
 /* powerpc does not select ARCH_HAS_SYSCALL_WRAPPER */
 #define FN_PREFIX
