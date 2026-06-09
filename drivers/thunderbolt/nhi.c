@@ -1436,6 +1436,20 @@ static void nhi_remove(struct pci_dev *pdev)
 	nhi_shutdown(nhi);
 }
 
+static void nhi_pci_shutdown(struct pci_dev *pdev)
+{
+	struct tb *tb = pci_get_drvdata(pdev);
+
+	/*
+	 * On system shutdown/reboot force host_reset so the connection
+	 * manager asserts DPR to signal disconnect before removing the
+	 * router tree. Only TBT3 devices are reset. Plain driver unload
+	 * uses ->remove (nhi_remove) and keeps the host_reset from load.
+	 */
+	tb->host_reset = true;
+	nhi_remove(pdev);
+}
+
 /*
  * The tunneled pci bridges are siblings of us. Use resume_noirq to reenable
  * the tunnels asap. A corresponding pci quirk blocks the downstream bridges
@@ -1558,7 +1572,7 @@ static struct pci_driver nhi_driver = {
 	.id_table = nhi_ids,
 	.probe = nhi_probe,
 	.remove = nhi_remove,
-	.shutdown = nhi_remove,
+	.shutdown = nhi_pci_shutdown,
 	.driver.pm = &nhi_pm_ops,
 };
 

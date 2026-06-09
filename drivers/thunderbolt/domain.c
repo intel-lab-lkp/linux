@@ -460,6 +460,8 @@ int tb_domain_add(struct tb *tb, bool reset)
 	if (ret)
 		goto err_ctl_stop;
 
+	tb->host_reset = reset;
+
 	/* Start the domain */
 	if (tb->cm_ops->start) {
 		ret = tb->cm_ops->start(tb, reset);

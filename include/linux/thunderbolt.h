@@ -76,6 +76,11 @@ enum tb_security_level {
  * @index: Linux assigned domain number
  * @security_level: Current security level
  * @nboot_acl: Number of boot ACLs the domain supports
+ * @host_reset: Host router was reset on driver load, or forced on system
+ *		shutdown/reboot. When set, tb_stop() asserts DPR on connected
+ *		downstream ports to signal disconnect before tearing down the
+ *		router tree. Only TBT3 devices are reset; USB4 routers are
+ *		skipped.
  * @privdata: Private connection manager specific data
  */
 struct tb {
@@ -89,6 +94,7 @@ struct tb {
 	int index;
 	enum tb_security_level security_level;
 	size_t nboot_acl;
+	bool host_reset;
 	unsigned long privdata[];
 };
 
