@@ -1113,20 +1113,28 @@ unroll_registration:
 static void rproc_stop_subdevices(struct rproc *rproc, bool crashed)
 {
 	struct rproc_subdev *subdev;
+	int ret;
 
 	list_for_each_entry_reverse(subdev, &rproc->subdevs, node) {
-		if (subdev->stop)
-			subdev->stop(subdev, crashed);
+		if (subdev->stop) {
+			ret = subdev->stop(subdev, crashed);
+			if (ret)
+				dev_warn(&rproc->dev, "subdev stop failed: %d\n", ret);
+		}
 	}
 }
 
 static void rproc_unprepare_subdevices(struct rproc *rproc)
 {
 	struct rproc_subdev *subdev;
+	int ret;
 
 	list_for_each_entry_reverse(subdev, &rproc->subdevs, node) {
-		if (subdev->unprepare)
-			subdev->unprepare(subdev);
+		if (subdev->unprepare) {
+			ret = subdev->unprepare(subdev);
+			if (ret)
+				dev_warn(&rproc->dev, "subdev unprepare failed: %d\n", ret);
+		}
 	}
 }
 

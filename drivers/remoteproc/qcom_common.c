@@ -216,19 +216,23 @@ static int glink_subdev_start(struct rproc_subdev *subdev)
 	return PTR_ERR_OR_ZERO(glink->edge);
 }
 
-static void glink_subdev_stop(struct rproc_subdev *subdev, bool crashed)
+static int glink_subdev_stop(struct rproc_subdev *subdev, bool crashed)
 {
 	struct qcom_rproc_glink *glink = to_glink_subdev(subdev);
 
 	qcom_glink_smem_unregister(glink->edge);
 	glink->edge = NULL;
+
+	return 0;
 }
 
-static void glink_subdev_unprepare(struct rproc_subdev *subdev)
+static int glink_subdev_unprepare(struct rproc_subdev *subdev)
 {
 	struct qcom_rproc_glink *glink = to_glink_subdev(subdev);
 
 	qcom_glink_ssr_notify(glink->ssr_name);
+
+	return 0;
 }
 
 /**
@@ -327,12 +331,14 @@ static int smd_subdev_start(struct rproc_subdev *subdev)
 	return PTR_ERR_OR_ZERO(smd->edge);
 }
 
-static void smd_subdev_stop(struct rproc_subdev *subdev, bool crashed)
+static int smd_subdev_stop(struct rproc_subdev *subdev, bool crashed)
 {
 	struct qcom_rproc_subdev *smd = to_smd_subdev(subdev);
 
 	qcom_smd_unregister_edge(smd->edge);
 	smd->edge = NULL;
+
+	return 0;
 }
 
 /**
@@ -465,7 +471,7 @@ static int ssr_notify_start(struct rproc_subdev *subdev)
 	return 0;
 }
 
-static void ssr_notify_stop(struct rproc_subdev *subdev, bool crashed)
+static int ssr_notify_stop(struct rproc_subdev *subdev, bool crashed)
 {
 	struct qcom_rproc_ssr *ssr = to_ssr_subdev(subdev);
 	struct qcom_ssr_notify_data data = {
@@ -475,9 +481,11 @@ static void ssr_notify_stop(struct rproc_subdev *subdev, bool crashed)
 
 	srcu_notifier_call_chain(&ssr->info->notifier_list,
 				 QCOM_SSR_BEFORE_SHUTDOWN, &data);
+
+	return 0;
 }
 
-static void ssr_notify_unprepare(struct rproc_subdev *subdev)
+static int ssr_notify_unprepare(struct rproc_subdev *subdev)
 {
 	struct qcom_rproc_ssr *ssr = to_ssr_subdev(subdev);
 	struct qcom_ssr_notify_data data = {
@@ -487,6 +495,8 @@ static void ssr_notify_unprepare(struct rproc_subdev *subdev)
 
 	srcu_notifier_call_chain(&ssr->info->notifier_list,
 				 QCOM_SSR_AFTER_SHUTDOWN, &data);
+
+	return 0;
 }
 
 /**
@@ -572,16 +582,18 @@ static int pdm_notify_prepare(struct rproc_subdev *subdev)
 }
 
 
-static void pdm_notify_unprepare(struct rproc_subdev *subdev)
+static int pdm_notify_unprepare(struct rproc_subdev *subdev)
 {
 	struct qcom_rproc_pdm *pdm = to_pdm_subdev(subdev);
 
 	if (!pdm->adev)
-		return;
+		return 0;
 
 	auxiliary_device_delete(pdm->adev);
 	auxiliary_device_uninit(pdm->adev);
 	pdm->adev = NULL;
+
+	return 0;
 }
 
 /**

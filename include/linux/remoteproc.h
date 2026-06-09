@@ -335,8 +335,8 @@ struct rproc_subdev {
 
 	int (*prepare)(struct rproc_subdev *subdev);
 	int (*start)(struct rproc_subdev *subdev);
-	void (*stop)(struct rproc_subdev *subdev, bool crashed);
-	void (*unprepare)(struct rproc_subdev *subdev);
+	int (*stop)(struct rproc_subdev *subdev, bool crashed);
+	int (*unprepare)(struct rproc_subdev *subdev);
 };
 
 /* we currently support only two vrings per rvdev */

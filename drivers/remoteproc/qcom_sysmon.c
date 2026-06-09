@@ -531,7 +531,7 @@ static int sysmon_start(struct rproc_subdev *subdev)
 	return 0;
 }
 
-static void sysmon_stop(struct rproc_subdev *subdev, bool crashed)
+static int sysmon_stop(struct rproc_subdev *subdev, bool crashed)
 {
 	struct qcom_sysmon *sysmon = container_of(subdev, struct qcom_sysmon, subdev);
 	struct sysmon_event event = {
@@ -548,7 +548,7 @@ static void sysmon_stop(struct rproc_subdev *subdev, bool crashed)
 
 	/* Don't request graceful shutdown if we've crashed */
 	if (crashed)
-		return;
+		return 0;
 
 	if (sysmon->ssctl_instance) {
 		if (!wait_for_completion_timeout(&sysmon->ssctl_comp, HZ / 2))
@@ -559,9 +559,11 @@ static void sysmon_stop(struct rproc_subdev *subdev, bool crashed)
 		sysmon->shutdown_acked = ssctl_request_shutdown(sysmon);
 	else if (sysmon->ept)
 		sysmon->shutdown_acked = sysmon_request_shutdown(sysmon);
+
+	return 0;
 }
 
-static void sysmon_unprepare(struct rproc_subdev *subdev)
+static int sysmon_unprepare(struct rproc_subdev *subdev)
 {
 	struct qcom_sysmon *sysmon = container_of(subdev, struct qcom_sysmon,
 						  subdev);
@@ -574,6 +576,8 @@ static void sysmon_unprepare(struct rproc_subdev *subdev)
 	sysmon->state = SSCTL_SSR_EVENT_AFTER_SHUTDOWN;
 	blocking_notifier_call_chain(&sysmon_notifiers, 0, (void *)&event);
 	mutex_unlock(&sysmon->state_lock);
+
+	return 0;
 }
 
 /**

@@ -326,7 +326,7 @@ static int mtk_rpmsg_prepare(struct rproc_subdev *subdev)
 	return 0;
 }
 
-static void mtk_rpmsg_unprepare(struct rproc_subdev *subdev)
+static int mtk_rpmsg_unprepare(struct rproc_subdev *subdev)
 {
 	struct mtk_rpmsg_rproc_subdev *mtk_subdev = to_mtk_subdev(subdev);
 
@@ -334,9 +334,11 @@ static void mtk_rpmsg_unprepare(struct rproc_subdev *subdev)
 		mtk_rpmsg_destroy_ept(mtk_subdev->ns_ept);
 		mtk_subdev->ns_ept = NULL;
 	}
+
+	return 0;
 }
 
-static void mtk_rpmsg_stop(struct rproc_subdev *subdev, bool crashed)
+static int mtk_rpmsg_stop(struct rproc_subdev *subdev, bool crashed)
 {
 	struct mtk_rpmsg_channel_info *info, *next;
 	struct mtk_rpmsg_rproc_subdev *mtk_subdev = to_mtk_subdev(subdev);
@@ -372,6 +374,8 @@ static void mtk_rpmsg_stop(struct rproc_subdev *subdev, bool crashed)
 		kfree(info);
 	}
 	mutex_unlock(&mtk_subdev->channels_lock);
+
+	return 0;
 }
 
 struct rproc_subdev *
