@@ -85,6 +85,15 @@ static int dummy_change_carrier(struct net_device *dev, bool new_carrier)
 	return 0;
 }
 
+static int dummy_setup_tc(struct net_device *dev, enum tc_setup_type type, void *type_data)
+{
+	if (dev_net(dev)->user_ns != &init_user_ns)
+		return -EOPNOTSUPP;
+
+	return 0;
+}
+ALLOW_ERROR_INJECTION(dummy_setup_tc, ERRNO);
+
 static const struct net_device_ops dummy_netdev_ops = {
 	.ndo_init		= dummy_dev_init,
 	.ndo_start_xmit		= dummy_xmit,
@@ -93,6 +102,7 @@ static const struct net_device_ops dummy_netdev_ops = {
 	.ndo_set_mac_address	= eth_mac_addr,
 	.ndo_get_stats64	= dummy_get_stats64,
 	.ndo_change_carrier	= dummy_change_carrier,
+	.ndo_setup_tc		= dummy_setup_tc,
 };
 
 static const struct ethtool_ops dummy_ethtool_ops = {

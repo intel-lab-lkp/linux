@@ -234,6 +234,9 @@ bool nft_chain_offload_support(const struct nft_base_chain *basechain)
 				return false;
 
 			dev = ops->dev;
+			if (dev_net(dev)->user_ns != &init_user_ns)
+				return false;
+
 			if (!dev->netdev_ops->ndo_setup_tc &&
 			    !flow_indr_dev_exists())
 				return false;
