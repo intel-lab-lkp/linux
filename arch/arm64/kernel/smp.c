@@ -33,6 +33,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/kexec.h>
 #include <linux/kgdb.h>
+#include <linux/kprobes.h>
 #include <linux/kvm_host.h>
 #include <linux/nmi.h>
 
@@ -910,6 +911,35 @@ static void __noreturn ipi_cpu_crash_stop(unsigned int cpu, struct pt_regs *regs
 #endif
 }
 
+#ifdef CONFIG_ARM_SDEI_NMI
+/*
+ * Stop entry for the SDEI cross-CPU NMI service: its event-0 handler
+ * lands here when this CPU was asked to stop. The bookkeeping mirrors
+ * the IPI_CPU_STOP{,_NMI} handling; the park happens inside the SDEI
+ * event, which is never completed -- completing it would have firmware
+ * resume the interrupted (typically wedged) context. No PSCI CPU_OFF
+ * either: powering off a PE that EL3 still considers mid-event invites
+ * firmware trouble.
+ */
+void __noreturn arm64_nmi_cpu_stop(struct pt_regs *regs)
+{
+	unsigned int cpu = smp_processor_id();
+
+	local_daif_mask();
+
+	if (IS_ENABLED(CONFIG_KEXEC_CORE) && crash_stop)
+		crash_save_cpu(regs, cpu);
+
+	/* the ack the stop requester polls for */
+	set_cpu_online(cpu, false);
+
+	sdei_mask_local_cpu();
+
+	cpu_park_loop();
+}
+NOKPROBE_SYMBOL(arm64_nmi_cpu_stop);
+#endif
+
 static void arm64_send_ipi(const cpumask_t *mask, unsigned int nr)
 {
 	unsigned int cpu;
@@ -1261,6 +1291,29 @@ void smp_send_stop(void)
 		timeout = USEC_PER_MSEC * 10;
 		while (num_other_online_cpus() && timeout--)
 			udelay(1);
+	}
+
+	/*
+	 * If CPUs are *still* online, try the SDEI cross-CPU NMI. Firmware
+	 * delivers it regardless of the target's DAIF state, so it reaches
+	 * a CPU spinning with interrupts masked, which neither rung above
+	 * could (without pseudo-NMI there is no NMI rung at all). Allow
+	 * 100ms: a firmware round-trip per CPU, with headroom.
+	 */
+	if (num_other_online_cpus()) {
+		/* re-snapshot after the rungs above took CPUs offline */
+		smp_rmb();
+		cpumask_copy(&mask, cpu_online_mask);
+		cpumask_clear_cpu(smp_processor_id(), &mask);
+
+		if (sdei_nmi_stop_cpus(&mask)) {
+			pr_info("SMP: retry stop with SDEI NMI for CPUs %*pbl\n",
+				cpumask_pr_args(&mask));
+
+			timeout = USEC_PER_MSEC * 100;
+			while (num_other_online_cpus() && timeout--)
+				udelay(1);
+		}
 	}
 
 	if (num_other_online_cpus()) {

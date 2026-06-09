@@ -29,6 +29,11 @@
  *     hardlockup_all_cpu_backtrace, soft-lockup/hung-task secondary
  *     dumps all reach interrupt-masked CPUs.
  *
+ *   - sdei_nmi_stop_cpus() — the last rung of smp_send_stop()'s
+ *     escalation (reboot/halt and the panic/kdump crash stop alike),
+ *     reaching CPUs that ignored the stop IPIs; on the kdump path the
+ *     wedged context is captured into the vmcore before the CPU parks.
+ *
  * Delivery uses the standard SDEI software-signalled event (event 0) and
  * SDEI_EVENT_SIGNAL. We register a handler for event 0, enable it, and
  * poke a target CPU with sdei_event_signal(0, mpidr): firmware makes
@@ -59,8 +64,45 @@ static bool sdei_nmi_available;
 
 #define SDEI_NMI_EVENT			0
 
+/*
+ * Stop-request dispatch lives on the same SDEI event 0 as everything
+ * else. The requesting CPU sets each target's bit in sdei_nmi_stop_mask
+ * before signalling event 0; the target's handler test-and-clears its
+ * bit and hands the CPU to arm64_nmi_cpu_stop(), which saves crash
+ * state when the stop is a kdump crash-stop, marks the CPU offline
+ * (which is what the requester polls for) and parks it.
+ *
+ * This mirrors the cpumask the framework's nmi_cpu_backtrace() consults
+ * just below, and a shared mask rather than a separate SDEI event avoids
+ * extra registrations from firmware.
+ */
+static cpumask_t sdei_nmi_stop_mask;
+
 static int sdei_nmi_handler(u32 event, struct pt_regs *regs, void *arg)
 {
+	int cpu = smp_processor_id();
+
+	if (cpumask_test_and_clear_cpu(cpu, &sdei_nmi_stop_mask)) {
+		/*
+		 * Never returns, and deliberately never completes the SDEI
+		 * event: SDEI_EVENT_COMPLETE has firmware restore the
+		 * interrupted context, which would land the CPU back in
+		 * the wedged loop (or in do_idle, which BUGs at
+		 * cpuhp_report_idle_dead once it sees itself offline).
+		 * Returning a modified pt_regs doesn't help --
+		 * arch/arm64/kernel/sdei.c::do_sdei_event only honours a PC
+		 * override via its IRQ-state heuristic and otherwise hands
+		 * EL3 its own saved-context slot back.
+		 *
+		 * Trade-off: EL3 retains ~one saved-context slot per parked
+		 * CPU until the next hardware reset (~hundreds of bytes per
+		 * CPU). Recoverability is unchanged versus an IPI-stopped
+		 * CPU: neither comes back without a reset.
+		 */
+		arm64_nmi_cpu_stop(regs);
+		/* unreachable */
+	}
+
 	/*
 	 * nmi_cpu_backtrace() no-ops unless this CPU's bit is set in the
 	 * global backtrace mask (driven by nmi_trigger_cpumask_backtrace()),
@@ -112,6 +154,35 @@ bool sdei_nmi_trigger_cpumask_backtrace(const cpumask_t *mask, int exclude_cpu)
 
 	nmi_trigger_cpumask_backtrace(mask, exclude_cpu,
 				      sdei_nmi_raise_backtrace);
+	return true;
+}
+
+/*
+ * Last rung of the stop escalation in smp_send_stop() (see
+ * arch/arm64/kernel/smp.c). The caller runs the regular stop IPI (and
+ * the pseudo-NMI stop IPI, where available) first; @mask holds whatever
+ * stayed online through those -- typically CPUs wedged with interrupts
+ * masked, unreachable by an IPI. Set each target's stop-request flag and
+ * signal event 0 at it; a target acks by marking itself offline, which
+ * the caller polls for.
+ *
+ * Returns false when SDEI isn't active, so the caller can skip the wait.
+ */
+bool sdei_nmi_stop_cpus(const cpumask_t *mask)
+{
+	unsigned int cpu;
+
+	if (!sdei_nmi_available)
+		return false;
+
+	cpumask_or(&sdei_nmi_stop_mask, &sdei_nmi_stop_mask, mask);
+
+	/* Publish the mask before the SMCs read it on the target side. */
+	smp_wmb();
+
+	for_each_cpu(cpu, mask)
+		sdei_nmi_fire(cpu);
+
 	return true;
 }
 
