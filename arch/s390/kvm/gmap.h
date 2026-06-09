@@ -279,7 +279,11 @@ static inline bool __must_check _gmap_crstep_xchg_atomic(struct gmap *gmap, unio
 			gmap_handle_vsie_unshadow_event(gmap, gfn);
 		else
 			_gmap_handle_vsie_unshadow_event(gmap, gfn);
-		dat_crstep_xchg_atomic(crstep, oldcrste, newcrste, gfn, gmap->asce);
+		/*
+		 * Ignore the result, it's just a best effort clearing of the
+		 * vsie_notif bit. The caller will have to try again regardless.
+		 */
+		(void)dat_crstep_xchg_atomic(crstep, oldcrste, newcrste, gfn, gmap->asce);
 		return false;
 	}
 	if (!oldcrste.s.fc1.d && newcrste.s.fc1.d && !newcrste.s.fc1.s)
