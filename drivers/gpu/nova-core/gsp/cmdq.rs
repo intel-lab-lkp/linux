@@ -22,6 +22,8 @@ use kernel::{
         aref::ARef,
         barrier::{
             dma_mb,
+            Full,
+            Read,
             Write, //
         },
         Mutex, //
@@ -339,6 +341,9 @@ impl DmaGspMem {
             (MSGQ_NUM_PAGES, tx)
         };
 
+        // ORDERING: Ensure data load is ordered after load of GSP write pointer.
+        dma_mb(Read);
+
         // SAFETY:
         // - `data` was created from a valid pointer, and `rx` and `tx` are in the
         //   `0..MSGQ_NUM_PAGES` range per the invariants of `gsp_write_ptr` and `cpu_read_ptr`,
@@ -436,6 +441,9 @@ impl DmaGspMem {
 
     // Informs the GSP that it can send `elem_count` new pages into the message queue.
     fn advance_cpu_read_ptr(&mut self, elem_count: u32) {
+        // ORDERING: Ensure read pointer is properly ordered with a LOAD->STORE ordering.
+        dma_mb(Full);
+
         super::fw::gsp_mem::advance_cpu_read_ptr(&self.0, elem_count)
     }
 

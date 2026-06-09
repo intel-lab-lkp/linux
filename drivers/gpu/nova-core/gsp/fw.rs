@@ -46,11 +46,6 @@ use crate::{
 
 // TODO: Replace with `IoView` projections once available.
 pub(super) mod gsp_mem {
-    use core::sync::atomic::{
-        fence,
-        Ordering, //
-    };
-
     use kernel::{
         dma::Coherent,
         dma_read,
@@ -76,10 +71,6 @@ pub(super) mod gsp_mem {
 
     pub(in crate::gsp) fn advance_cpu_read_ptr(qs: &Coherent<GspMem>, count: u32) {
         let rptr = cpu_read_ptr(qs).wrapping_add(count) % MSGQ_NUM_PAGES;
-
-        // Ensure read pointer is properly ordered.
-        fence(Ordering::SeqCst);
-
         dma_write!(qs, .cpuq.rx.0.readPtr, rptr);
     }
 
