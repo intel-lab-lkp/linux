@@ -2833,16 +2833,16 @@ static void wacom_mode_change_work(struct work_struct *work)
 
 	if (pen) {
 		wacom1 = hid_get_drvdata(pen);
-		wacom_release_resources(wacom1);
 		hid_hw_stop(wacom1->hdev);
+		wacom_release_resources(wacom1);
 		wacom1->wacom_wac.has_mode_change = true;
 		wacom1->wacom_wac.is_direct_mode = is_direct;
 	}
 
 	if (touch) {
 		wacom2 = hid_get_drvdata(touch);
-		wacom_release_resources(wacom2);
 		hid_hw_stop(wacom2->hdev);
+		wacom_release_resources(wacom2);
 		wacom2->wacom_wac.has_mode_change = true;
 		wacom2->wacom_wac.is_direct_mode = is_direct;
 	}
