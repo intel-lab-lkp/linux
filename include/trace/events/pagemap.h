@@ -77,6 +77,46 @@ TRACE_EVENT(mm_lru_activate,
 	TP_printk("folio=%p pfn=0x%lx", __entry->folio, __entry->pfn)
 );
 
+TRACE_EVENT(mm_lru_add_drain,
+
+	TP_PROTO(int cpu, unsigned int nr),
+
+	TP_ARGS(cpu, nr),
+
+	TP_STRUCT__entry(
+		__field(int,		cpu	)
+		__field(unsigned int,	nr	)
+	),
+
+	TP_fast_assign(
+		__entry->cpu	= cpu;
+		__entry->nr	= nr;
+	),
+
+	TP_printk("cpu=%d nr=%u", __entry->cpu, __entry->nr)
+);
+
+TRACE_EVENT(mm_lru_drain_all_queue,
+
+	TP_PROTO(int target_cpu, bool force_all_cpus),
+
+	TP_ARGS(target_cpu, force_all_cpus),
+
+	TP_STRUCT__entry(
+		__field(int,	target_cpu	)
+		__field(bool,	force_all_cpus	)
+	),
+
+	TP_fast_assign(
+		__entry->target_cpu	= target_cpu;
+		__entry->force_all_cpus	= force_all_cpus;
+	),
+
+	TP_printk("target_cpu=%d force_all_cpus=%s",
+		__entry->target_cpu,
+		__entry->force_all_cpus ? "true" : "false")
+);
+
 #endif /* _TRACE_PAGEMAP_H */
 
 /* This part must be outside protection */
