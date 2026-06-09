@@ -5169,7 +5169,7 @@ static int mtk_probe(struct platform_device *pdev)
 		err = mtk_sgmii_init(eth);
 
 		if (err)
-			return err;
+			goto err_destroy_sgmii;
 	}
 
 	if (eth->soc->required_pctl) {
