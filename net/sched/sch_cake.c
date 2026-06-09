@@ -2621,6 +2621,36 @@ static void cake_configure_rates(struct Qdisc *sch, u64 rate, bool rate_adjust)
 	qd->rate_shft = qd->tins[ft].tin_rate_shft;
 }
 
+static void cake_clamp_flow_deficit(struct cake_tin_data *b,
+				    struct cake_flow *flow,
+				    int flow_mode)
+{
+	s32 quantum;
+
+	if (flow->deficit <= 0)
+		return;
+
+	quantum = cake_get_flow_quantum(b, flow, flow_mode);
+	if (flow->deficit > quantum)
+		WRITE_ONCE(flow->deficit, quantum);
+}
+
+static void cake_clamp_active_deficits(struct cake_sched_data *qd)
+{
+	struct cake_sched_config *q = qd->config;
+	struct cake_flow *flow;
+	u32 tin;
+
+	for (tin = 0; tin < qd->tin_cnt; tin++) {
+		struct cake_tin_data *b = &qd->tins[tin];
+
+		list_for_each_entry(flow, &b->new_flows, flowchain)
+			cake_clamp_flow_deficit(b, flow, q->flow_mode);
+		list_for_each_entry(flow, &b->old_flows, flowchain)
+			cake_clamp_flow_deficit(b, flow, q->flow_mode);
+	}
+}
+
 static void cake_reconfigure(struct Qdisc *sch)
 {
 	struct cake_sched_data *qd = qdisc_priv(sch);
@@ -2628,6 +2658,7 @@ static void cake_reconfigure(struct Qdisc *sch)
 	u32 buffer_limit;
 
 	cake_configure_rates(sch, qd->config->rate_bps, false);
+	cake_clamp_active_deficits(qd);
 
 	if (q->buffer_config_limit) {
 		buffer_limit = q->buffer_config_limit;
