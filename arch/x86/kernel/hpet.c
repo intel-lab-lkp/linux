@@ -553,30 +553,31 @@ static struct irq_domain *hpet_create_irq_domain(int hpet_id)
 
 	fn = irq_domain_alloc_named_id_fwnode(hpet_msi_controller.name,
 					      hpet_id);
-	if (!fn) {
-		kfree(domain_info);
-		return NULL;
-	}
+	if (!fn)
+		goto free_info;
 
 	fwspec.fwnode = fn;
 	fwspec.param_count = 1;
 	fwspec.param[0] = hpet_id;
 
 	parent = irq_find_matching_fwspec(&fwspec, DOMAIN_BUS_GENERIC_MSI);
-	if (!parent) {
-		irq_domain_free_fwnode(fn);
-		kfree(domain_info);
-		return NULL;
-	}
+	if (!parent)
+		goto free_fwnode;
+
 	if (parent != x86_vector_domain)
 		hpet_msi_controller.name = "IR-HPET-MSI";
 
 	d = msi_create_irq_domain(fn, domain_info, parent);
-	if (!d) {
-		irq_domain_free_fwnode(fn);
-		kfree(domain_info);
-	}
+	if (!d)
+		goto free_fwnode;
+
 	return d;
+
+free_fwnode:
+	irq_domain_free_fwnode(fn);
+free_info:
+	kfree(domain_info);
+	return NULL;
 }
 
 static inline int hpet_dev_id(struct irq_domain *domain)
