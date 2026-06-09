@@ -308,6 +308,11 @@ static unsigned long shrink_huge_zero_folio_scan(struct shrinker *shrink,
 	return 0;
 }
 
+bool __weak arch_make_pages_readonly(struct page *page, int nr_pages)
+{
+	return false;
+}
+
 static struct shrinker *huge_zero_folio_shrinker;
 
 #ifdef CONFIG_SYSFS
@@ -981,8 +986,14 @@ static int __init thp_shrinker_init(void)
 		 * that get_huge_zero_folio() will most likely not fail as
 		 * thp_shrinker_init() is invoked early on during boot.
 		 */
-		if (!get_huge_zero_folio())
+		if (!get_huge_zero_folio()) {
 			pr_warn("Allocating persistent huge zero folio failed\n");
+			return 0;
+		}
+
+		arch_make_pages_readonly(folio_page(huge_zero_folio, 0),
+					HPAGE_PMD_NR);
+
 		return 0;
 	}
 

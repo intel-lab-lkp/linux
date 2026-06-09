@@ -2975,6 +2975,8 @@ static inline int arch_make_folio_accessible(struct folio *folio)
 }
 #endif
 
+bool arch_make_pages_readonly(struct page *page, int nr_pages);
+
 /*
  * Some inline functions in vmstat.h depend on page_zone()
  */
