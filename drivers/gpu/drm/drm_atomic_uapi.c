@@ -259,16 +259,16 @@ drm_atomic_set_fb_for_plane(struct drm_plane_state *plane_state,
 EXPORT_SYMBOL(drm_atomic_set_fb_for_plane);
 
 /**
- * drm_atomic_set_colorop_for_plane - set colorop for plane
+ * set_colorop_for_plane - set colorop for plane
  * @plane_state: atomic state object for the plane
  * @colorop: colorop to use for the plane
  *
  * Helper function to select the color pipeline on a plane by setting
  * it to the first drm_colorop element of the pipeline.
  */
-void
-drm_atomic_set_colorop_for_plane(struct drm_plane_state *plane_state,
-				 struct drm_colorop *colorop)
+static void
+set_colorop_for_plane(struct drm_plane_state *plane_state,
+		      struct drm_colorop *colorop)
 {
 	struct drm_plane *plane = plane_state->plane;
 
@@ -284,7 +284,16 @@ drm_atomic_set_colorop_for_plane(struct drm_plane_state *plane_state,
 
 	plane_state->color_pipeline = colorop;
 }
-EXPORT_SYMBOL(drm_atomic_set_colorop_for_plane);
+
+static struct drm_colorop *colorop_find(struct drm_device *dev,
+					struct drm_file *file_priv,
+					uint32_t id)
+{
+	struct drm_mode_object *mo;
+
+	mo = drm_mode_object_find(dev, file_priv, id, DRM_MODE_OBJECT_COLOROP);
+	return mo ? obj_to_colorop(mo) : NULL;
+}
 
 /**
  * drm_atomic_set_crtc_for_connector - set CRTC for connector
@@ -599,12 +608,12 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 		/* find DRM colorop object */
 		struct drm_colorop *colorop = NULL;
 
-		colorop = drm_colorop_find(dev, file_priv, val);
+		colorop = colorop_find(dev, file_priv, val);
 
 		if (val && !colorop)
 			return -EACCES;
 
-		drm_atomic_set_colorop_for_plane(state, colorop);
+		set_colorop_for_plane(state, colorop);
 	} else if (property == config->prop_fb_damage_clips) {
 		ret = drm_property_replace_blob_from_id(dev,
 					&state->fb_damage_clips,

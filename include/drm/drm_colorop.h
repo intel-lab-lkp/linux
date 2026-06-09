@@ -381,26 +381,6 @@ struct drm_colorop {
 
 #define obj_to_colorop(x) container_of(x, struct drm_colorop, base)
 
-/**
- * drm_colorop_find - look up a Colorop object from its ID
- * @dev: DRM device
- * @file_priv: drm file to check for lease against.
- * @id: &drm_mode_object ID
- *
- * This can be used to look up a Colorop from its userspace ID. Only used by
- * drivers for legacy IOCTLs and interface, nowadays extensions to the KMS
- * userspace interface should be done using &drm_property.
- */
-static inline struct drm_colorop *drm_colorop_find(struct drm_device *dev,
-						   struct drm_file *file_priv,
-						   uint32_t id)
-{
-	struct drm_mode_object *mo;
-
-	mo = drm_mode_object_find(dev, file_priv, id, DRM_MODE_OBJECT_COLOROP);
-	return mo ? obj_to_colorop(mo) : NULL;
-}
-
 void drm_colorop_pipeline_destroy(struct drm_device *dev);
 void drm_colorop_cleanup(struct drm_colorop *colorop);
 
