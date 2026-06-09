@@ -559,6 +559,11 @@ static int sysmon_stop(struct rproc_subdev *subdev, bool crashed)
 		sysmon->shutdown_acked = ssctl_request_shutdown(sysmon);
 	else if (sysmon->ept)
 		sysmon->shutdown_acked = sysmon_request_shutdown(sysmon);
+	else
+		return 0;
+
+	if (!sysmon->shutdown_acked)
+		return -ETIMEDOUT;
 
 	return 0;
 }
