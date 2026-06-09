@@ -890,16 +890,16 @@ static int qcom_pcie_ep_probe(struct platform_device *pdev)
 	pm_runtime_set_active(dev);
 	ret = devm_pm_runtime_enable(dev);
 	if (ret)
-		return ret;
+		goto err_rpm_put;
 
 	ret = qcom_pcie_ep_get_resources(pdev, pcie_ep);
 	if (ret)
-		return ret;
+		goto err_rpm_put;
 
 	ret = dw_pcie_ep_init(&pcie_ep->pci.ep);
 	if (ret) {
 		dev_err(dev, "Failed to initialize endpoint: %d\n", ret);
-		return ret;
+		goto err_rpm_put;
 	}
 
 	ret = qcom_pcie_ep_enable_irq_resources(pdev, pcie_ep);
@@ -929,6 +929,10 @@ err_disable_irqs:
 
 err_ep_deinit:
 	dw_pcie_ep_deinit(&pcie_ep->pci.ep);
+
+err_rpm_put:
+	pm_runtime_put_noidle(dev);
+	pm_runtime_disable(dev);
 
 	return ret;
 }
