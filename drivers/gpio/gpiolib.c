@@ -1052,7 +1052,8 @@ static int gpiochip_hog_lines(struct gpio_chip *gc)
 	int ret;
 
 	device_for_each_child_node_scoped(&gc->gpiodev->dev, fwnode) {
-		if (!fwnode_property_present(fwnode, "gpio-hog"))
+		if (!fwnode_device_is_available(fwnode) ||
+		    !fwnode_property_present(fwnode, "gpio-hog"))
 			continue;
 
 		ret = gpiochip_add_hog(gc, fwnode);
