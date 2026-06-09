@@ -2558,11 +2558,18 @@ free_new_key_string:
 
 static int get_key_size(char **key_string)
 {
+	size_t key_len;
 	char *colon, dummy;
 	int ret;
 
-	if (*key_string[0] != ':')
-		return strlen(*key_string) >> 1;
+	if (*key_string[0] != ':') {
+		key_len = strlen(*key_string);
+
+		if (strcmp(*key_string, "-") && (key_len & 1))
+			return -EINVAL;
+
+		return key_len >> 1;
+	}
 
 	/* look for next ':' in key string */
 	colon = strpbrk(*key_string + 1, ":");
@@ -2588,7 +2595,12 @@ static int crypt_set_keyring_key(struct crypt_config *cc, const char *key_string
 
 static int get_key_size(char **key_string)
 {
-	return (*key_string[0] == ':') ? -EINVAL : (int)(strlen(*key_string) >> 1);
+	size_t key_len = strlen(*key_string);
+
+	if (*key_string[0] == ':' || (strcmp(*key_string, "-") && (key_len & 1)))
+		return -EINVAL;
+
+	return key_len >> 1;
 }
 
 #endif /* CONFIG_KEYS */
