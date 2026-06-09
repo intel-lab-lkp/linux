@@ -30,14 +30,21 @@
  */
 static int vxfs_immed_read_folio(struct file *fp, struct folio *folio)
 {
+	struct inode *inode = folio->mapping->host;
+	size_t offset = folio_pos(folio);
 	struct vxfs_inode_info *vip = VXFS_INO(folio->mapping->host);
-	void *src = vip->vii_immed.vi_immed + folio_pos(folio);
-	unsigned long i;
+	size_t size = min_t(loff_t, inode->i_size,
+			    sizeof(vip->vii_immed.vi_immed));
+	size_t len = 0;
 
-	for (i = 0; i < folio_nr_pages(folio); i++) {
-		memcpy_to_page(folio_page(folio, i), 0, src, PAGE_SIZE);
-		src += PAGE_SIZE;
+	if (offset < size) {
+		len = min_t(size_t, size - offset, folio_size(folio));
+		memcpy_to_folio(folio, 0, vip->vii_immed.vi_immed + offset,
+				len);
 	}
+
+	if (len < folio_size(folio))
+		folio_zero_segment(folio, len, folio_size(folio));
 
 	folio_mark_uptodate(folio);
 	folio_unlock(folio);
