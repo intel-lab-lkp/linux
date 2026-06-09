@@ -304,6 +304,10 @@ static int create_space_info(struct btrfs_fs_info *info, u64 flags)
 
 	init_space_info(info, space_info, flags);
 
+	ret = btrfs_sysfs_add_space_info_type(space_info);
+	if (ret)
+		return ret;
+
 	if (btrfs_is_zoned(info)) {
 		if (flags & BTRFS_BLOCK_GROUP_DATA)
 			ret = create_space_info_sub_group(space_info, flags,
@@ -315,12 +319,8 @@ static int create_space_info(struct btrfs_fs_info *info, u64 flags)
 							  0);
 
 		if (ret)
-			goto out_free;
+			goto out_remove;
 	}
-
-	ret = btrfs_sysfs_add_space_info_type(space_info);
-	if (ret)
-		return ret;
 
 	list_add(&space_info->list, &info->space_info);
 	if (flags & BTRFS_BLOCK_GROUP_DATA)
@@ -328,8 +328,8 @@ static int create_space_info(struct btrfs_fs_info *info, u64 flags)
 
 	return ret;
 
-out_free:
-	kfree(space_info);
+out_remove:
+	btrfs_sysfs_remove_space_info(space_info);
 	return ret;
 }
 

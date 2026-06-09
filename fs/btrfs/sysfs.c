@@ -1885,6 +1885,22 @@ void btrfs_sysfs_remove_space_info(struct btrfs_space_info *space_info)
 {
 	int i;
 
+	for (i = 0; i < ARRAY_SIZE(space_info->sub_group); i++) {
+		struct btrfs_space_info *sub_group;
+
+		sub_group = space_info->sub_group[i];
+		if (!sub_group)
+			continue;
+
+		/*
+		 * Remove sub-groups before removing their parent space_info.
+		 * Clear the pointer first so recursive removal cannot leave a
+		 * stale child pointer behind.
+		 */
+		space_info->sub_group[i] = NULL;
+		btrfs_sysfs_remove_space_info(sub_group);
+	}
+
 	for (i = 0; i < BTRFS_NR_RAID_TYPES; i++) {
 		struct kobject *kobj;
 

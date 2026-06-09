@@ -4643,11 +4643,8 @@ static void check_removing_space_info(struct btrfs_space_info *space_info)
 	if (space_info->subgroup_id == BTRFS_SUB_GROUP_PRIMARY) {
 		/* This is a top space_info, proceed with its children first. */
 		for (int i = 0; i < BTRFS_SPACE_INFO_SUB_GROUP_MAX; i++) {
-			if (space_info->sub_group[i]) {
+			if (space_info->sub_group[i])
 				check_removing_space_info(space_info->sub_group[i]);
-				btrfs_sysfs_remove_space_info(space_info->sub_group[i]);
-				space_info->sub_group[i] = NULL;
-			}
 		}
 	}
 
