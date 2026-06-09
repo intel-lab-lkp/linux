@@ -7360,6 +7360,7 @@ bnx2_change_ring_size(struct bnx2 *bp, u32 rx, u32 tx, bool reset_irq)
 		if (rc) {
 			bnx2_napi_enable(bp);
 			dev_close(bp->dev);
+			atomic_dec(&bp->intr_sem);
 			return rc;
 		}
 #ifdef BCM_CNIC
