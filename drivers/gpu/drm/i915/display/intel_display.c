@@ -7569,20 +7569,20 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	/* FIXME probably need to sequence this properly */
 	intel_program_dpkgc_latency(state);
 
-	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state) {
-		bool modeset = intel_crtc_needs_modeset(new_crtc_state);
-		bool dc3co_to_dc6 = intel_display_power_get_and_reset_dc3co_to_dc6(display);
+	if (intel_display_power_dc3co_allowed(display)) {
 
-		/*
-		 * TODO: DC3co entry condition need to be checked before calling CMTG functions.
-		 */
-		if ((modeset || dc3co_to_dc6) &&
-		    new_crtc_state->hw.active && !crtc->cmtg.enabled) {
-			if (dc3co_to_dc6)
-				intel_cmtg_restore(new_crtc_state);
+		for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state) {
+			bool modeset = intel_crtc_needs_modeset(new_crtc_state);
+			bool dc3co_to_dc6 = intel_display_power_get_and_reset_dc3co_to_dc6(display);
 
-			intel_cmtg_program(new_crtc_state);
-			intel_cmtg_enable_interrupt(new_crtc_state);
+			if ((modeset || dc3co_to_dc6) &&
+			    new_crtc_state->hw.active && !crtc->cmtg.enabled) {
+				if (dc3co_to_dc6)
+					intel_cmtg_restore(new_crtc_state);
+
+				intel_cmtg_program(new_crtc_state);
+				intel_cmtg_enable_interrupt(new_crtc_state);
+			}
 		}
 	}
 
