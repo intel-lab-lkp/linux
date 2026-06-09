@@ -499,7 +499,8 @@ int hv_common_cpu_init(unsigned int cpu)
 		}
 
 		if (!ms_hyperv.paravisor_present &&
-		    (hv_isolation_type_snp() || hv_isolation_type_tdx())) {
+		    (hv_isolation_type_snp() || hv_isolation_type_tdx() ||
+		     hv_isolation_type_cca())) {
 			ret = set_memory_decrypted((unsigned long)mem, pgcount);
 			if (ret) {
 				/* It may be unsafe to free 'mem' */
@@ -665,6 +666,12 @@ bool __weak hv_isolation_type_tdx(void)
 	return false;
 }
 EXPORT_SYMBOL_GPL(hv_isolation_type_tdx);
+
+bool __weak hv_isolation_type_cca(void)
+{
+	return false;
+}
+EXPORT_SYMBOL_GPL(hv_isolation_type_cca);
 
 void __weak hv_setup_vmbus_handler(void (*handler)(void))
 {
