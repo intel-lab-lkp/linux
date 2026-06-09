@@ -250,6 +250,7 @@ void check_and_switch_context(struct mm_struct *mm)
 	if (!asid_gen_match(asid)) {
 		asid = new_context(mm);
 		atomic64_set(&mm->context.id, asid);
+		WRITE_ONCE(mm->context.active_cpu, ACTIVE_CPU_NONE);
 	}
 
 	if (cpumask_test_and_clear_cpu(cpu, &tlb_flush_pending))
@@ -321,6 +322,7 @@ unsigned long arm64_mm_context_get(struct mm_struct *mm)
 		 */
 		asid = new_context(mm);
 		atomic64_set(&mm->context.id, asid);
+		WRITE_ONCE(mm->context.active_cpu, ACTIVE_CPU_NONE);
 	}
 
 	nr_pinned_asids++;
