@@ -1685,8 +1685,9 @@ static int iommufd_test_dirty(struct iommufd_ucmd *ucmd, unsigned int mockpt_id,
 			      unsigned long page_size, void __user *uptr,
 			      u32 flags)
 {
-	unsigned long i, max;
 	struct iommu_test_cmd *cmd = ucmd->cmd;
+	unsigned long i, max, nr_bytes;
+	unsigned long nr_longs;
 	struct iommufd_hw_pagetable *hwpt;
 	struct mock_iommu_domain *mock;
 	int rc, count = 0;
@@ -1706,14 +1707,22 @@ static int iommufd_test_dirty(struct iommufd_ucmd *ucmd, unsigned int mockpt_id,
 	}
 
 	max = length / page_size;
-	tmp = kvzalloc(DIV_ROUND_UP(max, BITS_PER_LONG) * sizeof(unsigned long),
+	if (check_add_overflow(max, BITS_PER_LONG - 1, &nr_longs) ||
+	    check_add_overflow(max, BITS_PER_BYTE - 1, &nr_bytes)) {
+		rc = -EOVERFLOW;
+		goto out_put;
+	}
+	nr_longs /= BITS_PER_LONG;
+	nr_bytes /= BITS_PER_BYTE;
+
+	tmp = kvzalloc(array_size(nr_longs, sizeof(unsigned long)),
 		       GFP_KERNEL_ACCOUNT);
 	if (!tmp) {
 		rc = -ENOMEM;
 		goto out_put;
 	}
 
-	if (copy_from_user(tmp, uptr, DIV_ROUND_UP(max, BITS_PER_BYTE))) {
+	if (copy_from_user(tmp, uptr, nr_bytes)) {
 		rc = -EFAULT;
 		goto out_free;
 	}
