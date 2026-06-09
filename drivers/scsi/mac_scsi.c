@@ -474,7 +474,7 @@ static int __init mac_scsi_probe(struct platform_device *pdev)
 		mac_scsi_template.sg_tablesize = 1;
 
 	instance = scsi_host_alloc(&mac_scsi_template,
-	                           sizeof(struct NCR5380_hostdata));
+				   sizeof(struct NCR5380_hostdata), NULL);
 	if (!instance)
 		return -ENOMEM;
 

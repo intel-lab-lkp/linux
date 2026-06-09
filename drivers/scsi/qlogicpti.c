@@ -1316,7 +1316,7 @@ static int qpti_sbus_probe(struct platform_device *op)
 	if (op->archdata.irqs[0] == 0)
 		return -ENODEV;
 
-	host = scsi_host_alloc(&qpti_template, sizeof(struct qlogicpti));
+	host = scsi_host_alloc(&qpti_template, sizeof(struct qlogicpti), NULL);
 	if (!host)
 		return -ENOMEM;
 

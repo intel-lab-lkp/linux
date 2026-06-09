@@ -426,7 +426,7 @@ static int mac53c94_probe(struct macio_dev *mdev, const struct of_device_id *mat
 		return -EBUSY;
 	}
 
-       	host = scsi_host_alloc(&mac53c94_template, sizeof(struct fsc_state));
+	host = scsi_host_alloc(&mac53c94_template, sizeof(struct fsc_state), NULL);
 	if (host == NULL) {
 		printk(KERN_ERR "mac53c94: couldn't register host");
 		rc = -ENOMEM;

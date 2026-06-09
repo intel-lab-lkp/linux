@@ -847,7 +847,7 @@ static int fnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		{
 			host =
 				scsi_host_alloc(&fnic_host_template,
-								sizeof(struct fnic *));
+								sizeof(struct fnic *), &pdev->dev);
 			if (!host) {
 				dev_err(&fnic->pdev->dev, "Unable to allocate scsi host\n");
 				err = -ENOMEM;

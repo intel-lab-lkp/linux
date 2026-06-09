@@ -2824,7 +2824,7 @@ static int initio_probe_one(struct pci_dev *pdev,
 		error = -ENODEV;
 		goto out_disable_device;
 	}
-	shost = scsi_host_alloc(&initio_template, sizeof(struct initio_host));
+	shost = scsi_host_alloc(&initio_template, sizeof(struct initio_host), &pdev->dev);
 	if (!shost) {
 		printk(KERN_WARNING "initio: Could not allocate host structure.\n");
 		error = -ENOMEM;

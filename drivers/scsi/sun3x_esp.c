@@ -175,7 +175,7 @@ static int esp_sun3x_probe(struct platform_device *dev)
 	struct resource *res;
 	int err = -ENOMEM;
 
-	host = scsi_host_alloc(tpnt, sizeof(struct esp));
+	host = scsi_host_alloc(tpnt, sizeof(struct esp), NULL);
 	if (!host)
 		goto fail;
 

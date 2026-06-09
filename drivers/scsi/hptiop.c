@@ -1311,7 +1311,7 @@ static int hptiop_probe(struct pci_dev *pcidev, const struct pci_device_id *id)
 		goto disable_pci_device;
 	}
 
-	host = scsi_host_alloc(&driver_template, sizeof(struct hptiop_hba));
+	host = scsi_host_alloc(&driver_template, sizeof(struct hptiop_hba), &pcidev->dev);
 	if (!host) {
 		printk(KERN_ERR "hptiop: fail to alloc scsi host\n");
 		goto free_pci_regions;

@@ -301,7 +301,7 @@ static int esp_mac_probe(struct platform_device *dev)
 	if (dev->id > 1)
 		return -ENODEV;
 
-	host = scsi_host_alloc(tpnt, sizeof(struct esp));
+	host = scsi_host_alloc(tpnt, sizeof(struct esp), NULL);
 
 	err = -ENOMEM;
 	if (!host)

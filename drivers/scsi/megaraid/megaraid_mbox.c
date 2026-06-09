@@ -620,7 +620,7 @@ megaraid_io_attach(adapter_t *adapter)
 	struct Scsi_Host	*host;
 
 	// Initialize SCSI Host structure
-	host = scsi_host_alloc(&megaraid_template_g, 8);
+	host = scsi_host_alloc(&megaraid_template_g, 8, &pdev->dev);
 	if (!host) {
 		con_log(CL_ANN, (KERN_WARNING
 			"megaraid mbox: scsi_host_alloc failed\n"));

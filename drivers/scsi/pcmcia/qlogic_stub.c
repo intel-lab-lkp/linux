@@ -106,7 +106,7 @@ static struct Scsi_Host *qlogic_detect(struct scsi_host_template *host,
 	qlogicfas408_setup(qbase, qinitid, INT_TYPE);
 
 	host->name = qlogic_name;
-	shost = scsi_host_alloc(host, sizeof(struct qlogicfas408_priv));
+	shost = scsi_host_alloc(host, sizeof(struct qlogicfas408_priv), NULL);
 	if (!shost)
 		goto err;
 	shost->io_port = qbase;

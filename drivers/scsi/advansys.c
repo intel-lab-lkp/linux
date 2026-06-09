@@ -11237,7 +11237,7 @@ static int advansys_vlb_probe(struct device *dev, unsigned int id)
 		goto release_region;
 
 	err = -ENOMEM;
-	shost = scsi_host_alloc(&advansys_template, sizeof(*board));
+	shost = scsi_host_alloc(&advansys_template, sizeof(*board), NULL);
 	if (!shost)
 		goto release_region;
 
@@ -11345,7 +11345,7 @@ static int advansys_eisa_probe(struct device *dev)
 			irq = advansys_eisa_irq_no(edev);
 
 		err = -ENOMEM;
-		shost = scsi_host_alloc(&advansys_template, sizeof(*board));
+		shost = scsi_host_alloc(&advansys_template, sizeof(*board), NULL);
 		if (!shost)
 			goto release_region;
 
@@ -11462,7 +11462,7 @@ static int advansys_pci_probe(struct pci_dev *pdev,
 	ioport = pci_resource_start(pdev, 0);
 
 	err = -ENOMEM;
-	shost = scsi_host_alloc(&advansys_template, sizeof(*board));
+	shost = scsi_host_alloc(&advansys_template, sizeof(*board), &pdev->dev);
 	if (!shost)
 		goto release_region;
 

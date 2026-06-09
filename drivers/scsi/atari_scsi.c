@@ -785,7 +785,7 @@ static int __init atari_scsi_probe(struct platform_device *pdev)
 	}
 
 	instance = scsi_host_alloc(&atari_scsi_template,
-	                           sizeof(struct NCR5380_hostdata));
+				   sizeof(struct NCR5380_hostdata), NULL);
 	if (!instance) {
 		error = -ENOMEM;
 		goto fail_alloc;

@@ -388,7 +388,7 @@ static int pci_esp_probe_one(struct pci_dev *pdev,
 		goto fail_disable_device;
 	}
 
-	shost = scsi_host_alloc(hostt, sizeof(struct esp));
+	shost = scsi_host_alloc(hostt, sizeof(struct esp), &pdev->dev);
 	if (!shost) {
 		dev_printk(KERN_INFO, &pdev->dev,
 			   "failed to allocate scsi host\n");

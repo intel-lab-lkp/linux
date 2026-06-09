@@ -5468,7 +5468,7 @@ mpi3mr_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 
 	shost = scsi_host_alloc(&mpi3mr_driver_template,
-	    sizeof(struct mpi3mr_ioc));
+	    sizeof(struct mpi3mr_ioc), &pdev->dev);
 	if (!shost) {
 		retval = -ENODEV;
 		goto shost_failed;

@@ -1083,7 +1083,7 @@ ahc_linux_register_host(struct ahc_softc *ahc, struct scsi_host_template *templa
 	int	retval;
 
 	template->name = ahc->description;
-	host = scsi_host_alloc(template, sizeof(struct ahc_softc *));
+	host = scsi_host_alloc(template, sizeof(struct ahc_softc *), NULL);
 	if (host == NULL)
 		return -ENOMEM;
 

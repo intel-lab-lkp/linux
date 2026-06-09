@@ -1106,7 +1106,7 @@ static int inia100_probe_one(struct pci_dev *pdev,
 	bios = inw(port + 0x50);
 
 
-	shost = scsi_host_alloc(&inia100_template, sizeof(struct orc_host));
+	shost = scsi_host_alloc(&inia100_template, sizeof(struct orc_host), &pdev->dev);
 	if (!shost)
 		goto out_release_region;
 

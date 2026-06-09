@@ -214,7 +214,7 @@ static int a2091_probe(struct zorro_dev *z, const struct zorro_device_id *ent)
 		return -EBUSY;
 
 	instance = scsi_host_alloc(&a2091_scsi_template,
-				   sizeof(struct a2091_hostdata));
+				   sizeof(struct a2091_hostdata), NULL);
 	if (!instance) {
 		error = -ENOMEM;
 		goto fail_alloc;

@@ -1300,7 +1300,7 @@ static struct Scsi_Host *sym_attach(const struct scsi_host_template *tpnt, int u
 	if (!fw)
 		goto attach_failed;
 
-	shost = scsi_host_alloc(tpnt, sizeof(*sym_data));
+	shost = scsi_host_alloc(tpnt, sizeof(*sym_data), &pdev->dev);
 	if (!shost)
 		goto attach_failed;
 	sym_data = shost_priv(shost);

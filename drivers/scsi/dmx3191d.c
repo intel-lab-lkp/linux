@@ -74,7 +74,7 @@ static int dmx3191d_probe_one(struct pci_dev *pdev,
 	}
 
 	shost = scsi_host_alloc(&dmx3191d_driver_template,
-			sizeof(struct NCR5380_hostdata));
+			sizeof(struct NCR5380_hostdata), &pdev->dev);
 	if (!shost)
 		goto out_release_region;       
 

@@ -2556,7 +2556,7 @@ static int nsp32_detect(struct pci_dev *pdev)
 	/*
 	 * register this HBA as SCSI device
 	 */
-	host = scsi_host_alloc(&nsp32_template, sizeof(nsp32_hw_data));
+	host = scsi_host_alloc(&nsp32_template, sizeof(nsp32_hw_data), &pdev->dev);
 	if (host == NULL) {
 		nsp32_msg (KERN_ERR, "failed to scsi register");
 		goto err;

@@ -1214,7 +1214,7 @@ ahd_linux_register_host(struct ahd_softc *ahd, struct scsi_host_template *templa
 	int	retval;
 
 	template->name = ahd->description;
-	host = scsi_host_alloc(template, sizeof(struct ahd_softc *));
+	host = scsi_host_alloc(template, sizeof(struct ahd_softc *), NULL);
 	if (host == NULL)
 		return (ENOMEM);
 

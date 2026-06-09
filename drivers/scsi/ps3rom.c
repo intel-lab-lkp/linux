@@ -361,7 +361,7 @@ static int ps3rom_probe(struct ps3_system_bus_device *_dev)
 		goto fail_free_bounce;
 
 	host = scsi_host_alloc(&ps3rom_host_template,
-			       sizeof(struct ps3rom_private));
+			       sizeof(struct ps3rom_private), NULL);
 	if (!host) {
 		dev_err(&dev->sbd.core, "%s:%u: scsi_host_alloc failed\n",
 			__func__, __LINE__);

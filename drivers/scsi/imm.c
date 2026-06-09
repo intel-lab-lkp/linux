@@ -1221,7 +1221,7 @@ static int __imm_attach(struct parport *pb)
 	INIT_DELAYED_WORK(&dev->imm_tq, imm_interrupt);
 
 	err = -ENOMEM;
-	host = scsi_host_alloc(&imm_template, sizeof(imm_struct *));
+	host = scsi_host_alloc(&imm_template, sizeof(imm_struct *), NULL);
 	if (!host)
 		goto out1;
 	host->io_port = pb->base;

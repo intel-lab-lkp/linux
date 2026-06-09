@@ -494,7 +494,7 @@ static int mvs_pci_init(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (rc)
 		goto err_out_regions;
 
-	shost = scsi_host_alloc(&mvs_sht, sizeof(void *));
+	shost = scsi_host_alloc(&mvs_sht, sizeof(void *), &pdev->dev);
 	if (!shost) {
 		rc = -ENOMEM;
 		goto err_out_regions;

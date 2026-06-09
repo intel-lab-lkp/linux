@@ -1636,7 +1636,7 @@ static int aac_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	pci_set_master(pdev);
 
-	shost = scsi_host_alloc(&aac_driver_template, sizeof(struct aac_dev));
+	shost = scsi_host_alloc(&aac_driver_template, sizeof(struct aac_dev), &pdev->dev);
 	if (!shost) {
 		error = -ENOMEM;
 		goto out_disable_pdev;

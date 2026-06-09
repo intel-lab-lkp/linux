@@ -899,7 +899,7 @@ static int scsifront_probe(struct xenbus_device *dev,
 	int err = -ENOMEM;
 	char name[TASK_COMM_LEN];
 
-	host = scsi_host_alloc(&scsifront_sht, sizeof(*info));
+	host = scsi_host_alloc(&scsifront_sht, sizeof(*info), NULL);
 	if (!host) {
 		xenbus_dev_fatal(dev, err, "fail to allocate scsi host");
 		return err;

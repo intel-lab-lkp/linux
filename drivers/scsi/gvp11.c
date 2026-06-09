@@ -353,7 +353,7 @@ static int gvp11_probe(struct zorro_dev *z, const struct zorro_device_id *ent)
 		goto fail_check_or_alloc;
 
 	instance = scsi_host_alloc(&gvp11_scsi_template,
-				   sizeof(struct gvp11_hostdata));
+				   sizeof(struct gvp11_hostdata), NULL);
 	if (!instance) {
 		error = -ENOMEM;
 		goto fail_check_or_alloc;

@@ -2302,7 +2302,7 @@ static int __init blogic_init(void)
 		 */
 
 		host = scsi_host_alloc(&blogic_template,
-				sizeof(struct blogic_adapter));
+				sizeof(struct blogic_adapter), NULL);
 		if (host == NULL) {
 			release_region(myadapter->io_addr,
 					myadapter->addr_count);

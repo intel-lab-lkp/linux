@@ -3401,7 +3401,7 @@ static struct myrb_hba *myrb_detect(struct pci_dev *pdev,
 	struct Scsi_Host *shost;
 	struct myrb_hba *cb = NULL;
 
-	shost = scsi_host_alloc(&myrb_template, sizeof(struct myrb_hba));
+	shost = scsi_host_alloc(&myrb_template, sizeof(struct myrb_hba), &pdev->dev);
 	if (!shost) {
 		dev_err(&pdev->dev, "Unable to allocate Controller\n");
 		return NULL;

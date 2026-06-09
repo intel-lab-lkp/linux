@@ -126,7 +126,7 @@ static int oakscsi_probe(struct expansion_card *ec, const struct ecard_id *id)
 	if (ret)
 		goto out;
 
-	host = scsi_host_alloc(&oakscsi_template, sizeof(struct NCR5380_hostdata));
+	host = scsi_host_alloc(&oakscsi_template, sizeof(struct NCR5380_hostdata), NULL);
 	if (!host) {
 		ret = -ENOMEM;
 		goto release;

@@ -4142,7 +4142,7 @@ qla1280_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	pci_set_master(pdev);
 
 	error = -ENOMEM;
-	host = scsi_host_alloc(&qla1280_driver_template, sizeof(*ha));
+	host = scsi_host_alloc(&qla1280_driver_template, sizeof(*ha), &pdev->dev);
 	if (!host) {
 		printk(KERN_WARNING
 		       "qla1280: Failed to register host, aborting.\n");

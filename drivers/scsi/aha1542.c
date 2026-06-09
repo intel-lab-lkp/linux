@@ -752,7 +752,7 @@ static struct Scsi_Host *aha1542_hw_init(const struct scsi_host_template *tpnt,
 	if (!request_region(base_io, AHA1542_REGION_SIZE, "aha1542"))
 		return NULL;
 
-	sh = scsi_host_alloc(tpnt, sizeof(struct aha1542_hostdata));
+	sh = scsi_host_alloc(tpnt, sizeof(struct aha1542_hostdata), NULL);
 	if (!sh)
 		goto release;
 	aha1542 = shost_priv(sh);

@@ -3469,7 +3469,7 @@ hisi_sas_shost_alloc_pci(struct pci_dev *pdev)
 	struct hisi_hba *hisi_hba;
 	struct device *dev = &pdev->dev;
 
-	shost = scsi_host_alloc(&sht_v3_hw, sizeof(*hisi_hba));
+	shost = scsi_host_alloc(&sht_v3_hw, sizeof(*hisi_hba), &pdev->dev);
 	if (!shost) {
 		dev_err(dev, "shost alloc failed\n");
 		return NULL;

@@ -2903,7 +2903,7 @@ struct Scsi_Host *iscsi_host_alloc(const struct scsi_host_template *sht,
 	struct Scsi_Host *shost;
 	struct iscsi_host *ihost;
 
-	shost = scsi_host_alloc(sht, sizeof(struct iscsi_host) + dd_data_size);
+	shost = scsi_host_alloc(sht, sizeof(struct iscsi_host) + dd_data_size, NULL);
 	if (!shost)
 		return NULL;
 	ihost = shost_priv(shost);

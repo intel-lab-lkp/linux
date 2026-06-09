@@ -2483,7 +2483,7 @@ static struct Scsi_Host *hisi_sas_shost_alloc(struct platform_device *pdev,
 	struct device *dev = &pdev->dev;
 	int error;
 
-	shost = scsi_host_alloc(hw->sht, sizeof(*hisi_hba));
+	shost = scsi_host_alloc(hw->sht, sizeof(*hisi_hba), NULL);
 	if (!shost) {
 		dev_err(dev, "scsi host alloc failed\n");
 		return NULL;

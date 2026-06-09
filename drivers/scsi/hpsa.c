@@ -5837,7 +5837,7 @@ static int hpsa_scsi_host_alloc(struct ctlr_info *h)
 {
 	struct Scsi_Host *sh;
 
-	sh = scsi_host_alloc(&hpsa_driver_template, sizeof(struct ctlr_info *));
+	sh = scsi_host_alloc(&hpsa_driver_template, sizeof(struct ctlr_info *), &h->pdev->dev);
 	if (sh == NULL) {
 		dev_err(&h->pdev->dev, "scsi_host_alloc failed\n");
 		return -ENOMEM;

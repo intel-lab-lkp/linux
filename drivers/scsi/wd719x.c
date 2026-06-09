@@ -921,7 +921,7 @@ static int wd719x_pci_probe(struct pci_dev *pdev, const struct pci_device_id *d)
 		goto release_region;
 
 	err = -ENOMEM;
-	sh = scsi_host_alloc(&wd719x_template, sizeof(struct wd719x));
+	sh = scsi_host_alloc(&wd719x_template, sizeof(struct wd719x), &pdev->dev);
 	if (!sh)
 		goto release_region;
 

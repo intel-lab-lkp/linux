@@ -606,11 +606,11 @@ csio_shost_init(struct csio_hw *hw, struct device *dev,
 	if (dev == &hw->pdev->dev)
 		shost = scsi_host_alloc(
 				&csio_fcoe_shost_template,
-				sizeof(struct csio_lnode));
+				sizeof(struct csio_lnode), &hw->pdev->dev);
 	else
 		shost = scsi_host_alloc(
 				&csio_fcoe_shost_vport_template,
-				sizeof(struct csio_lnode));
+				sizeof(struct csio_lnode), &hw->pdev->dev);
 
 	if (!shost)
 		goto err;

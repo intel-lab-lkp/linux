@@ -1435,7 +1435,7 @@ static int pvscsi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		PVSCSI_MAX_NUM_REQ_ENTRIES_PER_PAGE;
 	pvscsi_template.cmd_per_lun =
 		min(pvscsi_template.can_queue, pvscsi_cmd_per_lun);
-	host = scsi_host_alloc(&pvscsi_template, sizeof(struct pvscsi_adapter));
+	host = scsi_host_alloc(&pvscsi_template, sizeof(struct pvscsi_adapter), &pdev->dev);
 	if (!host) {
 		printk(KERN_ERR "vmw_pvscsi: failed to allocate host\n");
 		goto out_release_resources_and_disable;

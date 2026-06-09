@@ -97,7 +97,7 @@ static int __init mvme147_init(void)
 		return 0;
 
 	mvme147_shost = scsi_host_alloc(&mvme147_host_template,
-			sizeof(struct WD33C93_hostdata));
+			sizeof(struct WD33C93_hostdata), NULL);
 	if (!mvme147_shost)
 		goto err_out;
 	mvme147_shost->base = 0xfffe4000;

@@ -3984,7 +3984,7 @@ static int dc395x_init_one(struct pci_dev *dev, const struct pci_device_id *id)
 
 	/* allocate scsi host information (includes out adapter) */
 	scsi_host = scsi_host_alloc(&dc395x_driver_template,
-				    sizeof(struct AdapterCtlBlk));
+				    sizeof(struct AdapterCtlBlk), &dev->dev);
 	if (!scsi_host)
 		goto fail;
 

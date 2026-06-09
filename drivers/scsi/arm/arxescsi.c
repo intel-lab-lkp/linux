@@ -272,7 +272,7 @@ static int arxescsi_probe(struct expansion_card *ec, const struct ecard_id *id)
 		goto out_region;
 	}
 
-	host = scsi_host_alloc(&arxescsi_template, sizeof(struct arxescsi_info));
+	host = scsi_host_alloc(&arxescsi_template, sizeof(struct arxescsi_info), NULL);
 	if (!host) {
 		ret = -ENOMEM;
 		goto out_region;

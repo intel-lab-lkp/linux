@@ -6638,7 +6638,7 @@ ips_register_scsi(int index)
 {
 	struct Scsi_Host *sh;
 	ips_ha_t *ha, *oldha = ips_ha[index];
-	sh = scsi_host_alloc(&ips_driver_template, sizeof (ips_ha_t));
+	sh = scsi_host_alloc(&ips_driver_template, sizeof(ips_ha_t), &oldha->pcidev->dev);
 	if (!sh) {
 		IPS_PRINTK(KERN_WARNING, oldha->pcidev,
 			   "Unable to register controller with SCSI subsystem\n");

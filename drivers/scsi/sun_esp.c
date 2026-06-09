@@ -457,7 +457,7 @@ static int esp_sbus_probe_one(struct platform_device *op,
 	struct esp *esp;
 	int err;
 
-	host = scsi_host_alloc(tpnt, sizeof(struct esp));
+	host = scsi_host_alloc(tpnt, sizeof(struct esp), NULL);
 
 	err = -ENOMEM;
 	if (!host)

@@ -2806,7 +2806,7 @@ static int acornscsi_probe(struct expansion_card *ec, const struct ecard_id *id)
 	if (ret)
 		goto out;
 
-	host = scsi_host_alloc(&acornscsi_template, sizeof(AS_Host));
+	host = scsi_host_alloc(&acornscsi_template, sizeof(AS_Host), NULL);
 	if (!host) {
 		ret = -ENOMEM;
 		goto out_release;

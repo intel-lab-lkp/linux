@@ -95,7 +95,7 @@ static struct Scsi_Host *__qlogicfas_detect(struct scsi_host_template *host,
 
 	qlogicfas408_setup(qbase, qinitid, INT_TYPE);
 
-	hreg = scsi_host_alloc(host, sizeof(struct qlogicfas408_priv));
+	hreg = scsi_host_alloc(host, sizeof(struct qlogicfas408_priv), NULL);
 	if (!hreg)
 		goto err_release_mem;
 	priv = get_priv_by_host(hreg);

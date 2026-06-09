@@ -1937,7 +1937,7 @@ static struct myrs_hba *myrs_alloc_host(struct pci_dev *pdev,
 	struct Scsi_Host *shost;
 	struct myrs_hba *cs;
 
-	shost = scsi_host_alloc(&myrs_template, sizeof(struct myrs_hba));
+	shost = scsi_host_alloc(&myrs_template, sizeof(struct myrs_hba), &pdev->dev);
 	if (!shost)
 		return NULL;
 

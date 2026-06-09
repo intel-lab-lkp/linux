@@ -1142,7 +1142,7 @@ static int pm8001_pci_probe(struct pci_dev *pdev,
 	if (rc)
 		goto err_out_regions;
 
-	shost = scsi_host_alloc(&pm8001_sht, sizeof(void *));
+	shost = scsi_host_alloc(&pm8001_sht, sizeof(void *), &pdev->dev);
 	if (!shost) {
 		rc = -ENOMEM;
 		goto err_out_regions;

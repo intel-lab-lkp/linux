@@ -1101,7 +1101,7 @@ static int __ppa_attach(struct parport *pb)
 	INIT_DELAYED_WORK(&dev->ppa_tq, ppa_interrupt);
 
 	err = -ENOMEM;
-	host = scsi_host_alloc(&ppa_template, sizeof(ppa_struct *));
+	host = scsi_host_alloc(&ppa_template, sizeof(ppa_struct *), NULL);
 	if (!host)
 		goto out1;
 	host->io_port = pb->base;

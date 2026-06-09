@@ -363,7 +363,7 @@ snic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/*
 	 * Allocate SCSI Host and setup association between host, and snic
 	 */
-	shost = scsi_host_alloc(&snic_host_template, sizeof(struct snic));
+	shost = scsi_host_alloc(&snic_host_template, sizeof(struct snic), &pdev->dev);
 	if (!shost) {
 		SNIC_ERR("Unable to alloc scsi_host\n");
 		ret = -ENOMEM;

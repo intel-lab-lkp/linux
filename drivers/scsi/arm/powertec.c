@@ -318,7 +318,7 @@ static int powertecscsi_probe(struct expansion_card *ec,
 	}
 
 	host = scsi_host_alloc(&powertecscsi_template,
-			       sizeof (struct powertec_info));
+			       sizeof(struct powertec_info), NULL);
 	if (!host) {
 		ret = -ENOMEM;
 		goto out_region;

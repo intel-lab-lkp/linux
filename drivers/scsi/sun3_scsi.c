@@ -578,7 +578,7 @@ static int __init sun3_scsi_probe(struct platform_device *pdev)
 #endif
 
 	instance = scsi_host_alloc(&sun3_scsi_template,
-	                           sizeof(struct NCR5380_hostdata));
+				   sizeof(struct NCR5380_hostdata), NULL);
 	if (!instance) {
 		error = -ENOMEM;
 		goto fail_alloc;

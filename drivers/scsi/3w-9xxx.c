@@ -2021,7 +2021,7 @@ static int twa_probe(struct pci_dev *pdev, const struct pci_device_id *dev_id)
 		goto out_disable_device;
 	}
 
-	host = scsi_host_alloc(&driver_template, sizeof(TW_Device_Extension));
+	host = scsi_host_alloc(&driver_template, sizeof(TW_Device_Extension), &pdev->dev);
 	if (!host) {
 		TW_PRINTK(host, TW_DRIVER, 0x24, "Failed to allocate memory for device extension");
 		retval = -ENOMEM;

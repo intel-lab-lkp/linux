@@ -7512,7 +7512,7 @@ static int megasas_probe_one(struct pci_dev *pdev,
 	pci_set_master(pdev);
 
 	host = scsi_host_alloc(&megasas_template,
-			       sizeof(struct megasas_instance));
+			       sizeof(struct megasas_instance), &pdev->dev);
 
 	if (!host) {
 		dev_printk(KERN_DEBUG, &pdev->dev, "scsi_host_alloc failed\n");

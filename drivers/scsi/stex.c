@@ -1667,7 +1667,7 @@ static int stex_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	S6flag = 0;
 	register_reboot_notifier(&stex_notifier);
 
-	host = scsi_host_alloc(&driver_template, sizeof(struct st_hba));
+	host = scsi_host_alloc(&driver_template, sizeof(struct st_hba), &pdev->dev);
 
 	if (!host) {
 		printk(KERN_ERR DRV_NAME "(%s): scsi_host_alloc failed\n",

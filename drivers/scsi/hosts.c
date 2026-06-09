@@ -403,12 +403,14 @@ static const struct device_type scsi_host_type = {
  * Return value:
  * 	Pointer to a new Scsi_Host
  **/
-struct Scsi_Host *scsi_host_alloc(const struct scsi_host_template *sht, int privsize)
+struct Scsi_Host *scsi_host_alloc(const struct scsi_host_template *sht, int privsize,
+				  struct device *dev)
 {
 	struct Scsi_Host *shost;
 	int index;
 
-	shost = kzalloc(sizeof(struct Scsi_Host) + privsize, GFP_KERNEL);
+	shost = kzalloc_node(sizeof(struct Scsi_Host) + privsize, GFP_KERNEL,
+			     dev ? dev_to_node(dev) : NUMA_NO_NODE);
 	if (!shost)
 		return NULL;
 

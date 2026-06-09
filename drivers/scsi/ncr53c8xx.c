@@ -8108,7 +8108,7 @@ struct Scsi_Host * __init ncr_attach(struct scsi_host_template *tpnt,
 	printk(KERN_INFO "ncr53c720-%d: rev 0x%x irq %d\n",
 		unit, device->chip.revision_id, device->slot.irq);
 
-	instance = scsi_host_alloc(tpnt, sizeof(*host_data));
+	instance = scsi_host_alloc(tpnt, sizeof(*host_data), NULL);
 	if (!instance)
 	        goto attach_error;
 	host_data = (struct host_data *) instance->hostdata;

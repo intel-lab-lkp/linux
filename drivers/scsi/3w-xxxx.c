@@ -2268,7 +2268,7 @@ static int tw_probe(struct pci_dev *pdev, const struct pci_device_id *dev_id)
 		goto out_disable_device;
 	}
 
-	host = scsi_host_alloc(&driver_template, sizeof(TW_Device_Extension));
+	host = scsi_host_alloc(&driver_template, sizeof(TW_Device_Extension), &pdev->dev);
 	if (!host) {
 		printk(KERN_WARNING "3w-xxxx: Failed to allocate memory for device extension.");
 		retval = -ENOMEM;

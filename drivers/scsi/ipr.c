@@ -9379,7 +9379,7 @@ static int ipr_probe_ioa(struct pci_dev *pdev,
 	ENTER;
 
 	dev_info(&pdev->dev, "Found IOA with IRQ: %d\n", pdev->irq);
-	host = scsi_host_alloc(&driver_template, sizeof(*ioa_cfg));
+	host = scsi_host_alloc(&driver_template, sizeof(*ioa_cfg), &pdev->dev);
 
 	if (!host) {
 		dev_err(&pdev->dev, "call to scsi_host_alloc failed!\n");

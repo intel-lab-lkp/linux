@@ -7619,7 +7619,7 @@ static int pqi_register_scsi(struct pqi_ctrl_info *ctrl_info)
 	int rc;
 	struct Scsi_Host *shost;
 
-	shost = scsi_host_alloc(&pqi_driver_template, sizeof(ctrl_info));
+	shost = scsi_host_alloc(&pqi_driver_template, sizeof(ctrl_info), &ctrl_info->pci_dev->dev);
 	if (!shost) {
 		dev_err(&ctrl_info->pci_dev->dev, "scsi_host_alloc failed\n");
 		return -ENOMEM;

@@ -774,7 +774,7 @@ static int zorro_esp_probe(struct zorro_dev *z,
 		goto fail_free_zep;
 	}
 
-	host = scsi_host_alloc(tpnt, sizeof(struct esp));
+	host = scsi_host_alloc(tpnt, sizeof(struct esp), NULL);
 
 	if (!host) {
 		pr_err("No host detected; board configuration problem?\n");

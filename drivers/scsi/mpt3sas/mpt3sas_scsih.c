@@ -13367,7 +13367,7 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 			PCIE_LINK_STATE_L1 | PCIE_LINK_STATE_CLKPM);
 		/* Use mpt2sas driver host template for SAS 2.0 HBA's */
 		shost = scsi_host_alloc(&mpt2sas_driver_template,
-		  sizeof(struct MPT3SAS_ADAPTER));
+		  sizeof(struct MPT3SAS_ADAPTER), &pdev->dev);
 		if (!shost)
 			return -ENODEV;
 		ioc = shost_priv(shost);
@@ -13399,7 +13399,7 @@ _scsih_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	case MPI26_VERSION:
 		/* Use mpt3sas driver host template for SAS 3.0 HBA's */
 		shost = scsi_host_alloc(&mpt3sas_driver_template,
-		  sizeof(struct MPT3SAS_ADAPTER));
+		  sizeof(struct MPT3SAS_ADAPTER), &pdev->dev);
 		if (!shost)
 			return -ENODEV;
 		ioc = shost_priv(shost);

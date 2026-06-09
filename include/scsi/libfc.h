@@ -883,7 +883,7 @@ libfc_host_alloc(const struct scsi_host_template *sht, int priv_size)
 	struct fc_lport *lport;
 	struct Scsi_Host *shost;
 
-	shost = scsi_host_alloc(sht, sizeof(*lport) + priv_size);
+	shost = scsi_host_alloc(sht, sizeof(*lport) + priv_size, NULL);
 	if (!shost)
 		return NULL;
 	lport = shost_priv(shost);

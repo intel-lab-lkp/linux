@@ -1969,7 +1969,7 @@ static int storvsc_probe(struct hv_device *device,
 				(100 - ring_avail_percent_lowater) / 100;
 
 	host = scsi_host_alloc(&scsi_driver,
-			       sizeof(struct hv_host_device));
+			       sizeof(struct hv_host_device), NULL);
 	if (!host)
 		return -ENOMEM;
 

@@ -538,7 +538,7 @@ static struct isci_host *isci_host_alloc(struct pci_dev *pdev, int id)
 		INIT_LIST_HEAD(&idev->node);
 	}
 
-	shost = scsi_host_alloc(&isci_sht, sizeof(void *));
+	shost = scsi_host_alloc(&isci_sht, sizeof(void *), &pdev->dev);
 	if (!shost)
 		return NULL;
 

@@ -394,7 +394,7 @@ static int cumanascsi2_probe(struct expansion_card *ec,
 	}
 
 	host = scsi_host_alloc(&cumanascsi2_template,
-			       sizeof(struct cumanascsi2_info));
+			       sizeof(struct cumanascsi2_info), NULL);
 	if (!host) {
 		ret = -ENOMEM;
 		goto out_region;

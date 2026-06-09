@@ -740,7 +740,7 @@ bfad_scsi_host_alloc(struct bfad_im_port_s *im_port, struct bfad_s *bfad)
 
 	sht->sg_tablesize = bfad->cfg_data.io_max_sge;
 
-	return scsi_host_alloc(sht, sizeof(struct bfad_im_port_pointer));
+	return scsi_host_alloc(sht, sizeof(struct bfad_im_port_pointer), NULL);
 }
 
 void

@@ -378,7 +378,7 @@ efct_scsi_new_device(struct efct *efct)
 	int error = 0;
 	struct efct_vport *vport = NULL;
 
-	shost = scsi_host_alloc(&efct_template, sizeof(*vport));
+	shost = scsi_host_alloc(&efct_template, sizeof(*vport), NULL);
 	if (!shost) {
 		efc_log_err(efct, "failed to allocate Scsi_Host struct\n");
 		return -ENOMEM;
@@ -902,7 +902,7 @@ efct_scsi_new_vport(struct efct *efct, struct device *dev)
 	int error = 0;
 	struct efct_vport *vport = NULL;
 
-	shost = scsi_host_alloc(&efct_template, sizeof(*vport));
+	shost = scsi_host_alloc(&efct_template, sizeof(*vport), NULL);
 	if (!shost) {
 		efc_log_err(efct, "failed to allocate Scsi_Host struct\n");
 		return NULL;

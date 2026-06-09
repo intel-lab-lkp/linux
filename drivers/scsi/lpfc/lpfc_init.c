@@ -4745,7 +4745,7 @@ lpfc_create_port(struct lpfc_hba *phba, int instance, struct device *dev)
 		template->sg_tablesize = lpfc_get_sg_tablesize(phba);
 	}
 
-	shost = scsi_host_alloc(template, sizeof(struct lpfc_vport));
+	shost = scsi_host_alloc(template, sizeof(struct lpfc_vport), &phba->pcidev->dev);
 	if (!shost)
 		goto out;
 

@@ -231,7 +231,7 @@ static int sgiwd93_probe(struct platform_device *pdev)
 	unsigned int irq = pd->irq;
 	int err;
 
-	host = scsi_host_alloc(&sgiwd93_template, sizeof(struct ip22_hostdata));
+	host = scsi_host_alloc(&sgiwd93_template, sizeof(struct ip22_hostdata), NULL);
 	if (!host) {
 		err = -ENOMEM;
 		goto out;

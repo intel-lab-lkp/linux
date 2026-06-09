@@ -752,7 +752,7 @@ SYM53C500_config(struct pcmcia_device *link)
 
 	chip_init(port_base);
 
-	host = scsi_host_alloc(tpnt, sizeof(struct sym53c500_data));
+	host = scsi_host_alloc(tpnt, sizeof(struct sym53c500_data), NULL);
 	if (!host) {
 		printk("SYM53C500: Unable to register host, giving up.\n");
 		goto err_release;

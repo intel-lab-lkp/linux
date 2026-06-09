@@ -537,7 +537,7 @@ struct Scsi_Host *fdomain_create(int base, int irq, int this_id,
 		return NULL;
 	}
 
-	sh = scsi_host_alloc(&fdomain_template, sizeof(struct fdomain));
+	sh = scsi_host_alloc(&fdomain_template, sizeof(struct fdomain), NULL);
 	if (!sh)
 		return NULL;
 

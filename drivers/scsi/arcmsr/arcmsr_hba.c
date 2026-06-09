@@ -1087,7 +1087,8 @@ static int arcmsr_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if(error){
 		return -ENODEV;
 	}
-	host = scsi_host_alloc(&arcmsr_scsi_host_template, sizeof(struct AdapterControlBlock));
+	host = scsi_host_alloc(&arcmsr_scsi_host_template,
+			       sizeof(struct AdapterControlBlock), &pdev->dev);
 	if(!host){
     		goto pci_disable_dev;
 	}

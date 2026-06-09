@@ -2235,7 +2235,7 @@ static int ibmvscsi_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 
 	dev_set_drvdata(&vdev->dev, NULL);
 
-	host = scsi_host_alloc(&driver_template, sizeof(*hostdata));
+	host = scsi_host_alloc(&driver_template, sizeof(*hostdata), NULL);
 	if (!host) {
 		dev_err(&vdev->dev, "couldn't allocate host data\n");
 		goto scsi_host_alloc_failed;

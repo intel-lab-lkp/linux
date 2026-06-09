@@ -2468,7 +2468,7 @@ static int mvumi_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (ret)
 		goto fail_set_dma_mask;
 
-	host = scsi_host_alloc(&mvumi_template, sizeof(*mhba));
+	host = scsi_host_alloc(&mvumi_template, sizeof(*mhba), &pdev->dev);
 	if (!host) {
 		dev_err(&pdev->dev, "scsi_host_alloc failed\n");
 		ret = -ENOMEM;

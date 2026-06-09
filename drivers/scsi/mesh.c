@@ -1877,7 +1877,7 @@ static int mesh_probe(struct macio_dev *mdev, const struct of_device_id *match)
        		printk(KERN_ERR "mesh: unable to request memory resources");
 		return -EBUSY;
 	}
-       	mesh_host = scsi_host_alloc(&mesh_template, sizeof(struct mesh_state));
+	mesh_host = scsi_host_alloc(&mesh_template, sizeof(struct mesh_state), NULL);
 	if (mesh_host == NULL) {
 		printk(KERN_ERR "mesh: couldn't register host");
 		goto out_release;

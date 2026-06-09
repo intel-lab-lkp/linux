@@ -704,7 +704,7 @@ static int asd_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	err = -ENOMEM;
 
-	shost = scsi_host_alloc(&aic94xx_sht, sizeof(void *));
+	shost = scsi_host_alloc(&aic94xx_sht, sizeof(void *), &dev->dev);
 	if (!shost)
 		goto Err;
 

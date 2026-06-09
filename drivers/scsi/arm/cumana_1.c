@@ -238,7 +238,7 @@ static int cumanascsi1_probe(struct expansion_card *ec,
 	if (ret)
 		goto out;
 
-	host = scsi_host_alloc(&cumanascsi_template, sizeof(struct NCR5380_hostdata));
+	host = scsi_host_alloc(&cumanascsi_template, sizeof(struct NCR5380_hostdata), NULL);
 	if (!host) {
 		ret = -ENOMEM;
 		goto out_release;

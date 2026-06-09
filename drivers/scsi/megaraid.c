@@ -4203,7 +4203,7 @@ megaraid_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 
 	/* Initialize SCSI Host structure */
-	host = scsi_host_alloc(&megaraid_template, sizeof(adapter_t));
+	host = scsi_host_alloc(&megaraid_template, sizeof(adapter_t), &pdev->dev);
 	if (!host)
 		goto out_iounmap;
 

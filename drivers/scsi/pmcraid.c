@@ -5236,7 +5236,7 @@ static int pmcraid_probe(struct pci_dev *pdev,
 	}
 
 	host = scsi_host_alloc(&pmcraid_host_template,
-				sizeof(struct pmcraid_instance));
+				sizeof(struct pmcraid_instance), &pdev->dev);
 
 	if (!host) {
 		dev_err(&pdev->dev, "scsi_host_alloc failed!\n");

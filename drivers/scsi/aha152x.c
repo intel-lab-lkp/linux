@@ -734,7 +734,7 @@ struct Scsi_Host *aha152x_probe_one(struct aha152x_setup *setup)
 {
 	struct Scsi_Host *shpnt;
 
-	shpnt = scsi_host_alloc(&aha152x_driver_template, sizeof(struct aha152x_hostdata));
+	shpnt = scsi_host_alloc(&aha152x_driver_template, sizeof(struct aha152x_hostdata), NULL);
 	if (!shpnt) {
 		printk(KERN_ERR "aha152x: scsi_host_alloc failed\n");
 		return NULL;

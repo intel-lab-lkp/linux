@@ -510,7 +510,7 @@ static int eesoxscsi_probe(struct expansion_card *ec, const struct ecard_id *id)
 	}
 
 	host = scsi_host_alloc(&eesox_template,
-			       sizeof(struct eesoxscsi_info));
+			       sizeof(struct eesoxscsi_info), NULL);
 	if (!host) {
 		ret = -ENOMEM;
 		goto out_region;

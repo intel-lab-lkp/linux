@@ -1326,7 +1326,7 @@ static struct Scsi_Host *nsp_detect(struct scsi_host_template *sht)
 	nsp_hw_data *data_b = &nsp_data_base, *data;
 
 	nsp_dbg(NSP_DEBUG_INIT, "this_id=%d", sht->this_id);
-	host = scsi_host_alloc(&nsp_driver_template, sizeof(nsp_hw_data));
+	host = scsi_host_alloc(&nsp_driver_template, sizeof(nsp_hw_data), NULL);
 	if (host == NULL) {
 		nsp_dbg(NSP_DEBUG_INIT, "host failed");
 		return NULL;

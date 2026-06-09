@@ -382,7 +382,7 @@ static int esas2r_probe(struct pci_dev *pcid,
 		       "after pci_enable_device() enable_cnt: %d",
 		       pcid->enable_cnt.counter);
 
-	host = scsi_host_alloc(&driver_template, host_alloc_size);
+	host = scsi_host_alloc(&driver_template, host_alloc_size, &pcid->dev);
 	if (host == NULL) {
 		esas2r_log(ESAS2R_LOG_CRIT, "scsi_host_alloc() FAIL");
 		return -ENODEV;

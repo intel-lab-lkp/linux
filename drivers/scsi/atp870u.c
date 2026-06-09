@@ -1579,7 +1579,7 @@ static int atp870u_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	pci_set_master(pdev);
 
 	err = -ENOMEM;
-	shpnt = scsi_host_alloc(&atp870u_template, sizeof(struct atp_unit));
+	shpnt = scsi_host_alloc(&atp870u_template, sizeof(struct atp_unit), &pdev->dev);
 	if (!shpnt)
 		goto release_region;
 

@@ -312,7 +312,7 @@ static int generic_NCR5380_init_one(const struct scsi_host_template *tpnt,
 		goto out_release;
 	}
 
-	instance = scsi_host_alloc(tpnt, sizeof(struct NCR5380_hostdata));
+	instance = scsi_host_alloc(tpnt, sizeof(struct NCR5380_hostdata), NULL);
 	if (instance == NULL) {
 		ret = -ENOMEM;
 		goto out_unmap;

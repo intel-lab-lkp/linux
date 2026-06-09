@@ -110,7 +110,7 @@ static int esp_jazz_probe(struct platform_device *dev)
 	struct resource *res;
 	int err;
 
-	host = scsi_host_alloc(tpnt, sizeof(struct esp));
+	host = scsi_host_alloc(tpnt, sizeof(struct esp), NULL);
 
 	err = -ENOMEM;
 	if (!host)

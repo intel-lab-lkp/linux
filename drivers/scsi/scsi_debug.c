@@ -9548,7 +9548,7 @@ static int sdebug_driver_probe(struct device *dev)
 
 	sdbg_host = dev_to_sdebug_host(dev);
 
-	hpnt = scsi_host_alloc(&sdebug_driver_template, 0);
+	hpnt = scsi_host_alloc(&sdebug_driver_template, 0, NULL);
 	if (NULL == hpnt) {
 		pr_err("scsi_host_alloc failed\n");
 		error = -ENODEV;

@@ -583,7 +583,7 @@ static int aha1740_probe (struct device *dev)
 	printk(KERN_INFO "aha174x: Extended translation %sabled.\n",
 	       translation ? "en" : "dis");
 	shpnt = scsi_host_alloc(&aha1740_template,
-			      sizeof(struct aha1740_hostdata));
+			      sizeof(struct aha1740_hostdata), NULL);
 	if(shpnt == NULL)
 		goto err_release_region;
 

@@ -235,7 +235,7 @@ static int __init amiga_a3000_scsi_probe(struct platform_device *pdev)
 		return -EBUSY;
 
 	instance = scsi_host_alloc(&amiga_a3000_scsi_template,
-				   sizeof(struct a3000_hostdata));
+				   sizeof(struct a3000_hostdata), NULL);
 	if (!instance) {
 		error = -ENOMEM;
 		goto fail_alloc;

@@ -6325,7 +6325,7 @@ static int ibmvfc_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 	unsigned int max_scsi_queues = min((unsigned int)IBMVFC_MAX_SCSI_QUEUES, online_cpus);
 
 	ENTER;
-	shost = scsi_host_alloc(&driver_template, sizeof(*vhost));
+	shost = scsi_host_alloc(&driver_template, sizeof(*vhost), NULL);
 	if (!shost) {
 		dev_err(dev, "Couldn't allocate host data\n");
 		goto out;
