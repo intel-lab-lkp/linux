@@ -1499,17 +1499,12 @@ static int lpi2c_imx_probe(struct platform_device *pdev)
 	if (ret)
 		lpi2c_imx->bitrate = I2C_MAX_STANDARD_MODE_FREQ;
 
-	ret = devm_request_irq(&pdev->dev, lpi2c_imx->irq, lpi2c_imx_isr, IRQF_NO_SUSPEND,
-			       pdev->name, lpi2c_imx);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "can't claim irq %d\n", lpi2c_imx->irq);
-
 	i2c_set_adapdata(&lpi2c_imx->adapter, lpi2c_imx);
 	platform_set_drvdata(pdev, lpi2c_imx);
 
 	ret = clk_bulk_prepare_enable(lpi2c_imx->num_clks, lpi2c_imx->clks);
 	if (ret)
-		goto free_irq;
+		return dev_err_probe(&pdev->dev, ret, "can't get LPI2C clock\n");
 
 	/*
 	 * Lock the parent clock rate to avoid getting parent clock upon
@@ -1539,6 +1534,22 @@ static int lpi2c_imx_probe(struct platform_device *pdev)
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
 
+	/*
+	 * Reset all internal controller registers of both Master and Target
+	 * to avoid effects of previous status.
+	 */
+	writel(MCR_RST, lpi2c_imx->base + LPI2C_MCR);
+	writel(SCR_RST, lpi2c_imx->base + LPI2C_SCR);
+	writel(0, lpi2c_imx->base + LPI2C_MCR);
+	writel(0, lpi2c_imx->base + LPI2C_SCR);
+
+	ret = devm_request_irq(&pdev->dev, lpi2c_imx->irq, lpi2c_imx_isr, IRQF_NO_SUSPEND,
+			       pdev->name, lpi2c_imx);
+	if (ret) {
+		dev_err_probe(&pdev->dev, ret, "can't claim irq %d\n", lpi2c_imx->irq);
+		goto rpm_disable;
+	}
+
 	temp = readl(lpi2c_imx->base + LPI2C_PARAM);
 	lpi2c_imx->txfifosize = 1 << (temp & 0x0f);
 	lpi2c_imx->rxfifosize = 1 << ((temp >> 8) & 0x0f);
@@ -1547,19 +1558,19 @@ static int lpi2c_imx_probe(struct platform_device *pdev)
 	ret = lpi2c_imx_init_recovery_info(lpi2c_imx, pdev);
 	/* Give it another chance if pinctrl used is not ready yet */
 	if (ret == -EPROBE_DEFER)
-		goto rpm_disable;
+		goto free_irq;
 
 	/* Init DMA */
 	ret = lpi2c_dma_init(&pdev->dev, phy_addr);
 	if (ret) {
 		if (ret == -EPROBE_DEFER)
-			goto rpm_disable;
+			goto free_irq;
 		dev_info(&pdev->dev, "use pio mode\n");
 	}
 
 	ret = i2c_add_adapter(&lpi2c_imx->adapter);
 	if (ret)
-		goto rpm_disable;
+		goto free_irq;
 
 	pm_runtime_put_autosuspend(&pdev->dev);
 
@@ -1567,6 +1578,8 @@ static int lpi2c_imx_probe(struct platform_device *pdev)
 
 	return 0;
 
+free_irq:
+	devm_free_irq(&pdev->dev, lpi2c_imx->irq, lpi2c_imx);
 rpm_disable:
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
@@ -1574,8 +1587,6 @@ rpm_disable:
 	pm_runtime_put_noidle(&pdev->dev);
 clk_disable:
 	clk_bulk_disable_unprepare(lpi2c_imx->num_clks, lpi2c_imx->clks);
-free_irq:
-	devm_free_irq(&pdev->dev, lpi2c_imx->irq, lpi2c_imx);
 
 	return ret;
 }
