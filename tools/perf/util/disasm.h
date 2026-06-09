@@ -106,6 +106,7 @@ struct annotate_args {
 	char			  *line;
 	int			  line_nr;
 	char			  *fileloc;
+	bool			  is_temp_elf;
 };
 
 const struct arch *arch__find(uint16_t e_machine, uint32_t e_flags, const char *cpuid);
