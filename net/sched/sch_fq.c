@@ -600,7 +600,7 @@ static int fq_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	u8 band;
 
 	band = fq_prio2band(q->prio2band, skb->priority & TC_PRIO_MAX);
-	if (unlikely(q->band_pkt_count[band] >= sch->limit)) {
+	if (unlikely(sch->q.qlen >= sch->limit)) {
 		q->stat_band_drops[band]++;
 		return qdisc_drop_reason(skb, sch, to_free, QDISC_DROP_BAND_LIMIT);
 	}
