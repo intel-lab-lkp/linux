@@ -575,10 +575,18 @@ int sja1105_setup_tc_taprio(struct dsa_switch *ds, int port,
 	tas_data->offload[port] = taprio_offload_get(admin);
 
 	rc = sja1105_init_scheduling(priv);
-	if (rc < 0)
+	if (rc < 0) {
+		taprio_offload_free(tas_data->offload[port]);
+		tas_data->offload[port] = NULL;
 		return rc;
+	}
 
-	return sja1105_static_config_reload(priv, SJA1105_SCHEDULING);
+	rc = sja1105_static_config_reload(priv, SJA1105_SCHEDULING);
+	if (rc < 0) {
+		taprio_offload_free(tas_data->offload[port]);
+		tas_data->offload[port] = NULL;
+	}
+	return rc;
 }
 
 static int sja1105_tas_check_running(struct sja1105_private *priv)
