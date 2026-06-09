@@ -857,12 +857,16 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 	const struct mtype_elem *d = value;
 	struct mtype_elem *data;
 	struct hbucket *n, *old = ERR_PTR(-ENOENT);
-	int i, j = -1, ret;
+	int i, j, ret;
 	bool flag_exist = flags & IPSET_FLAG_EXIST;
-	bool deleted = false, forceadd = false, reuse = false;
-	u32 r, key, multi = 0, elements, maxelem;
-	u8 npos = 0;
+	bool deleted, forceadd, reuse;
+	u32 r, key, multi, elements, maxelem;
+	u8 npos, retried = 0;
 
+retry:
+	multi = 0;
+	j = -1;
+	deleted = forceadd = reuse = false;
 	rcu_read_lock_bh();
 	t = rcu_dereference_bh(h->table);
 	key = HKEY(value, h->initval, t->htable_bits);
@@ -931,6 +935,10 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 			j = 0;
 		data = ahash_data(n, j, set->dsize);
 		if (!deleted) {
+			if (retried++)
+				goto set_full;
+			clear_bit(j, n->used);
+			smp_mb__after_atomic();
 #ifdef IP_SET_HASH_WITH_NETS
 			for (i = 0; i < IPSET_NET_COUNT; i++)
 				mtype_del_cidr(set, h,
@@ -939,6 +947,9 @@ mtype_add(struct ip_set *set, void *value, const struct ip_set_ext *ext,
 #endif
 			ip_set_ext_destroy(set, data);
 			t->hregion[r].elements--;
+			spin_unlock_bh(&t->hregion[r].lock);
+			rcu_read_unlock_bh();
+			goto retry;
 		}
 		goto copy_data;
 	}
