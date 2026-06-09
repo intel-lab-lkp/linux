@@ -632,3 +632,28 @@ void drm_colorop_set_next_property(struct drm_colorop *colorop, struct drm_color
 	colorop->next = next;
 }
 EXPORT_SYMBOL(drm_colorop_set_next_property);
+
+/**
+ * drm_colorop_add_to_pipeline - adds the given colorop to a color pipeline
+ * @pipeline: drm colorop pipeline
+ * @colorop: drm colorop to add
+ *
+ * Should be used when constructing the color pipeline. Adds the new colorop
+ * to the end of the pipeline and sets the 'next' property of the previously
+ * last colorop (if there is one) to point to the new colorop.
+ */
+void drm_colorop_add_to_pipeline(struct drm_colorop *pipeline, struct drm_colorop *colorop)
+{
+	struct drm_colorop *last = pipeline;
+
+	/* Head entry does not need processing */
+	if (colorop == pipeline)
+		return;
+
+	while (last->next)
+		last = last->next;
+
+	drm_object_property_set_value(&last->base, last->next_property, colorop->base.id);
+	last->next = colorop;
+}
+EXPORT_SYMBOL(drm_colorop_add_to_pipeline);
