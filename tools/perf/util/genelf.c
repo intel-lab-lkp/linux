@@ -179,7 +179,7 @@ static void blake2s_update_tagged(struct blake2s_ctx *ctx, int tag,
  * csize: the code size in bytes
  */
 int
-jit_write_elf(int fd, uint64_t load_addr __maybe_unused, const char *sym,
+jit_write_elf(int fd, uint16_t e_machine, uint64_t load_addr, const char *sym,
 	      const void *code, int csize,
 	      void *debug __maybe_unused, int nr_debug_entries __maybe_unused,
 	      void *unwinding, uint64_t unwinding_header_size, uint64_t unwinding_size)
@@ -218,9 +218,9 @@ jit_write_elf(int fd, uint64_t load_addr __maybe_unused, const char *sym,
 
 	ehdr->e_ident[EI_DATA] = GEN_ELF_ENDIAN;
 	ehdr->e_ident[EI_CLASS] = GEN_ELF_CLASS;
-	ehdr->e_machine = GEN_ELF_ARCH;
+	ehdr->e_machine = e_machine;
 	ehdr->e_type = ET_DYN;
-	ehdr->e_entry = GEN_ELF_TEXT_OFFSET;
+	ehdr->e_entry = load_addr;
 	ehdr->e_version = EV_CURRENT;
 	ehdr->e_shstrndx= unwinding ? 4 : 2; /* shdr index for section name */
 
@@ -230,8 +230,8 @@ jit_write_elf(int fd, uint64_t load_addr __maybe_unused, const char *sym,
 	phdr = elf_newphdr(e, 1);
 	phdr[0].p_type = PT_LOAD;
 	phdr[0].p_offset = GEN_ELF_TEXT_OFFSET;
-	phdr[0].p_vaddr = GEN_ELF_TEXT_OFFSET;
-	phdr[0].p_paddr = GEN_ELF_TEXT_OFFSET;
+	phdr[0].p_vaddr = load_addr;
+	phdr[0].p_paddr = load_addr;
 	phdr[0].p_filesz = csize;
 	phdr[0].p_memsz = csize;
 	phdr[0].p_flags = PF_X | PF_R;
@@ -267,7 +267,7 @@ jit_write_elf(int fd, uint64_t load_addr __maybe_unused, const char *sym,
 
 	shdr->sh_name = 1;
 	shdr->sh_type = SHT_PROGBITS;
-	shdr->sh_addr = GEN_ELF_TEXT_OFFSET;
+	shdr->sh_addr = load_addr;
 	shdr->sh_flags = SHF_EXECINSTR | SHF_ALLOC;
 	shdr->sh_entsize = 0;
 
@@ -278,7 +278,7 @@ jit_write_elf(int fd, uint64_t load_addr __maybe_unused, const char *sym,
 	 * Setup .eh_frame_hdr and .eh_frame
 	 */
 	if (unwinding) {
-		eh_frame_base_offset = ALIGN_8(GEN_ELF_TEXT_OFFSET + csize);
+		eh_frame_base_offset = ALIGN_8(load_addr + csize);
 		retval = jit_add_eh_frame_info(e, unwinding,
 					       unwinding_header_size, unwinding_size,
 					       eh_frame_base_offset);
@@ -324,7 +324,7 @@ jit_write_elf(int fd, uint64_t load_addr __maybe_unused, const char *sym,
 	 * setup symtab section
 	 */
 	symtab[1].st_size  = csize;
-	symtab[1].st_value = GEN_ELF_TEXT_OFFSET;
+	symtab[1].st_value = load_addr;
 
 	scn = elf_newscn(e);
 	if (!scn) {

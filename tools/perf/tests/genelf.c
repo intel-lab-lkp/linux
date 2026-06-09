@@ -38,7 +38,7 @@ static int test__jit_write_elf(struct test_suite *test __maybe_unused,
 
 	pr_info("Writing jit code to: %s\n", path);
 
-	ret = jit_write_elf(fd, 0, "main", x86_code, sizeof(x86_code),
+	ret = jit_write_elf(fd, GEN_ELF_ARCH, 0, "main", x86_code, sizeof(x86_code),
 			NULL, 0, NULL, 0, 0);
 	close(fd);
 
