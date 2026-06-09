@@ -4,6 +4,8 @@
 
 set -e
 
+export PERF_CONFIG=/dev/null
+
 shelldir=$(dirname "$0")
 
 # shellcheck source=lib/perf_has_symbol.sh
@@ -23,6 +25,7 @@ disasm_regex="[0-9]*\.[0-9]* *: *\w*: *\w*"
 cleanup() {
   rm -rf "${perfdata}" "${perfout}"
   rm -rf "${perfdata}".old
+  rm -f /tmp/__perf_test.config.*
 
   trap - EXIT TERM INT
 }
@@ -106,8 +109,61 @@ test_basic() {
   echo "${mode} annotate test [Success]"
 }
 
+test_disassembler() {
+  disassembler=$1
+  feature=$2
+
+  if [ -n "${feature}" ]
+  then
+    if ! perf check feature "${feature}" > /dev/null 2>&1
+    then
+      echo "Skip test for ${disassembler} (feature ${feature} not supported)"
+      return 0
+    fi
+  fi
+
+  echo "Test annotate with disassembler: ${disassembler}"
+
+  perf annotate --no-demangle -i "${perfdata}" --stdio --percent-limit 10 --disassembler "${disassembler}" 2> /dev/null > "${perfout}"
+  ret=$?
+
+  if [ "x${ret}" != "x0" ]
+  then
+    echo "annotate with ${disassembler} [Failed: perf annotate error]"
+    err=1
+    return 1
+  fi
+
+  # check if it has the target symbol
+  if ! grep -q "${testsym}" "${perfout}"
+  then
+    echo "annotate with ${disassembler} [Failed: missing target symbol]"
+    err=1
+    return 1
+  fi
+
+  # check if it has the disassembly lines
+  if ! grep -q "${disasm_regex}" "${perfout}"
+  then
+    echo "annotate with ${disassembler} [Failed: missing disasm output]"
+    err=1
+    return 1
+  fi
+
+  echo "annotate with ${disassembler} [Success]"
+  return 0
+}
+
 test_basic Basic
 test_basic Pipe
+
+if [ "${err}" -eq 0 ]
+then
+  test_disassembler "objdump" ""
+  test_disassembler "llvm" "libLLVM"
+  test_disassembler "capstone" "libcapstone"
+  test_disassembler "libasm" "libasm"
+fi
 
 cleanup
 exit $err
