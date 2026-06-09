@@ -98,8 +98,11 @@ static int drr_change_class(struct Qdisc *sch, u32 classid, u32 parentid,
 		}
 
 		sch_tree_lock(sch);
-		if (tb[TCA_DRR_QUANTUM])
+		if (tb[TCA_DRR_QUANTUM]) {
 			cl->quantum = quantum;
+			if (cl_is_active(cl))
+				cl->deficit = quantum;
+		}
 		sch_tree_unlock(sch);
 
 		return 0;
