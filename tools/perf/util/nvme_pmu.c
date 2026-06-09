@@ -26,33 +26,6 @@
 #ifdef HAVE_LIBNVME_SUPPORT
 #include <libnvme.h>
 
-
-#define NVME_CONFIG(log, size, offset) \
-	(((uint64_t)(log) << 24) | ((uint64_t)(size) << 16) | (offset))
-
-enum nvme_log_type {
-	NVME_LOG_SMART = 0,
-	NVME_LOG_ENDURANCE = 1,
-	NVME_LOG_FDP = 2,
-	NVME_LOG_ERROR = 3,
-	NVME_LOG_ZNS = 4,
-};
-
-#define NVME_SMART(size, field) \
-	NVME_CONFIG(NVME_LOG_SMART, size, offsetof(struct nvme_smart_log, field))
-
-#define NVME_ENDURANCE(size, field) \
-	NVME_CONFIG(NVME_LOG_ENDURANCE, size, offsetof(struct nvme_endurance_group_log, field))
-
-#define NVME_FDP(size, field) \
-	NVME_CONFIG(NVME_LOG_FDP, size, offsetof(struct nvme_fdp_stats_log, field))
-
-#define NVME_ERROR(size, field) \
-	NVME_CONFIG(NVME_LOG_ERROR, size, offsetof(struct nvme_error_log_page, field))
-
-#define NVME_ZNS(size, field) \
-	NVME_CONFIG(NVME_LOG_ZNS, size, offsetof(struct nvme_zns_changed_zone_log, field))
-
 struct nvme_event {
 	const char *name;
 	const char *desc;
