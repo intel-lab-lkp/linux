@@ -63,4 +63,7 @@ static inline u64 hv_get_non_nested_msr(unsigned int reg)
 
 #include <asm-generic/mshyperv.h>
 
+/* Per-CPU RSI host call structure for CCA Realms */
+extern void *__percpu *hyperv_pcpu_hostcall_struct;
+
 #endif
