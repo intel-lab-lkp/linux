@@ -5,7 +5,7 @@
 #include <linux/math.h>
 
 /* genelf.c */
-int jit_write_elf(int fd, uint64_t code_addr, const char *sym,
+int jit_write_elf(int fd, uint16_t e_machine, uint64_t code_addr, const char *sym,
 		  const void *code, int csize, void *debug, int nr_debug_entries,
 		  void *unwinding, uint64_t unwinding_header_size, uint64_t unwinding_size);
 #ifdef HAVE_LIBDW_SUPPORT

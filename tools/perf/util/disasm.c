@@ -23,6 +23,9 @@
 #include "debug.h"
 #include "disasm.h"
 #include "libasm.h"
+#ifdef HAVE_LIBELF_SUPPORT
+#include "genelf.h"
+#endif
 #include "dso.h"
 #include "dwarf-regs.h"
 #include "env.h"
@@ -1420,7 +1423,7 @@ static int symbol__disassemble_objdump(const char *filename, struct symbol *sym,
 	struct child_process objdump_process;
 	int err;
 
-	if (dso__binary_type(dso) == DSO_BINARY_TYPE__BPF_PROG_INFO)
+	if (dso__binary_type(dso) == DSO_BINARY_TYPE__BPF_PROG_INFO && !args->is_temp_elf)
 		return symbol__disassemble_bpf_libbfd(sym, args);
 
 	if (dso__binary_type(dso) == DSO_BINARY_TYPE__BPF_IMAGE)
@@ -1540,6 +1543,45 @@ out_free_command:
 	return err;
 }
 
+#ifdef HAVE_LIBELF_SUPPORT
+#include <unistd.h>
+#include "dwarf-regs.h"
+static int symbol__create_bpf_temp_elf(const char *filename, struct symbol *sym,
+				       struct annotate_args *args,
+				       char *tmp_elf, size_t tmp_elf_sz)
+{
+	struct map *map = args->ms->map;
+	struct dso *dso = map__dso(map);
+	u8 *code_buf = NULL;
+	const u8 *buf;
+	u64 buf_len;
+	bool is_64bit;
+	int tmp_fd;
+	int err = -1;
+
+	buf = dso__read_symbol(dso, filename, map, sym, &code_buf, &buf_len, &is_64bit);
+	if (!buf)
+		return -1;
+
+	snprintf(tmp_elf, tmp_elf_sz, "/tmp/perf-bpf-XXXXXX");
+	tmp_fd = mkstemp(tmp_elf);
+	if (tmp_fd >= 0) {
+		uint16_t e_machine = args->arch ? args->arch->id.e_machine : EM_HOST;
+
+		if (jit_write_elf(tmp_fd, e_machine, map__rip_2objdump(map, sym->start),
+				  sym->name, buf, buf_len,
+				  NULL, 0, NULL, 0, 0) == 0) {
+			err = 0;
+		}
+		close(tmp_fd);
+		if (err)
+			unlink(tmp_elf);
+	}
+	free(code_buf);
+	return err;
+}
+#endif
+
 int symbol__disassemble(struct symbol *sym, struct annotate_args *args)
 {
 	struct annotation_options *options = args->options;
@@ -1549,8 +1591,11 @@ int symbol__disassemble(struct symbol *sym, struct annotate_args *args)
 	bool delete_extract = false;
 	struct kcore_extract kce;
 	bool decomp = false;
-	int err = dso__disassemble_filename(dso, symfs_filename, sizeof(symfs_filename));
+	int err;
 
+	args->is_temp_elf = false;
+
+	err = dso__disassemble_filename(dso, symfs_filename, sizeof(symfs_filename));
 	if (err)
 		return err;
 
@@ -1605,7 +1650,25 @@ int symbol__disassemble(struct symbol *sym, struct annotate_args *args)
 
 	/* FIXME: LLVM and CAPSTONE should support source code */
 	if (options->annotate_src && !options->hide_src_code) {
-		err = symbol__disassemble_objdump(symfs_filename, sym, args);
+		const char *disasm_filename = symfs_filename;
+		bool is_temp = false;
+		char tmp_elf[PATH_MAX];
+
+#ifdef HAVE_LIBELF_SUPPORT
+		if (dso__binary_type(dso) == DSO_BINARY_TYPE__BPF_PROG_INFO) {
+			if (symbol__create_bpf_temp_elf(symfs_filename, sym, args,
+							tmp_elf, sizeof(tmp_elf)) == 0) {
+				disasm_filename = tmp_elf;
+				is_temp = true;
+				args->is_temp_elf = true;
+			}
+		}
+#endif
+		err = symbol__disassemble_objdump(disasm_filename, sym, args);
+		if (is_temp) {
+			unlink(tmp_elf);
+			args->is_temp_elf = false;
+		}
 		if (err == 0)
 			goto out_remove_tmp;
 	}
@@ -1613,29 +1676,63 @@ int symbol__disassemble(struct symbol *sym, struct annotate_args *args)
 	err = -1;
 	for (u8 i = 0; i < ARRAY_SIZE(options->disassemblers) && err != 0; i++) {
 		enum perf_disassembler dis = options->disassemblers[i];
+		const char *disasm_filename = symfs_filename;
+		bool is_temp = false;
+		char tmp_elf[PATH_MAX];
+
+		switch (dis) {
+		case PERF_DISASM_LIBASM:
+		case PERF_DISASM_OBJDUMP:
+#ifdef HAVE_LIBELF_SUPPORT
+			if (dso__binary_type(dso) == DSO_BINARY_TYPE__BPF_PROG_INFO) {
+				if (symbol__create_bpf_temp_elf(symfs_filename, sym, args,
+								tmp_elf, sizeof(tmp_elf)) == 0) {
+					disasm_filename = tmp_elf;
+					is_temp = true;
+					args->is_temp_elf = true;
+				}
+			}
+#endif
+			break;
+		case PERF_DISASM_LLVM:
+		case PERF_DISASM_CAPSTONE:
+		case PERF_DISASM_UNKNOWN:
+		default:
+			break;
+		}
 
 		switch (dis) {
 		case PERF_DISASM_LLVM:
 			args->options->disassembler_used = PERF_DISASM_LLVM;
-			err = symbol__disassemble_llvm(symfs_filename, sym, args);
+			err = symbol__disassemble_llvm(disasm_filename, sym, args);
 			break;
 		case PERF_DISASM_CAPSTONE:
 			args->options->disassembler_used = PERF_DISASM_CAPSTONE;
-			err = symbol__disassemble_capstone(symfs_filename, sym, args);
+			err = symbol__disassemble_capstone(disasm_filename, sym, args);
 			break;
 		case PERF_DISASM_LIBASM:
 			args->options->disassembler_used = PERF_DISASM_LIBASM;
-			err = symbol__disassemble_libasm(symfs_filename, sym, args);
+			err = symbol__disassemble_libasm(disasm_filename, sym, args);
 			break;
 		case PERF_DISASM_OBJDUMP:
 			args->options->disassembler_used = PERF_DISASM_OBJDUMP;
-			err = symbol__disassemble_objdump(symfs_filename, sym, args);
+			err = symbol__disassemble_objdump(disasm_filename, sym, args);
 			break;
 		case PERF_DISASM_UNKNOWN: /* End of disassemblers. */
 		default:
 			args->options->disassembler_used = PERF_DISASM_UNKNOWN;
+			if (is_temp) {
+				unlink(tmp_elf);
+				args->is_temp_elf = false;
+			}
 			goto out_remove_tmp;
 		}
+
+		if (is_temp) {
+			unlink(tmp_elf);
+			args->is_temp_elf = false;
+		}
+
 		if (err == 0)
 			pr_debug("Disassembled with %s\n", perf_disassembler__strs[dis]);
 	}

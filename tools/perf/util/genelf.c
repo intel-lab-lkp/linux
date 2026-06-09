@@ -179,7 +179,7 @@ static void blake2s_update_tagged(struct blake2s_ctx *ctx, int tag,
  * csize: the code size in bytes
  */
 int
-jit_write_elf(int fd, uint64_t load_addr __maybe_unused, const char *sym,
+jit_write_elf(int fd, uint16_t e_machine, uint64_t load_addr __maybe_unused, const char *sym,
 	      const void *code, int csize,
 	      void *debug __maybe_unused, int nr_debug_entries __maybe_unused,
 	      void *unwinding, uint64_t unwinding_header_size, uint64_t unwinding_size)
@@ -218,7 +218,7 @@ jit_write_elf(int fd, uint64_t load_addr __maybe_unused, const char *sym,
 
 	ehdr->e_ident[EI_DATA] = GEN_ELF_ENDIAN;
 	ehdr->e_ident[EI_CLASS] = GEN_ELF_CLASS;
-	ehdr->e_machine = GEN_ELF_ARCH;
+	ehdr->e_machine = e_machine;
 	ehdr->e_type = ET_DYN;
 	ehdr->e_entry = GEN_ELF_TEXT_OFFSET;
 	ehdr->e_version = EV_CURRENT;

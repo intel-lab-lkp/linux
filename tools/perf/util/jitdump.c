@@ -95,7 +95,7 @@ jit_emit_elf(struct jit_buf_desc *jd,
 		return -1;
 	}
 
-	ret = jit_write_elf(fd, code_addr, sym, (const void *)code, csize, debug, nr_debug_entries,
+	ret = jit_write_elf(fd, GEN_ELF_ARCH, code_addr, sym, (const void *)code, csize, debug, nr_debug_entries,
 			    unwinding, unwinding_header_size, unwinding_size);
 
         close(fd);
