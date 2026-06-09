@@ -174,8 +174,9 @@ You must not have the req_lock:
  * w_same: payload_size == logical_block_size
  * trim: payload_size == 0 */
 struct drbd_peer_request *
-drbd_alloc_peer_req(struct drbd_peer_device *peer_device, u64 id, sector_t sector,
-		    unsigned int request_size, unsigned int payload_size, gfp_t gfp_mask) __must_hold(local)
+drbd_alloc_peer_req(struct drbd_peer_device *peer_device, u64 id,
+		    sector_t sector, unsigned int request_size,
+		    unsigned int payload_size, gfp_t gfp_mask)
 {
 	struct drbd_device *device = peer_device->device;
 	struct drbd_peer_request *peer_req;
@@ -1657,7 +1658,7 @@ static void drbd_csum_ee_size(struct crypto_shash *h,
  */
 static struct drbd_peer_request *
 read_in_block(struct drbd_peer_device *peer_device, u64 id, sector_t sector,
-	      struct packet_info *pi) __must_hold(local)
+	      struct packet_info *pi)
 {
 	struct drbd_device *device = peer_device->device;
 	const sector_t capacity = get_capacity(device->vdisk);
@@ -1868,8 +1869,8 @@ static int e_end_resync_block(struct drbd_work *w, int unused)
 	return err;
 }
 
-static int recv_resync_read(struct drbd_peer_device *peer_device, sector_t sector,
-			    struct packet_info *pi) __releases(local)
+static int recv_resync_read(struct drbd_peer_device *peer_device,
+			    sector_t sector, struct packet_info *pi)
 {
 	struct drbd_device *device = peer_device->device;
 	struct drbd_peer_request *peer_req;
@@ -2826,7 +2827,7 @@ out_free_e:
 /*
  * drbd_asb_recover_0p  -  Recover after split-brain with no remaining primaries
  */
-static int drbd_asb_recover_0p(struct drbd_peer_device *peer_device) __must_hold(local)
+static int drbd_asb_recover_0p(struct drbd_peer_device *peer_device)
 {
 	struct drbd_device *device = peer_device->device;
 	int self, peer, rv = -100;
@@ -2909,7 +2910,7 @@ static int drbd_asb_recover_0p(struct drbd_peer_device *peer_device) __must_hold
 /*
  * drbd_asb_recover_1p  -  Recover after split-brain with one remaining primary
  */
-static int drbd_asb_recover_1p(struct drbd_peer_device *peer_device) __must_hold(local)
+static int drbd_asb_recover_1p(struct drbd_peer_device *peer_device)
 {
 	struct drbd_device *device = peer_device->device;
 	int hg, rv = -100;
@@ -2966,7 +2967,7 @@ static int drbd_asb_recover_1p(struct drbd_peer_device *peer_device) __must_hold
 /*
  * drbd_asb_recover_2p  -  Recover after split-brain with two remaining primaries
  */
-static int drbd_asb_recover_2p(struct drbd_peer_device *peer_device) __must_hold(local)
+static int drbd_asb_recover_2p(struct drbd_peer_device *peer_device)
 {
 	struct drbd_device *device = peer_device->device;
 	int hg, rv = -100;
@@ -3044,7 +3045,7 @@ static void drbd_uuid_dump(struct drbd_device *device, char *text, u64 *uuid,
  */
 
 static int drbd_uuid_compare(struct drbd_peer_device *const peer_device,
-		enum drbd_role const peer_role, int *rule_nr) __must_hold(local)
+			     enum drbd_role const peer_role, int *rule_nr)
 {
 	struct drbd_connection *const connection = peer_device->connection;
 	struct drbd_device *device = peer_device->device;
@@ -3264,7 +3265,7 @@ static int drbd_uuid_compare(struct drbd_peer_device *const peer_device,
  */
 static enum drbd_conns drbd_sync_handshake(struct drbd_peer_device *peer_device,
 					   enum drbd_role peer_role,
-					   enum drbd_disk_state peer_disk) __must_hold(local)
+					   enum drbd_disk_state peer_disk)
 {
 	struct drbd_device *device = peer_device->device;
 	enum drbd_conns rv = C_MASK;

@@ -3263,7 +3263,7 @@ void drbd_md_mark_dirty(struct drbd_device *device)
 		mod_timer(&device->md_sync_timer, jiffies + 5*HZ);
 }
 
-void drbd_uuid_move_history(struct drbd_device *device) __must_hold(local)
+void drbd_uuid_move_history(struct drbd_device *device)
 {
 	int i;
 
@@ -3271,7 +3271,7 @@ void drbd_uuid_move_history(struct drbd_device *device) __must_hold(local)
 		device->ldev->md.uuid[i+1] = device->ldev->md.uuid[i];
 }
 
-void __drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(local)
+void __drbd_uuid_set(struct drbd_device *device, int idx, u64 val)
 {
 	if (idx == UI_CURRENT) {
 		if (device->state.role == R_PRIMARY)
@@ -3286,7 +3286,7 @@ void __drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(l
 	drbd_md_mark_dirty(device);
 }
 
-void _drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(local)
+void _drbd_uuid_set(struct drbd_device *device, int idx, u64 val)
 {
 	unsigned long flags;
 	spin_lock_irqsave(&device->ldev->md.uuid_lock, flags);
@@ -3294,7 +3294,7 @@ void _drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(lo
 	spin_unlock_irqrestore(&device->ldev->md.uuid_lock, flags);
 }
 
-void drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(local)
+void drbd_uuid_set(struct drbd_device *device, int idx, u64 val)
 {
 	unsigned long flags;
 	spin_lock_irqsave(&device->ldev->md.uuid_lock, flags);
@@ -3313,7 +3313,7 @@ void drbd_uuid_set(struct drbd_device *device, int idx, u64 val) __must_hold(loc
  * Creates a new current UUID, and rotates the old current UUID into
  * the bitmap slot. Causes an incremental resync upon next connect.
  */
-void drbd_uuid_new_current(struct drbd_device *device) __must_hold(local)
+void drbd_uuid_new_current(struct drbd_device *device)
 {
 	u64 val;
 	unsigned long long bm_uuid;
@@ -3335,7 +3335,7 @@ void drbd_uuid_new_current(struct drbd_device *device) __must_hold(local)
 	drbd_md_sync(device);
 }
 
-void drbd_uuid_set_bm(struct drbd_device *device, u64 val) __must_hold(local)
+void drbd_uuid_set_bm(struct drbd_device *device, u64 val)
 {
 	unsigned long flags;
 	spin_lock_irqsave(&device->ldev->md.uuid_lock, flags);
@@ -3368,7 +3368,7 @@ void drbd_uuid_set_bm(struct drbd_device *device, u64 val) __must_hold(local)
  * Sets all bits in the bitmap and writes the whole bitmap to stable storage.
  */
 int drbd_bmio_set_n_write(struct drbd_device *device,
-			  struct drbd_peer_device *peer_device) __must_hold(local)
+			  struct drbd_peer_device *peer_device)
 
 {
 	int rv = -EIO;
@@ -3395,7 +3395,7 @@ int drbd_bmio_set_n_write(struct drbd_device *device,
  * Clears all bits in the bitmap and writes the whole bitmap to stable storage.
  */
 int drbd_bmio_clear_n_write(struct drbd_device *device,
-			  struct drbd_peer_device *peer_device) __must_hold(local)
+			    struct drbd_peer_device *peer_device)
 
 {
 	drbd_resume_al(device);
@@ -3522,7 +3522,7 @@ int drbd_bitmap_io(struct drbd_device *device,
 	return rv;
 }
 
-void drbd_md_set_flag(struct drbd_device *device, int flag) __must_hold(local)
+void drbd_md_set_flag(struct drbd_device *device, int flag)
 {
 	if ((device->ldev->md.flags & flag) != flag) {
 		drbd_md_mark_dirty(device);
@@ -3530,7 +3530,7 @@ void drbd_md_set_flag(struct drbd_device *device, int flag) __must_hold(local)
 	}
 }
 
-void drbd_md_clear_flag(struct drbd_device *device, int flag) __must_hold(local)
+void drbd_md_clear_flag(struct drbd_device *device, int flag)
 {
 	if ((device->ldev->md.flags & flag) != 0) {
 		drbd_md_mark_dirty(device);

@@ -968,8 +968,9 @@ void drbd_resume_io(struct drbd_device *device)
  * Returns 0 on success, negative return values indicate errors.
  * You should call drbd_md_sync() after calling this function.
  */
-enum determine_dev_size
-drbd_determine_dev_size(struct drbd_device *device, enum dds_flags flags, struct resize_parms *rs) __must_hold(local)
+enum determine_dev_size drbd_determine_dev_size(struct drbd_device *device,
+						enum dds_flags flags,
+						struct resize_parms *rs)
 {
 	struct md_offsets_and_sizes {
 		u64 last_agreed_sect;
@@ -3097,7 +3098,7 @@ out:
 }
 
 static int drbd_bmio_set_susp_al(struct drbd_device *device,
-		struct drbd_peer_device *peer_device) __must_hold(local)
+				 struct drbd_peer_device *peer_device)
 {
 	int rv;
 
