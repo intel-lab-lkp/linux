@@ -639,11 +639,12 @@ static enum drbd_state_rv drbd_req_state(struct drbd_device *device,
 {
 	enum drbd_state_rv rv;
 
-	if (f & CS_SERIALIZE)
-		mutex_lock(device->state_mutex);
+	if (!(f & CS_SERIALIZE))
+		return __drbd_req_state(device, mask, val, f);
+
+	mutex_lock(device->state_mutex);
 	rv = __drbd_req_state(device, mask, val, f & ~CS_SERIALIZE);
-	if (f & CS_SERIALIZE)
-		mutex_unlock(device->state_mutex);
+	mutex_unlock(device->state_mutex);
 
 	return rv;
 }
