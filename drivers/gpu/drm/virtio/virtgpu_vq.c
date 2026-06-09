@@ -318,15 +318,14 @@ static struct sg_table *vmalloc_to_sgt(char *data, uint32_t size, int *sg_ents)
 
 	*sg_ents = DIV_ROUND_UP(size, PAGE_SIZE);
 	ret = sg_alloc_table(sgt, *sg_ents, GFP_KERNEL);
-	if (ret) {
-		kfree(sgt);
-		return NULL;
-	}
+	if (ret)
+		goto free_sgt;
 
 	for_each_sgtable_sg(sgt, sg, i) {
 		pg = vmalloc_to_page(data);
 		if (!pg) {
 			sg_free_table(sgt);
+free_sgt:
 			kfree(sgt);
 			return NULL;
 		}
