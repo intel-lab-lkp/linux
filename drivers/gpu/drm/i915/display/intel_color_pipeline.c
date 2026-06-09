@@ -53,7 +53,7 @@ static bool plane_has_3dlut(struct intel_display *display, enum pipe pipe,
 
 static
 struct intel_colorop *intel_color_pipeline_plane_add_colorop(struct drm_plane *plane,
-							     struct intel_colorop *prev,
+							     struct drm_colorop **pipeline,
 							     enum intel_color_block id)
 {
 	struct drm_device *dev = plane->dev;
@@ -100,8 +100,10 @@ struct intel_colorop *intel_color_pipeline_plane_add_colorop(struct drm_plane *p
 	if (ret)
 		goto cleanup;
 
-	if (prev)
-		drm_colorop_set_next_property(&prev->base, &colorop->base);
+	if (!*pipeline)
+		*pipeline = &colorop->base;
+
+	drm_colorop_add_to_pipeline(*pipeline, &colorop->base);
 
 	return colorop;
 
@@ -117,7 +119,7 @@ int _intel_color_pipeline_plane_init(struct drm_plane *plane, struct drm_prop_en
 	struct drm_device *dev = plane->dev;
 	struct intel_display *display = to_intel_display(dev);
 	struct intel_colorop *colorop[MAX_COLOROP];
-	struct intel_colorop *prev = NULL;
+	struct drm_colorop *pipeline_root = NULL;
 	const enum intel_color_block *pipeline;
 	int pipeline_len;
 	int ret = 0;
@@ -132,14 +134,12 @@ int _intel_color_pipeline_plane_init(struct drm_plane *plane, struct drm_prop_en
 	}
 
 	for (i = 0; i < pipeline_len; i++) {
-		colorop[i] = intel_color_pipeline_plane_add_colorop(plane, prev,
+		colorop[i] = intel_color_pipeline_plane_add_colorop(plane, &pipeline_root,
 								    pipeline[i]);
 		if (IS_ERR(colorop[i])) {
 			ret = PTR_ERR(colorop[i]);
 			goto cleanup;
 		}
-
-		prev = colorop[i];
 	}
 
 	list->type = colorop[0]->base.base.id;
