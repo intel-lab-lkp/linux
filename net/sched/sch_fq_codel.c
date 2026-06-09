@@ -351,6 +351,19 @@ static void fq_codel_reset(struct Qdisc *sch)
 	q->memory_usage = 0;
 }
 
+static void fq_codel_clamp_active_deficits(struct fq_codel_sched_data *q,
+					   u32 quantum)
+{
+	struct fq_codel_flow *flow;
+
+	list_for_each_entry(flow, &q->new_flows, flowchain)
+		if (READ_ONCE(flow->deficit) > quantum)
+			WRITE_ONCE(flow->deficit, quantum);
+	list_for_each_entry(flow, &q->old_flows, flowchain)
+		if (READ_ONCE(flow->deficit) > quantum)
+			WRITE_ONCE(flow->deficit, quantum);
+}
+
 static const struct nla_policy fq_codel_policy[TCA_FQ_CODEL_MAX + 1] = {
 	[TCA_FQ_CODEL_TARGET]	= { .type = NLA_U32 },
 	[TCA_FQ_CODEL_LIMIT]	= { .type = NLA_U32 },
@@ -431,8 +444,10 @@ static int fq_codel_change(struct Qdisc *sch, struct nlattr *opt,
 		WRITE_ONCE(q->cparams.ecn,
 			   !!nla_get_u32(tb[TCA_FQ_CODEL_ECN]));
 
-	if (quantum)
+	if (quantum) {
+		fq_codel_clamp_active_deficits(q, quantum);
 		WRITE_ONCE(q->quantum, quantum);
+	}
 
 	if (tb[TCA_FQ_CODEL_DROP_BATCH_SIZE])
 		WRITE_ONCE(q->drop_batch_size,
