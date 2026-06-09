@@ -127,6 +127,16 @@ struct efi_runtime_work efi_rts_work;
 #define EFI_RTS_TIMEOUT		(120 * HZ)
 
 /*
+ * Set once an EFI runtime service call has hung past EFI_RTS_TIMEOUT.
+ * Subsequent __efi_queue_work() callers fail fast: the wedged worker
+ * is still inside firmware, owns efi_rts_work, and any reuse of the
+ * shared work_struct or completion would corrupt the workqueue's
+ * bookkeeping for the leaked work. The flag is intentionally never
+ * cleared - recovery requires reboot.
+ */
+static bool efi_rts_dead;
+
+/*
  * efi_queue_work:	Queue EFI runtime service call and wait for completion
  * @_rts:		EFI runtime service function identifier
  * @_args:		Arguments to pass to the EFI runtime service
@@ -328,6 +338,9 @@ static void __nocfi efi_call_rts(struct work_struct *work)
 static efi_status_t __efi_queue_work(enum efi_rts_ids id,
 				     union efi_rts_args *args)
 {
+	if (READ_ONCE(efi_rts_dead))
+		return EFI_DEVICE_ERROR;
+
 	efi_rts_work.efi_rts_id = id;
 	efi_rts_work.args = args;
 	efi_rts_work.caller = __builtin_return_address(0);
@@ -353,7 +366,9 @@ static efi_status_t __efi_queue_work(enum efi_rts_ids id,
 
 	if (!wait_for_completion_timeout(&efi_rts_work.efi_rts_comp,
 					 EFI_RTS_TIMEOUT)) {
-		pr_err("EFI runtime service %d wedged in firmware\n", id);
+		WRITE_ONCE(efi_rts_dead, true);
+		pr_err("EFI runtime service %d wedged in firmware; disabling EFI runtime services\n",
+		       id);
 		return EFI_TIMEOUT;
 	}
 
