@@ -106,6 +106,8 @@ static DEFINE_MUTEX(loop_validate_mutex);
  * loop_configure()/loop_change_fd()/__loop_clr_fd() calls.
  */
 static int loop_global_lock_killable(struct loop_device *lo)
+	__cond_acquires(0, &loop_validate_mutex)
+	__cond_acquires(0, &lo->lo_mutex)
 {
 	int err;
 
@@ -124,6 +126,8 @@ static int loop_global_lock_killable(struct loop_device *lo)
  * @lo: struct loop_device
  */
 static void loop_global_unlock(struct loop_device *lo)
+	__releases(&lo->lo_mutex)
+	__releases(&loop_validate_mutex)
 {
 	mutex_unlock(&lo->lo_mutex);
 	mutex_unlock(&loop_validate_mutex);
