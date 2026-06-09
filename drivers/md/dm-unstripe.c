@@ -69,8 +69,8 @@ static int unstripe_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		goto err;
 	}
 
-	if (uc->unstripe > uc->stripes && uc->stripes > 1) {
-		ti->error = "Please provide stripe between [0, # of stripes]";
+	if (uc->unstripe >= uc->stripes) {
+		ti->error = "Invalid stripe number";
 		goto err;
 	}
 
