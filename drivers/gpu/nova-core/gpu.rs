@@ -9,7 +9,8 @@ use kernel::{
     io::Io,
     num::Bounded,
     pci,
-    prelude::*, //
+    prelude::*,
+    sizes::SizeConstants, //
 };
 
 use crate::{
@@ -367,6 +368,8 @@ impl<'gpu> Gpu<'gpu> {
                     Ok(name) => dev_info!(pdev, "GPU name: {}\n", name),
                     Err(e) => dev_warn!(pdev, "GPU name unavailable: {:?}\n", e),
                 }
+
+                dev_info!(pdev, "Total VRAM: {} MiB\n", info.total_fb_end / u64::SZ_1M);
 
                 info
             }
