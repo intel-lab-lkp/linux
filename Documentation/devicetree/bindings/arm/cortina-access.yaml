@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/cortina-access.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Cortina-Access SoC boards
+
+maintainers:
+  - Jason Li <jason.li@cortina-access.com>
+
+description:
+  Boards based on Cortina-Access ARMv8 SoCs targeting networking and
+  access applications.
+
+properties:
+  $nodename:
+    const: /
+  compatible:
+    oneOf:
+      - description: Cortina-Access CA8289 (Venus) engineering board
+        const: cortina-access,ca8289-engboard
+
+      - description: Cortina-Access CA8289 (Venus) reference board
+        const: cortina-access,ca8289-refboard
+
+additionalProperties: true
+
+...
