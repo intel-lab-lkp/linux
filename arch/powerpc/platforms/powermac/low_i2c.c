@@ -504,8 +504,7 @@ static struct pmac_i2c_host_kw *__init kw_i2c_host_init(struct device_node *np)
 	if (addrp == NULL) {
 		printk(KERN_ERR "low_i2c: Can't find address for %pOF\n",
 		       np);
-		kfree(host);
-		return NULL;
+		goto free_host;
 	}
 	mutex_init(&host->mutex);
 	init_completion(&host->complete);
@@ -540,8 +539,7 @@ static struct pmac_i2c_host_kw *__init kw_i2c_host_init(struct device_node *np)
 	if (host->base == NULL) {
 		printk(KERN_ERR "low_i2c: Can't map registers for %pOF\n",
 		       np);
-		kfree(host);
-		return NULL;
+		goto free_host;
 	}
 
 	/* Make sure IRQ is disabled */
@@ -559,6 +557,10 @@ static struct pmac_i2c_host_kw *__init kw_i2c_host_init(struct device_node *np)
 	       *addrp, host->irq, np);
 
 	return host;
+
+free_host:
+	kfree(host);
+	return NULL;
 }
 
 
