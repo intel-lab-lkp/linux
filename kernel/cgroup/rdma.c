@@ -764,18 +764,22 @@ static void rdmacg_css_free(struct cgroup_subsys_state *css)
  *
  * This function is called when @css is about to go away and responsible
  * for shooting down all rdmacg associated with @css. As part of that it
- * marks all the resource pool entries to max value, so that when resources are
- * uncharged, associated resource pool can be freed as well.
+ * marks all the resource pool entries to max value, so that active pools can
+ * be freed when resources are uncharged and idle pools can be freed
+ * immediately.
  */
 static void rdmacg_css_offline(struct cgroup_subsys_state *css)
 {
 	struct rdma_cgroup *cg = css_rdmacg(css);
-	struct rdmacg_resource_pool *rpool;
+	struct rdmacg_resource_pool *rpool, *tmp;
 
 	mutex_lock(&rdmacg_mutex);
 
-	list_for_each_entry(rpool, &cg->rpools, cg_node)
+	list_for_each_entry_safe(rpool, tmp, &cg->rpools, cg_node) {
 		set_all_resource_max_limit(rpool);
+		if (rpool->usage_sum == 0)
+			free_cg_rpool_locked(rpool);
+	}
 
 	mutex_unlock(&rdmacg_mutex);
 }
