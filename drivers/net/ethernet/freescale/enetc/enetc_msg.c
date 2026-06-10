@@ -136,6 +136,148 @@ static u16 enetc_msg_handle_ip_revision(struct enetc_pf *pf, void *vf_msg)
 	}
 }
 
+static u16 enetc_msg_get_link_status(struct enetc_pf *pf)
+{
+	struct net_device *ndev = pf->si->ndev;
+	u16 pf_msg;
+
+	pf_msg = FIELD_PREP(ENETC_PF_MSG_CLASS_ID,
+			    ENETC_MSG_CLASS_ID_LINK_STATUS);
+
+	if (netif_carrier_ok(ndev))
+		pf_msg |= FIELD_PREP(ENETC_PF_MSG_CLASS_CODE,
+				     ENETC_LINK_STATUS_CLASS_CODE_UP);
+	else
+		pf_msg |= FIELD_PREP(ENETC_PF_MSG_CLASS_CODE,
+				     ENETC_LINK_STATUS_CLASS_CODE_DOWN);
+
+	return pf_msg;
+}
+
+static int enetc_pf_send_msg(struct enetc_pf *pf, u32 msg_code, u16 ms_mask)
+{
+	struct enetc_hw *hw = &pf->si->hw;
+	u16 old_ms_mask = ms_mask;
+	u16 ms_status;
+	u32 val;
+
+	/* The MS bit is set, indicating that the corresponding VF has not
+	 * read the last message, PF cannot send new message to the VF. So
+	 * the bit corresponding to VF is cleared from ms_mask.
+	 */
+	ms_status = enetc_rd(hw, ENETC_PSIMSGSR) & 0xffff;
+	ms_mask &= ~ms_status;
+	if (!ms_mask)
+		return -EIO;
+
+	if (ms_mask != old_ms_mask)
+		dev_warn_ratelimited(&pf->si->pdev->dev,
+				     "PF cannot send message to VF(s) 0x%x\n",
+				     ms_mask ^ old_ms_mask);
+
+	/* Writing a 1 when the bit is already set is undefined.
+	 * Writing a 0 has no effect. Sending messages only to
+	 * VFs where the MR bit is not set.
+	 */
+	enetc_wr(hw, ENETC_PSIMSGSR,
+		 FIELD_PREP(PSIMSGSR_MC, msg_code) | ms_mask);
+
+	return read_poll_timeout(enetc_rd, val, !(val & ms_mask), 1000,
+				 200000, false, hw, ENETC_PSIMSGSR);
+}
+
+static void enetc_msg_notify_vf_link_status(struct enetc_pf *pf, u16 ms_mask,
+					    bool link_up)
+{
+	u16 pf_msg = FIELD_PREP(ENETC_PF_MSG_CLASS_ID,
+				ENETC_MSG_CLASS_ID_LINK_STATUS);
+
+	if (link_up)
+		pf_msg |= FIELD_PREP(ENETC_PF_MSG_CLASS_CODE,
+				     ENETC_LINK_STATUS_CLASS_CODE_UP);
+	else
+		pf_msg |= FIELD_PREP(ENETC_PF_MSG_CLASS_CODE,
+				     ENETC_LINK_STATUS_CLASS_CODE_DOWN);
+
+	if (enetc_pf_send_msg(pf, pf_msg, ms_mask))
+		dev_err_ratelimited(&pf->si->pdev->dev,
+				    "PF notifies link status failed\n");
+}
+
+static void enetc_pf_reply_msg(struct enetc_hw *hw, int vf_id, u16 pf_msg)
+{
+	/* w1c to clear the corresponding VF MR bit */
+	enetc_wr(hw, ENETC_PSIIDR, ENETC_PSIMR_BIT(vf_id));
+	enetc_wr(hw, ENETC_PSIMSGRR, ENETC_SIMSGSR_SET_MC(pf_msg) |
+		 ENETC_PSIMR_BIT(vf_id));
+}
+
+static void enetc_msg_register_link_status_notifier(struct enetc_pf *pf,
+						    int vf_id)
+{
+	u16 pf_msg = FIELD_PREP(ENETC_PF_MSG_CLASS_ID,
+				ENETC_MSG_CLASS_ID_CMD_SUCCESS);
+
+	mutex_lock(&pf->msg_lock);
+
+	enetc_pf_reply_msg(&pf->si->hw, vf_id, pf_msg);
+
+	/* SR-IOV is being disabled if pf->sriov_enabled is false, so no
+	 * need to set link_status_ms_mask and notify the link status.
+	 */
+	if (!pf->sriov_enabled)
+		goto msg_unlock;
+
+	pf->link_status_ms_mask |= PSIMSGSR_MS(vf_id);
+
+	/* Notify VF the current link status */
+	enetc_msg_notify_vf_link_status(pf, PSIMSGSR_MS(vf_id),
+					netif_carrier_ok(pf->si->ndev));
+
+msg_unlock:
+	mutex_unlock(&pf->msg_lock);
+}
+
+static void enetc_msg_unregister_link_status_notifier(struct enetc_pf *pf,
+						      int vf_id)
+{
+	u16 pf_msg = FIELD_PREP(ENETC_PF_MSG_CLASS_ID,
+				ENETC_MSG_CLASS_ID_CMD_SUCCESS);
+
+	mutex_lock(&pf->msg_lock);
+
+	pf->link_status_ms_mask &= ~PSIMSGSR_MS(vf_id);
+	enetc_pf_reply_msg(&pf->si->hw, vf_id, pf_msg);
+
+	mutex_unlock(&pf->msg_lock);
+}
+
+static u16 enetc_msg_handle_link_status(struct enetc_pf *pf, int vf_id,
+					void *vf_msg)
+{
+	struct enetc_msg_header *msg_hdr = vf_msg;
+
+	switch (msg_hdr->cmd_id) {
+	case ENETC_MSG_GET_CURRENT_LINK_STATUS:
+		/* Currently, this message is intended only for
+		 * DPDK-owned VFs.
+		 */
+		return enetc_msg_get_link_status(pf);
+	case ENETC_MSG_REGISTER_LINK_CHANGE_NOTIFIER:
+		enetc_msg_register_link_status_notifier(pf, vf_id);
+		return 0;
+	case ENETC_MSG_UNREGISTER_LINK_CHANGE_NOTIFIER:
+		enetc_msg_unregister_link_status_notifier(pf, vf_id);
+		return 0;
+	default:
+		return ENETC_PF_MSG_NOTSUPP;
+	}
+}
+
+/* If *pf_msg is set to 0, it means that PF has responded to VF in
+ * enetc_msg_handle_rxmsg() through enetc_pf_reply_msg(), which also
+ * clears the corresponding VF MR bit in PSIIDR.
+ */
 static void enetc_msg_handle_rxmsg(struct enetc_pf *pf, int vf_id,
 				   u16 *pf_msg)
 {
@@ -211,6 +353,9 @@ static void enetc_msg_handle_rxmsg(struct enetc_pf *pf, int vf_id,
 	case ENETC_MSG_CLASS_ID_IP_REVISION:
 		*pf_msg = enetc_msg_handle_ip_revision(pf, msg);
 		break;
+	case ENETC_MSG_CLASS_ID_LINK_STATUS:
+		*pf_msg = enetc_msg_handle_link_status(pf, vf_id, msg);
+		break;
 	default:
 		dev_err_ratelimited(dev,
 				    "Unsupported message class ID: 0x%x\n",
@@ -236,7 +381,6 @@ static void enetc_msg_task(struct work_struct *work)
 		goto out;
 
 	for (i = 0; i < pf->num_vfs; i++) {
-		u32 psimsgrr;
 		u16 msg_code;
 
 		if (!(ENETC_PSIMR_BIT(i) & mr_status))
@@ -244,12 +388,14 @@ static void enetc_msg_task(struct work_struct *work)
 
 		enetc_msg_handle_rxmsg(pf, i, &msg_code);
 
-		/* w1c to clear the corresponding VF MR bit */
-		enetc_wr(hw, ENETC_PSIIDR, ENETC_PSIMR_BIT(i));
+		/* If msg_code is 0, it means that PF has responded to VF
+		 * in enetc_msg_handle_rxmsg() through enetc_pf_reply_msg(),
+		 * which also clears the corresponding VF MR bit in PSIIDR.
+		 */
+		if (!msg_code)
+			continue;
 
-		psimsgrr = ENETC_SIMSGSR_SET_MC(msg_code);
-		psimsgrr |= ENETC_PSIMR_BIT(i); /* w1c */
-		enetc_wr(hw, ENETC_PSIMSGRR, psimsgrr);
+		enetc_pf_reply_msg(hw, i, msg_code);
 	}
 
 out:
@@ -367,6 +513,11 @@ int enetc_sriov_configure(struct pci_dev *pdev, int num_vfs)
 	int err;
 
 	if (!num_vfs) {
+		mutex_lock(&pf->msg_lock);
+		pf->sriov_enabled = false;
+		pf->link_status_ms_mask = 0;
+		mutex_unlock(&pf->msg_lock);
+
 		pci_disable_sriov(pdev);
 		enetc_msg_psi_free(pf);
 		pf->num_vfs = 0;
@@ -379,6 +530,11 @@ int enetc_sriov_configure(struct pci_dev *pdev, int num_vfs)
 			goto err_msg_psi;
 		}
 
+		/* As PCI SR-IOV is not enabled at the moment, there is no
+		 * concurrent access to sriov_enabled. So no need to use
+		 * msg_lock to protect sriov_enabld.
+		 */
+		pf->sriov_enabled = true;
 		err = pci_enable_sriov(pdev, num_vfs);
 		if (err) {
 			dev_err(&pdev->dev, "pci_enable_sriov err %d\n", err);
@@ -389,6 +545,7 @@ int enetc_sriov_configure(struct pci_dev *pdev, int num_vfs)
 	return num_vfs;
 
 err_en_sriov:
+	pf->sriov_enabled = false;
 	enetc_msg_psi_free(pf);
 err_msg_psi:
 	pf->num_vfs = 0;
@@ -396,3 +553,35 @@ err_msg_psi:
 	return err;
 }
 EXPORT_SYMBOL_GPL(enetc_sriov_configure);
+
+static void enetc_pf_notify_vf_link_status(struct enetc_pf *pf,
+					   bool link_up)
+{
+	u16 ms_mask;
+
+	if (!pf->num_vfs)
+		return;
+
+	mutex_lock(&pf->msg_lock);
+
+	ms_mask = pf->link_status_ms_mask;
+	if (!ms_mask)
+		goto msg_unlock;
+
+	enetc_msg_notify_vf_link_status(pf, ms_mask, link_up);
+
+msg_unlock:
+	mutex_unlock(&pf->msg_lock);
+}
+
+void enetc_pf_notify_vf_link_up(struct enetc_pf *pf)
+{
+	enetc_pf_notify_vf_link_status(pf, true);
+}
+EXPORT_SYMBOL_GPL(enetc_pf_notify_vf_link_up);
+
+void enetc_pf_notify_vf_link_down(struct enetc_pf *pf)
+{
+	enetc_pf_notify_vf_link_status(pf, false);
+}
+EXPORT_SYMBOL_GPL(enetc_pf_notify_vf_link_down);

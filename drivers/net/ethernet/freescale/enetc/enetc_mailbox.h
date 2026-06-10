@@ -107,6 +107,7 @@ enum enetc_msg_class_id {
 
 	/* Common Class ID for PSI-to-VSI and VSI-to-PSI messages */
 	ENETC_MSG_CLASS_ID_MAC_FILTER		= 0x20,
+	ENETC_MSG_CLASS_ID_LINK_STATUS		= 0x80,
 	ENETC_MSG_CLASS_ID_IP_REVISION		= 0xf0,
 };
 
@@ -118,9 +119,21 @@ enum enetc_msg_ip_revision_cmd_id {
 	ENETC_MSG_GET_IP_MN			= 1,
 };
 
+enum enetc_msg_link_status_cmd_id {
+	ENETC_MSG_GET_CURRENT_LINK_STATUS,
+	ENETC_MSG_REGISTER_LINK_CHANGE_NOTIFIER,
+	ENETC_MSG_UNREGISTER_LINK_CHANGE_NOTIFIER,
+};
+
 /* Class-specific error return codes of MAC filter */
 enum enetc_mac_filter_class_code {
 	ENETC_MF_CLASS_CODE_INVALID_MAC,
+};
+
+/* Class-specific notifications/codes of link status */
+enum enetc_link_status_class_code {
+	ENETC_LINK_STATUS_CLASS_CODE_UP,
+	ENETC_LINK_STATUS_CLASS_CODE_DOWN,
 };
 
 struct enetc_msg_swbd {
@@ -161,6 +174,11 @@ struct enetc_msg_mac_exact_filter {
 /* The generic message format applies to the following messages:
  * Get IP revision message, class_id 0xf0.
  * cmd_id 1: get IP minor revision
+ *
+ * Link status message, class id 0x80.
+ * cmd_id 0x0: get the current link status
+ * cmd_id 0x1: register link status change notification
+ * cmd_id 0x2: unregister link status change notification
  */
 struct enetc_msg_generic {
 	struct enetc_msg_header hdr;
