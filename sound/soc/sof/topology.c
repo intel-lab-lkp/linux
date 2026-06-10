@@ -2548,7 +2548,8 @@ int snd_sof_load_topology(struct snd_soc_component *scomp, const char *file)
 		if (strstr(file, "dummy")) {
 			dev_err(scomp->dev,
 				"Function topology is required, please upgrade sof-firmware\n");
-			return -EINVAL;
+			ret = -EINVAL;
+			goto out;
 		}
 		tplg_files[0] = file;
 		tplg_cnt = 1;
