@@ -55,7 +55,7 @@ static int lp873x_gpio_get(struct gpio_chip *chip, unsigned int offset)
 	if (ret < 0)
 		return ret;
 
-	return val & BIT(offset * BITS_PER_GPO);
+	return !!(val & BIT(offset * BITS_PER_GPO));
 }
 
 static int lp873x_gpio_set(struct gpio_chip *chip, unsigned int offset,
@@ -124,7 +124,7 @@ static const struct gpio_chip template_chip = {
 	.direction_input	= lp873x_gpio_direction_input,
 	.direction_output	= lp873x_gpio_direction_output,
 	.get			= lp873x_gpio_get,
-	.set_rv			= lp873x_gpio_set,
+	.set			= lp873x_gpio_set,
 	.set_config		= lp873x_gpio_set_config,
 	.base			= -1,
 	.ngpio			= 2,

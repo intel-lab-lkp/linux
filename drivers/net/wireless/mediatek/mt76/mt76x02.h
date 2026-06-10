@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: ISC */
+/* SPDX-License-Identifier: BSD-3-Clause-Clear */
 /*
  * Copyright (C) 2016 Felix Fietkau <nbd@nbd.name>
  * Copyright (C) 2018 Stanislaw Gruszka <stf_xl@wp.pl>
@@ -262,10 +262,7 @@ mt76x02_rx_get_sta(struct mt76_dev *dev, u8 idx)
 {
 	struct mt76_wcid *wcid;
 
-	if (idx >= MT76x02_N_WCIDS)
-		return NULL;
-
-	wcid = rcu_dereference(dev->wcid[idx]);
+	wcid = __mt76_wcid_ptr(dev, idx);
 	if (!wcid)
 		return NULL;
 

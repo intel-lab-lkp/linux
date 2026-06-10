@@ -919,11 +919,11 @@ static long tap_ioctl(struct file *file, unsigned int cmd,
 	struct tap_queue *q = file->private_data;
 	struct tap_dev *tap;
 	void __user *argp = (void __user *)arg;
+	struct sockaddr_storage ss = {};
 	struct ifreq __user *ifr = argp;
 	unsigned int __user *up = argp;
 	unsigned short u;
 	int __user *sp = argp;
-	struct sockaddr_storage ss;
 	int s;
 	int ret;
 
@@ -1000,8 +1000,8 @@ static long tap_ioctl(struct file *file, unsigned int cmd,
 			return -ENOLINK;
 		}
 		ret = 0;
-		dev_get_mac_address((struct sockaddr *)&ss, dev_net(tap->dev),
-				    tap->dev->name);
+		netif_get_mac_address((struct sockaddr *)&ss, dev_net(tap->dev),
+				      tap->dev->name);
 		if (copy_to_user(&ifr->ifr_name, tap->dev->name, IFNAMSIZ) ||
 		    copy_to_user(&ifr->ifr_hwaddr, &ss, sizeof(ifr->ifr_hwaddr)))
 			ret = -EFAULT;
@@ -1052,6 +1052,7 @@ static int tap_get_user_xdp(struct tap_queue *q, struct xdp_buff *xdp)
 	int err, depth;
 
 	if (unlikely(xdp->data_end - xdp->data < ETH_HLEN)) {
+		put_page(virt_to_head_page(xdp->data));
 		err = -EINVAL;
 		goto err;
 	}
@@ -1061,6 +1062,7 @@ static int tap_get_user_xdp(struct tap_queue *q, struct xdp_buff *xdp)
 
 	skb = build_skb(xdp->data_hard_start, buflen);
 	if (!skb) {
+		put_page(virt_to_head_page(xdp->data));
 		err = -ENOMEM;
 		goto err;
 	}
@@ -1197,7 +1199,7 @@ int tap_queue_resize(struct tap_dev *tap)
 	int n = tap->numqueues;
 	int ret, i = 0;
 
-	rings = kmalloc_array(n, sizeof(*rings), GFP_KERNEL);
+	rings = kmalloc_objs(*rings, n);
 	if (!rings)
 		return -ENOMEM;
 
@@ -1217,7 +1219,7 @@ static int tap_list_add(dev_t major, const char *device_name)
 {
 	struct major_info *tap_major;
 
-	tap_major = kzalloc(sizeof(*tap_major), GFP_ATOMIC);
+	tap_major = kzalloc_obj(*tap_major, GFP_ATOMIC);
 	if (!tap_major)
 		return -ENOMEM;
 
@@ -1282,3 +1284,4 @@ MODULE_DESCRIPTION("Common library for drivers implementing the TAP interface");
 MODULE_AUTHOR("Arnd Bergmann <arnd@arndb.de>");
 MODULE_AUTHOR("Sainath Grandhi <sainath.grandhi@intel.com>");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS("NETDEV_INTERNAL");
