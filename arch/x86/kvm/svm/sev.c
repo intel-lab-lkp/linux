@@ -5153,8 +5153,12 @@ void sev_gmem_invalidate(kvm_pfn_t start, kvm_pfn_t end)
 
 		rc = rmp_make_shared(pfn, use_2m_update ? PG_LEVEL_2M : PG_LEVEL_4K);
 		if (WARN_ONCE(rc, "SEV: Failed to update RMP entry for PFN 0x%llx error %d\n",
-			      pfn, rc))
+			      pfn, rc)) {
+			/* Still assigned to the guest; pin and leak rather than freeing. */
+			folio_get(page_folio(pfn_to_page(pfn)));
+			snp_leak_pages(pfn, use_2m_update ? PTRS_PER_PMD : 1);
 			goto next_pfn;
+		}
 
 		/*
 		 * SEV-ES avoids host/guest cache coherency issues through
