@@ -1116,7 +1116,6 @@ static void digi_close(struct usb_serial_port *port)
 	usb_kill_urb(port->read_urb);
 
 	mutex_lock(&port->serial->disc_mutex);
-	/* if disconnected, just clear flags */
 	if (port->serial->disconnected)
 		goto exit;
 
@@ -1162,14 +1161,11 @@ static void digi_close(struct usb_serial_port *port)
 			TASK_INTERRUPTIBLE);
 	schedule_timeout(DIGI_CLOSE_TIMEOUT);
 	finish_wait(&priv->dp_flush_wait, &wait);
+exit:
+	mutex_unlock(&port->serial->disc_mutex);
 
 	/* shutdown any outstanding bulk writes */
 	usb_kill_urb(port->write_urb);
-exit:
-	spin_lock_irq(&priv->dp_port_lock);
-	priv->dp_write_urb_in_use = 0;
-	spin_unlock_irq(&priv->dp_port_lock);
-	mutex_unlock(&port->serial->disc_mutex);
 }
 
 
