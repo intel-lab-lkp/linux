@@ -39,6 +39,10 @@
  * @time_reftime:	Time at last adjustment in seconds
  * @time_adjust:	Adjustment value
  * @ntp_tick_adj:	Constant boot-param configurable NTP tick adjustment (upscaled)
+ * @cs_tick_adj:	Fixed per-second adjustment compensating for the difference
+ *			between the nominal NTP interval and the real time taken
+ *			by the clocksource's integer @cycle_interval (upscaled).
+ *			Set by the timekeeping core via ntp_clear().
  * @ntp_next_leap_sec:	Second value of the next pending leapsecond, or TIME64_MAX if no leap
  *
  * @pps_valid:		PPS signal watchdog counter
@@ -70,6 +74,7 @@ struct ntp_data {
 	time64_t		time_reftime;
 	long			time_adjust;
 	s64			ntp_tick_adj;
+	s64			cs_tick_adj;
 	time64_t		ntp_next_leap_sec;
 #ifdef CONFIG_NTP_PPS
 	int			pps_valid;
@@ -255,6 +260,7 @@ static void ntp_update_frequency(struct ntp_data *ntpdata)
 	second_length		 = (u64)(tick_usec * NSEC_PER_USEC * USER_HZ) << NTP_SCALE_SHIFT;
 
 	second_length		+= ntpdata->ntp_tick_adj;
+	second_length		+= ntpdata->cs_tick_adj;
 	second_length		+= ntpdata->time_freq;
 
 	new_base		 = div_u64(second_length, NTP_INTERVAL_FREQ);
@@ -350,11 +356,26 @@ static void __ntp_clear(struct ntp_data *ntpdata)
 }
 
 /**
- * ntp_clear - Clears the NTP state variables
- * @tkid:	Timekeeper ID to be able to select proper ntp data array member
+ * ntp_clear - Clear NTP state and set the clocksource quantisation adjustment
+ * @tkid:		Timekeeper ID
+ * @cs_tick_adj:	Per-second adjustment in ns << NTP_SCALE_SHIFT
+ *
+ * The timekeeping core uses an integer number of cycles (@cycle_interval)
+ * per NTP interval, so the real time that interval represents differs from
+ * the nominal NTP_INTERVAL_LENGTH by up to half a counter period. Folding
+ * this fixed offset into @cs_tick_adj makes it an explicit part of the NTP
+ * tick_length computation in ntp.c, instead of being applied during
+ * timekeeping accumulation where the NTP code never saw it. Like
+ * @ntp_tick_adj it stays internal to the kernel; userspace still sees the
+ * nominal tick via adjtimex. NTP retains its full symmetric ±MAXFREQ range
+ * around the corrected base rate.
+ *
+ * Called whenever the clocksource is (re)configured, which is also when the
+ * rest of the NTP state must be cleared, so the two are done together.
  */
-void ntp_clear(unsigned int tkid)
+void ntp_clear(unsigned int tkid, s64 cs_tick_adj)
 {
+	tk_ntp_data[tkid].cs_tick_adj = cs_tick_adj;
 	__ntp_clear(&tk_ntp_data[tkid]);
 }
 

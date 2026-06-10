@@ -3,7 +3,7 @@
 #define _LINUX_NTP_INTERNAL_H
 
 extern void ntp_init(void);
-extern void ntp_clear(unsigned int tkid);
+extern void ntp_clear(unsigned int tkid, s64 cs_tick_adj);
 /* Returns how long ticks are at present, in ns / 2^NTP_SCALE_SHIFT. */
 extern u64 ntp_tick_length(unsigned int tkid);
 extern ktime_t ntp_get_next_leap(unsigned int tkid);
