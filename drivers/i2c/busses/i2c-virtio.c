@@ -10,10 +10,13 @@
 
 #include <linux/acpi.h>
 #include <linux/completion.h>
+#include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/kernel.h>
+#include <linux/kref.h>
 #include <linux/module.h>
+#include <linux/overflow.h>
 #include <linux/virtio.h>
 #include <linux/virtio_ids.h>
 #include <linux/virtio_config.h>
@@ -31,39 +34,80 @@ struct virtio_i2c {
 	struct virtqueue *vq;
 };
 
+struct virtio_i2c_xfer;
+
 /**
  * struct virtio_i2c_req - the virtio I2C request structure
+ * @xfer: owning transfer
  * @completion: completion of virtio I2C message
+ * @read: true if this is a read message (I2C_M_RD is set)
  * @out_hdr: the OUT header of the virtio I2C message
- * @buf: the buffer into which data is read, or from which it's written
  * @in_hdr: the IN header of the virtio I2C message
  */
 struct virtio_i2c_req {
+	struct virtio_i2c_xfer *xfer;
 	struct completion completion;
+	bool read;
 	struct virtio_i2c_out_hdr out_hdr	____cacheline_aligned;
-	uint8_t *buf				____cacheline_aligned;
 	struct virtio_i2c_in_hdr in_hdr		____cacheline_aligned;
 };
+
+/**
+ * struct virtio_i2c_xfer - a queued I2C transfer
+ * @ref: one ref for the caller, plus one per in-flight virtqueue request
+ * @bounce_buf_base: start of bounce buffer region
+ * @reqs: the virtio I2C requests
+ *
+ * Allocation layout:
+ * - struct virtio_i2c_xfer xfer
+ * - struct virtio_i2c_req reqs[num]
+ * - padding to dma_get_cache_alignment()
+ * - u8 bounce_buf[virtio_i2c_bounce_size(msgs[0].len)]
+ *   ...
+ * - u8 bounce_buf[virtio_i2c_bounce_size(msgs[num-1].len)]
+ */
+struct virtio_i2c_xfer {
+	struct kref ref;
+	u8 *bounce_buf_base;
+	struct virtio_i2c_req reqs[];
+};
+
+static size_t virtio_i2c_bounce_size(unsigned int len)
+{
+	return ALIGN(len, dma_get_cache_alignment());
+}
+
+static void virtio_i2c_xfer_release(struct kref *ref)
+{
+	struct virtio_i2c_xfer *xfer = container_of(ref, struct virtio_i2c_xfer, ref);
+	kfree(xfer);
+}
 
 static void virtio_i2c_msg_done(struct virtqueue *vq)
 {
 	struct virtio_i2c_req *req;
 	unsigned int len;
 
-	while ((req = virtqueue_get_buf(vq, &len)))
+	while ((req = virtqueue_get_buf(vq, &len))) {
 		complete(&req->completion);
+		kref_put(&req->xfer->ref, virtio_i2c_xfer_release);
+	}
 }
 
-static int virtio_i2c_prepare_reqs(struct virtqueue *vq,
-				   struct virtio_i2c_req *reqs,
+static int virtio_i2c_prepare_xfer(struct virtqueue *vq,
+				   struct virtio_i2c_xfer *xfer,
 				   struct i2c_msg *msgs, int num)
 {
 	struct scatterlist *sgs[3], out_hdr, msg_buf, in_hdr;
+	struct virtio_i2c_req *reqs = xfer->reqs;
+	u8 *bounce_buf = xfer->bounce_buf_base;
 	int i;
 
 	for (i = 0; i < num; i++) {
 		int outcnt = 0, incnt = 0;
 
+		reqs[i].xfer = xfer;
+		reqs[i].read = !!(msgs[i].flags & I2C_M_RD);
 		init_completion(&reqs[i].completion);
 
 		/*
@@ -82,23 +126,31 @@ static int virtio_i2c_prepare_reqs(struct virtqueue *vq,
 		sgs[outcnt++] = &out_hdr;
 
 		if (msgs[i].len) {
-			reqs[i].buf = i2c_get_dma_safe_msg_buf(&msgs[i], 1);
-			if (!reqs[i].buf)
-				break;
+			/*
+			 * Even if msg->flags has I2C_M_DMA_SAFE set, a bounce
+			 * buffer is required because the transfer may be
+			 * interrupted, after which msg->buf is no longer valid.
+			 */
+			if (!(msgs[i].flags & I2C_M_RD))
+				memcpy(bounce_buf, msgs[i].buf, msgs[i].len);
 
-			sg_init_one(&msg_buf, reqs[i].buf, msgs[i].len);
+			sg_init_one(&msg_buf, bounce_buf, msgs[i].len);
 
 			if (msgs[i].flags & I2C_M_RD)
 				sgs[outcnt + incnt++] = &msg_buf;
 			else
 				sgs[outcnt++] = &msg_buf;
 		}
+		bounce_buf += virtio_i2c_bounce_size(msgs[i].len);
 
 		sg_init_one(&in_hdr, &reqs[i].in_hdr, sizeof(reqs[i].in_hdr));
 		sgs[outcnt + incnt++] = &in_hdr;
 
+		/* This reference is released in virtio_i2c_msg_done(). */
+		kref_get(&xfer->ref);
+
 		if (virtqueue_add_sgs(vq, sgs, outcnt, incnt, &reqs[i], GFP_KERNEL)) {
-			i2c_put_dma_safe_msg_buf(reqs[i].buf, &msgs[i], false);
+			kref_put(&xfer->ref, virtio_i2c_xfer_release);
 			break;
 		}
 	}
@@ -106,26 +158,38 @@ static int virtio_i2c_prepare_reqs(struct virtqueue *vq,
 	return i;
 }
 
-static int virtio_i2c_complete_reqs(struct virtqueue *vq,
-				    struct virtio_i2c_req *reqs,
-				    struct i2c_msg *msgs, int num)
+static int virtio_i2c_complete_xfer(struct virtio_i2c_xfer *xfer,
+				    struct i2c_msg *msgs,
+				    int num)
 {
+	struct virtio_i2c_req *reqs = xfer->reqs;
+	u8 *bounce_buf = xfer->bounce_buf_base;
 	bool failed = false;
 	int i, j = 0;
 
 	for (i = 0; i < num; i++) {
 		struct virtio_i2c_req *req = &reqs[i];
+		struct i2c_msg *msg = &msgs[i];
 
-		if (!failed) {
-			if (wait_for_completion_interruptible(&req->completion))
-				failed = true;
-			else if (req->in_hdr.status != VIRTIO_I2C_MSG_OK)
-				failed = true;
-			else
-				j++;
+		if (wait_for_completion_interruptible(&req->completion))
+			return -EINTR;
+
+		if (req->in_hdr.status != VIRTIO_I2C_MSG_OK) {
+			/*
+			 * Don't break yet. Try to wait until all requests
+			 * complete to ensure that the virtqueue has enough
+			 * descriptor slots for the next transfer.
+			 */
+			failed = true;
 		}
 
-		i2c_put_dma_safe_msg_buf(reqs[i].buf, &msgs[i], !failed);
+		if (!failed) {
+			if (req->read)
+				memcpy(msg->buf, bounce_buf, msg->len);
+			j++;
+		}
+
+		bounce_buf += virtio_i2c_bounce_size(msg->len);
 	}
 
 	return j;
@@ -136,14 +200,31 @@ static int virtio_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs,
 {
 	struct virtio_i2c *vi = i2c_get_adapdata(adap);
 	struct virtqueue *vq = vi->vq;
-	struct virtio_i2c_req *reqs;
-	int count;
+	struct virtio_i2c_xfer *xfer;
+	size_t alloc_size;
+	int i, count;
 
-	reqs = kzalloc_objs(*reqs, num);
-	if (!reqs)
+	alloc_size = struct_size(xfer, reqs, num);
+	if (check_add_overflow(alloc_size,
+			       dma_get_cache_alignment() - 1,
+			       &alloc_size)) /* padding for PTR_ALIGN() */
+		return -EOVERFLOW;
+	for (i = 0; i < num; i++) {
+		if (check_add_overflow(alloc_size,
+				       virtio_i2c_bounce_size(msgs[i].len),
+				       &alloc_size))
+			return -EOVERFLOW;
+	}
+
+	xfer = kzalloc(alloc_size, GFP_KERNEL);
+	if (!xfer)
 		return -ENOMEM;
 
-	count = virtio_i2c_prepare_reqs(vq, reqs, msgs, num);
+	kref_init(&xfer->ref);
+	xfer->bounce_buf_base = PTR_ALIGN((u8 *)(xfer->reqs + num),
+					  dma_get_cache_alignment());
+
+	count = virtio_i2c_prepare_xfer(vq, xfer, msgs, num);
 	if (!count)
 		goto err_free;
 
@@ -157,10 +238,10 @@ static int virtio_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs,
 	 */
 	virtqueue_kick(vq);
 
-	count = virtio_i2c_complete_reqs(vq, reqs, msgs, count);
+	count = virtio_i2c_complete_xfer(xfer, msgs, count);
 
 err_free:
-	kfree(reqs);
+	kref_put(&xfer->ref, virtio_i2c_xfer_release);
 	return count;
 }
 
