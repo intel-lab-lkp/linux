@@ -1288,6 +1288,7 @@ int nci_register_device(struct nci_dev *ndev)
 	timer_setup(&ndev->data_timer, nci_data_timer, 0);
 
 	mutex_init(&ndev->req_lock);
+	mutex_init(&ndev->conn_lock);
 	INIT_LIST_HEAD(&ndev->conn_info_list);
 
 	rc = nfc_register_device(ndev->nfc_dev);
@@ -1523,9 +1524,10 @@ static void nci_tx_work(struct work_struct *work)
 	struct nci_conn_info *conn_info;
 	struct sk_buff *skb;
 
+	mutex_lock(&ndev->conn_lock);
 	conn_info = nci_get_conn_info_by_conn_id(ndev, ndev->cur_conn_id);
 	if (!conn_info)
-		return;
+		goto unlock;
 
 	pr_debug("credits_cnt %d\n", atomic_read(&conn_info->credits_cnt));
 
@@ -1533,7 +1535,7 @@ static void nci_tx_work(struct work_struct *work)
 	while (atomic_read(&conn_info->credits_cnt)) {
 		skb = skb_dequeue(&ndev->tx_q);
 		if (!skb)
-			return;
+			goto unlock;
 		kcov_remote_start_common(skb_get_kcov_handle(skb));
 
 		/* Check if data flow control is used */
@@ -1552,6 +1554,9 @@ static void nci_tx_work(struct work_struct *work)
 			  jiffies + msecs_to_jiffies(NCI_DATA_TIMEOUT));
 		kcov_remote_stop();
 	}
+
+unlock:
+	mutex_unlock(&ndev->conn_lock);
 }
 
 /* ----- NCI RX worker thread (data & control) ----- */

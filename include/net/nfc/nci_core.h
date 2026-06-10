@@ -227,6 +227,7 @@ struct nci_dev {
 	struct sk_buff_head	tx_q;
 
 	struct mutex		req_lock;
+	struct mutex		conn_lock;
 	struct completion	req_completion;
 	__u32			req_status;
 	__u32			req_result;

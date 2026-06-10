@@ -330,6 +330,7 @@ static void nci_core_conn_close_rsp_packet(struct nci_dev *ndev,
 
 	pr_debug("status 0x%x\n", status);
 	if (status == NCI_STATUS_OK) {
+		mutex_lock(&ndev->conn_lock);
 		conn_info = nci_get_conn_info_by_conn_id(ndev,
 							 ndev->cur_conn_id);
 		if (conn_info) {
@@ -338,6 +339,7 @@ static void nci_core_conn_close_rsp_packet(struct nci_dev *ndev,
 				ndev->rf_conn_info = NULL;
 			devm_kfree(&ndev->nfc_dev->dev, conn_info);
 		}
+		mutex_unlock(&ndev->conn_lock);
 	}
 	nci_req_complete(ndev, status);
 }
