@@ -15,17 +15,44 @@ description:
 
 properties:
   compatible:
-    items:
-      - enum:
-          - cix,sky1-system-control
-          - cix,sky1-s5-system-control
-      - const: syscon
+    oneOf:
+      - items:
+          - enum:
+              - cix,sky1-system-control
+              - cix,sky1-s5-system-control
+          - const: syscon
+      - items:
+          - const: cix,sky1-audss-system-control
+          - const: simple-mfd
+          - const: syscon
 
   reg:
     maxItems: 1
 
   '#reset-cells':
     const: 1
+
+  clock-controller:
+    type: object
+    properties:
+      compatible:
+        const: cix,sky1-audss-clock
+    required:
+      - compatible
+    additionalProperties: true
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: cix,sky1-audss-system-control
+    then:
+      required:
+        - clock-controller
+    else:
+      properties:
+        clock-controller: false
 
 required:
   - compatible
@@ -39,4 +66,14 @@ examples:
       compatible = "cix,sky1-system-control", "syscon";
       reg = <0x4160000 0x100>;
       #reset-cells = <1>;
+    };
+  - |
+    audss_syscon: system-controller@7110000 {
+        compatible = "cix,sky1-audss-system-control", "simple-mfd", "syscon";
+        reg = <0x7110000 0x10000>;
+        #reset-cells = <1>;
+
+        clock-controller {
+            compatible = "cix,sky1-audss-clock";
+        };
     };
