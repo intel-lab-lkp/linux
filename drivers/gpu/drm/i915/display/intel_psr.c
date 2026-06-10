@@ -3019,10 +3019,11 @@ int intel_psr2_sel_fetch_update(struct intel_atomic_state *state,
 		drm_rect_fp_to_int(&src, &src);
 
 		/* Prepare plane-damage state before using it */
-		drm_atomic_helper_check_plane_damage(&state->base, &new_plane_state->uapi);
+		drm_atomic_helper_check_plane_damage(&state->base,
+						     &old_plane_state->uapi,
+						     &new_plane_state->uapi);
 
-		if (!drm_atomic_helper_damage_merged(&old_plane_state->uapi,
-						     &new_plane_state->uapi, &damaged_area))
+		if (!drm_atomic_helper_damage_merged(&new_plane_state->uapi, &damaged_area))
 			continue;
 
 		damaged_area.y1 += new_plane_state->uapi.dst.y1 - src.y1;
