@@ -122,6 +122,13 @@ properties:
       Specify when the AVB_LINK signal is active-low instead of normal
       active-high.
 
+  renesas,gptp:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      A phandle to an external gPTP clock for Gen4 platforms. The property is
+      optional for backwards compatibility, but without it gPTP timestamps are
+      disabled as Gen4 have no gPTP as part of the RAVB module itself.
+
   rx-internal-delay-ps:
     enum: [0, 1800]
 
@@ -305,6 +312,15 @@ allOf:
             items:
               - const: fck
               - const: refclk
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              const: renesas,etheravb-rcar-gen4
+    then:
+      properties:
+        renesas,gptp: false
 
 additionalProperties: false
 
