@@ -7,7 +7,6 @@
 //                         Marc Kleine-Budde <kernel@pengutronix.de>
 // Copyright (c) 2017-2019 Pengutronix,
 //                         Oleksij Rempel <kernel@pengutronix.de>
-
 #include <linux/can/skb.h>
 #include <net/can.h>
 
@@ -25,6 +24,9 @@
 #define J1939_TP_CMD_EOMA 0x13
 #define J1939_TP_CMD_BAM 0x20
 #define J1939_TP_CMD_ABORT 0xff
+
+#define J1939_TP_BAM_FRAME_SPACING_MS 50
+#define J1939_TP_BAM_ECHO_TIMEOUT_MS 250
 
 #define J1939_ETP_CMD_RTS 0x14
 #define J1939_ETP_CMD_CTS 0x15
@@ -754,7 +756,6 @@ static int j1939_session_tx_rts(struct j1939_session *session)
 
 	session->last_txcmd = dat[0];
 	if (dat[0] == J1939_TP_CMD_BAM) {
-		j1939_tp_schedule_txtimer(session, 50);
 		j1939_tp_set_rxtimeout(session, 250);
 	} else {
 		j1939_tp_set_rxtimeout(session, 1250);
@@ -854,12 +855,19 @@ static int j1939_session_tx_dat(struct j1939_session *session)
 		session->last_txcmd = 0xff;
 		pkt_done++;
 		session->pkt.tx++;
-		pdelay = j1939_cb_is_broadcast(&session->skcb) ? 50 :
-			j1939_tp_packet_delay;
 
-		if (session->pkt.tx < session->pkt.total && pdelay) {
-			j1939_tp_schedule_txtimer(session, pdelay);
+		/* For BAM transfer the tx timer is scheduled after receiving
+		 * the looped back frame as a tx ack. This means that here the
+		 * timer is only scheduled for directed transfers.
+		 */
+		pdelay = j1939_tp_packet_delay;
+		if (j1939_cb_is_broadcast(&session->skcb)) {
 			break;
+		} else {
+			if (session->pkt.tx < session->pkt.total && pdelay) {
+				j1939_tp_schedule_txtimer(session, j1939_tp_packet_delay);
+				break;
+			}
 		}
 	}
 
@@ -1793,8 +1801,12 @@ static void j1939_xtp_rx_rts(struct j1939_priv *priv, struct sk_buff *skb,
 	session->last_cmd = cmd;
 
 	if (cmd == J1939_TP_CMD_BAM) {
-		if (!session->transmission)
+		if (!session->transmission) {
 			j1939_tp_set_rxtimeout(session, 750);
+		} else {
+			j1939_tp_schedule_txtimer(session, J1939_TP_BAM_FRAME_SPACING_MS);
+			j1939_tp_set_rxtimeout(session, J1939_TP_BAM_ECHO_TIMEOUT_MS);
+		}
 	} else {
 		if (!session->transmission) {
 			j1939_session_txtimer_cancel(session);
@@ -1948,6 +1960,10 @@ static void j1939_xtp_rx_dat_one(struct j1939_session *session,
 	} else if (remain) {
 		if (!session->transmission)
 			j1939_tp_set_rxtimeout(session, 750);
+		else if (j1939_cb_is_broadcast(&session->skcb)) {
+			j1939_tp_schedule_txtimer(session, J1939_TP_BAM_FRAME_SPACING_MS);
+			j1939_tp_set_rxtimeout(session, J1939_TP_BAM_ECHO_TIMEOUT_MS);
+		}
 	} else if (do_cts_eoma) {
 		j1939_tp_set_rxtimeout(session, 1250);
 		if (!session->transmission)
