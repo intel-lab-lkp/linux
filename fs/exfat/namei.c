@@ -273,6 +273,34 @@ static int exfat_check_max_dentries(struct inode *inode)
 	return 0;
 }
 
+static int exfat_cache_next_empty_entry(struct super_block *sb,
+		struct exfat_inode_info *ei, struct exfat_hint_femp *hint_femp,
+		int dentry, int num_entries)
+{
+	int next, cur_clu, next_clu;
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	struct exfat_hint_femp next_hint;
+
+	if (hint_femp->eidx == EXFAT_HINT_NONE ||
+	    hint_femp->eidx != dentry ||
+	    hint_femp->count <= num_entries)
+		return 0;
+
+	next = dentry + num_entries;
+	next_hint = *hint_femp;
+	next_hint.eidx = next;
+	next_hint.count -= num_entries;
+
+	cur_clu = dentry / sbi->dentries_per_clu;
+	next_clu = next / sbi->dentries_per_clu;
+	if (next_clu > cur_clu &&
+	    exfat_chain_advance(sb, &next_hint.cur, next_clu - cur_clu))
+		return -EIO;
+
+	ei->hint_femp = next_hint;
+	return 0;
+}
+
 /*
  * Find an empty directory entry set.
  *
@@ -302,6 +330,7 @@ int exfat_find_empty_entry(struct inode *inode,
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	struct exfat_inode_info *ei = EXFAT_I(inode);
 	struct exfat_hint_femp hint_femp;
+	struct exfat_hint_femp prev_hint_femp;
 
 	hint_femp.eidx = EXFAT_HINT_NONE;
 
@@ -314,8 +343,13 @@ int exfat_find_empty_entry(struct inode *inode,
 			exfat_bytes_to_cluster(sbi, i_size_read(inode)),
 			ei->flags);
 
-	while ((dentry = exfat_search_empty_slot(sb, &hint_femp, p_dir,
-					num_entries, es)) < 0) {
+	for (;;) {
+		prev_hint_femp = hint_femp;
+		dentry = exfat_search_empty_slot(sb, &hint_femp, p_dir,
+				num_entries, es);
+		if (dentry >= 0)
+			break;
+
 		if (dentry != -ENOSPC)
 			return dentry;
 
@@ -380,6 +414,13 @@ int exfat_find_empty_entry(struct inode *inode,
 		ei->valid_size += sbi->cluster_size;
 		ei->flags = p_dir->flags;
 		inode->i_blocks += sbi->cluster_size >> 9;
+	}
+
+	ret = exfat_cache_next_empty_entry(sb, ei, &prev_hint_femp, dentry,
+			num_entries);
+	if (ret) {
+		exfat_put_dentry_set(es, false);
+		return ret;
 	}
 
 	p_dir->dir = exfat_sector_to_cluster(sbi, es->bh[0]->b_blocknr);
