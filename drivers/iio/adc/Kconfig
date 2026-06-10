@@ -1784,6 +1784,18 @@ config TI_ADS1119
          This driver can also be built as a module. If so, the module will be
          called ti-ads1119.
 
+config TI_ADS1220
+	tristate "Texas Instruments ADS1220 ADC"
+	depends on SPI
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	help
+	  If you say yes here you get support for Texas Instruments ADS1220
+	  24-bit, 4-channel, delta-sigma ADC chip.
+
+	  This driver can also be built as a module. If so, the module will be
+	  called ti-ads1220.
+
 config TI_ADS124S08
 	tristate "Texas Instruments ADS124S08"
 	depends on SPI
