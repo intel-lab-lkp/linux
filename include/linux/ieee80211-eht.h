@@ -891,6 +891,8 @@ static inline bool ieee80211_mle_size_ok(const u8 *data, size_t len)
 		check_common_len = true;
 		break;
 	case IEEE80211_ML_CONTROL_TYPE_RECONF:
+		common += 1;
+		check_common_len = true;
 		if (control & IEEE80211_MLC_RECONF_PRES_MLD_MAC_ADDR)
 			common += ETH_ALEN;
 		if (control & IEEE80211_MLC_RECONF_PRES_EML_CAPA)
@@ -906,6 +908,7 @@ static inline bool ieee80211_mle_size_ok(const u8 *data, size_t len)
 		break;
 	case IEEE80211_ML_CONTROL_TYPE_PRIO_ACCESS:
 		common = ETH_ALEN + 1;
+		check_common_len = true;
 		break;
 	default:
 		/* we don't know this type */
@@ -919,7 +922,7 @@ static inline bool ieee80211_mle_size_ok(const u8 *data, size_t len)
 		return true;
 
 	/* if present, common length is the first octet there */
-	return mle->variable[0] >= common;
+	return mle->variable[0] >= common && mle->variable[0] <= len - fixed;
 }
 
 /**
