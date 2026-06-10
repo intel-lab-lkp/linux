@@ -10,8 +10,8 @@
 /* Ucalls use unimplemented PAPR hcall 0 which exits KVM */
 #define H_UCALL	0
 
-int64_t hcall0(uint64_t token);
-int64_t hcall1(uint64_t token, uint64_t arg1);
-int64_t hcall2(uint64_t token, uint64_t arg1, uint64_t arg2);
+int64_t hcall0(u64 token);
+int64_t hcall1(u64 token, u64 arg1);
+int64_t hcall2(u64 token, u64 arg1, u64 arg2);
 
 #endif

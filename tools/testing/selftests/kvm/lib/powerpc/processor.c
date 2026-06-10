@@ -14,9 +14,9 @@
 #define RADIX_TREE_SIZE ((0x2UL << 61) | (0x5UL << 5)) /* 52-bits */
 #define RADIX_PGD_INDEX_SIZE 13
 
-static void set_proc_table(struct kvm_vm *vm, int pid, uint64_t dw0, uint64_t dw1)
+static void set_proc_table(struct kvm_vm *vm, int pid, u64 dw0, u64 dw1)
 {
-	uint64_t *proc_table;
+	u64 *proc_table;
 
 	proc_table = addr_gpa2hva(vm, vm->arch.prtb);
 	proc_table[pid * 2 + 0] = cpu_to_be64(dw0);
@@ -81,9 +81,9 @@ static int pt_shift(struct kvm_vm *vm, int level)
 	}
 }
 
-static uint64_t pt_entry_coverage(struct kvm_vm *vm, int level)
+static u64 pt_entry_coverage(struct kvm_vm *vm, int level)
 {
-	uint64_t size = vm->page_size;
+	u64 size = vm->page_size;
 
 	if (level == 4)
 		return size;
@@ -97,7 +97,7 @@ static uint64_t pt_entry_coverage(struct kvm_vm *vm, int level)
 	return size;
 }
 
-static int pt_idx(struct kvm_vm *vm, uint64_t vaddr, int level, uint64_t *nls)
+static int pt_idx(struct kvm_vm *vm, u64 vaddr, int level, u64 *nls)
 {
 	switch (level) {
 	case 1:
@@ -128,11 +128,11 @@ static int pt_idx(struct kvm_vm *vm, uint64_t vaddr, int level, uint64_t *nls)
 	}
 }
 
-static uint64_t *virt_get_pte(struct kvm_vm *vm, gpa_t pt,
-			  uint64_t vaddr, int level, uint64_t *nls)
+static u64 *virt_get_pte(struct kvm_vm *vm, gpa_t pt,
+			  u64 vaddr, int level, u64 *nls)
 {
 	int idx = pt_idx(vm, vaddr, level, nls);
-	uint64_t *ptep = addr_gpa2hva(vm, pt + idx * 8);
+	u64 *ptep = addr_gpa2hva(vm, pt + idx * 8);
 
 	return ptep;
 }
@@ -151,7 +151,7 @@ static uint64_t *virt_get_pte(struct kvm_vm *vm, gpa_t pt,
 #define PDE_NLS		0x0000000000000011ull
 #define PDE_PT_MASK	0x0fffffffffffff00ull
 
-static gpa_t __vm_alloc_pt(struct kvm_vm *vm, uint64_t pt_shift)
+static gpa_t __vm_alloc_pt(struct kvm_vm *vm, u64 pt_shift)
 {
 	gpa_t pt;
 
@@ -189,16 +189,16 @@ static gpa_t __vm_alloc_pt(struct kvm_vm *vm, uint64_t pt_shift)
 	return pt;
 }
 
-void virt_arch_pg_map(struct kvm_vm *vm, uint64_t gva, uint64_t gpa)
+void virt_arch_pg_map(struct kvm_vm *vm, u64 gva, u64 gpa)
 {
 	gpa_t pt = vm->mmu.pgd;
-	uint64_t *ptep, pte;
+	u64 *ptep, pte;
 	int level;
 
 	for (level = 1; level <= 3; level++) {
-		uint64_t nls;
-		uint64_t *pdep = virt_get_pte(vm, pt, gva, level, &nls);
-		uint64_t pde = be64_to_cpu(*pdep);
+		u64 nls;
+		u64 *pdep = virt_get_pte(vm, pt, gva, level, &nls);
+		u64 pde = be64_to_cpu(*pdep);
 
 		if (pde) {
 			TEST_ASSERT((pde & PDE_VALID) && !(pde & PTE_LEAF),
@@ -227,13 +227,13 @@ void virt_arch_pg_map(struct kvm_vm *vm, uint64_t gva, uint64_t gpa)
 gpa_t addr_arch_gva2gpa(struct kvm_vm *vm, gva_t gva)
 {
 	gpa_t pt = vm->mmu.pgd;
-	uint64_t *ptep, pte;
+	u64 *ptep, pte;
 	int level;
 
 	for (level = 1; level <= 3; level++) {
-		uint64_t nls;
-		uint64_t *pdep = virt_get_pte(vm, pt, gva, level, &nls);
-		uint64_t pde = be64_to_cpu(*pdep);
+		u64 nls;
+		u64 *pdep = virt_get_pte(vm, pt, gva, level, &nls);
+		u64 pde = be64_to_cpu(*pdep);
 
 		TEST_ASSERT((pde & PDE_VALID) && !(pde & PTE_LEAF),
 			"PDE not present at level: %u gva: 0x%lx pde:0x%lx\n",
@@ -263,8 +263,8 @@ static void virt_dump_pt(FILE *stream, struct kvm_vm *vm, gpa_t pt,
 	size = 1U << (pt_shift(vm, level) + 3);
 
 	for (idx = 0; idx < size; idx += 8, va += pt_entry_coverage(vm, level)) {
-		uint64_t *page_table = addr_gpa2hva(vm, pt + idx);
-		uint64_t pte = be64_to_cpu(*page_table);
+		u64 *page_table = addr_gpa2hva(vm, pt + idx);
+		u64 pte = be64_to_cpu(*page_table);
 
 		if (!(pte & PTE_VALID))
 			continue;
@@ -320,7 +320,7 @@ struct kvm_vcpu *vm_arch_vcpu_add(struct kvm_vm *vm, uint32_t vcpu_id)
 	struct ex_regs *ex_regs;
 	struct kvm_regs regs;
 	struct kvm_vcpu *vcpu;
-	uint64_t lpcr;
+	u64 lpcr;
 
 	stack_vaddr = __vm_alloc(vm, stack_size,
 				       DEFAULT_GUEST_STACK_VADDR_MIN,
@@ -374,7 +374,7 @@ void vcpu_args_set(struct kvm_vcpu *vcpu, unsigned int num, ...)
 	vcpu_regs_get(vcpu, &regs);
 
 	for (i = 0; i < num; i++)
-		regs.gpr[i + 3] = va_arg(ap, uint64_t);
+		regs.gpr[i + 3] = va_arg(ap, u64);
 
 	vcpu_regs_set(vcpu, &regs);
 	va_end(ap);
