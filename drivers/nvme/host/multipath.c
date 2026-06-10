@@ -292,6 +292,7 @@ static bool nvme_path_is_disabled(struct nvme_ns *ns)
 }
 
 static struct nvme_ns *__nvme_find_path(struct nvme_ns_head *head, int node)
+	__must_hold_shared(&head->srcu)
 {
 	int found_distance = INT_MAX, fallback_distance = INT_MAX, distance;
 	struct nvme_ns *found = NULL, *fallback = NULL, *ns;
@@ -343,6 +344,7 @@ static struct nvme_ns *nvme_next_ns(struct nvme_ns_head *head,
 }
 
 static struct nvme_ns *nvme_round_robin_path(struct nvme_ns_head *head)
+	__must_hold_shared(&head->srcu)
 {
 	struct nvme_ns *ns, *found = NULL;
 	int node = numa_node_id();
@@ -391,6 +393,7 @@ out:
 }
 
 static struct nvme_ns *nvme_queue_depth_path(struct nvme_ns_head *head)
+	__must_hold_shared(&head->srcu)
 {
 	struct nvme_ns *best_opt = NULL, *best_nonopt = NULL, *ns;
 	unsigned int min_depth_opt = UINT_MAX, min_depth_nonopt = UINT_MAX;
@@ -434,6 +437,7 @@ static inline bool nvme_path_is_optimized(struct nvme_ns *ns)
 }
 
 static struct nvme_ns *nvme_numa_path(struct nvme_ns_head *head)
+	__must_hold_shared(&head->srcu)
 {
 	int node = numa_node_id();
 	struct nvme_ns *ns;
