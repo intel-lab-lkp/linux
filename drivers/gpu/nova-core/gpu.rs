@@ -91,6 +91,10 @@ define_chipset!({
     GA104 = 0x174,
     GA106 = 0x176,
     GA107 = 0x177,
+    // Chipsets are listed in chip-ID order, which does not track FSP
+    // capability. Hopper (GH100) and Blackwell (GB10x/GB20x) boot the GSP
+    // via FSP, but Ada (AD10x), whose chip IDs fall between them, does not.
+    // See Chipset::uses_fsp().
     // Hopper
     GH100 = 0x180,
     // Ada
@@ -137,8 +141,8 @@ impl Chipset {
         matches!(self.arch(), Architecture::Turing) || matches!(self, Self::GA100)
     }
 
-    /// Returns `true` if this chipset boots via FSP (Hopper and later), which requires the FMC
-    /// firmware image.
+    /// Returns `true` if this chipset boots via FSP (Hopper and Blackwell, but not Ada), which
+    /// requires the FMC firmware image.
     pub(crate) const fn uses_fsp(self) -> bool {
         matches!(
             self.arch(),
