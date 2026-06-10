@@ -40,18 +40,15 @@ static struct xhci_segment *xhci_segment_alloc(struct xhci_hcd *xhci,
 		return NULL;
 
 	seg->trbs = dma_pool_zalloc(xhci->segment_pool, flags, &dma);
-	if (!seg->trbs) {
-		kfree(seg);
-		return NULL;
-	}
+	if (!seg->trbs)
+		goto free_seg;
 
 	if (max_packet) {
 		seg->bounce_buf = kzalloc_node(max_packet, flags,
 					dev_to_node(dev));
 		if (!seg->bounce_buf) {
 			dma_pool_free(xhci->segment_pool, seg->trbs, dma);
-			kfree(seg);
-			return NULL;
+			goto free_seg;
 		}
 	}
 	seg->num = num;
@@ -59,6 +56,10 @@ static struct xhci_segment *xhci_segment_alloc(struct xhci_hcd *xhci,
 	seg->next = NULL;
 
 	return seg;
+
+free_seg:
+	kfree(seg);
+	return NULL;
 }
 
 static void xhci_segment_free(struct xhci_hcd *xhci, struct xhci_segment *seg)
@@ -2310,19 +2311,21 @@ xhci_alloc_interrupter(struct xhci_hcd *xhci, unsigned int segs, gfp_t flags)
 	ir->event_ring = xhci_ring_alloc(xhci, segs, TYPE_EVENT, 0, flags);
 	if (!ir->event_ring) {
 		xhci_warn(xhci, "Failed to allocate interrupter event ring\n");
-		kfree(ir);
-		return NULL;
+		goto free_ir;
 	}
 
 	ret = xhci_alloc_erst(xhci, ir->event_ring, &ir->erst, flags);
 	if (ret) {
 		xhci_warn(xhci, "Failed to allocate interrupter erst\n");
 		xhci_ring_free(xhci, ir->event_ring);
-		kfree(ir);
-		return NULL;
+		goto free_ir;
 	}
 
 	return ir;
+
+free_ir:
+	kfree(ir);
+	return NULL;
 }
 
 void xhci_add_interrupter(struct xhci_hcd *xhci, unsigned int intr_num)
