@@ -361,7 +361,7 @@ struct nvme_ctrl {
 	wait_queue_head_t state_wq;
 
 	struct nvme_subsystem *subsys;
-	struct list_head subsys_entry;
+	struct list_head subsys_entry __guarded_by(&nvme_subsystems_lock);
 
 	struct opal_dev *opal_dev;
 
@@ -487,9 +487,9 @@ struct nvme_subsystem {
 	 * a separate refcount.
 	 */
 	struct kref		ref;
-	struct list_head	entry;
+	struct list_head	entry __guarded_by(&nvme_subsystems_lock);
 	struct mutex		lock;
-	struct list_head	ctrls;
+	struct list_head	ctrls __guarded_by(&nvme_subsystems_lock);
 	struct list_head	nsheads __guarded_by(&lock);
 	char			subnqn[NVMF_NQN_SIZE];
 	char			serial[20];
