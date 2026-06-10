@@ -2603,8 +2603,9 @@ immap_locked:
 
 	if (is_shmem) {
 		lruvec_stat_mod_folio(new_folio, NR_SHMEM, nr_pages);
-		lruvec_stat_mod_folio(new_folio, NR_SHMEM_THPS, HPAGE_PMD_NR);
-	} else {
+		if (is_pmd_order(order))
+			lruvec_stat_mod_folio(new_folio, NR_SHMEM_THPS, HPAGE_PMD_NR);
+	} else if (is_pmd_order(order)) {
 		lruvec_stat_mod_folio(new_folio, NR_FILE_THPS, HPAGE_PMD_NR);
 	}
 	lruvec_stat_mod_folio(new_folio, NR_FILE_PAGES, nr_pages);
