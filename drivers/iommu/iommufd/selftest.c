@@ -12,6 +12,7 @@
 #include <linux/iommu.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/sizes.h>
 #include <linux/xarray.h>
 #include <uapi/linux/iommufd.h>
 #include <linux/generic_pt/iommu.h>
@@ -1686,6 +1687,7 @@ static int iommufd_test_dirty(struct iommufd_ucmd *ucmd, unsigned int mockpt_id,
 			      u32 flags)
 {
 	unsigned long i, max;
+	unsigned long max_length;
 	struct iommu_test_cmd *cmd = ucmd->cmd;
 	struct iommufd_hw_pagetable *hwpt;
 	struct mock_iommu_domain *mock;
@@ -1702,6 +1704,13 @@ static int iommufd_test_dirty(struct iommufd_ucmd *ucmd, unsigned int mockpt_id,
 
 	if (!(mock->flags & MOCK_DIRTY_TRACK) || !mock->iommu.ops->set_dirty) {
 		rc = -EINVAL;
+		goto out_put;
+	}
+
+	if (check_mul_overflow((unsigned long)SZ_16M, page_size, &max_length))
+		max_length = ULONG_MAX;
+	if (length > max_length) {
+		rc = -EOVERFLOW;
 		goto out_put;
 	}
 
