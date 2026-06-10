@@ -283,8 +283,9 @@ static void vbox_primary_atomic_update(struct drm_plane *plane,
 	struct drm_crtc *crtc = new_state->crtc;
 	struct drm_framebuffer *fb = new_state->fb;
 	struct vbox_private *vbox = to_vbox_dev(fb->dev);
-	struct drm_mode_rect *clips;
-	uint32_t num_clips, i;
+	struct drm_mode_rect *clips = NULL;
+	u32 num_clips = 0;
+	u32 i;
 
 	vbox_crtc_set_base_and_mode(crtc, fb,
 				    new_state->src_x >> 16,
@@ -292,8 +293,10 @@ static void vbox_primary_atomic_update(struct drm_plane *plane,
 
 	/* Send information about dirty rectangles to VBVA. */
 
-	clips = drm_plane_get_damage_clips(new_state);
-	num_clips = drm_plane_get_damage_clips_count(new_state);
+	if (!new_state->ignore_damage_clips) {
+		clips = drm_plane_get_damage_clips(new_state);
+		num_clips = drm_plane_get_damage_clips_count(new_state);
+	}
 
 	if (!num_clips)
 		return;
