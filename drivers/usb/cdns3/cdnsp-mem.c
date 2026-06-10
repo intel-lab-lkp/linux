@@ -40,10 +40,8 @@ static struct cdnsp_segment *cdnsp_segment_alloc(struct cdnsp_device *pdev,
 		return NULL;
 
 	seg->trbs = dma_pool_zalloc(pdev->segment_pool, flags, &dma);
-	if (!seg->trbs) {
-		kfree(seg);
-		return NULL;
-	}
+	if (!seg->trbs)
+		goto free_seg;
 
 	if (max_packet) {
 		seg->bounce_buf = kzalloc(max_packet, flags | GFP_DMA);
@@ -63,6 +61,7 @@ static struct cdnsp_segment *cdnsp_segment_alloc(struct cdnsp_device *pdev,
 
 free_dma:
 	dma_pool_free(pdev->segment_pool, seg->trbs, dma);
+free_seg:
 	kfree(seg);
 
 	return NULL;
