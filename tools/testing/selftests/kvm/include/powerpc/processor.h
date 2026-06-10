@@ -7,6 +7,7 @@
 
 #include <linux/compiler.h>
 #include "ppc_asm.h"
+#include "kvm_util_types.h"
 
 extern unsigned char __interrupts_start[];
 extern unsigned char __interrupts_end[];
@@ -24,7 +25,7 @@ struct ex_regs {
 	u64	xer;
 	u32	cr;
 	u32	trap;
-	u64	vaddr; /* vaddr of this struct */
+	gva_t	gva; /* gva of this struct */
 };
 
 void vm_install_exception_handler(struct kvm_vm *vm, int vector,
