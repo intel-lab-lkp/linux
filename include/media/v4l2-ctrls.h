@@ -140,6 +140,7 @@ struct v4l2_ctrl_ops {
  * @minimum: set the value to the minimum value of the control.
  * @maximum: set the value to the maximum value of the control.
  * @log: log the value.
+ * @trace: trace the value of the control with Ftrace.
  * @validate: validate the value for ctrl->new_elems array elements.
  *	Return 0 on success and a negative value otherwise.
  */
@@ -153,6 +154,8 @@ struct v4l2_ctrl_type_ops {
 	void (*maximum)(const struct v4l2_ctrl *ctrl, u32 idx,
 			union v4l2_ctrl_ptr ptr);
 	void (*log)(const struct v4l2_ctrl *ctrl);
+	void (*trace)(const struct v4l2_fh *fh,
+		      const struct v4l2_ctrl *ctrl, union v4l2_ctrl_ptr ptr);
 	int (*validate)(const struct v4l2_ctrl *ctrl, union v4l2_ctrl_ptr ptr);
 };
 
@@ -1626,6 +1629,18 @@ void v4l2_ctrl_type_op_init(const struct v4l2_ctrl *ctrl, u32 from_idx,
  * Return: void
  */
 void v4l2_ctrl_type_op_log(const struct v4l2_ctrl *ctrl);
+
+/**
+ * v4l2_ctrl_type_op_trace - Default v4l2_ctrl_type_ops trace callback.
+ *
+ * @fh: The v4l2_fh of the current context.
+ * @ctrl: The v4l2_ctrl pointer.
+ * @ptr: The v4l2 control value.
+ *
+ * Return: void
+ */
+void v4l2_ctrl_type_op_trace(const struct v4l2_fh *fh,
+			     const struct v4l2_ctrl *ctrl, union v4l2_ctrl_ptr ptr);
 
 /**
  * v4l2_ctrl_type_op_validate - Default v4l2_ctrl_type_ops validate callback.
