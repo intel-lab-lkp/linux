@@ -2732,12 +2732,12 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
 	const unsigned int max_ptes_swap = collapse_max_ptes_swap(cc, HPAGE_PMD_ORDER);
 	struct address_space *mapping = file->f_mapping;
 	XA_STATE(xas, &mapping->i_pages, start);
+	unsigned int highest_enabled_order = 0;
 	enum scan_result result = SCAN_SUCCEED;
 	unsigned long enabled_orders, nr_pages;
 	struct folio *folio = NULL;
 	int node = NUMA_NO_NODE;
 	int present, swap;
-	pgoff_t pgoff;
 
 	present = 0;
 	swap = 0;
@@ -2746,6 +2746,9 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
 	nodes_clear(cc->alloc_nmask);
 
 	enabled_orders = collapse_possible_orders(vma, vma->vm_flags, tva_flags);
+	if (enabled_orders > 0)
+		highest_enabled_order = highest_order(enabled_orders);
+
 	/*
 	 * If PMD is the only enabled order, enforce max_ptes_none, otherwise
 	 * scan all pages to populate the bitmap for mTHP collapse.
@@ -2822,10 +2825,17 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
 		/*
 		 * If there are folios present, keep track of it in the bitmap
 		 * for file/shmem mTHP collapse.
+		 *
+		 * Skip those folios whose order has already exceeded the
+		 * 'highest_enabled_order', meaning they cannot be collapsed
+		 * into larger order folios.
 		 */
-		pgoff = max_t(pgoff_t, start, folio->index) - start;
-		nr_pages = min_t(int, HPAGE_PMD_NR - pgoff, nr_pages);
-		bitmap_set(cc->mthp_present_ptes, pgoff, nr_pages);
+		if (folio_order(folio) < highest_enabled_order) {
+			pgoff_t pgoff = max_t(pgoff_t, start, folio->index) - start;
+
+			nr_pages = min_t(int, HPAGE_PMD_NR - pgoff, nr_pages);
+			bitmap_set(cc->mthp_present_ptes, pgoff, nr_pages);
+		}
 
 		folio_put(folio);
 
@@ -2848,6 +2858,11 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
 		count_vm_event(THP_SCAN_EXCEED_NONE_PTE);
 		count_mthp_stat(HPAGE_PMD_ORDER,
 				MTHP_STAT_COLLAPSE_EXCEED_NONE);
+		goto out;
+	}
+
+	if (bitmap_empty(cc->mthp_present_ptes, MAX_PTRS_PER_PTE)) {
+		result = SCAN_FAIL;
 		goto out;
 	}
 
