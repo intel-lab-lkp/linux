@@ -2703,8 +2703,10 @@ static void intel_cdclk_pcode_pre_notify(struct intel_atomic_state *state)
 	 * if CDCLK is decreasing or not changing, set bits 25:16 to current CDCLK,
 	 * which basically means we choose the maximum of old and new CDCLK, if we know both
 	 */
-	if (change_cdclk)
+	if (change_cdclk) {
 		cdclk = max(new_cdclk_state->actual.cdclk, old_cdclk_state->actual.cdclk);
+		cdclk = DIV_ROUND_UP(cdclk, 1000);
+	}
 
 	/*
 	 * According to "Sequence For Pipe Count Change",
@@ -2740,8 +2742,10 @@ static void intel_cdclk_pcode_post_notify(struct intel_atomic_state *state)
 	 * According to "Sequence After Frequency Change",
 	 * set bits 25:16 to current CDCLK
 	 */
-	if (update_cdclk)
+	if (update_cdclk) {
 		cdclk = new_cdclk_state->actual.cdclk;
+		cdclk = DIV_ROUND_UP(cdclk, 1000);
+	}
 
 	/*
 	 * According to "Sequence For Pipe Count Change",
