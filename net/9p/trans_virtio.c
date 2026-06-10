@@ -573,7 +573,11 @@ static ssize_t p9_mount_tag_show(struct device *dev,
 	chan = vdev->priv;
 	tag_len = strlen(chan->tag);
 
-	memcpy(buf, chan->tag, tag_len + 1);
+	if (tag_len > PAGE_SIZE - 2)
+		tag_len = PAGE_SIZE - 2;
+
+	memcpy(buf, chan->tag, tag_len);
+	buf[tag_len] = '\0';
 
 	return tag_len + 1;
 }
