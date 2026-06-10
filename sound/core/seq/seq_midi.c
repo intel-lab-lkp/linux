@@ -18,6 +18,7 @@ Possible options for midisynth module:
 #include <linux/string.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/spinlock.h>
 #include <sound/core.h>
 #include <sound/rawmidi.h>
 #include <sound/seq_kernel.h>
@@ -43,6 +44,7 @@ struct seq_midisynth {
 	int subdevice;
 	struct snd_rawmidi_file input_rfile;
 	struct snd_rawmidi_file output_rfile;
+	rwlock_t output_lock;	/* protects output_rfile.output access */
 	int seq_client;
 	int seq_port;
 	struct snd_midi_event *parser;
@@ -129,6 +131,13 @@ static int event_process_midi(struct snd_seq_event *ev, int direct,
 
 	if (snd_BUG_ON(!msynth))
 		return -EINVAL;
+	/*
+	 * Hold the read side across the whole borrowed-substream use so a
+	 * concurrent port unsubscribe (midisynth_unuse) cannot release the
+	 * rawmidi file and free substream->runtime under us. IRQ-safe because
+	 * event_input can be reached from atomic sequencer delivery.
+	 */
+	guard(read_lock_irqsave)(&msynth->output_lock);
 	substream = msynth->output_rfile.output;
 	if (substream == NULL)
 		return -ENODEV;
@@ -160,6 +169,7 @@ static int snd_seq_midisynth_new(struct seq_midisynth *msynth,
 {
 	if (snd_midi_event_new(MAX_MIDI_EVENT_BUF, &msynth->parser) < 0)
 		return -ENOMEM;
+	rwlock_init(&msynth->output_lock);
 	msynth->card = card;
 	msynth->device = device;
 	msynth->subdevice = subdevice;
@@ -215,12 +225,13 @@ static int midisynth_use(void *private_data, struct snd_seq_port_subscribe *info
 {
 	int err;
 	struct seq_midisynth *msynth = private_data;
+	struct snd_rawmidi_file rfile = {};
 	struct snd_rawmidi_params params;
 
 	/* open midi port */
 	err = snd_rawmidi_kernel_open(msynth->rmidi, msynth->subdevice,
 				      SNDRV_RAWMIDI_LFLG_OUTPUT,
-				      &msynth->output_rfile);
+				      &rfile);
 	if (err < 0) {
 		pr_debug("ALSA: seq_midi: midi output open failed!!!\n");
 		return err;
@@ -229,12 +240,15 @@ static int midisynth_use(void *private_data, struct snd_seq_port_subscribe *info
 	params.avail_min = 1;
 	params.buffer_size = output_buffer_size;
 	params.no_active_sensing = 1;
-	err = snd_rawmidi_output_params(msynth->output_rfile.output, &params);
+	err = snd_rawmidi_output_params(rfile.output, &params);
 	if (err < 0) {
-		snd_rawmidi_kernel_release(&msynth->output_rfile);
+		snd_rawmidi_kernel_release(&rfile);
 		return err;
 	}
 	snd_midi_event_reset_decode(msynth->parser);
+	/* publish the opened file only after it is fully set up */
+	scoped_guard(write_lock_irqsave, &msynth->output_lock)
+		msynth->output_rfile = rfile;
 	return 0;
 }
 
@@ -242,11 +256,22 @@ static int midisynth_use(void *private_data, struct snd_seq_port_subscribe *info
 static int midisynth_unuse(void *private_data, struct snd_seq_port_subscribe *info)
 {
 	struct seq_midisynth *msynth = private_data;
+	struct snd_rawmidi_file rfile = {};
 
-	if (snd_BUG_ON(!msynth->output_rfile.output))
+	/*
+	 * Detach the borrowed output file under the write side so any in-flight
+	 * event_process_midi() either still sees the live substream (and is
+	 * drained out by the read lock) or sees NULL. Then drain and release
+	 * outside the lock, since those paths may sleep.
+	 */
+	scoped_guard(write_lock_irqsave, &msynth->output_lock) {
+		rfile = msynth->output_rfile;
+		msynth->output_rfile = (struct snd_rawmidi_file){};
+	}
+	if (snd_BUG_ON(!rfile.output))
 		return -EINVAL;
-	snd_rawmidi_drain_output(msynth->output_rfile.output);
-	return snd_rawmidi_kernel_release(&msynth->output_rfile);
+	snd_rawmidi_drain_output(rfile.output);
+	return snd_rawmidi_kernel_release(&rfile);
 }
 
 /* delete given midi synth port */
