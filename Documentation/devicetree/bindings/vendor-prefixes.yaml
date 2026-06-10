@@ -367,6 +367,8 @@ patternProperties:
     description: Chengdu Corpro Technology Co., Ltd.
   "^corechips,.*":
     description: Shenzhen Corechips Microelectronics Co., Ltd.
+  "^cortina-access,.*":
+    description: Cortina Access, Inc.
   "^cortina,.*":
     description: Cortina Systems, Inc.
   "^cosmic,.*":
