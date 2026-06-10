@@ -311,6 +311,20 @@ static void sg_split_t8_sizes_trailing_zero(struct kunit *test)
 	sg_split_run(test, in, 2, 0, sizes, 2);
 }
 
+static void sg_split_t8b_trailing_zero_no_input_left(struct kunit *test)
+{
+	/* First split consumes the entire input; the trailing zero-size split
+	 * gets no input entry (nents == 0).  sg_split_phys()/sg_split_mapped()
+	 * must not write out_sg[-1] for that empty split (out_sg would be
+	 * ZERO_SIZE_PTR).  Distinct from T8, where a trailing input entry
+	 * leaves the zero split with nents > 0.
+	 */
+	const struct sg_split_in_spec in[] = { { 0, 0, 10 } };
+	const size_t sizes[] = { 10, 0 };
+
+	sg_split_run(test, in, 1, 0, sizes, 2);
+}
+
 /* ========================================================================
  * Group D — boundary-position matrix (3 x 10-byte entries).
  */
@@ -487,6 +501,7 @@ static struct kunit_case sg_split_test_cases[] = {
 	KUNIT_CASE(sg_split_t6_dthev2_aead_shape),
 	KUNIT_CASE(sg_split_t7_skip_plus_partial_midentry),
 	KUNIT_CASE(sg_split_t8_sizes_trailing_zero),
+	KUNIT_CASE(sg_split_t8b_trailing_zero_no_input_left),
 	KUNIT_CASE(sg_split_t9_mid_first_two_trailing),
 	KUNIT_CASE(sg_split_t10_edge_first_two_trailing),
 	KUNIT_CASE(sg_split_t11_mid_middle_one_trailing),
