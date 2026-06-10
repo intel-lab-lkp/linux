@@ -365,6 +365,10 @@ static void smc_cdc_msg_recv_action(struct smc_sock *smc,
 			smp_mb__before_atomic();
 			atomic_add(diff_tx, &conn->sndbuf_space);
 			/* guarantee 0 <= sndbuf_space <= sndbuf_desc->len */
+			if (atomic_read(&conn->sndbuf_space) >
+			    conn->sndbuf_desc->len)
+				atomic_set(&conn->sndbuf_space,
+					   conn->sndbuf_desc->len);
 			smp_mb__after_atomic();
 			smc_curs_copy(&conn->tx_curs_fin,
 				      &conn->local_rx_ctrl.cons, conn);
