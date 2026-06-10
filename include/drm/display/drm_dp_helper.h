@@ -863,6 +863,14 @@ enum drm_dp_quirk {
 	 * specific DSC pixel throughput.
 	 */
 	DP_DPCD_QUIRK_DSC_THROUGHPUT_BPP_LIMIT,
+	/**
+	 * @DP_DPCD_QUIRK_NO_LINK_RATE_RBR:
+	 *
+	 * The device fails 8b/10b channel equalization at the RBR link
+	 * rate, but trains reliably at all higher link rates. Drivers
+	 * should avoid the RBR link rate for these devices.
+	 */
+	DP_DPCD_QUIRK_NO_LINK_RATE_RBR,
 };
 
 /**
