@@ -135,6 +135,10 @@ static struct khugepaged_scan khugepaged_scan = {
 	.mm_head = LIST_HEAD_INIT(khugepaged_scan.mm_head),
 };
 
+static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
+		struct file *file, pgoff_t start,
+		struct collapse_control *cc, int order);
+
 #ifdef CONFIG_SYSFS
 static ssize_t scan_sleep_millisecs_show(struct kobject *kobj,
 					 struct kobj_attribute *attr,
@@ -1487,6 +1491,7 @@ static unsigned int max_order_from_offset(unsigned int offset)
  * mTHP.
  */
 static enum scan_result mthp_collapse(struct mm_struct *mm,
+		struct file *file, pgoff_t start,
 		unsigned long address, int referenced, int unmapped,
 		struct collapse_control *cc, unsigned long enabled_orders)
 {
@@ -1520,8 +1525,12 @@ static enum scan_result mthp_collapse(struct mm_struct *mm,
 			enum scan_result ret;
 
 			collapse_address = address + offset * PAGE_SIZE;
-			ret = collapse_huge_page(mm, collapse_address, referenced,
-						 unmapped, cc, order);
+			if (file)
+				ret = collapse_file(mm, collapse_address, file,
+						start + offset, cc, order);
+			else
+				ret = collapse_huge_page(mm, collapse_address,
+						referenced, unmapped, cc, order);
 
 			switch (ret) {
 			/* Cases where we continue to next collapse candidate */
@@ -1529,6 +1538,7 @@ static enum scan_result mthp_collapse(struct mm_struct *mm,
 				collapsed += nr_ptes;
 				fallthrough;
 			case SCAN_PTE_MAPPED_HUGEPAGE:
+			case SCAN_PAGE_COMPOUND:
 				goto next_offset;
 			/* Cases where lower orders might still succeed */
 			case SCAN_ALLOC_HUGE_PAGE_FAIL:
@@ -1782,7 +1792,7 @@ out_unmap:
 	if (result == SCAN_SUCCEED) {
 		/* collapse_huge_page expects the lock to be dropped before calling */
 		mmap_read_unlock(mm);
-		result = mthp_collapse(mm, start_addr, referenced,
+		result = mthp_collapse(mm, NULL, 0, start_addr, referenced,
 				       unmapped, cc, enabled_orders);
 		/* mmap_lock was released above, set lock_dropped */
 		*lock_dropped = true;
@@ -2314,7 +2324,9 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 
 				if (++nr_none > max_ptes_none) {
 					result = SCAN_EXCEED_NONE_PTE;
-					count_vm_event(THP_SCAN_EXCEED_NONE_PTE);
+					if (is_pmd_order(order))
+						count_vm_event(THP_SCAN_EXCEED_NONE_PTE);
+					count_mthp_stat(order, MTHP_STAT_COLLAPSE_EXCEED_NONE);
 					goto xa_locked;
 				}
 
@@ -2324,6 +2336,19 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 
 			if (xa_is_value(folio) || !folio_test_uptodate(folio)) {
 				xas_unlock_irq(&xas);
+
+				/*
+				 * TODO: Support swapin without leading to further mTHP
+				 * collapses. Currently bringing in new pages via swapin may
+				 * cause a future higher order collapse on a rescan of the same
+				 * range.
+				 */
+				if (!is_pmd_order(order)) {
+					count_mthp_stat(order, MTHP_STAT_COLLAPSE_EXCEED_SWAP);
+					result = SCAN_EXCEED_SWAP_PTE;
+					goto xa_unlocked;
+				}
+
 				/* swap in or instantiate fallocated page */
 				if (shmem_get_folio(mapping->host, index, 0,
 						&folio, SGP_NOALLOC)) {
@@ -2404,6 +2429,18 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 		 */
 		if (is_pmd_order(folio_order(folio))) {
 			result = SCAN_PTE_MAPPED_HUGEPAGE;
+			goto out_unlock;
+		}
+
+		/*
+		 * If the folio order is greater than the collapse order, there is
+		 * no need to continue attempting to collapse.
+		 * And should return SCAN_PAGE_COMPOUND instead of SCAN_PTE_MAPPED_HUGEPAGE,
+		 * then we can build the mapping under the control of fault_around
+		 * when refaulting.
+		 */
+		if (folio_order(folio) >= order) {
+			result = SCAN_PAGE_COMPOUND;
 			goto out_unlock;
 		}
 
@@ -2629,12 +2666,11 @@ immap_locked:
 	xas_unlock_irq(&xas);
 
 	/*
-	 * Remove pte page tables, so we can re-fault the page as huge.
-	 * If MADV_COLLAPSE, adjust result to call try_collapse_pte_mapped_thp().
+	 * Remove pte page tables for PMD-sized THP collapse, so we can
+	 * re-fault the page as huge.
 	 */
-	retract_page_tables(mapping, start);
-	if (cc && !cc->is_khugepaged)
-		result = SCAN_PTE_MAPPED_HUGEPAGE;
+	if (is_pmd_order(order))
+		retract_page_tables(mapping, start);
 	folio_unlock(new_folio);
 
 	/*
@@ -2683,22 +2719,35 @@ out:
 }
 
 static enum scan_result collapse_scan_file(struct mm_struct *mm,
-		unsigned long addr, struct file *file, pgoff_t start,
-		struct collapse_control *cc)
+		struct vm_area_struct *vma, unsigned long addr,
+		struct file *file, pgoff_t start, struct collapse_control *cc)
 {
-	const unsigned int max_ptes_none = collapse_max_ptes_none(cc, NULL, HPAGE_PMD_ORDER);
+	enum tva_type tva_flags = cc->is_khugepaged ? TVA_KHUGEPAGED : TVA_FORCED_COLLAPSE;
+	unsigned int max_ptes_none = collapse_max_ptes_none(cc, NULL, HPAGE_PMD_ORDER);
 	const unsigned int max_ptes_swap = collapse_max_ptes_swap(cc, HPAGE_PMD_ORDER);
-	struct folio *folio = NULL;
 	struct address_space *mapping = file->f_mapping;
 	XA_STATE(xas, &mapping->i_pages, start);
-	int present, swap;
-	int node = NUMA_NO_NODE;
 	enum scan_result result = SCAN_SUCCEED;
+	unsigned long enabled_orders, nr_pages;
+	struct folio *folio = NULL;
+	int node = NUMA_NO_NODE;
+	int present, swap;
+	pgoff_t pgoff;
 
 	present = 0;
 	swap = 0;
+	bitmap_zero(cc->mthp_present_ptes, MAX_PTRS_PER_PTE);
 	memset(cc->node_load, 0, sizeof(cc->node_load));
 	nodes_clear(cc->alloc_nmask);
+
+	enabled_orders = collapse_possible_orders(vma, vma->vm_flags, tva_flags);
+	/*
+	 * If PMD is the only enabled order, enforce max_ptes_none, otherwise
+	 * scan all pages to populate the bitmap for mTHP collapse.
+	 */
+	if (enabled_orders != BIT(HPAGE_PMD_ORDER))
+		max_ptes_none = KHUGEPAGED_MAX_PTES_LIMIT;
+
 	rcu_read_lock();
 	xas_for_each(&xas, folio, start + HPAGE_PMD_NR - 1) {
 		if (xas_retry(&xas, folio))
@@ -2762,7 +2811,17 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
 		 * is just too costly...
 		 */
 
-		present += folio_nr_pages(folio);
+		nr_pages = folio_nr_pages(folio);
+		present += nr_pages;
+
+		/*
+		 * If there are folios present, keep track of it in the bitmap
+		 * for file/shmem mTHP collapse.
+		 */
+		pgoff = max_t(pgoff_t, start, folio->index) - start;
+		nr_pages = min_t(int, HPAGE_PMD_NR - pgoff, nr_pages);
+		bitmap_set(cc->mthp_present_ptes, pgoff, nr_pages);
+
 		folio_put(folio);
 
 		if (need_resched()) {
@@ -2776,15 +2835,23 @@ static enum scan_result collapse_scan_file(struct mm_struct *mm,
 	else
 		cc->progress += HPAGE_PMD_NR;
 
-	if (result == SCAN_SUCCEED) {
-		if (present < HPAGE_PMD_NR - max_ptes_none) {
-			result = SCAN_EXCEED_NONE_PTE;
-			count_vm_event(THP_SCAN_EXCEED_NONE_PTE);
-		} else {
-			result = collapse_file(mm, addr, file, start, cc, HPAGE_PMD_ORDER);
-		}
+	if (result != SCAN_SUCCEED)
+		goto out;
+
+	if (present < HPAGE_PMD_NR - max_ptes_none) {
+		result = SCAN_EXCEED_NONE_PTE;
+		count_vm_event(THP_SCAN_EXCEED_NONE_PTE);
+		count_mthp_stat(HPAGE_PMD_ORDER,
+				MTHP_STAT_COLLAPSE_EXCEED_NONE);
+		goto out;
 	}
 
+	result = mthp_collapse(mm, file, start, addr, 0, 0, cc, enabled_orders);
+	if (result == SCAN_SUCCEED && !cc->is_khugepaged) {
+		/* If MADV_COLLAPSE, adjust result to call collapse_pte_mapped_thp(). */
+		result = SCAN_PTE_MAPPED_HUGEPAGE;
+	}
+out:
 	trace_mm_khugepaged_scan_file(mm, folio, file, present, swap, result);
 	return result;
 }
@@ -2816,7 +2883,7 @@ static enum scan_result collapse_single_pmd(unsigned long addr,
 	mmap_read_unlock(mm);
 	*lock_dropped = true;
 retry:
-	result = collapse_scan_file(mm, addr, file, pgoff, cc);
+	result = collapse_scan_file(mm, vma, addr, file, pgoff, cc);
 
 	/*
 	 * For MADV_COLLAPSE, when encountering dirty pages, try to writeback,
