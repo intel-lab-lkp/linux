@@ -1585,6 +1585,7 @@ static void read_symbols(const char *modname)
 
 	if (!strends(modname, ".o")) {
 		error("%s: filename must be suffixed with .o\n", modname);
+		parse_elf_finish(&info);
 		return;
 	}
 
