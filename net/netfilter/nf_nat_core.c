@@ -914,6 +914,8 @@ nf_nat_inet_fn(void *priv, struct sk_buff *skb,
 		return NF_ACCEPT;
 
 	nat = nfct_nat(ct);
+	if (!nat)
+		return NF_ACCEPT;
 
 	switch (ctinfo) {
 	case IP_CT_RELATED:
