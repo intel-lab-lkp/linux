@@ -791,6 +791,62 @@ errptr(struct kunit *kunittest)
 #endif
 }
 
+struct pgtable_test {
+	u64 val;
+	const char *name;
+};
+
+static struct pgtable_test pgtable_test_cases[] = {
+	{ .val = 0xc0ffee,		.name = "0x0000000000c0ffee"},
+	{ .val = 0xdeadbeef,		.name = "0x00000000deadbeef"},
+	{ .val = 0xaabbcc,		.name = "0x0000000000aabbcc"},
+	{ .val = 0xcc,			.name = "0x00000000000000cc"},
+	{ .val = 0x1,			.name = "0x0000000000000001"},
+	{ .val = 0x11,			.name = "0x0000000000000011"},
+	{ .val = 0x111,			.name = "0x0000000000000111"},
+	{ .val = 0x10000010001,		.name = "0x0000010000010001"},
+	{ .val = 0xc0ffeec0ffee,	.name = "0x0000c0ffeec0ffee"},
+	{ .val = 0x10000000000,		.name = "0x0000010000000000"},
+	{ .val = 0x11000000000,		.name = "0x0000011000000000"},
+	{ .val = 0x1000000000000001,	.name = "0x1000000000000001"},
+	{ .val = 0x1100000000000010,	.name = "0x1100000000000010"},
+	{ .val = 0x1110000000000100,	.name = "0x1110000000000100"},
+	{ .val = 0xfff000000000ff00,	.name = "0xfff000000000ff00"},
+};
+
+static void
+pgtable_ptr(struct kunit *kunittest)
+{
+	char buf[64];
+	int i;
+
+	if (sizeof(pte_t) != 8)
+		kunit_skip(kunittest, "pte_t size is not 64 bits");
+
+	for (i = 0; i < ARRAY_SIZE(pgtable_test_cases); i++) {
+		pte_t pte = __pte(pgtable_test_cases[i].val);
+		pmd_t pmd = __pmd(pgtable_test_cases[i].val);
+		pud_t pud = __pud(pgtable_test_cases[i].val);
+		p4d_t p4d = __p4d(pgtable_test_cases[i].val);
+		pgd_t pgd = __pgd(pgtable_test_cases[i].val);
+
+		snprintf(buf, sizeof(buf), "%ppte", &pte);
+		KUNIT_EXPECT_STREQ(kunittest, buf, pgtable_test_cases[i].name);
+
+		snprintf(buf, sizeof(buf), "%ppmd", &pmd);
+		KUNIT_EXPECT_STREQ(kunittest, buf, pgtable_test_cases[i].name);
+
+		snprintf(buf, sizeof(buf), "%ppud", &pud);
+		KUNIT_EXPECT_STREQ(kunittest, buf, pgtable_test_cases[i].name);
+
+		snprintf(buf, sizeof(buf), "%pp4d", &p4d);
+		KUNIT_EXPECT_STREQ(kunittest, buf, pgtable_test_cases[i].name);
+
+		snprintf(buf, sizeof(buf), "%ppgd", &pgd);
+		KUNIT_EXPECT_STREQ(kunittest, buf, pgtable_test_cases[i].name);
+	}
+}
+
 static int printf_suite_init(struct kunit_suite *suite)
 {
 	total_tests = 0;
@@ -839,6 +895,7 @@ static struct kunit_case printf_test_cases[] = {
 	KUNIT_CASE(errptr),
 	KUNIT_CASE(fwnode_pointer),
 	KUNIT_CASE(fourcc_pointer),
+	KUNIT_CASE(pgtable_ptr),
 	{}
 };
 
