@@ -24,12 +24,9 @@ static inline void exfat_d_version_set(struct dentry *dentry,
 }
 
 /*
- * If new entry was created in the parent, it could create the 8.3 alias (the
- * shortname of logname).  So, the parent may have the negative-dentry which
- * matches the created 8.3 alias.
- *
- * If it happened, the negative dentry isn't actually negative anymore.  So,
- * drop it.
+ * exFAT has no FAT-style 8.3 alias entries. A negative dentry can therefore
+ * be reused for creation as long as the parent directory version did not
+ * change since the lookup that created it.
  */
 static int exfat_d_revalidate(struct inode *dir, const struct qstr *name,
 			      struct dentry *dentry, unsigned int flags)
@@ -54,7 +51,7 @@ static int exfat_d_revalidate(struct inode *dir, const struct qstr *name,
 	 * Drop the negative dentry, in order to make sure to use the case
 	 * sensitive name which is specified by user if this is for creation.
 	 */
-	if (flags & (LOOKUP_CREATE | LOOKUP_RENAME_TARGET))
+	if (flags & LOOKUP_RENAME_TARGET)
 		return 0;
 
 	return inode_eq_iversion(dir, exfat_d_version(dentry));
