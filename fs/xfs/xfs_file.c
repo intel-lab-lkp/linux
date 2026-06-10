@@ -1799,6 +1799,15 @@ xfs_file_release(
 		return 0;
 
 	/*
+	 * If the filesystem is frozen or freezing, don't trigger transactions
+	 * that would block close() indefinitely. Background block garbage
+	 * collection will clean up these speculative preallocations once
+	 * the filesystem thaws.
+	 */
+	if (!xfs_fs_writable(mp, SB_FREEZE_WRITE))
+		return 0;
+
+	/*
 	 * If we can't get the iolock just skip truncating the blocks past EOF
 	 * because we could deadlock with the mmap_lock otherwise. We'll get
 	 * another chance to drop them once the last reference to the inode is
