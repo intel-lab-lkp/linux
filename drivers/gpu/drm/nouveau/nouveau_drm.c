@@ -159,6 +159,13 @@ nouveau_cli_work_ready(struct dma_fence *fence)
 	unsigned long flags;
 	bool ret = true;
 
+	/*
+	 * This is not a cleanup / rework leftover, but a bugfix to prevent a
+	 * race with someone signalling the fence. The locked
+	 * dma_fence_is_signaled() cannot be used. The dma_fence implementation
+	 * is not fully synchronized with locks, but also uses atomic bits,
+	 * which can cause the dma_fence_put() below to be executed too soon.
+	 */
 	dma_fence_lock_irqsave(fence, flags);
 	if (!dma_fence_is_signaled_locked(fence))
 		ret = false;
