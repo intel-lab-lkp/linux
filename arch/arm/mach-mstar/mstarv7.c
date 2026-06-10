@@ -86,6 +86,7 @@ static int mstarv7_boot_secondary(unsigned int cpu, struct task_struct *idle)
 
 	np = of_find_compatible_node(NULL, NULL, "mstar,smpctrl");
 	smpctrl = of_iomap(np, 0);
+	of_node_put(np);
 
 	if (!smpctrl)
 		return -ENODEV;
