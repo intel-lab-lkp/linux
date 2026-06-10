@@ -1452,8 +1452,22 @@ err_channel_add:
 	return ret;
 }
 
+static void mv_xor_remove(struct platform_device *pdev)
+{
+	struct mv_xor_device *xordev = platform_get_drvdata(pdev);
+	int i;
+
+	for (i = 0; i < MV_XOR_MAX_CHANNELS; i++)
+		if (xordev->channels[i]) {
+			mv_xor_channel_remove(xordev->channels[i]);
+			if (pdev->dev.of_node)
+				irq_dispose_mapping(xordev->channels[i]->irq);
+		}
+}
+
 static struct platform_driver mv_xor_driver = {
 	.probe		= mv_xor_probe,
+	.remove		= mv_xor_remove,
 	.suspend        = mv_xor_suspend,
 	.resume         = mv_xor_resume,
 	.driver		= {
