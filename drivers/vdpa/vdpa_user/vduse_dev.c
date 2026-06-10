@@ -561,9 +561,9 @@ static int vduse_vdpa_set_vq_address(struct vdpa_device *vdpa, u16 idx,
 
 static void vduse_vq_kick(struct vduse_virtqueue *vq)
 {
-	spin_lock(&vq->kick_lock);
+	guard(spinlock)(&vq->kick_lock);
 	if (!vq->ready)
-		goto unlock;
+		return;
 
 	guard(rwsem_read)(&vq->dev->rwsem);
 	if (vq->dev->suspended)
@@ -573,8 +573,6 @@ static void vduse_vq_kick(struct vduse_virtqueue *vq)
 		eventfd_signal(vq->kickfd);
 	else
 		vq->kicked = true;
-unlock:
-	spin_unlock(&vq->kick_lock);
 }
 
 static void vduse_vq_kick_work(struct work_struct *work)
