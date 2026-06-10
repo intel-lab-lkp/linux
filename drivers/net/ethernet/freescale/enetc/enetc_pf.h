@@ -34,6 +34,10 @@ struct enetc_pf_ops {
 	struct phylink_pcs *(*create_pcs)(struct enetc_pf *pf, struct mii_bus *bus);
 	void (*destroy_pcs)(struct phylink_pcs *pcs);
 	int (*enable_psfp)(struct enetc_ndev_priv *priv);
+	void (*set_si_mac_promisc)(struct enetc_hw *hw, int si,
+				   enum enetc_mac_addr_type type, bool en);
+	void (*set_si_mac_hash_filter)(struct enetc_hw *hw, int si,
+				       enum enetc_mac_addr_type type, u64 hash);
 };
 
 struct enetc_pf {
