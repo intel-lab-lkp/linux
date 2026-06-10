@@ -84,13 +84,16 @@ static void sg_split_phys(struct sg_splitter *splitters, const int nb_splits)
 		in_sg = split->in_sg0;
 		out_sg = split->out_sg;
 		for (j = 0; j < split->nents; j++, out_sg++) {
+			unsigned int len = in_sg->length;
+
 			*out_sg = *in_sg;
-			if (!j) {
-				out_sg->offset += split->skip_sg0;
-				out_sg->length -= split->skip_sg0;
-			}
 			sg_dma_address(out_sg) = 0;
 			sg_dma_len(out_sg) = 0;
+			if (!j) {
+				out_sg->offset += split->skip_sg0;
+				len -= split->skip_sg0;
+			}
+			out_sg->length = len;
 			in_sg = sg_next(in_sg);
 		}
 		out_sg[-1].length = split->length_last_sg;
