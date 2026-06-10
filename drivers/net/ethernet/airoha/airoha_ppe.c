@@ -15,7 +15,7 @@
 #include "airoha_regs.h"
 #include "airoha_eth.h"
 
-static DEFINE_MUTEX(flow_offload_mutex);
+DEFINE_MUTEX(flow_offload_mutex);
 static DEFINE_SPINLOCK(ppe_lock);
 
 static const struct rhashtable_params airoha_flow_table_params = {
@@ -84,10 +84,10 @@ static u32 airoha_ppe_get_timestamp(struct airoha_ppe *ppe)
 			     AIROHA_FOE_IB1_BIND_TIMESTAMP);
 }
 
-void airoha_ppe_set_cpu_port(struct airoha_gdm_dev *dev, u8 ppe_id, u8 fport)
+void __airoha_ppe_set_cpu_port(struct airoha_gdm_dev *dev, u8 ppe_id, u8 fport)
 {
-	struct airoha_qdma *qdma = dev->qdma;
-	struct airoha_eth *eth = qdma->eth;
+	struct airoha_qdma *qdma = airoha_qdma_deref(dev);
+	struct airoha_eth *eth = dev->eth;
 	u8 qdma_id = qdma - &eth->qdma[0];
 	u32 fe_cpu_port;
 
@@ -95,6 +95,14 @@ void airoha_ppe_set_cpu_port(struct airoha_gdm_dev *dev, u8 ppe_id, u8 fport)
 	airoha_fe_rmw(eth, REG_PPE_DFT_CPORT(ppe_id, fport),
 		      DFT_CPORT_MASK(fport),
 		      __field_prep(DFT_CPORT_MASK(fport), fe_cpu_port));
+}
+
+void airoha_ppe_clear_cpu_port(struct airoha_gdm_dev *dev, u8 ppe_id, u8 fport)
+{
+	mutex_lock(&flow_offload_mutex);
+	airoha_fe_clear(dev->eth, REG_PPE_DFT_CPORT(ppe_id, fport),
+			DFT_CPORT_MASK(fport));
+	mutex_unlock(&flow_offload_mutex);
 }
 
 static void airoha_ppe_hw_init(struct airoha_ppe *ppe)
@@ -195,7 +203,7 @@ static void airoha_ppe_hw_init(struct airoha_ppe *ppe)
 			ppe_id = !airoha_is_lan_gdm_dev(dev) &&
 				 airoha_ppe_is_enabled(eth, 1);
 			fport = airoha_get_fe_port(dev);
-			airoha_ppe_set_cpu_port(dev, ppe_id, fport);
+			__airoha_ppe_set_cpu_port(dev, ppe_id, fport);
 		}
 	}
 }
