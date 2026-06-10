@@ -1526,6 +1526,9 @@ ieee80211_rx_h_check_dup(struct ieee80211_rx_data *rx)
 	if (status->flag & RX_FLAG_DUP_VALIDATED)
 		return RX_CONTINUE;
 
+	if (ieee80211_is_ext(hdr->frame_control))
+		return RX_CONTINUE;
+
 	/*
 	 * Drop duplicate 802.11 retransmissions
 	 * (IEEE 802.11-2012: 9.3.2.10 "Duplicate detection and recovery")
@@ -4510,11 +4513,16 @@ static bool ieee80211_accept_frame(struct ieee80211_rx_data *rx)
 	struct ieee80211_hdr *hdr = (void *)skb->data;
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 	u8 *bssid = ieee80211_get_bssid(hdr, skb->len, sdata->vif.type);
-	bool multicast = is_multicast_ether_addr(hdr->addr1) ||
-			 ieee80211_is_s1g_beacon(hdr->frame_control);
+	bool s1g = ieee80211_is_s1g_beacon(hdr->frame_control);
+	bool multicast;
 	static const u8 nan_network_id[ETH_ALEN] __aligned(2) = {
 		0x51, 0x6F, 0x9A, 0x01, 0x00, 0x00
 	};
+
+	if (s1g)
+		return sdata->vif.type == NL80211_IFTYPE_STATION && bssid;
+
+	multicast = is_multicast_ether_addr(hdr->addr1);
 
 	switch (sdata->vif.type) {
 	case NL80211_IFTYPE_STATION:
@@ -5213,11 +5221,13 @@ static bool ieee80211_prepare_and_rx_handle(struct ieee80211_rx_data *rx,
 	}
 
 	/* Store a copy of the pre-translated link addresses for SW crypto */
-	if (unlikely(is_unicast_ether_addr(hdr->addr1) &&
+	if (unlikely(!ieee80211_is_s1g_beacon(hdr->frame_control) &&
+		     is_unicast_ether_addr(hdr->addr1) &&
 		     !ieee80211_is_data(hdr->frame_control)))
 		memcpy(rx->link_addrs, &hdr->addrs, 3 * ETH_ALEN);
 
 	if (unlikely(rx->sta && rx->sta->sta.mlo) &&
+	    !ieee80211_is_s1g_beacon(hdr->frame_control) &&
 	    is_unicast_ether_addr(hdr->addr1) &&
 	    !ieee80211_is_probe_resp(hdr->frame_control) &&
 	    !ieee80211_is_beacon(hdr->frame_control)) {
@@ -5298,8 +5308,15 @@ static bool ieee80211_rx_for_interface(struct ieee80211_rx_data *rx,
 {
 	struct link_sta_info *link_sta;
 	struct ieee80211_hdr *hdr = (void *)skb->data;
+	u8 *sta_addr = hdr->addr2;
 	struct sta_info *sta;
 	int link_id = -1;
+
+	if (ieee80211_is_s1g_beacon(hdr->frame_control)) {
+		sta_addr = ieee80211_get_bssid(hdr, skb->len, rx->sdata->vif.type);
+		if (!sta_addr)
+			return false;
+	}
 
 	/*
 	 * Look up link station first, in case there's a
@@ -5307,14 +5324,14 @@ static bool ieee80211_rx_for_interface(struct ieee80211_rx_data *rx,
 	 * is identical to the MLD address, that way we'll
 	 * have the link information if needed.
 	 */
-	link_sta = link_sta_info_get_bss(rx->sdata, hdr->addr2);
+	link_sta = link_sta_info_get_bss(rx->sdata, sta_addr);
 	if (link_sta) {
 		sta = link_sta->sta;
 		link_id = link_sta->link_id;
 	} else {
 		struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 
-		sta = sta_info_get_bss(rx->sdata, hdr->addr2);
+		sta = sta_info_get_bss(rx->sdata, sta_addr);
 		if (status->link_valid) {
 			link_id = status->link_id;
 		} else if (ieee80211_vif_is_mld(&rx->sdata->vif) &&
@@ -5381,6 +5398,12 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 	}
 
 	if (err) {
+		dev_kfree_skb(skb);
+		return;
+	}
+
+	if (ieee80211_is_s1g_beacon(fc) &&
+	    !pskb_may_pull(skb, ieee80211_s1g_beacon_min_len(fc))) {
 		dev_kfree_skb(skb);
 		return;
 	}

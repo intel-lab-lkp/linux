@@ -2874,6 +2874,19 @@ struct ieee80211_tbtt_info_ge_11 {
 #include "ieee80211-nan.h"
 
 /**
+ * ieee80211_s1g_beacon_min_len - minimum length of an S1G beacon frame
+ * @fc: frame control bytes in little-endian byteorder
+ *
+ * Return: the minimum frame length containing the fixed S1G beacon fields and
+ * optional fixed fields indicated in the S1G beacon frame control.
+ */
+static inline size_t ieee80211_s1g_beacon_min_len(__le16 fc)
+{
+	return offsetof(struct ieee80211_ext, u.s1g_beacon.variable) +
+	       ieee80211_s1g_optional_len(fc);
+}
+
+/**
  * ieee80211_check_tim - check if AID bit is set in TIM
  * @tim: the TIM IE
  * @tim_len: length of the TIM IE
