@@ -26,12 +26,14 @@ static struct bnxt_re_cq *bnxt_re_search_for_cq(struct bnxt_re_dev *rdev, u32 cq
 {
 	struct bnxt_re_cq *cq = NULL, *tmp_cq;
 
+	mutex_lock(&rdev->cq_hash_lock);
 	hash_for_each_possible(rdev->cq_hash, tmp_cq, hash_entry, cq_id) {
 		if (tmp_cq->qplib_cq.id == cq_id) {
 			cq = tmp_cq;
 			break;
 		}
 	}
+	mutex_unlock(&rdev->cq_hash_lock);
 	return cq;
 }
 
