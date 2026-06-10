@@ -9,6 +9,7 @@ PCI Endpoint Framework
 
    pci-endpoint
    pci-endpoint-cfs
+   pci-endpoint-doe
    pci-test-function
    pci-test-howto
    pci-ntb-function
