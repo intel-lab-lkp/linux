@@ -11,6 +11,7 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <crypto/aes.h>
+#include <crypto/algapi.h>
 #include <crypto/internal/des.h>
 #include <crypto/internal/skcipher.h>
 #include <crypto/xts.h>
@@ -59,6 +60,14 @@ static void qce_skcipher_done(void *data)
 		dev_dbg(qce->dev, "skcipher operation error (%x)\n", status);
 
 	memcpy(rctx->iv, result_buf->encr_cntr_iv, rctx->ivsize);
+	/*
+	 * QCE hardware does not increment the counter for a partial final
+	 * block. Increment it in software so that iv_out reflects the correct
+	 * next counter value expected by the CTR mode.
+	 */
+	if (IS_CTR(rctx->flags) &&
+	   (rctx->cryptlen % crypto_skcipher_chunksize(crypto_skcipher_reqtfm(req))))
+		crypto_inc(rctx->iv, rctx->ivsize);
 	qce->async_req_done(tmpl->qce, error);
 }
 
