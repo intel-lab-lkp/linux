@@ -4669,6 +4669,7 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 	bool curr = cfs_rq->curr == se;
 	bool rel_vprot = false;
 	u64 avruntime = 0;
+	s64 limit;
 
 	if (se->on_rq) {
 		/* commit outstanding execution time */
@@ -4692,6 +4693,23 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 	rescale_entity(se, weight, rel_vprot);
 
 	update_load_set(&se->load, weight);
+
+	/*
+	 * rescale_entity() scaled vlag by old_weight/new_weight to preserve
+	 * lag across the reweight (vl' = vl * w/w').  On a large weight
+	 * decrease this can inflate vlag well past the legal lag bound.  Left
+	 * unclamped, the resulting se->vruntime = avruntime - vlag (computed
+	 * just below for an on_rq entity, or via place_entity() on the next
+	 * enqueue for an off_rq one) drifts far from cfs_rq->zero_vruntime, and
+	 * a subsequent __enqueue_entity() then overflows entity_key() * weight
+	 * in __sum_w_vruntime_add().  Re-clamp to the per-entity lag limit for
+	 * the new weight, exactly as entity_lag() does on every fresh lag.
+	 * Note calc_delta_fair(t, se) * se->load.weight <= t << NICE_0_LOAD_SHIFT
+	 * (equality but for the floor in __calc_delta), so this bounds
+	 * key * weight regardless of the entity's weight.
+	 */
+	limit = calc_delta_fair(cfs_rq_max_slice(cfs_rq) + TICK_NSEC, se);
+	se->vlag = clamp(se->vlag, -limit, limit);
 
 	do {
 		u32 divider = get_pelt_divider(&se->avg);
