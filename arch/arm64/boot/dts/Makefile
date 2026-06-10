@@ -16,6 +16,7 @@ subdir-y += broadcom
 subdir-y += bst
 subdir-y += cavium
 subdir-y += cix
+subdir-y += cortina-access
 subdir-y += exynos
 subdir-y += freescale
 subdir-y += hisilicon
