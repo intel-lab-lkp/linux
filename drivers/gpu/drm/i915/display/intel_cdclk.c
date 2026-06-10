@@ -2793,7 +2793,9 @@ intel_set_cdclk_pre_plane_update(struct intel_atomic_state *state)
 		return;
 
 	if (!intel_cdclk_changed(&old_cdclk_state->actual,
-				 &new_cdclk_state->actual))
+				 &new_cdclk_state->actual) &&
+	    dg2_power_well_count(display, old_cdclk_state) ==
+	    dg2_power_well_count(display, new_cdclk_state))
 		return;
 
 	if (new_cdclk_state->disable_pipes) {
@@ -2848,7 +2850,9 @@ intel_set_cdclk_post_plane_update(struct intel_atomic_state *state)
 		return;
 
 	if (!intel_cdclk_changed(&old_cdclk_state->actual,
-				 &new_cdclk_state->actual))
+				 &new_cdclk_state->actual) &&
+	    dg2_power_well_count(display, old_cdclk_state) ==
+	    dg2_power_well_count(display, new_cdclk_state))
 		return;
 
 	if (!new_cdclk_state->disable_pipes &&
