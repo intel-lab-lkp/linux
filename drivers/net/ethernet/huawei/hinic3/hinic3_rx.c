@@ -29,7 +29,7 @@
 #define HINIC3_LRO_PKT_HDR_LEN_IPV4     66
 #define HINIC3_LRO_PKT_HDR_LEN_IPV6     86
 #define HINIC3_LRO_PKT_HDR_LEN(cqe) \
-	(RQ_CQE_OFFOLAD_TYPE_GET((cqe)->offload_type, IP_TYPE) == \
+	(RQ_CQE_OFFOLAD_TYPE_GET(le32_to_cpu((cqe)->offload_type), IP_TYPE) == \
 	 HINIC3_RX_IPV6_PKT ? HINIC3_LRO_PKT_HDR_LEN_IPV6 : \
 	 HINIC3_LRO_PKT_HDR_LEN_IPV4)
 
@@ -46,7 +46,6 @@ static void hinic3_rxq_clean_stats(struct hinic3_rxq_stats *rxq_stats)
 
 	rxq_stats->alloc_skb_err = 0;
 	rxq_stats->alloc_rx_buf_err = 0;
-	rxq_stats->restore_drop_sge = 0;
 	u64_stats_update_end(&rxq_stats->syncp);
 }
 
@@ -155,8 +154,14 @@ static u32 hinic3_rx_fill_buffers(struct hinic3_rxq *rxq)
 
 		err = rx_alloc_mapped_page(rxq->page_pool, rx_info,
 					   rxq->buf_len);
-		if (unlikely(err))
+		if (unlikely(err)) {
+			preempt_disable();
+			u64_stats_update_begin(&rxq->rxq_stats.syncp);
+			rxq->rxq_stats.alloc_rx_buf_err++;
+			u64_stats_update_end(&rxq->rxq_stats.syncp);
+			preempt_enable();
 			break;
+		}
 
 		dma_addr = page_pool_get_dma_addr(rx_info->page) +
 			rx_info->page_offset;
@@ -170,6 +175,12 @@ static u32 hinic3_rx_fill_buffers(struct hinic3_rxq *rxq)
 				rxq->next_to_update << HINIC3_NORMAL_RQ_WQE);
 		rxq->delta -= i;
 		rxq->next_to_alloc = rxq->next_to_update;
+	} else if (free_wqebbs == rxq->q_depth - 1) {
+		preempt_disable();
+		u64_stats_update_begin(&rxq->rxq_stats.syncp);
+		rxq->rxq_stats.rx_buf_empty++;
+		u64_stats_update_end(&rxq->rxq_stats.syncp);
+		preempt_enable();
 	}
 
 	return i;
@@ -330,11 +341,23 @@ static void hinic3_rx_csum(struct hinic3_rxq *rxq, u32 offload_type,
 	struct net_device *netdev = rxq->netdev;
 	bool l2_tunnel;
 
+	if (unlikely(csum_err == HINIC3_RX_CSUM_IPSU_OTHER_ERR)) {
+		u64_stats_update_begin(&rxq->rxq_stats.syncp);
+		rxq->rxq_stats.other_errors++;
+		u64_stats_update_end(&rxq->rxq_stats.syncp);
+	}
+
 	if (!(netdev->features & NETIF_F_RXCSUM))
 		return;
 
 	if (unlikely(csum_err)) {
 		/* pkt type is recognized by HW, and csum is wrong */
+		if (!(csum_err & (HINIC3_RX_CSUM_HW_CHECK_NONE |
+				  HINIC3_RX_CSUM_IPSU_OTHER_ERR))) {
+			u64_stats_update_begin(&rxq->rxq_stats.syncp);
+			rxq->rxq_stats.csum_errors++;
+			u64_stats_update_end(&rxq->rxq_stats.syncp);
+		}
 		skb->ip_summed = CHECKSUM_NONE;
 		return;
 	}
@@ -387,8 +410,12 @@ static int recv_one_pkt(struct hinic3_rxq *rxq, struct hinic3_rq_cqe *rx_cqe,
 	u16 num_lro;
 
 	skb = hinic3_fetch_rx_buffer(rxq, pkt_len);
-	if (unlikely(!skb))
+	if (unlikely(!skb)) {
+		u64_stats_update_begin(&rxq->rxq_stats.syncp);
+		rxq->rxq_stats.alloc_skb_err++;
+		u64_stats_update_end(&rxq->rxq_stats.syncp);
 		return -ENOMEM;
+	}
 
 	/* place header in linear portion of buffer */
 	if (skb_is_nonlinear(skb))
@@ -550,11 +577,29 @@ int hinic3_configure_rxqs(struct net_device *netdev, u16 num_rq,
 	return 0;
 }
 
+void hinic3_rxq_get_stats(struct hinic3_rxq *rxq,
+			  struct hinic3_rxq_stats *stats)
+{
+	struct hinic3_rxq_stats *rxq_stats = &rxq->rxq_stats;
+	unsigned int start;
+
+	do {
+		start = u64_stats_fetch_begin(&rxq_stats->syncp);
+		stats->csum_errors = rxq_stats->csum_errors;
+		stats->other_errors = rxq_stats->other_errors;
+		stats->rx_buf_empty = rxq_stats->rx_buf_empty;
+		stats->alloc_skb_err = rxq_stats->alloc_skb_err;
+		stats->alloc_rx_buf_err = rxq_stats->alloc_rx_buf_err;
+	} while (u64_stats_fetch_retry(&rxq_stats->syncp, start));
+}
+
 int hinic3_rx_poll(struct hinic3_rxq *rxq, int budget)
 {
 	struct hinic3_nic_dev *nic_dev = netdev_priv(rxq->netdev);
+	u32 ip_type, offload_type, pkt_hdr_len;
 	u32 sw_ci, status, pkt_len, vlan_len;
 	struct hinic3_rq_cqe *rx_cqe;
+	u64 rx_bytes = 0;
 	u32 num_wqe = 0;
 	int nr_pkts = 0;
 	u16 num_lro;
@@ -574,10 +619,20 @@ int hinic3_rx_poll(struct hinic3_rxq *rxq, int budget)
 		if (recv_one_pkt(rxq, rx_cqe, pkt_len, vlan_len, status))
 			break;
 
+		rx_bytes += pkt_len;
 		nr_pkts++;
 		num_lro = RQ_CQE_STATUS_GET(status, NUM_LRO);
-		if (num_lro)
+		if (num_lro) {
+			offload_type = le32_to_cpu(rx_cqe->offload_type);
+			ip_type = RQ_CQE_OFFOLAD_TYPE_GET(offload_type,
+							  IP_TYPE);
+			pkt_hdr_len = ip_type == HINIC3_RX_IPV6_PKT ?
+				      HINIC3_LRO_PKT_HDR_LEN_IPV6 :
+				      HINIC3_LRO_PKT_HDR_LEN_IPV4;
+
+			rx_bytes += (num_lro - 1) * pkt_hdr_len;
 			num_wqe += hinic3_get_sge_num(rxq, pkt_len);
+		}
 
 		rx_cqe->status = 0;
 
@@ -587,6 +642,11 @@ int hinic3_rx_poll(struct hinic3_rxq *rxq, int budget)
 
 	if (rxq->delta >= HINIC3_RX_BUFFER_WRITE)
 		hinic3_rx_fill_buffers(rxq);
+
+	u64_stats_update_begin(&rxq->rxq_stats.syncp);
+	rxq->rxq_stats.packets += (u64)nr_pkts;
+	rxq->rxq_stats.bytes += rx_bytes;
+	u64_stats_update_end(&rxq->rxq_stats.syncp);
 
 	return nr_pkts;
 }
