@@ -792,6 +792,28 @@ static bool evlist__has_hybrid_pmus(struct evlist *evlist)
 	return false;
 }
 
+static bool evsel__should_run_on_aggr(struct perf_stat_config *config,
+				      struct evsel *counter,
+				      const struct aggr_cpu_id *id)
+{
+	struct perf_cpu cpu;
+	unsigned int idx;
+
+	if (!config->aggr_map || !config->aggr_get_id)
+		return true;
+
+	perf_cpu_map__for_each_cpu(cpu, idx, counter->core.cpus) {
+		struct aggr_cpu_id own_id;
+
+		if (cpu.cpu < 0)
+			return true;
+
+		own_id = config->aggr_get_id(config, cpu);
+		if (aggr_cpu_id__equal(id, &own_id))
+			return true;
+	}
+	return false;
+}
 static void printout(struct perf_stat_config *config, struct outstate *os,
 		     double uval, u64 run, u64 ena, double noise, int aggr_idx)
 {
@@ -822,7 +844,8 @@ static void printout(struct perf_stat_config *config, struct outstate *os,
 
 		if (counter->supported) {
 			if (!evlist__has_hybrid_pmus(counter->evlist)) {
-				config->print_free_counters_hint = 1;
+				if (evsel__should_run_on_aggr(config, counter, &os->id))
+					config->print_free_counters_hint = 1;
 			}
 		}
 	}
