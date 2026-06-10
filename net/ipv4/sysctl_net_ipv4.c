@@ -215,6 +215,40 @@ static int ipv4_fwd_update_priority(const struct ctl_table *table, int write,
 	return ret;
 }
 
+static int proc_tcp_reordering(const struct ctl_table *table, int write,
+			       void *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct ctl_table tmp = {
+		.data		= table->data,
+		.maxlen		= table->maxlen,
+		.mode		= table->mode,
+		.extra1		= SYSCTL_ONE,
+	};
+	struct net *net;
+
+	net = container_of(table->data, struct net, ipv4.sysctl_tcp_reordering);
+	tmp.extra2 = &net->ipv4.sysctl_tcp_max_reordering;
+
+	return proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
+}
+
+static int proc_tcp_max_reordering(const struct ctl_table *table, int write,
+				   void *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct ctl_table tmp = {
+		.data		= table->data,
+		.maxlen		= table->maxlen,
+		.mode		= table->mode,
+	};
+	struct net *net;
+
+	net = container_of(table->data, struct net,
+			   ipv4.sysctl_tcp_max_reordering);
+	tmp.extra1 = &net->ipv4.sysctl_tcp_reordering;
+
+	return proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
+}
+
 static int proc_tcp_congestion_control(const struct ctl_table *ctl, int write,
 				       void *buffer, size_t *lenp, loff_t *ppos)
 {
@@ -1058,7 +1092,7 @@ static struct ctl_table ipv4_net_table[] = {
 		.data		= &init_net.ipv4.sysctl_tcp_reordering,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= proc_tcp_reordering
 	},
 	{
 		.procname	= "tcp_retries1",
@@ -1293,7 +1327,7 @@ static struct ctl_table ipv4_net_table[] = {
 		.data		= &init_net.ipv4.sysctl_tcp_max_reordering,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec
+		.proc_handler	= proc_tcp_max_reordering
 	},
 	{
 		.procname	= "tcp_dsack",
