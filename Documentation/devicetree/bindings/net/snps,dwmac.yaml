@@ -545,6 +545,13 @@ properties:
       Enables the TSO feature otherwise it will be managed by MAC HW capability
       register.
 
+  snps,use-ncsi:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      Use the NC-SI stack instead of an MDIO PHY. Currently assumes
+      rmii (100bT) but kept as a separate property in case NC-SI grows support
+      for a gigabit link.
+
   mdio:
     $ref: mdio.yaml#
     unevaluatedProperties: false
