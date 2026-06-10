@@ -159,11 +159,11 @@ void register_trusted_foundations(struct trusted_foundations_platform_data *pd)
 
 void of_register_trusted_foundations(void)
 {
-	struct device_node *node;
+	struct device_node *node __free(device_node) =
+		of_find_compatible_node(NULL, NULL, "tlm,trusted-foundations");
 	struct trusted_foundations_platform_data pdata;
 	int err;
 
-	node = of_find_compatible_node(NULL, NULL, "tlm,trusted-foundations");
 	if (!node)
 		return;
 
