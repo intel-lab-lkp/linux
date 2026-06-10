@@ -447,7 +447,6 @@ static void bochs_primary_plane_helper_atomic_update(struct drm_plane *plane,
 	struct drm_device *dev = plane->dev;
 	struct bochs_device *bochs = to_bochs_device(dev);
 	struct drm_plane_state *plane_state = plane->state;
-	struct drm_plane_state *old_plane_state = drm_atomic_get_old_plane_state(state, plane);
 	struct drm_shadow_plane_state *shadow_plane_state = to_drm_shadow_plane_state(plane_state);
 	struct drm_framebuffer *fb = plane_state->fb;
 	struct drm_atomic_helper_damage_iter iter;
@@ -456,7 +455,7 @@ static void bochs_primary_plane_helper_atomic_update(struct drm_plane *plane,
 	if (!fb || !bochs->stride)
 		return;
 
-	drm_atomic_helper_damage_iter_init(&iter, old_plane_state, plane_state);
+	drm_atomic_helper_damage_iter_init(&iter, plane_state);
 	drm_atomic_for_each_plane_damage(&iter, &damage) {
 		struct iosys_map dst = IOSYS_MAP_INIT_VADDR_IOMEM(bochs->fb_map);
 
