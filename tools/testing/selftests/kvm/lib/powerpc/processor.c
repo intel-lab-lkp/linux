@@ -256,7 +256,7 @@ gpa_t addr_arch_gva2gpa(struct kvm_vm *vm, gva_t gva)
 }
 
 static void virt_dump_pt(FILE *stream, struct kvm_vm *vm, gpa_t pt,
-			 gva_t va, int level, uint8_t indent)
+			 gva_t va, int level, u8 indent)
 {
 	int size, idx;
 
@@ -283,7 +283,7 @@ static void virt_dump_pt(FILE *stream, struct kvm_vm *vm, gpa_t pt,
 
 }
 
-void virt_arch_dump(FILE *stream, struct kvm_vm *vm, uint8_t indent)
+void virt_arch_dump(FILE *stream, struct kvm_vm *vm, u8 indent)
 {
 	gpa_t pt = vm->mmu.pgd;
 
@@ -380,7 +380,7 @@ void vcpu_args_set(struct kvm_vcpu *vcpu, unsigned int num, ...)
 	va_end(ap);
 }
 
-void vcpu_arch_dump(FILE *stream, struct kvm_vcpu *vcpu, uint8_t indent)
+void vcpu_arch_dump(FILE *stream, struct kvm_vcpu *vcpu, u8 indent)
 {
 	struct kvm_regs regs;
 
