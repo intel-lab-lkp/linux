@@ -856,6 +856,59 @@ static char *default_pointer(char *buf, char *end, const void *ptr,
 	return ptr_to_id(buf, end, ptr, spec);
 }
 
+static char *pxd_pointer(char *buf, char *end, const void *ptr,
+			 struct printf_spec spec, const char *fmt)
+{
+	if (check_pointer(&buf, end, ptr, spec))
+		return buf;
+
+	if (fmt[1] == 't' && fmt[2] == 'e') {
+		pte_t *pte = (pte_t *)ptr;
+
+		static_assert(sizeof(pte_t) == 4 ||
+			      sizeof(pte_t) == 8,
+			      "pte_t size must be 4 or 8 bytes");
+		return special_hex_number(buf, end, pte_val(ptep_get(pte)), sizeof(pte_t));
+	}
+
+	if (fmt[1] == 'm' && fmt[2] == 'd') {
+		pmd_t *pmd = (pmd_t *)ptr;
+
+		static_assert(sizeof(pmd_t) == 4 ||
+			      sizeof(pmd_t) == 8,
+			      "pmd_t size must be 4 or 8 bytes");
+		return special_hex_number(buf, end, pmd_val(pmdp_get(pmd)), sizeof(pmd_t));
+	}
+
+	if (fmt[1] == 'u' && fmt[2] == 'd') {
+		pud_t *pud = (pud_t *)ptr;
+
+		static_assert(sizeof(pud_t) == 4 ||
+			      sizeof(pud_t) == 8,
+			      "pud_t size must be 4 or 8 bytes");
+		return special_hex_number(buf, end, pud_val(pudp_get(pud)), sizeof(pud_t));
+	}
+
+	if (fmt[1] == '4' && fmt[2] == 'd') {
+		p4d_t *p4d = (p4d_t *)ptr;
+
+		static_assert(sizeof(p4d_t) == 4 ||
+			      sizeof(p4d_t) == 8,
+			      "p4d_t size must be 4 or 8 bytes");
+		return special_hex_number(buf, end, p4d_val(p4dp_get(p4d)), sizeof(p4d_t));
+	}
+
+	if (fmt[1] == 'g' && fmt[2] == 'd') {
+		pgd_t *pgd = (pgd_t *)ptr;
+
+		static_assert(sizeof(pgd_t) == 4 ||
+			      sizeof(pgd_t) == 8,
+			      "pgd_t size must be 4 or 8 bytes");
+		return special_hex_number(buf, end, pgd_val(pgdp_get(pgd)), sizeof(pgd_t));
+	}
+	return default_pointer(buf, end, ptr, spec);
+}
+
 int kptr_restrict __read_mostly;
 
 static noinline_for_stack
@@ -2506,6 +2559,9 @@ early_param("no_hash_pointers", no_hash_pointers_enable);
  *		Without an option prints the full name of the node
  *		f full name
  *		P node name, including a possible unit address
+ * - 'p[g|4|u|m|t|][d|e]' For a page table entry, this prints its
+ *			  contents in a hexadecimal format
+ *
  * - 'x' For printing the address unmodified. Equivalent to "%lx".
  *       Please read the documentation (path below) before using!
  * - '[ku]s' For a BPF/tracing related format specifier, e.g. used out of
@@ -2615,6 +2671,8 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 		default:
 			return error_string(buf, end, "(einval)", spec);
 		}
+	case 'p':
+		return pxd_pointer(buf, end, ptr, spec, fmt);
 	default:
 		return default_pointer(buf, end, ptr, spec);
 	}

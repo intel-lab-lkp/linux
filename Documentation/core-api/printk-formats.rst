@@ -696,6 +696,25 @@ Rust
 Only intended to be used from Rust code to format ``core::fmt::Arguments``.
 Do *not* use it from C.
 
+Page Table Entry
+----------------
+
+::
+
+        %p[pgd|p4dp|pud|pmd|pte]
+
+Print page table entry at any level.
+
+Passed by reference.
+
+Examples for a 64 bit page table entry, given &(u64)0xc0ffee::
+
+        %ppte   0x0000000000c0ffee
+        %ppmd   0x0000000000c0ffee
+        %ppud   0x0000000000c0ffee
+        %pp4d   0x0000000000c0ffee
+        %ppgd   0x0000000000c0ffee
+
 Thanks
 ======
 
