@@ -577,6 +577,16 @@ void pci_read_bridge_bases(struct pci_bus *child)
 	if (pci_is_root_bus(child))	/* It's a host bus, nothing to read */
 		return;
 
+	/*
+	 * SR-IOV virtual buses are created by virtfn_add_bus() via
+	 * pci_add_new_bus(parent, NULL, busnr) when a VF lands on a bus
+	 * number different from its PF.  Such buses have a valid parent
+	 * but no bridge device (->self == NULL), so there are no bridge
+	 * windows to read.  Bail out before dereferencing @dev.
+	 */
+	if (!dev)
+		return;
+
 	pci_info(dev, "PCI bridge to %pR%s\n",
 		 &child->busn_res,
 		 dev->transparent ? " (subtractive decode)" : "");
