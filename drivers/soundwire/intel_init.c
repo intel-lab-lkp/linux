@@ -199,10 +199,8 @@ static struct sdw_intel_ctx
 	 * number of links is small, this is simpler than using a list to keep track of links.
 	 */
 	ctx->ldev = kzalloc_objs(*ctx->ldev, ctx->count);
-	if (!ctx->ldev) {
-		kfree(ctx);
-		return NULL;
-	}
+	if (!ctx->ldev)
+		goto free_ctx;
 
 	ctx->mmio_base = res->mmio_base;
 	ctx->shim_base = res->shim_base;
@@ -276,6 +274,7 @@ err:
 		intel_link_dev_unregister(ldev);
 	}
 	kfree(ctx->ldev);
+free_ctx:
 	kfree(ctx);
 	return NULL;
 }
