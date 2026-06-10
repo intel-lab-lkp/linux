@@ -277,19 +277,20 @@ nvkm_falcon_fw_ctor_hs(const struct nvkm_falcon_fw_func *func, const char *name,
 	fw->dmem_sign = loc - lhdr->data_dma_base;
 
 	if (bl) {
-		nvkm_firmware_put(blob);
+		const struct firmware *blob_bl;
 
-		ret = nvkm_firmware_load_name(subdev, bl, "", ver, &blob);
+		ret = nvkm_firmware_load_name(subdev, bl, "", ver, &blob_bl);
 		if (ret)
-			return ret;
+			goto done;
 
-		hdr = nvfw_bin_hdr(subdev, blob->data);
-		desc = nvfw_bl_desc(subdev, blob->data + hdr->header_offset);
+		hdr = nvfw_bin_hdr(subdev, blob_bl->data);
+		desc = nvfw_bl_desc(subdev, blob_bl->data + hdr->header_offset);
 
 		fw->boot_addr = desc->start_tag << 8;
 		fw->boot_size = desc->code_size;
-		fw->boot = kmemdup(blob->data + hdr->data_offset + desc->code_off,
+		fw->boot = kmemdup(blob_bl->data + hdr->data_offset + desc->code_off,
 				   fw->boot_size, GFP_KERNEL);
+		nvkm_firmware_put(blob_bl);
 		if (!fw->boot)
 			ret = -ENOMEM;
 	} else {
