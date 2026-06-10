@@ -1096,6 +1096,13 @@ static int digi_open(struct tty_struct *tty, struct usb_serial_port *port)
 		not_termios.c_iflag = ~tty->termios.c_iflag;
 		digi_set_termios(tty, port, &not_termios);
 	}
+
+	ret = usb_submit_urb(port->read_urb, GFP_KERNEL);
+	if (ret) {
+		dev_err(&port->dev, "failed to submit read urb: %d\n", ret);
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -1106,6 +1113,8 @@ static void digi_close(struct usb_serial_port *port)
 	int ret;
 	unsigned char buf[32];
 	struct digi_port *priv = usb_get_serial_port_data(port);
+
+	usb_kill_urb(port->read_urb);
 
 	mutex_lock(&port->serial->disc_mutex);
 	/* if disconnected, just clear flags */
@@ -1169,15 +1178,15 @@ exit:
 /*
  *  Digi Startup Device
  *
- *  Starts reads on all ports.  Must be called AFTER startup, with
+ *  Starts read on the OOB port.  Must be called AFTER startup, with
  *  urbs initialized.  Returns 0 if successful, non-zero error otherwise.
  */
 
 static int digi_startup_device(struct usb_serial *serial)
 {
-	int i, ret = 0;
 	struct digi_serial *serial_priv = usb_get_serial_data(serial);
-	struct usb_serial_port *port;
+	struct usb_serial_port *oob_port = serial_priv->ds_oob_port;
+	int ret;
 
 	/* be sure this happens exactly once */
 	spin_lock(&serial_priv->ds_serial_lock);
@@ -1188,19 +1197,13 @@ static int digi_startup_device(struct usb_serial *serial)
 	serial_priv->ds_device_started = 1;
 	spin_unlock(&serial_priv->ds_serial_lock);
 
-	/* start reading from each bulk in endpoint for the device */
-	/* set USB_DISABLE_SPD flag for write bulk urbs */
-	for (i = 0; i < serial->type->num_ports + 1; i++) {
-		port = serial->port[i];
-		ret = usb_submit_urb(port->read_urb, GFP_KERNEL);
-		if (ret != 0) {
-			dev_err(&port->dev,
-				"%s: usb_submit_urb failed, ret=%d, port=%d\n",
-				__func__, ret, i);
-			break;
-		}
+	ret = usb_submit_urb(oob_port->read_urb, GFP_KERNEL);
+	if (ret) {
+		dev_err(&serial->interface->dev, "failed to submit OOB read urb: %d\n", ret);
+		return ret;
 	}
-	return ret;
+
+	return 0;
 }
 
 static int digi_port_init(struct usb_serial_port *port, unsigned port_num)
@@ -1252,13 +1255,11 @@ static int digi_startup(struct usb_serial *serial)
 
 static void digi_disconnect(struct usb_serial *serial)
 {
-	int i;
+	struct digi_serial *serial_priv = usb_get_serial_data(serial);
+	struct usb_serial_port *oob_port = serial_priv->ds_oob_port;
 
-	/* stop reads and writes on all ports */
-	for (i = 0; i < serial->type->num_ports + 1; i++) {
-		usb_kill_urb(serial->port[i]->read_urb);
-		usb_kill_urb(serial->port[i]->write_urb);
-	}
+	usb_kill_urb(oob_port->read_urb);
+	usb_kill_urb(oob_port->write_urb);
 }
 
 
