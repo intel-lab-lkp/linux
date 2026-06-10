@@ -15,6 +15,7 @@
 #include <linux/err.h>
 #include <linux/interrupt.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
@@ -409,6 +410,8 @@ static struct arch_timer *arch_timer_mmio_init(struct arch_timer_mem *gt_block,
 	return_ptr(at);
 }
 
+static struct device_node *arch_timer_mmio_early_np;
+
 static int arch_timer_mmio_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -417,6 +420,10 @@ static int arch_timer_mmio_probe(struct platform_device *pdev)
 	int ret;
 
 	if (np) {
+		/* Check if timer was already probed early */
+		if (np == arch_timer_mmio_early_np)
+			return 0;
+
 		gt_block = devm_kzalloc(&pdev->dev, sizeof(*gt_block),
 					GFP_KERNEL);
 		if (!gt_block)
@@ -435,6 +442,46 @@ static int arch_timer_mmio_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, at);
 	return 0;
 }
+
+static const struct of_device_id arch_timer_cp15_match[] __initconst = {
+	{ .compatible = "arm,armv7-timer", },
+	{ .compatible = "arm,armv8-timer", },
+	{}
+};
+
+static bool __init arch_timer_mmio_has_cp15(void)
+{
+	struct device_node *np __free(device_node) =
+		of_find_matching_node(NULL, arch_timer_cp15_match);
+
+	return np && of_device_is_available(np);
+}
+
+static int __init arch_timer_mmio_of_early_init(struct device_node *np)
+{
+	struct arch_timer *at;
+	int ret;
+
+	if (arch_timer_mmio_early_np || arch_timer_mmio_has_cp15())
+		return -EPROBE_DEFER;
+
+	struct arch_timer_mem *gt_block __free(kfree) = kzalloc_obj(*gt_block);
+	if (!gt_block)
+		return -ENOMEM;
+
+	ret = of_populate_gt_block(np, gt_block);
+	if (ret)
+		return ret;
+
+	at = arch_timer_mmio_init(gt_block, np);
+	if (IS_ERR(at))
+		return PTR_ERR(at);
+	retain_and_null_ptr(gt_block);
+
+	arch_timer_mmio_early_np = np;
+	return 0;
+}
+TIMER_OF_DECLARE(armv7_arch_timer_mem, "arm,armv7-timer-mem", arch_timer_mmio_of_early_init);
 
 static const struct of_device_id arch_timer_mmio_of_table[] = {
 	{ .compatible = "arm,armv7-timer-mem", },
