@@ -9,6 +9,9 @@
 					   ENETC_MSG_CLASS_ID_CMD_NOT_SUPPORT)
 #define ENETC_PF_MSG_PERM_DENY	FIELD_PREP(ENETC_PF_MSG_CLASS_ID, \
 					   ENETC_MSG_CLASS_ID_PERMISSION_DENY)
+#define ENETC_PF_MSG_SPEED(s)	(FIELD_PREP(ENETC_PF_MSG_CLASS_ID, \
+					    ENETC_MSG_CLASS_ID_LINK_SPEED) | \
+				 FIELD_PREP(ENETC_PF_MSG_CLASS_CODE, (s)))
 
 static void enetc_msg_disable_mr_int(struct enetc_pf *pf)
 {
@@ -274,6 +277,84 @@ static u16 enetc_msg_handle_link_status(struct enetc_pf *pf, int vf_id,
 	}
 }
 
+static u16 enetc_msg_get_link_speed(struct enetc_pf *pf, int vf_id)
+{
+	struct enetc_ndev_priv *priv = netdev_priv(pf->si->ndev);
+	struct enetc_vf_state *vf_state = &pf->vf_state[vf_id];
+	struct ethtool_link_ksettings link_info = {};
+
+	/* A malicious or malfunctioning VM could potentially spam these
+	 * messages in a tight loop causing global rtnl_lock contention,
+	 * which may severely starve other processes on the host that
+	 * require rtnl_lock for routine network configuration, resulting
+	 * in a system-wide control-plane denial of service. Therefore,
+	 * we expect the VF query for link speed to be trusted. There's no
+	 * need to consider the transition from trusted to untrusted here,
+	 * as this won't cause rntl_lock() to be called frequently.
+	 */
+	mutex_lock(&vf_state->lock);
+	if (!(vf_state->flags & ENETC_VF_FLAG_TRUSTED)) {
+		mutex_unlock(&vf_state->lock);
+
+		return ENETC_PF_MSG_PERM_DENY;
+	}
+	mutex_unlock(&vf_state->lock);
+
+	rtnl_lock();
+	phylink_ethtool_ksettings_get(priv->phylink, &link_info);
+	rtnl_unlock();
+
+	switch (link_info.base.speed) {
+	case SPEED_10:
+		if (link_info.base.duplex == DUPLEX_HALF)
+			return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_10M_HD);
+		else if (link_info.base.duplex == DUPLEX_FULL)
+			return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_10M_FD);
+		else
+			return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_UNKNOWN);
+	case SPEED_100:
+		if (link_info.base.duplex == DUPLEX_HALF)
+			return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_100M_HD);
+		else if (link_info.base.duplex == DUPLEX_FULL)
+			return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_100M_FD);
+		else
+			return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_UNKNOWN);
+	case SPEED_1000:
+		return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_1000M);
+	case SPEED_2500:
+		return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_2500M);
+	case SPEED_5000:
+		return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_5G);
+	case SPEED_10000:
+		return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_10G);
+	case SPEED_25000:
+		return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_25G);
+	case SPEED_40000:
+		return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_40G);
+	case SPEED_50000:
+		return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_50G);
+	case SPEED_100000:
+		return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_100G);
+	default:
+		return ENETC_PF_MSG_SPEED(ENETC_MSG_SPEED_UNKNOWN);
+	}
+}
+
+static u16 enetc_msg_handle_link_speed(struct enetc_pf *pf, int vf_id,
+				       void *vf_msg)
+{
+	struct enetc_msg_header *msg_hdr = vf_msg;
+
+	switch (msg_hdr->cmd_id) {
+	case ENETC_MSG_GET_CURRENT_LINK_SPEED:
+		return enetc_msg_get_link_speed(pf, vf_id);
+	case ENETC_MSG_REGISTER_SPEED_CHANGE_NOTIFIER:
+	case ENETC_MSG_UNREGISTER_SPEED_CHANGE_NOTIFIER:
+	default:
+		return ENETC_PF_MSG_NOTSUPP;
+	}
+}
+
 /* If *pf_msg is set to 0, it means that PF has responded to VF in
  * enetc_msg_handle_rxmsg() through enetc_pf_reply_msg(), which also
  * clears the corresponding VF MR bit in PSIIDR.
@@ -355,6 +436,9 @@ static void enetc_msg_handle_rxmsg(struct enetc_pf *pf, int vf_id,
 		break;
 	case ENETC_MSG_CLASS_ID_LINK_STATUS:
 		*pf_msg = enetc_msg_handle_link_status(pf, vf_id, msg);
+		break;
+	case ENETC_MSG_CLASS_ID_LINK_SPEED:
+		*pf_msg = enetc_msg_handle_link_speed(pf, vf_id, msg);
 		break;
 	default:
 		dev_err_ratelimited(dev,
@@ -540,6 +624,7 @@ int enetc_sriov_configure(struct pci_dev *pdev, int num_vfs)
 			dev_err(&pdev->dev, "pci_enable_sriov err %d\n", err);
 			goto err_en_sriov;
 		}
+
 	}
 
 	return num_vfs;
