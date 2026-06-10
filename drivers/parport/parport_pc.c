@@ -2990,9 +2990,9 @@ static int __init parport_pc_init_superio(int autoirq, int autodma)
 
 static const struct pnp_device_id parport_pc_pnp_tbl[] = {
 	/* Standard LPT Printer Port */
-	{.id = "PNP0400", .driver_data = 0},
+	{ .id = "PNP0400" },
 	/* ECP Printer Port */
-	{.id = "PNP0401", .driver_data = 0},
+	{ .id = "PNP0401" },
 	{ }
 };
 
