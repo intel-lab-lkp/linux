@@ -2154,7 +2154,9 @@ int bnxt_re_destroy_srq(struct ib_srq *ib_srq, struct ib_udata *udata)
 
 	if (rdev->chip_ctx->modes.toggle_bits & BNXT_QPLIB_SRQ_TOGGLE_BIT) {
 		free_page((unsigned long)srq->uctx_srq_page);
+		mutex_lock(&rdev->srq_hash_lock);
 		hash_del(&srq->hash_entry);
+		mutex_unlock(&rdev->srq_hash_lock);
 	}
 	bnxt_qplib_destroy_srq(&rdev->qplib_res, qplib_srq);
 	ib_umem_release(srq->umem);
@@ -2264,7 +2266,9 @@ int bnxt_re_create_srq(struct ib_srq *ib_srq,
 
 		resp.srqid = srq->qplib_srq.id;
 		if (rdev->chip_ctx->modes.toggle_bits & BNXT_QPLIB_SRQ_TOGGLE_BIT) {
+			mutex_lock(&rdev->srq_hash_lock);
 			hash_add(rdev->srq_hash, &srq->hash_entry, srq->qplib_srq.id);
+			mutex_unlock(&rdev->srq_hash_lock);
 			srq->uctx_srq_page = (void *)get_zeroed_page(GFP_KERNEL);
 			if (!srq->uctx_srq_page) {
 				rc = -ENOMEM;

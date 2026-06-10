@@ -218,6 +218,7 @@ struct bnxt_re_dev {
 	DECLARE_HASHTABLE(cq_hash, MAX_CQ_HASH_BITS);
 	DECLARE_HASHTABLE(srq_hash, MAX_SRQ_HASH_BITS);
 	struct mutex			cq_hash_lock;  /* guards cq_hash  */
+	struct mutex			srq_hash_lock; /* guards srq_hash */
 	struct dentry			*dbg_root;
 	struct dentry			*qp_debugfs;
 	unsigned long			event_bitmap;
