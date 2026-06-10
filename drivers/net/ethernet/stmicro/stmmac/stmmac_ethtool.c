@@ -322,6 +322,12 @@ static int stmmac_ethtool_get_link_ksettings(struct net_device *dev,
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 
+	if (priv->plat->use_ncsi) {
+		cmd->base.speed = SPEED_100;
+		cmd->base.duplex = DUPLEX_FULL;
+		return 0;
+	}
+
 	return phylink_ethtool_ksettings_get(priv->phylink, cmd);
 }
 
@@ -330,6 +336,9 @@ stmmac_ethtool_set_link_ksettings(struct net_device *dev,
 				  const struct ethtool_link_ksettings *cmd)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
+
+	if (priv->plat->use_ncsi)
+		return -EOPNOTSUPP;
 
 	return phylink_ethtool_ksettings_set(priv->phylink, cmd);
 }
@@ -384,6 +393,9 @@ static int stmmac_nway_reset(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 
+	if (priv->plat->use_ncsi)
+		return -EOPNOTSUPP;
+
 	return phylink_ethtool_nway_reset(priv->phylink);
 }
 
@@ -424,6 +436,9 @@ stmmac_get_pauseparam(struct net_device *netdev,
 {
 	struct stmmac_priv *priv = netdev_priv(netdev);
 
+	if (priv->plat->use_ncsi)
+		return;
+
 	phylink_ethtool_get_pauseparam(priv->phylink, pause);
 }
 
@@ -432,6 +447,9 @@ stmmac_set_pauseparam(struct net_device *netdev,
 		      struct ethtool_pauseparam *pause)
 {
 	struct stmmac_priv *priv = netdev_priv(netdev);
+
+	if (priv->plat->use_ncsi)
+		return -EOPNOTSUPP;
 
 	return phylink_ethtool_set_pauseparam(priv->phylink, pause);
 }
@@ -547,7 +565,7 @@ static void stmmac_get_ethtool_stats(struct net_device *dev,
 					     (*(u32 *)p);
 			}
 		}
-		if (priv->dma_cap.eee) {
+		if (priv->dma_cap.eee && !priv->plat->use_ncsi) {
 			int val = phylink_get_eee_err(priv->phylink);
 			if (val)
 				priv->xstats.phy_eee_wakeup_error_n = val;
@@ -723,12 +741,18 @@ static void stmmac_get_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 
+	if (priv->plat->use_ncsi)
+		return;
+
 	return phylink_ethtool_get_wol(priv->phylink, wol);
 }
 
 static int stmmac_set_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
+
+	if (priv->plat->use_ncsi)
+		return -EOPNOTSUPP;
 
 	return phylink_ethtool_set_wol(priv->phylink, wol);
 }
@@ -738,6 +762,9 @@ static int stmmac_ethtool_op_get_eee(struct net_device *dev,
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 
+	if (priv->plat->use_ncsi)
+		return -EOPNOTSUPP;
+
 	return phylink_ethtool_get_eee(priv->phylink, edata);
 }
 
@@ -745,6 +772,9 @@ static int stmmac_ethtool_op_set_eee(struct net_device *dev,
 				     struct ethtool_keee *edata)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
+
+	if (priv->plat->use_ncsi)
+		return -EOPNOTSUPP;
 
 	return phylink_ethtool_set_eee(priv->phylink, edata);
 }
