@@ -198,7 +198,8 @@ static void intel_dp_set_dpcd_sink_rates(struct intel_dp *intel_dp)
 	static const int dp_rates[] = {
 		162000, 270000, 540000, 810000
 	};
-	int i, max_rate;
+	int i, num_rates = 0;
+	int max_rate;
 	int max_lttpr_rate;
 
 	if (drm_dp_has_quirk(&intel_dp->desc, DP_DPCD_QUIRK_CAN_DO_MAX_LINK_RATE_3_24_GBPS)) {
@@ -222,7 +223,17 @@ static void intel_dp_set_dpcd_sink_rates(struct intel_dp *intel_dp)
 	for (i = 0; i < ARRAY_SIZE(dp_rates); i++) {
 		if (dp_rates[i] > max_rate)
 			break;
-		intel_dp->sink_rates[i] = dp_rates[i];
+
+		/*
+		 * The quirked devices fail channel equalization at RBR, but
+		 * train reliably at all higher rates. Skip RBR, unless it's
+		 * the only available rate.
+		 */
+		if (dp_rates[i] == 162000 && max_rate >= 270000 &&
+		    drm_dp_has_quirk(&intel_dp->desc, DP_DPCD_QUIRK_NO_LINK_RATE_RBR))
+			continue;
+
+		intel_dp->sink_rates[num_rates++] = dp_rates[i];
 	}
 
 	/*
@@ -253,14 +264,14 @@ static void intel_dp_set_dpcd_sink_rates(struct intel_dp *intel_dp)
 		}
 
 		if (uhbr_rates & DP_UHBR10)
-			intel_dp->sink_rates[i++] = 1000000;
+			intel_dp->sink_rates[num_rates++] = 1000000;
 		if (uhbr_rates & DP_UHBR13_5)
-			intel_dp->sink_rates[i++] = 1350000;
+			intel_dp->sink_rates[num_rates++] = 1350000;
 		if (uhbr_rates & DP_UHBR20)
-			intel_dp->sink_rates[i++] = 2000000;
+			intel_dp->sink_rates[num_rates++] = 2000000;
 	}
 
-	intel_dp->num_sink_rates = i;
+	intel_dp->num_sink_rates = num_rates;
 }
 
 static void intel_dp_set_sink_rates(struct intel_dp *intel_dp)
