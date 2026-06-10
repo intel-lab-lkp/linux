@@ -4,6 +4,9 @@
 #include <linux/task_work.h>
 #include <linux/resume_user_mode.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/task_work.h>
+
 static struct callback_head work_exited; /* all we need is ->next == NULL */
 
 #ifdef CONFIG_IRQ_WORK
@@ -60,6 +63,7 @@ int task_work_add(struct task_struct *task, struct callback_head *work,
 		  enum task_work_notify_mode notify)
 {
 	struct callback_head *head;
+	task_work_func_t func;
 
 	if (notify == TWA_NMI_CURRENT) {
 		if (WARN_ON_ONCE(task != current))
@@ -70,10 +74,25 @@ int task_work_add(struct task_struct *task, struct callback_head *work,
 		kasan_record_aux_stack(work);
 	}
 
+	/*
+	 * Snapshot work->func before the cmpxchg below publishes @work.
+	 * After publish, a concurrent task_work_run() on @task may invoke
+	 * the callback and free @work, after which dereferencing work->func
+	 * to fill the tracepoint payload would cause UAF error.
+	 */
+	func = work->func;
+
+	/*
+	 * Emit add_request BEFORE the cmpxchg loop.
+	 * Tracing here guarantees add_request is seen before any possible
+	 * run_start.
+	 */
+	trace_task_work_add_request(task, work, func, notify);
+
 	head = READ_ONCE(task->task_works);
 	do {
 		if (unlikely(head == &work_exited))
-			return -ESRCH;
+			goto out_esrch;
 		work->next = head;
 	} while (!try_cmpxchg(&task->task_works, &head, work));
 
@@ -100,7 +119,12 @@ int task_work_add(struct task_struct *task, struct callback_head *work,
 		break;
 	}
 
+	trace_task_work_add_done(task, work, 0);
 	return 0;
+
+out_esrch:
+	trace_task_work_add_done(task, work, -ESRCH);
+	return -ESRCH;
 }
 
 /**
@@ -229,8 +253,12 @@ void task_work_run(void)
 		raw_spin_unlock_irq(&task->pi_lock);
 
 		do {
+			task_work_func_t func = work->func;
+
 			next = work->next;
-			work->func(work);
+			trace_task_work_run_start(task, work, func);
+			func(work);
+			trace_task_work_run_end(task, work, func);
 			work = next;
 			cond_resched();
 		} while (work);
