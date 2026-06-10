@@ -493,6 +493,20 @@ static void nhi_pci_remove(struct pci_dev *pdev)
 	nhi_shutdown(nhi);
 }
 
+static void nhi_pci_driver_shutdown(struct pci_dev *pdev)
+{
+	struct tb *tb = pci_get_drvdata(pdev);
+	struct tb_nhi *nhi = tb->nhi;
+
+	/*
+	 * Force host_reset so the connection manager asserts DPR and signals
+	 * disconnect to connected devices before the router tree is removed.
+	 * Only Thunderbolt 3 devices are reset.
+	 */
+	nhi->host_reset = true;
+	nhi_pci_remove(pdev);
+}
+
 static struct pci_device_id nhi_ids[] = {
 	/*
 	 * We have to specify class, the TB bridges use the same device and
@@ -593,7 +607,7 @@ static struct pci_driver nhi_driver = {
 	.id_table = nhi_ids,
 	.probe = nhi_pci_probe,
 	.remove = nhi_pci_remove,
-	.shutdown = nhi_pci_remove,
+	.shutdown = nhi_pci_driver_shutdown,
 	.driver.pm = &nhi_pm_ops,
 };
 
