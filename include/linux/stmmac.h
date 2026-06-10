@@ -348,6 +348,7 @@ struct plat_stmmacenet_data {
 	int mac_port_sel_speed;
 	u8 vlan_fail_q;
 	bool provide_bus_info;
+	bool use_ncsi;
 	int int_snapshot_num;
 	int msi_mac_vec;
 	int msi_wol_vec;

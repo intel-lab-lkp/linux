@@ -41,6 +41,7 @@
 #include <linux/udp.h>
 #include <linux/bpf_trace.h>
 #include <net/devlink.h>
+#include <net/ncsi.h>
 #include <net/page_pool/helpers.h>
 #include <net/pkt_cls.h>
 #include <net/xdp_sock_drv.h>
@@ -4167,6 +4168,16 @@ static int __stmmac_open(struct net_device *dev,
 	if (ret)
 		goto irq_error;
 
+	if (priv->plat->use_ncsi) {
+		/* If using NC-SI, set our carrier on and start the stack */
+		netif_carrier_on(priv->dev);
+
+		/* Start the NCSI device */
+		ret = ncsi_start_dev(priv->nsdev);
+		if (ret)
+			goto irq_error;
+	}
+
 	stmmac_enable_all_queues(priv);
 	netif_tx_start_all_queues(priv->dev);
 	stmmac_enable_all_dma_irq(priv);
@@ -4249,6 +4260,9 @@ static void __stmmac_release(struct net_device *dev)
 		hrtimer_cancel(&priv->dma_conf.tx_queue[chan].txtimer);
 
 	netif_tx_disable(dev);
+
+	if (priv->plat->use_ncsi)
+		ncsi_stop_dev(priv->nsdev);
 
 	/* Free the IRQ lines */
 	stmmac_free_irq(dev, REQ_IRQ_ERR_ALL, 0);
@@ -7795,6 +7809,15 @@ struct plat_stmmacenet_data *stmmac_plat_dat_alloc(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(stmmac_plat_dat_alloc);
 
+static void stmmac_ncsi_handler(struct ncsi_dev *nd)
+{
+	if (unlikely(nd->state != ncsi_dev_state_functional))
+		return;
+
+	netdev_info(nd->dev, "NCSI interface %s\n",
+		    nd->link_up ? "up" : "down");
+}
+
 static int __stmmac_dvr_probe(struct device *device,
 			      struct plat_stmmacenet_data *plat_dat,
 			      struct stmmac_resources *res)
@@ -8048,10 +8071,19 @@ static int __stmmac_dvr_probe(struct device *device,
 	if (ret)
 		goto error_pcs_setup;
 
-	ret = stmmac_phylink_setup(priv);
-	if (ret) {
-		netdev_err(ndev, "failed to setup phy (%d)\n", ret);
-		goto error_phy_setup;
+	if (priv->plat->use_ncsi) {
+		dev_info(priv->device, "Using NCSI interface\n");
+		priv->nsdev = ncsi_register_dev(ndev, stmmac_ncsi_handler);
+		if (!priv->nsdev) {
+			ret = -ENODEV;
+			goto error_phy_setup;
+		}
+	} else {
+		ret = stmmac_phylink_setup(priv);
+		if (ret) {
+			netdev_err(ndev, "failed to setup phy (%d)\n", ret);
+			goto error_phy_setup;
+		}
 	}
 
 	ret = stmmac_register_devlink(priv);
@@ -8082,6 +8114,8 @@ static int __stmmac_dvr_probe(struct device *device,
 error_netdev_register:
 	stmmac_unregister_devlink(priv);
 error_devlink_setup:
+	if (priv->nsdev)
+		ncsi_unregister_dev(priv->nsdev);
 	stmmac_phylink_destroy(priv->phylink);
 error_phy_setup:
 	stmmac_pcs_clean(ndev);
@@ -8141,6 +8175,8 @@ void stmmac_dvr_remove(struct device *dev)
 
 	pm_runtime_get_sync(dev);
 
+	if (priv->nsdev)
+		ncsi_unregister_dev(priv->nsdev);
 	unregister_netdev(ndev);
 
 #ifdef CONFIG_DEBUG_FS

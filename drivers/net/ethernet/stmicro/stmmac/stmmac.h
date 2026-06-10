@@ -383,6 +383,7 @@ struct stmmac_priv {
 	struct bpf_prog *xdp_prog;
 
 	struct devlink *devlink;
+	struct ncsi_dev *nsdev;
 };
 
 enum stmmac_state {

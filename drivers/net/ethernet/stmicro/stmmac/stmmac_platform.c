@@ -348,7 +348,7 @@ static int stmmac_mdio_setup(struct plat_stmmacenet_data *plat,
 	 * described assume this is the case since there must be something
 	 * connected to the MAC.
 	 */
-	legacy_mdio = !of_phy_is_fixed_link(np) && !plat->phy_node;
+	legacy_mdio = !of_phy_is_fixed_link(np) && !plat->phy_node && !plat->use_ncsi;
 	if (legacy_mdio)
 		dev_info(dev, "Deprecated MDIO bus assumption used\n");
 
@@ -450,6 +450,14 @@ stmmac_probe_config_dt(struct platform_device *pdev, u8 *mac)
 	/* Some wrapper drivers still rely on phy_node. Let's save it while
 	 * they are not converted to phylink. */
 	plat->phy_node = of_parse_phandle(np, "phy-handle", 0);
+
+	if (of_property_read_bool(np, "snps,use-ncsi")) {
+		if (!IS_ENABLED(CONFIG_NET_NCSI)) {
+			dev_err(&pdev->dev, "NCSI stack not enabled\n");
+			return ERR_PTR(-EINVAL);
+		}
+		plat->use_ncsi = true;
+	}
 
 	/* Get max speed of operation from device tree */
 	of_property_read_u32(np, "max-speed", &plat->max_speed);
