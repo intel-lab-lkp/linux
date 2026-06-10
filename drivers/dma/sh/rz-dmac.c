@@ -1488,6 +1488,7 @@ static int rz_dmac_probe(struct platform_device *pdev)
 	dma_cap_set(DMA_SLAVE, engine->cap_mask);
 	dma_cap_set(DMA_MEMCPY, engine->cap_mask);
 	dma_cap_set(DMA_CYCLIC, engine->cap_mask);
+	dma_cap_set(DMA_PRIVATE, engine->cap_mask);
 	engine->directions = BIT(DMA_DEV_TO_MEM) | BIT(DMA_MEM_TO_DEV);
 	engine->residue_granularity = DMA_RESIDUE_GRANULARITY_BURST;
 	rz_dmac_writel(dmac, DCTRL_DEFAULT, CHANNEL_0_7_COMMON_BASE + DCTRL);
