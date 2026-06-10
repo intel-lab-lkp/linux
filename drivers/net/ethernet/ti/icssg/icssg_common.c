@@ -1724,6 +1724,7 @@ void prueth_netdev_exit(struct prueth *prueth,
 
 	netif_napi_del(&emac->napi_rx);
 
+	mutex_destroy(&emac->qos.iet.fpe_lock);
 	pruss_release_mem_region(prueth->pruss, &emac->dram);
 	free_netdev(emac->ndev);
 	prueth->emac[mac] = NULL;
