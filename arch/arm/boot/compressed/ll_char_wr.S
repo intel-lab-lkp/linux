@@ -21,7 +21,8 @@
 LC0:	.word	LC0
 	.word	bytes_per_char_h
 	.word	video_size_row
-	.word	acorndata_8x8
+	@ The offset ensures that the header is skipped
+	.word	acorndata_8x8 + 4 /* FONT_EXTRA_WORDS */ * 4 /* sizeof(int) */
 	.word	con_charconvtable
 
 /*
