@@ -329,10 +329,8 @@ static struct rnbd_iu *rnbd_get_iu(struct rnbd_clt_session *sess,
 		return NULL;
 
 	permit = rnbd_get_permit(sess, con_type, wait);
-	if (!permit) {
-		kfree(iu);
-		return NULL;
-	}
+	if (!permit)
+		goto free_iu;
 
 	iu->permit = permit;
 	/*
@@ -349,6 +347,7 @@ static struct rnbd_iu *rnbd_get_iu(struct rnbd_clt_session *sess,
 
 	if (sg_alloc_table(&iu->sgt, 1, GFP_KERNEL)) {
 		rnbd_put_permit(sess, permit);
+free_iu:
 		kfree(iu);
 		return NULL;
 	}
