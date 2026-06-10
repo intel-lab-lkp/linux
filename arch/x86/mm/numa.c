@@ -33,6 +33,8 @@ static __init int numa_setup(char *opt)
 		numa_off = 1;
 	if (!strncmp(opt, "fake=", 5))
 		return numa_emu_cmdline(opt + 5);
+	if (!strncmp(opt, "standby=", 8))
+		return numa_standby_cmdline(opt + 8);
 	if (!strncmp(opt, "noacpi", 6))
 		disable_srat();
 	if (!strncmp(opt, "nohmat", 6))

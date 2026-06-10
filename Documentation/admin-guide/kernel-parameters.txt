@@ -4765,6 +4765,14 @@ Kernel parameters
 	numa=nohmat	[X86] Don't parse the HMAT table for NUMA setup, or
 			soft-reserved memory partitioning.
 
+	numa=standby=<N>
+			[KNL, ARM64, RISCV, X86, EARLY]
+			Reserve N additional empty NUMA nodes at boot for
+			runtime claiming via numa_request_exclusive_node().
+			These nodes have no memory or CPU affinity. Drivers
+			can claim them to place hotplugged memory on distinct
+			NUMA nodes for memory tiering or isolation.
+
 	numa_balancing=	[KNL,ARM64,PPC,RISCV,S390,X86] Enable or disable automatic
 			NUMA balancing.
 			Allowed values are enable and disable

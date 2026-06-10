@@ -43,6 +43,11 @@ int phys_to_target_node(u64 start);
 
 int numa_fill_memblks(u64 start, u64 end);
 
+void __init numa_add_standby_node(int node);
+void __init numa_commit_standby_nodes(void);
+int numa_request_exclusive_node(void);
+void numa_release_exclusive_node(int node);
+
 #else /* !CONFIG_NUMA */
 static inline int numa_nearest_node(int node, unsigned int state)
 {
@@ -64,6 +69,15 @@ static inline int phys_to_target_node(u64 start)
 }
 
 static inline void alloc_offline_node_data(int nid) {}
+
+static inline void numa_add_standby_node(int node) { }
+static inline void numa_commit_standby_nodes(void) { }
+static inline int numa_request_exclusive_node(void)
+{
+	return NUMA_NO_NODE;
+}
+static inline void numa_release_exclusive_node(int node) { }
+
 #endif
 
 #define numa_map_to_online_node(node) numa_nearest_node(node, N_ONLINE)
