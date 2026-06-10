@@ -3539,6 +3539,16 @@ static const struct dev_pm_ops nvme_dev_pm_ops = {
 };
 #endif /* CONFIG_PM_SLEEP */
 
+static void nvme_pci_ers_failed(struct nvme_dev *dev)
+{
+	nvme_change_ctrl_state(&dev->ctrl, NVME_CTRL_DELETING);
+	nvme_dev_disable(dev, true);
+	nvme_sync_queues(&dev->ctrl);
+	nvme_mark_namespaces_dead(&dev->ctrl);
+	nvme_unquiesce_io_queues(&dev->ctrl);
+	nvme_change_ctrl_state(&dev->ctrl, NVME_CTRL_DEAD);
+}
+
 static pci_ers_result_t nvme_error_detected(struct pci_dev *pdev,
 						pci_channel_state_t state)
 {
@@ -3564,6 +3574,7 @@ static pci_ers_result_t nvme_error_detected(struct pci_dev *pdev,
 	case pci_channel_io_perm_failure:
 		dev_warn(dev->ctrl.device,
 			"failure state error detected, request disconnect\n");
+		nvme_pci_ers_failed(dev);
 		return PCI_ERS_RESULT_DISCONNECT;
 	}
 	return PCI_ERS_RESULT_NEED_RESET;
