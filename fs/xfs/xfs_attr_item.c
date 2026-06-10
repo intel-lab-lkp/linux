@@ -739,7 +739,7 @@ xfs_attr_recover_work(
 	struct xfs_trans_res		resv;
 	struct xfs_attri_log_format	*attrp;
 	struct xfs_attri_log_nameval	*nv = attrip->attri_nameval;
-	int				error;
+	int				error = 0;
 	unsigned int			total = 0;
 
 	/*
@@ -789,14 +789,20 @@ xfs_attr_recover_work(
 		goto out_cancel;
 
 	error = xfs_defer_ops_capture_and_commit(tp, capture_list);
+	if (error)
+		goto out_unlock;
+
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	xfs_irele(ip);
+	return 0;
+
+out_cancel:
+	xfs_trans_cancel(tp);
 out_unlock:
 	xfs_iunlock(ip, XFS_ILOCK_EXCL);
 out_rele:
 	xfs_irele(ip);
 	return error;
-out_cancel:
-	xfs_trans_cancel(tp);
-	goto out_unlock;
 }
 
 /* Re-log an intent item to push the log tail forward. */
