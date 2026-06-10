@@ -2510,15 +2510,17 @@ static u64 logarithmic_accumulation(struct timekeeper *tk, u64 offset,
 	 */
 	if (tk->skew_delta) {
 		/*
-		 * skew_delta is stored pre-divided by HZ, matching time_offset,
-		 * so drain it directly. Fold the amount actually drained back
-		 * into ntp_error in full clock units (× NTP_INTERVAL_FREQ); any
-		 * undrainable overshoot is left in ntp_error to be compensated
-		 * by the dithering over subsequent ticks.
+		 * skew_delta (stored ÷HZ, matching time_offset) is the total
+		 * intentional skew delivered this accumulation. Apportion it:
+		 * the adjtime() linear share goes to time_adjust (capped at
+		 * MAX_TICKADJ/s), the exponential rest to time_offset, and any
+		 * undrainable overshoot stays in ntp_error (in full clock units,
+		 * × NTP_INTERVAL_FREQ) for the dithering to compensate.
 		 */
 		s64 drain = tk->skew_delta << shift;
-		s64 unclaimed = ntp_drain_time_offset(tk->id, drain);
+		s64 unclaimed = ntp_drain_time_adjust(tk->id, drain, shift);
 
+		unclaimed = ntp_drain_time_offset(tk->id, unclaimed);
 		tk->ntp_error += (drain - unclaimed) * NTP_INTERVAL_FREQ;
 	}
 

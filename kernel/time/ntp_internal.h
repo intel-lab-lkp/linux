@@ -8,6 +8,7 @@ extern void ntp_clear(unsigned int tkid, s64 cs_tick_adj);
 extern u64 ntp_tick_length(unsigned int tkid);
 extern s64 ntp_get_skew_delta(unsigned int tkid);
 extern s64 ntp_drain_time_offset(unsigned int tkid, s64 amount);
+extern s64 ntp_drain_time_adjust(unsigned int tkid, s64 amount, unsigned int shift);
 extern ktime_t ntp_get_next_leap(unsigned int tkid);
 extern int second_overflow(unsigned int tkid, time64_t secs);
 extern int ntp_adjtimex(unsigned int tkid, struct __kernel_timex *txc, const struct timespec64 *ts,
