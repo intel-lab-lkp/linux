@@ -304,15 +304,15 @@ static int i40e_register_auxiliary_dev(struct i40e_info *ldev, const char *name)
 	ldev->aux_dev = aux_dev;
 
 	ret = ida_alloc(&i40e_client_ida, GFP_KERNEL);
-	if (ret < 0) {
-		kfree(i40e_aux_dev);
-		return ret;
-	}
+	if (ret < 0)
+		goto free_aux_dev;
+
 	aux_dev->id = ret;
 
 	ret = auxiliary_device_init(aux_dev);
 	if (ret < 0) {
 		ida_free(&i40e_client_ida, aux_dev->id);
+free_aux_dev:
 		kfree(i40e_aux_dev);
 		return ret;
 	}
