@@ -134,6 +134,8 @@ struct hinic3_nic_dev {
 	struct mutex                    port_state_mutex;
 	/* mutex to serialize channel/resource changes */
 	struct mutex                    change_res_mutex;
+	/* lock for set queue coalesce */
+	spinlock_t                      coal_lock;
 
 	struct list_head                uc_filter_list;
 	struct list_head                mc_filter_list;

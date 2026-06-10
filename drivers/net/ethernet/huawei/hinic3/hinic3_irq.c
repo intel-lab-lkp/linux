@@ -173,9 +173,12 @@ static void hinic3_update_queue_coal(struct net_device *netdev, u16 q_id,
 
 	q_coal = &nic_dev->intr_coalesce[q_id];
 	coalesc_timer_cfg = (u8)coal_timer;
+
+	spin_lock(&nic_dev->coal_lock);
 	pending_limit = clamp_t(u8, coal_pkts >> HINIC3_COAL_PKT_SHIFT,
 				q_coal->rx_pending_limit_low,
 				q_coal->rx_pending_limit_high);
+	spin_unlock(&nic_dev->coal_lock);
 
 	hinic3_set_interrupt_moder(nic_dev->netdev, q_id,
 				   coalesc_timer_cfg, pending_limit);
