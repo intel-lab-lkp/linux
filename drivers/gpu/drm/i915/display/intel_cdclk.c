@@ -891,7 +891,7 @@ static void bdw_set_cdclk(struct intel_display *display,
 	ret = intel_parent_pcode_write(display, BDW_PCODE_DISPLAY_FREQ_CHANGE_REQ, 0x0);
 	if (ret) {
 		drm_err(display->drm,
-			"failed to inform pcode about cdclk change\n");
+			"Failed to inform PCODE about start of CDCLK change (%d)\n", ret);
 		return;
 	}
 
@@ -918,8 +918,11 @@ static void bdw_set_cdclk(struct intel_display *display,
 	if (ret)
 		drm_err(display->drm, "Switching back to LCPLL failed\n");
 
-	intel_parent_pcode_write(display, HSW_PCODE_DE_WRITE_FREQ_REQ,
-				 cdclk_config->voltage_level);
+	ret = intel_parent_pcode_write(display, HSW_PCODE_DE_WRITE_FREQ_REQ,
+				       cdclk_config->voltage_level);
+	if (ret)
+		drm_err(display->drm,
+			"Failed to inform PCODE about end of CDCLK change (%d)\n", ret);
 
 	intel_de_write(display, CDCLK_FREQ,
 		       DIV_ROUND_CLOSEST(cdclk, 1000) - 1);
@@ -1181,7 +1184,7 @@ static void skl_set_cdclk(struct intel_display *display,
 					 SKL_CDCLK_READY_FOR_CHANGE, 3);
 	if (ret) {
 		drm_err(display->drm,
-			"Failed to inform PCU about cdclk change (%d)\n", ret);
+			"Failed to inform PCODE about start of CDCLK change (%d)\n", ret);
 		return;
 	}
 
@@ -1221,8 +1224,11 @@ static void skl_set_cdclk(struct intel_display *display,
 	intel_de_posting_read(display, CDCLK_CTL);
 
 	/* inform PCU of the change */
-	intel_parent_pcode_write(display, SKL_PCODE_CDCLK_CONTROL,
-				 cdclk_config->voltage_level);
+	ret = intel_parent_pcode_write(display, SKL_PCODE_CDCLK_CONTROL,
+				       cdclk_config->voltage_level);
+	if (ret)
+		drm_err(display->drm,
+			"Failed to inform PCODE about end of CDCLK change (%d)\n", ret);
 
 	intel_update_cdclk(display);
 }
@@ -2263,8 +2269,7 @@ static void bxt_set_cdclk(struct intel_display *display,
 
 	if (ret) {
 		drm_err(display->drm,
-			"Failed to inform PCU about cdclk change (err %d, freq %d)\n",
-			ret, cdclk);
+			"Failed to inform PCODE about start of CDCLK change (%d)\n", ret);
 		return;
 	}
 
@@ -2299,8 +2304,7 @@ static void bxt_set_cdclk(struct intel_display *display,
 						       cdclk_config->voltage_level, 2);
 	if (ret)
 		drm_err(display->drm,
-			"PCode CDCLK freq set failed, (err %d, freq %d)\n",
-			ret, cdclk);
+			"Failed to inform PCODE about end of CDCLK change (%d)\n", ret);
 
 	intel_update_cdclk(display);
 
@@ -2571,14 +2575,13 @@ void intel_cdclk_dump_config(struct intel_display *display,
 		    cdclk_config->voltage_level);
 }
 
-static void dg2_cdclk_pcode_notify(struct intel_display *display,
-				   u8 voltage_level,
-				   u8 active_pipe_count,
-				   u16 cdclk,
-				   bool cdclk_update_valid,
-				   bool pipe_count_update_valid)
+static int dg2_cdclk_pcode_notify(struct intel_display *display,
+				  u8 voltage_level,
+				  u8 active_pipe_count,
+				  u16 cdclk,
+				  bool cdclk_update_valid,
+				  bool pipe_count_update_valid)
 {
-	int ret;
 	u32 update_mask = 0;
 
 	update_mask = DISPLAY_TO_PCODE_UPDATE_MASK(cdclk, active_pipe_count, voltage_level);
@@ -2589,14 +2592,10 @@ static void dg2_cdclk_pcode_notify(struct intel_display *display,
 	if (pipe_count_update_valid)
 		update_mask |= DISPLAY_TO_PCODE_PIPE_COUNT_VALID;
 
-	ret = intel_parent_pcode_request(display, SKL_PCODE_CDCLK_CONTROL,
-					 update_mask,
-					 SKL_CDCLK_READY_FOR_CHANGE,
-					 SKL_CDCLK_READY_FOR_CHANGE, 3);
-	if (ret)
-		drm_err(display->drm,
-			"Failed to inform PCU about display config (err %d)\n",
-			ret);
+	return intel_parent_pcode_request(display, SKL_PCODE_CDCLK_CONTROL,
+					  update_mask,
+					  SKL_CDCLK_READY_FOR_CHANGE,
+					  SKL_CDCLK_READY_FOR_CHANGE, 3);
 }
 
 static void intel_set_cdclk(struct intel_display *display,
@@ -2674,6 +2673,7 @@ static void dg2_cdclk_pcode_pre_notify(struct intel_atomic_state *state)
 		intel_atomic_get_new_cdclk_state(state);
 	unsigned int cdclk = 0; u8 voltage_level, num_active_pipes = 0;
 	bool change_cdclk, update_pipe_count;
+	int ret;
 
 	if (!intel_cdclk_changed(&old_cdclk_state->actual,
 				 &new_cdclk_state->actual) &&
@@ -2708,8 +2708,11 @@ static void dg2_cdclk_pcode_pre_notify(struct intel_atomic_state *state)
 	if (update_pipe_count)
 		num_active_pipes = dg2_power_well_count(display, new_cdclk_state);
 
-	dg2_cdclk_pcode_notify(display, voltage_level, num_active_pipes, cdclk,
-			       change_cdclk, update_pipe_count);
+	ret = dg2_cdclk_pcode_notify(display, voltage_level, num_active_pipes, cdclk,
+				     change_cdclk, update_pipe_count);
+	if (ret)
+		drm_err(display->drm,
+			"Failed to inform PCODE about start of CDCLK change (%d)\n", ret);
 }
 
 static void dg2_cdclk_pcode_post_notify(struct intel_atomic_state *state)
@@ -2721,6 +2724,7 @@ static void dg2_cdclk_pcode_post_notify(struct intel_atomic_state *state)
 		intel_atomic_get_old_cdclk_state(state);
 	unsigned int cdclk = 0; u8 voltage_level, num_active_pipes = 0;
 	bool update_cdclk, update_pipe_count;
+	int ret;
 
 	/* According to "Sequence After Frequency Change", set voltage to used level */
 	voltage_level = new_cdclk_state->actual.voltage_level;
@@ -2747,8 +2751,11 @@ static void dg2_cdclk_pcode_post_notify(struct intel_atomic_state *state)
 	if (update_pipe_count)
 		num_active_pipes = dg2_power_well_count(display, new_cdclk_state);
 
-	dg2_cdclk_pcode_notify(display, voltage_level, num_active_pipes, cdclk,
-			       update_cdclk, update_pipe_count);
+	ret = dg2_cdclk_pcode_notify(display, voltage_level, num_active_pipes, cdclk,
+				     update_cdclk, update_pipe_count);
+	if (ret)
+		drm_err(display->drm,
+			"Failed to inform PCODE about end of CDCLK change (%d)\n", ret);
 }
 
 bool intel_cdclk_is_decreasing_later(struct intel_atomic_state *state)
