@@ -48,7 +48,8 @@ struct slice {
 
 int sysv68_partition(struct parsed_partitions *state)
 {
-	int i, slices;
+	sector_t slice_sector;
+	unsigned int i, slices;
 	int slot = 1;
 	Sector sect;
 	unsigned char *data;
@@ -65,14 +66,16 @@ int sysv68_partition(struct parsed_partitions *state)
 		return 0;
 	}
 	slices = be16_to_cpu(b->dk_ios.ios_slccnt);
-	i = be32_to_cpu(b->dk_ios.ios_slcblk);
+	slice_sector = be32_to_cpu(b->dk_ios.ios_slcblk);
 	put_dev_sector(sect);
 
-	data = read_part_sector(state, i, &sect);
+	data = read_part_sector(state, slice_sector, &sect);
 	if (!data)
 		return -1;
 
-	slices -= 1; /* last slice is the whole disk */
+	slices = min_t(unsigned int, slices, SECTOR_SIZE / sizeof(*slice));
+	if (slices)
+		slices -= 1; /* last slice is the whole disk */
 	seq_buf_printf(&state->pp_buf, "sysV68: %s(s%u)", state->name, slices);
 	slice = (struct slice *)data;
 	for (i = 0; i < slices; i++, slice++) {
