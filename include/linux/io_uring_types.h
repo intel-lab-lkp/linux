@@ -352,6 +352,14 @@ struct io_ring_ctx {
 		atomic_t		cancel_seq;
 
 		/*
+		 * Consumer cursor for ->work_list, protected by ->uring_lock.
+		 * Deliberately kept away from the producer side of the queue,
+		 * as it's written for every popped entry, and the producer
+		 * cacheline is contended enough as it is.
+		 */
+		struct llist_node	*work_head;
+
+		/*
 		 * ->iopoll_list is protected by the ctx->uring_lock for
 		 * io_uring instances that don't use IORING_SETUP_SQPOLL.
 		 * For SQPOLL, only the single threaded io_sq_thread() will
@@ -417,8 +425,7 @@ struct io_ring_ctx {
 	 */
 	struct {
 		struct io_rings	__rcu	*rings_rcu;
-		struct llist_head	work_llist;
-		struct llist_head	retry_llist;
+		struct mpscq		work_list;
 		unsigned long		check_cq;
 		atomic_t		cq_wait_nr;
 		atomic_t		cq_timeouts;
@@ -741,8 +748,6 @@ struct io_kiocb {
 	 * For the latter, it points to the selected buffer ID.
 	 */
 	u16				buf_index;
-
-	unsigned			nr_tw;
 
 	/* REQ_F_* flags */
 	io_req_flags_t			flags;
