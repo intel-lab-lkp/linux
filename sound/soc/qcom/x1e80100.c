@@ -15,13 +15,104 @@
 #include "qdsp6/q6dsp-common.h"
 #include "sdw.h"
 
+#define X1E80100_WSA_MAX_CHANNELS	4
+
 struct x1e80100_snd_data {
 	bool stream_prepared[AFE_PORT_MAX];
 	struct snd_soc_card *card;
 	struct snd_soc_jack jack;
 	struct snd_soc_jack dp_jack[8];
 	bool jack_setup;
+	unsigned int user_chmap[AFE_PORT_MAX][4];
+	bool chmap_added[AFE_PORT_MAX];
 };
+
+static const struct snd_pcm_chmap_elem x1e80100_wsa_chmaps[] = {
+	{ .channels = 1, .map = { SNDRV_CHMAP_FC } },
+	{ .channels = 2, .map = { SNDRV_CHMAP_FL, SNDRV_CHMAP_FR } },
+	{ .channels = 3, .map = { SNDRV_CHMAP_FL, SNDRV_CHMAP_FR,
+				  SNDRV_CHMAP_FC } },
+	{ .channels = 4, .map = { SNDRV_CHMAP_FL, SNDRV_CHMAP_FR,
+				  SNDRV_CHMAP_RL, SNDRV_CHMAP_RR } },
+	{ }
+};
+
+static int x1e80100_chmap_to_q6(unsigned int pos)
+{
+	switch (pos) {
+	case SNDRV_CHMAP_FL:	return PCM_CHANNEL_FL;
+	case SNDRV_CHMAP_FR:	return PCM_CHANNEL_FR;
+	case SNDRV_CHMAP_MONO:
+	case SNDRV_CHMAP_FC:	return PCM_CHANNEL_FC;
+	case SNDRV_CHMAP_RL:	return PCM_CHANNEL_LB;
+	case SNDRV_CHMAP_RR:	return PCM_CHANNEL_RB;
+	case SNDRV_CHMAP_SL:	return PCM_CHANNEL_LS;
+	case SNDRV_CHMAP_SR:	return PCM_CHANNEL_RS;
+	case SNDRV_CHMAP_LFE:	return PCM_CHANNEL_LFE;
+	case SNDRV_CHMAP_RC:	return PCM_CHANNEL_CS;
+	default:		return -EINVAL;
+	}
+}
+
+static int x1e80100_chmap_ctl_get(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_pcm_chmap *info = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_pcm_runtime *rtd = info->pcm->private_data;
+	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+	struct x1e80100_snd_data *data = snd_soc_card_get_drvdata(rtd->card);
+	unsigned int *map = data->user_chmap[cpu_dai->id];
+	int i;
+
+	for (i = 0; i < info->max_channels; i++)
+		ucontrol->value.integer.value[i] = map[i];
+
+	return 0;
+}
+
+static int x1e80100_chmap_ctl_put(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_pcm_chmap *info = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_pcm_runtime *rtd = info->pcm->private_data;
+	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+	struct x1e80100_snd_data *data = snd_soc_card_get_drvdata(rtd->card);
+	unsigned int *map = data->user_chmap[cpu_dai->id];
+	int i;
+
+	for (i = 0; i < info->max_channels; i++) {
+		unsigned int pos = ucontrol->value.integer.value[i];
+
+		/* Validate every requested non-unset position up front. */
+		if (pos && x1e80100_chmap_to_q6(pos) < 0)
+			return -EINVAL;
+
+		map[i] = pos;
+	}
+
+	return 0;
+}
+
+static int x1e80100_add_wsa_chmap_ctls(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_pcm_chmap *info;
+	unsigned int i;
+	int ret;
+
+	ret = snd_pcm_add_chmap_ctls(rtd->pcm, SNDRV_PCM_STREAM_PLAYBACK,
+				     x1e80100_wsa_chmaps,
+				     X1E80100_WSA_MAX_CHANNELS, 0, &info);
+	if (ret < 0)
+		return ret;
+
+	/* Make the query-only chmap control writable from userspace. */
+	for (i = 0; i < info->kctl->count; i++)
+		info->kctl->vd[i].access |= SNDRV_CTL_ELEM_ACCESS_WRITE;
+	info->kctl->get = x1e80100_chmap_ctl_get;
+	info->kctl->put = x1e80100_chmap_ctl_put;
+
+	return 0;
+}
 
 static int x1e80100_snd_init(struct snd_soc_pcm_runtime *rtd)
 {
@@ -34,6 +125,9 @@ static int x1e80100_snd_init(struct snd_soc_pcm_runtime *rtd)
 	switch (cpu_dai->id) {
 	case WSA_CODEC_DMA_RX_0:
 	case WSA_CODEC_DMA_RX_1:
+		if (!rtd->pcm)
+			return 0;
+
 		/*
 		 * Set limit of -3 dB on Digital Volume and 0 dB on PA Volume
 		 * to reduce the risk of speaker damage until we have active
@@ -92,6 +186,7 @@ static int x1e80100_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	return 0;
 }
 
+/* Default WSA RX slot mapping when userspace has not provided a channel map. */
 static int x1e80100_snd_hw_map_channels(unsigned int *ch_map, int num)
 {
 	switch (num) {
@@ -120,6 +215,58 @@ static int x1e80100_snd_hw_map_channels(unsigned int *ch_map, int num)
 	return 0;
 }
 
+static int x1e80100_snd_build_rx_slot(struct x1e80100_snd_data *data,
+				      unsigned int dai_id, unsigned int channels,
+				      unsigned int *rx_slot)
+{
+	unsigned int *user = data->user_chmap[dai_id];
+	unsigned int i, set = 0;
+
+	for (i = 0; i < channels && i < ARRAY_SIZE(data->user_chmap[0]); i++)
+		if (user[i])
+			set++;
+
+	if (set != channels)
+		return x1e80100_snd_hw_map_channels(rx_slot, channels);
+
+	for (i = 0; i < channels; i++) {
+		int q6 = x1e80100_chmap_to_q6(user[i]);
+
+		if (q6 < 0)
+			return q6;
+		rx_slot[i] = q6;
+	}
+
+	return 0;
+}
+
+static int x1e80100_snd_startup(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
+	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+	struct x1e80100_snd_data *data = snd_soc_card_get_drvdata(rtd->card);
+	int ret;
+
+	ret = qcom_snd_sdw_startup(substream);
+	if (ret)
+		return ret;
+
+	switch (cpu_dai->id) {
+	case WSA_CODEC_DMA_RX_0:
+	case WSA_CODEC_DMA_RX_1:
+		if (!data->chmap_added[cpu_dai->id]) {
+			ret = x1e80100_add_wsa_chmap_ctls(rtd);
+			if (ret)
+				return ret;
+
+			data->chmap_added[cpu_dai->id] = true;
+		}
+		break;
+	}
+
+	return 0;
+}
+
 static int x1e80100_snd_prepare(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
@@ -132,7 +279,8 @@ static int x1e80100_snd_prepare(struct snd_pcm_substream *substream)
 	switch (cpu_dai->id) {
 	case WSA_CODEC_DMA_RX_0:
 	case WSA_CODEC_DMA_RX_1:
-		ret = x1e80100_snd_hw_map_channels(rx_slot, channels);
+		ret = x1e80100_snd_build_rx_slot(data, cpu_dai->id, channels,
+						 rx_slot);
 		if (ret)
 			return ret;
 
@@ -158,7 +306,7 @@ static int x1e80100_snd_hw_free(struct snd_pcm_substream *substream)
 }
 
 static const struct snd_soc_ops x1e80100_be_ops = {
-	.startup = qcom_snd_sdw_startup,
+	.startup = x1e80100_snd_startup,
 	.shutdown = qcom_snd_sdw_shutdown,
 	.hw_free = x1e80100_snd_hw_free,
 	.prepare = x1e80100_snd_prepare,
