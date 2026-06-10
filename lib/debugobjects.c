@@ -865,6 +865,16 @@ int debug_object_activate(void *addr, const struct debug_obj_descr *descr)
 		}
 	}
 
+	/*
+	 * A concurrent OOM teardown may have disabled debugobjects and
+	 * wiped the hash after the check at function entry. So we need
+	 * check it again here.
+	 */
+	if (!debug_objects_enabled) {
+		raw_spin_unlock_irqrestore(&db->lock, flags);
+		return 0;
+	}
+
 	raw_spin_unlock_irqrestore(&db->lock, flags);
 	debug_print_object(&o, "activate");
 
