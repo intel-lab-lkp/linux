@@ -134,6 +134,16 @@ config ARCH_CIX
 	  This enables support for the Cixtech SoC family,
 	  like P1(sky1).
 
+config ARCH_CORTINA_ACCESS
+	bool "Cortina-Access SoC Family"
+	select GPIOLIB
+	select PINCTRL
+	help
+	  This enables support for Cortina-Access SoCs.  The family
+	  includes ARMv8-based devices targeting networking and access
+	  applications.
+	  If you have a Cortina-Access board, say Y here.
+
 config ARCH_EXYNOS
 	bool "Samsung Exynos SoC family"
 	select COMMON_CLK_SAMSUNG

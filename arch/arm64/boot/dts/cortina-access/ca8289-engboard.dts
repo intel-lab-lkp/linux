@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * dts file for Cortina Access Venus Engineering Board
+ *
+ * Copyright (C) 2026, Cortina Access Inc.
+ *
+ */
+
+/dts-v1/;
+
+#include "ca8289-soc.dtsi"
+
+/ {
+	model = "Cortina Access Venus Engineering Board";
+	compatible = "cortina-access,ca8289-engboard";
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory@0 {	/* 512MB */
+		device_type = "memory";
+		reg = <0x00000000 0x00000000 0x0 0x20000000>;
+	};
+};
