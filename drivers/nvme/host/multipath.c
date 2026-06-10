@@ -231,8 +231,16 @@ bool nvme_mpath_clear_current_path(struct nvme_ns *ns)
 	bool changed = false;
 	int node;
 
+	/*
+	 * This helper is used by namespace failover/teardown and I/O policy
+	 * update paths. We only compare the head->current_path[] pointer value
+	 * and do not dereference the referenced namespace, so suppress the
+	 * context analysis warning for this lockless inspection of the
+	 * __rcu_guarded pointer.
+	 */
 	for_each_node(node) {
-		if (ns == rcu_access_pointer(head->current_path[node])) {
+		if (context_unsafe(ns ==
+				rcu_access_pointer(head->current_path[node]))) {
 			rcu_assign_pointer(head->current_path[node], NULL);
 			changed = true;
 		}
