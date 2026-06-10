@@ -124,6 +124,7 @@ bool intel_dp_is_edp(struct intel_dp *intel_dp)
 }
 
 static void intel_dp_unset_edid(struct intel_dp *intel_dp);
+static int intel_dp_hdmi_sink_max_frl(struct intel_dp *intel_dp);
 
 /* Is link rate UHBR and thus 128b/132b? */
 bool intel_dp_is_uhbr(const struct intel_crtc_state *crtc_state)
@@ -1329,6 +1330,40 @@ static int frl_required_bw(int clock, int bpc,
 }
 
 static enum drm_mode_status
+intel_dp_hdmi_clock_valid(struct intel_dp *intel_dp,
+			  int clock, int bpc,
+			  enum intel_output_format sink_format,
+			  bool respect_downstream_limits)
+{
+	int max_frl_bw;
+
+	if (!respect_downstream_limits)
+		return MODE_OK;
+
+	/* The FRL bandwidth the link will be trained with */
+	max_frl_bw = min(intel_dp->dfp.pcon_max_frl_bw,
+			 intel_dp_hdmi_sink_max_frl(intel_dp));
+
+	/*
+	 * If both the PCON and the sink support FRL, the PCON transmits
+	 * to the sink in FRL mode, where the TMDS character rate limits
+	 * don't apply.
+	 */
+	if (max_frl_bw > 0) {
+		/* converting bw from Gbps to Kbps */
+		max_frl_bw = max_frl_bw * 1000000;
+
+		if (frl_required_bw(clock, bpc, sink_format) > max_frl_bw)
+			return MODE_CLOCK_HIGH;
+
+		return MODE_OK;
+	}
+
+	return intel_dp_tmds_clock_valid(intel_dp, clock, bpc,
+					 sink_format, respect_downstream_limits);
+}
+
+static enum drm_mode_status
 intel_dp_mode_valid_downstream(struct intel_connector *connector,
 			       const struct drm_display_mode *mode,
 			       int target_clock,
@@ -1812,7 +1847,7 @@ static int intel_dp_hdmi_compute_bpc(struct intel_dp *intel_dp,
 	for (; bpc >= 8; bpc -= 2) {
 		if (intel_hdmi_bpc_possible(crtc_state, bpc,
 					    intel_dp_has_hdmi_sink(intel_dp)) &&
-		    intel_dp_tmds_clock_valid(intel_dp, clock, bpc, crtc_state->sink_format,
+		    intel_dp_hdmi_clock_valid(intel_dp, clock, bpc, crtc_state->sink_format,
 					      respect_downstream_limits) == MODE_OK)
 			return bpc;
 	}
