@@ -46,7 +46,20 @@ static void dwmac4_core_init(struct mac_device_info *hw,
 	u32 value;
 
 	value = readl(ioaddr + GMAC_CONFIG);
-	writel(value | GMAC_CORE_INIT, ioaddr + GMAC_CONFIG);
+	if (priv->plat->use_ncsi) {
+		/*
+		 * In NCSI case, because lack of PHY, will NOT
+		 * set the mac speed config and mac duplex
+		 * in stmmac_mac_link_up(). Now set these in
+		 * core init function.
+		 */
+		value |= GMAC_CORE_INIT;
+		value &= ~priv->hw->link.speed_mask;
+		value |= priv->hw->link.duplex | priv->hw->link.speed100;
+		writel(value, ioaddr + GMAC_CONFIG);
+	} else {
+		writel(value | GMAC_CORE_INIT, ioaddr + GMAC_CONFIG);
+	}
 
 	/* Configure LPI 1us counter to number of CSR clock ticks in 1us - 1 */
 	clk_rate = clk_get_rate(priv->plat->stmmac_clk);
