@@ -25,6 +25,7 @@ struct osnoise_top_cpu {
 	unsigned long long	irq_count;
 	unsigned long long	softirq_count;
 	unsigned long long	thread_count;
+	unsigned long long	ipi_count;
 
 	int			sum_cycles;
 };
@@ -116,6 +117,9 @@ osnoise_top_handler(struct trace_seq *s, struct tep_record *record,
 	tep_get_field_val(s, event, "thread_count", record, &val, 1);
 	update_sum(&cpu_data->thread_count, &val);
 
+	tep_get_field_val(s, event, "ipi_count", record, &val, 1);
+	update_sum(&cpu_data->ipi_count, &val);
+
 	return 0;
 }
 
@@ -163,7 +167,7 @@ static void osnoise_top_header(struct osnoise_tool *top)
 	if (params->mode == MODE_HWNOISE)
 		goto eol;
 
-	trace_seq_printf(s, "          IRQ      Softirq       Thread");
+	trace_seq_printf(s, "          IRQ      Softirq       Thread          IPI");
 
 eol:
 	if (pretty)
@@ -218,7 +222,8 @@ static void osnoise_top_print(struct osnoise_tool *tool, int cpu)
 
 	trace_seq_printf(s, "%12llu ", cpu_data->irq_count);
 	trace_seq_printf(s, "%12llu ", cpu_data->softirq_count);
-	trace_seq_printf(s, "%12llu\n", cpu_data->thread_count);
+	trace_seq_printf(s, "%12llu ", cpu_data->thread_count);
+	trace_seq_printf(s, "%12llu\n", cpu_data->ipi_count);
 }
 
 /*
