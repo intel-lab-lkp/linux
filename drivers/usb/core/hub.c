@@ -32,6 +32,7 @@
 #include <linux/mutex.h>
 #include <linux/random.h>
 #include <linux/pm_qos.h>
+#include <linux/pwrseq/consumer.h>
 #include <linux/kobject.h>
 
 #include <linux/bitfield.h>
@@ -886,20 +887,41 @@ static void hub_tt_work(struct work_struct *work)
 int usb_hub_set_port_power(struct usb_device *hdev, struct usb_hub *hub,
 			   int port1, bool set)
 {
-	int ret;
+	struct usb_port *pwrseq_port = hub->ports[port1 - 1];
+	int ret = 0;
+
+	/* non-SuperSpeed USB port holds pwrseq descriptor reference. */
+	if (hub->ports[port1 - 1]->is_superspeed && hub->ports[port1 - 1]->peer)
+		pwrseq_port = hub->ports[port1 - 1]->peer;
+
+	if (set && !pwrseq_port->pwrseq_on)
+		ret = pwrseq_power_on(pwrseq_port->pwrseq);
+	else if (!set && pwrseq_port->pwrseq_on)
+		ret = pwrseq_power_off(pwrseq_port->pwrseq);
+	if (ret)
+		return ret;
 
 	if (set)
 		ret = set_port_feature(hdev, port1, USB_PORT_FEAT_POWER);
 	else
 		ret = usb_clear_port_feature(hdev, port1, USB_PORT_FEAT_POWER);
 
-	if (ret)
+	if (ret) {
+		if (set && !pwrseq_port->pwrseq_on)
+			pwrseq_power_off(pwrseq_port->pwrseq);
+		else if (!set && pwrseq_port->pwrseq_on)
+			pwrseq_power_on(pwrseq_port->pwrseq);
 		return ret;
+	}
 
-	if (set)
+	if (set) {
 		set_bit(port1, hub->power_bits);
-	else
+		pwrseq_port->pwrseq_on = 1;
+	} else {
 		clear_bit(port1, hub->power_bits);
+		pwrseq_port->pwrseq_on = 0;
+	}
+
 	return 0;
 }
 
@@ -3245,7 +3267,13 @@ int usb_port_is_power_on(struct usb_port *port, unsigned int portstatus)
 			ret = 1;
 	}
 
-	return ret;
+	if (port->is_superspeed && port->peer)
+		port = port->peer;
+
+	if (!port->pwrseq)
+		return ret;
+
+	return ret && port->pwrseq_on;
 }
 
 static void usb_lock_port(struct usb_port *port_dev)
