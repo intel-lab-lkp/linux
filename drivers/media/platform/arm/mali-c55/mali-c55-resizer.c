@@ -422,8 +422,8 @@ static int mali_c55_rsz_program_resizer(struct mali_c55_resizer *rsz,
 	mali_c55_resizer_program_coefficients(rsz);
 
 	/* Program the V/H scaling factor in Q4.20 format. */
-	h_scale = crop->width * MALI_C55_RSZ_SCALER_FACTOR;
-	v_scale = crop->height * MALI_C55_RSZ_SCALER_FACTOR;
+	h_scale = (u64)crop->width * MALI_C55_RSZ_SCALER_FACTOR;
+	v_scale = (u64)crop->height * MALI_C55_RSZ_SCALER_FACTOR;
 
 	do_div(h_scale, scale->width);
 	do_div(v_scale, scale->height);
