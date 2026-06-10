@@ -4176,6 +4176,8 @@ use_case_br()
 
 	setup_cmd ip li del br0 2>/dev/null
 	setup_cmd_nsb ip li del vlan100 2>/dev/null
+
+	rmmod br_netfilter 2>/dev/null
 }
 
 # VRF only.
