@@ -8377,6 +8377,13 @@ F:	Documentation/devicetree/bindings/display/solomon,ssd-common.yaml
 F:	Documentation/devicetree/bindings/display/solomon,ssd13*.yaml
 F:	drivers/gpu/drm/solomon/ssd130x*
 
+DRM DRIVER FOR SOLOMON SSD1351 OLED DISPLAYS
+M:	Amit Barzilai <amit.barzilai22@gmail.com>
+S:	Maintained
+T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
+F:	Documentation/devicetree/bindings/display/solomon,ssd1351.yaml
+F:	drivers/gpu/drm/solomon/ssd1351.c
+
 DRM DRIVER FOR ST-ERICSSON MCDE
 M:	Linus Walleij <linusw@kernel.org>
 S:	Maintained

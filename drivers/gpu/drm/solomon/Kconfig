@@ -30,3 +30,17 @@ config DRM_SSD130X_SPI
 	  Say Y here if the SSD13xx OLED display is connected via SPI bus.
 
 	  If M is selected the module will be called ssd130x-spi.
+
+config DRM_SSD1351
+	tristate "DRM support for Solomon SSD1351 OLED displays"
+	depends on DRM && SPI && MMU
+	select DRM_CLIENT_SELECTION
+	select DRM_GEM_SHMEM_HELPER
+	select DRM_KMS_HELPER
+	help
+	  DRM driver for the Solomon SSD1351 RGB565 color OLED controller
+	  connected via 4-wire SPI. It drives up to a 128x128 65k-color
+	  panel and uploads pixels in the controller's native RGB565
+	  format, exposing a standard DRM/KMS device to userspace.
+
+	  If M is selected the module will be called ssd1351.
