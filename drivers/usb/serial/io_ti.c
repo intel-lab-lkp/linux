@@ -1092,23 +1092,21 @@ static int do_download_mode(struct edgeport_serial *serial,
 		return -ENOMEM;
 
 	status = get_manuf_info(serial, (u8 *)ti_manuf_desc);
-	if (status) {
-		kfree(ti_manuf_desc);
-		return status;
-	}
+	if (status)
+		goto free_ti_manuf_desc;
 
 	/* Check version number of ION descriptor */
 	if (!ignore_cpu_rev && ti_cpu_rev(ti_manuf_desc) < 2) {
 		dev_dbg(dev, "%s - Wrong CPU Rev %d (Must be 2)\n",
 			__func__, ti_cpu_rev(ti_manuf_desc));
-		kfree(ti_manuf_desc);
-		return -EINVAL;
+		status = -EINVAL;
+		goto free_ti_manuf_desc;
 	}
 
 	rom_desc = kmalloc_obj(*rom_desc);
 	if (!rom_desc) {
-		kfree(ti_manuf_desc);
-		return -ENOMEM;
+		status = -ENOMEM;
+		goto free_ti_manuf_desc;
 	}
 
 	/* Search for type 2 record (firmware record) */
@@ -1122,11 +1120,8 @@ static int do_download_mode(struct edgeport_serial *serial,
 				__func__);
 
 		firmware_version = kmalloc_obj(*firmware_version);
-		if (!firmware_version) {
-			kfree(rom_desc);
-			kfree(ti_manuf_desc);
-			return -ENOMEM;
-		}
+		if (!firmware_version)
+			goto e_nomem;
 
 		/*
 		 * Validate version number
@@ -1136,12 +1131,8 @@ static int do_download_mode(struct edgeport_serial *serial,
 				sizeof(struct ti_i2c_desc),
 				sizeof(struct ti_i2c_firmware_rec),
 				(u8 *)firmware_version);
-		if (status) {
-			kfree(firmware_version);
-			kfree(rom_desc);
-			kfree(ti_manuf_desc);
-			return status;
-		}
+		if (status)
+			goto free_firmware_version;
 
 		/*
 		 * Check version number of download with current
@@ -1171,10 +1162,8 @@ static int do_download_mode(struct edgeport_serial *serial,
 
 			record = kmalloc(1, GFP_KERNEL);
 			if (!record) {
-				kfree(firmware_version);
-				kfree(rom_desc);
-				kfree(ti_manuf_desc);
-				return -ENOMEM;
+				status = -ENOMEM;
+				goto free_firmware_version;
 			}
 			/*
 			 * In order to update the I2C firmware we must
@@ -1197,13 +1186,8 @@ static int do_download_mode(struct edgeport_serial *serial,
 			 */
 			status = write_rom(serial, start_address,
 					sizeof(*record), record);
-			if (status) {
-				kfree(record);
-				kfree(firmware_version);
-				kfree(rom_desc);
-				kfree(ti_manuf_desc);
-				return status;
-			}
+			if (status)
+				goto free_record;
 
 			/*
 			 * verify the write -- must do this in order
@@ -1214,22 +1198,13 @@ static int do_download_mode(struct edgeport_serial *serial,
 						start_address,
 						sizeof(*record),
 						record);
-			if (status) {
-				kfree(record);
-				kfree(firmware_version);
-				kfree(rom_desc);
-				kfree(ti_manuf_desc);
-				return status;
-			}
+			if (status)
+				goto free_record;
 
 			if (*record != I2C_DESC_TYPE_FIRMWARE_BLANK) {
 				dev_err(dev, "%s - error resetting device\n",
 						__func__);
-				kfree(record);
-				kfree(firmware_version);
-				kfree(rom_desc);
-				kfree(ti_manuf_desc);
-				return -ENODEV;
+				goto e_nodev;
 			}
 
 			dev_dbg(dev, "%s - HARDWARE RESET\n", __func__);
@@ -1244,11 +1219,7 @@ static int do_download_mode(struct edgeport_serial *serial,
 					__func__, status);
 
 			/* return an error on purpose. */
-			kfree(record);
-			kfree(firmware_version);
-			kfree(rom_desc);
-			kfree(ti_manuf_desc);
-			return -ENODEV;
+			goto e_nodev;
 		}
 		/* Same or newer fw version is already loaded */
 		serial->fw_version = download_cur_ver;
@@ -1265,18 +1236,13 @@ static int do_download_mode(struct edgeport_serial *serial,
 			u8 *vheader;
 
 			header = kmalloc(HEADER_SIZE, GFP_KERNEL);
-			if (!header) {
-				kfree(rom_desc);
-				kfree(ti_manuf_desc);
-				return -ENOMEM;
-			}
+			if (!header)
+				goto e_nomem;
 
 			vheader = kmalloc(HEADER_SIZE, GFP_KERNEL);
 			if (!vheader) {
 				kfree(header);
-				kfree(rom_desc);
-				kfree(ti_manuf_desc);
-				return -ENOMEM;
+				goto e_nomem;
 			}
 
 			dev_dbg(dev, "%s - Found Type BLANK FIRMWARE (Type F2) record\n",
@@ -1294,13 +1260,8 @@ static int do_download_mode(struct edgeport_serial *serial,
 			 * record type from 0xf2 to 0x02.
 			 */
 			status = build_i2c_fw_hdr(header, fw);
-			if (status) {
-				kfree(vheader);
-				kfree(header);
-				kfree(rom_desc);
-				kfree(ti_manuf_desc);
-				return -EINVAL;
-			}
+			if (status)
+				goto e_inval;
 
 			/*
 			 * Update I2C with type 0xf2 record with correct
@@ -1310,13 +1271,8 @@ static int do_download_mode(struct edgeport_serial *serial,
 						start_address,
 						HEADER_SIZE,
 						header);
-			if (status) {
-				kfree(vheader);
-				kfree(header);
-				kfree(rom_desc);
-				kfree(ti_manuf_desc);
-				return -EINVAL;
-			}
+			if (status)
+				goto e_inval;
 
 			/*
 			 * verify the write -- must do this in order for
@@ -1328,20 +1284,12 @@ static int do_download_mode(struct edgeport_serial *serial,
 			if (status) {
 				dev_dbg(dev, "%s - can't read header back\n",
 						__func__);
-				kfree(vheader);
-				kfree(header);
-				kfree(rom_desc);
-				kfree(ti_manuf_desc);
-				return status;
+				goto free_vheader;
 			}
 			if (memcmp(vheader, header, HEADER_SIZE)) {
 				dev_dbg(dev, "%s - write download record failed\n",
 						__func__);
-				kfree(vheader);
-				kfree(header);
-				kfree(rom_desc);
-				kfree(ti_manuf_desc);
-				return -EINVAL;
+				goto e_inval;
 			}
 
 			kfree(vheader);
@@ -1361,9 +1309,7 @@ static int do_download_mode(struct edgeport_serial *serial,
 				dev_err(dev,
 					"%s - UMPC_COPY_DNLD_TO_I2C failed\n",
 					__func__);
-				kfree(rom_desc);
-				kfree(ti_manuf_desc);
-				return status;
+				goto free_rom_desc;
 			}
 		}
 	}
@@ -1372,6 +1318,29 @@ static int do_download_mode(struct edgeport_serial *serial,
 	kfree(rom_desc);
 	kfree(ti_manuf_desc);
 	return 0;
+
+e_inval:
+	status = -EINVAL;
+free_vheader:
+	kfree(vheader);
+	kfree(header);
+	goto free_rom_desc;
+
+e_nomem:
+	status = -ENOMEM;
+	goto free_rom_desc;
+
+e_nodev:
+	status = -ENODEV;
+free_record:
+	kfree(record);
+free_firmware_version:
+	kfree(firmware_version);
+free_rom_desc:
+	kfree(rom_desc);
+free_ti_manuf_desc:
+	kfree(ti_manuf_desc);
+	return status;
 }
 
 static int do_boot_mode(struct edgeport_serial *serial,
