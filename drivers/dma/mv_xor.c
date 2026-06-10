@@ -1013,8 +1013,6 @@ static int mv_xor_channel_remove(struct mv_xor_chan *mv_chan)
 
 	dma_async_device_unregister(&mv_chan->dmadev);
 
-	dma_free_wc(dev, MV_XOR_POOL_SIZE,
-			  mv_chan->dma_desc_pool_virt, mv_chan->dma_desc_pool);
 	dma_unmap_single(dev, mv_chan->dummy_src_addr,
 			 MV_XOR_MIN_BYTE_COUNT, DMA_FROM_DEVICE);
 	dma_unmap_single(dev, mv_chan->dummy_dst_addr,
@@ -1024,8 +1022,6 @@ static int mv_xor_channel_remove(struct mv_xor_chan *mv_chan)
 				 device_node) {
 		list_del(&chan->device_node);
 	}
-
-	free_irq(mv_chan->irq, mv_chan);
 
 	return 0;
 }
@@ -1077,8 +1073,8 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 	 * requires that we explicitly flush the writes
 	 */
 	mv_chan->dma_desc_pool_virt =
-	  dma_alloc_wc(&pdev->dev, MV_XOR_POOL_SIZE, &mv_chan->dma_desc_pool,
-		       GFP_KERNEL);
+	  dmam_alloc_attrs(&pdev->dev, MV_XOR_POOL_SIZE, &mv_chan->dma_desc_pool,
+			   GFP_KERNEL, DMA_ATTR_WRITE_COMBINE);
 	if (!mv_chan->dma_desc_pool_virt) {
 		ret = -ENOMEM;
 		goto err_unmap_dst;
@@ -1112,10 +1108,10 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 	/* clear errors before enabling interrupts */
 	mv_chan_clear_err_status(mv_chan);
 
-	ret = request_irq(mv_chan->irq, mv_xor_interrupt_handler,
+	ret = devm_request_irq(&pdev->dev, mv_chan->irq, mv_xor_interrupt_handler,
 			  0, dev_name(&pdev->dev), mv_chan);
 	if (ret)
-		goto err_free_dma;
+		goto err_unmap_dst;
 
 	mv_chan_unmask_interrupts(mv_chan);
 
@@ -1138,14 +1134,14 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 		ret = mv_chan_memcpy_self_test(mv_chan);
 		dev_dbg(&pdev->dev, "memcpy self test returned %d\n", ret);
 		if (ret)
-			goto err_free_irq;
+			goto err_unmap_dst;
 	}
 
 	if (dma_has_cap(DMA_XOR, dma_dev->cap_mask)) {
 		ret = mv_chan_xor_self_test(mv_chan);
 		dev_dbg(&pdev->dev, "xor self test returned %d\n", ret);
 		if (ret)
-			goto err_free_irq;
+			goto err_unmap_dst;
 	}
 
 	dev_info(&pdev->dev, "Marvell XOR (%s): ( %s%s%s)\n",
@@ -1156,15 +1152,10 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 
 	ret = dma_async_device_register(dma_dev);
 	if (ret)
-		goto err_free_irq;
+		goto err_unmap_dst;
 
 	return mv_chan;
 
-err_free_irq:
-	free_irq(mv_chan->irq, mv_chan);
-err_free_dma:
-	dma_free_wc(&pdev->dev, MV_XOR_POOL_SIZE,
-			  mv_chan->dma_desc_pool_virt, mv_chan->dma_desc_pool);
 err_unmap_dst:
 	dma_unmap_single(dma_dev->dev, mv_chan->dummy_dst_addr,
 			 MV_XOR_MIN_BYTE_COUNT, DMA_TO_DEVICE);
