@@ -168,6 +168,10 @@ static int svc_connect(struct socket *sock, struct sockaddr_unsized *sockaddr,
 		error = -EINVAL;
 		goto out;
 	}
+	if (test_bit(ATM_VF_LISTEN, &vcc->flags)) {
+		error = -EINVAL;
+		goto out;
+	}
 
 	switch (sock->state) {
 	default:
@@ -302,6 +306,14 @@ static int svc_listen(struct socket *sock, int backlog)
 		error = -EADDRINUSE;
 		goto out;
 	}
+	if (sock->state == SS_CONNECTED) {
+		error = -EISCONN;
+		goto out;
+	}
+	if (sock->state != SS_UNCONNECTED) {
+		error = -EINVAL;
+		goto out;
+	}
 	set_bit(ATM_VF_WAITING, &vcc->flags);
 	sigd_enq(vcc, as_listen, NULL, NULL, &vcc->local);
 	for (;;) {
@@ -315,10 +327,14 @@ static int svc_listen(struct socket *sock, int backlog)
 		error = -EUNATCH;
 		goto out;
 	}
+	error = -sk->sk_err;
+	if (error)
+		goto out;
 	set_bit(ATM_VF_LISTEN, &vcc->flags);
+	sk->sk_state = TCP_LISTEN;
 	vcc_insert_socket(sk);
 	sk->sk_max_ack_backlog = backlog > 0 ? backlog : ATM_BACKLOG_DEFAULT;
-	error = -sk->sk_err;
+	error = 0;
 out:
 	release_sock(sk);
 	return error;
