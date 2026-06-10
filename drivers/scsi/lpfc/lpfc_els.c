@@ -9250,7 +9250,11 @@ lpfc_els_rcv_rpl(struct lpfc_vport *vport, struct lpfc_iocbq *cmdiocb,
 	     ((maxsize * sizeof(uint32_t)) >= sizeof(RPL_RSP)))) {
 		cmdsize = sizeof(uint32_t) + sizeof(RPL_RSP);
 	} else {
-		cmdsize = sizeof(uint32_t) + maxsize * sizeof(uint32_t);
+		u64 sz = sizeof(uint32_t) + (u64)maxsize * sizeof(uint32_t);
+
+		if (sz > sizeof(uint32_t) + sizeof(RPL_RSP))
+			sz = sizeof(uint32_t) + sizeof(RPL_RSP);
+		cmdsize = sz;
 	}
 	lpfc_els_rsp_rpl_acc(vport, cmdsize, cmdiocb, ndlp);
 
