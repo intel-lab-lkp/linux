@@ -1347,6 +1347,11 @@ properties:
           - const: xunlong,orangepi-cm5
           - const: rockchip,rk3588s
 
+      - description: Youyeetoo YY3588
+        items:
+          - const: youyeetoo,yy3588
+          - const: rockchip,rk3588
+
       - description: Zkmagic A95X Z2
         items:
           - const: zkmagic,a95x-z2
