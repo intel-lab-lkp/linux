@@ -774,7 +774,7 @@ xfs_attr_recover_work(
 	resv = xlog_recover_resv(&resv);
 	error = xfs_trans_alloc(mp, &resv, total, 0, XFS_TRANS_RESERVE, &tp);
 	if (error)
-		return error;
+		goto out_rele;
 	args->trans = tp;
 
 	xfs_ilock(ip, XFS_ILOCK_EXCL);
@@ -791,6 +791,7 @@ xfs_attr_recover_work(
 	error = xfs_defer_ops_capture_and_commit(tp, capture_list);
 out_unlock:
 	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+out_rele:
 	xfs_irele(ip);
 	return error;
 out_cancel:
