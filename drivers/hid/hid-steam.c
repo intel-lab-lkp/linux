@@ -445,7 +445,7 @@ static int steam_get_serial(struct steam_device *steam)
 	 */
 	int ret = 0;
 	u8 cmd[] = {ID_GET_STRING_ATTRIBUTE, sizeof(steam->serial_no), ATTRIB_STR_UNIT_SERIAL};
-	u8 reply[3 + STEAM_SERIAL_LEN + 1];
+	u8 reply[3 + STEAM_SERIAL_LEN + 1] = { 0 };
 
 	mutex_lock(&steam->report_mutex);
 	ret = steam_send_report(steam, cmd, sizeof(cmd));
