@@ -233,9 +233,10 @@ NOKPROBE_SYMBOL(__rethook_find_ret_addr);
  *
  * Find the correct return address modified by a rethook on @tsk in unsigned
  * long type.
- * The @tsk must be 'current' or a task which is not running. @frame is a hint
- * to get the currect return address - which is compared with the
- * rethook::frame field. The @cur is a loop cursor for searching the
+ * @tsk can be any task (any state). If not 'current', the result may be
+ * unreliable. Callers requiring reliability must ensure a safe context.
+ * @frame is a hint to get the correct return address - which is compared with
+ * the rethook::frame field. The @cur is a loop cursor for searching the
  * kretprobe return addresses on the @tsk. The '*@cur' should be NULL at the
  * first call, but '@cur' itself must NOT NULL.
  *
@@ -248,9 +249,6 @@ unsigned long rethook_find_ret_addr(struct task_struct *tsk, unsigned long frame
 	unsigned long ret;
 
 	if (WARN_ON_ONCE(!cur))
-		return 0;
-
-	if (tsk != current && task_is_running(tsk))
 		return 0;
 
 	do {
