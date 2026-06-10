@@ -72,6 +72,7 @@ properties:
           - qcom,pmih0108-gpio
           - qcom,pmiv0104-gpio
           - qcom,pmk8350-gpio
+          - qcom,pmk7750-gpio
           - qcom,pmk8550-gpio
           - qcom,pmk8850-gpio
           - qcom,pmm8155au-gpio
@@ -175,6 +176,7 @@ allOf:
               - qcom,pm8018-gpio
               - qcom,pm8019-gpio
               - qcom,pm8550vs-gpio
+              - qcom,pmk7750-gpio
               - qcom,pmk8550-gpio
     then:
       properties:
@@ -504,6 +506,7 @@ $defs:
                  - gpio1-gpio10 for pmi8994
                  - gpio1-gpio18 for pmih0108
                  - gpio1-gpio4 for pmk8350
+                 - gpio1-gpio6 for pmk7750
                  - gpio1-gpio6 for pmk8550
                  - gpio1-gpio8 for pmk8850
                  - gpio1-gpio10 for pmm8155au
