@@ -17,6 +17,7 @@ properties:
           - qcom,pcie-ipq9574
       - items:
           - enum:
+              - qcom,pcie-ipq5210
               - qcom,pcie-ipq5332
               - qcom,pcie-ipq5424
               - qcom,pcie-ipq9650
@@ -88,6 +89,7 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,pcie-ipq5210
               - qcom,pcie-ipq9650
     then:
       properties:
