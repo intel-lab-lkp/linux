@@ -348,7 +348,6 @@ struct imx219 {
 
 	struct v4l2_ctrl_handler ctrl_handler;
 	/* V4L2 Controls */
-	struct v4l2_ctrl *pixel_rate;
 	struct v4l2_ctrl *link_freq;
 	struct v4l2_ctrl *exposure;
 	struct v4l2_ctrl *vflip;
@@ -420,7 +419,30 @@ static void imx219_get_binning(struct v4l2_subdev_state *state, u8 *bin_h,
 
 }
 
-static inline u32 imx219_get_rate_factor(struct v4l2_subdev_state *state)
+/*
+ * When using the special binning mode the sensor requires the FRAME_LENGTH to
+ * be programmed in units of 2xLines, but it still outputs the same number of
+ * lines overall.
+ *
+ * FRAME_LENGTH = (output height + vblank) / 2
+ *
+ * If we go ahead with it and set `vblank = FRAME_LENGTH - height` it would
+ * make the control value negative.
+ *
+ * Instead we can compensate for it in the horizontal dimension, as LINE_LENGTH
+ * has enough room, so both blanking values stay positive.
+ *
+ * LINE_LENGTH = (output width + hblank) * 2
+ *
+ * So the blanking values when using the special binning mode are:
+ *
+ * vblank = FRAME_LENGTH * 2 - height
+ * hblank = LINE_LENGTH / 2 - width
+ *
+ * where FRAME_LENGTH and LINE_LENGTH are the values programmed in the sensor
+ * registers.
+ */
+static inline u32 imx219_get_fll_factor(struct v4l2_subdev_state *state)
 {
 	u8 bin_h, bin_v;
 
@@ -440,12 +462,12 @@ static int imx219_set_ctrl(struct v4l2_ctrl *ctrl)
 	struct i2c_client *client = v4l2_get_subdevdata(&imx219->sd);
 	const struct v4l2_mbus_framefmt *format;
 	struct v4l2_subdev_state *state;
-	u32 rate_factor;
+	u32 fll_factor;
 	int ret = 0;
 
 	state = v4l2_subdev_get_locked_active_state(&imx219->sd);
 	format = v4l2_subdev_state_get_format(state, 0);
-	rate_factor = imx219_get_rate_factor(state);
+	fll_factor = imx219_get_fll_factor(state);
 
 	if (ctrl->id == V4L2_CID_VBLANK) {
 		int exposure_max, exposure_def;
@@ -478,7 +500,7 @@ static int imx219_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_EXPOSURE:
 		cci_write(imx219->regmap, IMX219_REG_EXPOSURE,
-			  ctrl->val / rate_factor, &ret);
+			  ctrl->val / fll_factor, &ret);
 		break;
 	case V4L2_CID_DIGITAL_GAIN:
 		cci_write(imx219->regmap, IMX219_REG_DIGITAL_GAIN,
@@ -495,11 +517,11 @@ static int imx219_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_VBLANK:
 		cci_write(imx219->regmap, IMX219_REG_FRM_LENGTH_A,
-			  (format->height + ctrl->val) / rate_factor, &ret);
+			  (format->height + ctrl->val) / fll_factor, &ret);
 		break;
 	case V4L2_CID_HBLANK:
 		cci_write(imx219->regmap, IMX219_REG_LINE_LENGTH_A,
-			  format->width + ctrl->val, &ret);
+			  (format->width + ctrl->val) * fll_factor, &ret);
 		break;
 	case V4L2_CID_TEST_PATTERN_RED:
 		cci_write(imx219->regmap, IMX219_REG_TESTP_RED,
@@ -555,11 +577,10 @@ static int imx219_init_controls(struct imx219 *imx219)
 		return ret;
 
 	/* By default, PIXEL_RATE is read only */
-	imx219->pixel_rate = v4l2_ctrl_new_std(ctrl_hdlr, &imx219_ctrl_ops,
-					       V4L2_CID_PIXEL_RATE,
-					       imx219_get_pixel_rate(imx219),
-					       imx219_get_pixel_rate(imx219), 1,
-					       imx219_get_pixel_rate(imx219));
+	v4l2_ctrl_new_std(ctrl_hdlr, &imx219_ctrl_ops, V4L2_CID_PIXEL_RATE,
+			  imx219_get_pixel_rate(imx219),
+			  imx219_get_pixel_rate(imx219), 1,
+			  imx219_get_pixel_rate(imx219));
 
 	imx219->link_freq =
 		v4l2_ctrl_new_int_menu(ctrl_hdlr, &imx219_ctrl_ops,
@@ -880,15 +901,19 @@ static int imx219_set_pad_format(struct v4l2_subdev *sd,
 	crop->top = (IMX219_NATIVE_HEIGHT - crop->height) / 2;
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_ACTIVE) {
-		int exposure_max;
-		int exposure_def;
-		int hblank, llp_min;
-		int pixel_rate;
+		int exposure_max, exposure_def;
+		int llp_min, hblank, hblank_max;
+		u32 fll_factor = imx219_get_fll_factor(state);
 
-		/* Update limits and set FPS to default */
+		/*
+		 * Update VBLANK range and default value to match the mode.
+		 * Also fix the step-size to fll_factor, as we halve the values
+		 * before writing to the register when special binning is used.
+		 */
 		ret = __v4l2_ctrl_modify_range(imx219->vblank, IMX219_VBLANK_MIN,
-					       IMX219_FLL_MAX - mode->height, 1,
-					       mode->fll_def - mode->height);
+					       IMX219_FLL_MAX - mode->height,
+					       fll_factor, mode->fll_def -
+					       mode->height);
 		if (ret)
 			return ret;
 
@@ -910,37 +935,30 @@ static int imx219_set_pad_format(struct v4l2_subdev *sd,
 			return ret;
 
 		/*
-		 * With analog binning the default minimum line length of 3448
-		 * can cause artefacts with RAW10 formats, because the ADC
-		 * operates on two lines together. So we switch to a higher
-		 * minimum of 3560.
+		 * With special analog binning the default minimum line length
+		 * of 3448 can cause artefacts with RAW10 formats, possibly
+		 * because the sensor is averaging 4 pixels in the analogue
+		 * domain as opposed to just 2, but we don't know for sure.
+		 *
+		 * The datasheet is lacking on this topic but experimental
+		 * results and some vendor tables point to using a higher
+		 * minimum of 3560, which fixes the issue.
 		 */
 		imx219_get_binning(state, &bin_h, &bin_v);
 		llp_min = (bin_h & bin_v) == IMX219_BINNING_X2_ANALOG ?
 				  IMX219_BINNED_LLP_MIN : IMX219_LLP_MIN;
-		ret = __v4l2_ctrl_modify_range(imx219->hblank,
-					       llp_min - mode->width,
-					       IMX219_LLP_MAX - mode->width, 1,
-					       llp_min - mode->width);
-		if (ret)
-			return ret;
-		/*
-		 * Retain PPL setting from previous mode so that the
-		 * line time does not change on a mode change.
-		 * Limits have to be recomputed as the controls define
-		 * the blanking only, so PPL values need to have the
-		 * mode width subtracted.
-		 */
-		hblank = prev_line_len - mode->width;
-		ret = __v4l2_ctrl_s_ctrl(imx219->hblank, hblank);
+
+		hblank = (llp_min / fll_factor) - mode->width;
+		hblank_max = (IMX219_LLP_MAX / fll_factor) - mode->width;
+		ret = __v4l2_ctrl_modify_range(imx219->hblank, hblank,
+					       hblank_max, 1, hblank);
 		if (ret)
 			return ret;
 
-		/* Scale the pixel rate based on the mode specific factor */
-		pixel_rate = imx219_get_pixel_rate(imx219) *
-			     imx219_get_rate_factor(state);
-		ret = __v4l2_ctrl_modify_range(imx219->pixel_rate, pixel_rate,
-					       pixel_rate, 1, pixel_rate);
+		/*
+		 * Update HBLANK to default value.
+		 */
+		ret = __v4l2_ctrl_s_ctrl(imx219->hblank, hblank);
 		if (ret)
 			return ret;
 	}
