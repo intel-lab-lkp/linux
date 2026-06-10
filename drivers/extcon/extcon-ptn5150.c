@@ -307,16 +307,6 @@ static int ptn5150_i2c_probe(struct i2c_client *i2c)
 		}
 	}
 
-	ret = devm_request_threaded_irq(dev, info->irq, NULL,
-					ptn5150_irq_handler,
-					IRQF_TRIGGER_FALLING |
-					IRQF_ONESHOT,
-					i2c->name, info);
-	if (ret < 0) {
-		dev_err(dev, "failed to request handler for INTB IRQ\n");
-		return ret;
-	}
-
 	/* Allocate extcon device */
 	info->edev = devm_extcon_dev_allocate(info->dev, ptn5150_extcon_cable);
 	if (IS_ERR(info->edev)) {
@@ -361,6 +351,16 @@ static int ptn5150_i2c_probe(struct i2c_client *i2c)
 	ret = devm_add_action_or_reset(dev, ptn5150_work_sync_and_put, info);
 	if (ret)
 		return ret;
+
+	ret = devm_request_threaded_irq(dev, info->irq, NULL,
+					ptn5150_irq_handler,
+					IRQF_TRIGGER_FALLING |
+					IRQF_ONESHOT,
+					i2c->name, info);
+	if (ret < 0) {
+		dev_err(dev, "failed to request handler for INTB IRQ\n");
+		return ret;
+	}
 
 	/*
 	 * Update current extcon state if for example OTG connection was there
