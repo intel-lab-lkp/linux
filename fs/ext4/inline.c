@@ -973,11 +973,16 @@ static int ext4_add_dirent_to_inline(handle_t *handle,
 				     struct ext4_iloc *iloc,
 				     void *inline_start, int inline_size)
 {
-	int		err;
+	int		err, dlen = 0;
 	struct ext4_dir_entry_2 *de;
+	unsigned char *data = NULL;
+
+	/* Deliver data in any appropriate way here. Now it is NULL */
+	if (data)
+		dlen = (*data) + 1;
 
 	err = ext4_find_dest_de(dir, iloc->bh, inline_start,
-				inline_size, fname, &de, 0);
+				inline_size, fname, &de, dlen);
 	if (err)
 		return err;
 
@@ -986,7 +991,7 @@ static int ext4_add_dirent_to_inline(handle_t *handle,
 					    EXT4_JTR_NONE);
 	if (err)
 		return err;
-	ext4_insert_dentry(dir, inode, de, inline_size, fname);
+	ext4_insert_dentry_data(dir, inode, de, inline_size, fname, NULL);
 
 	ext4_show_inline_dir(dir, iloc->bh, inline_start, inline_size);
 
@@ -1326,7 +1331,13 @@ int ext4_inlinedir_to_tree(struct file *dir_file,
 			pos = EXT4_INLINE_DOTDOT_SIZE;
 		} else {
 			de = (struct ext4_dir_entry_2 *)(dir_buf + pos);
-			pos += ext4_rec_len_from_disk(de->rec_len, inline_size);
+			/* Use ext4_dir_entry_len to account for dirdata extensions */
+			pos += ext4_dir_entry_len(de, dir);
+			/* Validate pos doesn't exceed buffer to prevent use-after-free */
+			if (pos > inline_size) {
+				ret = count;
+				goto out;
+			}
 			if (ext4_check_dir_entry(inode, dir_file, de,
 					 iloc.bh, dir_buf,
 					 inline_size, pos)) {
