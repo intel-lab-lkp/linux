@@ -230,6 +230,12 @@ static inline void smc_cdc_cursor_to_host(union smc_host_cursor *local,
 	smc_curs_copy_net(&net, peer, conn);
 	temp.count = ntohl(net.count);
 	temp.wrap = ntohs(net.wrap);
+	/* the peer producer cursor is wire-controlled; bound the SMC-R count to
+	 * our RMB before it is used as a raw index by the urgent path, mirroring
+	 * the SMC-D conversion in smcd_cdc_msg_to_host().
+	 */
+	if (temp.count > conn->rmb_desc->len)
+		temp.count = conn->rmb_desc->len;
 	if ((old.wrap > temp.wrap) && temp.wrap)
 		return;
 	if ((old.wrap == temp.wrap) &&
@@ -260,6 +266,12 @@ static inline void smcd_cdc_msg_to_host(struct smc_host_cdc_msg *local,
 
 	temp.wrap = peer->prod.wrap;
 	temp.count = peer->prod.count;
+	/* the peer producer cursor is wire-controlled; a count past our RMB is
+	 * used as a raw index by the urgent path (smc_cdc_handle_urg_data_arrival)
+	 * and as a length by the recv path.  Bound it to the RMB.
+	 */
+	if (temp.count > conn->rmb_desc->len)
+		temp.count = conn->rmb_desc->len;
 	smc_curs_copy(&local->prod, &temp, conn);
 
 	temp.wrap = peer->cons.wrap;

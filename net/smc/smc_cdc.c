@@ -382,6 +382,8 @@ static void smc_cdc_msg_recv_action(struct smc_sock *smc,
 		smp_mb__before_atomic();
 		atomic_add(diff_prod, &conn->bytes_to_rcv);
 		/* guarantee 0 <= bytes_to_rcv <= rmb_desc->len */
+		if (atomic_read(&conn->bytes_to_rcv) > conn->rmb_desc->len)
+			atomic_set(&conn->bytes_to_rcv, conn->rmb_desc->len);
 		smp_mb__after_atomic();
 		smc->sk.sk_data_ready(&smc->sk);
 	} else {
