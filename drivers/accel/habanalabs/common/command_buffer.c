@@ -126,10 +126,8 @@ static struct hl_cb *hl_cb_alloc(struct hl_device *hdev, u32 cb_size,
 
 	if (internal_cb) {
 		p = (void *) gen_pool_alloc(hdev->internal_cb_pool, cb_size);
-		if (!p) {
-			kfree(cb);
-			return NULL;
-		}
+		if (!p)
+			goto free_cb;
 
 		cb_offset = p - hdev->internal_cb_pool_virt_addr;
 		cb->is_internal = true;
@@ -147,14 +145,17 @@ static struct hl_cb *hl_cb_alloc(struct hl_device *hdev, u32 cb_size,
 		dev_err(hdev->dev,
 			"failed to allocate %d of dma memory for CB\n",
 			cb_size);
-		kfree(cb);
-		return NULL;
+		goto free_cb;
 	}
 
 	cb->kernel_address = p;
 	cb->size = cb_size;
 
 	return cb;
+
+free_cb:
+	kfree(cb);
+	return NULL;
 }
 
 struct hl_cb_mmap_mem_alloc_args {
