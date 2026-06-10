@@ -9,6 +9,13 @@
  *        Andrey Konovalov <andreyknvl@gmail.com>
  */
 
+/*
+ * check_region_inline() and addr_has_metadata() can run very early.
+ * For example, in an interrupt taken while identify_cpu() has the CPU
+ * capability bits temporarily cleared.
+ */
+#define USE_EARLY_PGTABLE_L5
+
 #include <linux/export.h>
 #include <linux/interrupt.h>
 #include <linux/init.h>
