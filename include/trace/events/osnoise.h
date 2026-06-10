@@ -19,6 +19,7 @@ struct osnoise_sample {
 	int			irq_count;	/* # IRQs during this sample */
 	int			softirq_count;	/* # softirqs during this sample */
 	int			thread_count;	/* # threads during this sample */
+	int                     ipi_count;       /* # IPIs during this sample */
 };
 
 #ifdef CONFIG_TIMERLAT_TRACER

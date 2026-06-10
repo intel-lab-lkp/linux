@@ -430,16 +430,18 @@ FTRACE_ENTRY(osnoise, osnoise_entry,
 		__field(	unsigned int,		irq_count	)
 		__field(	unsigned int,		softirq_count	)
 		__field(	unsigned int,		thread_count	)
+		__field(	unsigned int,		ipi_count	)
 	),
 
-	F_printk("noise:%llu\tmax_sample:%llu\thw:%u\tnmi:%u\tirq:%u\tsoftirq:%u\tthread:%u\n",
+	F_printk("noise:%llu\tmax_sample:%llu\thw:%u\tnmi:%u\tirq:%u\tsoftirq:%u\tthread:%u\tipi:%u\n",
 		 __entry->noise,
 		 __entry->max_sample,
 		 __entry->hw_count,
 		 __entry->nmi_count,
 		 __entry->irq_count,
 		 __entry->softirq_count,
-		 __entry->thread_count)
+		 __entry->thread_count,
+		 __entry->ipi_count)
 );
 
 FTRACE_ENTRY(timerlat, timerlat_entry,

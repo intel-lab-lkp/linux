@@ -35,6 +35,7 @@
 
 #include <trace/events/irq.h>
 #include <trace/events/sched.h>
+#include <trace/events/ipi.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/osnoise.h>
@@ -82,6 +83,10 @@ struct osnoise_instance {
 };
 
 static struct list_head osnoise_instances;
+
+static struct cpumask osnoise_cpumask;
+static struct cpumask save_cpumask;
+static struct cpumask kthread_cpumask;
 
 static bool osnoise_has_registered_instances(void)
 {
@@ -203,6 +208,11 @@ struct osn_thread {
 	u64	delta_start;
 };
 
+/* IPI runtime info */
+struct osn_ipi {
+	u64 count;
+};
+
 /*
  * Runtime information: this structure saves the runtime information used by
  * one sampling thread.
@@ -215,6 +225,7 @@ struct osnoise_variables {
 	struct osn_irq		irq;
 	struct osn_softirq	softirq;
 	struct osn_thread	thread;
+	struct osn_ipi          ipi;
 	local_t			int_counter;
 };
 
@@ -505,6 +516,7 @@ __record_osnoise_sample(struct osnoise_sample *sample, struct trace_buffer *buff
 	entry->irq_count	= sample->irq_count;
 	entry->softirq_count	= sample->softirq_count;
 	entry->thread_count	= sample->thread_count;
+	entry->ipi_count	= sample->ipi_count;
 
 	trace_buffer_unlock_commit_nostack(buffer, event);
 }
@@ -1288,6 +1300,7 @@ trace_sched_switch_callback(void *data, bool preempt,
  * Hook the osnoise tracer callbacks to handle the noise from other
  * threads on the necessary kernel events.
  */
+
 static int hook_thread_events(void)
 {
 	int ret;
@@ -1319,6 +1332,60 @@ static void unhook_thread_events(void)
 	unregister_migration_monitor();
 }
 
+static void ipi_emission(struct osnoise_variables *osn_var, unsigned int dst_cpu)
+{
+	if (!osn_var->sampling)
+		return;
+
+	osn_var->ipi.count++;
+}
+
+static void trace_ipi_send_cpu_callback(void *data, unsigned int cpu,
+					unsigned long callsite, void *callback)
+{
+	struct osnoise_variables *osn_var;
+
+	osn_var = per_cpu_ptr(&per_cpu_osnoise_var, cpu);
+	ipi_emission(osn_var, cpu);
+}
+
+static void trace_ipi_send_cpumask_callback(void *data, const struct cpumask *cpumask,
+					    unsigned long callsite, void *callback)
+{
+	struct osnoise_variables *osn_var;
+	int cpu;
+
+	for_each_cpu_and(cpu, cpumask, &osnoise_cpumask) {
+		osn_var = per_cpu_ptr(&per_cpu_osnoise_var, cpu);
+		ipi_emission(osn_var, cpu);
+	}
+}
+
+static int hook_ipi_events(void)
+{
+	int ret;
+
+	ret = register_trace_ipi_send_cpu(trace_ipi_send_cpu_callback, NULL);
+	if (ret)
+		return -EINVAL;
+
+	ret = register_trace_ipi_send_cpumask(trace_ipi_send_cpumask_callback, NULL);
+	if (ret)
+		goto out_unreg;
+
+	return 0;
+
+out_unreg:
+	unregister_trace_ipi_send_cpu(trace_ipi_send_cpu_callback, NULL);
+	return -EINVAL;
+}
+
+static void unhook_ipi_events(void)
+{
+	unregister_trace_ipi_send_cpu(trace_ipi_send_cpu_callback, NULL);
+	unregister_trace_ipi_send_cpumask(trace_ipi_send_cpumask_callback, NULL);
+}
+
 /*
  * save_osn_sample_stats - Save the osnoise_sample statistics
  *
@@ -1333,6 +1400,7 @@ save_osn_sample_stats(struct osnoise_variables *osn_var, struct osnoise_sample *
 	s->irq_count = osn_var->irq.count;
 	s->softirq_count = osn_var->softirq.count;
 	s->thread_count = osn_var->thread.count;
+	s->ipi_count = osn_var->ipi.count;
 }
 
 /*
@@ -1349,6 +1417,7 @@ diff_osn_sample_stats(struct osnoise_variables *osn_var, struct osnoise_sample *
 	s->irq_count = osn_var->irq.count - s->irq_count;
 	s->softirq_count = osn_var->softirq.count - s->softirq_count;
 	s->thread_count = osn_var->thread.count - s->thread_count;
+	s->ipi_count = osn_var->ipi.count - s->ipi_count;
 }
 
 /*
@@ -1612,10 +1681,6 @@ static int run_osnoise(void)
 out:
 	return ret;
 }
-
-static struct cpumask osnoise_cpumask;
-static struct cpumask save_cpumask;
-static struct cpumask kthread_cpumask;
 
 /*
  * osnoise_sleep - sleep until the next period
@@ -2892,12 +2957,18 @@ static int osnoise_hook_events(void)
 		goto out_unhook_irq;
 
 	retval = hook_thread_events();
+	if (retval)
+		goto out_unhook_softirq;
+
+	retval = hook_ipi_events();
 	/*
 	 * All fine!
 	 */
 	if (!retval)
 		return 0;
 
+	unhook_thread_events();
+out_unhook_softirq:
 	unhook_softirq_events();
 out_unhook_irq:
 	unhook_irq_events();
@@ -2906,6 +2977,7 @@ out_unhook_irq:
 
 static void osnoise_unhook_events(void)
 {
+	unhook_ipi_events();
 	unhook_thread_events();
 	unhook_softirq_events();
 	unhook_irq_events();
