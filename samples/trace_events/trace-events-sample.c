@@ -92,12 +92,11 @@ static int simple_thread_fn(void *arg)
 }
 
 static DEFINE_MUTEX(thread_mutex);
-static int simple_thread_cnt;
 
 int foo_bar_reg(void)
 {
 	mutex_lock(&thread_mutex);
-	if (simple_thread_cnt++)
+	if (!IS_ERR_OR_NULL(simple_tsk_fn))
 		goto out;
 
 	pr_info("Starting thread for foo_bar_fn\n");
@@ -115,14 +114,11 @@ int foo_bar_reg(void)
 void foo_bar_unreg(void)
 {
 	mutex_lock(&thread_mutex);
-	if (--simple_thread_cnt)
-		goto out;
-
-	pr_info("Killing thread for foo_bar_fn\n");
-	if (simple_tsk_fn)
+	if (!IS_ERR_OR_NULL(simple_tsk_fn)) {
+		pr_info("Killing thread for foo_bar_fn\n");
 		kthread_stop(simple_tsk_fn);
-	simple_tsk_fn = NULL;
- out:
+		simple_tsk_fn = NULL;
+	}
 	mutex_unlock(&thread_mutex);
 }
 
@@ -139,7 +135,7 @@ static void __exit trace_event_exit(void)
 {
 	kthread_stop(simple_tsk);
 	mutex_lock(&thread_mutex);
-	if (simple_tsk_fn)
+	if (!IS_ERR_OR_NULL(simple_tsk_fn))
 		kthread_stop(simple_tsk_fn);
 	simple_tsk_fn = NULL;
 	mutex_unlock(&thread_mutex);
