@@ -73,6 +73,7 @@ struct bnxt_re_ah {
 struct bnxt_re_srq {
 	struct ib_srq		ib_srq;
 	struct bnxt_re_dev	*rdev;
+	struct ib_ucontext	*uctx;
 	u32			srq_limit;
 	struct bnxt_qplib_srq	qplib_srq;
 	struct ib_umem		*umem;

@@ -261,6 +261,9 @@ static int UVERBS_HANDLER(BNXT_RE_METHOD_GET_TOGGLE_MEM)(struct uverbs_attr_bund
 		if (!srq)
 			return -EINVAL;
 
+		if (srq->uctx != ib_uctx)
+			return -EINVAL;
+
 		addr = (u64)srq->uctx_srq_page;
 		break;
 
