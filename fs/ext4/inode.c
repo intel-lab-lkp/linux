@@ -1694,6 +1694,9 @@ struct mpage_da_data {
 	struct writeback_control *wbc;
 	unsigned int can_map:1;	/* Can writepages call map blocks? */
 
+	/* Saved memalloc context from ext4_writepages_down_read() */
+	int alloc_ctx;
+
 	/* These are internal state of ext4_do_writepages() */
 	loff_t start_pos;	/* The start pos to write */
 	loff_t next_pos;	/* Current pos to examine */
@@ -2824,8 +2827,21 @@ static int ext4_do_writepages(struct mpage_da_data *mpd)
 		}
 		BUG_ON(ext4_test_inode_state(inode,
 				EXT4_STATE_MAY_INLINE_DATA));
-		ext4_destroy_inline_data(handle, inode);
+		/*
+		 * Temporarily drop s_writepages_rwsem because
+		 * ext4_destroy_inline_data() acquires xattr_sem, which has
+		 * a higher lock ordering rank.  Holding both would create a
+		 * circular dependency with ext4_xattr_block_set() -> iput()
+		 * -> ext4_writepages() -> s_writepages_rwsem.
+		 */
+		if (mpd->can_map)
+			ext4_writepages_up_read(inode->i_sb, mpd->alloc_ctx);
+		ret = ext4_destroy_inline_data(handle, inode);
+		if (mpd->can_map)
+			mpd->alloc_ctx = ext4_writepages_down_read(inode->i_sb);
 		ext4_journal_stop(handle);
+		if (ret)
+			goto out_writepages;
 	}
 
 	/*
@@ -3032,13 +3048,12 @@ static int ext4_writepages(struct address_space *mapping,
 		.can_map = 1,
 	};
 	int ret;
-	int alloc_ctx;
 
 	ret = ext4_emergency_state(sb);
 	if (unlikely(ret))
 		return ret;
 
-	alloc_ctx = ext4_writepages_down_read(sb);
+	mpd.alloc_ctx = ext4_writepages_down_read(sb);
 	ret = ext4_do_writepages(&mpd);
 	/*
 	 * For data=journal writeback we could have come across pages marked
@@ -3047,7 +3062,7 @@ static int ext4_writepages(struct address_space *mapping,
 	 */
 	if (!ret && mpd.journalled_more_data)
 		ret = ext4_do_writepages(&mpd);
-	ext4_writepages_up_read(sb, alloc_ctx);
+	ext4_writepages_up_read(sb, mpd.alloc_ctx);
 
 	return ret;
 }
