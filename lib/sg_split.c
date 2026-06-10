@@ -81,6 +81,8 @@ static void sg_split_phys(struct sg_splitter *splitters, const int nb_splits)
 	struct sg_splitter *split;
 
 	for (i = 0, split = splitters; i < nb_splits; i++, split++) {
+		if (!split->nents)
+			continue;
 		in_sg = split->in_sg0;
 		out_sg = split->out_sg;
 		for (j = 0; j < split->nents; j++, out_sg++) {
@@ -108,6 +110,8 @@ static void sg_split_mapped(struct sg_splitter *splitters, const int nb_splits)
 	struct sg_splitter *split;
 
 	for (i = 0, split = splitters; i < nb_splits; i++, split++) {
+		if (!split->nents)
+			continue;
 		in_sg = split->in_sg0;
 		out_sg = split->out_sg;
 		for (j = 0; j < split->nents; j++, out_sg++) {
