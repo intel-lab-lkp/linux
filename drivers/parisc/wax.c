@@ -88,27 +88,23 @@ static int __init wax_init_chip(struct parisc_device *dev)
 	if (dev->irq < 0) {
 		printk(KERN_ERR "%s(): cannot get GSC irq\n",
 				__func__);
-		kfree(wax);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto free_wax;
 	}
 
 	wax->eim = ((u32) wax->gsc_irq.txn_addr) | wax->gsc_irq.txn_data;
 
 	ret = request_irq(wax->gsc_irq.irq, gsc_asic_intr, 0, "wax", wax);
-	if (ret < 0) {
-		kfree(wax);
-		return ret;
-	}
+	if (ret < 0)
+		goto free_wax;
 
 	/* enable IRQ's for devices below WAX */
 	gsc_writel(wax->eim, wax->hpa + OFFSET_IAR);
 
 	/* Done init'ing, register this driver */
 	ret = gsc_common_setup(dev, wax);
-	if (ret) {
-		kfree(wax);
-		return ret;
-	}
+	if (ret)
+		goto free_wax;
 
 	gsc_fixup_irqs(dev, wax, wax_choose_irq);
 	/* On 715-class machines, Wax EISA is a sibling of Wax, not a child. */
@@ -117,6 +113,10 @@ static int __init wax_init_chip(struct parisc_device *dev)
 		gsc_fixup_irqs(parent, wax, wax_choose_irq);
 	}
 
+	return ret;
+
+free_wax:
+	kfree(wax);
 	return ret;
 }
 
