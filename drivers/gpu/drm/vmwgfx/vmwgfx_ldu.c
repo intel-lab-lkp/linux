@@ -342,9 +342,14 @@ vmw_ldu_primary_plane_atomic_update(struct drm_plane *plane,
 			.x2 = vfb->base.width,
 			.y2 = vfb->base.height
 		};
-		struct drm_mode_rect *damage_rects = drm_plane_get_damage_clips(new_state);
-		u32 rect_count = drm_plane_get_damage_clips_count(new_state);
+		struct drm_mode_rect *damage_rects = NULL;
+		u32 rect_count = 0;
 		int ret;
+
+		if (!new_state->ignore_damage_clips) {
+			damage_rects = drm_plane_get_damage_clips(new_state);
+			rect_count = drm_plane_get_damage_clips_count(new_state);
+		}
 
 		if (!damage_rects) {
 			damage_rects = &fb_rect;
