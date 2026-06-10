@@ -17,6 +17,14 @@ static struct snd_soc_acpi_mach cht_surface_mach = {
 	.sof_tplg_filename = "sof-cht-rt5645.tplg",
 };
 
+static struct snd_soc_acpi_mach cht_yogabook_mach = {
+	.id = "10EC5677",
+	.drv_name = "cht-yogabook",
+	.fw_filename = "intel/fw_sst_22a8.bin",
+	.board = "cht-yogabook",
+	.sof_tplg_filename = "sof-cht-rt5677.tplg",
+};
+
 static struct snd_soc_acpi_mach cht_lenovo_yoga_tab3_x90_mach = {
 	.id = "10WM5102",
 	.drv_name = "bytcr_wm5102",
@@ -32,6 +40,24 @@ static const struct dmi_system_id cht_table[] = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Microsoft Corporation"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Surface 3"),
 		},
+	},
+	{
+		.ident = "Lenovo Yoga Book YB1-X91",
+		.driver_data = (void *)&cht_yogabook_mach,
+		/* YB1-X91L/F */
+		.matches = {
+			DMI_MATCH(DMI_PRODUCT_NAME, "Lenovo YB1-X91"),
+		}
+	},
+	{
+		.ident = "Lenovo Yoga Book YB1-X90",
+		.driver_data = (void *)&cht_yogabook_mach,
+		/* YB1-X90L/F, codec is not listed in DSDT */
+		.matches = {
+			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Intel Corporation"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "CHERRYVIEW D1 PLATFORM"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "YETI-11"),
+		}
 	},
 	{
 		/*
@@ -120,6 +146,20 @@ struct snd_soc_acpi_mach  snd_soc_acpi_intel_cherrytrail_machines[] = {
 		.fw_filename = "intel/fw_sst_22a8.bin",
 		.board = "cht-bsw",
 		.sof_tplg_filename = "sof-cht-rt5670.tplg",
+	},
+	/*
+	 * The only known Cherry Trail device with RT5677 codec and 10EC677
+	 * DSTD entry is the Lenovo Yoga Book YB1-X91. It has a device-specific
+	 * driver, so check DMI and use a machine quirk to override the default
+	 * (non-existent) machine driver.
+	 */
+	{
+		.id = "10EC5677",
+		.drv_name = "cht-bsw-rt5677",
+		.fw_filename = "intel/fw_sst_22a8.bin",
+		.board = "cht-bsw",
+		.machine_quirk = cht_quirk,
+		.sof_tplg_filename = "sof-cht-rt5677.tplg",
 	},
 	{
 		.comp_ids = &rt5645_comp_ids,
