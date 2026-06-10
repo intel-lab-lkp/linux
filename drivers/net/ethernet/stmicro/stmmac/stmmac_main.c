@@ -38,7 +38,6 @@
 #include <linux/seq_file.h>
 #endif /* CONFIG_DEBUG_FS */
 #include <linux/net_tstamp.h>
-#include <linux/phylink.h>
 #include <linux/udp.h>
 #include <linux/bpf_trace.h>
 #include <net/devlink.h>
@@ -49,6 +48,7 @@
 #include "stmmac_fpe.h"
 #include "stmmac.h"
 #include "stmmac_pcs.h"
+#include "stmmac_phylink.h"
 #include "stmmac_xdp.h"
 #include <linux/reset.h>
 #include <linux/of_mdio.h>
@@ -1323,7 +1323,7 @@ static int stmmac_init_phy(struct net_device *dev)
 	u32 dev_flags = 0;
 	int ret;
 
-	if (!phylink_expects_phy(priv->phylink))
+	if (!stmmac_phylink_expects_phy(priv->phylink))
 		return 0;
 
 	if (priv->hw->xpcs &&
@@ -3655,7 +3655,7 @@ static int stmmac_hw_setup(struct net_device *dev)
 
 	/* Make sure RX clock is enabled */
 	if (priv->hw->phylink_pcs)
-		phylink_pcs_pre_init(priv->phylink, priv->hw->phylink_pcs);
+		stmmac_phylink_pcs_pre_init(priv->phylink, priv->hw->phylink_pcs);
 
 	/* Note that clk_rx_i must be running for reset to complete. This
 	 * clock may also be required when setting the MAC address.
@@ -3663,12 +3663,12 @@ static int stmmac_hw_setup(struct net_device *dev)
 	 * Block the receive clock stop for LPI mode at the PHY in case
 	 * the link is established with EEE mode active.
 	 */
-	phylink_rx_clk_stop_block(priv->phylink);
+	stmmac_phylink_rx_clk_stop_block(priv->phylink);
 
 	/* DMA initialization and SW reset */
 	ret = stmmac_init_dma_engine(priv);
 	if (ret < 0) {
-		phylink_rx_clk_stop_unblock(priv->phylink);
+		stmmac_phylink_rx_clk_stop_unblock(priv->phylink);
 		netdev_err(priv->dev, "%s: DMA engine initialization failed\n",
 			   __func__);
 		return ret;
@@ -3676,7 +3676,7 @@ static int stmmac_hw_setup(struct net_device *dev)
 
 	/* Copy the MAC addr into the HW  */
 	stmmac_set_umac_addr(priv, priv->hw, dev->dev_addr, 0);
-	phylink_rx_clk_stop_unblock(priv->phylink);
+	stmmac_phylink_rx_clk_stop_unblock(priv->phylink);
 
 	/* Initialize the MAC Core */
 	stmmac_core_init(priv, priv->hw, dev);
@@ -3752,9 +3752,9 @@ static int stmmac_hw_setup(struct net_device *dev)
 	/* Start the ball rolling... */
 	stmmac_start_all_dma(priv);
 
-	phylink_rx_clk_stop_block(priv->phylink);
+	stmmac_phylink_rx_clk_stop_block(priv->phylink);
 	stmmac_set_hw_vlan_mode(priv, priv->hw);
-	phylink_rx_clk_stop_unblock(priv->phylink);
+	stmmac_phylink_rx_clk_stop_unblock(priv->phylink);
 
 	return 0;
 }
@@ -4159,7 +4159,7 @@ static int __stmmac_open(struct net_device *dev,
 
 	stmmac_init_coalesce(priv);
 
-	phylink_start(priv->phylink);
+	stmmac_phylink_start(priv->phylink);
 
 	stmmac_vlan_restore(priv);
 
@@ -4174,7 +4174,7 @@ static int __stmmac_open(struct net_device *dev,
 	return 0;
 
 irq_error:
-	phylink_stop(priv->phylink);
+	stmmac_phylink_stop(priv->phylink);
 
 	for (chan = 0; chan < priv->plat->tx_queues_to_use; chan++)
 		hrtimer_cancel(&priv->dma_conf.tx_queue[chan].txtimer);
@@ -4219,14 +4219,14 @@ static int stmmac_open(struct net_device *dev)
 	kfree(dma_conf);
 
 	/* We may have called phylink_speed_down before */
-	phylink_speed_up(priv->phylink);
+	stmmac_phylink_speed_up(priv->phylink);
 
 	return ret;
 
 err_serdes:
 	stmmac_legacy_serdes_power_down(priv);
 err_disconnect_phy:
-	phylink_disconnect_phy(priv->phylink);
+	stmmac_phylink_disconnect_phy(priv->phylink);
 err_runtime_pm:
 	pm_runtime_put(priv->device);
 err_dma_resources:
@@ -4241,7 +4241,7 @@ static void __stmmac_release(struct net_device *dev)
 	u8 chan;
 
 	/* Stop and disconnect the PHY */
-	phylink_stop(priv->phylink);
+	stmmac_phylink_stop(priv->phylink);
 
 	stmmac_disable_all_queues(priv);
 
@@ -4280,12 +4280,12 @@ static int stmmac_release(struct net_device *dev)
 	 * to its slowest speed to save power.
 	 */
 	if (device_may_wakeup(priv->device))
-		phylink_speed_down(priv->phylink, false);
+		stmmac_phylink_speed_down(priv->phylink, false);
 
 	__stmmac_release(dev);
 
 	stmmac_legacy_serdes_power_down(priv);
-	phylink_disconnect_phy(priv->phylink);
+	stmmac_phylink_disconnect_phy(priv->phylink);
 	pm_runtime_put(priv->device);
 
 	return 0;
@@ -6209,9 +6209,9 @@ static int stmmac_set_features(struct net_device *netdev,
 	else
 		priv->hw->hw_vlan_en = false;
 
-	phylink_rx_clk_stop_block(priv->phylink);
+	stmmac_phylink_rx_clk_stop_block(priv->phylink);
 	stmmac_set_hw_vlan_mode(priv, priv->hw);
-	phylink_rx_clk_stop_unblock(priv->phylink);
+	stmmac_phylink_rx_clk_stop_unblock(priv->phylink);
 
 	return 0;
 }
@@ -6386,7 +6386,8 @@ static int stmmac_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	case SIOCGMIIPHY:
 	case SIOCGMIIREG:
 	case SIOCSMIIREG:
-		ret = phylink_mii_ioctl(priv->phylink, rq, cmd);
+		if (priv->phylink)
+			ret = phylink_mii_ioctl(priv->phylink, rq, cmd);
 		break;
 	default:
 		break;
@@ -6480,9 +6481,9 @@ static int stmmac_set_mac_address(struct net_device *ndev, void *addr)
 	if (ret)
 		goto set_mac_error;
 
-	phylink_rx_clk_stop_block(priv->phylink);
+	stmmac_phylink_rx_clk_stop_block(priv->phylink);
 	stmmac_set_umac_addr(priv, priv->hw, ndev->dev_addr, 0);
-	phylink_rx_clk_stop_unblock(priv->phylink);
+	stmmac_phylink_rx_clk_stop_unblock(priv->phylink);
 
 set_mac_error:
 	pm_runtime_put(priv->device);
@@ -8081,7 +8082,7 @@ static int __stmmac_dvr_probe(struct device *device,
 error_netdev_register:
 	stmmac_unregister_devlink(priv);
 error_devlink_setup:
-	phylink_destroy(priv->phylink);
+	stmmac_phylink_destroy(priv->phylink);
 error_phy_setup:
 	stmmac_pcs_clean(ndev);
 error_pcs_setup:
@@ -8147,7 +8148,7 @@ void stmmac_dvr_remove(struct device *dev)
 #endif
 	stmmac_unregister_devlink(priv);
 
-	phylink_destroy(priv->phylink);
+	stmmac_phylink_destroy(priv->phylink);
 	if (priv->plat->stmmac_rst)
 		reset_control_assert(priv->plat->stmmac_rst);
 	reset_control_assert(priv->plat->stmmac_ahb_rst);
@@ -8214,7 +8215,7 @@ int stmmac_suspend(struct device *dev)
 	mutex_unlock(&priv->lock);
 
 	rtnl_lock();
-	phylink_suspend(priv->phylink, !!priv->wolopts);
+	stmmac_phylink_suspend(priv->phylink, !!priv->wolopts);
 	rtnl_unlock();
 
 	if (stmmac_fpe_supported(priv))
@@ -8314,7 +8315,7 @@ int stmmac_resume(struct device *dev)
 	/* Prepare the PHY to resume, ensuring that its clocks which are
 	 * necessary for the MAC DMA reset to complete are running
 	 */
-	phylink_prepare_resume(priv->phylink);
+	stmmac_phylink_prepare_resume(priv->phylink);
 
 	mutex_lock(&priv->lock);
 
@@ -8335,9 +8336,9 @@ int stmmac_resume(struct device *dev)
 	stmmac_init_timestamping(priv);
 
 	stmmac_init_coalesce(priv);
-	phylink_rx_clk_stop_block(priv->phylink);
+	stmmac_phylink_rx_clk_stop_block(priv->phylink);
 	stmmac_set_rx_mode(ndev);
-	phylink_rx_clk_stop_unblock(priv->phylink);
+	stmmac_phylink_rx_clk_stop_unblock(priv->phylink);
 
 	stmmac_vlan_restore(priv);
 
@@ -8350,7 +8351,7 @@ int stmmac_resume(struct device *dev)
 	 * initialised because it may bring the link up immediately in a
 	 * workqueue thread, which will race with initialisation.
 	 */
-	phylink_resume(priv->phylink);
+	stmmac_phylink_resume(priv->phylink);
 	rtnl_unlock();
 
 	netif_device_attach(ndev);
