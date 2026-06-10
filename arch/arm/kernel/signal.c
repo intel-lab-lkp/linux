@@ -140,7 +140,7 @@ static int restore_vfp_context(char __user **auxp)
 static int restore_sigframe(struct pt_regs *regs, struct sigframe __user *sf)
 {
 	struct sigcontext context;
-	char __user *aux;
+	char __user *aux __maybe_unused;
 	sigset_t set;
 	int err;
 
