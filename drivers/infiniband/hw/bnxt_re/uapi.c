@@ -99,6 +99,9 @@ static int UVERBS_HANDLER(BNXT_RE_METHOD_ALLOC_PAGE)(struct uverbs_attr_bundle *
 	switch (alloc_type) {
 	case BNXT_RE_ALLOC_WC_PAGE:
 		if (cctx->modes.db_push)  {
+			/* already allocated — one WC page per context */
+			if (uctx->wcdpi.dbr)
+				return -EEXIST;
 			if (bnxt_qplib_alloc_dpi(&rdev->qplib_res, &uctx->wcdpi,
 						 uctx, BNXT_QPLIB_DPI_TYPE_WC))
 				return -ENOMEM;
