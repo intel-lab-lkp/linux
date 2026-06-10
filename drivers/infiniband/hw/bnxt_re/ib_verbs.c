@@ -2272,6 +2272,8 @@ int bnxt_re_create_srq(struct ib_srq *ib_srq,
 			srq->uctx_srq_page = (void *)get_zeroed_page(GFP_KERNEL);
 			if (!srq->uctx_srq_page) {
 				rc = -ENOMEM;
+				bnxt_qplib_destroy_srq(&rdev->qplib_res,
+						       &srq->qplib_srq);
 				goto fail;
 			}
 			resp.comp_mask |= BNXT_RE_SRQ_TOGGLE_PAGE_SUPPORT;
@@ -2291,6 +2293,13 @@ int bnxt_re_create_srq(struct ib_srq *ib_srq,
 	return 0;
 
 fail:
+	if (rdev->chip_ctx->modes.toggle_bits & BNXT_QPLIB_SRQ_TOGGLE_BIT) {
+		mutex_lock(&rdev->srq_hash_lock);
+		hash_del(&srq->hash_entry);
+		mutex_unlock(&rdev->srq_hash_lock);
+		if (srq->uctx_srq_page)
+			free_page((unsigned long)srq->uctx_srq_page);
+	}
 	ib_umem_release(srq->umem);
 exit:
 	return rc;
