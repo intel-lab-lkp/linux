@@ -112,10 +112,8 @@ int __init sa11xx_clk_init(void)
 		return -ENOMEM;
 	hw->init = &clk_mpll_init_data;
 	ret = clk_hw_register(NULL, hw);
-	if (ret) {
-		kfree(hw);
-		return ret;
-	}
+	if (ret)
+		goto free_hw;
 
 	clk_hw_register_clkdev(hw, NULL, "sa11x0-fb");
 	clk_hw_register_clkdev(hw, NULL, "sa11x0-pcmcia");
@@ -134,12 +132,14 @@ int __init sa11xx_clk_init(void)
 		return -ENOMEM;
 	hw->init = &clk_gpio27_init_data;
 	ret = clk_hw_register(NULL, hw);
-	if (ret) {
-		kfree(hw);
-		return ret;
-	}
+	if (ret)
+		goto free_hw;
 
 	clk_hw_register_clkdev(hw, NULL, "sa1111.0");
 
 	return 0;
+
+free_hw:
+	kfree(hw);
+	return ret;
 }
