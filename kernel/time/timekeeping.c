@@ -402,6 +402,7 @@ static void tk_setup_internals(struct timekeeper *tk, struct clocksource *clock)
 	tk->tkr_raw.mult = clock->mult;
 	tk->ntp_err_mult = 0;
 	tk->skip_second_overflow = 0;
+	tk->skew_delta = 0;
 
 	tk->cs_id = clock->id;
 
@@ -2349,18 +2350,27 @@ static __always_inline void timekeeping_apply_adjustment(struct timekeeper *tk,
 static void timekeeping_adjust(struct timekeeper *tk, s64 offset)
 {
 	u64 ntp_tl = ntp_tick_length(tk->id);
+	s64 skew = ntp_get_skew_delta(tk->id);
 	u32 mult;
 
 	/*
-	 * Determine the multiplier from the current NTP tick length.
-	 * Avoid expensive division when the tick length doesn't change.
+	 * Determine the multiplier from the current NTP tick length plus
+	 * skew_delta. The skew biases mult so that ±1 dithering can deliver
+	 * the time_offset slew rate. Recompute when either changes.
 	 */
-	if (likely(tk->ntp_tick == ntp_tl)) {
+	if (likely(tk->ntp_tick == ntp_tl && tk->skew_delta == skew)) {
+		/* Revert to the base mult rate. */
 		mult = tk->tkr_mono.mult - tk->ntp_err_mult;
 	} else {
 		tk->ntp_tick = ntp_tl;
-		mult = div64_u64(tk->ntp_tick >> tk->ntp_error_shift,
-				 tk->cycle_interval);
+		tk->skew_delta = skew;
+		/*
+		 * skew_delta is stored pre-divided by HZ (matching time_offset);
+		 * scale it back up to the full per-tick rate for the mult bias.
+		 */
+		skew *= NTP_INTERVAL_FREQ;
+		mult = div64_u64((tk->ntp_tick + skew) >> tk->ntp_error_shift,
+				  tk->cycle_interval);
 	}
 
 	/*
@@ -2486,6 +2496,31 @@ static u64 logarithmic_accumulation(struct timekeeper *tk, u64 offset,
 	/* Accumulate error between NTP and clock interval */
 	tk->ntp_error += tk->ntp_tick << shift;
 	tk->ntp_error -= tk->xtime_interval << (tk->ntp_error_shift + shift);
+
+	/*
+	 * The above accounting of ntp_error includes the part of clock
+	 * skew which was *intentional*, imparted through deliberately
+	 * adjusting 'mult' in timekeeping_adjust() taking skew_delta
+	 * into account.
+	 *
+	 * Drain the intentional skew from time_offset, and readjust
+	 * ntp_error by the amount that *could* actually be drained.
+	 * This ensures that any *overshoot* is correctly left in
+	 * ntp_error and will be correctly compensated for over time.
+	 */
+	if (tk->skew_delta) {
+		/*
+		 * skew_delta is stored pre-divided by HZ, matching time_offset,
+		 * so drain it directly. Fold the amount actually drained back
+		 * into ntp_error in full clock units (× NTP_INTERVAL_FREQ); any
+		 * undrainable overshoot is left in ntp_error to be compensated
+		 * by the dithering over subsequent ticks.
+		 */
+		s64 drain = tk->skew_delta << shift;
+		s64 unclaimed = ntp_drain_time_offset(tk->id, drain);
+
+		tk->ntp_error += (drain - unclaimed) * NTP_INTERVAL_FREQ;
+	}
 
 	return offset;
 }

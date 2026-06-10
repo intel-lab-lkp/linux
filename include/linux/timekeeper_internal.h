@@ -189,6 +189,7 @@ struct timekeeper {
 	u32			ntp_err_mult;
 	s64			cs_tick_adj;
 	u32			skip_second_overflow;
+	s64			skew_delta;
 	s32			tai_offset;
 };
 
