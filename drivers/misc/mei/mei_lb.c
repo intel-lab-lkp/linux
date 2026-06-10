@@ -104,7 +104,7 @@ struct mei_lb_rsp {
 
 /* Late Binding version 2 */
 
-#define MEI_LB2_CMD 0x01
+#define MEI_LB2_CMD cpu_to_le32(0x01)
 
 #define MEI_LB2_HDR_FLAG_RSP 0x01
 
