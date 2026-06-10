@@ -194,7 +194,6 @@ struct digi_port {
 	int dp_throttled;
 	int dp_throttle_restart;
 	wait_queue_head_t dp_flush_wait;
-	wait_queue_head_t dp_close_wait;	/* wait queue for close */
 	wait_queue_head_t write_wait;
 	struct usb_serial_port *dp_port;
 };
@@ -1169,7 +1168,6 @@ static void digi_close(struct usb_serial_port *port)
 exit:
 	spin_lock_irq(&priv->dp_port_lock);
 	priv->dp_write_urb_in_use = 0;
-	wake_up_interruptible(&priv->dp_close_wait);
 	spin_unlock_irq(&priv->dp_port_lock);
 	mutex_unlock(&port->serial->disc_mutex);
 }
@@ -1218,7 +1216,6 @@ static int digi_port_init(struct usb_serial_port *port, unsigned port_num)
 	priv->dp_port_num = port_num;
 	init_waitqueue_head(&priv->dp_transmit_idle_wait);
 	init_waitqueue_head(&priv->dp_flush_wait);
-	init_waitqueue_head(&priv->dp_close_wait);
 	init_waitqueue_head(&priv->write_wait);
 	priv->dp_port = port;
 
