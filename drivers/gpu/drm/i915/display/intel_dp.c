@@ -2820,6 +2820,18 @@ intel_dp_compute_config_limits(struct intel_dp *intel_dp,
 								     crtc_state)));
 	}
 
+	/*
+	 * Prefer DSC with an at least 8 bpc input over a dithered 6 bpc
+	 * uncompressed output, by failing the uncompressed link config for
+	 * modes which would fit only with a 6 bpc pipe BPP. Honor a lower
+	 * limit set via the max bpc connector property.
+	 */
+	if (!dsc &&
+	    intel_dp_supports_dsc(intel_dp, connector, crtc_state) &&
+	    limits->pipe.max_bpp >= 24 &&
+	    crtc_state->pipe_bpp >= 24)
+		limits->pipe.min_bpp = max(limits->pipe.min_bpp, 24);
+
 	if (limits->pipe.min_bpp <= 0 ||
 	    limits->pipe.min_bpp > limits->pipe.max_bpp) {
 		drm_dbg_kms(display->drm, "[CONNECTOR:%d:%s] Invalid pipe bpp range: %d-%d\n",
