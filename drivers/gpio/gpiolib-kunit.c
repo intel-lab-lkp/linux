@@ -91,13 +91,8 @@ static struct platform_driver gpio_swnode_consumer_driver = {
 	},
 };
 
-static void gpio_swnode_lookup_by_primary(struct kunit *test)
+static int gpio_swnode_register_drivers(struct kunit *test)
 {
-	struct gpio_swnode_consumer_pdata *pdata;
-	struct platform_device_info pdevinfo;
-	struct property_entry properties[2];
-	struct platform_device *pdev;
-	bool bound = false;
 	int ret;
 
 	ret = kunit_platform_driver_register(test, &gpio_test_provider_driver);
@@ -105,6 +100,17 @@ static void gpio_swnode_lookup_by_primary(struct kunit *test)
 
 	ret = kunit_platform_driver_register(test, &gpio_swnode_consumer_driver);
 	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	return 0;
+}
+
+static void gpio_swnode_lookup_by_primary(struct kunit *test)
+{
+	struct gpio_swnode_consumer_pdata *pdata;
+	struct platform_device_info pdevinfo;
+	struct property_entry properties[2];
+	struct platform_device *pdev;
+	bool bound = false;
 
 	pdevinfo = (struct platform_device_info){
 		.name = GPIO_TEST_PROVIDER,
@@ -149,7 +155,6 @@ static void gpio_swnode_lookup_by_secondary(struct kunit *test)
 	struct fwnode_handle *primary;
 	struct platform_device *pdev;
 	bool bound = false;
-	int ret;
 
 	/*
 	 * Can't live on the stack as it will still get referenced in cleanup
@@ -157,12 +162,6 @@ static void gpio_swnode_lookup_by_secondary(struct kunit *test)
 	 */
 	primary = kunit_kzalloc(test, sizeof(*primary), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, primary);
-
-	ret = kunit_platform_driver_register(test, &gpio_test_provider_driver);
-	KUNIT_ASSERT_EQ(test, ret, 0);
-
-	ret = kunit_platform_driver_register(test, &gpio_swnode_consumer_driver);
-	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	fwnode_init(primary, NULL);
 
@@ -211,6 +210,7 @@ static struct kunit_case gpio_swnode_lookup_tests[] = {
 static struct kunit_suite gpio_swnode_lookup_test_suite = {
 	.name = "gpio-swnode-lookup",
 	.test_cases = gpio_swnode_lookup_tests,
+	.init = gpio_swnode_register_drivers,
 };
 
 static BLOCKING_NOTIFIER_HEAD(gpio_unbind_notifier);
