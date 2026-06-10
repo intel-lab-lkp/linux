@@ -6598,6 +6598,12 @@ S:	Maintained
 F:	Documentation/hwmon/corsair-psu.rst
 F:	drivers/hwmon/corsair-psu.c
 
+CORTINA-ACCESS SERIAL CONSOLE DRIVER
+M:	Jason Li <jason.li@cortina-access.com>
+L:	linux-serial@vger.kernel.org
+S:	Supported
+F:	drivers/tty/serial/serial_cortina-access.c
+
 COUNTER SUBSYSTEM
 M:	William Breathitt Gray <wbg@kernel.org>
 L:	linux-iio@vger.kernel.org

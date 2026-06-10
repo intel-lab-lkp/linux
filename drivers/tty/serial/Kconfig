@@ -1592,6 +1592,27 @@ config SERIAL_NUVOTON_MA35D1_CONSOLE
 	  but you can alter that using a kernel command line option such as
 	  "console=ttyNVTx".
 
+config SERIAL_CORTINA_ACCESS
+	tristate "Cortina-Access serial port support"
+	depends on OF
+	select SERIAL_CORE
+	help
+	  This driver is for the Cortina-Access SoC UART, present in the
+	  CA8289 (Venus) and related CAXXXX family of SoCs. If you have a
+	  machine based on the Cortina-Access SoC and wish to use the serial
+	  port, say 'Y' here. Otherwise, say 'N'.
+
+config SERIAL_CORTINA_ACCESS_CONSOLE
+	bool "Console on Cortina-Access serial port"
+	depends on SERIAL_CORTINA_ACCESS=y
+	select SERIAL_CORE_CONSOLE
+	select SERIAL_EARLYCON
+	help
+	  Say 'Y' here if you wish to use the Cortina-Access UART as the system
+	  console (the device which receives all kernel messages and warnings
+	  and which allows logins in single user mode).
+	  /dev/ttyS* is the default device node.
+
 endmenu
 
 config SERIAL_MCTRL_GPIO
