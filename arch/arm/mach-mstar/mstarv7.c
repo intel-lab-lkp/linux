@@ -117,6 +117,7 @@ static void __init mstarv7_init(void)
 
 	np = of_find_compatible_node(NULL, NULL, "mstar,l3bridge");
 	l3bridge = of_iomap(np, 0);
+	of_node_put(np);
 	if (l3bridge)
 		soc_mb = mstarv7_mb;
 	else
