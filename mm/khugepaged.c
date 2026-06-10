@@ -578,9 +578,14 @@ static unsigned long collapse_possible_orders(struct vm_area_struct *vma,
 {
 	unsigned long orders;
 
-	/* If khugepaged is scanning an anonymous vma, allow mTHP collapse */
+	/*
+	 * If khugepaged is scanning an anonymous or shmem vma,
+	 * allow mTHP collapse.
+	 */
 	if ((tva_flags == TVA_KHUGEPAGED) && vma_is_anonymous(vma))
 		orders = THP_ORDERS_ALL_ANON;
+	else if ((tva_flags == TVA_KHUGEPAGED) && vma_is_shmem(vma))
+		orders = THP_ORDERS_ALL_FILE_DEFAULT;
 	else
 		orders = BIT(HPAGE_PMD_ORDER);
 
