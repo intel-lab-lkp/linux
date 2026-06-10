@@ -194,10 +194,55 @@ void netpoll_poll_dev(struct net_device *dev)
 	}
 
 	ops = dev->netdev_ops;
+
+	/*
+	 * Run the poll callbacks in softirq context, exactly as net_rx_action()
+	 * does for the normal NAPI path. netpoll_poll_dev() is called from
+	 * process context with IRQs disabled (e.g. printk() -> netconsole while
+	 * holding a rq->lock inside __schedule()). Drivers free completed TX
+	 * skbs from their ->poll() via dev_kfree_skb_irq_reason(), which calls
+	 * raise_softirq_irqoff(NET_TX_SOFTIRQ). Outside softirq context that
+	 * helper sees !in_interrupt() and calls wakeup_softirqd() ->
+	 * try_to_wake_up(), which takes the rq->lock of the current CPU. If the
+	 * caller already holds that rq->lock this self-deadlocks, wedging the
+	 * CPU (and then the whole machine via rq->lock contention) until the
+	 * hard-lockup watchdog panics.
+	 *
+	 * Disabling BH makes in_interrupt() true for the duration of the poll,
+	 * so the TX completion only sets the softirq-pending bit and never wakes
+	 * ksoftirqd. The raised softirq is harmless and benign: netpoll reaps
+	 * the freed skbs itself via zap_completion_queue() below, and the
+	 * pending NET_TX softirq is serviced at the next irq_exit().
+	 */
+	local_bh_disable();
+
 	if (ops->ndo_poll_controller)
 		ops->ndo_poll_controller(dev);
 
 	poll_napi(dev);
+
+#ifndef CONFIG_PREEMPT_RT
+	/*
+	 * On !PREEMPT_RT all netpoll_poll_dev() callers invoke us with IRQs
+	 * disabled (see the WARN_ONCE() in netpoll_send_skb_on_dev()). Use
+	 * _local_bh_enable(), which leaves the BH-disabled section without
+	 * running pending softirqs inline -- the full local_bh_enable() would
+	 * re-enable IRQs and run softirq handlers deep inside this restricted,
+	 * lock-holding context. The raised NET_TX softirq is benign: netpoll
+	 * reaps the freed skbs itself via zap_completion_queue() below, and the
+	 * pending softirq is serviced at the next irq_exit().
+	 */
+	_local_bh_enable();
+#else
+	/*
+	 * On PREEMPT_RT this path runs with IRQs enabled and softirqs are
+	 * threaded, so there is no IRQ-disabled, lock-holding context to
+	 * protect. _local_bh_enable() is not available on RT, and local_bh_disable()
+	 * there takes the per-CPU softirq_ctrl local_lock that only the full
+	 * local_bh_enable() releases -- so use it.
+	 */
+	local_bh_enable();
+#endif
 
 	up(&ni->dev_lock);
 
