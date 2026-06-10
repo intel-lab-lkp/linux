@@ -30,6 +30,9 @@ static void enetc_enable_psiier_interrupts(struct enetc_pf *pf)
 	u32 psiier = ENETC_PSIMR_MASK(pf->num_vfs);
 	struct enetc_hw *hw = &pf->si->hw;
 
+	if (pf->ops->vf_flr_handler)
+		psiier |= ENETC_VFFLR_MASK(pf->num_vfs);
+
 	enetc_wr(hw, ENETC_PSIIER, psiier);
 }
 
@@ -220,11 +223,23 @@ static u16 enetc_msg_set_vf_mac_promisc_mode(struct enetc_pf *pf, int vf_id,
 
 	mutex_lock(&pf->msg_lock);
 
-	if (type & ENETC_MAC_FILTER_TYPE_UC)
-		pf->ops->set_si_mac_promisc(hw, si_id, UC, promisc);
+	if (type & ENETC_MAC_FILTER_TYPE_UC) {
+		if (promisc)
+			vf_state->flags |= ENETC_VF_FLAG_UC_PROMISC;
+		else
+			vf_state->flags &= ~ENETC_VF_FLAG_UC_PROMISC;
 
-	if (type & ENETC_MAC_FILTER_TYPE_MC)
+		pf->ops->set_si_mac_promisc(hw, si_id, UC, promisc);
+	}
+
+	if (type & ENETC_MAC_FILTER_TYPE_MC) {
+		if (promisc)
+			vf_state->flags |= ENETC_VF_FLAG_MC_PROMISC;
+		else
+			vf_state->flags &= ~ENETC_VF_FLAG_MC_PROMISC;
+
 		pf->ops->set_si_mac_promisc(hw, si_id, MC, promisc);
+	}
 
 	mutex_unlock(&pf->msg_lock);
 
@@ -589,6 +604,29 @@ free_msg:
 	kfree(msg);
 }
 
+static void enetc_vf_flr_handler(struct enetc_pf *pf)
+{
+	u32 flr_mask = ENETC_VFFLR_MASK(pf->num_vfs);
+	struct enetc_hw *hw = &pf->si->hw;
+	u32 flr_status;
+
+	if (!pf->ops->vf_flr_handler)
+		return;
+
+	flr_status = enetc_rd(hw, ENETC_PSIIDR) & flr_mask;
+	if (!flr_status)
+		return;
+
+	for (int i = 0; i < pf->num_vfs; i++) {
+		if (!(ENETC_VFFLR_BIT(i) & flr_status))
+			continue;
+
+		/* Clear FLR interrupt status, W1C */
+		enetc_wr(hw, ENETC_PSIIDR, ENETC_VFFLR_BIT(i));
+		pf->ops->vf_flr_handler(pf, i);
+	}
+}
+
 static void enetc_msg_task(struct work_struct *work)
 {
 	struct enetc_si *si = container_of(work, struct enetc_si, msg_task);
@@ -596,6 +634,8 @@ static void enetc_msg_task(struct work_struct *work)
 	struct enetc_hw *hw = &si->hw;
 	u32 mr_status, mr_mask;
 	int i;
+
+	enetc_vf_flr_handler(pf);
 
 	mr_mask = ENETC_PSIMR_MASK(pf->num_vfs);
 	mr_status = (enetc_rd(hw, ENETC_PSIMSGRR) & mr_mask) |
@@ -725,8 +765,21 @@ static void enetc_msg_psi_free(struct enetc_pf *pf)
 	/* PSIIER interrupts may be re-enabled by workqueue */
 	enetc_disable_psiier_interrupts(pf);
 
-	for (i = 0; i < pf->num_vfs; i++)
+	for (i = 0; i < pf->num_vfs; i++) {
+		struct enetc_vf_state *vf_state = &pf->vf_state[i];
+
 		enetc_msg_free_mbx(si, i);
+
+		/* VF may set these flags by mailbox messages, so need to
+		 * clear these flags when enetc_msg_psi_free() is called.
+		 * Flags set by PF are cleared, because these flags are
+		 * unrelated to whether SR-IOV is enabled or disabled.
+		 */
+		mutex_lock(&vf_state->lock);
+		vf_state->flags &= ~(ENETC_VF_FLAG_UC_PROMISC |
+				     ENETC_VF_FLAG_MC_PROMISC);
+		mutex_unlock(&vf_state->lock);
+	}
 }
 
 int enetc_sriov_configure(struct pci_dev *pdev, int num_vfs)

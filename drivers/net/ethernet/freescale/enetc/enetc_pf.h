@@ -10,6 +10,8 @@
 enum enetc_vf_flags {
 	ENETC_VF_FLAG_PF_SET_MAC	= BIT(0),
 	ENETC_VF_FLAG_TRUSTED		= BIT(1),
+	ENETC_VF_FLAG_UC_PROMISC	= BIT(2),
+	ENETC_VF_FLAG_MC_PROMISC	= BIT(3),
 };
 
 struct enetc_vf_state {
@@ -38,6 +40,7 @@ struct enetc_pf_ops {
 				   enum enetc_mac_addr_type type, bool en);
 	void (*set_si_mac_hash_filter)(struct enetc_hw *hw, int si,
 				       enum enetc_mac_addr_type type, u64 hash);
+	void (*vf_flr_handler)(struct enetc_pf *pf, int vf_id);
 };
 
 struct enetc_pf {
