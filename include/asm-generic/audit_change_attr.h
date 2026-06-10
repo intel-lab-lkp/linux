@@ -40,3 +40,19 @@ __NR_link,
 #ifdef __NR_linkat
 __NR_linkat,
 #endif
+#ifdef __NR_utime
+__NR_utime,
+#endif
+#ifdef __NR_utimes
+__NR_utimes,
+#endif
+#ifdef __NR_futimesat
+__NR_futimesat,
+#endif
+__NR_utimensat,
+#ifdef __NR_utimensat_time64
+__NR_utimensat_time64,
+#endif
+#ifdef __NR_file_setattr
+__NR_file_setattr,
+#endif
