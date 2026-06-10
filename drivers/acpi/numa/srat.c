@@ -664,6 +664,9 @@ int __init acpi_numa_init(void)
 		return cnt;
 	else if (!parsed_numa_memblks)
 		return -ENOENT;
+
+	/* Request any standby nodes (created after numa emulation) */
+	numa_request_standby_count(CONFIG_ACPI_NUMA_STANDBY_NODES);
 	return 0;
 }
 
