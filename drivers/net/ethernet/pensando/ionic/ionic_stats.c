@@ -237,7 +237,7 @@ static u32 ionic_extra_port_stats_get_count(struct ionic_lif *lif)
 {
 	struct ionic_dev *idev = &lif->ionic->idev;
 	struct ionic_port_extra_stats *pes_cache;
-	u32 count = 0;
+	u32 count = 1;
 
 	if (!(lif->ionic->ident.dev.capabilities &
 	      cpu_to_le64(IONIC_DEV_CAP_EXTRA_STATS)))
@@ -295,6 +295,8 @@ static void ionic_sw_stats_get_rx_strings(struct ionic_lif *lif, u8 **buf,
 static void ionic_extra_port_stats_get_strings(struct ionic_lif *lif, u8 **buf)
 {
 	struct ionic_port_extra_stats *pes_cache;
+
+	ethtool_puts(buf, "link_down_events_phy");
 
 	if (!(lif->ionic->ident.dev.capabilities &
 	    cpu_to_le64(IONIC_DEV_CAP_EXTRA_STATS)))
@@ -360,7 +362,11 @@ static void ionic_sw_stats_get_rxq_values(struct ionic_lif *lif, u64 **buf,
 
 static void ionic_extra_port_stats_get_values(struct ionic_lif *lif, u64 **buf)
 {
+	struct ionic_port_info *port_info = lif->ionic->idev.port_info;
 	struct ionic_port_extra_stats *pes_cache;
+
+	**buf = le16_to_cpu(port_info->status.link_down_count);
+	(*buf)++;
 
 	if (!(lif->ionic->ident.dev.capabilities &
 	      cpu_to_le64(IONIC_DEV_CAP_EXTRA_STATS)))
