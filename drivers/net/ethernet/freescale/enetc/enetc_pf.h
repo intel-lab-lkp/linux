@@ -41,8 +41,6 @@ struct enetc_pf {
 	int num_vfs; /* number of active VFs, after sriov_init */
 	int total_vfs; /* max number of VFs, set for PF at probe */
 	struct enetc_vf_state *vf_state;
-
-	struct enetc_mac_filter mac_filter[MADDR_TYPE];
 	struct enetc_msg_swbd *rxmsg;
 
 	char vlan_promisc_simap; /* bitmap of SIs in VLAN promisc mode */
