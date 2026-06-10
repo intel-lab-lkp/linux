@@ -2887,6 +2887,7 @@ err3:
 	mutex_unlock(&fe->dvb->mdev_lock);
 err2:
 #endif
+	dvb_device_get(dvbdev);
 	dvb_generic_release(inode, file);
 err1:
 	if (dvbdev->users == -1 && fe->ops.ts_bus_ctrl)
