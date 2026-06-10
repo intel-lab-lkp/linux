@@ -380,14 +380,14 @@ static int bind_virq_for_mce(void)
 	ret = HYPERVISOR_mca(&mc_op);
 	if (ret) {
 		pr_err("Failed to get CPU info\n");
-		kfree(g_physinfo);
-		return ret;
+		goto free_info;
 	}
 
 	ret  = bind_virq_to_irqhandler(VIRQ_MCA, 0,
 				       xen_mce_interrupt, 0, "mce", NULL);
 	if (ret < 0) {
 		pr_err("Failed to bind virq\n");
+free_info:
 		kfree(g_physinfo);
 		return ret;
 	}
