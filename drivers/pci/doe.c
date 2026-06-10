@@ -28,12 +28,6 @@
 #define PCI_DOE_TIMEOUT HZ
 #define PCI_DOE_POLL_INTERVAL	(PCI_DOE_TIMEOUT / 128)
 
-#define PCI_DOE_FLAG_CANCEL	0
-#define PCI_DOE_FLAG_DEAD	1
-
-/* Max data object length is 2^18 dwords */
-#define PCI_DOE_MAX_LENGTH	(1 << 18)
-
 /**
  * struct pci_doe_mb - State for a single DOE mailbox
  *
@@ -61,11 +55,6 @@ struct pci_doe_mb {
 #ifdef CONFIG_SYSFS
 	struct device_attribute *sysfs_attrs;
 #endif
-};
-
-struct pci_doe_feature {
-	u16 vid;
-	u8 type;
 };
 
 /**
