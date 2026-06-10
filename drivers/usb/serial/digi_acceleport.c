@@ -32,10 +32,6 @@
 /* so we can be sure to send the full buffer in one urb */
 #define DIGI_OUT_BUF_SIZE		8
 
-/* port input buffer length -- must be >= transfer buffer length - 3 */
-/* so we can be sure to hold at least one full buffer from one urb */
-#define DIGI_IN_BUF_SIZE		64
-
 /* retry timeout while sleeping */
 #define DIGI_RETRY_TIMEOUT		(HZ/10)
 
