@@ -383,12 +383,16 @@ int __init dove_init_pmu(void)
 	domains_node = of_get_child_by_name(np_pmu, "domains");
 	if (!domains_node) {
 		pr_err("%pOFn: failed to find domains sub-node\n", np_pmu);
+		of_node_put(np_pmu);
 		return 0;
 	}
 
 	pmu = kzalloc(sizeof(*pmu), GFP_KERNEL);
-	if (!pmu)
+	if (!pmu) {
+		of_node_put(np_pmu);
+		of_node_put(domains_node);
 		return -ENOMEM;
+	}
 
 	spin_lock_init(&pmu->lock);
 	pmu->of_node = np_pmu;
@@ -398,7 +402,9 @@ int __init dove_init_pmu(void)
 		pr_err("%pOFn: failed to map PMU\n", np_pmu);
 		iounmap(pmu->pmu_base);
 		iounmap(pmu->pmc_base);
+		of_node_put(pmu->of_node);
 		kfree(pmu);
+		of_node_put(domains_node);
 		return -ENOMEM;
 	}
 
@@ -442,6 +448,8 @@ int __init dove_init_pmu(void)
 
 		__pmu_domain_register(domain, np);
 	}
+
+	of_node_put(domains_node);
 
 	/* Loss of the interrupt controller is not a fatal error. */
 	parent_irq = irq_of_parse_and_map(pmu->of_node, 0);
