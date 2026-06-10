@@ -766,6 +766,17 @@ static ssize_t bonding_show_ad_user_port_key(struct device *d,
 static DEVICE_ATTR(ad_user_port_key, 0644,
 		   bonding_show_ad_user_port_key, bonding_sysfs_store_option);
 
+static ssize_t bonding_show_broadcast_neighbor(struct device *d,
+					       struct device_attribute *attr,
+					       char *buf)
+{
+	struct bonding *bond = to_bond(d);
+
+	return sysfs_emit(buf, "%d\n", bond->params.broadcast_neighbor);
+}
+static DEVICE_ATTR(broadcast_neighbor, 0644,
+		   bonding_show_broadcast_neighbor, bonding_sysfs_store_option);
+
 static struct attribute *per_bond_attrs[] = {
 	&dev_attr_slaves.attr,
 	&dev_attr_mode.attr,
@@ -805,6 +816,7 @@ static struct attribute *per_bond_attrs[] = {
 	&dev_attr_ad_actor_system.attr,
 	&dev_attr_ad_user_port_key.attr,
 	&dev_attr_arp_missed_max.attr,
+	&dev_attr_broadcast_neighbor.attr,
 	NULL,
 };
 
