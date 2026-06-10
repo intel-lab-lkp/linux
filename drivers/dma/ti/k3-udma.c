@@ -3270,10 +3270,7 @@ udma_prep_slave_sg_pkt(struct udma_chan *uc, struct scatterlist *sgl,
 		if (!hwdesc->cppi5_desc_vaddr) {
 			dev_err(uc->ud->dev,
 				"descriptor%d allocation failed\n", i);
-
-			udma_free_hwdesc(uc, d);
-			kfree(d);
-			return NULL;
+			goto free_hwdesc;
 		}
 
 		d->residue += sg_len;
@@ -3309,6 +3306,7 @@ udma_prep_slave_sg_pkt(struct udma_chan *uc, struct scatterlist *sgl,
 		dev_err(uc->ud->dev,
 			"%s: Transfer size %u is over the supported 4M range\n",
 			__func__, d->residue);
+free_hwdesc:
 		udma_free_hwdesc(uc, d);
 		kfree(d);
 		return NULL;
