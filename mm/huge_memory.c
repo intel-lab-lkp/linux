@@ -3892,7 +3892,7 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 			folio_ref_unfreeze(new_folio,
 					   folio_cache_ref_count(new_folio) + 1);
 
-			if (do_lru)
+			if (do_lru && !(mapping && new_folio->index >= end))
 				lru_add_split_folio(folio, new_folio, lruvec, list);
 
 			/*
