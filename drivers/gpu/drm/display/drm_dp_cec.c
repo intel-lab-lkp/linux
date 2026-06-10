@@ -218,6 +218,9 @@ static void drm_dp_cec_handle_irq(struct drm_dp_aux *aux)
 	if (drm_dp_dpcd_read_byte(aux, DP_CEC_TUNNELING_IRQ_FLAGS, &flags) < 0)
 		return;
 
+	if (!flags)
+		return;
+
 	if (flags & DP_CEC_RX_MESSAGE_INFO_VALID)
 		drm_dp_cec_received(aux);
 
@@ -255,11 +258,22 @@ void drm_dp_cec_irq(struct drm_dp_aux *aux)
 
 	ret = drm_dp_dpcd_read_byte(aux, DP_DEVICE_SERVICE_IRQ_VECTOR_ESI1,
 				    &cec_irq);
-	if (ret < 0 || !(cec_irq & DP_CEC_IRQ))
+	if (ret < 0)
 		goto unlock;
 
+	/*
+	 * Some branch devices, for instance the Synaptics VMM7100 based
+	 * DP-to-HDMI protocol converters, assert an IRQ_HPD pulse for each
+	 * CEC event, but never set the CEC_IRQ bit in the
+	 * DEVICE_SERVICE_IRQ_VECTOR_ESI1 register. Check the CEC tunneling
+	 * IRQ flags even without CEC_IRQ being set: servicing the flags is
+	 * idempotent and only costs one additional AUX read.
+	 */
 	drm_dp_cec_handle_irq(aux);
-	drm_dp_dpcd_write_byte(aux, DP_DEVICE_SERVICE_IRQ_VECTOR_ESI1, DP_CEC_IRQ);
+
+	if (cec_irq & DP_CEC_IRQ)
+		drm_dp_dpcd_write_byte(aux, DP_DEVICE_SERVICE_IRQ_VECTOR_ESI1,
+				       DP_CEC_IRQ);
 unlock:
 	mutex_unlock(&aux->cec.lock);
 }
