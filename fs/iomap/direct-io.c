@@ -424,6 +424,9 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 	if ((pos | length) & (alignment - 1))
 		return -EINVAL;
 
+	if (iov_iter_alignment(dio->submit.iter) & (alignment - 1))
+		return -EINVAL;
+
 	if (dio->flags & IOMAP_DIO_WRITE) {
 		bool need_completion_work = true;
 
