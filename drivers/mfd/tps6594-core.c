@@ -531,7 +531,7 @@ static int tps6594_handle_post_irq(void *irq_drv_data)
 	return ret;
 };
 
-static struct regmap_irq_chip tps6594_irq_chip = {
+static const struct regmap_irq_chip tps6594_irq_chip = {
 	.ack_base = TPS6594_REG_INT_BUCK1_2,
 	.ack_invert = 1,
 	.clear_ack = 1,
@@ -543,7 +543,7 @@ static struct regmap_irq_chip tps6594_irq_chip = {
 	.handle_post_irq = tps6594_handle_post_irq,
 };
 
-static struct regmap_irq_chip tps65224_irq_chip = {
+static const struct regmap_irq_chip tps65224_irq_chip = {
 	.ack_base = TPS6594_REG_INT_BUCK,
 	.ack_invert = 1,
 	.clear_ack = 1,
@@ -555,7 +555,7 @@ static struct regmap_irq_chip tps65224_irq_chip = {
 	.handle_post_irq = tps6594_handle_post_irq,
 };
 
-static struct regmap_irq_chip tps652g1_irq_chip = {
+static const struct regmap_irq_chip tps652g1_irq_chip = {
 	.ack_base = TPS6594_REG_INT_BUCK,
 	.ack_invert = 1,
 	.clear_ack = 1,
@@ -707,7 +707,10 @@ int tps6594_device_init(struct tps6594 *tps, bool enable_crc)
 {
 	struct device *dev = tps->dev;
 	int ret;
-	struct regmap_irq_chip *irq_chip;
+	const struct regmap_irq_chip *irq_chip;
+	struct regmap_irq_chip irq_chip_copy;
+	const char *irq_chip_name;
+	void *irq_chip_desc;
 	unsigned int pwr_on, gpio3_cfg;
 	const struct mfd_cell *cells;
 	int n_cells;
@@ -738,15 +741,22 @@ int tps6594_device_init(struct tps6594 *tps, bool enable_crc)
 		cells = tps6594_common_cells;
 	}
 
-	irq_chip->irq_drv_data = tps;
-	irq_chip->name = devm_kasprintf(dev, GFP_KERNEL, "%s-%ld-0x%02x",
-					dev->driver->name, tps->chip_id, tps->reg);
+	irq_chip_name = devm_kasprintf(dev, GFP_KERNEL, "%s-%ld-0x%02x",
+				       dev->driver->name, tps->chip_id, tps->reg);
+	if (!irq_chip_name)
+		return -ENOMEM;
 
-	if (!irq_chip->name)
+	irq_chip_copy = *irq_chip;
+	irq_chip_copy.irq_drv_data = tps;
+	irq_chip_copy.name = irq_chip_name;
+
+	irq_chip_desc = devm_kmemdup(dev, &irq_chip_copy, sizeof(irq_chip_copy),
+				     GFP_KERNEL);
+	if (!irq_chip_desc)
 		return -ENOMEM;
 
 	ret = devm_regmap_add_irq_chip(dev, tps->regmap, tps->irq, IRQF_SHARED | IRQF_ONESHOT,
-				       0, irq_chip, &tps->irq_data);
+				       0, irq_chip_desc, &tps->irq_data);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to add regmap IRQ\n");
 
