@@ -406,15 +406,19 @@ int ovs_flow_tbl_masks_cache_resize(struct flow_table *table, u32 size)
 	return 0;
 }
 
-int ovs_flow_tbl_init(struct flow_table *table)
+struct flow_table *ovs_flow_tbl_alloc(void)
 {
 	struct table_instance *ti, *ufid_ti;
+	struct flow_table *table;
 	struct mask_cache *mc;
 	struct mask_array *ma;
 
+	table = kzalloc_obj(*table, GFP_KERNEL);
+	if (!table)
+		return ERR_PTR(-ENOMEM);
 	mc = tbl_mask_cache_alloc(MC_DEFAULT_HASH_ENTRIES);
 	if (!mc)
-		return -ENOMEM;
+		goto free_table;
 
 	ma = tbl_mask_array_alloc(MASK_ARRAY_SIZE_MIN);
 	if (!ma)
@@ -435,7 +439,7 @@ int ovs_flow_tbl_init(struct flow_table *table)
 	table->last_rehash = jiffies;
 	table->count = 0;
 	table->ufid_count = 0;
-	return 0;
+	return table;
 
 free_ti:
 	__table_instance_destroy(ti);
@@ -443,7 +447,9 @@ free_mask_array:
 	__mask_array_destroy(ma);
 free_mask_cache:
 	__mask_cache_destroy(mc);
-	return -ENOMEM;
+free_table:
+	kfree(table);
+	return ERR_PTR(-ENOMEM);
 }
 
 static void flow_tbl_destroy_rcu_cb(struct rcu_head *rcu)
@@ -505,11 +511,11 @@ static void table_instance_destroy(struct table_instance *ti,
 	call_rcu(&ufid_ti->rcu, flow_tbl_destroy_rcu_cb);
 }
 
-/* No need for locking this function is called from RCU callback or
- * error path.
- */
-void ovs_flow_tbl_destroy(struct flow_table *table)
+/* No need for locking this function is called from RCU callback. */
+void ovs_flow_tbl_destroy_rcu(struct rcu_head *rcu)
 {
+	struct flow_table *table = container_of(rcu, struct flow_table, rcu);
+
 	struct table_instance *ti = rcu_dereference_raw(table->ti);
 	struct table_instance *ufid_ti = rcu_dereference_raw(table->ufid_ti);
 	struct mask_cache *mc = rcu_dereference_raw(table->mask_cache);
@@ -518,6 +524,7 @@ void ovs_flow_tbl_destroy(struct flow_table *table)
 	call_rcu(&mc->rcu, mask_cache_rcu_cb);
 	call_rcu(&ma->rcu, mask_array_rcu_cb);
 	table_instance_destroy(ti, ufid_ti);
+	kfree(table);
 }
 
 struct sw_flow *ovs_flow_tbl_dump_next(struct table_instance *ti,

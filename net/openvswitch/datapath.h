@@ -90,7 +90,7 @@ struct datapath {
 	struct list_head list_node;
 
 	/* Flow table. */
-	struct flow_table table;
+	struct flow_table __rcu *table;
 
 	/* Switch ports. */
 	struct hlist_head *ports;
