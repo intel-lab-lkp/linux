@@ -52,7 +52,7 @@ int
 xfs_setfilesize(
 	struct xfs_inode	*ip,
 	xfs_off_t		offset,
-	size_t			size)
+	xfs_off_t		size)
 {
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_trans	*tp;
