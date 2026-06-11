@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Unicode-3.0 AND GPL-2.0
 /*
  * linux/fs/nls/nls_iso8859-1.c
  *
