@@ -487,13 +487,45 @@ static struct file_operations kvm_gmem_fops = {
 	.fallocate	= kvm_gmem_fallocate,
 };
 
+#ifdef CONFIG_MIGRATION
 static int kvm_gmem_migrate_folio(struct address_space *mapping,
 				  struct folio *dst, struct folio *src,
 				  enum migrate_mode mode)
 {
-	WARN_ON_ONCE(1);
-	return -EINVAL;
+	struct inode *inode = mapping->host;
+	pgoff_t start, end;
+	int ret;
+
+	if (!filemap_invalidate_trylock_shared(mapping))
+		return -EAGAIN;
+
+	start = src->index;
+	end = start + folio_nr_pages(src);
+
+	kvm_gmem_invalidate_begin(inode, start, end);
+
+	/*
+	 * For non-confidential guest_memfd the folio is host-readable,
+	 * so filemap_migrate_folio() can copy the contents itself via
+	 * folio_mc_copy().
+	 *
+	 * This is also the hook point for confidential VMs (SEV-SNP, TDX) once
+	 * they are made movable: the host cannot copy encrypted/private memory,
+	 * so a firmware-assisted copy would run here.
+	 * Idea: https://lore.kernel.org/r/20260428155043.39251-8-shivankg@amd.com
+	 * Mark the @dst->migrate_info field with FOLIO_CONTENT_COPIED, so
+	 * __migrate_folio() skip folio_mc_copy() for confidential VMs.
+	 */
+	ret = filemap_migrate_folio(mapping, dst, src, mode);
+
+	kvm_gmem_invalidate_end(inode, start, end);
+
+	filemap_invalidate_unlock_shared(mapping);
+	return ret;
 }
+#else
+#define kvm_gmem_migrate_folio NULL
+#endif
 
 static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *folio)
 {
@@ -592,9 +624,17 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	inode->i_size = size;
 	mapping_set_gfp_mask(inode->i_mapping, GFP_HIGHUSER);
 	mapping_set_inaccessible(inode->i_mapping);
-	mapping_set_unmovable(inode->i_mapping);
-	/* Unmovable mappings are supposed to be marked unevictable as well. */
-	WARN_ON_ONCE(!mapping_unevictable(inode->i_mapping));
+
+	/*
+	 * Confidential VMs (SEV-SNP, TDX) bind encryption to the physical
+	 * address and require firmware assisted copy, so their folios cannot
+	 * be migrated yet.
+	 */
+	if (kvm_arch_has_private_mem(kvm)) {
+		mapping_set_unmovable(inode->i_mapping);
+		/* Unmovable mappings are supposed to be marked unevictable as well. */
+		WARN_ON_ONCE(!mapping_unevictable(inode->i_mapping));
+	}
 
 	GMEM_I(inode)->flags = flags;
 
