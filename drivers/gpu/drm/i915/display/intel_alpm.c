@@ -629,6 +629,9 @@ bool intel_alpm_get_error(struct intel_dp *intel_dp)
 	u8 val;
 	int r;
 
+	if (!intel_dp->alpm_dpcd)
+		return false;
+
 	r = drm_dp_dpcd_readb(aux, DP_RECEIVER_ALPM_STATUS, &val);
 	if (r != 1) {
 		drm_err(display->drm, "Error reading ALPM status\n");
