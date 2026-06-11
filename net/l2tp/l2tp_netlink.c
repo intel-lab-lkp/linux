@@ -245,7 +245,8 @@ static int l2tp_nl_cmd_tunnel_create(struct sk_buff *skb, struct genl_info *info
 	refcount_inc(&tunnel->ref_count);
 	ret = l2tp_tunnel_register(tunnel, net, &cfg);
 	if (ret < 0) {
-		kfree(tunnel);
+		l2tp_tunnel_put(tunnel);
+		l2tp_tunnel_put(tunnel);
 		goto out;
 	}
 	ret = l2tp_tunnel_notify(&l2tp_nl_family, info, tunnel,
