@@ -64,6 +64,8 @@ svcxdr_decode_nfstime3(struct xdr_stream *xdr, struct timespec64 *timep)
 		return false;
 	timep->tv_sec = be32_to_cpup(p++);
 	timep->tv_nsec = be32_to_cpup(p);
+	if (timep->tv_nsec >= (u32)1000000000)
+		return false;
 
 	return true;
 }
