@@ -8,8 +8,8 @@ use crate::{
     device,
     devres::Devres,
     io::{
-        Io,
         IoBackend,
+        IoBase,
         IoCapable,
         Mmio,
         MmioBackend,
@@ -144,7 +144,7 @@ impl_config_space_io_capable!(u8, pci_read_config_byte, pci_write_config_byte);
 impl_config_space_io_capable!(u16, pci_read_config_word, pci_write_config_word);
 impl_config_space_io_capable!(u32, pci_read_config_dword, pci_write_config_dword);
 
-impl<'a, T: ?Sized + KnownSize> Io<'a> for ConfigSpace<'a, T> {
+impl<'a, T: ?Sized + KnownSize> IoBase<'a> for ConfigSpace<'a, T> {
     type Backend = ConfigSpaceBackend;
     type Target = T;
 
@@ -267,7 +267,7 @@ impl<const SIZE: usize> Drop for Bar<'_, SIZE> {
     }
 }
 
-impl<'a, const SIZE: usize> Io<'a> for &'a Bar<'_, SIZE> {
+impl<'a, const SIZE: usize> IoBase<'a> for &'a Bar<'_, SIZE> {
     type Backend = MmioBackend;
     type Target = crate::io::Region<SIZE>;
 

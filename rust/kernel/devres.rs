@@ -68,6 +68,7 @@ struct Inner<T> {
 ///     devres::Devres,
 ///     io::{
 ///         Io,
+///         IoBase,
 ///         Mmio,
 ///         MmioRaw,
 ///         MmioBackend,
@@ -105,7 +106,7 @@ struct Inner<T> {
 ///     }
 /// }
 ///
-/// impl<'a, const SIZE: usize> Io<'a> for &'a IoMem<SIZE> {
+/// impl<'a, const SIZE: usize> IoBase<'a> for &'a IoMem<SIZE> {
 ///    type Backend = MmioBackend;
 ///    type Target = Region<SIZE>;
 ///
