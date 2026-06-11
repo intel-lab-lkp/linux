@@ -49,22 +49,22 @@ int nfs_sysfs_init(void)
 		return -ENOMEM;
 
 	ret = kobject_set_name(&nfs_kset->kobj, "nfs");
-	if (ret) {
-		kfree(nfs_kset);
-		return ret;
-	}
+	if (ret)
+		goto free_kset;
 
 	nfs_kset->kobj.parent = fs_kobj;
 	nfs_kset->kobj.ktype = &nfs_kset_type;
 	nfs_kset->kobj.kset = NULL;
 
 	ret = kset_register(nfs_kset);
-	if (ret) {
-		kfree(nfs_kset);
-		return ret;
-	}
+	if (ret)
+		goto free_kset;
 
 	return 0;
+
+free_kset:
+	kfree(nfs_kset);
+	return ret;
 }
 
 void nfs_sysfs_exit(void)
