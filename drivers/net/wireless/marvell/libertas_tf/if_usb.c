@@ -381,6 +381,8 @@ static int usb_tx_block(struct if_usb_card *cardp, uint8_t *payload,
 	else
 		urb = cardp->cmd_urb;
 
+	usb_kill_urb(urb);
+
 	usb_fill_bulk_urb(urb, cardp->udev,
 			  usb_sndbulkpipe(cardp->udev,
 					  cardp->ep_out),
