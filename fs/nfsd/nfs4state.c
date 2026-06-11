@@ -2196,22 +2196,50 @@ static void free_session(struct nfsd4_session *ses)
 	__free_session(ses);
 }
 
+/**
+ * nfsd_slot_shrinker_count - report reclaimable DRC slots
+ * @s: shrinker descriptor (unused)
+ * @sc: shrink control (unused)
+ *
+ * Return: a positive count of reclaimable slots, or SHRINK_EMPTY when
+ * there is nothing to reclaim.
+ */
 static unsigned long
-nfsd_slot_count(struct shrinker *s, struct shrink_control *sc)
+nfsd_slot_shrinker_count(struct shrinker *s, struct shrink_control *sc)
 {
 	int cnt = atomic_read(&nfsd_total_target_slots) -
 		  atomic_read(&nfsd_total_sessions);
 
+	/*
+	 * To prevent deadlock, one slot of each session (slot 0) is
+	 * not reclaimable while the session is active. Thus the
+	 * number of sessions is subtracted from the total number of
+	 * target slots.
+	 */
 	return cnt > 0 ? cnt : SHRINK_EMPTY;
 }
 
+/**
+ * nfsd_slot_shrinker_scan - reclaim DRC slots under memory pressure
+ * @s: shrinker descriptor (unused)
+ * @sc: shrink control; @sc->nr_to_scan bounds the sessions visited,
+ *      @sc->nr_scanned reports how many were visited
+ *
+ * Return: the number of session slots NFSD will release.
+ */
 static unsigned long
-nfsd_slot_scan(struct shrinker *s, struct shrink_control *sc)
+nfsd_slot_shrinker_scan(struct shrinker *s, struct shrink_control *sc)
 {
 	struct nfsd4_session *ses;
 	unsigned long scanned = 0;
 	unsigned long freed = 0;
 
+	/*
+	 * Each visited session releases at most one slot. After
+	 * nr_to_scan sessions have been visited, the list head is
+	 * rotated past the last visited session so the next scan
+	 * resumes from there.
+	 */
 	spin_lock(&nfsd_session_list_lock);
 	list_for_each_entry(ses, &nfsd_session_list, se_all_sessions) {
 		freed += reduce_session_slots(ses, 1);
@@ -9120,8 +9148,8 @@ nfs4_state_start(void)
 		rhltable_destroy(&nfs4_file_rhltable);
 		return -ENOMEM;
 	}
-	nfsd_slot_shrinker->count_objects = nfsd_slot_count;
-	nfsd_slot_shrinker->scan_objects = nfsd_slot_scan;
+	nfsd_slot_shrinker->count_objects = nfsd_slot_shrinker_count;
+	nfsd_slot_shrinker->scan_objects = nfsd_slot_shrinker_scan;
 	shrinker_register(nfsd_slot_shrinker);
 
 	set_max_delegations();
