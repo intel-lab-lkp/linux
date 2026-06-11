@@ -26,8 +26,7 @@ static void armada_fbdev_fb_destroy(struct fb_info *info)
 
 	drm_fb_helper_fini(fbh);
 
-	fbh->fb->funcs->destroy(fbh->fb);
-
+	drm_client_buffer_delete(fbh->buffer);
 	drm_client_release(&fbh->client);
 }
 
@@ -43,14 +42,16 @@ static const struct drm_fb_helper_funcs armada_fbdev_helper_funcs;
 int armada_fbdev_driver_fbdev_probe(struct drm_fb_helper *fbh,
 				    struct drm_fb_helper_surface_size *sizes)
 {
-	struct drm_device *dev = fbh->dev;
+	struct drm_client_dev *client = &fbh->client;
+	struct drm_device *dev = client->dev;
+	struct drm_file *file = client->file;
 	struct fb_info *info = fbh->info;
 	u32 fourcc, pitch;
 	u64 size;
 	const struct drm_format_info *format;
-	struct drm_mode_fb_cmd2 mode;
-	struct armada_framebuffer *dfb;
 	struct armada_gem_object *obj;
+	struct drm_client_buffer *buffer;
+	u32 handle;
 	int ret;
 	void *ptr;
 
@@ -85,37 +86,43 @@ int armada_fbdev_driver_fbdev_probe(struct drm_fb_helper *fbh,
 		goto err_drm_gem_object_put;
 	}
 
-	memset(&mode, 0, sizeof(mode));
-	mode.width = sizes->surface_width;
-	mode.height = sizes->surface_height;
-	mode.pitches[0] = pitch;
-	mode.pixel_format = fourcc;
-
-	dfb = armada_framebuffer_create(dev, format, &mode, obj);
-	if (IS_ERR(dfb)) {
-		ret = PTR_ERR(dfb);
+	ret = drm_gem_handle_create(file, &obj->obj, &handle);
+	if (ret)
 		goto err_drm_gem_object_put;
+
+	buffer = drm_client_buffer_create(client, sizes->surface_width, sizes->surface_height,
+					  fourcc, handle, pitch);
+	if (IS_ERR(buffer)) {
+		ret = PTR_ERR(buffer);
+		goto err_drm_gem_handle_delete;
 	}
+
+	fbh->funcs = &armada_fbdev_helper_funcs;
+	fbh->buffer = buffer;
+	fbh->fb = buffer->fb;
 
 	info->fbops = &armada_fb_ops;
 	info->fix.smem_start = obj->phys_addr;
 	info->fix.smem_len = obj->obj.size;
 	info->screen_size = obj->obj.size;
 	info->screen_base = ptr;
-	fbh->funcs = &armada_fbdev_helper_funcs;
-	fbh->fb = &dfb->fb;
 
 	drm_fb_helper_fill_info(info, fbh, sizes);
 
 	DRM_DEBUG_KMS("allocated %dx%d %dbpp fb: 0x%08llx\n",
-		dfb->fb.width, dfb->fb.height, dfb->fb.format->cpp[0] * 8,
+		buffer->fb->width, buffer->fb->height, buffer->fb->format->cpp[0] * 8,
 		(unsigned long long)obj->phys_addr);
+
+	/* The handle is only needed for creating the framebuffer. */
+	drm_gem_handle_delete(file, handle);
 
 	/* The framebuffer still holds a reference on the GEM object. */
 	drm_gem_object_put(&obj->obj);
 
 	return 0;
 
+err_drm_gem_handle_delete:
+	drm_gem_handle_delete(file, handle);
 err_drm_gem_object_put:
 	drm_gem_object_put(&obj->obj);
 	return ret;
