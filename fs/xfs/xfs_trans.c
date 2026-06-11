@@ -218,8 +218,20 @@ __xfs_trans_alloc(
 	ASSERT(!(flags & XFS_TRANS_RES_FDBLKS) || xfs_has_lazysbcount(mp));
 
 	tp = kmem_cache_zalloc(xfs_trans_cache, GFP_KERNEL | __GFP_NOFAIL);
-	if (!(flags & XFS_TRANS_NO_WRITECOUNT))
-		sb_start_intwrite(mp->m_super);
+	if (!(flags & XFS_TRANS_NO_WRITECOUNT)) {
+		/*
+		 * If TRYLOCK is specified, attempt a non-blocking lock to
+		 * avoid blocking indefinitely on frozen/freezing filesystems.
+		 */
+		if (flags & XFS_TRANS_TRYLOCK) {
+			if (!sb_start_intwrite_trylock(mp->m_super)) {
+				kmem_cache_free(xfs_trans_cache, tp);
+				return ERR_PTR(-EAGAIN);
+			}
+		} else {
+			sb_start_intwrite(mp->m_super);
+		}
+	}
 	xfs_trans_set_context(tp);
 	tp->t_flags = flags;
 	tp->t_mountp = mp;
@@ -252,6 +264,8 @@ xfs_trans_alloc(
 	 */
 retry:
 	tp = __xfs_trans_alloc(mp, flags);
+	if (IS_ERR(tp))
+		return PTR_ERR(tp);
 	WARN_ON(mp->m_super->s_writers.frozen == SB_FREEZE_COMPLETE);
 	error = xfs_trans_reserve(tp, resp, blocks, rtextents);
 	if (error == -ENOSPC && want_retry) {

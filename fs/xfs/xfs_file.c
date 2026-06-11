@@ -1807,8 +1807,17 @@ xfs_file_release(
 	if (!xfs_iflags_test(ip, XFS_EOFBLOCKS_RELEASED) &&
 	    xfs_ilock_nowait(ip, XFS_IOLOCK_EXCL)) {
 		if (xfs_can_free_eofblocks(ip) &&
-		    !xfs_iflags_test_and_set(ip, XFS_EOFBLOCKS_RELEASED))
-			xfs_free_eofblocks(ip);
+		    !xfs_iflags_test_and_set(ip, XFS_EOFBLOCKS_RELEASED)) {
+			int error = xfs_free_eofblocks(ip, XFS_TRANS_TRYLOCK);
+
+			/*
+			 * If transaction allocation fails due to a frozen/freezing
+			 * filesystem, clear the released flag so that subsequent
+			 * releases or background blockgc can retry post-thaw.
+			 */
+			if (error == -EAGAIN)
+				xfs_iflags_clear(ip, XFS_EOFBLOCKS_RELEASED);
+		}
 		xfs_iunlock(ip, XFS_IOLOCK_EXCL);
 	}
 
