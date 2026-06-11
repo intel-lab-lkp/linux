@@ -138,8 +138,10 @@ static int tegra_usb_reset_controller(struct device *dev)
 		return err;
 
 	err = reset_control_assert(rst);
-	if (err)
+	if (err) {
+		reset_control_deassert(rst);
 		return err;
+	}
 
 	udelay(1);
 
