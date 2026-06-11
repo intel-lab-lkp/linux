@@ -157,8 +157,8 @@ Description:
 		all VLs from this port. This may include packets with errors.
 		This is 64 bit counter.
 
-		port_rcv_packets: (RO) Total number of packets (this may include
-		packets containing Errors. This is 64 bit counter.
+		port_rcv_packets: (RO) Total number of packets, this may include
+		packets containing Errors. This is a 64 bit counter.
 
 		link_downed: (RO) Total number of times the Port Training state
 		machine has failed the link error recovery process and downed

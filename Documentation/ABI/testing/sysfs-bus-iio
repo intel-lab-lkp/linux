@@ -917,7 +917,7 @@ Description:
 
 		Note the driver will assume the last p events requested are
 		to be enabled where p is how many it supports (which may vary
-		depending on the exact set requested. So if you want to be
+		depending on the exact set requested). So if you want to be
 		sure you have set what you think you have, check the contents of
 		these attributes after everything is configured. Drivers may
 		have to buffer any parameters so that they are consistent when
@@ -973,7 +973,7 @@ Description:
 
 		Note the driver will assume the last p events requested are
 		to be enabled where p is however many it supports (which may
-		vary depending on the exact set requested. So if you want to be
+		vary depending on the exact set requested). So if you want to be
 		sure you have set what you think you have, check the contents of
 		these attributes after everything is configured. Drivers may
 		have to buffer any parameters so that they are consistent when
