@@ -656,13 +656,21 @@ void udf_free_blocks(struct super_block *sb, struct inode *inode,
 		     struct kernel_lb_addr *bloc, uint32_t offset,
 		     uint32_t count)
 {
+	struct udf_sb_info *sbi = UDF_SB(sb);
 	uint16_t partition = bloc->partitionReferenceNum;
-	struct udf_part_map *map = &UDF_SB(sb)->s_partmaps[partition];
+	struct udf_part_map *map;
 	uint32_t blk;
 
+	if (partition >= sbi->s_partitions) {
+		udf_debug("Invalid partition reference %u (partitions %u)\n",
+			  partition, sbi->s_partitions);
+		return;
+	}
+
+	map = &sbi->s_partmaps[partition];
 	if (check_add_overflow(bloc->logicalBlockNum, offset, &blk) ||
 	    check_add_overflow(blk, count, &blk) ||
-	    bloc->logicalBlockNum + count > map->s_partition_len) {
+	    blk > map->s_partition_len) {
 		udf_debug("Invalid request to free blocks: (%d, %u), off %u, "
 			  "len %u, partition len %u\n",
 			  partition, bloc->logicalBlockNum, offset, count,
