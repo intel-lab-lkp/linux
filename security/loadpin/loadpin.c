@@ -23,6 +23,10 @@
 #include <uapi/linux/loadpin.h>
 #include <uapi/linux/lsm.h>
 
+#ifdef CONFIG_SECURITY_LOADPIN_EBPF
+#include <linux/bpf.h>
+#endif /* CONFIG_SECURITY_LOADPIN_BPF */
+
 #define VERITY_DIGEST_FILE_HEADER "# LOADPIN_TRUSTED_VERITY_ROOT_DIGESTS"
 
 static void report_load(const char *origin, struct file *file, char *operation)
@@ -204,6 +208,28 @@ static int loadpin_load_data(enum kernel_load_data_id id, bool contents)
 	return loadpin_check(NULL, (enum kernel_read_file_id) id);
 }
 
+#ifdef CONFIG_SECURITY_LOADPIN_EBPF
+static int loadpin_bpf_prog_load(struct bpf_prog *prog, union bpf_attr *attr,
+				  struct bpf_token *token, bool is_kernel)
+{
+	int res = 0;
+	struct file *exe_file = NULL;
+	struct mm_struct *mm = current->mm;
+
+	if (is_kernel || !mm)
+		return 0;
+
+	exe_file = get_mm_exe_file(mm);
+	if (!exe_file)
+		return 0;
+
+	res = loadpin_check(exe_file, READING_EBPF);
+	fput(exe_file);
+
+	return res;
+}
+#endif /* CONFIG_SECURITY_LOADPIN_EBPF */
+
 static const struct lsm_id loadpin_lsmid = {
 	.name = "loadpin",
 	.id = LSM_ID_LOADPIN,
@@ -213,6 +239,9 @@ static struct security_hook_list loadpin_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(sb_free_security, loadpin_sb_free_security),
 	LSM_HOOK_INIT(kernel_read_file, loadpin_read_file),
 	LSM_HOOK_INIT(kernel_load_data, loadpin_load_data),
+#ifdef CONFIG_SECURITY_LOADPIN_EBPF
+	LSM_HOOK_INIT(bpf_prog_load, loadpin_bpf_prog_load),
+#endif /* CONFIG_SECURITY_LOADPIN_EBPF */
 };
 
 static void __init parse_exclude(void)

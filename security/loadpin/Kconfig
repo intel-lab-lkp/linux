@@ -42,3 +42,15 @@ config SECURITY_LOADPIN_VERITY
 
 	  This is followed by the verity digests, with one digest per
 	  line.
+
+config SECURITY_LOADPIN_EBPF
+	bool "Pin ebpf programs to one filesystem"
+	depends on SECURITY_LOADPIN
+	help
+	  eBPF program loading is pinned to the first filesystem from which the
+	  application loading the progam resides. When enabled, applications on
+	  other filesystems that attempt to load an eBPF program will be rejected.
+	  This is best used when applications that load eBPF programs reside on a
+	  read-only filesystem from which tools for dynamically generating eBPF
+	  programs such as bpftrace are not installed. This will not restrict the
+	  kernel from loading a bpf program.
