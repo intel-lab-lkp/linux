@@ -150,6 +150,11 @@ static int sigd_send(struct atm_vcc *vcc, struct sk_buff *skb)
 		sk = sk_atm(vcc);
 		pr_debug("as_indicate!!!\n");
 		lock_sock(sk);
+		/* Don't queue onto a closing listener; the skb would leak. */
+		if (test_bit(ATM_VF_CLOSE, &vcc->flags)) {
+			dev_kfree_skb(skb);
+			goto as_indicate_complete;
+		}
 		if (sk_acceptq_is_full(sk)) {
 			sigd_enq(NULL, as_reject, vcc, NULL, NULL);
 			dev_kfree_skb(skb);
