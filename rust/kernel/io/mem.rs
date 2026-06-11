@@ -16,7 +16,7 @@ use crate::{
             Region,
             Resource, //
         },
-        Mmio,
+        MmioOwned,
         MmioRaw, //
     },
     prelude::*,
@@ -211,7 +211,7 @@ impl<'a, const SIZE: usize> ExclusiveIoMem<'a, SIZE> {
 }
 
 impl<const SIZE: usize> Deref for ExclusiveIoMem<'_, SIZE> {
-    type Target = Mmio<SIZE>;
+    type Target = MmioOwned<SIZE>;
 
     fn deref(&self) -> &Self::Target {
         &self.iomem
@@ -291,10 +291,10 @@ impl<const SIZE: usize> Drop for IoMem<'_, SIZE> {
 }
 
 impl<const SIZE: usize> Deref for IoMem<'_, SIZE> {
-    type Target = Mmio<SIZE>;
+    type Target = MmioOwned<SIZE>;
 
     fn deref(&self) -> &Self::Target {
         // SAFETY: Safe as by the invariant of `IoMem`.
-        unsafe { Mmio::from_raw(&self.io) }
+        unsafe { MmioOwned::from_raw(&self.io) }
     }
 }
