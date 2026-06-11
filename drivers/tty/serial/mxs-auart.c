@@ -823,7 +823,7 @@ static void dma_rx_callback(void *arg)
 	stat &= ~(AUART_STAT_OERR | AUART_STAT_BERR |
 			AUART_STAT_PERR | AUART_STAT_FERR);
 
-	count = stat & AUART_STAT_RXCOUNT_MASK;
+	count = min_t(u32, stat & AUART_STAT_RXCOUNT_MASK, UART_XMIT_SIZE);
 	tty_insert_flip_string(port, s->rx_dma_buf, count);
 
 	mxs_write(stat, s, REG_STAT);
