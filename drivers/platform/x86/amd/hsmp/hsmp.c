@@ -306,6 +306,19 @@ static long hsmp_ioctl_msg(struct file *fp, unsigned long arg)
 	if (msg.msg_id < HSMP_TEST || msg.msg_id >= HSMP_MSG_ID_MAX)
 		return -ENOMSG;
 
+	/*
+	 * Sanitize the user-controlled msg_id against speculative
+	 * execution.  The bounds check above retires the out-of-range
+	 * case with -ENOMSG, but a mispredicted branch can still let the
+	 * CPU speculatively use msg_id as an index into
+	 * hsmp_msg_desc_table[] (here and in validate_message() /
+	 * is_get_msg() called downstream via hsmp_send_message()), and
+	 * pull arbitrary kernel memory into the cache (Spectre v1,
+	 * CVE-2017-5753).  Clamp once into msg.msg_id so every downstream
+	 * dereference sees the sanitized value.
+	 */
+	msg.msg_id = array_index_nospec(msg.msg_id, HSMP_MSG_ID_MAX);
+
 	switch (fp->f_mode & (FMODE_WRITE | FMODE_READ)) {
 	case FMODE_WRITE:
 		/*
