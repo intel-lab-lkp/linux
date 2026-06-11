@@ -50,6 +50,8 @@ Possible debug options are::
 	Z		Red zoning
 	P		Poisoning (object and padding)
 	U		User tracking (free and alloc)
+	H		Previous lifetime tracking. Requires U and preserves one
+			previous completed alloc/free lifetime for each object.
 	T		Trace (please only use on single slabs)
 	A		Enable failslab filter mark for the cache
 	O		Switch debugging off for caches that would have
@@ -91,6 +93,17 @@ kmalloc. All other slabs will not get any debugging enabled::
 
 	slab_debug=Z,dentry;U,kmalloc-*
 
+Previous lifetime tracking can be enabled together with user tracking for
+selected caches. This keeps one previous completed alloc/free lifetime in
+addition to the normal user tracking records::
+
+	slab_debug=UH,kmalloc-128
+
+This can help debug reports where an object was freed, reallocated, and later
+accessed or freed again through a stale pointer. The previous lifetime is
+diagnostic information only; it does not identify semantic ownership or the
+root cause of a use-after-free.
+
 You can also enable options (e.g. sanity checks and poisoning) for all caches
 except some that are deemed too performance critical and don't need to be
 debugged by specifying global debug options followed by a list of slab names
@@ -110,6 +123,7 @@ options from the ``slab_debug`` parameter translate to the following files::
 	Z	red_zone
 	P	poison
 	U	store_user
+	H	store_history
 	T	trace
 	A	failslab
 
@@ -245,9 +259,15 @@ into the syslog:
 	cpu> pid=<pid of the process>
      INFO: Freed in <kernel function> age=<jiffies since free> cpu=<freed by cpu>
 	pid=<pid of the process>
+     INFO: Previous object lifetime:
+     INFO: Previous allocated in <kernel function> age=<jiffies since alloc> cpu=<allocated by
+	cpu> pid=<pid of the process>
+     INFO: Previous freed in <kernel function> age=<jiffies since free> cpu=<freed by cpu>
+	pid=<pid of the process>
 
    (Object allocation / free information is only available if SLAB_STORE_USER is
-   set for the slab. slab_debug sets that option)
+   set for the slab. slab_debug sets that option. Previous lifetime information
+   is only available if both SLAB_STORE_USER and SLAB_STORE_HISTORY are set.)
 
 2. The object contents if an object was involved.
 
