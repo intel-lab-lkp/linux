@@ -679,8 +679,10 @@ static int xhci_port_bw_show(struct xhci_hcd *xhci, u8 dev_speed,
 	struct device			*dev = hcd->self.controller;
 
 	ret = pm_runtime_get_sync(dev);
-	if (ret < 0)
+	if (ret < 0) {
+		pm_runtime_put_noidle(dev);
 		return ret;
+	}
 
 	ctx = xhci_alloc_port_bw_ctx(xhci, 0);
 	if (!ctx) {
