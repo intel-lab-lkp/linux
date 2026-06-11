@@ -106,6 +106,14 @@ static void mv_chan_set_next_descriptor(struct mv_xor_chan *chan,
 	writel_relaxed(next_desc_addr, XOR_NEXT_DESC(chan));
 }
 
+static void mv_chan_mask_interrupts(struct mv_xor_chan *chan)
+{
+	u32 val = readl_relaxed(XOR_INTR_MASK(chan));
+
+	val &= ~(XOR_INTR_MASK_VALUE << (chan->idx * 16));
+	writel_relaxed(val, XOR_INTR_MASK(chan));
+}
+
 static void mv_chan_unmask_interrupts(struct mv_xor_chan *chan)
 {
 	u32 val = readl_relaxed(XOR_INTR_MASK(chan));
@@ -1010,6 +1018,9 @@ static int mv_xor_channel_remove(struct mv_xor_chan *mv_chan)
 {
 	struct dma_chan *chan, *_chan;
 	struct device *dev = mv_chan->dmadev.dev;
+
+	mv_chan_mask_interrupts(mv_chan);
+	tasklet_kill(&mv_chan->irq_tasklet);
 
 	dma_async_device_unregister(&mv_chan->dmadev);
 
