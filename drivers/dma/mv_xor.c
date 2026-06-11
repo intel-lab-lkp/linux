@@ -1029,18 +1029,12 @@ out:
 static int mv_xor_channel_remove(struct mv_xor_chan *mv_chan)
 {
 	struct dma_chan *chan, *_chan;
-	struct device *dev = mv_chan->dmadev.dev;
 
 	mv_chan_mask_interrupts(mv_chan);
 	mv_chan_disable(mv_chan);
 	tasklet_kill(&mv_chan->irq_tasklet);
 
 	dma_async_device_unregister(&mv_chan->dmadev);
-
-	dma_unmap_single(dev, mv_chan->dummy_src_addr,
-			 MV_XOR_MIN_BYTE_COUNT, DMA_FROM_DEVICE);
-	dma_unmap_single(dev, mv_chan->dummy_dst_addr,
-			 MV_XOR_MIN_BYTE_COUNT, DMA_TO_DEVICE);
 
 	list_for_each_entry_safe(chan, _chan, &mv_chan->dmadev.channels,
 				 device_node) {
@@ -1055,9 +1049,9 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 		   struct platform_device *pdev,
 		   int idx, dma_cap_mask_t cap_mask, int irq)
 {
-	int ret = 0;
 	struct mv_xor_chan *mv_chan;
 	struct dma_device *dma_dev;
+	int ret;
 
 	mv_chan = devm_kzalloc(&pdev->dev, sizeof(*mv_chan), GFP_KERNEL);
 	if (!mv_chan)
@@ -1089,19 +1083,18 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 	/*
 	 * These source and destination dummy buffers are used to implement
 	 * a DMA_INTERRUPT operation as a minimum-sized XOR operation.
-	 * Hence, we only need to map the buffers at initialization-time.
+	 * Hence, we only need to allocate the buffers at initialization-time.
+	 * The XOR engine reads from dummy_src and writes to dummy_dst.
 	 */
-	mv_chan->dummy_src_addr = dma_map_single(dma_dev->dev,
-		mv_chan->dummy_src, MV_XOR_MIN_BYTE_COUNT, DMA_FROM_DEVICE);
-	if (dma_mapping_error(dma_dev->dev, mv_chan->dummy_src_addr))
+	mv_chan->dummy_src = dmam_alloc_coherent(&pdev->dev, MV_XOR_MIN_BYTE_COUNT,
+						  &mv_chan->dummy_src_addr, GFP_KERNEL);
+	if (!mv_chan->dummy_src)
 		return ERR_PTR(-ENOMEM);
 
-	mv_chan->dummy_dst_addr = dma_map_single(dma_dev->dev,
-		mv_chan->dummy_dst, MV_XOR_MIN_BYTE_COUNT, DMA_TO_DEVICE);
-	if (dma_mapping_error(dma_dev->dev, mv_chan->dummy_dst_addr)) {
-		ret = -ENOMEM;
-		goto err_unmap_src;
-	}
+	mv_chan->dummy_dst = dmam_alloc_coherent(&pdev->dev, MV_XOR_MIN_BYTE_COUNT,
+						  &mv_chan->dummy_dst_addr, GFP_KERNEL);
+	if (!mv_chan->dummy_dst)
+		return ERR_PTR(-ENOMEM);
 
 
 	/* allocate coherent memory for hardware descriptors
@@ -1111,10 +1104,8 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 	mv_chan->dma_desc_pool_virt =
 	  dmam_alloc_attrs(&pdev->dev, MV_XOR_POOL_SIZE, &mv_chan->dma_desc_pool,
 			   GFP_KERNEL, DMA_ATTR_WRITE_COMBINE);
-	if (!mv_chan->dma_desc_pool_virt) {
-		ret = -ENOMEM;
-		goto err_unmap_dst;
-	}
+	if (!mv_chan->dma_desc_pool_virt)
+		return ERR_PTR(-ENOMEM);
 
 	/* discover transaction capabilities from the platform data */
 	dma_dev->cap_mask = cap_mask;
@@ -1143,7 +1134,7 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 	ret = devm_request_irq(&pdev->dev, mv_chan->irq, mv_xor_interrupt_handler,
 			  0, dev_name(&pdev->dev), mv_chan);
 	if (ret)
-		goto err_unmap_dst;
+		return ERR_PTR(ret);
 
 	mv_chan_unmask_interrupts(mv_chan);
 
@@ -1158,14 +1149,14 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 		ret = mv_chan_memcpy_self_test(mv_chan);
 		dev_dbg(&pdev->dev, "memcpy self test returned %d\n", ret);
 		if (ret)
-			goto err_unmap_dst;
+			return ERR_PTR(ret);
 	}
 
 	if (dma_has_cap(DMA_XOR, dma_dev->cap_mask)) {
 		ret = mv_chan_xor_self_test(mv_chan);
 		dev_dbg(&pdev->dev, "xor self test returned %d\n", ret);
 		if (ret)
-			goto err_unmap_dst;
+			return ERR_PTR(ret);
 	}
 
 	dev_info(&pdev->dev, "Marvell XOR (%s): ( %s%s%s)\n",
@@ -1176,18 +1167,9 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 
 	ret = dma_async_device_register(dma_dev);
 	if (ret)
-		goto err_unmap_dst;
+		return ERR_PTR(ret);
 
 	return mv_chan;
-
-err_unmap_dst:
-	dma_unmap_single(dma_dev->dev, mv_chan->dummy_dst_addr,
-			 MV_XOR_MIN_BYTE_COUNT, DMA_TO_DEVICE);
-err_unmap_src:
-	dma_unmap_single(dma_dev->dev, mv_chan->dummy_src_addr,
-			 MV_XOR_MIN_BYTE_COUNT, DMA_FROM_DEVICE);
-
-	return ERR_PTR(ret);
 }
 
 static void
