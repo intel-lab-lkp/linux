@@ -420,6 +420,12 @@ void execmem_fill_trapping_insns(void *ptr, size_t size)
 
 	flush_icache_range((unsigned long)ptr, (unsigned long)ptr + size);
 }
+
+#define MODULE_TEXT_FLAG	EXECMEM_ROX_CACHE
+#define MODULE_TEXT_PGPROT	PAGE_KERNEL_ROX
+#else
+#define MODULE_TEXT_FLAG	(0)
+#define MODULE_TEXT_PGPROT	PAGE_KERNEL
 #endif
 
 static u64 module_direct_base __ro_after_init = 0;
@@ -511,6 +517,8 @@ struct execmem_info __init *execmem_arch_setup(void)
 {
 	unsigned long fallback_start = 0, fallback_end = 0;
 	unsigned long start = 0, end = 0;
+	enum execmem_range_flags module_text_flags = 0;
+	pgprot_t module_text_pgprot = PAGE_KERNEL;
 
 	module_init_limits();
 
@@ -531,12 +539,24 @@ struct execmem_info __init *execmem_arch_setup(void)
 		end = module_plt_base + SZ_2G;
 	}
 
+	/*
+	 * The ROX Cache requires bbml2_no_abort because it uses large block
+	 * mappings. On systems without this guarantee, splitting these blocks
+	 * to make pages writable for module loading can trigger TLB Conflict
+	 * Aborts.
+	 */
+	if (system_supports_bbml2_noabort()) {
+		module_text_flags = MODULE_TEXT_FLAG;
+		module_text_pgprot = MODULE_TEXT_PGPROT;
+	}
+
 	execmem_info = (struct execmem_info){
 		.ranges = {
 			[EXECMEM_MODULE_TEXT] = {
 				.start	= start,
 				.end	= end,
-				.pgprot	= PAGE_KERNEL,
+				.flags = module_text_flags,
+				.pgprot	= module_text_pgprot,
 				.alignment = 1,
 				.fallback_start	= fallback_start,
 				.fallback_end	= fallback_end,
