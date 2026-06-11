@@ -1323,16 +1323,27 @@ static int virtnet_add_recvbuf_xsk(struct virtnet_info *vi, struct receive_queue
 				   struct xsk_buff_pool *pool, gfp_t gfp)
 {
 	struct xdp_buff **xsk_buffs;
+	bool need_wakeup;
 	dma_addr_t addr;
 	int err = 0;
 	u32 len, i;
 	int num;
 
+	need_wakeup = xsk_uses_need_wakeup(pool);
 	xsk_buffs = rq->xsk_buffs;
+
+	/* If both rq->vq and fill ring are empty, and then the user submit
+	 * all the chunks to the fill ring and check the wake up flag
+	 * after xsk_buff_alloc_batch() and before xsk_set_rx_need_wakeup(),
+	 * we will lose the chance to wake up the rx napi, so we have to
+	 * set the need_wakeup flag here.
+	 */
+	if (need_wakeup && virtqueue_get_vring_size(rq->vq) == rq->vq->num_free)
+		xsk_set_rx_need_wakeup(pool);
 
 	num = xsk_buff_alloc_batch(pool, xsk_buffs, rq->vq->num_free);
 	if (!num) {
-		if (xsk_uses_need_wakeup(pool)) {
+		if (need_wakeup) {
 			xsk_set_rx_need_wakeup(pool);
 			/* Return 0 instead of -ENOMEM so that NAPI is
 			 * descheduled.
@@ -1341,8 +1352,6 @@ static int virtnet_add_recvbuf_xsk(struct virtnet_info *vi, struct receive_queue
 		}
 
 		return -ENOMEM;
-	} else {
-		xsk_clear_rx_need_wakeup(pool);
 	}
 
 	len = xsk_pool_get_rx_frame_size(pool) + vi->hdr_len;
@@ -1361,6 +1370,16 @@ static int virtnet_add_recvbuf_xsk(struct virtnet_info *vi, struct receive_queue
 						    xsk_buffs[i], NULL, gfp);
 		if (err)
 			goto err;
+	}
+
+	if (need_wakeup) {
+		if (rq->vq->num_free)
+			/* We have free buffers, so we'd better wake up the
+			 * rx napi as soon as possible.
+			 */
+			xsk_set_rx_need_wakeup(pool);
+		else
+			xsk_clear_rx_need_wakeup(pool);
 	}
 
 	return num;
