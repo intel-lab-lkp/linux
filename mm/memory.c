@@ -4193,12 +4193,18 @@ static bool wp_can_reuse_anon_folio(struct folio *folio,
 	 */
 	if (folio_test_ksm(folio) || folio_ref_count(folio) > 3)
 		return false;
-	if (!folio_test_lru(folio))
+	if (!folio_test_lru(folio)) {
+		/*
+		 * Assume folio is on lru_cache and holds a cache reference.
+		 */
+		if (folio_ref_count(folio) > 2 + folio_test_swapcache(folio))
+			return false;
 		/*
 		 * We cannot easily detect+handle references from
 		 * remote LRU caches or references to LRU folios.
 		 */
 		lru_add_drain();
+	}
 	if (folio_ref_count(folio) > 1 + folio_test_swapcache(folio))
 		return false;
 	if (!folio_trylock(folio))
