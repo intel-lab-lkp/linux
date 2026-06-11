@@ -3396,9 +3396,13 @@ rpc_clnt_swap_activate(struct rpc_clnt *clnt)
 {
 	while (clnt != clnt->cl_parent)
 		clnt = clnt->cl_parent;
-	if (atomic_inc_return(&clnt->cl_swapper) == 1)
-		return rpc_clnt_iterate_for_each_xprt(clnt,
+	if (atomic_inc_return(&clnt->cl_swapper) == 1) {
+		int ret = rpc_clnt_iterate_for_each_xprt(clnt,
 				rpc_clnt_swap_activate_callback, NULL);
+		if (ret)
+			atomic_dec(&clnt->cl_swapper);
+		return ret;
+	}
 	return 0;
 }
 EXPORT_SYMBOL_GPL(rpc_clnt_swap_activate);
