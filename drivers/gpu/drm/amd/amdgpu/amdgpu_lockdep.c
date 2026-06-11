@@ -85,13 +85,13 @@ int amdgpu_lockdep_init(void)
 {
 	struct amdgpu_reset_domain *reset_domain = NULL;
 	struct amdgpu_reset_control reset_ctl;
-	struct mutex userq_sch_mutex;
-	struct mutex userq_mutex;
-	struct mutex notifier_lock;
-	struct mutex vram_lock;
-	struct mutex srbm_mutex;
-	struct mutex grbm_idx_mutex;
-	spinlock_t mmio_idx_lock;
+	static DEFINE_MUTEX(userq_sch_mutex);
+	static DEFINE_MUTEX(userq_mutex);
+	static DEFINE_MUTEX(notifier_lock);
+	static DEFINE_MUTEX(vram_lock);
+	static DEFINE_MUTEX(srbm_mutex);
+	static DEFINE_MUTEX(grbm_idx_mutex);
+	static DEFINE_SPINLOCK(mmio_idx_lock);
 	unsigned long flags;
 
 	/*
@@ -101,16 +101,6 @@ int amdgpu_lockdep_init(void)
 							"lockdep_test");
 	if (!reset_domain)
 		return -ENOMEM;
-
-	/* Initialize dummy locks */
-	mutex_init(&userq_sch_mutex);
-	mutex_init(&userq_mutex);
-	mutex_init(&notifier_lock);
-	mutex_init(&vram_lock);
-	mutex_init(&reset_ctl.reset_lock);
-	mutex_init(&srbm_mutex);
-	mutex_init(&grbm_idx_mutex);
-	spin_lock_init(&mmio_idx_lock);
 
 	/*
 	 * Associate dummy locks with the same class keys used for real
