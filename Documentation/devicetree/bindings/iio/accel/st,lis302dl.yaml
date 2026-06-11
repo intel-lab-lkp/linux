@@ -1,0 +1,320 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/accel/st,lis302dl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: STMicroelectronics LIS302DL/LIS3LV02D 3-Axis Accelerometer (Legacy Binding)
+
+description: |
+  WARNING: This is a legacy binding for hardware that predates modern DT
+  practices. It is documented as-found in upstream board files. Do NOT use
+  this as a template for new drivers or bindings.
+
+  The driver lives in drivers/misc/lis3lv02d, not in IIO. Many properties
+  listed here represent run-time driver configuration that would normally not
+  appear in device tree. They are documented here only because existing
+  upstream board DTS files use them.
+
+  Compatibles st,lis302dl-spi and st,lis3lv02d were previously listed as
+  deprecated in st,st-sensors.yaml. They are moved here with their actual
+  hardware configuration so validation works correctly.
+
+maintainers:
+  - Linus Walleij <linus.walleij@linaro.org>
+
+properties:
+  compatible:
+    oneOf:
+      - description: I2C variant (original part)
+        const: st,lis302dl
+      - description: I2C variant (larger range)
+        const: st,lis3lv02d
+      - description: SPI variant; including the bus type in the compatible
+          string is a legacy naming error, do not copy for new bindings
+        const: st,lis302dl-spi
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    minItems: 1
+    maxItems: 2
+
+  Vdd-supply:
+    description: Main power supply (legacy uppercase name used by most boards).
+
+  Vdd_IO-supply:
+    description: I/O power supply (legacy uppercase name used by most boards).
+
+  vdd-supply:
+    description: Main power supply (modern lowercase name, used by omap3-n900).
+
+  vddio-supply:
+    description: I/O power supply (modern lowercase name, used by omap3-n900).
+
+  mount-matrix:
+    description: 3x3 mounting rotation matrix.
+
+  st,min-limit-x:
+    $ref: /schemas/types.yaml#/definitions/int32
+    description: Minimum acceptable self-test delta for X axis.
+
+  st,min-limit-y:
+    $ref: /schemas/types.yaml#/definitions/int32
+    description: Minimum acceptable self-test delta for Y axis.
+
+  st,min-limit-z:
+    $ref: /schemas/types.yaml#/definitions/int32
+    description: Minimum acceptable self-test delta for Z axis.
+
+  st,max-limit-x:
+    $ref: /schemas/types.yaml#/definitions/int32
+    description: Maximum acceptable self-test delta for X axis.
+
+  st,max-limit-y:
+    $ref: /schemas/types.yaml#/definitions/int32
+    description: Maximum acceptable self-test delta for Y axis.
+
+  st,max-limit-z:
+    $ref: /schemas/types.yaml#/definitions/int32
+    description: Maximum acceptable self-test delta for Z axis.
+
+  # The following properties configure run-time driver behaviour and do not
+  # describe hardware. They are deprecated. Documented here only so that
+  # existing upstream board DTS files pass dt_binding_check.
+
+  st,click-single-x:
+    type: boolean
+    deprecated: true
+    description: Enable single-click detection on X axis.
+
+  st,click-single-y:
+    type: boolean
+    deprecated: true
+    description: Enable single-click detection on Y axis.
+
+  st,click-single-z:
+    type: boolean
+    deprecated: true
+    description: Enable single-click detection on Z axis.
+
+  st,click-threshold-x:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+    description: Click threshold X axis. Driver default is used if absent.
+
+  st,click-threshold-y:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+    description: Click threshold Y axis. Driver default is used if absent.
+
+  st,click-threshold-z:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+    description: Click threshold Z axis. Driver default is used if absent.
+
+  st,click-thresh-x:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+    description: |
+      Misspelling of st,click-threshold-x present in several upstream board
+      files. The driver does not read this property; it is silently ignored.
+      Documented here only to avoid dt_binding_check failures on those boards.
+
+  st,click-thresh-y:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+    description: See st,click-thresh-x.
+
+  st,click-thresh-z:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+    description: See st,click-thresh-x.
+
+  st,click-time-limit:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+    description: Click time limit in 0.5ms steps (0-127).
+
+  st,click-latency:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+    description: Click latency in 1ms steps (0-255).
+
+  st,click-window:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+
+  st,irq1-click:
+    type: boolean
+    deprecated: true
+  st,irq2-click:
+    type: boolean
+    deprecated: true
+  st,irq1-ff-wu-1:
+    type: boolean
+    deprecated: true
+  st,irq1-ff-wu-2:
+    type: boolean
+    deprecated: true
+  st,irq2-ff-wu-1:
+    type: boolean
+    deprecated: true
+  st,irq2-ff-wu-2:
+    type: boolean
+    deprecated: true
+  st,irq1-data-ready:
+    type: boolean
+    deprecated: true
+  st,irq2-data-ready:
+    type: boolean
+    deprecated: true
+  st,irq1-disable:
+    type: boolean
+    deprecated: true
+  st,irq2-disable:
+    type: boolean
+    deprecated: true
+  st,irq-open-drain:
+    type: boolean
+    deprecated: true
+  st,irq-active-low:
+    type: boolean
+    deprecated: true
+
+  st,wakeup-x-lo:
+    type: boolean
+    deprecated: true
+  st,wakeup-x-hi:
+    type: boolean
+    deprecated: true
+  st,wakeup-y-lo:
+    type: boolean
+    deprecated: true
+  st,wakeup-y-hi:
+    type: boolean
+    deprecated: true
+  st,wakeup-z-lo:
+    type: boolean
+    deprecated: true
+  st,wakeup-z-hi:
+    type: boolean
+    deprecated: true
+  st,wakeup-threshold:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+
+  st,wakeup2-x-lo:
+    type: boolean
+    deprecated: true
+  st,wakeup2-x-hi:
+    type: boolean
+    deprecated: true
+  st,wakeup2-y-lo:
+    type: boolean
+    deprecated: true
+  st,wakeup2-y-hi:
+    type: boolean
+    deprecated: true
+  st,wakeup2-z-lo:
+    type: boolean
+    deprecated: true
+  st,wakeup2-z-hi:
+    type: boolean
+    deprecated: true
+  st,wakeup2-threshold:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+
+  st,wu-duration-1:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+  st,wu-duration-2:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+
+  st,highpass-cutoff-hz:
+    enum: [1, 2, 4, 8]
+    deprecated: true
+  st,hipass1-disable:
+    type: boolean
+    deprecated: true
+  st,hipass2-disable:
+    type: boolean
+    deprecated: true
+
+  st,default-rate:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+
+  st,axis-x:
+    $ref: /schemas/types.yaml#/definitions/int32
+    minimum: -3
+    maximum: 3
+    deprecated: true
+    description: Axis remapping. Replaced by mount-matrix.
+
+  st,axis-y:
+    $ref: /schemas/types.yaml#/definitions/int32
+    minimum: -3
+    maximum: 3
+    deprecated: true
+    description: Axis remapping. Replaced by mount-matrix.
+
+  st,axis-z:
+    $ref: /schemas/types.yaml#/definitions/int32
+    minimum: -3
+    maximum: 3
+    deprecated: true
+    description: Axis remapping. Replaced by mount-matrix.
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        accelerometer@1d {
+            compatible = "st,lis302dl";
+            reg = <0x1d>;
+            vdd-supply = <&vaux1>;
+            vddio-supply = <&vio>;
+            interrupt-parent = <&gpio6>;
+            interrupts = <21 IRQ_TYPE_EDGE_RISING>,
+                         <20 IRQ_TYPE_EDGE_RISING>;
+            mount-matrix = "-1", "0", "0",
+                            "0", "1", "0",
+                            "0", "0", "-1";
+        };
+    };
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        accelerometer@1 {
+            compatible = "st,lis302dl-spi";
+            reg = <1>;
+            spi-max-frequency = <1000000>;
+            interrupt-parent = <&gpio>;
+            interrupts = <104 IRQ_TYPE_EDGE_FALLING>;
+            st,click-single-x;
+            st,click-single-y;
+            st,click-single-z;
+            st,irq1-click;
+            st,irq2-click;
+        };
+    };
+...
