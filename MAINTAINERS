@@ -2600,6 +2600,7 @@ F:	Documentation/devicetree/bindings/i2c/aspeed,ast2600-i2c.yaml
 F:	Documentation/devicetree/bindings/i2c/aspeed,i2c.yaml
 F:	Documentation/devicetree/bindings/interrupt-controller/aspeed,ast2400-i2c-ic.yaml
 F:	drivers/i2c/busses/i2c-aspeed.c
+F:	drivers/i2c/busses/i2c-ast2600.c
 F:	drivers/irqchip/irq-aspeed-i2c-ic.c
 
 ARM/ASPEED MACHINE SUPPORT
