@@ -1245,9 +1245,12 @@ static int resize_user(struct mlx5_ib_dev *dev, struct mlx5_ib_cq *cq,
 	if (ucmd.cqe_size && SIZE_MAX / ucmd.cqe_size <= entries - 1)
 		return -EINVAL;
 
-	umem = ib_umem_get_va(&dev->ib_dev, ucmd.buf_addr,
-			      (size_t)ucmd.cqe_size * entries,
-			      IB_ACCESS_LOCAL_WRITE);
+	umem = ib_umem_get_attr_or_va(&dev->ib_dev,
+				      rdma_udata_to_uverbs_attr_bundle(udata),
+				      UVERBS_ATTR_RESIZE_CQ_BUF_UMEM,
+				      ucmd.buf_addr,
+				      (size_t)ucmd.cqe_size * entries,
+				      IB_ACCESS_LOCAL_WRITE);
 	if (IS_ERR(umem)) {
 		err = PTR_ERR(umem);
 		return err;
