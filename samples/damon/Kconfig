@@ -40,4 +40,16 @@ config SAMPLE_DAMON_MTIER
 
 	  If unsure, say N.
 
+config SAMPLE_DAMON_HUGEPAGE
+	bool "Build DAMON-based collapse of hot regions (SAMPLE_DAMON_HUGEPAGE)"
+	depends on DAMON && DAMON_VADDR
+	help
+	  This module monitors a certain PID provided by the user through
+	  monitored_pid attribute. Hot regions are determined by DAMON-based
+	  sampling. Collapsing occurs according to the quota goal using total
+	  memory usage to huge page usage ratio. The ratio is set by the user
+	  through a module attribute.
+
+	  If unsure, say N.
+
 endmenu
