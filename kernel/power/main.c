@@ -683,10 +683,12 @@ static ssize_t pm_wakeup_irq_show(struct kobject *kobj,
 					struct kobj_attribute *attr,
 					char *buf)
 {
-	if (!pm_wakeup_irq())
+	unsigned int irq = pm_wakeup_irq();
+
+	if (!irq)
 		return -ENODATA;
 
-	return sysfs_emit(buf, "%u\n", pm_wakeup_irq());
+	return sysfs_emit(buf, "%u\n", irq);
 }
 
 power_attr_ro(pm_wakeup_irq);
