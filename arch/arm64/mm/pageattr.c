@@ -200,6 +200,13 @@ static int change_memory_common(unsigned long addr, int numpages,
 			if (ret)
 				return ret;
 		}
+		/*
+		 * When setting a read-only flag on the linear region, the memory
+		 * may have been backed by a PMD before being split. Try to
+		 * collapse it back into a PMD to restore huge page performance.
+		 */
+		if (pgprot_val(set_mask) == PTE_RDONLY && area->flags & VM_ALLOW_HUGE_VMAP)
+			try_collapse_kernel_pmd((u64)page_address(area->pages[0]));
 	}
 
 	/*

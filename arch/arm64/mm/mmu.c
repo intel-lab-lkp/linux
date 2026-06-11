@@ -769,6 +769,101 @@ static inline bool force_pte_mapping(void)
 
 static DEFINE_MUTEX(pgtable_split_lock);
 
+static inline bool __pte_can_be_collapsed(pte_t pte, unsigned long pfn, pgprot_t prot)
+{
+	if (!pte_valid(pte))
+		return false;
+	if (pte_pfn(pte) != pfn)
+		return false;
+	if ((pgprot_val(pte_pgprot(pte)) & ~PTE_CONT) != pgprot_val(prot))
+		return false;
+
+	return true;
+}
+
+static void __try_collapse_pmd(pmd_t *pmdp, pmd_t pmd, unsigned long addr)
+{
+	pte_t *ptep;
+	pte_t first_pte;
+	unsigned long pfn;
+	pgprot_t prot;
+	int i;
+
+	ptep = (pte_t *)pmd_page_vaddr(pmd);
+	first_pte = __ptep_get(ptep);
+
+	if (!pte_valid(first_pte))
+		return;
+
+	prot = pte_pgprot(first_pte);
+	prot = __pgprot(pgprot_val(prot) & ~PTE_CONT);
+	pfn = pte_pfn(first_pte);
+
+	if (!IS_ALIGNED(pfn, PMD_SIZE >> PAGE_SHIFT))
+		return;
+
+	for (i = 1; i < PTRS_PER_PTE; i++) {
+		if (!__pte_can_be_collapsed(__ptep_get(ptep + i), pfn + i, prot))
+			return;
+	}
+
+	set_pmd(pmdp, pmd_mkhuge(pfn_pmd(pfn, prot)));
+
+	__flush_tlb_kernel_pgtable(addr);
+
+	if (static_branch_unlikely(&arm64_ptdump_lock_key)) {
+		mmap_read_lock(&init_mm);
+		mmap_read_unlock(&init_mm);
+	}
+
+	pte_free_kernel(NULL, ptep);
+}
+
+void try_collapse_kernel_pmd(unsigned long addr)
+{
+	pgd_t *pgdp;
+	p4d_t *p4dp;
+	pud_t *pudp;
+	pmd_t *pmdp;
+	pmd_t pmd;
+
+	/*
+	 * collapse_pmd expects exact address of block to be collapsed
+	 */
+	if (WARN_ON(ALIGN_DOWN(addr, PMD_SIZE) != addr))
+		return;
+
+	mutex_lock(&pgtable_split_lock);
+
+	pgdp = pgd_offset_k(addr);
+	if (pgd_none(READ_ONCE(*pgdp)))
+		goto out;
+
+	p4dp = p4d_offset(pgdp, addr);
+	if (p4d_none(READ_ONCE(*p4dp)))
+		goto out;
+
+	pudp = pud_offset(p4dp, addr);
+	if (pud_none(READ_ONCE(*pudp)))
+		goto out;
+
+	if (pud_leaf(READ_ONCE(*pudp)))
+		goto out;
+
+	pmdp = pmd_offset(pudp, addr);
+	pmd = pmdp_get(pmdp);
+
+	if (!pmd_table(pmd))
+		goto out;
+
+	lazy_mmu_mode_enable();
+	__try_collapse_pmd(pmdp, pmd, addr);
+	lazy_mmu_mode_disable();
+
+out:
+	mutex_unlock(&pgtable_split_lock);
+}
+
 int split_kernel_leaf_mapping(unsigned long start, unsigned long end)
 {
 	int ret;
