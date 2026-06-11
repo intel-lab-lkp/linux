@@ -887,8 +887,9 @@ static int se_if_fops_close(struct inode *nd, struct file *fp)
 		list_del(&dev_ctx->link);
 
 		kfree(dev_ctx->devname);
-		kfree(dev_ctx);
 	}
+
+	kfree(dev_ctx);
 
 	return 0;
 }
