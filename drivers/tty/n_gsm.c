@@ -1457,6 +1457,9 @@ static int gsm_control_command(struct gsm_mux *gsm, int cmd, const u8 *data,
 	struct gsm_msg *msg;
 	struct gsm_dlci *dlci = gsm->dlci[0];
 
+	if (!dlci)
+		return -EINVAL;
+
 	msg = gsm_data_alloc(gsm, 0, dlen + 2, dlci->ftype);
 	if (msg == NULL)
 		return -ENOMEM;
@@ -1484,6 +1487,9 @@ static void gsm_control_reply(struct gsm_mux *gsm, int cmd, const u8 *data,
 {
 	struct gsm_msg *msg;
 	struct gsm_dlci *dlci = gsm->dlci[0];
+
+	if (!dlci)
+		return;
 
 	msg = gsm_data_alloc(gsm, 0, dlen + 2, dlci->ftype);
 	if (msg == NULL)
