@@ -887,8 +887,18 @@ static void kvm_init_mpidr_data(struct kvm *kvm)
 	data->mpidr_mask = mask;
 
 	kvm_for_each_vcpu(c, vcpu, kvm) {
-		u64 aff = kvm_vcpu_get_mpidr_aff(vcpu);
-		u16 index = kvm_mpidr_index(data, aff);
+		u64 aff;
+		u16 index;
+
+		/*
+		 * Skip vCPUs that haven't been reset yet; their MPIDR_EL1 is
+		 * zero.
+		 */
+		if (!kvm_vcpu_mpidr_is_reset(vcpu))
+			continue;
+
+		aff = kvm_vcpu_get_mpidr_aff(vcpu);
+		index = kvm_mpidr_index(data, aff);
 
 		data->cmpidr_to_idx[index] = c;
 	}
