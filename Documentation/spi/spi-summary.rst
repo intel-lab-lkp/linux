@@ -92,7 +92,7 @@ interfaces with SPI modes.  Given SPI support, they could use MMC or SD
 cards without needing a special purpose MMC/SD/SDIO controller.
 
 
-I'm confused.  What are these four SPI "clock modes"?
+What are the four SPI "clock modes"?
 -----------------------------------------------------
 It's easy to be confused here, and the vendor documentation you'll
 find isn't necessarily helpful.  The four modes combine two mode bits:
