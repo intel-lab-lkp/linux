@@ -365,16 +365,16 @@ static void se_dev_ctx_shared_mem_cleanup(struct se_if_device_ctx *dev_ctx)
 	se_shared_mem_mgmt->non_secure_mem.pos = 0;
 }
 
-static int add_b_desc_to_pending_list(void *shared_ptr_with_pos,
-				      struct se_ioctl_setup_iobuf *io,
-				      struct se_if_device_ctx *dev_ctx)
+static struct se_buf_desc *add_b_desc_to_pending_list(void *shared_ptr_with_pos,
+						      struct se_ioctl_setup_iobuf *io,
+						      struct se_if_device_ctx *dev_ctx)
 {
 	struct se_shared_mem_mgmt_info *se_shared_mem_mgmt = &dev_ctx->se_shared_mem_mgmt;
-	struct se_buf_desc *b_desc;
+	struct se_buf_desc *b_desc = NULL;
 
 	b_desc = kzalloc_obj(*b_desc, GFP_KERNEL);
 	if (!b_desc)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
 	b_desc->shared_buf_ptr = shared_ptr_with_pos;
 	b_desc->usr_buf_ptr = io->user_buf;
@@ -398,7 +398,7 @@ static int add_b_desc_to_pending_list(void *shared_ptr_with_pos,
 		list_add_tail(&b_desc->link, &se_shared_mem_mgmt->pending_out);
 	}
 
-	return 0;
+	return b_desc;
 }
 
 /* interface for managed res to unregister a character device */
@@ -641,7 +641,8 @@ static int se_ioctl_setup_iobuf_handler(struct se_if_device_ctx *dev_ctx,
 {
 	struct se_shared_mem *shared_mem = NULL;
 	struct se_ioctl_setup_iobuf io = {0};
-	size_t aligned_len;
+	struct se_buf_desc *b_desc = NULL;
+	size_t aligned_len = 0;
 	int err = 0;
 	u32 pos;
 
@@ -698,14 +699,18 @@ static int se_ioctl_setup_iobuf_handler(struct se_if_device_ctx *dev_ctx,
 			dev_err(dev_ctx->priv->dev,
 				"%s: Failed copy data to shared memory.",
 				dev_ctx->devname);
-			return -EFAULT;
+			err = -EFAULT;
+			goto rollback;
 		}
 	}
 
-	err = add_b_desc_to_pending_list(shared_mem->ptr + pos, &io, dev_ctx);
-	if (err < 0)
+	b_desc = add_b_desc_to_pending_list(shared_mem->ptr + pos, &io, dev_ctx);
+	if (IS_ERR(b_desc)) {
+		err = PTR_ERR(b_desc);
 		dev_err(dev_ctx->priv->dev, "%s: Failed to allocate/link b_desc.",
 			dev_ctx->devname);
+		goto rollback;
+	}
 
 copy:
 	/* Provide the EdgeLock Enclave address to user space only if success.*/
@@ -713,6 +718,18 @@ copy:
 		dev_err(dev_ctx->priv->dev, "%s: Failed to copy iobuff setup to user.",
 			dev_ctx->devname);
 		err = -EFAULT;
+		if (b_desc) {
+			list_del(&b_desc->link);
+			kfree(b_desc);
+		}
+		goto rollback;
+	}
+	return err;
+
+rollback:
+	if (aligned_len) {
+		memset(shared_mem->ptr + pos, 0, aligned_len);
+		shared_mem->pos = pos;
 	}
 
 	return err;
