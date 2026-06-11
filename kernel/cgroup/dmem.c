@@ -18,6 +18,13 @@
 #include <linux/rculist.h>
 #include <linux/slab.h>
 
+/*
+ * Number of reclaim attempts before giving up when lowering dmem.max
+ * below current usage. Mirrors memcg's MAX_RECLAIM_RETRIES; unify the
+ * two in a follow-up instead of duplicating the constant.
+ */
+#define DMEM_MAX_RECLAIM_RETRIES 16
+
 struct dmem_cgroup_region {
 	/**
 	 * @ref: References keeping the region alive.
@@ -51,6 +58,24 @@ struct dmem_cgroup_region {
 	 * No new pools should be added to the region afterwards.
 	 */
 	bool unregistered;
+
+	/**
+	 * @ops: Optional operations, set from dmem_cgroup_init at registration.
+	 */
+	const struct dmem_cgroup_ops *ops;
+
+	/** @reclaim_priv: Private data passed to @ops->reclaim. */
+	void *reclaim_priv;
+
+	/**
+	 * @unregister_sem: Serialises reclaim callbacks against unregistration.
+	 *
+	 * Readers (reclaim) hold the read side for the duration of a callback
+	 * invocation.  dmem_cgroup_unregister_region() takes the write side to
+	 * drain any in-flight callbacks before returning, so callers may safely
+	 * free @reclaim_priv once unregister returns.
+	 */
+	struct rw_semaphore unregister_sem;
 };
 
 struct dmemcg_state {
@@ -145,21 +170,71 @@ static void free_cg_pool(struct dmem_cgroup_pool_state *pool)
 }
 
 static void
-set_resource_min(struct dmem_cgroup_pool_state *pool, u64 val)
+set_resource_min(struct dmem_cgroup_pool_state *pool, u64 val, bool nonblock)
 {
 	page_counter_set_min(&pool->cnt, val);
 }
 
 static void
-set_resource_low(struct dmem_cgroup_pool_state *pool, u64 val)
+set_resource_low(struct dmem_cgroup_pool_state *pool, u64 val, bool nonblock)
 {
 	page_counter_set_low(&pool->cnt, val);
 }
 
 static void
-set_resource_max(struct dmem_cgroup_pool_state *pool, u64 val)
+set_resource_max(struct dmem_cgroup_pool_state *pool, u64 val, bool nonblock)
 {
-	page_counter_set_max(&pool->cnt, val);
+	struct dmem_cgroup_region *region = pool->region;
+	unsigned long limit = (unsigned long)val;
+
+	/*
+	 * Always update the limit, even if usage currently exceeds it.
+	 * Concurrent allocations will be throttled against the new limit
+	 * while reclaim is in progress.
+	 */
+	xchg(&pool->cnt.max, limit);
+
+	if (nonblock)
+		return;
+
+	/*
+	 * Hold the read side for the duration of the reclaim loop so that
+	 * dmem_cgroup_unregister_region() cannot return (and the caller
+	 * cannot free reclaim_priv) while a callback is in progress.
+	 *
+	 * The ops check must happen inside the lock.  A caller may have
+	 * observed ops != NULL before dmem_cgroup_unregister_region()
+	 * acquired the write side; rechecking under down_read() is safe
+	 * because region->unregistered is set while the write side is
+	 * held, so any down_read() that succeeds after up_write() will
+	 * see unregistered = true and skip the loop.
+	 */
+	down_read(&region->unregister_sem);
+	if (!region->unregistered && region->ops && region->ops->reclaim) {
+		for (int retries = DMEM_MAX_RECLAIM_RETRIES; ; ) {
+			u64 usage = page_counter_read(&pool->cnt);
+			int ret;
+
+			if (usage <= limit)
+				break;
+
+			if (signal_pending(current))
+				break;
+
+			ret = region->ops->reclaim(pool, usage - limit, region->reclaim_priv);
+
+			/*
+			 * Mirror memcg's retry strategy: only count -ENOSPC (no
+			 * progress) against the retry budget; any other error is
+			 * fatal and terminates the loop immediately.
+			 */
+			if (ret && (ret != -ENOSPC || !retries--))
+				break;
+
+			cond_resched();
+		}
+	}
+	up_read(&region->unregister_sem);
 }
 
 static u64 get_resource_low(struct dmem_cgroup_pool_state *pool)
@@ -189,9 +264,14 @@ static u64 get_resource_peak(struct dmem_cgroup_pool_state *pool)
 
 static void reset_all_resource_limits(struct dmem_cgroup_pool_state *rpool)
 {
-	set_resource_min(rpool, 0);
-	set_resource_low(rpool, 0);
-	set_resource_max(rpool, PAGE_COUNTER_MAX);
+	set_resource_min(rpool, 0, false);
+	set_resource_low(rpool, 0, false);
+	/*
+	 * Use nonblock=true: we are raising the limit to PAGE_COUNTER_MAX so
+	 * reclaim is pointless, and dmemcs_offline() holds rcu_read_lock()
+	 * which forbids sleeping.
+	 */
+	set_resource_max(rpool, PAGE_COUNTER_MAX, true);
 }
 
 static void dmemcs_offline(struct cgroup_subsys_state *css)
@@ -468,7 +548,10 @@ static void dmemcg_free_region(struct kref *ref)
  * dmem_cgroup_unregister_region() - Unregister a previously registered region.
  * @region: The region to unregister.
  *
- * This function undoes dmem_cgroup_register_region.
+ * This function undoes dmem_cgroup_register_region.  It drains any
+ * in-flight reclaim callbacks before returning, so the caller may safely
+ * free the resources pointed to by @init.reclaim_priv once this function
+ * returns.
  */
 void dmem_cgroup_unregister_region(struct dmem_cgroup_region *region)
 {
@@ -476,6 +559,15 @@ void dmem_cgroup_unregister_region(struct dmem_cgroup_region *region)
 
 	if (!region)
 		return;
+
+	/*
+	 * Acquire the write side to drain any in-flight reclaim callbacks.
+	 * After up_write() below, set_resource_max() will observe
+	 * region->unregistered = true under its own down_read() and skip
+	 * the reclaim loop, so reclaim_priv is safe to free once this
+	 * function returns.
+	 */
+	down_write(&region->unregister_sem);
 
 	spin_lock(&dmemcg_lock);
 
@@ -495,6 +587,8 @@ void dmem_cgroup_unregister_region(struct dmem_cgroup_region *region)
 	 */
 	region->unregistered = true;
 	spin_unlock(&dmemcg_lock);
+
+	up_write(&region->unregister_sem);
 
 	kref_put(&region->ref, dmemcg_free_region);
 }
@@ -537,7 +631,10 @@ dmem_cgroup_register_region(const struct dmem_cgroup_init *init,
 	INIT_LIST_HEAD(&ret->pools);
 	ret->name = region_name;
 	ret->size = init->size;
+	ret->ops = init->ops;
+	ret->reclaim_priv = init->reclaim_priv;
 	kref_init(&ret->ref);
+	init_rwsem(&ret->unregister_sem);
 
 	spin_lock(&dmemcg_lock);
 	list_add_tail_rcu(&ret->region_node, &dmem_cgroup_regions);
@@ -733,9 +830,10 @@ static int dmemcg_parse_limit(char *options, u64 *new_limit)
 
 static ssize_t dmemcg_limit_write(struct kernfs_open_file *of,
 				 char *buf, size_t nbytes, loff_t off,
-				 void (*apply)(struct dmem_cgroup_pool_state *, u64))
+				 void (*apply)(struct dmem_cgroup_pool_state *, u64, bool))
 {
 	struct dmemcg_state *dmemcs = css_to_dmemcs(of_css(of));
+	bool nonblock = of->file->f_flags & O_NONBLOCK;
 	int err = 0;
 
 	while (buf && !err) {
@@ -780,7 +878,8 @@ static ssize_t dmemcg_limit_write(struct kernfs_open_file *of,
 		}
 
 		/* And commit */
-		apply(pool, new_limit);
+		apply(pool, new_limit, nonblock);
+
 		dmemcg_pool_put(pool);
 
 out_put:
