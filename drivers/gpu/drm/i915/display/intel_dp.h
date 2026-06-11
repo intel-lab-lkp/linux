@@ -238,6 +238,7 @@ bool intel_dp_joiner_candidate_valid(struct intel_connector *connector,
 		for_each_if(intel_dp_joiner_candidate_valid(__connector, (__mode)->hdisplay, __num_joined_pipes))
 
 u8 intel_dp_as_sdp_transmission_time(void);
+int intel_dp_get_as_sdp_transmission_line(const struct intel_crtc_state *crtc_state);
 
 int intel_dp_link_init(struct intel_dp *intel_dp);
 void intel_dp_link_cleanup(struct intel_dp *intel_dp);
