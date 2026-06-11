@@ -61,6 +61,12 @@
  * where to place its SVC stack
  */
 struct secondary_data secondary_data;
+
+#ifdef CONFIG_HOTPLUG_PARALLEL
+struct secondary_data cpu_boot_data[NR_CPUS] ____cacheline_aligned __ro_after_init;
+unsigned long __mpidr_to_cpuid_table[NR_CPUS] ____cacheline_aligned;
+#endif
+
 /* Number of CPUs which aren't online, but looping in kernel text. */
 static int cpus_stuck_in_kernel;
 
@@ -106,8 +112,19 @@ static int boot_secondary(unsigned int cpu, struct task_struct *idle)
 	return -EOPNOTSUPP;
 }
 
+#ifndef CONFIG_HOTPLUG_PARALLEL
 static DECLARE_COMPLETION(cpu_running);
+#endif
 
+#ifdef CONFIG_HOTPLUG_PARALLEL
+int arch_cpuhp_kick_ap_alive(unsigned int cpu, struct task_struct *tidle)
+{
+	cpu_boot_data[cpu].task = tidle;
+	update_cpu_boot_status(cpu, CPU_MMU_OFF);
+
+	return boot_secondary(cpu, tidle);
+}
+#else
 int __cpu_up(unsigned int cpu, struct task_struct *idle)
 {
 	int ret;
@@ -172,6 +189,7 @@ int __cpu_up(unsigned int cpu, struct task_struct *idle)
 
 	return -EIO;
 }
+#endif /* CONFIG_HOTPLUG_PARALLEL */
 
 static void init_gic_priority_masking(void)
 {
@@ -205,6 +223,10 @@ asmlinkage notrace void secondary_start_kernel(void)
 	 */
 	mmgrab(mm);
 	current->active_mm = mm;
+
+#ifdef CONFIG_HOTPLUG_PARALLEL
+	cpuhp_ap_sync_alive();
+#endif
 
 	/*
 	 * TTBR0 is only used for the identity mapping at this stage. Make it
@@ -254,7 +276,9 @@ asmlinkage notrace void secondary_start_kernel(void)
 					 read_cpuid_id());
 	update_cpu_boot_status(cpu, CPU_BOOT_SUCCESS);
 	set_cpu_online(cpu, true);
+#ifndef CONFIG_HOTPLUG_PARALLEL
 	complete(&cpu_running);
+#endif
 
 	/*
 	 * Secondary CPUs enter the kernel with all DAIF exceptions masked.
@@ -769,6 +793,9 @@ void __init smp_init_cpus(void)
 	 */
 	for (i = 1; i < nr_cpu_ids; i++) {
 		if (cpu_logical_map(i) != INVALID_HWID) {
+#ifdef CONFIG_HOTPLUG_PARALLEL
+			__mpidr_to_cpuid_table[i] = cpu_logical_map(i);
+#endif
 			if (smp_cpu_setup(i))
 				set_cpu_logical_map(i, INVALID_HWID);
 		}

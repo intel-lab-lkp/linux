@@ -92,6 +92,10 @@ struct secondary_data {
 	long status;
 };
 
+#ifdef CONFIG_HOTPLUG_PARALLEL
+extern struct secondary_data cpu_boot_data[NR_CPUS];
+#endif
+
 extern struct secondary_data secondary_data;
 extern long __early_cpu_boot_status;
 extern void secondary_entry(void);
@@ -124,7 +128,11 @@ static inline void __noreturn cpu_park_loop(void)
 
 static inline void update_cpu_boot_status(unsigned int cpu, int val)
 {
+#ifdef CONFIG_HOTPLUG_PARALLEL
+	WRITE_ONCE(cpu_boot_data[cpu].status, val);
+#else
 	WRITE_ONCE(secondary_data.status, val);
+#endif
 	/* Ensure the visibility of the status update */
 	dsb(ishst);
 }

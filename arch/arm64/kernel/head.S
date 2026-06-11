@@ -12,6 +12,7 @@
 #include <linux/linkage.h>
 #include <linux/init.h>
 #include <linux/pgtable.h>
+#include <linux/threads.h>
 
 #include <asm/asm_pointer_auth.h>
 #include <asm/assembler.h>
@@ -391,7 +392,29 @@ SYM_FUNC_START_LOCAL(__secondary_switched)
 	msr	vbar_el1, x5
 	isb
 
+#ifdef CONFIG_HOTPLUG_PARALLEL
+	mrs	x0, mpidr_el1
+	mov_q	x1, MPIDR_HWID_BITMASK
+	and	x0, x0, x1
+
+	adr_l	x1, __mpidr_to_cpuid_table
+	mov	x19, #0
+.Lfind_cpuid:
+	ldr	x3, [x1, x19, lsl #3]
+	cmp	x3, x0
+	b.eq	.Lfound_cpuid
+	add	x19, x19, #1
+	cmp	x19, #NR_CPUS
+	b.ne	.Lfind_cpuid
+	b	.
+
+.Lfound_cpuid:
+	adr_l	x0, cpu_boot_data
+	lsl	x3, x19, #4
+	add	x0, x0, x3
+#else
 	adr_l	x0, secondary_data
+#endif
 	ldr	x2, [x0, #CPU_BOOT_TASK]
 	cbz	x2, __secondary_too_slow
 
