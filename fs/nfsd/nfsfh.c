@@ -144,16 +144,15 @@ static inline __be32 check_pseudo_root(struct dentry *dentry,
 /* Size of a file handle MAC, in 4-octet words */
 #define FH_MAC_WORDS (sizeof(__le64) / 4)
 
-static bool fh_append_mac(struct svc_fh *fhp, struct net *net)
+bool fh_append_mac(struct knfsd_fh *fh, int fh_maxsize, struct net *net)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
-	struct knfsd_fh *fh = &fhp->fh_handle;
 	siphash_key_t *fh_key = nn->fh_key;
 	__le64 hash;
 
 	if (!fh_key)
 		goto out_no_key;
-	if (fh->fh_size + sizeof(hash) > fhp->fh_maxsize)
+	if (fh->fh_size + sizeof(hash) > fh_maxsize)
 		goto out_no_space;
 
 	hash = cpu_to_le64(siphash(&fh->fh_raw, fh->fh_size, fh_key));
@@ -167,7 +166,7 @@ out_no_key:
 
 out_no_space:
 	pr_warn_ratelimited("NFSD: unable to sign filehandles, fh_size %zu would be greater than fh_maxsize %d.\n",
-			    fh->fh_size + sizeof(hash), fhp->fh_maxsize);
+			    fh->fh_size + sizeof(hash), fh_maxsize);
 	return false;
 }
 
@@ -566,7 +565,8 @@ static void _fh_update(struct svc_fh *fhp, struct svc_export *exp,
 		fhp->fh_handle.fh_size += maxsize * 4;
 
 		if (exp->ex_flags & NFSEXP_SIGN_FH)
-			if (!fh_append_mac(fhp, exp->cd->net))
+			if (!fh_append_mac(&fhp->fh_handle, fhp->fh_maxsize,
+					   exp->cd->net))
 				fhp->fh_handle.fh_fileid_type = FILEID_INVALID;
 	} else {
 		fhp->fh_handle.fh_fileid_type = FILEID_ROOT;
