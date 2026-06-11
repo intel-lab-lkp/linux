@@ -6898,6 +6898,7 @@ int ring_buffer_read_page(struct trace_buffer *buffer,
 	struct buffer_data_page *bpage;
 	struct buffer_page *reader;
 	unsigned long missed_events;
+	unsigned int subbuf_size;
 	unsigned int commit;
 	unsigned int read;
 	u64 save_timestamp;
@@ -6918,14 +6919,21 @@ int ring_buffer_read_page(struct trace_buffer *buffer,
 	if (!data_page || !data_page->data)
 		return -1;
 
-	if (data_page->order != buffer->subbuf_order)
-		return -1;
-
 	bpage = data_page->data;
 	if (!bpage)
 		return -1;
 
 	guard(raw_spinlock_irqsave)(&cpu_buffer->reader_lock);
+
+	/*
+	 * Check data_page order under lock to prevent a race with a
+	 * concurrent ring_buffer_subbuf_order_set() swap, which can
+	 * cause an outofbounds memset() if the subbuf_size changes.
+	 */
+	if (data_page->order != buffer->subbuf_order)
+		return -1;
+
+	subbuf_size = (PAGE_SIZE << data_page->order) - BUF_PAGE_HDR_SIZE;
 
 	reader = rb_get_reader_page(cpu_buffer);
 	if (!reader)
@@ -7043,7 +7051,7 @@ int ring_buffer_read_page(struct trace_buffer *buffer,
 		/* If there is room at the end of the page to save the
 		 * missed events, then record it there.
 		 */
-		if (buffer->subbuf_size - commit >= sizeof(missed_events)) {
+		if (subbuf_size - commit >= sizeof(missed_events)) {
 			memcpy(&bpage->data[commit], &missed_events,
 			       sizeof(missed_events));
 			local_add(RB_MISSED_STORED, &bpage->commit);
@@ -7055,8 +7063,8 @@ int ring_buffer_read_page(struct trace_buffer *buffer,
 	/*
 	 * This page may be off to user land. Zero it out here.
 	 */
-	if (commit < buffer->subbuf_size)
-		memset(&bpage->data[commit], 0, buffer->subbuf_size - commit);
+	if (commit < subbuf_size)
+		memset(&bpage->data[commit], 0, subbuf_size - commit);
 
 	return read;
 }
