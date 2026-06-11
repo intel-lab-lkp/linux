@@ -64,9 +64,8 @@ u64 sst_shim_read64(void __iomem *addr, int offset)
 void sst_set_fw_state_locked(
 		struct intel_sst_drv *sst_drv_ctx, int sst_state)
 {
-	mutex_lock(&sst_drv_ctx->sst_lock);
+	guard(mutex)(&sst_drv_ctx->sst_lock);
 	sst_drv_ctx->sst_state = sst_state;
-	mutex_unlock(&sst_drv_ctx->sst_lock);
 }
 
 /*
@@ -179,9 +178,8 @@ void sst_clean_stream(struct stream_info *stream)
 {
 	stream->status = STREAM_UN_INIT;
 	stream->prev = STREAM_UN_INIT;
-	mutex_lock(&stream->lock);
-	stream->cumm_bytes = 0;
-	mutex_unlock(&stream->lock);
+	scoped_guard(mutex, &stream->lock)
+		stream->cumm_bytes = 0;
 }
 
 int sst_prepare_and_post_msg(struct intel_sst_drv *sst,
@@ -302,18 +300,17 @@ int sst_assign_pvt_id(struct intel_sst_drv *drv)
 {
 	int local;
 
-	spin_lock(&drv->block_lock);
+	guard(spinlock)(&drv->block_lock);
 	/* find first zero index from lsb */
 	local = ffz(drv->pvt_id);
 	dev_dbg(drv->dev, "pvt_id assigned --> %d\n", local);
 	if (local >= SST_MAX_BLOCKS){
-		spin_unlock(&drv->block_lock);
 		dev_err(drv->dev, "PVT _ID error: no free id blocks ");
 		return -EINVAL;
 	}
 	/* toggle the index */
 	change_bit(local, &drv->pvt_id);
-	spin_unlock(&drv->block_lock);
+
 	return local;
 }
 
@@ -363,10 +360,8 @@ EXPORT_SYMBOL_GPL(relocate_imr_addr_mrfld);
 void sst_add_to_dispatch_list_and_post(struct intel_sst_drv *sst,
 						struct ipc_post *msg)
 {
-	unsigned long irq_flags;
+	scoped_guard(spinlock_irqsave, &sst->ipc_spin_lock)
+		list_add_tail(&msg->node, &sst->ipc_dispatch_list);
 
-	spin_lock_irqsave(&sst->ipc_spin_lock, irq_flags);
-	list_add_tail(&msg->node, &sst->ipc_dispatch_list);
-	spin_unlock_irqrestore(&sst->ipc_spin_lock, irq_flags);
 	sst->ops->post_message(sst, NULL, false);
 }
