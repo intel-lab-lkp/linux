@@ -512,9 +512,8 @@ int vhci_init_attr_group(void)
 	*attrs = &dev_attr_nports.attr;
 	*(attrs + 1) = &dev_attr_detach.attr;
 	*(attrs + 2) = &dev_attr_attach.attr;
-	*(attrs + 3) = &dev_attr_usbip_debug.attr;
 	for (i = 0; i < vhci_num_controllers; i++)
-		*(attrs + i + 4) = &((status_attrs + i)->attr.attr);
+		*(attrs + i + 3) = &((status_attrs + i)->attr.attr);
 	vhci_attr_group.attrs = attrs;
 	return 0;
 }

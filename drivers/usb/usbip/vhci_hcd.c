@@ -1506,6 +1506,12 @@ static int vhci_hcd_resume(struct platform_device *pdev)
 
 #endif
 
+static struct attribute *vhci_attrs[] = {
+	&driver_attr_usbip_debug.attr,
+	NULL
+};
+ATTRIBUTE_GROUPS(vhci);
+
 static struct platform_driver vhci_driver = {
 	.probe	= vhci_hcd_probe,
 	.remove = vhci_hcd_remove,
@@ -1513,6 +1519,7 @@ static struct platform_driver vhci_driver = {
 	.resume	= vhci_hcd_resume,
 	.driver	= {
 		.name = driver_name,
+		.groups = vhci_groups,
 	},
 };
 

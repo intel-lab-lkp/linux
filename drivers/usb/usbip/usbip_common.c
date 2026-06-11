@@ -30,24 +30,22 @@ module_param(usbip_debug_flag, ulong, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(usbip_debug_flag, "debug flags (defined in usbip_common.h)");
 
 /* FIXME */
-struct device_attribute dev_attr_usbip_debug;
-EXPORT_SYMBOL_GPL(dev_attr_usbip_debug);
+struct driver_attribute driver_attr_usbip_debug;
+EXPORT_SYMBOL_GPL(driver_attr_usbip_debug);
 
-static ssize_t usbip_debug_show(struct device *dev,
-				struct device_attribute *attr, char *buf)
+static ssize_t usbip_debug_show(struct device_driver *driver, char *buf)
 {
 	return sprintf(buf, "%lx\n", usbip_debug_flag);
 }
 
-static ssize_t usbip_debug_store(struct device *dev,
-				 struct device_attribute *attr, const char *buf,
-				 size_t count)
+static ssize_t usbip_debug_store(struct device_driver *driver,
+				 const char *buf, size_t count)
 {
 	if (sscanf(buf, "%lx", &usbip_debug_flag) != 1)
 		return -EINVAL;
 	return count;
 }
-DEVICE_ATTR_RW(usbip_debug);
+DRIVER_ATTR_RW(usbip_debug);
 
 static void usbip_dump_buffer(char *buff, int bufflen)
 {

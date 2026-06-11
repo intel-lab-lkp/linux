@@ -57,7 +57,7 @@ enum {
 #define usbip_dbg_flag_vhci_sysfs  (usbip_debug_flag & usbip_debug_vhci_sysfs)
 
 extern unsigned long usbip_debug_flag;
-extern struct device_attribute dev_attr_usbip_debug;
+extern struct driver_attribute driver_attr_usbip_debug;
 
 #define usbip_dbg_with_flag(flag, fmt, args...)		\
 	do {						\

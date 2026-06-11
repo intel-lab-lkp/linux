@@ -145,10 +145,15 @@ static DEVICE_ATTR_WO(usbip_sockfd);
 static struct attribute *usbip_attrs[] = {
 	&dev_attr_usbip_status.attr,
 	&dev_attr_usbip_sockfd.attr,
-	&dev_attr_usbip_debug.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(usbip);
+
+static struct attribute *usbip_drv_attrs[] = {
+	&driver_attr_usbip_debug.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(usbip_drv);
 
 static void stub_shutdown_connection(struct usbip_device *ud)
 {
@@ -531,4 +536,7 @@ struct usb_device_driver stub_driver = {
 #endif
 	.supports_autosuspend	=	0,
 	.dev_groups	= usbip_groups,
+	.driver = {
+		.groups		= usbip_drv_groups,
+	}
 };
