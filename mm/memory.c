@@ -4371,7 +4371,7 @@ void unmap_mapping_folio(struct folio *folio)
 
 	i_mmap_lock_read(mapping);
 	if (unlikely(mapping_mapped(mapping)))
-		unmap_mapping_range_tree(&mapping->i_mmap, first_index,
+		unmap_mapping_range_tree(get_i_mmap_root(mapping), first_index,
 					 last_index, &details);
 	i_mmap_unlock_read(mapping);
 }
@@ -4401,7 +4401,7 @@ void unmap_mapping_pages(struct address_space *mapping, pgoff_t start,
 
 	i_mmap_lock_read(mapping);
 	if (unlikely(mapping_mapped(mapping)))
-		unmap_mapping_range_tree(&mapping->i_mmap, first_index,
+		unmap_mapping_range_tree(get_i_mmap_root(mapping), first_index,
 					 last_index, &details);
 	i_mmap_unlock_read(mapping);
 }

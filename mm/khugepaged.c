@@ -1773,10 +1773,11 @@ static bool file_backed_vma_is_retractable(struct vm_area_struct *vma)
 
 static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 {
+	struct rb_root_cached *root = get_i_mmap_root(mapping);
 	struct vm_area_struct *vma;
 
 	i_mmap_lock_read(mapping);
-	vma_interval_tree_foreach(vma, &mapping->i_mmap, pgoff, pgoff) {
+	vma_interval_tree_foreach(vma, root, pgoff, pgoff) {
 		struct mmu_notifier_range range;
 		struct mm_struct *mm;
 		unsigned long addr;
@@ -2194,7 +2195,8 @@ xa_unlocked:
 		 * not be able to observe any missing pages due to the
 		 * previously inserted retry entries.
 		 */
-		vma_interval_tree_foreach(vma, &mapping->i_mmap, start, end) {
+		vma_interval_tree_foreach(vma, get_i_mmap_root(mapping),
+					start, end) {
 			if (userfaultfd_missing(vma)) {
 				result = SCAN_EXCEED_NONE_PTE;
 				goto immap_locked;

@@ -1138,6 +1138,7 @@ static int dax_writeback_one(struct xa_state *xas, struct dax_device *dax_dev,
 		struct address_space *mapping, void *entry)
 {
 	unsigned long pfn, index, count, end;
+	struct rb_root_cached *root = get_i_mmap_root(mapping);
 	long ret = 0;
 	struct vm_area_struct *vma;
 
@@ -1201,7 +1202,7 @@ static int dax_writeback_one(struct xa_state *xas, struct dax_device *dax_dev,
 
 	/* Walk all mappings of a given index of a file and writeprotect them */
 	i_mmap_lock_read(mapping);
-	vma_interval_tree_foreach(vma, &mapping->i_mmap, index, end) {
+	vma_interval_tree_foreach(vma, root, index, end) {
 		pfn_mkclean_range(pfn, count, index, vma);
 		cond_resched();
 	}
