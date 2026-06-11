@@ -5015,7 +5015,6 @@ int tracing_set_tracer(struct trace_array *tr, const char *buf)
 						RING_BUFFER_ALL_CPUS);
 		if (ret < 0)
 			return ret;
-		ret = 0;
 	}
 
 	list_for_each_entry(t, &tr->tracers, list) {
