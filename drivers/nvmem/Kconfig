@@ -30,6 +30,7 @@ source "drivers/nvmem/layouts/Kconfig"
 
 config NVMEM_AIROHA_SMC_EFUSES
 	tristate "Airoha SMC eFuse support"
+	depends on ARM64
 	depends on ARCH_AIROHA || COMPILE_TEST
 	depends on HAVE_ARM_SMCCC
 	default ARCH_AIROHA
