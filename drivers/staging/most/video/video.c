@@ -496,7 +496,7 @@ static int comp_probe_channel(struct most_interface *iface, int channel_idx,
 	ret = v4l2_device_register(NULL, &mdev->v4l2_dev);
 	if (ret) {
 		pr_err("v4l2_device_register() failed\n");
-		kfree(mdev);
+		v4l2_device_put(&mdev->v4l2_dev);
 		return ret;
 	}
 
