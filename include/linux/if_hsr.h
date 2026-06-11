@@ -38,6 +38,54 @@ struct hsr_tag {
 
 #define HSR_HLEN	6
 
+/**
+ * struct hsr_lre_stats - Kernel-internal IEC-62439-3 LRE counter set.
+ *
+ * This is the buffer type written by ndo_get_offload_stats() when called
+ * with attr_id == IFLA_STATS_LINK_XSTATS on an HSR slave device.  Each
+ * field maps to one HSR_XSTATS_* netlink attribute.  Fields that the
+ * offload driver does not support must be left at the initialised value of
+ * ~0ULL; the HSR layer will skip those when building the netlink reply.
+ *
+ * Per-port suffix: _a = port A (slave 1 / LAN-A),
+ *                  _b = port B (slave 2 / LAN-B),
+ *                  _c = interlink / application interface.
+ *
+ * @cnt_tx_a: lreCntTxA - sent HSR/PRP tagged frames on port A.
+ * @cnt_tx_b: lreCntTxB - sent HSR/PRP tagged frames on port B.
+ * @cnt_tx_c: lreCntTxC - sent HSR/PRP tagged frames on port C.
+ * @cnt_rx_a: lreCntRxA - received HSR/PRP tagged frames on port A.
+ * @cnt_rx_b: lreCntRxB - received HSR/PRP tagged frames on port B.
+ * @cnt_rx_c: lreCntRxC - received HSR/PRP tagged frames on port C.
+ * @cnt_err_wrong_lan_a: lreCntErrWrongLanA - wrong LAN ID frames on port A.
+ * @cnt_err_wrong_lan_b: lreCntErrWrongLanB - wrong LAN ID frames on port B.
+ * @cnt_err_wrong_lan_c: lreCntErrWrongLanC - wrong LAN ID frames on port C.
+ * @cnt_errors_a: lreCntErrorsA - received frames with errors on port A.
+ * @cnt_errors_b: lreCntErrorsB - received frames with errors on port B.
+ * @cnt_errors_c: lreCntErrorsC - received frames with errors on port C.
+ * @cnt_unique_a: lreCntUniqueA - frames received without duplicate on port A.
+ * @cnt_unique_b: lreCntUniqueB - frames received without duplicate on port B.
+ * @cnt_unique_c: lreCntUniqueC - frames received without duplicate on port C.
+ * @cnt_duplicate_a: lreCntDuplicateA - frames with one duplicate on port A.
+ * @cnt_duplicate_b: lreCntDuplicateB - frames with one duplicate on port B.
+ * @cnt_duplicate_c: lreCntDuplicateC - frames with one duplicate on port C.
+ * @cnt_multi_a: lreCntMultiA - frames with more than one duplicate on port A.
+ * @cnt_multi_b: lreCntMultiB - frames with more than one duplicate on port B.
+ * @cnt_multi_c: lreCntMultiC - frames with more than one duplicate on port C.
+ * @cnt_own_rx_a: lreCntOwnRxA - own-address frames received on port A.
+ * @cnt_own_rx_b: lreCntOwnRxB - own-address frames received on port B.
+ */
+struct hsr_lre_stats {
+	u64 cnt_tx_a, cnt_tx_b, cnt_tx_c;
+	u64 cnt_rx_a, cnt_rx_b, cnt_rx_c;
+	u64 cnt_err_wrong_lan_a, cnt_err_wrong_lan_b, cnt_err_wrong_lan_c;
+	u64 cnt_errors_a, cnt_errors_b, cnt_errors_c;
+	u64 cnt_unique_a, cnt_unique_b, cnt_unique_c;
+	u64 cnt_duplicate_a, cnt_duplicate_b, cnt_duplicate_c;
+	u64 cnt_multi_a, cnt_multi_b, cnt_multi_c;
+	u64 cnt_own_rx_a, cnt_own_rx_b;
+};
+
 #if IS_ENABLED(CONFIG_HSR)
 extern bool is_hsr_master(struct net_device *dev);
 extern int hsr_get_version(struct net_device *dev, enum hsr_version *ver);
