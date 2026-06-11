@@ -72,6 +72,22 @@ struct flow_table {
 
 extern struct kmem_cache *flow_stats_cache;
 
+static inline int lockdep_ovs_tbl_is_held(const struct flow_table *table
+					  __always_unused)
+{
+	return 1;
+}
+
+#define ASSERT_OVS_TBL(tbl)   WARN_ON(!lockdep_ovs_tbl_is_held(tbl))
+
+/* Lock-protected update-allowed dereferences.*/
+#define ovs_tbl_dereference(p, tbl)	\
+	rcu_dereference_protected(p, lockdep_ovs_tbl_is_held(tbl))
+
+/* Read dereferences can be protected by either RCU, table lock. */
+#define rcu_dereference_ovs_tbl(p, tbl) \
+	rcu_dereference_check(p, lockdep_ovs_tbl_is_held(tbl))
+
 int ovs_flow_init(void);
 void ovs_flow_exit(void);
 
