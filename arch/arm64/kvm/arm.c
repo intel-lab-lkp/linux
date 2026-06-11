@@ -890,6 +890,16 @@ static void kvm_init_mpidr_data(struct kvm *kvm)
 		u64 aff = kvm_vcpu_get_mpidr_aff(vcpu);
 		u16 index = kvm_mpidr_index(data, aff);
 
+		/*
+		 * In the CPU hot-plug scenario, the kvm_for_each_vcpu() macro
+		 * iterates over all possible vcpus. For vcpus that are not
+		 * reset, kvm_vcpu_get_mpidr_aff() returns 0, then the index
+		 * computed by kvm_mpidr_index() will also be 0, thereby
+		 * overwriting the original value of vcpu0.
+		 */
+		if (!kvm_vcpu_mpidr_is_reset(aff))
+			continue;
+
 		data->cmpidr_to_idx[index] = c;
 	}
 

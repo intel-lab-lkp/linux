@@ -506,6 +506,15 @@ static inline unsigned long kvm_vcpu_get_mpidr_aff(struct kvm_vcpu *vcpu)
 	return __vcpu_sys_reg(vcpu, MPIDR_EL1) & MPIDR_HWID_BITMASK;
 }
 
+/*
+ * Check if MPIDR matches hardware reset value. RES1 bits are set after reset,
+ * while a zero default indicates a vCPU that has not been reset.
+ */
+static inline bool kvm_vcpu_mpidr_is_reset(u64 val)
+{
+	return (val & MIDR_RES1_MASK) == MIDR_RES1_MASK;
+}
+
 static inline void kvm_vcpu_set_be(struct kvm_vcpu *vcpu)
 {
 	if (vcpu_mode_is_32bit(vcpu)) {
