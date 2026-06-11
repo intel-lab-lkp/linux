@@ -708,6 +708,16 @@ retry:
 		goto out3;
 	}
 
+	if (d_really_is_positive(rd.new_dentry)) {
+		struct ksmbd_file *target_fp;
+		target_fp = ksmbd_lookup_fd_inode(rd.new_dentry);
+		if (target_fp) {
+			ksmbd_fd_put(work, target_fp);
+			err = -EACCES;
+			goto out3;
+		}
+	}
+
 	err = vfs_rename(&rd);
 	if (err)
 		ksmbd_debug(VFS, "vfs_rename failed err %d\n", err);
