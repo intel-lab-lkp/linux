@@ -24,7 +24,8 @@ struct ib_frmr_key {
 struct ib_frmr_pool_ops {
 	int (*create_frmrs)(struct ib_device *device, struct ib_frmr_key *key,
 			    u32 *handles, u32 count);
-	void (*destroy_frmrs)(struct ib_device *device, u32 *handles,
+	void (*destroy_frmrs)(struct ib_device *device,
+			      const struct ib_frmr_key *key, u32 *handles,
 			      u32 count);
 	int (*build_key)(struct ib_device *device, const struct ib_frmr_key *in,
 			 struct ib_frmr_key *out);
@@ -33,7 +34,7 @@ struct ib_frmr_pool_ops {
 int ib_frmr_pools_init(struct ib_device *device,
 		       const struct ib_frmr_pool_ops *pool_ops);
 void ib_frmr_pools_cleanup(struct ib_device *device);
-int ib_frmr_pool_pop(struct ib_device *device, struct ib_mr *mr);
+int ib_frmr_pool_pop(struct ib_device *device, struct ib_mr *mr, bool *reused);
 int ib_frmr_pool_push(struct ib_device *device, struct ib_mr *mr);
 
 #endif /* FRMR_POOLS_H */
