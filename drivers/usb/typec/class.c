@@ -1430,6 +1430,41 @@ int typec_cable_is_active(struct typec_cable *cable)
 EXPORT_SYMBOL_GPL(typec_cable_is_active);
 
 /**
+ * typec_cable_altmode_unsupported - Check if a cable restricts altmode
+ * @alt: The Alternate Mode to evaluate
+ *
+ * Returns true if the connected cable is incapable of handling the altmode.
+ */
+bool typec_cable_altmode_unsupported(struct typec_altmode *alt)
+{
+	struct typec_altmode *plug;
+	struct typec_cable *cable;
+	bool unsupported = false;
+
+	plug = typec_altmode_get_plug(alt, TYPEC_PLUG_SOP_P);
+	if (plug) {
+		typec_altmode_put_plug(plug);
+		return false;
+	}
+
+	cable = typec_cable_get(typec_altmode2port(alt));
+	if (cable && cable->identity) {
+		const u32 id_header = cable->identity->id_header;
+		const u32 speed = VDO_TYPEC_CABLE_SPEED(cable->identity->vdo[0]);
+
+		if (!id_header || PD_IDH_PTYPE(id_header) == IDH_PTYPE_ACABLE)
+			unsupported = true;
+		else if (PD_IDH_PTYPE(id_header) == IDH_PTYPE_PCABLE)
+			unsupported = (speed == CABLE_USB2_ONLY);
+	}
+	if (cable)
+		typec_cable_put(cable);
+
+	return unsupported;
+}
+EXPORT_SYMBOL_GPL(typec_cable_altmode_unsupported);
+
+/**
  * typec_cable_set_identity - Report result from Discover Identity command
  * @cable: The cable updated identity values
  *
