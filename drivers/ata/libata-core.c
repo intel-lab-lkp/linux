@@ -6275,11 +6275,16 @@ static void ata_port_detach(struct ata_port *ap)
 	/* Remove scsi devices */
 	ata_for_each_link(link, ap, HOST_FIRST) {
 		ata_for_each_dev(dev, link, ALL) {
-			if (dev->sdev) {
+			int lun;
+
+			for (lun = ATAPI_MAX_LUN - 1; lun >= 0; lun--) {
+				struct scsi_device *sdev = dev->sdev[lun];
+				if (!sdev)
+					continue;
+				dev->sdev[lun] = NULL;
 				spin_unlock_irqrestore(ap->lock, flags);
-				scsi_remove_device(dev->sdev);
+				scsi_remove_device(sdev);
 				spin_lock_irqsave(ap->lock, flags);
-				dev->sdev = NULL;
 			}
 		}
 	}
