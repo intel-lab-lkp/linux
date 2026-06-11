@@ -153,11 +153,6 @@ register! {
 /// The base is provided by the GB10x framebuffer HAL.
 pub(crate) struct Hshub0Base(());
 
-/// Base of the GB20x FBHUB0 register window (`NV_FBHUB0_PRI_BASE` in Open RM).
-///
-/// The base is provided by the GB20x framebuffer HAL.
-pub(crate) struct Fbhub0Base(());
-
 register! {
     // GB10x sysmem flush registers, relative to the HSHUB0 base. GB10x routes sysmembar
     // through a primary and an EG (egress) pair that must both be programmed to the same
@@ -178,16 +173,18 @@ register! {
     pub(crate) NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_HI(u32) @ Hshub0Base + 0x000006c4 {
         19:0    adr;
     }
+}
 
-    // GB20x sysmem flush registers, relative to the FBHUB0 base. Unlike the older
-    // NV_PFB_NISO_FLUSH_SYSMEM_ADDR registers which encode the address with an 8-bit
-    // right-shift, these take the raw address split into lower and upper halves. Hardware
-    // ignores bits 7:0 of the LO register.
-    pub(crate) NV_PFB_FBHUB_PCIE_FLUSH_SYSMEM_ADDR_LO(u32) @ Fbhub0Base + 0x00001d58 {
+register! {
+    // GB20x FBHUB0 sysmem flush registers. Unlike the older
+    // NV_PFB_NISO_FLUSH_SYSMEM_ADDR registers, which encode the address with an
+    // 8-bit right-shift, these take the raw address split into lower and upper
+    // halves. Hardware ignores bits 7:0 of the LO register.
+    pub(crate) NV_PFB_FBHUB0_PCIE_FLUSH_SYSMEM_ADDR_LO(u32) @ 0x008a1d58 {
         31:0    adr => u32;
     }
 
-    pub(crate) NV_PFB_FBHUB_PCIE_FLUSH_SYSMEM_ADDR_HI(u32) @ Fbhub0Base + 0x00001d5c {
+    pub(crate) NV_PFB_FBHUB0_PCIE_FLUSH_SYSMEM_ADDR_HI(u32) @ 0x008a1d5c {
         19:0    adr;
     }
 }
