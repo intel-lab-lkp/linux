@@ -189,6 +189,25 @@ register! {
     }
 }
 
+register! {
+    /// Low bits of the physical system memory address used by the GPU to perform
+    /// sysmembar operations on Hopper.
+    ///
+    /// Like the GB20x FBHUB0 registers, and unlike the Ampere
+    /// `NV_PFB_NISO_FLUSH_SYSMEM_ADDR` registers (which encode the address with an
+    /// 8-bit right-shift), these take the raw address split into lower and upper
+    /// halves. Hardware ignores bits 7:0 of the LO register.
+    pub(crate) NV_PFB_FBHUB_PCIE_FLUSH_SYSMEM_ADDR_LO(u32) @ 0x00100a34 {
+        31:0    adr => u32;
+    }
+
+    /// High bits of the physical system memory address used by the GPU to perform
+    /// sysmembar operations on Hopper.
+    pub(crate) NV_PFB_FBHUB_PCIE_FLUSH_SYSMEM_ADDR_HI(u32) @ 0x00100a38 {
+        19:0    adr;
+    }
+}
+
 impl NV_PFB_PRI_MMU_LOCAL_MEMORY_RANGE {
     /// Returns the usable framebuffer size, in bytes.
     pub(crate) fn usable_fb_size(self) -> u64 {
