@@ -885,8 +885,10 @@ static int oplock_break(struct oplock_info *brk_opinfo, int req_op_level,
 
 		atomic_inc(&brk_opinfo->breaking_cnt);
 		err = oplock_break_pending(brk_opinfo, req_op_level);
-		if (err)
+		if (err) {
+			atomic_dec(&brk_opinfo->breaking_cnt);
 			return err < 0 ? err : 0;
+		}
 
 		if (brk_opinfo->open_trunc) {
 			/*
