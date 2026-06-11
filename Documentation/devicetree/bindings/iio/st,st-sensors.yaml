@@ -88,12 +88,6 @@ properties:
         enum:
           - st,lsm303d-imu
           - st,lsm9ds0-imu
-      - description: Deprecated bindings
-        enum:
-          - st,lis302dl-spi
-          - st,lis3lv02d
-        deprecated: true
-
   reg:
     maxItems: 1
 
