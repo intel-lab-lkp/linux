@@ -1387,7 +1387,8 @@ static int mv_xor_probe(struct platform_device *pdev)
 	 */
 	max_engines = num_present_cpus();
 	if (xordev->xor_type == XOR_ARMADA_37XX)
-		max_channels =	num_present_cpus();
+		max_channels = min_t(unsigned int, MV_XOR_MAX_CHANNELS,
+				     num_present_cpus());
 	else
 		max_channels = min_t(unsigned int,
 				     MV_XOR_MAX_CHANNELS,
