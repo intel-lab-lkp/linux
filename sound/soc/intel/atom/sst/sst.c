@@ -57,17 +57,17 @@ static irqreturn_t intel_sst_interrupt_mrfld(int irq, void *context)
 	isr.full = sst_shim_read64(drv->shim, SST_ISRX);
 
 	if (isr.part.done_interrupt) {
-		/* Clear done bit */
-		spin_lock(&drv->ipc_spin_lock);
-		header.full = sst_shim_read64(drv->shim,
-					drv->ipc_reg.ipcx);
-		header.p.header_high.part.done = 0;
-		sst_shim_write64(drv->shim, drv->ipc_reg.ipcx, header.full);
+		scoped_guard(spinlock, &drv->ipc_spin_lock) {
+			/* Clear done bit */
+			header.full = sst_shim_read64(drv->shim,
+						drv->ipc_reg.ipcx);
+			header.p.header_high.part.done = 0;
+			sst_shim_write64(drv->shim, drv->ipc_reg.ipcx, header.full);
 
-		/* write 1 to clear status register */
-		isr.part.done_interrupt = 1;
-		sst_shim_write64(drv->shim, SST_ISRX, isr.full);
-		spin_unlock(&drv->ipc_spin_lock);
+			/* write 1 to clear status register */
+			isr.part.done_interrupt = 1;
+			sst_shim_write64(drv->shim, SST_ISRX, isr.full);
+		}
 
 		/* we can send more messages to DSP so trigger work */
 		queue_work(drv->post_msg_wq, &drv->ipc_post_msg_wq);
@@ -76,11 +76,11 @@ static irqreturn_t intel_sst_interrupt_mrfld(int irq, void *context)
 
 	if (isr.part.busy_interrupt) {
 		/* message from dsp so copy that */
-		spin_lock(&drv->ipc_spin_lock);
-		imr.full = sst_shim_read64(drv->shim, SST_IMRX);
-		imr.part.busy_interrupt = 1;
-		sst_shim_write64(drv->shim, SST_IMRX, imr.full);
-		spin_unlock(&drv->ipc_spin_lock);
+		scoped_guard(spinlock, &drv->ipc_spin_lock) {
+			imr.full = sst_shim_read64(drv->shim, SST_IMRX);
+			imr.part.busy_interrupt = 1;
+			sst_shim_write64(drv->shim, SST_IMRX, imr.full);
+		}
 		header.full =  sst_shim_read64(drv->shim, drv->ipc_reg.ipcd);
 
 		if (sst_create_ipc_msg(&msg, header.p.header_high.part.large)) {
@@ -103,9 +103,8 @@ static irqreturn_t intel_sst_interrupt_mrfld(int irq, void *context)
 		msg->mrfld_header = header;
 		msg->is_process_reply =
 			sst_is_process_reply(header.p.header_high.part.msg_id);
-		spin_lock(&drv->rx_msg_lock);
-		list_add_tail(&msg->node, &drv->rx_list);
-		spin_unlock(&drv->rx_msg_lock);
+		scoped_guard(spinlock, &drv->rx_msg_lock)
+			list_add_tail(&msg->node, &drv->rx_list);
 		drv->ops->clear_interrupt(drv);
 		retval = IRQ_WAKE_THREAD;
 	}
