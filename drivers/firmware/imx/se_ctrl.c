@@ -666,6 +666,11 @@ static int se_ioctl_setup_iobuf_handler(struct se_if_device_ctx *dev_ctx,
 	}
 
 	aligned_len = round_up((size_t)io.length, 8);
+	if (aligned_len < io.length) {
+		dev_err(dev_ctx->priv->dev, "%s: Invalid buffer length.",
+			dev_ctx->devname);
+		return -EINVAL;
+	}
 
 	/* No specific requirement for this buffer. */
 	shared_mem = &dev_ctx->se_shared_mem_mgmt.non_secure_mem;
