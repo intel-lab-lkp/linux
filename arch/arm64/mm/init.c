@@ -408,6 +408,20 @@ void dump_mem_limit(void)
 }
 
 #ifdef CONFIG_EXECMEM
+
+#ifdef CONFIG_ARCH_HAS_EXECMEM_ROX
+void execmem_fill_trapping_insns(void *ptr, size_t size)
+{
+	int nr_inst = size / AARCH64_INSN_SIZE;
+	__le32 *updptr = ptr;
+
+	for (int i = 0; i < nr_inst; i++)
+		updptr[i] = cpu_to_le32(AARCH64_BREAK_FAULT);
+
+	flush_icache_range((unsigned long)ptr, (unsigned long)ptr + size);
+}
+#endif
+
 static u64 module_direct_base __ro_after_init = 0;
 static u64 module_plt_base __ro_after_init = 0;
 
