@@ -499,7 +499,16 @@ static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *fol
 {
 	pgoff_t start, end;
 
-	filemap_invalidate_lock_shared(mapping);
+	/*
+	 * memory_failure() holds mf_mutex globally.  We must not block
+	 * on filemap_invalidate_lock here, as it can be held exclusive
+	 * by kvm_gmem_fallocate() (MADV_REMOVE/FALLOC_FL_PUNCH_HOLE
+	 * path), creating an ABBA deadlock with the poisoned folio lock.
+	 * If the invalidation lock is contended, fail the recovery instead
+	 * of reporting MF_DELAYED without zapping KVM mappings.
+	 */
+	if (!filemap_invalidate_trylock_shared(mapping))
+		return -EBUSY;
 
 	start = folio->index;
 	end = start + folio_nr_pages(folio);
