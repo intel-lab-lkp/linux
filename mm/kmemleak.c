@@ -62,6 +62,7 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/sched/signal.h>
+#include <linux/sched/stat.h>
 #include <linux/sched/task.h>
 #include <linux/sched/task_stack.h>
 #include <linux/jiffies.h>
@@ -1885,17 +1886,34 @@ static void kmemleak_scan(void)
 	 * Scanning the task stacks (may introduce false negatives).
 	 */
 	if (kmemleak_stack_scan) {
-		struct task_struct *p, *g;
+		struct task_struct **tasks, *p, *g;
+		unsigned int nr = 0, max, i;
 
+		max = nr_threads + 64;
+		tasks = kvmalloc_array(max, sizeof(*tasks), GFP_KERNEL);
+
+		/* Snapshot the threads under RCU */
 		rcu_read_lock();
 		for_each_process_thread(g, p) {
-			void *stack = try_get_task_stack(p);
-			if (stack) {
-				scan_block(stack, stack + THREAD_SIZE, NULL);
-				put_task_stack(p);
-			}
+			if (!tasks || nr >= max)
+				break;
+			get_task_struct(p);
+			tasks[nr++] = p;
 		}
 		rcu_read_unlock();
+
+		/* now scan_block for the tasks above with cond_resched() */
+		for (i = 0; i < nr; i++) {
+			void *stack = try_get_task_stack(tasks[i]);
+
+			if (stack) {
+				scan_block(stack, stack + THREAD_SIZE, NULL);
+				put_task_stack(tasks[i]);
+			}
+			put_task_struct(tasks[i]);
+			cond_resched();
+		}
+		kvfree(tasks);
 	}
 
 	/*
