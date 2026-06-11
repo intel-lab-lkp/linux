@@ -88,7 +88,6 @@ static int catpt_dsp_do_send_msg(struct catpt_dev *cdev,
 				 struct catpt_ipc_msg *reply, int timeout, const char *name)
 {
 	struct catpt_ipc *ipc = &cdev->ipc;
-	unsigned long flags;
 	int ret;
 
 	if (!ipc->ready)
@@ -97,10 +96,10 @@ static int catpt_dsp_do_send_msg(struct catpt_dev *cdev,
 	    (reply && reply->size > ipc->config.outbox_size))
 		return -EINVAL;
 
-	spin_lock_irqsave(&ipc->lock, flags);
-	catpt_ipc_msg_init(ipc, reply);
-	catpt_dsp_send_tx(cdev, &request);
-	spin_unlock_irqrestore(&ipc->lock, flags);
+	scoped_guard(spinlock_irqsave, &ipc->lock) {
+		catpt_ipc_msg_init(ipc, reply);
+		catpt_dsp_send_tx(cdev, &request);
+	}
 
 	ret = catpt_wait_msg_completion(cdev, timeout);
 	if (ret) {
@@ -131,9 +130,8 @@ int catpt_dsp_send_msg_timeout(struct catpt_dev *cdev,
 	struct catpt_ipc *ipc = &cdev->ipc;
 	int ret;
 
-	mutex_lock(&ipc->mutex);
+	guard(mutex)(&ipc->mutex);
 	ret = catpt_dsp_do_send_msg(cdev, request, reply, timeout, name);
-	mutex_unlock(&ipc->mutex);
 
 	return ret;
 }
