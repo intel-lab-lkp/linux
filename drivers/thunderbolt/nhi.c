@@ -1401,6 +1401,8 @@ static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	dev_dbg(dev, "NHI initialized, starting thunderbolt\n");
 
+	nhi->host_reset = host_reset;
+
 	res = tb_domain_add(tb, host_reset);
 	if (res) {
 		/*
@@ -1423,10 +1425,18 @@ static int nhi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	return 0;
 }
 
-static void nhi_remove(struct pci_dev *pdev)
+static void nhi_do_remove(struct pci_dev *pdev, bool reset)
 {
 	struct tb *tb = pci_get_drvdata(pdev);
 	struct tb_nhi *nhi = tb->nhi;
+
+	/*
+	 * On system shutdown/reboot force a host router reset so the
+	 * connection manager asserts DPR on connected Thunderbolt 3 devices
+	 * before the router tree is removed (see tb_stop()).
+	 */
+	if (reset)
+		nhi->host_reset = true;
 
 	pm_runtime_get_sync(&pdev->dev);
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
@@ -1434,6 +1444,16 @@ static void nhi_remove(struct pci_dev *pdev)
 
 	tb_domain_remove(tb);
 	nhi_shutdown(nhi);
+}
+
+static void nhi_remove(struct pci_dev *pdev)
+{
+	nhi_do_remove(pdev, false);
+}
+
+static void nhi_pci_shutdown(struct pci_dev *pdev)
+{
+	nhi_do_remove(pdev, true);
 }
 
 /*
@@ -1558,7 +1578,7 @@ static struct pci_driver nhi_driver = {
 	.id_table = nhi_ids,
 	.probe = nhi_probe,
 	.remove = nhi_remove,
-	.shutdown = nhi_remove,
+	.shutdown = nhi_pci_shutdown,
 	.driver.pm = &nhi_pm_ops,
 };
 

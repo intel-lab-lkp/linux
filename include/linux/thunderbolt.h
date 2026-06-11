@@ -493,6 +493,11 @@ static inline struct tb_xdomain *tb_service_parent(struct tb_service *svc)
  *		    MSI-X is used.
  * @hop_count: Number of rings (end point hops) supported by NHI.
  * @quirks: NHI specific quirks if any
+ * @host_reset: Host router was reset on driver load, or forced on system
+ *		shutdown/reboot. When set, tb_stop() asserts DPR on connected
+ *		downstream ports to signal disconnect before tearing down the
+ *		router tree. Only Thunderbolt 3 devices are reset; USB4
+ *		routers are skipped.
  */
 struct tb_nhi {
 	spinlock_t lock;
@@ -507,6 +512,7 @@ struct tb_nhi {
 	struct work_struct interrupt_work;
 	u32 hop_count;
 	unsigned long quirks;
+	bool host_reset;
 };
 
 /**
