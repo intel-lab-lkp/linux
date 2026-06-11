@@ -54,3 +54,22 @@ These statistics are as follows,
  - ``FW_HOST_TX_PKT_CNT``: Number of valid packets copied by RTU0 to Tx queues
  - ``FW_HOST_EGRESS_Q_PRE_OVERFLOW``: Host Egress Q (Pre-emptible) Overflow Counter
  - ``FW_HOST_EGRESS_Q_EXP_OVERFLOW``: Host Egress Q (Pre-emptible) Overflow Counter
+ - ``FW_HSR_FWD_CHECK_FAIL_DROP``: Packets dropped on the HSR forwarding path due to failed checks
+ - ``FW_HSR_HE_CHECK_FAIL_DROP``: Packets dropped on the host egress path due to failed checks
+ - ``FW_HSR_SKIP_HOST_DUP_DISCARD``: Frames for which the host duplicate discard check was skipped
+
+HSR/LRE Standard Statistics
+============================
+
+When the ICSSG operates in HSR offload mode the driver exposes the IEC 62439-3
+LRE counters through the standard netlink stats interface.
+
+The following per-port (port A and port B) LRE counters are reported:
+
+ - ``lreCntTx``: Number of HSR/PRP tagged frames sent
+ - ``lreCntRx``: Number of HSR/PRP tagged frames received
+ - ``lreCntUnique``: Number of frames received with no duplicate detected
+ - ``lreCntDuplicate``: Number of frames received for which exactly one duplicate was detected
+ - ``lreCntMultiple``: Number of frames received for which more than one duplicate was detected
+ - ``lreCntOwnRx``: Number of HSR/PRP tagged frames received whose source MAC matches the node's own address
+ - ``lreCntErrWrongLan``: Number of frames received with a wrong LAN identifier (PRP only)

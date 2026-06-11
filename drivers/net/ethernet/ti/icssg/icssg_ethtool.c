@@ -74,7 +74,9 @@ static int emac_get_sset_count(struct net_device *ndev, int stringset)
 		if (emac->prueth->pa_stats)
 			return ICSSG_NUM_ETHTOOL_STATS;
 		else
-			return ICSSG_NUM_ETHTOOL_STATS - ICSSG_NUM_PA_STATS;
+			return ICSSG_NUM_ETHTOOL_STATS -
+			       (ICSSG_NUM_PA_STATS -
+				ICSSG_NUM_PA_STANDARD_STATS);
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -93,7 +95,8 @@ static void emac_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 				ethtool_puts(&p, icssg_all_miig_stats[i].name);
 		if (emac->prueth->pa_stats)
 			for (i = 0; i < ARRAY_SIZE(icssg_all_pa_stats); i++)
-				ethtool_puts(&p, icssg_all_pa_stats[i].name);
+				if (!icssg_all_pa_stats[i].standard_stats)
+					ethtool_puts(&p, icssg_all_pa_stats[i].name);
 		break;
 	default:
 		break;
@@ -114,7 +117,8 @@ static void emac_get_ethtool_stats(struct net_device *ndev,
 
 	if (emac->prueth->pa_stats)
 		for (i = 0; i < ARRAY_SIZE(icssg_all_pa_stats); i++)
-			*(data++) = emac->pa_stats[i];
+			if (!icssg_all_pa_stats[i].standard_stats)
+				*(data++) = emac->pa_stats[i];
 }
 
 static int emac_get_ts_info(struct net_device *ndev,
