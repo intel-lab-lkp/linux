@@ -516,8 +516,15 @@ int reset_control_assert(struct reset_control *rstc)
 		if (WARN_ON(atomic_read(&rstc->deassert_count) == 0))
 			return -EINVAL;
 
-		if (atomic_dec_return(&rstc->deassert_count) != 0)
+		if (atomic_dec_return(&rstc->deassert_count) != 0) {
+			int err = rcdev->ops->assert(rcdev, rstc->id);
+
+			if (err) {
+				atomic_inc(&rstc->deassert_count);
+				return err;
+			}
 			return 0;
+		}
 
 		/*
 		 * Shared reset controls allow the reset line to be in any state
