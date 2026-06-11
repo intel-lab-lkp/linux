@@ -672,8 +672,13 @@ static long gntdev_ioctl_map_grant_ref(struct gntdev_priv *priv,
 	op.index = map->index << PAGE_SHIFT;
 	mutex_unlock(&priv->lock);
 
-	if (copy_to_user(u, &op, sizeof(op)) != 0)
+	if (copy_to_user(u, &op, sizeof(op)) != 0) {
+		mutex_lock(&priv->lock);
+		list_del(&map->next);
+		mutex_unlock(&priv->lock);
+		gntdev_put_map(priv, map);
 		return -EFAULT;
+	}
 
 	return 0;
 }
