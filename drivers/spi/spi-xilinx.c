@@ -54,6 +54,7 @@
 #define XSPI_RXD_OFFSET		0x6c	/* Data Receive Register */
 
 #define XSPI_SSR_OFFSET		0x70	/* 32-bit Slave Select Register */
+#define XSPI_TFOR_OFFSET	0x74	/* Transmit FIFO Occupancy Register */
 
 /* Register definitions as per "OPB IPIF (v3.01c) Product Specification", DS414
  * IPIF registers are 32 bit
@@ -377,7 +378,9 @@ static int xilinx_spi_find_buffer_size(struct xilinx_spi *xspi)
 		n_words++;
 	} while (!(sr & XSPI_SR_TX_FULL_MASK));
 
-	return n_words;
+	if (n_words == 1)
+		return 1;
+	return xspi->read_fn(xspi->regs + XSPI_TFOR_OFFSET) + 1;
 }
 
 static const struct of_device_id xilinx_spi_of_match[] = {
