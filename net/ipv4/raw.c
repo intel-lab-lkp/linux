@@ -336,11 +336,20 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 	unsigned int iphlen;
 	int err;
 	struct rtable *rt = *rtp;
+	struct net_device *dev;
 	int hlen, tlen;
+	unsigned int mtu;
 
-	if (length > rt->dst.dev->mtu) {
+	rcu_read_lock();
+	dev = dst_dev_rcu(&rt->dst);
+	mtu = dev->mtu;
+	hlen = LL_RESERVED_SPACE(dev);
+	tlen = dev->needed_tailroom;
+	rcu_read_unlock();
+
+	if (length > mtu) {
 		ip_local_error(sk, EMSGSIZE, fl4->daddr, inet->inet_dport,
-			       rt->dst.dev->mtu);
+			       mtu);
 		return -EMSGSIZE;
 	}
 	if (length < sizeof(struct iphdr))
@@ -349,8 +358,6 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 	if (flags&MSG_PROBE)
 		goto out;
 
-	hlen = LL_RESERVED_SPACE(rt->dst.dev);
-	tlen = rt->dst.dev->needed_tailroom;
 	skb = sock_alloc_send_skb(sk,
 				  length + hlen + tlen + 15,
 				  flags & MSG_DONTWAIT, &err);
@@ -410,9 +417,11 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 				skb_transport_header(skb))->type);
 	}
 
+	rcu_read_lock();
 	err = NF_HOOK(NFPROTO_IPV4, NF_INET_LOCAL_OUT,
-		      net, sk, skb, NULL, rt->dst.dev,
+		      net, sk, skb, NULL, skb_dst_dev_rcu(skb),
 		      dst_output);
+	rcu_read_unlock();
 	if (err > 0)
 		err = net_xmit_errno(err);
 	if (err)

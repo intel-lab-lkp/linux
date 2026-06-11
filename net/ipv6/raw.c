@@ -601,11 +601,19 @@ static int rawv6_send_hdrinc(struct sock *sk, struct msghdr *msg, int length,
 	struct sk_buff *skb;
 	int err;
 	struct rt6_info *rt = dst_rt6_info(*dstp);
-	int hlen = LL_RESERVED_SPACE(rt->dst.dev);
-	int tlen = rt->dst.dev->needed_tailroom;
+	struct net_device *dev;
+	int hlen, tlen;
+	unsigned int mtu;
 
-	if (length > rt->dst.dev->mtu) {
-		ipv6_local_error(sk, EMSGSIZE, fl6, rt->dst.dev->mtu);
+	rcu_read_lock();
+	dev = dst_dev_rcu(&rt->dst);
+	mtu = dev->mtu;
+	hlen = LL_RESERVED_SPACE(dev);
+	tlen = dev->needed_tailroom;
+	rcu_read_unlock();
+
+	if (length > mtu) {
+		ipv6_local_error(sk, EMSGSIZE, fl6, mtu);
 		return -EMSGSIZE;
 	}
 	if (length < sizeof(struct ipv6hdr))

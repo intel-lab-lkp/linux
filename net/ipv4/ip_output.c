@@ -126,9 +126,11 @@ int ip_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	int err;
 
+	rcu_read_lock();
 	err = __ip_local_out(net, sk, skb);
 	if (likely(err == 1))
 		err = dst_output(net, sk, skb);
+	rcu_read_unlock();
 
 	return err;
 }
