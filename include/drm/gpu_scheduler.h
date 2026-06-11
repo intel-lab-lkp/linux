@@ -27,7 +27,6 @@
 #include <drm/spsc_queue.h>
 #include <linux/average.h>
 #include <linux/dma-fence.h>
-#include <linux/completion.h>
 #include <linux/xarray.h>
 #include <linux/workqueue.h>
 
@@ -221,14 +220,6 @@ struct drm_sched_entity {
 	 * drm_sched_fini().
 	 */
 	bool 				stopped;
-
-	/**
-	 * @entity_idle:
-	 *
-	 * Signals when entity is not in use, used to sequence entity cleanup in
-	 * drm_sched_entity_fini().
-	 */
-	struct completion		entity_idle;
 
 	/**
 	 * @oldest_job_waiting:

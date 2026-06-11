@@ -137,10 +137,6 @@ int drm_sched_entity_init(struct drm_sched_entity *entity,
 	entity->rq = &sched_list[0]->rq;
 	RCU_INIT_POINTER(entity->last_scheduled, NULL);
 	RB_CLEAR_NODE(&entity->rb_tree_node);
-	init_completion(&entity->entity_idle);
-
-	/* We start in an idle state. */
-	complete_all(&entity->entity_idle);
 
 	spin_lock_init(&entity->lock);
 	spsc_queue_init(&entity->job_queue);
@@ -276,18 +272,24 @@ static void drm_sched_entity_kill_jobs_cb(struct dma_fence *f,
  */
 void drm_sched_entity_kill(struct drm_sched_entity *entity)
 {
+	struct drm_gpu_scheduler *sched;
 	struct drm_sched_job *job;
 	struct dma_fence *prev;
 
 	spin_lock(&entity->lock);
 	entity->stopped = true;
-	drm_sched_rq_remove_entity(entity->rq, entity);
+	sched = drm_sched_rq_remove_entity(entity->rq, entity);
 	spin_unlock(&entity->lock);
 
-	/* Make sure this entity is not used by the scheduler at the moment */
-	wait_for_completion(&entity->entity_idle);
+	/*
+	 * Make sure this entity is not used by the scheduler at the moment.
+	 *
+	 * Scheduler is guaranteed to be stable after the entity was stopped and
+	 * removed from the run-queue.
+	 */
+	if (sched)
+		drm_sched_flush_run_work(sched);
 
-	/* The entity is guaranteed to not be used by the scheduler */
 	prev = rcu_dereference_check(entity->last_scheduled, true);
 	dma_fence_get(prev);
 	while ((job = drm_sched_entity_queue_pop(entity))) {
@@ -576,6 +578,13 @@ void drm_sched_entity_select_rq(struct drm_sched_entity *entity)
 		return;
 
 	spin_lock(&entity->lock);
+
+	if (entity->stopped) {
+		spin_unlock(&entity->lock);
+		return;
+
+	}
+
 	sched = drm_sched_pick_best(entity->sched_list, entity->num_sched_list);
 	rq = sched ? &sched->rq : NULL;
 	if (rq != entity->rq) {
