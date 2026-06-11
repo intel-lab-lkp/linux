@@ -135,10 +135,10 @@ static int probe_codec(struct hdac_bus *bus, int addr)
 	unsigned int res = -1;
 	int ret;
 
-	mutex_lock(&bus->cmd_mutex);
-	snd_hdac_bus_send_cmd(bus, cmd);
-	snd_hdac_bus_get_response(bus, addr, &res);
-	mutex_unlock(&bus->cmd_mutex);
+	scoped_guard(mutex, &bus->cmd_mutex) {
+		snd_hdac_bus_send_cmd(bus, cmd);
+		snd_hdac_bus_get_response(bus, addr, &res);
+	}
 	if (res == -1)
 		return -EIO;
 
@@ -273,7 +273,7 @@ static irqreturn_t avs_hda_interrupt(struct hdac_bus *bus)
 	if (snd_hdac_bus_handle_stream_irq(bus, status, hdac_update_stream))
 		ret = IRQ_HANDLED;
 
-	spin_lock_irq(&bus->reg_lock);
+	guard(spinlock_irq)(&bus->reg_lock);
 	/* Clear RIRB interrupt. */
 	status = snd_hdac_chip_readb(bus, RIRBSTS);
 	if (status & RIRB_INT_MASK) {
@@ -283,7 +283,6 @@ static irqreturn_t avs_hda_interrupt(struct hdac_bus *bus)
 		ret = IRQ_HANDLED;
 	}
 
-	spin_unlock_irq(&bus->reg_lock);
 	return ret;
 }
 
