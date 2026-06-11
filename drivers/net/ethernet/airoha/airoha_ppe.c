@@ -1333,8 +1333,6 @@ static int airoha_ppe_flush_sram_entries(struct airoha_ppe *ppe)
 	int i, err = 0;
 
 	for (i = 0; i < sram_num_entries; i++) {
-		int err;
-
 		memset(&hwe[i], 0, sizeof(*hwe));
 		err = airoha_ppe_foe_commit_sram_entry(ppe, i);
 		if (err)
