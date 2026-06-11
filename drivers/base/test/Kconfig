@@ -17,4 +17,5 @@ config DM_KUNIT_TEST
 config DRIVER_PE_KUNIT_TEST
 	tristate "KUnit Tests for property entry API" if !KUNIT_ALL_TESTS
 	depends on KUNIT
+	select OF
 	default KUNIT_ALL_TESTS
