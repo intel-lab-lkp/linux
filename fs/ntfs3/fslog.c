@@ -647,6 +647,23 @@ static inline void *enum_rstbl(struct RESTART_TABLE *t, void *c)
 	return NULL;
 }
 
+static inline bool dptbl_lcns_in_range(const struct DIR_PAGE_ENTRY *dp,
+				       u64 vcn, u16 lcns_follow)
+{
+	u64 dp_vcn = le64_to_cpu(dp->vcn);
+	u32 dp_lcns = le32_to_cpu(dp->lcns_follow);
+	u64 off;
+
+	if (vcn < dp_vcn)
+		return false;
+
+	off = vcn - dp_vcn;
+	if (off > dp_lcns)
+		return false;
+
+	return lcns_follow <= dp_lcns - (u32)off;
+}
+
 /*
  * find_dp - Search for a @vcn in Dirty Page Table.
  */
@@ -657,12 +674,8 @@ static inline struct DIR_PAGE_ENTRY *find_dp(struct RESTART_TABLE *dptbl,
 	struct DIR_PAGE_ENTRY *dp = NULL;
 
 	while ((dp = enum_rstbl(dptbl, dp))) {
-		u64 dp_vcn = le64_to_cpu(dp->vcn);
-
-		if (dp->target_attr == ta && vcn >= dp_vcn &&
-		    vcn < dp_vcn + le32_to_cpu(dp->lcns_follow)) {
+		if (dp->target_attr == ta && dptbl_lcns_in_range(dp, vcn, 1))
 			return dp;
-		}
 	}
 	return NULL;
 }
@@ -772,6 +785,37 @@ static bool check_rstbl(const struct RESTART_TABLE *rt, size_t bytes)
 		off = le32_to_cpu(*(__le32 *)Add2Ptr(rt, off));
 
 		if (off > ts - sizeof(__le32))
+			return false;
+	}
+
+	return true;
+}
+
+static bool check_dptbl(const struct RESTART_TABLE *rt, bool is_restart_v0)
+{
+	u16 rsize = le16_to_cpu(rt->size);
+	struct DIR_PAGE_ENTRY *dp = NULL;
+
+	if (rsize < sizeof(struct DIR_PAGE_ENTRY))
+		return false;
+
+	if (is_restart_v0 && rsize < sizeof(struct DIR_PAGE_ENTRY_32))
+		return false;
+
+	while ((dp = enum_rstbl((struct RESTART_TABLE *)rt, dp))) {
+		u32 lcns_follow = le32_to_cpu(dp->lcns_follow);
+		size_t bytes;
+
+		bytes = struct_size(dp, page_lcns, lcns_follow);
+		if (bytes > rsize)
+			return false;
+
+		if (!is_restart_v0)
+			continue;
+
+		bytes = size_add(offsetof(struct DIR_PAGE_ENTRY_32, page_lcns_low),
+				 array_size(lcns_follow, sizeof(u64)));
+		if (bytes > rsize)
 			return false;
 	}
 
@@ -4204,7 +4248,7 @@ check_dirty_page_table:
 	t32 = rec_len - t16;
 
 	/* Now check that this is a valid restart table. */
-	if (!check_rstbl(rt, t32)) {
+	if (!check_rstbl(rt, t32) || !check_dptbl(rt, !rst->major_ver)) {
 		err = -EINVAL;
 		goto out;
 	}
@@ -4547,9 +4591,13 @@ copy_lcns:
 		 * whole routine a loop, case Lcns do not fit below.
 		 */
 		t16 = le16_to_cpu(lrh->lcns_follow);
+		if (!dptbl_lcns_in_range(dp, t64, t16)) {
+			err = -EINVAL;
+			goto out;
+		}
+
 		for (i = 0; i < t16; i++) {
-			size_t j = (size_t)(le64_to_cpu(lrh->target_vcn) -
-					    le64_to_cpu(dp->vcn));
+			size_t j = (size_t)(t64 - le64_to_cpu(dp->vcn));
 			dp->page_lcns[j + i] = lrh->page_lcns[i];
 		}
 
@@ -4927,6 +4975,12 @@ find_dirty_page:
 
 	if (!dp)
 		goto read_next_log_do_action;
+
+	t16 = le16_to_cpu(lrh->lcns_follow);
+	if (!dptbl_lcns_in_range(dp, t64, t16)) {
+		err = -EINVAL;
+		goto out;
+	}
 
 	if (rec_lsn < le64_to_cpu(dp->oldest_lsn))
 		goto read_next_log_do_action;
