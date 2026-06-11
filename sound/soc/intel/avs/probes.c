@@ -186,7 +186,6 @@ static int avs_probe_compr_trigger(struct snd_compr_stream *cstream, int cmd,
 	struct hdac_ext_stream *host_stream = avs_compr_get_host_stream(cstream);
 	struct avs_dev *adev = to_avs_dev(dai->dev);
 	struct hdac_bus *bus = &adev->base.core;
-	unsigned long cookie;
 
 	if (!hdac_stream(host_stream)->prepared)
 		return -EPIPE;
@@ -195,17 +194,15 @@ static int avs_probe_compr_trigger(struct snd_compr_stream *cstream, int cmd,
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 	case SNDRV_PCM_TRIGGER_RESUME:
-		spin_lock_irqsave(&bus->reg_lock, cookie);
-		snd_hdac_stream_start(hdac_stream(host_stream));
-		spin_unlock_irqrestore(&bus->reg_lock, cookie);
+		scoped_guard(spinlock_irqsave, &bus->reg_lock)
+			snd_hdac_stream_start(hdac_stream(host_stream));
 		break;
 
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_STOP:
-		spin_lock_irqsave(&bus->reg_lock, cookie);
-		snd_hdac_stream_stop(hdac_stream(host_stream));
-		spin_unlock_irqrestore(&bus->reg_lock, cookie);
+		scoped_guard(spinlock_irqsave, &bus->reg_lock)
+			snd_hdac_stream_stop(hdac_stream(host_stream));
 		break;
 
 	default:
