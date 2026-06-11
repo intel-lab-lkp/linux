@@ -39,6 +39,9 @@ static int update_pd_power_uw(struct dtpm *dtpm)
 	struct em_perf_domain *pd = em_pd_get(dev);
 	struct em_perf_state *table;
 
+	if (!pd)
+		return -EINVAL;
+
 	rcu_read_lock();
 	table = em_perf_state_from_pd(pd);
 
@@ -59,6 +62,9 @@ static u64 set_pd_power_limit(struct dtpm *dtpm, u64 power_limit)
 	struct em_perf_state *table;
 	unsigned long freq;
 	int i;
+
+	if (!pd)
+		return dtpm->power_limit;
 
 	rcu_read_lock();
 	table = em_perf_state_from_pd(pd);
@@ -101,6 +107,9 @@ static u64 get_pd_power_uw(struct dtpm *dtpm)
 	unsigned long freq;
 	u64 power = 0;
 	int i;
+
+	if (!pd)
+		return 0;
 
 	mutex_lock(&devfreq->lock);
 	status = devfreq->last_status;
