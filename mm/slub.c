@@ -341,6 +341,14 @@ static inline unsigned int user_tracking_size(struct kmem_cache *s)
 	return nr_user_tracks(s) * sizeof(struct track);
 }
 
+static inline slab_flags_t sanitize_user_tracking_flags(slab_flags_t flags)
+{
+	if ((flags & SLAB_STORE_HISTORY) && !(flags & SLAB_STORE_USER))
+		flags &= ~SLAB_STORE_HISTORY;
+
+	return flags;
+}
+
 #ifdef SLAB_SUPPORTS_SYSFS
 static int sysfs_slab_add(struct kmem_cache *);
 #else
@@ -1910,7 +1918,7 @@ parse_slub_debug_flags(const char *str, slab_flags_t *flags, const char **slabs,
 	if ((*flags & SLAB_STORE_HISTORY) && !(*flags & SLAB_STORE_USER)) {
 		if (init)
 			pr_err("slab_debug option 'H' requires 'U'. skipped\n");
-		*flags &= ~SLAB_STORE_HISTORY;
+		*flags = sanitize_user_tracking_flags(*flags);
 	}
 check_slabs:
 	if (*str == ',')
@@ -2052,7 +2060,7 @@ slab_flags_t kmem_cache_flags(slab_flags_t flags, const char *name)
 
 			if (!strncmp(name, iter, cmplen)) {
 				flags |= block_flags;
-				return flags;
+				return sanitize_user_tracking_flags(flags);
 			}
 
 			if (!*end || *end == ';')
@@ -2061,7 +2069,7 @@ slab_flags_t kmem_cache_flags(slab_flags_t flags, const char *name)
 		}
 	}
 
-	return flags | slub_debug_local;
+	return sanitize_user_tracking_flags(flags | slub_debug_local);
 }
 #else /* !CONFIG_SLUB_DEBUG */
 static inline void setup_object_debug(struct kmem_cache *s, void *object) {}
