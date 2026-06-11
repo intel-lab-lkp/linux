@@ -79,8 +79,8 @@ pub struct ConfigSpace<'a, S: ?Sized + ConfigSpaceKind = Extended> {
 /// Implements [`IoCapable`] on [`ConfigSpace`] for `$ty` using `$read_fn` and `$write_fn`.
 macro_rules! impl_config_space_io_capable {
     ($ty:ty, $read_fn:ident, $write_fn:ident) => {
-        impl<'a, S: ?Sized + ConfigSpaceKind> IoCapable<$ty> for ConfigSpace<'a, S> {
-            unsafe fn io_read(&self, address: usize) -> $ty {
+        impl<'a, S: ?Sized + ConfigSpaceKind> IoCapable<$ty> for &ConfigSpace<'a, S> {
+            unsafe fn io_read(self, address: usize) -> $ty {
                 let mut val: $ty = 0;
 
                 // Return value from C function is ignored in infallible accessors.
@@ -94,7 +94,7 @@ macro_rules! impl_config_space_io_capable {
                 val
             }
 
-            unsafe fn io_write(&self, value: $ty, address: usize) {
+            unsafe fn io_write(self, value: $ty, address: usize) {
                 // Return value from C function is ignored in infallible accessors.
                 let _ret =
                     // SAFETY: By the type invariant `self.pdev` is a valid address.
@@ -112,18 +112,18 @@ impl_config_space_io_capable!(u8, pci_read_config_byte, pci_write_config_byte);
 impl_config_space_io_capable!(u16, pci_read_config_word, pci_write_config_word);
 impl_config_space_io_capable!(u32, pci_read_config_dword, pci_write_config_dword);
 
-impl<'a, S: ?Sized + ConfigSpaceKind> Io for ConfigSpace<'a, S> {
+impl<'a, S: ?Sized + ConfigSpaceKind> Io for &ConfigSpace<'a, S> {
     type Target = S;
 
     /// Returns the base address of the I/O region. It is always 0 for configuration space.
     #[inline]
-    fn addr(&self) -> usize {
+    fn addr(self) -> usize {
         0
     }
 
     /// Returns the maximum size of the configuration space.
     #[inline]
-    fn maxsize(&self) -> usize {
+    fn maxsize(self) -> usize {
         self.pdev.cfg_size().into_raw()
     }
 }
