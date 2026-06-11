@@ -2414,11 +2414,24 @@ static int ocfs2_dio_end_io(struct kiocb *iocb,
 		mlog_ratelimited(ML_ERROR, "Direct IO failed, bytes = %lld",
 				 (long long)bytes);
 	if (private) {
-		if (bytes > 0)
+		if (bytes > 0) {
 			ret = ocfs2_dio_end_io_write(inode, private, offset,
 						     bytes);
-		else
+		} else {
+			struct ocfs2_dio_write_ctxt *dwc = private;
+
+			if (dwc->dw_orphaned) {
+				struct buffer_head *di_bh = NULL;
+
+				if (ocfs2_inode_lock(inode, &di_bh, 1) == 0) {
+					ocfs2_del_inode_from_orphan(OCFS2_SB(inode->i_sb),
+								    inode, di_bh, 0, 0);
+					ocfs2_inode_unlock(inode, 1);
+					brelse(di_bh);
+				}
+			}
 			ocfs2_dio_free_write_ctx(inode, private);
+		}
 	}
 
 	ocfs2_iocb_clear_rw_locked(iocb);
