@@ -166,15 +166,13 @@ int avs_icl_load_basefw(struct avs_dev *adev, struct firmware *fw)
 
 	snd_hdac_chip_updateb(bus, VS_LTRP, AZX_REG_VS_LTRP_GB_MASK, ICL_VS_LTRP_GB_ICCMAX);
 
-	spin_lock(&bus->reg_lock);
-	snd_hdac_stream_start(hdac_stream(host_stream));
-	spin_unlock(&bus->reg_lock);
+	scoped_guard(spinlock, &bus->reg_lock)
+		snd_hdac_stream_start(hdac_stream(host_stream));
 
 	ret = avs_hda_load_basefw(adev, fw);
 
-	spin_lock(&bus->reg_lock);
-	snd_hdac_stream_stop(hdac_stream(host_stream));
-	spin_unlock(&bus->reg_lock);
+	scoped_guard(spinlock, &bus->reg_lock)
+		snd_hdac_stream_stop(hdac_stream(host_stream));
 
 	snd_hdac_dsp_cleanup(hdac_stream(host_stream), &dmab);
 
