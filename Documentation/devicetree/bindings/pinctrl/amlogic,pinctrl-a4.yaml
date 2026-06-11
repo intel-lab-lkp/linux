@@ -37,6 +37,8 @@ properties:
 
   ranges: true
 
+  interrupt-parent: true
+
 patternProperties:
   "^gpio@[0-9a-f]+$":
     type: object
@@ -64,6 +66,9 @@ patternProperties:
 
       gpio-ranges:
         maxItems: 1
+
+      hw-irq:
+        $ref: /schemas/types.yaml#/definitions/uint32
 
     required:
       - reg
