@@ -519,7 +519,7 @@ struct execmem_info __init *execmem_arch_setup(void)
 
 	execmem_info = (struct execmem_info){
 		.ranges = {
-			[EXECMEM_DEFAULT] = {
+			[EXECMEM_MODULE_TEXT] = {
 				.start	= start,
 				.end	= end,
 				.pgprot	= PAGE_KERNEL,
@@ -533,11 +533,27 @@ struct execmem_info __init *execmem_arch_setup(void)
 				.pgprot	= PAGE_KERNEL_ROX,
 				.alignment = 1,
 			},
+			[EXECMEM_FTRACE] = {
+				.start	= VMALLOC_START,
+				.end	= VMALLOC_END,
+				.pgprot	= PAGE_KERNEL,
+				.alignment = 1,
+				.fallback_start	= fallback_start,
+				.fallback_end	= fallback_end,
+			},
 			[EXECMEM_BPF] = {
 				.start	= VMALLOC_START,
 				.end	= VMALLOC_END,
 				.pgprot	= PAGE_KERNEL,
 				.alignment = 1,
+			},
+			[EXECMEM_MODULE_DATA] = {
+				.start  = start,
+				.end    = end,
+				.pgprot = PAGE_KERNEL,
+				.alignment = 1,
+				.fallback_start	= fallback_start,
+				.fallback_end	= fallback_end,
 			},
 		},
 	};
