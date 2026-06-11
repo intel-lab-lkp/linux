@@ -277,7 +277,7 @@ void *fixup_red_left(struct kmem_cache *s, void *p)
  * issues when checking or reading debug information
  */
 #define SLAB_NO_CMPXCHG (SLAB_CONSISTENCY_CHECKS | SLAB_STORE_USER | \
-				SLAB_TRACE)
+				SLAB_STORE_HISTORY | SLAB_TRACE)
 
 
 /*
@@ -285,7 +285,8 @@ void *fixup_red_left(struct kmem_cache *s, void *p)
  * disabled when slab_debug=O is used and a cache's min order increases with
  * metadata.
  */
-#define DEBUG_METADATA_FLAGS (SLAB_RED_ZONE | SLAB_POISON | SLAB_STORE_USER)
+#define DEBUG_METADATA_FLAGS (SLAB_RED_ZONE | SLAB_POISON | \
+			      SLAB_STORE_USER | SLAB_STORE_HISTORY)
 
 #define OO_SHIFT	16
 #define OO_MASK		((1 << OO_SHIFT) - 1)
@@ -316,14 +317,23 @@ struct track {
 	unsigned long when;	/* When did the operation occur */
 };
 
-enum track_item { TRACK_ALLOC, TRACK_FREE, TRACK_NR };
+enum track_item {
+	TRACK_ALLOC,
+	TRACK_FREE,
+	TRACK_PREV_ALLOC,
+	TRACK_PREV_FREE,
+	TRACK_NR,
+};
 
 static inline unsigned int nr_user_tracks(struct kmem_cache *s)
 {
 	if (!(s->flags & SLAB_STORE_USER))
 		return 0;
 
-	return TRACK_NR;
+	if (s->flags & SLAB_STORE_HISTORY)
+		return TRACK_NR;
+
+	return TRACK_PREV_ALLOC;
 }
 
 static inline unsigned int user_tracking_size(struct kmem_cache *s)
@@ -1837,6 +1847,9 @@ parse_slub_debug_flags(const char *str, slab_flags_t *flags, const char **slabs,
 		case 'u':
 			*flags |= SLAB_STORE_USER;
 			break;
+		case 'h':
+			*flags |= SLAB_STORE_HISTORY;
+			break;
 		case 't':
 			*flags |= SLAB_TRACE;
 			break;
@@ -1854,6 +1867,11 @@ parse_slub_debug_flags(const char *str, slab_flags_t *flags, const char **slabs,
 			if (init)
 				pr_err("slab_debug option '%c' unknown. skipped\n", *str);
 		}
+	}
+	if ((*flags & SLAB_STORE_HISTORY) && !(*flags & SLAB_STORE_USER)) {
+		if (init)
+			pr_err("slab_debug option 'H' requires 'U'. skipped\n");
+		*flags &= ~SLAB_STORE_HISTORY;
 	}
 check_slabs:
 	if (*str == ',')
@@ -1969,7 +1987,7 @@ slab_flags_t kmem_cache_flags(slab_flags_t flags, const char *name)
 	 * but let the user enable it via the command line below.
 	 */
 	if (flags & SLAB_NOLEAKTRACE)
-		slub_debug_local &= ~SLAB_STORE_USER;
+		slub_debug_local &= ~(SLAB_STORE_USER | SLAB_STORE_HISTORY);
 
 	len = strlen(name);
 	next_block = slub_debug_string;
@@ -9223,6 +9241,13 @@ static ssize_t store_user_show(struct kmem_cache *s, char *buf)
 
 SLAB_ATTR_RO(store_user);
 
+static ssize_t store_history_show(struct kmem_cache *s, char *buf)
+{
+	return sysfs_emit(buf, "%d\n", !!(s->flags & SLAB_STORE_HISTORY));
+}
+
+SLAB_ATTR_RO(store_history);
+
 static ssize_t validate_show(struct kmem_cache *s, char *buf)
 {
 	return 0;
@@ -9442,6 +9467,7 @@ static const struct attribute *const slab_attrs[] = {
 	&red_zone_attr.attr,
 	&poison_attr.attr,
 	&store_user_attr.attr,
+	&store_history_attr.attr,
 	&validate_attr.attr,
 #endif
 #ifdef CONFIG_ZONE_DMA

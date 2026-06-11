@@ -32,6 +32,7 @@ enum _slab_flag_bits {
 	_SLAB_CACHE_DMA,
 	_SLAB_CACHE_DMA32,
 	_SLAB_STORE_USER,
+	_SLAB_STORE_HISTORY,
 	_SLAB_PANIC,
 	_SLAB_TYPESAFE_BY_RCU,
 	_SLAB_TRACE,
@@ -98,6 +99,8 @@ enum _slab_flag_bits {
 #define SLAB_CACHE_DMA32	__SLAB_FLAG_BIT(_SLAB_CACHE_DMA32)
 /* DEBUG: Store the last owner for bug hunting */
 #define SLAB_STORE_USER		__SLAB_FLAG_BIT(_SLAB_STORE_USER)
+/* DEBUG: Store the previous object lifetime for bug hunting */
+#define SLAB_STORE_HISTORY	__SLAB_FLAG_BIT(_SLAB_STORE_HISTORY)
 /* Panic if kmem_cache_create() fails */
 #define SLAB_PANIC		__SLAB_FLAG_BIT(_SLAB_PANIC)
 /**
