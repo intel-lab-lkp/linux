@@ -1792,6 +1792,7 @@ static int __init parallel_bringup_parse_param(char *arg)
 }
 early_param("cpuhp.parallel", parallel_bringup_parse_param);
 
+#ifdef CONFIG_PARALLEL_SMT_PRIMARY_FIRST
 #ifdef CONFIG_HOTPLUG_SMT
 static inline bool cpuhp_smt_aware(void)
 {
@@ -1811,7 +1812,8 @@ static inline const struct cpumask *cpuhp_get_primary_thread_mask(void)
 {
 	return cpu_none_mask;
 }
-#endif
+#endif /* CONFIG_HOTPLUG_SMT */
+#endif /* CONFIG_PARALLEL_SMT_PRIMARY_FIRST */
 
 bool __weak arch_cpuhp_init_parallel_bringup(void)
 {
@@ -1837,6 +1839,7 @@ static bool __init cpuhp_bringup_cpus_parallel(unsigned int ncpus)
 	if (!__cpuhp_parallel_bringup)
 		return false;
 
+#ifdef CONFIG_PARALLEL_SMT_PRIMARY_FIRST
 	if (cpuhp_smt_aware()) {
 		const struct cpumask *pmask = cpuhp_get_primary_thread_mask();
 		static struct cpumask tmp_mask __initdata;
@@ -1857,6 +1860,7 @@ static bool __init cpuhp_bringup_cpus_parallel(unsigned int ncpus)
 		cpumask_andnot(&tmp_mask, mask, pmask);
 		mask = &tmp_mask;
 	}
+#endif /* CONFIG_PARALLEL_SMT_PRIMARY_FIRST */
 
 	/* Bring the not-yet started CPUs up */
 	cpuhp_bringup_mask(mask, ncpus, CPUHP_BP_KICK_AP);

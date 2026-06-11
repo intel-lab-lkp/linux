@@ -102,6 +102,10 @@ config HOTPLUG_PARALLEL
 	bool
 	select HOTPLUG_SPLIT_STARTUP
 
+config PARALLEL_SMT_PRIMARY_FIRST
+	bool
+	depends on HOTPLUG_PARALLEL
+
 config GENERIC_IRQ_ENTRY
 	bool
 
