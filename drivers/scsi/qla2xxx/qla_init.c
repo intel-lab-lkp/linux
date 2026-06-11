@@ -1352,6 +1352,7 @@ qla24xx_async_prli(struct scsi_qla_host *vha, fc_port_t *fcport)
 done_free_sp:
 	/* ref: INIT */
 	kref_put(&sp->cmd_kref, qla2x00_sp_release);
+	QLA_VHA_MARK_NOT_BUSY(vha);
 	fcport->flags &= ~FCF_ASYNC_SENT;
 	return rval;
 }
