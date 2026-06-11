@@ -870,6 +870,7 @@ ssize_t hfsplus_listxattr(struct dentry *dentry, char *buffer, size_t size)
 			res = -EIO;
 			goto end_listxattr;
 		}
+		strbuf[xattr_name_len] = '\0';
 
 		if (!buffer || !size) {
 			if (can_list(strbuf))
