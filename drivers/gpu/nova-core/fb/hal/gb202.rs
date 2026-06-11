@@ -28,7 +28,7 @@ fn read_sysmem_flush_page_gb202(bar: Bar0<'_>) -> u64 {
             .adr(),
     );
 
-    lo | (hi << 32)
+    (hi << 32) | lo
 }
 
 /// Write the sysmem flush page address through the GB20x FBHUB0 registers.

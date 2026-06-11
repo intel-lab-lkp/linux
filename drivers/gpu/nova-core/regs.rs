@@ -126,7 +126,7 @@ register! {
     }
 
     /// High bits of the physical system memory address used by the GPU to perform sysmembar
-    /// operations (see [`crate::fb::SysmemFlush`]).
+    /// operations.
     pub(crate) NV_PFB_NISO_FLUSH_SYSMEM_ADDR_HI(u32) @ 0x00100c40 {
         23:0    adr_63_40;
     }
