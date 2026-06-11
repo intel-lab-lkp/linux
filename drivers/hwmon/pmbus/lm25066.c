@@ -34,6 +34,7 @@ enum chips { lm25056, lm25066, lm5064, lm5066, lm5066i };
 #define LM25066_READ_AVG_PIN		0xdf
 
 #define LM25066_DEV_SETUP_CL		BIT(4)	/* Current limit */
+#define LM25066_DEV_SETUP_CL_CFG	BIT(2)	/* Current limit configuration */
 
 #define LM25066_SAMPLES_FOR_AVG_MAX	4096
 
@@ -464,6 +465,8 @@ MODULE_DEVICE_TABLE(of, lm25066_of_match);
 static int lm25066_probe(struct i2c_client *client)
 {
 	int config;
+	int config_new;
+	int ret;
 	u32 shunt;
 	struct lm25066_data *data;
 	struct pmbus_driver_info *info;
@@ -483,6 +486,28 @@ static int lm25066_probe(struct i2c_client *client)
 		return config;
 
 	data->id = (enum chips)(unsigned long)i2c_get_match_data(client);
+
+	config_new = config;
+	if (of_property_read_bool(client->dev.of_node, "ti,cl-smbus-high")) {
+		config_new |= LM25066_DEV_SETUP_CL_CFG;
+		if (data->id == lm25056 || data->id == lm25066)
+			config_new |= LM25066_DEV_SETUP_CL;
+		else
+			config_new &= ~LM25066_DEV_SETUP_CL;
+	} else if (of_property_read_bool(client->dev.of_node, "ti,cl-smbus-low")) {
+		config_new |= LM25066_DEV_SETUP_CL_CFG;
+		if (data->id == lm25056 || data->id == lm25066)
+			config_new &= ~LM25066_DEV_SETUP_CL;
+		else
+			config_new |= LM25066_DEV_SETUP_CL;
+	}
+
+	if (config_new != config) {
+		ret = i2c_smbus_write_byte_data(client, LM25066_DEVICE_SETUP, config_new);
+		if (ret < 0)
+			return ret;
+		config = config_new;
+	}
 
 	info = &data->info;
 
