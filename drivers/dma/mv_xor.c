@@ -1423,9 +1423,9 @@ static int mv_xor_probe(struct platform_device *pdev)
 			dma_cap_set(DMA_XOR, cap_mask);
 			dma_cap_set(DMA_INTERRUPT, cap_mask);
 
-			irq = irq_of_parse_and_map(np, 0);
-			if (!irq) {
-				ret = -ENODEV;
+			irq = of_irq_get(np, 0);
+			if (irq < 0) {
+				ret = irq;
 				goto err_channel_add;
 			}
 
@@ -1433,7 +1433,6 @@ static int mv_xor_probe(struct platform_device *pdev)
 						  cap_mask, irq);
 			if (IS_ERR(chan)) {
 				ret = PTR_ERR(chan);
-				irq_dispose_mapping(irq);
 				goto err_channel_add;
 			}
 
@@ -1468,11 +1467,8 @@ static int mv_xor_probe(struct platform_device *pdev)
 
 err_channel_add:
 	for (i = 0; i < MV_XOR_MAX_CHANNELS; i++)
-		if (xordev->channels[i]) {
+		if (xordev->channels[i])
 			mv_xor_channel_remove(xordev->channels[i]);
-			if (pdev->dev.of_node)
-				irq_dispose_mapping(xordev->channels[i]->irq);
-		}
 
 	return ret;
 }
