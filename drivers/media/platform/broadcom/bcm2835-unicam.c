@@ -1833,7 +1833,10 @@ static int unicam_querycap(struct file *file, void *priv,
 	strscpy(cap->driver, UNICAM_MODULE_NAME, sizeof(cap->driver));
 	strscpy(cap->card, UNICAM_MODULE_NAME, sizeof(cap->card));
 
-	cap->capabilities |= V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_META_CAPTURE;
+	if (is_image_node(node))
+		cap->capabilities |= V4L2_CAP_VIDEO_CAPTURE;
+	else
+		cap->capabilities |= V4L2_CAP_META_CAPTURE;
 
 	return 0;
 }
