@@ -888,13 +888,12 @@ static struct cache_head *svc_export_alloc(void)
 		return NULL;
 
 	i->ex_stats = kmalloc_obj(*(i->ex_stats));
-	if (!i->ex_stats) {
-		kfree(i);
-		return NULL;
-	}
+	if (!i->ex_stats)
+		goto free_export;
 
 	if (export_stats_init(i->ex_stats)) {
 		kfree(i->ex_stats);
+free_export:
 		kfree(i);
 		return NULL;
 	}
