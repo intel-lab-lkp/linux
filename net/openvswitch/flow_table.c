@@ -45,6 +45,16 @@
 static struct kmem_cache *flow_cache;
 struct kmem_cache *flow_stats_cache __read_mostly;
 
+#ifdef CONFIG_LOCKDEP
+int lockdep_ovs_tbl_is_held(const struct flow_table *table)
+{
+	if (debug_locks)
+		return lockdep_is_held(&table->lock);
+	else
+		return 1;
+}
+#endif
+
 static u16 range_n_bytes(const struct sw_flow_key_range *range)
 {
 	return range->end - range->start;
@@ -102,7 +112,7 @@ err:
 
 int ovs_flow_tbl_count(const struct flow_table *table)
 {
-	return table->count;
+	return READ_ONCE(table->count);
 }
 
 static void flow_free(struct sw_flow *flow)
@@ -417,6 +427,10 @@ struct flow_table *ovs_flow_tbl_alloc(void)
 	table = kzalloc_obj(*table, GFP_KERNEL);
 	if (!table)
 		return ERR_PTR(-ENOMEM);
+
+	mutex_init(&table->lock);
+	refcount_set(&table->refcnt, 1);
+
 	mc = tbl_mask_cache_alloc(MC_DEFAULT_HASH_ENTRIES);
 	if (!mc)
 		goto free_table;
@@ -449,6 +463,7 @@ free_mask_array:
 free_mask_cache:
 	__mask_cache_destroy(mc);
 free_table:
+	mutex_destroy(&table->lock);
 	kfree(table);
 	return ERR_PTR(-ENOMEM);
 }
@@ -467,7 +482,7 @@ static void table_instance_flow_free(struct flow_table *table,
 				     struct sw_flow *flow)
 {
 	hlist_del_rcu(&flow->flow_table.node[ti->node_ver]);
-	table->count--;
+	WRITE_ONCE(table->count, table->count - 1);
 
 	if (ovs_identifier_is_ufid(&flow->id)) {
 		hlist_del_rcu(&flow->ufid_table.node[ufid_ti->node_ver]);
@@ -477,10 +492,10 @@ static void table_instance_flow_free(struct flow_table *table,
 	flow_mask_remove(table, flow->mask);
 }
 
-/* Must be called with OVS mutex held. */
-void table_instance_flow_flush(struct flow_table *table,
-			       struct table_instance *ti,
-			       struct table_instance *ufid_ti)
+/* Must be called with table mutex held. */
+static void table_instance_flow_flush(struct flow_table *table,
+				      struct table_instance *ti,
+				      struct table_instance *ufid_ti)
 {
 	int i;
 
@@ -500,7 +515,7 @@ void table_instance_flow_flush(struct flow_table *table,
 
 	if (WARN_ON(table->count != 0 ||
 		    table->ufid_count != 0)) {
-		table->count = 0;
+		WRITE_ONCE(table->count, 0);
 		table->ufid_count = 0;
 	}
 }
@@ -513,7 +528,7 @@ static void table_instance_destroy(struct table_instance *ti,
 }
 
 /* No need for locking this function is called from RCU callback. */
-void ovs_flow_tbl_destroy_rcu(struct rcu_head *rcu)
+static void ovs_flow_tbl_destroy_rcu(struct rcu_head *rcu)
 {
 	struct flow_table *table = container_of(rcu, struct flow_table, rcu);
 
@@ -525,7 +540,20 @@ void ovs_flow_tbl_destroy_rcu(struct rcu_head *rcu)
 	call_rcu(&mc->rcu, mask_cache_rcu_cb);
 	call_rcu(&ma->rcu, mask_array_rcu_cb);
 	table_instance_destroy(ti, ufid_ti);
+	mutex_destroy(&table->lock);
 	kfree(table);
+}
+
+void ovs_flow_tbl_put(struct flow_table *table)
+{
+	if (refcount_dec_and_test(&table->refcnt)) {
+		mutex_lock(&table->lock);
+		table_instance_flow_flush(table,
+					  ovs_tbl_dereference(table->ti, table),
+					  ovs_tbl_dereference(table->ufid_ti, table));
+		mutex_unlock(&table->lock);
+		call_rcu(&table->rcu, ovs_flow_tbl_destroy_rcu);
+	}
 }
 
 struct sw_flow *ovs_flow_tbl_dump_next(struct table_instance *ti,
@@ -1060,7 +1088,7 @@ static void flow_key_insert(struct flow_table *table, struct sw_flow *flow)
 	flow->flow_table.hash = flow_hash(&flow->key, &flow->mask->range);
 	ti = ovs_tbl_dereference(table->ti, table);
 	table_instance_insert(ti, flow);
-	table->count++;
+	WRITE_ONCE(table->count, table->count + 1);
 
 	/* Expand table, if necessary, to make room. */
 	if (table->count > ti->n_buckets)
