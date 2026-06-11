@@ -1158,7 +1158,7 @@ static int __xsk_sendmsg(struct socket *sock, struct msghdr *m, size_t total_len
 		return -ENOBUFS;
 
 	if (sk_can_busy_loop(sk))
-		sk_busy_loop(sk, 1); /* only support non-blocking sockets */
+		sk_tx_busy_loop(sk, 1); /* only support non-blocking sockets */
 
 	if (xs->zc && xsk_no_wakeup(sk))
 		return 0;
