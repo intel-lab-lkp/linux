@@ -118,6 +118,33 @@ static inline int copy_name(char *buffer, struct jfs_ea *ea)
 /* Forward references */
 static void ea_release(struct inode *inode, struct ea_buffer *ea_buf);
 
+static bool ea_entries_valid(struct jfs_ea_list *ealist, int size)
+{
+	char *p = (char *)FIRST_EA(ealist);
+	char *end = (char *)ealist + size;
+
+	if (size < sizeof(*ealist))
+		return false;
+
+	while (p < end) {
+		struct jfs_ea *ea = (struct jfs_ea *)p;
+		int ea_size;
+
+		if (p + sizeof(*ea) > end)
+			return false;
+
+		ea_size = EA_SIZE(ea);
+		if (p + ea_size > end)
+			return false;
+		if (ea->name[ea->namelen] != '\0')
+			return false;
+
+		p += ea_size;
+	}
+
+	return p == end;
+}
+
 /*
  * NAME: ea_write_inline
  *
@@ -569,6 +596,15 @@ static int ea_get(struct inode *inode, struct ea_buffer *ea_buf, int min_size)
 			print_hex_dump(KERN_ERR, "", DUMP_PREFIX_ADDRESS, 16, 1,
 				       ea_buf->xattr, size, 1);
 		}
+		ea_release(inode, ea_buf);
+		rc = -EIO;
+		goto clean_up;
+	}
+
+	if (!ea_entries_valid(ea_buf->xattr, ea_size)) {
+		pr_err("%s: invalid extended attribute entry\n", __func__);
+		print_hex_dump(KERN_ERR, "", DUMP_PREFIX_ADDRESS, 16, 1,
+			       ea_buf->xattr, ea_size, 1);
 		ea_release(inode, ea_buf);
 		rc = -EIO;
 		goto clean_up;
