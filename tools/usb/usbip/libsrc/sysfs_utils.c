@@ -30,3 +30,26 @@ int write_sysfs_attribute(const char *attr_path, const char *new_value,
 
 	return 0;
 }
+
+int read_sysfs_attribute(const char *attr_path, char *value, size_t len)
+{
+	int fd;
+	int length;
+
+	fd = open(attr_path, O_RDONLY);
+	if (fd < 0) {
+		dbg("error opening attribute %s", attr_path);
+		return -1;
+	}
+
+	length = read(fd, value, len - 1);
+	if (length < 0) {
+		dbg("error reading from attribute %s", attr_path);
+		close(fd);
+		return -1;
+	}
+
+	value[length] = '\0';
+	close(fd);
+	return 0;
+}

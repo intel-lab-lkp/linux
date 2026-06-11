@@ -5,5 +5,6 @@
 
 int write_sysfs_attribute(const char *attr_path, const char *new_value,
 			  size_t len);
+int read_sysfs_attribute(const char *attr_path, char *value, size_t len);
 
 #endif

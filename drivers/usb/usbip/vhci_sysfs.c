@@ -127,23 +127,6 @@ static ssize_t status_show_not_ready(int pdev_nr, char *out)
 	return out - s;
 }
 
-static int status_name_to_id(const char *name)
-{
-	char *c;
-	long val;
-	int ret;
-
-	c = strchr(name, '.');
-	if (c == NULL)
-		return 0;
-
-	ret = kstrtol(c+1, 10, &val);
-	if (ret < 0)
-		return ret;
-
-	return val;
-}
-
 static ssize_t status_show(struct device *dev,
 			   struct device_attribute *attr, char *out)
 {
@@ -153,7 +136,7 @@ static ssize_t status_show(struct device *dev,
 	out += sprintf(out,
 		       "hub port sta spd dev      sockfd local_busid\n");
 
-	pdev_nr = status_name_to_id(attr->attr.name);
+	pdev_nr = container_of(dev, struct platform_device, dev)->id;
 	if (pdev_nr < 0)
 		out += status_show_not_ready(pdev_nr, out);
 	else
@@ -161,9 +144,9 @@ static ssize_t status_show(struct device *dev,
 
 	return out - s;
 }
+DEVICE_ATTR_RO(status);
 
-static ssize_t nports_show(struct device *dev, struct device_attribute *attr,
-			   char *out)
+static ssize_t nports_show(struct device_driver *driver, char *out)
 {
 	char *s = out;
 
@@ -174,7 +157,7 @@ static ssize_t nports_show(struct device *dev, struct device_attribute *attr,
 	out += sprintf(out, "%d\n", VHCI_PORTS * vhci_num_controllers);
 	return out - s;
 }
-static DEVICE_ATTR_RO(nports);
+DRIVER_ATTR_RO(nports);
 
 /* Sysfs entry to shutdown a virtual connection */
 static int vhci_port_disconnect(struct vhci_hcd *vhci_hcd, __u32 rhport)
@@ -230,7 +213,7 @@ static int valid_port(__u32 *pdev_nr, __u32 *rhport)
 	return 1;
 }
 
-static ssize_t detach_store(struct device *dev, struct device_attribute *attr,
+static ssize_t detach_store(struct device_driver *driver,
 			    const char *buf, size_t count)
 {
 	__u32 port = 0, pdev_nr = 0, rhport = 0;
@@ -249,7 +232,7 @@ static ssize_t detach_store(struct device *dev, struct device_attribute *attr,
 
 	hcd = platform_get_drvdata(vhcis[pdev_nr].pdev);
 	if (hcd == NULL) {
-		dev_err(dev, "port is not ready %u\n", port);
+		pr_err("port is not ready %u\n", port);
 		return -EAGAIN;
 	}
 
@@ -268,7 +251,7 @@ static ssize_t detach_store(struct device *dev, struct device_attribute *attr,
 
 	return count;
 }
-static DEVICE_ATTR_WO(detach);
+DRIVER_ATTR_WO(detach);
 
 static int valid_args(__u32 *pdev_nr, __u32 *rhport,
 		      enum usb_device_speed speed)
@@ -306,7 +289,7 @@ static int valid_args(__u32 *pdev_nr, __u32 *rhport,
  *
  * write() returns 0 on success, else negative errno.
  */
-static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
+static ssize_t attach_store(struct device_driver *driver,
 			    const char *buf, size_t count)
 {
 	struct socket *socket;
@@ -343,7 +326,7 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 
 	hcd = platform_get_drvdata(vhcis[pdev_nr].pdev);
 	if (hcd == NULL) {
-		dev_err(dev, "port %d is not ready\n", port);
+		pr_err("port %d is not ready\n", port);
 		return -EAGAIN;
 	}
 
@@ -360,13 +343,13 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 	/* Extract socket from fd. */
 	socket = sockfd_lookup(sockfd, &err);
 	if (!socket) {
-		dev_err(dev, "failed to lookup sock");
+		pr_err("failed to lookup sock");
 		err = -EINVAL;
 		goto unlock_mutex;
 	}
 	if (socket->type != SOCK_STREAM) {
-		dev_err(dev, "Expecting SOCK_STREAM - found %d",
-			socket->type);
+		pr_err("Expecting SOCK_STREAM - found %d",
+		       socket->type);
 		sockfd_put(socket);
 		err = -EINVAL;
 		goto unlock_mutex;
@@ -404,7 +387,7 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 		kthread_stop_put(tcp_rx);
 		kthread_stop_put(tcp_tx);
 
-		dev_err(dev, "port %d already used\n", rhport);
+		pr_err("port %d already used\n", rhport);
 		/*
 		 * Will be retried from userspace
 		 * if there's another free port.
@@ -413,10 +396,10 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 		goto unlock_mutex;
 	}
 
-	dev_info(dev, "pdev(%u) rhport(%u) sockfd(%d)\n",
-		 pdev_nr, rhport, sockfd);
-	dev_info(dev, "devid(%u) speed(%u) speed_str(%s)\n",
-		 devid, speed, usb_speed_string(speed));
+	pr_info("pdev(%u) rhport(%u) sockfd(%d)\n",
+		pdev_nr, rhport, sockfd);
+	pr_info("devid(%u) speed(%u) speed_str(%s)\n",
+		devid, speed, usb_speed_string(speed));
 
 	vdev->devid         = devid;
 	vdev->speed         = speed;
@@ -436,7 +419,7 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 
 	rh_port_connect(vdev, speed);
 
-	dev_info(dev, "Device attached\n");
+	pr_info("Device attached\n");
 
 	mutex_unlock(&vdev->ud.sysfs_lock);
 
@@ -446,80 +429,4 @@ unlock_mutex:
 	mutex_unlock(&vdev->ud.sysfs_lock);
 	return err;
 }
-static DEVICE_ATTR_WO(attach);
-
-#define MAX_STATUS_NAME 16
-
-struct status_attr {
-	struct device_attribute attr;
-	char name[MAX_STATUS_NAME+1];
-};
-
-static struct status_attr *status_attrs;
-
-static void set_status_attr(int id)
-{
-	struct status_attr *status;
-
-	status = status_attrs + id;
-	if (id == 0)
-		strscpy(status->name, "status");
-	else
-		snprintf(status->name, MAX_STATUS_NAME+1, "status.%d", id);
-	status->attr.attr.name = status->name;
-	status->attr.attr.mode = S_IRUGO;
-	status->attr.show = status_show;
-	sysfs_attr_init(&status->attr.attr);
-}
-
-static int init_status_attrs(void)
-{
-	int id;
-
-	status_attrs = kzalloc_objs(struct status_attr, vhci_num_controllers);
-	if (status_attrs == NULL)
-		return -ENOMEM;
-
-	for (id = 0; id < vhci_num_controllers; id++)
-		set_status_attr(id);
-
-	return 0;
-}
-
-static void finish_status_attrs(void)
-{
-	kfree(status_attrs);
-}
-
-struct attribute_group vhci_attr_group = {
-	.attrs = NULL,
-};
-
-int vhci_init_attr_group(void)
-{
-	struct attribute **attrs;
-	int ret, i;
-
-	attrs = kzalloc_objs(struct attribute *, (vhci_num_controllers + 5));
-	if (attrs == NULL)
-		return -ENOMEM;
-
-	ret = init_status_attrs();
-	if (ret) {
-		kfree(attrs);
-		return ret;
-	}
-	*attrs = &dev_attr_nports.attr;
-	*(attrs + 1) = &dev_attr_detach.attr;
-	*(attrs + 2) = &dev_attr_attach.attr;
-	for (i = 0; i < vhci_num_controllers; i++)
-		*(attrs + i + 3) = &((status_attrs + i)->attr.attr);
-	vhci_attr_group.attrs = attrs;
-	return 0;
-}
-
-void vhci_finish_attr_group(void)
-{
-	finish_status_attrs();
-	kfree(vhci_attr_group.attrs);
-}
+DRIVER_ATTR_WO(attach);

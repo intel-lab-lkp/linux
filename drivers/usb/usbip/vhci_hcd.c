@@ -46,6 +46,7 @@ static const char driver_desc[] = "USB/IP Virtual Host Controller";
 
 int vhci_num_controllers = VHCI_NR_HCS;
 struct vhci *vhcis;
+static struct platform_driver vhci_driver;
 
 static const char * const bit_desc[] = {
 	"CONNECTION",		/*0*/
@@ -1150,23 +1151,6 @@ static void vhci_device_init(struct vhci_device *vdev)
 	usbip_start_eh(&vdev->ud);
 }
 
-static int hcd_name_to_id(const char *name)
-{
-	char *c;
-	long val;
-	int ret;
-
-	c = strchr(name, '.');
-	if (c == NULL)
-		return 0;
-
-	ret = kstrtol(c+1, 10, &val);
-	if (ret < 0)
-		return ret;
-
-	return val;
-}
-
 static int vhci_setup(struct usb_hcd *hcd)
 {
 	struct vhci *vhci = *((void **)dev_get_platdata(hcd->self.controller));
@@ -1198,8 +1182,7 @@ static int vhci_setup(struct usb_hcd *hcd)
 static int vhci_start(struct usb_hcd *hcd)
 {
 	struct vhci_hcd *vhci_hcd = hcd_to_vhci_hcd(hcd);
-	int id, rhport;
-	int err;
+	int rhport;
 
 	usbip_dbg_vhci_hc("enter vhci_start\n");
 
@@ -1224,46 +1207,17 @@ static int vhci_start(struct usb_hcd *hcd)
 	hcd->self.otg_port = 1;
 #endif
 
-	id = hcd_name_to_id(hcd_name(hcd));
-	if (id < 0) {
-		dev_err(hcd_dev(hcd), "invalid vhci name %s\n", hcd_name(hcd));
-		return -EINVAL;
-	}
-
-	/* vhci_hcd is now ready to be controlled through sysfs */
-	if (id == 0 && usb_hcd_is_primary_hcd(hcd)) {
-		err = vhci_init_attr_group();
-		if (err) {
-			dev_err(hcd_dev(hcd), "init attr group failed, err = %d\n", err);
-			return err;
-		}
-		err = sysfs_create_group(&hcd_dev(hcd)->kobj, &vhci_attr_group);
-		if (err) {
-			dev_err(hcd_dev(hcd), "create sysfs files failed, err = %d\n", err);
-			vhci_finish_attr_group();
-			return err;
-		}
-		dev_info(hcd_dev(hcd), "created sysfs %s\n", hcd_name(hcd));
-	}
-
 	return 0;
 }
 
 static void vhci_stop(struct usb_hcd *hcd)
 {
 	struct vhci_hcd *vhci_hcd = hcd_to_vhci_hcd(hcd);
-	int id, rhport;
+	int rhport;
 
 	usbip_dbg_vhci_hc("stop VHCI controller\n");
 
-	/* 1. remove the userland interface of vhci_hcd */
-	id = hcd_name_to_id(hcd_name(hcd));
-	if (id == 0 && usb_hcd_is_primary_hcd(hcd)) {
-		sysfs_remove_group(&hcd_dev(hcd)->kobj, &vhci_attr_group);
-		vhci_finish_attr_group();
-	}
-
-	/* 2. shutdown all the ports of vhci_hcd */
+	/* shutdown all the ports of vhci_hcd */
 	for (rhport = 0; rhport < VHCI_HC_PORTS; rhport++) {
 		struct vhci_device *vdev = &vhci_hcd->vdev[rhport];
 
@@ -1507,10 +1461,19 @@ static int vhci_hcd_resume(struct platform_device *pdev)
 #endif
 
 static struct attribute *vhci_attrs[] = {
+	&driver_attr_nports.attr,
+	&driver_attr_detach.attr,
+	&driver_attr_attach.attr,
 	&driver_attr_usbip_debug.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(vhci);
+
+static struct attribute *vhci_dev_attrs[] = {
+	&dev_attr_status.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(vhci_dev);
 
 static struct platform_driver vhci_driver = {
 	.probe	= vhci_hcd_probe,
@@ -1520,6 +1483,7 @@ static struct platform_driver vhci_driver = {
 	.driver	= {
 		.name = driver_name,
 		.groups = vhci_groups,
+		.dev_groups = vhci_dev_groups,
 	},
 };
 

@@ -42,6 +42,8 @@
 
 #define SYSFS_PATH_MAX		256
 #define SYSFS_BUS_ID_SIZE	32
+#define SYSFS_NPORTS_SIZE	32
+#define SYSFS_DEVICE_NAME_SIZE	32
 
 /* Defines for op_code status in server/client op_common PDUs */
 #define ST_OK	0x00

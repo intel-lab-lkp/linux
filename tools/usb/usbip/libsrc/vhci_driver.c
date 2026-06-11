@@ -106,28 +106,38 @@ static int parse_status(const char *value)
 	return 0;
 }
 
-#define MAX_STATUS_NAME 18
-
 static int refresh_imported_device_list(void)
 {
 	const char *attr_status;
-	char status[MAX_STATUS_NAME+1] = "status";
+	char status[] = "status";
 	int i, ret;
+	struct udev_device *hc_device;
+	char hc_device_name[SYSFS_DEVICE_NAME_SIZE];
 
 	for (i = 0; i < vhci_driver->ncontrollers; i++) {
-		if (i > 0)
-			snprintf(status, sizeof(status), "status.%d", i);
-
-		attr_status = udev_device_get_sysattr_value(vhci_driver->hc_device,
+		snprintf(hc_device_name, sizeof(hc_device_name), "%s.%d",
+			 "vhci_hcd", i);
+		hc_device =
+		udev_device_new_from_subsystem_sysname(udev_context,
+						       USBIP_VHCI_BUS_TYPE,
+						       hc_device_name);
+		if (!hc_device) {
+			err("udev_device_new_from_subsystem_sysname failed: %s",
+			    hc_device_name);
+			return -1;
+		}
+		attr_status = udev_device_get_sysattr_value(hc_device,
 							    status);
 		if (!attr_status) {
 			err("udev_device_get_sysattr_value failed");
+			udev_device_unref(hc_device);
 			return -1;
 		}
 
 		dbg("controller %d", i);
 
 		ret = parse_status(attr_status);
+		udev_device_unref(hc_device);
 		if (ret != 0)
 			return ret;
 	}
@@ -135,13 +145,21 @@ static int refresh_imported_device_list(void)
 	return 0;
 }
 
-static int get_nports(struct udev_device *hc_device)
+static int get_nports(void)
 {
-	const char *attr_nports;
+	char attr_nports[SYSFS_NPORTS_SIZE];
+	char bus_type[] = "platform";
+	char nports_attr_name[] = "nports";
+	char nports_attr_path[SYSFS_PATH_MAX];
+	int ret;
 
-	attr_nports = udev_device_get_sysattr_value(hc_device, "nports");
-	if (!attr_nports) {
-		err("udev_device_get_sysattr_value nports failed");
+	snprintf(nports_attr_path, sizeof(nports_attr_path), "%s/%s/%s/%s/%s/%s",
+		 SYSFS_MNT_PATH, SYSFS_BUS_NAME, bus_type, SYSFS_DRIVERS_NAME,
+		 USBIP_VHCI_DRV_NAME, nports_attr_name);
+
+	ret = read_sysfs_attribute(nports_attr_path, attr_nports, sizeof(attr_nports));
+	if (ret < 0) {
+		err("error reading nports attribute");
 		return -1;
 	}
 
@@ -261,7 +279,7 @@ int usbip_vhci_driver_open(void)
 		goto err;
 	}
 
-	nports = get_nports(hc_device);
+	nports = get_nports();
 	if (nports <= 0) {
 		err("no available ports");
 		goto err;
@@ -359,16 +377,17 @@ int usbip_vhci_attach_device2(uint8_t port, int sockfd, uint32_t devid,
 	char buff[200]; /* what size should be ? */
 	char attach_attr_path[SYSFS_PATH_MAX];
 	char attr_attach[] = "attach";
-	const char *path;
+	char bus_type[] = "platform";
 	int ret;
 
 	snprintf(buff, sizeof(buff), "%u %d %u %u",
 			port, sockfd, devid, speed);
 	dbg("writing: %s", buff);
 
-	path = udev_device_get_syspath(vhci_driver->hc_device);
-	snprintf(attach_attr_path, sizeof(attach_attr_path), "%s/%s",
-		 path, attr_attach);
+	snprintf(attach_attr_path, sizeof(attach_attr_path), "%s/%s/%s/%s/%s/%s",
+		 SYSFS_MNT_PATH, SYSFS_BUS_NAME, bus_type, SYSFS_DRIVERS_NAME,
+		 USBIP_VHCI_DRV_NAME, attr_attach);
+
 	dbg("attach attribute path: %s", attach_attr_path);
 
 	ret = write_sysfs_attribute(attach_attr_path, buff, strlen(buff));
@@ -400,16 +419,16 @@ int usbip_vhci_detach_device(uint8_t port)
 {
 	char detach_attr_path[SYSFS_PATH_MAX];
 	char attr_detach[] = "detach";
+	char bus_type[] = "platform";
 	char buff[200]; /* what size should be ? */
-	const char *path;
 	int ret;
 
 	snprintf(buff, sizeof(buff), "%u", port);
 	dbg("writing: %s", buff);
 
-	path = udev_device_get_syspath(vhci_driver->hc_device);
-	snprintf(detach_attr_path, sizeof(detach_attr_path), "%s/%s",
-		 path, attr_detach);
+	snprintf(detach_attr_path, sizeof(detach_attr_path), "%s/%s/%s/%s/%s/%s",
+		 SYSFS_MNT_PATH, SYSFS_BUS_NAME, bus_type, SYSFS_DRIVERS_NAME,
+		 USBIP_VHCI_DRV_NAME, attr_detach);
 	dbg("detach attribute path: %s", detach_attr_path);
 
 	ret = write_sysfs_attribute(detach_attr_path, buff, strlen(buff));
