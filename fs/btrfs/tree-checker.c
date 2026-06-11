@@ -1915,6 +1915,40 @@ static int check_inode_extref(struct extent_buffer *leaf,
 	return 0;
 }
 
+static int check_root_ref(struct extent_buffer *leaf, int slot)
+{
+	struct btrfs_root_ref *rref;
+	const u32 item_size = btrfs_item_size(leaf, slot);
+	u32 expect_size;
+	u16 name_len;
+
+	if (unlikely(item_size < sizeof(*rref))) {
+		generic_err(leaf, slot,
+			    "invalid root ref item size, have %u expect >= %zu",
+			    item_size, sizeof(*rref));
+		return -EUCLEAN;
+	}
+
+	rref = btrfs_item_ptr(leaf, slot, struct btrfs_root_ref);
+	name_len = btrfs_root_ref_name_len(leaf, rref);
+	if (unlikely(name_len > BTRFS_NAME_LEN)) {
+		generic_err(leaf, slot,
+			    "root ref name too long, have %u max %u",
+			    name_len, BTRFS_NAME_LEN);
+		return -EUCLEAN;
+	}
+
+	expect_size = sizeof(*rref) + name_len;
+	if (unlikely(item_size != expect_size)) {
+		generic_err(leaf, slot,
+			    "invalid root ref item size, have %u expect %u",
+			    item_size, expect_size);
+		return -EUCLEAN;
+	}
+
+	return 0;
+}
+
 static int check_raid_stripe_extent(const struct extent_buffer *leaf,
 				    const struct btrfs_key *key, int slot)
 {
@@ -2225,6 +2259,10 @@ static enum btrfs_tree_block_status check_leaf_item(struct extent_buffer *leaf,
 		break;
 	case BTRFS_ROOT_ITEM_KEY:
 		ret = check_root_item(leaf, key, slot);
+		break;
+	case BTRFS_ROOT_REF_KEY:
+	case BTRFS_ROOT_BACKREF_KEY:
+		ret = check_root_ref(leaf, slot);
 		break;
 	case BTRFS_EXTENT_ITEM_KEY:
 	case BTRFS_METADATA_ITEM_KEY:
