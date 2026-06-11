@@ -2370,7 +2370,7 @@ static int pfkey_spdadd(struct sock *sk, struct sk_buff *skb, const struct sadb_
 
 out:
 	xp->walk.dead = 1;
-	xfrm_policy_destroy(xp);
+	xfrm_pol_put(xp);
 	return err;
 }
 
