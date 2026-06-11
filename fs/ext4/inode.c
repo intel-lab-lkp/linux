@@ -264,6 +264,12 @@ void ext4_evict_inode(struct inode *inode)
 	if (ext4_inode_is_fast_symlink(inode))
 		memset(EXT4_I(inode)->i_data, 0, sizeof(EXT4_I(inode)->i_data));
 	inode->i_size = 0;
+	/*
+	 * Skip extra isize expansion on inodes being deleted -- it is
+	 * pointless and can trigger a circular lock dependency:
+	 *   xattr_sem -> ext4_xattr_block_set -> iput -> s_writepages_rwsem
+	 */
+	ext4_set_inode_state(inode, EXT4_STATE_NO_EXPAND);
 	err = ext4_mark_inode_dirty(handle, inode);
 	if (err) {
 		ext4_warning(inode->i_sb,
