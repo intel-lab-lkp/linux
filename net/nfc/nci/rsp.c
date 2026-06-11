@@ -87,7 +87,8 @@ static u8 nci_core_init_rsp_packet_v2(struct nci_dev *ndev,
 				      const struct sk_buff *skb)
 {
 	const struct nci_core_init_rsp_nci_ver2 *rsp = (void *)skb->data;
-	const u8 *supported_rf_interface = rsp->supported_rf_interfaces;
+	const u8 *skb_end = skb->data + skb->len;
+	const u8 *supported_rf_interface;
 	u8 rf_interface_idx = 0;
 	u8 rf_extension_cnt = 0;
 
@@ -95,6 +96,11 @@ static u8 nci_core_init_rsp_packet_v2(struct nci_dev *ndev,
 
 	if (rsp->status != NCI_STATUS_OK)
 		return rsp->status;
+
+	if (skb->len < sizeof(*rsp))
+		return NCI_STATUS_SYNTAX_ERROR;
+
+	supported_rf_interface = rsp->supported_rf_interfaces;
 
 	ndev->nfcc_features = __le32_to_cpu(rsp->nfcc_features);
 	ndev->num_supported_rf_interfaces = rsp->num_supported_rf_interfaces;
@@ -104,10 +110,20 @@ static u8 nci_core_init_rsp_packet_v2(struct nci_dev *ndev,
 		    NCI_MAX_SUPPORTED_RF_INTERFACES);
 
 	while (rf_interface_idx < ndev->num_supported_rf_interfaces) {
+		/* The supported RF interfaces are a variable-length list of
+		 * (interface, extension count, extensions[]) tuples supplied by
+		 * the NFCC; bail out if its lengths would take us past the end
+		 * of the received packet.
+		 */
+		if (skb_end - supported_rf_interface < 2)
+			return NCI_STATUS_SYNTAX_ERROR;
+
 		ndev->supported_rf_interfaces[rf_interface_idx++] = *supported_rf_interface++;
 
 		/* skip rf extension parameters */
 		rf_extension_cnt = *supported_rf_interface++;
+		if (skb_end - supported_rf_interface < rf_extension_cnt)
+			return NCI_STATUS_SYNTAX_ERROR;
 		supported_rf_interface += rf_extension_cnt;
 	}
 
