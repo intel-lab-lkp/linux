@@ -168,7 +168,7 @@ static struct uss720_async_request *submit_async_request(struct parport_uss720_p
 	ret = usb_submit_urb(rq->urb, mem_flags);
 	if (!ret)
 		return rq;
-	destroy_async(&rq->ref_count);
+	kref_put(&rq->ref_count, destroy_async);
 	dev_err(&usbdev->dev, "submit_async_request submit_urb failed with %d\n", ret);
 	return NULL;
 }
