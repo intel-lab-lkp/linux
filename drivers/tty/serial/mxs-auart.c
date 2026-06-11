@@ -872,10 +872,12 @@ static int mxs_auart_dma_prep_rx(struct mxs_auart_port *s)
 static void mxs_auart_dma_exit_channel(struct mxs_auart_port *s)
 {
 	if (s->tx_dma_chan) {
+		dmaengine_terminate_sync(s->tx_dma_chan);
 		dma_release_channel(s->tx_dma_chan);
 		s->tx_dma_chan = NULL;
 	}
 	if (s->rx_dma_chan) {
+		dmaengine_terminate_sync(s->rx_dma_chan);
 		dma_release_channel(s->rx_dma_chan);
 		s->rx_dma_chan = NULL;
 	}
