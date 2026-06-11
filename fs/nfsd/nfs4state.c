@@ -1952,12 +1952,10 @@ gen_sessionid(struct nfsd4_session *ses)
 static struct shrinker *nfsd_slot_shrinker;
 static DEFINE_SPINLOCK(nfsd_session_list_lock);
 static LIST_HEAD(nfsd_session_list);
-/* The sum of "target_slots-1" on every session.  The shrinker can push this
- * down, though it can take a little while for the memory to actually
- * be freed.  The "-1" is because we can never free slot 0 while the
- * session is active.
- */
+/* The sum of "target_slots" on every session, slot 0 included. */
 static atomic_t nfsd_total_target_slots = ATOMIC_INIT(0);
+/* Session count, subtracted from the sum to exclude slot 0. */
+static atomic_t nfsd_total_sessions = ATOMIC_INIT(0);
 
 static void
 free_session_slots(struct nfsd4_session *ses, int from)
@@ -1981,9 +1979,10 @@ free_session_slots(struct nfsd4_session *ses, int from)
 	}
 	ses->se_fchannel.maxreqs = from;
 	if (ses->se_target_maxslots > from) {
-		int new_target = from ?: 1;
-		atomic_sub(ses->se_target_maxslots - new_target, &nfsd_total_target_slots);
-		ses->se_target_maxslots = new_target;
+		int delta = ses->se_target_maxslots - from;
+
+		atomic_sub(delta, &nfsd_total_target_slots);
+		ses->se_target_maxslots = from ?: 1;
 	}
 }
 
@@ -2079,7 +2078,7 @@ static struct nfsd4_session *alloc_session(struct nfsd4_channel_attrs *fattrs,
 	fattrs->maxreqs = i;
 	memcpy(&new->se_fchannel, fattrs, sizeof(struct nfsd4_channel_attrs));
 	new->se_target_maxslots = i;
-	atomic_add(i - 1, &nfsd_total_target_slots);
+	atomic_add(i, &nfsd_total_target_slots);
 	new->se_cb_slot_avail = ~0U;
 	new->se_cb_highest_slot = min(battrs->maxreqs - 1,
 				      NFSD_BC_SLOT_TABLE_SIZE - 1);
@@ -2207,9 +2206,10 @@ static void free_session(struct nfsd4_session *ses)
 static unsigned long
 nfsd_slot_count(struct shrinker *s, struct shrink_control *sc)
 {
-	unsigned long cnt = atomic_read(&nfsd_total_target_slots);
+	int cnt = atomic_read(&nfsd_total_target_slots) -
+		  atomic_read(&nfsd_total_sessions);
 
-	return cnt ? cnt : SHRINK_EMPTY;
+	return cnt > 0 ? cnt : SHRINK_EMPTY;
 }
 
 static unsigned long
@@ -2260,6 +2260,7 @@ static void init_session(struct svc_rqst *rqstp, struct nfsd4_session *new, stru
 
 	spin_lock(&nfsd_session_list_lock);
 	list_add_tail(&new->se_all_sessions, &nfsd_session_list);
+	atomic_inc(&nfsd_total_sessions);
 	spin_unlock(&nfsd_session_list_lock);
 
 	{
@@ -2333,6 +2334,7 @@ unhash_session(struct nfsd4_session *ses)
 	spin_unlock(&ses->se_client->cl_lock);
 	spin_lock(&nfsd_session_list_lock);
 	list_del(&ses->se_all_sessions);
+	atomic_dec(&nfsd_total_sessions);
 	spin_unlock(&nfsd_session_list_lock);
 }
 
@@ -2481,7 +2483,17 @@ unhash_client_locked(struct nfs4_client *clp)
 	spin_lock(&nfsd_session_list_lock);
 	list_for_each_entry(ses, &clp->cl_sessions, se_perclnt) {
 		list_del_init(&ses->se_hash);
-		list_del_init(&ses->se_all_sessions);
+		/*
+		 * unhash_client_locked() can run more than once for a
+		 * client; the session stays on cl_sessions across calls.
+		 * The first pass empties se_all_sessions via
+		 * list_del_init(), so skip the decrement on later passes
+		 * to keep nfsd_total_sessions from being double-counted.
+		 */
+		if (!list_empty(&ses->se_all_sessions)) {
+			list_del_init(&ses->se_all_sessions);
+			atomic_dec(&nfsd_total_sessions);
+		}
 	}
 	spin_unlock(&nfsd_session_list_lock);
 	spin_unlock(&clp->cl_lock);
