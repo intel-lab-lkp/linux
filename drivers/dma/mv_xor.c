@@ -1383,12 +1383,9 @@ static int mv_xor_probe(struct platform_device *pdev)
 			mv_xor_conf_mbus_windows(xordev, dram);
 	}
 
-	/* Not all platforms can gate the clock, so it is not
-	 * an error if the clock does not exists.
-	 */
-	xordev->clk = clk_get(&pdev->dev, NULL);
-	if (!IS_ERR(xordev->clk))
-		clk_prepare_enable(xordev->clk);
+	xordev->clk = devm_clk_get_optional_enabled(&pdev->dev, NULL);
+	if (IS_ERR(xordev->clk))
+		return PTR_ERR(xordev->clk);
 
 	/*
 	 * We don't want to have more than one channel per CPU in
@@ -1476,11 +1473,6 @@ err_channel_add:
 			if (pdev->dev.of_node)
 				irq_dispose_mapping(xordev->channels[i]->irq);
 		}
-
-	if (!IS_ERR(xordev->clk)) {
-		clk_disable_unprepare(xordev->clk);
-		clk_put(xordev->clk);
-	}
 
 	return ret;
 }
