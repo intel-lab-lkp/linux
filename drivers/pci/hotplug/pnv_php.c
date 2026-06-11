@@ -791,16 +791,15 @@ static struct pnv_php_slot *pnv_php_alloc_slot(struct device_node *dn)
 		return NULL;
 
 	php_slot->name = kstrdup(label, GFP_KERNEL);
-	if (!php_slot->name) {
-		kfree(php_slot);
-		return NULL;
-	}
+	if (!php_slot->name)
+		goto free_php_slot;
 
 	/* Allocate workqueue for this slot's interrupt handling */
 	php_slot->wq = alloc_workqueue("pciehp-%s", WQ_PERCPU, 0, php_slot->name);
 	if (!php_slot->wq) {
 		SLOT_WARN(php_slot, "Cannot alloc workqueue\n");
 		kfree(php_slot->name);
+free_php_slot:
 		kfree(php_slot);
 		return NULL;
 	}
