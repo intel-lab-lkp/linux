@@ -60,6 +60,15 @@ Terminology
   :c:func:`!i_mmap_[try]lock_write` for file-backed memory. We refer to these
   locks as the reverse mapping locks, or 'rmap locks' for brevity.
 
+  When :c:macro:`!CONFIG_SPLIT_I_MMAP` is enabled, the file-backed i_mmap tree
+  is split into multiple sibling trees (one per NUMA node or a number based on
+  CPU count), each with its own :c:type:`!struct i_mmap_tree` containing a
+  red/black interval tree and a :c:type:`!struct rw_semaphore`. In this
+  configuration, :c:func:`!i_mmap_lock_read` and :c:func:`!i_mmap_lock_write`
+  acquire all per-tree locks, while VMA insert/remove operations use the
+  per-tree granularity :c:func:`!i_mmap_tree_lock_write` to lock only the
+  relevant sibling tree, significantly reducing lock contention.
+
 We discuss page table locks separately in the dedicated section below.
 
 The first thing **any** of these locks achieve is to **stabilise** the VMA
@@ -230,12 +239,16 @@ These are the core fields which describe the MM the VMA belongs to and its attri
                                                            Updated under mmap read lock by
                                                            :c:func:`!task_numa_work`.
    :c:member:`!vm_userfaultfd_ctx`   CONFIG_USERFAULTFD    Userfaultfd context wrapper object of    mmap write,
-                                                           type :c:type:`!vm_userfaultfd_ctx`,      VMA write.
-                                                           either of zero size if userfaultfd is
-                                                           disabled, or containing a pointer
-                                                           to an underlying
-                                                           :c:type:`!userfaultfd_ctx` object which
-                                                           describes userfaultfd metadata.
+                                                            type :c:type:`!vm_userfaultfd_ctx`,      VMA write.
+                                                            either of zero size if userfaultfd is
+                                                            disabled, or containing a pointer
+                                                            to an underlying
+                                                            :c:type:`!userfaultfd_ctx` object which
+                                                            describes userfaultfd metadata.
+   :c:member:`!tree_idx`             CONFIG_SPLIT_I_MMAP   The index of the sibling i_mmap tree     Written once on
+                                                            that this VMA belongs to, set at         initial map.
+                                                            VMA creation time based on the NUMA
+                                                            node or the smallest sibling tree.
    ================================= ===================== ======================================== ===============
 
 These fields are present or not depending on whether the relevant kernel
@@ -247,12 +260,18 @@ configuration option is set.
    Field                               Description                               Write lock
    =================================== ========================================= ============================
    :c:member:`!shared.rb`              A red/black tree node used, if the        mmap write, VMA write,
-                                       mapping is file-backed, to place the VMA  i_mmap write.
-                                       in the
-                                       :c:member:`!struct address_space->i_mmap`
-                                       red/black interval tree.
+                                        mapping is file-backed, to place the VMA  i_mmap write (or per-tree
+                                        in the                                    i_mmap write when
+                                        :c:member:`!struct address_space->i_mmap` :c:macro:`!CONFIG_SPLIT_I_MMAP`
+                                        red/black interval tree (or one of the    is set).
+                                        sibling trees when
+                                        :c:macro:`!CONFIG_SPLIT_I_MMAP`
+                                        is enabled).
    :c:member:`!shared.rb_subtree_last` Metadata used for management of the       mmap write, VMA write,
-                                       interval tree if the VMA is file-backed.  i_mmap write.
+                                        interval tree if the VMA is file-backed.  i_mmap write (or per-tree
+                                                                                  i_mmap write when
+                                                                                  :c:macro:`!CONFIG_SPLIT_I_MMAP`
+                                                                                  is set).
    :c:member:`!anon_vma_chain`         List of pointers to both forked/CoW’d     mmap read, anon_vma write.
                                        :c:type:`!anon_vma` objects and
                                        :c:member:`!vma->anon_vma` if it is
@@ -490,6 +509,16 @@ There is also a file-system specific lock ordering comment located at the top of
 Please check the current state of these comments which may have changed since
 the time of writing of this document.
 
+.. note:: When :c:macro:`!CONFIG_SPLIT_I_MMAP` is enabled, the single
+   ``mapping->i_mmap_rwsem`` is replaced by an array of per-tree locks
+   ``mapping->i_mmap[i]->rwsem``. The lock ordering positions of
+   ``mapping->i_mmap_rwsem`` above apply to each per-tree lock
+   equivalently. VMA insert/remove operations acquire only the relevant
+   per-tree lock via :c:func:`!i_mmap_tree_lock_write`, while operations
+   that require all trees to be locked (such as
+   :c:func:`!unmap_mapping_range`) acquire all per-tree locks via
+   :c:func:`!i_mmap_lock_write` or :c:func:`!i_mmap_lock_read`.
+
 ------------------------------
 Locking Implementation Details
 ------------------------------
@@ -704,11 +733,15 @@ traversed or referenced by concurrent tasks.
 
 It is insufficient to simply hold an mmap write lock and VMA lock (which will
 prevent racing faults, and rmap operations), as a file-backed mapping can be
-truncated under the :c:struct:`!struct address_space->i_mmap_rwsem` alone.
+truncated under the :c:struct:`!struct address_space->i_mmap_rwsem` alone
+(or, when :c:macro:`!CONFIG_SPLIT_I_MMAP` is enabled, under all per-tree
+``mapping->i_mmap[i]->rwsem`` locks acquired via
+:c:func:`!i_mmap_lock_write`).
 
 As a result, no VMA which can be accessed via the reverse mapping (either
 through the :c:struct:`!struct anon_vma->rb_root` or the :c:member:`!struct
-address_space->i_mmap` interval trees) can have its page tables torn down.
+address_space->i_mmap` interval trees, or the sibling trees when
+:c:macro:`!CONFIG_SPLIT_I_MMAP` is enabled) can have its page tables torn down.
 
 The operation is typically performed via :c:func:`!free_pgtables`, which assumes
 either the mmap write lock has been taken (as specified by its
@@ -729,7 +762,9 @@ cleared without page table locks (in the :c:func:`!pgd_clear`, :c:func:`!p4d_cle
 .. note:: It is possible for leaf page tables to be torn down independent of
           the page tables above it as is done by
           :c:func:`!retract_page_tables`, which is performed under the i_mmap
-          read lock, PMD, and PTE page table locks, without this level of care.
+          read lock (or all per-tree ``mapping->i_mmap[i]->rwsem`` locks in
+          read mode when :c:macro:`!CONFIG_SPLIT_I_MMAP` is enabled), PMD, and
+          PTE page table locks, without this level of care.
 
 Page table moving
 ^^^^^^^^^^^^^^^^^
