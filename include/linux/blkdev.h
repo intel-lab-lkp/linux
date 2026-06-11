@@ -606,6 +606,13 @@ struct request_queue {
 	 */
 	struct mutex		elevator_lock;
 
+	/*
+	 * Serializes the whole elevator change operation for the same queue,
+	 * including the debugfs (un)register steps. Must be acquired before
+	 * freezing the queue and acquiring elevator_lock.
+	 */
+	struct mutex		elevator_queue_lock;
+
 	struct mutex		sysfs_lock;
 	/*
 	 * Protects queue limits and also sysfs attribute read_ahead_kb.

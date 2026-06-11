@@ -665,6 +665,13 @@ static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
 			return ret;
 	}
 
+	/*
+	 * Acquire elevator_queue_lock to serialize the debugfs (un)register
+	 * steps for the same queue. The elevator switch core part is protected
+	 * by queue freezing and ->elevator_lock.
+	 */
+	mutex_lock(&q->elevator_queue_lock);
+
 	memflags = blk_mq_freeze_queue(q);
 	/*
 	 * May be called before adding disk, when there isn't any FS I/O,
@@ -689,6 +696,8 @@ static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
 	 */
 	if (!ctx->new)
 		blk_mq_free_sched_res(&ctx->res, ctx->type, set);
+
+	mutex_unlock(&q->elevator_queue_lock);
 
 	return ret;
 }
