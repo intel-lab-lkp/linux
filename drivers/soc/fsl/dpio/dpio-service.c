@@ -140,10 +140,8 @@ struct dpaa2_io *dpaa2_io_create(const struct dpaa2_io_desc *desc,
 		return NULL;
 
 	/* check if CPU is out of range (-1 means any cpu) */
-	if (desc->cpu != DPAA2_IO_ANY_CPU && desc->cpu >= num_possible_cpus()) {
-		kfree(obj);
-		return NULL;
-	}
+	if (desc->cpu != DPAA2_IO_ANY_CPU && desc->cpu >= num_possible_cpus())
+		goto free_obj;
 
 	obj->dpio_desc = *desc;
 	obj->swp_desc.cena_bar = obj->dpio_desc.regs_cena;
@@ -158,11 +156,8 @@ struct dpaa2_io *dpaa2_io_create(const struct dpaa2_io_desc *desc,
 	qman_256_cycles_per_ns = 256000 / (obj->swp_desc.qman_clk / 1000000);
 	obj->swp_desc.qman_256_cycles_per_ns = qman_256_cycles_per_ns;
 	obj->swp = qbman_swp_init(&obj->swp_desc);
-
-	if (!obj->swp) {
-		kfree(obj);
-		return NULL;
-	}
+	if (!obj->swp)
+		goto free_obj;
 
 	INIT_LIST_HEAD(&obj->node);
 	spin_lock_init(&obj->lock_mgmt_cmd);
@@ -192,6 +187,10 @@ struct dpaa2_io *dpaa2_io_create(const struct dpaa2_io_desc *desc,
 	obj->frames = 0;
 
 	return obj;
+
+free_obj:
+	kfree(obj);
+	return NULL;
 }
 
 /**
@@ -665,10 +664,8 @@ struct dpaa2_io_store *dpaa2_io_store_create(unsigned int max_frames,
 	ret->max = max_frames;
 	size = max_frames * sizeof(struct dpaa2_dq) + 64;
 	ret->alloced_addr = kzalloc(size, GFP_KERNEL);
-	if (!ret->alloced_addr) {
-		kfree(ret);
-		return NULL;
-	}
+	if (!ret->alloced_addr)
+		goto free_ret;
 
 	ret->vaddr = PTR_ALIGN(ret->alloced_addr, 64);
 	ret->paddr = dma_map_single(dev, ret->vaddr,
@@ -676,14 +673,17 @@ struct dpaa2_io_store *dpaa2_io_store_create(unsigned int max_frames,
 				    DMA_FROM_DEVICE);
 	if (dma_mapping_error(dev, ret->paddr)) {
 		kfree(ret->alloced_addr);
-		kfree(ret);
-		return NULL;
+		goto free_ret;
 	}
 
 	ret->idx = 0;
 	ret->dev = dev;
 
 	return ret;
+
+free_ret:
+	kfree(ret);
+	return NULL;
 }
 EXPORT_SYMBOL_GPL(dpaa2_io_store_create);
 
