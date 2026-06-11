@@ -239,6 +239,13 @@ int set_memory_x(unsigned long addr, int numpages)
 					__pgprot(PTE_PXN));
 }
 
+static int set_memory_default(unsigned long addr, int numpages)
+{
+	return __change_memory_common(addr, PAGE_SIZE * numpages,
+				      __pgprot(PTE_VALID),
+				      __pgprot(PTE_RDONLY));
+}
+
 int set_memory_valid(unsigned long addr, int numpages, int enable)
 {
 	if (enable)
@@ -362,7 +369,15 @@ int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
 	if (!can_set_direct_map())
 		return 0;
 
-	return set_memory_valid(addr, nr, valid);
+	/*
+	 * Execmem cache uses this function to reset permissions on linear mapping
+	 * when freeing unused cache block. On x86 it makes memory RW which is
+	 * desirable. On ARM64 set_memory_valid() just change valid bit which
+	 * leave direct mapping read-only so use set_memory_default instead.
+	 */
+
+	return valid ? set_memory_default(addr, nr) :
+		       set_memory_valid(addr, nr, false);
 }
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
