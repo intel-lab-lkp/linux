@@ -92,7 +92,7 @@ nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
 		 * provide a valid checksum here, so the skb isn't dropped.
 		 */
 		uh = udp_hdr(skb);
-		udplen = ntohs(uh->len) ?: skb->len - skb_transport_offset(skb);
+		udplen = udp_get_len(skb, uh, skb_transport_offset(skb));
 		csum = skb_checksum(skb, skb_transport_offset(skb),
 				    udplen, 0);
 
