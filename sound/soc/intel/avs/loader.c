@@ -630,15 +630,15 @@ static int avs_load_firmware(struct avs_dev *adev, bool purge)
 	if (ret)
 		goto reenable_gating;
 
-	mutex_lock(&adev->comp_list_mutex);
-	list_for_each_entry(acomp, &adev->comp_list, node) {
-		struct avs_tplg *tplg = acomp->tplg;
+	scoped_guard(mutex, &adev->comp_list_mutex) {
+		list_for_each_entry(acomp, &adev->comp_list, node) {
+			struct avs_tplg *tplg = acomp->tplg;
 
-		ret = avs_dsp_load_libraries(adev, tplg->libs, tplg->num_libs);
-		if (ret < 0)
-			break;
+			ret = avs_dsp_load_libraries(adev, tplg->libs, tplg->num_libs);
+			if (ret < 0)
+				break;
+		}
 	}
-	mutex_unlock(&adev->comp_list_mutex);
 
 reenable_gating:
 	avs_hda_l1sen_enable(adev, true);
