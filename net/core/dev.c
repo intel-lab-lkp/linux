@@ -6878,11 +6878,6 @@ static void __busy_poll_stop(struct napi_struct *napi, unsigned long timeout)
 		      HRTIMER_MODE_REL_PINNED);
 }
 
-enum {
-	NAPI_F_PREFER_BUSY_POLL	= 1,
-	NAPI_F_END_ON_RESCHED	= 2,
-};
-
 static void busy_poll_stop(struct napi_struct *napi, void *have_poll_lock,
 			   unsigned flags, u16 budget)
 {
@@ -6932,9 +6927,9 @@ static void busy_poll_stop(struct napi_struct *napi, void *have_poll_lock,
 	local_bh_enable();
 }
 
-static void __napi_busy_loop(unsigned int napi_id,
+void __napi_busy_loop(unsigned int napi_id,
 		      bool (*loop_end)(void *, unsigned long),
-		      void *loop_end_arg, unsigned flags, u16 budget)
+		      void *loop_end_arg, unsigned int flags, u16 budget)
 {
 	unsigned long start_time = loop_end ? busy_loop_current_time() : 0;
 	int (*napi_poll)(struct napi_struct *napi, int budget);
@@ -6950,6 +6945,9 @@ restart:
 	napi = napi_by_id(napi_id);
 	if (!napi)
 		return;
+
+	if ((flags & NAPI_F_TX_NAPI) && napi->tx_napi)
+		napi = napi->tx_napi;
 
 	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
 		preempt_disable();
@@ -7015,6 +7013,7 @@ count:
 	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
 		preempt_enable();
 }
+EXPORT_SYMBOL(__napi_busy_loop);
 
 void napi_busy_loop_rcu(unsigned int napi_id,
 			bool (*loop_end)(void *, unsigned long),
@@ -7027,18 +7026,6 @@ void napi_busy_loop_rcu(unsigned int napi_id,
 
 	__napi_busy_loop(napi_id, loop_end, loop_end_arg, flags, budget);
 }
-
-void napi_busy_loop(unsigned int napi_id,
-		    bool (*loop_end)(void *, unsigned long),
-		    void *loop_end_arg, bool prefer_busy_poll, u16 budget)
-{
-	unsigned flags = prefer_busy_poll ? NAPI_F_PREFER_BUSY_POLL : 0;
-
-	rcu_read_lock();
-	__napi_busy_loop(napi_id, loop_end, loop_end_arg, flags, budget);
-	rcu_read_unlock();
-}
-EXPORT_SYMBOL(napi_busy_loop);
 
 void napi_suspend_irqs(unsigned int napi_id)
 {
@@ -7579,6 +7566,7 @@ void netif_napi_add_weight_locked(struct net_device *dev,
 	napi->poll_owner = -1;
 #endif
 	napi->list_owner = -1;
+	napi->tx_napi = NULL;
 	set_bit(NAPI_STATE_SCHED, &napi->state);
 	set_bit(NAPI_STATE_NPSVC, &napi->state);
 	netif_napi_dev_list_add(dev, napi);

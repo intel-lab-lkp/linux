@@ -416,6 +416,7 @@ struct napi_struct {
 	int			napi_rmap_idx;
 	int			index;
 	struct napi_config	*config;
+	struct napi_struct	*tx_napi;
 };
 
 enum {

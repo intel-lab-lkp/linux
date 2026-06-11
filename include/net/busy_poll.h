@@ -33,6 +33,12 @@ static inline bool napi_id_valid(unsigned int napi_id)
 
 #ifdef CONFIG_NET_RX_BUSY_POLL
 
+enum {
+	NAPI_F_PREFER_BUSY_POLL	= 1,
+	NAPI_F_END_ON_RESCHED	= 2,
+	NAPI_F_TX_NAPI		= 4,
+};
+
 struct napi_struct;
 extern unsigned int sysctl_net_busy_read __read_mostly;
 extern unsigned int sysctl_net_busy_poll __read_mostly;
@@ -49,9 +55,9 @@ static inline bool sk_can_busy_loop(const struct sock *sk)
 
 bool sk_busy_loop_end(void *p, unsigned long start_time);
 
-void napi_busy_loop(unsigned int napi_id,
-		    bool (*loop_end)(void *, unsigned long),
-		    void *loop_end_arg, bool prefer_busy_poll, u16 budget);
+void __napi_busy_loop(unsigned int napi_id,
+		      bool (*loop_end)(void *, unsigned long),
+		      void *loop_end_arg, unsigned int flags, u16 budget);
 
 void napi_busy_loop_rcu(unsigned int napi_id,
 			bool (*loop_end)(void *, unsigned long),
@@ -59,6 +65,17 @@ void napi_busy_loop_rcu(unsigned int napi_id,
 
 void napi_suspend_irqs(unsigned int napi_id);
 void napi_resume_irqs(unsigned int napi_id);
+
+static inline void napi_busy_loop(unsigned int napi_id,
+				  bool (*loop_end)(void *, unsigned long),
+				  void *loop_end_arg, bool prefer_busy_poll, u16 budget)
+{
+	unsigned int flags = prefer_busy_poll ? NAPI_F_PREFER_BUSY_POLL : 0;
+
+	rcu_read_lock();
+	__napi_busy_loop(napi_id, loop_end, loop_end_arg, flags, budget);
+	rcu_read_unlock();
+}
 
 #else /* CONFIG_NET_RX_BUSY_POLL */
 static inline unsigned long net_busy_loop_on(void)
@@ -123,6 +140,24 @@ static inline void sk_busy_loop(struct sock *sk, int nonblock)
 		napi_busy_loop(napi_id, nonblock ? NULL : sk_busy_loop_end, sk,
 			       READ_ONCE(sk->sk_prefer_busy_poll),
 			       READ_ONCE(sk->sk_busy_poll_budget) ?: BUSY_POLL_BUDGET);
+#endif
+}
+
+static inline void sk_tx_busy_loop(struct sock *sk, int nonblock)
+{
+#ifdef CONFIG_NET_RX_BUSY_POLL
+	unsigned int napi_id = READ_ONCE(sk->sk_napi_id);
+	unsigned int flags = NAPI_F_TX_NAPI;
+
+	if (READ_ONCE(sk->sk_prefer_busy_poll))
+		flags |= NAPI_F_PREFER_BUSY_POLL;
+
+	if (napi_id_valid(napi_id)) {
+		rcu_read_lock();
+		__napi_busy_loop(napi_id, nonblock ? NULL : sk_busy_loop_end, sk, flags,
+				 READ_ONCE(sk->sk_busy_poll_budget) ?: BUSY_POLL_BUDGET);
+		rcu_read_unlock();
+	}
 #endif
 }
 
