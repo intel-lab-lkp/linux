@@ -68,8 +68,9 @@ struct Inner<T> {
 ///     devres::Devres,
 ///     io::{
 ///         Io,
-///         MmioOwned,
+///         Mmio,
 ///         MmioRaw,
+///         MmioBackend,
 ///         PhysAddr,
 ///         Region, //
 ///     },
@@ -104,12 +105,13 @@ struct Inner<T> {
 ///     }
 /// }
 ///
-/// impl<const SIZE: usize> Deref for IoMem<SIZE> {
-///    type Target = MmioOwned<SIZE>;
+/// impl<'a, const SIZE: usize> Io<'a> for &'a IoMem<SIZE> {
+///    type Backend = MmioBackend;
+///    type Target = Region<SIZE>;
 ///
-///    fn deref(&self) -> &Self::Target {
+///    fn as_view(self) -> Mmio<'a, Region<SIZE>> {
 ///         // SAFETY: The memory range stored in `self` has been properly mapped in `Self::new`.
-///         unsafe { MmioOwned::from_raw(&self.0) }
+///         unsafe { Mmio::from_raw(self.0) }
 ///    }
 /// }
 /// # fn no_run(dev: &Device<Bound>) -> Result<(), Error> {
