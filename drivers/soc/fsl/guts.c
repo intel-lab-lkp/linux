@@ -15,6 +15,30 @@
 #include <linux/fsl/guts.h>
 
 #define DCFG_CCSR	0
+#define DCFG_DCSR	1
+
+#define MAX_NUM_LANES	8
+#define MAX_NUM_SERDES	2
+
+#define LS1088A_RCWSR29_SRDS_PRTCL_S1_LNn(lane)	\
+	GENMASK(19 + 4 * (3 - lane), 16 + 4 * (3 - lane))
+#define LS1088A_RCWSR30_SRDS_PRTCL_S2_LNn(lane)	\
+	GENMASK(3 + 4 * (3 - lane), 4 * (3 - lane))
+
+#define LS1046A_RCWSR5_SRDS_PRTCL_S1(lane)	\
+	GENMASK(19 + 4 * (lane), 16 + 4 * (lane))
+#define SRDS_PRTCL_NONE					0
+#define SRDS_PRTCL_XFI					1
+#define SRDS_PRTCL_2500BASEX				2
+#define SRDS_PRTCL_100BASEX_SGMII			3
+#define SRDS_PRTCL_QSGMII				4
+#define SRDS_PRTCL_PCIE					5
+
+#define LS2088A_RCWSR30_SRDS_CLK_EN_SEL_XGMII_S1	BIT(14)
+#define LS2088A_RCWSR30_SRDS_CLK_SEL_XGMII_Ln_S1(lane)	BIT(6 + (7 - (lane)))
+#define LS2088A_RCWSR30_SRDS_CLK_SEL_MSK		GENMASK(13, 6)
+#define SRDS_CLK_SEL_XGMII				1
+#define SRDS_CLK_SEL_GMII				0
 
 struct fsl_soc_die_attr {
 	char	*die;
@@ -22,9 +46,19 @@ struct fsl_soc_die_attr {
 	u32	mask;
 };
 
+struct fsl_soc_serdes_rcw_override {
+	int offset;
+	int mask;
+	int val;
+};
+
 struct fsl_soc_data {
 	const char *sfp_compat;
 	u32 uid_offset;
+	int (*serdes_get_rcw_override)(int index, int lane,
+				       enum lynx_lane_mode lane_mode,
+				       struct fsl_soc_serdes_rcw_override *override);
+	void (*serdes_init_rcwcr)(int index);
 };
 
 enum qoriq_die {
@@ -138,9 +172,13 @@ static const struct fsl_soc_die_attr fsl_soc_die[] = {
 
 static struct fsl_soc_guts {
 	struct ccsr_guts __iomem *dcfg_ccsr;
+	struct ccsr_guts __iomem *dcfg_dcsr;
 	const struct fsl_soc_data *data;
 	bool little_endian;
 	u32 svr;
+	enum lynx_lane_mode lane_mode[MAX_NUM_SERDES][MAX_NUM_LANES];
+	bool rcwcr_init_done;
+	spinlock_t rcwcr_lock; /* serializes concurrent writes to the RCWCR */
 } soc;
 
 static unsigned int fsl_guts_read(const void __iomem *reg)
@@ -149,6 +187,28 @@ static unsigned int fsl_guts_read(const void __iomem *reg)
 		return ioread32(reg);
 
 	return ioread32be(reg);
+}
+
+static void fsl_guts_write(void __iomem *reg, u32 val)
+{
+	if (soc.little_endian)
+		iowrite32(val, reg);
+	else
+		iowrite32be(val, reg);
+}
+
+/* Some fields of the Reset Configuration Word (RCW) can be overridden at
+ * runtime by writing to the RCWCRn registers contained within the DCSR space
+ * of the Device Configuration (DCFG) block. The layout of the RCWCRn registers
+ * is identical with the read-only RCWSRn from the CCSR space.
+ */
+static void fsl_guts_rmw(int offset, u32 val, u32 mask)
+{
+	u32 tmp = fsl_guts_read(&soc.dcfg_ccsr->rcwsr[offset]);
+
+	tmp &= ~mask;
+	tmp |= val;
+	fsl_guts_write(&soc.dcfg_dcsr->rcwcr[offset], tmp);
 }
 
 static bool fsl_soc_die_match_one(u32 svr, const struct fsl_soc_die_attr *match)
@@ -166,6 +226,97 @@ static const struct fsl_soc_die_attr *fsl_soc_die_match(
 	}
 	return NULL;
 }
+
+static int
+fsl_guts_serdes_get_rcw_override(int serdes_idx, int lane,
+				 enum lynx_lane_mode lane_mode,
+				 struct fsl_soc_serdes_rcw_override *override)
+{
+	if ((!fsl_soc_die_match_one(soc.svr, &fsl_soc_die[DIE_LS1088A]) &&
+	     !fsl_soc_die_match_one(soc.svr, &fsl_soc_die[DIE_LS2088A]) &&
+	     !fsl_soc_die_match_one(soc.svr, &fsl_soc_die[DIE_LS1046A])) ||
+	    !soc.data || !soc.data->serdes_get_rcw_override) {
+		pr_debug("RCW override not implemented for SoC\n");
+		return -EINVAL;
+	}
+
+	if (!soc.dcfg_dcsr) {
+		pr_debug("Device tree does not define DCFG_DCSR region necessary for RCW override\n");
+		return -EINVAL;
+	}
+
+	return soc.data->serdes_get_rcw_override(serdes_idx, lane, lane_mode,
+						 override);
+}
+
+/**
+ * fsl_guts_lane_init() - Notify guts module of SerDes lane configuration
+ * @serdes_idx: zero-based SerDes block index
+ * @lane: zero-based lane index within SerDes
+ * @lane_mode: initial / boot time SerDes protocol for lane
+ *
+ * On the LS208xA SoC, the RCW override procedure needs to be aware of all link
+ * modes which are configured on a SerDes block.
+ */
+void fsl_guts_lane_init(int serdes_idx, int lane, enum lynx_lane_mode lane_mode)
+{
+	soc.lane_mode[serdes_idx - 1][lane] = lane_mode;
+}
+EXPORT_SYMBOL_NS_GPL(fsl_guts_lane_init, "FSL_GUTS");
+
+/**
+ * fsl_guts_lane_validate() - Validate that SerDes protocol is implemented and
+ *	supported on current SoC
+ * @serdes_idx: zero-based SerDes block index
+ * @lane: zero-based lane index within SerDes
+ * @lane_mode: requested SerDes protocol
+ *
+ * Should be called before actually requesting the RCW override procedure to be
+ * applied using %fsl_guts_lane_set_mode()
+ *
+ * Return: 0 if RCW override to protocol is possible, negative error otherwise
+ */
+int fsl_guts_lane_validate(int serdes_idx, int lane, enum lynx_lane_mode lane_mode)
+{
+	struct fsl_soc_serdes_rcw_override override;
+
+	return fsl_guts_serdes_get_rcw_override(serdes_idx, lane, lane_mode,
+						&override);
+}
+EXPORT_SYMBOL_NS_GPL(fsl_guts_lane_validate, "FSL_GUTS");
+
+/**
+ * fsl_guts_lane_set_mode() - apply RCW override procedure for SerDes lane
+ * @serdes_idx: zero-based SerDes block index
+ * @lane: zero-based lane index within SerDes
+ * @lane_mode: requested SerDes protocol
+ *
+ * Return: 0 on success, negative error otherwise
+ */
+int fsl_guts_lane_set_mode(int serdes_idx, int lane, enum lynx_lane_mode lane_mode)
+{
+	struct fsl_soc_serdes_rcw_override override;
+	int err;
+
+	err = fsl_guts_serdes_get_rcw_override(serdes_idx, lane, lane_mode,
+					       &override);
+	if (err)
+		return err;
+
+	spin_lock(&soc.rcwcr_lock);
+
+	if (soc.data->serdes_init_rcwcr)
+		soc.data->serdes_init_rcwcr(serdes_idx);
+
+	fsl_guts_rmw(override.offset, override.val << __bf_shf(override.mask),
+		     override.mask);
+	soc.lane_mode[serdes_idx - 1][lane] = lane_mode;
+
+	spin_unlock(&soc.rcwcr_lock);
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(fsl_guts_lane_set_mode, "FSL_GUTS");
 
 static u64 fsl_guts_get_soc_uid(const char *compat, unsigned int offset)
 {
@@ -192,6 +343,128 @@ static u64 fsl_guts_get_soc_uid(const char *compat, unsigned int offset)
 
 	return uid;
 }
+
+static int ls1088a_serdes_get_rcw_override(int index, int lane,
+					   enum lynx_lane_mode lane_mode,
+					   struct fsl_soc_serdes_rcw_override *override)
+{
+	/* The RCW override procedure has to write to different registers
+	 * depending on the SerDes block index.
+	 */
+	switch (index) {
+	case 1:
+		override->offset = 28;
+		override->mask = LS1088A_RCWSR29_SRDS_PRTCL_S1_LNn(lane);
+		break;
+	case 2:
+		override->offset = 29;
+		override->mask = LS1088A_RCWSR30_SRDS_PRTCL_S2_LNn(lane);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (lynx_lane_mode_uses_xgmii_mac(lane_mode))
+		override->val = SRDS_PRTCL_XFI;
+	else if (lynx_lane_mode_uses_gmii_mac(lane_mode))
+		override->val = SRDS_PRTCL_100BASEX_SGMII;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
+static int ls1046a_serdes_get_rcw_override(int index, int lane,
+					   enum lynx_lane_mode lane_mode,
+					   struct fsl_soc_serdes_rcw_override *override)
+{
+	/* The RCW override procedure has to write to different registers
+	 * depending on the SerDes block index.
+	 */
+	switch (index) {
+	case 1:
+		override->offset = 4;
+		override->mask = LS1046A_RCWSR5_SRDS_PRTCL_S1(lane);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (lynx_lane_mode_uses_xgmii_mac(lane_mode))
+		override->val = SRDS_PRTCL_XFI;
+	else if (lynx_lane_mode_uses_gmii_mac(lane_mode))
+		override->val = SRDS_PRTCL_100BASEX_SGMII;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
+static int ls2088a_serdes_get_rcw_override(int index, int lane,
+					   enum lynx_lane_mode lane_mode,
+					   struct fsl_soc_serdes_rcw_override *override)
+{
+	switch (index) {
+	case 1:
+		override->offset = 29;
+		override->mask = LS2088A_RCWSR30_SRDS_CLK_SEL_XGMII_Ln_S1(lane);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (lynx_lane_mode_uses_xgmii_mac(lane_mode))
+		override->val = SRDS_CLK_SEL_XGMII;
+	else if (lynx_lane_mode_uses_gmii_mac(lane_mode))
+		override->val = SRDS_CLK_SEL_GMII;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
+static void ls2088a_serdes_init_rcwcr(int serdes_idx)
+{
+	u32 reg;
+	int i;
+
+	if (serdes_idx != 1)
+		return;
+	if (soc.rcwcr_init_done)
+		return;
+
+	/* SRDS_CLK_EN_SEL_XGMII_S1: SerDes Clock Enable Select XGMII Serdes 1:
+	 * Enables to select GMII/XGMII clock according to
+	 * SRDS_CLK_SEL_XGMII_Ln_S1
+	 */
+	reg = LS2088A_RCWSR30_SRDS_CLK_EN_SEL_XGMII_S1;
+
+	/* We need to configure the initial state of all lanes for
+	 * the SerDes block #1
+	 */
+	for (i = 0; i < MAX_NUM_LANES; i++)
+		if (lynx_lane_mode_uses_xgmii_mac(soc.lane_mode[serdes_idx - 1][i]))
+			reg |= LS2088A_RCWSR30_SRDS_CLK_SEL_XGMII_Ln_S1(i);
+
+	fsl_guts_rmw(29, reg,
+		     LS2088A_RCWSR30_SRDS_CLK_EN_SEL_XGMII_S1 |
+		     LS2088A_RCWSR30_SRDS_CLK_SEL_MSK);
+
+	soc.rcwcr_init_done = true;
+}
+
+static const struct fsl_soc_data ls1088a_data = {
+	.serdes_get_rcw_override = ls1088a_serdes_get_rcw_override,
+};
+
+static const struct fsl_soc_data ls1046a_data = {
+	.serdes_get_rcw_override = ls1046a_serdes_get_rcw_override,
+};
+
+static const struct fsl_soc_data ls2088a_data = {
+	.serdes_get_rcw_override = ls2088a_serdes_get_rcw_override,
+	.serdes_init_rcwcr = ls2088a_serdes_init_rcwcr,
+};
 
 static const struct fsl_soc_data ls1028a_data = {
 	.sfp_compat = "fsl,ls1028a-sfp",
@@ -221,10 +494,10 @@ static const struct of_device_id fsl_guts_of_match[] = {
 	{ .compatible = "fsl,mpc8572-guts", },
 	{ .compatible = "fsl,ls1021a-dcfg", },
 	{ .compatible = "fsl,ls1043a-dcfg", },
-	{ .compatible = "fsl,ls2080a-dcfg", },
-	{ .compatible = "fsl,ls1088a-dcfg", },
+	{ .compatible = "fsl,ls2080a-dcfg", .data = &ls2088a_data},
+	{ .compatible = "fsl,ls1088a-dcfg", .data = &ls1088a_data},
 	{ .compatible = "fsl,ls1012a-dcfg", },
-	{ .compatible = "fsl,ls1046a-dcfg", },
+	{ .compatible = "fsl,ls1046a-dcfg", .data = &ls1046a_data},
 	{ .compatible = "fsl,lx2160a-dcfg", },
 	{ .compatible = "fsl,ls1028a-dcfg", .data = &ls1028a_data},
 	{}
@@ -250,6 +523,8 @@ static int __init fsl_guts_init(void)
 		of_node_put(np);
 		return -ENOMEM;
 	}
+	/* DCFG_DCSR is optional */
+	soc.dcfg_dcsr = of_iomap(np, DCFG_DCSR);
 
 	soc.little_endian = of_property_read_bool(np, "little-endian");
 	soc.svr = fsl_guts_read(&soc.dcfg_ccsr->svr);
@@ -296,6 +571,8 @@ static int __init fsl_guts_init(void)
 		goto err;
 	}
 
+	spin_lock_init(&soc.rcwcr_lock);
+
 	pr_info("Machine: %s\n", soc_dev_attr->machine);
 	pr_info("SoC family: %s\n", soc_dev_attr->family);
 	pr_info("SoC ID: %s, Revision: %s\n",
@@ -305,7 +582,8 @@ static int __init fsl_guts_init(void)
 
 err_nomem:
 	ret = -ENOMEM;
-
+	if (soc.dcfg_dcsr)
+		iounmap(soc.dcfg_dcsr);
 	iounmap(soc.dcfg_ccsr);
 err:
 	kfree(soc_dev_attr->family);
