@@ -790,7 +790,6 @@ int dp_altmode_probe(struct typec_altmode *alt)
 	dp->alt = alt;
 
 	alt->desc = "DisplayPort";
-	typec_altmode_set_ops(alt, &dp_altmode_ops);
 
 	if (plug) {
 		plug->desc = "Displayport";
@@ -811,6 +810,10 @@ int dp_altmode_probe(struct typec_altmode *alt)
 	if (plug)
 		typec_altmode_set_drvdata(plug, dp);
 
+	if ((alt->vdo & DP_CAP_RECEPTACLE) && typec_cable_altmode_unsupported(alt))
+		return 0;
+
+	typec_altmode_set_ops(alt, &dp_altmode_ops);
 	if (!alt->mode_selection) {
 		dp->state = plug ? DP_STATE_ENTER_PRIME : DP_STATE_ENTER;
 		schedule_work(&dp->work);
