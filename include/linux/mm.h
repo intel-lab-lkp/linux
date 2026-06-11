@@ -4041,10 +4041,90 @@ struct vm_area_struct *vma_interval_tree_iter_first(struct rb_root_cached *root,
 struct vm_area_struct *vma_interval_tree_iter_next(struct vm_area_struct *node,
 				unsigned long start, unsigned long last);
 
+#ifdef CONFIG_SPLIT_I_MMAP
+extern int split_tree_num;
+
+static inline int smallest_tree_idx(struct file *file)
+{
+	struct address_space *mapping = file->f_mapping;
+	int tmp = INT_MAX, count;
+	int i, j = 0;
+
+	/*
+	 * Since a not 100% accurate value is still okay,
+	 * we do not need any lock here.
+	 */
+	for (i = 0; i < split_tree_num; i++) {
+		count = atomic_read(&mapping->i_mmap[i]->vma_count);
+		if (count < tmp) {
+			j = i;
+			tmp = count;
+			if (!tmp)
+				break;
+		}
+	}
+	return j;
+}
+
+static inline void vma_set_tree_idx(struct vm_area_struct *vma)
+{
+#ifdef CONFIG_NUMA
+	vma->tree_idx = numa_node_id();
+#else
+	vma->tree_idx = smallest_tree_idx(vma->vm_file);
+#endif
+}
+
+static inline struct rb_root_cached *get_rb_root(struct vm_area_struct *vma,
+					struct address_space *mapping)
+{
+	return &mapping->i_mmap[vma->tree_idx]->root;
+}
+
+/* Find the first valid VMA in the sibling trees */
+static inline struct vm_area_struct *first_vma(struct i_mmap_tree ***__r,
+				unsigned long start, unsigned long last)
+{
+	struct vm_area_struct *vma = NULL;
+	struct i_mmap_tree **tree = *__r;
+	struct rb_root_cached *root;
+
+	while (*tree) {
+		root = &(*tree)->root;
+		tree++;
+		vma = vma_interval_tree_iter_first(root, start, last);
+		if (vma)
+			break;
+	}
+
+	/* Save for the next loop */
+	*__r = tree;
+	return vma;
+}
+
+/*
+ * Please use get_i_mmap_root() to get the @root.
+ * @_tmp is referenced to avoid unused variable warning.
+ */
+#define vma_interval_tree_foreach(vma, root, start, last)		\
+	for (struct i_mmap_tree **_r = (struct i_mmap_tree **)(root),	\
+		**_tmp = (vma = first_vma(&_r, start, last)) ? _r : NULL;\
+	     ((_tmp && vma) || (vma = first_vma(&_r, start, last)));	\
+		vma = vma_interval_tree_iter_next(vma, start, last))
+#else
 /* Please use get_i_mmap_root() to get the @root */
 #define vma_interval_tree_foreach(vma, root, start, last)		\
 	for (vma = vma_interval_tree_iter_first(root, start, last);	\
 	     vma; vma = vma_interval_tree_iter_next(vma, start, last))
+
+static inline void vma_set_tree_idx(struct vm_area_struct *vma) { }
+
+static inline struct rb_root_cached *get_rb_root(struct vm_area_struct *vma,
+					struct address_space *mapping)
+{
+	return &mapping->i_mmap;
+}
+#endif
 
 void anon_vma_interval_tree_insert(struct anon_vma_chain *node,
 				   struct rb_root_cached *root);

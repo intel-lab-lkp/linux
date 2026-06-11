@@ -911,6 +911,23 @@ static struct inode *hugetlbfs_get_root(struct super_block *sb,
  */
 static struct lock_class_key hugetlbfs_i_mmap_rwsem_key;
 
+#ifdef CONFIG_SPLIT_I_MMAP
+static void hugetlbfs_lockdep_set_class(struct address_space *mapping)
+{
+	int i;
+
+	for (i = 0; i < split_tree_num; i++) {
+		lockdep_set_class(&mapping->i_mmap[i].rwsem,
+				&hugetlbfs_i_mmap_rwsem_key);
+	}
+}
+#else
+static void hugetlbfs_lockdep_set_class(struct address_space *mapping)
+{
+	lockdep_set_class(&mapping->i_mmap_rwsem, &hugetlbfs_i_mmap_rwsem_key);
+}
+#endif
+
 static struct inode *hugetlbfs_get_inode(struct super_block *sb,
 					struct mnt_idmap *idmap,
 					struct inode *dir,
@@ -935,8 +952,7 @@ static struct inode *hugetlbfs_get_inode(struct super_block *sb,
 
 		inode->i_ino = get_next_ino();
 		inode_init_owner(idmap, inode, dir, mode);
-		lockdep_set_class(&inode->i_mapping->i_mmap_rwsem,
-				&hugetlbfs_i_mmap_rwsem_key);
+		hugetlbfs_lockdep_set_class(inode->i_mapping);
 		inode->i_mapping->a_ops = &hugetlbfs_aops;
 		simple_inode_init_ts(inode);
 		info->resv_map = resv_map;

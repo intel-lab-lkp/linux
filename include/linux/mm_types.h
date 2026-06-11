@@ -1072,6 +1072,9 @@ struct vm_area_struct {
 #ifdef __HAVE_PFNMAP_TRACKING
 	struct pfnmap_track_ctx *pfnmap_track_ctx;
 #endif
+#ifdef CONFIG_SPLIT_I_MMAP
+	int tree_idx;			/* The sibling tree index for the VMA */
+#endif
 } __randomize_layout;
 
 /* Clears all bits in the VMA flags bitmap, non-atomically. */

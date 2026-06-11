@@ -234,22 +234,23 @@ static void __vma_link_file(struct vm_area_struct *vma,
 		mapping_allow_writable(mapping);
 
 	flush_dcache_mmap_lock(mapping);
-	vma_interval_tree_insert(vma, get_i_mmap_root(mapping));
+	vma_interval_tree_insert(vma, get_rb_root(vma, mapping));
+	inc_mapping_vma(mapping, vma);
 	flush_dcache_mmap_unlock(mapping);
 }
 
-/*
- * Requires inode->i_mapping->i_mmap_rwsem
- */
 static void __remove_shared_vm_struct(struct vm_area_struct *vma,
 				      struct address_space *mapping)
 {
+	i_mmap_tree_lock_write(mapping, vma);
 	if (vma_is_shared_maywrite(vma))
 		mapping_unmap_writable(mapping);
 
 	flush_dcache_mmap_lock(mapping);
-	vma_interval_tree_remove(vma, get_i_mmap_root(mapping));
+	vma_interval_tree_remove(vma, get_rb_root(vma, mapping));
+	dec_mapping_vma(mapping, vma);
 	flush_dcache_mmap_unlock(mapping);
+	i_mmap_tree_unlock_write(mapping, vma);
 }
 
 /*
@@ -297,8 +298,9 @@ static void vma_prepare(struct vma_prepare *vp)
 			uprobe_munmap(vp->adj_next, vp->adj_next->vm_start,
 				      vp->adj_next->vm_end);
 
-		i_mmap_lock_write(vp->mapping);
+		i_mmap_lock_write_prepare(vp->mapping);
 		if (vp->insert && vp->insert->vm_file) {
+			i_mmap_tree_lock_write(vp->mapping, vp->insert);
 			/*
 			 * Put into interval tree now, so instantiated pages
 			 * are visible to arm/parisc __flush_dcache_page
@@ -307,6 +309,7 @@ static void vma_prepare(struct vma_prepare *vp)
 			 */
 			__vma_link_file(vp->insert,
 					vp->insert->vm_file->f_mapping);
+			i_mmap_tree_unlock_write(vp->mapping, vp->insert);
 		}
 	}
 
@@ -318,12 +321,17 @@ static void vma_prepare(struct vma_prepare *vp)
 	}
 
 	if (vp->file) {
+		i_mmap_tree_lock_write(vp->mapping, vp->vma);
 		flush_dcache_mmap_lock(vp->mapping);
 		vma_interval_tree_remove(vp->vma,
-					get_i_mmap_root(vp->mapping));
-		if (vp->adj_next)
+					get_rb_root(vp->vma, vp->mapping));
+		dec_mapping_vma(vp->mapping, vp->vma);
+		if (vp->adj_next) {
+			i_mmap_tree_lock_write(vp->mapping, vp->adj_next);
 			vma_interval_tree_remove(vp->adj_next,
-					get_i_mmap_root(vp->mapping));
+					get_rb_root(vp->adj_next, vp->mapping));
+			dec_mapping_vma(vp->mapping, vp->adj_next);
+		}
 	}
 
 }
@@ -340,12 +348,17 @@ static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 			 struct mm_struct *mm)
 {
 	if (vp->file) {
-		if (vp->adj_next)
+		if (vp->adj_next) {
 			vma_interval_tree_insert(vp->adj_next,
-					get_i_mmap_root(vp->mapping));
+					get_rb_root(vp->adj_next, vp->mapping));
+			inc_mapping_vma(vp->mapping, vp->adj_next);
+			i_mmap_tree_unlock_write(vp->mapping, vp->adj_next);
+		}
 		vma_interval_tree_insert(vp->vma,
-					get_i_mmap_root(vp->mapping));
+					get_rb_root(vp->vma, vp->mapping));
+		inc_mapping_vma(vp->mapping, vp->vma);
 		flush_dcache_mmap_unlock(vp->mapping);
+		i_mmap_tree_unlock_write(vp->mapping, vp->vma);
 	}
 
 	if (vp->remove && vp->file) {
@@ -370,7 +383,7 @@ static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 	}
 
 	if (vp->file) {
-		i_mmap_unlock_write(vp->mapping);
+		i_mmap_unlock_write_complete(vp->mapping);
 
 		if (!vp->skip_vma_uprobe) {
 			uprobe_mmap(vp->vma);
@@ -1799,12 +1812,12 @@ static void unlink_file_vma_batch_process(struct unlink_vma_file_batch *vb)
 	int i;
 
 	mapping = vb->vmas[0]->vm_file->f_mapping;
-	i_mmap_lock_write(mapping);
+	i_mmap_lock_write_prepare(mapping);
 	for (i = 0; i < vb->count; i++) {
 		VM_WARN_ON_ONCE(vb->vmas[i]->vm_file->f_mapping != mapping);
 		__remove_shared_vm_struct(vb->vmas[i], mapping);
 	}
-	i_mmap_unlock_write(mapping);
+	i_mmap_unlock_write_complete(mapping);
 
 	unlink_file_vma_batch_init(vb);
 }
@@ -1836,10 +1849,13 @@ static void vma_link_file(struct vm_area_struct *vma, bool hold_rmap_lock)
 
 	if (file) {
 		mapping = file->f_mapping;
-		i_mmap_lock_write(mapping);
+		i_mmap_lock_write_prepare(mapping);
+		i_mmap_tree_lock_write(mapping, vma);
 		__vma_link_file(vma, mapping);
-		if (!hold_rmap_lock)
-			i_mmap_unlock_write(mapping);
+		if (!hold_rmap_lock) {
+			i_mmap_tree_unlock_write(mapping, vma);
+			i_mmap_unlock_write_complete(mapping);
+		}
 	}
 }
 
@@ -2164,6 +2180,23 @@ static void vm_lock_anon_vma(struct mm_struct *mm, struct anon_vma *anon_vma)
 	}
 }
 
+#ifdef CONFIG_SPLIT_I_MMAP
+static inline void i_mmap_nest_lock(struct address_space *mapping,
+				struct rw_semaphore *lock)
+{
+	int i;
+
+	for (i = 0; i < split_tree_num; i++)
+		down_write_nest_lock(&mapping->i_mmap[i]->rwsem, lock);
+}
+#else
+static inline void i_mmap_nest_lock(struct address_space *mapping,
+				struct rw_semaphore *lock)
+{
+	down_write_nest_lock(&mapping->i_mmap_rwsem, lock);
+}
+#endif
+
 static void vm_lock_mapping(struct mm_struct *mm, struct address_space *mapping)
 {
 	if (!test_bit(AS_MM_ALL_LOCKS, &mapping->flags)) {
@@ -2178,7 +2211,7 @@ static void vm_lock_mapping(struct mm_struct *mm, struct address_space *mapping)
 		 */
 		if (test_and_set_bit(AS_MM_ALL_LOCKS, &mapping->flags))
 			BUG();
-		down_write_nest_lock(&mapping->i_mmap_rwsem, &mm->mmap_lock);
+		i_mmap_nest_lock(mapping, &mm->mmap_lock);
 	}
 }
 
@@ -2489,6 +2522,7 @@ static int __mmap_new_file_vma(struct mmap_state *map,
 	int error;
 
 	vma->vm_file = map->file;
+	vma_set_tree_idx(vma);
 	if (!map->file_doesnt_need_get)
 		get_file(map->file);
 

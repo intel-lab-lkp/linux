@@ -1888,7 +1888,8 @@ static inline void maybe_rmap_unlock_action(struct vm_area_struct *vma,
 
 	VM_WARN_ON_ONCE(vma_is_anonymous(vma));
 	file = vma->vm_file;
-	i_mmap_unlock_write(file->f_mapping);
+	i_mmap_tree_unlock_write(file->f_mapping, vma);
+	i_mmap_unlock_write_complete(file->f_mapping);
 	action->hide_from_rmap_until_complete = false;
 }
 

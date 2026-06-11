@@ -9,6 +9,14 @@ menu "File systems"
 config DCACHE_WORD_ACCESS
        bool
 
+config SPLIT_I_MMAP
+	bool "Split the file's i_mmap to several trees"
+	default n
+	help
+	  Split the file's i_mmap to several trees, each tree has a separate
+	  lock. This will reduce the lock contention of file's i_mmap tree,
+	  but it will cost more memory for per inode.
+
 config VALIDATE_FS_PARSER
 	bool "Validate filesystem parameter description"
 	help

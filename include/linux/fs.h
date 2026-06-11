@@ -450,6 +450,25 @@ struct mapping_metadata_bhs {
 	struct list_head list;	/* The list of bhs (b_assoc_buffers) */
 };
 
+#ifdef CONFIG_SPLIT_I_MMAP
+/*
+ * struct i_mmap_tree - A single sibling tree of the file's split i_mmap.
+ * @root: The red/black interval tree root.
+ * @rwsem: Protects insert/remove operations on this sibling tree.
+ * @vma_count: Number of VMAs in this sibling tree.
+ *
+ * When CONFIG_SPLIT_I_MMAP is enabled, the file's single i_mmap tree is
+ * split into split_tree_num sibling trees, each with its own lock. This
+ * reduces lock contention by allowing concurrent VMA insert/remove
+ * operations on different sibling trees.
+ */
+struct i_mmap_tree {
+	struct rb_root_cached	root;
+	struct rw_semaphore	rwsem;
+	atomic_t		vma_count;
+};
+#endif
+
 /**
  * struct address_space - Contents of a cacheable, mappable object.
  * @host: Owner, either the inode or the block_device.
@@ -461,8 +480,13 @@ struct mapping_metadata_bhs {
  * @gfp_mask: Memory allocation flags to use for allocating pages.
  * @i_mmap_writable: Number of VM_SHARED, VM_MAYWRITE mappings.
  * @nr_thps: Number of THPs in the pagecache (non-shmem only).
- * @i_mmap: Tree of private and shared mappings.
- * @i_mmap_rwsem: Protects @i_mmap and @i_mmap_writable.
+ * @i_mmap: Tree of private and shared mappings. When CONFIG_SPLIT_I_MMAP
+ *   is enabled, this is an array of split_tree_num struct i_mmap_tree
+ *   pointers (plus a NULL terminator).
+ * @vma_count: Total number of VMAs across all sibling trees (only when
+ *   CONFIG_SPLIT_I_MMAP is enabled). Used by mapping_mapped().
+ * @i_mmap_rwsem: Protects @i_mmap and @i_mmap_writable (only when
+ *   CONFIG_SPLIT_I_MMAP is disabled; otherwise per-tree rwsem is used).
  * @nrpages: Number of page entries, protected by the i_pages lock.
  * @writeback_index: Writeback starts here.
  * @a_ops: Methods.
@@ -480,14 +504,19 @@ struct address_space {
 	/* number of thp, only for non-shmem files */
 	atomic_t		nr_thps;
 #endif
+#ifdef CONFIG_SPLIT_I_MMAP
+	struct i_mmap_tree	**i_mmap;
+	atomic_t		vma_count;
+#else
 	struct rb_root_cached	i_mmap;
+	struct rw_semaphore	i_mmap_rwsem;
+#endif
 	unsigned long		nrpages;
 	pgoff_t			writeback_index;
 	const struct address_space_operations *a_ops;
 	unsigned long		flags;
 	errseq_t		wb_err;
 	spinlock_t		i_private_lock;
-	struct rw_semaphore	i_mmap_rwsem;
 } __attribute__((aligned(sizeof(long)))) __randomize_layout;
 	/*
 	 * On most architectures that alignment is already the case; but
@@ -507,6 +536,133 @@ static inline bool mapping_tagged(const struct address_space *mapping, xa_mark_t
 {
 	return xa_marked(&mapping->i_pages, tag);
 }
+
+#ifdef CONFIG_SPLIT_I_MMAP
+static inline int mapping_mapped(const struct address_space *mapping)
+{
+	return	atomic_read(&mapping->vma_count);
+}
+
+static inline void inc_mapping_vma(struct address_space *mapping,
+				struct vm_area_struct *vma)
+{
+	struct i_mmap_tree *tree = mapping->i_mmap[vma->tree_idx];
+
+	atomic_inc(&tree->vma_count);
+	atomic_inc(&mapping->vma_count);
+}
+
+static inline void dec_mapping_vma(struct address_space *mapping,
+				struct vm_area_struct *vma)
+{
+	struct i_mmap_tree *tree = mapping->i_mmap[vma->tree_idx];
+
+	atomic_dec(&tree->vma_count);
+	atomic_dec(&mapping->vma_count);
+}
+
+static inline struct rb_root_cached *get_i_mmap_root(struct address_space *mapping)
+{
+	return (struct rb_root_cached *)mapping->i_mmap;
+}
+
+static inline void i_mmap_tree_lock_write(struct address_space *mapping,
+					struct vm_area_struct *vma)
+{
+	struct i_mmap_tree *tree = mapping->i_mmap[vma->tree_idx];
+
+	down_write(&tree->rwsem);
+}
+
+static inline void i_mmap_tree_unlock_write(struct address_space *mapping,
+					struct vm_area_struct *vma)
+{
+	struct i_mmap_tree *tree = mapping->i_mmap[vma->tree_idx];
+
+	up_write(&tree->rwsem);
+}
+
+#define i_mmap_lock_write_prepare(mapping)
+#define i_mmap_unlock_write_complete(mapping)
+
+extern int split_tree_num;
+static inline void i_mmap_lock_write(struct address_space *mapping)
+{
+	int i;
+
+	for (i = 0; i < split_tree_num; i++)
+		down_write(&mapping->i_mmap[i]->rwsem);
+}
+
+static inline int i_mmap_trylock_write(struct address_space *mapping)
+{
+	int i;
+
+	for (i = 0; i < split_tree_num; i++) {
+		if (!down_write_trylock(&mapping->i_mmap[i]->rwsem)) {
+			while (i--)
+				up_write(&mapping->i_mmap[i]->rwsem);
+			return 0;
+		}
+	}
+	return 1;
+}
+
+static inline void i_mmap_unlock_write(struct address_space *mapping)
+{
+	int i;
+
+	for (i = 0; i < split_tree_num; i++)
+		up_write(&mapping->i_mmap[i]->rwsem);
+}
+
+static inline int i_mmap_trylock_read(struct address_space *mapping)
+{
+	int i;
+
+	for (i = 0; i < split_tree_num; i++) {
+		if (!down_read_trylock(&mapping->i_mmap[i]->rwsem)) {
+			while (i--)
+				up_read(&mapping->i_mmap[i]->rwsem);
+			return 0;
+		}
+	}
+	return 1;
+}
+
+static inline void i_mmap_lock_read(struct address_space *mapping)
+{
+	int i;
+
+	for (i = 0; i < split_tree_num; i++)
+		down_read(&mapping->i_mmap[i]->rwsem);
+}
+
+static inline void i_mmap_unlock_read(struct address_space *mapping)
+{
+	int i;
+
+	for (i = 0; i < split_tree_num; i++)
+		up_read(&mapping->i_mmap[i]->rwsem);
+}
+
+static inline void i_mmap_assert_locked(struct address_space *mapping)
+{
+	int i;
+
+	for (i = 0; i < split_tree_num; i++)
+		lockdep_assert_held(&mapping->i_mmap[i]->rwsem);
+}
+
+static inline void i_mmap_assert_write_locked(struct address_space *mapping)
+{
+	int i;
+
+	for (i = 0; i < split_tree_num; i++)
+		lockdep_assert_held_write(&mapping->i_mmap[i]->rwsem);
+}
+
+#else
 
 static inline void i_mmap_lock_write(struct address_space *mapping)
 {
@@ -560,6 +716,18 @@ static inline struct rb_root_cached *get_i_mmap_root(struct address_space *mappi
 {
 	return &mapping->i_mmap;
 }
+
+static inline void inc_mapping_vma(struct address_space *mapping,
+				struct vm_area_struct *vma) { }
+static inline void dec_mapping_vma(struct address_space *mapping,
+				struct vm_area_struct *vma) { }
+
+#define i_mmap_lock_write_prepare(mapping)	i_mmap_lock_write(mapping)
+#define i_mmap_unlock_write_complete(mapping)	i_mmap_unlock_write(mapping)
+#define i_mmap_tree_lock_write(mapping, vma)
+#define i_mmap_tree_unlock_write(mapping, vma)
+
+#endif
 
 /*
  * Might pages of this file have been modified in userspace?

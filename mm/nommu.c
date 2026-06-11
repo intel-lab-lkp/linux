@@ -567,11 +567,16 @@ static void setup_vma_to_mm(struct vm_area_struct *vma, struct mm_struct *mm)
 	if (vma->vm_file) {
 		struct address_space *mapping = vma->vm_file->f_mapping;
 
-		i_mmap_lock_write(mapping);
+		i_mmap_lock_write_prepare(mapping);
+		i_mmap_tree_lock_write(mapping, vma);
+
 		flush_dcache_mmap_lock(mapping);
-		vma_interval_tree_insert(vma, get_i_mmap_root(mapping));
+		vma_interval_tree_insert(vma, get_rb_root(vma, mapping));
+		inc_mapping_vma(mapping, vma);
 		flush_dcache_mmap_unlock(mapping);
-		i_mmap_unlock_write(mapping);
+
+		i_mmap_tree_unlock_write(mapping, vma);
+		i_mmap_unlock_write_complete(mapping);
 	}
 }
 
@@ -583,11 +588,16 @@ static void cleanup_vma_from_mm(struct vm_area_struct *vma)
 		struct address_space *mapping;
 		mapping = vma->vm_file->f_mapping;
 
-		i_mmap_lock_write(mapping);
+		i_mmap_lock_write_prepare(mapping);
+		i_mmap_tree_lock_write(mapping, vma);
+
 		flush_dcache_mmap_lock(mapping);
-		vma_interval_tree_remove(vma, get_i_mmap_root(mapping));
+		vma_interval_tree_remove(vma, get_rb_root(vma, mapping));
+		dec_mapping_vma(mapping, vma);
 		flush_dcache_mmap_unlock(mapping);
-		i_mmap_unlock_write(mapping);
+
+		i_mmap_tree_unlock_write(mapping, vma);
+		i_mmap_unlock_write_complete(mapping);
 	}
 }
 
@@ -1063,6 +1073,7 @@ unsigned long do_mmap(struct file *file,
 	if (file) {
 		region->vm_file = get_file(file);
 		vma->vm_file = get_file(file);
+		vma_set_tree_idx(vma);
 	}
 
 	down_write(&nommu_region_sem);

@@ -210,6 +210,70 @@ static int no_open(struct inode *inode, struct file *file)
 	return -ENXIO;
 }
 
+#ifdef CONFIG_SPLIT_I_MMAP
+int split_tree_num;
+static int split_tree_align __maybe_unused = 32;
+
+static void __init init_split_tree_num(void)
+{
+#ifdef CONFIG_NUMA
+	split_tree_num = nr_node_ids;
+#else
+	split_tree_num = ALIGN(nr_cpu_ids, split_tree_align);
+#endif
+}
+
+static void free_mapping_i_mmap(struct address_space *mapping)
+{
+	int i;
+
+	if (!mapping->i_mmap)
+		return;
+
+	for (i = 0; i < split_tree_num; i++)
+		kfree(mapping->i_mmap[i]);
+
+	kfree(mapping->i_mmap);
+	mapping->i_mmap = NULL;
+}
+
+static int init_mapping_i_mmap(struct address_space *mapping, gfp_t gfp)
+{
+	struct i_mmap_tree *tree;
+	int i;
+
+	/* The extra one is used as terminator in vma_interval_tree_foreach() */
+	mapping->i_mmap = kzalloc(sizeof(tree) * (split_tree_num + 1), gfp);
+	if (!mapping->i_mmap)
+		return -ENOMEM;
+
+	for (i = 0; i < split_tree_num; i++) {
+		tree = kzalloc_node(sizeof(*tree), gfp, i);
+		if (!tree)
+			goto nomem;
+
+		tree->root = RB_ROOT_CACHED;
+		init_rwsem(&tree->rwsem);
+
+		mapping->i_mmap[i] = tree;
+	}
+	return 0;
+nomem:
+	free_mapping_i_mmap(mapping);
+	return -ENOMEM;
+}
+#else
+static int init_mapping_i_mmap(struct address_space *mapping, gfp_t gfp)
+{
+	mapping->i_mmap = RB_ROOT_CACHED;
+	init_rwsem(&mapping->i_mmap_rwsem);
+	return 0;
+}
+
+static void free_mapping_i_mmap(struct address_space *mapping) { }
+static void __init init_split_tree_num(void) {}
+#endif
+
 /**
  * inode_init_always_gfp - perform inode structure initialisation
  * @sb: superblock inode belongs to
@@ -298,8 +362,13 @@ int inode_init_always_gfp(struct super_block *sb, struct inode *inode, gfp_t gfp
 #endif
 	inode->i_flctx = NULL;
 
-	if (unlikely(security_inode_alloc(inode, gfp)))
+	if (init_mapping_i_mmap(mapping, gfp))
 		return -ENOMEM;
+
+	if (unlikely(security_inode_alloc(inode, gfp))) {
+		free_mapping_i_mmap(mapping);
+		return -ENOMEM;
+	}
 
 	this_cpu_inc(nr_inodes);
 
@@ -376,6 +445,7 @@ void __destroy_inode(struct inode *inode)
 	if (inode->i_default_acl && !is_uncached_acl(inode->i_default_acl))
 		posix_acl_release(inode->i_default_acl);
 #endif
+	free_mapping_i_mmap(&inode->i_data);
 	this_cpu_dec(nr_inodes);
 }
 EXPORT_SYMBOL(__destroy_inode);
@@ -476,9 +546,7 @@ EXPORT_SYMBOL(inc_nlink);
 static void __address_space_init_once(struct address_space *mapping)
 {
 	xa_init_flags(&mapping->i_pages, XA_FLAGS_LOCK_IRQ | XA_FLAGS_ACCOUNT);
-	init_rwsem(&mapping->i_mmap_rwsem);
 	spin_lock_init(&mapping->i_private_lock);
-	mapping->i_mmap = RB_ROOT_CACHED;
 }
 
 void address_space_init_once(struct address_space *mapping)
@@ -2681,6 +2749,7 @@ void __init inode_init(void)
 					&i_hash_mask,
 					0,
 					0);
+	init_split_tree_num();
 }
 
 void init_special_inode(struct inode *inode, umode_t mode, dev_t rdev)
