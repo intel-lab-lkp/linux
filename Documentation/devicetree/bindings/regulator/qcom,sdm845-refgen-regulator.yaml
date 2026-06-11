@@ -16,6 +16,20 @@ description:
 allOf:
   - $ref: regulator.yaml#
 
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: qcom,ipq9650-refgen-regulator
+    then:
+      required:
+        - clocks
+        - clock-names
+    else:
+      properties:
+        clocks: false
+        clock-names: false
+
 properties:
   compatible:
     oneOf:
@@ -29,6 +43,7 @@ properties:
 
       - items:
           - enum:
+              - qcom,ipq9650-refgen-regulator
               - qcom,qcs8300-refgen-regulator
               - qcom,sa8775p-refgen-regulator
               - qcom,sc7280-refgen-regulator
@@ -44,6 +59,16 @@ properties:
 
   reg:
     maxItems: 1
+
+  clocks:
+    items:
+      - description: Core reference clock
+      - description: AHB interface clock
+
+  clock-names:
+    items:
+      - const: core
+      - const: hclk
 
 required:
   - compatible
