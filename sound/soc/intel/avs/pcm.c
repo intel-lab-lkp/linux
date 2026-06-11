@@ -864,7 +864,6 @@ static int avs_dai_fe_trigger(struct snd_pcm_substream *substream, int cmd, stru
 	struct avs_dma_data *data;
 	struct hdac_ext_stream *host_stream;
 	struct hdac_bus *bus;
-	unsigned long flags;
 	int ret = 0;
 
 	data = snd_soc_dai_get_dma_data(dai, substream);
@@ -878,9 +877,8 @@ static int avs_dai_fe_trigger(struct snd_pcm_substream *substream, int cmd, stru
 		fallthrough;
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		spin_lock_irqsave(&bus->reg_lock, flags);
-		avs_hda_stream_start(bus, host_stream);
-		spin_unlock_irqrestore(&bus->reg_lock, flags);
+		scoped_guard(spinlock_irqsave, &bus->reg_lock)
+			avs_hda_stream_start(bus, host_stream);
 
 		/* Timeout on DRSM poll shall not stop the resume so ignore the result. */
 		if (cmd == SNDRV_PCM_TRIGGER_RESUME)
@@ -908,9 +906,8 @@ static int avs_dai_fe_trigger(struct snd_pcm_substream *substream, int cmd, stru
 		if (ret < 0)
 			dev_err(dai->dev, "pause FE path failed: %d\n", ret);
 
-		spin_lock_irqsave(&bus->reg_lock, flags);
-		avs_hda_stream_stop(bus, host_stream);
-		spin_unlock_irqrestore(&bus->reg_lock, flags);
+		scoped_guard(spinlock_irqsave, &bus->reg_lock)
+			avs_hda_stream_stop(bus, host_stream);
 
 		ret = avs_path_reset(data->path);
 		if (ret < 0)
@@ -1052,9 +1049,8 @@ finalize:
 	debugfs_create_file("topology_name", 0444, component->debugfs_root, component,
 			    &topology_name_fops);
 
-	mutex_lock(&adev->comp_list_mutex);
-	list_add_tail(&acomp->node, &adev->comp_list);
-	mutex_unlock(&adev->comp_list_mutex);
+	scoped_guard(mutex, &adev->comp_list_mutex)
+		list_add_tail(&acomp->node, &adev->comp_list);
 
 	return 0;
 
@@ -1072,9 +1068,8 @@ static void avs_component_remove(struct snd_soc_component *component)
 
 	mach = dev_get_platdata(component->card->dev);
 
-	mutex_lock(&adev->comp_list_mutex);
-	list_del(&acomp->node);
-	mutex_unlock(&adev->comp_list_mutex);
+	scoped_guard(mutex, &adev->comp_list_mutex)
+		list_del(&acomp->node);
 
 	if (mach->tplg_filename) {
 		ret = avs_remove_topology(component);
