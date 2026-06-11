@@ -956,6 +956,14 @@ int lis3lv02d_init_dt(struct lis3lv02d *lis3)
 	if (!pdata)
 		return -ENOMEM;
 
+	/* Set sensible click threshold defaults. Several upstream board DTS
+	 * files use the misspelled property "st,click-thresh-*" which the
+	 * driver never reads, leaving these at zero. Default to 10 so those
+	 * boards get working click detection without a DT change. */
+	pdata->click_thresh_x = 10;
+	pdata->click_thresh_y = 10;
+	pdata->click_thresh_z = 10;
+
 	if (of_property_read_bool(np, "st,click-single-x"))
 		pdata->click_flags |= LIS3_CLICK_SINGLE_X;
 	if (of_property_read_bool(np, "st,click-double-x"))
