@@ -205,6 +205,63 @@ xlog_recover_buf_commit_pass1(
 }
 
 /*
+ * Make sure the recovered dirty bitmap only describes ranges inside the
+ * recovered buffer and that each logged region is backed by one data iovec.
+ */
+STATIC int xlog_recover_validate_buf_data_map(struct xfs_mount *mp,
+					      struct xlog_recover_item *item,
+					      struct xfs_buf_log_format *buf_f)
+{
+	u64				buf_bytes = BBTOB(buf_f->blf_len);
+	int				i = 1;
+	int				bit = 0;
+
+	while (1) {
+		u64			reg_bytes;
+		u64			reg_end;
+		int			nbits;
+
+		bit = xfs_next_bit(buf_f->blf_data_map, buf_f->blf_map_size,
+				   bit);
+		if (bit == -1)
+			break;
+
+		nbits = xfs_contig_bits(buf_f->blf_data_map,
+					buf_f->blf_map_size, bit);
+		if (XFS_IS_CORRUPT(mp, nbits <= 0))
+			return -EFSCORRUPTED;
+
+		reg_bytes = (u64)nbits << XFS_BLF_SHIFT;
+		reg_end = ((u64)bit << XFS_BLF_SHIFT) + reg_bytes;
+		if (XFS_IS_CORRUPT(mp, reg_end > buf_bytes))
+			return -EFSCORRUPTED;
+
+		if (XFS_IS_CORRUPT(mp, i >= item->ri_total))
+			return -EFSCORRUPTED;
+		if (XFS_IS_CORRUPT(mp, !item->ri_buf[i].iov_base))
+			return -EFSCORRUPTED;
+		if (XFS_IS_CORRUPT(mp, item->ri_buf[i].iov_len == 0 ||
+				   item->ri_buf[i].iov_len % XFS_BLF_CHUNK))
+			return -EFSCORRUPTED;
+		if (XFS_IS_CORRUPT(mp, item->ri_buf[i].iov_len > reg_bytes))
+			return -EFSCORRUPTED;
+
+		/*
+		 * A single contiguous dirty range can be split into multiple
+		 * log vectors.  Advance by the amount covered by this iovec.
+		 */
+		nbits = item->ri_buf[i].iov_len >> XFS_BLF_SHIFT;
+		i++;
+		bit += nbits;
+	}
+
+	if (XFS_IS_CORRUPT(mp, i != item->ri_total))
+		return -EFSCORRUPTED;
+
+	return 0;
+}
+
+/*
  * Validate the recovered buffer is of the correct type and attach the
  * appropriate buffer operations to them for writeback. Magic numbers are in a
  * few places:
@@ -1031,6 +1088,12 @@ xlog_recover_buf_commit_pass2(
 		if (xlog_is_buffer_cancelled(log, buf_f->blf_blkno,
 				buf_f->blf_len))
 			goto cancelled;
+	}
+
+	error = xlog_recover_validate_buf_data_map(mp, item, buf_f);
+	if (error) {
+		ASSERT(error == -EFSCORRUPTED);
+		return error;
 	}
 
 	trace_xfs_log_recover_buf_recover(log, buf_f);
