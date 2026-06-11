@@ -125,6 +125,12 @@ enum uverbs_attrs_destroy_cq_cmd_attr_ids {
 	UVERBS_ATTR_DESTROY_CQ_RESP,
 };
 
+enum uverbs_attrs_resize_cq_cmd_attr_ids {
+	UVERBS_ATTR_RESIZE_CQ_HANDLE,
+	UVERBS_ATTR_RESIZE_CQ_CQE,
+	UVERBS_ATTR_RESIZE_CQ_RESP_CQE,
+};
+
 enum uverbs_attrs_create_flow_action_esp {
 	UVERBS_ATTR_CREATE_FLOW_ACTION_ESP_HANDLE,
 	UVERBS_ATTR_FLOW_ACTION_ESP_ATTRS,
@@ -205,6 +211,7 @@ enum uverbs_methods_srq {
 enum uverbs_methods_cq {
 	UVERBS_METHOD_CQ_CREATE,
 	UVERBS_METHOD_CQ_DESTROY,
+	UVERBS_METHOD_CQ_RESIZE,
 };
 
 enum uverbs_attrs_create_wq_cmd_attr_ids {
