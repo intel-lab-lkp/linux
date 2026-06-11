@@ -129,6 +129,7 @@ enum uverbs_attrs_resize_cq_cmd_attr_ids {
 	UVERBS_ATTR_RESIZE_CQ_HANDLE,
 	UVERBS_ATTR_RESIZE_CQ_CQE,
 	UVERBS_ATTR_RESIZE_CQ_RESP_CQE,
+	UVERBS_ATTR_RESIZE_CQ_BUF_UMEM,
 };
 
 enum uverbs_attrs_create_flow_action_esp {
