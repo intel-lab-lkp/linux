@@ -99,39 +99,39 @@ static void avs_dsp_recovery(struct avs_dev *adev)
 	unsigned int core_mask;
 	int ret;
 
-	mutex_lock(&adev->comp_list_mutex);
-	/* disconnect all running streams */
-	list_for_each_entry(acomp, &adev->comp_list, node) {
-		struct snd_soc_pcm_runtime *rtd;
-		struct snd_soc_card *card;
+	scoped_guard(mutex, &adev->comp_list_mutex) {
+		/* disconnect all running streams */
+		list_for_each_entry(acomp, &adev->comp_list, node) {
+			struct snd_soc_pcm_runtime *rtd;
+			struct snd_soc_card *card;
 
-		card = acomp->base.card;
-		if (!card)
-			continue;
-
-		for_each_card_rtds(card, rtd) {
-			struct snd_pcm *pcm;
-			int dir;
-
-			pcm = rtd->pcm;
-			if (!pcm || rtd->dai_link->no_pcm)
+			card = acomp->base.card;
+			if (!card)
 				continue;
 
-			for_each_pcm_streams(dir) {
-				struct snd_pcm_substream *substream;
+			for_each_card_rtds(card, rtd) {
+				struct snd_pcm *pcm;
+				int dir;
 
-				substream = pcm->streams[dir].substream;
-				if (!substream || !substream->runtime)
+				pcm = rtd->pcm;
+				if (!pcm || rtd->dai_link->no_pcm)
 					continue;
 
-				/* No need for _irq() as we are in nonatomic context. */
-				snd_pcm_stream_lock(substream);
-				snd_pcm_stop(substream, SNDRV_PCM_STATE_DISCONNECTED);
-				snd_pcm_stream_unlock(substream);
+				for_each_pcm_streams(dir) {
+					struct snd_pcm_substream *substream;
+
+					substream = pcm->streams[dir].substream;
+					if (!substream || !substream->runtime)
+						continue;
+
+					/* No need for _irq() as we are in nonatomic context. */
+					snd_pcm_stream_lock(substream);
+					snd_pcm_stop(substream, SNDRV_PCM_STATE_DISCONNECTED);
+					snd_pcm_stream_unlock(substream);
+				}
 			}
 		}
 	}
-	mutex_unlock(&adev->comp_list_mutex);
 
 	/* forcibly shutdown all cores */
 	core_mask = GENMASK(adev->hw_cfg.dsp_cores - 1, 0);
@@ -294,10 +294,10 @@ void avs_dsp_process_response(struct avs_dev *adev, u64 header)
 	 */
 	if (avs_msg_is_reply(header)) {
 		/* Response processing is invoked from IRQ thread. */
-		spin_lock_irq(&ipc->rx_lock);
-		avs_dsp_receive_rx(adev, header);
-		ipc->rx_completed = true;
-		spin_unlock_irq(&ipc->rx_lock);
+		scoped_guard(spinlock_irq, &ipc->rx_lock) {
+			avs_dsp_receive_rx(adev, header);
+			ipc->rx_completed = true;
+		}
 	} else {
 		avs_dsp_process_notification(adev, header);
 	}
@@ -338,21 +338,18 @@ again:
 	}
 
 	/* Ongoing notification's bottom-half may cause early wakeup */
-	spin_lock(&ipc->rx_lock);
-	if (!ipc->rx_completed) {
-		if (repeats_left) {
+	scoped_guard(spinlock, &ipc->rx_lock) {
+		if (!ipc->rx_completed) {
+			if (!repeats_left)
+				return -ETIMEDOUT;
+
 			/* Reply delayed due to notification. */
 			repeats_left--;
 			reinit_completion(&ipc->busy_completion);
-			spin_unlock(&ipc->rx_lock);
 			goto again;
 		}
-
-		spin_unlock(&ipc->rx_lock);
-		return -ETIMEDOUT;
 	}
 
-	spin_unlock(&ipc->rx_lock);
 	return 0;
 }
 
@@ -397,12 +394,12 @@ static int avs_dsp_do_send_msg(struct avs_dev *adev, struct avs_ipc_msg *request
 	if (!ipc->ready)
 		return -EPERM;
 
-	mutex_lock(&ipc->msg_mutex);
+	guard(mutex)(&ipc->msg_mutex);
 
-	spin_lock(&ipc->rx_lock);
-	avs_ipc_msg_init(ipc, reply);
-	avs_dsp_send_tx(adev, request, true);
-	spin_unlock(&ipc->rx_lock);
+	scoped_guard(spinlock, &ipc->rx_lock) {
+		avs_ipc_msg_init(ipc, reply);
+		avs_dsp_send_tx(adev, request, true);
+	}
 
 	ret = avs_ipc_wait_busy_completion(ipc, timeout);
 	if (ret) {
@@ -412,7 +409,7 @@ static int avs_dsp_do_send_msg(struct avs_dev *adev, struct avs_ipc_msg *request
 			/* Same treatment as on exception, just stack_dump=0. */
 			avs_dsp_exception_caught(adev, &msg);
 		}
-		goto exit;
+		return ret;
 	}
 
 	ret = ipc->rx.rsp.status;
@@ -436,8 +433,6 @@ static int avs_dsp_do_send_msg(struct avs_dev *adev, struct avs_ipc_msg *request
 			memcpy(reply->data, ipc->rx.data, reply->size);
 	}
 
-exit:
-	mutex_unlock(&ipc->msg_mutex);
 	return ret;
 }
 
@@ -501,16 +496,16 @@ static int avs_dsp_do_send_rom_msg(struct avs_dev *adev, struct avs_ipc_msg *req
 	struct avs_ipc *ipc = adev->ipc;
 	int ret;
 
-	mutex_lock(&ipc->msg_mutex);
+	guard(mutex)(&ipc->msg_mutex);
 
-	spin_lock(&ipc->rx_lock);
-	avs_ipc_msg_init(ipc, NULL);
-	/*
-	 * with hw still stalled, memory windows may not be
-	 * configured properly so avoid accessing SRAM
-	 */
-	avs_dsp_send_tx(adev, request, false);
-	spin_unlock(&ipc->rx_lock);
+	scoped_guard(spinlock, &ipc->rx_lock) {
+		avs_ipc_msg_init(ipc, NULL);
+		/*
+		 * with hw still stalled, memory windows may not be
+		 * configured properly so avoid accessing SRAM
+		 */
+		avs_dsp_send_tx(adev, request, false);
+	}
 
 	/* ROM messages must be sent before main core is unstalled */
 	ret = avs_dsp_op(adev, stall, AVS_MAIN_CORE_MASK, false);
@@ -521,8 +516,6 @@ static int avs_dsp_do_send_rom_msg(struct avs_dev *adev, struct avs_ipc_msg *req
 	if (ret)
 		dev_err(adev->dev, "%s (0x%08x 0x%08x) failed: %d\n",
 			name, request->glb.primary, request->glb.ext.val, ret);
-
-	mutex_unlock(&ipc->msg_mutex);
 
 	return ret;
 }
