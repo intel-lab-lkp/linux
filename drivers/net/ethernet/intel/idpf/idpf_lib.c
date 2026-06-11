@@ -1364,7 +1364,7 @@ void idpf_statistics_task(struct work_struct *work)
 	}
 
 	queue_delayed_work(adapter->stats_wq, &adapter->stats_task,
-			   msecs_to_jiffies(10000));
+			   msecs_to_jiffies(250));
 }
 
 /**
