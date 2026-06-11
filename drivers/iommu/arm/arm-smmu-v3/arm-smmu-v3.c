@@ -4800,7 +4800,11 @@ static int arm_smmu_device_disable(struct arm_smmu_device *smmu)
 
 static void arm_smmu_disable_action(void *data)
 {
-	arm_smmu_device_disable(data);
+	struct arm_smmu_device *smmu = data;
+
+	if (smmu->impl_ops && smmu->impl_ops->device_disable)
+		smmu->impl_ops->device_disable(smmu);
+	arm_smmu_device_disable(smmu);
 }
 
 static void arm_smmu_write_strtab(struct arm_smmu_device *smmu)
