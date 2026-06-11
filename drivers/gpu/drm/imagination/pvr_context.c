@@ -161,22 +161,47 @@ ctx_fw_data_init(void *cpu_ptr, void *priv)
 /**
  * pvr_context_destroy_queues() - Destroy all queues attached to a context.
  * @ctx: Context to destroy queues on.
+ * @queue_entity_fini: Corresponding queues of context to be released for
+ *                     failure path in context creation.
  *
  * Should be called when the last reference to a context object is dropped.
  * It releases all resources attached to the queues bound to this context.
  */
-static void pvr_context_destroy_queues(struct pvr_context *ctx)
+static void pvr_context_destroy_queues(struct pvr_context *ctx, bool queue_entity_fini)
 {
 	switch (ctx->type) {
 	case DRM_PVR_CTX_TYPE_RENDER:
-		pvr_queue_destroy(ctx->queues.fragment);
-		pvr_queue_destroy(ctx->queues.geometry);
+		if (ctx->queues.fragment) {
+			if (queue_entity_fini)
+				drm_sched_entity_fini(&ctx->queues.fragment->entity);
+
+			pvr_queue_destroy(ctx->queues.fragment);
+		}
+
+		if (ctx->queues.geometry) {
+			if (queue_entity_fini)
+				drm_sched_entity_fini(&ctx->queues.geometry->entity);
+
+			pvr_queue_destroy(ctx->queues.geometry);
+		}
 		break;
+
 	case DRM_PVR_CTX_TYPE_COMPUTE:
-		pvr_queue_destroy(ctx->queues.compute);
+		if (ctx->queues.compute) {
+			if (queue_entity_fini)
+				drm_sched_entity_fini(&ctx->queues.compute->entity);
+
+			pvr_queue_destroy(ctx->queues.compute);
+		}
 		break;
+
 	case DRM_PVR_CTX_TYPE_TRANSFER_FRAG:
-		pvr_queue_destroy(ctx->queues.transfer);
+		if (ctx->queues.transfer) {
+			if (queue_entity_fini)
+				drm_sched_entity_fini(&ctx->queues.transfer->entity);
+
+			pvr_queue_destroy(ctx->queues.transfer);
+		}
 		break;
 	}
 }
@@ -240,7 +265,7 @@ static int pvr_context_create_queues(struct pvr_context *ctx,
 	return -EINVAL;
 
 err_destroy_queues:
-	pvr_context_destroy_queues(ctx);
+	pvr_context_destroy_queues(ctx, true);
 	return err;
 }
 
@@ -349,7 +374,7 @@ err_destroy_fw_obj:
 	pvr_fw_object_destroy(ctx->fw_obj);
 
 err_destroy_queues:
-	pvr_context_destroy_queues(ctx);
+	pvr_context_destroy_queues(ctx, true);
 
 err_free_ctx_id:
 	/*
@@ -384,7 +409,7 @@ pvr_context_release(struct kref *ref_count)
 	spin_unlock(&pvr_dev->ctx_list_lock);
 
 	xa_erase(&pvr_dev->ctx_ids, ctx->ctx_id);
-	pvr_context_destroy_queues(ctx);
+	pvr_context_destroy_queues(ctx, false);
 	pvr_fw_object_destroy(ctx->fw_obj);
 	kfree(ctx->data);
 	pvr_vm_context_put(ctx->vm_ctx);

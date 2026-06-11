@@ -1445,15 +1445,11 @@ void pvr_queue_kill(struct pvr_queue *queue)
  */
 void pvr_queue_destroy(struct pvr_queue *queue)
 {
-	if (!queue)
-		return;
-
 	mutex_lock(&queue->ctx->pvr_dev->queues.lock);
 	list_del_init(&queue->node);
 	mutex_unlock(&queue->ctx->pvr_dev->queues.lock);
 
 	drm_sched_fini(&queue->scheduler);
-	drm_sched_entity_fini(&queue->entity);
 
 	if (WARN_ON(queue->last_queued_job_scheduled_fence))
 		dma_fence_put(queue->last_queued_job_scheduled_fence);
