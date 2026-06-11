@@ -276,6 +276,9 @@ page_pool_nl_fill(struct sk_buff *rsp, const struct page_pool *pool,
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_NAPI_ID, napi_id))
 		goto err_cancel;
 
+	if (nla_put_u32(rsp, NETDEV_A_PAGE_POOL_ORDER, pool->p.order))
+		goto err_cancel;
+
 	inflight = page_pool_inflight(pool, false);
 	refsz =	PAGE_SIZE << pool->p.order;
 	if (nla_put_uint(rsp, NETDEV_A_PAGE_POOL_INFLIGHT, inflight) ||

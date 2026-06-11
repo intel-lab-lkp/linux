@@ -190,6 +190,10 @@ attribute-sets:
         doc: io-uring memory provider information.
         type: nest
         nested-attributes: io-uring-provider-info
+      -
+        name: order
+        type: u32
+        doc: Page pool order (power of 2 page count per allocation).
   -
     name: page-pool-info
     subset-of: page-pool
@@ -648,6 +652,7 @@ operations:
             - detach-time
             - dmabuf
             - io-uring
+            - order
       dump:
         request:
           attributes:
