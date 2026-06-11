@@ -1533,6 +1533,9 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 		return -ENXIO;
 	}
 
+	/* Selector bits still available to this port. */
+	selector = cxlr_sel & ~selector;
+
 	if (cxl_rr->nr_targets_set) {
 		for (int i = 0; i < cxl_rr->nr_targets_set; i++)
 			if (ep->dport == cxlsd->target[i]) {
@@ -1545,7 +1548,23 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 		goto add_target;
 	}
 
-	ig = p->interleave_granularity * parent_distance;
+	/*
+	 * Auto regions keep the firmware value, passthrough decoders consume
+	 * no selector bits, interleaving decoders claim the lowest available
+	 * selector bit.
+	 */
+	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
+		ig = cxld->interleave_granularity;
+	} else if (iw == 1) {
+		ig = p->interleave_granularity * parent_distance;
+	} else if (selector) {
+		ig = 1ULL << __ffs64(selector);
+	} else {
+		dev_dbg(&cxlr->dev,
+			"%s:%s: no selector bits available for iw %d\n",
+			dev_name(port->uport_dev), dev_name(&port->dev), iw);
+		return -ENXIO;
+	}
 
 	rc = ways_to_eiw(iw, &eiw);
 	if (!rc)
@@ -1557,9 +1576,16 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 		return rc;
 	}
 
+	if (iw > 1 && (~selector & get_selector(iw, ig))) {
+		dev_dbg(&cxlr->dev,
+			"%s:%s: derived selector %#llx exceeds remaining %#llx (iw %d ig %d)\n",
+			dev_name(port->uport_dev), dev_name(&port->dev),
+			get_selector(iw, ig), selector, iw, ig);
+		return -ENXIO;
+	}
+
 	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
 		if (cxld->interleave_ways != iw ||
-		    (iw > 1 && cxld->interleave_granularity != ig) ||
 		    !spa_maps_hpa(p, &cxld->hpa_range) ||
 		    ((cxld->flags & CXL_DECODER_F_ENABLE) == 0)) {
 			dev_err(&cxlr->dev,
