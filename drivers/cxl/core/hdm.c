@@ -691,9 +691,16 @@ static void cxld_set_interleave(struct cxl_decoder *cxld, u32 *ctrl)
 	if (WARN_ONCE(ways_to_eiw(cxld->interleave_ways, &eiw),
 		      "invalid interleave_ways: %d\n", cxld->interleave_ways))
 		return;
-	if (WARN_ONCE(granularity_to_eig(cxld->interleave_granularity, &eig),
-		      "invalid interleave_granularity: %d\n",
-		      cxld->interleave_granularity))
+
+	/*
+	 * A non-interleaving decoder ignores the IG field. Encode a
+	 * don't-care value instead of validating the stored granularity.
+	 */
+	if (cxld->interleave_ways == 1)
+		eig = 0;
+	else if (WARN_ONCE(granularity_to_eig(cxld->interleave_granularity, &eig),
+			   "invalid interleave_granularity: %d\n",
+			   cxld->interleave_granularity))
 		return;
 
 	u32p_replace_bits(ctrl, eig, CXL_HDM_DECODER0_CTRL_IG_MASK);
