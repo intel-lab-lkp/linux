@@ -2731,6 +2731,7 @@ out_del_dev:
 	device_del(&udev->dev);
 fail:
 	usb_set_device_state(udev, USB_STATE_NOTATTACHED);
+	pm_runtime_put_noidle(&udev->dev);
 	pm_runtime_disable(&udev->dev);
 	pm_runtime_set_suspended(&udev->dev);
 	return err;
