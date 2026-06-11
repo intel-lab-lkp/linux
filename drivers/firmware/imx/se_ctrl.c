@@ -510,6 +510,7 @@ static int se_ioctl_cmd_snd_rcv_rsp_handler(struct se_if_device_ctx *dev_ctx,
 	struct se_ioctl_cmd_snd_rcv_rsp_info cmd_snd_rcv_rsp_info = {0};
 	struct se_if_priv *priv = dev_ctx->priv;
 	int err = 0;
+	int cleanup_err = 0;
 
 	if (copy_from_user(&cmd_snd_rcv_rsp_info, uarg,
 			   sizeof(cmd_snd_rcv_rsp_info))) {
@@ -594,7 +595,10 @@ static int se_ioctl_cmd_snd_rcv_rsp_handler(struct se_if_device_ctx *dev_ctx,
 		err = -EFAULT;
 	}
 
-	err = se_ioctl_cmd_snd_rcv_cleanup(dev_ctx, uarg, &cmd_snd_rcv_rsp_info);
+	cleanup_err = se_ioctl_cmd_snd_rcv_cleanup(dev_ctx, uarg, &cmd_snd_rcv_rsp_info);
+
+	if (!err)
+		err = cleanup_err;
 
 	return err;
 }
