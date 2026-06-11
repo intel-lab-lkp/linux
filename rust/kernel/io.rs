@@ -196,13 +196,14 @@ impl<const SIZE: usize> MmioRaw<SIZE> {
 #[repr(transparent)]
 pub struct Mmio<const SIZE: usize = 0>(MmioRaw<SIZE>);
 
-/// Checks whether an access of type `U` at the given `offset`
+/// Checks whether an access of type `U` at the given `base` and the given `offset`
 /// is valid within this region.
+///
+/// The `base` is used for alignment checking only. This can be set to 0 to skip the check.
 #[inline]
-const fn offset_valid<U>(offset: usize, size: usize) -> bool {
-    let type_size = core::mem::size_of::<U>();
-    if let Some(end) = offset.checked_add(type_size) {
-        end <= size && offset % type_size == 0
+const fn offset_valid<U>(base: usize, offset: usize, size: usize) -> bool {
+    if let Some(end) = offset.checked_add(size_of::<U>()) {
+        end <= size && (base.wrapping_add(offset) % align_of::<U>() == 0)
     } else {
         false
     }
@@ -221,14 +222,16 @@ pub trait IoCapable<T> {
     ///
     /// # Safety
     ///
-    /// The range `[address..address + size_of::<T>()]` must be within the bounds of `Self`.
+    /// - The range `[address..address + size_of::<T>()]` must be within the bounds of `Self`.
+    /// - `address` must be aligned.
     unsafe fn io_read(&self, address: usize) -> T;
 
     /// Performs an I/O write of `value` at `address`.
     ///
     /// # Safety
     ///
-    /// The range `[address..address + size_of::<T>()]` must be within the bounds of `Self`.
+    /// - The range `[address..address + size_of::<T>()]` must be within the bounds of `Self`.
+    /// - `address` must be aligned.
     unsafe fn io_write(&self, value: T, address: usize);
 }
 
@@ -310,7 +313,11 @@ pub trait Io {
     // Always inline to optimize out error path of `build_assert`.
     #[inline(always)]
     fn io_addr_assert<U>(&self, offset: usize) -> usize {
-        build_assert!(offset_valid::<U>(offset, Self::Target::MIN_SIZE));
+        // We cannot check alignment with `offset_valid` using `self.addr()`. So set 0 for it and
+        // ensure alignment by checking that the alignment of `U` is smaller or equal to the
+        // alignment of `Self::Target`.
+        const_assert!(Alignment::of::<U>().as_usize() <= Self::Target::MIN_ALIGN.as_usize());
+        build_assert!(offset_valid::<U>(0, offset, Self::Target::MIN_SIZE));
 
         self.addr() + offset
     }
@@ -319,7 +326,7 @@ pub trait Io {
     /// performing runtime bound checks.
     #[inline]
     fn io_addr<U>(&self, offset: usize) -> Result<usize> {
-        if !offset_valid::<U>(offset, self.maxsize()) {
+        if !offset_valid::<U>(self.addr(), offset, self.maxsize()) {
             return Err(EINVAL);
         }
 
