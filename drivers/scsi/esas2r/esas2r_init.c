@@ -683,6 +683,7 @@ static int __maybe_unused esas2r_resume(struct device *dev)
 	if (!esas2r_power_up(a, true)) {
 		esas2r_debug("yikes, esas2r_power_up failed");
 		rez = -ENOMEM;
+		esas2r_enable_chip_interrupts(a);
 		goto error_exit;
 	}
 
@@ -699,6 +700,7 @@ static int __maybe_unused esas2r_resume(struct device *dev)
 		esas2r_debug("yikes, unable to claim IRQ");
 		esas2r_log(ESAS2R_LOG_CRIT, "could not re-claim IRQ!");
 		rez = -ENOMEM;
+		esas2r_enable_chip_interrupts(a);
 		goto error_exit;
 	}
 
