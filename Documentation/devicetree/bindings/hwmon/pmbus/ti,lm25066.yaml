@@ -46,6 +46,26 @@ properties:
 
     additionalProperties: false
 
+  ti,cl-smbus-high:
+    description: |
+      Configure the Current Limit (CL) to use the SMBus high setting.
+    type: boolean
+
+  ti,cl-smbus-low:
+    description: |
+      Configure the Current Limit (CL) to use the SMBus low setting.
+    type: boolean
+
+dependencies:
+  ti,cl-smbus-high:
+    not:
+      required:
+        - ti,cl-smbus-low
+  ti,cl-smbus-low:
+    not:
+      required:
+        - ti,cl-smbus-high
+
 required:
   - compatible
   - reg
