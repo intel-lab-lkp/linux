@@ -1076,8 +1076,10 @@ int nfs42_proc_layoutstats_generic(struct nfs_server *server,
 	nfs4_init_sequence(server->nfs_client, &data->args.seq_args,
 			   &data->res.seq_res, 0, 0);
 	task = rpc_run_task(&task_setup);
-	if (IS_ERR(task))
+	if (IS_ERR(task)) {
+		nfs42_layoutstat_release(data);
 		return PTR_ERR(task);
+	}
 	rpc_put_task(task);
 	return 0;
 }
