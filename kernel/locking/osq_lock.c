@@ -78,7 +78,7 @@ osq_wait_next(struct optimistic_spin_queue *lock,
 		 * wait for either @lock to point to us, through its Step-B, or
 		 * wait for a new @node->next from its Step-C.
 		 */
-		if (node->next) {
+		if (data_race(node->next)) { /* xchg() validates the value. */
 			struct optimistic_spin_node *next;
 
 			next = xchg(&node->next, NULL);
