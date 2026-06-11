@@ -1054,6 +1054,18 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 	dma_dev->dev = &pdev->dev;
 	mv_chan->xordev = xordev;
 
+	spin_lock_init(&mv_chan->lock);
+	INIT_LIST_HEAD(&mv_chan->chain);
+	INIT_LIST_HEAD(&mv_chan->completed_slots);
+	INIT_LIST_HEAD(&mv_chan->free_slots);
+	INIT_LIST_HEAD(&mv_chan->allocated_slots);
+	mv_chan->dmachan.device = dma_dev;
+	dma_cookie_init(&mv_chan->dmachan);
+
+	mv_chan->mmr_base = xordev->xor_base;
+	mv_chan->mmr_high_base = xordev->xor_high_base;
+	tasklet_setup(&mv_chan->irq_tasklet, mv_xor_tasklet);
+
 	/*
 	 * These source and destination dummy buffers are used to implement
 	 * a DMA_INTERRUPT operation as a minimum-sized XOR operation.
@@ -1105,10 +1117,6 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 		dma_dev->device_prep_dma_xor = mv_xor_prep_dma_xor;
 	}
 
-	mv_chan->mmr_base = xordev->xor_base;
-	mv_chan->mmr_high_base = xordev->xor_high_base;
-	tasklet_setup(&mv_chan->irq_tasklet, mv_xor_tasklet);
-
 	/* clear errors before enabling interrupts */
 	mv_chan_clear_err_status(mv_chan);
 
@@ -1123,14 +1131,6 @@ mv_xor_channel_add(struct mv_xor_device *xordev,
 		mv_chan_set_mode(mv_chan, XOR_OPERATION_MODE_IN_DESC);
 	else
 		mv_chan_set_mode(mv_chan, XOR_OPERATION_MODE_XOR);
-
-	spin_lock_init(&mv_chan->lock);
-	INIT_LIST_HEAD(&mv_chan->chain);
-	INIT_LIST_HEAD(&mv_chan->completed_slots);
-	INIT_LIST_HEAD(&mv_chan->free_slots);
-	INIT_LIST_HEAD(&mv_chan->allocated_slots);
-	mv_chan->dmachan.device = dma_dev;
-	dma_cookie_init(&mv_chan->dmachan);
 
 	list_add_tail(&mv_chan->dmachan.device_node, &dma_dev->channels);
 
