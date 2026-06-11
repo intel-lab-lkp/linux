@@ -527,30 +527,33 @@ static void table_instance_destroy(struct table_instance *ti,
 	call_rcu(&ufid_ti->rcu, flow_tbl_destroy_rcu_cb);
 }
 
-/* No need for locking this function is called from RCU callback. */
 static void ovs_flow_tbl_destroy_rcu(struct rcu_head *rcu)
 {
 	struct flow_table *table = container_of(rcu, struct flow_table, rcu);
 
-	struct table_instance *ti = rcu_dereference_raw(table->ti);
-	struct table_instance *ufid_ti = rcu_dereference_raw(table->ufid_ti);
-	struct mask_cache *mc = rcu_dereference_raw(table->mask_cache);
-	struct mask_array *ma = rcu_dereference_raw(table->mask_array);
-
-	call_rcu(&mc->rcu, mask_cache_rcu_cb);
-	call_rcu(&ma->rcu, mask_array_rcu_cb);
-	table_instance_destroy(ti, ufid_ti);
 	mutex_destroy(&table->lock);
 	kfree(table);
 }
 
 void ovs_flow_tbl_put(struct flow_table *table)
 {
+	struct table_instance *ufid_ti;
+	struct table_instance *ti;
+	struct mask_cache *mc;
+	struct mask_array *ma;
+
 	if (refcount_dec_and_test(&table->refcnt)) {
 		mutex_lock(&table->lock);
-		table_instance_flow_flush(table,
-					  ovs_tbl_dereference(table->ti, table),
-					  ovs_tbl_dereference(table->ufid_ti, table));
+		ufid_ti = ovs_tbl_dereference(table->ufid_ti, table);
+		ti = ovs_tbl_dereference(table->ti, table);
+		table_instance_flow_flush(table, ti, ufid_ti);
+		table_instance_destroy(ti, ufid_ti);
+
+		mc = ovs_tbl_dereference(table->mask_cache, table);
+		ma = ovs_tbl_dereference(table->mask_array, table);
+		call_rcu(&mc->rcu, mask_cache_rcu_cb);
+		call_rcu(&ma->rcu, mask_array_rcu_cb);
+
 		mutex_unlock(&table->lock);
 		call_rcu(&table->rcu, ovs_flow_tbl_destroy_rcu);
 	}
