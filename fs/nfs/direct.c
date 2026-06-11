@@ -400,6 +400,7 @@ static ssize_t nfs_direct_read_schedule_iovec(struct nfs_direct_req *dreq,
 	 */
 	if (requested_bytes == 0) {
 		inode_dio_end(inode);
+		put_dreq(dreq);
 		nfs_direct_req_release(dreq);
 		return result < 0 ? result : -EIO;
 	}
