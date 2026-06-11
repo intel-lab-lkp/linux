@@ -1083,6 +1083,31 @@ static void set_track_update(struct kmem_cache *s, void *object,
 	p->when = jiffies;
 }
 
+static bool track_has_record(const struct track *track)
+{
+	return track->addr;
+}
+
+static void save_previous_lifetime(struct kmem_cache *s, void *object)
+{
+	struct track *alloc, *free;
+	struct track *prev_alloc, *prev_free;
+
+	if (!(s->flags & SLAB_STORE_HISTORY))
+		return;
+
+	alloc = get_track(s, object, TRACK_ALLOC);
+	free = get_track(s, object, TRACK_FREE);
+	if (!track_has_record(alloc) || !track_has_record(free))
+		return;
+
+	prev_alloc = get_track(s, object, TRACK_PREV_ALLOC);
+	prev_free = get_track(s, object, TRACK_PREV_FREE);
+
+	*prev_alloc = *alloc;
+	*prev_free = *free;
+}
+
 static __always_inline void set_track(struct kmem_cache *s, void *object,
 				      enum track_item alloc, unsigned long addr, gfp_t gfp_flags)
 {
@@ -1123,11 +1148,25 @@ static void print_track(const char *s, struct track *t, unsigned long pr_time)
 void print_tracking(struct kmem_cache *s, void *object)
 {
 	unsigned long pr_time = jiffies;
+	struct track *prev_alloc, *prev_free;
+
 	if (!(s->flags & SLAB_STORE_USER))
 		return;
 
 	print_track("Allocated", get_track(s, object, TRACK_ALLOC), pr_time);
 	print_track("Freed", get_track(s, object, TRACK_FREE), pr_time);
+
+	if (!(s->flags & SLAB_STORE_HISTORY))
+		return;
+
+	prev_alloc = get_track(s, object, TRACK_PREV_ALLOC);
+	prev_free = get_track(s, object, TRACK_PREV_FREE);
+	if (!track_has_record(prev_alloc) || !track_has_record(prev_free))
+		return;
+
+	pr_err("Previous object lifetime:\n");
+	print_track("Previous allocated", prev_alloc, pr_time);
+	print_track("Previous freed", prev_free, pr_time);
 }
 
 static void print_slab_info(const struct slab *slab)
@@ -4505,8 +4544,10 @@ new_objects:
 	return NULL;
 
 success:
-	if (kmem_cache_debug_flags(s, SLAB_STORE_USER))
+	if (kmem_cache_debug_flags(s, SLAB_STORE_USER)) {
+		save_previous_lifetime(s, object);
 		set_track(s, object, TRACK_ALLOC, addr, gfpflags);
+	}
 
 	return object;
 }
