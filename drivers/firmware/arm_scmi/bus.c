@@ -450,14 +450,13 @@ __scmi_device_create(struct device_node *np, struct device *parent,
 		return NULL;
 
 	scmi_dev->name = kstrdup_const(name ?: "unknown", GFP_KERNEL);
-	if (!scmi_dev->name) {
-		kfree(scmi_dev);
-		return NULL;
-	}
+	if (!scmi_dev->name)
+		goto free_scmi_dev;
 
 	id = ida_alloc_min(&scmi_bus_id, 1, GFP_KERNEL);
 	if (id < 0) {
 		kfree_const(scmi_dev->name);
+free_scmi_dev:
 		kfree(scmi_dev);
 		return NULL;
 	}
