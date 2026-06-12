@@ -1404,8 +1404,10 @@ static int snd_ctl_elem_write_user(struct snd_ctl_file *file,
 
 	card = file->card;
 	result = snd_power_ref_and_wait(card);
-	if (result < 0)
+	if (result < 0) {
+		snd_power_unref(card);
 		return result;
+	}
 	result = snd_ctl_elem_write(card, file, control);
 	snd_power_unref(card);
 	if (result < 0)
