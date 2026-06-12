@@ -50,7 +50,7 @@ static bool ceph_vxattrcb_layout_exists(struct ceph_inode_info *ci)
 {
 	struct ceph_file_layout *fl = &ci->i_layout;
 	return (fl->stripe_unit > 0 || fl->stripe_count > 0 ||
-		fl->object_size > 0 || fl->pool_id >= 0 ||
+		fl->object_size > 0 || fl->pool_id > 0 ||
 		rcu_dereference_raw(fl->pool_ns) != NULL);
 }
 
@@ -61,7 +61,7 @@ static ssize_t ceph_vxattrcb_layout(struct ceph_inode_info *ci, char *val,
 	struct ceph_client *cl = fsc->client;
 	struct ceph_osd_client *osdc = &fsc->client->osdc;
 	struct ceph_string *pool_ns;
-	s64 pool = ci->i_layout.pool_id;
+	u32 pool = ci->i_layout.pool_id;
 	const char *pool_name;
 	const char *ns_field = " pool_namespace=";
 	char buf[128];
@@ -81,7 +81,7 @@ static ssize_t ceph_vxattrcb_layout(struct ceph_inode_info *ci, char *val,
 		total_len = len + strlen(pool_name);
 	} else {
 		len = snprintf(buf, sizeof(buf),
-		"stripe_unit=%u stripe_count=%u object_size=%u pool=%lld",
+		"stripe_unit=%u stripe_count=%u object_size=%u pool=%u",
 		ci->i_layout.stripe_unit, ci->i_layout.stripe_count,
 		ci->i_layout.object_size, pool);
 		total_len = len;
@@ -164,7 +164,7 @@ static ssize_t ceph_vxattrcb_layout_pool(struct ceph_inode_info *ci,
 	ssize_t ret;
 	struct ceph_fs_client *fsc = ceph_sb_to_fs_client(ci->netfs.inode.i_sb);
 	struct ceph_osd_client *osdc = &fsc->client->osdc;
-	s64 pool = ci->i_layout.pool_id;
+	u32 pool = ci->i_layout.pool_id;
 	const char *pool_name;
 
 	down_read(&osdc->lock);
@@ -174,7 +174,7 @@ static ssize_t ceph_vxattrcb_layout_pool(struct ceph_inode_info *ci,
 		if (ret <= size)
 			memcpy(val, pool_name, ret);
 	} else {
-		ret = ceph_fmt_xattr(val, size, "%lld", pool);
+		ret = ceph_fmt_xattr(val, size, "%u", pool);
 	}
 	up_read(&osdc->lock);
 	return ret;
