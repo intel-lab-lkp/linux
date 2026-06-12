@@ -2361,6 +2361,7 @@ static int __init hash_pointers_mode_parse(char *str)
 	} else if (strcmp(str, "never") == 0) {
 		pr_info("Hash pointers mode set to never.\n");
 		hash_pointers_mode = HASH_PTR_NEVER;
+		no_hash_pointers = true;
 	} else if (strcmp(str, "always") == 0) {
 		pr_info("Hash pointers mode set to always.\n");
 		hash_pointers_mode = HASH_PTR_ALWAYS;
