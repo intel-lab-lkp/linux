@@ -3915,9 +3915,7 @@ static int bcmgenet_probe(struct platform_device *pdev)
 	unsigned int i;
 	int err = -EIO;
 
-	/* Up to GENET_MAX_MQ_CNT + 1 TX queues and RX queues */
-	dev = alloc_etherdev_mqs(sizeof(*priv), GENET_MAX_MQ_CNT + 1,
-				 GENET_MAX_MQ_CNT + 1);
+	dev = alloc_etherdev(sizeof(*priv));
 	if (!dev) {
 		dev_err(&pdev->dev, "can't allocate net device\n");
 		return -ENOMEM;
