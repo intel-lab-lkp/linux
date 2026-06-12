@@ -276,6 +276,49 @@ out_end:
 	return ret;
 }
 
+/*
+ * Write a command byte sequence from a buffer.
+ *
+ * Like ssd130x_write_cmd() but takes a pre-built byte array instead of
+ * variadic arguments, handy when the command is already in an array or
+ * when the caller wants to use sizeof() for the length.
+ */
+static int ssd130x_write_cmds(struct ssd130x_device *ssd130x, const u8 *cmd,
+			      size_t len)
+{
+	unsigned int i;
+	int ret;
+
+	for (i = 0; i < len; i++) {
+		ret = regmap_write(ssd130x->regmap, SSD13XX_COMMAND, cmd[i]);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+/*
+ * Run a packed command sequence.  The format is a flat byte array where each
+ * entry starts with a length byte followed by that many command bytes.  A
+ * zero length byte terminates the sequence.
+ *
+ * Example: { 2, 0x81, 0x80, 1, 0xAF, 0 }
+ *   sends command {0x81, 0x80}, then command {0xAF}, then stops.
+ */
+static int ssd130x_run_cmd_seq(struct ssd130x_device *ssd130x, const u8 *seq)
+{
+	while (*seq) {
+		u8 len = *seq++;
+		int ret = ssd130x_write_cmds(ssd130x, seq, len);
+
+		if (ret)
+			return ret;
+		seq += len;
+	}
+
+	return 0;
+}
 /* Set address range for horizontal/vertical addressing modes */
 static int ssd130x_set_col_range(struct ssd130x_device *ssd130x,
 				 u8 col_start, u8 cols)
