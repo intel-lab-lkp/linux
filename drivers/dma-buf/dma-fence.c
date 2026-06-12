@@ -359,8 +359,19 @@ void dma_fence_signal_timestamp_locked(struct dma_fence *fence,
 
 	dma_fence_assert_held(fence);
 
-	if (unlikely(test_and_set_bit(DMA_FENCE_FLAG_SIGNALED_BIT,
-				      &fence->flags)))
+	/*
+	 * First test the bit, so we don't signal an already signaled fence again.
+	 * The lock protects against multiple parties setting the bit. The bit
+	 * is then set at the end of the function.
+	 *
+	 * The background is that there is a fast path check in
+	 * dma_fence_is_signaled() which does not use lock protection and can
+	 * return true *while* the fence callbacks are still executing.
+	 *
+	 * This fast path check supposedly cannot be guarded by the lock because
+	 * of significant performance regressions.
+	 */
+	if (unlikely(test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags)))
 		return;
 
 	trace_dma_fence_signaled(fence);
@@ -384,6 +395,9 @@ void dma_fence_signal_timestamp_locked(struct dma_fence *fence,
 		INIT_LIST_HEAD(&cur->node);
 		cur->func(fence, cur);
 	}
+
+	// TODO: we need some barrier here, don't we?
+	set_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags);
 }
 EXPORT_SYMBOL(dma_fence_signal_timestamp_locked);
 
