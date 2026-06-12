@@ -4332,6 +4332,7 @@ static void hidpp_connect_event(struct work_struct *work)
 	ret = input_register_device(input);
 	if (ret) {
 		input_free_device(input);
+		hidpp->input = NULL;
 		return;
 	}
 
