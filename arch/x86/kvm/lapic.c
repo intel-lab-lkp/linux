@@ -1326,7 +1326,8 @@ static bool __kvm_irq_delivery_to_apic_fast(struct kvm *kvm, struct kvm_lapic *s
 	struct kvm_apic_map *map;
 	unsigned long bitmap;
 	struct kvm_lapic **dst = NULL;
-	int i;
+	struct kvm_vcpu *ipi_unique = NULL;
+	int i, ipi_targets = 0;
 	bool ret;
 
 	*r = -1;
@@ -1347,10 +1348,37 @@ static bool __kvm_irq_delivery_to_apic_fast(struct kvm *kvm, struct kvm_lapic *s
 	if (ret) {
 		*r = 0;
 		for_each_set_bit(i, &bitmap, 16) {
+			int delivered;
+
 			if (!dst[i])
 				continue;
-			*r += kvm_apic_set_irq(dst[i]->vcpu, irq, rtc_status);
+			delivered = kvm_apic_set_irq(dst[i]->vcpu, irq, rtc_status);
+			*r += delivered;
+			if (delivered > 0) {
+				ipi_targets++;
+				ipi_unique = dst[i]->vcpu;
+			}
 		}
+
+		/*
+		 * Track unicast fixed IPIs for directed-yield optimization.
+		 *
+		 * Only record when:
+		 *  - the IPI originated from a vCPU (LAPIC write, not kernel
+		 *    injection): src != NULL;
+		 *  - delivery mode is plain fixed: synchronization
+		 *    primitives such as spinlocks, TLB flushes and
+		 *    smp_call_function() use APIC_DM_FIXED;
+		 *  - no shorthand: shorthand encodes broadcasts and self
+		 *    which we explicitly do not track;
+		 *  - exactly one recipient accepted the interrupt, giving a
+		 *    directed sender->receiver relationship.
+		 */
+		if (src && irq->delivery_mode == APIC_DM_FIXED &&
+		    irq->shorthand == APIC_DEST_NOSHORT &&
+		    ipi_targets == 1 && ipi_unique && ipi_unique != src->vcpu)
+			kvm_track_ipi_communication(src->vcpu, ipi_unique,
+						    irq->vector);
 	}
 
 	rcu_read_unlock();
@@ -1443,6 +1471,13 @@ int __kvm_irq_delivery_to_apic(struct kvm *kvm, struct kvm_lapic *src,
 	struct kvm_vcpu *vcpu, *lowest = NULL;
 	unsigned long i, dest_vcpu_bitmap[BITS_TO_LONGS(KVM_MAX_VCPUS)];
 	unsigned int dest_vcpus = 0;
+	/*
+	 * Track unicast fixed IPI for directed-yield optimization in this
+	 * slow fallback path (APIC map miss). See the fast-path equivalent in
+	 * __kvm_irq_delivery_to_apic_fast() for the full filtering rationale.
+	 */
+	struct kvm_vcpu *ipi_unique = NULL;
+	int ipi_targets = 0;
 
 	if (__kvm_irq_delivery_to_apic_fast(kvm, src, irq, &r, rtc_status))
 		return r;
@@ -1456,6 +1491,8 @@ int __kvm_irq_delivery_to_apic(struct kvm *kvm, struct kvm_lapic *src,
 	memset(dest_vcpu_bitmap, 0, sizeof(dest_vcpu_bitmap));
 
 	kvm_for_each_vcpu(i, vcpu, kvm) {
+		int delivered;
+
 		if (!kvm_apic_present(vcpu))
 			continue;
 
@@ -1466,7 +1503,12 @@ int __kvm_irq_delivery_to_apic(struct kvm *kvm, struct kvm_lapic *src,
 		if (!kvm_lowest_prio_delivery(irq)) {
 			if (r < 0)
 				r = 0;
-			r += kvm_apic_set_irq(vcpu, irq, rtc_status);
+			delivered = kvm_apic_set_irq(vcpu, irq, rtc_status);
+			r += delivered;
+			if (delivered > 0) {
+				ipi_targets++;
+				ipi_unique = vcpu;
+			}
 		} else if (kvm_apic_sw_enabled(vcpu->arch.apic)) {
 			if (!vector_hashing_enabled) {
 				if (!lowest)
@@ -1487,8 +1529,27 @@ int __kvm_irq_delivery_to_apic(struct kvm *kvm, struct kvm_lapic *src,
 		lowest = kvm_get_vcpu(kvm, idx);
 	}
 
-	if (lowest)
-		r = kvm_apic_set_irq(lowest, irq, rtc_status);
+	if (lowest) {
+		int delivered = kvm_apic_set_irq(lowest, irq, rtc_status);
+
+		r = delivered;
+		if (delivered > 0) {
+			ipi_targets++;
+			ipi_unique = lowest;
+		}
+	}
+
+	/*
+	 * Record a unicast fixed IPI delivered via this slow path. The fast
+	 * path records the APIC-map-hit case; this covers the fallback
+	 * where kvm_apic_map_get_dest_lapic() missed but delivery still
+	 * resolves to exactly one recipient.
+	 */
+	if (src && irq->delivery_mode == APIC_DM_FIXED &&
+	    irq->shorthand == APIC_DEST_NOSHORT &&
+	    ipi_targets == 1 && ipi_unique && ipi_unique != src->vcpu)
+		kvm_track_ipi_communication(src->vcpu, ipi_unique,
+					    irq->vector);
 
 	return r;
 }
