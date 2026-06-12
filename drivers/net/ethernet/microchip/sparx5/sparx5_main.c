@@ -994,14 +994,22 @@ static int mchp_sparx5_probe(struct platform_device *pdev)
 		goto cleanup_ptp;
 	}
 
+	err = sparx5_rr_router_init(sparx5);
+	if (err) {
+		dev_err(sparx5->dev, "Router initialization failed\n");
+		goto cleanup_netdevs;
+	}
+
 	err = sparx5_register_notifier_blocks(sparx5);
 	if (err) {
 		dev_err(sparx5->dev, "Failed to register notifier blocks\n");
-		goto cleanup_netdevs;
+		goto cleanup_router;
 	}
 
 	goto cleanup_config;
 
+cleanup_router:
+	sparx5_rr_router_deinit(sparx5);
 cleanup_netdevs:
 	sparx5_unregister_netdevs(sparx5);
 cleanup_ptp:
@@ -1031,6 +1039,7 @@ static void mchp_sparx5_remove(struct platform_device *pdev)
 	sparx5_unregister_notifier_blocks(sparx5);
 	sparx5_unregister_netdevs(sparx5);
 	sparx5_ptp_deinit(sparx5);
+	sparx5_rr_router_deinit(sparx5);
 	sparx5_frame_io_deinit(sparx5);
 	sparx5_stats_deinit(sparx5);
 	sparx5_mact_deinit(sparx5);
@@ -1067,6 +1076,8 @@ static const struct sparx5_consts sparx5_consts = {
 	.qres_max_prio_idx   = 630,
 	.qres_max_colour_idx = 638,
 	.tod_pin             = 4,
+	.vmid_cnt            = 511,
+	.arp_tbl_cnt         = 2048,
 	.vcaps               = sparx5_vcaps,
 	.vcaps_cfg           = sparx5_vcap_inst_cfg,
 	.vcap_stats          = &sparx5_vcap_stats,
