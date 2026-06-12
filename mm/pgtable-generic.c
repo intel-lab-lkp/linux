@@ -434,6 +434,14 @@ static void kernel_pgtable_work_func(struct work_struct *work)
 	spin_unlock(&kernel_pgtable_work.lock);
 
 	iommu_sva_invalidate_kva_range(PAGE_OFFSET, TLB_FLUSH_ALL);
+
+	/*
+	 * Lockless kernel page table walkers (ptdump, and any other user of
+	 * walk_kernel_page_table_range_lockless()) dereference these pages
+	 * under rcu_read_lock(). Wait for a grace period so no walker can
+	 * still be reading a page we are about to free.
+	 */
+	synchronize_rcu();
 	list_for_each_entry_safe(pt, next, &page_list, pt_list)
 		__pagetable_free(pt);
 }
