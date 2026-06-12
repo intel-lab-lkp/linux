@@ -1738,6 +1738,46 @@ EXPORT_SYMBOL(drm_hdmi_connector_get_output_format_name);
  *	drm_connector_attach_max_bpc_property() to create and attach the
  *	property to the connector during initialization.
  *
+ * min bpc:
+ *	This range property is used by userspace to set a minimum bit depth that
+ *	the driver must reach on the connector for a given atomic state. If it
+ *	cannot do so, the atomic commit fails.
+ *
+ *	The precise definition of minimum bit depth used for the "min bpc"
+ *	property must align with the definition a given driver uses for the
+ *	"max bpc" property, such that when "min bpc" and "max bpc" are set to
+ *	the same value, the allowable range of bit depths is a single set point.
+ *
+ *	Drivers should ideally use a definition of bit depth that refers to a
+ *	perceptual optical bit depth, meaning it is equivalent to an
+ *	uncompressed optical bit depth for a variety of content to the median
+ *	human eyeball in a variety of viewing environments. The display link's
+ *	actual optical bit depth to represent the data on the wire may be lower
+ *	due to compression techniques, or even higher due to padding. In
+ *	concrete terms, userspace should not need to know how to implement DSC
+ *	compression in order to set a minimum bit depth to the appropriate
+ *	value, and should not need to perform display-protocol-specific
+ *	calculations to set the right on-the-wire format.
+ *
+ *	Userspace may use the "min bpc" property in combination with performing
+ *	atomic test commits in order to enumerate the possible output bit depths
+ *	for a given configuration. This way, userspace compositors can make
+ *	use-case and content-specific tradeoffs to reach a desired output bit
+ *	depth, such as by using chroma subsampling, or by choosing a lower
+ *	refresh rate mode.
+ *
+ *	Userspace may use the "min bpc" property in combination with the
+ *	"max bpc" property to know what output bit depth a successful atomic
+ *	commit is using. By setting "min bpc" and "max bpc" to the same value,
+ *	a successful commit will be using an output bit depth of said value.
+ *
+ *	When "min bpc" is set to a non-zero value, any bit depth degradation
+ *	logic below "min bpc" must be implemented by userspace (through lowering
+ *	"min bpc"), rather than by kernel drivers. For a driver to degrade to an
+ *	uncompressed optical output bit depth below "min bpc" is always a bug no
+ *	matter how good the intentions are, since it renders the property
+ *	useless as an oracle.
+ *
  * Connectors also have one standardized atomic property:
  *
  * CRTC_ID:
@@ -2891,6 +2931,43 @@ int drm_connector_attach_max_bpc_property(struct drm_connector *connector,
 	return 0;
 }
 EXPORT_SYMBOL(drm_connector_attach_max_bpc_property);
+
+/**
+ * drm_connector_attach_min_bpc_property - attach "min bpc" property
+ * @connector: connector to attach min bpc property on.
+ * @max: The maximum bit depth supported by the connector.
+ *
+ * Create and attach the "min bpc" connector property, which is used by
+ * userspace to require that a certain minimum bit depth is reached by the
+ * connector on atomic commit.
+ *
+ * Returns:
+ * Zero on success, negative errno on failure.
+ */
+int drm_connector_attach_min_bpc_property(struct drm_connector *connector,
+					  unsigned int max)
+{
+	struct drm_device *dev = connector->dev;
+	struct drm_property *prop;
+
+	if (max > U8_MAX)
+		return -ERANGE;
+
+	prop = connector->min_bpc_property;
+	if (!prop) {
+		prop = drm_property_create_range(dev, 0, "min bpc", 0, max);
+		if (!prop)
+			return -ENOMEM;
+
+		connector->min_bpc_property = prop;
+	}
+
+	drm_object_attach_property(&connector->base, prop, 0);
+	connector->state->min_requested_bpc = 0;
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_connector_attach_min_bpc_property);
 
 /**
  * drm_connector_attach_hdr_output_metadata_property - attach "HDR_OUTPUT_METADATA" property

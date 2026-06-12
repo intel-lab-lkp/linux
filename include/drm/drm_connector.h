@@ -1262,6 +1262,11 @@ struct drm_connector_state {
 	u8 max_requested_bpc;
 
 	/**
+	 * @min_requested_bpc: Minimum output bit depth requested by userspace
+	 */
+	u8 min_requested_bpc;
+
+	/**
 	 * @max_bpc: Connector max_bpc based on the requested max_bpc property
 	 * and the connector bpc limitations obtained from edid.
 	 */
@@ -2291,6 +2296,12 @@ struct drm_connector {
 	 */
 	struct drm_property *max_bpc_property;
 
+	/**
+	 * @min_bpc_property: Default connector property for the minimum bit
+	 * depth for the output to reach, or the commit to fail otherwise.
+	 */
+	struct drm_property *min_bpc_property;
+
 	/** @privacy_screen: drm_privacy_screen for this connector, or NULL. */
 	struct drm_privacy_screen *privacy_screen;
 
@@ -2697,6 +2708,8 @@ int drm_connector_set_orientation_from_panel(
 	struct drm_panel *panel);
 int drm_connector_attach_max_bpc_property(struct drm_connector *connector,
 					  int min, int max);
+int drm_connector_attach_min_bpc_property(struct drm_connector *connector,
+					  unsigned int max);
 void drm_connector_create_privacy_screen_properties(struct drm_connector *conn);
 void drm_connector_attach_privacy_screen_properties(struct drm_connector *conn);
 void drm_connector_attach_privacy_screen_provider(
