@@ -285,6 +285,16 @@ static inline void swap_read_unplug(struct swap_iocb *plug)
 void swap_write_unplug(struct swap_iocb *sio);
 int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug);
 int __swap_writepage(struct folio *folio, struct swap_iocb **swap_plug);
+#ifdef CONFIG_VSWAP
+void __swap_writepage_phys(struct folio *folio, struct swap_iocb **swap_plug,
+			   swp_entry_t phys_entry);
+#else
+static inline void __swap_writepage_phys(struct folio *folio,
+					 struct swap_iocb **swap_plug,
+					 swp_entry_t phys_entry)
+{
+}
+#endif
 
 /* linux/mm/swap_state.c */
 extern struct address_space swap_space __read_mostly;

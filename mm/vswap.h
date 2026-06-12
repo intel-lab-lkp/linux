@@ -9,6 +9,7 @@
 
 
 #include <linux/swap.h>
+#include "swap.h"
 
 struct zswap_entry;
 
@@ -32,10 +33,53 @@ enum vswap_backing_type {
 
 #ifdef CONFIG_VSWAP
 
-#include "swap.h"
 #include "swap_table.h"
 
-extern struct swap_info_struct *vswap_si;
+static inline bool is_vswap_entry(swp_entry_t entry)
+{
+	return swap_is_vswap(__swap_entry_to_info(entry));
+}
+
+/*
+ * Rmap cache-only helpers for physical cluster Pointer-tagged entries.
+ * SWP_RMAP_CACHE_ONLY records, inline on the physical swap_table entry,
+ * that the backing vswap entry has swap_count == 0 (swap-cache-only, so
+ * reclaimable). The physical reclaim scanner reads it directly instead of
+ * chasing the rmap into the vswap layer and paying the cluster-lookup
+ * indirection.
+ */
+
+static inline void swap_rmap_mark_cache_only(struct swap_cluster_info *ci,
+					     unsigned int off)
+{
+	atomic_long_t *table;
+
+	table = rcu_dereference_check(ci->table, true);
+	atomic_long_or(SWP_RMAP_CACHE_ONLY, &table[off]);
+}
+
+static inline void swap_rmap_clear_cache_only(struct swap_cluster_info *ci,
+					      unsigned int off)
+{
+	atomic_long_t *table;
+
+	table = rcu_dereference_check(ci->table, true);
+	atomic_long_and(~SWP_RMAP_CACHE_ONLY, &table[off]);
+}
+
+static inline bool swap_rmap_is_cache_only(struct swap_cluster_info *ci,
+					   unsigned int off)
+{
+	atomic_long_t *table;
+	bool ret;
+
+	VM_WARN_ON_ONCE(off >= SWAPFILE_CLUSTER);
+	rcu_read_lock();
+	table = rcu_dereference(ci->table);
+	ret = table && (atomic_long_read(&table[off]) & SWP_RMAP_CACHE_ONLY);
+	rcu_read_unlock();
+	return ret;
+}
 
 /*
  * Virtual table entry encoding for vswap clusters.
@@ -159,6 +203,25 @@ vswap_lock_cluster(swp_entry_t entry, unsigned int *voff)
 	return ci_dyn;
 }
 
+static inline swp_entry_t vswap_to_phys(swp_entry_t entry)
+{
+	struct swap_cluster_info_dynamic *ci_dyn;
+	unsigned int voff;
+	unsigned long vt;
+
+	ci_dyn = vswap_lock_cluster(entry, &voff);
+	if (!ci_dyn)
+		return (swp_entry_t){};
+
+	vt = __vtable_get(ci_dyn, voff);
+	spin_unlock(&ci_dyn->ci.lock);
+
+	if (vtable_type(vt) != VSWAP_SWAPFILE)
+		return (swp_entry_t){};
+
+	return vtable_to_phys(vt);
+}
+
 void __vswap_release_backing(struct swap_cluster_info *ci,
 			     unsigned int ci_start, unsigned int nr);
 
@@ -195,6 +258,7 @@ static inline struct zswap_entry *vswap_zswap_load(swp_entry_t entry)
 
 
 void folio_release_vswap_backing(struct folio *folio);
+void folio_release_non_phys_swap_backing(struct folio *folio);
 
 /*
  * Walk nr vtable slots starting at voff in ci_dyn. Returns the prefix
@@ -274,6 +338,17 @@ static inline int vswap_check_backing(swp_entry_t entry, int nr,
 	return ret;
 }
 
+static inline bool folio_phys_swap_backed(struct folio *folio)
+{
+	swp_entry_t entry = folio->swap;
+	int nr = folio_nr_pages(folio);
+	enum vswap_backing_type type;
+
+	return !is_vswap_entry(entry) ||
+	       (vswap_check_backing(entry, nr, &type) == nr &&
+		type == VSWAP_SWAPFILE);
+}
+
 static inline int vswap_cluster_alloc_vtable(struct swap_cluster_info_dynamic *ci_dyn)
 {
 	ci_dyn->virtual_table = kcalloc(SWAPFILE_CLUSTER,
@@ -293,6 +368,27 @@ static inline void vswap_cluster_free_vtable(struct swap_cluster_info *ci)
 
 #else /* !CONFIG_VSWAP */
 
+static inline bool is_vswap_entry(swp_entry_t entry)
+{
+	return false;
+}
+
+static inline swp_entry_t vswap_to_phys(swp_entry_t entry)
+{
+	return (swp_entry_t){};
+}
+
+static inline bool folio_phys_swap_backed(struct folio *folio)
+{
+	return true;
+}
+
+static inline bool swap_rmap_is_cache_only(struct swap_cluster_info *ci,
+					   unsigned int off)
+{
+	return false;
+}
+
 static inline void __vswap_release_backing(struct swap_cluster_info *ci,
 					   unsigned int ci_start,
 					   unsigned int nr) {}
@@ -306,6 +402,7 @@ static inline struct zswap_entry *vswap_zswap_load(swp_entry_t entry)
 }
 
 static inline void folio_release_vswap_backing(struct folio *folio) {}
+static inline void folio_release_non_phys_swap_backing(struct folio *folio) {}
 
 struct swap_cluster_info_dynamic;
 static inline int __vswap_check_backing(struct swap_cluster_info_dynamic *ci_dyn,
@@ -324,17 +421,35 @@ static inline void vswap_cluster_free_vtable(struct swap_cluster_info *ci) {}
 
 #endif /* CONFIG_VSWAP */
 
-#ifdef CONFIG_SWAP
-#include "swap.h"
-static inline bool is_vswap_entry(swp_entry_t entry)
+/*
+ * Test a per-backend swap flag (SWP_SYNCHRONOUS_IO, SWP_STABLE_WRITES, ...)
+ * for @entry. For a vswap entry the property belongs to the current
+ * physical backing rather than vswap_si itself; resolve to the backing
+ * and test there. Returns false for zswap/zero/unbacked vswap entries
+ * as they don't have a backing bdev.
+ */
+static inline bool swap_entry_backend_has_flag(struct swap_info_struct *si,
+					       swp_entry_t entry,
+					       unsigned long flag)
 {
-	return swap_is_vswap(__swap_entry_to_info(entry));
+	struct swap_info_struct *phys_si;
+	swp_entry_t phys;
+	bool has_flag;
+
+	if (!swap_is_vswap(si))
+		return data_race(si->flags & flag);
+
+	phys = vswap_to_phys(entry);
+	if (!phys.val)
+		return false;
+
+	phys_si = get_swap_device(phys);
+	if (!phys_si)
+		return false;
+
+	has_flag = data_race(phys_si->flags & flag);
+	put_swap_device(phys_si);
+	return has_flag;
 }
-#else
-static inline bool is_vswap_entry(swp_entry_t entry)
-{
-	return false;
-}
-#endif /* CONFIG_SWAP */
 
 #endif /* _MM_VSWAP_H */
