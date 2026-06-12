@@ -106,6 +106,7 @@ u64 kvm_pmu_guest_counter_mask(struct arm_pmu *pmu);
 void kvm_pmu_load(struct kvm_vcpu *vcpu);
 void kvm_pmu_put(struct kvm_vcpu *vcpu);
 void kvm_pmu_set_guest_owned(struct kvm_vcpu *vcpu);
+void kvm_pmu_handle_guest_irq(struct arm_pmu *pmu, u64 pmovsr);
 
 #define kvm_pmu_get_access(vcpu)	((vcpu)->arch.pmu.access)
 
@@ -273,6 +274,8 @@ static inline u64 kvm_pmu_guest_counter_mask(void *kvm)
 {
 	return 0;
 }
+
+static inline void kvm_pmu_handle_guest_irq(struct arm_pmu *pmu, u64 pmovsr) {}
 
 #endif
 
