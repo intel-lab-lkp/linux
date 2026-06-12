@@ -27638,6 +27638,7 @@ M:	Alexey Charkov <alchark@flipper.net>
 S:	Maintained
 F:	Documentation/devicetree/bindings/mfd/ugreen,dh2300-mcu.yaml
 F:	drivers/mfd/ugreen-dh2300-mcu.c
+F:	drivers/regulator/ugreen-dh2300-mcu-regulator.c
 
 UHID USERSPACE HID IO DRIVER
 M:	David Rheinsberg <david@readahead.eu>
