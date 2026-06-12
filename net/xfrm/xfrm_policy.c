@@ -2421,7 +2421,7 @@ static struct xfrm_policy *clone_policy(const struct xfrm_policy *old, int dir)
 		newp->selector = old->selector;
 		if (security_xfrm_policy_clone(old->security,
 					       &newp->security)) {
-			kfree(newp);
+			xfrm_pol_put(newp);
 			return NULL;  /* ENOMEM */
 		}
 		newp->lft = old->lft;
