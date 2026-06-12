@@ -227,14 +227,6 @@ impl NV_PFB_PRI_MMU_WPR2_ADDR_HI {
     }
 }
 
-// PGSP
-
-register! {
-    pub(crate) NV_PGSP_QUEUE_HEAD(u32) @ 0x00110c00 {
-        31:0    address;
-    }
-}
-
 // PGC6 register space.
 //
 // `GC6` is a GPU low-power state where VRAM is in self-refresh and the GPU is powered down (except
