@@ -322,8 +322,9 @@ static int ixgbevf_set_ringparam(struct net_device *netdev,
 	}
 
 	if (new_rx_count != adapter->rx_ring_count) {
-		rx_ring = vmalloc(array_size(sizeof(*rx_ring),
-					     adapter->num_rx_queues));
+		rx_ring = vmalloc_array(adapter->num_rx_queues,
+					sizeof(*rx_ring));
+
 		if (!rx_ring) {
 			err = -ENOMEM;
 			goto clear_reset;
