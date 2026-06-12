@@ -461,6 +461,9 @@ virt_efi_set_variable_nb(efi_char16_t *name, efi_guid_t *vendor, u32 attr,
 {
 	efi_status_t status;
 
+	if (!efi_enabled(EFI_RUNTIME_SERVICES))
+		return EFI_DEVICE_ERROR;
+
 	if (down_trylock(&efi_runtime_lock))
 		return EFI_NOT_READY;
 
@@ -500,6 +503,9 @@ virt_efi_query_variable_info_nb(u32 attr, u64 *storage_space,
 	if (efi.runtime_version < EFI_2_00_SYSTEM_TABLE_REVISION)
 		return EFI_UNSUPPORTED;
 
+	if (!efi_enabled(EFI_RUNTIME_SERVICES))
+		return EFI_DEVICE_ERROR;
+
 	if (down_trylock(&efi_runtime_lock))
 		return EFI_NOT_READY;
 
@@ -527,6 +533,11 @@ static void __nocfi
 virt_efi_reset_system(int reset_type, efi_status_t status,
 		      unsigned long data_size, efi_char16_t *data)
 {
+	if (!efi_enabled(EFI_RUNTIME_SERVICES)) {
+		pr_warn("EFI Runtime Services are disabled, not invoking reset_system()\n");
+		return;
+	}
+
 	if (down_trylock(&efi_runtime_lock)) {
 		pr_warn("failed to invoke the reset_system() runtime service:\n"
 			"could not get exclusive access to the firmware\n");
