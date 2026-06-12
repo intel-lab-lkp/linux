@@ -190,39 +190,33 @@ bool pkvm_hyp_vm_is_created(struct kvm *kvm)
 
 int pkvm_create_hyp_vm(struct kvm *kvm)
 {
-	int ret = 0;
-
 	/*
 	 * Synchronise with kvm_arch_prepare_memory_region(), as we
 	 * prevent memslot modifications on a pVM that has been run.
 	 */
-	mutex_lock(&kvm->slots_lock);
-	mutex_lock(&kvm->arch.config_lock);
-	if (!pkvm_hyp_vm_is_created(kvm))
-		ret = __pkvm_create_hyp_vm(kvm);
-	mutex_unlock(&kvm->arch.config_lock);
-	mutex_unlock(&kvm->slots_lock);
+	guard(mutex)(&kvm->slots_lock);
+	guard(mutex)(&kvm->arch.config_lock);
 
-	return ret;
+	if (!pkvm_hyp_vm_is_created(kvm))
+		return __pkvm_create_hyp_vm(kvm);
+
+	return 0;
 }
 
 int pkvm_create_hyp_vcpu(struct kvm_vcpu *vcpu)
 {
-	int ret = 0;
+	guard(mutex)(&vcpu->kvm->arch.config_lock);
 
-	mutex_lock(&vcpu->kvm->arch.config_lock);
 	if (!vcpu_get_flag(vcpu, VCPU_PKVM_FINALIZED))
-		ret = __pkvm_create_hyp_vcpu(vcpu);
-	mutex_unlock(&vcpu->kvm->arch.config_lock);
+		return __pkvm_create_hyp_vcpu(vcpu);
 
-	return ret;
+	return 0;
 }
 
 void pkvm_destroy_hyp_vm(struct kvm *kvm)
 {
-	mutex_lock(&kvm->arch.config_lock);
+	guard(mutex)(&kvm->arch.config_lock);
 	__pkvm_destroy_hyp_vm(kvm);
-	mutex_unlock(&kvm->arch.config_lock);
 }
 
 int pkvm_init_host_vm(struct kvm *kvm, unsigned long type)

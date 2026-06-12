@@ -193,10 +193,10 @@ void kvm_reset_vcpu(struct kvm_vcpu *vcpu)
 	bool loaded;
 	u32 pstate;
 
-	spin_lock(&vcpu->arch.mp_state_lock);
-	reset_state = vcpu->arch.reset_state;
-	vcpu->arch.reset_state.reset = false;
-	spin_unlock(&vcpu->arch.mp_state_lock);
+	scoped_guard(spinlock, &vcpu->arch.mp_state_lock) {
+		reset_state = vcpu->arch.reset_state;
+		vcpu->arch.reset_state.reset = false;
+	}
 
 	preempt_disable();
 	loaded = (vcpu->cpu != -1);
