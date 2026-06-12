@@ -797,7 +797,6 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	return 0;
 
  err2:
-	irq_dispose_mapping(task_irq);
 	bcom_ata_release(dmatsk);
  err1:
 	irq_dispose_mapping(ata_irq);
@@ -808,14 +807,11 @@ static void mpc52xx_ata_remove(struct platform_device *op)
 {
 	struct ata_host *host = platform_get_drvdata(op);
 	struct mpc52xx_ata_priv *priv = host->private_data;
-	int task_irq;
 
 	/* Deregister the ATA interface */
 	ata_platform_remove_one(op);
 
 	/* Clean up DMA */
-	task_irq = bcom_get_task_irq(priv->dmatsk);
-	irq_dispose_mapping(task_irq);
 	bcom_ata_release(priv->dmatsk);
 	irq_dispose_mapping(priv->ata_irq);
 }
