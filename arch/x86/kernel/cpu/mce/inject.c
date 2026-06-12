@@ -30,6 +30,7 @@
 #include <asm/mce.h>
 #include <asm/msr.h>
 #include <asm/nmi.h>
+#include <asm/processor.h>
 #include <asm/smp.h>
 
 #include "internal.h"
@@ -310,28 +311,43 @@ static struct notifier_block inject_nb = {
 	.notifier_call  = mce_inject_raise,
 };
 
+struct hwcr_update_info {
+	u64 clear;
+	u64 set;
+	int err;
+};
+
+static void ipi_update_hwcr(void *info)
+{
+	struct hwcr_update_info *ui = info;
+
+	ui->err = amd_update_hwcr(ui->clear, ui->set);
+}
+
 /*
  * Caller needs to be make sure this cpu doesn't disappear
  * from under us, i.e.: get_cpu/put_cpu.
  */
 static int toggle_hw_mce_inject(unsigned int cpu, bool enable)
 {
-	u32 l, h;
+	struct hwcr_update_info ui = {
+		.clear = enable ? 0 : MSR_K7_HWCR_MCSTATUSWREN,
+		.set = enable ? MSR_K7_HWCR_MCSTATUSWREN : 0,
+	};
 	int err;
 
-	err = rdmsr_on_cpu(cpu, MSR_K7_HWCR, &l, &h);
+	err = smp_call_function_single(cpu, ipi_update_hwcr, &ui, 1);
 	if (err) {
-		pr_err("%s: error reading HWCR\n", __func__);
+		pr_err("%s: error calling ipi_update_hwcr on CPU %d\n", __func__, cpu);
 		return err;
 	}
 
-	enable ? (l |= BIT(18)) : (l &= ~BIT(18));
+	if (ui.err) {
+		pr_err("%s: error updating HWCR on CPU %d\n", __func__, cpu);
+		return ui.err;
+	}
 
-	err = wrmsr_on_cpu(cpu, MSR_K7_HWCR, l, h);
-	if (err)
-		pr_err("%s: error writing HWCR\n", __func__);
-
-	return err;
+	return 0;
 }
 
 static int __set_inj(const char *buf)
