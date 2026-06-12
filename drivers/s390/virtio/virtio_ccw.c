@@ -429,7 +429,7 @@ static void virtio_ccw_drop_indicator(struct virtio_ccw_device *vcdev,
 			    vcdev->is_thinint ?
 			    VIRTIO_CCW_DOING_SET_IND_ADAPTER :
 			    VIRTIO_CCW_DOING_SET_IND);
-	if (ret && (ret != -ENODEV))
+	if (ret && (ret != -ENODEV) && (ret != -EINVAL))
 		dev_info(&vcdev->cdev->dev,
 			 "Failed to deregister indicators (%d)\n", ret);
 	else if (vcdev->is_thinint)
@@ -515,10 +515,10 @@ static void virtio_ccw_del_vq(struct virtqueue *vq, struct ccw1 *ccw)
 	ret = ccw_io_helper(vcdev, ccw,
 			    VIRTIO_CCW_DOING_SET_VQ | index);
 	/*
-	 * -ENODEV isn't considered an error: The device is gone anyway.
+	 * -ENODEV and -EINVAL aren't considered errors: The device is gone anyway.
 	 * This may happen on device detach.
 	 */
-	if (ret && (ret != -ENODEV))
+	if (ret && (ret != -ENODEV) && (ret != -EINVAL))
 		dev_warn(&vq->vdev->dev, "Error %d while deleting queue %d\n",
 			 ret, index);
 
