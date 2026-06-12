@@ -3226,11 +3226,8 @@ static int xilinx_dma_probe(struct platform_device *pdev)
 			goto disable_clks;
 		}
 
-		err = of_property_read_u32(node, "xlnx,flush-fsync",
-					   &xdev->flush_on_fsync);
-		if (err < 0)
-			dev_warn(xdev->dev,
-				 "missing xlnx,flush-fsync property\n");
+		xdev->flush_on_fsync =
+			of_property_read_bool(node, "xlnx,flush-fsync");
 	}
 
 	err = of_property_read_u32(node, "xlnx,addrwidth", &addr_width);
