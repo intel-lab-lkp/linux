@@ -19,6 +19,16 @@ menuconfig SWAP
 	  used to provide more virtual memory than the actual RAM present
 	  in your computer.  If unsure say Y.
 
+config VSWAP
+	bool "Virtual swap device"
+	depends on SWAP && 64BIT
+	help
+	  Adds a virtual swap layer that decouples swap entries in page
+	  tables from physical backing storage. Swap entries are allocated
+	  from a virtual swap device and can be backed by zswap, a physical
+	  swapfile, or kept in memory - with the backing changeable at
+	  runtime without invalidating page table entries.
+
 config ZSWAP
 	bool "Compressed cache for swap pages"
 	depends on SWAP
