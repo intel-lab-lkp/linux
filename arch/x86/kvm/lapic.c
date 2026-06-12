@@ -1746,6 +1746,65 @@ static void kvm_ioapic_send_eoi(struct kvm_lapic *apic, int vector)
 #endif
 }
 
+/*
+ * Clear IPI tracking state associated with a just-acknowledged vector.
+ *
+ * Called from both the emulated APIC_EOI write path (apic_set_eoi)
+ * and the accelerated exit path (kvm_apic_set_eoi_accelerated).
+ *
+ * Vector matching is deliberate: the receiver may handle an unrelated
+ * interrupt (timer, device IRQ) between an IPI's arrival and its EOI.
+ * If we cleared unconditionally, such an intermediate EOI would evict
+ * the still-pending IPI context and cause directed yield to miss the
+ * real receiver. We therefore only touch state when the EOI'd vector
+ * matches the one we recorded at send time.
+ *
+ * Two-stage cleanup:
+ *  1. Clear the receiver's context unconditionally when the vector
+ *     matches: it has processed exactly this IPI.
+ *  2. Clear the sender's pending_ipi flag only if the sender still
+ *     points at this receiver, with the same vector, and within the
+ *     configured recency window. This avoids evicting a newer IPI
+ *     that happens to share the vector with a stale one.
+ */
+static void kvm_clear_ipi_on_eoi(struct kvm_lapic *apic, int vector)
+{
+	struct kvm_vcpu *receiver = apic->vcpu;
+	struct kvm_vcpu *sender;
+	int sender_idx;
+	u64 then, now;
+
+	if (unlikely(!READ_ONCE(ipi_tracking_enabled)))
+		return;
+
+	if (vector < 0 || vector > 0xff)
+		return;
+
+	if (READ_ONCE(receiver->arch.ipi_context.vector) != (u8)vector)
+		return;
+
+	sender_idx = READ_ONCE(receiver->arch.ipi_context.last_ipi_sender);
+	kvm_vcpu_clear_ipi_context(receiver);
+
+	if (sender_idx < 0)
+		return;
+
+	sender = kvm_get_vcpu(receiver->kvm, sender_idx);
+	if (!sender)
+		return;
+
+	if (READ_ONCE(sender->arch.ipi_context.last_ipi_receiver) !=
+	    receiver->vcpu_idx)
+		return;
+	if (READ_ONCE(sender->arch.ipi_context.vector) != (u8)vector)
+		return;
+
+	then = READ_ONCE(sender->arch.ipi_context.ipi_time_ns);
+	now = ktime_get_mono_fast_ns();
+	if (now - then <= READ_ONCE(ipi_window_ns))
+		WRITE_ONCE(sender->arch.ipi_context.pending_ipi, false);
+}
+
 static int apic_set_eoi(struct kvm_lapic *apic)
 {
 	int vector = apic_find_highest_isr(apic);
@@ -1766,6 +1825,7 @@ static int apic_set_eoi(struct kvm_lapic *apic)
 		kvm_hv_synic_send_eoi(apic->vcpu, vector);
 
 	kvm_ioapic_send_eoi(apic, vector);
+	kvm_clear_ipi_on_eoi(apic, vector);
 	kvm_make_request(KVM_REQ_EVENT, apic->vcpu);
 	return vector;
 }
@@ -1781,6 +1841,7 @@ void kvm_apic_set_eoi_accelerated(struct kvm_vcpu *vcpu, int vector)
 	trace_kvm_eoi(apic, vector);
 
 	kvm_ioapic_send_eoi(apic, vector);
+	kvm_clear_ipi_on_eoi(apic, vector);
 	kvm_make_request(KVM_REQ_EVENT, apic->vcpu);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_apic_set_eoi_accelerated);
