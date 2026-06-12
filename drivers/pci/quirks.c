@@ -4227,6 +4227,41 @@ reset_complete:
 	return 0;
 }
 
+/*
+ * Device-specific reset method for certain Qualcomm devices via D3hot power
+ * cycle.
+ *
+ * These specific Qualcomm devices lack FLR capability, advertise NoSoftRst+
+ * (blocking PM reset), and have broken bus reset. Despite advertising
+ * NoSoftRst+, testing shows that D3hot transition provides sufficient reset
+ * for VFIO reuse, particularly after unexpected VM termination where the
+ * device would otherwise remain in an undefined state. While not a complete
+ * reset (BARs are preserved), it provides the only viable reset mechanism for
+ * these devices in the commented situations.
+ */
+static int reset_qualcomm_d3hot(struct pci_dev *dev, bool probe)
+{
+	int ret;
+
+	if (probe)
+		return 0;
+
+	if (dev->current_state != PCI_D0)
+		return -EINVAL;
+
+	ret = pci_set_power_state(dev, PCI_D3hot);
+	if (ret)
+		return ret;
+	msleep(200);
+
+	ret = pci_set_power_state(dev, PCI_D0);
+	if (ret)
+		return ret;
+	msleep(200);
+
+	return 0;
+}
+
 static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82599_SFP_VF,
 		 reset_intel_82599_sfp_virtfn },
@@ -4242,6 +4277,9 @@ static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 		reset_chelsio_generic_dev },
 	{ PCI_VENDOR_ID_HUAWEI, PCI_DEVICE_ID_HINIC_VF,
 		reset_hinic_vf_dev },
+	{ PCI_VENDOR_ID_QCOM, 0x1103, reset_qualcomm_d3hot },  /* WCN6855 */
+	{ PCI_VENDOR_ID_QCOM, 0x1107, reset_qualcomm_d3hot },  /* WCN7850 */
+	{ PCI_VENDOR_ID_QCOM, 0x0308, reset_qualcomm_d3hot },  /* SDX62/SDX65 */
 	{ 0 }
 };
 
