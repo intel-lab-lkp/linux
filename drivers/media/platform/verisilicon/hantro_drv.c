@@ -90,6 +90,8 @@ static void hantro_job_finish(struct hantro_dev *vpu,
 			      struct hantro_ctx *ctx,
 			      enum vb2_buffer_state result)
 {
+	ctx->total_ns += ktime_to_ns(ktime_sub(ktime_get(), ctx->start_time));
+
 	pm_runtime_put_autosuspend(vpu->dev);
 
 	clk_bulk_disable(vpu->variant->num_clocks, vpu->clocks);
@@ -185,6 +187,8 @@ static void device_run(void *priv)
 		goto err_cancel_job;
 
 	v4l2_m2m_buf_copy_metadata(src, dst);
+
+	ctx->start_time = ktime_get();
 
 	if (ctx->codec_ops->run(ctx))
 		goto err_cancel_job;
@@ -701,10 +705,28 @@ static int hantro_release(struct file *filp)
 	return 0;
 }
 
+static void hantro_show_fdinfo(struct seq_file *m, struct file *f)
+{
+	struct hantro_ctx *ctx = file_to_ctx(f);
+	struct hantro_dev *vpu = ctx->dev;
+
+	seq_printf(m, "media-driver:\t%s\n", DRIVER_NAME);
+	seq_printf(m, "media-engine-%s:\t%llu ns\n",
+		   ctx->is_encoder ? "encoder" : "decoder",
+		   ctx->total_ns);
+	seq_printf(m, "media-maxfreq-%s:\t%lu Hz\n",
+		   ctx->is_encoder ? "encoder" : "decoder",
+		   clk_get_rate(vpu->clocks[0].clk));
+	seq_printf(m, "media-curfreq-%s:\t%lu Hz\n",
+		   ctx->is_encoder ? "encoder" : "decoder",
+		   clk_get_rate(vpu->clocks[0].clk));
+}
+
 static const struct v4l2_file_operations hantro_fops = {
 	.owner = THIS_MODULE,
 	.open = hantro_open,
 	.release = hantro_release,
+	.show_fdinfo = hantro_show_fdinfo,
 	.poll = v4l2_m2m_fop_poll,
 	.unlocked_ioctl = video_ioctl2,
 	.mmap = v4l2_m2m_fop_mmap,

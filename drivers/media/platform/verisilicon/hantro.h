@@ -16,6 +16,7 @@
 #include <linux/videodev2.h>
 #include <linux/wait.h>
 #include <linux/clk.h>
+#include <linux/ktime.h>
 #include <linux/reset.h>
 
 #include <media/v4l2-ctrls.h>
@@ -267,6 +268,10 @@ struct hantro_ctx {
 	const struct hantro_codec_ops *codec_ops;
 	struct hantro_postproc_ctx postproc;
 	bool need_postproc;
+
+	/* Statistics for debugging and performance measurements. */
+	ktime_t start_time;
+	u64 total_ns;
 
 	/* Specific for particular codec modes. */
 	union {
