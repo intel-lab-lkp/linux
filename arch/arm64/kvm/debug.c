@@ -35,7 +35,7 @@ static int cpu_has_spe(u64 dfr0)
  *  - Self-hosted Trace Filter controls (MDCR_EL2_TTRF)
  *  - Self-hosted Trace (MDCR_EL2_TTRF/MDCR_EL2_E2TB)
  */
-static void kvm_arm_setup_mdcr_el2(struct kvm_vcpu *vcpu)
+void kvm_arm_setup_mdcr_el2(struct kvm_vcpu *vcpu)
 {
 	preempt_disable();
 
@@ -63,7 +63,8 @@ static void kvm_arm_setup_mdcr_el2(struct kvm_vcpu *vcpu)
 		 * fine grain traps and enforce counter access with
 		 * HPMN.
 		 */
-		if (!vcpu_on_unsupported_cpu(vcpu) &&
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED &&
+		    !vcpu_on_unsupported_cpu(vcpu) &&
 		    cpus_have_final_cap(ARM64_HAS_FGT) &&
 		    (cpus_have_final_cap(ARM64_HAS_HPMN0) || nr_guest_cntr > 0)) {
 			vcpu->arch.mdcr_el2 &= ~(MDCR_EL2_TPM | MDCR_EL2_TPMCR | MDCR_EL2_HPMN);

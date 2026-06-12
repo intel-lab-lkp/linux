@@ -1085,15 +1085,17 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 	u64 mask;
 	int idx;
 
+	kvm_pmu_set_guest_owned(vcpu);
+
 	switch (reg) {
 	case PMCR_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm))
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED)
 			kvm_pmu_direct_pmcr_write(vcpu, val);
 		else
 			kvm_pmu_handle_pmcr(vcpu, val);
 		break;
 	case PMSELR_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm))
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED)
 			write_sysreg(val, pmselr_el0);
 		else
 			__vcpu_assign_sys_reg(vcpu, reg, val);
@@ -1101,7 +1103,7 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 	case PMEVCNTR0_EL0 ... PMCCNTR_EL0:
 		idx = reg - PMEVCNTR0_EL0;
 
-		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED) {
 			if (idx == ARMV8_PMU_CYCLE_IDX)
 				write_sysreg(val, pmccntr_el0);
 			else
@@ -1122,7 +1124,7 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 		}
 		break;
 	case PMCNTENSET_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED) {
 			if (set)
 				write_sysreg(val, pmcntenset_el0);
 			else
@@ -1139,7 +1141,7 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 		}
 		break;
 	case PMINTENSET_EL1:
-		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED) {
 			if (set)
 				write_sysreg(val, pmintenset_el1);
 			else
@@ -1166,7 +1168,7 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 		local_irq_restore(flags);
 		break;
 	case PMUSERENR_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm))
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED)
 			write_sysreg(val, pmuserenr_el0);
 		else
 			__vcpu_assign_sys_reg(vcpu, reg, val);
@@ -1175,7 +1177,6 @@ static void pmu_reg_write(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg, u64 val, 
 		WARN_ON(1);
 		break;
 	}
-
 }
 
 /**
@@ -1192,15 +1193,17 @@ static u64 pmu_reg_read(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg)
 	u64 val = 0;
 	int idx;
 
+	kvm_pmu_set_guest_owned(vcpu);
+
 	switch (reg) {
 	case PMCR_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm))
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED)
 			val = kvm_pmu_direct_pmcr_read(vcpu);
 		else
 			val = kvm_vcpu_read_pmcr(vcpu);
 		break;
 	case PMSELR_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm))
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED)
 			val = read_sysreg(pmselr_el0);
 		else
 			val = __vcpu_sys_reg(vcpu, reg);
@@ -1208,7 +1211,7 @@ static u64 pmu_reg_read(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg)
 	case PMEVCNTR0_EL0 ... PMCCNTR_EL0:
 		idx = reg - PMEVCNTR0_EL0;
 
-		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED) {
 			if (idx == ARMV8_PMU_CYCLE_IDX)
 				val = read_sysreg(pmccntr_el0);
 			else
@@ -1221,7 +1224,7 @@ static u64 pmu_reg_read(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg)
 		val = __vcpu_sys_reg(vcpu, reg);
 		break;
 	case PMCNTENSET_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED) {
 			val = read_sysreg(pmcntenset_el0);
 			val &= kvm_pmu_guest_counter_mask(vcpu->kvm->arch.arm_pmu);
 		} else {
@@ -1229,7 +1232,7 @@ static u64 pmu_reg_read(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg)
 		}
 		break;
 	case PMINTENSET_EL1:
-		if (kvm_pmu_is_partitioned(vcpu->kvm)) {
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED) {
 			val = read_sysreg(pmintenset_el1);
 			val &= kvm_pmu_guest_counter_mask(vcpu->kvm->arch.arm_pmu);
 		} else {
@@ -1240,7 +1243,7 @@ static u64 pmu_reg_read(struct kvm_vcpu *vcpu, enum vcpu_sysreg reg)
 		val = __vcpu_sys_reg(vcpu, reg);
 		break;
 	case PMUSERENR_EL0:
-		if (kvm_pmu_is_partitioned(vcpu->kvm))
+		if (kvm_pmu_get_access(vcpu) == VCPU_PMU_ACCESS_GUEST_OWNED)
 			val = read_sysreg(pmuserenr_el0);
 		else
 			val = __vcpu_sys_reg(vcpu, reg);
