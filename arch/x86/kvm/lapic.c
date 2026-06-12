@@ -78,6 +78,29 @@ module_param(lapic_timer_advance, bool, 0444);
 static bool __read_mostly vector_hashing_enabled = true;
 module_param_named(vector_hashing, vector_hashing_enabled, bool, 0444);
 
+/*
+ * IPI tracking for directed-yield optimization.
+ *
+ * ipi_tracking_enabled  - master switch (default on). When off, the
+ *                         tracking hooks become no-ops and
+ *                         kvm_vcpu_is_ipi_receiver() always returns
+ *                         false, falling back to the legacy
+ *                         preempted-in-kernel heuristic.
+ *
+ * ipi_window_ns         - recency window. An IPI older than this is
+ *                         treated as stale and does not influence
+ *                         directed-yield selection. Long enough to
+ *                         cover typical spin-on-IPI-response periods,
+ *                         short enough to avoid stale state inflating
+ *                         boost priority on throughput-sensitive
+ *                         workloads.
+ */
+static bool ipi_tracking_enabled = true;
+module_param(ipi_tracking_enabled, bool, 0644);
+
+static unsigned long ipi_window_ns = 50 * NSEC_PER_MSEC;
+module_param(ipi_window_ns, ulong, 0644);
+
 static int kvm_lapic_msr_read(struct kvm_lapic *apic, u32 reg, u64 *data);
 static int kvm_lapic_msr_write(struct kvm_lapic *apic, u32 reg, u64 data);
 
@@ -1142,6 +1165,85 @@ static bool kvm_lowest_prio_delivery(struct kvm_lapic_irq *irq)
 static int kvm_apic_compare_prio(struct kvm_vcpu *vcpu1, struct kvm_vcpu *vcpu2)
 {
 	return vcpu1->arch.apic_arb_prio - vcpu2->arch.apic_arb_prio;
+}
+
+/*
+ * Record a sender -> receiver IPI relationship for directed-yield use.
+ *
+ * Accessed lockless (READ_ONCE/WRITE_ONCE); this is best-effort, racy
+ * information consumed only as a scheduling hint by
+ * kvm_vcpu_on_spin(), so occasional torn or stale reads are harmless.
+ *
+ * Callers should already have filtered out self-IPIs and non-unicast
+ * or non-fixed-mode deliveries; this function only records the state.
+ */
+void kvm_track_ipi_communication(struct kvm_vcpu *sender,
+				 struct kvm_vcpu *receiver, u8 vector)
+{
+	if (!sender || !receiver || sender == receiver)
+		return;
+	if (unlikely(!READ_ONCE(ipi_tracking_enabled)))
+		return;
+
+	WRITE_ONCE(sender->arch.ipi_context.last_ipi_receiver,
+		   receiver->vcpu_idx);
+	WRITE_ONCE(sender->arch.ipi_context.vector, vector);
+	WRITE_ONCE(sender->arch.ipi_context.pending_ipi, true);
+	WRITE_ONCE(sender->arch.ipi_context.ipi_time_ns,
+		   ktime_get_mono_fast_ns());
+
+	WRITE_ONCE(receiver->arch.ipi_context.last_ipi_sender,
+		   sender->vcpu_idx);
+	WRITE_ONCE(receiver->arch.ipi_context.vector, vector);
+}
+
+/*
+ * Return true if @receiver is the confirmed recent IPI target of
+ * @sender, within the configured recency window. Directed yield uses
+ * this as a high-confidence signal that selecting @receiver may
+ * unblock @sender's spin loop.
+ */
+bool kvm_vcpu_is_ipi_receiver(struct kvm_vcpu *sender,
+			      struct kvm_vcpu *receiver)
+{
+	u64 then, now;
+
+	if (unlikely(!READ_ONCE(ipi_tracking_enabled)))
+		return false;
+
+	if (!READ_ONCE(sender->arch.ipi_context.pending_ipi))
+		return false;
+
+	if (READ_ONCE(sender->arch.ipi_context.last_ipi_receiver) !=
+	    receiver->vcpu_idx)
+		return false;
+
+	then = READ_ONCE(sender->arch.ipi_context.ipi_time_ns);
+	now = ktime_get_mono_fast_ns();
+	return now - then <= READ_ONCE(ipi_window_ns);
+}
+
+/*
+ * Clear the IPI tracking state of a single vCPU, typically when the
+ * associated interrupt has been acknowledged (EOI) or the vCPU has
+ * been reset/destroyed.
+ *
+ * Leaves the monotonic timestamp untouched to keep staleness checks
+ * on other vCPUs that may reference this one well-defined; use
+ * kvm_vcpu_reset_ipi_context() for a hard reset.
+ */
+void kvm_vcpu_clear_ipi_context(struct kvm_vcpu *vcpu)
+{
+	WRITE_ONCE(vcpu->arch.ipi_context.pending_ipi, false);
+	WRITE_ONCE(vcpu->arch.ipi_context.last_ipi_sender, -1);
+	WRITE_ONCE(vcpu->arch.ipi_context.last_ipi_receiver, -1);
+	WRITE_ONCE(vcpu->arch.ipi_context.vector, 0);
+}
+
+void kvm_vcpu_reset_ipi_context(struct kvm_vcpu *vcpu)
+{
+	kvm_vcpu_clear_ipi_context(vcpu);
+	WRITE_ONCE(vcpu->arch.ipi_context.ipi_time_ns, 0);
 }
 
 /* Return true if the interrupt can be handled by using *bitmap as index mask

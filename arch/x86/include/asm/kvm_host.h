@@ -1065,6 +1065,25 @@ struct kvm_vcpu_arch {
 	int pending_external_vector;
 	int highest_stale_pending_ioapic_eoi;
 
+	/*
+	 * IPI tracking for directed-yield optimization.
+	 *
+	 * Populated by kvm_track_ipi_communication() when a unicast fixed
+	 * IPI is delivered, and queried by kvm_vcpu_is_ipi_receiver() from
+	 * kvm_vcpu_on_spin() to prefer the confirmed IPI target before
+	 * generic preempted-lock-holder heuristics.
+	 *
+	 * All accesses are lockless READ_ONCE/WRITE_ONCE; best-effort by
+	 * design (see comment on kvm_vcpu_is_good_yield_candidate()).
+	 */
+	struct {
+		int	last_ipi_sender;	/* vCPU idx of last IPI sender  */
+		int	last_ipi_receiver;	/* vCPU idx of last IPI target  */
+		u8	vector;			/* vector of the pending IPI    */
+		bool	pending_ipi;		/* awaiting IPI response        */
+		u64	ipi_time_ns;		/* mono timestamp of IPI send   */
+	} ipi_context;
+
 	/* be preempted when it's in kernel-mode(cpl=0) */
 	bool preempted_in_kernel;
 
