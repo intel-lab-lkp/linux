@@ -124,6 +124,23 @@ test_busypoll_with_napi_threaded()
 	return $?
 }
 
+test_busypoll_with_napi_threaded_link_flap()
+{
+	# Only enable napi threaded poll. Set suspend timeout and prefer busy
+	# poll to 0. Run again after a link flap.
+	test_busypoll 0 ${NAPI_THREADED_MODE_BUSY_POLL} 0 || return $?
+
+	ip netns exec nssv ip link set dev $NSIM_SV_NAME down
+	ip netns exec nscl ip link set dev $NSIM_CL_NAME down
+
+	ip netns exec nssv ip link set dev $NSIM_SV_NAME up
+	ip netns exec nscl ip link set dev $NSIM_CL_NAME up
+
+	test_busypoll 0 ${NAPI_THREADED_MODE_BUSY_POLL} 0
+
+	return $?
+}
+
 ###
 ### Code start
 ###
@@ -172,6 +189,13 @@ fi
 test_busypoll_with_napi_threaded
 if [ $? -ne 0 ]; then
 	echo "test_busypoll_with_napi_threaded failed"
+	cleanup_ns
+	exit 1
+fi
+
+test_busypoll_with_napi_threaded_link_flap
+if [ $? -ne 0 ]; then
+	echo "test_busypoll_with_napi_threaded_link_flap failed"
 	cleanup_ns
 	exit 1
 fi

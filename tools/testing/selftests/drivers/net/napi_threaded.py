@@ -127,6 +127,44 @@ def change_num_queues(cfg, nl) -> None:
     _assert_napi_threaded_enabled(nl, napi0_id)
     _assert_napi_threaded_enabled(nl, napi1_id)
 
+def nic_link_flap(cfg, nl) -> None:
+    """
+    Test that if threaded is enabled, and NIC goes through
+    a reset, the kthread stays unchanged across the link flap.
+    """
+    napis = nl.napi_get({'ifindex': cfg.ifindex}, dump=True)
+    ksft_ge(len(napis), 2)
+
+    napi0_id = napis[0]['id']
+    napi1_id = napis[1]['id']
+
+    _setup_deferred_cleanup(cfg)
+
+    # set threaded
+    _set_threaded_state(cfg, 1)
+    napis = nl.napi_get({'ifindex': cfg.ifindex}, dump=True)
+
+    # check napi threaded is set for both napis
+    _assert_napi_threaded_enabled(nl, napi0_id)
+    _assert_napi_threaded_enabled(nl, napi1_id)
+
+    pid0 = napis[0].get('pid')
+    pid1 = napis[1].get('pid')
+
+    cmd(f"ip link set {cfg.ifname} down")
+    cmd(f"ip link set {cfg.ifname} up")
+
+    # re-acquire napi info
+    napis = nl.napi_get({'ifindex': cfg.ifindex}, dump=True)
+    ksft_ge(len(napis), 2)
+
+    # check napi threaded is set for both napis
+    _assert_napi_threaded_enabled(nl, napi0_id)
+    _assert_napi_threaded_enabled(nl, napi1_id)
+
+    # check the kthread remains the same
+    ksft_eq(napis[0].get('pid'), pid0)
+    ksft_eq(napis[1].get('pid'), pid1)
 
 def main() -> None:
     """ Ksft boiler plate main """
@@ -134,7 +172,8 @@ def main() -> None:
     with NetDrvEnv(__file__, queue_count=2) as cfg:
         ksft_run([napi_init,
                   change_num_queues,
-                  enable_dev_threaded_disable_napi_threaded],
+                  enable_dev_threaded_disable_napi_threaded,
+                  nic_link_flap],
                  args=(cfg, NetdevFamily()))
     ksft_exit()
 
