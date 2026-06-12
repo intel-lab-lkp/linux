@@ -241,6 +241,8 @@ enum scx_cpu_preempt_reason {
 	SCX_CPU_PREEMPT_DL,
 	/* next task is being scheduled by &sched_class_stop */
 	SCX_CPU_PREEMPT_STOP,
+	/* next task is being scheduled by &sched_class_fair*/
+	SCX_CPU_PREEMPT_FAIR,
 	/* unknown reason for SCX being preempted */
 	SCX_CPU_PREEMPT_UNKNOWN,
 };
