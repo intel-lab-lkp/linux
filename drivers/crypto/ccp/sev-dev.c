@@ -1324,16 +1324,18 @@ static int snp_get_platform_data(struct sev_device *sev, int *error)
 static int snp_filter_reserved_mem_regions(struct resource *rs, void *arg)
 {
 	struct sev_data_range_list *range_list = arg;
-	struct sev_data_range *range = &range_list->ranges[range_list->num_elements];
+	struct sev_data_range *range;
 	size_t size;
 
 	/*
 	 * Ensure the list of HV_FIXED pages that will be passed to firmware
 	 * do not exceed the page-sized argument buffer.
 	 */
-	if ((range_list->num_elements * sizeof(struct sev_data_range) +
+	if (((range_list->num_elements + 1) * sizeof(struct sev_data_range) +
 	     sizeof(struct sev_data_range_list)) > PAGE_SIZE)
 		return -E2BIG;
+
+	range = &range_list->ranges[range_list->num_elements];
 
 	switch (rs->desc) {
 	case E820_TYPE_RESERVED:
