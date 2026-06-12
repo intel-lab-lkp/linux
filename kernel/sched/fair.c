@@ -9372,7 +9372,9 @@ eevdf_persistent_margin(struct cfs_rq *cfs_rq, struct sched_entity *se)
  * to a bounded positive-vlag margin so pick_eevdf()'s PICK_BUDDY branch
  * keeps returning it across several picks, without exceeding entity_lag()'s
  * legal bound. cfs_rq->curr is shifted in place (off-tree, carrying any
- * vprot window). Queued entities are left unchanged.
+ * vprot window); a queued entity uses the canonical
+ * place_entity()-paired requeue, keeping sum_w_vruntime consistent with
+ * entity_key().
  *
  * Idempotent once @se holds the margin. Caller must hold
  * rq_of(cfs_rq)->lock with rq_clock up to date.
@@ -9422,7 +9424,22 @@ eevdf_credit_entity_vlag(struct cfs_rq *cfs_rq, struct sched_entity *se)
 		return;
 	}
 
-	/* Queued entities are left unchanged by this helper path. */
+	/*
+	 * Canonical place_entity()-paired requeue: see dequeue_entity() and
+	 * requeue_delayed_entity(). place_entity() restores the deadline via
+	 * "se->deadline += se->vruntime", so make the deadline relative to
+	 * se->vruntime here (not avg_vruntime). This preserves the slice and
+	 * shifts the deadline by exactly -credit, mirroring the curr branch
+	 * and keeping deadline > vruntime.
+	 */
+	se->vlag = vlag + (s64)credit;
+	se->deadline -= se->vruntime;
+	se->rel_deadline = 1;
+	cfs_rq->nr_queued--;
+	__dequeue_entity(cfs_rq, se);
+	place_entity(cfs_rq, se, 0);
+	__enqueue_entity(cfs_rq, se);
+	cfs_rq->nr_queued++;
 }
 
 /*
