@@ -375,7 +375,7 @@ void *__kasan_unpoison_vmalloc(const void *start, unsigned long size,
 	redzone_start = round_up((unsigned long)start + size,
 				 KASAN_GRANULE_SIZE);
 	redzone_size = round_up(redzone_start, PAGE_SIZE) - redzone_start;
-	kasan_poison((void *)redzone_start, redzone_size, KASAN_TAG_INVALID,
+	kasan_poison((void *)redzone_start, redzone_size, KASAN_PAGE_REDZONE,
 		     flags & KASAN_VMALLOC_INIT);
 
 	/*
