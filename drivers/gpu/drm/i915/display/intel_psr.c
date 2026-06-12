@@ -3866,7 +3866,8 @@ static void psr_alpm_check(struct intel_dp *intel_dp)
 {
 	struct intel_psr *psr = &intel_dp->psr;
 
-	if (!psr->sel_update_enabled)
+	if ((!psr->sel_update_enabled && !intel_dp->psr.panel_replay_enabled) ||
+	    !intel_dp_is_edp(intel_dp))
 		return;
 
 	if (intel_alpm_get_error(intel_dp)) {
@@ -3980,7 +3981,6 @@ static void _psr_short_pulse(struct intel_dp *intel_dp)
 	/* clear status register */
 	drm_dp_dpcd_write_byte(&intel_dp->aux, DP_PSR_ERROR_STATUS, error_status);
 
-	psr_alpm_check(intel_dp);
 	psr_capability_changed_check(intel_dp);
 }
 
@@ -4000,6 +4000,8 @@ void intel_psr_short_pulse(struct intel_dp *intel_dp)
 		_panel_replay_short_pulse(intel_dp);
 	else
 		_psr_short_pulse(intel_dp);
+
+	psr_alpm_check(intel_dp);
 
 exit:
 	mutex_unlock(&intel_dp->psr.lock);
