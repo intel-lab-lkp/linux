@@ -375,6 +375,7 @@ mpc52xx_ata_hw_init(struct mpc52xx_ata_priv *priv)
 
 	/* Init timings to PIO0 */
 	memset(priv->timings, 0x00, 2*sizeof(struct mpc52xx_ata_timings));
+	priv->mpc52xx_ata_dma_last_write = -1;
 
 	mpc52xx_ata_compute_pio_timings(priv, 0, 0);
 	mpc52xx_ata_compute_pio_timings(priv, 1, 0);
@@ -750,7 +751,6 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	priv->ata_regs_pa = res_mem.start;
 	priv->ata_irq = ata_irq;
 	priv->csel = -1;
-	priv->mpc52xx_ata_dma_last_write = -1;
 
 	if (ipb_freq/1000000 == 66) {
 		priv->mdmaspec = mdmaspec66;
