@@ -2945,6 +2945,8 @@ preempt_reason_from_class(const struct sched_class *class)
 		return SCX_CPU_PREEMPT_DL;
 	if (class == &rt_sched_class)
 		return SCX_CPU_PREEMPT_RT;
+	if (class == &fair_sched_class)
+		return SCX_CPU_PREEMPT_FAIR;
 	return SCX_CPU_PREEMPT_UNKNOWN;
 }
 
