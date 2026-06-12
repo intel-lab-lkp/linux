@@ -376,6 +376,37 @@ static const struct iomap_ops erofs_iomap_ops = {
 	.iomap_end = erofs_iomap_end,
 };
 
+static void erofs_iomap_submit_read(const struct iomap_iter *iter,
+				    struct iomap_read_folio_ctx *ctx)
+{
+	iomap_bio_read_ops.submit_read(iter, ctx);
+}
+
+static int erofs_iomap_read_folio_range(const struct iomap_iter *iter,
+					struct iomap_read_folio_ctx *ctx,
+					size_t len)
+{
+	struct bio *bio = ctx->read_ctx;
+
+	/*
+	 * EROFS multi-device chunks may map adjacent file ranges to different
+	 * block devices whose sector numbers still look contiguous.  Split the
+	 * pending bio at device boundaries so I/O for different devices cannot be
+	 * mixed into the same bio by the generic sector-based iomap merge logic.
+	 */
+	if (bio && bio->bi_bdev != iter->iomap.bdev) {
+		erofs_iomap_submit_read(iter, ctx);
+		ctx->read_ctx = NULL;
+	}
+
+	return iomap_bio_read_folio_range(iter, ctx, len);
+}
+
+static const struct iomap_read_ops erofs_iomap_read_ops = {
+	.read_folio_range	= erofs_iomap_read_folio_range,
+	.submit_read		= erofs_iomap_submit_read,
+};
+
 int erofs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 		 u64 start, u64 len)
 {
@@ -395,7 +426,7 @@ int erofs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 static int erofs_read_folio(struct file *file, struct folio *folio)
 {
 	struct iomap_read_folio_ctx read_ctx = {
-		.ops		= &iomap_bio_read_ops,
+		.ops		= &erofs_iomap_read_ops,
 		.cur_folio	= folio,
 	};
 	bool need_iput;
@@ -413,7 +444,7 @@ static int erofs_read_folio(struct file *file, struct folio *folio)
 static void erofs_readahead(struct readahead_control *rac)
 {
 	struct iomap_read_folio_ctx read_ctx = {
-		.ops		= &iomap_bio_read_ops,
+		.ops		= &erofs_iomap_read_ops,
 		.rac		= rac,
 	};
 	bool need_iput;
