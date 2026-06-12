@@ -2874,14 +2874,14 @@ int jfs_readdir(struct file *file, struct dir_context *ctx)
 			ctx->pos = DIREND;
 			return 0;
 		}
-		/* get start leaf page and index */
-		DT_GETSEARCH(ip, btstack.top, bn, mp, p, index);
-
 		/* offset beyond directory eof ? */
-		if (bn < 0) {
+		if (btstack.top->bn < 0) {
 			ctx->pos = DIREND;
 			return 0;
 		}
+
+		/* get start leaf page and index */
+		DT_GETSEARCH(ip, btstack.top, bn, mp, p, index);
 	}
 
 	dirent_buf = __get_free_page(GFP_KERNEL);
@@ -3293,7 +3293,7 @@ static int dtReadNext(struct inode *ip, loff_t * offset,
 	btsp = btstack->top;
 	btsp->bn = bn;
 	btsp->index = dtoffset->index;
-	btsp->mp = mp;
+	btsp->mp = (bn == -1) ? NULL : mp;
 
 	return 0;
 }
