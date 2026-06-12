@@ -791,6 +791,35 @@ static int rtl8366rb_setup_all_leds_off(struct realtek_priv *priv)
 	return ret;
 }
 
+static int rtl8366rb_port_set_isolation(struct realtek_priv *priv, int port,
+					u32 mask)
+{
+	/* Bit 0 enables isolation so set this if we enable isolation
+	 * any of the ports an clear it if we disable on all of them.
+	 */
+	if (mask)
+		mask = RTL8366RB_PORT_ISO_PORTS(mask) | RTL8366RB_PORT_ISO_EN;
+
+	return regmap_write(priv->map, RTL8366RB_PORT_ISO(port),
+			    mask);
+}
+
+static int rtl8366rb_port_add_isolation(struct realtek_priv *priv, int port,
+					u32 mask)
+{
+	/* We assume isolation bit is on */
+	return regmap_update_bits(priv->map, RTL8366RB_PORT_ISO(port),
+				  RTL8366RB_PORT_ISO_PORTS(mask),
+				  RTL8366RB_PORT_ISO_PORTS(mask));
+}
+
+static int rtl8366rb_port_remove_isolation(struct realtek_priv *priv, int port,
+					   u32 mask)
+{
+	return regmap_update_bits(priv->map, RTL8366RB_PORT_ISO(port),
+				  RTL8366RB_PORT_ISO_PORTS(mask), 0);
+}
+
 static int rtl8366rb_setup(struct dsa_switch *ds)
 {
 	struct realtek_priv *priv = ds->priv;
@@ -868,16 +897,13 @@ static int rtl8366rb_setup(struct dsa_switch *ds)
 
 	/* Isolate all user ports so they can only send packets to itself and the CPU port */
 	for (i = 0; i < RTL8366RB_PORT_NUM_CPU; i++) {
-		ret = regmap_write(priv->map, RTL8366RB_PORT_ISO(i),
-				   RTL8366RB_PORT_ISO_PORTS(BIT(RTL8366RB_PORT_NUM_CPU)) |
-				   RTL8366RB_PORT_ISO_EN);
+		ret = rtl8366rb_port_set_isolation(priv, i, BIT(RTL8366RB_PORT_NUM_CPU));
 		if (ret)
 			return ret;
 	}
 	/* CPU port can send packets to all ports */
-	ret = regmap_write(priv->map, RTL8366RB_PORT_ISO(RTL8366RB_PORT_NUM_CPU),
-			   RTL8366RB_PORT_ISO_PORTS(dsa_user_ports(ds)) |
-			   RTL8366RB_PORT_ISO_EN);
+	ret = rtl8366rb_port_set_isolation(priv, RTL8366RB_PORT_NUM_CPU,
+					   dsa_user_ports(ds));
 	if (ret)
 		return ret;
 
@@ -1182,70 +1208,6 @@ rtl8366rb_port_disable(struct dsa_switch *ds, int port)
 				 BIT(port));
 	if (ret)
 		return;
-}
-
-static int
-rtl8366rb_port_bridge_join(struct dsa_switch *ds, int port,
-			   struct dsa_bridge bridge,
-			   bool *tx_fwd_offload,
-			   struct netlink_ext_ack *extack)
-{
-	struct realtek_priv *priv = ds->priv;
-	unsigned int port_bitmap = 0;
-	int ret, i;
-
-	/* Loop over all other ports than the current one */
-	for (i = 0; i < RTL8366RB_PORT_NUM_CPU; i++) {
-		/* Current port handled last */
-		if (i == port)
-			continue;
-		/* Not on this bridge */
-		if (!dsa_port_offloads_bridge(dsa_to_port(ds, i), &bridge))
-			continue;
-		/* Join this port to each other port on the bridge */
-		ret = regmap_update_bits(priv->map, RTL8366RB_PORT_ISO(i),
-					 RTL8366RB_PORT_ISO_PORTS(BIT(port)),
-					 RTL8366RB_PORT_ISO_PORTS(BIT(port)));
-		if (ret)
-			dev_err(priv->dev, "failed to join port %d\n", port);
-
-		port_bitmap |= BIT(i);
-	}
-
-	/* Set the bits for the ports we can access */
-	return regmap_update_bits(priv->map, RTL8366RB_PORT_ISO(port),
-				  RTL8366RB_PORT_ISO_PORTS(port_bitmap),
-				  RTL8366RB_PORT_ISO_PORTS(port_bitmap));
-}
-
-static void
-rtl8366rb_port_bridge_leave(struct dsa_switch *ds, int port,
-			    struct dsa_bridge bridge)
-{
-	struct realtek_priv *priv = ds->priv;
-	unsigned int port_bitmap = 0;
-	int ret, i;
-
-	/* Loop over all other ports than this one */
-	for (i = 0; i < RTL8366RB_PORT_NUM_CPU; i++) {
-		/* Current port handled last */
-		if (i == port)
-			continue;
-		/* Not on this bridge */
-		if (!dsa_port_offloads_bridge(dsa_to_port(ds, i), &bridge))
-			continue;
-		/* Remove this port from any other port on the bridge */
-		ret = regmap_update_bits(priv->map, RTL8366RB_PORT_ISO(i),
-					 RTL8366RB_PORT_ISO_PORTS(BIT(port)), 0);
-		if (ret)
-			dev_err(priv->dev, "failed to leave port %d\n", port);
-
-		port_bitmap |= BIT(i);
-	}
-
-	/* Clear the bits for the ports we can not access, leave ourselves */
-	regmap_update_bits(priv->map, RTL8366RB_PORT_ISO(port),
-			   RTL8366RB_PORT_ISO_PORTS(port_bitmap), 0);
 }
 
 /**
@@ -1801,8 +1763,8 @@ static const struct dsa_switch_ops rtl8366rb_switch_ops = {
 	.get_strings = rtl8366_get_strings,
 	.get_ethtool_stats = rtl8366_get_ethtool_stats,
 	.get_sset_count = rtl8366_get_sset_count,
-	.port_bridge_join = rtl8366rb_port_bridge_join,
-	.port_bridge_leave = rtl8366rb_port_bridge_leave,
+	.port_bridge_join = rtl83xx_port_bridge_join,
+	.port_bridge_leave = rtl83xx_port_bridge_leave,
 	.port_vlan_filtering = rtl8366rb_vlan_filtering,
 	.port_vlan_add = rtl8366_vlan_add,
 	.port_vlan_del = rtl8366_vlan_del,
@@ -1830,6 +1792,8 @@ static const struct realtek_ops rtl8366rb_ops = {
 	.is_vlan_valid	= rtl8366rb_is_vlan_valid,
 	.enable_vlan	= rtl8366rb_enable_vlan,
 	.enable_vlan4k	= rtl8366rb_enable_vlan4k,
+	.port_add_isolation = rtl8366rb_port_add_isolation,
+	.port_remove_isolation = rtl8366rb_port_remove_isolation,
 	.phy_read	= rtl8366rb_phy_read,
 	.phy_write	= rtl8366rb_phy_write,
 };
