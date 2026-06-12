@@ -93,7 +93,7 @@ properties:
       Width in bits of the length register as configured in hardware.
 
   xlnx,irq-delay:
-    $ref: /schemas/types.yaml#/definitions/uint32
+    $ref: /schemas/types.yaml#/definitions/uint8
     minimum: 0
     maximum: 255
     description:
