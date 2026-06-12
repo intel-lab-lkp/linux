@@ -265,10 +265,8 @@ static int t9015_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(priv->avdd), "failed to AVDD\n");
 
 	ret = device_reset(dev);
-	if (ret) {
-		dev_err(dev, "reset failed\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to reset device\n");
 
 	regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(regs)) {
