@@ -258,32 +258,27 @@ struct pkvm_hyp_vcpu *pkvm_load_hyp_vcpu(pkvm_handle_t handle,
 	if (__this_cpu_read(loaded_hyp_vcpu))
 		return NULL;
 
-	hyp_spin_lock(&vm_table_lock);
+	guard(hyp_spinlock)(&vm_table_lock);
 	hyp_vm = get_vm_by_handle(handle);
 	if (!hyp_vm || hyp_vm->kvm.arch.pkvm.is_dying)
-		goto unlock;
+		return NULL;
 
 	if (hyp_vm->kvm.created_vcpus <= vcpu_idx)
-		goto unlock;
+		return NULL;
 
 	/* Pairs with smp_store_release() in register_hyp_vcpu(). */
 	hyp_vcpu = smp_load_acquire(&hyp_vm->vcpus[vcpu_idx]);
 	if (!hyp_vcpu)
-		goto unlock;
+		return NULL;
 
 	/* Ensure vcpu isn't loaded on more than one cpu simultaneously. */
-	if (unlikely(hyp_vcpu->loaded_hyp_vcpu)) {
-		hyp_vcpu = NULL;
-		goto unlock;
-	}
+	if (unlikely(hyp_vcpu->loaded_hyp_vcpu))
+		return NULL;
 
 	hyp_vcpu->loaded_hyp_vcpu = this_cpu_ptr(&loaded_hyp_vcpu);
 	hyp_page_ref_inc(hyp_virt_to_page(hyp_vm));
-unlock:
-	hyp_spin_unlock(&vm_table_lock);
 
-	if (hyp_vcpu)
-		__this_cpu_write(loaded_hyp_vcpu, hyp_vcpu);
+	__this_cpu_write(loaded_hyp_vcpu, hyp_vcpu);
 	return hyp_vcpu;
 }
 
@@ -291,11 +286,10 @@ void pkvm_put_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu)
 {
 	struct pkvm_hyp_vm *hyp_vm = pkvm_hyp_vcpu_to_hyp_vm(hyp_vcpu);
 
-	hyp_spin_lock(&vm_table_lock);
+	guard(hyp_spinlock)(&vm_table_lock);
 	hyp_vcpu->loaded_hyp_vcpu = NULL;
 	__this_cpu_write(loaded_hyp_vcpu, NULL);
 	hyp_page_ref_dec(hyp_virt_to_page(hyp_vm));
-	hyp_spin_unlock(&vm_table_lock);
 }
 
 struct pkvm_hyp_vcpu *pkvm_get_loaded_hyp_vcpu(void)
@@ -308,20 +302,18 @@ struct pkvm_hyp_vm *get_pkvm_hyp_vm(pkvm_handle_t handle)
 {
 	struct pkvm_hyp_vm *hyp_vm;
 
-	hyp_spin_lock(&vm_table_lock);
+	guard(hyp_spinlock)(&vm_table_lock);
 	hyp_vm = get_vm_by_handle(handle);
 	if (hyp_vm)
 		hyp_page_ref_inc(hyp_virt_to_page(hyp_vm));
-	hyp_spin_unlock(&vm_table_lock);
 
 	return hyp_vm;
 }
 
 void put_pkvm_hyp_vm(struct pkvm_hyp_vm *hyp_vm)
 {
-	hyp_spin_lock(&vm_table_lock);
+	guard(hyp_spinlock)(&vm_table_lock);
 	hyp_page_ref_dec(hyp_virt_to_page(hyp_vm));
-	hyp_spin_unlock(&vm_table_lock);
 }
 
 struct pkvm_hyp_vm *get_np_pkvm_hyp_vm(pkvm_handle_t handle)
@@ -620,13 +612,8 @@ static int __insert_vm_table_entry(pkvm_handle_t handle,
 static int insert_vm_table_entry(pkvm_handle_t handle,
 				 struct pkvm_hyp_vm *hyp_vm)
 {
-	int ret;
-
-	hyp_spin_lock(&vm_table_lock);
-	ret = __insert_vm_table_entry(handle, hyp_vm);
-	hyp_spin_unlock(&vm_table_lock);
-
-	return ret;
+	guard(hyp_spinlock)(&vm_table_lock);
+	return __insert_vm_table_entry(handle, hyp_vm);
 }
 
 /*
@@ -701,9 +688,8 @@ int __pkvm_reserve_vm(void)
 {
 	int ret;
 
-	hyp_spin_lock(&vm_table_lock);
+	guard(hyp_spinlock)(&vm_table_lock);
 	ret = allocate_vm_table_entry();
-	hyp_spin_unlock(&vm_table_lock);
 
 	if (ret < 0)
 		return ret;
@@ -722,10 +708,9 @@ void __pkvm_unreserve_vm(pkvm_handle_t handle)
 	if (unlikely(!vm_table))
 		return;
 
-	hyp_spin_lock(&vm_table_lock);
+	guard(hyp_spinlock)(&vm_table_lock);
 	if (likely(idx < KVM_MAX_PVMS && vm_table[idx] == RESERVED_ENTRY))
 		remove_vm_table_entry(handle);
-	hyp_spin_unlock(&vm_table_lock);
 }
 
 #ifdef CONFIG_NVHE_EL2_DEBUG
@@ -785,9 +770,8 @@ struct pkvm_hyp_vcpu *init_selftest_vm(void *virt)
 
 void teardown_selftest_vm(void)
 {
-	hyp_spin_lock(&vm_table_lock);
+	guard(hyp_spinlock)(&vm_table_lock);
 	remove_vm_table_entry(selftest_vm.kvm.arch.pkvm.handle);
-	hyp_spin_unlock(&vm_table_lock);
 }
 #endif /* CONFIG_NVHE_EL2_DEBUG */
 
@@ -973,20 +957,15 @@ static struct pkvm_hyp_vm *get_pkvm_unref_hyp_vm_locked(pkvm_handle_t handle)
 int __pkvm_start_teardown_vm(pkvm_handle_t handle)
 {
 	struct pkvm_hyp_vm *hyp_vm;
-	int ret = 0;
 
-	hyp_spin_lock(&vm_table_lock);
+	guard(hyp_spinlock)(&vm_table_lock);
 	hyp_vm = get_pkvm_unref_hyp_vm_locked(handle);
-	if (!hyp_vm || hyp_vm->kvm.arch.pkvm.is_dying) {
-		ret = -EINVAL;
-		goto unlock;
-	}
+	if (!hyp_vm || hyp_vm->kvm.arch.pkvm.is_dying)
+		return -EINVAL;
 
 	hyp_vm->kvm.arch.pkvm.is_dying = true;
-unlock:
-	hyp_spin_unlock(&vm_table_lock);
 
-	return ret;
+	return 0;
 }
 
 int __pkvm_finalize_teardown_vm(pkvm_handle_t handle)
@@ -996,21 +975,18 @@ int __pkvm_finalize_teardown_vm(pkvm_handle_t handle)
 	struct kvm *host_kvm;
 	unsigned int idx;
 	size_t vm_size;
-	int err;
 
-	hyp_spin_lock(&vm_table_lock);
-	hyp_vm = get_pkvm_unref_hyp_vm_locked(handle);
-	if (!hyp_vm || !hyp_vm->kvm.arch.pkvm.is_dying) {
-		err = -EINVAL;
-		goto err_unlock;
+	scoped_guard(hyp_spinlock, &vm_table_lock) {
+		hyp_vm = get_pkvm_unref_hyp_vm_locked(handle);
+		if (!hyp_vm || !hyp_vm->kvm.arch.pkvm.is_dying)
+			return -EINVAL;
+
+		host_kvm = hyp_vm->host_kvm;
+
+		/* Ensure the VMID is clean before it can be reallocated */
+		__kvm_tlb_flush_vmid(&hyp_vm->kvm.arch.mmu);
+		remove_vm_table_entry(handle);
 	}
-
-	host_kvm = hyp_vm->host_kvm;
-
-	/* Ensure the VMID is clean before it can be reallocated */
-	__kvm_tlb_flush_vmid(&hyp_vm->kvm.arch.mmu);
-	remove_vm_table_entry(handle);
-	hyp_spin_unlock(&vm_table_lock);
 
 	/* Reclaim guest pages (including page-table pages) */
 	mc = &host_kvm->arch.pkvm.teardown_mc;
@@ -1042,10 +1018,6 @@ int __pkvm_finalize_teardown_vm(pkvm_handle_t handle)
 	teardown_donated_memory(mc, hyp_vm, vm_size);
 	hyp_unpin_shared_mem(host_kvm, host_kvm + 1);
 	return 0;
-
-err_unlock:
-	hyp_spin_unlock(&vm_table_lock);
-	return err;
 }
 
 static u64 __pkvm_memshare_page_req(struct kvm_vcpu *vcpu, u64 ipa)
