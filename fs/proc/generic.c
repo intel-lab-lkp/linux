@@ -404,7 +404,8 @@ struct proc_dir_entry *proc_register(struct proc_dir_entry *dir,
 		write_unlock(&proc_subdir_lock);
 		goto out_free_inum;
 	}
-	dir->nlink++;
+	if (S_ISDIR(dp->mode))
+		dir->nlink++;
 	write_unlock(&proc_subdir_lock);
 
 	return dp;
