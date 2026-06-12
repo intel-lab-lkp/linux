@@ -58,6 +58,7 @@ struct mpc52xx_ata_priv {
 
 	/* DMA */
 	struct bcom_task		*dmatsk;
+	int				task_irq;
 	const struct udmaspec		*udmaspec;
 	const struct mdmaspec		*mdmaspec;
 	int 				mpc52xx_ata_dma_last_write;
@@ -571,6 +572,7 @@ mpc52xx_bmdma_stop(struct ata_queued_cmd *qc)
 	struct mpc52xx_ata_priv *priv = ap->host->private_data;
 
 	bcom_disable(priv->dmatsk);
+	synchronize_irq(priv->task_irq);
 	bcom_ata_reset_bd(priv->dmatsk);
 	priv->waiting_for_dma = 0;
 
@@ -769,6 +771,7 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	priv->dmatsk = dmatsk;
 
 	task_irq = bcom_get_task_irq(dmatsk);
+	priv->task_irq = task_irq;
 	rv = devm_request_irq(&op->dev, task_irq, &mpc52xx_ata_task_irq, 0,
 				"ATA task", priv);
 	if (rv) {
