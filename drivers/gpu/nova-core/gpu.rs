@@ -91,6 +91,10 @@ define_chipset!({
     GA104 = 0x174,
     GA106 = 0x176,
     GA107 = 0x177,
+    // Chip IDs are in numerical order, which does not match FSP capability. Hopper (GH100) has a
+    // lower chip ID than Ada (AD10x), yet Hopper boots the GSP via FSP while Ada uses the older
+    // SEC2 booter. We therefore consider Hopper to be after Ada, so "Hopper and later" excludes
+    // Ada and means Hopper, Blackwell, Rubin, and everything after that.
     // Hopper
     GH100 = 0x180,
     // Ada
