@@ -989,6 +989,7 @@ static bool nbcon_emit_next_record(struct nbcon_write_context *wctxt, bool use_a
 	struct nbcon_state cur;
 	unsigned long dropped;
 	unsigned long ulseq;
+	bool may_suppress;
 
 	/*
 	 * This function should never be called for consoles that have not
@@ -1014,7 +1015,9 @@ static bool nbcon_emit_next_record(struct nbcon_write_context *wctxt, bool use_a
 	if (!nbcon_context_enter_unsafe(ctxt))
 		return false;
 
-	ctxt->backlog = printk_get_next_message(&pmsg, ctxt->seq, is_extended, true);
+	may_suppress = !(console_srcu_read_flags(con) & CON_NO_SUPPRESS);
+	ctxt->backlog = printk_get_next_message(&pmsg, ctxt->seq, is_extended,
+						may_suppress);
 	if (!ctxt->backlog)
 		return nbcon_context_exit_unsafe(ctxt);
 

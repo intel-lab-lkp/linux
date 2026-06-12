@@ -420,7 +420,7 @@ static void pstore_register_console(void)
 	 * Always initialize flags here since prior unregister_console()
 	 * calls may have changed settings (specifically CON_ENABLED).
 	 */
-	pstore_console.flags = CON_PRINTBUFFER | CON_ENABLED | CON_ANYTIME;
+	pstore_console.flags = CON_PRINTBUFFER | CON_ENABLED | CON_ANYTIME | CON_NO_SUPPRESS;
 	register_console(&pstore_console);
 }
 

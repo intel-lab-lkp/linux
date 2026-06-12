@@ -3131,10 +3131,12 @@ static bool console_emit_next_record(struct console *con, bool *handover, int co
 		.pbufs = &printk_shared_pbufs,
 	};
 	unsigned long flags;
+	bool may_suppress;
 
 	*handover = false;
 
-	if (!printk_get_next_message(&pmsg, con->seq, is_extended, true))
+	may_suppress = !(console_srcu_read_flags(con) & CON_NO_SUPPRESS);
+	if (!printk_get_next_message(&pmsg, con->seq, is_extended, may_suppress))
 		return false;
 
 	con->dropped += pmsg.dropped;

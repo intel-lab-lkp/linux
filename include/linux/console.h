@@ -180,6 +180,8 @@ static inline void con_debug_leave(void) { }
  *			constraints.
  * @CON_NBCON_ATOMIC_UNSAFE: The write_atomic() callback is not safe and is
  *			therefore only used by nbcon_atomic_flush_unsafe().
+ * @CON_NO_SUPPRESS:	Indicates that the console is exempt from loglevel-based
+ *			message suppression (e.g. from the 'quiet' boot argument).
  */
 enum cons_flags {
 	CON_PRINTBUFFER		= BIT(0),
@@ -192,6 +194,7 @@ enum cons_flags {
 	CON_SUSPENDED		= BIT(7),
 	CON_NBCON		= BIT(8),
 	CON_NBCON_ATOMIC_UNSAFE	= BIT(9),
+	CON_NO_SUPPRESS		= BIT(10),
 };
 
 /**
