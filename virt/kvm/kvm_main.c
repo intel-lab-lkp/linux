@@ -3963,12 +3963,51 @@ bool __weak kvm_vcpu_is_ipi_receiver(struct kvm_vcpu *sender,
 	return false;
 }
 
+/*
+ * Priority-based candidate filter for directed yield.
+ *
+ *   1) Confirmed IPI receiver of @me within the recency window.
+ *      This is the highest-confidence signal that selecting @vcpu
+ *      may help @me complete its spin-on-IPI-response.
+ *   2) Arch-provided fast pending-interrupt hint (APICv / AVIC /
+ *      arch_dy_has_pending_interrupt()). Covers cases where IPI
+ *      tracking was bypassed by hardware acceleration.
+ *   3) Legacy preempted fallback, with the existing optional
+ *      in-kernel filter when @yield_to_kernel_mode is set.
+ *
+ * Returning false asks kvm_vcpu_on_spin() to skip @vcpu in the
+ * strict (first) round; the relaxed (second) round applies only a
+ * vcpu->preempted check.
+ */
+static bool kvm_vcpu_is_good_yield_candidate(struct kvm_vcpu *me,
+					     struct kvm_vcpu *vcpu,
+					     bool yield_to_kernel_mode)
+{
+	/* Priority 1: confirmed recent IPI receiver. */
+	if (kvm_vcpu_is_ipi_receiver(me, vcpu))
+		return true;
+
+	/* Priority 2: arch-specific pending-interrupt hint. */
+	if (kvm_arch_dy_has_pending_interrupt(vcpu))
+		return true;
+
+	/* Priority 3: preempted, with optional in-kernel requirement. */
+	if (!READ_ONCE(vcpu->preempted))
+		return false;
+
+	if (yield_to_kernel_mode && !kvm_arch_vcpu_preempted_in_kernel(vcpu))
+		return false;
+
+	return true;
+}
+
 void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 {
 	int nr_vcpus, start, i, idx, yielded;
 	struct kvm *kvm = me->kvm;
 	struct kvm_vcpu *vcpu;
 	int try = 3;
+	bool first_round = true;
 
 	nr_vcpus = atomic_read(&kvm->online_vcpus);
 	if (nr_vcpus < 2)
@@ -4010,16 +4049,21 @@ void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 		if (kvm_vcpu_is_blocking(vcpu) && !vcpu_dy_runnable(vcpu))
 			continue;
 
-		/*
-		 * Treat the target vCPU as being in-kernel if it has a pending
-		 * interrupt, as the vCPU trying to yield may be spinning
-		 * waiting on IPI delivery, i.e. the target vCPU is in-kernel
-		 * for the purposes of directed yield.
-		 */
-		if (READ_ONCE(vcpu->preempted) && yield_to_kernel_mode &&
-		    !kvm_arch_dy_has_pending_interrupt(vcpu) &&
-		    !kvm_arch_vcpu_preempted_in_kernel(vcpu))
-			continue;
+		if (first_round) {
+			/* Strict round: IPI-aware and legacy preempted filters. */
+			if (!kvm_vcpu_is_good_yield_candidate(me, vcpu,
+							      yield_to_kernel_mode))
+				continue;
+		} else {
+			/*
+			 * Relaxed round: only require preempted. This is the
+			 * safety net for missed IPI tracking (e.g. APICv) or
+			 * transient runnable-set changes since the strict
+			 * scan.
+			 */
+			if (!READ_ONCE(vcpu->preempted))
+				continue;
+		}
 
 		if (!kvm_vcpu_eligible_for_directed_yield(vcpu))
 			continue;
@@ -4032,6 +4076,7 @@ void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 			break;
 		}
 	}
+
 	kvm_vcpu_set_in_spin_loop(me, false);
 
 	/* Ensure vcpu is not eligible during next spinloop */
