@@ -9346,8 +9346,8 @@ static void put_prev_task_fair(struct rq *rq, struct task_struct *prev, struct t
  * depth so it stays eligible across several picks. The caller clamps it to
  * entity_lag()'s legal bound, so EEVDF fairness is preserved.
  */
-static u64 __maybe_unused
-eevdf_persistent_margin(struct cfs_rq *cfs_rq, struct sched_entity *se)
+static u64 eevdf_persistent_margin(struct cfs_rq *cfs_rq,
+				   struct sched_entity *se)
 {
 	u64 base = sysctl_sched_base_slice;
 	unsigned int n = cfs_rq->h_nr_queued;
@@ -9379,7 +9379,7 @@ eevdf_persistent_margin(struct cfs_rq *cfs_rq, struct sched_entity *se)
  * Idempotent once @se holds the margin. Caller must hold
  * rq_of(cfs_rq)->lock with rq_clock up to date.
  */
-static void __maybe_unused
+static void
 eevdf_credit_entity_vlag(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	u64 avruntime, credit, want, margin, max_slice, lag_limit;
@@ -9488,6 +9488,7 @@ static void yield_task_fair(struct rq *rq)
 static bool yield_to_task_fair(struct rq *rq, struct task_struct *p)
 {
 	struct sched_entity *se = &p->se;
+	struct rq *p_rq = task_rq(p);
 
 	/* !se->on_rq also covers throttled task */
 	if (!se->on_rq)
@@ -9495,6 +9496,43 @@ static bool yield_to_task_fair(struct rq *rq, struct task_struct *p)
 
 	/* Tell the scheduler that we'd really like se to run next. */
 	set_next_buddy(se);
+
+	/* Without lag credit, keep the existing forfeit-based yield. */
+	if (!sched_feat(YIELD_TO_LAG_CREDIT)) {
+		yield_task_fair(rq);
+		return true;
+	}
+
+	/*
+	 * Walk the ancestor chain set_next_buddy() just nominated and credit
+	 * bounded lag to each not-yet-eligible level so pick_eevdf() returns
+	 * it. yield_to() holds both rq locks via double_rq_lock(), so touching
+	 * p's cfs_rqs (possibly on another CPU) is safe; the primitive is
+	 * idempotent, so no rate limiting is needed.
+	 *
+	 * Only refresh p_rq's clock when it differs from the local rq. A
+	 * remote p_rq must be refreshed so the per-level update_curr() is
+	 * accurate. In the same-rq case we skip it: the credit is a
+	 * best-effort hint and the rq clock is recent enough, while the
+	 * trailing yield_task_fair() would otherwise make this a second
+	 * update_rq_clock() on the same rq and trip
+	 * SCHED_WARN_ON(WARN_DOUBLE_CLOCK).
+	 */
+	if (rq != p_rq)
+		update_rq_clock(p_rq);
+
+	for_each_sched_entity(se) {
+		struct cfs_rq *cfs_rq = cfs_rq_of(se);
+
+		if (cfs_rq->next != se)
+			break;
+		if (se->sched_delayed)
+			break;
+		if (throttled_hierarchy(cfs_rq))
+			break;
+
+		eevdf_credit_entity_vlag(cfs_rq, se);
+	}
 
 	yield_task_fair(rq);
 
