@@ -220,6 +220,19 @@ extern struct semaphore __efi_uv_runtime_lock __alias(efi_runtime_lock);
 #endif
 
 /*
+ * Park a worker that must never run efi_rts_wq again: EFI runtime services
+ * have been disabled and its efi_rts_work is abandoned. Loop in schedule()
+ * so a spurious wakeup cannot resume it.
+ */
+void efi_rts_park_worker(void)
+{
+	for (;;) {
+		set_current_state(TASK_IDLE);
+		schedule();
+	}
+}
+
+/*
  * Calls the appropriate efi_runtime_service() with the appropriate
  * arguments.
  */
@@ -319,6 +332,14 @@ static void __nocfi efi_call_rts(struct work_struct *work)
 
 	efi_call_virt_check_flags(flags, efi_rts_work.caller);
 	arch_efi_call_virt_teardown();
+
+	/*
+	 * If __efi_queue_work() timed out and disabled runtime services, the
+	 * caller is gone and efi_rts_work is no longer ours: park the worker
+	 * so it never signals the stale completion or runs again.
+	 */
+	if (!efi_enabled(EFI_RUNTIME_SERVICES))
+		efi_rts_park_worker();
 
 	efi_rts_work.status = status;
 	complete(&efi_rts_work.efi_rts_comp);
