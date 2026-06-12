@@ -82,15 +82,36 @@ static bool is_best_fixed_mode(struct intel_connector *connector,
 		abs(drm_mode_vrefresh(best_mode) - vrefresh);
 }
 
-const struct drm_display_mode *
-intel_panel_fixed_mode(struct intel_connector *connector,
-		       const struct drm_display_mode *mode)
+static bool is_vrr_compatible(const struct drm_display_mode *mode1,
+			      const struct drm_display_mode *mode2)
+{
+	return drm_mode_match(mode1, mode2,
+			      DRM_MODE_MATCH_CLOCK |
+			      DRM_MODE_MATCH_TIMINGS_VRR |
+			      DRM_MODE_MATCH_FLAGS |
+			      DRM_MODE_MATCH_3D_FLAGS);
+}
+
+static const struct drm_display_mode *
+_intel_panel_fixed_mode(struct intel_connector *connector,
+			const struct drm_display_mode *mode,
+			const struct drm_display_mode *vrr_ref_mode)
 {
 	const struct drm_display_mode *fixed_mode, *best_mode = NULL;
 	int vrefresh = drm_mode_vrefresh(mode);
 
+	if (vrr_ref_mode &&
+	    (!intel_vrr_is_in_range(connector, vrefresh) ||
+	     !intel_vrr_is_in_range(connector, drm_mode_vrefresh(vrr_ref_mode))))
+		return NULL;
+
 	list_for_each_entry(fixed_mode, &connector->panel.fixed_modes, head) {
 		int fixed_mode_vrefresh = drm_mode_vrefresh(fixed_mode);
+
+		if (vrr_ref_mode &&
+		    (!intel_vrr_is_in_range(connector, fixed_mode_vrefresh) ||
+		     !is_vrr_compatible(fixed_mode, vrr_ref_mode)))
+			continue;
 
 		if (is_best_fixed_mode(connector, vrefresh,
 				       fixed_mode_vrefresh, best_mode))
@@ -98,6 +119,13 @@ intel_panel_fixed_mode(struct intel_connector *connector,
 	}
 
 	return best_mode;
+}
+
+const struct drm_display_mode *
+intel_panel_fixed_mode(struct intel_connector *connector,
+		       const struct drm_display_mode *mode)
+{
+	return _intel_panel_fixed_mode(connector, mode, NULL);
 }
 
 static bool is_alt_drrs_mode(const struct drm_display_mode *mode,
@@ -202,10 +230,27 @@ int intel_panel_compute_config(struct intel_atomic_state *state,
 			       struct intel_connector *connector)
 {
 	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
-	const struct drm_display_mode *fixed_mode =
-		intel_panel_fixed_mode(connector, adjusted_mode);
+	const struct drm_display_mode *fixed_mode = NULL;
 	int vrefresh, fixed_mode_vrefresh;
 	bool is_vrr;
+
+	/*
+	 * Attempt a VRR based refresh rate change if possible
+	 * when userspace has forbidden a full modeset.
+	 */
+	if (!state->base.allow_modeset) {
+		struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+		const struct intel_crtc_state *old_crtc_state =
+			intel_atomic_get_old_crtc_state(state, crtc);
+
+		if (old_crtc_state->hw.enable &&
+		    old_crtc_state->uapi.encoder_mask == crtc_state->uapi.encoder_mask)
+			fixed_mode = _intel_panel_fixed_mode(connector, adjusted_mode,
+							     &old_crtc_state->hw.adjusted_mode);
+	}
+
+	if (!fixed_mode)
+		fixed_mode = intel_panel_fixed_mode(connector, adjusted_mode);
 
 	if (!fixed_mode)
 		return 0;
