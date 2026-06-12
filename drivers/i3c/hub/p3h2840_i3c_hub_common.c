@@ -318,6 +318,13 @@ static void p3h2x4x_i3c_hub_remove(struct platform_device *pdev)
 	struct p3h2x4x_dev *p3h2x4x = dev_get_drvdata(pdev->dev.parent);
 	u8 i;
 
+#if IS_ENABLED(CONFIG_I2C_SLAVE)
+	if (p3h2x4x->i3cdev) {
+		i3c_device_disable_ibi(p3h2x4x->i3cdev);
+		i3c_device_free_ibi(p3h2x4x->i3cdev);
+	}
+#endif
+
 	for (i = 0; i < P3H2X4X_TP_MAX_COUNT; i++) {
 		if (p3h2x4x_i3c_hub->tp_bus[i].is_registered) {
 			if (p3h2x4x_i3c_hub->hub_config.tp_config[i].mode ==
