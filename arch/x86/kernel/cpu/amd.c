@@ -1319,6 +1319,48 @@ void amd_check_microcode(void)
 		on_each_cpu(zenbleed_check_cpu, NULL, 1);
 }
 
+/**
+ * amd_update_hwcr - Update MSR_K7_HWCR on the executing CPU
+ * @clear: Bits to clear
+ * @set: Bits to set
+ *
+ * MSR_K7_HWCR is written from both process context (e.g. CPUID faulting
+ * updates via arch_prctl(ARCH_SET_CPUID)) and interrupt context (e.g.
+ * Core Performance Boost updates IPI'd by the acpi-cpufreq driver), so
+ * a read-modify-write of the MSR must be performed with interrupts
+ * disabled to avoid losing an update made by an intervening interrupt.
+ * All runtime (non-initialization) updates of MSR_K7_HWCR should go
+ * through this helper.
+ *
+ * Bits in @set take precedence over bits in @clear.
+ *
+ * Context: Any context except NMI. Disabling interrupts does not
+ *          serialize against an NMI, so NMI handlers must not write
+ *          MSR_K7_HWCR.
+ *
+ * Return: 0 on success, negative error code if an MSR access faults.
+ */
+int amd_update_hwcr(u64 clear, u64 set)
+{
+	unsigned long flags;
+	u64 oldval, newval;
+	int ret;
+
+	local_irq_save(flags);
+	ret = rdmsrq_safe(MSR_K7_HWCR, &oldval);
+	if (ret)
+		goto out;
+
+	newval = (oldval & ~clear) | set;
+
+	if (newval != oldval)
+		ret = wrmsrq_safe(MSR_K7_HWCR, newval);
+out:
+	local_irq_restore(flags);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(amd_update_hwcr);
+
 static const char * const s5_reset_reason_txt[] = {
 	[0]  = "thermal pin BP_THERMTRIP_L was tripped",
 	[1]  = "power button was pressed for 4 seconds",

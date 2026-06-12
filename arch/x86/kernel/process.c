@@ -355,9 +355,9 @@ static void set_cpuid_faulting(bool on)
 		wrmsrq(MSR_MISC_FEATURES_ENABLES, msrval);
 	} else if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD) {
 		if (on)
-			msr_set_bit(MSR_K7_HWCR, MSR_K7_HWCR_CPUID_USER_DIS_BIT);
+			amd_update_hwcr(0, MSR_K7_HWCR_CPUID_USER_DIS);
 		else
-			msr_clear_bit(MSR_K7_HWCR, MSR_K7_HWCR_CPUID_USER_DIS_BIT);
+			amd_update_hwcr(MSR_K7_HWCR_CPUID_USER_DIS, 0);
 	}
 }
 

@@ -716,9 +716,11 @@ static __always_inline void amd_clear_divider(void)
 }
 
 extern void amd_check_microcode(void);
+extern int amd_update_hwcr(u64 clear, u64 set);
 #else
 static inline void amd_clear_divider(void)		{ }
 static inline void amd_check_microcode(void)		{ }
+static inline int amd_update_hwcr(u64 clear, u64 set) { return -ENODEV; }
 #endif
 
 extern unsigned long arch_align_stack(unsigned long sp);
