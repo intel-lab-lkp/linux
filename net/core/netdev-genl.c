@@ -162,6 +162,7 @@ static int
 netdev_nl_napi_fill_one(struct sk_buff *rsp, struct napi_struct *napi,
 			const struct genl_info *info)
 {
+	struct napi_thread_node *thread_node;
 	unsigned long irq_suspend_timeout;
 	unsigned long gro_flush_timeout;
 	u32 napi_defer_hard_irqs;
@@ -188,11 +189,16 @@ netdev_nl_napi_fill_one(struct sk_buff *rsp, struct napi_struct *napi,
 			 napi_get_threaded(napi)))
 		goto nla_put_failure;
 
-	if (napi->thread) {
-		pid = task_pid_nr(napi->thread);
-		if (nla_put_u32(rsp, NETDEV_A_NAPI_PID, pid))
+	rcu_read_lock();
+	thread_node = rcu_dereference(napi->thread_node);
+	if (thread_node) {
+		pid = task_pid_nr(thread_node->thread);
+		if (nla_put_u32(rsp, NETDEV_A_NAPI_PID, pid)) {
+			rcu_read_unlock();
 			goto nla_put_failure;
+		}
 	}
+	rcu_read_unlock();
 
 	napi_defer_hard_irqs = napi_get_defer_hard_irqs(napi);
 	if (nla_put_s32(rsp, NETDEV_A_NAPI_DEFER_HARD_IRQS,

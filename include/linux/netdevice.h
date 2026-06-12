@@ -63,6 +63,7 @@ struct dsa_port;
 struct ip_tunnel_parm_kern;
 struct macsec_context;
 struct macsec_ops;
+struct napi_struct;
 struct netdev_config;
 struct netdev_name_node;
 struct sd_flow_limit;
@@ -364,9 +365,19 @@ struct gro_node {
 };
 
 /*
+ * Structure for persisting threaded NAPI kthread
+ */
+struct napi_thread_node {
+	struct task_struct *thread;
+	struct napi_struct *napi;
+	struct rcu_head rcu;
+};
+
+/*
  * Structure for per-NAPI config
  */
 struct napi_config {
+	struct napi_thread_node *thread_node;
 	u64 gro_flush_timeout;
 	u64 irq_suspend_timeout;
 	u32 defer_hard_irqs;
@@ -403,7 +414,7 @@ struct napi_struct {
 	struct gro_node		gro;
 	struct hrtimer		timer;
 	/* all fields past this point are write-protected by netdev_lock */
-	struct task_struct	*thread;
+	struct napi_thread_node __rcu *thread_node;
 	unsigned long		gro_flush_timeout;
 	unsigned long		irq_suspend_timeout;
 	u32			defer_hard_irqs;
