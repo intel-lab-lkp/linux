@@ -1134,8 +1134,14 @@ static int zpci_mem_init(void)
 	BUILD_BUG_ON((CONFIG_ILLEGAL_POINTER_VALUE + 0x10000 > ZPCI_IOMAP_ADDR_BASE) &&
 		     (CONFIG_ILLEGAL_POINTER_VALUE <= ZPCI_IOMAP_ADDR_MAX));
 
+	struct kmem_cache_args fmb_cache_args = {
+		.align = __alignof__(struct zpci_fmb),
+		.useroffset = 0,
+		.usersize = sizeof(struct zpci_fmb)
+	};
+
 	zdev_fmb_cache = kmem_cache_create("PCI_FMB_cache", sizeof(struct zpci_fmb),
-					   __alignof__(struct zpci_fmb), 0, NULL);
+					   &fmb_cache_args, 0);
 	if (!zdev_fmb_cache)
 		goto error_fmb;
 
