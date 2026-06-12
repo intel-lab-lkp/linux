@@ -12,6 +12,7 @@
 #include <linux/acpi.h>
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/io.h>
 #include <linux/nospec.h>
 #include <linux/semaphore.h>
 #include <linux/slab.h>
@@ -41,7 +42,9 @@
  */
 #define CHECK_GET_BIT		BIT(31)
 
-static struct hsmp_plat_device hsmp_pdev;
+static struct hsmp_plat_device hsmp_pdev = {
+	.acpi_sock_refcnt = REFCOUNT_INIT(0),
+};
 
 /*
  * Send a message to the HSMP port via PCI-e config space registers
@@ -488,6 +491,7 @@ ssize_t hsmp_metric_tbl_read(struct hsmp_socket *sock, char *buf, size_t size)
 	msg.msg_id	= HSMP_GET_METRIC_TABLE;
 	msg.sock_ind	= sock->sock_ind;
 
+	guard(mutex)(&sock->metric_tbl_lock);
 	ret = hsmp_send_message(&msg);
 	if (ret)
 		return ret;
@@ -497,12 +501,59 @@ ssize_t hsmp_metric_tbl_read(struct hsmp_socket *sock, char *buf, size_t size)
 }
 EXPORT_SYMBOL_NS_GPL(hsmp_metric_tbl_read, "AMD_HSMP");
 
+void hsmp_metric_tbl_unmap_all(struct hsmp_plat_device *pdev, u16 num_sockets)
+{
+	u16 i;
+
+	if (!pdev->sock || !num_sockets)
+		return;
+
+	for (i = 0; i < num_sockets; i++) {
+		struct hsmp_socket *s = &pdev->sock[i];
+
+		if (s->metric_tbl_addr) {
+			iounmap(s->metric_tbl_addr);
+			s->metric_tbl_addr = NULL;
+		}
+		if (s->metric_lock_inited) {
+			mutex_destroy(&s->metric_tbl_lock);
+			s->metric_lock_inited = false;
+		}
+	}
+}
+EXPORT_SYMBOL_NS_GPL(hsmp_metric_tbl_unmap_all, "AMD_HSMP");
+
 int hsmp_get_tbl_dram_base(u16 sock_ind)
 {
 	struct hsmp_socket *sock = &hsmp_pdev.sock[sock_ind];
 	struct hsmp_message msg = { 0 };
 	phys_addr_t dram_addr;
 	int ret;
+
+	if (sock->metric_tbl_addr)
+		return 0;
+
+	/*
+	 * Initialize the per-socket lock before anything that can set
+	 * sock->metric_tbl_addr to a non-NULL value.  hsmp_metric_tbl_read()
+	 * gates on sock->metric_tbl_addr being non-NULL and then takes
+	 * metric_tbl_lock unconditionally; both callers of this function
+	 * (init_acpi() and init_platform_device()) intentionally only log
+	 * a failure here and continue probing, so an init order that left
+	 * metric_tbl_addr populated while mutex_init failed would leave the
+	 * read path locking an uninitialized mutex.  Doing the mutex init
+	 * first preserves the invariant "metric_tbl_addr != NULL implies the
+	 * lock is usable" on every error exit.
+	 *
+	 * Use non-devm mutex + ioremap so the shared sock[] array (ACPI
+	 * allocates once for all sockets) can be torn down from a single
+	 * refcounted release path without devm lifetime being tied to the
+	 * wrong struct device.
+	 */
+	if (!sock->metric_lock_inited) {
+		mutex_init(&sock->metric_tbl_lock);
+		sock->metric_lock_inited = true;
+	}
 
 	msg.sock_ind	= sock_ind;
 	msg.response_sz	= hsmp_msg_desc_table[HSMP_GET_METRIC_TABLE_DRAM_ADDR].response_sz;
@@ -527,8 +578,7 @@ int hsmp_get_tbl_dram_base(u16 sock_ind)
 	else
 		hsmp_pdev.hsmp_table_size = sizeof(struct hsmp_metric_table);
 
-	sock->metric_tbl_addr = devm_ioremap(sock->dev, dram_addr,
-					     hsmp_pdev.hsmp_table_size);
+	sock->metric_tbl_addr = ioremap(dram_addr, hsmp_pdev.hsmp_table_size);
 	if (!sock->metric_tbl_addr) {
 		dev_err(sock->dev, "Failed to ioremap metric table addr\n");
 		return -ENOMEM;

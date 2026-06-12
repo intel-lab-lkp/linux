@@ -230,6 +230,7 @@ static int hsmp_pltdrv_probe(struct platform_device *pdev)
 static void hsmp_pltdrv_remove(struct platform_device *pdev)
 {
 	hsmp_misc_deregister();
+	hsmp_metric_tbl_unmap_all(hsmp_pdev, hsmp_pdev->num_sockets);
 }
 
 static struct platform_driver amd_hsmp_driver = {
