@@ -518,6 +518,9 @@ xfs_do_force_shutdown(
 	} else if (flags & SHUTDOWN_DEVICE_REMOVED) {
 		tag = XFS_PTAG_SHUTDOWN_IOERROR;
 		why = "Block device removal";
+	} else if (flags & SHUTDOWN_DATA_IO_ERROR) {
+		tag = XFS_PTAG_SHUTDOWN_IOERROR;
+		why = "Unrecoverable Data I/O Error";
 	} else {
 		tag = XFS_PTAG_SHUTDOWN_IOERROR;
 		why = "Metadata I/O Error";

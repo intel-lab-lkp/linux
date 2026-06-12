@@ -1089,6 +1089,7 @@ struct xfs_health_monitor_inode {
 #define XFS_HEALTH_SHUTDOWN_CORRUPT_INCORE	(1u << 3)
 #define XFS_HEALTH_SHUTDOWN_CORRUPT_ONDISK	(1u << 4)
 #define XFS_HEALTH_SHUTDOWN_DEVICE_REMOVED	(1u << 5)
+#define XFS_HEALTH_SHUTDOWN_DATA_IO_ERROR	(1u << 6)
 
 /* shutdown */
 struct xfs_health_monitor_shutdown {

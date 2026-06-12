@@ -666,13 +666,15 @@ void xfs_do_force_shutdown(struct xfs_mount *mp, uint32_t flags, char *fname,
 #define SHUTDOWN_CORRUPT_INCORE	(1u << 3) /* corrupt in-memory structures */
 #define SHUTDOWN_CORRUPT_ONDISK	(1u << 4)  /* corrupt metadata on device */
 #define SHUTDOWN_DEVICE_REMOVED	(1u << 5) /* device removed underneath us */
+#define SHUTDOWN_DATA_IO_ERROR	(1u << 6) /* unrecoverable data write failed */
 
 #define XFS_SHUTDOWN_STRINGS \
 	{ SHUTDOWN_META_IO_ERROR,	"metadata_io" }, \
 	{ SHUTDOWN_LOG_IO_ERROR,	"log_io" }, \
 	{ SHUTDOWN_FORCE_UMOUNT,	"force_umount" }, \
 	{ SHUTDOWN_CORRUPT_INCORE,	"corruption" }, \
-	{ SHUTDOWN_DEVICE_REMOVED,	"device_removed" }
+	{ SHUTDOWN_DEVICE_REMOVED,	"device_removed" }, \
+	{ SHUTDOWN_DATA_IO_ERROR,	"data_io" }
 
 /*
  * Flags for xfs_mountfs

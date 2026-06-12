@@ -147,7 +147,7 @@ xfs_end_ioend_write(
 		 * available.
 		 */
 		if (is_zoned) {
-			xfs_force_shutdown(mp, SHUTDOWN_META_IO_ERROR);
+			xfs_force_shutdown(mp, SHUTDOWN_DATA_IO_ERROR);
 			goto done;
 		}
 		if (ioend->io_flags & IOMAP_IOEND_SHARED) {
