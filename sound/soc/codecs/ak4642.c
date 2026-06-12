@@ -613,7 +613,7 @@ static struct clk *ak4642_of_parse_mcko(struct device *dev)
 	if (of_property_read_u32(np, "clock-frequency", &rate))
 		return NULL;
 
-	if (of_property_read_bool(np, "clocks"))
+	if (of_property_present(np, "clocks"))
 		parent_clk_name = of_clk_get_parent_name(np, 0);
 
 	of_property_read_string(np, "clock-output-names", &clk_name);

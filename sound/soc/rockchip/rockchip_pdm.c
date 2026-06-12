@@ -550,8 +550,7 @@ static int rockchip_pdm_path_parse(struct rk_pdm_dev *pdm, struct device_node *n
 	unsigned int path[PDM_PATH_MAX];
 	int cnt = 0, ret = 0, i = 0, val = 0, msk = 0;
 
-	cnt = of_count_phandle_with_args(node, "rockchip,path-map",
-					 NULL);
+	cnt = of_property_count_u32_elems(node, "rockchip,path-map");
 	if (cnt != PDM_PATH_MAX)
 		return cnt;
 
