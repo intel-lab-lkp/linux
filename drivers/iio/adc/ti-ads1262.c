@@ -217,6 +217,10 @@
 #define ADS1262_RMUX_AVDD_AVSS			4
 #define ADS1262_RMUX_COUNT			5
 
+/* The calibration word is signed 24 bits value */
+#define ADS1262_CALIB_WORD_MAX		((int)(GENMASK(22, 0)))
+#define ADS1262_CALIB_WORD_MIN		(-ADS1262_CALIB_WORD_MAX - 1)
+
 struct ads1262_channel {
 	/* MODE0 */
 	u8 conv_delay:4;
@@ -453,6 +457,32 @@ static int ads1262_dev_start_one(struct ads1262 *st, u8 runmode)
 	return 0;
 }
 
+static int ads1262_read_calib(struct ads1262 *st, unsigned int reg, u32 *val)
+{
+	__le32 lval;
+	int ret;
+
+	/*
+	 * The calibration word is a signed 24 bit LSB-first value.
+	 */
+	ret = regmap_bulk_read(st->regmap, reg, &lval, 3);
+	if (ret)
+		return ret;
+	*val = sign_extend32(le32_to_cpu(lval), 23);
+
+	return 0;
+}
+
+static int ads1262_write_calib(struct ads1262 *st, unsigned int reg, u32 val)
+{
+	__le32 lval = cpu_to_le32(val);
+
+	/*
+	 * The calibration word is a signed 24 bit LSB-first value.
+	 */
+	return regmap_bulk_write(st->regmap, reg, &lval, 3);
+}
+
 static void ads1262_wait_for_conversion(struct ads1262 *st)
 {
 	reinit_completion(&st->drdy);
@@ -673,6 +703,18 @@ static int ads1262_read_raw(struct iio_dev *indio_dev,
 		*val2 = ads1262_conv_delay_avail[mode][1];
 		return IIO_VAL_INT_PLUS_NANO;
 
+	case IIO_CHAN_INFO_CALIBSCALE:
+		ret = ads1262_read_calib(st, ADS1262_FSCAL0_REG, val);
+		if (ret)
+			return ret;
+		return IIO_VAL_INT;
+
+	case IIO_CHAN_INFO_CALIBBIAS:
+		ret = ads1262_read_calib(st, ADS1262_OFCAL0_REG, val);
+		if (ret)
+			return ret;
+		return IIO_VAL_INT;
+
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -682,6 +724,9 @@ static int ads1262_read_avail(struct iio_dev *indio_dev,
 			      struct iio_chan_spec const *chan, const int **vals,
 			      int *type, int *length, long mask)
 {
+	static int calib_range[3] = { ADS1262_CALIB_WORD_MIN, 1,
+				      ADS1262_CALIB_WORD_MAX };
+
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
 		*type = IIO_VAL_INT_PLUS_MICRO;
@@ -700,6 +745,13 @@ static int ads1262_read_avail(struct iio_dev *indio_dev,
 		*vals = (const int *)ads1262_conv_delay_avail;
 		*length = ARRAY_SIZE(ads1262_conv_delay_avail) * 2;
 		return IIO_AVAIL_LIST;
+
+	case IIO_CHAN_INFO_CALIBSCALE:
+	case IIO_CHAN_INFO_CALIBBIAS:
+		*type = IIO_VAL_INT;
+		*vals = calib_range;
+		*length = ARRAY_SIZE(calib_range);
+		return IIO_AVAIL_RANGE;
 
 	default:
 		return -EOPNOTSUPP;
@@ -760,6 +812,18 @@ static int ads1262_write_raw(struct iio_dev *indio_dev,
 		mutex_unlock(&st->chan_lock);
 
 		break;
+
+	case IIO_CHAN_INFO_CALIBSCALE:
+		if (val > ADS1262_CALIB_WORD_MAX || val < ADS1262_CALIB_WORD_MIN)
+			return -EINVAL;
+
+		return ads1262_write_calib(st, ADS1262_FSCAL0_REG, val);
+
+	case IIO_CHAN_INFO_CALIBBIAS:
+		if (val > ADS1262_CALIB_WORD_MAX || val < ADS1262_CALIB_WORD_MIN)
+			return -EINVAL;
+
+		return ads1262_write_calib(st, ADS1262_OFCAL0_REG, val);
 
 	default:
 		return -EOPNOTSUPP;
@@ -867,9 +931,13 @@ static const struct iio_chan_spec ads1262_iio_voltage_template = {
 			      BIT(IIO_CHAN_INFO_HARDWAREGAIN) |
 			      BIT(IIO_CHAN_INFO_SAMP_FREQ) |
 			      BIT(IIO_CHAN_INFO_CONVDELAY),
+	.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_CALIBSCALE) |
+				   BIT(IIO_CHAN_INFO_CALIBBIAS),
 	.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_HARDWAREGAIN) |
 					     BIT(IIO_CHAN_INFO_SAMP_FREQ) |
-					     BIT(IIO_CHAN_INFO_CONVDELAY),
+					     BIT(IIO_CHAN_INFO_CONVDELAY) |
+					     BIT(IIO_CHAN_INFO_CALIBSCALE) |
+					     BIT(IIO_CHAN_INFO_CALIBBIAS),
 	.ext_info = ads1262_ext_info,
 };
 
