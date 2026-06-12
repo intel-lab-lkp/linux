@@ -2,3 +2,4 @@
 obj-y += camss/
 obj-y += iris/
 obj-y += venus/
+obj-y += jpeg/
