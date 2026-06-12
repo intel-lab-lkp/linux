@@ -27633,6 +27633,11 @@ L:	linux-input@vger.kernel.org
 S:	Maintained
 F:	drivers/hid/hid-udraw-ps3.c
 
+UGREEN DH2300 MCU MFD DRIVER
+M:	Alexey Charkov <alchark@flipper.net>
+S:	Maintained
+F:	Documentation/devicetree/bindings/mfd/ugreen,dh2300-mcu.yaml
+
 UHID USERSPACE HID IO DRIVER
 M:	David Rheinsberg <david@readahead.eu>
 L:	linux-input@vger.kernel.org
