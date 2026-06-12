@@ -30,6 +30,9 @@
 #include <linux/if_ether.h>
 #include <scsi/fc/fc_encaps.h>
 #include <scsi/fc/fc_fcoe.h>
+#include <linux/nvme.h>
+#include <linux/nvme-fc.h>
+#include <linux/nvme-fc-driver.h>
 
 #define FDLS_MIN_FRAMES	(32)
 #define FDLS_MIN_FRAME_ELEM	(4)
@@ -250,6 +253,11 @@ struct fc_std_logo {
 	struct fc_frame_header fchdr;
 	struct fc_els_logo els;
 } __packed;
+
+struct fc_std_ls_req {
+	struct fc_frame_header fchdr;
+	struct nvmefc_ls_req ls_req;
+};
 
 #define	FNIC_ETH_FCOE_HDRS_OFFSET	\
 	(sizeof(struct ethhdr) + sizeof(struct fcoe_hdr))
