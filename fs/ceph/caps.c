@@ -1128,8 +1128,8 @@ static void __ceph_remove_cap(struct ceph_cap *cap, bool queue_release)
 	struct ceph_mds_client *mdsc;
 	int removed = 0;
 
-	/* 'ci' being NULL means the remove have already occurred */
-	if (!ci) {
+	if (RB_EMPTY_NODE(&cap->ci_node)) {
+		/* this means the remove has already occurred */
 		doutc(cl, "inode is NULL\n");
 		return;
 	}
@@ -1142,6 +1142,7 @@ static void __ceph_remove_cap(struct ceph_cap *cap, bool queue_release)
 
 	/* remove from inode's cap rbtree, and clear auth cap */
 	rb_erase(&cap->ci_node, &ci->i_caps);
+	RB_CLEAR_NODE(&cap->ci_node);
 	if (ci->i_auth_cap == cap)
 		ci->i_auth_cap = NULL;
 
@@ -1158,8 +1159,6 @@ static void __ceph_remove_cap(struct ceph_cap *cap, bool queue_release)
 		cap->session = NULL;
 		removed = 1;
 	}
-	/* protect backpointer with s_cap_lock: see iterate_session_caps */
-	cap->ci = NULL;
 
 	/*
 	 * s_cap_reconnect is protected by s_cap_lock. no one changes
@@ -1201,8 +1200,8 @@ void ceph_remove_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	struct ceph_inode_info *ci = cap->ci;
 	struct ceph_fs_client *fsc;
 
-	/* 'ci' being NULL means the remove have already occurred */
-	if (!ci) {
+	if (RB_EMPTY_NODE(&cap->ci_node)) {
+		/* this means the remove has already occurred */
 		doutc(mdsc->fsc->client, "inode is NULL\n");
 		return;
 	}

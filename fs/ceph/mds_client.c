@@ -1902,7 +1902,7 @@ int ceph_iterate_session_caps(struct ceph_mds_session *session,
 
 		spin_lock(&session->s_cap_lock);
 		p = p->next;
-		if (!cap->ci) {
+		if (RB_EMPTY_NODE(&cap->ci_node)) {
 			doutc(cl, "finishing cap %p removal\n", cap);
 			BUG_ON(cap->session != session);
 			cap->session = NULL;
