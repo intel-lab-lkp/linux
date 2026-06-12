@@ -20,7 +20,6 @@
 #include <linux/delay.h>
 #include <linux/libata.h>
 #include <linux/of.h>
-#include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/types.h>
 
@@ -671,10 +670,15 @@ static int mpc52xx_ata_init_one(struct device *dev,
 /* OF Platform driver                                                       */
 /* ======================================================================== */
 
+static void devm_bcom_ata_release(void *data)
+{
+	bcom_ata_release(data);
+}
+
 static int mpc52xx_ata_probe(struct platform_device *op)
 {
 	unsigned int ipb_freq;
-	struct resource res_mem;
+	struct resource *res_mem;
 	struct mpc52xx_ata __iomem *ata_regs;
 	struct mpc52xx_ata_priv *priv = NULL;
 	int rv, task_irq;
@@ -690,25 +694,9 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 		return -ENODEV;
 	}
 
-	/* Get device base address from device tree, request the region
-	 * and ioremap it. */
-	rv = of_address_to_resource(op->dev.of_node, 0, &res_mem);
-	if (rv) {
-		dev_err(&op->dev, "could not determine device base address\n");
-		return rv;
-	}
-
-	if (!devm_request_mem_region(&op->dev, res_mem.start,
-				     sizeof(*ata_regs), DRV_NAME)) {
-		dev_err(&op->dev, "error requesting register region\n");
-		return -EBUSY;
-	}
-
-	ata_regs = devm_ioremap(&op->dev, res_mem.start, sizeof(*ata_regs));
-	if (!ata_regs) {
-		dev_err(&op->dev, "error mapping device registers\n");
-		return -ENOMEM;
-	}
+	ata_regs = devm_platform_get_and_ioremap_resource(op, 0, &res_mem);
+	if (IS_ERR(ata_regs))
+		return PTR_ERR(ata_regs);
 
 	/*
 	 * By default, all DMA modes are disabled for the MPC5200.  Some
@@ -738,7 +726,7 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 
 	priv->ipb_period = 1000000000 / (ipb_freq / 1000);
 	priv->ata_regs = ata_regs;
-	priv->ata_regs_pa = res_mem.start;
+	priv->ata_regs_pa = res_mem->start;
 	priv->csel = -1;
 
 	priv->ata_irq = platform_get_irq(op, 0);
@@ -762,47 +750,35 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 
 	priv->dmatsk = dmatsk;
 
+	rv = devm_add_action_or_reset(&op->dev, devm_bcom_ata_release, dmatsk);
+	if (rv)
+		return rv;
+
 	task_irq = bcom_get_task_irq(dmatsk);
 	priv->task_irq = task_irq;
 	rv = devm_request_irq(&op->dev, task_irq, &mpc52xx_ata_task_irq, 0,
-				"ATA task", priv);
+			      "ATA task", priv);
 	if (rv) {
 		dev_err(&op->dev, "error requesting DMA IRQ\n");
-		goto err2;
+		return rv;
 	}
 
 	/* Init the hw */
 	rv = mpc52xx_ata_hw_init(priv);
 	if (rv) {
 		dev_err(&op->dev, "error initializing hardware\n");
-		goto err2;
+		return rv;
 	}
 
 	/* Register ourselves to libata */
-	rv = mpc52xx_ata_init_one(&op->dev, priv, res_mem.start,
+	rv = mpc52xx_ata_init_one(&op->dev, priv, res_mem->start,
 				  mwdma_mask, udma_mask);
 	if (rv) {
 		dev_err(&op->dev, "error registering with ATA layer\n");
-		goto err2;
+		return rv;
 	}
 
 	return 0;
-
- err2:
-	bcom_ata_release(dmatsk);
-	return rv;
-}
-
-static void mpc52xx_ata_remove(struct platform_device *op)
-{
-	struct ata_host *host = platform_get_drvdata(op);
-	struct mpc52xx_ata_priv *priv = host->private_data;
-
-	/* Deregister the ATA interface */
-	ata_platform_remove_one(op);
-
-	/* Clean up DMA */
-	bcom_ata_release(priv->dmatsk);
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -843,7 +819,7 @@ static const struct of_device_id mpc52xx_ata_of_match[] = {
 
 static struct platform_driver mpc52xx_ata_of_platform_driver = {
 	.probe		= mpc52xx_ata_probe,
-	.remove		= mpc52xx_ata_remove,
+	.remove		= ata_platform_remove_one,
 #ifdef CONFIG_PM_SLEEP
 	.suspend	= mpc52xx_ata_suspend,
 	.resume		= mpc52xx_ata_resume,
