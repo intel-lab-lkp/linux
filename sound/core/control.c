@@ -1186,8 +1186,10 @@ static int snd_ctl_elem_info_user(struct snd_ctl_file *ctl,
 	if (copy_from_user(&info, _info, sizeof(info)))
 		return -EFAULT;
 	result = snd_power_ref_and_wait(card);
-	if (result)
+	if (result) {
+		snd_power_unref(card);
 		return result;
+	}
 	result = snd_ctl_elem_info(ctl, &info);
 	snd_power_unref(card);
 	if (result < 0)
