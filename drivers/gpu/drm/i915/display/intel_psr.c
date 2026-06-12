@@ -3899,14 +3899,47 @@ static void psr_capability_changed_check(struct intel_dp *intel_dp)
 	}
 }
 
-/*
- * On common bits:
- * DP_PSR_RFB_STORAGE_ERROR == DP_PANEL_REPLAY_RFB_STORAGE_ERROR
- * DP_PSR_VSC_SDP_UNCORRECTABLE_ERROR == DP_PANEL_REPLAY_VSC_SDP_UNCORRECTABLE_ERROR
- * DP_PSR_LINK_CRC_ERROR == DP_PANEL_REPLAY_LINK_CRC_ERROR
- * this function is relying on PSR definitions
- */
-void intel_psr_short_pulse(struct intel_dp *intel_dp)
+static void _panel_replay_short_pulse(struct intel_dp *intel_dp)
+{
+	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_psr *psr = &intel_dp->psr;
+	int ret;
+	u8 error_status;
+	const u8 errors = DP_PANEL_REPLAY_LINK_CRC_ERROR |
+			  DP_PANEL_REPLAY_RFB_STORAGE_ERROR |
+			  DP_PANEL_REPLAY_VSC_SDP_UNCORRECTABLE_ERROR;
+
+	ret = drm_dp_dpcd_read_byte(&intel_dp->aux, DP_PANEL_REPLAY_ERROR_STATUS,
+				    &error_status);
+	if (ret < 0)
+		return;
+
+	if (error_status & errors) {
+		intel_psr_disable_locked(intel_dp);
+		psr->sink_not_reliable = true;
+	}
+
+	if (error_status & DP_PANEL_REPLAY_RFB_STORAGE_ERROR)
+		drm_dbg_kms(display->drm,
+			    "Panel Replay RFB storage error\n");
+	if (error_status & DP_PANEL_REPLAY_VSC_SDP_UNCORRECTABLE_ERROR)
+		drm_dbg_kms(display->drm,
+			    "Panel Replay VSC SDP uncorrectable error\n");
+	if (error_status & DP_PANEL_REPLAY_LINK_CRC_ERROR)
+		drm_dbg_kms(display->drm,
+			    "Panel Replay Link CRC error\n");
+
+	if (error_status & ~errors)
+		drm_err(display->drm,
+			"PANEL_REPLAY_ERROR_STATUS unhandled errors %x\n",
+			error_status & ~errors);
+
+	/* clear status register */
+	drm_dp_dpcd_write_byte(&intel_dp->aux, DP_PANEL_REPLAY_ERROR_STATUS,
+			       error_status);
+}
+
+static void _psr_short_pulse(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_psr *psr = &intel_dp->psr;
@@ -3915,30 +3948,18 @@ void intel_psr_short_pulse(struct intel_dp *intel_dp)
 			  DP_PSR_VSC_SDP_UNCORRECTABLE_ERROR |
 			  DP_PSR_LINK_CRC_ERROR;
 
-	if (!CAN_PSR(intel_dp) && !CAN_PANEL_REPLAY(intel_dp))
-		return;
-
-	mutex_lock(&psr->lock);
-
-	psr->link_ok = false;
-
-	if (!psr->enabled)
-		goto exit;
-
 	if (psr_get_status_and_error_status(intel_dp, &status, &error_status)) {
 		drm_err(display->drm,
 			"Error reading PSR status or error status\n");
-		goto exit;
+		return;
 	}
 
-	if ((!psr->panel_replay_enabled && status == DP_PSR_SINK_INTERNAL_ERROR) ||
-	    (error_status & errors)) {
+	if (status == DP_PSR_SINK_INTERNAL_ERROR || (error_status & errors)) {
 		intel_psr_disable_locked(intel_dp);
 		psr->sink_not_reliable = true;
 	}
 
-	if (!psr->panel_replay_enabled && status == DP_PSR_SINK_INTERNAL_ERROR &&
-	    !error_status)
+	if (status == DP_PSR_SINK_INTERNAL_ERROR && !error_status)
 		drm_dbg_kms(display->drm,
 			    "PSR sink internal error, disabling PSR\n");
 	if (error_status & DP_PSR_RFB_STORAGE_ERROR)
@@ -3955,16 +3976,33 @@ void intel_psr_short_pulse(struct intel_dp *intel_dp)
 		drm_err(display->drm,
 			"PSR_ERROR_STATUS unhandled errors %x\n",
 			error_status & ~errors);
-	/* clear status register */
-	drm_dp_dpcd_writeb(&intel_dp->aux, DP_PSR_ERROR_STATUS, error_status);
 
-	if (!psr->panel_replay_enabled) {
-		psr_alpm_check(intel_dp);
-		psr_capability_changed_check(intel_dp);
-	}
+	/* clear status register */
+	drm_dp_dpcd_write_byte(&intel_dp->aux, DP_PSR_ERROR_STATUS, error_status);
+
+	psr_alpm_check(intel_dp);
+	psr_capability_changed_check(intel_dp);
+}
+
+void intel_psr_short_pulse(struct intel_dp *intel_dp)
+{
+	if (!CAN_PSR(intel_dp) && !CAN_PANEL_REPLAY(intel_dp))
+		return;
+
+	mutex_lock(&intel_dp->psr.lock);
+
+	if (!intel_dp->psr.enabled)
+		goto exit;
+
+	intel_dp->psr.link_ok = false;
+
+	if (intel_dp->psr.panel_replay_enabled)
+		_panel_replay_short_pulse(intel_dp);
+	else
+		_psr_short_pulse(intel_dp);
 
 exit:
-	mutex_unlock(&psr->lock);
+	mutex_unlock(&intel_dp->psr.lock);
 }
 
 bool intel_psr_enabled(struct intel_dp *intel_dp)
