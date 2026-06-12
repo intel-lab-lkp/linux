@@ -306,4 +306,4 @@ module_init(init_nls_iso8859_4)
 module_exit(exit_nls_iso8859_4)
 
 MODULE_DESCRIPTION("NLS ISO 8859-4 (Latin 4; old Baltic charset)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

@@ -270,4 +270,4 @@ module_init(init_nls_iso8859_5)
 module_exit(exit_nls_iso8859_5)
 
 MODULE_DESCRIPTION("NLS ISO 8859-5 (Cyrillic)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

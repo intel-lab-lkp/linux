@@ -7753,6 +7753,7 @@ sub process {
 						Dual\ BSD/GPL|
 						Dual\ MIT/GPL|
 						Dual\ MPL/GPL|
+						Dual\ Unicode/GPL|
 						Proprietary
 					}x;
 			if ($extracted_string !~ /^"(?:$valid_licenses)"$/x) {

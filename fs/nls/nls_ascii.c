@@ -164,4 +164,4 @@ module_init(init_nls_ascii)
 module_exit(exit_nls_ascii)
 
 MODULE_DESCRIPTION("NLS ASCII (United States)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

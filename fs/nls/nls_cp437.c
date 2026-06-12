@@ -385,4 +385,4 @@ module_init(init_nls_cp437)
 module_exit(exit_nls_cp437)
 
 MODULE_DESCRIPTION("NLS Codepage 437 (United States, Canada)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

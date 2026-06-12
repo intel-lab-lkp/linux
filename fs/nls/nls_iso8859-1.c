@@ -255,4 +255,4 @@ module_init(init_nls_iso8859_1)
 module_exit(exit_nls_iso8859_1)
 
 MODULE_DESCRIPTION("NLS ISO 8859-1 (Latin 1; Western European Languages)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

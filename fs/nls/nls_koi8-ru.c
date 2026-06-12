@@ -80,4 +80,4 @@ module_init(init_nls_koi8_ru)
 module_exit(exit_nls_koi8_ru)
 
 MODULE_DESCRIPTION("NLS KOI8-RU (Belarusian)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

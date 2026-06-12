@@ -299,4 +299,4 @@ module_init(init_nls_cp857)
 module_exit(exit_nls_cp857)
 
 MODULE_DESCRIPTION("NLS Codepage 857 (Turkish)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

@@ -306,4 +306,4 @@ module_init(init_nls_iso8859_3)
 module_exit(exit_nls_iso8859_3)
 
 MODULE_DESCRIPTION("NLS ISO 8859-3 (Latin 3; Esperanto, Galician, Maltese, Turkish)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

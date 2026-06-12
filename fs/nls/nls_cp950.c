@@ -9479,5 +9479,5 @@ module_init(init_nls_cp950)
 module_exit(exit_nls_cp950)
 
 MODULE_DESCRIPTION("NLS Traditional Chinese charset (Big5)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");
 MODULE_ALIAS_NLS(big5);

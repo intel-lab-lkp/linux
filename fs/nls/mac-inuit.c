@@ -529,4 +529,4 @@ module_init(init_nls_macinuit)
 module_exit(exit_nls_macinuit)
 
 MODULE_DESCRIPTION("NLS Codepage macinuit");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

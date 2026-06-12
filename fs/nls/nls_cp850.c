@@ -313,4 +313,4 @@ module_init(init_nls_cp850)
 module_exit(exit_nls_cp850)
 
 MODULE_DESCRIPTION("NLS Codepage 850 (Europe)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

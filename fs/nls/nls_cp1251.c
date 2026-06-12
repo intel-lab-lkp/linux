@@ -299,4 +299,4 @@ module_init(init_nls_cp1251)
 module_exit(exit_nls_cp1251)
 
 MODULE_DESCRIPTION("NLS Windows CP1251 (Bulgarian, Belarusian)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

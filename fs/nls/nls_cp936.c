@@ -11108,5 +11108,5 @@ module_init(init_nls_cp936)
 module_exit(exit_nls_cp936)
 
 MODULE_DESCRIPTION("NLS Simplified Chinese charset (CP936, GB2312)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");
 MODULE_ALIAS_NLS(gb2312);

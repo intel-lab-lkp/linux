@@ -7930,5 +7930,5 @@ module_init(init_nls_cp932)
 module_exit(exit_nls_cp932)
 
 MODULE_DESCRIPTION("NLS Japanese charset (Shift-JIS)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");
 MODULE_ALIAS_NLS(sjis);

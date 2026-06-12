@@ -405,4 +405,4 @@ module_init(init_nls_cp864)
 module_exit(exit_nls_cp864)
 
 MODULE_DESCRIPTION("NLS Codepage 864 (Arabic)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

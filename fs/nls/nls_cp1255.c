@@ -381,5 +381,5 @@ module_init(init_nls_cp1255)
 module_exit(exit_nls_cp1255)
 
 MODULE_DESCRIPTION("NLS Hebrew charsets (ISO-8859-8, CP1255)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");
 MODULE_ALIAS_NLS(iso8859-8);

@@ -494,4 +494,4 @@ module_init(init_nls_macgreek)
 module_exit(exit_nls_macgreek)
 
 MODULE_DESCRIPTION("NLS Codepage macgreek");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

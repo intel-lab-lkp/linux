@@ -578,4 +578,4 @@ module_init(init_nls_euc_jp)
 module_exit(exit_nls_euc_jp)
 
 MODULE_DESCRIPTION("NLS Japanese charset (EUC-JP)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");

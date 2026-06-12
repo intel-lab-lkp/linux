@@ -339,4 +339,4 @@ module_init(init_nls_iso8859_14)
 module_exit(exit_nls_iso8859_14)
 
 MODULE_DESCRIPTION("NLS ISO 8859-14 (Latin 8; Celtic)");
-MODULE_LICENSE("Dual BSD/GPL");
+MODULE_LICENSE("Dual Unicode/GPL");
