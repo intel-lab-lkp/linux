@@ -24,6 +24,14 @@ config ARM_AIROHA_SOC_CPUFREQ
 	help
 	  This adds the CPUFreq driver for Airoha EN7581 SoCs.
 
+config ARM_ACPM_CPUFREQ
+	tristate "ACPM based CPUFreq support"
+	depends on ARCH_EXYNOS || (COMPILE_TEST && 64BIT)
+	select PM_OPP
+	help
+	  This adds the CPUFreq driver for Exynos-based machines
+	  with ACPM firmware.
+
 config ARM_APPLE_SOC_CPUFREQ
 	tristate "Apple Silicon SoC CPUFreq support"
 	depends on ARCH_APPLE || (COMPILE_TEST && 64BIT)
