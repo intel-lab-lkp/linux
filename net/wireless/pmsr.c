@@ -37,6 +37,13 @@ static int pmsr_parse_ftm(struct cfg80211_registered_device *rdev,
 	if (tb[NL80211_PMSR_FTM_REQ_ATTR_PREAMBLE])
 		preamble = nla_get_u32(tb[NL80211_PMSR_FTM_REQ_ATTR_PREAMBLE]);
 
+	if (preamble > NL80211_PREAMBLE_HE) {
+		NL_SET_ERR_MSG_ATTR(info->extack,
+				    tb[NL80211_PMSR_FTM_REQ_ATTR_PREAMBLE],
+				    "FTM: invalid preamble");
+		return -EINVAL;
+	}
+
 	/* set up values - struct is 0-initialized */
 	out->ftm.requested = true;
 
