@@ -93,7 +93,7 @@ Description:
 		  /sys/firmware/dmi/entries/15-0/system_event_log
 
 		and has the following attributes (documented in the
-		SMBIOS / DMI specification under "System Event Log (Type 15)":
+		SMBIOS / DMI specification under "System Event Log (Type 15)"):
 
 		- area_length
 		- header_start_offset
