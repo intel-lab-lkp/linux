@@ -236,7 +236,7 @@ static void pci_p2pdma_release(void *data)
 		return;
 
 	/* Flush and disable pci_alloc_p2p_mem() */
-	pdev->p2pdma = NULL;
+	RCU_INIT_POINTER(pdev->p2pdma, NULL);
 	if (p2pdma->pool)
 		synchronize_rcu();
 	xa_destroy(&p2pdma->map_types);
