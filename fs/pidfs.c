@@ -46,8 +46,9 @@ void pidfs_get_root(struct path *path)
 }
 
 enum pidfs_attr_mask_bits {
-	PIDFS_ATTR_BIT_EXIT	= 0,
-	PIDFS_ATTR_BIT_COREDUMP	= 1,
+	PIDFS_ATTR_BIT_EXIT		= 0,
+	PIDFS_ATTR_BIT_COREDUMP		= 1,
+	PIDFS_ATTR_BIT_STASH_PINNED	= 2,
 };
 
 struct pidfs_anon_attr {
@@ -717,6 +718,7 @@ void pidfs_exit(struct task_struct *tsk)
 {
 	struct pid *pid = task_pid(tsk);
 	struct pidfs_attr *attr;
+	struct dentry *unpin = NULL;
 #ifdef CONFIG_CGROUPS
 	struct cgroup *cgrp;
 #endif
@@ -757,6 +759,23 @@ void pidfs_exit(struct task_struct *tsk)
 	/* Ensure that PIDFD_GET_INFO sees either all or nothing. */
 	smp_wmb();
 	set_bit(PIDFS_ATTR_BIT_EXIT, &attr->attr_mask);
+
+	/*
+	 * Drop the per-pid stash reference taken by pidfs_alloc_file()
+	 * (see PIDFS_ATTR_BIT_STASH_PINNED).  The wait_pidfd.lock guard
+	 * orders this against the pin in pidfs_alloc_file(): once
+	 * PIDFS_ATTR_BIT_EXIT is visible under the lock, no new pin can
+	 * be taken.  dput() runs outside the lock; on the final
+	 * reference it triggers __dentry_kill -> stashed_dentry_prune
+	 * -> pidfs_evict_inode, the existing teardown path.
+	 */
+	scoped_guard(spinlock_irq, &pid->wait_pidfd.lock) {
+		if (test_and_clear_bit(PIDFS_ATTR_BIT_STASH_PINNED,
+				       &attr->attr_mask))
+			unpin = READ_ONCE(pid->stashed);
+	}
+	if (unpin)
+		dput(unpin);
 }
 
 #ifdef CONFIG_COREDUMP
@@ -1122,6 +1141,32 @@ struct file *pidfs_alloc_file(struct pid *pid, unsigned int flags)
 		return ERR_PTR(ret);
 
 	VFS_WARN_ON_ONCE(!pid->attr);
+
+	/*
+	 * Pin the stashed dentry for the lifetime of the task so that
+	 * repeat pidfd_open() on the same pid reuses the cached dentry
+	 * + inode instead of reallocating both each time.  Anonymous
+	 * pidfs dentries don't enter the dcache LRU (DCACHE_DONTCACHE),
+	 * so without an explicit reference the dput() at close()
+	 * immediately destroys the dentry and, via
+	 * stashed_dentry_prune, the inode.
+	 *
+	 * Skip the pin once PIDFS_ATTR_BIT_EXIT is set: pidfs_exit()
+	 * has run (or is running) and will not run again, so a
+	 * reference taken now could never be dropped (stale
+	 * allocations via SO_PEERPIDFD reach here after
+	 * release_task()).  The wait_pidfd.lock guard makes the EXIT
+	 * check and the pin atomic against the unpin in pidfs_exit().
+	 */
+	scoped_guard(spinlock_irq, &pid->wait_pidfd.lock) {
+		struct pidfs_attr *attr = pid->attr;
+
+		if (!IS_ERR_OR_NULL(attr) &&
+		    !test_bit(PIDFS_ATTR_BIT_EXIT, &attr->attr_mask) &&
+		    !test_and_set_bit(PIDFS_ATTR_BIT_STASH_PINNED,
+				      &attr->attr_mask))
+			dget(path.dentry);
+	}
 
 	flags &= ~PIDFD_STALE;
 	flags |= O_RDWR;
