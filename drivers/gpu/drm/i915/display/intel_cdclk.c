@@ -1946,9 +1946,7 @@ static void adlp_cdclk_pll_crawl(struct intel_display *display, int vco)
 
 static u32 bxt_cdclk_cd2x_pipe_mask(struct intel_display *display)
 {
-	if (DISPLAY_VER(display) >= 12)
-		return TGL_CDCLK_CD2X_PIPE_MASK;
-	else if (DISPLAY_VER(display) >= 11)
+	if (DISPLAY_VER(display) >= 11)
 		return ICL_CDCLK_CD2X_PIPE_MASK;
 	else
 		return BXT_CDCLK_CD2X_PIPE_MASK;
@@ -1956,12 +1954,7 @@ static u32 bxt_cdclk_cd2x_pipe_mask(struct intel_display *display)
 
 static u32 bxt_cdclk_cd2x_pipe(struct intel_display *display, enum pipe pipe)
 {
-	if (DISPLAY_VER(display) >= 12) {
-		if (pipe == INVALID_PIPE)
-			return TGL_CDCLK_CD2X_PIPE_NONE;
-		else
-			return TGL_CDCLK_CD2X_PIPE(pipe);
-	} else if (DISPLAY_VER(display) >= 11) {
+	if (DISPLAY_VER(display) >= 11) {
 		if (pipe == INVALID_PIPE)
 			return ICL_CDCLK_CD2X_PIPE_NONE;
 		else
