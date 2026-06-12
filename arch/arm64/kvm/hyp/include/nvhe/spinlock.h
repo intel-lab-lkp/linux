@@ -13,6 +13,8 @@
 #ifndef __ARM64_KVM_NVHE_SPINLOCK_H__
 #define __ARM64_KVM_NVHE_SPINLOCK_H__
 
+#include <linux/cleanup.h>
+
 #include <asm/alternative.h>
 #include <asm/lse.h>
 #include <asm/rwonce.h>
@@ -97,6 +99,10 @@ static inline void hyp_spin_unlock(hyp_spinlock_t *lock)
 	:
 	: "memory");
 }
+
+DEFINE_LOCK_GUARD_1(hyp_spinlock, hyp_spinlock_t,
+		    hyp_spin_lock(_T->lock),
+		    hyp_spin_unlock(_T->lock))
 
 static inline bool hyp_spin_is_locked(hyp_spinlock_t *lock)
 {
