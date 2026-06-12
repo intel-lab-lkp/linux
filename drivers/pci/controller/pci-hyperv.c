@@ -52,6 +52,7 @@
 #include <linux/acpi.h>
 #include <linux/sizes.h>
 #include <linux/of_irq.h>
+#include <linux/jiffies.h>
 #include <asm/mshyperv.h>
 
 /*
@@ -1038,6 +1039,8 @@ static void put_pcichild(struct hv_pci_dev *hpdev)
 		kfree(hpdev);
 }
 
+#define TIMEOUT_MS 5000
+
 /*
  * There is no good way to get notified from vmbus_onoffer_rescind(),
  * so let's use polling here, since this is not a hot path.
@@ -1045,8 +1048,13 @@ static void put_pcichild(struct hv_pci_dev *hpdev)
 static int wait_for_response(struct hv_device *hdev,
 			     struct completion *comp)
 {
+	unsigned long timeout = get_jiffies_64() + msecs_to_jiffies(TIMEOUT_MS);
+	unsigned long now;
+
 	while (true) {
-		if (hdev->channel->rescind) {
+		now = get_jiffies_64();
+		if (hdev->channel->rescind ||
+		    time_after(now, timeout)) {
 			dev_warn_once(&hdev->device, "The device is gone.\n");
 			return -ENODEV;
 		}
