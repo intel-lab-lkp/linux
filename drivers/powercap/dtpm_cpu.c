@@ -54,7 +54,7 @@ static u64 set_pd_power_limit(struct dtpm *dtpm, u64 power_limit)
 
 	rcu_read_lock();
 	table = em_perf_state_from_pd(pd);
-	for (i = 0; i < pd->nr_perf_states; i++) {
+	for (i = 1; i < pd->nr_perf_states; i++) {
 
 		power = table[i].power * nr_cpus;
 
