@@ -22,4 +22,7 @@ void acpm_set_xfer(struct acpm_xfer *xfer, u32 *cmd, size_t cmdcnt,
 int acpm_do_xfer(struct acpm_handle *handle,
 		 const struct acpm_xfer *xfer);
 
+int acpm_do_xfer_fast(struct acpm_handle *handle,
+		      const struct acpm_xfer *xfer);
+
 #endif /* __EXYNOS_ACPM_H__ */

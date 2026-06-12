@@ -20,13 +20,13 @@
 #include <linux/mailbox/exynos-message.h>
 #include <linux/mailbox_client.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
 #include <linux/math.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/spinlock.h>
 #include <linux/types.h>
 
 #include "exynos-acpm.h"
@@ -109,12 +109,16 @@ struct acpm_queue {
  * @rxcnt:	expected length of the response in 32-bit words.
  * @completed:	flag indicating if the firmware response has been fully
  *		processed.
+ * @is_async:	For fire-and-forget xfer. Set to true to just ack
+ *		responses without processing.
+ *		By default, set to false for regular senders.
  */
 struct acpm_rx_data {
 	u32 *cmd __counted_by_ptr(cmdcnt);
 	size_t cmdcnt;
 	size_t rxcnt;
 	bool completed;
+	bool is_async;
 };
 
 #define ACPM_SEQNUM_MAX    64
@@ -148,8 +152,8 @@ struct acpm_chan {
 	struct acpm_info *acpm;
 	struct acpm_queue tx;
 	struct acpm_queue rx;
-	struct mutex tx_lock;
-	struct mutex rx_lock;
+	spinlock_t tx_lock;
+	spinlock_t rx_lock;
 
 	unsigned int qlen;
 	unsigned int mlen;
@@ -232,7 +236,7 @@ static int acpm_get_rx(struct acpm_chan *achan, const struct acpm_xfer *xfer,
 
 	*native_match = false;
 
-	guard(mutex)(&achan->rx_lock);
+	guard(spinlock)(&achan->rx_lock);
 
 	rx_front = readl(achan->rx.front);
 	i = readl(achan->rx.rear);
@@ -297,6 +301,9 @@ static int acpm_get_rx(struct acpm_chan *achan, const struct acpm_xfer *xfer,
 				*native_match = true;
 		}
 
+		if (rx_data->is_async)
+			clear_bit_unlock(seqnum, achan->bitmap_seqnum);
+
 		i = (i + 1) % achan->qlen;
 	} while (i != rx_front);
 
@@ -304,6 +311,57 @@ static int acpm_get_rx(struct acpm_chan *achan, const struct acpm_xfer *xfer,
 	writel(rx_front, achan->rx.rear);
 
 	return 0;
+}
+
+static void acpm_drain_stale_rx(struct acpm_chan *achan)
+{
+	u32 rx_front, seqnum, rx_seqnum;
+	const void __iomem *base = achan->rx.base;
+	struct acpm_rx_data *rx_data;
+	u32 i, val, mlen = achan->mlen;
+
+	if (!spin_trylock(&achan->rx_lock))
+		return;
+
+	rx_front = readl(achan->rx.front);
+	i = readl(achan->rx.rear);
+
+	/* Get out quick if we nothing to process */
+	if (i == rx_front) {
+		spin_unlock(&achan->rx_lock);
+		return;
+	}
+
+	do {
+		val = readl(base + mlen * i);
+		rx_seqnum = FIELD_GET(ACPM_PROTOCOL_SEQNUM, val);
+
+		if (rx_seqnum) {
+			seqnum = rx_seqnum - 1;
+			rx_data = &achan->rx_data[seqnum];
+
+			if (rx_data->rxcnt)
+				__ioread32_copy(rx_data->cmd, base + mlen * i, rx_data->rxcnt);
+
+			/* Signal the waiting thread (if any). If it hasn't started
+			 * spinning yet, it will see this instantly when it does. */
+			smp_store_release(&rx_data->completed, true);
+
+			/* Only free the sequence number if it belongs to an
+			 * async request. Senders who use regular acpm_do_xfer()
+			 * will free their own sequence numbers in
+			 * acpm_dequeue_by_polling().
+			 */
+			if (rx_data->is_async)
+				clear_bit_unlock(seqnum, achan->bitmap_seqnum);
+		}
+
+		i = (i + 1) % achan->qlen;
+	} while (i != rx_front);
+
+	writel(rx_front, achan->rx.rear);
+
+	spin_unlock(&achan->rx_lock);
 }
 
 /**
@@ -388,15 +446,15 @@ static int acpm_wait_for_queue_slots(struct acpm_chan *achan, u32 next_tx_front)
 }
 
 /**
- * acpm_prepare_xfer() - prepare a transfer before writing the message to the
+ * __acpm_prepare_xfer() - prepare a transfer before writing the message to the
  * TX queue.
  * @achan:	ACPM channel info.
  * @xfer:	reference to the transfer being prepared.
  *
  * Return: 0 on success, -errno otherwise.
  */
-static int acpm_prepare_xfer(struct acpm_chan *achan,
-			     const struct acpm_xfer *xfer)
+static int __acpm_prepare_xfer(struct acpm_chan *achan,
+			       const struct acpm_xfer *xfer, bool is_async)
 {
 	struct acpm_rx_data *rx_data;
 	u32 *txd = (u32 *)xfer->txd;
@@ -429,11 +487,18 @@ static int acpm_prepare_xfer(struct acpm_chan *achan,
 	/* Clear data for upcoming responses */
 	rx_data = &achan->rx_data[bit];
 	rx_data->completed = false;
+	rx_data->is_async = is_async;
 	memset(rx_data->cmd, 0, sizeof(*rx_data->cmd) * rx_data->cmdcnt);
 	/* zero means no response expected */
 	rx_data->rxcnt = xfer->rxcnt;
 
 	return 0;
+}
+
+static int acpm_prepare_xfer(struct acpm_chan *achan,
+			     const struct acpm_xfer *xfer)
+{
+	return __acpm_prepare_xfer(achan, xfer, false);
 }
 
 /**
@@ -450,6 +515,62 @@ static int acpm_wait_for_message_response(struct acpm_chan *achan,
 {
 	/* Just polling mode supported for now. */
 	return acpm_dequeue_by_polling(achan, xfer);
+}
+
+int acpm_do_xfer_fast(struct acpm_handle *handle, const struct acpm_xfer *xfer)
+{
+	struct acpm_info *acpm = handle_to_acpm_info(handle);
+	struct exynos_mbox_msg msg;
+	struct acpm_chan *achan;
+	u32 idx, tx_front;
+	int ret;
+
+	if (xfer->acpm_chan_id >= acpm->num_chans)
+		return -EINVAL;
+
+	achan = &acpm->chans[xfer->acpm_chan_id];
+
+	msg.chan_id = xfer->acpm_chan_id;
+	msg.chan_type = EXYNOS_MBOX_CHAN_TYPE_DOORBELL;
+
+	/* Ideally should be a raw_spin_trylock.
+	 * If we can't get it immediately, then give up.
+	 */
+	if (!spin_trylock(&achan->tx_lock))
+		return -EBUSY;
+
+	/* clean up/ack previous responses */
+	acpm_drain_stale_rx(achan);
+
+	tx_front = readl(achan->tx.front);
+	idx = (tx_front + 1) % achan->qlen;
+
+	if (idx == readl(achan->tx.rear)) {
+		/* stalled; queue is full? */
+		spin_unlock(&achan->tx_lock);
+		return -EBUSY;
+	}
+
+	ret = __acpm_prepare_xfer(achan, xfer, true);
+	if (ret) {
+		spin_unlock(&achan->tx_lock);
+		return ret;
+	}
+
+	__iowrite32_copy(achan->tx.base + achan->mlen * tx_front,
+			 xfer->txd, xfer->txcnt);
+
+	/* advance TX front */
+	writel(idx, achan->tx.front);
+
+	/* ring the doorbell */
+	ret = mbox_send_message(achan->chan, (void *)&msg);
+	if (ret >= 0)
+		mbox_client_txdone(achan->chan, 0);
+
+	spin_unlock(&achan->tx_lock);
+
+	return ret < 0 ? ret : 0;
 }
 
 /**
@@ -485,7 +606,7 @@ int acpm_do_xfer(struct acpm_handle *handle, const struct acpm_xfer *xfer)
 	msg.chan_id = xfer->acpm_chan_id;
 	msg.chan_type = EXYNOS_MBOX_CHAN_TYPE_DOORBELL;
 
-	scoped_guard(mutex, &achan->tx_lock) {
+	scoped_guard(spinlock, &achan->tx_lock) {
 		tx_front = readl(achan->tx.front);
 		idx = (tx_front + 1) % achan->qlen;
 
@@ -654,8 +775,8 @@ static int acpm_channels_init(struct acpm_info *acpm)
 		if (ret)
 			return ret;
 
-		mutex_init(&achan->rx_lock);
-		mutex_init(&achan->tx_lock);
+		spin_lock_init(&achan->rx_lock);
+		spin_lock_init(&achan->tx_lock);
 
 		cl->dev = dev;
 
@@ -675,6 +796,7 @@ static void acpm_clk_pdev_unregister(void *data)
 static const struct acpm_ops exynos_acpm_driver_ops = {
 	.dvfs = {
 		.set_rate = acpm_dvfs_set_rate,
+		.set_rate_fast = acpm_dvfs_set_rate_fast,
 		.get_rate = acpm_dvfs_get_rate,
 	},
 

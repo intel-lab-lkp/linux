@@ -14,6 +14,9 @@ struct acpm_handle;
 int acpm_dvfs_set_rate(struct acpm_handle *handle,
 		       unsigned int acpm_chan_id, unsigned int id,
 		       unsigned long rate);
+int acpm_dvfs_set_rate_fast(struct acpm_handle *handle,
+			    unsigned int acpm_chan_id, unsigned int id,
+			    unsigned long rate);
 unsigned long acpm_dvfs_get_rate(struct acpm_handle *handle,
 				 unsigned int acpm_chan_id,
 				 unsigned int clk_id);

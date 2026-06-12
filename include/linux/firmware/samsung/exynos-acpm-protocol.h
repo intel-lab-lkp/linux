@@ -16,6 +16,8 @@ struct device_node;
 struct acpm_dvfs_ops {
 	int (*set_rate)(struct acpm_handle *handle, unsigned int acpm_chan_id,
 			unsigned int clk_id, unsigned long rate);
+	int (*set_rate_fast)(struct acpm_handle *handle, unsigned int acpm_chan_id,
+			     unsigned int clk_id, unsigned long rate);
 	unsigned long (*get_rate)(struct acpm_handle *handle,
 				  unsigned int acpm_chan_id,
 				  unsigned int clk_id);

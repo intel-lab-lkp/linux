@@ -43,6 +43,20 @@ int acpm_dvfs_set_rate(struct acpm_handle *handle,
 	return acpm_do_xfer(handle, &xfer);
 }
 
+int acpm_dvfs_set_rate_fast(struct acpm_handle *handle,
+			    unsigned int acpm_chan_id, unsigned int clk_id,
+			    unsigned long rate)
+{
+	struct acpm_xfer xfer = {0};
+	u32 cmd[4];
+
+	acpm_dvfs_init_set_rate_cmd(cmd, clk_id, rate);
+	acpm_set_xfer(&xfer, cmd, ARRAY_SIZE(cmd), acpm_chan_id, false);
+
+	return acpm_do_xfer_fast(handle, &xfer);
+}
+
+
 static void acpm_dvfs_init_get_rate_cmd(u32 cmd[4], unsigned int clk_id)
 {
 	cmd[0] = FIELD_PREP(ACPM_DVFS_ID, clk_id);
