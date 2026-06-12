@@ -4,8 +4,8 @@ use super::{NullBlkDevice, THIS_MODULE};
 use kernel::{
     block::mq::gen_disk::{GenDisk, GenDiskBuilder},
     configfs::{self, AttributeOperations},
-    configfs_attrs,
     fmt::{self, Write as _},
+    macros::configfs_attrs,
     new_mutex,
     page::PAGE_SIZE,
     prelude::*,
