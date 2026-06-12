@@ -341,7 +341,7 @@ static void hdmi_std_setup_channel_mapping(struct hdac_chmap *chmap,
 				       bool non_pcm,
 				       int ca)
 {
-	struct hdac_cea_channel_speaker_allocation *ch_alloc;
+	const struct hdac_cea_channel_speaker_allocation *ch_alloc;
 	int i;
 	int err;
 	int order;
@@ -581,7 +581,8 @@ int snd_hdac_get_active_channels(int ca)
 }
 EXPORT_SYMBOL_GPL(snd_hdac_get_active_channels);
 
-struct hdac_cea_channel_speaker_allocation *snd_hdac_get_ch_alloc_from_ca(int ca)
+const struct hdac_cea_channel_speaker_allocation *
+snd_hdac_get_ch_alloc_from_ca(int ca)
 {
 	return &channel_allocations[get_channel_allocation_order(ca)];
 }
@@ -622,7 +623,8 @@ static int hdmi_chmap_ctl_info(struct snd_kcontrol *kcontrol,
 }
 
 static int hdmi_chmap_cea_alloc_validate_get_type(struct hdac_chmap *chmap,
-		struct hdac_cea_channel_speaker_allocation *cap, int channels)
+		const struct hdac_cea_channel_speaker_allocation *cap,
+		int channels)
 {
 	/* If the speaker allocation matches the channel count, it is OK.*/
 	if (cap->channels != channels)
@@ -633,7 +635,7 @@ static int hdmi_chmap_cea_alloc_validate_get_type(struct hdac_chmap *chmap,
 }
 
 static void hdmi_cea_alloc_to_tlv_chmap(struct hdac_chmap *hchmap,
-		struct hdac_cea_channel_speaker_allocation *cap,
+		const struct hdac_cea_channel_speaker_allocation *cap,
 		unsigned int *chmap, int channels)
 {
 	int count = 0;
@@ -690,7 +692,7 @@ static int hdmi_chmap_ctl_tlv(struct snd_kcontrol *kcontrol, int op_flag,
 
 	for (chs = 2; chs <= max_chs; chs++) {
 		int i;
-		struct hdac_cea_channel_speaker_allocation *cap;
+		const struct hdac_cea_channel_speaker_allocation *cap;
 
 		cap = channel_allocations;
 		for (i = 0; i < ARRAY_SIZE(channel_allocations); i++, cap++) {
