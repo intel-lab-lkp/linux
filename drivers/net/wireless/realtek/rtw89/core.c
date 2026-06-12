@@ -3,6 +3,7 @@
  */
 #include <linux/ip.h>
 #include <linux/sort.h>
+#include <linux/string_choices.h>
 #include <linux/udp.h>
 
 #include "cam.h"
@@ -7266,7 +7267,7 @@ void rtw89_core_rfkill_poll(struct rtw89_dev *rtwdev, bool force)
 		return;
 
 	rtw89_info(rtwdev, "rfkill hardware state changed to %s\n",
-		   blocked ? "disable" : "enable");
+		   str_enable_disable(!blocked));
 
 	if (blocked)
 		set_bit(RTW89_FLAG_HW_RFKILL_STATE, rtwdev->flags);
