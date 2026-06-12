@@ -97,8 +97,10 @@ static int snd_ctl_elem_info_compat(struct snd_ctl_file *ctl,
 		return -EFAULT;
 
 	err = snd_power_ref_and_wait(card);
-	if (err < 0)
+	if (err < 0) {
+		snd_power_unref(card);
 		return err;
+	}
 	err = snd_ctl_elem_info(ctl, data);
 	snd_power_unref(card);
 	if (err < 0)
