@@ -305,8 +305,10 @@ static int ctl_elem_read_user(struct snd_card *card,
 	int err;
 
 	err = snd_power_ref_and_wait(card);
-	if (err < 0)
+	if (err < 0) {
+		snd_power_unref(card);
 		return err;
+	}
 	err = __ctl_elem_read_user(card, userdata, valuep);
 	snd_power_unref(card);
 	return err;
