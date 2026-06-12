@@ -40,10 +40,6 @@
 
 #include "bcmgenet.h"
 
-/* Default highest priority queue for multi queue support */
-#define GENET_Q1_PRIORITY	0
-#define GENET_Q0_PRIORITY	1
-
 #define GENET_Q0_RX_BD_CNT	\
 	(TOTAL_DESC - priv->hw_params->rx_queues * priv->hw_params->rx_bds_per_q)
 #define GENET_Q0_TX_BD_CNT	\
@@ -187,10 +183,6 @@ enum dma_reg {
 	DMA_CTRL,
 	DMA_STATUS,
 	DMA_SCB_BURST_SIZE,
-	DMA_ARB_CTRL,
-	DMA_PRIORITY_0,
-	DMA_PRIORITY_1,
-	DMA_PRIORITY_2,
 	DMA_INDEX2RING_0,
 	DMA_INDEX2RING_1,
 	DMA_INDEX2RING_2,
@@ -223,10 +215,6 @@ static const u8 bcmgenet_dma_regs_v3plus[] = {
 	[DMA_CTRL]		= 0x04,
 	[DMA_STATUS]		= 0x08,
 	[DMA_SCB_BURST_SIZE]	= 0x0C,
-	[DMA_ARB_CTRL]		= 0x2C,
-	[DMA_PRIORITY_0]	= 0x30,
-	[DMA_PRIORITY_1]	= 0x34,
-	[DMA_PRIORITY_2]	= 0x38,
 	[DMA_RING0_TIMEOUT]	= 0x2C,
 	[DMA_RING1_TIMEOUT]	= 0x30,
 	[DMA_RING2_TIMEOUT]	= 0x34,
@@ -259,10 +247,6 @@ static const u8 bcmgenet_dma_regs_v2[] = {
 	[DMA_CTRL]		= 0x04,
 	[DMA_STATUS]		= 0x08,
 	[DMA_SCB_BURST_SIZE]	= 0x0C,
-	[DMA_ARB_CTRL]		= 0x30,
-	[DMA_PRIORITY_0]	= 0x34,
-	[DMA_PRIORITY_1]	= 0x38,
-	[DMA_PRIORITY_2]	= 0x3C,
 	[DMA_RING0_TIMEOUT]	= 0x2C,
 	[DMA_RING1_TIMEOUT]	= 0x30,
 	[DMA_RING2_TIMEOUT]	= 0x34,
@@ -286,10 +270,6 @@ static const u8 bcmgenet_dma_regs_v1[] = {
 	[DMA_CTRL]		= 0x00,
 	[DMA_STATUS]		= 0x04,
 	[DMA_SCB_BURST_SIZE]	= 0x0C,
-	[DMA_ARB_CTRL]		= 0x30,
-	[DMA_PRIORITY_0]	= 0x34,
-	[DMA_PRIORITY_1]	= 0x38,
-	[DMA_PRIORITY_2]	= 0x3C,
 	[DMA_RING0_TIMEOUT]	= 0x2C,
 	[DMA_RING1_TIMEOUT]	= 0x30,
 	[DMA_RING2_TIMEOUT]	= 0x34,
@@ -2126,13 +2106,6 @@ static netdev_tx_t bcmgenet_xmit(struct sk_buff *skb, struct net_device *dev)
 	int i;
 
 	index = skb_get_queue_mapping(skb);
-	/* Mapping strategy:
-	 * queue_mapping = 0, unclassified, packet xmited through ring 0
-	 * queue_mapping = 1, goes to ring 1. (highest priority queue)
-	 * queue_mapping = 2, goes to ring 2.
-	 * queue_mapping = 3, goes to ring 3.
-	 * queue_mapping = 4, goes to ring 4.
-	 */
 	ring = &priv->tx_rings[index];
 	txq = netdev_get_tx_queue(dev, index);
 
@@ -2712,7 +2685,6 @@ static void bcmgenet_init_tx_ring(struct bcmgenet_priv *priv,
 {
 	struct bcmgenet_tx_ring *ring = &priv->tx_rings[index];
 	u32 words_per_bd = WORDS_PER_BD(priv);
-	u32 flow_period_val = 0;
 
 	spin_lock_init(&ring->lock);
 	ring->priv = priv;
@@ -2727,16 +2699,11 @@ static void bcmgenet_init_tx_ring(struct bcmgenet_priv *priv,
 	ring->end_ptr = end_ptr - 1;
 	ring->prod_index = 0;
 
-	/* Set flow period for ring != 0 */
-	if (index)
-		flow_period_val = ENET_MAX_MTU_SIZE << 16;
-
 	bcmgenet_tdma_ring_writel(priv, index, 0, TDMA_PROD_INDEX);
 	bcmgenet_tdma_ring_writel(priv, index, 0, TDMA_CONS_INDEX);
 	bcmgenet_tdma_ring_writel(priv, index, 1, DMA_MBUF_DONE_THRESH);
-	/* Disable rate control for now */
-	bcmgenet_tdma_ring_writel(priv, index, flow_period_val,
-				  TDMA_FLOW_PERIOD);
+	/* Rate control disabled */
+	bcmgenet_tdma_ring_writel(priv, index, 0, TDMA_FLOW_PERIOD);
 	bcmgenet_tdma_ring_writel(priv, index,
 				  ((size << DMA_RING_SIZE_SHIFT) |
 				   RX_BUF_LENGTH), DMA_RING_BUF_SIZE);
@@ -2919,52 +2886,20 @@ static int bcmgenet_rdma_disable(struct bcmgenet_priv *priv)
 	return -ETIMEDOUT;
 }
 
-/* Initialize Tx queues
+/* Initialize the single Tx queue.
  *
- * Queues 1-4 are priority-based, each one has 32 descriptors,
- * with queue 1 being the highest priority queue.
- *
- * Queue 0 is the default Tx queue with
- * GENET_Q0_TX_BD_CNT = 256 - 4 * 32 = 128 descriptors.
- *
- * The transmit control block pool is then partitioned as follows:
- * - Tx queue 0 uses tx_cbs[0..127]
- * - Tx queue 1 uses tx_cbs[128..159]
- * - Tx queue 2 uses tx_cbs[160..191]
- * - Tx queue 3 uses tx_cbs[192..223]
- * - Tx queue 4 uses tx_cbs[224..255]
+ * Queue 0 owns the full TX descriptor pool (GENET_Q0_TX_BD_CNT BDs)
+ * and is the only ring enabled in DMA_RING_CFG / DMA_CTRL.
  */
 static void bcmgenet_init_tx_queues(struct net_device *dev)
 {
 	struct bcmgenet_priv *priv = netdev_priv(dev);
-	unsigned int start = 0, end = GENET_Q0_TX_BD_CNT;
-	u32 i, ring_mask, dma_priority[3] = {0, 0, 0};
 
-	/* Enable strict priority arbiter mode */
-	bcmgenet_tdma_writel(priv, DMA_ARBITER_SP, DMA_ARB_CTRL);
+	bcmgenet_init_tx_ring(priv, 0, GENET_Q0_TX_BD_CNT, 0,
+			      GENET_Q0_TX_BD_CNT);
 
-	/* Initialize Tx priority queues */
-	for (i = 0; i <= priv->hw_params->tx_queues; i++) {
-		bcmgenet_init_tx_ring(priv, i, end - start, start, end);
-		start = end;
-		end += priv->hw_params->tx_bds_per_q;
-		dma_priority[DMA_PRIO_REG_INDEX(i)] |=
-			(i ? GENET_Q1_PRIORITY : GENET_Q0_PRIORITY)
-			<< DMA_PRIO_REG_SHIFT(i);
-	}
-
-	/* Set Tx queue priorities */
-	bcmgenet_tdma_writel(priv, dma_priority[0], DMA_PRIORITY_0);
-	bcmgenet_tdma_writel(priv, dma_priority[1], DMA_PRIORITY_1);
-	bcmgenet_tdma_writel(priv, dma_priority[2], DMA_PRIORITY_2);
-
-	/* Configure Tx queues as descriptor rings */
-	ring_mask = (1 << (priv->hw_params->tx_queues + 1)) - 1;
-	bcmgenet_tdma_writel(priv, ring_mask, DMA_RING_CFG);
-
-	/* Enable Tx rings */
-	ring_mask <<= DMA_RING_BUF_EN_SHIFT;
-	bcmgenet_tdma_writel(priv, ring_mask, DMA_CTRL);
+	bcmgenet_tdma_writel(priv, BIT(0), DMA_RING_CFG);
+	bcmgenet_tdma_writel(priv, BIT(DMA_RING_BUF_EN_SHIFT), DMA_CTRL);
 }
 
 static void bcmgenet_enable_rx_napi(struct bcmgenet_priv *priv)
@@ -4123,7 +4058,6 @@ static int bcmgenet_probe(struct platform_device *pdev)
 	if (err)
 		goto err_clk_disable;
 
-	/* setup number of real queues + 1 */
 	netif_set_real_num_tx_queues(priv->dev, priv->hw_params->tx_queues + 1);
 	netif_set_real_num_rx_queues(priv->dev, priv->hw_params->rx_queues + 1);
 
