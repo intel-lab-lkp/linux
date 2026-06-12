@@ -883,7 +883,7 @@ static void string_bench_strrchr(struct kunit *test)
 
 #define TASK_NAME "task_name"
 #define TASK_NAME_LEN 9
-#define TASK_MAX_LEN TASK_COMM_LEN
+#define TASK_MAX_LEN TASK_COMM_EXT_LEN
 #define SMALLER_LEN TASK_NAME_LEN - 3
 #define BIGGER_LEN TASK_MAX_LEN + 3
 
