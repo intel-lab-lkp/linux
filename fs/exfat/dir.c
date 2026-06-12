@@ -1043,6 +1043,11 @@ rewind:
 					uniname += EXFAT_FILE_NAME_LEN;
 
 				len = exfat_extract_uni_name(ep, entry_uniname);
+				if (uniname + len >
+				    p_uniname->name + MAX_NAME_LENGTH) {
+					step = DIRENT_STEP_FILE;
+					continue;
+				}
 				name_len += len;
 
 				unichar = *(uniname+len);
