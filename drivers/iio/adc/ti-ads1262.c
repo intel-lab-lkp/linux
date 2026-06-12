@@ -17,6 +17,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
+#include <linux/gpio/driver.h>
 #include <linux/interrupt.h>
 #include <linux/lockdep.h>
 #include <linux/math.h>
@@ -312,6 +313,10 @@ static const int ads1262_conv_delay_avail[][2] = {
 
 static const int ads1262_pga_gain_avail[] = {
 	1, 2, 4, 8, 16, 32
+};
+
+static const char * const ads1262_gpio_names[] = {
+	"AIN3", "AIN4", "AIN5", "AIN6", "AIN7", "AIN8", "AIN9", "AINCOM"
 };
 
 static int ads1262_dev_power_on(struct ads1262 *st)
@@ -1050,6 +1055,146 @@ out_notify_done:
 	return IRQ_HANDLED;
 }
 
+static int ads1262_gpiochip_request(struct gpio_chip *gc, unsigned int offset)
+{
+	struct ads1262 *st = gpiochip_get_data(gc);
+	struct device *dev = &st->spi->dev;
+	int ret;
+
+	ret = pm_runtime_resume_and_get(dev);
+	if (ret)
+		return ret;
+
+	return regmap_update_bits(st->regmap, ADS1262_GPIOCON_REG,
+				  BIT(offset), BIT(offset));
+}
+
+static void ads1262_gpiochip_free(struct gpio_chip *gc, unsigned int offset)
+{
+	struct ads1262 *st = gpiochip_get_data(gc);
+	struct device *dev = &st->spi->dev;
+
+	regmap_update_bits(st->regmap, ADS1262_GPIOCON_REG, BIT(offset), 0);
+	pm_runtime_put_autosuspend(dev);
+}
+
+static int ads1262_gpiochip_get_direction(struct gpio_chip *gc,
+					  unsigned int offset)
+{
+	struct ads1262 *st = gpiochip_get_data(gc);
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(st->regmap, ADS1262_GPIODIR_REG, &val);
+	if (ret)
+		return ret;
+
+	return val & BIT(offset);
+}
+
+static int ads1262_gpiochip_direction_input(struct gpio_chip *gc,
+					    unsigned int offset)
+{
+	struct ads1262 *st = gpiochip_get_data(gc);
+
+	return regmap_update_bits(st->regmap, ADS1262_GPIODIR_REG,
+				  BIT(offset), 1);
+}
+
+static int ads1262_gpiochip_direction_output(struct gpio_chip *gc,
+					     unsigned int offset, int value)
+{
+	struct ads1262 *st = gpiochip_get_data(gc);
+	int ret;
+
+	ret = regmap_update_bits(st->regmap, ADS1262_GPIODIR_REG,
+				 BIT(offset), 0);
+	if (ret)
+		return ret;
+
+	return regmap_update_bits(st->regmap, ADS1262_GPIODAT_REG,
+				  BIT(offset), value ? BIT(offset) : 0);
+}
+
+static int ads1262_gpiochip_get(struct gpio_chip *gc, unsigned int offset)
+{
+	struct ads1262 *st = gpiochip_get_data(gc);
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(st->regmap, ADS1262_GPIODAT_REG, &val);
+	if (ret)
+		return ret;
+
+	return val & BIT(offset);
+}
+
+static int ads1262_gpiochip_get_multiple(struct gpio_chip *gc,
+					 unsigned long *mask,
+					 unsigned long *bits)
+{
+	struct ads1262 *st = gpiochip_get_data(gc);
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(st->regmap, ADS1262_GPIODAT_REG, &val);
+	if (ret)
+		return ret;
+
+	return val & *mask;
+}
+
+static int ads1262_gpiochip_set(struct gpio_chip *gc, unsigned int offset,
+				int value)
+{
+	struct ads1262 *st = gpiochip_get_data(gc);
+
+	return regmap_update_bits(st->regmap, ADS1262_GPIODAT_REG,
+				  BIT(offset), value ? BIT(offset) : 0);
+}
+
+static int ads1262_gpiochip_set_multiple(struct gpio_chip *gc,
+					 unsigned long *mask,
+					 unsigned long *bits)
+{
+	struct ads1262 *st = gpiochip_get_data(gc);
+
+	return regmap_update_bits(st->regmap, ADS1262_GPIODAT_REG, *mask,
+				  *bits);
+}
+
+static int ads1262_gpiochip_setup(struct ads1262 *st, const char *name)
+{
+	struct device *dev = &st->spi->dev;
+	struct gpio_chip *gc;
+
+	if (!device_property_present(dev, "gpio-controller"))
+		return 0;
+
+	gc = devm_kzalloc(dev, sizeof(*gc), GFP_KERNEL);
+	if (!gc)
+		return -ENOMEM;
+
+	gc->owner = THIS_MODULE;
+	gc->label = name;
+	gc->base = -1;
+	gc->ngpio = ARRAY_SIZE(ads1262_gpio_names);
+	gc->parent = dev;
+	gc->can_sleep = true;
+	gc->request = ads1262_gpiochip_request;
+	gc->free = ads1262_gpiochip_free;
+	gc->get_direction = ads1262_gpiochip_get_direction;
+	gc->direction_input = ads1262_gpiochip_direction_input;
+	gc->direction_output = ads1262_gpiochip_direction_output;
+	gc->get = ads1262_gpiochip_get;
+	gc->get_multiple = ads1262_gpiochip_get_multiple;
+	gc->set = ads1262_gpiochip_set;
+	gc->set_multiple = ads1262_gpiochip_set_multiple;
+	gc->names = ads1262_gpio_names;
+
+	return devm_gpiochip_add_data(dev, gc, st);
+}
+
 static int ads1262_parse_channel_data(struct ads1262 *st,
 				      struct ads1262_channel *chan_data,
 				      struct fwnode_handle *node)
@@ -1747,6 +1892,10 @@ static int ads1262_spi_probe(struct spi_device *spi)
 	pm_runtime_set_autosuspend_delay(dev, 10000);
 	pm_runtime_set_active(dev);
 	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		return ret;
+
+	ret = ads1262_gpiochip_setup(st, name);
 	if (ret)
 		return ret;
 
