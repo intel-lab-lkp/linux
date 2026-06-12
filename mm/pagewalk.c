@@ -692,9 +692,24 @@ int walk_page_range_debug(struct mm_struct *mm, unsigned long start,
 	};
 
 	/* For convenience, we allow traversal of kernel mappings. */
-	if (mm == &init_mm)
-		return walk_kernel_page_table_range(start, end, ops,
-						    pgd, private);
+	if (mm == &init_mm) {
+		int err;
+
+		/*
+		 * Kernel intermediate page tables can be freed concurrently by
+		 * vmalloc/ioremap teardown (e.g. pmd_free_pte_page()), which
+		 * routes the freed pages through pagetable_free_kernel(). That
+		 * path defers the free past an RCU grace period, so hold the RCU
+		 * read lock across the walk to prevent a page table from being
+		 * freed while we are still dereferencing it. ptdump is the only
+		 * caller here and its callbacks do not sleep, so this is safe.
+		 */
+		rcu_read_lock();
+		err = walk_kernel_page_table_range(start, end, ops, pgd, private);
+		rcu_read_unlock();
+		return err;
+	}
+
 	if (start >= end || !walk.mm)
 		return -EINVAL;
 	if (!check_ops_safe(ops))
