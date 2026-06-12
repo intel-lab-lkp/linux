@@ -102,6 +102,19 @@ static bool __ro_after_init allow_unsafe_mappings;
 module_param(allow_unsafe_mappings, bool, 0444);
 
 /*
+ * enable_relaxed_boost - second-round safety net for kvm_vcpu_on_spin().
+ *
+ * When on (default), if the strict scan finds no eligible yield target,
+ * fall back to a relaxed scan gated only by vcpu->preempted. This
+ * preserves forward progress if IPI tracking is missed (e.g.
+ * APICv-delivered IPIs) or the runnable set changes mid-scan.
+ *
+ * Disable this at runtime if the relaxed pass causes over-boosting.
+ */
+static bool enable_relaxed_boost = true;
+module_param(enable_relaxed_boost, bool, 0644);
+
+/*
  * Ordering of locks:
  *
  *	kvm->lock --> kvm->slots_lock --> kvm->irq_lock
@@ -4037,6 +4050,8 @@ void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 	 * they may all try to yield to the same vCPU(s).  But as above, this
 	 * is all best effort due to KVM's lack of visibility into the guest.
 	 */
+retry:
+	yielded = 0;
 	start = READ_ONCE(kvm->last_boosted_vcpu) + 1;
 	for (i = 0; i < nr_vcpus; i++) {
 		idx = (start + i) % nr_vcpus;
@@ -4075,6 +4090,15 @@ void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 		} else if (yielded < 0 && !--try) {
 			break;
 		}
+	}
+
+	/*
+	 * Second, relaxed pass if enabled, the strict pass yielded nothing,
+	 * and we still have retry budget for -ESRCH paths.
+	 */
+	if (enable_relaxed_boost && first_round && yielded <= 0 && try > 0) {
+		first_round = false;
+		goto retry;
 	}
 
 	kvm_vcpu_set_in_spin_loop(me, false);
