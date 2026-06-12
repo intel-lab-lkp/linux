@@ -26,6 +26,7 @@
 #include <sound/core.h>
 #include <sound/asoundef.h>
 #include <sound/pcm.h>
+#include <sound/pcm_drm_eld.h>
 #include <sound/pcm_params.h>
 #include <sound/initval.h>
 #include <sound/control.h>
@@ -56,72 +57,6 @@ MODULE_PARM_DESC(id,
 module_param(single_port, bool, 0444);
 MODULE_PARM_DESC(single_port,
 		"Single-port mode (for compatibility)");
-
-/*
- * ELD SA bits in the CEA Speaker Allocation data block
- */
-static const int eld_speaker_allocation_bits[] = {
-	[0] = FL | FR,
-	[1] = LFE,
-	[2] = FC,
-	[3] = RL | RR,
-	[4] = RC,
-	[5] = FLC | FRC,
-	[6] = RLC | RRC,
-	/* the following are not defined in ELD yet */
-	[7] = 0,
-};
-
-/*
- * This is an ordered list!
- *
- * The preceding ones have better chances to be selected by
- * hdmi_channel_allocation().
- */
-static struct cea_channel_speaker_allocation channel_allocations[] = {
-/*                        channel:   7     6    5    4    3     2    1    0  */
-{ .ca_index = 0x00,  .speakers = {   0,    0,   0,   0,   0,    0,  FR,  FL } },
-				/* 2.1 */
-{ .ca_index = 0x01,  .speakers = {   0,    0,   0,   0,   0,  LFE,  FR,  FL } },
-				/* Dolby Surround */
-{ .ca_index = 0x02,  .speakers = {   0,    0,   0,   0,  FC,    0,  FR,  FL } },
-				/* surround40 */
-{ .ca_index = 0x08,  .speakers = {   0,    0,  RR,  RL,   0,    0,  FR,  FL } },
-				/* surround41 */
-{ .ca_index = 0x09,  .speakers = {   0,    0,  RR,  RL,   0,  LFE,  FR,  FL } },
-				/* surround50 */
-{ .ca_index = 0x0a,  .speakers = {   0,    0,  RR,  RL,  FC,    0,  FR,  FL } },
-				/* surround51 */
-{ .ca_index = 0x0b,  .speakers = {   0,    0,  RR,  RL,  FC,  LFE,  FR,  FL } },
-				/* 6.1 */
-{ .ca_index = 0x0f,  .speakers = {   0,   RC,  RR,  RL,  FC,  LFE,  FR,  FL } },
-				/* surround71 */
-{ .ca_index = 0x13,  .speakers = { RRC,  RLC,  RR,  RL,  FC,  LFE,  FR,  FL } },
-
-{ .ca_index = 0x03,  .speakers = {   0,    0,   0,   0,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x04,  .speakers = {   0,    0,   0,  RC,   0,    0,  FR,  FL } },
-{ .ca_index = 0x05,  .speakers = {   0,    0,   0,  RC,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x06,  .speakers = {   0,    0,   0,  RC,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x07,  .speakers = {   0,    0,   0,  RC,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x0c,  .speakers = {   0,   RC,  RR,  RL,   0,    0,  FR,  FL } },
-{ .ca_index = 0x0d,  .speakers = {   0,   RC,  RR,  RL,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x0e,  .speakers = {   0,   RC,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x10,  .speakers = { RRC,  RLC,  RR,  RL,   0,    0,  FR,  FL } },
-{ .ca_index = 0x11,  .speakers = { RRC,  RLC,  RR,  RL,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x12,  .speakers = { RRC,  RLC,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x14,  .speakers = { FRC,  FLC,   0,   0,   0,    0,  FR,  FL } },
-{ .ca_index = 0x15,  .speakers = { FRC,  FLC,   0,   0,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x16,  .speakers = { FRC,  FLC,   0,   0,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x17,  .speakers = { FRC,  FLC,   0,   0,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x18,  .speakers = { FRC,  FLC,   0,  RC,   0,    0,  FR,  FL } },
-{ .ca_index = 0x19,  .speakers = { FRC,  FLC,   0,  RC,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x1a,  .speakers = { FRC,  FLC,   0,  RC,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x1b,  .speakers = { FRC,  FLC,   0,  RC,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x1c,  .speakers = { FRC,  FLC,  RR,  RL,   0,    0,  FR,  FL } },
-{ .ca_index = 0x1d,  .speakers = { FRC,  FLC,  RR,  RL,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x1e,  .speakers = { FRC,  FLC,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x1f,  .speakers = { FRC,  FLC,  RR,  RL,  FC,  LFE,  FR,  FL } },
-};
 
 static const struct channel_map_table map_tables[] = {
 	{ SNDRV_CHMAP_FL,       0x00,   FL },
@@ -384,68 +319,13 @@ static int had_init_audio_ctrl(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-/*
- * Compute derived values in channel_allocations[].
- */
-static void init_channel_allocations(void)
-{
-	int i, j;
-	struct cea_channel_speaker_allocation *p;
-
-	for (i = 0; i < ARRAY_SIZE(channel_allocations); i++) {
-		p = channel_allocations + i;
-		p->channels = 0;
-		p->spk_mask = 0;
-		for (j = 0; j < ARRAY_SIZE(p->speakers); j++)
-			if (p->speakers[j]) {
-				p->channels++;
-				p->spk_mask |= p->speakers[j];
-			}
-	}
-}
-
-/*
- * The transformation takes two steps:
- *
- *      eld->spk_alloc => (eld_speaker_allocation_bits[]) => spk_mask
- *            spk_mask => (channel_allocations[])         => ai->CA
- *
- * TODO: it could select the wrong CA from multiple candidates.
- */
 static int had_channel_allocation(struct snd_intelhad *intelhaddata,
 				  int channels)
 {
-	int i;
-	int ca = 0;
-	int spk_mask = 0;
+	int ca;
 
-	/*
-	 * CA defaults to 0 for basic stereo audio
-	 */
-	if (channels <= 2)
-		return 0;
-
-	/*
-	 * expand ELD's speaker allocation mask
-	 *
-	 * ELD tells the speaker mask in a compact(paired) form,
-	 * expand ELD's notions to match the ones used by Audio InfoFrame.
-	 */
-
-	for (i = 0; i < ARRAY_SIZE(eld_speaker_allocation_bits); i++) {
-		if (intelhaddata->eld[DRM_ELD_SPEAKER] & (1 << i))
-			spk_mask |= eld_speaker_allocation_bits[i];
-	}
-
-	/* search for the first working match in the CA table */
-	for (i = 0; i < ARRAY_SIZE(channel_allocations); i++) {
-		if (channels == channel_allocations[i].channels &&
-		(spk_mask & channel_allocations[i].spk_mask) ==
-				channel_allocations[i].spk_mask) {
-			ca = channel_allocations[i].ca_index;
-			break;
-		}
-	}
+	ca = snd_cea_channel_allocation(intelhaddata->eld[DRM_ELD_SPEAKER] & 0x7f,
+					channels, 0x1f, false);
 
 	dev_dbg(intelhaddata->dev, "select CA 0x%x for %d\n", ca, channels);
 
@@ -487,7 +367,7 @@ static void had_build_channel_allocation_map(struct snd_intelhad *intelhaddata)
 	/*
 	 * Sink may support more than 8 channels, if eld_high has more than
 	 * one bit set. SOC supports max 8 channels.
-	 * Refer eld_speaker_allocation_bits, for sink speaker allocation
+	 * Refer the CEA ELD speaker allocation mapping for sink allocation.
 	 */
 
 	/* if 0x2F < eld < 0x4F fall back to 0x2f, else fall back to 0x4F */
@@ -505,24 +385,25 @@ static void had_build_channel_allocation_map(struct snd_intelhad *intelhaddata)
 		}
 	}
 
-	for (i = 0; i < ARRAY_SIZE(eld_speaker_allocation_bits); i++) {
-		if (intelhaddata->eld[DRM_ELD_SPEAKER] & (1 << i))
-			spk_mask |= eld_speaker_allocation_bits[i];
-	}
+	spk_mask = snd_cea_spk_mask_from_alloc(intelhaddata->eld[DRM_ELD_SPEAKER] &
+						 0x7f);
 
-	for (i = 0; i < ARRAY_SIZE(channel_allocations); i++) {
-		if (spk_mask == channel_allocations[i].spk_mask) {
-			for (c = 0; c < channel_allocations[i].channels; c++) {
-				chmap->map[c] = spk_to_chmap(
-					channel_allocations[i].speakers[
-						(MAX_SPEAKERS - 1) - c]);
-			}
-			chmap->channels = channel_allocations[i].channels;
+	for (i = 0; i < snd_cea_channel_allocations_count; i++) {
+		const struct snd_cea_channel_speaker_allocation *ca;
+
+		ca = &snd_cea_channel_allocations[i];
+		if (ca->ca_index > 0x1f)
+			continue;
+		if (spk_mask == ca->spk_mask) {
+			for (c = 0; c < ca->channels; c++)
+				chmap->map[c] =
+					spk_to_chmap(ca->speakers[MAX_SPEAKERS - 1 - c]);
+			chmap->channels = ca->channels;
 			intelhaddata->chmap->chmap = chmap;
 			break;
 		}
 	}
-	if (i >= ARRAY_SIZE(channel_allocations))
+	if (i >= snd_cea_channel_allocations_count)
 		kfree(chmap);
 }
 
@@ -1723,7 +1604,6 @@ static int __hdmi_lpe_audio_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	init_channel_allocations();
 
 	card_ctx->num_pipes = pdata->num_pipes;
 	card_ctx->num_ports = single_port ? 1 : pdata->num_ports;

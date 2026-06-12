@@ -44,15 +44,6 @@ enum cea_speaker_placement {
 	LFE = (1 << 10),        /* Low Frequency Effect */
 };
 
-struct cea_channel_speaker_allocation {
-	int ca_index;
-	int speakers[8];
-
-	/* derived values, just for convenience */
-	int channels;
-	int spk_mask;
-};
-
 struct channel_map_table {
 	unsigned char map;              /* ALSA API channel map position */
 	unsigned char cea_slot;         /* CEA slot value */

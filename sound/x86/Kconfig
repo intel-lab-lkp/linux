@@ -12,6 +12,7 @@ config HDMI_LPE_AUDIO
 	tristate "HDMI audio without HDAudio on Intel Atom platforms"
 	depends on DRM_I915
 	select SND_PCM
+	select SND_PCM_ELD
 	help
 	 Choose this option to support HDMI LPE Audio mode
 
