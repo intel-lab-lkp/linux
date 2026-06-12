@@ -636,10 +636,12 @@ hdmi_compute_format_bpc(const struct drm_connector *connector,
 			unsigned int max_bpc, enum drm_output_color_format fmt)
 {
 	struct drm_device *dev = connector->dev;
-	unsigned int bpc;
+	unsigned int bpc, min_bpc;
 	int ret;
 
-	for (bpc = max_bpc; bpc >= 8; bpc -= 2) {
+	min_bpc = max(conn_state->min_requested_bpc, 8);
+
+	for (bpc = max_bpc; bpc >= min_bpc; bpc -= 2) {
 		ret = hdmi_try_format_bpc(connector, conn_state, mode, bpc, fmt);
 		if (!ret)
 			continue;
@@ -657,8 +659,8 @@ hdmi_compute_format_bpc(const struct drm_connector *connector,
 		return 0;
 	}
 
-	drm_dbg_kms(dev, "Failed. %s output format not supported for any bpc count.\n",
-		    drm_hdmi_connector_get_output_format_name(fmt));
+	drm_dbg_kms(dev, "Failed. %s output format not supported for any bpc <= %u and >= %u.\n",
+		    drm_hdmi_connector_get_output_format_name(fmt), max_bpc, min_bpc);
 
 	return -EINVAL;
 }
