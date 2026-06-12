@@ -14,10 +14,12 @@
 #include <linux/clk.h>
 #include <linux/completion.h>
 #include <linux/compiler_attributes.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/driver.h>
+#include <linux/idr.h>
 #include <linux/interrupt.h>
 #include <linux/lockdep.h>
 #include <linux/math.h>
@@ -41,6 +43,8 @@
 #include <linux/iio/trigger.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
+
+#include "ti-ads1262.h"
 
 /* Commands */
 #define ADS1262_OPCODE_NOP			0x00
@@ -220,6 +224,8 @@
 /* The calibration word is signed 24 bits value */
 #define ADS1262_CALIB_WORD_MAX		((int)(GENMASK(22, 0)))
 #define ADS1262_CALIB_WORD_MIN		(-ADS1262_CALIB_WORD_MAX - 1)
+
+static DEFINE_IDA(ads1262_ida);
 
 struct ads1262_channel {
 	/* MODE0 */
@@ -1123,6 +1129,143 @@ out_notify_done:
 	return IRQ_HANDLED;
 }
 
+static int ads1263_adc2_enable(struct ads1263_adc2_ctx *ctx,
+			       const struct ads1263_adc2_channel *chan)
+{
+	struct ads1262 *st = ctx->chip;
+
+	/*
+	 * The ads1263_adc2_channel struct can be written directly to the chip's
+	 * configuration registers (ADC2CFG, ADC2MUX) in a single transfer, so
+	 * it's necessary to assert it's size (2 bytes).
+	 */
+	static_assert(sizeof(*chan) == 2);
+
+	guard(mutex)(&ctx->chan_lock);
+
+	return regmap_bulk_write(st->regmap, ADS1262_ADC2CFG_REG, chan,
+				 sizeof(*chan));
+}
+
+static int ads1263_adc2_start(struct ads1263_adc2_ctx *ctx)
+{
+	struct ads1262 *st = ctx->chip;
+
+	return ads1262_dev_cmd(st, ADS1262_OPCODE_START2);
+}
+
+static int ads1263_adc2_stop(struct ads1263_adc2_ctx *ctx)
+{
+	struct ads1262 *st = ctx->chip;
+
+	return ads1262_dev_cmd(st, ADS1262_OPCODE_STOP2);
+}
+
+static int ads1263_adc2_read(struct ads1263_adc2_ctx *ctx, __be32 *val)
+{
+	struct ads1262 *st = ctx->chip;
+
+	return ads1262_dev_read_data_command(st, ADS1262_OPCODE_RDATA2, val);
+}
+
+static void ads1262_aux_device_destroy(void *data)
+{
+	struct auxiliary_device *adev = data;
+
+	auxiliary_device_delete(adev);
+	auxiliary_device_uninit(adev);
+}
+
+static void ads1262_aux_device_release(struct device *dev)
+{
+	struct auxiliary_device *adev = to_auxiliary_dev(dev);
+	struct ads1263_adc2_ctx *ctx =
+		container_of(adev, struct ads1263_adc2_ctx, adev);
+	struct fwnode_handle *node = adev->dev.fwnode;
+
+	mutex_destroy(&ctx->chan_lock);
+	kfree(ctx->channels);
+	ida_free(&ads1262_ida, adev->id);
+	kfree(ctx);
+	fwnode_handle_put(node);
+}
+
+static int ads1262_aux_device_setup(struct ads1262 *st)
+{
+	struct device *dev = &st->spi->dev;
+	struct ads1263_adc2_channel *chans;
+	struct auxiliary_device *adev;
+	struct ads1263_adc2_ctx *ctx;
+	struct fwnode_handle *node;
+	int id, ret;
+
+	node = device_get_named_child_node(dev, "adc");
+	if (!node)
+		return 0;
+
+	ctx = kzalloc_obj(*ctx);
+	if (!ctx) {
+		ret = -ENOMEM;
+		goto out_node_put;
+	}
+
+	id = ida_alloc(&ads1262_ida, GFP_KERNEL);
+	if (id < 0) {
+		ret = id;
+		goto out_free_adc2;
+	}
+
+	chans = kcalloc(st->num_channels, sizeof(*chans), GFP_KERNEL);
+	if (!chans) {
+		ret = -ENOMEM;
+		goto out_free_id;
+	}
+
+	for (unsigned int i = 0; i < st->num_channels; i++) {
+		chans[i].negative_input = st->channels[i].negative_input;
+		chans[i].positive_input = st->channels[i].positive_input;
+	}
+
+	ctx->chip = st;
+	ctx->num_channels = st->num_channels;
+	ctx->channels = chans;
+	ctx->enable = ads1263_adc2_enable;
+	ctx->start = ads1263_adc2_start;
+	ctx->stop = ads1263_adc2_stop;
+	ctx->read = ads1263_adc2_read;
+	mutex_init(&ctx->chan_lock);
+
+	adev = &ctx->adev;
+	adev->name = "ads1263_adc2";
+	adev->id = id;
+	adev->dev.release = ads1262_aux_device_release;
+	adev->dev.parent = dev;
+	device_set_node(&adev->dev, no_free_ptr(node));
+
+	ret = auxiliary_device_init(adev);
+	if (ret)
+		goto out_free_channels;
+
+	ret = auxiliary_device_add(adev);
+	if (ret) {
+		auxiliary_device_uninit(adev);
+		return ret;
+	}
+
+	return devm_add_action_or_reset(dev, ads1262_aux_device_destroy, adev);
+
+out_free_channels:
+	kfree(chans);
+out_free_id:
+	ida_free(&ads1262_ida, id);
+out_free_adc2:
+	kfree(ctx);
+out_node_put:
+	fwnode_handle_put(node);
+
+	return ret;
+}
+
 static int ads1262_gpiochip_request(struct gpio_chip *gc, unsigned int offset)
 {
 	struct ads1262 *st = gpiochip_get_data(gc);
@@ -1964,6 +2107,10 @@ static int ads1262_spi_probe(struct spi_device *spi)
 		return ret;
 
 	ret = ads1262_gpiochip_setup(st, name);
+	if (ret)
+		return ret;
+
+	ret = ads1262_aux_device_setup(st);
 	if (ret)
 		return ret;
 

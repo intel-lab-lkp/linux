@@ -26675,6 +26675,8 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/iio/adc/ti,ads1262.yaml
 F:	Documentation/devicetree/bindings/iio/adc/ti,ads1263-adc2.yaml
 F:	drivers/iio/adc/ti-ads1262.c
+F:	drivers/iio/adc/ti-ads1262.h
+F:	drivers/iio/adc/ti-ads1263-adc2.c
 
 TI ADS7924 ADC DRIVER
 M:	Hugo Villeneuve <hvilleneuve@dimonoff.com>

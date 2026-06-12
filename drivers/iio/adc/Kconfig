@@ -1809,6 +1809,19 @@ config TI_ADS1262
 	  This driver can also be built as a module. If so, the module will be
 	  called ti-ads1262.
 
+config TI_ADS1263_ADC2
+	tristate "Texas Instruments ADS1263 auxiliary ADC (ADC2) driver"
+	depends on TI_ADS1262
+	select AUXILIARY_BUS
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	help
+	  If you say yes here you get support for Texas Instruments ADS1263
+	  auxiliary ADC (ADC2).
+
+	  This driver can also be built as a module. If so, the module will be
+	  called ti-ads1263-adc2.
+
 config TI_ADS1298
 	tristate "Texas Instruments ADS1298"
 	depends on SPI
