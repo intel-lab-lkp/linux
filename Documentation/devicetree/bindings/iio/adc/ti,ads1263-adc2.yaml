@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/adc/ti,ads1263-adc2.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TI ADS1263 ADC2 analog-to-digital converter
+
+maintainers:
+  - Kurt Borja <kuurtb@gmail.com>
+
+description:
+  The ADS1263 includes an auxiliary, 24-bit, delta-sigma ADC (ADC2). ADC2
+  operation is independent of ADC1, with independent selections of input
+  channel, reference voltage, sample rate, and channel gain.
+
+properties:
+  compatible:
+    enum:
+      - ti,ads1263-adc2
+  vref-supply:
+    description: Optional external voltage reference.
+
+  ti,refmux:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      Selects the positive voltage reference input:
+      0: Internal 2.5 V reference
+      1: AIN0-AIN1 pins
+      2: AIN2-AIN3 pins
+      3: AIN4-AIN5 pins
+      4: AVDD-AVSS pins
+    minimum: 0
+    maximum: 4
+    default: 0
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+  '#io-channel-cells':
+    const: 1
+
+required:
+  - compatible
+
+additionalProperties: false
