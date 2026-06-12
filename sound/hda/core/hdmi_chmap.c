@@ -23,23 +23,23 @@
  * CEA RL/RR; The SMPTE channel _assignment_ C/LFE is swapped to CEA LFE/FC.
  */
 enum cea_speaker_placement {
-	FL  = (1 <<  0),	/* Front Left           */
-	FC  = (1 <<  1),	/* Front Center         */
-	FR  = (1 <<  2),	/* Front Right          */
-	FLC = (1 <<  3),	/* Front Left Center    */
-	FRC = (1 <<  4),	/* Front Right Center   */
-	RL  = (1 <<  5),	/* Rear Left            */
-	RC  = (1 <<  6),	/* Rear Center          */
-	RR  = (1 <<  7),	/* Rear Right           */
-	RLC = (1 <<  8),	/* Rear Left Center     */
-	RRC = (1 <<  9),	/* Rear Right Center    */
-	LFE = (1 << 10),	/* Low Frequency Effect */
-	FLW = (1 << 11),	/* Front Left Wide      */
-	FRW = (1 << 12),	/* Front Right Wide     */
-	FLH = (1 << 13),	/* Front Left High      */
-	FCH = (1 << 14),	/* Front Center High    */
-	FRH = (1 << 15),	/* Front Right High     */
-	TC  = (1 << 16),	/* Top Center           */
+	FL  = BIT(0),	/* Front Left */
+	FC  = BIT(1),	/* Front Center */
+	FR  = BIT(2),	/* Front Right */
+	FLC = BIT(3),	/* Front Left Center */
+	FRC = BIT(4),	/* Front Right Center */
+	RL  = BIT(5),	/* Rear Left */
+	RC  = BIT(6),	/* Rear Center */
+	RR  = BIT(7),	/* Rear Right */
+	RLC = BIT(8),	/* Rear Left Center */
+	RRC = BIT(9),	/* Rear Right Center */
+	LFE = BIT(10),	/* Low Frequency Effect */
+	FLW = BIT(11),	/* Front Left Wide */
+	FRW = BIT(12),	/* Front Right Wide */
+	FLH = BIT(13),	/* Front Left High */
+	FCH = BIT(14),	/* Front Center High */
+	FRH = BIT(15),	/* Front Right High */
+	TC  = BIT(16),	/* Top Center */
 };
 
 static const char * const cea_speaker_allocation_names[] = {
@@ -54,24 +54,6 @@ static const char * const cea_speaker_allocation_names[] = {
 	/*  8 */ "FLH/FRH",
 	/*  9 */ "TC",
 	/* 10 */ "FCH",
-};
-
-/*
- * ELD SA bits in the CEA Speaker Allocation data block
- */
-static const int eld_speaker_allocation_bits[] = {
-	[0] = FL | FR,
-	[1] = LFE,
-	[2] = FC,
-	[3] = RL | RR,
-	[4] = RC,
-	[5] = FLC | FRC,
-	[6] = RLC | RRC,
-	/* the following are not defined in ELD yet */
-	[7] = FLW | FRW,
-	[8] = FLH | FRH,
-	[9] = TC,
-	[10] = FCH,
 };
 
 /*
@@ -110,75 +92,6 @@ static int hdmi_channel_mapping[0x32][8] = {
 	[0x13] = { 0x00, 0x11, 0x26, 0x37, 0x43, 0x52, 0x64, 0x75 },
 };
 
-/*
- * This is an ordered list!
- *
- * The preceding ones have better chances to be selected by
- * hdmi_channel_allocation().
- */
-static struct hdac_cea_channel_speaker_allocation channel_allocations[] = {
-/*			  channel:   7     6    5    4    3     2    1    0  */
-{ .ca_index = 0x00,  .speakers = {   0,    0,   0,   0,   0,    0,  FR,  FL } },
-				 /* 2.1 */
-{ .ca_index = 0x01,  .speakers = {   0,    0,   0,   0,   0,  LFE,  FR,  FL } },
-				 /* Dolby Surround */
-{ .ca_index = 0x02,  .speakers = {   0,    0,   0,   0,  FC,    0,  FR,  FL } },
-				 /* surround40 */
-{ .ca_index = 0x08,  .speakers = {   0,    0,  RR,  RL,   0,    0,  FR,  FL } },
-				 /* surround41 */
-{ .ca_index = 0x09,  .speakers = {   0,    0,  RR,  RL,   0,  LFE,  FR,  FL } },
-				 /* surround50 */
-{ .ca_index = 0x0a,  .speakers = {   0,    0,  RR,  RL,  FC,    0,  FR,  FL } },
-				 /* surround51 */
-{ .ca_index = 0x0b,  .speakers = {   0,    0,  RR,  RL,  FC,  LFE,  FR,  FL } },
-				 /* 6.1 */
-{ .ca_index = 0x0f,  .speakers = {   0,   RC,  RR,  RL,  FC,  LFE,  FR,  FL } },
-				 /* surround71 */
-{ .ca_index = 0x13,  .speakers = { RRC,  RLC,  RR,  RL,  FC,  LFE,  FR,  FL } },
-
-{ .ca_index = 0x03,  .speakers = {   0,    0,   0,   0,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x04,  .speakers = {   0,    0,   0,  RC,   0,    0,  FR,  FL } },
-{ .ca_index = 0x05,  .speakers = {   0,    0,   0,  RC,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x06,  .speakers = {   0,    0,   0,  RC,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x07,  .speakers = {   0,    0,   0,  RC,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x0c,  .speakers = {   0,   RC,  RR,  RL,   0,    0,  FR,  FL } },
-{ .ca_index = 0x0d,  .speakers = {   0,   RC,  RR,  RL,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x0e,  .speakers = {   0,   RC,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x10,  .speakers = { RRC,  RLC,  RR,  RL,   0,    0,  FR,  FL } },
-{ .ca_index = 0x11,  .speakers = { RRC,  RLC,  RR,  RL,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x12,  .speakers = { RRC,  RLC,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x14,  .speakers = { FRC,  FLC,   0,   0,   0,    0,  FR,  FL } },
-{ .ca_index = 0x15,  .speakers = { FRC,  FLC,   0,   0,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x16,  .speakers = { FRC,  FLC,   0,   0,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x17,  .speakers = { FRC,  FLC,   0,   0,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x18,  .speakers = { FRC,  FLC,   0,  RC,   0,    0,  FR,  FL } },
-{ .ca_index = 0x19,  .speakers = { FRC,  FLC,   0,  RC,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x1a,  .speakers = { FRC,  FLC,   0,  RC,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x1b,  .speakers = { FRC,  FLC,   0,  RC,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x1c,  .speakers = { FRC,  FLC,  RR,  RL,   0,    0,  FR,  FL } },
-{ .ca_index = 0x1d,  .speakers = { FRC,  FLC,  RR,  RL,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x1e,  .speakers = { FRC,  FLC,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x1f,  .speakers = { FRC,  FLC,  RR,  RL,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x20,  .speakers = {   0,  FCH,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x21,  .speakers = {   0,  FCH,  RR,  RL,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x22,  .speakers = {  TC,    0,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x23,  .speakers = {  TC,    0,  RR,  RL,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x24,  .speakers = { FRH,  FLH,  RR,  RL,   0,    0,  FR,  FL } },
-{ .ca_index = 0x25,  .speakers = { FRH,  FLH,  RR,  RL,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x26,  .speakers = { FRW,  FLW,  RR,  RL,   0,    0,  FR,  FL } },
-{ .ca_index = 0x27,  .speakers = { FRW,  FLW,  RR,  RL,   0,  LFE,  FR,  FL } },
-{ .ca_index = 0x28,  .speakers = {  TC,   RC,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x29,  .speakers = {  TC,   RC,  RR,  RL,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x2a,  .speakers = { FCH,   RC,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x2b,  .speakers = { FCH,   RC,  RR,  RL,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x2c,  .speakers = {  TC,  FCH,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x2d,  .speakers = {  TC,  FCH,  RR,  RL,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x2e,  .speakers = { FRH,  FLH,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x2f,  .speakers = { FRH,  FLH,  RR,  RL,  FC,  LFE,  FR,  FL } },
-{ .ca_index = 0x30,  .speakers = { FRW,  FLW,  RR,  RL,  FC,    0,  FR,  FL } },
-{ .ca_index = 0x31,  .speakers = { FRW,  FLW,  RR,  RL,  FC,  LFE,  FR,  FL } },
-};
-
 static int hdmi_pin_set_slot_channel(struct hdac_device *codec,
 		hda_nid_t pin_nid, int asp_slot, int channel)
 {
@@ -213,32 +126,12 @@ static void hdmi_set_channel_count(struct hdac_device *codec,
  * Channel mapping routines
  */
 
-/*
- * Compute derived values in channel_allocations[].
- */
-static void init_channel_allocations(void)
-{
-	int i, j;
-	struct hdac_cea_channel_speaker_allocation *p;
-
-	for (i = 0; i < ARRAY_SIZE(channel_allocations); i++) {
-		p = channel_allocations + i;
-		p->channels = 0;
-		p->spk_mask = 0;
-		for (j = 0; j < ARRAY_SIZE(p->speakers); j++)
-			if (p->speakers[j]) {
-				p->channels++;
-				p->spk_mask |= p->speakers[j];
-			}
-	}
-}
-
 static int get_channel_allocation_order(int ca)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(channel_allocations); i++) {
-		if (channel_allocations[i].ca_index == ca)
+	for (i = 0; i < snd_cea_channel_allocations_count; i++) {
+		if (snd_cea_channel_allocations[i].ca_index == ca)
 			break;
 	}
 	return i;
@@ -257,61 +150,13 @@ void snd_hdac_print_channel_allocation(int spk_alloc, char *buf, int buflen)
 }
 EXPORT_SYMBOL_GPL(snd_hdac_print_channel_allocation);
 
-/*
- * The transformation takes two steps:
- *
- *	eld->spk_alloc => (eld_speaker_allocation_bits[]) => spk_mask
- *	      spk_mask => (channel_allocations[])         => ai->CA
- *
- * TODO: it could select the wrong CA from multiple candidates.
-*/
 static int hdmi_channel_allocation_spk_alloc_blk(struct hdac_device *codec,
 				   int spk_alloc, int channels)
 {
-	int i;
-	int ca = 0;
-	int spk_mask = 0;
+	int ca;
 	char buf[SND_PRINT_CHANNEL_ALLOCATION_ADVISED_BUFSIZE];
 
-	/*
-	 * CA defaults to 0 for basic stereo audio
-	 */
-	if (channels <= 2)
-		return 0;
-
-	/*
-	 * expand ELD's speaker allocation mask
-	 *
-	 * ELD tells the speaker mask in a compact(paired) form,
-	 * expand ELD's notions to match the ones used by Audio InfoFrame.
-	 */
-	for (i = 0; i < ARRAY_SIZE(eld_speaker_allocation_bits); i++) {
-		if (spk_alloc & (1 << i))
-			spk_mask |= eld_speaker_allocation_bits[i];
-	}
-
-	/* search for the first working match in the CA table */
-	for (i = 0; i < ARRAY_SIZE(channel_allocations); i++) {
-		if (channels == channel_allocations[i].channels &&
-		    (spk_mask & channel_allocations[i].spk_mask) ==
-				channel_allocations[i].spk_mask) {
-			ca = channel_allocations[i].ca_index;
-			break;
-		}
-	}
-
-	if (!ca) {
-		/*
-		 * if there was no match, select the regular ALSA channel
-		 * allocation with the matching number of channels
-		 */
-		for (i = 0; i < ARRAY_SIZE(channel_allocations); i++) {
-			if (channels == channel_allocations[i].channels) {
-				ca = channel_allocations[i].ca_index;
-				break;
-			}
-		}
-	}
+	ca = snd_cea_channel_allocation(spk_alloc, channels, 0x31, true);
 
 	snd_hdac_print_channel_allocation(spk_alloc, buf, sizeof(buf));
 	dev_dbg(&codec->dev, "HDMI: select CA 0x%x for %d-channel allocation: %s\n",
@@ -341,14 +186,14 @@ static void hdmi_std_setup_channel_mapping(struct hdac_chmap *chmap,
 				       bool non_pcm,
 				       int ca)
 {
-	const struct hdac_cea_channel_speaker_allocation *ch_alloc;
+	const struct snd_cea_channel_speaker_allocation *ch_alloc;
 	int i;
 	int err;
 	int order;
 	int non_pcm_mapping[8];
 
 	order = get_channel_allocation_order(ca);
-	ch_alloc = &channel_allocations[order];
+	ch_alloc = &snd_cea_channel_allocations[order];
 
 	if (hdmi_channel_mapping[ca][1] == 0) {
 		int hdmi_slot = 0;
@@ -438,12 +283,12 @@ static int to_cea_slot(int ordered_ca, unsigned char pos)
 	/* Add sanity check to pass klockwork check.
 	 * This should never happen.
 	 */
-	if (ordered_ca >= ARRAY_SIZE(channel_allocations))
+	if (ordered_ca >= snd_cea_channel_allocations_count)
 		return -1;
 
 	if (mask) {
 		for (i = 0; i < 8; i++) {
-			if (channel_allocations[ordered_ca].speakers[7 - i] == mask)
+			if (snd_cea_channel_allocations[ordered_ca].speakers[7 - i] == mask)
 				return i;
 		}
 	}
@@ -475,7 +320,7 @@ static int from_cea_slot(int ordered_ca, unsigned char slot)
 	if (slot >= 8)
 		return 0;
 
-	mask = channel_allocations[ordered_ca].speakers[7 - slot];
+	mask = snd_cea_channel_allocations[ordered_ca].speakers[7 - slot];
 
 	return snd_hdac_spk_to_chmap(mask);
 }
@@ -494,12 +339,12 @@ static int hdmi_manual_channel_allocation(int chs, unsigned char *map)
 		}
 	}
 
-	for (i = 0; i < ARRAY_SIZE(channel_allocations); i++) {
-		if ((chs == channel_allocations[i].channels ||
-		     spks == channel_allocations[i].channels) &&
-		    (spk_mask & channel_allocations[i].spk_mask) ==
-				channel_allocations[i].spk_mask)
-			return channel_allocations[i].ca_index;
+	for (i = 0; i < snd_cea_channel_allocations_count; i++) {
+		if ((chs == snd_cea_channel_allocations[i].channels ||
+		     spks == snd_cea_channel_allocations[i].channels) &&
+		    (spk_mask & snd_cea_channel_allocations[i].spk_mask) ==
+				snd_cea_channel_allocations[i].spk_mask)
+			return snd_cea_channel_allocations[i].ca_index;
 	}
 	return -1;
 }
@@ -542,8 +387,8 @@ static void hdmi_setup_fake_chmap(unsigned char *map, int ca)
 	int ordered_ca = get_channel_allocation_order(ca);
 
 	for (i = 0; i < 8; i++) {
-		if (ordered_ca < ARRAY_SIZE(channel_allocations) &&
-		    i < channel_allocations[ordered_ca].channels)
+		if (ordered_ca < snd_cea_channel_allocations_count &&
+		    i < snd_cea_channel_allocations[ordered_ca].channels)
 			map[i] = from_cea_slot(ordered_ca, hdmi_channel_mapping[ca][i] & 0x0f);
 		else
 			map[i] = 0;
@@ -574,17 +419,16 @@ int snd_hdac_get_active_channels(int ca)
 	/* Add sanity check to pass klockwork check.
 	 * This should never happen.
 	 */
-	if (ordered_ca >= ARRAY_SIZE(channel_allocations))
+	if (ordered_ca >= snd_cea_channel_allocations_count)
 		ordered_ca = 0;
 
-	return channel_allocations[ordered_ca].channels;
+	return snd_cea_channel_allocations[ordered_ca].channels;
 }
 EXPORT_SYMBOL_GPL(snd_hdac_get_active_channels);
 
-const struct hdac_cea_channel_speaker_allocation *
-snd_hdac_get_ch_alloc_from_ca(int ca)
+const struct snd_cea_channel_speaker_allocation *snd_hdac_get_ch_alloc_from_ca(int ca)
 {
-	return &channel_allocations[get_channel_allocation_order(ca)];
+	return &snd_cea_channel_allocations[get_channel_allocation_order(ca)];
 }
 EXPORT_SYMBOL_GPL(snd_hdac_get_ch_alloc_from_ca);
 
@@ -623,8 +467,7 @@ static int hdmi_chmap_ctl_info(struct snd_kcontrol *kcontrol,
 }
 
 static int hdmi_chmap_cea_alloc_validate_get_type(struct hdac_chmap *chmap,
-		const struct hdac_cea_channel_speaker_allocation *cap,
-		int channels)
+		const struct snd_cea_channel_speaker_allocation *cap, int channels)
 {
 	/* If the speaker allocation matches the channel count, it is OK.*/
 	if (cap->channels != channels)
@@ -635,7 +478,7 @@ static int hdmi_chmap_cea_alloc_validate_get_type(struct hdac_chmap *chmap,
 }
 
 static void hdmi_cea_alloc_to_tlv_chmap(struct hdac_chmap *hchmap,
-		const struct hdac_cea_channel_speaker_allocation *cap,
+		const struct snd_cea_channel_speaker_allocation *cap,
 		unsigned int *chmap, int channels)
 {
 	int count = 0;
@@ -655,15 +498,7 @@ static void hdmi_cea_alloc_to_tlv_chmap(struct hdac_chmap *hchmap,
 
 static int spk_mask_from_spk_alloc(int spk_alloc)
 {
-	int i;
-	int spk_mask = eld_speaker_allocation_bits[0];
-
-	for (i = 0; i < ARRAY_SIZE(eld_speaker_allocation_bits); i++) {
-		if (spk_alloc & (1 << i))
-			spk_mask |= eld_speaker_allocation_bits[i];
-	}
-
-	return spk_mask;
+	return snd_cea_spk_mask_from_alloc(spk_alloc | BIT(0));
 }
 
 static int hdmi_chmap_ctl_tlv(struct snd_kcontrol *kcontrol, int op_flag,
@@ -692,10 +527,10 @@ static int hdmi_chmap_ctl_tlv(struct snd_kcontrol *kcontrol, int op_flag,
 
 	for (chs = 2; chs <= max_chs; chs++) {
 		int i;
-		const struct hdac_cea_channel_speaker_allocation *cap;
+		const struct snd_cea_channel_speaker_allocation *cap;
 
-		cap = channel_allocations;
-		for (i = 0; i < ARRAY_SIZE(channel_allocations); i++, cap++) {
+		cap = snd_cea_channel_allocations;
+		for (i = 0; i < snd_cea_channel_allocations_count; i++, cap++) {
 			int chs_bytes = chs * 4;
 			unsigned int tlv_chmap[8];
 
@@ -842,7 +677,6 @@ void snd_hdac_register_chmap_ops(struct hdac_device *hdac,
 {
 	chmap->ops = chmap_ops;
 	chmap->hdac = hdac;
-	init_channel_allocations();
 }
 EXPORT_SYMBOL_GPL(snd_hdac_register_chmap_ops);
 

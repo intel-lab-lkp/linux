@@ -7,19 +7,12 @@
 #define __SOUND_HDA_CHMAP_H
 
 #include <sound/pcm.h>
+#include <sound/pcm_drm_eld.h>
 #include <sound/hdaudio.h>
 
 
 #define SND_PRINT_CHANNEL_ALLOCATION_ADVISED_BUFSIZE 80
 
-struct hdac_cea_channel_speaker_allocation {
-	int ca_index;
-	int speakers[8];
-
-	/* derived values, just for convenience */
-	int channels;
-	int spk_mask;
-};
 struct hdac_chmap;
 
 struct hdac_chmap_ops {
@@ -28,10 +21,9 @@ struct hdac_chmap_ops {
 	 * for devices that have non-standard mapping requirements.
 	 */
 	int (*chmap_cea_alloc_validate_get_type)(struct hdac_chmap *chmap,
-		const struct hdac_cea_channel_speaker_allocation *cap,
-		int channels);
+		const struct snd_cea_channel_speaker_allocation *cap, int channels);
 	void (*cea_alloc_to_tlv_chmap)(struct hdac_chmap *hchmap,
-		const struct hdac_cea_channel_speaker_allocation *cap,
+		const struct snd_cea_channel_speaker_allocation *cap,
 		unsigned int *chmap, int channels);
 
 	/* check that the user-given chmap is supported */
@@ -72,8 +64,7 @@ void snd_hdac_setup_channel_mapping(struct hdac_chmap *chmap,
 		       int channels, unsigned char *map,
 		       bool chmap_set);
 void snd_hdac_print_channel_allocation(int spk_alloc, char *buf, int buflen);
-const struct hdac_cea_channel_speaker_allocation *
-snd_hdac_get_ch_alloc_from_ca(int ca);
+const struct snd_cea_channel_speaker_allocation *snd_hdac_get_ch_alloc_from_ca(int ca);
 int snd_hdac_chmap_to_spk_mask(unsigned char c);
 int snd_hdac_spk_to_chmap(int spk);
 int snd_hdac_add_chmap_ctls(struct snd_pcm *pcm, int pcm_idx,

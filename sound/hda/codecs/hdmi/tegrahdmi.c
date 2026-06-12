@@ -205,8 +205,7 @@ static int tegra_hdmi_build_pcms(struct hda_codec *codec)
  * - 0x10de0040
  */
 static int nvhdmi_chmap_cea_alloc_validate_get_type(struct hdac_chmap *chmap,
-		const struct hdac_cea_channel_speaker_allocation *cap,
-		int channels)
+		const struct snd_cea_channel_speaker_allocation *cap, int channels)
 {
 	if (cap->ca_index == 0x00 && channels == 2)
 		return SNDRV_CTL_TLVT_CHMAP_FIXED;

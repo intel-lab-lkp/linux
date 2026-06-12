@@ -2,6 +2,7 @@
 config SND_HDA_CORE
 	tristate
 	select REGMAP
+	select SND_PCM_ELD
 
 config SND_HDA_DSP_LOADER
 	bool

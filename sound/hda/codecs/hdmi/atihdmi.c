@@ -262,7 +262,7 @@ static int atihdmi_paired_swap_fc_lfe(int pos)
 static int atihdmi_paired_chmap_validate(struct hdac_chmap *chmap,
 			int ca, int chs, unsigned char *map)
 {
-	const struct hdac_cea_channel_speaker_allocation *cap;
+	const struct snd_cea_channel_speaker_allocation *cap;
 	int i, j;
 
 	/* check that only channel pairs need to be remapped on old pre-rev3 ATI/AMD */
@@ -377,7 +377,7 @@ static int atihdmi_pin_get_slot_channel(struct hdac_device *hdac,
 
 static int atihdmi_paired_chmap_cea_alloc_validate_get_type(
 		struct hdac_chmap *chmap,
-		const struct hdac_cea_channel_speaker_allocation *cap,
+		const struct snd_cea_channel_speaker_allocation *cap,
 		int channels)
 {
 	int c;
@@ -406,7 +406,7 @@ static int atihdmi_paired_chmap_cea_alloc_validate_get_type(
 }
 
 static void atihdmi_paired_cea_alloc_to_tlv_chmap(struct hdac_chmap *hchmap,
-		const struct hdac_cea_channel_speaker_allocation *cap,
+		const struct snd_cea_channel_speaker_allocation *cap,
 		unsigned int *chmap, int channels)
 {
 	/* produce paired maps for pre-rev3 ATI/AMD codecs */
