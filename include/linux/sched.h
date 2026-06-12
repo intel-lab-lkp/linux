@@ -2000,6 +2000,23 @@ extern void __set_task_comm(struct task_struct *tsk, const char *from, bool exec
 	__set_task_comm(tsk, from, false);		\
 })
 
+/*
+ * Copy task name to a buffer. Final result is always a NUL-terminated string.
+ */
+#define copy_task_comm(dst, tsk, len)						\
+{										\
+	const char *_src = (tsk)->comm;						\
+	size_t _dst_len = len + __must_be_array(dst), _src_len = sizeof(_src);	\
+	char *_dst = dst;							\
+										\
+	if (_dst_len <= _src_len) {						\
+		memcpy(_dst, _src, _dst_len);					\
+		dst[_dst_len - 1] = '\0';					\
+	} else {								\
+		strscpy_pad(_dst, _src, _dst_len);				\
+	}									\
+}
+
 static __always_inline void scheduler_ipi(void)
 {
 	/*
