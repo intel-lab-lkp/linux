@@ -162,8 +162,10 @@ static int avs_probe_compr_set_params(struct snd_compr_stream *cstream,
 
 		/* D0ix not allowed during probing. */
 		ret = avs_dsp_disable_d0ix(adev);
-		if (ret)
+		if (ret) {
+			avs_dsp_enable_d0ix(adev);
 			return ret;
+		}
 
 		node_id.vindex = hdac_stream(host_stream)->stream_tag - 1;
 		node_id.dma_type = AVS_DMA_HDA_HOST_INPUT;
