@@ -2,6 +2,8 @@
 #ifndef __SOUND_PCM_DRM_ELD_H
 #define __SOUND_PCM_DRM_ELD_H
 
+struct snd_info_buffer;
+
 enum eld_versions {
 	ELD_VER_CEA_861D	= 2,
 	ELD_VER_PARTIAL		= 31,
@@ -83,6 +85,20 @@ struct snd_parsed_hdmi_eld {
 	int	sad_count;
 	struct snd_cea_sad sad[ELD_MAX_SAD];
 };
+
+struct snd_cea_channel_speaker_allocation {
+	unsigned int ca_index;
+	unsigned int speakers[8];
+	unsigned int channels;
+	unsigned int spk_mask;
+};
+
+extern const struct snd_cea_channel_speaker_allocation
+	snd_cea_channel_allocations[];
+extern const unsigned int snd_cea_channel_allocations_count;
+unsigned int snd_cea_spk_mask_from_alloc(unsigned int spk_alloc);
+int snd_cea_channel_allocation(unsigned int spk_alloc, unsigned int channels,
+			       unsigned int max_ca, bool fallback);
 
 int snd_pcm_hw_constraint_eld(struct snd_pcm_runtime *runtime, void *eld);
 
