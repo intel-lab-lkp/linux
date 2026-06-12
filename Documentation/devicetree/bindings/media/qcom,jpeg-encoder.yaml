@@ -1,0 +1,142 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/qcom,jpeg-encoder.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm JPEG Encoder
+
+maintainers:
+  - Azam Sadiq Pasha Kapatrala Syed <akapatra@quicinc.com>
+  - Hariram Purushothaman <hariramp@quicinc.com>
+
+description: |
+  Qualcomm JPEG Encoder is the JPEG encode hardware present in Qualcomm SoCs.
+
+  The JPEG hardware IP version 4.2.0 is shared across SM8250, QCM6490, SM8550
+  and related derivatives.  Platforms based on the SM8550 register layout and
+  interrupt wiring can reuse the qcom,sm8550-jenc fallback compatible, provided
+  the correct register base address and IOMMU stream IDs are supplied in the
+  DTS node.
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - const: qcom,sm8250-jenc
+      - items:
+          - enum:
+              - qcom,qcm6490-jenc
+          - const: qcom,sm8550-jenc
+      - items:
+          - const: qcom,sm8550-jenc
+
+  cell-index:
+    description: Legacy JPEG HW instance index.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  reg:
+    maxItems: 1
+
+  reg-names:
+    oneOf:
+      - items:
+          - const: jpeg
+      - items:
+          - const: jpeg-regs
+      - items:
+          - const: jpeg_regs
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    minItems: 6
+    maxItems: 6
+
+  clock-names:
+    oneOf:
+      - items:
+          - const: gcc_hf_axi
+          - const: gcc_sf_axi
+          - const: core_ahb
+          - const: cpas_ahb
+          - const: camnoc_axi
+          - const: jpeg
+      - items:
+          - const: gcc_hf_axi_clk
+          - const: gcc_sf_axi_clk
+          - const: core_ahb_clk
+          - const: cpas_ahb_clk
+          - const: camnoc_axi_clk
+          - const: jpeg_clk
+
+  power-domains:
+    maxItems: 1
+
+  iommus:
+    maxItems: 2
+
+  interconnects:
+    maxItems: 4
+
+  interconnect-names:
+    items:
+      - const: cam_ahb
+      - const: cam_hf_0_mnoc
+      - const: cam_sf_0_mnoc
+      - const: cam_sf_icp_mnoc
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - interrupts
+  - power-domains
+  - iommus
+  - interconnects
+  - interconnect-names
+
+additionalProperties: false
+
+examples:
+  - |
+    jpeg-encoder@ac53000 {
+        compatible = "qcom,sm8250-jenc";
+        reg = <0xac53000 0x1000>;
+        reg-names = "jpeg";
+
+        interrupts = <0 474 4>;
+        power-domains = <&camcc 0>;
+
+        clock-names =
+            "gcc_hf_axi",
+            "gcc_sf_axi",
+            "core_ahb",
+            "cpas_ahb",
+            "camnoc_axi",
+            "jpeg";
+
+        clocks =
+            <&gcc 0>,
+            <&gcc 1>,
+            <&camcc 0>,
+            <&camcc 1>,
+            <&camcc 2>,
+            <&camcc 3>;
+
+        iommus = <&apps_smmu 0x2040 0x400>,
+                 <&apps_smmu 0x2440 0x400>;
+
+        interconnects =
+            <&gem_noc 0 0 &config_noc 8 0>,
+            <&mmss_noc 0 0 &mc_virt 0 0>,
+            <&mmss_noc 1 0 &mc_virt 0 0>,
+            <&mmss_noc 2 0 &mc_virt 0 0>;
+
+        interconnect-names =
+            "cam_ahb",
+            "cam_hf_0_mnoc",
+            "cam_sf_0_mnoc",
+            "cam_sf_icp_mnoc";
+    };
