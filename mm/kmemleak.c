@@ -1696,6 +1696,32 @@ unlock_put:
 }
 
 /*
+ * Briefly drop the RCU read lock to reschedule during the task stack scan.
+ * Both cursors are pinned across the gap; return false if either one was
+ * unhashed meanwhile, so the caller stops this round instead of walking a
+ * stale list.
+ */
+static bool kmemleak_stack_scan_break(struct task_struct *g,
+				      struct task_struct *p)
+{
+	bool can_cont;
+
+	get_task_struct(g);
+	get_task_struct(p);
+
+	rcu_read_unlock();
+	cond_resched();
+	rcu_read_lock();
+
+	can_cont = pid_alive(g) && pid_alive(p);
+
+	put_task_struct(p);
+	put_task_struct(g);
+
+	return can_cont;
+}
+
+/*
  * Print one leak inline. The hex dump is gated on OBJECT_ALLOCATED so it
  * does not touch user memory that was freed concurrently; the rest of the
  * report (backtrace, comm, pid) is always emitted since the kmemleak_object
@@ -1804,6 +1830,7 @@ static void kmemleak_scan(void)
 	int __maybe_unused i;
 	struct xarray dedup;
 	int new_leaks = 0;
+	bool aborted = false;
 
 	jiffies_last_scan = jiffies;
 
@@ -1890,11 +1917,21 @@ static void kmemleak_scan(void)
 		rcu_read_lock();
 		for_each_process_thread(g, p) {
 			void *stack = try_get_task_stack(p);
+
 			if (stack) {
 				scan_block(stack, stack + THREAD_SIZE, NULL);
 				put_task_stack(p);
 			}
+			/*
+			 * This is an expensive loop, we must to call the
+			 * scheduler to avoid lockups
+			 */
+			if (need_resched() && !kmemleak_stack_scan_break(g, p)) {
+				aborted = true;
+				goto unlock;
+			}
 		}
+unlock:
 		rcu_read_unlock();
 	}
 
@@ -1937,9 +1974,10 @@ static void kmemleak_scan(void)
 	scan_gray_list();
 
 	/*
-	 * If scanning was stopped do not report any new unreferenced objects.
+	 * If scanning was stopped or a stack scan round was aborted, do not
+	 * report any new unreferenced objects.
 	 */
-	if (scan_should_stop())
+	if (scan_should_stop() || aborted)
 		return;
 
 	/*
