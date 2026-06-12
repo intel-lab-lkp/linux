@@ -655,13 +655,26 @@ int walk_kernel_page_table_range_lockless(unsigned long start, unsigned long end
 		.private	= private,
 		.no_vma		= true
 	};
+	int err;
 
 	if (start >= end)
 		return -EINVAL;
 	if (!check_ops_safe(ops))
 		return -EINVAL;
 
-	return walk_pgd_range(start, end, &walk);
+	/*
+	 * Kernel intermediate page tables can be freed concurrently by
+	 * vmalloc/ioremap teardown (e.g. pmd_free_pte_page()), which routes
+	 * the freed pages through pagetable_free_kernel(). That path defers
+	 * the free past an RCU grace period, so hold the RCU read lock across
+	 * the lockless walk to prevent a page table from being freed while we
+	 * are still dereferencing it.
+	 */
+	rcu_read_lock();
+	err = walk_pgd_range(start, end, &walk);
+	rcu_read_unlock();
+
+	return err;
 }
 
 /**
