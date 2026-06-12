@@ -27637,6 +27637,7 @@ UGREEN DH2300 MCU MFD DRIVER
 M:	Alexey Charkov <alchark@flipper.net>
 S:	Maintained
 F:	Documentation/devicetree/bindings/mfd/ugreen,dh2300-mcu.yaml
+F:	drivers/mfd/ugreen-dh2300-mcu.c
 
 UHID USERSPACE HID IO DRIVER
 M:	David Rheinsberg <david@readahead.eu>
