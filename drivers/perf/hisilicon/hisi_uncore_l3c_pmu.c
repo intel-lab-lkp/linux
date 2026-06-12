@@ -362,7 +362,7 @@ static int hisi_l3c_pmu_check_filter(struct perf_event *event)
  */
 static u32 hisi_l3c_pmu_get_counter_offset(int cntr_idx)
 {
-	return L3C_CNTR0_LOWER + L3C_HW_IDX(cntr_idx) * 8;
+	return L3C_CNTR0_LOWER + L3C_HW_IDX(cntr_idx) * L3C_NR_COUNTERS;
 }
 
 static u64 hisi_l3c_pmu_read_counter(struct hisi_pmu *l3c_pmu,
