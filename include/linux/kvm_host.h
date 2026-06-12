@@ -992,6 +992,7 @@ static inline struct kvm_io_bus *kvm_get_bus(struct kvm *kvm, enum kvm_bus idx)
 static inline void kvm_lockdep_assert_vcpu_is_locked_or_unreachable(struct kvm_vcpu *vcpu)
 {
 	lockdep_assert_once(lockdep_is_held(&vcpu->mutex) ||
+			    vcpu->vcpu_idx < 0 ||
 			    !refcount_read(&vcpu->kvm->users_count));
 }
 
