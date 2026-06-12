@@ -9342,6 +9342,54 @@ static void put_prev_task_fair(struct rq *rq, struct task_struct *prev, struct t
 }
 
 /*
+ * eevdf_credit_entity_vlag - credit a nominated next-buddy to eligibility
+ *
+ * Advance @se (already nominated by set_next_buddy(), so cfs_rq->next == se)
+ * just enough negative vlag to reach the eligibility boundary (vlag = 0) so
+ * pick_eevdf()'s PICK_BUDDY branch returns it. cfs_rq->curr is shifted in
+ * place (off-tree, carrying any vprot window). Queued entities are left
+ * unchanged.
+ *
+ * Idempotent: a no-op once @se is already eligible. Caller must hold
+ * rq_of(cfs_rq)->lock with rq_clock up to date.
+ */
+static void __maybe_unused
+eevdf_credit_entity_vlag(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	u64 avruntime, credit;
+	s64 vlag;
+
+	/* Callers gate this helper with YIELD_TO_LAG_CREDIT. */
+	if (cfs_rq->nr_queued < 2)
+		return;
+	if (throttled_hierarchy(cfs_rq))
+		return;
+	if (WARN_ON_ONCE(!se->on_rq) || se->sched_delayed)
+		return;
+
+	update_curr(cfs_rq);
+	avruntime = avg_vruntime(cfs_rq);
+	vlag = entity_lag(cfs_rq, se, avruntime);
+
+	/* Already eligible: nothing to do. */
+	if (vlag >= 0)
+		return;
+
+	credit = (u64)(-vlag);
+
+	if (cfs_rq->curr == se) {
+		/* curr is off-tree: in-place shift, carrying any vprot window. */
+		if (protect_slice(se))
+			se->vprot -= credit;
+		se->vruntime -= credit;
+		se->deadline -= credit;
+		return;
+	}
+
+	/* Queued entities are left unchanged by this helper path. */
+}
+
+/*
  * sched_yield() is very simple
  */
 static void yield_task_fair(struct rq *rq)

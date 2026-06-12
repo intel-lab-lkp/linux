@@ -41,6 +41,15 @@ SCHED_FEAT(NEXT_BUDDY, false)
 SCHED_FEAT(PICK_BUDDY, true)
 
 /*
+ * Let yield_to_task_fair() credit bounded EEVDF lag to the nominated
+ * next-buddy so pick_eevdf() honors the hint even when the target has
+ * negative vlag at some level of its ancestor chain. The credit is bounded
+ * by a queue-depth-scaled margin within entity_lag()'s legal range, so
+ * fairness is preserved.
+ */
+SCHED_FEAT(YIELD_TO_LAG_CREDIT, true)
+
+/*
  * Consider buddies to be cache hot, decreases the likeliness of a
  * cache buddy being migrated away, increases cache locality.
  */
