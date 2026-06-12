@@ -551,92 +551,34 @@ static int ssd130x_init(struct ssd130x_device *ssd130x)
 
 static int ssd132x_init(struct ssd130x_device *ssd130x)
 {
-	int ret;
+	const u8 cmds[] = {
+		2, SSD13XX_CONTRAST, 0x80,
+		3, SSD132X_SET_COL_RANGE, 0x00,
+					ssd130x->width / SSD132X_SEGMENT_WIDTH - 1,
+		3, SSD132X_SET_ROW_RANGE, 0x00, ssd130x->height - 1,
+		/*
+		 * Horizontal Address Increment
+		 * Re-map for Column Address, Nibble and COM
+		 * COM Split Odd Even
+		 */
+		2, SSD13XX_SET_SEG_REMAP, 0x53,
+		2, SSD132X_SET_DISPLAY_START, 0x00,
+		2, SSD132X_SET_DISPLAY_OFFSET, 0x00,
+		1, SSD132X_SET_DISPLAY_NORMAL,
+		2, SSD13XX_SET_MULTIPLEX_RATIO, ssd130x->height - 1,
+		2, SSD132X_SET_PHASE_LENGTH, 0x55,
+		1, SSD132X_SELECT_DEFAULT_TABLE,
+		2, SSD132X_SET_CLOCK_FREQ, 0x01,
+		2, SSD132X_SET_FUNCTION_SELECT_A, 0x1,
+		2, SSD132X_SET_PRECHARGE_PERIOD, 0x01,
+		2, SSD132X_SET_PRECHARGE_VOLTAGE, 0x08,
+		2, SSD130X_SET_VCOMH_VOLTAGE, 0x07,
+		/* Enable second pre-charge and internal VSL */
+		2, SSD132X_SET_FUNCTION_SELECT_B, 0x62,
+		0,
+	};
 
-	/* Set initial contrast */
-	ret = ssd130x_write_cmd(ssd130x, 2, SSD13XX_CONTRAST, 0x80);
-	if (ret < 0)
-		return ret;
-
-	/* Set column start and end */
-	ret = ssd130x_write_cmd(ssd130x, 3, SSD132X_SET_COL_RANGE, 0x00,
-				ssd130x->width / SSD132X_SEGMENT_WIDTH - 1);
-	if (ret < 0)
-		return ret;
-
-	/* Set row start and end */
-	ret = ssd130x_write_cmd(ssd130x, 3, SSD132X_SET_ROW_RANGE, 0x00, ssd130x->height - 1);
-	if (ret < 0)
-		return ret;
-	/*
-	 * Horizontal Address Increment
-	 * Re-map for Column Address, Nibble and COM
-	 * COM Split Odd Even
-	 */
-	ret = ssd130x_write_cmd(ssd130x, 2, SSD13XX_SET_SEG_REMAP, 0x53);
-	if (ret < 0)
-		return ret;
-
-	/* Set display start and offset */
-	ret = ssd130x_write_cmd(ssd130x, 2, SSD132X_SET_DISPLAY_START, 0x00);
-	if (ret < 0)
-		return ret;
-
-	ret = ssd130x_write_cmd(ssd130x, 2, SSD132X_SET_DISPLAY_OFFSET, 0x00);
-	if (ret < 0)
-		return ret;
-
-	/* Set display mode normal */
-	ret = ssd130x_write_cmd(ssd130x, 1, SSD132X_SET_DISPLAY_NORMAL);
-	if (ret < 0)
-		return ret;
-
-	/* Set multiplex ratio value */
-	ret = ssd130x_write_cmd(ssd130x, 2, SSD13XX_SET_MULTIPLEX_RATIO, ssd130x->height - 1);
-	if (ret < 0)
-		return ret;
-
-	/* Set phase length */
-	ret = ssd130x_write_cmd(ssd130x, 2, SSD132X_SET_PHASE_LENGTH, 0x55);
-	if (ret < 0)
-		return ret;
-
-	/* Select default linear gray scale table */
-	ret = ssd130x_write_cmd(ssd130x, 1, SSD132X_SELECT_DEFAULT_TABLE);
-	if (ret < 0)
-		return ret;
-
-	/* Set clock frequency */
-	ret = ssd130x_write_cmd(ssd130x, 2, SSD132X_SET_CLOCK_FREQ, 0x01);
-	if (ret < 0)
-		return ret;
-
-	/* Enable internal VDD regulator */
-	ret = ssd130x_write_cmd(ssd130x, 2, SSD132X_SET_FUNCTION_SELECT_A, 0x1);
-	if (ret < 0)
-		return ret;
-
-	/* Set pre-charge period */
-	ret = ssd130x_write_cmd(ssd130x, 2, SSD132X_SET_PRECHARGE_PERIOD, 0x01);
-	if (ret < 0)
-		return ret;
-
-	/* Set pre-charge voltage */
-	ret = ssd130x_write_cmd(ssd130x, 2, SSD132X_SET_PRECHARGE_VOLTAGE, 0x08);
-	if (ret < 0)
-		return ret;
-
-	/* Set VCOMH voltage */
-	ret = ssd130x_write_cmd(ssd130x, 2, SSD130X_SET_VCOMH_VOLTAGE, 0x07);
-	if (ret < 0)
-		return ret;
-
-	/* Enable second pre-charge and internal VSL */
-	ret = ssd130x_write_cmd(ssd130x, 2, SSD132X_SET_FUNCTION_SELECT_B, 0x62);
-	if (ret < 0)
-		return ret;
-
-	return 0;
+	return ssd130x_run_cmd_seq(ssd130x, cmds);
 }
 
 static int ssd133x_init(struct ssd130x_device *ssd130x)
