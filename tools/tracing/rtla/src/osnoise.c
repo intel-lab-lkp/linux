@@ -345,480 +345,73 @@ void osnoise_put_runtime_period(struct osnoise_context *context)
 }
 
 /*
- * osnoise_get_timerlat_period_us - read and save the original "timerlat_period_us"
+ * Long long option get/set/restore/put functions, generated from OSNOISE_LL_OPTIONS.
  */
-static long long
-osnoise_get_timerlat_period_us(struct osnoise_context *context)
-{
-	long long timerlat_period_us;
-
-	if (context->timerlat_period_us != OSNOISE_TIME_INIT_VAL)
-		return context->timerlat_period_us;
-
-	if (context->orig_timerlat_period_us != OSNOISE_TIME_INIT_VAL)
-		return context->orig_timerlat_period_us;
-
-	timerlat_period_us = osnoise_read_ll_config("osnoise/timerlat_period_us");
-	if (timerlat_period_us < 0)
-		goto out_err;
-
-	context->orig_timerlat_period_us = timerlat_period_us;
-	return timerlat_period_us;
-
-out_err:
-	return OSNOISE_TIME_INIT_VAL;
+#define OSNOISE_LL_OPTION(name, path, init_val)						\
+static long long									\
+osnoise_get_##name(struct osnoise_context *context)					\
+{											\
+	long long name;									\
+											\
+	if (context->name != (init_val))						\
+		return context->name;							\
+											\
+	if (context->orig_##name != (init_val))						\
+		return context->orig_##name;						\
+											\
+	name = osnoise_read_ll_config(path);						\
+	if (name < 0)									\
+		return (init_val);							\
+											\
+	context->orig_##name = name;							\
+	return name;									\
+}											\
+											\
+int osnoise_set_##name(struct osnoise_context *context, long long name)			\
+{											\
+	long long curr = osnoise_get_##name(context);					\
+	int retval;									\
+											\
+	if (curr == (init_val))								\
+		return -1;								\
+											\
+	retval = osnoise_write_ll_config(path, name);					\
+	if (retval < 0)									\
+		return -2;								\
+											\
+	context->name = name;								\
+	return 0;									\
+}											\
+											\
+void osnoise_restore_##name(struct osnoise_context *context)				\
+{											\
+	int retval;									\
+											\
+	if (context->orig_##name == (init_val))						\
+		return;									\
+											\
+	if (context->orig_##name == context->name)					\
+		goto out_done_##name;							\
+											\
+	retval = osnoise_write_ll_config(path, context->orig_##name);			\
+	if (retval < 0)									\
+		err_msg("Could not restore original " #name "\n");			\
+											\
+out_done_##name:									\
+	context->name = (init_val);							\
+}											\
+											\
+static void osnoise_put_##name(struct osnoise_context *context)				\
+{											\
+	osnoise_restore_##name(context);						\
+											\
+	if (context->orig_##name == (init_val))						\
+		return;									\
+											\
+	context->orig_##name = (init_val);						\
 }
-
-/*
- * osnoise_set_timerlat_period_us - set "timerlat_period_us"
- */
-int osnoise_set_timerlat_period_us(struct osnoise_context *context, long long timerlat_period_us)
-{
-	long long curr_timerlat_period_us = osnoise_get_timerlat_period_us(context);
-	int retval;
-
-	if (curr_timerlat_period_us == OSNOISE_TIME_INIT_VAL)
-		return -1;
-
-	retval = osnoise_write_ll_config("osnoise/timerlat_period_us", timerlat_period_us);
-	if (retval < 0)
-		return -1;
-
-	context->timerlat_period_us = timerlat_period_us;
-
-	return 0;
-}
-
-/*
- * osnoise_restore_timerlat_period_us - restore "timerlat_period_us"
- */
-void osnoise_restore_timerlat_period_us(struct osnoise_context *context)
-{
-	int retval;
-
-	if (context->orig_timerlat_period_us == OSNOISE_TIME_INIT_VAL)
-		return;
-
-	if (context->orig_timerlat_period_us == context->timerlat_period_us)
-		goto out_done;
-
-	retval = osnoise_write_ll_config("osnoise/timerlat_period_us", context->orig_timerlat_period_us);
-	if (retval < 0)
-		err_msg("Could not restore original osnoise timerlat_period_us\n");
-
-out_done:
-	context->timerlat_period_us = OSNOISE_TIME_INIT_VAL;
-}
-
-/*
- * osnoise_put_timerlat_period_us - restore original values and cleanup data
- */
-void osnoise_put_timerlat_period_us(struct osnoise_context *context)
-{
-	osnoise_restore_timerlat_period_us(context);
-
-	if (context->orig_timerlat_period_us == OSNOISE_TIME_INIT_VAL)
-		return;
-
-	context->orig_timerlat_period_us = OSNOISE_TIME_INIT_VAL;
-}
-
-/*
- * osnoise_get_timerlat_align_us - read and save the original "timerlat_align_us"
- */
-static long long
-osnoise_get_timerlat_align_us(struct osnoise_context *context)
-{
-	long long timerlat_align_us;
-
-	if (context->timerlat_align_us != OSNOISE_OPTION_INIT_VAL)
-		return context->timerlat_align_us;
-
-	if (context->orig_timerlat_align_us != OSNOISE_OPTION_INIT_VAL)
-		return context->orig_timerlat_align_us;
-
-	timerlat_align_us = osnoise_read_ll_config("osnoise/timerlat_align_us");
-	if (timerlat_align_us < 0)
-		goto out_err;
-
-	context->orig_timerlat_align_us = timerlat_align_us;
-	return timerlat_align_us;
-
-out_err:
-	return OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_set_timerlat_align_us - set "timerlat_align_us"
- */
-int osnoise_set_timerlat_align_us(struct osnoise_context *context, long long timerlat_align_us)
-{
-	long long curr_timerlat_align_us = osnoise_get_timerlat_align_us(context);
-	int retval;
-
-	if (curr_timerlat_align_us == OSNOISE_OPTION_INIT_VAL)
-		return -1;
-
-	retval = osnoise_write_ll_config("osnoise/timerlat_align_us", timerlat_align_us);
-	if (retval < 0)
-		return -1;
-
-	context->timerlat_align_us = timerlat_align_us;
-
-	return 0;
-}
-
-/*
- * osnoise_restore_timerlat_align_us - restore "timerlat_align_us"
- */
-void osnoise_restore_timerlat_align_us(struct osnoise_context *context)
-{
-	int retval;
-
-	if (context->orig_timerlat_align_us == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	if (context->orig_timerlat_align_us == context->timerlat_align_us)
-		goto out_done;
-
-	retval = osnoise_write_ll_config("osnoise/timerlat_align_us",
-				   context->orig_timerlat_align_us);
-	if (retval < 0)
-		err_msg("Could not restore original osnoise timerlat_align_us\n");
-
-out_done:
-	context->timerlat_align_us = OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_put_timerlat_align_us - restore original values and cleanup data
- */
-void osnoise_put_timerlat_align_us(struct osnoise_context *context)
-{
-	osnoise_restore_timerlat_align_us(context);
-
-	if (context->orig_timerlat_align_us == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	context->orig_timerlat_align_us = OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_get_stop_us - read and save the original "stop_tracing_us"
- */
-static long long
-osnoise_get_stop_us(struct osnoise_context *context)
-{
-	long long stop_us;
-
-	if (context->stop_us != OSNOISE_OPTION_INIT_VAL)
-		return context->stop_us;
-
-	if (context->orig_stop_us != OSNOISE_OPTION_INIT_VAL)
-		return context->orig_stop_us;
-
-	stop_us = osnoise_read_ll_config("osnoise/stop_tracing_us");
-	if (stop_us < 0)
-		goto out_err;
-
-	context->orig_stop_us = stop_us;
-	return stop_us;
-
-out_err:
-	return OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_set_stop_us - set "stop_tracing_us"
- */
-int osnoise_set_stop_us(struct osnoise_context *context, long long stop_us)
-{
-	long long curr_stop_us = osnoise_get_stop_us(context);
-	int retval;
-
-	if (curr_stop_us == OSNOISE_OPTION_INIT_VAL)
-		return -1;
-
-	retval = osnoise_write_ll_config("osnoise/stop_tracing_us", stop_us);
-	if (retval < 0)
-		return -1;
-
-	context->stop_us = stop_us;
-
-	return 0;
-}
-
-/*
- * osnoise_restore_stop_us - restore the original "stop_tracing_us"
- */
-void osnoise_restore_stop_us(struct osnoise_context *context)
-{
-	int retval;
-
-	if (context->orig_stop_us == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	if (context->orig_stop_us == context->stop_us)
-		goto out_done;
-
-	retval = osnoise_write_ll_config("osnoise/stop_tracing_us", context->orig_stop_us);
-	if (retval < 0)
-		err_msg("Could not restore original osnoise stop_us\n");
-
-out_done:
-	context->stop_us = OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_put_stop_us - restore original values and cleanup data
- */
-void osnoise_put_stop_us(struct osnoise_context *context)
-{
-	osnoise_restore_stop_us(context);
-
-	if (context->orig_stop_us == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	context->orig_stop_us = OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_get_stop_total_us - read and save the original "stop_tracing_total_us"
- */
-static long long
-osnoise_get_stop_total_us(struct osnoise_context *context)
-{
-	long long stop_total_us;
-
-	if (context->stop_total_us != OSNOISE_OPTION_INIT_VAL)
-		return context->stop_total_us;
-
-	if (context->orig_stop_total_us != OSNOISE_OPTION_INIT_VAL)
-		return context->orig_stop_total_us;
-
-	stop_total_us = osnoise_read_ll_config("osnoise/stop_tracing_total_us");
-	if (stop_total_us < 0)
-		goto out_err;
-
-	context->orig_stop_total_us = stop_total_us;
-	return stop_total_us;
-
-out_err:
-	return OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_set_stop_total_us - set "stop_tracing_total_us"
- */
-int osnoise_set_stop_total_us(struct osnoise_context *context, long long stop_total_us)
-{
-	long long curr_stop_total_us = osnoise_get_stop_total_us(context);
-	int retval;
-
-	if (curr_stop_total_us == OSNOISE_OPTION_INIT_VAL)
-		return -1;
-
-	retval = osnoise_write_ll_config("osnoise/stop_tracing_total_us", stop_total_us);
-	if (retval < 0)
-		return -1;
-
-	context->stop_total_us = stop_total_us;
-
-	return 0;
-}
-
-/*
- * osnoise_restore_stop_total_us - restore the original "stop_tracing_total_us"
- */
-void osnoise_restore_stop_total_us(struct osnoise_context *context)
-{
-	int retval;
-
-	if (context->orig_stop_total_us == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	if (context->orig_stop_total_us == context->stop_total_us)
-		goto out_done;
-
-	retval = osnoise_write_ll_config("osnoise/stop_tracing_total_us",
-			context->orig_stop_total_us);
-	if (retval < 0)
-		err_msg("Could not restore original osnoise stop_total_us\n");
-
-out_done:
-	context->stop_total_us = OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_put_stop_total_us - restore original values and cleanup data
- */
-void osnoise_put_stop_total_us(struct osnoise_context *context)
-{
-	osnoise_restore_stop_total_us(context);
-
-	if (context->orig_stop_total_us == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	context->orig_stop_total_us = OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_get_print_stack - read and save the original "print_stack"
- */
-static long long
-osnoise_get_print_stack(struct osnoise_context *context)
-{
-	long long print_stack;
-
-	if (context->print_stack != OSNOISE_OPTION_INIT_VAL)
-		return context->print_stack;
-
-	if (context->orig_print_stack != OSNOISE_OPTION_INIT_VAL)
-		return context->orig_print_stack;
-
-	print_stack = osnoise_read_ll_config("osnoise/print_stack");
-	if (print_stack < 0)
-		goto out_err;
-
-	context->orig_print_stack = print_stack;
-	return print_stack;
-
-out_err:
-	return OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_set_print_stack - set "print_stack"
- */
-int osnoise_set_print_stack(struct osnoise_context *context, long long print_stack)
-{
-	long long curr_print_stack = osnoise_get_print_stack(context);
-	int retval;
-
-	if (curr_print_stack == OSNOISE_OPTION_INIT_VAL)
-		return -1;
-
-	retval = osnoise_write_ll_config("osnoise/print_stack", print_stack);
-	if (retval < 0)
-		return -1;
-
-	context->print_stack = print_stack;
-
-	return 0;
-}
-
-/*
- * osnoise_restore_print_stack - restore the original "print_stack"
- */
-void osnoise_restore_print_stack(struct osnoise_context *context)
-{
-	int retval;
-
-	if (context->orig_print_stack == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	if (context->orig_print_stack == context->print_stack)
-		goto out_done;
-
-	retval = osnoise_write_ll_config("osnoise/print_stack", context->orig_print_stack);
-	if (retval < 0)
-		err_msg("Could not restore original osnoise print_stack\n");
-
-out_done:
-	context->print_stack = OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_put_print_stack - restore original values and cleanup data
- */
-void osnoise_put_print_stack(struct osnoise_context *context)
-{
-	osnoise_restore_print_stack(context);
-
-	if (context->orig_print_stack == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	context->orig_print_stack = OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_get_tracing_thresh - read and save the original "tracing_thresh"
- */
-static long long
-osnoise_get_tracing_thresh(struct osnoise_context *context)
-{
-	long long tracing_thresh;
-
-	if (context->tracing_thresh != OSNOISE_OPTION_INIT_VAL)
-		return context->tracing_thresh;
-
-	if (context->orig_tracing_thresh != OSNOISE_OPTION_INIT_VAL)
-		return context->orig_tracing_thresh;
-
-	tracing_thresh = osnoise_read_ll_config("tracing_thresh");
-	if (tracing_thresh < 0)
-		goto out_err;
-
-	context->orig_tracing_thresh = tracing_thresh;
-	return tracing_thresh;
-
-out_err:
-	return OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_set_tracing_thresh - set "tracing_thresh"
- */
-int osnoise_set_tracing_thresh(struct osnoise_context *context, long long tracing_thresh)
-{
-	long long curr_tracing_thresh = osnoise_get_tracing_thresh(context);
-	int retval;
-
-	if (curr_tracing_thresh == OSNOISE_OPTION_INIT_VAL)
-		return -1;
-
-	retval = osnoise_write_ll_config("tracing_thresh", tracing_thresh);
-	if (retval < 0)
-		return -1;
-
-	context->tracing_thresh = tracing_thresh;
-
-	return 0;
-}
-
-/*
- * osnoise_restore_tracing_thresh - restore the original "tracing_thresh"
- */
-void osnoise_restore_tracing_thresh(struct osnoise_context *context)
-{
-	int retval;
-
-	if (context->orig_tracing_thresh == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	if (context->orig_tracing_thresh == context->tracing_thresh)
-		goto out_done;
-
-	retval = osnoise_write_ll_config("tracing_thresh", context->orig_tracing_thresh);
-	if (retval < 0)
-		err_msg("Could not restore original tracing_thresh\n");
-
-out_done:
-	context->tracing_thresh = OSNOISE_OPTION_INIT_VAL;
-}
-
-/*
- * osnoise_put_tracing_thresh - restore original values and cleanup data
- */
-void osnoise_put_tracing_thresh(struct osnoise_context *context)
-{
-	osnoise_restore_tracing_thresh(context);
-
-	if (context->orig_tracing_thresh == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	context->orig_tracing_thresh = OSNOISE_OPTION_INIT_VAL;
-}
+OSNOISE_LL_OPTIONS
+#undef OSNOISE_LL_OPTION
 
 static int osnoise_options_get_option(char *option)
 {
@@ -866,188 +459,70 @@ static int osnoise_options_set_option(char *option, bool onoff)
 	return tracefs_instance_file_write(NULL, "osnoise/options", no_option);
 }
 
-static int osnoise_get_irq_disable(struct osnoise_context *context)
-{
-	if (context->opt_irq_disable != OSNOISE_OPTION_INIT_VAL)
-		return context->opt_irq_disable;
-
-	if (context->orig_opt_irq_disable != OSNOISE_OPTION_INIT_VAL)
-		return context->orig_opt_irq_disable;
-
-	context->orig_opt_irq_disable = osnoise_options_get_option("OSNOISE_IRQ_DISABLE");
-
-	return context->orig_opt_irq_disable;
+/*
+ * Flag option get/set/restore/put functions, generated from OSNOISE_FLAG_OPTIONS.
+ */
+#define OSNOISE_FLAG_OPTION(name, option_str)						\
+static int osnoise_get_##name(struct osnoise_context *context)				\
+{											\
+	if (context->opt_##name != OSNOISE_OPTION_INIT_VAL)				\
+		return context->opt_##name;						\
+											\
+	if (context->orig_opt_##name != OSNOISE_OPTION_INIT_VAL)			\
+		return context->orig_opt_##name;					\
+											\
+	context->orig_opt_##name = osnoise_options_get_option(option_str);		\
+	return context->orig_opt_##name;						\
+}											\
+											\
+int osnoise_set_##name(struct osnoise_context *context, bool onoff)			\
+{											\
+	int val = osnoise_get_##name(context);						\
+	int retval;									\
+											\
+	if (val == OSNOISE_OPTION_INIT_VAL)						\
+		return -1;								\
+											\
+	if (val == onoff)								\
+		return 0;								\
+											\
+	retval = osnoise_options_set_option(option_str, onoff);				\
+	if (retval < 0)									\
+		return -2;								\
+											\
+	context->opt_##name = onoff;							\
+	return 0;									\
+}											\
+											\
+void osnoise_restore_##name(struct osnoise_context *context)				\
+{											\
+	int retval;									\
+											\
+	if (context->orig_opt_##name == OSNOISE_OPTION_INIT_VAL)			\
+		return;									\
+											\
+	if (context->orig_opt_##name == context->opt_##name)				\
+		goto out_done_##name;							\
+											\
+	retval = osnoise_options_set_option(option_str, context->orig_opt_##name);	\
+	if (retval < 0)									\
+		err_msg("Could not restore original " option_str " option\n");		\
+											\
+out_done_##name:									\
+	context->opt_##name = OSNOISE_OPTION_INIT_VAL;					\
+}											\
+											\
+static void osnoise_put_##name(struct osnoise_context *context)				\
+{											\
+	osnoise_restore_##name(context);						\
+											\
+	if (context->orig_opt_##name == OSNOISE_OPTION_INIT_VAL)			\
+		return;									\
+											\
+	context->orig_opt_##name = OSNOISE_OPTION_INIT_VAL;				\
 }
-
-int osnoise_set_irq_disable(struct osnoise_context *context, bool onoff)
-{
-	int opt_irq_disable = osnoise_get_irq_disable(context);
-	int retval;
-
-	if (opt_irq_disable == OSNOISE_OPTION_INIT_VAL)
-		return -1;
-
-	if (opt_irq_disable == onoff)
-		return 0;
-
-	retval = osnoise_options_set_option("OSNOISE_IRQ_DISABLE", onoff);
-	if (retval < 0)
-		return -1;
-
-	context->opt_irq_disable = onoff;
-
-	return 0;
-}
-
-static void osnoise_restore_irq_disable(struct osnoise_context *context)
-{
-	int retval;
-
-	if (context->orig_opt_irq_disable == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	if (context->orig_opt_irq_disable == context->opt_irq_disable)
-		goto out_done;
-
-	retval = osnoise_options_set_option("OSNOISE_IRQ_DISABLE", context->orig_opt_irq_disable);
-	if (retval < 0)
-		err_msg("Could not restore original OSNOISE_IRQ_DISABLE option\n");
-
-out_done:
-	context->orig_opt_irq_disable = OSNOISE_OPTION_INIT_VAL;
-}
-
-static void osnoise_put_irq_disable(struct osnoise_context *context)
-{
-	osnoise_restore_irq_disable(context);
-
-	if (context->orig_opt_irq_disable == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	context->orig_opt_irq_disable = OSNOISE_OPTION_INIT_VAL;
-}
-
-static int osnoise_get_workload(struct osnoise_context *context)
-{
-	if (context->opt_workload != OSNOISE_OPTION_INIT_VAL)
-		return context->opt_workload;
-
-	if (context->orig_opt_workload != OSNOISE_OPTION_INIT_VAL)
-		return context->orig_opt_workload;
-
-	context->orig_opt_workload = osnoise_options_get_option("OSNOISE_WORKLOAD");
-
-	return context->orig_opt_workload;
-}
-
-int osnoise_set_workload(struct osnoise_context *context, bool onoff)
-{
-	int opt_workload = osnoise_get_workload(context);
-	int retval;
-
-	if (opt_workload == OSNOISE_OPTION_INIT_VAL)
-		return -1;
-
-	if (opt_workload == onoff)
-		return 0;
-
-	retval = osnoise_options_set_option("OSNOISE_WORKLOAD", onoff);
-	if (retval < 0)
-		return -2;
-
-	context->opt_workload = onoff;
-
-	return 0;
-}
-
-static void osnoise_restore_workload(struct osnoise_context *context)
-{
-	int retval;
-
-	if (context->orig_opt_workload == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	if (context->orig_opt_workload == context->opt_workload)
-		goto out_done;
-
-	retval = osnoise_options_set_option("OSNOISE_WORKLOAD", context->orig_opt_workload);
-	if (retval < 0)
-		err_msg("Could not restore original OSNOISE_WORKLOAD option\n");
-
-out_done:
-	context->orig_opt_workload = OSNOISE_OPTION_INIT_VAL;
-}
-
-static void osnoise_put_workload(struct osnoise_context *context)
-{
-	osnoise_restore_workload(context);
-
-	if (context->orig_opt_workload == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	context->orig_opt_workload = OSNOISE_OPTION_INIT_VAL;
-}
-
-static int osnoise_get_timerlat_align(struct osnoise_context *context)
-{
-	if (context->opt_timerlat_align != OSNOISE_OPTION_INIT_VAL)
-		return context->opt_timerlat_align;
-
-	if (context->orig_opt_timerlat_align != OSNOISE_OPTION_INIT_VAL)
-		return context->orig_opt_timerlat_align;
-
-	context->orig_opt_timerlat_align = osnoise_options_get_option("TIMERLAT_ALIGN");
-
-	return context->orig_opt_timerlat_align;
-}
-
-int osnoise_set_timerlat_align(struct osnoise_context *context, bool onoff)
-{
-	int opt_timerlat_align = osnoise_get_timerlat_align(context);
-	int retval;
-
-	if (opt_timerlat_align == OSNOISE_OPTION_INIT_VAL)
-		return -1;
-
-	if (opt_timerlat_align == onoff)
-		return 0;
-
-	retval = osnoise_options_set_option("TIMERLAT_ALIGN", onoff);
-	if (retval < 0)
-		return -2;
-
-	context->opt_timerlat_align = onoff;
-
-	return 0;
-}
-
-static void osnoise_restore_timerlat_align(struct osnoise_context *context)
-{
-	int retval;
-
-	if (context->orig_opt_timerlat_align == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	if (context->orig_opt_timerlat_align == context->opt_timerlat_align)
-		goto out_done;
-
-	retval = osnoise_options_set_option("TIMERLAT_ALIGN", context->orig_opt_timerlat_align);
-	if (retval < 0)
-		err_msg("Could not restore original TIMERLAT_ALIGN option\n");
-
-out_done:
-	context->orig_opt_timerlat_align = OSNOISE_OPTION_INIT_VAL;
-}
-
-static void osnoise_put_timerlat_align(struct osnoise_context *context)
-{
-	osnoise_restore_timerlat_align(context);
-
-	if (context->orig_opt_timerlat_align == OSNOISE_OPTION_INIT_VAL)
-		return;
-
-	context->orig_opt_timerlat_align = OSNOISE_OPTION_INIT_VAL;
-}
+OSNOISE_FLAG_OPTIONS
+#undef OSNOISE_FLAG_OPTION
 
 enum {
 	FLAG_CONTEXT_NEWLY_CREATED	= (1 << 0),
@@ -1083,29 +558,16 @@ struct osnoise_context *osnoise_context_alloc(void)
 
 	context = calloc_fatal(1, sizeof(*context));
 
-	context->orig_stop_us		= OSNOISE_OPTION_INIT_VAL;
-	context->stop_us		= OSNOISE_OPTION_INIT_VAL;
-
-	context->orig_stop_total_us	= OSNOISE_OPTION_INIT_VAL;
-	context->stop_total_us		= OSNOISE_OPTION_INIT_VAL;
-
-	context->orig_print_stack	= OSNOISE_OPTION_INIT_VAL;
-	context->print_stack		= OSNOISE_OPTION_INIT_VAL;
-
-	context->orig_tracing_thresh	= OSNOISE_OPTION_INIT_VAL;
-	context->tracing_thresh		= OSNOISE_OPTION_INIT_VAL;
-
-	context->orig_opt_irq_disable	= OSNOISE_OPTION_INIT_VAL;
-	context->opt_irq_disable	= OSNOISE_OPTION_INIT_VAL;
-
-	context->orig_opt_workload	= OSNOISE_OPTION_INIT_VAL;
-	context->opt_workload		= OSNOISE_OPTION_INIT_VAL;
-
-	context->orig_opt_timerlat_align	= OSNOISE_OPTION_INIT_VAL;
-	context->opt_timerlat_align		= OSNOISE_OPTION_INIT_VAL;
-
-	context->orig_timerlat_align_us	= OSNOISE_OPTION_INIT_VAL;
-	context->timerlat_align_us	= OSNOISE_OPTION_INIT_VAL;
+#define OSNOISE_LL_OPTION(name, path, init_val)			\
+	context->orig_##name	 = (init_val);			\
+	context->name		 = (init_val);
+#define OSNOISE_FLAG_OPTION(name, option_str)			\
+	context->orig_opt_##name = OSNOISE_OPTION_INIT_VAL; 	\
+	context->opt_##name	 = OSNOISE_OPTION_INIT_VAL;
+	OSNOISE_LL_OPTIONS
+	OSNOISE_FLAG_OPTIONS
+#undef OSNOISE_LL_OPTION
+#undef OSNOISE_FLAG_OPTION
 
 	osnoise_get_context(context);
 
@@ -1128,15 +590,13 @@ void osnoise_put_context(struct osnoise_context *context)
 
 	osnoise_put_cpus(context);
 	osnoise_put_runtime_period(context);
-	osnoise_put_stop_us(context);
-	osnoise_put_stop_total_us(context);
-	osnoise_put_timerlat_period_us(context);
-	osnoise_put_print_stack(context);
-	osnoise_put_tracing_thresh(context);
-	osnoise_put_irq_disable(context);
-	osnoise_put_workload(context);
-	osnoise_put_timerlat_align(context);
-	osnoise_put_timerlat_align_us(context);
+
+#define OSNOISE_LL_OPTION(name, path, init_val)	osnoise_put_##name(context);
+#define OSNOISE_FLAG_OPTION(name, option_str)	osnoise_put_##name(context);
+	OSNOISE_LL_OPTIONS
+	OSNOISE_FLAG_OPTIONS
+#undef OSNOISE_LL_OPTION
+#undef OSNOISE_FLAG_OPTION
 
 	free(context);
 }

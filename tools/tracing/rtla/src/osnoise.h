@@ -34,28 +34,6 @@ int osnoise_set_runtime_period(struct osnoise_context *context,
 			       unsigned long long period);
 void osnoise_restore_runtime_period(struct osnoise_context *context);
 
-void osnoise_restore_stop_us(struct osnoise_context *context);
-void osnoise_restore_stop_total_us(struct osnoise_context *context);
-
-int osnoise_set_timerlat_period_us(struct osnoise_context *context,
-				   long long timerlat_period_us);
-void osnoise_restore_timerlat_period_us(struct osnoise_context *context);
-
-int osnoise_set_tracing_thresh(struct osnoise_context *context,
-			       long long tracing_thresh);
-void osnoise_restore_tracing_thresh(struct osnoise_context *context);
-
-void osnoise_restore_print_stack(struct osnoise_context *context);
-int osnoise_set_print_stack(struct osnoise_context *context,
-			    long long print_stack);
-
-int osnoise_set_timerlat_align_us(struct osnoise_context *context,
-				  long long timerlat_align_us);
-void osnoise_restore_timerlat_align_us(struct osnoise_context *context);
-
-int osnoise_set_timerlat_align(struct osnoise_context *context, bool onoff);
-
-int osnoise_set_irq_disable(struct osnoise_context *context, bool onoff);
 void osnoise_report_missed_events(struct osnoise_tool *tool);
 int osnoise_apply_config(struct osnoise_tool *tool, struct osnoise_params *params);
 

@@ -7,8 +7,34 @@
 #include "utils.h"
 
 /*
+ * OSNOISE_LL_OPTIONS - list of long long options backed by tracefs files.
+ *   OSNOISE_LL_OPTION(field_name, tracefs_path, init_value)
+ *
+ * OSNOISE_FLAG_OPTIONS - list of boolean options backed by osnoise/options.
+ *   OSNOISE_FLAG_OPTION(field_name, option_string)
+ */
+#define OSNOISE_LL_OPTIONS \
+	OSNOISE_LL_OPTION(stop_us,		"osnoise/stop_tracing_us",	 OSNOISE_OPTION_INIT_VAL) \
+	OSNOISE_LL_OPTION(stop_total_us,	"osnoise/stop_tracing_total_us", OSNOISE_OPTION_INIT_VAL) \
+	OSNOISE_LL_OPTION(print_stack,		"osnoise/print_stack",		 OSNOISE_OPTION_INIT_VAL) \
+	OSNOISE_LL_OPTION(tracing_thresh,	"tracing_thresh",		 OSNOISE_OPTION_INIT_VAL) \
+	OSNOISE_LL_OPTION(timerlat_period_us,	"osnoise/timerlat_period_us",	 OSNOISE_TIME_INIT_VAL)   \
+	OSNOISE_LL_OPTION(timerlat_align_us,	"osnoise/timerlat_align_us",	 OSNOISE_OPTION_INIT_VAL)
+
+#define OSNOISE_FLAG_OPTIONS \
+	OSNOISE_FLAG_OPTION(irq_disable,	"OSNOISE_IRQ_DISABLE") \
+	OSNOISE_FLAG_OPTION(workload,		"OSNOISE_WORKLOAD") \
+	OSNOISE_FLAG_OPTION(timerlat_align,	"TIMERLAT_ALIGN")
+
+/*
  * osnoise_context - read, store, write, restore osnoise configs.
  */
+#define OSNOISE_LL_OPTION(name, path, init_val)		\
+	long long		orig_##name;		\
+	long long		name;
+#define OSNOISE_FLAG_OPTION(name, option_str)		\
+	int			orig_opt_##name;	\
+	int			opt_##name;
 struct osnoise_context {
 	int			flags;
 	int			ref;
@@ -24,42 +50,11 @@ struct osnoise_context {
 	unsigned long long	orig_period_us;
 	unsigned long long	period_us;
 
-	/* 0 as init value */
-	long long		orig_timerlat_period_us;
-	long long		timerlat_period_us;
-
-	/* 0 as init value */
-	long long		orig_tracing_thresh;
-	long long		tracing_thresh;
-
-	/* -1 as init value because 0 is disabled */
-	long long		orig_stop_us;
-	long long		stop_us;
-
-	/* -1 as init value because 0 is disabled */
-	long long		orig_stop_total_us;
-	long long		stop_total_us;
-
-	/* -1 as init value because 0 is disabled */
-	long long		orig_print_stack;
-	long long		print_stack;
-
-	/* -1 as init value because 0 is off */
-	int			orig_opt_irq_disable;
-	int			opt_irq_disable;
-
-	/* -1 as init value because 0 is off */
-	int			orig_opt_workload;
-	int			opt_workload;
-
-	/* -1 as init value because 0 is off */
-	int			orig_opt_timerlat_align;
-	int			opt_timerlat_align;
-
-	/* 0 as init value */
-	unsigned long long	orig_timerlat_align_us;
-	unsigned long long	timerlat_align_us;
+	OSNOISE_LL_OPTIONS
+	OSNOISE_FLAG_OPTIONS
 };
+#undef OSNOISE_LL_OPTION
+#undef OSNOISE_FLAG_OPTION
 
 extern volatile int stop_tracing;
 
@@ -173,15 +168,21 @@ common_threshold_handler(const struct osnoise_tool *tool);
 int osnoise_set_cpus(struct osnoise_context *context, char *cpus);
 void osnoise_restore_cpus(struct osnoise_context *context);
 
-int osnoise_set_workload(struct osnoise_context *context, bool onoff);
+#define OSNOISE_LL_OPTION(name, path, init_val)					\
+	int osnoise_set_##name(struct osnoise_context *context, long long name);	\
+	void osnoise_restore_##name(struct osnoise_context *context);
+#define OSNOISE_FLAG_OPTION(name, option_str)					\
+	int osnoise_set_##name(struct osnoise_context *context, bool onoff);	\
+	void osnoise_restore_##name(struct osnoise_context *context);
+OSNOISE_LL_OPTIONS
+OSNOISE_FLAG_OPTIONS
+#undef OSNOISE_LL_OPTION
+#undef OSNOISE_FLAG_OPTION
 
 void osnoise_destroy_tool(struct osnoise_tool *top);
 struct osnoise_tool *osnoise_init_tool(char *tool_name);
 struct osnoise_tool *osnoise_init_trace_tool(const char *tracer);
 bool osnoise_trace_is_off(struct osnoise_tool *tool, struct osnoise_tool *record);
-int osnoise_set_stop_us(struct osnoise_context *context, long long stop_us);
-int osnoise_set_stop_total_us(struct osnoise_context *context,
-			      long long stop_total_us);
 
 int common_apply_config(struct osnoise_tool *tool, struct common_params *params);
 int top_main_loop(struct osnoise_tool *tool);
