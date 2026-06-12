@@ -9342,21 +9342,45 @@ static void put_prev_task_fair(struct rq *rq, struct task_struct *prev, struct t
 }
 
 /*
- * eevdf_credit_entity_vlag - credit a nominated next-buddy to eligibility
+ * Positive-vlag target margin for a credited buddy, scaled by runqueue
+ * depth so it stays eligible across several picks. The caller clamps it to
+ * entity_lag()'s legal bound, so EEVDF fairness is preserved.
+ */
+static u64 __maybe_unused
+eevdf_persistent_margin(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	u64 base = sysctl_sched_base_slice;
+	unsigned int n = cfs_rq->h_nr_queued;
+	u64 raw;
+
+	if (n <= 4)
+		raw = base * 4;
+	else if (n <= 8)
+		raw = base * 6;
+	else if (n <= 16)
+		raw = base * 8;
+	else
+		raw = base * 12;
+
+	return calc_delta_fair(raw, se);
+}
+
+/*
+ * eevdf_credit_entity_vlag - credit bounded vlag to a nominated next-buddy
  *
  * Advance @se (already nominated by set_next_buddy(), so cfs_rq->next == se)
- * just enough negative vlag to reach the eligibility boundary (vlag = 0) so
- * pick_eevdf()'s PICK_BUDDY branch returns it. cfs_rq->curr is shifted in
- * place (off-tree, carrying any vprot window). Queued entities are left
- * unchanged.
+ * to a bounded positive-vlag margin so pick_eevdf()'s PICK_BUDDY branch
+ * keeps returning it across several picks, without exceeding entity_lag()'s
+ * legal bound. cfs_rq->curr is shifted in place (off-tree, carrying any
+ * vprot window). Queued entities are left unchanged.
  *
- * Idempotent: a no-op once @se is already eligible. Caller must hold
+ * Idempotent once @se holds the margin. Caller must hold
  * rq_of(cfs_rq)->lock with rq_clock up to date.
  */
 static void __maybe_unused
 eevdf_credit_entity_vlag(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
-	u64 avruntime, credit;
+	u64 avruntime, credit, want, margin, max_slice, lag_limit;
 	s64 vlag;
 
 	/* Callers gate this helper with YIELD_TO_LAG_CREDIT. */
@@ -9371,11 +9395,23 @@ eevdf_credit_entity_vlag(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	avruntime = avg_vruntime(cfs_rq);
 	vlag = entity_lag(cfs_rq, se, avruntime);
 
-	/* Already eligible: nothing to do. */
-	if (vlag >= 0)
-		return;
+	/* Clamp the margin to entity_lag()'s bound so place_entity() keeps it. */
+	max_slice = cfs_rq_max_slice(cfs_rq) + TICK_NSEC;
+	lag_limit = calc_delta_fair(max_slice, se);
+	margin = eevdf_persistent_margin(cfs_rq, se);
+	if (lag_limit && margin > lag_limit)
+		margin = lag_limit;
+	if (vlag >= 0) {
+		if ((u64)vlag >= margin)
+			return;
+		want = margin - (u64)vlag;
+	} else {
+		want = margin + (u64)(-vlag);
+	}
 
-	credit = (u64)(-vlag);
+	credit = want;
+	if (!credit)
+		return;
 
 	if (cfs_rq->curr == se) {
 		/* curr is off-tree: in-place shift, carrying any vprot window. */
