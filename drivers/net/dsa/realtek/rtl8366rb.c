@@ -854,6 +854,16 @@ rtl8366rb_port_stp_state_set(struct dsa_switch *ds, int port, u8 state)
 	}
 }
 
+static int rtl8366rb_port_set_learning(struct realtek_priv *priv, int port,
+				       bool enable)
+{
+	/* Notice inverted semantics in this register: setting a bit disables
+	 * learning instead of enabling it.
+	 */
+	return regmap_update_bits(priv->map, RTL8366RB_PORT_LEARNDIS_CTRL,
+				  BIT(port), enable ? 0 : BIT(port));
+}
+
 static int rtl8366rb_setup(struct dsa_switch *ds)
 {
 	struct realtek_priv *priv = ds->priv;
@@ -942,6 +952,11 @@ static int rtl8366rb_setup(struct dsa_switch *ds)
 
 		/* Start with all ports completely isolated */
 		ret = rtl8366rb_port_set_isolation(priv, dp->index, 0);
+		if (ret)
+			return ret;
+
+		/* Disable learning */
+		ret = rtl8366rb_port_set_learning(priv, dp->index, false);
 		if (ret)
 			return ret;
 
@@ -1036,12 +1051,6 @@ static int rtl8366rb_setup(struct dsa_switch *ds)
 		else
 			rb->max_mtu[i] = ETH_DATA_LEN;
 	}
-
-	/* Disable learning for all ports */
-	ret = regmap_write(priv->map, RTL8366RB_PORT_LEARNDIS_CTRL,
-			   RTL8366RB_PORT_ALL);
-	if (ret)
-		return ret;
 
 	/* Enable auto ageing for all ports */
 	ret = regmap_write(priv->map, RTL8366RB_SECURITY_CTRL, 0);
@@ -1337,25 +1346,6 @@ rtl8366rb_port_pre_bridge_flags(struct dsa_switch *ds, int port,
 	/* We support enabling/disabling learning */
 	if (flags.mask & ~(BR_LEARNING))
 		return -EINVAL;
-
-	return 0;
-}
-
-static int
-rtl8366rb_port_bridge_flags(struct dsa_switch *ds, int port,
-			    struct switchdev_brport_flags flags,
-			    struct netlink_ext_ack *extack)
-{
-	struct realtek_priv *priv = ds->priv;
-	int ret;
-
-	if (flags.mask & BR_LEARNING) {
-		ret = regmap_update_bits(priv->map, RTL8366RB_PORT_LEARNDIS_CTRL,
-					 BIT(port),
-					 (flags.val & BR_LEARNING) ? 0 : BIT(port));
-		if (ret)
-			return ret;
-	}
 
 	return 0;
 }
@@ -1810,7 +1800,7 @@ static const struct dsa_switch_ops rtl8366rb_switch_ops = {
 	.port_enable = rtl8366rb_port_enable,
 	.port_disable = rtl8366rb_port_disable,
 	.port_pre_bridge_flags = rtl8366rb_port_pre_bridge_flags,
-	.port_bridge_flags = rtl8366rb_port_bridge_flags,
+	.port_bridge_flags = rtl83xx_port_bridge_flags,
 	.port_stp_state_set = rtl8366rb_port_stp_state_set,
 	.port_fast_age = rtl8366rb_port_fast_age,
 	.port_change_mtu = rtl8366rb_change_mtu,
@@ -1833,6 +1823,7 @@ static const struct realtek_ops rtl8366rb_ops = {
 	.enable_vlan4k	= rtl8366rb_enable_vlan4k,
 	.port_add_isolation = rtl8366rb_port_add_isolation,
 	.port_remove_isolation = rtl8366rb_port_remove_isolation,
+	.port_set_learning = rtl8366rb_port_set_learning,
 	.phy_read	= rtl8366rb_phy_read,
 	.phy_write	= rtl8366rb_phy_write,
 };
