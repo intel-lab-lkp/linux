@@ -28,6 +28,7 @@
 #include <linux/bpf_trace.h>
 #include <linux/net_tstamp.h>
 #include <linux/skbuff_ref.h>
+#include <linux/sched/clock.h>
 #include <net/page_pool/helpers.h>
 
 #define DRV_NAME	"veth"
@@ -50,6 +51,7 @@
  * delay => 64 * 250 ms = 16 s.
  */
 #define VETH_WATCHDOG_TIMEOUT_MS	(64 * 250)
+#define VETH_BQL_COAL_TX_USECS	100 /* default tx-usecs for BQL batching */
 
 struct veth_stats {
 	u64	rx_drops;
@@ -69,6 +71,11 @@ struct veth_rq_stats {
 	struct u64_stats_sync	syncp;
 };
 
+struct veth_bql_state {
+	u64	time;	/* sched_clock() when current coalescing window started */
+	uint	n_bql;	/* BQL completions batched in the current window */
+};
+
 struct veth_rq {
 	struct napi_struct	xdp_napi;
 	struct napi_struct __rcu *napi; /* points to xdp_napi when the latter is initialized */
@@ -76,6 +83,7 @@ struct veth_rq {
 	struct bpf_prog __rcu	*xdp_prog;
 	struct xdp_mem_info	xdp_mem;
 	struct veth_rq_stats	stats;
+	struct veth_bql_state	bql_state;
 	bool			rx_notify_masked;
 	struct ptr_ring		xdp_ring;
 	struct xdp_rxq_info	xdp_rxq;
@@ -88,6 +96,7 @@ struct veth_priv {
 	struct bpf_prog		*_xdp_prog;
 	struct veth_rq		*rq;
 	unsigned int		requested_headroom;
+	unsigned int		tx_coal_usecs;	/* BQL completion coalescing */
 };
 
 struct veth_xdp_tx_bq {
@@ -272,7 +281,56 @@ static void veth_get_channels(struct net_device *dev,
 static int veth_set_channels(struct net_device *dev,
 			     struct ethtool_channels *ch);
 
+static int veth_get_coalesce(struct net_device *dev,
+			     struct ethtool_coalesce *ec,
+			     struct kernel_ethtool_coalesce *kernel_coal,
+			     struct netlink_ext_ack *extack)
+{
+	struct veth_priv *priv = netdev_priv(dev);
+
+	ec->tx_coalesce_usecs = priv->tx_coal_usecs;
+	return 0;
+}
+
+static int veth_set_coalesce(struct net_device *dev,
+			     struct ethtool_coalesce *ec,
+			     struct kernel_ethtool_coalesce *kernel_coal,
+			     struct netlink_ext_ack *extack)
+{
+	struct veth_priv *priv = netdev_priv(dev);
+	struct net_device *peer;
+
+	/* The coalescing window delays BQL completions, so keep tx-usecs well
+	 * below the tx_timeout watchdog; otherwise a large value could stall a
+	 * stopped queue long enough to trip a false watchdog timeout. Cap at
+	 * half the watchdog to leave a generous safety margin. tx-usecs is
+	 * microseconds, the watchdog is milliseconds.
+	 */
+	if (ec->tx_coalesce_usecs > VETH_WATCHDOG_TIMEOUT_MS / 2 * USEC_PER_MSEC) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "tx-usecs must stay below half the tx_timeout watchdog");
+		return -ERANGE;
+	}
+
+	/* Paired with READ_ONCE in veth_xdp_rcv(). */
+	WRITE_ONCE(priv->tx_coal_usecs, ec->tx_coalesce_usecs);
+
+	/* veth_xdp_rcv() reads each device's own value, so mirror it onto
+	 * the peer to keep the pair symmetric: both directions coalesce
+	 * with the same tx-usecs. Called under RTNL, rtnl_dereference() is safe.
+	 */
+	peer = rtnl_dereference(priv->peer);
+	if (peer) {
+		struct veth_priv *peer_priv = netdev_priv(peer);
+
+		WRITE_ONCE(peer_priv->tx_coal_usecs, ec->tx_coalesce_usecs);
+	}
+
+	return 0;
+}
+
 static const struct ethtool_ops veth_ethtool_ops = {
+	.supported_coalesce_params = ETHTOOL_COALESCE_TX_USECS,
 	.get_drvinfo		= veth_get_drvinfo,
 	.get_link		= ethtool_op_get_link,
 	.get_strings		= veth_get_strings,
@@ -282,6 +340,8 @@ static const struct ethtool_ops veth_ethtool_ops = {
 	.get_ts_info		= ethtool_op_get_ts_info,
 	.get_channels		= veth_get_channels,
 	.set_channels		= veth_set_channels,
+	.get_coalesce		= veth_get_coalesce,
+	.set_coalesce		= veth_set_coalesce,
 };
 
 /* general routines */
@@ -969,13 +1029,54 @@ xdp_xmit:
 	return NULL;
 }
 
+static void veth_bql_maybe_complete(struct veth_bql_state *state,
+				    struct netdev_queue *peer_txq,
+				    u64 bql_flush_ns)
+{
+	u64 current_time;
+
+	/* There is no reason to complete with 0 and
+	 * peer_txq could go away.
+	 */
+	if (!state->n_bql || !peer_txq)
+		return;
+
+	current_time = sched_clock();
+
+	/* We complete if:
+	 * 1. We reach bql_flush_ns.
+	 * 2. We potentially have BQL starvation.
+	 */
+	if (state->time + bql_flush_ns <= current_time ||
+	    state->n_bql > peer_txq->dql.limit) {
+		netdev_tx_completed_queue(peer_txq, state->n_bql,
+					  state->n_bql * VETH_BQL_UNIT);
+		state->time = current_time;
+		state->n_bql = 0;
+	}
+}
+
 static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 			struct veth_xdp_tx_bq *bq,
 			struct veth_stats *stats,
 			struct netdev_queue *peer_txq)
 {
+	struct veth_priv *priv = netdev_priv(rq->dev);
+	struct veth_bql_state *state = &rq->bql_state;
 	int i, done = 0, n_xdpf = 0;
 	void *xdpf[VETH_XDP_BATCH];
+	u64 bql_flush_ns;
+
+	/* Mirrored to both peers; paired with WRITE_ONCE() in veth_set_coalesce */
+	bql_flush_ns = (u64)READ_ONCE(priv->tx_coal_usecs) * 1000;
+
+	/* Clamp stored timestamp in case we migrated to a CPU with a behind
+	 * sched_clock(); tries to reduce late BQL flushes.
+	 */
+	state->time = min(state->time, sched_clock());
+
+	/* Flush completions that timed out since the previous NAPI poll. */
+	veth_bql_maybe_complete(state, peer_txq, bql_flush_ns);
 
 	for (i = 0; i < budget; i++) {
 		void *ptr = __ptr_ring_consume(&rq->xdp_ring);
@@ -1000,12 +1101,11 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 			}
 		} else {
 			/* ndo_start_xmit */
-			bool bql_charged = veth_ptr_is_bql(ptr);
 			struct sk_buff *skb = veth_ptr_to_skb(ptr);
 
+			if (veth_ptr_is_bql(ptr))
+				state->n_bql++;
 			stats->xdp_bytes += skb->len;
-			if (peer_txq && bql_charged)
-				netdev_tx_completed_queue(peer_txq, 1, VETH_BQL_UNIT);
 
 			skb = veth_xdp_rcv_skb(rq, skb, bq, stats);
 			if (skb) {
@@ -1015,6 +1115,7 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 					napi_gro_receive(&rq->xdp_napi, skb);
 			}
 		}
+		veth_bql_maybe_complete(state, peer_txq, bql_flush_ns);
 		done++;
 	}
 
@@ -1123,6 +1224,9 @@ static int __veth_napi_enable_range(struct net_device *dev, int start, int end)
 	for (i = start; i < end; i++) {
 		struct veth_rq *rq = &priv->rq[i];
 
+		rq->bql_state.time = sched_clock();
+		rq->bql_state.n_bql = 0;
+
 		napi_enable(&rq->xdp_napi);
 		rcu_assign_pointer(priv->rq[i].napi, &priv->rq[i].xdp_napi);
 	}
@@ -1172,11 +1276,15 @@ static void veth_napi_del_range(struct net_device *dev, int start, int end)
 
 		rq->rx_notify_masked = false;
 
-		/* Drain leftover ring frames, counting BQL-charged SKBs that
-		 * were charged via netdev_tx_sent_queue() but never consumed.
+		/* Drain leftover ring frames, counting BQL-charged SKBs, and
+		 * add the completions still pending in the coalescing window
+		 * (consumed by NAPI but not yet flushed).  Both were charged
+		 * via netdev_tx_sent_queue() and are still outstanding.
 		 */
-		n_bql = veth_ptr_ring_drain(&rq->xdp_ring);
+		n_bql = veth_ptr_ring_drain(&rq->xdp_ring) + rq->bql_state.n_bql;
 		ptr_ring_cleanup(&rq->xdp_ring, veth_ptr_free);
+		rq->bql_state.n_bql = 0;
+		rq->bql_state.time = 0;
 
 		if (!peer || i >= peer->num_tx_queues)
 			continue;
@@ -1865,6 +1973,8 @@ static const struct xdp_metadata_ops veth_xdp_metadata_ops = {
 
 static void veth_setup(struct net_device *dev)
 {
+	struct veth_priv *priv = netdev_priv(dev);
+
 	ether_setup(dev);
 
 	dev->priv_flags &= ~IFF_TX_SKB_SHARING;
@@ -1889,6 +1999,7 @@ static void veth_setup(struct net_device *dev)
 	dev->pcpu_stat_type = NETDEV_PCPU_STAT_TSTATS;
 	dev->max_mtu = ETH_MAX_MTU;
 	dev->watchdog_timeo = msecs_to_jiffies(VETH_WATCHDOG_TIMEOUT_MS);
+	priv->tx_coal_usecs = VETH_BQL_COAL_TX_USECS;
 
 	dev->hw_features = VETH_FEATURES;
 	dev->hw_enc_features = VETH_FEATURES;
