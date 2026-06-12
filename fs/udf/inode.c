@@ -2151,6 +2151,7 @@ void udf_write_aext(struct inode *inode, struct extent_position *epos,
 	struct short_ad *sad;
 	struct long_ad *lad;
 	struct udf_inode_info *iinfo = UDF_I(inode);
+	struct udf_sb_info *sbi = UDF_SB(inode->i_sb);
 
 	if (!epos->bh)
 		ptr = iinfo->i_data + epos->offset -
@@ -2297,6 +2298,12 @@ int udf_current_aext(struct inode *inode, struct extent_position *epos,
 	default:
 		udf_debug("alloc_type = %u unsupported\n", iinfo->i_alloc_type);
 		return -EINVAL;
+	}
+
+	if (eloc->partitionReferenceNum >= sbi->s_partitions) {
+		udf_debug("invalid partition reference %u (partitions %u)\n",
+			  eloc->partitionReferenceNum, sbi->s_partitions);
+		return -EFSCORRUPTED;
 	}
 
 	return 1;
