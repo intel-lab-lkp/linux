@@ -591,6 +591,7 @@ static int tls_do_encryption(struct sock *sk,
 		 * below on error, just remove the record and return.
 		 */
 		if (rc != -EINPROGRESS) {
+			atomic_dec(&ctx->encrypt_pending);
 			list_del(&rec->list);
 			return rc;
 		}
