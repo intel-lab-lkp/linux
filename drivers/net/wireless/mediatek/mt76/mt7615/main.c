@@ -1243,7 +1243,8 @@ static int mt7615_suspend(struct ieee80211_hw *hw,
 
 	clear_bit(MT76_STATE_RUNNING, &phy->mt76->state);
 	cancel_delayed_work_sync(&phy->scan_work);
-	cancel_delayed_work_sync(&phy->mt76->mac_work);
+	/* mac_work re-enters the mt76 mutex, so flush it after unlock. */
+	cancel_delayed_work(&phy->mt76->mac_work);
 
 	set_bit(MT76_STATE_SUSPEND, &phy->mt76->state);
 	ieee80211_iterate_active_interfaces(hw,
@@ -1255,6 +1256,7 @@ static int mt7615_suspend(struct ieee80211_hw *hw,
 		err = mt76_connac_mcu_set_hif_suspend(&dev->mt76, true, true);
 
 	mt7615_mutex_release(dev);
+	cancel_delayed_work_sync(&phy->mt76->mac_work);
 
 	return err;
 }
