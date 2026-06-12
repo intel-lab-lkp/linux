@@ -516,6 +516,20 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	trace_nfsd_vfs_setattr(rqstp, fhp, iap, guardtime);
 
+	/*
+	 * Reject a client-supplied atime or mtime whose tv_nsec is out of
+	 * range. Such a value is well-formed on the wire but is not a valid
+	 * timespec64; storing it verbatim can corrupt on-disk timestamps
+	 * (for example, ext4 packs tv_nsec << 2 alongside epoch bits).
+	 * Reject it before acquiring any resources. RFC 1813 Section 2.6
+	 * leaves error precedence to the implementation.
+	 */
+	if (((iap->ia_valid & ATTR_ATIME_SET) &&
+	     (u32)iap->ia_atime.tv_nsec >= NSEC_PER_SEC) ||
+	    ((iap->ia_valid & ATTR_MTIME_SET) &&
+	     (u32)iap->ia_mtime.tv_nsec >= NSEC_PER_SEC))
+		return nfserr_inval;
+
 	if (iap->ia_valid & ATTR_SIZE) {
 		accmode |= NFSD_MAY_WRITE|NFSD_MAY_OWNER_OVERRIDE;
 		ftype = S_IFREG;
