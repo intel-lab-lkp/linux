@@ -33,6 +33,7 @@ static inline bool kasan_stack_collection_enabled(void)
 #include "../slab.h"
 
 DECLARE_STATIC_KEY_TRUE(kasan_flag_vmalloc);
+DECLARE_STATIC_KEY_FALSE(kasan_flag_tag_only_on_alloc);
 
 enum kasan_mode {
 	KASAN_MODE_SYNC,
@@ -50,6 +51,11 @@ static inline bool kasan_vmalloc_enabled(void)
 {
 	/* Static branch is never enabled with CONFIG_KASAN_VMALLOC disabled. */
 	return static_branch_likely(&kasan_flag_vmalloc);
+}
+
+static inline bool kasan_tag_only_on_alloc_enabled(void)
+{
+	return static_branch_unlikely(&kasan_flag_tag_only_on_alloc);
 }
 
 static inline bool kasan_async_fault_possible(void)
@@ -145,12 +151,17 @@ static inline bool kasan_requires_meta(void)
 #define KASAN_SLAB_REDZONE	0xFC  /* redzone for slab object */
 #define KASAN_SLAB_FREE		0xFB  /* freed slab object */
 #define KASAN_VMALLOC_INVALID	0xF8  /* inaccessible space in vmap area */
+#elif defined(CONFIG_KASAN_HW_TAGS)
+#define KASAN_PAGE_FREE		0x0E
+#define KASAN_PAGE_REDZONE	0x1E
+#define KASAN_SLAB_REDZONE	0x2E
+#define KASAN_SLAB_FREE		0x3E
 #else
 #define KASAN_PAGE_FREE		KASAN_TAG_INVALID
 #define KASAN_PAGE_REDZONE	KASAN_TAG_INVALID
 #define KASAN_SLAB_REDZONE	KASAN_TAG_INVALID
 #define KASAN_SLAB_FREE		KASAN_TAG_INVALID
-#define KASAN_VMALLOC_INVALID	KASAN_TAG_INVALID /* only used for SW_TAGS */
+#define KASAN_VMALLOC_INVALID	KASAN_TAG_INVALID
 #endif
 
 #ifdef CONFIG_KASAN_GENERIC
@@ -478,6 +489,16 @@ static inline u8 kasan_random_tag(void) { return 0; }
 
 static inline void kasan_poison(const void *addr, size_t size, u8 value, bool init)
 {
+	if (kasan_tag_only_on_alloc_enabled()) {
+		if ((value != KASAN_SLAB_REDZONE) && (value != KASAN_PAGE_REDZONE)) {
+			if (init)
+				memset((void *)kasan_reset_tag(addr), 0, size);
+			return;
+		}
+	}
+
+	value |= 0xF0;
+
 	if (WARN_ON((unsigned long)addr & KASAN_GRANULE_MASK))
 		return;
 	if (WARN_ON(size & KASAN_GRANULE_MASK))
