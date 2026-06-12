@@ -12,6 +12,7 @@
 #include "jfs_incore.h"
 #include "jfs_inode.h"
 #include "jfs_dmap.h"
+#include "jfs_superblock.h"
 #include "jfs_txnmgr.h"
 #include "jfs_xattr.h"
 #include "jfs_acl.h"
@@ -41,6 +42,24 @@ int jfs_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 	return rc ? -EIO : 0;
 }
 
+static int jfs_get_active_ag(struct inode *inode, int *agp)
+{
+	struct jfs_inode_info *ji = JFS_IP(inode);
+	struct jfs_sb_info *sbi = JFS_SBI(inode->i_sb);
+	struct bmap *bmap = sbi->bmap;
+	u64 ag = BLKTOAG(addressPXD(&ji->ixpxd), sbi);
+
+	if (ag >= bmap->db_numag) {
+		jfs_error(inode->i_sb,
+			  "inode %llu has invalid active ag %llu\n",
+			  inode->i_ino, ag);
+		return -EIO;
+	}
+
+	*agp = ag;
+	return 0;
+}
+
 static int jfs_open(struct inode *inode, struct file *file)
 {
 	int rc;
@@ -63,11 +82,18 @@ static int jfs_open(struct inode *inode, struct file *file)
 	if (S_ISREG(inode->i_mode) && file->f_mode & FMODE_WRITE &&
 	    (inode->i_size == 0)) {
 		struct jfs_inode_info *ji = JFS_IP(inode);
+		struct bmap *bmap;
+		int active_ag;
+
+		rc = jfs_get_active_ag(inode, &active_ag);
+		if (rc)
+			return rc;
+
 		spin_lock_irq(&ji->ag_lock);
 		if (ji->active_ag == -1) {
-			struct jfs_sb_info *jfs_sb = JFS_SBI(inode->i_sb);
-			ji->active_ag = BLKTOAG(addressPXD(&ji->ixpxd), jfs_sb);
-			atomic_inc(&jfs_sb->bmap->db_active[ji->active_ag]);
+			bmap = JFS_SBI(inode->i_sb)->bmap;
+			ji->active_ag = active_ag;
+			atomic_inc(&bmap->db_active[active_ag]);
 		}
 		spin_unlock_irq(&ji->ag_lock);
 	}
