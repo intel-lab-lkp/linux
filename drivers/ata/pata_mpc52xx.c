@@ -766,6 +766,8 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 		goto err1;
 	}
 
+	priv->dmatsk = dmatsk;
+
 	task_irq = bcom_get_task_irq(dmatsk);
 	rv = devm_request_irq(&op->dev, task_irq, &mpc52xx_ata_task_irq, 0,
 				"ATA task", priv);
@@ -773,7 +775,6 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 		dev_err(&op->dev, "error requesting DMA IRQ\n");
 		goto err2;
 	}
-	priv->dmatsk = dmatsk;
 
 	/* Init the hw */
 	rv = mpc52xx_ata_hw_init(priv);
