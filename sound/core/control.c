@@ -2020,8 +2020,10 @@ static long snd_ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		return err;
 	case SNDRV_CTL_IOCTL_TLV_WRITE:
 		err = snd_power_ref_and_wait(card);
-		if (err < 0)
+		if (err < 0) {
+			snd_power_unref(card);
 			return err;
+		}
 		scoped_guard(rwsem_write, &card->controls_rwsem)
 			err = snd_ctl_tlv_ioctl(ctl, argp, SNDRV_CTL_TLV_OP_WRITE);
 		snd_power_unref(card);
