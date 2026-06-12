@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# RISC-V CPU Frequency scaling drivers
+#
+
+config RISCV_SPACEMIT_K1_CPUFREQ
+	tristate "SpacemiT K1 CPUFreq driver"
+	depends on ARCH_SPACEMIT || COMPILE_TEST
+	depends on OF && COMMON_CLK
+	select PM_OPP
+	help
+	  Enable CPU frequency scaling for SpacemiT K1 SoC.
+	  K1 has two CPU cluster clocks and one shared CPU voltage rail.
+	  The driver keeps all CPUs in one policy and updates both cluster
+	  clocks with the shared OPP transition.

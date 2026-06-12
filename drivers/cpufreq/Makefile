@@ -90,6 +90,9 @@ obj-$(CONFIG_ARM_TEGRA194_CPUFREQ)	+= tegra194-cpufreq.o
 obj-$(CONFIG_ARM_TI_CPUFREQ)		+= ti-cpufreq.o
 obj-$(CONFIG_ARM_VEXPRESS_SPC_CPUFREQ)	+= vexpress-spc-cpufreq.o
 
+##################################################################################
+# RISC-V SoC drivers
+obj-$(CONFIG_RISCV_SPACEMIT_K1_CPUFREQ)	+= spacemit-k1-cpufreq.o
 
 ##################################################################################
 # PowerPC platform drivers

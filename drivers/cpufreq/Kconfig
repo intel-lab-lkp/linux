@@ -259,6 +259,10 @@ endif
 
 source "drivers/cpufreq/Kconfig.arm"
 
+if RISCV
+source "drivers/cpufreq/Kconfig.riscv"
+endif
+
 if PPC32 || PPC64
 source "drivers/cpufreq/Kconfig.powerpc"
 endif
