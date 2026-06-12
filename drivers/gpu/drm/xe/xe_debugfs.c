@@ -28,6 +28,7 @@
 #include "xe_sriov_pf_debugfs.h"
 #include "xe_sriov_vf.h"
 #include "xe_step.h"
+#include "xe_ras.h"
 #include "xe_tile_debugfs.h"
 #include "xe_vsec.h"
 #include "xe_wa.h"
@@ -609,6 +610,8 @@ void xe_debugfs_register(struct xe_device *xe)
 	xe_pxp_debugfs_register(xe->pxp);
 
 	xe_psmi_debugfs_register(xe);
+
+	xe_ras_debugfs_register(xe, root);
 
 	fault_create_debugfs_attr("fail_gt_reset", root, &gt_reset_failure);
 
