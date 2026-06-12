@@ -1944,6 +1944,16 @@ static void adlp_cdclk_pll_crawl(struct intel_display *display, int vco)
 	display->cdclk.hw.vco = vco;
 }
 
+static u32 bxt_cdclk_cd2x_pipe_mask(struct intel_display *display)
+{
+	if (DISPLAY_VER(display) >= 12)
+		return TGL_CDCLK_CD2X_PIPE_MASK;
+	else if (DISPLAY_VER(display) >= 11)
+		return ICL_CDCLK_CD2X_PIPE_MASK;
+	else
+		return BXT_CDCLK_CD2X_PIPE_MASK;
+}
+
 static u32 bxt_cdclk_cd2x_pipe(struct intel_display *display, enum pipe pipe)
 {
 	if (DISPLAY_VER(display) >= 12) {
@@ -2378,7 +2388,7 @@ static void bxt_sanitize_cdclk(struct intel_display *display)
 	 * dividers both syncing to an active pipe, or asynchronously
 	 * (PIPE_NONE).
 	 */
-	cdctl &= ~bxt_cdclk_cd2x_pipe(display, INVALID_PIPE);
+	cdctl &= ~bxt_cdclk_cd2x_pipe_mask(display);
 	cdctl |= bxt_cdclk_cd2x_pipe(display, INVALID_PIPE);
 
 	if (cdctl != expected) {
