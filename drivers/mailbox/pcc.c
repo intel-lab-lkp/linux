@@ -447,9 +447,14 @@ static int pcc_send_data(struct mbox_chan *chan, void *data)
 
 static bool pcc_last_tx_done(struct mbox_chan *chan)
 {
+	bool ret;
 	struct pcc_chan_info *pchan = chan->con_priv;
 
-	return pcc_mbox_cmd_complete_check(pchan);
+	ret = pcc_mbox_cmd_complete_check(pchan);
+	if (ret && !pchan->plat_irq)
+		mbox_chan_received_data(chan, NULL);
+
+	return ret;
 }
 
 /**
