@@ -1259,8 +1259,10 @@ static int snd_ctl_elem_read_user(struct snd_card *card,
 		return PTR_ERR(control);
 
 	result = snd_power_ref_and_wait(card);
-	if (result)
+	if (result) {
+		snd_power_unref(card);
 		return result;
+	}
 	result = snd_ctl_elem_read(card, control);
 	snd_power_unref(card);
 	if (result < 0)
