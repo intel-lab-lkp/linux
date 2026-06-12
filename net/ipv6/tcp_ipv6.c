@@ -2335,12 +2335,12 @@ static void __net_exit tcpv6_net_exit(struct net *net)
 	inet_ctl_sock_destroy(net->ipv6.tcp_sk);
 }
 
-static struct pernet_operations tcpv6_net_ops = {
+static struct pernet_operations tcpv6_net_ops __net_initdata = {
 	.init	    = tcpv6_net_init,
 	.exit	    = tcpv6_net_exit,
 };
 
-int __init tcpv6_init(void)
+int __net_init tcpv6_init(void)
 {
 	int ret;
 
@@ -2378,7 +2378,7 @@ out_tcpv6_protocol:
 	goto out;
 }
 
-void tcpv6_exit(void)
+void __net_exit tcpv6_exit(void)
 {
 	unregister_pernet_subsys(&tcpv6_net_ops);
 	inet6_unregister_protosw(&tcpv6_protosw);

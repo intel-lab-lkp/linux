@@ -1994,12 +1994,12 @@ static void __net_exit ndisc_net_exit(struct net *net)
 	inet_ctl_sock_destroy(net->ipv6.ndisc_sk);
 }
 
-static struct pernet_operations ndisc_net_ops = {
+static struct pernet_operations ndisc_net_ops __net_initdata = {
 	.init = ndisc_net_init,
 	.exit = ndisc_net_exit,
 };
 
-int __init ndisc_init(void)
+int __net_init ndisc_init(void)
 {
 	int err;
 
@@ -2027,17 +2027,17 @@ out_unregister_pernet:
 #endif
 }
 
-int __init ndisc_late_init(void)
+int __net_init ndisc_late_init(void)
 {
 	return register_netdevice_notifier(&ndisc_netdev_notifier);
 }
 
-void ndisc_late_cleanup(void)
+void __net_exit ndisc_late_cleanup(void)
 {
 	unregister_netdevice_notifier(&ndisc_netdev_notifier);
 }
 
-void ndisc_cleanup(void)
+void __net_exit ndisc_cleanup(void)
 {
 #ifdef CONFIG_SYSCTL
 	neigh_sysctl_unregister(&nd_tbl.parms);

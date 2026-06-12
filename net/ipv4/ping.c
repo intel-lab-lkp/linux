@@ -1144,17 +1144,17 @@ static void __net_exit ping_v4_proc_exit_net(struct net *net)
 	remove_proc_entry("icmp", net->proc_net);
 }
 
-static struct pernet_operations ping_v4_net_ops = {
+static struct pernet_operations ping_v4_net_ops __net_initdata = {
 	.init = ping_v4_proc_init_net,
 	.exit = ping_v4_proc_exit_net,
 };
 
-int __init ping_proc_init(void)
+int __net_init ping_proc_init(void)
 {
 	return register_pernet_subsys(&ping_v4_net_ops);
 }
 
-void ping_proc_exit(void)
+void __net_exit ping_proc_exit(void)
 {
 	unregister_pernet_subsys(&ping_v4_net_ops);
 }

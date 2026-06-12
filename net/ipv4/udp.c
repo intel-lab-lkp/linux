@@ -3600,17 +3600,17 @@ static void __net_exit udp4_proc_exit_net(struct net *net)
 	remove_proc_entry("udp", net->proc_net);
 }
 
-static struct pernet_operations udp4_net_ops = {
+static struct pernet_operations udp4_net_ops __net_initdata = {
 	.init = udp4_proc_init_net,
 	.exit = udp4_proc_exit_net,
 };
 
-int __init udp4_proc_init(void)
+int __net_init udp4_proc_init(void)
 {
 	return register_pernet_subsys(&udp4_net_ops);
 }
 
-void udp4_proc_exit(void)
+void __net_exit udp4_proc_exit(void)
 {
 	unregister_pernet_subsys(&udp4_net_ops);
 }

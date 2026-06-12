@@ -3317,17 +3317,17 @@ static void __net_exit tcp4_proc_exit_net(struct net *net)
 	remove_proc_entry("tcp", net->proc_net);
 }
 
-static struct pernet_operations tcp4_net_ops = {
+static struct pernet_operations tcp4_net_ops __net_initdata = {
 	.init = tcp4_proc_init_net,
 	.exit = tcp4_proc_exit_net,
 };
 
-int __init tcp4_proc_init(void)
+int __net_init tcp4_proc_init(void)
 {
 	return register_pernet_subsys(&tcp4_net_ops);
 }
 
-void tcp4_proc_exit(void)
+void __net_exit tcp4_proc_exit(void)
 {
 	unregister_pernet_subsys(&tcp4_net_ops);
 }

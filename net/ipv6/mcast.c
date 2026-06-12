@@ -3209,12 +3209,12 @@ static void __net_exit igmp6_net_exit(struct net *net)
 	igmp6_proc_exit(net);
 }
 
-static struct pernet_operations igmp6_net_ops = {
+static struct pernet_operations igmp6_net_ops __net_initdata = {
 	.init = igmp6_net_init,
 	.exit = igmp6_net_exit,
 };
 
-int __init igmp6_init(void)
+int __net_init igmp6_init(void)
 {
 	int err;
 
@@ -3231,18 +3231,18 @@ int __init igmp6_init(void)
 	return err;
 }
 
-int __init igmp6_late_init(void)
+int __net_init igmp6_late_init(void)
 {
 	return register_netdevice_notifier(&igmp6_netdev_notifier);
 }
 
-void igmp6_cleanup(void)
+void __net_exit igmp6_cleanup(void)
 {
 	unregister_pernet_subsys(&igmp6_net_ops);
 	destroy_workqueue(mld_wq);
 }
 
-void igmp6_late_cleanup(void)
+void __net_exit igmp6_late_cleanup(void)
 {
 	unregister_netdevice_notifier(&igmp6_netdev_notifier);
 }

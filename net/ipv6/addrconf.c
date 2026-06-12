@@ -4527,17 +4527,17 @@ static void __net_exit if6_proc_net_exit(struct net *net)
 	remove_proc_entry("if_inet6", net->proc_net);
 }
 
-static struct pernet_operations if6_proc_net_ops = {
+static struct pernet_operations if6_proc_net_ops __net_initdata = {
 	.init = if6_proc_net_init,
 	.exit = if6_proc_net_exit,
 };
 
-int __init if6_proc_init(void)
+int __net_init if6_proc_init(void)
 {
 	return register_pernet_subsys(&if6_proc_net_ops);
 }
 
-void if6_proc_exit(void)
+void __net_exit if6_proc_exit(void)
 {
 	unregister_pernet_subsys(&if6_proc_net_ops);
 }

@@ -1256,17 +1256,17 @@ static void __net_exit raw6_exit_net(struct net *net)
 	remove_proc_entry("raw6", net->proc_net);
 }
 
-static struct pernet_operations raw6_net_ops = {
+static struct pernet_operations raw6_net_ops __net_initdata = {
 	.init = raw6_init_net,
 	.exit = raw6_exit_net,
 };
 
-int __init raw6_proc_init(void)
+int __net_init raw6_proc_init(void)
 {
 	return register_pernet_subsys(&raw6_net_ops);
 }
 
-void raw6_proc_exit(void)
+void __net_exit raw6_proc_exit(void)
 {
 	unregister_pernet_subsys(&raw6_net_ops);
 }

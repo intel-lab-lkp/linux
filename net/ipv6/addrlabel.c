@@ -340,17 +340,17 @@ static void __net_exit ip6addrlbl_net_exit(struct net *net)
 	spin_unlock(&net->ipv6.ip6addrlbl_table.lock);
 }
 
-static struct pernet_operations ipv6_addr_label_ops = {
+static struct pernet_operations ipv6_addr_label_ops __net_initdata = {
 	.init = ip6addrlbl_net_init,
 	.exit = ip6addrlbl_net_exit,
 };
 
-int __init ipv6_addr_label_init(void)
+int __net_init ipv6_addr_label_init(void)
 {
 	return register_pernet_subsys(&ipv6_addr_label_ops);
 }
 
-void ipv6_addr_label_cleanup(void)
+void __net_exit ipv6_addr_label_cleanup(void)
 {
 	unregister_pernet_subsys(&ipv6_addr_label_ops);
 }

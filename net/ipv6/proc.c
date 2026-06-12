@@ -298,17 +298,17 @@ static void __net_exit ipv6_proc_exit_net(struct net *net)
 	remove_proc_entry("snmp6", net->proc_net);
 }
 
-static struct pernet_operations ipv6_proc_ops = {
+static struct pernet_operations ipv6_proc_ops __net_initdata = {
 	.init = ipv6_proc_init_net,
 	.exit = ipv6_proc_exit_net,
 };
 
-int __init ipv6_misc_proc_init(void)
+int __net_init ipv6_misc_proc_init(void)
 {
 	return register_pernet_subsys(&ipv6_proc_ops);
 }
 
-void ipv6_misc_proc_exit(void)
+void __net_exit ipv6_misc_proc_exit(void)
 {
 	unregister_pernet_subsys(&ipv6_proc_ops);
 }

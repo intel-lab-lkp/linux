@@ -903,17 +903,17 @@ static void __net_exit ip6_flowlabel_net_exit(struct net *net)
 	ip6_flowlabel_proc_fini(net);
 }
 
-static struct pernet_operations ip6_flowlabel_net_ops = {
+static struct pernet_operations ip6_flowlabel_net_ops __net_initdata = {
 	.init = ip6_flowlabel_proc_init,
 	.exit = ip6_flowlabel_net_exit,
 };
 
-int ip6_flowlabel_init(void)
+int __net_init ip6_flowlabel_init(void)
 {
 	return register_pernet_subsys(&ip6_flowlabel_net_ops);
 }
 
-void ip6_flowlabel_cleanup(void)
+void __net_exit ip6_flowlabel_cleanup(void)
 {
 	static_key_deferred_flush(&ipv6_flowlabel_exclusive);
 	timer_delete(&ip6_fl_gc_timer);
