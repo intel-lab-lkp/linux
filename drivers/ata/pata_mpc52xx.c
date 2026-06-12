@@ -21,7 +21,6 @@
 #include <linux/libata.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/types.h>
 
@@ -676,7 +675,6 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 {
 	unsigned int ipb_freq;
 	struct resource res_mem;
-	int ata_irq = 0;
 	struct mpc52xx_ata __iomem *ata_regs;
 	struct mpc52xx_ata_priv *priv = NULL;
 	int rv, task_irq;
@@ -733,24 +731,19 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	if ((prop) && (proplen >= 4))
 		udma_mask = ATA_UDMA2 & ((1 << (*prop + 1)) - 1);
 
-	ata_irq = irq_of_parse_and_map(op->dev.of_node, 0);
-	if (!ata_irq) {
-		dev_err(&op->dev, "error mapping irq\n");
-		return -EINVAL;
-	}
-
 	/* Prepare our private structure */
 	priv = devm_kzalloc(&op->dev, sizeof(*priv), GFP_KERNEL);
-	if (!priv) {
-		rv = -ENOMEM;
-		goto err1;
-	}
+	if (!priv)
+		return -ENOMEM;
 
 	priv->ipb_period = 1000000000 / (ipb_freq / 1000);
 	priv->ata_regs = ata_regs;
 	priv->ata_regs_pa = res_mem.start;
-	priv->ata_irq = ata_irq;
 	priv->csel = -1;
+
+	priv->ata_irq = platform_get_irq(op, 0);
+	if (priv->ata_irq < 0)
+		return priv->ata_irq;
 
 	if (ipb_freq/1000000 == 66) {
 		priv->mdmaspec = mdmaspec66;
@@ -764,8 +757,7 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 	dmatsk = bcom_ata_init(MAX_DMA_BUFFERS, MAX_DMA_BUFFER_SIZE);
 	if (!dmatsk) {
 		dev_err(&op->dev, "bestcomm initialization failed\n");
-		rv = -ENOMEM;
-		goto err1;
+		return -ENOMEM;
 	}
 
 	priv->dmatsk = dmatsk;
@@ -798,8 +790,6 @@ static int mpc52xx_ata_probe(struct platform_device *op)
 
  err2:
 	bcom_ata_release(dmatsk);
- err1:
-	irq_dispose_mapping(ata_irq);
 	return rv;
 }
 
@@ -813,7 +803,6 @@ static void mpc52xx_ata_remove(struct platform_device *op)
 
 	/* Clean up DMA */
 	bcom_ata_release(priv->dmatsk);
-	irq_dispose_mapping(priv->ata_irq);
 }
 
 #ifdef CONFIG_PM_SLEEP
