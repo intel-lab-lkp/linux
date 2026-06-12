@@ -9485,6 +9485,83 @@ static void yield_task_fair(struct rq *rq)
 	}
 }
 
+/*
+ * Rate-limit the forced local reschedule on the yield_to() lag-credit path
+ * to at most once per 6ms per rq.
+ *
+ * Lag credit is intentionally not rate-limited: a contended lock holder
+ * should be credited on every directed yield to keep the scheduling hint
+ * effective. Only the forced preemption needs bounding, as cancelling
+ * RUN_TO_PARITY protection and calling resched_curr() on every PLE-driven
+ * yield_to() can cause excessive preemption on compute-bound guests.
+ *
+ * Returns true if the caller should skip forcing a reschedule because a
+ * recent one already happened on this rq; the credit just applied still
+ * persists, so the buddy can be selected at the next scheduling point.
+ *
+ * Called under rq->lock with rq_clock up to date. yield_to_task_fair()
+ * updates the clock before walking the hierarchy because yield_to() takes
+ * the rq locks without updating them.
+ */
+static bool yield_to_force_resched_rate_limit(struct rq *rq)
+{
+	u64 now = rq_clock(rq);
+	u64 last = rq->yield_to_force_resched_last_ns;
+
+	if (last && (now - last) <= 6 * NSEC_PER_MSEC)
+		return true;
+
+	rq->yield_to_force_resched_last_ns = now;
+	return false;
+}
+
+/*
+ * Forfeit the local yielder, cancel its RUN_TO_PARITY slice protection
+ * along the whole sched_entity chain, and force a reschedule.
+ *
+ * yield_to() does not reschedule the caller, and an active protect_slice()
+ * at any level can keep pick_eevdf() returning the yielder instead of the
+ * credited buddy. cancel_protect_slice() is EEVDF-native (also used by
+ * PREEMPT_WAKEUP_SHORT) and does not touch vruntime. Caller holds the
+ * local rq lock via yield_to()'s double_rq_lock().
+ *
+ * Only the forced preemption here is rate-limited (to once per 6ms per rq);
+ * the lag credit applied by the caller runs on every yield_to(). When
+ * throttled, the credited buddy can still be selected at the next natural
+ * scheduling point without tearing down slice protection and forcing an
+ * immediate switch.
+ */
+static void yield_to_local_force_resched(struct rq *rq)
+{
+	struct sched_entity *yse = &rq->donor->se;
+
+	yield_task_fair(rq);
+
+	/*
+	 * If the yielder is the only runnable task on this rq there is nothing
+	 * for resched_curr() to switch to: any credited buddy is on a remote rq
+	 * in this cross-rq case, where yield_to() already issued resched_curr()
+	 * on the target's rq. Skip the forced reschedule: it would be a no-op
+	 * and an unnecessary preemption of an unrelated local task.
+	 * yield_task_fair() also returns early here without updating rq_clock.
+	 */
+	if (rq->nr_running <= 1)
+		return;
+
+	/*
+	 * Rate-limit the forced preemption (cancel_protect_slice + resched_curr)
+	 * to once per 6ms per rq. rq's clock was refreshed by the caller before
+	 * the credit walk, so rq_clock(rq) read here is current.
+	 */
+	if (yield_to_force_resched_rate_limit(rq))
+		return;
+
+	for_each_sched_entity(yse)
+		cancel_protect_slice(yse);
+
+	resched_curr(rq);
+}
+
 static bool yield_to_task_fair(struct rq *rq, struct task_struct *p)
 {
 	struct sched_entity *se = &p->se;
@@ -9504,21 +9581,22 @@ static bool yield_to_task_fair(struct rq *rq, struct task_struct *p)
 	}
 
 	/*
-	 * Walk the ancestor chain set_next_buddy() just nominated and credit
-	 * bounded lag to each not-yet-eligible level so pick_eevdf() returns
-	 * it. yield_to() holds both rq locks via double_rq_lock(), so touching
-	 * p's cfs_rqs (possibly on another CPU) is safe; the primitive is
-	 * idempotent, so no rate limiting is needed.
+	 * Walk the ancestor chain nominated by set_next_buddy() and credit
+	 * bounded lag to each not-yet-eligible level, so pick_eevdf() can
+	 * honor the buddy hint. Lag credit runs on every directed yield; only
+	 * the forced preemption in yield_to_local_force_resched() is
+	 * rate-limited. yield_to() holds both rq locks via double_rq_lock(),
+	 * so touching p's cfs_rqs (possibly on another CPU) is safe.
 	 *
-	 * Only refresh p_rq's clock when it differs from the local rq. A
-	 * remote p_rq must be refreshed so the per-level update_curr() is
-	 * accurate. In the same-rq case we skip it: the credit is a
-	 * best-effort hint and the rq clock is recent enough, while the
-	 * trailing yield_task_fair() would otherwise make this a second
-	 * update_rq_clock() on the same rq and trip
-	 * SCHED_WARN_ON(WARN_DOUBLE_CLOCK).
+	 * Refresh the local rq clock first: yield_to() took the locks without
+	 * updating any clock and the per-level update_curr() below reads
+	 * rq_clock; assert_clock_updated() (default-on, no sched_feat gate)
+	 * fires otherwise. For a remote p_rq refresh it too; in the same-rq
+	 * case the refresh above already covers it (a redundant update is only
+	 * warned about under the default-off WARN_DOUBLE_CLOCK).
 	 */
-	if (rq != p_rq)
+	update_rq_clock(rq);
+	if (p_rq != rq)
 		update_rq_clock(p_rq);
 
 	for_each_sched_entity(se) {
@@ -9534,7 +9612,12 @@ static bool yield_to_task_fair(struct rq *rq, struct task_struct *p)
 		eevdf_credit_entity_vlag(cfs_rq, se);
 	}
 
-	yield_task_fair(rq);
+	/*
+	 * Force the local CPU to reschedule so the credited buddy can be
+	 * selected instead of the protected yielder;
+	 * yield_to_local_force_resched() also does the leaf forfeit.
+	 */
+	yield_to_local_force_resched(rq);
 
 	return true;
 }

@@ -1316,6 +1316,16 @@ struct rq {
 	unsigned int		ttwu_local;
 #endif
 
+	/*
+	 * Last rq_clock at which the yield_to() lag-credit path forced a local
+	 * reschedule on this rq. Used to rate-limit only the forced preemption
+	 * (cancel_protect_slice + resched_curr) to at most once per 6ms per rq,
+	 * preventing excessive forced preemption on PLE-heavy guests. The lag
+	 * credit itself is not rate-limited. Functional state, not a statistic,
+	 * so kept outside CONFIG_SCHEDSTATS.
+	 */
+	u64			yield_to_force_resched_last_ns;
+
 #ifdef CONFIG_CPU_IDLE
 	/* Must be inspected within a RCU lock section */
 	struct cpuidle_state	*idle_state;
