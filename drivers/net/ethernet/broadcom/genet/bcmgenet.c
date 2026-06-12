@@ -3751,8 +3751,8 @@ static const struct bcmgenet_hw_params bcmgenet_hw_params_v1 = {
 };
 
 static const struct bcmgenet_hw_params bcmgenet_hw_params_v2 = {
-	.tx_queues = 4,
-	.tx_bds_per_q = 32,
+	.tx_queues = 0,
+	.tx_bds_per_q = 0,
 	.rx_queues = 0,
 	.rx_bds_per_q = 0,
 	.bp_in_en_shift = 16,
@@ -3769,8 +3769,8 @@ static const struct bcmgenet_hw_params bcmgenet_hw_params_v2 = {
 };
 
 static const struct bcmgenet_hw_params bcmgenet_hw_params_v3 = {
-	.tx_queues = 4,
-	.tx_bds_per_q = 32,
+	.tx_queues = 0,
+	.tx_bds_per_q = 0,
 	.rx_queues = 0,
 	.rx_bds_per_q = 0,
 	.bp_in_en_shift = 17,
@@ -3787,8 +3787,8 @@ static const struct bcmgenet_hw_params bcmgenet_hw_params_v3 = {
 };
 
 static const struct bcmgenet_hw_params bcmgenet_hw_params_v4 = {
-	.tx_queues = 4,
-	.tx_bds_per_q = 32,
+	.tx_queues = 0,
+	.tx_bds_per_q = 0,
 	.rx_queues = 0,
 	.rx_bds_per_q = 0,
 	.bp_in_en_shift = 17,
