@@ -38,6 +38,7 @@
 #include <linux/zsmalloc.h>
 
 #include "swap.h"
+#include "vswap.h"
 #include "internal.h"
 
 /*********************************
@@ -762,7 +763,7 @@ static void zswap_entry_cache_free(struct zswap_entry *entry)
  * Carries out the common pattern of freeing an entry's zsmalloc allocation,
  * freeing the entry itself, and decrementing the number of stored pages.
  */
-static void zswap_entry_free(struct zswap_entry *entry)
+void zswap_entry_free(struct zswap_entry *entry)
 {
 	zswap_lru_del(&zswap_list_lru, entry);
 	zs_free(entry->pool->zs_pool, entry->handle);
@@ -994,16 +995,21 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	struct swap_info_struct *si;
 	int ret = 0;
 
+	/* try to allocate swap cache folio */
 	si = get_swap_device(swpentry);
 	if (!si)
 		return -EEXIST;
 
+	/*
+	 * Vswap entries have no physical backing - writeback would fail
+	 * and SIGBUS the caller. Bail before we waste a swap-cache folio
+	 * allocation.
+	 */
 	if (si->flags & SWP_VSWAP) {
 		put_swap_device(si);
 		return -EINVAL;
 	}
 
-	/* try to allocate swap cache folio */
 	mpol = get_task_policy(current);
 	folio = swap_cache_alloc_folio(swpentry, GFP_KERNEL, BIT(0), NULL, mpol,
 				       NO_INTERLEAVE_INDEX);
@@ -1416,24 +1422,24 @@ static bool zswap_store_page(struct page *page,
 	if (!zswap_compress(page, entry, pool))
 		goto compress_failed;
 
-	old = xa_store(swap_zswap_tree(page_swpentry),
-		       swp_offset(page_swpentry),
-		       entry, GFP_KERNEL);
-	if (xa_is_err(old)) {
-		int err = xa_err(old);
+	if (is_vswap_entry(page_swpentry)) {
+		vswap_zswap_store(page_swpentry, entry);
+	} else {
+		old = xa_store(swap_zswap_tree(page_swpentry),
+			       swp_offset(page_swpentry),
+			       entry, GFP_KERNEL);
+		if (xa_is_err(old)) {
+			int err = xa_err(old);
 
-		WARN_ONCE(err != -ENOMEM, "unexpected xarray error: %d\n", err);
-		zswap_reject_alloc_fail++;
-		goto store_failed;
+			WARN_ONCE(err != -ENOMEM,
+				  "unexpected xarray error: %d\n", err);
+			zswap_reject_alloc_fail++;
+			goto store_failed;
+		}
+
+		if (old)
+			zswap_entry_free(old);
 	}
-
-	/*
-	 * We may have had an existing entry that became stale when
-	 * the folio was redirtied and now the new version is being
-	 * swapped out. Get rid of the old.
-	 */
-	if (old)
-		zswap_entry_free(old);
 
 	/*
 	 * The entry is successfully compressed and stored in the tree, there is
@@ -1487,6 +1493,7 @@ bool zswap_store(struct folio *folio)
 	struct mem_cgroup *memcg = NULL;
 	struct zswap_pool *pool;
 	bool ret = false;
+	bool partial_store = false;
 	long index;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
@@ -1524,8 +1531,10 @@ bool zswap_store(struct folio *folio)
 	for (index = 0; index < nr_pages; ++index) {
 		struct page *page = folio_page(folio, index);
 
-		if (!zswap_store_page(page, objcg, pool))
+		if (!zswap_store_page(page, objcg, pool)) {
+			partial_store = index > 0;
 			goto put_pool;
+		}
 	}
 
 	if (objcg)
@@ -1548,7 +1557,9 @@ check_old:
 	 * offsets corresponding to each page of the folio. Otherwise,
 	 * writeback could overwrite the new data in the swapfile.
 	 */
-	if (!ret) {
+	if (partial_store && is_vswap_entry(swp))
+		folio_release_vswap_backing(folio);
+	else if (!ret && !is_vswap_entry(swp)) {
 		unsigned type = swp_type(swp);
 		pgoff_t offset = swp_offset(swp);
 		struct zswap_entry *entry;
@@ -1588,8 +1599,7 @@ check_old:
 int zswap_load(struct folio *folio)
 {
 	swp_entry_t swp = folio->swap;
-	pgoff_t offset = swp_offset(swp);
-	struct xarray *tree = swap_zswap_tree(swp);
+	struct swap_info_struct *si = __swap_entry_to_info(swp);
 	struct zswap_entry *entry;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
@@ -1599,16 +1609,25 @@ int zswap_load(struct folio *folio)
 		return -ENOENT;
 
 	/*
-	 * Large folios should not be swapped in while zswap is being used, as
-	 * they are not properly handled. Zswap does not properly load large
-	 * folios, and a large folio may only be partially in zswap.
+	 * zswap_load() does not support large folios. For non-vswap
+	 * entries this is unexpected on the swapin path: WARN and
+	 * sigbus. For vswap entries __swap_cache_add_check() has already
+	 * filtered out ZSWAP-backed THPs under the cluster lock, so the
+	 * large folio here is zero- or phys-backed; return -ENOENT to
+	 * fall through to the phys/zero IO path.
 	 */
-	if (WARN_ON_ONCE(folio_test_large(folio))) {
-		folio_unlock(folio);
-		return -EINVAL;
+	if (folio_test_large(folio)) {
+		if (WARN_ON_ONCE(!swap_is_vswap(si))) {
+			folio_unlock(folio);
+			return -EINVAL;
+		}
+		return -ENOENT;
 	}
 
-	entry = xa_load(tree, offset);
+	if (swap_is_vswap(si))
+		entry = vswap_zswap_load(swp);
+	else
+		entry = xa_load(swap_zswap_tree(swp), swp_offset(swp));
 	if (!entry)
 		return -ENOENT;
 
@@ -1623,16 +1642,14 @@ int zswap_load(struct folio *folio)
 	if (entry->objcg)
 		count_objcg_events(entry->objcg, ZSWPIN, 1);
 
-	/*
-	 * We are reading into the swapcache, invalidate zswap entry.
-	 * The swapcache is the authoritative owner of the page and
-	 * its mappings, and the pressure that results from having two
-	 * in-memory copies outweighs any benefits of caching the
-	 * compression work.
-	 */
 	folio_mark_dirty(folio);
-	xa_erase(tree, offset);
-	zswap_entry_free(entry);
+
+	if (swap_is_vswap(si)) {
+		folio_release_vswap_backing(folio);
+	} else {
+		xa_erase(swap_zswap_tree(swp), swp_offset(swp));
+		zswap_entry_free(entry);
+	}
 
 	folio_unlock(folio);
 	return 0;

@@ -67,6 +67,7 @@
 
 #include "internal.h"
 #include "swap.h"
+#include "vswap.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/vmscan.h>
@@ -349,6 +350,9 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 		 * space in any swap device?
 		 */
 		if (get_nr_swap_pages() > 0)
+			return true;
+		/* vswap doesn't contribute to nr_swap_pages */
+		if (IS_ENABLED(CONFIG_VSWAP) && zswap_is_enabled())
 			return true;
 	} else {
 		/* Is the memcg below its swap limit? */
@@ -1524,9 +1528,13 @@ activate_locked_split:
 			nr_pages = 1;
 		}
 activate_locked:
-		/* Not a candidate for swapping, so reclaim swap space. */
+		/*
+		 * Not a candidate for swapping, so reclaim physical swap
+		 * space if we are running out.
+		 */
 		if (folio_test_swapcache(folio) &&
-		    (mem_cgroup_swap_full(folio) || folio_test_mlocked(folio)))
+		    ((mem_cgroup_swap_full(folio) && !is_vswap_entry(folio->swap)) ||
+		     folio_test_mlocked(folio)))
 			folio_free_swap(folio);
 		VM_BUG_ON_FOLIO(folio_test_active(folio), folio);
 		if (!folio_test_mlocked(folio)) {
@@ -2614,7 +2622,7 @@ static bool can_age_anon_pages(struct lruvec *lruvec,
 			       struct scan_control *sc)
 {
 	/* Aging the anon LRU is valuable if swap is present: */
-	if (total_swap_pages > 0)
+	if (total_swap_pages > 0 || (IS_ENABLED(CONFIG_VSWAP) && zswap_is_enabled()))
 		return true;
 
 	/* Also valuable if anon pages can be demoted: */

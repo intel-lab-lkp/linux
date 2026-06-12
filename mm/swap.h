@@ -69,7 +69,9 @@ struct swap_cluster_info_dynamic {
 	struct swap_cluster_info ci;	/* Underlying cluster info */
 	unsigned int index;		/* for cluster_index() */
 	struct rcu_head rcu;		/* For kfree_rcu deferred free */
-	/* Backend pointers (virtual_table) added in a later patch. */
+#ifdef CONFIG_VSWAP
+	atomic_long_t *virtual_table;	/* Backing pointers for vswap slots */
+#endif
 };
 
 /* All on-list cluster must have a non-zero flag. */

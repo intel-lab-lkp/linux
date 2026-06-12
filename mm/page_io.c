@@ -27,6 +27,7 @@
 #include <linux/zswap.h>
 #include "swap.h"
 #include "swap_table.h"
+#include "vswap.h"
 
 static void __end_swap_bio_write(struct bio *bio)
 {
@@ -207,14 +208,19 @@ static void swap_zeromap_folio_set(struct folio *folio)
 	struct obj_cgroup *objcg = get_obj_cgroup_from_folio(folio);
 	int nr_pages = folio_nr_pages(folio);
 	struct swap_cluster_info *ci;
+	unsigned int voff, i;
 	swp_entry_t entry;
-	unsigned int i;
 
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_swapcache(folio), folio);
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_locked(folio), folio);
 
 	ci = swap_cluster_get_and_lock(folio);
-	for (i = 0; i < folio_nr_pages(folio); i++) {
+	if (is_vswap_entry(folio->swap)) {
+		/* Free any prior backing (e.g. ZSWAP entry from earlier swapout) */
+		voff = swp_cluster_offset(folio->swap);
+		__vswap_release_backing(ci, voff, nr_pages);
+	}
+	for (i = 0; i < nr_pages; i++) {
 		entry = page_swap_entry(folio_page(folio, i));
 		__swap_table_set_zero(ci, swp_cluster_offset(entry));
 	}
@@ -282,6 +288,9 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
 	 */
 	swap_zeromap_folio_clear(folio);
 
+	if (is_vswap_entry(folio->swap))
+		folio_release_vswap_backing(folio);
+
 	if (zswap_store(folio)) {
 		count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPOUT);
 		goto out_unlock;
@@ -294,6 +303,11 @@ int swap_writeout(struct folio *folio, struct swap_iocb **swap_plug)
 		return AOP_WRITEPAGE_ACTIVATE;
 	}
 	rcu_read_unlock();
+
+	if (is_vswap_entry(folio->swap)) {
+		folio_mark_dirty(folio);
+		return AOP_WRITEPAGE_ACTIVATE;
+	}
 
 	return __swap_writepage(folio, swap_plug);
 out_unlock:
@@ -537,23 +551,26 @@ static void sio_read_complete(struct kiocb *iocb, long ret)
 static int swap_zeromap_batch(swp_entry_t entry, int max_nr,
 			      bool *is_zerop)
 {
-	int i;
-	bool is_zero;
-	unsigned int ci_start = swp_cluster_offset(entry);
 	struct swap_cluster_info *ci = __swap_entry_to_cluster(entry);
+	unsigned int ci_start = swp_cluster_offset(entry), ci_off, ci_end;
+	bool is_zero;
 
 	VM_WARN_ON_ONCE(ci_start + max_nr > SWAPFILE_CLUSTER);
 
+	ci_off = ci_start;
+	ci_end = ci_off + max_nr;
+
 	rcu_read_lock();
-	is_zero = __swap_table_test_zero(ci, ci_start);
-	for (i = 1; i < max_nr; i++)
-		if (is_zero != __swap_table_test_zero(ci, ci_start + i))
-			break;
-	rcu_read_unlock();
+	is_zero = __swap_table_test_zero(ci, ci_off);
 	if (is_zerop)
 		*is_zerop = is_zero;
+	while (++ci_off < ci_end) {
+		if (is_zero != __swap_table_test_zero(ci, ci_off))
+			break;
+	}
+	rcu_read_unlock();
 
-	return i;
+	return ci_off - ci_start;
 }
 
 static bool swap_read_folio_zeromap(struct folio *folio)
