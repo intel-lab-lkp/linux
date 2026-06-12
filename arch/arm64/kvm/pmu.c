@@ -553,6 +553,13 @@ u8 kvm_arm_pmu_get_max_counters(struct kvm *kvm)
 		return 1;
 
 	/*
+	 * If partitioned then we are limited by the max counters in
+	 * the guest partition.
+	 */
+	if (pmu_is_partitioned(arm_pmu))
+		return arm_pmu->max_guest_counters;
+
+	/*
 	 * The arm_pmu->cntr_mask considers the fixed counter(s) as well.
 	 * Ignore those and return only the general-purpose counters.
 	 */
