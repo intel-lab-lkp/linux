@@ -3796,6 +3796,23 @@ static unsigned int folio_cache_ref_count(const struct folio *folio)
 	return folio_nr_pages(folio);
 }
 
+static void clear_dropped_split_folio_lru_flags(struct folio *folio)
+{
+	/*
+	 * __split_folio_to_order() clones these LRU state bits from the
+	 * original folio.  A folio that is dropped instead of being added to
+	 * the LRU will not pass through lruvec_del_folio() and
+	 * __folio_clear_lru_flags(), so clear the cloned state before it is
+	 * freed back to the page allocator.
+	 */
+	set_mask_bits(&folio->flags.f,
+		      (1UL << PG_referenced) | (1UL << PG_active) |
+			      (1UL << PG_workingset) |
+			      (1UL << PG_unevictable) | __PG_MLOCKED |
+			      LRU_GEN_MASK | LRU_REFS_MASK,
+		      0);
+}
+
 static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int new_order,
 					     struct page *split_at, struct xa_state *xas,
 					     struct address_space *mapping, bool do_lru,
@@ -3884,6 +3901,7 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 		for (new_folio = folio_next(folio); new_folio != end_folio;
 		     new_folio = next) {
 			unsigned long nr_pages = folio_nr_pages(new_folio);
+			bool drop = mapping && new_folio->index >= end;
 
 			next = folio_next(new_folio);
 
@@ -3892,7 +3910,9 @@ static int __folio_freeze_and_split_unmapped(struct folio *folio, unsigned int n
 			folio_ref_unfreeze(new_folio,
 					   folio_cache_ref_count(new_folio) + 1);
 
-			if (do_lru)
+			if (drop)
+				clear_dropped_split_folio_lru_flags(new_folio);
+			else if (do_lru)
 				lru_add_split_folio(folio, new_folio, lruvec, list);
 
 			/*
