@@ -3903,7 +3903,6 @@ static void psr_capability_changed_check(struct intel_dp *intel_dp)
 static void _panel_replay_short_pulse(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
-	struct intel_psr *psr = &intel_dp->psr;
 	int ret;
 	u8 error_status;
 	const u8 errors = DP_PANEL_REPLAY_LINK_CRC_ERROR |
@@ -3914,11 +3913,6 @@ static void _panel_replay_short_pulse(struct intel_dp *intel_dp)
 				    &error_status);
 	if (ret < 0)
 		return;
-
-	if (error_status & errors) {
-		intel_psr_disable_locked(intel_dp);
-		psr->sink_not_reliable = true;
-	}
 
 	if (error_status & DP_PANEL_REPLAY_RFB_STORAGE_ERROR)
 		drm_dbg_kms(display->drm,
@@ -3938,6 +3932,11 @@ static void _panel_replay_short_pulse(struct intel_dp *intel_dp)
 	/* clear status register */
 	drm_dp_dpcd_write_byte(&intel_dp->aux, DP_PANEL_REPLAY_ERROR_STATUS,
 			       error_status);
+
+	if (error_status & errors) {
+		intel_psr_exit(intel_dp);
+		queue_work(display->wq.unordered, &intel_dp->psr.work);
+	}
 }
 
 static void _psr_short_pulse(struct intel_dp *intel_dp)
