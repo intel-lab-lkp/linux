@@ -457,6 +457,7 @@ static int pdc_intc_probe(struct platform_device *pdev)
 
 	return 0;
 err_generic:
+	irq_domain_remove_generic_chips(priv->domain);
 	irq_domain_remove(priv->domain);
 	return ret;
 }
@@ -464,7 +465,14 @@ err_generic:
 static void pdc_intc_remove(struct platform_device *pdev)
 {
 	struct pdc_intc_priv *priv = platform_get_drvdata(pdev);
+	unsigned int i;
 
+	for (i = 0; i < priv->nr_perips; ++i)
+		irq_set_chained_handler_and_data(priv->perip_irqs[i], NULL, NULL);
+
+	irq_set_chained_handler_and_data(priv->syswake_irq, NULL, NULL);
+
+	irq_domain_remove_generic_chips(priv->domain);
 	irq_domain_remove(priv->domain);
 }
 
