@@ -3261,6 +3261,23 @@ static size_t trace__fprintf_tp_fields(struct trace *trace, struct perf_sample *
 		if (val == 0 && !trace->show_zeros && !arg->show_zero && arg->strtoul != STUL_BTF_TYPE)
 			continue;
 
+		/*
+		 * __probe_ip is implicitly added to bare dynamic probes.
+		 * Suppress it by default to avoid cluttering the output.
+		 * If verbose mode is enabled, ensure it is formatted as a
+		 * hexadecimal memory address rather than a signed integer.
+		 */
+		if (!strcmp(field->name, "__probe_ip")) {
+			if (!verbose)
+				continue;
+
+			printed += scnprintf(bf + printed, size - printed,
+					     "%s%s: %#016llx", printed ?
+					     ", " : "", field->name,
+					     (unsigned long long)val);
+			continue;
+		}
+
 		printed += scnprintf(bf + printed, size - printed, "%s", printed ? ", " : "");
 
 		if (trace->show_arg_names)
