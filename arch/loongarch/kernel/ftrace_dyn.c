@@ -8,6 +8,7 @@
 #include <linux/ftrace.h>
 #include <linux/kprobes.h>
 #include <linux/uaccess.h>
+#include <linux/memory.h>
 
 #include <asm/inst.h>
 #include <asm/module.h>
@@ -24,8 +25,12 @@ static int ftrace_modify_code(unsigned long pc, u32 old, u32 new, bool validate)
 			return -EINVAL;
 	}
 
-	if (larch_insn_patch_text((void *)pc, new))
+	mutex_lock(&text_mutex);
+	if (larch_insn_patch_text((void *)pc, new)) {
+		mutex_unlock(&text_mutex);
 		return -EPERM;
+	}
+	mutex_unlock(&text_mutex);
 
 	return 0;
 }

@@ -6,11 +6,10 @@
 #include <linux/uaccess.h>
 #include <linux/set_memory.h>
 #include <linux/stop_machine.h>
+#include <linux/memory.h>
 
 #include <asm/cacheflush.h>
 #include <asm/inst.h>
-
-static DEFINE_RAW_SPINLOCK(patch_lock);
 
 void simu_pc(struct pt_regs *regs, union loongarch_instruction insn)
 {
@@ -207,14 +206,32 @@ int larch_insn_read(void *addr, u32 *insnp)
 int larch_insn_write(void *addr, u32 insn)
 {
 	int ret;
+	int err = 0;
+	size_t start;
 	unsigned long flags = 0;
 
 	if ((unsigned long)addr & 3)
 		return -EINVAL;
 
-	raw_spin_lock_irqsave(&patch_lock, flags);
+	start = round_down((size_t)addr, PAGE_SIZE);
+
+	lockdep_assert_held(&text_mutex);
+
+	err = set_memory_rw(start, 1);
+	if (err) {
+		pr_info("%s: set_memory_rw() failed\n", __func__);
+		return err;
+	}
+
+	local_irq_save(flags);
 	ret = copy_to_kernel_nofault(addr, &insn, LOONGARCH_INSN_SIZE);
-	raw_spin_unlock_irqrestore(&patch_lock, flags);
+	local_irq_restore(flags);
+
+	err = set_memory_rox(start, 1);
+	if (err) {
+		pr_info("%s: set_memory_rox() failed\n", __func__);
+		return err;
+	}
 
 	return ret;
 }
