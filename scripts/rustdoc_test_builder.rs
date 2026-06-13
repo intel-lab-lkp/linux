@@ -47,11 +47,18 @@ fn main() {
         })
         .expect("No test function found in `rustdoc`'s output.");
 
+    // Figure out a smaller test name based on the generated function name.
+    let name = rustdoc_function_name.split_once("_rust_kernel_").unwrap().1;
+
+    // The rustdoc function name can include the absolute path when building with `O=` which is
+    // undesireable and create overlong symbol names. Remap it to relative path.
+    let trimmed_function_name = format!("_doctest_main_rust_kernel_{name}");
+
     // Qualify `Result` to avoid the collision with our own `Result` coming from the prelude.
     let body = body.replace(
         &format!("{rustdoc_function_name}() -> Result<(), impl core::fmt::Debug> {{"),
         &format!(
-            "{rustdoc_function_name}() -> ::core::result::Result<(), impl ::core::fmt::Debug> {{"
+            "{trimmed_function_name}() -> ::core::result::Result<(), impl ::core::fmt::Debug> {{"
         ),
     );
 
@@ -62,11 +69,8 @@ fn main() {
     // We save the result in a variable so that the failed assertion message looks nicer.
     let body = body.replace(
         &format!("}} {rustdoc_function_name}().unwrap() }}"),
-        &format!("}} let test_return_value = {rustdoc_function_name}(); assert!(test_return_value.is_ok()); }}"),
+        &format!("}} let test_return_value = {trimmed_function_name}(); assert!(test_return_value.is_ok()); }}"),
     );
-
-    // Figure out a smaller test name based on the generated function name.
-    let name = rustdoc_function_name.split_once("_rust_kernel_").unwrap().1;
 
     let path = format!("rust/test/doctests/kernel/{name}");
 
