@@ -1767,17 +1767,32 @@ occupied_mt_find_hole_window_locked(unsigned long min, unsigned long max,
 {
 	MA_STATE(mas, &occupied_vmap_area_mt, 0, 0);
 	unsigned long search = min;
+	unsigned long search_len = size;
 	unsigned long hole_end;
 	bool retry_empty;
 
 	lockdep_assert_held(&free_vmap_area_lock);
 	retry_empty = list_empty(&vmap_retry_list);
 
+	/*
+	 * Pad the gap-find by align-1 when align exceeds PAGE_SIZE so that
+	 * any alignment slack inside the returned gap can be absorbed
+	 * without an extra outer-loop iteration. Without this padding, the
+	 * loop has to scan past every page-aligned gap that is large enough
+	 * for @size but too small for the aligned start, which is O(K) in
+	 * the number of such gaps and pathological for big alignments on a
+	 * fragmented occupied tree.
+	 */
+	if (align > PAGE_SIZE) {
+		if (check_add_overflow(size, align - 1, &search_len))
+			return false;
+	}
+
 	while (search <= max) {
 		unsigned long candidate, candidate_end;
 
 		mas_set(&mas, search);
-		if (mas_empty_area(&mas, search, max, size))
+		if (mas_empty_area(&mas, search, max, search_len))
 			return false;
 
 		hole_end = min(mas.last, max);
@@ -2182,39 +2197,35 @@ rollback_busy_insert_failed_alloc_locked(struct vmap_area *va)
 }
 
 /*
- * Reinsert @va into the free index after occupied erase. On failure, place the
- * range on the non-index retry queue and best-effort restore occupied tracking.
+ * Release @va after the caller has erased it from occupied_vmap_area_mt.
+ * In the occupied-only design there is no free index to track free space
+ * with vmap_area objects: the range becomes implicitly free as soon as
+ * the occupied marker is gone. The struct itself is recycled to the slab.
  *
- * Return: free-tracked @va on success, NULL when queued for retry.
+ * The signature returns @va on success (matching the pre-rewrite contract
+ * used by the synchronous free_vmap_area() path) so the caller can decide
+ * whether further bookkeeping is needed.
  */
-static __always_inline struct vmap_area *
-reinsert_or_queue_vmap_area_locked(struct vmap_area *va)
+static __always_inline void
+release_drained_vmap_area_locked(struct vmap_area *va)
 {
-	struct vmap_area *tracked;
-
 	lockdep_assert_held(&free_vmap_area_lock);
 
-	tracked = merge_or_add_vmap_area_free_locked(va);
-	if (tracked)
-		return tracked;
-
-	if (insert_vmap_area_free_locked(va))
-		return va;
-
-	/*
-	 * Retry queue acts as allocation exclusion even if occupied restore
-	 * fails under pressure.
-	 */
-	if (WARN_ON_ONCE(!occupied_mt_store_va_locked(va)))
-		INIT_LIST_HEAD(&va->list);
-
-	retry_queue_add_va_locked(va);
-	return NULL;
+	kmem_cache_free(vmap_area_cachep, va);
 }
 
 /*
  * Returns a start address of the newly allocated area, if success.
  * Otherwise an error value is returned that indicates failure.
+ *
+ * Steady state (post late_initcall, occupied_mt perf_mode on) takes
+ * the occupied-only fast path: find a gap with mas_empty_area on
+ * @occupied_vmap_area_mt and store the consumed sub-range. This costs
+ * two maple touches per allocation versus four to six in the legacy
+ * path (which clipped a free vmap_area struct in @free_vmap_area_mt).
+ *
+ * Pre-perf_mode (early boot) and -ENOENT/-ERANGE retries fall back to
+ * the legacy free_mt walk + va_clip path, which remains correct.
  */
 static __always_inline unsigned long
 __alloc_vmap_area(unsigned long size, unsigned long align,
@@ -2235,33 +2246,41 @@ __alloc_vmap_area(unsigned long size, unsigned long align,
 		return -EINVAL;
 	if (size > vend - vstart)
 		return -ENOENT;
+
+	/*
+	 * Occupied-only fast path: skip both the free_mt validation
+	 * (free_mt_find_enclose_range_locked) and the va_clip splitting.
+	 * occupied_mt_find_hole_window_locked already pads the gap search by
+	 * align-1 internally for align > PAGE_SIZE, so any alignment lands
+	 * inside the returned gap; storing the consumed sub-range in
+	 * occupied_mt makes the allocator visible to subsequent lookups. The
+	 * legacy free_mt stays in sync only at coarse points (init, pre-
+	 * perf_mode), which is harmless because the alloc and free hot paths
+	 * no longer query it.
+	 */
+	if (occupied_mt_supported()) {
+		if (!occupied_mt_find_hole_window_locked(vstart, vend - 1, size,
+							 align, &nva_start_addr))
+			return -ENOENT;
+
+		if (check_add_overflow(nva_start_addr, size, &nva_end_addr))
+			return -ERANGE;
+
+		if (!occupied_mt_store_range_locked(nva_start_addr, nva_end_addr))
+			return -ENOMEM;
+
+		return nva_start_addr;
+	}
+
+	/*
+	 * Pre-perf_mode early boot fallback: walk free_mt linearly and use
+	 * va_clip to keep both indices coherent.
+	 */
 	if (align > PAGE_SIZE && (vend - vstart) != size) {
 		if (check_add_overflow(size, align - 1, &search_len))
 			return -ERANGE;
 	}
 
-	if (occupied_mt_supported() && align <= PAGE_SIZE) {
-		unsigned long candidate;
-
-		if (occupied_mt_find_hole_window_locked(vstart, vend - 1, size,
-							align, &candidate)) {
-			if (check_add_overflow(candidate, size, &nva_end_addr))
-				return -ERANGE;
-
-			va = free_mt_find_enclose_range_locked(candidate, nva_end_addr);
-			if (likely(va)) {
-				nva_start_addr = candidate;
-				goto found;
-			}
-
-			occupied_mt_cache_gap_miss_locked(candidate, vend);
-		}
-	}
-
-	/*
-	 * Free maple index is authoritative for allocatable ranges; lazy and
-	 * retry entries are intentionally excluded from it.
-	 */
 	mas_set(&mas, vstart);
 	va = mas_find(&mas, vend - 1);
 	while (va) {
@@ -2295,7 +2314,6 @@ next:
 	if (!va)
 		return -ENOENT;
 
-found:
 	ret = va_clip(va, nva_start_addr, size);
 	if (WARN_ON_ONCE(ret))
 		return ret;
@@ -2340,8 +2358,7 @@ static void free_vmap_area(struct vmap_area *va)
 		spin_unlock(&free_vmap_area_lock);
 		goto out_schedule_retry;
 	}
-	if (!reinsert_or_queue_vmap_area_locked(va))
-		queued_retry = true;
+	release_drained_vmap_area_locked(va);
 	spin_unlock(&free_vmap_area_lock);
 
 out_schedule_retry:
@@ -2692,15 +2709,13 @@ reclaim_list_global(struct list_head *head, bool erase_occupied,
 {
 	struct vmap_area *va, *n;
 	bool ok = true;
-	bool queue_retry_work = false;
+	LIST_HEAD(release);
 
 	if (list_empty(head))
 		return true;
 
 	spin_lock(&free_vmap_area_lock);
 	list_for_each_entry_safe(va, n, head, list) {
-		bool occupied_erased = false;
-
 		list_del_init(&va->list);
 		if (erase_occupied) {
 			if (WARN_ON_ONCE(!occupied_mt_erase_va_locked(va))) {
@@ -2708,24 +2723,21 @@ reclaim_list_global(struct list_head *head, bool erase_occupied,
 				ok = false;
 				continue;
 			}
-
-			occupied_erased = true;
 		}
-			if (WARN_ON_ONCE(!merge_or_add_vmap_area_free_locked(va))) {
-				if (occupied_erased &&
-				    WARN_ON_ONCE(!occupied_mt_store_va_locked(va))) {
-					retry_queue_add_va_locked(va);
-					queue_retry_work = true;
-					ok = false;
-					continue;
-				}
-				list_add_tail(&va->list, failed);
-				ok = false;
-		}
+		/*
+		 * Occupied-only design: there are no free vmap_area objects
+		 * any more. With the occupied marker erased, the range is
+		 * implicitly free (a gap in occupied_vmap_area_mt). Just
+		 * release the struct outside the lock.
+		 */
+		list_add_tail(&va->list, &release);
 	}
 	spin_unlock(&free_vmap_area_lock);
-	if (queue_retry_work)
-		schedule_work(&drain_vmap_work);
+
+	list_for_each_entry_safe(va, n, &release, list) {
+		list_del_init(&va->list);
+		kmem_cache_free(vmap_area_cachep, va);
+	}
 
 	return ok;
 }
@@ -5747,14 +5759,16 @@ recovery:
 		orig_start = vas[area]->va_start;
 		orig_end = vas[area]->va_end;
 		if (occupied_mt_erase_va_locked(vas[area])) {
-			va = reinsert_or_queue_vmap_area_locked(vas[area]);
-			if (va)
-				kasan_release_vmalloc(orig_start, orig_end,
-						      va->va_start, va->va_end,
-						      KASAN_VMALLOC_PAGE_RANGE |
-						      KASAN_VMALLOC_TLB_FLUSH);
-			else
-				queued_retry = true;
+			/*
+			 * Reinsert releases vas[area] in the occupied-only
+			 * design; use orig_start/orig_end captured above for
+			 * the kasan release call rather than va->va_start.
+			 */
+			release_drained_vmap_area_locked(vas[area]);
+			kasan_release_vmalloc(orig_start, orig_end,
+					      orig_start, orig_end,
+					      KASAN_VMALLOC_PAGE_RANGE |
+					      KASAN_VMALLOC_TLB_FLUSH);
 		} else {
 			retry_queue_add_va_locked(vas[area]);
 			queued_retry = true;
@@ -5820,14 +5834,11 @@ err_free_shadow:
 		orig_start = vas[area]->va_start;
 		orig_end = vas[area]->va_end;
 		if (occupied_mt_erase_va_locked(vas[area])) {
-			va = reinsert_or_queue_vmap_area_locked(vas[area]);
-			if (va)
-				kasan_release_vmalloc(orig_start, orig_end,
-						      va->va_start, va->va_end,
-						      KASAN_VMALLOC_PAGE_RANGE |
-						      KASAN_VMALLOC_TLB_FLUSH);
-			else
-				queued_retry = true;
+			release_drained_vmap_area_locked(vas[area]);
+			kasan_release_vmalloc(orig_start, orig_end,
+					      orig_start, orig_end,
+					      KASAN_VMALLOC_PAGE_RANGE |
+					      KASAN_VMALLOC_TLB_FLUSH);
 		} else {
 			retry_queue_add_va_locked(vas[area]);
 			queued_retry = true;
@@ -6045,6 +6056,14 @@ module_init(proc_vmalloc_init);
 
 #endif
 
+/*
+ * Pre-occupied-only design seeded the free index with placeholder VAs
+ * covering gaps between vmlist entries. This is preserved as the
+ * boot-time path that populates the legacy free_vmap_area_mt for any
+ * code that still queries it (notably pcpu_get_vm_areas). With
+ * occupied_vmap_area_mt authoritative, allocators on the hot path
+ * skip free_mt entirely.
+ */
 static void __init vmap_init_free_space(void)
 {
 	unsigned long vmap_start = 1;
