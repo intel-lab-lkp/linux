@@ -116,7 +116,7 @@ static inline struct dvb_frontend *mxl5005s_attach(struct dvb_frontend *fe,
 	printk(KERN_WARNING "%s: driver disabled by Kconfig\n", __func__);
 	return NULL;
 }
-#endif /* CONFIG_DVB_TUNER_MXL5005S */
+#endif /* IS_REACHABLE(CONFIG_MEDIA_TUNER_MXL5005S) */
 
 #endif /* __MXL5005S_H */
 
