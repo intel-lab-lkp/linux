@@ -1496,7 +1496,7 @@ static int ov772x_probe(struct i2c_client *client)
 
 	ret = ov772x_parse_dt(client, priv);
 	if (ret)
-		goto error_clk_put;
+		goto error_gpio_put;
 
 	ret = ov772x_video_probe(priv);
 	if (ret < 0)
