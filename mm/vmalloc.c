@@ -2468,95 +2468,278 @@ static inline void setup_vmalloc_vm(struct vm_struct *vm,
 }
 
 /*
- * Per-CPU bump-allocator overlay.
+ * Per-CPU bump-allocator overlay (Option B + Option G).
  *
  * Each CPU reserves a contiguous chunk of vmalloc address space and
  * dispenses page-aligned allocations via a bump pointer. The chunk's
- * range is reserved through the global allocator once; individual
- * allocations within the chunk avoid the global maple-tree work
- * entirely. Each allocation still gets its own vmap_area struct and
- * is inserted into the per-node busy.mt, so find_vmap_area() and
- * vfree() continue to work unchanged.
+ * range is reserved through the global allocator once; per-allocation
+ * the bump path skips global maple-tree work entirely AND skips the
+ * per-node busy.mt insert: each chunk carries a page_va[] array that
+ * maps page-offsets within the chunk to the owning vmap_area struct,
+ * so find_vmap_area(addr) for a chunk-resident addr is one chunk
+ * lookup + array index — no maple_tree descent at all.
  *
- * Recycling: chunks leak in this minimal form. With 16 MB chunks on a
- * 128 GB vmalloc range, the address space supports thousands of chunks
- * before exhaustion. A future iteration can add chunk recycling via a
- * va->bump_chunk back-pointer + refcount; deferred to keep this hot
- * path's struct vmap_area footprint at 48 B.
+ * Constraints: only the standard vmalloc range (VMALLOC_START..
+ * VMALLOC_END) with align and size both <= VMAP_BUMP_CHUNK_SIZE/2
+ * take the bump path. Anything else falls through to the existing
+ * __alloc_vmap_area path which keeps the busy.mt insert.
  *
- * Constraints: only the standard vmalloc range with align <= PAGE_SIZE
- * and size <= VMAP_BUMP_CHUNK_SIZE/2 takes the bump path. Anything
- * else falls through to the existing __alloc_vmap_area path.
+ * Chunks recycle on bump exhaustion: the active chunk is retired
+ * to a global list when it can no longer fit the request; freed VAs
+ * release their page_va entries; when a chunk's alloc count drops to
+ * zero it is returned to the global allocator and freed.
  */
 #define VMAP_BUMP_CHUNK_SIZE	(64UL * 1024 * 1024)
+#define VMAP_BUMP_CHUNK_PAGES	(VMAP_BUMP_CHUNK_SIZE >> PAGE_SHIFT)
+
+/*
+ * VA flag bit 0x4 marks vmap_areas allocated by the bump allocator. These
+ * VAs are never inserted into occupied_vmap_area_mt — the chunk's whole
+ * range was inserted at refill time. reclaim_list_global() consults this
+ * bit to skip occupied_mt_erase_va_locked() on the vfree path, which would
+ * otherwise WARN every time a bump-allocated VA is reclaimed. Bit 0x4 sits
+ * outside VMAP_FLAGS_MASK (0x3 = VMAP_RAM | VMAP_BLOCK) and below the
+ * encode_vn_id() shift (BITS_PER_BYTE), so it does not alias either field.
+ */
+#define VA_FROM_BUMP_CHUNK	0x4
 
 struct vmap_bump_chunk {
-	unsigned long	base;
-	unsigned long	limit;
-	unsigned long	bump;
+	unsigned long		base;
+	unsigned long		limit;
+	unsigned long		bump;
+	atomic_t		alloced;	/* # outstanding pages */
+	struct list_head	link;		/* on vmap_bump_chunks */
+	struct rcu_head		rcu;		/* deferred free */
+	struct vmap_area	*page_va[VMAP_BUMP_CHUNK_PAGES];
 };
 
-static DEFINE_PER_CPU(struct vmap_bump_chunk, vmap_bump);
-static DEFINE_PER_CPU(spinlock_t, vmap_bump_lock);
+static DEFINE_PER_CPU(struct vmap_bump_chunk *, vmap_bump_cur);
+static LIST_HEAD(vmap_bump_chunks);
+static DEFINE_SPINLOCK(vmap_bump_chunks_lock);
 
-/* Try the per-CPU bump-allocator. Returns the chosen address or
- * a negative IS_ERR_VALUE on miss; callers fall through to the
- * regular path on miss.
+/*
+ * Coarse [lo, hi) bounds covering every active vmap_bump_chunk's
+ * range. vmap_chunk_lookup() rejects out-of-range addresses (e.g.
+ * pcpu allocations sitting in the upper half of the vmalloc range)
+ * without taking vmap_bump_chunks_lock. Updated whenever a chunk is
+ * installed or released.
  */
-static unsigned long
+static unsigned long vmap_chunks_lo = ULONG_MAX;
+static unsigned long vmap_chunks_hi;
+
+static __always_inline unsigned long
+vmap_chunk_page_idx(struct vmap_bump_chunk *chunk, unsigned long addr)
+{
+	return (addr - chunk->base) >> PAGE_SHIFT;
+}
+
+/*
+ * Find the chunk containing @addr. Returns NULL if @addr was not
+ * allocated from any chunk. The walk is O(num_chunks); for our
+ * benchmark workloads num_chunks is bounded in the tens, so this is
+ * still under one cache-line of comparisons in practice.
+ */
+static struct vmap_bump_chunk *
+vmap_chunk_lookup(unsigned long addr)
+{
+	struct vmap_bump_chunk *chunk, *cur;
+
+	/*
+	 * Fast reject: addr lies entirely outside any chunk's [base, limit).
+	 * READ_ONCE pairs with the WRITE_ONCE updates in vmap_bump_refill /
+	 * vmap_bump_unlink. The bound is monotonic (lo only goes down, hi
+	 * only goes up while chunks live), so a stale read can only force
+	 * us into the slow path — never miss a real hit.
+	 */
+	if (addr < READ_ONCE(vmap_chunks_lo) ||
+	    addr >= READ_ONCE(vmap_chunks_hi))
+		return NULL;
+
+	cur = this_cpu_read(vmap_bump_cur);
+	if (cur && addr >= cur->base && addr < cur->limit)
+		return cur;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(chunk, &vmap_bump_chunks, link) {
+		if (addr >= chunk->base && addr < chunk->limit) {
+			rcu_read_unlock();
+			return chunk;
+		}
+	}
+	rcu_read_unlock();
+	return NULL;
+}
+
+/*
+ * Reserve and bump-allocate via the per-CPU chunk. Returns the
+ * vmap_area pre-populated (va_start, va_end, page_va[] linkage),
+ * or NULL on miss/refill-needed.
+ */
+static struct vmap_area *
 vmap_bump_alloc(unsigned long size, unsigned long align,
-		unsigned long vstart, unsigned long vend)
+		unsigned long vstart, unsigned long vend, gfp_t gfp_mask,
+		int node, unsigned long va_flags)
 {
 	struct vmap_bump_chunk *chunk;
-	spinlock_t *lock;
-	unsigned long aligned, addr = -ENOENT;
+	struct vmap_area *va;
+	unsigned long aligned, idx, n_pages, i;
 
 	if (vstart != VMALLOC_START || vend != VMALLOC_END ||
 	    size == 0 || size > VMAP_BUMP_CHUNK_SIZE / 2 ||
 	    align > VMAP_BUMP_CHUNK_SIZE / 2)
-		return -EINVAL;
+		return NULL;
 
-	lock = this_cpu_ptr(&vmap_bump_lock);
-	spin_lock(lock);
-	chunk = this_cpu_ptr(&vmap_bump);
-	if (chunk->base) {
-		aligned = ALIGN(chunk->bump, align);
-		if (aligned + size <= chunk->limit) {
-			chunk->bump = aligned + size;
-			addr = aligned;
-		}
+	va = kmem_cache_alloc_node(vmap_area_cachep, gfp_mask, node);
+	if (unlikely(!va))
+		return NULL;
+
+	/*
+	 * preempt_disable() is sufficient for the per-CPU chunk hot path:
+	 * the chunk pointer is per-CPU and only mutated by the CPU that
+	 * owns it (in vmap_bump_refill). preempt-disable pins us to the
+	 * current CPU and serializes against an in-flight refill on the
+	 * same CPU.
+	 */
+	preempt_disable();
+	chunk = this_cpu_read(vmap_bump_cur);
+	if (!chunk) {
+		preempt_enable();
+		kmem_cache_free(vmap_area_cachep, va);
+		return NULL;
 	}
-	spin_unlock(lock);
-	return addr;
+	aligned = ALIGN(chunk->bump, align);
+	if (aligned + size > chunk->limit) {
+		preempt_enable();
+		kmem_cache_free(vmap_area_cachep, va);
+		return NULL;
+	}
+	chunk->bump = aligned + size;
+	idx = vmap_chunk_page_idx(chunk, aligned);
+	n_pages = size >> PAGE_SHIFT;
+	for (i = 0; i < n_pages; i++)
+		chunk->page_va[idx + i] = va;
+	atomic_add(n_pages, &chunk->alloced);
+	preempt_enable();
+
+	va->va_start = aligned;
+	va->va_end = aligned + size;
+	va->vm = NULL;
+	/*
+	 * Encode the destination vmap_node so the existing per-node pool
+	 * machinery and decode_vn_id() in free_vmap_area_noflush() see a
+	 * valid id. VA_FROM_BUMP_CHUNK marks this VA so reclaim_list_global
+	 * skips occupied_mt_erase_va_locked() — bump VAs were never tracked
+	 * in occupied_vmap_area_mt (the whole chunk range was). The bit
+	 * sits below BITS_PER_BYTE so it does not alias decode_vn_id()'s
+	 * shift, and outside VMAP_FLAGS_MASK so it does not alias VMAP_RAM
+	 * / VMAP_BLOCK.
+	 */
+	va->flags = va_flags | encode_vn_id(addr_to_node_id(aligned)) |
+		    VA_FROM_BUMP_CHUNK;
+	INIT_LIST_HEAD(&va->list);
+	return va;
 }
 
-/* Refill this CPU's bump chunk. Reserves a fresh range from the
- * global allocator. Old chunk's remaining space is leaked (the
- * already-allocated VAs in it stay live; the unused tail is wasted).
+/*
+ * Refill this CPU's bump chunk. Reserves a fresh range from the
+ * global allocator. The old chunk (if any) is moved to the global
+ * vmap_bump_chunks list; it stays alive until its outstanding
+ * allocations drain.
  */
 static int
 vmap_bump_refill(gfp_t gfp_mask)
 {
-	struct vmap_bump_chunk *chunk;
-	spinlock_t *lock;
+	struct vmap_bump_chunk *new_chunk;
 	unsigned long base;
+
+	new_chunk = kvzalloc(sizeof(*new_chunk), gfp_mask);
+	if (!new_chunk)
+		return -ENOMEM;
 
 	preload_this_cpu_lock(&free_vmap_area_lock, gfp_mask, NUMA_NO_NODE);
 	base = __alloc_vmap_area(VMAP_BUMP_CHUNK_SIZE, PAGE_SIZE,
 				 VMALLOC_START, VMALLOC_END);
 	spin_unlock(&free_vmap_area_lock);
 
-	if (IS_ERR_VALUE(base))
+	if (IS_ERR_VALUE(base)) {
+		kvfree(new_chunk);
 		return -ENOMEM;
+	}
 
-	lock = this_cpu_ptr(&vmap_bump_lock);
-	spin_lock(lock);
-	chunk = this_cpu_ptr(&vmap_bump);
-	chunk->base = base;
-	chunk->limit = base + VMAP_BUMP_CHUNK_SIZE;
-	chunk->bump = base;
-	spin_unlock(lock);
+	new_chunk->base = base;
+	new_chunk->limit = base + VMAP_BUMP_CHUNK_SIZE;
+	new_chunk->bump = base;
+	atomic_set(&new_chunk->alloced, 0);
+	INIT_LIST_HEAD(&new_chunk->link);
+
+	spin_lock(&vmap_bump_chunks_lock);
+	list_add_rcu(&new_chunk->link, &vmap_bump_chunks);
+	if (new_chunk->base < vmap_chunks_lo)
+		WRITE_ONCE(vmap_chunks_lo, new_chunk->base);
+	if (new_chunk->limit > vmap_chunks_hi)
+		WRITE_ONCE(vmap_chunks_hi, new_chunk->limit);
+	spin_unlock(&vmap_bump_chunks_lock);
+
+	preempt_disable();
+	this_cpu_write(vmap_bump_cur, new_chunk);
+	preempt_enable();
+
 	return 0;
+}
+
+/*
+ * Drop a chunk-allocated VA. Called from the vfree path when the va
+ * has VA_FROM_BUMP_CHUNK set. Clears the page_va[] linkage and
+ * releases the va struct. If the chunk's outstanding count hits zero
+ * AND the chunk is no longer the per-CPU current chunk, the chunk's
+ * range is returned to the global allocator and the chunk descriptor
+ * is freed.
+ */
+static struct vmap_area *
+vmap_bump_unlink(unsigned long addr)
+{
+	struct vmap_bump_chunk *chunk;
+	struct vmap_area *va;
+	unsigned long idx, n_pages;
+
+	chunk = vmap_chunk_lookup(addr);
+	if (!chunk)
+		return NULL;
+
+	idx = vmap_chunk_page_idx(chunk, addr);
+	if (idx >= VMAP_BUMP_CHUNK_PAGES)
+		return NULL;
+
+	va = chunk->page_va[idx];
+	if (!va || va->va_start != addr)
+		return NULL;
+
+	n_pages = (va->va_end - va->va_start) >> PAGE_SHIFT;
+	memset(&chunk->page_va[idx], 0, n_pages * sizeof(va));
+
+	/*
+	 * If this chunk fully drained AND it is no longer the per-CPU
+	 * current chunk, return its range to the global allocator and
+	 * free the descriptor. We do NOT reset the bump pointer for the
+	 * current chunk: addresses inside the chunk may still have stale
+	 * TLB entries until the next lazy-purge flush, so reusing them
+	 * before the flush is unsafe. Forward-only bump avoids that.
+	 */
+	if (atomic_sub_return(n_pages, &chunk->alloced) == 0 &&
+	    chunk != this_cpu_read(vmap_bump_cur)) {
+		spin_lock(&vmap_bump_chunks_lock);
+		list_del_rcu(&chunk->link);
+		spin_unlock(&vmap_bump_chunks_lock);
+
+		spin_lock(&free_vmap_area_lock);
+		if (occupied_mt_supported())
+			WARN_ON_ONCE(!occupied_mt_erase_range_locked(chunk->base,
+								     chunk->limit));
+		spin_unlock(&free_vmap_area_lock);
+		kvfree_rcu(chunk, rcu);
+	}
+
+	return va;
 }
 
 /*
@@ -2590,6 +2773,44 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 	might_sleep_if(allow_block);
 
 	/*
+	 * Per-CPU bump-chunk fast path (Option B + Option G).
+	 *
+	 * Returns a fully-populated va_start/va_end vmap_area struct; the
+	 * chunk's page_va[] array carries the addr->va linkage, so no
+	 * per-node busy.mt insert is needed. find_vmap_area() and
+	 * find_unlink_vmap_area() consult vmap_chunk_lookup() before
+	 * falling back to busy.mt.
+	 */
+	va = vmap_bump_alloc(size, align, vstart, vend, gfp_mask, node,
+			     va_flags);
+	if (!va && vmap_bump_refill(gfp_mask) == 0)
+		va = vmap_bump_alloc(size, align, vstart, vend, gfp_mask, node,
+				     va_flags);
+	if (va) {
+		if (vm) {
+			vm->addr = (void *)va->va_start;
+			vm->size = va_size(va);
+			va->vm = vm;
+		}
+		BUG_ON(!IS_ALIGNED(va->va_start, align));
+		BUG_ON(va->va_start < vstart);
+		BUG_ON(va->va_end > vend);
+
+		ret = kasan_populate_vmalloc(va->va_start, size, gfp_mask);
+		if (ret) {
+			vmap_bump_unlink(va->va_start);
+			kmem_cache_free(vmap_area_cachep, va);
+			if (vm) {
+				vm->addr = NULL;
+				vm->size = 0;
+				vm->requested_size = 0;
+			}
+			return ERR_PTR(ret);
+		}
+		return va;
+	}
+
+	/*
 	 * If a VA is obtained from a global heap(if it fails here)
 	 * it is anyway marked with this "vn_id" so it is returned
 	 * to this pool's node later. Such way gives a possibility
@@ -2611,19 +2832,6 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 	}
 
 retry:
-	if (IS_ERR_VALUE(addr)) {
-		/*
-		 * Per-CPU bump-allocator fast path. On hit, no global
-		 * tree work runs at all. On miss, refill the chunk and
-		 * try again before falling back to the regular path.
-		 */
-		addr = vmap_bump_alloc(size, align, vstart, vend);
-		if (IS_ERR_VALUE(addr) && (long)addr == -ENOENT) {
-			if (vmap_bump_refill(gfp_mask) == 0)
-				addr = vmap_bump_alloc(size, align,
-						       vstart, vend);
-		}
-	}
 	if (IS_ERR_VALUE(addr)) {
 		preload_this_cpu_lock(&free_vmap_area_lock, gfp_mask, node);
 		try_init_free_mt_locked();
@@ -2792,12 +3000,20 @@ reclaim_list_global(struct list_head *head, bool erase_occupied,
 	list_for_each_entry_safe(va, n, head, list) {
 		list_del_init(&va->list);
 		if (erase_occupied) {
+			/*
+			 * Bump-allocated VAs were never inserted into
+			 * occupied_vmap_area_mt — the chunk's whole range was.
+			 * Skip the per-VA erase to avoid a spurious WARN.
+			 */
+			if (va->flags & VA_FROM_BUMP_CHUNK)
+				goto queue_release;
 			if (WARN_ON_ONCE(!occupied_mt_erase_va_locked(va))) {
 				list_add_tail(&va->list, failed);
 				ok = false;
 				continue;
 			}
 		}
+queue_release:
 		/*
 		 * Occupied-only design: there are no free vmap_area objects
 		 * any more. With the occupied marker erased, the range is
@@ -3179,12 +3395,29 @@ static void free_unmap_vmap_area(struct vmap_area *va)
 
 struct vmap_area *find_vmap_area(unsigned long addr)
 {
+	struct vmap_bump_chunk *chunk;
 	struct vmap_node *vn;
 	struct vmap_area *va;
 	int i, j;
 
 	if (unlikely(!vmap_initialized))
 		return NULL;
+
+	/*
+	 * Bump-chunk fast path: if @addr lives in a per-CPU bump chunk,
+	 * the va is at chunk->page_va[(addr - chunk->base) / PAGE_SIZE].
+	 * No maple-tree descent.
+	 */
+	chunk = vmap_chunk_lookup(addr);
+	if (chunk) {
+		unsigned long idx = vmap_chunk_page_idx(chunk, addr);
+
+		if (idx < VMAP_BUMP_CHUNK_PAGES) {
+			va = chunk->page_va[idx];
+			if (va)
+				return va;
+		}
+	}
 
 	/*
 	 * An addr_to_node_id(addr) converts an address to a node index
@@ -3219,6 +3452,15 @@ static struct vmap_area *find_unlink_vmap_area(unsigned long addr)
 	struct vmap_node *vn;
 	struct vmap_area *va;
 	int i, j;
+
+	/*
+	 * Bump-chunk fast path: if @addr was allocated from a per-CPU
+	 * chunk, the page_va[] linkage is the only place it lives. No
+	 * busy.mt walk needed.
+	 */
+	va = vmap_bump_unlink(addr);
+	if (va)
+		return va;
 
 	/*
 	 * Check the comment in the find_vmap_area() about the loop.
@@ -6319,8 +6561,6 @@ void __init vmalloc_init(void)
 		init_llist_head(&p->list);
 		INIT_WORK(&p->wq, delayed_vfree_work);
 		xa_init(&vbq->vmap_blocks);
-
-		spin_lock_init(&per_cpu(vmap_bump_lock, i));
 	}
 
 	/*
