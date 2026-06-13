@@ -2697,6 +2697,18 @@ static int kvm_vcpu_ioctl_set_lapic(struct kvm_vcpu *vcpu,
 	return 0;
 }
 
+static bool kvm_is_interrupt_allowed(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * Note, .interrupt_allowed() returns -EBUSY if interrupts are allowed
+	 * based on CPU state, but can't be immediately delivered due to a
+	 * pending nested VM-Enter.  Treat that case as "allowed", because
+	 * the goal here is just to check if interrupts are architecturally
+	 * allowed, not to check if they can be injected.
+	 */
+	return kvm_x86_call(interrupt_allowed)(vcpu, false);
+}
+
 static int kvm_cpu_accept_dm_intr(struct kvm_vcpu *vcpu)
 {
 	/*
@@ -2722,7 +2734,7 @@ static int kvm_vcpu_ready_for_interrupt_injection(struct kvm_vcpu *vcpu)
 	 * or KVM_SET_SREGS.  For that to work, we must be at an
 	 * instruction boundary and with no events half-injected.
 	 */
-	return (kvm_arch_interrupt_allowed(vcpu) &&
+	return (kvm_is_interrupt_allowed(vcpu) &&
 		kvm_cpu_accept_dm_intr(vcpu) &&
 		!kvm_event_needs_reinjection(vcpu) &&
 		!kvm_is_exception_pending(vcpu));
@@ -8472,7 +8484,7 @@ bool kvm_vcpu_has_events(struct kvm_vcpu *vcpu)
 	if (kvm_test_request(KVM_REQ_UPDATE_PROTECTED_GUEST_STATE, vcpu))
 		return true;
 
-	if (kvm_arch_interrupt_allowed(vcpu) && kvm_cpu_has_interrupt(vcpu))
+	if (kvm_is_interrupt_allowed(vcpu) && kvm_cpu_has_interrupt(vcpu))
 		return true;
 
 	if (kvm_hv_has_stimer_pending(vcpu))
@@ -10308,11 +10320,6 @@ int kvm_arch_vcpu_should_kick(struct kvm_vcpu *vcpu)
 	return kvm_vcpu_exiting_guest_mode(vcpu) == IN_GUEST_MODE;
 }
 
-int kvm_arch_interrupt_allowed(struct kvm_vcpu *vcpu)
-{
-	return kvm_x86_call(interrupt_allowed)(vcpu, false);
-}
-
 static inline u32 kvm_async_pf_hash_fn(gfn_t gfn)
 {
 	BUILD_BUG_ON(!is_power_of_2(ASYNC_PF_PER_VCPU));
@@ -10448,7 +10455,7 @@ bool kvm_can_do_async_pf(struct kvm_vcpu *vcpu)
 	 * If interrupts are off we cannot even use an artificial
 	 * halt state.
 	 */
-	return kvm_arch_interrupt_allowed(vcpu);
+	return kvm_is_interrupt_allowed(vcpu);
 }
 
 bool kvm_arch_async_page_not_present(struct kvm_vcpu *vcpu,

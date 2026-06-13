@@ -2338,7 +2338,6 @@ enum {
 # define kvm_memslots_for_spte_role(kvm, role) __kvm_memslots(kvm, 0)
 #endif
 
-int kvm_arch_interrupt_allowed(struct kvm_vcpu *vcpu);
 void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event);
 
 u64 kvm_scale_tsc(u64 tsc, u64 ratio);
