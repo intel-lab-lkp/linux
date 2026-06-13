@@ -196,10 +196,12 @@ struct otto_emdio_priv {
 	struct mutex lock; /* protect HW access */
 	DECLARE_BITMAP(valid_ports, MAX_PORTS);
 	u16 page[MAX_PORTS];
+	u8 mmd_state[MAX_PORTS];
 	u8 smi_bus[MAX_PORTS];
 	u8 smi_addr[MAX_PORTS];
 	bool smi_bus_is_c45[MAX_SMI_BUSSES];
 	struct mii_bus *bus[MAX_SMI_BUSSES];
+	bool init_done;
 };
 
 struct otto_emdio_info {
@@ -209,6 +211,7 @@ struct otto_emdio_info {
 	u32 cmd_read;
 	u32 cmd_write;
 	struct otto_emdio_cmd_regs cmd_regs;
+	bool link_flap;
 	u8 num_buses;
 	u8 num_ports;
 	u16 num_pages;
@@ -252,6 +255,43 @@ static int otto_emdio_set_port_polling(struct otto_emdio_priv *priv, int port, b
 {
 	return regmap_assign_bits(priv->regmap, priv->info->poll_ctrl + (port / 32) * 4,
 				  BIT(port % 32), active);
+}
+
+static int otto_emdio_mmd_prefix(struct otto_emdio_priv *priv, int port, int regnum)
+{
+	u8 newstate, *state = &priv->mmd_state[port];
+	int expected, ret = 0;
+
+	if (!priv->init_done)
+		return 0;
+	/*
+	 * Disabled polling might produce link flapping and false notification interrupts on the
+	 * MAC layer. In this case disable c45 over c22 MMD access because chances are high that
+	 * the register 13/14/13/14 sequence is intercepted by a parallel hardware access. As
+	 * a workaround the PHY must provide its own mmd read/write() callbacks and redirect to
+	 * normal c22 registers. See rtlgen_read_mmd().
+	 */
+	if (priv->info->link_flap)
+		return (regnum == MII_MMD_DATA || regnum == MII_MMD_CTRL) ? -EIO : 0;
+
+	expected = (*state & 1) ? MII_MMD_DATA : MII_MMD_CTRL;
+	newstate = regnum == expected ? *state + 1 : 0;
+
+	if (newstate == 1 || newstate < *state)
+		ret = otto_emdio_set_port_polling(priv, port, !newstate);
+	*state = newstate;
+
+	return ret;
+}
+
+static int otto_emdio_mmd_postfix(struct otto_emdio_priv *priv, int port, int regnum)
+{
+	if (priv->mmd_state[port] != 4)
+		return 0;
+
+	priv->mmd_state[port] = 0;
+
+	return otto_emdio_set_port_polling(priv, port, true);
 }
 
 static int otto_emdio_run_cmd(struct mii_bus *bus, u32 cmd,
@@ -463,7 +503,15 @@ static int otto_emdio_read_c22(struct mii_bus *bus, int phy_id, int regnum)
 		if (regnum == 31)
 			return priv->page[port];
 
+		ret = otto_emdio_mmd_prefix(priv, port, regnum);
+		if (ret)
+			return ret;
+
 		ret = priv->info->read_c22(bus, port, regnum, &value);
+		if (ret)
+			return ret;
+
+		ret = otto_emdio_mmd_postfix(priv, port, regnum);
 	}
 
 	return ret ? ret : value;
@@ -472,7 +520,7 @@ static int otto_emdio_read_c22(struct mii_bus *bus, int phy_id, int regnum)
 static int otto_emdio_write_c22(struct mii_bus *bus, int phy_id, int regnum, u16 value)
 {
 	struct otto_emdio_priv *priv = otto_emdio_bus_to_priv(bus);
-	int port;
+	int port, ret;
 
 	port = otto_emdio_phy_to_port(bus, phy_id);
 	if (port < 0)
@@ -487,7 +535,15 @@ static int otto_emdio_write_c22(struct mii_bus *bus, int phy_id, int regnum, u16
 			return 0;
 		}
 
-		return priv->info->write_c22(bus, port, regnum, value);
+		ret = otto_emdio_mmd_prefix(priv, port, regnum);
+		if (ret)
+			return ret;
+
+		ret = priv->info->write_c22(bus, port, regnum, value);
+		if (ret)
+			return ret;
+
+		return otto_emdio_mmd_postfix(priv, port, regnum);
 	}
 }
 
@@ -793,6 +849,8 @@ static int otto_emdio_probe(struct platform_device *pdev)
 		if (err)
 			return err;
 	}
+
+	priv->init_done = true;
 
 	return 0;
 }
