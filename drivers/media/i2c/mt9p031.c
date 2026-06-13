@@ -1076,14 +1076,17 @@ static int mt9p031_parse_properties(struct mt9p031 *mt9p031, struct device *dev)
 		return dev_err_probe(dev, -EINVAL, "endpoint node not found\n");
 
 	ret = v4l2_fwnode_endpoint_parse(np, &endpoint);
-	fwnode_handle_put(np);
-	if (ret)
+	if (ret) {
+		fwnode_handle_put(np);
 		return dev_err_probe(dev, -EINVAL, "could not parse endpoint\n");
+	}
 
 	fwnode_property_read_u32(np, "input-clock-frequency",
 				 &mt9p031->ext_freq);
 	fwnode_property_read_u32(np, "pixel-clock-frequency",
 				 &mt9p031->target_freq);
+
+	fwnode_handle_put(np);
 
 	mt9p031->pixclk_pol = !!(endpoint.bus.parallel.flags &
 				 V4L2_MBUS_PCLK_SAMPLE_RISING);
