@@ -2468,6 +2468,98 @@ static inline void setup_vmalloc_vm(struct vm_struct *vm,
 }
 
 /*
+ * Per-CPU bump-allocator overlay.
+ *
+ * Each CPU reserves a contiguous chunk of vmalloc address space and
+ * dispenses page-aligned allocations via a bump pointer. The chunk's
+ * range is reserved through the global allocator once; individual
+ * allocations within the chunk avoid the global maple-tree work
+ * entirely. Each allocation still gets its own vmap_area struct and
+ * is inserted into the per-node busy.mt, so find_vmap_area() and
+ * vfree() continue to work unchanged.
+ *
+ * Recycling: chunks leak in this minimal form. With 16 MB chunks on a
+ * 128 GB vmalloc range, the address space supports thousands of chunks
+ * before exhaustion. A future iteration can add chunk recycling via a
+ * va->bump_chunk back-pointer + refcount; deferred to keep this hot
+ * path's struct vmap_area footprint at 48 B.
+ *
+ * Constraints: only the standard vmalloc range with align <= PAGE_SIZE
+ * and size <= VMAP_BUMP_CHUNK_SIZE/2 takes the bump path. Anything
+ * else falls through to the existing __alloc_vmap_area path.
+ */
+#define VMAP_BUMP_CHUNK_SIZE	(64UL * 1024 * 1024)
+
+struct vmap_bump_chunk {
+	unsigned long	base;
+	unsigned long	limit;
+	unsigned long	bump;
+};
+
+static DEFINE_PER_CPU(struct vmap_bump_chunk, vmap_bump);
+static DEFINE_PER_CPU(spinlock_t, vmap_bump_lock);
+
+/* Try the per-CPU bump-allocator. Returns the chosen address or
+ * a negative IS_ERR_VALUE on miss; callers fall through to the
+ * regular path on miss.
+ */
+static unsigned long
+vmap_bump_alloc(unsigned long size, unsigned long align,
+		unsigned long vstart, unsigned long vend)
+{
+	struct vmap_bump_chunk *chunk;
+	spinlock_t *lock;
+	unsigned long aligned, addr = -ENOENT;
+
+	if (vstart != VMALLOC_START || vend != VMALLOC_END ||
+	    size == 0 || size > VMAP_BUMP_CHUNK_SIZE / 2 ||
+	    align > VMAP_BUMP_CHUNK_SIZE / 2)
+		return -EINVAL;
+
+	lock = this_cpu_ptr(&vmap_bump_lock);
+	spin_lock(lock);
+	chunk = this_cpu_ptr(&vmap_bump);
+	if (chunk->base) {
+		aligned = ALIGN(chunk->bump, align);
+		if (aligned + size <= chunk->limit) {
+			chunk->bump = aligned + size;
+			addr = aligned;
+		}
+	}
+	spin_unlock(lock);
+	return addr;
+}
+
+/* Refill this CPU's bump chunk. Reserves a fresh range from the
+ * global allocator. Old chunk's remaining space is leaked (the
+ * already-allocated VAs in it stay live; the unused tail is wasted).
+ */
+static int
+vmap_bump_refill(gfp_t gfp_mask)
+{
+	struct vmap_bump_chunk *chunk;
+	spinlock_t *lock;
+	unsigned long base;
+
+	preload_this_cpu_lock(&free_vmap_area_lock, gfp_mask, NUMA_NO_NODE);
+	base = __alloc_vmap_area(VMAP_BUMP_CHUNK_SIZE, PAGE_SIZE,
+				 VMALLOC_START, VMALLOC_END);
+	spin_unlock(&free_vmap_area_lock);
+
+	if (IS_ERR_VALUE(base))
+		return -ENOMEM;
+
+	lock = this_cpu_ptr(&vmap_bump_lock);
+	spin_lock(lock);
+	chunk = this_cpu_ptr(&vmap_bump);
+	chunk->base = base;
+	chunk->limit = base + VMAP_BUMP_CHUNK_SIZE;
+	chunk->bump = base;
+	spin_unlock(lock);
+	return 0;
+}
+
+/*
  * Allocate a region of KVA of the specified size and alignment, within the
  * vstart and vend. If vm is passed in, the two will also be bound.
  */
@@ -2519,6 +2611,19 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 	}
 
 retry:
+	if (IS_ERR_VALUE(addr)) {
+		/*
+		 * Per-CPU bump-allocator fast path. On hit, no global
+		 * tree work runs at all. On miss, refill the chunk and
+		 * try again before falling back to the regular path.
+		 */
+		addr = vmap_bump_alloc(size, align, vstart, vend);
+		if (IS_ERR_VALUE(addr) && (long)addr == -ENOENT) {
+			if (vmap_bump_refill(gfp_mask) == 0)
+				addr = vmap_bump_alloc(size, align,
+						       vstart, vend);
+		}
+	}
 	if (IS_ERR_VALUE(addr)) {
 		preload_this_cpu_lock(&free_vmap_area_lock, gfp_mask, node);
 		try_init_free_mt_locked();
@@ -6214,6 +6319,8 @@ void __init vmalloc_init(void)
 		init_llist_head(&p->list);
 		INIT_WORK(&p->wq, delayed_vfree_work);
 		xa_init(&vbq->vmap_blocks);
+
+		spin_lock_init(&per_cpu(vmap_bump_lock, i));
 	}
 
 	/*
