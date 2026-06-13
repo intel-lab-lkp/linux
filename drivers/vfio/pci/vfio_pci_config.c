@@ -2078,3 +2078,62 @@ bool vfio_pci_core_range_intersect_range(loff_t buf_start, size_t buf_cnt,
 	return false;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_range_intersect_range);
+
+int vfio_pci_core_feature_dsn(struct vfio_pci_core_device *vdev, u32 flags,
+			      void __user *arg, size_t argsz)
+{
+	struct vfio_device_feature_pci_dsn dsn;
+	struct pci_dev *pdev = vdev->pdev;
+	__le32 *vserial;
+	int pos, ret;
+
+	/*
+	 * The DSN capability is virtualized in vconfig; locate it on the
+	 * physical device only to decide whether the feature is supported.
+	 * A feature ioctl can only reach an opened device, and vconfig is
+	 * allocated by vfio_config_init() during vfio_pci_core_enable() on
+	 * open, so vconfig is valid here.
+	 */
+	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_DSN);
+	if (!pos)
+		return -ENOTTY;
+
+	ret = vfio_check_feature(flags, argsz,
+				 VFIO_DEVICE_FEATURE_GET |
+				 VFIO_DEVICE_FEATURE_SET,
+				 sizeof(dsn));
+	if (ret != 1)
+		return ret;
+
+	vserial = (__le32 *)&vdev->vconfig[pos + PCI_DSN_LOW_DW];
+
+	if (flags & VFIO_DEVICE_FEATURE_SET) {
+		if (copy_from_user(&dsn, arg, sizeof(dsn)))
+			return -EFAULT;
+
+		/*
+		 * The config-space read path (vfio_default_config_read())
+		 * does not hold a lock, and a guest reads the DSN as two
+		 * 32-bit dwords.  Store each dword with WRITE_ONCE() so a
+		 * concurrent guest read observes a consistent dword; a guest
+		 * reading the two halves around this update may see an
+		 * old/new mix, exactly as hardware may tear a 64-bit read of
+		 * a register pair.  This matches the DSN's read-only,
+		 * advisory nature.  Serializing concurrent SET callers is the
+		 * userspace VMM's responsibility.
+		 */
+		WRITE_ONCE(vserial[0], cpu_to_le32(lower_32_bits(dsn.serial_number)));
+		WRITE_ONCE(vserial[1], cpu_to_le32(upper_32_bits(dsn.serial_number)));
+		return 0;
+	}
+
+	/* VFIO_DEVICE_FEATURE_GET */
+	dsn.serial_number =
+		((u64)le32_to_cpu(READ_ONCE(vserial[1])) << 32) |
+		le32_to_cpu(READ_ONCE(vserial[0]));
+
+	if (copy_to_user(arg, &dsn, sizeof(dsn)))
+		return -EFAULT;
+
+	return 0;
+}

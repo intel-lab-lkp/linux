@@ -1511,6 +1511,24 @@ struct vfio_device_feature_bus_master {
  */
 #define VFIO_DEVICE_FEATURE_DMA_BUF 11
 
+/**
+ * Upon VFIO_DEVICE_FEATURE_SET, set the PCIe Device Serial Number (DSN)
+ * presented to the user (guest) in the device's virtualized config space.
+ * By default vfio-pci scrubs the physical DSN to zero so the host device's
+ * unique identifier is not leaked; this feature lets the hypervisor present
+ * a chosen, per-VM synthetic serial instead (for example a stable but
+ * non-host-identifying value for migration).
+ *
+ * Upon VFIO_DEVICE_FEATURE_GET, read back the currently presented serial.
+ *
+ * The feature is only available for devices that expose a DSN capability.
+ * serial_number is the 64-bit serial in little-endian wire order.
+ */
+struct vfio_device_feature_pci_dsn {
+	__aligned_u64 serial_number;
+};
+#define VFIO_DEVICE_FEATURE_PCI_DSN 13
+
 struct vfio_region_dma_range {
 	__u64 offset;
 	__u64 length;

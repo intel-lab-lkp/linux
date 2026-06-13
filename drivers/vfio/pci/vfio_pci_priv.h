@@ -64,6 +64,8 @@ void vfio_pci_uninit_perm_bits(void);
 
 int vfio_config_init(struct vfio_pci_core_device *vdev);
 void vfio_config_free(struct vfio_pci_core_device *vdev);
+int vfio_pci_core_feature_dsn(struct vfio_pci_core_device *vdev, u32 flags,
+			      void __user *arg, size_t argsz);
 
 int vfio_pci_set_power_state(struct vfio_pci_core_device *vdev,
 			     pci_power_t state);
