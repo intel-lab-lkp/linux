@@ -943,6 +943,16 @@ static struct vmap_node {
 	struct mt_list lazy;
 
 	/*
+	 * Lazy list. The lazy index is no longer queried by address on the
+	 * hot path: free_vmap_area_noflush() pushes the VA via list_add and
+	 * purge drains it via list_splice. Keeping a list head sidesteps a
+	 * mas_store on every vfree and a mas_for_each + per-entry
+	 * mas_store(NULL) during purge. lazy.mt is retained for the rare
+	 * non-perf_mode rollback path inside publish_vmap_area_lazy().
+	 */
+	struct list_head lazy_list;
+
+	/*
 	 * Ready-to-free areas.
 	 */
 	struct list_head purge_list;
@@ -1510,52 +1520,37 @@ unlink_vmap_area_busy_locked(struct vmap_area *va, struct vmap_node *vn)
 static __always_inline bool
 insert_vmap_area_lazy_locked(struct vmap_area *va, struct vmap_node *vn)
 {
-	int err;
-
 	lockdep_assert_held(&vn->lazy.lock);
 
-	try_init_lazy_mt_locked(vn);
-	if (WARN_ON_ONCE(!vn->lazy.mt_enabled))
+	/*
+	 * The maple-tree lazy index is bypassed in the hot path: a simple
+	 * list saves one mas_store per vfree and one mas_for_each + N
+	 * mas_store(NULL) during purge. lazy.mt is left untouched here so
+	 * the non-perf_mode publish_vmap_area_lazy() rollback can still
+	 * unlink the VA via unlink_vmap_area_lazy_locked() if it inserted
+	 * one — that path is unreachable in steady state with perf_mode on.
+	 */
+	if (WARN_ON_ONCE(!list_empty(&va->list)))
 		return false;
 
-	if (!validate_vmap_area_range_insert_mt_locked(&vn->lazy.mt,
-						       va->va_start,
-						       va->va_end))
-		return false;
-
-	INIT_LIST_HEAD(&va->list);
-
-	MA_STATE(mas, &vn->lazy.mt, va->va_start, va->va_end - 1);
-
-	err = mas_preallocate(&mas, va, GFP_NOWAIT | __GFP_NOWARN);
-	if (!err) {
-		mas_store_prealloc(&mas, va);
-		mas_destroy(&mas);
-		return true;
-	}
-
-	err = mas_store_gfp(&mas, va, GFP_ATOMIC | __GFP_NOWARN);
-	return !WARN_ON_ONCE(err);
+	list_add_tail(&va->list, &vn->lazy_list);
+	return true;
 }
 
 static __always_inline bool
 unlink_vmap_area_lazy_locked(struct vmap_area *va, struct vmap_node *vn)
 {
-	int err;
-
 	lockdep_assert_held(&vn->lazy.lock);
 
-	try_init_lazy_mt_locked(vn);
-	if (WARN_ON_ONCE(!vn->lazy.mt_enabled))
+	/*
+	 * Match insert_vmap_area_lazy_locked()'s list-based fast path. Used
+	 * only by publish_vmap_area_lazy() rollback, which is unreachable in
+	 * steady state but kept for the non-perf_mode early-boot window.
+	 */
+	if (list_empty(&va->list))
 		return false;
 
-	MA_STATE(mas, &vn->lazy.mt, va->va_start, va->va_end - 1);
-
-	err = mas_store_gfp(&mas, NULL, GFP_ATOMIC | __GFP_NOWARN);
-	if (WARN_ON_ONCE(err))
-		return false;
-
-	INIT_LIST_HEAD(&va->list);
+	list_del_init(&va->list);
 	return true;
 }
 
@@ -1610,48 +1605,22 @@ lazy_vmap_areas_empty_locked(struct vmap_node *vn)
 {
 	lockdep_assert_held(&vn->lazy.lock);
 
-	try_init_lazy_mt_locked(vn);
-	if (WARN_ON_ONCE(!vn->lazy.mt_enabled))
-		return true;
-
-	return mtree_empty(&vn->lazy.mt);
+	return list_empty(&vn->lazy_list);
 }
 
 static __always_inline void
 move_lazy_vmap_areas_to_purge_locked(struct vmap_node *vn)
 {
-	LIST_HEAD(move_list);
-	struct vmap_area *va, *n_va;
-	int err;
-
 	lockdep_assert_held(&vn->lazy.lock);
 
-	try_init_lazy_mt_locked(vn);
-	if (WARN_ON_ONCE(!vn->lazy.mt_enabled))
-		return;
-
-	MA_STATE(mas, &vn->lazy.mt, 0, 0);
-
-	mas_for_each(&mas, va, ULONG_MAX)
-		list_add_tail(&va->list, &move_list);
-
 	/*
-	 * Erase ranges one-by-one and move only successfully erased entries to
-	 * purge_list. This avoids destroy/reinit churn and keeps lazy index
-	 * coherence if an erase operation fails under pressure.
+	 * Move every queued VA to purge_list with a single splice. The
+	 * sort-by-address property that the maple-tree lazy index used to
+	 * provide is no longer used by purge_vmap_node(); kasan_release
+	 * computes its own min/max over the resulting purge_list when
+	 * needed.
 	 */
-	list_for_each_entry_safe(va, n_va, &move_list, list) {
-		MA_STATE(mas_erase, &vn->lazy.mt, va->va_start, va->va_end - 1);
-
-		err = mas_store_gfp(&mas_erase, NULL, GFP_ATOMIC | __GFP_NOWARN);
-		if (unlikely(err)) {
-			WARN_ON_ONCE(err);
-			list_del_init(&va->list);
-			continue;
-		}
-
-		list_move_tail(&va->list, &vn->purge_list);
-	}
+	list_splice_tail_init(&vn->lazy_list, &vn->purge_list);
 }
 
 static __always_inline bool
@@ -2806,13 +2775,18 @@ static void
 kasan_release_vmalloc_node(struct vmap_node *vn)
 {
 	struct vmap_area *va;
-	unsigned long start, end;
+	unsigned long start = ULONG_MAX, end = 0;
 	unsigned int batch_count = 0;
 
-	start = list_first_entry(&vn->purge_list, struct vmap_area, list)->va_start;
-	end = list_last_entry(&vn->purge_list, struct vmap_area, list)->va_end;
-
+	/*
+	 * purge_list is no longer sorted by address (lazy_list is built in
+	 * insertion order via list_add_tail). Compute the bounding range
+	 * inline with the per-VA shadow-release loop to avoid a second walk.
+	 */
 	list_for_each_entry(va, &vn->purge_list, list) {
+		start = min(start, va->va_start);
+		end = max(end, va->va_end);
+
 		if (is_vmalloc_or_module_addr((void *) va->va_start))
 			kasan_release_vmalloc(va->va_start, va->va_end,
 				va->va_start, va->va_end,
@@ -2824,7 +2798,9 @@ kasan_release_vmalloc_node(struct vmap_node *vn)
 		}
 	}
 
-	kasan_release_vmalloc(start, end, start, end, KASAN_VMALLOC_TLB_FLUSH);
+	if (start < end)
+		kasan_release_vmalloc(start, end, start, end,
+				      KASAN_VMALLOC_TLB_FLUSH);
 }
 
 static void purge_vmap_node(struct work_struct *work)
@@ -2938,6 +2914,7 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 	static cpumask_t purge_nodes;
 	unsigned int nr_purge_nodes;
 	struct vmap_node *vn;
+	struct vmap_area *va;
 	int i;
 
 	lockdep_assert_held(&vmap_purge_lock);
@@ -2964,11 +2941,14 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 		move_lazy_vmap_areas_to_purge_locked(vn);
 		spin_unlock(&vn->lazy.lock);
 
-		start = min(start, list_first_entry(&vn->purge_list,
-			struct vmap_area, list)->va_start);
-
-		end = max(end, list_last_entry(&vn->purge_list,
-			struct vmap_area, list)->va_end);
+		/*
+		 * lazy_list (and therefore purge_list) is no longer sorted by
+		 * address. Compute the bounding range by walking purge_list.
+		 */
+		list_for_each_entry(va, &vn->purge_list, list) {
+			start = min(start, va->va_start);
+			end = max(end, va->va_end);
+		}
 
 		cpumask_set_cpu(node_to_id(vn), &purge_nodes);
 	}
@@ -6153,6 +6133,7 @@ static void vmap_init_nodes(void)
 		mt_init_flags(&vn->lazy.mt, MT_FLAGS_LOCK_EXTERN);
 		mt_set_external_lock(&vn->lazy.mt, &vn->lazy.lock);
 		vn->lazy.mt_enabled = true;
+		INIT_LIST_HEAD(&vn->lazy_list);
 
 		for (i = 0; i < MAX_VA_SIZE_PAGES; i++) {
 			INIT_LIST_HEAD(&vn->pool[i].head);
