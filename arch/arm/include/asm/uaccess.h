@@ -180,12 +180,13 @@ extern int __get_user_64t_4(void *);
 
 #define __get_user_check(x, p)						\
 	({								\
-		unsigned long __limit = TASK_SIZE - 1; \
+		unsigned long __limit = TASK_SIZE - 1;			\
+		unsigned int __ua_flags = uaccess_save_and_enable();	\
 		register typeof(*(p)) __user *__p asm("r0") = (p);	\
 		register __inttype(x) __r2 asm("r2");			\
 		register unsigned long __l asm("r1") = __limit;		\
 		register int __e asm("r0");				\
-		unsigned int __ua_flags = uaccess_save_and_enable();	\
+		__inttype(x) __tmp_r2;					\
 		int __tmp_e;						\
 		switch (sizeof(*(__p))) {				\
 		case 1:							\
@@ -214,9 +215,10 @@ extern int __get_user_64t_4(void *);
 			break;						\
 		default: __e = __get_user_bad(); break;			\
 		}							\
+		__tmp_r2 = __r2;					\
 		__tmp_e = __e;						\
 		uaccess_restore(__ua_flags);				\
-		x = (typeof(*(p))) __r2;				\
+		x = (typeof(*(p))) __tmp_r2;				\
 		__tmp_e;						\
 	})
 
