@@ -777,6 +777,7 @@ static int asus_kbd_register_leds(struct hid_device *hdev)
 	if (ret < 0) {
 		/* No need to have this still around */
 		devm_kfree(&hdev->dev, drvdata->kbd_backlight);
+		drvdata->kbd_backlight = NULL;
 	}
 
 	return ret;
