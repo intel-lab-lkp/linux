@@ -3122,10 +3122,24 @@ static struct vmap_area *find_unlink_vmap_area(unsigned long addr)
 	do {
 		vn = &vmap_nodes[i];
 
+		/*
+		 * Combine the lookup and removal into a single maple-tree
+		 * descent. mas_erase() positions the state at @addr and clears
+		 * the slot in one pass, returning the previously stored VA.
+		 * This saves the second mas_store(NULL) the original
+		 * find_vmap_area_busy_locked + unlink_vmap_area_busy_locked
+		 * pair issued, halving the busy-tree maple work per vfree.
+		 */
 		spin_lock(&vn->busy.lock);
-		va = find_vmap_area_busy_locked(addr, vn);
+		if (likely(vn->busy.mt_enabled)) {
+			MA_STATE(mas, &vn->busy.mt, addr, addr);
+
+			va = mas_erase(&mas);
+		} else {
+			va = NULL;
+		}
 		if (va)
-			unlink_vmap_area_busy_locked(va, vn);
+			INIT_LIST_HEAD(&va->list);
 		spin_unlock(&vn->busy.lock);
 
 		if (va)
