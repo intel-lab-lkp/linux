@@ -49,7 +49,7 @@ fn main() {
 
     // Qualify `Result` to avoid the collision with our own `Result` coming from the prelude.
     let body = body.replace(
-        &format!("{rustdoc_function_name}() -> Result<(), impl ::core::fmt::Debug> {{"),
+        &format!("{rustdoc_function_name}() -> Result<(), impl core::fmt::Debug> {{"),
         &format!(
             "{rustdoc_function_name}() -> ::core::result::Result<(), impl ::core::fmt::Debug> {{"
         ),
