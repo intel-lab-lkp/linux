@@ -205,9 +205,9 @@ static char trace_iocg_path[TRACE_IOCG_PATH_LEN];
 		}								\
 	} while (0)
 
-#else	/* CONFIG_TRACE_POINTS */
+#else	/* CONFIG_TRACEPOINTS */
 #define TRACE_IOCG_PATH(type, iocg, ...)	do { } while (0)
-#endif	/* CONFIG_TRACE_POINTS */
+#endif	/* CONFIG_TRACEPOINTS */
 
 enum {
 	MILLION			= 1000000,
