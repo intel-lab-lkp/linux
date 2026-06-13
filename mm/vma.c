@@ -2729,11 +2729,10 @@ static bool can_set_ksm_flags_early(struct mmap_state *map)
 	return false;
 }
 
-static unsigned long __mmap_region(struct file *file, unsigned long addr,
-		unsigned long len, vma_flags_t vma_flags,
+static unsigned long __mmap_region(struct mm_struct *mm, struct file *file,
+		unsigned long addr, unsigned long len, vma_flags_t vma_flags,
 		unsigned long pgoff, struct list_head *uf)
 {
-	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma = NULL;
 	bool have_mmap_prepare = file && file->f_op->mmap_prepare;
 	VMA_ITERATOR(vmi, mm, addr);
@@ -2827,15 +2826,16 @@ abort_munmap:
  * Returns: Either an error, or the address at which the requested mapping has
  * been performed.
  */
-unsigned long mmap_region(struct file *file, unsigned long addr,
-			  unsigned long len, vm_flags_t vm_flags,
-			  unsigned long pgoff, struct list_head *uf)
+unsigned long mmap_region(struct mm_struct *mm, struct file *file,
+			  unsigned long addr, unsigned long len,
+			  vm_flags_t vm_flags, unsigned long pgoff,
+			  struct list_head *uf)
 {
 	unsigned long ret;
 	bool writable_file_mapping = false;
 	const vma_flags_t vma_flags = legacy_to_vma_flags(vm_flags);
 
-	mmap_assert_write_locked(current->mm);
+	mmap_assert_write_locked(mm);
 
 	/* Check to see if MDWE is applicable. */
 	if (map_deny_write_exec(&vma_flags, &vma_flags))
@@ -2854,13 +2854,13 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 		writable_file_mapping = true;
 	}
 
-	ret = __mmap_region(file, addr, len, vma_flags, pgoff, uf);
+	ret = __mmap_region(mm, file, addr, len, vma_flags, pgoff, uf);
 
 	/* Clear our write mapping regardless of error. */
 	if (writable_file_mapping)
 		mapping_unmap_writable(file->f_mapping);
 
-	validate_mm(current->mm);
+	validate_mm(mm);
 	return ret;
 }
 
