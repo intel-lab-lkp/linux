@@ -899,6 +899,7 @@ static struct maple_tree occupied_vmap_area_mt =
 		       free_vmap_area_lock);
 static bool occupied_vmap_area_mt_enabled;
 static bool occupied_vmap_area_mt_init_tried;
+static bool occupied_vmap_area_perf_mode;
 
 /*
  * Preload a CPU with one object for "no edge" split case. The
@@ -1073,11 +1074,12 @@ static __always_inline bool free_mt_store_va_locked(struct vmap_area *va)
 	if (!err) {
 		mas_store_prealloc(&mas, va);
 		mas_destroy(&mas);
-	} else {
-		err = mas_store_gfp(&mas, va, GFP_ATOMIC | __GFP_NOWARN);
-		if (WARN_ON_ONCE(err))
-			return false;
+		return true;
 	}
+
+	err = mas_store_gfp(&mas, va, GFP_ATOMIC | __GFP_NOWARN);
+	if (WARN_ON_ONCE(err))
+		return false;
 
 	return true;
 }
@@ -1117,6 +1119,31 @@ free_mt_update_va_locked(struct vmap_area *va, unsigned long old_start,
 		return false;
 
 	return true;
+}
+
+/*
+ * Trim a stored range entry by clearing a sub-range from one end.
+ * Used by LE_FIT and RE_FIT in va_clip(): the original [old_start,
+ * old_end-1]->@va entry survives intact at the un-trimmed sub-range,
+ * so a single mas_store NULL replaces the explicit erase + restore-at-
+ * shrunk-range pair, halving maple-tree work for edge clips. NE_FIT
+ * uses the same primitive after first inserting @lva, which trades 3
+ * stores (erase + store + lva) for 2 (lva + middle trim).
+ */
+static __always_inline bool
+free_mt_trim_range_locked(unsigned long trim_start, unsigned long trim_end)
+{
+	int err;
+
+	lockdep_assert_held(&free_vmap_area_lock);
+
+	if (trim_start >= trim_end)
+		return true;
+
+	MA_STATE(mas, &free_vmap_area_mt, trim_start, trim_end - 1);
+
+	err = mas_store_gfp(&mas, NULL, GFP_ATOMIC | __GFP_NOWARN);
+	return !WARN_ON_ONCE(err);
 }
 
 static __always_inline void
@@ -1176,6 +1203,11 @@ static __always_inline void try_init_free_mt_locked(void)
 
 static __always_inline bool occupied_mt_supported(void)
 {
+	return occupied_vmap_area_perf_mode && occupied_vmap_area_mt_enabled;
+}
+
+static __always_inline bool occupied_mt_enabled(void)
+{
 	return occupied_vmap_area_mt_enabled;
 }
 
@@ -1194,26 +1226,46 @@ static __always_inline void try_init_occupied_mt_locked(void)
 }
 
 static __always_inline bool
-occupied_mt_store_range_locked(unsigned long start, unsigned long end)
+occupied_mt_store_range_raw_locked(unsigned long start, unsigned long end)
 {
 	int err;
 
 	lockdep_assert_held(&free_vmap_area_lock);
 
-	if (WARN_ON_ONCE(!occupied_mt_supported()))
-		return false;
+	if (!occupied_mt_enabled())
+		return true;
 
 	MA_STATE(mas, &occupied_vmap_area_mt, start, end - 1);
 
-	err = mas_preallocate(&mas, XA_ZERO_ENTRY, GFP_NOWAIT | __GFP_NOWARN);
-	if (!err) {
-		mas_store_prealloc(&mas, XA_ZERO_ENTRY);
-		mas_destroy(&mas);
-		return true;
-	}
-
 	err = mas_store_gfp(&mas, XA_ZERO_ENTRY, GFP_ATOMIC | __GFP_NOWARN);
 	return !WARN_ON_ONCE(err);
+}
+
+static __always_inline bool
+occupied_mt_erase_range_raw_locked(unsigned long start, unsigned long end)
+{
+	int err;
+
+	lockdep_assert_held(&free_vmap_area_lock);
+
+	if (!occupied_mt_enabled())
+		return true;
+
+	MA_STATE(mas, &occupied_vmap_area_mt, start, end - 1);
+
+	err = mas_store_gfp(&mas, NULL, GFP_ATOMIC | __GFP_NOWARN);
+	return !WARN_ON_ONCE(err);
+}
+
+static __always_inline bool
+occupied_mt_store_range_locked(unsigned long start, unsigned long end)
+{
+	lockdep_assert_held(&free_vmap_area_lock);
+
+	if (!occupied_mt_supported())
+		return true;
+
+	return occupied_mt_store_range_raw_locked(start, end);
 }
 
 static __always_inline bool
@@ -1227,17 +1279,12 @@ occupied_mt_store_va_locked(struct vmap_area *va)
 static __always_inline bool
 occupied_mt_erase_range_locked(unsigned long start, unsigned long end)
 {
-	int err;
-
 	lockdep_assert_held(&free_vmap_area_lock);
 
 	if (WARN_ON_ONCE(!occupied_mt_supported()))
 		return false;
 
-	MA_STATE(mas, &occupied_vmap_area_mt, start, end - 1);
-
-	err = mas_store_gfp(&mas, NULL, GFP_ATOMIC | __GFP_NOWARN);
-	return !WARN_ON_ONCE(err);
+	return occupied_mt_erase_range_raw_locked(start, end);
 }
 
 static __always_inline bool
@@ -1304,18 +1351,32 @@ __find_vmap_area_enclose_addr_mt(unsigned long addr, struct maple_tree *tree)
 }
 
 static __always_inline bool
+find_vmap_area_insert_neighbors_mt_locked(struct maple_tree *tree,
+					  unsigned long start,
+					  unsigned long end,
+					  struct vmap_area **left,
+					  struct vmap_area **right)
+{
+	*left = __find_vmap_area_enclose_addr_mt(start, tree);
+	if (*left && WARN_ON_ONCE((*left)->va_end > start))
+		return false;
+
+	*right = __find_vmap_area_exceed_addr_mt(start, tree);
+	if (*right && WARN_ON_ONCE((*right)->va_start < end))
+		return false;
+
+	return true;
+}
+
+static __always_inline bool
 validate_vmap_area_range_insert_mt_locked(struct maple_tree *tree,
 					  unsigned long start,
 					  unsigned long end)
 {
 	struct vmap_area *left, *right;
 
-	left = __find_vmap_area_enclose_addr_mt(start, tree);
-	if (left && WARN_ON_ONCE(left->va_end > start))
-		return false;
-
-	right = __find_vmap_area_exceed_addr_mt(start, tree);
-	if (right && WARN_ON_ONCE(right->va_start < end))
+	if (!find_vmap_area_insert_neighbors_mt_locked(tree, start, end,
+						       &left, &right))
 		return false;
 
 	return true;
@@ -1499,10 +1560,11 @@ unlink_vmap_area_lazy_locked(struct vmap_area *va, struct vmap_node *vn)
 }
 
 /*
- * Transition a VA into the lazy index and drop occupied tracking. On occupied
- * erase failure, attempt to roll back the lazy insertion; if rollback fails we
- * keep the lazy entry and let purge-side erase_occupied handling repair stale
- * occupied state.
+ * Transition a VA into the lazy index.
+ *
+ * In the default mode, occupied tracking is dropped while the VA is lazy.
+ * In occupied perf mode, lazy ranges stay occupied-indexed so hole search can
+ * avoid repeatedly probing unavailable gaps.
  *
  * Returns true when the VA remains lazy-indexed; false when it should be
  * retried via non-index queue.
@@ -1516,6 +1578,11 @@ publish_vmap_area_lazy(struct vmap_area *va, struct vmap_node *vn)
 	if (unlikely(!insert_vmap_area_lazy_locked(va, vn))) {
 		spin_unlock(&vn->lazy.lock);
 		return false;
+	}
+
+	if (occupied_mt_supported()) {
+		spin_unlock(&vn->lazy.lock);
+		return true;
 	}
 
 	/*
@@ -1588,22 +1655,32 @@ move_lazy_vmap_areas_to_purge_locked(struct vmap_node *vn)
 }
 
 static __always_inline bool
+insert_vmap_area_free_nocheck_locked(struct vmap_area *va)
+{
+	lockdep_assert_held(&free_vmap_area_lock);
+
+	try_init_free_mt_locked();
+
+	if (unlikely(!free_mt_supported()))
+		return false;
+
+	INIT_LIST_HEAD(&va->list);
+	return free_mt_store_va_locked(va);
+}
+
+static __always_inline bool
 insert_vmap_area_free_locked(struct vmap_area *va)
 {
 	struct vmap_area *prev, *next;
 
 	lockdep_assert_held(&free_vmap_area_lock);
 
-	prev = __find_vmap_area_enclose_addr_mt(va->va_start, &free_vmap_area_mt);
-	if (prev && WARN_ON_ONCE(prev->va_end > va->va_start))
+	if (!find_vmap_area_insert_neighbors_mt_locked(&free_vmap_area_mt,
+						       va->va_start, va->va_end,
+						       &prev, &next))
 		return false;
 
-	next = __find_vmap_area_exceed_addr_mt(va->va_start, &free_vmap_area_mt);
-	if (next && WARN_ON_ONCE(next->va_start < va->va_end))
-		return false;
-
-	INIT_LIST_HEAD(&va->list);
-	return free_mt_store_va_locked(va);
+	return insert_vmap_area_free_nocheck_locked(va);
 }
 
 static __always_inline void
@@ -1634,8 +1711,9 @@ merge_or_add_vmap_area_free_locked(struct vmap_area *va)
 	new_start = va->va_start;
 	new_end = va->va_end;
 
-	left = __find_vmap_area_enclose_addr_mt(new_start, &free_vmap_area_mt);
-	if (left && WARN_ON_ONCE(left->va_end > new_start))
+	if (!find_vmap_area_insert_neighbors_mt_locked(&free_vmap_area_mt,
+						       new_start, new_end,
+						       &left, &right))
 		return NULL;
 
 	right = __find_vmap_area_exceed_addr_mt(new_start, &free_vmap_area_mt);
@@ -1657,7 +1735,7 @@ merge_or_add_vmap_area_free_locked(struct vmap_area *va)
 	va->va_start = new_start;
 	va->va_end = new_end;
 
-	if (!insert_vmap_area_free_locked(va))
+	if (!insert_vmap_area_free_nocheck_locked(va))
 		return NULL;
 
 	return va;
@@ -1690,6 +1768,10 @@ occupied_mt_find_hole_window_locked(unsigned long min, unsigned long max,
 	MA_STATE(mas, &occupied_vmap_area_mt, 0, 0);
 	unsigned long search = min;
 	unsigned long hole_end;
+	bool retry_empty;
+
+	lockdep_assert_held(&free_vmap_area_lock);
+	retry_empty = list_empty(&vmap_retry_list);
 
 	while (search <= max) {
 		unsigned long candidate, candidate_end;
@@ -1709,7 +1791,8 @@ occupied_mt_find_hole_window_locked(unsigned long min, unsigned long max,
 		while (candidate >= search && candidate_end <= hole_end) {
 			unsigned long blocked_end = 0;
 
-			if (!retry_queue_overlap_locked(candidate, candidate_end,
+			if (retry_empty ||
+			    !retry_queue_overlap_locked(candidate, candidate_end,
 							&blocked_end)) {
 				*addr = candidate;
 				return true;
@@ -1749,6 +1832,70 @@ occupied_mt_find_hole_lowest_locked(unsigned long size, unsigned long align,
 		return addr;
 
 	return -ENOENT;
+}
+
+static __always_inline struct vmap_area *
+free_mt_find_enclose_range_locked(unsigned long start, unsigned long end)
+{
+	struct vmap_area *va;
+
+	lockdep_assert_held(&free_vmap_area_lock);
+
+	va = __find_vmap_area_mt(start, &free_vmap_area_mt);
+	if (!va)
+		return NULL;
+
+	if (va->va_start > start || va->va_end < end)
+		return NULL;
+
+	return va;
+}
+
+static __always_inline void
+occupied_mt_cache_gap_miss_locked(unsigned long candidate, unsigned long vend)
+{
+	struct vmap_area *prev, *next;
+	unsigned long blocked_end;
+
+	lockdep_assert_held(&free_vmap_area_lock);
+
+	if (!occupied_mt_supported())
+		return;
+
+	prev = __find_vmap_area_enclose_addr_mt(candidate, &free_vmap_area_mt);
+	if (prev && prev->va_start <= candidate && candidate < prev->va_end)
+		return;
+
+	next = __find_vmap_area_exceed_addr_mt(candidate, &free_vmap_area_mt);
+	blocked_end = next ? next->va_start : vend;
+	if (blocked_end <= candidate)
+		return;
+
+	WARN_ON_ONCE(!occupied_mt_store_range_raw_locked(candidate, blocked_end));
+}
+
+static __always_inline bool occupied_mt_seed_from_free_locked(void)
+{
+	MA_STATE(mas, &free_vmap_area_mt, 0, 0);
+	struct vmap_area *va;
+	unsigned long search = VMALLOC_START;
+
+	lockdep_assert_held(&free_vmap_area_lock);
+
+	mas_for_each(&mas, va, VMALLOC_END - 1) {
+		if (search < va->va_start) {
+			if (!occupied_mt_store_range_raw_locked(search, va->va_start))
+				return false;
+		}
+
+		if (va->va_end > search)
+			search = va->va_end;
+	}
+
+	if (search < VMALLOC_END)
+		return occupied_mt_store_range_raw_locked(search, VMALLOC_END);
+
+	return true;
 }
 
 /* Lowest-match scan directly on maple ordered traversal. */
@@ -1939,11 +2086,39 @@ va_clip(struct vmap_area *va, unsigned long nva_start_addr,
 	}
 
 	if (type != FL_FIT_TYPE) {
-		if (free_mt_supported() &&
-		    !free_mt_update_va_locked(va, old_start, old_end))
-			return -ENOMEM;
-
-		if (lva && !insert_vmap_area_free_locked(lva)) {
+		if (free_mt_supported()) {
+			/*
+			 * Drop only the consumed sub-range from the original
+			 * free entry instead of erase-then-store. The maple
+			 * tree leaves @va at the surviving sub-range intact,
+			 * so a single mas_store per clip side suffices.
+			 *
+			 * For NE_FIT, insert @lva at the original entry's
+			 * left portion first: mas_store overwrites the old
+			 * [old_start, old_end-1]->va entry only across
+			 * [old_start, lva->va_end-1], leaving the right side
+			 * still pointing to @va. The subsequent middle trim
+			 * carves out the consumed gap. Trades 3 stores
+			 * (erase + restore + lva) for 2.
+			 */
+			if (type == LE_FIT_TYPE) {
+				if (!free_mt_trim_range_locked(old_start,
+							       va->va_start))
+					return -ENOMEM;
+			} else if (type == RE_FIT_TYPE) {
+				if (!free_mt_trim_range_locked(va->va_end,
+							       old_end))
+					return -ENOMEM;
+			} else { /* NE_FIT_TYPE */
+				if (!insert_vmap_area_free_nocheck_locked(lva)) {
+					kmem_cache_free(vmap_area_cachep, lva);
+					return -ENOMEM;
+				}
+				if (!free_mt_trim_range_locked(nva_start_addr,
+							       nva_start_addr + size))
+					return -ENOMEM;
+			}
+		} else if (lva && !insert_vmap_area_free_nocheck_locked(lva)) {
 			kmem_cache_free(vmap_area_cachep, lva);
 			return -ENOMEM;
 		}
@@ -1965,7 +2140,7 @@ restore_allocated_vmap_range_free_locked(unsigned long start, unsigned long end)
 
 	va->va_start = start;
 	va->va_end = end;
-	if (!insert_vmap_area_free_locked(va)) {
+	if (!insert_vmap_area_free_nocheck_locked(va)) {
 		kmem_cache_free(vmap_area_cachep, va);
 		return false;
 	}
@@ -2048,6 +2223,7 @@ __alloc_vmap_area(unsigned long size, unsigned long align,
 	int ret;
 	unsigned long nva_start_addr;
 	unsigned long nva_end_addr;
+	unsigned long search_len = size;
 	struct vmap_area *va;
 	MA_STATE(mas, &free_vmap_area_mt, 0, 0);
 
@@ -2059,6 +2235,28 @@ __alloc_vmap_area(unsigned long size, unsigned long align,
 		return -EINVAL;
 	if (size > vend - vstart)
 		return -ENOENT;
+	if (align > PAGE_SIZE && (vend - vstart) != size) {
+		if (check_add_overflow(size, align - 1, &search_len))
+			return -ERANGE;
+	}
+
+	if (occupied_mt_supported() && align <= PAGE_SIZE) {
+		unsigned long candidate;
+
+		if (occupied_mt_find_hole_window_locked(vstart, vend - 1, size,
+							align, &candidate)) {
+			if (check_add_overflow(candidate, size, &nva_end_addr))
+				return -ERANGE;
+
+			va = free_mt_find_enclose_range_locked(candidate, nva_end_addr);
+			if (likely(va)) {
+				nva_start_addr = candidate;
+				goto found;
+			}
+
+			occupied_mt_cache_gap_miss_locked(candidate, vend);
+		}
+	}
 
 	/*
 	 * Free maple index is authoritative for allocatable ranges; lazy and
@@ -2067,26 +2265,37 @@ __alloc_vmap_area(unsigned long size, unsigned long align,
 	mas_set(&mas, vstart);
 	va = mas_find(&mas, vend - 1);
 	while (va) {
-		unsigned long search_start = max(va->va_start, vstart);
-		unsigned long candidate_end;
+		unsigned long search_start, limit_end;
+
+		search_start = va->va_start;
+		if (search_start < vstart)
+			search_start = vstart;
+
+		limit_end = va->va_end;
+		if (limit_end > vend)
+			limit_end = vend;
+
+		if (unlikely(limit_end <= search_start))
+			goto next;
+		if (unlikely(limit_end - search_start < search_len))
+			goto next;
 
 		nva_start_addr = ALIGN(search_start, align);
 		if (nva_start_addr < search_start)
 			return -ERANGE;
 
-		if (check_add_overflow(nva_start_addr, size - 1, &candidate_end))
+		if (check_add_overflow(nva_start_addr, size, &nva_end_addr))
 			return -ERANGE;
-
-		if (candidate_end < vend && candidate_end < va->va_end) {
-			nva_end_addr = candidate_end + 1;
+		if (nva_end_addr <= limit_end)
 			break;
-		}
 
+next:
 		va = mas_next(&mas, vend - 1);
 	}
 	if (!va)
 		return -ENOENT;
 
+found:
 	ret = va_clip(va, nva_start_addr, size);
 	if (WARN_ON_ONCE(ret))
 		return ret;
@@ -2571,7 +2780,8 @@ decay_va_pool_node(struct vmap_node *vn, bool full_decay)
 		}
 	}
 
-	WARN_ON_ONCE(!reclaim_list_global(&decay_list, false, &decay_failed));
+	WARN_ON_ONCE(!reclaim_list_global(&decay_list, occupied_mt_supported(),
+					  &decay_failed));
 	list_for_each_entry_safe(va, nva, &decay_failed, list) {
 		list_del_init(&va->list);
 		WARN_ON_ONCE(!node_pool_add_va(vn, va));
@@ -6043,3 +6253,21 @@ void __init vmalloc_init(void)
 	vmap_node_shrinker->scan_objects = vmap_node_shrink_scan;
 	shrinker_register(vmap_node_shrinker);
 }
+
+static int __init vmap_enable_occupied_perf_mode(void)
+{
+	bool seeded = false;
+
+	spin_lock(&free_vmap_area_lock);
+	try_init_occupied_mt_locked();
+	if (occupied_mt_enabled())
+		seeded = occupied_mt_seed_from_free_locked();
+	occupied_vmap_area_perf_mode = seeded;
+	spin_unlock(&free_vmap_area_lock);
+
+	if (!seeded)
+		pr_warn("vmalloc: occupied perf mode disabled (seed failure)\n");
+
+	return 0;
+}
+late_initcall(vmap_enable_occupied_perf_mode);
