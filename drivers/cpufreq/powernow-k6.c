@@ -29,10 +29,10 @@ static unsigned int                     max_multiplier;
 static unsigned int			param_busfreq = 0;
 static unsigned int			param_max_multiplier = 0;
 
-module_param_named(max_multiplier, param_max_multiplier, uint, S_IRUGO);
+module_param_named(max_multiplier, param_max_multiplier, uint, 0444);
 MODULE_PARM_DESC(max_multiplier, "Maximum multiplier (allowed values: 20 30 35 40 45 50 55 60)");
 
-module_param_named(bus_frequency, param_busfreq, uint, S_IRUGO);
+module_param_named(bus_frequency, param_busfreq, uint, 0444);
 MODULE_PARM_DESC(bus_frequency, "Bus frequency in kHz");
 
 /* Clock ratio multiplied by 10 - see table 27 in AMD#23446 */
