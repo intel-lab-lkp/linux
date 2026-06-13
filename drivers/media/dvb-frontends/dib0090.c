@@ -1161,12 +1161,6 @@ int dib0090_gain_control(struct dvb_frontend *fe)
 		state->agc_freeze = 0;
 		dib0090_write_reg(state, 0x04, 0x0);
 
-#ifdef CONFIG_BAND_SBAND
-		if (state->current_band == BAND_SBAND) {
-			dib0090_set_rframp(state, rf_ramp_sband);
-			dib0090_set_bbramp(state, bb_ramp_boost);
-		} else
-#endif
 #ifdef CONFIG_BAND_VHF
 		if (state->current_band == BAND_VHF && !state->identity.p1g) {
 			dib0090_set_rframp(state, rf_ramp_pwm_vhf);
@@ -1786,10 +1780,6 @@ static int dib0090_wbd_calibration(struct dib0090_state *state, enum frontend_tu
 			wbd_gain = wbd->wbd_gain;
 		else {
 			wbd_gain = 4;
-#if defined(CONFIG_BAND_LBAND) || defined(CONFIG_BAND_SBAND)
-			if ((state->current_band == BAND_LBAND) || (state->current_band == BAND_SBAND))
-				wbd_gain = 2;
-#endif
 		}
 
 		if (wbd_gain == state->wbd_calibration_gain) {	/* the WBD calibration has already been done */
@@ -1869,12 +1859,6 @@ static const struct dib0090_pll dib0090_pll_table[] = {
 	{700000, 0, 2, 4, 4},
 	{860000, 1, 2, 4, 4},
 #endif
-#ifdef CONFIG_BAND_LBAND
-	{1800000, 1, 0, 2, 4},
-#endif
-#ifdef CONFIG_BAND_SBAND
-	{2900000, 0, 14, 1, 4},
-#endif
 };
 
 static const struct dib0090_tuning dib0090_tuning_table_fm_vhf_on_cband[] = {
@@ -1891,15 +1875,6 @@ static const struct dib0090_tuning dib0090_tuning_table_fm_vhf_on_cband[] = {
 	{750000, 2, 5, 15, 0x300, 0x1d12, 0xb9ce, EN_UHF},
 	{850000, 2, 6, 15, 0x300, 0x1d12, 0xb9ce, EN_UHF},
 	{900000, 2, 7, 15, 0x300, 0x1d12, 0xb9ce, EN_UHF},
-#endif
-#ifdef CONFIG_BAND_LBAND
-	{1500000, 4, 0, 20, 0x300, 0x1912, 0x82c9, EN_LBD},
-	{1600000, 4, 1, 20, 0x300, 0x1912, 0x82c9, EN_LBD},
-	{1800000, 4, 3, 20, 0x300, 0x1912, 0x82c9, EN_LBD},
-#endif
-#ifdef CONFIG_BAND_SBAND
-	{2300000, 1, 4, 20, 0x300, 0x2d2A, 0x82c7, EN_SBD},
-	{2900000, 1, 7, 20, 0x280, 0x2deb, 0x8347, EN_SBD},
 #endif
 };
 
@@ -1921,15 +1896,6 @@ static const struct dib0090_tuning dib0090_tuning_table[] = {
 	{850000, 2, 6, 15, 0x300, 0x1d12, 0xb9ce, EN_UHF},
 	{900000, 2, 7, 15, 0x300, 0x1d12, 0xb9ce, EN_UHF},
 #endif
-#ifdef CONFIG_BAND_LBAND
-	{1500000, 4, 0, 20, 0x300, 0x1912, 0x82c9, EN_LBD},
-	{1600000, 4, 1, 20, 0x300, 0x1912, 0x82c9, EN_LBD},
-	{1800000, 4, 3, 20, 0x300, 0x1912, 0x82c9, EN_LBD},
-#endif
-#ifdef CONFIG_BAND_SBAND
-	{2300000, 1, 4, 20, 0x300, 0x2d2A, 0x82c7, EN_SBD},
-	{2900000, 1, 7, 20, 0x280, 0x2deb, 0x8347, EN_SBD},
-#endif
 };
 
 static const struct dib0090_tuning dib0090_p1g_tuning_table[] = {
@@ -1949,15 +1915,6 @@ static const struct dib0090_tuning dib0090_p1g_tuning_table[] = {
 	{680000, 2, 5, 15, 0x300, 0x1d12, 0xb9ce, EN_UHF},
 	{720000, 2, 6, 15, 0x300, 0x1d12, 0xb9ce, EN_UHF},
 	{900000, 2, 7, 15, 0x300, 0x1d12, 0xb9ce, EN_UHF},
-#endif
-#ifdef CONFIG_BAND_LBAND
-	{1500000, 4, 0, 20, 0x300, 0x1912, 0x82c9, EN_LBD},
-	{1600000, 4, 1, 20, 0x300, 0x1912, 0x82c9, EN_LBD},
-	{1800000, 4, 3, 20, 0x300, 0x1912, 0x82c9, EN_LBD},
-#endif
-#ifdef CONFIG_BAND_SBAND
-	{2300000, 1, 4, 20, 0x300, 0x2d2A, 0x82c7, EN_SBD},
-	{2900000, 1, 7, 20, 0x280, 0x2deb, 0x8347, EN_SBD},
 #endif
 };
 
@@ -1984,12 +1941,6 @@ static const struct dib0090_pll dib0090_p1g_pll_table[] = {
 	{680000, 0, 4, 4, 4},
 	{860000, 1, 4, 4, 4},
 #endif
-#ifdef CONFIG_BAND_LBAND
-	{1800000, 1, 2, 2, 4},
-#endif
-#ifdef CONFIG_BAND_SBAND
-	{2900000, 0, 1, 1, 6},
-#endif
 };
 
 static const struct dib0090_tuning dib0090_p1g_tuning_table_fm_vhf_on_cband[] = {
@@ -2005,15 +1956,6 @@ static const struct dib0090_tuning dib0090_p1g_tuning_table_fm_vhf_on_cband[] = 
 	{750000, 2, 5, 15, 0x300, 0x1d12, 0xb9ce, EN_UHF},
 	{850000, 2, 6, 15, 0x300, 0x1d12, 0xb9ce, EN_UHF},
 	{900000, 2, 7, 15, 0x300, 0x1d12, 0xb9ce, EN_UHF},
-#endif
-#ifdef CONFIG_BAND_LBAND
-	{1500000, 4, 0, 20, 0x300, 0x1912, 0x82c9, EN_LBD},
-	{1600000, 4, 1, 20, 0x300, 0x1912, 0x82c9, EN_LBD},
-	{1800000, 4, 3, 20, 0x300, 0x1912, 0x82c9, EN_LBD},
-#endif
-#ifdef CONFIG_BAND_SBAND
-	{2300000, 1, 4, 20, 0x300, 0x2d2A, 0x82c7, EN_SBD},
-	{2900000, 1, 7, 20, 0x280, 0x2deb, 0x8347, EN_SBD},
 #endif
 };
 
