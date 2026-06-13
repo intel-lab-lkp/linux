@@ -587,6 +587,47 @@ static const struct acpi_device_id amd_hsmp_acpi_ids[] = {
 };
 MODULE_DEVICE_TABLE(acpi, amd_hsmp_acpi_ids);
 
+static void hsmp_acpi_sock_release(struct kref *kref)
+{
+	struct hsmp_plat_device *pdev = container_of(kref, struct hsmp_plat_device,
+						     acpi_sock_kref);
+
+	mutex_lock(&hsmp_acpi_probe_mutex);
+	if (pdev->mdev.this_device)
+		hsmp_misc_deregister();
+	hsmp_destroy_metric_read_locks(pdev, pdev->num_sockets);
+	kfree(pdev->sock);
+	pdev->sock = NULL;
+	pdev->num_sockets = 0;
+	pdev->proto_ver = 0;
+	pdev->acpi_sock_kref_started = false;
+	mutex_unlock(&hsmp_acpi_probe_mutex);
+}
+
+/**
+ * hsmp_acpi_free_sock_array_early() - Drop the global socket array on early probe failure.
+ *
+ * When init_acpi() or misc_register() fails before any ACPI socket reference
+ * is handed out via kref, free the array and destroy per-socket mutexes.
+ */
+static void hsmp_acpi_free_sock_array_early(void)
+{
+	u16 i;
+
+	lockdep_assert_held(&hsmp_acpi_probe_mutex);
+
+	if (hsmp_pdev->acpi_sock_kref_started)
+		return;
+	if (!hsmp_pdev->sock)
+		return;
+
+	for (i = 0; i < hsmp_pdev->num_sockets; i++)
+		mutex_destroy(&hsmp_pdev->sock[i].metric_read_lock);
+	kfree(hsmp_pdev->sock);
+	hsmp_pdev->sock = NULL;
+	hsmp_pdev->num_sockets = 0;
+}
+
 static int hsmp_acpi_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -597,34 +638,44 @@ static int hsmp_acpi_probe(struct platform_device *pdev)
 
 	guard(mutex)(&hsmp_acpi_probe_mutex);
 
-	if (!hsmp_pdev->is_probed) {
+	if (!hsmp_pdev->sock) {
 		hsmp_pdev->num_sockets = topology_max_packages();
 		if (!hsmp_pdev->num_sockets) {
 			dev_err(&pdev->dev, "No CPU sockets detected\n");
 			return -ENODEV;
 		}
 
-		hsmp_pdev->sock = devm_kcalloc(&pdev->dev, hsmp_pdev->num_sockets,
-					       sizeof(*hsmp_pdev->sock),
-					       GFP_KERNEL);
+		hsmp_pdev->sock = kcalloc(hsmp_pdev->num_sockets,
+					  sizeof(*hsmp_pdev->sock),
+					  GFP_KERNEL);
 		if (!hsmp_pdev->sock)
 			return -ENOMEM;
+
+		hsmp_init_metric_read_locks(hsmp_pdev, hsmp_pdev->num_sockets);
 	}
 
 	ret = init_acpi(&pdev->dev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to initialize HSMP interface.\n");
+		hsmp_acpi_free_sock_array_early();
 		return ret;
 	}
 
-	if (!hsmp_pdev->is_probed) {
+	if (!hsmp_pdev->mdev.this_device) {
 		ret = hsmp_misc_register(&pdev->dev);
 		if (ret) {
 			dev_err(&pdev->dev, "Failed to register misc device\n");
+			hsmp_acpi_free_sock_array_early();
 			return ret;
 		}
-		hsmp_pdev->is_probed = true;
-		dev_dbg(&pdev->dev, "AMD HSMP ACPI is probed successfully\n");
+		dev_dbg(&pdev->dev, "AMD HSMP ACPI misc device registered\n");
+	}
+
+	if (!hsmp_pdev->acpi_sock_kref_started) {
+		kref_init(&hsmp_pdev->acpi_sock_kref);
+		hsmp_pdev->acpi_sock_kref_started = true;
+	} else {
+		kref_get(&hsmp_pdev->acpi_sock_kref);
 	}
 
 	return 0;
@@ -632,16 +683,7 @@ static int hsmp_acpi_probe(struct platform_device *pdev)
 
 static void hsmp_acpi_remove(struct platform_device *pdev)
 {
-	mutex_lock(&hsmp_acpi_probe_mutex);
-	/*
-	 * We register only one misc_device even on multi-socket system.
-	 * So, deregister should happen only once.
-	 */
-	if (hsmp_pdev->is_probed) {
-		hsmp_misc_deregister();
-		hsmp_pdev->is_probed = false;
-	}
-	mutex_unlock(&hsmp_acpi_probe_mutex);
+	kref_put(&hsmp_pdev->acpi_sock_kref, hsmp_acpi_sock_release);
 }
 
 static struct platform_driver amd_hsmp_driver = {
