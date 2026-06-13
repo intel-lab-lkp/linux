@@ -177,12 +177,20 @@ static int smb_block_read(struct rmi_transport_dev *xport,
 	struct rmi_smb_xport *rmi_smb =
 		container_of(xport, struct rmi_smb_xport, xport);
 	struct i2c_client *client = rmi_smb->client;
+	u8 data[I2C_SMBUS_BLOCK_MAX];
 	int retval;
 
-	retval = i2c_smbus_read_block_data(client, commandcode, buf);
+	/*
+	 * i2c_smbus_read_block_data() copies the device-reported block count
+	 * (up to I2C_SMBUS_BLOCK_MAX) into the destination and has no way to
+	 * know its size, so read into a local buffer and copy back at most
+	 * len bytes - never past the caller's buffer.
+	 */
+	retval = i2c_smbus_read_block_data(client, commandcode, data);
 	if (retval < 0)
 		return retval;
 
+	memcpy(buf, data, min_t(size_t, retval, len));
 	return retval;
 }
 
