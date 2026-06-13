@@ -148,6 +148,7 @@ struct asus_drvdata {
 	int battery_stat;
 	bool battery_in_query;
 	unsigned long battery_next_query;
+	bool fn_lock_sync_work_disabled;
 	struct work_struct fn_lock_sync_work;
 	bool fn_lock;
 #if IS_REACHABLE(CONFIG_ASUS_WMI)
@@ -416,7 +417,7 @@ static int asus_event(struct hid_device *hdev, struct hid_field *field,
 		case KEY_KBDILLUMTOGGLE:
 			return !asus_hid_event(ASUS_EV_BRTTOGGLE);
 		case KEY_FN_ESC:
-			if (drvdata->quirks & QUIRK_HID_FN_LOCK) {
+			if (!drvdata->fn_lock_sync_work_disabled && (drvdata->quirks & QUIRK_HID_FN_LOCK)) {
 				drvdata->fn_lock = !drvdata->fn_lock;
 				schedule_work(&drvdata->fn_lock_sync_work);
 			}
@@ -1491,8 +1492,10 @@ static void asus_remove(struct hid_device *hdev)
 		cancel_work_sync(&drvdata->kbd_backlight->work);
 	}
 
-	if (drvdata->quirks & QUIRK_HID_FN_LOCK)
+	if (drvdata->quirks & QUIRK_HID_FN_LOCK) {
+		drvdata->fn_lock_sync_work_disabled = true;
 		cancel_work_sync(&drvdata->fn_lock_sync_work);
+	}
 
 #if IS_REACHABLE(CONFIG_ASUS_WMI)
 	drvdata->wmi_work_disabled = true;
