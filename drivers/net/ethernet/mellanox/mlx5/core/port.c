@@ -921,8 +921,8 @@ int mlx5_query_mtppse(struct mlx5_core_dev *mdev, u8 pin, u8 *arm, u8 *mode)
 	if (err)
 		return err;
 
-	*arm = MLX5_GET(mtppse_reg, in, event_arm);
-	*mode = MLX5_GET(mtppse_reg, in, event_generation_mode);
+	*arm = MLX5_GET(mtppse_reg, out, event_arm);
+	*mode = MLX5_GET(mtppse_reg, out, event_generation_mode);
 
 	return err;
 }
