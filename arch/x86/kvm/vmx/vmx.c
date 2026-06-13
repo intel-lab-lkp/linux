@@ -5254,6 +5254,9 @@ bool vmx_interrupt_blocked(struct kvm_vcpu *vcpu)
 
 int vmx_interrupt_allowed(struct kvm_vcpu *vcpu, bool for_injection)
 {
+	if (vmx_interrupt_blocked(vcpu))
+		return 0;
+
 	if (vcpu->arch.nested_run_pending)
 		return -EBUSY;
 
@@ -5264,7 +5267,7 @@ int vmx_interrupt_allowed(struct kvm_vcpu *vcpu, bool for_injection)
 	if (for_injection && is_guest_mode(vcpu) && nested_exit_on_intr(vcpu))
 		return -EBUSY;
 
-	return !vmx_interrupt_blocked(vcpu);
+	return 1;
 }
 
 int vmx_set_tss_addr(struct kvm *kvm, unsigned int addr)
