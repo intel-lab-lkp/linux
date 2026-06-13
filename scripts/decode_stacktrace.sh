@@ -7,7 +7,6 @@ usage() {
 	echo "Usage:"
 	echo "	$0 [-R] -r <release>"
 	echo "	$0 [-R] [<vmlinux> [<base_path>|auto [<modules_path>]]]"
-	echo "	$0 -h"
 	echo "Options:"
 	echo "  -R: decode return address instead of caller address."
 }
@@ -37,7 +36,7 @@ ADDR2LINE=${UTIL_PREFIX}addr2line${UTIL_SUFFIX}
 NM=${UTIL_PREFIX}nm${UTIL_SUFFIX}
 decode_retaddr=false
 
-if [[ $1 == "-h" ]] ; then
+if [[ $1 == "" ]] ; then
 	usage
 	exit 0
 elif [[ $1 == "-R" ]] ; then
