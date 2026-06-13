@@ -35,6 +35,7 @@ static DEFINE_XARRAY(erdt_domain_xa);
 
 #define ERDT_VALID_VERSION			1
 #define CMRC_VALID_INDEX_FUNC_VERSION		1
+#define UNAVAILABLE_COUNTER			BIT_ULL(63)
 #define RMDD_FLAG_CPU_DOMAIN			BIT(0)
 
 static u32 valid_subtbl_mask;
@@ -42,6 +43,94 @@ static u32 valid_subtbl_mask;
 bool erdt_enabled(void)
 {
 	return erdt_enabled_flag;
+}
+
+static void __iomem *cmrc_index_function_1(struct erdt_domain_info *d,
+					   struct acpi_erdt_cmrc *cmrc, int rmid)
+{
+	u16 clump_size, stride_size;
+	void __iomem *vaddr;
+
+	clump_size = cmrc->clump_size;
+	stride_size = cmrc->clump_stride;
+
+	/*
+	 * MMIO_ADDRESS_for_RMID# = CMRC Base +
+	 *   (RMID / ClumpSize) * Stride +
+	 *   (RMID % ClumpSize) * 8
+	 */
+	vaddr = d->base[ERDT_MMIO_CMRC_BASE] +
+		(rmid / clump_size) * stride_size +
+		(rmid % clump_size) * 8;
+
+	return vaddr;
+}
+
+/**
+ * erdt_read_l3_occupancy - Read L3 occupancy count for a given RMID
+ * @d:    Pointer to the ERDT domain info
+ * @rmid: Resource Monitoring ID to read occupancy for
+ * @val:  Output pointer to store the scaled occupancy count
+ *
+ * Calculates the MMIO address using clump and stride information
+ * from the CMRC ACPI structure and reads the L3 cache occupancy
+ * count for the given RMID. The raw value is scaled using the
+ * up_scale factor provided by firmware.
+ *
+ * Return: 0 for success, error code for other cases.
+ */
+static int erdt_read_l3_occupancy(struct erdt_domain_info *d, int rmid, u64 *val)
+{
+	struct acpi_erdt_cmrc *cmrc;
+	void __iomem *vaddr;
+	u64 l3_cmt_count;
+	u32 offset;
+
+	cmrc = d->cmrc;
+	if (!cmrc)
+		return -EIO;
+
+	offset = (rmid / cmrc->clump_size) * cmrc->clump_stride +
+		 (rmid % cmrc->clump_size) * 8;
+	if (offset + sizeof(u64) > (u32)cmrc->cmt_reg_size << 12)
+		return -EINVAL;
+
+	vaddr = cmrc_index_function_1(d, cmrc, rmid);
+
+	l3_cmt_count = readq(vaddr);
+	if (l3_cmt_count & UNAVAILABLE_COUNTER)
+		return -EINVAL;
+
+	*val = l3_cmt_count * cmrc->up_scale;
+
+	return 0;
+}
+
+/**
+ * erdt_mon_read - Read monitoring data for a given domain and RMID
+ * @hdr:    Domain header
+ * @ev_id:  Monitoring event ID (e.g. QOS_L3_OCCUP_EVENT_ID)
+ * @rmid:   Resource Monitoring ID for which to read the data
+ * @val:    Store the read data
+ *
+ * Looks up the domain by domid and dispatches the read request
+ * to the appropriate helper based on the event type.
+ * Currently supports only L3 occupancy monitoring.
+ *
+ * Return: 0 on success, error code otherwise.
+ */
+int erdt_mon_read(struct rdt_domain_hdr *hdr, int ev_id, int rmid, u64 *val)
+{
+	struct erdt_domain_info *d;
+
+	d = xa_load(&erdt_domain_xa, hdr->id);
+	if (!d)
+		return -EIO;
+
+	if (ev_id == QOS_L3_OCCUP_EVENT_ID)
+		return erdt_read_l3_occupancy(d, rmid, val);
+
+	return -EINVAL;
 }
 
 /**
