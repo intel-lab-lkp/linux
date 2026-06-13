@@ -3925,8 +3925,22 @@ static int ocfs2_duplicate_inline_data(struct inode *s_inode,
 	struct ocfs2_super *osb = OCFS2_SB(s_inode->i_sb);
 	struct ocfs2_dinode *s_di = (struct ocfs2_dinode *)s_bh->b_data;
 	struct ocfs2_dinode *t_di = (struct ocfs2_dinode *)t_bh->b_data;
+	u16 id_count = le16_to_cpu(s_di->id2.i_data.id_count);
 
 	BUG_ON(!(OCFS2_I(s_inode)->ip_dyn_features & OCFS2_INLINE_DATA_FL));
+
+	/*
+	 * id_count was validated by ocfs2_validate_inode_block() when the inode
+	 * was read, but the cached buffer can be modified afterward, so re-check
+	 * it before the memcpy.
+	 */
+	if (id_count > ocfs2_max_inline_data_with_xattr(s_inode->i_sb, s_di)) {
+		ret = ocfs2_error(s_inode->i_sb,
+				  "Inode %llu has invalid inline data id_count %u\n",
+				  (unsigned long long)OCFS2_I(s_inode)->ip_blkno,
+				  id_count);
+		goto out;
+	}
 
 	handle = ocfs2_start_trans(osb, OCFS2_INODE_UPDATE_CREDITS);
 	if (IS_ERR(handle)) {
@@ -3943,8 +3957,7 @@ static int ocfs2_duplicate_inline_data(struct inode *s_inode,
 	}
 
 	t_di->id2.i_data.id_count = s_di->id2.i_data.id_count;
-	memcpy(t_di->id2.i_data.id_data, s_di->id2.i_data.id_data,
-	       le16_to_cpu(s_di->id2.i_data.id_count));
+	memcpy(t_di->id2.i_data.id_data, s_di->id2.i_data.id_data, id_count);
 	spin_lock(&OCFS2_I(t_inode)->ip_lock);
 	OCFS2_I(t_inode)->ip_dyn_features |= OCFS2_INLINE_DATA_FL;
 	t_di->i_dyn_features = cpu_to_le16(OCFS2_I(t_inode)->ip_dyn_features);
