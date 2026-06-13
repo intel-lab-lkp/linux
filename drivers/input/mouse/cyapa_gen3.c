@@ -247,27 +247,37 @@ ssize_t cyapa_smbus_read_block(struct cyapa *cyapa, u8 cmd, size_t len,
 	ssize_t ret;
 	u8 index;
 	u8 smbus_cmd;
-	u8 *buf;
+	u8 buf[I2C_SMBUS_BLOCK_MAX];
 	struct i2c_client *client = cyapa->client;
 
 	if (!(SMBUS_BYTE_BLOCK_CMD_MASK & cmd))
 		return -EINVAL;
 
+	/*
+	 * i2c_smbus_read_block_data() copies the device-reported block count
+	 * (up to I2C_SMBUS_BLOCK_MAX) into its buffer and has no way to know
+	 * its size, so read into a local buffer and copy back at most the
+	 * expected number of bytes - never past the caller's buffer.
+	 */
 	if (SMBUS_GROUP_BLOCK_CMD_MASK & cmd) {
 		/* read specific block registers command. */
 		smbus_cmd = SMBUS_ENCODE_RW(cmd, SMBUS_READ);
-		ret = i2c_smbus_read_block_data(client, smbus_cmd, values);
+		ret = i2c_smbus_read_block_data(client, smbus_cmd, buf);
+		if (ret > 0)
+			memcpy(values, buf, min_t(size_t, ret, len));
 		goto out;
 	}
 
 	ret = 0;
 	for (index = 0; index * I2C_SMBUS_BLOCK_MAX < len; index++) {
+		size_t offset = index * I2C_SMBUS_BLOCK_MAX;
+
 		smbus_cmd = SMBUS_ENCODE_IDX(cmd, index);
 		smbus_cmd = SMBUS_ENCODE_RW(smbus_cmd, SMBUS_READ);
-		buf = values + I2C_SMBUS_BLOCK_MAX * index;
 		ret = i2c_smbus_read_block_data(client, smbus_cmd, buf);
 		if (ret < 0)
 			goto out;
+		memcpy(values + offset, buf, min_t(size_t, ret, len - offset));
 	}
 
 out:
