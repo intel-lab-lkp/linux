@@ -1420,11 +1420,17 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		if (drvdata->tp) {
 			ret = asus_start_multitouch(hdev);
 			if (ret)
-				goto err_stop_hw;
+				goto err_unregister_backlight;
 		}
 	}
 
 	return 0;
+err_unregister_backlight:
+	if (drvdata->kbd_backlight) {
+		asus_hid_unregister_listener(&drvdata->kbd_backlight->listener);
+		devm_kfree(&hdev->dev, drvdata->kbd_backlight);
+		drvdata->kbd_backlight = NULL;
+	}
 err_stop_hw:
 	hid_hw_stop(hdev);
 	return ret;
