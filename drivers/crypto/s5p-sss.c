@@ -2151,8 +2151,8 @@ static int s5p_aes_probe(struct platform_device *pdev)
 
 	/*
 	 * Note: HASH and PRNG uses the same registers in secss, avoid
-	 * overwrite each other. This will drop HASH when CONFIG_EXYNOS_RNG
-	 * is enabled in config. We need larger size for HASH registers in
+	 * overwrite each other. This will drop HASH when CONFIG_CRYPTO_DEV_EXYNOS_RNG
+	 * is enabled. We need larger size for HASH registers in
 	 * secss, current describe only AES/DES
 	 */
 	if (IS_ENABLED(CONFIG_CRYPTO_DEV_EXYNOS_HASH)) {
