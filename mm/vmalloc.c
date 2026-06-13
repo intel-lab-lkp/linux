@@ -2508,6 +2508,7 @@ struct vmap_bump_chunk {
 	unsigned long		limit;
 	unsigned long		bump;
 	atomic_t		alloced;	/* # outstanding pages */
+	int			owner_cpu;
 	struct list_head	link;		/* on vmap_bump_chunks */
 	struct rcu_head		rcu;		/* deferred free */
 	struct vmap_area	*page_va[VMAP_BUMP_CHUNK_PAGES];
@@ -2516,6 +2517,16 @@ struct vmap_bump_chunk {
 static DEFINE_PER_CPU(struct vmap_bump_chunk *, vmap_bump_cur);
 static LIST_HEAD(vmap_bump_chunks);
 static DEFINE_SPINLOCK(vmap_bump_chunks_lock);
+
+static __always_inline bool
+vmap_bump_eligible(unsigned long size, unsigned long align,
+		   unsigned long vstart, unsigned long vend)
+{
+	return vstart == VMALLOC_START && vend == VMALLOC_END &&
+		size > 0 && PAGE_ALIGNED(size) &&
+		size <= VMAP_BUMP_CHUNK_SIZE / 2 &&
+		align > 0 && align <= VMAP_BUMP_CHUNK_SIZE / 2;
+}
 
 /*
  * Coarse [lo, hi) bounds covering every active vmap_bump_chunk's
@@ -2582,11 +2593,10 @@ vmap_bump_alloc(unsigned long size, unsigned long align,
 {
 	struct vmap_bump_chunk *chunk;
 	struct vmap_area *va;
-	unsigned long aligned, idx, n_pages, i;
+	struct vmap_area **slot;
+	unsigned long aligned, new_bump, idx, n_pages, i;
 
-	if (vstart != VMALLOC_START || vend != VMALLOC_END ||
-	    size == 0 || size > VMAP_BUMP_CHUNK_SIZE / 2 ||
-	    align > VMAP_BUMP_CHUNK_SIZE / 2)
+	if (!vmap_bump_eligible(size, align, vstart, vend))
 		return NULL;
 
 	va = kmem_cache_alloc_node(vmap_area_cachep, gfp_mask, node);
@@ -2607,22 +2617,34 @@ vmap_bump_alloc(unsigned long size, unsigned long align,
 		kmem_cache_free(vmap_area_cachep, va);
 		return NULL;
 	}
+
 	aligned = ALIGN(chunk->bump, align);
-	if (aligned + size > chunk->limit) {
+	if (aligned < chunk->base ||
+	    check_add_overflow(aligned, size, &new_bump) ||
+	    new_bump > chunk->limit) {
 		preempt_enable();
 		kmem_cache_free(vmap_area_cachep, va);
 		return NULL;
 	}
-	chunk->bump = aligned + size;
+
 	idx = vmap_chunk_page_idx(chunk, aligned);
 	n_pages = size >> PAGE_SHIFT;
-	for (i = 0; i < n_pages; i++)
-		chunk->page_va[idx + i] = va;
+	if (unlikely(idx >= VMAP_BUMP_CHUNK_PAGES ||
+		     n_pages > VMAP_BUMP_CHUNK_PAGES - idx)) {
+		preempt_enable();
+		kmem_cache_free(vmap_area_cachep, va);
+		return NULL;
+	}
+
+	chunk->bump = new_bump;
+	slot = &chunk->page_va[idx];
+	for (i = n_pages; i > 0; i--)
+		*slot++ = va;
 	atomic_add(n_pages, &chunk->alloced);
 	preempt_enable();
 
 	va->va_start = aligned;
-	va->va_end = aligned + size;
+	va->va_end = new_bump;
 	va->vm = NULL;
 	/*
 	 * Encode the destination vmap_node so the existing per-node pool
@@ -2651,6 +2673,7 @@ vmap_bump_refill(gfp_t gfp_mask)
 {
 	struct vmap_bump_chunk *new_chunk;
 	unsigned long base;
+	int cpu;
 
 	new_chunk = kvzalloc(sizeof(*new_chunk), gfp_mask);
 	if (!new_chunk)
@@ -2670,6 +2693,7 @@ vmap_bump_refill(gfp_t gfp_mask)
 	new_chunk->limit = base + VMAP_BUMP_CHUNK_SIZE;
 	new_chunk->bump = base;
 	atomic_set(&new_chunk->alloced, 0);
+	new_chunk->owner_cpu = -1;
 	INIT_LIST_HEAD(&new_chunk->link);
 
 	spin_lock(&vmap_bump_chunks_lock);
@@ -2681,6 +2705,8 @@ vmap_bump_refill(gfp_t gfp_mask)
 	spin_unlock(&vmap_bump_chunks_lock);
 
 	preempt_disable();
+	cpu = smp_processor_id();
+	new_chunk->owner_cpu = cpu;
 	this_cpu_write(vmap_bump_cur, new_chunk);
 	preempt_enable();
 
@@ -2699,6 +2725,7 @@ static struct vmap_area *
 vmap_bump_unlink(unsigned long addr)
 {
 	struct vmap_bump_chunk *chunk;
+	struct vmap_bump_chunk *owner_cur;
 	struct vmap_area *va;
 	unsigned long idx, n_pages;
 
@@ -2715,6 +2742,8 @@ vmap_bump_unlink(unsigned long addr)
 		return NULL;
 
 	n_pages = (va->va_end - va->va_start) >> PAGE_SHIFT;
+	if (unlikely(!n_pages || n_pages > VMAP_BUMP_CHUNK_PAGES - idx))
+		return NULL;
 	memset(&chunk->page_va[idx], 0, n_pages * sizeof(va));
 
 	/*
@@ -2725,8 +2754,12 @@ vmap_bump_unlink(unsigned long addr)
 	 * TLB entries until the next lazy-purge flush, so reusing them
 	 * before the flush is unsafe. Forward-only bump avoids that.
 	 */
+	if (unlikely(chunk->owner_cpu < 0 || chunk->owner_cpu >= nr_cpu_ids))
+		return va;
+
+	owner_cur = READ_ONCE(per_cpu(vmap_bump_cur, chunk->owner_cpu));
 	if (atomic_sub_return(n_pages, &chunk->alloced) == 0 &&
-	    chunk != this_cpu_read(vmap_bump_cur)) {
+	    chunk != owner_cur) {
 		spin_lock(&vmap_bump_chunks_lock);
 		list_del_rcu(&chunk->link);
 		spin_unlock(&vmap_bump_chunks_lock);
@@ -2781,11 +2814,14 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 	 * find_unlink_vmap_area() consult vmap_chunk_lookup() before
 	 * falling back to busy.mt.
 	 */
-	va = vmap_bump_alloc(size, align, vstart, vend, gfp_mask, node,
-			     va_flags);
-	if (!va && vmap_bump_refill(gfp_mask) == 0)
+	va = NULL;
+	if (vmap_bump_eligible(size, align, vstart, vend)) {
 		va = vmap_bump_alloc(size, align, vstart, vend, gfp_mask, node,
 				     va_flags);
+		if (!va && vmap_bump_refill(gfp_mask) == 0)
+			va = vmap_bump_alloc(size, align, vstart, vend, gfp_mask,
+					     node, va_flags);
+	}
 	if (va) {
 		if (vm) {
 			vm->addr = (void *)va->va_start;
