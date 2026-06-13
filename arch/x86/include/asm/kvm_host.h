@@ -316,6 +316,7 @@ struct kvm_kernel_irqfd;
 struct kvm_kernel_irq_routing_entry;
 
 struct kvm_x86_msr_filter;
+struct kvm_x86_pmu_event_filter;
 
 struct kvm_caps {
 	/* control of guest tsc rate supported? */
@@ -1321,18 +1322,6 @@ enum kvm_suppress_eoi_broadcast_mode {
 	KVM_SUPPRESS_EOI_BROADCAST_QUIRKED, /* Legacy behavior */
 	KVM_SUPPRESS_EOI_BROADCAST_ENABLED, /* Enable Suppress EOI broadcast */
 	KVM_SUPPRESS_EOI_BROADCAST_DISABLED /* Disable Suppress EOI broadcast */
-};
-
-struct kvm_x86_pmu_event_filter {
-	__u32 action;
-	__u32 nevents;
-	__u32 fixed_counter_bitmap;
-	__u32 flags;
-	__u32 nr_includes;
-	__u32 nr_excludes;
-	__u64 *includes;
-	__u64 *excludes;
-	__u64 events[] __counted_by(nevents);
 };
 
 enum kvm_apicv_inhibit {
