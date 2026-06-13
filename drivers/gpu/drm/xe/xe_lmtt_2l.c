@@ -14,9 +14,9 @@
 /**
  * DOC: Two-Level LMTT Structure
  *
- * LMHAW (Local Memory Host Address Width) is 37 bit (128GB)
+ * LMHAW (Local Memory Host Address Width) is 35 bit (32GB)
  *
- * LMGAW (Local Memory Guest Address Width) is 37 bit (128GB)
+ * LMGAW (Local Memory Guest Address Width) is 35 bit (32GB)
  *
  * The following figure illustrates the structure and function of the 2L LMTT::
  *
@@ -54,11 +54,7 @@
 typedef u32 lmtt_2l_pde_t;
 typedef u32 lmtt_2l_pte_t;
 
-#if IS_ENABLED(CONFIG_DRM_XE_LMTT_2L_128GB)
-#define LMTT_2L_HAW			37 /* 128 GiB */
-#else
 #define LMTT_2L_HAW			35 /* 32 GiB */
-#endif
 
 #define LMTT_2L_PDE_MAX_NUM		64 /* SRIOV with PF and 63 VFs, index 0 (PF) is unused */
 #define LMTT_2L_PDE_LMTT_PTR		GENMASK(LMTT_2L_HAW - 13, 4)
@@ -79,7 +75,6 @@ static unsigned int lmtt_2l_pte_num(unsigned int level)
 	case 1:
 		return LMTT_2L_PDE_MAX_NUM;
 	case 0:
-		BUILD_BUG_ON(LMTT_2L_HAW == 37 && LMTT_2L_PTE_MAX_NUM != SZ_64K);
 		BUILD_BUG_ON(LMTT_2L_HAW == 35 && LMTT_2L_PTE_MAX_NUM != SZ_16K);
 		return LMTT_2L_PTE_MAX_NUM;
 	default:
