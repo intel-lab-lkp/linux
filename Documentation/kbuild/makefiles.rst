@@ -127,11 +127,8 @@ controllers are detected, and thus your disks are renumbered.
 
 Example::
 
-  #drivers/isdn/i4l/Makefile
-  # Makefile for the kernel ISDN subsystem and device drivers.
-  # Each configuration option enables a list of files.
-  obj-$(CONFIG_ISDN_I4L)         += isdn.o
-  obj-$(CONFIG_ISDN_PPP_BSDCOMP) += isdn_bsdcomp.o
+  obj-$(CONFIG_FOO) += foo.o
+  obj-$(CONFIG_BAR) += bar.o
 
 Loadable module goals - obj-m
 -----------------------------
@@ -145,10 +142,9 @@ simply adds the file to $(obj-m).
 
 Example::
 
-  #drivers/isdn/i4l/Makefile
-  obj-$(CONFIG_ISDN_PPP_BSDCOMP) += isdn_bsdcomp.o
+  obj-$(CONFIG_FOO) += foo.o
 
-Note: In this example $(CONFIG_ISDN_PPP_BSDCOMP) evaluates to "m"
+Note: In this example $(CONFIG_FOO) evaluates to "m".
 
 If a kernel module is built from several source files, you specify
 that you want to build a module in the same way as above; however,
@@ -158,13 +154,12 @@ variable.
 
 Example::
 
-  #drivers/isdn/i4l/Makefile
-  obj-$(CONFIG_ISDN_I4L) += isdn.o
-  isdn-y := isdn_net_lib.o isdn_v110.o isdn_common.o
+  obj-$(CONFIG_FOO) += foo.o
+  foo-y := foo_1.o foo_2.o foo_3.o
 
-In this example, the module name will be isdn.o. Kbuild will
-compile the objects listed in $(isdn-y) and then run
-``$(LD) -r`` on the list of these files to generate isdn.o.
+In this example, the module name will be foo.o. Kbuild will
+compile the objects listed in $(foo-y) and then run
+``$(LD) -r`` on the list of these files to generate foo.o.
 
 Due to kbuild recognizing $(<module_name>-y) for composite objects,
 you can use the value of a ``CONFIG_`` symbol to optionally include an
