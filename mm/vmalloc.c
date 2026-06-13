@@ -2240,14 +2240,14 @@ static void free_vmap_area(struct vmap_area *va)
 	 * Remove from the busy tree/list.
 	 */
 	spin_lock(&vn->busy.lock);
-	unlink_va(va, &vn->busy.root);
+	unlink_vmap_area_busy_locked(va, vn);
 	spin_unlock(&vn->busy.lock);
 
 	/*
 	 * Insert/Merge it back to the free tree/list.
 	 */
 	spin_lock(&free_vmap_area_lock);
-	merge_or_add_vmap_area_augment(va, &free_vmap_area_root, &free_vmap_area_list);
+	merge_or_add_vmap_area_free_locked(va);
 	spin_unlock(&free_vmap_area_lock);
 }
 
@@ -2431,12 +2431,13 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 		 * Only scan the relevant parts containing pointers to other objects
 		 * to avoid false negatives.
 		 */
-		kmemleak_scan_area(&va->rb_node, SIZE_MAX, gfp_mask);
+		kmemleak_scan_area(&va->vm, SIZE_MAX, gfp_mask);
 	}
 
 retry:
 	if (IS_ERR_VALUE(addr)) {
 		preload_this_cpu_lock(&free_vmap_area_lock, gfp_mask, node);
+		try_init_free_mt_locked();
 		addr = __alloc_vmap_area(size, align, vstart, vend);
 		spin_unlock(&free_vmap_area_lock);
 
@@ -2479,7 +2480,7 @@ retry:
 	vn = addr_to_node(va->va_start);
 
 	spin_lock(&vn->busy.lock);
-	insert_vmap_area(va, &vn->busy.root, &vn->busy.head);
+	insert_vmap_area_busy_locked(va, vn);
 	spin_unlock(&vn->busy.lock);
 
 	BUG_ON(!IS_ALIGNED(va->va_start, align));
@@ -2575,8 +2576,7 @@ reclaim_list_global(struct list_head *head)
 
 	spin_lock(&free_vmap_area_lock);
 	list_for_each_entry_safe(va, n, head, list)
-		merge_or_add_vmap_area_augment(va,
-			&free_vmap_area_root, &free_vmap_area_list);
+		merge_or_add_vmap_area_free_locked(va);
 	spin_unlock(&free_vmap_area_lock);
 }
 
@@ -2719,12 +2719,13 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end,
 		vn->skip_populate = full_pool_decay;
 		decay_va_pool_node(vn, full_pool_decay);
 
-		if (RB_EMPTY_ROOT(&vn->lazy.root))
-			continue;
-
 		spin_lock(&vn->lazy.lock);
-		WRITE_ONCE(vn->lazy.root.rb_node, NULL);
-		list_replace_init(&vn->lazy.head, &vn->purge_list);
+		if (lazy_vmap_areas_empty_locked(vn)) {
+			spin_unlock(&vn->lazy.lock);
+			continue;
+		}
+
+		move_lazy_vmap_areas_to_purge_locked(vn);
 		spin_unlock(&vn->lazy.lock);
 
 		start = min(start, list_first_entry(&vn->purge_list,
@@ -2823,7 +2824,7 @@ static void free_vmap_area_noflush(struct vmap_area *va)
 		id_to_node(vn_id):addr_to_node(va->va_start);
 
 	spin_lock(&vn->lazy.lock);
-	insert_vmap_area(va, &vn->lazy.root, &vn->lazy.head);
+	insert_vmap_area_lazy_locked(va, vn);
 	spin_unlock(&vn->lazy.lock);
 
 	trace_free_vmap_area_noflush(va_start, nr_lazy, nr_lazy_max);
@@ -2873,7 +2874,7 @@ struct vmap_area *find_vmap_area(unsigned long addr)
 		vn = &vmap_nodes[i];
 
 		spin_lock(&vn->busy.lock);
-		va = __find_vmap_area(addr, &vn->busy.root);
+		va = find_vmap_area_busy_locked(addr, vn);
 		spin_unlock(&vn->busy.lock);
 
 		if (va)
@@ -2897,9 +2898,9 @@ static struct vmap_area *find_unlink_vmap_area(unsigned long addr)
 		vn = &vmap_nodes[i];
 
 		spin_lock(&vn->busy.lock);
-		va = __find_vmap_area(addr, &vn->busy.root);
+		va = find_vmap_area_busy_locked(addr, vn);
 		if (va)
-			unlink_va(va, &vn->busy.root);
+			unlink_vmap_area_busy_locked(va, vn);
 		spin_unlock(&vn->busy.lock);
 
 		if (va)
@@ -2955,8 +2956,8 @@ struct vmap_block_queue {
 
 	/*
 	 * An xarray requires an extra memory dynamically to
-	 * be allocated. If it is an issue, we can use rb-tree
-	 * instead.
+	 * be allocated. If it is an issue, switch to another
+	 * indexing data structure.
 	 */
 	struct xarray vmap_blocks;
 };
@@ -3133,7 +3134,7 @@ static void free_vmap_block(struct vmap_block *vb)
 
 	vn = addr_to_node(vb->va->va_start);
 	spin_lock(&vn->busy.lock);
-	unlink_va(vb->va, &vn->busy.root);
+	unlink_vmap_area_busy_locked(vb->va, vn);
 	spin_unlock(&vn->busy.lock);
 
 	free_vmap_area_noflush(vb->va);
@@ -5238,9 +5239,15 @@ void free_vm_area(struct vm_struct *area)
 EXPORT_SYMBOL_GPL(free_vm_area);
 
 #ifdef CONFIG_SMP
-static struct vmap_area *node_to_va(struct rb_node *n)
+static __always_inline struct vmap_area *
+free_vmap_area_prev(struct vmap_area *va)
 {
-	return rb_entry_safe(n, struct vmap_area, rb_node);
+	lockdep_assert_held(&free_vmap_area_lock);
+
+	if (va->list.prev == &free_vmap_area_list)
+		return NULL;
+
+	return list_entry(va->list.prev, struct vmap_area, list);
 }
 
 /**
@@ -5255,26 +5262,19 @@ static struct vmap_area *node_to_va(struct rb_node *n)
 static struct vmap_area *
 pvm_find_va_enclose_addr(unsigned long addr)
 {
-	struct vmap_area *va, *tmp;
-	struct rb_node *n;
+	struct vmap_area *va;
 
-	n = free_vmap_area_root.rb_node;
-	va = NULL;
+	lockdep_assert_held(&free_vmap_area_lock);
 
-	while (n) {
-		tmp = rb_entry(n, struct vmap_area, rb_node);
-		if (tmp->va_start <= addr) {
-			va = tmp;
-			if (tmp->va_end >= addr)
-				break;
+	if (free_mt_supported())
+		return __find_vmap_area_enclose_addr_mt(addr, &free_vmap_area_mt);
 
-			n = n->rb_right;
-		} else {
-			n = n->rb_left;
-		}
+	list_for_each_entry_reverse(va, &free_vmap_area_list, list) {
+		if (va->va_start <= addr)
+			return va;
 	}
 
-	return va;
+	return NULL;
 }
 
 /**
@@ -5419,7 +5419,7 @@ retry:
 		 * If this VA does not fit, move base downwards and recheck.
 		 */
 		if (base + start < va->va_start) {
-			va = node_to_va(rb_prev(&va->rb_node));
+			va = free_vmap_area_prev(va);
 			base = pvm_determine_end_from_reverse(&va, align) - end;
 			term_area = area;
 			continue;
@@ -5474,7 +5474,7 @@ retry:
 		struct vmap_node *vn = addr_to_node(vas[area]->va_start);
 
 		spin_lock(&vn->busy.lock);
-		insert_vmap_area(vas[area], &vn->busy.root, &vn->busy.head);
+		insert_vmap_area_busy_locked(vas[area], vn);
 		setup_vmalloc_vm(vms[area], vas[area], VM_ALLOC,
 				 pcpu_get_vm_areas);
 		spin_unlock(&vn->busy.lock);
@@ -5501,8 +5501,7 @@ recovery:
 	while (area--) {
 		orig_start = vas[area]->va_start;
 		orig_end = vas[area]->va_end;
-		va = merge_or_add_vmap_area_augment(vas[area], &free_vmap_area_root,
-				&free_vmap_area_list);
+		va = merge_or_add_vmap_area_free_locked(vas[area]);
 		if (va)
 			kasan_release_vmalloc(orig_start, orig_end,
 				va->va_start, va->va_end,
@@ -5552,8 +5551,7 @@ err_free_shadow:
 	for (area = 0; area < nr_vms; area++) {
 		orig_start = vas[area]->va_start;
 		orig_end = vas[area]->va_end;
-		va = merge_or_add_vmap_area_augment(vas[area], &free_vmap_area_root,
-				&free_vmap_area_list);
+		va = merge_or_add_vmap_area_free_locked(vas[area]);
 		if (va)
 			kasan_release_vmalloc(orig_start, orig_end,
 				va->va_start, va->va_end,
