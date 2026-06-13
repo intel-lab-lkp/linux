@@ -93,11 +93,12 @@ struct crypto4xx_device {
 	u32 gdr_head;
 	u32 sdr_tail;
 	u32 sdr_head;
-	struct pd_uinfo *pdr_uinfo;
 	struct list_head alg_list;	/* List of algorithm supported
 					by this device */
 	struct ratelimit_state aead_ratelimit;
 	bool is_revb;
+
+	struct pd_uinfo pdr_uinfo[];
 };
 
 struct crypto4xx_core_device {

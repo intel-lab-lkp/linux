@@ -171,14 +171,6 @@ static u32 crypto4xx_build_pdr(struct crypto4xx_device *dev)
 	if (!dev->pdr)
 		return -ENOMEM;
 
-	dev->pdr_uinfo = kzalloc_objs(struct pd_uinfo, PPC4XX_NUM_PD);
-	if (!dev->pdr_uinfo) {
-		dma_free_coherent(dev->core_dev->device,
-				  sizeof(struct ce_pd) * PPC4XX_NUM_PD,
-				  dev->pdr,
-				  dev->pdr_pa);
-		return -ENOMEM;
-	}
 	dev->shadow_sa_pool = dma_alloc_coherent(dev->core_dev->device,
 				   sizeof(union shadow_sa_buf) * PPC4XX_NUM_PD,
 				   &dev->shadow_sa_pool_pa,
@@ -226,8 +218,6 @@ static void crypto4xx_destroy_pdr(struct crypto4xx_device *dev)
 		dma_free_coherent(dev->core_dev->device,
 			sizeof(struct sa_state_record) * PPC4XX_NUM_PD,
 			dev->shadow_sr_pool, dev->shadow_sr_pool_pa);
-
-	kfree(dev->pdr_uinfo);
 }
 
 static u32 crypto4xx_get_pd_from_pdr_nolock(struct crypto4xx_device *dev)
@@ -1247,7 +1237,7 @@ static int crypto4xx_probe(struct platform_device *ofdev)
 	dev_set_drvdata(dev, core_dev);
 	core_dev->ofdev = ofdev;
 	core_dev->dev = devm_kzalloc(
-		&ofdev->dev, sizeof(struct crypto4xx_device), GFP_KERNEL);
+		&ofdev->dev, struct_size(core_dev->dev, pdr_uinfo, PPC4XX_NUM_PD), GFP_KERNEL);
 	if (!core_dev->dev)
 		return -ENOMEM;
 
