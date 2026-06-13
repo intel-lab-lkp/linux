@@ -53,14 +53,14 @@ static struct posix_acl *f2fs_acl_from_disk(const char *value, size_t size)
 	const char *end = value + size;
 
 	if (size < sizeof(struct f2fs_acl_header))
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(-EFSCORRUPTED);
 
 	if (hdr->a_version != cpu_to_le32(F2FS_ACL_VERSION))
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(-EFSCORRUPTED);
 
 	count = f2fs_acl_count(size);
 	if (count < 0)
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(-EFSCORRUPTED);
 	if (count == 0)
 		return NULL;
 
@@ -70,7 +70,8 @@ static struct posix_acl *f2fs_acl_from_disk(const char *value, size_t size)
 
 	for (i = 0; i < count; i++) {
 
-		if ((char *)entry > end)
+		if (unlikely((char *)entry +
+			     sizeof(struct f2fs_acl_entry_short) > end))
 			goto fail;
 
 		acl->a_entries[i].e_tag  = le16_to_cpu(entry->e_tag);
@@ -86,6 +87,9 @@ static struct posix_acl *f2fs_acl_from_disk(const char *value, size_t size)
 			break;
 
 		case ACL_USER:
+			if (unlikely((char *)entry +
+				     sizeof(struct f2fs_acl_entry) > end))
+				goto fail;
 			acl->a_entries[i].e_uid =
 				make_kuid(&init_user_ns,
 						le32_to_cpu(entry->e_id));
@@ -93,6 +97,9 @@ static struct posix_acl *f2fs_acl_from_disk(const char *value, size_t size)
 					sizeof(struct f2fs_acl_entry));
 			break;
 		case ACL_GROUP:
+			if (unlikely((char *)entry +
+				     sizeof(struct f2fs_acl_entry) > end))
+				goto fail;
 			acl->a_entries[i].e_gid =
 				make_kgid(&init_user_ns,
 						le32_to_cpu(entry->e_id));
@@ -108,7 +115,7 @@ static struct posix_acl *f2fs_acl_from_disk(const char *value, size_t size)
 	return acl;
 fail:
 	posix_acl_release(acl);
-	return ERR_PTR(-EINVAL);
+	return ERR_PTR(-EFSCORRUPTED);
 }
 
 static void *f2fs_acl_to_disk(struct f2fs_sb_info *sbi,
