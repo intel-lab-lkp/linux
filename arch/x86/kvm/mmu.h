@@ -4,7 +4,6 @@
 
 #include <linux/kvm_host.h>
 #include "regs.h"
-#include "x86.h"
 #include "cpuid.h"
 
 extern bool __read_mostly enable_mmio_caching;
@@ -298,6 +297,11 @@ kvm_mmu_slot_lpages(struct kvm_memory_slot *slot, int level)
 static inline void kvm_update_page_stats(struct kvm *kvm, int level, int count)
 {
 	atomic64_add(count, &kvm->stat.pages[level - 1]);
+}
+
+static inline bool mmu_is_nested(struct kvm_vcpu *vcpu)
+{
+	return vcpu->arch.walk_mmu == &vcpu->arch.nested_mmu;
 }
 
 static inline gpa_t kvm_translate_gpa(struct kvm_vcpu *vcpu,
