@@ -6,6 +6,7 @@
 #include <asm/fpu/xstate.h>
 #include <asm/mce.h>
 #include <asm/pvclock.h>
+#include "msrs.h"
 #include "mmu.h"
 #include "regs.h"
 #include "kvm_emulate.h"
@@ -45,14 +46,6 @@ do {											\
 	failed;								\
 })
 
-/*
- * The first...last VMX feature MSRs that are emulated by KVM.  This may or may
- * not cover all known VMX MSRs, as KVM doesn't emulate an MSR until there's an
- * associated feature that KVM supports for nested virtualization.
- */
-#define KVM_FIRST_EMULATED_VMX_MSR	MSR_IA32_VMX_BASIC
-#define KVM_LAST_EMULATED_VMX_MSR	MSR_IA32_VMX_VMFUNC
-
 #define KVM_DEFAULT_PLE_GAP		128
 #define KVM_VMX_DEFAULT_PLE_WINDOW	4096
 #define KVM_DEFAULT_PLE_WINDOW_GROW	2
@@ -60,16 +53,6 @@ do {											\
 #define KVM_VMX_DEFAULT_PLE_WINDOW_MAX	UINT_MAX
 #define KVM_SVM_DEFAULT_PLE_WINDOW_MAX	USHRT_MAX
 #define KVM_SVM_DEFAULT_PLE_WINDOW	3000
-
-/*
- * KVM's internal, non-ABI indices for synthetic MSRs. The values themselves
- * are arbitrary and have no meaning, the only requirement is that they don't
- * conflict with "real" MSRs that KVM supports. Use values at the upper end
- * of KVM's reserved paravirtual MSR range to minimize churn, i.e. these values
- * will be usable until KVM exhausts its supply of paravirtual MSR indices.
- */
-
-#define MSR_KVM_INTERNAL_GUEST_SSP	0x4b564dff
 
 static inline unsigned int __grow_ple_window(unsigned int val,
 		unsigned int base, unsigned int modifier, unsigned int max)
@@ -100,9 +83,6 @@ static inline unsigned int __shrink_ple_window(unsigned int val,
 
 	return max(val, min);
 }
-
-#define MSR_IA32_CR_PAT_DEFAULT	\
-	PAT_VALUE(WB, WT, UC_MINUS, UC, WB, WT, UC_MINUS, UC)
 
 void kvm_service_local_tlb_flush_requests(struct kvm_vcpu *vcpu);
 int kvm_check_nested_events(struct kvm_vcpu *vcpu);
@@ -378,15 +358,12 @@ void kvm_deliver_exception_payload(struct kvm_vcpu *vcpu,
 				   struct kvm_queued_exception *ex);
 void kvm_handle_exception_payload_quirk(struct kvm_vcpu *vcpu);
 
-int kvm_mtrr_set_msr(struct kvm_vcpu *vcpu, u32 msr, u64 data);
-int kvm_mtrr_get_msr(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata);
 void kvm_fixup_and_inject_pf_error(struct kvm_vcpu *vcpu, gva_t gva, u16 error_code);
 int x86_decode_emulated_instruction(struct kvm_vcpu *vcpu, int emulation_type,
 				    void *insn, int insn_len);
 int x86_emulate_instruction(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa,
 			    int emulation_type, void *insn, int insn_len);
-fastpath_t handle_fastpath_wrmsr(struct kvm_vcpu *vcpu);
-fastpath_t handle_fastpath_wrmsr_imm(struct kvm_vcpu *vcpu, u32 msr, int reg);
+
 fastpath_t handle_fastpath_hlt(struct kvm_vcpu *vcpu);
 fastpath_t handle_fastpath_invd(struct kvm_vcpu *vcpu);
 
@@ -431,20 +408,6 @@ extern unsigned int min_timer_period_us;
 extern bool enable_vmware_backdoor;
 
 extern int pi_inject_timer;
-
-extern bool report_ignored_msrs;
-
-static inline void kvm_pr_unimpl_wrmsr(struct kvm_vcpu *vcpu, u32 msr, u64 data)
-{
-	if (report_ignored_msrs)
-		vcpu_unimpl(vcpu, "Unhandled WRMSR(0x%x) = 0x%llx\n", msr, data);
-}
-
-static inline void kvm_pr_unimpl_rdmsr(struct kvm_vcpu *vcpu, u32 msr)
-{
-	if (report_ignored_msrs)
-		vcpu_unimpl(vcpu, "Unhandled RDMSR(0x%x)\n", msr);
-}
 
 static inline u64 nsec_to_cycles(struct kvm_vcpu *vcpu, u64 nsec)
 {
@@ -563,33 +526,10 @@ static inline void kvm_machine_check(void)
 #endif
 }
 
-int kvm_spec_ctrl_test_value(u64 value);
 int kvm_handle_memory_failure(struct kvm_vcpu *vcpu, int r,
 			      struct x86_exception *e);
 void kvm_invalidate_pcid(struct kvm_vcpu *vcpu, unsigned long pcid);
 int kvm_handle_invpcid(struct kvm_vcpu *vcpu, unsigned long type, gva_t gva);
-bool kvm_msr_allowed(struct kvm_vcpu *vcpu, u32 index, u32 type);
-
-enum kvm_msr_access {
-	MSR_TYPE_R	= BIT(0),
-	MSR_TYPE_W	= BIT(1),
-	MSR_TYPE_RW	= MSR_TYPE_R | MSR_TYPE_W,
-};
-
-/*
- * Internal error codes that are used to indicate that MSR emulation encountered
- * an error that should result in #GP in the guest, unless userspace handles it.
- * Note, '1', '0', and negative numbers are off limits, as they are used by KVM
- * as part of KVM's lightly documented internal KVM_RUN return codes.
- *
- * UNSUPPORTED	- The MSR isn't supported, either because it is completely
- *		  unknown to KVM, or because the MSR should not exist according
- *		  to the vCPU model.
- *
- * FILTERED	- Access to the MSR is denied by a userspace MSR filter.
- */
-#define  KVM_MSR_RET_UNSUPPORTED	2
-#define  KVM_MSR_RET_FILTERED		3
 
 int kvm_sev_es_mmio(struct kvm_vcpu *vcpu, bool is_write, gpa_t gpa,
 		    unsigned int bytes, void *data);
@@ -649,27 +589,4 @@ int ____kvm_emulate_hypercall(struct kvm_vcpu *vcpu, int cpl,
 
 int kvm_emulate_hypercall(struct kvm_vcpu *vcpu);
 
-#define CET_US_RESERVED_BITS		GENMASK(9, 6)
-#define CET_US_SHSTK_MASK_BITS		GENMASK(1, 0)
-#define CET_US_IBT_MASK_BITS		(GENMASK_ULL(5, 2) | GENMASK_ULL(63, 10))
-#define CET_US_LEGACY_BITMAP_BASE(data)	((data) >> 12)
-
-static inline bool kvm_is_valid_u_s_cet(struct kvm_vcpu *vcpu, u64 data)
-{
-	if (data & CET_US_RESERVED_BITS)
-		return false;
-	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_SHSTK) &&
-	    (data & CET_US_SHSTK_MASK_BITS))
-		return false;
-	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_IBT) &&
-	    (data & CET_US_IBT_MASK_BITS))
-		return false;
-	if (!IS_ALIGNED(CET_US_LEGACY_BITMAP_BASE(data), 4))
-		return false;
-	/* IBT can be suppressed iff the TRACKER isn't WAIT_ENDBR. */
-	if ((data & CET_SUPPRESS) && (data & CET_WAIT_ENDBR))
-		return false;
-
-	return true;
-}
 #endif
