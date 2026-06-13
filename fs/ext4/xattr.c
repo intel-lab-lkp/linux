@@ -449,6 +449,23 @@ static int ext4_xattr_inode_iget(struct inode *parent, unsigned long ea_ino,
 	ext4_xattr_inode_set_class(inode);
 
 	/*
+	 * EA inode has two valid states:
+	 *   i_nlink=0, ref_count=0: orphaned, pending deletion
+	 *   i_nlink=1, ref_count>0: active, referenced by one or more inodes
+	 * Anything else indicates on-disk corruption.
+	 */
+	if (inode->i_nlink > 1 ||
+	    (inode->i_nlink && !ext4_xattr_inode_get_ref(inode)) ||
+	    (!inode->i_nlink && ext4_xattr_inode_get_ref(inode))) {
+		ext4_error(parent->i_sb,
+			   "EA inode %lu has unexpected i_nlink=%u ref_count=%llu",
+			   ea_ino, inode->i_nlink,
+			   ext4_xattr_inode_get_ref(inode));
+		iput(inode);
+		return -EFSCORRUPTED;
+	}
+
+	/*
 	 * Check whether this is an old Lustre-style xattr inode. Lustre
 	 * implementation does not have hash validation, rather it has a
 	 * backpointer from ea_inode to the parent inode.
