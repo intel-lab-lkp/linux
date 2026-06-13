@@ -4720,18 +4720,6 @@ static int vcpu_mmio_read(struct kvm_vcpu *vcpu, gpa_t addr, int len, void *v)
 	return handled;
 }
 
-void kvm_set_segment(struct kvm_vcpu *vcpu,
-		     struct kvm_segment *var, int seg)
-{
-	kvm_x86_call(set_segment)(vcpu, var, seg);
-}
-
-void kvm_get_segment(struct kvm_vcpu *vcpu,
-		     struct kvm_segment *var, int seg)
-{
-	kvm_x86_call(get_segment)(vcpu, var, seg);
-}
-
 gpa_t kvm_mmu_gva_to_gpa_read(struct kvm_vcpu *vcpu, gva_t gva,
 			      struct x86_exception *exception)
 {
