@@ -123,6 +123,36 @@ static int ads1100_get_voltage_microvolts(struct ads1100_data *data)
 	return ads1100_get_voltage_milivolts(data) * MICRO / MILLI;
 }
 
+static bool ads1100_new_data_ready(struct ads1100_data *data)
+{
+	int ret;
+	u8 buffer[3];
+
+	ret = i2c_master_recv(data->client, (char *)&buffer, sizeof(buffer));
+	if (ret < 3) {
+		dev_err(&data->client->dev, "I2C read fail: %d\n", ret);
+		return ret;
+	}
+
+	return FIELD_GET(ADS1100_CFG_ST_BSY, buffer[2]);
+}
+
+static int ads1100_poll_data_ready(struct ads1100_data *data)
+{
+	u8 buffer[3];
+	bool data_ready;
+	int datarate = data->ads_config->data_rate[FIELD_GET(ADS1100_DR_MASK, data->config)];
+   // To be sure we wait 5 times more than datarate
+	unsigned long wait_time = DIV_ROUND_CLOSEST(MICRO, 5 * datarate);
+
+	/* To be sure that polled value will have value after config change */
+	i2c_master_recv(data->client, (char *)&buffer, sizeof(buffer));
+
+	return read_poll_timeout(ads1100_new_data_ready, data_ready,
+				 !data_ready, wait_time,
+				 ADS1100_MAX_DRDY_TIMEOUT, false, data);
+}
+
 static int ads1100_data_bits(struct ads1100_data *data)
 {
 	return ads1100_data_rate_bits[FIELD_GET(ADS1100_DR_MASK, data->config)];
@@ -165,6 +195,7 @@ static int ads1100_set_scale(struct ads1100_data *data, int val, int val2)
 {
 	int microvolts;
 	int gain;
+	int ret;
 
 	/* With Vdd between 2.7 and 5V, the scale is always below 1 */
 	if (val)
@@ -185,21 +216,40 @@ static int ads1100_set_scale(struct ads1100_data *data, int val, int val2)
 	if (gain < BIT(0) || gain > BIT(3))
 		return -EINVAL;
 
+	ret = pm_runtime_resume_and_get(&data->client->dev);
+	if (ret < 0)
+		return ret;
+
 	ads1100_set_config_bits(data, ADS1100_PGA_MASK, ffs(gain) - 1);
 
-	return 0;
+	ret = ads1100_poll_data_ready(data);
+
+	pm_runtime_put_autosuspend(&data->client->dev);
+
+	return ret;
 }
 
 static int ads1100_set_data_rate(struct ads1100_data *data, int chan, int rate)
 {
 	unsigned int i;
 	unsigned int size;
+	int ret;
 
 	size = data->supports_data_rate ? ARRAY_SIZE(ads1100_data_rate) : 1;
 	for (i = 0; i < size; i++) {
-		if (data->ads_config->data_rate[i] == rate)
-			return ads1100_set_config_bits(data, ADS1100_DR_MASK,
+		if (data->ads_config->data_rate[i] != rate)
+			continue;
+
+		ret = pm_runtime_resume_and_get(&data->client->dev);
+		if (ret < 0)
+			return ret;
+
+		ads1100_set_config_bits(data, ADS1100_DR_MASK,
 					FIELD_PREP(ADS1100_DR_MASK, i));
+		ret = ads1100_poll_data_ready(data);
+
+		pm_runtime_put_autosuspend(&data->client->dev);
+		return ret;
 	}
 
 	return -EINVAL;
