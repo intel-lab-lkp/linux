@@ -315,6 +315,8 @@ enum x86_intercept_stage;
 struct kvm_kernel_irqfd;
 struct kvm_kernel_irq_routing_entry;
 
+struct kvm_x86_msr_filter;
+
 struct kvm_caps {
 	/* control of guest tsc rate supported? */
 	bool has_tsc_control;
@@ -1291,13 +1293,6 @@ struct kvm_hv {
 };
 #endif
 
-struct msr_bitmap_range {
-	u32 flags;
-	u32 nmsrs;
-	u32 base;
-	unsigned long *bitmap;
-};
-
 #ifdef CONFIG_KVM_XEN
 /* Xen emulation context */
 struct kvm_xen {
@@ -1326,12 +1321,6 @@ enum kvm_suppress_eoi_broadcast_mode {
 	KVM_SUPPRESS_EOI_BROADCAST_QUIRKED, /* Legacy behavior */
 	KVM_SUPPRESS_EOI_BROADCAST_ENABLED, /* Enable Suppress EOI broadcast */
 	KVM_SUPPRESS_EOI_BROADCAST_DISABLED /* Disable Suppress EOI broadcast */
-};
-
-struct kvm_x86_msr_filter {
-	u8 count;
-	bool default_allow:1;
-	struct msr_bitmap_range ranges[16];
 };
 
 struct kvm_x86_pmu_event_filter {
