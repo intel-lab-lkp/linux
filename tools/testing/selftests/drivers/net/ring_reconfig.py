@@ -5,10 +5,18 @@
 Test channel and ring size configuration via ethtool (-L / -G).
 """
 
+import socket
+import struct
+import time
+
 from lib.py import ksft_run, ksft_exit, ksft_pr
 from lib.py import ksft_eq
+from lib.py import KsftSkipEx
 from lib.py import NetDrvEpEnv, EthtoolFamily, GenerateTraffic
-from lib.py import defer, NlError
+from lib.py import cmd, defer, rand_port, tc, NlError
+
+# Added in Python 3.13; fallback to 61 for x86/ARM/MIPS
+SO_TXTIME = getattr(socket, "SO_TXTIME", 61)
 
 
 def channels(cfg) -> None:
@@ -151,6 +159,169 @@ def ringparam(cfg) -> None:
         GenerateTraffic(cfg).wait_pkts_and_stop(10000)
 
 
+def _write_sysfs(cfg, path, val):
+    with open(path, "r", encoding="utf-8") as fp:
+        orig_val = fp.read().strip()
+    if str(val) == orig_val:
+        return
+    with open(path, "w", encoding="utf-8") as fp:
+        fp.write(str(val))
+    defer(lambda p=path, v=orig_val: open(p, "w").write(v))
+
+
+def _get_mq_handle(cfg):
+    qdiscs = tc(f"qdisc show dev {cfg.ifname}", json=True)
+    for q in qdiscs:
+        if q.get("kind") == "mq":
+            return q["handle"]
+    raise KsftSkipEx(f"no mq qdisc found on {cfg.ifname}")
+
+
+def _get_qdisc_backlog(cfg, queue, mq_handle):
+    qdiscs = tc(f"-s qdisc show dev {cfg.ifname}", json=True)
+    target_parent = f"{mq_handle}{queue + 1:x}"
+    for q in qdiscs:
+        if q.get("parent", "") == target_parent:
+            return q.get("backlog")
+    return None
+
+
+def _setup_fq_qdisc(cfg, mq_handle, port, target_queue, other_queue):
+    mq_child_parent = f"{mq_handle}{target_queue + 1:x}"
+
+    # Save the original child qdisc to restore after test
+    qdiscs = tc(f"qdisc show dev {cfg.ifname}", json=True)
+    default_qdisc = cmd("sysctl -n net.core.default_qdisc").stdout.strip()
+    orig_kind = default_qdisc
+    for q in qdiscs:
+        if q.get("parent", "") == mq_child_parent:
+            orig_kind = q.get("kind", default_qdisc)
+            break
+    try:
+        tc(f"qdisc replace dev {cfg.ifname} parent {mq_child_parent} fq")
+    except Exception as exc:
+        raise KsftSkipEx("fq not available (CONFIG_NET_SCH_FQ)") from exc
+    defer(tc,
+          f"qdisc replace dev {cfg.ifname} parent {mq_child_parent} {orig_kind}")
+
+    qdisc_j = tc(f"qdisc show dev {cfg.ifname}", json=True)
+    has_clsact = any(q['kind'] == 'clsact' for q in qdisc_j)
+    if not has_clsact:
+        tc(f"qdisc add dev {cfg.ifname} clsact")
+        defer(tc, f"qdisc del dev {cfg.ifname} clsact")
+
+    proto = "ipv6" if int(cfg.addr_ipver) == 6 else "ip"
+    try:
+        tc(f"filter add dev {cfg.ifname} egress protocol {proto} "
+           f"pref 1 flower ip_proto udp dst_port {port} "
+           f"action skbedit queue_mapping {target_queue}")
+    except Exception as exc:
+        raise KsftSkipEx("tc flower/act_skbedit not available") from exc
+    defer(tc, f"filter del dev {cfg.ifname} egress pref 1")
+
+    tc(f"filter add dev {cfg.ifname} egress pref 100 "
+       f"matchall action skbedit queue_mapping {other_queue}")
+    defer(tc, f"filter del dev {cfg.ifname} egress pref 100")
+
+
+def _create_sotxtime_socket(cfg):
+    sock = socket.socket(socket.AF_INET6 if cfg.addr_ipver == "6"
+                         else socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, SO_TXTIME, struct.pack("Ii", 1, 0))
+    except OSError as exc:
+        sock.close()
+        raise KsftSkipEx("SO_TXTIME not supported") from exc
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE,
+                    cfg.ifname.encode())
+    return sock
+
+
+def _send_sotxtime_burst(sock, addr, port, count, delay_ns, ipver):
+    payload = b'\x00' * 1400
+    txtime_ns = time.clock_gettime_ns(time.CLOCK_MONOTONIC) + delay_ns
+
+    ancdata = [(socket.SOL_SOCKET, SO_TXTIME, struct.pack("Q", txtime_ns))]
+    if int(ipver) == 6:
+        dest = (addr, port, 0, 0)
+    else:
+        dest = (addr, port)
+    for _ in range(count):
+        sock.sendmsg([payload], ancdata, 0, dest)
+
+
+def reconfig_tx_stall(cfg) -> None:
+    target_queue = 1
+    other_queue = 0
+
+    ehdr = {'header': {'dev-index': cfg.ifindex}}
+    chans = cfg.eth.channels_get(ehdr)
+
+    if 'combined-max' not in chans:
+        raise KsftSkipEx("device does not support combined channels")
+    if chans['combined-count'] < 2:
+        raise KsftSkipEx("need at least 2 combined channels")
+
+    rings = cfg.eth.rings_get(ehdr)
+    if 'rx' not in rings or 'tx' not in rings:
+        raise KsftSkipEx("device does not expose rx/tx ring params")
+    tx_cur = rings['tx']
+    if tx_cur <= 64:
+        raise KsftSkipEx("tx ring size already at minimum")
+    defer(cfg.eth.rings_set, ehdr | {'tx': tx_cur})
+
+    tx_min = 64
+    cfg.eth.rings_set(ehdr | {'tx': tx_min})
+
+    # Slow completions so the ring stays full after FQ releases packets
+    napi_defer = f"/sys/class/net/{cfg.ifname}/napi_defer_hard_irqs"
+    gro_timeout = f"/sys/class/net/{cfg.ifname}/gro_flush_timeout"
+    _write_sysfs(cfg, napi_defer, 100)
+    _write_sysfs(cfg, gro_timeout, 1000000000)
+
+    mq_handle = _get_mq_handle(cfg)
+    port = rand_port()
+    _setup_fq_qdisc(cfg, mq_handle, port, target_queue, other_queue)
+
+    sock = _create_sotxtime_socket(cfg)
+    defer(sock.close)
+
+    pkt_count = tx_min * 2
+
+    for delay_ms in [100, 200, 500]:
+        delay_ns = delay_ms * 1_000_000
+        _send_sotxtime_burst(sock, cfg.remote_addr, port, pkt_count,
+                             delay_ns, cfg.addr_ipver)
+        ksft_pr(f"Sent {pkt_count} SO_TXTIME packets (+{delay_ms}ms)")
+        time.sleep(delay_ms / 1000 + 0.3)
+
+        backlog = _get_qdisc_backlog(cfg, target_queue, mq_handle)
+        if backlog:
+            break
+    else:
+        raise KsftSkipEx("failed to build qdisc backlog")
+
+    ksft_pr(f"Backlog before reconfig: {backlog} bytes")
+
+    # Trigger ring reconfig — driver should call wake, not just start
+    cfg.eth.rings_set(ehdr | {'tx': tx_cur})
+
+    # Let completions proceed normally
+    _write_sysfs(cfg, napi_defer, 0)
+    _write_sysfs(cfg, gro_timeout, 0)
+
+    # Poll for backlog to drain
+    for _ in range(100):
+        backlog = _get_qdisc_backlog(cfg, target_queue, mq_handle)
+        if not backlog:
+            break
+        time.sleep(0.1)
+
+    ksft_eq(0, backlog,
+            comment=f"qdisc backlog stuck on queue {target_queue} "
+                    f"after ring reconfig")
+
+
 def main() -> None:
     """ Ksft boiler plate main """
 
@@ -158,7 +329,8 @@ def main() -> None:
         cfg.eth = EthtoolFamily()
 
         ksft_run([channels,
-                  ringparam],
+                  ringparam,
+                  reconfig_tx_stall],
                  args=(cfg, ))
     ksft_exit()
 
