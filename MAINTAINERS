@@ -28347,6 +28347,12 @@ L:	kvm@vger.kernel.org
 S:	Supported
 F:	drivers/vfio/pci/nvgrace-gpu/
 
+VFIO PCI DEVICE SERIAL NUMBER SELFTEST
+M:	Pranjal Arya <pranjal.arya@oss.qualcomm.com>
+L:	kvm@vger.kernel.org
+S:	Maintained
+F:	tools/testing/selftests/vfio/vfio_pci_dsn_test.c
+
 VFIO PCI DEVICE SPECIFIC DRIVERS
 R:	Jason Gunthorpe <jgg@nvidia.com>
 R:	Yishai Hadas <yishaih@nvidia.com>
