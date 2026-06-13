@@ -43,6 +43,12 @@
 #include <linux/uaccess.h>
 #include <linux/anon_inodes.h>
 #include <linux/lockdep.h>
+#include <linux/mm.h>
+#include <linux/mman.h>
+#include <linux/mmap_lock.h>
+#include <linux/sched/mm.h>
+#include <linux/task_work.h>
+#include <uapi/asm-generic/mman-common.h>
 
 /*
  * When SECCOMP_IOCTL_NOTIF_ID_VALID was first introduced, it had the
@@ -232,6 +238,27 @@ struct seccomp_filter {
 	struct notification *notif;
 	struct mutex notify_lock;
 	wait_queue_head_t wqh;
+	struct list_head pins;
+};
+
+/*
+ * A sealed MAP_SHARED PROT_READ mapping of @memfd_file installed at
+ * @target_addr in @mm by SECCOMP_IOCTL_NOTIF_PIN_INSTALL, used as a
+ * redirect target for SECCOMP_IOCTL_NOTIF_SEND_REDIRECT.
+ *
+ * @mm is held via mmgrab() (mm_count, not mm_users) purely for a stable
+ * identity compare; it does not keep the address space alive, so execve
+ * tears the mapping down and switches to a fresh mm. A redirect is only
+ * honoured while the trapped task's current mm equals @mm: since
+ * VM_SEALED makes the mapping immutable for the life of that mm, an
+ * identity match proves the range is still the read-only memfd backing.
+ */
+struct seccomp_pin_range {
+	struct list_head list;
+	unsigned long target_addr;
+	size_t size;
+	struct file *memfd_file;
+	struct mm_struct *mm;
 };
 
 /* Limit any path through the tree to 256KB worth of instructions. */
@@ -521,9 +548,44 @@ static inline pid_t seccomp_can_sync_threads(void)
 	return 0;
 }
 
+static void seccomp_pin_range_free(struct seccomp_pin_range *pin)
+{
+	fput(pin->memfd_file);
+	mmdrop(pin->mm);
+	kfree(pin);
+}
+
+static void seccomp_pin_evict(struct seccomp_filter *filter,
+			      unsigned long target_addr)
+{
+	struct seccomp_pin_range *old, *tmp;
+
+	lockdep_assert_held(&filter->notify_lock);
+	list_for_each_entry_safe(old, tmp, &filter->pins, list) {
+		if (old->target_addr == target_addr) {
+			list_del(&old->list);
+			seccomp_pin_range_free(old);
+		}
+	}
+}
+
 static inline void seccomp_filter_free(struct seccomp_filter *filter)
 {
+	struct seccomp_pin_range *pin, *tmp;
+
 	if (filter) {
+		/*
+		 * No other reference to @filter exists at this point. The
+		 * pinned-memfd VMAs themselves live in the trapped task's mm
+		 * and follow that mm's lifetime (the seal protects them from
+		 * unmap by the target); here we only need to drop our
+		 * bookkeeping references: the backing memfd file and the
+		 * mmgrab() identity reference on the install-time mm.
+		 */
+		list_for_each_entry_safe(pin, tmp, &filter->pins, list) {
+			list_del(&pin->list);
+			seccomp_pin_range_free(pin);
+		}
 		bpf_prog_destroy(filter->prog);
 		kfree(filter);
 	}
@@ -708,6 +770,7 @@ static struct seccomp_filter *seccomp_prepare_filter(struct sock_fprog *fprog)
 	refcount_set(&sfilter->refs, 1);
 	refcount_set(&sfilter->users, 1);
 	init_waitqueue_head(&sfilter->wqh);
+	INIT_LIST_HEAD(&sfilter->pins);
 
 	return sfilter;
 }
@@ -1823,6 +1886,303 @@ out:
 	return ret;
 }
 
+/*
+ * Install a sealed PROT_READ MAP_SHARED mapping of @memfd_file at
+ * @target_addr in @target's mm, then record the range on @filter for
+ * later SEND_REDIRECT pointer validation. Steals one reference on
+ * @memfd_file on success (held until filter free); on failure, the
+ * caller is responsible for releasing it.
+ */
+static long seccomp_install_pin(struct seccomp_filter *filter,
+				struct task_struct *target,
+				struct file *memfd_file,
+				unsigned long target_addr, size_t size)
+{
+	struct seccomp_pin_range *range;
+	struct mm_struct *mm;
+	unsigned long ret;
+
+	mm = get_task_mm(target);
+	if (!mm)
+		return -ESRCH;
+
+	range = kmalloc_obj(*range, GFP_KERNEL_ACCOUNT);
+	if (!range) {
+		mmput(mm);
+		return -ENOMEM;
+	}
+
+	/*
+	 * Install a read-only, sealed, MAP_FIXED_NOREPLACE mapping: an
+	 * existing mapping at @target_addr yields -EEXIST rather than being
+	 * silently clobbered.
+	 */
+	ret = vm_mmap_seal_remote(mm, memfd_file, target_addr, size, 0);
+	if (IS_ERR_VALUE(ret)) {
+		mmput(mm);
+		kfree(range);
+		return (long)ret;
+	}
+	if (ret != target_addr) {
+		mmput(mm);
+		kfree(range);
+		return -ENOMEM;
+	}
+
+	mmgrab(mm);
+	mmput(mm); /* For get_task_mm() */
+
+	range->target_addr = target_addr;
+	range->size = size;
+	range->memfd_file = memfd_file;
+	range->mm = mm;
+
+	mutex_lock(&filter->notify_lock);
+	seccomp_pin_evict(filter, target_addr);
+	list_add(&range->list, &filter->pins);
+	mutex_unlock(&filter->notify_lock);
+	return 0;
+}
+
+static long seccomp_notify_pin_install(struct seccomp_filter *filter,
+				       struct seccomp_notif_pin_install __user *upin,
+				       unsigned int size)
+{
+	struct seccomp_notif_pin_install pin;
+	struct seccomp_knotif *knotif;
+	struct task_struct *target;
+	struct file *memfd_file;
+	long ret;
+
+	BUILD_BUG_ON(sizeof(pin) < SECCOMP_NOTIFY_PIN_INSTALL_SIZE_VER0);
+	BUILD_BUG_ON(sizeof(pin) != SECCOMP_NOTIFY_PIN_INSTALL_SIZE_LATEST);
+
+	if (size < SECCOMP_NOTIFY_PIN_INSTALL_SIZE_VER0 || size >= PAGE_SIZE)
+		return -EINVAL;
+
+	ret = copy_struct_from_user(&pin, sizeof(pin), upin, size);
+	if (ret)
+		return ret;
+
+	if (pin.flags)
+		return -EINVAL;
+	if (!pin.size || !IS_ALIGNED(pin.target_addr, PAGE_SIZE) ||
+	    !IS_ALIGNED(pin.size, PAGE_SIZE))
+		return -EINVAL;
+	if (pin.target_addr + pin.size < pin.target_addr)
+		return -EINVAL;
+
+	memfd_file = fget(pin.memfd);
+	if (!memfd_file)
+		return -EBADF;
+
+	ret = mutex_lock_interruptible(&filter->notify_lock);
+	if (ret < 0)
+		goto out_fput;
+
+	knotif = find_notification(filter, pin.id);
+	if (!knotif) {
+		ret = -ENOENT;
+		goto out_unlock;
+	}
+	if (knotif->state != SECCOMP_NOTIFY_SENT) {
+		ret = -EINPROGRESS;
+		goto out_unlock;
+	}
+
+	target = knotif->task;
+	get_task_struct(target);
+	mutex_unlock(&filter->notify_lock);
+
+	ret = seccomp_install_pin(filter, target, memfd_file,
+				  pin.target_addr, pin.size);
+	put_task_struct(target);
+
+	if (ret < 0)
+		goto out_fput;
+	return 0;
+
+out_unlock:
+	mutex_unlock(&filter->notify_lock);
+out_fput:
+	fput(memfd_file);
+	return ret;
+}
+
+static bool seccomp_pin_check(struct seccomp_filter *filter,
+			      struct mm_struct *target_mm, u64 ptr, u64 len)
+{
+	struct seccomp_pin_range *pin;
+	u64 end;
+
+	lockdep_assert_held(&filter->notify_lock);
+
+	if (!len)
+		return false;
+	end = ptr + len;
+	if (end < ptr)
+		return false;
+
+	list_for_each_entry(pin, &filter->pins, list) {
+		if (pin->mm != target_mm)
+			continue;
+		if (ptr >= pin->target_addr &&
+		    end <= pin->target_addr + pin->size)
+			return true;
+	}
+	return false;
+}
+
+struct seccomp_redirect_restore {
+	struct callback_head twork;
+	unsigned long orig_args[SECCOMP_REDIRECT_ARGS];
+	u32 args_mask;
+	u64 self_exec_id;	/* snapshot to detect an intervening execve */
+};
+
+static void seccomp_redirect_restore_cb(struct callback_head *cb)
+{
+	struct seccomp_redirect_restore *r =
+		container_of(cb, struct seccomp_redirect_restore, twork);
+	unsigned long args[SECCOMP_REDIRECT_ARGS];
+	int i;
+
+	if (READ_ONCE(current->self_exec_id) != r->self_exec_id) {
+		kfree(r);
+		return;
+	}
+
+	syscall_get_arguments(current, current_pt_regs(), args);
+	for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++)
+		if (r->args_mask & (1U << i))
+			args[i] = r->orig_args[i];
+	syscall_set_arguments(current, current_pt_regs(), args);
+	kfree(r);
+}
+
+static long seccomp_notify_send_redirect(struct seccomp_filter *filter,
+					 struct seccomp_notif_resp_redirect __user *uresp,
+					 unsigned int size)
+{
+	struct seccomp_notif_resp_redirect resp;
+	struct seccomp_knotif *knotif;
+	struct seccomp_redirect_restore *restore;
+	struct pt_regs *target_regs;
+	unsigned long args[SECCOMP_REDIRECT_ARGS];
+	long ret;
+	int i;
+
+	BUILD_BUG_ON(sizeof(resp) < SECCOMP_NOTIFY_RESP_REDIRECT_SIZE_VER0);
+	BUILD_BUG_ON(sizeof(resp) != SECCOMP_NOTIFY_RESP_REDIRECT_SIZE_LATEST);
+
+	if (size < SECCOMP_NOTIFY_RESP_REDIRECT_SIZE_VER0 || size >= PAGE_SIZE)
+		return -EINVAL;
+
+	ret = copy_struct_from_user(&resp, sizeof(resp), uresp, size);
+	if (ret)
+		return ret;
+
+	if (!(resp.flags & SECCOMP_REDIRECT_FLAG_CONTINUE))
+		return -EINVAL;
+	if (resp.flags & ~SECCOMP_REDIRECT_FLAG_CONTINUE)
+		return -EINVAL;
+	if (resp.args_mask & ~((1U << SECCOMP_REDIRECT_ARGS) - 1))
+		return -EINVAL;
+	if (resp.ptr_mask & ~resp.args_mask)
+		return -EINVAL;
+	if (resp._pad)
+		return -EINVAL;
+	if (!resp.args_mask)
+		return -EINVAL;
+
+	for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++) {
+		if (resp.ptr_mask & (1U << i)) {
+			if (!resp.ptr_len[i])
+				return -EINVAL;
+		} else if (resp.ptr_len[i]) {
+			return -EINVAL;
+		}
+	}
+
+	restore = kzalloc_obj(*restore, GFP_KERNEL_ACCOUNT);
+	if (!restore)
+		return -ENOMEM;
+	init_task_work(&restore->twork, seccomp_redirect_restore_cb);
+
+	ret = mutex_lock_interruptible(&filter->notify_lock);
+	if (ret < 0) {
+		kfree(restore);
+		return ret;
+	}
+
+	knotif = find_notification(filter, resp.id);
+	if (!knotif) {
+		ret = -ENOENT;
+		goto out_unlock_free;
+	}
+	if (knotif->state != SECCOMP_NOTIFY_SENT) {
+		ret = -EINPROGRESS;
+		goto out_unlock_free;
+	}
+
+	for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++) {
+		if (!(resp.ptr_mask & (1U << i)))
+			continue;
+		if (!seccomp_pin_check(filter, knotif->task->mm,
+				       resp.args[i], resp.ptr_len[i])) {
+			ret = -EFAULT;
+			goto out_unlock_free;
+		}
+	}
+
+	/*
+	 * Save original pt_regs args (target is parked in
+	 * seccomp_do_user_notification, so its pt_regs is stable) and
+	 * write substituted values. The trapped task's task_work fires
+	 * at user-mode return, restoring originals for ABI compliance.
+	 */
+	target_regs = task_pt_regs(knotif->task);
+	syscall_get_arguments(knotif->task, target_regs, args);
+	for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++)
+		restore->orig_args[i] = args[i];
+	restore->args_mask = resp.args_mask;
+	restore->self_exec_id = READ_ONCE(knotif->task->self_exec_id);
+
+	for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++)
+		if (resp.args_mask & (1U << i))
+			args[i] = resp.args[i];
+	syscall_set_arguments(knotif->task, target_regs, args);
+
+	ret = task_work_add(knotif->task, &restore->twork, TWA_RESUME);
+	if (ret) {
+		for (i = 0; i < SECCOMP_REDIRECT_ARGS; i++)
+			args[i] = restore->orig_args[i];
+		syscall_set_arguments(knotif->task, target_regs, args);
+		goto out_unlock_free;
+	}
+
+	/*
+	 * Mark REPLIED with FLAG_CONTINUE so the wait-loop exit path
+	 * runs the syscall normally.
+	 */
+	knotif->state = SECCOMP_NOTIFY_REPLIED;
+	knotif->error = 0;
+	knotif->val = 0;
+	knotif->flags = SECCOMP_USER_NOTIF_FLAG_CONTINUE;
+	if (filter->notif->flags & SECCOMP_USER_NOTIF_FD_SYNC_WAKE_UP)
+		complete_on_current_cpu(&knotif->ready);
+	else
+		complete(&knotif->ready);
+
+	mutex_unlock(&filter->notify_lock);
+	return 0;
+
+out_unlock_free:
+	mutex_unlock(&filter->notify_lock);
+	kfree(restore);
+	return ret;
+}
+
 static long seccomp_notify_ioctl(struct file *file, unsigned int cmd,
 				 unsigned long arg)
 {
@@ -1847,6 +2207,12 @@ static long seccomp_notify_ioctl(struct file *file, unsigned int cmd,
 	switch (EA_IOCTL(cmd)) {
 	case EA_IOCTL(SECCOMP_IOCTL_NOTIF_ADDFD):
 		return seccomp_notify_addfd(filter, buf, _IOC_SIZE(cmd));
+	case EA_IOCTL(SECCOMP_IOCTL_NOTIF_PIN_INSTALL):
+		return seccomp_notify_pin_install(filter, buf,
+						  _IOC_SIZE(cmd));
+	case EA_IOCTL(SECCOMP_IOCTL_NOTIF_SEND_REDIRECT):
+		return seccomp_notify_send_redirect(filter, buf,
+						    _IOC_SIZE(cmd));
 	default:
 		return -EINVAL;
 	}
