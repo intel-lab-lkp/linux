@@ -238,9 +238,9 @@ static u64 get_corrected_val(struct rdt_resource *r, struct rdt_l3_mon_domain *d
 	return chunks * hw_res->mon_scale;
 }
 
-int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_domain_hdr *hdr,
-			   u32 unused, u32 rmid, enum resctrl_event_id eventid,
-			   void *arch_priv, u64 *val, void *ignored)
+static int arch_l3_read_event(struct rdt_domain_hdr *hdr, u32 rmid,
+			      enum resctrl_event_id eventid, u64 *val,
+			      struct rdt_resource *r)
 {
 	struct rdt_hw_l3_mon_domain *hw_dom;
 	struct rdt_l3_mon_domain *d;
@@ -249,11 +249,6 @@ int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_domain_hdr *hdr,
 	u32 prmid;
 	int cpu;
 	int ret;
-
-	resctrl_arch_rmid_read_context_check();
-
-	if (r->rid == RDT_RESOURCE_PERF_PKG)
-		return intel_aet_read_event(hdr->id, rmid, arch_priv, val);
 
 	if (!domain_header_is_valid(hdr, RESCTRL_MON_DOMAIN, RDT_RESOURCE_L3))
 		return -EINVAL;
@@ -273,6 +268,22 @@ int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_domain_hdr *hdr,
 	}
 
 	return ret;
+}
+
+int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_domain_hdr *hdr,
+			   u32 unused, u32 rmid, enum resctrl_event_id eventid,
+			   void *arch_priv, u64 *val, void *ignored)
+{
+	resctrl_arch_rmid_read_context_check();
+
+	switch (r->rid) {
+	case RDT_RESOURCE_L3:
+		return arch_l3_read_event(hdr, rmid, eventid, val, r);
+	case RDT_RESOURCE_PERF_PKG:
+		return intel_aet_read_event(hdr->id, rmid, arch_priv, val);
+	default:
+		return -EINVAL;
+	}
 }
 
 static int __cntr_id_read(u32 cntr_id, u64 *val)
