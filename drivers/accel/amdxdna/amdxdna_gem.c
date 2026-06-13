@@ -1040,20 +1040,33 @@ int amdxdna_drm_sync_bo_ioctl(struct drm_device *dev,
 	}
 	abo = to_xdna_obj(gobj);
 
+	if (args->offset > gobj->size ||
+	    args->size > gobj->size - args->offset) {
+		ret = -EINVAL;
+		goto put_obj;
+	}
+
 	ret = amdxdna_gem_pin(abo);
 	if (ret) {
 		XDNA_ERR(xdna, "Pin BO %d failed, ret %d", args->handle, ret);
 		goto put_obj;
 	}
 
-	if (is_import_bo(abo))
-		drm_clflush_sg(abo->base.sgt);
-	else if (amdxdna_gem_vmap(abo))
-		drm_clflush_virt_range(amdxdna_gem_vmap(abo) + args->offset, args->size);
-	else if (abo->base.pages)
-		drm_clflush_pages(abo->base.pages, gobj->size >> PAGE_SHIFT);
-	else
-		drm_WARN(&xdna->ddev, 1, "Can not get flush memory");
+	if (args->size) {
+		if (is_import_bo(abo)) {
+			drm_clflush_sg(abo->base.sgt);
+		} else {
+			void *kva = amdxdna_gem_vmap(abo);
+
+			if (kva)
+				drm_clflush_virt_range(kva + args->offset,
+						       args->size);
+			else if (abo->base.pages)
+				drm_clflush_pages(abo->base.pages, gobj->size >> PAGE_SHIFT);
+			else
+				drm_WARN(&xdna->ddev, 1, "Can not get flush memory");
+		}
+	}
 
 	amdxdna_gem_unpin(abo);
 
