@@ -9,7 +9,6 @@
 #include <linux/list.h>
 #include <linux/llist.h>
 #include <asm/page.h>		/* pgprot_t */
-#include <linux/rbtree.h>
 #include <linux/overflow.h>
 
 #include <asm/vmalloc.h>
@@ -72,19 +71,8 @@ struct vmap_area {
 	unsigned long va_start;
 	unsigned long va_end;
 
-	struct rb_node rb_node;         /* address sorted rbtree */
-	struct list_head list;          /* address sorted list */
-
-	/*
-	 * The following two variables can be packed, because
-	 * a vmap_area object can be either:
-	 *    1) in "free" tree (root is free_vmap_area_root)
-	 *    2) or "busy" tree (root is vmap_area_root)
-	 */
-	union {
-		unsigned long subtree_max_size; /* in "free" tree */
-		struct vm_struct *vm;           /* in "busy" tree */
-	};
+	struct list_head list;          /* auxiliary linkage (pool/purge/lazy) */
+	struct vm_struct *vm;
 	unsigned long flags; /* mark type of vm_map_ram area */
 };
 

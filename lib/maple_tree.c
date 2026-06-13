@@ -5634,6 +5634,13 @@ void __init maple_tree_init(void)
 		.sheaf_capacity = 32,
 	};
 
+	/*
+	 * vmalloc_init() may need Maple allocations before start_kernel() reaches
+	 * its own maple_tree_init() callsite. Keep initialization idempotent.
+	 */
+	if (maple_node_cache)
+		return;
+
 	maple_node_cache = kmem_cache_create("maple_node",
 			sizeof(struct maple_node), &args,
 			SLAB_PANIC);
