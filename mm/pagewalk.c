@@ -664,6 +664,19 @@ int walk_kernel_page_table_range_lockless(unsigned long start, unsigned long end
 	return walk_pgd_range(start, end, &walk);
 }
 
+static int walk_kernel_page_table_range_rcu(unsigned long start, unsigned long end,
+		const struct mm_walk_ops *ops, pgd_t *pgd,
+		void *private)
+{
+	int err;
+
+	rcu_read_lock();
+	err = walk_kernel_page_table_range(start, end, ops, pgd, private);
+	rcu_read_unlock();
+
+	return err;
+}
+
 /**
  * walk_page_range_debug - walk a range of pagetables not backed by a vma
  * @mm:		mm_struct representing the target process of page table walk
@@ -693,8 +706,9 @@ int walk_page_range_debug(struct mm_struct *mm, unsigned long start,
 
 	/* For convenience, we allow traversal of kernel mappings. */
 	if (mm == &init_mm)
-		return walk_kernel_page_table_range(start, end, ops,
-						    pgd, private);
+		return walk_kernel_page_table_range_rcu(start, end, ops, pgd,
+							private);
+
 	if (start >= end || !walk.mm)
 		return -EINVAL;
 	if (!check_ops_safe(ops))
