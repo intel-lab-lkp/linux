@@ -1186,6 +1186,18 @@ static void vmx_remove_autostore_msr(struct vcpu_vmx *vmx, u32 msr)
 	vmx_remove_auto_msr(&vmx->msr_autostore, msr, VM_EXIT_MSR_STORE_COUNT);
 }
 
+static u16 vmx_store_ldt(void)
+{
+	u16 ldt;
+	asm("sldt %0" : "=g"(ldt));
+	return ldt;
+}
+
+static void vmx_load_ldt(u16 sel)
+{
+	asm("lldt %0" : : "rm"(sel));
+}
+
 #ifdef CONFIG_X86_32
 /*
  * On 32-bit kernels, VM exits still load the FS and GS bases from the
@@ -1203,7 +1215,7 @@ static unsigned long segment_base(u16 selector)
 	table = get_current_gdt_ro();
 
 	if ((selector & SEGMENT_TI_MASK) == SEGMENT_LDT) {
-		u16 ldt_selector = kvm_read_ldt();
+		u16 ldt_selector = vmx_store_ldt();
 
 		if (!(ldt_selector & ~SEGMENT_RPL_MASK))
 			return 0;
@@ -1358,7 +1370,7 @@ void vmx_prepare_switch_to_guest(struct kvm_vcpu *vcpu)
 	 * Set host fs and gs selectors.  Unfortunately, 22.2.3 does not
 	 * allow segment selectors with cpl > 0 or ti == 1.
 	 */
-	host_state->ldt_sel = kvm_read_ldt();
+	host_state->ldt_sel = vmx_store_ldt();
 
 #ifdef CONFIG_X86_64
 	savesegment(ds, host_state->ds_sel);
@@ -1405,7 +1417,7 @@ static void vmx_prepare_switch_to_host(struct vcpu_vmx *vmx)
 	rdmsrq(MSR_KERNEL_GS_BASE, vmx->msr_guest_kernel_gs_base);
 #endif
 	if (host_state->ldt_sel || (host_state->gs_sel & 7)) {
-		kvm_load_ldt(host_state->ldt_sel);
+		vmx_load_ldt(host_state->ldt_sel);
 #ifdef CONFIG_X86_64
 		load_gs_index(host_state->gs_sel);
 #else
