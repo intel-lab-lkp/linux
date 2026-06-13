@@ -448,6 +448,14 @@ static int ext4_xattr_inode_iget(struct inode *parent, unsigned long ea_ino,
 	}
 	ext4_xattr_inode_set_class(inode);
 
+	if (inode->i_nlink > 1) {
+		ext4_error(parent->i_sb,
+			   "EA inode %lu has unexpected i_nlink=%u",
+			   ea_ino, inode->i_nlink);
+		iput(inode);
+		return -EFSCORRUPTED;
+	}
+
 	/*
 	 * Check whether this is an old Lustre-style xattr inode. Lustre
 	 * implementation does not have hash validation, rather it has a
