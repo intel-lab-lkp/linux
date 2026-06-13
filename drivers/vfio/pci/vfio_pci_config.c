@@ -1086,6 +1086,31 @@ static int __init init_pci_ext_cap_pwr_perm(struct perm_bits *perm)
 }
 
 /*
+ * The Device Serial Number is a unique, persistent, per-device identifier.
+ * Passing the physical serial number through to a guest leaks an identifier
+ * that can be used to fingerprint and correlate the host device across VMs
+ * and tenants.  Virtualize the whole capability so reads come from vconfig
+ * (which is scrubbed during init, see vfio_ecap_init()) instead of hardware,
+ * and disallow writes (the DSN is read-only hardware state anyway).
+ */
+static int __init init_pci_ext_cap_dsn_perm(struct perm_bits *perm)
+{
+	if (alloc_perm_bits(perm, pci_ext_cap_length[PCI_EXT_CAP_ID_DSN]))
+		return -ENOMEM;
+
+	/*
+	 * Virtualize the whole capability: the header (offset 0) plus the
+	 * two serial-number dwords (offsets 4 and 8).  All reads are then
+	 * served from vconfig (scrubbed in vfio_ecap_init()) rather than
+	 * hardware, and writes are denied since the DSN is read-only state.
+	 */
+	p_setd(perm, 0, ALL_VIRT, NO_WRITE);
+	p_setd(perm, 4, ALL_VIRT, NO_WRITE);
+	p_setd(perm, 8, ALL_VIRT, NO_WRITE);
+	return 0;
+}
+
+/*
  * Initialize the shared permission tables
  */
 void vfio_pci_uninit_perm_bits(void)
@@ -1100,6 +1125,7 @@ void vfio_pci_uninit_perm_bits(void)
 
 	free_perm_bits(&ecap_perms[PCI_EXT_CAP_ID_ERR]);
 	free_perm_bits(&ecap_perms[PCI_EXT_CAP_ID_PWR]);
+	free_perm_bits(&ecap_perms[PCI_EXT_CAP_ID_DSN]);
 }
 
 int __init vfio_pci_init_perm_bits(void)
@@ -1120,6 +1146,7 @@ int __init vfio_pci_init_perm_bits(void)
 	/* Extended capabilities */
 	ret |= init_pci_ext_cap_err_perm(&ecap_perms[PCI_EXT_CAP_ID_ERR]);
 	ret |= init_pci_ext_cap_pwr_perm(&ecap_perms[PCI_EXT_CAP_ID_PWR]);
+	ret |= init_pci_ext_cap_dsn_perm(&ecap_perms[PCI_EXT_CAP_ID_DSN]);
 	ecap_perms[PCI_EXT_CAP_ID_VNDR].writefn = vfio_raw_config_write;
 	ecap_perms[PCI_EXT_CAP_ID_DVSEC].writefn = vfio_raw_config_write;
 
@@ -1701,6 +1728,18 @@ static int vfio_ecap_init(struct vfio_pci_core_device *vdev)
 		ret = vfio_fill_vconfig_bytes(vdev, epos, len);
 		if (ret)
 			return ret;
+
+		/*
+		 * Scrub the physical Device Serial Number from the
+		 * virtualized config space so the guest cannot read the
+		 * host device's unique identifier.  The capability is fully
+		 * virtualized (see init_pci_ext_cap_dsn_perm()), so reads
+		 * return this scrubbed value rather than hardware.  The user
+		 * can present a chosen serial via VFIO_DEVICE_FEATURE_PCI_DSN.
+		 */
+		if (ecap == PCI_EXT_CAP_ID_DSN)
+			memset(&vdev->vconfig[epos + PCI_DSN_LOW_DW], 0,
+			       sizeof(__le64));
 
 		/*
 		 * If we're just using this capability to anchor the list,

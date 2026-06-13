@@ -768,6 +768,11 @@
 #define PCI_EXT_CAP_DSN_SIZEOF	12
 #define PCI_EXT_CAP_MCAST_ENDPOINT_SIZEOF 40
 
+/* Device Serial Number */
+#define PCI_DSN_CAP		0x00	/* Capability header */
+#define PCI_DSN_LOW_DW		0x04	/* Serial number, lower dword */
+#define PCI_DSN_HIGH_DW		0x08	/* Serial number, upper dword */
+
 /* Advanced Error Reporting */
 #define PCI_ERR_UNCOR_STATUS	0x04	/* Uncorrectable Error Status */
 #define  PCI_ERR_UNC_UND	0x00000001	/* Undefined */
