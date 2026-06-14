@@ -31,6 +31,7 @@
 #include <linux/unaligned.h>
 #include <net/ip6_checksum.h>
 #include <net/netdev_queues.h>
+#include <net/page_pool/helpers.h>
 #include <net/phy/realtek_phy.h>
 
 #include "r8169.h"
@@ -70,7 +71,9 @@
 #define InterFrameGap	0x03	/* 3 means InterFrameGap = the shortest one */
 
 #define R8169_REGS_SIZE		256
-#define R8169_RX_BUF_SIZE	(SZ_16K - 1)
+#define R8169_RX_HEADROOM	ALIGN(XDP_PACKET_HEADROOM, 8)
+#define R8169_RX_BUF_SIZE	(PAGE_SIZE - R8169_RX_HEADROOM - \
+				 SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
 #define NUM_TX_DESC	256	/* Number of Tx descriptor registers */
 #define NUM_RX_DESC	256	/* Number of Rx descriptor registers */
 #define R8169_TX_RING_BYTES	(NUM_TX_DESC * sizeof(struct TxDesc))
@@ -737,6 +740,7 @@ struct rtl8169_private {
 	enum mac_version mac_version;
 	enum rtl_dash_type dash_type;
 	u32 cur_rx; /* Index into the Rx descriptor buffer of next Rx pkt. */
+	u32 dirty_rx; /* Index of first Rx descriptor needing a new buffer */
 	u32 cur_tx; /* Index into the Tx descriptor buffer of next Rx pkt. */
 	u32 dirty_tx;
 	struct TxDesc *TxDescArray;	/* 256-aligned Tx descriptor ring */
@@ -745,6 +749,8 @@ struct rtl8169_private {
 	dma_addr_t RxPhyAddr;
 	struct page *Rx_databuff[NUM_RX_DESC];	/* Rx data buffers */
 	struct ring_info tx_skb[NUM_TX_DESC];	/* Tx data buffers */
+	struct page_pool *page_pool;
+	u32 rx_buf_sz;
 	u16 cp_cmd;
 	u16 tx_lpi_timer;
 	u32 irq_mask;
@@ -4148,37 +4154,27 @@ static int rtl8169_change_mtu(struct net_device *dev, int new_mtu)
 	return 0;
 }
 
-static void rtl8169_mark_to_asic(struct RxDesc *desc)
+static void rtl8169_mark_to_asic(struct RxDesc *desc, u32 rx_buf_sz)
 {
 	u32 eor = le32_to_cpu(desc->opts1) & RingEnd;
 
 	desc->opts2 = 0;
 	/* Force memory writes to complete before releasing descriptor */
 	dma_wmb();
-	WRITE_ONCE(desc->opts1, cpu_to_le32(DescOwn | eor | R8169_RX_BUF_SIZE));
+	WRITE_ONCE(desc->opts1, cpu_to_le32(DescOwn | eor | rx_buf_sz));
 }
 
 static struct page *rtl8169_alloc_rx_data(struct rtl8169_private *tp,
 					  struct RxDesc *desc)
 {
-	struct device *d = tp_to_dev(tp);
-	int node = dev_to_node(d);
-	dma_addr_t mapping;
 	struct page *data;
 
-	data = alloc_pages_node(node, GFP_KERNEL, get_order(R8169_RX_BUF_SIZE));
+	data = page_pool_dev_alloc_pages(tp->page_pool);
 	if (!data)
 		return NULL;
 
-	mapping = dma_map_page(d, data, 0, R8169_RX_BUF_SIZE, DMA_FROM_DEVICE);
-	if (unlikely(dma_mapping_error(d, mapping))) {
-		netdev_err(tp->dev, "Failed to map RX DMA!\n");
-		__free_pages(data, get_order(R8169_RX_BUF_SIZE));
-		return NULL;
-	}
-
-	desc->addr = cpu_to_le64(mapping);
-	rtl8169_mark_to_asic(desc);
+	desc->addr = cpu_to_le64(page_pool_get_dma_addr(data) + R8169_RX_HEADROOM);
+	rtl8169_mark_to_asic(desc, tp->rx_buf_sz);
 
 	return data;
 }
@@ -4187,15 +4183,17 @@ static void rtl8169_rx_clear(struct rtl8169_private *tp)
 {
 	int i;
 
-	for (i = 0; i < NUM_RX_DESC && tp->Rx_databuff[i]; i++) {
-		dma_unmap_page(tp_to_dev(tp),
-			       le64_to_cpu(tp->RxDescArray[i].addr),
-			       R8169_RX_BUF_SIZE, DMA_FROM_DEVICE);
-		__free_pages(tp->Rx_databuff[i], get_order(R8169_RX_BUF_SIZE));
+	for (i = 0; i < NUM_RX_DESC; i++) {
+		if (!tp->Rx_databuff[i])
+			continue;
+		page_pool_put_full_page(tp->page_pool, tp->Rx_databuff[i], true);
 		tp->Rx_databuff[i] = NULL;
 		tp->RxDescArray[i].addr = 0;
 		tp->RxDescArray[i].opts1 = 0;
 	}
+
+	page_pool_destroy(tp->page_pool);
+	tp->page_pool = NULL;
 }
 
 static int rtl8169_rx_fill(struct rtl8169_private *tp)
@@ -4221,10 +4219,27 @@ static int rtl8169_rx_fill(struct rtl8169_private *tp)
 
 static int rtl8169_init_ring(struct rtl8169_private *tp)
 {
+	struct page_pool_params pp_params = { 0 };
+
 	rtl8169_init_ring_indexes(tp);
+	tp->dirty_rx = 0;
+	tp->rx_buf_sz = R8169_RX_BUF_SIZE;
 
 	memset(tp->tx_skb, 0, sizeof(tp->tx_skb));
 	memset(tp->Rx_databuff, 0, sizeof(tp->Rx_databuff));
+
+	pp_params.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV;
+	pp_params.order = 0;
+	pp_params.pool_size = NUM_RX_DESC;
+	pp_params.nid = dev_to_node(tp_to_dev(tp));
+	pp_params.dev = tp_to_dev(tp);
+	pp_params.dma_dir = DMA_FROM_DEVICE;
+	pp_params.offset = R8169_RX_HEADROOM;
+	pp_params.max_len = tp->rx_buf_sz;
+
+	tp->page_pool = page_pool_create(&pp_params);
+	if (IS_ERR(tp->page_pool))
+		return PTR_ERR(tp->page_pool);
 
 	return rtl8169_rx_fill(tp);
 }
@@ -4312,7 +4327,7 @@ static void rtl_reset_work(struct rtl8169_private *tp)
 	rtl8169_cleanup(tp);
 
 	for (i = 0; i < NUM_RX_DESC; i++)
-		rtl8169_mark_to_asic(tp->RxDescArray + i);
+		rtl8169_mark_to_asic(tp->RxDescArray + i, tp->rx_buf_sz);
 
 	napi_enable(&tp->napi);
 	rtl_hw_start(tp);
@@ -4776,9 +4791,8 @@ static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, int budget
 	for (count = 0; count < budget; count++, tp->cur_rx++) {
 		unsigned int pkt_size, entry = tp->cur_rx % NUM_RX_DESC;
 		struct RxDesc *desc = tp->RxDescArray + entry;
+		struct page *page;
 		struct sk_buff *skb;
-		const void *rx_buf;
-		dma_addr_t addr;
 		u32 status;
 
 		status = le32_to_cpu(READ_ONCE(desc->opts1));
@@ -4791,6 +4805,9 @@ static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, int budget
 		 */
 		dma_rmb();
 
+		page = tp->Rx_databuff[entry];
+		tp->Rx_databuff[entry] = NULL;
+
 		if (unlikely(status & RxRES)) {
 			if (net_ratelimit())
 				netdev_warn(dev, "Rx ERROR. status = %08x\n",
@@ -4802,9 +4819,9 @@ static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, int budget
 				dev->stats.rx_crc_errors++;
 
 			if (!(dev->features & NETIF_F_RXALL))
-				goto release_descriptor;
+				goto recycle;
 			else if (status & RxRWT || !(status & (RxRUNT | RxCRC)))
-				goto release_descriptor;
+				goto recycle;
 		}
 
 		pkt_size = status & GENMASK(13, 0);
@@ -4817,24 +4834,23 @@ static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, int budget
 		if (unlikely(rtl8169_fragmented_frame(status))) {
 			dev->stats.rx_dropped++;
 			dev->stats.rx_length_errors++;
-			goto release_descriptor;
+			goto recycle;
 		}
 
-		skb = napi_alloc_skb(&tp->napi, pkt_size);
+		dma_sync_single_for_cpu(d,
+					page_pool_get_dma_addr(page) +
+					R8169_RX_HEADROOM,
+					pkt_size, DMA_FROM_DEVICE);
+
+		skb = napi_build_skb(page_address(page), PAGE_SIZE);
 		if (unlikely(!skb)) {
 			dev->stats.rx_dropped++;
-			goto release_descriptor;
+			goto recycle;
 		}
 
-		addr = le64_to_cpu(desc->addr);
-		rx_buf = page_address(tp->Rx_databuff[entry]);
-
-		dma_sync_single_for_cpu(d, addr, pkt_size, DMA_FROM_DEVICE);
-		prefetch(rx_buf);
-		skb_copy_to_linear_data(skb, rx_buf, pkt_size);
-		skb->tail += pkt_size;
-		skb->len = pkt_size;
-		dma_sync_single_for_device(d, addr, pkt_size, DMA_FROM_DEVICE);
+		skb_reserve(skb, R8169_RX_HEADROOM);
+		skb_put(skb, pkt_size);
+		skb_mark_for_recycle(skb);
 
 		rtl8169_rx_csum(skb, status);
 		skb->protocol = eth_type_trans(skb, dev);
@@ -4847,11 +4863,32 @@ static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, int budget
 		napi_gro_receive(&tp->napi, skb);
 
 		dev_sw_netstats_rx_add(dev, pkt_size);
-release_descriptor:
-		rtl8169_mark_to_asic(desc);
+
+		continue;
+
+recycle:
+		page_pool_put_full_page(tp->page_pool, page, true);
 	}
 
 	return count;
+}
+
+static void rtl8169_rx_refill(struct rtl8169_private *tp)
+{
+	u32 dirty_rx = tp->dirty_rx;
+
+	while (dirty_rx != tp->cur_rx) {
+		u32 entry = dirty_rx % NUM_RX_DESC;
+
+		if (!tp->Rx_databuff[entry]) {
+			tp->Rx_databuff[entry] = rtl8169_alloc_rx_data(tp,
+								       tp->RxDescArray + entry);
+			if (!tp->Rx_databuff[entry])
+				break;
+		}
+		dirty_rx++;
+	}
+	tp->dirty_rx = dirty_rx;
 }
 
 static irqreturn_t rtl8169_interrupt(int irq, void *dev_instance)
@@ -4921,6 +4958,7 @@ static int rtl8169_poll(struct napi_struct *napi, int budget)
 	rtl_tx(dev, tp, budget);
 
 	work_done = rtl_rx(dev, tp, budget);
+	rtl8169_rx_refill(tp);
 
 	if (work_done < budget && napi_complete_done(napi, work_done))
 		rtl_irq_enable(tp);
@@ -5775,8 +5813,12 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	jumbo_max = rtl_jumbo_max(tp);
-	if (jumbo_max)
-		dev->max_mtu = jumbo_max;
+	if (jumbo_max) {
+		unsigned int page_pool_mtu;
+
+		page_pool_mtu = R8169_RX_BUF_SIZE - VLAN_ETH_HLEN - ETH_FCS_LEN;
+		dev->max_mtu = min_t(int, jumbo_max, page_pool_mtu);
+	}
 
 	rtl_set_irq_mask(tp);
 
@@ -5808,7 +5850,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	if (jumbo_max)
 		netdev_info(dev, "jumbo features [frames: %d bytes, tx checksumming: %s]\n",
-			    jumbo_max, tp->mac_version <= RTL_GIGA_MAC_VER_06 ?
+			    dev->max_mtu, tp->mac_version <= RTL_GIGA_MAC_VER_06 ?
 			    "ok" : "ko");
 
 	if (tp->dash_type != RTL_DASH_NONE) {
