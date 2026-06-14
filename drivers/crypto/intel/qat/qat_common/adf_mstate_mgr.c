@@ -231,8 +231,18 @@ static int adf_mstate_sect_validate(struct adf_mstate_mgr *mgr)
 
 	end = (uintptr_t)mgr->buf + mgr->size;
 	for (i = 0; i < mgr->n_sects; i++) {
-		uintptr_t s_start = (uintptr_t)sect->state;
-		uintptr_t s_end = s_start + sect->size;
+		uintptr_t s_start, s_end;
+
+		/* The section header must be in the buffer before it is read. */
+		if ((uintptr_t)sect < (uintptr_t)mgr->buf ||
+		    (uintptr_t)sect > end - sizeof(*sect)) {
+			pr_debug("QAT: LM - Section header out of bounds (index=%u) in state_mgr (size=%u, secs=%u)\n",
+				 i, mgr->size, mgr->n_sects);
+			return -EINVAL;
+		}
+
+		s_start = (uintptr_t)sect->state;
+		s_end = s_start + sect->size;
 
 		if (s_end < s_start || s_end > end) {
 			pr_debug("QAT: LM - Corrupted state section (index=%u, size=%u) in state_mgr (size=%u, secs=%u)\n",
