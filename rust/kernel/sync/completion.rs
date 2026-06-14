@@ -90,6 +90,20 @@ impl Completion {
         self.inner.get()
     }
 
+    /// Signal one task waiting on this completion.
+    ///
+    /// This method wakes up a single task waiting on this completion and increments the
+    /// internal counter by one. If no task is currently waiting, the next
+    /// [`Completion::wait_for_completion`] returns immediately.
+    ///
+    /// Unlike [`Completion::complete_all`], the completion is not marked permanently done, so a
+    /// single [`Completion`] paired one-to-one with [`Completion::wait_for_completion`] can be
+    /// reused to signal the same event repeatedly.
+    pub fn complete(&self) {
+        // SAFETY: `self.as_raw()` is a pointer to a valid `struct completion`.
+        unsafe { bindings::complete(self.as_raw()) };
+    }
+
     /// Signal all tasks waiting on this completion.
     ///
     /// This method wakes up all tasks waiting on this completion; after this operation the
