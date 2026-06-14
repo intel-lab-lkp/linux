@@ -5678,6 +5678,11 @@ static int mvneta_probe(struct platform_device *pdev)
 					 "use SW buffer management\n");
 				mvneta_bm_put(pp->bm_priv);
 				pp->bm_priv = NULL;
+			} else {
+				/* Ensure BM suspends after us, resumes before us */
+				device_link_add(&pdev->dev,
+						&pp->bm_priv->pdev->dev,
+						DL_FLAG_AUTOREMOVE_CONSUMER);
 			}
 		}
 		/* Set RX packet offset correction for platforms, whose
