@@ -1093,6 +1093,7 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_NPCA_PRIMARY_FREQ] = { .type = NLA_U32 },
 	[NL80211_ATTR_NPCA_PUNCT_BITMAP] =
 		NLA_POLICY_FULL_RANGE(NLA_U32, &nl80211_punct_bitmap_range),
+	[NL80211_ATTR_STA_DUMP_LINK_STATS] = { .type = NLA_FLAG },
 };
 
 /* policy for the key attributes */
@@ -7870,7 +7871,7 @@ static int nl80211_fill_link_station(struct sk_buff *msg,
 		goto nla_put_failure;					\
 	} while (0)
 
-	link_sinfoattr = nla_nest_start_noflag(msg, NL80211_ATTR_STA_INFO);
+	link_sinfoattr = nla_nest_start(msg, NL80211_ATTR_STA_INFO);
 	if (!link_sinfoattr)
 		goto nla_put_failure;
 
@@ -7936,8 +7937,8 @@ static int nl80211_fill_link_station(struct sk_buff *msg,
 	PUT_LINK_SINFO(BEACON_LOSS, beacon_loss_count, u32);
 
 	if (link_sinfo->filled & BIT_ULL(NL80211_STA_INFO_BSS_PARAM)) {
-		bss_param = nla_nest_start_noflag(msg,
-						  NL80211_STA_INFO_BSS_PARAM);
+		bss_param = nla_nest_start(msg,
+					   NL80211_STA_INFO_BSS_PARAM);
 		if (!bss_param)
 			goto nla_put_failure;
 
@@ -7979,8 +7980,7 @@ static int nl80211_fill_link_station(struct sk_buff *msg,
 		struct nlattr *tidsattr;
 		int tid;
 
-		tidsattr = nla_nest_start_noflag(msg,
-						 NL80211_STA_INFO_TID_STATS);
+		tidsattr = nla_nest_start(msg, NL80211_STA_INFO_TID_STATS);
 		if (!tidsattr)
 			goto nla_put_failure;
 
@@ -7993,7 +7993,7 @@ static int nl80211_fill_link_station(struct sk_buff *msg,
 			if (!tidstats->filled)
 				continue;
 
-			tidattr = nla_nest_start_noflag(msg, tid + 1);
+			tidattr = nla_nest_start(msg, tid + 1);
 			if (!tidattr)
 				goto nla_put_failure;
 
@@ -8464,11 +8464,57 @@ static void cfg80211_sta_set_mld_sinfo(struct station_info *sinfo)
 	sinfo->filled &= ~BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL_AVG);
 }
 
+enum nl80211_dump_station_phase {
+	NL80211_DUMP_STA_PHASE_AGGREGATED = 0,
+	NL80211_DUMP_STA_PHASE_PER_LINK   = 1,
+};
+
 struct nl80211_dump_station_ctx {
 	int sta_idx;
+	int link_idx;
+	enum nl80211_dump_station_phase phase;
+	bool dump_link_stats;
 	u8 mac_addr[ETH_ALEN];
 	struct station_info sinfo;
 };
+
+static int nl80211_put_link_station_payload(struct sk_buff *msg,
+					    struct cfg80211_registered_device *rdev,
+					    struct station_info *sinfo,
+					    int link_idx)
+{
+	struct link_station_info *link_sinfo = sinfo->links[link_idx];
+	struct nlattr *links, *link;
+
+	if (WARN_ON_ONCE(!link_sinfo))
+		return -ENOENT;
+
+	if (!is_valid_ether_addr(link_sinfo->addr))
+		return -EADDRNOTAVAIL;
+
+	links = nla_nest_start(msg, NL80211_ATTR_MLO_LINKS);
+	if (!links)
+		return -EMSGSIZE;
+
+	link = nla_nest_start(msg, link_idx + 1);
+	if (!link)
+		goto nla_put_failure;
+
+	if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_idx) ||
+	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, link_sinfo->addr))
+		goto nla_put_failure;
+
+	if (nl80211_fill_link_station(msg, rdev, link_sinfo))
+		goto nla_put_failure;
+
+	nla_nest_end(msg, link);
+	nla_nest_end(msg, links);
+	return 0;
+
+nla_put_failure:
+	nla_nest_cancel(msg, links);
+	return -EMSGSIZE;
+}
 
 static int nl80211_dump_station(struct sk_buff *skb,
 				struct netlink_callback *cb)
@@ -8476,9 +8522,16 @@ static int nl80211_dump_station(struct sk_buff *skb,
 	struct cfg80211_registered_device *rdev;
 	struct wireless_dev *wdev;
 	struct nl80211_dump_station_ctx *ctx = (void *)cb->args[2];
+	struct nlattr **attrbuf __free(kfree) = NULL;
 	int err;
 
-	err = nl80211_prepare_wdev_dump(cb, &rdev, &wdev, NULL);
+	if (!ctx) {
+		attrbuf = kzalloc_objs(*attrbuf, NUM_NL80211_ATTR);
+		if (!attrbuf)
+			return -ENOMEM;
+	}
+
+	err = nl80211_prepare_wdev_dump(cb, &rdev, &wdev, attrbuf);
 	if (err)
 		return err;
 	/* nl80211_prepare_wdev_dump acquired it in the successful case */
@@ -8490,6 +8543,9 @@ static int nl80211_dump_station(struct sk_buff *skb,
 			err = -ENOMEM;
 			goto out_err;
 		}
+		ctx->phase = NL80211_DUMP_STA_PHASE_AGGREGATED;
+		ctx->dump_link_stats =
+			!!attrbuf[NL80211_ATTR_STA_DUMP_LINK_STATS];
 		cb->args[2] = (long)ctx;
 	}
 
@@ -8505,34 +8561,53 @@ static int nl80211_dump_station(struct sk_buff *skb,
 
 	while (true) {
 		void *hdr;
+		int ret;
 
-		memset(&ctx->sinfo, 0, sizeof(ctx->sinfo));
-		for (int i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
-			ctx->sinfo.links[i] =
-				kzalloc_obj(*ctx->sinfo.links[0]);
-			if (!ctx->sinfo.links[i]) {
-				err = -ENOMEM;
+		/* AGGREGATED phase: fetch sinfo from driver once per station */
+		if (ctx->phase == NL80211_DUMP_STA_PHASE_AGGREGATED) {
+			memset(&ctx->sinfo, 0, sizeof(ctx->sinfo));
+			for (int i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
+				ctx->sinfo.links[i] =
+					kzalloc_obj(*ctx->sinfo.links[0]);
+				if (!ctx->sinfo.links[i]) {
+					err = -ENOMEM;
+					goto out_err_release;
+				}
+			}
+
+			err = rdev_dump_station(rdev, wdev, ctx->sta_idx,
+						ctx->mac_addr, &ctx->sinfo);
+			if (err == -ENOENT) {
+				err = skb->len;
 				goto out_err_release;
+			}
+			if (err)
+				goto out_err_release;
+
+			if (ctx->sinfo.valid_links)
+				cfg80211_sta_set_mld_sinfo(&ctx->sinfo);
+		} else {
+			/* PER_LINK phase: advance to next valid link */
+			while (ctx->link_idx < IEEE80211_MLD_MAX_NUM_LINKS &&
+			       !(ctx->sinfo.valid_links & BIT(ctx->link_idx)))
+				ctx->link_idx++;
+
+			if (ctx->link_idx >= IEEE80211_MLD_MAX_NUM_LINKS) {
+				cfg80211_sinfo_release_content(&ctx->sinfo);
+				ctx->sta_idx++;
+				ctx->phase = NL80211_DUMP_STA_PHASE_AGGREGATED;
+				continue;
 			}
 		}
 
-		err = rdev_dump_station(rdev, wdev, ctx->sta_idx,
-					ctx->mac_addr, &ctx->sinfo);
-		if (err == -ENOENT) {
-			err = skb->len;
-			goto out_err_release;
-		}
-		if (err)
-			goto out_err_release;
-
-		if (ctx->sinfo.valid_links)
-			cfg80211_sta_set_mld_sinfo(&ctx->sinfo);
-
+		/* Build common header for both phases */
 		hdr = nl80211hdr_put(skb, NETLINK_CB(cb->skb).portid,
 				     cb->nlh->nlmsg_seq, NLM_F_MULTI,
 				     NL80211_CMD_NEW_STATION);
 		if (!hdr) {
 			err = skb->len;
+			if (ctx->phase == NL80211_DUMP_STA_PHASE_PER_LINK)
+				goto out_err;
 			goto out_err_release;
 		}
 
@@ -8546,18 +8621,49 @@ static int nl80211_dump_station(struct sk_buff *skb,
 				ctx->sinfo.generation)) {
 			genlmsg_cancel(skb, hdr);
 			err = skb->len;
+			if (ctx->phase == NL80211_DUMP_STA_PHASE_PER_LINK)
+				goto out_err;
 			goto out_err_release;
 		}
 
-		if (nl80211_put_sta_info_common(skb, rdev, &ctx->sinfo)) {
-			genlmsg_cancel(skb, hdr);
-			err = skb->len;
-			goto out_err_release;
-		}
+		switch (ctx->phase) {
+		case NL80211_DUMP_STA_PHASE_AGGREGATED:
+			ret = nl80211_put_sta_info_common(skb, rdev, &ctx->sinfo);
+			if (ret) {
+				genlmsg_cancel(skb, hdr);
+				err = ret;
+				goto out_err_release;
+			}
+			genlmsg_end(skb, hdr);
 
-		genlmsg_end(skb, hdr);
-		cfg80211_sinfo_release_content(&ctx->sinfo);
-		ctx->sta_idx++;
+			if (ctx->dump_link_stats && ctx->sinfo.valid_links) {
+				ctx->phase = NL80211_DUMP_STA_PHASE_PER_LINK;
+				ctx->link_idx = 0;
+			} else {
+				cfg80211_sinfo_release_content(&ctx->sinfo);
+				ctx->sta_idx++;
+			}
+			break;
+
+		case NL80211_DUMP_STA_PHASE_PER_LINK:
+			ret = nl80211_put_link_station_payload(skb, rdev,
+							       &ctx->sinfo,
+							       ctx->link_idx);
+			if (ret == -EMSGSIZE) {
+				genlmsg_cancel(skb, hdr);
+				err = skb->len;
+				goto out_err;
+			}
+			if (ret) {
+				/* skip invalid link, do not abort the dump */
+				genlmsg_cancel(skb, hdr);
+				ctx->link_idx++;
+				continue;
+			}
+			genlmsg_end(skb, hdr);
+			ctx->link_idx++;
+			break;
+		}
 	}
 
 out_err_release:
