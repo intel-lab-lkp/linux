@@ -620,7 +620,7 @@ static int csi2tx_probe(struct platform_device *pdev)
 
 	ret = v4l2_async_register_subdev(&csi2tx->subdev);
 	if (ret < 0)
-		goto err_free_priv;
+		goto err_entity_cleanup;
 
 	dev_info(&pdev->dev,
 		 "Probed CSI2TX with %u/%u lanes, %u streams, %s D-PHY\n",
@@ -629,6 +629,8 @@ static int csi2tx_probe(struct platform_device *pdev)
 
 	return 0;
 
+err_entity_cleanup:
+	media_entity_cleanup(&csi2tx->subdev.entity);
 err_free_priv:
 	kfree(csi2tx);
 	return ret;
@@ -639,6 +641,7 @@ static void csi2tx_remove(struct platform_device *pdev)
 	struct csi2tx_priv *csi2tx = platform_get_drvdata(pdev);
 
 	v4l2_async_unregister_subdev(&csi2tx->subdev);
+	media_entity_cleanup(&csi2tx->subdev.entity);
 	kfree(csi2tx);
 }
 
