@@ -1246,6 +1246,88 @@ static const unsigned int cpu_job_bo_handle_count[] = {
 	[V3D_CPU_JOB_TYPE_COPY_PERFORMANCE_QUERY] = 1,
 };
 
+/* Reject offset + (count - 1) * stride + write_size if it leaves the BO. */
+static int
+v3d_check_copy_extent(struct drm_device *dev, size_t bo_size,
+		      u32 offset, u32 stride, u32 count, u32 write_size)
+{
+	u32 span, last;
+
+	if (!count)
+		return 0;
+
+	if (check_mul_overflow(stride, count - 1, &span) ||
+	    check_add_overflow(span, write_size, &span) ||
+	    check_add_overflow(span, offset, &last) ||
+	    last > bo_size) {
+		drm_dbg(dev, "CPU job copy buffer exceeds the destination BO.\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/* Bound the copy-query CPU-job writes; the exec-time copy does not. */
+static int
+v3d_cpu_job_check_copy_bounds(struct v3d_cpu_job *job)
+{
+	struct drm_device *dev = &job->base.v3d->drm;
+	struct v3d_copy_query_results_info *copy = &job->copy;
+	u32 elem = copy->do_64bit ? sizeof(u64) : sizeof(u32);
+	struct v3d_bo *bo, *timestamp;
+	u32 slots, write_size;
+	int i;
+
+	switch (job->job_type) {
+	case V3D_CPU_JOB_TYPE_COPY_TIMESTAMP_QUERY:
+		bo = to_v3d_bo(job->base.bo[0]);
+		timestamp = to_v3d_bo(job->base.bo[1]);
+
+		slots = copy->availability_bit ? 2 : 1;
+		if (check_mul_overflow(slots, elem, &write_size))
+			return -EINVAL;
+
+		if (v3d_check_copy_extent(dev, bo->base.base.size, copy->offset,
+					  copy->stride, job->timestamp_query.count,
+					  write_size))
+			return -EINVAL;
+
+		for (i = 0; i < job->timestamp_query.count; i++) {
+			u32 end;
+
+			if (check_add_overflow(job->timestamp_query.queries[i].offset,
+					       (u32)sizeof(u64), &end) ||
+			    end > timestamp->base.base.size) {
+				drm_dbg(dev, "CPU job timestamp query offset exceeds the BO.\n");
+				return -EINVAL;
+			}
+		}
+		return 0;
+	case V3D_CPU_JOB_TYPE_COPY_PERFORMANCE_QUERY:
+		bo = to_v3d_bo(job->base.bo[0]);
+
+		if (check_mul_overflow(job->performance_query.nperfmons,
+				       (u32)DRM_V3D_MAX_PERF_COUNTERS, &slots))
+			return -EINVAL;
+		if (copy->availability_bit) {
+			u32 avail_slots;
+
+			if (check_add_overflow(job->performance_query.ncounters,
+					       1u, &avail_slots))
+				return -EINVAL;
+			slots = max(slots, avail_slots);
+		}
+		if (check_mul_overflow(slots, elem, &write_size))
+			return -EINVAL;
+
+		return v3d_check_copy_extent(dev, bo->base.base.size, copy->offset,
+					     copy->stride, job->performance_query.count,
+					     write_size);
+	default:
+		return 0;
+	}
+}
+
 /**
  * v3d_submit_cpu_ioctl() - Submits a CPU job to the V3D.
  * @dev: DRM device
@@ -1314,6 +1396,10 @@ v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 	if (args->bo_handle_count) {
 		ret = v3d_lookup_bos(dev, file_priv, &cpu_job->base,
 				     args->bo_handles, args->bo_handle_count);
+		if (ret)
+			goto fail;
+
+		ret = v3d_cpu_job_check_copy_bounds(cpu_job);
 		if (ret)
 			goto fail;
 
