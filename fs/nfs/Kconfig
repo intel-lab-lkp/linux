@@ -215,3 +215,17 @@ config NFS_V4_2_READ_PLUS
 	default y
 	help
 	 Choose Y here to enable use of the NFS v4.2 READ_PLUS operation.
+
+config NFS_GETDEVICEINFO_KUNIT_TEST
+	tristate "KUnit test for pNFS GETDEVICEINFO notification decode" if !KUNIT_ALL_TESTS
+	depends on NFS_V4 && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Builds KUnit coverage for the notification-bitmap length pass in
+	  the NFS client pNFS GETDEVICEINFO reply decoder. The test drives
+	  the real decode_getdeviceinfo() over a crafted reply and, on an
+	  unfixed kernel built with CONFIG_KASAN, reports the slab-out-of-
+	  bounds read caused by a 32-bit overflow in the notification-bitmap
+	  length handling.
+
+	  If unsure, say N.

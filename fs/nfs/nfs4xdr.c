@@ -7788,3 +7788,7 @@ const struct rpc_version nfs_version4 = {
 	.procs			= nfs4_procedures,
 	.counts			= nfs_version4_counts,
 };
+
+#if IS_ENABLED(CONFIG_NFS_GETDEVICEINFO_KUNIT_TEST)
+#include "getdeviceinfo_notify_kunit.c"
+#endif
