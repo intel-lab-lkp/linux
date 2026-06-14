@@ -989,7 +989,7 @@ fail_class_get:
 /* Init / exit ****************************************************************/
 
 /* Set up the min/max and defaults for ROG tunables */
-static void init_rog_tunables(void)
+static int init_rog_tunables(void)
 {
 	const struct power_limits *ac_limits, *dc_limits;
 	struct rog_tunables *ac_rog_tunables = NULL, *dc_rog_tunables = NULL;
@@ -1000,14 +1000,14 @@ static void init_rog_tunables(void)
 	dmi_id = dmi_first_match(power_limits);
 	if (!dmi_id) {
 		pr_warn("No matching power limits found for this system\n");
-		return;
+		return 0;
 	}
 
 	/* Get the power data for this system */
 	power_data = dmi_id->driver_data;
 	if (!power_data) {
 		pr_info("No power data available for this system\n");
-		return;
+		return 0;
 	}
 
 	/* Initialize AC power tunables */
@@ -1015,7 +1015,7 @@ static void init_rog_tunables(void)
 	if (ac_limits) {
 		ac_rog_tunables = kzalloc_obj(*asus_armoury.rog_tunables[ASUS_ROG_TUNABLE_AC]);
 		if (!ac_rog_tunables)
-			goto err_nomem;
+			return -ENOMEM;
 
 		asus_armoury.rog_tunables[ASUS_ROG_TUNABLE_AC] = ac_rog_tunables;
 		ac_rog_tunables->power_limits = ac_limits;
@@ -1063,7 +1063,8 @@ static void init_rog_tunables(void)
 		dc_rog_tunables = kzalloc_obj(*asus_armoury.rog_tunables[ASUS_ROG_TUNABLE_DC]);
 		if (!dc_rog_tunables) {
 			kfree(ac_rog_tunables);
-			goto err_nomem;
+			asus_armoury.rog_tunables[ASUS_ROG_TUNABLE_AC] = NULL;
+			return -ENOMEM;
 		}
 
 		asus_armoury.rog_tunables[ASUS_ROG_TUNABLE_DC] = dc_rog_tunables;
@@ -1106,15 +1107,13 @@ static void init_rog_tunables(void)
 		pr_debug("No DC PPT limits defined\n");
 	}
 
-	return;
-
-err_nomem:
-	pr_err("Failed to allocate memory for tunables\n");
+	return 0;
 }
 
 static int __init asus_fw_init(void)
 {
 	char *wmi_uid;
+	int err;
 
 	wmi_uid = wmi_get_acpi_device_uid(ASUS_WMI_MGMT_GUID);
 	if (!wmi_uid)
@@ -1127,10 +1126,19 @@ static int __init asus_fw_init(void)
 	if (!strcmp(wmi_uid, ASUS_ACPI_UID_ASUSWMI))
 		return -ENODEV;
 
-	init_rog_tunables();
+	err = init_rog_tunables();
+	if (err)
+		return err;
 
-	/* Must always be last step to ensure data is available */
-	return asus_fw_attr_add();
+	err = asus_fw_attr_add();
+	if (err) {
+		kfree(asus_armoury.rog_tunables[ASUS_ROG_TUNABLE_AC]);
+		asus_armoury.rog_tunables[ASUS_ROG_TUNABLE_AC] = NULL;
+		kfree(asus_armoury.rog_tunables[ASUS_ROG_TUNABLE_DC]);
+		asus_armoury.rog_tunables[ASUS_ROG_TUNABLE_DC] = NULL;
+	}
+
+	return err;
 }
 
 static void __exit asus_fw_exit(void)
