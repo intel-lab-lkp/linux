@@ -347,6 +347,12 @@
 			status = "disabled";
 		};
 
+		soe: soe@1fbfa000 {
+			compatible = "airoha,en7581-soe";
+			reg = <0x0 0x1fbfa000 0x0 0x268>;
+			interrupts = <GIC_SPI 79 IRQ_TYPE_LEVEL_HIGH>;
+		};
+
 		eth: ethernet@1fb50000 {
 			compatible = "airoha,en7581-eth";
 			reg = <0 0x1fb50000 0 0x2600>,
