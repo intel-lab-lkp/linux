@@ -126,7 +126,7 @@ EXPORT_SYMBOL_GPL(nvme_reset_wq);
 struct workqueue_struct *nvme_delete_wq;
 EXPORT_SYMBOL_GPL(nvme_delete_wq);
 
-static LIST_HEAD(nvme_subsystems);
+static __guarded_by(&nvme_subsystems_lock) LIST_HEAD(nvme_subsystems);
 DEFINE_MUTEX(nvme_subsystems_lock);
 
 static DEFINE_IDA(nvme_instance_ida);
@@ -3164,6 +3164,7 @@ static void nvme_put_subsystem(struct nvme_subsystem *subsys)
 }
 
 static struct nvme_subsystem *__nvme_find_get_subsystem(const char *subsysnqn)
+	__must_hold(&nvme_subsystems_lock)
 {
 	struct nvme_subsystem *subsys;
 
@@ -3208,6 +3209,7 @@ static inline bool nvme_is_io_ctrl(struct nvme_ctrl *ctrl)
 
 static bool nvme_validate_cntlid(struct nvme_subsystem *subsys,
 		struct nvme_ctrl *ctrl, struct nvme_id_ctrl *id)
+	__must_hold(&nvme_subsystems_lock)
 {
 	struct nvme_ctrl *tmp;
 
@@ -3250,7 +3252,12 @@ static int nvme_init_subsystem(struct nvme_ctrl *ctrl, struct nvme_id_ctrl *id)
 	scoped_guard(mutex_init, &subsys->lock)
 		INIT_LIST_HEAD(&subsys->nsheads);
 	kref_init(&subsys->ref);
-	INIT_LIST_HEAD(&subsys->ctrls);
+	/*
+	 * Initializing subsys->ctrls list doesn't need to be protected
+	 * using @nvme_subsystems_lock. So suppress the Clang's warning
+	 * declaring context_unsafe.
+	 */
+	context_unsafe(INIT_LIST_HEAD(&subsys->ctrls));
 	nvme_init_subnqn(subsys, ctrl, id);
 	memcpy(subsys->serial, id->sn, sizeof(subsys->serial));
 	memcpy(subsys->model, id->mn, sizeof(subsys->model));
