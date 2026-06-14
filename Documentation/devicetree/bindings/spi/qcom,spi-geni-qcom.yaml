@@ -45,6 +45,11 @@ properties:
       - const: tx
       - const: rx
 
+  qcom,force-gsi-mode:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      Use DMA (GSI) mode, even if FIFO mode is not disabled.
+
   interconnects:
     minItems: 2
     maxItems: 3
