@@ -103,7 +103,13 @@ struct opt3001_chip_info {
 struct opt3001 {
 	struct i2c_client	*client;
 
+	/*
+	 * Ensure data capture and read-modify-write sequences are
+	 * not interrupted.
+	 */
 	struct mutex		lock;
+
+	/* Allows for IRQs to bypass locking mechanism */
 	bool			ok_to_ignore_lock;
 	bool			result_ready;
 	wait_queue_head_t	result_ready_queue;
