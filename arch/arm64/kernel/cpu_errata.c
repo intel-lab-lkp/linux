@@ -309,6 +309,17 @@ static void cpu_enable_impdef_pmuv3_traps(const struct arm64_cpu_capabilities *_
 	sysreg_clear_set_s(SYS_HACR_EL2, 0, BIT(56));
 }
 
+#ifdef CONFIG_APPLE_ERRATUM_WFI_STATE
+static bool has_apple_erratum_wfi_state(const struct arm64_cpu_capabilities *entry, int scope)
+{
+#define SYS_IMP_APL_CYC_OVRD   sys_reg(3, 5, 15, 5, 0)
+#define CYC_OVRD_WFI_MODE_MASK GENMASK(26, 24)
+	if (read_cpuid_implementor() != ARM_CPU_IMP_APPLE)
+		return false;
+	return FIELD_GET(CYC_OVRD_WFI_MODE_MASK, read_sysreg_s(SYS_IMP_APL_CYC_OVRD)) != 2;
+}
+#endif
+
 #ifdef CONFIG_ARM64_WORKAROUND_REPEAT_TLBI
 static const struct arm64_cpu_capabilities arm64_repeat_tlbi_list[] = {
 #ifdef CONFIG_QCOM_FALKOR_ERRATUM_1009
@@ -1009,6 +1020,14 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.matches = has_impdef_pmuv3,
 		.cpu_enable = cpu_enable_impdef_pmuv3_traps,
 	},
+#ifdef CONFIG_APPLE_ERRATUM_WFI_STATE
+	{
+		.desc = "Apple WFI loses state",
+		.capability = ARM64_WORKAROUND_WFI_STATE,
+		.type = ARM64_CPUCAP_SCOPE_BOOT_CPU | ARM64_CPUCAP_OPTIONAL_FOR_LATE_CPU,
+		.matches = has_apple_erratum_wfi_state,
+	},
+#endif
 	{
 	}
 };
