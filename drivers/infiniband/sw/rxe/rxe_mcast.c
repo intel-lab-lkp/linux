@@ -196,6 +196,8 @@ static void __rxe_init_mcg(struct rxe_dev *rxe, union ib_gid *mgid,
 	__rxe_insert_mcg(mcg);
 }
 
+static void __rxe_destroy_mcg(struct rxe_mcg *mcg);
+
 /**
  * rxe_get_mcg - lookup or allocate a mcg
  * @rxe: rxe device object
@@ -247,7 +249,13 @@ static struct rxe_mcg *rxe_get_mcg(struct rxe_dev *rxe, union ib_gid *mgid)
 	if (!err)
 		return mcg;
 
-	kfree(mcg);
+	/* mcg was made visible in mcg_tree; unwind the insert before freeing. */
+	spin_lock_bh(&rxe->mcg_lock);
+	__rxe_destroy_mcg(mcg);
+	spin_unlock_bh(&rxe->mcg_lock);
+	kref_put(&mcg->ref_cnt, rxe_cleanup_mcg);
+	return ERR_PTR(err);
+
 err_dec:
 	atomic_dec(&rxe->mcg_num);
 	return ERR_PTR(err);
