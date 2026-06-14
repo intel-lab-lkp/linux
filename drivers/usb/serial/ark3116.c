@@ -236,7 +236,7 @@ static void ark3116_set_termios(struct tty_struct *tty,
 	}
 
 	/* Update state: synchronize */
-	mutex_lock(&priv->hw_lock);
+	guard(mutex)(&priv->hw_lock);
 
 	/* keep old LCR_SBC bit */
 	lcr |= (priv->lcr & UART_LCR_SBC);
@@ -278,8 +278,6 @@ static void ark3116_set_termios(struct tty_struct *tty,
 		priv->lcr = lcr;
 		ark3116_write_reg(serial, UART_LCR, lcr);
 	}
-
-	mutex_unlock(&priv->hw_lock);
 
 	/* check for software flow control */
 	if (I_IXOFF(tty) || I_IXON(tty)) {
@@ -378,9 +376,8 @@ static int ark3116_tiocmget(struct tty_struct *tty)
 	__u32 ctrl;
 	unsigned long flags;
 
-	mutex_lock(&priv->hw_lock);
+	guard(mutex)(&priv->hw_lock);
 	ctrl = priv->mcr;
-	mutex_unlock(&priv->hw_lock);
 
 	spin_lock_irqsave(&priv->status_lock, flags);
 	status = priv->msr;
@@ -406,7 +403,7 @@ static int ark3116_tiocmset(struct tty_struct *tty,
 	 * in priv->mcr is actually the one that is in the hardware
 	 */
 
-	mutex_lock(&priv->hw_lock);
+	guard(mutex)(&priv->hw_lock);
 
 	if (set & TIOCM_RTS)
 		priv->mcr |= UART_MCR_RTS;
@@ -427,8 +424,6 @@ static int ark3116_tiocmset(struct tty_struct *tty,
 
 	ark3116_write_reg(port->serial, UART_MCR, priv->mcr);
 
-	mutex_unlock(&priv->hw_lock);
-
 	return 0;
 }
 
@@ -439,7 +434,7 @@ static int ark3116_break_ctl(struct tty_struct *tty, int break_state)
 	int ret;
 
 	/* LCR is also used for other things: protect access */
-	mutex_lock(&priv->hw_lock);
+	guard(mutex)(&priv->hw_lock);
 
 	if (break_state)
 		priv->lcr |= UART_LCR_SBC;
@@ -447,8 +442,6 @@ static int ark3116_break_ctl(struct tty_struct *tty, int break_state)
 		priv->lcr &= ~UART_LCR_SBC;
 
 	ret = ark3116_write_reg(port->serial, UART_LCR, priv->lcr);
-
-	mutex_unlock(&priv->hw_lock);
 
 	return ret;
 }
