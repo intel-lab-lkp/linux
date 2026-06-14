@@ -201,8 +201,9 @@ struct o2hb_region {
 				hr_item_dropped:1,
 				hr_node_deleted:1;
 
-	/* protected by the hr_callback_sem */
+	/* Protected by o2hb_live_lock. */
 	struct task_struct 	*hr_task;
+	bool			hr_heartbeat_active;
 
 	unsigned int		hr_blocks;
 	unsigned long long	hr_start_block;
@@ -1771,8 +1772,9 @@ out:
 }
 
 /*
- * this is acting as commit; we set up all of hr_bdev_file and hr_task or
- * nothing
+ * This acts as commit.  The active flag covers the start/run/stop window and
+ * startup publishes it before rechecking the local node, so local=0 either
+ * sees heartbeat in progress or forces this path to fail before a thread runs.
  */
 static ssize_t o2hb_region_dev_store(struct config_item *item,
 				     const char *page,
@@ -1874,6 +1876,17 @@ static ssize_t o2hb_region_dev_store(struct config_item *item,
 	/* unsteady_iterations is triple the steady_iterations */
 	atomic_set(&reg->hr_unsteady_iterations, (live_threshold * 3));
 
+	o2nm_lock_subsystem();
+	spin_lock(&o2hb_live_lock);
+	reg->hr_heartbeat_active = true;
+	spin_unlock(&o2hb_live_lock);
+	if (o2nm_this_node() == O2NM_MAX_NODES) {
+		o2nm_unlock_subsystem();
+		ret = -EINVAL;
+		goto out;
+	}
+	o2nm_unlock_subsystem();
+
 	hb_task = kthread_run(o2hb_thread, reg, "o2hb-%s",
 			      reg->hr_item.ci_name);
 	if (IS_ERR(hb_task)) {
@@ -1925,10 +1938,16 @@ out:
 		spin_lock(&o2hb_live_lock);
 		hb_task = reg->hr_task;
 		reg->hr_task = NULL;
+		if (!hb_task)
+			reg->hr_heartbeat_active = false;
 		spin_unlock(&o2hb_live_lock);
 
-		if (hb_task)
+		if (hb_task) {
 			kthread_stop(hb_task);
+			spin_lock(&o2hb_live_lock);
+			reg->hr_heartbeat_active = false;
+			spin_unlock(&o2hb_live_lock);
+		}
 
 		o2hb_unmap_slot_data(reg);
 
@@ -2108,6 +2127,11 @@ static void o2hb_heartbeat_group_drop_item(struct config_group *group,
 
 	if (hb_task)
 		kthread_stop(hb_task);
+
+	spin_lock(&o2hb_live_lock);
+	if (hb_task)
+		reg->hr_heartbeat_active = false;
+	spin_unlock(&o2hb_live_lock);
 
 	if (o2hb_global_heartbeat_active()) {
 		spin_lock(&o2hb_live_lock);
@@ -2570,6 +2594,29 @@ int o2hb_get_all_regions(char *region_uuids, u8 max_regions)
 	return numregs;
 }
 EXPORT_SYMBOL_GPL(o2hb_get_all_regions);
+
+/*
+ * The active flag covers the entire start/run/stop window in which a region
+ * may still have a heartbeat thread that can re-read o2nm_this_node().
+ */
+int o2hb_heartbeat_active(void)
+{
+	struct o2hb_region *reg;
+	int active = 0;
+
+	spin_lock(&o2hb_live_lock);
+
+	list_for_each_entry(reg, &o2hb_all_regions, hr_all_item) {
+		if (reg->hr_heartbeat_active) {
+			active = 1;
+			break;
+		}
+	}
+
+	spin_unlock(&o2hb_live_lock);
+
+	return active;
+}
 
 int o2hb_global_heartbeat_active(void)
 {

@@ -25,9 +25,6 @@ static const char *o2nm_fence_method_desc[O2NM_FENCE_METHODS] = {
 	"panic",	/* O2NM_FENCE_PANIC */
 };
 
-static inline void o2nm_lock_subsystem(void);
-static inline void o2nm_unlock_subsystem(void);
-
 struct o2nm_node *o2nm_get_node_by_num(u8 node_num)
 {
 	struct o2nm_node *node = NULL;
@@ -366,7 +363,13 @@ static ssize_t o2nm_node_local_store(struct config_item *item, const char *page,
 
 	if (!tmp && cluster->cl_has_local &&
 	    cluster->cl_local_node == node->nd_num) {
+		if (o2hb_heartbeat_active()) {
+			ret = -EBUSY;
+			goto out;
+		}
+
 		o2net_stop_listening(node);
+		cluster->cl_has_local = 0;
 		cluster->cl_local_node = O2NM_INVALID_NODE_NUM;
 	}
 
@@ -762,12 +765,12 @@ static struct o2nm_cluster_group o2nm_cluster_group = {
 	},
 };
 
-static inline void o2nm_lock_subsystem(void)
+void o2nm_lock_subsystem(void)
 {
 	mutex_lock(&o2nm_cluster_group.cs_subsys.su_mutex);
 }
 
-static inline void o2nm_unlock_subsystem(void)
+void o2nm_unlock_subsystem(void)
 {
 	mutex_unlock(&o2nm_cluster_group.cs_subsys.su_mutex);
 }
