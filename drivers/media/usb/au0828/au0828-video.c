@@ -628,6 +628,7 @@ void au0828_usb_v4l2_media_release(struct au0828_dev *dev)
 		if (AUVI_INPUT(i).type == AU0828_VMUX_UNDEFINED)
 			return;
 		media_device_unregister_entity(&dev->input_ent[i]);
+		media_entity_cleanup(&dev->input_ent[i]);
 	}
 #endif
 }
@@ -934,7 +935,9 @@ int au0828_analog_unregister(struct au0828_dev *dev)
 
 	mutex_lock(&au0828_sysfs_lock);
 	vb2_video_unregister_device(&dev->vdev);
+	media_entity_cleanup(&dev->vdev.entity);
 	vb2_video_unregister_device(&dev->vbi_dev);
+	media_entity_cleanup(&dev->vbi_dev.entity);
 	mutex_unlock(&au0828_sysfs_lock);
 
 	v4l2_device_disconnect(&dev->v4l2_dev);
@@ -1907,8 +1910,10 @@ static void au0828_analog_create_entities(struct au0828_dev *dev)
 			pr_err("failed to initialize input pad[%d]!\n", i);
 
 		ret = media_device_register_entity(dev->media_dev, ent);
-		if (ret < 0)
+		if (ret < 0) {
 			pr_err("failed to register input entity %d!\n", i);
+			media_entity_cleanup(ent);
+		}
 	}
 #endif
 }
@@ -2026,6 +2031,7 @@ int au0828_analog_register(struct au0828_dev *dev,
 	if (retval != 0) {
 		dprintk(1, "unable to register video device (error = %d).\n",
 			retval);
+		media_entity_cleanup(&dev->vdev.entity);
 		return -ENODEV;
 	}
 
@@ -2055,6 +2061,8 @@ int au0828_analog_register(struct au0828_dev *dev,
 
 err_reg_vbi_dev:
 	vb2_video_unregister_device(&dev->vdev);
+	media_entity_cleanup(&dev->vdev.entity);
+	media_entity_cleanup(&dev->vbi_dev.entity);
 	return ret;
 }
 
