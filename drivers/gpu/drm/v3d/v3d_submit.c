@@ -1268,7 +1268,7 @@ v3d_check_copy_extent(struct drm_device *dev, size_t bo_size,
 }
 
 /* Bound the copy-query CPU-job writes; the exec-time copy does not. */
-static int
+int
 v3d_cpu_job_check_copy_bounds(struct v3d_cpu_job *job)
 {
 	struct drm_device *dev = &job->base.v3d->drm;

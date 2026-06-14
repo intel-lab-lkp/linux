@@ -901,3 +901,7 @@ v3d_sched_fini(struct v3d_dev *v3d)
 			drm_sched_fini(&v3d->queue[q].sched);
 	}
 }
+
+#if IS_ENABLED(CONFIG_DRM_V3D_COPY_QUERY_KUNIT_TEST)
+#include "v3d_copy_query_kunit.c"
+#endif

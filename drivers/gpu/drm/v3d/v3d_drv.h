@@ -583,6 +583,9 @@ int v3d_submit_csd_ioctl(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv);
 int v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv);
+/* Exposed for the copy-query KUnit; its presence marks the bounds patch applied. */
+#define V3D_CPU_JOB_COPY_BOUNDS_CHECKED 1
+int v3d_cpu_job_check_copy_bounds(struct v3d_cpu_job *job);
 
 /* v3d_irq.c */
 int v3d_irq_init(struct v3d_dev *v3d);

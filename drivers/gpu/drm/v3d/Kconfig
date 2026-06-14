@@ -11,3 +11,13 @@ config DRM_V3D
 	  Choose this option if you have a system that has a Broadcom
 	  V3D 3.x or newer GPUs. SoCs supported include the BCM2711,
 	  BCM7268 and BCM7278.
+
+config DRM_V3D_COPY_QUERY_KUNIT_TEST
+	bool "KUnit test for V3D CPU-job copy-query bounds"
+	depends on DRM_V3D && KUNIT=y
+	select DRM_KUNIT_TEST_HELPERS
+	help
+	  Builds a KUnit suite that drives the V3D CPU-job copy-timestamp-query
+	  handler over a real shmem-backed BO to exercise the destination-buffer
+	  bounds. Used to reproduce the copy-query out-of-bounds write under
+	  KASAN. If in doubt, say N.
