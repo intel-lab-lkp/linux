@@ -741,6 +741,7 @@ static int au8522_probe(struct i2c_client *client)
 	if (hdl->error) {
 		int err = hdl->error;
 
+		media_entity_cleanup(&sd->entity);
 		v4l2_ctrl_handler_free(hdl);
 		au8522_release_state(state);
 		return err;
@@ -764,6 +765,7 @@ static void au8522_remove(struct i2c_client *client)
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	v4l2_device_unregister_subdev(sd);
 	v4l2_ctrl_handler_free(sd->ctrl_handler);
+	media_entity_cleanup(&sd->entity);
 	au8522_release_state(to_state(sd));
 }
 
