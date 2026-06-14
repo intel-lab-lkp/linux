@@ -798,8 +798,10 @@ static void saa7134_media_release(struct saa7134_dev *dev)
 #ifdef CONFIG_MEDIA_CONTROLLER
 	int i;
 
-	for (i = 0; i < SAA7134_INPUT_MAX + 1; i++)
+	for (i = 0; i < SAA7134_INPUT_MAX + 1; i++) {
 		media_device_unregister_entity(&dev->input_ent[i]);
+		media_entity_cleanup(&dev->input_ent[i]);
+	}
 #endif
 }
 
@@ -836,8 +838,10 @@ static void saa7134_create_entities(struct saa7134_dev *dev)
 			pr_err("failed to initialize demod pad!\n");
 
 		ret = media_device_register_entity(dev->media_dev, &dev->demod);
-		if (ret < 0)
+		if (ret < 0) {
 			pr_err("failed to register demod entity!\n");
+			media_entity_cleanup(&dev->demod);
+		}
 
 		dev->decoder = &dev->demod;
 	} else {
@@ -904,8 +908,10 @@ static void saa7134_create_entities(struct saa7134_dev *dev)
 			pr_err("failed to initialize input pad[%d]!\n", i);
 
 		ret = media_device_register_entity(dev->media_dev, ent);
-		if (ret < 0)
+		if (ret < 0) {
 			pr_err("failed to register input entity %d!\n", i);
+			media_entity_cleanup(ent);
+		}
 	}
 
 	/* Create input for Radio RF connector */
@@ -923,8 +929,10 @@ static void saa7134_create_entities(struct saa7134_dev *dev)
 			pr_err("failed to initialize input pad[%d]!\n", i);
 
 		ret = media_device_register_entity(dev->media_dev, ent);
-		if (ret < 0)
+		if (ret < 0) {
 			pr_err("failed to register input entity %d!\n", i);
+			media_entity_cleanup(ent);
+		}
 	}
 }
 #endif
@@ -956,6 +964,7 @@ static void saa7134_unregister_video(struct saa7134_dev *dev)
 			vb2_video_unregister_device(dev->video_dev);
 		else
 			video_device_release(dev->video_dev);
+		media_entity_cleanup(&dev->video_dev->entity);
 		dev->video_dev = NULL;
 	}
 	if (dev->vbi_dev) {
@@ -963,6 +972,7 @@ static void saa7134_unregister_video(struct saa7134_dev *dev)
 			vb2_video_unregister_device(dev->vbi_dev);
 		else
 			video_device_release(dev->vbi_dev);
+		media_entity_cleanup(&dev->vbi_dev->entity);
 		dev->vbi_dev = NULL;
 	}
 	if (dev->radio_dev) {
