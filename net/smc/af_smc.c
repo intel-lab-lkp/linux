@@ -156,6 +156,12 @@ static struct sock *smc_tcp_syn_recv_sock(const struct sock *sk,
 	if (child) {
 		rcu_assign_sk_user_data(child, NULL);
 
+		/*
+		 * the child inherited the listen-specific sk_data_ready();
+		 * restore it here, as sk_user_data may be reused before accept
+		 */
+		child->sk_data_ready = smc->clcsk_data_ready;
+
 		/* v4-mapped sockets don't inherit parent ops. Don't restore. */
 		if (inet_csk(child)->icsk_af_ops == inet_csk(sk)->icsk_af_ops)
 			inet_csk(child)->icsk_af_ops = smc->ori_af_ops;
