@@ -4533,7 +4533,6 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 		if (error)
 			goto out_dput;
 
-		file->f_mode |= FMODE_CREATED;
 		if (!dir_inode->i_op->create) {
 			error = -EACCES;
 			goto out_dput;
@@ -4545,6 +4544,7 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 			goto out_dput;
 
 		fsnotify_create(dir_inode, dentry);
+		file->f_mode |= FMODE_CREATED;
 	}
 
 	return dentry;
