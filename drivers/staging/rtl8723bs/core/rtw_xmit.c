@@ -741,17 +741,17 @@ static s32 update_attrib(struct adapter *padapter, struct sk_buff *pkt, struct p
 	} else {
 		psta = rtw_get_stainfo(pstapriv, pattrib->ra);
 		if (!psta)	/*  if we cannot get psta => drop the pkt */
-			return _FAIL;
+			return -EINVAL;
 		else if (check_fwstate(pmlmepriv, WIFI_AP_STATE) && !(psta->state & _FW_LINKED))
-			return _FAIL;
+			return -EINVAL;
 	}
 
 	if (!psta)
 		/*  if we cannot get psta => drop the pkt */
-		return _FAIL;
+		return -EINVAL;
 
 	if (!(psta->state & _FW_LINKED))
-		return _FAIL;
+		return -EINVAL;
 
 	spin_lock_bh(&psta->lock);
 	ret = update_attrib_sec_info(padapter, pattrib, psta);
@@ -793,7 +793,7 @@ static s32 update_attrib(struct adapter *padapter, struct sk_buff *pkt, struct p
 	}
 
 	/* pattrib->priority = 5; force to used VI queue, for testing */
-	return _SUCCESS;
+	return 0;
 }
 
 static s32 xmitframe_addmic(struct adapter *padapter, struct xmit_frame *pxmitframe)
@@ -1954,7 +1954,7 @@ s32 rtw_xmit(struct adapter *padapter, struct sk_buff **ppkt)
 	struct xmit_priv *pxmitpriv = &padapter->xmitpriv;
 	struct xmit_frame *pxmitframe = NULL;
 
-	s32 res;
+	int ret;
 
 	if (start == 0)
 		start = jiffies;
@@ -1967,9 +1967,8 @@ s32 rtw_xmit(struct adapter *padapter, struct sk_buff **ppkt)
 	if (!pxmitframe)
 		return -1;
 
-	res = update_attrib(padapter, *ppkt, &pxmitframe->attrib);
-
-	if (res != _SUCCESS) {
+	ret = update_attrib(padapter, *ppkt, &pxmitframe->attrib);
+	if (ret) {
 		rtw_free_xmitframe(pxmitpriv, pxmitframe);
 		return -1;
 	}
