@@ -1006,6 +1006,7 @@ static void em28xx_v4l2_media_release(struct em28xx *dev)
 		if (!INPUT(i)->type)
 			return;
 		media_device_unregister_entity(&dev->input_ent[i]);
+		media_entity_cleanup(&dev->input_ent[i]);
 	}
 #endif
 }
@@ -1136,9 +1137,11 @@ static void em28xx_v4l2_create_entities(struct em28xx *dev)
 				"failed to initialize input pad[%d]!\n", i);
 
 		ret = media_device_register_entity(dev->media_dev, ent);
-		if (ret < 0)
+		if (ret < 0) {
 			dev_err(&dev->intf->dev,
 				"failed to register input entity %d!\n", i);
+			media_entity_cleanup(ent);
+		}
 	}
 
 	if (dev->board.decoder == EM28XX_BUILTIN) {
@@ -1157,8 +1160,10 @@ static void em28xx_v4l2_create_entities(struct em28xx *dev)
 			dev_err(&dev->intf->dev, "failed to initialize decoder pads %d!\n", ret);
 
 		ret = media_device_register_entity(dev->media_dev, v4l2->decoder);
-		if (ret < 0)
+		if (ret < 0) {
 			dev_err(&dev->intf->dev, "failed to register decoder entity %d!\n", ret);
+			media_entity_cleanup(v4l2->decoder);
+		}
 	}
 
 #endif
@@ -2403,11 +2408,13 @@ static int em28xx_v4l2_fini(struct em28xx *dev)
 			 video_device_node_name(&v4l2->vbi_dev));
 		video_unregister_device(&v4l2->vbi_dev);
 	}
+	media_entity_cleanup(&v4l2->vbi_dev.entity);
 	if (video_is_registered(&v4l2->vdev)) {
 		dev_info(&dev->intf->dev, "V4L2 device %s deregistered\n",
 			 video_device_node_name(&v4l2->vdev));
 		video_unregister_device(&v4l2->vdev);
 	}
+	media_entity_cleanup(&v4l2->vdev.entity);
 
 	v4l2_ctrl_handler_free(&v4l2->ctrl_handler);
 	v4l2_device_unregister(&v4l2->v4l2_dev);
@@ -2961,6 +2968,7 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 	if (ret) {
 		dev_err(&dev->intf->dev,
 			"unable to register video device (error=%i).\n", ret);
+		media_entity_cleanup(&v4l2->vdev.entity);
 		goto unregister_dev;
 	}
 
@@ -2995,6 +3003,7 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 		if (ret < 0) {
 			dev_err(&dev->intf->dev,
 				"unable to register vbi device\n");
+			media_entity_cleanup(&v4l2->vbi_dev.entity);
 			goto unregister_dev;
 		}
 	}
