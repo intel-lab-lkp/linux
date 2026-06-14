@@ -2569,10 +2569,11 @@ static void nvme_tcp_free_ctrl(struct nvme_ctrl *nctrl)
 {
 	struct nvme_tcp_ctrl *ctrl = to_tcp_ctrl(nctrl);
 
-	if (list_empty(&ctrl->list))
-		goto free_ctrl;
-
 	mutex_lock(&nvme_tcp_ctrl_mutex);
+	if (list_empty(&ctrl->list)) {
+		mutex_unlock(&nvme_tcp_ctrl_mutex);
+		goto free_ctrl;
+	}
 	list_del(&ctrl->list);
 	mutex_unlock(&nvme_tcp_ctrl_mutex);
 
