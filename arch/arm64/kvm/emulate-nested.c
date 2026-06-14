@@ -2785,7 +2785,7 @@ void kvm_emulate_nested_eret(struct kvm_vcpu *vcpu)
 		 */
 		if (kvm_has_pauth(vcpu->kvm, FPACCOMBINE) && !(spsr & PSR_IL_BIT)) {
 			esr &= ESR_ELx_ERET_ISS_ERETA;
-			esr |= FIELD_PREP(ESR_ELx_EC_MASK, ESR_ELx_EC_FPAC);
+			esr |= FIELD_PREP(ESR_ELx_EC_MASK, ESR_ELx_EC_FPAC) | ESR_ELx_IL;
 			kvm_inject_nested_sync(vcpu, esr);
 			return;
 		}
