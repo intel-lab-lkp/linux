@@ -326,3 +326,7 @@ found:
 
 	return sect;
 }
+
+#if IS_ENABLED(CONFIG_CRYPTO_DEV_QAT_KUNIT_TEST)
+#include "adf_mstate_mgr_test.c"
+#endif

@@ -133,3 +133,19 @@ config CRYPTO_DEV_QAT_ERROR_INJECTION
 
 	  This functionality is available via debugfs entry of the Intel(R)
 	  QuickAssist device
+
+config CRYPTO_DEV_QAT_KUNIT_TEST
+	bool "KUnit tests for Intel(R) QAT live migration state manager" if !KUNIT_ALL_TESTS
+	depends on CRYPTO_DEV_QAT && KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Build KUnit tests for the Intel(R) QAT live migration state
+	  manager remote-import parser (adf_mstate_mgr.c). The tests drive
+	  the migration setup parser on a buffer sized as the QAT GEN4
+	  VFIO migration backend allocates it and check that a malformed
+	  remote preamble is rejected before any out-of-bounds access.
+
+	  For more information on KUnit and unit tests in general, please
+	  refer to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
