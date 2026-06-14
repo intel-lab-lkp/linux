@@ -369,17 +369,17 @@ struct nvme_queue {
 	void *sq_cmds __guarded_by(&sq_lock);
 	 /* only used for poll queues: */
 	spinlock_t cq_poll_lock ____cacheline_aligned_in_smp;
-	struct nvme_completion *cqes;
+	struct nvme_completion *cqes __guarded_by(&cq_poll_lock);
 	dma_addr_t sq_dma_addr;
 	dma_addr_t cq_dma_addr;
 	u32 __iomem *q_db;
 	u32 q_depth;
 	u16 cq_vector;
-	u16 cq_head;
+	u16 cq_head __guarded_by(&cq_poll_lock);
 	u16 sq_tail __guarded_by(&sq_lock);
 	u16 last_sq_tail __guarded_by(&sq_lock);
 	u16 qid;
-	u8 cq_phase;
+	u8 cq_phase __guarded_by(&cq_poll_lock);
 	u8 sqes;
 	unsigned long flags;
 #define NVMEQ_ENABLED		0
@@ -1534,6 +1534,7 @@ static void nvme_pci_complete_batch(struct io_comp_batch *iob)
 
 /* We read the CQE phase first to check if the rest of the entry is valid */
 static inline bool nvme_cqe_pending(struct nvme_queue *nvmeq)
+	__must_hold(nvmeq->cq_poll_lock)
 {
 	struct nvme_completion *hcqe = &nvmeq->cqes[nvmeq->cq_head];
 
@@ -1541,6 +1542,7 @@ static inline bool nvme_cqe_pending(struct nvme_queue *nvmeq)
 }
 
 static inline void nvme_ring_cq_doorbell(struct nvme_queue *nvmeq)
+	__must_hold(nvmeq->cq_poll_lock)
 {
 	u16 head = nvmeq->cq_head;
 
@@ -1558,6 +1560,7 @@ static inline struct blk_mq_tags *nvme_queue_tagset(struct nvme_queue *nvmeq)
 
 static inline void nvme_handle_cqe(struct nvme_queue *nvmeq,
 				   struct io_comp_batch *iob, u16 idx)
+	__must_hold(nvmeq->cq_poll_lock)
 {
 	struct nvme_completion *cqe = &nvmeq->cqes[idx];
 	__u16 command_id = READ_ONCE(cqe->command_id);
@@ -1595,6 +1598,7 @@ static inline void nvme_handle_cqe(struct nvme_queue *nvmeq,
 }
 
 static inline void nvme_update_cq_head(struct nvme_queue *nvmeq)
+	__must_hold(nvmeq->cq_poll_lock)
 {
 	u32 tmp = nvmeq->cq_head + 1;
 
@@ -1608,6 +1612,7 @@ static inline void nvme_update_cq_head(struct nvme_queue *nvmeq)
 
 static inline bool nvme_poll_cq(struct nvme_queue *nvmeq,
 			        struct io_comp_batch *iob)
+	__must_hold(nvmeq->cq_poll_lock)
 {
 	bool found = false;
 
@@ -1628,6 +1633,7 @@ static inline bool nvme_poll_cq(struct nvme_queue *nvmeq,
 }
 
 static irqreturn_t nvme_irq(int irq, void *data)
+	__context_unsafe(/* IRQ queues do not use cq_poll_lock  */)
 {
 	struct nvme_queue *nvmeq = data;
 	DEFINE_IO_COMP_BATCH(iob);
@@ -1641,6 +1647,7 @@ static irqreturn_t nvme_irq(int irq, void *data)
 }
 
 static irqreturn_t nvme_irq_check(int irq, void *data)
+	__context_unsafe(/* IRQ queues do not use cq_poll_lock */)
 {
 	struct nvme_queue *nvmeq = data;
 
@@ -1673,8 +1680,14 @@ static int nvme_poll(struct blk_mq_hw_ctx *hctx, struct io_comp_batch *iob)
 	struct nvme_queue *nvmeq = hctx->driver_data;
 	bool found;
 
+	/*
+	 * nvme_cqe_pending() is intentionally used as a lockless fast-path
+	 * check before taking ->cq_poll_lock. The result is only advisory and
+	 * the CQ is revalidated under ->cq_poll_lock by nvme_poll_cq(), so
+	 * suppress the context analysis warning for this lockless inspection.
+	 */
 	if (!test_bit(NVMEQ_POLLED, &nvmeq->flags) ||
-	    !nvme_cqe_pending(nvmeq))
+	    context_unsafe(!nvme_cqe_pending(nvmeq)))
 		return 0;
 
 	spin_lock(&nvmeq->cq_poll_lock);
@@ -2134,6 +2147,7 @@ static int nvme_alloc_sq_cmds(struct nvme_dev *dev, struct nvme_queue *nvmeq,
 }
 
 static int nvme_alloc_queue(struct nvme_dev *dev, int qid, int depth)
+	__context_unsafe(/* safe to allocate queue without any protection */)
 {
 	struct nvme_queue *nvmeq = &dev->queues[qid];
 
