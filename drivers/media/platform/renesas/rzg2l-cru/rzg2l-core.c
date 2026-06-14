@@ -50,12 +50,12 @@ static int rzg2l_cru_group_notify_complete(struct v4l2_async_notifier *notifier)
 	ret = v4l2_device_register_subdev_nodes(&cru->v4l2_dev);
 	if (ret) {
 		dev_err(cru->dev, "Failed to register subdev nodes\n");
-		return ret;
+		goto err_unregister_ip_subdev;
 	}
 
 	ret = rzg2l_cru_video_register(cru);
 	if (ret)
-		return ret;
+		goto err_unregister_ip_subdev;
 
 	/*
 	 * CRU can be connected either to CSI2 or PARALLEL device
@@ -71,7 +71,7 @@ static int rzg2l_cru_group_notify_complete(struct v4l2_async_notifier *notifier)
 	if (ret) {
 		dev_err(cru->dev, "Error creating link from %s to %s\n",
 			source->name, sink->name);
-		return ret;
+		goto err_unregister_video;
 	}
 	cru->ip.remote = cru->csi.subdev;
 
@@ -84,10 +84,16 @@ static int rzg2l_cru_group_notify_complete(struct v4l2_async_notifier *notifier)
 	if (ret) {
 		dev_err(cru->dev, "Error creating link from %s to %s\n",
 			source->name, sink->name);
-		return ret;
+		goto err_unregister_video;
 	}
 
 	return 0;
+
+err_unregister_video:
+	rzg2l_cru_video_unregister(cru);
+err_unregister_ip_subdev:
+	rzg2l_cru_ip_subdev_unregister(cru);
+	return ret;
 }
 
 static void rzg2l_cru_group_notify_unbind(struct v4l2_async_notifier *notifier,
@@ -300,6 +306,7 @@ static int rzg2l_cru_probe(struct platform_device *pdev)
 
 error_dma_unregister:
 	rzg2l_cru_dma_unregister(cru);
+	media_entity_cleanup(&cru->vdev.entity);
 
 	return ret;
 }
@@ -316,6 +323,7 @@ static void rzg2l_cru_remove(struct platform_device *pdev)
 	mutex_destroy(&cru->mdev_lock);
 
 	rzg2l_cru_dma_unregister(cru);
+	media_entity_cleanup(&cru->vdev.entity);
 }
 
 static const u16 rzg3e_cru_regs[] = {
