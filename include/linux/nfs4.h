@@ -752,6 +752,9 @@ enum pnfs_notify_deviceid_type4 {
 	NOTIFY_DEVICEID4_DELETE = 1 << 2,
 };
 
+/* All defined deviceid notification bits live in word 0; bound the decoder. */
+#define NFS4_GETDEVICEINFO_NOTIFY_MAXWORDS	4
+
 enum pnfs_block_volume_type {
 	PNFS_BLOCK_VOLUME_SIMPLE	= 0,
 	PNFS_BLOCK_VOLUME_SLICE		= 1,

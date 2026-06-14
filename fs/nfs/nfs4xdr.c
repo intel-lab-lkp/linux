@@ -6089,7 +6089,11 @@ static int decode_getdeviceinfo(struct xdr_stream *xdr,
 	if (len) {
 		uint32_t i;
 
-		p = xdr_inline_decode(xdr, 4 * len);
+		/* Bound len so len << 2 cannot wrap and defeat the check below. */
+		if (len > NFS4_GETDEVICEINFO_NOTIFY_MAXWORDS)
+			return -EIO;
+
+		p = xdr_inline_decode(xdr, len << 2);
 		if (unlikely(!p))
 			return -EIO;
 
