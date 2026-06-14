@@ -219,7 +219,7 @@ static int rvin_group_notify_complete(struct v4l2_async_notifier *notifier)
 	ret = v4l2_device_register_subdev_nodes(&vin->v4l2_dev);
 	if (ret) {
 		vin_err(vin, "Failed to register subdev nodes\n");
-		return ret;
+		goto err_unregister_media;
 	}
 
 	/* Register all video nodes for the group. */
@@ -228,11 +228,24 @@ static int rvin_group_notify_complete(struct v4l2_async_notifier *notifier)
 		    !video_is_registered(&vin->group->vin[i]->vdev)) {
 			ret = rvin_v4l2_register(vin->group->vin[i]);
 			if (ret)
-				return ret;
+				goto err_unregister_vdevs;
 		}
 	}
 
-	return vin->group->link_setup(vin->group);
+	ret = vin->group->link_setup(vin->group);
+	if (ret)
+		goto err_unregister_vdevs;
+
+	return 0;
+
+err_unregister_vdevs:
+	for (i = 0; i < RCAR_VIN_NUM; i++) {
+		if (vin->group->vin[i] && video_is_registered(&vin->group->vin[i]->vdev))
+			rvin_v4l2_unregister(vin->group->vin[i]);
+	}
+err_unregister_media:
+	media_device_unregister(&vin->group->mdev);
+	return ret;
 }
 
 static void rvin_group_notify_unbind(struct v4l2_async_notifier *notifier,
@@ -1250,6 +1263,7 @@ err_id:
 	rvin_id_put(vin);
 err_dma:
 	rvin_dma_unregister(vin);
+	media_entity_cleanup(&vin->vdev.entity);
 
 	return ret;
 }
@@ -1274,6 +1288,7 @@ static void rcar_vin_remove(struct platform_device *pdev)
 	rvin_id_put(vin);
 
 	rvin_dma_unregister(vin);
+	media_entity_cleanup(&vin->vdev.entity);
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(rvin_pm_ops, rvin_suspend, rvin_resume);
