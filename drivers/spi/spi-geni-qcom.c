@@ -102,6 +102,7 @@ struct spi_geni_master {
 	int irq;
 	bool cs_flag;
 	bool abort_failed;
+	bool force_gsi_mode;
 	struct dma_chan *tx;
 	struct dma_chan *rx;
 	int cur_xfer_mode;
@@ -655,6 +656,9 @@ static int spi_geni_init(struct spi_geni_master *mas)
 		mas->oversampling = 1;
 
 	fifo_disable = readl(se->base + GENI_IF_DISABLE_RO) & FIFO_IF_DISABLE;
+	if (mas->force_gsi_mode)
+		fifo_disable = 1;
+
 	switch (fifo_disable) {
 	case 1:
 		ret = spi_geni_grab_gpi_chan(mas);
@@ -1132,6 +1136,9 @@ static int spi_geni_probe(struct platform_device *pdev)
 	ret = geni_icc_set_bw(&mas->se);
 	if (ret)
 		return ret;
+
+	if (device_property_read_bool(&pdev->dev, "qcom,force-gsi-mode"))
+		mas->force_gsi_mode = true;
 
 	ret = spi_geni_init(mas);
 	if (ret)
