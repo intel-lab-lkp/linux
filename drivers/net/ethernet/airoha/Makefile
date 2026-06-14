@@ -6,4 +6,5 @@
 obj-$(CONFIG_NET_AIROHA) += airoha-eth.o
 airoha-eth-y := airoha_eth.o airoha_ppe.o
 airoha-eth-$(CONFIG_DEBUG_FS) += airoha_ppe_debugfs.o
+airoha-eth-$(CONFIG_NET_AIROHA_SOE) += airoha_soe.o
 obj-$(CONFIG_NET_AIROHA_NPU) += airoha_npu.o
