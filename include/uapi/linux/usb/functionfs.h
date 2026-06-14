@@ -25,6 +25,7 @@ enum functionfs_flags {
 	FUNCTIONFS_EVENTFD = 32,
 	FUNCTIONFS_ALL_CTRL_RECIP = 64,
 	FUNCTIONFS_CONFIG0_SETUP = 128,
+	FUNCTIONFS_RW_PROXY_EPS = 256,
 };
 
 /* Descriptor of an non-audio endpoint */
