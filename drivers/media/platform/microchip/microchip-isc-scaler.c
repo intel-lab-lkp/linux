@@ -222,12 +222,19 @@ int isc_scaler_init(struct isc_device *isc)
 	ret = v4l2_device_register_subdev(&isc->v4l2_dev, &isc->scaler_sd);
 	if (ret < 0) {
 		dev_err(isc->dev, "scaler sd failed to register subdev\n");
+		media_entity_cleanup(&isc->scaler_sd.entity);
 		return ret;
 	}
 
 	return ret;
 }
 EXPORT_SYMBOL_GPL(isc_scaler_init);
+
+void isc_scaler_unregister(struct isc_device *isc)
+{
+	media_entity_cleanup(&isc->scaler_sd.entity);
+}
+EXPORT_SYMBOL_GPL(isc_scaler_unregister);
 
 int isc_scaler_link(struct isc_device *isc)
 {

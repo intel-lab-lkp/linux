@@ -392,6 +392,7 @@ void microchip_isc_clk_cleanup(struct isc_device *isc);
 
 int isc_scaler_link(struct isc_device *isc);
 int isc_scaler_init(struct isc_device *isc);
+void isc_scaler_unregister(struct isc_device *isc);
 int isc_mc_init(struct isc_device *isc, u32 ver);
 void isc_mc_cleanup(struct isc_device *isc);
 

@@ -1949,6 +1949,7 @@ EXPORT_SYMBOL_GPL(isc_mc_init);
 
 void isc_mc_cleanup(struct isc_device *isc)
 {
+	isc_scaler_unregister(isc);
 	media_entity_cleanup(&isc->video_dev.entity);
 	media_device_cleanup(&isc->mdev);
 }
