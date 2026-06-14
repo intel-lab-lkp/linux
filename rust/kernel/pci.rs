@@ -452,6 +452,22 @@ impl Device<device::Core> {
         to_result(unsafe { bindings::pci_enable_device_mem(self.as_raw()) })
     }
 
+    /// Enable I/O and memory resources for this device, with automatic cleanup.
+    ///
+    /// This is the managed version of `pci_enable_device()`: it enables the device's I/O and
+    /// memory resources and registers a `pci_disable_device()` call that runs automatically
+    /// when the device is unbound from its driver. In contrast, [`Device::enable_device_mem`]
+    /// is unmanaged and only enables memory resources.
+    ///
+    /// The automatic cleanup keeps the device's enable count balanced across driver
+    /// unbind/rebind cycles. With an unbalanced (leaked) enable count, a re-probe skips the
+    /// power-state transition back to `D0`, which makes subsequent MSI allocation fail with
+    /// `EINVAL`.
+    pub fn enable_device(&self) -> Result {
+        // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
+        to_result(unsafe { bindings::pcim_enable_device(self.as_raw()) })
+    }
+
     /// Enable bus-mastering for this device.
     #[inline]
     pub fn set_master(&self) {
