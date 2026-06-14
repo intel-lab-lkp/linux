@@ -8474,6 +8474,8 @@ struct nl80211_dump_station_ctx {
 	int link_idx;
 	enum nl80211_dump_station_phase phase;
 	bool dump_link_stats;
+	bool filter_mac;
+	u8 filter_mac_addr[ETH_ALEN];
 	u8 mac_addr[ETH_ALEN];
 	struct station_info sinfo;
 };
@@ -8543,10 +8545,22 @@ static int nl80211_dump_station(struct sk_buff *skb,
 			err = -ENOMEM;
 			goto out_err;
 		}
+		cb->args[2] = (long)ctx;
 		ctx->phase = NL80211_DUMP_STA_PHASE_AGGREGATED;
 		ctx->dump_link_stats =
 			!!attrbuf[NL80211_ATTR_STA_DUMP_LINK_STATS];
-		cb->args[2] = (long)ctx;
+		if (attrbuf[NL80211_ATTR_MAC]) {
+			const u8 *mac = nla_data(attrbuf[NL80211_ATTR_MAC]);
+
+			if (!is_valid_ether_addr(mac)) {
+				kfree(ctx);
+				cb->args[2] = 0;
+				err = -EINVAL;
+				goto out_err;
+			}
+			ctx->filter_mac = true;
+			memcpy(ctx->filter_mac_addr, mac, ETH_ALEN);
+		}
 	}
 
 	if (!wdev->netdev && wdev->iftype != NL80211_IFTYPE_NAN) {
@@ -8554,7 +8568,12 @@ static int nl80211_dump_station(struct sk_buff *skb,
 		goto out_err;
 	}
 
-	if (!rdev->ops->dump_station) {
+	if (ctx->filter_mac) {
+		if (!rdev->ops->get_station) {
+			err = -EOPNOTSUPP;
+			goto out_err;
+		}
+	} else if (!rdev->ops->dump_station) {
 		err = -EOPNOTSUPP;
 		goto out_err;
 	}
@@ -8575,8 +8594,22 @@ static int nl80211_dump_station(struct sk_buff *skb,
 				}
 			}
 
-			err = rdev_dump_station(rdev, wdev, ctx->sta_idx,
-						ctx->mac_addr, &ctx->sinfo);
+			if (ctx->filter_mac) {
+				if (ctx->sta_idx > 0) {
+					err = skb->len;
+					goto out_err_release;
+				}
+				err = rdev_get_station(rdev, wdev,
+						       ctx->filter_mac_addr,
+						       &ctx->sinfo);
+				if (!err)
+					memcpy(ctx->mac_addr,
+					       ctx->filter_mac_addr, ETH_ALEN);
+			} else {
+				err = rdev_dump_station(rdev, wdev, ctx->sta_idx,
+							ctx->mac_addr,
+							&ctx->sinfo);
+			}
 			if (err == -ENOENT) {
 				err = skb->len;
 				goto out_err_release;
