@@ -3455,7 +3455,7 @@ static int i40e_configure_tx_ring(struct i40e_ring *ring)
 
 	/* some ATR related tx ring init */
 	if (test_bit(I40E_FLAG_FD_ATR_ENA, vsi->back->flags)) {
-		ring->atr_sample_rate = I40E_DEFAULT_ATR_SAMPLE_RATE;
+		ring->atr_sample_rate = vsi->back->atr_sample_rate;
 		ring->atr_count = 0;
 	} else {
 		ring->atr_sample_rate = 0;
@@ -12741,6 +12741,8 @@ static int i40e_sw_init(struct i40e_pf *pf)
 			i40e_set_partition_bw_setting(pf);
 		}
 	}
+
+	pf->atr_sample_rate = I40E_DEFAULT_ATR_SAMPLE_RATE;
 
 	if ((pf->hw.func_caps.fd_filters_guaranteed > 0) ||
 	    (pf->hw.func_caps.fd_filters_best_effort > 0)) {
