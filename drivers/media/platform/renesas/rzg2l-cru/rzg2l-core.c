@@ -300,6 +300,7 @@ static int rzg2l_cru_probe(struct platform_device *pdev)
 
 error_dma_unregister:
 	rzg2l_cru_dma_unregister(cru);
+	media_entity_cleanup(&cru->vdev.entity);
 
 	return ret;
 }
@@ -316,6 +317,7 @@ static void rzg2l_cru_remove(struct platform_device *pdev)
 	mutex_destroy(&cru->mdev_lock);
 
 	rzg2l_cru_dma_unregister(cru);
+	media_entity_cleanup(&cru->vdev.entity);
 }
 
 static const u16 rzg3e_cru_regs[] = {
