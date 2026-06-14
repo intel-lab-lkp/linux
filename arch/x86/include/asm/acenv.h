@@ -21,11 +21,6 @@
  * Changing sleep state in a virtual machine doesn't affect the host system
  * sleep state and cannot lead to data loss.
  */
-#define ACPI_FLUSH_CPU_CACHE()					\
-do {								\
-	if (!cpu_feature_enabled(X86_FEATURE_HYPERVISOR))	\
-		wbinvd();					\
-} while (0)
 
 int __acpi_acquire_global_lock(unsigned int *lock);
 int __acpi_release_global_lock(unsigned int *lock);
