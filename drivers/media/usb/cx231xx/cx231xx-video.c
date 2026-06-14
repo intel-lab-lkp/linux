@@ -1006,8 +1006,10 @@ void cx231xx_v4l2_create_entities(struct cx231xx *dev)
 			pr_err("failed to initialize input pad[%d]!\n", i);
 
 		ret = media_device_register_entity(dev->media_dev, ent);
-		if (ret < 0)
+		if (ret < 0) {
 			pr_err("failed to register input entity %d!\n", i);
+			media_entity_cleanup(ent);
+		}
 	}
 #endif
 }
@@ -1558,6 +1560,7 @@ void cx231xx_release_analog_resources(struct cx231xx *dev)
 			video_device_node_name(&dev->vbi_dev));
 		video_unregister_device(&dev->vbi_dev);
 	}
+	media_entity_cleanup(&dev->vbi_dev.entity);
 	if (video_is_registered(&dev->vdev)) {
 		dev_info(dev->dev, "V4L2 device %s deregistered\n",
 			video_device_node_name(&dev->vdev));
@@ -1567,6 +1570,7 @@ void cx231xx_release_analog_resources(struct cx231xx *dev)
 
 		video_unregister_device(&dev->vdev);
 	}
+	media_entity_cleanup(&dev->vdev.entity);
 	v4l2_ctrl_handler_free(&dev->ctrl_handler);
 	v4l2_ctrl_handler_free(&dev->radio_ctrl_handler);
 }
@@ -1839,6 +1843,7 @@ int cx231xx_register_analog_devices(struct cx231xx *dev)
 		dev_err(dev->dev,
 			"unable to register video device (error=%i).\n",
 			ret);
+		media_entity_cleanup(&dev->vdev.entity);
 		return ret;
 	}
 
@@ -1895,6 +1900,7 @@ int cx231xx_register_analog_devices(struct cx231xx *dev)
 				    vbi_nr[dev->devno]);
 	if (ret < 0) {
 		dev_err(dev->dev, "unable to register vbi device\n");
+		media_entity_cleanup(&dev->vbi_dev.entity);
 		return ret;
 	}
 
