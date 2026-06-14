@@ -14,11 +14,11 @@
 #include "fabrics.h"
 #include <linux/nvme-keyring.h>
 
-static LIST_HEAD(nvmf_transports);
 static DECLARE_RWSEM(nvmf_transports_rwsem);
+static __guarded_by(&nvmf_transports_rwsem) LIST_HEAD(nvmf_transports);
 
-static LIST_HEAD(nvmf_hosts);
 static DEFINE_MUTEX(nvmf_hosts_mutex);
+static __guarded_by(&nvmf_hosts_mutex) LIST_HEAD(nvmf_hosts);
 
 static struct nvmf_host *nvmf_default_host;
 
