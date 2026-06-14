@@ -1047,6 +1047,10 @@ static int fixup_node_id(int node_id, struct mce *m)
 	if (smca_get_bank_type(m->extcpu, m->bank) != SMCA_UMC_V2)
 		return node_id;
 
+	/* If no GPU nodes are present, no fixup is needed. */
+	if (!gpu_node_map.node_count)
+		return node_id;
+
 	/* Nodes below the GPU base node are CPU nodes and don't need a fixup. */
 	if (nid < gpu_node_map.base_node_id)
 		return node_id;
