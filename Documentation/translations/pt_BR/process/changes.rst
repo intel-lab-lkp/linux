@@ -32,16 +32,16 @@ PC Card por exemplo, provavelmente não precisará se preocupar com o pcmciautil
 Programa               Versão mínima    Comando para verificar a versão
 ====================== ===============  ========================================
 GNU C                  8.1              gcc --version
-Clang/LLVM (optional)  15.0.0           clang --version
-Rust (optional)        1.85.0           rustc --version
-bindgen (optional)     0.71.1           bindgen --version
+Clang/LLVM (opcional)  15.0.0           clang --version
+Rust (opcional)        1.85.0           rustc --version
+bindgen (opcional)     0.71.1           bindgen --version
 GNU make               4.0              make --version
 bash                   4.2              bash --version
 binutils               2.30             ld -v
 flex                   2.5.35           flex --version
 gdb                    7.2              gdb --version
 bison                  2.0              bison --version
-pahole                 1.22             pahole --version
+pahole                 1.26             pahole --version
 util-linux             2.10o            mount --version
 kmod                   13               kmod -V
 e2fsprogs              1.41.4           e2fsck -V
@@ -149,6 +149,11 @@ Desde o Linux 5.2, se CONFIG_DEBUG_INFO_BTF estiver selecionado, o sistema de
 compilação gera BTF (BPF Type Format) a partir do DWARF no vmlinux, e um pouco
 depois para os módulos do kernel também. Isso requer o pahole v1.22 ou superior.
 
+Desde o Linux 7.0, kfuncs anotados com KF_IMPLICIT_ARGS exigem o pahole v1.26
+ou posterior. Sem ele, tais kfuncs terão protótipos BTF incorretos em vmlinux,
+fazendo com que os programas BPF falhem ao carregar com um erro "func_proto
+incompatible with vmlinux". Muitos kfuncs sched_ext são afetados.
+
 Ele pode ser encontrado nos pacotes ``dwarves`` ou ``pahole`` das
 distribuições, ou em https://fedorapeople.org/~acme/dwarves/.
 
@@ -189,7 +194,7 @@ Tar
 O GNU tar é necessário caso você deseje habilitar o acesso aos cabeçalhos do
 kernel via sysfs (CONFIG_IKHEADERS).
 
-gtags / GNU GLOBAL (optional)
+gtags / GNU GLOBAL (opcional)
 -----------------------------
 
 A compilação do kernel requer o GNU GLOBAL versão 6.6.5 ou superior para gerar
