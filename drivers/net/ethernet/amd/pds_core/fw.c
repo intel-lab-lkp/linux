@@ -21,9 +21,11 @@
 #define PDSC_FW_COMPONENT_FULL_NAME_BUFLEN \
 	(sizeof(PDSC_FW_COMPONENT_PREFIX) + PDS_CORE_FW_COMPONENT_NAME_BUFLEN)
 
-/* Driver-defined component type to name mapping */
+/* Driver-defined component type to name mapping.
+ * PDS_CORE_FW_TYPE_MAIN is NULL - handled specially as "fw" without prefix.
+ */
 static const char * const pdsc_fw_type_names[] = {
-	[PDS_CORE_FW_TYPE_MAIN]      = "mainfw",
+	[PDS_CORE_FW_TYPE_MAIN]      = NULL,
 	[PDS_CORE_FW_TYPE_BOOT]      = "bootloader",
 	[PDS_CORE_FW_TYPE_CPLD]      = "cpld",
 	[PDS_CORE_FW_TYPE_SECURE]    = "secure",
@@ -44,6 +46,10 @@ static u8 pdsc_name_to_fw_type(const char *name)
 {
 	size_t prefix_len;
 	int i;
+
+	/* "fw" without suffix maps to main firmware */
+	if (!strcmp(name, "fw"))
+		return PDS_CORE_FW_TYPE_MAIN;
 
 	prefix_len = str_has_prefix(name, PDSC_FW_COMPONENT_PREFIX);
 	if (prefix_len)
@@ -752,7 +758,9 @@ static int pdsc_flash_component(struct pldmfw *context,
 	if (component_type) {
 		const char *type_name = pdsc_fw_type_to_name(component_type);
 
-		if (type_name) {
+		if (component_type == PDS_CORE_FW_TYPE_MAIN) {
+			component_name = "fw";
+		} else if (type_name) {
 			snprintf(component_name_buf, sizeof(component_name_buf),
 				 "%s%s", PDSC_FW_COMPONENT_PREFIX, type_name);
 			component_name = component_name_buf;

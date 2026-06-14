@@ -115,8 +115,8 @@ Individual components can also be updated by specifying the component name::
   # devlink dev flash pci/0000:b5:00.0 \
             file firmware.pldmfw component fw.cpld
 
-Per-component update uses driver-defined component names (fw.mainfw,
-fw.cpld, etc.). Not all components support per-component update -
+Per-component update uses driver-defined component names (fw, fw.cpld,
+etc.). Not all components support per-component update -
 devlink will reject the request if the specified component cannot
 be updated.
 
@@ -133,12 +133,9 @@ names. The driver reports the following component versions:
      - Type
      - Description
    * - ``fw``
-     - running
-     - Version of firmware running on the device
-   * - ``fw.mainfw``
      - running, stored
      - Main firmware
-   * - ``fw.mainfw.gold``
+   * - ``fw.gold``
      - stored
      - Gold (recovery) firmware
    * - ``fw.bootloader``
@@ -181,13 +178,12 @@ Example output::
           asic.rev 0x0
         running:
           fw.bootloader 1.2.3
-          fw.mainfw 1.3.0
-          fw.cpld 3.18
           fw 1.3.0
+          fw.cpld 3.18
         stored:
           fw.bootloader 1.2.3
-          fw.mainfw.gold 1.2.0
-          fw.mainfw 1.3.0
+          fw.gold 1.2.0
+          fw 1.3.0
           fw.cpld 3.18
 
 Health Reporters
