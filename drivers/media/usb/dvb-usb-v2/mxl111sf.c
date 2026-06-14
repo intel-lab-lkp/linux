@@ -900,8 +900,21 @@ static int mxl111sf_attach_tuner(struct dvb_usb_adapter *adap)
 		return ret;
 
 	ret = media_device_register_entity(mdev, &state->tuner);
-	if (ret)
+	if (ret) {
+		media_entity_cleanup(&state->tuner);
 		return ret;
+	}
+#endif
+	return 0;
+}
+
+static int mxl111sf_detach_tuner(struct dvb_usb_adapter *adap)
+{
+	struct mxl111sf_state *state = adap_to_priv(adap);
+
+#ifdef CONFIG_MEDIA_CONTROLLER_DVB
+	media_device_unregister_entity(&state->tuner);
+	media_entity_cleanup(&state->tuner);
 #endif
 	return 0;
 }
@@ -1093,6 +1106,7 @@ static struct dvb_usb_device_properties mxl111sf_props_dvbt = {
 	.i2c_algo          = &mxl111sf_i2c_algo,
 	.frontend_attach   = mxl111sf_frontend_attach_dvbt,
 	.tuner_attach      = mxl111sf_attach_tuner,
+	.tuner_detach      = mxl111sf_detach_tuner,
 	.init              = mxl111sf_init,
 	.streaming_ctrl    = mxl111sf_ep4_streaming_ctrl,
 	.get_stream_config = mxl111sf_get_stream_config_dvbt,
@@ -1135,6 +1149,7 @@ static struct dvb_usb_device_properties mxl111sf_props_atsc = {
 	.i2c_algo          = &mxl111sf_i2c_algo,
 	.frontend_attach   = mxl111sf_frontend_attach_atsc,
 	.tuner_attach      = mxl111sf_attach_tuner,
+	.tuner_detach      = mxl111sf_detach_tuner,
 	.init              = mxl111sf_init,
 	.streaming_ctrl    = mxl111sf_ep6_streaming_ctrl,
 	.get_stream_config = mxl111sf_get_stream_config_atsc,
@@ -1177,6 +1192,7 @@ static struct dvb_usb_device_properties mxl111sf_props_mh = {
 	.i2c_algo          = &mxl111sf_i2c_algo,
 	.frontend_attach   = mxl111sf_frontend_attach_mh,
 	.tuner_attach      = mxl111sf_attach_tuner,
+	.tuner_detach      = mxl111sf_detach_tuner,
 	.init              = mxl111sf_init,
 	.streaming_ctrl    = mxl111sf_ep5_streaming_ctrl,
 	.get_stream_config = mxl111sf_get_stream_config_mh,
@@ -1246,6 +1262,7 @@ static struct dvb_usb_device_properties mxl111sf_props_atsc_mh = {
 	.i2c_algo          = &mxl111sf_i2c_algo,
 	.frontend_attach   = mxl111sf_frontend_attach_atsc_mh,
 	.tuner_attach      = mxl111sf_attach_tuner,
+	.tuner_detach      = mxl111sf_detach_tuner,
 	.init              = mxl111sf_init,
 	.streaming_ctrl    = mxl111sf_streaming_ctrl_atsc_mh,
 	.get_stream_config = mxl111sf_get_stream_config_atsc_mh,
@@ -1325,6 +1342,7 @@ static struct dvb_usb_device_properties mxl111sf_props_mercury = {
 	.i2c_algo          = &mxl111sf_i2c_algo,
 	.frontend_attach   = mxl111sf_frontend_attach_mercury,
 	.tuner_attach      = mxl111sf_attach_tuner,
+	.tuner_detach      = mxl111sf_detach_tuner,
 	.init              = mxl111sf_init,
 	.streaming_ctrl    = mxl111sf_streaming_ctrl_mercury,
 	.get_stream_config = mxl111sf_get_stream_config_mercury,
@@ -1396,6 +1414,7 @@ static struct dvb_usb_device_properties mxl111sf_props_mercury_mh = {
 	.i2c_algo          = &mxl111sf_i2c_algo,
 	.frontend_attach   = mxl111sf_frontend_attach_mercury_mh,
 	.tuner_attach      = mxl111sf_attach_tuner,
+	.tuner_detach      = mxl111sf_detach_tuner,
 	.init              = mxl111sf_init,
 	.streaming_ctrl    = mxl111sf_streaming_ctrl_mercury_mh,
 	.get_stream_config = mxl111sf_get_stream_config_mercury_mh,
