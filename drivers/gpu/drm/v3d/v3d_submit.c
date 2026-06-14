@@ -1264,6 +1264,104 @@ static const unsigned int cpu_job_bo_handle_count[] = {
 	[V3D_CPU_JOB_TYPE_COPY_PERFORMANCE_QUERY] = 1,
 };
 
+/* Reject offset + (count - 1) * stride + write_size if it leaves the BO. */
+static int
+v3d_check_copy_extent(struct drm_device *dev, size_t bo_size,
+		      u32 offset, u32 stride, u32 count, u32 write_size)
+{
+	u32 last;
+
+	if (!count)
+		return 0;
+
+	if (check_mul_overflow(stride, count - 1, &last) ||
+	    check_add_overflow(last, write_size, &last) ||
+	    check_add_overflow(last, offset, &last) ||
+	    last > bo_size) {
+		drm_dbg(dev, "CPU job copy buffer exceeds the destination BO.\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/* Reject a query CPU job whose writes would land outside their BO. */
+static int
+v3d_cpu_job_bounds_check(struct v3d_cpu_job *job)
+{
+	struct drm_device *dev = &job->base.v3d->drm;
+	struct v3d_timestamp_query_info *tquery = &job->timestamp_query;
+	struct v3d_copy_query_results_info *copy = &job->copy;
+	u32 elem = copy->do_64bit ? sizeof(u64) : sizeof(u32);
+	struct v3d_bo *dst, *src;
+	u32 slots, write_size;
+	int i;
+
+	switch (job->job_type) {
+	case V3D_CPU_JOB_TYPE_TIMESTAMP_QUERY:
+	case V3D_CPU_JOB_TYPE_RESET_TIMESTAMP_QUERY:
+		/* Each query writes one u64 timestamp slot into bo[0]. */
+		dst = to_v3d_bo(job->base.bo[0]);
+
+		for (i = 0; i < tquery->count; i++) {
+			if ((u64)tquery->queries[i].offset + sizeof(u64) >
+			    dst->base.base.size)
+				goto err_range;
+		}
+		return 0;
+	case V3D_CPU_JOB_TYPE_COPY_TIMESTAMP_QUERY:
+		/* Copies one u64 per query from bo[1] into bo[0]. */
+		dst = to_v3d_bo(job->base.bo[0]);
+		src = to_v3d_bo(job->base.bo[1]);
+
+		for (i = 0; i < tquery->count; i++) {
+			if ((u64)tquery->queries[i].offset + sizeof(u64) >
+			    src->base.base.size)
+				goto err_range;
+		}
+
+		write_size = (copy->availability_bit ? 2 : 1) * elem;
+		return v3d_check_copy_extent(dev, dst->base.base.size,
+					     copy->offset, copy->stride,
+					     tquery->count, write_size);
+	case V3D_CPU_JOB_TYPE_COPY_PERFORMANCE_QUERY:
+		/*
+		 * Each query writes nperfmons * DRM_V3D_MAX_PERF_COUNTERS
+		 * counter slots into bo[0], plus an availability slot at
+		 * index ncounters. nperfmons and ncounters are user values,
+		 * so the slot count is computed overflow-safe.
+		 */
+		dst = to_v3d_bo(job->base.bo[0]);
+
+		if (check_mul_overflow(job->performance_query.nperfmons,
+				       (u32)DRM_V3D_MAX_PERF_COUNTERS, &slots))
+			goto err_range;
+
+		if (copy->availability_bit) {
+			u32 avail_slots;
+
+			if (check_add_overflow(job->performance_query.ncounters,
+					       1u, &avail_slots))
+				goto err_range;
+			slots = max(slots, avail_slots);
+		}
+
+		if (check_mul_overflow(slots, elem, &write_size))
+			goto err_range;
+
+		return v3d_check_copy_extent(dev, dst->base.base.size,
+					     copy->offset, copy->stride,
+					     job->performance_query.count,
+					     write_size);
+	default:
+		return 0;
+	}
+
+err_range:
+	drm_dbg(dev, "CPU job query offset exceeds the BO.\n");
+	return -EINVAL;
+}
+
 /**
  * v3d_submit_cpu_ioctl() - Submits a CPU job to the V3D.
  * @dev: DRM device
@@ -1332,6 +1430,10 @@ v3d_submit_cpu_ioctl(struct drm_device *dev, void *data,
 	if (args->bo_handle_count) {
 		ret = v3d_lookup_bos(dev, file_priv, &cpu_job->base,
 				     args->bo_handles, args->bo_handle_count);
+		if (ret)
+			goto fail;
+
+		ret = v3d_cpu_job_bounds_check(cpu_job);
 		if (ret)
 			goto fail;
 
