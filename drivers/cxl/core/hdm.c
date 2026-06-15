@@ -87,6 +87,8 @@ static void parse_hdm_decoder_caps(struct cxl_hdm *cxlhdm)
 		cxlhdm->iw_cap_mask |= BIT(3) | BIT(6) | BIT(12);
 	if (FIELD_GET(CXL_HDM_DECODER_INTERLEAVE_16_WAY, hdm_cap))
 		cxlhdm->iw_cap_mask |= BIT(16);
+	cxlhdm->supported_coherency =
+		FIELD_GET(CXL_HDM_DECODER_SUPPORTED_COHERENCY_MASK, hdm_cap);
 }
 
 static bool should_emulate_decoders(struct cxl_endpoint_dvsec_info *info)
@@ -1023,6 +1025,14 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 		else
 			cxld->target_type = CXL_DECODER_DEVMEM;
 
+		/*
+		 * Autocommit BI-enabled decoders is not supported.
+		 * At this point cxlds->bi is not yet setup, so there
+		 * are no guarantees that the platform supports BI.
+		 */
+		if (FIELD_GET(CXL_HDM_DECODER0_CTRL_BI, ctrl))
+			return -ENXIO;
+
 		guard(rwsem_write)(&cxl_rwsem.region);
 		if (cxld->id != cxl_num_decoders_committed(port)) {
 			dev_warn(&port->dev,
@@ -1042,12 +1052,20 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 		if (cxled) {
 			struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 			struct cxl_dev_state *cxlds = cxlmd->cxlds;
+			struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
 
 			/*
-			 * Default by devtype until a device arrives that needs
-			 * more precision.
+			 * HDMs that advertise support for both coherency
+			 * modes (CXL_HDM_DECODER_COHERENCY_BOTH) default to
+			 * host-only here; the region attach path will switch
+			 * target_type to device-coherent if the region's
+			 * root decoder has the CFMWS BI bit set. Only HDMs
+			 * that strictly support device-coherent mode default
+			 * to HDM-DB.
 			 */
-			if (cxlds->type == CXL_DEVTYPE_CLASSMEM)
+			if (cxlds->type == CXL_DEVTYPE_CLASSMEM &&
+			    cxlhdm->supported_coherency !=
+			    CXL_HDM_DECODER_COHERENCY_DEV)
 				cxld->target_type = CXL_DECODER_HOSTONLYMEM;
 			else
 				cxld->target_type = CXL_DECODER_DEVMEM;
