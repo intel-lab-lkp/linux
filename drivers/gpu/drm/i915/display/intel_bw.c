@@ -52,6 +52,8 @@ struct intel_qgv_point {
 
 #define DEPROGBWPCLIMIT		60
 
+#define PEAK_BW_THRESHOLD	20000
+
 struct intel_psf_gv_point {
 	u8 clk; /* clock in multiples of 16.6666 MHz */
 };
@@ -601,6 +603,34 @@ static int tgl_peakbw(int num_channels, int channel_width, int dclk)
 	return num_channels * (channel_width / 8) * dclk;
 }
 
+static void xe3_add_peakbw_threshold(struct intel_display *display)
+{
+	u8 qgv_points = display->bw.num_qgv_points;
+
+	if (!HAS_PEAK_BW_THRESHOLD(display))
+		return;
+
+	if (qgv_points >= I915_NUM_QGV_POINTS) {
+		drm_warn(display->drm, "Maximum QGV points reached. Ignore the peak bw threshold\n");
+		return;
+	}
+
+	if (qgv_points <= 1) {
+		drm_warn(display->drm, "SAGV not supported. Ignore the peak bw threshold\n");
+		return;
+	}
+
+	display->bw.num_qgv_points++;
+
+	display->bw.peakbw[qgv_points] = PEAK_BW_THRESHOLD;
+
+	for (int i = 0; i < ARRAY_SIZE(display->bw.max); i++)
+		display->bw.max[i].deratedbw[qgv_points] = PEAK_BW_THRESHOLD;
+
+	drm_dbg_kms(display->drm, "An extra QGV point %d added for Peak bw threshod of %d\n",
+		    qgv_points, PEAK_BW_THRESHOLD);
+}
+
 static int tgl_get_bw_info(struct intel_display *display,
 			   const struct dram_info *dram_info,
 			   const struct intel_soc_bw_params *soc_bw_params,
@@ -694,6 +724,9 @@ static int tgl_get_bw_info(struct intel_display *display,
 
 		drm_dbg_kms(display->drm, "QGV %d: peakbw=%u\n", i, display->bw.peakbw[i]);
 	}
+
+	/* For xe3 cases add an extra qgv point for Peak bw threshold */
+	xe3_add_peakbw_threshold(display);
 
 	for (i = 0; i < qi.num_psf_points; i++) {
 		const struct intel_psf_gv_point *sp = &qi.psf_points[i];
