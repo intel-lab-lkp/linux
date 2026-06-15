@@ -342,10 +342,25 @@ void cacheinfo_hygon_init_llc_id(struct cpuinfo_x86 *c)
 		return;
 
 	/*
-	 * Hygons are similar to AMD Family 17h up to 1F models: LLC is
-	 * at the core complex level.  Core complex ID is ApicId[3].
+	 * LLC is at the core complex level. For Hygon processor
+	 * models 0x0–0x5, core complex ID is similar to AMD Family
+	 * 17h up to 1F models, which is ApicId[3]. For Hygon
+	 * processor models 0x6 and 0x7/0x8, core complex ID is
+	 * derived from APIC ID bit 4 and bit 5, respectively.
 	 */
-	c->topo.llc_id = c->topo.apicid >> 3;
+
+	switch (c->x86_model) {
+	case 0x6:
+		c->topo.llc_id = c->topo.apicid >> 4;
+		break;
+	case 0x7:
+	case 0x8:
+		c->topo.llc_id = c->topo.apicid >> 5;
+		break;
+	default:
+		c->topo.llc_id = c->topo.apicid >> 3;
+		break;
+	}
 }
 
 void init_amd_cacheinfo(struct cpuinfo_x86 *c)
