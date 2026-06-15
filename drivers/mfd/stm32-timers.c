@@ -329,8 +329,10 @@ static int stm32_timers_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, ddata);
 
 	ret = of_platform_populate(pdev->dev.of_node, NULL, NULL, &pdev->dev);
-	if (ret)
+	if (ret) {
+		of_platform_depopulate(&pdev->dev);
 		stm32_timers_dma_remove(dev, ddata);
+	}
 
 	return ret;
 }
