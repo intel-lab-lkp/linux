@@ -10011,6 +10011,7 @@ static void btrfs_free_swapfile_pins(struct inode *inode)
 	struct btrfs_fs_info *fs_info = BTRFS_I(inode)->root->fs_info;
 	struct btrfs_swapfile_pin *sp;
 	struct rb_node *node, *next;
+	u64 bg_released = 0;
 
 	spin_lock(&fs_info->swapfile_pins_lock);
 	node = rb_first(&fs_info->swapfile_pins);
@@ -10020,15 +10021,22 @@ static void btrfs_free_swapfile_pins(struct inode *inode)
 		if (sp->inode == inode) {
 			rb_erase(&sp->node, &fs_info->swapfile_pins);
 			if (sp->is_block_group) {
-				btrfs_dec_block_group_swap_extents(sp->ptr,
+				struct btrfs_block_group *bg = sp->ptr;
+
+				bg_released += bg->length;
+				btrfs_dec_block_group_swap_extents(bg,
 							   sp->bg_extent_count);
-				btrfs_put_block_group(sp->ptr);
+				btrfs_put_block_group(bg);
 			}
 			kfree(sp);
 		}
 		node = next;
 	}
 	spin_unlock(&fs_info->swapfile_pins_lock);
+	btrfs_info(fs_info,
+	"swapfile deactivated on root %llu ino %llu, released %llu bytes of block groups",
+		   btrfs_root_id(BTRFS_I(inode)->root),
+		   btrfs_ino(BTRFS_I(inode)), bg_released);
 }
 
 struct btrfs_swap_info {
@@ -10108,6 +10116,7 @@ static int btrfs_swap_activate(struct swap_info_struct *sis, struct file *file,
 	int ret = 0;
 	u64 isize;
 	u64 prev_extent_end = 0;
+	u64 pinned_bg_size = 0;
 
 	/*
 	 * Acquire the inode's mmap lock to prevent races with memory mapped
@@ -10357,6 +10366,8 @@ static int btrfs_swap_activate(struct swap_info_struct *sis, struct file *file,
 				ret = 0;
 			else
 				goto out;
+		} else {
+			pinned_bg_size += bg->length;
 		}
 
 		if (bsi.block_len &&
@@ -10403,6 +10414,14 @@ out_unlock_mmap:
 	btrfs_free_path(path);
 	if (ret)
 		return ret;
+
+	btrfs_info(fs_info,
+"swapfile activated on root %llu ino %llu, pinned down %llu bytes of block groups",
+		   btrfs_root_id(BTRFS_I(inode)->root),
+		   btrfs_ino(BTRFS_I(inode)),
+		   pinned_bg_size);
+	btrfs_warn(fs_info,
+"any extent in pinned block groups will not be able to be scrubbed nor balanced");
 
 	if (device)
 		sis->bdev = device->bdev;
