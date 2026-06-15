@@ -419,8 +419,11 @@ kernel::impl_device_context_into_aref!(I2cAdapter);
 // SAFETY: Instances of `I2cAdapter` are always reference-counted.
 unsafe impl AlwaysRefCounted for I2cAdapter {
     fn inc_ref(&self) {
-        // SAFETY: The existence of a shared reference guarantees that the refcount is non-zero.
-        unsafe { bindings::i2c_get_adapter(self.index()) };
+        // SAFETY: The existence of a shared reference guarantees that the refcounts are non-zero.
+        unsafe {
+            bindings::__module_get((*self.as_raw()).owner);
+            bindings::get_device(&raw mut (*self.as_raw()).dev);
+        }
     }
 
     unsafe fn dec_ref(obj: NonNull<Self>) {
