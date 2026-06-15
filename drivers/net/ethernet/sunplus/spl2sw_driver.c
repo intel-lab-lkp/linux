@@ -319,10 +319,8 @@ static struct device_node *spl2sw_get_eth_child_node(struct device_node *ether_n
 
 static int spl2sw_probe(struct platform_device *pdev)
 {
-	struct device_node *eth_ports_np;
-	struct device_node *port_np;
+	struct device_node *eth_ports_np __free(device_node) = NULL;
 	struct spl2sw_common *comm;
-	struct device_node *phy_np;
 	phy_interface_t phy_mode;
 	struct net_device *ndev;
 	struct spl2sw_mac *mac;
@@ -418,8 +416,10 @@ static int spl2sw_probe(struct platform_device *pdev)
 	}
 
 	for (i = 0; i < MAX_NETDEV_NUM; i++) {
-		/* Get port@i of node ethernet-ports. */
-		port_np = spl2sw_get_eth_child_node(eth_ports_np, i);
+		struct device_node *port_np __free(device_node) =
+			spl2sw_get_eth_child_node(eth_ports_np, i);
+		struct device_node *phy_np;
+
 		if (!port_np)
 			continue;
 
@@ -441,6 +441,7 @@ static int spl2sw_probe(struct platform_device *pdev)
 		/* Get mac-address from nvmem. */
 		ret = spl2sw_nvmem_get_mac_address(&pdev->dev, port_np, mac_addr);
 		if (ret == -EPROBE_DEFER) {
+			of_node_put(phy_np);
 			goto out_unregister_dev;
 		} else if (ret) {
 			dev_info(&pdev->dev, "Generate a random mac address!\n");
@@ -449,8 +450,10 @@ static int spl2sw_probe(struct platform_device *pdev)
 
 		/* Initialize the net device. */
 		ret = spl2sw_init_netdev(pdev, mac_addr, &ndev);
-		if (ret)
+		if (ret) {
+			of_node_put(phy_np);
 			goto out_unregister_dev;
+		}
 
 		ndev->irq = irq;
 		comm->ndev[i] = ndev;
@@ -500,8 +503,11 @@ static int spl2sw_probe(struct platform_device *pdev)
 
 out_unregister_dev:
 	for (i = 0; i < MAX_NETDEV_NUM; i++)
-		if (comm->ndev[i])
+		if (comm->ndev[i]) {
+			mac = netdev_priv(comm->ndev[i]);
+			of_node_put(mac->phy_node);
 			unregister_netdev(comm->ndev[i]);
+		}
 
 out_free_mdio:
 	spl2sw_mdio_remove(comm);
