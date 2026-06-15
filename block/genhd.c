@@ -1005,7 +1005,15 @@ static int __init genhd_device_init(void)
 
 	/* create top-level block dir */
 	block_depr = kobject_create_and_add("block", NULL);
+	if (!block_depr) {
+		error = -ENOMEM;
+		goto out_class_unregister;
+	}
 	return 0;
+
+out_class_unregister:
+	class_unregister(&block_class);
+	return error;
 }
 
 subsys_initcall(genhd_device_init);
