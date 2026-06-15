@@ -1199,18 +1199,16 @@ put_no_open:
 }
 
 /**
- * bdev_fput - yield claim to the block device and put the file
+ * bdev_yield_claim - give up the holder claim on an open block device
  * @bdev_file: open block device
  *
- * Yield claim on the block device and put the file. Ensure that the
- * block device can be reclaimed before the file is closed which is a
- * deferred operation.
+ * Yield the holder and any write access for @bdev_file without closing it, so
+ * the caller can still act on the device - e.g. bdev_allow_freeze() it - before
+ * the final bdev_fput().  bdev_fput() yields too, so calling it afterwards is
+ * safe.
  */
-void bdev_fput(struct file *bdev_file)
+void bdev_yield_claim(struct file *bdev_file)
 {
-	if (WARN_ON_ONCE(bdev_file->f_op != &def_blk_fops))
-		return;
-
 	if (bdev_file->private_data) {
 		struct block_device *bdev = file_bdev(bdev_file);
 		struct gendisk *disk = bdev->bd_disk;
@@ -1226,7 +1224,23 @@ void bdev_fput(struct file *bdev_file)
 		bdev_file->private_data = BDEV_I(bdev_file->f_mapping->host);
 		mutex_unlock(&disk->open_mutex);
 	}
+}
+EXPORT_SYMBOL_GPL(bdev_yield_claim);
 
+/**
+ * bdev_fput - yield claim to the block device and put the file
+ * @bdev_file: open block device
+ *
+ * Yield claim on the block device and put the file. Ensure that the
+ * block device can be reclaimed before the file is closed which is a
+ * deferred operation.
+ */
+void bdev_fput(struct file *bdev_file)
+{
+	if (WARN_ON_ONCE(bdev_file->f_op != &def_blk_fops))
+		return;
+
+	bdev_yield_claim(bdev_file);
 	fput(bdev_file);
 }
 EXPORT_SYMBOL(bdev_fput);
