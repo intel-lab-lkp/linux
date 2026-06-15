@@ -132,20 +132,31 @@ struct FspCotMessage {
 }
 
 impl FspCotMessage {
+    /// Computes the FRTS vidmem offset for the Chain-of-Trust message. It is measured from the end
+    /// of the framebuffer.
+    fn frts_vidmem_offset(fb_info: &FbSizes) -> Result<u64> {
+        let mut offset = u64::from(fb_info.fb_end_reserved_size);
+
+        if fb_info.pmu_reserved_size != 0 {
+            offset = offset
+                .checked_add(u64::from(fb_info.pmu_reserved_size))
+                .ok_or(EINVAL)?
+                // The 2 MiB alignment is r570-specific.
+                .align_up(Alignment::new::<SZ_2M>())
+                .ok_or(EINVAL)?;
+        }
+
+        Ok(offset)
+    }
+
     /// Returns an in-place initializer for [`FspCotMessage`].
     fn new<'a>(
         fb_info: &FbSizes,
         fsp_fw: &'a FspFirmware,
         args: &'a FmcBootArgs<'_>,
     ) -> Result<impl Init<Self> + 'a> {
-        // frts_vidmem_offset is measured from the end of FB, so FRTS sits at
-        // (end of FB) - frts_vidmem_offset.
         let frts_vidmem_offset = if !args.resume {
-            let frts_reserved_size = fb_info.heap_size + u64::from(fb_info.pmu_reserved_size);
-
-            frts_reserved_size
-                .align_up(Alignment::new::<SZ_2M>())
-                .ok_or(EINVAL)?
+            Self::frts_vidmem_offset(fb_info)?
         } else {
             0
         };

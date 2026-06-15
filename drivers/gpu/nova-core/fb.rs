@@ -304,6 +304,9 @@ pub(crate) struct FbSizes {
     pub(crate) heap_size: u64,
     /// PMU reserved memory size, in bytes.
     pub(crate) pmu_reserved_size: u32,
+    /// Size reserved at the end of the framebuffer. This is architecture dependent and used to
+    /// compute the FRTS offset for the FSP CoT message.
+    pub(crate) fb_end_reserved_size: u32,
     /// Number of VF partitions.
     pub(crate) vf_partition_count: u8,
 }
@@ -321,6 +324,7 @@ impl FbSizes {
                 .wpr_heap_size(chipset, fb_size)?,
             heap_size: u64::from(hal.non_wpr_heap_size()),
             pmu_reserved_size: hal.pmu_reserved_size(),
+            fb_end_reserved_size: hal.fb_end_reserved_size(),
             vf_partition_count: 0,
         })
     }

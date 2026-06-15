@@ -81,6 +81,10 @@ impl FbHal for Ga100 {
     fn frts_size(&self) -> u64 {
         0
     }
+
+    fn fb_end_reserved_size(&self) -> u32 {
+        super::tu102::fb_end_reserved_size_tu102()
+    }
 }
 
 const GA100: Ga100 = Ga100;

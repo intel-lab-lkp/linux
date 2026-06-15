@@ -41,6 +41,9 @@ pub(crate) trait FbHal {
 
     /// Returns the FRTS size, in bytes.
     fn frts_size(&self) -> u64;
+
+    /// Returns the size reserved at the end of the framebuffer, in bytes.
+    fn fb_end_reserved_size(&self) -> u32;
 }
 
 /// Returns the HAL corresponding to `chipset`.

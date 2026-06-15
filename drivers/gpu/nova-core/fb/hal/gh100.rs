@@ -44,6 +44,10 @@ impl FbHal for Gh100 {
     fn frts_size(&self) -> u64 {
         super::tu102::frts_size_tu102()
     }
+
+    fn fb_end_reserved_size(&self) -> u32 {
+        super::tu102::fb_end_reserved_size_tu102()
+    }
 }
 
 const GH100: Gh100 = Gh100;

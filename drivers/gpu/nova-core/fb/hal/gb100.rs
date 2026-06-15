@@ -78,6 +78,7 @@ fn write_sysmem_flush_page_gb100(bar: Bar0<'_>, addr: Bounded<u64, 52>) {
     );
 }
 
+// This PMU reservation size is r570-specific.
 pub(super) const fn pmu_reserved_size_gb100() -> u32 {
     usize_into_u32::<{ const_align_up(SZ_8M + SZ_16M + SZ_4K, Alignment::new::<SZ_128K>()).unwrap() }>(
     )
@@ -115,6 +116,10 @@ impl FbHal for Gb100 {
 
     fn frts_size(&self) -> u64 {
         super::tu102::frts_size_tu102()
+    }
+
+    fn fb_end_reserved_size(&self) -> u32 {
+        u32::SZ_2M + u32::SZ_128K
     }
 }
 

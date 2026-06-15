@@ -83,11 +83,16 @@ impl FbHal for Gb202 {
 
     fn non_wpr_heap_size(&self) -> u32 {
         // Non-WPR heap for GB20x (see Open RM: kgspGetNonWprHeapSize, GB202+).
+        // This size is r570-specific.
         u32::SZ_2M + u32::SZ_128K
     }
 
     fn frts_size(&self) -> u64 {
         super::tu102::frts_size_tu102()
+    }
+
+    fn fb_end_reserved_size(&self) -> u32 {
+        u32::SZ_2M + u32::SZ_128K
     }
 }
 

@@ -52,6 +52,10 @@ pub(super) const fn frts_size_tu102() -> u64 {
     u64::SZ_1M
 }
 
+pub(super) const fn fb_end_reserved_size_tu102() -> u32 {
+    u32::SZ_2M
+}
+
 struct Tu102;
 
 impl FbHal for Tu102 {
@@ -81,6 +85,10 @@ impl FbHal for Tu102 {
 
     fn frts_size(&self) -> u64 {
         frts_size_tu102()
+    }
+
+    fn fb_end_reserved_size(&self) -> u32 {
+        fb_end_reserved_size_tu102()
     }
 }
 
