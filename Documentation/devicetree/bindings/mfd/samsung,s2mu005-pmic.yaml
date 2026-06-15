@@ -38,17 +38,10 @@ properties:
       Child node describing MUIC device.
 
   multi-led:
-    type: object
+    $ref: /schemas/leds/leds-class-multicolor.yaml#
 
-    allOf:
-      - $ref: /schemas/leds/leds-class-multicolor.yaml#
-
-    properties:
-      compatible:
-        const: samsung,s2mu005-rgb
-
-    required:
-      - compatible
+    description:
+      Child node describing the RGB status LED.
 
     unevaluatedProperties: false
 
