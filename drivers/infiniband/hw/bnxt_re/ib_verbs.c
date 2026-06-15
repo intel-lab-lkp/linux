@@ -2137,6 +2137,19 @@ static enum ib_mtu __to_ib_mtu(u32 mtu)
 }
 
 /* Shared Receive Queues */
+/* Shared Receive Queue lifetime helpers */
+static void bnxt_re_srq_release(struct kref *ref)
+{
+	struct bnxt_re_srq *srq = container_of(ref, struct bnxt_re_srq, srq_ref);
+
+	complete(&srq->srq_destroy_comp);
+}
+
+void bnxt_re_put_srq(struct bnxt_re_srq *srq)
+{
+	kref_put(&srq->srq_ref, bnxt_re_srq_release);
+}
+
 int bnxt_re_destroy_srq(struct ib_srq *ib_srq, struct ib_udata *udata)
 {
 	struct bnxt_re_srq *srq = container_of(ib_srq, struct bnxt_re_srq,
@@ -2149,10 +2162,18 @@ int bnxt_re_destroy_srq(struct ib_srq *ib_srq, struct ib_udata *udata)
 	if (ret)
 		return ret;
 
-	if (rdev->chip_ctx->modes.toggle_bits & BNXT_QPLIB_SRQ_TOGGLE_BIT)
+	if (rdev->chip_ctx->modes.toggle_bits & BNXT_QPLIB_SRQ_TOGGLE_BIT && srq->uctx) {
+		mutex_lock(&rdev->srq_hash_lock);
 		hash_del(&srq->hash_entry);
+		mutex_unlock(&rdev->srq_hash_lock);
+		/* Drop the creator's reference and wait for any concurrent
+		 * bnxt_re_search_for_srq() caller to finish with the pointer.
+		 */
+		kref_put(&srq->srq_ref, bnxt_re_srq_release);
+		wait_for_completion(&srq->srq_destroy_comp);
+	}
 	bnxt_qplib_destroy_srq(&rdev->qplib_res, qplib_srq);
-	if (rdev->chip_ctx->modes.toggle_bits & BNXT_QPLIB_SRQ_TOGGLE_BIT)
+	if (rdev->chip_ctx->modes.toggle_bits & BNXT_QPLIB_SRQ_TOGGLE_BIT && srq->uctx)
 		free_page((unsigned long)srq->uctx_srq_page);
 	ib_umem_release(srq->umem);
 	atomic_dec(&rdev->stats.res.srq_count);
@@ -2260,7 +2281,11 @@ int bnxt_re_create_srq(struct ib_srq *ib_srq,
 
 		resp.srqid = srq->qplib_srq.id;
 		if (rdev->chip_ctx->modes.toggle_bits & BNXT_QPLIB_SRQ_TOGGLE_BIT) {
+			kref_init(&srq->srq_ref);
+			init_completion(&srq->srq_destroy_comp);
+			mutex_lock(&rdev->srq_hash_lock);
 			hash_add(rdev->srq_hash, &srq->hash_entry, srq->qplib_srq.id);
+			mutex_unlock(&rdev->srq_hash_lock);
 			srq->uctx_srq_page = (void *)get_zeroed_page(GFP_KERNEL);
 			if (!srq->uctx_srq_page) {
 				rc = -ENOMEM;

@@ -2343,6 +2343,7 @@ static int bnxt_re_dev_init(struct bnxt_re_dev *rdev, u8 op_type)
 	mutex_init(&rdev->cq_hash_lock);
 	if (rdev->chip_ctx->modes.toggle_bits & BNXT_QPLIB_SRQ_TOGGLE_BIT)
 		hash_init(rdev->srq_hash);
+	mutex_init(&rdev->srq_hash_lock);
 
 	bnxt_re_debugfs_add_pdev(rdev);
 

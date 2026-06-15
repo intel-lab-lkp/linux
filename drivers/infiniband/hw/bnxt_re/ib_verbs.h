@@ -79,6 +79,8 @@ struct bnxt_re_srq {
 	spinlock_t		lock;		/* protect srq */
 	void			*uctx_srq_page;
 	struct hlist_node       hash_entry;
+	struct kref		srq_ref;
+	struct completion	srq_destroy_comp;
 };
 
 struct bnxt_re_qp {
@@ -247,6 +249,7 @@ int bnxt_re_modify_srq(struct ib_srq *srq, struct ib_srq_attr *srq_attr,
 		       struct ib_udata *udata);
 int bnxt_re_query_srq(struct ib_srq *srq, struct ib_srq_attr *srq_attr);
 int bnxt_re_destroy_srq(struct ib_srq *srq, struct ib_udata *udata);
+void bnxt_re_put_srq(struct bnxt_re_srq *srq);
 int bnxt_re_post_srq_recv(struct ib_srq *srq, const struct ib_recv_wr *recv_wr,
 			  const struct ib_recv_wr **bad_recv_wr);
 int bnxt_re_create_qp(struct ib_qp *qp, struct ib_qp_init_attr *qp_init_attr,

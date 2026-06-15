@@ -42,12 +42,15 @@ static struct bnxt_re_srq *bnxt_re_search_for_srq(struct bnxt_re_dev *rdev, u32 
 {
 	struct bnxt_re_srq *srq = NULL, *tmp_srq;
 
+	mutex_lock(&rdev->srq_hash_lock);
 	hash_for_each_possible(rdev->srq_hash, tmp_srq, hash_entry, srq_id) {
 		if (tmp_srq->qplib_srq.id == srq_id) {
+			kref_get(&tmp_srq->srq_ref);
 			srq = tmp_srq;
 			break;
 		}
 	}
+	mutex_unlock(&rdev->srq_hash_lock);
 	return srq;
 }
 
@@ -263,6 +266,7 @@ static int UVERBS_HANDLER(BNXT_RE_METHOD_GET_TOGGLE_MEM)(struct uverbs_attr_bund
 			return -EINVAL;
 
 		addr = (u64)srq->uctx_srq_page;
+		bnxt_re_put_srq(srq);
 		break;
 
 	default:
