@@ -19,7 +19,6 @@
 
 #include "intel_acpi.h"
 #include "intel_audio.h"
-#include "intel_bw.h"
 #include "intel_display.h"
 #include "intel_display_core.h"
 #include "intel_display_device.h"
@@ -29,7 +28,6 @@
 #include "intel_dmc.h"
 #include "intel_dmc_wl.h"
 #include "intel_dp.h"
-#include "intel_dram.h"
 #include "intel_fbdev.h"
 #include "intel_hdcp.h"
 #include "intel_hotplug.h"
@@ -133,22 +131,9 @@ int xe_display_init_early(struct xe_device *xe)
 		return 0;
 	}
 
-	/* Early display init.. */
-	intel_opregion_setup(display);
-
-	/*
-	 * Fill the dram structure to get the system dram info. This will be
-	 * used for memory latency calculation.
-	 */
-	err = intel_dram_detect(display);
-	if (err)
-		goto err_opregion;
-
-	intel_bw_init_hw(display);
-
 	err = intel_display_driver_probe_noirq(display);
 	if (err)
-		goto err_opregion;
+		return err;
 
 	err = intel_display_driver_probe_nogem(display);
 	if (err)
@@ -158,8 +143,7 @@ int xe_display_init_early(struct xe_device *xe)
 err_noirq:
 	intel_display_driver_remove_noirq(display);
 	intel_display_power_cleanup(display);
-err_opregion:
-	intel_opregion_cleanup(display);
+
 	return err;
 }
 

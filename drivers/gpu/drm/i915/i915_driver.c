@@ -51,7 +51,6 @@
 #include <drm/intel/intel_pcode_regs.h>
 
 #include "display/i9xx_display_sr.h"
-#include "display/intel_bw.h"
 #include "display/intel_cdclk.h"
 #include "display/intel_crtc.h"
 #include "display/intel_display_device.h"
@@ -60,7 +59,6 @@
 #include "display/intel_dmc.h"
 #include "display/intel_dp.h"
 #include "display/intel_dpt.h"
-#include "display/intel_dram.h"
 #include "display/intel_fbdev.h"
 #include "display/intel_gmbus.h"
 #include "display/intel_hotplug.h"
@@ -469,7 +467,6 @@ static int i915_pcode_init(struct drm_i915_private *i915)
  */
 static int i915_driver_hw_probe(struct drm_i915_private *dev_priv)
 {
-	struct intel_display *display = dev_priv->display;
 	struct pci_dev *pdev = to_pci_dev(dev_priv->drm.dev);
 	int ret;
 
@@ -563,26 +560,13 @@ static int i915_driver_hw_probe(struct drm_i915_private *dev_priv)
 			drm_dbg(&dev_priv->drm, "can't enable MSI");
 	}
 
-	intel_opregion_setup(display);
-
 	ret = i915_pcode_init(dev_priv);
 	if (ret)
-		goto err_opregion;
-
-	/*
-	 * Fill the dram structure to get the system dram info. This will be
-	 * used for memory latency calculation.
-	 */
-	ret = intel_dram_detect(display);
-	if (ret)
-		goto err_opregion;
-
-	intel_bw_init_hw(display);
+		goto err_msi;
 
 	return 0;
 
-err_opregion:
-	intel_opregion_cleanup(display);
+err_msi:
 	pci_disable_msi(pdev);
 err_mem_regions:
 	intel_memory_regions_driver_release(dev_priv);

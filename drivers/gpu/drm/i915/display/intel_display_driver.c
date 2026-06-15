@@ -43,6 +43,7 @@
 #include "intel_dp_tunnel.h"
 #include "intel_dpll.h"
 #include "intel_dpll_mgr.h"
+#include "intel_dram.h"
 #include "intel_encoder.h"
 #include "intel_fb.h"
 #include "intel_fbc.h"
@@ -203,11 +204,23 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 {
 	int ret;
 
+	intel_opregion_setup(display);
+
+	/*
+	 * Fill the dram structure to get the system dram info. This will be
+	 * used for memory latency calculation.
+	 */
+	ret = intel_dram_detect(display);
+	if (ret)
+		goto cleanup_opregion;
+
+	intel_bw_init_hw(display);
+
 	if (HAS_DISPLAY(display)) {
 		ret = drm_vblank_init(display->drm,
 				      INTEL_NUM_PIPES(display));
 		if (ret)
-			return ret;
+			goto cleanup_opregion;
 	}
 
 	intel_bios_init(display);
@@ -306,6 +319,8 @@ cleanup_pw_domain_dmc:
 	intel_display_power_driver_remove(display);
 cleanup_bios:
 	intel_bios_driver_remove(display);
+cleanup_opregion:
+	intel_opregion_cleanup(display);
 
 	return ret;
 }
