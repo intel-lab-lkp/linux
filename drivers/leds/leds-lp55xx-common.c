@@ -1090,6 +1090,7 @@ static int lp55xx_register_sysfs(struct lp55xx_chip *chip)
 {
 	struct device *dev = &chip->cl->dev;
 	const struct lp55xx_device_config *cfg = chip->cfg;
+	bool engine_group_created = false;
 	int ret;
 
 	if (!cfg->run_engine || !cfg->firmware_cb)
@@ -1098,10 +1099,17 @@ static int lp55xx_register_sysfs(struct lp55xx_chip *chip)
 	ret = sysfs_create_group(&dev->kobj, &lp55xx_engine_attr_group);
 	if (ret)
 		return ret;
+	engine_group_created = true;
 
 dev_specific_attrs:
-	return cfg->dev_attr_group ?
-		sysfs_create_group(&dev->kobj, cfg->dev_attr_group) : 0;
+	if (!cfg->dev_attr_group)
+		return 0;
+
+	ret = sysfs_create_group(&dev->kobj, cfg->dev_attr_group);
+	if (ret && engine_group_created)
+		sysfs_remove_group(&dev->kobj, &lp55xx_engine_attr_group);
+
+	return ret;
 }
 
 static void lp55xx_unregister_sysfs(struct lp55xx_chip *chip)
