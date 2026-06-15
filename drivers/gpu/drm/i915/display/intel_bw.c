@@ -521,6 +521,19 @@ static const struct intel_display_bw_params *get_display_bw_params(struct intel_
 	return NULL;
 }
 
+static void update_sagv_status(struct intel_display *display, int qgv_points)
+{
+	/*
+	 * In case if SAGV is disabled in BIOS, we always get 1
+	 * SAGV point, but we can't send PCode commands to restrict it
+	 * as it will fail and pointless anyway.
+	 */
+	if (qgv_points == 1)
+		display->sagv.status = I915_SAGV_NOT_CONTROLLED;
+	else
+		display->sagv.status = I915_SAGV_ENABLED;
+}
+
 static int icl_get_bw_info(struct intel_display *display,
 			   const struct dram_info *dram_info,
 			   const struct intel_soc_bw_params *soc_bw_params,
@@ -579,15 +592,8 @@ static int icl_get_bw_info(struct intel_display *display,
 				    i, j, bi->num_planes, bi->deratedbw[j]);
 		}
 	}
-	/*
-	 * In case if SAGV is disabled in BIOS, we always get 1
-	 * SAGV point, but we can't send PCode commands to restrict it
-	 * as it will fail and pointless anyway.
-	 */
-	if (qi.num_qgv_points == 1)
-		display->sagv.status = I915_SAGV_NOT_CONTROLLED;
-	else
-		display->sagv.status = I915_SAGV_ENABLED;
+
+	update_sagv_status(display, display->bw.num_qgv_points);
 
 	return 0;
 }
@@ -699,15 +705,7 @@ static int tgl_get_bw_info(struct intel_display *display,
 		drm_dbg_kms(display->drm, "PSF GV %d: bw=%u\n", i, display->bw.psf_bw[i]);
 	}
 
-	/*
-	 * In case if SAGV is disabled in BIOS, we always get 1
-	 * SAGV point, but we can't send PCode commands to restrict it
-	 * as it will fail and pointless anyway.
-	 */
-	if (qi.num_qgv_points == 1)
-		display->sagv.status = I915_SAGV_NOT_CONTROLLED;
-	else
-		display->sagv.status = I915_SAGV_ENABLED;
+	update_sagv_status(display, display->bw.num_qgv_points);
 
 	return 0;
 }
@@ -729,7 +727,7 @@ static void dg2_get_bw_info(struct intel_display *display)
 	for (i = 1; i < ARRAY_SIZE(display->bw.max); i++)
 		display->bw.max[i] = display->bw.max[0];
 
-	display->sagv.status = I915_SAGV_NOT_CONTROLLED;
+	update_sagv_status(display, display->bw.num_qgv_points);
 }
 
 static int xe2_hpd_get_bw_info(struct intel_display *display,
@@ -777,7 +775,7 @@ static int xe2_hpd_get_bw_info(struct intel_display *display,
 	 * battery and plugged-in operation.
 	 */
 	drm_WARN_ON(display->drm, qi.num_qgv_points != 2);
-	display->sagv.status = I915_SAGV_ENABLED;
+	update_sagv_status(display, display->bw.num_qgv_points);
 
 	return 0;
 }
