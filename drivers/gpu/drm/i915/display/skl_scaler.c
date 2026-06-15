@@ -351,7 +351,7 @@ static int intel_allocate_scaler(struct intel_crtc_scaler_state *scaler_state,
 		return scaler_id;
 	}
 
-	return -1;
+	return -EINVAL;
 }
 
 static void
@@ -848,7 +848,7 @@ static int skl_pipe_scaler_get_hw_state(struct intel_crtc_state *crtc_state)
 			return scaler_id;
 	}
 
-	return -1;
+	return -EINVAL;
 }
 
 void
