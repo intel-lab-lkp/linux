@@ -31,9 +31,12 @@ use crate::{
         Falcon, //
     },
     fb::FbLayout,
-    firmware::fsp::{
-        FmcSignatures,
-        FspFirmware, //
+    firmware::{
+        fsp::{
+            FmcSignatures,
+            FspFirmware, //
+        },
+        FIRMWARE_VERSION, //
     },
     gpu::Chipset,
     gsp::GspFmcBootParams,
@@ -236,13 +239,13 @@ impl Fsp {
         dev: &device::Device<device::Bound>,
         bar: Bar0<'_>,
         chipset: Chipset,
-        fsp_fw: FspFirmware,
     ) -> Result<Fsp> {
         /// FSP secure boot completion timeout in milliseconds.
         const FSP_SECURE_BOOT_TIMEOUT_MS: i64 = 5000;
 
         let hal = hal::fsp_hal(chipset).ok_or(ENOTSUPP)?;
         let falcon = Falcon::<FspEngine>::new(dev, chipset)?;
+        let fsp_fw = FspFirmware::new(dev, chipset, FIRMWARE_VERSION)?;
 
         read_poll_timeout(
             || Ok(hal.fsp_boot_status(bar)),
