@@ -104,4 +104,19 @@ config UCSI_HUAWEI_GAOKUN
 	  To compile the driver as a module, choose M here: the module will be
 	  called ucsi_huawei_gaokun.
 
+config TYPEC_UCSI_ITEPD
+	tristate "ITE IT885x Type-C PD and UCSI Driver"
+	depends on I2C
+	depends on DRM
+	select AUXILIARY_BUS
+	help
+	  This driver enables core, UCSI, and Alternate Mode support for
+	  the ITE IT885x Type-C Power Delivery controller over I2C.
+
+	  The driver uses the auxiliary bus to spawn the UCSI and Altmode
+	  child devices from the main I2C core driver.
+
+	  To compile the driver as a module, choose M here: the modules
+	  will be called itepd, ucsi_itepd and itepd_altmode.
+
 endif

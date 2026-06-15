@@ -13730,6 +13730,10 @@ R:	Doreen Lin <doreen.lin@ite.com.tw>
 L:	linux-usb@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/usb/ite,itepd-it885x.yaml
+F:	drivers/usb/typec/ucsi/itepd.c
+F:	drivers/usb/typec/ucsi/itepd.h
+F:	drivers/usb/typec/ucsi/itepd_altmode.c
+F:	drivers/usb/typec/ucsi/ucsi_itepd.c
 
 IVTV VIDEO4LINUX DRIVER
 M:	Andy Walls <awalls@md.metrocast.net>
