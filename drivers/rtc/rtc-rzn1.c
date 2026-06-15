@@ -70,6 +70,9 @@ struct rzn1_rtc {
 	 */
 	spinlock_t ctl1_access_lock;
 	struct rtc_time tm_alarm;
+	int alarm_irq;
+	int sec_irq;
+	bool alarm_enabled;
 };
 
 static void rzn1_rtc_get_time_snapshot(struct rzn1_rtc *rtc, struct rtc_time *tm)
@@ -218,6 +221,8 @@ static int rzn1_rtc_alarm_irq_enable(struct device *dev, unsigned int enable)
 		ctl1 &= ~(RZN1_RTC_CTL1_ALME | RZN1_RTC_CTL1_1SE);
 		writel(ctl1, rtc->base + RZN1_RTC_CTL1);
 	}
+
+	rtc->alarm_enabled = enable;
 
 	return 0;
 }
@@ -398,6 +403,7 @@ static int rzn1_rtc_probe(struct platform_device *pdev)
 	irq = platform_get_irq_byname(pdev, "alarm");
 	if (irq < 0)
 		return irq;
+	rtc->alarm_irq = irq;
 
 	rtc->rtcdev = devm_rtc_allocate_device(&pdev->dev);
 	if (IS_ERR(rtc->rtcdev))
@@ -476,7 +482,12 @@ static int rzn1_rtc_probe(struct platform_device *pdev)
 		set_bit(RTC_FEATURE_ALARM_RES_MINUTE, rtc->rtcdev->features);
 		clear_bit(RTC_FEATURE_UPDATE_INTERRUPT, rtc->rtcdev->features);
 		dev_warn(&pdev->dev, "RTC pps interrupt not available. Alarm has only minute accuracy\n");
+		rtc->sec_irq = -ENXIO;
+	} else {
+		rtc->sec_irq = irq;
 	}
+
+	device_init_wakeup(&pdev->dev, true);
 
 	ret = devm_rtc_register_device(rtc->rtcdev);
 	if (ret)
@@ -500,6 +511,74 @@ static void rzn1_rtc_remove(struct platform_device *pdev)
 	pm_runtime_put(&pdev->dev);
 }
 
+static int rzn1_rtc_suspend(struct device *dev)
+{
+	struct rzn1_rtc *rtc = dev_get_drvdata(dev);
+	int ret;
+
+	if (!device_may_wakeup(dev))
+		return 0;
+
+	/*
+	 * Note on HW Wakeup Granularity Limitations:
+	 * True second-level accuracy cannot be guaranteed for device wakeups due
+	 * to hardware design tracking limitations across the three available blocks:
+	 * - Alarm Interrupt (RTC_ALM): Only matches on day-of-week, hour, and minute.
+	 * It completely lacks a seconds comparator field.
+	 * - 1-Second Interrupt (RTC_1S): A free-running broadcast that fires every
+	 * second. Activating it as a wakeup source triggers an immediate resume
+	 * on the very next 1-second boundary, bypassing target accuracy.
+	 * - Fixed Interval Interrupt (RTC_PRD): Periodic broadcast options (0.25s,
+	 * 0.5s, 1s, 1min, 1hr, 1day, or 1month) lack point-in-time matching,
+	 * offering no targeted relief.
+	 *
+	 * Consequently, due to the absence of a seconds comparator, if a wakeup is
+	 * requested within the current minute, the system will resume on the very next
+	 * 1-second tick regardless of the actual target alarm time. When the alarm
+	 * target is scheduled for a future minute, the system will resume early at the
+	 * start of that target minute boundary (00 seconds), failing to guarantee
+	 * second-level accuracy for the initial hardware wakeup event.
+	 */
+	if (rtc->alarm_enabled)
+		dev_crit(dev, "second/minute-level wakeup accuracy cannot be guaranteed by HW\n");
+	ret = enable_irq_wake(rtc->alarm_irq);
+	if (ret)
+		return ret;
+	if (rtc->sec_irq >= 0) {
+		ret = enable_irq_wake(rtc->sec_irq);
+		if (ret) {
+			disable_irq_wake(rtc->alarm_irq);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int rzn1_rtc_resume(struct device *dev)
+{
+	struct rzn1_rtc *rtc = dev_get_drvdata(dev);
+	int ret;
+
+	if (!device_may_wakeup(dev))
+		return 0;
+
+	ret = disable_irq_wake(rtc->alarm_irq);
+	if (ret)
+		return ret;
+	if (rtc->sec_irq >= 0) {
+		ret = disable_irq_wake(rtc->sec_irq);
+		if (ret) {
+			enable_irq_wake(rtc->alarm_irq);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(rzn1_rtc_pm_ops, rzn1_rtc_suspend, rzn1_rtc_resume);
+
 static const struct of_device_id rzn1_rtc_of_match[] = {
 	{ .compatible	= "renesas,rzn1-rtc" },
 	{},
@@ -512,6 +591,7 @@ static struct platform_driver rzn1_rtc_driver = {
 	.driver = {
 		.name	= "rzn1-rtc",
 		.of_match_table = rzn1_rtc_of_match,
+		.pm = pm_ptr(&rzn1_rtc_pm_ops),
 	},
 };
 module_platform_driver(rzn1_rtc_driver);
