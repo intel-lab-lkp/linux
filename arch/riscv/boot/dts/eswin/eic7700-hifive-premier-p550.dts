@@ -20,6 +20,11 @@
 	};
 };
 
+&xtal {
+	clock-frequency = <24000000>;
+	clock-output-names = "xtal24m";
+};
+
 &uart0 {
 	status = "okay";
 };
