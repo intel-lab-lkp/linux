@@ -57,6 +57,21 @@ properties:
     description:
       Number of outputs.
 
+  xlnx,clk-mul-div:
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    description:
+      Fixed MMCM/PLL multiply/divide ratios, one (multiplier, divisor)
+      pair per clock output relative to clk_in1. The number of entries
+      must equal xlnx,nr-outputs.
+    minItems: 1
+    maxItems: 8
+    items:
+      items:
+        - description: multiplier
+          minimum: 1
+        - description: divisor
+          minimum: 1
+
 required:
   - compatible
   - reg
@@ -65,6 +80,14 @@ required:
   - clock-names
   - xlnx,speed-grade
   - xlnx,nr-outputs
+
+allOf:
+  - if:
+      required:
+        - xlnx,static-config
+    then:
+      required:
+        - xlnx,clk-mul-div
 
 additionalProperties: false
 
@@ -77,6 +100,7 @@ examples:
         xlnx,static-config;
         xlnx,speed-grade = <1>;
         xlnx,nr-outputs = <6>;
+        xlnx,clk-mul-div = <12 1>, <10 2>, <8 1>, <6 1>, <4 2>, <2 1>;
         clock-names = "clk_in1", "s_axi_aclk";
         clocks = <&clkc 15>, <&clkc 15>;
     };
