@@ -450,6 +450,14 @@ static void snd_pcm_substream_proc_status_read(struct snd_info_entry *entry,
 		snd_iprintf(buffer, "error %d\n", err);
 		return;
 	}
+	/*
+	 * Show "closed" for DISCONNECTED state allow audio service
+	 * to detect USB reset/disconnect and reinitialize the device.
+	 */
+	if (status.state == SNDRV_PCM_STATE_DISCONNECTED) {
+		snd_iprintf(buffer, "closed\n");
+		return;
+	}
 	snd_iprintf(buffer, "state: %s\n", snd_pcm_state_name(status.state));
 	snd_iprintf(buffer, "owner_pid   : %d\n", pid_vnr(substream->pid));
 	snd_iprintf(buffer, "trigger_time: %lld.%09lld\n",
