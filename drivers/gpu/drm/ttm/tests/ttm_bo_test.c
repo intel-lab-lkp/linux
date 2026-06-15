@@ -603,7 +603,170 @@ static void ttm_bo_multiple_pin_one_unpin(struct kunit *test)
 	ttm_resource_free(bo, &res);
 }
 
+/*
+ * Regression tests for bulk_move LRU cursor accounting: a resource added to a
+ * bo's bulk_move cursor can become unevictable (pinned or swapped) before it is
+ * freed. ttm_resource_del_bulk_move() must still take it off the cursor, or
+ * pos->first/last are left dangling at the freed resource.
+ */
+
+/*
+ * Free a swapped (unevictable) resource that is still referenced by the
+ * bulk_move cursor and check that the cursor no longer points at it.
+ */
+static void ttm_bo_bulk_move_swapped_free_dangles(struct kunit *test)
+{
+	struct ttm_test_devices *priv = test->priv;
+	struct ttm_lru_bulk_move lru_bulk_move;
+	struct ttm_lru_bulk_move_pos *pos;
+	struct ttm_operation_ctx ctx = { };
+	struct ttm_resource *res1, *res1_saved;
+	struct ttm_buffer_object *bo1;
+	struct ttm_device *ttm_dev;
+	struct ttm_place *place;
+	struct dma_resv *resv;
+	struct ttm_tt *tt;
+	int err;
+
+	ttm_lru_bulk_move_init(&lru_bulk_move);
+	place = ttm_place_kunit_init(test, TTM_PL_SYSTEM, 0);
+
+	ttm_dev = kunit_kzalloc(test, sizeof(*ttm_dev), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, ttm_dev);
+	err = ttm_device_kunit_init(priv, ttm_dev, 0);
+	KUNIT_ASSERT_EQ(test, err, 0);
+	priv->ttm_dev = ttm_dev;
+
+	resv = kunit_kzalloc(test, sizeof(*resv), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, resv);
+	dma_resv_init(resv);
+
+	bo1 = ttm_bo_kunit_init(test, priv, BO_SIZE, resv);
+
+	/* bo1: put a SYSTEM resource on the bulk_move pos */
+	dma_resv_lock(bo1->base.resv, NULL);
+	ttm_bo_set_bulk_move(bo1, &lru_bulk_move);
+	err = ttm_resource_alloc(bo1, place, &res1, NULL);
+	KUNIT_ASSERT_EQ(test, err, 0);
+	bo1->resource = res1;
+
+	pos = &lru_bulk_move.pos[TTM_PL_SYSTEM][bo1->priority];
+	/* res1 is now tracked by the bulk_move pos */
+	KUNIT_EXPECT_PTR_EQ(test, pos->first, res1);
+	KUNIT_EXPECT_PTR_EQ(test, pos->last, res1);
+
+	/* make bo1->ttm swapped so res1 is "unevictable" (ttm_resource_is_swapped) */
+	tt = kunit_kzalloc(test, sizeof(*tt), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, tt);
+	err = ttm_tt_init(tt, bo1, 0, ttm_cached, 0);
+	KUNIT_ASSERT_EQ(test, err, 0);
+	bo1->ttm = tt;
+	err = ttm_tt_populate(ttm_dev, tt, &ctx);
+	KUNIT_ASSERT_EQ(test, err, 0);
+	ttm_tt_swapout(ttm_dev, tt, GFP_KERNEL);
+	KUNIT_ASSERT_TRUE(test, tt->page_flags & TTM_TT_FLAG_SWAPPED);
+
+	/* res1 is still tracked by the pos right before the free */
+	KUNIT_EXPECT_PTR_EQ(test, pos->first, res1);
+
+	/*
+	 * Free res1 while it is swapped (unevictable). ttm_resource_free() calls
+	 * ttm_resource_del_bulk_move(), which is a no-op for an unevictable
+	 * resource -- so res1 is NOT removed from the bulk_move pos before the
+	 * underlying memory is freed.
+	 */
+	res1_saved = res1;
+	ttm_resource_free(bo1, &res1);
+	dma_resv_unlock(bo1->base.resv);
+
+	/*
+	 * A correct implementation must not leave the bulk_move pos pointing at
+	 * the freed resource. On the buggy code these still equal the freed
+	 * res1_saved (a dangling pointer that the next add/move dereferences).
+	 */
+	KUNIT_EXPECT_PTR_NE(test, pos->first, res1_saved);
+	KUNIT_EXPECT_PTR_NE(test, pos->last, res1_saved);
+
+	dma_resv_fini(resv);
+}
+
+/*
+ * After a swapped-free leaves the bulk_move cursor dangling, a later
+ * ttm_resource_alloc() on the same bulk_move dereferences the freed cursor in
+ * ttm_lru_bulk_move_add() (use-after-free, catchable with KASAN) and corrupts
+ * the LRU list.
+ */
+static void ttm_bo_bulk_move_dangling_corrupts(struct kunit *test)
+{
+	struct ttm_test_devices *priv = test->priv;
+	struct ttm_lru_bulk_move lru_bulk_move;
+	struct ttm_operation_ctx ctx = { };
+	struct ttm_buffer_object *bo1, *bo2;
+	struct ttm_resource *res1, *res2;
+	struct ttm_device *ttm_dev;
+	struct ttm_place *place;
+	struct dma_resv *resv1, *resv2;
+	struct ttm_tt *tt;
+	int err;
+
+	ttm_lru_bulk_move_init(&lru_bulk_move);
+	place = ttm_place_kunit_init(test, TTM_PL_SYSTEM, 0);
+
+	ttm_dev = kunit_kzalloc(test, sizeof(*ttm_dev), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, ttm_dev);
+	err = ttm_device_kunit_init(priv, ttm_dev, 0);
+	KUNIT_ASSERT_EQ(test, err, 0);
+	priv->ttm_dev = ttm_dev;
+
+	resv1 = kunit_kzalloc(test, sizeof(*resv1), GFP_KERNEL);
+	resv2 = kunit_kzalloc(test, sizeof(*resv2), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, resv1);
+	KUNIT_ASSERT_NOT_NULL(test, resv2);
+	dma_resv_init(resv1);
+	dma_resv_init(resv2);
+
+	bo1 = ttm_bo_kunit_init(test, priv, BO_SIZE, resv1);
+	bo2 = ttm_bo_kunit_init(test, priv, BO_SIZE, resv2);
+
+	/* bo1: resource on the bulk_move pos, then swap + free -> dangling pos */
+	dma_resv_lock(bo1->base.resv, NULL);
+	ttm_bo_set_bulk_move(bo1, &lru_bulk_move);
+	err = ttm_resource_alloc(bo1, place, &res1, NULL);
+	KUNIT_ASSERT_EQ(test, err, 0);
+	bo1->resource = res1;
+
+	tt = kunit_kzalloc(test, sizeof(*tt), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, tt);
+	err = ttm_tt_init(tt, bo1, 0, ttm_cached, 0);
+	KUNIT_ASSERT_EQ(test, err, 0);
+	bo1->ttm = tt;
+	err = ttm_tt_populate(ttm_dev, tt, &ctx);
+	KUNIT_ASSERT_EQ(test, err, 0);
+	ttm_tt_swapout(ttm_dev, tt, GFP_KERNEL);
+
+	ttm_resource_free(bo1, &res1);
+	dma_resv_unlock(bo1->base.resv);
+
+	/*
+	 * bo2 allocates on the SAME bulk_move. ttm_lru_bulk_move_add() reads the
+	 * dangling pos->first (freed res1) and list_move()s relative to the freed
+	 * pos->last -> use-after-free + list corruption.
+	 */
+	dma_resv_lock(bo2->base.resv, NULL);
+	ttm_bo_set_bulk_move(bo2, &lru_bulk_move);
+	err = ttm_resource_alloc(bo2, place, &res2, NULL);
+	KUNIT_ASSERT_EQ(test, err, 0);
+	bo2->resource = res2;
+	ttm_resource_free(bo2, &res2);
+	dma_resv_unlock(bo2->base.resv);
+
+	dma_resv_fini(resv1);
+	dma_resv_fini(resv2);
+}
+
 static struct kunit_case ttm_bo_test_cases[] = {
+	KUNIT_CASE(ttm_bo_bulk_move_swapped_free_dangles),
+	KUNIT_CASE(ttm_bo_bulk_move_dangling_corrupts),
 	KUNIT_CASE_PARAM(ttm_bo_reserve_optimistic_no_ticket,
 			 ttm_bo_reserve_gen_params),
 	KUNIT_CASE(ttm_bo_reserve_locked_no_sleep),
