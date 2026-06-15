@@ -74,7 +74,6 @@ properties:
 
 required:
   - compatible
-  - reg
   - "#clock-cells"
   - clocks
   - clock-names
@@ -88,20 +87,33 @@ allOf:
     then:
       required:
         - xlnx,clk-mul-div
+    else:
+      required:
+        - reg
 
 additionalProperties: false
 
 examples:
   - |
-    clock-controller@b0000000  {
+    clock-controller@b0000000 {
         compatible = "xlnx,clocking-wizard";
         reg = <0xb0000000 0x10000>;
         #clock-cells = <1>;
-        xlnx,static-config;
-        xlnx,speed-grade = <1>;
-        xlnx,nr-outputs = <6>;
-        xlnx,clk-mul-div = <12 1>, <10 2>, <8 1>, <6 1>, <4 2>, <2 1>;
+        clocks = <&clkc 15>, <&clkc 18>;
         clock-names = "clk_in1", "s_axi_aclk";
-        clocks = <&clkc 15>, <&clkc 15>;
+        xlnx,nr-outputs = <6>;
+        xlnx,speed-grade = <1>;
+    };
+
+  - |
+    clock-controller {
+        compatible = "xlnx,clocking-wizard";
+        #clock-cells = <1>;
+        clocks = <&clkc 15>, <&clkc 18>;
+        clock-names = "clk_in1", "s_axi_aclk";
+        xlnx,nr-outputs = <6>;
+        xlnx,speed-grade = <1>;
+        xlnx,static-config;
+        xlnx,clk-mul-div = <12 1>, <10 2>, <8 1>, <6 1>, <4 2>, <2 1>;
     };
 ...
