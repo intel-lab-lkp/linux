@@ -240,7 +240,7 @@ EXPORT_SYMBOL_GPL(watchdog_set_restart_priority);
 
 static int ___watchdog_register_device(struct watchdog_device *wdd)
 {
-	int ret, id = -1;
+	int ret, min_id, id = -1;
 
 	if (wdd == NULL || wdd->info == NULL || wdd->ops == NULL)
 		return -EINVAL;
@@ -265,8 +265,15 @@ static int ___watchdog_register_device(struct watchdog_device *wdd)
 					     GFP_KERNEL);
 	}
 
-	if (id < 0)
-		id = ida_alloc_max(&watchdog_ida, MAX_DOGS - 1, GFP_KERNEL);
+	if (id < 0) {
+		ret = of_alias_get_highest_id("watchdog");
+		if (ret >= 0)
+			min_id = ret + 1;
+		else
+			min_id = 0;
+
+		id = ida_alloc_range(&watchdog_ida, min_id, MAX_DOGS - 1, GFP_KERNEL);
+	}
 
 	if (id < 0)
 		return id;
