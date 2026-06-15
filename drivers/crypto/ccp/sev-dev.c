@@ -106,6 +106,9 @@ struct snp_hv_fixed_pages_entry {
 
 static LIST_HEAD(snp_hv_fixed_pages);
 
+/* Set while SNP has CPU hotplug disabled. */
+static bool snp_cpu_hotplug_disabled;
+
 /* Trusted Memory Region (TMR):
  *   The TMR is a 1MB area that must be 1MB aligned.  Use the page allocator
  *   to allocate the memory, which will return aligned memory for the specified
@@ -1478,6 +1481,17 @@ static int __sev_snp_init_locked(int *error, unsigned int max_snp_asid)
 
 	snp_hv_fixed_pages_state_update(sev, HV_FIXED);
 
+	/*
+	 * Disable CPU hotplug while SNP is active.  Guard against stacking
+	 * the disable count: the legacy SNP_SHUTDOWN_EX path clears
+	 * snp_initialized without re-enabling hotplug, so this can run
+	 * again while hotplug is already disabled.
+	 */
+	if (!snp_cpu_hotplug_disabled) {
+		cpu_hotplug_disable();
+		snp_cpu_hotplug_disabled = true;
+	}
+
 	snp_setup_rmpopt();
 
 	sev->snp_initialized = true;
@@ -2068,8 +2082,21 @@ static int __sev_snp_shutdown_locked(int *error, bool panic)
 	}
 
 	if (data.x86_snp_shutdown) {
-		if (!panic)
+		if (!panic) {
 			snp_shutdown();
+			/*
+			 * snp_shutdown() fully tears SNP down (clear_rmp()) and
+			 * has already cleared the per-core RMPOPT_BASE MSRs via
+			 * rmpopt_cleanup() with hotplug still disabled.  Re-enable
+			 * CPU hotplug now.  On the legacy path SNP stays
+			 * enabled in hardware, so hotplug is correctly left
+			 * disabled.
+			 */
+			if (snp_cpu_hotplug_disabled) {
+				cpu_hotplug_enable();
+				snp_cpu_hotplug_disabled = false;
+			}
+		}
 		snp_hv_fixed_pages_state_update(sev, ALLOCATED);
 	} else {
 		/*
