@@ -180,6 +180,8 @@ int ovl_getattr(struct mnt_idmap *idmap, const struct path *path,
 	int fsid = 0;
 	int err;
 	bool metacopy_blocks = false;
+	vfsuid_t vfsuid;
+	vfsgid_t vfsgid;
 
 	metacopy_blocks = ovl_is_metacopy_dentry(dentry);
 
@@ -291,6 +293,12 @@ int ovl_getattr(struct mnt_idmap *idmap, const struct path *path,
 	 */
 	if (!is_dir && ovl_test_flag(OVL_INDEX, d_inode(dentry)))
 		stat->nlink = dentry->d_inode->i_nlink;
+
+	/* Map ownership of the real inode through the overlay mount idmap. */
+	vfsuid = make_vfsuid(idmap, i_user_ns(inode), stat->uid);
+	vfsgid = make_vfsgid(idmap, i_user_ns(inode), stat->gid);
+	stat->uid = vfsuid_into_kuid(vfsuid);
+	stat->gid = vfsgid_into_kgid(vfsgid);
 
 	return err;
 }
