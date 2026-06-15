@@ -100,10 +100,13 @@ enum fetch_op {
 	// Stage 2 (dereference) op
 	FETCH_OP_DEREF,		/* Dereference: .offset */
 	FETCH_OP_UDEREF,	/* User-space Dereference: .offset */
+	FETCH_OP_DEREF_CPU,	/* Per-CPU Dereference for this CPU */
+	FETCH_OP_CPU_PTR,	/* Per-CPU pointer for this CPU */
 	// Stage 3 (store) ops
 	FETCH_OP_ST_RAW,	/* Raw: .size */
 	FETCH_OP_ST_MEM,	/* Mem: .offset, .size */
 	FETCH_OP_ST_UMEM,	/* Mem: .offset, .size */
+	FETCH_OP_ST_CPUMEM,	/* Per-CPU Mem: .size */
 	FETCH_OP_ST_STRING,	/* String: .offset, .size */
 	FETCH_OP_ST_USTRING,	/* User String: .offset, .size */
 	FETCH_OP_ST_SYMSTR,	/* Kernel Symbol String: .offset, .size */
