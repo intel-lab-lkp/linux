@@ -69,32 +69,32 @@ static const char *const lp8864_led_status_msg[] = {
 };
 
 /**
- * struct lp8864_led
+ * struct lp8864
  * @client: Pointer to the I2C client
  * @led_dev: led class device pointer
  * @regmap: Devices register map
  * @led_status_mask: Helps to report LED fault only once
  */
-struct lp8864_led {
+struct lp8864 {
 	struct i2c_client *client;
 	struct led_classdev led_dev;
 	struct regmap *regmap;
 	u16 led_status_mask;
 };
 
-static int lp8864_fault_check(struct lp8864_led *led)
+static int lp8864_fault_check(struct lp8864 *priv)
 {
 	int ret, i;
 	unsigned int val;
 
-	ret = regmap_read(led->regmap, LP8864_SUPPLY_STATUS, &val);
+	ret = regmap_read(priv->regmap, LP8864_SUPPLY_STATUS, &val);
 	if (ret)
 		goto err;
 
 	/* Odd bits are status bits, even bits are clear bits */
 	for (i = 0; i < ARRAY_SIZE(lp8864_supply_status_msg); i++)
 		if (val & BIT(i * 2 + 1))
-			dev_warn(&led->client->dev, "%s\n", lp8864_supply_status_msg[i]);
+			dev_warn(&priv->client->dev, "%s\n", lp8864_supply_status_msg[i]);
 
 	/*
 	 * Clear bits have an index preceding the corresponding Status bits;
@@ -102,25 +102,25 @@ static int lp8864_fault_check(struct lp8864_led *led)
 	 * Status bit.
 	 */
 	if (val)
-		ret = regmap_write(led->regmap, LP8864_SUPPLY_STATUS, val >> 1 | val);
+		ret = regmap_write(priv->regmap, LP8864_SUPPLY_STATUS, val >> 1 | val);
 	if (ret)
 		goto err;
 
-	ret = regmap_read(led->regmap, LP8864_BOOST_STATUS, &val);
+	ret = regmap_read(priv->regmap, LP8864_BOOST_STATUS, &val);
 	if (ret)
 		goto err;
 
 	/* Odd bits are status bits, even bits are clear bits */
 	for (i = 0; i < ARRAY_SIZE(lp8864_boost_status_msg); i++)
 		if (val & BIT(i * 2 + 1))
-			dev_warn(&led->client->dev, "%s\n", lp8864_boost_status_msg[i]);
+			dev_warn(&priv->client->dev, "%s\n", lp8864_boost_status_msg[i]);
 
 	if (val)
-		ret = regmap_write(led->regmap, LP8864_BOOST_STATUS, val >> 1 | val);
+		ret = regmap_write(priv->regmap, LP8864_BOOST_STATUS, val >> 1 | val);
 	if (ret)
 		goto err;
 
-	ret = regmap_read(led->regmap, LP8864_LED_STATUS, &val);
+	ret = regmap_read(priv->regmap, LP8864_LED_STATUS, &val);
 	if (ret)
 		goto err;
 
@@ -128,31 +128,31 @@ static int lp8864_fault_check(struct lp8864_led *led)
 	 * Clear already reported faults that maintain their value until device
 	 * power-down
 	 */
-	val &= ~led->led_status_mask;
+	val &= ~priv->led_status_mask;
 
 	for (i = 0; i < ARRAY_SIZE(lp8864_led_status_msg); i++)
 		if (lp8864_led_status_msg[i] && val & BIT(i))
-			dev_warn(&led->client->dev, "%s\n", lp8864_led_status_msg[i]);
+			dev_warn(&priv->client->dev, "%s\n", lp8864_led_status_msg[i]);
 
 	/*
 	 * Mark those which maintain their value until device power-down as
 	 * "already reported"
 	 */
-	led->led_status_mask |= val & ~LP8864_LED_STATUS_WR_MASK;
+	priv->led_status_mask |= val & ~LP8864_LED_STATUS_WR_MASK;
 
 	/*
 	 * Only bits 14, 12, 10 have to be cleared here, but others are RO,
 	 * we don't care what we write to them.
 	 */
 	if (val & LP8864_LED_STATUS_WR_MASK)
-		ret = regmap_write(led->regmap, LP8864_LED_STATUS, val >> 1 | val);
+		ret = regmap_write(priv->regmap, LP8864_LED_STATUS, val >> 1 | val);
 	if (ret)
 		goto err;
 
 	return 0;
 
 err:
-	dev_err(&led->client->dev, "Failed to read/clear faults (%pe)\n", ERR_PTR(ret));
+	dev_err(&priv->client->dev, "Failed to read/clear faults (%pe)\n", ERR_PTR(ret));
 
 	return ret;
 }
@@ -160,31 +160,31 @@ err:
 static int lp8864_brightness_set(struct led_classdev *led_cdev,
 				 enum led_brightness brt_val)
 {
-	struct lp8864_led *led = container_of(led_cdev, struct lp8864_led, led_dev);
+	struct lp8864 *priv = container_of(led_cdev, struct lp8864, led_dev);
 	/* Scale 0..LED_FULL into 16-bit HW brightness */
 	unsigned int val = brt_val * 0xffff / LED_FULL;
 	int ret;
 
-	ret = lp8864_fault_check(led);
+	ret = lp8864_fault_check(priv);
 	if (ret)
 		return ret;
 
-	ret = regmap_write(led->regmap, LP8864_BRT_CONTROL, val);
+	ret = regmap_write(priv->regmap, LP8864_BRT_CONTROL, val);
 	if (ret)
-		dev_err(&led->client->dev, "Failed to write brightness value\n");
+		dev_err(&priv->client->dev, "Failed to write brightness value\n");
 
 	return ret;
 }
 
 static enum led_brightness lp8864_brightness_get(struct led_classdev *led_cdev)
 {
-	struct lp8864_led *led = container_of(led_cdev, struct lp8864_led, led_dev);
+	struct lp8864 *priv = container_of(led_cdev, struct lp8864, led_dev);
 	unsigned int val;
 	int ret;
 
-	ret = regmap_read(led->regmap, LP8864_BRT_CONTROL, &val);
+	ret = regmap_read(priv->regmap, LP8864_BRT_CONTROL, &val);
 	if (ret) {
-		dev_err(&led->client->dev, "Failed to read brightness value\n");
+		dev_err(&priv->client->dev, "Failed to read brightness value\n");
 		return ret;
 	}
 
@@ -208,14 +208,14 @@ static void lp8864_disable_gpio(void *data)
 static int lp8864_probe(struct i2c_client *client)
 {
 	int ret;
-	struct lp8864_led *led;
+	struct lp8864 *priv;
 	struct device_node *np = dev_of_node(&client->dev);
 	struct device_node *child_node;
 	struct led_init_data init_data = {};
 	struct gpio_desc *enable_gpio;
 
-	led = devm_kzalloc(&client->dev, sizeof(*led), GFP_KERNEL);
-	if (!led)
+	priv = devm_kzalloc(&client->dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
 		return -ENOMEM;
 
 	child_node = of_get_next_available_child(np, NULL);
@@ -237,24 +237,24 @@ static int lp8864_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
-	led->client = client;
-	led->led_dev.brightness_set_blocking = lp8864_brightness_set;
-	led->led_dev.brightness_get = lp8864_brightness_get;
+	priv->client = client;
+	priv->led_dev.brightness_set_blocking = lp8864_brightness_set;
+	priv->led_dev.brightness_get = lp8864_brightness_get;
 
-	led->regmap = devm_regmap_init_i2c(client, &lp8864_regmap_config);
-	if (IS_ERR(led->regmap))
-		return dev_err_probe(&client->dev, PTR_ERR(led->regmap),
+	priv->regmap = devm_regmap_init_i2c(client, &lp8864_regmap_config);
+	if (IS_ERR(priv->regmap))
+		return dev_err_probe(&client->dev, PTR_ERR(priv->regmap),
 				     "Failed to allocate regmap\n");
 
 	/* Control brightness by DISPLAY_BRT register */
-	ret = regmap_update_bits(led->regmap, LP8864_USER_CONFIG1, LP8864_BRT_MODE_MASK,
+	ret = regmap_update_bits(priv->regmap, LP8864_USER_CONFIG1, LP8864_BRT_MODE_MASK,
 								   LP8864_BRT_MODE_REG);
 	if (ret) {
-		dev_err(&led->client->dev, "Failed to set brightness control mode\n");
+		dev_err(&priv->client->dev, "Failed to set brightness control mode\n");
 		return ret;
 	}
 
-	ret = lp8864_fault_check(led);
+	ret = lp8864_fault_check(priv);
 	if (ret)
 		return ret;
 
@@ -262,7 +262,7 @@ static int lp8864_probe(struct i2c_client *client)
 	init_data.devicename = "lp8864";
 	init_data.default_label = ":display_cluster";
 
-	ret = devm_led_classdev_register_ext(&client->dev, &led->led_dev, &init_data);
+	ret = devm_led_classdev_register_ext(&client->dev, &priv->led_dev, &init_data);
 	if (ret)
 		dev_err(&client->dev, "Failed to register LED device (%pe)\n", ERR_PTR(ret));
 
