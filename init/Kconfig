@@ -2287,6 +2287,12 @@ config ARCH_HAS_PREPARE_SYNC_CORE_CMD
 config ARCH_HAS_SYNC_CORE_BEFORE_USERMODE
 	bool
 
+config ARCH_HAS_DPS_ROOT_PARTITION_TYPE_UUID
+	bool
+
+config DPS_ROOT_AUTO_DISCOVERY
+	def_bool BLOCK && EFI && ARCH_HAS_DPS_ROOT_PARTITION_TYPE_UUID
+
 # It may be useful for an architecture to override the definitions of the
 # SYSCALL_DEFINE() and __SYSCALL_DEFINEx() macros in <linux/syscalls.h>
 # and the COMPAT_ variants in <linux/compat.h>, in particular to use a

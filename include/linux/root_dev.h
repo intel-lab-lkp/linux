@@ -5,6 +5,12 @@
 #include <linux/major.h>
 #include <linux/types.h>
 #include <linux/kdev_t.h>
+#include <linux/uuid.h>
+
+#ifdef CONFIG_DPS_ROOT_AUTO_DISCOVERY
+#include <asm/dps_root.h>
+static_assert(sizeof(DPS_ROOT_PARTITION_TYPE_UUID) == UUID_STRING_LEN + 1);
+#endif
 
 enum {
 	Root_NFS = MKDEV(UNNAMED_MAJOR, 255),
