@@ -125,6 +125,7 @@ struct knav_dma_chan {
 			ch->channel : ch->flow)
 
 static struct knav_dma_pool_device *kdev;
+static struct dentry *knav_dma_debugfs;
 
 static bool device_ready;
 bool knav_dma_device_ready(void)
@@ -740,8 +741,9 @@ static int knav_dma_probe(struct platform_device *pdev)
 		goto err_put_sync;
 	}
 
-	debugfs_create_file("knav_dma", S_IFREG | S_IRUGO, NULL, NULL,
-			    &knav_dma_debug_fops);
+	knav_dma_debugfs = debugfs_create_file("knav_dma", 0444,
+					       NULL, NULL,
+					       &knav_dma_debug_fops);
 
 	device_ready = true;
 	return ret;
@@ -758,6 +760,10 @@ static void knav_dma_remove(struct platform_device *pdev)
 {
 	struct knav_dma_device *dma;
 
+	device_ready = false;
+	debugfs_remove(knav_dma_debugfs);
+	knav_dma_debugfs = NULL;
+
 	list_for_each_entry(dma, &kdev->list, list) {
 		if (atomic_dec_return(&dma->ref_count) == 0)
 			knav_dma_hw_destroy(dma);
@@ -765,6 +771,7 @@ static void knav_dma_remove(struct platform_device *pdev)
 
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+	kdev = NULL;
 }
 
 static struct of_device_id of_match[] = {
