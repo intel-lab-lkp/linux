@@ -122,6 +122,8 @@ pte_t ptep_xchg_direct(struct mm_struct *mm, unsigned long addr,
 
 	preempt_disable();
 	old = ptep_flush_direct(mm, addr, ptep, 1);
+	if (pte_present(new))
+		new = clear_pte_bit(new, __pgprot(_PAGE_UNUSED));
 	set_pte(ptep, new);
 	preempt_enable();
 	return old;
@@ -160,6 +162,8 @@ pte_t ptep_xchg_lazy(struct mm_struct *mm, unsigned long addr,
 
 	preempt_disable();
 	old = ptep_flush_lazy(mm, addr, ptep, 1);
+	if (pte_present(new))
+		new = clear_pte_bit(new, __pgprot(_PAGE_UNUSED));
 	set_pte(ptep, new);
 	preempt_enable();
 	return old;
@@ -175,6 +179,8 @@ pte_t ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr,
 void ptep_modify_prot_commit(struct vm_area_struct *vma, unsigned long addr,
 			     pte_t *ptep, pte_t old_pte, pte_t pte)
 {
+	if (pte_present(pte))
+		pte = clear_pte_bit(pte, __pgprot(_PAGE_UNUSED));
 	set_pte(ptep, pte);
 }
 
