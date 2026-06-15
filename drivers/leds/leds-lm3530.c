@@ -301,10 +301,11 @@ static int lm3530_init_registers(struct lm3530_data *drvdata)
 	return ret;
 }
 
-static void lm3530_brightness_set(struct led_classdev *led_cdev,
-				     enum led_brightness brt_val)
+static int
+lm3530_brightness_set_blocking(struct led_classdev *led_cdev,
+			       enum led_brightness brt_val)
 {
-	int err;
+	int err = 0;
 	struct lm3530_data *drvdata =
 	    container_of(led_cdev, struct lm3530_data, led_dev);
 	struct lm3530_platform_data *pdata = drvdata->pdata;
@@ -344,6 +345,8 @@ static void lm3530_brightness_set(struct led_classdev *led_cdev,
 	default:
 		break;
 	}
+
+	return err;
 }
 
 static ssize_t mode_show(struct device *dev,
@@ -438,7 +441,8 @@ static int lm3530_probe(struct i2c_client *client)
 	drvdata->brightness = LED_OFF;
 	drvdata->enable = false;
 	drvdata->led_dev.name = LM3530_LED_DEV;
-	drvdata->led_dev.brightness_set = lm3530_brightness_set;
+	drvdata->led_dev.brightness_set_blocking =
+		lm3530_brightness_set_blocking;
 	drvdata->led_dev.max_brightness = MAX_BRIGHTNESS;
 	drvdata->led_dev.groups = lm3530_groups;
 
