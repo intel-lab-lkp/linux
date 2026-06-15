@@ -187,4 +187,12 @@ static inline bool kvm_check_and_clear_guest_paused(void)
 	return false;
 }
 
+static inline bool kvm_pv_tlb_flush_supported(void)
+{
+	unsigned int feat = kvm_arch_para_features();
+
+	return (feat & (1U << KVM_FEATURE_PV_TLB_FLUSH)) &&
+	       (feat & (1U << KVM_FEATURE_STEAL_TIME));
+}
+
 #endif /* _ASM_LOONGARCH_KVM_PARA_H */
