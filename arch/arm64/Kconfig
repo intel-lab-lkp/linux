@@ -453,6 +453,18 @@ config AMPERE_ERRATUM_AC04_CPU_23
 
 	  If unsure, say Y.
 
+config APPLE_ERRATUM_WFI_STATE
+	bool "Apple Silicon: WFI loses state"
+	default y
+	help
+	  This option adds an alternative code sequence to work around some
+	  Apple Silicon CPUs losing register state during wfi and wfit
+	  instructions.
+
+	  As a workaround, the wfi and wfit instructions are replaced with nop
+	  operations via the alternative framework if an affected CPU is
+	  detected.
+
 config ARM64_WORKAROUND_CLEAN_CACHE
 	bool
 
