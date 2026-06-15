@@ -176,6 +176,19 @@ allOf:
         compatible:
           contains:
             enum:
+              - microchip,cap1126
+    then:
+      patternProperties:
+        "^led@":
+          properties:
+            reg:
+              maximum: 1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
               - microchip,cap1106
               - microchip,cap1126
               - microchip,cap1188
