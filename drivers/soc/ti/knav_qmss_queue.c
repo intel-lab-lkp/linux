@@ -26,6 +26,7 @@
 #include "knav_qmss.h"
 
 static struct knav_device *kdev;
+static struct dentry *knav_queue_debugfs;
 static DEFINE_MUTEX(knav_dev_lock);
 #define knav_dev_lock_held() \
 	lockdep_is_held(&knav_dev_lock)
@@ -1857,8 +1858,9 @@ static int knav_queue_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	debugfs_create_file("qmss", S_IFREG | S_IRUGO, NULL, NULL,
-			    &knav_queue_debug_fops);
+	knav_queue_debugfs = debugfs_create_file("qmss", 0444,
+						 NULL, NULL,
+						 &knav_queue_debug_fops);
 	device_ready = true;
 	return 0;
 
@@ -1873,9 +1875,14 @@ err:
 
 static void knav_queue_remove(struct platform_device *pdev)
 {
+	device_ready = false;
+	debugfs_remove(knav_queue_debugfs);
+	knav_queue_debugfs = NULL;
+
 	/* TODO: Free resources */
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+	kdev = NULL;
 }
 
 static struct platform_driver keystone_qmss_driver = {
