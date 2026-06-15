@@ -382,6 +382,8 @@ static struct block_device *add_partition(struct gendisk *disk, int partno,
 
 	if (flags & ADDPART_FLAG_READONLY)
 		bdev_set_flag(bdev, BD_READ_ONLY);
+	if (flags & ADDPART_FLAG_NO_AUTO)
+		bdev_set_flag(bdev, BD_NO_AUTO_DISCOVERY);
 
 	/* everything is up and running, commence */
 	err = xa_insert(&disk->part_tbl, partno, bdev, GFP_KERNEL);

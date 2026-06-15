@@ -266,6 +266,7 @@ static int __init match_dev_by_type_uuid(struct device *dev, const void *data)
 	const struct uuidcmp *cmp = data;
 
 	return bdev->bd_disk == cmp->disk && bdev->bd_meta_info &&
+	       !bdev_test_flag(bdev, BD_NO_AUTO_DISCOVERY) &&
 	       !strcasecmp(cmp->uuid, bdev->bd_meta_info->type_uuid);
 }
 

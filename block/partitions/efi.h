@@ -11,6 +11,7 @@
 #ifndef FS_PART_EFI_H_INCLUDED
 #define FS_PART_EFI_H_INCLUDED
 
+#include <linux/bits.h>
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -29,6 +30,8 @@
 #define GPT_HEADER_SIGNATURE 0x5452415020494645ULL
 #define GPT_HEADER_REVISION_V1 0x00010000
 #define GPT_PRIMARY_PARTITION_TABLE_LBA 1
+
+#define GPT_ATTRIBUTE_NO_AUTO BIT_U64(63)
 
 #define PARTITION_SYSTEM_GUID \
     EFI_GUID( 0xC12A7328, 0xF81F, 0x11d2, \

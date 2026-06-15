@@ -604,6 +604,7 @@ void blk_free_ext_minor(unsigned int minor);
 #define ADDPART_FLAG_RAID	1
 #define ADDPART_FLAG_WHOLEDISK	2
 #define ADDPART_FLAG_READONLY	4
+#define ADDPART_FLAG_NO_AUTO	8
 int bdev_add_partition(struct gendisk *disk, int partno, sector_t start,
 		sector_t length);
 int bdev_del_partition(struct gendisk *disk, int partno);

@@ -739,6 +739,8 @@ int efi_partition(struct parsed_partitions *state)
 		/* If this is a RAID volume, tell md */
 		if (!efi_guidcmp(ptes[i].partition_type_guid, PARTITION_LINUX_RAID_GUID))
 			state->parts[i + 1].flags = ADDPART_FLAG_RAID;
+		if (le64_to_cpu(ptes[i].attributes) & GPT_ATTRIBUTE_NO_AUTO)
+			state->parts[i + 1].flags |= ADDPART_FLAG_NO_AUTO;
 
 		info = &state->parts[i + 1].info;
 		efi_guid_to_str(&ptes[i].unique_partition_guid, info->uuid);
