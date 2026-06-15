@@ -2246,6 +2246,7 @@ int bnxt_re_create_srq(struct ib_srq *ib_srq,
 
 	uctx = rdma_udata_to_drv_context(udata, struct bnxt_re_ucontext, ib_uctx);
 	srq->rdev = rdev;
+	srq->uctx = uctx ? &uctx->ib_uctx : NULL;
 	srq->qplib_srq.pd = &pd->qplib_pd;
 	srq->qplib_srq.dpi = &rdev->dpi_privileged;
 	/* Allocate 1 more than what's provided so posting max doesn't
