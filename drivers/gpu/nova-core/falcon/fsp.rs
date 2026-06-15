@@ -35,6 +35,9 @@ use crate::{
 /// FSP message timeout in milliseconds.
 const FSP_MSG_TIMEOUT_MS: i64 = 2000;
 
+/// Size of the FSP EMEM channel 0 that we can use.
+const FSP_EMEM_CHANNEL_0_SIZE: usize = 1024;
+
 /// Type specifying the `Fsp` falcon engine. Cannot be instantiated.
 pub(crate) struct Fsp(());
 
@@ -149,23 +152,32 @@ impl Falcon<Fsp> {
     /// Returns `ETIMEDOUT` if no message was available until timeout, or a regular error code if a
     /// memory allocation error occurred.
     pub(crate) fn recv_msg(&mut self, bar: Bar0<'_>) -> Result<KVec<u8>> {
-        let msg_size = read_poll_timeout(
-            || Ok(self.poll_msgq(bar)),
-            |&size| size > 0,
-            Delta::from_millis(10),
-            Delta::from_millis(FSP_MSG_TIMEOUT_MS),
-        )
-        .map(num::u32_as_usize)?;
+        let result = (|| {
+            let msg_size = read_poll_timeout(
+                || Ok(self.poll_msgq(bar)),
+                |&size| size > 0,
+                Delta::from_millis(10),
+                Delta::from_millis(FSP_MSG_TIMEOUT_MS),
+            )
+            .map(num::u32_as_usize)?;
 
-        let mut buffer = KVec::<u8>::new();
-        buffer.resize(msg_size, 0, GFP_KERNEL)?;
+            // Don't blindly allocate more than the maximum we expect from FSP.
+            if msg_size > FSP_EMEM_CHANNEL_0_SIZE {
+                return Err(EIO);
+            }
 
-        self.read_emem(bar, &mut buffer)?;
+            let mut buffer = KVec::<u8>::new();
+            buffer.resize(msg_size, 0, GFP_KERNEL)?;
 
-        // Reset message queue pointers after reading.
+            self.read_emem(bar, &mut buffer)?;
+
+            Ok(buffer)
+        })();
+
+        // Reset the message queue pointers regardless of outcome.
         bar.write(Array::at(0), regs::NV_PFSP_MSGQ_TAIL::zeroed().with_val(0));
         bar.write(Array::at(0), regs::NV_PFSP_MSGQ_HEAD::zeroed().with_val(0));
 
-        Ok(buffer)
+        result
     }
 }
