@@ -42,6 +42,7 @@ static struct clk *get_cpu_clk(int cpu)
 	if (WARN(!np, "missing cpu node\n"))
 		return NULL;
 	cpu_clk = of_clk_get(np, 0);
+	of_node_put(np);
 	if (WARN_ON(IS_ERR(cpu_clk)))
 		return NULL;
 	return cpu_clk;
