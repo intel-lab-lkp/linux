@@ -1077,7 +1077,7 @@ int sdw_bpt_send_async(struct sdw_bus *bus, struct sdw_slave *slave, struct sdw_
 int sdw_bpt_wait(struct sdw_bus *bus, struct sdw_slave *slave, struct sdw_bpt_msg *msg);
 int sdw_bpt_send_sync(struct sdw_bus *bus, struct sdw_slave *slave, struct sdw_bpt_msg *msg);
 
-#if IS_ENABLED(CONFIG_SOUNDWIRE)
+#if IS_REACHABLE(CONFIG_SOUNDWIRE)
 
 int sdw_stream_add_slave(struct sdw_slave *slave,
 			 struct sdw_stream_config *stream_config,
