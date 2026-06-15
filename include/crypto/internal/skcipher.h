@@ -21,6 +21,16 @@
  */
 #define CRYPTO_ALG_SKCIPHER_REQSIZE_LARGE CRYPTO_ALG_OPTIONAL_KEY
 
+/*
+ * Set by an skcipher that handles skcipher_request::data_unit_size > 0
+ * natively in one pass; otherwise the API splits the request.  Lives in
+ * the type-specific 0xff000000 cra_flags range.  A native driver must
+ * derive per-DU IVs as a 128-bit LE counter and leave @iv at the
+ * caller-supplied starting value on return, success or error, matching
+ * the auto-splitter so the two paths are observably identical.
+ */
+#define CRYPTO_ALG_SKCIPHER_NATIVE_MULTI_DU	0x01000000
+
 struct aead_request;
 struct rtattr;
 

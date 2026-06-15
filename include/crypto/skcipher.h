@@ -31,6 +31,11 @@ struct scatterlist;
 /**
  *	struct skcipher_request - Symmetric key cipher request
  *	@cryptlen: Number of bytes to encrypt or decrypt
+ *	@data_unit_size: Size in bytes of each data unit, or 0 for a
+ *		single-data-unit request (the default).  When non-zero,
+ *		must be a power of two, @cryptlen must be a positive
+ *		multiple of it, and per-DU IVs are derived from @iv as a
+ *		128-bit little-endian counter.
  *	@iv: Initialisation Vector
  *	@src: Source SG list
  *	@dst: Destination SG list
@@ -39,6 +44,7 @@ struct scatterlist;
  */
 struct skcipher_request {
 	unsigned int cryptlen;
+	unsigned int data_unit_size;
 
 	u8 *iv;
 
@@ -225,6 +231,7 @@ struct lskcipher_alg {
 	struct skcipher_request *name = \
 		(((struct skcipher_request *)__##name##_desc)->base.tfm = \
 			crypto_sync_skcipher_tfm((_tfm)), \
+		 ((struct skcipher_request *)__##name##_desc)->data_unit_size = 0, \
 		 (void *)__##name##_desc)
 
 /**
@@ -819,6 +826,8 @@ static inline void skcipher_request_set_tfm(struct skcipher_request *req,
 					    struct crypto_skcipher *tfm)
 {
 	req->base.tfm = crypto_skcipher_tfm(tfm);
+	/* Reused requests default to single-data-unit. */
+	req->data_unit_size = 0;
 }
 
 static inline void skcipher_request_set_sync_tfm(struct skcipher_request *req,
@@ -935,6 +944,25 @@ static inline void skcipher_request_set_crypt(
 	req->dst = dst;
 	req->cryptlen = cryptlen;
 	req->iv = iv;
+}
+
+/**
+ * skcipher_request_set_data_unit_size() - submit as multiple data units
+ * @req: request handle
+ * @data_unit_size: data-unit size in bytes (power of two), or 0 to disable
+ *
+ * Process @req as @cryptlen / @data_unit_size data units sharing one starting
+ * @iv, with per-DU IVs derived as a 128-bit little-endian counter.  @cryptlen
+ * must be a positive multiple of @data_unit_size, else the encrypt/decrypt
+ * call returns -EINVAL; a target that cannot do multi-DU (ivsize != 16, an
+ * lskcipher, or async without native support) returns -EOPNOTSUPP.  Unlike
+ * the single-DU path, @iv is preserved across the call regardless of outcome.
+ */
+static inline void
+skcipher_request_set_data_unit_size(struct skcipher_request *req,
+				    unsigned int data_unit_size)
+{
+	req->data_unit_size = data_unit_size;
 }
 
 #endif	/* _CRYPTO_SKCIPHER_H */

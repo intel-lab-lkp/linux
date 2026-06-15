@@ -17,6 +17,7 @@
 #include <linux/cryptouser.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
+#include <linux/log2.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/seq_file.h>
@@ -432,15 +433,139 @@ out:
 }
 EXPORT_SYMBOL_GPL(crypto_skcipher_setkey);
 
+/* IV size for the 128-bit LE-counter multi-data-unit convention. */
+#define SKCIPHER_MDU_IVSIZE	16
+
+static inline void skcipher_iv_inc_le128(u8 *iv)
+{
+	__le64 lo_le, hi_le;
+	u64 lo;
+
+	memcpy(&lo_le, iv, 8);
+	memcpy(&hi_le, iv + 8, 8);
+	lo = le64_to_cpu(lo_le) + 1;
+	lo_le = cpu_to_le64(lo);
+	memcpy(iv, &lo_le, 8);
+	if (unlikely(lo == 0)) {
+		hi_le = cpu_to_le64(le64_to_cpu(hi_le) + 1);
+		memcpy(iv + 8, &hi_le, 8);
+	}
+}
+
+/*
+ * Dispatch a multi-data-unit request as one single-DU sub-request per
+ * unit.  Each unit's IV is the caller's IV plus the unit index, taken
+ * as a 128-bit little-endian counter.  A pair of scatter_walks advances
+ * through src/dst in a single linear pass (O(entries + units)); building
+ * each sub-request's view with scatterwalk_ffwd() would instead rescan
+ * from the head every unit, i.e. O(units^2).
+ */
+static int skcipher_split_data_units(struct skcipher_request *req,
+				     int (*body)(struct skcipher_request *))
+{
+	const unsigned int du = req->data_unit_size;
+	const unsigned int total = req->cryptlen;
+	struct scatterlist *orig_src = req->src;
+	struct scatterlist *orig_dst = req->dst;
+	bool inplace = orig_src == orig_dst;
+	struct scatter_walk src_walk, dst_walk;
+	struct scatterlist src_sg[2], dst_sg[2];
+	u8 iv_orig[SKCIPHER_MDU_IVSIZE];
+	u8 iv_work[SKCIPHER_MDU_IVSIZE];
+	unsigned int off;
+	int err = 0;
+
+	memcpy(iv_orig, req->iv, sizeof(iv_orig));
+	memcpy(iv_work, iv_orig, sizeof(iv_orig));
+
+	sg_init_table(src_sg, 2);
+	scatterwalk_start(&src_walk, orig_src);
+	if (!inplace) {
+		sg_init_table(dst_sg, 2);
+		scatterwalk_start(&dst_walk, orig_dst);
+	}
+
+	/* Stop the per-DU body from re-entering the splitter. */
+	req->data_unit_size = 0;
+	req->src = src_sg;
+	req->dst = inplace ? src_sg : dst_sg;
+
+	for (off = 0; off < total; off += du) {
+		req->cryptlen = du;
+		scatterwalk_get_sglist(&src_walk, src_sg);
+		scatterwalk_skip(&src_walk, du);
+		if (!inplace) {
+			scatterwalk_get_sglist(&dst_walk, dst_sg);
+			scatterwalk_skip(&dst_walk, du);
+		}
+
+		err = body(req);
+		if (err)
+			break;
+
+		skcipher_iv_inc_le128(iv_work);
+		memcpy(req->iv, iv_work, sizeof(iv_work));
+	}
+
+	/* Caller-visible IV is the starting IV regardless of outcome. */
+	memcpy(req->iv, iv_orig, sizeof(iv_orig));
+	req->src = orig_src;
+	req->dst = orig_dst;
+	req->cryptlen = total;
+	req->data_unit_size = du;
+	return err;
+}
+
+static int crypto_skcipher_validate_multi_du(struct skcipher_request *req)
+{
+	const unsigned int du = req->data_unit_size;
+	struct crypto_skcipher *tfm;
+	struct skcipher_alg *alg;
+	u32 cra_flags;
+
+	if (likely(!du))
+		return 0;
+	if (!is_power_of_2(du) || du < SKCIPHER_MDU_IVSIZE)
+		return -EINVAL;
+	if (!req->cryptlen || (req->cryptlen & (du - 1)))
+		return -EINVAL;
+
+	tfm = crypto_skcipher_reqtfm(req);
+	alg = crypto_skcipher_alg(tfm);
+
+	/* lskcipher's *_sg path doesn't honour data_unit_size. */
+	if (alg->co.base.cra_type != &crypto_skcipher_type)
+		return -EOPNOTSUPP;
+
+	/* Capability mismatch, not a malformed request: report -EOPNOTSUPP. */
+	if (crypto_skcipher_ivsize(tfm) != SKCIPHER_MDU_IVSIZE)
+		return -EOPNOTSUPP;
+
+	/* The auto-splitter is sync-only; native drivers own async dispatch. */
+	cra_flags = alg->co.base.cra_flags;
+	if ((cra_flags & CRYPTO_ALG_ASYNC) &&
+	    !(cra_flags & CRYPTO_ALG_SKCIPHER_NATIVE_MULTI_DU))
+		return -EOPNOTSUPP;
+
+	return 0;
+}
+
 int crypto_skcipher_encrypt(struct skcipher_request *req)
 {
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct skcipher_alg *alg = crypto_skcipher_alg(tfm);
+	int err;
 
 	if (crypto_skcipher_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)
 		return -ENOKEY;
+	err = crypto_skcipher_validate_multi_du(req);
+	if (err)
+		return err;
 	if (alg->co.base.cra_type != &crypto_skcipher_type)
 		return crypto_lskcipher_encrypt_sg(req);
+	if (req->data_unit_size &&
+	    !(alg->co.base.cra_flags & CRYPTO_ALG_SKCIPHER_NATIVE_MULTI_DU))
+		return skcipher_split_data_units(req, alg->encrypt);
 	return alg->encrypt(req);
 }
 EXPORT_SYMBOL_GPL(crypto_skcipher_encrypt);
@@ -449,11 +574,18 @@ int crypto_skcipher_decrypt(struct skcipher_request *req)
 {
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct skcipher_alg *alg = crypto_skcipher_alg(tfm);
+	int err;
 
 	if (crypto_skcipher_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)
 		return -ENOKEY;
+	err = crypto_skcipher_validate_multi_du(req);
+	if (err)
+		return err;
 	if (alg->co.base.cra_type != &crypto_skcipher_type)
 		return crypto_lskcipher_decrypt_sg(req);
+	if (req->data_unit_size &&
+	    !(alg->co.base.cra_flags & CRYPTO_ALG_SKCIPHER_NATIVE_MULTI_DU))
+		return skcipher_split_data_units(req, alg->decrypt);
 	return alg->decrypt(req);
 }
 EXPORT_SYMBOL_GPL(crypto_skcipher_decrypt);
