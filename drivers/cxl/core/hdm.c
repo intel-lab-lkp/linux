@@ -705,9 +705,25 @@ static void cxld_set_interleave(struct cxl_decoder *cxld, u32 *ctrl)
 
 static void cxld_set_type(struct cxl_decoder *cxld, u32 *ctrl)
 {
+	bool bi = cxld->target_type == CXL_DECODER_DEVMEM;
+
+	if (bi) {
+		if (is_endpoint_decoder(&cxld->dev)) {
+			struct cxl_endpoint_decoder *cxled =
+				to_cxl_endpoint_decoder(&cxld->dev);
+			struct cxl_dev_state *cxlds =
+				cxled_to_memdev(cxled)->cxlds;
+
+			bi = cxlds->bi;
+		} else if (cxld->region) {
+			bi = cxl_root_decoder_is_bi(cxld->region->cxlrd);
+		}
+	}
+
 	u32p_replace_bits(ctrl,
 			  !!(cxld->target_type == CXL_DECODER_HOSTONLYMEM),
 			  CXL_HDM_DECODER0_CTRL_HOSTONLY);
+	u32p_replace_bits(ctrl, bi, CXL_HDM_DECODER0_CTRL_BI);
 }
 
 static void cxlsd_set_targets(struct cxl_switch_decoder *cxlsd, u64 *tgt)
