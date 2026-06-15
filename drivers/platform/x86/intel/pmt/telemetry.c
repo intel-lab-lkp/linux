@@ -25,6 +25,8 @@
 #include <linux/uaccess.h>
 #include <linux/xarray.h>
 
+#include <asm/resctrl.h>
+
 #include "class.h"
 
 #define TELEM_SIZE_OFFSET	0x0
@@ -365,6 +367,8 @@ static void pmt_telem_remove(struct auxiliary_device *auxdev)
 	struct pmt_telem_priv *priv = auxiliary_get_drvdata(auxdev);
 	int i;
 
+	intel_aet_unregister_enumeration();
+
 	mutex_lock(&ep_lock);
 	for (i = 0; i < priv->num_entries; i++) {
 		struct intel_pmt_entry *entry = &priv->entry[i];
@@ -405,6 +409,8 @@ static int pmt_telem_probe(struct auxiliary_device *auxdev, const struct auxilia
 		intel_pmt_get_features(entry);
 	}
 
+	intel_aet_register_enumeration(THIS_MODULE, intel_pmt_get_regions_by_feature,
+				       intel_pmt_put_feature_group);
 	return 0;
 abort_probe:
 	pmt_telem_remove(auxdev);
