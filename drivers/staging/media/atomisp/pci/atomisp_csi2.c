@@ -185,7 +185,6 @@ static int mipi_csi2_init_entities(struct atomisp_mipi_csi2_device *csi2,
 void
 atomisp_mipi_csi2_unregister_entities(struct atomisp_mipi_csi2_device *csi2)
 {
-	media_entity_cleanup(&csi2->subdev.entity);
 	v4l2_device_unregister_subdev(&csi2->subdev);
 }
 
@@ -331,6 +330,10 @@ void atomisp_csi2_configure(struct atomisp_sub_device *asd)
  */
 void atomisp_mipi_csi2_cleanup(struct atomisp_device *isp)
 {
+	unsigned int i;
+
+	for (i = 0; i < ATOMISP_CAMERA_NR_PORTS; i++)
+		media_entity_cleanup(&isp->csi2_port[i].subdev.entity);
 }
 
 int atomisp_mipi_csi2_init(struct atomisp_device *isp)

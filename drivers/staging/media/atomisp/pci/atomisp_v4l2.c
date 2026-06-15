@@ -334,10 +334,8 @@ int atomisp_video_init(struct atomisp_video_pipe *video)
 
 void atomisp_video_unregister(struct atomisp_video_pipe *video)
 {
-	if (video_is_registered(&video->vdev)) {
-		media_entity_cleanup(&video->vdev.entity);
+	if (video_is_registered(&video->vdev))
 		video_unregister_device(&video->vdev);
-	}
 }
 
 static int atomisp_save_iunit_reg(struct atomisp_device *isp)
@@ -814,7 +812,6 @@ static void atomisp_unregister_entities(struct atomisp_device *isp)
 
 	v4l2_device_unregister(&isp->v4l2_dev);
 	media_device_unregister(&isp->media_dev);
-	media_device_cleanup(&isp->media_dev);
 
 	for (i = 0; i < isp->input_cnt; i++)
 		__v4l2_subdev_state_free(isp->inputs[i].try_sd_state);
@@ -875,7 +872,6 @@ csi_and_subdev_probe_failed:
 	v4l2_device_unregister(&isp->v4l2_dev);
 v4l2_device_failed:
 	media_device_unregister(&isp->media_dev);
-	media_device_cleanup(&isp->media_dev);
 	return ret;
 }
 
@@ -1086,7 +1082,7 @@ static int atomisp_initialize_modules(struct atomisp_device *isp)
 	ret = atomisp_mipi_csi2_init(isp);
 	if (ret < 0) {
 		dev_err(isp->dev, "mipi csi2 initialization failed\n");
-		goto error_mipi_csi2;
+		return ret;
 	}
 
 	ret = atomisp_subdev_init(isp);
@@ -1098,13 +1094,13 @@ static int atomisp_initialize_modules(struct atomisp_device *isp)
 	return 0;
 
 error_isp_subdev:
-error_mipi_csi2:
 	atomisp_mipi_csi2_cleanup(isp);
 	return ret;
 }
 
 static void atomisp_uninitialize_modules(struct atomisp_device *isp)
 {
+	atomisp_subdev_cleanup(isp);
 	atomisp_mipi_csi2_cleanup(isp);
 }
 
@@ -1451,6 +1447,7 @@ error_unregister_entities:
 	atomisp_unregister_entities(isp);
 error_uninitialize_modules:
 	atomisp_uninitialize_modules(isp);
+	media_device_cleanup(&isp->media_dev);
 error_irq_uninit:
 	atomisp_msi_irq_uninit(isp);
 	pci_free_irq_vectors(pdev);
@@ -1476,6 +1473,7 @@ static void atomisp_pci_remove(struct pci_dev *pdev)
 
 	atomisp_unregister_entities(isp);
 	atomisp_uninitialize_modules(isp);
+	media_device_cleanup(&isp->media_dev);
 	atomisp_msi_irq_uninit(isp);
 	pci_free_irq_vectors(pdev);
 }
