@@ -71,6 +71,6 @@ static inline struct dvb_frontend *s5h1432_attach(const struct s5h1432_config
 	printk(KERN_WARNING "%s: driver disabled by Kconfig\n", __func__);
 	return NULL;
 }
-#endif /* CONFIG_DVB_s5h1432 */
+#endif /* CONFIG_DVB_S5H1432 */
 
 #endif /* __s5h1432_H__ */
