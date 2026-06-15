@@ -626,8 +626,18 @@ static inline bool is_current_inode_path(const struct send_ctx *sctx,
 					 const struct fs_path *path)
 {
 	const struct fs_path *cur = &sctx->cur_inode_path;
+	const int cur_len = fs_path_len(cur);
 
-	return (strncmp(path->start, cur->start, fs_path_len(cur)) == 0);
+	if (strncmp(path->start, cur->start, cur_len) != 0)
+		return false;
+
+	/* Path may be a prefix of the current inode's path, check for that. */
+	if (path->start[cur_len] == '\0')
+		return true;
+	if (path->start[cur_len] == '/')
+		return true;
+
+	return false;
 }
 
 static struct btrfs_path *alloc_path_for_send(void)
