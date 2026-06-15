@@ -26,4 +26,13 @@ struct tegra_bpmp_ops {
 extern const struct tegra_bpmp_ops tegra186_bpmp_ops;
 extern const struct tegra_bpmp_ops tegra210_bpmp_ops;
 
+/* Maximum ACPI BPMP mailbox data buffer size. */
+#define TEGRA_BPMP_ACPI_BMRQ_DATA_SZ   3960U
+
+struct tegra_bpmp_acpi_message {
+	u64 status;
+	u8 *data_ptr;
+	u8 data[TEGRA_BPMP_ACPI_BMRQ_DATA_SZ];
+};
+
 #endif
