@@ -4321,15 +4321,24 @@ int pci_wait_for_pending_transaction(struct pci_dev *dev)
 EXPORT_SYMBOL(pci_wait_for_pending_transaction);
 
 /**
- * pcie_flr - initiate a PCIe function level reset
+ * pcie_reset_flr - initiate a PCIe function level reset
  * @dev: device to reset
+ * @probe: if true, return 0 if device can be reset this way
  *
- * Initiate a function level reset unconditionally on @dev without
- * checking any flags and DEVCAP
+ * Initiate a function level reset on @dev.
  */
-int pcie_flr(struct pci_dev *dev)
+int pcie_reset_flr(struct pci_dev *dev, bool probe)
 {
 	int ret;
+
+	if (dev->dev_flags & PCI_DEV_FLAGS_NO_FLR_RESET)
+		return -ENOTTY;
+
+	if (!(dev->devcap & PCI_EXP_DEVCAP_FLR))
+		return -ENOTTY;
+
+	if (probe)
+		return 0;
 
 	if (!pci_wait_for_pending_transaction(dev))
 		pci_err(dev, "timed out waiting for pending transaction; performing function level reset anyway\n");
@@ -4357,28 +4366,7 @@ int pcie_flr(struct pci_dev *dev)
 done:
 	pci_dev_reset_iommu_done(dev);
 	return ret;
-}
-EXPORT_SYMBOL_GPL(pcie_flr);
 
-/**
- * pcie_reset_flr - initiate a PCIe function level reset
- * @dev: device to reset
- * @probe: if true, return 0 if device can be reset this way
- *
- * Initiate a function level reset on @dev.
- */
-int pcie_reset_flr(struct pci_dev *dev, bool probe)
-{
-	if (dev->dev_flags & PCI_DEV_FLAGS_NO_FLR_RESET)
-		return -ENOTTY;
-
-	if (!(dev->devcap & PCI_EXP_DEVCAP_FLR))
-		return -ENOTTY;
-
-	if (probe)
-		return 0;
-
-	return pcie_flr(dev);
 }
 EXPORT_SYMBOL_GPL(pcie_reset_flr);
 

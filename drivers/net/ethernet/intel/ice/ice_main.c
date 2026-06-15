@@ -5173,7 +5173,7 @@ ice_probe(struct pci_dev *pdev, const struct pci_device_id __always_unused *ent)
 	if (is_kdump_kernel()) {
 		pci_save_state(pdev);
 		pci_clear_master(pdev);
-		err = pcie_flr(pdev);
+		err = pcie_reset_flr(pdev, PCI_RESET_DO_RESET);
 		if (err)
 			return err;
 		pci_restore_state(pdev);

@@ -426,7 +426,7 @@ static void octeon_pci_flr(struct octeon_device *oct)
 	pci_write_config_word(oct->pci_dev, PCI_COMMAND,
 			      PCI_COMMAND_INTX_DISABLE);
 
-	pcie_flr(oct->pci_dev);
+	pcie_reset_flr(oct->pci_dev, PCI_RESET_DO_RESET);
 
 	pci_cfg_access_unlock(oct->pci_dev);
 

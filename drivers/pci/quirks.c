@@ -2019,6 +2019,23 @@ DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_PXH_0,	quirk_pc
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_PXH_1,	quirk_pcie_pxh);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_PXHV,	quirk_pcie_pxh);
 
+#define PCI_DEVICE_ID_INTEL_82599_SFP_VF   0x10ed
+static void quirk_intel_82599_sfp_virtfn(struct pci_dev *dev)
+{
+	/*
+	 * http://www.intel.com/content/dam/doc/datasheet/82599-10-gbe-controller-datasheet.pdf
+	 *
+	 * The 82599 supports FLR on VFs, but FLR support is reported only
+	 * in the PF DEVCAP (sec 9.3.10.4), not in the VF DEVCAP (sec 9.5).
+	 * So enable PCI_EXP_DEVCAP_FLR directly without first checking if it is
+	 * supported.
+	 */
+
+	dev->devcap |= PCI_EXP_DEVCAP_FLR;
+}
+
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82599_SFP_VF, quirk_intel_82599_sfp_virtfn);
+
 /*
  * Some Intel PCI Express chipsets have trouble with downstream device
  * power management.
@@ -3944,20 +3961,6 @@ DECLARE_PCI_FIXUP_SUSPEND_LATE(PCI_VENDOR_ID_INTEL,
  * reset a single function if other methods (e.g. FLR, PM D0->D3) are
  * not available.
  */
-static int reset_intel_82599_sfp_virtfn(struct pci_dev *dev, bool probe)
-{
-	/*
-	 * http://www.intel.com/content/dam/doc/datasheet/82599-10-gbe-controller-datasheet.pdf
-	 *
-	 * The 82599 supports FLR on VFs, but FLR support is reported only
-	 * in the PF DEVCAP (sec 9.3.10.4), not in the VF DEVCAP (sec 9.5).
-	 * Thus we must call pcie_flr() directly without first checking if it is
-	 * supported.
-	 */
-	if (!probe)
-		pcie_flr(dev);
-	return 0;
-}
 
 #define SOUTH_CHICKEN2		0xc2004
 #define PCH_PP_STATUS		0xc7200
@@ -4058,7 +4061,7 @@ static int reset_chelsio_generic_dev(struct pci_dev *dev, bool probe)
 				      PCI_MSIX_FLAGS_ENABLE |
 				      PCI_MSIX_FLAGS_MASKALL);
 
-	pcie_flr(dev);
+	pcie_reset_flr(dev, PCI_RESET_DO_RESET);
 
 	/*
 	 * Restore the configuration information (BAR values, etc.) including
@@ -4070,7 +4073,6 @@ static int reset_chelsio_generic_dev(struct pci_dev *dev, bool probe)
 	return 0;
 }
 
-#define PCI_DEVICE_ID_INTEL_82599_SFP_VF   0x10ed
 #define PCI_DEVICE_ID_INTEL_IVB_M_VGA      0x0156
 #define PCI_DEVICE_ID_INTEL_IVB_M2_VGA     0x0166
 
@@ -4150,7 +4152,7 @@ static int nvme_disable_and_flr(struct pci_dev *dev, bool probe)
 
 	pci_iounmap(dev, bar);
 
-	pcie_flr(dev);
+	pcie_reset_flr(dev, PCI_RESET_DO_RESET);
 
 	return 0;
 }
@@ -4207,7 +4209,7 @@ static int reset_hinic_vf_dev(struct pci_dev *pdev, bool probe)
 	val = val | HINIC_VF_FLR_PROC_BIT;
 	iowrite32be(val, bar + HINIC_VF_OP);
 
-	pcie_flr(pdev);
+	pcie_reset_flr(pdev, PCI_RESET_DO_RESET);
 
 	/*
 	 * The device must recapture its Bus and Device Numbers after FLR
@@ -4238,8 +4240,6 @@ reset_complete:
 }
 
 static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
-	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82599_SFP_VF,
-		 reset_intel_82599_sfp_virtfn },
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_IVB_M_VGA,
 		reset_ivb_igd },
 	{ PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_IVB_M2_VGA,

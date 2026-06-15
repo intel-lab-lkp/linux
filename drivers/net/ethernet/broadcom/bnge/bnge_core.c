@@ -274,7 +274,7 @@ static int bnge_probe_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	if (is_kdump_kernel()) {
 		pci_clear_master(pdev);
-		pcie_flr(pdev);
+		pcie_reset_flr(pdev, PCI_RESET_DO_RESET);
 	}
 
 	rc = bnge_pci_enable(pdev);

@@ -3635,7 +3635,7 @@ int enetc_pci_probe(struct pci_dev *pdev, const char *name, int sizeof_priv)
 	size_t alloc_size;
 	int err, len;
 
-	pcie_flr(pdev);
+	pcie_reset_flr(pdev, PCI_RESET_DO_RESET);
 	err = pci_enable_device_mem(pdev);
 	if (err)
 		return dev_err_probe(&pdev->dev, err, "device enable failed\n");

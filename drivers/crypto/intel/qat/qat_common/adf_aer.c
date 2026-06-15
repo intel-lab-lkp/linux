@@ -89,7 +89,7 @@ EXPORT_SYMBOL_GPL(adf_reset_sbr);
 
 void adf_reset_flr(struct adf_accel_dev *accel_dev)
 {
-	pcie_flr(accel_to_pci_dev(accel_dev));
+	pcie_reset_flr(accel_to_pci_dev(accel_dev), PCI_RESET_DO_RESET);
 }
 EXPORT_SYMBOL_GPL(adf_reset_flr);
 

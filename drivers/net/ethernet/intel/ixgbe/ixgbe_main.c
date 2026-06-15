@@ -8351,7 +8351,7 @@ static void ixgbe_check_for_bad_vf(struct ixgbe_adapter *adapter)
 		if (status_reg != IXGBE_FAILED_READ_CFG_WORD &&
 		    status_reg & PCI_STATUS_REC_MASTER_ABORT) {
 			ixgbe_bad_vf_abort(adapter, vf);
-			pcie_flr(vfdev);
+			pcie_reset_flr(vfdev, PCI_RESET_DO_RESET);
 		}
 	}
 }

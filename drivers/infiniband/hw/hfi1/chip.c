@@ -14042,7 +14042,7 @@ static int init_chip(struct hfi1_devdata *dd)
 		dd_dev_info(dd, "Resetting CSRs with FLR\n");
 
 		/* do the FLR, the DC reset will remain */
-		pcie_flr(dd->pcidev);
+		pcie_reset_flr(dd->pcidev, PCI_RESET_DO_RESET);
 
 		/* restore command and BARs */
 		ret = restore_pci_variables(dd);
@@ -14054,7 +14054,7 @@ static int init_chip(struct hfi1_devdata *dd)
 
 		if (is_ax(dd)) {
 			dd_dev_info(dd, "Resetting CSRs with FLR\n");
-			pcie_flr(dd->pcidev);
+			pcie_reset_flr(dd->pcidev, PCI_RESET_DO_RESET);
 			ret = restore_pci_variables(dd);
 			if (ret) {
 				dd_dev_err(dd, "%s: Could not restore PCI variables\n",

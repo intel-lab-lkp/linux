@@ -16910,7 +16910,7 @@ static int bnxt_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 */
 	if (is_kdump_kernel()) {
 		pci_clear_master(pdev);
-		pcie_flr(pdev);
+		pcie_reset_flr(pdev, PCI_RESET_DO_RESET);
 	}
 
 	max_irqs = bnxt_get_max_irq(pdev);
@@ -17195,7 +17195,7 @@ static void bnxt_shutdown(struct pci_dev *pdev)
 		netif_close(dev);
 
 	if (bnxt_hwrm_func_drv_unrgtr(bp)) {
-		pcie_flr(pdev);
+		pcie_reset_flr(pdev, PCI_RESET_DO_RESET);
 		goto shutdown_exit;
 	}
 	bnxt_ptp_clear(bp);
