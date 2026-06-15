@@ -514,6 +514,21 @@ config BACKLIGHT_LED
 	  If you have a LCD backlight adjustable by LED class driver, say Y
 	  to enable this driver.
 
+config LEDS_LP8864
+	tristate "Backlight driver for TI LP8864/LP8866 4/6 channel LED drivers"
+	depends on I2C && OF
+	select REGMAP_I2C
+	select NEW_LEDS
+	select LEDS_CLASS
+	help
+	  If you say yes here you get support for the TI LP8864-Q1,
+	  LP8864S-Q1, LP8866-Q1, LP8866S-Q1 4/6 channel LED backlight
+	  drivers with I2C interface. The driver registers a backlight
+	  class device and optionally an LED class device.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called lp8864_bl.
+
 endif # BACKLIGHT_CLASS_DEVICE
 
 endmenu

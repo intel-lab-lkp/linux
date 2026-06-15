@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * TI LP8864/LP8866 4/6 Channel LED Driver
+ * TI LP8864/LP8866 4/6 Channel LED Backlight Driver
  *
- * Copyright (C) 2024 Siemens AG
+ * Copyright (C) 2024-2026 Siemens AG
  *
  * Based on LP8860 driver by Dan Murphy <dmurphy@ti.com>
  */
 
+#include <linux/backlight.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
@@ -26,6 +27,8 @@
 #define LP8864_BOOST_STATUS		0x10
 #define LP8864_LED_STATUS		0x12
 #define   LP8864_LED_STATUS_WR_MASK	GENMASK(14, 9)	/* Writeable bits in the LED_STATUS reg */
+
+#define LP8864_MAX_BRIGHTNESS		0xffff
 
 /* Textual meaning for status bits, starting from bit 1 */
 static const char *const lp8864_supply_status_msg[] = {
@@ -71,13 +74,15 @@ static const char *const lp8864_led_status_msg[] = {
 /**
  * struct lp8864
  * @client: Pointer to the I2C client
- * @led_dev: led class device pointer
+ * @led_dev: optional led class device pointer
+ * @bl: backlight device pointer
  * @regmap: Devices register map
  * @led_status_mask: Helps to report LED fault only once
  */
 struct lp8864 {
 	struct i2c_client *client;
-	struct led_classdev led_dev;
+	struct led_classdev *led_dev;
+	struct backlight_device *bl;
 	struct regmap *regmap;
 	u16 led_status_mask;
 };
@@ -157,28 +162,59 @@ err:
 	return ret;
 }
 
-static int lp8864_brightness_set(struct led_classdev *led_cdev,
-				 enum led_brightness brt_val)
+static int lp8864_brightness_set(struct lp8864 *priv, unsigned int brightness)
 {
-	struct lp8864 *priv = container_of(led_cdev, struct lp8864, led_dev);
-	/* Scale 0..LED_FULL into 16-bit HW brightness */
-	unsigned int val = brt_val * 0xffff / LED_FULL;
 	int ret;
 
 	ret = lp8864_fault_check(priv);
 	if (ret)
 		return ret;
 
-	ret = regmap_write(priv->regmap, LP8864_BRT_CONTROL, val);
+	ret = regmap_write(priv->regmap, LP8864_BRT_CONTROL, brightness);
 	if (ret)
 		dev_err(&priv->client->dev, "Failed to write brightness value\n");
 
 	return ret;
 }
 
-static enum led_brightness lp8864_brightness_get(struct led_classdev *led_cdev)
+static int lp8864_backlight_update_status(struct backlight_device *bl)
 {
-	struct lp8864 *priv = container_of(led_cdev, struct lp8864, led_dev);
+	return lp8864_brightness_set(bl_get_data(bl), backlight_get_brightness(bl));
+}
+
+static int lp8864_backlight_get_brightness(struct backlight_device *bl)
+{
+	struct lp8864 *priv = bl_get_data(bl);
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(priv->regmap, LP8864_BRT_CONTROL, &val);
+	if (ret) {
+		dev_err(&priv->client->dev, "Failed to read brightness value\n");
+		return ret;
+	}
+
+	return val;
+}
+
+static const struct backlight_ops lp8864_backlight_ops = {
+	.options = BL_CORE_SUSPENDRESUME,
+	.update_status = lp8864_backlight_update_status,
+	.get_brightness = lp8864_backlight_get_brightness,
+};
+
+static int lp8864_led_brightness_set(struct led_classdev *led_cdev,
+				     enum led_brightness brt_val)
+{
+	struct lp8864 *priv = dev_get_drvdata(led_cdev->dev->parent);
+
+	/* Scale 0..LED_FULL into 16-bit HW brightness */
+	return lp8864_brightness_set(priv, brt_val * 0xffff / LED_FULL);
+}
+
+static enum led_brightness lp8864_led_brightness_get(struct led_classdev *led_cdev)
+{
+	struct lp8864 *priv = dev_get_drvdata(led_cdev->dev->parent);
 	unsigned int val;
 	int ret;
 
@@ -212,17 +248,14 @@ static int lp8864_probe(struct i2c_client *client)
 	struct device_node *np = dev_of_node(&client->dev);
 	struct device_node *child_node;
 	struct led_init_data init_data = {};
+	struct backlight_device *bl;
+	struct backlight_properties props;
 	struct gpio_desc *enable_gpio;
+	u32 val;
 
 	priv = devm_kzalloc(&client->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
-
-	child_node = of_get_next_available_child(np, NULL);
-	if (!child_node) {
-		dev_err(&client->dev, "No LED function defined\n");
-		return -EINVAL;
-	}
 
 	ret = devm_regulator_get_enable_optional(&client->dev, "vled");
 	if (ret && ret != -ENODEV)
@@ -238,8 +271,7 @@ static int lp8864_probe(struct i2c_client *client)
 		return ret;
 
 	priv->client = client;
-	priv->led_dev.brightness_set_blocking = lp8864_brightness_set;
-	priv->led_dev.brightness_get = lp8864_brightness_get;
+	i2c_set_clientdata(client, priv);
 
 	priv->regmap = devm_regmap_init_i2c(client, &lp8864_regmap_config);
 	if (IS_ERR(priv->regmap))
@@ -258,11 +290,46 @@ static int lp8864_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
+	/* Register backlight class device */
+	memset(&props, 0, sizeof(props));
+	props.type = BACKLIGHT_RAW;
+	props.max_brightness = LP8864_MAX_BRIGHTNESS;
+	props.brightness = LP8864_MAX_BRIGHTNESS;
+	props.scale = BACKLIGHT_SCALE_LINEAR;
+
+	if (!device_property_read_u32(&client->dev, "max-brightness", &val))
+		props.max_brightness = val;
+
+	if (!device_property_read_u32(&client->dev, "default-brightness", &val))
+		props.brightness = val;
+
+	bl = devm_backlight_device_register(&client->dev, "lp8864-backlight",
+					    &client->dev, priv,
+					    &lp8864_backlight_ops, &props);
+	if (IS_ERR(bl))
+		return dev_err_probe(&client->dev, PTR_ERR(bl),
+				     "Failed to register backlight device\n");
+
+	priv->bl = bl;
+	backlight_update_status(bl);
+
+	/* Register LED class device if "led" child node is present */
+	child_node = of_get_available_child_by_name(np, "led");
+	if (!child_node)
+		return 0;
+
+	priv->led_dev = devm_kzalloc(&client->dev, sizeof(*priv->led_dev), GFP_KERNEL);
+	if (!priv->led_dev)
+		return -ENOMEM;
+
+	priv->led_dev->brightness_set_blocking = lp8864_led_brightness_set;
+	priv->led_dev->brightness_get = lp8864_led_brightness_get;
+
 	init_data.fwnode = of_fwnode_handle(child_node);
 	init_data.devicename = "lp8864";
 	init_data.default_label = ":display_cluster";
 
-	ret = devm_led_classdev_register_ext(&client->dev, &priv->led_dev, &init_data);
+	ret = devm_led_classdev_register_ext(&client->dev, priv->led_dev, &init_data);
 	if (ret)
 		dev_err(&client->dev, "Failed to register LED device (%pe)\n", ERR_PTR(ret));
 
@@ -291,6 +358,6 @@ static struct i2c_driver lp8864_driver = {
 };
 module_i2c_driver(lp8864_driver);
 
-MODULE_DESCRIPTION("Texas Instruments LP8864/LP8866 LED driver");
+MODULE_DESCRIPTION("Texas Instruments LP8864/LP8866 LED Backlight driver");
 MODULE_AUTHOR("Alexander Sverdlin <alexander.sverdlin@siemens.com>");
 MODULE_LICENSE("GPL");
