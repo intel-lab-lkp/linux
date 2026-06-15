@@ -228,11 +228,52 @@ DECLARE_UVERBS_NAMED_METHOD(
 			    UVERBS_ATTR_TYPE(struct ib_uverbs_destroy_cq_resp),
 			    UA_MANDATORY));
 
+static int UVERBS_HANDLER(UVERBS_METHOD_CQ_RESIZE)(
+	struct uverbs_attr_bundle *attrs)
+{
+	struct ib_cq *cq =
+		uverbs_attr_get_obj(attrs, UVERBS_ATTR_RESIZE_CQ_HANDLE);
+	u32 cqe;
+	int ret;
+
+	if (!cq->device->ops.resize_user_cq)
+		return -EOPNOTSUPP;
+
+	ret = uverbs_copy_from(&cqe, attrs, UVERBS_ATTR_RESIZE_CQ_CQE);
+	if (ret)
+		return ret;
+
+	if (!cqe)
+		return -EINVAL;
+
+	ret = cq->device->ops.resize_user_cq(cq, cqe, &attrs->driver_udata);
+	if (ret)
+		return ret;
+
+	return uverbs_copy_to(attrs, UVERBS_ATTR_RESIZE_CQ_RESP_CQE,
+			      &cq->cqe, sizeof(cq->cqe));
+}
+
+DECLARE_UVERBS_NAMED_METHOD(
+	UVERBS_METHOD_CQ_RESIZE,
+	UVERBS_ATTR_IDR(UVERBS_ATTR_RESIZE_CQ_HANDLE,
+			UVERBS_OBJECT_CQ,
+			UVERBS_ACCESS_READ,
+			UA_MANDATORY),
+	UVERBS_ATTR_PTR_IN(UVERBS_ATTR_RESIZE_CQ_CQE,
+			   UVERBS_ATTR_TYPE(u32),
+			   UA_MANDATORY),
+	UVERBS_ATTR_PTR_OUT(UVERBS_ATTR_RESIZE_CQ_RESP_CQE,
+			    UVERBS_ATTR_TYPE(u32),
+			    UA_MANDATORY),
+	UVERBS_ATTR_UHW());
+
 DECLARE_UVERBS_NAMED_OBJECT(
 	UVERBS_OBJECT_CQ,
 	UVERBS_TYPE_ALLOC_IDR_SZ(sizeof(struct ib_ucq_object), uverbs_free_cq),
 	&UVERBS_METHOD(UVERBS_METHOD_CQ_CREATE),
-	&UVERBS_METHOD(UVERBS_METHOD_CQ_DESTROY)
+	&UVERBS_METHOD(UVERBS_METHOD_CQ_DESTROY),
+	&UVERBS_METHOD(UVERBS_METHOD_CQ_RESIZE)
 );
 
 const struct uapi_definition uverbs_def_obj_cq[] = {
