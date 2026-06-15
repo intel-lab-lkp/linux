@@ -2217,10 +2217,9 @@ static int __init its_lpi_init(u32 id_bits)
 static unsigned long *its_lpi_alloc(int nr_irqs, u32 *base, int *nr_ids)
 {
 	unsigned long *bitmap = NULL;
-	int err = 0;
 
 	do {
-		err = alloc_lpi_range(nr_irqs, base);
+		int err = alloc_lpi_range(nr_irqs, base);
 		if (!err)
 			break;
 
@@ -2228,22 +2227,20 @@ static unsigned long *its_lpi_alloc(int nr_irqs, u32 *base, int *nr_ids)
 	} while (nr_irqs > 0);
 
 	if (!nr_irqs)
-		err = -ENOSPC;
-
-	if (err)
-		goto out;
+		goto err_out;
 
 	bitmap = bitmap_zalloc(nr_irqs, GFP_ATOMIC);
 	if (!bitmap)
-		goto out;
+		goto err_free_lpi;
 
 	*nr_ids = nr_irqs;
-
-out:
-	if (!bitmap)
-		*base = *nr_ids = 0;
-
 	return bitmap;
+
+err_free_lpi:
+	free_lpi_range(*base, nr_irqs);
+err_out:
+	*base = *nr_ids = 0;
+	return NULL;
 }
 
 static void its_lpi_free(unsigned long *bitmap, u32 base, u32 nr_ids)
