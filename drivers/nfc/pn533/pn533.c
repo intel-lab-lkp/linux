@@ -951,6 +951,7 @@ static inline void pn533_poll_next_mod(struct pn533 *dev)
 
 static void pn533_poll_reset_mod_list(struct pn533 *dev)
 {
+	timer_delete_sync(&dev->listen_timer);
 	dev->poll_mod_count = 0;
 }
 
@@ -1234,6 +1235,10 @@ static int pn533_init_target_complete(struct pn533 *dev, struct sk_buff *resp)
 static void pn533_listen_mode_timer(struct timer_list *t)
 {
 	struct pn533 *dev = timer_container_of(dev, t, listen_timer);
+
+	/* Polling may have been stopped while the timer was pending. */
+	if (!dev->poll_mod_count)
+		return;
 
 	dev->cancel_listen = 1;
 
