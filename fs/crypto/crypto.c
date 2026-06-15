@@ -209,6 +209,53 @@ struct page *fscrypt_encrypt_pagecache_blocks(struct folio *folio,
 EXPORT_SYMBOL(fscrypt_encrypt_pagecache_blocks);
 
 /**
+ * fscrypt_crypt_data_unit_inplace() - En/decrypt data units in-place
+ * @inode:   The inode to which these data units belong
+ * @page:    The page containing the data units to en/decrypt
+ * @len:     Size of the region to en/decrypt.  This must be a multiple of
+ *	     FSCRYPT_CONTENTS_ALIGNMENT.
+ * @offs:    Byte offset within @page at which the region begins
+ * @index:   Fscrypt data unit index of the start of the region
+ * @encrypt: True to encrypt, false to decrypt
+ *
+ * Return: 0 on success; -errno on failure
+ */
+int fscrypt_crypt_data_unit_inplace(const struct inode *inode,
+				    struct page *page, unsigned int len,
+				    unsigned int offs, u64 index, bool encrypt)
+{
+	const struct fscrypt_inode_info *ci = fscrypt_get_inode_info_raw(inode);
+	unsigned int du_size;
+	unsigned int i;
+	int err;
+
+	/*
+	 * Pairs with the smp_store_release() that publishes ->tfm after the
+	 * software transform has been fully initialized.
+	 */
+	if (!ci || !smp_load_acquire(&ci->ci_enc_key.tfm))
+		return -EOPNOTSUPP;
+	du_size = 1U << ci->ci_data_unit_bits;
+
+	if (WARN_ON_ONCE(len <= 0))
+		return -EINVAL;
+	if (WARN_ON_ONCE(!IS_ALIGNED(len | offs, FSCRYPT_CONTENTS_ALIGNMENT)))
+		return -EINVAL;
+
+	for (i = 0; i < len; i += du_size, index++) {
+		unsigned int todo = min(du_size, len - i);
+
+		err = fscrypt_crypt_data_unit(ci,
+				encrypt ? FS_ENCRYPT : FS_DECRYPT,
+				index, page, page, todo, offs + i);
+		if (err)
+			return err;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(fscrypt_crypt_data_unit_inplace);
+
+/**
  * fscrypt_encrypt_block_inplace() - Encrypt a filesystem block in-place
  * @inode:     The inode to which this block belongs
  * @page:      The page containing the block to encrypt

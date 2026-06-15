@@ -400,6 +400,180 @@ static int fscrypt_setup_v2_file_key(struct fscrypt_inode_info *ci,
 	return 0;
 }
 
+static int fscrypt_prepare_data_unit_inplace_software_key(
+					struct fscrypt_prepared_key *prep_key,
+					const u8 *raw_key,
+					const struct fscrypt_inode_info *ci)
+{
+	struct crypto_sync_skcipher *tfm;
+
+	/* Pairs with the smp_store_release() below. */
+	if (smp_load_acquire(&prep_key->tfm))
+		return 0;
+	tfm = fscrypt_allocate_skcipher(ci->ci_mode, raw_key, ci->ci_inode);
+	if (IS_ERR(tfm))
+		return PTR_ERR(tfm);
+	/* Pairs with the smp_load_acquire() above and other ->tfm readers. */
+	smp_store_release(&prep_key->tfm, tfm);
+	return 0;
+}
+
+static int fscrypt_prepare_per_mode_data_unit_inplace_key(
+					struct fscrypt_inode_info *ci,
+					struct fscrypt_master_key *mk,
+					struct fscrypt_prepared_key *keys,
+					u8 hkdf_context, bool include_fs_uuid)
+{
+	const struct super_block *sb = ci->ci_inode->i_sb;
+	struct fscrypt_mode *mode = ci->ci_mode;
+	const u8 mode_num = mode - fscrypt_modes;
+	struct fscrypt_prepared_key *prep_key;
+	u8 mode_key[FSCRYPT_MAX_RAW_KEY_SIZE];
+	u8 hkdf_info[sizeof(mode_num) + sizeof(sb->s_uuid)];
+	unsigned int hkdf_infolen = 0;
+	int err;
+
+	if (WARN_ON_ONCE(mode_num > FSCRYPT_MODE_MAX))
+		return -EINVAL;
+
+	prep_key = &keys[mode_num];
+
+	BUILD_BUG_ON(sizeof(mode_num) != 1);
+	BUILD_BUG_ON(sizeof(sb->s_uuid) != 16);
+	BUILD_BUG_ON(sizeof(hkdf_info) != 17);
+	hkdf_info[hkdf_infolen++] = mode_num;
+	if (include_fs_uuid) {
+		memcpy(&hkdf_info[hkdf_infolen], &sb->s_uuid,
+		       sizeof(sb->s_uuid));
+		hkdf_infolen += sizeof(sb->s_uuid);
+	}
+
+	fscrypt_hkdf_expand(&mk->mk_secret.hkdf, hkdf_context, hkdf_info,
+			    hkdf_infolen, mode_key, mode->keysize);
+	err = fscrypt_prepare_data_unit_inplace_software_key(prep_key,
+							    mode_key, ci);
+	memzero_explicit(mode_key, mode->keysize);
+	if (!err)
+		ci->ci_enc_key = *prep_key;
+	return err;
+}
+
+/**
+ * fscrypt_supports_data_unit_inplace() - check data-unit crypto support
+ * @inode: an encrypted regular file inode
+ *
+ * Check whether filesystem-managed data regions can use fscrypt contents
+ * encryption for this inode.  This path is limited to v2 IV_INO_LBLK
+ * policies, including hardware-wrapped key configurations supported by
+ * fscrypt.  Per-file inlinecrypt keys and DIRECT_KEY policies are
+ * unsupported.
+ */
+bool fscrypt_supports_data_unit_inplace(const struct inode *inode)
+{
+	struct fscrypt_inode_info *ci = fscrypt_get_inode_info_raw(inode);
+	struct fscrypt_master_key *mk;
+	u8 flags;
+	bool supported;
+
+	if (!ci)
+		return false;
+	/*
+	 * Pairs with the smp_store_release() that publishes ->tfm after the
+	 * software transform has been fully initialized.
+	 */
+	if (smp_load_acquire(&ci->ci_enc_key.tfm))
+		return true;
+	if (!fscrypt_using_inline_encryption(ci))
+		return false;
+
+	mk = ci->ci_master_key;
+	if (!mk)
+		return false;
+
+	down_read(&mk->mk_sem);
+	if (!mk->mk_present ||
+	    ci->ci_policy.version != FSCRYPT_POLICY_V2) {
+		supported = false;
+		goto out;
+	}
+
+	flags = ci->ci_policy.v2.flags;
+	supported = flags & (FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64 |
+			     FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32);
+out:
+	up_read(&mk->mk_sem);
+	return supported;
+}
+EXPORT_SYMBOL_GPL(fscrypt_supports_data_unit_inplace);
+
+/**
+ * fscrypt_prepare_data_unit_inplace() - prepare software data-unit crypto
+ * @inode: an encrypted regular file inode
+ *
+ * Prepare the software transform used by filesystem-managed data regions that
+ * need fscrypt contents encryption but do not go through a data bio.  If the
+ * inode already uses filesystem-layer encryption, the normal contents key is
+ * already prepared.  If the inode uses blk-crypto with a v2 IV_INO_LBLK
+ * policy, this prepares the corresponding software transform for the
+ * filesystem-managed data region.
+ */
+int fscrypt_prepare_data_unit_inplace(const struct inode *inode)
+{
+	struct fscrypt_inode_info *ci = fscrypt_get_inode_info_raw(inode);
+	struct fscrypt_master_key *mk;
+	u8 flags;
+	int err = 0;
+
+	if (!ci)
+		return -ENOKEY;
+	/*
+	 * Pairs with the smp_store_release() that publishes ->tfm after the
+	 * software transform has been fully initialized.
+	 */
+	if (smp_load_acquire(&ci->ci_enc_key.tfm))
+		return 0;
+	if (!fscrypt_using_inline_encryption(ci))
+		return -EOPNOTSUPP;
+
+	mk = ci->ci_master_key;
+	if (!mk)
+		return -EOPNOTSUPP;
+
+	down_read(&mk->mk_sem);
+	if (!mk->mk_present) {
+		err = -ENOKEY;
+		goto out_unlock;
+	}
+	if (ci->ci_policy.version != FSCRYPT_POLICY_V2) {
+		err = -EOPNOTSUPP;
+		goto out_unlock;
+	}
+
+	mutex_lock(&fscrypt_mode_key_setup_mutex);
+	/* Pairs with fscrypt_prepare_data_unit_inplace_software_key(). */
+	if (smp_load_acquire(&ci->ci_enc_key.tfm))
+		goto out_mutex;
+
+	flags = ci->ci_policy.v2.flags;
+	if (flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64) {
+		err = fscrypt_prepare_per_mode_data_unit_inplace_key(ci, mk,
+				mk->mk_iv_ino_lblk_64_keys,
+				HKDF_CONTEXT_IV_INO_LBLK_64_KEY, true);
+	} else if (flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32) {
+		err = fscrypt_prepare_per_mode_data_unit_inplace_key(ci, mk,
+				mk->mk_iv_ino_lblk_32_keys,
+				HKDF_CONTEXT_IV_INO_LBLK_32_KEY, true);
+	} else {
+		err = -EOPNOTSUPP;
+	}
+out_mutex:
+	mutex_unlock(&fscrypt_mode_key_setup_mutex);
+out_unlock:
+	up_read(&mk->mk_sem);
+	return err;
+}
+EXPORT_SYMBOL_GPL(fscrypt_prepare_data_unit_inplace);
+
 /*
  * Check whether the size of the given master key (@mk) is appropriate for the
  * encryption settings which a particular file will use (@ci).

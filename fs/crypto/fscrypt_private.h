@@ -236,7 +236,8 @@ struct fscrypt_symlink_data {
  * @tfm: crypto API transform object
  * @blk_key: key for blk-crypto
  *
- * Normally only one of the fields will be non-NULL.
+ * Most users need only one prepared form.  Inline-crypto users that also need
+ * filesystem-layer software crypto for non-bio data regions may prepare both.
  */
 struct fscrypt_prepared_key {
 	struct crypto_sync_skcipher *tfm;
