@@ -1265,23 +1265,27 @@ int __init mvebu_mbus_dt_init(bool is_coherent)
 	prop = of_get_property(np, "controller", NULL);
 	if (!prop) {
 		pr_err("required 'controller' property missing\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto put_np;
 	}
 
 	controller = of_find_node_by_phandle(be32_to_cpup(prop));
 	if (!controller) {
 		pr_err("could not find an 'mbus-controller' node\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto put_np;
 	}
 
 	if (of_address_to_resource(controller, 0, &mbuswins_res)) {
 		pr_err("cannot get MBUS register address\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto put_controller;
 	}
 
 	if (of_address_to_resource(controller, 1, &sdramwins_res)) {
 		pr_err("cannot get SDRAM register address\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto put_controller;
 	}
 
 	/*
@@ -1312,9 +1316,15 @@ int __init mvebu_mbus_dt_init(bool is_coherent)
 				     resource_size(&mbusbridge_res),
 				     is_coherent);
 	if (ret)
-		return ret;
+		goto put_controller;
 
 	/* Setup statically declared windows in the DT */
-	return mbus_dt_setup(&mbus_state, np);
+	ret = mbus_dt_setup(&mbus_state, np);
+
+put_controller:
+	of_node_put(controller);
+put_np:
+	of_node_put(np);
+	return ret;
 }
 #endif
