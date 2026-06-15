@@ -132,10 +132,11 @@ static inline u32 dw_spi_rx_max(struct dw_spi *dws)
 	return min_t(u32, dws->rx_len, dw_readl(dws, DW_SPI_RXFLR));
 }
 
-static void dw_writer(struct dw_spi *dws)
+static u32 dw_writer(struct dw_spi *dws)
 {
 	u32 max = dw_spi_tx_max(dws);
 	u32 txw = 0;
+	u32 tx = 0;
 
 	while (max--) {
 		if (dws->tx) {
@@ -150,13 +151,16 @@ static void dw_writer(struct dw_spi *dws)
 		}
 		dw_write_io_reg(dws, DW_SPI_DR, txw);
 		--dws->tx_len;
+		++tx;
 	}
+	return tx;
 }
 
-static void dw_reader(struct dw_spi *dws)
+static u32 dw_reader(struct dw_spi *dws)
 {
 	u32 max = dw_spi_rx_max(dws);
 	u32 rxw;
+	u32 rx = 0;
 
 	while (max--) {
 		rxw = dw_read_io_reg(dws, DW_SPI_DR);
@@ -171,7 +175,9 @@ static void dw_reader(struct dw_spi *dws)
 			dws->rx += dws->n_bytes;
 		}
 		--dws->rx_len;
+		++rx;
 	}
+	return rx;
 }
 
 int dw_spi_check_status(struct dw_spi *dws, bool raw)
@@ -210,42 +216,59 @@ int dw_spi_check_status(struct dw_spi *dws, bool raw)
 }
 EXPORT_SYMBOL_NS_GPL(dw_spi_check_status, "SPI_DW_CORE");
 
+static irqreturn_t dw_spi_irq_thread_fn(int irq, void *dev_id)
+{
+	struct spi_controller *ctlr = dev_id;
+	struct dw_spi *dws = spi_controller_get_devdata(ctlr);
+	u16 irq_status = dw_readl(dws, DW_SPI_RISR);
+	u32 rx, tx, imask, mask = 0;
+
+	do {
+		/*
+		 * Read data from the Rx FIFO every time we've got a chance executing
+		 * this method. If there is nothing left to receive, terminate the
+		 * procedure. Otherwise adjust the Rx FIFO Threshold level if it's a
+		 * final stage of the transfer. By doing so we'll get the next IRQ
+		 * right when the leftover incoming data is received.
+		 */
+		rx = dw_reader(dws);
+		if (!dws->rx_len) {
+			mask = DW_SPI_INT_MASK;
+			spi_finalize_current_transfer(dws->ctlr);
+		} else if (dws->rx_len <= dw_readl(dws, DW_SPI_RXFTLR)) {
+			dw_writel(dws, DW_SPI_RXFTLR, dws->rx_len - 1);
+		}
+
+		/*
+		 * Send data out if Tx FIFO Empty IRQ is received. The IRQ will be
+		 * disabled after the data transmission is finished so not to
+		 * have the TXE IRQ flood at the final stage of the transfer.
+		 */
+		if (irq_status & DW_SPI_INT_TXEI) {
+			tx = dw_writer(dws);
+			if (!dws->tx_len)
+				mask = DW_SPI_INT_TXEI;
+		}
+	} while (rx != 0 || tx != 0);
+
+	imask = DW_SPI_INT_TXEI | DW_SPI_INT_TXOI |
+		DW_SPI_INT_RXUI | DW_SPI_INT_RXOI | DW_SPI_INT_RXFI;
+	imask &= ~mask;
+	dw_spi_umask_intr(dws, imask);
+
+	return IRQ_HANDLED;
+}
+
 static irqreturn_t dw_spi_transfer_handler(struct dw_spi *dws)
 {
-	u16 irq_status = dw_readl(dws, DW_SPI_ISR);
-
 	if (dw_spi_check_status(dws, false)) {
 		spi_finalize_current_transfer(dws->ctlr);
 		return IRQ_HANDLED;
 	}
 
-	/*
-	 * Read data from the Rx FIFO every time we've got a chance executing
-	 * this method. If there is nothing left to receive, terminate the
-	 * procedure. Otherwise adjust the Rx FIFO Threshold level if it's a
-	 * final stage of the transfer. By doing so we'll get the next IRQ
-	 * right when the leftover incoming data is received.
-	 */
-	dw_reader(dws);
-	if (!dws->rx_len) {
-		dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
-		spi_finalize_current_transfer(dws->ctlr);
-	} else if (dws->rx_len <= dw_readl(dws, DW_SPI_RXFTLR)) {
-		dw_writel(dws, DW_SPI_RXFTLR, dws->rx_len - 1);
-	}
+	dw_spi_mask_intr(dws, DW_SPI_INT_MASK);
 
-	/*
-	 * Send data out if Tx FIFO Empty IRQ is received. The IRQ will be
-	 * disabled after the data transmission is finished so not to
-	 * have the TXE IRQ flood at the final stage of the transfer.
-	 */
-	if (irq_status & DW_SPI_INT_TXEI) {
-		dw_writer(dws);
-		if (!dws->tx_len)
-			dw_spi_mask_intr(dws, DW_SPI_INT_TXEI);
-	}
-
-	return IRQ_HANDLED;
+	return IRQ_WAKE_THREAD;
 }
 
 static irqreturn_t dw_spi_irq(int irq, void *dev_id)
@@ -946,13 +969,6 @@ int dw_spi_add_controller(struct device *dev, struct dw_spi *dws)
 	/* Basic HW init */
 	dw_spi_hw_init(dev, dws);
 
-	ret = request_irq(dws->irq, dw_spi_irq, IRQF_SHARED, dev_name(dev),
-			  ctlr);
-	if (ret < 0 && ret != -ENOTCONN) {
-		dev_err(dev, "can not request IRQ\n");
-		goto err_free_ctlr;
-	}
-
 	dw_spi_init_mem_ops(dws);
 
 	ctlr->mode_bits = SPI_CPOL | SPI_CPHA;
@@ -992,13 +1008,20 @@ int dw_spi_add_controller(struct device *dev, struct dw_spi *dws)
 	if (dws->dma_ops && dws->dma_ops->dma_init) {
 		ret = dws->dma_ops->dma_init(dev, dws);
 		if (ret == -EPROBE_DEFER) {
-			goto err_free_irq;
+			goto err_free_ctlr;
 		} else if (ret) {
 			dev_warn(dev, "DMA init failed\n");
 		} else {
 			ctlr->can_dma = dws->dma_ops->can_dma;
 			ctlr->flags |= SPI_CONTROLLER_MUST_TX;
 		}
+	}
+
+	ret = request_threaded_irq(dws->irq, dw_spi_irq, dw_spi_irq_thread_fn,
+				   IRQF_SHARED, dev_name(dev), ctlr);
+	if (ret < 0 && ret != -ENOTCONN) {
+		dev_err(dev, "can not request IRQ\n");
+		goto err_free_ctlr;
 	}
 
 	ret = spi_register_controller(ctlr);
@@ -1014,7 +1037,6 @@ err_dma_exit:
 	if (dws->dma_ops && dws->dma_ops->dma_exit)
 		dws->dma_ops->dma_exit(dws);
 	dw_spi_enable_chip(dws, 0);
-err_free_irq:
 	free_irq(dws->irq, ctlr);
 err_free_ctlr:
 	spi_controller_put(ctlr);
