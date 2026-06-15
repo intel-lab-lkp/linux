@@ -216,3 +216,4 @@ int amdgpu_dm_wb_connector_init(struct amdgpu_display_manager *dm,
 
 	return 0;
 }
+EXPORT_IF_KUNIT(amdgpu_dm_wb_connector_init);
