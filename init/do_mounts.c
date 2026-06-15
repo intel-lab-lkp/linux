@@ -402,6 +402,11 @@ void __init mount_root(char *root_device_name)
 	}
 }
 
+static int __init lookup_root_device(char *root_device_name)
+{
+	return early_lookup_bdev(root_device_name, &ROOT_DEV);
+}
+
 /* wait for any asynchronous scanning to complete */
 static void __init wait_for_root(char *root_device_name)
 {
@@ -415,7 +420,7 @@ static void __init wait_for_root(char *root_device_name)
 	end = ktime_add_ms(ktime_get_raw(), root_wait);
 
 	while (!driver_probe_done() ||
-	       early_lookup_bdev(root_device_name, &ROOT_DEV) < 0) {
+	       lookup_root_device(root_device_name) < 0) {
 		msleep(5);
 		if (root_wait > 0 && ktime_after(ktime_get_raw(), end))
 			break;
