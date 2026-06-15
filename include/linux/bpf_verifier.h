@@ -1448,6 +1448,7 @@ struct bpf_kfunc_call_arg_meta {
 	/* Out parameters */
 	u8 release_regno;
 	bool r0_rdonly;
+	bool pkt_dynptr_write;
 	u32 ret_btf_id;
 	u64 r0_size;
 	u32 subprogno;
