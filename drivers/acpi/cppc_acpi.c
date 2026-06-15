@@ -1686,6 +1686,38 @@ int cppc_set_epp(int cpu, u64 epp_val)
 EXPORT_SYMBOL_GPL(cppc_set_epp);
 
 /**
+ * cppc_set_ospm_nominal_perf() - Write OSPM Nominal Performance register.
+ * @cpu: CPU on which to write register.
+ * @ospm_nominal_perf: Value to write to the OSPM Nominal Performance register.
+ *
+ * OSPM Nominal Performance conveys the desired nominal performance level
+ * at which the platform may run. Per ACPI 6.6, s8.4.6.1.2.6, the value
+ * must lie within [Lowest Performance, Nominal Performance] and may be
+ * set independently of Minimum, Maximum and Desired performance. The
+ * caller is responsible for validating the range.
+ *
+ * Return: 0 on success or negative error code.
+ */
+int cppc_set_ospm_nominal_perf(int cpu, u64 ospm_nominal_perf)
+{
+	return cppc_set_reg_val(cpu, OSPM_NOMINAL_PERF, ospm_nominal_perf);
+}
+EXPORT_SYMBOL_GPL(cppc_set_ospm_nominal_perf);
+
+/**
+ * cppc_get_ospm_nominal_perf() - Read OSPM Nominal Performance register.
+ * @cpu: CPU from which to read register.
+ * @ospm_nominal_perf: Pointer to store the OSPM Nominal Performance value.
+ *
+ * Return: 0 on success or negative error code.
+ */
+int cppc_get_ospm_nominal_perf(int cpu, u64 *ospm_nominal_perf)
+{
+	return cppc_get_reg_val(cpu, OSPM_NOMINAL_PERF, ospm_nominal_perf);
+}
+EXPORT_SYMBOL_GPL(cppc_get_ospm_nominal_perf);
+
+/**
  * cppc_get_auto_act_window() - Read autonomous activity window register.
  * @cpu: CPU from which to read register.
  * @auto_act_window: Return address.

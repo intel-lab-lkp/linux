@@ -1011,11 +1011,75 @@ static int cppc_get_perf_limited_filtered(int cpu, u64 *perf_limited)
 CPPC_CPUFREQ_ATTR_RW_U64(perf_limited, cppc_get_perf_limited_filtered,
 			 cppc_set_perf_limited)
 
+static ssize_t show_ospm_nominal_freq(struct cpufreq_policy *policy, char *buf)
+{
+	struct cppc_cpudata *cpu_data = policy->driver_data;
+	u64 perf;
+	int ret;
+
+	ret = cppc_get_ospm_nominal_perf(policy->cpu, &perf);
+	if (ret == -EOPNOTSUPP)
+		return sysfs_emit(buf, "<unsupported>\n");
+	if (ret)
+		return ret;
+
+	return sysfs_emit(buf, "%u\n",
+			  cppc_perf_to_khz(&cpu_data->perf_caps, perf));
+}
+
+static ssize_t store_ospm_nominal_freq(struct cpufreq_policy *policy,
+				       const char *buf, size_t count)
+{
+	struct cppc_cpudata *cpu_data = policy->driver_data;
+	unsigned int sib, freq_khz, failing_cpu = 0;
+	u64 prev_perf;
+	u32 perf;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &freq_khz);
+	if (ret)
+		return ret;
+
+	perf = cppc_khz_to_perf(&cpu_data->perf_caps, freq_khz);
+	if (perf < cpu_data->perf_caps.lowest_perf ||
+	    perf > cpu_data->perf_caps.nominal_perf)
+		return -EINVAL;
+
+	/* Save the current value to roll back to if a sibling write fails. */
+	ret = cppc_get_ospm_nominal_perf(policy->cpu, &prev_perf);
+	if (ret)
+		return ret;
+
+	for_each_cpu(sib, policy->cpus) {
+		ret = cppc_set_ospm_nominal_perf(sib, perf);
+		if (ret) {
+			failing_cpu = sib;
+			goto rollback;
+		}
+	}
+
+	return count;
+
+rollback:
+	/*
+	 * Restore the previous value on siblings already updated.
+	 * for_each_cpu() iterates in CPU-id order, so siblings before
+	 * @failing_cpu were updated successfully.
+	 */
+	for_each_cpu(sib, policy->cpus) {
+		if (sib == failing_cpu)
+			break;
+		cppc_set_ospm_nominal_perf(sib, prev_perf);
+	}
+	return ret;
+}
+
 cpufreq_freq_attr_ro(freqdomain_cpus);
 cpufreq_freq_attr_rw(auto_select);
 cpufreq_freq_attr_rw(auto_act_window);
 cpufreq_freq_attr_rw(energy_performance_preference_val);
 cpufreq_freq_attr_rw(perf_limited);
+cpufreq_freq_attr_rw(ospm_nominal_freq);
 
 static struct freq_attr *cppc_cpufreq_attr[] = {
 	&freqdomain_cpus,
@@ -1023,6 +1087,7 @@ static struct freq_attr *cppc_cpufreq_attr[] = {
 	&auto_act_window,
 	&energy_performance_preference_val,
 	&perf_limited,
+	&ospm_nominal_freq,
 	NULL,
 };
 
