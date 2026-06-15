@@ -593,8 +593,6 @@ static int icl_get_bw_info(struct intel_display *display,
 		}
 	}
 
-	update_sagv_status(display, display->bw.num_qgv_points);
-
 	return 0;
 }
 
@@ -705,8 +703,6 @@ static int tgl_get_bw_info(struct intel_display *display,
 		drm_dbg_kms(display->drm, "PSF GV %d: bw=%u\n", i, display->bw.psf_bw[i]);
 	}
 
-	update_sagv_status(display, display->bw.num_qgv_points);
-
 	return 0;
 }
 
@@ -726,8 +722,6 @@ static void dg2_get_bw_info(struct intel_display *display)
 	/* Bandwidth does not depend on # of planes; set all groups the same */
 	for (i = 1; i < ARRAY_SIZE(display->bw.max); i++)
 		display->bw.max[i] = display->bw.max[0];
-
-	update_sagv_status(display, display->bw.num_qgv_points);
 }
 
 static int xe2_hpd_get_bw_info(struct intel_display *display,
@@ -775,7 +769,6 @@ static int xe2_hpd_get_bw_info(struct intel_display *display,
 	 * battery and plugged-in operation.
 	 */
 	drm_WARN_ON(display->drm, qi.num_qgv_points != 2);
-	update_sagv_status(display, display->bw.num_qgv_points);
 
 	return 0;
 }
@@ -876,6 +869,8 @@ void intel_bw_init_hw(struct intel_display *display)
 	} else if (DISPLAY_VER(display) == 11) {
 		icl_get_bw_info(display, dram_info, soc_bw_params, display_bw_params);
 	}
+
+	update_sagv_status(display, display->bw.num_qgv_points);
 }
 
 static unsigned int intel_bw_num_active_planes(struct intel_display *display,
