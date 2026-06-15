@@ -802,7 +802,6 @@ i915_driver_create(struct pci_dev *pdev, const struct pci_device_id *ent)
 	const struct intel_device_info *match_info =
 		(struct intel_device_info *)ent->driver_data;
 	struct drm_i915_private *i915;
-	struct intel_display *display;
 
 	i915 = devm_drm_dev_alloc(&pdev->dev, &i915_drm_driver,
 				  struct drm_i915_private, drm);
@@ -816,12 +815,6 @@ i915_driver_create(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* Set up device info and initial runtime info. */
 	intel_device_info_driver_create(i915, pdev->device, match_info);
-
-	display = intel_display_device_probe(pdev, &parent);
-	if (IS_ERR(display))
-		return ERR_CAST(display);
-
-	i915->display = display;
 
 	return i915;
 }
@@ -851,11 +844,17 @@ int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	i915 = i915_driver_create(pdev, ent);
 	if (IS_ERR(i915)) {
-		pci_disable_device(pdev);
-		return PTR_ERR(i915);
+		ret = PTR_ERR(i915);
+		goto out_pci_disable;
 	}
 
-	display = i915->display;
+	display = intel_display_device_probe(pdev, &parent);
+	if (IS_ERR(display)) {
+		ret = PTR_ERR(display);
+		goto out_pci_disable;
+	}
+
+	i915->display = display;
 
 	ret = i915_driver_early_probe(i915);
 	if (ret < 0)
