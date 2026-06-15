@@ -93,6 +93,17 @@ static void apple_z2_parse_touches(struct apple_z2 *z2,
 		return;
 	nfingers = msg[APPLE_Z2_NUM_FINGERS_OFFSET];
 	fingers = (struct apple_z2_finger *)(msg + APPLE_Z2_FINGERS_OFFSET);
+	/*
+	 * A malicious or malfunctioning controller can report more fingers
+	 * than the packet actually carries; drop the packet rather than read
+	 * finger records past the end of the receive buffer.
+	 */
+	if (nfingers && msg_len < APPLE_Z2_FINGERS_OFFSET + nfingers * sizeof(*fingers)) {
+		dev_warn_ratelimited(&z2->spidev->dev,
+				     "discarding packet: %d fingers exceed packet length\n",
+				     nfingers);
+		return;
+	}
 	for (i = 0; i < nfingers; i++) {
 		slot = input_mt_get_slot_by_key(z2->input_dev, fingers[i].finger);
 		if (slot < 0) {
