@@ -2822,6 +2822,36 @@ next_slot:
 	return 0;
 }
 
+/*
+ * Open @path for @sb with freezing denied before the holder claim is published,
+ * so a racing bdev_freeze() can never reach a claim a device add or replace may
+ * still abort.  The deny is taken on a throwaway non-holder probe open, then the
+ * holder is opened by the probe's dev_t.  Balanced by the caller.
+ */
+struct file *btrfs_open_device_deny_freeze(const char *path,
+					   struct super_block *sb)
+{
+	struct file *probe_file, *bdev_file;
+	int ret;
+
+	probe_file = bdev_file_open_by_path(path, BLK_OPEN_READ, NULL, NULL);
+	if (IS_ERR(probe_file))
+		return probe_file;
+
+	ret = bdev_deny_freeze(file_bdev(probe_file));
+	if (ret) {
+		bdev_fput(probe_file);
+		return ERR_PTR(ret);
+	}
+
+	bdev_file = bdev_file_open_by_dev(file_bdev(probe_file)->bd_dev,
+					  BLK_OPEN_WRITE, sb, &fs_holder_ops);
+	if (IS_ERR(bdev_file))
+		bdev_allow_freeze(file_bdev(probe_file));
+	bdev_fput(probe_file);
+	return bdev_file;
+}
+
 int btrfs_init_new_device(struct btrfs_fs_info *fs_info, const char *device_path)
 {
 	struct btrfs_root *root = fs_info->dev_root;
@@ -2840,8 +2870,8 @@ int btrfs_init_new_device(struct btrfs_fs_info *fs_info, const char *device_path
 	if (sb_rdonly(sb) && !fs_devices->seeding)
 		return -EROFS;
 
-	bdev_file = bdev_file_open_by_path(device_path, BLK_OPEN_WRITE,
-					   fs_info->sb, &fs_holder_ops);
+	/* Forbid freezing until the device is a committed member (or unwound). */
+	bdev_file = btrfs_open_device_deny_freeze(device_path, fs_info->sb);
 	if (IS_ERR(bdev_file))
 		return PTR_ERR(bdev_file);
 
@@ -3006,8 +3036,10 @@ int btrfs_init_new_device(struct btrfs_fs_info *fs_info, const char *device_path
 		up_write(&sb->s_umount);
 		locked = false;
 
-		if (ret) /* transaction commit */
+		if (ret) { /* transaction commit */
+			bdev_allow_freeze(file_bdev(bdev_file));
 			return ret;
+		}
 
 		ret = btrfs_relocate_sys_chunks(fs_info);
 		if (ret < 0)
@@ -3015,8 +3047,10 @@ int btrfs_init_new_device(struct btrfs_fs_info *fs_info, const char *device_path
 				    "Failed to relocate sys chunks after device initialization. This can be fixed using the \"btrfs balance\" command.");
 		trans = btrfs_attach_transaction(root);
 		if (IS_ERR(trans)) {
-			if (PTR_ERR(trans) == -ENOENT)
+			if (PTR_ERR(trans) == -ENOENT) {
+				bdev_allow_freeze(file_bdev(bdev_file));
 				return 0;
+			}
 			ret = PTR_ERR(trans);
 			trans = NULL;
 			goto error_sysfs;
@@ -3036,6 +3070,7 @@ int btrfs_init_new_device(struct btrfs_fs_info *fs_info, const char *device_path
 	/* Update ctime/mtime for blkid or udev */
 	update_dev_time(device_path);
 
+	bdev_allow_freeze(file_bdev(bdev_file));
 	return ret;
 
 error_sysfs:
@@ -3065,7 +3100,7 @@ error_free_zone:
 error_free_device:
 	btrfs_free_device(device);
 error:
-	bdev_fput(bdev_file);
+	btrfs_release_device_allow_freeze(bdev_file);
 	if (locked) {
 		mutex_unlock(&uuid_mutex);
 		up_write(&sb->s_umount);
