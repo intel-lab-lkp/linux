@@ -11,6 +11,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/aperture.h>
+#include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/eventfd.h>
 #include <linux/file.h>
@@ -29,6 +30,7 @@
 #include <linux/sched/mm.h>
 #include <linux/iommufd.h>
 #include <linux/pci-p2pdma.h>
+#include <linux/seq_file.h>
 #if IS_ENABLED(CONFIG_EEH)
 #include <asm/eeh.h>
 #endif
@@ -96,6 +98,60 @@ static inline bool vfio_vga_disabled(struct vfio_pci_core_device *vdev)
 	return true;
 #endif
 }
+
+#ifdef CONFIG_VFIO_DEBUGFS
+static struct vfio_pci_core_device *
+vfio_pci_core_debugfs_private(struct seq_file *seq)
+{
+	struct device *dev = seq->private;
+	struct vfio_device *core_vdev = container_of(dev, struct vfio_device,
+						     device);
+
+	return container_of(core_vdev, struct vfio_pci_core_device, vdev);
+}
+
+static int vfio_pci_core_debugfs_nointxmask(struct seq_file *seq, void *data)
+{
+	struct vfio_pci_core_device *vdev = vfio_pci_core_debugfs_private(seq);
+
+	seq_puts(seq, vdev->nointxmask ? "Y\n" : "N\n");
+	return 0;
+}
+
+static int vfio_pci_core_debugfs_disable_idle_d3(struct seq_file *seq,
+						 void *data)
+{
+	struct vfio_pci_core_device *vdev = vfio_pci_core_debugfs_private(seq);
+
+	seq_puts(seq, vdev->disable_idle_d3 ? "Y\n" : "N\n");
+	return 0;
+}
+
+/*
+ * disable_idle_d3 and nointxmask are writable module parameters latched
+ * per device at init, so a device's effective value can differ from the
+ * current parameter setting.  Expose the per-device (read-only) values
+ * here for visibility; read-only parameters can't drift and are omitted.
+ */
+static void vfio_pci_core_debugfs_init(struct vfio_pci_core_device *vdev)
+{
+	struct device *dev = &vdev->vdev.device;
+	struct dentry *pci_dir;
+
+	if (IS_ERR_OR_NULL(vdev->vdev.debug_root))
+		return;
+
+	pci_dir = debugfs_create_dir("pci", vdev->vdev.debug_root);
+	debugfs_create_devm_seqfile(dev, "nointxmask", pci_dir,
+				    vfio_pci_core_debugfs_nointxmask);
+	debugfs_create_devm_seqfile(dev, "disable_idle_d3", pci_dir,
+				    vfio_pci_core_debugfs_disable_idle_d3);
+}
+#else
+static inline void vfio_pci_core_debugfs_init(struct vfio_pci_core_device *vdev)
+{
+}
+#endif /* CONFIG_VFIO_DEBUGFS */
 
 /*
  * Our VGA arbiter participation is limited since we don't know anything
@@ -2242,6 +2298,9 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	ret = vfio_register_group_dev(&vdev->vdev);
 	if (ret)
 		goto out_power;
+
+	vfio_pci_core_debugfs_init(vdev);
+
 	return 0;
 
 out_power:
