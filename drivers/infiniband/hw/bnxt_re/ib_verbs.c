@@ -3534,6 +3534,7 @@ int bnxt_re_create_user_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *att
 		return -EINVAL;
 
 	cq->rdev = rdev;
+	cq->uctx = &uctx->ib_uctx;
 	cctx = rdev->chip_ctx;
 	cq->qplib_cq.cq_handle = (u64)(unsigned long)(&cq->qplib_cq);
 

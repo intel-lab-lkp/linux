@@ -257,6 +257,11 @@ static int UVERBS_HANDLER(BNXT_RE_METHOD_GET_TOGGLE_MEM)(struct uverbs_attr_bund
 		if (!cq)
 			return -EINVAL;
 
+		if (cq->uctx != ib_uctx) {
+			bnxt_re_put_cq(cq);
+			return -EINVAL;
+		}
+
 		addr = (u64)cq->uctx_cq_page;
 		bnxt_re_put_cq(cq);
 		break;
