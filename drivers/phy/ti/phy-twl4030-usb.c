@@ -162,6 +162,7 @@ struct twl4030_usb {
 	enum musb_vbus_id_status linkstat;
 	atomic_t		connected;
 	bool			vbus_supplied;
+	bool			vbus_file;
 	bool			musb_mailbox_pending;
 	unsigned long		runtime_suspended:1;
 	unsigned long		needs_resume:1;
@@ -746,11 +747,15 @@ static int twl4030_usb_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "ldo init failed\n");
 		return err;
 	}
-	usb_add_phy_dev(&twl->phy);
+	err = usb_add_phy_dev(&twl->phy);
+	if (err)
+		return err;
 
 	platform_set_drvdata(pdev, twl);
 	if (device_create_file(&pdev->dev, &dev_attr_vbus))
 		dev_warn(&pdev->dev, "could not create sysfs file\n");
+	else
+		twl->vbus_file = true;
 
 	ATOMIC_INIT_NOTIFIER_HEAD(&twl->phy.notifier);
 
@@ -773,18 +778,29 @@ static int twl4030_usb_probe(struct platform_device *pdev)
 	if (status < 0) {
 		dev_dbg(&pdev->dev, "can't get IRQ %d, err %d\n",
 			twl->irq, status);
-		return status;
+		err = status;
+		goto err_runtime;
 	}
 
 	if (pdata)
 		err = phy_create_lookup(phy, "usb", "musb-hdrc.0");
 	if (err)
-		return err;
+		goto err_runtime;
 
 	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_autosuspend(twl->dev);
 
 	return 0;
+
+err_runtime:
+	pm_runtime_dont_use_autosuspend(&pdev->dev);
+	pm_runtime_put_noidle(twl->dev);
+	pm_runtime_disable(&pdev->dev);
+	if (twl->vbus_file)
+		device_remove_file(twl->dev, &dev_attr_vbus);
+	usb_remove_phy(&twl->phy);
+
+	return err;
 }
 
 static void twl4030_usb_remove(struct platform_device *pdev)
@@ -795,7 +811,8 @@ static void twl4030_usb_remove(struct platform_device *pdev)
 	usb_remove_phy(&twl->phy);
 	pm_runtime_get_sync(twl->dev);
 	cancel_delayed_work_sync(&twl->id_workaround_work);
-	device_remove_file(twl->dev, &dev_attr_vbus);
+	if (twl->vbus_file)
+		device_remove_file(twl->dev, &dev_attr_vbus);
 
 	/* set transceiver mode to power on defaults */
 	twl4030_usb_set_mode(twl, -1);
