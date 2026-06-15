@@ -47,6 +47,7 @@
 #include <linux/skbuff.h>	/* struct sk_buff */
 #include <linux/mm.h>
 #include <linux/security.h>
+#include <linux/swiotlb.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/page_counter.h>
@@ -69,6 +70,14 @@
 #include <linux/net_tstamp.h>
 #include <net/l3mdev.h>
 #include <uapi/linux/socket.h>
+
+#ifdef CONFIG_SWIOTLB
+struct sk_swiotlb_info {
+	struct device		*dev;
+	u32			serial;
+	unsigned long		jiffies;
+};
+#endif
 
 /*
  * This structure really needs to be cleaned up.
@@ -602,7 +611,27 @@ struct sock {
 #if IS_ENABLED(CONFIG_PROVE_LOCKING) && IS_ENABLED(CONFIG_MODULES)
 	struct module		*sk_owner;
 #endif
+#ifdef CONFIG_SWIOTLB
+	struct sk_swiotlb_info	sk_swiotlb;
+#endif
 };
+
+#ifdef CONFIG_SWIOTLB
+static inline void sk_init_bounce_device(struct sock *sk)
+{
+	sk->sk_swiotlb.dev = NULL;
+}
+static inline void sk_cleanup_bounce_device(struct sock *sk)
+{
+	if (sk->sk_swiotlb.dev) {
+		swiotlb_safe_put_device(sk->sk_swiotlb.dev);
+		sk->sk_swiotlb.dev = NULL;
+	}
+}
+#else
+static inline void sk_init_bounce_device(struct sock *sk) {}
+static inline void sk_cleanup_bounce_device(struct sock *sk) {}
+#endif
 
 struct sock_bh_locked {
 	struct sock *sock;

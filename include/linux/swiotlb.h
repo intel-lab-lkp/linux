@@ -7,8 +7,10 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/limits.h>
+#include <linux/percpu.h>
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
+#include <linux/atomic.h>
 
 struct device;
 struct page;
@@ -122,6 +124,9 @@ struct io_tlb_mem {
 	atomic_long_t total_used;
 	atomic_long_t used_hiwater;
 	atomic_long_t transient_nslabs;
+#else
+	unsigned long last_used_slots;
+	unsigned long last_used_jiffies;
 #endif
 };
 
@@ -185,6 +190,69 @@ bool is_swiotlb_active(struct device *dev);
 void __init swiotlb_adjust_size(unsigned long size);
 phys_addr_t default_swiotlb_base(void);
 phys_addr_t default_swiotlb_limit(void);
+
+/* Helpers for zerocopy swiotlb. */
+/* Control allocation fraction. */
+extern unsigned int swiotlb_zc_tx_percent;
+
+/* Track freshness of the leaf device info. */
+extern atomic_t global_device_serial;
+
+static inline u32 swiotlb_get_device_serial(void)
+{
+	return atomic_read(&global_device_serial);
+}
+
+static inline void swiotlb_device_deleted(void)
+{
+	atomic_inc(&global_device_serial);
+}
+
+struct page *swiotlb_alloc_pages(struct device *dev, unsigned int order);
+bool swiotlb_free_pages(struct page *page, bool where_debug_only);
+void swiotlb_safe_put_device(struct device *dev);
+
+static inline void swiotlb_set_page_dev(struct page *page, struct device *dev)
+{
+	page->private = (unsigned long)dev;
+}
+
+static inline struct device *swiotlb_page_to_dev(struct page *page)
+{
+	return (struct device *)compound_head(page)->private;
+}
+
+static inline bool is_zerocopy_swiotlb_folio(struct page *page)
+{
+	struct folio *folio = page_folio(page);
+
+	return folio_test_zcswiotlb(folio) && folio->private != 0;
+}
+
+/* These two are in mm/page_alloc.c */
+void swiotlb_prep_compound_page(struct page *page, unsigned int order);
+void swiotlb_destroy_compound_page(struct page *page, unsigned int order);
+
+#if defined(CONFIG_NET)
+/*
+ * Track the socket for the currently transmitted packet, so the dma mapping
+ * function can record there the leaf device if it needs bounce buffers.
+ */
+struct sock;
+DECLARE_PER_CPU(struct sock *, current_tx_socket);
+void sk_set_bounce_device(struct sock *sk, struct device *dev);
+static inline void dma_learn_bounce_device(struct device *dev)
+{
+	struct sock *sk = this_cpu_read(current_tx_socket);
+
+	if (sk)
+		sk_set_bounce_device(sk, dev);
+}
+#else
+static inline void dma_learn_bounce_device(struct device *dev) {}
+#endif
+/* End helpers for zerocopy swiotlb. */
+
 #else
 static inline void swiotlb_init(bool addressing_limited, unsigned int flags)
 {
@@ -234,6 +302,12 @@ static inline phys_addr_t default_swiotlb_limit(void)
 {
 	return 0;
 }
+
+/* zerocopy swiotlb stubs */
+static inline bool swiotlb_free_pages(struct page *page, int reason) { return false; }
+static inline u32 swiotlb_get_device_serial(void) { return 0; }
+static inline void swiotlb_device_deleted(void) {}
+
 #endif /* CONFIG_SWIOTLB */
 
 phys_addr_t swiotlb_tbl_map_single(struct device *hwdev, phys_addr_t phys,

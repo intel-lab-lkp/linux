@@ -3855,6 +3855,7 @@ void device_del(struct device *dev)
 	unsigned int noio_flag;
 
 	device_lock(dev);
+	swiotlb_device_deleted();
 	kill_device(dev);
 	device_unlock(dev);
 

@@ -103,6 +103,9 @@
 #include <linux/sockios.h>
 #include <linux/net.h>
 #include <linux/mm.h>
+#include <linux/swiotlb.h>
+#include <linux/device.h>
+#include <linux/moduleparam.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/poll.h>
@@ -151,6 +154,83 @@
 #include <uapi/linux/pidfd.h>
 
 #include "dev.h"
+
+#ifdef CONFIG_SWIOTLB
+
+DEFINE_PER_CPU(struct sock *, current_tx_socket);
+EXPORT_PER_CPU_SYMBOL(current_tx_socket);
+
+void sk_set_bounce_device(struct sock *sk, struct device *dev)
+{
+	struct device *old_dev;
+
+	if (in_hardirq() || !sk_fullsock(sk) || sock_flag(sk, SOCK_ZEROCOPY))
+		return;
+
+	old_dev = READ_ONCE(sk->sk_swiotlb.dev);
+
+	if (dev != old_dev) {
+		/* Rate-limit updates to once per second to prevent bonding thrashing */
+		if (old_dev && time_before(jiffies, sk->sk_swiotlb.jiffies + HZ))
+			return;
+
+		get_device(dev);
+
+		/* Atomically swap in the new device and get the actual old one */
+		old_dev = xchg(&sk->sk_swiotlb.dev, dev);
+
+		WRITE_ONCE(sk->sk_swiotlb.serial, swiotlb_get_device_serial());
+		sk->sk_swiotlb.jiffies = jiffies;
+
+		/* Only drop the reference to the device we actually replaced */
+		if (old_dev)
+			swiotlb_safe_put_device(old_dev);
+	}
+}
+EXPORT_SYMBOL(sk_set_bounce_device);
+
+/*
+ * Wrap alloc_pages in __skb_page_frag_refill(). If the socket's dma_device requires
+ * SWIOTLB bounce buffering, divert allocation to the SWIOTLB slot allocator.
+ * This ensures the packet payload is written directly to a bounce buffer from the start,
+ * enabling zero-copy during driver DMA mapping.
+ */
+static inline struct page *alloc_any_pg(gfp_t gfp, unsigned int order, struct sock *sk)
+{
+	if (sk && READ_ONCE(swiotlb_zc_tx_percent) && !sock_flag(sk, SOCK_ZEROCOPY)) {
+		u32 serial = READ_ONCE(sk->sk_swiotlb.serial);
+		struct device *dev;
+
+		/* Force serial read BEFORE device pointer read. */
+		smp_rmb();
+
+		dev = READ_ONCE(sk->sk_swiotlb.dev);
+
+		if (dev) {
+			/*
+			 * The serial check is just for cache invalidation, UAF is
+			 * protected by the reference held in the sk.
+			 */
+			if (swiotlb_get_device_serial() != serial) {
+				if (cmpxchg(&sk->sk_swiotlb.dev, dev, NULL) == dev)
+					swiotlb_safe_put_device(dev);
+			} else {
+				struct page *page = swiotlb_alloc_pages(dev, order);
+
+				if (page)
+					return page;
+				/* On failure, fallback to alloc_pages(). */
+			}
+		}
+	}
+	return alloc_pages(gfp, order);
+}
+#else
+static inline struct page *alloc_any_pg(gfp_t gfp, unsigned int order, struct sock *sk)
+{
+	return alloc_pages(gfp, order);
+}
+#endif
 
 static DEFINE_MUTEX(proto_list_mutex);
 static LIST_HEAD(proto_list);
@@ -2383,6 +2463,7 @@ static void __sk_destruct(struct rcu_head *head)
 		__netns_tracker_free(net, &sk->ns_tracker, false);
 		net_passive_dec(net);
 	}
+	sk_cleanup_bounce_device(sk);
 	sk_prot_free(sk->sk_prot_creator, sk);
 }
 
@@ -2485,6 +2566,7 @@ struct sock *sk_clone(const struct sock *sk, const gfp_t priority,
 		goto out;
 
 	sock_copy(newsk, sk);
+	sk_init_bounce_device(newsk);
 
 	newsk->sk_prot_creator = prot;
 
@@ -3130,7 +3212,7 @@ DEFINE_STATIC_KEY_FALSE(net_high_order_alloc_disable_key);
  * no guarantee that allocations succeed. Therefore, @sz MUST be
  * less or equal than PAGE_SIZE.
  */
-bool skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t gfp)
+bool __skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t gfp, struct sock *sk)
 {
 	if (pfrag->page) {
 		if (page_ref_count(pfrag->page) == 1) {
@@ -3146,27 +3228,27 @@ bool skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t gfp)
 	if (SKB_FRAG_PAGE_ORDER &&
 	    !static_branch_unlikely(&net_high_order_alloc_disable_key)) {
 		/* Avoid direct reclaim but allow kswapd to wake */
-		pfrag->page = alloc_pages((gfp & ~__GFP_DIRECT_RECLAIM) |
-					  __GFP_COMP | __GFP_NOWARN |
-					  __GFP_NORETRY,
-					  SKB_FRAG_PAGE_ORDER);
+		pfrag->page = alloc_any_pg((gfp & ~__GFP_DIRECT_RECLAIM) |
+					   __GFP_COMP | __GFP_NOWARN |
+					   __GFP_NORETRY,
+					   SKB_FRAG_PAGE_ORDER, sk);
 		if (likely(pfrag->page)) {
 			pfrag->size = PAGE_SIZE << SKB_FRAG_PAGE_ORDER;
 			return true;
 		}
 	}
-	pfrag->page = alloc_page(gfp);
+	pfrag->page = alloc_any_pg(gfp, 0, sk);
 	if (likely(pfrag->page)) {
 		pfrag->size = PAGE_SIZE;
 		return true;
 	}
 	return false;
 }
-EXPORT_SYMBOL(skb_page_frag_refill);
+EXPORT_SYMBOL(__skb_page_frag_refill);
 
 bool sk_page_frag_refill(struct sock *sk, struct page_frag *pfrag)
 {
-	if (likely(skb_page_frag_refill(32U, pfrag, sk->sk_allocation)))
+	if (likely(__skb_page_frag_refill(32U, pfrag, sk->sk_allocation, sk)))
 		return true;
 
 	if (!sk->sk_bypass_prot_mem)

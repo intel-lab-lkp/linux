@@ -16,6 +16,7 @@
 
 #include <linux/stddef.h>
 #include <linux/mm.h>
+#include <linux/swiotlb.h>
 #include <linux/highmem.h>
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>
@@ -706,6 +707,31 @@ void prep_compound_page(struct page *page, unsigned int order)
 
 	prep_compound_head(page, order);
 }
+
+#ifdef CONFIG_SWIOTLB
+void swiotlb_prep_compound_page(struct page *page, unsigned int order)
+{
+	if (order > 0)
+		prep_compound_page(page, order);
+}
+
+void swiotlb_destroy_compound_page(struct page *page, unsigned int order)
+{
+	if (order > 0) {
+		struct folio *folio = (struct folio *)page;
+
+		__ClearPageHead(page);
+		page[1].flags.f &= ~PAGE_FLAGS_SECOND;
+#ifdef NR_PAGES_IN_LARGE_FOLIO
+		folio->_nr_pages = 0;
+#endif
+		for (int i = 1; i < (1 << order); i++) {
+			page[i].mapping = NULL;
+			clear_compound_head(&page[i]);
+		}
+	}
+}
+#endif /* CONFIG_SWIOTLB */
 
 static inline void set_buddy_order(struct page *page, unsigned int order)
 {
@@ -2942,6 +2968,9 @@ static void __free_frozen_pages(struct page *page, unsigned int order,
 	unsigned long pfn = page_to_pfn(page);
 	int migratetype;
 
+	if (unlikely(swiotlb_free_pages(page, false)))
+		return;
+
 	if (!pcp_allowed_order(order)) {
 		__free_pages_ok(page, order, fpi_flags);
 		return;
@@ -3007,6 +3036,9 @@ void free_unref_folios(struct folio_batch *folios)
 		struct folio *folio = folios->folios[i];
 		unsigned long pfn = folio_pfn(folio);
 		unsigned int order = folio_order(folio);
+
+		if (unlikely(swiotlb_free_pages(&folio->page, true)))
+			continue;
 
 		if (!__free_pages_prepare(&folio->page, order, FPI_NONE))
 			continue;

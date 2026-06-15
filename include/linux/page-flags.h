@@ -923,6 +923,7 @@ enum pagetype {
 	PGTY_zsmalloc		= 0xf6,
 	PGTY_unaccepted		= 0xf7,
 	PGTY_large_kmalloc	= 0xf8,
+	PGTY_zcswiotlb		= 0xf9,
 
 	PGTY_mapcount_underflow = 0xff
 };
@@ -1054,6 +1055,9 @@ PAGE_TYPE_OPS(Zsmalloc, zsmalloc, zsmalloc)
  */
 PAGE_TYPE_OPS(Unaccepted, unaccepted, unaccepted)
 PAGE_TYPE_OPS(LargeKmalloc, large_kmalloc, large_kmalloc)
+
+/* Pages in socket buffers from the swiotlb pool. */
+PAGE_TYPE_OPS(ZCSwiotlb, zcswiotlb, zcswiotlb)
 
 /**
  * PageHuge - Determine if the page belongs to hugetlbfs

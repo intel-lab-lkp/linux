@@ -3783,7 +3783,12 @@ static inline void skb_frag_page_copy(skb_frag_t *fragto,
 	fragto->netmem = fragfrom->netmem;
 }
 
-bool skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t prio);
+/* zerocopy swiotlb uses an additional non-null struct sock pointer. */
+bool __skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t prio, struct sock *sk);
+static inline bool skb_page_frag_refill(unsigned int sz, struct page_frag *pfrag, gfp_t prio)
+{
+	return __skb_page_frag_refill(sz, pfrag, prio, NULL);
+}
 
 /**
  * __skb_frag_dma_map - maps a paged fragment via the DMA API

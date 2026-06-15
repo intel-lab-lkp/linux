@@ -37,12 +37,16 @@
 #include <linux/mm.h>
 #include <linux/pfn.h>
 #include <linux/rculist.h>
+#include <linux/refcount.h>
 #include <linux/scatterlist.h>
 #include <linux/set_memory.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/swiotlb.h>
+#include <linux/moduleparam.h>
+#include <linux/percpu.h>
 #include <linux/types.h>
+#include <linux/atomic.h>
 #ifdef CONFIG_DMA_RESTRICTED_POOL
 #include <linux/of.h>
 #include <linux/of_fdt.h>
@@ -80,6 +84,17 @@ struct io_tlb_slot {
 
 static bool swiotlb_force_bounce;
 static bool swiotlb_force_disable;
+
+/**
+ * global_device_serial - Global sequence number for device deletions
+ *
+ * Incremented every time a device is unregistered (in device_del()).
+ * Used by subsystems (like SWIOTLB zero-copy sockets) as a fast, lockless
+ * O(1) cache invalidation serial to detect when a cached device pointer
+ * might have been deleted and needs to be expired to prevent Use-After-Free.
+ */
+atomic_t global_device_serial = ATOMIC_INIT(0);
+EXPORT_SYMBOL(global_device_serial);
 
 #ifdef CONFIG_SWIOTLB_DYNAMIC
 
@@ -1442,6 +1457,8 @@ phys_addr_t swiotlb_tbl_map_single(struct device *dev, phys_addr_t orig_addr,
 	offset &= (IO_TLB_SIZE - 1);
 	index += pad_slots;
 	pool->slots[index].pad_slots = pad_slots;
+	/* Fix an upstream bug with alloc_align_mask = 0xffff */
+	pool->slots[index].alloc_size = mapping_size;
 	for (i = 0; i < (nr_slots(size) - pad_slots); i++)
 		pool->slots[index + i].orig_addr = slot_addr(orig_addr, i);
 	tlb_addr = slot_addr(pool->start, index) + offset;
@@ -1555,6 +1572,13 @@ void __swiotlb_tbl_unmap_single(struct device *dev, phys_addr_t tlb_addr,
 		unsigned long attrs, struct io_tlb_pool *pool)
 {
 	/*
+	 * Recognize and avoid unmapping pages allocated for Zero-Copy SWIOTLB Page Bypass.
+	 * They will be eventually released when the page reference count drops to 0.
+	 */
+	if (is_zerocopy_swiotlb_folio(pfn_to_page(PHYS_PFN(tlb_addr))))
+		return;
+
+	/*
 	 * First, sync the memory before unmapping the entry
 	 */
 	if (!(attrs & DMA_ATTR_SKIP_CPU_SYNC) &&
@@ -1596,6 +1620,21 @@ dma_addr_t swiotlb_map(struct device *dev, phys_addr_t paddr, size_t size,
 {
 	phys_addr_t swiotlb_addr;
 	dma_addr_t dma_addr;
+
+	dma_learn_bounce_device(dev);
+
+	/*
+	 * If the page was allocated via Zero-Copy SWIOTLB Page Bypass, it is likely
+	 * already good for DMA so we can return its dma address.
+	 */
+	if (is_zerocopy_swiotlb_folio(pfn_to_page(PHYS_PFN(paddr)))) {
+		dma_addr = phys_to_dma_unencrypted(dev, paddr);
+		if (likely(dma_capable(dev, dma_addr, size, true))) {
+			if (!dev_is_dma_coherent(dev) && !(attrs & DMA_ATTR_SKIP_CPU_SYNC))
+				arch_sync_dma_for_device(paddr, size, dir);
+			return dma_addr;
+		}
+	}
 
 	trace_swiotlb_bounced(dev, phys_to_dma(dev, paddr), size);
 
@@ -1899,3 +1938,191 @@ static const struct reserved_mem_ops rmem_swiotlb_ops = {
 
 RESERVEDMEM_OF_DECLARE(dma, "restricted-dma-pool", &rmem_swiotlb_ops);
 #endif /* CONFIG_DMA_RESTRICTED_POOL */
+
+/*
+ * Asynchronous/Deferred Device Release.
+ * put_device() can trigger the final release path of a device which may sleep.
+ * Since SWIOTLB pages can be freed in atomic or interrupt context (e.g. TX completion),
+ * we must defer the put_device() call to task context using a workqueue.
+ */
+struct swiotlb_deferred_put {
+	struct work_struct work;
+	struct device *dev;
+};
+
+static void swiotlb_deferred_put_work(struct work_struct *work)
+{
+	struct swiotlb_deferred_put *dp = container_of(work, struct swiotlb_deferred_put, work);
+
+	put_device(dp->dev);
+	kfree(dp);
+}
+
+/**
+ * swiotlb_safe_put_device() - Safely release device reference from atomic/interrupt context
+ * @dev: The device structure to release.
+ *
+ * Enqueues a deferred put_device() call on a workqueue using GFP_ATOMIC.
+ * If memory allocation fails, the reference is leaked to avoid an immediate crash.
+ */
+void swiotlb_safe_put_device(struct device *dev)
+{
+	struct swiotlb_deferred_put *dp;
+
+	if (!dev)
+		return;
+
+	/*
+	 * FAST PATH (O(1) lockless): If this is not the last reference,
+	 * we can decrement it atomically and safely in any context
+	 * without allocating memory or scheduling work!
+	 */
+	if (refcount_dec_not_one(&dev->kobj.kref.refcount))
+		return;
+
+	/*
+	 * SLOW PATH: It is the last reference (refcount == 1). We must
+	 * defer the final put_device() to task context because it will
+	 * trigger device_release() which can sleep.
+	 */
+	dp = kmalloc_obj(*dp, GFP_ATOMIC);
+	if (dp) {
+		INIT_WORK(&dp->work, swiotlb_deferred_put_work);
+		dp->dev = dev;
+		schedule_work(&dp->work);
+	} else {
+		pr_warn_ratelimited("swiotlb: failed to allocate deferred put, leaking device ref\n");
+	}
+}
+EXPORT_SYMBOL_GPL(swiotlb_safe_put_device);
+
+unsigned int swiotlb_zc_tx_percent;
+module_param_named(zerocopy_tx_percent, swiotlb_zc_tx_percent, uint, 0644);
+
+static unsigned long fast_mem_used(struct io_tlb_mem *mem)
+{
+#ifdef CONFIG_DEBUG_FS
+	return mem_used(mem);
+#else
+	unsigned long last_j = READ_ONCE(mem->last_used_jiffies);
+	unsigned long now = jiffies;
+
+	if (time_after(now, last_j + HZ / 100) &&
+	    try_cmpxchg(&mem->last_used_jiffies, &last_j, now)) {
+		WRITE_ONCE(mem->last_used_slots, mem_used(mem));
+	}
+	return READ_ONCE(mem->last_used_slots);
+#endif
+}
+
+/**
+ * swiotlb_alloc_pages() - Allocate long-lived contiguous pages from SWIOTLB pool
+ * @dev: Device which requires the SWIOTLB bounce buffers.
+ * @order: Allocation order (log2 of number of pages).
+ */
+struct page *swiotlb_alloc_pages(struct device *dev, unsigned int order)
+{
+	struct io_tlb_mem *mem = dev->dma_io_tlb_mem;
+	struct io_tlb_pool *pool;
+	int npages = 1 << order;
+	unsigned int max_pct;
+	phys_addr_t tlb_addr;
+	struct page *page;
+	int index;
+
+	if (!mem || !mem->nslabs)
+		return NULL;
+
+	max_pct = clamp(READ_ONCE(swiotlb_zc_tx_percent), 0u, 90u);
+	if (max_pct == 0 || max_pct * mem->nslabs <= fast_mem_used(mem) * 100)
+		return NULL;
+
+	/*
+	 * Enforce natural alignment for compound pages. The mask-based
+	 * compound_head() optimization (used when HVO is enabled and struct page
+	 * size is a power of 2) assumes that compound pages are naturally aligned
+	 * to their size. Without this, compound_head() on tail pages can return
+	 * a wrong head page pointer, leading to refcount corruption.
+	 */
+	index = swiotlb_find_slots(dev, 0, PAGE_SIZE * npages, ~(PAGE_MASK << order), &pool);
+	if (index == -1)
+		return NULL;
+
+	tlb_addr = slot_addr(pool->start, index);
+
+	pool->slots[index].pad_slots = 0;
+	pool->slots[index].alloc_size = PAGE_SIZE * npages;
+
+	page = pfn_to_page(PHYS_PFN(tlb_addr));
+
+	set_page_count(page, 1);
+
+	/* Strictly tag page[0] to prevent clobbering folio tail overlays */
+	__SetPageZCSwiotlb(page);
+
+	swiotlb_set_page_dev(page, dev);
+	get_device(dev);
+	swiotlb_prep_compound_page(page, order);
+	return page;
+}
+EXPORT_SYMBOL_GPL(swiotlb_alloc_pages);
+
+/*
+ * Debugging to track how swiotlb_free_pages() was called.
+ * b2: 0 from __free_frozen_pages(), 1 from free_unref_folios()
+ * b1: pool found b0: dev present,
+ */
+static unsigned long zc_debug[8];
+static int ctrs_num = 8;
+module_param_array(zc_debug, ulong, &ctrs_num, 0644);
+static void __zc_debug_stats(bool where, bool has_dev, bool has_pool)
+{
+	zc_debug[has_dev + has_pool * 2 + where * 4]++;
+}
+
+/**
+ * swiotlb_free_pages() - Free pages allocated via swiotlb_alloc_pages()
+ * @page: The starting struct page to release.
+ */
+bool swiotlb_free_pages(struct page *page, bool where_debug_only)
+{
+	struct page *head = compound_head(page);
+	struct device *dev = swiotlb_page_to_dev(head);
+	phys_addr_t head_tlb_addr = page_to_phys(head);
+	struct io_tlb_pool *pool;
+	int index, npages, i;
+
+	if (!folio_test_zcswiotlb(page_folio(head)))
+		return false;
+
+	pool = dev ? swiotlb_find_pool(dev, head_tlb_addr) : NULL;
+	__zc_debug_stats(where_debug_only, !!dev, !!pool);
+
+	/* Check for any false positives. */
+	if (!pool)
+		return false;
+
+	/* Read alloc_size first, it is reset by swiotlb_release_slots(). */
+	index = (head_tlb_addr - pool->start) >> IO_TLB_SHIFT;
+	npages = pool->slots[index].alloc_size >> PAGE_SHIFT;
+
+	WARN_ON_ONCE(!is_power_of_2(npages));
+
+	/* Step 1: Sever compound links (clobbers compound_info / lru.next) */
+	swiotlb_destroy_compound_page(head, ilog2(npages));
+
+	/* Step 2: Re-init LRU, drop refcounts, and strip flag across all constituent pages */
+	for (i = 0; i < npages; i++) {
+		INIT_LIST_HEAD(&head[i].lru);
+		set_page_count(&head[i], 0);
+		head[i].private = 0;
+		__ClearPageZCSwiotlb(&head[i]);
+	}
+
+	/* Step 3: Safely release slots back to the pool */
+	swiotlb_release_slots(dev, head_tlb_addr, pool);
+	swiotlb_del_transient(dev, head_tlb_addr, pool);
+	swiotlb_safe_put_device(dev);
+	return true;
+}
+EXPORT_SYMBOL_GPL(swiotlb_free_pages);
