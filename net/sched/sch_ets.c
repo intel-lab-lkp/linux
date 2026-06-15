@@ -40,7 +40,7 @@ struct ets_class {
 	struct list_head alist; /* In struct ets_sched.active. */
 	struct Qdisc *qdisc;
 	u32 quantum;
-	u32 deficit;
+	u64 deficit;
 	struct gnet_stats_basic_sync bstats;
 	struct gnet_stats_queue qstats;
 };
@@ -465,8 +465,10 @@ ets_qdisc_dequeue_skb(struct Qdisc *sch, struct sk_buff *skb)
 static struct sk_buff *ets_qdisc_dequeue(struct Qdisc *sch)
 {
 	struct ets_sched *q = qdisc_priv(sch);
-	struct ets_class *cl;
+	struct ets_class *cl, *first;
 	struct sk_buff *skb;
+	u64 extra_rounds;
+	u64 rounds;
 	unsigned int band;
 	unsigned int len;
 
@@ -481,26 +483,49 @@ static struct sk_buff *ets_qdisc_dequeue(struct Qdisc *sch)
 		if (list_empty(&q->active))
 			goto out;
 
-		cl = list_first_entry(&q->active, struct ets_class, alist);
-		skb = cl->qdisc->ops->peek(cl->qdisc);
-		if (!skb) {
-			qdisc_warn_nonwc(__func__, cl->qdisc);
-			goto out;
-		}
+		first = list_first_entry(&q->active, struct ets_class, alist);
+		extra_rounds = U64_MAX;
 
-		len = qdisc_pkt_len(skb);
-		if (len <= cl->deficit) {
-			cl->deficit -= len;
-			skb = qdisc_dequeue_peeked(cl->qdisc);
-			if (unlikely(!skb))
+		do {
+			cl = list_first_entry(&q->active, struct ets_class, alist);
+			skb = cl->qdisc->ops->peek(cl->qdisc);
+			if (!skb) {
+				qdisc_warn_nonwc(__func__, cl->qdisc);
 				goto out;
-			if (cl->qdisc->q.qlen == 0)
-				list_del_init(&cl->alist);
-			return ets_qdisc_dequeue_skb(sch, skb);
-		}
+			}
 
-		cl->deficit += cl->quantum;
-		list_move_tail(&cl->alist, &q->active);
+			len = qdisc_pkt_len(skb);
+			if (len <= cl->deficit) {
+				cl->deficit -= len;
+				skb = qdisc_dequeue_peeked(cl->qdisc);
+				if (unlikely(!skb))
+					goto out;
+				if (cl->qdisc->q.qlen == 0)
+					list_del_init(&cl->alist);
+				return ets_qdisc_dequeue_skb(sch, skb);
+			}
+
+			cl->deficit += cl->quantum;
+			list_move_tail(&cl->alist, &q->active);
+
+			if (len <= cl->deficit) {
+				extra_rounds = 0;
+				continue;
+			}
+
+			rounds = div64_u64((u64)len - cl->deficit + cl->quantum - 1,
+					   cl->quantum);
+			if (rounds < extra_rounds)
+				extra_rounds = rounds;
+		} while (list_first_entry(&q->active, struct ets_class,
+					  alist) != first);
+
+		if (!extra_rounds)
+			continue;
+
+		/* Skip full rounds where no active class can dequeue. */
+		list_for_each_entry(cl, &q->active, alist)
+			cl->deficit += extra_rounds * cl->quantum;
 	}
 out:
 	return NULL;
