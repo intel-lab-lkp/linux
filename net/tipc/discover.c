@@ -49,6 +49,7 @@
 
 /**
  * struct tipc_discoverer - information about an ongoing link setup request
+ * @rcu: RCU head used to free the structure after a grace period
  * @bearer_id: identity of bearer issuing requests
  * @net: network namespace instance
  * @dest: destination address for request messages
@@ -60,6 +61,7 @@
  * @timer_intv: current interval between requests (in ms)
  */
 struct tipc_discoverer {
+	struct rcu_head rcu;
 	u32 bearer_id;
 	struct tipc_media_addr dest;
 	struct net *net;
@@ -382,6 +384,17 @@ int tipc_disc_create(struct net *net, struct tipc_bearer *b,
 	return 0;
 }
 
+/* RCU callback: free the discoverer only after any concurrent
+ * tipc_disc_rcv() softirq reader of bearer->disc has finished.
+ */
+static void tipc_disc_free_rcu(struct rcu_head *rp)
+{
+	struct tipc_discoverer *d = container_of(rp, struct tipc_discoverer, rcu);
+
+	kfree_skb(d->skb);
+	kfree(d);
+}
+
 /**
  * tipc_disc_delete - destroy object sending periodic link setup requests
  * @d: ptr to link dest structure
@@ -389,8 +402,7 @@ int tipc_disc_create(struct net *net, struct tipc_bearer *b,
 void tipc_disc_delete(struct tipc_discoverer *d)
 {
 	timer_shutdown_sync(&d->timer);
-	kfree_skb(d->skb);
-	kfree(d);
+	call_rcu(&d->rcu, tipc_disc_free_rcu);
 }
 
 /**
