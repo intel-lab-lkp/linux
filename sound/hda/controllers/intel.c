@@ -1930,6 +1930,10 @@ static int azx_first_init(struct azx *chip)
 	if (chip->driver_type == AZX_DRIVER_ZHAOXINHDMI)
 		bus->polling_mode = 1;
 
+	if (chip->driver_type == AZX_DRIVER_HYGON &&
+	    chip->pci->device == PCI_DEVICE_ID_HYGON_18H_M05H_HDA)
+		bus->access_sdnctl_in_dword = 1;
+
 	bus->remap_addr = pcim_iomap_region(pci, 0, "ICH HD audio");
 	if (IS_ERR(bus->remap_addr))
 		return PTR_ERR(bus->remap_addr);
