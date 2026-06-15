@@ -343,8 +343,7 @@ const char *vfio_pci_get_cdev_path(const char *bdf)
 	char *cdev_path;
 	DIR *dir;
 
-	cdev_path = calloc(PATH_MAX, 1);
-	VFIO_ASSERT_NOT_NULL(cdev_path);
+	cdev_path = calloc_assert(PATH_MAX, 1);
 
 	snprintf_assert(dir_path, sizeof(dir_path), "/sys/bus/pci/devices/%s/vfio-dev/", bdf);
 
@@ -425,8 +424,7 @@ struct vfio_pci_device *vfio_pci_device_alloc(const char *bdf, struct iommu *iom
 {
 	struct vfio_pci_device *device;
 
-	device = calloc(1, sizeof(*device));
-	VFIO_ASSERT_NOT_NULL(device);
+	device = calloc_assert(1, sizeof(*device));
 
 	VFIO_ASSERT_NOT_NULL(iommu);
 	device->iommu = iommu;
