@@ -26,9 +26,17 @@ int ovl_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	bool full_copy_up = false;
 	struct dentry *upperdentry;
 
-	err = setattr_prepare(&nop_mnt_idmap, dentry, attr);
+	err = setattr_prepare(idmap, dentry, attr);
 	if (err)
 		return err;
+
+	/* Rebase ownership from the mount idmap into overlay id space. */
+	if (attr->ia_valid & ATTR_UID)
+		attr->ia_vfsuid = VFSUIDT_INIT(from_vfsuid(idmap,
+				i_user_ns(d_inode(dentry)), attr->ia_vfsuid));
+	if (attr->ia_valid & ATTR_GID)
+		attr->ia_vfsgid = VFSGIDT_INIT(from_vfsgid(idmap,
+				i_user_ns(d_inode(dentry)), attr->ia_vfsgid));
 
 	if (attr->ia_valid & ATTR_SIZE) {
 		/* Truncate should trigger data copy up as well */
