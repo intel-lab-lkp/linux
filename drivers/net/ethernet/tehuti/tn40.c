@@ -1751,13 +1751,13 @@ static int tn40_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	ret = tn40_hw_reset(priv);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to reset HW.\n");
-		goto err_unset_drvdata;
+		goto err_free_netdev;
 	}
 
 	ret = pci_alloc_irq_vectors(pdev, 1, nvec, PCI_IRQ_MSI);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to allocate irq.\n");
-		goto err_unset_drvdata;
+		goto err_free_netdev;
 	}
 
 	ret = tn40_mdiobus_init(priv);
@@ -1799,8 +1799,10 @@ err_cleanup_swnodes:
 	tn40_swnodes_cleanup(priv);
 err_free_irq:
 	pci_free_irq_vectors(pdev);
-err_unset_drvdata:
+err_free_netdev:
+	netif_napi_del(&priv->napi);
 	pci_set_drvdata(pdev, NULL);
+	free_netdev(ndev);
 err_iounmap:
 	iounmap(regs);
 err_free_regions:
