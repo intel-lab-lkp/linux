@@ -3435,6 +3435,18 @@ static void bnxt_re_put_nq(struct bnxt_re_dev *rdev, struct bnxt_qplib_nq *nq)
 }
 
 /* Completion Queues */
+static void bnxt_re_cq_release(struct kref *ref)
+{
+	struct bnxt_re_cq *cq = container_of(ref, struct bnxt_re_cq, cq_ref);
+
+	complete(&cq->cq_destroy_comp);
+}
+
+void bnxt_re_put_cq(struct bnxt_re_cq *cq)
+{
+	kref_put(&cq->cq_ref, bnxt_re_cq_release);
+}
+
 int bnxt_re_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 {
 	struct bnxt_qplib_chip_ctx *cctx;
@@ -3452,10 +3464,18 @@ int bnxt_re_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 	if (ret)
 		return ret;
 
-	if (cctx->modes.toggle_bits & BNXT_QPLIB_CQ_TOGGLE_BIT)
+	if (cctx->modes.toggle_bits & BNXT_QPLIB_CQ_TOGGLE_BIT && cq->uctx) {
+		mutex_lock(&rdev->cq_hash_lock);
 		hash_del(&cq->hash_entry);
+		mutex_unlock(&rdev->cq_hash_lock);
+		/* Drop the creator's reference and wait for any concurrent
+		 * bnxt_re_search_for_cq() caller to finish with the pointer.
+		 */
+		kref_put(&cq->cq_ref, bnxt_re_cq_release);
+		wait_for_completion(&cq->cq_destroy_comp);
+	}
 	bnxt_qplib_destroy_cq(&rdev->qplib_res, &cq->qplib_cq);
-	if (cctx->modes.toggle_bits & BNXT_QPLIB_CQ_TOGGLE_BIT)
+	if (cctx->modes.toggle_bits & BNXT_QPLIB_CQ_TOGGLE_BIT && cq->uctx)
 		free_page((unsigned long)cq->uctx_cq_page);
 
 	bnxt_re_put_nq(rdev, nq);
@@ -3531,7 +3551,11 @@ int bnxt_re_create_user_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *att
 	spin_lock_init(&cq->cq_lock);
 
 	if (cctx->modes.toggle_bits & BNXT_QPLIB_CQ_TOGGLE_BIT) {
+		kref_init(&cq->cq_ref);
+		init_completion(&cq->cq_destroy_comp);
+		mutex_lock(&rdev->cq_hash_lock);
 		hash_add(rdev->cq_hash, &cq->hash_entry, cq->qplib_cq.id);
+		mutex_unlock(&rdev->cq_hash_lock);
 		/* Allocate a page */
 		cq->uctx_cq_page = (void *)get_zeroed_page(GFP_KERNEL);
 		if (!cq->uctx_cq_page) {
