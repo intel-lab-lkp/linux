@@ -66,4 +66,6 @@ static inline bool tegra410_bpmp_mbwt_cmd_is_supported(struct tegra_bpmp *bpmp,
 }
 #endif
 
+int tegra_bpmp_sysfs_register(struct tegra_bpmp *bpmp);
+
 #endif

@@ -1,0 +1,51 @@
+What:		/sys/bus/platform/devices/<bpmp-device>/bandwidth
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	Aniruddha TVS Rao <anrao@nvidia.com>
+Description:
+		Provides access to the Tegra410 Memory Bandwidth Throttler
+		(MBWT) control exposed by BPMP firmware for PCIe and GPU
+		connected over chip-to-chip link (Nv-Clink) traffic on the
+		path to DRAM.
+
+		The attribute is present only on ACPI-based Tegra410 systems
+		and only when BPMP firmware reports support for the MBWT
+		GET_BW and SET_BW requests through its query ABI.
+
+		Each PCIe bandwidth group has a single shared cap for all
+		traffic in that group. A group may contain only PCIe devices,
+		only a GPU over Nv-Clink, or both PCIe and GPU traffic in a
+		bifurcated topology. Bandwidth for a group can be set per
+		traffic type (PCIe Read, PCIe Write, GPU over Nv-Clink).
+
+		A write accepts a comma-separated tuple of
+		"instance,vc_type,bandwidth". Spaces around comma-separated
+		fields are allowed.
+
+		instance identifies the PCIe bandwidth group. Valid values are
+		0-5, where 0 = pcie0, 1 = pcie1, ..., 5 = pcie5.
+
+		vc_type selects the traffic type for the selected group:
+		0 = PCIe read
+		1 = PCIe write
+		2 = GPU over Nv-Clink
+
+		bandwidth specifies the target bandwidth cap in GB/s. Values
+		outside 1-110 (inclusive) are rejected by the driver before
+		issuing MBWT_SET. Firmware may still reject values within
+		that range.
+
+		A read queries firmware for each documented instance and
+		vc_type combination, and returns one tuple per line. Reads
+		do not depend on a previous write. If firmware returns an
+		error for any GET_BW request, the read fails with that error.
+
+		Example:
+			echo 0,1,100 > .../bandwidth
+			cat .../bandwidth
+			0,0,100
+			0,1,100
+			...
+
+Users:		Platform integration and bandwidth tuning on ACPI-based
+		Tegra410 systems (PCIe and GPU over Nv-Clink caps).
