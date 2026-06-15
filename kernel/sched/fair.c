@@ -9903,7 +9903,7 @@ pick:
 preempt:
 	if (preempt_action == PREEMPT_WAKEUP_SHORT) {
 		cancel_protect_slice(se);
-		clear_buddies(cfs_rq, se);
+		set_next_buddy(&p->se);
 	}
 
 	resched_curr_lazy(rq);
