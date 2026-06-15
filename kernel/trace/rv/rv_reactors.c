@@ -465,7 +465,13 @@ int init_rv_reactors(struct dentry *root_dir)
 
 void rv_react(struct rv_monitor *monitor, const char *msg, ...)
 {
-	static DEFINE_WAIT_OVERRIDE_MAP(rv_react_map, LD_WAIT_FREE);
+#ifdef CONFIG_LOCKDEP
+	static struct lockdep_map rv_react_map = {
+		.name = "rv_react",
+		.wait_type_outer = LD_WAIT_FREE,
+		.wait_type_inner = LD_WAIT_SPIN,
+	};
+#endif
 	va_list args;
 
 	if (!rv_reacting_on() || !monitor->react)
