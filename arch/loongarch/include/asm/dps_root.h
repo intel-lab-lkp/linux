@@ -1,0 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+
+#ifndef _ASM_LOONGARCH_DPS_ROOT_H
+#define _ASM_LOONGARCH_DPS_ROOT_H
+
+#define DPS_ROOT_PARTITION_TYPE_UUID "77055800-792c-4f94-b39a-98c91b762bb6"
+
+#endif /* _ASM_LOONGARCH_DPS_ROOT_H */
