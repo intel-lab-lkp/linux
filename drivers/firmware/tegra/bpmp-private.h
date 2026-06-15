@@ -35,4 +35,35 @@ struct tegra_bpmp_acpi_message {
 	u8 data[TEGRA_BPMP_ACPI_BMRQ_DATA_SZ];
 };
 
+#if IS_ENABLED(CONFIG_ARCH_TEGRA_410_SOC)
+int tegra410_bpmp_mbwt_set(struct tegra_bpmp *bpmp, unsigned int instance,
+			   unsigned int vc_type, unsigned int bandwidth);
+int tegra410_bpmp_mbwt_get(struct tegra_bpmp *bpmp, unsigned int instance,
+			   unsigned int vc_type, unsigned int *bandwidth_out);
+bool tegra410_bpmp_mbwt_cmd_is_supported(struct tegra_bpmp *bpmp,
+					 unsigned int cmd_code);
+#else
+static inline int tegra410_bpmp_mbwt_set(struct tegra_bpmp *bpmp,
+					 unsigned int instance,
+					 unsigned int vc_type,
+					 unsigned int bandwidth)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int tegra410_bpmp_mbwt_get(struct tegra_bpmp *bpmp,
+					 unsigned int instance,
+					 unsigned int vc_type,
+					 unsigned int *bandwidth_out)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline bool tegra410_bpmp_mbwt_cmd_is_supported(struct tegra_bpmp *bpmp,
+						       unsigned int cmd_code)
+{
+	return false;
+}
+#endif
+
 #endif
