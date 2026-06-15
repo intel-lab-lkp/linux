@@ -101,6 +101,8 @@ struct dbg_reg_def_t dbg_reg_def[DBG_MAX_REG_NUM] = {
 	{ "fpcr", 4, -1 },
 };
 
+static DEFINE_PER_CPU(unsigned int, kgdb_pstate);
+
 char *dbg_get_reg(int regno, void *mem, struct pt_regs *regs)
 {
 	if (regno >= DBG_MAX_REG_NUM || regno < 0)
@@ -207,6 +209,8 @@ int kgdb_arch_handle_exception(int exception_vector, int signo,
 		err = 0;
 		break;
 	case 's':
+		__this_cpu_write(kgdb_pstate, linux_regs->pstate);
+		linux_regs->pstate |= PSR_I_BIT;
 		/*
 		 * Update step address value with address passed
 		 * with step packet.
@@ -252,8 +256,16 @@ NOKPROBE_SYMBOL(kgdb_compiled_brk_handler);
 
 int kgdb_single_step_handler(struct pt_regs *regs, unsigned long esr)
 {
+	unsigned int pstate;
 	if (!kgdb_single_step)
 		return DBG_HOOK_ERROR;
+
+	/* restore interrupt mask status */
+	pstate = __this_cpu_read(kgdb_pstate);
+	if (pstate & PSR_I_BIT)
+		regs->pstate |= PSR_I_BIT;
+	else
+		regs->pstate &= ~PSR_I_BIT;
 
 	kgdb_handle_exception(0, SIGTRAP, 0, regs);
 	return DBG_HOOK_HANDLED;
