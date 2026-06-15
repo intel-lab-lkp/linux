@@ -300,7 +300,11 @@ static int adc12138_init(struct adc12138 *adc)
 	if (status < 0)
 		return status;
 
-	adc12138_wait_eoc(adc, msecs_to_jiffies(100));
+	ret = adc12138_wait_eoc(adc, msecs_to_jiffies(100));
+	if (ret) {
+		dev_warn(&adc->spi->dev, "wait eoc timeout\n");
+		return ret;
+	}
 
 	status = adc12138_read_status(adc);
 	if (status & ADC12138_STATUS_CAL) {
