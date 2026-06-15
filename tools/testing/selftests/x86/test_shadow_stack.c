@@ -979,6 +979,14 @@ int main(int argc, char *argv[])
 {
 	int ret = 0;
 
+	/* test that we can't use unlock to set shadow stack */
+	if (!ARCH_PRCTL(ARCH_SHSTK_UNLOCK, ARCH_SHSTK_SHSTK)) {
+		printf("[SKIP]\tCould enable Shadow stack via UNLOCK\n");
+		return 1;
+	}
+
+	printf("[OK]\tCouldn't enable Shadow stack via UNLOCK\n");
+
 	if (ARCH_PRCTL(ARCH_SHSTK_ENABLE, ARCH_SHSTK_SHSTK)) {
 		printf("[SKIP]\tCould not enable Shadow stack\n");
 		return 1;
