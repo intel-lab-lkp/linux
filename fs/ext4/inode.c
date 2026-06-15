@@ -1695,6 +1695,9 @@ struct mpage_da_data {
 	struct writeback_control *wbc;
 	unsigned int can_map:1;	/* Can writepages call map blocks? */
 
+	/* Saved memalloc context from ext4_writepages_down_read() */
+	int alloc_ctx;
+
 	/* These are internal state of ext4_do_writepages() */
 	loff_t start_pos;	/* The start pos to write */
 	loff_t next_pos;	/* Current pos to examine */
@@ -2817,16 +2820,35 @@ static int ext4_do_writepages(struct mpage_da_data *mpd)
 	 * we'd better clear the inline data here.
 	 */
 	if (ext4_has_inline_data(inode)) {
-		/* Just inode will be modified... */
+		/*
+		 * Temporarily drop s_writepages_rwsem because
+		 * ext4_destroy_inline_data() acquires xattr_sem, which has
+		 * a higher lock ordering rank.  Holding both would create a
+		 * circular dependency with ext4_xattr_block_set() -> iput()
+		 * -> ext4_writepages() -> s_writepages_rwsem.
+		 *
+		 * Drop the rwsem before starting the journal handle to also
+		 * avoid a deadlock with ext4_change_inode_journal_flag(),
+		 * which takes rwsem (write) then jbd2_journal_lock_updates().
+		 */
+		if (mpd->can_map)
+			ext4_writepages_up_read(inode->i_sb, mpd->alloc_ctx);
 		handle = ext4_journal_start(inode, EXT4_HT_INODE, 1);
 		if (IS_ERR(handle)) {
+			if (mpd->can_map)
+				mpd->alloc_ctx =
+					ext4_writepages_down_read(inode->i_sb);
 			ret = PTR_ERR(handle);
 			goto out_writepages;
 		}
 		BUG_ON(ext4_test_inode_state(inode,
 				EXT4_STATE_MAY_INLINE_DATA));
-		ext4_destroy_inline_data(handle, inode);
+		ret = ext4_destroy_inline_data(handle, inode);
 		ext4_journal_stop(handle);
+		if (mpd->can_map)
+			mpd->alloc_ctx = ext4_writepages_down_read(inode->i_sb);
+		if (ret)
+			goto out_writepages;
 	}
 
 	/*
@@ -3033,13 +3055,12 @@ static int ext4_writepages(struct address_space *mapping,
 		.can_map = 1,
 	};
 	int ret;
-	int alloc_ctx;
 
 	ret = ext4_emergency_state(sb);
 	if (unlikely(ret))
 		return ret;
 
-	alloc_ctx = ext4_writepages_down_read(sb);
+	mpd.alloc_ctx = ext4_writepages_down_read(sb);
 	ret = ext4_do_writepages(&mpd);
 	/*
 	 * For data=journal writeback we could have come across pages marked
@@ -3048,7 +3069,7 @@ static int ext4_writepages(struct address_space *mapping,
 	 */
 	if (!ret && mpd.journalled_more_data)
 		ret = ext4_do_writepages(&mpd);
-	ext4_writepages_up_read(sb, alloc_ctx);
+	ext4_writepages_up_read(sb, mpd.alloc_ctx);
 
 	return ret;
 }
