@@ -16,7 +16,10 @@ use crate::{
         sec2::Sec2,
         Falcon, //
     },
-    fb::FbLayout,
+    fb::{
+        FbRanges,
+        GspFbInfo, //
+    },
     firmware::{
         booter::{
             BooterFirmware,
@@ -185,7 +188,7 @@ fn run_fwsec_frts(
     falcon: &Falcon<GspEngine>,
     bar: Bar0<'_>,
     bios: &Vbios,
-    fb_layout: &FbLayout,
+    fb_ranges: &FbRanges,
 ) -> Result {
     // Check that the WPR2 region does not already exist - if it does, we cannot run
     // FWSEC-FRTS until the GPU is reset.
@@ -204,8 +207,8 @@ fn run_fwsec_frts(
         bar,
         bios,
         FwsecCommand::Frts {
-            frts_addr: fb_layout.frts.start,
-            frts_size: fb_layout.frts.len(),
+            frts_addr: fb_ranges.frts.start,
+            frts_size: fb_ranges.frts.len(),
         },
     )?;
 
@@ -244,12 +247,12 @@ fn run_fwsec_frts(
 
             Err(EIO)
         }
-        (wpr2_lo, _) if wpr2_lo != fb_layout.frts.start => {
+        (wpr2_lo, _) if wpr2_lo != fb_ranges.frts.start => {
             dev_err!(
                 dev,
                 "WPR2 region created at unexpected address {:#x}; expected {:#x}\n",
                 wpr2_lo,
-                fb_layout.frts.start,
+                fb_ranges.frts.start,
             );
 
             Err(EIO)
@@ -272,11 +275,14 @@ impl GspHal for Tu102 {
         dev: &'a device::Device<device::Bound>,
         bar: Bar0<'a>,
         chipset: Chipset,
-        fb_layout: &FbLayout,
+        fb_info: &GspFbInfo,
         wpr_meta: &Coherent<GspFwWprMeta>,
         gsp_falcon: &'a Falcon<GspEngine>,
         sec2_falcon: &'a Falcon<Sec2>,
     ) -> Result<BootUnloadGuard<'a>> {
+        let GspFbInfo::Ranges(fb_ranges) = fb_info else {
+            return Err(EINVAL);
+        };
         let bios = Vbios::new(dev, bar)?;
 
         // Try and prepare the unload bundle.
@@ -301,8 +307,8 @@ impl GspHal for Tu102 {
             BootUnloadGuard::new(gsp, dev, bar, gsp_falcon, sec2_falcon, unload_bundle);
 
         // FWSEC-FRTS is not executed on chips where the FRTS region size is 0 (e.g. GA100).
-        if !fb_layout.frts.is_empty() {
-            run_fwsec_frts(dev, chipset, gsp_falcon, bar, &bios, fb_layout)?;
+        if !fb_ranges.frts.is_empty() {
+            run_fwsec_frts(dev, chipset, gsp_falcon, bar, &bios, fb_ranges)?;
         }
 
         gsp_falcon.reset(bar)?;

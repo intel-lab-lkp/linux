@@ -18,7 +18,7 @@ use crate::{
         sec2::Sec2,
         Falcon, //
     },
-    fb::FbLayout,
+    fb::GspFbInfo,
     firmware::gsp::GspFirmware,
     gpu::{
         Architecture,
@@ -60,7 +60,7 @@ pub(super) trait GspHal: Send {
         dev: &'a device::Device<device::Bound>,
         bar: Bar0<'a>,
         chipset: Chipset,
-        fb_layout: &FbLayout,
+        fb_info: &GspFbInfo,
         wpr_meta: &Coherent<GspFwWprMeta>,
         gsp_falcon: &'a Falcon<GspEngine>,
         sec2_falcon: &'a Falcon<Sec2>,

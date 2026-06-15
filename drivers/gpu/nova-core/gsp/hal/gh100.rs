@@ -17,7 +17,7 @@ use crate::{
         sec2::Sec2,
         Falcon, //
     },
-    fb::FbLayout,
+    fb::GspFbInfo,
     fsp::{
         FmcBootArgs,
         Fsp, //
@@ -152,11 +152,15 @@ impl GspHal for Gh100 {
         dev: &'a device::Device<device::Bound>,
         bar: Bar0<'a>,
         chipset: Chipset,
-        fb_layout: &FbLayout,
+        fb_info: &GspFbInfo,
         wpr_meta: &Coherent<GspFwWprMeta>,
         gsp_falcon: &'a Falcon<GspEngine>,
         sec2_falcon: &'a Falcon<Sec2>,
     ) -> Result<BootUnloadGuard<'a>> {
+        let GspFbInfo::Sizes(fb_sizes) = fb_info else {
+            return Err(EINVAL);
+        };
+
         let args = FmcBootArgs::new(dev, chipset, wpr_meta, &gsp.libos, false)?;
 
         let mut fsp = Fsp::new(dev, chipset)?;
@@ -169,7 +173,7 @@ impl GspHal for Gh100 {
         let unload_guard =
             BootUnloadGuard::new(gsp, dev, bar, gsp_falcon, sec2_falcon, Some(unload_bundle));
 
-        fsp.boot_fmc(dev, bar, fb_layout, &args)?;
+        fsp.boot_fmc(dev, bar, fb_sizes, &args)?;
 
         wait_for_gsp_lockdown_release(dev, bar, gsp_falcon, args.boot_params())?;
 

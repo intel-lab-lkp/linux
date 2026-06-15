@@ -19,7 +19,7 @@ use crate::{
         sec2::Sec2,
         Falcon, //
     },
-    fb::FbLayout,
+    fb::GspFbInfo,
     firmware::{
         gsp::GspFirmware,
         FIRMWARE_VERSION, //
@@ -114,10 +114,10 @@ impl super::Gsp {
 
         let gsp_fw = KBox::pin_init(GspFirmware::new(dev, chipset, FIRMWARE_VERSION), GFP_KERNEL)?;
 
-        let fb_layout = FbLayout::new(chipset, bar, &gsp_fw)?;
-        dev_dbg!(dev, "{:#x?}\n", fb_layout);
+        let fb_info = GspFbInfo::new(chipset, bar, &gsp_fw)?;
+        dev_dbg!(dev, "{:#x?}\n", fb_info);
 
-        let wpr_meta = Coherent::init(dev, GFP_KERNEL, GspFwWprMeta::new(&gsp_fw, &fb_layout))?;
+        let wpr_meta = Coherent::init(dev, GFP_KERNEL, GspFwWprMeta::new(&gsp_fw, &fb_info))?;
 
         // Perform the chipset-specific boot sequence, and retrieve the unload bundle.
         let unload_guard = hal.boot(
@@ -125,7 +125,7 @@ impl super::Gsp {
             dev,
             bar,
             chipset,
-            &fb_layout,
+            &fb_info,
             &wpr_meta,
             gsp_falcon,
             sec2_falcon,

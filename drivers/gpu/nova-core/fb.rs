@@ -144,11 +144,29 @@ impl fmt::Debug for FbRange {
     }
 }
 
-/// Layout of the GPU framebuffer memory.
-///
-/// Contains ranges of GPU memory reserved for a given purpose during the GSP boot process.
+/// Framebuffer information required for GSP boot.
 #[derive(Debug)]
-pub(crate) struct FbLayout {
+pub(crate) enum GspFbInfo {
+    /// Concrete framebuffer ranges for host computed framebuffer layout.
+    Ranges(FbRanges),
+    /// Sizes of framebuffer ranges for GSP-FMC computed ranges.
+    Sizes(FbSizes),
+}
+
+impl GspFbInfo {
+    /// Computes the framebuffer region information required for boot.
+    pub(crate) fn new(chipset: Chipset, bar: Bar0<'_>, gsp_fw: &GspFirmware) -> Result<Self> {
+        if chipset.uses_fsp() {
+            FbSizes::new(chipset, bar).map(Self::Sizes)
+        } else {
+            FbRanges::new(chipset, bar, gsp_fw).map(Self::Ranges)
+        }
+    }
+}
+
+/// Framebuffer ranges needed for GSP boot process.
+#[derive(Debug)]
+pub(crate) struct FbRanges {
     /// Range of the framebuffer. Starts at `0`.
     pub(crate) fb: FbRange,
     /// VGA workspace, small area of reserved memory at the end of the framebuffer.
@@ -163,15 +181,17 @@ pub(crate) struct FbLayout {
     pub(crate) wpr2_heap: FbRange,
     /// WPR2 region range, starting with an instance of `GspFwWprMeta`.
     pub(crate) wpr2: FbRange,
+    /// Non-WPR heap, located just below WPR2.
     pub(crate) heap: FbRange,
+    /// Number of VF partitions.
     pub(crate) vf_partition_count: u8,
     /// PMU reserved memory size, in bytes.
     pub(crate) pmu_reserved_size: u32,
 }
 
-impl FbLayout {
-    /// Computes the FB layout for `chipset` required to run the `gsp_fw` GSP firmware.
-    pub(crate) fn new(chipset: Chipset, bar: Bar0<'_>, gsp_fw: &GspFirmware) -> Result<Self> {
+impl FbRanges {
+    /// Computes concrete framebuffer ranges required on non-FSP booting architectures.
+    fn new(chipset: Chipset, bar: Bar0<'_>, gsp_fw: &GspFirmware) -> Result<Self> {
         let hal = hal::fb_hal(chipset);
 
         let fb = {
@@ -267,6 +287,41 @@ impl FbLayout {
             heap,
             vf_partition_count: 0,
             pmu_reserved_size: hal.pmu_reserved_size(),
+        })
+    }
+}
+
+/// Framebuffer region sizes needed for GSP-FMC boot.
+#[derive(Debug)]
+pub(crate) struct FbSizes {
+    /// VGA workspace size, in bytes.
+    pub(crate) vga_workspace_size: u64,
+    /// FRTS size, in bytes.
+    pub(crate) frts_size: u64,
+    /// WPR2 heap size, in bytes.
+    pub(crate) wpr2_heap_size: u64,
+    /// Non-WPR heap size, in bytes.
+    pub(crate) heap_size: u64,
+    /// PMU reserved memory size, in bytes.
+    pub(crate) pmu_reserved_size: u32,
+    /// Number of VF partitions.
+    pub(crate) vf_partition_count: u8,
+}
+
+impl FbSizes {
+    /// Computes the framebuffer region sizes for GSP-FMC boot.
+    fn new(chipset: Chipset, bar: Bar0<'_>) -> Result<Self> {
+        let hal = hal::fb_hal(chipset);
+        let fb_size = hal.vidmem_size(bar);
+
+        Ok(Self {
+            vga_workspace_size: u64::SZ_128K,
+            frts_size: hal.frts_size(),
+            wpr2_heap_size: gsp::LibosParams::from_chipset(chipset)
+                .wpr_heap_size(chipset, fb_size)?,
+            heap_size: u64::from(hal.non_wpr_heap_size()),
+            pmu_reserved_size: hal.pmu_reserved_size(),
+            vf_partition_count: 0,
         })
     }
 }

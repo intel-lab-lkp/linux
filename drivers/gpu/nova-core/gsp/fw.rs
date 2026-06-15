@@ -28,7 +28,7 @@ use kernel::{
 };
 
 use crate::{
-    fb::FbLayout,
+    fb::GspFbInfo,
     firmware::gsp::GspFirmware,
     gpu::{
         Architecture,
@@ -214,11 +214,65 @@ type GspFwWprMetaBootInfo = bindings::GspFwWprMeta__bindgen_ty_1__bindgen_ty_1;
 
 impl GspFwWprMeta {
     /// Returns an initializer for a `GspFwWprMeta` suitable for booting `gsp_firmware` using the
-    /// `fb_layout` layout.
+    /// framebuffer information.
     pub(crate) fn new<'a>(
         gsp_firmware: &'a GspFirmware,
-        fb_layout: &'a FbLayout,
+        fb_info: &'a GspFbInfo,
     ) -> impl Init<Self> + 'a {
+        #[derive(Default)]
+        struct WprMetaFields {
+            gsp_fw_rsvd_start: u64,
+            non_wpr_heap_offset: u64,
+            non_wpr_heap_size: u64,
+            gsp_fw_wpr_start: u64,
+            gsp_fw_heap_offset: u64,
+            gsp_fw_heap_size: u64,
+            gsp_fw_offset: u64,
+            boot_bin_offset: u64,
+            frts_offset: u64,
+            frts_size: u64,
+            gsp_fw_wpr_end: u64,
+            gsp_fw_heap_vf_partition_count: u8,
+            fb_size: u64,
+            vga_workspace_offset: u64,
+            vga_workspace_size: u64,
+            pmu_reserved_size: u32,
+        }
+
+        let fields = match fb_info {
+            GspFbInfo::Ranges(ranges) => WprMetaFields {
+                gsp_fw_rsvd_start: ranges.heap.start,
+                non_wpr_heap_offset: ranges.heap.start,
+                non_wpr_heap_size: ranges.heap.len(),
+                gsp_fw_wpr_start: ranges.wpr2.start,
+                gsp_fw_heap_offset: ranges.wpr2_heap.start,
+                gsp_fw_heap_size: ranges.wpr2_heap.len(),
+                gsp_fw_offset: ranges.elf.start,
+                boot_bin_offset: ranges.boot.start,
+                frts_offset: ranges.frts.start,
+                frts_size: ranges.frts.len(),
+                gsp_fw_wpr_end: ranges
+                    .vga_workspace
+                    .start
+                    .align_down(Alignment::new::<SZ_128K>()),
+                gsp_fw_heap_vf_partition_count: ranges.vf_partition_count,
+                fb_size: ranges.fb.len(),
+                vga_workspace_offset: ranges.vga_workspace.start,
+                vga_workspace_size: ranges.vga_workspace.len(),
+                pmu_reserved_size: ranges.pmu_reserved_size,
+            },
+            GspFbInfo::Sizes(sizes) => WprMetaFields {
+                non_wpr_heap_size: sizes.heap_size,
+                gsp_fw_heap_size: sizes.wpr2_heap_size,
+                frts_size: sizes.frts_size,
+                gsp_fw_heap_vf_partition_count: sizes.vf_partition_count,
+                vga_workspace_size: sizes.vga_workspace_size,
+                pmu_reserved_size: sizes.pmu_reserved_size,
+                // When only sizes are supplied, offsets and several other parameters are not used.
+                ..Default::default()
+            },
+        };
+
         #[allow(non_snake_case)]
         let init_inner = init!(bindings::GspFwWprMeta {
             // CAST: we want to store the bits of `GSP_FW_WPR_META_MAGIC` unmodified.
@@ -237,25 +291,22 @@ impl GspFwWprMeta {
                     sizeOfSignature: u64::from_safe_cast(gsp_firmware.signatures.size()),
                 },
             },
-            gspFwRsvdStart: fb_layout.heap.start,
-            nonWprHeapOffset: fb_layout.heap.start,
-            nonWprHeapSize: fb_layout.heap.end - fb_layout.heap.start,
-            gspFwWprStart: fb_layout.wpr2.start,
-            gspFwHeapOffset: fb_layout.wpr2_heap.start,
-            gspFwHeapSize: fb_layout.wpr2_heap.end - fb_layout.wpr2_heap.start,
-            gspFwOffset: fb_layout.elf.start,
-            bootBinOffset: fb_layout.boot.start,
-            frtsOffset: fb_layout.frts.start,
-            frtsSize: fb_layout.frts.end - fb_layout.frts.start,
-            gspFwWprEnd: fb_layout
-                .vga_workspace
-                .start
-                .align_down(Alignment::new::<SZ_128K>()),
-            gspFwHeapVfPartitionCount: fb_layout.vf_partition_count,
-            fbSize: fb_layout.fb.end - fb_layout.fb.start,
-            vgaWorkspaceOffset: fb_layout.vga_workspace.start,
-            vgaWorkspaceSize: fb_layout.vga_workspace.end - fb_layout.vga_workspace.start,
-            pmuReservedSize: fb_layout.pmu_reserved_size,
+            gspFwRsvdStart: fields.gsp_fw_rsvd_start,
+            nonWprHeapOffset: fields.non_wpr_heap_offset,
+            nonWprHeapSize: fields.non_wpr_heap_size,
+            gspFwWprStart: fields.gsp_fw_wpr_start,
+            gspFwHeapOffset: fields.gsp_fw_heap_offset,
+            gspFwHeapSize: fields.gsp_fw_heap_size,
+            gspFwOffset: fields.gsp_fw_offset,
+            bootBinOffset: fields.boot_bin_offset,
+            frtsOffset: fields.frts_offset,
+            frtsSize: fields.frts_size,
+            gspFwWprEnd: fields.gsp_fw_wpr_end,
+            gspFwHeapVfPartitionCount: fields.gsp_fw_heap_vf_partition_count,
+            fbSize: fields.fb_size,
+            vgaWorkspaceOffset: fields.vga_workspace_offset,
+            vgaWorkspaceSize: fields.vga_workspace_size,
+            pmuReservedSize: fields.pmu_reserved_size,
             ..Zeroable::init_zeroed()
         });
 
