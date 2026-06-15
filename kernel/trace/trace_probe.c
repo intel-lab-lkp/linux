@@ -730,6 +730,20 @@ static int parse_btf_arg(char *varname,
 		goto found;
 	}
 
+	if (strcmp(varname, "$current") == 0) {
+		code->op = FETCH_OP_CURRENT;
+		/* If no typecast is specified for $current, use task_struct by default */
+		if (!ctx->struct_btf) {
+			tid = bpf_find_btf_id("task_struct", BTF_KIND_STRUCT, &ctx->struct_btf);
+			if (tid < 0) {
+				trace_probe_log_err(ctx->offset, NO_BTF_ENTRY);
+				return -ENOENT;
+			}
+			ctx->last_struct = btf_type_skip_modifiers(ctx->struct_btf, tid, &tid);
+		}
+		goto found;
+	}
+
 	if (ctx->flags & TPARG_FL_RETURN && !strcmp(varname, "$retval")) {
 		code->op = FETCH_OP_RETVAL;
 		/* Check whether the function return type is not void */
@@ -756,8 +770,8 @@ static int parse_btf_arg(char *varname,
 			return -ENOENT;
 		}
 	}
-	params = ctx->params;
 
+	params = ctx->params;
 	for (i = 0; i < ctx->nr_params; i++) {
 		const char *name = btf_name_by_offset(ctx->btf, params[i].name_off);
 
@@ -1244,6 +1258,24 @@ static int parse_probe_vars(char *orig_arg, const struct fetch_type *t,
 
 	if (strcmp(arg, "comm") == 0 || strcmp(arg, "COMM") == 0) {
 		code->op = FETCH_OP_COMM;
+		return 0;
+	}
+
+	/* $current returns the address of the current task_struct. */
+	if (str_has_prefix(arg, "current")) {
+		/* $current is only supported by kernel probe and need function name. */
+		if (!(ctx->flags & TPARG_FL_KERNEL) || !ctx->funcname) {
+			err = TP_ERR_BAD_VAR;
+			goto inval;
+		}
+		arg += strlen("current");
+		if (*arg == '-' && IS_ENABLED(CONFIG_PROBE_EVENTS_BTF_ARGS))
+			return parse_btf_arg(orig_arg, pcode, end, ctx);
+
+		if (*arg != '\0')
+			goto inval;
+
+		code->op = FETCH_OP_CURRENT;
 		return 0;
 	}
 
