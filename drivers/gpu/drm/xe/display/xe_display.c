@@ -105,7 +105,6 @@ static void xe_display_fini_early(void *arg)
 	intel_hpd_cancel_work(display);
 	intel_display_driver_remove_noirq(display);
 	intel_display_driver_remove_nogem(display);
-	intel_opregion_cleanup(display);
 	intel_display_power_cleanup(display);
 }
 

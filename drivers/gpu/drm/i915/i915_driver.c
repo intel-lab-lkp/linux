@@ -586,12 +586,9 @@ ALLOW_ERROR_INJECTION(i915_driver_hw_probe, ERRNO);
  */
 static void i915_driver_hw_remove(struct drm_i915_private *dev_priv)
 {
-	struct intel_display *display = dev_priv->display;
 	struct pci_dev *pdev = to_pci_dev(dev_priv->drm.dev);
 
 	i915_perf_fini(dev_priv);
-
-	intel_opregion_cleanup(display);
 
 	pci_disable_msi(pdev);
 }

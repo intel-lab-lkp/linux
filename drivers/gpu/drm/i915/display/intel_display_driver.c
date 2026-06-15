@@ -662,6 +662,8 @@ void intel_display_driver_remove_nogem(struct intel_display *display)
 	intel_display_power_driver_remove(display);
 
 	intel_bios_driver_remove(display);
+
+	intel_opregion_cleanup(display);
 }
 
 void intel_display_driver_unregister(struct intel_display *display)
