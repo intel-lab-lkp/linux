@@ -754,6 +754,15 @@ static void rcar_du_crtc_atomic_enable(struct drm_crtc *crtc,
 	     (BIT(RCAR_DU_OUTPUT_DSI0) | BIT(RCAR_DU_OUTPUT_DSI1)))) {
 		struct drm_bridge *bridge = rcdu->dsi[rcrtc->index];
 
+		/*
+		 * When we have a DSC block between the DU and the DSI,
+		 * the "bridge" points to the DSC. Detect the DSC by looking
+		 * at the bridge type, and skip the DSC if the bridge is not
+		 * the DSI bridge.
+		 */
+		if (bridge->type != DRM_MODE_CONNECTOR_DSI)
+			bridge = bridge->next_bridge;
+
 		rcar_mipi_dsi_pclk_enable(bridge, state);
 	}
 
@@ -795,6 +804,15 @@ static void rcar_du_crtc_atomic_disable(struct drm_crtc *crtc,
 	    (rstate->outputs &
 	     (BIT(RCAR_DU_OUTPUT_DSI0) | BIT(RCAR_DU_OUTPUT_DSI1)))) {
 		struct drm_bridge *bridge = rcdu->dsi[rcrtc->index];
+
+		/*
+		 * When we have a DSC block between the DU and the DSI,
+		 * the "bridge" points to the DSC. Detect the DSC by looking
+		 * at the bridge type, and skip the DSC if the bridge is not
+		 * the DSI bridge.
+		 */
+		if (bridge->type != DRM_MODE_CONNECTOR_DSI)
+			bridge = bridge->next_bridge;
 
 		/*
 		 * Disable the DSI clock output, see
