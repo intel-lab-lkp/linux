@@ -5187,7 +5187,7 @@ int perf_session__read_header(struct perf_session *session)
 			pr_err("Invalid ids section size %" PRIu64 " for attr %d, not aligned to u64\n",
 			       f_attr.ids.size, i);
 			err = -EINVAL;
-			goto out_delete_evlist;
+			goto out_put_evlist;
 		}
 
 		/*
@@ -5200,7 +5200,7 @@ int perf_session__read_header(struct perf_session *session)
 			pr_err("Invalid ids section size %" PRIu64 " for attr %d, too many IDs\n",
 			       f_attr.ids.size, i);
 			err = -EINVAL;
-			goto out_delete_evlist;
+			goto out_put_evlist;
 		}
 
 		/*
@@ -5213,19 +5213,19 @@ int perf_session__read_header(struct perf_session *session)
 			pr_err("Invalid ids section for attr %d: offset=%" PRIu64 " size=%" PRIu64 " exceeds file size %" PRIu64 "\n",
 			       i, f_attr.ids.offset, f_attr.ids.size, (u64)input_stat.st_size);
 			err = -EINVAL;
-			goto out_delete_evlist;
+			goto out_put_evlist;
 		}
 
 		tmp = lseek(fd, 0, SEEK_CUR);
 		evsel = evsel__new(&f_attr.attr);
 
 		if (evsel == NULL)
-			goto out_delete_evlist;
+			goto out_put_evlist;
 
 		evsel->needs_swap = header->needs_swap;
 		/*
 		 * Do it before so that if perf_evsel__alloc_id fails, this
-		 * entry gets purged too at evlist__delete().
+		 * entry gets purged too at evlist__put().
 		 */
 		evlist__add(session->evlist, evsel);
 
@@ -5236,7 +5236,7 @@ int perf_session__read_header(struct perf_session *session)
 		 * hattr->ids threads.
 		 */
 		if (perf_evsel__alloc_id(&evsel->core, 1, nr_ids))
-			goto out_delete_evlist;
+			goto out_put_evlist;
 
 		lseek(fd, f_attr.ids.offset, SEEK_SET);
 
@@ -5266,18 +5266,18 @@ int perf_session__read_header(struct perf_session *session)
 		err = perf_header__process_sections(header, fd, &session->tevent,
 						    perf_file_section__process);
 		if (err < 0)
-			goto out_delete_evlist;
+			goto out_put_evlist;
 
 		if (evlist__prepare_tracepoint_events(session->evlist,
 						      session->tevent.pevent)) {
 			err = -ENOMEM;
-			goto out_delete_evlist;
+			goto out_put_evlist;
 		}
 #else
 		err = perf_header__process_sections(header, fd, NULL,
 						    perf_file_section__process);
 		if (err < 0)
-			goto out_delete_evlist;
+			goto out_put_evlist;
 #endif
 	}
 
@@ -5303,8 +5303,8 @@ int perf_session__read_header(struct perf_session *session)
 out_errno:
 	return -errno;
 
-out_delete_evlist:
-	evlist__delete(session->evlist);
+out_put_evlist:
+	evlist__put(session->evlist);
 	session->evlist = NULL;
 	return err;
 }
