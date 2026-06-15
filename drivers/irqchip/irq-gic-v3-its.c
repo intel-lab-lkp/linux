@@ -273,7 +273,7 @@ static void *itt_alloc_pool(int node, int size)
 			break;
 
 		gen_pool_add(itt_pool, (unsigned long)page_address(page), PAGE_SIZE, node);
-	} while (!addr);
+	} while (true);
 
 	return (void *)addr;
 }
@@ -1681,7 +1681,7 @@ static unsigned int cpumask_pick_least_loaded(struct irq_data *d,
 		int this_count = its_read_lpi_count(d, tmp);
 		if (this_count < count) {
 			cpu = tmp;
-		        count = this_count;
+			count = this_count;
 		}
 	}
 
@@ -2127,12 +2127,13 @@ static int alloc_lpi_range(u32 nr_lpis, u32 *base)
 	list_for_each_entry_safe(range, tmp, &lpi_range_list, entry) {
 		if (range->span >= nr_lpis) {
 			*base = range->base_id;
-			range->base_id += nr_lpis;
-			range->span -= nr_lpis;
 
-			if (range->span == 0) {
+			if (range->span == nr_lpis) {
 				list_del(&range->entry);
 				kfree(range);
+			} else {
+				range->base_id += nr_lpis;
+				range->span -= nr_lpis;
 			}
 
 			err = 0;
@@ -2472,7 +2473,6 @@ retry_baser:
 
 	baser->order = order;
 	baser->base = base;
-	baser->psz = psz;
 	tmp = indirect ? GITS_LVL1_ENTRY_SIZE : esz;
 
 	pr_info("ITS@%pa: allocated %d %s @%llx (%s, esz %d, psz %dK, shr %d)\n",
