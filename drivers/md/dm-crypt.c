@@ -101,6 +101,9 @@ struct dm_crypt_request {
 	struct scatterlist sg_in[4];
 	struct scatterlist sg_out[4];
 	u64 iv_sector;
+	/* Multi-data-unit SG arrays, NULL when sg_in[]/sg_out[] suffice. */
+	struct scatterlist *sg_in_ext;
+	struct scatterlist *sg_out_ext;
 };
 
 struct crypt_config;
@@ -115,6 +118,12 @@ struct crypt_iv_operations {
 			 struct dm_crypt_request *dmreq);
 	void (*post)(struct crypt_config *cc, u8 *iv,
 		     struct dm_crypt_request *dmreq);
+	/*
+	 * The per-sector IV advances as a 128-bit LE counter, so a bio's
+	 * consecutive sectors share one starting IV and can be batched into
+	 * a single skcipher request via data_unit_size.
+	 */
+	bool sector_iv_le128;
 };
 
 struct iv_benbi_private {
@@ -151,6 +160,7 @@ enum cipher_flags {
 	CRYPT_IV_LARGE_SECTORS,		/* Calculate IV from sector_size, not 512B sectors */
 	CRYPT_ENCRYPT_PREPROCESS,	/* Must preprocess data for encryption (elephant) */
 	CRYPT_KEY_MAC_SIZE_SET,		/* The integrity_key_size option was used */
+	CRYPT_MULTI_DATA_UNIT,		/* Batch all sectors of a bio per crypto request */
 };
 
 /*
@@ -1018,7 +1028,8 @@ static const struct crypt_iv_operations crypt_iv_plain_ops = {
 };
 
 static const struct crypt_iv_operations crypt_iv_plain64_ops = {
-	.generator = crypt_iv_plain64_gen
+	.generator = crypt_iv_plain64_gen,
+	.sector_iv_le128 = true,
 };
 
 static const struct crypt_iv_operations crypt_iv_plain64be_ops = {
@@ -1426,12 +1437,126 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 	return r;
 }
 
+/*
+ * Submit all remaining sectors of the current bio in one skcipher request.
+ * Same return convention as crypt_convert_block_skcipher() except for
+ * -EAGAIN, which the caller must treat as "disable multi-DU and re-enter
+ * the per-sector path" so swap-out-to-dm-crypt always makes forward
+ * progress on the mempool reserve.
+ */
+static int crypt_convert_block_skcipher_multi(struct crypt_config *cc,
+					      struct convert_context *ctx,
+					      struct skcipher_request *req,
+					      unsigned int *out_processed)
+{
+	const unsigned int sector_size = cc->sector_size;
+	const gfp_t gfp = GFP_NOIO | __GFP_NORETRY | __GFP_NOWARN;
+	unsigned int total = ctx->iter_in.bi_size;
+	unsigned int n_sg_in = 0, n_sg_out = 0;
+	struct dm_crypt_request *dmreq = dmreq_of_req(cc, req);
+	struct scatterlist *sg_in = NULL, *sg_out = NULL;
+	struct bvec_iter iter_in, iter_out;
+	struct bio_vec bv;
+	u8 *iv, *org_iv;
+	int r;
+
+	if (WARN_ON_ONCE(ctx->iter_in.bi_size != ctx->iter_out.bi_size))
+		return -EIO;
+	if (unlikely(total & (sector_size - 1)))
+		return -EIO;
+
+	iter_in = ctx->iter_in;
+	iter_in.bi_size = total;
+	__bio_for_each_bvec(bv, ctx->bio_in, iter_in, iter_in)
+		n_sg_in++;
+
+	iter_out = ctx->iter_out;
+	iter_out.bi_size = total;
+	__bio_for_each_bvec(bv, ctx->bio_out, iter_out, iter_out)
+		n_sg_out++;
+
+	sg_in = kmalloc_array(n_sg_in, sizeof(*sg_in), gfp);
+	sg_out = (ctx->bio_in == ctx->bio_out) ? sg_in :
+		 kmalloc_array(n_sg_out, sizeof(*sg_out), gfp);
+	if (!sg_in || !sg_out) {
+		kfree(sg_in);
+		if (sg_out != sg_in)
+			kfree(sg_out);
+		return -EAGAIN;
+	}
+
+	sg_init_table(sg_in, n_sg_in);
+	{
+		unsigned int i = 0;
+
+		iter_in = ctx->iter_in;
+		iter_in.bi_size = total;
+		__bio_for_each_bvec(bv, ctx->bio_in, iter_in, iter_in)
+			sg_set_page(&sg_in[i++], bv.bv_page, bv.bv_len,
+				    bv.bv_offset);
+	}
+
+	if (sg_out != sg_in) {
+		unsigned int i = 0;
+
+		sg_init_table(sg_out, n_sg_out);
+		iter_out = ctx->iter_out;
+		iter_out.bi_size = total;
+		__bio_for_each_bvec(bv, ctx->bio_out, iter_out, iter_out)
+			sg_set_page(&sg_out[i++], bv.bv_page, bv.bv_len,
+				    bv.bv_offset);
+	}
+
+	dmreq->iv_sector = ctx->cc_sector;
+	if (test_bit(CRYPT_IV_LARGE_SECTORS, &cc->cipher_flags))
+		dmreq->iv_sector >>= cc->sector_shift;
+	dmreq->ctx = ctx;
+
+	iv = iv_of_dmreq(cc, dmreq);
+	org_iv = org_iv_of_dmreq(cc, dmreq);
+	r = cc->iv_gen_ops->generator(cc, org_iv, dmreq);
+	if (r < 0)
+		goto out_free_sg;
+	memcpy(iv, org_iv, cc->iv_size);
+
+	dmreq->sg_in_ext = sg_in;
+	dmreq->sg_out_ext = (sg_out == sg_in) ? NULL : sg_out;
+
+	skcipher_request_set_crypt(req, sg_in, sg_out, total, iv);
+	skcipher_request_set_data_unit_size(req, sector_size);
+
+	if (bio_data_dir(ctx->bio_in) == WRITE)
+		r = crypto_skcipher_encrypt(req);
+	else
+		r = crypto_skcipher_decrypt(req);
+
+	/*
+	 * Sync error: kcryptd_async_done won't run, so free the SG
+	 * arrays here.  Async returns (-EINPROGRESS, -EBUSY) hand
+	 * ownership to the completion callback.
+	 */
+	if (r && r != -EINPROGRESS && r != -EBUSY)
+		goto out_free_sg;
+
+	*out_processed = total;
+	return r;
+
+out_free_sg:
+	kfree(sg_in);
+	if (sg_out != sg_in)
+		kfree(sg_out);
+	dmreq->sg_in_ext = NULL;
+	dmreq->sg_out_ext = NULL;
+	return r;
+}
+
 static void kcryptd_async_done(void *async_req, int error);
 
 static int crypt_alloc_req_skcipher(struct crypt_config *cc,
 				     struct convert_context *ctx)
 {
 	unsigned int key_index = ctx->cc_sector & (cc->tfms_count - 1);
+	struct dm_crypt_request *dmreq;
 
 	if (!ctx->r.req) {
 		ctx->r.req = mempool_alloc(&cc->req_pool, in_interrupt() ? GFP_ATOMIC : GFP_NOIO);
@@ -1440,6 +1565,11 @@ static int crypt_alloc_req_skcipher(struct crypt_config *cc,
 	}
 
 	skcipher_request_set_tfm(ctx->r.req, cc->cipher_tfm.tfms[key_index]);
+
+	/* Multi-DU SG arrays are owned by the helper that allocates them. */
+	dmreq = dmreq_of_req(cc, ctx->r.req);
+	dmreq->sg_in_ext = NULL;
+	dmreq->sg_out_ext = NULL;
 
 	/*
 	 * Use REQ_MAY_BACKLOG so a cipher driver internally backlogs
@@ -1487,6 +1617,12 @@ static void crypt_free_req_skcipher(struct crypt_config *cc,
 				    struct skcipher_request *req, struct bio *base_bio)
 {
 	struct dm_crypt_io *io = dm_per_bio_data(base_bio, cc->per_bio_data_size);
+	struct dm_crypt_request *dmreq = dmreq_of_req(cc, req);
+
+	kfree(dmreq->sg_in_ext);
+	dmreq->sg_in_ext = NULL;
+	kfree(dmreq->sg_out_ext);
+	dmreq->sg_out_ext = NULL;
 
 	if ((struct skcipher_request *)(io + 1) != req)
 		mempool_free(req, &cc->req_pool);
@@ -1515,7 +1651,9 @@ static void crypt_free_req(struct crypt_config *cc, void *req, struct bio *base_
 static blk_status_t crypt_convert(struct crypt_config *cc,
 			 struct convert_context *ctx, bool atomic, bool reset_pending)
 {
-	unsigned int sector_step = cc->sector_size >> SECTOR_SHIFT;
+	const unsigned int sector_step = cc->sector_size >> SECTOR_SHIFT;
+	bool multi_du = test_bit(CRYPT_MULTI_DATA_UNIT, &cc->cipher_flags);
+	unsigned int processed;
 	int r;
 
 	/*
@@ -1536,8 +1674,13 @@ static blk_status_t crypt_convert(struct crypt_config *cc,
 
 		atomic_inc(&ctx->cc_pending);
 
+		processed = cc->sector_size;
 		if (crypt_integrity_aead(cc))
 			r = crypt_convert_block_aead(cc, ctx, ctx->r.req_aead, ctx->tag_offset);
+		else if (multi_du)
+			r = crypt_convert_block_skcipher_multi(cc, ctx,
+							       ctx->r.req,
+							       &processed);
 		else
 			r = crypt_convert_block_skcipher(cc, ctx, ctx->r.req, ctx->tag_offset);
 
@@ -1559,8 +1702,19 @@ static blk_status_t crypt_convert(struct crypt_config *cc,
 					 * exit and continue processing in a workqueue
 					 */
 					ctx->r.req = NULL;
-					ctx->tag_offset++;
-					ctx->cc_sector += sector_step;
+					if (!multi_du) {
+						ctx->tag_offset++;
+						ctx->cc_sector += sector_step;
+					} else {
+						bio_advance_iter(ctx->bio_in,
+								 &ctx->iter_in,
+								 processed);
+						bio_advance_iter(ctx->bio_out,
+								 &ctx->iter_out,
+								 processed);
+						ctx->cc_sector +=
+							processed >> SECTOR_SHIFT;
+					}
 					return BLK_STS_DEV_RESOURCE;
 				}
 			} else {
@@ -1574,18 +1728,40 @@ static blk_status_t crypt_convert(struct crypt_config *cc,
 		 */
 		case -EINPROGRESS:
 			ctx->r.req = NULL;
-			ctx->tag_offset++;
-			ctx->cc_sector += sector_step;
+			if (!multi_du) {
+				ctx->tag_offset++;
+				ctx->cc_sector += sector_step;
+			} else {
+				bio_advance_iter(ctx->bio_in, &ctx->iter_in,
+						 processed);
+				bio_advance_iter(ctx->bio_out, &ctx->iter_out,
+						 processed);
+				ctx->cc_sector += processed >> SECTOR_SHIFT;
+			}
 			continue;
 		/*
 		 * The request was already processed (synchronously).
 		 */
 		case 0:
 			atomic_dec(&ctx->cc_pending);
-			ctx->cc_sector += sector_step;
-			ctx->tag_offset++;
+			if (!multi_du) {
+				ctx->cc_sector += sector_step;
+				ctx->tag_offset++;
+			} else {
+				bio_advance_iter(ctx->bio_in, &ctx->iter_in,
+						 processed);
+				bio_advance_iter(ctx->bio_out, &ctx->iter_out,
+						 processed);
+				ctx->cc_sector += processed >> SECTOR_SHIFT;
+			}
 			if (!atomic)
 				cond_resched();
+			continue;
+		/* Multi-DU rejected (no memory or sync-only mismatch): fall back. */
+		case -EAGAIN:
+		case -EOPNOTSUPP:
+			atomic_dec(&ctx->cc_pending);
+			multi_du = false;
 			continue;
 		/*
 		 * There was a data integrity error.
@@ -3061,6 +3237,29 @@ static int crypt_ctr_cipher(struct dm_target *ti, char *cipher_in, char *key)
 			ti->error = "Error initialising IV";
 			return ret;
 		}
+	}
+
+	/*
+	 * Enable multi-data-unit batching only when per-DU IVs can be
+	 * derived from one starting IV as a 128-bit LE counter, matching
+	 * skcipher_request_set_data_unit_size().  Only IV modes flagged
+	 * sector_iv_le128 qualify (plain64; not plain, whose 32-bit counter
+	 * wraps differently across a 2^32-sector boundary).  ivsize must be
+	 * 16 (the core rejects otherwise) and the cipher must be sync,
+	 * single-tfm, no integrity, no per-sector post() hook.  The driver
+	 * advertises nothing: the core auto-splits for drivers that lack
+	 * native support.
+	 */
+	if (!crypt_integrity_aead(cc) && cc->tfms_count == 1 &&
+	    cc->iv_gen_ops && cc->iv_gen_ops->sector_iv_le128 &&
+	    !cc->iv_gen_ops->post &&
+	    !cc->integrity_tag_size && !cc->integrity_iv_size &&
+	    crypto_skcipher_ivsize(any_tfm(cc)) == 16 &&
+	    !(crypto_skcipher_alg(any_tfm(cc))->base.cra_flags &
+	      CRYPTO_ALG_ASYNC)) {
+		set_bit(CRYPT_MULTI_DATA_UNIT, &cc->cipher_flags);
+		DMINFO("Using multi-data-unit crypto offload (du=%u)",
+		       cc->sector_size);
 	}
 
 	/* wipe the kernel key payload copy */
