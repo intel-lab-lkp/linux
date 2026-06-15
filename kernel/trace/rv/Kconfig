@@ -121,3 +121,13 @@ config RV_REACT_PANIC
 	help
 	  Enables the panic reactor. The panic reactor emits a printk()
 	  message if an exception is found and panic()s the system.
+
+config RV_REACT_PANIC_KUNIT
+	bool "KUnit tests for reactor_panic" if !KUNIT_ALL_TESTS
+	depends on RV_REACT_PANIC && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds KUnit tests for the panic reactor. These are only
+	  for development and testing, not for regular kernel use cases.
+
+	  If unsure, say N.
