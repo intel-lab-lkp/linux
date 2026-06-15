@@ -1119,6 +1119,15 @@ void btrfs_free_extra_devids(struct btrfs_fs_devices *fs_devices)
 	mutex_unlock(&uuid_mutex);
 }
 
+/* Release a device that was made unfreezable for a membership change. */
+void btrfs_release_device_allow_freeze(struct file *bdev_file)
+{
+	/* Yield before allow (strand-safe); file still open for the allow (UAF-safe). */
+	bdev_yield_claim(bdev_file);
+	bdev_allow_freeze(file_bdev(bdev_file));
+	bdev_fput(bdev_file);
+}
+
 static void btrfs_close_bdev(struct btrfs_device *device)
 {
 	if (!device->bdev)
@@ -2336,6 +2345,13 @@ int btrfs_rm_device(struct btrfs_fs_info *fs_info,
 	    fs_info->fs_devices->rw_devices == 1)
 		return BTRFS_ERROR_DEV_ONLY_WRITABLE;
 
+	/* Removal and freezing are mutually exclusive; refuse if frozen now. */
+	if (device->bdev) {
+		ret = bdev_deny_freeze(device->bdev);
+		if (ret)
+			return ret;
+	}
+
 	if (test_bit(BTRFS_DEV_STATE_WRITEABLE, &device->dev_state)) {
 		mutex_lock(&fs_info->chunk_mutex);
 		list_del_init(&device->dev_alloc_list);
@@ -2362,6 +2378,8 @@ int btrfs_rm_device(struct btrfs_fs_info *fs_info,
 			   device->devid, ret);
 		btrfs_abort_transaction(trans, ret);
 		btrfs_end_transaction(trans);
+		if (device->bdev)
+			bdev_allow_freeze(device->bdev);
 		return ret;
 	}
 
@@ -2447,6 +2465,8 @@ int btrfs_rm_device(struct btrfs_fs_info *fs_info,
 	return btrfs_commit_transaction(trans);
 
 error_undo:
+	if (device->bdev)
+		bdev_allow_freeze(device->bdev);
 	if (test_bit(BTRFS_DEV_STATE_WRITEABLE, &device->dev_state)) {
 		mutex_lock(&fs_info->chunk_mutex);
 		list_add(&device->dev_alloc_list,
