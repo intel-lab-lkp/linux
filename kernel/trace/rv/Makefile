@@ -23,4 +23,5 @@ obj-$(CONFIG_RV_MON_NOMISS) += monitors/nomiss/nomiss.o
 # Add new monitors here
 obj-$(CONFIG_RV_REACTORS) += rv_reactors.o
 obj-$(CONFIG_RV_REACT_PRINTK) += reactor_printk.o
+obj-$(CONFIG_RV_REACT_PRINTK_KUNIT) += reactor_printk_kunit.o
 obj-$(CONFIG_RV_REACT_PANIC) += reactor_panic.o

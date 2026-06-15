@@ -104,6 +104,16 @@ config RV_REACT_PRINTK
 	  Enables the printk reactor. The printk reactor emits a printk()
 	  message if an exception is found.
 
+config RV_REACT_PRINTK_KUNIT
+	bool "KUnit tests for reactor_printk" if !KUNIT_ALL_TESTS
+	depends on RV_REACT_PRINTK && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds KUnit tests for the printk reactor. These are only
+	  for development and testing, not for regular kernel use cases.
+
+	  If unsure, say N.
+
 config RV_REACT_PANIC
 	bool "Panic reactor"
 	depends on RV_REACTORS
