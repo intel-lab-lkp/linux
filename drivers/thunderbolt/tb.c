@@ -640,8 +640,8 @@ static int tb_consumed_dp_bandwidth(struct tb *tb,
 		 * tunnels in the group).
 		 */
 		group = tunnel->src_port->group;
-		if (group && group->reserved && !group_reserved[group->index])
-			group_reserved[group->index] = group->reserved;
+		if (group && group->reserved && !group_reserved[group->index - 1])
+			group_reserved[group->index - 1] = group->reserved;
 
 		/*
 		 * Ignore the DP tunnel between src_port and dst_port
