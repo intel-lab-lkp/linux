@@ -41,6 +41,7 @@ struct kvm_steal_time {
 	__u8  pad[47];
 };
 #define KVM_VCPU_PREEMPTED		(1 << 0)
+#define KVM_VCPU_FLUSH_TLB		(1 << 1)
 
 /*
  * Hypercall interface for KVM hypervisor

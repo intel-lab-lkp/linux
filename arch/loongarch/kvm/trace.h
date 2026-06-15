@@ -210,6 +210,21 @@ TRACE_EVENT(kvm_vpid_change,
 	    TP_printk("VPID: 0x%08lx", __entry->vpid)
 );
 
+TRACE_EVENT(kvm_pv_tlb_flush,
+	TP_PROTO(struct kvm_vcpu *vcpu, bool need_flush),
+	TP_ARGS(vcpu, need_flush),
+	TP_STRUCT__entry(
+		__field(unsigned int, vcpu_id)
+		__field(bool, need_flush)
+	),
+	TP_fast_assign(
+		__entry->vcpu_id = vcpu->vcpu_id;
+		__entry->need_flush = need_flush;
+	),
+	TP_printk("vcpu %u need_flush %u", __entry->vcpu_id,
+		  __entry->need_flush)
+);
+
 #endif /* _TRACE_KVM_H */
 
 #undef TRACE_INCLUDE_PATH

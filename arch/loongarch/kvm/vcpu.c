@@ -173,7 +173,39 @@ static void kvm_update_stolen_time(struct kvm_vcpu *vcpu)
 	}
 
 	st = (struct kvm_steal_time __user *)ghc->hva;
-	if (kvm_guest_has_pv_feature(vcpu, KVM_FEATURE_PREEMPT)) {
+	if (kvm_guest_has_pv_feature(vcpu, KVM_FEATURE_PV_TLB_FLUSH)) {
+		u32 old = 0;
+		int err = 0;
+
+		/*
+		 * Prime the cache line with a normal load before the coherent
+		 * atomic below; it was observed (when the line was last dirtied
+		 * by another core) to be needed for amand_db.w to see a current
+		 * value.  amand_db.w overwrites `old` with the real pre-AND value,
+		 * so this load contributes only its cache side-effect.
+		 */
+		unsafe_get_user(old, (u32 __user *)&st->preempted, out);
+
+		/* Atomically read and clear the preempted byte via amand_db.w. */
+		asm volatile(
+		"1: amand_db.w %1, %3, %2	\n"
+		"2:				\n"
+		_ASM_EXTABLE_UACCESS_ERR_ZERO(1b, 2b, %0, %1)
+		: "+r" (err), "+&r" (old),
+		  "+ZB" (*(u32 *)&st->preempted)
+		: "r" ((u32)~0xffu)
+		: "memory");
+
+		if (err)
+			goto out;
+
+		vcpu->arch.st.preempted = 0;
+
+		if ((u8)old & KVM_VCPU_FLUSH_TLB) {
+			vcpu->arch.vpid = 0;	/* Drop vpid to flush TLB */
+			trace_kvm_pv_tlb_flush(vcpu, true);
+		}
+	} else if (kvm_guest_has_pv_feature(vcpu, KVM_FEATURE_PREEMPT)) {
 		unsafe_put_user(0, &st->preempted, out);
 		vcpu->arch.st.preempted = 0;
 	}
