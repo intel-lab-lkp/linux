@@ -25,6 +25,7 @@ struct fsi_master_aspeed {
 	void __iomem		*base;
 	struct clk		*clk;
 	struct gpio_desc	*cfam_reset_gpio;
+	bool			cfam_reset_file;
 };
 
 #define to_fsi_master_aspeed(m) \
@@ -483,6 +484,7 @@ static int setup_cfam_reset(struct fsi_master_aspeed *aspeed)
 		devm_gpiod_put(dev, gpio);
 		return rc;
 	}
+	aspeed->cfam_reset_file = true;
 
 	return 0;
 }
@@ -570,6 +572,9 @@ static int fsi_master_aspeed_probe(struct platform_device *pdev)
 		goto err_free_aspeed;
 	}
 
+	dev_set_drvdata(&pdev->dev, aspeed);
+	mutex_init(&aspeed->lock);
+
 	rc = setup_cfam_reset(aspeed);
 	if (rc) {
 		dev_err(&pdev->dev, "CFAM reset GPIO setup failed\n");
@@ -620,9 +625,6 @@ static int fsi_master_aspeed_probe(struct platform_device *pdev)
 	aspeed->master.term = aspeed_master_term;
 	aspeed->master.link_enable = aspeed_master_link_enable;
 
-	dev_set_drvdata(&pdev->dev, aspeed);
-
-	mutex_init(&aspeed->lock);
 	aspeed_master_init(aspeed);
 
 	rc = fsi_master_register(&aspeed->master);
@@ -640,8 +642,11 @@ static int fsi_master_aspeed_probe(struct platform_device *pdev)
 	return 0;
 
 err_release:
+	if (aspeed->cfam_reset_file)
+		device_remove_file(&pdev->dev, &dev_attr_cfam_reset);
 	clk_disable_unprepare(aspeed->clk);
 err_free_aspeed:
+	dev_set_drvdata(&pdev->dev, NULL);
 	kfree(aspeed);
 	return rc;
 }
@@ -650,6 +655,8 @@ static void fsi_master_aspeed_remove(struct platform_device *pdev)
 {
 	struct fsi_master_aspeed *aspeed = platform_get_drvdata(pdev);
 
+	if (aspeed->cfam_reset_file)
+		device_remove_file(&pdev->dev, &dev_attr_cfam_reset);
 	fsi_master_unregister(&aspeed->master);
 	clk_disable_unprepare(aspeed->clk);
 }
