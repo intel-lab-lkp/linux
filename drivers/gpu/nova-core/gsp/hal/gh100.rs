@@ -30,6 +30,7 @@ use crate::{
             UnloadBundle, //
         },
         Gsp,
+        GspFmcBootParams,
         GspFwWprMeta, //
     },
 };
@@ -62,13 +63,13 @@ impl GspMbox {
         &self,
         gsp_falcon: &Falcon<GspEngine>,
         bar: Bar0<'_>,
-        fmc_boot_params_addr: u64,
+        fmc_boot_params: &Coherent<GspFmcBootParams>,
     ) -> bool {
         // GSP-FMC normally clears the boot parameters address from the mailboxes early during
         // boot. If the address is still there, keep polling rather than treating it as an error.
         // Any other non-zero mailbox0 value is a GSP-FMC error code.
         if self.mbox0 != 0 {
-            return self.combined_addr() != fmc_boot_params_addr;
+            return self.combined_addr() != fmc_boot_params.dma_handle();
         }
 
         !gsp_falcon.riscv_branch_privilege_lockdown(bar)
@@ -80,7 +81,7 @@ fn wait_for_gsp_lockdown_release(
     dev: &device::Device<device::Bound>,
     bar: Bar0<'_>,
     gsp_falcon: &Falcon<GspEngine>,
-    fmc_boot_params_addr: u64,
+    fmc_boot_params: &Coherent<GspFmcBootParams>,
 ) -> Result {
     dev_dbg!(dev, "Waiting for GSP lockdown release\n");
 
@@ -95,7 +96,7 @@ fn wait_for_gsp_lockdown_release(
         },
         |mbox| match mbox {
             None => false,
-            Some(mbox) => mbox.lockdown_released_or_error(gsp_falcon, bar, fmc_boot_params_addr),
+            Some(mbox) => mbox.lockdown_released_or_error(gsp_falcon, bar, fmc_boot_params),
         },
         Delta::from_millis(10),
         Delta::from_secs(30),
@@ -156,13 +157,7 @@ impl GspHal for Gh100 {
         gsp_falcon: &'a Falcon<GspEngine>,
         sec2_falcon: &'a Falcon<Sec2>,
     ) -> Result<BootUnloadGuard<'a>> {
-        let args = FmcBootArgs::new(
-            dev,
-            chipset,
-            wpr_meta.dma_handle(),
-            gsp.libos.dma_handle(),
-            false,
-        )?;
+        let args = FmcBootArgs::new(dev, chipset, wpr_meta, &gsp.libos, false)?;
 
         let mut fsp = Fsp::wait_secure_boot(dev, bar, chipset)?;
 
@@ -176,7 +171,7 @@ impl GspHal for Gh100 {
 
         fsp.boot_fmc(dev, bar, fb_layout, &args)?;
 
-        wait_for_gsp_lockdown_release(dev, bar, gsp_falcon, args.boot_params_dma_handle())?;
+        wait_for_gsp_lockdown_release(dev, bar, gsp_falcon, args.boot_params())?;
 
         Ok(unload_guard)
     }

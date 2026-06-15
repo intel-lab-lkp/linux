@@ -28,16 +28,14 @@ mod sequencer;
 pub(crate) use fw::{
     GspFmcBootParams,
     GspFwWprMeta,
+    LibosMemoryRegionInitArgument,
     LibosParams, //
 };
 
 use crate::{
     gsp::cmdq::Cmdq,
-    gsp::fw::{
-        GspArgumentsPadded,
-        LibosMemoryRegionInitArgument, //
-    },
-    num,
+    gsp::fw::GspArgumentsPadded,
+    num, //
 };
 
 pub(crate) const GSP_PAGE_SHIFT: usize = 12;
