@@ -1289,7 +1289,10 @@ impl Process {
 
         // Update state and determine if we need to queue a work item. We only need to do it when
         // the node is not dead or if the user already completed the death notification.
-        if death.set_cleared(false) {
+        let should_schedule = death.set_cleared(false);
+        drop(refs);
+
+        if should_schedule {
             if let Some(death) = ListArc::try_from_arc_or_drop(death) {
                 let _ = thread.push_work_if_looper(death);
             }
