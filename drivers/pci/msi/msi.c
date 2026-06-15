@@ -872,6 +872,7 @@ void __pci_restore_msix_state(struct pci_dev *dev)
 {
 	struct msi_desc *entry;
 	bool write_msg;
+	u16 cmd;
 
 	if (!dev->msix_enabled)
 		return;
@@ -882,6 +883,11 @@ void __pci_restore_msix_state(struct pci_dev *dev)
 				PCI_MSIX_FLAGS_ENABLE | PCI_MSIX_FLAGS_MASKALL);
 
 	write_msg = arch_restore_msi_irqs(dev);
+	if (write_msg) {
+		pci_read_config_word(dev, PCI_COMMAND, &cmd);
+		pci_write_config_word(dev, PCI_COMMAND,
+				      cmd | PCI_COMMAND_MEMORY);
+	}
 
 	scoped_guard (msi_descs_lock, &dev->dev) {
 		msi_for_each_desc(entry, &dev->dev, MSI_DESC_ALL) {
@@ -890,6 +896,9 @@ void __pci_restore_msix_state(struct pci_dev *dev)
 			pci_msix_write_vector_ctrl(entry, entry->pci.msix_ctrl);
 		}
 	}
+
+	if (write_msg)
+		pci_write_config_word(dev, PCI_COMMAND, cmd);
 
 	pci_msix_clear_and_set_ctrl(dev, PCI_MSIX_FLAGS_MASKALL, 0);
 }
