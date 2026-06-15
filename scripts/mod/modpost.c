@@ -727,6 +727,18 @@ static const char *sym_name(struct elf_info *elf, Elf_Sym *sym)
 static bool match(const char *string, const char *const patterns[])
 {
 	const char *pattern;
+	char string_stripped[512];
+	const char *ext = strstr(string, ".llvm.");
+
+	/*
+	 * Clang LTO can append .llvm.<hash> to a variable. Safely strip
+	 * the suffix so glob whitelists (like *_ops) work.
+	 */
+	if (ext && (ext - string) < sizeof(string_stripped)) {
+		strncpy(string_stripped, string, ext - string);
+		string_stripped[ext - string] = '\0';
+		string = string_stripped;
+	}
 
 	while ((pattern = *patterns++)) {
 		if (!fnmatch(pattern, string, 0))
