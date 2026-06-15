@@ -622,6 +622,8 @@ void intel_display_driver_remove_noirq(struct intel_display *display)
 	if (!HAS_DISPLAY(display))
 		return;
 
+	intel_hpd_cancel_work(display);
+
 	intel_display_driver_suspend_access(display);
 
 	/*
