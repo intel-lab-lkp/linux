@@ -130,14 +130,17 @@ static struct sk_buff *netc_rcv(struct sk_buff *skb,
 	int tag_len, sw_id, port;
 	int type, subtype;
 
-	if (unlikely(!pskb_may_pull(skb, NETC_TAG_MAX_LEN)))
+	if (unlikely(!pskb_may_pull(skb, NETC_TAG_MAX_LEN))) {
+		kfree_skb(skb);
 		return NULL;
+	}
 
 	tag_cmn = dsa_etype_header_pos_rx(skb);
 	if (ntohs(tag_cmn->tpid) != ETH_P_NXP_NETC) {
 		dev_warn_ratelimited(&ndev->dev, "Unknown TPID 0x%04x\n",
 				     ntohs(tag_cmn->tpid));
 
+		kfree_skb(skb);
 		return NULL;
 	}
 
@@ -150,13 +153,16 @@ static struct sk_buff *netc_rcv(struct sk_buff *skb,
 		dev_warn_ratelimited(&ndev->dev,
 				     "VEPA switch ID is not supported yet\n");
 
+		kfree_skb(skb);
 		return NULL;
 	}
 
 	port = FIELD_GET(NETC_TAG_PORT, tag_cmn->switch_port);
 	skb->dev = dsa_conduit_find_user(ndev, sw_id, port);
-	if (!skb->dev)
+	if (!skb->dev) {
+		kfree_skb(skb);
 		return NULL;
+	}
 
 	type = FIELD_GET(NETC_TAG_TYPE, tag_cmn->type);
 	subtype = FIELD_GET(NETC_TAG_SUBTYPE, tag_cmn->type);
@@ -164,11 +170,14 @@ static struct sk_buff *netc_rcv(struct sk_buff *skb,
 		dsa_default_offload_fwd_mark(skb);
 	} else if (type == NETC_TAG_TO_HOST) {
 		/* Currently only subtype0 supported */
-		if (subtype != NETC_TAG_TH_SUBTYPE0)
+		if (subtype != NETC_TAG_TH_SUBTYPE0) {
+			kfree_skb(skb);
 			return NULL;
+		}
 	} else {
 		dev_warn_ratelimited(&ndev->dev,
 				     "Unexpected  tag type %d\n", type);
+		kfree_skb(skb);
 		return NULL;
 	}
 
