@@ -21,13 +21,16 @@ properties:
   compatible:
     const: samsung,s2mu005-pmic
 
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
   flash:
     $ref: /schemas/leds/samsung,s2mu005-flash.yaml#
     description:
       Child node describing flash LEDs.
-
-  interrupts:
-    maxItems: 1
 
   muic:
     $ref: /schemas/extcon/samsung,s2mu005-muic.yaml#
@@ -48,9 +51,6 @@ properties:
       - compatible
 
     unevaluatedProperties: false
-
-  reg:
-    maxItems: 1
 
 required:
   - compatible
