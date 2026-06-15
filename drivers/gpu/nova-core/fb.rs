@@ -182,7 +182,7 @@ pub(crate) struct FbRanges {
     /// WPR2 region range, starting with an instance of `GspFwWprMeta`.
     pub(crate) wpr2: FbRange,
     /// Non-WPR heap, located just below WPR2.
-    pub(crate) heap: FbRange,
+    pub(crate) non_wpr_heap: FbRange,
     /// Number of VF partitions.
     pub(crate) vf_partition_count: u8,
     /// PMU reserved memory size, in bytes.
@@ -271,9 +271,9 @@ impl FbRanges {
             FbRange(wpr2_addr..frts.end)
         };
 
-        let heap = {
-            let heap_size = u64::from(hal.non_wpr_heap_size());
-            FbRange(wpr2.start - heap_size..wpr2.start)
+        let non_wpr_heap = {
+            let non_wpr_heap_size = u64::from(hal.non_wpr_heap_size());
+            FbRange(wpr2.start - non_wpr_heap_size..wpr2.start)
         };
 
         Ok(Self {
@@ -284,7 +284,7 @@ impl FbRanges {
             elf,
             wpr2_heap,
             wpr2,
-            heap,
+            non_wpr_heap,
             vf_partition_count: 0,
             pmu_reserved_size: hal.pmu_reserved_size(),
         })
@@ -301,7 +301,7 @@ pub(crate) struct FbSizes {
     /// WPR2 heap size, in bytes.
     pub(crate) wpr2_heap_size: u64,
     /// Non-WPR heap size, in bytes.
-    pub(crate) heap_size: u64,
+    pub(crate) non_wpr_heap_size: u64,
     /// PMU reserved memory size, in bytes.
     pub(crate) pmu_reserved_size: u32,
     /// Size reserved at the end of the framebuffer. This is architecture dependent and used to
@@ -322,7 +322,7 @@ impl FbSizes {
             frts_size: hal.frts_size(),
             wpr2_heap_size: gsp::LibosParams::from_chipset(chipset)
                 .wpr_heap_size(chipset, fb_size)?,
-            heap_size: u64::from(hal.non_wpr_heap_size()),
+            non_wpr_heap_size: u64::from(hal.non_wpr_heap_size()),
             pmu_reserved_size: hal.pmu_reserved_size(),
             fb_end_reserved_size: hal.fb_end_reserved_size(),
             vf_partition_count: 0,

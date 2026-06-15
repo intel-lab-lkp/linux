@@ -241,9 +241,9 @@ impl GspFwWprMeta {
 
         let fields = match fb_info {
             GspFbInfo::Ranges(ranges) => WprMetaFields {
-                gsp_fw_rsvd_start: ranges.heap.start,
-                non_wpr_heap_offset: ranges.heap.start,
-                non_wpr_heap_size: ranges.heap.len(),
+                gsp_fw_rsvd_start: ranges.non_wpr_heap.start,
+                non_wpr_heap_offset: ranges.non_wpr_heap.start,
+                non_wpr_heap_size: ranges.non_wpr_heap.len(),
                 gsp_fw_wpr_start: ranges.wpr2.start,
                 gsp_fw_heap_offset: ranges.wpr2_heap.start,
                 gsp_fw_heap_size: ranges.wpr2_heap.len(),
@@ -262,7 +262,7 @@ impl GspFwWprMeta {
                 pmu_reserved_size: ranges.pmu_reserved_size,
             },
             GspFbInfo::Sizes(sizes) => WprMetaFields {
-                non_wpr_heap_size: sizes.heap_size,
+                non_wpr_heap_size: sizes.non_wpr_heap_size,
                 gsp_fw_heap_size: sizes.wpr2_heap_size,
                 frts_size: sizes.frts_size,
                 gsp_fw_heap_vf_partition_count: sizes.vf_partition_count,
