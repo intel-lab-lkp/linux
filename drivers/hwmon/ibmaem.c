@@ -945,6 +945,9 @@ static int aem_register_sensors(struct aem_data *data,
 	if (err)
 		goto error;
 	err = device_create_file(dev, &sensor_dev_attr_version.dev_attr);
+	if (err)
+		goto error;
+
 	return err;
 
 error:
