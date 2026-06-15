@@ -280,16 +280,27 @@ static bool ttm_resource_unevictable(struct ttm_resource *res, struct ttm_buffer
 void ttm_resource_add_bulk_move(struct ttm_resource *res,
 				struct ttm_buffer_object *bo)
 {
-	if (bo->bulk_move && !ttm_resource_unevictable(res, bo))
+	if (bo->bulk_move && !ttm_resource_unevictable(res, bo)) {
 		ttm_lru_bulk_move_add(bo->bulk_move, res);
+		res->bulk_move = true;
+	}
 }
 
 /* Remove the resource from a bulk move if the BO is configured for it */
 void ttm_resource_del_bulk_move(struct ttm_resource *res,
 				struct ttm_buffer_object *bo)
 {
-	if (bo->bulk_move && !ttm_resource_unevictable(res, bo))
+	/*
+	 * Remove based on whether the resource was actually added, not on its
+	 * current evictability: a resource can become unevictable (pinned or
+	 * swapped) after being added, and must still be taken off the bulk_move
+	 * cursor before it is freed -- otherwise pos->first/last are left
+	 * dangling at freed memory.
+	 */
+	if (res->bulk_move) {
 		ttm_lru_bulk_move_del(bo->bulk_move, res);
+		res->bulk_move = false;
+	}
 }
 
 /* Move a resource to the LRU or bulk tail */
@@ -303,7 +314,7 @@ void ttm_resource_move_to_lru_tail(struct ttm_resource *res)
 	if (ttm_resource_unevictable(res, bo)) {
 		list_move_tail(&res->lru.link, &bdev->unevictable);
 
-	} else if (bo->bulk_move) {
+	} else if (res->bulk_move) {
 		struct ttm_lru_bulk_move_pos *pos =
 			ttm_lru_bulk_move_pos(bo->bulk_move, res);
 
@@ -339,6 +350,7 @@ void ttm_resource_init(struct ttm_buffer_object *bo,
 	res->bus.is_iomem = false;
 	res->bus.caching = ttm_cached;
 	res->bo = bo;
+	res->bulk_move = false;
 
 	man = ttm_manager_type(bo->bdev, place->mem_type);
 	spin_lock(&bo->bdev->lru_lock);

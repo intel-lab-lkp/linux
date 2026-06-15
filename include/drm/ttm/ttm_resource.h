@@ -274,6 +274,15 @@ struct ttm_resource {
 	 * @lru: Least recently used list, see &ttm_resource_manager.lru
 	 */
 	struct ttm_lru_item lru;
+
+	/**
+	 * @bulk_move: Whether this resource is currently tracked by its bo's
+	 * &ttm_buffer_object.bulk_move cursor. Recorded when the resource is
+	 * added so the matching del removes it even if the resource has since
+	 * become unevictable (pinned or swapped) -- otherwise the cursor would
+	 * be left pointing at this resource after it is freed.
+	 */
+	bool bulk_move;
 };
 
 /**
