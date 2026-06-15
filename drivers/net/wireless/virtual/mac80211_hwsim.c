@@ -1022,6 +1022,46 @@ static int hwsim_get_chanwidth(enum nl80211_chan_width bw)
 	return INT_MAX;
 }
 
+static bool hwsim_sta_uses_sub20_chanctx(struct ieee80211_hw *hw,
+					 struct ieee80211_vif *vif,
+					 struct ieee80211_sta *sta)
+{
+	struct mac80211_hwsim_data *data = hw->priv;
+	int link_id;
+
+	rcu_read_lock();
+	for (link_id = 0; link_id < ARRAY_SIZE(sta->link); link_id++) {
+		struct ieee80211_link_sta *link_sta;
+		enum nl80211_chan_width confbw = data->bw;
+		struct ieee80211_bss_conf *vif_conf;
+		struct ieee80211_chanctx_conf *chanctx_conf;
+
+		link_sta = rcu_dereference(sta->link[link_id]);
+		if (!link_sta)
+			continue;
+
+		if (data->use_chanctx) {
+			vif_conf = rcu_dereference(vif->link_conf[link_id]);
+			if (!vif_conf)
+				continue;
+
+			chanctx_conf = rcu_dereference(vif_conf->chanctx_conf);
+			if (!chanctx_conf)
+				continue;
+
+			confbw = chanctx_conf->def.width;
+		}
+
+		if (hwsim_get_chanwidth(confbw) < 20) {
+			rcu_read_unlock();
+			return true;
+		}
+	}
+	rcu_read_unlock();
+
+	return false;
+}
+
 static void mac80211_hwsim_tx_frame(struct ieee80211_hw *hw,
 				    struct sk_buff *skb,
 				    struct ieee80211_channel *chan);
@@ -2846,7 +2886,12 @@ static int mac80211_hwsim_sta_add(struct ieee80211_hw *hw,
 
 	hwsim_check_magic(vif);
 	hwsim_set_sta_magic(sta);
-	mac80211_hwsim_sta_rc_update(hw, vif, &sta->deflink, 0);
+	/*
+	 * Like S1G, sub-20 widths aren't handled by this add-time
+	 * rc_update() call.
+	 */
+	if (!hwsim_sta_uses_sub20_chanctx(hw, vif, sta))
+		mac80211_hwsim_sta_rc_update(hw, vif, &sta->deflink, 0);
 
 	if (sta->valid_links) {
 		WARN(hweight16(sta->valid_links) > 1,
