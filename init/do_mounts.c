@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 #include <linux/mount.h>
 #include <linux/device.h>
+#include <linux/efi.h>
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/initrd.h>
@@ -19,6 +20,8 @@
 #include <linux/ramfs.h>
 #include <linux/shmem_fs.h>
 #include <linux/ktime.h>
+#include <linux/ucs2_string.h>
+#include <linux/uuid.h>
 
 #include <linux/nfs_fs.h>
 #include <linux/nfs_fs_sb.h>
@@ -402,9 +405,86 @@ void __init mount_root(char *root_device_name)
 	}
 }
 
+#ifdef CONFIG_DPS_ROOT_AUTO_DISCOVERY
+static char efi_partuuid[EFI_VARIABLE_GUID_LEN + 1] __initdata;
+
+static int __init efi_loader_get_device_part_uuid(char *efi_uuid, size_t size)
+{
+	efi_char16_t efi_uuid_ucs2[EFI_VARIABLE_GUID_LEN + 1] = {};
+	unsigned long efi_uuid_ucs2_size = sizeof(efi_uuid_ucs2);
+	efi_status_t status;
+
+	if (!efi_rt_services_supported(EFI_RT_SUPPORTED_GET_VARIABLE))
+		return -EOPNOTSUPP;
+
+	status = efi.get_variable(L"LoaderDevicePartUUID",
+				  &LINUX_EFI_LOADER_ENTRY_GUID, NULL,
+				  &efi_uuid_ucs2_size, efi_uuid_ucs2);
+	if (status != EFI_SUCCESS)
+		return efi_status_to_err(status);
+
+	if (ucs2_as_utf8((u8 *)efi_uuid, efi_uuid_ucs2, size) != UUID_STRING_LEN ||
+	    !uuid_is_valid(efi_uuid))
+		return -EINVAL;
+
+	return 0;
+}
+
+static int __init lookup_dps_root(dev_t *dev)
+{
+	static const char dps_root_partition_type_uuid[] __initconst =
+		DPS_ROOT_PARTITION_TYPE_UUID;
+	int err;
+
+	err = early_lookup_bdev_by_type_uuid(dps_root_partition_type_uuid,
+					     efi_partuuid, dev);
+	if (!err)
+		pr_info("VFS: Discovered root partition with GPT type UUID %s\n",
+			dps_root_partition_type_uuid);
+
+	return err;
+}
+
+static dev_t __init try_dps_root_discovery(void)
+{
+	dev_t dev;
+	int err;
+
+	err = efi_loader_get_device_part_uuid(efi_partuuid,
+					      sizeof(efi_partuuid));
+	if (err) {
+		pr_err("VFS: Unable to get LoaderDevicePartUUID EFI variable: %pe, skipping root partition discovery\n",
+			ERR_PTR(err));
+		if (root_wait) {
+			pr_err("Disabling rootwait\n");
+			root_wait = 0;
+		}
+		return 0;
+	}
+
+	if (!lookup_dps_root(&dev))
+		return dev;
+
+	return 0;
+}
+#else
+static int __init lookup_dps_root(dev_t *dev)
+{
+	return 0;
+}
+
+static dev_t __init try_dps_root_discovery(void)
+{
+	return 0;
+}
+#endif
+
 static int __init lookup_root_device(char *root_device_name)
 {
-	return early_lookup_bdev(root_device_name, &ROOT_DEV);
+	if (root_device_name[0])
+		return early_lookup_bdev(root_device_name, &ROOT_DEV);
+	else
+		return lookup_dps_root(&ROOT_DEV);
 }
 
 /* wait for any asynchronous scanning to complete */
@@ -415,7 +495,10 @@ static void __init wait_for_root(char *root_device_name)
 	if (ROOT_DEV != 0)
 		return;
 
-	pr_info("Waiting for root device %s...\n", root_device_name);
+	if (root_device_name[0])
+		pr_info("Waiting for root device %s...\n", root_device_name);
+	else if (IS_ENABLED(CONFIG_DPS_ROOT_AUTO_DISCOVERY))
+		pr_info("Waiting for discoverable root partition...\n");
 
 	end = ktime_add_ms(ktime_get_raw(), root_wait);
 
@@ -480,6 +563,8 @@ void __init prepare_namespace(void)
 
 	if (saved_root_name[0])
 		ROOT_DEV = parse_root_device(saved_root_name);
+	else
+		ROOT_DEV = try_dps_root_discovery();
 
 	initrd_load();
 
