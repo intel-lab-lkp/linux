@@ -19,8 +19,10 @@ mod gh100;
 mod tu102;
 
 pub(crate) trait GpuHal {
-    /// Waits for GFW_BOOT completion if required by this hardware family.
-    fn wait_gfw_boot_completion(&self, bar: Bar0<'_>) -> Result;
+    /// Waits for architecture specific operations to complete before we can try to boot the GSP.
+    /// For example, may wait on GFW_BOOT completion or FSP secure boot completion, depending on the
+    /// architecture.
+    fn wait_preboot_completion(&self, bar: Bar0<'_>, chipset: Chipset) -> Result;
 
     /// Returns the DMA mask for the current architecture.
     fn dma_mask(&self) -> DmaMask;

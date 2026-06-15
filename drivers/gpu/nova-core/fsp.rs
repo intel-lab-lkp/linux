@@ -49,8 +49,7 @@ use crate::{
         NvdmHeader,
         NvdmType, //
     },
-    num,
-    regs, //
+    num, //
 };
 
 mod hal;
@@ -229,41 +228,36 @@ impl<'a> FmcBootArgs<'a> {
 
 /// FSP interface for Hopper/Blackwell GPUs.
 ///
-/// An `Fsp` is produced by [`Fsp::wait_secure_boot`], which only returns once FSP secure boot
-/// has completed. It owns the FSP falcon and the FMC firmware, which are used for the subsequent
-/// Chain of Trust boot.
+/// It owns the FSP falcon and the FMC firmware, which are used for the subsequent Chain of Trust
+/// boot.
 pub(crate) struct Fsp {
     falcon: Falcon<FspEngine>,
     fsp_fw: FspFirmware,
 }
 
 impl Fsp {
-    /// Waits for FSP secure boot completion, then returns the [`Fsp`] interface.
-    ///
-    /// Polls the thermal scratch register until FSP signals boot completion or the timeout
-    /// elapses. Returning an [`Fsp`] only on success guarantees, at the API level, that the
-    /// interface is not used before secure boot has completed.
-    pub(crate) fn wait_secure_boot(
-        dev: &device::Device<device::Bound>,
-        bar: Bar0<'_>,
-        chipset: Chipset,
-    ) -> Result<Fsp> {
+    /// Waits for FSP secure boot completion. This must be called before trying to create the `Fsp`
+    /// interface or read any registers dependent on FSP boot completion.
+    pub(crate) fn wait_for_secure_boot(bar: Bar0<'_>, chipset: Chipset) -> Result {
         /// FSP secure boot completion timeout in milliseconds.
         const FSP_SECURE_BOOT_TIMEOUT_MS: i64 = 5000;
 
         let hal = hal::fsp_hal(chipset).ok_or(ENOTSUPP)?;
-        let falcon = Falcon::<FspEngine>::new(dev, chipset)?;
-        let fsp_fw = FspFirmware::new(dev, chipset, FIRMWARE_VERSION)?;
 
         read_poll_timeout(
-            || Ok(hal.fsp_boot_status(bar)),
-            |&status| status == regs::NV_THERM_I2CS_SCRATCH_FSP_BOOT_COMPLETE_STATUS_SUCCESS,
+            || Ok(hal.fsp_boot_done(bar)),
+            |&done| done,
             Delta::from_millis(10),
             Delta::from_millis(FSP_SECURE_BOOT_TIMEOUT_MS),
-        )
-        .inspect_err(|e| {
-            dev_err!(dev, "FSP secure boot completion error: {:?}\n", e);
-        })?;
+        )?;
+
+        Ok(())
+    }
+
+    /// Creates an FSP interface.
+    pub(crate) fn new(dev: &device::Device<device::Bound>, chipset: Chipset) -> Result<Self> {
+        let falcon = Falcon::<FspEngine>::new(dev, chipset)?;
+        let fsp_fw = FspFirmware::new(dev, chipset, FIRMWARE_VERSION)?;
 
         Ok(Fsp { falcon, fsp_fw })
     }

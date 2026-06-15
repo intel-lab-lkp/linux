@@ -159,7 +159,7 @@ impl GspHal for Gh100 {
     ) -> Result<BootUnloadGuard<'a>> {
         let args = FmcBootArgs::new(dev, chipset, wpr_meta, &gsp.libos, false)?;
 
-        let mut fsp = Fsp::wait_secure_boot(dev, bar, chipset)?;
+        let mut fsp = Fsp::new(dev, chipset)?;
 
         let unload_bundle = crate::gsp::UnloadBundle(
             KBox::new(FspUnloadBundle, GFP_KERNEL)? as KBox<dyn UnloadBundle>

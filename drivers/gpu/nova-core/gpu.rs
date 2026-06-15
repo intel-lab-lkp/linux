@@ -295,7 +295,8 @@ impl<'gpu> Gpu<'gpu> {
                 dev_info!(pdev,"NVIDIA ({})\n", spec);
             })?,
 
-            // We must wait for GFW_BOOT completion before doing any significant setup on the GPU.
+            // We must wait for some architecture specific setup to complete before doing any
+            // significant setup on the GPU.
             _: {
                 let hal = hal::gpu_hal(spec.chipset);
                 let dma_mask = hal.dma_mask();
@@ -304,8 +305,8 @@ impl<'gpu> Gpu<'gpu> {
                 // still constructing it, so no concurrent DMA allocations can exist.
                 unsafe { pdev.dma_set_mask_and_coherent(dma_mask)? };
 
-                hal.wait_gfw_boot_completion(bar)
-                    .inspect_err(|_| dev_err!(pdev, "GFW boot did not complete\n"))?;
+                hal.wait_preboot_completion(bar, spec.chipset)
+                    .inspect_err(|_| dev_err!(pdev, "preboot firmware did not complete\n"))?;
             },
 
             sysmem_flush: SysmemFlush::register(pdev.as_ref(), bar, spec.chipset)?,

@@ -7,15 +7,19 @@ use kernel::{
     prelude::*, //
 };
 
-use crate::driver::Bar0;
+use crate::{
+    driver::Bar0,
+    fsp::Fsp,
+    gpu::Chipset, //
+};
 
 use super::GpuHal;
 
 struct Gh100;
 
 impl GpuHal for Gh100 {
-    fn wait_gfw_boot_completion(&self, _bar: Bar0<'_>) -> Result {
-        Ok(())
+    fn wait_preboot_completion(&self, bar: Bar0<'_>, chipset: Chipset) -> Result {
+        Fsp::wait_for_secure_boot(bar, chipset)
     }
 
     fn dma_mask(&self) -> DmaMask {

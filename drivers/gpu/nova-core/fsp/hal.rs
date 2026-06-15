@@ -14,8 +14,8 @@ mod gb202;
 mod gh100;
 
 pub(super) trait FspHal {
-    /// Returns the secure boot status from the architecture-specific `NV_THERM_I2CS_SCRATCH` register.
-    fn fsp_boot_status(&self, bar: Bar0<'_>) -> u32;
+    /// Returns whether FSP secure boot is done.
+    fn fsp_boot_done(&self, bar: Bar0<'_>) -> bool;
 
     /// Returns the FSP Chain of Trust protocol version this chipset advertises.
     fn cot_version(&self) -> u16;

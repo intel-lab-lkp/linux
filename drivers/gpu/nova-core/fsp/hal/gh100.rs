@@ -11,16 +11,16 @@ use crate::{
 
 struct Gh100;
 
-/// Reads the FSP secure boot status from the Hopper/GB10x thermal scratch register.
-pub(super) fn fsp_boot_status_gh100(bar: Bar0<'_>) -> u32 {
+/// Returns whether FSP secure boot is done on Hopper/GB10x.
+pub(super) fn fsp_boot_done_gh100(bar: Bar0<'_>) -> bool {
     bar.read(regs::gh100::NV_THERM_I2CS_SCRATCH_FSP_BOOT_COMPLETE)
         .fsp_boot_complete()
-        .into()
+        == regs::NV_THERM_I2CS_SCRATCH_FSP_BOOT_COMPLETE_STATUS_SUCCESS
 }
 
 impl FspHal for Gh100 {
-    fn fsp_boot_status(&self, bar: Bar0<'_>) -> u32 {
-        fsp_boot_status_gh100(bar)
+    fn fsp_boot_done(&self, bar: Bar0<'_>) -> bool {
+        fsp_boot_done_gh100(bar)
     }
 
     fn cot_version(&self) -> u16 {
