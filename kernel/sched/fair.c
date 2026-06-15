@@ -1083,6 +1083,7 @@ struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)
  */
 static inline void set_protect_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
+	u64 vruntime = min_vruntime(se->vruntime, avg_vruntime(cfs_rq));
 	u64 slice = normalized_sysctl_sched_base_slice;
 	u64 vprot = se->deadline;
 
@@ -1090,8 +1091,8 @@ static inline void set_protect_slice(struct cfs_rq *cfs_rq, struct sched_entity 
 		slice = cfs_rq_min_slice(cfs_rq);
 
 	slice = min(slice, se->slice);
-	if (slice != se->slice)
-		vprot = min_vruntime(vprot, se->vruntime + calc_delta_fair(slice, se));
+	if (vruntime != se->vruntime || slice != se->slice)
+		vprot = min_vruntime(vprot, vruntime + calc_delta_fair(slice, se));
 
 	se->vprot = vprot;
 }
@@ -1099,8 +1100,9 @@ static inline void set_protect_slice(struct cfs_rq *cfs_rq, struct sched_entity 
 static inline void update_protect_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	u64 slice = cfs_rq_min_slice(cfs_rq);
+	u64 vruntime = min_vruntime(se->vruntime, avg_vruntime(cfs_rq));
 
-	se->vprot = min_vruntime(se->vprot, se->vruntime + calc_delta_fair(slice, se));
+	se->vprot = min_vruntime(se->vprot, vruntime + calc_delta_fair(slice, se));
 }
 
 static inline bool protect_slice(struct sched_entity *se)
