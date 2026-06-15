@@ -105,6 +105,61 @@ properties:
       Restricts the UFS controller to rate-a or rate-b for both TX and
       RX directions.
 
+  tx-precode-enable-g6:
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    oneOf:
+      - items:
+          - description: Host_Lane0 precode
+          - description: Device_Lane0 precode
+      - items:
+          - description: Host_Lane0 precode
+          - description: Device_Lane0 precode
+          - description: Host_Lane1 precode
+          - description: Device_Lane1 precode
+    items:
+      enum: [0, 1]
+    description:
+      Static TX Precode enable values for HS-G6 only.
+
+patternProperties:
+  "^txeq-preshoot-g[1-6]$":
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    oneOf:
+      - items:
+          - description: Host_Lane0 Preshoot value
+          - description: Device_Lane0 Preshoot value
+      - items:
+          - description: Host_Lane0 Preshoot value
+          - description: Device_Lane0 Preshoot value
+          - description: Host_Lane1 Preshoot value
+          - description: Device_Lane1 Preshoot value
+    items:
+      enum: [0, 1, 2, 3, 4, 5, 6, 7]
+    description: |
+      Static TX Equalization PreShoot settings for High Speed Gears. These
+      values are programmed to the corresponding UniPro PA layer attribute
+      PA_TxEQG[1-6]Setting. Each value selects a Pre-Shoot level as defined
+      by the MIPI M-PHY specification (TX_HS_PreShoot_Setting).
+
+  "^txeq-deemphasis-g[1-6]$":
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    oneOf:
+      - items:
+          - description: Host_Lane0 DeEmphasis value
+          - description: Device_Lane0 DeEmphasis value
+      - items:
+          - description: Host_Lane0 DeEmphasis value
+          - description: Device_Lane0 DeEmphasis value
+          - description: Host_Lane1 DeEmphasis value
+          - description: Device_Lane1 DeEmphasis value
+    items:
+      enum: [0, 1, 2, 3, 4, 5, 6, 7]
+    description: |
+      Static TX Equalization DeEmphasis settings for High Speed Gears. These
+      values are programmed to the corresponding UniPro PA layer attribute
+      PA_TxEQG[1-6]Setting. Each value selects a De-Emphasis level as defined
+      by the MIPI M-PHY specification (TX_HS_DeEmphasis_Setting).
+
 dependencies:
   freq-table-hz: [ clocks ]
   operating-points-v2: [ clocks, clock-names ]
