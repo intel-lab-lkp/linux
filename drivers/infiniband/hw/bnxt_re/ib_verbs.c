@@ -3615,14 +3615,27 @@ int bnxt_re_create_user_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *att
 	resp.phase = cq->qplib_cq.period;
 	rc = ib_respond_udata(udata, resp);
 	if (rc)
-		goto free_mem;
+		goto free_page;
 
 	return 0;
 
-free_mem:
-	free_page((unsigned long)cq->uctx_cq_page);
+free_page:
+	if (cq->uctx_cq_page)
+		free_page((unsigned long)cq->uctx_cq_page);
+
 destroy_cq:
 	bnxt_qplib_destroy_cq(&rdev->qplib_res, &cq->qplib_cq);
+	if (cctx->modes.toggle_bits & BNXT_QPLIB_CQ_TOGGLE_BIT) {
+		mutex_lock(&rdev->cq_hash_lock);
+		hash_del(&cq->hash_entry);
+		mutex_unlock(&rdev->cq_hash_lock);
+		/* Drop the creator's reference and wait for any concurrent
+		 * bnxt_re_search_for_cq() caller to release the pointer
+		 * before the RDMA core frees the object.
+		 */
+		kref_put(&cq->cq_ref, bnxt_re_cq_release);
+		wait_for_completion(&cq->cq_destroy_comp);
+	}
 free_umem:
 	ib_umem_release(cq->umem);
 	return rc;
