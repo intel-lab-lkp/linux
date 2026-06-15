@@ -42,7 +42,7 @@ static struct nf_logger *__find_logger(int pf, const char *str_logger)
 	return NULL;
 }
 
-int nf_log_set(struct net *net, u_int8_t pf, const struct nf_logger *logger)
+int nf_log_set(struct net *net, u8 pf, const struct nf_logger *logger)
 {
 	const struct nf_logger *log;
 
@@ -76,7 +76,7 @@ void nf_log_unset(struct net *net, const struct nf_logger *logger)
 EXPORT_SYMBOL(nf_log_unset);
 
 /* return EEXIST if the same logger is registered, 0 on success. */
-int nf_log_register(u_int8_t pf, struct nf_logger *logger)
+int nf_log_register(u8 pf, struct nf_logger *logger)
 {
 	int i;
 	int ret = 0;
@@ -133,7 +133,7 @@ EXPORT_SYMBOL(nf_log_unregister);
  *
  * Returns: true if at least one logger is active for @pf, false otherwise.
  */
-bool nf_log_is_registered(u_int8_t pf)
+bool nf_log_is_registered(u8 pf)
 {
 	int i;
 
@@ -151,7 +151,7 @@ bool nf_log_is_registered(u_int8_t pf)
 }
 EXPORT_SYMBOL(nf_log_is_registered);
 
-int nf_log_bind_pf(struct net *net, u_int8_t pf,
+int nf_log_bind_pf(struct net *net, u8 pf,
 		   const struct nf_logger *logger)
 {
 	if (pf >= ARRAY_SIZE(net->nf.nf_loggers))
@@ -167,7 +167,7 @@ int nf_log_bind_pf(struct net *net, u_int8_t pf,
 }
 EXPORT_SYMBOL(nf_log_bind_pf);
 
-void nf_log_unbind_pf(struct net *net, u_int8_t pf)
+void nf_log_unbind_pf(struct net *net, u8 pf)
 {
 	if (pf >= ARRAY_SIZE(net->nf.nf_loggers))
 		return;
@@ -235,7 +235,7 @@ void nf_logger_put(int pf, enum nf_log_type type)
 EXPORT_SYMBOL_GPL(nf_logger_put);
 
 void nf_log_packet(struct net *net,
-		   u_int8_t pf,
+		   u8 pf,
 		   unsigned int hooknum,
 		   const struct sk_buff *skb,
 		   const struct net_device *in,
@@ -264,7 +264,7 @@ void nf_log_packet(struct net *net,
 EXPORT_SYMBOL(nf_log_packet);
 
 void nf_log_trace(struct net *net,
-		  u_int8_t pf,
+		  u8 pf,
 		  unsigned int hooknum,
 		  const struct sk_buff *skb,
 		  const struct net_device *in,

@@ -37,7 +37,7 @@ struct nf_loginfo {
 };
 
 typedef void nf_logfn(struct net *net,
-		      u_int8_t pf,
+		      u8 pf,
 		      unsigned int hooknum,
 		      const struct sk_buff *skb,
 		      const struct net_device *in,
@@ -56,18 +56,18 @@ struct nf_logger {
 extern int sysctl_nf_log_all_netns;
 
 /* Function to register/unregister log function. */
-int nf_log_register(u_int8_t pf, struct nf_logger *logger);
+int nf_log_register(u8 pf, struct nf_logger *logger);
 void nf_log_unregister(struct nf_logger *logger);
 
 /* Check if any logger is registered for a given protocol family. */
-bool nf_log_is_registered(u_int8_t pf);
+bool nf_log_is_registered(u8 pf);
 
-int nf_log_set(struct net *net, u_int8_t pf, const struct nf_logger *logger);
+int nf_log_set(struct net *net, u8 pf, const struct nf_logger *logger);
 void nf_log_unset(struct net *net, const struct nf_logger *logger);
 
-int nf_log_bind_pf(struct net *net, u_int8_t pf,
+int nf_log_bind_pf(struct net *net, u8 pf,
 		   const struct nf_logger *logger);
-void nf_log_unbind_pf(struct net *net, u_int8_t pf);
+void nf_log_unbind_pf(struct net *net, u8 pf);
 
 int nf_logger_find_get(int pf, enum nf_log_type type);
 void nf_logger_put(int pf, enum nf_log_type type);
@@ -78,7 +78,7 @@ void nf_logger_put(int pf, enum nf_log_type type);
 /* Calls the registered backend logging function */
 __printf(8, 9)
 void nf_log_packet(struct net *net,
-		   u_int8_t pf,
+		   u8 pf,
 		   unsigned int hooknum,
 		   const struct sk_buff *skb,
 		   const struct net_device *in,
@@ -88,7 +88,7 @@ void nf_log_packet(struct net *net,
 
 __printf(8, 9)
 void nf_log_trace(struct net *net,
-		  u_int8_t pf,
+		  u8 pf,
 		  unsigned int hooknum,
 		  const struct sk_buff *skb,
 		  const struct net_device *in,
