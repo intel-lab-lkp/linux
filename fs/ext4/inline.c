@@ -309,7 +309,7 @@ static int ext4_create_inline_data(handle_t *handle,
 		goto out;
 	}
 
-	error = ext4_xattr_ibody_set(handle, inode, &i, &is);
+	error = ext4_xattr_ibody_set(handle, inode, &i, &is, NULL);
 	if (error) {
 		if (error == -ENOSPC)
 			ext4_clear_inode_state(inode,
@@ -386,7 +386,7 @@ static int ext4_update_inline_data(handle_t *handle, struct inode *inode,
 	i.value = value;
 	i.value_len = len;
 
-	error = ext4_xattr_ibody_set(handle, inode, &i, &is);
+	error = ext4_xattr_ibody_set(handle, inode, &i, &is, NULL);
 	if (error)
 		goto out;
 
@@ -469,7 +469,7 @@ static int ext4_destroy_inline_data_nolock(handle_t *handle,
 	if (error)
 		goto out;
 
-	error = ext4_xattr_ibody_set(handle, inode, &i, &is);
+	error = ext4_xattr_ibody_set(handle, inode, &i, &is, NULL);
 	if (error)
 		goto out;
 
@@ -1847,6 +1847,7 @@ int ext4_inline_data_truncate(struct inode *inode, int *has_inline)
 	int inline_size, value_len, needed_blocks, no_expand, err = 0;
 	size_t i_size;
 	void *value = NULL;
+	struct ext4_xattr_inode_array *ea_inode_array = NULL;
 	struct ext4_xattr_ibody_find is = {
 		.s = { .not_found = -ENODATA, },
 	};
@@ -1917,7 +1918,7 @@ int ext4_inline_data_truncate(struct inode *inode, int *has_inline)
 			i.value = value;
 			i.value_len = i_size > EXT4_MIN_INLINE_DATA_SIZE ?
 					i_size - EXT4_MIN_INLINE_DATA_SIZE : 0;
-			err = ext4_xattr_ibody_set(handle, inode, &i, &is);
+			err = ext4_xattr_ibody_set(handle, inode, &i, &is, &ea_inode_array);
 			if (err)
 				goto out_error;
 		}
@@ -1950,6 +1951,7 @@ out:
 			ext4_handle_sync(handle);
 	}
 	ext4_journal_stop(handle);
+	ext4_xattr_inode_array_free(ea_inode_array);
 	return err;
 }
 

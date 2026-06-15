@@ -44,7 +44,8 @@ ext4_initxattrs(struct inode *inode, const struct xattr *xattr_array,
 		err = ext4_xattr_set_handle(handle, inode,
 					    EXT4_XATTR_INDEX_SECURITY,
 					    xattr->name, xattr->value,
-					    xattr->value_len, XATTR_CREATE);
+					    xattr->value_len, XATTR_CREATE,
+					    NULL);
 		if (err < 0)
 			break;
 	}
