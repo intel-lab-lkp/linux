@@ -184,7 +184,7 @@ static int icl_pcode_restrict_qgv_points(struct intel_display *display,
 {
 	int ret;
 
-	if (DISPLAY_VER(display) >= 14)
+	if (HAS_PMDEMAND(display))
 		return 0;
 
 	/* bspec says to keep retrying for at least 1 ms */
@@ -1238,7 +1238,7 @@ static int intel_bw_check_qgv_points(struct intel_display *display,
 
 	data_rate = DIV_ROUND_UP(data_rate, 1000);
 
-	if (DISPLAY_VER(display) >= 14)
+	if (HAS_PMDEMAND(display))
 		return mtl_find_qgv_points(display, data_rate, num_active_planes,
 					   new_bw_state);
 	else
