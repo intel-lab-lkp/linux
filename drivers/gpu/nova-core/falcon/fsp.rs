@@ -125,6 +125,26 @@ impl Falcon<Fsp> {
         }
     }
 
+    /// Both the kernel driver and GSP talk to FSP. Try to ensure exclusive access to the FSP is
+    /// enforced by making sure there is not a pending message already sent to FSP, and that there
+    /// is no pending message from FSP to be read.
+    fn wait_until_ready(&mut self, bar: Bar0<'_>) -> Result {
+        read_poll_timeout(
+            || {
+                let qhead = bar.read(regs::NV_PFSP_QUEUE_HEAD::at(0)).address();
+                let qtail = bar.read(regs::NV_PFSP_QUEUE_TAIL::at(0)).address();
+                let mhead = bar.read(regs::NV_PFSP_MSGQ_HEAD::at(0)).val();
+                let mtail = bar.read(regs::NV_PFSP_MSGQ_TAIL::at(0)).val();
+
+                Ok(qhead == qtail && mhead == mtail)
+            },
+            |&ready| ready,
+            Delta::from_millis(10),
+            Delta::from_millis(FSP_MSG_TIMEOUT_MS),
+        )?;
+        Ok(())
+    }
+
     /// Writes `packet` to FSP EMEM and updates the queue pointers to notify FSP.
     ///
     /// Returns `EINVAL` if `packet` is empty or its length is not 4-byte aligned.
@@ -132,6 +152,9 @@ impl Falcon<Fsp> {
         if packet.is_empty() {
             return Err(EINVAL);
         }
+
+        // Try to make sure we have exclusive access to the FSP at this point.
+        self.wait_until_ready(bar)?;
 
         self.write_emem(bar, packet)?;
 
