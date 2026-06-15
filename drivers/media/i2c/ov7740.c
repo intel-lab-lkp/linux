@@ -1115,17 +1115,20 @@ static void ov7740_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct ov7740 *ov7740 = container_of(sd, struct ov7740, subdev);
+	int ret;
 
 	v4l2_async_unregister_subdev(sd);
 	media_entity_cleanup(&ov7740->subdev.entity);
 	ov7740_free_controls(ov7740);
 
-	pm_runtime_get_sync(&client->dev);
+	ret = pm_runtime_resume_and_get(&client->dev);
 	pm_runtime_disable(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
-	pm_runtime_put_noidle(&client->dev);
 
-	ov7740_set_power(ov7740, 0);
+	if (ret >= 0) {
+		ov7740_set_power(ov7740, 0);
+		pm_runtime_put_noidle(&client->dev);
+	}
 }
 
 static int __maybe_unused ov7740_runtime_suspend(struct device *dev)
