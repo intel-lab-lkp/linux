@@ -431,6 +431,7 @@ static const char pyrf_lost_event__doc[] = PyDoc_STR("perf lost event object.");
 
 static PyMemberDef pyrf_lost_event__members[] = {
 	sample_members
+	member_def(perf_event_header, type, T_UINT, "event type"),
 	member_def(perf_record_lost, id, T_ULONGLONG, "event id"),
 	member_def(perf_record_lost, lost, T_ULONGLONG, "number of lost events"),
 	{ .name = NULL, },
@@ -539,6 +540,7 @@ static const char pyrf_read_event__doc[] = PyDoc_STR("perf read event object.");
 
 static PyMemberDef pyrf_read_event__members[] = {
 	sample_members
+	member_def(perf_event_header, type, T_UINT, "event type"),
 	member_def(perf_record_read, pid, T_UINT, "event pid"),
 	member_def(perf_record_read, tid, T_UINT, "event tid"),
 	{ .name = NULL, },
@@ -3224,6 +3226,7 @@ static const struct perf_constant perf__constants[] = {
 	PERF_CONST(TYPE_BREAKPOINT),
 
 	PERF_CONST(COUNT_HW_CPU_CYCLES),
+	PERF_CONST(COUNT_HW_REF_CPU_CYCLES),
 	PERF_CONST(COUNT_HW_INSTRUCTIONS),
 	PERF_CONST(COUNT_HW_CACHE_REFERENCES),
 	PERF_CONST(COUNT_HW_CACHE_MISSES),
@@ -4102,10 +4105,19 @@ PyMODINIT_FUNC PyInit_perf(void)
 	page_size = sysconf(_SC_PAGE_SIZE);
 
 	Py_INCREF(&pyrf_evlist__type);
-	PyModule_AddObject(module, "evlist", (PyObject*)&pyrf_evlist__type);
+	PyModule_AddObject(module, "evlist", (PyObject *)&pyrf_evlist__type);
 
 	Py_INCREF(&pyrf_evsel__type);
-	PyModule_AddObject(module, "evsel", (PyObject*)&pyrf_evsel__type);
+	PyModule_AddObject(module, "evsel", (PyObject *)&pyrf_evsel__type);
+
+	Py_INCREF(&pyrf_thread__type);
+	PyModule_AddObject(module, "thread", (PyObject *)&pyrf_thread__type);
+
+	Py_INCREF(&pyrf_callchain__type);
+	PyModule_AddObject(module, "callchain", (PyObject *)&pyrf_callchain__type);
+
+	Py_INCREF(&pyrf_callchain_node__type);
+	PyModule_AddObject(module, "callchain_node", (PyObject *)&pyrf_callchain_node__type);
 
 	Py_INCREF(&pyrf_mmap_event__type);
 	PyModule_AddObject(module, "mmap_event", (PyObject *)&pyrf_mmap_event__type);
