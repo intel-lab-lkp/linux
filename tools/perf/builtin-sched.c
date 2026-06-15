@@ -2014,9 +2014,9 @@ static int perf_sched__read_events(struct perf_sched *sched)
 			goto out_delete;
 		}
 
-		sched->nr_events      = session->evlist->stats.nr_events[0];
-		sched->nr_lost_events = session->evlist->stats.total_lost;
-		sched->nr_lost_chunks = session->evlist->stats.nr_events[PERF_RECORD_LOST];
+		sched->nr_events      = evlist__stats(session->evlist)->nr_events[0];
+		sched->nr_lost_events = evlist__stats(session->evlist)->total_lost;
+		sched->nr_lost_chunks = evlist__stats(session->evlist)->nr_events[PERF_RECORD_LOST];
 	}
 
 	rc = 0;
@@ -3292,7 +3292,7 @@ static int timehist_check_attr(struct perf_sched *sched,
 	struct evsel *evsel;
 	struct evsel_runtime *er;
 
-	list_for_each_entry(evsel, &evlist->core.entries, core.node) {
+	list_for_each_entry(evsel, &evlist__core(evlist)->entries, core.node) {
 		er = evsel__get_runtime(evsel);
 		if (er == NULL) {
 			pr_err("Failed to allocate memory for evsel runtime data\n");
@@ -3464,9 +3464,9 @@ static int perf_sched__timehist(struct perf_sched *sched)
 		goto out;
 	}
 
-	sched->nr_events      = evlist->stats.nr_events[0];
-	sched->nr_lost_events = evlist->stats.total_lost;
-	sched->nr_lost_chunks = evlist->stats.nr_events[PERF_RECORD_LOST];
+	sched->nr_events      = evlist__stats(evlist)->nr_events[0];
+	sched->nr_lost_events = evlist__stats(evlist)->total_lost;
+	sched->nr_lost_chunks = evlist__stats(evlist)->nr_events[PERF_RECORD_LOST];
 
 	if (sched->summary)
 		timehist_print_summary(sched, session);
@@ -3971,7 +3971,7 @@ static int perf_sched__schedstat_record(struct perf_sched *sched,
 	if (err < 0)
 		goto out;
 
-	user_requested_cpus = evlist->core.user_requested_cpus;
+	user_requested_cpus = evlist__core(evlist)->user_requested_cpus;
 
 	err = perf_event__synthesize_schedstat(&(sched->tool),
 					       process_synthesized_schedstat_event,
@@ -3987,7 +3987,7 @@ static int perf_sched__schedstat_record(struct perf_sched *sched,
 		evlist__start_workload(evlist);
 
 	while (!done) {
-		if (argc && waitpid(evlist->workload.pid, NULL, WNOHANG) > 0)
+		if (argc && waitpid(evlist__workload_pid(evlist), NULL, WNOHANG) > 0)
 			break;
 		sleep(1);
 	}
@@ -4688,7 +4688,7 @@ static int perf_sched__schedstat_report(struct perf_sched *sched)
 	if (err < 0)
 		goto out;
 
-	user_requested_cpus = session->evlist->core.user_requested_cpus;
+	user_requested_cpus = evlist__core(session->evlist)->user_requested_cpus;
 
 	err = perf_session__process_events(session);
 
@@ -4864,7 +4864,7 @@ static int perf_sched__schedstat_live(struct perf_sched *sched,
 	if (err < 0)
 		goto out;
 
-	user_requested_cpus = evlist->core.user_requested_cpus;
+	user_requested_cpus = evlist__core(evlist)->user_requested_cpus;
 
 	err = perf_event__synthesize_schedstat(&(sched->tool),
 					       process_synthesized_event_live,
@@ -4880,7 +4880,7 @@ static int perf_sched__schedstat_live(struct perf_sched *sched,
 		evlist__start_workload(evlist);
 
 	while (!done) {
-		if (argc && waitpid(evlist->workload.pid, NULL, WNOHANG) > 0)
+		if (argc && waitpid(evlist__workload_pid(evlist), NULL, WNOHANG) > 0)
 			break;
 		sleep(1);
 	}
