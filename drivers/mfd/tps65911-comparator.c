@@ -130,12 +130,16 @@ static int tps65911_comparator_probe(struct platform_device *pdev)
 
 	/* Create sysfs entry */
 	ret = device_create_file(&pdev->dev, &dev_attr_comp1_threshold);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to add COMP1 sysfs file\n");
+		return ret;
+	}
 
 	ret = device_create_file(&pdev->dev, &dev_attr_comp2_threshold);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to add COMP2 sysfs file\n");
+		device_remove_file(&pdev->dev, &dev_attr_comp1_threshold);
+	}
 
 	return ret;
 }
