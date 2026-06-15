@@ -29,11 +29,13 @@ properties:
     const: 1
 
   clocks:
+    minItems: 1
     items:
       - description: clock input
       - description: axi clock
 
   clock-names:
+    minItems: 1
     items:
       - const: clk_in1
       - const: s_axi_aclk
@@ -87,9 +89,19 @@ allOf:
     then:
       required:
         - xlnx,clk-mul-div
+      properties:
+        clocks:
+          maxItems: 1
+        clock-names:
+          maxItems: 1
     else:
       required:
         - reg
+      properties:
+        clocks:
+          minItems: 2
+        clock-names:
+          minItems: 2
 
 additionalProperties: false
 
@@ -109,8 +121,8 @@ examples:
     clock-controller {
         compatible = "xlnx,clocking-wizard";
         #clock-cells = <1>;
-        clocks = <&clkc 15>, <&clkc 18>;
-        clock-names = "clk_in1", "s_axi_aclk";
+        clocks = <&clkc 15>;
+        clock-names = "clk_in1";
         xlnx,nr-outputs = <6>;
         xlnx,speed-grade = <1>;
         xlnx,static-config;
