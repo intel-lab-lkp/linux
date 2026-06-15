@@ -583,8 +583,7 @@ static int i915_driver_hw_probe(struct drm_i915_private *dev_priv)
 
 err_opregion:
 	intel_opregion_cleanup(display);
-	if (pdev->msi_enabled)
-		pci_disable_msi(pdev);
+	pci_disable_msi(pdev);
 err_mem_regions:
 	intel_memory_regions_driver_release(dev_priv);
 err_ggtt:
@@ -610,8 +609,7 @@ static void i915_driver_hw_remove(struct drm_i915_private *dev_priv)
 
 	intel_opregion_cleanup(display);
 
-	if (pdev->msi_enabled)
-		pci_disable_msi(pdev);
+	pci_disable_msi(pdev);
 }
 
 /**
