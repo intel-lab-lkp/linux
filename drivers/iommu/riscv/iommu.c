@@ -53,6 +53,10 @@ struct riscv_iommu_devres {
 	void *addr;
 };
 
+#ifdef CONFIG_RISCV_IOMMU_32BIT_ACCESS
+DEFINE_RAW_SPINLOCK(riscv_iommu_32bit_access_lock);
+#endif
+
 static void riscv_iommu_devres_pages_release(struct device *dev, void *res)
 {
 	struct riscv_iommu_devres *devres = res;

@@ -22,3 +22,14 @@ config RISCV_IOMMU_PCI
 	def_bool y if RISCV_IOMMU && PCI_MSI
 	help
 	  Support for the PCIe implementation of RISC-V IOMMU architecture.
+
+config RISCV_IOMMU_32BIT_ACCESS
+	bool "Use 32-bit accesses for RISC-V IOMMU registers"
+	depends on RISCV_IOMMU
+	help
+	  Say Y when the RISC-V IOMMU MMIO window cannot be accessed
+	  using naturally aligned 64-bit loads and stores.
+
+	  When enabled, 64-bit IOMMU registers are accessed as paired
+	  32-bit MMIO operations. This option does not describe an RV32
+	  kernel or a 32-bit IOMMU architecture.

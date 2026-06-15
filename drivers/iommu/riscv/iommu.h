@@ -14,6 +14,9 @@
 #include <linux/iommu.h>
 #include <linux/types.h>
 #include <linux/iopoll.h>
+#ifdef CONFIG_RISCV_IOMMU_32BIT_ACCESS
+#include <linux/spinlock.h>
+#endif
 
 #include "iommu-bits.h"
 
@@ -69,11 +72,16 @@ void riscv_iommu_disable(struct riscv_iommu_device *iommu);
 #define riscv_iommu_readl(iommu, addr) \
 	readl_relaxed((iommu)->reg + (addr))
 
-#define riscv_iommu_readq(iommu, addr) \
-	readq_relaxed((iommu)->reg + (addr))
-
 #define riscv_iommu_writel(iommu, addr, val) \
 	writel_relaxed((val), (iommu)->reg + (addr))
+
+#define riscv_iommu_readl_timeout(iommu, addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout(readl_relaxed, (iommu)->reg + (addr), val, cond, \
+			   delay_us, timeout_us)
+
+#ifndef CONFIG_RISCV_IOMMU_32BIT_ACCESS
+#define riscv_iommu_readq(iommu, addr) \
+	readq_relaxed((iommu)->reg + (addr))
 
 #define riscv_iommu_writeq(iommu, addr, val) \
 	writeq_relaxed((val), (iommu)->reg + (addr))
@@ -81,9 +89,44 @@ void riscv_iommu_disable(struct riscv_iommu_device *iommu);
 #define riscv_iommu_readq_timeout(iommu, addr, val, cond, delay_us, timeout_us) \
 	readx_poll_timeout(readq_relaxed, (iommu)->reg + (addr), val, cond, \
 			   delay_us, timeout_us)
+#else /* CONFIG_RISCV_IOMMU_32BIT_ACCESS */
 
-#define riscv_iommu_readl_timeout(iommu, addr, val, cond, delay_us, timeout_us) \
-	readx_poll_timeout(readl_relaxed, (iommu)->reg + (addr), val, cond, \
-			   delay_us, timeout_us)
+extern raw_spinlock_t riscv_iommu_32bit_access_lock;
+
+static inline u64 __riscv_iommu_readq_relaxed(void __iomem *addr)
+{
+	u32 lo, hi;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&riscv_iommu_32bit_access_lock, flags);
+	do {
+		hi = readl_relaxed(addr + sizeof(u32));
+		lo = readl_relaxed(addr);
+	} while (hi != readl_relaxed(addr + sizeof(u32)));
+	raw_spin_unlock_irqrestore(&riscv_iommu_32bit_access_lock, flags);
+
+	return ((u64)hi << 32) | (u64)lo;
+}
+
+static inline void __riscv_iommu_writeq_relaxed(u64 value, void __iomem *addr)
+{
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&riscv_iommu_32bit_access_lock, flags);
+	writel_relaxed((u32)(value >> 32), addr + sizeof(u32));
+	writel_relaxed((u32)value, addr);
+	raw_spin_unlock_irqrestore(&riscv_iommu_32bit_access_lock, flags);
+}
+
+#define riscv_iommu_readq(iommu, addr) \
+	__riscv_iommu_readq_relaxed((iommu)->reg + (addr))
+
+#define riscv_iommu_writeq(iommu, addr, val) \
+	__riscv_iommu_writeq_relaxed((val), (iommu)->reg + (addr))
+
+#define riscv_iommu_readq_timeout(iommu, addr, val, cond, delay_us, timeout_us) \
+	readx_poll_timeout(__riscv_iommu_readq_relaxed, (iommu)->reg + (addr), \
+			   val, cond, delay_us, timeout_us)
+#endif /* CONFIG_RISCV_IOMMU_32BIT_ACCESS */
 
 #endif
