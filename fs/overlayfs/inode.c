@@ -306,7 +306,7 @@ int ovl_permission(struct mnt_idmap *idmap,
 	 * Check overlay inode with the creds of task and underlying inode
 	 * with creds of mounter
 	 */
-	err = generic_permission(&nop_mnt_idmap, inode, mask);
+	err = generic_permission(idmap, inode, mask);
 	if (err)
 		return err;
 
