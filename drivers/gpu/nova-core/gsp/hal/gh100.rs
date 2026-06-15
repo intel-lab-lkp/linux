@@ -162,16 +162,6 @@ impl GspHal for Gh100 {
     ) -> Result<BootUnloadGuard<'a>> {
         let fsp_fw = FspFirmware::new(dev, chipset, FIRMWARE_VERSION)?;
 
-        let unload_bundle = crate::gsp::UnloadBundle(
-            KBox::new(FspUnloadBundle, GFP_KERNEL)? as KBox<dyn UnloadBundle>
-        );
-
-        // Wrap the unload bundle into a drop guard so it is automatically run upon failure.
-        let unload_guard =
-            BootUnloadGuard::new(gsp, dev, bar, gsp_falcon, sec2_falcon, Some(unload_bundle));
-
-        let mut fsp = Fsp::wait_secure_boot(dev, bar, chipset, fsp_fw)?;
-
         let args = FmcBootArgs::new(
             dev,
             chipset,
@@ -179,6 +169,16 @@ impl GspHal for Gh100 {
             gsp.libos.dma_handle(),
             false,
         )?;
+
+        let mut fsp = Fsp::wait_secure_boot(dev, bar, chipset, fsp_fw)?;
+
+        let unload_bundle = crate::gsp::UnloadBundle(
+            KBox::new(FspUnloadBundle, GFP_KERNEL)? as KBox<dyn UnloadBundle>
+        );
+
+        // Wrap the unload bundle into a drop guard so it is automatically run upon failure.
+        let unload_guard =
+            BootUnloadGuard::new(gsp, dev, bar, gsp_falcon, sec2_falcon, Some(unload_bundle));
 
         fsp.boot_fmc(dev, bar, fb_layout, &args)?;
 
