@@ -144,11 +144,13 @@ static int kvm_vfio_file_add(struct kvm_device *dev, unsigned int fd)
 {
 	struct kvm_vfio *kv = dev->private;
 	struct kvm_vfio_file *kvf;
-	struct file *filp __free(fput) = NULL;
+	CLASS(fd, f)(fd);
+	struct file *filp = NULL;
 
-	filp = fget(fd);
-	if (!filp)
+	if (fd_empty(f))
 		return -EBADF;
+
+	filp = fd_file(f);
 
 	/* Ensure the FD is a vfio FD. */
 	if (!kvm_vfio_file_is_valid(filp))
