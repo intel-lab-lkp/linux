@@ -366,6 +366,7 @@ static int s2m_rgb_probe(struct platform_device *pdev)
 	struct sec_pmic_dev *pmic_drvdata = dev_get_drvdata(dev->parent);
 	struct s2m_rgb *rgb;
 	struct led_init_data init_data = {};
+	struct device_node *multi_led_node __free(device_node) = NULL;
 	int ret;
 
 	rgb = devm_kzalloc(dev, sizeof(*rgb), GFP_KERNEL);
@@ -392,7 +393,11 @@ static int s2m_rgb_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to create mutex lock\n");
 
-	init_data.fwnode = of_fwnode_handle(dev->of_node);
+	multi_led_node = of_get_child_by_name(dev->parent->of_node, "multi-led");
+	if (!multi_led_node)
+		return dev_err_probe(dev, -ENODEV, "RGB LED node required but not found\n");
+
+	init_data.fwnode = of_fwnode_handle(multi_led_node);
 	ret = devm_led_classdev_multicolor_register_ext(dev, &rgb->mc, &init_data);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to create LED device\n");
@@ -405,12 +410,6 @@ static const struct platform_device_id s2m_rgb_id_table[] = {
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(platform, s2m_rgb_id_table);
-
-static const struct of_device_id s2m_rgb_of_match_table[] = {
-	{ .compatible = "samsung,s2mu005-rgb", .data = (void *)S2MU005 },
-	{ /* sentinel */ },
-};
-MODULE_DEVICE_TABLE(of, s2m_rgb_of_match_table);
 
 static struct platform_driver s2m_rgb_driver = {
 	.driver = {
