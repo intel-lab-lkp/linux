@@ -6,6 +6,7 @@
 #include <linux/kvm_host.h>
 #include <linux/mempolicy.h>
 #include <linux/pseudo_fs.h>
+#include <linux/rwsem.h>
 #include <linux/pagemap.h>
 
 #include "kvm_mm.h"
@@ -31,6 +32,13 @@ struct gmem_inode {
 	struct shared_policy policy;
 	struct inode vfs_inode;
 	struct list_head gmem_file_list;
+
+	/*
+	 * Serializes established gmem_file entries and bindings with
+	 * invalidations that don't hold mapping->invalidate_lock, e.g.
+	 * ->error_remove_folio().
+	 */
+	struct rw_semaphore bindings_lock;
 
 	u64 flags;
 };
@@ -344,6 +352,7 @@ static int kvm_gmem_release(struct inode *inode, struct file *file)
 
 	filemap_invalidate_lock(inode->i_mapping);
 
+	down_write(&GMEM_I(inode)->bindings_lock);
 	xa_for_each(&f->bindings, index, slot)
 		WRITE_ONCE(slot->gmem.file, NULL);
 
@@ -357,6 +366,7 @@ static int kvm_gmem_release(struct inode *inode, struct file *file)
 	__kvm_gmem_invalidate_end(f, 0, -1ul);
 
 	list_del(&f->entry);
+	up_write(&GMEM_I(inode)->bindings_lock);
 
 	filemap_invalidate_unlock(inode->i_mapping);
 
@@ -499,11 +509,10 @@ static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *fol
 {
 	pgoff_t start, end;
 
-	filemap_invalidate_lock_shared(mapping);
-
 	start = folio->index;
 	end = start + folio_nr_pages(folio);
 
+	down_read(&GMEM_I(mapping->host)->bindings_lock);
 	kvm_gmem_invalidate_begin(mapping->host, start, end);
 
 	/*
@@ -516,8 +525,7 @@ static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *fol
 	 */
 
 	kvm_gmem_invalidate_end(mapping->host, start, end);
-
-	filemap_invalidate_unlock_shared(mapping);
+	up_read(&GMEM_I(mapping->host)->bindings_lock);
 
 	return MF_DELAYED;
 }
@@ -673,10 +681,11 @@ int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 	start = offset >> PAGE_SHIFT;
 	end = start + slot->npages;
 
+	down_write(&GMEM_I(inode)->bindings_lock);
 	if (!xa_empty(&f->bindings) &&
 	    xa_find(&f->bindings, &start, end - 1, XA_PRESENT)) {
-		filemap_invalidate_unlock(inode->i_mapping);
-		goto err;
+		r = -EINVAL;
+		goto err_unlock;
 	}
 
 	/*
@@ -690,6 +699,10 @@ int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 		slot->flags |= KVM_MEMSLOT_GMEM_ONLY;
 
 	xa_store_range(&f->bindings, start, end - 1, slot, GFP_KERNEL);
+	r = 0;
+
+err_unlock:
+	up_write(&GMEM_I(inode)->bindings_lock);
 	filemap_invalidate_unlock(inode->i_mapping);
 
 	/*
@@ -697,7 +710,6 @@ int kvm_gmem_bind(struct kvm *kvm, struct kvm_memory_slot *slot,
 	 * not the other way 'round.  Active bindings are invalidated if the
 	 * file is closed before memslots are destroyed.
 	 */
-	r = 0;
 err:
 	fput(file);
 	return r;
@@ -739,12 +751,21 @@ void kvm_gmem_unbind(struct kvm_memory_slot *slot)
 	 * until the caller drops slots_lock.
 	 */
 	if (!file) {
-		__kvm_gmem_unbind(slot, slot->gmem.file->private_data);
+		struct file *slot_file = slot->gmem.file;
+		struct inode *inode = file_inode(slot_file);
+
+		filemap_invalidate_lock(inode->i_mapping);
+		down_write(&GMEM_I(inode)->bindings_lock);
+		__kvm_gmem_unbind(slot, slot_file->private_data);
+		up_write(&GMEM_I(inode)->bindings_lock);
+		filemap_invalidate_unlock(inode->i_mapping);
 		return;
 	}
 
 	filemap_invalidate_lock(file->f_mapping);
+	down_write(&GMEM_I(file_inode(file))->bindings_lock);
 	__kvm_gmem_unbind(slot, file->private_data);
+	up_write(&GMEM_I(file_inode(file))->bindings_lock);
 	filemap_invalidate_unlock(file->f_mapping);
 }
 
@@ -946,6 +967,7 @@ static struct inode *kvm_gmem_alloc_inode(struct super_block *sb)
 
 	gi->flags = 0;
 	INIT_LIST_HEAD(&gi->gmem_file_list);
+	init_rwsem(&gi->bindings_lock);
 	return &gi->vfs_inode;
 }
 
