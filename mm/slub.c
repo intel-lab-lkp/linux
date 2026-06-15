@@ -5549,7 +5549,7 @@ void *__kmalloc_flags_noprof(DECL_TOKEN_PARAMS(size, token), gfp_t flags,
 	};
 
 	if (alloc_flags_allow_spinning(alloc_flags)) {
-		return __do_kmalloc_node(size, NULL, flags, node,
+		return __do_kmalloc_node(NULL, flags, node,
 				PASS_TOKEN_PARAM(token), &ac);
 	} else {
 		return __kmalloc_nolock_noprof(PASS_TOKEN_PARAMS(size, token),
