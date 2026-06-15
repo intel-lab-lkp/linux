@@ -123,6 +123,46 @@ static const struct regulator_desc max14577_supported_regulators[] = {
 	[MAX14577_CHARGER] = MAX14577_CHARGER_REG,
 };
 
+static unsigned int max77836_ldo_get_mode(struct regulator_dev *rdev)
+{
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(rdev->regmap, rdev->desc->enable_reg, &val);
+	if (ret)
+		return ret;
+
+	val &= MAX77836_CNFG1_LDO_PWRMD_MASK;
+	switch (val) {
+	case MAX77836_CNFG1_LDO_PWRMD_LPM:
+		return REGULATOR_MODE_IDLE;
+	case MAX77836_CNFG1_LDO_PWRMD_NORMAL:
+		return REGULATOR_MODE_NORMAL;
+	default:
+		return REGULATOR_MODE_INVALID;
+	}
+}
+
+static int max77836_ldo_set_mode(struct regulator_dev *rdev,
+		unsigned int mode)
+{
+	unsigned int val;
+
+	switch (mode) {
+	case REGULATOR_MODE_NORMAL:
+		val = MAX77836_CNFG1_LDO_PWRMD_NORMAL;
+		break;
+	case REGULATOR_MODE_IDLE:
+		val = MAX77836_CNFG1_LDO_PWRMD_LPM;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return regmap_update_bits(rdev->regmap, rdev->desc->enable_reg,
+		MAX77836_CNFG1_LDO_PWRMD_MASK, val);
+}
+
 static const struct regulator_ops max77836_ldo_ops = {
 	.is_enabled		= regulator_is_enabled_regmap,
 	.enable			= regulator_enable_regmap,
@@ -131,7 +171,8 @@ static const struct regulator_ops max77836_ldo_ops = {
 	.map_voltage		= regulator_map_voltage_linear,
 	.get_voltage_sel	= regulator_get_voltage_sel_regmap,
 	.set_voltage_sel	= regulator_set_voltage_sel_regmap,
-	/* TODO: add .set_suspend_mode */
+	.get_mode		= max77836_ldo_get_mode,
+	.set_mode		= max77836_ldo_set_mode,
 };
 
 #define MAX77836_LDO_REG(num)	{ \
