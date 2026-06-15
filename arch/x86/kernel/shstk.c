@@ -583,12 +583,13 @@ long shstk_prctl(struct task_struct *task, int option, unsigned long arg2)
 	}
 
 	/* Only allow via ptrace */
-	if (task != current) {
-		if (option == ARCH_SHSTK_UNLOCK && IS_ENABLED(CONFIG_CHECKPOINT_RESTORE)) {
-			task->thread.features_locked &= ~features;
-			return 0;
-		}
-		return -EINVAL;
+	if (option == ARCH_SHSTK_UNLOCK) {
+		if (task == current)
+			return -EPERM;
+		if (!IS_ENABLED(CONFIG_CHECKPOINT_RESTORE))
+			return -EINVAL;
+		task->thread.features_locked &= ~features;
+		return 0;
 	}
 
 	/* Do not allow to change locked features */
