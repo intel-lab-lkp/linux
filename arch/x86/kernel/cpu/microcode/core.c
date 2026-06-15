@@ -193,6 +193,9 @@ void __init load_ucode_bsp(void)
 			return;
 		intel = false;
 		break;
+	case X86_VENDOR_HYGON:
+		intel = false;
+		break;
 
 	default:
 		return;
@@ -201,7 +204,11 @@ void __init load_ucode_bsp(void)
 	if (intel)
 		load_ucode_intel_bsp(&early_data);
 	else
-		load_ucode_amd_bsp(&early_data, cpuid_1_eax);
+		if (x86_cpuid_vendor() == X86_VENDOR_HYGON)
+			load_ucode_hygon_bsp(&early_data, cpuid_1_eax);
+		else
+			load_ucode_amd_bsp(&early_data, cpuid_1_eax);
+
 }
 
 void load_ucode_ap(void)
@@ -226,6 +233,9 @@ void load_ucode_ap(void)
 	case X86_VENDOR_AMD:
 		if (x86_family(cpuid_1_eax) >= 0x10)
 			load_ucode_amd_ap(cpuid_1_eax);
+		break;
+	case X86_VENDOR_HYGON:
+		load_ucode_hygon_ap(cpuid_1_eax);
 		break;
 	default:
 		break;
@@ -285,6 +295,9 @@ static void reload_early_microcode(unsigned int cpu)
 	case X86_VENDOR_AMD:
 		if (family >= 0x10)
 			reload_ucode_amd(cpu);
+		break;
+	case X86_VENDOR_HYGON:
+		reload_ucode_hygon(cpu);
 		break;
 	default:
 		break;
@@ -893,6 +906,8 @@ static int __init microcode_init(void)
 		microcode_ops = init_intel_microcode();
 	else if (c->x86_vendor == X86_VENDOR_AMD)
 		microcode_ops = init_amd_microcode();
+	else if (c->x86_vendor == X86_VENDOR_HYGON)
+		microcode_ops = init_hygon_microcode();
 	else
 		pr_err("no support for this CPU vendor\n");
 
