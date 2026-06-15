@@ -344,7 +344,7 @@ impl GspHal for Tu102 {
         // Create and run the GSP sequencer.
         let seq_params = GspSequencerParams {
             bootloader_app_version: gsp_fw.bootloader.app_version,
-            libos_dma_handle: gsp.libos.dma_handle(),
+            libos: &gsp.libos,
             gsp_falcon,
             sec2_falcon,
             dev,

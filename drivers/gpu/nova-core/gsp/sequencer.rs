@@ -6,6 +6,7 @@ use core::array;
 
 use kernel::{
     device,
+    dma::Coherent,
     io::{
         poll::read_poll_timeout,
         Io, //
@@ -31,6 +32,7 @@ use crate::{
             MessageFromGsp, //
         },
         fw,
+        LibosMemoryRegionInitArgument, //
     },
     num::FromSafeCast,
     sbuffer::SBufferIter,
@@ -136,8 +138,8 @@ pub(crate) struct GspSequencer<'a> {
     sec2_falcon: &'a Falcon<Sec2>,
     /// GSP falcon for core operations.
     gsp_falcon: &'a Falcon<Gsp>,
-    /// LibOS DMA handle address.
-    libos_dma_handle: u64,
+    /// LibOS memory region init arguments.
+    libos: &'a Coherent<[LibosMemoryRegionInitArgument]>,
     /// Bootloader application version.
     bootloader_app_version: u32,
     /// Device for logging.
@@ -233,11 +235,13 @@ impl GspSeqCmd {
                 // Reset the GSP to prepare it for resuming.
                 seq.gsp_falcon.reset(seq.bar)?;
 
+                let libos_dma_handle = seq.libos.dma_handle();
+
                 // Write the libOS DMA handle to GSP mailboxes.
                 seq.gsp_falcon.write_mailboxes(
                     seq.bar,
-                    Some(seq.libos_dma_handle as u32),
-                    Some((seq.libos_dma_handle >> 32) as u32),
+                    Some(libos_dma_handle as u32),
+                    Some((libos_dma_handle >> 32) as u32),
                 );
 
                 // Start the SEC2 falcon which will trigger GSP-RM to resume on the GSP.
@@ -342,8 +346,8 @@ impl<'a> GspSequencer<'a> {
 pub(crate) struct GspSequencerParams<'a> {
     /// Bootloader application version.
     pub(crate) bootloader_app_version: u32,
-    /// LibOS DMA handle address.
-    pub(crate) libos_dma_handle: u64,
+    /// LibOS memory region init arguments.
+    pub(crate) libos: &'a Coherent<[LibosMemoryRegionInitArgument]>,
     /// GSP falcon for core operations.
     pub(crate) gsp_falcon: &'a Falcon<Gsp>,
     /// SEC2 falcon for core operations.
@@ -369,7 +373,7 @@ impl<'a> GspSequencer<'a> {
             bar: params.bar,
             sec2_falcon: params.sec2_falcon,
             gsp_falcon: params.gsp_falcon,
-            libos_dma_handle: params.libos_dma_handle,
+            libos: params.libos,
             bootloader_app_version: params.bootloader_app_version,
             dev: params.dev,
         };
