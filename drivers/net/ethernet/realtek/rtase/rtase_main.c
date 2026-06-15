@@ -61,6 +61,7 @@
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
 #include <linux/prefetch.h>
+#include <linux/ptp_classify.h>
 #include <linux/rtnetlink.h>
 #include <linux/tcp.h>
 #include <asm/irq.h>
@@ -1249,6 +1250,81 @@ static u32 rtase_tx_csum(struct sk_buff *skb, const struct net_device *dev)
 	return csum_cmd;
 }
 
+static bool rtase_get_udp_offset(struct sk_buff *skb, u32 *udp_offset)
+{
+	int no = skb_network_offset(skb);
+	struct ipv6hdr *i6h, _i6h;
+	struct iphdr *ih, _ih;
+
+	switch (vlan_get_protocol(skb)) {
+	case htons(ETH_P_IP):
+		ih = skb_header_pointer(skb, no, sizeof(_ih), &_ih);
+		if (!ih)
+			return false;
+
+		if (ih->ihl < 5)
+			return false;
+
+		if (ih->protocol != IPPROTO_UDP)
+			return false;
+
+		*udp_offset = no + ih->ihl * 4;
+
+		return true;
+	case htons(ETH_P_IPV6):
+		i6h = skb_header_pointer(skb, no, sizeof(_i6h), &_i6h);
+		if (!i6h)
+			return false;
+
+		if (i6h->nexthdr != IPPROTO_UDP)
+			return false;
+
+		*udp_offset = no + sizeof(*i6h);
+
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool rtase_skb_pad(struct sk_buff *skb)
+{
+	__be16 *dest, _dest;
+	u32 trans_data_len;
+	u32 udp_offset;
+	u16 dest_port;
+	u32 pad_len;
+
+	if (!rtase_get_udp_offset(skb, &udp_offset))
+		return true;
+
+	trans_data_len = skb->len - udp_offset;
+	if (trans_data_len < offsetof(struct udphdr, len) ||
+	    trans_data_len >= RTASE_MIN_PAD_LEN)
+		return true;
+
+	dest = skb_header_pointer(skb,
+				  udp_offset + offsetof(struct udphdr, dest),
+				  sizeof(_dest), &_dest);
+	if (!dest)
+		return true;
+
+	dest_port = ntohs(*dest);
+	if (dest_port != PTP_EV_PORT && dest_port != PTP_GEN_PORT)
+		return true;
+
+	if (skb_is_nonlinear(skb)) {
+		if (skb_linearize(skb))
+			return false;
+	}
+
+	pad_len = RTASE_MIN_PAD_LEN - trans_data_len;
+	if (__skb_put_padto(skb, skb->len + pad_len, false))
+		return false;
+
+	return true;
+}
+
 static int rtase_xmit_frags(struct rtase_ring *ring, struct sk_buff *skb,
 			    u32 opts1, u32 opts2)
 {
@@ -1361,6 +1437,9 @@ static netdev_tx_t rtase_start_xmit(struct sk_buff *skb,
 	} else if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		opts2 |= rtase_tx_csum(skb, dev);
 	}
+
+	if (!rtase_skb_pad(skb))
+		goto err_dma_0;
 
 	frags = rtase_xmit_frags(ring, skb, opts1, opts2);
 	if (unlikely(frags < 0))
