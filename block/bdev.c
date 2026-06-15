@@ -304,7 +304,12 @@ int bdev_freeze(struct block_device *bdev)
 
 	mutex_lock(&bdev->bd_fsfreeze_mutex);
 
-	if (atomic_inc_return(&bdev->bd_fsfreeze_count) > 1) {
+	/* A device being removed from its filesystem refuses freezes. */
+	if (!atomic_inc_unless_negative(&bdev->bd_fsfreeze_count)) {
+		mutex_unlock(&bdev->bd_fsfreeze_mutex);
+		return -EBUSY;
+	}
+	if (atomic_read(&bdev->bd_fsfreeze_count) > 1) {
 		mutex_unlock(&bdev->bd_fsfreeze_mutex);
 		return 0;
 	}
@@ -367,6 +372,42 @@ out:
 	return error;
 }
 EXPORT_SYMBOL(bdev_thaw);
+
+/**
+ * bdev_deny_freeze - make a block device unfreezable
+ * @bdev: block device
+ *
+ * Reserve @bdev against bdev_freeze() the way deny_write_access() reserves a
+ * file against writers.  bd_fsfreeze_count is sign-encoded: > 0 counts active
+ * freezes, < 0 counts deniers, so a deny succeeds only while no freeze is in
+ * progress.  While held, bdev_freeze() returns -EBUSY.  Pair with
+ * bdev_allow_freeze().
+ *
+ * A filesystem removing, adding or replacing a member device denies freezes on
+ * it for the duration, so a claim a freeze walk might act on is never torn down
+ * behind the freezer's back.  The deny is device-scoped, not (device,
+ * superblock)-scoped: a device shared by several superblocks is refused for all
+ * of them.  No in-tree filesystem removes a shared claim from a live superblock.
+ *
+ * Return: 0, or -EBUSY if the device is currently frozen.
+ */
+int bdev_deny_freeze(struct block_device *bdev)
+{
+	return atomic_dec_unless_positive(&bdev->bd_fsfreeze_count) ? 0 : -EBUSY;
+}
+EXPORT_SYMBOL_GPL(bdev_deny_freeze);
+
+/**
+ * bdev_allow_freeze - allow freezing a block device again
+ * @bdev: block device
+ *
+ * Undo one bdev_deny_freeze().
+ */
+void bdev_allow_freeze(struct block_device *bdev)
+{
+	atomic_inc(&bdev->bd_fsfreeze_count);
+}
+EXPORT_SYMBOL_GPL(bdev_allow_freeze);
 
 /*
  * pseudo-fs
