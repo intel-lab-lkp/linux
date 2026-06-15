@@ -1800,6 +1800,10 @@ void sync_bdevs(bool wait);
 void bdev_statx(const struct path *path, struct kstat *stat, u32 request_mask);
 void printk_all_partitions(void);
 int __init early_lookup_bdev(const char *pathname, dev_t *dev);
+#ifdef CONFIG_DPS_ROOT_AUTO_DISCOVERY
+int __init early_lookup_bdev_by_type_uuid(const char *type_uuid,
+					  const char *efi_partuuid, dev_t *dev);
+#endif
 #else
 static inline void invalidate_bdev(struct block_device *bdev)
 {

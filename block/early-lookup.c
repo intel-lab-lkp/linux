@@ -5,10 +5,12 @@
  */
 #include <linux/blkdev.h>
 #include <linux/ctype.h>
+#include <linux/uuid.h>
 
 struct uuidcmp {
 	const char *uuid;
 	int len;
+	struct gendisk *disk;
 };
 
 /**
@@ -45,12 +47,10 @@ static int __init match_dev_by_uuid(struct device *dev, const void *data)
  */
 static int __init devt_from_partuuid(const char *uuid_str, dev_t *devt)
 {
-	struct uuidcmp cmp;
+	struct uuidcmp cmp = { .uuid = uuid_str };
 	struct device *dev = NULL;
 	int offset = 0;
 	char *slash;
-
-	cmp.uuid = uuid_str;
 
 	slash = strchr(uuid_str, '/');
 	/* Check for optional partition number offset attributes. */
@@ -251,6 +251,67 @@ int __init early_lookup_bdev(const char *name, dev_t *devt)
 		return devt_from_devname(name + 5, devt);
 	return devt_from_devnum(name, devt);
 }
+
+#ifdef CONFIG_DPS_ROOT_AUTO_DISCOVERY
+/**
+ * match_dev_by_type_uuid - callback for finding a partition using its type UUID
+ * @dev:	device passed in by the caller
+ * @data:	opaque pointer to the desired struct uuidcmp to match
+ *
+ * Returns: 1 if the device matches, and 0 otherwise.
+ */
+static int __init match_dev_by_type_uuid(struct device *dev, const void *data)
+{
+	struct block_device *bdev = dev_to_bdev(dev);
+	const struct uuidcmp *cmp = data;
+
+	return bdev->bd_disk == cmp->disk && bdev->bd_meta_info &&
+	       !strcasecmp(cmp->uuid, bdev->bd_meta_info->type_uuid);
+}
+
+/**
+ * early_lookup_bdev_by_type_uuid - look up a partition by its type UUID
+ * @type_uuid:		partition type UUID to search for
+ * @efi_partuuid:	partition UUID identifying the active EFI partition
+ * @devt:		matching dev_t result
+ *
+ * This helper follows the Discoverable Partitions Specification rules. It uses
+ * @efi_partuuid to find the disk containing the active EFI System Partition,
+ * then searches only partitions on that disk for the partition type UUID
+ * specified by @type_uuid.
+ *
+ * Returns: 0 on success or a negative error code on failure.
+ */
+int __init early_lookup_bdev_by_type_uuid(const char *type_uuid,
+					  const char *efi_partuuid, dev_t *devt)
+{
+	struct uuidcmp efi_cmp = {
+		.uuid = efi_partuuid,
+		.len = UUID_STRING_LEN,
+	};
+	struct uuidcmp type_cmp = {
+		.uuid = type_uuid,
+	};
+	struct device *efi_dev;
+	struct device *type_dev;
+
+	efi_dev = class_find_device(&block_class, NULL, &efi_cmp,
+				    &match_dev_by_uuid);
+	if (!efi_dev)
+		return -ENODEV;
+
+	type_cmp.disk = dev_to_disk(efi_dev);
+	type_dev = class_find_device(&block_class, NULL, &type_cmp,
+				     &match_dev_by_type_uuid);
+	put_device(efi_dev);
+	if (!type_dev)
+		return -ENODEV;
+
+	*devt = type_dev->devt;
+	put_device(type_dev);
+	return 0;
+}
+#endif
 
 static char __init *bdevt_str(dev_t devt, char *buf)
 {
