@@ -149,6 +149,16 @@ config ARCH_TEGRA_241_SOC
 	help
 	  Enable support for the NVIDIA Tegra241 SoC.
 
+config ARCH_TEGRA_410_SOC
+	bool "NVIDIA Tegra410 SoC"
+	help
+	  Enable support for the NVIDIA Tegra410 SoC.
+
+	  This option enables Tegra410-specific platform support in
+	  drivers shared across NVIDIA Tegra SoCs.
+	  It should be selected when building a kernel for Tegra410
+	  systems.
+
 config ARCH_TEGRA_264_SOC
 	bool "NVIDIA Tegra264 SoC"
 	default ARCH_TEGRA
