@@ -2293,6 +2293,8 @@ int bnxt_re_create_srq(struct ib_srq *ib_srq,
 			srq->uctx_srq_page = (void *)get_zeroed_page(GFP_KERNEL);
 			if (!srq->uctx_srq_page) {
 				rc = -ENOMEM;
+				bnxt_qplib_destroy_srq(&rdev->qplib_res,
+						       &srq->qplib_srq);
 				goto fail;
 			}
 			resp.comp_mask |= BNXT_RE_SRQ_TOGGLE_PAGE_SUPPORT;
@@ -2312,6 +2314,19 @@ int bnxt_re_create_srq(struct ib_srq *ib_srq,
 	return 0;
 
 fail:
+	if (rdev->chip_ctx->modes.toggle_bits & BNXT_QPLIB_SRQ_TOGGLE_BIT && srq->uctx) {
+		mutex_lock(&rdev->srq_hash_lock);
+		hash_del(&srq->hash_entry);
+		mutex_unlock(&rdev->srq_hash_lock);
+		/* Drop the creator's reference and wait for any concurrent
+		 * bnxt_re_search_for_srq() caller to release the pointer
+		 * before the RDMA core frees the object.
+		 */
+		kref_put(&srq->srq_ref, bnxt_re_srq_release);
+		wait_for_completion(&srq->srq_destroy_comp);
+		if (srq->uctx_srq_page)
+			free_page((unsigned long)srq->uctx_srq_page);
+	}
 	ib_umem_release(srq->umem);
 exit:
 	return rc;
