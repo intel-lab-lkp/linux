@@ -1,0 +1,16 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+
+#ifndef _ASM_POWERPC_DPS_ROOT_H
+#define _ASM_POWERPC_DPS_ROOT_H
+
+#ifdef CONFIG_PPC64
+#ifdef CONFIG_CPU_LITTLE_ENDIAN
+#define DPS_ROOT_PARTITION_TYPE_UUID "c31c45e6-3f39-412e-80fb-4809c4980599"
+#else
+#define DPS_ROOT_PARTITION_TYPE_UUID "912ade1d-a839-4913-8964-a10eee08fbd2"
+#endif
+#else
+#define DPS_ROOT_PARTITION_TYPE_UUID "1de3f1ef-fa98-47b5-8dcd-4a860a654d78"
+#endif
+
+#endif /* _ASM_POWERPC_DPS_ROOT_H */
