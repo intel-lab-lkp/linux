@@ -719,7 +719,7 @@ int ad_dpot_probe(struct device *dev,
 
 	if (err) {
 		dev_err(dev, "failed to register sysfs hooks\n");
-		goto exit_free;
+		goto exit_remove_files;
 	}
 
 	dev_info(dev, "%s %d-Position Digital Potentiometer registered\n",
@@ -750,6 +750,9 @@ void ad_dpot_remove(struct device *dev)
 	for (i = DPOT_RDAC0; i < MAX_RDACS; i++)
 		if (data->wipers & (1 << i))
 			ad_dpot_remove_files(dev, data->feat, i);
+
+	if (data->feat & F_CMD_INC)
+		sysfs_remove_group(&dev->kobj, &ad525x_group_commands);
 
 	kfree(data);
 }
