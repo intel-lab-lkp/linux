@@ -32,6 +32,7 @@ static void qedf_shutdown(struct pci_dev *pdev);
 static void qedf_schedule_recovery_handler(void *dev);
 static void qedf_recovery_handler(struct work_struct *work);
 static int qedf_suspend(struct pci_dev *pdev, pm_message_t state);
+static void qedf_free_fcoe_pf_param(struct qedf_ctx *qedf);
 
 /*
  * Driver module parameters.
@@ -2927,15 +2928,18 @@ static void qedf_free_bdq(struct qedf_ctx *qedf)
 	if (qedf->bdq_pbl_list)
 		dma_free_coherent(&qedf->pdev->dev, QEDF_PAGE_SIZE,
 		    qedf->bdq_pbl_list, qedf->bdq_pbl_list_dma);
+	qedf->bdq_pbl_list = NULL;
 
 	if (qedf->bdq_pbl)
 		dma_free_coherent(&qedf->pdev->dev, qedf->bdq_pbl_mem_size,
 		    qedf->bdq_pbl, qedf->bdq_pbl_dma);
+	qedf->bdq_pbl = NULL;
 
 	for (i = 0; i < QEDF_BDQ_SIZE; i++) {
 		if (qedf->bdq[i].buf_addr) {
 			dma_free_coherent(&qedf->pdev->dev, QEDF_BDQ_BUF_SIZE,
 			    qedf->bdq[i].buf_addr, qedf->bdq[i].buf_dma);
+			qedf->bdq[i].buf_addr = NULL;
 		}
 	}
 }
@@ -2944,6 +2948,9 @@ static void qedf_free_global_queues(struct qedf_ctx *qedf)
 {
 	int i;
 	struct global_queue **gl = qedf->global_queues;
+
+	if (!gl)
+		return;
 
 	for (i = 0; i < qedf->num_queues; i++) {
 		if (!gl[i])
@@ -2957,6 +2964,7 @@ static void qedf_free_global_queues(struct qedf_ctx *qedf)
 			    gl[i]->cq_pbl, gl[i]->cq_pbl_dma);
 
 		kfree(gl[i]);
+		gl[i] = NULL;
 	}
 
 	qedf_free_bdq(qedf);
@@ -3201,6 +3209,7 @@ static int qedf_set_fcoe_pf_param(struct qedf_ctx *qedf)
 	if (rval) {
 		QEDF_ERR(&(qedf->dbg_ctx), "Global queue allocation "
 			  "failed.\n");
+		qedf_free_fcoe_pf_param(qedf);
 		return 1;
 	}
 
@@ -3264,11 +3273,14 @@ static void qedf_free_fcoe_pf_param(struct qedf_ctx *qedf)
 		size = qedf->num_queues * sizeof(struct qedf_glbl_q_params);
 		dma_free_coherent(&qedf->pdev->dev, size, qedf->p_cpuq,
 		    qedf->hw_p_cpuq);
+		qedf->p_cpuq = NULL;
+		qedf->hw_p_cpuq = 0;
 	}
 
 	qedf_free_global_queues(qedf);
 
 	kfree(qedf->global_queues);
+	qedf->global_queues = NULL;
 }
 
 /*
@@ -3443,7 +3455,7 @@ retry_probe:
 	rc = qed_ops->fill_dev_info(qedf->cdev, &qedf->dev_info);
 	if (rc) {
 		QEDF_ERR(&qedf->dbg_ctx, "Failed to fill dev info.\n");
-		goto err2;
+		goto err2_free_pf;
 	}
 
 	if (mode != QEDF_MODE_RECOVERY) {
@@ -3452,7 +3464,7 @@ retry_probe:
 			QEDF_ERR(&qedf->dbg_ctx, "Cannot register devlink\n");
 			rc = PTR_ERR(qedf->devlink);
 			qedf->devlink = NULL;
-			goto err2;
+			goto err2_free_pf;
 		}
 	}
 
@@ -3469,7 +3481,7 @@ retry_probe:
 	if (rc) {
 
 		QEDF_ERR(&(qedf->dbg_ctx), "Cannot start slowpath.\n");
-		goto err2;
+		goto err2_free_pf;
 	}
 
 	/* Start the Slowpath-process */
@@ -3483,7 +3495,7 @@ retry_probe:
 	rc = qed_ops->common->slowpath_start(qedf->cdev, &slowpath_params);
 	if (rc) {
 		QEDF_ERR(&(qedf->dbg_ctx), "Cannot start slowpath.\n");
-		goto err2;
+		goto err2_free_pf;
 	}
 
 	/*
@@ -3713,10 +3725,11 @@ err6:
 err5:
 	qed_ops->stop(qedf->cdev);
 err4:
-	qedf_free_fcoe_pf_param(qedf);
 	qedf_sync_free_irqs(qedf);
 err3:
 	qed_ops->common->slowpath_stop(qedf->cdev);
+err2_free_pf:
+	qedf_free_fcoe_pf_param(qedf);
 err2:
 	qed_ops->common->remove(qedf->cdev);
 err1:
