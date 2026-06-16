@@ -531,6 +531,13 @@ replay_abort:
 				status |= NFNL_BATCH_REPLAY;
 				goto done;
 			}
+
+			/* No point in further processing; followup errors can
+			 * be bogus (e.g. -ENOENT because object that next
+			 * rule/element wants could not be inserted).
+			 */
+			if (err == -ENOMEM)
+				goto ack;
 		}
 ack:
 		if (nlh->nlmsg_flags & NLM_F_ACK || err) {
