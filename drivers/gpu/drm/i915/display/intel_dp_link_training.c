@@ -1850,18 +1850,22 @@ static bool reduce_link_params_in_bw_order(struct intel_dp *intel_dp,
 					   const struct intel_crtc_state *crtc_state,
 					   int *new_link_rate, int *new_lane_count)
 {
+	struct intel_dp_link_caps *link_caps = intel_dp->link.caps;
+	struct intel_dp_link_config forced_params;
 	int link_rate;
 	int lane_count;
 	int i;
+
+	intel_dp_link_caps_get_forced_params(link_caps, &forced_params);
 
 	i = intel_dp_link_config_index(intel_dp, crtc_state->port_clock, crtc_state->lane_count);
 	for (i--; i >= 0; i--) {
 		intel_dp_link_config_get(intel_dp, i, &link_rate, &lane_count);
 
-		if ((intel_dp->link.force_rate &&
-		     intel_dp->link.force_rate != link_rate) ||
-		    (intel_dp->link.force_lane_count &&
-		     intel_dp->link.force_lane_count != lane_count))
+		if ((forced_params.rate &&
+		     forced_params.rate != link_rate) ||
+		    (forced_params.lane_count &&
+		     forced_params.lane_count != lane_count))
 			continue;
 
 		break;
@@ -1878,10 +1882,13 @@ static bool reduce_link_params_in_bw_order(struct intel_dp *intel_dp,
 
 static int reduce_link_rate(struct intel_dp *intel_dp, int current_rate)
 {
+	struct intel_dp_link_caps *link_caps = intel_dp->link.caps;
+	struct intel_dp_link_config forced_params;
 	int rate_index;
 	int new_rate;
 
-	if (intel_dp->link.force_rate)
+	intel_dp_link_caps_get_forced_params(link_caps, &forced_params);
+	if (forced_params.rate)
 		return -1;
 
 	rate_index = intel_dp_rate_index(intel_dp->common_rates,
@@ -1902,7 +1909,10 @@ static int reduce_link_rate(struct intel_dp *intel_dp, int current_rate)
 
 static int reduce_lane_count(struct intel_dp *intel_dp, int current_lane_count)
 {
-	if (intel_dp->link.force_lane_count)
+	struct intel_dp_link_config forced_params;
+
+	intel_dp_link_caps_get_forced_params(intel_dp->link.caps, &forced_params);
+	if (forced_params.lane_count)
 		return -1;
 
 	if (current_lane_count == 1)
