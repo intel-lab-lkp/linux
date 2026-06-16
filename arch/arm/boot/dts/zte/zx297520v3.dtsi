@@ -33,6 +33,13 @@
 		#clock-cells = <0>;
 	};
 
+	syscon-reboot {
+		compatible = "syscon-reboot";
+		regmap = <&topclk>;
+		offset = <0x0>;
+		mask = <0x1>;
+	};
+
 	timer {
 		compatible = "arm,armv7-timer";
 		interrupts = <GIC_PPI 13 IRQ_TYPE_LEVEL_LOW>,
