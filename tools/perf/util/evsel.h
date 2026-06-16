@@ -126,6 +126,7 @@ struct evsel {
 	bool			needs_uniquify;
 	bool			fallenback_eacces;
 	bool			fallenback_eopnotsupp;
+	u8			probe_type:3;
 	struct hashmap		*per_pkg_mask;
 	int			err;
 	int			script_output_type;
@@ -258,6 +259,10 @@ int evsel__object_config(size_t object_size,
 struct perf_pmu *evsel__find_pmu(const struct evsel *evsel);
 const char *evsel__pmu_name(const struct evsel *evsel);
 bool evsel__is_aux_event(const struct evsel *evsel);
+
+bool evsel__is_probe(struct evsel *evsel);
+bool evsel__is_kprobe(struct evsel *evsel);
+bool evsel__is_uprobe(struct evsel *evsel);
 
 struct evsel *evsel__new_idx(struct perf_event_attr *attr, int idx);
 
@@ -397,8 +402,22 @@ struct tep_format_field;
 
 u64 format_field__intval(struct tep_format_field *field, struct perf_sample *sample, bool needs_swap);
 
+#ifdef HAVE_LIBTRACEEVENT
 struct tep_format_field *evsel__field(struct evsel *evsel, const char *name);
 struct tep_format_field *evsel__common_field(struct evsel *evsel, const char *name);
+#else
+static inline struct tep_format_field *
+evsel__field(struct evsel *evsel __maybe_unused, const char *name __maybe_unused)
+{
+	return NULL;
+}
+
+static inline struct tep_format_field *
+evsel__common_field(struct evsel *evsel __maybe_unused, const char *name __maybe_unused)
+{
+	return NULL;
+}
+#endif
 
 bool __evsel__match(const struct evsel *evsel, u32 type, u64 config);
 
