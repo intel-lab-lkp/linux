@@ -8,6 +8,7 @@
 #include <linux/cleanup.h>
 #include <linux/completion.h>
 #include <linux/dma-mapping.h>
+#include <linux/firmware/imx/se_api.h>
 #include <linux/genalloc.h>
 
 #include "ele_base_msg.h"
@@ -303,3 +304,124 @@ int ele_debug_dump(struct se_if_priv *priv)
 
 	return ret;
 }
+
+static int ele_read_fuse(struct se_if_priv *priv, uint16_t fuse_id, u32 *value)
+{
+	struct se_api_msg *tx_msg __free(kfree) = NULL;
+	struct se_api_msg *rx_msg __free(kfree) = NULL;
+	int rx_msg_sz = ELE_READ_FUSE_RSP_MSG_SZ;
+	int ret = 0;
+
+	if (!priv)
+		return -EINVAL;
+
+	tx_msg = kzalloc(ELE_READ_FUSE_REQ_MSG_SZ, GFP_KERNEL);
+	if (!tx_msg)
+		return -ENOMEM;
+
+	rx_msg = kzalloc(rx_msg_sz, GFP_KERNEL);
+	if (!rx_msg)
+		return -ENOMEM;
+
+	ret = se_fill_cmd_msg_hdr(priv, (struct se_msg_hdr *)&tx_msg->header,
+				  ELE_READ_FUSE_REQ, ELE_READ_FUSE_REQ_MSG_SZ,
+				  true);
+	if (ret)
+		return ret;
+
+	tx_msg->data[0] = fuse_id;
+
+	ret = ele_msg_send_rcv(priv->priv_dev_ctx, tx_msg,
+			       ELE_READ_FUSE_REQ_MSG_SZ, rx_msg, rx_msg_sz);
+	if (ret < 0)
+		return ret;
+
+	ret = se_val_rsp_hdr_n_status(priv, rx_msg, ELE_READ_FUSE_REQ,
+				      rx_msg_sz, true);
+	if (ret)
+		return ret;
+
+	*value = rx_msg->data[1];
+
+	return 0;
+}
+
+/**
+ * imx_se_read_fuse() - API to request SE-FW to read the fuse value.
+ * @se_if_data: refs to data attached to the se interface.
+ * @fuse_id: fuse identifier to read.
+ * @value: unsigned integer array to store the fuse values.
+ *
+ * Secure enclave like EdgeLock Enclave, manages the fuses. This API
+ * requests the FW to read the fuses. FW responds with the read values.
+ *
+ * Context:
+ *
+ * Return value:
+ *   0,   means success.
+ *   < 0, means failure.
+ */
+int imx_se_read_fuse(void *se_if_data, uint16_t fuse_id, u32 *value)
+{
+	return ele_read_fuse((struct se_if_priv *)se_if_data, fuse_id, value);
+}
+EXPORT_SYMBOL_GPL(imx_se_read_fuse);
+
+static int ele_write_fuse(struct se_if_priv *priv, uint16_t fuse_id, u32 value)
+{
+	struct se_api_msg *tx_msg __free(kfree) = NULL;
+	struct se_api_msg *rx_msg __free(kfree) = NULL;
+	int ret = 0;
+
+	if (!priv)
+		return -EINVAL;
+
+	tx_msg = kzalloc(ELE_WRITE_FUSE_REQ_MSG_SZ, GFP_KERNEL);
+	if (!tx_msg)
+		return -ENOMEM;
+
+	rx_msg = kzalloc(ELE_WRITE_FUSE_RSP_MSG_SZ, GFP_KERNEL);
+	if (!rx_msg)
+		return -ENOMEM;
+
+	ret = se_fill_cmd_msg_hdr(priv, (struct se_msg_hdr *)&tx_msg->header,
+				  ELE_WRITE_FUSE, ELE_WRITE_FUSE_REQ_MSG_SZ,
+				  true);
+	if (ret)
+		return ret;
+
+	tx_msg->data[0] = (32 << 16) | (fuse_id << 5);
+	tx_msg->data[1] = value;
+
+	ret = ele_msg_send_rcv(priv->priv_dev_ctx, tx_msg,
+			       ELE_WRITE_FUSE_REQ_MSG_SZ, rx_msg,
+			       ELE_WRITE_FUSE_RSP_MSG_SZ);
+	if (ret < 0)
+		return ret;
+
+	ret = se_val_rsp_hdr_n_status(priv, rx_msg, ELE_WRITE_FUSE,
+				      ELE_WRITE_FUSE_RSP_MSG_SZ, true);
+
+	return ret;
+}
+
+/**
+ * imx_se_write_fuse() - API to request SE-FW to write to fuses.
+ * @se_if_data: refs to data attached to the se interface.
+ * @fuse_id: fuse identifier to write to.
+ * @value: unsigned integer value that to be written to the fuse.
+ *
+ * Secure enclave like EdgeLock Enclave, manages the fuses. This API
+ * requests the FW to write the fuse with the given value.
+ *
+ * Context:
+ *
+ * Return value:
+ *   0,   means success.
+ *   < 0, means failure.
+ */
+int imx_se_write_fuse(void *se_if_data, uint16_t fuse_id, u32 value)
+{
+	return ele_write_fuse((struct se_if_priv *)se_if_data, fuse_id, value);
+}
+EXPORT_SYMBOL_GPL(imx_se_write_fuse);
