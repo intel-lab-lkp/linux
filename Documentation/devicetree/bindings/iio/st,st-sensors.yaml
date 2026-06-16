@@ -126,6 +126,13 @@ properties:
   mount-matrix:
     description: an optional 3x3 mounting rotation matrix.
 
+  st,fullscale-milligauss:
+    description:
+      Initial magnetometer full-scale at probe time, in milligauss.
+      Per-chip allowed values are enumerated in the allOf clauses
+      below.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
 allOf:
   - if:
       properties:
@@ -162,6 +169,70 @@ allOf:
         interrupts:
           maxItems: 1
         st,drdy-int-pin: false
+
+  # Per-chip enum lists for st,fullscale-milligauss. Out-of-range
+  # values fail dt_binding_check instead of being demoted to a
+  # runtime warning by the driver.
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - st,lsm303dlh-magn
+              - st,lsm303dlhc-magn
+              - st,lsm303dlm-magn
+    then:
+      properties:
+        st,fullscale-milligauss:
+          enum: [1300, 1900, 2500, 4000, 4700, 5600, 8100]
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - st,lis3mdl-magn
+              - st,lsm303c-magn
+              - st,lsm9ds1-magn
+    then:
+      properties:
+        st,fullscale-milligauss:
+          enum: [4000, 8000, 12000, 16000]
+
+  # Single fixed full-scale, no register to switch: reject.
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - st,iis2mdc
+              - st,lis2mdl
+              - st,lsm303agr-magn
+    then:
+      properties:
+        st,fullscale-milligauss: false
+
+  # Reject st,fullscale-milligauss on non-magnetometer compatibles.
+  # Keep this enum in sync with the three magn clauses above when
+  # adding a new magnetometer compatible.
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              enum:
+                - st,iis2mdc
+                - st,lis2mdl
+                - st,lis3mdl-magn
+                - st,lsm303agr-magn
+                - st,lsm303c-magn
+                - st,lsm303dlh-magn
+                - st,lsm303dlhc-magn
+                - st,lsm303dlm-magn
+                - st,lsm9ds1-magn
+    then:
+      properties:
+        st,fullscale-milligauss: false
 
 required:
   - compatible
