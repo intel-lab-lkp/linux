@@ -32,6 +32,9 @@
 #include "hyperv.h"
 #include "pmu.h"
 
+static bool nested_tlb_force_flush;
+module_param(nested_tlb_force_flush, bool, 0644);
+
 #define CC KVM_NESTED_VMENTER_CONSISTENCY_CHECK
 
 static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
@@ -691,6 +694,12 @@ static void nested_svm_entry_tlb_flush(struct kvm_vcpu *vcpu)
 	/* Handle pending Hyper-V TLB flush requests */
 	kvm_hv_nested_transtion_tlb_flush(vcpu, npt_enabled);
 
+	if (nested_tlb_force_flush) {
+		kvm_make_request(KVM_REQ_MMU_SYNC, vcpu);
+		kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
+		return;
+	}
+
 	if (svm->nested.ctl.asid != svm->nested.last_asid) {
 		svm->nested.last_asid = svm->nested.ctl.asid;
 		new_asid = true;
@@ -725,6 +734,12 @@ static void nested_svm_exit_tlb_flush(struct kvm_vcpu *vcpu)
 	struct vcpu_svm *svm = to_svm(vcpu);
 
 	kvm_hv_nested_transtion_tlb_flush(vcpu, npt_enabled);
+
+	if (nested_tlb_force_flush) {
+		kvm_make_request(KVM_REQ_MMU_SYNC, vcpu);
+		kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
+		return;
+	}
 
 	/* Flush L1's own ASID if it request a *full* TLB flush on VMRUN */
 	if (svm->nested.ctl.tlb_ctl == TLB_CONTROL_FLUSH_ALL_ASID)
