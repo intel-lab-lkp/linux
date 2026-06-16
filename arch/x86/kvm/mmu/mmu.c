@@ -8192,4 +8192,68 @@ void kvm_mmu_init_memslot_memory_attributes(struct kvm *kvm,
 		}
 	}
 }
+
+static struct {
+	spinlock_t	lock;
+	unsigned long	*bitmap;
+	unsigned int	nr;
+} tlb_tags;
+
+int kvm_init_tlb_tags(unsigned int nr)
+{
+	if (WARN_ON_ONCE(!nr))
+		return -EINVAL;
+
+	tlb_tags.bitmap = bitmap_zalloc(nr, GFP_KERNEL);
+	if (!tlb_tags.bitmap)
+		return -ENOMEM;
+
+	/*
+	 * 0 is the host's TLB tag for both VMX's VPID and SVM's ASID, and is
+	 * returned on failed allocations (e.g. no more tags left).
+	 */
+	__set_bit(0, tlb_tags.bitmap);
+
+	tlb_tags.nr = nr;
+	spin_lock_init(&tlb_tags.lock);
+	return 0;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_init_tlb_tags);
+
+void kvm_destroy_tlb_tags(void)
+{
+	bitmap_free(tlb_tags.bitmap);
+	tlb_tags.bitmap = NULL;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_destroy_tlb_tags);
+
+kvm_tlb_tag_t kvm_alloc_tlb_tag(void)
+{
+	kvm_tlb_tag_t tag;
+
+	if (WARN_ON_ONCE(!tlb_tags.bitmap))
+		return 0;
+
+	guard(spinlock)(&tlb_tags.lock);
+
+	tag = find_first_zero_bit(tlb_tags.bitmap, tlb_tags.nr);
+	if (tag >= tlb_tags.nr)
+		return 0;
+
+	__set_bit(tag, tlb_tags.bitmap);
+	return tag;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_alloc_tlb_tag);
+
+void kvm_free_tlb_tag(kvm_tlb_tag_t tag)
+{
+	if (!tag || WARN_ON_ONCE(tag >= tlb_tags.nr))
+		return;
+
+	guard(spinlock)(&tlb_tags.lock);
+
+	__clear_bit(tag, tlb_tags.bitmap);
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_free_tlb_tag);
+
 #endif
