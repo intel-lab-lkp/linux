@@ -218,6 +218,9 @@ static void __exit tipc_exit(void)
 	unregister_pernet_device(&tipc_net_ops);
 	tipc_unregister_sysctl();
 
+	/* Wait for tipc_disc_free_rcu() callbacks queued from module text. */
+	rcu_barrier();
+
 	pr_info("Deactivated\n");
 }
 
