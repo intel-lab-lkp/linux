@@ -43,13 +43,20 @@ int intel_dp_max_common_rate(struct intel_dp *intel_dp)
 
 static int forced_lane_count(struct intel_dp *intel_dp)
 {
+	if (!intel_dp->link.force_lane_count)
+		return 0;
+
 	return clamp(intel_dp->link.force_lane_count, 1, intel_dp_max_common_lane_count(intel_dp));
 }
 
 static int forced_link_rate(struct intel_dp *intel_dp)
 {
-	int len = intel_dp_common_len_rate_limit(intel_dp, intel_dp->link.force_rate);
+	int len;
 
+	if (!intel_dp->link.force_rate)
+		return 0;
+
+	len = intel_dp_common_len_rate_limit(intel_dp, intel_dp->link.force_rate);
 	if (len == 0)
 		return intel_dp_common_rate(intel_dp, 0);
 
