@@ -316,7 +316,15 @@ struct track {
 	unsigned long when;	/* When did the operation occur */
 };
 
-enum track_item { TRACK_ALLOC, TRACK_FREE };
+enum track_item { TRACK_ALLOC, TRACK_FREE, TRACK_NR };
+
+static inline unsigned int user_tracking_size(slab_flags_t flags)
+{
+	if (flags & SLAB_STORE_USER)
+		return TRACK_NR * sizeof(struct track);
+
+	return 0;
+}
 
 #ifdef SLAB_SUPPORTS_SYSFS
 static int sysfs_slab_add(struct kmem_cache *);
@@ -740,7 +748,7 @@ static inline void set_orig_size(struct kmem_cache *s,
 		return;
 
 	p += get_info_end(s);
-	p += sizeof(struct track) * 2;
+	p += user_tracking_size(s->flags);
 
 	*(unsigned long *)p = orig_size;
 }
@@ -756,7 +764,7 @@ static inline unsigned long get_orig_size(struct kmem_cache *s, void *object)
 		return s->object_size;
 
 	p += get_info_end(s);
-	p += sizeof(struct track) * 2;
+	p += user_tracking_size(s->flags);
 
 	return *(unsigned long *)p;
 }
@@ -874,7 +882,7 @@ static unsigned int obj_exts_offset_in_object(struct kmem_cache *s)
 	unsigned int offset = get_info_end(s);
 
 	if (kmem_cache_debug_flags(s, SLAB_STORE_USER))
-		offset += sizeof(struct track) * 2;
+		offset += user_tracking_size(s->flags);
 
 	if (slub_debug_orig_size(s))
 		offset += sizeof(unsigned long);
@@ -1077,7 +1085,7 @@ static void init_tracking(struct kmem_cache *s, void *object)
 		return;
 
 	p = get_track(s, object, TRACK_ALLOC);
-	memset(p, 0, 2*sizeof(struct track));
+	memset(p, 0, user_tracking_size(s->flags));
 }
 
 static void print_track(const char *s, struct track *t, unsigned long pr_time)
@@ -1185,8 +1193,7 @@ static void print_trailer(struct kmem_cache *s, struct slab *slab, u8 *p)
 
 	off = get_info_end(s);
 
-	if (s->flags & SLAB_STORE_USER)
-		off += 2 * sizeof(struct track);
+	off += user_tracking_size(s->flags);
 
 	if (slub_debug_orig_size(s))
 		off += sizeof(unsigned long);
@@ -1390,7 +1397,7 @@ static int check_pad_bytes(struct kmem_cache *s, struct slab *slab, u8 *p)
 
 	if (s->flags & SLAB_STORE_USER) {
 		/* We also have user information there */
-		off += 2 * sizeof(struct track);
+		off += user_tracking_size(s->flags);
 
 		if (s->flags & SLAB_KMALLOC)
 			off += sizeof(unsigned long);
@@ -7845,7 +7852,7 @@ static int calculate_sizes(struct kmem_cache_args *args, struct kmem_cache *s)
 		 * Need to store information about allocs and frees after
 		 * the object.
 		 */
-		size += 2 * sizeof(struct track);
+		size += user_tracking_size(flags);
 
 		/* Save the original kmalloc request size */
 		if (flags & SLAB_KMALLOC)
