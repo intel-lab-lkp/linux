@@ -354,11 +354,6 @@ static int intel_dp_get_max_common_lane_count(struct intel_dp *intel_dp)
 	return min3(source_max, sink_max, lane_max);
 }
 
-int intel_dp_max_common_lane_count(struct intel_dp *intel_dp)
-{
-	return intel_dp->max_common_lane_count;
-}
-
 int intel_dp_max_lane_count(struct intel_dp *intel_dp)
 {
 	struct intel_dp_link_caps *link_caps = intel_dp->link.caps;
@@ -700,8 +695,6 @@ static bool intel_dp_set_common_link_params(struct intel_dp *intel_dp)
 	int num_common_rates;
 	int common_rates[DP_MAX_SUPPORTED_RATES];
 	bool params_changed = false;
-
-	intel_dp->max_common_lane_count = intel_dp_get_max_common_lane_count(intel_dp);
 
 	intel_dp_get_common_rates(intel_dp, common_rates, &num_common_rates);
 	if (intel_dp_link_caps_update(intel_dp,
@@ -3613,7 +3606,7 @@ void intel_dp_set_link_params(struct intel_dp *intel_dp,
 
 void intel_dp_reset_link_params(struct intel_dp *intel_dp)
 {
-	intel_dp->link.max_lane_count = intel_dp_max_common_lane_count(intel_dp);
+	intel_dp->link.max_lane_count = intel_dp_link_caps_max_common_lane_count(intel_dp->link.caps);
 	intel_dp->link.max_rate = intel_dp_max_common_rate(intel_dp);
 	intel_dp->link.mst_probed_lane_count = 0;
 	intel_dp->link.mst_probed_rate = 0;
