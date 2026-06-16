@@ -8197,24 +8197,26 @@ static struct {
 	spinlock_t	lock;
 	unsigned long	*bitmap;
 	unsigned int	nr;
+	kvm_tlb_tag_t	min;
 } tlb_tags;
 
-int kvm_init_tlb_tags(unsigned int nr)
+int kvm_init_tlb_tags(kvm_tlb_tag_t min, unsigned int nr)
 {
-	if (WARN_ON_ONCE(!nr))
+	unsigned int end;
+
+	/*
+	 * 0 is the host's TLB tag for both VMX's VPID and SVM's ASID, and is
+	 * returned on failed allocations (e.g. no more tags left).
+	 */
+	if (WARN_ON_ONCE(!min || !nr || check_add_overflow(min, nr, &end)))
 		return -EINVAL;
 
 	tlb_tags.bitmap = bitmap_zalloc(nr, GFP_KERNEL);
 	if (!tlb_tags.bitmap)
 		return -ENOMEM;
 
-	/*
-	 * 0 is the host's TLB tag for both VMX's VPID and SVM's ASID, and is
-	 * returned on failed allocations (e.g. no more tags left).
-	 */
-	__set_bit(0, tlb_tags.bitmap);
-
 	tlb_tags.nr = nr;
+	tlb_tags.min = min;
 	spin_lock_init(&tlb_tags.lock);
 	return 0;
 }
@@ -8229,30 +8231,36 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_destroy_tlb_tags);
 
 kvm_tlb_tag_t kvm_alloc_tlb_tag(void)
 {
-	kvm_tlb_tag_t tag;
+	unsigned int bit;
 
 	if (WARN_ON_ONCE(!tlb_tags.bitmap))
 		return 0;
 
 	guard(spinlock)(&tlb_tags.lock);
 
-	tag = find_first_zero_bit(tlb_tags.bitmap, tlb_tags.nr);
-	if (tag >= tlb_tags.nr)
+	bit = find_first_zero_bit(tlb_tags.bitmap, tlb_tags.nr);
+	if (bit >= tlb_tags.nr)
 		return 0;
 
-	__set_bit(tag, tlb_tags.bitmap);
-	return tag;
+	__set_bit(bit, tlb_tags.bitmap);
+	return tlb_tags.min + bit;
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_alloc_tlb_tag);
 
 void kvm_free_tlb_tag(kvm_tlb_tag_t tag)
 {
-	if (!tag || WARN_ON_ONCE(tag >= tlb_tags.nr))
+	unsigned int bit;
+
+	if (!tag || WARN_ON_ONCE(tag < tlb_tags.min))
+		return;
+
+	bit = tag - tlb_tags.min;
+	if (WARN_ON_ONCE(bit >= tlb_tags.nr))
 		return;
 
 	guard(spinlock)(&tlb_tags.lock);
 
-	__clear_bit(tag, tlb_tags.bitmap);
+	__clear_bit(bit, tlb_tags.bitmap);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_free_tlb_tag);
 

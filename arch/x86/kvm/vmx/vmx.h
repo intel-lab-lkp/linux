@@ -336,7 +336,8 @@ static __always_inline u32 vmx_get_intr_info(struct kvm_vcpu *vcpu)
 
 static __always_inline int init_vpids(void)
 {
-	return enable_vpid ? kvm_init_tlb_tags(VMX_NR_VPIDS) : 0;
+	/* Exclude VPID=0 as it is used for the host */
+	return enable_vpid ? kvm_init_tlb_tags(1, VMX_NR_VPIDS - 1) : 0;
 }
 
 static __always_inline void destroy_vpids(void)
