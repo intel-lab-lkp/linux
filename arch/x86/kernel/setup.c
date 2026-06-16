@@ -742,11 +742,8 @@ static void __init trim_snb_memory(void)
 	 * setup_arch(), so there is no need to reserve it here.
 	 */
 
-	for (i = 0; i < ARRAY_SIZE(bad_pages); i++) {
-		if (memblock_reserve(bad_pages[i], PAGE_SIZE))
-			printk(KERN_WARNING "failed to reserve 0x%08lx\n",
-			       bad_pages[i]);
-	}
+	for (i = 0; i < ARRAY_SIZE(bad_pages); i++)
+		memblock_reserve(bad_pages[i], PAGE_SIZE);
 }
 
 static void __init trim_bios_range(void)
