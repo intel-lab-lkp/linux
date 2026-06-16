@@ -112,7 +112,7 @@ test_trap_eret_branches() {
 	start_err=$err
 	err=0
 	perf record -o $TMPDIR/perf.data --branch-filter any,save_type,u,k -- \
-		perf test -w traploop 1000 > "$TMPDIR/record.txt" 2>&1
+		perf test -w traploop 100000 > "$TMPDIR/record.txt" 2>&1
 	perf script -i $TMPDIR/perf.data --fields brstacksym | \
 		tr ' ' '\n' > $TMPDIR/perf.script
 
@@ -137,7 +137,7 @@ test_kernel_branches() {
 	start_err=$err
 	err=0
 	perf record -o $TMPDIR/perf.data --branch-filter any,k -- \
-		perf bench syscall basic --loop 1000 > "$TMPDIR/record.txt" 2>&1
+		perf bench syscall basic --loop 100000 > "$TMPDIR/record.txt" 2>&1
 	perf script -i $TMPDIR/perf.data --fields brstack | \
 		tr ' ' '\n' > $TMPDIR/perf.script
 
@@ -209,7 +209,7 @@ test_syscall() {
 	err=0
 	perf record -o $TMPDIR/perf.data --branch-filter \
 		any_call,save_type,u,k -c 10007 -- \
-		perf bench syscall basic --loop 8000  > "$TMPDIR/record.txt" 2>&1
+		perf bench syscall basic --loop 100000  > "$TMPDIR/record.txt" 2>&1
 	perf script -i $TMPDIR/perf.data --fields brstacksym | \
 		tr ' ' '\n' > $TMPDIR/perf.script
 
