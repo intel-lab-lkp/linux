@@ -169,10 +169,18 @@ fn main() {
             r#"/// Generated `{name}` KUnit test case from a Rust documentation test.
 #[no_mangle]
 pub extern "C" fn {kunit_name}(__kunit_test: *mut ::kernel::bindings::kunit) {{
-    /// Overrides the usual [`file!`] macro with one that expands to the real path.
+    // Overrides the usual [`file!`] macro with one that expands to the real path.
     #[allow(unused)]
     macro_rules! file {{
         () => {{ "{real_path}" }}
+    }}
+
+    // Overrides the usual [`line!`] macro with one that expands to the real line number.
+    #[allow(unused)]
+    macro_rules! line {{
+        // NOTE: This does not expand to a literal, but a constant expression.
+        // Therefore code that depends on `line!()` being overrideable needs special adjustment.
+        () => {{ const {{ ::core::line!() - __DOCTEST_ANCHOR + {line} }} }}
     }}
 
     /// Overrides the usual [`assert!`] macro with one that calls KUnit instead.
@@ -180,7 +188,7 @@ pub extern "C" fn {kunit_name}(__kunit_test: *mut ::kernel::bindings::kunit) {{
     macro_rules! assert {{
         ($cond:expr $(,)?) => {{{{
             ::kernel::kunit_assert!(
-                "{kunit_name}", __DOCTEST_ANCHOR - {line}, $cond
+                "{kunit_name}", $cond
             );
         }}}}
     }}
@@ -190,7 +198,7 @@ pub extern "C" fn {kunit_name}(__kunit_test: *mut ::kernel::bindings::kunit) {{
     macro_rules! assert_eq {{
         ($left:expr, $right:expr $(,)?) => {{{{
             ::kernel::kunit_assert_eq!(
-                "{kunit_name}", __DOCTEST_ANCHOR - {line}, $left, $right
+                "{kunit_name}", $left, $right
             );
         }}}}
     }}
@@ -212,7 +220,7 @@ pub extern "C" fn {kunit_name}(__kunit_test: *mut ::kernel::bindings::kunit) {{
 
     /// The anchor where the test code body starts.
     #[allow(unused)]
-    static __DOCTEST_ANCHOR: i32 = ::core::line!() as i32 + {body_offset} + 2;
+    static __DOCTEST_ANCHOR: u32 = ::core::line!() + {body_offset} + 2;
     {{
         #![allow(unreachable_pub, clippy::disallowed_names)]
         {body}

@@ -195,7 +195,7 @@ macro_rules! module_device_table {
     ($table_type: literal, $module_table_name:ident, $table_name:ident) => {
         #[rustfmt::skip]
         #[export_name =
-            concat!("__mod_device_table__", line!(),
+            concat!("__mod_device_table__", ::core::line!(),
                     "__kmod_", module_path!(),
                     "__", $table_type,
                     "__", stringify!($table_name))

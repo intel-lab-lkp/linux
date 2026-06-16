@@ -113,7 +113,7 @@ pub(crate) fn kunit_tests(test_suite: Ident, mut module: ItemMod) -> Result<Toke
             #[allow(unused)]
             macro_rules! assert {
                 ($cond:expr $(,)?) => {{
-                    kernel::kunit_assert!(#test_str, 0, $cond);
+                    kernel::kunit_assert!(#test_str, $cond);
                 }}
             }
         });
@@ -121,7 +121,7 @@ pub(crate) fn kunit_tests(test_suite: Ident, mut module: ItemMod) -> Result<Toke
             #[allow(unused)]
             macro_rules! assert_eq {
                 ($left:expr, $right:expr $(,)?) => {{
-                    kernel::kunit_assert_eq!(#test_str, 0, $left, $right);
+                    kernel::kunit_assert_eq!(#test_str, $left, $right);
                 }}
             }
         });
