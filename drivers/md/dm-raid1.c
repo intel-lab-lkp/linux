@@ -524,6 +524,17 @@ static void read_callback(unsigned long error, void *context)
 		return;
 	}
 
+	/*
+	 * BLK_STS_INVAL means the bio was not valid for the underlying device,
+	 * e.g. a misaligned direct I/O. That is a caller error, not a device
+	 * failure, so propagate it rather than failing the mirror and retrying
+	 * on the other legs, which would fail the same way.
+	 */
+	if (bio->bi_status == BLK_STS_INVAL) {
+		bio_endio(bio);
+		return;
+	}
+
 	fail_mirror(m, DM_RAID1_READ_ERROR);
 
 	if (likely(default_ok(m)) || mirror_available(m->ms, bio)) {
@@ -618,6 +629,16 @@ static void write_callback(unsigned long error, void *context)
 	 * regions with the same code.
 	 */
 	if (likely(!error)) {
+		bio_endio(bio);
+		return;
+	}
+
+	/*
+	 * BLK_STS_INVAL means the bio was not valid for the underlying device,
+	 * e.g. a misaligned direct I/O. Propagate the error without degrading
+	 * the array.
+	 */
+	if (bio->bi_status == BLK_STS_INVAL) {
 		bio_endio(bio);
 		return;
 	}
@@ -1262,7 +1283,12 @@ static int mirror_end_io(struct dm_target *ti, struct bio *bio,
 		return DM_ENDIO_DONE;
 	}
 
-	if (*error == BLK_STS_NOTSUPP)
+	/*
+	 * BLK_STS_INVAL means the bio was not valid for the underlying device,
+	 * e.g. a misaligned direct I/O. Propagate it rather than failing the
+	 * mirror and retrying, which would fail the same way on every leg.
+	 */
+	if (*error == BLK_STS_NOTSUPP || *error == BLK_STS_INVAL)
 		goto out;
 
 	if (bio->bi_opf & REQ_RAHEAD)
