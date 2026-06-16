@@ -15,6 +15,7 @@
 #include <linux/of_irq.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
+#include <linux/property.h>
 #include <linux/syscalls.h>
 #include <linux/suspend.h>
 #include <linux/debugfs.h>
@@ -1233,8 +1234,6 @@ static int extcon_rtk_type_c_init(struct type_c_data *type_c)
 
 	spin_unlock_irqrestore(&type_c->lock, flags);
 
-	schedule_delayed_work(&type_c->delayed_work, msecs_to_jiffies(0));
-
 	if (!type_c->port) {
 		struct typec_capability typec_cap = { };
 		struct fwnode_handle *fwnode;
@@ -1253,28 +1252,37 @@ static int extcon_rtk_type_c_init(struct type_c_data *type_c)
 		ret = fwnode_property_read_string(fwnode, "power-role", &buf);
 		if (ret) {
 			dev_err(dev, "power-role not found: %d\n", ret);
-			return ret;
+			goto put_fwnode;
 		}
 
 		ret = typec_find_port_power_role(buf);
 		if (ret < 0)
-			return ret;
+			goto put_fwnode;
 		typec_cap.type = ret;
 
 		ret = fwnode_property_read_string(fwnode, "data-role", &buf);
 		if (ret) {
 			dev_err(dev, "data-role not found: %d\n", ret);
-			return ret;
+			goto put_fwnode;
 		}
 
 		ret = typec_find_port_data_role(buf);
 		if (ret < 0)
-			return ret;
+			goto put_fwnode;
 		typec_cap.data = ret;
 
 		type_c->port = typec_register_port(type_c->dev, &typec_cap);
-		if (IS_ERR(type_c->port))
-			return PTR_ERR(type_c->port);
+		if (IS_ERR(type_c->port)) {
+			ret = PTR_ERR(type_c->port);
+			type_c->port = NULL;
+		} else {
+			ret = 0;
+		}
+
+put_fwnode:
+		fwnode_handle_put(fwnode);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
@@ -1339,8 +1347,13 @@ static int extcon_rtk_type_c_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	ret = devm_request_irq(dev, type_c->irq, type_c_detect_irq,
-			       IRQF_SHARED, "type_c_detect", type_c);
+	ret = request_irq(type_c->irq, type_c_detect_irq, IRQF_SHARED,
+			  "type_c_detect", type_c);
+	if (ret) {
+		dev_err(dev, "failed to request IRQ %u: %d\n",
+			type_c->irq, ret);
+		goto err_dispose_irq;
+	}
 
 	spin_lock_init(&type_c->lock);
 
@@ -1365,19 +1378,21 @@ static int extcon_rtk_type_c_probe(struct platform_device *pdev)
 	if (!type_c_cfg) {
 		dev_err(dev, "type_c config are not assigned!\n");
 		ret = -EINVAL;
-		goto err;
+		goto err_put_gpio;
 	}
 
 	type_c->type_c_cfg = devm_kzalloc(dev, sizeof(*type_c_cfg), GFP_KERNEL);
-	if (!type_c->type_c_cfg)
-		return -ENOMEM;
+	if (!type_c->type_c_cfg) {
+		ret = -ENOMEM;
+		goto err_put_gpio;
+	}
 
 	memcpy(type_c->type_c_cfg, type_c_cfg, sizeof(*type_c_cfg));
 
 	if (setup_type_c_parameter(type_c)) {
 		dev_err(dev, "ERROR: %s to setup type c parameter!!", __func__);
 		ret = -EINVAL;
-		goto err;
+		goto err_put_gpio;
 	}
 
 	INIT_DELAYED_WORK(&type_c->delayed_work, host_device_switch);
@@ -1385,17 +1400,35 @@ static int extcon_rtk_type_c_probe(struct platform_device *pdev)
 	ret = extcon_rtk_type_c_init(type_c);
 	if (ret) {
 		dev_err(dev, "%s failed to init type_c\n", __func__);
-		goto err;
+		goto err_put_gpio;
 	}
 
 	platform_set_drvdata(pdev, type_c);
 
 	ret = extcon_rtk_type_c_edev_register(type_c);
+	if (ret)
+		goto err_unregister_port;
+
+	schedule_delayed_work(&type_c->delayed_work, 0);
 
 	create_debug_files(type_c);
 
 	return 0;
 
+err_unregister_port:
+	platform_set_drvdata(pdev, NULL);
+	if (type_c->port) {
+		typec_unregister_port(type_c->port);
+		type_c->port = NULL;
+	}
+err_put_gpio:
+	if (type_c->rd_ctrl_gpio_desc) {
+		gpiod_put(type_c->rd_ctrl_gpio_desc);
+		type_c->rd_ctrl_gpio_desc = NULL;
+	}
+	free_irq(type_c->irq, type_c);
+err_dispose_irq:
+	irq_dispose_mapping(type_c->irq);
 err:
 	dev_err(&pdev->dev, "%s: Probe fail, %d\n", __func__, ret);
 
@@ -1409,16 +1442,15 @@ static void extcon_rtk_type_c_remove(struct platform_device *pdev)
 	u32 default_ctrl;
 	unsigned long flags;
 
+	cancel_delayed_work_sync(&type_c->delayed_work);
+	WARN_ON_ONCE(delayed_work_pending(&type_c->delayed_work));
+
 	remove_debug_files(type_c);
 
 	if (type_c->port) {
 		typec_unregister_port(type_c->port);
 		type_c->port = NULL;
 	}
-
-	cancel_delayed_work_sync(&type_c->delayed_work);
-	flush_delayed_work(&type_c->delayed_work);
-	WARN_ON_ONCE(delayed_work_pending(&type_c->delayed_work));
 
 	spin_lock_irqsave(&type_c->lock, flags);
 	/* disable interrupt */
@@ -1437,6 +1469,7 @@ static void extcon_rtk_type_c_remove(struct platform_device *pdev)
 	type_c->rd_ctrl_gpio_desc = NULL;
 
 	free_irq(type_c->irq, type_c);
+	irq_dispose_mapping(type_c->irq);
 }
 
 static const struct type_c_cfg rtd1295_type_c_cfg = {
