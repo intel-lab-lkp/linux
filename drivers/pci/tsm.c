@@ -670,7 +670,7 @@ static struct pci_dev *find_dsm_dev(struct pci_dev *pdev)
 		return NULL;
 
 	if (is_dsm(pf0))
-		return pf0;
+		return no_free_ptr(pf0);
 
 	/*
 	 * For cases where a switch may be hosting TDISP services on behalf of
