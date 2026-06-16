@@ -229,6 +229,23 @@ void btrfs_exclop_finish(struct btrfs_fs_info *fs_info)
 	sysfs_notify(&fs_info->fs_devices->fsid_kobj, NULL, "exclusive_operation");
 }
 
+/* Like btrfs_exclop_finish(), but only if @type is the one currently held. */
+void btrfs_exclop_finish_if(struct btrfs_fs_info *fs_info,
+			    enum btrfs_exclusive_operation type)
+{
+	bool notify = false;
+
+	spin_lock(&fs_info->super_lock);
+	if (fs_info->exclusive_operation == type) {
+		WRITE_ONCE(fs_info->exclusive_operation, BTRFS_EXCLOP_NONE);
+		notify = true;
+	}
+	spin_unlock(&fs_info->super_lock);
+	if (notify)
+		sysfs_notify(&fs_info->fs_devices->fsid_kobj, NULL,
+			     "exclusive_operation");
+}
+
 void btrfs_exclop_balance(struct btrfs_fs_info *fs_info,
 			  enum btrfs_exclusive_operation op)
 {

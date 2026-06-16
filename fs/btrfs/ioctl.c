@@ -3176,8 +3176,13 @@ static long btrfs_ioctl_dev_replace(struct btrfs_fs_info *fs_info,
 		if (!btrfs_exclop_start(fs_info, BTRFS_EXCLOP_DEV_REPLACE)) {
 			ret = BTRFS_ERROR_DEV_EXCL_RUN_IN_PROGRESS;
 		} else {
-			ret = btrfs_dev_replace_by_ioctl(fs_info, p);
-			btrfs_exclop_finish(fs_info);
+			bool suspended = false;
+
+			ret = btrfs_dev_replace_by_ioctl(fs_info, p, &suspended);
+			/* A suspended replace keeps the exclusive op held. */
+			if (!suspended)
+				btrfs_exclop_finish_if(fs_info,
+						       BTRFS_EXCLOP_DEV_REPLACE);
 		}
 		break;
 	case BTRFS_IOCTL_DEV_REPLACE_CMD_STATUS:

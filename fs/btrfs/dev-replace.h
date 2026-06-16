@@ -19,7 +19,8 @@ struct btrfs_device;
 int btrfs_init_dev_replace(struct btrfs_fs_info *fs_info);
 int btrfs_run_dev_replace(struct btrfs_trans_handle *trans);
 int btrfs_dev_replace_by_ioctl(struct btrfs_fs_info *fs_info,
-			    struct btrfs_ioctl_dev_replace_args *args);
+			    struct btrfs_ioctl_dev_replace_args *args,
+			    bool *suspended);
 void btrfs_dev_replace_status(struct btrfs_fs_info *fs_info,
 			      struct btrfs_ioctl_dev_replace_args *args);
 int btrfs_dev_replace_cancel(struct btrfs_fs_info *fs_info);
