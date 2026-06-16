@@ -161,11 +161,16 @@ struct rzg2l_cru_dev {
 	struct list_head buf_list;
 	unsigned int sequence;
 
+	bool running;
+
 	struct v4l2_pix_format format;
 };
 
 int rzg2l_cru_start_image_processing(struct rzg2l_cru_dev *cru);
 void rzg2l_cru_stop_image_processing(struct rzg2l_cru_dev *cru);
+
+int rzg2l_cru_set_stream(struct rzg2l_cru_dev *cru, int on);
+void rzg2l_cru_requeue_active_buffers(struct rzg2l_cru_dev *cru);
 
 int rzg2l_cru_dma_register(struct rzg2l_cru_dev *cru);
 void rzg2l_cru_dma_unregister(struct rzg2l_cru_dev *cru);
