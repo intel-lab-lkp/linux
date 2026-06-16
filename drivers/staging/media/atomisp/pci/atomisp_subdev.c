@@ -886,9 +886,14 @@ void atomisp_subdev_cleanup_pending_events(struct atomisp_sub_device *asd)
 
 void atomisp_subdev_unregister_entities(struct atomisp_sub_device *asd)
 {
-	atomisp_subdev_cleanup_entities(asd);
 	v4l2_device_unregister_subdev(&asd->subdev);
 	atomisp_video_unregister(&asd->video_out);
+}
+
+void atomisp_subdev_cleanup(struct atomisp_device *isp)
+{
+	atomisp_subdev_cleanup_entities(&isp->asd);
+	media_entity_cleanup(&isp->asd.video_out.vdev.entity);
 }
 
 int atomisp_subdev_register_subdev(struct atomisp_sub_device *asd,
@@ -913,7 +918,7 @@ int atomisp_subdev_init(struct atomisp_device *isp)
 	isp_subdev_init_params(&isp->asd);
 	ret = isp_subdev_init_entities(&isp->asd);
 	if (ret < 0)
-		atomisp_subdev_cleanup_entities(&isp->asd);
+		atomisp_subdev_cleanup(isp);
 
 	return ret;
 }
