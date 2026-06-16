@@ -405,9 +405,20 @@ static void urb_irq_callback(struct urb *urb)
 	struct yealink_dev *yld = urb->context;
 	int ret, status = urb->status;
 
-	if (status)
+	switch (status) {
+	case 0:
+		break;
+	case -ECONNRESET:
+	case -ENOENT:
+	case -ESHUTDOWN:
+		dev_dbg(&yld->intf->dev, "%s - urb shutting down with status %d\n",
+			__func__, status);
+		return;
+	default:
 		dev_err(&yld->intf->dev, "%s - urb status %d\n",
 			__func__, status);
+		return;
+	}
 
 	switch (yld->irq_data->cmd) {
 	case CMD_KEYPRESS:
@@ -443,9 +454,20 @@ static void urb_ctl_callback(struct urb *urb)
 	struct yealink_dev *yld = urb->context;
 	int ret = 0, status = urb->status;
 
-	if (status)
+	switch (status) {
+	case 0:
+		break;
+	case -ECONNRESET:
+	case -ENOENT:
+	case -ESHUTDOWN:
+		dev_dbg(&yld->intf->dev, "%s - urb shutting down with status %d\n",
+			__func__, status);
+		return;
+	default:
 		dev_err(&yld->intf->dev, "%s - urb status %d\n",
 			__func__, status);
+		return;
+	}
 
 	switch (yld->ctl_data->cmd) {
 	case CMD_KEYPRESS:
