@@ -38,6 +38,7 @@
 #include <linux/workqueue.h>
 #include <linux/mm_inline.h>
 #include <linux/overflow.h>
+#include <linux/log2.h>
 #include "vfio.h"
 
 #define DRIVER_VERSION  "0.2"
@@ -2947,6 +2948,9 @@ static int vfio_iommu_type1_unmap_dma(struct vfio_iommu *iommu,
 			return -EFAULT;
 
 		if (!access_ok((void __user *)bitmap.data, bitmap.size))
+			return -EINVAL;
+
+		if (unlikely(!is_power_of_2(bitmap.pgsize)))
 			return -EINVAL;
 
 		pgshift = __ffs(bitmap.pgsize);
