@@ -59,6 +59,15 @@
 			#interrupt-cells = <2>;
 		};
 
+		pmih0108_e1_haptics: haptics@f000 {
+			compatible = "qcom,pmih010x-haptics";
+			reg = <0xf000>, <0xf100>;
+			reg-names = "hap-cfg", "hap-ptn";
+			interrupts = <0x7 0xf0 0x1 IRQ_TYPE_EDGE_RISING>;
+			interrupt-names = "fifo-empty";
+			status = "disabled";
+		};
+
 		pmih0108_e1_eusb2_repeater: phy@fd00 {
 			compatible = "qcom,pm8550b-eusb2-repeater";
 			reg = <0xfd00>;

@@ -952,6 +952,13 @@
 	};
 };
 
+&pmih0108_e1_haptics {
+	status = "okay";
+
+	qcom,lra-period-us = <6667>;
+	qcom,vmax-mv = <3600>;
+};
+
 &pmh0101_flash {
 	status = "okay";
 

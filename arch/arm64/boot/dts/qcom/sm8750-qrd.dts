@@ -933,6 +933,13 @@
 	status = "okay";
 };
 
+&pmih0108_haptics {
+	status = "okay";
+
+	qcom,lra-period-us = <5880>;
+	qcom,vmax-mv = <1700>;
+};
+
 &pmih0108_eusb2_repeater {
 	status = "okay";
 

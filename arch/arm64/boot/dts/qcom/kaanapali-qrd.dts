@@ -744,6 +744,13 @@
 	};
 };
 
+&pmih0108_e1_haptics {
+	status = "okay";
+
+	qcom,lra-period-us = <7692>;
+	qcom,vmax-mv = <1850>;
+};
+
 &pon_resin {
 	linux,code = <KEY_VOLUMEDOWN>;
 
