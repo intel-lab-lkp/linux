@@ -707,8 +707,12 @@ static void nested_svm_transition_tlb_flush(struct kvm_vcpu *vcpu)
 
 static void svm_switch_vmcb(struct vcpu_svm *svm, struct kvm_vmcb_info *target_vmcb)
 {
+	struct kvm_vcpu *vcpu = &svm->vcpu;
+
 	svm->current_vmcb = target_vmcb;
 	svm->vmcb = target_vmcb->ptr;
+
+	nested_svm_transition_tlb_flush(vcpu);
 }
 
 /*
@@ -859,8 +863,6 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm)
 	struct vmcb *vmcb02 = svm->nested.vmcb02.ptr;
 	struct vmcb *vmcb01 = svm->vmcb01.ptr;
 	struct kvm_vcpu *vcpu = &svm->vcpu;
-
-	nested_svm_transition_tlb_flush(vcpu);
 
 	/* Enter Guest-Mode */
 	enter_guest_mode(vcpu);
@@ -1435,8 +1437,6 @@ void nested_svm_vmexit(struct vcpu_svm *svm)
 	svm->vcpu.arch.dr7 = DR7_FIXED_1;
 	kvm_update_dr7(&svm->vcpu);
 
-	nested_svm_transition_tlb_flush(vcpu);
-
 	nested_svm_uninit_mmu_context(vcpu);
 
 	if (nested_svm_load_cr3(vcpu, vmcb01->save.cr3, false, true))
@@ -1555,8 +1555,6 @@ void svm_leave_nested(struct kvm_vcpu *vcpu)
 		__svm_pmu_handle_nested_transition(svm, true);
 
 		svm_switch_vmcb(svm, &svm->vmcb01);
-
-		nested_svm_transition_tlb_flush(vcpu);
 
 		nested_svm_uninit_mmu_context(vcpu);
 		vmcb_mark_all_dirty(svm->vmcb);
