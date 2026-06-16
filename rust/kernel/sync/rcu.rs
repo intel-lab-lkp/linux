@@ -56,3 +56,11 @@ pub fn rcu_barrier() {
     // SAFETY: `rcu_barrier()` is always safe to be called. It just might wait for a grace period.
     unsafe { bindings::rcu_barrier() };
 }
+
+/// Wait for one RCU grace period.
+///
+/// You typically do this to wait for everyone holding a [`Guard`].
+pub fn synchronize_rcu() {
+    // SAFETY: `synchronize_rcu()` is always safe to be called. It just waits for a grace period.
+    unsafe { bindings::synchronize_rcu() };
+}
