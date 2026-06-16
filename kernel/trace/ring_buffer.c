@@ -7175,7 +7175,7 @@ int ring_buffer_read_page(struct trace_buffer *buffer,
 			rpos = reader->read;
 			pos += event_size;
 
-			if (rpos >= event_size)
+			if (rpos >= size)
 				break;
 
 			event = rb_reader_event(cpu_buffer);
