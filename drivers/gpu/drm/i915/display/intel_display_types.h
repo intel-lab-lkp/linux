@@ -1548,6 +1548,8 @@ struct intel_crtc {
 	struct {
 		u32 numerator;
 		u32 denominator;
+		/* Derived during atomic check: 1000/1001 video timing required */
+		bool video_mode;
 	} cmrr;
 
 	int scanline_offset;
