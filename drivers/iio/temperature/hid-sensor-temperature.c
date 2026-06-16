@@ -125,7 +125,7 @@ static const struct iio_info temperature_info = {
 
 /* Callback handler to send event after all samples are received and captured */
 static int temperature_proc_event(struct hid_sensor_hub_device *hsdev,
-				unsigned int usage_id, void *pdev)
+				u32 usage_id, void *pdev)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(pdev);
 	struct temperature_state *temp_st = iio_priv(indio_dev);
@@ -140,7 +140,7 @@ static int temperature_proc_event(struct hid_sensor_hub_device *hsdev,
 
 /* Capture samples in local storage */
 static int temperature_capture_sample(struct hid_sensor_hub_device *hsdev,
-				unsigned int usage_id, size_t raw_len,
+				u32 usage_id, size_t raw_len,
 				char *raw_data, void *pdev)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(pdev);
@@ -159,7 +159,7 @@ static int temperature_capture_sample(struct hid_sensor_hub_device *hsdev,
 static int temperature_parse_report(struct platform_device *pdev,
 				struct hid_sensor_hub_device *hsdev,
 				struct iio_chan_spec *channels,
-				unsigned int usage_id,
+				u32 usage_id,
 				struct temperature_state *st)
 {
 	int ret;
