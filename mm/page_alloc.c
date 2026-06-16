@@ -3222,7 +3222,7 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 		} else {
 			spin_lock_irqsave(&zone->lock, flags);
 		}
-		if (alloc_flags & ALLOC_HIGHATOMIC)
+		if (alloc_flags & (ALLOC_HIGHATOMIC | ALLOC_HIGHATOMIC_RESERVE))
 			page = __rmqueue_smallest(zone, order, MIGRATE_HIGHATOMIC);
 		if (!page) {
 			enum rmqueue_mode rmqm = RMQUEUE_NORMAL;
@@ -3250,7 +3250,7 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 	 * If this is a high-order atomic allocation then check
 	 * if the pageblock should be reserved for the future
 	 */
-	if (unlikely(alloc_flags & ALLOC_HIGHATOMIC))
+	if (unlikely(alloc_flags & ALLOC_HIGHATOMIC_RESERVE))
 		reserve_highatomic_pageblock(page, order, zone);
 
 	__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
@@ -3333,9 +3333,10 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 			 * Instead, direct it towards the reserves by
 			 * returning NULL, which will make the caller fall
 			 * back to rmqueue_buddy. This will try to use the
-			 * reserves first and grow them if needed.
+			 * reserves first and grow them if permitted by
+			 * the ALLOC_HIGHATOMIC_RESERVE flag.
 			 */
-			if (alloc_flags & ALLOC_HIGHATOMIC)
+			if (alloc_flags & (ALLOC_HIGHATOMIC | ALLOC_HIGHATOMIC_RESERVE))
 				return NULL;
 
 			alloced = rmqueue_bulk(zone, order,
@@ -3653,7 +3654,7 @@ bool __zone_watermark_ok(struct zone *z, unsigned int order, unsigned long mark,
 			return true;
 		}
 #endif
-		if ((alloc_flags & (ALLOC_HIGHATOMIC|ALLOC_OOM)) &&
+		if ((alloc_flags & (ALLOC_HIGHATOMIC | ALLOC_HIGHATOMIC_RESERVE | ALLOC_OOM)) &&
 		    !free_area_empty(area, MIGRATE_HIGHATOMIC)) {
 			return true;
 		}
@@ -3771,6 +3772,24 @@ alloc_flags_nofragment(struct zone *zone, gfp_t gfp_mask)
 	alloc_flags |= ALLOC_NOFRAGMENT;
 #endif /* CONFIG_ZONE_DMA32 */
 	return alloc_flags;
+}
+
+/*
+ * Let high-priority non-blocking allocations above order-0 and up
+ * to the costly order try to use existing MIGRATE_HIGHATOMIC
+ * reserves on the fastpath.
+ */
+static inline unsigned int
+alloc_flags_highatomic_fastpath(gfp_t gfp_mask, unsigned int order)
+{
+	if (!order || order > PAGE_ALLOC_COSTLY_ORDER)
+		return 0;
+	if (!(gfp_mask & __GFP_HIGH))
+		return 0;
+	if (gfp_mask & (__GFP_DIRECT_RECLAIM | __GFP_NOMEMALLOC))
+		return 0;
+
+	return ALLOC_HIGHATOMIC;
 }
 
 /* Must be called after current_gfp_context() which can change gfp_mask */
@@ -4504,7 +4523,7 @@ gfp_to_alloc_flags(gfp_t gfp_mask, unsigned int order)
 			alloc_flags |= ALLOC_NON_BLOCK;
 
 			if (order > 0 && (alloc_flags & ALLOC_MIN_RESERVE))
-				alloc_flags |= ALLOC_HIGHATOMIC;
+				alloc_flags |= ALLOC_HIGHATOMIC_RESERVE;
 		}
 
 		/*
@@ -5298,7 +5317,8 @@ struct page *__alloc_frozen_pages_noprof(gfp_t gfp, unsigned int order,
 	 * Forbid the first pass from falling back to types that fragment
 	 * memory until all local zones are considered.
 	 */
-	alloc_flags |= alloc_flags_nofragment(zonelist_zone(ac.preferred_zoneref), gfp);
+	alloc_flags |= alloc_flags_nofragment(zonelist_zone(ac.preferred_zoneref), gfp) |
+			alloc_flags_highatomic_fastpath(alloc_gfp, order);
 
 	/* First allocation attempt */
 	page = get_page_from_freelist(alloc_gfp, order, alloc_flags, &ac);
