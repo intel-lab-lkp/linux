@@ -87,12 +87,12 @@ struct mms114_touch {
 	u8 reserved[2];
 } __packed;
 
-static int __mms114_read_reg(struct mms114_data *data, unsigned int reg,
-			     unsigned int len, u8 *val)
+static int __mms114_read_reg(struct mms114_data *data, u8 reg,
+			     unsigned int len, void *val)
 {
 	struct i2c_client *client = data->client;
 	struct i2c_msg xfer[2];
-	u8 buf = reg & 0xff;
+	u8 buf = reg;
 	int error;
 
 	if (reg <= MMS114_MODE_CONTROL && reg + len > MMS114_MODE_CONTROL)
@@ -121,7 +121,7 @@ static int __mms114_read_reg(struct mms114_data *data, unsigned int reg,
 	return 0;
 }
 
-static int mms114_read_reg(struct mms114_data *data, unsigned int reg)
+static int mms114_read_reg(struct mms114_data *data, u8 reg)
 {
 	u8 val;
 	int error;
@@ -133,15 +133,14 @@ static int mms114_read_reg(struct mms114_data *data, unsigned int reg)
 	return error < 0 ? error : val;
 }
 
-static int mms114_write_reg(struct mms114_data *data, unsigned int reg,
-			    unsigned int val)
+static int mms114_write_reg(struct mms114_data *data, u8 reg, u8 val)
 {
 	struct i2c_client *client = data->client;
 	u8 buf[2];
 	int error;
 
-	buf[0] = reg & 0xff;
-	buf[1] = val & 0xff;
+	buf[0] = reg;
+	buf[1] = val;
 
 	error = i2c_master_send(client, buf, 2);
 	if (error != 2) {
@@ -242,9 +241,8 @@ static irqreturn_t mms114_interrupt(int irq, void *dev_id)
 
 	touch_size = packet_size / event_size;
 
-	error = __mms114_read_reg(data, MMS114_INFORMATION, packet_size,
-			(u8 *)touch);
-	if (error < 0)
+	error = __mms114_read_reg(data, MMS114_INFORMATION, packet_size, touch);
+	if (error)
 		goto out;
 
 	for (index = 0; index < touch_size; index++) {
