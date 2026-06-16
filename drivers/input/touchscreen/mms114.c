@@ -95,8 +95,8 @@ static int __mms114_read_reg(struct mms114_data *data, u8 reg,
 	u8 buf = reg;
 	int error;
 
-	if (reg <= MMS114_MODE_CONTROL && reg + len > MMS114_MODE_CONTROL)
-		BUG();
+	if (WARN_ON(reg <= MMS114_MODE_CONTROL && reg + len > MMS114_MODE_CONTROL))
+		return -EINVAL;
 
 	/* Write register */
 	xfer[0].addr = client->addr;
@@ -310,8 +310,7 @@ static int mms114_get_version(struct mms114_data *data)
 		if (error)
 			return error;
 
-		group = i2c_smbus_read_byte_data(data->client,
-						  MMS152_COMPAT_GROUP);
+		group = i2c_smbus_read_byte_data(data->client, MMS152_COMPAT_GROUP);
 		if (group < 0)
 			return group;
 
@@ -371,14 +370,14 @@ static int mms114_setup_regs(struct mms114_data *data)
 
 	if (data->contact_threshold) {
 		error = mms114_write_reg(data, MMS114_CONTACT_THRESHOLD,
-				data->contact_threshold);
+					 data->contact_threshold);
 		if (error < 0)
 			return error;
 	}
 
 	if (data->moving_threshold) {
 		error = mms114_write_reg(data, MMS114_MOVING_THRESHOLD,
-				data->moving_threshold);
+					 data->moving_threshold);
 		if (error < 0)
 			return error;
 	}
@@ -464,9 +463,9 @@ static int mms114_parse_legacy_bindings(struct mms114_data *data)
 	}
 
 	device_property_read_u32(dev, "contact-threshold",
-				&data->contact_threshold);
+				 &data->contact_threshold);
 	device_property_read_u32(dev, "moving-threshold",
-				&data->moving_threshold);
+				 &data->moving_threshold);
 
 	if (device_property_read_bool(dev, "x-invert"))
 		props->invert_x = true;
@@ -519,7 +518,7 @@ static int mms114_probe(struct i2c_client *client)
 		return data->num_keycodes;
 	} else if (data->num_keycodes > MMS114_MAX_TOUCHKEYS) {
 		dev_warn(&client->dev,
-			"Found %d linux,keycodes but max is %d, ignoring the rest\n",
+			 "Found %d linux,keycodes but max is %d, ignoring the rest\n",
 			 data->num_keycodes, MMS114_MAX_TOUCHKEYS);
 		data->num_keycodes = MMS114_MAX_TOUCHKEYS;
 	}
