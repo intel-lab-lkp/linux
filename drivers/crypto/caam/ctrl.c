@@ -1150,8 +1150,10 @@ set_dma_mask:
 		 ctrlpriv->total_jobrs, ctrlpriv->qi_present);
 
 	ret = devm_of_platform_populate(dev);
-	if (ret)
+	if (ret) {
 		dev_err(dev, "JR platform devices creation error\n");
+		of_platform_depopulate(dev);
+	}
 
 	return ret;
 }
