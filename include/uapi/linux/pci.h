@@ -46,4 +46,19 @@ enum pci_hotplug_event {
 	PCI_HOTPLUG_CARD_NOT_PRESENT,
 };
 
+/*
+ * PCIe TPH sysfs binary entry for CPU-to-ST mapping
+ * Sysfs file: /sys/bus/pci/devices/<BDF>/tph_cpu_st
+ * Each entry is 8 bytes aligned, seek offset = cpu_id * PCI_TPH_CPU_ST_ENTRY_SZ
+ */
+struct pci_tph_cpu_st {
+	__u8  vm_st;        /* Volatile Memory Steering Tag (1 byte) */
+	__u8  pm_st;        /* Persistent Memory Steering Tag (1 byte) */
+	__u16 vm_xst;       /* Volatile Memory Extended Steering Tag (2 bytes) */
+	__u16 pm_xst;       /* Persistent Memory Extended Steering Tag (2 bytes) */
+	__u16 reserved;     /* Padding to 8 bytes for aligned offset lookup */
+} __packed;
+
+#define PCI_TPH_CPU_ST_ENTRY_SZ sizeof(struct pci_tph_cpu_st)
+
 #endif /* _UAPILINUX_PCI_H */

@@ -130,6 +130,29 @@ static acpi_status tph_invoke_dsm(acpi_handle handle, u32 cpu_uid,
 
 	return AE_OK;
 }
+
+static int tph_get_cpu_st_info(struct pci_dev *pdev, unsigned int cpu,
+			       union st_info *info)
+{
+	acpi_handle rp_acpi_handle;
+	struct pci_dev *rp;
+	u32 cpu_uid;
+	int ret;
+
+	ret = acpi_get_cpu_uid(cpu, &cpu_uid);
+	if (ret != 0)
+		return ret;
+
+	rp = pcie_find_root_port(pdev);
+	if (!rp || !rp->bus || !rp->bus->bridge)
+		return -ENODEV;
+
+	rp_acpi_handle = ACPI_HANDLE(rp->bus->bridge);
+	if (tph_invoke_dsm(rp_acpi_handle, cpu_uid, info) != AE_OK)
+		return -EINVAL;
+
+	return 0;
+}
 #endif
 
 /* Update the TPH Requester Enable field of TPH Control Register */
@@ -231,30 +254,35 @@ static int write_tag_to_st_table(struct pci_dev *pdev, int index, u16 tag)
 	return pci_write_config_word(pdev, offset, tag);
 }
 
+static void get_cpu_all_st(struct pci_dev *pdev, unsigned int cpu,
+			   struct pci_tph_cpu_st *st)
+{
+	memset(st, 0, sizeof(*st));
+#ifdef CONFIG_ACPI
+	union st_info info;
+	int ret;
+
+	ret = tph_get_cpu_st_info(pdev, cpu, &info);
+	if (ret == 0) {
+		st->vm_st = info.vm_st_valid ? info.vm_st : 0;
+		st->pm_st = info.pm_st_valid ? info.pm_st : 0;
+		st->vm_xst = info.vm_xst_valid ? info.vm_xst : 0;
+		st->pm_xst = info.pm_xst_valid ? info.pm_xst : 0;
+		st->reserved = 0;
+	}
+#endif
+}
+
 static int get_cpu_st(struct pci_dev *pdev, enum tph_mem_type mem_type,
 		      u8 req_type, unsigned int cpu, u16 *tag)
 {
 #ifdef CONFIG_ACPI
-	struct pci_dev *rp;
-	acpi_handle rp_acpi_handle;
 	union st_info info;
-	u32 cpu_uid;
 	int ret;
 
-	ret = acpi_get_cpu_uid(cpu, &cpu_uid);
+	ret = tph_get_cpu_st_info(pdev, cpu, &info);
 	if (ret != 0)
 		return ret;
-
-	rp = pcie_find_root_port(pdev);
-	if (!rp || !rp->bus || !rp->bus->bridge)
-		return -ENODEV;
-
-	rp_acpi_handle = ACPI_HANDLE(rp->bus->bridge);
-
-	if (tph_invoke_dsm(rp_acpi_handle, cpu_uid, &info) != AE_OK) {
-		*tag = 0;
-		return -EINVAL;
-	}
 
 	*tag = tph_extract_tag(mem_type, req_type, &info);
 
@@ -619,3 +647,58 @@ bool pcie_tph_supported(struct pci_dev *pdev, bool want_ext)
 	return pdev->tph_ext_support;
 }
 EXPORT_SYMBOL(pcie_tph_supported);
+
+static ssize_t tph_cpu_st_read(struct file *filp, struct kobject *kobj,
+			       const struct bin_attribute *bin_attr, char *buf,
+			       loff_t off, size_t count)
+{
+	struct pci_dev *pdev = to_pci_dev(kobj_to_dev(kobj));
+	size_t entry_sz = PCI_TPH_CPU_ST_ENTRY_SZ;
+	struct pci_tph_cpu_st st;
+	unsigned int target_cpu;
+	size_t copy_len;
+
+	if (off >= nr_cpu_ids * entry_sz || off % entry_sz != 0)
+		return 0;
+
+	target_cpu = off / entry_sz;
+	if (!cpu_possible(target_cpu))
+		return -ENODEV;
+
+	get_cpu_all_st(pdev, target_cpu, &st);
+
+	copy_len = min_t(size_t, entry_sz, count);
+	memcpy(buf, &st, copy_len);
+
+	return copy_len;
+}
+static BIN_ATTR(tph_cpu_st, 0400, tph_cpu_st_read, NULL, 0);
+
+static const struct bin_attribute *const tph_cpu_st_bin_attrs[] = {
+	&bin_attr_tph_cpu_st,
+	NULL,
+};
+
+static size_t tph_cpu_st_bin_size(struct kobject *kobj,
+				  const struct bin_attribute *a, int n)
+{
+	return nr_cpu_ids * PCI_TPH_CPU_ST_ENTRY_SZ;
+}
+
+static umode_t tph_cpu_st_attr_is_visible(struct kobject *kobj,
+					  const struct bin_attribute *a, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	if (pcie_tph_supported(pdev, false))
+		return a->attr.mode;
+
+	return 0;
+}
+
+const struct attribute_group pcie_tph_cpu_st_attr_group = {
+	.bin_attrs = tph_cpu_st_bin_attrs,
+	.bin_size = tph_cpu_st_bin_size,
+	.is_bin_visible = tph_cpu_st_attr_is_visible,
+};
