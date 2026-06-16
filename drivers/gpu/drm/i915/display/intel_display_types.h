@@ -1800,6 +1800,14 @@ struct intel_psr {
 	struct ref_tracker *vblank_wakeref;
 };
 
+struct intel_dp_link_config {
+	int rate;
+	int lane_count;
+};
+
+#define INTEL_DP_LINK_CONFIG_NULL \
+	((struct intel_dp_link_config){})
+
 struct intel_dp {
 	intel_reg_t output_reg;
 	u32 DP;
