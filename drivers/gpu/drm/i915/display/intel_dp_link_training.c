@@ -1891,9 +1891,8 @@ static int reduce_link_rate(struct intel_dp *intel_dp, int current_rate)
 	if (forced_params.rate)
 		return -1;
 
-	rate_index = intel_dp_rate_index(intel_dp->common_rates,
-					 intel_dp->num_common_rates,
-					 current_rate);
+	rate_index = intel_dp_link_caps_common_rate_idx(link_caps,
+							current_rate);
 
 	if (rate_index <= 0)
 		return -1;
