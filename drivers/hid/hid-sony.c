@@ -1272,8 +1272,6 @@ static int sony_mapping(struct hid_device *hdev, struct hid_input *hi,
 static int sony_register_touchpad(struct sony_sc *sc, int touch_count,
 		int w, int h, int touch_major, int touch_minor, int orientation)
 {
-	size_t name_sz;
-	char *name;
 	int ret;
 
 	sc->touchpad = devm_input_allocate_device(&sc->hdev->dev);
@@ -1295,12 +1293,10 @@ static int sony_register_touchpad(struct sony_sc *sc, int touch_count,
 	 * a suffix. Other devices which were added later like Sony TV remotes
 	 * inhirited this suffix.
 	 */
-	name_sz = strlen(sc->hdev->name) + sizeof(TOUCHPAD_SUFFIX);
-	name = devm_kzalloc(&sc->hdev->dev, name_sz, GFP_KERNEL);
-	if (!name)
+	sc->touchpad->name = devm_kasprintf(&sc->hdev->dev, GFP_KERNEL, "%s" TOUCHPAD_SUFFIX,
+										sc->hdev->name);
+	if (!sc->touchpad->name)
 		return -ENOMEM;
-	snprintf(name, name_sz, "%s" TOUCHPAD_SUFFIX, sc->hdev->name);
-	sc->touchpad->name = name;
 
 	/* We map the button underneath the touchpad to BTN_LEFT. */
 	__set_bit(EV_KEY, sc->touchpad->evbit);
@@ -1337,8 +1333,6 @@ static int sony_register_touchpad(struct sony_sc *sc, int touch_count,
 
 static int sony_register_sensors(struct sony_sc *sc)
 {
-	size_t name_sz;
-	char *name;
 	int ret;
 
 	sc->sensor_dev = devm_input_allocate_device(&sc->hdev->dev);
@@ -1357,12 +1351,10 @@ static int sony_register_sensors(struct sony_sc *sc)
 	/* Append a suffix to the controller name as there are various
 	 * DS4 compatible non-Sony devices with different names.
 	 */
-	name_sz = strlen(sc->hdev->name) + sizeof(SENSOR_SUFFIX);
-	name = devm_kzalloc(&sc->hdev->dev, name_sz, GFP_KERNEL);
-	if (!name)
+	sc->sensor_dev->name = devm_kasprintf(&sc->hdev->dev, GFP_KERNEL, "%s" SENSOR_SUFFIX,
+										sc->hdev->name);
+	if (!sc->sensor_dev->name)
 		return -ENOMEM;
-	snprintf(name, name_sz, "%s" SENSOR_SUFFIX, sc->hdev->name);
-	sc->sensor_dev->name = name;
 
 	if (sc->quirks & SIXAXIS_CONTROLLER) {
 		/* For the DS3 we only support the accelerometer, which works
