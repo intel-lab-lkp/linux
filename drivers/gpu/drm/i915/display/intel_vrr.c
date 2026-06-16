@@ -233,6 +233,9 @@ intel_vrr_cmrr_compute_config(struct intel_crtc_state *crtc_state)
 	if (!HAS_CMRR(display))
 		return;
 
+	if (crtc_state->has_sel_update)
+		return;
+
 	/* No CMRR ratio configured through debugfs */
 	if (!crtc->cmrr.numerator)
 		return;
