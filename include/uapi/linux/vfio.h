@@ -1541,6 +1541,28 @@ struct vfio_device_feature_dma_buf {
  */
 #define VFIO_DEVICE_FEATURE_TPH_ENABLE	13
 
+/**
+ * VFIO_DEVICE_FEATURE_TPH_ST_CONFIG - Configure PCIe TPH Steering Tag entries
+ *
+ * Provides userspace interface to configure PCIe TPH ST table entries.
+ *
+ * @index: Start entry offset within ST table
+ * @count: Number of consecutive entries to configure
+ * @data_uptr: Userspace data buffer for 16-bit raw ST values
+ *
+ * This feature requires two preconditions:
+ * 1. Global enable_unsafe_tph module parameter is enabled;
+ * 2. VFIO_DEVICE_FEATURE_TPH_ENABLE has been SET on the device beforehand.
+ */
+#define VFIO_DEVICE_FEATURE_TPH_ST_CONFIG	14
+
+struct vfio_device_feature_tph_st_config {
+	__u16 index;
+	__u16 count;
+	__u32 reserved; /* Reserved for future use, must be zero */
+	__aligned_u64 data_uptr;
+};
+
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**
