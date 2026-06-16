@@ -9,6 +9,7 @@
 #include "intel_alpm.h"
 #include "intel_crtc.h"
 #include "intel_de.h"
+#include "intel_display_limits.h"
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_dmc.h"
@@ -318,10 +319,10 @@ int intel_vrr_fixed_rr_hw_flipline(const struct intel_crtc_state *crtc_state)
 	return intel_vrr_fixed_rr_hw_vtotal(crtc_state);
 }
 
-void intel_vrr_set_fixed_rr_timings(const struct intel_crtc_state *crtc_state)
+void intel_vrr_set_fixed_rr_timings(const struct intel_crtc_state *crtc_state,
+				    enum transcoder cpu_transcoder)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
-	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 
 	if (!intel_vrr_possible(crtc_state))
 		return;
@@ -645,7 +646,7 @@ void intel_vrr_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
 			       lower_32_bits(crtc_state->cmrr.cmrr_n));
 	}
 
-	intel_vrr_set_fixed_rr_timings(crtc_state);
+	intel_vrr_set_fixed_rr_timings(crtc_state, cpu_transcoder);
 
 	if (!intel_vrr_always_use_vrr_tg(display))
 		intel_de_write(display, TRANS_VRR_CTL(display, cpu_transcoder),
@@ -974,7 +975,7 @@ void intel_vrr_disable(const struct intel_crtc_state *old_crtc_state)
 		intel_vrr_tg_disable(old_crtc_state);
 
 	intel_vrr_disable_dc_balancing(old_crtc_state);
-	intel_vrr_set_fixed_rr_timings(old_crtc_state);
+	intel_vrr_set_fixed_rr_timings(old_crtc_state, old_crtc_state->cpu_transcoder);
 }
 
 void intel_vrr_transcoder_enable(const struct intel_crtc_state *crtc_state)
