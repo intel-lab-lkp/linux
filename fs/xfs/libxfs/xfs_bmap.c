@@ -3194,6 +3194,36 @@ xfs_bmap_select_minlen(
 	return args->maxlen;
 }
 
+#define	GENERIC_AG_SET_SZ	(2)
+
+static inline xfs_agnumber_t
+xfs_default_ag_set_size(
+	struct xfs_inode	*ip)
+{
+	struct xfs_mount	*mp = ip->i_mount;
+
+	return min_t(xfs_agnumber_t, GENERIC_AG_SET_SZ, mp->m_sb.sb_agcount);
+}
+
+static xfs_agnumber_t
+xfs_ag_to_ag_set(
+	struct xfs_bmalloca	*ap,
+	xfs_agnumber_t		base_agno)
+{
+	struct xfs_inode	*ip = ap->ip;
+	struct xfs_mount	*mp = ip->i_mount;
+	xfs_agnumber_t		set_size;
+
+	/* Apply fanning only for regular file data */
+	if (!(ap->datatype & XFS_ALLOC_USERDATA))
+		return base_agno;
+
+	set_size = xfs_default_ag_set_size(ip);
+	/* Fan out within the AG set using low bits of the inode */
+	return (base_agno + (XFS_INO_TO_AGINO(mp, ip->i_ino) % set_size)) %
+		mp->m_sb.sb_agcount;
+}
+
 static int
 xfs_bmap_btalloc_select_lengths(
 	struct xfs_bmalloca	*ap,
@@ -3589,8 +3619,16 @@ xfs_bmap_btalloc_best_length(
 {
 	xfs_extlen_t		blen = 0;
 	int			error;
+	xfs_agnumber_t		target_ag, start_ag;
 
 	ap->blkno = XFS_INO_TO_FSB(args->mp, ap->ip->i_ino);
+
+	/* fan out initial AG across the generic AG set */
+	start_ag = XFS_FSB_TO_AGNO(args->mp, ap->blkno);
+	target_ag = xfs_ag_to_ag_set(ap, start_ag);
+	if (target_ag != start_ag)
+		ap->blkno = XFS_AGB_TO_FSB(args->mp, target_ag, 0);
+
 	if (!xfs_bmap_adjacent(ap))
 		ap->eof = false;
 
