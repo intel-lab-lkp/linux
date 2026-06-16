@@ -1251,6 +1251,8 @@ static unsigned int sm501_mem_local[] = {
 	[5]	= 2*1024*1024,
 };
 
+static void sm501_dev_remove(struct sm501_devdata *sm);
+
 /* sm501_init_dev
  *
  * Common init code for an SM501
@@ -1323,6 +1325,7 @@ static int sm501_init_dev(struct sm501_devdata *sm)
 	if (ret) {
 		dev_err(sm->dev, "M1X and M clocks sourced from different "
 					"PLLs\n");
+		sm501_dev_remove(sm);
 		return -EINVAL;
 	}
 
@@ -1585,9 +1588,14 @@ static int sm501_pci_probe(struct pci_dev *dev,
 		goto err4;
 	}
 
-	sm501_init_dev(sm);
+	err = sm501_init_dev(sm);
+	if (err)
+		goto err5;
+
 	return 0;
 
+ err5:
+	iounmap(sm->regs);
  err4:
 	release_mem_region(sm->io_res->start, 0x100);
  err3:
