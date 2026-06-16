@@ -241,11 +241,12 @@ del_device_store(const struct bus_type *bus, const char *buf, size_t count)
 		if (nsim_bus_dev->dev.id != id)
 			continue;
 		list_del(&nsim_bus_dev->list);
-		nsim_bus_dev_del(nsim_bus_dev);
 		err = 0;
 		break;
 	}
 	mutex_unlock(&nsim_bus_dev_list_lock);
+	if (!err)
+		nsim_bus_dev_del(nsim_bus_dev);
 	return !err ? count : err;
 }
 static BUS_ATTR_WO(del_device);
@@ -527,11 +528,11 @@ void nsim_bus_exit(void)
 		complete(&nsim_bus_devs_released);
 
 	mutex_lock(&nsim_bus_dev_list_lock);
-	list_for_each_entry_safe(nsim_bus_dev, tmp, &nsim_bus_dev_list, list) {
+	list_for_each_entry_safe(nsim_bus_dev, tmp, &nsim_bus_dev_list, list)
 		list_del(&nsim_bus_dev->list);
-		nsim_bus_dev_del(nsim_bus_dev);
-	}
 	mutex_unlock(&nsim_bus_dev_list_lock);
+	list_for_each_entry_safe(nsim_bus_dev, tmp, &nsim_bus_dev_list, list)
+		nsim_bus_dev_del(nsim_bus_dev);
 
 	wait_for_completion(&nsim_bus_devs_released);
 
