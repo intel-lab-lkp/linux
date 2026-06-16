@@ -331,6 +331,8 @@ static int jz4780_nemc_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	platform_set_drvdata(pdev, nemc);
+
 	/*
 	 * Iterate over child devices, check that they do not conflict with
 	 * each other, and register child devices for them. If a child device
@@ -379,7 +381,6 @@ static int jz4780_nemc_probe(struct platform_device *pdev)
 		}
 	}
 
-	platform_set_drvdata(pdev, nemc);
 	dev_info(dev, "JZ4780 NEMC initialised\n");
 	return 0;
 }
@@ -388,6 +389,7 @@ static void jz4780_nemc_remove(struct platform_device *pdev)
 {
 	struct jz4780_nemc *nemc = platform_get_drvdata(pdev);
 
+	of_platform_depopulate(&pdev->dev);
 	clk_disable_unprepare(nemc->clk);
 }
 
