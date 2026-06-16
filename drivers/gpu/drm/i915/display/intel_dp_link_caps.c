@@ -151,6 +151,15 @@ static int intel_dp_link_config_lane_count(const struct intel_dp_link_config_ent
 	return 1 << lc->lane_count_exp;
 }
 
+static void set_max_link_limits_no_update(struct intel_dp_link_caps *link_caps,
+					  const struct intel_dp_link_config *max_link_limits)
+{
+	struct intel_dp *intel_dp = link_caps->dp;
+
+	intel_dp->link.max_rate = max_link_limits->rate;
+	intel_dp->link.max_lane_count = max_link_limits->lane_count;
+}
+
 /**
  * intel_dp_link_caps_get_max_limits - get the current maximum link limits
  * @link_caps: link capabilities state
@@ -179,6 +188,32 @@ void intel_dp_link_caps_get_max_limits(struct intel_dp_link_caps *link_caps,
 
 	max_link_limits->rate = intel_dp->link.max_rate;
 	max_link_limits->lane_count = intel_dp->link.max_lane_count;
+}
+
+/**
+ * intel_dp_link_caps_set_max_limits - set the current maximum link limits
+ * @link_caps: link capabilities state
+ * @max_link_limits: new maximum link limits
+ *
+ * Set the current maximum rate and lane count limits to @max_link_limits,
+ * constraining the set of allowed configurations.
+ *
+ * Unlike intel_dp_link_caps_get_max_limits(), the caller must serialize
+ * this call against concurrent queries and updates to @link_caps, in line
+ * with the rest of the API.
+ *
+ * Return:
+ * - %true  if the @link_caps cached max limits value got updated with
+ *          @max_link_limits.
+ * - %false if @max_link_limits is invalid.
+ */
+bool intel_dp_link_caps_set_max_limits(struct intel_dp_link_caps *link_caps,
+				       const struct intel_dp_link_config *max_link_limits)
+{
+	set_max_link_limits_no_update(link_caps, max_link_limits);
+
+	/* TODO: validate max_link_limits */
+	return true;
 }
 
 static int intel_dp_link_config_bw(struct intel_dp *intel_dp,
