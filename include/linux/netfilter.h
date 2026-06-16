@@ -181,7 +181,7 @@ static inline void nf_hook_state_init(struct nf_hook_state *p,
 struct nf_sockopt_ops {
 	struct list_head list;
 
-	u_int8_t pf;
+	u8 pf;
 
 	/* Non-inclusive ranges: use 0/0/NULL to never get called. */
 	int set_optmin;
@@ -357,9 +357,9 @@ NF_HOOK_LIST(uint8_t pf, unsigned int hook, struct net *net, struct sock *sk,
 }
 
 /* Call setsockopt() */
-int nf_setsockopt(struct sock *sk, u_int8_t pf, int optval, sockptr_t opt,
+int nf_setsockopt(struct sock *sk, u8 pf, int optval, sockptr_t opt,
 		  unsigned int len);
-int nf_getsockopt(struct sock *sk, u_int8_t pf, int optval, char __user *opt,
+int nf_getsockopt(struct sock *sk, u8 pf, int optval, char __user *opt,
 		  int *len);
 
 struct flowi;
