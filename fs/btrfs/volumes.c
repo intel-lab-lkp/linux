@@ -3046,9 +3046,8 @@ int btrfs_init_new_device(struct btrfs_fs_info *fs_info, const char *device_path
 		if (IS_ERR(trans)) {
 			if (PTR_ERR(trans) == -ENOENT)
 				return 0;
-			ret = PTR_ERR(trans);
-			trans = NULL;
-			goto error_sysfs;
+			/* Device is a committed member now; don't tear it down. */
+			return PTR_ERR(trans);
 		}
 		ret = btrfs_commit_transaction(trans);
 	}
