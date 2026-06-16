@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/property.h>
 #include <linux/sysfs.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
@@ -608,6 +609,7 @@ int st_magn_common_probe(struct iio_dev *indio_dev)
 	struct st_sensor_data *mdata = iio_priv(indio_dev);
 	struct device *parent = indio_dev->dev.parent;
 	struct st_sensors_platform_data *pdata = dev_get_platdata(parent);
+	const char *propname;
 	int err;
 
 	indio_dev->modes = INDIO_DIRECT_MODE;
@@ -627,6 +629,36 @@ int st_magn_common_probe(struct iio_dev *indio_dev)
 
 	mdata->current_fullscale = &mdata->sensor_settings->fs.fs_avl[0];
 	mdata->odr = mdata->sensor_settings->odr.odr_avl[0].hz;
+
+	/*
+	 * Skip fixed-FS chips (fs.addr == 0): no register to switch.
+	 * The binding rejects the property on these compatibles too;
+	 * the gate guards stale DTBs.
+	 */
+	propname = "st,fullscale-milligauss";
+	if (mdata->sensor_settings->fs.addr &&
+	    device_property_present(parent, propname)) {
+		struct st_sensor_fullscale *fs = &mdata->sensor_settings->fs;
+		u32 fs_mg;
+		int i;
+
+		err = device_property_read_u32(parent, propname, &fs_mg);
+		if (err)
+			return err;
+
+		for (i = 0; i < ST_SENSORS_FULLSCALE_AVL_MAX; i++) {
+			if (!fs->fs_avl[i].num)
+				break;
+			if (fs->fs_avl[i].num == fs_mg) {
+				mdata->current_fullscale = &fs->fs_avl[i];
+				break;
+			}
+		}
+		if (mdata->current_fullscale->num != fs_mg)
+			dev_warn(parent, "%s=%u not supported, using %u\n",
+				 propname, fs_mg,
+				 mdata->current_fullscale->num);
+	}
 
 	if (!pdata)
 		pdata = (struct st_sensors_platform_data *)&default_magn_pdata;
