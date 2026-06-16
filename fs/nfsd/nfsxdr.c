@@ -172,14 +172,45 @@ svcxdr_decode_sattr(struct svc_rqst *rqstp, struct xdr_stream *xdr,
 	tmp1 = be32_to_cpup(p++);
 	tmp2 = be32_to_cpup(p++);
 	if (tmp1 != (u32)-1 && tmp2 != (u32)-1) {
+		/*
+		 * Guard the raw useconds before the unit conversion below.
+		 * tmp2 * NSEC_PER_USEC is computed in unsigned long, which is
+		 * 32 bits on ILP32, so an out-of-range value would wrap and
+		 * silently produce a bogus in-range tv_nsec. useconds ==
+		 * 1000000 is the Sun "set to current server time" convention
+		 * (see the mtime block below); allow it and reject anything
+		 * larger. Note 1000000 * NSEC_PER_USEC is 10^9, which does not
+		 * wrap on ILP32.
+		 */
+		if (tmp2 > 1000000)
+			return false;
 		iap->ia_valid |= ATTR_ATIME | ATTR_ATIME_SET;
 		iap->ia_atime.tv_sec = tmp1;
 		iap->ia_atime.tv_nsec = tmp2 * NSEC_PER_USEC;
+		/*
+		 * The Linux NFSv2 client emits useconds == 1000000 in the
+		 * atime field too (touch / utimes(file, NULL) sets ATTR_ATIME
+		 * without ATTR_ATIME_SET). Apply the Sun convention here so
+		 * the server uses its current time and ignores the bogus
+		 * tv_nsec, instead of storing an out-of-range value when the
+		 * mtime field does not also carry 1000000. Only ATTR_ATIME_SET
+		 * is cleared; the mtime block keeps its own handling, where
+		 * 1000000 means "set both atime and mtime to now".
+		 */
+		if (tmp2 == 1000000)
+			iap->ia_valid &= ~ATTR_ATIME_SET;
 	}
 
 	tmp1 = be32_to_cpup(p++);
 	tmp2 = be32_to_cpup(p++);
 	if (tmp1 != (u32)-1 && tmp2 != (u32)-1) {
+		/*
+		 * useconds == 1000000 is a valid Sun convention here (see
+		 * below); anything above that is out of range. Guard it before
+		 * the unit conversion to avoid the ILP32 wrap described above.
+		 */
+		if (tmp2 > 1000000)
+			return false;
 		iap->ia_valid |= ATTR_MTIME | ATTR_MTIME_SET;
 		iap->ia_mtime.tv_sec = tmp1;
 		iap->ia_mtime.tv_nsec = tmp2 * NSEC_PER_USEC;
