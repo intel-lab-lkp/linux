@@ -412,16 +412,25 @@ int amdxdna_hwctx_sync_debug_bo(struct amdxdna_client *client, u32 debug_bo_hdl)
 	if (!gobj)
 		return -EINVAL;
 
+	ret = amdxdna_pm_resume_get(xdna);
+	if (ret) {
+		XDNA_ERR(xdna, "Resume failed, ret %d", ret);
+		goto put_obj;
+	}
+
 	abo = to_xdna_obj(gobj);
-	guard(mutex)(&xdna->dev_lock);
+	mutex_lock(&xdna->dev_lock);
 	hwctx = xa_load(&client->hwctx_xa, abo->assigned_hwctx);
 	if (!hwctx) {
 		ret = -EINVAL;
-		goto put_obj;
+		goto unlock;
 	}
 
 	ret = xdna->dev_info->ops->hwctx_sync_debug_bo(hwctx, debug_bo_hdl);
 
+unlock:
+	mutex_unlock(&xdna->dev_lock);
+	amdxdna_pm_suspend_put(xdna);
 put_obj:
 	drm_gem_object_put(gobj);
 	return ret;
