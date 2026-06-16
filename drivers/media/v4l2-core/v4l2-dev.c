@@ -1082,7 +1082,7 @@ int __video_register_device(struct video_device *vdev,
 	if (ret < 0) {
 		mutex_unlock(&videodev_lock);
 		pr_err("%s: device_register failed\n", __func__);
-		put_device(&vdev->dev);
+		video_put(vdev);
 		return ret;
 	}
 
