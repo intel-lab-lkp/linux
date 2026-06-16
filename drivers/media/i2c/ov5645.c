@@ -1231,14 +1231,14 @@ static const struct of_device_id ov5645_of_match[] = {
 MODULE_DEVICE_TABLE(of, ov5645_of_match);
 
 static const struct dev_pm_ops ov5645_pm_ops = {
-	SET_RUNTIME_PM_OPS(ov5645_set_power_off, ov5645_set_power_on, NULL)
+	RUNTIME_PM_OPS(ov5645_set_power_off, ov5645_set_power_on, NULL)
 };
 
 static struct i2c_driver ov5645_i2c_driver = {
 	.driver = {
 		.of_match_table = ov5645_of_match,
 		.name  = "ov5645",
-		.pm = &ov5645_pm_ops,
+		.pm = pm_ptr(&ov5645_pm_ops),
 	},
 	.probe = ov5645_probe,
 	.remove = ov5645_remove,
