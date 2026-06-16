@@ -40,6 +40,7 @@
 #include <linux/interval_tree.h>
 #include <linux/iova_bitmap.h>
 #include <linux/iommufd.h>
+#include <linux/huge_mm.h>
 #include "vfio.h"
 
 #define DRIVER_VERSION	"0.3"
@@ -1462,6 +1463,7 @@ const struct file_operations vfio_device_fops = {
 	.unlocked_ioctl	= vfio_device_fops_unl_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
 	.mmap		= vfio_device_fops_mmap,
+	.get_unmapped_area = thp_get_unmapped_area,
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo	= vfio_device_show_fdinfo,
 #endif
