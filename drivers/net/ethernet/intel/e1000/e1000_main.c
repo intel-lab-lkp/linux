@@ -1546,11 +1546,10 @@ setup_tx_desc_die:
 			      "for the transmit descriptor ring\n");
 			vfree(txdr->buffer_info);
 			return -ENOMEM;
-		} else {
+		}
 			/* Free old allocation, new allocation was successful */
 			dma_free_coherent(&pdev->dev, txdr->size, olddesc,
 					  olddma);
-		}
 	}
 	memset(txdr->desc, 0, txdr->size);
 
