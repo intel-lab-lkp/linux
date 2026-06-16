@@ -203,8 +203,10 @@ static int test__vmlinux_matches_kallsyms(struct test_suite *test __maybe_unused
 	 * Init the machines that will hold kernel, modules obtained from
 	 * both vmlinux + .ko files and from /proc/kallsyms split by modules.
 	 */
-	machine__init(&args.kallsyms, "", HOST_KERNEL_ID);
-	machine__init(&vmlinux, "", HOST_KERNEL_ID);
+	if (machine__init(&args.kallsyms, "", HOST_KERNEL_ID))
+		goto out;
+	if (machine__init(&vmlinux, "", HOST_KERNEL_ID))
+		goto out;
 
 	maps = machine__kernel_maps(&vmlinux);
 
