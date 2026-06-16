@@ -268,10 +268,10 @@ void __init init_arch(bp_tag_t *bp_start)
  * Initialize system. Setup memory and reserve regions.
  */
 
-static inline int __init_memblock mem_reserve(unsigned long start,
-					      unsigned long end)
+static inline void __init_memblock mem_reserve(unsigned long start,
+					       unsigned long end)
 {
-	return memblock_reserve(start, end - start);
+	memblock_reserve(start, end - start);
 }
 
 void __init setup_arch(char **cmdline_p)
@@ -290,11 +290,12 @@ void __init setup_arch(char **cmdline_p)
 	/* Reserve some memory regions */
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (initrd_start < initrd_end &&
-	    !mem_reserve(__pa(initrd_start), __pa(initrd_end)))
+	if (initrd_start < initrd_end) {
+		mem_reserve(__pa(initrd_start), __pa(initrd_end));
 		initrd_below_start_ok = 1;
-	else
+	} else {
 		initrd_start = 0;
+	}
 #endif
 
 	mem_reserve(__pa(_stext), __pa(_end));
