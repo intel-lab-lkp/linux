@@ -66,6 +66,8 @@
 static int btrfs_dev_replace_finishing(struct btrfs_fs_info *fs_info,
 				       int scrub_ret);
 static int btrfs_dev_replace_kthread(void *data);
+static void btrfs_rm_dev_replace_blocked(struct btrfs_fs_info *fs_info);
+static void btrfs_rm_dev_replace_unblocked(struct btrfs_fs_info *fs_info);
 
 int btrfs_init_dev_replace(struct btrfs_fs_info *fs_info)
 {
@@ -690,7 +692,11 @@ static int btrfs_dev_replace_start(struct btrfs_fs_info *fs_info,
 		dev_replace->srcdev = NULL;
 		dev_replace->tgtdev = NULL;
 		up_write(&dev_replace->rwsem);
-		goto leave;
+		/* Drain writes already duplicated to tgtdev before freeing it. */
+		btrfs_rm_dev_replace_blocked(fs_info);
+		btrfs_destroy_dev_replace_tgtdev(tgt_device);
+		btrfs_rm_dev_replace_unblocked(fs_info);
+		return ret;
 	}
 
 	ret = btrfs_commit_transaction(trans);
