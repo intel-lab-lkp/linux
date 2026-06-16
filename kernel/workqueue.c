@@ -52,6 +52,7 @@
 #include <linux/uaccess.h>
 #include <linux/sched/isolation.h>
 #include <linux/sched/debug.h>
+#include <linux/sched/wake_q.h>
 #include <linux/nmi.h>
 #include <linux/kvm_para.h>
 #include <linux/delay.h>
@@ -1258,13 +1259,17 @@ static void kick_bh_pool(struct worker_pool *pool)
 }
 
 /**
- * kick_pool - wake up an idle worker if necessary
+ * kick_pool_pick - select and claim an idle worker, deferring the wakeup
  * @pool: pool to kick
+ * @wakeq: wake_q to queue the selected worker on
  *
- * @pool may have pending work items. Wake up worker if necessary. Returns
- * whether a worker was woken up.
+ * Like kick_pool() but queues the picked worker on @wakeq (wake_q_add())
+ * instead of waking it, so the caller can wake_up_q(@wakeq) after dropping
+ * pool->lock. Returns whether a worker was selected.
+ *
+ * Must be called with @pool->lock held.
  */
-static bool kick_pool(struct worker_pool *pool)
+static bool kick_pool_pick(struct worker_pool *pool, struct wake_q_head *wakeq)
 {
 	struct worker *worker = first_idle_worker(pool);
 	struct task_struct *p;
@@ -1310,8 +1315,25 @@ static bool kick_pool(struct worker_pool *pool)
 		}
 	}
 #endif
-	wake_up_process(p);
+	wake_q_add(wakeq, p);
 	return true;
+}
+
+/**
+ * kick_pool - wake up an idle worker if necessary
+ * @pool: pool to kick
+ *
+ * @pool may have pending work items. Wake up worker if necessary. Returns
+ * whether a worker was woken up.
+ */
+static bool kick_pool(struct worker_pool *pool)
+{
+	DEFINE_WAKE_Q(wakeq);
+	bool kicked;
+
+	kicked = kick_pool_pick(pool, &wakeq);
+	wake_up_q(&wakeq);
+	return kicked;
 }
 
 #ifdef CONFIG_WQ_CPU_INTENSIVE_REPORT
