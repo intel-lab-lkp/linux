@@ -16,6 +16,7 @@
 #include "intel_display_power.h"
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
+#include "intel_vrr.h"
 
 /**
  * DOC: Common Primary Timing Generator (CMTG)
@@ -246,4 +247,14 @@ void intel_cmtg_set_timings(const struct intel_crtc_state *crtc_state, enum set_
 		intel_set_transcoder_timings_lrr(crtc_state, cmtg_transcoder);
 	else
 		intel_set_transcoder_timings(crtc_state, cmtg_transcoder);
+}
+
+void intel_cmtg_set_vrr_timings(const struct intel_crtc_state *crtc_state)
+{
+	enum transcoder cmtg_transcoder = to_cmtg_transcoder(crtc_state->cpu_transcoder);
+
+	if (!intel_cmtg_is_allowed(crtc_state))
+		return;
+
+	intel_vrr_set_fixed_rr_timings(crtc_state, cmtg_transcoder);
 }
