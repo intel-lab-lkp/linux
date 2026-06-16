@@ -10,35 +10,39 @@
 #ifdef HAVE_BACKTRACE_SUPPORT
 #include <execinfo.h>
 #endif
-#include <poll.h>
-#include <unistd.h>
 #include <setjmp.h>
-#include <string.h>
 #include <stdlib.h>
-#include <sys/types.h>
+#include <string.h>
+
 #include <dirent.h>
-#include <sys/wait.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include "builtin.h"
-#include "config.h"
-#include "hist.h"
-#include "intlist.h"
-#include "tests.h"
-#include "debug.h"
-#include "color.h"
-#include <subcmd/parse-options.h>
-#include <subcmd/run-command.h>
-#include "string2.h"
-#include "symbol.h"
-#include "util/rlimit.h"
-#include "util/strbuf.h"
 #include <linux/kernel.h>
 #include <linux/string.h>
-#include <subcmd/exec-cmd.h>
 #include <linux/zalloc.h>
+#include <poll.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
+#include <subcmd/exec-cmd.h>
+#include <subcmd/parse-options.h>
+#include <subcmd/run-command.h>
+
+#include "builtin.h"
+#include "color.h"
+#include "config.h"
+#include "debug.h"
+#include "hist.h"
+#include "intlist.h"
+#include "string2.h"
+#include "symbol.h"
 #include "tests-scripts.h"
+#include "tests.h"
+#include "util/rlimit.h"
+#include "util/strbuf.h"
+#include "util/term.h"
 
 static const char *junit_filename;
 static struct strbuf junit_xml_buf = STRBUF_INIT;
@@ -413,19 +417,64 @@ static char *xml_escape(const char *str)
 	return res ? res : strdup("");
 }
 
+static int get_term_width(void)
+{
+	struct winsize ws;
+	int cols = 80;
+	int term_width;
+
+	if (!isatty(1))
+		return 10000;
+
+	get_term_dimensions(&ws);
+	if (ws.ws_col > 0)
+		cols = ws.ws_col;
+
+	/*
+	 * Limit description width to fit on a single line. We subtract 35
+	 * columns of headroom to allocate space for:
+	 * - The suite index prefix: e.g. " 10.100:" (9 characters).
+	 * - The colon separator and spaces: " : " (3 characters).
+	 * - The longest status results: e.g. "Skip (some metrics failed)" (26 characters)
+	 *   or "Running (XX active)" (20 characters).
+	 *
+	 * A minimum description width of 10 is enforced to ensure names are
+	 * legible even on very narrow consoles.
+	 */
+	term_width = cols - 35;
+	if (term_width < 10)
+		term_width = 10;
+
+	return term_width;
+}
+
+static int get_max_desc_width(int width)
+{
+	int term_width = get_term_width();
+
+	return width > term_width ? term_width : width;
+}
+
 static int print_test_result(struct test_suite *t, int curr_suite, int curr_test_case,
 			     int result, int width, int running,
 			     const char *err_output, double elapsed)
 {
+	int pad_width = get_max_desc_width(width);
+	int term_width = get_term_width();
+
 	if (test_suite__num_test_cases(t) > 1) {
 		char prefix[32];
 		int len = snprintf(prefix, sizeof(prefix), "%3d.%1d:",
 				   curr_suite + 1, curr_test_case + 1);
-		int subw = len >= 4 ? width + 4 - len : width;
+		int pad = len >= 4 ? pad_width + 4 - len : pad_width;
+		int trunc = len >= 4 ? term_width + 4 - len : term_width;
 
-		pr_info("%s %-*s:", prefix, subw, test_description(t, curr_test_case));
-	} else
-		pr_info("%3d: %-*s:", curr_suite + 1, width, test_description(t, curr_test_case));
+		pr_info("%s %-*.*s:", prefix, pad, trunc,
+			test_description(t, curr_test_case));
+	} else {
+		pr_info("%3d: %-*.*s:", curr_suite + 1, pad_width, term_width,
+			test_description(t, curr_test_case));
+	}
 
 	switch (result) {
 	case TEST_RUNNING:
@@ -695,6 +744,7 @@ static void finish_test(struct child_test **child_tests, int running_test, int c
 	int ret;
 	struct timespec end_time;
 	double elapsed;
+	width = get_max_desc_width(width);
 
 	if (child_test == NULL) {
 		/* Test wasn't started. */
@@ -709,7 +759,8 @@ static void finish_test(struct child_test **child_tests, int running_test, int c
 	 * sub test names.
 	 */
 	if (test_suite__num_test_cases(t) > 1 && curr_test_case == 0)
-		pr_info("%3d: %-*s:\n", curr_suite + 1, width, test_description(t, -1));
+		pr_info("%3d: %-*.*s:\n", curr_suite + 1, width, width,
+			test_description(t, -1));
 
 	/*
 	 * Busy loop reading from the child's stdout/stderr that are set to be
@@ -917,6 +968,8 @@ static int finish_tests_parallel(struct child_test **child_tests, size_t num_tes
 	int last_suite_printed = -1;
 	sigset_t set, oldset;
 
+	width = get_max_desc_width(width);
+
 	sigemptyset(&set);
 	sigaddset(&set, SIGINT);
 	sigaddset(&set, SIGTERM);
@@ -985,8 +1038,11 @@ static int finish_tests_parallel(struct child_test **child_tests, size_t num_tes
 			if (next_child) {
 				if (test_suite__num_test_cases(next_child->test) > 1 &&
 				    last_suite_printed != next_child->suite_num) {
-					pr_info("%3d: %-*s:\n", next_child->suite_num + 1, width,
-						test_description(next_child->test, -1));
+					pr_info("%3d: %-*.*s:\n",
+						next_child->suite_num + 1,
+						width, width,
+						test_description(
+							next_child->test, -1));
 					last_suite_printed = next_child->suite_num;
 				}
 				print_test_result(next_child->test, next_child->suite_num,
@@ -1049,7 +1105,8 @@ static int finish_tests_parallel(struct child_test **child_tests, size_t num_tes
 
 			if (test_suite__num_test_cases(child->test) > 1 &&
 			    last_suite_printed != child->suite_num) {
-				pr_info("%3d: %-*s:\n", child->suite_num + 1, width,
+				pr_info("%3d: %-*.*s:\n", child->suite_num + 1,
+					width, width,
 					test_description(child->test, -1));
 				last_suite_printed = child->suite_num;
 			}
@@ -1296,7 +1353,10 @@ static int __cmd_test(struct test_suite **suites, int argc, const char *argv[],
 
 			if (intlist__find(skiplist, curr_suite + 1)) {
 				if (pass == 1) {
-					pr_info("%3d: %-*s:", curr_suite + 1, width,
+					int pad_width = get_max_desc_width(width);
+					int term_width = get_term_width();
+
+					pr_info("%3d: %-*.*s:", curr_suite + 1, pad_width, term_width,
 						test_description(*t, -1));
 					color_fprintf(stderr, PERF_COLOR_YELLOW,
 						      " Skip (user override)\n");
