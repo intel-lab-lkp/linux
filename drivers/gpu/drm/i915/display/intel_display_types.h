@@ -1545,6 +1545,11 @@ struct intel_crtc {
 		u64 flip_count;
 	} dc_balance;
 
+	struct {
+		u32 numerator;
+		u32 denominator;
+	} cmrr;
+
 	int scanline_offset;
 
 	struct {
