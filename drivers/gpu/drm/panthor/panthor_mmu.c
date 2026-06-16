@@ -301,6 +301,15 @@ struct panthor_vm {
 	/** @mm_lock: Lock protecting the @mm field. */
 	struct mutex mm_lock;
 
+	/** @kernel_va: VA-range reserved for kernel BOs. */
+	struct {
+		/** @kernel_va.start: Start of the VA-range for kernel BOs. */
+		u64 start;
+
+		/** @kernel_va.range: Size of the automatic VA-range for kernel BOs. */
+		u64 range;
+	} kernel_va;
+
 	/** @kernel_auto_va: Automatic VA-range for kernel BOs. */
 	struct {
 		/** @kernel_auto_va.start: Start of the automatic VA-range for kernel BOs. */
@@ -1307,6 +1316,24 @@ static int panthor_vm_op_ctx_prealloc_pts(struct panthor_vm_op_ctx *op_ctx)
 		return -ENOMEM;
 
 	return 0;
+}
+
+static bool
+panthor_vm_is_kernel_address(struct panthor_vm *vm,
+			     const struct drm_panthor_vm_bind_op *op)
+{
+	u32 op_type = op->flags & DRM_PANTHOR_VM_BIND_OP_TYPE_MASK;
+	u64 end, kstart, krange, kend;
+
+	if (op_type == DRM_PANTHOR_VM_BIND_OP_TYPE_SYNC_ONLY)
+		return false;
+
+	end = op->va + op->size;
+	kstart = vm->kernel_va.start;
+	krange = vm->kernel_va.range;
+	kend = kstart + krange;
+
+	return krange && op->va < kend && kstart < end;
 }
 
 #define PANTHOR_VM_BIND_OP_MAP_FLAGS \
@@ -2891,6 +2918,8 @@ panthor_vm_create(struct panthor_device *ptdev, bool for_mcu,
 	} else {
 		min_va = 0;
 		va_range = full_va_range;
+		vm->kernel_va.start = kernel_va_start;
+		vm->kernel_va.range = kernel_va_size;
 	}
 
 	mutex_init(&vm->mm_lock);
@@ -2979,6 +3008,10 @@ panthor_vm_bind_prepare_op_ctx(struct drm_file *file,
 
 	/* Aligned on page size. */
 	if (!IS_ALIGNED(op->va | op->size | op->bo_offset, vm_pgsz))
+		return -EINVAL;
+
+	/* We don't allow mappings that intersect with kbo's reserved range */
+	if (panthor_vm_is_kernel_address(vm, op))
 		return -EINVAL;
 
 	switch (op->flags & DRM_PANTHOR_VM_BIND_OP_TYPE_MASK) {
