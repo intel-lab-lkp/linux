@@ -81,6 +81,7 @@
 #define SONY_FF_SUPPORT (SIXAXIS_CONTROLLER | MOTION_CONTROLLER)
 #define SONY_BT_DEVICE (SIXAXIS_CONTROLLER_BT | MOTION_CONTROLLER_BT | NAVIGATION_CONTROLLER_BT)
 #define NSG_MRXU_REMOTE (NSG_MR5U_REMOTE_BT | NSG_MR7U_REMOTE_BT)
+#define RB4_GUITAR_PS4 (RB4_GUITAR_PS4_USB | RB4_GUITAR_PS4_BT)
 
 #define MAX_LEDS 4
 #define NSG_MRXU_MAX_X 1667
@@ -534,6 +535,7 @@ struct sony_sc {
 	struct input_dev *sensor_dev;
 	struct led_classdev *leds[MAX_LEDS];
 	unsigned long quirks;
+	int (*raw_event)(struct sony_sc *sc, u8 *rd, int size);
 	struct work_struct state_worker;
 	void (*send_output_report)(struct sony_sc *sc);
 	struct power_supply *battery;
@@ -946,7 +948,7 @@ static const u8 *sony_report_fixup(struct hid_device *hdev, u8 *rdesc,
 	return rdesc;
 }
 
-static void sixaxis_parse_report(struct sony_sc *sc, u8 *rd, int size)
+static int sixaxis_raw_event(struct sony_sc *sc, u8 *rd, int size)
 {
 	static const u8 sixaxis_battery_capacity[] = { 0, 1, 25, 50, 75, 100 };
 	unsigned long flags;
@@ -954,6 +956,31 @@ static void sixaxis_parse_report(struct sony_sc *sc, u8 *rd, int size)
 	u8 index;
 	u8 battery_capacity;
 	int battery_status;
+
+	if (unlikely(size != 49 || rd[0] != 0x01))
+		return 0;
+
+	if (sc->quirks & SIXAXIS_CONTROLLER) {
+		/*
+		 * When connected via Bluetooth the Sixaxis occasionally sends
+		 * a report with the second byte 0xff and the rest zeroed.
+		 *
+		 * This report does not reflect the actual state of the
+		 * controller must be ignored to avoid generating false input
+		 * events.
+		 */
+		if (rd[1] == 0xff)
+			return -EINVAL;
+
+		/*
+		 * Sixaxis HID report has acclerometers/gyro with MSByte first, this
+		 * has to be BYTE_SWAPPED before passing up to joystick interface
+		 */
+		swap(rd[41], rd[42]);
+		swap(rd[43], rd[44]);
+		swap(rd[45], rd[46]);
+		swap(rd[47], rd[48]);
+	}
 
 	/*
 	 * The sixaxis is charging if the battery value is 0xee
@@ -993,12 +1020,17 @@ static void sixaxis_parse_report(struct sony_sc *sc, u8 *rd, int size)
 
 		input_sync(sc->sensor_dev);
 	}
+
+	return 0;
 }
 
-static void nsg_mrxu_parse_report(struct sony_sc *sc, u8 *rd, int size)
+static int nsg_mrxu_raw_event(struct sony_sc *sc, u8 *rd, int size)
 {
 	int n, offset, relx, rely;
 	u8 active;
+
+	if (unlikely(size < 12 || rd[0] != 0x02))
+		return 0;
 
 	/*
 	 * The NSG-MRxU multi-touch trackpad data starts at offset 1 and
@@ -1067,10 +1099,33 @@ static void nsg_mrxu_parse_report(struct sony_sc *sc, u8 *rd, int size)
 	input_mt_sync_frame(sc->touchpad);
 
 	input_sync(sc->touchpad);
+	return 0;
 }
 
-static void rb4_ps4_guitar_parse_report(struct sony_sc *sc, u8 *rd, int size)
+static int rb3_pro_instrument_raw_event(struct sony_sc *sc, u8 *rd, int size)
 {
+	/* Rock Band 3 PS3 Pro instruments set rd[24] to 0xE0 when they're
+	 * sending full reports, and 0x02 when only sending navigation.
+	 */
+	if (size < 25 || rd[24] != 0x02)
+		return 0;
+
+	/* Only attempt to enable full report every 8 seconds */
+	if (time_after(jiffies, sc->rb3_pro_poke_jiffies)) {
+		sc->rb3_pro_poke_jiffies = jiffies + secs_to_jiffies(8);
+		rb3_pro_instrument_enable_full_report(sc);
+	}
+
+	return 0;
+}
+
+static int rb4_ps4_guitar_raw_event(struct sony_sc *sc, u8 *rd, int size)
+{
+	const int expected_size = (sc->quirks & RB4_GUITAR_PS4_BT) ? 78 : 64;
+
+	if (unlikely(size != expected_size || rd[0] != 0x01))
+		return 0;
+
 	/*
 	 * Rock Band 4 PS4 guitars have whammy and
 	 * tilt functionality, they're located at
@@ -1084,15 +1139,19 @@ static void rb4_ps4_guitar_parse_report(struct sony_sc *sc, u8 *rd, int size)
 	input_report_abs(sc->input_dev, ABS_RZ, rd[45]);
 
 	input_sync(sc->input_dev);
+	return 0;
 }
 
-static void rb4_ps5_guitar_parse_report(struct sony_sc *sc, u8 *rd, int size)
+static int rb4_ps5_guitar_raw_event(struct sony_sc *sc, u8 *rd, int size)
 {
 	u8 charging_status;
 	u8 battery_data;
 	u8 battery_capacity;
 	u8 battery_status;
 	unsigned long flags;
+
+	if (unlikely(size != 64 || rd[0] != 0x01))
+		return 0;
 
 	/*
 	 * Rock Band 4 PS5 guitars have whammy and
@@ -1138,65 +1197,22 @@ static void rb4_ps5_guitar_parse_report(struct sony_sc *sc, u8 *rd, int size)
 	spin_unlock_irqrestore(&sc->lock, flags);
 
 	input_sync(sc->input_dev);
+	return 0;
 }
 
 static int sony_raw_event(struct hid_device *hdev, struct hid_report *report,
 		u8 *rd, int size)
 {
 	struct sony_sc *sc = hid_get_drvdata(hdev);
+	int ret;
 
-	/*
-	 * Sixaxis HID report has acclerometers/gyro with MSByte first, this
-	 * has to be BYTE_SWAPPED before passing up to joystick interface
-	 */
-	if ((sc->quirks & SIXAXIS_CONTROLLER) && rd[0] == 0x01 && size == 49) {
-		/*
-		 * When connected via Bluetooth the Sixaxis occasionally sends
-		 * a report with the second byte 0xff and the rest zeroed.
-		 *
-		 * This report does not reflect the actual state of the
-		 * controller must be ignored to avoid generating false input
-		 * events.
-		 */
-		if (rd[1] == 0xff)
-			return -EINVAL;
-
-		swap(rd[41], rd[42]);
-		swap(rd[43], rd[44]);
-		swap(rd[45], rd[46]);
-		swap(rd[47], rd[48]);
-
-		sixaxis_parse_report(sc, rd, size);
-	} else if ((sc->quirks & MOTION_CONTROLLER_BT) && rd[0] == 0x01 && size == 49) {
-		sixaxis_parse_report(sc, rd, size);
-	} else if ((sc->quirks & NAVIGATION_CONTROLLER) && rd[0] == 0x01 && size == 49) {
-		sixaxis_parse_report(sc, rd, size);
-	} else if ((sc->quirks & NSG_MRXU_REMOTE) && rd[0] == 0x02 && size >= 12) {
-		nsg_mrxu_parse_report(sc, rd, size);
-		return 1;
-	} else if ((sc->quirks & RB4_GUITAR_PS4_USB) && rd[0] == 0x01 && size == 64) {
-		rb4_ps4_guitar_parse_report(sc, rd, size);
-		return 1;
-	} else if ((sc->quirks & RB4_GUITAR_PS4_BT) && rd[0] == 0x01 && size == 78) {
-		rb4_ps4_guitar_parse_report(sc, rd, size);
-		return 1;
-	} else if ((sc->quirks & RB4_GUITAR_PS5) && rd[0] == 0x01 && size == 64) {
-		rb4_ps5_guitar_parse_report(sc, rd, size);
-		return 1;
+	if (sc->raw_event) {
+		ret = sc->raw_event(sc, rd, size);
+		if (unlikely(ret < 0))
+			return ret;
 	}
 
-	/* Rock Band 3 PS3 Pro instruments set rd[24] to 0xE0 when they're
-	 * sending full reports, and 0x02 when only sending navigation.
-	 */
-	if ((sc->quirks & RB3_PRO_INSTRUMENT) && size >= 25 && rd[24] == 0x02) {
-		/* Only attempt to enable full report every 8 seconds */
-		if (time_after(jiffies, sc->rb3_pro_poke_jiffies)) {
-			sc->rb3_pro_poke_jiffies = jiffies + secs_to_jiffies(8);
-			rb3_pro_instrument_enable_full_report(sc);
-		}
-	}
-
-	if (sc->defer_initialization) {
+	if (unlikely(sc->defer_initialization)) {
 		sc->defer_initialization = 0;
 		sony_schedule_work(sc, SONY_WORKER_STATE);
 	}
@@ -1256,7 +1272,7 @@ static int sony_mapping(struct hid_device *hdev, struct hid_input *hi,
 	if (sc->quirks & DJH_TURNTABLE)
 		return djh_turntable_mapping(hdev, hi, field, usage, bit, max);
 
-	if (sc->quirks & (RB4_GUITAR_PS4_USB | RB4_GUITAR_PS4_BT))
+	if (sc->quirks & RB4_GUITAR_PS4)
 		return rb4_guitar_mapping(hdev, hi, field, usage, bit, max);
 
 	if (sc->quirks & RB4_GUITAR_PS5)
@@ -2110,6 +2126,12 @@ static void sony_release_device_id(struct sony_sc *sc)
 	}
 }
 
+static inline void sony_init_raw_event_handler(struct sony_sc *sc,
+				int (*raw_event)(struct sony_sc *, u8 *, int))
+{
+	sc->raw_event = raw_event;
+}
+
 static inline void sony_init_output_report(struct sony_sc *sc,
 				void (*send_output_report)(struct sony_sc *))
 {
@@ -2185,6 +2207,7 @@ static int sony_input_configured(struct hid_device *hdev,
 			goto err_stop;
 		}
 
+		sony_init_raw_event_handler(sc, sixaxis_raw_event);
 		sony_init_output_report(sc, sixaxis_send_output_report);
 	} else if (sc->quirks & NAVIGATION_CONTROLLER_BT) {
 		/*
@@ -2199,6 +2222,7 @@ static int sony_input_configured(struct hid_device *hdev,
 			goto err_stop;
 		}
 
+		sony_init_raw_event_handler(sc, sixaxis_raw_event);
 		sony_init_output_report(sc, sixaxis_send_output_report);
 	} else if (sc->quirks & RB3_PRO_INSTRUMENT) {
 		/*
@@ -2213,6 +2237,8 @@ static int sony_input_configured(struct hid_device *hdev,
 		 */
 		hdev->quirks |= HID_QUIRK_NO_OUTPUT_REPORTS_ON_INTR_EP;
 		hdev->quirks |= HID_QUIRK_SKIP_OUTPUT_REPORT_ID;
+
+		sony_init_raw_event_handler(sc, rb3_pro_instrument_raw_event);
 	} else if (sc->quirks & SIXAXIS_CONTROLLER_USB) {
 		/*
 		 * The Sony Sixaxis does not handle HID Output Reports on the
@@ -2237,6 +2263,7 @@ static int sony_input_configured(struct hid_device *hdev,
 			goto err_stop;
 		}
 
+		sony_init_raw_event_handler(sc, sixaxis_raw_event);
 		sony_init_output_report(sc, sixaxis_send_output_report);
 	} else if (sc->quirks & SIXAXIS_CONTROLLER_BT) {
 		/*
@@ -2258,6 +2285,7 @@ static int sony_input_configured(struct hid_device *hdev,
 			goto err_stop;
 		}
 
+		sony_init_raw_event_handler(sc, sixaxis_raw_event);
 		sony_init_output_report(sc, sixaxis_send_output_report);
 	} else if (sc->quirks & NSG_MRXU_REMOTE) {
 		/*
@@ -2273,8 +2301,15 @@ static int sony_input_configured(struct hid_device *hdev,
 			goto err_stop;
 		}
 
+		sony_init_raw_event_handler(sc, nsg_mrxu_raw_event);
 	} else if (sc->quirks & MOTION_CONTROLLER) {
+		if (sc->quirks & MOTION_CONTROLLER_BT)
+			sony_init_raw_event_handler(sc, sixaxis_raw_event);
 		sony_init_output_report(sc, motion_send_output_report);
+	} else if (sc->quirks & RB4_GUITAR_PS4) {
+		sony_init_raw_event_handler(sc, rb4_ps4_guitar_raw_event);
+	} else if (sc->quirks & RB4_GUITAR_PS5) {
+		sony_init_raw_event_handler(sc, rb4_ps5_guitar_raw_event);
 	}
 
 	if (sc->quirks & SONY_LED_SUPPORT) {
