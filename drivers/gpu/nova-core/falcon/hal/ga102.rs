@@ -32,17 +32,17 @@ use crate::{
 use super::FalconHal;
 
 fn select_core_ga102<E: FalconEngine>(bar: Bar0<'_>) -> Result {
-    let bcr_ctrl = bar.read(crate::regs::NV_PRISCV_RISCV_BCR_CTRL::of::<E>());
+    let bcr_ctrl = bar.read(regs::NV_PRISCV_RISCV_BCR_CTRL::of::<E>());
     if bcr_ctrl.core_select() != PeregrineCoreSelect::Falcon {
         bar.write(
             WithBase::of::<E>(),
-            crate::regs::NV_PRISCV_RISCV_BCR_CTRL::zeroed()
+            regs::NV_PRISCV_RISCV_BCR_CTRL::zeroed()
                 .with_core_select(PeregrineCoreSelect::Falcon),
         );
 
         // TIMEOUT: falcon core should take less than 10ms to report being enabled.
         read_poll_timeout(
-            || Ok(bar.read(crate::regs::NV_PRISCV_RISCV_BCR_CTRL::of::<E>())),
+            || Ok(bar.read(regs::NV_PRISCV_RISCV_BCR_CTRL::of::<E>())),
             |r| r.valid(),
             Delta::ZERO,
             Delta::from_millis(10),
@@ -138,7 +138,7 @@ impl<E: FalconEngine> FalconHal<E> for Ga102<E> {
     }
 
     fn is_riscv_active(&self, bar: Bar0<'_>) -> bool {
-        bar.read(crate::regs::NV_PRISCV_RISCV_CPUCTL::of::<E>())
+        bar.read(regs::NV_PRISCV_RISCV_CPUCTL::of::<E>())
             .active_stat()
     }
 

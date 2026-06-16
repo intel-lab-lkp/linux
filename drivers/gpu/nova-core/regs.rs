@@ -23,9 +23,7 @@ use crate::{
         FalconFbifTarget,
         FalconMem,
         FalconSecurityModel,
-        PFalcon2Base,
-        PFalconBase,
-        PeregrineCoreSelect, //
+        PFalconBase, //
     },
     gpu::{
         Architecture,
@@ -490,30 +488,6 @@ impl NV_PFALCON_FALCON_HWCFG2 {
     /// Returns `true` if memory scrubbing is completed.
     pub(crate) fn mem_scrubbing_done(self) -> bool {
         !self.mem_scrubbing()
-    }
-}
-
-// PRISCV
-
-register! {
-    /// RISC-V status register for debug (Turing and GA100 only).
-    /// Reflects current RISC-V core status.
-    pub(crate) NV_PRISCV_RISCV_CORE_SWITCH_RISCV_STATUS(u32) @ PFalcon2Base + 0x00000240 {
-        /// RISC-V core active/inactive status.
-        0:0     active_stat => bool;
-    }
-
-    /// GA102 and later.
-    pub(crate) NV_PRISCV_RISCV_CPUCTL(u32) @ PFalcon2Base + 0x00000388 {
-        7:7     active_stat => bool;
-        0:0     halted => bool;
-    }
-
-    /// GA102 and later.
-    pub(crate) NV_PRISCV_RISCV_BCR_CTRL(u32) @ PFalcon2Base + 0x00000668 {
-        8:8     br_fetch => bool;
-        4:4     core_select => PeregrineCoreSelect;
-        0:0     valid => bool;
     }
 }
 

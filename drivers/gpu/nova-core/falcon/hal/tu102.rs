@@ -18,9 +18,9 @@ use crate::{
         hal::LoadMethod,
         Falcon,
         FalconBromParams,
-        FalconEngine, //
+        FalconEngine,
+        regs, //
     },
-    regs, //
 };
 
 use super::FalconHal;
@@ -58,7 +58,7 @@ impl<E: FalconEngine> FalconHal<E> for Tu102<E> {
     fn reset_wait_mem_scrubbing(&self, bar: Bar0<'_>) -> Result {
         // TIMEOUT: memory scrubbing should complete in less than 10ms.
         read_poll_timeout(
-            || Ok(bar.read(regs::NV_PFALCON_FALCON_DMACTL::of::<E>())),
+            || Ok(bar.read(crate::regs::NV_PFALCON_FALCON_DMACTL::of::<E>())),
             |r| r.mem_scrubbing_done(),
             Delta::ZERO,
             Delta::from_millis(10),
@@ -67,7 +67,7 @@ impl<E: FalconEngine> FalconHal<E> for Tu102<E> {
     }
 
     fn reset_eng(&self, bar: Bar0<'_>) -> Result {
-        regs::NV_PFALCON_FALCON_ENGINE::reset_engine::<E>(bar);
+        crate::regs::NV_PFALCON_FALCON_ENGINE::reset_engine::<E>(bar);
         self.reset_wait_mem_scrubbing(bar)?;
 
         Ok(())
