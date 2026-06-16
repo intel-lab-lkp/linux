@@ -602,11 +602,17 @@ static int stm32_rifsc_conf_dump_show(struct seq_file *s, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(stm32_rifsc_conf_dump);
 
+static void stm32_rifsc_remove_debugfs(void *data)
+{
+	debugfs_remove(data);
+}
+
 static int stm32_rifsc_register_debugfs(struct stm32_firewall_controller *rifsc_controller,
 					u32 nb_risup, u32 nb_rimu, u32 nb_risal)
 {
 	struct rifsc_dbg_private *rifsc_priv;
 	struct dentry *root = NULL;
+	struct dentry *file;
 
 	rifsc_priv = devm_kzalloc(rifsc_controller->dev, sizeof(*rifsc_priv), GFP_KERNEL);
 	if (!rifsc_priv)
@@ -625,9 +631,13 @@ static int stm32_rifsc_register_debugfs(struct stm32_firewall_controller *rifsc_
 	if (IS_ERR(root))
 		return PTR_ERR(root);
 
-	debugfs_create_file("rifsc", 0444, root, rifsc_priv, &stm32_rifsc_conf_dump_fops);
+	file = debugfs_create_file("rifsc", 0444, root, rifsc_priv,
+				   &stm32_rifsc_conf_dump_fops);
+	if (IS_ERR(file))
+		return PTR_ERR(file);
 
-	return 0;
+	return devm_add_action_or_reset(rifsc_controller->dev,
+					stm32_rifsc_remove_debugfs, file);
 }
 #endif /* defined(CONFIG_DEBUG_FS) */
 
