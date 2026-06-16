@@ -37,6 +37,7 @@ use crate::{
             GspHal,
             UnloadBundle, //
         },
+        regs,
         sequencer::{
             GspSequencer,
             GspSequencerParams, //
@@ -44,7 +45,6 @@ use crate::{
         Gsp,
         GspFwWprMeta, //
     },
-    regs,
     vbios::Vbios, //
 };
 
@@ -141,7 +141,7 @@ impl UnloadBundle for Sec2UnloadBundle {
             .inspect_err(|e| dev_err!(dev, "FWSEC-SB failed to run: {:?}\n", e));
 
         // Remove WPR2 region if set.
-        let wpr2_hi = bar.read(regs::NV_PFB_PRI_MMU_WPR2_ADDR_HI);
+        let wpr2_hi = bar.read(crate::regs::NV_PFB_PRI_MMU_WPR2_ADDR_HI);
         let booter_unloader_res = (|| {
             if !wpr2_hi.is_wpr2_set() {
                 return Ok(());
@@ -160,7 +160,7 @@ impl UnloadBundle for Sec2UnloadBundle {
             }
 
             // Confirm that the WPR2 region has been removed.
-            let wpr2_hi = bar.read(regs::NV_PFB_PRI_MMU_WPR2_ADDR_HI);
+            let wpr2_hi = bar.read(crate::regs::NV_PFB_PRI_MMU_WPR2_ADDR_HI);
             if wpr2_hi.is_wpr2_set() {
                 dev_err!(
                     dev,
@@ -189,7 +189,7 @@ fn run_fwsec_frts(
 ) -> Result {
     // Check that the WPR2 region does not already exist - if it does, we cannot run
     // FWSEC-FRTS until the GPU is reset.
-    if bar.read(regs::NV_PFB_PRI_MMU_WPR2_ADDR_HI).higher_bound() != 0 {
+    if bar.read(crate::regs::NV_PFB_PRI_MMU_WPR2_ADDR_HI).higher_bound() != 0 {
         dev_err!(
             dev,
             "WPR2 region already exists - GPU needs to be reset to proceed\n"
@@ -234,8 +234,8 @@ fn run_fwsec_frts(
 
     // Check that the WPR2 region has been created as we requested.
     let (wpr2_lo, wpr2_hi) = (
-        bar.read(regs::NV_PFB_PRI_MMU_WPR2_ADDR_LO).lower_bound(),
-        bar.read(regs::NV_PFB_PRI_MMU_WPR2_ADDR_HI).higher_bound(),
+        bar.read(crate::regs::NV_PFB_PRI_MMU_WPR2_ADDR_LO).lower_bound(),
+        bar.read(crate::regs::NV_PFB_PRI_MMU_WPR2_ADDR_HI).higher_bound(),
     );
 
     match (wpr2_lo, wpr2_hi) {
