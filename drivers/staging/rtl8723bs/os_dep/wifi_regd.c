@@ -74,7 +74,7 @@ static void _rtw_reg_apply_flags(struct wiphy *wiphy)
 		freq = rtw_ieee80211_channel_to_frequency(channel);
 		ch = ieee80211_get_channel(wiphy, freq);
 		if (ch) {
-			if (channel_set[i].ScanType == SCAN_PASSIVE)
+			if (channel_set[i].scan_type == SCAN_PASSIVE)
 				ch->flags = IEEE80211_CHAN_NO_IR;
 			else
 				ch->flags = 0;

@@ -346,18 +346,18 @@ static u8 init_channel_set(struct adapter *padapter, u8 ChannelPlan, struct rt_c
 				(ChannelPlan == RT_CHANNEL_DOMAIN_GLOBAL_NULL)) {
 				if (channel_set[chanset_size].channel_num >= 1 &&
 				    channel_set[chanset_size].channel_num <= 11)
-					channel_set[chanset_size].ScanType = SCAN_ACTIVE;
+					channel_set[chanset_size].scan_type = SCAN_ACTIVE;
 				else if (channel_set[chanset_size].channel_num  >= 12 &&
 					 channel_set[chanset_size].channel_num  <= 14)
-					channel_set[chanset_size].ScanType  = SCAN_PASSIVE;
+					channel_set[chanset_size].scan_type  = SCAN_PASSIVE;
 			} else if (ChannelPlan == RT_CHANNEL_DOMAIN_WORLD_WIDE_13 ||
 				 Index2G == RT_CHANNEL_DOMAIN_2G_WORLD) { /*  channel 12~13, passive scan */
 				if (channel_set[chanset_size].channel_num <= 11)
-					channel_set[chanset_size].ScanType = SCAN_ACTIVE;
+					channel_set[chanset_size].scan_type = SCAN_ACTIVE;
 				else
-					channel_set[chanset_size].ScanType = SCAN_PASSIVE;
+					channel_set[chanset_size].scan_type = SCAN_PASSIVE;
 			} else
-				channel_set[chanset_size].ScanType = SCAN_ACTIVE;
+				channel_set[chanset_size].scan_type = SCAN_ACTIVE;
 
 			chanset_size++;
 		}
@@ -3689,7 +3689,7 @@ unsigned int send_beacon(struct adapter *padapter)
 void site_survey(struct adapter *padapter)
 {
 	unsigned char survey_channel = 0, val8;
-	enum rt_scan_type	ScanType = SCAN_PASSIVE;
+	enum rt_scan_type	scan_type = SCAN_PASSIVE;
 	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
 	struct mlme_ext_info *pmlmeinfo = &pmlmeext->mlmext_info;
 	u32 initialgain = 0;
@@ -3701,7 +3701,8 @@ void site_survey(struct adapter *padapter)
 		if (pmlmeext->sitesurvey_res.channel_idx < pmlmeext->sitesurvey_res.ch_num) {
 			ch = &pmlmeext->sitesurvey_res.ch[pmlmeext->sitesurvey_res.channel_idx];
 			survey_channel = ch->hw_value;
-			ScanType = (ch->flags & RTW_IEEE80211_CHAN_PASSIVE_SCAN) ? SCAN_PASSIVE : SCAN_ACTIVE;
+			scan_type = (ch->flags & RTW_IEEE80211_CHAN_PASSIVE_SCAN) ?
+				SCAN_PASSIVE : SCAN_ACTIVE;
 		}
 	}
 
@@ -3712,7 +3713,7 @@ void site_survey(struct adapter *padapter)
 		else
 			r8723bs_select_channel(padapter, survey_channel);
 
-		if (ScanType == SCAN_ACTIVE) { /* obey the channel plan setting... */
+		if (scan_type == SCAN_ACTIVE) { /* obey the channel plan setting... */
 			{
 				int i;
 
@@ -4185,18 +4186,18 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 
 				if (chplan_sta[i].channel_num == chplan_ap.Channel[j]) {
 					chplan_new[k].channel_num = chplan_ap.Channel[j];
-					chplan_new[k].ScanType = SCAN_ACTIVE;
+					chplan_new[k].scan_type = SCAN_ACTIVE;
 					i++;
 					j++;
 					k++;
 				} else if (chplan_sta[i].channel_num < chplan_ap.Channel[j]) {
 					chplan_new[k].channel_num = chplan_sta[i].channel_num;
-					chplan_new[k].ScanType = SCAN_PASSIVE;
+					chplan_new[k].scan_type = SCAN_PASSIVE;
 					i++;
 					k++;
 				} else if (chplan_sta[i].channel_num > chplan_ap.Channel[j]) {
 					chplan_new[k].channel_num = chplan_ap.Channel[j];
-					chplan_new[k].ScanType = SCAN_ACTIVE;
+					chplan_new[k].scan_type = SCAN_ACTIVE;
 					j++;
 					k++;
 				}
@@ -4207,7 +4208,7 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 				(chplan_sta[i].channel_num != 0) &&
 				(chplan_sta[i].channel_num <= 14)) {
 				chplan_new[k].channel_num = chplan_sta[i].channel_num;
-				chplan_new[k].ScanType = SCAN_PASSIVE;
+				chplan_new[k].scan_type = SCAN_PASSIVE;
 				i++;
 				k++;
 			}
@@ -4215,7 +4216,7 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 			/*  add channel AP supported */
 			while ((j < chplan_ap.Len) && (chplan_ap.Channel[j] <= 14)) {
 				chplan_new[k].channel_num = chplan_ap.Channel[j];
-				chplan_new[k].ScanType = SCAN_ACTIVE;
+				chplan_new[k].scan_type = SCAN_ACTIVE;
 				j++;
 				k++;
 			}
@@ -4225,7 +4226,7 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 				(chplan_sta[i].channel_num != 0) &&
 				(chplan_sta[i].channel_num <= 14)) {
 				chplan_new[k].channel_num = chplan_sta[i].channel_num;
-				chplan_new[k].ScanType = chplan_sta[i].ScanType;
+				chplan_new[k].scan_type = chplan_sta[i].scan_type;
 				i++;
 				k++;
 			}
@@ -4244,8 +4245,8 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 	i = 0;
 	while ((i < MAX_CHANNEL_NUM) && (chplan_new[i].channel_num != 0)) {
 		if (chplan_new[i].channel_num == channel) {
-			if (chplan_new[i].ScanType == SCAN_PASSIVE)
-				chplan_new[i].ScanType = SCAN_ACTIVE;
+			if (chplan_new[i].scan_type == SCAN_PASSIVE)
+				chplan_new[i].scan_type = SCAN_ACTIVE;
 			break;
 		}
 		i++;
@@ -5315,7 +5316,7 @@ static int rtw_scan_ch_decision(struct adapter *padapter, struct rtw_ieee80211_c
 
 			memcpy(&out[j], &in[i], sizeof(struct rtw_ieee80211_channel));
 
-			if (pmlmeext->channel_set[set_idx].ScanType == SCAN_PASSIVE)
+			if (pmlmeext->channel_set[set_idx].scan_type == SCAN_PASSIVE)
 				out[j].flags |= RTW_IEEE80211_CHAN_PASSIVE_SCAN;
 
 			j++;
@@ -5337,7 +5338,7 @@ static int rtw_scan_ch_decision(struct adapter *padapter, struct rtw_ieee80211_c
 
 			out[j].hw_value = pmlmeext->channel_set[i].channel_num;
 
-			if (pmlmeext->channel_set[i].ScanType == SCAN_PASSIVE)
+			if (pmlmeext->channel_set[i].scan_type == SCAN_PASSIVE)
 				out[j].flags |= RTW_IEEE80211_CHAN_PASSIVE_SCAN;
 
 			j++;
