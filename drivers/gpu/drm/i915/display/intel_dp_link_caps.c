@@ -351,6 +351,24 @@ int intel_dp_link_config_index(struct intel_dp *intel_dp, int link_rate, int lan
 	return -1;
 }
 
+/**
+ * intel_dp_link_caps_reset - reset link capability restrictions
+ * @link_caps: link capabilities state
+ *
+ * Reset all current restrictions except for the user requested forced
+ * parameters, thus updating the set of allowed configurations and the
+ * derived maximum link information accordingly.
+ *
+ * This function is regularly called after a sink is connected, either
+ * for the first time to the connector or after a previous sink was
+ * disconnected from it, and intel_dp_link_caps_update() was called.
+ */
+void intel_dp_link_caps_reset(struct intel_dp_link_caps *link_caps)
+{
+	/* TODO: Update the maximum link information. */
+	reset_max_link_limits_no_update(link_caps);
+}
+
 static int i915_dp_force_link_rate_show(struct seq_file *m, void *data)
 {
 	struct intel_connector *connector = to_intel_connector(m->private);
