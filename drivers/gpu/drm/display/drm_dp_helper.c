@@ -762,6 +762,27 @@ ssize_t drm_dp_dpcd_read(struct drm_dp_aux *aux, unsigned int offset,
 		ret = drm_dp_dpcd_access(aux, DP_AUX_NATIVE_READ, offset,
 					 buffer, size);
 
+	if (ret < 0 && size > 1) {
+		size_t i;
+		u8 *buf = buffer;
+		int err;
+
+		/*
+		 * Workaround for USB-C hubs/adapters with buggy firmware that fail
+		 * multi-byte AUX reads but work with single-byte reads.
+		 * Known affected devices:
+		 * - Lenovo USB-C to VGA adapter (VIA VL817, idVendor=17ef, idProduct=7217)
+		 * - Dell DA310 USB-C hub (idVendor=413c, idProduct=c010)
+		 * Attempt byte-by-byte reading as a fallback.
+		 */
+		for (i = 0; i < size; i++) {
+			err = drm_dp_dpcd_read_byte(aux, offset + i, &buf[i]);
+			if (err < 0)
+				return err;
+		}
+		ret = size;
+	}
+
 	drm_dp_dump_access(aux, DP_AUX_NATIVE_READ, offset, buffer, ret);
 	return ret;
 }
