@@ -58,6 +58,7 @@ struct cec_notifier;
 struct drm_printer;
 struct intel_connector;
 struct intel_ddi_buf_trans;
+struct intel_dp_link_caps;
 struct intel_dp_link_training;
 struct intel_fbc;
 struct intel_global_objs_state;
@@ -1867,6 +1868,7 @@ struct intel_dp {
 		int force_lane_count;
 		int force_rate;
 		struct intel_dp_link_training *training;
+		struct intel_dp_link_caps *caps;
 	} link;
 	bool reset_link_params;
 	int mso_link_count;
