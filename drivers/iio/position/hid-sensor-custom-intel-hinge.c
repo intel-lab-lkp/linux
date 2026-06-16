@@ -190,7 +190,7 @@ static const struct iio_info hinge_info = {
  * and captured.
  */
 static int hinge_proc_event(struct hid_sensor_hub_device *hsdev,
-			    unsigned int usage_id, void *priv)
+			    u32 usage_id, void *priv)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(priv);
 	struct hinge_state *st = iio_priv(indio_dev);
@@ -209,7 +209,7 @@ static int hinge_proc_event(struct hid_sensor_hub_device *hsdev,
 
 /* Capture samples in local storage */
 static int hinge_capture_sample(struct hid_sensor_hub_device *hsdev,
-				unsigned int usage_id, size_t raw_len,
+				u32 usage_id, size_t raw_len,
 				char *raw_data, void *priv)
 {
 	struct iio_dev *indio_dev = platform_get_drvdata(priv);
@@ -236,7 +236,7 @@ static int hinge_capture_sample(struct hid_sensor_hub_device *hsdev,
 static int hinge_parse_report(struct platform_device *pdev,
 			      struct hid_sensor_hub_device *hsdev,
 			      struct iio_chan_spec *channels,
-			      unsigned int usage_id, struct hinge_state *st)
+			      u32 usage_id, struct hinge_state *st)
 {
 	int ret;
 	int i;
