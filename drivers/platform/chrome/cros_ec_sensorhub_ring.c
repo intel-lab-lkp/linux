@@ -436,6 +436,20 @@ cros_ec_sensor_ring_process_event(struct cros_ec_sensorhub *sensorhub,
 	const s64 now = cros_ec_get_time_ns();
 	int axis, async_flags;
 
+	/*
+	 * The sensor number is reported by the EC and is used unchecked below
+	 * to index sensorhub->batch_state[], which is only sensor_num entries
+	 * long. Reject an out-of-range value, as cros_sensorhub_send_sample()
+	 * already does, so a malformed FIFO event cannot drive an out-of-bounds
+	 * access.
+	 */
+	if (in->sensor_num >= sensorhub->sensor_num) {
+		dev_warn_ratelimited(sensorhub->dev,
+				     "Invalid sensor number %u from EC\n",
+				     in->sensor_num);
+		return false;
+	}
+
 	/* Do not populate the filter based on asynchronous events. */
 	async_flags = in->flags &
 		(MOTIONSENSE_SENSOR_FLAG_ODR | MOTIONSENSE_SENSOR_FLAG_FLUSH);
