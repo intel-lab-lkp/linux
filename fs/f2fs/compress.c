@@ -1487,8 +1487,18 @@ void f2fs_compress_write_end_io(struct bio *bio, struct folio *folio)
 	struct page *page = &folio->page;
 	struct f2fs_sb_info *sbi = bio->bi_private;
 	struct compress_io_ctx *cic = folio->private;
-	enum count_type type = WB_DATA_TYPE(folio, true);
+	unsigned int offset = folio->index & (cic->nr_rpages - 1);
+	struct page *last_page = NULL;
+	enum count_type type;
 	int i;
+
+	if (unlikely(!offset || offset >= cic->nr_rpages ||
+		     !cic->rpages[offset])) {
+		f2fs_bug_on(sbi, 1);
+		type = F2FS_WB_CP_DATA;
+	} else {
+		type = WB_DATA_TYPE(page_folio(cic->rpages[offset]), false);
+	}
 
 	if (unlikely(bio->bi_status != BLK_STS_OK))
 		mapping_set_error(cic->inode->i_mapping, -EIO);
@@ -1501,21 +1511,31 @@ void f2fs_compress_write_end_io(struct bio *bio, struct folio *folio)
 	}
 
 	for (i = 0; i < cic->nr_rpages; i++) {
-		WARN_ON(!cic->rpages[i]);
+		if (WARN_ON(!cic->rpages[i]))
+			continue;
+		last_page = cic->rpages[i];
+	}
+
+	for (i = 0; i < cic->nr_rpages; i++) {
+		if (!cic->rpages[i])
+			continue;
 		clear_page_private_gcing(cic->rpages[i]);
-		end_page_writeback(cic->rpages[i]);
+
+		if (cic->rpages[i] != last_page)
+			end_page_writeback(cic->rpages[i]);
 	}
 
 	page_array_free(sbi, cic->rpages, cic->nr_rpages);
 	kmem_cache_free(cic_entry_slab, cic);
 
 	/*
-	 * Make sure dec_page_count() is the last access to sbi.
-	 * Once it drops the F2FS_WB_CP_DATA counter to zero, the
-	 * unmount thread can proceed to destroy sbi and
-	 * sbi->page_array_slab.
+	 * Keep all sbi accesses before the last raw page writeback is
+	 * released, so an unmount thread cannot free sbi while this callback
+	 * is still using it.
 	 */
 	dec_page_count(sbi, type);
+	if (last_page)
+		end_page_writeback(last_page);
 }
 
 static int f2fs_write_raw_pages(struct compress_ctx *cc,

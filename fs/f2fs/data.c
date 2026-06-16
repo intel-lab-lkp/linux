@@ -1092,7 +1092,7 @@ next:
 	/* set submitted = true as a return value */
 	fio->submitted = 1;
 
-	type = WB_DATA_TYPE(bio_folio, fio->compressed_page);
+	type = WB_DATA_TYPE(fio->compressed_page ? fio->folio : bio_folio, false);
 	inc_page_count(sbi, type);
 
 	if (io->bio &&
