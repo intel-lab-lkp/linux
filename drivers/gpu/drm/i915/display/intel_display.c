@@ -7579,10 +7579,8 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	/* FIXME probably need to sequence this properly */
 	intel_program_dpkgc_latency(state);
 
-	/*
-	 * TODO: DC3co entry condition need to be checked before calling CMTG functions.
-	 */
-	intel_cmtg_program(state);
+	if (intel_display_power_dc3co_allowed(display))
+		intel_cmtg_program(state);
 
 	intel_wait_for_vblank_workers(state);
 
