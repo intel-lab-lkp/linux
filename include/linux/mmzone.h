@@ -2024,11 +2024,14 @@ struct mem_section {
 
 #ifdef CONFIG_SPARSEMEM_EXTREME
 #define SECTIONS_PER_ROOT       (PAGE_SIZE / sizeof (struct mem_section))
+#define SECTIONS_PER_ROOT_SHIFT ilog2(SECTIONS_PER_ROOT)
 #else
 #define SECTIONS_PER_ROOT	1
+#define SECTIONS_PER_ROOT_SHIFT 0
 #endif
 
-#define SECTION_NR_TO_ROOT(sec)	((sec) / SECTIONS_PER_ROOT)
+#define SECTION_NR_TO_ROOT(sec)	((sec) >> SECTIONS_PER_ROOT_SHIFT)
+#define SECTION_NR_IN_ROOT(sec)	((sec) & SECTION_ROOT_MASK)
 #define NR_SECTION_ROOTS	DIV_ROUND_UP(NR_MEM_SECTIONS, SECTIONS_PER_ROOT)
 #define SECTION_ROOT_MASK	(SECTIONS_PER_ROOT - 1)
 
@@ -2054,7 +2057,7 @@ static inline struct mem_section *__nr_to_section(unsigned long nr)
 	if (!mem_section || !mem_section[root])
 		return NULL;
 #endif
-	return &mem_section[root][nr & SECTION_ROOT_MASK];
+	return &mem_section[root][SECTION_NR_IN_ROOT(nr)];
 }
 extern size_t mem_section_usage_size(void);
 
