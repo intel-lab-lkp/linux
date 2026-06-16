@@ -933,6 +933,7 @@ static int unix_setsockopt(struct socket *sock, int level, int optname,
 {
 	struct unix_sock *u = unix_sk(sock->sk);
 	struct sock *sk = sock->sk;
+	int error;
 	int val;
 
 	if (level != SOL_SOCKET)
@@ -941,11 +942,9 @@ static int unix_setsockopt(struct socket *sock, int level, int optname,
 	if (!unix_custom_sockopt(optname))
 		return sock_setsockopt(sock, level, optname, optval, optlen);
 
-	if (optlen != sizeof(int))
-		return -EINVAL;
-
-	if (copy_from_sockptr(&val, optval, sizeof(val)))
-		return -EFAULT;
+	error = copy_safe_from_sockptr(&val, sizeof(val), optval, optlen);
+	if (error)
+		return error;
 
 	switch (optname) {
 	case SO_INQ:
