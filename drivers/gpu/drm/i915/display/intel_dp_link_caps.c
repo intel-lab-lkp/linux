@@ -46,6 +46,17 @@ struct intel_dp_link_caps {
 	 * disconnects.
 	 */
 	struct intel_dp_link_config forced_params;
+
+	/*
+	 * User set maximum limits. These limits constrain the currently
+	 * allowed set of configurations and are not adjusted when sink
+	 * capabilities change.
+	 *
+	 * max_limits.rate/lane_count may come from different allowed
+	 * configurations, i.e. the (max_limits.rate, max_limits.lane_count)
+	 * tuple itself may not be an allowed configuration.
+	 */
+	struct intel_dp_link_config max_limits;
 };
 
 /* Get length of common rates array potentially limited by max_rate. */
@@ -154,10 +165,7 @@ static int intel_dp_link_config_lane_count(const struct intel_dp_link_config_ent
 static void set_max_link_limits_no_update(struct intel_dp_link_caps *link_caps,
 					  const struct intel_dp_link_config *max_link_limits)
 {
-	struct intel_dp *intel_dp = link_caps->dp;
-
-	intel_dp->link.max_rate = max_link_limits->rate;
-	intel_dp->link.max_lane_count = max_link_limits->lane_count;
+	link_caps->max_limits = *max_link_limits;
 }
 
 static void reset_max_link_limits_no_update(struct intel_dp_link_caps *link_caps)
@@ -194,10 +202,7 @@ static void reset_max_link_limits_no_update(struct intel_dp_link_caps *link_caps
 void intel_dp_link_caps_get_max_limits(struct intel_dp_link_caps *link_caps,
 				       struct intel_dp_link_config *max_link_limits)
 {
-	struct intel_dp *intel_dp = link_caps->dp;
-
-	max_link_limits->rate = intel_dp->link.max_rate;
-	max_link_limits->lane_count = intel_dp->link.max_lane_count;
+	*max_link_limits = link_caps->max_limits;
 }
 
 /**
