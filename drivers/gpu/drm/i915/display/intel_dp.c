@@ -339,23 +339,19 @@ int intel_dp_max_source_lane_count(struct intel_digital_port *dig_port)
 
 /*
  * Theoretical max between source and sink.
- * Return %true if the max common lane count changed.
  */
-static bool intel_dp_set_max_common_lane_count(struct intel_dp *intel_dp)
+static int intel_dp_get_max_common_lane_count(struct intel_dp *intel_dp)
 {
 	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
 	int source_max = intel_dp_max_source_lane_count(dig_port);
 	int sink_max = intel_dp->max_sink_lane_count;
 	int lane_max = intel_tc_port_max_lane_count(dig_port);
 	int lttpr_max = drm_dp_lttpr_max_lane_count(intel_dp->lttpr_common_caps);
-	int old_max_common_lane_count = intel_dp->max_common_lane_count;
 
 	if (lttpr_max)
 		sink_max = min(sink_max, lttpr_max);
 
-	intel_dp->max_common_lane_count = min3(source_max, sink_max, lane_max);
-
-	return intel_dp->max_common_lane_count != old_max_common_lane_count;
+	return min3(source_max, sink_max, lane_max);
 }
 
 int intel_dp_max_common_lane_count(struct intel_dp *intel_dp)
@@ -705,12 +701,12 @@ static bool intel_dp_set_common_link_params(struct intel_dp *intel_dp)
 	int common_rates[DP_MAX_SUPPORTED_RATES];
 	bool params_changed = false;
 
-	if (intel_dp_set_max_common_lane_count(intel_dp))
-		params_changed = true;
+	intel_dp->max_common_lane_count = intel_dp_get_max_common_lane_count(intel_dp);
 
 	intel_dp_get_common_rates(intel_dp, common_rates, &num_common_rates);
 	if (intel_dp_link_caps_update(intel_dp,
-				      common_rates, num_common_rates))
+				      common_rates, num_common_rates,
+				      intel_dp_get_max_common_lane_count(intel_dp)))
 		params_changed = true;
 
 	return params_changed;

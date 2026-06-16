@@ -25,6 +25,7 @@ struct intel_dp_link_caps {
 	/* Rate, lane count caps common to source and sink. */
 	int num_rates;
 	int rates[DP_MAX_SUPPORTED_RATES];
+	int max_lane_count;
 
 	/* common rate,lane_count configs in bw order */
 	int num_configs;
@@ -169,7 +170,7 @@ static int link_config_cmp_by_bw(const void *a, const void *b, const void *p)
 
 /* Return %true if the supported link parameters have changed. */
 bool intel_dp_link_caps_update(struct intel_dp *intel_dp,
-			       const int *rates, int num_rates)
+			       const int *rates, int num_rates, int max_lane_count)
 {
 	struct intel_dp_link_caps *link_caps = intel_dp->link.caps;
 	struct intel_display *display = to_intel_display(intel_dp);
@@ -179,13 +180,13 @@ bool intel_dp_link_caps_update(struct intel_dp *intel_dp,
 	int i;
 	int j;
 
-	if (drm_WARN_ON(display->drm, !is_power_of_2(intel_dp_max_common_lane_count(intel_dp))))
+	if (drm_WARN_ON(display->drm, !is_power_of_2(max_lane_count)))
 		return false;
 
 	if (drm_WARN_ON(display->drm, num_rates > ARRAY_SIZE(link_caps->rates)))
 		return false;
 
-	num_common_lane_configs = ilog2(intel_dp_max_common_lane_count(intel_dp)) + 1;
+	num_common_lane_configs = ilog2(max_lane_count) + 1;
 
 	if (drm_WARN_ON(display->drm, num_rates * num_common_lane_configs >
 				    ARRAY_SIZE(link_caps->configs)))
@@ -197,8 +198,13 @@ bool intel_dp_link_caps_update(struct intel_dp *intel_dp,
 	    memcmp(rates, link_caps->rates, num_rates * sizeof(rates[0])))
 		link_params_changed = true;
 
+	if (max_lane_count != link_caps->max_lane_count)
+		link_params_changed = true;
+
 	memcpy(link_caps->rates, rates, num_rates * sizeof(rates[0]));
 	link_caps->num_rates = num_rates;
+	link_caps->max_lane_count = max_lane_count;
+
 	link_caps->num_configs = num_rates * num_common_lane_configs;
 
 	lc = &link_caps->configs[0];
@@ -216,7 +222,6 @@ bool intel_dp_link_caps_update(struct intel_dp *intel_dp,
 	       link_config_cmp_by_bw, NULL,
 	       intel_dp);
 
-	/* TODO: Also detect a change in the max lane count. */
 	return link_params_changed;
 }
 
