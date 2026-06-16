@@ -11080,6 +11080,7 @@ GREYBUS AUDIO PROTOCOLS DRIVERS
 M:	Vaibhav Agarwal <vaibhav.sr@gmail.com>
 M:	Mark Greer <mgreer@animalcreek.com>
 S:	Maintained
+F:	Documentation/devicetree/bindings/sound/toshiba,apb-dummy-codec.yaml
 F:	drivers/staging/greybus/audio_apbridgea.c
 F:	drivers/staging/greybus/audio_apbridgea.h
 F:	drivers/staging/greybus/audio_codec.c
