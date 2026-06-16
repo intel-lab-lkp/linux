@@ -32,7 +32,7 @@ do
   then
     # We failed to see the event and it is supported. Possibly the workload was
     # too small so retry with something longer.
-    result=$(perf stat --pfm-events "$p" perf bench internals synthesize 2>&1)
+    result=$(perf stat --pfm-events "$p" perf test -w noploop 0.1 2>&1)
     x=$?
     if test "$x" -ne "0"
     then
