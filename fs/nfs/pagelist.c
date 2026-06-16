@@ -428,42 +428,6 @@ static void nfs_page_assign_page(struct nfs_page *req, struct page *page, bool p
 }
 
 /**
- * nfs_page_create_from_page - Create an NFS read/write request.
- * @ctx: open context to use
- * @page: page to write
- * @pinned: true if page is pinned
- * @pgbase: starting offset within the page for the write
- * @offset: file offset for the write
- * @count: number of bytes to read/write
- *
- * The page must be locked by the caller. This makes sure we never
- * create two different requests for the same page.
- * User should ensure it is safe to sleep in this function.
- */
-struct nfs_page *nfs_page_create_from_page(struct nfs_open_context *ctx,
-					   struct page *page,
-					   bool pinned,
-					   unsigned int pgbase, loff_t offset,
-					   unsigned int count)
-{
-	struct nfs_lock_context *l_ctx = nfs_get_lock_context(ctx);
-	struct nfs_page *ret;
-
-	if (IS_ERR(l_ctx))
-		return ERR_CAST(l_ctx);
-	ret = nfs_page_create(l_ctx, pgbase, offset >> PAGE_SHIFT,
-			      offset_in_page(offset), count);
-	if (!IS_ERR(ret)) {
-		nfs_page_assign_page(ret, page, pinned);
-		if (pinned)
-			ret->wb_nr_pinned = 1;
-		nfs_page_group_init(ret, NULL);
-	}
-	nfs_put_lock_context(l_ctx);
-	return ret;
-}
-
-/**
  * nfs_page_create_from_folio - Create an NFS read/write request.
  * @ctx: open context to use
  * @folio: folio to write

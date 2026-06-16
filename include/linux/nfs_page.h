@@ -125,12 +125,6 @@ struct nfs_pageio_descriptor {
 /* arbitrarily selected limit to number of mirrors */
 #define NFS_PAGEIO_DESCRIPTOR_MIRROR_MAX 16
 
-extern struct nfs_page *nfs_page_create_from_page(struct nfs_open_context *ctx,
-						  struct page *page,
-						  bool pinned,
-						  unsigned int pgbase,
-						  loff_t offset,
-						  unsigned int count);
 extern struct nfs_page *nfs_page_create_from_folio(struct nfs_open_context *ctx,
 						   struct folio *folio,
 						   bool pinned,
