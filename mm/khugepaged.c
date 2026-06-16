@@ -2647,6 +2647,39 @@ immap_locked:
 
 rollback:
 	/* Something went wrong: roll back page cache changes */
+
+	/*
+	 * xas_create_range() above populated the xarray with nodes spanning
+	 * the whole collapse range, including empty slots for the holes
+	 * (nr_none entries).  On the success path these nodes are consumed by
+	 * the multi-index store of new_folio, and the nr_none handling further
+	 * up frees the ones covering the holes; but the error paths that branch
+	 * straight here do neither.  Prune the now-empty nodes explicitly,
+	 * otherwise they are leaked until the mapping is torn down -- one of
+	 * the two cases called out in the comment in clear_inode().
+	 *
+	 * A node can only be deleted once its slot count drops to zero, so
+	 * briefly store an XA_RETRY_ENTRY into each empty slot and then clear
+	 * it again: clearing the retry entry drops the count back to zero and
+	 * lets xas_store() -> xas_delete_node() free the node.  Slots that
+	 * still hold the original folios are left untouched.
+	 */
+	xas_lock_irq(&xas);
+	xas_set_order(&xas, start, 0);
+	for (index = start; index < end; index++) {
+		if (!xas_next(&xas)) {
+			xas_store(&xas, XA_RETRY_ENTRY);
+			if (xas_error(&xas))
+				break;
+		}
+	}
+	xas_set_order(&xas, start, 0);
+	for (index = start; index < end; index++) {
+		if (xas_next(&xas) == XA_RETRY_ENTRY)
+			xas_store(&xas, NULL);
+	}
+	xas_unlock_irq(&xas);
+
 	if (nr_none) {
 		xas_lock_irq(&xas);
 		mapping->nrpages -= nr_none;
