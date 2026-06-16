@@ -165,12 +165,7 @@ void __init reserve_crashkernel(void)
 			goto disable;
 		}
 	} else {
-		ret = memblock_reserve(crashk_res.start, crash_size);
-		if (unlikely(ret < 0)) {
-			pr_err("crashkernel reservation failed - "
-			       "memory is in use\n");
-			goto disable;
-		}
+		memblock_reserve(crashk_res.start, crash_size);
 	}
 
 	crashk_res.end = crashk_res.start + crash_size - 1;
