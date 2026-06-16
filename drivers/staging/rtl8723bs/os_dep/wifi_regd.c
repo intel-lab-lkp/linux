@@ -70,7 +70,7 @@ static void _rtw_reg_apply_flags(struct wiphy *wiphy)
 
 	/* channels apply by channel plans. */
 	for (i = 0; i < max_chan_nums; i++) {
-		channel = channel_set[i].ChannelNum;
+		channel = channel_set[i].channel_num;
 		freq = rtw_ieee80211_channel_to_frequency(channel);
 		ch = ieee80211_get_channel(wiphy, freq);
 		if (ch) {

@@ -172,12 +172,12 @@ int rtw_ch_set_search_ch(struct rt_channel_info *ch_set, const u32 ch)
 {
 	int i;
 
-	for (i = 0; ch_set[i].ChannelNum != 0; i++) {
-		if (ch == ch_set[i].ChannelNum)
+	for (i = 0; ch_set[i].channel_num != 0; i++) {
+		if (ch == ch_set[i].channel_num)
 			break;
 	}
 
-	if (i >= ch_set[i].ChannelNum)
+	if (i >= ch_set[i].channel_num)
 		return -1;
 	return i;
 }
@@ -262,7 +262,7 @@ static int has_channel(struct rt_channel_info *channel_set,
 	int i;
 
 	for (i = 0; i < chanset_size; i++)
-		if (channel_set[i].ChannelNum == chan)
+		if (channel_set[i].channel_num == chan)
 			return 1;
 
 	return 0;
@@ -339,17 +339,20 @@ static u8 init_channel_set(struct adapter *padapter, u8 ChannelPlan, struct rt_c
 
 	if (b2_4GBand) {
 		for (index = 0; index < RTW_ChannelPlan2G[Index2G].Len; index++) {
-			channel_set[chanset_size].ChannelNum = RTW_ChannelPlan2G[Index2G].Channel[index];
+			channel_set[chanset_size].channel_num =
+				RTW_ChannelPlan2G[Index2G].Channel[index];
 
 			if ((ChannelPlan == RT_CHANNEL_DOMAIN_GLOBAL_DOAMIN) ||/* Channel 1~11 is active, and 12~14 is passive */
 				(ChannelPlan == RT_CHANNEL_DOMAIN_GLOBAL_NULL)) {
-				if (channel_set[chanset_size].ChannelNum >= 1 && channel_set[chanset_size].ChannelNum <= 11)
+				if (channel_set[chanset_size].channel_num >= 1 &&
+				    channel_set[chanset_size].channel_num <= 11)
 					channel_set[chanset_size].ScanType = SCAN_ACTIVE;
-				else if ((channel_set[chanset_size].ChannelNum  >= 12 && channel_set[chanset_size].ChannelNum  <= 14))
+				else if (channel_set[chanset_size].channel_num  >= 12 &&
+					 channel_set[chanset_size].channel_num  <= 14)
 					channel_set[chanset_size].ScanType  = SCAN_PASSIVE;
 			} else if (ChannelPlan == RT_CHANNEL_DOMAIN_WORLD_WIDE_13 ||
 				 Index2G == RT_CHANNEL_DOMAIN_2G_WORLD) { /*  channel 12~13, passive scan */
-				if (channel_set[chanset_size].ChannelNum <= 11)
+				if (channel_set[chanset_size].channel_num <= 11)
 					channel_set[chanset_size].ScanType = SCAN_ACTIVE;
 				else
 					channel_set[chanset_size].ScanType = SCAN_PASSIVE;
@@ -4173,26 +4176,26 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 		if (pregistrypriv->wireless_mode & WIRELESS_11G) {
 			do {
 				if ((i == MAX_CHANNEL_NUM) ||
-					(chplan_sta[i].ChannelNum == 0) ||
-					(chplan_sta[i].ChannelNum > 14))
+					(chplan_sta[i].channel_num == 0) ||
+					(chplan_sta[i].channel_num > 14))
 					break;
 
 				if ((j == chplan_ap.Len) || (chplan_ap.Channel[j] > 14))
 					break;
 
-				if (chplan_sta[i].ChannelNum == chplan_ap.Channel[j]) {
-					chplan_new[k].ChannelNum = chplan_ap.Channel[j];
+				if (chplan_sta[i].channel_num == chplan_ap.Channel[j]) {
+					chplan_new[k].channel_num = chplan_ap.Channel[j];
 					chplan_new[k].ScanType = SCAN_ACTIVE;
 					i++;
 					j++;
 					k++;
-				} else if (chplan_sta[i].ChannelNum < chplan_ap.Channel[j]) {
-					chplan_new[k].ChannelNum = chplan_sta[i].ChannelNum;
+				} else if (chplan_sta[i].channel_num < chplan_ap.Channel[j]) {
+					chplan_new[k].channel_num = chplan_sta[i].channel_num;
 					chplan_new[k].ScanType = SCAN_PASSIVE;
 					i++;
 					k++;
-				} else if (chplan_sta[i].ChannelNum > chplan_ap.Channel[j]) {
-					chplan_new[k].ChannelNum = chplan_ap.Channel[j];
+				} else if (chplan_sta[i].channel_num > chplan_ap.Channel[j]) {
+					chplan_new[k].channel_num = chplan_ap.Channel[j];
 					chplan_new[k].ScanType = SCAN_ACTIVE;
 					j++;
 					k++;
@@ -4201,9 +4204,9 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 
 			/*  change AP not support channel to Passive scan */
 			while ((i < MAX_CHANNEL_NUM) &&
-				(chplan_sta[i].ChannelNum != 0) &&
-				(chplan_sta[i].ChannelNum <= 14)) {
-				chplan_new[k].ChannelNum = chplan_sta[i].ChannelNum;
+				(chplan_sta[i].channel_num != 0) &&
+				(chplan_sta[i].channel_num <= 14)) {
+				chplan_new[k].channel_num = chplan_sta[i].channel_num;
 				chplan_new[k].ScanType = SCAN_PASSIVE;
 				i++;
 				k++;
@@ -4211,7 +4214,7 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 
 			/*  add channel AP supported */
 			while ((j < chplan_ap.Len) && (chplan_ap.Channel[j] <= 14)) {
-				chplan_new[k].ChannelNum = chplan_ap.Channel[j];
+				chplan_new[k].channel_num = chplan_ap.Channel[j];
 				chplan_new[k].ScanType = SCAN_ACTIVE;
 				j++;
 				k++;
@@ -4219,9 +4222,9 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 		} else {
 			/*  keep original STA 2.4G channel plan */
 			while ((i < MAX_CHANNEL_NUM) &&
-				(chplan_sta[i].ChannelNum != 0) &&
-				(chplan_sta[i].ChannelNum <= 14)) {
-				chplan_new[k].ChannelNum = chplan_sta[i].ChannelNum;
+				(chplan_sta[i].channel_num != 0) &&
+				(chplan_sta[i].channel_num <= 14)) {
+				chplan_new[k].channel_num = chplan_sta[i].channel_num;
 				chplan_new[k].ScanType = chplan_sta[i].ScanType;
 				i++;
 				k++;
@@ -4239,8 +4242,8 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 	channel = bssid->configuration.ds_config;
 	chplan_new = pmlmeext->channel_set;
 	i = 0;
-	while ((i < MAX_CHANNEL_NUM) && (chplan_new[i].ChannelNum != 0)) {
-		if (chplan_new[i].ChannelNum == channel) {
+	while ((i < MAX_CHANNEL_NUM) && (chplan_new[i].channel_num != 0)) {
+		if (chplan_new[i].channel_num == channel) {
 			if (chplan_new[i].ScanType == SCAN_PASSIVE)
 				chplan_new[i].ScanType = SCAN_ACTIVE;
 			break;
@@ -5332,7 +5335,7 @@ static int rtw_scan_ch_decision(struct adapter *padapter, struct rtw_ieee80211_c
 				break;
 			}
 
-			out[j].hw_value = pmlmeext->channel_set[i].ChannelNum;
+			out[j].hw_value = pmlmeext->channel_set[i].channel_num;
 
 			if (pmlmeext->channel_set[i].ScanType == SCAN_PASSIVE)
 				out[j].flags |= RTW_IEEE80211_CHAN_PASSIVE_SCAN;
