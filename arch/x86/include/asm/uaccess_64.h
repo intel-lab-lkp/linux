@@ -51,6 +51,18 @@ static inline unsigned long __untagged_addr_remote(struct mm_struct *mm,
 	(__force __typeof__(addr))__untagged_addr_remote(mm, __addr);	\
 })
 
+/* Same as __untagged_addr_remote(), but usable without the mmap lock held. */
+static inline unsigned long __untagged_addr_remote_unlocked(struct mm_struct *mm,
+							    unsigned long addr)
+{
+	return addr & READ_ONCE((mm)->context.untag_mask);
+}
+
+#define untagged_addr_remote_unlocked(mm, addr)	({			\
+	unsigned long __addr = (__force unsigned long)(addr);		\
+	(__force __typeof__(addr))__untagged_addr_remote_unlocked(mm, __addr); \
+})
+
 #endif
 
 #define valid_user_address(x) \
