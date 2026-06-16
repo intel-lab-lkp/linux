@@ -1858,9 +1858,10 @@ static bool reduce_link_params_in_bw_order(struct intel_dp *intel_dp,
 
 	intel_dp_link_caps_get_forced_params(link_caps, &forced_params);
 
-	i = intel_dp_link_config_index(intel_dp, crtc_state->port_clock, crtc_state->lane_count);
+	i = intel_dp_link_config_index(intel_dp->link.caps,
+				       crtc_state->port_clock, crtc_state->lane_count);
 	for (i--; i >= 0; i--) {
-		intel_dp_link_config_get(intel_dp, i, &link_rate, &lane_count);
+		intel_dp_link_config_get(intel_dp->link.caps, i, &link_rate, &lane_count);
 
 		if ((forced_params.rate &&
 		     forced_params.rate != link_rate) ||

@@ -699,7 +699,7 @@ static bool intel_dp_set_common_link_params(struct intel_dp *intel_dp)
 	bool params_changed = false;
 
 	intel_dp_get_common_rates(intel_dp, common_rates, &num_common_rates);
-	if (intel_dp_link_caps_update(intel_dp,
+	if (intel_dp_link_caps_update(intel_dp->link.caps,
 				      common_rates, num_common_rates,
 				      intel_dp_get_max_common_lane_count(intel_dp)))
 		params_changed = true;
