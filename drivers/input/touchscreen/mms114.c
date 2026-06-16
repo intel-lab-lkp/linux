@@ -116,7 +116,7 @@ static int __mms114_read_reg(struct mms114_data *data, u8 reg,
 			"%s: i2c transfer failed (%d)\n", __func__, error);
 		return error < 0 ? error : -EIO;
 	}
-	udelay(MMS114_I2C_DELAY);
+	usleep_range(MMS114_I2C_DELAY, MMS114_I2C_DELAY + 50);
 
 	return 0;
 }
@@ -148,7 +148,7 @@ static int mms114_write_reg(struct mms114_data *data, u8 reg, u8 val)
 			"%s: i2c send failed (%d)\n", __func__, error);
 		return error < 0 ? error : -EIO;
 	}
-	udelay(MMS114_I2C_DELAY);
+	usleep_range(MMS114_I2C_DELAY, MMS114_I2C_DELAY + 50);
 
 	if (reg == MMS114_MODE_CONTROL)
 		data->cache_mode_control = val;
