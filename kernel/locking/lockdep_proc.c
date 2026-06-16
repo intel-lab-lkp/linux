@@ -170,7 +170,7 @@ static int lc_show(struct seq_file *m, void *v)
 
 	for (i = 0; i < chain->depth; i++) {
 		class = lock_chain_get_class(chain, i);
-		if (!class->key)
+		if (!class || !class->key)
 			continue;
 
 		seq_printf(m, "[%p] ", class->key);
