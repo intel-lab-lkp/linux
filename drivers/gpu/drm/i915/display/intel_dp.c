@@ -698,36 +698,20 @@ static void intel_dp_get_common_rates(struct intel_dp *intel_dp,
 	}
 }
 
-static bool intel_dp_set_common_rates(struct intel_dp *intel_dp)
-{
-	int num_old_common_rates = intel_dp->num_common_rates;
-	int old_common_rates[DP_MAX_SUPPORTED_RATES];
-
-	/* TODO: Add a struct containing both rates and number of rates. */
-	static_assert(__same_type(old_common_rates[0], intel_dp->common_rates[0]) &&
-		      sizeof(old_common_rates) == sizeof(intel_dp->common_rates));
-	memcpy(old_common_rates, intel_dp->common_rates,
-	       num_old_common_rates * sizeof(old_common_rates[0]));
-
-	intel_dp_get_common_rates(intel_dp, intel_dp->common_rates, &intel_dp->num_common_rates);
-
-	return num_old_common_rates != intel_dp->num_common_rates ||
-	       memcmp(old_common_rates, intel_dp->common_rates,
-		      num_old_common_rates * sizeof(old_common_rates[0]));
-}
-
 /* Return %true if any common link param changed. */
 static bool intel_dp_set_common_link_params(struct intel_dp *intel_dp)
 {
+	int num_common_rates;
+	int common_rates[DP_MAX_SUPPORTED_RATES];
 	bool params_changed = false;
-
-	if (intel_dp_set_common_rates(intel_dp))
-		params_changed = true;
 
 	if (intel_dp_set_max_common_lane_count(intel_dp))
 		params_changed = true;
 
-	intel_dp_link_caps_update(intel_dp);
+	intel_dp_get_common_rates(intel_dp, common_rates, &num_common_rates);
+	if (intel_dp_link_caps_update(intel_dp,
+				      common_rates, num_common_rates))
+		params_changed = true;
 
 	return params_changed;
 }
