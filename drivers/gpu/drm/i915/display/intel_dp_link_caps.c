@@ -160,6 +160,16 @@ static void set_max_link_limits_no_update(struct intel_dp_link_caps *link_caps,
 	intel_dp->link.max_lane_count = max_link_limits->lane_count;
 }
 
+static void reset_max_link_limits_no_update(struct intel_dp_link_caps *link_caps)
+{
+	struct intel_dp_link_config max_link_limits = {
+		.rate = intel_dp_max_common_rate(link_caps->dp),
+		.lane_count = intel_dp_link_caps_max_common_lane_count(link_caps),
+	};
+
+	set_max_link_limits_no_update(link_caps, &max_link_limits);
+}
+
 /**
  * intel_dp_link_caps_get_max_limits - get the current maximum link limits
  * @link_caps: link capabilities state
@@ -214,6 +224,18 @@ bool intel_dp_link_caps_set_max_limits(struct intel_dp_link_caps *link_caps,
 
 	/* TODO: validate max_link_limits */
 	return true;
+}
+
+/**
+ * intel_dp_link_caps_reset_max_limits - reset the current maximum link limits
+ * @link_caps: link capabilities state
+ *
+ * Reset the current maximum link limits to the maximum supported common link
+ * rate and lane count.
+ */
+void intel_dp_link_caps_reset_max_limits(struct intel_dp_link_caps *link_caps)
+{
+	reset_max_link_limits_no_update(link_caps);
 }
 
 static int intel_dp_link_config_bw(struct intel_dp *intel_dp,
