@@ -382,6 +382,14 @@ void iavf_configure_queues(struct iavf_adapter *adapter)
 
 	max_frame = LIBIE_MAX_RX_FRM_LEN(adapter->rx_rings->pp->p.offset);
 	max_frame = min_not_zero(adapter->vf_res->max_mtu, max_frame);
+	/* The PF programs max_pkt_size into the per-queue Rx context "rxmax".
+	 * LIBIE_MAX_RX_FRM_LEN is the multi-descriptor (S/G) frame ceiling
+	 * (16382), but that exceeds the E810 max MAC frame size (9728); some
+	 * PFs reject the out-of-range value with VIRTCHNL_STATUS_ERR_PARAM.
+	 * Cap it at the single-buffer HW limit (== the MAC frame max),
+	 * restoring the pre-Page-Pool behaviour.
+	 */
+	max_frame = min(max_frame, LIBIE_MAX_RX_BUF_LEN);
 
 	if (adapter->current_op != VIRTCHNL_OP_UNKNOWN) {
 		/* bail because we already have a command pending */
