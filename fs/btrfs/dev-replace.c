@@ -861,6 +861,21 @@ static void btrfs_dev_replace_update_device_in_mapping_tree(
 	write_unlock(&fs_info->mapping_tree_lock);
 }
 
+/* Demote a STARTED replace to SUSPENDED on an early finishing failure. */
+static void btrfs_dev_replace_set_suspended(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_dev_replace *dev_replace = &fs_info->dev_replace;
+
+	down_write(&dev_replace->rwsem);
+	if (dev_replace->replace_state == BTRFS_IOCTL_DEV_REPLACE_STATE_STARTED) {
+		dev_replace->replace_state =
+			BTRFS_IOCTL_DEV_REPLACE_STATE_SUSPENDED;
+		dev_replace->time_stopped = ktime_get_real_seconds();
+		dev_replace->item_needs_writeback = 1;
+	}
+	up_write(&dev_replace->rwsem);
+}
+
 static int btrfs_dev_replace_finishing(struct btrfs_fs_info *fs_info,
 				       int scrub_ret)
 {
@@ -895,6 +910,7 @@ static int btrfs_dev_replace_finishing(struct btrfs_fs_info *fs_info,
 	 */
 	ret = btrfs_start_delalloc_roots(fs_info, LONG_MAX, false);
 	if (ret) {
+		btrfs_dev_replace_set_suspended(fs_info);
 		mutex_unlock(&dev_replace->lock_finishing_cancel_unmount);
 		return ret;
 	}
@@ -908,6 +924,7 @@ static int btrfs_dev_replace_finishing(struct btrfs_fs_info *fs_info,
 	while (1) {
 		trans = btrfs_start_transaction(root, 0);
 		if (IS_ERR(trans)) {
+			btrfs_dev_replace_set_suspended(fs_info);
 			mutex_unlock(&dev_replace->lock_finishing_cancel_unmount);
 			return PTR_ERR(trans);
 		}
