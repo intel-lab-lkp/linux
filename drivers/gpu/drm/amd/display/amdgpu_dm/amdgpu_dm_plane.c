@@ -932,6 +932,7 @@ static int amdgpu_dm_plane_helper_prepare_fb(struct drm_plane *plane,
 	struct amdgpu_bo *rbo;
 	struct dm_plane_state *dm_plane_state_new, *dm_plane_state_old;
 	uint32_t domain;
+	bool pin_vram_only;
 	int r;
 
 	if (!new_state->fb) {
@@ -958,13 +959,35 @@ static int amdgpu_dm_plane_helper_prepare_fb(struct drm_plane *plane,
 	if (r)
 		goto error_unlock;
 
-	if (plane->type != DRM_PLANE_TYPE_CURSOR)
-		domain = amdgpu_display_supported_domains(adev, rbo->flags);
-	else
+	/*
+	 * Pin native scanout in VRAM on APUs so a swapchain stays in one
+	 * memory domain. A VRAM/GTT split changes its mem_type between flips
+	 * and amdgpu_dm_crtc_mem_type_changed() rejects the async flip. Skip
+	 * small carveouts that may not fit, and imported buffers.
+	 */
+	pin_vram_only = plane->type != DRM_PLANE_TYPE_CURSOR &&
+			(adev->flags & AMD_IS_APU) &&
+			!rbo->tbo.base.import_attach &&
+			adev->gmc.real_vram_size > AMDGPU_SG_THRESHOLD;
+
+	if (plane->type == DRM_PLANE_TYPE_CURSOR || pin_vram_only)
 		domain = AMDGPU_GEM_DOMAIN_VRAM;
+	else
+		domain = amdgpu_display_supported_domains(adev, rbo->flags);
 
 	rbo->flags |= AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS;
 	r = amdgpu_bo_pin(rbo, domain);
+	if (r == -ENOMEM && pin_vram_only) {
+		/*
+		 * VRAM could not fit the buffer. Fall back to GTT where
+		 * allowed so the swapchain stays in one domain.
+		 */
+		domain = amdgpu_display_supported_domains(adev, rbo->flags);
+		if (domain & AMDGPU_GEM_DOMAIN_GTT) {
+			domain = AMDGPU_GEM_DOMAIN_GTT;
+			r = amdgpu_bo_pin(rbo, domain);
+		}
+	}
 	if (unlikely(r != 0)) {
 		if (r != -ERESTARTSYS)
 			DRM_ERROR("Failed to pin framebuffer with error %d\n", r);
