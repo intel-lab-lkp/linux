@@ -19,7 +19,7 @@
 #include "pmbus.h"
 
 enum chips { adm1075, adm1272, adm1273, adm1275, adm1276, adm1278, adm1281,
-	 adm1293, adm1294, sq24905c };
+	 adm1293, adm1294, bd12780, sq24905c };
 
 #define ADM1275_MFR_STATUS_IOUT_WARN2	BIT(0)
 #define ADM1293_MFR_STATUS_VAUX_UV_WARN	BIT(5)
@@ -47,6 +47,8 @@ enum chips { adm1075, adm1272, adm1273, adm1275, adm1276, adm1278, adm1281,
 #define ADM1278_VOUT_EN			BIT(1)
 
 #define ADM1278_PMON_DEFCONFIG		(ADM1278_VOUT_EN | ADM1278_TEMP1_EN | ADM1278_TSFILT)
+/* The BD12780 data sheets mark TSFILT bit as reserved. */
+#define BD12780_PMON_DEFCONFIG		(ADM1278_VOUT_EN | ADM1278_TEMP1_EN)
 
 #define ADM1293_IRANGE_25		0
 #define ADM1293_IRANGE_50		BIT(6)
@@ -487,6 +489,21 @@ static const struct i2c_device_id adm1275_id[] = {
 	{ "adm1281", adm1281 },
 	{ "adm1293", adm1293 },
 	{ "adm1294", adm1294 },
+	/*
+	 * The BD12780a is functionally identical to BD12780(*). Even the pmbus ID
+	 * register contents are same. When instantiated from the DT, it is required
+	 * to have the bd12780 as a fall-back. We still need the bd12780a ID here,
+	 * because the i2c_device_id is created from the first compatible, not from
+	 * the fall-back entry.
+	 * (*)Until proven to differ. I prefer having own compatible for these
+	 * variants for that day. Please note that even though the probe is called
+	 * based on the 'bd12780a' -entry, the ID is picked at probe based on the
+	 * pmbus register contents and not by DT entry. Thus, if the bd12780 and
+	 * bd12780a are found to require different handling, then this needs to be
+	 * changed, or bd12780a is handled as bd12780.
+	 */
+	{ "bd12780", bd12780 },
+	{ "bd12780a", /* driver data unused, see --^ */ },
 	{ "mc09c", sq24905c },
 	{ }
 };
@@ -494,12 +511,13 @@ MODULE_DEVICE_TABLE(i2c, adm1275_id);
 
 /* Enable VOUT & TEMP1 if not enabled (disabled by default) */
 static int adm1275_enable_vout_temp(struct adm1275_data *data,
-				    struct i2c_client *client, int config)
+				    struct i2c_client *client, int config,
+				    u16 defconfig)
 {
 	int ret;
 
-	if ((config & ADM1278_PMON_DEFCONFIG) != ADM1278_PMON_DEFCONFIG) {
-		config |= ADM1278_PMON_DEFCONFIG;
+	if ((config & defconfig) != defconfig) {
+		config |= defconfig;
 		ret = adm1275_write_pmon_config(data, client, config);
 		if (ret < 0) {
 			dev_err(&client->dev, "Failed to enable VOUT/TEMP1 monitoring\n");
@@ -535,7 +553,8 @@ static int adm1275_probe(struct i2c_client *client)
 		return ret;
 	}
 	if ((ret != 3 || strncmp(block_buffer, "ADI", 3)) &&
-	    (ret != 2 || strncmp(block_buffer, "SY", 2))) {
+	    (ret != 2 || strncmp(block_buffer, "SY", 2)) &&
+	    (ret != 4 || strncmp(block_buffer, "ROHM", 4))) {
 		dev_err(&client->dev, "Unsupported Manufacturer ID\n");
 		return -ENODEV;
 	}
@@ -562,7 +581,7 @@ static int adm1275_probe(struct i2c_client *client)
 	if (mid->driver_data == adm1272 || mid->driver_data == adm1273 ||
 	    mid->driver_data == adm1278 || mid->driver_data == adm1281 ||
 	    mid->driver_data == adm1293 || mid->driver_data == adm1294 ||
-	    mid->driver_data == sq24905c)
+	    mid->driver_data == bd12780 || mid->driver_data == sq24905c)
 		config_read_fn = i2c_smbus_read_word_data;
 	else
 		config_read_fn = i2c_smbus_read_byte_data;
@@ -666,7 +685,8 @@ static int adm1275_probe(struct i2c_client *client)
 			PMBUS_HAVE_VOUT | PMBUS_HAVE_STATUS_VOUT |
 			PMBUS_HAVE_TEMP | PMBUS_HAVE_STATUS_TEMP;
 
-		ret = adm1275_enable_vout_temp(data, client, config);
+		ret = adm1275_enable_vout_temp(data, client, config,
+					       ADM1278_PMON_DEFCONFIG);
 		if (ret)
 			return ret;
 
@@ -712,7 +732,16 @@ static int adm1275_probe(struct i2c_client *client)
 		break;
 	case adm1278:
 	case adm1281:
+	case bd12780:
 	case sq24905c:
+	{
+		u16 defconfig;
+
+		if (data->id == bd12780)
+			defconfig = BD12780_PMON_DEFCONFIG;
+		else
+			defconfig = ADM1278_PMON_DEFCONFIG;
+
 		data->have_vout = true;
 		data->have_pin_max = true;
 		data->have_temp_max = true;
@@ -728,13 +757,14 @@ static int adm1275_probe(struct i2c_client *client)
 			PMBUS_HAVE_VOUT | PMBUS_HAVE_STATUS_VOUT |
 			PMBUS_HAVE_TEMP | PMBUS_HAVE_STATUS_TEMP;
 
-		ret = adm1275_enable_vout_temp(data, client, config);
+		ret = adm1275_enable_vout_temp(data, client, config, defconfig);
 		if (ret)
 			return ret;
 
 		if (config & ADM1278_VIN_EN)
 			info->func[0] |= PMBUS_HAVE_VIN;
 		break;
+	}
 	case adm1293:
 	case adm1294:
 		data->have_iout_min = true;
