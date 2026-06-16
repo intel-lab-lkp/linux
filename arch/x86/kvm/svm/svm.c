@@ -1300,12 +1300,6 @@ static void svm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 		__svm_vcpu_reset(vcpu);
 }
 
-void svm_switch_vmcb(struct vcpu_svm *svm, struct kvm_vmcb_info *target_vmcb)
-{
-	svm->current_vmcb = target_vmcb;
-	svm->vmcb = target_vmcb->ptr;
-}
-
 static int svm_vcpu_precreate(struct kvm *kvm)
 {
 	return avic_alloc_physical_id_table(kvm);
@@ -1353,7 +1347,9 @@ static int svm_vcpu_create(struct kvm_vcpu *vcpu)
 
 	svm->vmcb01.ptr = page_address(vmcb01_page);
 	svm->vmcb01.pa = __sme_set(page_to_pfn(vmcb01_page) << PAGE_SHIFT);
-	svm_switch_vmcb(svm, &svm->vmcb01);
+
+	svm->current_vmcb = &svm->vmcb01;
+	svm->vmcb = svm->vmcb01.ptr;
 
 	svm->guest_state_loaded = false;
 
