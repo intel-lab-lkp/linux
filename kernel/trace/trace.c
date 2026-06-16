@@ -57,6 +57,7 @@
 
 #include "trace.h"
 #include "trace_output.h"
+#include "trace_stackmap.h"
 
 #ifdef CONFIG_FTRACE_STARTUP_TEST
 /*
@@ -509,12 +510,13 @@ EXPORT_SYMBOL_GPL(unregister_ftrace_export);
 /* trace_options that are only supported by global_trace */
 #define TOP_LEVEL_TRACE_FLAGS (TRACE_ITER(PRINTK) |			\
 	       TRACE_ITER(PRINTK_MSGONLY) | TRACE_ITER(RECORD_CMD) |	\
-	       TRACE_ITER(PROF_TEXT_OFFSET) | FPROFILE_DEFAULT_FLAGS)
+	       TRACE_ITER(PROF_TEXT_OFFSET) | TRACE_ITER(STACKMAP) |	\
+	       FPROFILE_DEFAULT_FLAGS)
 
 /* trace_flags that are default zero for instances */
 #define ZEROED_TRACE_FLAGS \
 	(TRACE_ITER(EVENT_FORK) | TRACE_ITER(FUNC_FORK) | TRACE_ITER(TRACE_PRINTK) | \
-	 TRACE_ITER(COPY_MARKER))
+	 TRACE_ITER(COPY_MARKER) | TRACE_ITER(STACKMAP))
 
 /*
  * The global_trace is the descriptor that holds the top-level tracing
@@ -1562,7 +1564,7 @@ void tracing_reset_online_cpus(struct array_buffer *buf)
 	ring_buffer_record_enable(buffer);
 }
 
-static void tracing_reset_all_cpus(struct array_buffer *buf)
+void tracing_reset_all_cpus(struct array_buffer *buf)
 {
 	struct trace_buffer *buffer = buf->buffer;
 
@@ -2182,6 +2184,75 @@ void __ftrace_trace_stack(struct trace_array *tr,
 				calls[i] = FTRACE_TRAMPOLINE_MARKER;
 		}
 	}
+#endif
+
+#ifdef CONFIG_FTRACE_STACKMAP
+	/*
+	 * If stackmap dedup is enabled, try to store only the stack_id
+	 * in the ring buffer instead of the full stack trace.
+	 *
+	 * Reserve the TRACE_STACK_ID ring-buffer slot BEFORE inserting
+	 * into the stackmap. This guarantees the map is only mutated
+	 * (and its ref_count / success counters bumped) when a
+	 * ring-buffer event will actually reference the entry:
+	 *   - reservation fails  -> fall back to full stack, map untouched
+	 *   - get_id() fails      -> discard the reserved slot, fall back
+	 * so stack_map_stat counters stay consistent with what the ring
+	 * buffer holds, and a failed reservation never consumes a map
+	 * slot for an event that records a full stack anyway.
+	 */
+	if (tr->trace_flags & TRACE_ITER(STACKMAP)) {
+		struct ftrace_stackmap *smap;
+		struct stack_id_entry *sid_entry;
+		int sid;
+
+		/*
+		 * Pairs with the smp_store_release() that publishes the
+		 * fully initialized global stackmap at tracefs init.
+		 */
+		smap = smp_load_acquire(&tr->stackmap);
+		if (!smap)
+			goto full_stack;
+
+		/*
+		 * The stackmap stores at most FTRACE_STACKMAP_MAX_DEPTH
+		 * frames per entry. A deeper trace would be truncated, and
+		 * two distinct stacks that share the first MAX_DEPTH frames
+		 * would hash and compare equal, silently merging into one
+		 * stack_id. Keep the conservative full-stack path for deep
+		 * traces so no information is lost or misattributed.
+		 */
+		if (nr_entries > FTRACE_STACKMAP_MAX_DEPTH)
+			goto full_stack;
+
+		event = __trace_buffer_lock_reserve(buffer, TRACE_STACK_ID,
+						    sizeof(*sid_entry), trace_ctx);
+		if (!event)
+			goto full_stack;
+
+		sid = ftrace_stackmap_get_id(smap, fstack->calls, nr_entries);
+		if (sid < 0) {
+			/*
+			 * Pool exhausted or a reset is in progress. Discard
+			 * the reserved stack_id slot and record the full
+			 * stack instead, so the event still gets a trace.
+			 */
+			__trace_event_discard_commit(buffer, event);
+			goto full_stack;
+		}
+
+		sid_entry = ring_buffer_event_data(event);
+		sid_entry->stack_id = sid;
+		/*
+		 * stack_id is a synthetic side-event attached to a
+		 * primary trace event that was already subject to
+		 * filtering. No per-event filter is defined for
+		 * TRACE_STACK_ID, so commit unconditionally.
+		 */
+		__buffer_unlock_commit(buffer, event);
+		goto out;
+	}
+full_stack:
 #endif
 
 	event = __trace_buffer_lock_reserve(buffer, TRACE_STACK,
@@ -3976,6 +4047,33 @@ int trace_keep_overwrite(struct tracer *tracer, u64 mask, int set)
 	return 0;
 }
 
+#ifdef CONFIG_FTRACE_STACKMAP
+/*
+ * Tracks tracefs-time initialization of the global stackmap so that
+ * set_tracer_flag() can distinguish "not initialized yet" from
+ * "initialization permanently failed".
+ *
+ * Boot-time options (trace_options=stackmap,stacktrace) are applied
+ * very early, before tracer_init_tracefs() creates and publishes the
+ * map. We must allow the STACKMAP flag to be set during that window
+ * (the hot path falls back to a full stack while tr->stackmap is NULL,
+ * then starts using the map once it is published). We must, however,
+ * reject the enable once init has *failed*, so options/stackmap never
+ * reports an enabled no-op.
+ *
+ * Written once from the tracefs init work before any concurrent
+ * userspace writer to trace_options can run, then only read; a plain
+ * int is therefore sufficient.
+ */
+enum {
+	STACKMAP_INIT_PENDING,	/* tracer_init_tracefs() not run yet */
+	STACKMAP_INIT_DONE,	/* map published, stack_map file created */
+	STACKMAP_INIT_FAILED,	/* permanent failure, never available */
+};
+
+static int stackmap_init_state = STACKMAP_INIT_PENDING;
+#endif
+
 int set_tracer_flag(struct trace_array *tr, u64 mask, int enabled)
 {
 	switch (mask) {
@@ -3989,6 +4087,33 @@ int set_tracer_flag(struct trace_array *tr, u64 mask, int enabled)
 	/* do nothing if flag is already set */
 	if (!!(tr->trace_flags & mask) == !!enabled)
 		return 0;
+
+#ifdef CONFIG_FTRACE_STACKMAP
+	/*
+	 * STACKMAP is intentionally global-instance-only: the dedup map,
+	 * its tracefs files (stack_map / stack_map_stat / stack_map_bin)
+	 * and the lifetime/reset semantics are tied to the global trace
+	 * array. options/stackmap is hidden on secondary instances via
+	 * TOP_LEVEL_TRACE_FLAGS, but writes still reach set_tracer_flag()
+	 * through the aggregate trace_options file. Reject the enable on
+	 * a secondary instance so it cannot be silently accepted and then
+	 * become a no-op in the hot path (where tr->stackmap is NULL and
+	 * the code falls back to a full stack trace).
+	 *
+	 * On the global instance, allow the enable while init is still
+	 * pending (boot-time trace_options=stackmap is applied before the
+	 * tracefs init work creates the map; the hot path falls back
+	 * until the map is published). Only reject once init has
+	 * permanently failed, so options/stackmap never reports an
+	 * enabled no-op. READ_ONCE() suffices: this only inspects the
+	 * init state, it does not dereference the map (the hot path uses
+	 * smp_load_acquire(&tr->stackmap) for that).
+	 */
+	if (mask == TRACE_ITER(STACKMAP) && enabled &&
+	    (tr != &global_trace ||
+	     READ_ONCE(stackmap_init_state) == STACKMAP_INIT_FAILED))
+		return -EINVAL;
+#endif
 
 	/* Give the tracer a chance to approve the change */
 	if (tr->current_trace->flag_changed)
@@ -9223,6 +9348,91 @@ static __init void tracer_init_tracefs_work_func(struct work_struct *work)
 			NULL, &tracing_dyn_info_fops);
 #endif
 
+#ifdef CONFIG_FTRACE_STACKMAP
+	{
+		struct ftrace_stackmap *smap;
+		struct dentry *map_file;
+
+		smap = ftrace_stackmap_create(&global_trace);
+		if (!IS_ERR(smap)) {
+			/*
+			 * Failure-atomic init: stack_map is the single
+			 * required tracefs file (it doubles as the reset
+			 * interface and the human-readable resolver). If
+			 * we cannot create it, the hot path must not be
+			 * able to emit <stack_id N> events that no one can
+			 * resolve or clear, so refuse to publish the map
+			 * and tear it down.
+			 *
+			 * Create stack_map BEFORE smp_store_release() so an
+			 * observed non-NULL global_trace.stackmap implies
+			 * its resolver/reset file exists.
+			 */
+			map_file = trace_create_file("stack_map",
+						     TRACE_MODE_WRITE, NULL,
+						     smap,
+						     &ftrace_stackmap_fops);
+			if (!map_file) {
+				pr_warn("ftrace stackmap init: stack_map create failed, dedup disabled\n");
+				ftrace_stackmap_destroy(smap);
+				/*
+				 * Permanent failure. Record it and clear a
+				 * STACKMAP flag that a boot-time
+				 * trace_options=stackmap may have set, so
+				 * options/stackmap does not report an
+				 * enabled no-op and later userspace enables
+				 * return -EINVAL.
+				 */
+				WRITE_ONCE(stackmap_init_state,
+					   STACKMAP_INIT_FAILED);
+				global_trace.trace_flags &=
+					~TRACE_ITER(STACKMAP);
+			} else {
+				/*
+				 * smp_store_release pairs with the
+				 * smp_load_acquire() in
+				 * __ftrace_trace_stack(). Publishing only
+				 * after the required file exists keeps
+				 * "smap visible" => "resolver/reset
+				 * available".
+				 */
+				smp_store_release(&global_trace.stackmap,
+						  smap);
+				WRITE_ONCE(stackmap_init_state,
+					   STACKMAP_INIT_DONE);
+				/*
+				 * stat and bin are auxiliary observability
+				 * surfaces. If they fail to be created we
+				 * keep dedup enabled (the kernel side still
+				 * works, and stack_map alone is enough to
+				 * resolve and reset); trace_create_file()
+				 * already pr_warn()s on failure.
+				 */
+				trace_create_file("stack_map_stat",
+						  TRACE_MODE_READ, NULL,
+						  smap,
+						  &ftrace_stackmap_stat_fops);
+				trace_create_file("stack_map_bin",
+						  TRACE_MODE_READ, NULL,
+						  smap,
+						  &ftrace_stackmap_bin_fops);
+			}
+		} else {
+			pr_warn("ftrace stackmap init failed, dedup disabled\n");
+			/*
+			 * global_trace is statically defined; its stackmap
+			 * field is zero-initialized via BSS, so leaving it
+			 * NULL ensures the smp_load_acquire() in
+			 * __ftrace_trace_stack() falls back to full stack.
+			 * Mark init failed and clear any boot-time STACKMAP
+			 * flag so userspace enables are rejected rather than
+			 * becoming silent no-ops.
+			 */
+			WRITE_ONCE(stackmap_init_state, STACKMAP_INIT_FAILED);
+			global_trace.trace_flags &= ~TRACE_ITER(STACKMAP);
+		}
+	}
+#endif
 	create_trace_instances(NULL);
 
 	update_tracer_options();
