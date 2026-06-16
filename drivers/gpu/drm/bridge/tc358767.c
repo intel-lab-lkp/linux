@@ -1723,7 +1723,7 @@ static const struct drm_edid *tc_edid_read(struct drm_bridge *bridge,
 	ret = tc_get_display_props(tc);
 	if (ret < 0) {
 		dev_err(tc->dev, "failed to read display props: %d\n", ret);
-		return 0;
+		return NULL;
 	}
 
 	return drm_edid_read_ddc(connector, &tc->aux.ddc);
