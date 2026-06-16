@@ -41,8 +41,10 @@ static struct sk_buff *rtl4a_tag_xmit(struct sk_buff *skb,
 	u16 out;
 
 	/* Pad out to at least 60 bytes */
-	if (unlikely(__skb_put_padto(skb, ETH_ZLEN, false)))
+	if (unlikely(__skb_put_padto(skb, ETH_ZLEN, false))) {
+		kfree_skb(skb);
 		return NULL;
+	}
 
 	netdev_dbg(dev, "add realtek tag to package to port %d\n",
 		   dp->index);
@@ -75,8 +77,10 @@ static struct sk_buff *rtl4a_tag_rcv(struct sk_buff *skb,
 	u8 prot;
 	u8 port;
 
-	if (unlikely(!pskb_may_pull(skb, RTL4_A_HDR_LEN)))
+	if (unlikely(!pskb_may_pull(skb, RTL4_A_HDR_LEN))) {
+		kfree_skb(skb);
 		return NULL;
+	}
 
 	tag = dsa_etype_header_pos_rx(skb);
 	p = (__be16 *)tag;
@@ -92,6 +96,7 @@ static struct sk_buff *rtl4a_tag_rcv(struct sk_buff *skb,
 	prot = (protport >> RTL4_A_PROTOCOL_SHIFT) & 0x0f;
 	if (prot != RTL4_A_PROTOCOL_RTL8366RB) {
 		netdev_err(dev, "unknown realtek protocol 0x%01x\n", prot);
+		kfree_skb(skb);
 		return NULL;
 	}
 	port = protport & 0xff;
@@ -99,6 +104,7 @@ static struct sk_buff *rtl4a_tag_rcv(struct sk_buff *skb,
 	skb->dev = dsa_conduit_find_user(dev, 0, port);
 	if (!skb->dev) {
 		netdev_dbg(dev, "could not find user for port %d\n", port);
+		kfree_skb(skb);
 		return NULL;
 	}
 
