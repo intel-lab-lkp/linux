@@ -118,10 +118,8 @@ int intel_dp_link_caps_max_common_lane_count(struct intel_dp_link_caps *link_cap
 	return link_caps->max_lane_count;
 }
 
-static int forced_lane_count(struct intel_dp *intel_dp)
+static int forced_lane_count(struct intel_dp_link_caps *link_caps)
 {
-	struct intel_dp_link_caps *link_caps = intel_dp->link.caps;
-
 	if (!link_caps->forced_params.lane_count)
 		return 0;
 
@@ -129,9 +127,9 @@ static int forced_lane_count(struct intel_dp *intel_dp)
 		     1, intel_dp_link_caps_max_common_lane_count(link_caps));
 }
 
-static int forced_link_rate(struct intel_dp *intel_dp)
+static int forced_link_rate(struct intel_dp_link_caps *link_caps)
 {
-	struct intel_dp_link_caps *link_caps = intel_dp->link.caps;
+	struct intel_dp *intel_dp = link_caps->dp;
 	int len;
 
 	if (!link_caps->forced_params.rate)
@@ -147,14 +145,14 @@ static int forced_link_rate(struct intel_dp *intel_dp)
 void intel_dp_link_caps_get_forced_params(struct intel_dp_link_caps *link_caps,
 					  struct intel_dp_link_config *forced_params)
 {
-	forced_params->rate = forced_link_rate(link_caps->dp);
-	forced_params->lane_count = forced_lane_count(link_caps->dp);
+	forced_params->rate = forced_link_rate(link_caps);
+	forced_params->lane_count = forced_lane_count(link_caps);
 }
 
-static int intel_dp_link_config_rate(struct intel_dp *intel_dp,
+static int intel_dp_link_config_rate(struct intel_dp_link_caps *link_caps,
 				     const struct intel_dp_link_config_entry *lc)
 {
-	return intel_dp_common_rate(intel_dp, lc->link_rate_idx);
+	return intel_dp_common_rate(link_caps->dp, lc->link_rate_idx);
 }
 
 static int intel_dp_link_config_lane_count(const struct intel_dp_link_config_entry *lc)
@@ -243,26 +241,28 @@ void intel_dp_link_caps_reset_max_limits(struct intel_dp_link_caps *link_caps)
 	reset_max_link_limits_no_update(link_caps);
 }
 
-static int intel_dp_link_config_bw(struct intel_dp *intel_dp,
+static int intel_dp_link_config_bw(struct intel_dp_link_caps *link_caps,
 				   const struct intel_dp_link_config_entry *lc)
 {
-	return drm_dp_max_dprx_data_rate(intel_dp_link_config_rate(intel_dp, lc),
+	return drm_dp_max_dprx_data_rate(intel_dp_link_config_rate(link_caps, lc),
 					 intel_dp_link_config_lane_count(lc));
 }
 
 static int link_config_cmp_by_bw(const void *a, const void *b, const void *p)
 {
 	struct intel_dp *intel_dp = (struct intel_dp *)p;	/* remove const */
+	struct intel_dp_link_caps *link_caps = intel_dp->link.caps;
+
 	const struct intel_dp_link_config_entry *lc_a = a;
 	const struct intel_dp_link_config_entry *lc_b = b;
-	int bw_a = intel_dp_link_config_bw(intel_dp, lc_a);
-	int bw_b = intel_dp_link_config_bw(intel_dp, lc_b);
+	int bw_a = intel_dp_link_config_bw(link_caps, lc_a);
+	int bw_b = intel_dp_link_config_bw(link_caps, lc_b);
 
 	if (bw_a != bw_b)
 		return bw_a - bw_b;
 
-	return intel_dp_link_config_rate(intel_dp, lc_a) -
-	       intel_dp_link_config_rate(intel_dp, lc_b);
+	return intel_dp_link_config_rate(link_caps, lc_a) -
+	       intel_dp_link_config_rate(link_caps, lc_b);
 }
 
 /* Return %true if the supported link parameters have changed. */
@@ -333,7 +333,7 @@ void intel_dp_link_config_get(struct intel_dp *intel_dp, int idx, int *link_rate
 
 	lc = &link_caps->configs[idx];
 
-	*link_rate = intel_dp_link_config_rate(intel_dp, lc);
+	*link_rate = intel_dp_link_config_rate(link_caps, lc);
 	*lane_count = intel_dp_link_config_lane_count(lc);
 }
 
@@ -414,8 +414,9 @@ static int i915_dp_force_link_rate_show(struct seq_file *m, void *data)
 	return 0;
 }
 
-static int parse_link_rate(struct intel_dp *intel_dp, const char __user *ubuf, size_t len)
+static int parse_link_rate(struct intel_dp_link_caps *link_caps, const char __user *ubuf, size_t len)
 {
+	struct intel_dp *intel_dp = link_caps->dp;
 	char *kbuf;
 	const char *p;
 	int rate;
@@ -458,7 +459,7 @@ static ssize_t i915_dp_force_link_rate_write(struct file *file,
 	int rate;
 	int err;
 
-	rate = parse_link_rate(intel_dp, ubuf, len);
+	rate = parse_link_rate(link_caps, ubuf, len);
 	if (rate < 0)
 		return rate;
 
