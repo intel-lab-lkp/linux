@@ -1033,6 +1033,7 @@ static int rpmh_rsc_probe(struct platform_device *pdev)
 	struct device_node *dn = pdev->dev.of_node;
 	struct rsc_drv *drv;
 	char drv_id[10] = {0};
+	bool cpu_pm_registered = false;
 	int ret, irq;
 	u32 solver_config;
 	u32 rsc_id;
@@ -1107,7 +1108,10 @@ static int rpmh_rsc_probe(struct platform_device *pdev)
 				return ret;
 		} else {
 			drv->rsc_pm.notifier_call = rpmh_rsc_cpu_pm_callback;
-			cpu_pm_register_notifier(&drv->rsc_pm);
+			ret = cpu_pm_register_notifier(&drv->rsc_pm);
+			if (ret)
+				return ret;
+			cpu_pm_registered = true;
 		}
 	}
 
@@ -1123,9 +1127,14 @@ static int rpmh_rsc_probe(struct platform_device *pdev)
 	drv->dev = &pdev->dev;
 
 	ret = devm_of_platform_populate(&pdev->dev);
-	if (ret && pdev->dev.pm_domain) {
-		dev_pm_genpd_remove_notifier(&pdev->dev);
-		pm_runtime_disable(&pdev->dev);
+	if (ret) {
+		of_platform_depopulate(&pdev->dev);
+		if (pdev->dev.pm_domain) {
+			dev_pm_genpd_remove_notifier(&pdev->dev);
+			pm_runtime_disable(&pdev->dev);
+		} else if (cpu_pm_registered) {
+			cpu_pm_unregister_notifier(&drv->rsc_pm);
+		}
 	}
 
 	return ret;
