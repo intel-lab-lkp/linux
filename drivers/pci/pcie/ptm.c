@@ -200,6 +200,8 @@ int pci_enable_ptm(struct pci_dev *dev)
 
 	rc = __pci_enable_ptm(dev);
 	if (rc) {
+		if (!dev->ptm_root)
+			pci_disable_ptm(parent);
 		atomic_dec(&dev->ptm_enable_cnt);
 		return rc;
 	}
