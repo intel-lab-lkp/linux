@@ -1400,6 +1400,11 @@ struct intel_crtc_state {
 			u16 max_increase, max_decrease;
 			u16 vblank_target;
 		} dc_balance;
+
+		struct {
+			bool enable;
+			u64 cmrr_n, cmrr_m;
+		} cmrr;
 	} vrr;
 
 	/* Content Match Refresh Rate state */

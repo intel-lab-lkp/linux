@@ -53,7 +53,7 @@ static bool intel_crtc_cmrr_enabling(struct intel_atomic_state *state,
 		return false;
 
 	return is_enabling(cmrr.enable, old_crtc_state, new_crtc_state) ||
-		(new_crtc_state->cmrr.enable);
+		(new_crtc_state->vrr.cmrr.enable);
 }
 
 static bool intel_crtc_cmrr_disabling(struct intel_atomic_state *state,
@@ -68,7 +68,7 @@ static bool intel_crtc_cmrr_disabling(struct intel_atomic_state *state,
 		return false;
 
 	return is_disabling(cmrr.enable, old_crtc_state, new_crtc_state) ||
-			(old_crtc_state->cmrr.enable);
+			(old_crtc_state->vrr.cmrr.enable);
 }
 
 bool intel_vrr_is_capable(struct intel_connector *connector)
@@ -276,11 +276,11 @@ intel_vrr_cmrr_compute_config(struct intel_crtc_state *crtc_state)
 	 * is tracked in HW.
 	 */
 
-	crtc_state->cmrr.cmrr_n =
+	crtc_state->vrr.cmrr.cmrr_n =
 		mul_u32_u32(requested_refresh_rate * adjusted_mode->crtc_htotal,
 			    multiplier_m);
 	adjusted_pixel_rate = mul_u32_u32(adjusted_mode->crtc_clock, 1000) * multiplier_n;
-	crtc_state->cmrr.cmrr_m = do_div(adjusted_pixel_rate, crtc_state->cmrr.cmrr_n);
+	crtc_state->vrr.cmrr.cmrr_m = do_div(adjusted_pixel_rate, crtc_state->vrr.cmrr.cmrr_n);
 
 	return;
 }
@@ -875,13 +875,13 @@ intel_vrr_enable_cmrr(const struct intel_crtc_state *crtc_state)
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 
 	intel_de_write(display, TRANS_CMRR_M_HI(display, cpu_transcoder),
-		       upper_32_bits(crtc_state->cmrr.cmrr_m));
+		       upper_32_bits(crtc_state->vrr.cmrr.cmrr_m));
 	intel_de_write(display, TRANS_CMRR_M_LO(display, cpu_transcoder),
-		       lower_32_bits(crtc_state->cmrr.cmrr_m));
+		       lower_32_bits(crtc_state->vrr.cmrr.cmrr_m));
 	intel_de_write(display, TRANS_CMRR_N_HI(display, cpu_transcoder),
-		       upper_32_bits(crtc_state->cmrr.cmrr_n));
+		       upper_32_bits(crtc_state->vrr.cmrr.cmrr_n));
 	intel_de_write(display, TRANS_CMRR_N_LO(display, cpu_transcoder),
-		       lower_32_bits(crtc_state->cmrr.cmrr_n));
+		       lower_32_bits(crtc_state->vrr.cmrr.cmrr_n));
 }
 
 static void
@@ -1038,7 +1038,7 @@ void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 	intel_vrr_enable_dc_balancing(crtc_state);
 
 	if (!intel_vrr_always_use_vrr_tg(display))
-		intel_vrr_tg_enable(crtc_state, crtc_state->cmrr.enable);
+		intel_vrr_tg_enable(crtc_state, crtc_state->vrr.cmrr.enable);
 }
 
 void intel_vrr_disable(const struct intel_crtc_state *old_crtc_state)
@@ -1140,10 +1140,10 @@ void intel_vrr_get_config(struct intel_crtc_state *crtc_state)
 	trans_vrr_ctl = intel_de_read(display,
 				      TRANS_VRR_CTL(display, cpu_transcoder));
 
-	if (crtc_state->cmrr.enable) {
-		crtc_state->cmrr.cmrr_n =
+	if (crtc_state->vrr.cmrr.enable) {
+		crtc_state->vrr.cmrr.cmrr_n =
 			intel_de_read64_2x32(display, TRANS_CMRR_N_LO(display, cpu_transcoder));
-		crtc_state->cmrr.cmrr_m =
+		crtc_state->vrr.cmrr.cmrr_m =
 			intel_de_read64_2x32(display, TRANS_CMRR_M_LO(display, cpu_transcoder));
 	}
 
