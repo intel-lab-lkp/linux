@@ -316,7 +316,13 @@ struct track {
 	unsigned long when;	/* When did the operation occur */
 };
 
-enum track_item { TRACK_ALLOC, TRACK_FREE, TRACK_NR };
+enum track_item {
+	TRACK_ALLOC,
+	TRACK_FREE,
+	TRACK_PREV_ALLOC,
+	TRACK_PREV_FREE,
+	TRACK_NR,
+};
 
 static inline unsigned int user_tracking_size(slab_flags_t flags)
 {
@@ -1069,12 +1075,37 @@ static void set_track_update(struct kmem_cache *s, void *object,
 	p->when = jiffies;
 }
 
-static __always_inline void set_track(struct kmem_cache *s, void *object,
-				      enum track_item alloc, unsigned long addr, gfp_t gfp_flags)
+static bool track_has_record(const struct track *t)
+{
+	return t->addr;
+}
+
+static void clear_track(struct kmem_cache *s, void *object,
+			enum track_item track)
+{
+	memset(get_track(s, object, track), 0, sizeof(struct track));
+}
+
+static void save_previous_lifetime(struct kmem_cache *s, void *object)
+{
+	struct track *alloc = get_track(s, object, TRACK_ALLOC);
+	struct track *free = get_track(s, object, TRACK_FREE);
+
+	if (!track_has_record(alloc) || !track_has_record(free))
+		return;
+
+	*get_track(s, object, TRACK_PREV_ALLOC) = *alloc;
+	*get_track(s, object, TRACK_PREV_FREE) = *free;
+}
+
+static __always_inline void set_alloc_track(struct kmem_cache *s, void *object,
+					    unsigned long addr, gfp_t gfp_flags)
 {
 	depot_stack_handle_t handle = set_track_prepare(gfp_flags);
 
-	set_track_update(s, object, alloc, addr, handle);
+	save_previous_lifetime(s, object);
+	set_track_update(s, object, TRACK_ALLOC, addr, handle);
+	clear_track(s, object, TRACK_FREE);
 }
 
 static void init_tracking(struct kmem_cache *s, void *object)
@@ -1109,11 +1140,22 @@ static void print_track(const char *s, struct track *t, unsigned long pr_time)
 void print_tracking(struct kmem_cache *s, void *object)
 {
 	unsigned long pr_time = jiffies;
+	struct track *prev_alloc;
+	struct track *prev_free;
+
 	if (!(s->flags & SLAB_STORE_USER))
 		return;
 
 	print_track("Allocated", get_track(s, object, TRACK_ALLOC), pr_time);
 	print_track("Freed", get_track(s, object, TRACK_FREE), pr_time);
+
+	prev_alloc = get_track(s, object, TRACK_PREV_ALLOC);
+	prev_free = get_track(s, object, TRACK_PREV_FREE);
+	if (track_has_record(prev_alloc) || track_has_record(prev_free)) {
+		pr_err("Previous object lifetime:\n");
+		print_track("Previously allocated", prev_alloc, pr_time);
+		print_track("Previously freed", prev_free, pr_time);
+	}
 }
 
 static void print_slab_info(const struct slab *slab)
@@ -1360,10 +1402,12 @@ skip_bug_print:
  *
  * [Metadata starts at object + s->inuse]
  *   - A. freelist pointer (if freeptr_outside_object)
- *   - B. alloc tracking (SLAB_STORE_USER)
- *   - C. free tracking (SLAB_STORE_USER)
- *   - D. original request size (SLAB_KMALLOC && SLAB_STORE_USER)
- *   - E. KASAN metadata (if enabled)
+ *   - B. current alloc tracking (SLAB_STORE_USER)
+ *   - C. current free tracking (SLAB_STORE_USER)
+ *   - D. previous alloc tracking (SLAB_STORE_USER)
+ *   - E. previous free tracking (SLAB_STORE_USER)
+ *   - F. original request size (SLAB_KMALLOC && SLAB_STORE_USER)
+ *   - G. KASAN metadata (if enabled)
  *
  * [Mandatory padding] (if CONFIG_SLUB_DEBUG && SLAB_RED_ZONE)
  *   - One mandatory debug word to guarantee a minimum poisoned gap
@@ -2018,8 +2062,8 @@ static inline void slab_pad_check(struct kmem_cache *s, struct slab *slab) {}
 static inline int check_object(struct kmem_cache *s, struct slab *slab,
 			void *object, u8 val) { return 1; }
 static inline depot_stack_handle_t set_track_prepare(gfp_t gfp_flags) { return 0; }
-static inline void set_track(struct kmem_cache *s, void *object,
-			     enum track_item alloc, unsigned long addr, gfp_t gfp_flags) {}
+static inline void set_alloc_track(struct kmem_cache *s, void *object,
+				   unsigned long addr, gfp_t gfp_flags) {}
 static inline void add_full(struct kmem_cache *s, struct kmem_cache_node *n,
 					struct slab *slab) {}
 static inline void remove_full(struct kmem_cache *s, struct kmem_cache_node *n,
@@ -4484,7 +4528,7 @@ new_objects:
 
 success:
 	if (kmem_cache_debug_flags(s, SLAB_STORE_USER))
-		set_track(s, object, TRACK_ALLOC, addr, gfpflags);
+		set_alloc_track(s, object, addr, gfpflags);
 
 	return object;
 }
