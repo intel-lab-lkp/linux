@@ -1502,6 +1502,7 @@ static void gc_worker(struct work_struct *work)
 		struct nf_conntrack_tuple_hash *h;
 		struct hlist_nulls_head *ct_hash;
 		struct hlist_nulls_node *n;
+		struct nf_conn_help *help;
 		struct nf_conn *tmp;
 
 		rcu_read_lock();
@@ -1532,6 +1533,10 @@ static void gc_worker(struct work_struct *work)
 				next_run = delta_time < (s32)GC_SCAN_INTERVAL_MAX;
 				goto early_exit;
 			}
+
+			help = nfct_help(tmp);
+			if (help)
+				nf_ct_expectation_gc(help);
 
 			if (nf_ct_is_expired(tmp)) {
 				nf_ct_gc_expired(tmp);
