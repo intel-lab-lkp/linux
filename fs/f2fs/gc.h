@@ -5,6 +5,9 @@
  * Copyright (c) 2012 Samsung Electronics Co., Ltd.
  *             http://www.samsung.com/
  */
+#include <linux/sched/task.h>
+#include <linux/spinlock.h>
+
 #define GC_THREAD_MIN_WB_PAGES		1	/*
 						 * a threshold to determine
 						 * whether IO subsystem is idle
@@ -47,6 +50,7 @@
 
 struct f2fs_gc_kthread {
 	struct task_struct *f2fs_gc_task;
+	spinlock_t gc_task_lock;		/* protects f2fs_gc_task */
 	wait_queue_head_t gc_wait_queue_head;
 
 	/* for gc sleep time */
@@ -71,6 +75,40 @@ struct f2fs_gc_kthread {
 	unsigned int boost_gc_multiple;
 	unsigned int boost_gc_greedy;
 };
+
+static inline struct task_struct *f2fs_get_gc_task(struct f2fs_gc_kthread *gc_th)
+{
+	struct task_struct *task;
+
+	spin_lock(&gc_th->gc_task_lock);
+	task = READ_ONCE(gc_th->f2fs_gc_task);
+	if (task)
+		get_task_struct(task);
+	spin_unlock(&gc_th->gc_task_lock);
+
+	return task;
+}
+
+static inline void f2fs_set_gc_task(struct f2fs_gc_kthread *gc_th,
+				    struct task_struct *task)
+{
+	spin_lock(&gc_th->gc_task_lock);
+	WRITE_ONCE(gc_th->f2fs_gc_task, task);
+	spin_unlock(&gc_th->gc_task_lock);
+}
+
+static inline struct task_struct *
+f2fs_detach_gc_task(struct f2fs_gc_kthread *gc_th)
+{
+	struct task_struct *task;
+
+	spin_lock(&gc_th->gc_task_lock);
+	task = READ_ONCE(gc_th->f2fs_gc_task);
+	WRITE_ONCE(gc_th->f2fs_gc_task, NULL);
+	spin_unlock(&gc_th->gc_task_lock);
+
+	return task;
+}
 
 struct gc_inode_list {
 	struct list_head ilist;

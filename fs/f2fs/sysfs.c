@@ -12,6 +12,7 @@
 #include <linux/seq_file.h>
 #include <linux/unicode.h>
 #include <linux/ioprio.h>
+#include <linux/sched/task.h>
 #include <linux/sysfs.h>
 
 #include "f2fs.h"
@@ -981,17 +982,24 @@ out:
 	}
 
 	if (!strcmp(a->attr.name, "critical_task_priority")) {
+		struct f2fs_gc_kthread *gc_th;
+		struct task_struct *gc_task;
+		int nice;
+
 		if (t < NICE_TO_PRIO(MIN_NICE) || t > NICE_TO_PRIO(MAX_NICE))
 			return -EINVAL;
 		if (!capable(CAP_SYS_NICE))
 			return -EPERM;
 		sbi->critical_task_priority = t;
+		nice = PRIO_TO_NICE(sbi->critical_task_priority);
 		if (sbi->cprc_info.f2fs_issue_ckpt)
-			set_user_nice(sbi->cprc_info.f2fs_issue_ckpt,
-					PRIO_TO_NICE(sbi->critical_task_priority));
-		if (sbi->gc_thread && sbi->gc_thread->f2fs_gc_task)
-			set_user_nice(sbi->gc_thread->f2fs_gc_task,
-					PRIO_TO_NICE(sbi->critical_task_priority));
+			set_user_nice(sbi->cprc_info.f2fs_issue_ckpt, nice);
+		gc_th = READ_ONCE(sbi->gc_thread);
+		gc_task = gc_th ? f2fs_get_gc_task(gc_th) : NULL;
+		if (gc_task) {
+			set_user_nice(gc_task, nice);
+			put_task_struct(gc_task);
+		}
 		return count;
 	}
 
