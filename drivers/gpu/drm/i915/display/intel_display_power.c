@@ -285,6 +285,19 @@ sanitize_target_dc_state(struct intel_display *display,
 	return target_dc_state;
 }
 
+bool intel_display_power_get_and_reset_dc3co_to_dc6(struct intel_display *display)
+{
+	struct i915_power_domains *power_domains = &display->power.domains;
+	bool ret;
+
+	mutex_lock(&power_domains->lock);
+	ret = power_domains->dc3co_to_dc6;
+	power_domains->dc3co_to_dc6 = false;
+	mutex_unlock(&power_domains->lock);
+
+	return ret;
+}
+
 /**
  * intel_display_power_set_target_dc_state - Set target dc state.
  * @display: display device
@@ -300,6 +313,7 @@ void intel_display_power_set_target_dc_state(struct intel_display *display,
 	struct i915_power_well *power_well;
 	bool dc_off_enabled;
 	struct i915_power_domains *power_domains = &display->power.domains;
+	u32 old_target_dc_state;
 
 	mutex_lock(&power_domains->lock);
 	power_well = lookup_power_well(display, SKL_DISP_DC_OFF);
@@ -320,7 +334,16 @@ void intel_display_power_set_target_dc_state(struct intel_display *display,
 	if (!dc_off_enabled)
 		intel_power_well_enable(display, power_well);
 
+	old_target_dc_state =  power_domains->target_dc_state;
 	power_domains->target_dc_state = state;
+
+	/*
+	 * CMTG must be restored explicitly after DC6 exit. The dc3co_to_dc6
+	 * flag helps CMTG determine whether restoration is required.
+	 */
+	if (old_target_dc_state == DC_STATE_EN_DC3CO &&
+	    power_domains->target_dc_state == DC_STATE_EN_UPTO_DC6)
+		power_domains->dc3co_to_dc6 = true;
 
 	if (!dc_off_enabled)
 		intel_power_well_disable(display, power_well);
