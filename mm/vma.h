@@ -28,6 +28,12 @@ struct unlink_vma_file_batch {
 	struct vm_area_struct *vmas[8];
 };
 
+struct link_vma_file_batch {
+	int count;
+	struct vm_area_struct *new_vmas[8];
+	struct vm_area_struct *old_vmas[8];
+};
+
 /*
  * vma munmap operation
  */
@@ -446,6 +452,14 @@ void unlink_file_vma_batch_final(struct unlink_vma_file_batch *vb);
 
 void unlink_file_vma_batch_add(struct unlink_vma_file_batch *vb,
 			       struct vm_area_struct *vma);
+
+void link_file_vma_batch_init(struct link_vma_file_batch *vb);
+
+void link_file_vma_batch_final(struct link_vma_file_batch *vb);
+
+void link_file_vma_batch_add(struct link_vma_file_batch *vb,
+			     struct vm_area_struct *new_vma,
+			     struct vm_area_struct *old_vma);
 
 struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 	unsigned long addr, unsigned long len, pgoff_t pgoff,

@@ -1735,6 +1735,7 @@ __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 	unsigned long charge = 0;
 	LIST_HEAD(uf);
 	VMA_ITERATOR(vmi, mm, 0);
+	struct link_vma_file_batch vb;
 
 	if (mmap_write_lock_killable(oldmm))
 		return -EINTR;
@@ -1758,6 +1759,7 @@ __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 	if (unlikely(retval))
 		goto out;
 
+	link_file_vma_batch_init(&vb);
 	mt_clear_in_rcu(vmi.mas.tree);
 	for_each_vma(vmi, mpnt) {
 		struct file *file;
@@ -1822,18 +1824,9 @@ __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 
 		file = tmp->vm_file;
 		if (file) {
-			struct address_space *mapping = file->f_mapping;
-
 			get_file(file);
-			i_mmap_lock_write(mapping);
-			if (vma_is_shared_maywrite(tmp))
-				mapping_allow_writable(mapping);
-			flush_dcache_mmap_lock(mapping);
 			/* insert tmp into the share list, just after mpnt */
-			vma_interval_tree_insert_after(tmp, mpnt,
-					&mapping->i_mmap);
-			flush_dcache_mmap_unlock(mapping);
-			i_mmap_unlock_write(mapping);
+			link_file_vma_batch_add(&vb, tmp, mpnt);
 		}
 
 		if (!(tmp->vm_flags & VM_WIPEONFORK))
@@ -1847,6 +1840,7 @@ __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 	/* a new mm has just been created */
 	retval = arch_dup_mmap(oldmm, mm);
 loop_out:
+	link_file_vma_batch_final(&vb);
 	vma_iter_free(&vmi);
 	if (!retval) {
 		mt_set_in_rcu(vmi.mas.tree);

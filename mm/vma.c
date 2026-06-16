@@ -1827,6 +1827,55 @@ void unlink_file_vma_batch_final(struct unlink_vma_file_batch *vb)
 		unlink_file_vma_batch_process(vb);
 }
 
+void link_file_vma_batch_init(struct link_vma_file_batch *vb)
+{
+	vb->count = 0;
+}
+
+static void link_file_vma_batch_process(struct link_vma_file_batch *vb)
+{
+	struct address_space *mapping;
+	int i;
+
+	mapping = vb->new_vmas[0]->vm_file->f_mapping;
+	i_mmap_lock_write(mapping);
+	for (i = 0; i < vb->count; i++) {
+		VM_WARN_ON_ONCE(vb->new_vmas[i]->vm_file->f_mapping != mapping);
+		if (vma_is_shared_maywrite(vb->new_vmas[i]))
+			mapping_allow_writable(mapping);
+		flush_dcache_mmap_lock(mapping);
+		vma_interval_tree_insert_after(vb->new_vmas[i], vb->old_vmas[i],
+					       &mapping->i_mmap);
+		flush_dcache_mmap_unlock(mapping);
+	}
+	i_mmap_unlock_write(mapping);
+
+	link_file_vma_batch_init(vb);
+}
+
+void link_file_vma_batch_add(struct link_vma_file_batch *vb,
+			     struct vm_area_struct *new_vma,
+			     struct vm_area_struct *old_vma)
+{
+	if (new_vma->vm_file == NULL)
+		return;
+
+	if ((vb->count > 0 && vb->new_vmas[0]->vm_file != new_vma->vm_file) ||
+	    vb->count == ARRAY_SIZE(vb->new_vmas))
+		link_file_vma_batch_process(vb);
+
+	vb->new_vmas[vb->count] = new_vma;
+	vb->old_vmas[vb->count] = old_vma;
+	vb->count++;
+}
+
+void link_file_vma_batch_final(struct link_vma_file_batch *vb)
+{
+	if (vb->count > 0)
+		link_file_vma_batch_process(vb);
+}
+
+
 static void vma_link_file(struct vm_area_struct *vma, bool hold_rmap_lock)
 {
 	struct file *file = vma->vm_file;
