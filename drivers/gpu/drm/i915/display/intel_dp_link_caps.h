@@ -11,11 +11,11 @@ struct intel_dp;
 struct intel_dp_link_caps;
 struct intel_dp_link_config;
 
-int intel_dp_common_len_rate_limit(const struct intel_dp *intel_dp,
+int intel_dp_common_len_rate_limit(struct intel_dp_link_caps *link_caps,
 				   int max_rate);
-int intel_dp_common_rate(struct intel_dp *intel_dp, int index);
+int intel_dp_common_rate(struct intel_dp_link_caps *link_caps, int index);
 int intel_dp_link_caps_common_rate_idx(struct intel_dp_link_caps *link_caps, int rate);
-int intel_dp_max_common_rate(struct intel_dp *intel_dp);
+int intel_dp_max_common_rate(struct intel_dp_link_caps *link_caps);
 int intel_dp_link_caps_num_common_rates(struct intel_dp_link_caps *link_caps);
 int intel_dp_link_caps_max_common_lane_count(struct intel_dp_link_caps *link_caps);
 
