@@ -6694,7 +6694,7 @@ static void intel_pipe_fastset(const struct intel_crtc_state *old_crtc_state,
 	if (new_crtc_state->update_lrr) {
 		intel_set_transcoder_timings_lrr(new_crtc_state, new_crtc_state->cpu_transcoder);
 		intel_cmtg_set_timings(new_crtc_state, LRR);
-		intel_vrr_set_fixed_rr_timings(new_crtc_state);
+		intel_vrr_set_fixed_rr_timings(new_crtc_state, new_crtc_state->cpu_transcoder);
 		intel_vrr_transcoder_enable(new_crtc_state);
 	}
 }
