@@ -718,10 +718,6 @@ static void nested_svm_entry_tlb_flush(struct kvm_vcpu *vcpu)
 			kvm_make_request(KVM_REQ_MMU_SYNC, vcpu);
 		kvm_make_request(KVM_REQ_TLB_FLUSH_GUEST, vcpu);
 	}
-
-	/* TODO: optimize unconditional TLB flush/MMU sync */
-	kvm_make_request(KVM_REQ_MMU_SYNC, vcpu);
-	kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
 }
 
 static void nested_svm_exit_tlb_flush(struct kvm_vcpu *vcpu)
@@ -733,9 +729,6 @@ static void nested_svm_exit_tlb_flush(struct kvm_vcpu *vcpu)
 	/* Flush L1's own ASID if it request a *full* TLB flush on VMRUN */
 	if (svm->nested.ctl.tlb_ctl == TLB_CONTROL_FLUSH_ALL_ASID)
 		kvm_make_request(KVM_REQ_TLB_FLUSH_GUEST, vcpu);
-
-	kvm_make_request(KVM_REQ_MMU_SYNC, vcpu);
-	kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
 }
 
 static void svm_switch_vmcb(struct vcpu_svm *svm, struct kvm_vmcb_info *target_vmcb)
@@ -1539,7 +1532,7 @@ int svm_allocate_nested(struct vcpu_svm *svm)
 	if (!svm->nested.msrpm)
 		goto err_free_vmcb02;
 
-	svm->nested.asid02 = svm->asid;
+	svm->nested.asid02 = allocate_asid();
 
 	svm->nested.initialized = true;
 	return 0;
@@ -1556,6 +1549,8 @@ void svm_free_nested(struct vcpu_svm *svm)
 
 	if (WARN_ON_ONCE(svm->vmcb != svm->vmcb01.ptr))
 		svm_switch_vmcb(svm, &svm->vmcb01);
+
+	free_asid(svm->nested.asid02);
 
 	svm_vcpu_free_msrpm(svm->nested.msrpm);
 	svm->nested.msrpm = NULL;
