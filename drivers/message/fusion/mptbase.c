@@ -3257,6 +3257,8 @@ GetPortFacts(MPT_ADAPTER *ioc, int portnum, int sleepFlag)
 		return -4;
 	}
 
+	BUG_ON(portnum < 0 || portnum >= ARRAY_SIZE(ioc->pfacts));
+
 	pfacts = &ioc->pfacts[portnum];
 
 	/* Destination (reply area)...  */
@@ -6701,6 +6703,7 @@ static int mpt_iocinfo_proc_show(struct seq_file *m, void *v)
 	char		 expVer[32];
 	int		 sz;
 	int		 p;
+	int		 numberOfPorts = MIN(ioc->facts.NumberOfPorts, ARRAY_SIZE(ioc->pfacts));
 
 	mpt_get_fw_exp_ver(expVer, ioc);
 
@@ -6755,7 +6758,7 @@ static int mpt_iocinfo_proc_show(struct seq_file *m, void *v)
 	seq_printf(m, "  MaxBuses = %d\n", ioc->facts.MaxBuses);
 
 	/* per-port info */
-	for (p=0; p < ioc->facts.NumberOfPorts; p++) {
+	for (p = 0; p < numberOfPorts; p++) {
 		seq_printf(m, "  PortNumber = %d (of %d)\n",
 				p+1,
 				ioc->facts.NumberOfPorts);
