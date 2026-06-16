@@ -204,16 +204,31 @@ static inline struct kvm_vcpu_hv_tlb_flush_fifo *kvm_hv_get_tlb_flush_fifo(struc
 	return &hv_vcpu->tlb_flush_fifo[i];
 }
 
-static inline void kvm_hv_purge_tlb_flush_fifo(struct kvm_vcpu *vcpu)
+/* Purge pending TLB flushes in @fifo, or in all FIFOs if @fifo is NULL */
+static inline void __kvm_hv_purge_tlb_flush_fifo(struct kvm_vcpu *vcpu,
+						 struct kvm_vcpu_hv_tlb_flush_fifo *fifo)
 {
-	struct kvm_vcpu_hv_tlb_flush_fifo *tlb_flush_fifo;
+	struct kvm_vcpu_hv *hv_vcpu = to_hv_vcpu(vcpu);
+	int i;
 
-	if (!to_hv_vcpu(vcpu) || !kvm_check_request(KVM_REQ_HV_TLB_FLUSH, vcpu))
+	if (!hv_vcpu || !kvm_check_request(KVM_REQ_HV_TLB_FLUSH, vcpu))
 		return;
 
-	tlb_flush_fifo = kvm_hv_get_tlb_flush_fifo(vcpu, is_guest_mode(vcpu));
+	for (i = 0; i < ARRAY_SIZE(hv_vcpu->tlb_flush_fifo); i++) {
+		if (!fifo || fifo == &hv_vcpu->tlb_flush_fifo[i])
+			kfifo_reset_out(&hv_vcpu->tlb_flush_fifo[i].entries);
+	}
+}
 
-	kfifo_reset_out(&tlb_flush_fifo->entries);
+static inline void kvm_hv_purge_tlb_flush_fifo(struct kvm_vcpu *vcpu)
+{
+	struct kvm_vcpu_hv_tlb_flush_fifo *fifo;
+
+	if (!to_hv_vcpu(vcpu))
+		return;
+
+	fifo = kvm_hv_get_tlb_flush_fifo(vcpu, is_guest_mode(vcpu));
+	__kvm_hv_purge_tlb_flush_fifo(vcpu, fifo);
 }
 
 static inline bool guest_hv_cpuid_has_l2_tlb_flush(struct kvm_vcpu *vcpu)
