@@ -3036,10 +3036,8 @@ skip_one:
 		}
 
 		DT_GETPAGE(ip, bn, mp, PSIZE, p, rc);
-		if (rc) {
-			kfree(dirent_buf);
-			return rc;
-		}
+		if (rc)
+			goto out;
 	}
 
       out:
