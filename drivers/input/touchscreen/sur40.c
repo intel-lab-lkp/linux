@@ -806,8 +806,10 @@ static int sur40_probe(struct usb_interface *interface,
 	}
 
 	error = sur40_init_input(sur40);
-	if (error)
-		goto err_unreg_video;
+	if (error) {
+		video_unregister_device(&sur40->vdev);
+		return error;
+	}
 
 	/* we can register the device now, as it is ready */
 	usb_set_intfdata(interface, sur40);
@@ -815,8 +817,6 @@ static int sur40_probe(struct usb_interface *interface,
 
 	return 0;
 
-err_unreg_video:
-	video_unregister_device(&sur40->vdev);
 err_free_ctrl:
 	v4l2_ctrl_handler_free(&sur40->hdl);
 err_unreg_v4l2:
@@ -835,13 +835,8 @@ static void sur40_disconnect(struct usb_interface *interface)
 	struct sur40_state *sur40 = usb_get_intfdata(interface);
 
 	input_unregister_device(sur40->input);
-
-	v4l2_ctrl_handler_free(&sur40->hdl);
 	video_unregister_device(&sur40->vdev);
-	v4l2_device_unregister(&sur40->v4l2);
-
-	kfree(sur40->bulk_in_buffer);
-	kfree(sur40);
+	v4l2_device_disconnect(&sur40->v4l2);
 
 	usb_set_intfdata(interface, NULL);
 	dev_dbg(&interface->dev, "%s is now disconnected\n", DRIVER_DESC);
@@ -1176,11 +1171,21 @@ static const struct v4l2_ioctl_ops sur40_video_ioctl_ops = {
 	.vidioc_streamoff	= vb2_ioctl_streamoff,
 };
 
+static void sur40_video_release(struct video_device *vdev)
+{
+	struct sur40_state *sur40 = video_get_drvdata(vdev);
+
+	v4l2_device_unregister(&sur40->v4l2);
+	v4l2_ctrl_handler_free(&sur40->hdl);
+	kfree(sur40->bulk_in_buffer);
+	kfree(sur40);
+}
+
 static const struct video_device sur40_video_device = {
 	.name = DRIVER_LONG,
 	.fops = &sur40_video_fops,
 	.ioctl_ops = &sur40_video_ioctl_ops,
-	.release = video_device_release_empty,
+	.release = sur40_video_release,
 	.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_TOUCH |
 		       V4L2_CAP_READWRITE | V4L2_CAP_STREAMING,
 };
