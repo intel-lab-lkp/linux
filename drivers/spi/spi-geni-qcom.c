@@ -654,26 +654,21 @@ static int spi_geni_init(struct spi_geni_master *mas)
 	else
 		mas->oversampling = 1;
 
-	fifo_disable = readl(se->base + GENI_IF_DISABLE_RO) & FIFO_IF_DISABLE;
-	switch (fifo_disable) {
-	case 1:
-		ret = spi_geni_grab_gpi_chan(mas);
-		if (!ret) { /* success case */
-			mas->cur_xfer_mode = GENI_GPI_DMA;
-			geni_se_select_mode(se, GENI_GPI_DMA);
-			dev_dbg(mas->dev, "Using GPI DMA mode for SPI\n");
-			break;
-		} else if (ret == -EPROBE_DEFER) {
-			goto out_pm;
-		}
-		/*
-		 * in case of failure to get gpi dma channel, we can still do the
-		 * FIFO mode, so fallthrough
-		 */
-		dev_warn(mas->dev, "FIFO mode disabled, but couldn't get DMA, fall back to FIFO mode\n");
-		fallthrough;
+	/* Try GPI DMA mode first, fallback to fifo mode if it fails. */
+	ret = spi_geni_grab_gpi_chan(mas);
+	if (!ret) { /* success case */
+		mas->cur_xfer_mode = GENI_GPI_DMA;
+		geni_se_select_mode(se, GENI_GPI_DMA);
+		dev_dbg(mas->dev, "Using GPI DMA mode for SPI\n");
+	} else if (ret == -EPROBE_DEFER) {
+		goto out_pm;
+	} else {
+		fifo_disable = readl(se->base + GENI_IF_DISABLE_RO) & FIFO_IF_DISABLE;
+		if (fifo_disable)
+			dev_warn(mas->dev, "FIFO mode disabled, but couldn't get GPI DMA, fall back to FIFO mode\n");
+		else
+			dev_dbg(mas->dev, "Using FIFO mode for SPI\n");
 
-	case 0:
 		mas->cur_xfer_mode = GENI_SE_FIFO;
 		geni_se_select_mode(se, GENI_SE_FIFO);
 		/* setup_fifo_params assumes that these registers start with a zero value */
@@ -683,7 +678,6 @@ static int spi_geni_init(struct spi_geni_master *mas)
 		writel(0, se->base + SE_SPI_CPOL);
 		writel(0, se->base + SE_SPI_DEMUX_OUTPUT_INV);
 		ret = 0;
-		break;
 	}
 
 	/* We never control CS manually */
