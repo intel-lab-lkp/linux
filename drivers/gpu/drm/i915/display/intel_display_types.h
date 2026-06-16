@@ -1840,7 +1840,7 @@ struct intel_dp {
 #define INTEL_DP_LINK_RATE_IDX_BITS		(BITS_PER_TYPE(u8) - INTEL_DP_LANE_COUNT_EXP_BITS)
 #define INTEL_DP_MAX_LINK_CONFIGS		(DP_MAX_SUPPORTED_RATES * \
 						 INTEL_DP_MAX_SUPPORTED_LANE_CONFIGS)
-		struct intel_dp_link_config {
+		struct intel_dp_link_config_entry {
 			u8 link_rate_idx:INTEL_DP_LINK_RATE_IDX_BITS;
 			u8 lane_count_exp:INTEL_DP_LANE_COUNT_EXP_BITS;
 		} configs[INTEL_DP_MAX_LINK_CONFIGS];
