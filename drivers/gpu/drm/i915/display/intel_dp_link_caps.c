@@ -151,6 +151,36 @@ static int intel_dp_link_config_lane_count(const struct intel_dp_link_config_ent
 	return 1 << lc->lane_count_exp;
 }
 
+/**
+ * intel_dp_link_caps_get_max_limits - get the current maximum link limits
+ * @link_caps: link capabilities state
+ * @max_link_limits: returned maximum link limits
+ *
+ * Return the current maximum rate and lane count limits in
+ * @max_link_limits.
+ *
+ * These limits constrain the set of allowed configurations.
+ *
+ * The limits are set to the maximum common supported values after
+ * intel_dp_link_caps_reset() is called, and can later be modified by
+ * intel_dp_link_caps_set_max_limits(). The max rate and lane count
+ * parameters are independent limits, so the pair does not necessarily
+ * define a valid configuration.
+ *
+ * This function may be called without serializing against updates to
+ * @link_caps. However, without such serialization the returned value may be
+ * an out-of-sync (link rate, lane count) tuple, i.e. the parameters may
+ * belong to different update snapshots in time.
+ */
+void intel_dp_link_caps_get_max_limits(struct intel_dp_link_caps *link_caps,
+				       struct intel_dp_link_config *max_link_limits)
+{
+	struct intel_dp *intel_dp = link_caps->dp;
+
+	max_link_limits->rate = intel_dp->link.max_rate;
+	max_link_limits->lane_count = intel_dp->link.max_lane_count;
+}
+
 static int intel_dp_link_config_bw(struct intel_dp *intel_dp,
 				   const struct intel_dp_link_config_entry *lc)
 {
@@ -482,6 +512,7 @@ static int i915_dp_max_link_rate_show(void *data, u64 *val)
 	struct intel_connector *connector = to_intel_connector(data);
 	struct intel_display *display = to_intel_display(connector);
 	struct intel_dp *intel_dp = intel_attached_dp(connector);
+	struct intel_dp_link_config max_link_limits;
 	int err;
 
 	err = drm_modeset_lock_single_interruptible(&display->drm->mode_config.connection_mutex);
@@ -490,7 +521,8 @@ static int i915_dp_max_link_rate_show(void *data, u64 *val)
 
 	intel_dp_flush_connector_commits(connector);
 
-	*val = intel_dp->link.max_rate;
+	intel_dp_link_caps_get_max_limits(intel_dp->link.caps, &max_link_limits);
+	*val = max_link_limits.rate;
 
 	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
 
@@ -503,6 +535,7 @@ static int i915_dp_max_lane_count_show(void *data, u64 *val)
 	struct intel_connector *connector = to_intel_connector(data);
 	struct intel_display *display = to_intel_display(connector);
 	struct intel_dp *intel_dp = intel_attached_dp(connector);
+	struct intel_dp_link_config max_link_limits;
 	int err;
 
 	err = drm_modeset_lock_single_interruptible(&display->drm->mode_config.connection_mutex);
@@ -511,7 +544,8 @@ static int i915_dp_max_lane_count_show(void *data, u64 *val)
 
 	intel_dp_flush_connector_commits(connector);
 
-	*val = intel_dp->link.max_lane_count;
+	intel_dp_link_caps_get_max_limits(intel_dp->link.caps, &max_link_limits);
+	*val = max_link_limits.lane_count;
 
 	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
 
