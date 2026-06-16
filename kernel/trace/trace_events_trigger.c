@@ -1789,17 +1789,14 @@ int event_enable_trigger_parse(struct event_command *cmd_ops,
 	enable_data->file = event_enable_file;
 
 	trigger_data = trigger_data_alloc(cmd_ops, cmd, param, enable_data);
-	if (!trigger_data) {
-		kfree(enable_data);
-		return ret;
-	}
+	if (!trigger_data)
+		goto out_free_enable_data;
 
 	if (remove) {
 		event_trigger_unregister(cmd_ops, file, glob+1, trigger_data);
 		kfree(trigger_data);
-		kfree(enable_data);
 		ret = 0;
-		return ret;
+		goto out_free_enable_data;
 	}
 
 	/* Up the trigger_data count to make sure nothing frees it on failure */
@@ -1837,6 +1834,7 @@ int event_enable_trigger_parse(struct event_command *cmd_ops,
  out_free:
 	event_trigger_reset_filter(cmd_ops, trigger_data);
 	event_trigger_free(trigger_data);
+out_free_enable_data:
 	kfree(enable_data);
 
 	return ret;
