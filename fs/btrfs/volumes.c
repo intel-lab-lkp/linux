@@ -3732,7 +3732,7 @@ again:
 		if (chunk_type & BTRFS_BLOCK_GROUP_SYSTEM) {
 			ret = btrfs_relocate_chunk(fs_info, found_key.offset,
 						   true);
-			if (ret == -ENOSPC)
+			if (ret == -ENOSPC || ret == -EAGAIN)
 				failed++;
 			else
 				BUG_ON(ret);
