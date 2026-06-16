@@ -8,6 +8,7 @@
 #include <linux/log2.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
+#include <linux/string.h>
 #include <linux/types.h>
 
 #include <drm/drm_print.h>
@@ -131,25 +132,39 @@ static int link_config_cmp_by_bw(const void *a, const void *b, const void *p)
 	       intel_dp_link_config_rate(intel_dp, lc_b);
 }
 
-void intel_dp_link_caps_update(struct intel_dp *intel_dp)
+/* Return %true if the supported link parameters have changed. */
+bool intel_dp_link_caps_update(struct intel_dp *intel_dp,
+			       const int *rates, int num_rates)
 {
 	struct intel_dp_link_caps *link_caps = intel_dp->link.caps;
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_dp_link_config_entry *lc;
+	bool link_params_changed = false;
 	int num_common_lane_configs;
 	int i;
 	int j;
 
 	if (drm_WARN_ON(display->drm, !is_power_of_2(intel_dp_max_common_lane_count(intel_dp))))
-		return;
+		return false;
+
+	if (drm_WARN_ON(display->drm, num_rates > ARRAY_SIZE(intel_dp->common_rates)))
+		return false;
 
 	num_common_lane_configs = ilog2(intel_dp_max_common_lane_count(intel_dp)) + 1;
 
-	if (drm_WARN_ON(display->drm, intel_dp->num_common_rates * num_common_lane_configs >
+	if (drm_WARN_ON(display->drm, num_rates * num_common_lane_configs >
 				    ARRAY_SIZE(link_caps->configs)))
-		return;
+		return false;
 
-	link_caps->num_configs = intel_dp->num_common_rates * num_common_lane_configs;
+	/* TODO: Add a struct containing both rates and number of rates. */
+	static_assert(__same_type(rates[0], intel_dp->common_rates[0]));
+	if (num_rates != intel_dp->num_common_rates ||
+	    memcmp(rates, intel_dp->common_rates, num_rates * sizeof(rates[0])))
+		link_params_changed = true;
+
+	memcpy(intel_dp->common_rates, rates, num_rates * sizeof(rates[0]));
+	intel_dp->num_common_rates = num_rates;
+	link_caps->num_configs = num_rates * num_common_lane_configs;
 
 	lc = &link_caps->configs[0];
 	for (i = 0; i < intel_dp->num_common_rates; i++) {
@@ -165,6 +180,9 @@ void intel_dp_link_caps_update(struct intel_dp *intel_dp)
 	       sizeof(link_caps->configs[0]),
 	       link_config_cmp_by_bw, NULL,
 	       intel_dp);
+
+	/* TODO: Also detect a change in the max lane count. */
+	return link_params_changed;
 }
 
 void intel_dp_link_config_get(struct intel_dp *intel_dp, int idx, int *link_rate, int *lane_count)
