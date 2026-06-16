@@ -154,13 +154,8 @@ void __init fadump_append_bootargs(void)
 	if (!fw_dump.dump_active || !fw_dump.param_area_supported || !fw_dump.param_area)
 		return;
 
-	if (fw_dump.param_area < fw_dump.boot_mem_top) {
-		if (memblock_reserve(fw_dump.param_area, COMMAND_LINE_SIZE)) {
-			pr_warn("WARNING: Can't use additional parameters area!\n");
-			fw_dump.param_area = 0;
-			return;
-		}
-	}
+	if (fw_dump.param_area < fw_dump.boot_mem_top)
+		memblock_reserve(fw_dump.param_area, COMMAND_LINE_SIZE);
 
 	append_args = (char *)fw_dump.param_area;
 	len = strlen(boot_command_line);
@@ -632,10 +627,7 @@ int __init fadump_reserve_mem(void)
 		    (fw_dump.ops->fadump_setup_metadata(&fw_dump) < 0))
 			goto error_out;
 
-		if (memblock_reserve(base, size)) {
-			pr_err("Failed to reserve memory!\n");
-			goto error_out;
-		}
+		memblock_reserve(base, size);
 
 		pr_info("Reserved %lldMB of memory at %#016llx (System RAM: %lldMB)\n",
 			(size >> 20), base, (memblock_phys_mem_size() >> 20));
