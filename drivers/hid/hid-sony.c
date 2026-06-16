@@ -523,10 +523,6 @@ static DEFINE_SPINLOCK(sony_dev_list_lock);
 static LIST_HEAD(sony_device_list);
 static DEFINE_IDA(sony_device_id_allocator);
 
-enum sony_worker {
-	SONY_WORKER_STATE
-};
-
 struct sony_sc {
 	spinlock_t lock;
 	struct list_head list_node;
@@ -569,17 +565,11 @@ struct sony_sc {
 
 static void sony_set_leds(struct sony_sc *sc);
 
-static inline void sony_schedule_work(struct sony_sc *sc,
-				      enum sony_worker which)
+static inline void sony_schedule_work(struct sony_sc *sc)
 {
-	switch (which) {
-	case SONY_WORKER_STATE:
-		scoped_guard(spinlock_irqsave, &sc->lock) {
-			if (!sc->defer_initialization && sc->state_worker_initialized)
-				schedule_work(&sc->state_worker);
-		}
-		break;
-	}
+	guard(spinlock_irqsave)(&sc->lock);
+	if (!sc->defer_initialization && sc->state_worker_initialized)
+		schedule_work(&sc->state_worker);
 }
 
 static void ghl_magic_poke_cb(struct urb *urb)
@@ -1211,7 +1201,7 @@ static int sony_raw_event(struct hid_device *hdev, struct hid_report *report,
 
 	if (unlikely(sc->defer_initialization)) {
 		sc->defer_initialization = 0;
-		sony_schedule_work(sc, SONY_WORKER_STATE);
+		sony_schedule_work(sc);
 	}
 
 	return 0;
@@ -1520,7 +1510,7 @@ static void buzz_set_leds(struct sony_sc *sc)
 static void sony_set_leds(struct sony_sc *sc)
 {
 	if (!(sc->quirks & BUZZ_CONTROLLER))
-		sony_schedule_work(sc, SONY_WORKER_STATE);
+		sony_schedule_work(sc);
 	else
 		buzz_set_leds(sc);
 }
@@ -1631,7 +1621,7 @@ static int sony_led_blink_set(struct led_classdev *led, unsigned long *delay_on,
 		new_off != drv_data->led_delay_off[n]) {
 		drv_data->led_delay_on[n] = new_on;
 		drv_data->led_delay_off[n] = new_off;
-		sony_schedule_work(drv_data, SONY_WORKER_STATE);
+		sony_schedule_work(drv_data);
 	}
 
 	return 0;
@@ -1859,7 +1849,7 @@ static int sony_play_effect(struct input_dev *dev, void *data,
 	sc->left = effect->u.rumble.strong_magnitude / 256;
 	sc->right = effect->u.rumble.weak_magnitude / 256;
 
-	sony_schedule_work(sc, SONY_WORKER_STATE);
+	sony_schedule_work(sc);
 	return 0;
 }
 
