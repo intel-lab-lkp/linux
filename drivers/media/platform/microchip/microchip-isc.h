@@ -62,7 +62,11 @@ struct isc_subdev_entity {
  * @mbus_code:		V4L2 media bus format code.
  * @cfa_baycfg:		If this format is RAW BAYER, indicate the type of bayer.
 			this is either BGBG, RGRG, etc.
- * @pfe_cfg0_bps:	Number of hardware data lines connected to the ISC
+ * @pfe_cfg0_bps:	Pre-shifted ISC_PFE_CFG0 BPS field value (e.g.
+			ISC_PFE_CFG0_BPS_EIGHT), not a plain bit-depth integer.
+			OR it directly into the PFE_CFG0 register word, or use
+			FIELD_GET(ISC_PFE_CFG0_BPS_MASK, ...) to obtain the
+			3-bit BPS field value.
  * @raw:		If the format is raw bayer.
  */
 
