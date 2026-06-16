@@ -1232,6 +1232,7 @@ MODULE_DEVICE_TABLE(of, ov5645_of_match);
 
 static const struct dev_pm_ops ov5645_pm_ops = {
 	RUNTIME_PM_OPS(ov5645_set_power_off, ov5645_set_power_on, NULL)
+	SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
 };
 
 static struct i2c_driver ov5645_i2c_driver = {
