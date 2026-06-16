@@ -45,6 +45,7 @@
 #include "xfs_inode_util.h"
 #include "xfs_metafile.h"
 
+#define XFS_MAX_USER_WRITE_STREAMS		(16)
 struct kmem_cache *xfs_inode_cache;
 
 int
@@ -52,12 +53,34 @@ xfs_inode_max_write_streams(
 	struct xfs_inode	*ip)
 {
 	struct block_device	*bdev;
+	struct xfs_mount	*mp = ip->i_mount;
+	int nr_streams;
+	xfs_agnumber_t nr_ags, ag_set_size;
 
 	bdev = xfs_inode_buftarg(ip)->bt_bdev;
 	if (!bdev)
 		return 0;
 
-	return bdev_max_write_streams(bdev);
+	nr_streams = bdev_max_write_streams(bdev);
+	if (nr_streams > 0)
+		return nr_streams;
+	if (XFS_IS_REALTIME_INODE(ip))
+		return 0;
+	/*
+	 * Enable software-only streams if hardware streams are not available.
+	 * This helps to
+	 * - improve isolation; reduce allocation interleaving.
+	 * - improve concurrency using AG-set based steering within and across streams.
+	 */
+	nr_ags = mp->m_sb.sb_agcount;
+	if (nr_ags >= 32)
+		ag_set_size = 4;
+	else if (nr_ags >= 8)
+		ag_set_size = 2;
+	else
+		ag_set_size = 1;
+	nr_streams = nr_ags / ag_set_size;
+	return min_t(uint16_t, nr_streams, XFS_MAX_USER_WRITE_STREAMS);
 }
 
 uint16_t
