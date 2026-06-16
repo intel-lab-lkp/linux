@@ -6,10 +6,12 @@
  */
 
 #include <linux/device.h>
+#include <linux/firmware/imx/se_api.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/nvmem-provider.h>
 #include <linux/of.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/if_ether.h>	/* ETH_ALEN */
@@ -44,6 +46,8 @@ struct imx_ocotp_priv {
 	struct nvmem_config config;
 	struct mutex lock;
 	const struct ocotp_devtype_data *data;
+	void *se_data;
+	struct platform_device *se_dev;
 };
 
 static enum fuse_type imx_ocotp_fuse_type(void *context, u32 index)
@@ -72,6 +76,7 @@ static int imx_ocotp_reg_read(void *context, unsigned int offset, void *val, siz
 	enum fuse_type type;
 	u32 *buf;
 	void *p;
+	int ret;
 	int i;
 	u8 skipbytes;
 
@@ -92,6 +97,19 @@ static int imx_ocotp_reg_read(void *context, unsigned int offset, void *val, siz
 	buf = p;
 
 	for (i = index; i < (index + count); i++) {
+		/*
+		 * All fuse registers can be read via ELE. If the SE device is
+		 * available, always prefer it.
+		 */
+		if (priv->se_data) {
+			ret = imx_se_read_fuse(priv->se_data, i, buf++);
+			if (ret) {
+				mutex_unlock(&priv->lock);
+				return ret;
+			}
+			continue;
+		}
+
 		type = imx_ocotp_fuse_type(context, i);
 		if (type == FUSE_INVALID || type == FUSE_ELE) {
 			*buf++ = 0;
@@ -112,6 +130,32 @@ static int imx_ocotp_reg_read(void *context, unsigned int offset, void *val, siz
 
 	return 0;
 };
+
+static int imx_ocotp_reg_write(void *context, unsigned int offset, void *val, size_t bytes)
+{
+	struct imx_ocotp_priv *priv = context;
+	u32 word = offset >> 2;
+	u32 *buf = val;
+	int ret;
+
+	/* allow only writing one complete OTP word at a time */
+	if ((bytes != 4) || (offset % 4 != 0))
+		return -EINVAL;
+
+	/*
+	 * The ELE API returns an error when writing an all-zero value. As
+	 * OTP fuse bits can not be switched from 1 to 0 anyway, skip these
+	 * values.
+	 */
+	if (!*buf)
+		return 0;
+
+	mutex_lock(&priv->lock);
+	ret = imx_se_write_fuse(priv->se_data, word, *buf);
+	mutex_unlock(&priv->lock);
+
+	return ret;
+}
 
 static int imx_ocotp_cell_pp(void *context, const char *id, int index,
 			     unsigned int offset, void *data, size_t bytes)
@@ -136,11 +180,18 @@ static void imx_ocotp_fixup_dt_cell_info(struct nvmem_device *nvmem,
 	cell->read_post_process = imx_ocotp_cell_pp;
 }
 
+static void imx_ocotp_put_se_dev(void *data)
+{
+	platform_device_put(data);
+}
+
 static int imx_ele_ocotp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct imx_ocotp_priv *priv;
 	struct nvmem_device *nvmem;
+	struct device_node *np;
+	int ret;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -152,16 +203,36 @@ static int imx_ele_ocotp_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->base))
 		return PTR_ERR(priv->base);
 
+	np = of_parse_phandle(pdev->dev.of_node, "secure-enclave", 0);
+	if (!np) {
+		dev_info(&pdev->dev, "missing or invalid SE handle, using readonly FSB\n");
+	} else {
+		priv->se_dev = of_find_device_by_node(np);
+		of_node_put(np);
+		if (!priv->se_dev)
+			return dev_err_probe(&pdev->dev, -ENODEV, "failed to find SE device\n");
+
+		ret = devm_add_action_or_reset(&pdev->dev, imx_ocotp_put_se_dev,
+					       priv->se_dev);
+		if (ret)
+			return ret;
+
+		priv->se_data = platform_get_drvdata(priv->se_dev);
+		if (!priv->se_data)
+			return dev_err_probe(&pdev->dev, -EPROBE_DEFER,
+					     "SE device not ready\n");
+	}
+
 	priv->config.dev = dev;
 	priv->config.name = "ELE-OCOTP";
 	priv->config.id = NVMEM_DEVID_AUTO;
 	priv->config.owner = THIS_MODULE;
 	priv->config.size = priv->data->size;
 	priv->config.reg_read = imx_ocotp_reg_read;
+	priv->config.reg_write = imx_ocotp_reg_write;
 	priv->config.word_size = 1;
 	priv->config.stride = 1;
 	priv->config.priv = priv;
-	priv->config.read_only = true;
 	priv->config.add_legacy_fixed_of_cells = true;
 	priv->config.fixup_dt_cell_info = imx_ocotp_fixup_dt_cell_info;
 
@@ -169,6 +240,9 @@ static int imx_ele_ocotp_probe(struct platform_device *pdev)
 		priv->config.keepout = priv->data->keepout;
 		priv->config.nkeepout = priv->data->nkeepout;
 	}
+
+	if (!priv->se_data)
+		priv->config.read_only = true;
 
 	mutex_init(&priv->lock);
 
