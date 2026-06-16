@@ -941,12 +941,8 @@ static void writepages_finish(struct ceph_osd_request *req)
 					   (u64)osd_data->length);
 		total_pages += num_pages;
 		for (j = 0; j < num_pages; j++) {
+			fscrypt_finalize_bounce_page(&osd_data->pages[j]);
 			page = osd_data->pages[j];
-			if (fscrypt_is_bounce_page(page)) {
-				page = fscrypt_pagecache_page(page);
-				fscrypt_free_bounce_page(osd_data->pages[j]);
-				osd_data->pages[j] = page;
-			}
 			BUG_ON(!page);
 			WARN_ON(!PageUptodate(page));
 
