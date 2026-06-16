@@ -267,7 +267,7 @@ sanitize_target_dc_state(struct intel_display *display,
 	static const u32 states[] = {
 		DC_STATE_EN_UPTO_DC6,
 		DC_STATE_EN_UPTO_DC5,
-		DC_STATE_EN_DC3CO,
+		DC_STATE_EN_UPTO_DC3CO,
 		DC_STATE_DISABLE,
 	};
 	int i;
@@ -341,7 +341,7 @@ void intel_display_power_set_target_dc_state(struct intel_display *display,
 	 * CMTG must be restored explicitly after DC6 exit. The dc3co_to_dc6
 	 * flag helps CMTG determine whether restoration is required.
 	 */
-	if (old_target_dc_state == DC_STATE_EN_DC3CO &&
+	if (old_target_dc_state == DC_STATE_EN_UPTO_DC3CO &&
 	    power_domains->target_dc_state == DC_STATE_EN_UPTO_DC6)
 		power_domains->dc3co_to_dc6 = true;
 
@@ -1022,10 +1022,10 @@ static u32 get_allowed_dc_mask(struct intel_display *display, int enable_dc)
 
 	switch (requested_dc) {
 	case 4:
-		mask |= DC_STATE_EN_DC3CO | DC_STATE_EN_UPTO_DC6;
+		mask |= DC_STATE_EN_UPTO_DC3CO | DC_STATE_EN_UPTO_DC6;
 		break;
 	case 3:
-		mask |= DC_STATE_EN_DC3CO | DC_STATE_EN_UPTO_DC5;
+		mask |= DC_STATE_EN_UPTO_DC3CO | DC_STATE_EN_UPTO_DC5;
 		break;
 	case 2:
 		mask |= DC_STATE_EN_UPTO_DC6;
