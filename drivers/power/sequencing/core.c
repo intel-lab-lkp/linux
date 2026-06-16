@@ -1010,7 +1010,7 @@ static void *pwrseq_debugfs_seq_next(struct seq_file *seq, void *data,
 
 	struct device *next __free(put_device) =
 			bus_find_next_device(&pwrseq_bus, curr);
-	return next;
+	return_ptr(next);
 }
 
 static void pwrseq_debugfs_seq_show_target(struct seq_file *seq,
