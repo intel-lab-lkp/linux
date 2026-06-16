@@ -2104,7 +2104,7 @@ static PyObject *pyrf__parse_metrics(PyObject *self, PyObject *args)
 	cpus = pcpus ? ((struct pyrf_cpu_map *)pcpus)->cpus : NULL;
 
 	evlist__init(&evlist, cpus, threads);
-	ret = metricgroup__parse_groups(&evlist, pmu ?: "all", input,
+	ret = metricgroup__parse_groups(&evlist, pmu ?: "all", false, input,
 					/*metric_no_group=*/ false,
 					/*metric_no_merge=*/ false,
 					/*metric_no_threshold=*/ true,
