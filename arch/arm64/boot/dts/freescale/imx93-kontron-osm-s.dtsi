@@ -24,6 +24,15 @@
 		stdout-path = &lpuart1;
 	};
 
+	firmware {
+		hsm0: secure-enclave {
+			compatible = "fsl,imx93-se-ele-hsm";
+			mbox-names = "tx", "rx";
+			mboxes = <&s4muap 0 0>, <&s4muap 1 0>;
+			memory-region = <&ele_memory>;
+		};
+	};
+
 	reg_usdhc2_vcc: regulator-usdhc2-vcc {
 		compatible = "regulator-fixed";
 		pinctrl-names = "default";
@@ -55,6 +64,19 @@
 
 		regulator-state-disk {
 			regulator-off-in-suspend;
+		};
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		ele_memory: ele-memory {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0 0x80000000 0 0x40000000>;
+			size = <0 0x100000>;
+			no-map;
 		};
 	};
 };
@@ -251,6 +273,10 @@
 &lpuart7 { /* OSM-S UART_A */
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_lpuart7>;
+};
+
+&ocotp {
+	secure-enclave = <&hsm0>;
 };
 
 &tpm3 { /* OSM-S PWM_0 */
