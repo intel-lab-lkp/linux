@@ -676,15 +676,32 @@ int intel_dp_rate_index(const int *rates, int len, int rate)
 	return -1;
 }
 
-/* Return %true if the common rates changed. */
-static bool intel_dp_set_common_rates(struct intel_dp *intel_dp)
+static void intel_dp_get_common_rates(struct intel_dp *intel_dp,
+				      int common_rates[DP_MAX_SUPPORTED_RATES],
+				      int *num_common_rates)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
-	int num_old_common_rates = intel_dp->num_common_rates;
-	int old_common_rates[DP_MAX_SUPPORTED_RATES];
 
 	drm_WARN_ON(display->drm,
 		    !intel_dp->num_source_rates || !intel_dp->num_sink_rates);
+
+	*num_common_rates = intersect_rates(intel_dp->source_rates,
+					    intel_dp->num_source_rates,
+					    intel_dp->sink_rates,
+					    intel_dp->num_sink_rates,
+					    common_rates);
+
+	/* Paranoia, there should always be something in common. */
+	if (drm_WARN_ON(display->drm, *num_common_rates == 0)) {
+		common_rates[0] = 162000;
+		*num_common_rates = 1;
+	}
+}
+
+static bool intel_dp_set_common_rates(struct intel_dp *intel_dp)
+{
+	int num_old_common_rates = intel_dp->num_common_rates;
+	int old_common_rates[DP_MAX_SUPPORTED_RATES];
 
 	/* TODO: Add a struct containing both rates and number of rates. */
 	static_assert(__same_type(old_common_rates[0], intel_dp->common_rates[0]) &&
@@ -692,17 +709,7 @@ static bool intel_dp_set_common_rates(struct intel_dp *intel_dp)
 	memcpy(old_common_rates, intel_dp->common_rates,
 	       num_old_common_rates * sizeof(old_common_rates[0]));
 
-	intel_dp->num_common_rates = intersect_rates(intel_dp->source_rates,
-						     intel_dp->num_source_rates,
-						     intel_dp->sink_rates,
-						     intel_dp->num_sink_rates,
-						     intel_dp->common_rates);
-
-	/* Paranoia, there should always be something in common. */
-	if (drm_WARN_ON(display->drm, intel_dp->num_common_rates == 0)) {
-		intel_dp->common_rates[0] = 162000;
-		intel_dp->num_common_rates = 1;
-	}
+	intel_dp_get_common_rates(intel_dp, intel_dp->common_rates, &intel_dp->num_common_rates);
 
 	return num_old_common_rates != intel_dp->num_common_rates ||
 	       memcmp(old_common_rates, intel_dp->common_rates,
