@@ -129,20 +129,19 @@ static int binderfs_binder_device_create(struct inode *ref_inode,
 #endif
 
 	/* Reserve new minor number for the new device. */
-	mutex_lock(&binderfs_minors_mutex);
-	if (++info->device_count <= info->mount_opts.max)
-		minor = ida_alloc_max(&binderfs_minors,
-				      use_reserve ? BINDERFS_MAX_MINOR - 1 :
-						    BINDERFS_MAX_MINOR_CAPPED - 1,
-				      GFP_KERNEL);
-	else
-		minor = -ENOSPC;
-	if (minor < 0) {
-		--info->device_count;
-		mutex_unlock(&binderfs_minors_mutex);
-		return minor;
+	scoped_guard(mutex, &binderfs_minors_mutex) {
+		if (++info->device_count <= info->mount_opts.max)
+			minor = ida_alloc_max(&binderfs_minors,
+					      use_reserve ? BINDERFS_MAX_MINOR - 1 :
+							    BINDERFS_MAX_MINOR_CAPPED - 1,
+					      GFP_KERNEL);
+		else
+			minor = -ENOSPC;
+		if (minor < 0) {
+			--info->device_count;
+			return minor;
+		}
 	}
-	mutex_unlock(&binderfs_minors_mutex);
 
 	ret = -ENOMEM;
 	device = kzalloc_obj(*device);
