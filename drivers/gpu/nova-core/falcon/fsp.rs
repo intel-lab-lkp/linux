@@ -26,10 +26,10 @@ use crate::{
         Falcon,
         FalconEngine,
         PFalcon2Base,
-        PFalconBase, //
+        PFalconBase,
+        regs, //
     },
-    num,
-    regs, //
+    num, //
 };
 
 /// FSP message timeout in milliseconds.
@@ -61,7 +61,7 @@ impl Falcon<Fsp> {
         // Begin a write burst at offset `0`, auto-incrementing on each write.
         bar.write(
             WithBase::of::<Fsp>(),
-            regs::NV_PFALCON_FALCON_EMEMC::zeroed().with_aincw(true),
+            crate::regs::NV_PFALCON_FALCON_EMEMC::zeroed().with_aincw(true),
         );
 
         for chunk in data.chunks_exact(4) {
@@ -70,7 +70,7 @@ impl Falcon<Fsp> {
             // Write the next 32-bit `value`; hardware advances the offset.
             bar.write(
                 WithBase::of::<Fsp>(),
-                regs::NV_PFALCON_FALCON_EMEMD::zeroed().with_data(value),
+                crate::regs::NV_PFALCON_FALCON_EMEMD::zeroed().with_data(value),
             );
         }
 
@@ -89,12 +89,12 @@ impl Falcon<Fsp> {
         // Begin a read burst at offset `0`, auto-incrementing on each read.
         bar.write(
             WithBase::of::<Fsp>(),
-            regs::NV_PFALCON_FALCON_EMEMC::zeroed().with_aincr(true),
+            crate::regs::NV_PFALCON_FALCON_EMEMC::zeroed().with_aincr(true),
         );
 
         for chunk in data.chunks_exact_mut(4) {
             // Read the next 32-bit word; hardware advances the offset.
-            let value = bar.read(regs::NV_PFALCON_FALCON_EMEMD::of::<Fsp>()).data();
+            let value = bar.read(crate::regs::NV_PFALCON_FALCON_EMEMD::of::<Fsp>()).data();
             chunk.copy_from_slice(&value.to_le_bytes());
         }
 
