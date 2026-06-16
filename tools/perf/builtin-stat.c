@@ -1210,6 +1210,7 @@ static int parse_cputype(const struct option *opt,
 		return -1;
 	}
 	parse_events_option_args.pmu_filter = pmu->name;
+	parse_events_option_args.cputype_filter = true;
 
 	return 0;
 }
@@ -1226,6 +1227,7 @@ static int parse_pmu_filter(const struct option *opt,
 	}
 
 	parse_events_option_args.pmu_filter = str;
+	parse_events_option_args.cputype_filter = false;
 	return 0;
 }
 
