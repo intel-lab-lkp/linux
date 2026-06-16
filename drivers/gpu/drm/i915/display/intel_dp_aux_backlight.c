@@ -355,9 +355,14 @@ intel_dp_aux_hdr_disable_backlight(const struct drm_connector_state *conn_state,
 	struct intel_connector *connector = to_intel_connector(conn_state->connector);
 	struct intel_panel *panel = &connector->panel;
 
-	/* Nothing to do for AUX based backlight controls */
-	if (panel->backlight.edp.intel_cap.sdr_uses_aux)
+	/*
+	 * Drive the DPCD brightness to 0 before tearing down the link / power
+	 * sequencer so the panel can blank emission gracefully.
+	 */
+	if (panel->backlight.edp.intel_cap.sdr_uses_aux) {
+		intel_dp_aux_hdr_set_aux_backlight(conn_state, 0);
 		return;
+	}
 
 	/* Note we want the actual pwm_level to be 0, regardless of pwm_min */
 	panel->backlight.pwm_funcs->disable(conn_state, intel_backlight_invert_pwm_level(connector, 0));
@@ -518,6 +523,12 @@ static void intel_dp_aux_vesa_disable_backlight(const struct drm_connector_state
 	struct intel_connector *connector = to_intel_connector(old_conn_state->connector);
 	struct intel_panel *panel = &connector->panel;
 	struct intel_dp *intel_dp = enc_to_intel_dp(connector->encoder);
+
+	/*
+	 * Drive the DPCD brightness register to 0 before clearing BL_ENABLE or
+	 * dropping the panel power.
+	 */
+	drm_edp_backlight_set_level(&intel_dp->aux, &panel->backlight.edp.vesa.info, 0);
 
 	drm_edp_backlight_disable(&intel_dp->aux, &panel->backlight.edp.vesa.info);
 
