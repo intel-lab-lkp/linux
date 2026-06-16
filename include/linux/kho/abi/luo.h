@@ -119,17 +119,19 @@
 
 #define LIVEUPDATE_HNDL_COMPAT_LENGTH	48
 
+#include <linux/kho/abi/kexec_handover.h>
+
 /**
  * struct luo_file_ser - Represents the serialized preserves files.
  * @compatible:  File handler compatible string.
- * @data:        Private data
+ * @serialized_data: Serializable pointer union for private data.
  * @token:       User provided token for this file
  *
  * If this structure is modified, LUO_SESSION_COMPATIBLE must be updated.
  */
 struct luo_file_ser {
 	char compatible[LIVEUPDATE_HNDL_COMPAT_LENGTH];
-	u64 data;
+	DECLARE_KHOSER_PTR(serialized_data, void *);
 	u64 token;
 } __packed;
 
