@@ -178,10 +178,12 @@ static int lan966x_pci_probe(struct pci_dev *pdev, const struct pci_device_id *i
 
 	ret = of_platform_default_populate(dev_of_node(dev), NULL, dev);
 	if (ret)
-		goto err_unload_overlay;
+		goto err_depopulate;
 
 	return 0;
 
+err_depopulate:
+	of_platform_depopulate(dev);
 err_unload_overlay:
 	lan966x_pci_unload_overlay(data);
 	return ret;
