@@ -1406,7 +1406,11 @@ static int geni_se_probe(struct platform_device *pdev)
 
 	dev_set_drvdata(dev, wrapper);
 	dev_dbg(dev, "GENI SE Driver probed\n");
-	return devm_of_platform_populate(dev);
+	ret = devm_of_platform_populate(dev);
+	if (ret)
+		of_platform_depopulate(dev);
+
+	return ret;
 }
 
 static const char * const qup_clks[] = {
