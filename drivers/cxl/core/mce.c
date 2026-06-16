@@ -7,13 +7,27 @@
 #include <cxlmem.h>
 #include "mce.h"
 
+static struct device *cxlmd_get_endpoint_dev(struct cxl_memdev *cxlmd)
+{
+	struct cxl_port *endpoint;
+
+	if (!cxlmd)
+		return NULL;
+
+	guard(device)(&cxlmd->dev);
+	endpoint = cxlmd->endpoint;
+	if (IS_ERR_OR_NULL(endpoint))
+		return NULL;
+
+	return get_device(&endpoint->dev);
+}
+
 static int cxl_handle_mce(struct notifier_block *nb, unsigned long val,
 			  void *data)
 {
 	struct cxl_memdev_state *mds = container_of(nb, struct cxl_memdev_state,
 						    mce_notifier);
 	struct cxl_memdev *cxlmd = mds->cxlds.cxlmd;
-	struct cxl_port *endpoint;
 	struct mce *mce = data;
 	u64 spa, spa_alias;
 	unsigned long pfn;
@@ -24,8 +38,13 @@ static int cxl_handle_mce(struct notifier_block *nb, unsigned long val,
 	if (!cxlmd)
 		return NOTIFY_DONE;
 
-	endpoint = cxlmd->endpoint;
-	if (IS_ERR_OR_NULL(endpoint))
+	/*
+	 * With the cxlmd device lock held, check the cxlmd->endpoint pointer
+	 * and then take a reference of the device in order to keep it alive
+	 * while accessing it.
+	 */
+	struct device *dev __free(put_device) = cxlmd_get_endpoint_dev(cxlmd);
+	if (!dev)
 		return NOTIFY_DONE;
 
 	spa = mce->addr & MCI_ADDR_PHYSADDR;
@@ -34,7 +53,7 @@ static int cxl_handle_mce(struct notifier_block *nb, unsigned long val,
 	if (!pfn_valid(pfn))
 		return NOTIFY_DONE;
 
-	spa_alias = cxl_port_get_spa_cache_alias(endpoint, spa);
+	spa_alias = cxl_port_get_spa_cache_alias(to_cxl_port(dev), spa);
 	if (spa_alias == ~0ULL)
 		return NOTIFY_DONE;
 
