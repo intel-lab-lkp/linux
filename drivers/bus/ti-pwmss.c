@@ -27,14 +27,18 @@ static int pwmss_probe(struct platform_device *pdev)
 
 	/* Populate all the child nodes here... */
 	ret = of_platform_populate(node, NULL, NULL, &pdev->dev);
-	if (ret)
+	if (ret) {
 		dev_err(&pdev->dev, "no child node found\n");
+		of_platform_depopulate(&pdev->dev);
+		pm_runtime_disable(&pdev->dev);
+	}
 
 	return ret;
 }
 
 static void pwmss_remove(struct platform_device *pdev)
 {
+	of_platform_depopulate(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 }
 
