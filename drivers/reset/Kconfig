@@ -404,6 +404,17 @@ config RESET_UNIPHIER_GLUE
 	  on UniPhier SoCs. Say Y if you want to control reset signals
 	  provided by the glue layer.
 
+config RESET_ZTE_ZX297520V3
+	tristate "ZTE zx297520v3 Reset Driver"
+	depends on (ARCH_ZTE || COMPILE_TEST)
+	default CLK_ZTE_ZX297520V3
+	select AUXILIARY_BUS
+	help
+	  This enables the reset controller for ZTE zx297520v3 SoCs. The reset
+	  controller is part of the clock controller on this SoC. This driver
+	  operates on an auxiliary device exposed by the clock driver. Enable
+	  this driver if you plan to boot the kernel on a zx297520v3 based SoC.
+
 config RESET_ZYNQ
 	bool "ZYNQ Reset Driver" if COMPILE_TEST
 	default ARCH_ZYNQ
