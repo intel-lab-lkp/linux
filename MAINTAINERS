@@ -21825,6 +21825,7 @@ M:	Siratul Islam <siratul.islam@linux.dev>
 L:	linux-iio@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/iio/magnetometer/qstcorp,qmc5883l.yaml
+F:	drivers/iio/magnetometer/qmc5883l.c
 
 QT1010 MEDIA DRIVER
 L:	linux-media@vger.kernel.org
