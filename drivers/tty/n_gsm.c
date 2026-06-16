@@ -453,6 +453,8 @@ static const u8 gsm_fcs8[256] = {
 #define GOOD_FCS	0xCF
 
 static void gsm_dlci_close(struct gsm_dlci *dlci);
+static struct gsm_dlci *gsm_dlci_open_get(struct gsm_mux *gsm, unsigned int addr);
+static void gsm_dlci_unget(struct gsm_dlci *dlci);
 static int gsmld_output(struct gsm_mux *gsm, u8 *data, int len);
 static int gsm_modem_update(struct gsm_dlci *dlci, u8 brk);
 static struct gsm_msg *gsm_data_alloc(struct gsm_mux *gsm, u8 addr, int len,
@@ -1694,10 +1696,8 @@ static void gsm_control_modem(struct gsm_mux *gsm, const u8 *data, int clen)
 		return;
 
 	addr >>= 1;
-	/* Closed port, or invalid ? */
-	if (addr == 0 || addr >= NUM_DLCI || gsm->dlci[addr] == NULL)
+	if (addr == 0)
 		return;
-	dlci = gsm->dlci[addr];
 
 	/* Must be at least one byte following the EA */
 	if ((cl - len) < 1)
@@ -1711,12 +1711,23 @@ static void gsm_control_modem(struct gsm_mux *gsm, const u8 *data, int clen)
 	if (len < 1)
 		return;
 
+	/*
+	 * Pin the addressed DLCI across the dereference: a concurrent
+	 * GSMIOC_SETCONF -> gsm_cleanup_mux() can free it otherwise. Pinning
+	 * (not gsm->mutex over the whole handler) keeps the data path lock
+	 * free.
+	 */
+	dlci = gsm_dlci_open_get(gsm, addr);
+	if (dlci == NULL)
+		return;
+
 	tty = tty_port_tty_get(&dlci->port);
 	gsm_process_modem(tty, dlci, modem, cl);
 	if (tty) {
 		tty_wakeup(tty);
 		tty_kref_put(tty);
 	}
+	gsm_dlci_unget(dlci);
 	gsm_control_reply(gsm, CMD_MSC, data, clen);
 }
 
@@ -1746,15 +1757,26 @@ static void gsm_control_negotiation(struct gsm_mux *gsm, unsigned int cr,
 	/* Invalid DLCI? */
 	params = (struct gsm_dlci_param_bits *)data;
 	addr = FIELD_GET(PN_D_FIELD_DLCI, params->d_bits);
-	if (addr == 0 || addr >= NUM_DLCI || !gsm->dlci[addr]) {
+	if (addr == 0) {
 		gsm->open_error++;
 		return;
 	}
-	dlci = gsm->dlci[addr];
+
+	/*
+	 * Pin the addressed DLCI across the negotiation; see gsm_control_modem()
+	 * for why. Unlike MSC/RLS this DLCI need not be open, so pin first and
+	 * check the state afterwards.
+	 */
+	dlci = gsm_dlci_open_get(gsm, addr);
+	if (dlci == NULL) {
+		gsm->open_error++;
+		return;
+	}
 
 	/* Too late for parameter negotiation? */
 	if ((!cr && dlci->state == DLCI_OPENING) || dlci->state == DLCI_OPEN) {
 		gsm->open_error++;
+		gsm_dlci_unget(dlci);
 		return;
 	}
 
@@ -1765,6 +1787,7 @@ static void gsm_control_negotiation(struct gsm_mux *gsm, unsigned int cr,
 			pr_info("%s PN failed\n", __func__);
 		gsm->open_error++;
 		gsm_dlci_close(dlci);
+		gsm_dlci_unget(dlci);
 		return;
 	}
 
@@ -1785,6 +1808,7 @@ static void gsm_control_negotiation(struct gsm_mux *gsm, unsigned int cr,
 			pr_info("%s PN in invalid state\n", __func__);
 		gsm->open_error++;
 	}
+	gsm_dlci_unget(dlci);
 }
 
 /**
@@ -1800,6 +1824,7 @@ static void gsm_control_negotiation(struct gsm_mux *gsm, unsigned int cr,
 
 static void gsm_control_rls(struct gsm_mux *gsm, const u8 *data, int clen)
 {
+	struct gsm_dlci *dlci;
 	struct tty_port *port;
 	unsigned int addr = 0;
 	u8 bits;
@@ -1816,15 +1841,21 @@ static void gsm_control_rls(struct gsm_mux *gsm, const u8 *data, int clen)
 	if (len <= 0)
 		return;
 	addr >>= 1;
-	/* Closed port, or invalid ? */
-	if (addr == 0 || addr >= NUM_DLCI || gsm->dlci[addr] == NULL)
+	if (addr == 0)
 		return;
 	/* No error ? */
 	bits = *dp;
 	if ((bits & 1) == 0)
 		return;
 
-	port = &gsm->dlci[addr]->port;
+	/*
+	 * Pin the addressed DLCI across the dereference; see gsm_control_modem()
+	 * for why. gsm_cleanup_mux() can free it concurrently otherwise.
+	 */
+	dlci = gsm_dlci_open_get(gsm, addr);
+	if (dlci == NULL)
+		return;
+	port = &dlci->port;
 
 	if (bits & 2)
 		tty_insert_flip_char(port, 0, TTY_OVERRUN);
@@ -1835,6 +1866,7 @@ static void gsm_control_rls(struct gsm_mux *gsm, const u8 *data, int clen)
 
 	tty_flip_buffer_push(port);
 
+	gsm_dlci_unget(dlci);
 	gsm_control_reply(gsm, CMD_RLS, data, clen);
 }
 
@@ -2694,7 +2726,14 @@ static void gsm_dlci_free(struct tty_port *port)
 	struct gsm_dlci *dlci = container_of(port, struct gsm_dlci, port);
 
 	timer_shutdown_sync(&dlci->t1);
-	dlci->gsm->dlci[dlci->addr] = NULL;
+	/*
+	 * Only clear the slot if it still points at us. A receive worker can
+	 * pin this DLCI across gsm_queue() dispatch with dlci_get(); if a
+	 * concurrent GSMIOC_SETCONF tears the mux down and re-creates a DLCI
+	 * at the same address before the worker drops its reference, the slot
+	 * already refers to the new DLCI and must not be cleared here.
+	 */
+	cmpxchg(&dlci->gsm->dlci[dlci->addr], dlci, NULL);
 	kfifo_free(&dlci->fifo);
 	while ((dlci->skb = skb_dequeue(&dlci->skb_list)))
 		dev_kfree_skb(dlci->skb);
@@ -2709,6 +2748,42 @@ static inline void dlci_get(struct gsm_dlci *dlci)
 static inline void dlci_put(struct gsm_dlci *dlci)
 {
 	tty_port_put(&dlci->port);
+}
+
+/**
+ *	gsm_dlci_open_get	-	look up a DLCI and pin it
+ *	@gsm: GSM mux
+ *	@addr: DLCI address
+ *
+ *	Look up gsm->dlci[addr] under gsm->mutex and, if present, take a
+ *	tty_port reference so it cannot be freed while a control-frame handler
+ *	dereferences it. A concurrent GSMIOC_SETCONF -> gsm_cleanup_mux()
+ *	releases DLCIs under the same mutex, so the lookup and the pin are
+ *	atomic with respect to the teardown. Returns the pinned DLCI or NULL.
+ *	The caller must release it with gsm_dlci_unget(). Callers that require
+ *	a particular state must check dlci->state themselves.
+ */
+static struct gsm_dlci *gsm_dlci_open_get(struct gsm_mux *gsm, unsigned int addr)
+{
+	struct gsm_dlci *dlci;
+
+	if (addr >= NUM_DLCI)
+		return NULL;
+	mutex_lock(&gsm->mutex);
+	dlci = gsm->dlci[addr];
+	if (dlci != NULL)
+		dlci_get(dlci);
+	mutex_unlock(&gsm->mutex);
+	return dlci;
+}
+
+/**
+ *	gsm_dlci_unget		-	drop a reference from gsm_dlci_open_get()
+ *	@dlci: DLCI to release
+ */
+static void gsm_dlci_unget(struct gsm_dlci *dlci)
+{
+	dlci_put(dlci);
 }
 
 static void gsm_destroy_network(struct gsm_dlci *dlci);
@@ -2839,11 +2914,23 @@ static void gsm_queue(struct gsm_mux *gsm)
 	case UI|PF:
 	case UIH:
 	case UIH|PF:
+		/*
+		 * Pin the DLCI so a concurrent gsm_cleanup_mux() cannot free
+		 * it while dlci->data() and the handlers it reaches use it.
+		 * The mutex is dropped before the dispatch, so the data path
+		 * is not serialised.
+		 */
+		mutex_lock(&gsm->mutex);
+		dlci = gsm->dlci[address];
 		if (dlci == NULL || dlci->state != DLCI_OPEN) {
+			mutex_unlock(&gsm->mutex);
 			gsm_response(gsm, address, DM|PF);
 			return;
 		}
+		dlci_get(dlci);
+		mutex_unlock(&gsm->mutex);
 		dlci->data(dlci, gsm->buf, gsm->len);
+		dlci_put(dlci);
 		break;
 	default:
 		goto invalid;
