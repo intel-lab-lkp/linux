@@ -878,10 +878,10 @@ intel_vrr_enable_cmrr(const struct intel_crtc_state *crtc_state)
 		       upper_32_bits(crtc_state->vrr.cmrr.cmrr_m));
 	intel_de_write(display, TRANS_CMRR_M_LO(display, cpu_transcoder),
 		       lower_32_bits(crtc_state->vrr.cmrr.cmrr_m));
-	intel_de_write(display, TRANS_CMRR_N_HI(display, cpu_transcoder),
-		       upper_32_bits(crtc_state->vrr.cmrr.cmrr_n));
 	intel_de_write(display, TRANS_CMRR_N_LO(display, cpu_transcoder),
 		       lower_32_bits(crtc_state->vrr.cmrr.cmrr_n));
+	intel_de_write(display, TRANS_CMRR_N_HI(display, cpu_transcoder),
+		       upper_32_bits(crtc_state->vrr.cmrr.cmrr_n));
 }
 
 static void
@@ -892,8 +892,8 @@ intel_vrr_disable_cmrr(const struct intel_crtc_state *crtc_state)
 
 	intel_de_write(display, TRANS_CMRR_M_HI(display, cpu_transcoder), 0);
 	intel_de_write(display, TRANS_CMRR_M_LO(display, cpu_transcoder), 0);
-	intel_de_write(display, TRANS_CMRR_N_HI(display, cpu_transcoder), 0);
 	intel_de_write(display, TRANS_CMRR_N_LO(display, cpu_transcoder), 0);
+	intel_de_write(display, TRANS_CMRR_N_HI(display, cpu_transcoder), 0);
 }
 
 static void
@@ -993,12 +993,6 @@ static void intel_vrr_tg_enable(const struct intel_crtc_state *crtc_state,
 		       trans_vrr_push(crtc_state, false));
 
 	vrr_ctl = VRR_CTL_VRR_ENABLE | trans_vrr_ctl(crtc_state);
-
-	/*
-	 * FIXME this might be broken as bspec seems to imply that
-	 * even VRR_CTL_CMRR_ENABLE is armed by TRANS_CMRR_N_HI
-	 * when enabling CMRR (but not when disabling CMRR?).
-	 */
 
 	intel_de_write(display, TRANS_VRR_CTL(display, cpu_transcoder), vrr_ctl);
 
