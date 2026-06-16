@@ -74,19 +74,19 @@
 #define FLAG_DELAY_INIT BIT(0)
 
 static bool dpad_to_buttons;
-module_param(dpad_to_buttons, bool, S_IRUGO);
+module_param(dpad_to_buttons, bool, 0444);
 MODULE_PARM_DESC(dpad_to_buttons, "Map D-PAD to buttons rather than axes for unknown pads");
 
 static bool triggers_to_buttons;
-module_param(triggers_to_buttons, bool, S_IRUGO);
+module_param(triggers_to_buttons, bool, 0444);
 MODULE_PARM_DESC(triggers_to_buttons, "Map triggers to buttons rather than axes for unknown pads");
 
 static bool sticks_to_null;
-module_param(sticks_to_null, bool, S_IRUGO);
+module_param(sticks_to_null, bool, 0444);
 MODULE_PARM_DESC(sticks_to_null, "Do not map sticks at all for unknown pads");
 
 static bool auto_poweroff = true;
-module_param(auto_poweroff, bool, S_IWUSR | S_IRUGO);
+module_param(auto_poweroff, bool, 0644);
 MODULE_PARM_DESC(auto_poweroff, "Power off wireless controllers on suspend");
 
 static const struct xpad_device {
