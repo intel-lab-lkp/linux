@@ -16,6 +16,8 @@ int intel_dp_common_len_rate_limit(const struct intel_dp *intel_dp,
 int intel_dp_common_rate(struct intel_dp *intel_dp, int index);
 int intel_dp_max_common_rate(struct intel_dp *intel_dp);
 
+void intel_dp_link_caps_print_common_rates(struct intel_dp_link_caps *link_caps);
+
 void intel_dp_link_caps_get_forced_params(struct intel_dp_link_caps *link_caps,
 					  struct intel_dp_link_config *forced_params);
 

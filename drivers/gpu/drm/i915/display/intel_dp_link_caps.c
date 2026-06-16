@@ -6,6 +6,7 @@
 #include <linux/bitops.h>
 #include <linux/debugfs.h>
 #include <linux/log2.h>
+#include <linux/seq_buf.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
 #include <linux/string.h>
@@ -64,6 +65,19 @@ int intel_dp_common_rate(struct intel_dp *intel_dp, int index)
 int intel_dp_max_common_rate(struct intel_dp *intel_dp)
 {
 	return intel_dp_common_rate(intel_dp, intel_dp->num_common_rates - 1);
+}
+
+void intel_dp_link_caps_print_common_rates(struct intel_dp_link_caps *link_caps)
+{
+	struct intel_dp *intel_dp = link_caps->dp;
+	struct intel_display *display = to_intel_display(intel_dp);
+	DECLARE_SEQ_BUF(s, 128);
+	int i;
+
+	for (i = 0; i < intel_dp->num_common_rates; i++)
+		seq_buf_printf(&s, "%s%d", i ? ", " : "", intel_dp->common_rates[i]);
+
+	drm_dbg_kms(display->drm, "common rates: %s\n", seq_buf_str(&s));
 }
 
 static int forced_lane_count(struct intel_dp *intel_dp)
