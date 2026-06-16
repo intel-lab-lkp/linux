@@ -10,6 +10,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/device.h>
+#include <linux/mod_devicetable.h>
 #include <linux/notifier.h>
 #include <linux/types.h>
 
@@ -950,11 +951,6 @@ struct scmi_device {
 };
 
 #define to_scmi_dev(d) container_of_const(d, struct scmi_device, dev)
-
-struct scmi_device_id {
-	u8 protocol_id;
-	const char *name;
-};
 
 struct scmi_driver {
 	const char *name;
