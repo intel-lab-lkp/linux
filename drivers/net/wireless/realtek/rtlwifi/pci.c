@@ -33,6 +33,7 @@ static const u8 ac_to_hwq[] = {
 
 static const struct pci_device_id rtl_aspm_quirks[] = {
 	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_REALTEK, 0xb723, 0x11ad, 0x1723) },
+	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_REALTEK, 0xb723, 0x17aa, 0xb736) },
 	{ 0 }
 };
 
