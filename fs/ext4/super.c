@@ -1308,6 +1308,9 @@ static void ext4_put_super(struct super_block *sb)
 	destroy_workqueue(sbi->rsv_conversion_wq);
 	ext4_release_orphan_info(sb);
 
+	/* Flush deferred EA inode iputs before destroying journal */
+	flush_work(&sbi->s_ea_inode_work);
+
 	if (sbi->s_journal) {
 		aborted = is_journal_aborted(sbi->s_journal);
 		err = ext4_journal_destroy(sbi, sbi->s_journal);
@@ -5538,6 +5541,9 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 		sbi->s_journal = NULL;
 		needs_recovery = 0;
 	}
+
+	init_llist_head(&sbi->s_ea_inode_to_free);
+	INIT_WORK(&sbi->s_ea_inode_work, ext4_ea_inode_work);
 
 	if (!test_opt(sb, NO_MBCACHE)) {
 		sbi->s_ea_block_cache = ext4_xattr_create_cache();
