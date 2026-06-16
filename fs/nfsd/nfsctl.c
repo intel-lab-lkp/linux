@@ -2329,6 +2329,212 @@ int nfsd_nl_cache_flush_doit(struct sk_buff *skb, struct genl_info *info)
 	return 0;
 }
 
+static int nfsd_nl_fill_proc_ops(struct sk_buff *skb, int attr,
+				 unsigned long __percpu *counts,
+				 unsigned int nproc)
+{
+	struct nlattr *nest;
+	unsigned int j;
+	int k;
+
+	for (j = 0; j < nproc; j++) {
+		unsigned long count = 0;
+
+		for_each_possible_cpu(k)
+			count += per_cpu(counts[j], k);
+
+		nest = nla_nest_start(skb, attr);
+		if (!nest)
+			return -EMSGSIZE;
+		if (nla_put_u32(skb, NFSD_A_SERVER_PROC_ENTRY_OP, j) ||
+		    nla_put_u64_64bit(skb, NFSD_A_SERVER_PROC_ENTRY_COUNT,
+				      count, NFSD_A_SERVER_PROC_ENTRY_PAD)) {
+			nla_nest_cancel(skb, nest);
+			return -EMSGSIZE;
+		}
+		nla_nest_end(skb, nest);
+	}
+
+	return 0;
+}
+
+/**
+ * nfsd_nl_server_stats_get_dumpit - dump NFS server statistics
+ * @skb: reply buffer
+ * @cb: netlink metadata and command arguments
+ *
+ * cb->args[0] tracks the current NFSv4 operation index for proc4ops.
+ * A value of 0 means we haven't started yet. We emit all scalar stats
+ * and per-version procedure counts in the first message, then emit
+ * proc4ops entries filling as many as will fit per message.
+ *
+ * Returns the size of the reply or a negative errno.
+ */
+int nfsd_nl_server_stats_get_dumpit(struct sk_buff *skb,
+				    struct netlink_callback *cb)
+{
+	struct net *net = sock_net(skb->sk);
+	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	struct svc_stat *statp = &nn->nfsd_svcstats;
+	struct svc_program *prog = statp->program;
+	int start = cb->args[0];
+	void *hdr;
+
+	/*
+	 * cb->args[0] == 0: first call, emit scalar stats + procN counts
+	 * cb->args[0] > 0: emit proc4ops entries starting from args[0] - 1
+	 * cb->args[0] < 0: done
+	 */
+	if (start < 0)
+		return 0;
+
+	if (start == 0) {
+		hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid,
+				  cb->nlh->nlmsg_seq, &nfsd_nl_family,
+				  NLM_F_MULTI, NFSD_CMD_SERVER_STATS_GET);
+		if (!hdr)
+			return -ENOBUFS;
+
+		/* Reply cache stats */
+		{
+			u64 hits, misses, nocache;
+
+			hits = percpu_counter_sum_positive(&nn->counter[NFSD_STATS_RC_HITS]);
+			misses = percpu_counter_sum_positive(&nn->counter[NFSD_STATS_RC_MISSES]);
+			nocache = percpu_counter_sum_positive(&nn->counter[NFSD_STATS_RC_NOCACHE]);
+			if (nla_put_u64_64bit(skb, NFSD_A_SERVER_STATS_RC_HITS,
+					hits, NFSD_A_SERVER_STATS_PAD) ||
+			    nla_put_u64_64bit(skb, NFSD_A_SERVER_STATS_RC_MISSES,
+					misses, NFSD_A_SERVER_STATS_PAD) ||
+			    nla_put_u64_64bit(skb, NFSD_A_SERVER_STATS_RC_NOCACHE,
+					nocache, NFSD_A_SERVER_STATS_PAD))
+				goto err_cancel;
+		}
+
+		/* Filehandle stats */
+		if (nla_put_u64_64bit(skb, NFSD_A_SERVER_STATS_FH_STALE,
+				percpu_counter_sum_positive(&nn->counter[NFSD_STATS_FH_STALE]),
+				NFSD_A_SERVER_STATS_PAD))
+			goto err_cancel;
+
+		/* IO stats */
+		{
+			u64 rd, wr;
+
+			rd = percpu_counter_sum_positive(&nn->counter[NFSD_STATS_IO_READ]);
+			wr = percpu_counter_sum_positive(&nn->counter[NFSD_STATS_IO_WRITE]);
+			if (nla_put_u64_64bit(skb, NFSD_A_SERVER_STATS_IO_READ,
+					rd, NFSD_A_SERVER_STATS_PAD) ||
+			    nla_put_u64_64bit(skb, NFSD_A_SERVER_STATS_IO_WRITE,
+					wr, NFSD_A_SERVER_STATS_PAD))
+				goto err_cancel;
+		}
+
+		/* Network stats */
+		if (nla_put_u32(skb, NFSD_A_SERVER_STATS_NETCNT,
+				statp->netcnt) ||
+		    nla_put_u32(skb, NFSD_A_SERVER_STATS_NETUDPCNT,
+				statp->netudpcnt) ||
+		    nla_put_u32(skb, NFSD_A_SERVER_STATS_NETTCPCNT,
+				statp->nettcpcnt) ||
+		    nla_put_u32(skb, NFSD_A_SERVER_STATS_NETTCPCONN,
+				statp->nettcpconn))
+			goto err_cancel;
+
+		/* RPC stats */
+		if (nla_put_u32(skb, NFSD_A_SERVER_STATS_RPCCNT,
+				statp->rpccnt) ||
+		    nla_put_u32(skb, NFSD_A_SERVER_STATS_RPCBADFMT,
+				statp->rpcbadfmt) ||
+		    nla_put_u32(skb, NFSD_A_SERVER_STATS_RPCBADAUTH,
+				statp->rpcbadauth) ||
+		    nla_put_u32(skb, NFSD_A_SERVER_STATS_RPCBADCLNT,
+				statp->rpcbadclnt))
+			goto err_cancel;
+
+		/* Per-version procedure counts */
+		if (statp->vs_count) {
+			static const int proc_attrs[] = {
+				[2] = NFSD_A_SERVER_STATS_PROC2_OPS,
+				[3] = NFSD_A_SERVER_STATS_PROC3_OPS,
+				[4] = NFSD_A_SERVER_STATS_PROC4_OPS,
+			};
+			unsigned int i;
+
+			for (i = 0; i < prog->pg_nvers &&
+			     i < ARRAY_SIZE(proc_attrs); i++) {
+				if (!prog->pg_vers[i] ||
+				    !statp->vs_count[i])
+					continue;
+				if (!proc_attrs[i])
+					continue;
+				if (nfsd_nl_fill_proc_ops(skb,
+						proc_attrs[i],
+						statp->vs_count[i],
+						prog->pg_vers[i]->vs_nproc))
+					goto err_cancel;
+			}
+		}
+
+		genlmsg_end(skb, hdr);
+		cb->args[0] = 1;
+	}
+
+#ifdef CONFIG_NFSD_V4
+	/* NFSv4 individual operation counts */
+	{
+		int i = (start > 0) ? start - 1 : 0;
+
+		for (; i <= LAST_NFS4_OP; i++) {
+			struct percpu_counter *ctr;
+			struct nlattr *nest;
+			u64 cnt;
+
+			ctr = &nn->counter[NFSD_STATS_NFS4_OP(i)];
+			cnt = percpu_counter_sum_positive(ctr);
+
+			hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid,
+					  cb->nlh->nlmsg_seq,
+					  &nfsd_nl_family, NLM_F_MULTI,
+					  NFSD_CMD_SERVER_STATS_GET);
+			if (!hdr) {
+				cb->args[0] = i + 1;
+				goto out;
+			}
+
+			nest = nla_nest_start(skb,
+					NFSD_A_SERVER_STATS_PROC4OPS_OPS);
+			if (!nest) {
+				genlmsg_cancel(skb, hdr);
+				cb->args[0] = i + 1;
+				goto out;
+			}
+			if (nla_put_u32(skb, NFSD_A_SERVER_PROC_ENTRY_OP,
+					i) ||
+			    nla_put_u64_64bit(skb,
+					NFSD_A_SERVER_PROC_ENTRY_COUNT,
+					cnt,
+					NFSD_A_SERVER_PROC_ENTRY_PAD)) {
+				nla_nest_cancel(skb, nest);
+				genlmsg_cancel(skb, hdr);
+				cb->args[0] = i + 1;
+				goto out;
+			}
+			nla_nest_end(skb, nest);
+			genlmsg_end(skb, hdr);
+		}
+	}
+#endif
+
+	cb->args[0] = -1;
+out:
+	return skb->len;
+
+err_cancel:
+	genlmsg_cancel(skb, hdr);
+	return -EMSGSIZE;
+}
+
 int nfsd_cache_notify(struct cache_detail *cd, struct cache_head *h, u32 cache_type)
 {
 	struct genlmsghdr *hdr;
