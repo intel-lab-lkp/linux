@@ -1631,23 +1631,40 @@ static void tgl_bw_buddy_init(struct intel_display *display)
 		    table[config].type == dram_info->type)
 			break;
 
+	/*
+	 * If we don't recognize the memory configuration, explicitly disable
+	 * the address buddy logic in pre-xe2_lpd platforms as it was before.
+	 * In xe2_lpd+ cases, page masks must be set to 0 if no matching
+	 * configuration is found in the table. So keep the default settings
+	 * as it is. By default, BW_BUDDY_CTL bit 31 is 0 (bw buddy enabled)
+	 * and BW_BUDDY_PAGE_MASK is 0x0
+	 *
+	 * TODO: Revisit the buddy page masks table when bspec updates the
+	 * table with the correct number of channels for each dram type.
+	 */
 	if (table[config].page_mask == 0) {
 		drm_dbg_kms(display->drm,
 			    "Unknown memory configuration; disabling address buddy logic.\n");
-		for_each_set_bit(i, &abox_mask, BITS_PER_TYPE(abox_mask))
-			intel_de_write(display, BW_BUDDY_CTL(i),
-				       BW_BUDDY_DISABLE);
-	} else {
-		for_each_set_bit(i, &abox_mask, BITS_PER_TYPE(abox_mask)) {
-			intel_de_write(display, BW_BUDDY_PAGE_MASK(i),
-				       table[config].page_mask);
 
-			/* Wa_22010178259:tgl,dg1,rkl,adl-s */
-			if (intel_display_wa(display, INTEL_DISPLAY_WA_22010178259))
-				intel_de_rmw(display, BW_BUDDY_CTL(i),
-					     BW_BUDDY_TLB_REQ_TIMER_MASK,
-					     BW_BUDDY_TLB_REQ_TIMER(0x8));
+		if (DISPLAY_VER(display) < 20) {
+			for_each_set_bit(i, &abox_mask, BITS_PER_TYPE(abox_mask))
+				intel_de_write(display, BW_BUDDY_CTL(i),
+					       BW_BUDDY_DISABLE);
 		}
+
+		return;
+	}
+
+	/* We found a matching configuration. Program the BW_BUDDY registers. */
+	for_each_set_bit(i, &abox_mask, BITS_PER_TYPE(abox_mask)) {
+		intel_de_write(display, BW_BUDDY_PAGE_MASK(i),
+			       table[config].page_mask);
+
+		/* Wa_22010178259:tgl,dg1,rkl,adl-s */
+		if (intel_display_wa(display, INTEL_DISPLAY_WA_22010178259))
+			intel_de_rmw(display, BW_BUDDY_CTL(i),
+				     BW_BUDDY_TLB_REQ_TIMER_MASK,
+				     BW_BUDDY_TLB_REQ_TIMER(0x8));
 	}
 }
 
