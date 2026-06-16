@@ -717,9 +717,16 @@ static void svm_switch_vmcb(struct vcpu_svm *svm, struct kvm_vmcb_info *target_v
 {
 	struct kvm_vcpu *vcpu = &svm->vcpu;
 
+	/*
+	 * TLB flushes are applied to the VMCB, so apply any pending TLB flushes
+	 * on the current VMCB before switching to a new one..
+	 */
+	kvm_service_local_tlb_flush_requests(vcpu);
+
 	svm->current_vmcb = target_vmcb;
 	svm->vmcb = target_vmcb->ptr;
 
+	/* .. then request TLB flushes needed for the new VMCB */
 	if (target_vmcb == &svm->nested.vmcb02)
 		nested_svm_entry_tlb_flush(vcpu);
 	else
