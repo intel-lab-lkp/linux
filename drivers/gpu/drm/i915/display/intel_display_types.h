@@ -1865,8 +1865,6 @@ struct intel_dp {
 		 */
 		int mst_probed_lane_count;
 		int mst_probed_rate;
-		int force_lane_count;
-		int force_rate;
 		struct intel_dp_link_training *training;
 		struct intel_dp_link_caps *caps;
 	} link;
