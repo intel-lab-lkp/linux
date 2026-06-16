@@ -1778,6 +1778,8 @@ struct intel_psr {
 	bool irq_aux_error;
 	/* DC3CO allowed used to control PSR configuration */
 	bool dc3co_allowed;
+	/* DC3CO disable work */
+	struct delayed_work dc3co_work;
 	u16 su_w_granularity;
 	u16 su_y_granularity;
 	bool source_panel_replay_support;
