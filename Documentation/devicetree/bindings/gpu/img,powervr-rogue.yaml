@@ -27,6 +27,11 @@ properties:
           - const: img,img-rogue
       - items:
           - enum:
+              - renesas,r8a77995-gpu
+          - const: img,img-ge8300
+          - const: img,img-rogue
+      - items:
+          - enum:
               - ti,am62-gpu
           - const: img,img-axe-1-16m
           # This deprecated element must be kept around to allow old kernels to
@@ -114,6 +119,7 @@ allOf:
           contains:
             enum:
               - img,img-ge7800
+              - img,img-ge8300
               - img,img-gx6250
               - thead,th1520-gpu
     then:
@@ -159,14 +165,14 @@ allOf:
   - if:
       properties:
         compatible:
-          contains:
-            const: thead,th1520-gpu
+          enum:
+            - renesas,r8a77995-gpu
+            - thead,th1520-gpu
     then:
       properties:
         power-domains:
           items:
-            - description: The single, unified power domain for the GPU on the
-                TH1520 SoC, integrating all internal IP power domains.
+            - description: The single, unified power domain for the GPU.
         power-domain-names: false
       required:
         - power-domains
