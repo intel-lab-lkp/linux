@@ -75,6 +75,9 @@
 		framebuffer: framebuffer {
 			compatible = "simple-framebuffer";
 			memory-region = <&cont_splash_mem>;
+			vddio-supply = <&vreg_l14a_1p88>;
+			vci-supply = <&panel_vci_3v3>;
+			poc-supply = <&panel_vddi_poc_1p8>;
 
 			format = "a8r8g8b8";
 			stride = <(1080 * 4)>;
