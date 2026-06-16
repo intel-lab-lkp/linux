@@ -36,10 +36,8 @@ obj-$(CONFIG_RUST) += exports.o
 always-$(CONFIG_RUST) += libproc_macro2.rlib libquote.rlib libsyn.rlib
 
 always-$(CONFIG_RUST_KERNEL_DOCTESTS) += doctests_kernel_generated.rs
-always-$(CONFIG_RUST_KERNEL_DOCTESTS) += doctests_kernel_generated_kunit.c
 
 obj-$(CONFIG_RUST_KERNEL_DOCTESTS) += doctests_kernel_generated.o
-obj-$(CONFIG_RUST_KERNEL_DOCTESTS) += doctests_kernel_generated_kunit.o
 
 always-$(subst y,$(CONFIG_RUST),$(CONFIG_JUMP_LABEL)) += kernel/generated_arch_static_branch_asm.rs
 ifndef CONFIG_UML
@@ -387,7 +385,7 @@ quiet_cmd_rustdoc_test_kernel = RUSTDOC TK $<
 		$< $(rustdoc_test_kernel_quiet); \
 	$(objtree)/scripts/rustdoc_test_gen
 
-%/doctests_kernel_generated.rs %/doctests_kernel_generated_kunit.c: \
+%/doctests_kernel_generated.rs: \
     $(src)/kernel/lib.rs $(obj)/kernel.o \
     $(objtree)/scripts/rustdoc_test_builder \
     $(objtree)/scripts/rustdoc_test_gen FORCE
