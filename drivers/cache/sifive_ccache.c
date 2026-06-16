@@ -100,6 +100,12 @@ static void setup_sifive_debug(void)
 	debugfs_create_file("sifive_debug_inject_error", 0200,
 			    sifive_test, NULL, &ccache_fops);
 }
+
+static void remove_sifive_debug(void)
+{
+	debugfs_remove_recursive(sifive_test);
+	sifive_test = NULL;
+}
 #endif
 
 static void ccache_config_read(void)
@@ -336,12 +342,16 @@ static int __init sifive_ccache_init(void)
 
 	rc = platform_driver_register(&sifive_ccache_driver);
 	if (rc)
-		goto err_unmap;
+		goto err_remove_debug;
 
 	of_node_put(np);
 
 	return 0;
 
+err_remove_debug:
+#ifdef CONFIG_DEBUG_FS
+	remove_sifive_debug();
+#endif
 err_unmap:
 	iounmap(ccache_base);
 err_node_put:
