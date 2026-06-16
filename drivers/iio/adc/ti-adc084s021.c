@@ -230,8 +230,7 @@ static int adc084s021_probe(struct spi_device *spi)
 					    adc084s021_buffer_trigger_handler,
 					    &adc084s021_buffer_setup_ops);
 	if (ret) {
-		dev_err(&spi->dev, "Failed to setup triggered buffer\n");
-		return ret;
+		return dev_err_probe(&spi->dev, ret, "Failed to setup triggered buffer\n");
 	}
 
 	return devm_iio_device_register(&spi->dev, indio_dev);

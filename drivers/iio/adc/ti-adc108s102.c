@@ -256,7 +256,7 @@ static int adc108s102_probe(struct spi_device *spi)
 					      &adc108s102_trigger_handler,
 					      NULL);
 	if (ret)
-		return ret;
+		return dev_err_probe(&spi->dev, ret, "iio triggered buffer setup failed\n");
 
 	ret = devm_iio_device_register(&spi->dev, indio_dev);
 	if (ret)

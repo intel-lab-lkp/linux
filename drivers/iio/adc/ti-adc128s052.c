@@ -225,7 +225,7 @@ static int adc128_probe(struct spi_device *spi)
 
 	ret = devm_mutex_init(&spi->dev, &adc->lock);
 	if (ret)
-		return ret;
+		return dev_err_probe(&spi->dev, ret, "failed to initialize mutex\n");
 
 	return devm_iio_device_register(&spi->dev, indio_dev);
 }

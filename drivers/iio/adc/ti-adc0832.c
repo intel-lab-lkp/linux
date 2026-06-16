@@ -289,17 +289,17 @@ static int adc0832_probe(struct spi_device *spi)
 
 	ret = regulator_enable(adc->reg);
 	if (ret)
-		return ret;
+		return dev_err_probe(&spi->dev, ret, "failed to enable regulator\n");
 
 	ret = devm_add_action_or_reset(&spi->dev, adc0832_reg_disable,
 				       adc->reg);
 	if (ret)
-		return ret;
+		return dev_err_probe(&spi->dev, ret, "failed to register cleanup action\n");
 
 	ret = devm_iio_triggered_buffer_setup(&spi->dev, indio_dev, NULL,
 					      adc0832_trigger_handler, NULL);
 	if (ret)
-		return ret;
+		return dev_err_probe(&spi->dev, ret, "iio triggered buffer setup failed\n");
 
 	return devm_iio_device_register(&spi->dev, indio_dev);
 }
