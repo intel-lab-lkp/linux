@@ -1,0 +1,119 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/input/qcom,spmi-haptics.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Haptics device inside Qualcomm Technologies, Inc. PMIH010X
+
+maintainers:
+  - Fenglin Wu <fenglin.wu@oss.qualcomm.com>
+
+description: |
+  The Qualcomm PMIH010X PMIC integrates a haptics module (HAP530_HV) that
+  drives an LRA (Linear Resonant Actuator) with output voltage up to 10 V.
+  Two play modes are supported:
+
+    DIRECT_PLAY: The hardware outputs sinusoidal waveforms whose period is
+      defined by lra-period-us and whose peak voltage is defined by vmax-mv.
+      The driving amplitude can be scaled in the range [0, 255] via a single
+      register byte.  Hardware-based LRA auto-resonance tracking is enabled by
+      default in this mode, allowing the haptics engine to follow the actual
+      resonant frequency of the LRA and update the driving period accordingly
+      to achieve stronger vibration magnitude.
+
+    FIFO streaming: The hardware can play an arbitrary waveform composed of a
+      sequence of 8-bit samples at a configurable play rate.  Samples are
+      pre-filled into the internal FIFO memory of the haptics module and
+      continuously replenished via the FIFO-empty IRQ until all samples have
+      been played.  The following play rate values are accepted:
+        -- 0(T_LRA): each FIFO byte drives one full sinusoidal cycle with the
+          period defined in lra-period-us.
+        -- 1/2/3(T_LRA_DIV_2/4/8): each FIFO byte drives a half/quarter/eighth
+          sinusoidal cycle with the period defined in lra-period-us.
+        -- 8/9/10/11/12/13(8KHz/16KHz/24KHz/32KHz/44.1KHz/48KHz): the FIFO
+          data is treated as PCM samples and drives the output with an
+          arbitrarily shaped waveform.  This mode is typically used to define
+          custom driving waveforms for specific vibration effects such as fast
+          attack, crisp brake, etc.
+
+      In FIFO streaming mode, hardware-based LRA auto-resonance tracking is
+      disabled by default.  Because this mode is intended to drive arbitrary
+      waveforms that may not follow the resonant frequency, autonomous hardware
+      resonance correction would interfere with the intended output.
+
+      In the driver, FIFO streaming is implemented using an FF_PERIODIC effect
+      with an FF_CUSTOM waveform.  The expected custom data layout is:
+        custom_data[0]   = play rate code (see qcom,wf-play-rate values below)
+        custom_data[1]   = vmax in mV; 0 = use device default (qcom,vmax-mv)
+        custom_data[2..] = signed 8-bit PCM samples (at least one required)
+
+properties:
+  compatible:
+    const: qcom,pmih010x-haptics
+
+  reg:
+    items:
+      - description: HAP_CFG module base address
+      - description: HAP_PTN module base address
+
+  reg-names:
+    items:
+      - const: hap-cfg
+      - const: hap-ptn
+
+  interrupts:
+    maxItems: 1
+
+  interrupt-names:
+    items:
+      - const: fifo-empty
+
+  qcom,vmax-mv:
+    description:
+      Maximum allowed output driving voltage in millivolts, rounded to the
+      nearest 50 mV step. This is the peak driving voltage in DIRECT_PLAY mode
+      which outputs sinusoidal waveforms. The value should be equal to the square
+      root of 2 times the Vrms voltage of the LRA.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 50
+    maximum: 10000
+
+  qcom,lra-period-us:
+    description:
+      LRA actuator initial resonance period in microseconds
+      (1,000,000 / resonant_freq_hz).  Used to configure T_LRA-based play
+      rates and the auto-resonance zero-crossing window.
+    minimum: 5
+    maximum: 20475
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - interrupts
+  - interrupt-names
+  - qcom,vmax-mv
+  - qcom,lra-period-us
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    pmic {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        haptics@f000 {
+            compatible = "qcom,pmih010x-haptics";
+            reg = <0xf000>, <0xf100>;
+            reg-names = "hap-cfg", "hap-ptn";
+            interrupts = <0x7 0xf0 0x1 IRQ_TYPE_EDGE_RISING>;
+            interrupt-names = "fifo-empty";
+
+            qcom,vmax-mv = <1300>;
+            qcom,lra-period-us = <5880>;
+        };
+    };
