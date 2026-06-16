@@ -2389,6 +2389,8 @@ void intel_dp_128b132b_sdp_crc16(struct intel_dp *intel_dp,
 bool intel_dp_link_params_valid(struct intel_dp *intel_dp, int link_rate,
 				u8 lane_count)
 {
+	struct intel_dp_link_config max_link_limits;
+
 	/*
 	 * FIXME: we need to synchronize the current link parameters with
 	 * hardware readout. Currently fast link training doesn't work on
@@ -2411,12 +2413,14 @@ bool intel_dp_link_params_valid(struct intel_dp *intel_dp, int link_rate,
 	 * configuration. Although that happens to be true for now, it will
 	 * stop being guaranteed once fallback depends only on disabled configs.
 	 */
+	intel_dp_link_caps_get_max_limits(intel_dp->link.caps, &max_link_limits);
+
 	if (link_rate == 0 ||
-	    link_rate > intel_dp->link.max_rate)
+	    link_rate > max_link_limits.rate)
 		return false;
 
 	if (lane_count == 0 ||
-	    lane_count > intel_dp_max_lane_count(intel_dp))
+	    lane_count > max_link_limits.lane_count)
 		return false;
 
 	return true;
