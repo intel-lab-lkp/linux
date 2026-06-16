@@ -1380,7 +1380,7 @@ mpt_register_lan_device (MPT_ADAPTER *mpt_dev, int pnum)
 static int
 mptlan_probe(struct pci_dev *pdev)
 {
-	MPT_ADAPTER 		*ioc = pci_get_drvdata(pdev);
+	MPT_ADAPTER 		*ioc = mpt_get_adapter(pdev);
 	struct net_device	*dev;
 	int			i;
 
@@ -1426,7 +1426,7 @@ mptlan_probe(struct pci_dev *pdev)
 static void
 mptlan_remove(struct pci_dev *pdev)
 {
-	MPT_ADAPTER 		*ioc = pci_get_drvdata(pdev);
+	MPT_ADAPTER 		*ioc = mpt_get_adapter(pdev);
 	struct net_device	*dev = ioc->netdev;
 	struct mpt_lan_priv *priv = netdev_priv(dev);
 

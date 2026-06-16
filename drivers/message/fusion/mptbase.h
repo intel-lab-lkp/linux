@@ -113,6 +113,8 @@
 #define MPT_PROCFS_SUMMARY_ALL_PATHNAME		"/proc/" MPT_PROCFS_SUMMARY_ALL_NODE
 #define MPT_FW_REV_MAGIC_ID_STRING		"FwRev="
 
+#define MPT_MAX_PORT_FACTS		2
+
 #define  MPT_MAX_REQ_DEPTH		1023
 #define  MPT_DEFAULT_REQ_DEPTH		256
 #define  MPT_MIN_REQ_DEPTH		128
@@ -537,7 +539,7 @@ typedef struct _FcCfgData {
 		FCPortPage1_t	*data;
 		dma_addr_t	 dma;
 		int		 pg_sz;
-	}			 fc_port_page1[2];
+	}			 fc_port_page1[MPT_MAX_PORT_FACTS];
 } FcCfgData;
 
 #define MPT_RPORT_INFO_FLAGS_REGISTERED	0x01	/* rport registered */
@@ -699,8 +701,8 @@ typedef struct _MPT_ADAPTER
 	u32			 hs_req[MPT_MAX_FRAME_SIZE/sizeof(u32)];
 	u16			 hs_reply[MPT_MAX_FRAME_SIZE/sizeof(u16)];
 	IOCFactsReply_t		 facts;
-	PortFactsReply_t	 pfacts[2];
-	FCPortPage0_t		 fc_port_page0[2];
+	PortFactsReply_t	 pfacts[MPT_MAX_PORT_FACTS];
+	FCPortPage0_t		 fc_port_page0[MPT_MAX_PORT_FACTS];
 	LANPage0_t		 lan_cnfg_page0;
 	LANPage1_t		 lan_cnfg_page1;
 
@@ -918,6 +920,7 @@ extern int	 mpt_reset_register(u8 cb_idx, MPT_RESETHANDLER reset_func);
 extern void	 mpt_reset_deregister(u8 cb_idx);
 extern int	 mpt_device_driver_register(struct mpt_pci_driver * dd_cbfunc, u8 cb_idx);
 extern void	 mpt_device_driver_deregister(u8 cb_idx);
+extern MPT_ADAPTER *mpt_get_adapter(struct pci_dev *pdev);
 extern MPT_FRAME_HDR	*mpt_get_msg_frame(u8 cb_idx, MPT_ADAPTER *ioc);
 extern void	 mpt_free_msg_frame(MPT_ADAPTER *ioc, MPT_FRAME_HDR *mf);
 extern void	 mpt_put_msg_frame(u8 cb_idx, MPT_ADAPTER *ioc, MPT_FRAME_HDR *mf);

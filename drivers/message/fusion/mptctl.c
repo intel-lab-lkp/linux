@@ -2849,7 +2849,7 @@ static long compat_mpctl_ioctl(struct file *f, unsigned int cmd, unsigned long a
 static int
 mptctl_probe(struct pci_dev *pdev)
 {
-	MPT_ADAPTER *ioc = pci_get_drvdata(pdev);
+	MPT_ADAPTER *ioc = mpt_get_adapter(pdev);
 
 	mutex_init(&ioc->ioctl_cmds.mutex);
 	init_completion(&ioc->ioctl_cmds.done);

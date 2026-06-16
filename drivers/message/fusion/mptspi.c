@@ -1330,7 +1330,7 @@ mptspi_ioc_reset(MPT_ADAPTER *ioc, int reset_phase)
 static int
 mptspi_resume(struct pci_dev *pdev)
 {
-	MPT_ADAPTER 	*ioc = pci_get_drvdata(pdev);
+	MPT_ADAPTER 	*ioc = mpt_get_adapter(pdev);
 	struct _MPT_SCSI_HOST *hd = shost_priv(ioc->sh);
 	int rc;
 
@@ -1367,7 +1367,7 @@ mptspi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if ((r = mpt_attach(pdev,id)) != 0)
 		return r;
 
-	ioc = pci_get_drvdata(pdev);
+	ioc = mpt_get_adapter(pdev);
 	ioc->DoneCtx = mptspiDoneCtx;
 	ioc->TaskCtx = mptspiTaskCtx;
 	ioc->InternalCtx = mptspiInternalCtx;
@@ -1546,7 +1546,7 @@ out_mptspi_probe:
 
 static void mptspi_remove(struct pci_dev *pdev)
 {
-	MPT_ADAPTER *ioc = pci_get_drvdata(pdev);
+	MPT_ADAPTER *ioc = mpt_get_adapter(pdev);
 
 	scsi_remove_host(ioc->sh);
 	mptscsih_remove(pdev);

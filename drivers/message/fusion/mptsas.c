@@ -5163,7 +5163,7 @@ mptsas_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (r)
 		return r;
 
-	ioc = pci_get_drvdata(pdev);
+	ioc = mpt_get_adapter(pdev);
 	mptsas_fw_event_off(ioc);
 	ioc->DoneCtx = mptsasDoneCtx;
 	ioc->TaskCtx = mptsasTaskCtx;
@@ -5337,7 +5337,7 @@ mptsas_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 static void
 mptsas_shutdown(struct pci_dev *pdev)
 {
-	MPT_ADAPTER *ioc = pci_get_drvdata(pdev);
+	MPT_ADAPTER *ioc = mpt_get_adapter(pdev);
 
 	mptsas_fw_event_off(ioc);
 	mptsas_cleanup_fw_event_q(ioc);
@@ -5345,7 +5345,7 @@ mptsas_shutdown(struct pci_dev *pdev)
 
 static void mptsas_remove(struct pci_dev *pdev)
 {
-	MPT_ADAPTER *ioc = pci_get_drvdata(pdev);
+	MPT_ADAPTER *ioc = mpt_get_adapter(pdev);
 	struct mptsas_portinfo *p, *n;
 	int i;
 

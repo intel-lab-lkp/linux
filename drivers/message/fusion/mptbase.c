@@ -1741,6 +1741,21 @@ out_pci_disable_device:
 	return r;
 }
 
+MPT_ADAPTER *
+mpt_get_adapter(struct pci_dev *pdev)
+{
+	MPT_ADAPTER *ioc = pci_get_drvdata(pdev);
+
+	if (ioc && ioc->facts.NumberOfPorts >= ARRAY_SIZE(ioc->pfacts)) {
+		ioc->facts.NumberOfPorts = ARRAY_SIZE(ioc->pfacts);
+	}
+
+	BUILD_BUG_ON(ARRAY_SIZE(ioc->pfacts) != ARRAY_SIZE(ioc->fc_port_page0));
+	BUILD_BUG_ON(ARRAY_SIZE(ioc->pfacts) != ARRAY_SIZE(ioc->fc_data.fc_port_page1));
+
+	return ioc;
+}
+
 /*=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=*/
 /**
  *	mpt_attach - Install a PCI intelligent MPT adapter.
@@ -2074,7 +2089,7 @@ out_free_ioc:
 void
 mpt_detach(struct pci_dev *pdev)
 {
-	MPT_ADAPTER 	*ioc = pci_get_drvdata(pdev);
+	MPT_ADAPTER 	*ioc = mpt_get_adapter(pdev);
 	char pname[64];
 	u8 cb_idx;
 	unsigned long flags;
@@ -2140,7 +2155,7 @@ int
 mpt_suspend(struct pci_dev *pdev, pm_message_t state)
 {
 	u32 device_state;
-	MPT_ADAPTER *ioc = pci_get_drvdata(pdev);
+	MPT_ADAPTER *ioc = mpt_get_adapter(pdev);
 
 	device_state = pci_choose_state(pdev, state);
 	printk(MYIOC_s_INFO_FMT "pci-suspend: pdev=0x%p, slot=%s, Entering "
@@ -2179,7 +2194,7 @@ mpt_suspend(struct pci_dev *pdev, pm_message_t state)
 int
 mpt_resume(struct pci_dev *pdev)
 {
-	MPT_ADAPTER *ioc = pci_get_drvdata(pdev);
+	MPT_ADAPTER *ioc = mpt_get_adapter(pdev);
 	u32 device_state = pdev->current_state;
 	int recovery_state;
 	int err;
@@ -8451,6 +8466,7 @@ EXPORT_SYMBOL(mpt_reset_register);
 EXPORT_SYMBOL(mpt_reset_deregister);
 EXPORT_SYMBOL(mpt_device_driver_register);
 EXPORT_SYMBOL(mpt_device_driver_deregister);
+EXPORT_SYMBOL(mpt_get_adapter);
 EXPORT_SYMBOL(mpt_get_msg_frame);
 EXPORT_SYMBOL(mpt_put_msg_frame);
 EXPORT_SYMBOL(mpt_put_msg_frame_hi_pri);

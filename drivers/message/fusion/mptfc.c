@@ -1219,7 +1219,7 @@ mptfc_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if ((r = mpt_attach(pdev,id)) != 0)
 		return r;
 
-	ioc = pci_get_drvdata(pdev);
+	ioc = mpt_get_adapter(pdev);
 	ioc->DoneCtx = mptfcDoneCtx;
 	ioc->TaskCtx = mptfcTaskCtx;
 	ioc->InternalCtx = mptfcInternalCtx;
@@ -1525,7 +1525,7 @@ mptfc_init(void)
  */
 static void mptfc_remove(struct pci_dev *pdev)
 {
-	MPT_ADAPTER		*ioc = pci_get_drvdata(pdev);
+	MPT_ADAPTER		*ioc = mpt_get_adapter(pdev);
 	struct mptfc_rport_info	*p, *n;
 	struct workqueue_struct *work_q;
 	unsigned long		flags;
