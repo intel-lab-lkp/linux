@@ -1663,6 +1663,8 @@ static void amdgpu_xgmi_reset_on_init_work(struct work_struct *work)
 		if (r && r != -EHWPOISON)
 			dev_err(tmp_adev->dev,
 				"error during bad page data initialization");
+
+		amdgpu_ttm_enable_buffer_funcs(tmp_adev);
 	}
 }
 
