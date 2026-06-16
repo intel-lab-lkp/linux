@@ -5,6 +5,7 @@
 #ifndef LINUX_DMAENGINE_H
 #define LINUX_DMAENGINE_H
 
+#include <linux/bitops.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/uio.h>
@@ -391,6 +392,7 @@ enum dma_slave_buswidth {
 	DMA_SLAVE_BUSWIDTH_32_BYTES = 32,
 	DMA_SLAVE_BUSWIDTH_64_BYTES = 64,
 	DMA_SLAVE_BUSWIDTH_128_BYTES = 128,
+	DMA_SLAVE_BUSWIDTH_MAX
 };
 
 /**
@@ -509,8 +511,14 @@ enum dma_residue_granularity {
  * resubmitted multiple times
  */
 struct dma_slave_caps {
-	u32 src_addr_widths;
-	u32 dst_addr_widths;
+	struct {
+		DECLARE_BITMAP(src_addr_widths_mask, DMA_SLAVE_BUSWIDTH_MAX);
+		u32 src_addr_widths;
+	};
+	struct {
+		DECLARE_BITMAP(dst_addr_widths_mask, DMA_SLAVE_BUSWIDTH_MAX);
+		u32 dst_addr_widths;
+	};
 	u32 directions;
 	u32 min_burst;
 	u32 max_burst;
@@ -887,8 +895,14 @@ struct dma_device {
 	struct module *owner;
 	struct ida chan_ida;
 
-	u32 src_addr_widths;
-	u32 dst_addr_widths;
+	struct {
+		DECLARE_BITMAP(src_addr_widths_mask, DMA_SLAVE_BUSWIDTH_MAX);
+		u32 src_addr_widths;
+	};
+	struct {
+		DECLARE_BITMAP(dst_addr_widths_mask, DMA_SLAVE_BUSWIDTH_MAX);
+		u32 dst_addr_widths;
+	};
 	u32 directions;
 	u32 min_burst;
 	u32 max_burst;
@@ -1676,6 +1690,84 @@ static inline struct device *dmaengine_get_dma_device(struct dma_chan *chan)
 		return &chan->dev->device;
 
 	return chan->device->dev;
+}
+
+static inline enum dma_slave_buswidth
+__dma_slave_caps_get_width_min(const unsigned long *bitmask)
+{
+	enum dma_slave_buswidth width = find_first_bit(bitmask,
+						       DMA_SLAVE_BUSWIDTH_MAX);
+
+	if (width == DMA_SLAVE_BUSWIDTH_MAX)
+		return DMA_SLAVE_BUSWIDTH_UNDEFINED;
+
+	return width;
+}
+
+static inline enum dma_slave_buswidth
+dma_slave_caps_get_src_width_min(const struct dma_slave_caps *caps)
+{
+	return __dma_slave_caps_get_width_min(caps->src_addr_widths_mask);
+}
+
+static inline enum dma_slave_buswidth
+dma_slave_caps_get_dst_width_min(const struct dma_slave_caps *caps)
+{
+	return __dma_slave_caps_get_width_min(caps->dst_addr_widths_mask);
+}
+
+static inline int __dma_set_addr_mask(unsigned long *bitmask,
+				      enum dma_slave_buswidth *widths,
+				      unsigned int n_widths)
+{
+	for (unsigned int i = 0; i < n_widths; i++) {
+		switch (widths[i]) {
+		case DMA_SLAVE_BUSWIDTH_1_BYTE:
+		case DMA_SLAVE_BUSWIDTH_2_BYTES:
+		case DMA_SLAVE_BUSWIDTH_3_BYTES:
+		case DMA_SLAVE_BUSWIDTH_4_BYTES:
+		case DMA_SLAVE_BUSWIDTH_8_BYTES:
+		case DMA_SLAVE_BUSWIDTH_16_BYTES:
+		case DMA_SLAVE_BUSWIDTH_32_BYTES:
+		case DMA_SLAVE_BUSWIDTH_64_BYTES:
+		case DMA_SLAVE_BUSWIDTH_128_BYTES:
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		__set_bit(widths[i], bitmask);
+	}
+
+	return 0;
+}
+
+static inline int dma_set_src_addr_mask(struct dma_device *device,
+					enum dma_slave_buswidth *widths,
+					unsigned int n_widths)
+{
+	int ret;
+
+	ret = __dma_set_addr_mask(device->src_addr_widths_mask, widths, n_widths);
+	if (ret)
+		return ret;
+
+	device->src_addr_widths = bitmap_read(device->src_addr_widths_mask, 0, 32);
+	return 0;
+}
+
+static inline int dma_set_dst_addr_mask(struct dma_device *device,
+					enum dma_slave_buswidth *widths,
+					unsigned int n_widths)
+{
+	int ret;
+
+	ret = __dma_set_addr_mask(device->dst_addr_widths_mask, widths, n_widths);
+	if (ret)
+		return ret;
+
+	device->dst_addr_widths = bitmap_read(device->dst_addr_widths_mask, 0, 32);
+	return 0;
 }
 
 #endif /* DMAENGINE_H */
