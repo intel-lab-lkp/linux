@@ -169,12 +169,18 @@ fn main() {
             r#"/// Generated `{name}` KUnit test case from a Rust documentation test.
 #[no_mangle]
 pub extern "C" fn {kunit_name}(__kunit_test: *mut ::kernel::bindings::kunit) {{
+    /// Overrides the usual [`file!`] macro with one that expands to the real path.
+    #[allow(unused)]
+    macro_rules! file {{
+        () => {{ "{real_path}" }}
+    }}
+
     /// Overrides the usual [`assert!`] macro with one that calls KUnit instead.
     #[allow(unused)]
     macro_rules! assert {{
         ($cond:expr $(,)?) => {{{{
             ::kernel::kunit_assert!(
-                "{kunit_name}", c"{real_path}", __DOCTEST_ANCHOR - {line}, $cond
+                "{kunit_name}", __DOCTEST_ANCHOR - {line}, $cond
             );
         }}}}
     }}
@@ -184,7 +190,7 @@ pub extern "C" fn {kunit_name}(__kunit_test: *mut ::kernel::bindings::kunit) {{
     macro_rules! assert_eq {{
         ($left:expr, $right:expr $(,)?) => {{{{
             ::kernel::kunit_assert_eq!(
-                "{kunit_name}", c"{real_path}", __DOCTEST_ANCHOR - {line}, $left, $right
+                "{kunit_name}", __DOCTEST_ANCHOR - {line}, $left, $right
             );
         }}}}
     }}
