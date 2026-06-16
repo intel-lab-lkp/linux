@@ -364,17 +364,16 @@ int intel_dp_max_common_lane_count(struct intel_dp *intel_dp)
 	return intel_dp->max_common_lane_count;
 }
 
-static int forced_lane_count(struct intel_dp *intel_dp)
-{
-	return clamp(intel_dp->link.force_lane_count, 1, intel_dp_max_common_lane_count(intel_dp));
-}
-
 int intel_dp_max_lane_count(struct intel_dp *intel_dp)
 {
+	struct intel_dp_link_caps *link_caps = intel_dp->link.caps;
+	struct intel_dp_link_config forced_params;
 	int lane_count;
 
+	intel_dp_link_caps_get_forced_params(link_caps, &forced_params);
+
 	if (intel_dp->link.force_lane_count)
-		lane_count = forced_lane_count(intel_dp);
+		lane_count = forced_params.lane_count;
 	else
 		lane_count = intel_dp->link.max_lane_count;
 
@@ -391,8 +390,12 @@ int intel_dp_max_lane_count(struct intel_dp *intel_dp)
 
 static int intel_dp_min_lane_count(struct intel_dp *intel_dp)
 {
+	struct intel_dp_link_config forced_params;
+
+	intel_dp_link_caps_get_forced_params(intel_dp->link.caps, &forced_params);
+
 	if (intel_dp->link.force_lane_count)
-		return forced_lane_count(intel_dp);
+		return forced_params.lane_count;
 
 	return 1;
 }
@@ -1655,23 +1658,17 @@ static void intel_dp_print_rates(struct intel_dp *intel_dp)
 	drm_dbg_kms(display->drm, "common rates: %s\n", seq_buf_str(&s));
 }
 
-static int forced_link_rate(struct intel_dp *intel_dp)
-{
-	int len = intel_dp_common_len_rate_limit(intel_dp, intel_dp->link.force_rate);
-
-	if (len == 0)
-		return intel_dp_common_rate(intel_dp, 0);
-
-	return intel_dp_common_rate(intel_dp, len - 1);
-}
-
 int
 intel_dp_max_link_rate(struct intel_dp *intel_dp)
 {
+	struct intel_dp_link_caps *link_caps = intel_dp->link.caps;
+	struct intel_dp_link_config forced_params;
 	int len;
 
+	intel_dp_link_caps_get_forced_params(link_caps, &forced_params);
+
 	if (intel_dp->link.force_rate)
-		return forced_link_rate(intel_dp);
+		return forced_params.rate;
 
 	len = intel_dp_common_len_rate_limit(intel_dp, intel_dp->link.max_rate);
 
@@ -1681,8 +1678,12 @@ intel_dp_max_link_rate(struct intel_dp *intel_dp)
 static int
 intel_dp_min_link_rate(struct intel_dp *intel_dp)
 {
+	struct intel_dp_link_config forced_params;
+
+	intel_dp_link_caps_get_forced_params(intel_dp->link.caps, &forced_params);
+
 	if (intel_dp->link.force_rate)
-		return forced_link_rate(intel_dp);
+		return forced_params.rate;
 
 	return intel_dp_common_rate(intel_dp, 0);
 }
