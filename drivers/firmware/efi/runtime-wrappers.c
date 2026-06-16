@@ -212,6 +212,19 @@ extern struct semaphore __efi_uv_runtime_lock __alias(efi_runtime_lock);
 #endif
 
 /*
+ * Park a worker that must never run efi_rts_wq again: EFI runtime services
+ * have been disabled and its efi_rts_work is abandoned. Loop in schedule()
+ * so a spurious wakeup cannot resume it.
+ */
+void efi_rts_park_worker(void)
+{
+	for (;;) {
+		set_current_state(TASK_IDLE);
+		schedule();
+	}
+}
+
+/*
  * Calls the appropriate efi_runtime_service() with the appropriate
  * arguments.
  */
