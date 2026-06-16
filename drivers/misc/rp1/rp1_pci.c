@@ -191,13 +191,13 @@ static int rp1_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (!rp1_node) {
 		dev_err(dev, "Missing of_node for device\n");
 		err = -EINVAL;
-		goto err_put_node;
+		goto err_out;
 	}
 
 	rp1 = devm_kzalloc(&pdev->dev, sizeof(*rp1), GFP_KERNEL);
 	if (!rp1) {
 		err = -ENOMEM;
-		goto err_put_node;
+		goto err_out;
 	}
 
 	rp1->pdev = pdev;
@@ -206,21 +206,21 @@ static int rp1_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		dev_err(&pdev->dev,
 			"Not initialized - is the firmware running?\n");
 		err = -EINVAL;
-		goto err_put_node;
+		goto err_out;
 	}
 
 	err = pcim_enable_device(pdev);
 	if (err < 0) {
 		err = dev_err_probe(&pdev->dev, err,
 				    "Enabling PCI device has failed");
-		goto err_put_node;
+		goto err_out;
 	}
 
 	rp1->bar1 = pcim_iomap(pdev, 1, 0);
 	if (!rp1->bar1) {
 		dev_err(&pdev->dev, "Cannot map PCI BAR\n");
 		err = -EIO;
-		goto err_put_node;
+		goto err_out;
 	}
 
 	pci_set_master(pdev);
@@ -230,11 +230,11 @@ static int rp1_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (err < 0) {
 		err = dev_err_probe(&pdev->dev, err,
 				    "Failed to allocate MSI-X vectors\n");
-		goto err_put_node;
+		goto err_out;
 	} else if (err != RP1_INT_END) {
 		dev_err(&pdev->dev, "Cannot allocate enough interrupts\n");
 		err = -EINVAL;
-		goto err_put_node;
+		goto err_out;
 	}
 
 	pci_set_drvdata(pdev, rp1);
@@ -267,15 +267,11 @@ static int rp1_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_unregister_interrupts;
 	}
 
-	of_node_put(rp1_node);
-
 	return 0;
 
 err_unregister_interrupts:
 	rp1_unregister_interrupts(pdev);
-err_put_node:
-	of_node_put(rp1_node);
-
+err_out:
 	return err;
 }
 
