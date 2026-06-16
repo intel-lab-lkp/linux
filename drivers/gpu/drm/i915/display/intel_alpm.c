@@ -291,7 +291,9 @@ void intel_alpm_lobf_compute_config_late(struct intel_dp *intel_dp,
 	if (!crtc_state->has_lobf)
 		return;
 
-	if (!intel_alpm_lobf_is_window1_sufficient(crtc_state)) {
+	if (crtc_state->has_psr ||
+	    !intel_vrr_is_fixed_rr(crtc_state) ||
+	    !intel_alpm_lobf_is_window1_sufficient(crtc_state)) {
 		crtc_state->has_lobf = false;
 		return;
 	}
@@ -343,11 +345,7 @@ void intel_alpm_lobf_compute_config(struct intel_dp *intel_dp,
 	if (!intel_dp->as_sdp_supported)
 		return;
 
-	if (crtc_state->has_psr)
-		return;
-
-	if (!intel_vrr_always_use_vrr_tg(display) ||
-	    !intel_vrr_is_fixed_rr(crtc_state))
+	if (!intel_vrr_always_use_vrr_tg(display))
 		return;
 
 	if (!(intel_alpm_aux_wake_supported(intel_dp) ||
