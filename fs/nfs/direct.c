@@ -194,23 +194,45 @@ static ssize_t nfs_direct_extract_pages(struct nfs_direct_req *dreq,
 		return result;
 
 	npages = (result + pgbase + PAGE_SIZE - 1) >> PAGE_SHIFT;
-	for (i = 0; i < npages; i++) {
+	for (i = 0; i < npages; ) {
+		unsigned int chunk_len, folio_offset;
+		unsigned int nr_to_add = 1;
 		struct nfs_page *req;
-		unsigned int req_len = min_t(size_t, result - bytes, PAGE_SIZE - pgbase);
+		struct folio *folio;
 
-		req = nfs_page_create_from_page(dreq->ctx, pagevec[i],
-						pinned, pgbase, *pos,
-						req_len);
+		folio = page_folio(pagevec[i]);
+		folio_offset = (folio_page_idx(folio, pagevec[i]) << PAGE_SHIFT) + pgbase;
+		chunk_len = min_t(size_t, result - bytes, PAGE_SIZE - pgbase);
+
+		while (i + nr_to_add < npages) {
+			struct page *next_page = pagevec[i + nr_to_add];
+			struct page *prev_page = pagevec[i + nr_to_add - 1];
+
+			if (page_folio(next_page) != folio ||
+			    next_page != prev_page + 1)
+				break;
+
+			chunk_len += min_t(size_t, result - bytes - chunk_len, PAGE_SIZE);
+			nr_to_add++;
+		}
+
+		req = nfs_page_create_from_folio(dreq->ctx, folio,
+						  pinned, folio_offset,
+						  chunk_len);
 		if (IS_ERR(req)) {
 			if (!bytes)
 				bytes = PTR_ERR(req);
 			break;
 		}
 
+		req->wb_index = *pos >> PAGE_SHIFT;
+		req->wb_offset = offset_in_page(*pos);
+
 		list_add_tail(&req->wb_list, list);
 		pgbase = 0;
-		bytes += req_len;
-		*pos += req_len;
+		bytes += chunk_len;
+		*pos += chunk_len;
+		i += nr_to_add;
 	}
 
 	if (i < npages) {
@@ -403,9 +425,9 @@ static ssize_t nfs_direct_read_schedule_iovec(struct nfs_direct_req *dreq,
 		if (result < 0)
 			break;
 
-		requested_bytes += result;
 		while (!list_empty(&nfs_page_list)) {
 			struct nfs_page *req = nfs_list_entry(nfs_page_list.next);
+			size_t req_len = req->wb_bytes;
 
 			nfs_list_remove_request(req);
 			if (!nfs_pageio_add_request(&desc, req)) {
@@ -414,6 +436,7 @@ static ssize_t nfs_direct_read_schedule_iovec(struct nfs_direct_req *dreq,
 				nfs_release_request_list(&nfs_page_list);
 				break;
 			}
+			requested_bytes += req_len;
 		}
 		if (result < 0)
 			break;
@@ -922,19 +945,22 @@ static ssize_t nfs_direct_write_schedule_iovec(struct nfs_direct_req *dreq,
 		if (result < 0)
 			break;
 
-		requested_bytes += result;
 		while (!list_empty(&nfs_page_list)) {
 			struct nfs_page *req = nfs_list_entry(nfs_page_list.next);
+			size_t req_len = req->wb_bytes;
 
 			nfs_list_remove_request(req);
 			if (defer) {
 				nfs_mark_request_commit(req, NULL, &cinfo, 0);
+				requested_bytes += req_len;
 				continue;
 			}
 
 			nfs_lock_request(req);
-			if (nfs_pageio_add_request(&desc, req))
+			if (nfs_pageio_add_request(&desc, req)) {
+				requested_bytes += req_len;
 				continue;
+			}
 
 			/* Exit on hard errors */
 			if (desc.pg_error < 0 && desc.pg_error != -EAGAIN) {
@@ -951,6 +977,7 @@ static ssize_t nfs_direct_write_schedule_iovec(struct nfs_direct_req *dreq,
 			spin_unlock(&dreq->lock);
 			nfs_unlock_request(req);
 			nfs_mark_request_commit(req, NULL, &cinfo, 0);
+			requested_bytes += req_len;
 			desc.pg_error = 0;
 			defer = true;
 		}
