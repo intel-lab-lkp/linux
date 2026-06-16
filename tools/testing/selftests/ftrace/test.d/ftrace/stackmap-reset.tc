@@ -1,0 +1,76 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# description: ftrace - stackmap reset clears the trace buffer and ABI header
+# requires: stack_map options/stackmap function:tracer
+
+# Lock in the two things most likely to regress in the stackmap ABI /
+# lifetime:
+#   1. Resetting the stackmap (echo 0 > stack_map, tracing stopped) also
+#      clears the trace buffer, so no stale <stack_id N> can be left
+#      dangling against an emptied map.
+#   2. The stack_map_bin header carries the expected magic ('FSMB' =
+#      0x46534D42) and version (1).
+
+fail() {
+    echo "FAIL: $1"
+    exit_fail
+}
+
+cleanup() {
+    disable_tracing 2>/dev/null
+    echo nop > current_tracer 2>/dev/null
+    echo 0 > options/stackmap 2>/dev/null
+    echo 0 > options/stacktrace 2>/dev/null
+}
+trap cleanup EXIT
+
+disable_tracing
+clear_trace
+
+echo 1 > options/stackmap
+echo 1 > options/stacktrace
+echo function > current_tracer
+enable_tracing
+sleep 1
+disable_tracing
+
+# Sanity: the buffer must contain stack_id events before reset, otherwise
+# the post-reset emptiness check below would be meaningless.
+before=$(grep -c "<stack_id" trace || true)
+: "${before:=0}"
+if [ "$before" -eq 0 ]; then
+    fail "no <stack_id> events captured before reset"
+fi
+
+# Reset while tracing is stopped. This must succeed AND clear the trace
+# buffer (destructive reset semantics).
+echo 0 > stack_map || fail "reset rejected while tracing stopped"
+
+after=$(grep -c "<stack_id" trace || true)
+: "${after:=0}"
+if [ "$after" -ne 0 ]; then
+    fail "trace still has $after stale <stack_id> events after reset"
+fi
+
+entries=$(cat stack_map_stat | grep "^entries:" | awk '{print $2}')
+: "${entries:=-1}"
+if [ "$entries" -ne 0 ]; then
+    fail "stackmap still has $entries entries after reset"
+fi
+
+# Binary export header: magic 'FSMB' (0x46534D42) + version 1.
+# od -tx4 renders the 32-bit words in the target's native byte order,
+# which matches what the kernel wrote, so the comparison is endian-safe.
+if command -v od >/dev/null 2>&1; then
+    magic=$(od -An -tx4 -N4 stack_map_bin | tr -d ' \n')
+    if [ "$magic" != "46534d42" ]; then
+        fail "stack_map_bin bad magic: 0x$magic (expected 46534d42)"
+    fi
+    ver=$(od -An -tx4 -j4 -N4 stack_map_bin | tr -d ' \n')
+    if [ "$ver" != "00000001" ]; then
+        fail "stack_map_bin bad version: 0x$ver (expected 00000001)"
+    fi
+fi
+
+echo "stackmap reset test passed: cleared $before stack_id events, ABI header ok"
+exit 0
