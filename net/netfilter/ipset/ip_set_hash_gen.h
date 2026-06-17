@@ -803,8 +803,17 @@ out:
 cleanup:
 	rcu_read_unlock_bh();
 	spin_unlock_bh(&orig->gc_lock);
+
+	/* We have to exclude add/del */
+	spin_lock_bh(&set->lock);
 	atomic_set(&orig->ref, 0);
 	atomic_dec(&orig->uref);
+	/* Cleanup the backlog of ADD/DEL elements */
+	list_for_each_safe(l, lt, &h->ad) {
+		list_del(l);
+		kfree(l);
+	}
+	spin_unlock_bh(&set->lock);
 	mtype_ahash_destroy(set, t, false);
 	if (ret == -EAGAIN)
 		goto retry;
