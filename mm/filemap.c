@@ -2669,20 +2669,30 @@ static int filemap_get_pages(struct kiocb *iocb, size_t count,
 {
 	struct file *filp = iocb->ki_filp;
 	struct address_space *mapping = filp->f_mapping;
+	bool is_hugetlbfs = is_file_hugepages(filp);
 	pgoff_t index = iocb->ki_pos >> PAGE_SHIFT;
 	pgoff_t last_index;
 	struct folio *folio;
 	unsigned int flags;
+	size_t min_folio_bytes;
 	int err = 0;
 
 	/* "last_index" is the index of the folio beyond the end of the read */
-	last_index = round_up(iocb->ki_pos + count,
-			mapping_min_folio_nrbytes(mapping)) >> PAGE_SHIFT;
+	if (is_hugetlbfs)
+		min_folio_bytes = huge_page_size(hstate_file(filp));
+	else
+		min_folio_bytes = mapping_min_folio_nrbytes(mapping);
+	last_index = round_up(iocb->ki_pos + count, min_folio_bytes) >> PAGE_SHIFT;
+
 retry:
 	if (fatal_signal_pending(current))
 		return -EINTR;
 
 	filemap_get_read_batch(mapping, index, last_index - 1, fbatch);
+
+	if (is_hugetlbfs)
+		goto done;
+
 	if (!folio_batch_count(fbatch)) {
 		DEFINE_READAHEAD(ractl, filp, &filp->f_ra, mapping, index);
 
@@ -2721,6 +2731,7 @@ retry:
 			goto err;
 	}
 
+done:
 	trace_mm_filemap_get_pages(mapping, index, last_index - 1);
 	return 0;
 err:
