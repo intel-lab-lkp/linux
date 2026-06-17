@@ -28,6 +28,7 @@
  */
 #include <linux/hrtimer_types.h>
 
+#include <crypto/akcipher.h>
 #include <crypto/sha2.h>
 
 #include <linux/acpi.h>
