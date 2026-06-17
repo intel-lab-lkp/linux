@@ -112,11 +112,12 @@ flag was specified in either the shmget() or mmap() call.  If NORESERVE
 was specified, then this routine returns immediately as no reservations
 are desired.
 
-The arguments 'from' and 'to' are huge page indices into the mapping or
-underlying file.  For shmget(), 'from' is always 0 and 'to' corresponds to
-the length of the segment/mapping.  For mmap(), the offset argument could
-be used to specify the offset into the underlying file.  In such a case,
-the 'from' and 'to' arguments have been adjusted by this offset.
+The arguments 'from' and 'to' are base page indices into the mapping or
+underlying file that must be huge page aligned.  For shmget(),
+'from' is always 0 and 'to' corresponds to the length of the segment/mapping.
+For mmap(), the offset argument could be used to specify the offset into
+the underlying file.  In such a case, the 'from' and 'to' arguments have been
+adjusted by this offset.
 
 One of the big differences between PRIVATE and SHARED mappings is the way
 in which reservations are represented in the reservation map.
@@ -136,10 +137,10 @@ to indicate this VMA owns the reservations.
 
 The reservation map is consulted to determine how many huge page reservations
 are needed for the current mapping/segment.  For private mappings, this is
-always the value (to - from).  However, for shared mappings it is possible that
-some reservations may already exist within the range (to - from).  See the
-section :ref:`Reservation Map Modifications <resv_map_modifications>`
-for details on how this is accomplished.
+always the number of huge pages covered by the range [from, to).
+However, for shared mappings it is possible that some reservations may already
+exist within the range [from, to).  See the section :ref:`Reservation Map
+Modifications <resv_map_modifications>` for details on how this is accomplished.
 
 The mapping may be associated with a subpool.  If so, the subpool is consulted
 to ensure there is sufficient space for the mapping.  It is possible that the

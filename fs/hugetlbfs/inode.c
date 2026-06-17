@@ -150,10 +150,8 @@ static int hugetlbfs_file_mmap(struct file *file, struct vm_area_struct *vma)
 	if (inode->i_flags & S_PRIVATE)
 		vma_flags_set(&vma_flags, VMA_NORESERVE_BIT);
 
-	if (hugetlb_reserve_pages(inode,
-				vma->vm_pgoff >> huge_page_order(h),
-				len >> huge_page_shift(h), vma,
-				vma_flags) < 0)
+	if (hugetlb_reserve_pages(inode, vma->vm_pgoff, len >> PAGE_SHIFT,
+				  vma, vma_flags) < 0)
 		goto out;
 
 	ret = 0;
@@ -389,7 +387,7 @@ hugetlb_vmdelete_list(struct rb_root_cached *root, pgoff_t start, pgoff_t end,
  */
 static void remove_inode_single_folio(struct hstate *h, struct inode *inode,
 		struct address_space *mapping, struct folio *folio,
-		pgoff_t index, bool truncate_op)
+		pgoff_t idx, bool truncate_op)
 {
 	/*
 	 * If folio is mapped, it was faulted in after being
@@ -401,7 +399,7 @@ static void remove_inode_single_folio(struct hstate *h, struct inode *inode,
 	 */
 	folio_lock(folio);
 	if (unlikely(folio_mapped(folio)))
-		hugetlb_unmap_file_folio(h, mapping, folio, index);
+		hugetlb_unmap_file_folio(h, mapping, folio, idx);
 
 	/*
 	 * We must remove the folio from page cache before removing
@@ -413,8 +411,10 @@ static void remove_inode_single_folio(struct hstate *h, struct inode *inode,
 	VM_BUG_ON_FOLIO(folio_test_hugetlb_restore_reserve(folio), folio);
 	hugetlb_delete_from_page_cache(folio);
 	if (!truncate_op) {
-		if (unlikely(hugetlb_unreserve_pages(inode, index,
-							index + 1, 1)))
+		pgoff_t index = idx << huge_page_order(h);
+		pgoff_t next = index + pages_per_huge_page(h);
+
+		if (unlikely(hugetlb_unreserve_pages(inode, index, next, 1)))
 			hugetlb_fix_reserve_counts(inode);
 	}
 
@@ -476,9 +476,8 @@ static void remove_inode_hugepages(struct inode *inode, loff_t lstart,
 	}
 
 	if (truncate_op)
-		(void)hugetlb_unreserve_pages(inode,
-				lstart >> huge_page_shift(h),
-				LONG_MAX, freed);
+		(void)hugetlb_unreserve_pages(inode, lstart >> PAGE_SHIFT,
+					      LONG_MAX, freed);
 }
 
 static void hugetlbfs_evict_inode(struct inode *inode)
@@ -1429,9 +1428,7 @@ struct file *hugetlb_file_setup(const char *name, size_t size,
 	inode->i_size = size;
 	clear_nlink(inode);
 
-	if (hugetlb_reserve_pages(inode, 0,
-			size >> huge_page_shift(hstate_inode(inode)), NULL,
-			acctflag) < 0)
+	if (hugetlb_reserve_pages(inode, 0, size >> PAGE_SHIFT, NULL, acctflag) < 0)
 		file = ERR_PTR(-ENOMEM);
 	else
 		file = alloc_file_pseudo(inode, mnt, name, O_RDWR,

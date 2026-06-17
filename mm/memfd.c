@@ -79,22 +79,19 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t index)
 		 */
 		struct inode *inode = file_inode(memfd);
 		struct hstate *h = hstate_file(memfd);
-		pgoff_t idx;
+		pgoff_t next;
 		int err = -ENOMEM;
 		long nr_resv;
 
 		gfp_mask = htlb_alloc_mask(h);
 		gfp_mask &= ~(__GFP_HIGHMEM | __GFP_MOVABLE);
-		idx = index >> huge_page_order(h);
+		next = index + pages_per_huge_page(h);
 
-		nr_resv = hugetlb_reserve_pages(inode, idx, idx + 1, NULL, EMPTY_VMA_FLAGS);
+		nr_resv = hugetlb_reserve_pages(inode, index, next, NULL, EMPTY_VMA_FLAGS);
 		if (nr_resv < 0)
 			return ERR_PTR(nr_resv);
 
-		folio = alloc_hugetlb_folio_reserve(h,
-						    numa_node_id(),
-						    NULL,
-						    gfp_mask);
+		folio = alloc_hugetlb_folio_reserve(h, numa_node_id(), NULL, gfp_mask);
 		if (folio) {
 			u32 hash;
 
@@ -119,13 +116,8 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t index)
 			 */
 			hash = hugetlb_fault_mutex_hash(memfd->f_mapping, index);
 			mutex_lock(&hugetlb_fault_mutex_table[hash]);
-
-			err = hugetlb_add_to_page_cache(folio,
-							memfd->f_mapping,
-							index);
-
+			err = hugetlb_add_to_page_cache(folio, memfd->f_mapping, index);
 			mutex_unlock(&hugetlb_fault_mutex_table[hash]);
-
 			if (err) {
 				folio_put(folio);
 				goto err_unresv;
@@ -137,7 +129,7 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t index)
 		}
 err_unresv:
 		if (nr_resv > 0)
-			hugetlb_unreserve_pages(inode, idx, idx + 1, 0);
+			hugetlb_unreserve_pages(inode, index, next, 0);
 		return ERR_PTR(err);
 	}
 #endif

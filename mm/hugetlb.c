@@ -6534,7 +6534,7 @@ next:
  */
 
 long hugetlb_reserve_pages(struct inode *inode,
-		long from, long to,
+		long from_idx, long to_idx,
 		struct vm_area_struct *vma,
 		vma_flags_t vma_flags)
 {
@@ -6544,13 +6544,20 @@ long hugetlb_reserve_pages(struct inode *inode,
 	struct resv_map *resv_map;
 	struct hugetlb_cgroup *h_cg = NULL;
 	long gbl_reserve, regions_needed = 0;
+	long from, to;
 	int err;
 
+	VM_WARN_ON(!IS_ALIGNED(from_idx, 1UL << huge_page_order(h)));
+	VM_WARN_ON(!IS_ALIGNED(to_idx,   1UL << huge_page_order(h)));
+
 	/* This should never happen */
-	if (from > to) {
+	if (from_idx > to_idx) {
 		VM_WARN(1, "%s called with a negative range\n", __func__);
 		return -EINVAL;
 	}
+
+	from = from_idx >> huge_page_order(h);
+	to = to_idx >> huge_page_order(h);
 
 	/*
 	 * vma specific semaphore used for pmd sharing and fault/truncation
@@ -6721,14 +6728,20 @@ out_err:
 	return err;
 }
 
-long hugetlb_unreserve_pages(struct inode *inode, long start, long end,
-								long freed)
+long hugetlb_unreserve_pages(struct inode *inode, long start_idx,
+			     long end_idx, long freed)
 {
 	struct hstate *h = hstate_inode(inode);
 	struct resv_map *resv_map = inode_resv_map(inode);
 	long chg = 0;
 	struct hugepage_subpool *spool = subpool_inode(inode);
-	long gbl_reserve;
+	long gbl_reserve, start, end;
+
+	VM_WARN_ON(!IS_ALIGNED(start_idx, 1UL << huge_page_order(h)));
+	VM_WARN_ON(!IS_ALIGNED(end_idx,   1UL << huge_page_order(h)));
+
+	start = start_idx >> huge_page_order(h);
+	end = end_idx >> huge_page_order(h);
 
 	/*
 	 * Since this routine can be called in the evict inode path for all
