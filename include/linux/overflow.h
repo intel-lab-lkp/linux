@@ -2,9 +2,10 @@
 #ifndef __LINUX_OVERFLOW_H
 #define __LINUX_OVERFLOW_H
 
+#include <linux/args.h>
 #include <linux/compiler.h>
-#include <linux/limits.h>
 #include <linux/const.h>
+#include <linux/limits.h>
 
 /*
  * We need to compute the minimum and maximum values representable in a given
@@ -337,16 +338,7 @@ static __always_inline size_t __must_check size_mul(size_t factor1, size_t facto
 	return bytes;
 }
 
-/**
- * size_add() - Calculate size_t addition with saturation at SIZE_MAX
- * @addend1: first addend
- * @addend2: second addend
- *
- * Returns: calculate @addend1 + @addend2, both promoted to size_t,
- * with any overflow causing the return value to be SIZE_MAX. The
- * lvalue must be size_t to avoid implicit type conversion.
- */
-static __always_inline size_t __must_check size_add(size_t addend1, size_t addend2)
+static __always_inline size_t __must_check __size_add(size_t addend1, size_t addend2)
 {
 	size_t bytes;
 
@@ -355,6 +347,29 @@ static __always_inline size_t __must_check size_add(size_t addend1, size_t adden
 
 	return bytes;
 }
+
+#define __size_add0(addend1, ...)						\
+	__size_add(addend1, 0)
+#define __size_add1(addend1, addend2, ...)					\
+	__size_add(addend1,  addend2)
+#define __size_add2(addend1, addend2, addend3, ...)				\
+	__size_add(__size_add(addend1,  addend2), addend3)
+#define __size_add3(addend1, addend2, addend3, addend4, ...)			\
+	__size_add(__size_add2(addend1,  addend2, addend3), addend4)
+#define __size_add4(addend1, addend2, addend3, addend4, addend5, ...)		\
+	__size_add(__size_add3(addend1,  addend2, addend3, addend4), addend5)
+
+/**
+ * size_add() - Calculate size_t addition with saturation at SIZE_MAX
+ * @addend1: first addend
+ * @...: more to add (optional)
+ *
+ * Returns: calculate @addend1 + @addend2, both promoted to size_t,
+ * with any overflow causing the return value to be SIZE_MAX. The
+ * lvalue must be size_t to avoid implicit type conversion.
+ */
+#define size_add(addend1, ...)	\
+	CONCATENATE(__size_add, COUNT_ARGS(__VA_ARGS__))(addend1, __VA_ARGS__)
 
 /**
  * size_sub() - Calculate size_t subtraction with saturation at SIZE_MAX
