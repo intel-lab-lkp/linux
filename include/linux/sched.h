@@ -2517,4 +2517,15 @@ extern void migrate_enable(void);
 
 DEFINE_LOCK_GUARD_0(migrate, migrate_disable(), migrate_enable())
 
+#ifdef CONFIG_PREFERRED_CPU
+struct steal_monitor_t {
+	struct work_struct  work;
+	ktime_t prev_time;
+	u64 prev_steal;
+	int previous_decision;
+	unsigned int low_threshold;
+	unsigned int high_threshold;
+	unsigned int sampling_period_ms;
+};
+#endif
 #endif
