@@ -242,7 +242,7 @@ static int rk3588_otp_read(void *context, unsigned int offset,
 {
 	struct rockchip_otp *otp = context;
 	u32 *buf = val;
-	int ret;
+	int ret = 0;
 
 	while (count--) {
 		writel((offset++ << RK3588_ADDR_SHIFT) |
