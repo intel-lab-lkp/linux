@@ -178,14 +178,11 @@ int rtw_init_cmd_priv(struct	cmd_priv *pcmdpriv)
 
 	pcmdpriv->cmd_buf = PTR_ALIGN(pcmdpriv->cmd_allocated_buf, CMDBUFF_ALIGN_SZ);
 
-	pcmdpriv->rsp_allocated_buf = kzalloc(MAX_RSPSZ + 4, GFP_ATOMIC);
-	if (!pcmdpriv->rsp_allocated_buf) {
+	pcmdpriv->rsp_buf = kzalloc(MAX_RSPSZ, GFP_ATOMIC);
+	if (!pcmdpriv->rsp_buf) {
 		kfree(pcmdpriv->cmd_allocated_buf);
 		return -ENOMEM;
 	}
-
-	pcmdpriv->rsp_buf = pcmdpriv->rsp_allocated_buf + 4 -
-		((SIZE_PTR)(pcmdpriv->rsp_allocated_buf) & 3);
 
 	pcmdpriv->cmd_issued_cnt = 0;
 	pcmdpriv->cmd_done_cnt = 0;
@@ -232,7 +229,7 @@ void _rtw_free_cmd_priv(struct	cmd_priv *pcmdpriv)
 	if (pcmdpriv) {
 		kfree(pcmdpriv->cmd_allocated_buf);
 
-		kfree(pcmdpriv->rsp_allocated_buf);
+		kfree(pcmdpriv->rsp_buf);
 
 		mutex_destroy(&pcmdpriv->sctx_mutex);
 	}
