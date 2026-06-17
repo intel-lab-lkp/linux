@@ -448,6 +448,30 @@ impl<Ctx: device::DeviceContext> Device<Ctx> {
         self.0.get()
     }
 
+    /// Clears a halt/stall on bulk `endpoint`, resetting both the device-side stall
+    /// (CLEAR_FEATURE ENDPOINT_HALT) and the host-side data toggle via
+    /// `usb_clear_halt()`. The transfer direction is taken from bit 7 of the endpoint
+    /// address (`USB_DIR_IN`), so this works for both bulk IN and bulk OUT endpoints.
+    /// Must be called from process context (it sleeps). Needed e.g. when another
+    /// driver left a streaming endpoint stalled.
+    pub fn clear_halt(&self, endpoint: u8) -> Result {
+        // `usb_clear_halt()` must be given a pipe whose direction matches the endpoint:
+        // it issues CLEAR_FEATURE to that endpoint address and resets the matching data
+        // toggle. Build an IN or OUT pipe from the `USB_DIR_IN` bit of the address;
+        // using `usb_sndbulkpipe()` unconditionally would force OUT and silently fail
+        // to clear a stalled IN endpoint.
+        let pipe = if endpoint & (bindings::USB_DIR_IN as u8) != 0 {
+            // SAFETY: `self.as_raw()` is a valid `struct usb_device` by the type invariant.
+            unsafe { bindings::usb_rcvbulkpipe(self.as_raw(), endpoint.into()) }
+        } else {
+            // SAFETY: `self.as_raw()` is a valid `struct usb_device` by the type invariant.
+            unsafe { bindings::usb_sndbulkpipe(self.as_raw(), endpoint.into()) }
+        };
+        // SAFETY: `self.as_raw()` is valid by the type invariant; `usb_clear_halt()`
+        // only issues a control request and updates host-side endpoint state.
+        to_result(unsafe { bindings::usb_clear_halt(self.as_raw(), pipe as kernel::ffi::c_int) })
+    }
+
     /// Issues a synchronous bulk OUT transfer of `data` to bulk endpoint
     /// `endpoint` and returns the number of bytes actually transferred.
     ///
