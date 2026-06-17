@@ -1943,8 +1943,7 @@ static int sof_link_load(struct snd_soc_component *scomp, int index, struct snd_
 			       private->array, le32_to_cpu(private->size));
 	if (ret < 0) {
 		dev_err(scomp->dev, "Failed tp parse common DAI link tokens\n");
-		kfree(slink);
-		return ret;
+		goto free_slink;
 	}
 
 	token_list = tplg_ops ? tplg_ops->token_list : NULL;
@@ -2013,8 +2012,8 @@ static int sof_link_load(struct snd_soc_component *scomp, int index, struct snd_
 	/* allocate memory for tuples array */
 	slink->tuples = kzalloc_objs(*slink->tuples, num_tuples);
 	if (!slink->tuples) {
-		kfree(slink);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto free_slink;
 	}
 
 	if (token_list[SOF_DAI_LINK_TOKENS].tokens) {
@@ -2070,6 +2069,7 @@ out:
 
 err:
 	kfree(slink->tuples);
+free_slink:
 	kfree(slink);
 
 	return ret;
