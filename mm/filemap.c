@@ -2472,6 +2472,8 @@ static void filemap_get_read_batch(struct address_space *mapping,
 
 		if (!folio_batch_add(fbatch, folio))
 			break;
+		if (folio_contain_hwpoisoned_page(folio))
+			break;
 		if (!folio_test_uptodate(folio))
 			break;
 		if (folio_test_readahead(folio))
@@ -2868,6 +2870,7 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 			size_t offset = iocb->ki_pos & (fsize - 1);
 			size_t bytes = min_t(loff_t, end_offset - iocb->ki_pos,
 					     fsize - offset);
+			size_t adjusted;
 			size_t copied;
 
 			if (end_offset < folio_pos(folio))
@@ -2882,13 +2885,22 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 			if (writably_mapped)
 				flush_dcache_folio(folio);
 
-			copied = copy_folio_to_iter(folio, offset, bytes, iter);
+			adjusted = bytes;
+			if (folio_contain_hwpoisoned_page(folio)) {
+				adjusted = adjust_range_hwpoison(folio, offset, bytes);
+				if (adjusted == 0) {
+					error = -EIO;
+					break;
+				}
+			}
+
+			copied = copy_folio_to_iter(folio, offset, adjusted, iter);
 
 			already_read += copied;
 			iocb->ki_pos += copied;
 			last_pos = iocb->ki_pos;
 
-			if (copied < bytes) {
+			if (copied < adjusted) {
 				error = -EFAULT;
 				break;
 			}
