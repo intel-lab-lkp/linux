@@ -32,9 +32,9 @@ enum ndis_802_11_network_type {
 };
 
 /*
-	FW will only save the channel number in DSConfig.
-	ODI Handler will convert the channel number to freq. number.
-*/
+ * FW will only save the channel number in DSConfig.
+ * ODI Handler will convert the channel number to freq. number.
+ */
 struct ndis_802_11_conf {
 	u32 length;             /*  Length of structure */
 	u32 beacon_period;       /*  units are Kusec */
@@ -138,7 +138,8 @@ struct wlan_phy_info {
 
 struct wlan_bcn_info {
 	/* these infor get from rtw_get_encrypt_info when
-	 * * translate scan to UI */
+	 * translate scan to UI
+	 */
 	u8 encryp_protocol;/* ENCRYP_PROTOCOL_E: OPEN/WEP/WPA/WPA2/WAPI */
 	int group_cipher; /* WPA/WPA2 group cipher */
 	int pairwise_cipher;/* WPA/WPA2/WEP pairwise cipher */
@@ -150,8 +151,8 @@ struct wlan_bcn_info {
 };
 
 /* temporally add #pragma pack for structure alignment issue of
-*   struct wlan_bssid_ex and get_wlan_bssid_ex_sz()
-*/
+ * struct wlan_bssid_ex and get_wlan_bssid_ex_sz()
+ */
 struct wlan_bssid_ex {
 	u32  length;
 	u8 mac_address[ETH_ALEN];
