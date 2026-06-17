@@ -84,10 +84,8 @@ static int dsa_switch_rcv(struct sk_buff *skb, struct net_device *dev,
 		nskb = cpu_dp->rcv(skb, dev);
 	}
 
-	if (!nskb) {
-		kfree_skb(skb);
+	if (!nskb)
 		return 0;
-	}
 
 	skb = nskb;
 	skb_push(skb, ETH_HLEN);
