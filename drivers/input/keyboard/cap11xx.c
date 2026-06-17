@@ -231,10 +231,13 @@ static int cap11xx_init_keys(struct cap11xx_priv *priv)
 		}
 	}
 
-	if (!of_property_read_u32_array(node, "microchip,calib-sensitivity",
-					priv->calib_sensitivities,
-					priv->model->num_channels)) {
-		if (priv->model->has_sensitivity_control) {
+	if (of_property_present(node, "microchip,calib-sensitivity")) {
+		if (!priv->model->has_sensitivity_control) {
+			dev_warn(dev,
+				 "This model doesn't support 'calib-sensitivity'\n");
+		} else if (!of_property_read_u32_array(node, "microchip,calib-sensitivity",
+						       priv->calib_sensitivities,
+						       priv->model->num_channels)) {
 			for (i = 0; i < priv->model->num_channels; i++) {
 				if (!is_power_of_2(priv->calib_sensitivities[i]) ||
 				    priv->calib_sensitivities[i] > 4) {
@@ -254,32 +257,31 @@ static int cap11xx_init_keys(struct cap11xx_priv *priv)
 				if (error)
 					return error;
 			}
-		} else {
-			dev_warn(dev,
-				 "This model doesn't support 'calib-sensitivity'\n");
 		}
 	}
 
-	for (i = 0; i < priv->model->num_channels; i++) {
-		if (!of_property_read_u32_index(node, "microchip,signal-guard",
-						i, &u32_val)) {
-			if (u32_val > 1)
-				return -EINVAL;
-			if (u32_val)
-				priv->signal_guard_inputs_mask |= 0x01 << i;
-		}
-	}
-
-	if (priv->signal_guard_inputs_mask) {
-		if (priv->model->has_signal_guard) {
-			error = regmap_write(priv->regmap,
-					     CAP11XX_REG_SIGNAL_GUARD_ENABLE,
-					     priv->signal_guard_inputs_mask);
-			if (error)
-				return error;
-		} else {
+	if (of_property_present(node, "microchip,signal-guard")) {
+		if (!priv->model->has_signal_guard) {
 			dev_warn(dev,
 				 "This model doesn't support 'signal-guard'\n");
+		} else {
+			for (i = 0; i < priv->model->num_channels; i++) {
+				if (!of_property_read_u32_index(node, "microchip,signal-guard",
+								i, &u32_val)) {
+					if (u32_val > 1)
+						return -EINVAL;
+					if (u32_val)
+						priv->signal_guard_inputs_mask |= 0x01 << i;
+				}
+			}
+
+			if (priv->signal_guard_inputs_mask) {
+				error = regmap_write(priv->regmap,
+						     CAP11XX_REG_SIGNAL_GUARD_ENABLE,
+						     priv->signal_guard_inputs_mask);
+				if (error)
+					return error;
+			}
 		}
 	}
 
