@@ -444,6 +444,7 @@ static void stress_inorder_work(struct work_struct *work)
 	struct ww_acquire_ctx ctx;
 	int *order;
 	int err;
+	int attempts_after_tmout = 10000;
 
 	stress->result = -ENOMEM;
 
@@ -476,7 +477,7 @@ retry:
 			ww_mutex_unlock(&locks[order[n]]);
 
 		if (err == -EDEADLK) {
-			if (!time_after(jiffies, stress->timeout)) {
+			if ((!time_after(jiffies, stress->timeout)) || attempts_after_tmout--) {
 				ww_mutex_lock_slow(&locks[order[contended]], &ctx);
 				goto retry;
 			}
