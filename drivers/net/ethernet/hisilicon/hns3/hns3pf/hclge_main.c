@@ -1577,6 +1577,11 @@ static int hclge_configure(struct hclge_dev *hdev)
 	hdev->hw.mac.req_autoneg = AUTONEG_ENABLE;
 	hdev->hw.mac.req_duplex = DUPLEX_FULL;
 
+	/* When lane_num is 0, the firmware will automatically
+	 * select the appropriate lane_num based on the speed.
+	 */
+	hdev->hw.mac.req_lane_num = 0;
+
 	hclge_parse_link_mode(hdev, cfg.speed_ability);
 
 	hdev->hw.mac.max_speed = hclge_get_max_speed(cfg.speed_ability);
@@ -2652,6 +2657,7 @@ static int hclge_cfg_mac_speed_dup_h(struct hnae3_handle *handle, int speed,
 	if (ret)
 		return ret;
 
+	hdev->hw.mac.req_lane_num = lane_num;
 	if (speed != SPEED_UNKNOWN)
 		hdev->hw.mac.req_speed = (u32)speed;
 	if (duplex != DUPLEX_UNKNOWN)
@@ -11747,7 +11753,7 @@ static int hclge_set_autoneg_speed_dup(struct hclge_dev *hdev)
 	if (!hdev->hw.mac.req_autoneg) {
 		ret = hclge_cfg_mac_speed_dup_hw(hdev, hdev->hw.mac.req_speed,
 						 hdev->hw.mac.req_duplex,
-						 hdev->hw.mac.lane_num);
+						 hdev->hw.mac.req_lane_num);
 		if (ret)
 			return ret;
 	}
