@@ -1159,7 +1159,7 @@ static void submit_exec_queue(struct xe_exec_queue *q, struct xe_sched_job *job)
 	if (exec_queue_suspended(q))
 		return;
 
-	if (!exec_queue_enabled(q) && !exec_queue_suspended(q)) {
+	if (!exec_queue_enabled(q)) {
 		action[len++] = XE_GUC_ACTION_SCHED_CONTEXT_MODE_SET;
 		action[len++] = q->guc->id;
 		action[len++] = GUC_CONTEXT_ENABLE;
