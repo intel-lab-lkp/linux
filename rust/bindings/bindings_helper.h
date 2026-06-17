@@ -28,6 +28,8 @@
  */
 #include <linux/hrtimer_types.h>
 
+#include <crypto/sha2.h>
+
 #include <linux/acpi.h>
 #include <linux/gpu_buddy.h>
 #include <drm/drm_device.h>
