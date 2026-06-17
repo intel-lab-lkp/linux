@@ -180,6 +180,25 @@ config I2C_I801_MUX
 	  Optional support for multiplexed SMBUS on certain systems with
 	  more than 8 memory slots.
 
+config I2C_IMC_X299
+	tristate "Intel X299 / Skylake-X iMC SMBus adapter"
+	depends on PCI && ACPI && X86
+	help
+	  Say Y here if you want kernel support for the integrated memory
+	  controller (iMC) SMBus engine found in Intel Skylake-X / Cascade
+	  Lake-X processors (socket LGA 2066, platform X299, PCU function
+	  8086:2085).
+
+	  The engine is exposed through the PCI configuration space of the
+	  PCU function and is driven via ECAM MMIO (not CF8/CFC port I/O,
+	  which is trapped by System Management Mode on this platform).
+	  Two I2C adapters are registered, one per hardware SMBus channel,
+	  allowing access to DDR4 DIMM SPD EEPROMs (0x50-0x57) and thermal
+	  sensors from userspace via standard i2c-tools and lm-sensors.
+
+	  If unsure, say N.  This driver is only useful on Intel X299 desktop
+	  / HEDT systems with the Skylake-X or Cascade Lake-X CPU.
+
 config I2C_ISCH
 	tristate "Intel SCH SMBus 1.0"
 	depends on PCI && HAS_IOPORT
