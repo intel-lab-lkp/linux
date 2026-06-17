@@ -10,12 +10,16 @@
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <linux/reset.h>
 #include <linux/reset-controller.h>
 
 #include <dt-bindings/reset/cix,sky1-system-control.h>
 #include <dt-bindings/reset/cix,sky1-s5-system-control.h>
+#include <dt-bindings/reset/cix,sky1-audss-system-control.h>
 
 #define SKY1_RESET_SLEEP_MIN_US		50
 #define SKY1_RESET_SLEEP_MAX_US		100
@@ -34,6 +38,7 @@ struct sky1_src {
 	struct reset_controller_dev rcdev;
 	const struct sky1_src_signal *signals;
 	struct regmap *regmap;
+	struct reset_control *rst_noc;
 };
 
 enum {
@@ -258,6 +263,34 @@ static const struct sky1_src_variant variant_sky1_fch = {
 	.signals_num = ARRAY_SIZE(sky1_src_fch_signals),
 };
 
+enum {
+	AUDSS_SW_RST = 0x78,
+};
+
+static const struct sky1_src_signal sky1_audss_signals[] = {
+	[AUDSS_I2S0_SW_RST]   = { AUDSS_SW_RST, BIT(0) },
+	[AUDSS_I2S1_SW_RST]   = { AUDSS_SW_RST, BIT(1) },
+	[AUDSS_I2S2_SW_RST]   = { AUDSS_SW_RST, BIT(2) },
+	[AUDSS_I2S3_SW_RST]   = { AUDSS_SW_RST, BIT(3) },
+	[AUDSS_I2S4_SW_RST]   = { AUDSS_SW_RST, BIT(4) },
+	[AUDSS_I2S5_SW_RST]   = { AUDSS_SW_RST, BIT(5) },
+	[AUDSS_I2S6_SW_RST]   = { AUDSS_SW_RST, BIT(6) },
+	[AUDSS_I2S7_SW_RST]   = { AUDSS_SW_RST, BIT(7) },
+	[AUDSS_I2S8_SW_RST]   = { AUDSS_SW_RST, BIT(8) },
+	[AUDSS_I2S9_SW_RST]   = { AUDSS_SW_RST, BIT(9) },
+	[AUDSS_WDT_SW_RST]    = { AUDSS_SW_RST, BIT(10) },
+	[AUDSS_TIMER_SW_RST]  = { AUDSS_SW_RST, BIT(11) },
+	[AUDSS_MB0_SW_RST]    = { AUDSS_SW_RST, BIT(12) },
+	[AUDSS_MB1_SW_RST]    = { AUDSS_SW_RST, BIT(13) },
+	[AUDSS_HDA_SW_RST]    = { AUDSS_SW_RST, BIT(14) },
+	[AUDSS_DMAC_SW_RST]   = { AUDSS_SW_RST, BIT(15) },
+};
+
+static const struct sky1_src_variant variant_sky1_audss = {
+	.signals = sky1_audss_signals,
+	.signals_num = ARRAY_SIZE(sky1_audss_signals),
+};
+
 static struct sky1_src *to_sky1_src(struct reset_controller_dev *rcdev)
 {
 	return container_of(rcdev, struct sky1_src, rcdev);
@@ -318,17 +351,34 @@ static const struct reset_control_ops sky1_src_ops = {
 	.status   = sky1_reset_status
 };
 
+static int __maybe_unused sky1_reset_runtime_suspend(struct device *dev)
+{
+	struct sky1_src *sky1src = dev_get_drvdata(dev);
+
+	return reset_control_assert(sky1src->rst_noc);
+}
+
+static int __maybe_unused sky1_reset_runtime_resume(struct device *dev)
+{
+	struct sky1_src *sky1src = dev_get_drvdata(dev);
+
+	return reset_control_deassert(sky1src->rst_noc);
+}
+
 static int sky1_reset_probe(struct platform_device *pdev)
 {
 	struct sky1_src *sky1src;
 	struct device *dev = &pdev->dev;
 	const struct sky1_src_variant *variant;
+	int ret;
 
 	sky1src = devm_kzalloc(dev, sizeof(*sky1src), GFP_KERNEL);
 	if (!sky1src)
 		return -ENOMEM;
 
 	variant = of_device_get_match_data(dev);
+	if (!variant)
+		return -ENODEV;
 
 	sky1src->regmap = device_node_to_regmap(dev->of_node);
 	if (IS_ERR(sky1src->regmap)) {
@@ -343,12 +393,36 @@ static int sky1_reset_probe(struct platform_device *pdev)
 	sky1src->rcdev.of_node   = dev->of_node;
 	sky1src->rcdev.dev       = dev;
 
-	return devm_reset_controller_register(dev, &sky1src->rcdev);
+	ret = devm_reset_controller_register(dev, &sky1src->rcdev);
+	if (ret)
+		return ret;
+
+	platform_set_drvdata(pdev, sky1src);
+
+	if (of_device_is_compatible(dev->of_node, "cix,sky1-audss-system-control")) {
+		sky1src->rst_noc = devm_reset_control_get_exclusive(dev, NULL);
+		if (IS_ERR(sky1src->rst_noc))
+			return dev_err_probe(dev, PTR_ERR(sky1src->rst_noc),
+					     "failed to get audss noc reset");
+
+		pm_runtime_get_noresume(dev);
+		pm_runtime_set_active(dev);
+		devm_pm_runtime_enable(dev);
+
+		reset_control_deassert(sky1src->rst_noc);
+
+		ret = devm_of_platform_populate(dev);
+		pm_runtime_put(dev);
+		return ret;
+	}
+
+	return 0;
 }
 
 static const struct of_device_id sky1_sysreg_of_match[] = {
-	{ .compatible = "cix,sky1-system-control", .data = &variant_sky1_fch},
-	{ .compatible = "cix,sky1-s5-system-control", .data = &variant_sky1},
+	{ .compatible = "cix,sky1-system-control", .data = &variant_sky1_fch },
+	{ .compatible = "cix,sky1-s5-system-control", .data = &variant_sky1 },
+	{ .compatible = "cix,sky1-audss-system-control", .data = &variant_sky1_audss },
 	{},
 };
 MODULE_DEVICE_TABLE(of, sky1_sysreg_of_match);
@@ -358,6 +432,12 @@ static struct platform_driver sky1_reset_driver = {
 	.driver = {
 		.name		= "cix,sky1-rst",
 		.of_match_table = sky1_sysreg_of_match,
+		.pm		= &(const struct dev_pm_ops){
+			SET_RUNTIME_PM_OPS(sky1_reset_runtime_suspend,
+					   sky1_reset_runtime_resume, NULL)
+			SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
+						pm_runtime_force_resume)
+		},
 	},
 };
 module_platform_driver(sky1_reset_driver)
