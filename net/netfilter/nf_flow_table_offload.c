@@ -820,6 +820,9 @@ nf_flow_offload_rule_alloc(struct net *net,
 
 	tuple = &flow->tuplehash[dir].tuple;
 	other_tuple = &flow->tuplehash[!dir].tuple;
+	if (other_tuple->tun_num &&
+	    other_tuple->xmit_type == FLOW_OFFLOAD_XMIT_DIRECT)
+		goto err_flow_match;
 	if (other_tuple->xmit_type == FLOW_OFFLOAD_XMIT_NEIGH)
 		other_dst = other_tuple->dst_cache;
 

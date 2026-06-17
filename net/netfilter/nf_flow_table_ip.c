@@ -299,6 +299,11 @@ static bool nf_flow_exceeds_mtu(const struct sk_buff *skb, unsigned int mtu)
 
 static inline bool nf_flow_dst_check(struct flow_offload_tuple *tuple)
 {
+	if (tuple->tun_num &&
+	    tuple->xmit_type == FLOW_OFFLOAD_XMIT_DIRECT &&
+	    !dst_check(tuple->dst_cache, tuple->dst_cookie))
+		return false;
+
 	if (tuple->xmit_type != FLOW_OFFLOAD_XMIT_NEIGH &&
 	    tuple->xmit_type != FLOW_OFFLOAD_XMIT_XFRM)
 		return true;
@@ -482,6 +487,7 @@ static int nf_flow_offload_forward(struct nf_flowtable_ctx *ctx,
 				   struct flow_offload_tuple_rhash *tuplehash,
 				   struct sk_buff *skb)
 {
+	struct flow_offload_tuple *other_tuple;
 	enum flow_offload_tuple_dir dir;
 	struct flow_offload *flow;
 	unsigned int thoff, mtu;
@@ -503,6 +509,12 @@ static int nf_flow_offload_forward(struct nf_flowtable_ctx *ctx,
 		return 0;
 
 	if (!nf_flow_dst_check(&tuplehash->tuple)) {
+		flow_offload_teardown(flow);
+		return 0;
+	}
+
+	other_tuple = &flow->tuplehash[!dir].tuple;
+	if (other_tuple->tun_num && !nf_flow_dst_check(other_tuple)) {
 		flow_offload_teardown(flow);
 		return 0;
 	}
@@ -1091,6 +1103,7 @@ static int nf_flow_offload_ipv6_forward(struct nf_flowtable_ctx *ctx,
 					struct flow_offload_tuple_rhash *tuplehash,
 					struct sk_buff *skb, int encap_limit)
 {
+	struct flow_offload_tuple *other_tuple;
 	enum flow_offload_tuple_dir dir;
 	struct flow_offload *flow;
 	unsigned int thoff, mtu;
@@ -1115,6 +1128,12 @@ static int nf_flow_offload_ipv6_forward(struct nf_flowtable_ctx *ctx,
 		return 0;
 
 	if (!nf_flow_dst_check(&tuplehash->tuple)) {
+		flow_offload_teardown(flow);
+		return 0;
+	}
+
+	other_tuple = &flow->tuplehash[!dir].tuple;
+	if (other_tuple->tun_num && !nf_flow_dst_check(other_tuple)) {
 		flow_offload_teardown(flow);
 		return 0;
 	}
