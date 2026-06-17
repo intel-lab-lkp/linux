@@ -35,6 +35,8 @@
 #include <linux/clk.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
+#include <linux/dmaengine.h>
+#include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
@@ -303,6 +305,8 @@
 	(opr)) << (((idx) % 2) * OPRND_SHIFT))
 
 #define NXP_XSPI_MIN_IOMAP	SZ_4M
+#define NXP_XSPI_DMA_TOUT	5000 /* ms */
+#define NXP_XSPI_DMA_ALIGN	32
 #define NXP_XSPI_MAX_CHIPSELECT		2
 #define POLL_TOUT_US		5000
 
@@ -336,6 +340,8 @@ struct nxp_xspi {
 	/* mutex lock for each operation */
 	struct mutex lock;
 	int selected;
+	struct dma_chan *dma_rx;
+	struct completion dma_rx_c;
 #define XSPI_DTR_PROTO		BIT(0)
 	int flags;
 	/* Save the previous operation clock rate */
@@ -799,6 +805,78 @@ static int nxp_xspi_ahb_read(struct nxp_xspi *xspi, const struct spi_mem_op *op)
 	return 0;
 }
 
+static int nxp_xspi_dma_init(struct device *dev, struct nxp_xspi *xspi)
+{
+	xspi->dma_rx = dma_request_chan(dev, "rx");
+	if (IS_ERR(xspi->dma_rx)) {
+		int ret = PTR_ERR(xspi->dma_rx);
+
+		xspi->dma_rx = NULL;
+		if (ret == -EPROBE_DEFER)
+			return ret;
+		dev_dbg(dev, "NO DMA RX channel, falling back to CPU read\n");
+		return 0;
+	}
+	init_completion(&xspi->dma_rx_c);
+
+	return 0;
+}
+
+static void nxp_xspi_dma_rx_callback(void *data)
+{
+	struct nxp_xspi *xspi = data;
+
+	complete(&xspi->dma_rx_c);
+}
+
+static int nxp_xspi_ahb_dma_read(struct nxp_xspi *xspi,
+				 const struct spi_mem_op *op)
+{
+	struct dma_async_tx_descriptor *desc;
+	struct dma_chan *chan = xspi->dma_rx;
+	unsigned long timeout;
+	dma_addr_t dma_addr;
+	int ret = 0;
+
+	dma_addr = dma_map_single(chan->device->dev,
+				  op->data.buf.in, op->data.nbytes,
+				  DMA_FROM_DEVICE);
+
+	if (dma_mapping_error(chan->device->dev, dma_addr)) {
+		dev_err(xspi->dev, "failed to map DMA buffer for AHB read\n");
+		return -ENOMEM;
+	}
+
+	desc = dmaengine_prep_dma_memcpy(chan, dma_addr,
+					 xspi->memmap_phy + op->addr.val,
+					 op->data.nbytes,
+					 DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
+	if (!desc) {
+		dev_err(xspi->dev, "failed to prepare AHB RX DMA descriptor\n");
+		ret = -EIO;
+		goto err_unmap;
+	}
+	desc->callback = nxp_xspi_dma_rx_callback;
+	desc->callback_param = xspi;
+	reinit_completion(&xspi->dma_rx_c);
+	dmaengine_submit(desc);
+	dma_async_issue_pending(chan);
+
+	timeout = wait_for_completion_timeout(&xspi->dma_rx_c,
+					      msecs_to_jiffies(NXP_XSPI_DMA_TOUT));
+	if (!timeout) {
+		dev_err(xspi->dev, "AHB RX DMA timeout\n");
+		dmaengine_terminate_sync(chan);
+		ret = -ETIMEDOUT;
+	}
+
+err_unmap:
+	dma_unmap_single(chan->device->dev, dma_addr,
+			 op->data.nbytes, DMA_FROM_DEVICE);
+
+	return ret;
+}
+
 static int nxp_xspi_fill_txfifo(struct nxp_xspi *xspi,
 				 const struct spi_mem_op *op)
 {
@@ -1019,10 +1097,15 @@ static int nxp_xspi_exec_op(struct spi_mem *mem, const struct spi_mem_op *op)
 	 *     all use IP write.
 	 */
 	if ((op->data.dir == SPI_MEM_DATA_IN) && !needs_ip_only(xspi)
-		&& ((op->addr.val + op->data.nbytes) <= xspi->memmap_phy_size))
-		err = nxp_xspi_ahb_read(xspi, op);
-	else
+		&& ((op->addr.val + op->data.nbytes) <= xspi->memmap_phy_size)) {
+	/* use DMA for transfers no less than ahb_buf_size, when DMA is available */
+		if (xspi->dma_rx && op->data.nbytes >= xspi->devtype_data->ahb_buf_size)
+			err = nxp_xspi_ahb_dma_read(xspi, op);
+		else
+			err = nxp_xspi_ahb_read(xspi, op);
+	} else {
 		err = nxp_xspi_do_op(xspi, op);
+	}
 
 	nxp_xspi_sw_reset(xspi);
 
@@ -1045,6 +1128,24 @@ static int nxp_xspi_adjust_op_size(struct spi_mem *mem, struct spi_mem_op *op)
 		if (!needs_ip_only(xspi) && (op->addr.val < xspi->memmap_phy_size)
 			&& ((op->addr.val + op->data.nbytes) > xspi->memmap_phy_size))
 			op->data.nbytes = xspi->memmap_phy_size - op->addr.val;
+
+		/*
+		 * For AHB DMA read, align the transfer to NXP_XSPI_DMA_ALIGN
+		 * boundaries. If the start address is unaligned, shorten this
+		 * transfer so the next one starts on an aligned boundary.
+		 * Otherwise, if the length is unaligned, round it down.
+		 */
+		if (xspi->dma_rx && !needs_ip_only(xspi) &&
+		    (op->data.nbytes >= xspi->devtype_data->ahb_buf_size)) {
+			if (op->addr.val % NXP_XSPI_DMA_ALIGN)
+				op->data.nbytes =
+					ALIGN(op->addr.val, NXP_XSPI_DMA_ALIGN) -
+					op->addr.val;
+			else if (op->data.nbytes % NXP_XSPI_DMA_ALIGN)
+				op->data.nbytes =
+					ALIGN_DOWN(op->data.nbytes,
+					NXP_XSPI_DMA_ALIGN);
+		}
 	}
 
 	return 0;
@@ -1207,6 +1308,10 @@ static void nxp_xspi_cleanup(void *data)
 
 	if (xspi->ahb_addr)
 		iounmap(xspi->ahb_addr);
+	if (xspi->dma_rx) {
+		dmaengine_terminate_sync(xspi->dma_rx);
+		dma_release_channel(xspi->dma_rx);
+	}
 }
 
 static int nxp_xspi_probe(struct platform_device *pdev)
@@ -1254,7 +1359,12 @@ static int nxp_xspi_probe(struct platform_device *pdev)
 	/* Find the irq */
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
-		return dev_err_probe(dev, irq,  "Failed to get irq source");
+		return dev_err_probe(dev, irq, "Failed to get irq source");
+
+	/* DMA is optional, failure(other than -EPROBE_DEFER) falls back to CPU */
+	ret = nxp_xspi_dma_init(dev, xspi);
+	if (ret == -EPROBE_DEFER)
+		return ret;
 
 	pm_runtime_set_autosuspend_delay(dev, XSPI_RPM_TIMEOUT_MS);
 	pm_runtime_use_autosuspend(dev);
