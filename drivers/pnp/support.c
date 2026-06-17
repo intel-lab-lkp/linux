@@ -37,9 +37,9 @@ EXPORT_SYMBOL(pnp_is_active);
  * Functionally similar to acpi_ex_eisa_id_to_string(), but that's
  * buried in the ACPI CA, and we can't depend on it being present.
  */
-void pnp_eisa_id_to_string(u32 id, char *str)
+void pnp_eisa_id_to_string(__be32 _id, char *str)
 {
-	id = be32_to_cpu(id);
+	u32 id = be32_to_cpu(_id);
 
 	/*
 	 * According to the specs, the first three characters are five-bit

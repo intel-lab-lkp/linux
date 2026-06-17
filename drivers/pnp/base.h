@@ -11,7 +11,7 @@ extern const struct bus_type pnp_bus_type;
 int pnp_register_protocol(struct pnp_protocol *protocol);
 
 #define PNP_EISA_ID_MASK 0x7fffffff
-void pnp_eisa_id_to_string(u32 id, char *str);
+void pnp_eisa_id_to_string(__be32 id, char *str);
 struct pnp_dev *pnp_alloc_dev(struct pnp_protocol *, int id,
 			      const char *pnpid);
 struct pnp_card *pnp_alloc_card(struct pnp_protocol *, int id, char *pnpid);
