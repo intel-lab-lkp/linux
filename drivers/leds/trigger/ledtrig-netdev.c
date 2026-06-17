@@ -487,6 +487,8 @@ static ssize_t offloaded_show(struct device *dev,
 {
 	struct led_netdev_data *trigger_data = led_trigger_get_drvdata(dev);
 
+	dev_warn_once(dev, "offloaded attribute has been deprecated, see trigger_may_offload.\n");
+
 	return sprintf(buf, "%d\n", trigger_data->hw_control);
 }
 

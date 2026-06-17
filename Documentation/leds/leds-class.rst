@@ -179,6 +179,9 @@ ops and needs to declare specific support for the supported triggers.
 
 With hw control we refer to the LED driven by hardware.
 
+A sysfs attribute `trigger_may_offload` is provided for userspace to
+query supported triggers and their states.
+
 LED driver must define the following value to support hw control:
 
     - hw_control_trigger:
@@ -239,6 +242,11 @@ LED trigger must implement the following API to support hw control:
     - offloaded:
                 return a boolean indicating if the trigger is offloaded to
                 hardware.
+
+                If an LED driver specifies a hw control trigger but the
+                latter doesn't implement this callback, a dev_err_once will
+                be emitted and the LED trigger will be assumed to be not
+                offloaded.
 
 LED driver can activate additional modes by default to workaround the
 impossibility of supporting each different mode on the supported trigger.
