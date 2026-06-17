@@ -35,8 +35,8 @@
 #include "query.h"
 #include "bpf_filter.h"
 
-#define IORING_MAX_RESTRICTIONS	(IORING_RESTRICTION_LAST + \
-				 IORING_REGISTER_LAST + IORING_OP_LAST)
+#define IORING_MAX_RESTRICTIONS \
+	(IORING_RESTRICTION_LAST + IORING_REGISTER_LAST + IORING_OP_LAST)
 
 static __cold int io_probe(struct io_ring_ctx *ctx, void __user *arg,
 			   unsigned nr_args)
@@ -86,7 +86,6 @@ int io_unregister_personality(struct io_ring_ctx *ctx, unsigned id)
 	return -EINVAL;
 }
 
-
 static int io_register_personality(struct io_ring_ctx *ctx)
 {
 	const struct cred *creds;
@@ -96,7 +95,8 @@ static int io_register_personality(struct io_ring_ctx *ctx)
 	creds = get_current_cred();
 
 	ret = xa_alloc_cyclic(&ctx->personalities, &id, (void *)creds,
-			XA_LIMIT(0, USHRT_MAX), &ctx->pers_next, GFP_KERNEL);
+			      XA_LIMIT(0, USHRT_MAX), &ctx->pers_next,
+			      GFP_KERNEL);
 	if (ret < 0) {
 		put_cred(creds);
 		return ret;
@@ -133,7 +133,8 @@ static __cold int io_parse_restrictions(void __user *arg, unsigned int nr_args,
 		case IORING_RESTRICTION_REGISTER_OP:
 			if (res[i].register_op >= IORING_REGISTER_LAST)
 				goto err;
-			__set_bit(res[i].register_op, restrictions->register_op);
+			__set_bit(res[i].register_op,
+				  restrictions->register_op);
 			restrictions->reg_registered = true;
 			break;
 		case IORING_RESTRICTION_SQE_OP:
@@ -165,7 +166,8 @@ err:
 }
 
 static __cold int io_register_restrictions(struct io_ring_ctx *ctx,
-					   void __user *arg, unsigned int nr_args)
+					   void __user *arg,
+					   unsigned int nr_args)
 {
 	int ret;
 
@@ -484,22 +486,23 @@ static void io_register_free_rings(struct io_ring_ctx *ctx,
 	io_free_region(ctx->user, &r->ring_region);
 }
 
-#define swap_old(ctx, o, n, field)		\
-	do {					\
-		(o).field = (ctx)->field;	\
-		(ctx)->field = (n).field;	\
+#define swap_old(ctx, o, n, field)        \
+	do {                              \
+		(o).field = (ctx)->field; \
+		(ctx)->field = (n).field; \
 	} while (0)
 
-#define RESIZE_FLAGS	(IORING_SETUP_CQSIZE | IORING_SETUP_CLAMP)
-#define COPY_FLAGS	(IORING_SETUP_NO_SQARRAY | IORING_SETUP_SQE128 | \
-			 IORING_SETUP_CQE32 | IORING_SETUP_NO_MMAP | \
-			 IORING_SETUP_CQE_MIXED | IORING_SETUP_SQE_MIXED)
+#define RESIZE_FLAGS (IORING_SETUP_CQSIZE | IORING_SETUP_CLAMP)
+#define COPY_FLAGS                                                            \
+	(IORING_SETUP_NO_SQARRAY | IORING_SETUP_SQE128 | IORING_SETUP_CQE32 | \
+	 IORING_SETUP_NO_MMAP | IORING_SETUP_CQE_MIXED |                      \
+	 IORING_SETUP_SQE_MIXED)
 
 static int io_register_resize_rings(struct io_ring_ctx *ctx, void __user *arg)
 {
 	struct io_ctx_config config;
 	struct io_uring_region_desc rd;
-	struct io_ring_ctx_rings o = { }, n = { }, *to_free = NULL;
+	struct io_ring_ctx_rings o = {}, n = {}, *to_free = NULL;
 	unsigned i, tail, old_head;
 	struct io_uring_params *p = &config.p;
 	struct io_rings_layout *rl = &config.layout;
@@ -612,7 +615,8 @@ static int io_register_resize_rings(struct io_ring_ctx *ctx, void __user *arg)
 			src_mask = (ctx->sq_entries << 1) - 1;
 			dst_mask = (p->sq_entries << 1) - 1;
 		}
-		memcpy(&n.sq_sqes[index & dst_mask], &o.sq_sqes[index & src_mask], sq_size);
+		memcpy(&n.sq_sqes[index & dst_mask],
+		       &o.sq_sqes[index & src_mask], sq_size);
 	}
 	WRITE_ONCE(n.rings->sq.head, old_head);
 	WRITE_ONCE(n.rings->sq.tail, tail);
@@ -642,7 +646,8 @@ overflow:
 			src_mask = (ctx->cq_entries << 1) - 1;
 			dst_mask = (p->cq_entries << 1) - 1;
 		}
-		memcpy(&n.rings->cqes[index & dst_mask], &o.rings->cqes[index & src_mask], cq_size);
+		memcpy(&n.rings->cqes[index & dst_mask],
+		       &o.rings->cqes[index & src_mask], cq_size);
 	}
 	WRITE_ONCE(n.rings->cq.head, old_head);
 	WRITE_ONCE(n.rings->cq.tail, tail);
@@ -666,7 +671,8 @@ overflow:
 	 * should act on unconditionally. Worst case it'll be an extra
 	 * syscall.
 	 */
-	atomic_or(IORING_SQ_TASKRUN | IORING_SQ_NEED_WAKEUP, &n.rings->sq_flags);
+	atomic_or(IORING_SQ_TASKRUN | IORING_SQ_NEED_WAKEUP,
+		  &n.rings->sq_flags);
 	ctx->rings = n.rings;
 	rcu_assign_pointer(ctx->rings_rcu, n.rings);
 
@@ -738,8 +744,7 @@ static int io_register_mem_region(struct io_ring_ctx *ctx, void __user *uarg)
 
 static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
 			       void __user *arg, unsigned nr_args)
-	__releases(ctx->uring_lock)
-	__acquires(ctx->uring_lock)
+	__releases(ctx->uring_lock) __acquires(ctx->uring_lock)
 {
 	int ret;
 
@@ -753,7 +758,8 @@ static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
 	if (ctx->submitter_task && ctx->submitter_task != current)
 		return -EEXIST;
 
-	if ((ctx->int_flags & IO_RING_F_REG_RESTRICTED) && !(ctx->flags & IORING_SETUP_R_DISABLED)) {
+	if ((ctx->int_flags & IO_RING_F_REG_RESTRICTED) &&
+	    !(ctx->flags & IORING_SETUP_R_DISABLED)) {
 		opcode = array_index_nospec(opcode, IORING_REGISTER_LAST);
 		if (!test_bit(opcode, ctx->restrictions.register_op))
 			return -EACCES;
@@ -924,6 +930,12 @@ static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
 			break;
 		ret = io_register_clone_buffers(ctx, arg);
 		break;
+	case IORING_REGISTER_CLONE_FILES:
+		ret = -EINVAL;
+		if (!arg || nr_args != 1)
+			break;
+		ret = io_register_clone_files(ctx, arg);
+		break;
 	case IORING_REGISTER_ZCRX_IFQ:
 		ret = -EINVAL;
 		if (!arg || nr_args != 1)
@@ -966,7 +978,8 @@ static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
 	return ret;
 }
 
-static int io_uring_register_send_msg_ring(void __user *arg, unsigned int nr_args)
+static int io_uring_register_send_msg_ring(void __user *arg,
+					   unsigned int nr_args)
 {
 	struct io_uring_sqe sqe;
 

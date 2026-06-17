@@ -21,20 +21,21 @@
 #include "register.h"
 
 struct io_rsrc_update {
-	struct file			*file;
-	u64				arg;
-	u32				nr_args;
-	u32				offset;
+	struct file *file;
+	u64 arg;
+	u32 nr_args;
+	u32 offset;
 };
 
 static struct io_rsrc_node *io_sqe_buffer_register(struct io_ring_ctx *ctx,
-			struct iovec *iov, struct page **last_hpage);
+						   struct iovec *iov,
+						   struct page **last_hpage);
 
 /* only define max */
-#define IORING_MAX_FIXED_FILES	(1U << 20)
-#define IORING_MAX_REG_BUFFERS	(1U << 14)
+#define IORING_MAX_FIXED_FILES (1U << 20)
+#define IORING_MAX_REG_BUFFERS (1U << 14)
 
-#define IO_CACHED_BVECS_SEGS	32
+#define IO_CACHED_BVECS_SEGS 32
 
 int __io_account_mem(struct user_struct *user, unsigned long nr_pages)
 {
@@ -51,8 +52,8 @@ int __io_account_mem(struct user_struct *user, unsigned long nr_pages)
 		new_pages = cur_pages + nr_pages;
 		if (new_pages > page_limit)
 			return -ENOMEM;
-	} while (!atomic_long_try_cmpxchg(&user->locked_vm,
-					  &cur_pages, new_pages));
+	} while (!atomic_long_try_cmpxchg(&user->locked_vm, &cur_pages,
+					  new_pages));
 	return 0;
 }
 
@@ -485,8 +486,8 @@ int io_files_update(struct io_kiocb *req, unsigned int issue_flags)
 		ret = io_files_update_with_index_alloc(req, issue_flags);
 	} else {
 		io_ring_submit_lock(ctx, issue_flags);
-		ret = __io_register_rsrc_update(ctx, IORING_RSRC_FILE,
-						&up2, up->nr_args);
+		ret = __io_register_rsrc_update(ctx, IORING_RSRC_FILE, &up2,
+						up->nr_args);
 		io_ring_submit_unlock(ctx, issue_flags);
 	}
 
@@ -529,7 +530,7 @@ int io_sqe_files_unregister(struct io_ring_ctx *ctx)
 int io_sqe_files_register(struct io_ring_ctx *ctx, void __user *arg,
 			  unsigned nr_args, u64 __user *tags)
 {
-	__s32 __user *fds = (__s32 __user *) arg;
+	__s32 __user *fds = (__s32 __user *)arg;
 	struct file *file;
 	int fd, ret;
 	unsigned i;
@@ -678,7 +679,7 @@ static int io_buffer_account_pin(struct io_ring_ctx *ctx, struct page **pages,
 }
 
 static bool io_coalesce_buffer(struct page ***pages, int *nr_pages,
-				struct io_imu_folio_data *data)
+			       struct io_imu_folio_data *data)
 {
 	struct page **page_array = *pages, **new_array = NULL;
 	unsigned nr_pages_left = *nr_pages;
@@ -732,14 +733,14 @@ bool io_check_coalesce_buffer(struct page **page_array, int nr_pages,
 	 */
 	for (i = 1; i < nr_pages; i++) {
 		if (page_folio(page_array[i]) == folio &&
-			page_array[i] == page_array[i-1] + 1) {
+		    page_array[i] == page_array[i - 1] + 1) {
 			count++;
 			continue;
 		}
 
 		if (nr_folios == 1) {
-			if (folio_page_idx(folio, page_array[i-1]) !=
-				data->nr_pages_mid - 1)
+			if (folio_page_idx(folio, page_array[i - 1]) !=
+			    data->nr_pages_mid - 1)
 				return false;
 
 			data->nr_pages_head = count;
@@ -749,7 +750,7 @@ bool io_check_coalesce_buffer(struct page **page_array, int nr_pages,
 
 		folio = page_folio(page_array[i]);
 		if (folio_size(folio) != (1UL << data->folio_shift) ||
-			folio_page_idx(folio, page_array[i]) != 0)
+		    folio_page_idx(folio, page_array[i]) != 0)
 			return false;
 
 		count = 1;
@@ -792,8 +793,8 @@ static struct io_rsrc_node *io_sqe_buffer_register(struct io_ring_ctx *ctx,
 		return ERR_PTR(-ENOMEM);
 
 	ret = -ENOMEM;
-	pages = io_pin_pages((unsigned long) iov->iov_base, iov->iov_len,
-				&nr_pages);
+	pages = io_pin_pages((unsigned long)iov->iov_base, iov->iov_len,
+			     &nr_pages);
 	if (IS_ERR(pages)) {
 		ret = PTR_ERR(pages);
 		pages = NULL;
@@ -803,7 +804,8 @@ static struct io_rsrc_node *io_sqe_buffer_register(struct io_ring_ctx *ctx,
 	/* If it's huge page(s), try to coalesce them into fewer bvec entries */
 	if (nr_pages > 1 && io_check_coalesce_buffer(pages, nr_pages, &data)) {
 		if (data.nr_pages_mid != 1)
-			coalesced = io_coalesce_buffer(&pages, &nr_pages, &data);
+			coalesced =
+				io_coalesce_buffer(&pages, &nr_pages, &data);
 	}
 
 	imu = io_alloc_imu(ctx, nr_pages);
@@ -817,7 +819,7 @@ static struct io_rsrc_node *io_sqe_buffer_register(struct io_ring_ctx *ctx,
 
 	size = iov->iov_len;
 	/* store original address for later verification */
-	imu->ubuf = (unsigned long) iov->iov_base;
+	imu->ubuf = (unsigned long)iov->iov_base;
 	imu->len = iov->iov_len;
 	imu->folio_shift = PAGE_SHIFT;
 	imu->release = io_release_ubuf;
@@ -885,8 +887,9 @@ int io_sqe_buffers_register(struct io_ring_ctx *ctx, void __user *arg,
 		u64 tag = 0;
 
 		if (arg) {
-			uvec = (struct iovec __user *) arg;
-			iov = iovec_from_user(uvec, 1, 1, &fast_iov, io_is_compat(ctx));
+			uvec = (struct iovec __user *)arg;
+			iov = iovec_from_user(uvec, 1, 1, &fast_iov,
+					      io_is_compat(ctx));
 			if (IS_ERR(iov)) {
 				ret = PTR_ERR(iov);
 				break;
@@ -1050,8 +1053,7 @@ static int io_import_kbuf(int ddir, struct iov_iter *iter,
 }
 
 static int io_import_fixed(int ddir, struct iov_iter *iter,
-			   struct io_mapped_ubuf *imu,
-			   u64 buf_addr, size_t len)
+			   struct io_mapped_ubuf *imu, u64 buf_addr, size_t len)
 {
 	const struct bio_vec *bvec;
 	size_t folio_mask;
@@ -1095,7 +1097,8 @@ static int io_import_fixed(int ddir, struct iov_iter *iter,
 		bvec += seg_skip;
 		offset &= folio_mask;
 	}
-	nr_segs = (offset + len + bvec->bv_offset + folio_mask) >> imu->folio_shift;
+	nr_segs = (offset + len + bvec->bv_offset + folio_mask) >>
+		  imu->folio_shift;
 	iov_iter_bvec(iter, ddir, bvec, nr_segs, len);
 	iter->iov_offset = offset;
 	return 0;
@@ -1124,9 +1127,8 @@ inline struct io_rsrc_node *io_find_buf_node(struct io_kiocb *req,
 	return NULL;
 }
 
-int io_import_reg_buf(struct io_kiocb *req, struct iov_iter *iter,
-			u64 buf_addr, size_t len, int ddir,
-			unsigned issue_flags)
+int io_import_reg_buf(struct io_kiocb *req, struct iov_iter *iter, u64 buf_addr,
+		      size_t len, int ddir, unsigned int issue_flags)
 {
 	struct io_rsrc_node *node;
 
@@ -1146,7 +1148,8 @@ static void lock_two_rings(struct io_ring_ctx *ctx1, struct io_ring_ctx *ctx2)
 }
 
 /* Both rings are locked by the caller. */
-static int io_clone_buffers(struct io_ring_ctx *ctx, struct io_ring_ctx *src_ctx,
+static int io_clone_buffers(struct io_ring_ctx *ctx,
+			    struct io_ring_ctx *src_ctx,
 			    struct io_uring_clone_buffers *arg)
 {
 	struct io_rsrc_data data;
@@ -1160,7 +1163,8 @@ static int io_clone_buffers(struct io_ring_ctx *ctx, struct io_ring_ctx *src_ctx
 	 * Accounting state is shared between the two rings; that only works if
 	 * both rings are accounted towards the same counters.
 	 */
-	if (ctx->user != src_ctx->user || ctx->mm_account != src_ctx->mm_account)
+	if (ctx->user != src_ctx->user ||
+	    ctx->mm_account != src_ctx->mm_account)
 		return -EINVAL;
 
 	/* if offsets are given, must have nr specified too */
@@ -1268,7 +1272,8 @@ int io_register_clone_buffers(struct io_ring_ctx *ctx, void __user *arg)
 
 	if (copy_from_user(&buf, arg, sizeof(buf)))
 		return -EFAULT;
-	if (buf.flags & ~(IORING_REGISTER_SRC_REGISTERED|IORING_REGISTER_DST_REPLACE))
+	if (buf.flags &
+	    ~(IORING_REGISTER_SRC_REGISTERED | IORING_REGISTER_DST_REPLACE))
 		return -EINVAL;
 	if (!(buf.flags & IORING_REGISTER_DST_REPLACE) && ctx->buf_table.nr)
 		return -EBUSY;
@@ -1293,6 +1298,165 @@ int io_register_clone_buffers(struct io_ring_ctx *ctx, void __user *arg)
 	}
 
 	ret = io_clone_buffers(ctx, src_ctx, &buf);
+
+out:
+	if (src_ctx != ctx)
+		mutex_unlock(&src_ctx->uring_lock);
+
+	if (!registered_src)
+		fput(file);
+	return ret;
+}
+
+static int io_clone_files(struct io_ring_ctx *ctx, struct io_ring_ctx *src_ctx,
+			  struct io_uring_clone_files *arg)
+{
+	struct io_file_table new_file_table;
+	int i, off, nr;
+	unsigned int src_nr;
+
+	lockdep_assert_held(&ctx->uring_lock);
+	lockdep_assert_held(&src_ctx->uring_lock);
+
+	/* if offsets are given, must have nr specified too */
+	if (!arg->nr && (arg->dst_off || arg->src_off))
+		return -EINVAL;
+	/* not allowed unless REPLACE is set */
+	if (ctx->file_table.data.nr &&
+	    !(arg->flags & IORING_REGISTER_DST_REPLACE))
+		return -EBUSY;
+
+	src_nr = src_ctx->file_table.data.nr;
+	if (!src_nr)
+		return -ENXIO;
+	if (!arg->nr)
+		arg->nr = src_nr;
+	else if (arg->nr > src_nr)
+		return -EINVAL;
+	else if (arg->nr > IORING_MAX_FIXED_FILES)
+		return -EINVAL;
+	if (check_add_overflow(arg->nr, arg->src_off, &off) || off > src_nr)
+		return -EOVERFLOW;
+	if (check_add_overflow(arg->nr, arg->dst_off, &src_nr))
+		return -EOVERFLOW;
+	if (src_nr > IORING_MAX_FIXED_FILES)
+		return -EINVAL;
+	/* Allocate file tables memory {data + bitmap} into new_file_table */
+	memset(&new_file_table, 0, sizeof(new_file_table));
+	if (!io_alloc_file_tables(ctx, &new_file_table,
+				  max(src_nr, ctx->file_table.data.nr)))
+		return -ENOMEM;
+
+	/* Copy original dst nodes from before the cloned range */
+	for (i = 0; i < min(arg->dst_off, ctx->file_table.data.nr); i++) {
+		struct io_rsrc_node *node = ctx->file_table.data.nodes[i];
+
+		if (node) {
+			new_file_table.data.nodes[i] = node;
+			node->refs++;
+			io_file_bitmap_set(&new_file_table, i);
+		}
+	}
+
+	off = arg->dst_off;
+	i = arg->src_off;
+	nr = arg->nr;
+	while (nr--) {
+		struct io_rsrc_node *dst_node, *src_node;
+
+		src_node = io_rsrc_node_lookup(&src_ctx->file_table.data, i);
+		if (!src_node) {
+			dst_node = NULL;
+		} else {
+			dst_node = io_rsrc_node_alloc(ctx, IORING_RSRC_FILE);
+			if (!dst_node) {
+				io_free_file_tables(ctx, &new_file_table);
+				return -ENOMEM;
+			}
+
+			struct file *file = io_slot_file(src_node);
+
+			get_file(file);
+			io_fixed_file_set(dst_node, file);
+		}
+		new_file_table.data.nodes[off] = dst_node;
+		if (dst_node)
+			io_file_bitmap_set(&new_file_table, off);
+
+		i++;
+		off++;
+	}
+
+	/* Copy original dst nodes from after the cloned range */
+	for (i = src_nr; i < ctx->file_table.data.nr; i++) {
+		struct io_rsrc_node *node = ctx->file_table.data.nodes[i];
+
+		if (node) {
+			new_file_table.data.nodes[i] = node;
+			node->refs++;
+			io_file_bitmap_set(&new_file_table, i);
+		}
+	}
+
+	/*
+	 * If asked for replace, put the old table. new_file_table.data->nodes[] holds both
+	 * old and new nodes at this point.
+	 */
+	if (arg->flags & IORING_REGISTER_DST_REPLACE)
+		io_free_file_tables(ctx, &ctx->file_table);
+
+	/*
+	 * ctx->file_table must be empty now - either the contents are being
+	 * replaced and we just freed the table, or the contents are being
+	 * copied to a ring that does not have buffers yet (checked at function
+	 * entry).
+	 */
+	WARN_ON_ONCE(ctx->file_table.data.nr);
+	ctx->file_table = new_file_table;
+	io_file_table_set_alloc_range(ctx, 0, ctx->file_table.data.nr);
+	return 0;
+}
+
+int io_register_clone_files(struct io_ring_ctx *ctx, void __user *arg)
+{
+	struct io_uring_clone_files clone_arg;
+	struct io_ring_ctx *src_ctx;
+	bool registered_src;
+	struct file *file;
+	int ret;
+
+	if (copy_from_user(&clone_arg, arg, sizeof(clone_arg)))
+		return -EFAULT;
+	if (clone_arg.flags &
+	    ~(IORING_REGISTER_SRC_REGISTERED | IORING_REGISTER_DST_REPLACE))
+		return -EINVAL;
+	/* not allowed unless REPLACE is set */
+	if (!(clone_arg.flags & IORING_REGISTER_DST_REPLACE) &&
+	    ctx->file_table.data.nr)
+		return -EBUSY;
+	if (memchr_inv(clone_arg.pad, 0, sizeof(clone_arg.pad)))
+		return -EINVAL;
+
+	registered_src = (clone_arg.flags & IORING_REGISTER_SRC_REGISTERED) !=
+			 0;
+	file = io_uring_ctx_get_file(clone_arg.src_fd, registered_src);
+	if (IS_ERR(file))
+		return PTR_ERR(file);
+
+	src_ctx = file->private_data;
+	if (src_ctx != ctx) {
+		mutex_unlock(&ctx->uring_lock);
+		lock_two_rings(ctx, src_ctx);
+
+		/* Prevent cross-process hijacking */
+		if (src_ctx->submitter_task &&
+		    src_ctx->submitter_task != current) {
+			ret = -EEXIST;
+			goto out;
+		}
+	}
+
+	ret = io_clone_files(ctx, src_ctx, &clone_arg);
 
 out:
 	if (src_ctx != ctx)
@@ -1328,9 +1492,8 @@ int io_vec_realloc(struct iou_vec *iv, unsigned nr_entries)
 }
 
 static int io_vec_fill_bvec(int ddir, struct iov_iter *iter,
-				struct io_mapped_ubuf *imu,
-				struct iovec *iovec, unsigned nr_iovs,
-				struct iou_vec *vec)
+			    struct io_mapped_ubuf *imu, struct iovec *iovec,
+			    unsigned int nr_iovs, struct iou_vec *vec)
 {
 	unsigned long folio_size = 1 << imu->folio_shift;
 	unsigned long folio_mask = folio_size - 1;
@@ -1352,7 +1515,8 @@ static int io_vec_fill_bvec(int ddir, struct iov_iter *iter,
 
 		if (unlikely(!iov_len))
 			return -EFAULT;
-		if (unlikely(check_add_overflow(total_len, iov_len, &total_len)))
+		if (unlikely(
+			    check_add_overflow(total_len, iov_len, &total_len)))
 			return -EOVERFLOW;
 
 		offset = buf_addr - imu->ubuf;
@@ -1366,11 +1530,11 @@ static int io_vec_fill_bvec(int ddir, struct iov_iter *iter,
 		offset &= folio_mask;
 
 		for (; iov_len; offset = 0, bvec_idx++, src_bvec++) {
-			size_t seg_size = min_t(size_t, iov_len,
-						folio_size - offset);
+			size_t seg_size =
+				min_t(size_t, iov_len, folio_size - offset);
 
-			bvec_set_page(&res_bvec[bvec_idx],
-				      src_bvec->bv_page, seg_size, offset);
+			bvec_set_page(&res_bvec[bvec_idx], src_bvec->bv_page,
+				      seg_size, offset);
 			iov_len -= seg_size;
 		}
 	}
@@ -1411,7 +1575,7 @@ static int io_vec_fill_kern_bvec(int ddir, struct iov_iter *iter,
 		size_t offset = (size_t)(uintptr_t)iovec[iov_idx].iov_base;
 		size_t iov_len = iovec[iov_idx].iov_len;
 		struct bvec_iter bi = {
-			.bi_size        = offset + iov_len,
+			.bi_size = offset + iov_len,
 		};
 		struct bio_vec bv;
 
@@ -1439,7 +1603,7 @@ static int iov_kern_bvec_size(const struct iovec *iov,
 		return ret;
 
 	for (i = 0; off < offset + iov->iov_len && i < imu->nr_bvecs;
-			off += bvec[i].bv_len, i++) {
+	     off += bvec[i].bv_len, i++) {
 		if (offset >= off && offset < off + bvec[i].bv_len)
 			start = i;
 	}
@@ -1472,9 +1636,9 @@ static int io_kern_bvec_size(struct iovec *iov, unsigned nr_iovs,
 	return 0;
 }
 
-int io_import_reg_vec(int ddir, struct iov_iter *iter,
-			struct io_kiocb *req, struct iou_vec *vec,
-			unsigned nr_iovs, unsigned issue_flags)
+int io_import_reg_vec(int ddir, struct iov_iter *iter, struct io_kiocb *req,
+		      struct iou_vec *vec, unsigned int nr_iovs,
+		      unsigned int issue_flags)
 {
 	struct io_rsrc_node *node;
 	struct io_mapped_ubuf *imu;
@@ -1531,7 +1695,8 @@ int io_import_reg_vec(int ddir, struct iov_iter *iter,
 	}
 
 	if (imu->flags & IO_REGBUF_F_KBUF)
-		return io_vec_fill_kern_bvec(ddir, iter, imu, iov, nr_iovs, vec);
+		return io_vec_fill_kern_bvec(ddir, iter, imu, iov, nr_iovs,
+					     vec);
 
 	return io_vec_fill_bvec(ddir, iter, imu, iov, nr_iovs, vec);
 }
