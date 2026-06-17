@@ -126,6 +126,10 @@ properties:
           - const: mediatek,mt8127
       - items:
           - enum:
+              - amazon,ford
+          - const: mediatek,mt8127
+      - items:
+          - enum:
               - mediatek,mt8135-evbp1
           - const: mediatek,mt8135
       - items:
