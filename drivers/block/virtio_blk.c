@@ -99,7 +99,7 @@ struct virtblk_req {
 		 * be the last byte.
 		 */
 		struct {
-			__virtio64 sector;
+			__le64 sector;
 			u8 status;
 		} zone_append;
 	} in_hdr;
@@ -335,14 +335,12 @@ static inline void virtblk_request_done(struct request *req)
 {
 	struct virtblk_req *vbr = blk_mq_rq_to_pdu(req);
 	blk_status_t status = virtblk_result(virtblk_vbr_status(vbr));
-	struct virtio_blk *vblk = req->mq_hctx->queue->queuedata;
 
 	virtblk_unmap_data(req, vbr);
 	virtblk_cleanup_cmd(req);
 
 	if (req_op(req) == REQ_OP_ZONE_APPEND)
-		req->__sector = virtio64_to_cpu(vblk->vdev,
-						vbr->in_hdr.zone_append.sector);
+		req->__sector = le64_to_cpu(vbr->in_hdr.zone_append.sector);
 
 	blk_mq_end_request(req, status);
 }
@@ -589,13 +587,13 @@ static int virtblk_parse_zone(struct virtio_blk *vblk,
 {
 	struct blk_zone zone = { };
 
-	zone.start = virtio64_to_cpu(vblk->vdev, entry->z_start);
+	zone.start = le64_to_cpu(entry->z_start);
 	if (zone.start + vblk->zone_sectors <= get_capacity(vblk->disk))
 		zone.len = vblk->zone_sectors;
 	else
 		zone.len = get_capacity(vblk->disk) - zone.start;
-	zone.capacity = virtio64_to_cpu(vblk->vdev, entry->z_cap);
-	zone.wp = virtio64_to_cpu(vblk->vdev, entry->z_wp);
+	zone.capacity = le64_to_cpu(entry->z_cap);
+	zone.wp = le64_to_cpu(entry->z_wp);
 
 	switch (entry->z_type) {
 	case VIRTIO_BLK_ZT_SWR:
@@ -687,8 +685,7 @@ static int virtblk_report_zones(struct gendisk *disk, sector_t sector,
 		if (ret)
 			goto fail_report;
 
-		nz = min_t(u64, virtio64_to_cpu(vblk->vdev, report->nr_zones),
-			   nr_zones);
+		nz = min_t(u64, le64_to_cpu(report->nr_zones), nr_zones);
 		if (!nz)
 			break;
 
@@ -698,8 +695,7 @@ static int virtblk_report_zones(struct gendisk *disk, sector_t sector,
 			if (ret)
 				goto fail_report;
 
-			sector = virtio64_to_cpu(vblk->vdev,
-						 report->zones[i].z_start) +
+			sector = le64_to_cpu(report->zones[i].z_start) +
 				 vblk->zone_sectors;
 			zone_idx++;
 		}
@@ -725,18 +721,18 @@ static int virtblk_read_zoned_limits(struct virtio_blk *vblk,
 
 	lim->features |= BLK_FEAT_ZONED;
 
-	virtio_cread(vdev, struct virtio_blk_config,
-		     zoned.max_open_zones, &v);
+	virtio_cread_le(vdev, struct virtio_blk_config,
+			zoned.max_open_zones, &v);
 	lim->max_open_zones = v;
 	dev_dbg(&vdev->dev, "max open zones = %u\n", v);
 
-	virtio_cread(vdev, struct virtio_blk_config,
-		     zoned.max_active_zones, &v);
+	virtio_cread_le(vdev, struct virtio_blk_config,
+			zoned.max_active_zones, &v);
 	lim->max_active_zones = v;
 	dev_dbg(&vdev->dev, "max active zones = %u\n", v);
 
-	virtio_cread(vdev, struct virtio_blk_config,
-		     zoned.write_granularity, &wg);
+	virtio_cread_le(vdev, struct virtio_blk_config,
+			zoned.write_granularity, &wg);
 	if (!wg) {
 		dev_warn(&vdev->dev, "zero write granularity reported\n");
 		return -ENODEV;
@@ -750,8 +746,8 @@ static int virtblk_read_zoned_limits(struct virtio_blk *vblk,
 	 * virtio ZBD specification doesn't require zones to be a power of
 	 * two sectors in size, but the code in this driver expects that.
 	 */
-	virtio_cread(vdev, struct virtio_blk_config, zoned.zone_sectors,
-		     &vblk->zone_sectors);
+	virtio_cread_le(vdev, struct virtio_blk_config, zoned.zone_sectors,
+			&vblk->zone_sectors);
 	if (vblk->zone_sectors == 0 || !is_power_of_2(vblk->zone_sectors)) {
 		dev_err(&vdev->dev,
 			"zoned device with non power of two zone size %u\n",
@@ -767,8 +763,8 @@ static int virtblk_read_zoned_limits(struct virtio_blk *vblk,
 		lim->max_hw_discard_sectors = 0;
 	}
 
-	virtio_cread(vdev, struct virtio_blk_config,
-		     zoned.max_append_sectors, &v);
+	virtio_cread_le(vdev, struct virtio_blk_config,
+			zoned.max_append_sectors, &v);
 	if (!v) {
 		dev_warn(&vdev->dev, "zero max_append_sectors reported\n");
 		return -ENODEV;
