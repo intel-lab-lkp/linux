@@ -430,9 +430,26 @@ int btrfs_get_raid_extent_offset(struct btrfs_fs_info *fs_info,
 	ret = btrfs_search_slot(NULL, stripe_root, &stripe_key, path, 0, 0);
 	if (ret < 0)
 		return ret;
-	if (ret) {
-		if (path->slots[0] != 0)
-			path->slots[0]--;
+	if (ret > 0) {
+		/*
+		 * The exact key is not present, so the stripe extent that may
+		 * contain @logical is the previous item.
+		 *
+		 * If there is no previous item, the covering extent (if any) is
+		 * the one we landed on (its objectid == logical), so re-search
+		 * to position there for the forward scan below.
+		 */
+		ret = btrfs_previous_item(stripe_root, path, 0,
+					  BTRFS_RAID_STRIPE_KEY);
+		if (ret < 0)
+			return ret;
+		if (ret > 0) {
+			btrfs_release_path(path);
+			ret = btrfs_search_slot(NULL, stripe_root, &stripe_key,
+						path, 0, 0);
+			if (ret < 0)
+				return ret;
+		}
 	}
 
 	while (1) {
