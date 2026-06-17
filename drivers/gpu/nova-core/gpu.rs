@@ -9,7 +9,8 @@ use kernel::{
     io::Io,
     num::Bounded,
     pci,
-    prelude::*, //
+    prelude::*,
+    sizes::SizeConstants, //
 };
 
 use crate::{
@@ -368,6 +369,21 @@ impl<'gpu> Gpu<'gpu> {
                 match info.gpu_name() {
                     Ok(name) => dev_info!(pdev, "GPU name: {}\n", name),
                     Err(e) => dev_warn!(pdev, "GPU name unavailable: {:?}\n", e),
+                }
+
+                if !info.usable_fb_regions.is_empty() {
+                    dev_info!(pdev, "Usable FB regions:\n");
+                    for region in &info.usable_fb_regions {
+                        dev_info!(pdev, "  - {:#x?}\n", region);
+                    }
+
+                    dev_info!(
+                        pdev,
+                        "Total usable VRAM: {} MiB\n",
+                        info.usable_fb_regions.iter().fold(0u64, |res, region| res
+                            .saturating_add(region.end - region.start))
+                            / u64::SZ_1M
+                    );
                 }
 
                 info
