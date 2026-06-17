@@ -402,8 +402,7 @@ int xe_userptr_setup(struct xe_userptr_vma *uvma, unsigned long start,
 	if (err)
 		return err;
 
-	userptr->pages.notifier_seq = LONG_MAX;
-	userptr->pages.drm = &vm->xe->drm;
+	drm_gpusvm_init_pages(&userptr->pages, &vm->xe->drm);
 
 	return 0;
 }
