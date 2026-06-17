@@ -156,7 +156,7 @@ void __init sme_early_decrypt(resource_size_t paddr, unsigned long size)
 static void __init __sme_early_map_unmap_mem(void *vaddr, unsigned long size,
 					     bool map)
 {
-	unsigned long paddr = (unsigned long)vaddr - __PAGE_OFFSET;
+	unsigned long paddr = __pa(vaddr);
 	pmdval_t pmd_flags, pmd;
 
 	/* Use early_pmd_flags but remove the encryption mask */
