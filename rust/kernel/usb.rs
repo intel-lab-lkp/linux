@@ -19,6 +19,7 @@ use crate::{
     },
     prelude::*,
     sync::aref::AlwaysRefCounted,
+    time::Delta,
     types::Opaque,
     ThisModule, //
 };
@@ -426,7 +427,7 @@ unsafe impl Sync for Interface {}
 ///
 /// [`struct usb_device`]: https://www.kernel.org/doc/html/latest/driver-api/usb/usb.html#c.usb_device
 #[repr(transparent)]
-struct Device<Ctx: device::DeviceContext = device::Normal>(
+pub struct Device<Ctx: device::DeviceContext = device::Normal>(
     Opaque<bindings::usb_device>,
     PhantomData<Ctx>,
 );
@@ -434,6 +435,100 @@ struct Device<Ctx: device::DeviceContext = device::Normal>(
 impl<Ctx: device::DeviceContext> Device<Ctx> {
     fn as_raw(&self) -> *mut bindings::usb_device {
         self.0.get()
+    }
+
+    /// Issues a synchronous bulk OUT transfer of `data` to bulk endpoint
+    /// `endpoint` and returns the number of bytes actually transferred.
+    ///
+    /// This is a blocking, sleeping call and therefore must only be invoked from
+    /// a process (sleepable) context, never from atomic or interrupt context.
+    ///
+    /// `endpoint` is the endpoint's `bEndpointAddress` as it appears in the
+    /// descriptor (e.g. `0x02`); the transfer direction is fixed by the method
+    /// (OUT), so only the low four bits — the endpoint number — are used.
+    /// `timeout` is the maximum time to wait, rounded down to whole
+    /// milliseconds; a [`Delta`] of zero — or any non-zero value below 1 ms —
+    /// waits indefinitely (the `usb_bulk_msg()` `timeout == 0` contract).
+    ///
+    /// `usb_bulk_msg()` DMAs directly from the transfer buffer, so the buffer
+    /// must reside in DMA-capable (kmalloc'd) memory. `data` may be any slice —
+    /// it is copied into a kmalloc'd bounce buffer internally — so callers need
+    /// not arrange DMA-capable storage themselves.
+    ///
+    /// [`usb_bulk_msg()`]: https://docs.kernel.org/driver-api/usb/usb.html#c.usb_bulk_msg
+    pub fn bulk_send(&self, endpoint: u8, data: &[u8], timeout: Delta) -> Result<usize> {
+        let mut actual: kernel::ffi::c_int = 0;
+
+        // `usb_bulk_msg()` requires a DMA-capable buffer; `data` may live on the
+        // stack or in `.rodata`, so copy it into a kmalloc'd bounce buffer.
+        let mut buf = KVec::with_capacity(data.len(), GFP_KERNEL)?;
+        buf.extend_from_slice(data, GFP_KERNEL)?;
+
+        // SAFETY: `self.as_raw()` is a valid `struct usb_device` by the type invariant.
+        let pipe = unsafe { bindings::usb_sndbulkpipe(self.as_raw(), endpoint.into()) };
+
+        // SAFETY: `self.as_raw()` is valid by the type invariant; `buf` is a kmalloc'd
+        // buffer valid for reads of `buf.len()` bytes; `actual` is a valid out-pointer.
+        to_result(unsafe {
+            bindings::usb_bulk_msg(
+                self.as_raw(),
+                pipe,
+                buf.as_mut_ptr().cast::<kernel::ffi::c_void>(),
+                buf.len().try_into()?,
+                &mut actual,
+                timeout.as_millis().try_into()?,
+            )
+        })?;
+
+        Ok(actual as usize)
+    }
+
+    /// Issues a synchronous bulk IN transfer of up to `data.len()` bytes from bulk
+    /// endpoint `endpoint` into `data` and returns the number of bytes received.
+    ///
+    /// This is a blocking, sleeping call and therefore must only be invoked from a
+    /// process (sleepable) context, never from atomic or interrupt context.
+    ///
+    /// `endpoint` is the endpoint's `bEndpointAddress` as it appears in the
+    /// descriptor (e.g. `0x84`); the transfer direction is fixed by the method
+    /// (IN), so only the low four bits — the endpoint number — are used.
+    /// `timeout` is the maximum time to wait, rounded down to whole
+    /// milliseconds; a [`Delta`] of zero — or any non-zero value below 1 ms —
+    /// waits indefinitely (the `usb_bulk_msg()` `timeout == 0` contract).
+    ///
+    /// `usb_bulk_msg()` DMAs directly into the transfer buffer, so the buffer
+    /// must reside in DMA-capable (kmalloc'd) memory. The data is received into
+    /// a kmalloc'd bounce buffer internally and then copied into `data`, so
+    /// `data` may be any slice.
+    ///
+    /// [`usb_bulk_msg()`]: https://docs.kernel.org/driver-api/usb/usb.html#c.usb_bulk_msg
+    pub fn bulk_recv(&self, endpoint: u8, data: &mut [u8], timeout: Delta) -> Result<usize> {
+        let mut actual: kernel::ffi::c_int = 0;
+
+        // `usb_bulk_msg()` requires a DMA-capable buffer; receive into a kmalloc'd
+        // bounce buffer and copy out, so `data` need not be DMA-capable itself.
+        let mut buf = KVec::from_elem(0u8, data.len(), GFP_KERNEL)?;
+
+        // SAFETY: `self.as_raw()` is a valid `struct usb_device` by the type invariant.
+        let pipe = unsafe { bindings::usb_rcvbulkpipe(self.as_raw(), endpoint.into()) };
+
+        // SAFETY: `self.as_raw()` is valid by the type invariant; `buf` is a kmalloc'd
+        // buffer valid for writes of `buf.len()` bytes; `actual` is a valid out-pointer.
+        to_result(unsafe {
+            bindings::usb_bulk_msg(
+                self.as_raw(),
+                pipe,
+                buf.as_mut_ptr().cast::<kernel::ffi::c_void>(),
+                buf.len().try_into()?,
+                &mut actual,
+                timeout.as_millis().try_into()?,
+            )
+        })?;
+
+        // `usb_bulk_msg()` never reports more than the requested length.
+        let n = (actual as usize).min(data.len());
+        data[..n].copy_from_slice(&buf[..n]);
+        Ok(n)
     }
 }
 
