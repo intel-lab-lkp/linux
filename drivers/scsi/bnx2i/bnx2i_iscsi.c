@@ -1914,6 +1914,10 @@ static struct iscsi_endpoint *bnx2i_ep_connect(struct Scsi_Host *shost,
 	if (rc)
 		goto del_active_ep;
 
+	rc = iscsi_register_endpoint(ep);
+	if (rc)
+		goto del_active_ep;
+
 	mutex_unlock(&hba->net_dev_lock);
 	return ep;
 

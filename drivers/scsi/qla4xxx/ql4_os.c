@@ -1749,6 +1749,12 @@ qla4xxx_ep_connect(struct Scsi_Host *shost, struct sockaddr *dst_addr,
 
 	qla_ep->host = shost;
 
+	ret = iscsi_register_endpoint(ep);
+	if (ret) {
+		iscsi_destroy_endpoint(ep);
+		return ERR_PTR(ret);
+	}
+
 	return ep;
 }
 

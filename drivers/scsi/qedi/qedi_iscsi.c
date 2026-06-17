@@ -1014,6 +1014,10 @@ qedi_ep_connect(struct Scsi_Host *shost, struct sockaddr *dst_addr,
 		goto ep_rel_conn;
 	}
 
+	ret = iscsi_register_endpoint(ep);
+	if (ret)
+		goto ep_rel_conn;
+
 	atomic_inc(&qedi->num_offloads);
 	return ep;
 

@@ -2937,11 +2937,17 @@ check_route:
 	cep->csk = csk;
 	cep->chba = hba;
 
+	err = iscsi_register_endpoint(ep);
+	if (err)
+		goto release_ep;
+
 	log_debug(1 << CXGBI_DBG_ISCSI | 1 << CXGBI_DBG_SOCK,
 		"ep 0x%p, cep 0x%p, csk 0x%p, hba 0x%p,%s.\n",
 		ep, cep, csk, hba, hba->ndev->name);
 	return ep;
 
+release_ep:
+	iscsi_destroy_endpoint(ep);
 release_conn:
 	cxgbi_sock_put(csk);
 	cxgbi_sock_closed(csk);

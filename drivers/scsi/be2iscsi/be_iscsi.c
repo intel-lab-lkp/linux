@@ -1188,6 +1188,12 @@ beiscsi_ep_connect(struct Scsi_Host *shost, struct sockaddr *dst_addr,
 		goto free_ep;
 	}
 
+	ret = iscsi_register_endpoint(ep);
+	if (ret) {
+		beiscsi_ep_disconnect(ep);
+		return ERR_PTR(ret);
+	}
+
 	return ep;
 
 free_ep:

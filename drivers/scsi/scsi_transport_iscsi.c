@@ -217,7 +217,7 @@ iscsi_create_endpoint(int dd_size)
 	 * First endpoint id should be 1 to comply with user space
 	 * applications (iscsid).
 	 */
-	id = idr_alloc(&iscsi_ep_idr, ep, 1, -1, GFP_NOIO);
+	id = idr_alloc(&iscsi_ep_idr, NULL, 1, -1, GFP_NOIO);
 	if (id < 0) {
 		mutex_unlock(&iscsi_ep_idr_mutex);
 		printk(KERN_ERR "Could not allocate endpoint ID. Error %d.\n",
@@ -256,6 +256,28 @@ free_ep:
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(iscsi_create_endpoint);
+
+int iscsi_register_endpoint(struct iscsi_endpoint *ep)
+{
+	void *old;
+	int err = 0;
+
+	mutex_lock(&iscsi_ep_idr_mutex);
+	old = idr_find(&iscsi_ep_idr, ep->id);
+	if (old) {
+		err = -EBUSY;
+		goto unlock;
+	}
+
+	old = idr_replace(&iscsi_ep_idr, ep, ep->id);
+	if (IS_ERR(old))
+		err = PTR_ERR(old);
+unlock:
+	mutex_unlock(&iscsi_ep_idr_mutex);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(iscsi_register_endpoint);
 
 void iscsi_destroy_endpoint(struct iscsi_endpoint *ep)
 {
