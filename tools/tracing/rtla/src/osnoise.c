@@ -1181,7 +1181,8 @@ struct osnoise_tool *osnoise_init_tool(char *tool_name)
 /*
  * osnoise_init_trace_tool - init a tracer instance to trace osnoise events
  */
-struct osnoise_tool *osnoise_init_trace_tool(const char *tracer)
+struct osnoise_tool *osnoise_init_trace_tool(struct common_params *params,
+					     const char *tracer)
 {
 	struct osnoise_tool *trace;
 	int retval;
@@ -1194,6 +1195,20 @@ struct osnoise_tool *osnoise_init_trace_tool(const char *tracer)
 	if (retval < 0 && !errno) {
 		err_msg("Could not find osnoise events\n");
 		goto out_err;
+	}
+
+	if (params->ipi) {
+		retval = tracefs_event_enable(trace->trace.inst, "ipi", "ipi_send_cpu");
+		if (retval < 0 && !errno) {
+			err_msg("Could not find ipi_send_cpu event\n");
+			goto out_err;
+		}
+
+		retval = tracefs_event_enable(trace->trace.inst, "ipi", "ipi_send_cpumask");
+		if (retval < 0 && !errno) {
+			err_msg("Could not find ipi_send_cpumask event\n");
+			goto out_err;
+		}
 	}
 
 	retval = enable_tracer_by_name(trace->trace.inst, tracer);
