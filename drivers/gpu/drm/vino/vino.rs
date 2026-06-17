@@ -44,6 +44,7 @@
 use kernel::{
     alloc::flags::GFP_KERNEL,
     bindings,
+    drm,
     device::{self, Core},
     error::code::{ENODEV, EINVAL},
     prelude::*,
@@ -79,6 +80,24 @@ fn timeout() -> Delta {
 /// hardware -- the dock runs the whole plaintext handshake but never engages the encrypted CP.
 static CP_ENGAGED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
+/// One-shot: clear-halt + prime the video endpoints before the first live-scanout EP08 write.
+static EP08_SCANOUT_PRIMED: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
+/// Consecutive failed live-scanout frames, for log rate-limiting. Until CP engages, the dock
+/// NAKs every EP08 write (EPROTO), so without this every compositor pageflip would spam dmesg.
+static SCANOUT_FAILS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
+/// Pageflip throttle: number of upcoming pageflips to skip before the next scanout attempt
+/// (a backoff while the dock NAKs). A single successful frame clears it.
+static SCANOUT_SKIP: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
+/// Set once the bring-up work item finishes (AKE/CP attempt done). `detect` only connects the
+/// live-scanout connector AFTER this, so a compositor enabling the output cannot start EP08
+/// scanout on top of the still-running AKE on the same USB device.
+static BRINGUP_COMPLETE: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
 mod proto;
 mod crypto;
 mod rng;
@@ -103,9 +122,13 @@ struct Session {
     cap_announce: KVec<u8>,
 }
 
+mod drm_sink;
+
 /// Per-bound-interface driver state.
 struct VinoDriver {
     _intf: ARef<usb::Interface>,
+    /// The registered `drm::Device` (only on the control interface, iface 0).
+    _ddev: Option<ARef<drm_sink::VinoDrmDevice>>,
 }
 
 /// Deferred bring-up work item: the bring-up sequence run on the system workqueue instead
@@ -115,6 +138,7 @@ struct VinoDriver {
 #[pin_data]
 struct BringUp {
     intf: ARef<usb::Interface>,
+    ddev: Option<ARef<drm_sink::VinoDrmDevice>>,
     #[pin]
     work: Work<BringUp>,
 }
@@ -124,10 +148,14 @@ impl_has_work! {
 }
 
 impl BringUp {
-    fn new(intf: ARef<usb::Interface>) -> Result<Arc<Self>> {
+    fn new(
+        intf: ARef<usb::Interface>,
+        ddev: Option<ARef<drm_sink::VinoDrmDevice>>,
+    ) -> Result<Arc<Self>> {
         Arc::pin_init(
             pin_init!(BringUp {
                 intf,
+                ddev,
                 work <- new_work!("vino::bring_up"),
             }),
             GFP_KERNEL,
@@ -141,38 +169,72 @@ impl WorkItem for BringUp {
     fn run(this: Arc<BringUp>) {
         let cdev: &device::Device = this.intf.as_ref();
         let dev: &usb::Device = this.intf.as_ref();
-        // WIP scaffold: plaintext bring-up, the clean-room HDCP 2.2 AKE/LC/SKE, then the
-        // post-SKE CP setup. Bind regardless of the outcome -- there is no display path until
-        // the dock engages the encrypted control plane, which it currently never does (see the
-        // "help wanted" note at the top of the file). The DRM sink lands in a later patch.
+        let ddev = &this.ddev;
+        // WIP scaffold: attempt the plaintext bring-up, then the clean-room HDCP 2.2
+        // AKE/LC/SKE, then the post-SKE CP setup. Bind regardless of the outcome -- there
+        // is no display path until the dock engages the encrypted control plane, which it
+        // currently never does (see the "help wanted" note at the top of the file).
         match VinoDriver::bring_up(dev) {
             Ok(()) => {
                 dev_info!(cdev, "vino: plaintext session init OK\n");
                 match VinoDriver::run_ake(dev) {
                     Ok(session) => {
                         dev_info!(cdev, "vino: HDCP AKE + LC + SKE complete (session keyed)\n");
+                        // Dev diagnostic: the live session key/riv, so the dock's encrypted
+                        // EP84 replies can be decoded offline from a usbmon capture. Behind
+                        // pr_debug, so compiled out unless dynamic debug is enabled.
                         pr_debug!("vino: SESSION ks={:02x?} riv={:02x?}\n", &session.ks, &session.riv);
-                        // Phase 2c: drive the post-SKE CP setup. send_cp_setup re-seals DLM's
-                        // captured setup template under THIS session's live ks/riv and sends it;
-                        // `acks` counts the dock's encrypted wsub=0x45 replies. THIS IS THE WALL:
-                        // on a cold dock `acks` stays 0 -- the dock runs the entire plaintext
-                        // handshake but never engages the encrypted CP.
+
+                        // Phase 2c: drive the post-SKE CP setup. send_cp_setup re-seals
+                        // DLM's captured setup template under THIS session's live ks/riv and
+                        // sends it; `acks` counts the dock's encrypted wsub=0x45 replies.
+                        // THIS IS THE WALL: on a cold dock `acks` stays 0 -- the dock runs the
+                        // entire plaintext handshake but never engages the encrypted CP.
                         let mut edid_out: Option<KVec<u8>> = None;
                         match VinoDriver::send_cp_setup(dev, &session, &mut edid_out) {
-                            Ok((n, acks, _wseq_end, _ctr_end)) => {
+                            Ok((n, acks, wseq_end, ctr_end)) => {
                                 dev_info!(cdev,
                                     "vino: CP setup sent -- {n} messages, {acks} dock CP acks (wsub=0x45)\n");
-                                // CP engagement gates EP08 video (added in a later patch): until
-                                // the dock acks, pushing pixels at it wedges the hub.
+                                // CP engagement gates EP08 video: until the dock acks, pushing
+                                // pixels at it wedges the hub.
                                 CP_ENGAGED.store(acks > 0, core::sync::atomic::Ordering::SeqCst);
+                                // Publish the engaged session to the DRM device so the KMS
+                                // callbacks
+                                // can send runtime CP (mode-set on a modeset, cursor on motion),
+                                // continuing this keystream. Only when the dock actually engaged.
+                                if acks > 0 {
+                                    if let Some(d) = ddev.as_ref() {
+                                        let data: &drm_sink::VinoDrmData = d;
+                                        data.publish_session(
+                                            &session.ks, &session.riv, wseq_end, ctr_end,
+                                        );
+                                    }
+                                }
                             }
                             Err(e) => dev_info!(cdev, "vino: CP setup incomplete ({e:?}) -- WIP\n"),
+                        }
+                        // Cache the dock's EDID on the DRM device (when the CP channel
+                        // delivered it) so the connector's get_modes installs the real
+                        // monitor descriptor via the standard DRM EDID helpers.
+                        if let (Some(blob), Some(d)) = (edid_out, ddev.as_ref()) {
+                            let n = blob.len();
+                            let data: &drm_sink::VinoDrmData = d;
+                            data.set_edid(blob);
+                            dev_info!(cdev, "vino: cached dock EDID for connector ({n} bytes)\n");
                         }
                     }
                     Err(e) => dev_info!(cdev, "vino: HDCP AKE incomplete ({e:?}) -- WIP\n"),
                 }
             }
             Err(e) => dev_info!(cdev, "vino: session init incomplete ({e:?}) -- WIP\n"),
+        }
+        // Bring-up attempt finished: allow the live-scanout connector to report connected
+        // and let a compositor drive EP08 frames, without racing the handshake.
+        BRINGUP_COMPLETE.store(true, core::sync::atomic::Ordering::SeqCst);
+        if let Some(d) = ddev.as_ref() {
+            let data: &drm_sink::VinoDrmData = d;
+            data.fire_hotplug();
+            dev_info!(cdev, "vino: bring-up complete -- live-scanout connector now connected\n");
         }
     }
 }
@@ -1596,16 +1658,59 @@ impl usb::Driver for VinoDriver {
                 return Err(ENODEV);
             }
             dev_info!(cdev, "vino: bound D6000 interface {ifnum} (idle -- control is iface 0)\n");
-            return Ok(Self { _intf: intf.into() });
+            return Ok(Self { _intf: intf.into(), _ddev: None });
         }
         dev_info!(cdev, "vino: bound DisplayLink D6000 -- plaintext session bring-up\n");
 
-        // Bring-up is blocking synchronous USB I/O; hand it to the system workqueue so
-        // probe() returns immediately and userspace stays responsive. The work item holds
-        // a refcounted handle to the interface, so the bulk endpoints outlive probe(); USB
-        // I/O after an intervening disconnect simply errors and is logged.
+        // Phase 3: register a real DRM/KMS device on the control interface so the dock
+        // shows up as a mode-settable `card`/`renderD` node (atomic KMS via the simple
+        // display pipe, one 1080p virtual connector, GEM-shmem dumb buffers). Non-fatal:
+        // bring-up still proceeds (and the interface still binds) if any step fails, so
+        // a DRM-core hiccup can't regress the USB session work.
+        // Hold a refcounted handle to the bound interface; one copy goes into the DRM
+        // device-private (for the EP08 scanout path), one stays in `VinoDriver`.
         let intf_ref: ARef<usb::Interface> = intf.into();
-        match BringUp::new(intf_ref.clone()) {
+        // DRM device lifecycle (drm-rust API): allocate an `UnregisteredDevice`, wire up
+        // the KMS pipeline on it while still unregistered, then hand it to
+        // `Registration::new_foreign_owned` (which registers it and ties its lifetime to
+        // the bound USB device via devres, returning a borrowed `&Device`).
+        let ddev: Option<ARef<drm_sink::VinoDrmDevice>> =
+            match drm::UnregisteredDevice::<drm_sink::VinoDrmDriver>::new(
+                cdev,
+                drm_sink::VinoDrmData::new(intf_ref.clone()),
+            ) {
+                Ok(unreg) => match drm_sink::kms_init(&unreg) {
+                    Ok(()) => match drm::driver::Registration::new_foreign_owned(unreg, cdev, 0) {
+                        Ok(reg_dev) => {
+                            dev_info!(cdev, "vino: DRM+KMS device registered (card node live, 1080p)\n");
+                            Some(reg_dev.into())
+                        }
+                        Err(e) => {
+                            dev_info!(cdev, "vino: DRM registration failed ({e:?}) -- continuing without card node\n");
+                            None
+                        }
+                    },
+                    Err(e) => {
+                        dev_info!(cdev, "vino: KMS init failed ({e:?}) -- continuing without card node\n");
+                        None
+                    }
+                },
+                Err(e) => {
+                    dev_info!(cdev, "vino: drm::UnregisteredDevice::new failed ({e:?}) -- continuing\n");
+                    None
+                }
+            };
+
+        // Bring-up (preamble + HDCP AKE + ~6 s of lockstep CP replay) is all blocking
+        // synchronous USB I/O. Running it inline here pins the USB driver-model probe
+        // thread while the DRM card node is already registered and live, which stalled
+        // the compositor (KWin) on first plug until the dock was physically yanked. Hand
+        // it to the system workqueue so `probe()` returns immediately and userspace KMS
+        // stays responsive. The work item holds refcounted handles to the interface (for
+        // the bulk endpoints) and the DRM device (for EDID caching), so they outlive
+        // `probe()`; USB I/O after an intervening disconnect simply errors and is logged,
+        // exactly like any other failed bring-up step.
+        match BringUp::new(intf_ref.clone(), ddev.clone()) {
             Ok(work) => {
                 let _ = workqueue::system().enqueue(work);
                 dev_info!(cdev, "vino: bring-up queued on system workqueue\n");
@@ -1613,7 +1718,7 @@ impl usb::Driver for VinoDriver {
             Err(e) => dev_info!(cdev, "vino: failed to queue bring-up ({e:?}) -- WIP\n"),
         }
 
-        Ok(Self { _intf: intf_ref })
+        Ok(Self { _intf: intf_ref, _ddev: ddev })
     }
 
     fn disconnect<'bound>(intf: &'bound usb::Interface<Core<'_>>, _data: Pin<&Self>) {
