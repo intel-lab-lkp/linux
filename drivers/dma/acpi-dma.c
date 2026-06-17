@@ -55,7 +55,7 @@ static int acpi_dma_parse_resource_group(const struct acpi_csrt_group *grp,
 
 	INIT_LIST_HEAD(&resource_list);
 	ret = acpi_dev_get_resources(adev, &resource_list, NULL, NULL);
-	if (ret <= 0)
+	if (ret < 0)
 		return 0;
 
 	list_for_each_entry(rentry, &resource_list, node) {
@@ -370,9 +370,10 @@ struct dma_chan *acpi_dma_request_slave_chan_by_index(struct device *dev,
 	INIT_LIST_HEAD(&resource_list);
 	ret = acpi_dev_get_resources(adev, &resource_list,
 				     acpi_dma_parse_fixed_dma, &pdata);
-	acpi_dev_free_resource_list(&resource_list);
 	if (ret < 0)
 		return ERR_PTR(ret);
+
+	acpi_dev_free_resource_list(&resource_list);
 
 	if (dma_spec->slave_id < 0 || dma_spec->chan_id < 0)
 		return ERR_PTR(-ENODEV);
