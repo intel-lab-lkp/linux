@@ -697,6 +697,23 @@ impl<Ctx: device::DeviceContext> Device<Ctx> {
             bindings::usb_set_interface(self.as_raw(), interface.into(), alternate.into())
         })
     }
+
+    /// Re-issues `SET_CONFIGURATION` for the device's current configuration, resetting
+    /// per-endpoint data toggles and returning every interface to alternate setting 0
+    /// (clearing any stalls) WITHOUT re-enumerating the device.
+    ///
+    /// Wraps [`usb_reset_configuration()`]. This is a blocking, sleeping call and must
+    /// only be invoked from process context. Note: it resets the toggles of ALL of the
+    /// device's endpoints, so on a composite device it can disturb sibling-interface
+    /// drivers that are mid-transfer.
+    ///
+    /// [`usb_reset_configuration()`]: https://docs.kernel.org/driver-api/usb/usb.html#c.usb_reset_configuration
+    pub fn reset_configuration(&self) -> Result {
+        // SAFETY: `self.as_raw()` is a valid `struct usb_device` by the type invariant;
+        // `usb_reset_configuration()` only re-issues SET_CONFIGURATION and updates the
+        // host-side endpoint state for this device.
+        to_result(unsafe { bindings::usb_reset_configuration(self.as_raw()) })
+    }
 }
 
 // SAFETY: `Device` is a transparent wrapper of a type that doesn't depend on `Device`'s generic
