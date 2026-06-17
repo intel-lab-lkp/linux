@@ -5819,6 +5819,20 @@ static int mvneta_suspend(struct device *device)
 	mvneta_stop_dev(pp);
 	rtnl_unlock();
 
+	/* Release IRQ to avoid stale MPIC mask state on resume.
+	 * On PREEMPT_RT, forced-threaded oneshot IRQs may leave the
+	 * interrupt masked (depth>0) at suspend time. This prevents
+	 * resume_device_irqs() from restoring the MPIC CPU routing,
+	 * permanently disabling the interrupt. Re-requesting the IRQ
+	 * on resume guarantees a clean state.
+	 */
+	if (pp->neta_armada3700)
+		free_irq(dev->irq, pp);
+	else {
+		on_each_cpu(mvneta_percpu_disable, pp, true);
+		free_percpu_irq(dev->irq, pp->ports);
+	}
+
 	for (queue = 0; queue < rxq_number; queue++) {
 		struct mvneta_rx_queue *rxq = &pp->rxqs[queue];
 
@@ -5883,6 +5897,21 @@ static int mvneta_resume(struct device *device)
 
 		txq->next_desc_to_proc = 0;
 		mvneta_txq_hw_init(pp, txq);
+	}
+
+	/* Re-request IRQ (see comment in mvneta_suspend) */
+	if (pp->neta_armada3700) {
+		err = request_irq(dev->irq, mvneta_isr, 0, dev->name, pp);
+	} else {
+		err = request_percpu_irq(dev->irq, mvneta_percpu_isr,
+					dev->name, pp->ports);
+		if (!err)
+			on_each_cpu(mvneta_percpu_enable, pp, true);
+	}
+	if (err) {
+		netdev_err(dev, "cannot request irq %d\n", dev->irq);
+		netif_device_detach(dev);
+		return err;
 	}
 
 	if (!pp->neta_armada3700) {
