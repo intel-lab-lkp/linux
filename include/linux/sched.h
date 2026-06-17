@@ -2527,5 +2527,7 @@ struct steal_monitor_t {
 	unsigned int high_threshold;
 	unsigned int sampling_period_ms;
 };
+
+extern struct steal_monitor_t steal_mon;
 #endif
 #endif

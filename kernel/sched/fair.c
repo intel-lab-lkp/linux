@@ -13292,7 +13292,8 @@ static int sched_balance_rq(int this_cpu, struct rq *this_rq,
 	cpumask_and(cpus, sched_domain_span(sd), cpu_active_mask);
 
 	/* Spread load among preferred CPUs */
-	cpumask_and(cpus, cpus, cpu_preferred_mask);
+	if (sched_steal_mon_enabled())
+		cpumask_and(cpus, cpus, cpu_preferred_mask);
 
 	schedstat_inc(sd->lb_count[idle]);
 

@@ -1060,6 +1060,7 @@ struct root_domain {
 	struct perf_domain __rcu *pd;
 };
 
+static inline bool sched_steal_mon_enabled(void);
 extern void init_defrootdomain(void);
 extern int sched_init_domains(const struct cpumask *cpu_map);
 extern void rq_attach_root(struct rq *rq, struct root_domain *rd);
@@ -1436,7 +1437,7 @@ static inline bool available_idle_cpu(int cpu)
 	if (!idle_rq(cpu_rq(cpu)))
 		return 0;
 
-	if (!cpu_preferred(cpu))
+	if (sched_steal_mon_enabled() && !cpu_preferred(cpu))
 		return 0;
 
 	if (vcpu_is_preempted(cpu))
@@ -4243,8 +4244,15 @@ DECLARE_STATIC_KEY_FALSE(__sched_sm_enable);
 void sched_init_steal_monitor(void);
 void sched_steal_detection_work(struct work_struct *work);
 void sched_push_current_non_preferred_cpu(struct rq *rq);
+void sched_trigger_steal_computation(int cpu);
+static inline bool sched_steal_mon_enabled(void)
+{
+	return static_branch_unlikely(&__sched_sm_enable);
+}
 #else	/* !CONFIG_PREFERRED_CPU */
 static inline void sched_push_current_non_preferred_cpu(struct rq *rq) { }
 static inline void sched_init_steal_monitor(void) { }
+static inline void sched_trigger_steal_computation(int cpu) { }
+static inline bool sched_steal_mon_enabled(void) { return false; }
 #endif
 #endif /* _KERNEL_SCHED_SCHED_H */
