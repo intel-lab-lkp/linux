@@ -530,6 +530,81 @@ impl<Ctx: device::DeviceContext> Device<Ctx> {
         data[..n].copy_from_slice(&buf[..n]);
         Ok(n)
     }
+
+    /// Issues a synchronous control OUT transfer on the default control endpoint.
+    ///
+    /// Wraps [`usb_control_msg_send()`]; `request`, `request_type`, `value` and
+    /// `index` are the `bRequest`, `bmRequestType`, `wValue` and `wIndex` setup
+    /// fields. `data` is the payload (`wLength` is its length).
+    ///
+    /// This is a blocking, sleeping call and must only be invoked from process
+    /// context. Unlike the bulk path, the buffer is copied internally, so `data`
+    /// need not reside in DMA-capable memory. `timeout` is the maximum time to
+    /// wait, rounded down to whole milliseconds; a [`Delta`] of zero — or any
+    /// non-zero value below 1 ms — waits indefinitely.
+    ///
+    /// [`usb_control_msg_send()`]: https://docs.kernel.org/driver-api/usb/usb.html#c.usb_control_msg_send
+    pub fn control_send(
+        &self,
+        request: u8,
+        request_type: u8,
+        value: u16,
+        index: u16,
+        data: &[u8],
+        timeout: Delta,
+    ) -> Result {
+        // SAFETY: `self.as_raw()` is valid by the type invariant; `data` is valid for
+        // reads of `data.len()` bytes; `usb_control_msg_send()` copies the buffer.
+        to_result(unsafe {
+            bindings::usb_control_msg_send(
+                self.as_raw(),
+                0,
+                request,
+                request_type,
+                value,
+                index,
+                data.as_ptr().cast::<kernel::ffi::c_void>(),
+                data.len().try_into()?,
+                timeout.as_millis().try_into()?,
+                bindings::GFP_KERNEL,
+            )
+        })
+    }
+
+    /// Issues a synchronous control IN transfer on the default control endpoint,
+    /// filling `data` with exactly `data.len()` bytes.
+    ///
+    /// Wraps [`usb_control_msg_recv()`], which fails the transfer if the device
+    /// returns fewer than `data.len()` bytes. The setup fields and context/buffer
+    /// rules are as for [`Device::control_send`].
+    ///
+    /// [`usb_control_msg_recv()`]: https://docs.kernel.org/driver-api/usb/usb.html#c.usb_control_msg_recv
+    pub fn control_recv(
+        &self,
+        request: u8,
+        request_type: u8,
+        value: u16,
+        index: u16,
+        data: &mut [u8],
+        timeout: Delta,
+    ) -> Result {
+        // SAFETY: `self.as_raw()` is valid by the type invariant; `data` is valid for
+        // writes of `data.len()` bytes; `usb_control_msg_recv()` copies into the buffer.
+        to_result(unsafe {
+            bindings::usb_control_msg_recv(
+                self.as_raw(),
+                0,
+                request,
+                request_type,
+                value,
+                index,
+                data.as_mut_ptr().cast::<kernel::ffi::c_void>(),
+                data.len().try_into()?,
+                timeout.as_millis().try_into()?,
+                bindings::GFP_KERNEL,
+            )
+        })
+    }
 }
 
 // SAFETY: `Device` is a transparent wrapper of a type that doesn't depend on `Device`'s generic
