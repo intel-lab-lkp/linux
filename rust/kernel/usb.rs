@@ -605,6 +605,19 @@ impl<Ctx: device::DeviceContext> Device<Ctx> {
             )
         })
     }
+
+    /// Selects alternate setting `alternate` of interface `interface`.
+    ///
+    /// Wraps [`usb_set_interface()`] (the standard `SET_INTERFACE` request). This is
+    /// a blocking, sleeping call and must only be invoked from process context.
+    ///
+    /// [`usb_set_interface()`]: https://docs.kernel.org/driver-api/usb/usb.html#c.usb_set_interface
+    pub fn set_interface(&self, interface: u8, alternate: u8) -> Result {
+        // SAFETY: `self.as_raw()` is a valid `struct usb_device` by the type invariant.
+        to_result(unsafe {
+            bindings::usb_set_interface(self.as_raw(), interface.into(), alternate.into())
+        })
+    }
 }
 
 // SAFETY: `Device` is a transparent wrapper of a type that doesn't depend on `Device`'s generic
