@@ -64,7 +64,7 @@ static void memfd_tag_pins(struct xa_state *xas)
  * (memfd_pin_folios()) cannot find a folio in the page cache at a given
  * index in the mapping.
  */
-struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t idx)
+struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t index)
 {
 #ifdef CONFIG_HUGETLB_PAGE
 	struct folio *folio;
@@ -79,12 +79,13 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t idx)
 		 */
 		struct inode *inode = file_inode(memfd);
 		struct hstate *h = hstate_file(memfd);
+		pgoff_t idx;
 		int err = -ENOMEM;
 		long nr_resv;
 
 		gfp_mask = htlb_alloc_mask(h);
 		gfp_mask &= ~(__GFP_HIGHMEM | __GFP_MOVABLE);
-		idx >>= huge_page_order(h);
+		idx = index >> huge_page_order(h);
 
 		nr_resv = hugetlb_reserve_pages(inode, idx, idx + 1, NULL, EMPTY_VMA_FLAGS);
 		if (nr_resv < 0)
@@ -116,7 +117,7 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t idx)
 			 * races with concurrent allocations, as required by all other
 			 * callers of hugetlb_add_to_page_cache().
 			 */
-			hash = hugetlb_fault_mutex_hash(memfd->f_mapping, idx);
+			hash = hugetlb_fault_mutex_hash(memfd->f_mapping, index);
 			mutex_lock(&hugetlb_fault_mutex_table[hash]);
 
 			err = hugetlb_add_to_page_cache(folio,
@@ -140,7 +141,7 @@ err_unresv:
 		return ERR_PTR(err);
 	}
 #endif
-	return shmem_read_folio(memfd->f_mapping, idx);
+	return shmem_read_folio(memfd->f_mapping, index);
 }
 
 /*

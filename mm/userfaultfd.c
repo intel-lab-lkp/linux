@@ -789,7 +789,7 @@ static __always_inline ssize_t mfill_atomic_hugetlb(
 	long copied;
 	struct folio *folio;
 	unsigned long vma_hpagesize;
-	pgoff_t idx;
+	pgoff_t index;
 	u32 hash;
 	struct address_space *mapping;
 
@@ -858,9 +858,9 @@ retry:
 		 * in the case of shared pmds.  fault mutex prevents
 		 * races with other faulting threads.
 		 */
-		idx = hugetlb_linear_page_index(dst_vma, dst_addr);
+		index = linear_page_index(dst_vma, dst_addr);
 		mapping = dst_vma->vm_file->f_mapping;
-		hash = hugetlb_fault_mutex_hash(mapping, idx);
+		hash = hugetlb_fault_mutex_hash(mapping, index);
 		mutex_lock(&hugetlb_fault_mutex_table[hash]);
 		hugetlb_vma_lock_read(dst_vma);
 

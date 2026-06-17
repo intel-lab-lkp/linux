@@ -448,7 +448,7 @@ static void remove_inode_hugepages(struct inode *inode, loff_t lstart,
 	struct address_space *mapping = &inode->i_data;
 	const pgoff_t end = lend >> PAGE_SHIFT;
 	struct folio_batch fbatch;
-	pgoff_t next, index;
+	pgoff_t next;
 	int i, freed = 0;
 	bool truncate_op = (lend == LLONG_MAX);
 
@@ -459,15 +459,14 @@ static void remove_inode_hugepages(struct inode *inode, loff_t lstart,
 			struct folio *folio = fbatch.folios[i];
 			u32 hash = 0;
 
-			index = folio->index >> huge_page_order(h);
-			hash = hugetlb_fault_mutex_hash(mapping, index);
+			hash = hugetlb_fault_mutex_hash(mapping, folio->index);
 			mutex_lock(&hugetlb_fault_mutex_table[hash]);
 
 			/*
 			 * Remove folio that was part of folio_batch.
 			 */
 			remove_inode_single_folio(h, inode, mapping, folio,
-						  index, truncate_op);
+						  folio->index, truncate_op);
 			freed++;
 
 			mutex_unlock(&hugetlb_fault_mutex_table[hash]);
@@ -664,7 +663,7 @@ static long hugetlbfs_fallocate(struct file *file, int mode, loff_t offset,
 		addr = index * hpage_size;
 
 		/* mutex taken here, fault path and hole punch */
-		hash = hugetlb_fault_mutex_hash(mapping, index);
+		hash = hugetlb_fault_mutex_hash(mapping, index << huge_page_order(h));
 		mutex_lock(&hugetlb_fault_mutex_table[hash]);
 
 		/* See if already present in mapping to avoid alloc/free */

@@ -5510,7 +5510,7 @@ retry_avoidcopy:
 		 */
 		if (cow_from_owner) {
 			struct address_space *mapping = vma->vm_file->f_mapping;
-			pgoff_t idx;
+			pgoff_t index;
 			u32 hash;
 
 			folio_put(old_folio);
@@ -5523,8 +5523,8 @@ retry_avoidcopy:
 			 *
 			 * Reacquire both after unmap operation.
 			 */
-			idx = vma_hugecache_offset(h, vma, vmf->address);
-			hash = hugetlb_fault_mutex_hash(mapping, idx);
+			index = linear_page_index(vma, vmf->address);
+			hash = hugetlb_fault_mutex_hash(mapping, index);
 			hugetlb_vma_unlock_read(vma);
 			mutex_unlock(&hugetlb_fault_mutex_table[hash]);
 
@@ -5659,8 +5659,6 @@ static inline vm_fault_t hugetlb_handle_userfault(struct vm_fault *vmf,
 						  unsigned long reason)
 {
 	u32 hash;
-	struct hstate *h = hstate_vma(vmf->vma);
-	pgoff_t idx = vmf->pgoff >> huge_page_order(h);
 
 	/*
 	 * vma_lock and hugetlb_fault_mutex must be dropped before handling
@@ -5668,7 +5666,7 @@ static inline vm_fault_t hugetlb_handle_userfault(struct vm_fault *vmf,
 	 * userfault, any vma operation should be careful from here.
 	 */
 	hugetlb_vma_unlock_read(vmf->vma);
-	hash = hugetlb_fault_mutex_hash(mapping, idx);
+	hash = hugetlb_fault_mutex_hash(mapping, vmf->pgoff);
 	mutex_unlock(&hugetlb_fault_mutex_table[hash]);
 	return handle_userfault(vmf, reason);
 }
@@ -5901,7 +5899,7 @@ out:
 	if (unlikely(ret & VM_FAULT_RETRY))
 		vma_end_read(vma);
 
-	hash = hugetlb_fault_mutex_hash(mapping, idx);
+	hash = hugetlb_fault_mutex_hash(mapping, vmf->pgoff);
 	mutex_unlock(&hugetlb_fault_mutex_table[hash]);
 	return ret;
 
@@ -5918,13 +5916,16 @@ backout_unlocked:
 }
 
 #ifdef CONFIG_SMP
-u32 hugetlb_fault_mutex_hash(struct address_space *mapping, pgoff_t idx)
+u32 hugetlb_fault_mutex_hash(struct address_space *mapping, pgoff_t index)
 {
 	unsigned long key[2];
+	struct hstate *h;
 	u32 hash;
 
 	key[0] = (unsigned long) mapping;
-	key[1] = idx;
+
+	h = hstate_inode(mapping->host);
+	key[1] = index >> huge_page_order(h);
 
 	hash = jhash2((u32 *)&key, sizeof(key)/(sizeof(u32)), 0);
 
@@ -5935,7 +5936,7 @@ u32 hugetlb_fault_mutex_hash(struct address_space *mapping, pgoff_t idx)
  * For uniprocessor systems we always use a single mutex, so just
  * return 0 and avoid the hashing overhead.
  */
-u32 hugetlb_fault_mutex_hash(struct address_space *mapping, pgoff_t idx)
+u32 hugetlb_fault_mutex_hash(struct address_space *mapping, pgoff_t index)
 {
 	return 0;
 }
@@ -5970,7 +5971,7 @@ vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 	 * the same page in the page cache.
 	 */
 	mapping = vma->vm_file->f_mapping;
-	hash = hugetlb_fault_mutex_hash(mapping, vmf.pgoff >> huge_page_order(h));
+	hash = hugetlb_fault_mutex_hash(mapping, vmf.pgoff);
 	mutex_lock(&hugetlb_fault_mutex_table[hash]);
 
 	/*
