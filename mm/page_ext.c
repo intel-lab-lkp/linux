@@ -253,6 +253,18 @@ static struct page_ext *lookup_page_ext(const struct page *page)
 {
 	unsigned long pfn = page_to_pfn(page);
 	struct mem_section *section = __pfn_to_section(pfn);
+
+	/*
+	 * section can be NULL when the page_ext iterator's for-loop increment
+	 * computes a PFN one step beyond the last registered section. This
+	 * occurs because pfn_to_page() uses __nr_to_section() which succeeds
+	 * for unregistered sections that share a root array with registered
+	 * sections,while __pfn_to_section() returns NULL for them.
+	 *
+	 */
+	if (!section)
+		return NULL;
+
 	struct page_ext *page_ext = READ_ONCE(section->page_ext);
 
 	WARN_ON_ONCE(!rcu_read_lock_held());
