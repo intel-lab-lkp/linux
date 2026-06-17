@@ -56,6 +56,13 @@ properties:
     description:
       Some additional phy settings are access through GRF regs.
 
+  rockchip,clk-lane-phase:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 7
+    description:
+      Clock lane sampling phase in 40 ps steps. The hardware default is 3.
+
 required:
   - compatible
   - reg
