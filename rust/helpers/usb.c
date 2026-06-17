@@ -19,3 +19,9 @@ rust_helper_usb_rcvbulkpipe(struct usb_device *dev, unsigned int endpoint)
 {
 	return usb_rcvbulkpipe(dev, endpoint);
 }
+
+__rust_helper unsigned int
+rust_helper_usb_rcvintpipe(struct usb_device *dev, unsigned int endpoint)
+{
+	return usb_rcvintpipe(dev, endpoint);
+}

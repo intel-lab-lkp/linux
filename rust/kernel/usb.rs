@@ -566,6 +566,50 @@ impl<Ctx: device::DeviceContext> Device<Ctx> {
         Ok(n)
     }
 
+    /// Issues a synchronous interrupt IN transfer on `endpoint`, returning the number of bytes
+    /// received. Uses `usb_interrupt_msg()` over an interrupt pipe (built with `usb_rcvintpipe()`)
+    /// so the URB's transfer type matches the endpoint — the correctly-typed counterpart to
+    /// [`bulk_recv`] for interrupt-IN status endpoints.
+    ///
+    /// This is a blocking, sleeping call and must only be invoked from process context. `endpoint`
+    /// is the endpoint's `bEndpointAddress` (e.g. `0x83`); only its low four bits — the endpoint
+    /// number — are used and the direction is fixed by the method (IN). As for [`bulk_recv`], the
+    /// data is received into a kmalloc'd bounce buffer internally and copied into `data`, so `data`
+    /// need not be DMA-capable. `timeout` is the maximum time to wait, rounded down to whole
+    /// milliseconds; a [`Delta`] of zero, or any non-zero value below 1 ms, waits indefinitely.
+    ///
+    /// [`bulk_recv`]: Self::bulk_recv
+    pub fn interrupt_recv(&self, endpoint: u8, data: &mut [u8], timeout: Delta) -> Result<usize> {
+        let mut actual: kernel::ffi::c_int = 0;
+
+        // `usb_interrupt_msg()` requires a DMA-capable buffer; receive into a kmalloc'd
+        // bounce buffer and copy out, so `data` need not be DMA-capable itself.
+        let mut buf = KVec::from_elem(0u8, data.len(), GFP_KERNEL)?;
+
+        // SAFETY: `self.as_raw()` is a valid `struct usb_device` by the type invariant.
+        let pipe = unsafe { bindings::usb_rcvintpipe(self.as_raw(), endpoint.into()) };
+
+        // SAFETY: `self.as_raw()` is valid by the type invariant; `buf` is a kmalloc'd buffer
+        // valid for writes of `buf.len()` bytes; `actual` is a valid out-pointer.
+        // `usb_interrupt_msg()` fills an interrupt URB for `pipe` and blocks until it completes
+        // or `timeout` elapses.
+        to_result(unsafe {
+            bindings::usb_interrupt_msg(
+                self.as_raw(),
+                pipe,
+                buf.as_mut_ptr().cast::<kernel::ffi::c_void>(),
+                buf.len().try_into()?,
+                &mut actual,
+                timeout.as_millis().try_into()?,
+            )
+        })?;
+
+        // `usb_interrupt_msg()` never reports more than the requested length.
+        let n = (actual as usize).min(data.len());
+        data[..n].copy_from_slice(&buf[..n]);
+        Ok(n)
+    }
+
     /// Issues a synchronous control OUT transfer on the default control endpoint.
     ///
     /// Wraps [`usb_control_msg_send()`]; `request`, `request_type`, `value` and
