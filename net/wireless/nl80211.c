@@ -11560,13 +11560,10 @@ nl80211_parse_sched_scan(struct wiphy *wiphy, struct wireless_dev *wdev,
 	     attrs[NL80211_ATTR_SCHED_SCAN_RSSI_ADJUST]))
 		return ERR_PTR(-EINVAL);
 
-	size = struct_size(request, channels, n_channels);
-	size = size_add(size, array_size(sizeof(*request->ssids), n_ssids));
-	size = size_add(size, array_size(sizeof(*request->match_sets),
-					 n_match_sets));
-	size = size_add(size, array_size(sizeof(*request->scan_plans),
-					 n_plans));
-	size = size_add(size, ie_len);
+	size = size_add(struct_size(request, channels, n_channels), ie_len,
+			array_size(sizeof(*request->ssids), n_ssids),
+			array_size(sizeof(*request->match_sets), n_match_sets),
+			array_size(sizeof(*request->scan_plans), n_plans));
 	request = kzalloc(size, GFP_KERNEL);
 	if (!request)
 		return ERR_PTR(-ENOMEM);
