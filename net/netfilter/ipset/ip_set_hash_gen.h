@@ -84,6 +84,7 @@ struct htable {
 	atomic_t uref;		/* References for dumping and gc */
 	u8 htable_bits;		/* size of hash table == 2^htable_bits */
 	u32 maxelem;		/* Maxelem per region */
+	spinlock_t gc_lock;	/* Lock to exclude gc and resize */
 	struct ip_set_region *hregion;	/* Region locks and ext sizes */
 	struct hbucket __rcu *bucket[]; /* hashtable buckets */
 };
@@ -569,7 +570,7 @@ mtype_gc(struct work_struct *work)
 	set = gc->set;
 	h = set->data;
 
-	spin_lock_bh(&set->lock);
+	rcu_read_lock_bh();
 	t = ipset_dereference_set(h->table, set);
 	atomic_inc(&t->uref);
 	numof_locks = ahash_numof_locks(t->htable_bits);
@@ -580,9 +581,11 @@ mtype_gc(struct work_struct *work)
 	next_run = (IPSET_GC_PERIOD(set->timeout) * HZ) / numof_locks;
 	if (next_run < HZ/10)
 		next_run = HZ/10;
-	spin_unlock_bh(&set->lock);
+	rcu_read_unlock_bh();
 
+	spin_lock_bh(&t->gc_lock);
 	mtype_gc_do(set, h, t, r);
+	spin_unlock_bh(&t->gc_lock);
 
 	if (atomic_dec_and_test(&t->uref) && atomic_read(&t->ref)) {
 		pr_debug("Table destroy after resize by expire: %p\n", t);
@@ -679,6 +682,7 @@ retry:
 	atomic_inc(&orig->uref);
 	pr_debug("attempt to resize set %s from %u to %u, t %p\n",
 		 set->name, orig->htable_bits, htable_bits, orig);
+	spin_lock_bh(&orig->gc_lock);
 	for (r = 0; r < ahash_numof_locks(orig->htable_bits); r++) {
 		/* Expire may replace a hbucket with another one */
 		rcu_read_lock_bh();
@@ -692,8 +696,13 @@ retry:
 				if (!test_bit_acquire(j, n->used))
 					continue;
 				data = ahash_data(n, j, dsize);
-				if (SET_ELEM_EXPIRED(set, data))
-					continue;
+				/* Parallel gc is excluded so we copy
+				 * the already expired elements too.
+				 * - If resize succeeds next gc on new
+				 *   hash will purge the entries.
+				 * - If resize fails next gc on the
+				 *   original hash will do the cleanup.
+				 */
 #ifdef IP_SET_HASH_WITH_NETS
 				/* We have readers running parallel with us,
 				 * so the live data cannot be modified.
@@ -755,6 +764,7 @@ retry:
 		}
 		rcu_read_unlock_bh();
 	}
+	spin_unlock_bh(&orig->gc_lock);
 
 	/* There can't be any other writer. */
 	rcu_assign_pointer(h->table, t);
@@ -792,6 +802,7 @@ out:
 
 cleanup:
 	rcu_read_unlock_bh();
+	spin_unlock_bh(&orig->gc_lock);
 	atomic_set(&orig->ref, 0);
 	atomic_dec(&orig->uref);
 	mtype_ahash_destroy(set, t, false);
@@ -1619,6 +1630,7 @@ IPSET_TOKEN(HTYPE, _create)(struct net *net, struct ip_set *set,
 	}
 	t->htable_bits = hbits;
 	t->maxelem = h->maxelem / ahash_numof_locks(hbits);
+	spin_lock_init(&t->gc_lock);
 	RCU_INIT_POINTER(h->table, t);
 
 	INIT_LIST_HEAD(&h->ad);
