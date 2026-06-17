@@ -1657,6 +1657,7 @@ struct task_struct {
 #ifdef CONFIG_UNWIND_USER
 	struct unwind_task_info		unwind_info;
 #endif
+	int				has_preferred_cpu_state;
 
 	/* CPU-specific state of this task: */
 	struct thread_struct		thread;

@@ -4213,4 +4213,22 @@ DEFINE_CLASS_IS_UNCONDITIONAL(sched_change)
 
 #include "ext.h"
 
+/*
+ * has_preferred_cpu_state is encoding two bits of information.
+ * First Byte is to encode where the call to is_cpu_allowed coming from.
+ * Second Byte is to encode the intersection of task affinity
+ * and cpu_preferred_mask.
+ *
+ * If 1st Byte is set, call to is_cpu_allowed coming from select_fallback_rq.
+ * That helps to avoid repeated calculation keeping time complexity same.
+ */
+static inline bool task_has_preferred_cpus(struct task_struct *p)
+{
+	int cached_value = p->has_preferred_cpu_state;
+
+	if (cached_value & 0x1)
+		return p->has_preferred_cpu_state >> 8;
+	else
+		return cpumask_intersects(p->cpus_ptr, cpu_preferred_mask);
+}
 #endif /* _KERNEL_SCHED_SCHED_H */

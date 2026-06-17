@@ -2500,6 +2500,8 @@ static inline bool rq_has_pinned_tasks(struct rq *rq)
  */
 static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 {
+	bool task_check_preferred_cpu = false;
+
 	/* When not in the task's cpumask, no point in looking further. */
 	if (!task_allowed_on_cpu(p, cpu))
 		return false;
@@ -2508,9 +2510,22 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 	if (is_migration_disabled(p))
 		return cpu_online(cpu);
 
+	/*
+	 * This is essential to maintain user affinities when preferred
+	 * CPUs change. A task pinned on non-preferred CPU should continue
+	 * to run there, since this is non-user triggered.
+	 *
+	 * If CPU is non-preferred and task can run on other CPUs which are
+	 * currently preferred, then choose those other CPUs instead
+	 */
+	task_check_preferred_cpu = !cpu_preferred(cpu) && task_has_preferred_cpus(p);
+
 	/* Non kernel threads are not allowed during either online or offline. */
-	if (!(p->flags & PF_KTHREAD))
+	if (!(p->flags & PF_KTHREAD)) {
+		if (task_check_preferred_cpu)
+			return false;
 		return cpu_active(cpu);
+	}
 
 	/* KTHREAD_IS_PER_CPU is always allowed. */
 	if (kthread_is_per_cpu(p))
@@ -2518,6 +2533,10 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 
 	/* Regular kernel threads don't get to stay during offline. */
 	if (cpu_dying(cpu))
+		return false;
+
+	/* Try on preferred CPU first if possible*/
+	if (task_check_preferred_cpu)
 		return false;
 
 	/* But are allowed during online. */
@@ -3550,6 +3569,14 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
 	int dest_cpu;
 
 	/*
+	 * Cache value whether task's affinity spans preferred CPUs.
+	 * This helps to avoid repeating the same for each CPU
+	 * later in the loop. Encode call to is_cpu_allowed coming
+	 * via select_fallback_rq.
+	 */
+	p->has_preferred_cpu_state = task_has_preferred_cpus(p) << 8 | 0x1;
+
+	/*
 	 * If the node that the CPU is on has been offlined, cpu_to_node()
 	 * will return -1. There is no CPU on the node, and we should
 	 * select the CPU on the other node.
@@ -3560,7 +3587,7 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
 		/* Look for allowed, online CPU in same node. */
 		for_each_cpu(dest_cpu, nodemask) {
 			if (is_cpu_allowed(p, dest_cpu))
-				return dest_cpu;
+				goto clear_and_return;
 		}
 	}
 
@@ -3604,6 +3631,8 @@ out:
 		}
 	}
 
+clear_and_return:
+	p->has_preferred_cpu_state = 0;
 	return dest_cpu;
 }
 
@@ -4612,6 +4641,7 @@ static void __sched_fork(u64 clone_flags, struct task_struct *p)
 	init_numa_balancing(clone_flags, p);
 	p->wake_entry.u_flags = CSD_TYPE_TTWU;
 	p->migration_pending = NULL;
+	p->has_preferred_cpu_state = 0;
 	init_sched_mm(p);
 }
 
