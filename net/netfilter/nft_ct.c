@@ -1296,7 +1296,8 @@ static void nft_ct_expect_obj_eval(struct nft_object *obj,
 	struct nf_conn *ct;
 
 	ct = nf_ct_get(pkt->skb, &ctinfo);
-	if (!ct || nf_ct_is_confirmed(ct) || nf_ct_is_template(ct)) {
+	if (!ct || nf_ct_is_confirmed(ct) || nf_ct_is_template(ct) ||
+	    test_bit(IPS_HELPER_BIT, &ct->status)) {
 		regs->verdict.code = NFT_BREAK;
 		return;
 	}
@@ -1309,6 +1310,7 @@ static void nft_ct_expect_obj_eval(struct nft_object *obj,
 		regs->verdict.code = NF_DROP;
 		return;
 	}
+	set_bit(IPS_HELPER_BIT, &ct->status);
 
 	if (help->expecting[NF_CT_EXPECT_CLASS_DEFAULT] >= priv->size) {
 		regs->verdict.code = NFT_BREAK;
@@ -1326,7 +1328,7 @@ static void nft_ct_expect_obj_eval(struct nft_object *obj,
 		          &ct->tuplehash[!dir].tuple.src.u3,
 		          &ct->tuplehash[!dir].tuple.dst.u3,
 		          priv->l4proto, NULL, &priv->dport);
-	exp->timeout.expires = jiffies + priv->timeout * HZ;
+	exp->timeout += priv->timeout * HZ;
 
 	if (nf_ct_expect_related(exp, 0) != 0)
 		regs->verdict.code = NF_DROP;
