@@ -845,7 +845,7 @@ static int mlx5_lag_create_single_fdb(struct mlx5_lag *ldev)
 	}
 	return 0;
 err:
-	mlx5_ldev_for_each_reverse(j, i, 0, ldev) {
+	mlx5_ldev_for_each_reverse(j, i - 1, 0, ldev) {
 		if (j == master_idx)
 			continue;
 		mlx5_eswitch_offloads_single_fdb_del_one(master_esw,
