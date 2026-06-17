@@ -32,12 +32,12 @@
 #define HAS_SECONDARY_PWM	0x10
 
 static const struct platform_device_id pwm_id_table[] = {
-	/*   PWM    has_secondary_pwm? */
-	{ "pxa25x-pwm", 0 },
-	{ "pxa27x-pwm", HAS_SECONDARY_PWM },
-	{ "pxa168-pwm", 0 },
-	{ "pxa910-pwm", 0 },
-	{ },
+	/*             PWM            has_secondary_pwm? */
+	{ .name = "pxa25x-pwm", .driver_data = 0 },
+	{ .name = "pxa27x-pwm", .driver_data = HAS_SECONDARY_PWM },
+	{ .name = "pxa168-pwm", .driver_data = 0 },
+	{ .name = "pxa910-pwm", .driver_data = 0 },
+	{ }
 };
 MODULE_DEVICE_TABLE(platform, pwm_id_table);
 
