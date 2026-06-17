@@ -404,6 +404,18 @@ static inline
 	}
 }
 
+static u32 b43_dma64_ringmem_size(struct b43_dmaring *ring)
+{
+	/* AC d11 cores (core_rev 40/42) expose a 16-bit descriptor pointer
+	 * (mask 0xffff) and need a 64K-aligned ring; dma_alloc_coherent()
+	 * aligns to the (power-of-2) allocation size. Smaller cores use the
+	 * 0x1fff mask and are fine with 8K.
+	 */
+	if (ring->dev->dev->core_rev == 40 || ring->dev->dev->core_rev == 42)
+		return 0x10000;
+	return B43_DMA64_RINGMEMSIZE;
+}
+
 static int alloc_ringmemory(struct b43_dmaring *ring)
 {
 	/* The specs call for 4K buffers for 30- and 32-bit DMA with 4K
@@ -415,8 +427,8 @@ static int alloc_ringmemory(struct b43_dmaring *ring)
 	 * B43_DMA64_RXSTATDPTR. Let's just use 8K buffers even if we don't use
 	 * more than 256 slots for ring.
 	 */
-	u16 ring_mem_size = (ring->type == B43_DMA_64BIT) ?
-				B43_DMA64_RINGMEMSIZE : B43_DMA32_RINGMEMSIZE;
+	u32 ring_mem_size = (ring->type == B43_DMA_64BIT) ?
+			b43_dma64_ringmem_size(ring) : B43_DMA32_RINGMEMSIZE;
 
 	ring->descbase = dma_alloc_coherent(ring->dev->dev->dma_dev,
 					    ring_mem_size, &(ring->dmabase),
@@ -429,8 +441,8 @@ static int alloc_ringmemory(struct b43_dmaring *ring)
 
 static void free_ringmemory(struct b43_dmaring *ring)
 {
-	u16 ring_mem_size = (ring->type == B43_DMA_64BIT) ?
-				B43_DMA64_RINGMEMSIZE : B43_DMA32_RINGMEMSIZE;
+	u32 ring_mem_size = (ring->type == B43_DMA_64BIT) ?
+			b43_dma64_ringmem_size(ring) : B43_DMA32_RINGMEMSIZE;
 	dma_free_coherent(ring->dev->dev->dma_dev, ring_mem_size,
 			  ring->descbase, ring->dmabase);
 }
