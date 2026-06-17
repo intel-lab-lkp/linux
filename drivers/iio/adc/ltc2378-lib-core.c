@@ -18,13 +18,28 @@ int ltc2378_lib_buffer_setup(struct iio_dev *indio_dev, struct ltc2378_state *st
 
 	ret = __ltc2378_set_offload_ops(st);
 	if (ret == -EOPNOTSUPP)
-		return 0; /* Let device setup complete without buffer support */
+		goto trigger_buf_setup;
 
 	if (!ret)
 		ret = st->ops->buffer_setup(indio_dev, st);
 
 	if (ret)
 		return dev_err_probe(dev, ret, "error on SPI offload setup\n");
+
+	return 0;
+
+trigger_buf_setup:
+	ret = __ltc2378_set_triggered_buf_ops(st);
+	if (ret == -EOPNOTSUPP)
+		return 0; /* Let device setup complete without buffer support */
+
+	if (!ret)
+		ret = st->ops->buffer_setup(indio_dev, st);
+
+	if (ret)
+		return dev_err_probe(dev, ret, "error on buffer setup\n");
+
+	st->chans[st->num_iio_chans++] = IIO_CHAN_SOFT_TIMESTAMP(1);
 
 	return 0;
 }

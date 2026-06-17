@@ -89,6 +89,8 @@ int ltc2378_lib_buffer_setup(struct iio_dev *indio_dev, struct ltc2378_state *st
 
 #define __ltc2378_set_offload_ops(st) ltc2378_set_offload_ops((st))
 
+#define __ltc2378_set_triggered_buf_ops(st) ltc2378_set_triggered_buf_ops((st))
+
 #ifdef CONFIG_LTC2378_LIB_OFFLOAD_BUFFER
 
 int ltc2378_set_offload_ops(struct ltc2378_state *st);
@@ -101,5 +103,18 @@ static inline int ltc2378_set_offload_ops(struct ltc2378_state *st)
 }
 
 #endif /* CONFIG_LTC2378_LIB_OFFLOAD_BUFFER */
+
+#ifdef CONFIG_LTC2378_LIB_TRIGGERED_BUFFER
+
+int ltc2378_set_triggered_buf_ops(struct ltc2378_state *st);
+
+#else
+
+static inline int ltc2378_set_triggered_buf_ops(struct ltc2378_state *st)
+{
+	return -EOPNOTSUPP;
+}
+
+#endif /* CONFIG_LTC2378_LIB_TRIGGERED_BUFFER */
 
 #endif /* __DRIVERS_IIO_ADC_LTC2378_H__ */
