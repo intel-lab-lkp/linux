@@ -11417,6 +11417,9 @@ void arch_dec_preferred_cpus(struct steal_monitor_t *sm, u64 steal_ratio)
 
 	last_cpu = cpumask_last(cpu_preferred_mask);
 
+	/* mask can't be null */
+	cpumask_check(last_cpu);
+
 	/*
 	 * If the core belongs to the housekeeping CPUs, no action is
 	 * taken. This leaves at least one core preferred always.
@@ -11504,6 +11507,9 @@ void sched_trigger_steal_computation(int cpu)
 	int first_hk_cpu = cpumask_first_and(housekeeping_cpumask(HK_TYPE_KERNEL_NOISE),
 					     cpu_active_mask);
 	ktime_t now;
+
+	/* at least one housekeeping CPU must be active */
+	cpumask_check(first_hk_cpu);
 
 	/* Done by first active housekeeping CPU only */
 	if (likely(cpu != first_hk_cpu))
