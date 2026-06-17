@@ -1431,6 +1431,10 @@ bool sched_can_stop_tick(struct rq *rq)
 	if (rq->dl.dl_nr_running)
 		return false;
 
+	/* Keep the tick running until CFS tasks are pushed out*/
+	if (!cpu_preferred(rq->cpu) && rq->cfs.h_nr_queued)
+		return false;
+
 	/*
 	 * If there are more than one RR tasks, we need the tick to affect the
 	 * actual RR behaviour.
