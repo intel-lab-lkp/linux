@@ -65,6 +65,7 @@ static struct audioreach_graph *q6apm_get_audioreach_graph(struct q6apm *apm, ui
 	graph->apm = apm;
 	graph->info = info;
 	graph->id = graph_id;
+	kref_init(&graph->refcount);
 
 	graph->graph = audioreach_alloc_graph_pkt(apm, info);
 	if (IS_ERR(graph->graph)) {
@@ -84,8 +85,6 @@ static struct audioreach_graph *q6apm_get_audioreach_graph(struct q6apm *apm, ui
 		return ERR_PTR(id);
 	}
 	mutex_unlock(&apm->lock);
-
-	kref_init(&graph->refcount);
 
 	q6apm_send_cmd_sync(apm, graph->graph, 0);
 
