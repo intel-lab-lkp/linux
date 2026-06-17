@@ -358,7 +358,8 @@ static ssize_t iomap_dio_bio_iter_one(struct iomap_iter *iter,
 				iomap_max_bio_size(&iter->iomap), alignment);
 	else
 		ret = bio_iov_iter_get_pages(bio, dio->submit.iter,
-					     alignment - 1);
+					     alignment - 1,
+					     bdev_dma_alignment(bio->bi_bdev));
 	if (unlikely(ret))
 		goto out_put_bio;
 	ret = bio->bi_iter.bi_size;

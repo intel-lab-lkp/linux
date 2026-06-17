@@ -1242,7 +1242,7 @@ static int bio_iov_iter_align_down(struct bio *bio, struct iov_iter *iter,
  * is returned only if 0 pages could be pinned.
  */
 int bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter,
-			   unsigned len_align_mask)
+			   unsigned len_align_mask, unsigned vec_align_mask)
 {
 	iov_iter_extraction_t flags = 0;
 
@@ -1251,6 +1251,11 @@ int bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter,
 
 	if (iov_iter_is_bvec(iter)) {
 		bio_iov_bvec_set(bio, iter);
+
+		if (mp_bvec_iter_offset(bio->bi_io_vec, bio->bi_iter) &
+							vec_align_mask)
+			return -EINVAL;
+
 		iov_iter_advance(iter, bio->bi_iter.bi_size);
 		return 0;
 	}
@@ -1265,8 +1270,16 @@ int bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter,
 
 		ret = iov_iter_extract_bvecs(iter, bio->bi_io_vec,
 				BIO_MAX_SIZE - bio->bi_iter.bi_size,
-				&bio->bi_vcnt, bio->bi_max_vecs, flags);
+				&bio->bi_vcnt, bio->bi_max_vecs,
+				vec_align_mask, flags);
 		if (ret <= 0) {
+			if (ret == -EINVAL) {
+				bio_release_pages(bio, false);
+				bio_clear_flag(bio, BIO_PAGE_PINNED);
+				bio->bi_iter.bi_size = 0;
+				bio->bi_vcnt = 0;
+				return ret;
+			}
 			if (!bio->bi_vcnt)
 				return ret;
 			break;
@@ -1377,7 +1390,7 @@ static int bio_iov_iter_bounce_read(struct bio *bio, struct iov_iter *iter,
 		ssize_t ret;
 
 		ret = iov_iter_extract_bvecs(iter, bio->bi_io_vec + 1, len,
-				&bio->bi_vcnt, bio->bi_max_vecs - 1, 0);
+				&bio->bi_vcnt, bio->bi_max_vecs - 1, 0, 0);
 		if (ret <= 0) {
 			if (!bio->bi_vcnt) {
 				folio_put(folio);

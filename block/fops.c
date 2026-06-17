@@ -47,7 +47,8 @@ static inline int blkdev_iov_iter_get_pages(struct bio *bio,
 		struct iov_iter *iter, struct block_device *bdev)
 {
 	return bio_iov_iter_get_pages(bio, iter,
-			bdev_logical_block_size(bdev) - 1);
+			bdev_logical_block_size(bdev) - 1,
+			bdev_dma_alignment(bdev));
 }
 
 #define DIO_INLINE_BIO_VECS 4
