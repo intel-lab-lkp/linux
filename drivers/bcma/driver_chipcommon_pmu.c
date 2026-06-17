@@ -188,6 +188,14 @@ static void bcma_pmu_resources_init(struct bcma_drv_cc *cc)
 			  BCMA_RES_4314_WL_CORE_READY;
 		max_msk = 0x3FFFFFFF;
 		break;
+	case BCMA_CHIP_ID_BCM4352:
+	case BCMA_CHIP_ID_BCM4360:
+		/*
+		 * Vendor programs the max mask here for chip rev > 2 with ChipStatus bit 5 clear
+		 */
+		if (bus->chipinfo.rev > 2 && !(cc->status & BIT(5)))
+			max_msk = 0x1ff;
+		break;
 	default:
 		bcma_debug(bus, "PMU resource config unknown or not needed for device 0x%04X\n",
 			   bus->chipinfo.id);
