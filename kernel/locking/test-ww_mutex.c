@@ -306,7 +306,9 @@ static void test_cycle_work(struct work_struct *work)
 		err = 0;
 		ww_mutex_unlock(&cycle->a_mutex);
 		ww_mutex_lock_slow(cycle->b_mutex, &ctx);
-		erra = ww_mutex_lock(&cycle->a_mutex, &ctx);
+		do {
+			erra = ww_mutex_lock(&cycle->a_mutex, &ctx);
+		} while (erra == -EDEADLK);
 	}
 
 	if (!err)
