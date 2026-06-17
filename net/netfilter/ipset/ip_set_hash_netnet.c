@@ -149,8 +149,8 @@ hash_netnet4_kadt(struct ip_set *set, const struct sk_buff *skb,
 	struct hash_netnet4_elem e = { };
 	struct ip_set_ext ext = IP_SET_INIT_KEXT(skb, opt, set);
 
-	e.cidr[0] = INIT_CIDR(h->nets[0].cidr[0], HOST_MASK);
-	e.cidr[1] = INIT_CIDR(h->nets[0].cidr[1], HOST_MASK);
+	e.cidr[0] = INIT_CIDR(FIRST_CIDR(h, 0), HOST_MASK);
+	e.cidr[1] = INIT_CIDR(FIRST_CIDR(h, 1), HOST_MASK);
 	if (adt == IPSET_TEST)
 		e.ccmp = (HOST_MASK << (sizeof(e.cidr[0]) * 8)) | HOST_MASK;
 
@@ -388,8 +388,8 @@ hash_netnet6_kadt(struct ip_set *set, const struct sk_buff *skb,
 	struct hash_netnet6_elem e = { };
 	struct ip_set_ext ext = IP_SET_INIT_KEXT(skb, opt, set);
 
-	e.cidr[0] = INIT_CIDR(h->nets[0].cidr[0], HOST_MASK);
-	e.cidr[1] = INIT_CIDR(h->nets[0].cidr[1], HOST_MASK);
+	e.cidr[0] = INIT_CIDR(FIRST_CIDR(h, 0), HOST_MASK);
+	e.cidr[1] = INIT_CIDR(FIRST_CIDR(h, 1), HOST_MASK);
 	if (adt == IPSET_TEST)
 		e.ccmp = (HOST_MASK << (sizeof(u8) * 8)) | HOST_MASK;
 

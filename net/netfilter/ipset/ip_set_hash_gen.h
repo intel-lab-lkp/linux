@@ -142,6 +142,8 @@ htable_size(u8 hbits)
 
 #define INIT_CIDR(cidr, host_mask)	\
 	DCIDR_PUT(((cidr) ? NCIDR_GET(cidr) : host_mask))
+#define FIRST_CIDR(h, n)		\
+	h->abnets[h->active][0].cidr[n]
 
 #ifdef IP_SET_HASH_WITH_NET0
 /* cidr from 0 to HOST_MASK value and c = cidr + 1 */
@@ -305,7 +307,8 @@ struct htype {
 	struct list_head ad;	/* Resize add|del backlist */
 	struct mtype_elem next; /* temporary storage for uadd */
 #ifdef IP_SET_HASH_WITH_NETS
-	struct net_prefixes nets[NLEN]; /* book-keeping of prefixes */
+	struct net_prefixes abnets[2][NLEN]; 	/* book-keeping of prefixes */
+	u8 active;				/* active slot */
 #endif
 };
 
@@ -326,26 +329,31 @@ struct mtype_resize_ad {
 static void
 mtype_add_cidr(struct ip_set *set, struct htype *h, u8 cidr, u8 n)
 {
+	struct net_prefixes (*anets)[NLEN] = &h->abnets[h->active];
+	struct net_prefixes (*bnets)[NLEN] = &h->abnets[!h->active];
 	int i, j;
 
 	spin_lock_bh(&set->lock);
 	/* Add in increasing prefix order, so larger cidr first */
-	for (i = 0, j = -1; i < NLEN && h->nets[i].cidr[n]; i++) {
+	for (i = 0, j = -1; i < NLEN && (*anets)[i].cidr[n]; i++) {
 		if (j != -1) {
 			continue;
-		} else if (h->nets[i].cidr[n] < cidr) {
+		} else if ((*anets)[i].cidr[n] < cidr) {
 			j = i;
-		} else if (h->nets[i].cidr[n] == cidr) {
-			h->nets[CIDR_POS(cidr)].nets[n]++;
+		} else if ((*anets)[i].cidr[n] == cidr) {
+			(*anets)[CIDR_POS(cidr)].nets[n]++;
 			goto unlock;
 		}
 	}
+	memcpy(bnets, anets, sizeof(*bnets));
 	if (j != -1) {
 		for (; i > j; i--)
-			h->nets[i].cidr[n] = h->nets[i - 1].cidr[n];
+			(*bnets)[i].cidr[n] = (*bnets)[i - 1].cidr[n];
 	}
-	h->nets[i].cidr[n] = cidr;
-	h->nets[CIDR_POS(cidr)].nets[n] = 1;
+	(*bnets)[i].cidr[n] = cidr;
+	(*bnets)[CIDR_POS(cidr)].nets[n] = 1;
+	smp_wmb();
+	h->active = !h->active;
 unlock:
 	spin_unlock_bh(&set->lock);
 }
@@ -353,18 +361,23 @@ unlock:
 static void
 mtype_del_cidr(struct ip_set *set, struct htype *h, u8 cidr, u8 n)
 {
+	struct net_prefixes (*anets)[NLEN] = &h->abnets[h->active];
+	struct net_prefixes (*bnets)[NLEN] = &h->abnets[!h->active];
 	u8 i, j, net_end = NLEN - 1;
 
 	spin_lock_bh(&set->lock);
 	for (i = 0; i < NLEN; i++) {
-		if (h->nets[i].cidr[n] != cidr)
+		if ((*anets)[i].cidr[n] != cidr)
 			continue;
-		h->nets[CIDR_POS(cidr)].nets[n]--;
-		if (h->nets[CIDR_POS(cidr)].nets[n] > 0)
+		(*anets)[CIDR_POS(cidr)].nets[n]--;
+		if ((*anets)[CIDR_POS(cidr)].nets[n] > 0)
 			goto unlock;
-		for (j = i; j < net_end && h->nets[j].cidr[n]; j++)
-			h->nets[j].cidr[n] = h->nets[j + 1].cidr[n];
-		h->nets[j].cidr[n] = 0;
+		memcpy(bnets, anets, sizeof(*bnets));
+		for (j = i; j < net_end && (*bnets)[j].cidr[n]; j++)
+			(*bnets)[j].cidr[n] = (*bnets)[j + 1].cidr[n];
+		(*bnets)[j].cidr[n] = 0;
+		smp_wmb();
+		h->active = !h->active;
 		goto unlock;
 	}
 unlock:
@@ -422,7 +435,8 @@ mtype_flush(struct ip_set *set)
 		spin_unlock_bh(&t->hregion[r].lock);
 	}
 #ifdef IP_SET_HASH_WITH_NETS
-	memset(h->nets, 0, sizeof(h->nets));
+	memset(&h->abnets, 0, sizeof(h->abnets));
+	h->active = 0;
 #endif
 }
 
@@ -1194,6 +1208,7 @@ mtype_test_cidrs(struct ip_set *set, struct mtype_elem *d,
 	struct htable *t = rcu_dereference_bh(h->table);
 	struct hbucket *n;
 	struct mtype_elem *data;
+	struct net_prefixes (*nets)[NLEN] = &h->abnets[h->active];
 #if IPSET_NET_COUNT == 2
 	struct mtype_elem orig = *d;
 	int ret, i, j = 0, k;
@@ -1204,16 +1219,16 @@ mtype_test_cidrs(struct ip_set *set, struct mtype_elem *d,
 	u8 pos;
 
 	pr_debug("test by nets\n");
-	for (; j < NLEN && h->nets[j].cidr[0] && !multi; j++) {
+	for (; j < NLEN && (*nets)[j].cidr[0] && !multi; j++) {
 #if IPSET_NET_COUNT == 2
 		mtype_data_reset_elem(d, &orig);
-		mtype_data_netmask(d, NCIDR_GET(h->nets[j].cidr[0]), false);
-		for (k = 0; k < NLEN && h->nets[k].cidr[1] && !multi;
+		mtype_data_netmask(d, NCIDR_GET((*nets)[j].cidr[0]), false);
+		for (k = 0; k < NLEN && (*nets)[k].cidr[1] && !multi;
 		     k++) {
-			mtype_data_netmask(d, NCIDR_GET(h->nets[k].cidr[1]),
+			mtype_data_netmask(d, NCIDR_GET((*nets)[k].cidr[1]),
 					   true);
 #else
-		mtype_data_netmask(d, NCIDR_GET(h->nets[j].cidr[0]));
+		mtype_data_netmask(d, NCIDR_GET((*nets)[j].cidr[0]));
 #endif
 		key = HKEY(d, h->initval, t->htable_bits);
 		n = rcu_dereference_bh(hbucket(t, key));
