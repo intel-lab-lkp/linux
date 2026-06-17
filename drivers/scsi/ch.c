@@ -897,6 +897,7 @@ static int ch_probe(struct scsi_device *sd)
 {
 	struct device *dev = &sd->sdev_gendev;
 	struct device *class_dev;
+	void *old;
 	int ret;
 	scsi_changer *ch;
 
@@ -909,7 +910,7 @@ static int ch_probe(struct scsi_device *sd)
 
 	idr_preload(GFP_KERNEL);
 	spin_lock(&ch_index_lock);
-	ret = idr_alloc(&ch_index_idr, ch, 0, CH_MAX_DEVS + 1, GFP_NOWAIT);
+	ret = idr_alloc(&ch_index_idr, NULL, 0, CH_MAX_DEVS + 1, GFP_NOWAIT);
 	spin_unlock(&ch_index_lock);
 	idr_preload_end();
 
@@ -951,6 +952,15 @@ static int ch_probe(struct scsi_device *sd)
 		ch_init_elem(ch);
 
 	mutex_unlock(&ch->lock);
+
+	spin_lock(&ch_index_lock);
+	old = idr_replace(&ch_index_idr, ch, ch->minor);
+	spin_unlock(&ch_index_lock);
+	if (IS_ERR(old)) {
+		ret = PTR_ERR(old);
+		goto destroy_dev;
+	}
+
 	dev_set_drvdata(dev, ch);
 	sdev_printk(KERN_INFO, sd, "Attached scsi changer %s\n", ch->name);
 
@@ -960,7 +970,9 @@ destroy_dev:
 put_device:
 	scsi_device_put(sd);
 remove_idr:
+	spin_lock(&ch_index_lock);
 	idr_remove(&ch_index_idr, ch->minor);
+	spin_unlock(&ch_index_lock);
 free_ch:
 	kfree(ch);
 	return ret;
