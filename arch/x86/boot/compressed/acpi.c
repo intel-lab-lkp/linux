@@ -184,8 +184,8 @@ static unsigned long get_cmdline_acpi_rsdp(void)
 	char val[MAX_ADDR_LEN] = { };
 	int ret;
 
-	ret = cmdline_find_option("acpi_rsdp", val, MAX_ADDR_LEN);
-	if (ret < 0)
+	ret = cmdline_find_option("acpi_rsdp", val, sizeof(val));
+	if (ret < 0 || ret >= sizeof(val))
 		return 0;
 
 	if (boot_kstrtoul(val, 16, &addr))
