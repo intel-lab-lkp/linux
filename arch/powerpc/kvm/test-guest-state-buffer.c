@@ -521,6 +521,21 @@ static void test_gs_hostwide_counters(struct kunit *test)
 	kvmppc_gsb_free(gsb);
 }
 
+static int init_gs_test_suite(struct kunit_suite *suite)
+{
+	long rc = H_NOT_AVAILABLE;
+	unsigned long host_capabilities = 0;
+
+	/* Enable test suite only if APIv2 is supported */
+	if (kvmhv_on_pseries())
+		rc = plpar_guest_get_capabilities(0, &host_capabilities);
+
+	if (rc)
+		kunit_mark_skipped(suite, "Unsupported hypervisor");
+
+	return 0;
+}
+
 static struct kunit_case guest_state_buffer_testcases[] = {
 	KUNIT_CASE(test_creating_buffer),
 	KUNIT_CASE(test_adding_element),
@@ -535,6 +550,7 @@ static struct kunit_case guest_state_buffer_testcases[] = {
 static struct kunit_suite guest_state_buffer_test_suite = {
 	.name = "guest_state_buffer_test",
 	.test_cases = guest_state_buffer_testcases,
+	.suite_init = init_gs_test_suite,
 };
 
 kunit_test_suites(&guest_state_buffer_test_suite);
