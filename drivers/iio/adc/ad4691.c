@@ -1980,7 +1980,8 @@ static int ad4691_setup_offload(struct iio_dev *indio_dev,
 		indio_dev->setup_ops = &ad4691_cnv_burst_offload_buffer_setup_ops;
 
 	ret = devm_iio_dmaengine_buffer_setup_with_handle(dev, indio_dev, rx_dma,
-							  IIO_BUFFER_DIRECTION_IN);
+							  IIO_BUFFER_DIRECTION_IN,
+							  NULL);
 	if (ret)
 		return ret;
 

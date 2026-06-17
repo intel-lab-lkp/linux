@@ -1874,7 +1874,7 @@ static int ad7380_probe_spi_offload(struct iio_dev *indio_dev,
 				     "failed to get offload RX DMA\n");
 
 	ret = devm_iio_dmaengine_buffer_setup_with_handle(dev, indio_dev,
-		rx_dma, IIO_BUFFER_DIRECTION_IN);
+		rx_dma, IIO_BUFFER_DIRECTION_IN, NULL);
 	if (ret)
 		return dev_err_probe(dev, ret, "cannot setup dma buffer\n");
 

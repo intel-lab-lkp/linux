@@ -843,7 +843,7 @@ static int ad7944_probe(struct spi_device *spi)
 		 */
 
 		ret = devm_iio_dmaengine_buffer_setup_with_handle(dev,
-			indio_dev, rx_dma, IIO_BUFFER_DIRECTION_IN);
+			indio_dev, rx_dma, IIO_BUFFER_DIRECTION_IN, NULL);
 		if (ret)
 			return ret;
 

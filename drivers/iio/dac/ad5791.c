@@ -448,7 +448,7 @@ static int ad5791_offload_setup(struct iio_dev *indio_dev)
 				     "failed to get offload TX DMA\n");
 
 	ret = devm_iio_dmaengine_buffer_setup_with_handle(&spi->dev,
-		indio_dev, tx_dma, IIO_BUFFER_DIRECTION_OUT);
+		indio_dev, tx_dma, IIO_BUFFER_DIRECTION_OUT, NULL);
 	if (ret)
 		return ret;
 

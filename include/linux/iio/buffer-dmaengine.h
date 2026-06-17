@@ -10,6 +10,7 @@
 #include <linux/iio/buffer.h>
 
 struct iio_dev;
+struct iio_dev_attr;
 struct device;
 struct dma_chan;
 
@@ -17,23 +18,26 @@ void iio_dmaengine_buffer_teardown(struct iio_buffer *buffer);
 struct iio_buffer *iio_dmaengine_buffer_setup_ext(struct device *dev,
 						  struct iio_dev *indio_dev,
 						  const char *channel,
-						  enum iio_buffer_direction dir);
+						  enum iio_buffer_direction dir,
+						  const struct iio_dev_attr **buffer_attrs);
 
 #define iio_dmaengine_buffer_setup(dev, indio_dev, channel)	\
-	iio_dmaengine_buffer_setup_ext(dev, indio_dev, channel,	\
-				       IIO_BUFFER_DIRECTION_IN)
+	iio_dmaengine_buffer_setup_ext(dev, indio_dev, channel, \
+				       IIO_BUFFER_DIRECTION_IN, NULL)
 
 int devm_iio_dmaengine_buffer_setup_ext(struct device *dev,
 					struct iio_dev *indio_dev,
 					const char *channel,
-					enum iio_buffer_direction dir);
+					enum iio_buffer_direction dir,
+					const struct iio_dev_attr **buffer_attrs);
 int devm_iio_dmaengine_buffer_setup_with_handle(struct device *dev,
 						struct iio_dev *indio_dev,
 						struct dma_chan *chan,
-						enum iio_buffer_direction dir);
+						enum iio_buffer_direction dir,
+						const struct iio_dev_attr **buffer_attrs);
 
 #define devm_iio_dmaengine_buffer_setup(dev, indio_dev, channel)	\
 	devm_iio_dmaengine_buffer_setup_ext(dev, indio_dev, channel,	\
-					    IIO_BUFFER_DIRECTION_IN)
+					    IIO_BUFFER_DIRECTION_IN, NULL)
 
 #endif

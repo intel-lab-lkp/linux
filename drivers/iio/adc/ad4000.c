@@ -871,7 +871,8 @@ static int ad4000_spi_offload_setup(struct iio_dev *indio_dev,
 				     "Failed to get offload RX DMA\n");
 
 	ret = devm_iio_dmaengine_buffer_setup_with_handle(dev, indio_dev, rx_dma,
-							  IIO_BUFFER_DIRECTION_IN);
+							  IIO_BUFFER_DIRECTION_IN,
+							  NULL);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to setup DMA buffer\n");
 

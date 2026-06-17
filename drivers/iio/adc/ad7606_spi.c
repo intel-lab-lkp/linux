@@ -317,7 +317,7 @@ static int ad7606_spi_offload_probe(struct device *dev,
 				     "failed to get offload RX DMA\n");
 
 	ret = devm_iio_dmaengine_buffer_setup_with_handle(dev, indio_dev,
-		rx_dma, IIO_BUFFER_DIRECTION_IN);
+		rx_dma, IIO_BUFFER_DIRECTION_IN, NULL);
 	if (ret)
 		return dev_err_probe(dev, ret,
 				     "failed to setup offload RX DMA\n");

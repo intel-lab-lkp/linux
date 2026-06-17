@@ -820,7 +820,7 @@ int devm_ad_sd_setup_buffer_and_trigger(struct device *dev, struct iio_dev *indi
 					     "Failed to get RX DMA channel\n");
 
 		ret = devm_iio_dmaengine_buffer_setup_with_handle(dev, indio_dev,
-			rx_dma, IIO_BUFFER_DIRECTION_IN);
+			rx_dma, IIO_BUFFER_DIRECTION_IN, NULL);
 		if (ret)
 			return dev_err_probe(dev, ret, "Cannot setup DMA buffer\n");
 

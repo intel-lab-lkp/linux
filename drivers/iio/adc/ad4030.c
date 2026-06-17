@@ -1400,7 +1400,8 @@ static int ad4030_spi_offload_setup(struct iio_dev *indio_dev,
 				     "failed to get offload RX DMA\n");
 
 	return devm_iio_dmaengine_buffer_setup_with_handle(dev, indio_dev, rx_dma,
-							   IIO_BUFFER_DIRECTION_IN);
+							   IIO_BUFFER_DIRECTION_IN,
+							   NULL);
 }
 
 static int ad4030_setup_pga(struct device *dev, struct iio_dev *indio_dev,

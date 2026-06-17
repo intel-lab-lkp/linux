@@ -1779,7 +1779,7 @@ static int ad4695_probe_spi_offload(struct iio_dev *indio_dev,
 	}
 
 	return devm_iio_dmaengine_buffer_setup_with_handle(dev, indio_dev,
-		rx_dma, IIO_BUFFER_DIRECTION_IN);
+		rx_dma, IIO_BUFFER_DIRECTION_IN, NULL);
 }
 
 static const struct spi_offload_config ad4695_spi_offload_config = {

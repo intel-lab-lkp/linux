@@ -289,7 +289,8 @@ EXPORT_SYMBOL_NS_GPL(iio_dmaengine_buffer_teardown, "IIO_DMAENGINE_BUFFER");
 static struct iio_buffer
 *__iio_dmaengine_buffer_setup_ext(struct iio_dev *indio_dev,
 				  struct dma_chan *chan,
-				  enum iio_buffer_direction dir)
+				  enum iio_buffer_direction dir,
+				  const struct iio_dev_attr **buffer_attrs)
 {
 	struct iio_buffer *buffer;
 	int ret;
@@ -301,6 +302,7 @@ static struct iio_buffer
 	indio_dev->modes |= INDIO_BUFFER_HARDWARE;
 
 	buffer->direction = dir;
+	buffer->attrs = buffer_attrs;
 
 	ret = iio_device_attach_buffer(indio_dev, buffer);
 	if (ret) {
@@ -329,7 +331,8 @@ static struct iio_buffer
 struct iio_buffer *iio_dmaengine_buffer_setup_ext(struct device *dev,
 						  struct iio_dev *indio_dev,
 						  const char *channel,
-						  enum iio_buffer_direction dir)
+						  enum iio_buffer_direction dir,
+						  const struct iio_dev_attr **buffer_attrs)
 {
 	struct dma_chan *chan;
 	struct iio_buffer *buffer;
@@ -338,7 +341,7 @@ struct iio_buffer *iio_dmaengine_buffer_setup_ext(struct device *dev,
 	if (IS_ERR(chan))
 		return ERR_CAST(chan);
 
-	buffer = __iio_dmaengine_buffer_setup_ext(indio_dev, chan, dir);
+	buffer = __iio_dmaengine_buffer_setup_ext(indio_dev, chan, dir, buffer_attrs);
 	if (IS_ERR(buffer))
 		dma_release_channel(chan);
 
@@ -366,11 +369,12 @@ static void devm_iio_dmaengine_buffer_teardown(void *buffer)
 int devm_iio_dmaengine_buffer_setup_ext(struct device *dev,
 					struct iio_dev *indio_dev,
 					const char *channel,
-					enum iio_buffer_direction dir)
+					enum iio_buffer_direction dir,
+					const struct iio_dev_attr **buffer_attrs)
 {
 	struct iio_buffer *buffer;
 
-	buffer = iio_dmaengine_buffer_setup_ext(dev, indio_dev, channel, dir);
+	buffer = iio_dmaengine_buffer_setup_ext(dev, indio_dev, channel, dir, buffer_attrs);
 	if (IS_ERR(buffer))
 		return PTR_ERR(buffer);
 
@@ -403,11 +407,12 @@ static void devm_iio_dmaengine_buffer_free(void *buffer)
 int devm_iio_dmaengine_buffer_setup_with_handle(struct device *dev,
 						struct iio_dev *indio_dev,
 						struct dma_chan *chan,
-						enum iio_buffer_direction dir)
+						enum iio_buffer_direction dir,
+						const struct iio_dev_attr **buffer_attrs)
 {
 	struct iio_buffer *buffer;
 
-	buffer = __iio_dmaengine_buffer_setup_ext(indio_dev, chan, dir);
+	buffer = __iio_dmaengine_buffer_setup_ext(indio_dev, chan, dir, buffer_attrs);
 	if (IS_ERR(buffer))
 		return PTR_ERR(buffer);
 
