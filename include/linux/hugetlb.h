@@ -1071,9 +1071,9 @@ void hugetlb_unregister_node(struct node *node);
 #endif
 
 /*
- * Check if a given raw @page in a hugepage is HWPOISON.
+ * Check if a given raw @page is HWPOISON in a folio of any kind
  */
-bool is_raw_hwpoison_page_in_hugepage(struct page *page);
+bool is_raw_hwpoison_page_in_folio(struct page *page);
 
 static inline unsigned long huge_page_mask_align(struct file *file)
 {

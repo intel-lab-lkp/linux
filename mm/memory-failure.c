@@ -1822,14 +1822,21 @@ static inline struct llist_head *raw_hwp_list_head(struct folio *folio)
 	return (struct llist_head *)&folio->_hugetlb_hwpoison;
 }
 
-bool is_raw_hwpoison_page_in_hugepage(struct page *page)
+/**
+ * is_raw_hwpoison_page_in_folio - answers the question whether a given
+ * page is indeed hwpoisoned.
+ * @page: given page, maybe base page, part of a large folio or hugetlb.
+ *
+ * Return: true if @page is the raw hwpoisoned page; else, false.
+ */
+bool is_raw_hwpoison_page_in_folio(struct page *page)
 {
 	struct llist_head *raw_hwp_head;
 	struct raw_hwp_page *p;
 	struct folio *folio = page_folio(page);
 	bool ret = false;
 
-	if (!folio_test_hwpoison(folio))
+	if (!folio_contain_hwpoisoned_page(folio))
 		return false;
 
 	if (!folio_test_hugetlb(folio))
@@ -1856,6 +1863,7 @@ bool is_raw_hwpoison_page_in_hugepage(struct page *page)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(is_raw_hwpoison_page_in_folio);
 
 static unsigned long __folio_free_raw_hwp(struct folio *folio, bool move_flag)
 {
