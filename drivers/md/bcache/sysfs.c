@@ -95,6 +95,7 @@ read_attribute(feature_incompat);
 
 read_attribute(state);
 read_attribute(cache_read_races);
+read_attribute(bypass_tracking_alloc_fails);
 read_attribute(reclaim);
 read_attribute(reclaimed_journal_buckets);
 read_attribute(flush_write);
@@ -748,6 +749,9 @@ SHOW(__bch_cache_set)
 	sysfs_print(cache_read_races,
 		    atomic_long_read(&c->cache_read_races));
 
+	sysfs_print(bypass_tracking_alloc_fails,
+		    atomic_long_read(&c->bypass_tracking_alloc_fails));
+
 	sysfs_print(reclaim,
 		    atomic_long_read(&c->reclaim));
 
@@ -993,6 +997,7 @@ static struct attribute *bch_cache_set_internal_attrs[] = {
 
 	&sysfs_bset_tree_stats,
 	&sysfs_cache_read_races,
+	&sysfs_bypass_tracking_alloc_fails,
 	&sysfs_reclaim,
 	&sysfs_reclaimed_journal_buckets,
 	&sysfs_flush_write,

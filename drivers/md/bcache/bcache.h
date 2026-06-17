@@ -299,6 +299,12 @@ enum stop_on_failure {
 	BCH_CACHED_DEV_STOP_MODE_MAX,
 };
 
+struct bch_bypass_page {
+	u16		*counts;
+	unsigned int	active;
+	spinlock_t	lock;
+};
+
 struct cached_dev {
 	struct list_head	list;
 	struct bcache_device	disk;
@@ -407,7 +413,35 @@ struct cached_dev {
 	 */
 #define BCH_WBRATE_UPDATE_MAX_SKIPS	15
 	unsigned int		rate_update_retry;
+
+	/* For tracking active bypass writes */
+#define BCH_BYPASS_CHUNK_SHIFT		16  /* 2^16 sectors = 32MB */
+#define BCH_BYPASS_PAGE_COUNTERS	(PAGE_SIZE / sizeof(u16))
+#define BCH_BYPASS_PAGE_SHIFT		(PAGE_SHIFT - 1)
+#define BCH_BYPASS_PAGE_MASK		((1UL << BCH_BYPASS_PAGE_SHIFT) - 1)
+	struct bch_bypass_page	*bypass_pages;
+	unsigned long		bypass_num_pages;
 };
+
+static inline unsigned long sector_to_bypass_chunk(sector_t sector)
+{
+	return sector >> BCH_BYPASS_CHUNK_SHIFT;
+}
+
+static inline unsigned long bypass_chunk_to_page(unsigned long chunk)
+{
+	return chunk >> BCH_BYPASS_PAGE_SHIFT;
+}
+
+static inline unsigned long bypass_chunk_to_offset(unsigned long chunk)
+{
+	return chunk & BCH_BYPASS_PAGE_MASK;
+}
+
+static inline sector_t bypass_chunk_to_sector(unsigned long chunk)
+{
+	return (sector_t)chunk << BCH_BYPASS_CHUNK_SHIFT;
+}
 
 enum alloc_reserve {
 	RESERVE_BTREE,
@@ -714,6 +748,7 @@ struct cache_set {
 	struct time_stats	btree_read_time;
 
 	atomic_long_t		cache_read_races;
+	atomic_long_t		bypass_tracking_alloc_fails;
 	atomic_long_t		writeback_keys_done;
 	atomic_long_t		writeback_keys_failed;
 

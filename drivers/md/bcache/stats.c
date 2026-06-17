@@ -47,6 +47,7 @@ read_attribute(cache_bypass_hits);
 read_attribute(cache_bypass_misses);
 read_attribute(cache_hit_ratio);
 read_attribute(cache_miss_collisions);
+read_attribute(cache_read_bypass_races);
 read_attribute(bypassed);
 
 SHOW(bch_stats)
@@ -64,6 +65,7 @@ SHOW(bch_stats)
 			     var(cache_hits) + var(cache_misses)));
 
 	var_print(cache_miss_collisions);
+	var_print(cache_read_bypass_races);
 	sysfs_hprint(bypassed,	var(sectors_bypassed) << 9);
 #undef var
 	return 0;
@@ -85,6 +87,7 @@ static struct attribute *bch_stats_attrs[] = {
 	&sysfs_cache_bypass_misses,
 	&sysfs_cache_hit_ratio,
 	&sysfs_cache_miss_collisions,
+	&sysfs_cache_read_bypass_races,
 	&sysfs_bypassed,
 	NULL
 };
@@ -112,6 +115,7 @@ void bch_cache_accounting_clear(struct cache_accounting *acc)
 	acc->total.cache_bypass_hits = 0;
 	acc->total.cache_bypass_misses = 0;
 	acc->total.cache_miss_collisions = 0;
+	acc->total.cache_read_bypass_races = 0;
 	acc->total.sectors_bypassed = 0;
 }
 
@@ -143,6 +147,7 @@ static void scale_stats(struct cache_stats *stats, unsigned long rescale_at)
 		scale_stat(&stats->cache_bypass_hits);
 		scale_stat(&stats->cache_bypass_misses);
 		scale_stat(&stats->cache_miss_collisions);
+		scale_stat(&stats->cache_read_bypass_races);
 		scale_stat(&stats->sectors_bypassed);
 	}
 }
@@ -165,6 +170,7 @@ static void scale_accounting(struct timer_list *t)
 	move_stat(cache_bypass_hits);
 	move_stat(cache_bypass_misses);
 	move_stat(cache_miss_collisions);
+	move_stat(cache_read_bypass_races);
 	move_stat(sectors_bypassed);
 
 	scale_stats(&acc->total, 0);
@@ -210,6 +216,14 @@ void bch_mark_cache_miss_collision(struct cache_set *c, struct bcache_device *d)
 
 	atomic_inc(&dc->accounting.collector.cache_miss_collisions);
 	atomic_inc(&c->accounting.collector.cache_miss_collisions);
+}
+
+void bch_mark_cache_read_bypass_race(struct cache_set *c, struct bcache_device *d)
+{
+	struct cached_dev *dc = container_of(d, struct cached_dev, disk);
+
+	atomic_inc(&dc->accounting.collector.cache_read_bypass_races);
+	atomic_inc(&c->accounting.collector.cache_read_bypass_races);
 }
 
 void bch_mark_sectors_bypassed(struct cache_set *c, struct cached_dev *dc,

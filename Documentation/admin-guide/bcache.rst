@@ -507,6 +507,10 @@ cache_miss_collisions
   cache miss, but raced with a write and data was already present (usually 0
   since the synchronization for cache misses was rewritten)
 
+cache_read_bypass_races
+  Counts instances where a cache miss read raced with a concurrent bypass
+  write, forcing the read to bypass the cache to prevent reading stale data.
+
 Sysfs - cache set
 ~~~~~~~~~~~~~~~~~
 
@@ -591,6 +595,10 @@ bset_tree_stats
 
 btree_cache_max_chain
   Longest chain in the btree node cache's hash table
+
+bypass_tracking_alloc_fails
+  Counts instances where memory allocation for bypass write tracking
+  failed. When this occurs, a bypass write proceeds untracked.
 
 cache_read_races
   Counts instances where while data was being read from the cache, the bucket

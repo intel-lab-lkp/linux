@@ -1346,6 +1346,13 @@ void bch_cached_dev_release(struct kobject *kobj)
 {
 	struct cached_dev *dc = container_of(kobj, struct cached_dev,
 					     disk.kobj);
+	if (dc->bypass_pages) {
+		unsigned long i;
+
+		for (i = 0; i < dc->bypass_num_pages; i++)
+			kfree(dc->bypass_pages[i].counts);
+		kfree(dc->bypass_pages);
+	}
 	kfree(dc);
 	module_put(THIS_MODULE);
 }
@@ -1407,6 +1414,25 @@ static CLOSURE_CALLBACK(cached_dev_flush)
 	continue_at(cl, cached_dev_free, system_percpu_wq);
 }
 
+static int bch_cached_dev_bypass_init(struct cached_dev *dc, sector_t sectors)
+{
+	unsigned long chunks = (sectors + (1UL << BCH_BYPASS_CHUNK_SHIFT) - 1) >>
+			       BCH_BYPASS_CHUNK_SHIFT;
+	unsigned long i;
+
+	dc->bypass_num_pages = DIV_ROUND_UP(chunks, BCH_BYPASS_PAGE_COUNTERS);
+	dc->bypass_pages = kcalloc(dc->bypass_num_pages,
+				   sizeof(struct bch_bypass_page),
+				   GFP_KERNEL);
+	if (!dc->bypass_pages)
+		return -ENOMEM;
+
+	for (i = 0; i < dc->bypass_num_pages; i++)
+		spin_lock_init(&dc->bypass_pages[i].lock);
+
+	return 0;
+}
+
 static int cached_dev_init(struct cached_dev *dc, unsigned int block_size)
 {
 	int ret;
@@ -1446,6 +1472,10 @@ static int cached_dev_init(struct cached_dev *dc, unsigned int block_size)
 	dc->error_limit = DEFAULT_CACHED_DEV_ERROR_LIMIT;
 	/* default to auto */
 	dc->stop_when_cache_set_failed = BCH_CACHED_DEV_STOP_AUTO;
+
+	ret = bch_cached_dev_bypass_init(dc, bdev_nr_sectors(dc->bdev));
+	if (ret)
+		return ret;
 
 	bch_cached_dev_request_init(dc);
 	bch_cached_dev_writeback_init(dc);

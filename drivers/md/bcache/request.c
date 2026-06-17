@@ -830,6 +830,126 @@ static CLOSURE_CALLBACK(cached_dev_cache_miss_done)
 	closure_put(&d->cl);
 }
 
+static void bch_bypass_write_start(struct cached_dev *dc, sector_t sector, unsigned int sectors)
+{
+	unsigned long start_chunk = sector_to_bypass_chunk(sector);
+	unsigned long end_chunk = sector_to_bypass_chunk(sector + sectors - 1);
+	unsigned long end_pg_idx = bypass_chunk_to_page(end_chunk);
+	unsigned long chunk;
+
+	if (!dc->bypass_pages)
+		return;
+
+	if (WARN_ON_ONCE(end_pg_idx >= dc->bypass_num_pages))
+		return;
+
+	for (chunk = start_chunk; chunk <= end_chunk; chunk++) {
+		unsigned long pg_idx = bypass_chunk_to_page(chunk);
+		unsigned long pg_off = bypass_chunk_to_offset(chunk);
+		struct bch_bypass_page *pg = &dc->bypass_pages[pg_idx];
+		u16 *new_counts;
+		u16 *dup_counts = NULL;
+
+		spin_lock_irq(&pg->lock);
+		if (!pg->counts) {
+			spin_unlock_irq(&pg->lock);
+			new_counts = kzalloc(PAGE_SIZE, __GFP_NOWARN | GFP_NOIO);
+			spin_lock_irq(&pg->lock);
+			if (!new_counts) {
+				if (!pg->counts) {
+					spin_unlock_irq(&pg->lock);
+					pr_warn_ratelimited("failed to allocate bypass write tracking page, bypass write untracked for sectors %llu-%llu\n",
+							    (uint64_t)bypass_chunk_to_sector(chunk),
+							    (uint64_t)bypass_chunk_to_sector(
+								    chunk + 1) - 1);
+					if (dc->disk.c)
+						atomic_long_inc(
+							&dc->disk.c->bypass_tracking_alloc_fails);
+					continue;
+				}
+			}
+			if (new_counts) {
+				if (pg->counts)
+					dup_counts = new_counts;
+				else
+					pg->counts = new_counts;
+			}
+		}
+		pg->counts[pg_off]++;
+		pg->active++;
+		spin_unlock_irq(&pg->lock);
+
+		kfree(dup_counts);
+	}
+}
+
+static void bch_bypass_write_end(struct cached_dev *dc, sector_t sector, unsigned int sectors)
+{
+	unsigned long start_chunk = sector_to_bypass_chunk(sector);
+	unsigned long end_chunk = sector_to_bypass_chunk(sector + sectors - 1);
+	unsigned long end_pg_idx = bypass_chunk_to_page(end_chunk);
+	unsigned long chunk;
+
+	if (!dc->bypass_pages)
+		return;
+
+	if (WARN_ON_ONCE(end_pg_idx >= dc->bypass_num_pages))
+		return;
+
+	for (chunk = start_chunk; chunk <= end_chunk; chunk++) {
+		unsigned long pg_idx = bypass_chunk_to_page(chunk);
+		unsigned long pg_off = bypass_chunk_to_offset(chunk);
+		struct bch_bypass_page *pg = &dc->bypass_pages[pg_idx];
+		u16 *counts = NULL;
+		unsigned long flags;
+
+		spin_lock_irqsave(&pg->lock, flags);
+		if (pg->counts && pg->counts[pg_off] > 0) {
+			pg->counts[pg_off]--;
+			pg->active--;
+			if (!pg->active) {
+				counts = pg->counts;
+				pg->counts = NULL;
+			}
+		}
+		spin_unlock_irqrestore(&pg->lock, flags);
+
+		kfree(counts);
+	}
+}
+
+static bool bch_has_active_bypass_writes(struct cached_dev *dc, sector_t sector,
+					 unsigned int sectors)
+{
+	unsigned long start_chunk = sector_to_bypass_chunk(sector);
+	unsigned long end_chunk = sector_to_bypass_chunk(sector + sectors - 1);
+	unsigned long end_pg_idx = bypass_chunk_to_page(end_chunk);
+	unsigned long chunk;
+	bool has_active = false;
+
+	if (!dc->bypass_pages)
+		return false;
+
+	if (WARN_ON_ONCE(end_pg_idx >= dc->bypass_num_pages))
+		return false;
+
+	for (chunk = start_chunk; chunk <= end_chunk; chunk++) {
+		unsigned long pg_idx = bypass_chunk_to_page(chunk);
+		unsigned long pg_off = bypass_chunk_to_offset(chunk);
+		struct bch_bypass_page *pg = &dc->bypass_pages[pg_idx];
+
+		spin_lock_irq(&pg->lock);
+		if (pg->counts && pg->counts[pg_off] > 0) {
+			has_active = true;
+			spin_unlock_irq(&pg->lock);
+			break;
+		}
+		spin_unlock_irq(&pg->lock);
+	}
+
+	return has_active;
+}
+
 static CLOSURE_CALLBACK(cached_dev_read_done)
 {
 	closure_type(s, struct search, cl);
@@ -898,6 +1018,13 @@ static int cached_dev_cache_miss(struct btree *b, struct search *s,
 	unsigned int size_limit;
 
 	s->cache_missed = 1;
+
+	if (bch_has_active_bypass_writes(dc, bio->bi_iter.bi_sector,
+					 min(sectors, bio_sectors(bio)))) {
+		s->iop.bypass = true;
+		trace_bcache_read_bypass_race(bio);
+		bch_mark_cache_read_bypass_race(s->iop.c, s->d);
+	}
 
 	if (s->cache_miss || s->iop.bypass) {
 		miss = bio_next_split(bio, sectors, GFP_NOIO, &s->d->bio_split);
@@ -974,6 +1101,9 @@ static CLOSURE_CALLBACK(cached_dev_write_complete)
 	closure_type(s, struct search, cl);
 	struct cached_dev *dc = container_of(s->d, struct cached_dev, disk);
 
+	if (s->iop.bypass)
+		bch_bypass_write_end(dc, s->iop.bio->bi_iter.bi_sector, bio_sectors(s->iop.bio));
+
 	up_read_non_owner(&dc->writeback_lock);
 	cached_dev_bio_complete(&cl->work);
 }
@@ -1017,6 +1147,8 @@ static void cached_dev_write(struct cached_dev *dc, struct search *s)
 	if (s->iop.bypass) {
 		s->iop.bio = s->orig_bio;
 		bio_get(s->iop.bio);
+
+		bch_bypass_write_start(dc, bio->bi_iter.bi_sector, bio_sectors(bio));
 
 		if (bio_op(bio) == REQ_OP_DISCARD &&
 		    !bdev_max_discard_sectors(dc->bdev))

@@ -120,6 +120,11 @@ DEFINE_EVENT(bcache_bio, bcache_bypass_congested,
 	TP_ARGS(bio)
 );
 
+DEFINE_EVENT(bcache_bio, bcache_read_bypass_race,
+	TP_PROTO(struct bio *bio),
+	TP_ARGS(bio)
+);
+
 TRACE_EVENT(bcache_read,
 	TP_PROTO(struct bio *bio, bool hit, bool bypass),
 	TP_ARGS(bio, hit, bypass),
