@@ -86,6 +86,7 @@ mod hdcp;
 mod ake;
 mod golden;
 mod cp;
+mod video;
 
 /// The shared secrets a completed HDCP 2.2 AKE leaves behind: the SKE session key
 /// `ks` and content IV `riv` key the AES-CTR control plane (sec 6), and `kd` is kept
