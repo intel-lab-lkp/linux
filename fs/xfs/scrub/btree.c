@@ -340,9 +340,9 @@ xchk_btree_block_check_siblings(
 	}
 
 	/*
-	 * Does the left & right sibling pointers match the adjacent
+	 * Do the left & right sibling pointers match the adjacent
 	 * parent level pointers?
-	 * (These function absorbs error codes for us.)
+	 * (These functions absorb error codes for us.)
 	 */
 	error = xchk_btree_block_check_sibling(bs, level, -1, &leftsib);
 	if (error)

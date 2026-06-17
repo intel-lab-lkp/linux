@@ -227,7 +227,7 @@ xlog_recover_validate_buf_type(
 
 	/*
 	 * We can only do post recovery validation on items on CRC enabled
-	 * fielsystems as we need to know when the buffer was written to be able
+	 * filesystems as we need to know when the buffer was written to be able
 	 * to determine if we should have replayed the item. If we replay old
 	 * metadata over a newer buffer, then it will enter a temporarily
 	 * inconsistent state resulting in verification failures. Hence for now
@@ -806,7 +806,7 @@ xlog_recover_do_primary_sb_buffer(
  *
  * The magic number might not match the buffer type we are going to recover
  * (e.g. reallocated blocks), so we ignore the xfs_buf_log_format flags.  Hence
- * extract the LSN of the existing object in the buffer based on it's current
+ * extract the LSN of the existing object in the buffer based on its current
  * magic number.  If we don't recognise the magic number in the buffer, then
  * return a LSN of -1 so that the caller knows it was an unrecognised block and
  * so can recover the buffer.

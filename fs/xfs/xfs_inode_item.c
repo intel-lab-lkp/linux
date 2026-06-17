@@ -978,7 +978,7 @@ xfs_iflush_ail_updates(
 
 		/*
 		 * dgc: Not sure how this happens, but it happens very
-		 * occassionaly via generic/388.  xfs_iflush_abort() also
+		 * occasionally via generic/388.  xfs_iflush_abort() also
 		 * silently handles this same "under writeback but not in AIL at
 		 * shutdown" condition via xfs_trans_ail_delete().
 		 */

@@ -274,7 +274,7 @@ xfs_trans_read_buf_map(
 		 *
 		 * If the buffer passes verification we'll let this go, but if
 		 * not we have to shut down.  Let the transaction cleanup code
-		 * release this buffer when it kills the tranaction.
+		 * release this buffer when it kills the transaction.
 		 */
 		ASSERT(bp->b_ops != NULL);
 		error = xfs_buf_reverify(bp, ops);

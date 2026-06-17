@@ -2293,7 +2293,7 @@ xlog_recovery_process_trans(
 
 	/*
 	 * Callees must not free the trans structure. We'll decide if we need to
-	 * free it or not based on the operation being done and it's result.
+	 * free it or not based on the operation being done and its result.
 	 */
 	switch (flags) {
 	/* expected flag values */

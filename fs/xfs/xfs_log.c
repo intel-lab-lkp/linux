@@ -415,7 +415,7 @@ out_error:
  * before we tear down the AIL.
  *
  * We avoid processing actively referenced iclogs so that we don't run callbacks
- * while the iclog owner might still be preparing the iclog for IO submssion.
+ * while the iclog owner might still be preparing the iclog for IO submission.
  * These will be caught by xlog_state_iclog_release() and call this function
  * again to process any callbacks that may have been added to that iclog.
  */
@@ -446,7 +446,7 @@ xlog_state_shutdown_callbacks(
 }
 
 /*
- * Flush iclog to disk if this is the last reference to the given iclog and the
+ * Flush iclog to disk if this is the last reference to the given iclog and
  * it is in the WANT_SYNC state.
  *
  * If XLOG_ICL_NEED_FUA is already set on the iclog, we need to ensure that the
@@ -632,7 +632,7 @@ xfs_log_mount(
 	clear_bit(XLOG_ACTIVE_RECOVERY, &log->l_opstate);
 
 	/*
-	 * Now the log has been fully initialised and we know were our
+	 * Now the log has been fully initialised and we know where our
 	 * space grant counters are, we can initialise the permanent ticket
 	 * needed for delayed logging to work.
 	 */
@@ -1554,7 +1554,7 @@ xlog_write_iclog(
 	 * triggered during unmount, and that can occur asynchronously to the
 	 * unmount thread, and hence we need to ensure that completes before
 	 * tearing down the iclogbufs.  Hence we need to hold the buffer lock
-	 * across the log IO to archieve that.
+	 * across the log IO to achieve that.
 	 */
 	down(&iclog->ic_sema);
 	if (xlog_is_shutdown(log)) {
@@ -1747,7 +1747,7 @@ xlog_sync(
 	if (bno + BTOBB(count) > log->l_logBBsize)
 		xlog_split_iclog(log, iclog->ic_header, bno, count);
 
-	/* calculcate the checksum */
+	/* calculate the checksum */
 	iclog->ic_header->h_crc = xlog_cksum(log, iclog->ic_header,
 			iclog->ic_datap, XLOG_REC_SIZE, size);
 	/*

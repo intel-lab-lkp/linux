@@ -281,10 +281,10 @@ xfs_dax_notify_dev_failure(
 		xfs_info(mp, "Device is about to be removed!");
 		/*
 		 * Freeze fs to prevent new mappings from being created.
-		 * - Keep going on if others already hold the kernel forzen.
+		 * - Keep going on if others already hold the kernel frozen.
 		 * - Keep going on if other errors too because this device is
 		 *   starting to fail.
-		 * - If kernel frozen state is hold successfully here, thaw it
+		 * - If kernel frozen state is held successfully here, thaw it
 		 *   here as well at the end.
 		 */
 		kernel_frozen = xfs_dax_notify_failure_freeze(mp) == 0;

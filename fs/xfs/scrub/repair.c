@@ -368,7 +368,7 @@ xrep_calc_ag_resblks(
 		 * used blocks.  However, with reflink it's possible to have
 		 * more than one rmap record per AG block.  We don't know how
 		 * many rmaps there could be in the AG, so we start off with
-		 * what we hope is an generous over-estimation.
+		 * what we hope is a generous over-estimation.
 		 */
 		if (xfs_has_reflink(mp))
 			rmapbt_sz = xfs_rmapbt_calc_size(mp,
@@ -1257,7 +1257,7 @@ xrep_metadata_inode_forks(
 
 /*
  * Set up an in-memory buffer cache so that we can use the xfbtree.  Allocating
- * a shmem file might take loks, so we cannot be in transaction context.  Park
+ * a shmem file might take looks, so we cannot be in transaction context.  Park
  * our resources in the scrub context and let the teardown function take care
  * of them at the right time.
  */

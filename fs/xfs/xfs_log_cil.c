@@ -253,7 +253,7 @@ xlog_cil_iovec_space(
  * the incoming modification. Then during the formatting of the item we can swap
  * the active buffer with the new one if we can't reuse the existing buffer. We
  * don't free the old buffer as it may be reused on the next modification if
- * it's size is right, otherwise we'll free and reallocate it at that point.
+ * its size is right, otherwise we'll free and reallocate it at that point.
  *
  * This function builds a vector for the changes in each log item in the
  * transaction. It then works out the length of the buffer needed for each log
@@ -1223,7 +1223,7 @@ struct xlog_cil_trans_hdr {
  *
  * This is the only place we write a transaction header, so we also build the
  * log opheaders that indicate the start of a log transaction and wrap the
- * transaction header. We keep the start record in it's own log vector rather
+ * transaction header. We keep the start record in its own log vector rather
  * than compacting them into a single region as this ends up making the logic
  * in xlog_write() for handling empty opheaders for start, commit and unmount
  * records much simpler.
@@ -1369,7 +1369,7 @@ xlog_cil_cleanup_whiteouts(
  * allocation context. However, we do not want to block on memory reclaim
  * recursing back into the filesystem because this push may have been triggered
  * by memory reclaim itself. Hence we really need to run under full GFP_NOFS
- * contraints here.
+ * constraints here.
  */
 static void
 xlog_cil_push_work(
@@ -1539,7 +1539,7 @@ xlog_cil_push_work(
 	 * checks for this - ACTIVE can be either a past completed iclog or a
 	 * future iclog being filled, while WANT_SYNC through SYNC_DONE can be a
 	 * past or future iclog awaiting IO or ordered IO completion to be run.
-	 * In the latter case, if it's a future iclog and we wait on it, the we
+	 * In the latter case, if it's a future iclog and we wait on it, we
 	 * will hang because it won't get processed through to ic_force_wait
 	 * wakeup until this commit_iclog is written to disk.  Hence we use the
 	 * iclog header lsn and compare it to the commit lsn to determine if we
@@ -1574,7 +1574,7 @@ xlog_cil_push_work(
 	 *
 	 * If the push caller needs the commit to be immediately stable and the
 	 * commit_iclog is not yet marked as XLOG_STATE_WANT_SYNC to indicate it
-	 * will be written when released, switch it's state to WANT_SYNC right
+	 * will be written when released, switch its state to WANT_SYNC right
 	 * now.
 	 */
 	ctx->commit_iclog->ic_flags |= XLOG_ICL_NEED_FUA;
@@ -1984,7 +1984,7 @@ restart:
 
 	/*
 	 * We detected a shutdown in progress. We need to trigger the log force
-	 * to pass through it's iclog state machine error handling, even though
+	 * to pass through its iclog state machine error handling, even though
 	 * we are already in a shutdown state. Hence we can't return
 	 * NULLCOMMITLSN here as that has special meaning to log forces (i.e.
 	 * LSN is already stable), so we return a zero LSN instead.

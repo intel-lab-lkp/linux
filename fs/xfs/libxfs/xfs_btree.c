@@ -398,7 +398,7 @@ xfs_btree_check_ptr(
  * Calculate CRC on the whole btree block and stuff it into the
  * long-form btree header.
  *
- * Prior to calculting the CRC, pull the LSN out of the buffer log item and put
+ * Prior to calculating the CRC, pull the LSN out of the buffer log item and put
  * it into the buffer so recovery knows what the last modification was that made
  * it to disk.
  */
@@ -436,7 +436,7 @@ xfs_btree_fsblock_verify_crc(
  * Calculate CRC on the whole btree block and stuff it into the
  * short-form btree header.
  *
- * Prior to calculting the CRC, pull the LSN out of the buffer log item and put
+ * Prior to calculating the CRC, pull the LSN out of the buffer log item and put
  * it into the buffer so recovery knows what the last modification was that made
  * it to disk.
  */
@@ -4739,7 +4739,7 @@ xfs_btree_visit_blocks(
  * Change the owner of a btree.
  *
  * The mechanism we use here is ordered buffer logging. Because we don't know
- * how many buffers were are going to need to modify, we don't really want to
+ * how many buffers we are going to need to modify, we don't really want to
  * have to make transaction reservations for the worst case of every buffer in a
  * full size btree as that may be more space that we can fit in the log....
  *

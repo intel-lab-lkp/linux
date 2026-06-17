@@ -84,7 +84,7 @@ xfs_trans_free(
  * permanent log reservation of the given transaction.  The remaining
  * unused block and rt extent reservations are also inherited.  This
  * implies that the original transaction is no longer allowed to allocate
- * blocks.  Locks and log items, however, are no inherited.  They must
+ * blocks.  Locks and log items, however, are not inherited.  They must
  * be added to the new transaction explicitly.
  */
 STATIC struct xfs_trans *
@@ -1056,7 +1056,7 @@ xfs_trans_roll(
 }
 
 /*
- * Allocate an transaction, lock and join the inode to it, and reserve quota.
+ * Allocate a transaction, lock and join the inode to it, and reserve quota.
  *
  * The caller must ensure that the on-disk dquots attached to this inode have
  * already been allocated and initialized.  The caller is responsible for
@@ -1184,7 +1184,7 @@ xfs_trans_reserve_more_inode(
 }
 
 /*
- * Allocate an transaction in preparation for inode creation by reserving quota
+ * Allocate a transaction in preparation for inode creation by reserving quota
  * against the given dquots.  Callers are not required to hold any inode locks.
  */
 int
@@ -1234,7 +1234,7 @@ retry:
 }
 
 /*
- * Allocate an transaction, lock and join the inode to it, and reserve quota
+ * Allocate a transaction, lock and join the inode to it, and reserve quota
  * in preparation for inode attribute changes that include uid, gid, or prid
  * changes.
  *
@@ -1348,7 +1348,7 @@ out_cancel:
 }
 
 /*
- * Allocate an transaction, lock and join the directory and child inodes to it,
+ * Allocate a transaction, lock and join the directory and child inodes to it,
  * and reserve quota for a directory update.  If there isn't sufficient space,
  * @dblocks will be set to zero for a reservationless directory update and
  * @nospace_error will be set to a negative errno describing the space
