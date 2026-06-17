@@ -3332,7 +3332,7 @@ static int __ffs_func_bind_do_descs(enum ffs_entity_type type, u8 *valuep,
 		struct usb_request *req;
 		struct usb_ep *ep;
 		u8 bEndpointAddress;
-		u16 wMaxPacketSize;
+		__le16 wMaxPacketSize;
 
 		/*
 		 * We back up bEndpointAddress because autoconfig overwrites
