@@ -135,7 +135,15 @@ pub trait Driver {
 
 /// The registration type of a `drm::Device`.
 ///
-/// Once the `Registration` structure is dropped, the device is unregistered.
+/// Once the `Registration` structure is dropped, the device is unplugged (which also
+/// unregisters it). [`drm_dev_unplug`] is the hot-unplug-safe teardown: it sets the device's
+/// `unplugged` flag (so the DRM ioctl/mmap paths return `-ENODEV` to any process still holding
+/// an open `card`/`render` node, rather than dereferencing freed device state), drains
+/// in-flight `drm_dev_enter`/`drm_dev_exit` critical sections, unregisters the minors, and tears
+/// down userspace mappings. For devices on a removable bus (e.g. a USB dock) this is required
+/// for safe removal; for permanent devices it is a harmless superset of `drm_dev_unregister`.
+///
+/// [`drm_dev_unplug`]: https://docs.kernel.org/gpu/drm-internals.html
 pub struct Registration<T: Driver>(ARef<drm::Device<T>>);
 
 impl<T: Driver> Registration<T> {
@@ -197,7 +205,9 @@ unsafe impl<T: Driver> Send for Registration<T> {}
 impl<T: Driver> Drop for Registration<T> {
     fn drop(&mut self) {
         // SAFETY: Safe by the invariant of `ARef<drm::Device<T>>`. The existence of this
-        // `Registration` also guarantees the this `drm::Device` is actually registered.
-        unsafe { bindings::drm_dev_unregister(self.0.as_raw()) };
+        // `Registration` also guarantees that this `drm::Device` is actually registered.
+        // `drm_dev_unplug` is the hot-unplug-safe teardown (it calls `drm_dev_unregister`
+        // internally after marking the device unplugged) — see the type's documentation.
+        unsafe { bindings::drm_dev_unplug(self.0.as_raw()) };
     }
 }
