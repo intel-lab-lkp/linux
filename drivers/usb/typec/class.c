@@ -20,6 +20,9 @@
 #include "class.h"
 #include "pd.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/typec.h>
+
 static DEFINE_IDA(typec_index_ida);
 
 const struct class typec_class = {
@@ -2427,10 +2430,14 @@ EXPORT_SYMBOL_GPL(typec_get_orientation);
 int typec_set_mode(struct typec_port *port, int mode)
 {
 	struct typec_mux_state state = { };
+	int ret;
 
 	state.mode = mode;
 
-	return typec_mux_set(port->mux, &state);
+	ret = typec_mux_set(port->mux, &state);
+	trace_typec_mode(port, mode, ret);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(typec_set_mode);
 
