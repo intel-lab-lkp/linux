@@ -129,6 +129,11 @@ pub(super) struct Head {
     /// One-shot: this head's cursor `create` (sprite dimensions) was sent before its first
     /// image upload (per head -- the global one would skip head 1's create).
     cursor_primed: core::sync::atomic::AtomicBool,
+    /// Last DDC/CI brightness/contrast (0..=100) set on this head's monitor via the connector
+    /// properties; replayed on DPMS-on. Stored here (not in connector state) because DDC/CI is
+    /// a side-band action on the physical monitor, not part of the atomic scanout pipeline.
+    brightness: core::sync::atomic::AtomicU32,
+    contrast: core::sync::atomic::AtomicU32,
     #[pin]
     scanout: Mutex<ScanoutState>,
     /// This head's downstream-monitor EDID (`None` until the CP channel delivers it). Only
@@ -167,6 +172,8 @@ impl Head {
         try_pin_init!(Self {
             index,
             cursor_primed: core::sync::atomic::AtomicBool::new(false),
+            brightness: core::sync::atomic::AtomicU32::new(100),
+            contrast: core::sync::atomic::AtomicU32::new(100),
             scanout <- new_mutex!(ScanoutState {
                 enc: None,
                 cur: VVec::new(),
@@ -239,6 +246,12 @@ pub(super) struct VinoDrmData {
     encoder_funcs: Opaque<bindings::drm_encoder_funcs>,
     #[pin]
     mode_cfg_funcs: Opaque<bindings::drm_mode_config_funcs>,
+    /// The custom 0..=100 connector range properties for DDC/CI brightness/contrast, created
+    /// and attached in [`kms_init`]. Stored so the connector `atomic_set_property` /
+    /// `atomic_get_property` callbacks can identify them by pointer. Written once during
+    /// single-threaded probe, read-only thereafter (`AtomicPtr` for `Sync` without `unsafe`).
+    brightness_prop: core::sync::atomic::AtomicPtr<bindings::drm_property>,
+    contrast_prop: core::sync::atomic::AtomicPtr<bindings::drm_property>,
 }
 
 // SAFETY: the embedded C KMS objects are written only during single-threaded
@@ -278,6 +291,8 @@ impl VinoDrmData {
             cursor_helper <- z(),
             encoder_funcs <- z(),
             mode_cfg_funcs <- z(),
+            brightness_prop: core::sync::atomic::AtomicPtr::new(ptr::null_mut()),
+            contrast_prop: core::sync::atomic::AtomicPtr::new(ptr::null_mut()),
         })
     }
 
@@ -364,6 +379,14 @@ impl VinoDrmData {
         link.wire_seq = link.wire_seq.wrapping_add(((content.len() + 15) / 16) as u32);
         link.counter = link.counter.wrapping_add(1);
         Ok(())
+    }
+
+    /// Push a DDC/CI Set-VCP write to a head's downstream monitor (brightness, contrast or
+    /// DPMS power). Wraps [`super::cp::ddc_set_vcp`] (`id=0x15`); a no-op until the cipher is
+    /// engaged. Used by the brightness/contrast connector properties and by DPMS in the CRTC
+    /// enable/disable callbacks.
+    pub(super) fn set_vcp(&self, head_index: u8, vcp: u8, value: u16) -> Result {
+        self.send_cp(head_index, 0x15, 0, |ctr| super::cp::ddc_set_vcp(ctr, vcp, value))
     }
 }
 
@@ -637,6 +660,11 @@ unsafe extern "C" fn crtc_atomic_enable(
     if let Err(e) = data.send_cp(head.index, 0x48, 16, |ctr| super::cp::set_mode(ctr, &timing)) {
         pr_warn!("vino: head{} runtime mode-set send failed ({e:?})\n", head.index);
     }
+    // Bring the monitor out of DPMS standby (DDC/CI VCP 0xD6 = on). Inferred wire (see
+    // `cp::ddc_set_vcp`); a no-op until CP engages, and re-applies the user's brightness.
+    let _ = data.set_vcp(head.index, super::cp::VCP_POWER_MODE, super::cp::POWER_ON);
+    let b = head.brightness.load(core::sync::atomic::Ordering::Relaxed);
+    let _ = data.set_vcp(head.index, super::cp::VCP_BRIGHTNESS, b as u16);
 }
 
 /// CRTC `.atomic_disable`: the display is turning off.
@@ -646,10 +674,12 @@ unsafe extern "C" fn crtc_atomic_enable(
 /// re-enable (DPMS-on) re-inits the encoder and sends a **full keyframe** rather than diffing
 /// against a shadow the dock may have dropped while blanked, and re-uploads the cursor sprite.
 ///
-/// The dock holds the last frame when video stops (it has its own scanout buffer), so the
-/// monitor freezes the last image rather than going black; a true backlight-standby would need
-/// a dock power command that is not decoded (DLM's `Standby`/`Suspend`/`TempPowerOff` are
-/// internal, vtable-dispatched events with no wire frame -- the same dead-end as gamma).
+/// The dock holds the last frame when video stops (it has its own scanout buffer), so video
+/// alone freezes the last image rather than going black. To actually blank the panel we send a
+/// DDC/CI power-off (VCP 0xD6 = off) to the monitor over the same monitor-I2C bridge the EDID
+/// read uses -- the standard MCCS power control the macOS/Windows agents drive (DLM's
+/// `Standby`/`Suspend`/`TempPowerOff` are the host-internal names for it). Inferred wire (see
+/// [`super::cp::ddc_set_vcp`]); a no-op until CP engages.
 unsafe extern "C" fn crtc_atomic_disable(
     crtc: *mut bindings::drm_crtc,
     _state: *mut bindings::drm_atomic_commit,
@@ -671,6 +701,10 @@ unsafe extern "C" fn crtc_atomic_disable(
     }
     head.cursor_primed
         .store(false, core::sync::atomic::Ordering::SeqCst);
+    // DPMS-off: blank the monitor backlight via DDC/CI (VCP 0xD6 = off) rather than leaving
+    // the last frame frozen on the panel. Inferred wire (see `cp::ddc_set_vcp`); no-op until
+    // CP engages.
+    let _ = data.set_vcp(head.index, super::cp::VCP_POWER_MODE, super::cp::POWER_OFF);
     pr_info!("vino: KMS CRTC disable -- head{} display OFF (scanout stopped)\n", head.index);
 }
 
@@ -1182,6 +1216,9 @@ pub(super) fn kms_init<C: drm::DeviceContext>(
             Some(bindings::drm_atomic_helper_connector_duplicate_state);
         (*cf).atomic_destroy_state =
             Some(bindings::drm_atomic_helper_connector_destroy_state);
+        // Custom DDC/CI brightness/contrast properties (see `connector_atomic_set_property`).
+        (*cf).atomic_set_property = Some(connector_atomic_set_property);
+        (*cf).atomic_get_property = Some(connector_atomic_get_property);
         (*data.conn_helper.get()).get_modes = Some(get_modes);
         // Prune any single mode above the per-head pixel-clock ceiling (~4K@60).
         (*data.conn_helper.get()).mode_valid = Some(mode_valid);
@@ -1216,6 +1253,26 @@ pub(super) fn kms_init<C: drm::DeviceContext>(
         (*data.encoder_funcs.get()).destroy = Some(bindings::drm_encoder_cleanup);
 
         // Build each head's objects (connector + primary/cursor planes + CRTC + encoder).
+        // DDC/CI brightness/contrast: one 0..=100 range property each, created on the device
+        // and attached to every connector in `build_head`. Non-fatal: a NULL property just
+        // means the knob is absent (kept in the AtomicPtr as NULL, ignored by the callbacks).
+        let bp = bindings::drm_property_create_range(
+            raw,
+            0,
+            c"brightness".as_ptr().cast(),
+            0,
+            100,
+        );
+        data.brightness_prop.store(bp, core::sync::atomic::Ordering::Relaxed);
+        let cp = bindings::drm_property_create_range(
+            raw,
+            0,
+            c"contrast".as_ptr().cast(),
+            0,
+            100,
+        );
+        data.contrast_prop.store(cp, core::sync::atomic::Ordering::Relaxed);
+
         for head in data.heads() {
             build_head(raw, data, head)?;
         }
@@ -1322,8 +1379,84 @@ unsafe fn build_head(raw: *mut bindings::drm_device, data: &VinoDrmData, head: &
         if rc != 0 {
             pr_warn!("vino: head{} rotation property unavailable ({rc})\n", head.index);
         }
+
+        // Attach the shared DDC/CI brightness/contrast properties to this connector, each at
+        // its default of 100 (= no attenuation). The callbacks store the value per head and
+        // fire the DDC/CI write (see `connector_atomic_set_property`).
+        let bp = data.brightness_prop.load(core::sync::atomic::Ordering::Relaxed);
+        if !bp.is_null() {
+            bindings::drm_object_attach_property(&mut (*conn).base, bp, 100);
+        }
+        let cp = data.contrast_prop.load(core::sync::atomic::Ordering::Relaxed);
+        if !cp.is_null() {
+            bindings::drm_object_attach_property(&mut (*conn).base, cp, 100);
+        }
     }
     Ok(())
+}
+
+/// Connector `.atomic_set_property`: handle the custom DDC/CI brightness/contrast properties
+/// (the standard properties are handled by the DRM core, which never calls us for them). On a
+/// value change we store it on the head and immediately push a DDC/CI Set-VCP write to the
+/// monitor -- DDC/CI is a side-band action on the physical panel, not part of the atomic
+/// scanout state, so it is applied here rather than threaded through connector state. Returns
+/// `-EINVAL` for any other property so the core reports it as unknown.
+unsafe extern "C" fn connector_atomic_set_property(
+    connector: *mut bindings::drm_connector,
+    _state: *mut bindings::drm_connector_state,
+    property: *mut bindings::drm_property,
+    val: u64,
+) -> i32 {
+    // SAFETY: `connector` is a valid connector embedded in our DRM device-private.
+    let dev = unsafe { (*connector).dev };
+    // SAFETY: `dev` is our live, registered drm_device.
+    let data: &VinoDrmData = unsafe { VinoDrmDevice::from_raw(dev) };
+    let Some(head) = data.head_by_connector(connector) else {
+        return EINVAL.to_errno();
+    };
+    let bp = data.brightness_prop.load(core::sync::atomic::Ordering::Relaxed);
+    let cp = data.contrast_prop.load(core::sync::atomic::Ordering::Relaxed);
+    let v = val.min(100) as u32;
+    let (slot, vcp) = if property == bp && !bp.is_null() {
+        (&head.brightness, super::cp::VCP_BRIGHTNESS)
+    } else if property == cp && !cp.is_null() {
+        (&head.contrast, super::cp::VCP_CONTRAST)
+    } else {
+        return EINVAL.to_errno();
+    };
+    if slot.swap(v, core::sync::atomic::Ordering::Relaxed) != v {
+        let _ = data.set_vcp(head.index, vcp, v as u16);
+    }
+    0
+}
+
+/// Connector `.atomic_get_property`: read back the stored DDC/CI brightness/contrast (the
+/// values round-trip through the head atomics set by [`connector_atomic_set_property`]).
+unsafe extern "C" fn connector_atomic_get_property(
+    connector: *mut bindings::drm_connector,
+    _state: *const bindings::drm_connector_state,
+    property: *mut bindings::drm_property,
+    val: *mut u64,
+) -> i32 {
+    // SAFETY: `connector` is a valid connector embedded in our DRM device-private.
+    let dev = unsafe { (*connector).dev };
+    // SAFETY: `dev` is our live, registered drm_device.
+    let data: &VinoDrmData = unsafe { VinoDrmDevice::from_raw(dev) };
+    let Some(head) = data.head_by_connector(connector) else {
+        return EINVAL.to_errno();
+    };
+    let bp = data.brightness_prop.load(core::sync::atomic::Ordering::Relaxed);
+    let cp = data.contrast_prop.load(core::sync::atomic::Ordering::Relaxed);
+    let slot = if property == bp && !bp.is_null() {
+        &head.brightness
+    } else if property == cp && !cp.is_null() {
+        &head.contrast
+    } else {
+        return EINVAL.to_errno();
+    };
+    // SAFETY: the DRM core passes a valid `*mut u64` output pointer.
+    unsafe { *val = slot.load(core::sync::atomic::Ordering::Relaxed) as u64 };
+    0
 }
 
 /// Thin wrapper so the `unsafe` block above reads cleanly.

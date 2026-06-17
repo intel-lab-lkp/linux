@@ -112,6 +112,57 @@ pub(super) fn set_mode(counter: u16, t: &Timing) -> Result<KVec<u8>> {
     Ok(b)
 }
 
+/// Standard VESA MCCS (Monitor Control Command Set 2.2) VCP feature codes, driven over
+/// DDC/CI. The macOS DisplayLink agent exposes these as per-display brightness/contrast
+/// ("Popover did show -- starting DDC/CI communication", `setBrightness`/`setContrast`); the
+/// dock bridges the DDC/CI transaction to the downstream monitor's I2C slave 0x37 -- the same
+/// monitor-I2C path the EDID read ([`get_edid_req`]) uses for the 0x50 EDID slave.
+pub(super) const VCP_BRIGHTNESS: u8 = 0x10;
+pub(super) const VCP_CONTRAST: u8 = 0x12;
+/// VCP 0xD6 "Power mode": value 0x01 = on, 0x04 = off (DPMS-off / hard standby). Lets DPMS
+/// blank the panel backlight instead of freezing the last frame (see [`crtc_atomic_disable`]).
+pub(super) const VCP_POWER_MODE: u8 = 0xd6;
+pub(super) const POWER_ON: u16 = 0x01;
+pub(super) const POWER_OFF: u16 = 0x04;
+
+/// Build a DDC/CI "Set VCP Feature" request: the 7 bytes a DDC/CI host writes to the
+/// monitor's I2C slave 0x37, after the 0x6e (= 0x37<<1) write address (VESA DDC/CI 1.1
+/// sec 4.4). Layout: source 0x51, length `0x80 | 4`, opcode 0x03 (Set VCP), VCP code,
+/// value-hi, value-lo, then an XOR checksum seeded with the destination address 0x6e. Pure
+/// and fully standard, so it is unit-tested byte-exact against the spec
+/// ([`super::tests::ddc_ci_set_vcp_checksum`]).
+pub(super) fn ddc_ci_set_vcp(vcp: u8, value: u16) -> [u8; 7] {
+    let body = [0x51u8, 0x84, 0x03, vcp, (value >> 8) as u8, value as u8];
+    let mut chk = 0x6eu8; // checksum seed = destination slave-write address (0x37 << 1)
+    for &x in &body {
+        chk ^= x;
+    }
+    [body[0], body[1], body[2], body[3], body[4], body[5], chk]
+}
+
+/// CP message that tunnels a DDC/CI Set-VCP write to the downstream monitor -- the brightness,
+/// contrast and DPMS-power controls the macOS/Windows agents drive over "DDC/CI communication".
+/// The dock's monitor-I2C bridge is the same one the EDID read uses, so this is modelled as the
+/// WRITE companion to the `0x15/0x21` EDID read: `id=0x15 sub=0x22`, carrying the I2C slave
+/// (0x37) + payload length at off20 and the 7-byte DDC/CI Set-VCP payload at off22.
+///
+/// The `id`/`sub` and payload offset are **inferred** from the EDID-read pairing -- the write
+/// transaction was never captured (it only fires once a monitor is actively driven, i.e. past
+/// the CP wall), so re-check against a capture once CP engages. The DDC/CI bytes themselves
+/// ([`ddc_ci_set_vcp`]) are standard and verified.
+pub(super) fn ddc_set_vcp(counter: u16, vcp: u8, value: u16) -> Result<KVec<u8>> {
+    let payload = ddc_ci_set_vcp(vcp, value);
+    let mut b = KVec::with_capacity(32, GFP_KERNEL)?;
+    header(&mut b, 0x15, 0x22, counter)?;
+    pad_to(&mut b, 20)?;
+    // off20: monitor DDC/CI I2C slave (0x37) + DDC/CI payload length.
+    b.extend_from_slice(&[0x37, payload.len() as u8], GFP_KERNEL)?;
+    // off22: the DDC/CI Set-VCP bytes (same off22 convention as the EDID payload).
+    b.extend_from_slice(&payload, GFP_KERNEL)?;
+    pad_to(&mut b, 32)?;
+    Ok(b)
+}
+
 /// EDID base-block sanity check: length, the `00 FF..FF 00` magic, and the 1-byte
 /// checksum (all 128 base bytes sum to 0 mod 256). A corrupt blob must never drive a
 /// mode-set, so [`timing_from_edid`] rejects anything that fails this.

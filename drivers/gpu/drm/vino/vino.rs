@@ -385,6 +385,24 @@ impl VinoDriver {
             Ok(()) => pr_info!("vino: step device-open 0xfc(iface1) OK = {:02x?}\n", probe3),
             Err(e) => pr_info!("vino: step device-open 0xfc(iface1) non-fatal ({e:?})\n"),
         }
+        // DFU firmware-version query, matching DLM / the macOS+Windows drivers'
+        // DfuGetVmmDeviceFirmwareVersion: vendor IN bmRequestType=0xc1 bRequest=0xfd wIndex=1,
+        // a 6-byte version blob (the reference driver's request-size table: 0xfb=4 customer/board,
+        // 0xfc=3 device-type, 0xfd=6 firmware-version, 0xfe=16 descriptor). This is a device-level
+        // DFU read, independent of the CP channel, so it works regardless of CP engagement -- handy
+        // for diagnostics and confirming the dock firmware revision.
+        let mut fw_ver = [0u8; 6];
+        match dev.control_recv(0xfd, VENDOR_IN_IFACE, 0, 1, &mut fw_ver, timeout()) {
+            Ok(()) => pr_info!("vino: dock DFU firmware version = {:02x?}\n", fw_ver),
+            Err(e) => pr_info!("vino: device-open 0xfd(firmware-version) non-fatal ({e:?})\n"),
+        }
+        // DFU customer/board id (DfuGetVmmDeviceCustomerAndBoardId): bRequest=0xfb, 4-byte blob.
+        let mut cust_board = [0u8; 4];
+        match dev.control_recv(0xfb, VENDOR_IN_IFACE, 0, 1, &mut cust_board, timeout()) {
+            Ok(()) => pr_info!("vino: dock DFU customer/board id = {:02x?}\n", cust_board),
+            Err(e) => pr_info!("vino: device-open 0xfb(customer/board) non-fatal ({e:?})\n"),
+        }
+
         // EXPERIMENT (2026-06-16): replay DLM's repeated STRING-descriptor reads at device-open.
         // Timing analysis of the paired cold capture (captures/paired-coldbus-20260615-220311)
         // shows DLM, beyond the distinct descriptor SET vino already issues, re-reads STRING idx0
