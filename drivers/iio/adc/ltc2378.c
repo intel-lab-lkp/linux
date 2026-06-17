@@ -17,6 +17,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 #include <linux/types.h>
+#include <linux/units.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/types.h>
@@ -26,120 +27,160 @@
 static const struct ltc2378_chip_info ltc2338_18_chip_info = {
 	.name = "ltc2338-18",
 	.resolution = 18,
+	.max_sample_rate_hz = HZ_PER_MHZ,
+	.tconv_ns = 527,
 	.bipolar = true,
 };
 
 static const struct ltc2378_chip_info ltc2364_16_chip_info = {
 	.name = "ltc2364-16",
 	.resolution = 16,
+	.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+	.tconv_ns = 3000,
 	.bipolar = false,
 };
 
 static const struct ltc2378_chip_info ltc2364_18_chip_info = {
 	.name = "ltc2364-18",
 	.resolution = 18,
+	.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+	.tconv_ns = 3000,
 	.bipolar = false,
 };
 
 static const struct ltc2378_chip_info ltc2367_16_chip_info = {
 	.name = "ltc2367-16",
 	.resolution = 16,
+	.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+	.tconv_ns = 1500,
 	.bipolar = false,
 };
 
 static const struct ltc2378_chip_info ltc2367_18_chip_info = {
 	.name = "ltc2367-18",
 	.resolution = 18,
+	.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+	.tconv_ns = 1500,
 	.bipolar = false,
 };
 
 static const struct ltc2378_chip_info ltc2368_16_chip_info = {
 	.name = "ltc2368-16",
 	.resolution = 16,
+	.max_sample_rate_hz = HZ_PER_MHZ,
+	.tconv_ns = 527,
 	.bipolar = false,
 };
 
 static const struct ltc2378_chip_info ltc2368_18_chip_info = {
 	.name = "ltc2368-18",
 	.resolution = 18,
+	.max_sample_rate_hz = HZ_PER_MHZ,
+	.tconv_ns = 527,
 	.bipolar = false,
 };
 
 static const struct ltc2378_chip_info ltc2369_18_chip_info = {
 	.name = "ltc2369-18",
 	.resolution = 18,
+	.max_sample_rate_hz = 1600 * HZ_PER_KHZ,
+	.tconv_ns = 412,
 	.bipolar = false,
 };
 
 static const struct ltc2378_chip_info ltc2370_16_chip_info = {
 	.name = "ltc2370-16",
 	.resolution = 16,
+	.max_sample_rate_hz = 2 * HZ_PER_MHZ,
+	.tconv_ns = 322,
 	.bipolar = false,
 };
 
 static const struct ltc2378_chip_info ltc2376_16_chip_info = {
 	.name = "ltc2376-16",
 	.resolution = 16,
+	.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+	.tconv_ns = 3000,
 	.bipolar = true,
 };
 
 static const struct ltc2378_chip_info ltc2376_18_chip_info = {
 	.name = "ltc2376-18",
 	.resolution = 18,
+	.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+	.tconv_ns = 3000,
 	.bipolar = true,
 };
 
 static const struct ltc2378_chip_info ltc2376_20_chip_info = {
 	.name = "ltc2376-20",
 	.resolution = 20,
+	.max_sample_rate_hz = 250 * HZ_PER_KHZ,
+	.tconv_ns = 3000,
 	.bipolar = true,
 };
 
 static const struct ltc2378_chip_info ltc2377_16_chip_info = {
 	.name = "ltc2377-16",
 	.resolution = 16,
+	.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+	.tconv_ns = 1500,
 	.bipolar = true,
 };
 
 static const struct ltc2378_chip_info ltc2377_18_chip_info = {
 	.name = "ltc2377-18",
 	.resolution = 18,
+	.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+	.tconv_ns = 1500,
 	.bipolar = true,
 };
 
 static const struct ltc2378_chip_info ltc2377_20_chip_info = {
 	.name = "ltc2377-20",
 	.resolution = 20,
+	.max_sample_rate_hz = 500 * HZ_PER_KHZ,
+	.tconv_ns = 1500,
 	.bipolar = true,
 };
 
 static const struct ltc2378_chip_info ltc2378_16_chip_info = {
 	.name = "ltc2378-16",
 	.resolution = 16,
+	.max_sample_rate_hz = HZ_PER_MHZ,
+	.tconv_ns = 527,
 	.bipolar = true,
 };
 
 static const struct ltc2378_chip_info ltc2378_18_chip_info = {
 	.name = "ltc2378-18",
 	.resolution = 18,
+	.max_sample_rate_hz = HZ_PER_MHZ,
+	.tconv_ns = 527,
 	.bipolar = true,
 };
 
 static const struct ltc2378_chip_info ltc2378_20_chip_info = {
 	.name = "ltc2378-20",
 	.resolution = 20,
+	.max_sample_rate_hz = HZ_PER_MHZ,
+	.tconv_ns = 675,
 	.bipolar = true,
 };
 
 static const struct ltc2378_chip_info ltc2379_18_chip_info = {
 	.name = "ltc2379-18",
 	.resolution = 18,
+	.max_sample_rate_hz = 1600 * HZ_PER_KHZ,
+	.tconv_ns = 412,
 	.bipolar = true,
 };
 
 static const struct ltc2378_chip_info ltc2380_16_chip_info = {
 	.name = "ltc2380-16",
 	.resolution = 16,
+	.max_sample_rate_hz = 2 * HZ_PER_MHZ,
+	.tconv_ns = 322,
 	.bipolar = true,
 };
 
@@ -266,6 +307,10 @@ static int ltc2378_probe(struct spi_device *spi)
 	st->xfer.len = st->info->resolution > 16 ? 4 : 2;
 	st->xfer.bits_per_word = st->info->resolution;
 
+	ret = ltc2378_lib_buffer_setup(indio_dev, st);
+	if (ret)
+		return ret;
+
 	indio_dev->channels = st->chans;
 	indio_dev->num_channels = st->num_iio_chans;
 
@@ -336,3 +381,4 @@ MODULE_AUTHOR("Ioan-Daniel Pop <pop.ioan-daniel@analog.com>");
 MODULE_AUTHOR("Marcelo Schmitt <marcelo.schmitt@analog.com>");
 MODULE_DESCRIPTION("Analog Devices LTC2378 ADC series driver");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS("IIO_LTC2378");

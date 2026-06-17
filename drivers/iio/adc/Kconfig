@@ -944,6 +944,9 @@ config LTC2378
 	tristate "Analog Devices LTC2378 ADC driver"
 	depends on SPI
 	depends on GPIOLIB
+	select LTC2378_LIB
+	select LTC2378_LIB_OFFLOAD_BUFFER if SPI_OFFLOAD && PWM && SPI_OFFLOAD_TRIGGER_PWM && IIO_BUFFER && IIO_BUFFER_DMAENGINE
+	select LTC2378_LIB_TRIGGERED_BUFFER if IIO_BUFFER
 	help
 	  Say yes here to build support for Analog Devices LTC2378-20 and
 	  similar analog to digital converters.
@@ -2027,3 +2030,19 @@ config XILINX_AMS
 	  xilinx-ams.
 
 endmenu
+
+config LTC2378_LIB
+	tristate
+	help
+	  Say yes here to build support for buffered data capture with LTC2378
+
+config LTC2378_LIB_OFFLOAD_BUFFER
+	bool
+	help
+	  Say yes here to build support for high speed data capture with LTC2378
+
+config LTC2378_LIB_TRIGGERED_BUFFER
+	bool
+	select IIO_TRIGGERED_BUFFER
+	help
+	  Say yes here to build support for buffered data capture with LTC2378
