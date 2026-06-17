@@ -6575,8 +6575,10 @@ static int finish_inode_if_needed(struct send_ctx *sctx, bool at_end)
 
 	if (!sctx->parent_root || sctx->cur_inode_new) {
 		need_chown = true;
-		if (!S_ISLNK(sctx->cur_inode_mode))
+		if (!S_ISLNK(sctx->cur_inode_mode)) {
 			need_chmod = true;
+			need_fileattr = true;
+		}
 		if (sctx->cur_inode_next_write_offset == sctx->cur_inode_size)
 			need_truncate = false;
 	} else {
