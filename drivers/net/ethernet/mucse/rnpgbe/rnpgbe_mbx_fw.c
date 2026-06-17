@@ -28,12 +28,11 @@ static int mucse_fw_send_cmd_wait_resp(struct mucse_hw *hw,
 	int err;
 
 	mutex_lock(&hw->mbx.lock);
-	err = mucse_write_and_wait_ack_mbx(hw, (u32 *)req, len);
+	err = mucse_write_and_wait_ack_mbx(hw, req, len);
 	if (err)
 		goto out;
 	do {
-		err = mucse_poll_and_read_mbx(hw, (u32 *)reply,
-					      sizeof(*reply));
+		err = mucse_poll_and_read_mbx(hw, reply, sizeof(*reply));
 		if (err)
 			goto out;
 		/* mucse_write_and_wait_ack_mbx return 0 means fw has
@@ -125,7 +124,7 @@ int mucse_mbx_powerup(struct mucse_hw *hw, bool is_powerup)
 
 	len = le16_to_cpu(req.datalen);
 	mutex_lock(&hw->mbx.lock);
-	err = mucse_write_and_wait_ack_mbx(hw, (u32 *)&req, len);
+	err = mucse_write_and_wait_ack_mbx(hw, &req, len);
 	mutex_unlock(&hw->mbx.lock);
 
 	return err;

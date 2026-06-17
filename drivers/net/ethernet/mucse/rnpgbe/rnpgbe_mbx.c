@@ -166,10 +166,12 @@ static void mucse_mbx_inc_pf_ack(struct mucse_hw *hw)
  *
  * Return: 0 on success, negative errno on failure
  **/
-static int mucse_read_mbx_pf(struct mucse_hw *hw, u32 *msg, u16 size)
+static int mucse_read_mbx_pf(struct mucse_hw *hw, void *msg, u16 size)
 {
 	const int size_in_words = size / sizeof(u32);
 	struct mucse_mbx_info *mbx = &hw->mbx;
+	int off = MUCSE_MBX_FWPF_SHM;
+	__le32 *msg_le32 = msg;
 	int err;
 
 	err = mucse_obtain_mbx_lock_pf(hw);
@@ -177,7 +179,7 @@ static int mucse_read_mbx_pf(struct mucse_hw *hw, u32 *msg, u16 size)
 		return err;
 
 	for (int i = 0; i < size_in_words; i++)
-		msg[i] = mbx_data_rd32(mbx, MUCSE_MBX_FWPF_SHM + 4 * i);
+		msg_le32[i] = cpu_to_le32(mbx_data_rd32(mbx, off + 4 * i));
 	/* Hw needs write data_reg at last */
 	mbx_data_wr32(mbx, MUCSE_MBX_FWPF_SHM, 0);
 	/* flush reqs as we have read this request data */
@@ -236,7 +238,7 @@ static int mucse_poll_for_msg(struct mucse_hw *hw)
  * Return: 0 if it successfully received a message notification and
  * copied it into the receive buffer, negative errno on failure
  **/
-int mucse_poll_and_read_mbx(struct mucse_hw *hw, u32 *msg, u16 size)
+int mucse_poll_and_read_mbx(struct mucse_hw *hw, void *msg, u16 size)
 {
 	int err;
 
@@ -290,10 +292,11 @@ static void mucse_mbx_inc_pf_req(struct mucse_hw *hw)
  * Return: 0 if it successfully copied message into the buffer,
  * negative errno on failure
  **/
-static int mucse_write_mbx_pf(struct mucse_hw *hw, u32 *msg, u16 size)
+static int mucse_write_mbx_pf(struct mucse_hw *hw, const void *msg, u16 size)
 {
 	const int size_in_words = size / sizeof(u32);
 	struct mucse_mbx_info *mbx = &hw->mbx;
+	const __le32 *msg_le32 = msg;
 	int err;
 
 	err = mucse_obtain_mbx_lock_pf(hw);
@@ -301,7 +304,8 @@ static int mucse_write_mbx_pf(struct mucse_hw *hw, u32 *msg, u16 size)
 		return err;
 
 	for (int i = 0; i < size_in_words; i++)
-		mbx_data_wr32(mbx, MUCSE_MBX_FWPF_SHM + i * 4, msg[i]);
+		mbx_data_wr32(mbx, MUCSE_MBX_FWPF_SHM + i * 4,
+			      le32_to_cpu(msg_le32[i]));
 
 	/* flush acks as we are overwriting the message buffer */
 	hw->mbx.fw_ack = mucse_mbx_get_fwack(mbx);
@@ -360,7 +364,7 @@ static int mucse_poll_for_ack(struct mucse_hw *hw)
  * Return: 0 if it successfully copied message into the buffer and
  * received an ack to that message within delay * timeout_cnt period
  **/
-int mucse_write_and_wait_ack_mbx(struct mucse_hw *hw, u32 *msg, u16 size)
+int mucse_write_and_wait_ack_mbx(struct mucse_hw *hw, const void *msg, u16 size)
 {
 	int err;
 
