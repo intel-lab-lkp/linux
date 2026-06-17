@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-2.0
+config DRM_VINO
+	tristate "DisplayLink DL3 (Vino) open driver"
+	depends on USB = y
+	depends on DRM
+	depends on RUST
+	select DRM_KMS_HELPER
+	select DRM_GEM_SHMEM_HELPER
+	select RUST_DRM_GEM_SHMEM_HELPER
+	help
+	  Open in-kernel Rust driver for DisplayLink DL3 USB docks (Dell
+	  Universal Dock D6000 and relatives), reverse-engineered in this tree
+	  (see vino-re/docs/00-canonical-guide.md).
+
+	  Phase 0 binds the dock over USB only. USB data transfer, the HDCP 2.2
+	  control plane, mode-set, the Vino codec and the DRM/KMS sink are added
+	  in later phases (see vino-kmod/README.md).
+
+	  To compile this as a module, choose M here: the module is called vino.
+
+	  If unsure, say N.

@@ -363,3 +363,5 @@ endif
 # Separate option because drm_panel_orientation_quirks.c is shared with fbdev
 config DRM_PANEL_ORIENTATION_QUIRKS
 	tristate
+
+source "drivers/gpu/drm/vino/Kconfig"
