@@ -357,6 +357,17 @@ impl<Ctx: device::DeviceContext> Interface<Ctx> {
     fn as_raw(&self) -> *mut bindings::usb_interface {
         self.0.get()
     }
+
+    /// Returns the interface number (`bInterfaceNumber`) of this interface's
+    /// current alternate setting.
+    pub fn number(&self) -> u8 {
+        // SAFETY: `self.as_raw()` is a valid `struct usb_interface` pointer by the
+        // type invariant, and a bound interface always has a `cur_altsetting`.
+        unsafe {
+            let altsetting = (*self.as_raw()).cur_altsetting;
+            (*altsetting).desc.bInterfaceNumber
+        }
+    }
 }
 
 // SAFETY: `usb::Interface` is a transparent wrapper of `struct usb_interface`.
