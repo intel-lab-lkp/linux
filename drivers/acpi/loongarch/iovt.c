@@ -4,6 +4,12 @@
 #include <linux/pci.h>
 #include "init.h"
 
+struct iovt_device_entry {
+	struct list_head list;
+	int start_devid;
+	int end_devid;
+};
+
 struct iovt_fwnode {
 	struct list_head list;
 	struct fwnode_handle *fwnode;
@@ -11,6 +17,7 @@ struct iovt_fwnode {
 	int segment;
 	int devid;
 	int nid;
+	struct list_head ep_list;
 };
 
 /* Root pointer to the mapped IOVT table */
@@ -72,7 +79,10 @@ static int __init iovt_add_iommu(struct acpi_iovt_iommu *iommu)
 {
 	struct iovt_fwnode *np;
 	struct fwnode_handle *fwnode;
-	int ret;
+	struct acpi_iovt_device_entry *ep;
+	struct iovt_device_entry *entry;
+	int i, ret, start_devid;
+	bool is_start = false;
 
 	np = kzalloc_obj(struct iovt_fwnode, GFP_ATOMIC);
 	if (WARN_ON(!np))
@@ -102,6 +112,47 @@ static int __init iovt_add_iommu(struct acpi_iovt_iommu *iommu)
 		np->fwnode = fwnode;
 	}
 
+	if (np->flag & ACPI_IOVT_MAGAGE_BY_SEGMENT)
+		goto skip;
+
+	INIT_LIST_HEAD(&np->ep_list);
+	ep = ACPI_ADD_PTR(struct acpi_iovt_device_entry, iommu, iommu->device_entry_offset);
+	for (i = 0; i < iommu->device_entry_num; i++) {
+		switch (ep->type) {
+		case ACPI_IOVT_DEVICE_ENTRY_START:
+			is_start = true;
+			start_devid = ep->device_id;
+			break;
+		case ACPI_IOVT_DEVICE_ENTRY_END:
+			if (!is_start)
+				break;
+
+			entry = kzalloc_obj(struct iovt_device_entry, GFP_ATOMIC);
+			if (!entry)
+				return -ENOMEM;
+
+			entry->start_devid = start_devid;
+			entry->end_devid = ep->device_id;
+			list_add_tail(&entry->list, &np->ep_list);
+			is_start = false;
+			break;
+		case ACPI_IOVT_DEVICE_ENTRY_SINGLE:
+			entry = kzalloc_obj(struct iovt_device_entry, GFP_ATOMIC);
+			if (!entry)
+				return -ENOMEM;
+
+			entry->start_devid = ep->device_id;
+			entry->end_devid = ep->device_id;
+			list_add_tail(&entry->list, &np->ep_list);
+			is_start = false;
+			break;
+		default:
+			break;
+		}
+		ep = ACPI_ADD_PTR(struct acpi_iovt_device_entry, ep, ep->length);
+	}
+
+skip:
 	spin_lock(&iovt_fwnode_lock);
 	list_add_tail(&np->list, &iovt_fwnode_list);
 	spin_unlock(&iovt_fwnode_lock);
