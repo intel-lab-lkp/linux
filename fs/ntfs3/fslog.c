@@ -648,6 +648,14 @@ static inline void *enum_rstbl(struct RESTART_TABLE *t, void *c)
 }
 
 /*
+ * dp_range_ok - true if [j, j + count) fits in a page_lcns[cap] array.
+ */
+static inline bool dp_range_ok(size_t j, u32 count, u32 cap)
+{
+	return j < cap && count <= cap - j;
+}
+
+/*
  * find_dp - Search for a @vcn in Dirty Page Table.
  */
 static inline struct DIR_PAGE_ENTRY *find_dp(struct RESTART_TABLE *dptbl,
@@ -3801,6 +3809,7 @@ int log_replay(struct ntfs_inode *ni, bool *initialized)
 	u64 t64;
 	u16 t16;
 	u32 t32;
+	size_t j;
 
 	log = kzalloc_obj(struct ntfs_log, GFP_NOFS);
 	if (!log)
@@ -4566,9 +4575,12 @@ copy_lcns:
 		 * whole routine a loop, case Lcns do not fit below.
 		 */
 		t16 = le16_to_cpu(lrh->lcns_follow);
+		j = le64_to_cpu(lrh->target_vcn) - le64_to_cpu(dp->vcn);
+		if (!dp_range_ok(j, t16, le32_to_cpu(dp->lcns_follow))) {
+			err = -EINVAL;
+			goto out;
+		}
 		for (i = 0; i < t16; i++) {
-			size_t j = (size_t)(le64_to_cpu(lrh->target_vcn) -
-					    le64_to_cpu(dp->vcn));
 			dp->page_lcns[j + i] = lrh->page_lcns[i];
 		}
 
@@ -4985,8 +4997,14 @@ find_dirty_page:
 	/* Shorten length by any Lcns which were deleted. */
 	saved_len = dlen;
 
+	j = le64_to_cpu(lrh->target_vcn) - le64_to_cpu(dp->vcn);
+	if (!dp_range_ok(j, le16_to_cpu(lrh->lcns_follow),
+			 le32_to_cpu(dp->lcns_follow))) {
+		err = -EINVAL;
+		goto out;
+	}
+
 	for (i = le16_to_cpu(lrh->lcns_follow); i; i--) {
-		size_t j;
 		u32 alen, voff;
 
 		voff = le16_to_cpu(lrh->record_off) +
@@ -4994,7 +5012,6 @@ find_dirty_page:
 		voff += le16_to_cpu(lrh->cluster_off) << SECTOR_SHIFT;
 
 		/* If the Vcn question is allocated, we can just get out. */
-		j = le64_to_cpu(lrh->target_vcn) - le64_to_cpu(dp->vcn);
 		if (dp->page_lcns[j + i - 1])
 			break;
 
