@@ -156,6 +156,17 @@ hl_mmap_mem_buf_alloc(struct hl_mem_mgr *mmg,
 	if (!buf)
 		return NULL;
 
+	buf->mmg = mmg;
+	buf->behavior = behavior;
+	kref_init(&buf->refcount);
+
+	rc = buf->behavior->alloc(buf, gfp, args);
+	if (rc) {
+		dev_err(mmg->dev, "%s: Failure in buffer alloc callback %d\n",
+			behavior->topic, rc);
+		goto free_buf;
+	}
+
 	spin_lock(&mmg->lock);
 	rc = idr_alloc(&mmg->handles, buf, 1, 0, GFP_ATOMIC);
 	spin_unlock(&mmg->lock);
@@ -163,27 +174,16 @@ hl_mmap_mem_buf_alloc(struct hl_mem_mgr *mmg,
 		dev_err(mmg->dev,
 			"%s: Failed to allocate IDR for a new buffer, rc=%d\n",
 			behavior->topic, rc);
-		goto free_buf;
+		goto destroy_buf;
 	}
 
-	buf->mmg = mmg;
-	buf->behavior = behavior;
 	buf->handle = (((u64)rc | buf->behavior->mem_id) << PAGE_SHIFT);
-	kref_init(&buf->refcount);
-
-	rc = buf->behavior->alloc(buf, gfp, args);
-	if (rc) {
-		dev_err(mmg->dev, "%s: Failure in buffer alloc callback %d\n",
-			behavior->topic, rc);
-		goto remove_idr;
-	}
 
 	return buf;
 
-remove_idr:
-	spin_lock(&mmg->lock);
-	idr_remove(&mmg->handles, lower_32_bits(buf->handle >> PAGE_SHIFT));
-	spin_unlock(&mmg->lock);
+destroy_buf:
+	hl_mmap_mem_buf_destroy(buf);
+	return NULL;
 free_buf:
 	kfree(buf);
 	return NULL;
