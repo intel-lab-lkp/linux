@@ -249,15 +249,26 @@ static void cgrp_refresh_hweight(struct cgroup *cgrp, struct fcg_cgrp_ctx *cgc)
 
 static void cgrp_cap_budget(struct cgv_node *cgv_node, struct fcg_cgrp_ctx *cgc)
 {
-	u64 delta, cvtime, max_budget;
+	s64 delta;
+	u64 cvtime, max_budget;
 
 	/*
 	 * A node which is on the rbtree can't be pointed to from elsewhere yet
 	 * and thus can't be updated and repositioned. Instead, we collect the
 	 * vtime deltas separately and apply it asynchronously here.
 	 */
-	delta = __sync_fetch_and_sub(&cgc->cvtime_delta, cgc->cvtime_delta);
-	cvtime = cgv_node->cvtime + delta;
+	delta = (s64)__sync_fetch_and_sub(&cgc->cvtime_delta, cgc->cvtime_delta);
+	/*
+	 * cvtime_delta may be negative (early-yield refund from fcg_dispatch()).
+	 * Apply it in the signed domain and clamp the resulting cvtime at zero
+	 * so that a refund larger than the accumulated cvtime doesn't roll the
+	 * field negative.
+	 */
+	s64 vtime = (s64)cgv_node->cvtime + delta;
+
+	if (vtime < 0)
+		vtime = 0;
+	cvtime = (u64)vtime;
 
 	/*
 	 * Allow a cgroup to carry the maximum budget proportional to its
@@ -767,11 +778,26 @@ void BPF_STRUCT_OPS(fcg_dispatch, s32 cpu, struct task_struct *prev)
 		 * We want to update the vtime delta and then look for the next
 		 * cgroup to execute but the latter needs to be done in a loop
 		 * and we can't keep the lock held. Oh well...
+		 *
+		 * Charge the overrun or refund the unused time. The original
+		 * (cur_at + slice - now) was inverted: early yields were
+		 * penalized and overruns underflowed. Use (now - (cur_at +
+		 * slice)) so overruns are positive and early yields negative;
+		 * split the magnitude scaling by sign since BPF has no signed
+		 * division.
 		 */
 		bpf_spin_lock(&cgv_tree_lock);
-		__sync_fetch_and_add(&cgc->cvtime_delta,
-				     (cpuc->cur_at + cgrp_slice_ns - now) *
-				     FCG_HWEIGHT_ONE / (cgc->hweight ?: 1));
+		u64 expected_end = cpuc->cur_at + cgrp_slice_ns;
+		s64 excess = (s64)(now - expected_end);
+		s64 delta;
+
+		if (excess > 0)
+			delta = (s64)((u64)excess * FCG_HWEIGHT_ONE /
+				      (cgc->hweight ?: 1));
+		else
+			delta = -(s64)((u64)-excess * FCG_HWEIGHT_ONE /
+				       (cgc->hweight ?: 1));
+		__sync_fetch_and_add(&cgc->cvtime_delta, delta);
 		bpf_spin_unlock(&cgv_tree_lock);
 	} else {
 		stat_inc(FCG_STAT_CNS_GONE);
