@@ -2014,9 +2014,7 @@ mpt_attach(struct pci_dev *pdev, const struct pci_device_id *id)
 
 		destroy_workqueue(ioc->reset_work_q);
 		ioc->reset_work_q = NULL;
-
-		kfree(ioc);
-		return r;
+		goto out_free_ioc;
 	}
 
 	/* call per device driver probe entry point */
