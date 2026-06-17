@@ -1488,7 +1488,7 @@ static int era_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	if (r) {
 		ti->error = "Error opening metadata device";
 		era_destroy(era);
-		return -EINVAL;
+		return r;
 	}
 
 	r = dm_get_device(ti, argv[1], BLK_OPEN_READ | BLK_OPEN_WRITE,
@@ -1496,7 +1496,7 @@ static int era_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	if (r) {
 		ti->error = "Error opening data device";
 		era_destroy(era);
-		return -EINVAL;
+		return r;
 	}
 
 	r = sscanf(argv[2], "%u%c", &era->sectors_per_block, &dummy);
@@ -1510,7 +1510,7 @@ static int era_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	if (r) {
 		ti->error = "could not set max io len";
 		era_destroy(era);
-		return -EINVAL;
+		return r;
 	}
 
 	if (!valid_block_size(era->sectors_per_block)) {
