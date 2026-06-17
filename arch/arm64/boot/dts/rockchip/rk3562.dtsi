@@ -7,6 +7,7 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/phy/phy.h>
+#include <dt-bindings/power/rockchip,rk3562-power.h>
 #include <dt-bindings/pinctrl/rockchip.h>
 #include <dt-bindings/reset/rockchip,rk3562-cru.h>
 #include <dt-bindings/soc/rockchip,boot-mode.h>
@@ -351,7 +352,7 @@
 			num-lanes = <1>;
 			phys = <&combphy PHY_TYPE_PCIE>;
 			phy-names = "pcie-phy";
-			power-domains = <&power 15>;
+			power-domains = <&power RK3562_PD_PHP>;
 			ranges = <0x01000000 0x0 0xfc100000 0x0 0xfc100000 0x0 0x100000
 				  0x02000000 0x0 0xfc200000 0x0 0xfc200000 0x0 0x1e00000
 				  0x03000000 0x3 0x00000000 0x3 0x00000000 0x0 0x40000000>;
@@ -667,48 +668,48 @@
 				#address-cells = <1>;
 				#size-cells = <0>;
 
-				power-domain@8 {
-					reg = <8>;
+				power-domain@RK3562_PD_GPU {
+					reg = <RK3562_PD_GPU>;
 					pm_qos = <&qos_gpu>;
 					#power-domain-cells = <0>;
 				};
 
-				power-domain@7 {
-					reg = <7>;
+				power-domain@RK3562_PD_NPU {
+					reg = <RK3562_PD_NPU>;
 					pm_qos = <&qos_npu>;
 					#power-domain-cells = <0>;
 				};
 
-				power-domain@11 {
-					reg = <11>;
+				power-domain@RK3562_PD_VDPU {
+					reg = <RK3562_PD_VDPU>;
 					pm_qos = <&qos_rkvdec>;
 					#power-domain-cells = <0>;
 				};
 
-				power-domain@12 {
-					reg = <12>;
+				power-domain@RK3562_PD_VI {
+					reg = <RK3562_PD_VI>;
 					pm_qos = <&qos_isp>,
 						 <&qos_vicap>;
 					#power-domain-cells = <1>;
 					#address-cells = <1>;
 					#size-cells = <0>;
 
-					power-domain@10 {
-						reg = <10>;
+					power-domain@RK3562_PD_VEPU {
+						reg = <RK3562_PD_VEPU>;
 						pm_qos = <&qos_vepu>;
 						#power-domain-cells = <0>;
 					};
 				};
 
-				power-domain@13 {
-					reg = <13>;
+				power-domain@RK3562_PD_VO {
+					reg = <RK3562_PD_VO>;
 					pm_qos = <&qos_vop>;
 					#power-domain-cells = <1>;
 					#address-cells = <1>;
 					#size-cells = <0>;
 
-					power-domain@14 {
-						reg = <14>;
+					power-domain@RK3562_PD_RGA {
+						reg = <RK3562_PD_RGA>;
 						pm_qos = <&qos_rga_rd>,
 							 <&qos_rga_wr>,
 							 <&qos_jpeg>;
@@ -716,8 +717,8 @@
 					};
 				};
 
-				power-domain@15 {
-					reg = <15>;
+				power-domain@RK3562_PD_PHP {
+					reg = <RK3562_PD_PHP>;
 					pm_qos = <&qos_pcie>,
 						 <&qos_usb3>;
 					#power-domain-cells = <0>;
@@ -737,7 +738,7 @@
 				     <GIC_SPI 75 IRQ_TYPE_LEVEL_HIGH>;
 			interrupt-names = "job", "mmu", "gpu";
 			operating-points-v2 = <&gpu_opp_table>;
-			power-domains = <&power 8>;
+			power-domains = <&power RK3562_PD_GPU>;
 			#cooling-cells = <2>;
 			status = "disabled";
 		};
@@ -1090,6 +1091,52 @@
 			resets = <&cru SRST_H_SDMMC1>;
 			reset-names = "reset";
 			status = "disabled";
+		};
+
+		otp: efuse@ff930000 {
+			compatible = "rockchip,rk3562-otp";
+			reg = <0x0 0xff930000 0x0 0x4000>;
+			clocks = <&cru CLK_USER_OTPC_NS>, <&cru PCLK_OTPC_NS>,
+				 <&cru PCLK_OTPPHY>, <&cru CLK_SBPI_OTPC_NS>;
+			clock-names = "otp", "apb_pclk", "phy", "sbpi";
+			resets = <&cru SRST_USER_OTPC_NS>, <&cru SRST_P_OTPC_NS>,
+				 <&cru SRST_P_OTPPHY>, <&cru SRST_SBPI_OTPC_NS>;
+			reset-names = "otp", "apb", "phy", "sbpi";
+
+			nvmem-layout {
+				compatible = "fixed-layout";
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				cpu_code: cpu-code@2 {
+					reg = <0x02 0x2>;
+				};
+
+				otp_cpu_version: cpu-version@8 {
+					reg = <0x08 0x1>;
+					bits = <3 3>;
+				};
+
+				otp_id: id@a {
+					reg = <0x0a 0x10>;
+				};
+
+				cpu_leakage: cpu-leakage@1a {
+					reg = <0x1a 0x1>;
+				};
+
+				log_leakage: log-leakage@1b {
+					reg = <0x1b 0x1>;
+				};
+
+				npu_leakage: npu-leakage@1c {
+					reg = <0x1c 0x1>;
+				};
+
+				gpu_leakage: gpu-leakage@1d {
+					reg = <0x1d 0x1>;
+				};
+			};
 		};
 
 		dmac: dma-controller@ff990000 {

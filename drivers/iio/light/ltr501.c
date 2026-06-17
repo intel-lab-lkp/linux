@@ -24,8 +24,6 @@
 #include <linux/iio/buffer.h>
 #include <linux/iio/triggered_buffer.h>
 
-#define LTR501_DRV_NAME "ltr501"
-
 #define LTR501_ALS_CONTR 0x80 /* ALS operation mode, SW reset */
 #define LTR501_PS_CONTR 0x81 /* PS operation mode */
 #define LTR501_PS_MEAS_RATE 0x84 /* measurement rate*/
@@ -64,8 +62,6 @@
 
 #define LTR501_ALS_DEF_PERIOD 500000
 #define LTR501_PS_DEF_PERIOD 100000
-
-#define LTR501_REGMAP_NAME "ltr501_regmap"
 
 #define LTR501_LUX_CONV(vis_coeff, vis_data, ir_coeff, ir_data) \
 			((vis_coeff * vis_data) - (ir_coeff * ir_data))
@@ -758,7 +754,7 @@ static int ltr501_get_gain_index(const struct ltr501_gain *gain, int size,
 		if (val == gain[i].scale && val2 == gain[i].uscale)
 			return i;
 
-	return -1;
+	return -EINVAL;
 }
 
 static int __ltr501_write_raw(struct iio_dev *indio_dev,
@@ -777,7 +773,7 @@ static int __ltr501_write_raw(struct iio_dev *indio_dev,
 						  info->als_gain_tbl_size,
 						  val, val2);
 			if (i < 0)
-				return -EINVAL;
+				return i;
 
 			data->als_contr &= ~info->als_gain_mask;
 			data->als_contr |= i << info->als_gain_shift;
@@ -789,7 +785,7 @@ static int __ltr501_write_raw(struct iio_dev *indio_dev,
 						  info->ps_gain_tbl_size,
 						  val, val2);
 			if (i < 0)
-				return -EINVAL;
+				return i;
 
 			data->ps_contr &= ~LTR501_CONTR_PS_GAIN_MASK;
 			data->ps_contr |= i << LTR501_CONTR_PS_GAIN_SHIFT;
@@ -1283,13 +1279,11 @@ static irqreturn_t ltr501_trigger_handler(int irq, void *p)
 	struct {
 		u16 channels[3];
 		aligned_s64 ts;
-	} scan;
+	} scan = { };
 	__le16 als_buf[2];
 	u8 mask = 0;
 	int j = 0;
 	int ret, psdata;
-
-	memset(&scan, 0, sizeof(scan));
 
 	/* figure out which data needs to be ready */
 	if (test_bit(0, indio_dev->active_scan_mask) ||
@@ -1321,8 +1315,8 @@ static irqreturn_t ltr501_trigger_handler(int irq, void *p)
 		scan.channels[j++] = psdata & LTR501_PS_DATA_MASK;
 	}
 
-	iio_push_to_buffers_with_timestamp(indio_dev, &scan,
-					   iio_get_time_ns(indio_dev));
+	iio_push_to_buffers_with_ts(indio_dev, &scan, sizeof(scan),
+				    iio_get_time_ns(indio_dev));
 
 done:
 	iio_trigger_notify_done(indio_dev->trig);
@@ -1404,11 +1398,11 @@ static bool ltr501_is_volatile_reg(struct device *dev, unsigned int reg)
 }
 
 static const struct regmap_config ltr501_regmap_config = {
-	.name =  LTR501_REGMAP_NAME,
+	.name = "ltr501_regmap",
 	.reg_bits = 8,
 	.val_bits = 8,
 	.max_register = LTR501_MAX_REG,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 	.volatile_reg = ltr501_is_volatile_reg,
 };
 
@@ -1626,7 +1620,7 @@ MODULE_DEVICE_TABLE(of, ltr501_of_match);
 
 static struct i2c_driver ltr501_driver = {
 	.driver = {
-		.name   = LTR501_DRV_NAME,
+		.name   = "ltr501",
 		.of_match_table = ltr501_of_match,
 		.pm	= pm_sleep_ptr(&ltr501_pm_ops),
 		.acpi_match_table = ltr_acpi_match,

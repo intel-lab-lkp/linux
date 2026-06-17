@@ -15,50 +15,51 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/reset.h>
 #include <linux/platform_device.h>
 
 #include "sdhci.h"
 #include "sdhci-pltfm.h"
 
-#define SDHC_MMC_CTRL_REG		0x114
-#define  MISC_INT_EN			BIT(1)
-#define  MISC_INT			BIT(2)
-#define  ENHANCE_STROBE_EN		BIT(8)
-#define  MMC_HS400			BIT(9)
-#define  MMC_HS200			BIT(10)
-#define  MMC_CARD_MODE			BIT(12)
+#define SPACEMIT_SDHC_MMC_CTRL_REG	0x114
+#define  SDHC_MISC_INT_EN		BIT(1)
+#define  SDHC_MISC_INT			BIT(2)
+#define  SDHC_ENHANCE_STROBE_EN		BIT(8)
+#define  SDHC_MMC_HS400			BIT(9)
+#define  SDHC_MMC_HS200			BIT(10)
+#define  SDHC_MMC_CARD_MODE		BIT(12)
 
-#define SDHC_TX_CFG_REG			0x11C
-#define  TX_INT_CLK_SEL			BIT(30)
-#define  TX_MUX_SEL			BIT(31)
+#define SPACEMIT_SDHC_TX_CFG_REG	0x11C
+#define  SDHC_TX_INT_CLK_SEL		BIT(30)
+#define  SDHC_TX_MUX_SEL		BIT(31)
 
-#define SDHC_PHY_CTRL_REG		0x160
-#define  PHY_FUNC_EN			BIT(0)
-#define  PHY_PLL_LOCK			BIT(1)
-#define  HOST_LEGACY_MODE		BIT(31)
+#define SPACEMIT_SDHC_PHY_CTRL_REG	0x160
+#define  SDHC_PHY_FUNC_EN		BIT(0)
+#define  SDHC_PHY_PLL_LOCK		BIT(1)
+#define  SDHC_HOST_LEGACY_MODE		BIT(31)
 
-#define SDHC_PHY_FUNC_REG		0x164
-#define  PHY_TEST_EN			BIT(7)
-#define  HS200_USE_RFIFO		BIT(15)
+#define SPACEMIT_SDHC_PHY_FUNC_REG	0x164
+#define  SDHC_PHY_TEST_EN		BIT(7)
+#define  SDHC_HS200_USE_RFIFO		BIT(15)
 
-#define SDHC_PHY_DLLCFG			0x168
-#define  DLL_PREDLY_NUM			GENMASK(3, 2)
-#define  DLL_FULLDLY_RANGE		GENMASK(5, 4)
-#define  DLL_VREG_CTRL			GENMASK(7, 6)
-#define  DLL_ENABLE			BIT(31)
+#define SPACEMIT_SDHC_PHY_DLLCFG	0x168
+#define  SDHC_DLL_PREDLY_NUM		GENMASK(3, 2)
+#define  SDHC_DLL_FULLDLY_RANGE		GENMASK(5, 4)
+#define  SDHC_DLL_VREG_CTRL		GENMASK(7, 6)
+#define  SDHC_DLL_ENABLE		BIT(31)
 
-#define SDHC_PHY_DLLCFG1		0x16C
-#define  DLL_REG1_CTRL			GENMASK(7, 0)
-#define  DLL_REG2_CTRL			GENMASK(15, 8)
-#define  DLL_REG3_CTRL			GENMASK(23, 16)
-#define  DLL_REG4_CTRL			GENMASK(31, 24)
+#define SPACEMIT_SDHC_PHY_DLLCFG1	0x16C
+#define  SDHC_DLL_REG1_CTRL		GENMASK(7, 0)
+#define  SDHC_DLL_REG2_CTRL		GENMASK(15, 8)
+#define  SDHC_DLL_REG3_CTRL		GENMASK(23, 16)
+#define  SDHC_DLL_REG4_CTRL		GENMASK(31, 24)
 
-#define SDHC_PHY_DLLSTS			0x170
-#define  DLL_LOCK_STATE			BIT(0)
+#define SPACEMIT_SDHC_PHY_DLLSTS	0x170
+#define  SDHC_DLL_LOCK_STATE		BIT(0)
 
-#define SDHC_PHY_PADCFG_REG		0x178
-#define  PHY_DRIVE_SEL			GENMASK(2, 0)
-#define  RX_BIAS_CTRL			BIT(5)
+#define SPACEMIT_SDHC_PHY_PADCFG_REG	0x178
+#define  SDHC_PHY_DRIVE_SEL		GENMASK(2, 0)
+#define  SDHC_RX_BIAS_CTRL		BIT(5)
 
 struct spacemit_sdhci_host {
 	struct clk *clk_core;
@@ -91,23 +92,24 @@ static void spacemit_sdhci_reset(struct sdhci_host *host, u8 mask)
 	if (mask != SDHCI_RESET_ALL)
 		return;
 
-	spacemit_sdhci_setbits(host, PHY_FUNC_EN | PHY_PLL_LOCK, SDHC_PHY_CTRL_REG);
+	spacemit_sdhci_setbits(host, SDHC_PHY_FUNC_EN | SDHC_PHY_PLL_LOCK,
+			       SPACEMIT_SDHC_PHY_CTRL_REG);
 
-	spacemit_sdhci_clrsetbits(host, PHY_DRIVE_SEL,
-				  RX_BIAS_CTRL | FIELD_PREP(PHY_DRIVE_SEL, 4),
-				  SDHC_PHY_PADCFG_REG);
+	spacemit_sdhci_clrsetbits(host, SDHC_PHY_DRIVE_SEL,
+				  SDHC_RX_BIAS_CTRL | FIELD_PREP(SDHC_PHY_DRIVE_SEL, 4),
+				  SPACEMIT_SDHC_PHY_PADCFG_REG);
 
 	if (!(host->mmc->caps2 & MMC_CAP2_NO_MMC))
-		spacemit_sdhci_setbits(host, MMC_CARD_MODE, SDHC_MMC_CTRL_REG);
+		spacemit_sdhci_setbits(host, SDHC_MMC_CARD_MODE, SPACEMIT_SDHC_MMC_CTRL_REG);
 }
 
 static void spacemit_sdhci_set_uhs_signaling(struct sdhci_host *host, unsigned int timing)
 {
 	if (timing == MMC_TIMING_MMC_HS200)
-		spacemit_sdhci_setbits(host, MMC_HS200, SDHC_MMC_CTRL_REG);
+		spacemit_sdhci_setbits(host, SDHC_MMC_HS200, SPACEMIT_SDHC_MMC_CTRL_REG);
 
 	if (timing == MMC_TIMING_MMC_HS400)
-		spacemit_sdhci_setbits(host, MMC_HS400, SDHC_MMC_CTRL_REG);
+		spacemit_sdhci_setbits(host, SDHC_MMC_HS400, SPACEMIT_SDHC_MMC_CTRL_REG);
 
 	sdhci_set_uhs_signaling(host, timing);
 
@@ -120,9 +122,9 @@ static void spacemit_sdhci_set_clock(struct sdhci_host *host, unsigned int clock
 	struct mmc_host *mmc = host->mmc;
 
 	if (mmc->ios.timing <= MMC_TIMING_UHS_SDR50)
-		spacemit_sdhci_setbits(host, TX_INT_CLK_SEL, SDHC_TX_CFG_REG);
+		spacemit_sdhci_setbits(host, SDHC_TX_INT_CLK_SEL, SPACEMIT_SDHC_TX_CFG_REG);
 	else
-		spacemit_sdhci_clrbits(host, TX_INT_CLK_SEL, SDHC_TX_CFG_REG);
+		spacemit_sdhci_clrbits(host, SDHC_TX_INT_CLK_SEL, SPACEMIT_SDHC_TX_CFG_REG);
 
 	sdhci_set_clock(host, clock);
 };
@@ -132,20 +134,22 @@ static void spacemit_sdhci_phy_dll_init(struct sdhci_host *host)
 	u32 state;
 	int ret;
 
-	spacemit_sdhci_clrsetbits(host, DLL_PREDLY_NUM | DLL_FULLDLY_RANGE | DLL_VREG_CTRL,
-				  FIELD_PREP(DLL_PREDLY_NUM, 1) |
-				  FIELD_PREP(DLL_FULLDLY_RANGE, 1) |
-				  FIELD_PREP(DLL_VREG_CTRL, 1),
-				  SDHC_PHY_DLLCFG);
+	spacemit_sdhci_clrsetbits(host, SDHC_DLL_PREDLY_NUM |
+				  SDHC_DLL_FULLDLY_RANGE |
+				  SDHC_DLL_VREG_CTRL,
+				  FIELD_PREP(SDHC_DLL_PREDLY_NUM, 1) |
+				  FIELD_PREP(SDHC_DLL_FULLDLY_RANGE, 1) |
+				  FIELD_PREP(SDHC_DLL_VREG_CTRL, 1),
+				  SPACEMIT_SDHC_PHY_DLLCFG);
 
-	spacemit_sdhci_clrsetbits(host, DLL_REG1_CTRL,
-				  FIELD_PREP(DLL_REG1_CTRL, 0x92),
-				  SDHC_PHY_DLLCFG1);
+	spacemit_sdhci_clrsetbits(host, SDHC_DLL_REG1_CTRL,
+				  FIELD_PREP(SDHC_DLL_REG1_CTRL, 0x92),
+				  SPACEMIT_SDHC_PHY_DLLCFG1);
 
-	spacemit_sdhci_setbits(host, DLL_ENABLE, SDHC_PHY_DLLCFG);
+	spacemit_sdhci_setbits(host, SDHC_DLL_ENABLE, SPACEMIT_SDHC_PHY_DLLCFG);
 
-	ret = readl_poll_timeout(host->ioaddr + SDHC_PHY_DLLSTS, state,
-				 state & DLL_LOCK_STATE, 2, 100);
+	ret = readl_poll_timeout(host->ioaddr + SPACEMIT_SDHC_PHY_DLLSTS, state,
+				 state & SDHC_DLL_LOCK_STATE, 2, 100);
 	if (ret == -ETIMEDOUT)
 		dev_warn(mmc_dev(host->mmc), "fail to lock phy dll in 100us!\n");
 }
@@ -155,11 +159,11 @@ static void spacemit_sdhci_hs400_enhanced_strobe(struct mmc_host *mmc, struct mm
 	struct sdhci_host *host = mmc_priv(mmc);
 
 	if (!ios->enhanced_strobe) {
-		spacemit_sdhci_clrbits(host, ENHANCE_STROBE_EN, SDHC_MMC_CTRL_REG);
+		spacemit_sdhci_clrbits(host, SDHC_ENHANCE_STROBE_EN, SPACEMIT_SDHC_MMC_CTRL_REG);
 		return;
 	}
 
-	spacemit_sdhci_setbits(host, ENHANCE_STROBE_EN, SDHC_MMC_CTRL_REG);
+	spacemit_sdhci_setbits(host, SDHC_ENHANCE_STROBE_EN, SPACEMIT_SDHC_MMC_CTRL_REG);
 	spacemit_sdhci_phy_dll_init(host);
 }
 
@@ -174,8 +178,7 @@ static int spacemit_sdhci_pre_select_hs400(struct mmc_host *mmc)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
 
-	spacemit_sdhci_setbits(host, MMC_HS400, SDHC_MMC_CTRL_REG);
-	host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY;
+	spacemit_sdhci_setbits(host, SDHC_MMC_HS400, SPACEMIT_SDHC_MMC_CTRL_REG);
 
 	return 0;
 }
@@ -185,20 +188,22 @@ static void spacemit_sdhci_post_select_hs400(struct mmc_host *mmc)
 	struct sdhci_host *host = mmc_priv(mmc);
 
 	spacemit_sdhci_phy_dll_init(host);
-	host->mmc->caps &= ~MMC_CAP_WAIT_WHILE_BUSY;
 }
 
 static void spacemit_sdhci_pre_hs400_to_hs200(struct mmc_host *mmc)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
 
-	spacemit_sdhci_clrbits(host, PHY_FUNC_EN | PHY_PLL_LOCK, SDHC_PHY_CTRL_REG);
-	spacemit_sdhci_clrbits(host, MMC_HS400 | MMC_HS200 | ENHANCE_STROBE_EN, SDHC_MMC_CTRL_REG);
-	spacemit_sdhci_clrbits(host, HS200_USE_RFIFO, SDHC_PHY_FUNC_REG);
+	spacemit_sdhci_clrbits(host, SDHC_PHY_FUNC_EN | SDHC_PHY_PLL_LOCK,
+			       SPACEMIT_SDHC_PHY_CTRL_REG);
+	spacemit_sdhci_clrbits(host, SDHC_MMC_HS400 | SDHC_MMC_HS200 | SDHC_ENHANCE_STROBE_EN,
+			       SPACEMIT_SDHC_MMC_CTRL_REG);
+	spacemit_sdhci_clrbits(host, SDHC_HS200_USE_RFIFO, SPACEMIT_SDHC_PHY_FUNC_REG);
 
 	udelay(5);
 
-	spacemit_sdhci_setbits(host, PHY_FUNC_EN | PHY_PLL_LOCK, SDHC_PHY_CTRL_REG);
+	spacemit_sdhci_setbits(host, SDHC_PHY_FUNC_EN | SDHC_PHY_PLL_LOCK,
+			       SPACEMIT_SDHC_PHY_CTRL_REG);
 }
 
 static inline int spacemit_sdhci_get_clocks(struct device *dev,
@@ -215,6 +220,21 @@ static inline int spacemit_sdhci_get_clocks(struct device *dev,
 		return -EINVAL;
 
 	pltfm_host->clk = sdhst->clk_io;
+
+	return 0;
+}
+
+static inline int spacemit_sdhci_get_resets(struct device *dev)
+{
+	struct reset_control *rst;
+
+	rst = devm_reset_control_get_optional_shared_deasserted(dev, "axi");
+	if (IS_ERR(rst))
+		return PTR_ERR(rst);
+
+	rst = devm_reset_control_get_optional_exclusive_deasserted(dev, "sdh");
+	if (IS_ERR(rst))
+		return PTR_ERR(rst);
 
 	return 0;
 }
@@ -239,8 +259,20 @@ static const struct sdhci_pltfm_data spacemit_sdhci_k1_pdata = {
 		   SDHCI_QUIRK2_PRESET_VALUE_BROKEN,
 };
 
+static const struct sdhci_pltfm_data spacemit_sdhci_k3_pdata = {
+	.ops = &spacemit_sdhci_ops,
+	.quirks = SDHCI_QUIRK_DATA_TIMEOUT_USES_SDCLK |
+		  SDHCI_QUIRK_NO_ENDATTR_IN_NOPDESC |
+		  SDHCI_QUIRK_32BIT_ADMA_SIZE |
+		  SDHCI_QUIRK_CAP_CLOCK_BASE_BROKEN |
+		  SDHCI_QUIRK_BROKEN_CARD_DETECTION |
+		  SDHCI_QUIRK_BROKEN_TIMEOUT_VAL,
+	.quirks2 = SDHCI_QUIRK2_PRESET_VALUE_BROKEN,
+};
+
 static const struct of_device_id spacemit_sdhci_of_match[] = {
-	{ .compatible = "spacemit,k1-sdhci" },
+	{ .compatible = "spacemit,k1-sdhci", .data = &spacemit_sdhci_k1_pdata },
+	{ .compatible = "spacemit,k3-sdhci", .data = &spacemit_sdhci_k3_pdata },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, spacemit_sdhci_of_match);
@@ -251,10 +283,13 @@ static int spacemit_sdhci_probe(struct platform_device *pdev)
 	struct spacemit_sdhci_host *sdhst;
 	struct sdhci_pltfm_host *pltfm_host;
 	struct sdhci_host *host;
+	const struct sdhci_pltfm_data *data;
 	struct mmc_host_ops *mops;
 	int ret;
 
-	host = sdhci_pltfm_init(pdev, &spacemit_sdhci_k1_pdata, sizeof(*sdhst));
+	data = of_device_get_match_data(&pdev->dev);
+
+	host = sdhci_pltfm_init(pdev, data, sizeof(*sdhst));
 	if (IS_ERR(host))
 		return PTR_ERR(host);
 
@@ -280,6 +315,10 @@ static int spacemit_sdhci_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_pltfm;
 
+	ret = spacemit_sdhci_get_resets(dev);
+	if (ret)
+		goto err_pltfm;
+
 	ret = sdhci_add_host(host);
 	if (ret)
 		goto err_pltfm;
@@ -287,7 +326,6 @@ static int spacemit_sdhci_probe(struct platform_device *pdev)
 	return 0;
 
 err_pltfm:
-	sdhci_pltfm_free(pdev);
 	return ret;
 }
 

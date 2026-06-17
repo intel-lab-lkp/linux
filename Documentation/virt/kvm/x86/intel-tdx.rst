@@ -79,7 +79,20 @@ to be configured to the TDX guest.
   struct kvm_tdx_capabilities {
         __u64 supported_attrs;
         __u64 supported_xfam;
-        __u64 reserved[254];
+
+        /* TDG.VP.VMCALL hypercalls executed in kernel and forwarded to
+         * userspace, respectively
+         */
+        __u64 kernel_tdvmcallinfo_1_r11;
+        __u64 user_tdvmcallinfo_1_r11;
+
+        /* TDG.VP.VMCALL instruction executions subfunctions executed in kernel
+         * and forwarded to userspace, respectively
+         */
+        __u64 kernel_tdvmcallinfo_1_r12;
+        __u64 user_tdvmcallinfo_1_r12;
+
+        __u64 reserved[250];
 
         /* Configurable CPUID bits for userspace */
         struct kvm_cpuid2 cpuid;
@@ -143,7 +156,7 @@ KVM_TDX_INIT_MEM_REGION
 :Returns: 0 on success, <0 on error
 
 Initialize @nr_pages TDX guest private memory starting from @gpa with userspace
-provided data from @source_addr.
+provided data from @source_addr. @source_addr must be PAGE_SIZE-aligned.
 
 Note, before calling this sub command, memory attribute of the range
 [gpa, gpa + nr_pages] needs to be private.  Userspace can use

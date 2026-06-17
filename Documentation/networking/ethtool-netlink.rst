@@ -96,7 +96,7 @@ For short bitmaps of (reasonably) fixed length, standard ``NLA_BITFIELD32``
 type is used. For arbitrary length bitmaps, ethtool netlink uses a nested
 attribute with contents of one of two forms: compact (two binary bitmaps
 representing bit values and mask of affected bits) and bit-by-bit (list of
-bits identified by either index or name).
+bits identified by index or name).
 
 Verbose (bit-by-bit) bitsets allow sending symbolic names for bits together
 with their values which saves a round trip (when the bitset is passed in a
@@ -156,12 +156,16 @@ Bit-by-bit form: nested (bitset) attribute contents:
  | | | ``ETHTOOL_A_BITSET_BIT_VALUE`` | flag   | present if bit is set       |
  +-+-+--------------------------------+--------+-----------------------------+
 
-Bit size is optional for bit-by-bit form. ``ETHTOOL_A_BITSET_BITS`` nest can
+For bit-by-bit form, ``ETHTOOL_A_BITSET_SIZE`` is optional, and
+``ETHTOOL_A_BITSET_BITS`` is mandatory. ``ETHTOOL_A_BITSET_BITS`` nest can
 only contain ``ETHTOOL_A_BITSET_BITS_BIT`` attributes but there can be an
 arbitrary number of them.  A bit may be identified by its index or by its
 name. When used in requests, listed bits are set to 0 or 1 according to
-``ETHTOOL_A_BITSET_BIT_VALUE``, the rest is preserved. A request fails if
-index exceeds kernel bit length or if name is not recognized.
+``ETHTOOL_A_BITSET_BIT_VALUE``, the rest is preserved.
+
+A request fails if index exceeds kernel bit length or if name is not
+recognized. If both name and index are set, the request will fail if they
+point to different bits.
 
 When ``ETHTOOL_A_BITSET_NOMASK`` flag is present, bitset is interpreted as
 a simple bitmap. ``ETHTOOL_A_BITSET_BIT_VALUE`` attributes are not used in
@@ -239,6 +243,10 @@ Userspace to kernel:
   ``ETHTOOL_MSG_PHY_GET``               get Ethernet PHY information
   ``ETHTOOL_MSG_TSCONFIG_GET``          get hw timestamping configuration
   ``ETHTOOL_MSG_TSCONFIG_SET``          set hw timestamping configuration
+  ``ETHTOOL_MSG_RSS_SET``               set RSS settings
+  ``ETHTOOL_MSG_RSS_CREATE_ACT``        create an additional RSS context
+  ``ETHTOOL_MSG_RSS_DELETE_ACT``        delete an additional RSS context
+  ``ETHTOOL_MSG_MSE_GET``               get MSE diagnostic data
   ===================================== =================================
 
 Kernel to userspace:
@@ -292,6 +300,11 @@ Kernel to userspace:
   ``ETHTOOL_MSG_TSCONFIG_GET_REPLY``       hw timestamping configuration
   ``ETHTOOL_MSG_TSCONFIG_SET_REPLY``       new hw timestamping configuration
   ``ETHTOOL_MSG_PSE_NTF``                  PSE events notification
+  ``ETHTOOL_MSG_RSS_NTF``                  RSS settings notification
+  ``ETHTOOL_MSG_RSS_CREATE_ACT_REPLY``     create an additional RSS context
+  ``ETHTOOL_MSG_RSS_CREATE_NTF``           additional RSS context created
+  ``ETHTOOL_MSG_RSS_DELETE_NTF``           additional RSS context deleted
+  ``ETHTOOL_MSG_MSE_GET_REPLY``            MSE diagnostic data
   ======================================== =================================
 
 ``GET`` requests are sent by userspace applications to retrieve device
@@ -1063,6 +1076,8 @@ Kernel response contents:
   ``ETHTOOL_A_COALESCE_TX_AGGR_TIME_USECS``    u32     time (us), aggr, Tx
   ``ETHTOOL_A_COALESCE_RX_PROFILE``            nested  profile of DIM, Rx
   ``ETHTOOL_A_COALESCE_TX_PROFILE``            nested  profile of DIM, Tx
+  ``ETHTOOL_A_COALESCE_RX_CQE_FRAMES``         u32     max packets, Rx CQE
+  ``ETHTOOL_A_COALESCE_RX_CQE_NSECS``          u32     delay (ns), Rx CQE
   ===========================================  ======  =======================
 
 Attributes are only included in reply if their value is not zero or the
@@ -1095,6 +1110,13 @@ well with frequent small-sized URBs transmissions.
 ``ETHTOOL_A_COALESCE_RX_PROFILE`` and ``ETHTOOL_A_COALESCE_TX_PROFILE`` refer
 to DIM parameters, see `Generic Network Dynamic Interrupt Moderation (Net DIM)
 <https://www.kernel.org/doc/Documentation/networking/net_dim.rst>`_.
+
+Rx CQE coalescing allows multiple received packets to be coalesced into a
+single Completion Queue Entry (CQE) or descriptor writeback.
+``ETHTOOL_A_COALESCE_RX_CQE_FRAMES`` describes the maximum number of
+frames that can be coalesced into a CQE or writeback.
+``ETHTOOL_A_COALESCE_RX_CQE_NSECS`` describes max time in nanoseconds after
+the first packet arrival in a coalesced CQE or writeback to be sent.
 
 COALESCE_SET
 ============
@@ -1134,6 +1156,8 @@ Request contents:
   ``ETHTOOL_A_COALESCE_TX_AGGR_TIME_USECS``    u32     time (us), aggr, Tx
   ``ETHTOOL_A_COALESCE_RX_PROFILE``            nested  profile of DIM, Rx
   ``ETHTOOL_A_COALESCE_TX_PROFILE``            nested  profile of DIM, Tx
+  ``ETHTOOL_A_COALESCE_RX_CQE_FRAMES``         u32     max packets, Rx CQE
+  ``ETHTOOL_A_COALESCE_RX_CQE_NSECS``          u32     delay (ns), Rx CQE
   ===========================================  ======  =======================
 
 Request is rejected if it attributes declared as unsupported by driver (i.e.
@@ -1533,6 +1557,11 @@ Drivers fill in the statistics in the following structure:
 
 .. kernel-doc:: include/linux/ethtool.h
     :identifiers: ethtool_fec_stats
+
+Statistics may have FEC bins histogram attribute ``ETHTOOL_A_FEC_STAT_HIST``
+as defined in IEEE 802.3ck-2022 and 802.3df-2024. Nested attributes will have
+the range of FEC errors in the bin (inclusive) and the amount of error events
+in the bin.
 
 FEC_SET
 =======
@@ -1969,14 +1998,15 @@ used to ignore context 0s and only dump additional contexts).
 
 Kernel response contents:
 
-=====================================  ======  ==========================
+=====================================  ======  ===============================
   ``ETHTOOL_A_RSS_HEADER``             nested  reply header
   ``ETHTOOL_A_RSS_CONTEXT``            u32     context number
   ``ETHTOOL_A_RSS_HFUNC``              u32     RSS hash func
   ``ETHTOOL_A_RSS_INDIR``              binary  Indir table bytes
   ``ETHTOOL_A_RSS_HKEY``               binary  Hash key bytes
   ``ETHTOOL_A_RSS_INPUT_XFRM``         u32     RSS input data transformation
-=====================================  ======  ==========================
+  ``ETHTOOL_A_RSS_FLOW_HASH``          nested  Header fields included in hash
+=====================================  ======  ===============================
 
 ETHTOOL_A_RSS_HFUNC attribute is bitmap indicating the hash function
 being used. Current supported options are toeplitz, xor or crc32.
@@ -1985,6 +2015,67 @@ indicates queue number.
 ETHTOOL_A_RSS_INPUT_XFRM attribute is a bitmap indicating the type of
 transformation applied to the input protocol fields before given to the RSS
 hfunc. Current supported options are symmetric-xor and symmetric-or-xor.
+ETHTOOL_A_RSS_FLOW_HASH carries per-flow type bitmask of which header
+fields are included in the hash calculation.
+
+RSS_SET
+=======
+
+Request contents:
+
+=====================================  ======  ==============================
+  ``ETHTOOL_A_RSS_HEADER``             nested  request header
+  ``ETHTOOL_A_RSS_CONTEXT``            u32     context number
+  ``ETHTOOL_A_RSS_HFUNC``              u32     RSS hash func
+  ``ETHTOOL_A_RSS_INDIR``              binary  Indir table bytes
+  ``ETHTOOL_A_RSS_HKEY``               binary  Hash key bytes
+  ``ETHTOOL_A_RSS_INPUT_XFRM``         u32     RSS input data transformation
+  ``ETHTOOL_A_RSS_FLOW_HASH``          nested  Header fields included in hash
+=====================================  ======  ==============================
+
+``ETHTOOL_A_RSS_INDIR`` is the minimal RSS table the user expects. Kernel and
+the device driver may replicate the table if its smaller than smallest table
+size supported by the device. For example if user requests ``[0, 1]`` but the
+device needs at least 8 entries - the real table in use will end up being
+``[0, 1, 0, 1, 0, 1, 0, 1]``. Most devices require the table size to be power
+of 2, so tables which size is not a power of 2 will likely be rejected.
+Using table of size 0 will reset the indirection table to the default.
+
+RSS_CREATE_ACT
+==============
+
+Request contents:
+
+=====================================  ======  ==============================
+  ``ETHTOOL_A_RSS_HEADER``             nested  request header
+  ``ETHTOOL_A_RSS_CONTEXT``            u32     context number
+  ``ETHTOOL_A_RSS_HFUNC``              u32     RSS hash func
+  ``ETHTOOL_A_RSS_INDIR``              binary  Indir table bytes
+  ``ETHTOOL_A_RSS_HKEY``               binary  Hash key bytes
+  ``ETHTOOL_A_RSS_INPUT_XFRM``         u32     RSS input data transformation
+=====================================  ======  ==============================
+
+Kernel response contents:
+
+=====================================  ======  ==============================
+  ``ETHTOOL_A_RSS_HEADER``             nested  request header
+  ``ETHTOOL_A_RSS_CONTEXT``            u32     context number
+=====================================  ======  ==============================
+
+Create an additional RSS context, if ``ETHTOOL_A_RSS_CONTEXT`` is not
+specified kernel will allocate one automatically.
+
+RSS_DELETE_ACT
+==============
+
+Request contents:
+
+=====================================  ======  ==============================
+  ``ETHTOOL_A_RSS_HEADER``             nested  request header
+  ``ETHTOOL_A_RSS_CONTEXT``            u32     context number
+=====================================  ======  ==============================
+
+Delete an additional RSS context.
 
 PLCA_GET_CFG
 ============
@@ -2384,6 +2475,68 @@ Kernel response contents:
 
 For a description of each attribute, see ``TSCONFIG_GET``.
 
+MSE_GET
+=======
+
+Retrieves detailed Mean Square Error (MSE) diagnostic information from the PHY.
+
+Request Contents:
+
+  ====================================  ======  ============================
+  ``ETHTOOL_A_MSE_HEADER``              nested  request header
+  ====================================  ======  ============================
+
+Kernel Response Contents:
+
+  ====================================  ======  ================================
+  ``ETHTOOL_A_MSE_HEADER``              nested  reply header
+  ``ETHTOOL_A_MSE_CAPABILITIES``        nested  capability/scale info for MSE
+                                                measurements
+  ``ETHTOOL_A_MSE_CHANNEL_A``           nested  snapshot for Channel A
+  ``ETHTOOL_A_MSE_CHANNEL_B``           nested  snapshot for Channel B
+  ``ETHTOOL_A_MSE_CHANNEL_C``           nested  snapshot for Channel C
+  ``ETHTOOL_A_MSE_CHANNEL_D``           nested  snapshot for Channel D
+  ``ETHTOOL_A_MSE_WORST_CHANNEL``       nested  snapshot for worst channel
+  ``ETHTOOL_A_MSE_LINK``                nested  snapshot for link-wide aggregate
+  ====================================  ======  ================================
+
+MSE Capabilities
+----------------
+
+This nested attribute reports the capability / scaling properties used to
+interpret snapshot values.
+
+  ============================================== ======  =========================
+  ``ETHTOOL_A_MSE_CAPABILITIES_MAX_AVERAGE_MSE`` uint    max avg_mse scale
+  ``ETHTOOL_A_MSE_CAPABILITIES_MAX_PEAK_MSE``    uint    max peak_mse scale
+  ``ETHTOOL_A_MSE_CAPABILITIES_REFRESH_RATE_PS`` uint    sample rate (picoseconds)
+  ``ETHTOOL_A_MSE_CAPABILITIES_NUM_SYMBOLS``     uint    symbols per HW sample
+  ============================================== ======  =========================
+
+The max-average/peak fields are included only if the corresponding metric
+is supported by the PHY. Their absence indicates that the metric is not
+available.
+
+See ``struct phy_mse_capability`` kernel documentation in
+``include/linux/phy.h``.
+
+MSE Snapshot
+------------
+
+Each per-channel nest contains an atomic snapshot of MSE values for that
+selector (channel A/B/C/D, worst channel, or link).
+
+  ==========================================  ======  ===================
+  ``ETHTOOL_A_MSE_SNAPSHOT_AVERAGE_MSE``      uint    average MSE value
+  ``ETHTOOL_A_MSE_SNAPSHOT_PEAK_MSE``         uint    current peak MSE
+  ``ETHTOOL_A_MSE_SNAPSHOT_WORST_PEAK_MSE``   uint    worst-case peak MSE
+  ==========================================  ======  ===================
+
+Within each channel nest, only the metrics supported by the PHY will be present.
+
+See ``struct phy_mse_snapshot`` kernel documentation in
+``include/linux/phy.h``.
+
 Request translation
 ===================
 
@@ -2436,8 +2589,8 @@ are netlink only.
   ``ETHTOOL_SFLAGS``                  ``ETHTOOL_MSG_FEATURES_SET``
   ``ETHTOOL_GPFLAGS``                 ``ETHTOOL_MSG_PRIVFLAGS_GET``
   ``ETHTOOL_SPFLAGS``                 ``ETHTOOL_MSG_PRIVFLAGS_SET``
-  ``ETHTOOL_GRXFH``                   n/a
-  ``ETHTOOL_SRXFH``                   n/a
+  ``ETHTOOL_GRXFH``                   ``ETHTOOL_MSG_RSS_GET``
+  ``ETHTOOL_SRXFH``                   ``ETHTOOL_MSG_RSS_SET``
   ``ETHTOOL_GGRO``                    ``ETHTOOL_MSG_FEATURES_GET``
   ``ETHTOOL_SGRO``                    ``ETHTOOL_MSG_FEATURES_SET``
   ``ETHTOOL_GRXRINGS``                n/a
@@ -2452,7 +2605,7 @@ are netlink only.
   ``ETHTOOL_GRXNTUPLE``               n/a
   ``ETHTOOL_GSSET_INFO``              ``ETHTOOL_MSG_STRSET_GET``
   ``ETHTOOL_GRXFHINDIR``              ``ETHTOOL_MSG_RSS_GET``
-  ``ETHTOOL_SRXFHINDIR``              n/a
+  ``ETHTOOL_SRXFHINDIR``              ``ETHTOOL_MSG_RSS_SET``
   ``ETHTOOL_GFEATURES``               ``ETHTOOL_MSG_FEATURES_GET``
   ``ETHTOOL_SFEATURES``               ``ETHTOOL_MSG_FEATURES_SET``
   ``ETHTOOL_GCHANNELS``               ``ETHTOOL_MSG_CHANNELS_GET``
