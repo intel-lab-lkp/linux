@@ -734,7 +734,7 @@ static struct kobject *test_ww_mutex_kobj;
 
 static int __init test_ww_mutex_init(void)
 {
-	int ret;
+	int ret = -ENOMEM;
 
 	prandom_seed_state(&rng, get_random_u64());
 
@@ -743,28 +743,35 @@ static int __init test_ww_mutex_init(void)
 		return -ENOMEM;
 
 	test_ww_mutex_kobj = kobject_create_and_add("test_ww_mutex", kernel_kobj);
-	if (!test_ww_mutex_kobj) {
-		destroy_workqueue(wq);
-		return -ENOMEM;
-	}
+	if (!test_ww_mutex_kobj)
+		goto kobj_err;
 
 	/* Create the files associated with this kobject */
 	ret = sysfs_create_group(test_ww_mutex_kobj, &attr_group);
-	if (ret) {
-		kobject_put(test_ww_mutex_kobj);
-		destroy_workqueue(wq);
-		return ret;
-	}
+	if (ret)
+		goto sysfs_err;
 
 	mutex_lock(&run_lock);
 	ret = run_test_classes();
 	mutex_unlock(&run_lock);
+
+	if (!ret)
+		return 0;
+
+	sysfs_remove_group(test_ww_mutex_kobj, &attr_group);
+
+sysfs_err:
+	kobject_put(test_ww_mutex_kobj);
+
+kobj_err:
+	destroy_workqueue(wq);
 
 	return ret;
 }
 
 static void __exit test_ww_mutex_exit(void)
 {
+	sysfs_remove_group(test_ww_mutex_kobj, &attr_group);
 	kobject_put(test_ww_mutex_kobj);
 	destroy_workqueue(wq);
 }
