@@ -305,6 +305,11 @@ properties:
 
       - items:
           - enum:
+              - qcom,hawi-mtp
+          - const: qcom,hawi
+
+      - items:
+          - enum:
               - 8dev,jalapeno
               - alfa-network,ap120c-ac
           - const: qcom,ipq4018
