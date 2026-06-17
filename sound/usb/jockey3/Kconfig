@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config SND_USB_JOCKEY3
+	tristate "Reloop Jockey 3 support"
+	default m
+	depends on SND_USB && USB
+	select SND_PCM
+	select SND_RAWMIDI
+	help
+	  Say Y here to include support for the Reloop Jockey 3 DJ controllers.
+          These devices utilize a non-standard, proprietary Ploytec USB
+          protocol.
+
+	  Supported devices:
+
+            * Reloop Jockey 3 Master Edition
+            * Reloop Jockey 3 Remix
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called snd-reloop-jockey3.
