@@ -3380,8 +3380,6 @@ static int amdgpu_device_ip_resume(struct amdgpu_device *adev)
 
 	r = amdgpu_device_ip_resume_phase2(adev);
 
-	amdgpu_ttm_enable_buffer_funcs(adev);
-
 	if (r)
 		return r;
 
@@ -4504,8 +4502,6 @@ int amdgpu_device_suspend(struct drm_device *dev, bool notify_clients)
 	if (r)
 		goto unwind_userq;
 
-	amdgpu_ttm_disable_buffer_funcs(adev);
-
 	amdgpu_fence_driver_hw_fini(adev);
 
 	r = amdgpu_device_ip_suspend_phase2(adev);
@@ -4518,7 +4514,6 @@ int amdgpu_device_suspend(struct drm_device *dev, bool notify_clients)
 	return 0;
 
 unwind_evict:
-	amdgpu_ttm_enable_buffer_funcs(adev);
 	amdgpu_fence_driver_hw_init(adev);
 
 unwind_userq:
