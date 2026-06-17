@@ -116,7 +116,7 @@ static void fast_req_dump(struct xe_guc_ct *ct, u16 fence, unsigned int slot)
 {
 	struct xe_gt *gt = ct_to_gt(ct);
 #if IS_ENABLED(CONFIG_DRM_XE_DEBUG_GUC)
-	char *buf __cleanup(kfree) = kmalloc(SZ_4K, GFP_NOWAIT);
+	char *buf __free(kfree) = kmalloc(SZ_4K, GFP_NOWAIT);
 
 	if (buf && stack_depot_snprint(ct->fast_req[slot].stack, buf, SZ_4K, 0))
 		xe_gt_err(gt, "Fence 0x%x was used by action %#04x sent at:\n%s\n",
