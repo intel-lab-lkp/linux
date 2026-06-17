@@ -392,6 +392,21 @@ static const struct dmi_system_id gpiolib_acpi_quirks[] __initconst = {
 			.ignore_wake = "VEN_0488:00@355",
 		},
 	},
+	{
+		/*
+		 * ASUS ROG Strix G16 G614 series laptops experience a long boot
+		 * delay (approx. 36 seconds) because the touchpad's ActiveBoth
+		 * GPIO interrupt handler (TP_ATTN#) stalls/hangs during boot
+		 * initialization.
+		 */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "ROG Strix G16 G614"),
+		},
+		.driver_data = &(struct acpi_gpiolib_dmi_quirk) {
+			.no_edge_events_on_boot = true,
+		},
+	},
 	{} /* Terminating entry */
 };
 
