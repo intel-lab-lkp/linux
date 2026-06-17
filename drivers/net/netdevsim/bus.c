@@ -155,6 +155,8 @@ static const struct device_type nsim_bus_dev_type = {
 static struct nsim_bus_dev *
 nsim_bus_dev_new(unsigned int id, unsigned int port_count, unsigned int num_queues);
 
+static void nsim_bus_dev_del(struct nsim_bus_dev *nsim_bus_dev);
+
 static ssize_t
 new_device_store(const struct bus_type *bus, const char *buf, size_t count)
 {
@@ -182,7 +184,6 @@ new_device_store(const struct bus_type *bus, const char *buf, size_t count)
 	}
 
 	mutex_lock(&nsim_bus_dev_list_lock);
-	/* Prevent to use resource before initialization. */
 	if (!smp_load_acquire(&nsim_bus_enable)) {
 		err = -EBUSY;
 		goto err;
@@ -195,12 +196,9 @@ new_device_store(const struct bus_type *bus, const char *buf, size_t count)
 	}
 
 	refcount_inc(&nsim_bus_devs);
-	/* Allow using nsim_bus_dev */
 	smp_store_release(&nsim_bus_dev->init, true);
-
 	list_add_tail(&nsim_bus_dev->list, &nsim_bus_dev_list);
 	mutex_unlock(&nsim_bus_dev_list_lock);
-
 	return count;
 err:
 	mutex_unlock(&nsim_bus_dev_list_lock);
@@ -208,7 +206,6 @@ err:
 }
 static BUS_ATTR_WO(new_device);
 
-static void nsim_bus_dev_del(struct nsim_bus_dev *nsim_bus_dev);
 
 static ssize_t
 del_device_store(const struct bus_type *bus, const char *buf, size_t count)
@@ -241,11 +238,12 @@ del_device_store(const struct bus_type *bus, const char *buf, size_t count)
 		if (nsim_bus_dev->dev.id != id)
 			continue;
 		list_del(&nsim_bus_dev->list);
-		nsim_bus_dev_del(nsim_bus_dev);
 		err = 0;
 		break;
 	}
 	mutex_unlock(&nsim_bus_dev_list_lock);
+	if (!err)
+		nsim_bus_dev_del(nsim_bus_dev);
 	return !err ? count : err;
 }
 static BUS_ATTR_WO(del_device);
@@ -520,6 +518,7 @@ err_bus_unregister:
 void nsim_bus_exit(void)
 {
 	struct nsim_bus_dev *nsim_bus_dev, *tmp;
+	LIST_HEAD(delete_list);
 
 	/* Disallow using resources */
 	smp_store_release(&nsim_bus_enable, false);
@@ -527,11 +526,10 @@ void nsim_bus_exit(void)
 		complete(&nsim_bus_devs_released);
 
 	mutex_lock(&nsim_bus_dev_list_lock);
-	list_for_each_entry_safe(nsim_bus_dev, tmp, &nsim_bus_dev_list, list) {
-		list_del(&nsim_bus_dev->list);
-		nsim_bus_dev_del(nsim_bus_dev);
-	}
+	list_splice_init(&nsim_bus_dev_list, &delete_list);
 	mutex_unlock(&nsim_bus_dev_list_lock);
+	list_for_each_entry_safe(nsim_bus_dev, tmp, &delete_list, list)
+		nsim_bus_dev_del(nsim_bus_dev);
 
 	wait_for_completion(&nsim_bus_devs_released);
 
