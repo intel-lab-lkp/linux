@@ -6,6 +6,7 @@
  * parts of early kernel initialization.
  */
 #include <linux/acpi.h>
+#include <linux/bootconfig.h>
 #include <linux/console.h>
 #include <linux/cpu.h>
 #include <linux/crash_dump.h>
@@ -36,6 +37,7 @@
 #include <asm/bios_ebda.h>
 #include <asm/bugs.h>
 #include <asm/cacheinfo.h>
+#include <asm/cmdline.h>
 #include <asm/coco.h>
 #include <asm/cpu.h>
 #include <asm/efi.h>
@@ -923,6 +925,31 @@ void __init setup_arch(char **cmdline_p)
 #endif
 	builtin_cmdline_added = true;
 #endif
+
+	/*
+	 * Match the runtime bootconfig parser's opt-in: only fold the
+	 * embedded kernel.* keys into the cmdline when "bootconfig" is
+	 * present on the command line, or CONFIG_BOOT_CONFIG_FORCE is set.
+	 * setup_boot_config()'s parse_args() loop treats any presence of
+	 * the "bootconfig" key as opt-in (bare, =0, =1, ...), so check both
+	 * forms here: cmdline_find_option_bool() matches the bare key,
+	 * cmdline_find_option() matches "bootconfig=<anything>". Without
+	 * the second check, "bootconfig=0" would skip the early prepend
+	 * but still trigger the late runtime apply -- a split-brain state.
+	 * CONFIG_BOOT_CONFIG_FORCE defaults to y when BOOT_CONFIG_EMBED is
+	 * set, so on the default config the embedded keys are applied
+	 * unconditionally.
+	 */
+	{
+		char buf[8];
+
+		if (IS_ENABLED(CONFIG_BOOT_CONFIG_FORCE) ||
+		    cmdline_find_option_bool(boot_command_line, "bootconfig") ||
+		    cmdline_find_option(boot_command_line, "bootconfig",
+					buf, sizeof(buf)) >= 0)
+			xbc_prepend_embedded_cmdline(boot_command_line,
+						     COMMAND_LINE_SIZE);
+	}
 
 	strscpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
 	*cmdline_p = command_line;
