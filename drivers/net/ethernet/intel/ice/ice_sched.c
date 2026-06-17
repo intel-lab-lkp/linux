@@ -895,7 +895,8 @@ void ice_sched_cleanup_all(struct ice_hw *hw)
  * @layer: layer number to add nodes
  * @num_nodes: number of nodes
  * @num_nodes_added: pointer to num nodes added
- * @first_node_teid: if new nodes are added then return the TEID of first node
+ * @first_node_teid: if new nodes are added then return the TEID of first node,
+ *                   may be NULL
  * @prealloc_nodes: preallocated nodes struct for software DB
  *
  * This function add nodes to HW as well as to SW DB for a given layer
@@ -1000,7 +1001,7 @@ ice_sched_add_elems(struct ice_port_info *pi, struct ice_sched_node *tc_node,
 		if (!pi->sib_head[tc_node->tc_num][layer])
 			pi->sib_head[tc_node->tc_num][layer] = new_node;
 
-		if (i == 0)
+		if (first_node_teid && i == 0)
 			*first_node_teid = teid;
 	}
 
@@ -1015,7 +1016,7 @@ ice_sched_add_elems(struct ice_port_info *pi, struct ice_sched_node *tc_node,
  * @parent: pointer to parent node
  * @layer: layer number to add nodes
  * @num_nodes: number of nodes to be added
- * @first_node_teid: pointer to the first node TEID
+ * @first_node_teid: pointer to the first node TEID, may be NULL
  * @num_nodes_added: pointer to number of nodes added
  *
  * Add nodes into specific HW layer.
@@ -1078,7 +1079,6 @@ ice_sched_add_nodes_to_layer(struct ice_port_info *pi,
 	*num_nodes_added = 0;
 	while (*num_nodes_added < num_nodes) {
 		u16 max_child_nodes, num_added = 0;
-		u32 temp;
 
 		status = ice_sched_add_nodes_to_hw_layer(pi, tc_node, parent,
 							 layer,	new_num_nodes,
@@ -1109,13 +1109,11 @@ ice_sched_add_nodes_to_layer(struct ice_port_info *pi,
 			 * try the next available sibling.
 			 */
 			parent = ice_sched_find_next_vsi_node(parent);
-			/* Don't modify the first node TEID memory if the
-			 * first node was added already in the above call.
-			 * Instead send some temp memory for all other
-			 * recursive calls.
+			/* Don't modify the first node TEID memory if the first node
+			 * was added already in the above call.
 			 */
 			if (num_added)
-				first_teid_ptr = &temp;
+				first_teid_ptr = NULL;
 
 			new_num_nodes = num_nodes - *num_nodes_added;
 		}
