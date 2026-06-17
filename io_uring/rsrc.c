@@ -1501,6 +1501,166 @@ out:
 	return ret;
 }
 
+
+static int io_clone_files(struct io_ring_ctx *ctx, struct io_ring_ctx *src_ctx,
+			  struct io_uring_clone_files *arg)
+{
+	struct io_file_table new_file_table;
+	int i, off, nr;
+	unsigned int src_nr;
+
+	lockdep_assert_held(&ctx->uring_lock);
+	lockdep_assert_held(&src_ctx->uring_lock);
+
+	/* if offsets are given, must have nr specified too */
+	if (!arg->nr && (arg->dst_off || arg->src_off))
+		return -EINVAL;
+	/* not allowed unless REPLACE is set */
+	if (ctx->file_table.data.nr &&
+	    !(arg->flags & IORING_REGISTER_DST_REPLACE))
+		return -EBUSY;
+
+	src_nr = src_ctx->file_table.data.nr;
+	if (!src_nr)
+		return -ENXIO;
+	if (!arg->nr)
+		arg->nr = src_nr;
+	else if (arg->nr > src_nr)
+		return -EINVAL;
+	else if (arg->nr > IORING_MAX_FIXED_FILES)
+		return -EINVAL;
+	if (check_add_overflow(arg->nr, arg->src_off, &off) || off > src_nr)
+		return -EOVERFLOW;
+	if (check_add_overflow(arg->nr, arg->dst_off, &src_nr))
+		return -EOVERFLOW;
+	if (src_nr > IORING_MAX_FIXED_FILES)
+		return -EINVAL;
+	/* Allocate file tables memory {data + bitmap} into new_file_table */
+	memset(&new_file_table, 0, sizeof(new_file_table));
+	if (!io_alloc_file_tables(ctx, &new_file_table,
+				  max(src_nr, ctx->file_table.data.nr)))
+		return -ENOMEM;
+
+	/* Copy original dst nodes from before the cloned range */
+	for (i = 0; i < min(arg->dst_off, ctx->file_table.data.nr); i++) {
+		struct io_rsrc_node *node = ctx->file_table.data.nodes[i];
+
+		if (node) {
+			new_file_table.data.nodes[i] = node;
+			node->refs++;
+			io_file_bitmap_set(&new_file_table, i);
+		}
+	}
+
+	off = arg->dst_off;
+	i = arg->src_off;
+	nr = arg->nr;
+	while (nr--) {
+		struct io_rsrc_node *dst_node, *src_node;
+
+		src_node = io_rsrc_node_lookup(&src_ctx->file_table.data, i);
+		if (!src_node) {
+			dst_node = NULL;
+		} else {
+			dst_node = io_rsrc_node_alloc(ctx, IORING_RSRC_FILE);
+			if (!dst_node) {
+				io_free_file_tables(ctx, &new_file_table);
+				return -ENOMEM;
+			}
+
+			struct file *file = io_slot_file(src_node);
+
+			get_file(file);
+			io_fixed_file_set(dst_node, file);
+		}
+		new_file_table.data.nodes[off] = dst_node;
+		if (dst_node)
+			io_file_bitmap_set(&new_file_table, off);
+
+		i++;
+		off++;
+	}
+
+	/* Copy original dst nodes from after the cloned range */
+	for (i = src_nr; i < ctx->file_table.data.nr; i++) {
+		struct io_rsrc_node *node = ctx->file_table.data.nodes[i];
+
+		if (node) {
+			new_file_table.data.nodes[i] = node;
+			node->refs++;
+			io_file_bitmap_set(&new_file_table, i);
+		}
+	}
+
+	/*
+	 * If asked for replace, put the old table. new_file_table.data->nodes[] holds both
+	 * old and new nodes at this point.
+	 */
+	if (arg->flags & IORING_REGISTER_DST_REPLACE)
+		io_free_file_tables(ctx, &ctx->file_table);
+
+	/*
+	 * ctx->file_table must be empty now - either the contents are being
+	 * replaced and we just freed the table, or the contents are being
+	 * copied to a ring that does not have buffers yet (checked at function
+	 * entry).
+	 */
+	WARN_ON_ONCE(ctx->file_table.data.nr);
+	ctx->file_table = new_file_table;
+	io_file_table_set_alloc_range(ctx, 0, ctx->file_table.data.nr);
+	return 0;
+}
+
+int io_register_clone_files(struct io_ring_ctx *ctx, void __user *arg)
+{
+	struct io_uring_clone_files clone_arg;
+	struct io_ring_ctx *src_ctx;
+	bool registered_src;
+	struct file *file;
+	int ret;
+
+	if (copy_from_user(&clone_arg, arg, sizeof(clone_arg)))
+		return -EFAULT;
+	if (clone_arg.flags &
+	    ~(IORING_REGISTER_SRC_REGISTERED | IORING_REGISTER_DST_REPLACE))
+		return -EINVAL;
+	/* not allowed unless REPLACE is set */
+	if (!(clone_arg.flags & IORING_REGISTER_DST_REPLACE) &&
+	    ctx->file_table.data.nr)
+		return -EBUSY;
+	if (memchr_inv(clone_arg.pad, 0, sizeof(clone_arg.pad)))
+		return -EINVAL;
+
+	registered_src = (clone_arg.flags & IORING_REGISTER_SRC_REGISTERED) !=
+			 0;
+	file = io_uring_ctx_get_file(clone_arg.src_fd, registered_src);
+	if (IS_ERR(file))
+		return PTR_ERR(file);
+
+	src_ctx = file->private_data;
+	if (src_ctx != ctx) {
+		mutex_unlock(&ctx->uring_lock);
+		lock_two_rings(ctx, src_ctx);
+
+		/* Prevent cross-process hijacking */
+		if (src_ctx->submitter_task &&
+		    src_ctx->submitter_task != current) {
+			ret = -EEXIST;
+			goto out;
+		}
+	}
+
+	ret = io_clone_files(ctx, src_ctx, &clone_arg);
+
+out:
+	if (src_ctx != ctx)
+		mutex_unlock(&src_ctx->uring_lock);
+
+	if (!registered_src)
+		fput(file);
+	return ret;
+}
+
 void io_vec_free(struct iou_vec *iv)
 {
 	if (!iv->iovec)
