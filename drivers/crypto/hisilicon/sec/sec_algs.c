@@ -833,6 +833,7 @@ out:
 	kfree(splits_in);
 	kfree(splits_out_nents);
 	kfree(splits_out);
+err_free_split_sizes:
 	kfree(split_sizes);
 	return ret;
 
@@ -853,10 +854,7 @@ err_unmap_out_sg:
 err_unmap_in_sg:
 	sec_unmap_sg_on_err(skreq->src, steps, splits_in, splits_in_nents,
 			    sec_req->len_in, info->dev);
-err_free_split_sizes:
-	kfree(split_sizes);
-
-	return ret;
+	goto err_free_split_sizes;
 }
 
 static int sec_alg_skcipher_encrypt(struct skcipher_request *req)
