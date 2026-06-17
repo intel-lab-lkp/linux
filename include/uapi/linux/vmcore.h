@@ -21,6 +21,7 @@ enum hwerr_error_type {
 	HWERR_RECOV_PCI,
 	HWERR_RECOV_CXL,
 	HWERR_RECOV_OTHERS,
+	HWERR_FATAL,		/* fatal hardware errors */
 	HWERR_RECOV_MAX,
 };
 

@@ -877,6 +877,11 @@ EXPORT_SYMBOL_NS_GPL(cxl_cper_kfifo_get, "CXL");
 
 static void ghes_log_hwerr(int sev, guid_t *sec_type)
 {
+	if (sev == GHES_SEV_PANIC) {
+		hwerr_log_error_type(HWERR_FATAL);
+		return;
+	}
+
 	if (sev != GHES_SEV_RECOVERABLE)
 		return;
 
