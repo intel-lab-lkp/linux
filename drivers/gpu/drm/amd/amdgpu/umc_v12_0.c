@@ -680,7 +680,7 @@ static int umc_v12_0_fill_error_record(struct amdgpu_device *adev,
 {
 	struct ras_err_data *err_data = (struct ras_err_data *)ras_error_status;
 	uint64_t page_pfn[UMC_V12_0_BAD_PAGE_NUM_PER_CHANNEL];
-	int ret, i, count;
+	int ret = 0, i, count;
 
 	if (!err_data || !ecc_err)
 		return -EINVAL;
