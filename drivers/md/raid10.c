@@ -344,8 +344,8 @@ static inline void update_head_pos(int slot, struct r10bio *r10_bio)
 {
 	struct r10conf *conf = r10_bio->mddev->private;
 
-	conf->mirrors[r10_bio->devs[slot].devnum].head_position =
-		r10_bio->devs[slot].addr + (r10_bio->sectors);
+	WRITE_ONCE(conf->mirrors[r10_bio->devs[slot].devnum].head_position,
+		   r10_bio->devs[slot].addr + (r10_bio->sectors));
 }
 
 /*
@@ -830,7 +830,7 @@ static struct md_rdev *read_balance(struct r10conf *conf,
 			new_distance = r10_bio->devs[slot].addr;
 		else
 			new_distance = abs(r10_bio->devs[slot].addr -
-					   conf->mirrors[disk].head_position);
+					   READ_ONCE(conf->mirrors[disk].head_position));
 
 		if (new_distance < best_dist) {
 			best_dist = new_distance;
