@@ -177,6 +177,10 @@ static ssize_t read_port(struct device *dev, struct device_attribute *attr,
 	result = vendor_command(cyp, CYPRESS_READ_PORT, read_id, 0);
 
 	dev_dbg(&cyp->udev->dev, "Result of vendor_command: %d\n\n", result);
+	if (result < 0)
+		return result;
+	if (result < 2)
+		return -EIO;
 
 	return sprintf(buf, "%d", cyp->port[port_num]);
 }
