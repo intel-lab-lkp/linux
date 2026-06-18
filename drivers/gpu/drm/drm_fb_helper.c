@@ -232,9 +232,23 @@ static void drm_fb_helper_fb_dirty(struct drm_fb_helper *helper)
 	struct drm_clip_rect clip_copy;
 	unsigned long flags;
 	int ret;
+	unsigned int crtc_index = 0;
+	struct drm_crtc *crtc;
 
 	mutex_lock(&helper->lock);
-	drm_client_modeset_wait_for_vblank(&helper->client, 0);
+
+	drm_for_each_crtc(crtc, dev) {
+		if (crtc->primary && crtc->primary->state &&
+		    crtc->primary->state->fb == helper->fb &&
+		    crtc->state && crtc->state->active) {
+			crtc_index = drm_crtc_index(crtc) + 1;
+			break;
+		}
+	}
+
+	if (crtc_index > 0)
+		drm_client_modeset_wait_for_vblank(&helper->client, crtc_index - 1);
+
 	mutex_unlock(&helper->lock);
 
 	if (drm_WARN_ON_ONCE(dev, !helper->funcs->fb_dirty))
