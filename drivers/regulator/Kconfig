@@ -408,18 +408,6 @@ config REGULATOR_DA9211
 	  step down converter 12A or 16A DC-DC Buck controlled through an I2C
 	  interface.
 
-config REGULATOR_DBX500_PRCMU
-	bool
-
-config REGULATOR_DB8500_PRCMU
-	bool "ST-Ericsson DB8500 Voltage Domain Regulators"
-	depends on MFD_DB8500_PRCMU
-	depends on !UX500_PM_DOMAIN
-	select REGULATOR_DBX500_PRCMU
-	help
-	  This driver supports the voltage domain regulators controlled by the
-	  DB8500 PRCMU
-
 config REGULATOR_FAN53555
 	tristate "Fairchild FAN53555 Regulator"
 	depends on I2C
