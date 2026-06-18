@@ -1380,61 +1380,75 @@ static long shrink_memcg(struct mem_cgroup *memcg,
 	return walk_arg.bytes_written;
 }
 
-static void shrink_worker(struct work_struct *w)
+/*
+ * Global iteration uses a global cursor to select from all online
+ * memcgs in a round-robin fashion.
+ *
+ * We save iteration cursor memcg into zswap_next_shrink,
+ * which can be modified by the offline memcg cleaner
+ * zswap_memcg_offline_cleanup().
+ *
+ * Since the offline cleaner is called only once, we cannot leave an
+ * offline memcg reference in zswap_next_shrink.
+ * We can rely on the cleaner only if we get online memcg under lock.
+ *
+ * If we get an offline memcg, we cannot determine if the cleaner has
+ * already been called or will be called later. We must put back the
+ * reference before returning from this function. Otherwise, the
+ * offline memcg left in zswap_next_shrink will hold the reference
+ * until the next run of shrink_worker().
+ */
+static struct mem_cgroup *zswap_iter_global(void)
 {
 	struct mem_cgroup *memcg;
-	int failures = 0, attempts = 0;
-	unsigned long thr;
-	long ret;
-
-	/* Reclaim down to the accept threshold */
-	thr = zswap_accept_thr_pages();
 
 	/*
-	 * Global reclaim will select cgroup in a round-robin fashion from all
-	 * online memcgs, but memcgs that have no pages in zswap and
-	 * writeback-disabled memcgs (memory.zswap.writeback=0) are not
-	 * candidates for shrinking.
+	 * Start from the next memcg after zswap_next_shrink.
+	 * When the offline cleaner has already advanced the cursor,
+	 * advancing the cursor here overlooks one memcg, but this
+	 * should be negligibly rare.
 	 *
-	 * Shrinking will be aborted if we encounter the following
-	 * MAX_RECLAIM_RETRIES times:
-	 * - No writeback-candidate memcgs found in a memcg tree walk.
-	 * - Shrinking a writeback-candidate memcg failed.
-	 *
-	 * We save iteration cursor memcg into zswap_next_shrink,
-	 * which can be modified by the offline memcg cleaner
-	 * zswap_memcg_offline_cleanup().
-	 *
-	 * Since the offline cleaner is called only once, we cannot leave an
-	 * offline memcg reference in zswap_next_shrink.
-	 * We can rely on the cleaner only if we get online memcg under lock.
-	 *
-	 * If we get an offline memcg, we cannot determine if the cleaner has
-	 * already been called or will be called later. We must put back the
-	 * reference before returning from this function. Otherwise, the
-	 * offline memcg left in zswap_next_shrink will hold the reference
-	 * until the next run of shrink_worker().
+	 * If we get an online memcg, keep the extra reference in case
+	 * the original one obtained by mem_cgroup_iter() is dropped by
+	 * zswap_memcg_offline_cleanup() while we are shrinking the
+	 * memcg.
 	 */
+	spin_lock(&zswap_shrink_lock);
 	do {
-		/*
-		 * Start shrinking from the next memcg after zswap_next_shrink.
-		 * When the offline cleaner has already advanced the cursor,
-		 * advancing the cursor here overlooks one memcg, but this
-		 * should be negligibly rare.
-		 *
-		 * If we get an online memcg, keep the extra reference in case
-		 * the original one obtained by mem_cgroup_iter() is dropped by
-		 * zswap_memcg_offline_cleanup() while we are shrinking the
-		 * memcg.
-		 */
-		spin_lock(&zswap_shrink_lock);
-		do {
-			memcg = mem_cgroup_iter(NULL, zswap_next_shrink, NULL);
-			zswap_next_shrink = memcg;
-		} while (memcg && !mem_cgroup_tryget_online(memcg));
-		spin_unlock(&zswap_shrink_lock);
+		memcg = mem_cgroup_iter(NULL, zswap_next_shrink, NULL);
+		zswap_next_shrink = memcg;
+	} while (memcg && !mem_cgroup_tryget_online(memcg));
+	spin_unlock(&zswap_shrink_lock);
 
-		if (!memcg) {
+	return memcg;
+}
+
+/*
+ * Walk the memcg tree and write back zswap pages until the
+ * (lower_pages, upper_pages) window closes, or abort encounter
+ * MAX_RECLAIM_RETRIES times of the following conditions:
+ * - No writeback-candidate memcgs found in a memcg tree walk.
+ * - Shrinking a writeback-candidate memcg failed.
+ *
+ * For shrink_worker(), it passes lower=thr and upper=zswap_total_pages().
+ * The @upper limit is refreshed in each iteration by re-evaluating
+ * zswap_total_pages(), and the window closes once the total falls
+ * below the threshold.
+ */
+static void zswap_try_to_writeback(unsigned long lower_pages,
+				   unsigned long upper_pages)
+{
+	int failures = 0, attempts = 0;
+	struct mem_cgroup *iter_memcg;
+
+	while (lower_pages < upper_pages) {
+		unsigned long batch_size;
+		long shrunk;
+
+		cond_resched();
+
+		iter_memcg = zswap_iter_global();
+		if (!iter_memcg) {
 			/*
 			 * Continue shrinking without incrementing failures if
 			 * we found candidate memcgs in the last tree walk.
@@ -1443,12 +1457,16 @@ static void shrink_worker(struct work_struct *w)
 				break;
 
 			attempts = 0;
-			goto resched;
+			continue;
 		}
 
-		ret = shrink_memcg(memcg, NR_ZSWAP_WB_BATCH);
+		batch_size = min(upper_pages - lower_pages, NR_ZSWAP_WB_BATCH);
+		shrunk = shrink_memcg(iter_memcg, batch_size);
 		/* drop the extra reference */
-		mem_cgroup_put(memcg);
+		mem_cgroup_put(iter_memcg);
+
+		/* zswap total pages might have changed, refresh it. */
+		upper_pages = zswap_total_pages();
 
 		/*
 		 * There are no writeback-candidate pages in the memcg.
@@ -1456,15 +1474,23 @@ static void shrink_worker(struct work_struct *w)
 		 * with pages in zswap. Skip this without incrementing attempts
 		 * and failures.
 		 */
-		if (ret == -ENOENT)
+		if (shrunk == -ENOENT)
 			continue;
 		++attempts;
 
-		if (ret <= 0 && ++failures == MAX_RECLAIM_RETRIES)
+		if (shrunk <= 0 && ++failures == MAX_RECLAIM_RETRIES)
 			break;
-resched:
-		cond_resched();
-	} while (zswap_total_pages() > thr);
+	}
+}
+
+static void shrink_worker(struct work_struct *w)
+{
+	unsigned long thr;
+
+	/* Reclaim down to the accept threshold */
+	thr = zswap_accept_thr_pages();
+
+	zswap_try_to_writeback(thr, zswap_total_pages());
 }
 
 /*********************************
