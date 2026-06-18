@@ -143,6 +143,14 @@
 #define F_GETOWNER_UIDS	17
 #endif
 
+#ifndef F_GETFD_EX
+#define F_GETFD_EX	18
+#endif
+
+#ifndef F_SETFD_EX
+#define F_SETFD_EX	19
+#endif
+
 /*
  * Open File Description Locks
  *
@@ -170,6 +178,9 @@ struct f_owner_ex {
 
 /* for F_[GET|SET]FL */
 #define FD_CLOEXEC	1	/* actually anything with low bit set goes */
+
+/* for F_[GET|SET]FD_EX */
+#define FD_CLOBCOR	2	/* close the fd before dump core */
 
 /* for posix fcntl() and lockf() */
 #ifndef F_RDLCK

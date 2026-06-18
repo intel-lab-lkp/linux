@@ -27,6 +27,7 @@ struct fdtable {
 	unsigned int max_fds;
 	struct file __rcu **fd;      /* current fd array */
 	unsigned long *close_on_exec;
+	unsigned long *close_before_core;
 	unsigned long *open_fds;
 	unsigned long *full_fds_bits;
 	struct rcu_head rcu;
@@ -51,6 +52,7 @@ struct files_struct {
 	spinlock_t file_lock ____cacheline_aligned_in_smp;
 	unsigned int next_fd;
 	unsigned long close_on_exec_init[1];
+	unsigned long close_before_core_init[1];
 	unsigned long open_fds_init[1];
 	unsigned long full_fds_bits_init[1];
 	struct file __rcu * fd_array[NR_OPEN_DEFAULT];
@@ -95,6 +97,11 @@ static inline struct file *files_lookup_fd_locked(struct files_struct *files, un
 static inline bool close_on_exec(unsigned int fd, const struct files_struct *files)
 {
 	return test_bit(fd, files_fdtable(files)->close_on_exec);
+}
+
+static inline bool close_before_core(unsigned int fd, const struct files_struct *files)
+{
+	return test_bit(fd, files_fdtable(files)->close_before_core);
 }
 
 struct task_struct;

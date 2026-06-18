@@ -547,6 +547,8 @@ static int coredump_wait(int exit_code, struct core_state *core_state)
 		}
 	}
 
+	exit_files_before_core(tsk);
+
 	return core_waiters;
 }
 

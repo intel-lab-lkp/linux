@@ -130,6 +130,8 @@ static inline void copy_fd_bitmaps(struct fdtable *nfdt, struct fdtable *ofdt,
 			copy_words * BITS_PER_LONG, nwords * BITS_PER_LONG);
 	bitmap_copy_and_extend(nfdt->close_on_exec, ofdt->close_on_exec,
 			copy_words * BITS_PER_LONG, nwords * BITS_PER_LONG);
+	bitmap_copy_and_extend(nfdt->close_before_core, ofdt->close_before_core,
+			copy_words * BITS_PER_LONG, nwords * BITS_PER_LONG);
 	bitmap_copy_and_extend(nfdt->full_fds_bits, ofdt->full_fds_bits,
 			copy_words, nwords);
 }
@@ -222,13 +224,15 @@ static struct fdtable *alloc_fdtable(unsigned int slots_wanted)
 	fdt->fd = data;
 
 	data = kvmalloc(max_t(size_t,
-				 2 * nr / BITS_PER_BYTE + BITBIT_SIZE(nr), L1_CACHE_BYTES),
+				 3 * nr / BITS_PER_BYTE + BITBIT_SIZE(nr), L1_CACHE_BYTES),
 				 GFP_KERNEL_ACCOUNT);
 	if (!data)
 		goto out_arr;
 	fdt->open_fds = data;
 	data += nr / BITS_PER_BYTE;
 	fdt->close_on_exec = data;
+	data += nr / BITS_PER_BYTE;
+	fdt->close_before_core = data;
 	data += nr / BITS_PER_BYTE;
 	fdt->full_fds_bits = data;
 
@@ -330,10 +334,22 @@ static inline void __set_close_on_exec(unsigned int fd, struct fdtable *fdt,
 	}
 }
 
+static inline void __set_close_before_core(unsigned int fd, struct fdtable *fdt,
+				       bool set)
+{
+	if (set) {
+		__set_bit(fd, fdt->close_before_core);
+	} else {
+		if (test_bit(fd, fdt->close_before_core))
+			__clear_bit(fd, fdt->close_before_core);
+	}
+}
+
 static inline void __set_open_fd(unsigned int fd, struct fdtable *fdt, bool set)
 {
 	__set_bit(fd, fdt->open_fds);
 	__set_close_on_exec(fd, fdt, set);
+	__set_close_before_core(fd, fdt, false);
 	fd /= BITS_PER_LONG;
 	if (!~fdt->open_fds[fd])
 		__set_bit(fd, fdt->full_fds_bits);
@@ -400,6 +416,7 @@ struct files_struct *dup_fd(struct files_struct *oldf, struct fd_range *punch_ho
 	new_fdt = &newf->fdtab;
 	new_fdt->max_fds = NR_OPEN_DEFAULT;
 	new_fdt->close_on_exec = newf->close_on_exec_init;
+	new_fdt->close_before_core = newf->close_before_core_init;
 	new_fdt->open_fds = newf->open_fds_init;
 	new_fdt->full_fds_bits = newf->full_fds_bits_init;
 	new_fdt->fd = &newf->fd_array[0];
@@ -471,7 +488,7 @@ struct files_struct *dup_fd(struct files_struct *oldf, struct fd_range *punch_ho
 	return newf;
 }
 
-static struct fdtable *close_files(struct files_struct * files)
+static struct fdtable *close_files(struct files_struct *files)
 {
 	/*
 	 * It is safe to dereference the fd table without RCU or
@@ -483,6 +500,7 @@ static struct fdtable *close_files(struct files_struct * files)
 
 	for (;;) {
 		unsigned long set;
+
 		i = j * BITS_PER_LONG;
 		if (i >= fdt->max_fds)
 			break;
@@ -490,6 +508,7 @@ static struct fdtable *close_files(struct files_struct * files)
 		while (set) {
 			if (set & 1) {
 				struct file *file = fdt->fd[i];
+
 				if (file) {
 					filp_close(file, files);
 					cond_resched();
@@ -502,6 +521,41 @@ static struct fdtable *close_files(struct files_struct * files)
 
 	return fdt;
 }
+
+static struct fdtable *close_files_before_core(struct files_struct *files)
+{
+	/*
+	 * It is safe to dereference the fd table without RCU or
+	 * ->file_lock because this is the last reference to the
+	 * files structure.
+	 */
+	struct fdtable *fdt = rcu_dereference_raw(files->fdt);
+	unsigned int i, j = 0;
+
+	for (;;) {
+		unsigned long set;
+
+		i = j * BITS_PER_LONG;
+		if (i >= fdt->max_fds)
+			break;
+		set = fdt->open_fds[j++];
+		while (set) {
+			if (set & 1 && close_before_core(i, files)) {
+				struct file *file = fdt->fd[i];
+
+				if (file) {
+					filp_close(file, files);
+					cond_resched();
+				}
+			}
+			i++;
+			set >>= 1;
+		}
+	}
+
+	return fdt;
+}
+
 
 void put_files_struct(struct files_struct *files)
 {
@@ -517,13 +571,22 @@ void put_files_struct(struct files_struct *files)
 
 void exit_files(struct task_struct *tsk)
 {
-	struct files_struct * files = tsk->files;
+	struct files_struct *files = tsk->files;
 
 	if (files) {
 		task_lock(tsk);
 		tsk->files = NULL;
 		task_unlock(tsk);
 		put_files_struct(files);
+	}
+}
+
+void exit_files_before_core(struct task_struct *tsk)
+{
+	struct files_struct *files = tsk->files;
+
+	if (files) {
+		close_files_before_core(files);
 	}
 }
 
@@ -534,6 +597,7 @@ struct files_struct init_files = {
 		.max_fds	= NR_OPEN_DEFAULT,
 		.fd		= &init_files.fd_array[0],
 		.close_on_exec	= init_files.close_on_exec_init,
+		.close_before_core = init_files.close_before_core_init,
 		.open_fds	= init_files.open_fds_init,
 		.full_fds_bits	= init_files.full_fds_bits_init,
 	},
@@ -1275,6 +1339,7 @@ void __f_unlock_pos(struct file *f)
 void set_close_on_exec(unsigned int fd, int flag)
 {
 	struct files_struct *files = current->files;
+
 	spin_lock(&files->file_lock);
 	__set_close_on_exec(fd, files_fdtable(files), flag);
 	spin_unlock(&files->file_lock);
@@ -1283,8 +1348,28 @@ void set_close_on_exec(unsigned int fd, int flag)
 bool get_close_on_exec(unsigned int fd)
 {
 	bool res;
+
 	rcu_read_lock();
 	res = close_on_exec(fd, current->files);
+	rcu_read_unlock();
+	return res;
+}
+
+void set_close_before_core(unsigned int fd, int flag)
+{
+	struct files_struct *files = current->files;
+
+	spin_lock(&files->file_lock);
+	__set_close_before_core(fd, files_fdtable(files), flag);
+	spin_unlock(&files->file_lock);
+}
+
+bool get_close_before_core(unsigned int fd)
+{
+	bool res;
+
+	rcu_read_lock();
+	res = close_before_core(fd, current->files);
 	rcu_read_unlock();
 	return res;
 }

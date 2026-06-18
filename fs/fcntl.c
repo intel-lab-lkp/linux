@@ -470,6 +470,13 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 		err = 0;
 		set_close_on_exec(fd, argi & FD_CLOEXEC);
 		break;
+	case F_GETFD_EX:
+		err = get_close_before_core(fd) ? FD_CLOBCOR : 0;
+		break;
+	case F_SETFD_EX:
+		err = 0;
+		set_close_before_core(fd, argi & FD_CLOBCOR);
+		break;
 	case F_GETFL:
 		err = filp->f_flags;
 		break;
