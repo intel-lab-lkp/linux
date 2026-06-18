@@ -150,12 +150,6 @@ int amdgpu_lockdep_init(void)
 	/* Level 6: Reset control lock */
 	mutex_lock(&reset_ctl.reset_lock);
 
-	/*
-	 * Mark potential memory reclaim boundary.
-	 * GPU operations might trigger memory allocation/reclaim.
-	 */
-	fs_reclaim_acquire(GFP_KERNEL);
-
 	/* Level 7: SRBM register access */
 	mutex_lock(&srbm_mutex);
 
@@ -174,8 +168,6 @@ int amdgpu_lockdep_init(void)
 	spin_unlock_irqrestore(&mmio_idx_lock, flags);
 	mutex_unlock(&grbm_idx_mutex);
 	mutex_unlock(&srbm_mutex);
-
-	fs_reclaim_release(GFP_KERNEL);
 
 	mutex_unlock(&reset_ctl.reset_lock);
 	up_read(&reset_domain->sem);
