@@ -2801,3 +2801,89 @@ bool irq_check_status_bit(unsigned int irq, unsigned int bitmask)
 	return res;
 }
 EXPORT_SYMBOL_GPL(irq_check_status_bit);
+
+/*
+ * Managed IRQ housekeeping callback: iterate all managed IRQs and ask
+ * the chip to move them off CPUs newly removed from HK_TYPE_MANAGED_IRQ.
+ */
+static void irq_hk_apply(enum hk_type type)
+{
+	cpumask_var_t hk_mask;
+	struct irq_desc *desc;
+	unsigned int irq;
+
+	if (!alloc_cpumask_var(&hk_mask, GFP_KERNEL))
+		return;
+
+	/*
+	 * Snapshot the new HK_TYPE_MANAGED_IRQ mask under an RCU read lock
+	 * before iterating IRQ descriptors.  The lockdep annotation in
+	 * housekeeping_cpumask() requires an RCU read-side critical section
+	 * for runtime-mutable types.
+	 */
+	rcu_read_lock();
+	cpumask_copy(hk_mask, housekeeping_cpumask_rcu(HK_TYPE_MANAGED_IRQ));
+	rcu_read_unlock();
+
+	irq_lock_sparse();
+
+	for_each_active_irq(irq) {
+		desc = irq_to_desc(irq);
+		if (!desc || !desc->action)
+			continue;
+
+		/*
+		 * Only managed interrupts are selected: they have
+		 * IRQF_AFFINITY_MANAGED set, meaning the kernel owns their
+		 * affinity.  User-controlled IRQs are intentionally skipped.
+		 *
+		 * When the intersection of the current affinity mask and the
+		 * new housekeeping mask is non-empty, re-apply the restricted
+		 * affinity to migrate the IRQ away from newly isolated CPUs.
+		 * If the intersection is empty (all serving CPUs are now
+		 * isolated), the IRQ is left on its current CPU temporarily;
+		 * handling that case (IRQ shutdown / re-startup) is left for
+		 * a follow-up.
+		 */
+		if (irqd_affinity_is_managed(&desc->irq_data)) {
+			const struct cpumask *mask;
+			struct cpumask *tmp = this_cpu_ptr(&__tmp_mask);
+
+			raw_spin_lock_irq(&desc->lock);
+			mask = irq_data_get_affinity_mask(&desc->irq_data);
+			cpumask_and(tmp, mask, hk_mask);
+			if (cpumask_intersects(tmp, cpu_online_mask))
+				irq_do_set_affinity(&desc->irq_data, tmp, false);
+			raw_spin_unlock_irq(&desc->lock);
+		}
+	}
+
+	irq_unlock_sparse();
+	free_cpumask_var(hk_mask);
+}
+
+static int irq_hk_validate(enum hk_type type,
+			   const struct cpumask *cur_mask,
+			   const struct cpumask *new_mask)
+{
+	if (!IS_ENABLED(CONFIG_SMP))
+		return -EOPNOTSUPP;
+	return 0;
+}
+
+static struct housekeeping_cbs irq_hk_cbs = {
+	.name		= "genirq/managed",
+	.pre_validate	= irq_hk_validate,
+	.apply		= irq_hk_apply,
+};
+
+static int __init irq_hk_init(void)
+{
+	int ret;
+
+	ret = housekeeping_register_cbs(HK_TYPE_MANAGED_IRQ, &irq_hk_cbs);
+	if (ret)
+		pr_info("genirq: managed IRQ runtime migration disabled (%d)\n", ret);
+	return 0;
+}
+late_initcall(irq_hk_init);
