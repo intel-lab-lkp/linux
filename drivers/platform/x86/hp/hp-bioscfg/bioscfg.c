@@ -692,8 +692,7 @@ static int hp_init_bios_package_attribute(enum hp_wmi_data_type attr_type,
 	if (ret) {
 		pr_debug("Failed to populate integer package data. Error [0%0x]\n",
 			 ret);
-		kfree(str_value);
-		return ret;
+		goto pack_attr_exit;
 	}
 
 	if (!str_value || !str_value[0]) {
