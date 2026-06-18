@@ -73,14 +73,10 @@ static int sst_fill_and_send_cmd(struct sst_data *drv,
 				 u8 ipc_msg, u8 block, u8 task_id, u8 pipe_id,
 				 void *cmd_data, u16 len)
 {
-	int ret;
+	guard(mutex)(&drv->lock);
 
-	mutex_lock(&drv->lock);
-	ret = sst_fill_and_send_cmd_unlocked(drv, ipc_msg, block,
-					task_id, pipe_id, cmd_data, len);
-	mutex_unlock(&drv->lock);
-
-	return ret;
+	return sst_fill_and_send_cmd_unlocked(drv, ipc_msg, block,
+					      task_id, pipe_id, cmd_data, len);
 }
 
 /*
@@ -167,7 +163,7 @@ static int sst_slot_get(struct snd_kcontrol *kcontrol,
 	unsigned int val, mux;
 	u8 *map = is_tx ? sst_ssp_rx_map : sst_ssp_tx_map;
 
-	mutex_lock(&drv->lock);
+	guard(mutex)(&drv->lock);
 	val = 1 << ctl_no;
 	/* search which slot/channel has this bit set - there should be only one */
 	for (mux = e->max; mux > 0;  mux--)
@@ -175,7 +171,6 @@ static int sst_slot_get(struct snd_kcontrol *kcontrol,
 			break;
 
 	ucontrol->value.enumerated.item[0] = mux;
-	mutex_unlock(&drv->lock);
 
 	dev_dbg(c->dev, "%s - %s map = %#x\n",
 			is_tx ? "tx channel" : "rx slot",
@@ -235,7 +230,7 @@ static int sst_slot_put(struct snd_kcontrol *kcontrol,
 	if (mux > e->max - 1)
 		return -EINVAL;
 
-	mutex_lock(&drv->lock);
+	guard(mutex)(&drv->lock);
 	/* first clear all registers of this bit */
 	for (i = 0; i < e->max; i++)
 		map[i] &= ~val;
@@ -244,7 +239,6 @@ static int sst_slot_put(struct snd_kcontrol *kcontrol,
 		/* kctl set to 'none' and we reset the bits so send IPC */
 		ret = sst_check_and_send_slot_map(drv, kcontrol);
 
-		mutex_unlock(&drv->lock);
 		return ret;
 	}
 
@@ -258,7 +252,6 @@ static int sst_slot_put(struct snd_kcontrol *kcontrol,
 
 	ret = sst_check_and_send_slot_map(drv, kcontrol);
 
-	mutex_unlock(&drv->lock);
 	return ret;
 }
 
@@ -354,13 +347,12 @@ static int sst_algo_control_set(struct snd_kcontrol *kcontrol,
 	struct sst_algo_control *bc = (void *)kcontrol->private_value;
 
 	dev_dbg(cmpnt->dev, "control_name=%s\n", kcontrol->id.name);
-	mutex_lock(&drv->lock);
+	guard(mutex)(&drv->lock);
 	switch (bc->type) {
 	case SST_ALGO_PARAMS:
 		memcpy(bc->params, ucontrol->value.bytes.data, bc->max);
 		break;
 	default:
-		mutex_unlock(&drv->lock);
 		dev_err(cmpnt->dev, "Invalid Input- algo type:%d\n",
 				bc->type);
 		return -EINVAL;
@@ -368,7 +360,6 @@ static int sst_algo_control_set(struct snd_kcontrol *kcontrol,
 	/*if pipe is enabled, need to send the algo params from here*/
 	if (bc->w && bc->w->power)
 		ret = sst_send_algo_cmd(drv, bc);
-	mutex_unlock(&drv->lock);
 
 	return ret;
 }
@@ -475,7 +466,7 @@ static int sst_gain_put(struct snd_kcontrol *kcontrol,
 	struct sst_gain_mixer_control *mc = (void *)kcontrol->private_value;
 	struct sst_gain_value *gv = mc->gain_val;
 
-	mutex_lock(&drv->lock);
+	guard(mutex)(&drv->lock);
 
 	switch (mc->type) {
 	case SST_GAIN_TLV:
@@ -497,7 +488,6 @@ static int sst_gain_put(struct snd_kcontrol *kcontrol,
 		break;
 
 	default:
-		mutex_unlock(&drv->lock);
 		dev_err(cmpnt->dev, "Invalid Input- gain type:%d\n",
 				mc->type);
 		return -EINVAL;
@@ -506,7 +496,6 @@ static int sst_gain_put(struct snd_kcontrol *kcontrol,
 	if (mc->w && mc->w->power)
 		ret = sst_send_gain_cmd(drv, gv, mc->task_id,
 			mc->pipe_id | mc->instance_id, mc->module_id, 0);
-	mutex_unlock(&drv->lock);
 
 	return ret;
 }
@@ -521,10 +510,9 @@ static int sst_send_pipe_module_params(struct snd_soc_dapm_widget *w,
 	struct sst_data *drv = snd_soc_component_get_drvdata(c);
 	struct sst_ids *ids = w->priv;
 
-	mutex_lock(&drv->lock);
+	guard(mutex)(&drv->lock);
 	sst_find_and_send_pipe_algo(drv, w->name, ids);
 	sst_set_pipe_gain(ids, drv, 0);
-	mutex_unlock(&drv->lock);
 
 	return 0;
 }
