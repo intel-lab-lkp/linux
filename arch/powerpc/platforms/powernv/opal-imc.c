@@ -168,8 +168,8 @@ static struct imc_pmu *imc_pmu_create(struct device_node *parent, int pmu_index,
 		kfree(pmu_ptr->pmu.name);
 		if (pmu_ptr->domain == IMC_DOMAIN_NEST)
 			kfree(pmu_ptr->mem_info);
-		kfree(pmu_ptr);
-		return NULL;
+
+		goto free_pmu;
 	}
 
 	return pmu_ptr;
