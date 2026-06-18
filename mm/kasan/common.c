@@ -163,6 +163,16 @@ void __kasan_poison_slab(struct slab *slab)
 		     KASAN_SLAB_REDZONE, false);
 }
 
+void __kasan_poison_pte(pte_t *pte, int nr)
+{
+	kasan_poison(pte, sizeof(*pte) * nr, KASAN_LAZY_MMU_PTE, false);
+}
+
+void __kasan_unpoison_pte(pte_t *pte, int nr)
+{
+	kasan_unpoison(pte, sizeof(*pte) * nr, false);
+}
+
 void __kasan_unpoison_new_object(struct kmem_cache *cache, void *object)
 {
 	kasan_unpoison(object, cache->object_size, false);
