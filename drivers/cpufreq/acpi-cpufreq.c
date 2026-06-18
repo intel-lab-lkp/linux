@@ -528,10 +528,11 @@ static void free_acpi_perf_data(void)
 static int cpufreq_boost_down_prep(unsigned int cpu)
 {
 	/*
-	 * Clear the boost-disable bit on the CPU_DOWN path so that
-	 * this cpu cannot block the remaining ones from boosting.
+	 * Clear the boost-disable bit on the target CPU so that
+	 * it cannot block the remaining ones from boosting.
 	 */
-	return boost_set_msr(1);
+	return smp_call_function_single(cpu, boost_set_msr_each,
+					(void *)1L, 1);
 }
 
 /*
