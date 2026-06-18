@@ -50,6 +50,22 @@ config IOMMU_IO_PGTABLE_LPAE_KUNIT_TEST
 
 	  If unsure, say N here.
 
+config IOMMU_IO_PGTABLE_CONTIG_HINT
+	bool "Enable contiguous hint"
+	depends on IOMMU_IO_PGTABLE_LPAE
+	default y
+	help
+	  Enable contiguous hint (CONT bit) support for the ARM LPAE page
+	  table allocator. Contiguous hint sizes are advertised in the
+	  pgsize_bitmap so that IOMMU API users can align allocations to
+	  these sizes and benefit from improved TLB utilization, analogous
+	  to how the CPU MMU advertises contiguous sizes via hugetlb.
+
+	  Disabling this option provides a compile-time opt-out for
+	  hardware affected by SMMU errata related to the contiguous bit.
+
+	  If unsure, say Y here.
+
 config IOMMU_IO_PGTABLE_ARMV7S
 	bool "ARMv7/v8 Short Descriptor Format"
 	select IOMMU_IO_PGTABLE
