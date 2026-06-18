@@ -410,8 +410,13 @@ again:
 	if (vq->num_free < elemcnt) {
 		spin_unlock(&vgdev->ctrlq.qlock);
 		virtio_gpu_notify(vgdev);
-		wait_event(vgdev->ctrlq.ack_queue,
-			   vq->num_free >= elemcnt || vgdev->vqs_released);
+		while (!wait_event_timeout(vgdev->ctrlq.ack_queue,
+					   vq->num_free >= elemcnt ||
+					   vgdev->vqs_released,
+					   5 * HZ) && !vgdev->vqs_released)
+			DRM_WARN("ctrlq waiting for host: no free space for %d secs\n",
+				 5);
+
 		/*
 		 * Set by virtio_gpu_release_vqs() to unblock
 		 * synchronize_srcu() wait in drm_dev_unplug().
@@ -592,8 +597,13 @@ retry:
 	ret = virtqueue_add_sgs(vq, sgs, outcnt, 0, vbuf, GFP_ATOMIC);
 	if (ret == -ENOSPC) {
 		spin_unlock(&vgdev->cursorq.qlock);
-		wait_event(vgdev->cursorq.ack_queue,
-			   vq->num_free >= outcnt || vgdev->vqs_released);
+		while (!wait_event_timeout(vgdev->cursorq.ack_queue,
+					   vq->num_free >= outcnt ||
+					   vgdev->vqs_released,
+					   5 * HZ) && !vgdev->vqs_released)
+			DRM_WARN("cursorq waiting for host: no free space for %d secs\n",
+				 5);
+
 		/* See comment in virtio_gpu_queue_ctrl_sgs(). */
 		if (vgdev->vqs_released) {
 			free_vbuf(vgdev, vbuf);
