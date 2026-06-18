@@ -220,10 +220,13 @@ static int p2wi_probe(struct platform_device *pdev)
 	childnp = of_get_next_available_child(np, NULL);
 	if (childnp) {
 		ret = of_property_read_u32(childnp, "reg", &target_addr);
-		if (ret)
-			return dev_err_probe(dev, -EINVAL,
-					     "invalid target address on node %pOF\n", childnp);
-
+		if (ret) {
+			ret = dev_err_probe(dev, -EINVAL,
+					    "invalid target address on node %pOF\n", childnp);
+			of_node_put(childnp);
+			return ret;
+		}
+		of_node_put(childnp);
 		p2wi->target_addr = target_addr;
 	}
 
