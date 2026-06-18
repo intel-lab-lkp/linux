@@ -6483,8 +6483,9 @@ static int addrconf_sysctl_proxy_ndp(const struct ctl_table *ctl, int write,
 		void *buffer, size_t *lenp, loff_t *ppos)
 {
 	int *valp = ctl->data;
-	int ret;
+	loff_t pos = *ppos;
 	int old, new;
+	int ret;
 
 	old = *valp;
 	ret = proc_dointvec(ctl, write, buffer, lenp, ppos);
@@ -6493,8 +6494,12 @@ static int addrconf_sysctl_proxy_ndp(const struct ctl_table *ctl, int write,
 	if (write && old != new) {
 		struct net *net = ctl->extra2;
 
-		if (!rtnl_net_trylock(net))
+		if (!rtnl_net_trylock(net)) {
+			/* Restore the original values before restarting */
+			*valp = old;
+			*ppos = pos;
 			return restart_syscall();
+		}
 
 		if (valp == &net->ipv6.devconf_dflt->proxy_ndp) {
 			inet6_netconf_notify_devconf(net, RTM_NEWNETCONF,
