@@ -2257,6 +2257,7 @@ struct damon_sysfs_scheme {
 	struct damon_sysfs_scheme_regions *tried_regions;
 	int target_nid;
 	unsigned int target_order;
+	unsigned int hot_threshold;
 	struct damos_sysfs_dests *dests;
 };
 
@@ -2289,6 +2290,10 @@ static struct damos_sysfs_action_name damos_sysfs_action_names[] = {
 	{
 		.action = DAMOS_COLLAPSE,
 		.name = "collapse",
+	},
+	{
+		.action = DAMOS_MTHP_SPLIT,
+		.name = "mthp_split",
 	},
 	{
 		.action = DAMOS_LRU_PRIO,
@@ -2670,6 +2675,34 @@ static ssize_t target_order_store(struct kobject *kobj,
 	return count;
 }
 
+static ssize_t hot_threshold_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	struct damon_sysfs_scheme *scheme = container_of(kobj,
+			struct damon_sysfs_scheme, kobj);
+
+	return sysfs_emit(buf, "%u\n", scheme->hot_threshold);
+}
+
+static ssize_t hot_threshold_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	struct damon_sysfs_scheme *scheme = container_of(kobj,
+			struct damon_sysfs_scheme, kobj);
+	unsigned int val;
+	int err;
+
+	err = kstrtouint(buf, 0, &val);
+	if (err)
+		return err;
+
+	if (val > 100)
+		return -EINVAL;
+
+	scheme->hot_threshold = val;
+	return count;
+}
+
 static void damon_sysfs_scheme_release(struct kobject *kobj)
 {
 	kfree(container_of(kobj, struct damon_sysfs_scheme, kobj));
@@ -2687,11 +2720,15 @@ static struct kobj_attribute damon_sysfs_scheme_target_nid_attr =
 static struct kobj_attribute damon_sysfs_scheme_target_order_attr =
 		__ATTR_RW_MODE(target_order, 0600);
 
+static struct kobj_attribute damon_sysfs_scheme_hot_threshold_attr =
+		__ATTR_RW_MODE(hot_threshold, 0600);
+
 static struct attribute *damon_sysfs_scheme_attrs[] = {
 	&damon_sysfs_scheme_action_attr.attr,
 	&damon_sysfs_scheme_apply_interval_us_attr.attr,
 	&damon_sysfs_scheme_target_nid_attr.attr,
 	&damon_sysfs_scheme_target_order_attr.attr,
+	&damon_sysfs_scheme_hot_threshold_attr.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(damon_sysfs_scheme);
@@ -3045,7 +3082,21 @@ static struct damos *damon_sysfs_mk_scheme(
 			HPAGE_PMD_ORDER, HPAGE_PMD_ORDER);
 		sysfs_scheme->target_order = 0;
 	}
+	if (sysfs_scheme->action == DAMOS_MTHP_SPLIT &&
+	    (sysfs_scheme->target_order == 0 ||
+	     sysfs_scheme->target_order >= HPAGE_PMD_ORDER)) {
+		pr_warn("DAMON mthp_split: target_order %u invalid, need 2..%u. Defaulting to 2.\n",
+			sysfs_scheme->target_order,
+			HPAGE_PMD_ORDER - 1);
+		sysfs_scheme->target_order = 2;
+	}
 	scheme->target_order = sysfs_scheme->target_order;
+
+	if (sysfs_scheme->action == DAMOS_MTHP_SPLIT) {
+		if (sysfs_scheme->hot_threshold == 0)
+			sysfs_scheme->hot_threshold = 30;
+		scheme->hot_threshold = sysfs_scheme->hot_threshold;
+	}
 
 	err = damos_sysfs_add_quota_score(sysfs_quotas->goals, &scheme->quota);
 	if (err) {
