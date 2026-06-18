@@ -108,6 +108,19 @@ struct erdma_mtt {
 	struct erdma_mtt *low_level;
 };
 
+enum erdma_mem_flags {
+	ERDMA_MEM_FLAG_MTT_PHYS_CONT = (1 << 0),
+};
+
+struct erdma_mem_init_attr {
+	u64 start;
+	u64 virt;
+	u64 len;
+	unsigned long req_page_size;
+	int access;
+	u32 flags;
+};
+
 struct erdma_mem {
 	struct ib_umem *umem;
 	struct erdma_mtt *mtt;
