@@ -8,6 +8,7 @@
 #include <linux/err.h>
 #include <linux/device.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_opp.h>
 #include <linux/scmi_protocol.h>
