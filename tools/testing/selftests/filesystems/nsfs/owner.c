@@ -72,7 +72,7 @@ int main(int argc, char *argvp[])
 		return pr_err("NS_GET_USERNS returned a wrong namespace");
 
 	init_uns = ioctl(uns, NS_GET_USERNS);
-	if (uns < 0)
+	if (init_uns < 0)
 		return pr_err("Unable to get an owning user namespace");
 
 	if (ioctl(init_uns, NS_GET_USERNS) >= 0 || errno != EPERM)
