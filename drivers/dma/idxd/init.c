@@ -601,15 +601,18 @@ static void idxd_read_caps(struct idxd_device *idxd)
 		idxd->hw.iaa_cap.bits = ioread64(idxd->reg_base + IDXD_IAACAP_OFFSET);
 }
 
+/*
+ * Release an idxd device that was allocated (device_initialize() was called)
+ * but never successfully registered. put_device() drops the last reference and
+ * triggers idxd_conf_device_release() which frees all resources including the
+ * ida, opcap_bmap, and the idxd structure itself.
+ */
 static void idxd_free(struct idxd_device *idxd)
 {
 	if (!idxd)
 		return;
 
 	put_device(idxd_confdev(idxd));
-	bitmap_free(idxd->opcap_bmap);
-	ida_free(&idxd_ida, idxd->id);
-	kfree(idxd);
 }
 
 static struct idxd_device *idxd_alloc(struct pci_dev *pdev, struct idxd_driver_data *data)
@@ -649,8 +652,12 @@ static struct idxd_device *idxd_alloc(struct pci_dev *pdev, struct idxd_driver_d
 	return idxd;
 
 err_name:
+	/* device_initialize() was called, so put_device() will trigger
+	 * idxd_conf_device_release() which frees ida, opcap_bmap, and idxd.
+	 * Do not fall through to err_opcap/err_ida.
+	 */
 	put_device(conf_dev);
-	bitmap_free(idxd->opcap_bmap);
+	return NULL;
 err_opcap:
 	ida_free(&idxd_ida, idxd->id);
 err_ida:
