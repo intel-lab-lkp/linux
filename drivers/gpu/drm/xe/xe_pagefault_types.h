@@ -65,8 +65,13 @@ struct xe_pagefault {
 	struct {
 		/** @consumer.page_addr: address of page fault */
 		u64 page_addr;
-		/** @consumer.asid: address space ID */
-		u32 asid;
+#define XE_PAGEFAULT_ASID_MASK	GENMASK(23, 0)
+#define XE_PAGEFAULT_SRCID_MASK	GENMASK(31, 24)
+		/**
+		 * @consumer.id: address space ID and SRCID, folded into one
+		 * to keep size compact
+		 */
+		u32 id;
 		/**
 		 * @consumer.access_type: access type and prefetch flag packed
 		 * into a u8.
