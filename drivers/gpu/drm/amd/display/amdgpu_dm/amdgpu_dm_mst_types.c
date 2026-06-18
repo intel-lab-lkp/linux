@@ -99,8 +99,8 @@ EXPORT_IF_KUNIT(dm_dp_aux_fill_payload_flags);
 /*
  * This function handles both native AUX and I2C-Over-AUX transactions.
  */
-static ssize_t dm_dp_aux_transfer(struct drm_dp_aux *aux,
-				  struct drm_dp_aux_msg *msg)
+STATIC_IFN_KUNIT ssize_t dm_dp_aux_transfer(struct drm_dp_aux *aux,
+					    struct drm_dp_aux_msg *msg)
 {
 	ssize_t result = 0;
 	struct aux_payload payload;
@@ -167,6 +167,7 @@ static ssize_t dm_dp_aux_transfer(struct drm_dp_aux *aux,
 
 	return result;
 }
+EXPORT_IF_KUNIT(dm_dp_aux_transfer);
 
 static void
 dm_dp_mst_connector_destroy(struct drm_connector *connector)
@@ -518,7 +519,7 @@ static int dm_dp_mst_get_modes(struct drm_connector *connector)
 	return ret;
 }
 
-static struct drm_encoder *
+STATIC_IFN_KUNIT struct drm_encoder *
 dm_mst_atomic_best_encoder(struct drm_connector *connector,
 			   struct drm_atomic_commit *state)
 {
@@ -529,8 +530,9 @@ dm_mst_atomic_best_encoder(struct drm_connector *connector,
 
 	return &adev->dm.mst_encoders[acrtc->crtc_id].base;
 }
+EXPORT_IF_KUNIT(dm_mst_atomic_best_encoder);
 
-static int
+STATIC_IFN_KUNIT int
 dm_dp_mst_detect(struct drm_connector *connector,
 		 struct drm_modeset_acquire_ctx *ctx, bool force)
 {
@@ -600,9 +602,10 @@ dm_dp_mst_detect(struct drm_connector *connector,
 
 	return connection_status;
 }
+EXPORT_IF_KUNIT(dm_dp_mst_detect);
 
-static int dm_dp_mst_atomic_check(struct drm_connector *connector,
-				  struct drm_atomic_commit *state)
+STATIC_IFN_KUNIT int dm_dp_mst_atomic_check(struct drm_connector *connector,
+					    struct drm_atomic_commit *state)
 {
 	struct amdgpu_dm_connector *aconnector = to_amdgpu_dm_connector(connector);
 	struct drm_dp_mst_topology_mgr *mst_mgr = &aconnector->mst_root->mst_mgr;
@@ -610,6 +613,7 @@ static int dm_dp_mst_atomic_check(struct drm_connector *connector,
 
 	return drm_dp_atomic_release_time_slots(state, mst_mgr, mst_port);
 }
+EXPORT_IF_KUNIT(dm_dp_mst_atomic_check);
 
 static const struct drm_connector_helper_funcs dm_dp_mst_connector_helper_funcs = {
 	.get_modes = dm_dp_mst_get_modes,
@@ -650,6 +654,7 @@ dm_dp_create_fake_mst_encoders(struct amdgpu_device *adev)
 		drm_encoder_helper_add(encoder, &amdgpu_dm_encoder_helper_funcs);
 	}
 }
+EXPORT_IF_KUNIT(dm_dp_create_fake_mst_encoders);
 
 static struct drm_connector *
 dm_dp_add_mst_connector(struct drm_dp_mst_topology_mgr *mgr,
@@ -855,6 +860,7 @@ void dm_handle_mst_sideband_msg_ready_event(
 	if (process_count == max_process_count)
 		DRM_DEBUG_DRIVER("Loop exceeded max iterations\n");
 }
+EXPORT_IF_KUNIT(dm_handle_mst_sideband_msg_ready_event);
 
 static void dm_handle_mst_down_rep_msg_ready(struct drm_dp_mst_topology_mgr *mgr)
 {
@@ -2108,3 +2114,4 @@ enum dc_status dm_dp_mst_is_port_support_mode(
 #endif
 	return DC_OK;
 }
+EXPORT_IF_KUNIT(dm_dp_mst_is_port_support_mode);
