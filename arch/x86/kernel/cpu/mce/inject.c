@@ -31,6 +31,7 @@
 #include <asm/mce.h>
 #include <asm/msr.h>
 #include <asm/nmi.h>
+#include <asm/processor.h>
 #include <asm/smp.h>
 
 #include "internal.h"
@@ -311,30 +312,6 @@ static struct notifier_block inject_nb = {
 	.notifier_call  = mce_inject_raise,
 };
 
-/*
- * Caller needs to be make sure this cpu doesn't disappear
- * from under us, i.e.: get_cpu/put_cpu.
- */
-static int toggle_hw_mce_inject(unsigned int cpu, bool enable)
-{
-	struct msr val;
-	int err;
-
-	err = rdmsrq_on_cpu(cpu, MSR_K7_HWCR, &val.q);
-	if (err) {
-		pr_err("%s: error reading HWCR\n", __func__);
-		return err;
-	}
-
-	enable ? (val.l |= BIT(18)) : (val.l &= ~BIT(18));
-
-	err = wrmsrq_on_cpu(cpu, MSR_K7_HWCR, val.q);
-	if (err)
-		pr_err("%s: error writing HWCR\n", __func__);
-
-	return err;
-}
-
 static int __set_inj(const char *buf)
 {
 	int i;
@@ -500,6 +477,12 @@ static void prepare_msrs(void *info)
 			wrmsrq(MSR_IA32_MCx_MISC(b), m.misc);
 	}
 }
+static void ipi_inject_mce(void *info)
+{
+	amd_update_hwcr(MSR_K7_HWCR_MCSTATUSWREN_BIT, true);
+	prepare_msrs(info);
+	amd_update_hwcr(MSR_K7_HWCR_MCSTATUSWREN_BIT, false);
+}
 
 static void do_inject(void)
 {
@@ -556,13 +539,13 @@ static void do_inject(void)
 	if (!cpu_online(cpu))
 		goto err;
 
-	toggle_hw_mce_inject(cpu, true);
-
 	i_mce.mcgstatus = mcg_status;
 	i_mce.inject_flags = inj_type;
-	smp_call_function_single(cpu, prepare_msrs, &i_mce, 0);
 
-	toggle_hw_mce_inject(cpu, false);
+	if (smp_call_function_single(cpu, ipi_inject_mce, &i_mce, 1)) {
+		pr_err("%s: Error injecting MCE on CPU %d\n", __func__, cpu);
+		goto err;
+	}
 
 	switch (inj_type) {
 	case DFR_INT_INJ:
@@ -727,7 +710,6 @@ static void __init debugfs_init(void)
 
 static void check_hw_inj_possible(void)
 {
-	int cpu;
 	u8 bank;
 
 	/*
@@ -737,7 +719,7 @@ static void check_hw_inj_possible(void)
 	if (!cpu_feature_enabled(X86_FEATURE_SMCA))
 		return;
 
-	cpu = get_cpu();
+	get_cpu();
 
 	for (bank = 0; bank < MAX_NR_BANKS; ++bank) {
 		u64 status = MCI_STATUS_VAL, ipid;
@@ -747,7 +729,7 @@ static void check_hw_inj_possible(void)
 		if (!ipid)
 			continue;
 
-		toggle_hw_mce_inject(cpu, true);
+		amd_update_hwcr(MSR_K7_HWCR_MCSTATUSWREN_BIT, true);
 
 		wrmsrq_safe(mca_msr_reg(bank, MCA_STATUS), status);
 		rdmsrq_safe(mca_msr_reg(bank, MCA_STATUS), &status);
@@ -759,7 +741,7 @@ static void check_hw_inj_possible(void)
 				"Try using APEI EINJ instead.\n");
 		}
 
-		toggle_hw_mce_inject(cpu, false);
+		amd_update_hwcr(MSR_K7_HWCR_MCSTATUSWREN_BIT, false);
 
 		break;
 	}
