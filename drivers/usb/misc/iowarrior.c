@@ -917,6 +917,7 @@ static void iowarrior_disconnect(struct usb_interface *interface)
 		mutex_unlock(&dev->mutex);
 	} else {
 		/* no process is using the device, cleanup now */
+		usb_kill_anchored_urbs(&dev->submitted);
 		mutex_unlock(&dev->mutex);
 		iowarrior_delete(dev);
 	}
