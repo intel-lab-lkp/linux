@@ -5,6 +5,7 @@
 
 #include <linux/firmware/imx/sm.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/scmi_protocol.h>

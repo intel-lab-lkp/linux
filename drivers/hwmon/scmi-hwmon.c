@@ -8,6 +8,7 @@
 
 #include <linux/hwmon.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/scmi_protocol.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
