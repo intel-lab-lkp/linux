@@ -58,6 +58,7 @@ struct cec_notifier;
 struct drm_printer;
 struct intel_connector;
 struct intel_ddi_buf_trans;
+struct intel_dp_link_training;
 struct intel_fbc;
 struct intel_global_objs_state;
 struct intel_hdcp_shim;
@@ -1185,7 +1186,6 @@ struct intel_crtc_state {
 	bool pkg_c_latency_used;
 	/* Only used for state verification. */
 	enum intel_panel_replay_dsc_support panel_replay_dsc_support;
-	u32 dc3co_exitline;
 	u16 su_y_granularity;
 	u8 active_non_psr_pipes;
 	u8 entry_setup_frames;
@@ -1573,6 +1573,10 @@ struct intel_crtc {
 #endif
 
 	bool vblank_psr_notify;
+
+	struct {
+		bool enabled;
+	} cmtg;
 };
 
 struct intel_plane_error {
@@ -1772,14 +1776,16 @@ struct intel_psr {
 	ktime_t last_exit;
 	bool sink_not_reliable;
 	bool irq_aux_error;
+	/* DC3CO allowed used to control PSR configuration */
+	bool dc3co_allowed;
+	/* DC3CO disable work */
+	struct delayed_work dc3co_work;
 	u16 su_w_granularity;
 	u16 su_y_granularity;
 	bool source_panel_replay_support;
 	bool sink_panel_replay_support;
 	bool panel_replay_enabled;
-	u32 dc3co_exitline;
 	u32 dc3co_exit_delay;
-	struct delayed_work dc3co_work;
 	u8 entry_setup_frames;
 
 	u8 io_wake_lines;
@@ -1853,11 +1859,7 @@ struct intel_dp {
 		int mst_probed_rate;
 		int force_lane_count;
 		int force_rate;
-		bool retrain_disabled;
-		/* Sequential link training failures after a passing LT */
-		int seq_train_failures;
-		int force_train_failure;
-		bool force_retrain;
+		struct intel_dp_link_training *training;
 	} link;
 	bool reset_link_params;
 	int mso_link_count;
