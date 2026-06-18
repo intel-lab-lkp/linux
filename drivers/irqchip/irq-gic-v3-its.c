@@ -1120,7 +1120,7 @@ static struct its_cmd_block *its_allocate_entry(struct its_node *its)
 	while (its_queue_full(its)) {
 		count--;
 		if (!count) {
-			pr_err_ratelimited("ITS queue not draining\n");
+			pr_err_ratelimited("ITS@%pa queue not draining\n", &its->phys_base);
 			return NULL;
 		}
 		cpu_relax();
@@ -1196,8 +1196,8 @@ static int its_wait_for_range_completion(struct its_node *its,
 
 		count--;
 		if (!count) {
-			pr_err_ratelimited("ITS queue timeout (%llu %llu)\n",
-					   to_idx, linear_idx);
+			pr_err_ratelimited("ITS@%pa queue timeout (%llu %llu)\n",
+					   &its->phys_base, to_idx, linear_idx);
 			return -1;
 		}
 		prev_idx = rd_idx;
@@ -1244,7 +1244,7 @@ post:									\
 	raw_spin_unlock_irqrestore(&its->lock, flags);			\
 									\
 	if (its_wait_for_range_completion(its, rd_idx, next_cmd))	\
-		pr_err_ratelimited("ITS cmd %ps failed\n", builder);	\
+		pr_err_ratelimited("ITS@%pa cmd %ps failed\n", &its->phys_base, &builder);	\
 }
 
 static void its_build_sync_cmd(struct its_node *its,
@@ -2411,7 +2411,8 @@ static int its_setup_baser(struct its_node *its, struct its_baser *baser,
 
 		/* 52bit PA is supported only when PageSize=64K */
 		if (psz != SZ_64K) {
-			pr_err("ITS: no 52bit PA support when psz=%d\n", psz);
+			pr_err("ITS@%pa: no 52bit PA support when psz=%d\n",
+				   &its->phys_base, psz);
 			its_free_pages(base, order);
 			return -ENXIO;
 		}
@@ -5181,7 +5182,7 @@ static int its_init_vpe_domain(void)
 	vpe_proxy.dev = its_create_device(its, devid, entries, false);
 	if (!vpe_proxy.dev) {
 		kfree(vpe_proxy.vpes);
-		pr_err("ITS: Can't allocate GICv4 proxy device\n");
+		pr_err("ITS@%pa: Can't allocate GICv4 proxy device\n", &its->phys_base);
 		return -ENOMEM;
 	}
 
