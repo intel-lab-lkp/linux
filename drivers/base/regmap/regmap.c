@@ -1333,42 +1333,6 @@ void regmap_field_bulk_free(struct regmap_field *field)
 EXPORT_SYMBOL_GPL(regmap_field_bulk_free);
 
 /**
- * devm_regmap_field_bulk_free() - Free a bulk register field allocated using
- *                            devm_regmap_field_bulk_alloc.
- *
- * @dev: Device that will be interacted with
- * @field: regmap field which should be freed.
- *
- * Free register field allocated using devm_regmap_field_bulk_alloc(). Usually
- * drivers need not call this function, as the memory allocated via devm
- * will be freed as per device-driver life-cycle.
- */
-void devm_regmap_field_bulk_free(struct device *dev,
-				 struct regmap_field *field)
-{
-	devm_kfree(dev, field);
-}
-EXPORT_SYMBOL_GPL(devm_regmap_field_bulk_free);
-
-/**
- * devm_regmap_field_free() - Free a register field allocated using
- *                            devm_regmap_field_alloc.
- *
- * @dev: Device that will be interacted with
- * @field: regmap field which should be freed.
- *
- * Free register field allocated using devm_regmap_field_alloc(). Usually
- * drivers need not call this function, as the memory allocated via devm
- * will be freed as per device-driver life-cyle.
- */
-void devm_regmap_field_free(struct device *dev,
-	struct regmap_field *field)
-{
-	devm_kfree(dev, field);
-}
-EXPORT_SYMBOL_GPL(devm_regmap_field_free);
-
-/**
  * regmap_field_alloc() - Allocate and initialise a register field.
  *
  * @regmap: regmap bank in which this register field is located.
