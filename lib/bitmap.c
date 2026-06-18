@@ -432,22 +432,29 @@ unsigned long bitmap_find_next_zero_area_off(unsigned long *map,
 					     unsigned long align_mask,
 					     unsigned long align_offset)
 {
-	unsigned long index, end, i;
-again:
-	index = find_next_zero_bit(map, size, start);
+	unsigned long find_idx, end, i, find_word_idx, find_word_off;
 
-	/* Align allocation */
-	index = __ALIGN_MASK(index + align_offset, align_mask) - align_offset;
+	for (;;) {
+		find_idx = find_next_zero_bit(map, size, start);
 
-	end = index + nr;
-	if (end > size)
-		return end;
-	i = find_next_bit(map, end, index);
-	if (i < end) {
+		/* Align allocation */
+		find_idx = __ALIGN_MASK(find_idx + align_offset,
+			align_mask) - align_offset;
+
+		end = find_idx + nr;
+		if (end > size)
+			return end;
+
+		find_word_idx = find_idx / BITS_PER_LONG;
+		find_word_off = find_word_idx * BITS_PER_LONG;
+
+		i = find_last_bit(map + find_word_idx,
+			end - find_word_off) + find_word_off;
+		if (i >= end || i < find_idx)
+			return find_idx;
+
 		start = i + 1;
-		goto again;
 	}
-	return index;
 }
 EXPORT_SYMBOL(bitmap_find_next_zero_area_off);
 
