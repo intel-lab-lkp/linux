@@ -36,7 +36,7 @@ properties:
     const: 1
     description:
       The clock consumer should specify the desired clock by having the clock
-      ID in its "clocks" phandle cell. See
+      ID in its 'clocks' phandle cell. See
       include/dt-bindings/clock/nxp,imx95-clock.h
 
 required:
