@@ -2736,7 +2736,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 		err = -EINVAL;
 		dev_err(&of_dev->dev, "%s: Failed to determine FM%d clock rate\n",
 			__func__, fman->dts_params.id);
-		goto fman_node_put;
+		goto clk_put;
 	}
 	/* Rounding to MHz */
 	fman->dts_params.clk_freq = DIV_ROUND_UP(clk_rate, 1000000);
@@ -2746,7 +2746,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 	if (err) {
 		dev_err(&of_dev->dev, "%s: failed to read fsl,qman-channel-range for %pOF\n",
 			__func__, fm_node);
-		goto fman_node_put;
+		goto clk_put;
 	}
 	fman->dts_params.qman_channel_base = range[0];
 	fman->dts_params.num_of_qman_channels = range[1];
@@ -2757,7 +2757,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 		err = -EINVAL;
 		dev_err(&of_dev->dev, "%s: could not find MURAM node\n",
 			__func__);
-		goto fman_free;
+		goto clk_put;
 	}
 
 	err = of_address_to_resource(muram_node, 0,
@@ -2766,7 +2766,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 		of_node_put(muram_node);
 		dev_err(&of_dev->dev, "%s: of_address_to_resource() = %d\n",
 			__func__, err);
-		goto fman_free;
+		goto clk_put;
 	}
 
 	of_node_put(muram_node);
@@ -2776,7 +2776,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 	if (err < 0) {
 		dev_err(&of_dev->dev, "%s: irq %d allocation failed (error = %d)\n",
 			__func__, irq, err);
-		goto fman_free;
+		goto clk_put;
 	}
 
 	if (fman->dts_params.err_irq != 0) {
@@ -2786,7 +2786,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 		if (err < 0) {
 			dev_err(&of_dev->dev, "%s: irq %d allocation failed (error = %d)\n",
 				__func__, fman->dts_params.err_irq, err);
-			goto fman_free;
+			goto clk_put;
 		}
 	}
 
@@ -2794,7 +2794,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 	if (IS_ERR(base_addr)) {
 		err = PTR_ERR(base_addr);
 		dev_err(&of_dev->dev, "%s: devm_ioremap() failed\n", __func__);
-		goto fman_free;
+		goto clk_put;
 	}
 
 	fman->dts_params.base_addr = base_addr;
@@ -2806,7 +2806,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 	if (err) {
 		dev_err(&of_dev->dev, "%s: of_platform_populate() failed\n",
 			__func__);
-		goto fman_free;
+		goto clk_put;
 	}
 
 #ifdef CONFIG_DPAA_ERRATUM_A050385
@@ -2816,9 +2816,10 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 
 	return fman;
 
+clk_put:
+	clk_put(clk);
 fman_node_put:
 	of_node_put(fm_node);
-fman_free:
 	kfree(fman);
 	return ERR_PTR(err);
 }
