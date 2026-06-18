@@ -1167,6 +1167,22 @@ static __init int init_tdmrs(struct tdmr_info_list *tdmr_list)
 	return 0;
 }
 
+/* Initialize TDX module extensions for extension SEAMCALLs */
+static __init int tdx_ext_init(void)
+{
+	struct tdx_module_args args = {};
+	u64 r;
+
+	do {
+		r = seamcall(TDH_EXT_INIT, &args);
+	} while (r == TDX_INTERRUPTED_RESUMABLE);
+
+	if (r != TDX_SUCCESS)
+		return -EFAULT;
+
+	return 0;
+}
+
 #define HPA_LIST_INFO_FIRST_ENTRY	GENMASK_U64(11, 3)
 #define HPA_LIST_INFO_PFN		GENMASK_U64(51, 12)
 #define HPA_LIST_INFO_LAST_ENTRY	GENMASK_U64(63, 55)
@@ -1285,7 +1301,11 @@ static __init int init_tdx_module_extensions(void)
 	if (!sysinfo_ext.ext_required)
 		return 0;
 
-	return tdx_ext_mem_setup(sysinfo_ext.memory_pool_required_pages);
+	ret = tdx_ext_mem_setup(sysinfo_ext.memory_pool_required_pages);
+	if (ret)
+		return ret;
+
+	return tdx_ext_init();
 }
 
 static __init int init_tdx_module(void)
