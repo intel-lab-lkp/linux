@@ -4,7 +4,11 @@
 $id: http://devicetree.org/schemas/rng/timeriomem_rng.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: TimerIO Random Number Generator
+title: Timer IOMEM hardware random number generator
+
+description: |
+  A device that provides random data via a single memory-mapped IO register.
+  A new value becomes available at a fixed interval.
 
 maintainers:
   - Krzysztof Kozlowski <krzk@kernel.org>
@@ -13,29 +17,47 @@ properties:
   compatible:
     const: timeriomem_rng
 
+  reg:
+    maxItems: 1
+    description:
+      Base address to sample from.  Must be aligned to the configured access
+      width (1, 2, or 4 bytes) and at least that wide.
+
   period:
     $ref: /schemas/types.yaml#/definitions/uint32
-    description: wait time in microseconds to use between samples
+    description:
+      Interval in microseconds between random value updates.
 
   quality:
     $ref: /schemas/types.yaml#/definitions/uint32
     default: 0
     description:
-      Estimated number of bits of true entropy per 1024 bits read from the rng.
-      Defaults to zero which causes the kernel's default quality to be used
-      instead.  Note that the default quality is usually zero which disables
-      using this rng to automatically fill the kernel's entropy pool.
+      Estimated number of bits of true entropy per 1024 bits read from the
+      device.  Defaults to zero which causes the kernel's default quality to
+      be used instead.  Note that the default quality is usually zero which
+      disables using this RNG to automatically fill the kernel's entropy
+      pool.
 
-  reg:
-    maxItems: 1
+  reg-io-width:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 4
+    enum: [1, 2, 4]
     description:
-      Base address to sample from. Currently 'reg' must be at least four bytes
-      wide and 32-bit aligned.
+      Access width in bytes.  Determines whether the read is performed as
+      an 8-bit, 16-bit, or 32-bit bus access.
+
+  mask:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0xFFFFFFFF
+    description:
+      Mask applied to the value read from the register.  Bits set to 0 in
+      the mask are cleared in the output data.  Default (no mask) passes
+      all bits through.
 
 required:
   - compatible
-  - period
   - reg
+  - period
 
 additionalProperties: false
 
@@ -43,6 +65,8 @@ examples:
   - |
     rng@44 {
         compatible = "timeriomem_rng";
-        reg = <0x44 0x04>;
-        period = <1000000>;
+        reg = <0x44 0x01>;
+        period = <50000>;
+        reg-io-width = <1>;
+        mask = <0xFF>;
     };
