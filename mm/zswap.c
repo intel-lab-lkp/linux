@@ -163,6 +163,7 @@ struct zswap_pool {
 struct zswap_shrink_walk_arg {
 	unsigned long bytes_written;
 	bool encountered_page_in_swapcache;
+	bool proactive;
 };
 
 /* Global LRU lists shared by all zswap pools. */
@@ -990,7 +991,8 @@ static bool zswap_decompress(struct zswap_entry *entry, struct folio *folio)
  * freed.
  */
 static int zswap_writeback_entry(struct zswap_entry *entry,
-				 swp_entry_t swpentry)
+				 swp_entry_t swpentry,
+				 bool proactive)
 {
 	struct xarray *tree;
 	pgoff_t offset = swp_offset(swpentry);
@@ -1044,6 +1046,15 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	count_vm_event(ZSWPWB);
 	if (entry->objcg)
 		count_objcg_events(entry->objcg, ZSWPWB, 1);
+
+	if (proactive && entry->objcg) {
+		struct mem_cgroup *memcg;
+
+		rcu_read_lock();
+		memcg = obj_cgroup_memcg(entry->objcg);
+		mod_memcg_state(memcg, MEMCG_ZSWPWB_PROACTIVE_B, entry->length);
+		rcu_read_unlock();
+	}
 
 	zswap_entry_free(entry);
 
@@ -1155,7 +1166,7 @@ static enum lru_status shrink_memcg_cb(struct list_head *item, struct list_lru_o
 	 */
 	spin_unlock(&l->lock);
 
-	writeback_result = zswap_writeback_entry(entry, swpentry);
+	writeback_result = zswap_writeback_entry(entry, swpentry, walk_arg->proactive);
 
 	if (writeback_result) {
 		zswap_reject_reclaim_fail++;
@@ -1184,6 +1195,7 @@ static unsigned long zswap_shrinker_scan(struct shrinker *shrinker,
 	struct zswap_shrink_walk_arg walk_arg = {
 		.bytes_written = 0,
 		.encountered_page_in_swapcache = false,
+		.proactive = false,
 	};
 	unsigned long shrink_ret;
 
@@ -1305,11 +1317,12 @@ static struct shrinker *zswap_alloc_shrinker(void)
  * writeback disabled, is a zombie cgroup, or has empty zswap LRUs.
  */
 static long shrink_memcg(struct mem_cgroup *memcg,
-			 unsigned long nr_to_writeback)
+			 unsigned long nr_to_writeback, bool proactive)
 {
 	struct zswap_shrink_walk_arg walk_arg = {
 		.bytes_written = 0,
 		.encountered_page_in_swapcache = false,
+		.proactive = proactive,
 	};
 	u64 bytes_to_writeback = nr_to_writeback << PAGE_SHIFT;
 	bool memcg_list_is_empty = true;
@@ -1492,7 +1505,7 @@ static int zswap_try_to_writeback(struct mem_cgroup *memcg,
 		}
 
 		batch_size = min(upper_pages - lower_pages, NR_ZSWAP_WB_BATCH);
-		shrunk = shrink_memcg(iter_memcg, batch_size);
+		shrunk = shrink_memcg(iter_memcg, batch_size, proactive);
 		/* drop the extra reference */
 		mem_cgroup_put(iter_memcg);
 
@@ -1642,7 +1655,7 @@ bool zswap_store(struct folio *folio)
 	objcg = get_obj_cgroup_from_folio(folio);
 	if (objcg && !obj_cgroup_may_zswap(objcg)) {
 		memcg = get_mem_cgroup_from_objcg(objcg);
-		if (shrink_memcg(memcg, 1) <= 0) {
+		if (shrink_memcg(memcg, 1, false) <= 0) {
 			mem_cgroup_put(memcg);
 			goto put_objcg;
 		}
