@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config DRM_AST
 	tristate "AST server chips"
-	depends on DRM && PCI
+	depends on PCI
 	select DRM_CLIENT_SELECTION
 	select DRM_GEM_SHMEM_HELPER
 	select DRM_KMS_HELPER
@@ -13,4 +13,3 @@ config DRM_AST
 	 and a version of AST that knows to fail if KMS
 	 is bound to the driver. These GPUs are commonly found
 	 in server chipsets.
-

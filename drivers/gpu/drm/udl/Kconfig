@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config DRM_UDL
 	tristate "DisplayLink"
-	depends on DRM
 	depends on USB
 	depends on USB_ARCH_HAS_HCD
 	depends on MMU

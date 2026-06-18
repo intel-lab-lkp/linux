@@ -1,6 +1,5 @@
 config DRM_LOGICVC
 	tristate "LogiCVC DRM"
-	depends on DRM
 	depends on OF || COMPILE_TEST
 	select DRM_CLIENT_SELECTION
 	select DRM_KMS_HELPER

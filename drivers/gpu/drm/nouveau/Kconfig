@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config DRM_NOUVEAU
 	tristate "Nouveau (NVIDIA) cards"
-	depends on DRM && PCI
+	depends on PCI
 	select IOMMU_API
 	select FW_LOADER
 	select FW_CACHE if PM_SLEEP

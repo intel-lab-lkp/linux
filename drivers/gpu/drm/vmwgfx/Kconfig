@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 config DRM_VMWGFX
 	tristate "DRM driver for VMware Virtual GPU"
-	depends on DRM && PCI
+	depends on PCI
 	depends on (X86 && HYPERVISOR_GUEST) || ARM64
 	select DRM_CLIENT_SELECTION
 	select DRM_TTM
@@ -24,4 +24,3 @@ config DRM_VMWGFX_MKSSTATS
 	default n
 	help
 	   Choose this option to instrument the kernel driver for mksGuestStats.
-

@@ -1,6 +1,5 @@
 config DRM_MCDE
 	tristate "DRM Support for ST-Ericsson MCDE (Multichannel Display Engine)"
-	depends on DRM
 	depends on CMA
 	depends on ARM || COMPILE_TEST
 	depends on OF

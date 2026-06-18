@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config DRM_ASPEED_GFX
 	tristate "ASPEED BMC Display Controller"
-	depends on DRM && OF
+	depends on OF
 	depends on (COMPILE_TEST || ARCH_ASPEED)
 	depends on MMU
 	select DRM_CLIENT_SELECTION

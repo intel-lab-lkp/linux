@@ -2,7 +2,6 @@ config DRM_USE_DYNAMIC_DEBUG
 	bool "use dynamic debug to implement drm.debug"
 	default n
 	depends on BROKEN
-	depends on DRM
 	depends on DYNAMIC_DEBUG || DYNAMIC_DEBUG_CORE
 	depends on JUMP_LABEL
 	help
@@ -13,7 +12,7 @@ config DRM_USE_DYNAMIC_DEBUG
 
 config DRM_WERROR
 	bool "Compile the drm subsystem with warnings as errors"
-	depends on DRM && EXPERT
+	depends on EXPERT
 	depends on !WERROR
 	default n
 	help
@@ -27,7 +26,7 @@ config DRM_WERROR
 
 config DRM_HEADER_TEST
 	bool "Ensure DRM headers are self-contained and pass kernel-doc"
-	depends on DRM && EXPERT && BROKEN
+	depends on EXPERT && BROKEN
 	default n
 	help
 	  Ensure the DRM subsystem headers both under drivers/gpu/drm and
@@ -39,7 +38,6 @@ config DRM_HEADER_TEST
 config DRM_DEBUG_MM
 	bool "Insert extra checks and debug info into the DRM range managers"
 	default n
-	depends on DRM
 	depends on STACKTRACE_SUPPORT
 	select STACKDEPOT
 	help
@@ -52,14 +50,14 @@ config DRM_DEBUG_MM
 
 config DRM_KUNIT_TEST_HELPERS
 	tristate
-	depends on DRM && KUNIT
+	depends on KUNIT
 	select DRM_KMS_HELPER
 	help
 	  KUnit Helpers for KMS drivers.
 
 config DRM_KUNIT_TEST
 	tristate "KUnit tests for DRM" if !KUNIT_ALL_TESTS
-	depends on DRM && KUNIT && MMU
+	depends on KUNIT && MMU
 	select DRM_BRIDGE_CONNECTOR
 	select DRM_BUDDY
 	select DRM_DISPLAY_DP_HELPER
@@ -85,7 +83,7 @@ config DRM_KUNIT_TEST
 
 config DRM_TTM_KUNIT_TEST
 	tristate "KUnit tests for TTM" if !KUNIT_ALL_TESTS
-	depends on DRM && KUNIT && MMU && (UML || COMPILE_TEST)
+	depends on KUNIT && MMU && (UML || COMPILE_TEST)
 	select DRM_TTM
 	select DRM_BUDDY
 	select DRM_EXPORT_FOR_TESTS if m
@@ -102,7 +100,7 @@ config DRM_TTM_KUNIT_TEST
 config DRM_SCHED_KUNIT_TEST
 	tristate "KUnit tests for the DRM scheduler" if !KUNIT_ALL_TESTS
 	select DRM_SCHED
-	depends on DRM && KUNIT
+	depends on KUNIT
 	default KUNIT_ALL_TESTS
 	help
 	  Choose this option to build unit tests for the DRM scheduler.

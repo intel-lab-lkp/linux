@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config DRM_VGEM
 	tristate "Virtual GEM provider"
-	depends on DRM && MMU
+	depends on MMU
 	select DRM_GEM_SHMEM_HELPER
 	help
 	  Choose this option to get a virtual graphics memory manager,

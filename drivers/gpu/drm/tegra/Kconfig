@@ -3,7 +3,6 @@ config DRM_TEGRA
 	tristate "NVIDIA Tegra DRM"
 	depends on ARCH_TEGRA || COMPILE_TEST
 	depends on COMMON_CLK
-	depends on DRM
 	depends on OF
 	select DRM_CLIENT_SELECTION
 	select DRM_DISPLAY_DP_HELPER

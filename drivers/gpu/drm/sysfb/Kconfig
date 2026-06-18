@@ -1,15 +1,13 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 menu "Drivers for system framebuffers"
-	depends on DRM
 
 config DRM_SYSFB_HELPER
 	tristate
-	depends on DRM
 
 config DRM_COREBOOTDRM
 	tristate "Coreboot framebuffer driver"
-	depends on DRM && MMU
+	depends on MMU
 	depends on GOOGLE_FRAMEBUFFER_COREBOOT
 	select APERTURE_HELPERS
 	select DRM_CLIENT_SELECTION
@@ -25,7 +23,7 @@ config DRM_COREBOOTDRM
 
 config DRM_EFIDRM
 	tristate "EFI framebuffer driver"
-	depends on DRM && MMU && EFI && (!SYSFB_SIMPLEFB || COMPILE_TEST)
+	depends on MMU && EFI && (!SYSFB_SIMPLEFB || COMPILE_TEST)
 	select APERTURE_HELPERS
 	select DRM_CLIENT_SELECTION
 	select DRM_GEM_SHMEM_HELPER
@@ -41,7 +39,7 @@ config DRM_EFIDRM
 
 config DRM_OFDRM
 	tristate "Open Firmware display driver"
-	depends on DRM && MMU && OF && (PPC || COMPILE_TEST)
+	depends on MMU && OF && (PPC || COMPILE_TEST)
 	select APERTURE_HELPERS
 	select DRM_CLIENT_SELECTION
 	select DRM_GEM_SHMEM_HELPER
@@ -56,7 +54,7 @@ config DRM_OFDRM
 
 config DRM_SIMPLEDRM
 	tristate "Simple framebuffer driver"
-	depends on DRM && MMU
+	depends on MMU
 	select APERTURE_HELPERS
 	select DRM_CLIENT_SELECTION
 	select DRM_GEM_SHMEM_HELPER
@@ -75,7 +73,7 @@ config DRM_SIMPLEDRM
 
 config DRM_VESADRM
 	tristate "VESA framebuffer driver"
-	depends on DRM && MMU && X86 && (!SYSFB_SIMPLEFB || COMPILE_TEST)
+	depends on MMU && X86 && (!SYSFB_SIMPLEFB || COMPILE_TEST)
 	select APERTURE_HELPERS
 	select DRM_CLIENT_SELECTION
 	select DRM_GEM_SHMEM_HELPER

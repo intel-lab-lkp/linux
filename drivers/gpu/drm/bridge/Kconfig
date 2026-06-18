@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config DRM_BRIDGE
 	def_bool y
-	depends on DRM
 	help
 	  Bridge registration and lookup framework.
 
@@ -31,7 +30,7 @@ config DRM_AUX_HPD_BRIDGE
 	  support.
 
 menu "Display Interface Bridges"
-	depends on DRM && DRM_BRIDGE
+	depends on DRM_BRIDGE
 
 config DRM_CHIPONE_ICN6211
 	tristate "Chipone ICN6211 MIPI-DSI/RGB Converter bridge"
@@ -241,7 +240,6 @@ config DRM_MICROCHIP_LVDS_SERIALIZER
 
 config DRM_NWL_MIPI_DSI
 	tristate "Northwest Logic MIPI DSI Host controller"
-	depends on DRM
 	depends on COMMON_CLK
 	depends on OF && HAS_IOMEM
 	select DRM_KMS_HELPER
@@ -430,7 +428,7 @@ config DRM_TOSHIBA_TC358775
 
 config DRM_TI_DLPC3433
 	tristate "TI DLPC3433 Display controller"
-	depends on DRM && DRM_PANEL
+	depends on DRM_PANEL
 	depends on OF
 	select DRM_MIPI_DSI
 	help

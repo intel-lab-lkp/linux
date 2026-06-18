@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config DRM_PANEL
 	bool
-	depends on DRM
 	help
 	  Panel registration and lookup framework.
 
 menu "Display Panels"
-	depends on DRM && DRM_PANEL
+	depends on DRM_PANEL
 
 config DRM_PANEL_ABT_Y030XX067A
 	tristate "ABT Y030XX067A 320x480 LCD panel"

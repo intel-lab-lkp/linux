@@ -2,7 +2,7 @@
 config DRM_RZG2L_DU
 	tristate "DRM Support for RZ/G2L Display Unit"
 	depends on ARCH_RENESAS || COMPILE_TEST
-	depends on DRM && OF
+	depends on OF
 	depends on VIDEO_RENESAS_VSP1
 	select DRM_CLIENT_SELECTION
 	select DRM_GEM_DMA_HELPER

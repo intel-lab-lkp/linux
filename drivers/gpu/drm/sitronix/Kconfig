@@ -1,6 +1,6 @@
 config DRM_ST7571
 	tristate "DRM support for Sitronix ST7567/ST7571 display panels"
-	depends on DRM && MMU
+	depends on MMU
 	select DRM_CLIENT_SELECTION
 	select DRM_GEM_SHMEM_HELPER
 	select DRM_KMS_HELPER
@@ -41,7 +41,7 @@ config DRM_ST7571_SPI
 
 config DRM_ST7586
 	tristate "DRM support for Sitronix ST7586 display panels"
-	depends on DRM && SPI
+	depends on SPI
 	select DRM_CLIENT_SELECTION
 	select DRM_KMS_HELPER
 	select DRM_GEM_DMA_HELPER
@@ -54,7 +54,7 @@ config DRM_ST7586
 
 config DRM_ST7735R
 	tristate "DRM support for Sitronix ST7715R/ST7735R display panels"
-	depends on DRM && SPI
+	depends on SPI
 	select DRM_CLIENT_SELECTION
 	select DRM_KMS_HELPER
 	select DRM_GEM_DMA_HELPER
@@ -70,7 +70,7 @@ config DRM_ST7735R
 
 config DRM_ST7920
 	tristate "DRM support for Sitronix ST7920 LCD displays"
-	depends on DRM && SPI && MMU
+	depends on SPI && MMU
 	select DRM_GEM_SHMEM_HELPER
 	select DRM_KMS_HELPER
 	select REGMAP_SPI

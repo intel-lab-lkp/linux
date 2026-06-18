@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 config DRM_RCAR_DU
 	tristate "DRM Support for R-Car Display Unit"
-	depends on DRM && OF
+	depends on OF
 	depends on ARM || ARM64 || COMPILE_TEST
 	depends on ARCH_RENESAS || COMPILE_TEST
 	select DRM_CLIENT_SELECTION
@@ -27,7 +27,7 @@ config DRM_RCAR_CMM
 
 config DRM_RCAR_DW_HDMI
 	tristate "R-Car Gen3 and RZ/G2 DU HDMI Encoder Support"
-	depends on DRM && OF
+	depends on OF
 	depends on DRM_RCAR_DU || COMPILE_TEST
 	select DRM_DW_HDMI
 	help

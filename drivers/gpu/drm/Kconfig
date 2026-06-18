@@ -26,36 +26,31 @@ menuconfig DRM
 	  details.  You should also select and configure AGP
 	  (/dev/agpgart) support if it is available for your platform.
 
+if DRM
+
 menu "DRM debugging options"
-depends on DRM
 source "drivers/gpu/drm/Kconfig.debug"
 endmenu
 
-if DRM
-
 config DRM_MIPI_DBI
 	tristate
-	depends on DRM
 	select DRM_KMS_HELPER
 
 config DRM_MIPI_DSI
 	bool
-	depends on DRM
 
 config DRM_KMS_HELPER
 	tristate
-	depends on DRM
 	select FB_CORE if DRM_FBDEV_EMULATION
 	help
 	  CRTC helpers for KMS drivers.
 
 config DRM_DRAW
 	bool
-	depends on DRM
 
 config DRM_PANIC
 	bool "Display a user-friendly message when a kernel panic occurs"
-	depends on DRM && PRINTK
+	depends on PRINTK
 	select FONT_SUPPORT
 	select DRM_DRAW
 	help
@@ -132,7 +127,6 @@ config DRM_PANIC_SCREEN_QR_VERSION
 
 config DRM_RAS
 	bool "DRM RAS support"
-	depends on DRM
 	depends on NET
 	help
 	  Enables the DRM RAS (Reliability, Availability and Serviceability)
@@ -172,7 +166,6 @@ config DRM_DEBUG_MODESET_LOCK
 
 config DRM_CLIENT
 	bool
-	depends on DRM
 	help
 	  Enables support for DRM clients. DRM drivers that need
 	  struct drm_client_dev and its interfaces should select this
@@ -183,7 +176,6 @@ source "drivers/gpu/drm/clients/Kconfig"
 
 config DRM_LOAD_EDID_FIRMWARE
 	bool "Allow to specify an EDID data set instead of probing for it"
-	depends on DRM
 	help
 	  Say Y here, if you want to use EDID data to be loaded from the
 	  /lib/firmware directory or one of the provided built-in
@@ -197,7 +189,7 @@ source "drivers/gpu/drm/display/Kconfig"
 
 config DRM_TTM
 	tristate
-	depends on DRM && MMU
+	depends on MMU
 	select SHMEM
 	help
 	  GPU memory management subsystem for devices with multiple
@@ -206,13 +198,11 @@ config DRM_TTM
 
 config DRM_EXEC
 	tristate
-	depends on DRM
 	help
 	  Execution context for command submissions
 
 config DRM_GPUVM
 	tristate
-	depends on DRM
 	select DRM_EXEC
 	help
 	  GPU-VM representation providing helpers to manage a GPUs virtual
@@ -220,14 +210,12 @@ config DRM_GPUVM
 
 config RUST_DRM_GPUVM
 	bool
-	depends on DRM
 	select DRM_GPUVM
 	help
 	  Choose this if you need GPUVM functions in Rust
 
 config DRM_GPUSVM
 	tristate
-	depends on DRM
 	select HMM_MIRROR
 	select MMU_NOTIFIER
 	help
@@ -236,20 +224,17 @@ config DRM_GPUSVM
 
 config DRM_BUDDY
 	tristate
-	depends on DRM
 	select GPU_BUDDY
 	help
 	  A page based buddy allocator
 
 config DRM_VRAM_HELPER
 	tristate
-	depends on DRM
 	help
 	  Helpers for VRAM memory management
 
 config DRM_TTM_HELPER
 	tristate
-	depends on DRM
 	select DRM_TTM
 	select DRM_KMS_HELPER if DRM_FBDEV_EMULATION
 	select FB_CORE if DRM_FBDEV_EMULATION
@@ -259,7 +244,6 @@ config DRM_TTM_HELPER
 
 config DRM_GEM_DMA_HELPER
 	tristate
-	depends on DRM
 	select DRM_KMS_HELPER if DRM_FBDEV_EMULATION
 	select FB_CORE if DRM_FBDEV_EMULATION
 	select FB_DMAMEM_HELPERS_DEFERRED if DRM_FBDEV_EMULATION
@@ -268,7 +252,7 @@ config DRM_GEM_DMA_HELPER
 
 config DRM_GEM_SHMEM_HELPER
 	tristate
-	depends on DRM && MMU
+	depends on MMU
 	select DRM_KMS_HELPER if DRM_FBDEV_EMULATION
 	select FB_CORE if DRM_FBDEV_EMULATION
 	select FB_SYSMEM_HELPERS_DEFERRED if DRM_FBDEV_EMULATION
@@ -277,18 +261,16 @@ config DRM_GEM_SHMEM_HELPER
 
 config RUST_DRM_GEM_SHMEM_HELPER
 	bool
-	depends on DRM && MMU
+	depends on MMU
 	select DRM_GEM_SHMEM_HELPER
 	help
 	  Choose this if you need the GEM shmem helper functions In Rust
 
 config DRM_SUBALLOC_HELPER
 	tristate
-	depends on DRM
 
 config DRM_SCHED
 	tristate
-	depends on DRM
 
 # Separate option as not all DRM drivers use it
 config DRM_PANEL_BACKLIGHT_QUIRKS
@@ -365,7 +347,7 @@ source "drivers/gpu/drm/xe/Kconfig"
 source "drivers/gpu/drm/xen/Kconfig"
 source "drivers/gpu/drm/xlnx/Kconfig"
 
-endif
+endif # DRM
 
 # Separate option because drm_panel_orientation_quirks.c is shared with fbdev
 config DRM_PANEL_ORIENTATION_QUIRKS

@@ -2,7 +2,6 @@
 
 config DRM_MSM
 	tristate "MSM DRM"
-	depends on DRM
 	depends on ARCH_QCOM || SOC_IMX5 || COMPILE_TEST
 	depends on COMMON_CLK
 	depends on IOMMU_SUPPORT

@@ -6,7 +6,7 @@ config DRM_MXS
 
 config DRM_MXSFB
 	tristate "i.MX (e)LCDIF LCD controller"
-	depends on DRM && OF
+	depends on OF
 	depends on COMMON_CLK
 	depends on ARCH_MXS || ARCH_MXC || COMPILE_TEST
 	select DRM_CLIENT_SELECTION
@@ -24,7 +24,7 @@ config DRM_MXSFB
 
 config DRM_IMX_LCDIF
 	tristate "i.MX LCDIFv3 LCD controller"
-	depends on DRM && OF
+	depends on OF
 	depends on COMMON_CLK
 	depends on ARCH_MXC || COMPILE_TEST
 	select DRM_CLIENT_SELECTION

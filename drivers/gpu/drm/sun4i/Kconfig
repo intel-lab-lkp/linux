@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config DRM_SUN4I
 	tristate "DRM Support for Allwinner A10 Display Engine"
-	depends on DRM && COMMON_CLK
+	depends on COMMON_CLK
 	depends on ARCH_SUNXI || COMPILE_TEST
 	select DRM_CLIENT_SELECTION
 	select DRM_GEM_DMA_HELPER

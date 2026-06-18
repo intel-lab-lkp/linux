@@ -2,7 +2,6 @@
 
 config DRM_CLIENT_LIB
 	tristate
-	depends on DRM
 	select DRM_KMS_HELPER if DRM_FBDEV_EMULATION
 	select FB_CORE if DRM_FBDEV_EMULATION
 	help
@@ -11,7 +10,6 @@ config DRM_CLIENT_LIB
 
 config DRM_CLIENT_SELECTION
 	tristate
-	depends on DRM
 	select DRM_CLIENT_LIB if DRM_CLIENT_LOG
 	select DRM_CLIENT_LIB if DRM_FBDEV_EMULATION
 	help

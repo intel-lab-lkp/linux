@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config DRM_PL111
 	tristate "DRM Support for PL111 CLCD Controller"
-	depends on DRM
 	depends on ARM || ARM64 || COMPILE_TEST
 	depends on VEXPRESS_CONFIG || VEXPRESS_CONFIG=n
 	depends on COMMON_CLK
@@ -13,4 +12,3 @@ config DRM_PL111
 	help
 	  Choose this option for DRM support for the PL111 CLCD controller.
 	  If M is selected the module will be called pl111_drm.
-
