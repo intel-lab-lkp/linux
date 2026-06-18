@@ -2603,7 +2603,8 @@ static bool rcu_torture_one_read(struct torture_random_state *trsp, long myid)
 	// rcu_read_unlock() does not end the full segmented RCU read-side
 	// critical section.
 	if (WARN_ON_ONCE(cur_ops->is_task_rcu_boosted && cur_ops->is_task_rcu_boosted() &&
-			 !in_serving_softirq() && !in_hardirq() && !in_nmi()) &&
+			 preempt_count() == 0 && !irqs_disabled() &&
+			 rcu_preempt_depth() == 0) &&
 	    READ_ONCE(firsttime) && xchg(&firsttime, 0)) {
 		nsegs = rtors.rtrsp - rtors.rtseg;
 		nsegs = clamp_val(nsegs, 0, RCUTORTURE_RDR_MAX_SEGS);
