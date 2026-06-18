@@ -46,6 +46,33 @@ extern bool housekeeping_test_cpu(int cpu, enum hk_type type);
 extern int housekeeping_update(struct cpumask *isol_mask);
 extern void __init housekeeping_init(void);
 
+/**
+ * struct housekeeping_cbs - Per-subsystem callbacks for housekeeping mask changes
+ * @name:		Subsystem name for diagnostic messages
+ * @pre_validate:	Run before RCU pointer swap.  Return -EINVAL
+ *			to reject the update.
+ * @apply:		Run after synchronize_rcu().  Reconfigure subsystem
+ *			state.  The new mask is visible to readers.
+ *
+ * Register subsystem callbacks at initcall time.
+ * Invoke callbacks in registration order when the corresponding
+ * housekeeping mask changes.  Skip types not present in the update
+ * mask.
+ *
+ * Replace the notifier-chain pattern with deterministic callback
+ * ordering.
+ */
+struct housekeeping_cbs {
+	const char			*name;
+	int	(*pre_validate)(enum hk_type type,
+				const struct cpumask *cur_mask,
+				const struct cpumask *new_mask);
+	void	(*apply)(enum hk_type type);
+};
+
+int housekeeping_register_cbs(enum hk_type type, struct housekeeping_cbs *cbs);
+int housekeeping_unregister_cbs(enum hk_type type, struct housekeeping_cbs *cbs);
+
 #else
 
 static inline int housekeeping_any_cpu(enum hk_type type)
@@ -73,6 +100,10 @@ static inline bool housekeeping_test_cpu(int cpu, enum hk_type type)
 
 static inline int housekeeping_update(struct cpumask *isol_mask) { return 0; }
 static inline void housekeeping_init(void) { }
+static inline int housekeeping_register_cbs(enum hk_type type,
+					    struct housekeeping_cbs *cbs) { return 0; }
+static inline int housekeeping_unregister_cbs(enum hk_type type,
+					      struct housekeeping_cbs *cbs) { return 0; }
 #endif /* CONFIG_CPU_ISOLATION */
 
 static inline bool housekeeping_cpu(int cpu, enum hk_type type)

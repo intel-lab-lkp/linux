@@ -28,6 +28,93 @@ struct housekeeping {
 
 static struct housekeeping housekeeping;
 
+/*
+ * Maintain an explicit callback table indexed by housekeeping type.
+ * Invoke callbacks for affected types in deterministic order:
+ * pre_validate() before the RCU pointer swap, apply() after
+ * synchronize_rcu().
+ */
+#define HK_MAX_CBS 4
+
+static struct {
+	struct housekeeping_cbs *cbs[HK_MAX_CBS];
+	int nr;
+} housekeeping_cbs_table[HK_TYPE_MAX];
+
+/**
+ * housekeeping_register_cbs - Register explicit callbacks for a housekeeping type
+ * @type:	Housekeeping type to register for
+ * @cbs:	Callback structure containing pre_validate() and apply()
+ *
+ * Callbacks run in registration order when the mask for @type changes:
+ * pre_validate() before the RCU swap may reject the update; apply()
+ * after synchronize_rcu() reconfigures subsystem state.
+ *
+ * Return: 0 on success, -EINVAL if @type or @cbs is invalid,
+ * -ENOSPC if the per-type table is full.
+ */
+int housekeeping_register_cbs(enum hk_type type, struct housekeeping_cbs *cbs)
+{
+	if (type >= HK_TYPE_MAX || !cbs)
+		return -EINVAL;
+	if (housekeeping_cbs_table[type].nr >= HK_MAX_CBS)
+		return -ENOSPC;
+	housekeeping_cbs_table[type].cbs[housekeeping_cbs_table[type].nr++] = cbs;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(housekeeping_register_cbs);
+
+/**
+ * housekeeping_unregister_cbs - Remove previously registered callbacks
+ * @type:	Housekeeping type
+ * @cbs:	Callback structure to remove
+ *
+ * Return: 0 on success, -EINVAL if arguments are invalid,
+ * -ENOENT if @cbs was not registered.
+ */
+int housekeeping_unregister_cbs(enum hk_type type, struct housekeeping_cbs *cbs)
+{
+	int i;
+
+	if (type >= HK_TYPE_MAX || !cbs)
+		return -EINVAL;
+	for (i = 0; i < housekeeping_cbs_table[type].nr; i++) {
+		if (housekeeping_cbs_table[type].cbs[i] == cbs) {
+			housekeeping_cbs_table[type].cbs[i] =
+				housekeeping_cbs_table[type].cbs[--housekeeping_cbs_table[type].nr];
+			return 0;
+		}
+	}
+	return -ENOENT;
+}
+EXPORT_SYMBOL_GPL(housekeeping_unregister_cbs);
+
+static int housekeeping_pre_validate_cbs(enum hk_type type,
+					 const struct cpumask *cur,
+					 const struct cpumask *new)
+{
+	int i, ret;
+
+	for (i = 0; i < housekeeping_cbs_table[type].nr; i++) {
+		if (!housekeeping_cbs_table[type].cbs[i]->pre_validate)
+			continue;
+		ret = housekeeping_cbs_table[type].cbs[i]->pre_validate(type, cur, new);
+		if (ret < 0)
+			return ret;
+	}
+	return 0;
+}
+
+static void housekeeping_apply_cbs(enum hk_type type)
+{
+	int i;
+
+	for (i = 0; i < housekeeping_cbs_table[type].nr; i++) {
+		if (housekeeping_cbs_table[type].cbs[i]->apply)
+			housekeeping_cbs_table[type].cbs[i]->apply(type);
+	}
+}
+
 bool housekeeping_enabled(enum hk_type type)
 {
 	return !!(READ_ONCE(housekeeping.flags) & BIT(type));
