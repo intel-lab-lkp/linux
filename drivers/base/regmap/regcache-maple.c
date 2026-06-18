@@ -307,7 +307,7 @@ static int regcache_maple_init(struct regmap *map)
 	return 0;
 }
 
-static int regcache_maple_exit(struct regmap *map)
+static void regcache_maple_exit(struct regmap *map)
 {
 	struct maple_tree *mt = map->cache;
 	MA_STATE(mas, mt, 0, UINT_MAX);
@@ -315,7 +315,7 @@ static int regcache_maple_exit(struct regmap *map)
 
 	/* if we've already been called then just return */
 	if (!mt)
-		return 0;
+		return;
 
 	mas_lock(&mas);
 	mas_for_each(&mas, entry, UINT_MAX)
@@ -325,8 +325,6 @@ static int regcache_maple_exit(struct regmap *map)
 
 	kfree(mt);
 	map->cache = NULL;
-
-	return 0;
 }
 
 static int regcache_maple_insert_block(struct regmap *map, int first,
