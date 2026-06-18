@@ -547,6 +547,9 @@ static int coredump_wait(int exit_code, struct core_state *core_state)
 		}
 	}
 
+	if (!mm_flags_test(MMF_DUMP_MAPPED_SHARED, tsk->mm))
+		exit_files(tsk);
+
 	return core_waiters;
 }
 
