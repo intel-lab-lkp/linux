@@ -4929,3 +4929,107 @@ void __init rcu_init(void)
 #include "tree_exp.h"
 #include "tree_nocb.h"
 #include "tree_plugin.h"
+
+#ifdef CONFIG_RCU_NOCB_CPU
+/*
+ * RCU NOCB runtime toggle via housekeeping callback.
+ * Schedule the CPU-hotplug work asynchronously because
+ * remove_cpu() and add_cpu() must not be called while holding
+ * cpuset_top_mutex (the hk callback context).
+ *
+ * Snapshot the current HK_TYPE_KERNEL_NOISE cpumask inside the work
+ * function under an RCU read lock to avoid caching a pointer at
+ * apply() time that could be freed before the work runs.
+ */
+struct rcu_hk_work {
+	struct work_struct work;
+};
+
+static void rcu_hk_workfn(struct work_struct *w)
+{
+	struct rcu_hk_work *hw = container_of(w, struct rcu_hk_work, work);
+	cpumask_var_t hk_mask;
+	int cpu, ret;
+
+	if (!alloc_cpumask_var(&hk_mask, GFP_KERNEL)) {
+		kfree(hw);
+		return;
+	}
+
+	rcu_read_lock();
+	cpumask_copy(hk_mask, housekeeping_cpumask_rcu(HK_TYPE_KERNEL_NOISE));
+	rcu_read_unlock();
+
+	for_each_possible_cpu(cpu) {
+		bool should_offload = !cpumask_test_cpu(cpu, hk_mask);
+		bool is_offloaded;
+		bool was_online;
+
+		if (!cpumask_available(rcu_nocb_mask)) {
+			is_offloaded = false;
+		} else {
+			is_offloaded = cpumask_test_cpu(cpu, rcu_nocb_mask);
+		}
+
+		if (should_offload == is_offloaded)
+			continue;
+
+		was_online = cpu_online(cpu);
+		if (was_online) {
+			ret = remove_cpu(cpu);
+			if (ret)
+				continue;
+		}
+		if (should_offload)
+			rcu_nocb_cpu_offload(cpu);
+		else
+			rcu_nocb_cpu_deoffload(cpu);
+		if (was_online)
+			add_cpu(cpu);
+	}
+
+	free_cpumask_var(hk_mask);
+	kfree(hw);
+}
+
+static void rcu_hk_apply(enum hk_type type)
+{
+	struct rcu_hk_work *hw;
+
+	if (!cpumask_available(rcu_nocb_mask))
+		return;
+
+	hw = kmalloc(sizeof(*hw), GFP_KERNEL);
+	if (!hw)
+		return;
+
+	INIT_WORK(&hw->work, rcu_hk_workfn);
+	schedule_work(&hw->work);
+}
+
+static int rcu_hk_validate(enum hk_type type,
+			   const struct cpumask *cur_mask,
+			   const struct cpumask *new_mask)
+{
+	if (!IS_ENABLED(CONFIG_RCU_NOCB_CPU))
+		return -EOPNOTSUPP;
+	return 0;
+}
+
+static struct housekeeping_cbs rcu_hk_cbs = {
+	.name		= "rcu/nocb",
+	.pre_validate	= rcu_hk_validate,
+	.apply		= rcu_hk_apply,
+};
+
+static int __init rcu_hk_init(void)
+{
+	int ret;
+
+	ret = housekeeping_register_cbs(HK_TYPE_KERNEL_NOISE, &rcu_hk_cbs);
+	if (ret)
+		pr_info("rcu/nocb: runtime NOCB toggle disabled (%d)\n", ret);
+	return 0;
+}
+late_initcall(rcu_hk_init);
+#endif /* CONFIG_RCU_NOCB_CPU */
