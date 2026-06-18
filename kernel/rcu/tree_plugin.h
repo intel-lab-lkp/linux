@@ -693,6 +693,54 @@ static void rcu_preempt_deferred_qs_handler(struct irq_work *iwp)
 }
 
 /*
+ * Bounded-delay rescue timeout for the deferred-QS reporting.
+ *
+ * The compound branch of rcu_read_unlock_special() arms either the
+ * scheduler, RCU_SOFTIRQ (raise_softirq_irqoff) or irq_work_queue_on() inorder
+ * to report a deferred QS at a later time. 
+ *
+ * However, that is not enough as in scenarios where local_irq_disable()d
+ * sections span the preempt_enable() call of a preempt-disabled section:
+ *
+ *  rcu_read_lock();
+ *  // receive IPI for exp GP
+ *  preempt_disable();
+ *  rcu_read_unlock();    // Set the "need reschedule" flag.
+ *  local_irq_disable();
+ *  preempt_enable();     // Cannot reschedule as IRQs are off.
+ *  local_irq_enable();
+ *  // Now outside the compount RCU read-side critical section
+ *  // however, expedited GP is still help up.
+ *
+ * Introduce a rescue timer, firing every 50 micro seconds after the last
+ * rcu_read_unlock() call, to fix this.
+ */
+static int defer_qs_rescue_delay_us = 50;
+module_param(defer_qs_rescue_delay_us, int, 0644);
+MODULE_PARM_DESC(defer_qs_rescue_delay_us,
+		 "Microseconds before the rescue timer fires a deferred-QS report.");
+
+static enum hrtimer_restart
+rcu_preempt_deferred_qs_rescue(struct hrtimer *hrtp)
+{
+	lockdep_assert_irqs_disabled();
+
+	/*
+	 * Still inside a reader / compound section: deboosting is unsafe, so
+	 * rearm and retry after a bounded delay.  Once clean,
+	 * rcu_preempt_deferred_qs_try_report() reports the deferred QS and
+	 * releases any boost in the current task's context (or is a no-op if
+	 * natural recovery already landed).
+	 */
+	if (!rcu_preempt_deferred_qs_try_report(current)) {
+		hrtimer_forward_now(hrtp,
+				    us_to_ktime(defer_qs_rescue_delay_us));
+		return HRTIMER_RESTART;
+	}
+	return HRTIMER_NORESTART;
+}
+
+/*
  * Check if expedited grace period processing during unlock is needed.
  *
  * This function determines whether expedited handling is required based on:
@@ -811,6 +859,13 @@ static void rcu_read_unlock_special(struct task_struct *t)
 				irq_work_queue_on(&rdp->defer_qs_iw, rdp->cpu);
 			}
 		}
+		// Bounded-delay rescue: arm whenever the compound branch
+		// entered with a pending deferred-QS / deboost obligation,
+		// regardless of which mechanism above was chosen.
+		if (needs_exp && cpu_online(rdp->cpu))
+			hrtimer_start(&rdp->defer_qs_iw_rescue,
+				      us_to_ktime(defer_qs_rescue_delay_us),
+				      HRTIMER_MODE_REL_PINNED_HARD);
 		local_irq_restore(flags);
 		return;
 	}
@@ -947,6 +1002,9 @@ dump_blkd_tasks(struct rcu_node *rnp, int ncheck)
 static void rcu_preempt_deferred_qs_init(struct rcu_data *rdp)
 {
 	rdp->defer_qs_iw = IRQ_WORK_INIT_HARD(rcu_preempt_deferred_qs_handler);
+	hrtimer_setup(&rdp->defer_qs_iw_rescue,
+		      rcu_preempt_deferred_qs_rescue,
+		      CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_HARD);
 }
 #else /* #ifdef CONFIG_PREEMPT_RCU */
 
