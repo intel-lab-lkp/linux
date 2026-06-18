@@ -52,4 +52,8 @@ struct tdx_sys_info {
 	struct tdx_sys_info_td_conf td_conf;
 };
 
+struct tdx_sys_info_ext {
+	bool ext_required;
+};
+
 #endif
