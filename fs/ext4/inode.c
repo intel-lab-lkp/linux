@@ -3782,6 +3782,7 @@ static int ext4_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 	struct ext4_map_blocks map;
 	u8 blkbits = inode->i_blkbits;
 	unsigned int orig_mlen;
+	int map_flags = 0;
 
 	if ((offset >> blkbits) > EXT4_MAX_LOGICAL_BLOCK)
 		return -EINVAL;
@@ -3796,6 +3797,12 @@ static int ext4_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 	map.m_len = min_t(loff_t, (offset + length - 1) >> blkbits,
 			  EXT4_MAX_LOGICAL_BLOCK) - map.m_lblk + 1;
 	orig_mlen = map.m_len;
+	/*
+	 * In NOWAIT context, only use cached extent info. If es cache misses,
+	 * return -EAGAIN to avoid sleeping on down_read(i_data_sem).
+	 */
+	if (flags & IOMAP_NOWAIT)
+		map_flags = EXT4_GET_BLOCKS_CACHED_NOWAIT;
 
 	if (flags & IOMAP_WRITE) {
 		/*
@@ -3805,7 +3812,7 @@ static int ext4_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		 * especially in multi-threaded overwrite requests.
 		 */
 		if (offset + length <= i_size_read(inode)) {
-			ret = ext4_map_blocks(NULL, inode, &map, 0);
+			ret = ext4_map_blocks(NULL, inode, &map, map_flags);
 			/*
 			 * For DAX we convert extents to initialized ones before
 			 * copying the data, otherwise we do it after I/O so
@@ -3826,7 +3833,7 @@ static int ext4_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		}
 		ret = ext4_iomap_alloc(inode, &map, flags);
 	} else {
-		ret = ext4_map_blocks(NULL, inode, &map, 0);
+		ret = ext4_map_blocks(NULL, inode, &map, map_flags);
 	}
 
 	if (ret < 0)
