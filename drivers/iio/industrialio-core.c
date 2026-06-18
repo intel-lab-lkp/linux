@@ -26,6 +26,7 @@
 #include <linux/property.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/wait.h>
 
 #include <linux/iio/buffer.h>
@@ -199,6 +200,64 @@ static const char * const iio_chan_info_postfix[] = {
 	[IIO_CHAN_INFO_CONVDELAY] = "convdelay",
 	[IIO_CHAN_INFO_POWERFACTOR] = "powerfactor",
 };
+
+static int __iio_chan_prefix_emit(const struct iio_chan_spec *chan,
+				  enum iio_shared_by shared_by,
+				  char *buf, size_t len)
+{
+	const char *dir = iio_direction[chan->output];
+	const char *type = iio_chan_type_name_spec[chan->type];
+	int n = 0;
+
+	switch (shared_by) {
+	case IIO_SHARED_BY_ALL:
+		buf[0] = '\0'; /* empty channel prefix */
+		break;
+	case IIO_SHARED_BY_DIR:
+		n = scnprintf(buf, len, "%s", dir);
+		break;
+	case IIO_SHARED_BY_TYPE:
+		n = scnprintf(buf, len, "%s_%s", dir, type);
+		if (chan->differential)
+			n += scnprintf(buf + n, len - n, "-%s", type);
+		break;
+	case IIO_SEPARATE:
+		if (chan->indexed) {
+			n = scnprintf(buf, len, "%s_%s%d", dir, type,
+				      chan->channel);
+			if (chan->differential)
+				n += scnprintf(buf + n, len - n, "-%s%d", type,
+					       chan->channel2);
+		} else {
+			if (chan->differential) {
+				WARN(1, "Differential channels must be indexed\n");
+				return -EINVAL;
+			}
+			n = scnprintf(buf, len, "%s_%s", dir, type);
+		}
+
+		if (chan->modified) {
+			if (chan->differential) {
+				WARN(1, "Differential channels can not have modifier\n");
+				return -EINVAL;
+			}
+			n += scnprintf(buf + n, len - n, "_%s",
+				       iio_modifier_names[chan->channel2]);
+		}
+
+		if (chan->extend_name)
+			n += scnprintf(buf + n, len - n, "_%s", chan->extend_name);
+		break;
+	}
+
+	if (n > 0 && n < len - 1) { /* prefix termination if not empty */
+		buf[n++] = '_';
+		buf[n] = '\0';
+	}
+
+	return n;
+}
+
 /**
  * iio_device_id() - query the unique ID for the device
  * @indio_dev:		Device structure whose ID is being queried
@@ -1100,105 +1159,18 @@ int __iio_device_attr_init(struct device_attribute *dev_attr,
 						size_t len),
 			   enum iio_shared_by shared_by)
 {
-	int ret = 0;
-	char *name = NULL;
-	char *full_postfix;
+	char prefix[NAME_MAX + 1];
+	int ret;
 
 	sysfs_attr_init(&dev_attr->attr);
 
-	/* Build up postfix of <extend_name>_<modifier>_postfix */
-	if (chan->modified && (shared_by == IIO_SEPARATE)) {
-		if (chan->extend_name)
-			full_postfix = kasprintf(GFP_KERNEL, "%s_%s_%s",
-						 iio_modifier_names[chan->channel2],
-						 chan->extend_name,
-						 postfix);
-		else
-			full_postfix = kasprintf(GFP_KERNEL, "%s_%s",
-						 iio_modifier_names[chan->channel2],
-						 postfix);
-	} else {
-		if (chan->extend_name == NULL || shared_by != IIO_SEPARATE)
-			full_postfix = kstrdup(postfix, GFP_KERNEL);
-		else
-			full_postfix = kasprintf(GFP_KERNEL,
-						 "%s_%s",
-						 chan->extend_name,
-						 postfix);
-	}
-	if (full_postfix == NULL)
+	ret = __iio_chan_prefix_emit(chan, shared_by, prefix, sizeof(prefix));
+	if (ret < 0)
+		return ret;
+
+	dev_attr->attr.name = kasprintf(GFP_KERNEL, "%s%s", prefix, postfix);
+	if (!dev_attr->attr.name)
 		return -ENOMEM;
-
-	if (chan->differential) { /* Differential can not have modifier */
-		switch (shared_by) {
-		case IIO_SHARED_BY_ALL:
-			name = kasprintf(GFP_KERNEL, "%s", full_postfix);
-			break;
-		case IIO_SHARED_BY_DIR:
-			name = kasprintf(GFP_KERNEL, "%s_%s",
-						iio_direction[chan->output],
-						full_postfix);
-			break;
-		case IIO_SHARED_BY_TYPE:
-			name = kasprintf(GFP_KERNEL, "%s_%s-%s_%s",
-					    iio_direction[chan->output],
-					    iio_chan_type_name_spec[chan->type],
-					    iio_chan_type_name_spec[chan->type],
-					    full_postfix);
-			break;
-		case IIO_SEPARATE:
-			if (!chan->indexed) {
-				WARN(1, "Differential channels must be indexed\n");
-				ret = -EINVAL;
-				goto error_free_full_postfix;
-			}
-			name = kasprintf(GFP_KERNEL,
-					    "%s_%s%d-%s%d_%s",
-					    iio_direction[chan->output],
-					    iio_chan_type_name_spec[chan->type],
-					    chan->channel,
-					    iio_chan_type_name_spec[chan->type],
-					    chan->channel2,
-					    full_postfix);
-			break;
-		}
-	} else { /* Single ended */
-		switch (shared_by) {
-		case IIO_SHARED_BY_ALL:
-			name = kasprintf(GFP_KERNEL, "%s", full_postfix);
-			break;
-		case IIO_SHARED_BY_DIR:
-			name = kasprintf(GFP_KERNEL, "%s_%s",
-						iio_direction[chan->output],
-						full_postfix);
-			break;
-		case IIO_SHARED_BY_TYPE:
-			name = kasprintf(GFP_KERNEL, "%s_%s_%s",
-					    iio_direction[chan->output],
-					    iio_chan_type_name_spec[chan->type],
-					    full_postfix);
-			break;
-
-		case IIO_SEPARATE:
-			if (chan->indexed)
-				name = kasprintf(GFP_KERNEL, "%s_%s%d_%s",
-						    iio_direction[chan->output],
-						    iio_chan_type_name_spec[chan->type],
-						    chan->channel,
-						    full_postfix);
-			else
-				name = kasprintf(GFP_KERNEL, "%s_%s_%s",
-						    iio_direction[chan->output],
-						    iio_chan_type_name_spec[chan->type],
-						    full_postfix);
-			break;
-		}
-	}
-	if (name == NULL) {
-		ret = -ENOMEM;
-		goto error_free_full_postfix;
-	}
-	dev_attr->attr.name = name;
 
 	if (readfunc) {
 		dev_attr->attr.mode |= 0444;
@@ -1210,10 +1182,7 @@ int __iio_device_attr_init(struct device_attribute *dev_attr,
 		dev_attr->store = writefunc;
 	}
 
-error_free_full_postfix:
-	kfree(full_postfix);
-
-	return ret;
+	return 0;
 }
 
 static void __iio_device_attr_deinit(struct device_attribute *dev_attr)
