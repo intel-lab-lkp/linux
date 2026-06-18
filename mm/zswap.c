@@ -1424,22 +1424,50 @@ static struct mem_cgroup *zswap_iter_global(void)
 }
 
 /*
+ * Local iteration uses a local cursor to select from online memcgs
+ * under @root in a round-robin fashion.
+ *
+ * Pass the previous return value as @prev to advance the round-robin
+ * iteration, or pass NULL to start a new walk. If exiting early before
+ * the iteration completes, the caller must call mem_cgroup_iter_break()
+ * to release the cursor reference.
+ */
+static struct mem_cgroup *zswap_iter_local(struct mem_cgroup *root,
+					   struct mem_cgroup *prev)
+{
+	struct mem_cgroup *memcg;
+
+	do {
+		memcg = mem_cgroup_iter(root, prev, NULL);
+		prev = memcg;
+	} while (memcg && !mem_cgroup_tryget_online(memcg));
+	return memcg;
+}
+
+/*
  * Walk the memcg tree and write back zswap pages until the
  * (lower_pages, upper_pages) window closes, or abort encounter
  * MAX_RECLAIM_RETRIES times of the following conditions:
  * - No writeback-candidate memcgs found in a memcg tree walk.
  * - Shrinking a writeback-candidate memcg failed.
  *
- * For shrink_worker(), it passes lower=thr and upper=zswap_total_pages().
- * The @upper limit is refreshed in each iteration by re-evaluating
- * zswap_total_pages(), and the window closes once the total falls
- * below the threshold.
+ * For shrink_worker() (proactive=false), it passes lower=thr and
+ * upper=zswap_total_pages(). The @upper limit is refreshed in each
+ * iteration by re-evaluating zswap_total_pages(), and the window
+ * closes once the total falls below the threshold.
+ *
+ * For zswap_proactive_writeback() (proactive=true), it passes lower=0
+ * and upper=nr_to_writeback. The @lower limit is advanced by the
+ * compressed bytes written back via shrink_memcg(). The window closes
+ * once @nr_to_writeback pages of compressed data have been written back.
  */
-static void zswap_try_to_writeback(unsigned long lower_pages,
-				   unsigned long upper_pages)
+static int zswap_try_to_writeback(struct mem_cgroup *memcg,
+				  unsigned long lower_pages,
+				  unsigned long upper_pages, bool proactive)
 {
-	int failures = 0, attempts = 0;
-	struct mem_cgroup *iter_memcg;
+	int ret = 0, failures = 0, attempts = 0;
+	struct mem_cgroup *iter_memcg = NULL;
+	u64 bytes_written = 0;
 
 	while (lower_pages < upper_pages) {
 		unsigned long batch_size;
@@ -1447,14 +1475,17 @@ static void zswap_try_to_writeback(unsigned long lower_pages,
 
 		cond_resched();
 
-		iter_memcg = zswap_iter_global();
+		iter_memcg = proactive ? zswap_iter_local(memcg, iter_memcg)
+				       : zswap_iter_global();
 		if (!iter_memcg) {
 			/*
 			 * Continue shrinking without incrementing failures if
 			 * we found candidate memcgs in the last tree walk.
 			 */
-			if (!attempts && ++failures == MAX_RECLAIM_RETRIES)
+			if (!attempts && ++failures == MAX_RECLAIM_RETRIES) {
+				ret = -EAGAIN;
 				break;
+			}
 
 			attempts = 0;
 			continue;
@@ -1465,8 +1496,17 @@ static void zswap_try_to_writeback(unsigned long lower_pages,
 		/* drop the extra reference */
 		mem_cgroup_put(iter_memcg);
 
-		/* zswap total pages might have changed, refresh it. */
-		upper_pages = zswap_total_pages();
+		/*
+		 * Advance the window endpoint owned by this caller:
+		 *  - !proactive: zswap total pages might have changed, refresh.
+		 *  -  proactive: accumulate bytes freed and fold to pages.
+		 */
+		if (!proactive) {
+			upper_pages = zswap_total_pages();
+		} else if (shrunk > 0) {
+			bytes_written += shrunk;
+			lower_pages = DIV_ROUND_UP(bytes_written, PAGE_SIZE);
+		}
 
 		/*
 		 * There are no writeback-candidate pages in the memcg.
@@ -1478,9 +1518,15 @@ static void zswap_try_to_writeback(unsigned long lower_pages,
 			continue;
 		++attempts;
 
-		if (shrunk <= 0 && ++failures == MAX_RECLAIM_RETRIES)
+		if (shrunk <= 0 && ++failures == MAX_RECLAIM_RETRIES) {
+			ret = -EAGAIN;
 			break;
+		}
 	}
+
+	if (proactive)
+		mem_cgroup_iter_break(memcg, iter_memcg);
+	return ret;
 }
 
 static void shrink_worker(struct work_struct *w)
@@ -1490,7 +1536,7 @@ static void shrink_worker(struct work_struct *w)
 	/* Reclaim down to the accept threshold */
 	thr = zswap_accept_thr_pages();
 
-	zswap_try_to_writeback(thr, zswap_total_pages());
+	zswap_try_to_writeback(NULL, thr, zswap_total_pages(), false);
 }
 
 /*********************************
@@ -1734,6 +1780,19 @@ int zswap_load(struct folio *folio)
 
 	folio_unlock(folio);
 	return 0;
+}
+
+int zswap_proactive_writeback(struct mem_cgroup *memcg,
+			      unsigned long nr_to_writeback)
+{
+	if (!memcg)
+		return -EINVAL;
+	if (!mem_cgroup_zswap_writeback_enabled(memcg))
+		return -EINVAL;
+	if (!nr_to_writeback)
+		return 0;
+
+	return zswap_try_to_writeback(memcg, 0, nr_to_writeback, true);
 }
 
 void zswap_invalidate(swp_entry_t swp)
