@@ -46,7 +46,7 @@ static int __init test_find_first_bit(const void *bitmap, unsigned long len)
 		__clear_bit(i, cp);
 	}
 	time = ktime_get() - time;
-	pr_err("find_first_bit:     %18llu ns, %6ld iterations\n", time, cnt);
+	pr_err("find_first_bit:                 %14llu ns, %6ld iterations\n", time, cnt);
 
 	return 0;
 }
@@ -66,7 +66,7 @@ static int __init test_find_first_and_bit(const void *bitmap, const void *bitmap
 		__clear_bit(i, cp);
 	}
 	time = ktime_get() - time;
-	pr_err("find_first_and_bit: %18llu ns, %6ld iterations\n", time, cnt);
+	pr_err("find_first_and_bit:             %14llu ns, %6ld iterations\n", time, cnt);
 
 	return 0;
 }
@@ -80,7 +80,7 @@ static int __init test_find_next_bit(const void *bitmap, unsigned long len)
 	for (cnt = i = 0; i < BITMAP_LEN; cnt++)
 		i = find_next_bit(bitmap, BITMAP_LEN, i) + 1;
 	time = ktime_get() - time;
-	pr_err("find_next_bit:      %18llu ns, %6ld iterations\n", time, cnt);
+	pr_err("find_next_bit:                  %14llu ns, %6ld iterations\n", time, cnt);
 
 	return 0;
 }
@@ -94,7 +94,7 @@ static int __init test_find_next_zero_bit(const void *bitmap, unsigned long len)
 	for (cnt = i = 0; i < BITMAP_LEN; cnt++)
 		i = find_next_zero_bit(bitmap, len, i) + 1;
 	time = ktime_get() - time;
-	pr_err("find_next_zero_bit: %18llu ns, %6ld iterations\n", time, cnt);
+	pr_err("find_next_zero_bit:             %14llu ns, %6ld iterations\n", time, cnt);
 
 	return 0;
 }
@@ -113,7 +113,7 @@ static int __init test_find_last_bit(const void *bitmap, unsigned long len)
 		len = l;
 	} while (len);
 	time = ktime_get() - time;
-	pr_err("find_last_bit:      %18llu ns, %6ld iterations\n", time, cnt);
+	pr_err("find_last_bit:                  %14llu ns, %6ld iterations\n", time, cnt);
 
 	return 0;
 }
@@ -129,7 +129,7 @@ static int __init test_find_nth_bit(const unsigned long *bitmap, unsigned long l
 		WARN_ON(l >= len);
 	}
 	time = ktime_get() - time;
-	pr_err("find_nth_bit:       %18llu ns, %6ld iterations\n", time, w);
+	pr_err("find_nth_bit:                   %14llu ns, %6ld iterations\n", time, w);
 
 	return 0;
 }
@@ -144,7 +144,22 @@ static int __init test_find_next_and_bit(const void *bitmap,
 	for (cnt = i = 0; i < BITMAP_LEN; cnt++)
 		i = find_next_and_bit(bitmap, bitmap2, BITMAP_LEN, i + 1);
 	time = ktime_get() - time;
-	pr_err("find_next_and_bit:  %18llu ns, %6ld iterations\n", time, cnt);
+	pr_err("find_next_and_bit:              %14llu ns, %6ld iterations\n", time, cnt);
+
+	return 0;
+}
+
+static int __init
+test_bitmap_find_next_zero_area_off(unsigned long *bitmap, unsigned long len)
+{
+	unsigned long i, cnt;
+	ktime_t time;
+
+	time = ktime_get();
+	for (cnt = i = 0; i < BITMAP_LEN; cnt++)
+		i = bitmap_find_next_zero_area_off(bitmap, BITMAP_LEN, i, 8, 0, 0) + 1;
+	time = ktime_get() - time;
+	pr_err("bitmap_find_next_zero_area_off: %14llu ns, %6ld iterations\n", time, cnt);
 
 	return 0;
 }
@@ -158,6 +173,7 @@ static int __init find_bit_test(void)
 	get_random_bytes(bitmap, sizeof(bitmap));
 	get_random_bytes(bitmap2, sizeof(bitmap2));
 
+	test_bitmap_find_next_zero_area_off(bitmap, BITMAP_LEN);
 	test_find_next_bit(bitmap, BITMAP_LEN);
 	test_find_next_zero_bit(bitmap, BITMAP_LEN);
 	test_find_last_bit(bitmap, BITMAP_LEN);
@@ -181,6 +197,7 @@ static int __init find_bit_test(void)
 		__set_bit(get_random_u32_below(BITMAP_LEN), bitmap2);
 	}
 
+	test_bitmap_find_next_zero_area_off(bitmap, BITMAP_LEN);
 	test_find_next_bit(bitmap, BITMAP_LEN);
 	test_find_next_zero_bit(bitmap, BITMAP_LEN);
 	test_find_last_bit(bitmap, BITMAP_LEN);
