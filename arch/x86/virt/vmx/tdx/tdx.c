@@ -1168,7 +1168,7 @@ static __init int init_tdmrs(struct tdmr_info_list *tdmr_list)
 }
 
 /* Initialize TDX module extensions for extension SEAMCALLs */
-static __init int tdx_ext_init(void)
+static int tdx_ext_init(void)
 {
 	struct tdx_module_args args = {};
 	u64 r;
@@ -1304,6 +1304,31 @@ static __init int init_tdx_module_extensions(void)
 	ret = tdx_ext_mem_setup(sysinfo_ext.memory_pool_required_pages);
 	if (ret)
 		return ret;
+
+	return tdx_ext_init();
+}
+
+/*
+ * Mostly the same flow as init_tdx_module_extensions(), but rejects adding
+ * more memory.
+ */
+static int update_tdx_module_extensions(void)
+{
+	struct tdx_sys_info_ext sysinfo_ext;
+	int ret;
+
+	if (!(tdx_sysinfo.features.tdx_features0 & TDX_FEATURES0_EXT))
+		return 0;
+
+	ret = get_tdx_sys_info_ext(&sysinfo_ext);
+	if (ret)
+		return ret;
+
+	if (!sysinfo_ext.ext_required)
+		return 0;
+
+	if (sysinfo_ext.memory_pool_required_pages)
+		return -EFAULT;
 
 	return tdx_ext_init();
 }
@@ -1497,6 +1522,10 @@ int tdx_module_run_update(void)
 	 * and severely wrong with the module.
 	 */
 	WARN_ON_ONCE(ret);
+
+	ret = update_tdx_module_extensions();
+	if (ret)
+		return ret;
 
 	tdx_module_state.initialized = true;
 	return 0;

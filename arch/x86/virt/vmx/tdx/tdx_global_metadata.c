@@ -132,7 +132,7 @@ static __init int get_tdx_sys_info(struct tdx_sys_info *sysinfo)
 	return ret;
 }
 
-static __init int get_tdx_sys_info_ext(struct tdx_sys_info_ext *sysinfo_ext)
+static int get_tdx_sys_info_ext(struct tdx_sys_info_ext *sysinfo_ext)
 {
 	int ret;
 	u64 val;
