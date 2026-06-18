@@ -339,8 +339,7 @@ static bool can_demote(int nid, struct scan_control *sc,
 	return !nodes_empty(allowed_mask);
 }
 
-static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
-					  int nid,
+static inline bool __can_reclaim_anon_pages(struct mem_cgroup *memcg,
 					  struct scan_control *sc)
 {
 	if (memcg == NULL) {
@@ -355,6 +354,16 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 		if (mem_cgroup_get_nr_swap_pages(memcg) > 0)
 			return true;
 	}
+
+	return false;
+}
+
+static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
+					  int nid,
+					  struct scan_control *sc)
+{
+	if (__can_reclaim_anon_pages(memcg, sc))
+		return true;
 
 	/*
 	 * The page can not be swapped.
@@ -1279,6 +1288,8 @@ retry:
 				int __maybe_unused order = folio_order(folio);
 
 				if (!folio_test_large(folio))
+					goto activate_locked_split;
+				if (!__can_reclaim_anon_pages(memcg, sc))
 					goto activate_locked_split;
 				/* Fallback to swap normal pages */
 				if (split_folio_to_list(folio, folio_list))
