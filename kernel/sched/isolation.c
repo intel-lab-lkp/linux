@@ -249,6 +249,118 @@ int housekeeping_update(struct cpumask *isol_mask)
 	return 0;
 }
 
+/**
+ * housekeeping_update_types - Update housekeeping masks for specified types
+ * @type_mask: Bitmask of housekeeping types to update
+ * @isol_mask: CPUs being added to the isolation set
+ *
+ * For each type in @type_mask that was enabled at boot, compute the
+ * trial mask as (boot mask & ~@isol_mask), validate it against
+ * @cpu_online_mask, invoke pre_validate() callbacks, swap the RCU
+ * mask pointer, and run apply() callbacks after synchronize_rcu().
+ *
+ * HK_TYPE_KERNEL_NOISE also supports runtime first-enable: when an
+ * isolated cpuset partition is created without nohz_full= at boot,
+ * cpu_possible_mask is used as the initial base and the type flag is
+ * set in housekeeping.flags on the first call.
+ *
+ * Return: 0 on success, -ENOMEM on allocation failure, -EINVAL if
+ * a trial mask has no online CPUs.
+ */
+int housekeeping_update_types(unsigned long type_mask,
+			      struct cpumask *isol_mask)
+{
+	struct cpumask *trials[HK_TYPE_MAX] = {};
+	struct cpumask *old_masks[HK_TYPE_MAX] = {};
+	enum hk_type type;
+	int ret = 0;
+
+	for_each_set_bit(type, &type_mask, HK_TYPE_MAX) {
+		const struct cpumask *base;
+
+		if (type == HK_TYPE_DOMAIN_BOOT)
+			continue;
+		if (!housekeeping_enabled(type)) {
+			/*
+			 * HK_TYPE_KERNEL_NOISE supports runtime first-enable
+			 * for DHM isolated partitions created without nohz_full=
+			 * at boot.  All other types must be boot-enabled.
+			 */
+			if (type != HK_TYPE_KERNEL_NOISE)
+				continue;
+		}
+
+		/*
+		 * HK_TYPE_KERNEL_NOISE always uses cpu_possible_mask as its
+		 * base.  Its semantics are exactly "cpu_possible minus the
+		 * currently-isolated set", so the base never shrinks across
+		 * successive isolation/de-isolation cycles.  If we used the
+		 * current HK mask instead, de-isolating all partitions would
+		 * leave the mask at its last non-trivial value rather than
+		 * reverting to cpu_possible, breaking subsequent isolations.
+		 */
+		if (type == HK_TYPE_KERNEL_NOISE)
+			base = cpu_possible_mask;
+		else
+			base = housekeeping_cpumask(type);
+		trials[type] = kmalloc(cpumask_size(), GFP_KERNEL);
+		if (!trials[type]) {
+			ret = -ENOMEM;
+			goto err_free;
+		}
+		cpumask_andnot(trials[type], base, isol_mask);
+		if (!cpumask_intersects(trials[type], cpu_online_mask)) {
+			ret = -EINVAL;
+			goto err_free;
+		}
+	}
+
+	if (!housekeeping.flags) {
+		ret = -EINVAL;
+		goto err_free;
+	}
+
+	for_each_set_bit(type, &type_mask, HK_TYPE_MAX) {
+		if (!trials[type])
+			continue;
+		ret = housekeeping_pre_validate_cbs(type,
+						    housekeeping_cpumask(type),
+						    trials[type]);
+		if (ret < 0)
+			goto err_free;
+	}
+
+	for_each_set_bit(type, &type_mask, HK_TYPE_MAX) {
+		if (!trials[type])
+			continue;
+		old_masks[type] = housekeeping_cpumask_dereference(type);
+		/* First-time runtime enable: register the type now. */
+		if (!housekeeping_enabled(type))
+			WRITE_ONCE(housekeeping.flags,
+				   housekeeping.flags | BIT(type));
+		rcu_assign_pointer(housekeeping.cpumasks[type], trials[type]);
+		trials[type] = NULL;
+	}
+
+	synchronize_rcu();
+
+	for_each_set_bit(type, &type_mask, HK_TYPE_MAX) {
+		if (housekeeping_cbs_table[type].nr == 0)
+			continue;
+		housekeeping_apply_cbs(type);
+	}
+
+	for_each_set_bit(type, &type_mask, HK_TYPE_MAX)
+		kfree(old_masks[type]);
+
+	return 0;
+
+err_free:
+	for_each_set_bit(type, &type_mask, HK_TYPE_MAX)
+		kfree(trials[type]);
+	return ret;
+}
+
 void __init housekeeping_init(void)
 {
 	enum hk_type type;
