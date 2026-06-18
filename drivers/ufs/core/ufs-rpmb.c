@@ -115,11 +115,9 @@ static int ufs_rpmb_route_frames(struct device *dev, u8 *req, unsigned int req_l
 		}
 	}
 
-	if (!ret) {
-		ret = ufs_sec_submit(hba, protocol_id, resp, resp_len, false);
-		if (ret)
-			dev_err(dev, "Response read failed with ret=%d\n", ret);
-	}
+	ret = ufs_sec_submit(hba, protocol_id, resp, resp_len, false);
+	if (ret)
+		dev_err(dev, "Response read failed with ret=%d\n", ret);
 
 	return ret;
 }
