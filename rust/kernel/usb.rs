@@ -89,7 +89,8 @@ impl<T: Driver> Adapter<T> {
             // does not add additional invariants, so it's safe to transmute.
             let id = unsafe { &*id.cast::<DeviceId>() };
 
-            let info = T::ID_TABLE.info(id.index());
+            // SAFETY: `id` comes from `T::ID_TABLE` which is of type `IdArray<_, T::IdInfo>`.
+            let info = unsafe { id.info_unchecked::<T::IdInfo>() };
             let data = T::probe(intf, id, info);
 
             let dev: &device::Device<device::CoreInternal<'_>> = intf.as_ref();
@@ -242,10 +243,6 @@ unsafe impl RawDeviceId for DeviceId {
 // SAFETY: `DRIVER_DATA_OFFSET` is the offset to the `driver_info` field.
 unsafe impl RawDeviceIdIndex for DeviceId {
     const DRIVER_DATA_OFFSET: usize = core::mem::offset_of!(bindings::usb_device_id, driver_info);
-
-    fn index(&self) -> usize {
-        self.0.driver_info
-    }
 }
 
 /// [`IdTable`](kernel::device_id::IdTable) type for USB.
