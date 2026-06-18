@@ -983,6 +983,21 @@ config CFI_PERMISSIVE
 
 	  If unsure, say N.
 
+config CFI_KUNIT_TEST
+	tristate "KUnit test kCFI indirect-call type checks at runtime" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Builds a KUnit test that triggers kCFI type mismatches on real
+	  indirect calls and verifies that the violations are detected, and
+	  that well-typed indirect calls (including high-arity ones) are not
+	  disturbed. The test registers a hook in the kCFI failure path so
+	  its deliberate violations are counted and survived on its own
+	  threads, so it works with CFI_PERMISSIVE either enabled or disabled.
+
+	  For the fatal-trap behavior of a real violation, see LKDTM's "CFI_*"
+	  tests.
+
 config HAVE_ARCH_WITHIN_STACK_FRAMES
 	bool
 	help

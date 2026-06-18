@@ -23,6 +23,18 @@ static inline enum bug_trap_type report_cfi_failure_noaddr(struct pt_regs *regs,
 	return report_cfi_failure(regs, addr, NULL, 0);
 }
 
+#if IS_ENABLED(CONFIG_CFI_KUNIT_TEST)
+/*
+ * Register a hook consulted by report_cfi_failure() on every kCFI trap. If
+ * the hook returns true, the failure is treated as handled: the report is
+ * suppressed and BUG_TRAP_TYPE_WARN is returned so the arch trap handler
+ * skips the trapping instruction and resumes, regardless of CFI_PERMISSIVE.
+ * This lets the kCFI KUnit test count deliberate violations on its own
+ * threads without killing them. Pass NULL to unregister.
+ */
+void cfi_kunit_set_failure_hook(bool (*hook)(void));
+#endif
+
 #ifndef cfi_get_offset
 /*
  * Returns the CFI prefix offset. By default, the compiler emits only
@@ -56,6 +68,11 @@ extern u32 cfi_bpf_subprog_hash;
 
 static inline int cfi_get_offset(void) { return 0; }
 static inline u32 cfi_get_func_hash(void *func) { return 0; }
+
+#if IS_ENABLED(CONFIG_CFI_KUNIT_TEST)
+/* No kCFI traps to hook when CONFIG_CFI=n; the test skips at runtime. */
+static inline void cfi_kunit_set_failure_hook(bool (*hook)(void)) { }
+#endif
 
 #define cfi_bpf_hash 0U
 #define cfi_bpf_subprog_hash 0U
