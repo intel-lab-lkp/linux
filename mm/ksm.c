@@ -2341,7 +2341,7 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 		 * afterwards, the reference count will be correct and
 		 * split_huge_page should succeed.
 		 */
-		split = PageTransCompound(page)
+		split = PageCompound(page)
 			&& compound_head(page) == compound_head(tree_page);
 		put_page(tree_page);
 		if (kfolio) {
