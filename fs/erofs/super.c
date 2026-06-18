@@ -625,9 +625,8 @@ static void erofs_set_sysfs_name(struct super_block *sb)
 					     sbi->fsid);
 	else if (sbi->fsid)
 		super_set_sysfs_name_generic(sb, "%s", sbi->fsid);
-	else if (erofs_is_fileio_mode(sbi))
-		super_set_sysfs_name_generic(sb, "%s",
-					     bdi_dev_name(sb->s_bdi));
+	else if (erofs_is_memback_mode(sbi) || erofs_is_fileio_mode(sbi))
+		super_set_sysfs_name_generic(sb, "%s", bdi_dev_name(sb->s_bdi));
 	else
 		super_set_sysfs_name_id(sb);
 }
@@ -708,7 +707,7 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 			return -EINVAL;
 		}
 
-		if (erofs_is_fileio_mode(sbi)) {
+		if (erofs_is_memback_mode(sbi) || erofs_is_fileio_mode(sbi)) {
 			sb->s_blocksize = 1 << sbi->blkszbits;
 			sb->s_blocksize_bits = sbi->blkszbits;
 		} else if (!sb_set_blocksize(sb, 1 << sbi->blkszbits)) {
@@ -791,10 +790,38 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 	return 0;
 }
 
+/*
+ * Pending memback parameters, consumed during erofs_fc_get_tree().
+ * Only used by single-threaded __init code, no synchronization needed.
+ */
+static void *erofs_memback_pending_data;
+static unsigned long erofs_memback_pending_size;
+
+void __init erofs_memback_set_pending(void *data, unsigned long size)
+{
+	erofs_memback_pending_data = data;
+	erofs_memback_pending_size = size;
+}
+
+static void erofs_memback_consume_pending(struct erofs_sb_info *sbi)
+{
+	sbi->memback_data = erofs_memback_pending_data;
+	sbi->memback_size = erofs_memback_pending_size;
+	erofs_memback_pending_data = NULL;
+	erofs_memback_pending_size = 0;
+}
+
 static int erofs_fc_get_tree(struct fs_context *fc)
 {
 	struct erofs_sb_info *sbi = fc->s_fs_info;
 	int ret;
+
+	if (erofs_memback_pending_data) {
+		erofs_memback_consume_pending(sbi);
+		return get_tree_nodev(fc, erofs_fc_fill_super);
+	}
+	if (erofs_is_memback_mode(sbi))
+		return get_tree_nodev(fc, erofs_fc_fill_super);
 
 	if (IS_ENABLED(CONFIG_EROFS_FS_ONDEMAND) && sbi->fsid)
 		return get_tree_nodev(fc, erofs_fc_fill_super);
@@ -928,7 +955,8 @@ static void erofs_kill_sb(struct super_block *sb)
 {
 	struct erofs_sb_info *sbi = EROFS_SB(sb);
 
-	if ((IS_ENABLED(CONFIG_EROFS_FS_ONDEMAND) && sbi->fsid) ||
+	if (erofs_is_memback_mode(sbi) ||
+	    (IS_ENABLED(CONFIG_EROFS_FS_ONDEMAND) && sbi->fsid) ||
 	    sbi->dif0.file)
 		kill_anon_super(sb);
 	else

@@ -1709,10 +1709,12 @@ static void z_erofs_submit_queue(struct z_erofs_frontend *f,
 			       sb->s_blocksize);
 		do {
 			bvec.bv_page = NULL;
-			if (bio && (cur != last_pa ||
-				    bio->bi_bdev != mdev.m_bdev)) {
+			if (bio &&
+			    (cur != last_pa || bio->bi_bdev != mdev.m_bdev)) {
 drain_io:
-				if (erofs_is_fileio_mode(EROFS_SB(sb)))
+				if (erofs_is_memback_mode(EROFS_SB(sb)))
+					erofs_memback_submit_bio(bio);
+				else if (erofs_is_fileio_mode(EROFS_SB(sb)))
 					erofs_fileio_submit_bio(bio);
 				else if (erofs_is_fscache_mode(sb))
 					erofs_fscache_submit_bio(bio);
@@ -1742,7 +1744,9 @@ drain_io:
 			}
 
 			if (!bio) {
-				if (erofs_is_fileio_mode(EROFS_SB(sb)))
+				if (erofs_is_memback_mode(EROFS_SB(sb)))
+					bio = erofs_memback_bio_alloc(&mdev);
+				else if (erofs_is_fileio_mode(EROFS_SB(sb)))
 					bio = erofs_fileio_bio_alloc(&mdev);
 				else if (erofs_is_fscache_mode(sb))
 					bio = erofs_fscache_bio_alloc(&mdev);
@@ -1772,7 +1776,9 @@ drain_io:
 	} while (next != Z_EROFS_PCLUSTER_TAIL);
 
 	if (bio) {
-		if (erofs_is_fileio_mode(EROFS_SB(sb)))
+		if (erofs_is_memback_mode(EROFS_SB(sb)))
+			erofs_memback_submit_bio(bio);
+		else if (erofs_is_fileio_mode(EROFS_SB(sb)))
 			erofs_fileio_submit_bio(bio);
 		else if (erofs_is_fscache_mode(sb))
 			erofs_fscache_submit_bio(bio);

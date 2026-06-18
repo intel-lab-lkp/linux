@@ -22,7 +22,8 @@ void erofs_put_metabuf(struct erofs_buf *buf)
 	if (!buf->page)
 		return;
 	erofs_unmap_metabuf(buf);
-	folio_put(page_folio(buf->page));
+	if (!buf->memback)
+		folio_put(page_folio(buf->page));
 	buf->page = NULL;
 }
 
@@ -43,6 +44,25 @@ void *erofs_bread(struct erofs_buf *buf, erofs_off_t offset, bool need_kmap)
 		err = rw_verify_area(READ, buf->file, &fpos, PAGE_SIZE);
 		if (err < 0)
 			return ERR_PTR(err);
+	}
+
+	if (buf->memback) {
+		void *addr = (char *)buf->mapping + offset;
+		struct page *page;
+
+		if (offset >= buf->memback_size)
+			return ERR_PTR(-EFSCORRUPTED);
+
+		page = virt_to_page(addr);
+		if (buf->page != page) {
+			erofs_unmap_metabuf(buf);
+			buf->page = page;
+		}
+		if (!need_kmap)
+			return NULL;
+		if (!buf->base)
+			buf->base = kmap_local_page(buf->page);
+		return buf->base + offset_in_page(addr);
 	}
 
 	if (buf->page) {
@@ -70,15 +90,24 @@ int erofs_init_metabuf(struct erofs_buf *buf, struct super_block *sb,
 	struct erofs_sb_info *sbi = EROFS_SB(sb);
 
 	buf->file = NULL;
+	buf->memback = false;
 	if (in_metabox) {
 		if (unlikely(!sbi->metabox_inode))
 			return -EFSCORRUPTED;
 		buf->mapping = sbi->metabox_inode->i_mapping;
 		return 0;
 	}
+	if (erofs_is_memback_mode(sbi)) {
+		buf->memback = true;
+		buf->memback_size = sbi->memback_size;
+		buf->off = 0;
+		/* Reuse the mapping pointer to carry the base address */
+		buf->mapping = (struct address_space *)sbi->memback_data;
+		return 0;
+	}
 	buf->off = sbi->dif0.fsoff;
 	if (erofs_is_fileio_mode(sbi)) {
-		buf->file = sbi->dif0.file;	/* some fs like FUSE needs it */
+		buf->file = sbi->dif0.file; /* some fs like FUSE needs it */
 		buf->mapping = buf->file->f_mapping;
 	} else if (erofs_is_fscache_mode(sb))
 		buf->mapping = sbi->dif0.fscache->inode->i_mapping;
