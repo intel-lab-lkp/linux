@@ -40,6 +40,7 @@ enum hk_type {
 DECLARE_STATIC_KEY_FALSE(housekeeping_overridden);
 extern int housekeeping_any_cpu(enum hk_type type);
 extern const struct cpumask *housekeeping_cpumask(enum hk_type type);
+extern const struct cpumask *housekeeping_cpumask_rcu(enum hk_type type);
 extern bool housekeeping_enabled(enum hk_type type);
 extern void housekeeping_affine(struct task_struct *t, enum hk_type type);
 extern bool housekeeping_test_cpu(int cpu, enum hk_type type);
@@ -83,6 +84,11 @@ static inline int housekeeping_any_cpu(enum hk_type type)
 }
 
 static inline const struct cpumask *housekeeping_cpumask(enum hk_type type)
+{
+	return cpu_possible_mask;
+}
+
+static inline const struct cpumask *housekeeping_cpumask_rcu(enum hk_type type)
 {
 	return cpu_possible_mask;
 }
