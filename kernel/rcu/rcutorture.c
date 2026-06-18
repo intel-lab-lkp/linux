@@ -2601,15 +2601,26 @@ static bool rcu_torture_one_read(struct torture_random_state *trsp, long myid)
 	// of arch_irq_work_raise()).  On such systems, RCU cannot
 	// guarantee to immediately deboost RCU readers when the outermost
 	// rcu_read_unlock() does not end the full segmented RCU read-side
-	// critical section.
-	if (WARN_ON_ONCE(cur_ops->is_task_rcu_boosted && cur_ops->is_task_rcu_boosted() &&
-			 preempt_count() == 0 && !irqs_disabled() &&
-			 rcu_preempt_depth() == 0) &&
-	    READ_ONCE(firsttime) && xchg(&firsttime, 0)) {
-		nsegs = rtors.rtrsp - rtors.rtseg;
-		nsegs = clamp_val(nsegs, 0, RCUTORTURE_RDR_MAX_SEGS);
-		pr_alert("Slow-deboost rcutorture reader segments:\n");
-		rcu_torture_dump_read_segs(rtors.rtseg, nsegs);
+	// critical section.  Allow up to 500us for an async deboost
+	// mechanism (e.g. rescue hrtimer, default 50us) to fire before
+	// declaring the deboost tardy.
+	if (cur_ops->is_task_rcu_boosted && cur_ops->is_task_rcu_boosted() &&
+	    preempt_count() == 0 && !irqs_disabled() &&
+	    rcu_preempt_depth() == 0) {
+		int wait_us;
+
+		for (wait_us = 0; wait_us < 500; wait_us += 10) {
+			udelay(10);
+			if (!cur_ops->is_task_rcu_boosted())
+				break;
+		}
+		if (WARN_ON_ONCE(cur_ops->is_task_rcu_boosted()) &&
+		    READ_ONCE(firsttime) && xchg(&firsttime, 0)) {
+			nsegs = rtors.rtrsp - rtors.rtseg;
+			nsegs = clamp_val(nsegs, 0, RCUTORTURE_RDR_MAX_SEGS);
+			pr_alert("Slow-deboost rcutorture reader segments:\n");
+			rcu_torture_dump_read_segs(rtors.rtseg, nsegs);
+		}
 	}
 	return true;
 }
