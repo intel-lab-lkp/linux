@@ -148,6 +148,8 @@ struct tdx_vp {
 };
 
 bool tdx_quote_enabled(void);
+void *tdx_quote_generate(struct tdx_td *td, void *in_data, u32 in_data_len,
+			 u32 *quote_len);
 
 static inline u64 mk_keyed_paddr(u16 hkid, struct page *page)
 {
