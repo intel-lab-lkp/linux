@@ -12,6 +12,7 @@
 #include <linux/bpf_trace.h>
 #include <net/xdp_sock_drv.h>
 #include <linux/etherdevice.h>
+#include <linux/mutex.h>
 #include <linux/pci.h>
 #include <linux/mdio.h>
 
@@ -70,6 +71,32 @@ static const struct pci_device_id igc_pci_tbl[] = {
 
 MODULE_DEVICE_TABLE(pci, igc_pci_tbl);
 
+static bool igc_mac_passthrough_cached;
+static u8 igc_mac_passthrough_addr[ETH_ALEN] __aligned(2);
+static DEFINE_MUTEX(igc_mac_passthrough_lock);
+
+static bool igc_get_mac_passthrough_addr(u8 *addr)
+{
+	mutex_lock(&igc_mac_passthrough_lock);
+	if (!igc_mac_passthrough_cached) {
+		mutex_unlock(&igc_mac_passthrough_lock);
+		return false;
+	}
+
+	ether_addr_copy(addr, igc_mac_passthrough_addr);
+	mutex_unlock(&igc_mac_passthrough_lock);
+
+	return true;
+}
+
+static void igc_cache_mac_passthrough_addr(u8 *addr)
+{
+	mutex_lock(&igc_mac_passthrough_lock);
+	ether_addr_copy(igc_mac_passthrough_addr, addr);
+	igc_mac_passthrough_cached = true;
+	mutex_unlock(&igc_mac_passthrough_lock);
+}
+
 static void igc_read_rar0(struct igc_hw *hw, u8 *addr, u32 *ral, u32 *rah)
 {
 	*ral = rd32(IGC_RAL(0));
@@ -97,22 +124,32 @@ static bool igc_is_lmvp_device(struct pci_dev *pdev)
 static void igc_wait_for_lmvp_mac_passthrough(struct pci_dev *pdev,
 					      struct igc_hw *hw)
 {
+	u8 cached_addr[ETH_ALEN] __aligned(2);
 	u8 addr[ETH_ALEN] __aligned(2);
 	u32 orig_ral, orig_rah;
 	u32 ral, rah;
+	bool cached;
 	int i;
 
 	if (!igc_is_lmvp_device(pdev))
 		return;
 
+	cached = igc_get_mac_passthrough_addr(cached_addr);
 	igc_read_rar0(hw, addr, &orig_ral, &orig_rah);
+	if (cached && ether_addr_equal(addr, cached_addr))
+		return;
 
 	for (i = 0; i < 100; i++) {
 		msleep(100);
 		igc_read_rar0(hw, addr, &ral, &rah);
-		if ((ral != orig_ral || rah != orig_rah) &&
-		    is_valid_ether_addr(addr))
+		if (cached) {
+			if (ether_addr_equal(addr, cached_addr))
+				return;
+		} else if ((ral != orig_ral || rah != orig_rah) &&
+			   is_valid_ether_addr(addr)) {
+			igc_cache_mac_passthrough_addr(addr);
 			return;
+		}
 	}
 }
 
