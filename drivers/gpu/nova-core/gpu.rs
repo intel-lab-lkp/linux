@@ -23,7 +23,8 @@ use crate::{
     fb::SysmemFlush,
     gsp::{
         self,
-        Gsp, //
+        Gsp,
+        GspBootContext, //
     },
     regs,
 };
@@ -323,7 +324,13 @@ impl<'gpu> Gpu<'gpu> {
             // This member must be initialized last, so the `UnloadBundle` can never be dropped from
             // outside of the constructed `Gpu`, ensuring that the unload sequence is properly run
             // in case of failure.
-            unload_bundle: gsp.boot(pdev, bar, spec.chipset, gsp_falcon, sec2_falcon)?,
+            unload_bundle: gsp.boot(GspBootContext {
+                pdev,
+                bar,
+                chipset: spec.chipset,
+                gsp_falcon,
+                sec2_falcon,
+            })?,
             bar,
         })
     }
