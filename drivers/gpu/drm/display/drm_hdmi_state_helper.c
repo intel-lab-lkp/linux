@@ -649,7 +649,7 @@ hdmi_compute_format_bpc(const struct drm_connector *connector,
 	unsigned int bpc;
 	int ret;
 
-	for (bpc = max_bpc; bpc >= 8; bpc -= 2) {
+	for (bpc = rounddown(max_bpc, 2); bpc >= 8; bpc -= 2) {
 		ret = hdmi_try_format_bpc(connector, conn_state, mode, bpc, fmt);
 		if (!ret)
 			continue;
