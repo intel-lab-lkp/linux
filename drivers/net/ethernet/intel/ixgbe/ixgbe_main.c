@@ -12352,6 +12352,86 @@ static pci_ers_result_t ixgbe_io_slot_reset(struct pci_dev *pdev)
 	return result;
 }
 
+/* 1500 us poll interval */
+#define IXGBE_RESET_PREP_POLL_INTERVAL_US 1500
+/* 2 second timeout to acquire reset lock before proceeding */
+#define IXGBE_RESET_PREP_TIMEOUT_US 2000000
+
+/**
+ * ixgbe_reset_prep - called before the pci bus is reset.
+ * @pdev: Pointer to PCI device
+ *
+ * Prepare the card for a reset, preventing the service task from running.
+ */
+static void ixgbe_reset_prep(struct pci_dev *pdev)
+{
+	struct ixgbe_adapter *adapter = pci_get_drvdata(pdev);
+
+	if (!adapter)
+		return;
+
+	if (poll_timeout_us(test_and_set_bit(__IXGBE_RESETTING, &adapter->state),
+			    test_bit(__IXGBE_RESETTING, &adapter->state),
+			    IXGBE_RESET_PREP_POLL_INTERVAL_US,
+			    IXGBE_RESET_PREP_TIMEOUT_US, false)) {
+		/* ixgbe_reset_done() will exit early if this happens.
+		 * A retry will be needed
+		 */
+		e_err(drv, "Timed out waiting for __IXGBE_RESETTING to be released. Reset is needed\n");
+		return;
+	}
+
+	/* Sync __IXGBE_RESETTING */
+	smp_mb__after_atomic();
+
+	if (test_bit(__IXGBE_SERVICE_INITED, &adapter->state)) {
+		/* Prevent the service task from being requeued in the timer callback */
+		timer_delete_sync(&adapter->service_timer);
+		/* Cancel any possibly queued service task */
+		cancel_work_sync(&adapter->service_task);
+	}
+
+	pci_clear_master(pdev);
+
+	set_bit(__IXGBE_PCIE_RESET_IN_PROGRESS, &adapter->state);
+}
+
+/**
+ * ixgbe_reset_done - called after the pci bus has been reset.
+ * @pdev: Pointer to PCI device
+ *
+ * Allow the service task to run and schedule re-initialization.
+ */
+static void ixgbe_reset_done(struct pci_dev *pdev)
+{
+	struct ixgbe_adapter *adapter = pci_get_drvdata(pdev);
+
+	if (!adapter)
+		return;
+
+	if (!test_and_clear_bit(__IXGBE_PCIE_RESET_IN_PROGRESS, &adapter->state)) {
+		/* Should never get here */
+		e_err(drv, "Reset done called without PCIe reset in progress\n");
+		return;
+	}
+
+	pci_set_master(pdev);
+
+	/* Allow the service task to run */
+	if (!test_bit(__IXGBE_REMOVING, &adapter->state)) {
+		clear_bit(__IXGBE_RESETTING, &adapter->state);
+		/* Sync __IXGBE_RESETTING */
+		smp_mb__after_atomic();
+	}
+
+	/* Schedule re-initialization */
+	if (!test_bit(__IXGBE_DOWN, &adapter->state)) {
+		set_bit(__IXGBE_RESET_REQUESTED, &adapter->state);
+		if (test_bit(__IXGBE_SERVICE_INITED, &adapter->state))
+			mod_timer(&adapter->service_timer, jiffies + 1);
+	}
+}
+
 /**
  * ixgbe_io_resume - called when traffic can start flowing again.
  * @pdev: Pointer to PCI device
@@ -12384,6 +12464,8 @@ static const struct pci_error_handlers ixgbe_err_handler = {
 	.error_detected = ixgbe_io_error_detected,
 	.slot_reset = ixgbe_io_slot_reset,
 	.resume = ixgbe_io_resume,
+	.reset_prepare = ixgbe_reset_prep,
+	.reset_done = ixgbe_reset_done,
 };
 
 static DEFINE_SIMPLE_DEV_PM_OPS(ixgbe_pm_ops, ixgbe_suspend, ixgbe_resume);
