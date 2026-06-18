@@ -189,28 +189,31 @@ struct rzv2h_pll_div_pars {
 		.k = { .min = -32768, .max = 32767 },			\
 	}								\
 
-#ifdef CONFIG_CLK_RZV2H
-bool rzv2h_get_pll_pars(const struct rzv2h_pll_limits *limits,
-			struct rzv2h_pll_pars *pars, u64 freq_millihz);
+#ifdef CONFIG_CLK_RZV2H_CPG_LIB
+bool rzv2h_cpg_get_pll_pars(const struct rzv2h_pll_limits *limits,
+			    struct rzv2h_pll_pars *pars, u64 freq_millihz);
 
-bool rzv2h_get_pll_divs_pars(const struct rzv2h_pll_limits *limits,
-			     struct rzv2h_pll_div_pars *pars,
-			     const u8 *table, u8 table_size, u64 freq_millihz);
+bool rzv2h_cpg_get_pll_divs_pars(const struct rzv2h_pll_limits *limits,
+				 struct rzv2h_pll_div_pars *pars,
+				 const u8 *table, u8 table_size, u64 freq_millihz);
 #else
-static inline bool rzv2h_get_pll_pars(const struct rzv2h_pll_limits *limits,
-				      struct rzv2h_pll_pars *pars,
-				      u64 freq_millihz)
+static inline bool rzv2h_cpg_get_pll_pars(const struct rzv2h_pll_limits *limits,
+					  struct rzv2h_pll_pars *pars,
+					  u64 freq_millihz)
 {
 	return false;
 }
 
-static inline bool rzv2h_get_pll_divs_pars(const struct rzv2h_pll_limits *limits,
-					   struct rzv2h_pll_div_pars *pars,
-					   const u8 *table, u8 table_size,
-					   u64 freq_millihz)
+static inline bool rzv2h_cpg_get_pll_divs_pars(const struct rzv2h_pll_limits *limits,
+					       struct rzv2h_pll_div_pars *pars,
+					       const u8 *table, u8 table_size,
+					       u64 freq_millihz)
 {
 	return false;
 }
 #endif
+
+#define rzv2h_get_pll_pars	rzv2h_cpg_get_pll_pars
+#define rzv2h_get_pll_divs_pars	rzv2h_cpg_get_pll_divs_pars
 
 #endif
