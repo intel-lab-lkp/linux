@@ -98,6 +98,17 @@ config RCU_TORTURE_TEST_LOG_GP
 	  Say Y here if you want grace-period sequence numbers logged.
 	  Say N if you are unsure.
 
+config RCU_GP_CLEANUP_STALE_CHECK
+	bool "Detect stuck defer_qs_pending state at GP cleanup"
+	depends on RCU_TORTURE_TEST
+	default n
+	help
+	  This option adds a per-CPU instrumentation counter on every
+	  PENDING -> IDLE transition of rdp->defer_qs_pending, and a
+	  detector in rcu_gp_cleanup().
+
+	  Say N if you are unsure.
+
 config RCU_REF_SCALE_TEST
 	tristate "Scalability tests for read-side synchronization (RCU and others)"
 	depends on DEBUG_KERNEL
