@@ -1498,8 +1498,8 @@ int kvm_handle_vncr_abort(struct kvm_vcpu *vcpu)
 		return kvm_handle_guest_sea(vcpu);
 
 	if (!esr_fsc_is_translation_fault(esr) && !esr_fsc_is_permission_fault(esr)) {
-		WARN_ONCE(1, "Unhandled VNCR abort, ESR=%llx\n", esr);
-		return 1;
+		KVM_BUG(1, vcpu->kvm, "Unhandled VNCR abort, ESR=%llx\n", esr);
+		return -EIO;
 	}
 
 	ret = kvm_translate_vncr(vcpu, &is_gmem);
