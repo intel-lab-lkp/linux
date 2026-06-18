@@ -196,6 +196,16 @@
 #define GCC_VIDEO_AXI0C_CLK					186
 #define GCC_VIDEO_XO_CLK					187
 
+/* Maili has below additional clocks on top of Hawi */
+#define GCC_QUPV3_WRAP5_CORE_2X_CLK				188
+#define GCC_QUPV3_WRAP5_CORE_CLK				189
+#define GCC_QUPV3_WRAP5_QSPI_REF_CLK				190
+#define GCC_QUPV3_WRAP5_QSPI_REF_CLK_SRC			191
+#define GCC_QUPV3_WRAP5_S0_CLK					192
+#define GCC_QUPV3_WRAP5_S0_CLK_SRC				193
+#define GCC_QUPV3_WRAP_5_M_AHB_CLK				194
+#define GCC_QUPV3_WRAP_5_S_AHB_CLK				195
+
 /* GCC power domains */
 #define GCC_PCIE_0_GDSC						0
 #define GCC_PCIE_0_PHY_GDSC					1
