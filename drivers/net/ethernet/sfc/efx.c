@@ -984,6 +984,7 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 	efx_fini_io(efx);
 
 	probe_data = container_of(efx, struct efx_probe_data, efx);
+	efx_cxl_exit(probe_data);
 
 	pci_dbg(efx->pci_dev, "shutdown successful\n");
 
@@ -1244,6 +1245,7 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
  fail3:
 	efx_fini_io(efx);
  fail2:
+	efx_cxl_exit(probe_data);
 	efx_fini_struct(efx);
  fail1:
 	WARN_ON(rc > 0);
