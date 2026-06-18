@@ -949,6 +949,18 @@ pub unsafe trait PinInit<T: ?Sized, E = Infallible>: Sized {
     {
         ChainPinInit(self, f, __internal::PhantomInvariant::new())
     }
+
+    /// Convert the error type of this pin-initializer.
+    ///
+    /// This is useful when combining initializers with different error types, for example
+    /// when an infallible initializer (error type [`Infallible`]) needs to be used in a context
+    /// that expects a different error type.
+    fn map_err<E2, F>(self, f: F) -> MapErr<Self, F, T, E>
+    where
+        F: FnOnce(E) -> E2,
+    {
+        MapErr(self, f, __internal::PhantomInvariant::new())
+    }
 }
 
 /// An initializer returned by [`PinInit::pin_chain`].
@@ -972,6 +984,38 @@ where
         let val = unsafe { Pin::new_unchecked(val) };
         // SAFETY: `slot` was initialized above.
         (self.1)(val).inspect_err(|_| unsafe { core::ptr::drop_in_place(slot) })
+    }
+}
+
+/// An initializer returned by [`PinInit::map_err`].
+pub struct MapErr<I, F, T: ?Sized, E>(I, F, __internal::PhantomInvariant<(E, T)>);
+
+// SAFETY: The `__pinned_init` function is implemented such that it
+// - returns `Ok(())` on successful initialization,
+// - returns `Err(err)` on error and in this case `slot` will be dropped.
+// - considers `slot` pinned.
+unsafe impl<T: ?Sized, E, E2, I, F> PinInit<T, E2> for MapErr<I, F, T, E>
+where
+    I: PinInit<T, E>,
+    F: FnOnce(E) -> E2,
+{
+    unsafe fn __pinned_init(self, slot: *mut T) -> Result<(), E2> {
+        // SAFETY: All requirements fulfilled since this function is `__pinned_init`.
+        unsafe { self.0.__pinned_init(slot).map_err(self.1) }
+    }
+}
+
+// SAFETY: The `__init` function is implemented such that it
+// - returns `Ok(())` on successful initialization,
+// - returns `Err(err)` on error and in this case `slot` will be dropped.
+unsafe impl<T: ?Sized, E, E2, I, F> Init<T, E2> for MapErr<I, F, T, E>
+where
+    I: Init<T, E>,
+    F: FnOnce(E) -> E2,
+{
+    unsafe fn __init(self, slot: *mut T) -> Result<(), E2> {
+        // SAFETY: All requirements fulfilled since this function is `__init`.
+        unsafe { self.0.__init(slot).map_err(self.1) }
     }
 }
 
