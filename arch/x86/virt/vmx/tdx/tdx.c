@@ -57,6 +57,7 @@ static struct tdx_module_state tdx_module_state;
 static u32 tdx_global_keyid __ro_after_init;
 static u32 tdx_guest_keyid_start __ro_after_init;
 static u32 tdx_nr_guest_keyids __ro_after_init;
+static u64 tdx_addon_feature0 __ro_after_init;
 
 static DEFINE_IDA(tdx_guest_keyid_pool);
 
@@ -1004,9 +1005,18 @@ static __init int construct_tdmrs(struct list_head *tmb_list,
 	return ret;
 }
 
+static __init void set_tdx_addon_features(void)
+{
+	/*
+	 * To add DICE-based TDX Quoting feature bit in tdx_addon_feature0 when
+	 * kernel is ready.
+	 */
+}
+
 static __init int config_tdx_module(struct tdmr_info_list *tdmr_list,
 				    u64 global_keyid)
 {
+	u64 seamcall_fn = TDH_SYS_CONFIG_V0;
 	struct tdx_module_args args = {};
 	u64 *tdmr_pa_array;
 	size_t array_sz;
@@ -1032,7 +1042,15 @@ static __init int config_tdx_module(struct tdmr_info_list *tdmr_list,
 	args.rcx = __pa(tdmr_pa_array);
 	args.rdx = tdmr_list->nr_consumed_tdmrs;
 	args.r8 = global_keyid;
-	ret = seamcall_prerr(TDH_SYS_CONFIG, &args);
+
+	set_tdx_addon_features();
+
+	if (tdx_addon_feature0) {
+		args.r9 = tdx_addon_feature0;
+		seamcall_fn = TDH_SYS_CONFIG;
+	}
+
+	ret = seamcall_prerr(seamcall_fn, &args);
 
 	/* Free the array as it is not required anymore. */
 	kfree(tdmr_pa_array);
@@ -1314,10 +1332,16 @@ int tdx_module_shutdown(void)
 
 int tdx_module_run_update(void)
 {
+	u64 seamcall_fn = TDH_SYS_UPDATE_V0;
 	struct tdx_module_args args = {};
 	int ret;
 
-	ret = seamcall_prerr(TDH_SYS_UPDATE, &args);
+	if (tdx_addon_feature0) {
+		args.r9 = tdx_addon_feature0;
+		seamcall_fn = TDH_SYS_UPDATE;
+	}
+
+	ret = seamcall_prerr(seamcall_fn, &args);
 	if (ret)
 		return ret;
 
