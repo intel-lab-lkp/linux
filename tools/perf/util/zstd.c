@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 
-#include <string.h>
-
 #include "util/compress.h"
 #include "util/debug.h"
 
@@ -71,8 +69,7 @@ ssize_t zstd_compress_stream_to_records(struct zstd_data *data, void *dst, size_
 		if (ZSTD_isError(ret)) {
 			pr_err("failed to compress %ld bytes: %s\n",
 				(long)src_size, ZSTD_getErrorName(ret));
-			memcpy(dst, src, src_size);
-			return src_size;
+			return -1;
 		}
 		size = output.pos;
 		size = process_header(record, size);
