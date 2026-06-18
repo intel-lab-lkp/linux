@@ -163,7 +163,7 @@ struct lowcore {
 	__s32	preempt_count;			/* 0x03a8 */
 	__u32	spinlock_lockval;		/* 0x03ac */
 	__u32	spinlock_index;			/* 0x03b0 */
-	__u8	pad_0x03b4[0x03b8-0x03b4];	/* 0x03b4 */
+	__s32	lazy_mmu_count;			/* 0x03b4 */
 	__u64	percpu_offset;			/* 0x03b8 */
 	__u8	percpu_register;		/* 0x03c0 */
 	__u8	pad_0x03c1[0x0400-0x03c1];	/* 0x03c1 */

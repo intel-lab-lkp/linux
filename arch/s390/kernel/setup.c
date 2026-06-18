@@ -77,6 +77,7 @@
 #include <asm/maccess.h>
 #include <asm/uv.h>
 #include <asm/asm-offsets.h>
+#include <asm/lazy_mmu.h>
 #include "entry.h"
 
 /*
@@ -1012,5 +1013,6 @@ void __init setup_arch(char **cmdline_p)
 
 void __init arch_cpu_finalize_init(void)
 {
+	lazy_mmu_online_boot_cpu();
 	sclp_init();
 }
