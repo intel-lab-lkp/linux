@@ -189,6 +189,20 @@ post_cmd:
 				   true);
 }
 
+static int dereg_mr_cmd(struct erdma_dev *dev, struct erdma_mr *mr)
+{
+	struct erdma_cmdq_dereg_mr_req req = {};
+
+	erdma_cmdq_build_reqhdr(&req.hdr, CMDQ_SUBMOD_RDMA,
+				CMDQ_OPCODE_DEREG_MR);
+
+	req.cfg = FIELD_PREP(ERDMA_CMD_MR_MPT_IDX_MASK, mr->ibmr.lkey >> 8) |
+		  FIELD_PREP(ERDMA_CMD_MR_KEY_MASK, mr->ibmr.lkey & 0xFF);
+
+	return erdma_post_cmd_wait(&dev->cmdq, &req, sizeof(req), NULL, NULL,
+				   true);
+}
+
 static int create_cq_cmd(struct erdma_ucontext *uctx, struct erdma_cq *cq)
 {
 	struct erdma_dev *dev = to_edev(cq->ibcq.device);
@@ -828,50 +842,50 @@ static void erdma_destroy_mtt(struct erdma_dev *dev, struct erdma_mtt *mtt)
 	}
 }
 
-static int erdma_mem_init(struct erdma_dev *dev, struct erdma_mem *mem,
-			  struct erdma_mem_init_attr *attr)
+static int erdma_mem_init_by_umem(struct erdma_dev *dev, struct erdma_mem *mem,
+				  struct erdma_mem_init_attr *attr,
+				  struct ib_umem *umem)
 {
-	int ret = 0;
-
-	mem->umem =
-		ib_umem_get_va(&dev->ibdev, attr->start, attr->len, attr->access);
-	if (IS_ERR(mem->umem)) {
-		ret = PTR_ERR(mem->umem);
-		mem->umem = NULL;
-		return ret;
-	}
-
+	mem->umem = umem;
 	mem->va = attr->virt;
 	mem->len = attr->len;
 
 	mem->page_size = ib_umem_find_best_pgsz(mem->umem, attr->req_page_size,
 						attr->virt);
-	if (!mem->page_size) {
-		ret = -EINVAL;
-		goto error_ret;
-	}
+	if (!mem->page_size)
+		return -EINVAL;
 
 	mem->page_offset = attr->start & (mem->page_size - 1);
 	mem->mtt_nents = ib_umem_num_dma_blocks(mem->umem, mem->page_size);
 	mem->page_cnt = mem->mtt_nents;
 	mem->mtt = erdma_create_mtt(dev, MTT_SIZE(mem->page_cnt),
 				    attr->flags & ERDMA_MEM_FLAG_MTT_PHYS_CONT);
-	if (IS_ERR(mem->mtt)) {
-		ret = PTR_ERR(mem->mtt);
-		goto error_ret;
-	}
+	if (IS_ERR(mem->mtt))
+		return PTR_ERR(mem->mtt);
 
 	erdma_fill_bottom_mtt(dev, mem);
 
 	return 0;
+}
 
-error_ret:
-	if (mem->umem) {
-		ib_umem_release(mem->umem);
-		mem->umem = NULL;
+static int erdma_mem_init(struct erdma_dev *dev, struct erdma_mem *mem,
+			  struct erdma_mem_init_attr *attr)
+{
+	struct ib_umem *umem;
+	int ret;
+
+	umem = ib_umem_get_va(&dev->ibdev, attr->start, attr->len,
+			      attr->access);
+	if (IS_ERR(umem))
+		return PTR_ERR(umem);
+
+	ret = erdma_mem_init_by_umem(dev, mem, attr, umem);
+	if (ret) {
+		ib_umem_release(umem);
+		return ret;
 	}
 
-	return ret;
+	return 0;
 }
 
 static void erdma_mem_uninit(struct erdma_dev *dev, struct erdma_mem *mem)
@@ -1244,21 +1258,26 @@ int erdma_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sg, int sg_nents,
 	return num;
 }
 
-struct ib_mr *erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len,
-				u64 virt, int access, struct ib_dmah *dmah,
-				struct ib_udata *udata)
+static void erdma_umem_dmabuf_revoke(void *priv)
+{
+	struct erdma_mr *mr = priv;
+	struct erdma_dev *dev = to_edev(mr->ibmr.device);
+	int ret;
+
+	ret = dereg_mr_cmd(dev, mr);
+	if (ret)
+		ibdev_err(&dev->ibdev, "dmabuf mr revoke failed %d", ret);
+}
+
+static struct ib_mr *
+_erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len, u64 virt, int access,
+		   struct ib_umem *umem, struct ib_dmah *dmah)
 {
 	struct erdma_dev *dev = to_edev(ibpd->device);
 	struct erdma_mem_init_attr attr = {};
 	struct erdma_mr *mr = NULL;
 	u32 stag;
 	int ret;
-
-	if (dmah)
-		return ERR_PTR(-EOPNOTSUPP);
-
-	if (!len || len > dev->attrs.max_mr_size)
-		return ERR_PTR(-EINVAL);
 
 	mr = kzalloc_obj(*mr);
 	if (!mr)
@@ -1269,16 +1288,17 @@ struct ib_mr *erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len,
 	attr.start = start;
 	attr.access = access;
 	attr.req_page_size = SZ_2G - SZ_4K;
-	ret = erdma_mem_init(dev, &mr->mem, &attr);
+	ret = erdma_mem_init_by_umem(dev, &mr->mem, &attr, umem);
 	if (ret)
 		goto err_out_free;
 
 	ret = erdma_create_stag(dev, &stag);
 	if (ret)
-		goto err_uninit_mem;
+		goto err_destroy_mtt;
 
 	mr->ibmr.lkey = mr->ibmr.rkey = stag;
 	mr->ibmr.pd = ibpd;
+	mr->ibmr.device = ibpd->device;
 	mr->access = ERDMA_MR_ACC_LR | to_erdma_access_flags(access);
 	mr->valid = 1;
 	mr->type = ERDMA_MR_TYPE_NORMAL;
@@ -1293,8 +1313,8 @@ err_out_mr:
 	erdma_free_idx(&dev->res_cb[ERDMA_RES_TYPE_STAG_IDX],
 		       mr->ibmr.lkey >> 8);
 
-err_uninit_mem:
-	erdma_mem_uninit(dev, &mr->mem);
+err_destroy_mtt:
+	erdma_destroy_mtt(dev, mr->mem.mtt);
 
 err_out_free:
 	kfree(mr);
@@ -1302,29 +1322,94 @@ err_out_free:
 	return ERR_PTR(ret);
 }
 
+struct ib_mr *erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len,
+				u64 virt, int access, struct ib_dmah *dmah,
+				struct ib_udata *udata)
+{
+	struct erdma_dev *dev = to_edev(ibpd->device);
+	struct ib_umem *umem;
+	struct ib_mr *ibmr;
+
+	if (dmah)
+		return ERR_PTR(-EOPNOTSUPP);
+
+	if (!len || len > dev->attrs.max_mr_size)
+		return ERR_PTR(-EINVAL);
+
+	umem = ib_umem_get_va(&dev->ibdev, start, len, access);
+	if (IS_ERR(umem))
+		return ERR_CAST(umem);
+
+	ibmr = _erdma_reg_user_mr(ibpd, start, len, virt, access, umem, dmah);
+	if (IS_ERR(ibmr)) {
+		ib_umem_release(umem);
+		return ibmr;
+	}
+
+	return ibmr;
+}
+
+struct ib_mr *erdma_reg_user_mr_dmabuf(struct ib_pd *ibpd, u64 start, u64 len,
+				       u64 virt, int fd, int access,
+				       struct ib_dmah *dmah,
+				       struct uverbs_attr_bundle *attrs)
+{
+	struct erdma_dev *dev = to_edev(ibpd->device);
+	struct ib_umem_dmabuf *umem_dmabuf;
+	struct ib_mr *ibmr;
+
+	if (dmah)
+		return ERR_PTR(-EOPNOTSUPP);
+
+	if (!len || len > dev->attrs.max_mr_size)
+		return ERR_PTR(-EINVAL);
+
+	umem_dmabuf =
+		ib_umem_dmabuf_get_pinned_revocable_and_lock(&dev->ibdev, start,
+							     len, fd, access);
+	if (IS_ERR(umem_dmabuf))
+		return ERR_CAST(umem_dmabuf);
+
+	ibmr = _erdma_reg_user_mr(ibpd, start, len, virt, access,
+				  &umem_dmabuf->umem, dmah);
+	if (IS_ERR(ibmr)) {
+		ib_umem_dmabuf_revoke_unlock(umem_dmabuf);
+		ib_umem_release(&umem_dmabuf->umem);
+		return ibmr;
+	}
+
+	ib_umem_dmabuf_set_revoke_locked(umem_dmabuf, erdma_umem_dmabuf_revoke,
+					 to_emr(ibmr));
+	ib_umem_dmabuf_revoke_unlock(umem_dmabuf);
+
+	return ibmr;
+}
+
 int erdma_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
 {
-	struct erdma_mr *mr;
 	struct erdma_dev *dev = to_edev(ibmr->device);
-	struct erdma_cmdq_dereg_mr_req req;
+	struct erdma_mr *mr = to_emr(ibmr);
+	bool dmabuf;
 	int ret;
 
-	mr = to_emr(ibmr);
+	dmabuf = mr->mem.umem && mr->mem.umem->is_dmabuf;
+	if (!dmabuf) {
+		ret = dereg_mr_cmd(dev, mr);
+		if (ret)
+			return ret;
+	}
 
-	erdma_cmdq_build_reqhdr(&req.hdr, CMDQ_SUBMOD_RDMA,
-				CMDQ_OPCODE_DEREG_MR);
+	if (mr->mem.umem) {
+		ib_umem_release(mr->mem.umem);
+		mr->mem.umem = NULL;
+	}
 
-	req.cfg = FIELD_PREP(ERDMA_CMD_MR_MPT_IDX_MASK, ibmr->lkey >> 8) |
-		  FIELD_PREP(ERDMA_CMD_MR_KEY_MASK, ibmr->lkey & 0xFF);
-
-	ret = erdma_post_cmd_wait(&dev->cmdq, &req, sizeof(req), NULL, NULL,
-				  true);
-	if (ret)
-		return ret;
+	if (mr->mem.mtt) {
+		erdma_destroy_mtt(dev, mr->mem.mtt);
+		mr->mem.mtt = NULL;
+	}
 
 	erdma_free_idx(&dev->res_cb[ERDMA_RES_TYPE_STAG_IDX], ibmr->lkey >> 8);
-
-	erdma_mem_uninit(dev, &mr->mem);
 
 	kfree(mr);
 	return 0;
