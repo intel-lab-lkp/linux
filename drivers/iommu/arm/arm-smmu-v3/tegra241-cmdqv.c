@@ -317,13 +317,14 @@ static void tegra241_vintf0_handle_error(struct tegra241_vintf *vintf)
 		u64 map = readq_relaxed(REG_VINTF(vintf, LVCMDQ_ERR_MAP_64(i)));
 
 		while (map) {
-			unsigned long lidx = __ffs64(map);
+			unsigned long bit = __ffs64(map);
+			unsigned long lidx = i * 64 + bit;
 			struct tegra241_vcmdq *vcmdq = vintf->lvcmdqs[lidx];
 			u32 gerror = readl_relaxed(REG_VCMDQ_PAGE0(vcmdq, GERROR));
 
 			__arm_smmu_cmdq_skip_err(&vintf->cmdqv->smmu, &vcmdq->cmdq);
 			writel(gerror, REG_VCMDQ_PAGE0(vcmdq, GERRORN));
-			map &= ~BIT_ULL(lidx);
+			map &= ~BIT_ULL(bit);
 		}
 	}
 }
