@@ -11,9 +11,37 @@
 
 bool cfi_warn __ro_after_init = IS_ENABLED(CONFIG_CFI_PERMISSIVE);
 
+#if IS_ENABLED(CONFIG_CFI_KUNIT_TEST)
+static bool (*cfi_kunit_failure_hook)(void);
+
+void cfi_kunit_set_failure_hook(bool (*hook)(void))
+{
+	WRITE_ONCE(cfi_kunit_failure_hook, hook);
+}
+EXPORT_SYMBOL_GPL(cfi_kunit_set_failure_hook);
+
+static bool cfi_kunit_handled(void)
+{
+	bool (*hook)(void) = READ_ONCE(cfi_kunit_failure_hook);
+
+	return hook && hook();
+}
+#else
+static inline bool cfi_kunit_handled(void) { return false; }
+#endif
+
 enum bug_trap_type report_cfi_failure(struct pt_regs *regs, unsigned long addr,
 				      unsigned long *target, u32 type)
 {
+	/*
+	 * Let a registered KUnit test consume and count its own deliberate
+	 * violations. If it claims the failure, suppress the report and tell
+	 * the arch handler to skip the trap and resume the thread, regardless
+	 * of CFI_PERMISSIVE.
+	 */
+	if (cfi_kunit_handled())
+		return BUG_TRAP_TYPE_WARN;
+
 	if (target)
 		pr_err("CFI failure at %pS (target: %pS; expected type: 0x%08x)\n",
 		       (void *)addr, (void *)*target, type);
