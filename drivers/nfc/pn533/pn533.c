@@ -2883,3 +2883,96 @@ MODULE_AUTHOR("Waldemar Rymarkiewicz <waldemar.rymarkiewicz@tieto.com>");
 MODULE_DESCRIPTION("PN533 driver ver " VERSION);
 MODULE_VERSION(VERSION);
 MODULE_LICENSE("GPL");
+
+#if IS_ENABLED(CONFIG_NFC_PN533_KUNIT_TEST)
+#include <kunit/test.h>
+
+/*
+ * Regression test for the out-of-bounds read in the PN533 standard-frame
+ * validator: pn533_std_rx_frame_is_valid() trusts the device-supplied
+ * datalen field and reads data[0 .. datalen-1] (the data checksum) without
+ * checking that the received buffer actually contains that many bytes. A
+ * malicious USB PN53x device returning a short transfer therefore makes the
+ * driver read past the receive buffer.
+ */
+static void pn533_std_rx_frame_short_oob_test(struct kunit *test)
+{
+	struct pn533 *dev;
+	struct pn533_frame_ops *ops;
+	struct pn533_std_frame *f;
+	const size_t hdr = sizeof(struct pn533_std_frame); /* header, no data[] */
+
+	dev = kunit_kzalloc(test, sizeof(*dev), GFP_KERNEL);
+	ops = kunit_kzalloc(test, sizeof(*ops), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, dev);
+	KUNIT_ASSERT_NOT_NULL(test, ops);
+	dev->ops = ops;
+
+	/* benign control: a correctly sized, well-formed frame validates and
+	 * does not read out of bounds (proves the trigger reaches the real
+	 * data-checksum path). data is all zero: data checksum = 0, and the
+	 * trailing frame-checksum byte data[datalen] is already 0.
+	 */
+	{
+		const u8 dl = 3;
+		const size_t full = hdr + dl + PN533_STD_FRAME_TAIL_LEN;
+		struct pn533_std_frame *gf = kunit_kzalloc(test, full, GFP_KERNEL);
+
+		KUNIT_ASSERT_NOT_NULL(test, gf);
+		gf->start_frame = cpu_to_be16(PN533_STD_FRAME_SOF);
+		gf->datalen = dl;
+		gf->datalen_checksum = pn533_std_checksum(dl);
+		KUNIT_EXPECT_TRUE(test,
+				  pn533_std_rx_frame_is_valid(gf, full, dev));
+	}
+
+	/* attack: a header-only buffer that declares datalen = 8. The data
+	 * checksum loop reads data[0 .. 7] starting one byte past the
+	 * allocation -> KASAN slab-out-of-bounds read on an unpatched tree.
+	 */
+	f = kunit_kzalloc(test, hdr, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, f);
+	f->start_frame = cpu_to_be16(PN533_STD_FRAME_SOF);
+	f->datalen = 8;
+	f->datalen_checksum = pn533_std_checksum(8);
+	pn533_std_rx_frame_is_valid(f, hdr, dev);
+}
+
+static void pn533_target_type_a_nfcid_oob_test(struct kunit *test)
+{
+	struct nfc_target nfc_tgt;
+	struct pn533_target_type_a *ta;
+	const size_t hdr = sizeof(struct pn533_target_type_a); /* 4, no nfcid */
+
+	/* header-only target data, but nfcid_len claims the full 10 bytes ->
+	 * pn533_target_found_type_a()'s memcpy reads nfcid_data[0..9], past the
+	 * allocation -> KASAN slab-out-of-bounds on an unpatched tree.
+	 */
+	ta = kunit_kzalloc(test, hdr, GFP_KERNEL);
+	KUNIT_ASSERT_NOT_NULL(test, ta);
+	ta->sens_res = cpu_to_be16(0x0001);
+	ta->sel_res = 0;
+	ta->nfcid_len = NFC_NFCID1_MAXSIZE; /* 10 */
+
+	/* unpatched: is_valid accepts (nfcid_len only checked vs the
+	 * destination) and the memcpy reads nfcid_data[0..9] past the 4-byte
+	 * buffer. The fix bounds nfcid_len against the response buffer and
+	 * rejects the frame, returning -EPROTO.
+	 */
+	KUNIT_EXPECT_EQ(test,
+			pn533_target_found_type_a(&nfc_tgt, (u8 *)ta, hdr),
+			-EPROTO);
+}
+
+static struct kunit_case pn533_test_cases[] = {
+	KUNIT_CASE(pn533_std_rx_frame_short_oob_test),
+	KUNIT_CASE(pn533_target_type_a_nfcid_oob_test),
+	{}
+};
+
+static struct kunit_suite pn533_test_suite = {
+	.name = "pn533",
+	.test_cases = pn533_test_cases,
+};
+kunit_test_suite(pn533_test_suite);
+#endif /* CONFIG_NFC_PN533_KUNIT_TEST */

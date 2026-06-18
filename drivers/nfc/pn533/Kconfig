@@ -37,3 +37,12 @@ config NFC_PN532_UART
 
 	  If you choose to build a module, it'll be called pn532_uart.
 	  Say N if unsure.
+
+config NFC_PN533_KUNIT_TEST
+	bool "KUnit tests for the NFC PN533 driver" if !KUNIT_ALL_TESTS
+	depends on NFC_PN533=y && KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Enable the KUnit regression tests for the NFC PN533 driver,
+	  covering bounds checking of device-supplied frame lengths.
+	  If unsure, say N.
