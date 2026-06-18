@@ -929,6 +929,7 @@ struct yt921x_acl_blk {
 };
 
 struct yt921x_port {
+	struct yt921x_priv *priv;
 	unsigned char index;
 
 	bool hairpin;
@@ -964,7 +965,7 @@ struct yt921x_priv {
 	struct mii_bus *mbus_int;
 	struct mii_bus *mbus_ext;
 
-	struct yt921x_port ports[YT921X_PORT_NUM];
+	struct yt921x_port *ports[YT921X_PORT_NUM];
 
 	u16 eee_ports_mask;
 
