@@ -313,6 +313,12 @@ static ssize_t ext4_buffered_write_iter(struct kiocb *iocb,
 	if (ret <= 0)
 		goto out;
 
+	/*
+	 * Prevent concurrent DIO and BIO to the same file range.
+	 * Wait for all in-flight DIO to complete before dirtying pages.
+	 */
+	inode_dio_wait(inode);
+
 	ret = generic_perform_write(iocb, from);
 
 out:
