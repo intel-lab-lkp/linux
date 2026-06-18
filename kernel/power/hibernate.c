@@ -114,6 +114,18 @@ bool hibernation_available(void)
 }
 
 /**
+ * pm_hibernation_snapshot_done - check if a hibernation snapshot is available
+ *
+ * Return: %true if a hibernation snapshot has been taken and has not been
+ *         released yet.
+ */
+bool pm_hibernation_snapshot_done(void)
+{
+	return !!in_suspend;
+}
+EXPORT_SYMBOL_GPL(pm_hibernation_snapshot_done);
+
+/**
  * hibernation_set_ops - Set the global hibernate operations.
  * @ops: Hibernation operations to use in subsequent hibernation transitions.
  */
