@@ -92,7 +92,14 @@ struct secondary_data {
 	long status;
 };
 
+#ifdef CONFIG_HOTPLUG_PARALLEL
+static_assert((sizeof(struct secondary_data) & (sizeof(struct secondary_data) - 1)) == 0,
+	      "secondary_data size must be a power of 2 for assembly lsl assembly!");
+
+extern struct secondary_data cpu_boot_data[NR_CPUS];
+#else
 extern struct secondary_data secondary_data;
+#endif
 extern long __early_cpu_boot_status;
 extern void secondary_entry(void);
 
@@ -124,7 +131,11 @@ static inline void __noreturn cpu_park_loop(void)
 
 static inline void update_cpu_boot_status(unsigned int cpu, int val)
 {
+#ifdef CONFIG_HOTPLUG_PARALLEL
+	WRITE_ONCE(cpu_boot_data[cpu].status, val);
+#else
 	WRITE_ONCE(secondary_data.status, val);
+#endif
 	/* Ensure the visibility of the status update */
 	dsb(ishst);
 }

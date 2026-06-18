@@ -12,6 +12,7 @@
 #include <linux/linkage.h>
 #include <linux/init.h>
 #include <linux/pgtable.h>
+#include <linux/threads.h>
 
 #include <asm/asm_pointer_auth.h>
 #include <asm/assembler.h>
@@ -378,6 +379,33 @@ alternative_else_nop_endif
 	br	x8
 SYM_FUNC_END(secondary_startup)
 
+#ifdef CONFIG_HOTPLUG_PARALLEL
+	/*
+	 * Convert the physical MPIDR of the current secondary CPU
+	 * to its logical CPUID by traversing __cpu_logical_map
+	 * in parallel.
+	 */
+	.macro	mpidr_to_cpuid, mpidr, cpuid, tmp1, tmp2
+	mov_q	\tmp1, MPIDR_HWID_BITMASK
+	and	\mpidr, \mpidr, \tmp1
+
+	adr_l	\tmp1, __cpu_logical_map
+	mov	\cpuid, #0
+.Lfind_cpuid\@:
+	ldr	\tmp2, [\tmp1, \cpuid, lsl #3]
+	cmp	\tmp2, #-1
+	b.eq	.Lnext_cpu\@
+	cmp	\tmp2, \mpidr
+	b.eq	.Lfound_cpuid\@
+.Lnext_cpu\@:
+	add	\cpuid, \cpuid, #1
+	cmp	\cpuid, #NR_CPUS
+	b.ne	.Lfind_cpuid\@
+	b	__secondary_too_slow
+.Lfound_cpuid\@:
+	.endm
+#endif
+
 	.text
 SYM_FUNC_START_LOCAL(__secondary_switched)
 	mov	x0, x20
@@ -391,7 +419,15 @@ SYM_FUNC_START_LOCAL(__secondary_switched)
 	msr	vbar_el1, x5
 	isb
 
+#ifdef CONFIG_HOTPLUG_PARALLEL
+	mrs	x0, mpidr_el1
+	mpidr_to_cpuid mpidr=x0, cpuid=x2, tmp1=x1, tmp2=x3
+
+	adr_l	x0, cpu_boot_data
+	add	x0, x0, x2, lsl #SECONDARY_DATA_SHIFT
+#else
 	adr_l	x0, secondary_data
+#endif
 	ldr	x2, [x0, #CPU_BOOT_TASK]
 	cbz	x2, __secondary_too_slow
 

@@ -61,6 +61,11 @@
  * where to place its SVC stack
  */
 struct secondary_data secondary_data;
+
+#ifdef CONFIG_HOTPLUG_PARALLEL
+struct secondary_data cpu_boot_data[NR_CPUS] ____cacheline_aligned;
+#endif
+
 /* Number of CPUs which aren't online, but looping in kernel text. */
 static int cpus_stuck_in_kernel;
 
@@ -106,8 +111,30 @@ static int boot_secondary(unsigned int cpu, struct task_struct *idle)
 	return -EOPNOTSUPP;
 }
 
+#ifndef CONFIG_HOTPLUG_PARALLEL
 static DECLARE_COMPLETION(cpu_running);
+#endif
 
+#ifdef CONFIG_HOTPLUG_PARALLEL
+extern const struct cpu_operations smp_spin_table_ops;
+
+/* Establish whether parallel bringup can be supported. */
+bool __init arch_cpuhp_init_parallel_bringup(void)
+{
+	int cpu = smp_processor_id();
+	const struct cpu_operations *ops = get_cpu_ops(cpu);
+
+	return ops && ops != &smp_spin_table_ops;
+}
+
+int arch_cpuhp_kick_ap_alive(unsigned int cpu, struct task_struct *tidle)
+{
+	cpu_boot_data[cpu].task = tidle;
+	update_cpu_boot_status(cpu, CPU_MMU_OFF);
+
+	return boot_secondary(cpu, tidle);
+}
+#else
 int __cpu_up(unsigned int cpu, struct task_struct *idle)
 {
 	int ret;
@@ -172,6 +199,7 @@ int __cpu_up(unsigned int cpu, struct task_struct *idle)
 
 	return -EIO;
 }
+#endif /* CONFIG_HOTPLUG_PARALLEL */
 
 static void init_gic_priority_masking(void)
 {
@@ -223,6 +251,9 @@ asmlinkage notrace void secondary_start_kernel(void)
 	 * fail to come online.
 	 */
 	check_local_cpu_capabilities();
+#ifdef CONFIG_HOTPLUG_PARALLEL
+	cpuhp_ap_sync_alive();
+#endif
 	rcutree_report_cpu_starting(cpu);
 
 	ops = get_cpu_ops(cpu);
@@ -254,7 +285,9 @@ asmlinkage notrace void secondary_start_kernel(void)
 					 read_cpuid_id());
 	update_cpu_boot_status(cpu, CPU_BOOT_SUCCESS);
 	set_cpu_online(cpu, true);
+#ifndef CONFIG_HOTPLUG_PARALLEL
 	complete(&cpu_running);
+#endif
 
 	/*
 	 * Secondary CPUs enter the kernel with all DAIF exceptions masked.
