@@ -21,8 +21,8 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_dma.h>
+#include <linux/of_platform.h>
 #include <linux/amba/bus.h>
-#include <linux/regulator/consumer.h>
 
 #include "dmaengine.h"
 #include "ste_dma40.h"
@@ -571,7 +571,8 @@ struct d40_gen_dmac {
  * to phy_chans entries.
  * @plat_data: Pointer to provided platform_data which is the driver
  * configuration.
- * @lcpa_regulator: Pointer to hold the regulator for the esram bank for lcla.
+ * @lcla_dev: SRAM device for the ESRAM bank used by LCLA.
+ * @lcla_pm_enabled: Whether runtime PM was enabled for LCLA by this driver.
  * @phy_res: Vector containing all physical channels.
  * @lcla_pool: lcla pool settings and data.
  * @lcpa_base: The virtual mapped address of LCPA.
@@ -607,7 +608,8 @@ struct d40_base {
 	struct d40_chan			**lookup_log_chans;
 	struct d40_chan			**lookup_phy_chans;
 	struct stedma40_platform_data	 *plat_data;
-	struct regulator		 *lcpa_regulator;
+	struct device			 *lcla_dev;
+	bool				  lcla_pm_enabled;
 	/* Physical half channels */
 	struct d40_phy_res		 *phy_res;
 	struct d40_lcla_pool		  lcla_pool;
@@ -626,6 +628,22 @@ struct d40_base {
 static struct device *chan2dev(struct d40_chan *d40c)
 {
 	return &d40c->chan.dev->device;
+}
+
+static void d40_transfer_runtime_get(struct d40_base *base)
+{
+	if (base->lcla_dev)
+		pm_runtime_get_sync(base->lcla_dev);
+
+	pm_runtime_get_sync(base->dev);
+}
+
+static void d40_transfer_runtime_put(struct d40_base *base)
+{
+	pm_runtime_put_autosuspend(base->dev);
+
+	if (base->lcla_dev)
+		pm_runtime_put_sync_suspend(base->lcla_dev);
 }
 
 static bool chan_is_physical(struct d40_chan *chan)
@@ -1516,7 +1534,7 @@ static struct d40_desc *d40_queue_start(struct d40_chan *d40c)
 	if (d40d != NULL) {
 		if (!d40c->busy) {
 			d40c->busy = true;
-			pm_runtime_get_sync(d40c->base->dev);
+			d40_transfer_runtime_get(d40c->base);
 		}
 
 		/* Remove from queue */
@@ -1579,7 +1597,7 @@ static void dma_tc_handle(struct d40_chan *d40c)
 		if (d40_queue_start(d40c) == NULL) {
 			d40c->busy = false;
 
-			pm_runtime_put_autosuspend(d40c->base->dev);
+			d40_transfer_runtime_put(d40c->base);
 		}
 
 		d40_desc_remove(d40d);
@@ -2052,7 +2070,7 @@ static int d40_free_dma(struct d40_chan *d40c)
 		d40c->base->lookup_phy_chans[phy->num] = NULL;
 
 	if (d40c->busy)
-		pm_runtime_put_autosuspend(d40c->base->dev);
+		d40_transfer_runtime_put(d40c->base);
 
 	d40c->busy = false;
 	d40c->phy_chan = NULL;
@@ -2613,7 +2631,7 @@ static int d40_terminate_all(struct dma_chan *chan)
 	d40_term_all(d40c);
 	pm_runtime_put_autosuspend(d40c->base->dev);
 	if (d40c->busy)
-		pm_runtime_put_autosuspend(d40c->base->dev);
+		d40_transfer_runtime_put(d40c->base);
 	d40c->busy = false;
 
 	spin_unlock_irqrestore(&d40c->lock, flags);
@@ -2916,29 +2934,11 @@ static int __init d40_dmaengine_init(struct d40_base *base,
 #ifdef CONFIG_PM_SLEEP
 static int dma40_suspend(struct device *dev)
 {
-	struct d40_base *base = dev_get_drvdata(dev);
-	int ret;
-
-	ret = pm_runtime_force_suspend(dev);
-	if (ret)
-		return ret;
-
-	if (base->lcpa_regulator)
-		ret = regulator_disable(base->lcpa_regulator);
-	return ret;
+	return pm_runtime_force_suspend(dev);
 }
 
 static int dma40_resume(struct device *dev)
 {
-	struct d40_base *base = dev_get_drvdata(dev);
-	int ret = 0;
-
-	if (base->lcpa_regulator) {
-		ret = regulator_enable(base->lcpa_regulator);
-		if (ret)
-			return ret;
-	}
-
 	return pm_runtime_force_resume(dev);
 }
 #endif
@@ -3492,7 +3492,10 @@ static int __init d40_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *np = pdev->dev.of_node;
 	struct device_node *np_lcpa;
+	struct device_node *np_lcla;
+	struct device_node *np_lcla_parent;
 	struct d40_base *base;
+	struct platform_device *lcla_pdev;
 	struct resource *res;
 	struct resource res_lcpa;
 	int num_reserved_chans;
@@ -3590,22 +3593,31 @@ static int __init d40_probe(struct platform_device *pdev)
 	}
 
 	if (base->plat_data->use_esram_lcla) {
-
-		base->lcpa_regulator = regulator_get(base->dev, "lcla_esram");
-		if (IS_ERR(base->lcpa_regulator)) {
-			d40_err(dev, "Failed to get lcpa_regulator\n");
-			ret = PTR_ERR(base->lcpa_regulator);
-			base->lcpa_regulator = NULL;
+		np_lcla = of_parse_phandle(np, "sram", 1);
+		if (!np_lcla) {
+			dev_err(dev, "no LCLA SRAM node\n");
+			ret = -EINVAL;
 			goto destroy_cache;
 		}
 
-		ret = regulator_enable(base->lcpa_regulator);
-		if (ret) {
-			d40_err(dev,
-				"Failed to enable lcpa_regulator\n");
-			regulator_put(base->lcpa_regulator);
-			base->lcpa_regulator = NULL;
+		np_lcla_parent = of_get_parent(np_lcla);
+		of_node_put(np_lcla);
+		if (!np_lcla_parent) {
+			dev_err(dev, "no LCLA SRAM parent node\n");
+			ret = -EINVAL;
 			goto destroy_cache;
+		}
+
+		lcla_pdev = of_find_device_by_node(np_lcla_parent);
+		of_node_put(np_lcla_parent);
+		if (!lcla_pdev) {
+			ret = -EPROBE_DEFER;
+			goto destroy_cache;
+		}
+		base->lcla_dev = &lcla_pdev->dev;
+		if (!pm_runtime_enabled(base->lcla_dev)) {
+			pm_runtime_enable(base->lcla_dev);
+			base->lcla_pm_enabled = true;
 		}
 	}
 
@@ -3642,16 +3654,17 @@ static int __init d40_probe(struct platform_device *pdev)
 				 SZ_1K * base->num_phy_chans,
 				 DMA_TO_DEVICE);
 
-	if (!base->lcla_pool.base_unaligned && base->lcla_pool.base)
+	if (!base->lcla_pool.base_unaligned && base->lcla_pool.base &&
+	    base->lcla_pool.pages)
 		free_pages((unsigned long)base->lcla_pool.base,
 			   base->lcla_pool.pages);
 
 	kfree(base->lcla_pool.base_unaligned);
 
-	if (base->lcpa_regulator) {
-		regulator_disable(base->lcpa_regulator);
-		regulator_put(base->lcpa_regulator);
-	}
+	if (base->lcla_pm_enabled)
+		pm_runtime_disable(base->lcla_dev);
+	if (base->lcla_dev)
+		put_device(base->lcla_dev);
 	pm_runtime_disable(base->dev);
 
  report_failure:
