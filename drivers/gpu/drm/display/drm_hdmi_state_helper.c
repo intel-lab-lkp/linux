@@ -420,6 +420,16 @@ sink_supports_format_bpc(const struct drm_connector *connector,
 		return false;
 	}
 
+	switch (bpc) {
+	case 8:
+	case 10:
+	case 12:
+	case 16:
+		break;
+	default:
+		return false;
+	}
+
 	if (!info->is_hdmi &&
 	    (format != DRM_OUTPUT_COLOR_FORMAT_RGB444 || bpc != 8)) {
 		drm_dbg_kms(dev, "DVI Monitors require an RGB output at 8 bpc\n");
