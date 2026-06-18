@@ -184,6 +184,17 @@ macro_rules! module_device_table {
         $table_name: ident, $id_info_type: ty,
         [$(($id: expr, $info:expr $(,)?)),* $(,)?]
     ) => {
+        $crate::module_device_table!(
+            $table_type, $device_id_ty, $table_name, $id_info_type,
+            {$($id=>$info,)*}
+        );
+    };
+
+    (
+        $table_type: literal, $device_id_ty: ty,
+        $table_name: ident, $id_info_type: ty,
+        {$($id: expr => $info:expr),* $(,)?}
+    ) => {
         #[export_name =
             concat!("__mod_device_table__", line!(),
                     "__kmod_", module_path!(),
