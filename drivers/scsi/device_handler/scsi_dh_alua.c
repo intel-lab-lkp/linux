@@ -582,8 +582,8 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 			sdev_printk(KERN_INFO, sdev,
 				    "%s: ignoring rtpg result %d\n",
 				    ALUA_DH_NAME, retval);
-			kfree(buff);
-			return SCSI_DH_OK;
+			err = SCSI_DH_OK;
+			goto free_buff;
 		}
 		if (retval < 0 || !scsi_sense_valid(&sense_hdr)) {
 			sdev_printk(KERN_INFO, sdev,
@@ -632,15 +632,14 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 			sdev_printk(KERN_ERR, sdev, "%s: rtpg retry\n",
 				    ALUA_DH_NAME);
 			scsi_print_sense_hdr(sdev, ALUA_DH_NAME, &sense_hdr);
-			kfree(buff);
-			return err;
+			goto free_buff;
 		}
 		sdev_printk(KERN_ERR, sdev, "%s: rtpg failed\n",
 			    ALUA_DH_NAME);
 		scsi_print_sense_hdr(sdev, ALUA_DH_NAME, &sense_hdr);
-		kfree(buff);
 		pg->expiry = 0;
-		return SCSI_DH_IO;
+		err = SCSI_DH_IO;
+		goto free_buff;
 	}
 
 	len = get_unaligned_be32(&buff[0]) + 4;
@@ -770,6 +769,7 @@ static int alua_rtpg(struct scsi_device *sdev, struct alua_port_group *pg)
 		break;
 	}
 	spin_unlock_irqrestore(&pg->lock, flags);
+free_buff:
 	kfree(buff);
 	return err;
 }
