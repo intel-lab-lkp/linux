@@ -2800,7 +2800,7 @@ void kvm_emulate_nested_eret(struct kvm_vcpu *vcpu)
 		 * ERET handling, and the guest will have a little surprise.
 		 */
 		if (kvm_has_pauth(vcpu->kvm, FPACCOMBINE) && !(spsr & PSR_IL_BIT)) {
-			esr &= ESR_ELx_ERET_ISS_ERETA;
+			esr &= (ESR_ELx_ERET_ISS_ERETA | ESR_ELx_IL);
 			esr |= FIELD_PREP(ESR_ELx_EC_MASK, ESR_ELx_EC_FPAC);
 			kvm_inject_nested_sync(vcpu, esr);
 			return;
