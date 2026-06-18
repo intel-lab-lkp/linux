@@ -201,7 +201,8 @@ struct pn533_frame_ops {
 	int tx_header_len;
 	int tx_tail_len;
 
-	bool (*rx_is_frame_valid)(void *frame, struct pn533 *dev);
+	bool (*rx_is_frame_valid)(void *frame, size_t frame_len,
+				  struct pn533 *dev);
 	bool (*rx_frame_is_ack)(void *frame);
 	int (*rx_frame_size)(void *frame);
 	int rx_header_len;

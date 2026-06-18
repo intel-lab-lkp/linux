@@ -274,10 +274,14 @@ static void pn533_std_tx_update_payload_len(void *_frame, int len)
 	frame->datalen += len;
 }
 
-static bool pn533_std_rx_frame_is_valid(void *_frame, struct pn533 *dev)
+static bool pn533_std_rx_frame_is_valid(void *_frame, size_t frame_len,
+					struct pn533 *dev)
 {
 	u8 checksum;
 	struct pn533_std_frame *stdf = _frame;
+
+	if (frame_len < sizeof(struct pn533_std_frame))
+		return false;
 
 	if (stdf->start_frame != cpu_to_be16(PN533_STD_FRAME_SOF))
 		return false;
@@ -285,6 +289,10 @@ static bool pn533_std_rx_frame_is_valid(void *_frame, struct pn533 *dev)
 	if (likely(!PN533_STD_IS_EXTENDED(stdf))) {
 		/* Standard frame code */
 		dev->ops->rx_header_len = PN533_STD_FRAME_HEADER_LEN;
+
+		if (frame_len < sizeof(struct pn533_std_frame) +
+				stdf->datalen + PN533_STD_FRAME_TAIL_LEN)
+			return false;
 
 		checksum = pn533_std_checksum(stdf->datalen);
 		if (checksum != stdf->datalen_checksum)
@@ -298,6 +306,11 @@ static bool pn533_std_rx_frame_is_valid(void *_frame, struct pn533 *dev)
 		struct pn533_ext_frame *eif = _frame;
 
 		dev->ops->rx_header_len = PN533_EXT_FRAME_HEADER_LEN;
+
+		if (frame_len < sizeof(struct pn533_ext_frame) ||
+		    frame_len < sizeof(struct pn533_ext_frame) +
+				be16_to_cpu(eif->datalen) + PN533_STD_FRAME_TAIL_LEN)
+			return false;
 
 		checksum = pn533_ext_checksum(be16_to_cpu(eif->datalen));
 		if (checksum != eif->datalen_checksum)
@@ -699,6 +712,10 @@ static bool pn533_target_type_a_is_valid(struct pn533_target_type_a *type_a,
 		return false;
 
 	if (type_a->nfcid_len > NFC_NFCID1_MAXSIZE)
+		return false;
+
+	if (sizeof(struct pn533_target_type_a) + type_a->nfcid_len >
+	    (size_t)target_data_len)
 		return false;
 
 	return true;
@@ -1399,6 +1416,7 @@ static int pn533_autopoll_complete(struct pn533 *dev, void *arg,
 {
 	struct pn532_autopoll_resp *apr;
 	struct nfc_target nfc_tgt;
+	size_t remaining;
 	u8 nbtg;
 	int rc;
 
@@ -1417,12 +1435,21 @@ static int pn533_autopoll_complete(struct pn533 *dev, void *arg,
 		goto stop_poll;
 	}
 
+	if (resp->len < 1)
+		return -EAGAIN;
+
 	nbtg = resp->data[0];
 	if ((nbtg > 2) || (nbtg <= 0))
 		return -EAGAIN;
 
+	remaining = resp->len - 1;
 	apr = (struct pn532_autopoll_resp *)&resp->data[1];
 	while (nbtg--) {
+		if (remaining < sizeof(struct pn532_autopoll_resp) ||
+		    apr->ln < 1 ||
+		    remaining < (size_t)apr->ln + 2)
+			return -EAGAIN;
+
 		memset(&nfc_tgt, 0, sizeof(struct nfc_target));
 		switch (apr->type) {
 		case PN532_AUTOPOLL_TYPE_ISOA:
@@ -1468,6 +1495,7 @@ static int pn533_autopoll_complete(struct pn533 *dev, void *arg,
 		}
 
 		dev->tgt_available_prots = nfc_tgt.supported_protocols;
+		remaining -= (size_t)apr->ln + 2;
 		apr = (struct pn532_autopoll_resp *)
 			(apr->tgdata + (apr->ln - 1));
 	}
@@ -2189,7 +2217,7 @@ void pn533_recv_frame(struct pn533 *dev, struct sk_buff *skb, int status)
 	print_hex_dump_debug("PN533 RX: ", DUMP_PREFIX_NONE, 16, 1, skb->data,
 			     dev->ops->rx_frame_size(skb->data), false);
 
-	if (!dev->ops->rx_is_frame_valid(skb->data, dev)) {
+	if (!dev->ops->rx_is_frame_valid(skb->data, skb->len, dev)) {
 		nfc_err(dev->dev, "Received an invalid frame\n");
 		dev->cmd->status = -EIO;
 	} else if (!pn533_rx_frame_is_cmd_response(dev, skb->data)) {

@@ -312,14 +312,22 @@ static void pn533_acr122_tx_update_payload_len(void *_frame, int len)
 	frame->datalen += len;
 }
 
-static bool pn533_acr122_is_rx_frame_valid(void *_frame, struct pn533 *dev)
+static bool pn533_acr122_is_rx_frame_valid(void *_frame, size_t frame_len,
+					   struct pn533 *dev)
 {
 	struct pn533_acr122_rx_frame *frame = _frame;
+
+	if (frame_len < sizeof(struct pn533_acr122_rx_frame))
+		return false;
 
 	if (frame->ccid.type != 0x83)
 		return false;
 
-	if (!frame->ccid.datalen)
+	if (frame->ccid.datalen < 2)
+		return false;
+
+	if (frame_len < sizeof(struct pn533_acr122_rx_frame) +
+			frame->ccid.datalen)
 		return false;
 
 	if (frame->data[frame->ccid.datalen - 2] == 0x63)
