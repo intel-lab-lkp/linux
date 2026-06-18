@@ -1029,10 +1029,8 @@ static __init int construct_tdmrs(struct list_head *tmb_list,
 
 static __init void set_tdx_addon_features(void)
 {
-	/*
-	 * To add DICE-based TDX Quoting feature bit in tdx_addon_feature0 when
-	 * kernel is ready.
-	 */
+	if (tdx_sysinfo.features.tdx_features0 & TDX_FEATURES0_QUOTE)
+		tdx_addon_feature0 |= TDX_FEATURES0_QUOTE;
 }
 
 static __init int config_tdx_module(struct tdmr_info_list *tdmr_list,
