@@ -20,7 +20,7 @@ skip_test() {
 WAIT_INOTIFY=$(cd $(dirname $0); pwd)/wait_inotify
 
 # Find cgroup v2 mount point
-CGROUP2=$(mount -t cgroup2 | head -1 | awk -e '{print $3}')
+CGROUP2=$(mount -t cgroup2 | head -1 | awk '{print $3}')
 [[ -n "$CGROUP2" ]] || skip_test "Cgroup v2 mount point not found!"
 SUBPARTS_CPUS=$CGROUP2/.__DEBUG__.cpuset.cpus.subpartitions
 CPULIST=$(cat $CGROUP2/cpuset.cpus.effective)
@@ -1204,9 +1204,211 @@ test_inotify()
 	echo "" > cpuset.cpus
 }
 
+#
+# cpu_in_cpulist <cpu> <cpulist>
+#
+# Return 0 if <cpu> appears in <cpulist> (a kernel cpumask list such as
+# "0-3,8-31"), non-zero otherwise.  The kernel cpulist format uses ranges
+# ("lo-hi") and comma-separated items; a simple grep cannot detect that a
+# number falls in the middle of a range, so walk each element explicitly.
+#
+cpu_in_cpulist()
+{
+	local cpu=$1 list=$2 range lo hi
+	for range in $(echo "$list" | tr ',' ' '); do
+		if [[ "$range" == *-* ]]; then
+			lo=${range%-*}
+			hi=${range#*-}
+			[[ $cpu -ge $lo && $cpu -le $hi ]] && return 0
+		else
+			[[ $cpu -eq $range ]] && return 0
+		fi
+	done
+	return 1
+}
+
+#
+# Test that isolated partition creation/destruction drives kernel-noise
+# housekeeping mask updates and remains correct under pressure.
+#
+# Requires: >=8 CPUs, no isolcpus= boot conflict, root
+#
+test_hk_noise_isolated()
+{
+	local ISOL_BEFORE TEST_CPUS i PART ISOL_AFTER ISOL_RESTORE
+	local NOHZ_FILE NOHZ_BEFORE NOHZ_AFTER NOHZ_RESTORE
+	local HK_NOHZ_CHECK=0
+	local LOOPS=100
+
+	[[ $NR_CPUS -ge 8 ]] || {
+		echo "HK-noise test skipped: need >=8 CPUs, have $NR_CPUS"
+		return 0
+	}
+
+	# Detect whether CONFIG_NO_HZ_FULL is active: the sysfs attribute
+	# /sys/devices/system/cpu/nohz_full exposes the current nohz_full
+	# cpumask and is only present when NO_HZ_FULL is enabled.
+	NOHZ_FILE=/sys/devices/system/cpu/nohz_full
+	[[ -r "$NOHZ_FILE" ]] && HK_NOHZ_CHECK=1
+
+	cd $CGROUP2/test
+	echo member > cpuset.cpus.partition 2>/dev/null
+	echo "" > cpuset.cpus 2>/dev/null
+
+	ISOL_BEFORE=$(cat $CGROUP2/cpuset.cpus.isolated)
+	[[ $HK_NOHZ_CHECK -eq 1 ]] && NOHZ_BEFORE=$(cat $NOHZ_FILE)
+	TEST_CPUS="4-7"
+	echo $TEST_CPUS > cpuset.cpus
+
+	#
+	# Basic create/destroy cycle — verify domain isolation and
+	# kernel-noise (nohz_full) changes together.
+	#
+	console_msg "HK-noise: basic create/destroy cycle"
+	echo isolated > cpuset.cpus.partition
+
+	ISOL_AFTER=$(cat $CGROUP2/cpuset.cpus.isolated)
+	[[ $ISOL_AFTER != "$ISOL_BEFORE" ]] || {
+		echo "FAIL: isolated set unchanged after partition create"
+		exit 1
+	}
+
+	if [[ $HK_NOHZ_CHECK -eq 1 ]]; then
+		NOHZ_AFTER=$(cat $NOHZ_FILE)
+		# Verify that the newly isolated CPUs (4-7) appear in nohz_full.
+		# nohz_full = inverse of housekeeping, so isolating 4-7 should
+		# add them to nohz_full.
+		for cpu in 4 5 6 7; do
+			if ! cpu_in_cpulist $cpu "$NOHZ_AFTER"; then
+				echo "FAIL: cpu${cpu} not in nohz_full after isolation" \
+				     "(got: '$NOHZ_AFTER')"
+				exit 1
+			fi
+		done
+		console_msg "HK-noise: nohz_full after isolation: $NOHZ_AFTER"
+	fi
+
+	echo member > cpuset.cpus.partition
+
+	ISOL_RESTORE=$(cat $CGROUP2/cpuset.cpus.isolated)
+	[[ $ISOL_RESTORE = "$ISOL_BEFORE" ]] || {
+		echo "FAIL: expected '$ISOL_BEFORE' after destroy, got '$ISOL_RESTORE'"
+		exit 1
+	}
+
+	if [[ $HK_NOHZ_CHECK -eq 1 ]]; then
+		NOHZ_RESTORE=$(cat $NOHZ_FILE)
+		[[ "$NOHZ_RESTORE" = "$NOHZ_BEFORE" ]] || {
+			echo "FAIL: nohz_full not restored: expected '$NOHZ_BEFORE'," \
+			     "got '$NOHZ_RESTORE'"
+			exit 1
+		}
+	fi
+
+	#
+	# Reject all-CPU isolation (must leave at least one housekeeping CPU)
+	#
+	console_msg "HK-noise: reject all-CPU isolation"
+	echo 0-$((NR_CPUS - 1)) > cpuset.cpus
+	echo isolated > cpuset.cpus.partition
+	PART=$(cat cpuset.cpus.partition)
+	[[ $PART = *invalid* || $PART = member ]] || {
+		echo "FAIL: all-CPU isolation was not rejected, got '$PART'"
+		exit 1
+	}
+
+	#
+	# SMT safety: partial sibling isolation
+	#
+	console_msg "HK-noise: SMT sibling constraint"
+	echo $TEST_CPUS > cpuset.cpus
+	echo isolated > cpuset.cpus.partition
+	PART=$(cat cpuset.cpus.partition)
+	[[ $PART = isolated ]] || {
+		echo "FAIL: could not create isolated partition, got '$PART'"
+		exit 1
+	}
+	echo member > cpuset.cpus.partition
+
+	#
+	# Nested partition: parent root → child isolated
+	#
+	console_msg "HK-noise: nested partition inheritance"
+	echo $TEST_CPUS > cpuset.cpus
+	test_partition root
+	mkdir -p HK_SUB
+	cd HK_SUB
+	echo 4-5 > cpuset.cpus
+	echo isolated > cpuset.cpus.partition
+	ISOL_AFTER=$(cat $CGROUP2/cpuset.cpus.isolated)
+	[[ -n $ISOL_AFTER ]] || {
+		echo "FAIL: nested isolated partition not reflected in cpuset.cpus.isolated"
+		exit 1
+	}
+	echo member > cpuset.cpus.partition
+	cd $CGROUP2/test
+	echo member > cpuset.cpus.partition
+	rmdir HK_SUB 2>/dev/null
+
+	#
+	# Pressure test: 100 create/destroy cycles
+	#
+	console_msg "HK-noise: pressure test ($LOOPS cycles)"
+	echo $TEST_CPUS > cpuset.cpus
+	for i in $(seq 1 $LOOPS); do
+		echo isolated > cpuset.cpus.partition
+		PART=$(cat cpuset.cpus.partition)
+		[[ $PART = isolated ]] || {
+			echo "FAIL: cycle $i create failed, got '$PART'"
+			exit 1
+		}
+		echo member > cpuset.cpus.partition
+		PART=$(cat cpuset.cpus.partition)
+		[[ $PART = member ]] || {
+			echo "FAIL: cycle $i destroy failed, got '$PART'"
+			exit 1
+		}
+	done
+
+	#
+	# Stability: after pressure test, verify final state
+	#
+	console_msg "HK-noise: post-pressure cleanup"
+	echo isolated > cpuset.cpus.partition
+	ISOL_AFTER=$(cat $CGROUP2/cpuset.cpus.isolated)
+	[[ -n $ISOL_AFTER ]] || {
+		echo "FAIL: isolated set empty after pressure test"
+		exit 1
+	}
+	echo member > cpuset.cpus.partition
+	echo "" > cpuset.cpus
+	ISOL_RESTORE=$(cat $CGROUP2/cpuset.cpus.isolated)
+	[[ $ISOL_RESTORE = "$ISOL_BEFORE" ]] || {
+		echo "FAIL: final isolated '$ISOL_RESTORE' != '$ISOL_BEFORE'"
+		exit 1
+	}
+
+	if [[ $HK_NOHZ_CHECK -eq 1 ]]; then
+		NOHZ_RESTORE=$(cat $NOHZ_FILE)
+		[[ "$NOHZ_RESTORE" = "$NOHZ_BEFORE" ]] || {
+			echo "FAIL: nohz_full not restored after pressure test:" \
+			     "expected '$NOHZ_BEFORE', got '$NOHZ_RESTORE'"
+			exit 1
+		}
+	fi
+
+	cd $CGROUP2
+	if [[ $HK_NOHZ_CHECK -eq 1 ]]; then
+		console_msg "HK-noise: PASSED (with nohz_full verification)"
+	else
+		console_msg "HK-noise: PASSED (nohz_full skipped: CONFIG_NO_HZ_FULL not active)"
+	fi
+}
+
 trap cleanup 0 2 3 6
 run_state_test TEST_MATRIX
 run_remote_state_test REMOTE_TEST_MATRIX
 test_isolated
 test_inotify
+test_hk_noise_isolated
 echo "All tests PASSED."
