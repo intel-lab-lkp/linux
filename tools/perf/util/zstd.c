@@ -30,7 +30,7 @@ int zstd_fini(struct zstd_data *data)
 
 ssize_t zstd_compress_stream_to_records(struct zstd_data *data, void *dst, size_t dst_size,
 				       void *src, size_t src_size, size_t max_record_size,
-				       size_t process_header(void *record, size_t increment))
+				       size_t process_header(void *record, size_t data_size))
 {
 	size_t ret, size, compressed = 0;
 	ZSTD_inBuffer input = { src, src_size, 0 };
