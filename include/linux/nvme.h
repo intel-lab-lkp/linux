@@ -1427,8 +1427,15 @@ struct nvme_supported_log {
 	__le32	lids[256];
 };
 
+/*
+ * LID Supported and Effects (Supported Log Pages log, LID 0x00):
+ *
+ * @NVME_LIDS_LSUPP: LID Supported
+ * @NVME_LIDS_IOS:   Index Offset Supported
+ */
 enum {
-	NVME_LIDS_LSUPP	= 1 << 0,
+	NVME_LIDS_LSUPP	= (1 << 0),
+	NVME_LIDS_IOS	= (1 << 1),
 };
 
 struct nvme_supported_features_log {
@@ -1581,6 +1588,15 @@ struct nvme_get_log_page_command {
 	__u8			rsvd14[3];
 	__u8			csi;
 	__u32			rsvd15;
+};
+
+/*
+ * Get Log Page Command Dword 14:
+ *
+ * @NVME_LOG_CDW14_OT: Offset Type (0 = byte offset, 1 = structure index)
+ */
+enum {
+	NVME_LOG_CDW14_OT	= (1 << 23),
 };
 
 struct nvme_directive_cmd {

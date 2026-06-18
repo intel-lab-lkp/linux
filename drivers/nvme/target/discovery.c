@@ -158,12 +158,96 @@ static size_t discovery_log_entries(struct nvmet_req *req)
 	return entries;
 }
 
+/*
+ * LID Supported and Effects for log pages served by this controller.
+ * Must match Supported Log Pages (LID 0x00) lids[] contents.
+ */
+static u32 nvmet_disc_lid_support_effects(u8 lid)
+{
+	switch (lid) {
+	case NVME_LOG_SUPPORTED:
+		return NVME_LIDS_LSUPP;
+	case NVME_LOG_DISC:
+		return NVME_LIDS_LSUPP | NVME_LIDS_IOS;
+	default:
+		return 0;
+	}
+}
+
+static bool nvmet_disc_lid_ios(u8 lid)
+{
+	return nvmet_disc_lid_support_effects(lid) & NVME_LIDS_IOS;
+}
+
+static u16 nvmet_execute_disc_get_supported_log_pages(struct nvmet_req *req)
+{
+	struct nvme_supported_log *logs;
+	u16 status;
+
+	logs = kzalloc_obj(*logs);
+	if (!logs)
+		return NVME_SC_INTERNAL;
+
+	logs->lids[NVME_LOG_SUPPORTED] =
+		cpu_to_le32(nvmet_disc_lid_support_effects(NVME_LOG_SUPPORTED));
+	logs->lids[NVME_LOG_DISC] =
+		cpu_to_le32(nvmet_disc_lid_support_effects(NVME_LOG_DISC));
+
+	status = nvmet_copy_to_sgl(req, 0, logs, sizeof(*logs));
+	kfree(logs);
+	return status;
+}
+
+static bool nvmet_disc_get_log_ot(struct nvme_command *cmd)
+{
+	return le32_to_cpu(cmd->common.cdw14) & NVME_LOG_CDW14_OT;
+}
+
+static u64 nvmet_disc_get_log_offset(struct nvme_command *cmd, u8 lid,
+				     u32 entry_size, u16 *error_loc)
+{
+	u64 lpo = nvmet_get_log_page_offset(cmd);
+
+	if (nvmet_disc_get_log_ot(cmd)) {
+		u64 byte_off;
+
+		if (!nvmet_disc_lid_ios(lid)) {
+			*error_loc = offsetof(struct nvme_common_command, cdw14);
+			return U64_MAX;
+		}
+
+		if (lpo == 0)
+			return 0;
+		/*
+		 * byte_off = sizeof(hdr) + (index - 1) * entry_size.
+		 * Reject if that would overflow u64: a wrapped offset could
+		 * otherwise pass offset > alloc_len below.
+		 */
+		if (lpo - 1 > (U64_MAX - sizeof(struct nvmf_disc_rsp_page_hdr)) /
+			    entry_size) {
+			*error_loc = offsetof(struct nvme_get_log_page_command,
+					      lpo);
+			return U64_MAX;
+		}
+		byte_off = sizeof(struct nvmf_disc_rsp_page_hdr) +
+			   (lpo - 1) * entry_size;
+		return byte_off;
+	}
+
+	if (lpo & 0x3) {
+		*error_loc = offsetof(struct nvme_get_log_page_command, lpo);
+		return U64_MAX;
+	}
+
+	return lpo;
+}
+
 static void nvmet_execute_disc_get_log_page(struct nvmet_req *req)
 {
 	const int entry_size = sizeof(struct nvmf_disc_rsp_page_entry);
 	struct nvmet_ctrl *ctrl = req->sq->ctrl;
 	struct nvmf_disc_rsp_page_hdr *hdr;
-	u64 offset = nvmet_get_log_page_offset(req->cmd);
+	u64 offset;
 	size_t data_len = nvmet_get_log_page_len(req->cmd);
 	size_t alloc_len;
 	size_t copy_len;
@@ -177,6 +261,14 @@ static void nvmet_execute_disc_get_log_page(struct nvmet_req *req)
 	if (!nvmet_check_transfer_len(req, data_len))
 		return;
 
+	if (req->cmd->get_log_page.lid == NVME_LOG_SUPPORTED) {
+		u16 status;
+
+		status = nvmet_execute_disc_get_supported_log_pages(req);
+		nvmet_req_complete(req, status);
+		return;
+	}
+
 	if (req->cmd->get_log_page.lid != NVME_LOG_DISC) {
 		req->error_loc =
 			offsetof(struct nvme_get_log_page_command, lid);
@@ -184,10 +276,9 @@ static void nvmet_execute_disc_get_log_page(struct nvmet_req *req)
 		goto out;
 	}
 
-	/* Spec requires dword aligned offsets */
-	if (offset & 0x3) {
-		req->error_loc =
-			offsetof(struct nvme_get_log_page_command, lpo);
+	offset = nvmet_disc_get_log_offset(req->cmd, NVME_LOG_DISC, entry_size,
+					   &req->error_loc);
+	if (offset == U64_MAX) {
 		status = NVME_SC_INVALID_FIELD | NVME_STATUS_DNR;
 		goto out;
 	}
