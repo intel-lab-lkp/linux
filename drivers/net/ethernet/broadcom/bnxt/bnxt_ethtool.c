@@ -606,6 +606,7 @@ static void bnxt_get_ethtool_stats(struct net_device *dev,
 		goto skip_ring_stats;
 	}
 
+	bnxt_sync_stats(bp);
 	tpa_stats = bnxt_get_num_tpa_ring_stats(bp);
 	for (i = 0; i < bp->cp_nr_rings; i++) {
 		struct bnxt_napi *bnapi = bp->bnapi[i];
@@ -3310,6 +3311,7 @@ static void bnxt_get_fec_stats(struct net_device *dev,
 	if (BNXT_VF(bp) || !(bp->flags & BNXT_FLAG_PORT_STATS_EXT))
 		return;
 
+	bnxt_sync_stats(bp);
 	rx = bp->rx_port_stats_ext.sw_stats;
 	fec_stats->corrected_bits.total =
 		*(rx + BNXT_RX_STATS_EXT_OFFSET(rx_corrected_bits));
@@ -3409,6 +3411,7 @@ static void bnxt_get_pause_stats(struct net_device *dev,
 	if (BNXT_VF(bp) || !(bp->flags & BNXT_FLAG_PORT_STATS))
 		return;
 
+	bnxt_sync_stats(bp);
 	rx = bp->port_stats.sw_stats;
 	tx = bp->port_stats.sw_stats + BNXT_TX_PORT_STATS_BYTE_OFFSET / 8;
 
@@ -5572,6 +5575,7 @@ static void bnxt_get_eth_phy_stats(struct net_device *dev,
 	if (BNXT_VF(bp) || !(bp->flags & BNXT_FLAG_PORT_STATS_EXT))
 		return;
 
+	bnxt_sync_stats(bp);
 	rx = bp->rx_port_stats_ext.sw_stats;
 	phy_stats->SymbolErrorDuringCarrier =
 		*(rx + BNXT_RX_STATS_EXT_OFFSET(rx_pcs_symbol_err));
@@ -5586,6 +5590,7 @@ static void bnxt_get_eth_mac_stats(struct net_device *dev,
 	if (BNXT_VF(bp) || !(bp->flags & BNXT_FLAG_PORT_STATS))
 		return;
 
+	bnxt_sync_stats(bp);
 	rx = bp->port_stats.sw_stats;
 	tx = bp->port_stats.sw_stats + BNXT_TX_PORT_STATS_BYTE_OFFSET / 8;
 
@@ -5610,6 +5615,7 @@ static void bnxt_get_eth_ctrl_stats(struct net_device *dev,
 	if (BNXT_VF(bp) || !(bp->flags & BNXT_FLAG_PORT_STATS))
 		return;
 
+	bnxt_sync_stats(bp);
 	rx = bp->port_stats.sw_stats;
 	ctrl_stats->MACControlFramesReceived =
 		BNXT_GET_RX_PORT_STATS64(rx, rx_ctrl_frames);
@@ -5639,6 +5645,7 @@ static void bnxt_get_rmon_stats(struct net_device *dev,
 	if (BNXT_VF(bp) || !(bp->flags & BNXT_FLAG_PORT_STATS))
 		return;
 
+	bnxt_sync_stats(bp);
 	rx = bp->port_stats.sw_stats;
 	tx = bp->port_stats.sw_stats + BNXT_TX_PORT_STATS_BYTE_OFFSET / 8;
 
@@ -5712,6 +5719,7 @@ static void bnxt_get_link_ext_stats(struct net_device *dev,
 	if (BNXT_VF(bp) || !(bp->flags & BNXT_FLAG_PORT_STATS_EXT))
 		return;
 
+	bnxt_sync_stats(bp);
 	rx = bp->rx_port_stats_ext.sw_stats;
 	stats->link_down_events =
 		*(rx + BNXT_RX_STATS_EXT_OFFSET(link_down_events));
