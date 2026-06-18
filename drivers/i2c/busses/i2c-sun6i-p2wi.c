@@ -184,7 +184,6 @@ static int p2wi_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
-	struct device_node *childnp;
 	unsigned long parent_clk_freq;
 	u32 clk_freq = I2C_MAX_STANDARD_MODE_FREQ;
 	struct p2wi *p2wi;
@@ -217,14 +216,19 @@ static int p2wi_probe(struct platform_device *pdev)
 	 * In this case the target_addr is set to -1 and won't be checked when
 	 * launching a P2WI transfer.
 	 */
+	struct device_node *childnp;
+
 	childnp = of_get_next_available_child(np, NULL);
 	if (childnp) {
 		ret = of_property_read_u32(childnp, "reg", &target_addr);
-		if (ret)
+		if (ret) {
+			of_node_put(childnp);
 			return dev_err_probe(dev, -EINVAL,
 					     "invalid target address on node %pOF\n", childnp);
+		}
 
 		p2wi->target_addr = target_addr;
+		of_node_put(childnp);
 	}
 
 	p2wi->regs = devm_platform_ioremap_resource(pdev, 0);
