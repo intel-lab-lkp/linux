@@ -7,7 +7,15 @@
 
 use pin_init::Wrapper;
 
-use crate::{bindings, prelude::*, sync::rcu, types::Opaque};
+use crate::{
+    bindings,
+    prelude::*,
+    sync::{
+        rcu,
+        Completion, //
+    },
+    types::Opaque,
+};
 use core::{
     marker::PhantomData,
     ops::Deref,
@@ -67,6 +75,8 @@ use core::{
 pub struct Revocable<T> {
     is_available: AtomicBool,
     #[pin]
+    revocation: Completion,
+    #[pin]
     data: Opaque<T>,
 }
 
@@ -85,6 +95,7 @@ impl<T> Revocable<T> {
     pub fn new<E>(data: impl PinInit<T, E>) -> impl PinInit<Self, E> {
         try_pin_init!(Self {
             is_available: AtomicBool::new(true),
+            revocation <- Completion::new().map_err(|e| match e {}),
             data <- Opaque::pin_init(data),
         }? E)
     }
@@ -168,6 +179,10 @@ impl<T> Revocable<T> {
             // SAFETY: We know `self.data` is valid because only one CPU can succeed the
             // `compare_exchange` above that takes `is_available` from `true` to `false`.
             unsafe { drop_in_place(self.data.get()) };
+
+            self.revocation.complete_all();
+        } else {
+            self.revocation.wait_for_completion();
         }
 
         revoke
@@ -179,7 +194,8 @@ impl<T> Revocable<T> {
     /// expecting that there are no concurrent users of the object.
     ///
     /// Returns `true` if `&self` has been revoked with this call, `false` if it was revoked
-    /// already.
+    /// already. In the latter case, this function waits for the concurrent revocation to complete
+    /// before returning.
     ///
     /// # Safety
     ///
@@ -200,7 +216,8 @@ impl<T> Revocable<T> {
     /// function waits for the concurrent access to complete before dropping the wrapped object.
     ///
     /// Returns `true` if `&self` has been revoked with this call, `false` if it was revoked
-    /// already.
+    /// already. In the latter case, this function waits for the concurrent revocation to complete
+    /// before returning, ensuring the wrapped object has been fully dropped.
     pub fn revoke(&self) -> bool {
         // SAFETY: By passing `true` we ask `revoke_internal` to wait for the grace period to
         // finish.
