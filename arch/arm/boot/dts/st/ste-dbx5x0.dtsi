@@ -673,6 +673,7 @@
 				// DB8500_REGULATOR_VAPE
 				db8500_vape_reg: db8500_vape {
 					regulator-always-on;
+					power-domains = <&pm_domains DOMAIN_VAPE>;
 				};
 
 				// DB8500_REGULATOR_VARM
@@ -693,6 +694,7 @@
 
 				// DB8500_REGULATOR_VSMPS2
 				db8500_vsmps2_reg: db8500_vsmps2 {
+					power-domains = <&pm_domains DOMAIN_VSMPS2>;
 				};
 
 				// DB8500_REGULATOR_VSMPS3

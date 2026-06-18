@@ -397,6 +397,17 @@ config REGULATOR_DA9210
 	  converter 12A DC-DC Buck controlled through an I2C
 	  interface.
 
+config REGULATOR_DB8500
+	bool "ST-Ericsson DB8500 power domain regulators"
+	depends on MFD_DB8500_PRCMU && UX500_PM_DOMAIN && OF
+	default ARCH_U8500
+	help
+	  This driver supports the DB8500 VAPE and VSMPS2 regulators.
+	  These supplies are represented by generic power domains in hardware,
+	  but the same voltage rails are routed out of the chip and used to
+	  supply external peripherals.
+	  Enable this driver to bridge those regulator consumers to genpd.
+
 config REGULATOR_DA9211
 	tristate "Dialog Semiconductor DA9211/DA9212/DA9213/DA9223/DA9214/DA9224/DA9215/DA9225 regulator"
 	depends on I2C
