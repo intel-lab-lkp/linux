@@ -411,7 +411,7 @@ static __always_inline void ct_kernel_enter(bool user, int offset) { }
 #define CREATE_TRACE_POINTS
 #include <trace/events/context_tracking.h>
 
-DEFINE_STATIC_KEY_FALSE_RO(context_tracking_key);
+DEFINE_STATIC_KEY_FALSE(context_tracking_key);
 EXPORT_SYMBOL_GPL(context_tracking_key);
 
 static noinstr bool context_tracking_recursion_enter(void)
@@ -674,28 +674,21 @@ void user_exit_callable(void)
 }
 NOKPROBE_SYMBOL(user_exit_callable);
 
-void __init ct_cpu_track_user(int cpu)
+void ct_cpu_track_user(int cpu)
 {
-	static __initdata bool initialized = false;
-
 	if (!per_cpu(context_tracking.active, cpu)) {
 		per_cpu(context_tracking.active, cpu) = true;
 		static_branch_inc(&context_tracking_key);
 	}
+}
 
-	if (initialized)
+void ct_cpu_untrack_user(int cpu)
+{
+	if (!per_cpu(context_tracking.active, cpu))
 		return;
 
-#ifdef CONFIG_HAVE_TIF_NOHZ
-	/*
-	 * Set TIF_NOHZ to init/0 and let it propagate to all tasks through fork
-	 * This assumes that init is the only task at this early boot stage.
-	 */
-	set_tsk_thread_flag(&init_task, TIF_NOHZ);
-#endif
-	WARN_ON_ONCE(!tasklist_empty());
-
-	initialized = true;
+	per_cpu(context_tracking.active, cpu) = false;
+	static_branch_dec(&context_tracking_key);
 }
 
 #ifdef CONFIG_CONTEXT_TRACKING_USER_FORCE

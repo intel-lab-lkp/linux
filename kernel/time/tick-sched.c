@@ -26,6 +26,7 @@
 #include <linux/irq_work.h>
 #include <linux/posix-timers.h>
 #include <linux/context_tracking.h>
+#include <linux/sched/isolation.h>
 #include <linux/mm.h>
 
 #include <asm/irq_regs.h>
@@ -653,11 +654,6 @@ void __init tick_nohz_init(void)
 	if (!tick_nohz_full_running)
 		return;
 
-	/*
-	 * Full dynticks uses IRQ work to drive the tick rescheduling on safe
-	 * locking contexts. But then we need IRQ work to raise its own
-	 * interrupts to avoid circular dependency on the tick.
-	 */
 	if (!arch_irq_work_has_interrupt()) {
 		pr_warn("NO_HZ: Can't run full dynticks because arch doesn't support IRQ work self-IPIs\n");
 		cpumask_clear(tick_nohz_full_mask);
@@ -676,6 +672,16 @@ void __init tick_nohz_init(void)
 		}
 	}
 
+	/*
+	 * Pre-initialize context tracking for all possible CPUs so
+	 * ctx tracking is already active when a CPU is later added to
+	 * nohz_full at runtime.  The tracking overhead is negligible
+	 * because the static key is not incremented yet — only per-CPU
+	 * tracking state is set up.
+	 */
+	if (IS_ENABLED(CONFIG_CONTEXT_TRACKING_USER_FORCE))
+		context_tracking_init();
+
 	for_each_cpu(cpu, tick_nohz_full_mask)
 		ct_cpu_track_user(cpu);
 
@@ -686,6 +692,147 @@ void __init tick_nohz_init(void)
 	pr_info("NO_HZ: Full dynticks CPUs: %*pbl.\n",
 		cpumask_pr_args(tick_nohz_full_mask));
 }
+
+static int tick_nohz_hk_validate(enum hk_type type,
+				 const struct cpumask *cur_mask,
+				 const struct cpumask *new_mask)
+{
+	if (!IS_ENABLED(CONFIG_NO_HZ_FULL))
+		return -EOPNOTSUPP;
+	return 0;
+}
+
+static void tick_nohz_hk_apply(enum hk_type type)
+{
+	static DEFINE_SPINLOCK(tick_nohz_lock);
+	cpumask_var_t nohz_full, added, removed;
+	bool was_running;
+	int cpu;
+
+	if (!alloc_cpumask_var(&nohz_full, GFP_KERNEL))
+		return;
+	if (!alloc_cpumask_var(&added, GFP_KERNEL)) {
+		free_cpumask_var(nohz_full);
+		return;
+	}
+	if (!alloc_cpumask_var(&removed, GFP_KERNEL)) {
+		free_cpumask_var(added);
+		free_cpumask_var(nohz_full);
+		return;
+	}
+
+	/*
+	 * Snapshot the new HK_TYPE_KERNEL_NOISE mask under an RCU read lock.
+	 * housekeeping_update_types() completes synchronize_rcu() before
+	 * invoking apply(), so the new pointer is stable; however the lockdep
+	 * annotation in housekeeping_cpumask() still requires an RCU read-side
+	 * critical section for runtime-mutable types.
+	 */
+	rcu_read_lock();
+	cpumask_andnot(nohz_full, cpu_possible_mask,
+		       housekeeping_cpumask_rcu(HK_TYPE_KERNEL_NOISE));
+	rcu_read_unlock();
+
+	/*
+	 * When "nohz_full=" was not passed at boot, tick_nohz_full_running is
+	 * false and the full dynticks infrastructure (sched_tick_offload_init,
+	 * RCU nohz quiescent-state reporting, context-tracking bootstrap) was
+	 * never initialised.  In that case restrict the update to
+	 * tick_nohz_full_mask so the /sys/devices/system/cpu/nohz_full sysfs
+	 * attribute reflects DHM-isolated CPUs without enabling tick
+	 * suppression, context tracking, or timer migration – all of which
+	 * require boot-time setup and would deadlock on the first
+	 * synchronize_rcu() call after CPUs are offlined.
+	 */
+	was_running = READ_ONCE(tick_nohz_full_running);
+
+	spin_lock(&tick_nohz_lock);
+
+	/*
+	 * When nohz_full= was active at boot, compute the delta and update
+	 * context tracking for CPUs joining or leaving the nohz_full set.
+	 * Skip when !was_running: ct_cpu_track_user() calls
+	 * static_branch_inc() which may sleep (jump_label_update on the
+	 * 0→1 transition) – illegal inside a spinlock.
+	 */
+	if (IS_ENABLED(CONFIG_CONTEXT_TRACKING_USER) &&
+	    was_running &&
+	    cpumask_available(tick_nohz_full_mask)) {
+		cpumask_andnot(added, nohz_full, tick_nohz_full_mask);
+		cpumask_andnot(removed, tick_nohz_full_mask, nohz_full);
+		for_each_cpu(cpu, added)
+			ct_cpu_track_user(cpu);
+		for_each_cpu(cpu, removed)
+			ct_cpu_untrack_user(cpu);
+	}
+
+	/*
+	 * Update tick_nohz_full_mask unconditionally: this is the snapshot
+	 * read by the /sys/devices/system/cpu/nohz_full sysfs attribute and
+	 * must reflect the current isolation set even in the DHM runtime case.
+	 */
+	if (cpumask_available(tick_nohz_full_mask))
+		cpumask_copy(tick_nohz_full_mask, nohz_full);
+
+	/*
+	 * Only modify tick_nohz_full_running and migrate the global tick when
+	 * nohz_full= was set at boot; without boot-time setup, setting
+	 * tick_nohz_full_running would suppress ticks on isolated CPUs and
+	 * prevent RCU quiescent-state reporting, causing synchronize_rcu()
+	 * to stall permanently when a CPU is subsequently offlined.
+	 */
+	if (was_running) {
+		tick_nohz_full_running = !cpumask_empty(nohz_full);
+
+		if (tick_nohz_full_running) {
+			cpu = READ_ONCE(tick_do_timer_cpu);
+			if (cpu < nr_cpu_ids &&
+			    !housekeeping_test_cpu(cpu, HK_TYPE_KERNEL_NOISE)) {
+				int new_cpu;
+
+				new_cpu = housekeeping_any_cpu(HK_TYPE_KERNEL_NOISE);
+				if (new_cpu < nr_cpu_ids)
+					WRITE_ONCE(tick_do_timer_cpu, new_cpu);
+			}
+		}
+	}
+
+	spin_unlock(&tick_nohz_lock);
+
+	if (was_running)
+		tick_nohz_full_kick_all();
+	free_cpumask_var(removed);
+	free_cpumask_var(added);
+	free_cpumask_var(nohz_full);
+}
+
+static struct housekeeping_cbs tick_nohz_hk_cbs = {
+	.name		= "tick/nohz",
+	.pre_validate	= tick_nohz_hk_validate,
+	.apply		= tick_nohz_hk_apply,
+};
+
+static int __init tick_nohz_hk_init_late(void)
+{
+	int ret;
+
+	/*
+	 * Ensure tick_nohz_full_mask is allocated so that tick_nohz_hk_apply()
+	 * can update it (and the /sys/devices/system/cpu/nohz_full sysfs
+	 * attribute) when CPUs are isolated at runtime via DHM.  If "nohz_full="
+	 * was passed at boot the mask is already allocated; allocate an empty
+	 * one here for the runtime-only case.
+	 */
+	if (!cpumask_available(tick_nohz_full_mask) &&
+	    !zalloc_cpumask_var(&tick_nohz_full_mask, GFP_KERNEL))
+		pr_warn("tick/nohz: failed to allocate nohz_full_mask for DHM\n");
+
+	ret = housekeeping_register_cbs(HK_TYPE_KERNEL_NOISE, &tick_nohz_hk_cbs);
+	if (ret)
+		pr_warn("tick/nohz: Failed to register hk callback: %d\n", ret);
+	return 0;
+}
+late_initcall(tick_nohz_hk_init_late);
 #endif /* #ifdef CONFIG_NO_HZ_FULL */
 
 /*
