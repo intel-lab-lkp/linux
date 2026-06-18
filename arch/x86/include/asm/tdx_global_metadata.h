@@ -57,4 +57,8 @@ struct tdx_sys_info_ext {
 	bool ext_required;
 };
 
+struct tdx_sys_info_quote {
+	u32 max_quote_size;
+};
+
 #endif
