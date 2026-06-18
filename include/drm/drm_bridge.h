@@ -1257,6 +1257,10 @@ struct drm_bridge {
 	 */
 	struct mutex hpd_mutex;
 	/**
+	 * @hpd_state_mutex: Protects the HPD en/disablement state for the bridge.
+	 */
+	struct mutex hpd_state_mutex;
+	/**
 	 * @hpd_cb: Hot plug detection callback, registered with
 	 * drm_bridge_hpd_enable().
 	 */
