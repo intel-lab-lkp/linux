@@ -1514,7 +1514,7 @@ irqreturn_t efx_farch_fatal_interrupt(struct efx_nic *efx)
 irqreturn_t efx_farch_legacy_interrupt(int irq, void *dev_id)
 {
 	struct efx_nic *efx = dev_id;
-	bool soft_enabled = READ_ONCE(efx->irq_soft_enabled);
+	bool soft_enabled = efx_irq_soft_enabled(efx);
 	efx_oword_t *int_ker = efx->irq_status.addr;
 	irqreturn_t result = IRQ_NONE;
 	struct efx_channel *channel;
@@ -1606,7 +1606,7 @@ irqreturn_t efx_farch_msi_interrupt(int irq, void *dev_id)
 		   "IRQ %d on CPU %d status " EFX_OWORD_FMT "\n",
 		   irq, raw_smp_processor_id(), EFX_OWORD_VAL(*int_ker));
 
-	if (!likely(READ_ONCE(efx->irq_soft_enabled)))
+	if (!likely(efx_irq_soft_enabled(efx)))
 		return IRQ_HANDLED;
 
 	/* Handle non-event-queue sources */

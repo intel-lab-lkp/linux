@@ -2143,7 +2143,7 @@ static irqreturn_t efx_ef10_msi_interrupt(int irq, void *dev_id)
 	netif_vdbg(efx, intr, efx->net_dev,
 		   "IRQ %d on CPU %d\n", irq, raw_smp_processor_id());
 
-	if (likely(READ_ONCE(efx->irq_soft_enabled))) {
+	if (likely(efx_irq_soft_enabled(efx))) {
 		/* Note test interrupts */
 		if (context->index == efx->irq_level)
 			efx->last_irq_cpu = raw_smp_processor_id();
@@ -2158,7 +2158,7 @@ static irqreturn_t efx_ef10_msi_interrupt(int irq, void *dev_id)
 static irqreturn_t efx_ef10_legacy_interrupt(int irq, void *dev_id)
 {
 	struct efx_nic *efx = dev_id;
-	bool soft_enabled = READ_ONCE(efx->irq_soft_enabled);
+	bool soft_enabled = efx_irq_soft_enabled(efx);
 	struct efx_channel *channel;
 	efx_dword_t reg;
 	u32 queues;

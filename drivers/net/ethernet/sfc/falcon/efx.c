@@ -1460,7 +1460,7 @@ static int ef4_soft_enable_interrupts(struct ef4_nic *efx)
 
 	BUG_ON(efx->state == STATE_DISABLED);
 
-	efx->irq_soft_enabled = true;
+	ef4_irq_soft_enable(efx);
 	smp_wmb();
 
 	ef4_for_each_channel(channel, efx) {
@@ -1493,7 +1493,7 @@ static void ef4_soft_disable_interrupts(struct ef4_nic *efx)
 	if (efx->state == STATE_DISABLED)
 		return;
 
-	efx->irq_soft_enabled = false;
+	ef4_irq_soft_disable(efx);
 	smp_wmb();
 
 	if (efx->legacy_irq)
