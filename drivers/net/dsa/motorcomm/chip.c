@@ -26,6 +26,7 @@
 #include <net/pkt_cls.h>
 
 #include "chip.h"
+#include "leds.h"
 #include "smi.h"
 
 struct yt921x_mib_desc {
@@ -150,8 +151,6 @@ static const struct yt921x_info yt921x_infos[] = {
 	},
 	{}
 };
-
-#define YT921X_NAME	"yt921x"
 
 #define YT921X_VID_UNWARE	4095
 
@@ -4558,6 +4557,10 @@ static int yt921x_chip_setup(struct yt921x_priv *priv)
 	if (res)
 		return res;
 #endif
+
+	res = yt921x_led_setup(priv);
+	if (res)
+		return res;
 
 	/* Clear MIB */
 	ctrl = YT921X_MIB_CTRL_CLEAN | YT921X_MIB_CTRL_ALL_PORT;

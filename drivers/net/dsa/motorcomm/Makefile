@@ -2,3 +2,4 @@
 obj-$(CONFIG_NET_DSA_YT921X) += yt921x.o
 yt921x-objs := chip.o
 yt921x-objs += smi.o
+yt921x-$(CONFIG_NET_DSA_YT921X_LEDS) += leds.o
