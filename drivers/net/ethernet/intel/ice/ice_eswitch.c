@@ -66,8 +66,10 @@ err_vlan_filtering:
 	ice_cfg_dflt_vsi(uplink_vsi->port_info, uplink_vsi->idx, false,
 			 ICE_FLTR_TX);
 err_def_tx:
-	ice_cfg_dflt_vsi(uplink_vsi->port_info, uplink_vsi->idx, false,
-			 ICE_FLTR_RX);
+	/* keep the Rx DFLT rule if still promiscuous (see release_env) */
+	if (!(uplink_vsi->current_netdev_flags & IFF_PROMISC))
+		ice_cfg_dflt_vsi(uplink_vsi->port_info, uplink_vsi->idx,
+				 false, ICE_FLTR_RX);
 err_def_rx:
 	ice_vsi_del_vlan_zero(uplink_vsi);
 err_vlan_zero:
@@ -273,11 +275,23 @@ static void ice_eswitch_release_env(struct ice_pf *pf)
 	vlan_ops = ice_get_compat_vsi_vlan_ops(uplink_vsi);
 
 	ice_vsi_update_local_lb(uplink_vsi, false);
+	/* No-op while IFF_PROMISC is set: ice_cfg_vlan_pruning() self-gates on
+	 * it, so this cannot re-enable VLAN pruning under a preserved DFLT rule.
+	 */
 	vlan_ops->ena_rx_filtering(uplink_vsi);
 	ice_cfg_dflt_vsi(uplink_vsi->port_info, uplink_vsi->idx, false,
 			 ICE_FLTR_TX);
-	ice_cfg_dflt_vsi(uplink_vsi->port_info, uplink_vsi->idx, false,
-			 ICE_FLTR_RX);
+
+	/* Keep the Rx DFLT rule if the uplink is still promiscuous; it must
+	 * outlive the session. current_netdev_flags is used because its
+	 * IFF_PROMISC bit only changes under ice_vsi_sync_fltr(), gated off
+	 * during switchdev, so the read cannot race the RTNL netdev->flags.
+	 * Any change made during the session is replayed on teardown.
+	 */
+	if (!(uplink_vsi->current_netdev_flags & IFF_PROMISC))
+		ice_cfg_dflt_vsi(uplink_vsi->port_info, uplink_vsi->idx,
+				 false, ICE_FLTR_RX);
+
 	ice_fltr_add_mac_and_broadcast(uplink_vsi,
 				       uplink_vsi->port_info->mac.perm_addr,
 				       ICE_FWD_TO_VSI);
@@ -327,10 +341,20 @@ err_br_offloads:
  */
 static void ice_eswitch_disable_switchdev(struct ice_pf *pf)
 {
+	struct ice_vsi *uplink_vsi = pf->eswitch.uplink_vsi;
+
 	ice_eswitch_br_offloads_deinit(pf);
 	ice_eswitch_release_env(pf);
 
 	pf->eswitch.is_running = false;
+
+	/* ice_set_rx_mode() was gated off during the session; replay a filter
+	 * sync so any suppressed promisc change reconciles the DFLT Rx rule.
+	 */
+	set_bit(ICE_VSI_UMAC_FLTR_CHANGED, uplink_vsi->state);
+	set_bit(ICE_VSI_MMAC_FLTR_CHANGED, uplink_vsi->state);
+	set_bit(ICE_FLAG_FLTR_SYNC, pf->flags);
+	ice_service_task_schedule(pf);
 }
 
 /**
