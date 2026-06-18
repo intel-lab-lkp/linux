@@ -53,6 +53,7 @@ struct tdx_sys_info {
 };
 
 struct tdx_sys_info_ext {
+	u32 memory_pool_required_pages;
 	bool ext_required;
 };
 

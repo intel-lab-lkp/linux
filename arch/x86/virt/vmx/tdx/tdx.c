@@ -31,6 +31,7 @@
 #include <linux/syscore_ops.h>
 #include <linux/idr.h>
 #include <linux/kvm_types.h>
+#include <linux/bitfield.h>
 #include <asm/page.h>
 #include <asm/special_insns.h>
 #include <asm/msr-index.h>
@@ -1166,6 +1167,108 @@ static __init int init_tdmrs(struct tdmr_info_list *tdmr_list)
 	return 0;
 }
 
+#define HPA_LIST_INFO_FIRST_ENTRY	GENMASK_U64(11, 3)
+#define HPA_LIST_INFO_PFN		GENMASK_U64(51, 12)
+#define HPA_LIST_INFO_LAST_ENTRY	GENMASK_U64(63, 55)
+
+static __init u64 to_hpa_list_info(struct page *hpa_list_page,
+				   unsigned int nr_pages)
+{
+	return FIELD_PREP(HPA_LIST_INFO_FIRST_ENTRY, 0) |
+	       FIELD_PREP(HPA_LIST_INFO_PFN, page_to_pfn(hpa_list_page)) |
+	       FIELD_PREP(HPA_LIST_INFO_LAST_ENTRY, nr_pages - 1);
+}
+
+static __init int tdx_ext_mem_add(struct page *hpa_list_page,
+				  unsigned int nr_pages)
+{
+	struct tdx_module_args args = {
+		.rcx = to_hpa_list_info(hpa_list_page, nr_pages),
+	};
+	u64 r;
+
+	do {
+		/*
+		 * TDH_EXT_MEM_ADD is designed to use output parameter RCX to
+		 * override/update input parameter RCX, so the caller doesn't
+		 * have to do manual parameter update on retry call.
+		 */
+		r = seamcall_ret(TDH_EXT_MEM_ADD, &args);
+	} while (r == TDX_INTERRUPTED_RESUMABLE);
+
+	if (r != TDX_SUCCESS)
+		return -EFAULT;
+
+	return 0;
+}
+
+struct tdx_hpa_list {
+	u64 phys[PAGE_SIZE / sizeof(u64)];
+};
+
+static_assert(sizeof(struct tdx_hpa_list) == PAGE_SIZE);
+
+static __init int tdx_ext_mem_setup(unsigned int required_pages)
+{
+	struct tdx_hpa_list *hpa_list;
+	struct page *page;
+	unsigned int i;
+	int ret;
+
+	/*
+	 * memory_pool_required_pages == 0 means no need to add pages,
+	 * skip the memory setup.
+	 */
+	if (!required_pages)
+		return 0;
+
+	hpa_list = kzalloc_obj(*hpa_list);
+	if (!hpa_list)
+		return -ENOMEM;
+
+	page = alloc_contig_pages(required_pages, GFP_KERNEL, numa_mem_id(),
+				  &node_online_map);
+	if (!page) {
+		ret = -ENOMEM;
+		goto out_free_hpa_list;
+	}
+
+	i = 0;
+	while (i < required_pages) {
+		unsigned int nents = min(required_pages - i,
+					 ARRAY_SIZE(hpa_list->phys));
+		unsigned int j;
+
+		for (j = 0; j < nents; j++)
+			hpa_list->phys[j] = page_to_phys(page + i + j);
+
+		ret = tdx_ext_mem_add(virt_to_page(hpa_list), nents);
+		/*
+		 * No SEAMCALLs to reclaim the added pages. For simple error
+		 * handling, leak all pages.
+		 */
+		WARN(ret, "Fatal: TDX module rejected (%d) memory for extensions, stranded all pages\n",
+		     ret);
+		if (ret)
+			break;
+
+		i += nents;
+	}
+
+	/*
+	 * Memory for extensions can't be reclaimed once added, print out the
+	 * amount, stop tracking it and free the hpa_list page, no matter
+	 * success or failure.
+	 */
+	pr_info("%lu KB consumed for TDX module extensions\n",
+		required_pages * PAGE_SIZE / 1024);
+
+out_free_hpa_list:
+	kfree(hpa_list);
+
+	return ret;
+}
+
 static __init int init_tdx_module_extensions(void)
 {
 	struct tdx_sys_info_ext sysinfo_ext;
@@ -1182,9 +1285,7 @@ static __init int init_tdx_module_extensions(void)
 	if (!sysinfo_ext.ext_required)
 		return 0;
 
-	/* TODO: add the extensions enabling steps here */
-
-	return 0;
+	return tdx_ext_mem_setup(sysinfo_ext.memory_pool_required_pages);
 }
 
 static __init int init_tdx_module(void)

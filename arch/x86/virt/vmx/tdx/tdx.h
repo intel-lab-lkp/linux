@@ -63,6 +63,7 @@
 #define TDH_SYS_SHUTDOWN		52
 #define TDH_SYS_UPDATE_V0		53
 #define TDH_SYS_UPDATE			SEAMCALL_LEAF_VER(TDH_SYS_UPDATE_V0, 1)
+#define TDH_EXT_MEM_ADD			61
 #define TDH_SYS_DISABLE			69
 
 /* TDX page types */
