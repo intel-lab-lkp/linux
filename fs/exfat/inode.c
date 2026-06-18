@@ -11,6 +11,7 @@
 #include <linux/time.h>
 #include <linux/writeback.h>
 #include <linux/uio.h>
+#include <linux/swap.h>
 #include <linux/random.h>
 #include <linux/iversion.h>
 
@@ -534,6 +535,27 @@ int exfat_block_truncate_page(struct inode *inode, loff_t from)
 	return block_truncate_page(inode->i_mapping, from, exfat_get_block);
 }
 
+static int exfat_swap_activate(struct swap_info_struct *sis,
+			       struct file *file, sector_t *span)
+{
+	struct inode *inode = file_inode(file);
+	struct exfat_inode_info *ei = EXFAT_I(inode);
+	int ret;
+
+	/*
+	 * exfat's fallocate allocates clusters without updating valid_size,
+	 * leaving them invisible to bmap(). Extend valid_size to i_size so
+	 * that generic_swapfile_activate() can map all blocks.
+	 */
+	if (ei->valid_size < i_size_read(inode)) {
+		ret = exfat_extend_valid_size(inode, i_size_read(inode));
+		if (ret)
+			return ret;
+	}
+
+	return generic_swapfile_activate(sis, file, span);
+}
+
 static const struct address_space_operations exfat_aops = {
 	.dirty_folio	= block_dirty_folio,
 	.invalidate_folio = block_invalidate_folio,
@@ -545,6 +567,7 @@ static const struct address_space_operations exfat_aops = {
 	.direct_IO	= exfat_direct_IO,
 	.bmap		= exfat_aop_bmap,
 	.migrate_folio	= buffer_migrate_folio,
+	.swap_activate	= exfat_swap_activate,
 };
 
 static inline unsigned long exfat_hash(loff_t i_pos)

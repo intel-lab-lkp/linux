@@ -489,6 +489,7 @@ int exfat_trim_fs(struct inode *inode, struct fstrim_range *range);
 
 /* file.c */
 extern const struct file_operations exfat_file_operations;
+int exfat_extend_valid_size(struct inode *inode, loff_t new_valid_size);
 int __exfat_truncate(struct inode *inode);
 void exfat_truncate(struct inode *inode);
 int exfat_setattr(struct mnt_idmap *idmap, struct dentry *dentry,

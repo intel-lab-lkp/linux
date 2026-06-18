@@ -642,7 +642,7 @@ int exfat_file_fsync(struct file *filp, loff_t start, loff_t end, int datasync)
 	return blkdev_issue_flush(inode->i_sb->s_bdev);
 }
 
-static int exfat_extend_valid_size(struct inode *inode, loff_t new_valid_size)
+int exfat_extend_valid_size(struct inode *inode, loff_t new_valid_size)
 {
 	int err;
 	loff_t pos;
