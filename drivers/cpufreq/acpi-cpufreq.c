@@ -103,9 +103,7 @@ static int boost_set_msr(bool enable)
 		break;
 	case X86_VENDOR_HYGON:
 	case X86_VENDOR_AMD:
-		msr_addr = MSR_K7_HWCR;
-		msr_mask = MSR_K7_HWCR_CPB_DIS;
-		break;
+		return amd_update_hwcr(MSR_K7_HWCR_CPB_DIS_BIT, !enable);
 	default:
 		return -EINVAL;
 	}
