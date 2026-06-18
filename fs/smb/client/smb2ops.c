@@ -2364,7 +2364,50 @@ smb3_enum_snapshots(const unsigned int xid, struct cifs_tcon *tcon,
 	return rc;
 }
 
+static int
+smb3_notify_open(const unsigned int xid, struct dentry *dentry,
+		 struct cifs_sb_info *cifs_sb, void *page,
+		 struct cifs_fid *fid, const unsigned char **pathp,
+		 __le16 **utf16_pathp, struct cifs_tcon **tconp)
+{
+	struct cifs_tcon *tcon;
+	const unsigned char *path;
+	__le16 *utf16_path = NULL;
+	struct cifs_open_parms oparms;
+	u8 oplock = SMB2_OPLOCK_LEVEL_NONE;
+	int rc;
 
+	path = build_path_from_dentry(dentry, page);
+	if (IS_ERR(path)) {
+		rc = PTR_ERR(path);
+		goto out;
+	}
+	*pathp = path;
+
+	utf16_path = cifs_convert_path_to_utf16(path, cifs_sb);
+	if (utf16_path == NULL) {
+		rc = -ENOMEM;
+		goto out;
+	}
+	*utf16_pathp = utf16_path;
+
+	tcon = cifs_sb_master_tcon(cifs_sb);
+	*tconp = tcon;
+	oparms = (struct cifs_open_parms) {
+		.tcon = tcon,
+		.path = path,
+		.desired_access = FILE_READ_ATTRIBUTES | FILE_READ_DATA,
+		.disposition = FILE_OPEN,
+		.create_options = cifs_create_options(cifs_sb, 0),
+		.fid = fid,
+	};
+
+	rc = SMB2_open(xid, &oparms, utf16_path, &oplock, NULL, NULL, NULL,
+		       NULL);
+
+out:
+	return rc;
+}
 
 static int
 smb3_notify(const unsigned int xid, struct file *pfile,
@@ -2375,28 +2418,14 @@ smb3_notify(const unsigned int xid, struct file *pfile,
 	struct dentry *dentry = pfile->f_path.dentry;
 	struct inode *inode = file_inode(pfile);
 	struct cifs_sb_info *cifs_sb = CIFS_SB(inode->i_sb);
-	struct cifs_open_parms oparms;
 	struct cifs_fid fid;
 	struct cifs_tcon *tcon;
 	const unsigned char *path;
 	char *returned_ioctl_info = NULL;
 	void *page = alloc_dentry_path();
 	__le16 *utf16_path = NULL;
-	u8 oplock = SMB2_OPLOCK_LEVEL_NONE;
 	int rc = 0;
 	__u32 ret_len = 0;
-
-	path = build_path_from_dentry(dentry, page);
-	if (IS_ERR(path)) {
-		rc = PTR_ERR(path);
-		goto notify_exit;
-	}
-
-	utf16_path = cifs_convert_path_to_utf16(path, cifs_sb);
-	if (utf16_path == NULL) {
-		rc = -ENOMEM;
-		goto notify_exit;
-	}
 
 	if (return_changes) {
 		if (copy_from_user(&notify, ioc_buf, sizeof(struct smb3_notify_info))) {
@@ -2411,18 +2440,8 @@ smb3_notify(const unsigned int xid, struct file *pfile,
 		notify.data_len = 0;
 	}
 
-	tcon = cifs_sb_master_tcon(cifs_sb);
-	oparms = (struct cifs_open_parms) {
-		.tcon = tcon,
-		.path = path,
-		.desired_access = FILE_READ_ATTRIBUTES | FILE_READ_DATA,
-		.disposition = FILE_OPEN,
-		.create_options = cifs_create_options(cifs_sb, 0),
-		.fid = &fid,
-	};
-
-	rc = SMB2_open(xid, &oparms, utf16_path, &oplock, NULL, NULL, NULL,
-		       NULL);
+	rc = smb3_notify_open(xid, dentry, cifs_sb, page, &fid,
+			      &path, &utf16_path, &tcon);
 	if (rc)
 		goto notify_exit;
 
