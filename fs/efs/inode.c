@@ -254,9 +254,14 @@ efs_block_t efs_map_block(struct inode *inode, efs_block_t block) {
 		 *
 		 */
 		ibase = 0;
-		for(dirext = 0; cur < ibase && dirext < direxts; dirext++) {
-			ibase += in->extents[dirext].cooked.ex_length *
+		for (dirext = 0; dirext < direxts; dirext++) {
+			int entries = in->extents[dirext].cooked.ex_length *
 				(EFS_BLOCKSIZE / sizeof(efs_extent));
+
+			if (cur < ibase + entries)
+				break;
+
+			ibase += entries;
 		}
 
 		if (dirext == direxts) {
