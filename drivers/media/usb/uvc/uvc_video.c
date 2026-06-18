@@ -12,6 +12,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
 #include <linux/videodev2.h>
@@ -2149,6 +2150,13 @@ int uvc_video_resume(struct uvc_streaming *stream, int reset)
 	uvc_video_clock_reset(&stream->clock);
 
 	if (!uvc_queue_streaming(&stream->queue))
+		return 0;
+
+	/*
+	 * Avoid restarting the streaming hardware during the transient THAW
+	 * phase after a hibernation snapshot has been created.
+	 */
+	if (pm_hibernation_snapshot_done())
 		return 0;
 
 	ret = uvc_commit_video(stream, &stream->ctrl);
