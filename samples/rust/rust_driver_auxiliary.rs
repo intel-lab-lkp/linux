@@ -79,7 +79,7 @@ impl pci::Driver for ParentDriver {
 
     fn probe<'bound>(
         pdev: &'bound pci::Device<Core<'_>>,
-        _info: &'bound Self::IdInfo,
+        _info: Option<&'bound Self::IdInfo>,
     ) -> impl PinInit<Self::Data<'bound>, Error> + 'bound {
         Ok(ParentData {
             // SAFETY: `ParentData` is the driver's private data, which is dropped when the
