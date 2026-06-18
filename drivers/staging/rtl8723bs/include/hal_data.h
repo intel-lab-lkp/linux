@@ -37,13 +37,7 @@ enum rt_regulator_mode {
 
 enum rt_ampdu_burst {
 	RT_AMPDU_BURST_NONE	= 0,
-	RT_AMPDU_BURST_92D	= 1,
-	RT_AMPDU_BURST_88E	= 2,
-	RT_AMPDU_BURST_8812_4	= 3,
-	RT_AMPDU_BURST_8812_8	= 4,
-	RT_AMPDU_BURST_8812_12	= 5,
-	RT_AMPDU_BURST_8812_15	= 6,
-	RT_AMPDU_BURST_8723B	= 7,
+	RT_AMPDU_BURST_8723B	= 1,
 };
 
 #define CHANNEL_MAX_NUMBER		(14)	/*  14 is the max channel number */
@@ -363,7 +357,7 @@ struct hal_com_data {
 	u8 RegIQKFWOffload;
 	struct submit_ctx	iqk_sctx;
 
-	enum rt_ampdu_burst	AMPDUBurstMode; /* 92C maybe not use, but for compile successfully */
+	enum rt_ampdu_burst	AMPDUBurstMode;
 
 	u32 		sdio_himr;
 	u32 		sdio_hisr;
