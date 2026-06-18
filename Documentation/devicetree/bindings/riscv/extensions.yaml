@@ -297,7 +297,7 @@ properties:
             3) Only Svadu present in DT => Supervisor must assume Svadu to be
                always enabled.
             4) Both Svade and Svadu present in DT => Supervisor must assume
-               Svadu turned-off at boot time. To use Svadu, supervisor must
+               Svadu is disabled at boot time. To use Svadu, supervisor must
                explicitly enable it using the SBI FWFT extension.
 
         - const: svadu
