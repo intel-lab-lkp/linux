@@ -525,7 +525,7 @@ static int do_add_master_key(struct super_block *sb,
 	struct fscrypt_master_key *mk;
 	int err;
 
-	mutex_lock(&fscrypt_add_key_mutex); /* serialize find + link */
+	guard(mutex)(&fscrypt_add_key_mutex); /* serialize find + link */
 
 	mk = fscrypt_find_master_key(sb, mk_spec);
 	if (!mk) {
@@ -552,7 +552,6 @@ static int do_add_master_key(struct super_block *sb,
 		}
 		fscrypt_put_master_key(mk);
 	}
-	mutex_unlock(&fscrypt_add_key_mutex);
 	return err;
 }
 
