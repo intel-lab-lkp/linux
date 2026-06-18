@@ -764,6 +764,12 @@ static void rcu_exp_handler(void *unused)
 		return;
 
 	/*
+	 * Clear defer_qs_pending so arming attempts following this IPI
+	 * within the current GP can queue irq_work again.
+	 */
+	rcu_defer_qs_clear(rdp);
+
+	/*
 	 * Second, the common case of not being in an RCU read-side
 	 * critical section.  If also enabled or idle, immediately
 	 * report the quiescent state, otherwise defer.
