@@ -36,6 +36,9 @@ struct	es8389_private {
 	unsigned int sysclk;
 	int mastermode;
 
+	u8 hpfl;
+	u8 hpfr;
+	u32 target_freq;
 	u8 mclk_src;
 	u8 vddd;
 	int version;
@@ -504,6 +507,48 @@ static inline int get_coeff(u8 vddd, u8 dmic, int mclk, int rate)
 	return -EINVAL;
 }
 
+static const u32 hpf_table[10][10] = {
+	{1020, 754, 624, 559, 527, 511, 502, 498, 497, 496},
+	{754, 495, 368, 306, 274, 259, 251, 247, 246, 244},
+	{624, 368, 243, 182, 151, 136, 128, 124, 123, 121},
+	{559, 306, 182, 120, 90, 75, 68, 63, 62, 60},
+	{527, 274, 151, 90, 60, 45, 38, 33, 32, 31},
+	{511, 259, 136, 75, 45, 30, 23, 19, 18, 17},
+	{502, 251, 128, 68, 38, 23, 16, 13, 11, 11},
+	{498, 247, 124, 63, 33, 19, 13, 10, 8, 8},
+	{497, 246, 123, 62, 32, 18, 11, 8, 8, 0},
+	{496, 244, 121, 60, 31, 17, 11, 8, 0, 0}
+};
+
+static bool find_best_hpf_freq(u32 target_hz, u8 *hpf1, u8 *hpf2)
+{
+	int best_row = -1, best_col = -1;
+	u32 min_diff = U32_MAX;
+	u32 f, diff;
+	int i, j;
+
+	if ((*hpf1 == ES8389_HPF_INVALID) | (*hpf2 == ES8389_HPF_INVALID))
+		return false;
+
+	for (i = 0; i < 10; i++) {
+		for (j = i; j < 10; j++) {
+			f = hpf_table[i][j];
+
+			diff = (target_hz > f) ? (target_hz - f) : (f - target_hz);
+			if (diff < min_diff) {
+				min_diff = diff;
+				best_row = i;
+				best_col = j;
+			}
+		}
+	}
+
+	*hpf1 = best_col + ES8389_HPF_OFFSET;
+	*hpf2 = best_row + ES8389_HPF_OFFSET;
+
+	return true;
+}
+
 /*
  * if PLL not be used, use internal clk1 for mclk,otherwise, use internal clk2 for PLL source.
  */
@@ -585,6 +630,8 @@ static int es8389_pcm_hw_params(struct snd_pcm_substream *substream,
 	int coeff, ret;
 	u8 dmic_enable, state = 0;
 	unsigned int regv;
+	u32 freq;
+	bool hpf;
 
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S16_LE:
@@ -661,6 +708,14 @@ static int es8389_pcm_hw_params(struct snd_pcm_substream *substream,
 	} else {
 		dev_err(component->dev, "Clock coefficients do not match");
 		return -EINVAL;
+	}
+
+	freq = (es8389->target_freq * 48000) / params_rate(params);
+	hpf = find_best_hpf_freq(freq, &es8389->hpfl, &es8389->hpfr);
+	if (!hpf) {
+		dev_dbg(component->dev, "Can't find best freq. Use the default setting");
+		es8389->hpfl = ES8389_HPF_DEFAULT;
+		es8389->hpfr = ES8389_HPF_DEFAULT;
 	}
 
 	return 0;
@@ -743,8 +798,8 @@ static int es8389_mute(struct snd_soc_dai *dai, int mute, int direction)
 			regmap_update_bits(es8389->regmap, ES8389_DAC_FORMAT_MUTE,
 						0x03, 0x00);
 		} else {
-			regmap_update_bits(es8389->regmap, ES8389_ADC_HPF1, 0x0f, 0x0a);
-			regmap_update_bits(es8389->regmap, ES8389_ADC_HPF2, 0x0f, 0x0a);
+			regmap_update_bits(es8389->regmap, ES8389_ADC_HPF1, 0x0f, es8389->hpfl);
+			regmap_update_bits(es8389->regmap, ES8389_ADC_HPF2, 0x0f, es8389->hpfr);
 			regmap_update_bits(es8389->regmap, ES8389_ADC_FORMAT_MUTE,
 						0x03, 0x00);
 		}
@@ -904,6 +959,12 @@ static int es8389_probe(struct snd_soc_component *component)
 	if (ret != 0) {
 		dev_dbg(component->dev, "mclk-src return %d", ret);
 		es8389->mclk_src = ES8389_MCLK_SOURCE;
+	}
+
+	ret = device_property_read_u32(component->dev, "everest,hpf-frq", &es8389->target_freq);
+	if (ret != 0) {
+		dev_dbg(component->dev, "hpf-freq return %d\n", ret);
+		es8389->target_freq = ES8389_HPF_INVALID;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(es8389_core_supplies); i++)
