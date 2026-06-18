@@ -730,6 +730,9 @@ static irqreturn_t zynqmp_dma_irq_handler(int irq, void *data)
 	u32 isr, imr, status;
 	irqreturn_t ret = IRQ_NONE;
 
+	if (pm_runtime_get_if_active(chan->dev) <= 0)
+		return IRQ_NONE;
+
 	isr = readl(chan->regs + ZYNQMP_DMA_ISR);
 	imr = readl(chan->regs + ZYNQMP_DMA_IMR);
 	status = isr & ~imr;
@@ -755,6 +758,8 @@ static irqreturn_t zynqmp_dma_irq_handler(int irq, void *data)
 		dev_dbg(chan->dev, "Channel %p overflow interrupt\n", chan);
 		ret = IRQ_HANDLED;
 	}
+
+	pm_runtime_put(chan->dev);
 
 	return ret;
 }
