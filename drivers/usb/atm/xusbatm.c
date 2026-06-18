@@ -35,6 +35,9 @@ static struct usbatm_driver xusbatm_drivers[XUSBATM_DRIVERS_MAX];
 static struct usb_device_id xusbatm_usb_ids[XUSBATM_DRIVERS_MAX + 1];
 static struct usb_driver xusbatm_usb_driver;
 
+static void xusbatm_release_intf(struct usb_device *usb_dev,
+				 struct usb_interface *intf, int claimed);
+
 static struct usb_interface *xusbatm_find_intf(struct usb_device *usb_dev, int altsetting, u8 ep)
 {
 	struct usb_host_interface *alt;
@@ -62,6 +65,7 @@ static int xusbatm_capture_intf(struct usbatm_data *usbatm, struct usb_device *u
 	ret = usb_set_interface(usb_dev, ifnum, altsetting);
 	if (ret) {
 		usb_err(usbatm, "%s: altsetting %2d for interface %2d failed (%d)!\n", __func__, altsetting, ifnum, ret);
+		xusbatm_release_intf(usb_dev, intf, claim);
 		return ret;
 	}
 	return 0;
