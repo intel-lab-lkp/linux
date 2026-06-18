@@ -32,7 +32,7 @@ ssize_t zstd_compress_stream_to_records(struct zstd_data *data, void *dst, size_
 				       void *src, size_t src_size, size_t max_record_size,
 				       size_t process_header(void *record, size_t data_size))
 {
-	size_t ret, size, compressed = 0;
+	size_t ret, size, compressed = 0, hdr_size = 0;
 	ZSTD_inBuffer input = { src, src_size, 0 };
 	ZSTD_outBuffer output;
 	void *record;
@@ -53,8 +53,14 @@ ssize_t zstd_compress_stream_to_records(struct zstd_data *data, void *dst, size_
 	}
 
 	while (input.pos < input.size) {
+		if (hdr_size &&
+		    dst_size < hdr_size + max_record_size + sizeof(u64)) {
+			pr_err("failed to compress: output buffer too small\n");
+			return -1;
+		}
 		record = dst;
 		size = process_header(record, 0);
+		hdr_size = size;
 		compressed += size;
 		dst += size;
 		dst_size -= size;
