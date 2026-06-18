@@ -1213,6 +1213,7 @@ struct efx_probe_data {
 	struct efx_nic efx;
 #ifdef CONFIG_SFC_CXL
 	struct efx_cxl *cxl;
+	bool cxl_pio_initialised;
 #endif
 };
 
