@@ -760,7 +760,8 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 		}
 
 		if (flags & EXT4_GET_BLOCKS_CACHED_NOWAIT)
-			return retval;
+			return retval ? retval : -EAGAIN;
+
 #ifdef ES_AGGRESSIVE_TEST
 		ext4_map_blocks_es_recheck(handle, inode, map,
 					   &orig_map, flags);
@@ -776,7 +777,7 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 	 * cannot find extent in the cache.
 	 */
 	if (flags & EXT4_GET_BLOCKS_CACHED_NOWAIT)
-		return 0;
+		return -EAGAIN;
 
 	/*
 	 * Try to see if we can get the block without requesting a new
