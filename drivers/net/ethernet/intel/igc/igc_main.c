@@ -11,6 +11,7 @@
 #include <net/pkt_sched.h>
 #include <linux/bpf_trace.h>
 #include <net/xdp_sock_drv.h>
+#include <linux/etherdevice.h>
 #include <linux/pci.h>
 #include <linux/mdio.h>
 
@@ -68,6 +69,52 @@ static const struct pci_device_id igc_pci_tbl[] = {
 };
 
 MODULE_DEVICE_TABLE(pci, igc_pci_tbl);
+
+static void igc_read_rar0(struct igc_hw *hw, u8 *addr, u32 *ral, u32 *rah)
+{
+	*ral = rd32(IGC_RAL(0));
+	*rah = rd32(IGC_RAH(0));
+
+	addr[0] = *ral & 0xff;
+	addr[1] = (*ral >> 8) & 0xff;
+	addr[2] = (*ral >> 16) & 0xff;
+	addr[3] = (*ral >> 24) & 0xff;
+	addr[4] = *rah & 0xff;
+	addr[5] = (*rah >> 8) & 0xff;
+}
+
+static bool igc_is_lmvp_device(struct pci_dev *pdev)
+{
+	switch (pdev->device) {
+	case IGC_DEV_ID_I225_LMVP:
+	case IGC_DEV_ID_I226_LMVP:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static void igc_wait_for_lmvp_mac_passthrough(struct pci_dev *pdev,
+					      struct igc_hw *hw)
+{
+	u8 addr[ETH_ALEN] __aligned(2);
+	u32 orig_ral, orig_rah;
+	u32 ral, rah;
+	int i;
+
+	if (!igc_is_lmvp_device(pdev))
+		return;
+
+	igc_read_rar0(hw, addr, &orig_ral, &orig_rah);
+
+	for (i = 0; i < 100; i++) {
+		msleep(100);
+		igc_read_rar0(hw, addr, &ral, &rah);
+		if ((ral != orig_ral || rah != orig_rah) &&
+		    is_valid_ether_addr(addr))
+			return;
+	}
+}
 
 enum latency_range {
 	lowest_latency = 0,
@@ -7269,6 +7316,7 @@ static int igc_probe(struct pci_dev *pdev,
 	 * known good starting state
 	 */
 	hw->mac.ops.reset_hw(hw);
+	igc_wait_for_lmvp_mac_passthrough(pdev, hw);
 
 	if (igc_get_flash_presence_i225(hw)) {
 		if (hw->nvm.ops.validate(hw) < 0) {
