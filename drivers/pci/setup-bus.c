@@ -367,7 +367,8 @@ static void pdev_sort_resources(struct pci_dev *dev, struct list_head *head)
 			align = pci_resource_alignment(dev_res->dev,
 							 dev_res->res);
 
-			if (r_align > align) {
+			if (r_align > align ||
+			    (r_align == align && resource_size(r) > resource_size(dev_res->res))) {
 				n = &dev_res->list;
 				break;
 			}
