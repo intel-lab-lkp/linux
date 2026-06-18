@@ -1156,8 +1156,10 @@ static int rk817_charger_probe(struct platform_device *pdev)
 	    (bat_info->constant_charge_voltage_max_uv <= 0) ||
 	    (bat_info->constant_charge_current_max_ua <= 0) ||
 	    (bat_info->charge_term_current_ua <= 0)) {
-		return dev_err_probe(dev, -EINVAL,
-				     "Required bat info missing or invalid\n");
+		dev_err_probe(dev, -EINVAL,
+			      "Required bat info missing or invalid\n");
+		ret = -EINVAL;
+		goto err_put_bat_info;
 	}
 
 	charger->bat_charge_full_design_uah = bat_info->charge_full_design_uah;
@@ -1170,7 +1172,7 @@ static int rk817_charger_probe(struct platform_device *pdev)
 	 */
 	ret = rk817_battery_init(charger, bat_info);
 	if (ret)
-		return ret;
+		goto err_put_bat_info;
 
 	power_supply_put_battery_info(charger->bat_ps, bat_info);
 
@@ -1209,6 +1211,10 @@ static int rk817_charger_probe(struct platform_device *pdev)
 	mod_delayed_work(system_percpu_wq, &charger->work, 0);
 
 	return 0;
+
+err_put_bat_info:
+	power_supply_put_battery_info(charger->bat_ps, bat_info);
+	return ret;
 }
 
 static int __maybe_unused rk817_suspend(struct device *dev)
