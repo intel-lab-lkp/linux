@@ -1647,7 +1647,8 @@ static unsigned long fraction_mm_sched(int cpu,
 	guard(raw_spinlock_irqsave)(&rq->cpu_epoch_lock);
 
 	/* Skip the rq that has not been hit for a long time */
-	if ((rq->cpu_epoch - pcpu_sched->epoch_timeout) > llc_epoch_affinity_timeout) {
+	if (sched_feat(SC_VISIT) &&
+	    (rq->cpu_epoch - pcpu_sched->epoch_timeout) > llc_epoch_affinity_timeout) {
 		cpumask_clear_cpu(cpu, &mm->sc_stat.visited_cpus);
 		return 0;
 	}
@@ -1724,7 +1725,8 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 		rq->cpu_runtime += delta_exec;
 		epoch = rq->cpu_epoch;
 		pcpu_sched->epoch_timeout = epoch;
-		if (!cpumask_test_cpu(cpu_of(rq), &mm->sc_stat.visited_cpus))
+		if (sched_feat(SC_VISIT) &&
+		    !cpumask_test_cpu(cpu_of(rq), &mm->sc_stat.visited_cpus))
 			cpumask_set_cpu(cpu_of(rq), &mm->sc_stat.visited_cpus);
 	}
 
@@ -1776,6 +1778,51 @@ static void task_tick_cache(struct rq *rq, struct task_struct *p)
 	}
 }
 
+static void get_scan_cpumasks(cpumask_var_t cpus, struct task_struct *p)
+{
+#ifdef CONFIG_NUMA_BALANCING
+	int cpu, curr_cpu, nid, pref_nid;
+
+	if (!static_branch_likely(&sched_numa_balancing))
+		goto out;
+
+	cpu = READ_ONCE(p->mm->sc_stat.cpu);
+	if (cpu != -1)
+		nid = cpu_to_node(cpu);
+	curr_cpu = task_cpu(p);
+
+	/*
+	 * Scanning in the preferred NUMA node is ideal. However, the NUMA
+	 * preferred node is per-task rather than per-process. It is possible
+	 * for different threads of the process to have distinct preferred
+	 * nodes; consequently, the process-wide preferred LLC may bounce
+	 * between different nodes. As a workaround, maintain the scan
+	 * CPU mask to also cover the process's current preferred LLC and the
+	 * current running node to mitigate the bouncing risk.
+	 * TBD: numa_group should be considered during task aggregation.
+	 */
+	pref_nid = p->numa_preferred_nid;
+	/* honor the task's preferred node */
+	if (pref_nid == NUMA_NO_NODE)
+		goto out;
+
+	cpumask_or(cpus, cpus, cpumask_of_node(pref_nid));
+
+	/* honor the task's preferred LLC CPU */
+	if (cpu != -1 && !cpumask_test_cpu(cpu, cpus) && nid != NUMA_NO_NODE)
+		cpumask_or(cpus, cpus, cpumask_of_node(nid));
+
+	/* make sure the task's current running node is included */
+	if (!cpumask_test_cpu(curr_cpu, cpus))
+		cpumask_or(cpus, cpus, cpumask_of_node(cpu_to_node(curr_cpu)));
+
+	return;
+
+out:
+#endif
+	cpumask_copy(cpus, cpu_online_mask);
+}
+
 static inline void update_avg_scale(u64 *avg, u64 sample)
 {
 	int factor = per_cpu(sd_llc_size, raw_smp_processor_id());
@@ -1803,6 +1850,7 @@ static void task_cache_work(struct callback_head *work)
 	struct mm_struct *mm = p->mm;
 	unsigned long m_a_occ = 0;
 	cpumask_var_t cpus;
+	int scanned = 0;
 
 	WARN_ON_ONCE(work != &p->cache_work);
 
@@ -1836,7 +1884,12 @@ static void task_cache_work(struct callback_head *work)
 	scoped_guard (cpus_read_lock) {
 		guard(rcu)();
 
-		cpumask_and(cpus, cpu_online_mask, &mm->sc_stat.visited_cpus);
+		if (sched_feat(SC_NODE))
+			get_scan_cpumasks(cpus, p);
+		if (sched_feat(SC_VISIT))
+			cpumask_and(cpus, cpu_online_mask, &mm->sc_stat.visited_cpus);
+		else
+			cpumask_copy(cpus, cpu_online_mask);
 
 		for_each_cpu(cpu, cpus) {
 			/* XXX sched_cluster_active */
@@ -1853,6 +1906,7 @@ static void task_cache_work(struct callback_head *work)
 				    cur->mm == mm)
 					nr_running++;
 
+				scanned++;
 				occ = fraction_mm_sched(i, mm);
 				if (occ == 0)
 					continue;
@@ -1908,6 +1962,7 @@ static void task_cache_work(struct callback_head *work)
 
 	update_avg_scale(&mm->sc_stat.nr_running_avg, nr_running);
 	free_cpumask_var(cpus);
+	trace_sched_cache_scan(p, scanned);
 }
 
 void init_sched_mm(struct task_struct *p)
