@@ -468,8 +468,11 @@ static int palmas_set_mode_smps(struct regulator_dev *dev, unsigned int mode)
 	}
 
 	pmic->current_reg_mode[id] = reg & PALMAS_SMPS12_CTRL_MODE_ACTIVE_MASK;
-	if (rail_enable)
-		palmas_smps_write(pmic->palmas, rinfo->ctrl_addr, reg);
+	if (rail_enable) {
+		ret = palmas_smps_write(pmic->palmas, rinfo->ctrl_addr, reg);
+		if (ret)
+			return ret;
+	}
 
 	/* Switch the enable value to ensure this is used for enable */
 	pmic->desc[id].enable_val = pmic->current_reg_mode[id];
