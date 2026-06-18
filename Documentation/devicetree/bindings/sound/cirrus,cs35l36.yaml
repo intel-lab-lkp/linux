@@ -1,0 +1,224 @@
+# SPDX-License-Identifier: GPL-2.0-only
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/cirrus,cs35l36.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Cirrus Logic CS35L36 Speaker Amplifier
+
+maintainers:
+  - patches@opensource.cirrus.com
+  - Bjorn Helgaas <bhelgaas@google.com>
+
+description: |
+  CS35L36 is a boosted mono Class D amplifier
+
+allOf:
+  - $ref: /schemas/sound/dai-common.yaml#
+
+properties:
+  compatible:
+    enum:
+      - cirrus,cs35l36
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  VA-supply:
+    description: Voltage regulator of analog internal section
+
+  VP-supply:
+    description: Voltage regulator of boost converter
+
+  reset-gpios:
+    maxItems: 1
+
+  cirrus,boost-ctl-millivolt:
+    description: Boost converter output voltage in millivolts (step 50)
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 2550
+    maximum: 12000
+
+  cirrus,boost-peak-milliamp:
+    description: Boost-converter peak current limit in mA (step 50)
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 4500
+    minimum: 1600
+    maximum: 4500
+
+  cirrus,boost-ind-nanohenry:
+    description: Initial inductor estimation reference value in nanohenry (1000=1μH, 1200=1.2μH)
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 1000
+
+  cirrus,multi-amp-mode:
+    description: Hi-Z ASP port when more than one amplifier in system.
+    type: boolean
+
+  cirrus,boost-ctl-select:
+    description: Boost converter control source selection
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0x01
+    enum:
+      - 0x00 # Control Port
+      - 0x01 # Class
+      - 0x10 # Sync
+
+  cirrus,amp-pcm-inv:
+    description: Invert incoming PCM data when true.
+    type: boolean
+
+  cirrus,imon-pol-inv:
+    description: Invert polarity of outbound IMON feedback when true.
+    type: boolean
+
+  cirrus,vmon-pol-inv:
+    description: Invert polarity of outbound VMON feedback when true.
+    type: boolean
+
+  cirrus,dcm-mode-enable:
+    description: Enable boost converter automatic Discontinuous Conduction Mode.
+    type: boolean
+
+  cirrus,weak-fet-disable:
+    description: Reduce output driver strength in Weak-FET Drive Mode when true.
+    type: boolean
+
+  cirrus,classh-wk-fet-delay:
+    description: Weak-FET entry delay in ms
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 100
+    enum:
+      - 0 # 0
+      - 1 # 5
+      - 2 # 10
+      - 3 # 50
+      - 4 # 100
+      - 5 # 200
+      - 6 # 500
+      - 7 # 1000
+
+  cirrus,classh-weak-fet-thld-millivolt:
+    description: Weak-FET drive threshold in mV
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700]
+
+  cirrus,temp-warn-threshold:
+    description: Overtemperature warning threshold
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 2
+    enum:
+      - 0 # 105°C
+      - 1 # 115°C
+      - 2 # 125°C
+      - 3 # 135°C
+
+  cirrus,irq-drive-select:
+    description: Interrupt output driver type
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 1
+    enum:
+      - 0 # open-drain
+      - 1 # push-pull
+
+  cirrus,irq-gpio-select:
+    description: Programmable IRQ pin selection
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum:
+      - 0 # PDM_DATA/SWIRE_SD/INT
+      - 1 # GPIO
+
+  cirrus,vpbr-config:
+    description: Brownout prevention configuration sub-node
+    type: object
+    additionalProperties: false
+
+    properties:
+      cirrus,vpbr-en:
+        description: VBST brownout prevention enable
+        $ref: /schemas/types.yaml#/definitions/uint32
+        default: 0
+        enum:
+          - 0 # disabled
+          - 1 # enabled
+
+      cirrus,vpbr-thld:
+        description: Initial VPBR threshold voltage
+        $ref: /schemas/types.yaml#/definitions/uint32
+
+      cirrus,vpbr-atk-rate:
+        description: Attenuation attack step rate
+        $ref: /schemas/types.yaml#/definitions/uint32
+
+      cirrus,vpbr-atk-vol:
+        description: VP brownout prevention step size
+        $ref: /schemas/types.yaml#/definitions/uint32
+
+      cirrus,vpbr-max-attn:
+        description: Maximum attenuation during VP brownout prevention
+        $ref: /schemas/types.yaml#/definitions/uint32
+
+      cirrus,vpbr-wait:
+        description: Delay between brownout clearance and attenuation release
+        $ref: /schemas/types.yaml#/definitions/uint32
+
+      cirrus,vpbr-rel-rate:
+        description: Attenuation release step rate
+        $ref: /schemas/types.yaml#/definitions/uint32
+
+      cirrus,vpbr-mute-en:
+        description: Mute audio if maximum attenuation reached
+        $ref: /schemas/types.yaml#/definitions/uint32
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - VA-supply
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        codec@40 {
+            compatible = "cirrus,cs35l36";
+            reg = <0x40>;
+            VA-supply = <&dummy_vreg>;
+            VP-supply = <&dummy_vreg>;
+            reset-gpios = <&gpio0 54 GPIO_ACTIVE_HIGH>;
+            interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
+
+            cirrus,boost-ind-nanohenry = <1000>;
+            cirrus,boost-ctl-millivolt = <10000>;
+            cirrus,boost-peak-milliamp = <4500>;
+            cirrus,boost-ctl-select = <0x00>;
+            cirrus,weak-fet-delay = <4>;
+            cirrus,weak-fet-thld = <0x01>;
+            cirrus,temp-warn-threshold = <1>;
+            cirrus,multi-amp-mode;
+            cirrus,irq-drive-select = <1>;
+            cirrus,irq-gpio-select = <0x01>;
+
+            cirrus,vpbr-config {
+                cirrus,vpbr-en = <0>;
+                cirrus,vpbr-thld = <0x05>;
+                cirrus,vpbr-atk-rate = <0x02>;
+                cirrus,vpbr-atk-vol = <0x01>;
+                cirrus,vpbr-max-attn = <0x09>;
+                cirrus,vpbr-wait = <0x01>;
+                cirrus,vpbr-rel-rate = <0x05>;
+                cirrus,vpbr-mute-en = <0x00>;
+            };
+        };
+    };
+...
