@@ -121,4 +121,16 @@ config DAMON_STAT_ENABLED_DEFAULT
 	  Whether to enable DAMON_STAT by default.  Users can disable it in
 	  boot or runtime using its 'enabled' parameter.
 
+config DAMON_SPE
+	bool "DAMON SPE feedback for sub-THP access monitoring (prototype)"
+	depends on DAMON_VADDR
+	help
+	  Enable sub-THP access heatmap feedback for DAMOS_MTHP_SPLIT.
+	  Currently a prototype: uses PTE access bits for THPs that have
+	  been split to PTEs, returns "no data" for PMD-mapped THPs.
+
+	  On hardware with ARM SPE (e.g. Kunpeng 920), this will be
+	  extended to provide per-subpage access data without needing to
+	  split the PMD first, enabling precise mTHP split decisions.
+
 endmenu

@@ -18,6 +18,7 @@
 
 #include "../internal.h"
 #include "ops-common.h"
+#include "spe.h"
 
 #ifdef CONFIG_DAMON_VADDR_KUNIT_TEST
 #undef DAMON_MIN_REGION_SZ
@@ -945,6 +946,7 @@ static unsigned long damos_va_mthp_split(struct damon_target *target,
 	struct vm_area_struct *vma;
 	struct folio *folio;
 	struct folio_walk fw;
+	int hot_pct;
 
 	mm = damon_get_mm(target);
 	if (!mm)
@@ -979,8 +981,18 @@ static unsigned long damos_va_mthp_split(struct damon_target *target,
 			folio_get(folio);
 			folio_walk_end(&fw, vma);
 
-			if (!split_folio_to_order(folio, target_order))
-				applied += chunk_sz;
+			hot_pct = damon_spe_hot_fraction(folio, vma, addr,
+						 target_order);
+			/*
+			 * hot_pct < 0: no heatmap data (no SPE, PMD-mapped),
+			 * split unconditionally — DAMON access pattern already
+			 * identified this region as cold.
+			 */
+			if (hot_pct < 0 ||
+			    (unsigned int)hot_pct < s->hot_threshold) {
+				if (!split_folio_to_order(folio, target_order))
+					applied += chunk_sz;
+			}
 
 			folio_unlock(folio);
 			folio_put(folio);

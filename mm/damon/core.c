@@ -20,6 +20,7 @@
 
 /* for damon_get_folio() used by node eligible memory metrics */
 #include "ops-common.h"
+#include "spe.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/damon.h>
@@ -3025,6 +3026,8 @@ static void kdamond_apply_schemes(struct damon_ctx *c)
 
 	if (!has_schemes_to_apply)
 		return;
+
+	damon_spe_prune();
 
 	max_region_sz = damon_region_sz_limit(c);
 	mutex_lock(&c->walk_control_lock);
