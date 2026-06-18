@@ -1828,6 +1828,16 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 
 	debugfs_remove_recursive(adap->debugfs);
 
+	/* Remove from IDR first so that a concurrent i2c_get_adapter() can
+	 * no longer find this adapter.  Without this ordering,
+	 * i2c_get_adapter() can find the adapter via idr_find() and call
+	 * get_device() after device_unregister() has already dropped the
+	 * refcount to zero, triggering a use-after-free warning.
+	 */
+	mutex_lock(&core_lock);
+	idr_remove(&i2c_adapter_idr, adap->nr);
+	mutex_unlock(&core_lock);
+
 	/* wait until all references to the device are gone
 	 *
 	 * FIXME: This is old code and should ideally be replaced by an
@@ -1838,11 +1848,6 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 	init_completion(&adap->dev_released);
 	device_unregister(&adap->dev);
 	wait_for_completion(&adap->dev_released);
-
-	/* free bus id */
-	mutex_lock(&core_lock);
-	idr_remove(&i2c_adapter_idr, adap->nr);
-	mutex_unlock(&core_lock);
 
 	/* Clear the device structure in case this adapter is ever going to be
 	   added again */
