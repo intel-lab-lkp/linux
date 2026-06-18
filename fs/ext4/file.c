@@ -228,7 +228,8 @@ ext4_extending_io(struct inode *inode, loff_t offset, size_t len)
  * unwritten conversion for middle blocks are protected by i_data_sem
  * and inode_dio_begin().
  */
-static bool ext4_dio_needs_zeroing(struct inode *inode, loff_t pos, loff_t len)
+static bool ext4_dio_needs_zeroing(struct inode *inode, loff_t pos, loff_t len,
+				   bool nowait)
 {
 	struct ext4_map_blocks map;
 	unsigned int blkbits = inode->i_blkbits;
@@ -236,9 +237,13 @@ static bool ext4_dio_needs_zeroing(struct inode *inode, loff_t pos, loff_t len)
 	bool head_partial, tail_partial;
 	ext4_lblk_t head_lblk, tail_lblk;
 	int err;
+	int map_flags = 0;
 
 	if (pos + len > i_size_read(inode))
 		return true;
+
+	if (nowait)
+		map_flags = EXT4_GET_BLOCKS_CACHED_NOWAIT;
 
 	head_partial = (pos & blockmask) != 0;
 	tail_partial = ((pos + len) & blockmask) != 0;
@@ -249,7 +254,7 @@ static bool ext4_dio_needs_zeroing(struct inode *inode, loff_t pos, loff_t len)
 	if (head_partial) {
 		map.m_lblk = head_lblk;
 		map.m_len = tail_lblk - head_lblk + 1;
-		err = ext4_map_blocks(NULL, inode, &map, 0);
+		err = ext4_map_blocks(NULL, inode, &map, map_flags);
 		if (err <= 0 || !(map.m_flags & EXT4_MAP_MAPPED))
 			return true;
 		/* If this mapping already covers the tail block, we're done. */
@@ -261,7 +266,7 @@ static bool ext4_dio_needs_zeroing(struct inode *inode, loff_t pos, loff_t len)
 	if (tail_partial) {
 		map.m_lblk = tail_lblk;
 		map.m_len = 1;
-		err = ext4_map_blocks(NULL, inode, &map, 0);
+		err = ext4_map_blocks(NULL, inode, &map, map_flags);
 		if (err <= 0 || !(map.m_flags & EXT4_MAP_MAPPED))
 			return true;
 	}
@@ -516,7 +521,8 @@ restart:
 	 * under shared lock is safe.
 	 */
 	if (ext4_unaligned_io(inode, from, offset))
-		needs_zeroing = ext4_dio_needs_zeroing(inode, offset, count);
+		needs_zeroing = ext4_dio_needs_zeroing(inode, offset, count,
+						iocb->ki_flags & IOCB_NOWAIT);
 
 	/* Determine whether we need to upgrade to an exclusive lock. */
 	if (*ilock_shared &&
