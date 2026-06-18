@@ -91,9 +91,6 @@
 /* i2c bus recover timeout: us */
 #define SPACEMIT_I2C_BUS_BUSY_TIMEOUT		100000
 
-#define SPACEMIT_I2C_MAX_STANDARD_MODE_FREQ	100000	/* Hz */
-#define SPACEMIT_I2C_MAX_FAST_MODE_FREQ		400000	/* Hz */
-
 #define SPACEMIT_SR_ERR	(SPACEMIT_SR_BED | SPACEMIT_SR_RXOV | SPACEMIT_SR_ALD)
 
 #define SPACEMIT_BUS_RESET_CLK_CNT_MAX		9
@@ -286,7 +283,7 @@ static void spacemit_i2c_init(struct spacemit_i2c_dev *i2c)
 		val |= SPACEMIT_CR_MSDIE;
 	}
 
-	if (i2c->clock_freq == SPACEMIT_I2C_MAX_FAST_MODE_FREQ)
+	if (i2c->clock_freq == I2C_MAX_FAST_MODE_FREQ)
 		val |= SPACEMIT_CR_MODE_FAST;
 
 	/* disable response to general call */
@@ -703,14 +700,14 @@ static int spacemit_i2c_probe(struct platform_device *pdev)
 		dev_warn(dev, "failed to read clock-frequency property: %d\n", ret);
 
 	/* For now, this driver doesn't support high-speed. */
-	if (!i2c->clock_freq || i2c->clock_freq > SPACEMIT_I2C_MAX_FAST_MODE_FREQ) {
+	if (!i2c->clock_freq || i2c->clock_freq > I2C_MAX_FAST_MODE_FREQ) {
 		dev_warn(dev, "unsupported clock frequency %u; using %u\n",
-			 i2c->clock_freq, SPACEMIT_I2C_MAX_FAST_MODE_FREQ);
-		i2c->clock_freq = SPACEMIT_I2C_MAX_FAST_MODE_FREQ;
-	} else if (i2c->clock_freq < SPACEMIT_I2C_MAX_STANDARD_MODE_FREQ) {
+			 i2c->clock_freq, I2C_MAX_FAST_MODE_FREQ);
+		i2c->clock_freq = I2C_MAX_FAST_MODE_FREQ;
+	} else if (i2c->clock_freq < I2C_MAX_STANDARD_MODE_FREQ) {
 		dev_warn(dev, "unsupported clock frequency %u; using %u\n",
-			 i2c->clock_freq,  SPACEMIT_I2C_MAX_STANDARD_MODE_FREQ);
-		i2c->clock_freq = SPACEMIT_I2C_MAX_STANDARD_MODE_FREQ;
+			 i2c->clock_freq, I2C_MAX_STANDARD_MODE_FREQ);
+		i2c->clock_freq = I2C_MAX_STANDARD_MODE_FREQ;
 	}
 
 	i2c->dev = &pdev->dev;
