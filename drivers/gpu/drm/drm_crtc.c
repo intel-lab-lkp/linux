@@ -73,6 +73,9 @@
  * &drm_mode_config_funcs.atomic_check.
  */
 
+#define fence_to_crtc(f) container_of((f)->extern_lock, \
+				      struct drm_crtc, fence_lock)
+
 /**
  * drm_crtc_from_index - find the registered CRTC at an index
  * @dev: DRM device
@@ -152,14 +155,6 @@ static void drm_crtc_crc_fini(struct drm_crtc *crtc)
 #ifdef CONFIG_DEBUG_FS
 	kfree(crtc->crc.source);
 #endif
-}
-
-static const struct dma_fence_ops drm_crtc_fence_ops;
-
-static struct drm_crtc *fence_to_crtc(struct dma_fence *fence)
-{
-	BUG_ON(rcu_access_pointer(fence->ops) != &drm_crtc_fence_ops);
-	return container_of(fence->extern_lock, struct drm_crtc, fence_lock);
 }
 
 static const char *drm_crtc_fence_get_driver_name(struct dma_fence *fence)
