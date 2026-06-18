@@ -4,6 +4,7 @@
 
 use kernel::{
     alloc::kvec::KVVec,
+    cred::Credential,
     error::code::*,
     prelude::*,
     security,
@@ -105,6 +106,24 @@ impl Context {
             // is just an optimization; the vector remains valid even if shrinking fails.
             let _ = manager.all_procs.shrink_to(len * 2, GFP_KERNEL);
         }
+    }
+
+    pub(crate) fn check_manager(&self, cred: &Credential) -> Result {
+        let manager = self.manager.lock();
+        if manager.node.is_some() {
+            return Err(EBUSY);
+        }
+        security::binder_set_context_mgr(cred)?;
+
+        // If the context manager has been set before, ensure that we use the same euid.
+        let caller_uid = Kuid::current_euid();
+        if let Some(ref uid) = manager.uid {
+            if *uid != caller_uid {
+                return Err(EPERM);
+            }
+        }
+
+        Ok(())
     }
 
     pub(crate) fn set_manager_node(&self, node_ref: NodeRef) -> Result {

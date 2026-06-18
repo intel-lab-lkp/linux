@@ -741,6 +741,7 @@ impl Process {
         } else {
             (0, 0, 0)
         };
+        self.ctx.check_manager(&self.cred)?;
         let node_ref = self.get_node(ptr, cookie, flags as _, true, thread)?;
         let node = node_ref.node.clone();
         self.ctx.set_manager_node(node_ref)?;
