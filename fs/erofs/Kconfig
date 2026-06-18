@@ -213,3 +213,14 @@ config EROFS_FS_PAGE_CACHE_SHARE
 	  content fingerprints on the same machine.
 
 	  If unsure, say N.
+
+config EROFS_FS_MEMBACK_KUNIT_TEST
+	bool "Test EROFS memory-backed mount" if !KUNIT_ALL_TESTS
+	depends on EROFS_FS=y && EROFS_FS_ZIP && KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  KUnit test for the EROFS memory-backed mount path. Embeds a small
+	  LZ4-compressed EROFS image and verifies that it can be mounted and
+	  read via the memback interface during kernel init.
+
+	  Say N unless you are running KUnit tests.

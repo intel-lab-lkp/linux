@@ -12,3 +12,4 @@ erofs-$(CONFIG_EROFS_FS_BACKED_BY_FILE) += fileio.o
 erofs-$(CONFIG_EROFS_FS_ONDEMAND) += fscache.o
 erofs-y += memback.o
 erofs-$(CONFIG_EROFS_FS_PAGE_CACHE_SHARE) += ishare.o
+obj-$(CONFIG_EROFS_FS_MEMBACK_KUNIT_TEST) += memback_test.o
