@@ -3564,7 +3564,7 @@ static void update_cpu_capabilities(u16 scope_mask)
 		 * system capabilities are finalised.
 		 */
 		if (!match_all && caps->desc && !caps->cpus)
-			pr_info("detected: %s\n", caps->desc);
+			printk_deferred(KERN_INFO "detected: %s\n", caps->desc);
 
 		__set_bit(caps->capability, system_cpucaps);
 
@@ -3687,7 +3687,7 @@ static void verify_local_cpu_caps(u16 scope_mask)
 	}
 
 	if (i < ARM64_NCAPS) {
-		pr_crit("CPU%d: Detected conflict for capability %d (%s), System: %d, CPU: %d\n",
+		printk_deferred(KERN_CRIT "CPU%d: Detected conflict for capability %d (%s), System: %d, CPU: %d\n",
 			smp_processor_id(), caps->capability,
 			caps->desc, system_has_cap, cpu_has_cap);
 
@@ -3715,7 +3715,7 @@ __verify_local_elf_hwcaps(const struct arm64_cpu_capabilities *caps)
 
 	for (; caps->matches; caps++)
 		if (cpus_have_elf_hwcap(caps) && !caps->matches(caps, SCOPE_LOCAL_CPU)) {
-			pr_crit("CPU%d: missing HWCAP: %s\n",
+			printk_deferred(KERN_CRIT "CPU%d: missing HWCAP: %s\n",
 					smp_processor_id(), caps->desc);
 			cpu_die_early();
 		}
@@ -3734,7 +3734,7 @@ static void verify_sve_features(void)
 	unsigned long cpacr = cpacr_save_enable_kernel_sve();
 
 	if (vec_verify_vq_map(ARM64_VEC_SVE)) {
-		pr_crit("CPU%d: SVE: vector length support mismatch\n",
+		printk_deferred(KERN_CRIT "CPU%d: SVE: vector length support mismatch\n",
 			smp_processor_id());
 		cpu_die_early();
 	}
@@ -3747,7 +3747,7 @@ static void verify_sme_features(void)
 	unsigned long cpacr = cpacr_save_enable_kernel_sme();
 
 	if (vec_verify_vq_map(ARM64_VEC_SME)) {
-		pr_crit("CPU%d: SME: vector length support mismatch\n",
+		printk_deferred(KERN_CRIT "CPU%d: SME: vector length support mismatch\n",
 			smp_processor_id());
 		cpu_die_early();
 	}
@@ -3772,7 +3772,7 @@ static void verify_hyp_capabilities(void)
 	safe_vmid_bits = get_vmid_bits(safe_mmfr1);
 	vmid_bits = get_vmid_bits(mmfr1);
 	if (vmid_bits < safe_vmid_bits) {
-		pr_crit("CPU%d: VMID width mismatch\n", smp_processor_id());
+		printk_deferred(KERN_CRIT "CPU%d: VMID width mismatch\n", smp_processor_id());
 		cpu_die_early();
 	}
 
@@ -3781,7 +3781,7 @@ static void verify_hyp_capabilities(void)
 				ID_AA64MMFR0_EL1_PARANGE_SHIFT);
 	ipa_max = id_aa64mmfr0_parange_to_phys_shift(parange);
 	if (ipa_max < get_kvm_ipa_limit()) {
-		pr_crit("CPU%d: IPA range mismatch\n", smp_processor_id());
+		printk_deferred(KERN_CRIT "CPU%d: IPA range mismatch\n", smp_processor_id());
 		cpu_die_early();
 	}
 }
@@ -3794,7 +3794,7 @@ static void verify_mpam_capabilities(void)
 
 	if (FIELD_GET(ID_AA64PFR0_EL1_MPAM_MASK, cpu_idr) !=
 	    FIELD_GET(ID_AA64PFR0_EL1_MPAM_MASK, sys_idr)) {
-		pr_crit("CPU%d: MPAM version mismatch\n", smp_processor_id());
+		printk_deferred(KERN_CRIT "CPU%d: MPAM version mismatch\n", smp_processor_id());
 		cpu_die_early();
 	}
 
@@ -3802,7 +3802,7 @@ static void verify_mpam_capabilities(void)
 	sys_idr = read_sanitised_ftr_reg(SYS_MPAMIDR_EL1);
 	if (FIELD_GET(MPAMIDR_EL1_HAS_HCR, cpu_idr) !=
 	    FIELD_GET(MPAMIDR_EL1_HAS_HCR, sys_idr)) {
-		pr_crit("CPU%d: Missing MPAM HCR\n", smp_processor_id());
+		printk_deferred(KERN_CRIT "CPU%d: Missing MPAM HCR\n", smp_processor_id());
 		cpu_die_early();
 	}
 
@@ -3811,7 +3811,7 @@ static void verify_mpam_capabilities(void)
 	sys_partid_max = FIELD_GET(MPAMIDR_EL1_PARTID_MAX, sys_idr);
 	sys_pmg_max = FIELD_GET(MPAMIDR_EL1_PMG_MAX, sys_idr);
 	if (cpu_partid_max < sys_partid_max || cpu_pmg_max < sys_pmg_max) {
-		pr_crit("CPU%d: MPAM PARTID/PMG max values are mismatched\n", smp_processor_id());
+		printk_deferred(KERN_CRIT "CPU%d: MPAM PARTID/PMG max values are mismatched\n", smp_processor_id());
 		cpu_die_early();
 	}
 }

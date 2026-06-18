@@ -70,7 +70,7 @@ void verify_cpu_asid_bits(void)
 		 * We cannot decrease the ASID size at runtime, so panic if we support
 		 * fewer ASID bits than the boot CPU.
 		 */
-		pr_crit("CPU%d: smaller ASID size(%u) than boot CPU (%u)\n",
+		printk_deferred(KERN_CRIT "CPU%d: smaller ASID size(%u) than boot CPU (%u)\n",
 				smp_processor_id(), asid, asid_bits);
 		cpu_panic_kernel(smp_processor_id());
 	}

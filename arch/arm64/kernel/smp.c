@@ -215,7 +215,6 @@ asmlinkage notrace void secondary_start_kernel(void)
 	if (system_uses_irq_prio_masking())
 		init_gic_priority_masking();
 
-	rcutree_report_cpu_starting(cpu);
 	trace_hardirqs_off();
 
 	/*
@@ -224,6 +223,7 @@ asmlinkage notrace void secondary_start_kernel(void)
 	 * fail to come online.
 	 */
 	check_local_cpu_capabilities();
+	rcutree_report_cpu_starting(cpu);
 
 	ops = get_cpu_ops(cpu);
 	if (ops->cpu_postboot)
@@ -404,7 +404,7 @@ void __noreturn cpu_die_early(void)
 {
 	int cpu = smp_processor_id();
 
-	pr_crit("CPU%d: will not boot\n", cpu);
+	printk_deferred(KERN_CRIT "CPU%d: will not boot\n", cpu);
 
 	/* Mark this CPU absent */
 	set_cpu_present(cpu, 0);
