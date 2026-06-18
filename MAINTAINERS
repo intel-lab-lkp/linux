@@ -19891,6 +19891,7 @@ M:	Wenmeng Liu <wenmeng.liu@oss.qualcomm.com>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/media/i2c/ovti,og0va1b.yaml
+F:	drivers/media/i2c/og0va1b.c
 
 OMNIVISION OG0VE1B SENSOR DRIVER
 M:	Vladimir Zapolskiy <vladimir.zapolskiy@linaro.org>
