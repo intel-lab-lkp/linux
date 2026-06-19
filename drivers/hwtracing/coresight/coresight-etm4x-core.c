@@ -1511,7 +1511,6 @@ static void etm4_init_arch_data(void *info)
 	/* NUMCNTR, bits[30:28] number of counters available for tracing */
 	drvdata->nr_cntr = FIELD_GET(TRCIDR5_NUMCNTR_MASK, etmidr5);
 
-	coresight_clear_self_claim_tag_unlocked(csa);
 	etm4_cs_lock(drvdata, csa);
 	cpu_detect_trace_filtering(drvdata);
 }
@@ -2194,6 +2193,13 @@ static int etm4_add_coresight_dev(struct etm4_init_arg *init_arg)
 	drvdata->csdev = coresight_register(&desc);
 	if (IS_ERR(drvdata->csdev))
 		return PTR_ERR(drvdata->csdev);
+
+	/* init the claim tag protocol - ensure run on correct cpu */
+	ret = coresight_init_claim_tags_cpu_smp(drvdata->csdev, drvdata->cpu);
+	if (ret) {
+		coresight_unregister(drvdata->csdev);
+		return ret;
+	}
 
 	ret = etm_perf_symlink(drvdata->csdev, true);
 	if (ret) {

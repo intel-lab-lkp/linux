@@ -769,22 +769,25 @@ static int etb_probe(struct amba_device *adev, const struct amba_id *id)
 	desc.dev = dev;
 	desc.groups = coresight_etb_groups;
 
-	coresight_clear_self_claim_tag(&desc.access);
 	drvdata->csdev = coresight_register(&desc);
 	if (IS_ERR(drvdata->csdev))
 		return PTR_ERR(drvdata->csdev);
+
+	ret = coresight_init_claim_tags(drvdata->csdev);
+	if (ret)
+		goto err_unregister_csdev;
 
 	drvdata->miscdev.name = desc.name;
 	drvdata->miscdev.minor = MISC_DYNAMIC_MINOR;
 	drvdata->miscdev.fops = &etb_fops;
 	ret = misc_register(&drvdata->miscdev);
 	if (ret)
-		goto err_misc_register;
+		goto err_unregister_csdev;
 
 	pm_runtime_put(&adev->dev);
 	return 0;
 
-err_misc_register:
+err_unregister_csdev:
 	coresight_unregister(drvdata->csdev);
 	return ret;
 }

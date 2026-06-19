@@ -248,6 +248,20 @@ struct coresight_trace_id_map {
 	raw_spinlock_t lock;
 };
 
+/*
+ * Coresight claim tag info:
+ * CS_CLAIM_TAG_UNKNOWN      - not yet checked.
+ * CS_CLAIM_TAG_STD_PROTOCOL - using standard claim/release protocol.
+ * CS_CLAIM_TAG_NOT_IMPL     - no claim tags available.
+ * CS_CLAIM_TAG_IGNORE	     - force skip of claim tags protocol
+ */
+enum coresight_claim_tag_info {
+	CS_CLAIM_TAG_UNKNOWN,
+	CS_CLAIM_TAG_STD_PROTOCOL,
+	CS_CLAIM_TAG_NOT_IMPL,
+	CS_CLAIM_TAG_IGNORE,
+};
+
 /**
  * struct coresight_device - representation of a device as used by the framework
  * @pdata:	Platform data with device connections associated to this device.
@@ -269,6 +283,7 @@ struct coresight_trace_id_map {
  *		spinlock.
  * @cpu:	The CPU this component is affined to (-1 for not CPU bound).
  * @orphan:	true if the component has connections that haven't been linked.
+ * @claim_tag_info: how the device is using claim tags.
  * @sysfs_sink_activated: 'true' when a sink has been selected for use via sysfs
  *		by writing a 1 to the 'enable_sink' file.  A sink can be
  *		activated but not yet enabled.  Enabling for a _sink_ happens
@@ -297,6 +312,7 @@ struct coresight_device {
 	int refcnt;
 	int cpu;
 	bool orphan;
+	enum coresight_claim_tag_info claim_tag_info;
 	/* sink specific fields */
 	bool sysfs_sink_activated;
 	struct dev_ext_attribute *ea;
@@ -664,15 +680,14 @@ int coresight_timeout(struct csdev_access *csa, u32 offset, int position, int va
 typedef void (*coresight_timeout_cb_t) (struct csdev_access *, u32, int, int);
 int coresight_timeout_action(struct csdev_access *csa, u32 offset, int position, int value,
 			     coresight_timeout_cb_t cb);
-int coresight_claim_device(struct coresight_device *csdev);
-int coresight_claim_device_unlocked(struct coresight_device *csdev);
 
 int coresight_claim_device(struct coresight_device *csdev);
 int coresight_claim_device_unlocked(struct coresight_device *csdev);
-void coresight_clear_self_claim_tag(struct csdev_access *csa);
-void coresight_clear_self_claim_tag_unlocked(struct csdev_access *csa);
 void coresight_disclaim_device(struct coresight_device *csdev);
 void coresight_disclaim_device_unlocked(struct coresight_device *csdev);
+int coresight_init_claim_tags(struct coresight_device *csdev);
+int coresight_init_claim_tags_cpu_smp(struct coresight_device *csdev, int cpu);
+
 char *coresight_alloc_device_name(const char *prefix, struct device *dev);
 
 bool coresight_loses_context_with_cpu(struct device *dev);
