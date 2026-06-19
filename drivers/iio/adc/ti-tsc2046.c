@@ -739,7 +739,7 @@ static void tsc2046_adc_parse_fwnode(struct tsc2046_adc_priv *priv)
 
 static int tsc2046_adc_probe(struct spi_device *spi)
 {
-	const struct tsc2046_adc_dcfg *dcfg;
+	const struct tsc2046_adc_dcfg *dcfg = &tsc2046_adc_dcfg_tsc2046e;
 	struct device *dev = &spi->dev;
 	struct tsc2046_adc_priv *priv;
 	struct iio_dev *indio_dev;
@@ -751,10 +751,6 @@ static int tsc2046_adc_probe(struct spi_device *spi)
 			spi->max_speed_hz, TI_TSC2046_MAX_CLK_FREQ);
 		return -EINVAL;
 	}
-
-	dcfg = spi_get_device_match_data(spi);
-	if (!dcfg)
-		return -EINVAL;
 
 	spi->mode &= ~SPI_MODE_X_MASK;
 	spi->mode |= SPI_MODE_0;
@@ -829,13 +825,13 @@ static int tsc2046_adc_probe(struct spi_device *spi)
 }
 
 static const struct of_device_id ads7950_of_table[] = {
-	{ .compatible = "ti,tsc2046e-adc", .data = &tsc2046_adc_dcfg_tsc2046e },
+	{ .compatible = "ti,tsc2046e-adc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, ads7950_of_table);
 
 static const struct spi_device_id tsc2046_adc_spi_ids[] = {
-	{ "tsc2046e-adc", (unsigned long)&tsc2046_adc_dcfg_tsc2046e },
+	{ .name = "tsc2046e-adc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, tsc2046_adc_spi_ids);
