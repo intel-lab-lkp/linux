@@ -322,6 +322,16 @@ static int update_raid_extent_item(struct btrfs_trans_handle *trans,
 	return ret;
 }
 
+static void fill_raid_stride(struct btrfs_io_stripe *stripe,
+			     struct btrfs_raid_stride *raid_stride)
+{
+	u64 devid = stripe->dev->devid;
+	u64 physical = stripe->physical;
+
+	btrfs_set_stack_raid_stride_devid(raid_stride, devid);
+	btrfs_set_stack_raid_stride_physical(raid_stride, physical);
+}
+
 EXPORT_FOR_TESTS
 int btrfs_insert_one_raid_extent(struct btrfs_trans_handle *trans,
 				 struct btrfs_io_context *bioc)
@@ -344,12 +354,9 @@ int btrfs_insert_one_raid_extent(struct btrfs_trans_handle *trans,
 	trace_btrfs_insert_one_raid_extent(fs_info, bioc->logical, bioc->size,
 					   num_stripes);
 	for (int i = 0; i < num_stripes; i++) {
-		u64 devid = bioc->stripes[i].dev->devid;
-		u64 physical = bioc->stripes[i].physical;
+		struct btrfs_io_stripe *stripe = &bioc->stripes[i];
 		struct btrfs_raid_stride *raid_stride = &stripe_extent->strides[i];
-
-		btrfs_set_stack_raid_stride_devid(raid_stride, devid);
-		btrfs_set_stack_raid_stride_physical(raid_stride, physical);
+		fill_raid_stride(stripe, raid_stride);
 	}
 
 	stripe_key.objectid = bioc->logical;
