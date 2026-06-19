@@ -342,13 +342,25 @@ static inline void smc_init_saved_callbacks(struct smc_sock *smc)
 
 static inline struct smc_sock *smc_clcsock_user_data(const struct sock *clcsk)
 {
-	return (struct smc_sock *)
-	       ((uintptr_t)clcsk->sk_user_data & ~SK_USER_DATA_NOCOPY);
+	uintptr_t data = (uintptr_t)clcsk->sk_user_data;
+
+	/*
+	 * Return the smc_sock only if the slot carries SMC's tag alone.
+	 * sockmap stores a sk_psock here tagged SK_USER_DATA_PSOCK; it is
+	 * not an smc_sock and must not be dereferenced as one.
+	 */
+	if ((data & ~SK_USER_DATA_PTRMASK) != SK_USER_DATA_NOCOPY)
+		return NULL;
+	return (struct smc_sock *)(data & SK_USER_DATA_PTRMASK);
 }
 
 static inline struct smc_sock *smc_clcsock_user_data_rcu(const struct sock *clcsk)
 {
-	return (struct smc_sock *)rcu_dereference_sk_user_data(clcsk);
+	uintptr_t data = (uintptr_t)rcu_dereference(__sk_user_data(clcsk));
+
+	if ((data & ~SK_USER_DATA_PTRMASK) != SK_USER_DATA_NOCOPY)
+		return NULL;
+	return (struct smc_sock *)(data & SK_USER_DATA_PTRMASK);
 }
 
 /* save target_cb in saved_cb, and replace target_cb with new_cb */
