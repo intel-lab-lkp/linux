@@ -1,0 +1,232 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2026 Liu Yu <f78fk@live.com>
+ */
+/dts-v1/;
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include "zynq-7000.dtsi"
+
+/ {
+	model = "MYIR MYS-7Z020-V2 Board";
+	compatible = "myir,mys-7z020-v2", "xlnx,zynq-7000";
+
+	aliases {
+		ethernet0 = &gem0;
+		mmc0 = &sdhci0;
+		serial0 = &uart1;
+		spi0 = &qspi;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		autorepeat;
+
+		key-user {
+			label = "USR";
+			gpios = <&gpio0 50 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_PROG1>;
+			wakeup-source;
+		};
+	};
+
+	gpio-leds {
+		compatible = "gpio-leds";
+
+		led-blue {
+			label = "led_blue";
+			gpios = <&gpio0 115 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		led-green {
+			label = "led_green";
+			gpios = <&gpio0 114 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		led-red {
+			label = "led_red";
+			gpios = <&gpio0 116 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		usr-led1 {
+			label = "usr_led1";
+			gpios = <&gpio0 0 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		usr-led2 {
+			label = "usr_led2";
+			gpios = <&gpio0 9 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x0 0x40000000>;
+	};
+};
+
+&clkc {
+	ps-clk-frequency = <33333333>;
+};
+
+&gem0 {
+	phy-mode = "rgmii-id";
+	phy-handle = <&ethernet_phy>;
+
+	status = "okay";
+
+	mdio {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		ethernet_phy: ethernet-phy@7 {
+			reg = <0x7>;
+		};
+	};
+};
+
+&gpio0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_gpio0_default>;
+};
+
+&pinctrl0 {
+	pinctrl_gpio0_default: gpio0-default {
+		mux {
+			function = "gpio0";
+			groups = "gpio0_0_grp", "gpio0_9_grp", "gpio0_50_grp";
+		};
+		conf {
+			groups = "gpio0_0_grp", "gpio0_9_grp", "gpio0_50_grp";
+			slew-rate = <0>;
+			io-standard = <1>;
+		};
+		conf-pull-up {
+			pins = "MIO0", "MIO9", "MIO50";
+			bias-pull-up;
+		};
+	};
+
+	pinctrl_sdhci0_default: sdhci0-default {
+		mux {
+			groups = "sdio0_2_grp";
+			function = "sdio0";
+		};
+		mux-cd {
+			groups = "gpio0_46_grp";
+			function = "sdio0_cd";
+		};
+		conf {
+			groups = "sdio0_2_grp";
+			slew-rate = <0>;
+			io-standard = <1>;
+			bias-disable;
+		};
+		conf-cd {
+			pins = "MIO46";
+			bias-pull-up;
+			slew-rate = <0>;
+			io-standard = <1>;
+		};
+	};
+
+	pinctrl_uart1_default: uart1-default {
+		mux {
+			groups = "uart1_10_grp";
+			function = "uart1";
+		};
+		conf {
+			groups = "uart1_10_grp";
+			slew-rate = <0>;
+			io-standard = <1>;
+		};
+		conf-rx {
+			pins = "MIO49";
+			bias-high-impedance;
+		};
+		conf-tx {
+			pins = "MIO48";
+			bias-disable;
+		};
+	};
+};
+
+&qspi {
+	num-cs = <1>;
+
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0x0>;
+		spi-tx-bus-width = <1>;
+		spi-rx-bus-width = <4>;
+		spi-max-frequency = <50000000>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "qspi-boot";
+				reg = <0x0 0x80000>;
+			};
+
+			partition@80000 {
+				label = "qspi-bootenv";
+				reg = <0x80000 0x20000>;
+			};
+
+			partition@a0000 {
+				label = "qspi-bitstream";
+				reg = <0xa0000 0x460000>;
+			};
+
+			partition@500000 {
+				label = "qspi-kernel";
+				reg = <0x500000 0x480000>;
+			};
+
+			partition@980000 {
+				label = "qspi-devicetree";
+				reg = <0x980000 0x10000>;
+			};
+
+			partition@990000 {
+				label = "qspi-rootfs";
+				reg = <0x990000 0x600000>;
+			};
+
+			partition@f90000 {
+				label = "data";
+				reg = <0xf90000 0x70000>;
+			};
+		};
+	};
+};
+
+&sdhci0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_sdhci0_default>;
+	disable-wp;
+
+	status = "okay";
+};
+
+&uart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart1_default>;
+
+	status = "okay";
+};
+
