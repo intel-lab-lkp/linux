@@ -1768,10 +1768,9 @@ s32 rtw_free_xmitframe(struct xmit_priv *pxmitpriv, struct xmit_frame *pxmitfram
 		pxmitframe->pkt = NULL;
 	}
 
-	if (pxmitframe->alloc_addr) {
-		kfree(pxmitframe->alloc_addr);
+	kfree(pxmitframe->alloc_addr);
+	if (pxmitframe->alloc_addr)
 		goto check_pkt_complete;
-	}
 
 	if (pxmitframe->ext_tag == 0)
 		queue = &pxmitpriv->free_xmit_queue;
