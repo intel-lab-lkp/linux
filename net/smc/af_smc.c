@@ -2630,6 +2630,9 @@ static void smc_clcsock_data_ready(struct sock *listen_clcsock)
 {
 	struct smc_sock *lsmc;
 
+	if (READ_ONCE(listen_clcsock->sk_state) != TCP_LISTEN)
+		return;
+
 	read_lock_bh(&listen_clcsock->sk_callback_lock);
 	lsmc = smc_clcsock_user_data(listen_clcsock);
 	if (!lsmc)
