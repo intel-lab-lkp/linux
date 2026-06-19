@@ -2912,6 +2912,9 @@ void btrfs_init_fs_info(struct btrfs_fs_info *fs_info)
 
 	fs_info->bg_reclaim_threshold = BTRFS_DEFAULT_RECLAIM_THRESH;
 	INIT_WORK(&fs_info->reclaim_bgs_work, btrfs_reclaim_bgs_work);
+
+	INIT_LIST_HEAD(&fs_info->stripe_sets);
+	spin_lock_init(&fs_info->stripe_set_list_lock);
 }
 
 static int init_mount_fs_info(struct btrfs_fs_info *fs_info, struct super_block *sb)
@@ -4492,6 +4495,8 @@ void __cold close_ctree(struct btrfs_fs_info *fs_info)
 
 	kthread_stop(fs_info->transaction_kthread);
 	kthread_stop(fs_info->cleaner_kthread);
+
+	ASSERT(list_empty(&fs_info->stripe_sets));
 
 	ASSERT(list_empty(&fs_info->delayed_iputs));
 	set_bit(BTRFS_FS_CLOSING_DONE, &fs_info->flags);

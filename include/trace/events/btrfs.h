@@ -3323,6 +3323,30 @@ DEFINE_EVENT(btrfs_raid56_bio, raid56_write,
 	TP_ARGS(rbio, bio, trace_info)
 );
 
+TRACE_EVENT(btrfs_insert_parity_stripe,
+
+	TP_PROTO(const struct btrfs_fs_info *fs_info, u64 logical, u64 length,
+		 int num_parity),
+
+	TP_ARGS(fs_info, logical, length, num_parity),
+
+	TP_STRUCT__entry_btrfs(
+		__field(	u64,	logical		)
+		__field(	u64,	length		)
+		__field(	int,	num_parity	)
+	),
+
+	TP_fast_assign_btrfs(fs_info,
+		__entry->logical	= logical;
+		__entry->length		= length;
+		__entry->num_parity	= num_parity;
+	),
+
+	TP_printk_btrfs("logical=%llu length=%llu num_parity=%d",
+			__entry->logical, __entry->length,
+			__entry->num_parity)
+);
+
 TRACE_EVENT(btrfs_insert_one_raid_extent,
 
 	TP_PROTO(const struct btrfs_fs_info *fs_info, u64 logical, u64 length,

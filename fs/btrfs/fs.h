@@ -968,6 +968,9 @@ struct btrfs_fs_info {
 	struct list_head allocated_ebs;
 #endif
 
+	spinlock_t stripe_set_list_lock;
+	struct list_head stripe_sets;
+
 	/* Used by self tests only. */
 	bool (*use_bitmap)(struct btrfs_free_space_ctl *ctl,
 			   struct btrfs_free_space *info);

@@ -7305,6 +7305,13 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 				io_geom.stripe_offset +
 				btrfs_stripe_nr_to_offset(io_geom.stripe_nr);
 		}
+		/*
+		 * RAID56 write with RAID stripe-tree needs to split the write
+		 * on the stripe boundary.
+		 */
+		if (io_geom.use_rst)
+			*length = min_t(u64, *length,
+					BTRFS_STRIPE_LEN - io_geom.stripe_offset);
 	} else {
 		/*
 		 * For all other non-RAID56 profiles, just copy the target

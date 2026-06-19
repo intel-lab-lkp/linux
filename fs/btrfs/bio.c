@@ -410,6 +410,37 @@ static void btrfs_simple_end_io(struct bio *bio)
 	queue_work(btrfs_end_io_wq(fs_info, bio), &bbio->end_io_work);
 }
 
+static void raid56_write_end_io_work(struct work_struct *work)
+{
+	struct btrfs_bio *bbio = container_of(work, struct btrfs_bio, end_io_work);
+	struct bio *bio = &bbio->bio;
+	struct btrfs_io_stripe *stripe = bio->bi_private;
+
+	if (bio_is_zone_append(bio) && !bio->bi_status)
+		stripe->physical = bio->bi_iter.bi_sector << SECTOR_SHIFT;
+
+	btrfs_bio_end_io(bbio, bbio->bio.bi_status);
+}
+
+static void raid56_write_endio(struct bio *bio)
+{
+	struct btrfs_bio *bbio = btrfs_bio(bio);
+	struct btrfs_io_stripe *stripe = bio->bi_private;
+	struct btrfs_io_context *bioc = stripe->bioc;
+	struct btrfs_fs_info *fs_info = bioc->fs_info;
+
+	btrfs_bio_counter_dec(fs_info);
+	bbio->mirror_num = bioc->mirror_num;
+
+	if (bio->bi_status)
+		btrfs_log_dev_io_error(bio, stripe->dev);
+
+	INIT_WORK(&bbio->end_io_work, raid56_write_end_io_work);
+	queue_work(btrfs_end_io_wq(fs_info, bio), &bbio->end_io_work);
+
+	btrfs_put_bioc(bioc);
+}
+
 static void btrfs_raid56_end_io(struct bio *bio)
 {
 	struct btrfs_io_context *bioc = bio->bi_private;
@@ -565,6 +596,39 @@ static void btrfs_submit_mirrored_bio(struct btrfs_io_context *bioc, int dev_nr)
 	btrfs_submit_dev_bio(bioc->stripes[dev_nr].dev, bio);
 }
 
+static void btrfs_submit_raid56_write(struct bio *bio, struct btrfs_io_context *bioc)
+{
+	struct btrfs_bio *bbio = btrfs_bio(bio);
+	struct btrfs_io_stripe *smap;
+	u64 length = bio->bi_iter.bi_size;
+	int stripe_nr = btrfs_bioc_to_stripe_nr(bioc);
+
+	bioc->size = length;
+	smap = &bioc->stripes[stripe_nr];
+	smap->bioc = bioc;
+
+	bbio->orig_physical = smap->physical;
+	bio->bi_iter.bi_sector = smap->physical >> SECTOR_SHIFT;
+	bio->bi_private = smap;
+	bio->bi_end_io = raid56_write_endio;
+	btrfs_get_bioc(bioc);
+	btrfs_submit_dev_bio(smap->dev, bio);
+}
+
+static bool btrfs_is_rst_raid56_bioc(struct btrfs_io_context *bioc)
+{
+	if (!bioc)
+		return false;
+
+	if (!(bioc->map_type & BTRFS_BLOCK_GROUP_RAID56_MASK))
+		return false;
+
+	if (!bioc->use_rst)
+		return false;
+
+	return true;
+}
+
 static void btrfs_submit_bio(struct bio *bio, struct btrfs_io_context *bioc,
 			     struct btrfs_io_stripe *smap, int mirror_num)
 {
@@ -586,6 +650,11 @@ static void btrfs_submit_bio(struct bio *bio, struct btrfs_io_context *bioc,
 			raid56_parity_recover(bio, bioc, mirror_num);
 		else
 			raid56_parity_write(bio, bioc);
+	} else if (btrfs_is_rst_raid56_bioc(bioc)) {
+		if (bio_op(bio) == REQ_OP_READ)
+			ASSERT(0, "RST RAID56 read not implemented yet");
+		else
+			btrfs_submit_raid56_write(bio, bioc);
 	} else {
 		/* Write to multiple mirrors. */
 		int total_devs = bioc->num_stripes;
@@ -788,6 +857,16 @@ static bool btrfs_submit_chunk(struct btrfs_bio *bbio, int mirror_num)
 		bbio->orig_logical = logical;
 
 	bbio->can_use_append = btrfs_use_zone_append(bbio);
+
+	if (btrfs_is_rst_raid56_bioc(bioc) &&
+	    btrfs_op(bio) == BTRFS_MAP_WRITE) {
+		ret = btrfs_rst_raid56_write(bbio, bioc);
+		if (ret) {
+			btrfs_bio_counter_dec(fs_info);
+			status = errno_to_blk_status(ret);
+			goto end_bbio;
+		}
+	}
 
 	map_length = min(map_length, length);
 	if (bbio->can_use_append)
