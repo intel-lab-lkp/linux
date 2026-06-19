@@ -34,6 +34,14 @@ properties:
     minimum: 2
     maximum: 64
 
+  sifive,trustedwid:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    maximum: 31
+    description: |
+      The World ID (WID) designated as the trusted WID for this platform.
+      Transactions tagged with this WID are authorized to access and configure
+      WorldGuard blocks, including wgCheckers and wgMarkers.
+
 additionalProperties: true
 
 examples:
@@ -44,6 +52,7 @@ examples:
         #size-cells = <0>;
         timebase-frequency = <1000000>;
         riscv,nworlds = <4>;
+        sifive,trustedwid = <3>;
 
         cpu@0 {
             device_type = "cpu";
