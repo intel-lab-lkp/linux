@@ -123,9 +123,3 @@ config CLK_IMX95_BLK_CTL
 	help
 	    Build the clock driver for i.MX95 BLK CTL
 
-config CLK_IMXRT1050
-	tristate "IMXRT1050 CCM Clock Driver"
-	depends on SOC_IMXRT || COMPILE_TEST
-	select MXC_CLK
-	help
-	    Build the driver for i.MXRT1050 CCM Clock Driver
