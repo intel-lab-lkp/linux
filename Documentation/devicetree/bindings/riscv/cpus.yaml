@@ -26,6 +26,7 @@ description: |
 allOf:
   - $ref: /schemas/cpu.yaml#
   - $ref: extensions.yaml
+  - $ref: worlds.yaml
   - if:
       not:
         properties:
@@ -120,11 +121,31 @@ properties:
       thead systems where the vector register length is not identical on all harts, or
       the vlenb CSR is not available.
 
+  riscv,pmwid:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Platform-defined M-mode World ID (WID) assigned to this hart.
+    minimum: 0
+    maximum: 63
+
+  riscv,pmwidlist:
+    $ref: /schemas/types.yaml#/definitions/uint64
+    description:
+      Platform-defined bitmap of M-mode World IDs (WIDs) that this hart may use.
+
+  riscv,pmlwidlist:
+    $ref: /schemas/types.yaml#/definitions/uint64
+    description:
+      Platform-defined bitmap of World IDs (WIDs) that S-mode and U-mode may use
+      on this hart.
+
   # RISC-V has multiple properties for cache op block sizes as the sizes
   # differ between individual CBO extensions
   cache-op-block-size: false
   # RISC-V requires 'timebase-frequency' in /cpus, so disallow it here
   timebase-frequency: false
+  # RISC-V requires 'riscv,nworlds' in /cpus, so disallow it here
+  riscv,nworlds: false
 
   interrupt-controller:
     type: object

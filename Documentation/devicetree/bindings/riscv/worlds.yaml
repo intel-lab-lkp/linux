@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: (GPL-2.0 OR MIT)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/riscv/worlds.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: RISC-V Worlds Extension
+
+maintainers:
+  - Yu-Chien Peter Lin <peter.lin@sifive.com>
+
+description: |
+  The RISC-V Worlds ISA extension, as described in the RISC-V Privileged
+  Specification, adds World ID tagging for context isolation.
+
+  This binding describes the system-wide Worlds configuration for the /cpus node
+  and is used alongside per-hart Worlds-related properties such as riscv,pmwid in
+  the RISC-V CPU binding and Worlds-related ISA extensions enumerated via
+  riscv,isa-extensions.
+
+select:
+  properties:
+    $nodename:
+      pattern: "^cpus$"
+
+properties:
+  riscv,nworlds:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      Number of World IDs (WIDs) supported by the platform. This is a system-wide
+      property that describes the total number of isolation contexts available.
+      Hardware components such as the WorldGuard Checker use this to determine
+      the valid range of WID values.
+    minimum: 2
+    maximum: 64
+
+additionalProperties: true
+
+examples:
+  - |
+    // Example: System with 4 World IDs
+    cpus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        timebase-frequency = <1000000>;
+        riscv,nworlds = <4>;
+
+        cpu@0 {
+            device_type = "cpu";
+            reg = <0>;
+            compatible = "sifive,bullet0", "riscv";
+            riscv,isa-base = "rv64i";
+            riscv,isa-extensions = "i", "m", "a", "f", "d", "c";
+            riscv,pmwid = <0>;
+
+            interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+
+        cpu@1 {
+            device_type = "cpu";
+            reg = <1>;
+            compatible = "sifive,bullet0", "riscv";
+            riscv,isa-base = "rv64i";
+            riscv,isa-extensions = "i", "m", "a", "f", "d", "c";
+            riscv,pmwid = <1>;
+
+            interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+        };
+    };
