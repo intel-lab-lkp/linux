@@ -223,7 +223,13 @@ struct stripe_head {
 	int			cpu;
 	struct r5worker_group	*group;
 
-	struct stripe_head	*batch_head; /* protected by stripe lock */
+	/*
+	 * Writer protected by stripe_lock.
+	 * Reader hold stripe_lock when STRIPE_BATCH_READY is set.
+	 * Without STRIPE_BATCH_READY means no concurrent write,
+	 * lockless read is ok.
+	 */
+	struct stripe_head	*batch_head;
 	spinlock_t		batch_lock; /* only header's lock is useful */
 	struct list_head	batch_list; /* protected by head's batch lock*/
 
