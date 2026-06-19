@@ -81,7 +81,10 @@ struct layer_mask {
 	 */
 	access_mask_t quiet : 1;
 #endif /* CONFIG_AUDIT */
-} __packed __aligned(sizeof(access_mask_t));
+	access_mask_t __pad : ((sizeof(access_mask_t) * 8) -
+				LANDLOCK_NUM_ACCESS_MAX -
+				IS_ENABLED(CONFIG_AUDIT));
+};
 
 /*
  * Make sure that we don't increase the size of struct layer_mask when storing
