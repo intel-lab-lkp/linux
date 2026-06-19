@@ -510,10 +510,10 @@ static int ad3530r_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id ad3530r_id[] = {
-	{ "ad3530", (kernel_ulong_t)&ad3530_chip },
-	{ "ad3530r", (kernel_ulong_t)&ad3530r_chip },
-	{ "ad3531", (kernel_ulong_t)&ad3531_chip },
-	{ "ad3531r", (kernel_ulong_t)&ad3531r_chip },
+	{ .name = "ad3530", .driver_data = (kernel_ulong_t)&ad3530_chip },
+	{ .name = "ad3530r", .driver_data = (kernel_ulong_t)&ad3530r_chip },
+	{ .name = "ad3531", .driver_data = (kernel_ulong_t)&ad3531_chip },
+	{ .name = "ad3531r", .driver_data = (kernel_ulong_t)&ad3531r_chip },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ad3530r_id);
