@@ -764,11 +764,25 @@ int tomoyo_socket_sendmsg_permission(struct socket *sock, struct msghdr *msg,
 	struct tomoyo_addr_info address;
 	const u8 family = tomoyo_sock_family(sock->sk);
 	const unsigned int type = sock->type;
+	int ret;
 
+	address.protocol = type;
+
+	if ((msg->msg_flags & MSG_FASTOPEN) != 0 && msg->msg_name != NULL &&
+	    (sk_is_tcp(sock->sk) ||
+	     (sk_is_inet(sock->sk) && type == SOCK_STREAM &&
+	      sock->sk->sk_protocol == IPPROTO_MPTCP))) {
+		address.operation = TOMOYO_NETWORK_CONNECT;
+		ret = tomoyo_check_inet_address(
+			(struct sockaddr *)msg->msg_name, msg->msg_namelen,
+			sock->sk->sk_protocol, &address);
+		if (ret != 0)
+			return ret;
+	}
 	if (!msg->msg_name || !family ||
 	    (type != SOCK_DGRAM && type != SOCK_RAW))
 		return 0;
-	address.protocol = type;
+
 	address.operation = TOMOYO_NETWORK_SEND;
 	if (family == PF_UNIX)
 		return tomoyo_check_unix_address((struct sockaddr *)
