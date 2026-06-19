@@ -237,9 +237,15 @@ static int ads7138_read_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
+		/* Disable statistics update so the value is not updated mid read */
+		ret = ads7138_i2c_clear_bit(data->client, ADS7138_REG_GENERAL_CFG,
+					    ADS7138_GENERAL_CFG_STATS_EN);
 		ret = ads7138_i2c_read_block(data->client,
 					     ADS7138_REG_RECENT_LSB_CH(chan->channel),
 					     values, ARRAY_SIZE(values));
+		/* Enable statistics update after read */
+		ret = ads7138_i2c_set_bit(data->client, ADS7138_REG_GENERAL_CFG,
+					  ADS7138_GENERAL_CFG_STATS_EN);
 		if (ret)
 			return ret;
 
