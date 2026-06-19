@@ -893,6 +893,27 @@ pci_llseek_resource_legacy(struct file *filep,
 }
 
 #ifdef HAVE_PCI_LEGACY
+
+#define pci_legacy_resource_io_attr(_suffix, _size)				\
+static const struct bin_attribute pci_legacy_io##_suffix##_attr = {		\
+	.attr = { .name = "legacy_io" __stringify(_suffix), .mode = 0600 },	\
+	.size = (_size),							\
+	.read = pci_read_legacy_io,						\
+	.write = pci_write_legacy_io,						\
+	.f_mapping = iomem_get_mapping,						\
+	.llseek = pci_llseek_resource_legacy,					\
+	.mmap = pci_mmap_legacy_io,						\
+}
+
+#define pci_legacy_resource_mem_attr(_suffix, _size)				\
+static const struct bin_attribute pci_legacy_mem##_suffix##_attr = {		\
+	.attr = { .name = "legacy_mem" __stringify(_suffix), .mode = 0600 },	\
+	.size = (_size),							\
+	.f_mapping = iomem_get_mapping,						\
+	.llseek = pci_llseek_resource_legacy,					\
+	.mmap = pci_mmap_legacy_mem,						\
+}
+
 /**
  * pci_read_legacy_io - read byte(s) from legacy I/O port space
  * @filp: open sysfs file
