@@ -450,13 +450,30 @@ static int btrfs_get_raid_extent(struct btrfs_fs_info *fs_info,
 	ret = btrfs_search_slot(NULL, stripe_root, &stripe_key, path, 0, 0);
 	if (ret < 0)
 		return ret;
-	if (ret) {
-		if (path->slots[0] != 0)
-			path->slots[0]--;
-
-		btrfs_item_key_to_cpu(path->nodes[0], &found_key, path->slots[0]);
-		if (found_key.type != type && path->slots[0] > 0)
-			path->slots[0]--;
+	if (ret > 0) {
+		/*
+		 * The exact key is not present, so the stripe extent that may
+		 * contain @logical is the previous item of @type. Use
+		 * btrfs_previous_item() to step back to it: it crosses into the
+		 * previous leaf when we landed on slot 0 of a leaf (a plain
+		 * slots[0]-- would stay in the current leaf and miss an item
+		 * that is the last one of the previous leaf), and it skips items
+		 * of a different type (e.g. the parity stripe).
+		 *
+		 * If there is no previous item of @type, the covering item (if
+		 * any) is the one we landed on (its objectid == logical), so
+		 * re-search to position there for the forward scan below.
+		 */
+		ret = btrfs_previous_item(stripe_root, path, 0, type);
+		if (ret < 0)
+			return ret;
+		if (ret > 0) {
+			btrfs_release_path(path);
+			ret = btrfs_search_slot(NULL, stripe_root, &stripe_key,
+						path, 0, 0);
+			if (ret < 0)
+				return ret;
+		}
 	}
 
 	while (1) {
