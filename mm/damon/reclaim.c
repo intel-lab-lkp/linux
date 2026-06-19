@@ -268,6 +268,9 @@ static int damon_reclaim_apply_parameters(void)
 	if (err)
 		goto out;
 	err = damon_commit_ctx(ctx, param_ctx);
+
+	if (!err)
+		return 0;
 out:
 	damon_destroy_ctx(param_ctx);
 	return err;
