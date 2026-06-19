@@ -358,6 +358,14 @@ static int glink_rpm_probe(struct platform_device *pdev)
 
 	enable_irq(rpm->irq);
 
+	ret = qcom_glink_native_start(glink);
+	if (ret) {
+		disable_irq(rpm->irq);
+		qcom_glink_native_remove(glink);
+		mbox_free_channel(rpm->mbox_chan);
+		return ret;
+	}
+
 	return 0;
 }
 

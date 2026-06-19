@@ -1928,17 +1928,41 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 	if (ret)
 		dev_err(dev, "failed to add groups\n");
 
+	return glink;
+}
+EXPORT_SYMBOL_GPL(qcom_glink_native_probe);
+
+/**
+ * qcom_glink_native_start() - start the GLINK protocol handshake
+ * @glink:	glink handle returned by qcom_glink_native_probe()
+ *
+ * Send the initial version command and register the chrdev. This is split
+ * out from qcom_glink_native_probe() so that a transport can enable its
+ * receive interrupt before the version handshake is initiated, ensuring the
+ * version ACK from the remote is not missed.
+ *
+ * Failure to register the chrdev is not fatal and only logged, matching the
+ * previous behaviour of qcom_glink_native_probe().
+ *
+ * Return: 0 on success, negative errno if sending the version command failed.
+ */
+int qcom_glink_native_start(struct qcom_glink *glink)
+{
+	int ret;
+
 	ret = qcom_glink_send_version(glink);
-	if (ret)
-		return ERR_PTR(ret);
+	if (ret) {
+		dev_err(glink->dev, "failed to send version: %d\n", ret);
+		return ret;
+	}
 
 	ret = qcom_glink_create_chrdev(glink);
 	if (ret)
 		dev_err(glink->dev, "failed to register chrdev\n");
 
-	return glink;
+	return 0;
 }
-EXPORT_SYMBOL_GPL(qcom_glink_native_probe);
+EXPORT_SYMBOL_GPL(qcom_glink_native_start);
 
 static int qcom_glink_remove_device(struct device *dev, void *data)
 {

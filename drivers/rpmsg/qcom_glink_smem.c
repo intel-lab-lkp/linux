@@ -348,7 +348,15 @@ struct qcom_glink_smem *qcom_glink_smem_register(struct device *parent,
 
 	enable_irq(smem->irq);
 
+	ret = qcom_glink_native_start(glink);
+	if (ret)
+		goto err_disable_irq;
+
 	return smem;
+
+err_disable_irq:
+	disable_irq(smem->irq);
+	qcom_glink_native_remove(glink);
 
 err_free_mbox:
 	mbox_free_channel(smem->mbox_chan);
