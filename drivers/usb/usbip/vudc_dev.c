@@ -279,15 +279,18 @@ static int vep_disable(struct usb_ep *_ep)
 static struct usb_request *vep_alloc_request(struct usb_ep *_ep,
 		gfp_t mem_flags)
 {
+	struct vep *ep;
 	struct vrequest *req;
 
 	if (!_ep)
 		return NULL;
+	ep = to_vep(_ep);
 
 	req = kzalloc_obj(*req, mem_flags);
 	if (!req)
 		return NULL;
 
+	req->udc = ep_to_vudc(ep);
 	INIT_LIST_HEAD(&req->req_entry);
 
 	return &req->req;
