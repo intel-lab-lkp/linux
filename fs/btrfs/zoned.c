@@ -781,6 +781,14 @@ int btrfs_check_zoned_mode(struct btrfs_fs_info *fs_info)
 		     (u64)lim->max_sectors << SECTOR_SHIFT,
 		     (u64)lim->max_segments << PAGE_SHIFT),
 		fs_info->sectorsize);
+
+	if (btrfs_fs_incompat(fs_info, RAID_STRIPE_TREE)) {
+		u64 aligned = ALIGN_DOWN(fs_info->max_zone_append_size,
+					 BTRFS_STRIPE_LEN);
+
+		if (aligned)
+			fs_info->max_zone_append_size = aligned;
+	}
 	fs_info->fs_devices->chunk_alloc_policy = BTRFS_CHUNK_ALLOC_ZONED;
 
 	fs_info->max_extent_size = min_not_zero(fs_info->max_extent_size,
