@@ -615,6 +615,24 @@ static void btrfs_submit_raid56_write(struct bio *bio, struct btrfs_io_context *
 	btrfs_submit_dev_bio(smap->dev, bio);
 }
 
+static void btrfs_submit_rst_raid56_read(struct bio *bio,
+					 struct btrfs_io_context *bioc)
+{
+	struct btrfs_bio *bbio = btrfs_bio(bio);
+	int stripe_nr = btrfs_bioc_to_stripe_nr(bioc);
+	struct btrfs_device *dev = bioc->stripes[stripe_nr].dev;
+	int ret;
+
+	bbio->mirror_num = bioc->mirror_num;
+	ret = btrfs_rst_raid56_read(bbio, bioc);
+	btrfs_bio_counter_dec(bioc->fs_info);
+	if (ret && !bio->bi_status)
+		bio->bi_status = errno_to_blk_status(ret);
+	if (bio->bi_status)
+		btrfs_log_dev_io_error(bio, dev);
+	btrfs_check_read_bio(bbio, dev);
+}
+
 static bool btrfs_is_rst_raid56_bioc(struct btrfs_io_context *bioc)
 {
 	if (!bioc)
@@ -652,7 +670,7 @@ static void btrfs_submit_bio(struct bio *bio, struct btrfs_io_context *bioc,
 			raid56_parity_write(bio, bioc);
 	} else if (btrfs_is_rst_raid56_bioc(bioc)) {
 		if (bio_op(bio) == REQ_OP_READ)
-			ASSERT(0, "RST RAID56 read not implemented yet");
+			btrfs_submit_rst_raid56_read(bio, bioc);
 		else
 			btrfs_submit_raid56_write(bio, bioc);
 	} else {

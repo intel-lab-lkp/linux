@@ -414,9 +414,10 @@ int btrfs_insert_raid_extent(struct btrfs_trans_handle *trans,
 	return 0;
 }
 
-int btrfs_get_raid_extent_offset(struct btrfs_fs_info *fs_info,
+static int btrfs_get_raid_extent(struct btrfs_fs_info *fs_info,
 				 u64 logical, u64 *length, u64 map_type,
-				 u32 stripe_index, struct btrfs_io_stripe *stripe)
+				 u32 stripe_index, u8 type,
+				 struct btrfs_io_stripe *stripe)
 {
 	struct btrfs_root *stripe_root = fs_info->stripe_root;
 	struct btrfs_stripe_extent *stripe_extent;
@@ -425,7 +426,6 @@ int btrfs_get_raid_extent_offset(struct btrfs_fs_info *fs_info,
 	BTRFS_PATH_AUTO_FREE(path);
 	struct extent_buffer *leaf;
 	const u64 end = logical + *length;
-	int type = BTRFS_RAID_STRIPE_KEY;
 	int num_stripes;
 	u64 offset;
 	u64 found_logical;
@@ -495,6 +495,37 @@ int btrfs_get_raid_extent_offset(struct btrfs_fs_info *fs_info,
 	num_stripes = btrfs_num_raid_stripes(btrfs_item_size(leaf, slot));
 	stripe_extent = btrfs_item_ptr(leaf, slot, struct btrfs_stripe_extent);
 
+	if (map_type & BTRFS_BLOCK_GROUP_RAID56_MASK) {
+		/*
+		 * Unlike the other profiles, a RAID56 data (or parity) column is
+		 * not placed on a device the caller can derive from the chunk's
+		 * geometric rotation: with a zone append the device picks where
+		 * the write lands, so the stripe tree records the device the
+		 * column actually went to. Trust that recorded (devid, physical)
+		 * rather than the caller's rotation-derived device - matching
+		 * against the latter can spuriously miss and return -ENODATA for
+		 * data that is present, just on a different device.
+		 */
+		struct btrfs_raid_stride *stride = &stripe_extent->strides[0];
+		BTRFS_DEV_LOOKUP_ARGS(args);
+		struct btrfs_device *dev;
+
+		args.devid = btrfs_raid_stride_devid(leaf, stride);
+		dev = btrfs_find_device(fs_info->fs_devices, &args);
+		if (!dev) {
+			ret = -ENODATA;
+			goto out;
+		}
+
+		stripe->dev = dev;
+		stripe->physical = btrfs_raid_stride_physical(leaf, stride) + offset;
+
+		trace_btrfs_get_raid_extent_offset(fs_info, logical, *length,
+						   stripe->physical, args.devid);
+
+		return 0;
+	}
+
 	for (int i = 0; i < num_stripes; i++) {
 		struct btrfs_raid_stride *stride = &stripe_extent->strides[i];
 		u64 devid = btrfs_raid_stride_devid(leaf, stride);
@@ -527,6 +558,24 @@ out:
 	}
 
 	return ret;
+}
+
+int btrfs_get_raid_extent_offset(struct btrfs_fs_info *fs_info,
+				 u64 logical, u64 *length, u64 map_type,
+				 u32 stripe_index, struct btrfs_io_stripe *stripe)
+{
+	return btrfs_get_raid_extent(fs_info, logical, length, map_type,
+				     stripe_index, BTRFS_RAID_STRIPE_KEY,
+				     stripe);
+}
+
+int btrfs_get_parity_extent(struct btrfs_fs_info *fs_info,
+			    u64 logical, u64 *length, u64 map_type,
+			    struct btrfs_io_stripe *stripe)
+{
+	return btrfs_get_raid_extent(fs_info, logical, length, map_type,
+				     0, BTRFS_RAID_STRIPE_PARITY_KEY,
+				     stripe);
 }
 
 struct btrfs_stripe_unit {
@@ -839,4 +888,153 @@ int btrfs_rst_raid56_write(struct btrfs_bio *orig,
 		btrfs_stripe_set_put(fs_info, set);
 
 	return 0;
+}
+
+static int btrfs_rst_read_stripe(struct btrfs_device *dev, u64 physical,
+				 struct folio *folio, u64 len)
+{
+	struct bio *bio;
+	int ret;
+
+	if (!dev->bdev)
+		return -EIO;
+
+	bio = bio_alloc(dev->bdev, 1, REQ_OP_READ, GFP_NOFS);
+	if (!bio)
+		return -ENOMEM;
+
+	bio_add_folio_nofail(bio, folio, len, 0);
+	bio->bi_iter.bi_sector = physical >> SECTOR_SHIFT;
+	ret = submit_bio_wait(bio);
+	bio_put(bio);
+
+	return ret;
+}
+
+int btrfs_rst_raid56_read(struct btrfs_bio *orig,
+			  struct btrfs_io_context *bioc)
+{
+	struct btrfs_fs_info *fs_info = bioc->fs_info;
+	const unsigned int nr_parity = btrfs_nr_parity_stripes(bioc->map_type);
+	const unsigned int nr_data = bioc->num_stripes - nr_parity;
+	const unsigned int target = btrfs_bioc_to_stripe_nr(bioc);
+	const u64 full = bioc->full_stripe_logical;
+	const u64 off_in_stripe =
+		bioc->logical - (full + (u64)target * BTRFS_STRIPE_LEN);
+	const u64 len = orig->bio.bi_iter.bi_size;
+	const int order = get_order(len);
+	struct btrfs_io_stripe pstripe = { 0 };
+	struct folio **folios = NULL;
+	struct bvec_iter iter;
+	struct bio_vec bv;
+	void **bufs = NULL;
+	u64 plen = len;
+	u64 off;
+	unsigned int idx = 0;
+	int ret;
+
+	const bool target_present = bioc->stripes[target].dev->bdev != NULL;
+	bool others_present = true;
+
+	for (int i = 0; i < bioc->num_stripes; i++)
+		if (i != target && !bioc->stripes[i].dev->bdev)
+			others_present = false;
+
+	if (target_present && (orig->mirror_num <= 1 || !others_present)) {
+		struct btrfs_io_stripe dstripe = { 0 };
+		u64 dlen = len;
+
+		dstripe.dev = bioc->stripes[target].dev;
+		ret = btrfs_get_raid_extent_offset(fs_info, bioc->logical, &dlen,
+						   bioc->map_type, 0, &dstripe);
+		if (ret)
+			return ret;
+
+		bio_set_dev(&orig->bio, dstripe.dev->bdev);
+		orig->bio.bi_iter.bi_sector = dstripe.physical >> SECTOR_SHIFT;
+		return submit_bio_wait(&orig->bio);
+	}
+
+	if (!others_present)
+		return -EIO;
+
+	folios = kcalloc(nr_data, sizeof(*folios), GFP_NOFS);
+	if (!folios) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	bufs = kcalloc(nr_data, sizeof(*bufs), GFP_NOFS);
+	if (!bufs) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	for (int i = 0; i < nr_data; i++) {
+		struct btrfs_io_stripe s = { 0 };
+		u64 slogical = full + (u64)i * BTRFS_STRIPE_LEN + off_in_stripe;
+		u64 slen = len;
+
+		if (i == target)
+			continue;
+
+		s.dev = bioc->stripes[i].dev;
+		ret = btrfs_get_raid_extent_offset(fs_info, slogical, &slen,
+						   bioc->map_type, 0, &s);
+		if (ret)
+			goto out;
+
+		folios[idx] = folio_alloc(GFP_NOFS, order);
+		if (!folios[idx]) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		ret = btrfs_rst_read_stripe(s.dev, s.physical, folios[idx], len);
+		if (ret)
+			goto out;
+
+		bufs[idx] = folio_address(folios[idx]);
+		idx++;
+	}
+
+	folios[idx] = folio_alloc(GFP_NOFS, order);
+	if (!folios[idx]) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	pstripe.dev = bioc->stripes[nr_data].dev;
+	ret = btrfs_get_parity_extent(fs_info, full + off_in_stripe, &plen,
+				      bioc->map_type, &pstripe);
+	if (ret)
+		goto out;
+
+	ret = btrfs_rst_read_stripe(pstripe.dev, pstripe.physical, folios[idx],
+				    len);
+	if (ret)
+		goto out;
+
+	bufs[idx] = folio_address(folios[idx]);
+	idx++;
+
+	xor_gen(bufs[idx - 1], bufs, idx - 1, len);
+
+	off = 0;
+	bio_for_each_segment(bv, &orig->bio, iter) {
+		memcpy_to_bvec(&bv, (const char *)bufs[idx - 1] + off);
+		off += bv.bv_len;
+	}
+	ret = 0;
+
+out:
+	if (folios) {
+		for (unsigned int i = 0; i < nr_data; i++)
+			if (folios[i])
+				folio_put(folios[i]);
+	}
+	kfree(folios);
+	kfree(bufs);
+
+	return ret;
 }

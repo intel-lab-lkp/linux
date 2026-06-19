@@ -28,10 +28,15 @@ int btrfs_delete_raid_extent(struct btrfs_trans_handle *trans, u64 start, u64 le
 int btrfs_get_raid_extent_offset(struct btrfs_fs_info *fs_info,
 				 u64 logical, u64 *length, u64 map_type,
 				 u32 stripe_index, struct btrfs_io_stripe *stripe);
+int btrfs_get_parity_extent(struct btrfs_fs_info *fs_info,
+			    u64 logical, u64 *length, u64 map_type,
+			    struct btrfs_io_stripe *stripe);
 int btrfs_insert_raid_extent(struct btrfs_trans_handle *trans,
 			     struct btrfs_ordered_extent *ordered_extent);
 int btrfs_rst_raid56_write(struct btrfs_bio *bbio,
 			   struct btrfs_io_context *bioc);
+int btrfs_rst_raid56_read(struct btrfs_bio *orig,
+			  struct btrfs_io_context *bioc);
 
 #ifdef CONFIG_BTRFS_FS_RUN_SANITY_TESTS
 int btrfs_insert_one_raid_extent(struct btrfs_trans_handle *trans,
