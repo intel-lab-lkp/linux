@@ -25,17 +25,23 @@ static void mt6397_irq_lock(struct irq_data *data)
 	mutex_lock(&mt6397->irqlock);
 }
 
+static void mt6397_irq_write_masks(struct mt6397_chip *mt6397,
+				   const u16 *masks)
+{
+	regmap_write(mt6397->regmap, mt6397->int_con[0], masks[0]);
+	regmap_write(mt6397->regmap, mt6397->int_con[1], masks[1]);
+	if (mt6397->int_con[2])
+		regmap_write(mt6397->regmap, mt6397->int_con[2], masks[2]);
+}
+
 static void mt6397_irq_sync_unlock(struct irq_data *data)
 {
 	struct mt6397_chip *mt6397 = irq_data_get_irq_chip_data(data);
+	const u16 *masks;
 
-	regmap_write(mt6397->regmap, mt6397->int_con[0],
-		     mt6397->irq_masks_cur[0]);
-	regmap_write(mt6397->regmap, mt6397->int_con[1],
-		     mt6397->irq_masks_cur[1]);
-	if (mt6397->int_con[2])
-		regmap_write(mt6397->regmap, mt6397->int_con[2],
-			     mt6397->irq_masks_cur[2]);
+	masks = mt6397->irq_suspended ? mt6397->wake_mask :
+					mt6397->irq_masks_cur;
+	mt6397_irq_write_masks(mt6397, masks);
 
 	mutex_unlock(&mt6397->irqlock);
 }
@@ -141,24 +147,20 @@ static int mt6397_irq_pm_notifier(struct notifier_block *notifier,
 
 	switch (pm_event) {
 	case PM_SUSPEND_PREPARE:
-		regmap_write(chip->regmap,
-			     chip->int_con[0], chip->wake_mask[0]);
-		regmap_write(chip->regmap,
-			     chip->int_con[1], chip->wake_mask[1]);
-		if (chip->int_con[2])
-			regmap_write(chip->regmap,
-				     chip->int_con[2], chip->wake_mask[2]);
+		mutex_lock(&chip->irqlock);
+		chip->irq_suspended = true;
+		mt6397_irq_write_masks(chip, chip->wake_mask);
+		mutex_unlock(&chip->irqlock);
+
 		enable_irq_wake(chip->irq);
 		break;
 
 	case PM_POST_SUSPEND:
-		regmap_write(chip->regmap,
-			     chip->int_con[0], chip->irq_masks_cur[0]);
-		regmap_write(chip->regmap,
-			     chip->int_con[1], chip->irq_masks_cur[1]);
-		if (chip->int_con[2])
-			regmap_write(chip->regmap,
-				     chip->int_con[2], chip->irq_masks_cur[2]);
+		mutex_lock(&chip->irqlock);
+		chip->irq_suspended = false;
+		mt6397_irq_write_masks(chip, chip->irq_masks_cur);
+		mutex_unlock(&chip->irqlock);
+
 		disable_irq_wake(chip->irq);
 		break;
 
@@ -167,6 +169,29 @@ static int mt6397_irq_pm_notifier(struct notifier_block *notifier,
 	}
 
 	return NOTIFY_DONE;
+}
+
+static void mt6397_irq_pm_notifier_unregister(void *data)
+{
+	struct mt6397_chip *chip = data;
+
+	unregister_pm_notifier(&chip->pm_nb);
+}
+
+static void mt6397_irq_domain_remove(void *data)
+{
+	struct mt6397_chip *chip = data;
+	unsigned int hwirq;
+	unsigned int virq;
+
+	for (hwirq = 0; hwirq < MT6397_IRQ_NR; hwirq++) {
+		virq = irq_find_mapping(chip->irq_domain, hwirq);
+		if (virq)
+			irq_dispose_mapping(virq);
+	}
+
+	irq_domain_remove(chip->irq_domain);
+	chip->irq_domain = NULL;
 }
 
 int mt6397_irq_init(struct mt6397_chip *chip)
@@ -223,16 +248,28 @@ int mt6397_irq_init(struct mt6397_chip *chip)
 		return -ENOMEM;
 	}
 
+	ret = devm_add_action_or_reset(chip->dev, mt6397_irq_domain_remove,
+				       chip);
+	if (ret)
+		return ret;
+
 	ret = devm_request_threaded_irq(chip->dev, chip->irq, NULL,
 					mt6397_irq_thread, IRQF_ONESHOT,
 					"mt6397-pmic", chip);
 	if (ret) {
 		dev_err(chip->dev, "failed to register irq=%d; err: %d\n",
 			chip->irq, ret);
-		irq_domain_remove(chip->irq_domain);
 		return ret;
 	}
 
-	register_pm_notifier(&chip->pm_nb);
-	return 0;
+	ret = register_pm_notifier(&chip->pm_nb);
+	if (ret) {
+		dev_err(chip->dev, "failed to register PM notifier: %d\n", ret);
+		return ret;
+	}
+
+	ret = devm_add_action_or_reset(chip->dev,
+				       mt6397_irq_pm_notifier_unregister, chip);
+
+	return ret;
 }
