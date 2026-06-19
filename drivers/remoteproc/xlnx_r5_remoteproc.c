@@ -305,8 +305,9 @@ static void zynqmp_r5_mb_rx_cb(struct mbox_client *cl, void *msg)
  * Function to setup mailboxes related properties
  * return : NULL if failed else pointer to mbox_info
  */
-static struct mbox_info *zynqmp_r5_setup_mbox(struct device *cdev)
+static struct mbox_info *zynqmp_r5_setup_mbox(struct zynqmp_r5_core *r5_core)
 {
+	struct device *cdev = r5_core->dev;
 	struct mbox_client *mbox_cl;
 	struct mbox_info *ipi;
 
@@ -317,6 +318,9 @@ static struct mbox_info *zynqmp_r5_setup_mbox(struct device *cdev)
 	ipi = kzalloc_obj(*ipi);
 	if (!ipi)
 		return NULL;
+
+	ipi->r5_core = r5_core;
+	INIT_WORK(&ipi->mbox_work, handle_event_notified);
 
 	mbox_cl = &ipi->mbox_cl;
 	mbox_cl->rx_callback = zynqmp_r5_mb_rx_cb;
@@ -344,8 +348,6 @@ static struct mbox_info *zynqmp_r5_setup_mbox(struct device *cdev)
 		return NULL;
 	}
 
-	INIT_WORK(&ipi->mbox_work, handle_event_notified);
-
 	return ipi;
 }
 
@@ -363,6 +365,8 @@ static void zynqmp_r5_free_mbox(struct mbox_info *ipi)
 		mbox_free_channel(ipi->rx_chan);
 		ipi->rx_chan = NULL;
 	}
+
+	cancel_work_sync(&ipi->mbox_work);
 
 	kfree(ipi);
 }
@@ -1376,10 +1380,9 @@ static int zynqmp_r5_cluster_init(struct zynqmp_r5_cluster *cluster)
 		 * If mailbox nodes are disabled using "status" property then
 		 * setting up mailbox channels will fail.
 		 */
-		ipi = zynqmp_r5_setup_mbox(&child_pdev->dev);
+		ipi = zynqmp_r5_setup_mbox(r5_cores[i]);
 		if (ipi) {
 			r5_cores[i]->ipi = ipi;
-			ipi->r5_core = r5_cores[i];
 		}
 
 		/*
