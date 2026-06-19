@@ -1,0 +1,400 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/st,lis3lv02d.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: STMicroelectronics LIS3LV02D and similar accelerometers (misc driver)
+
+maintainers:
+  - Eric Piel <eric.piel@tremplin-utc.net>
+
+description:
+  This binding describes the STMicroelectronics accelerometers supported by
+  the misc/lis3lv02d driver. This driver provides input (joystick) and
+  hardware monitoring support, in contrast to the IIO st-accel driver which
+  also supports some of these devices.
+  Refer to Documentation/devicetree/bindings/iio/st,st-sensors.yaml for the
+  IIO binding.
+
+select:
+  anyOf:
+    - properties:
+        compatible:
+          contains:
+            const: st,lis302dl-spi
+    - properties:
+        compatible:
+          contains:
+            const: st,lis331dlh
+    - properties:
+        compatible:
+          contains:
+            const: st,lis33de
+    - properties:
+        compatible:
+          contains:
+            const: st,lis3lv02d
+  required:
+    - compatible
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - enum:
+              - st,lis331dlh
+              - st,lis33de
+          - const: st,lis3lv02d
+      - const: st,lis331dlh
+      - const: st,lis3lv02d
+      - const: st,lis302dl-spi
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    minItems: 1
+    maxItems: 2
+
+  spi-max-frequency:
+    description: SPI bus frequency; should be set to 1000000 unless
+      constrained by external circuitry.
+    maximum: 1000000
+
+  Vdd-supply:
+    description: The input supply for Vdd.
+
+  Vdd_IO-supply:
+    description: The input supply for Vdd_IO.
+
+  st,click-single-x:
+    description: Issue an interrupt on single click events on the X axis.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,click-double-x:
+    description: Issue an interrupt on double click events on the X axis.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,click-single-y:
+    description: Issue an interrupt on single click events on the Y axis.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,click-double-y:
+    description: Issue an interrupt on double click events on the Y axis.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,click-single-z:
+    description: Issue an interrupt on single click events on the Z axis.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,click-double-z:
+    description: Issue an interrupt on double click events on the Z axis.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,click-thresh-x:
+    description: X axis click threshold (deprecated spelling, use st,click-threshold-x).
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+
+  st,click-thresh-y:
+    description: Y axis click threshold (deprecated spelling, use st,click-threshold-y).
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+
+  st,click-thresh-z:
+    description: Z axis click threshold (deprecated spelling, use st,click-threshold-z).
+    $ref: /schemas/types.yaml#/definitions/uint32
+    deprecated: true
+
+  st,click-threshold-x:
+    description: X axis click threshold.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  st,click-threshold-y:
+    description: Y axis click threshold.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  st,click-threshold-z:
+    description: Z axis click threshold.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  st,click-click-time-limit:
+    description: Click time limit (deprecated spelling, use st,click-time-limit).
+    $ref: /schemas/types.yaml#/definitions/uint32
+    maximum: 255
+    deprecated: true
+
+  st,click-time-limit:
+    description: Click time limit, from 0 to 127.5 msec with step of 0.5 msec.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    maximum: 255
+
+  st,click-latency:
+    description: Click latency, from 0 to 255 msec with step of 1 msec.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    maximum: 255
+
+  st,click-window:
+    description: Click window, from 0 to 255 msec with step of 1 msec.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    maximum: 255
+
+  st,irq1-disable:
+    description: Disable IRQ 1.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,irq1-ff-wu-1:
+    description: Raise IRQ 1 on FF_WU_1 condition.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,irq1-ff-wu-2:
+    description: Raise IRQ 1 on FF_WU_2 condition.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,irq1-data-ready:
+    description: Raise IRQ 1 on data ready condition.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,irq1-click:
+    description: Raise IRQ 1 on click condition.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,irq2-disable:
+    description: Disable IRQ 2.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,irq2-ff-wu-1:
+    description: Raise IRQ 2 on FF_WU_1 condition.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,irq2-ff-wu-2:
+    description: Raise IRQ 2 on FF_WU_2 condition.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,irq2-data-ready:
+    description: Raise IRQ 2 on data ready condition.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,irq2-click:
+    description: Raise IRQ 2 on click condition.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,irq-open-drain:
+    description: Consider IRQ lines open-drain.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,irq-active-low:
+    description: Make IRQ lines active low.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wu-duration-1:
+    description: Duration register for Free-Fall/Wake-Up interrupt 1.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    maximum: 255
+
+  st,wu-duration-2:
+    description: Duration register for Free-Fall/Wake-Up interrupt 2.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    maximum: 255
+
+  st,wakeup-x-lo:
+    description: Set wakeup condition on X axis for lower limit.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wakeup-x-hi:
+    description: Set wakeup condition on X axis for upper limit.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wakeup-y-lo:
+    description: Set wakeup condition on Y axis for lower limit.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wakeup-y-hi:
+    description: Set wakeup condition on Y axis for upper limit.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wakeup-z-lo:
+    description: Set wakeup condition on Z axis for lower limit.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wakeup-z-hi:
+    description: Set wakeup condition on Z axis for upper limit.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wakeup-threshold:
+    description: Set wakeup threshold.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    maximum: 255
+
+  st,wakeup2-x-lo:
+    description: Set wakeup condition on X axis for lower limit for second wakeup engine.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wakeup2-x-hi:
+    description: Set wakeup condition on X axis for upper limit for second wakeup engine.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wakeup2-y-lo:
+    description: Set wakeup condition on Y axis for lower limit for second wakeup engine.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wakeup2-y-hi:
+    description: Set wakeup condition on Y axis for upper limit for second wakeup engine.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wakeup2-z-lo:
+    description: Set wakeup condition on Z axis for lower limit for second wakeup engine.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wakeup2-z-hi:
+    description: Set wakeup condition on Z axis for upper limit for second wakeup engine.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,wakeup2-threshold:
+    description: Set wakeup threshold for second wakeup engine.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    maximum: 255
+
+  st,highpass-cutoff-hz:
+    description: Highpass cut-off frequency. Valid values are 1, 2, 4 or 8.
+    enum: [1, 2, 4, 8]
+
+  st,hipass1-disable:
+    description: Disable highpass filter 1.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,hipass2-disable:
+    description: Disable highpass filter 2.
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  st,default-rate:
+    description: Set the default output data rate.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  st,axis-x:
+    description: Set the X axis mapping. Negative values can be used for inverted axis.
+    $ref: /schemas/types.yaml#/definitions/int32
+
+  st,axis-y:
+    description: Set the Y axis mapping. Negative values can be used for inverted axis.
+    $ref: /schemas/types.yaml#/definitions/int32
+
+  st,axis-z:
+    description: Set the Z axis mapping. Negative values can be used for inverted axis.
+    $ref: /schemas/types.yaml#/definitions/int32
+
+  st,min-limit-x:
+    description: Minimum limit for X axis (used by self-test).
+    $ref: /schemas/types.yaml#/definitions/int32
+
+  st,min-limit-y:
+    description: Minimum limit for Y axis (used by self-test).
+    $ref: /schemas/types.yaml#/definitions/int32
+
+  st,min-limit-z:
+    description: Minimum limit for Z axis (used by self-test).
+    $ref: /schemas/types.yaml#/definitions/int32
+
+  st,max-limit-x:
+    description: Maximum limit for X axis (used by self-test).
+    $ref: /schemas/types.yaml#/definitions/int32
+
+  st,max-limit-y:
+    description: Maximum limit for Y axis (used by self-test).
+    $ref: /schemas/types.yaml#/definitions/int32
+
+  st,max-limit-z:
+    description: Maximum limit for Z axis (used by self-test).
+    $ref: /schemas/types.yaml#/definitions/int32
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          not:
+            contains:
+              const: st,lis302dl-spi
+    then:
+      required:
+        - Vdd-supply
+        - Vdd_IO-supply
+    else:
+      properties:
+        Vdd-supply: false
+        Vdd_IO-supply: false
+      required:
+        - spi-max-frequency
+        - interrupts
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        accelerometer@18 {
+            compatible = "st,lis331dlh", "st,lis3lv02d";
+            reg = <0x18>;
+            Vdd-supply = <&lis3_reg>;
+            Vdd_IO-supply = <&lis3_reg>;
+            interrupt-parent = <&gpio2>;
+            interrupts = <18 0>;
+
+            st,click-single-x;
+            st,click-single-y;
+            st,click-single-z;
+            st,click-threshold-x = <10>;
+            st,click-threshold-y = <10>;
+            st,click-threshold-z = <10>;
+            st,irq1-click;
+            st,irq2-click;
+            st,wakeup-x-lo;
+            st,wakeup-x-hi;
+            st,wakeup-y-lo;
+            st,wakeup-y-hi;
+            st,wakeup-z-lo;
+            st,wakeup-z-hi;
+            st,min-limit-x = <120>;
+            st,min-limit-y = <120>;
+            st,min-limit-z = <140>;
+            st,max-limit-x = <550>;
+            st,max-limit-y = <550>;
+            st,max-limit-z = <750>;
+        };
+    };
+  - |
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        accelerometer@0 {
+            compatible = "st,lis302dl-spi";
+            reg = <0>;
+            spi-max-frequency = <1000000>;
+            interrupt-parent = <&gpio>;
+            interrupts = <104 0>;
+
+            st,click-single-x;
+            st,click-single-y;
+            st,click-single-z;
+            st,click-threshold-x = <10>;
+            st,click-threshold-y = <10>;
+            st,click-threshold-z = <10>;
+            st,irq1-click;
+            st,irq2-click;
+            st,wakeup-x-lo;
+            st,wakeup-x-hi;
+            st,wakeup-y-lo;
+            st,wakeup-y-hi;
+            st,wakeup-z-lo;
+            st,wakeup-z-hi;
+        };
+    };
+...
