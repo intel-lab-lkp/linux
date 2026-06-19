@@ -1243,6 +1243,8 @@ remove_and_enqueue_same_base(struct hrtimer *timer, struct hrtimer_clock_base *b
 		/* Try to update in place to avoid the de/enqueue dance */
 		if (hrtimer_can_update_in_place(timer, base, expires)) {
 			hrtimer_set_expires_range_ns(timer, expires, delta_ns);
+			debug_hrtimer_deactivate(timer);
+			debug_hrtimer_activate(timer, mode);
 			trace_hrtimer_start(timer, mode, true);
 			if (was_first)
 				base->expires_next = expires;
