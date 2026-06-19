@@ -32,6 +32,29 @@ static struct btrfs_device *btrfs_device_by_devid(struct btrfs_fs_devices *fs_de
 	return NULL;
 }
 
+static int init_raid5_bioc(struct btrfs_fs_info *fs_info,
+			   struct btrfs_io_context *bioc,
+			   u64 full_logical, u64 base_physical)
+{
+	bioc->map_type = RST_TEST_RAID5_TYPE;
+	bioc->num_stripes = RST_TEST_NUM_DEVICES;
+	bioc->full_stripe_logical = full_logical;
+
+	for (int i = 0; i < RST_TEST_NUM_DEVICES; i++) {
+		struct btrfs_io_stripe *stripe = &bioc->stripes[i];
+
+		stripe->dev = btrfs_device_by_devid(fs_info->fs_devices, i);
+		if (!stripe->dev) {
+			test_err("cannot find device with devid %d", i);
+			return -EINVAL;
+		}
+
+		stripe->physical = base_physical + i * (u64)SZ_1G;
+	}
+
+	return 0;
+}
+
 /*
  * Test creating a range of three extents and then punch a hole in the middle,
  * deleting all of the middle extents and partially deleting the "book ends".
@@ -1165,6 +1188,199 @@ out:
 	return ret;
 }
 
+/* Insert a full RAID5 stripe: two 64K data stripes + one parity stripe. */
+static int insert_raid5_full_stripe(struct btrfs_trans_handle *trans,
+				    struct btrfs_io_context *bioc, u64 full)
+{
+	const u64 stripe_len = BTRFS_STRIPE_LEN;
+	int ret;
+
+	bioc->logical = full;
+	bioc->size = stripe_len;
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
+	if (ret) {
+		test_err("inserting data stripe 0 failed: %d", ret);
+		return ret;
+	}
+
+	bioc->logical = full + stripe_len;
+	bioc->size = stripe_len;
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
+	if (ret) {
+		test_err("inserting data stripe 1 failed: %d", ret);
+		return ret;
+	}
+
+	bioc->logical = full;
+	bioc->size = 2 * stripe_len;
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_PARITY_KEY);
+	if (ret) {
+		test_err("inserting parity stripe failed: %d", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+/* Verify a RAID5 data or parity stripe resolves to @phys. */
+static int check_raid5_stripe(struct btrfs_fs_info *fs_info, u64 logical,
+			      u64 len, u64 devid, u64 phys, bool parity)
+{
+	struct btrfs_io_stripe io_stripe = { 0 };
+	int ret;
+
+	io_stripe.dev = btrfs_device_by_devid(fs_info->fs_devices, devid);
+	if (!io_stripe.dev) {
+		test_err("cannot find device with devid %llu", devid);
+		return -EINVAL;
+	}
+
+	if (parity)
+		ret = btrfs_get_parity_extent(fs_info, logical, &len,
+					      RST_TEST_RAID5_TYPE, &io_stripe);
+	else
+		ret = btrfs_get_raid_extent_offset(fs_info, logical, &len,
+						   RST_TEST_RAID5_TYPE, 0,
+						   &io_stripe);
+	if (ret) {
+		test_err("lookup of %s extent [%llu, %llu] failed: %d",
+			 parity ? "parity" : "data", logical, logical + len, ret);
+		return ret;
+	}
+
+	if (io_stripe.physical != phys) {
+		test_err("invalid %s physical, expected %llu, got %llu",
+			 parity ? "parity" : "data", phys, io_stripe.physical);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/*
+ * Test a simple RAID5 full-stripe create and delete on a 3-device (2 data +
+ * 1 parity) filesystem: insert the two data stripes and the parity stripe,
+ * verify each resolves to the right device/physical, then delete.
+ */
+static int test_raid5_simple_create_delete(struct btrfs_trans_handle *trans)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	struct btrfs_io_context *bioc;
+	const u64 full = SZ_1M;
+	const u64 stripe_len = BTRFS_STRIPE_LEN;
+	const u64 base = SZ_1G;
+	int ret;
+
+	bioc = alloc_btrfs_io_context(fs_info, full, RST_TEST_NUM_DEVICES);
+	if (!bioc) {
+		test_std_err(TEST_ALLOC_IO_CONTEXT);
+		return -ENOMEM;
+	}
+
+	ret = init_raid5_bioc(fs_info, bioc, full, base);
+	if (ret)
+		goto out;
+
+	ret = insert_raid5_full_stripe(trans, bioc, full);
+	if (ret)
+		goto out;
+
+	ret = check_raid5_stripe(fs_info, full, stripe_len, 0, base, false);
+	if (ret)
+		goto out;
+	ret = check_raid5_stripe(fs_info, full + stripe_len, stripe_len, 1,
+				 base + (u64)SZ_1G, false);
+	if (ret)
+		goto out;
+	ret = check_raid5_stripe(fs_info, full, 2 * stripe_len, 2,
+				 base + 2 * (u64)SZ_1G, true);
+	if (ret)
+		goto out;
+
+	/*
+	 * Delete the data stripes. The parity item cannot be removed via
+	 * btrfs_delete_raid_extent() in the test fs_info (it detects parity
+	 * profiles through the chunk map, which does not exist here); it is
+	 * reclaimed when the dummy fs_info is torn down.
+	 */
+	ret = btrfs_delete_raid_extent(trans, full, stripe_len);
+	if (ret) {
+		test_err("deleting data stripe 0 failed: %d", ret);
+		goto out;
+	}
+	ret = btrfs_delete_raid_extent(trans, full + stripe_len, stripe_len);
+	if (ret)
+		test_err("deleting data stripe 1 failed: %d", ret);
+
+out:
+	btrfs_put_bioc(bioc);
+	return ret;
+}
+
+/*
+ * Test overwriting a RAID5 full stripe: create it, then re-insert the data and
+ * parity stripes with new physical addresses and verify the stripe-tree items
+ * were updated in place (exercises update_raid_extent_item() for both the
+ * data and the parity keys).
+ */
+static int test_raid5_create_update_delete(struct btrfs_trans_handle *trans)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	struct btrfs_io_context *bioc;
+	const u64 full = SZ_1M;
+	const u64 stripe_len = BTRFS_STRIPE_LEN;
+	const u64 base = SZ_1G;
+	const u64 base2 = 4 * (u64)SZ_1G;
+	int ret;
+
+	bioc = alloc_btrfs_io_context(fs_info, full, RST_TEST_NUM_DEVICES);
+	if (!bioc) {
+		test_std_err(TEST_ALLOC_IO_CONTEXT);
+		return -ENOMEM;
+	}
+
+	ret = init_raid5_bioc(fs_info, bioc, full, base);
+	if (ret)
+		goto out;
+
+	ret = insert_raid5_full_stripe(trans, bioc, full);
+	if (ret)
+		goto out;
+
+	ret = init_raid5_bioc(fs_info, bioc, full, base2);
+	if (ret)
+		goto out;
+
+	ret = insert_raid5_full_stripe(trans, bioc, full);
+	if (ret)
+		goto out;
+
+	ret = check_raid5_stripe(fs_info, full, stripe_len, 0, base2, false);
+	if (ret)
+		goto out;
+	ret = check_raid5_stripe(fs_info, full + stripe_len, stripe_len, 1,
+				 base2 + (u64)SZ_1G, false);
+	if (ret)
+		goto out;
+	ret = check_raid5_stripe(fs_info, full, 2 * stripe_len, 2,
+				 base2 + 2 * (u64)SZ_1G, true);
+	if (ret)
+		goto out;
+
+	ret = btrfs_delete_raid_extent(trans, full, stripe_len);
+	if (ret) {
+		test_err("deleting data stripe 0 failed: %d", ret);
+		goto out;
+	}
+	ret = btrfs_delete_raid_extent(trans, full + stripe_len, stripe_len);
+	if (ret)
+		test_err("deleting data stripe 1 failed: %d", ret);
+
+out:
+	btrfs_put_bioc(bioc);
+	return ret;
+}
+
 static const test_func_t tests[] = {
 	test_simple_create_delete,
 	test_create_update_delete,
@@ -1175,6 +1391,8 @@ static const test_func_t tests[] = {
 	test_punch_hole_3extents,
 	test_delete_two_extents,
 	test_read_data_and_parity,
+	test_raid5_simple_create_delete,
+	test_raid5_create_update_delete,
 };
 
 static int run_test(test_func_t test, u32 sectorsize, u32 nodesize)
