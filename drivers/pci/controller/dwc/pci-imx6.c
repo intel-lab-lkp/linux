@@ -1382,7 +1382,7 @@ static int imx_pcie_host_init(struct dw_pcie_rp *pp)
 
 	ret = pci_pwrctrl_power_on_devices(dev);
 	if (ret) {
-		dev_err(dev, "failed to power on pwrctrl devices\n");
+		dev_err_probe(dev, ret, "failed to power on pwrctrl devices\n");
 		goto err_pwrctrl_destroy;
 	}
 
