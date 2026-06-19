@@ -37,6 +37,9 @@ int btrfs_rst_raid56_write(struct btrfs_bio *bbio,
 			   struct btrfs_io_context *bioc);
 int btrfs_rst_raid56_read(struct btrfs_bio *orig,
 			  struct btrfs_io_context *bioc);
+void btrfs_rst_raid56_finish_ordered(struct btrfs_ordered_extent *ordered);
+void btrfs_rst_flush_stripe_sets(struct btrfs_fs_info *fs_info);
+void btrfs_rst_destroy_stripe_sets(struct btrfs_fs_info *fs_info);
 
 #ifdef CONFIG_BTRFS_FS_RUN_SANITY_TESTS
 int btrfs_insert_one_raid_extent(struct btrfs_trans_handle *trans,

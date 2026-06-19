@@ -14,6 +14,7 @@
 #include "volumes.h"
 #include "print-tree.h"
 #include "zoned.h"
+#include "ordered-data.h"
 
 static int btrfs_partially_delete_raid_extent(struct btrfs_trans_handle *trans,
 					       struct btrfs_path *path,
@@ -621,6 +622,8 @@ struct btrfs_stripe_set {
 	atomic_t pending_ios;
 	spinlock_t lock;
 	u32 covered;
+	bool finalized;
+	bool can_use_append;
 	unsigned int nr_data;
 	unsigned int npar;
 	struct btrfs_stripe_unit stripe_units[] __counted_by(npar);
@@ -635,10 +638,12 @@ static void btrfs_stripe_set_put(struct btrfs_fs_info *fs_info,
 				   struct btrfs_stripe_set *set)
 {
 	if (refcount_dec_and_test(&set->refs)) {
+		unsigned long flags;
+
 		ASSERT(atomic_read(&set->pending_ios) == 0);
-		spin_lock(&fs_info->stripe_set_list_lock);
+		spin_lock_irqsave(&fs_info->stripe_set_list_lock, flags);
 		list_del_init(&set->list);
-		spin_unlock(&fs_info->stripe_set_list_lock);
+		spin_unlock_irqrestore(&fs_info->stripe_set_list_lock, flags);
 
 		kfree(set);
 	}
@@ -650,10 +655,13 @@ static struct btrfs_stripe_set *btrfs_stripe_set_lookup(
 {
 	struct btrfs_fs_info *fs_info = bioc->fs_info;
 	struct btrfs_stripe_set *set;
+	unsigned long flags;
 	bool found = false;
 
-	spin_lock(&fs_info->stripe_set_list_lock);
+	spin_lock_irqsave(&fs_info->stripe_set_list_lock, flags);
 	list_for_each_entry(set, &fs_info->stripe_sets, list) {
+		if (set->finalized)
+			continue;
 		if (in_range(bioc->logical, set->full_stripe_logical,
 			     set->full_stripe_len)) {
 			found = true;
@@ -663,7 +671,7 @@ static struct btrfs_stripe_set *btrfs_stripe_set_lookup(
 	}
 	if (found)
 		btrfs_stripe_set_get(set);
-	spin_unlock(&fs_info->stripe_set_list_lock);
+	spin_unlock_irqrestore(&fs_info->stripe_set_list_lock, flags);
 
 	if (!found)
 		return NULL;
@@ -751,6 +759,7 @@ static struct btrfs_stripe_set *btrfs_stripe_set_alloc(
 	const unsigned int nr_parity = btrfs_nr_parity_stripes(bioc->map_type);
 	const unsigned int nr_data = bioc->num_stripes - nr_parity;
 	struct btrfs_stripe_set *set;
+	unsigned long flags;
 
 	set = kzalloc(struct_size(set, stripe_units, nr_parity), GFP_NOFS);
 	if (!set)
@@ -760,6 +769,7 @@ static struct btrfs_stripe_set *btrfs_stripe_set_alloc(
 	atomic_set(&set->pending_ios, 0);
 	spin_lock_init(&set->lock);
 	set->covered = 0;
+	set->finalized = false;
 	INIT_LIST_HEAD(&set->list);
 	INIT_WORK(&set->work, insert_parity_stripe_work);
 	set->fs_info = fs_info;
@@ -792,9 +802,9 @@ static struct btrfs_stripe_set *btrfs_stripe_set_alloc(
 		bio_add_folio_nofail(bio, folio, BTRFS_STRIPE_LEN, 0);
 	}
 
-	spin_lock(&fs_info->stripe_set_list_lock);
+	spin_lock_irqsave(&fs_info->stripe_set_list_lock, flags);
 	list_add_tail(&set->list, &fs_info->stripe_sets);
-	spin_unlock(&fs_info->stripe_set_list_lock);
+	spin_unlock_irqrestore(&fs_info->stripe_set_list_lock, flags);
 
 	return set;
 }
@@ -854,14 +864,23 @@ static void btrfs_stripe_set_finalize(struct btrfs_stripe_set *set)
 	struct btrfs_io_stripe *pstripe = set->stripe_units[0].pstripe;
 	struct bio *bio = set->stripe_units[0].bio;
 	u64 physical = pstripe->physical;
+	unsigned long flags;
 
 	ASSERT(set->npar == 1, "npar=%u", set->npar);
 
-	spin_lock(&fs_info->stripe_set_list_lock);
-	list_del_init(&set->list);
-	spin_unlock(&fs_info->stripe_set_list_lock);
+	spin_lock(&set->lock);
+	if (set->finalized) {
+		spin_unlock(&set->lock);
+		return;
+	}
+	set->finalized = true;
+	spin_unlock(&set->lock);
 
-	if (btrfs_dev_is_sequential(pstripe->dev, physical)) {
+	spin_lock_irqsave(&fs_info->stripe_set_list_lock, flags);
+	list_del_init(&set->list);
+	spin_unlock_irqrestore(&fs_info->stripe_set_list_lock, flags);
+
+	if (set->can_use_append && btrfs_dev_is_sequential(pstripe->dev, physical)) {
 		bio->bi_opf &= ~REQ_OP_WRITE;
 		bio->bi_opf |= REQ_OP_ZONE_APPEND;
 		physical = round_down(physical, fs_info->zone_size);
@@ -893,15 +912,17 @@ int btrfs_rst_raid56_write(struct btrfs_bio *orig,
 	/*
 	 * Accumulate the parity for the full stripe bioc->logical falls into.
 	 * Each data bbio folds its column into the shared stripe set; when all
-	 * nr_data columns have been folded the parity is submitted. A full stripe
-	 * split across ordered extents is thus completed once its last column
-	 * arrives.
+	 * nr_data columns have been folded the parity is submitted eagerly. A
+	 * full stripe split across ordered extents is completed when its last
+	 * column arrives; a partial tail stripe is finalized from the ordered-
+	 * extent completion in btrfs_rst_raid56_finish_ordered().
 	 */
 	set = btrfs_stripe_set_lookup(bioc, full_stripe_len);
 	if (!set) {
 		set = btrfs_stripe_set_alloc(bioc, full_stripe_len);
 		if (IS_ERR(set))
 			return PTR_ERR(set);
+		set->can_use_append = orig->can_use_append;
 		created = true;
 	}
 
@@ -913,6 +934,114 @@ int btrfs_rst_raid56_write(struct btrfs_bio *orig,
 		btrfs_stripe_set_put(fs_info, set);
 
 	return 0;
+}
+
+/*
+ * Finalize the parity of a partial tail stripe once its data ordered extent has
+ * completed (so the data columns are committed). Complete stripes are submitted
+ * by btrfs_rst_raid56_write(). The only stripe that can still be pending here
+ * is the one holding the last byte of ordered's data. If a data extent
+ * continues right after ordered, that stripe spans two ordered extents and
+ * will be completed by the next one's data, so it is left alone.
+ */
+void btrfs_rst_raid56_finish_ordered(struct btrfs_ordered_extent *ordered)
+{
+	struct btrfs_inode *inode = ordered->inode;
+	struct btrfs_fs_info *fs_info = inode->root->fs_info;
+	const u64 logical_end = ordered->disk_bytenr + ordered->disk_num_bytes;
+	struct btrfs_stripe_set *set, *found = NULL;
+	unsigned long flags;
+
+	if (!fs_info->stripe_root)
+		return;
+
+	spin_lock_irqsave(&fs_info->stripe_set_list_lock, flags);
+	list_for_each_entry(set, &fs_info->stripe_sets, list) {
+		if (set->finalized)
+			continue;
+		if (in_range(logical_end - 1, set->full_stripe_logical,
+			     set->full_stripe_len)) {
+			found = set;
+			btrfs_stripe_set_get(set);
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&fs_info->stripe_set_list_lock, flags);
+
+	if (!found)
+		return;
+
+	/*
+	 * If the file extends past this ordered extent, more data
+	 * will land in this stripe and complete it eagerly, so leave it alone.
+	 * Only when this ordered extent reaches i_size is the stripe a genuine
+	 * tail.
+	 */
+	if (ordered->file_offset + ordered->num_bytes <
+	    i_size_read(&inode->vfs_inode)) {
+		btrfs_stripe_set_put(fs_info, found);
+		return;
+	}
+
+	btrfs_stripe_set_finalize(found);
+	btrfs_stripe_set_put(fs_info, found);
+}
+
+void btrfs_rst_flush_stripe_sets(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_stripe_set *set, *tmp;
+	unsigned long flags;
+	LIST_HEAD(pending);
+
+	if (!fs_info->stripe_root)
+		return;
+
+	spin_lock_irqsave(&fs_info->stripe_set_list_lock, flags);
+	list_splice_init(&fs_info->stripe_sets, &pending);
+	spin_unlock_irqrestore(&fs_info->stripe_set_list_lock, flags);
+
+	list_for_each_entry_safe(set, tmp, &pending, list)
+		btrfs_stripe_set_finalize(set);
+}
+
+/*
+ * Free any stripe sets still pending at unmount of an aborted filesystem.
+ *
+ * When the filesystem is forced read-only mid-write, the data ordered extents
+ * complete with an error and never reach btrfs_rst_raid56_finish_ordered(), so
+ * the partial-tail stripe sets they allocated are never finalized: their parity
+ * bios/folios are never submitted and the sets stay on fs_info->stripe_sets.
+ * Tear them down here (we cannot submit parity on a read-only fs) so the list
+ * is empty and close_ctree() does not trip its ASSERT.
+ */
+void btrfs_rst_destroy_stripe_sets(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_stripe_set *set, *tmp;
+	unsigned long flags;
+	LIST_HEAD(pending);
+
+	if (!fs_info->stripe_root)
+		return;
+
+	spin_lock_irqsave(&fs_info->stripe_set_list_lock, flags);
+	list_splice_init(&fs_info->stripe_sets, &pending);
+	spin_unlock_irqrestore(&fs_info->stripe_set_list_lock, flags);
+
+	list_for_each_entry_safe(set, tmp, &pending, list) {
+		ASSERT(!set->finalized);
+		ASSERT(atomic_read(&set->pending_ios) == 0);
+
+		for (int i = 0; i < set->npar; i++) {
+			struct btrfs_stripe_unit *unit = &set->stripe_units[i];
+
+			if (unit->folio)
+				folio_put(unit->folio);
+			if (unit->bio)
+				bio_io_error(unit->bio);
+		}
+
+		btrfs_stripe_set_put(fs_info, set);
+	}
 }
 
 static int btrfs_rst_read_stripe(struct btrfs_device *dev, u64 physical,
@@ -1006,6 +1135,10 @@ int btrfs_rst_raid56_read(struct btrfs_bio *orig,
 		s.dev = bioc->stripes[i].dev;
 		ret = btrfs_get_raid_extent_offset(fs_info, slogical, &slen,
 						   bioc->map_type, 0, &s);
+		if (ret == -ENODATA) {
+			ret = 0;
+			continue;
+		}
 		if (ret)
 			goto out;
 

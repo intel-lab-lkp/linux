@@ -34,6 +34,7 @@
 #include "ctree.h"
 #include "disk-io.h"
 #include "transaction.h"
+#include "raid-stripe-tree.h"
 #include "btrfs_inode.h"
 #include "direct-io.h"
 #include "props.h"
@@ -1023,6 +1024,14 @@ int btrfs_sync_fs(struct super_block *sb, int wait)
 	}
 
 	btrfs_wait_ordered_roots(fs_info, U64_MAX, NULL);
+
+	/*
+	 * All ordered extents are now on disk, so any RAID56 stripe-tree set
+	 * still pending is a genuine partial stripe (e.g. an interior partial
+	 * write) that finish_ordered left for a completion that will never
+	 * come. Finalize them now, before they leak past unmount.
+	 */
+	btrfs_rst_flush_stripe_sets(fs_info);
 
 	trans = btrfs_attach_transaction_barrier(root);
 	if (IS_ERR(trans)) {

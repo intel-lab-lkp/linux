@@ -3164,6 +3164,13 @@ int btrfs_finish_one_ordered(struct btrfs_ordered_extent *ordered_extent)
 		btrfs_abort_transaction(trans, ret);
 		goto out;
 	}
+
+	/*
+	 * The data of this ordered extent is now on disk. Finalize the RAID
+	 * stripe-tree parity of a partial tail stripe that no further data will
+	 * complete.
+	 */
+	btrfs_rst_raid56_finish_ordered(ordered_extent);
 out:
 	if (clear_bits)
 		btrfs_clear_extent_bit(&inode->io_tree, start, end, clear_bits,

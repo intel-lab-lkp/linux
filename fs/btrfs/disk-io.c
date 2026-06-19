@@ -31,6 +31,7 @@
 #include "free-space-tree.h"
 #include "dev-replace.h"
 #include "raid56.h"
+#include "raid-stripe-tree.h"
 #include "sysfs.h"
 #include "qgroup.h"
 #include "compression.h"
@@ -4495,6 +4496,16 @@ void __cold close_ctree(struct btrfs_fs_info *fs_info)
 
 	kthread_stop(fs_info->transaction_kthread);
 	kthread_stop(fs_info->cleaner_kthread);
+
+	/*
+	 * On an aborted (forced read-only) filesystem, partial-tail stripe
+	 * sets may have leaked because their data ordered extents completed
+	 * with an error and never finalized the parity. Free them so the
+	 * ASSERT below holds; in the clean case the list is already empty and
+	 * any leftover is a genuine bug we still want to catch.
+	 */
+	if (BTRFS_FS_ERROR(fs_info))
+		btrfs_rst_destroy_stripe_sets(fs_info);
 
 	ASSERT(list_empty(&fs_info->stripe_sets));
 
