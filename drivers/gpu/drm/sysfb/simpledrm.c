@@ -229,6 +229,33 @@ simplefb_get_panel_height_mm_of(struct drm_device *dev, struct device_node *of_p
 	return __simplefb_get_panel_size_mm_of(dev, of_panel_node, "height-mm");
 }
 
+static enum drm_panel_orientation
+simplefb_get_panel_orientation_of(struct drm_device *dev, struct device_node *of_panel_node)
+{
+	int ret;
+	u32 rotation;
+
+	ret = of_property_read_u32(of_panel_node, "rotation", &rotation);
+	if (ret) {
+		drm_dbg(dev, "simplefb: cannot parse panel rotation: error %d\n", ret);
+		return DRM_MODE_PANEL_ORIENTATION_UNKNOWN;
+	}
+
+	switch (rotation) {
+	case 0:
+		return DRM_MODE_PANEL_ORIENTATION_NORMAL;
+	case 90:
+		return DRM_MODE_PANEL_ORIENTATION_RIGHT_UP;
+	case 180:
+		return DRM_MODE_PANEL_ORIENTATION_BOTTOM_UP;
+	case 270:
+		return DRM_MODE_PANEL_ORIENTATION_LEFT_UP;
+	default:
+		drm_dbg(dev, "simplefb: cannot parse panel rotation: value %u\n", rotation);
+		return DRM_MODE_PANEL_ORIENTATION_UNKNOWN;
+	}
+}
+
 /*
  * Simple Framebuffer device
  */
@@ -632,6 +659,7 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 	int width, height, stride;
 	u16 width_mm = 0, height_mm = 0;
 	struct device_node *panel_node;
+	enum drm_panel_orientation orientation = DRM_MODE_PANEL_ORIENTATION_UNKNOWN;
 	const struct drm_format_info *format;
 	struct resource *res, *mem = NULL;
 	struct drm_plane *primary_plane;
@@ -696,6 +724,7 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 		if (panel_node) {
 			width_mm = simplefb_get_panel_width_mm_of(dev, panel_node);
 			height_mm = simplefb_get_panel_height_mm_of(dev, panel_node);
+			orientation = simplefb_get_panel_orientation_of(dev, panel_node);
 			of_node_put(panel_node);
 		}
 	} else {
@@ -831,8 +860,7 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 	if (ret)
 		return ERR_PTR(ret);
 	drm_connector_helper_add(connector, &simpledrm_connector_helper_funcs);
-	drm_connector_set_panel_orientation_with_quirk(connector,
-						       DRM_MODE_PANEL_ORIENTATION_UNKNOWN,
+	drm_connector_set_panel_orientation_with_quirk(connector, orientation,
 						       width, height);
 
 	ret = drm_connector_attach_encoder(connector, encoder);
