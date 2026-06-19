@@ -341,7 +341,9 @@ int btrfs_insert_one_raid_extent(struct btrfs_trans_handle *trans,
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct btrfs_key stripe_key;
 	struct btrfs_root *stripe_root = fs_info->stripe_root;
-	const int num_stripes = btrfs_bg_type_to_factor(bioc->map_type);
+	const int num_stripes = (type == BTRFS_RAID_STRIPE_PARITY_KEY) ?
+		btrfs_nr_parity_stripes(bioc->map_type) :
+		btrfs_bg_type_to_factor(bioc->map_type);
 	struct btrfs_stripe_extent AUTO_KFREE(stripe_extent);
 	const size_t item_size = struct_size(stripe_extent, strides, num_stripes);
 	int ret;
@@ -356,7 +358,13 @@ int btrfs_insert_one_raid_extent(struct btrfs_trans_handle *trans,
 	trace_btrfs_insert_one_raid_extent(fs_info, bioc->logical, bioc->size,
 					   num_stripes);
 
-	if (bioc->map_type & BTRFS_BLOCK_GROUP_RAID56_MASK) {
+	if (type == BTRFS_RAID_STRIPE_PARITY_KEY) {
+		const int nr_data = bioc->num_stripes - num_stripes;
+
+		for (int i = 0; i < num_stripes; i++)
+			fill_raid_stride(&bioc->stripes[nr_data + i],
+					 &stripe_extent->strides[i]);
+	} else if (bioc->map_type & BTRFS_BLOCK_GROUP_RAID56_MASK) {
 		int stripe_nr = btrfs_bioc_to_stripe_nr(bioc);
 		struct btrfs_raid_stride *raid_stride = &stripe_extent->strides[0];
 

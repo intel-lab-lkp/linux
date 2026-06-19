@@ -11,8 +11,9 @@
 #include "../raid-stripe-tree.h"
 #include "btrfs-tests.h"
 
-#define RST_TEST_NUM_DEVICES	(2)
+#define RST_TEST_NUM_DEVICES	(3)
 #define RST_TEST_RAID1_TYPE	(BTRFS_BLOCK_GROUP_DATA | BTRFS_BLOCK_GROUP_RAID1)
+#define RST_TEST_RAID5_TYPE	(BTRFS_BLOCK_GROUP_DATA | BTRFS_BLOCK_GROUP_RAID5)
 
 #define SZ_48K (SZ_32K + SZ_16K)
 
@@ -1070,6 +1071,100 @@ out:
 	return ret;
 }
 
+static int test_read_data_and_parity(struct btrfs_trans_handle *trans)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+	struct btrfs_io_context *bioc;
+	struct btrfs_io_stripe io_stripe = { 0 };
+	u64 map_type = RST_TEST_RAID5_TYPE;
+	u64 logical = SZ_1M;
+	u64 len = BTRFS_STRIPE_LEN;
+	const u64 data_physical = logical;
+	const u64 parity_physical = logical + (RST_TEST_NUM_DEVICES - 1) * (u64)SZ_1G;
+	int ret;
+
+	bioc = alloc_btrfs_io_context(fs_info, logical, RST_TEST_NUM_DEVICES);
+	if (!bioc) {
+		test_std_err(TEST_ALLOC_IO_CONTEXT);
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	bioc->map_type = map_type;
+	bioc->size = len;
+	bioc->num_stripes = RST_TEST_NUM_DEVICES;
+	bioc->full_stripe_logical = logical;
+
+	for (int i = 0; i < RST_TEST_NUM_DEVICES; i++) {
+		struct btrfs_io_stripe *stripe = &bioc->stripes[i];
+
+		stripe->dev = btrfs_device_by_devid(fs_info->fs_devices, i);
+		if (!stripe->dev) {
+			test_err("cannot find device with devid %d", i);
+			ret = -EINVAL;
+			goto out;
+		}
+
+		stripe->physical = logical + i * (u64)SZ_1G;
+	}
+
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
+	if (ret) {
+		test_err("inserting data RAID extent failed: %d", ret);
+		goto out;
+	}
+
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_PARITY_KEY);
+	if (ret) {
+		test_err("inserting parity RAID extent failed: %d", ret);
+		goto out;
+	}
+
+	io_stripe.dev = btrfs_device_by_devid(fs_info->fs_devices, 0);
+	len = BTRFS_STRIPE_LEN;
+	ret = btrfs_get_raid_extent_offset(fs_info, logical, &len, map_type, 0,
+					   &io_stripe);
+	if (ret) {
+		test_err("lookup of data RAID extent [%llu, %llu] failed",
+			 logical, logical + len);
+		goto out;
+	}
+
+	if (io_stripe.physical != data_physical) {
+		test_err("invalid data physical address, expected %llu, got %llu",
+			 data_physical, io_stripe.physical);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	io_stripe.dev = btrfs_device_by_devid(fs_info->fs_devices,
+					      RST_TEST_NUM_DEVICES - 1);
+	len = BTRFS_STRIPE_LEN;
+	ret = btrfs_get_parity_extent(fs_info, logical, &len, map_type,
+				      &io_stripe);
+	if (ret) {
+		test_err("lookup of parity RAID extent [%llu, %llu] failed",
+			 logical, logical + len);
+		goto out;
+	}
+
+	if (io_stripe.physical != parity_physical) {
+		test_err("invalid parity physical address, expected %llu, got %llu",
+			 parity_physical, io_stripe.physical);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = btrfs_delete_raid_extent(trans, logical, len);
+	if (ret)
+		test_err("deleting RAID extent [%llu, %llu] failed", logical,
+			 logical + len);
+
+out:
+	btrfs_put_bioc(bioc);
+	return ret;
+}
+
 static const test_func_t tests[] = {
 	test_simple_create_delete,
 	test_create_update_delete,
@@ -1079,6 +1174,7 @@ static const test_func_t tests[] = {
 	test_punch_hole,
 	test_punch_hole_3extents,
 	test_delete_two_extents,
+	test_read_data_and_parity,
 };
 
 static int run_test(test_func_t test, u32 sectorsize, u32 nodesize)
