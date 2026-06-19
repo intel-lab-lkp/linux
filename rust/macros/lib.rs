@@ -15,6 +15,8 @@
 #![cfg_attr(not(CONFIG_RUSTC_HAS_SPAN_FILE), feature(proc_macro_span))]
 
 mod concat_idents;
+#[cfg(CONFIG_CONFIGFS_FS)]
+mod configfs_attrs;
 mod export;
 mod fmt;
 mod helpers;
@@ -487,5 +489,90 @@ pub fn paste(input: TokenStream) -> TokenStream {
 pub fn kunit_tests(attr: TokenStream, input: TokenStream) -> TokenStream {
     kunit::kunit_tests(parse_macro_input!(attr), parse_macro_input!(input))
         .unwrap_or_else(|e| e.into_compile_error())
+        .into()
+}
+
+/// Define a list of configfs attributes statically.
+///
+/// # Examples
+///
+/// ```ignore
+/// let item_type = configfs_attrs! {
+///     container: configfs::Subsystem<Configuration>,
+///     data: Configuration,
+///     child: Child,
+///     attributes: [
+///         message: 0,
+///         bar: 1,
+///     ],
+/// };
+/// ```
+///
+/// Expands the following output:
+///
+/// ```ignore
+/// let item_type = {
+///         static DATA_ATTR_LIST: kernel::configfs::AttributeList<
+///             3usize,
+///             Configuration,
+///         > = unsafe { kernel::configfs::AttributeList::new() };
+///         static MESSAGE_ATTR_0: kernel::configfs::Attribute<
+///             0u64,
+///             Configuration,
+///             Configuration,
+///         > = unsafe {
+///             kernel::configfs::Attribute::new({
+///                 const S: &str = "message\u{0}";
+///                 const C: &kernel::str::CStr = match kernel::str::CStr::from_bytes_with_nul(
+///                     S.as_bytes(),
+///                 ) {
+///                     Ok(v) => v,
+///                     Err(_) => {
+///                         ::core::panicking::panic_fmt(
+///                             format_args!("string contains interior NUL"),
+///                         );
+///                     }
+///                 };
+///                 C
+///             })
+///         };
+///         unsafe { DATA_ATTR_LIST.add::<0usize, 0u64, _>(&MESSAGE_ATTR_0) }
+///         static BAR_ATTR_1: kernel::configfs::Attribute<
+///             1u64,
+///             Configuration,
+///             Configuration,
+///         > = unsafe {
+///             kernel::configfs::Attribute::new({
+///                 const S: &str = "bar\u{0}";
+///                 const C: &kernel::str::CStr = match kernel::str::CStr::from_bytes_with_nul(
+///                     S.as_bytes(),
+///                 ) {
+///                     Ok(v) => v,
+///                     Err(_) => {
+///                         ::core::panicking::panic_fmt(
+///                             format_args!("string contains interior NUL"),
+///                         );
+///                     }
+///                 };
+///                 C
+///             })
+///         };
+///         unsafe { DATA_ATTR_LIST.add::<1usize, 1u64, _>(&BAR_ATTR_1) }
+///         {
+///             static DATA_TPE: kernel::configfs::ItemType<
+///                 Subsystem<Configuration>,
+///                 Configuration,
+///             > = kernel::configfs::ItemType::<
+///                 Subsystem<Configuration>,
+///                 Configuration,
+///             >::new_with_child_ctor::<3usize, Child>(&THIS_MODULE, &DATA_ATTR_LIST);
+///             &DATA_TPE
+///         }
+///     };
+/// ```
+#[cfg(CONFIG_CONFIGFS_FS)]
+#[proc_macro]
+pub fn configfs_attrs(input: TokenStream) -> TokenStream {
+    configfs_attrs::configfs_attrs(parse_macro_input!(input as configfs_attrs::ConfigfsAttrs))
         .into()
 }

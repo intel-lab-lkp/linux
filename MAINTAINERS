@@ -6464,6 +6464,7 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/a.hindborg/linux.git config
 F:	fs/configfs/
 F:	include/linux/configfs.h
 F:	rust/kernel/configfs.rs
+F:	rust/macros/configfs_attrs.rs
 F:	samples/configfs/
 F:	samples/rust/rust_configfs.rs
 
