@@ -83,6 +83,29 @@ properties:
       This array describes either a single reference source or a positive and
       negative reference sources.
 
+  excitation-channels:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    maxItems: 16
+    minItems: 1
+    description:
+      Excitation current sources provide current to resistive temperature
+      devices (RTDs), thermistors diodes and other resistive sensors that
+      require constant current biasing.
+
+      This array describes the mux configuration of the excitation current
+      sources.
+
+  excitation-current-microamp:
+    maxItems: 16
+    minItems: 1
+    description:
+      Excitation current sources provide current to resistive temperature
+      devices (RTDs), thermistors diodes and other resistive sensors that
+      require constant current biasing.
+
+      This array describes the current configuration of the excitation current
+      sources or the single matched current for all sources.
+
 anyOf:
   - oneOf:
       - required:
