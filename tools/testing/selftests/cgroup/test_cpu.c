@@ -646,7 +646,7 @@ test_cpucg_nested_weight_underprovisioned(const char *root)
 static int test_cpucg_max(const char *root)
 {
 	int ret = KSFT_FAIL;
-	long quota_usec = 1000;
+	long quota_usec = USEC_PER_SEC / sysconf(_SC_CLK_TCK);
 	long default_period_usec = 100000; /* cpu.max's default period */
 	long duration_seconds = 1;
 
@@ -710,7 +710,7 @@ cleanup:
 static int test_cpucg_max_nested(const char *root)
 {
 	int ret = KSFT_FAIL;
-	long quota_usec = 1000;
+	long quota_usec = USEC_PER_SEC / sysconf(_SC_CLK_TCK);
 	long default_period_usec = 100000; /* cpu.max's default period */
 	long duration_seconds = 1;
 
