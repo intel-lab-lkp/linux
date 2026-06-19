@@ -364,15 +364,6 @@ config PINCTRL_XWAY
 	depends on SOC_TYPE_XWAY
 	depends on PINCTRL_LANTIQ
 
-config PINCTRL_LPC18XX
-	bool "NXP LPC18XX/43XX SCU pinctrl driver"
-	depends on OF && (ARCH_LPC18XX || COMPILE_TEST)
-	default ARCH_LPC18XX
-	select PINMUX
-	select GENERIC_PINCONF
-	help
-	  Pinctrl driver for NXP LPC18xx/43xx System Control Unit (SCU).
-
 config PINCTRL_MAX7360
 	tristate "MAX7360 Pincontrol support"
 	depends on MFD_MAX7360
