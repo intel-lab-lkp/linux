@@ -141,7 +141,6 @@ enum tsc2046_state {
 
 struct tsc2046_adc_priv {
 	struct spi_device *spi;
-	const struct tsc2046_adc_dcfg *dcfg;
 	bool internal_vref;
 
 	struct iio_trigger *trig;
@@ -763,7 +762,6 @@ static int tsc2046_adc_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	priv = iio_priv(indio_dev);
-	priv->dcfg = dcfg;
 
 	priv->spi = spi;
 
