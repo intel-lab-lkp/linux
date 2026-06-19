@@ -1662,8 +1662,11 @@ static int hp_wmi_platform_profile_get(struct device *dev,
 	int tp;
 
 	tp = thermal_profile_get();
-	if (tp < 0)
-		return tp;
+	if (tp < 0) {
+		guard(mutex)(&active_platform_profile_lock);
+		*profile = active_platform_profile;
+		return 0;
+	}
 
 	switch (tp) {
 	case HP_THERMAL_PROFILE_PERFORMANCE:
@@ -1679,7 +1682,9 @@ static int hp_wmi_platform_profile_get(struct device *dev,
 		*profile = PLATFORM_PROFILE_QUIET;
 		break;
 	default:
-		return -EINVAL;
+		guard(mutex)(&active_platform_profile_lock);
+		*profile = active_platform_profile;
+		break;
 	}
 
 	return 0;
@@ -1707,9 +1712,13 @@ static int hp_wmi_platform_profile_set(struct device *dev,
 		return -EOPNOTSUPP;
 	}
 
+	guard(mutex)(&active_platform_profile_lock);
+
 	err = thermal_profile_set(tp);
 	if (err)
 		return err;
+
+	active_platform_profile = profile;
 
 	return 0;
 }
@@ -2017,8 +2026,23 @@ static int hp_wmi_platform_profile_probe(void *drvdata, unsigned long *choices)
 		/* Adding an equivalent to HP Omen software ECO mode: */
 		set_bit(PLATFORM_PROFILE_LOW_POWER, choices);
 	} else {
-		set_bit(PLATFORM_PROFILE_QUIET, choices);
-		set_bit(PLATFORM_PROFILE_COOL, choices);
+		int current_tp = thermal_profile_get();
+
+		if (current_tp < 0)
+			return current_tp;
+
+		if (thermal_profile_set(HP_THERMAL_PROFILE_QUIET) == 0)
+			set_bit(PLATFORM_PROFILE_QUIET, choices);
+		if (thermal_profile_set(HP_THERMAL_PROFILE_COOL) == 0)
+			set_bit(PLATFORM_PROFILE_COOL, choices);
+		if (thermal_profile_set(HP_THERMAL_PROFILE_DEFAULT) == 0)
+			set_bit(PLATFORM_PROFILE_BALANCED, choices);
+		if (thermal_profile_set(HP_THERMAL_PROFILE_PERFORMANCE) == 0)
+			set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
+
+		/* Restore the original thermal profile */
+		thermal_profile_set(current_tp);
+		return 0;
 	}
 
 	set_bit(PLATFORM_PROFILE_BALANCED, choices);
@@ -2262,6 +2286,25 @@ static int thermal_profile_setup(struct platform_device *device)
 		err = thermal_profile_set(tp);
 		if (err)
 			return err;
+
+		/* Initialize active_platform_profile */
+		switch (tp) {
+		case HP_THERMAL_PROFILE_PERFORMANCE:
+			active_platform_profile = PLATFORM_PROFILE_PERFORMANCE;
+			break;
+		case HP_THERMAL_PROFILE_DEFAULT:
+			active_platform_profile = PLATFORM_PROFILE_BALANCED;
+			break;
+		case HP_THERMAL_PROFILE_COOL:
+			active_platform_profile = PLATFORM_PROFILE_COOL;
+			break;
+		case HP_THERMAL_PROFILE_QUIET:
+			active_platform_profile = PLATFORM_PROFILE_QUIET;
+			break;
+		default:
+			active_platform_profile = PLATFORM_PROFILE_BALANCED;
+			break;
+		}
 
 		ops = &hp_wmi_platform_profile_ops;
 	}
