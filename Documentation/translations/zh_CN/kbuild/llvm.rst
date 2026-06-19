@@ -5,6 +5,8 @@
 :Original: Documentation/kbuild/llvm.rst
 :Translator: 慕冬亮 Dongliang Mu <dzm91@hust.edu.cn>
 
+.. _kbuild_llvm_zh:
+
 ==========================
 使用 Clang/LLVM 构建 Linux
 ==========================
