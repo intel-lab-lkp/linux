@@ -36,7 +36,7 @@ struct led_pwm_data {
 
 struct led_pwm_priv {
 	int num_leds;
-	struct led_pwm_data leds[];
+	struct led_pwm_data leds[] __counted_by(num_leds);
 };
 
 static int led_pwm_set(struct led_classdev *led_cdev,
@@ -82,9 +82,10 @@ static int led_pwm_default_brightness_get(struct fwnode_handle *fwnode,
 
 __attribute__((nonnull))
 static int led_pwm_add(struct device *dev, struct led_pwm_priv *priv,
-		       struct led_pwm *led, struct fwnode_handle *fwnode)
+		       int idx, struct led_pwm *led,
+		       struct fwnode_handle *fwnode)
 {
-	struct led_pwm_data *led_data = &priv->leds[priv->num_leds];
+	struct led_pwm_data *led_data = &priv->leds[idx];
 	struct led_init_data init_data = { .fwnode = fwnode };
 	int ret;
 
@@ -167,14 +168,13 @@ static int led_pwm_add(struct device *dev, struct led_pwm_priv *priv,
 		}
 	}
 
-	priv->num_leds++;
 	return 0;
 }
 
 static int led_pwm_create_fwnode(struct device *dev, struct led_pwm_priv *priv)
 {
 	struct led_pwm led;
-	int ret;
+	int ret, i = 0;
 
 	device_for_each_child_node_scoped(dev, fwnode) {
 		memset(&led, 0, sizeof(led));
@@ -193,7 +193,7 @@ static int led_pwm_create_fwnode(struct device *dev, struct led_pwm_priv *priv)
 
 		led.default_state = led_init_default_state_get(fwnode);
 
-		ret = led_pwm_add(dev, priv, &led, fwnode);
+		ret = led_pwm_add(dev, priv, i++, &led, fwnode);
 		if (ret)
 			return ret;
 	}
@@ -216,6 +216,8 @@ static int led_pwm_probe(struct platform_device *pdev)
 			    GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
+
+	priv->num_leds = count;
 
 	ret = led_pwm_create_fwnode(&pdev->dev, priv);
 
