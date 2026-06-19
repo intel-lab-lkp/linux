@@ -1064,9 +1064,8 @@ static int adis16550_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	st = iio_priv(indio_dev);
-	st->info = spi_get_device_match_data(spi);
-	if (!st->info)
-		return -EINVAL;
+	st->info = &adis16550_chip_info;
+
 	adis = &st->adis;
 	indio_dev->name = st->info->name;
 	indio_dev->channels = st->info->channels;
@@ -1117,13 +1116,13 @@ static int adis16550_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id adis16550_id[] = {
-	{ "adis16550",  (kernel_ulong_t)&adis16550_chip_info},
+	{ .name = "adis16550" },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, adis16550_id);
 
 static const struct of_device_id adis16550_of_match[] = {
-	{ .compatible = "adi,adis16550", .data = &adis16550_chip_info },
+	{ .compatible = "adi,adis16550" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, adis16550_of_match);
