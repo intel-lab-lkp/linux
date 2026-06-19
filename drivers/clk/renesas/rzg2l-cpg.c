@@ -119,6 +119,11 @@
 #define RZG3L_PLL7_FSTD_DIV_MR_MIN	(8 * MEGA)
 #define RZG3L_PLL7_FSTD_DIV_MR_MAX	(16 * MEGA)
 
+#define CPG_PLLDSI_SMUX_LVDS_DUTY_NUM		4
+#define CPG_PLLDSI_SMUX_LVDS_DUTY_DEN		7
+#define CPG_PLLDSI_SMUX_DSI_RGB_DUTY_NUM	1
+#define CPG_PLLDSI_SMUX_DSI_RGB_DUTY_DEN	2
+
 /**
  * struct clk_hw_data - clock hardware data
  * @hw: clock hw
@@ -739,6 +744,20 @@ struct dsi_div_hw_data {
 };
 
 #define to_dsi_div_hw_data(_hw)	container_of(_hw, struct dsi_div_hw_data, hw)
+
+/**
+ * struct rzg3l_dsi_mux_clk - PLL DSI MUX clock
+ *
+ * @priv: CPG private data
+ * @mux: mux clk
+ */
+struct rzg3l_dsi_mux_clk {
+	struct rzg2l_cpg_priv *priv;
+	struct clk_mux mux;
+};
+
+#define to_plldsi_clk_mux(_mux) \
+	container_of(_mux, struct rzg3l_dsi_mux_clk, mux)
 
 static unsigned long rzg2l_cpg_dsi_div_recalc_rate(struct clk_hw *hw,
 						   unsigned long parent_rate)
@@ -1401,6 +1420,116 @@ static const struct clk_ops rzg3l_cpg_pll_ops = {
 	.recalc_rate = rzg3s_cpg_pll_clk_recalc_rate,
 };
 
+static u8 rzg3l_cpg_dsi_smux_get_parent(struct clk_hw *hw)
+{
+	return clk_mux_ops.get_parent(hw);
+}
+
+static int rzg3l_cpg_dsi_smux_set_parent(struct clk_hw *hw, u8 index)
+{
+	return clk_mux_ops.set_parent(hw, index);
+}
+
+static int rzg3l_cpg_dsi_smux_determine_rate(struct clk_hw *hw,
+					     struct clk_rate_request *req)
+{
+	req->best_parent_rate = req->rate;
+
+	return 0;
+}
+
+static int rzg3l_cpg_dsi_smux_get_duty_cycle(struct clk_hw *hw,
+					     struct clk_duty *duty)
+{
+	u8 parent = clk_mux_ops.get_parent(hw);
+
+	/*
+	 * CDIV7_DSIx_CLK - LVDS path (div7) - duty 4/7.
+	 * CSDIV_DSIx - DSI/RGB path (csdiv) - duty 1/2.
+	 */
+	if (parent == 0) {
+		duty->num = CPG_PLLDSI_SMUX_LVDS_DUTY_NUM;
+		duty->den = CPG_PLLDSI_SMUX_LVDS_DUTY_DEN;
+	} else {
+		duty->num = CPG_PLLDSI_SMUX_DSI_RGB_DUTY_NUM;
+		duty->den = CPG_PLLDSI_SMUX_DSI_RGB_DUTY_DEN;
+	}
+
+	return 0;
+}
+
+static int rzg3l_cpg_dsi_smux_set_duty_cycle(struct clk_hw *hw,
+					     struct clk_duty *duty)
+{
+	struct clk_hw *parent_hw;
+	u8 parent_idx;
+
+	/*
+	 * Select parent based on requested duty cycle:
+	 * - If duty > 50% (num/den > 1/2), select LVDS path (parent 0)
+	 * - Otherwise, select DSI/RGB path (parent 1)
+	 */
+	if (duty->num * CPG_PLLDSI_SMUX_DSI_RGB_DUTY_DEN >
+	    duty->den * CPG_PLLDSI_SMUX_DSI_RGB_DUTY_NUM)
+		parent_idx = 0;
+	else
+		parent_idx = 1;
+
+	if (parent_idx >= clk_hw_get_num_parents(hw))
+		return -EINVAL;
+
+	parent_hw = clk_hw_get_parent_by_index(hw, parent_idx);
+	if (!parent_hw)
+		return -EINVAL;
+
+	return clk_hw_set_parent(hw, parent_hw);
+}
+
+static const struct clk_ops rzg3l_cpg_dsi_smux_ops = {
+	.determine_rate = rzg3l_cpg_dsi_smux_determine_rate,
+	.get_parent = rzg3l_cpg_dsi_smux_get_parent,
+	.set_parent = rzg3l_cpg_dsi_smux_set_parent,
+	.get_duty_cycle = rzg3l_cpg_dsi_smux_get_duty_cycle,
+	.set_duty_cycle = rzg3l_cpg_dsi_smux_set_duty_cycle,
+};
+
+static struct clk * __init
+rzg3l_cpg_dsi_mux_clk_register(const struct cpg_core_clk *core,
+			       struct rzg2l_cpg_priv *priv)
+{
+	struct rzg3l_dsi_mux_clk *clk_hw_data;
+	struct clk_init_data init;
+	struct clk_hw *clk_hw;
+	int ret;
+
+	clk_hw_data = devm_kzalloc(priv->dev, sizeof(*clk_hw_data), GFP_KERNEL);
+	if (!clk_hw_data)
+		return ERR_PTR(-ENOMEM);
+
+	clk_hw_data->priv = priv;
+
+	init.name = core->name;
+	init.ops = &rzg3l_cpg_dsi_smux_ops;
+	init.flags = core->flag | CLK_SET_RATE_PARENT;
+	init.parent_names = core->parent_names;
+	init.num_parents = core->num_parents;
+
+	clk_hw_data->mux.reg = priv->base + GET_REG_OFFSET(core->conf);
+	clk_hw_data->mux.shift = GET_SHIFT(core->conf);
+	clk_hw_data->mux.mask = clk_div_mask(GET_WIDTH(core->conf));
+	clk_hw_data->mux.flags = core->mux_flags;
+	clk_hw_data->mux.lock = &priv->rmw_lock;
+
+	clk_hw = &clk_hw_data->mux.hw;
+	clk_hw->init = &init;
+
+	ret = devm_clk_hw_register(priv->dev, clk_hw);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return clk_hw->clk;
+}
+
 static inline bool
 rzg3l_dsi_compute_pll_parameters(struct rzg3l_plldsi_parameters *pars,
 				 struct rzg3l_plldsi_parameters *p,
@@ -1706,6 +1835,9 @@ rzg2l_cpg_register_core_clk(const struct cpg_core_clk *core,
 		break;
 	case CLK_TYPE_G3L_PLLDSI:
 		clk = rzg2l_cpg_pll_clk_register(core, priv, &rzg3l_cpg_plldsi_ops);
+		break;
+	case CLK_TYPE_G3L_DSI_MUX:
+		clk = rzg3l_cpg_dsi_mux_clk_register(core, priv);
 		break;
 	default:
 		goto fail;

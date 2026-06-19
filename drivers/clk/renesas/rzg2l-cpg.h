@@ -148,6 +148,9 @@ enum clk_types {
 
 	/* Clock for G3L DSI divider */
 	CLK_TYPE_G3L_DSI_DIV,
+
+	/* Clock for G3L DSI clock source selector */
+	CLK_TYPE_G3L_DSI_MUX,
 };
 
 #define DEF_TYPE(_name, _id, _type...) \
@@ -201,6 +204,12 @@ enum clk_types {
 		 .parent_names = _parent_names, \
 		 .num_parents = ARRAY_SIZE(_parent_names), \
 		 .mux_flags = CLK_MUX_READ_ONLY)
+#define DEF_G3L_SEL_DSI_MUX(_name, _id, _conf, _parent_names) \
+	DEF_TYPE(_name, _id, CLK_TYPE_G3L_DSI_MUX, .conf = _conf, \
+		 .parent_names = _parent_names, \
+		 .num_parents = ARRAY_SIZE(_parent_names), \
+		 .flag = CLK_SET_RATE_PARENT, \
+		 .mux_flags = CLK_MUX_HIWORD_MASK)
 #define DEF_SD_MUX(_name, _id, _conf, _sconf, _parent_names, _mtable, _clk_flags, _notifier) \
 	DEF_TYPE(_name, _id, CLK_TYPE_SD_MUX, .conf = _conf, .sconf = _sconf, \
 		 .parent_names = _parent_names, \
