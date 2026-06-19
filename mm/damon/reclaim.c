@@ -481,6 +481,10 @@ static int __init damon_reclaim_init(void)
 out:
 	if (err && enabled)
 		enabled = false;
+
+	/* Prevent potenial memory leakage */
+	if (err && ctx)
+		damon_destroy_ctx(ctx);
 	return err;
 }
 
