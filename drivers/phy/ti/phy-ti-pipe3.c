@@ -500,7 +500,10 @@ static int ti_pipe3_init(struct phy *x)
 	u32 val;
 	int ret = 0;
 
-	ti_pipe3_enable_clocks(phy);
+	ret = ti_pipe3_enable_clocks(phy);
+	if (ret)
+		return ret;
+
 	/*
 	 * Set pcie_pcs register to 0x96 for proper functioning of phy
 	 * as recommended in AM572x TRM SPRUHZ6, section 18.5.2.2, table
