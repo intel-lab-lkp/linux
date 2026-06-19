@@ -106,6 +106,20 @@ properties:
       This array describes the current configuration of the excitation current
       sources or the single matched current for all sources.
 
+  burn-out-current-microamp:
+    description:
+      Burn-out current sources provide current to the channel's input pins for
+      open-circuit or short-circuit detection.
+
+  burn-out-current-polarity:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      Burn-out current sources provide current to the channel's input pins for
+      open-circuit or short-circuit detection.
+    enum:
+      - pull-up
+      - pull-down
+
 anyOf:
   - oneOf:
       - required:
