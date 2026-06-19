@@ -41,7 +41,7 @@
 #define ATH9K_PWRTBL_11NG_HT_SHIFT      12
 
 
-static u16 bits_per_symbol[][2] = {
+static const u16 bits_per_symbol[][2] = {
 	/* 20MHz 40MHz */
 	{    26,   54 },     /*  0: BPSK */
 	{    52,  108 },     /*  1: QPSK 1/2 */
