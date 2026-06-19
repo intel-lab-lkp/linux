@@ -73,6 +73,16 @@ properties:
       device design and can interact with other characteristics such as
       settling time.
 
+  reference-source:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    maxItems: 2
+    minItems: 1
+    description:
+      Indicates the voltage reference source or sources for this channel.
+
+      This array describes either a single reference source or a positive and
+      negative reference sources.
+
 anyOf:
   - oneOf:
       - required:
