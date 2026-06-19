@@ -943,6 +943,8 @@ M:	Tze Yee Ng <tze.yee.ng@altera.com>
 L:	linux-hwmon@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/hwmon/altr,stratix10-hwmon.yaml
+F:	Documentation/hwmon/stratix10-hwmon.rst
+F:	drivers/hwmon/stratix10-hwmon.c
 
 ALTERA MAILBOX DRIVER
 M:	Tien Sung Ang <tiensung.ang@altera.com>

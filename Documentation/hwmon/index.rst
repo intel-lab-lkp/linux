@@ -244,6 +244,7 @@ Hardware Monitoring Kernel Drivers
    sparx5-temp
    spd5118
    stpddc60
+   stratix10-hwmon
    surface_fan
    sy7636a-hwmon
    tc654
