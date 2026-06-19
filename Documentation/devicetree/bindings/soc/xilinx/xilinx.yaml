@@ -23,6 +23,7 @@ properties:
               - digilent,zynq-zybo
               - digilent,zynq-zybo-z7
               - ebang,ebaz4205
+              - myir,mys-7z020-v2
               - myir,zynq-zturn-v5
               - myir,zynq-zturn
               - xlnx,zynq-cc108
