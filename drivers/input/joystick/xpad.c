@@ -72,6 +72,9 @@
 #define PKT_XBE2_FW_5_11    4
 
 #define FLAG_DELAY_INIT BIT(0)
+#define FLAG_NO_LED	BIT(1)
+#define FLAG_NO_RUMBLE	BIT(2)
+#define FLAG_NO_LED_RUMBLE	(FLAG_NO_LED | FLAG_NO_RUMBLE)
 
 static bool dpad_to_buttons;
 module_param(dpad_to_buttons, bool, S_IRUGO);
@@ -292,6 +295,12 @@ static const struct xpad_device {
 	{ 0x1689, 0xfd00, "Razer Onza Tournament Edition", 0, XTYPE_XBOX360 },
 	{ 0x1689, 0xfd01, "Razer Onza Classic Edition", 0, XTYPE_XBOX360 },
 	{ 0x1689, 0xfe00, "Razer Sabertooth", 0, XTYPE_XBOX360 },
+	{ 0x16d0, 0x1103, "Azeron Cyro", 0, XTYPE_XBOX360, FLAG_NO_LED_RUMBLE },
+	{ 0x16d0, 0x113c, "Azeron Cyborg", 0, XTYPE_XBOX360, FLAG_NO_LED_RUMBLE },
+	{ 0x16d0, 0x1192, "Azeron Classic/Compact", 0, XTYPE_XBOX360, FLAG_NO_LED_RUMBLE },
+	{ 0x16d0, 0x1212, "Azeron Cyro Lefty", 0, XTYPE_XBOX360, FLAG_NO_LED_RUMBLE },
+	{ 0x16d0, 0x12f7, "Azeron Cyborg II", 0, XTYPE_XBOX360, FLAG_NO_LED_RUMBLE },
+	{ 0x16d0, 0x13ea, "Azeron Keyzen", 0, XTYPE_XBOX360, FLAG_NO_LED_RUMBLE },
 	{ 0x17ef, 0x6182, "Lenovo Legion Controller for Windows", 0, XTYPE_XBOX360 },
 	{ 0x1949, 0x041a, "Amazon Game Controller", 0, XTYPE_XBOX360 },
 	{ 0x1a86, 0xe310, "Legion Go S", 0, XTYPE_XBOX360 },
@@ -533,6 +542,7 @@ static const struct usb_device_id xpad_table[] = {
 	XPAD_XBOX360_VENDOR(0x15e4),		/* Numark Xbox 360 controllers */
 	XPAD_XBOX360_VENDOR(0x162e),		/* Joytech Xbox 360 controllers */
 	XPAD_XBOX360_VENDOR(0x1689),		/* Razer Onza */
+	XPAD_XBOX360_VENDOR(0x16d0),		/* Azeron controllers */
 	XPAD_XBOX360_VENDOR(0x17ef),		/* Lenovo */
 	XPAD_XBOX360_VENDOR(0x1949),		/* Amazon controllers */
 	XPAD_XBOX360_VENDOR(0x1a86),		/* Nanjing Qinheng Microelectronics (WCH) */
@@ -776,6 +786,8 @@ struct usb_xpad {
 	const char *name;		/* name of the device */
 	struct work_struct work;	/* init/remove device from callback */
 	time64_t mode_btn_down_ts;
+	bool no_led;			/* device stalls on LED packets */
+	bool no_rumble;			/* device stalls on rumble packets */
 	bool delay_init;		/* init packets should be delayed */
 	bool delayed_init_done;
 };
@@ -1615,6 +1627,9 @@ static int xpad_init_ff(struct usb_xpad *xpad)
 	if (xpad->xtype == XTYPE_UNKNOWN)
 		return 0;
 
+	if (xpad->no_rumble)
+		return 0;
+
 	input_set_capability(xpad->dev, EV_FF, FF_RUMBLE);
 
 	return input_ff_create_memless(xpad->dev, NULL, xpad_play_effect);
@@ -1718,6 +1733,9 @@ static int xpad_led_probe(struct usb_xpad *xpad)
 	struct xpad_led *led;
 	struct led_classdev *led_cdev;
 	int error;
+
+	if (xpad->no_led)
+		return 0;
 
 	if (xpad->xtype != XTYPE_XBOX360 && xpad->xtype != XTYPE_XBOX360W)
 		return 0;
@@ -2082,6 +2100,10 @@ static int xpad_probe(struct usb_interface *intf, const struct usb_device_id *id
 	xpad->name = xpad_device[i].name;
 	if (xpad_device[i].flags & FLAG_DELAY_INIT)
 		xpad->delay_init = true;
+	if (xpad_device[i].flags & FLAG_NO_LED)
+		xpad->no_led = true;
+	if (xpad_device[i].flags & FLAG_NO_RUMBLE)
+		xpad->no_rumble = true;
 
 	xpad->packet_type = PKT_XB;
 	INIT_WORK(&xpad->work, xpad_presence_work);
