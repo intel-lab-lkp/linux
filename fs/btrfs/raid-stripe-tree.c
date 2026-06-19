@@ -1137,6 +1137,7 @@ int btrfs_rst_raid56_read(struct btrfs_bio *orig,
 		bioc->logical - (full + (u64)target * BTRFS_STRIPE_LEN);
 	const u64 len = orig->bio.bi_iter.bi_size;
 	const int order = get_order(len);
+	const bool commit_root = btrfs_is_data_reloc_root(orig->inode->root);
 	struct btrfs_io_stripe pstripe = { 0 };
 	struct folio **folios = NULL;
 	struct bvec_iter iter;
@@ -1159,6 +1160,7 @@ int btrfs_rst_raid56_read(struct btrfs_bio *orig,
 		u64 dlen = len;
 
 		dstripe.dev = bioc->stripes[target].dev;
+		dstripe.rst_search_commit_root = commit_root;
 		ret = btrfs_get_raid_extent_offset(fs_info, bioc->logical, &dlen,
 						   bioc->map_type, 0, &dstripe);
 		if (ret)
@@ -1193,6 +1195,7 @@ int btrfs_rst_raid56_read(struct btrfs_bio *orig,
 			continue;
 
 		s.dev = bioc->stripes[i].dev;
+		s.rst_search_commit_root = commit_root;
 		ret = btrfs_get_raid_extent_offset(fs_info, slogical, &slen,
 						   bioc->map_type, 0, &s);
 		if (ret == -ENODATA) {
@@ -1223,6 +1226,7 @@ int btrfs_rst_raid56_read(struct btrfs_bio *orig,
 	}
 
 	pstripe.dev = bioc->stripes[nr_data].dev;
+	pstripe.rst_search_commit_root = commit_root;
 	ret = btrfs_get_parity_extent(fs_info, full + off_in_stripe, &plen,
 				      bioc->map_type, &pstripe);
 	if (ret)

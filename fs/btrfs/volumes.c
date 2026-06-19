@@ -7274,6 +7274,12 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 	bioc->map_type = map->type;
 	bioc->use_rst = io_geom.use_rst;
 
+	if (io_geom.use_rst) {
+		for (int i = 0; i < num_alloc_stripes; i++)
+			bioc->stripes[i].rst_search_commit_root =
+				smap && smap->rst_search_commit_root;
+	}
+
 	/*
 	 * For RAID56 full map, we need to make sure the stripes[] follows the
 	 * rule that data stripes are all ordered, then followed with P and Q
