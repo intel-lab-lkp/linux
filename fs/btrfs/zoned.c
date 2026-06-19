@@ -1855,6 +1855,72 @@ static int btrfs_load_block_group_raid10(struct btrfs_block_group *bg,
 	return 0;
 }
 
+static int btrfs_load_block_group_raid56(struct btrfs_block_group *bg,
+					 struct btrfs_chunk_map *map,
+					 struct zone_info *zone_info,
+					 unsigned long *active,
+					 u64 last_alloc)
+{
+	struct btrfs_fs_info *fs_info = bg->fs_info;
+	const int nr_parity = btrfs_nr_parity_stripes(map->type);
+	const int nr_data = map->num_stripes - nr_parity;
+	bool has_conventional = false;
+	u64 wp_sum = 0;
+
+	if (!(map->type & BTRFS_BLOCK_GROUP_DATA)) {
+		btrfs_err(fs_info, "zoned: only data profile is supported for %s",
+			  btrfs_bg_type_to_raid_name(map->type));
+		return -EINVAL;
+	}
+
+	if (!fs_info->stripe_root) {
+		btrfs_err(fs_info, "zoned: data %s needs raid-stripe-tree",
+			  btrfs_bg_type_to_raid_name(map->type));
+		return -EINVAL;
+	}
+
+	for (int i = 0; i < map->num_stripes; i++) {
+		if (zone_info[i].alloc_offset == WP_MISSING_DEV)
+			continue;
+		if (zone_info[i].alloc_offset == WP_CONVENTIONAL) {
+			has_conventional = true;
+			continue;
+		}
+		wp_sum += zone_info[i].alloc_offset;
+	}
+
+	if (has_conventional) {
+		bg->alloc_offset = last_alloc;
+	} else {
+		u64 row_bytes = (u64)map->num_stripes << BTRFS_STRIPE_LEN_SHIFT;
+		u64 nr_rows = div64_u64(wp_sum + row_bytes - 1, row_bytes);
+
+		bg->alloc_offset = wp_sum -
+			(((u64)nr_rows * nr_parity) << BTRFS_STRIPE_LEN_SHIFT);
+	}
+
+	for (int i = 0; i < nr_data; i++) {
+		if (zone_info[i].alloc_offset == WP_MISSING_DEV)
+			continue;
+		bg->zone_capacity += zone_info[i].capacity;
+	}
+
+	for (int i = 0; i < map->num_stripes; i++) {
+		if (!map->stripes[i].dev->bdev)
+			continue;
+		if (!btrfs_dev_is_sequential(map->stripes[i].dev,
+					     map->stripes[i].physical))
+			continue;
+		if (zone_info[i].alloc_offset != 0 && test_bit(i, active)) {
+			set_bit(BLOCK_GROUP_FLAG_ZONE_IS_ACTIVE, &bg->runtime_flags);
+			break;
+		}
+	}
+
+	return 0;
+}
+
+
 EXPORT_FOR_TESTS
 int btrfs_load_block_group_by_raid_type(struct btrfs_block_group *bg,
 					struct btrfs_chunk_map *map,
@@ -1886,6 +1952,8 @@ int btrfs_load_block_group_by_raid_type(struct btrfs_block_group *bg,
 		break;
 	case BTRFS_BLOCK_GROUP_RAID5:
 	case BTRFS_BLOCK_GROUP_RAID6:
+		ret = btrfs_load_block_group_raid56(bg, map, zone_info, active, last_alloc);
+		break;
 	default:
 		btrfs_err(fs_info, "zoned: profile %s not yet supported",
 			  btrfs_bg_type_to_raid_name(map->type));
