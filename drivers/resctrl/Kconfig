@@ -54,3 +54,7 @@ config RISCV_CBQRI_DRIVER_DEBUG
 	  new platform; otherwise leave disabled to avoid log noise.
 
 endif
+
+config RISCV_CBQRI_RESCTRL_FS
+	bool
+	default y if RISCV_CBQRI_DRIVER && RESCTRL_FS
