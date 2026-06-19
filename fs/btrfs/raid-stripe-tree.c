@@ -12,6 +12,7 @@
 #include "disk-io.h"
 #include "raid-stripe-tree.h"
 #include "volumes.h"
+#include "raid56.h"
 #include "print-tree.h"
 #include "zoned.h"
 #include "ordered-data.h"
@@ -28,13 +29,14 @@ static int btrfs_partially_delete_raid_extent(struct btrfs_trans_handle *trans,
 	size_t item_size;
 	struct btrfs_key newkey = {
 		.objectid = oldkey->objectid + frontpad,
-		.type = BTRFS_RAID_STRIPE_KEY,
+		.type = oldkey->type,
 		.offset = newlen,
 	};
 	int ret;
 
 	ASSERT(newlen > 0);
-	ASSERT(oldkey->type == BTRFS_RAID_STRIPE_KEY);
+	ASSERT(oldkey->type == BTRFS_RAID_STRIPE_KEY ||
+	       oldkey->type == BTRFS_RAID_STRIPE_PARITY_KEY);
 
 	leaf = path->nodes[0];
 	slot = path->slots[0];
@@ -65,7 +67,8 @@ static int btrfs_partially_delete_raid_extent(struct btrfs_trans_handle *trans,
 	return btrfs_insert_item(trans, stripe_root, &newkey, newitem, item_size);
 }
 
-int btrfs_delete_raid_extent(struct btrfs_trans_handle *trans, u64 start, u64 length)
+static int __btrfs_delete_raid_extent(struct btrfs_trans_handle *trans,
+				      u64 start, u64 length, u8 type)
 {
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct btrfs_root *stripe_root = fs_info->stripe_root;
@@ -100,7 +103,7 @@ int btrfs_delete_raid_extent(struct btrfs_trans_handle *trans, u64 start, u64 le
 
 	while (1) {
 		key.objectid = start;
-		key.type = BTRFS_RAID_STRIPE_KEY;
+		key.type = type;
 		key.offset = (u64)-1;
 
 		ret = btrfs_search_slot(trans, stripe_root, &key, path, -1, 1);
@@ -142,7 +145,7 @@ int btrfs_delete_raid_extent(struct btrfs_trans_handle *trans, u64 start, u64 le
 		if (found_start > start) {
 			if (slot == 0) {
 				ret = btrfs_previous_item(stripe_root, path, 0,
-							  BTRFS_RAID_STRIPE_KEY);
+							  type);
 				if (ret) {
 					if (ret > 0)
 						ret = -ENOENT;
@@ -163,7 +166,7 @@ int btrfs_delete_raid_extent(struct btrfs_trans_handle *trans, u64 start, u64 le
 			}
 		}
 
-		if (key.type != BTRFS_RAID_STRIPE_KEY)
+		if (key.type != type)
 			break;
 
 		/* That stripe ends before we start, we're done. */
@@ -191,7 +194,7 @@ int btrfs_delete_raid_extent(struct btrfs_trans_handle *trans, u64 start, u64 le
 			struct btrfs_stripe_extent *extent;
 			struct btrfs_key newkey = {
 				.objectid = end,
-				.type = BTRFS_RAID_STRIPE_KEY,
+				.type = type,
 				.offset = diff_end,
 			};
 
@@ -296,6 +299,63 @@ int btrfs_delete_raid_extent(struct btrfs_trans_handle *trans, u64 start, u64 le
 
 	return ret;
 }
+
+int btrfs_delete_raid_extent(struct btrfs_trans_handle *trans, u64 start, u64 length)
+{
+	struct btrfs_chunk_map *map;
+	bool has_parity = false;
+	int ret;
+
+	map = btrfs_find_chunk_map(trans->fs_info, start, length);
+	has_parity = map && btrfs_nr_parity_stripes(map->type);
+
+	if (has_parity) {
+		const u64 full_stripe = (u64)nr_data_stripes(map) * BTRFS_STRIPE_LEN;
+		u64 chunk_start = map->start;
+		u64 rel_start = start - chunk_start;
+		u64 rel_end = start + length - chunk_start;
+		u64 aligned_start, aligned_end;
+
+		btrfs_free_chunk_map(map);
+
+		/*
+		 * On a parity profile, freeing only part of a full stripe (a
+		 * hole punch, or freeing one of several extents that share a
+		 * stripe) must NOT touch the stripe tree: the on-disk parity
+		 * was computed over all of the stripe's data columns, so
+		 * trimming the parity item or dropping a freed column's data
+		 * item would make a degraded read of the *surviving* columns
+		 * reconstruct garbage. Instead retain both the data and parity
+		 * items and only delete them once the whole stripe is free.
+		 *
+		 * Restrict the deletion to the full stripes entirely covered by
+		 * [start, start + length); the leftover items of partially freed
+		 * stripes are reclaimed when the block group is removed (after
+		 * relocation rewrites the surviving data as fresh full stripes).
+		 */
+		aligned_start = roundup(rel_start, full_stripe);
+		aligned_end = rounddown(rel_end, full_stripe);
+		if (aligned_start >= aligned_end)
+			return 0;
+
+		start = chunk_start + aligned_start;
+		length = aligned_end - aligned_start;
+
+		ret = __btrfs_delete_raid_extent(trans, start, length,
+						 BTRFS_RAID_STRIPE_PARITY_KEY);
+		if (ret)
+			return ret;
+
+		return __btrfs_delete_raid_extent(trans, start, length,
+						  BTRFS_RAID_STRIPE_KEY);
+	}
+
+	btrfs_free_chunk_map(map);
+
+	return __btrfs_delete_raid_extent(trans, start, length,
+					  BTRFS_RAID_STRIPE_KEY);
+}
+
 
 static int update_raid_extent_item(struct btrfs_trans_handle *trans,
 				   struct btrfs_key *key,

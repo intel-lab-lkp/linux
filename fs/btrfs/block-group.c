@@ -21,6 +21,7 @@
 #include "fs.h"
 #include "accessors.h"
 #include "extent-tree.h"
+#include "raid-stripe-tree.h"
 
 static struct kmem_cache *block_group_cache;
 static struct kmem_cache *free_space_ctl_cache;
@@ -1166,6 +1167,20 @@ int btrfs_remove_block_group(struct btrfs_trans_handle *trans,
 	btrfs_free_excluded_extents(block_group);
 	btrfs_free_ref_tree_range(fs_info, block_group->start,
 				  block_group->length);
+
+	/*
+	 * On RAID stripe-tree filesystems a partial-stripe free deliberately
+	 * keeps the stripe's data and parity items around (so degraded reads of
+	 * the surviving columns still reconstruct correctly). The block group
+	 * is now empty and about to go away, so this is where those retained
+	 * items are finally reclaimed.
+	 */
+	ret = btrfs_delete_raid_extent(trans, block_group->start,
+				       block_group->length);
+	if (ret) {
+		btrfs_abort_transaction(trans, ret);
+		goto out;
+	}
 
 	index = btrfs_bg_flags_to_raid_index(block_group->flags);
 
