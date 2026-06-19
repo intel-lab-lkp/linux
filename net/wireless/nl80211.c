@@ -22920,6 +22920,11 @@ static int nl80211_netlink_notify(struct notifier_block * nb,
 	if (state != NETLINK_URELEASE || notify->protocol != NETLINK_GENERIC)
 		return NOTIFY_DONE;
 
+	/*
+	 * Keep disconnect_wk scheduling ordered with NETDEV_GOING_DOWN's
+	 * cancel_work_sync() and NETDEV_UNREGISTER's wdev list removal.
+	 */
+	rtnl_lock();
 	rcu_read_lock();
 
 	list_for_each_entry_rcu(rdev, &cfg80211_rdev_list, list) {
@@ -22961,6 +22966,7 @@ static int nl80211_netlink_notify(struct notifier_block * nb,
 	}
 
 	rcu_read_unlock();
+	rtnl_unlock();
 
 	/*
 	 * It is possible that the user space process that is controlling the
