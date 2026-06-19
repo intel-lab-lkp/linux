@@ -247,7 +247,9 @@ void jffs2_evict_inode (struct inode *inode)
 		  __func__, inode->i_ino, inode->i_mode);
 	truncate_inode_pages_final(&inode->i_data);
 	clear_inode(inode);
+	mutex_lock(&c->alloc_sem);
 	jffs2_do_clear_inode(c, f);
+	mutex_unlock(&c->alloc_sem);
 }
 
 struct inode *jffs2_iget(struct super_block *sb, unsigned long ino)
