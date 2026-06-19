@@ -364,49 +364,12 @@ static void zynqmp_r5_rproc_kick(struct rproc *rproc, int vqid)
 static int zynqmp_r5_rproc_start(struct rproc *rproc)
 {
 	struct zynqmp_r5_core *r5_core = rproc->priv;
-	enum rpu_boot_mem bootmem;
 	int ret;
 
-	/*
-	 * The exception vector pointers (EVP) refer to the base-address of
-	 * exception vectors (for reset, IRQ, FIQ, etc). The reset-vector
-	 * starts at the base-address and subsequent vectors are on 4-byte
-	 * boundaries.
-	 *
-	 * Exception vectors can start either from 0x0000_0000 (LOVEC) or
-	 * from 0xFFFF_0000 (HIVEC) which is mapped in the OCM (On-Chip Memory)
-	 *
-	 * Usually firmware will put Exception vectors at LOVEC.
-	 *
-	 * It is not recommend that you change the exception vector.
-	 * Changing the EVP to HIVEC will result in increased interrupt latency
-	 * and jitter. Also, if the OCM is secured and the Cortex-R5F processor
-	 * is non-secured, then the Cortex-R5F processor cannot access the
-	 * HIVEC exception vectors in the OCM.
-	 */
-	bootmem = (rproc->bootaddr >= 0xFFFC0000) ?
-		   PM_RPU_BOOTMEM_HIVEC : PM_RPU_BOOTMEM_LOVEC;
-
-	dev_dbg(r5_core->dev, "RPU boot addr 0x%llx from %s.", rproc->bootaddr,
-		bootmem == PM_RPU_BOOTMEM_HIVEC ? "OCM" : "TCM");
-
-	/* Request node before starting RPU core if new version of API is supported */
-	if (zynqmp_pm_feature(PM_REQUEST_NODE) > 1) {
-		ret = zynqmp_pm_request_node(r5_core->pm_domain_id,
-					     ZYNQMP_PM_CAPABILITY_ACCESS, 0,
-					     ZYNQMP_PM_REQUEST_ACK_BLOCKING);
-		if (ret < 0) {
-			dev_err(r5_core->dev, "failed to request 0x%x",
-				r5_core->pm_domain_id);
-			return ret;
-		}
-	}
-
-	ret = zynqmp_pm_request_wake(r5_core->pm_domain_id, 1,
-				     bootmem, ZYNQMP_PM_REQUEST_ACK_NO);
+	ret = zynqmp_pm_start_rpu(r5_core->pm_domain_id, rproc->bootaddr);
 	if (ret)
-		dev_err(r5_core->dev,
-			"failed to start RPU = 0x%x\n", r5_core->pm_domain_id);
+		dev_err(&rproc->dev, "failed to start RPU\n");
+
 	return ret;
 }
 
@@ -423,30 +386,9 @@ static int zynqmp_r5_rproc_stop(struct rproc *rproc)
 	struct zynqmp_r5_core *r5_core = rproc->priv;
 	int ret;
 
-	/* Use release node API to stop core if new version of API is supported */
-	if (zynqmp_pm_feature(PM_RELEASE_NODE) > 1) {
-		ret = zynqmp_pm_release_node(r5_core->pm_domain_id);
-		if (ret)
-			dev_err(r5_core->dev, "failed to stop remoteproc RPU %d\n", ret);
-		return ret;
-	}
-
-	/*
-	 * Check expected version of EEMI call before calling it. This avoids
-	 * any error or warning prints from firmware as it is expected that fw
-	 * doesn't support it.
-	 */
-	if (zynqmp_pm_feature(PM_FORCE_POWERDOWN) != 1) {
-		dev_dbg(r5_core->dev, "EEMI interface %d ver 1 not supported\n",
-			PM_FORCE_POWERDOWN);
-		return -EOPNOTSUPP;
-	}
-
-	/* maintain force pwr down for backward compatibility */
-	ret = zynqmp_pm_force_pwrdwn(r5_core->pm_domain_id,
-				     ZYNQMP_PM_REQUEST_ACK_BLOCKING);
+	ret = zynqmp_pm_stop_rpu(r5_core->pm_domain_id);
 	if (ret)
-		dev_err(r5_core->dev, "core force power down failed\n");
+		dev_err(&rproc->dev, "failed to stop RPU\n");
 
 	return ret;
 }
