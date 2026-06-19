@@ -14,7 +14,8 @@
 #define BTRFS_RST_SUPP_BLOCK_GROUP_MASK    (BTRFS_BLOCK_GROUP_DUP |		\
 					    BTRFS_BLOCK_GROUP_RAID1_MASK |	\
 					    BTRFS_BLOCK_GROUP_RAID0 |		\
-					    BTRFS_BLOCK_GROUP_RAID10)
+					    BTRFS_BLOCK_GROUP_RAID10 |		\
+					    BTRFS_BLOCK_GROUP_RAID56_MASK)
 
 struct btrfs_io_context;
 struct btrfs_io_stripe;
