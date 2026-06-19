@@ -62,6 +62,10 @@ properties:
     $ref: /schemas/fpga/intel,stratix10-soc-fpga-mgr.yaml
     description: Optional child node for fpga manager to perform fabric configuration.
 
+  hwmon:
+    $ref: /schemas/hwmon/altr,stratix10-hwmon.yaml
+    description: Optional child node for Stratix 10 hardware monitor.
+
 required:
   - compatible
   - method
