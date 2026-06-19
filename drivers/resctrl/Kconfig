@@ -53,6 +53,21 @@ config RISCV_CBQRI_DRIVER_DEBUG
 	  per-controller registration steps.  Useful when bringing up a
 	  new platform; otherwise leave disabled to avoid log noise.
 
+config RISCV_CBQRI_CAPACITY
+	bool "RISC-V CBQRI cache capacity-allocation controller"
+	depends on OF
+	help
+	  Device-tree platform driver for a RISC-V CBQRI capacity controller
+	  that backs a CPU cache, matching the generic
+	  "riscv,cbqri-capacity-controller" compatible. The controller node
+	  carries a phandle to the cache it governs; the driver derives the
+	  cache level and the set of harts that share it from the kernel
+	  cache topology and registers it as the resctrl cache-allocation
+	  resource.
+
+	  Say N unless your SoC describes a CBQRI capacity controller in its
+	  device tree.
+
 endif
 
 config RISCV_CBQRI_RESCTRL_FS
