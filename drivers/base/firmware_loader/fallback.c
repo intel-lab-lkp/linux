@@ -8,6 +8,7 @@
 #include <linux/sysctl.h>
 #include <linux/module.h>
 
+#include "../base.h"
 #include "fallback.h"
 #include "firmware.h"
 
@@ -75,6 +76,7 @@ static int fw_load_sysfs_fallback(struct fw_sysfs *fw_sysfs, long timeout)
 {
 	int retval = 0;
 	struct device *f_dev = &fw_sysfs->dev;
+	struct device *parent = f_dev->parent;
 	struct fw_priv *fw_priv = fw_sysfs->fw_priv;
 
 	/* fall back on userspace loading */
@@ -83,7 +85,23 @@ static int fw_load_sysfs_fallback(struct fw_sysfs *fw_sysfs, long timeout)
 
 	dev_set_uevent_suppress(f_dev, true);
 
+	/*
+	 * The fallback device is added as a child of the requesting device,
+	 * which can be removed concurrently. Hold the requester's lock across
+	 * device_add() to serialize against its removal, and skip the add if
+	 * the requester is already dead.
+	 */
+	if (parent) {
+		device_lock(parent);
+		if (parent->p->dead) {
+			device_unlock(parent);
+			retval = -ENODEV;
+			goto err_put_dev;
+		}
+	}
 	retval = device_add(f_dev);
+	if (parent)
+		device_unlock(parent);
 	if (retval) {
 		dev_err(f_dev, "%s: device_register failed\n", __func__);
 		goto err_put_dev;
