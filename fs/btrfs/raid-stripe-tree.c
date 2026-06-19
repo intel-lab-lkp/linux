@@ -413,6 +413,7 @@ int btrfs_get_raid_extent_offset(struct btrfs_fs_info *fs_info,
 	BTRFS_PATH_AUTO_FREE(path);
 	struct extent_buffer *leaf;
 	const u64 end = logical + *length;
+	int type = BTRFS_RAID_STRIPE_KEY;
 	int num_stripes;
 	u64 offset;
 	u64 found_logical;
@@ -422,7 +423,7 @@ int btrfs_get_raid_extent_offset(struct btrfs_fs_info *fs_info,
 	int ret;
 
 	stripe_key.objectid = logical;
-	stripe_key.type = BTRFS_RAID_STRIPE_KEY;
+	stripe_key.type = type;
 	stripe_key.offset = 0;
 
 	path = btrfs_alloc_path();
@@ -440,6 +441,10 @@ int btrfs_get_raid_extent_offset(struct btrfs_fs_info *fs_info,
 	if (ret) {
 		if (path->slots[0] != 0)
 			path->slots[0]--;
+
+		btrfs_item_key_to_cpu(path->nodes[0], &found_key, path->slots[0]);
+		if (found_key.type != type && path->slots[0] > 0)
+			path->slots[0]--;
 	}
 
 	while (1) {
@@ -456,7 +461,8 @@ int btrfs_get_raid_extent_offset(struct btrfs_fs_info *fs_info,
 			goto out;
 		}
 
-		if (in_range(logical, found_logical, found_length))
+		if (in_range(logical, found_logical, found_length) &&
+		    found_key.type == type)
 			break;
 
 		ret = btrfs_next_item(stripe_root, path);

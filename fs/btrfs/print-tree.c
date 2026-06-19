@@ -416,6 +416,7 @@ static void key_type_string(const struct btrfs_key *key, char *buf, int buf_size
 		[BTRFS_UUID_KEY_SUBVOL]			= "UUID_KEY_SUBVOL",
 		[BTRFS_UUID_KEY_RECEIVED_SUBVOL]	= "UUID_KEY_RECEIVED_SUBVOL",
 		[BTRFS_RAID_STRIPE_KEY]			= "RAID_STRIPE",
+		[BTRFS_RAID_STRIPE_PARITY_KEY]		= "RAID_PARITY",
 		[BTRFS_IDENTITY_REMAP_KEY]		= "IDENTITY_REMAP",
 		[BTRFS_REMAP_KEY]			= "REMAP",
 		[BTRFS_REMAP_BACKREF_KEY]		= "REMAP_BACKREF",
@@ -571,6 +572,7 @@ void btrfs_print_leaf(const struct extent_buffer *l)
 					btrfs_item_size(l, i));
 			break;
 		case BTRFS_RAID_STRIPE_KEY:
+		case BTRFS_RAID_STRIPE_PARITY_KEY:
 			print_raid_stripe_key(l, btrfs_item_size(l, i),
 				btrfs_item_ptr(l, i, struct btrfs_stripe_extent));
 			break;
