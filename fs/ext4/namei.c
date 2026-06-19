@@ -2282,6 +2282,8 @@ static int add_dirent_to_buf(handle_t *handle, struct ext4_filename *fname,
 	if (ext4_has_feature_metadata_csum(inode->i_sb))
 		csum_size = sizeof(struct ext4_dir_entry_tail);
 
+	dfid = ext4_dentry_get_fid(inode->i_sb,
+		(struct ext4_dentry_param *)EXT4_I(inode)->i_dirdata);
 	if (!de) {
 		if (dfid)
 			dlen = dfid->df_header.ddh_length;
@@ -2628,6 +2630,7 @@ static int ext4_add_entry(handle_t *handle, struct dentry *dentry,
 {
 	struct inode *dir = d_inode(dentry->d_parent);
 
+	EXT4_I(inode)->i_dirdata = dentry->d_fsdata;
 	if (fscrypt_is_nokey_name(dentry))
 		return -ENOKEY;
 	return __ext4_add_entry(handle, dir, &dentry->d_name, inode);
@@ -4387,6 +4390,146 @@ static int ext4_rename2(struct mnt_idmap *idmap,
 	}
 
 	return ext4_rename(idmap, old_dir, old_dentry, new_dir, new_dentry, flags);
+}
+
+/*
+ * ext4_dirdata_set_lufid() - Set LUFID data on an existing directory entry
+ * @dir:        parent directory inode
+ * @filename:   name of the file in the directory
+ * @namelen:    length of filename
+ * @edp:        pointer to initialized dentry param with LUFID data
+ *
+ * This function finds an existing directory entry, deletes it, and re-creates it
+ * with LUFID data attached. Used by the EXT4_IOC_SET_LUFID ioctl.
+ *
+ * Returns 0 on success, negative error code on failure.
+ */
+int ext4_dirdata_set_lufid(struct inode *dir, const char *filename,
+			    int namelen, struct ext4_dentry_param *edp)
+{
+	struct super_block *sb = dir->i_sb;
+	struct ext4_filename fname;
+	struct ext4_dir_entry_2 *de = NULL;
+	struct buffer_head *bh = NULL;
+	struct inode *inode = NULL;
+	handle_t *handle = NULL;
+	struct qstr d_name;
+	void *old_dirdata = NULL;
+	int err = 0;
+
+	/* Check if dirdata feature is enabled */
+	if (!ext4_has_feature_dirdata(sb))
+		return -ENOTSUPP;
+
+	if (namelen > EXT4_NAME_LEN)
+               return -ENAMETOOLONG;
+        if (namelen != strnlen(filename, namelen + 1))
+               return -EINVAL;
+
+	/* Setup the filename for lookup */
+	d_name.name = filename;
+	d_name.len = namelen;
+
+	/* Lookup the filename in the directory */
+	err = ext4_fname_setup_filename(dir, &d_name, 0, &fname);
+	if (err)
+		goto out_free;
+
+	bh = ext4_find_entry(dir, &d_name, &de, NULL);
+	if (!bh) {
+		err = -ENOENT;
+		goto out_free;
+	}
+
+	/* Get the inode number from the directory entry */
+	inode = ext4_iget(sb, le32_to_cpu(de->inode), EXT4_IGET_NORMAL);
+	if (IS_ERR(inode)) {
+		err = PTR_ERR(inode);
+		inode = NULL;
+		goto out_brelse;
+	}
+
+	/* Start a transaction */
+	handle = ext4_journal_start(dir, EXT4_HT_DIR, 
+				     2 * EXT4_DATA_TRANS_BLOCKS(sb) + 
+				     EXT4_INDEX_EXTRA_TRANS_BLOCKS);
+	if (IS_ERR(handle)) {
+		err = PTR_ERR(handle);
+		handle = NULL;
+		goto out_iput;
+	}
+
+	inode_lock(dir);
+
+	/* Delete the old entry */
+	err = ext4_delete_entry(handle, dir, de, bh);
+	if (err)
+		goto out_unlock;
+
+	brelse(bh);
+	bh = NULL;
+
+	/* Re-add the entry with LUFID data
+	 * We set i_dirdata before adding so the entry can include it
+	 */
+	old_dirdata = EXT4_I(inode)->i_dirdata;
+	EXT4_I(inode)->i_dirdata = edp;
+
+	/* Use ext4_add_entry() to properly handle hash table management
+	 * and block splitting, just like rename does. This ensures the entry
+	 * is placed in the correct hash block and avoids breaking dirhash.
+	 */
+	{
+		struct dentry parent_dentry = { .d_inode = dir };
+		struct dentry new_dentry = {
+			.d_name = d_name,
+			.d_parent = &parent_dentry,
+			.d_inode = inode,  /* Same inode (in-place update) */
+			.d_fsdata = edp,   /* required */
+		};
+		err = ext4_add_entry(handle, &new_dentry, inode);
+	}
+	EXT4_I(inode)->i_dirdata = old_dirdata;
+
+	if (err) {
+		/*
+		 * The original entry was already removed above and the
+		 * re-add with the new LUFID failed; try to restore the
+		 * original entry so the inode isn't left without any
+		 * directory entry pointing at it.
+		 */
+		struct dentry parent_dentry = { .d_inode = dir };
+		struct dentry orig_dentry = {
+			.d_name = d_name,
+			.d_parent = &parent_dentry,
+			.d_inode = inode,
+		};
+		int rollback_err = ext4_add_entry(handle, &orig_dentry, inode);
+
+		if (rollback_err)
+			EXT4_ERROR_INODE(dir,
+				"Failed to set LUFID on '%.*s' (err=%d) and failed to restore the original directory entry (err=%d); inode %llu may be orphaned",
+				namelen, filename, err, rollback_err,
+				inode->i_ino);
+		goto out_unlock;
+	}
+
+	/* Update inode times */
+	inode_set_ctime_current(dir);
+	inode_inc_iversion(dir);
+	ext4_mark_inode_dirty(handle, dir);
+
+out_unlock:
+	inode_unlock(dir);
+	ext4_journal_stop(handle);
+out_iput:
+	iput(inode);
+out_brelse:
+	brelse(bh);
+out_free:
+	ext4_fname_free_filename(&fname);
+
+	return err;
 }
 
 /*
