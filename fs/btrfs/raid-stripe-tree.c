@@ -334,7 +334,7 @@ static void fill_raid_stride(struct btrfs_io_stripe *stripe,
 
 EXPORT_FOR_TESTS
 int btrfs_insert_one_raid_extent(struct btrfs_trans_handle *trans,
-				 struct btrfs_io_context *bioc)
+				 struct btrfs_io_context *bioc, u8 type)
 {
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct btrfs_key stripe_key;
@@ -360,7 +360,7 @@ int btrfs_insert_one_raid_extent(struct btrfs_trans_handle *trans,
 	}
 
 	stripe_key.objectid = bioc->logical;
-	stripe_key.type = BTRFS_RAID_STRIPE_KEY;
+	stripe_key.type = type;
 	stripe_key.offset = bioc->size;
 
 	ret = btrfs_insert_item(trans, stripe_root, &stripe_key, stripe_extent,
@@ -387,7 +387,7 @@ int btrfs_insert_raid_extent(struct btrfs_trans_handle *trans,
 		return 0;
 
 	list_for_each_entry(bioc, &ordered_extent->bioc_list, rst_ordered_entry) {
-		ret = btrfs_insert_one_raid_extent(trans, bioc);
+		ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 		if (ret)
 			return ret;
 	}

@@ -77,7 +77,7 @@ static int test_punch_hole_3extents(struct btrfs_trans_handle *trans)
 		stripe->physical = logical1 + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;
@@ -98,7 +98,7 @@ static int test_punch_hole_3extents(struct btrfs_trans_handle *trans)
 		stripe->physical = logical2 + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;
@@ -119,7 +119,7 @@ static int test_punch_hole_3extents(struct btrfs_trans_handle *trans)
 		stripe->physical = logical3 + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;
@@ -253,7 +253,7 @@ static int test_delete_two_extents(struct btrfs_trans_handle *trans)
 		stripe->physical = logical1 + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;
@@ -274,7 +274,7 @@ static int test_delete_two_extents(struct btrfs_trans_handle *trans)
 		stripe->physical = logical2 + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;
@@ -295,7 +295,7 @@ static int test_delete_two_extents(struct btrfs_trans_handle *trans)
 		stripe->physical = logical3 + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;
@@ -396,7 +396,7 @@ static int test_punch_hole(struct btrfs_trans_handle *trans)
 		stripe->physical = logical1 + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;
@@ -536,7 +536,7 @@ static int test_front_delete_prev_item(struct btrfs_trans_handle *trans)
 		stripe->physical = logical1 + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;
@@ -557,7 +557,7 @@ static int test_front_delete_prev_item(struct btrfs_trans_handle *trans)
 		stripe->physical = logical2 + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;
@@ -676,7 +676,7 @@ static int test_front_delete(struct btrfs_trans_handle *trans)
 		stripe->physical = logical + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;
@@ -785,7 +785,7 @@ static int test_tail_delete(struct btrfs_trans_handle *trans)
 		stripe->physical = logical + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;
@@ -907,7 +907,7 @@ static int test_create_update_delete(struct btrfs_trans_handle *trans)
 		stripe->physical = logical + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;
@@ -953,7 +953,7 @@ static int test_create_update_delete(struct btrfs_trans_handle *trans)
 		stripe->physical = SZ_1G + logical + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("updating RAID extent failed: %d", ret);
 		goto out;
@@ -1027,7 +1027,7 @@ static int test_simple_create_delete(struct btrfs_trans_handle *trans)
 		stripe->physical = logical + i * SZ_1G;
 	}
 
-	ret = btrfs_insert_one_raid_extent(trans, bioc);
+	ret = btrfs_insert_one_raid_extent(trans, bioc, BTRFS_RAID_STRIPE_KEY);
 	if (ret) {
 		test_err("inserting RAID extent failed: %d", ret);
 		goto out;

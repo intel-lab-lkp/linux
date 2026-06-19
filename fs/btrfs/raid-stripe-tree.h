@@ -31,7 +31,7 @@ int btrfs_insert_raid_extent(struct btrfs_trans_handle *trans,
 
 #ifdef CONFIG_BTRFS_FS_RUN_SANITY_TESTS
 int btrfs_insert_one_raid_extent(struct btrfs_trans_handle *trans,
-				 struct btrfs_io_context *bioc);
+				 struct btrfs_io_context *bioc, u8 type);
 #endif
 
 static inline bool btrfs_need_stripe_tree_update(struct btrfs_fs_info *fs_info,
