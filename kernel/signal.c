@@ -1037,8 +1037,10 @@ static inline bool legacy_queue(struct sigpending *signals, int sig)
 	return (sig < SIGRTMIN) && sigismember(&signals->signal, sig);
 }
 
+#define SEND_SIGNAL_FORCE	(1 << 0)
+
 static int __send_signal_locked(int sig, struct kernel_siginfo *info,
-				struct task_struct *t, enum pid_type type, bool force)
+				struct task_struct *t, enum pid_type type, int flags)
 {
 	struct sigpending *pending;
 	struct sigqueue *q;
@@ -1048,7 +1050,7 @@ static int __send_signal_locked(int sig, struct kernel_siginfo *info,
 	lockdep_assert_held(&t->sighand->siglock);
 
 	result = TRACE_SIGNAL_IGNORED;
-	if (!prepare_signal(sig, t, force))
+	if (!prepare_signal(sig, t, flags & SEND_SIGNAL_FORCE))
 		goto ret;
 
 	pending = (type != PIDTYPE_PID) ? &t->signal->shared_pending : &t->pending;
@@ -1211,7 +1213,8 @@ int send_signal_locked(int sig, struct kernel_siginfo *info,
 			force = true;
 		}
 	}
-	return __send_signal_locked(sig, info, t, type, force);
+	return __send_signal_locked(sig, info, t, type,
+				    force ? SEND_SIGNAL_FORCE : 0);
 }
 
 static void print_fatal_signal(int signr)
@@ -1295,6 +1298,7 @@ force_sig_info_to_task(struct kernel_siginfo *info, struct task_struct *t,
 	unsigned long int flags;
 	int ret, blocked, ignored;
 	struct k_sigaction *action;
+	int send_flags = SEND_SIGNAL_FORCE;
 	int sig = info->si_signo;
 
 	spin_lock_irqsave(&t->sighand->siglock, flags);
@@ -1315,7 +1319,7 @@ force_sig_info_to_task(struct kernel_siginfo *info, struct task_struct *t,
 	if (action->sa.sa_handler == SIG_DFL &&
 	    (!t->ptrace || (handler == HANDLER_EXIT)))
 		t->signal->flags &= ~SIGNAL_UNKILLABLE;
-	ret = __send_signal_locked(sig, info, t, PIDTYPE_PID, true);
+	ret = __send_signal_locked(sig, info, t, PIDTYPE_PID, send_flags);
 	/* This can happen if the signal was already pending and blocked */
 	if (!task_sigpending(t))
 		signal_wake_up(t, 0);
@@ -1549,7 +1553,7 @@ int kill_pid_usb_asyncio(int sig, int errno, sigval_t addr,
 
 	if (sig) {
 		if (lock_task_sighand(p, &flags)) {
-			ret = __send_signal_locked(sig, &info, p, PIDTYPE_TGID, false);
+			ret = __send_signal_locked(sig, &info, p, PIDTYPE_TGID, 0);
 			unlock_task_sighand(p, &flags);
 		} else
 			ret = -ESRCH;
@@ -2258,7 +2262,7 @@ bool do_notify_parent(struct task_struct *tsk, int sig)
 	 * parent's namespaces.
 	 */
 	if (sig)
-		__send_signal_locked(sig, &info, tsk->parent, PIDTYPE_TGID, false);
+		__send_signal_locked(sig, &info, tsk->parent, PIDTYPE_TGID, 0);
 	__wake_up_parent(tsk, tsk->parent);
 	spin_unlock_irqrestore(&psig->siglock, flags);
 
