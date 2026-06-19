@@ -1068,15 +1068,14 @@ static int mt9p031_parse_properties(struct mt9p031 *mt9p031, struct device *dev)
 	struct v4l2_fwnode_endpoint endpoint = {
 		.bus_type = V4L2_MBUS_PARALLEL
 	};
-	struct fwnode_handle *np;
+	struct fwnode_handle *np __free(fwnode_handle) =
+		fwnode_graph_get_next_endpoint(dev_fwnode(dev), NULL);
 	int ret;
 
-	np = fwnode_graph_get_next_endpoint(dev_fwnode(dev), NULL);
 	if (!np)
 		return dev_err_probe(dev, -EINVAL, "endpoint node not found\n");
 
 	ret = v4l2_fwnode_endpoint_parse(np, &endpoint);
-	fwnode_handle_put(np);
 	if (ret)
 		return dev_err_probe(dev, -EINVAL, "could not parse endpoint\n");
 
