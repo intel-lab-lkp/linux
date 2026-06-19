@@ -1066,8 +1066,10 @@ static inline bool damon_target_has_pid(const struct damon_ctx *ctx)
 
 static inline unsigned int damon_max_nr_accesses(const struct damon_attrs *attrs)
 {
+	unsigned long sample_interval = attrs->sample_interval ? : 1;
+
 	/* {aggr,sample}_interval are unsigned long, hence could overflow */
-	return min(attrs->aggr_interval / attrs->sample_interval,
+	return min(attrs->aggr_interval / sample_interval,
 			(unsigned long)UINT_MAX);
 }
 
