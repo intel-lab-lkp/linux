@@ -6030,10 +6030,12 @@ static enum stripe_result make_stripe_request(struct mddev *mddev,
 
 	set_bit(STRIPE_HANDLE, &sh->state);
 	clear_bit(STRIPE_DELAYED, &sh->state);
+	spin_lock_irq(&sh->stripe_lock);
 	if ((!sh->batch_head || sh == sh->batch_head) &&
 	    (bi->bi_opf & REQ_SYNC) &&
 	    !test_and_set_bit(STRIPE_PREREAD_ACTIVE, &sh->state))
 		atomic_inc(&conf->preread_active_stripes);
+	spin_unlock_irq(&sh->stripe_lock);
 
 	release_stripe_plug(mddev, sh);
 	return STRIPE_SUCCESS;
