@@ -81,4 +81,8 @@
 /* Device claims zero configurations, forcing to 1 */
 #define USB_QUIRK_FORCE_ONE_CONFIG		BIT(18)
 
+/* Use a 255 byte sized config descriptor request */
+#define USB_QUIRK_CONFIG_SIZE			BIT(19)
+#define USB_DT_CONFIG_SIZE_QUIRK		255
+
 #endif /* __LINUX_USB_QUIRKS_H */

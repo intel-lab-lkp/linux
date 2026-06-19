@@ -912,6 +912,8 @@ int usb_get_configuration(struct usb_device *dev)
 	unsigned char *bigbuffer;
 	struct usb_config_descriptor *desc;
 	int result;
+	size_t usb_dt_config_size = (dev->quirks & USB_QUIRK_CONFIG_SIZE)
+		? USB_DT_CONFIG_SIZE_QUIRK : USB_DT_CONFIG_SIZE;
 
 	if (ncfg > USB_MAXCONFIG) {
 		dev_notice(ddev, "too many configurations: %d, "
@@ -938,7 +940,8 @@ int usb_get_configuration(struct usb_device *dev)
 	if (!dev->rawdescriptors)
 		return -ENOMEM;
 
-	desc = kmalloc(USB_DT_CONFIG_SIZE, GFP_KERNEL);
+	desc = kmalloc(usb_dt_config_size, GFP_KERNEL);
+
 	if (!desc)
 		return -ENOMEM;
 
@@ -946,7 +949,7 @@ int usb_get_configuration(struct usb_device *dev)
 		/* We grab just the first descriptor so we know how long
 		 * the whole configuration is */
 		result = usb_get_descriptor(dev, USB_DT_CONFIG, cfgno,
-		    desc, USB_DT_CONFIG_SIZE);
+		    desc, usb_dt_config_size);
 		if (result < 0) {
 			dev_err(ddev, "unable to read config index %d "
 			    "descriptor/%s: %d\n", cfgno, "start", result);
@@ -957,26 +960,39 @@ int usb_get_configuration(struct usb_device *dev)
 			break;
 		} else if (result < 4) {
 			dev_err(ddev, "config index %d descriptor too short "
-			    "(expected %i, got %i)\n", cfgno,
-			    USB_DT_CONFIG_SIZE, result);
+			    "(expected %zu, got %i)\n", cfgno,
+			    usb_dt_config_size, result);
 			result = -EINVAL;
 			goto err;
 		}
-		length = max_t(int, le16_to_cpu(desc->wTotalLength),
-		    USB_DT_CONFIG_SIZE);
+		/* If the device does returns the full length configuration
+		 * descriptor, skip the second read. Fallback to default
+		 * behavior otherwise.
+		 */
+		if (dev->quirks & USB_QUIRK_CONFIG_SIZE
+				&& result == le16_to_cpu(desc->wTotalLength)
+				&& result < USB_DT_CONFIG_SIZE_QUIRK) {
 
-		/* Now that we know the length, get the whole thing */
-		bigbuffer = kmalloc(length, GFP_KERNEL);
-		if (!bigbuffer) {
-			result = -ENOMEM;
-			goto err;
+			bigbuffer = (unsigned char *) desc;
+			desc = NULL;
+			length = result;
+		} else {
+			length = max_t(int, le16_to_cpu(desc->wTotalLength),
+			    usb_dt_config_size);
+
+			/* Now that we know the length, get the whole thing */
+			bigbuffer = kmalloc(length, GFP_KERNEL);
+			if (!bigbuffer) {
+				result = -ENOMEM;
+				goto err;
+			}
+
+			if (dev->quirks & USB_QUIRK_DELAY_INIT)
+				msleep(200);
+
+			result = usb_get_descriptor(dev, USB_DT_CONFIG, cfgno,
+			    bigbuffer, length);
 		}
-
-		if (dev->quirks & USB_QUIRK_DELAY_INIT)
-			msleep(200);
-
-		result = usb_get_descriptor(dev, USB_DT_CONFIG, cfgno,
-		    bigbuffer, length);
 		if (result < 0) {
 			dev_err(ddev, "unable to read config index %d "
 			    "descriptor/%s\n", cfgno, "all");
@@ -1000,6 +1016,14 @@ int usb_get_configuration(struct usb_device *dev)
 	}
 
 err:
+	/* Log failed device's VID:PID pair to make it easy to debug and fix
+	 * enumeration and initialization issues
+	 */
+	if (result < 0) {
+		dev_err(ddev, "Failed to initialize device %04x:%04x due to above errors.",
+		    le16_to_cpu(dev->descriptor.idVendor), le16_to_cpu(dev->descriptor.idProduct));
+	}
+
 	kfree(desc);
 	dev->descriptor.bNumConfigurations = cfgno;
 
