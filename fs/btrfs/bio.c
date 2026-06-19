@@ -577,7 +577,8 @@ static void btrfs_submit_bio(struct bio *bio, struct btrfs_io_context *bioc,
 		bio->bi_private = smap->dev;
 		bio->bi_end_io = btrfs_simple_end_io;
 		btrfs_submit_dev_bio(smap->dev, bio);
-	} else if (bioc->map_type & BTRFS_BLOCK_GROUP_RAID56_MASK) {
+	} else if (bioc->map_type & BTRFS_BLOCK_GROUP_RAID56_MASK &&
+		   !bioc->use_rst) {
 		/* Parity RAID write or read recovery. */
 		bio->bi_private = bioc;
 		bio->bi_end_io = btrfs_raid56_end_io;
