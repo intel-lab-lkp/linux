@@ -1214,6 +1214,13 @@ void nsim_destroy(struct netdevsim *ns)
 		ns->page = NULL;
 	}
 
+	/*
+	 * Remove per-port debugfs files before free_netdev() releases the
+	 * netdevsim struct to prevent use-after-free in concurrent readers.
+	 */
+	debugfs_remove_recursive(ns->nsim_dev_port->ddir);
+	ns->nsim_dev_port->ddir = NULL;
+
 	free_netdev(dev);
 }
 
