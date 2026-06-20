@@ -70,6 +70,39 @@ pub mod internal {
     pub use bindings::drm_device;
     pub use bindings::drm_file;
     pub use bindings::drm_ioctl_desc;
+
+    /// Call an ioctl handler with lifetime-bounded references.
+    ///
+    /// The lifetime `'a` is tied to the `_anchor` parameter. This prevents handlers from
+    /// declaring `'static` on `dev`, `data`, or `file`.
+    ///
+    /// # Safety
+    ///
+    /// - `raw_data` must point to a valid, exclusively-owned instance of `Data` for the duration
+    ///   of the call.
+    /// - `raw_file` must be a valid pointer to a `struct drm_file`.
+    #[doc(hidden)]
+    #[inline(always)]
+    pub unsafe fn __call_ioctl<
+        'a,
+        Dev: 'a,
+        Data: 'a,
+        F: super::super::file::DriverFile + 'a,
+        Ret,
+    >(
+        _anchor: &'a (),
+        dev: &'a Dev,
+        raw_data: *mut ::core::ffi::c_void,
+        raw_file: *mut drm_file,
+        f: impl FnOnce(&'a Dev, &'a mut Data, &'a super::super::File<F>) -> Ret,
+    ) -> Ret {
+        // SAFETY: Caller guarantees raw_data points to a valid instance of Data with the correct
+        // size and alignment, exclusively owned for the duration of the ioctl call.
+        let data = unsafe { &mut *(raw_data.cast::<Data>()) };
+        // SAFETY: Caller guarantees raw_file is a valid pointer to a `struct drm_file`.
+        let file = unsafe { super::super::File::<F>::from_raw(raw_file) };
+        f(dev, data, file)
+    }
 }
 
 /// Declare the DRM ioctls for a driver.
@@ -135,19 +168,19 @@ macro_rules! declare_drm_ioctls {
                             // dev/file match the current driver these ioctls are being declared
                             // for, and it's not clear how to enforce this within the type system.
                             let dev = $crate::drm::device::Device::from_raw(raw_dev);
-                            // SAFETY: The ioctl argument has size `_IOC_SIZE(cmd)`, which we
-                            // asserted above matches the size of this type, and all bit patterns of
-                            // UAPI structs must be valid.
-                            // The `ioctl` argument is exclusively owned by the handler
-                            // and guaranteed by the C implementation (`drm_ioctl()`) to remain
-                            // valid for the entire lifetime of the reference taken here.
-                            // There is no concurrent access or aliasing; no other references
-                            // to this object exist during this call.
-                            let data = unsafe { &mut *(raw_data.cast::<$crate::uapi::$struct>()) };
-                            // SAFETY: This is just the DRM file structure
-                            let file = unsafe { $crate::drm::File::from_raw(raw_file) };
+                            let __anchor = ();
 
-                            match $func(dev, data, file) {
+                            // SAFETY:
+                            // - The ioctl argument has size `_IOC_SIZE(cmd)`, which we asserted
+                            //   above matches the size of this type, and all bit patterns of UAPI
+                            //   structs must be valid. The argument is exclusively owned by this
+                            //   handler, guaranteed by `drm_ioctl()` to remain valid for the
+                            //   duration of the call.
+                            // - `raw_file` is a valid `struct drm_file` pointer provided by the
+                            //   DRM core.
+                            match unsafe { $crate::drm::ioctl::internal::__call_ioctl(
+                                &__anchor, dev, raw_data, raw_file, $func,
+                            ) } {
                                 Err(e) => e.to_errno(),
                                 Ok(i) => i.try_into()
                                             .unwrap_or($crate::error::code::ERANGE.to_errno()),
