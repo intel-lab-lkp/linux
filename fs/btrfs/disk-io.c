@@ -3324,10 +3324,14 @@ static void invalidate_and_check_btree_folios(struct btrfs_fs_info *fs_info)
 			wait_on_bit_io(&eb->bflags, EXTENT_BUFFER_READING,
 				       TASK_UNINTERRUPTIBLE);
 		/*
-		 * The refs threshold is 2, one held by us at the beginning
-		 * of the loop, one for the ownership in the buffer tree.
+		 * EXTENT_BUFFER_READING is cleared then the eb refs is put during
+		 * end_bbio_meta_read(), which leaves a window where above wait
+		 * finished but eb ref is still hold by endio.
+		 *
+		 * Thus we can not use eb->refs to determine if the eb is hold
+		 * by someone else. Just check if the eb is still under IO.
 		 */
-		if (unlikely(refcount_read(&eb->refs) > 2 || extent_buffer_under_io(eb))) {
+		if (unlikely(extent_buffer_under_io(eb))) {
 			WARN_ON_ONCE(IS_ENABLED(CONFIG_BTRFS_DEBUG));
 			btrfs_warn(fs_info,
 			"unable to release extent buffer %llu owner %llu gen %llu refs %u flags 0x%lx",
