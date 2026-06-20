@@ -80,7 +80,8 @@ macro_rules! drm_legacy_fields {
 ///   or may not be registered with userspace.
 /// - [`Ioctl`]: The device has been registered with userspace at some point; used in ioctl
 ///   dispatch context.
-/// - [`Registered`]: The device has been registered with userspace at some point.
+/// - [`Registered`]: The device is currently registered with userspace and the parent bus device
+///   is bound.
 ///
 /// Both `Device<T, Ioctl>` and `Device<T, Registered>` dereference to `Device<T>` ([`Normal`]),
 /// so any method available on a [`Normal`] device is also available in the other contexts.
@@ -98,18 +99,15 @@ pub struct Normal;
 impl Sealed for Normal {}
 impl DeviceContext for Normal {}
 
-/// The [`DeviceContext`] of a [`Device`] that was registered with userspace at some point.
+/// The [`DeviceContext`] of a [`Device`] that is currently registered with userspace.
 ///
-/// This represents a [`Device`] which is guaranteed to have been registered with userspace at
-/// some point in time. Such a DRM device is guaranteed to have been fully-initialized.
-///
-/// Note: A device in this context is not guaranteed to remain registered with userspace for its
-/// entire lifetime, as this is impossible to guarantee at compile-time.
+/// A [`Device`] in this context is guaranteed to be registered and its parent bus device is
+/// guaranteed to be bound. This is enforced at runtime by [`RegistrationGuard`], which holds a
+/// `drm_dev_enter()` / `drm_dev_exit()` SRCU critical section.
 ///
 /// # Invariants
 ///
-/// A [`Device`] in this [`DeviceContext`] is guaranteed to have been registered with userspace
-/// at some point in time.
+/// The parent bus device is bound for the duration of any reference to a `Device<T, Registered>`.
 pub struct Registered;
 
 impl Sealed for Registered {}
@@ -260,8 +258,8 @@ impl<T: drm::Driver> UnregisteredDevice<T> {
 
 /// A typed DRM device with a specific [`drm::Driver`] implementation and [`DeviceContext`].
 ///
-/// A device in the [`Registered`] context is guaranteed to have been registered with userspace
-/// at some point. The [`Normal`] context is the general-purpose, reference-counted context.
+/// A device in the [`Registered`] context is currently registered with userspace and its parent
+/// bus device is bound. The [`Normal`] context is the general-purpose, reference-counted context.
 ///
 /// # Invariants
 ///
@@ -337,6 +335,71 @@ impl<T: drm::Driver, C: DeviceContext> Device<T, C> {
     pub(crate) unsafe fn assume_ctx<NewCtx: DeviceContext>(&self) -> &Device<T, NewCtx> {
         // SAFETY: The data layout is identical via our type invariants.
         unsafe { mem::transmute(self) }
+    }
+}
+
+impl<T: drm::Driver> Device<T, Ioctl> {
+    /// Guard against the parent bus device being unbound.
+    ///
+    /// Returns a [`RegistrationGuard`] if the device has not been unplugged, [`None`] otherwise.
+    ///
+    /// While [`RegistrationGuard`] is held the parent device is guaranteed to be bound.
+    #[must_use]
+    pub fn registration_guard(&self) -> Option<RegistrationGuard<'_, T>> {
+        let mut idx: i32 = 0;
+        // SAFETY: `self.as_raw()` is a valid pointer to a `struct drm_device`.
+        if unsafe { bindings::drm_dev_enter(self.as_raw(), &mut idx) } {
+            // INVARIANT:
+            // - `idx` is the SRCU index from the successful `drm_dev_enter()` above.
+            // - The parent bus device is bound: `drm_dev_enter()` succeeded, meaning
+            //   `drm_dev_unplug()` has not completed; since it is only called from
+            //   `Registration::drop()` during parent unbind, the parent is still bound.
+            Some(RegistrationGuard {
+                // SAFETY: See INVARIANT above; the `Registered` context invariant holds.
+                dev: unsafe { self.assume_ctx() },
+                idx,
+                _not_send: NotThreadSafe,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+/// A guard proving the DRM device is registered and the parent bus device is bound.
+///
+/// The guard dereferences to [`Device<T, Registered>`], providing access to the DRM device with
+/// the guarantee that the parent bus device is bound for the entire duration of the critical
+/// section.
+///
+/// Internally this is backed by a `drm_dev_enter()` / `drm_dev_exit()` SRCU critical section.
+///
+/// # Invariants
+///
+/// - `idx` is the SRCU read lock index returned by a successful `drm_dev_enter()` call.
+/// - The parent bus device of `dev` is bound for the lifetime of this guard.
+#[must_use]
+pub struct RegistrationGuard<'a, T: drm::Driver> {
+    dev: &'a Device<T, Registered>,
+    idx: i32,
+    _not_send: NotThreadSafe,
+}
+
+impl<T: drm::Driver> Deref for RegistrationGuard<'_, T> {
+    type Target = Device<T, Registered>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.dev
+    }
+}
+
+impl<T: drm::Driver> Drop for RegistrationGuard<'_, T> {
+    #[inline]
+    fn drop(&mut self) {
+        // SAFETY: `self.idx` was returned by a successful `drm_dev_enter()` call, as guaranteed
+        // by the type invariants of `RegistrationGuard`.
+        unsafe { bindings::drm_dev_exit(self.idx) };
     }
 }
 
