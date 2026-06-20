@@ -2355,18 +2355,24 @@ static unsigned int ata_scsiop_inq_b9(struct ata_device *dev,
 {
 	struct ata_cpr_log *cpr_log = dev->cpr_log;
 	u8 *desc = &rbuf[64];
-	int i;
+	int i, nr_cpr;
 
 	if (!cpr_log) {
 		ata_scsi_set_invalid_field(dev, cmd, 2, 0xff);
 		return 0;
 	}
 
+	/*
+	 * The page is built in the fixed-size ata_scsi_rbuf, so the number of
+	 * range descriptors returned is bounded by that buffer's size.
+	 */
+	nr_cpr = min_t(int, cpr_log->nr_cpr, (ATA_SCSI_RBUF_SIZE - 64) / 32);
+
 	/* SCSI Concurrent Positioning Ranges VPD page: SBC-5 rev 1 or later */
 	rbuf[1] = 0xb9;
-	put_unaligned_be16(64 + (int)cpr_log->nr_cpr * 32 - 4, &rbuf[2]);
+	put_unaligned_be16(64 + nr_cpr * 32 - 4, &rbuf[2]);
 
-	for (i = 0; i < cpr_log->nr_cpr; i++, desc += 32) {
+	for (i = 0; i < nr_cpr; i++, desc += 32) {
 		desc[0] = cpr_log->cpr[i].num;
 		desc[1] = cpr_log->cpr[i].num_storage_elements;
 		put_unaligned_be64(cpr_log->cpr[i].start_lba, &desc[8]);
