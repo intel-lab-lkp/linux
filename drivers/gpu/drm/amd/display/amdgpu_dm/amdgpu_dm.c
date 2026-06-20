@@ -6782,22 +6782,44 @@ static void update_stream_scaling_settings(struct drm_device *dev,
 
 static enum dc_color_depth
 convert_color_depth_from_display_info(const struct drm_connector *connector,
-				      bool is_y420, int requested_bpc)
+				      enum dc_pixel_encoding pixel_encoding,
+				      int requested_bpc)
 {
+	const struct drm_display_info *info = &connector->display_info;
+	bool is_hdmi_pcon = false;
 	u8 bpc;
 
-	if (is_y420) {
+	if (connector->connector_type != DRM_MODE_CONNECTOR_WRITEBACK) {
+		const struct amdgpu_dm_connector *aconnector =
+			to_amdgpu_dm_connector(connector);
+
+		is_hdmi_pcon = aconnector->dc_link &&
+			aconnector->dc_link->dpcd_caps.dongle_type ==
+			DISPLAY_DONGLE_DP_HDMI_CONVERTER;
+	}
+
+	if (pixel_encoding == PIXEL_ENCODING_YCBCR420) {
 		bpc = 8;
 
 		/* Cap display bpc based on HDMI 2.0 HF-VSDB */
-		if (connector->display_info.hdmi.y420_dc_modes & DRM_EDID_YCBCR420_DC_48)
+		if (info->hdmi.y420_dc_modes & DRM_EDID_YCBCR420_DC_48)
 			bpc = 16;
-		else if (connector->display_info.hdmi.y420_dc_modes & DRM_EDID_YCBCR420_DC_36)
+		else if (info->hdmi.y420_dc_modes & DRM_EDID_YCBCR420_DC_36)
 			bpc = 12;
-		else if (connector->display_info.hdmi.y420_dc_modes & DRM_EDID_YCBCR420_DC_30)
+		else if (info->hdmi.y420_dc_modes & DRM_EDID_YCBCR420_DC_30)
+			bpc = 10;
+	} else if (pixel_encoding == PIXEL_ENCODING_RGB && is_hdmi_pcon) {
+		bpc = 8;
+
+		/* The downstream sink is HDMI even though DRM exposes DP. */
+		if (info->edid_hdmi_rgb444_dc_modes & DRM_EDID_HDMI_DC_48)
+			bpc = 16;
+		else if (info->edid_hdmi_rgb444_dc_modes & DRM_EDID_HDMI_DC_36)
+			bpc = 12;
+		else if (info->edid_hdmi_rgb444_dc_modes & DRM_EDID_HDMI_DC_30)
 			bpc = 10;
 	} else {
-		bpc = (uint8_t)connector->display_info.bpc;
+		bpc = (uint8_t)info->bpc;
 		/* Assume 8 bpc by default if no bpc is specified. */
 		bpc = bpc ? bpc : 8;
 	}
@@ -7017,7 +7039,7 @@ static void fill_stream_properties_from_drm_display_mode(
 	timing_out->timing_3d_format = TIMING_3D_FORMAT_NONE;
 	timing_out->display_color_depth = convert_color_depth_from_display_info(
 		connector,
-		(timing_out->pixel_encoding == PIXEL_ENCODING_YCBCR420),
+		timing_out->pixel_encoding,
 		requested_bpc);
 	timing_out->scan_type = SCANNING_TYPE_NODATA;
 	timing_out->hdmi_vic = 0;
@@ -8774,6 +8796,7 @@ static int dm_encoder_helper_atomic_check(struct drm_encoder *encoder,
 	struct drm_dp_mst_port *mst_port;
 	struct drm_dp_mst_topology_state *mst_state;
 	enum dc_color_depth color_depth;
+	enum dc_pixel_encoding pixel_encoding = PIXEL_ENCODING_RGB;
 	int clock, bpp = 0;
 	bool is_y420 = false;
 
@@ -8814,8 +8837,10 @@ static int dm_encoder_helper_atomic_check(struct drm_encoder *encoder,
 
 		is_y420 = drm_mode_is_420_also(&connector->display_info, adjusted_mode) &&
 			  aconnector->force_yuv420_output;
+		if (is_y420)
+			pixel_encoding = PIXEL_ENCODING_YCBCR420;
 		color_depth = convert_color_depth_from_display_info(connector,
-								    is_y420,
+								    pixel_encoding,
 								    max_bpc);
 		bpp = convert_dc_color_depth_into_bpc(color_depth) * 3;
 		clock = adjusted_mode->clock;
