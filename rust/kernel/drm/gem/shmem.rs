@@ -17,7 +17,7 @@ use crate::{
         private::Sealed,
         Device,
         DeviceContext,
-        Registered, //
+        Normal, //
     },
     error::to_result,
     prelude::*,
@@ -43,7 +43,7 @@ use gem::{
 /// This is used with [`Object::new()`] to control various properties that can only be set when
 /// initially creating a shmem-backed GEM object.
 #[derive(Default)]
-pub struct ObjectConfig<'a, T: DriverObject, C: DeviceContext = Registered> {
+pub struct ObjectConfig<'a, T: DriverObject, C: DeviceContext = Normal> {
     /// Whether to set the write-combine map flag.
     pub map_wc: bool,
 
@@ -62,7 +62,7 @@ pub struct ObjectConfig<'a, T: DriverObject, C: DeviceContext = Registered> {
 /// - Any type invariants of `C` apply to the parent DRM device for this GEM object.
 #[repr(C)]
 #[pin_data]
-pub struct Object<T: DriverObject, C: DeviceContext = Registered> {
+pub struct Object<T: DriverObject, C: DeviceContext = Normal> {
     #[pin]
     obj: Opaque<bindings::drm_gem_shmem_object>,
     /// Parent object that owns this object's DMA reservation object.
