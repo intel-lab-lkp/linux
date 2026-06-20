@@ -6825,8 +6825,10 @@ static int addrconf_sysctl_force_forwarding(const struct ctl_table *ctl, int wri
 	ret = proc_douintvec_minmax(&tmp_ctl, write, buffer, lenp, ppos);
 
 	if (write && old_val != new_val) {
-		if (!rtnl_net_trylock(net))
+		if (!rtnl_net_trylock(net)) {
+			*ppos = pos;
 			return restart_syscall();
+		}
 
 		WRITE_ONCE(*valp, new_val);
 
@@ -6851,8 +6853,6 @@ static int addrconf_sysctl_force_forwarding(const struct ctl_table *ctl, int wri
 		rtnl_net_unlock(net);
 	}
 
-	if (ret)
-		*ppos = pos;
 	return ret;
 }
 
