@@ -97,12 +97,13 @@ pub mod internal {
     #[inline(always)]
     pub unsafe fn __call_ioctl<
         'a,
+        Anchor,
         Dev: 'a,
         Data: 'a,
         F: super::super::file::DriverFile + 'a,
         Ret,
     >(
-        _anchor: &'a (),
+        _anchor: &'a Anchor,
         dev: &'a Dev,
         raw_data: *mut ::core::ffi::c_void,
         raw_file: *mut drm_file,
@@ -128,6 +129,7 @@ pub mod internal {
 ///
 /// ```ignore
 /// fn foo(device: &kernel::drm::Device<Self, kernel::drm::Registered>,
+///        reg_data: &<Self::RegistrationData as kernel::types::ForLt>::Of<'_>,
 ///        data: &mut uapi::argument_type,
 ///        file: &kernel::drm::File<Self::File>,
 /// ) -> Result<u32>
@@ -202,25 +204,28 @@ macro_rules! declare_drm_ioctls {
                                     unsafe { &*__ptr },
                                     unreachable!(),
                                     unreachable!(),
+                                    unreachable!(),
                                 )
                             };
 
                             let Some(guard) = dev.registration_guard() else {
                                 return $crate::error::code::ENODEV.to_errno();
                             };
-                            let __anchor = ();
 
-                            // SAFETY:
-                            // - The ioctl argument has size `_IOC_SIZE(cmd)`, which we asserted
-                            //   above matches the size of this type, and all bit patterns of UAPI
-                            //   structs must be valid. The argument is exclusively owned by this
-                            //   handler, guaranteed by `drm_ioctl()` to remain valid for the
-                            //   duration of the call.
-                            // - `raw_file` is a valid `struct drm_file` pointer provided by the
-                            //   DRM core.
-                            match unsafe { $crate::drm::ioctl::internal::__call_ioctl(
-                                &__anchor, &*guard, raw_data, raw_file, $func,
-                            ) } {
+                            match guard.registration_data_with(|reg_data| {
+                                // SAFETY:
+                                // - The ioctl argument has size `_IOC_SIZE(cmd)`, which we asserted
+                                //   above matches the size of this type, and all bit patterns of
+                                //   UAPI structs must be valid. The argument is exclusively owned
+                                //   by this handler, guaranteed by `drm_ioctl()` to remain valid
+                                //   for the duration of the call.
+                                // - `raw_file` is a valid `struct drm_file` pointer provided by
+                                //   the DRM core.
+                                unsafe { $crate::drm::ioctl::internal::__call_ioctl(
+                                    reg_data, &*guard, raw_data, raw_file,
+                                    |dev, data, file| $func(dev, reg_data, data, file),
+                                ) }
+                            }) {
                                 Err(e) => e.to_errno(),
                                 Ok(i) => i.try_into()
                                             .unwrap_or($crate::error::code::ERANGE.to_errno()),
