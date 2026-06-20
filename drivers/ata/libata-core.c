@@ -2832,6 +2832,17 @@ static void ata_dev_config_cpr(struct ata_device *dev)
 	if (!nr_cpr)
 		goto out;
 
+	/*
+	 * The log size is reported in the GPL directory independently of the
+	 * number of range descriptors in buf[0]. Clamp the count to what the
+	 * allocated buffer holds so the loop below cannot read past it.
+	 */
+	if (buf_len < 64 + (size_t)nr_cpr * 32) {
+		nr_cpr = buf_len > 64 ? (buf_len - 64) / 32 : 0;
+		if (!nr_cpr)
+			goto out;
+	}
+
 	cpr_log = kzalloc_flex(*cpr_log, cpr, nr_cpr);
 	if (!cpr_log)
 		goto out;
