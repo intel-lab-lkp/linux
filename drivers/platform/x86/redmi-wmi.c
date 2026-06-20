@@ -25,6 +25,10 @@ static const struct key_entry redmi_wmi_keymap[] = {
 	{KE_KEY, 0x00010101,	{KEY_SWITCHVIDEOMODE}},
 	{KE_KEY, 0x00001a01,	{KEY_REFRESH_RATE_TOGGLE}},
 
+	/* Mic-mute key */
+	{KE_KEY, 0x00002101,	{KEY_MICMUTE}},
+	{KE_KEY, 0x00012101,	{KEY_MICMUTE}},
+
 	/* AI button has code for each position */
 	{KE_KEY, 0x00011801,	{KEY_ASSISTANT}},
 	{KE_KEY, 0x00011901,	{KEY_ASSISTANT}},
