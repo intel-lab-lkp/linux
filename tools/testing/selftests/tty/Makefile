@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 CFLAGS = -O2 -Wall
-TEST_GEN_PROGS := tty_tstamp_update tty_tiocsti_test
+TEST_GEN_PROGS := tty_tstamp_update tty_tiocsti_test tty_n_gsm_test
 LDLIBS += -lcap
 
 include ../lib.mk
