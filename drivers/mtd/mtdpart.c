@@ -118,6 +118,9 @@ static struct mtd_info *allocate_partition(struct mtd_info *parent,
 				part->name, parent_size - child->part.offset,
 				child->part.size);
 			/* register to preserve ordering */
+			child->part.offset = 0;
+			child->part.size = 0;
+			child->erasesize = parent->erasesize;
 			goto out_register;
 		}
 	}
