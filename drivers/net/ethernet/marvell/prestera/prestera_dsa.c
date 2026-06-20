@@ -4,6 +4,7 @@
 #include <linux/bitfield.h>
 #include <linux/bitops.h>
 #include <linux/errno.h>
+#include <linux/unaligned.h>
 #include <linux/string.h>
 
 #include "prestera_dsa.h"
@@ -33,15 +34,14 @@
 
 int prestera_dsa_parse(struct prestera_dsa *dsa, const u8 *dsa_buf)
 {
-	__be32 *dsa_words = (__be32 *)dsa_buf;
 	enum prestera_dsa_cmd cmd;
 	u32 words[4];
 	u32 field;
 
-	words[0] = ntohl(dsa_words[0]);
-	words[1] = ntohl(dsa_words[1]);
-	words[2] = ntohl(dsa_words[2]);
-	words[3] = ntohl(dsa_words[3]);
+	words[0] = get_unaligned_be32(dsa_buf);
+	words[1] = get_unaligned_be32(dsa_buf + 4);
+	words[2] = get_unaligned_be32(dsa_buf + 8);
+	words[3] = get_unaligned_be32(dsa_buf + 12);
 
 	/* set the common parameters */
 	cmd = (enum prestera_dsa_cmd)FIELD_GET(PRESTERA_DSA_W0_CMD, words[0]);
@@ -82,7 +82,6 @@ int prestera_dsa_parse(struct prestera_dsa *dsa, const u8 *dsa_buf)
 
 int prestera_dsa_build(const struct prestera_dsa *dsa, u8 *dsa_buf)
 {
-	__be32 *dsa_words = (__be32 *)dsa_buf;
 	u32 dev_num = dsa->hw_dev_num;
 	u32 words[4] = { 0 };
 
@@ -98,10 +97,10 @@ int prestera_dsa_build(const struct prestera_dsa *dsa, u8 *dsa_buf)
 	words[1] |= FIELD_PREP(PRESTERA_DSA_W1_EXT_BIT, 1);
 	words[2] |= FIELD_PREP(PRESTERA_DSA_W2_EXT_BIT, 1);
 
-	dsa_words[0] = htonl(words[0]);
-	dsa_words[1] = htonl(words[1]);
-	dsa_words[2] = htonl(words[2]);
-	dsa_words[3] = htonl(words[3]);
+	put_unaligned_be32(words[0], dsa_buf);
+	put_unaligned_be32(words[1], dsa_buf + 4);
+	put_unaligned_be32(words[2], dsa_buf + 8);
+	put_unaligned_be32(words[3], dsa_buf + 12);
 
 	return 0;
 }
