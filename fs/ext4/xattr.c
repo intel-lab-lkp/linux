@@ -117,6 +117,8 @@ const struct xattr_handler * const ext4_xattr_handlers[] = {
 static int
 ext4_expand_inode_array(struct ext4_xattr_inode_array **ea_inode_array,
 			struct inode *inode);
+static void ext4_xattr_inode_array_free_deferred(struct super_block *sb,
+				struct ext4_xattr_inode_array *array);
 
 #ifdef CONFIG_LOCKDEP
 void ext4_xattr_inode_set_class(struct inode *ea_inode)
@@ -2187,7 +2189,8 @@ getblk_failed:
 		ext4_xattr_release_block(handle, inode, bs->bh,
 					 &ea_inode_array,
 					 0 /* extra_credits */);
-		ext4_xattr_inode_array_free(ea_inode_array);
+		ext4_xattr_inode_array_free_deferred(inode->i_sb,
+						     ea_inode_array);
 	}
 	error = 0;
 
@@ -3023,6 +3026,75 @@ void ext4_xattr_inode_array_free(struct ext4_xattr_inode_array *ea_inode_array)
 	for (idx = 0; idx < ea_inode_array->count; ++idx)
 		iput(ea_inode_array->inodes[idx]);
 	kfree(ea_inode_array);
+}
+
+static void ext4_xattr_inode_array_free_deferred(struct super_block *sb,
+				struct ext4_xattr_inode_array *array)
+{
+	int idx;
+
+	if (array == NULL)
+		return;
+
+	for (idx = 0; idx < array->count; ++idx)
+		ext4_put_ea_inode(sb, array->inodes[idx]);
+	kfree(array);
+}
+
+struct ext4_ea_iput_entry {
+	struct llist_node node;
+	struct inode *inode;
+};
+
+/*
+ * Worker function for deferred EA inode iput.  Processes all inodes queued
+ * on s_ea_inode_to_free in a context free of xattr_sem/jbd2 handle locks.
+ */
+void ext4_ea_inode_work(struct work_struct *work)
+{
+	struct ext4_sb_info *sbi = container_of(to_delayed_work(work),
+						struct ext4_sb_info,
+						s_ea_inode_work);
+	struct llist_node *node = llist_del_all(&sbi->s_ea_inode_to_free);
+	struct llist_node *next;
+
+	while (node) {
+		struct ext4_ea_iput_entry *entry = container_of(node,
+				struct ext4_ea_iput_entry, node);
+		next = node->next;
+		iput(entry->inode);
+		kfree(entry);
+		node = next;
+	}
+}
+
+/*
+ * Release a VFS reference on an EA inode after ext4_xattr_inode_dec_ref()
+ * may have set i_nlink=0.  Must be used instead of iput() in any context
+ * where xattr_sem or a jbd2 handle is held, because eviction of a nlink=0
+ * inode can acquire those same locks.
+ *
+ * When SB_ACTIVE, eviction does not call write_inode_now() so direct
+ * iput() is safe.  During mount (!SB_ACTIVE), defer to a workqueue.
+ *
+ * For EA inode references dropped without a preceding dec_ref (e.g.,
+ * lookup-only paths where nlink remains >= 1), plain iput() is safe
+ * and preferred.
+ */
+void ext4_put_ea_inode(struct super_block *sb, struct inode *inode)
+{
+	struct ext4_ea_iput_entry *entry;
+
+	if (!inode)
+		return;
+	if (sb->s_flags & SB_ACTIVE) {
+		iput(inode);
+		return;
+	}
+	entry = kmalloc(sizeof(*entry), GFP_NOFS | __GFP_NOFAIL);
+	entry->inode = inode;
+	llist_add(&entry->node, &EXT4_SB(sb)->s_ea_inode_to_free);
+	schedule_delayed_work(&EXT4_SB(sb)->s_ea_inode_work, 1);
 }
 
 /*
