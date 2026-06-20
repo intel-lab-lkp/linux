@@ -14,6 +14,7 @@
 #include <linux/delay.h>
 #include <linux/nfc.h>
 #include <linux/of.h>
+#include <linux/unaligned.h>
 
 #include "st-nci.h"
 
@@ -120,7 +121,7 @@ static int st_nci_i2c_read(struct st_nci_i2c_phy *phy,
 	if (r != ST_NCI_I2C_MIN_SIZE)
 		return -EREMOTEIO;
 
-	len = be16_to_cpu(*(__be16 *) (buf + 2));
+	len = get_unaligned_be16(buf + 2);
 	if (len > ST_NCI_I2C_MAX_SIZE) {
 		nfc_err(&client->dev, "invalid frame len\n");
 		return -EBADMSG;

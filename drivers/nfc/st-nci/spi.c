@@ -14,6 +14,7 @@
 #include <linux/delay.h>
 #include <linux/nfc.h>
 #include <linux/of.h>
+#include <linux/unaligned.h>
 #include <net/nfc/nci.h>
 
 #include "st-nci.h"
@@ -130,7 +131,7 @@ static int st_nci_spi_read(struct st_nci_spi_phy *phy,
 	if (r < 0)
 		return -EREMOTEIO;
 
-	len = be16_to_cpu(*(__be16 *) (buf + 2));
+	len = get_unaligned_be16(buf + 2);
 	if (len > ST_NCI_SPI_MAX_SIZE) {
 		nfc_err(&dev->dev, "invalid frame len\n");
 		phy->ndlc->hard_fault = 1;
