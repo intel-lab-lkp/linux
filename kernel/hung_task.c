@@ -25,6 +25,9 @@
 #include <linux/hung_task.h>
 #include <linux/rwsem.h>
 #include <linux/sys_info.h>
+#include <linux/stacktrace.h>
+#include <linux/jhash.h>
+#include <linux/hash.h>
 
 #include <trace/events/sched.h>
 
@@ -58,6 +61,23 @@ unsigned long __read_mostly sysctl_hung_task_timeout_secs = CONFIG_DEFAULT_HUNG_
 static unsigned long __read_mostly sysctl_hung_task_check_interval_secs;
 
 static int __read_mostly sysctl_hung_task_warnings = 10;
+
+#ifdef CONFIG_STACKTRACE
+/*
+ * Sizing the deduplicator hash table.
+ * 12 bits provides 4096 slots, costing just 16 KB of static memory.
+ */
+#define HUNG_TASK_HT_BITS 12
+#define HUNG_TASK_HT_SIZE (1UL << HUNG_TASK_HT_BITS)
+
+static u32 hung_task_hash_table[HUNG_TASK_HT_SIZE];
+
+/*
+ * Enable or disable stack trace deduplication.
+ * Defaults to 1 (enabled).
+ */
+static int __read_mostly sysctl_hung_task_dedup = 1;
+#endif
 
 static int __read_mostly did_panic;
 static bool hung_task_call_panic;
@@ -223,17 +243,70 @@ static inline void debug_show_blocker(struct task_struct *task, unsigned long ti
 }
 #endif
 
+#ifdef CONFIG_STACKTRACE
+/**
+ * hung_task_stack_is_unique - Check if a stack trace has been seen this round
+ * @t: Pointer to the task structure
+ *
+ * Captures the stack trace of the task, hashes it, and checks our lossy
+ * cache. Since this is only called serially from the khungtaskd thread,
+ * no concurrent locks or atomics are required. Returns true if the stack
+ * is unique (or we collided), false if it is a known duplicate.
+ */
+static bool hung_task_stack_is_unique(struct task_struct *t)
+{
+	unsigned long entries[64];
+	unsigned int nr_entries;
+	u32 hash, idx;
+
+	nr_entries = stack_trace_save_tsk(t, entries, ARRAY_SIZE(entries), 0);
+	hash = jhash2((u32 *)entries, nr_entries * (sizeof(unsigned long) /
+		      sizeof(u32)), JHASH_INITVAL);
+
+	if (unlikely(!hash))
+		hash = 1;
+
+	idx = hash_32(hash, HUNG_TASK_HT_BITS);
+
+	if (hung_task_hash_table[idx] == hash)
+		return false;
+
+	hung_task_hash_table[idx] = hash;
+
+	return true;
+}
+
+static inline void hung_task_dedup_flush(void)
+{
+	memset(hung_task_hash_table, 0, sizeof(hung_task_hash_table));
+}
+#else
+static bool hung_task_stack_is_unique(struct task_struct *t)
+{
+	return true;
+}
+
+static inline void hung_task_dedup_flush(void)
+{
+}
+#endif /* CONFIG_STACKTRACE */
+
 /**
  * hung_task_info - Print diagnostic details for a hung task
  * @t: Pointer to the detected hung task.
  * @timeout: Timeout threshold for detecting hung tasks
  * @this_round_count: Count of hung tasks detected in the current iteration
+ * @dedup_enabled: Snapshot of sysctl_hung_task_dedup for the current interval.
  *
  * Print structured information about the specified hung task, if warnings
- * are enabled or if the panic batch threshold is exceeded.
+ * are enabled or if the panic batch threshold is exceeded. If @dedup_enabled
+ * is true, identical stack traces within the same detection round are
+ * intercepted and suppressed to save ring buffer space.
  */
 static void hung_task_info(struct task_struct *t, unsigned long timeout,
-			   unsigned long this_round_count)
+			   unsigned long this_round_count,
+			   bool dedup_enabled)
+
 {
 	trace_sched_process_hang(t);
 
@@ -261,8 +334,14 @@ static void hung_task_info(struct task_struct *t, unsigned long timeout,
 			pr_err("      Blocked by coredump.\n");
 		pr_err("\"echo 0 > /proc/sys/kernel/hung_task_timeout_secs\""
 			" disables this message.\n");
-		sched_show_task(t);
-		debug_show_blocker(t, timeout);
+
+		/* Intercept and drop duplicate stack traces */
+		if (!dedup_enabled || hung_task_stack_is_unique(t)) {
+			sched_show_task(t);
+			debug_show_blocker(t, timeout);
+		} else {
+			pr_err("      Identical stack trace suppressed. See sysctl kernel.hung_task_dedup\n");
+		}
 
 		if (!sysctl_hung_task_warnings)
 			pr_info("Future hung task reports are suppressed, see sysctl kernel.hung_task_warnings\n");
@@ -306,6 +385,7 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 	unsigned long this_round_count;
 	int need_warning = sysctl_hung_task_warnings;
 	unsigned long si_mask = hung_task_si_mask;
+	bool dedup_enabled = IS_ENABLED(CONFIG_STACKTRACE) ? READ_ONCE(sysctl_hung_task_dedup) : 0;
 
 	/*
 	 * If the system crashed already then all bets are off,
@@ -313,6 +393,13 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 	 */
 	if (test_taint(TAINT_DIE) || did_panic)
 		return;
+
+	/*
+	 * Reset the de-duplicator hash table for this new detection round.
+	 * This prevents stale hashes from permanently suppressing.
+	 */
+	if (dedup_enabled)
+		hung_task_dedup_flush();
 
 	this_round_count = 0;
 	rcu_read_lock();
@@ -334,7 +421,7 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 			 */
 			atomic_long_inc(&sysctl_hung_task_detect_count);
 			this_round_count++;
-			hung_task_info(t, timeout, this_round_count);
+			hung_task_info(t, timeout, this_round_count, dedup_enabled);
 		}
 	}
  unlock:
@@ -483,6 +570,17 @@ static const struct ctl_table hung_task_sysctls[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_NEG_ONE,
 	},
+#ifdef CONFIG_STACKTRACE
+	{
+		.procname	= "hung_task_dedup",
+		.data		= &sysctl_hung_task_dedup,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+#endif
 	{
 		.procname	= "hung_task_detect_count",
 		.maxlen		= sizeof(unsigned long),
