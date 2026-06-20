@@ -122,6 +122,8 @@ typedef void (*dw_edma_handler_t)(struct dw_edma_chan *);
 
 struct dw_edma_core_ops {
 	void (*off)(struct dw_edma *dw);
+	void (*quiesce)(struct dw_edma *dw);
+	void (*ch_quiesce)(struct dw_edma_chan *chan);
 	u16 (*ch_count)(struct dw_edma *dw, enum dw_edma_dir dir);
 	enum dma_status (*ch_status)(struct dw_edma_chan *chan);
 	irqreturn_t (*handle_int)(struct dw_edma_irq *dw_irq, enum dw_edma_dir dir,
@@ -172,6 +174,18 @@ static inline
 void dw_edma_core_off(struct dw_edma *dw)
 {
 	dw->core->off(dw);
+}
+
+static inline
+void dw_edma_core_quiesce(struct dw_edma *dw)
+{
+	dw->core->quiesce(dw);
+}
+
+static inline
+void dw_edma_core_ch_quiesce(struct dw_edma_chan *chan)
+{
+	chan->dw->core->ch_quiesce(chan);
 }
 
 static inline
