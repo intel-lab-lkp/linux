@@ -136,6 +136,22 @@ static void write_ipack(struct ipack *p, const u8 *data, int count)
 	}
 }
 
+static int av7110_ipack_m1_pts(struct ipack *p, const u8 *buf,
+			       int c, int count, int max_which)
+{
+	while (c < count && p->which < max_which) {
+		if (p->which < 7)
+			p->pts[p->which - 2] = buf[c];
+
+		write_ipack(p, buf + c, 1);
+		c++;
+		p->found++;
+		p->which++;
+		p->hlength++;
+	}
+	return c;
+}
+
 int av7110_ipack_instant_repack(const u8 *buf, int count, struct ipack *p)
 {
 	int l;
@@ -335,26 +351,11 @@ int av7110_ipack_instant_repack(const u8 *buf, int count, struct ipack *p)
 				return count;
 			if (p->which > 2) {
 				if ((p->flag2 & PTS_DTS_FLAGS) == PTS_ONLY) {
-					while (c < count && p->which < 7) {
-						p->pts[p->which - 2] = buf[c];
-						write_ipack(p, buf + c, 1);
-						c++;
-						p->found++;
-						p->which++;
-						p->hlength++;
-					}
+					c = av7110_ipack_m1_pts(p, buf, c, count, 7);
 					if (c == count)
 						return count;
 				} else if ((p->flag2 & PTS_DTS_FLAGS) == PTS_DTS) {
-					while (c < count && p->which < 12) {
-						if (p->which < 7)
-							p->pts[p->which - 2] = buf[c];
-						write_ipack(p, buf + c, 1);
-						c++;
-						p->found++;
-						p->which++;
-						p->hlength++;
-					}
+					c = av7110_ipack_m1_pts(p, buf, c, count, 12);
 					if (c == count)
 						return count;
 				}
