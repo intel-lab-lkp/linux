@@ -2009,6 +2009,7 @@ static int cs_ioctl_reserve_signals(struct hl_fpriv *hpriv,
 	struct hl_cs_encaps_sig_handle *handle;
 	struct hl_encaps_signals_mgr *mgr;
 	struct hl_hw_sob *hw_sob;
+	void *old;
 	int hdl_id;
 	int rc = 0;
 
@@ -2045,13 +2046,19 @@ static int cs_ioctl_reserve_signals(struct hl_fpriv *hpriv,
 	}
 
 	handle->count = count;
+	handle->q_idx = q_idx;
+	handle->hdev = hdev;
+	handle->cs_seq = ULLONG_MAX;
+	kref_init(&handle->refcount);
 
 	hl_ctx_get(hpriv->ctx);
 	handle->ctx = hpriv->ctx;
 	mgr = &hpriv->ctx->sig_mgr;
 
 	spin_lock(&mgr->lock);
-	hdl_id = idr_alloc(&mgr->handles, handle, 1, 0, GFP_ATOMIC);
+	hdl_id = idr_alloc(&mgr->handles, NULL, 1, 0, GFP_ATOMIC);
+	if (hdl_id >= 0)
+		handle->id = hdl_id;
 	spin_unlock(&mgr->lock);
 
 	if (hdl_id < 0) {
@@ -2059,11 +2066,6 @@ static int cs_ioctl_reserve_signals(struct hl_fpriv *hpriv,
 		rc = -EINVAL;
 		goto put_ctx;
 	}
-
-	handle->id = hdl_id;
-	handle->q_idx = q_idx;
-	handle->hdev = hdev;
-	kref_init(&handle->refcount);
 
 	hdev->asic_funcs->hw_queues_lock(hdev);
 
@@ -2093,10 +2095,17 @@ static int cs_ioctl_reserve_signals(struct hl_fpriv *hpriv,
 	 */
 	handle->pre_sob_val = prop->next_sob_val - handle->count;
 
-	handle->cs_seq = ULLONG_MAX;
-
 	*signals_count = prop->next_sob_val;
 	hdev->asic_funcs->hw_queues_unlock(hdev);
+
+	spin_lock(&mgr->lock);
+	old = idr_replace(&mgr->handles, handle, hdl_id);
+	spin_unlock(&mgr->lock);
+
+	if (WARN_ON(IS_ERR(old))) {
+		rc = PTR_ERR(old);
+		goto remove_idr;
+	}
 
 	*sob_addr = handle->hw_sob->sob_addr;
 	*handle_id = hdl_id;
