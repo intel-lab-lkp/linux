@@ -2712,10 +2712,21 @@ int ocfs2_del_inode_from_orphan(struct ocfs2_super *osb,
 {
 	struct inode *orphan_dir_inode = NULL;
 	struct buffer_head *orphan_dir_bh = NULL;
-	struct ocfs2_dinode *di = (struct ocfs2_dinode *)di_bh->b_data;
+	struct ocfs2_dinode *di;
 	handle_t *handle = NULL;
 	int status = 0;
+	struct buffer_head *local_di_bh = NULL;
 
+	if (!di_bh) {
+		status = ocfs2_inode_lock(inode, &local_di_bh, 1);
+		if (status < 0) {
+			mlog_errno(status);
+			return status;
+		}
+		di_bh = local_di_bh;
+	}
+
+	di = (struct ocfs2_dinode *)di_bh->b_data;
 	orphan_dir_inode = ocfs2_get_system_file_inode(osb,
 			ORPHAN_DIR_SYSTEM_INODE,
 			le16_to_cpu(di->i_dio_orphaned_slot));
@@ -2779,6 +2790,10 @@ bail_unlock_orphan:
 	iput(orphan_dir_inode);
 
 bail:
+	if (local_di_bh) {
+		ocfs2_inode_unlock(inode, 1);
+		brelse(local_di_bh);
+	}
 	return status;
 }
 

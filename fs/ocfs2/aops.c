@@ -2280,6 +2280,7 @@ static int ocfs2_dio_end_io_write(struct inode *inode,
 	handle_t *handle = NULL;
 	loff_t end = offset + bytes;
 	int ret = 0, credits = 0, batch = 0;
+	bool orphaned = false;
 
 	ocfs2_init_dealloc_ctxt(&dealloc);
 
@@ -2371,17 +2372,25 @@ commit:
 		ocfs2_commit_trans(osb, handle);
 unlock:
 	up_write(&oi->ip_alloc_sem);
+	/*
+	 * Release the cluster lock and di_bh BEFORE calling
+	 * ocfs2_del_inode_from_orphan(). That function will acquire
+	 * inode_lock(orphan_dir_inode) which would cause an AB-BA
+	 *  deadlock with recovery paths that hold orphan_dir lock
+	 * before acquiring the file inode lock.
+	 */
+	orphaned = (!ret && dwc->dw_orphaned);
+	ocfs2_inode_unlock(inode, 1);
+	brelse(di_bh);
+	di_bh = NULL;
 
-	/* everything looks good, let's start the cleanup */
-	if (!ret && dwc->dw_orphaned) {
+	/* everything looks good, let's start the orphan cleanup */
+	if (orphaned) {
 		BUG_ON(dwc->dw_writer_pid != task_pid_nr(current));
-
-		ret = ocfs2_del_inode_from_orphan(osb, inode, di_bh, 0, 0);
+		ret = ocfs2_del_inode_from_orphan(osb, inode, NULL, 0, 0);
 		if (ret < 0)
 			mlog_errno(ret);
 	}
-	ocfs2_inode_unlock(inode, 1);
-	brelse(di_bh);
 out:
 	if (data_ac)
 		ocfs2_free_alloc_context(data_ac);
