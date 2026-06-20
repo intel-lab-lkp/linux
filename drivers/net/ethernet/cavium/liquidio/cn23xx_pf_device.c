@@ -1338,8 +1338,11 @@ int setup_cn23xx_octeon_pf_device(struct octeon_device *oct)
 		return 1;
 	}
 
-	if (cn23xx_get_pf_num(oct) != 0)
+	if (cn23xx_get_pf_num(oct) != 0) {
+		octeon_unmap_pci_barx(oct, 0);
+		octeon_unmap_pci_barx(oct, 1);
 		return 1;
+	}
 
 	if (cn23xx_sriov_config(oct)) {
 		octeon_unmap_pci_barx(oct, 0);
