@@ -79,6 +79,9 @@ macro_rules! drm_legacy_fields {
 /// - [`Normal`]: The general-purpose, reference-counted context. A [`Device`] in this context may
 ///   or may not be registered with userspace.
 /// - [`Registered`]: The device has been registered with userspace at some point.
+///
+/// `Device<T, Registered>` dereferences to `Device<T>` ([`Normal`]), so any method available on a
+/// [`Normal`] device is also available on a [`Registered`] one.
 pub trait DeviceContext: Sealed + Send + Sync {}
 
 /// The general-purpose, reference-counted [`DeviceContext`].
@@ -320,11 +323,22 @@ impl<T: drm::Driver, C: DeviceContext> Device<T, C> {
     }
 }
 
-impl<T: drm::Driver, C: DeviceContext> Deref for Device<T, C> {
+impl<T: drm::Driver> Deref for Device<T> {
     type Target = T::Data;
 
     fn deref(&self) -> &Self::Target {
         &self.data
+    }
+}
+
+impl<T: drm::Driver> Deref for Device<T, Registered> {
+    type Target = Device<T>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: The caller holds a `Device<T, Registered>`, which guarantees all invariants
+        // of the weaker `Normal` context.
+        unsafe { self.assume_ctx() }
     }
 }
 
