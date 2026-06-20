@@ -13370,6 +13370,12 @@ L:	netdev@vger.kernel.org
 S:	Orphan
 F:	drivers/net/wwan/iosm/
 
+INTEL X299 iMC SMBUS DRIVER
+M:	Simone Chifari <simone.chifari@gmail.com>
+L:	linux-i2c@vger.kernel.org
+S:	Maintained
+F:	drivers/i2c/busses/i2c-imc-x299.c
+
 INTEL(R) FLEXIBLE RETURN AND EVENT DELIVERY
 M:	Xin Li <xin@zytor.com>
 M:	"H. Peter Anvin" <hpa@zytor.com>
