@@ -43,14 +43,14 @@ use gem::{
 /// This is used with [`Object::new()`] to control various properties that can only be set when
 /// initially creating a shmem-backed GEM object.
 #[derive(Default)]
-pub struct ObjectConfig<'a, T: DriverObject, C: DeviceContext = Normal> {
+pub struct ObjectConfig<'a, T: DriverObject> {
     /// Whether to set the write-combine map flag.
     pub map_wc: bool,
 
     /// Reuse the DMA reservation from another GEM object.
     ///
     /// The newly created [`Object`] will hold an owned refcount to `parent_resv_obj` if specified.
-    pub parent_resv_obj: Option<&'a Object<T, C>>,
+    pub parent_resv_obj: Option<&'a Object<T>>,
 }
 
 /// A shmem-backed GEM object.
@@ -66,17 +66,16 @@ pub struct Object<T: DriverObject, C: DeviceContext = Normal> {
     #[pin]
     obj: Opaque<bindings::drm_gem_shmem_object>,
     /// Parent object that owns this object's DMA reservation object.
-    parent_resv_obj: Option<ARef<Object<T, C>>>,
+    parent_resv_obj: Option<ARef<Object<T>>>,
     #[pin]
     inner: T,
     _ctx: PhantomData<C>,
 }
 
 super::impl_aref_for_gem_obj! {
-    impl<T, C> for Object<T, C>
+    impl<T> for Object<T>
     where
-        T: DriverObject,
-        C: DeviceContext
+        T: DriverObject
 }
 
 // SAFETY: All GEM objects are thread-safe.
@@ -112,13 +111,43 @@ impl<T: DriverObject, C: DeviceContext> Object<T, C> {
         self.obj.get()
     }
 
+    /// Returns the `Device` that owns this GEM object.
+    pub fn dev(&self) -> &Device<T::Driver, C> {
+        // SAFETY: `dev` will have been initialized in `Self::new()` by `drm_gem_shmem_init()`.
+        unsafe { Device::from_raw((*self.as_raw()).dev) }
+    }
+
+    extern "C" fn free_callback(obj: *mut bindings::drm_gem_object) {
+        // SAFETY:
+        // - DRM always passes a valid gem object here
+        // - We used drm_gem_shmem_create() in our create_gem_object callback, so we know that
+        //   `obj` is contained within a drm_gem_shmem_object
+        let this = unsafe { container_of!(obj, bindings::drm_gem_shmem_object, base) };
+
+        // SAFETY:
+        // - We're in free_callback - so this function is safe to call.
+        // - We won't be using the gem resources on `this` after this call.
+        unsafe { bindings::drm_gem_shmem_release(this) };
+
+        // SAFETY:
+        // - We verified above that `obj` is valid, which makes `this` valid
+        // - This function is set in AllocOps, so we know that `this` is contained within a
+        //   `Object<T, C>`
+        let this = unsafe { container_of!(Opaque::cast_from(this), Self, obj) }.cast_mut();
+
+        // SAFETY: We're recovering the Kbox<> we created in gem_create_object()
+        let _ = unsafe { KBox::from_raw(this) };
+    }
+}
+
+impl<T: DriverObject> Object<T> {
     /// Create a new shmem-backed DRM object of the given size.
     ///
     /// Additional config options can be specified using `config`.
     pub fn new(
-        dev: &Device<T::Driver, C>,
+        dev: &Device<T::Driver>,
         size: usize,
-        config: ObjectConfig<'_, T, C>,
+        config: ObjectConfig<'_, T>,
         args: T::Args,
     ) -> Result<ARef<Self>> {
         let new: Pin<KBox<Self>> = KBox::try_pin_init(
@@ -126,7 +155,7 @@ impl<T: DriverObject, C: DeviceContext> Object<T, C> {
                 obj <- Opaque::init_zeroed(),
                 parent_resv_obj: config.parent_resv_obj.map(|p| p.into()),
                 inner <- T::new(dev, size, args),
-                _ctx: PhantomData::<C>,
+                _ctx: PhantomData,
             }),
             GFP_KERNEL,
         )?;
@@ -156,34 +185,6 @@ impl<T: DriverObject, C: DeviceContext> Object<T, C> {
         shmem.set_map_wc(config.map_wc);
 
         Ok(obj)
-    }
-
-    /// Returns the `Device` that owns this GEM object.
-    pub fn dev(&self) -> &Device<T::Driver, C> {
-        // SAFETY: `dev` will have been initialized in `Self::new()` by `drm_gem_shmem_init()`.
-        unsafe { Device::from_raw((*self.as_raw()).dev) }
-    }
-
-    extern "C" fn free_callback(obj: *mut bindings::drm_gem_object) {
-        // SAFETY:
-        // - DRM always passes a valid gem object here
-        // - We used drm_gem_shmem_create() in our create_gem_object callback, so we know that
-        //   `obj` is contained within a drm_gem_shmem_object
-        let this = unsafe { container_of!(obj, bindings::drm_gem_shmem_object, base) };
-
-        // SAFETY:
-        // - We're in free_callback - so this function is safe to call.
-        // - We won't be using the gem resources on `this` after this call.
-        unsafe { bindings::drm_gem_shmem_release(this) };
-
-        // SAFETY:
-        // - We verified above that `obj` is valid, which makes `this` valid
-        // - This function is set in AllocOps, so we know that `this` is contained within a
-        //   `Object<T, C>`
-        let this = unsafe { container_of!(Opaque::cast_from(this), Self, obj) }.cast_mut();
-
-        // SAFETY: We're recovering the Kbox<> we created in gem_create_object()
-        let _ = unsafe { KBox::from_raw(this) };
     }
 }
 
