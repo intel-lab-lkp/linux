@@ -7,11 +7,11 @@
 use crate::{
     bindings,
     device,
-    devres,
     drm,
     error::to_result,
     prelude::*,
-    sync::aref::ARef, //
+    sync::aref::ARef,
+    types::ForLt, //
 };
 use core::{
     mem,
@@ -110,6 +110,16 @@ pub trait Driver {
     /// Context data associated with the DRM driver
     type Data: Sync + Send;
 
+    /// Data owned by the [`Registration`] and accessible within a
+    /// [`RegistrationGuard`](drm::RegistrationGuard) critical section via
+    /// [`Device::registration_data_with()`](drm::Device::registration_data_with).
+    ///
+    /// This is a [`ForLt`](trait@ForLt) type whose lifetime is tied to the parent bus
+    /// device binding scope. References handed out by
+    /// [`Device::registration_data_with()`](drm::Device::registration_data_with) are tied to
+    /// the closure scope.
+    type RegistrationData: ForLt;
+
     /// The type used to manage memory for this driver.
     type Object: AllocImpl;
 
@@ -139,65 +149,82 @@ pub trait Driver {
 /// The registration type of a `drm::Device`.
 ///
 /// Once the `Registration` structure is dropped, the device is unregistered.
-pub struct Registration<T: Driver>(ARef<drm::Device<T>>);
+pub struct Registration<'a, T: Driver> {
+    drm: ARef<drm::Device<T>>,
+    _reg_data: Pin<KBox<<T::RegistrationData as ForLt>::Of<'a>>>,
+}
 
-impl<T: Driver> Registration<T> {
-    fn new(drm: drm::UnregisteredDevice<T>, flags: usize) -> Result<Self> {
-        // SAFETY: `drm.as_raw()` is valid by the invariants of `drm::Device`.
-        to_result(unsafe { bindings::drm_dev_register(drm.as_raw(), flags) })?;
-
-        // SAFETY: We just called `drm_dev_register` above
-        let new = NonNull::from(unsafe { drm.assume_ctx() });
-
-        // Leak the ARef from UnregisteredDevice in preparation for transferring its ownership.
-        mem::forget(drm);
-
-        // SAFETY: `drm`'s `Drop` constructor was never called, ensuring that there remains at least
-        // one reference to the device - which we take ownership over here.
-        let new = unsafe { ARef::from_raw(new) };
-
-        Ok(Self(new))
-    }
-
-    /// Registers a new [`UnregisteredDevice`](drm::UnregisteredDevice) with userspace.
+impl<'a, T: Driver> Registration<'a, T>
+where
+    for<'b> <T::RegistrationData as ForLt>::Of<'b>: Send + Sync,
+{
+    /// Register a new [`UnregisteredDevice`](drm::UnregisteredDevice) with userspace.
     ///
-    /// Ownership of the [`Registration`] object is passed to [`devres::register`].
-    pub fn new_foreign_owned<'a>(
-        drm: drm::UnregisteredDevice<T>,
+    /// # Safety
+    ///
+    /// The caller must not `mem::forget()` the returned [`Registration`] or otherwise prevent its
+    /// [`Drop`] implementation from running, since the registration data may contain borrowed
+    /// references that become invalid after `'a` ends.
+    pub unsafe fn new<E>(
         dev: &'a device::Device<device::Bound>,
+        drm: drm::UnregisteredDevice<T>,
+        reg_data: impl PinInit<<T::RegistrationData as ForLt>::Of<'a>, E>,
         flags: usize,
-    ) -> Result<&'a drm::Device<T>>
+    ) -> Result<Self>
     where
-        T: 'static,
+        Error: From<E>,
     {
         if drm.as_ref().as_ref().as_raw() != dev.as_raw() {
             return Err(EINVAL);
         }
 
-        let reg = Registration::<T>::new(drm, flags)?;
-        let drm = NonNull::from(reg.device());
+        let reg_data: Pin<KBox<<T::RegistrationData as ForLt>::Of<'a>>> =
+            KBox::pin_init(reg_data, GFP_KERNEL)?;
 
-        devres::register(dev, reg, GFP_KERNEL)?;
+        // Store the registration data pointer in the device before registration, so that it is
+        // visible once ioctls can be called.
+        //
+        // SAFETY: Lifetimes do not affect layout, so the pointer cast is sound.
+        let ptr: NonNull<<T::RegistrationData as ForLt>::Of<'static>> =
+            unsafe { mem::transmute(NonNull::from(Pin::get_ref(reg_data.as_ref()))) };
 
-        // SAFETY: Since `reg` was passed to devres::register(), the device now owns the lifetime
-        // of the DRM registration - ensuring that this references lives for at least as long as 'a.
-        Ok(unsafe { drm.as_ref() })
+        // SAFETY: No concurrent access; the device is not yet registered.
+        unsafe { *drm.registration_data.get() = ptr };
+
+        // SAFETY: `drm` is a valid, initialized but not yet registered DRM device.
+        let ret = unsafe { bindings::drm_dev_register(drm.as_raw(), flags) };
+        if let Err(e) = to_result(ret) {
+            // SAFETY: No concurrent access; registration failed.
+            unsafe { *drm.registration_data.get() = NonNull::dangling() };
+            return Err(e);
+        }
+
+        Ok(Self {
+            drm: (&*drm).into(),
+            _reg_data: reg_data,
+        })
     }
 
     /// Returns a reference to the `Device` instance for this registration.
     pub fn device(&self) -> &drm::Device<T> {
-        &self.0
+        &self.drm
     }
 }
 
 // SAFETY: `Registration` doesn't offer any methods or access to fields when shared between
 // threads, hence it's safe to share it.
-unsafe impl<T: Driver> Sync for Registration<T> {}
+unsafe impl<T: Driver> Sync for Registration<'_, T> where
+    for<'a> <T::RegistrationData as ForLt>::Of<'a>: Send + Sync
+{
+}
 
 // SAFETY: Registration with and unregistration from the DRM subsystem can happen from any thread.
-unsafe impl<T: Driver> Send for Registration<T> {}
+unsafe impl<T: Driver> Send for Registration<'_, T> where
+    for<'a> <T::RegistrationData as ForLt>::Of<'a>: Send + Sync
+{
+}
 
-impl<T: Driver> Drop for Registration<T> {
+impl<T: Driver> Drop for Registration<'_, T> {
     fn drop(&mut self) {
         // Use `drm_dev_unplug` rather than `drm_dev_unregister` to ensure that existing
         // `drm_dev_enter()` critical sections complete before unregistration proceeds. This
@@ -207,6 +234,9 @@ impl<T: Driver> Drop for Registration<T> {
         //
         // SAFETY: Safe by the invariant of `ARef<drm::Device<T>>`. The existence of this
         // `Registration` also guarantees that this `drm::Device` is actually registered.
-        unsafe { bindings::drm_dev_unplug(self.0.as_raw()) };
+        unsafe { bindings::drm_dev_unplug(self.drm.as_raw()) };
+        // After drm_dev_unplug(), the SRCU barrier guarantees that all RegistrationGuard critical
+        // sections have completed, so no one holds a reference to reg_data anymore.
+        // reg_data is dropped here automatically.
     }
 }
