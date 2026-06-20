@@ -1160,6 +1160,31 @@ static void read_and_intersect_post_frl_lt_status(
 	}
 }
 
+static bool is_ch7218_pcon(const struct dc_link *link)
+{
+	return link->dpcd_caps.branch_dev_id == DP_BRANCH_DEVICE_ID_2B02F0 &&
+		!memcmp(link->dpcd_caps.branch_dev_name, "CH7218",
+			sizeof(link->dpcd_caps.branch_dev_name));
+}
+
+static void apply_ch7218_pcon_caps_quirk(struct dc_link *link)
+{
+	if (!link->dc->caps.dp_hdmi21_pcon_support)
+		return;
+
+	/*
+	 * Some CH7218 firmware reports no downstream port, or reports the
+	 * detailed downstream port as DP, while the device identity and EDID
+	 * describe a DP-to-HDMI 2.1 PCON. Restore only the documented converter
+	 * capability ceilings here; do not touch the PCON link state.
+	 */
+	link->dpcd_caps.dongle_caps.dp_hdmi_max_bpc = 12;
+	link->dpcd_caps.dongle_caps.dp_hdmi_frl_max_link_bw_in_kbps = 48000000;
+	link->dpcd_caps.dongle_caps.is_dp_hdmi_ycbcr422_pass_through = true;
+	link->dpcd_caps.dongle_caps.is_dp_hdmi_ycbcr420_pass_through = true;
+	link->dpcd_caps.dongle_caps.extendedCapValid = true;
+}
+
 static void get_active_converter_info(
 	uint8_t data, struct dc_link *link)
 {
@@ -1168,10 +1193,19 @@ static void get_active_converter_info(
 
 	/* decode converter info*/
 	if (!ds_port.fields.PORT_PRESENT) {
-		link->dpcd_caps.dongle_type = DISPLAY_DONGLE_NONE;
+		if (is_ch7218_pcon(link)) {
+			link->dpcd_caps.is_branch_dev = true;
+			link->dpcd_caps.dongle_type =
+				DISPLAY_DONGLE_DP_HDMI_CONVERTER;
+			link->dpcd_caps.dongle_caps.dongle_type =
+				link->dpcd_caps.dongle_type;
+			apply_ch7218_pcon_caps_quirk(link);
+		} else {
+			link->dpcd_caps.dongle_type = DISPLAY_DONGLE_NONE;
+			link->dpcd_caps.is_branch_dev = false;
+		}
 		set_dongle_type(link->ddc,
 				link->dpcd_caps.dongle_type);
-		link->dpcd_caps.is_branch_dev = false;
 		return;
 	}
 
@@ -1202,7 +1236,14 @@ static void get_active_converter_info(
 			switch (port_caps->bits.DWN_STRM_PORTX_TYPE) {
 			/*Handle DP case as DONGLE_NONE*/
 			case DOWN_STREAM_DETAILED_DP:
-				link->dpcd_caps.dongle_type = DISPLAY_DONGLE_NONE;
+				link->dpcd_caps.dongle_type = is_ch7218_pcon(link) ?
+					DISPLAY_DONGLE_DP_HDMI_CONVERTER :
+					DISPLAY_DONGLE_NONE;
+				link->dpcd_caps.dongle_caps.dongle_type =
+					link->dpcd_caps.dongle_type;
+				if (link->dpcd_caps.dongle_type ==
+						DISPLAY_DONGLE_DP_HDMI_CONVERTER)
+					apply_ch7218_pcon_caps_quirk(link);
 				break;
 			case DOWN_STREAM_DETAILED_VGA:
 				link->dpcd_caps.dongle_type =
