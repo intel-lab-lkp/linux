@@ -71,6 +71,18 @@ pub mod internal {
     pub use bindings::drm_file;
     pub use bindings::drm_ioctl_desc;
 
+    /// Reinterpret a pointer to a DRM device with a different [`DeviceContext`], preserving the
+    /// driver type parameter `T`.
+    ///
+    /// Used by [`declare_drm_ioctls!`] to anchor type inference.
+    #[doc(hidden)]
+    #[inline(always)]
+    pub const fn __dev_ctx_cast<T: super::super::Driver>(
+        ptr: *const super::super::device::Device<T, super::super::Ioctl>,
+    ) -> *const super::super::device::Device<T, super::super::Registered> {
+        ptr.cast()
+    }
+
     /// Call an ioctl handler with lifetime-bounded references.
     ///
     /// The lifetime `'a` is tied to the `_anchor` parameter. This prevents handlers from
@@ -115,7 +127,7 @@ pub mod internal {
 /// `user_callback` should have the following prototype:
 ///
 /// ```ignore
-/// fn foo(device: &kernel::drm::Device<Self>,
+/// fn foo(device: &kernel::drm::Device<Self, kernel::drm::Registered>,
 ///        data: &mut uapi::argument_type,
 ///        file: &kernel::drm::File<Self::File>,
 /// ) -> Result<u32>
@@ -164,11 +176,38 @@ macro_rules! declare_drm_ioctls {
                             // - The DRM device must have been registered when we're called through
                             //   an IOCTL.
                             //
+                            // INVARIANT: The `Ioctl` context requires that the device has been
+                            // registered via `drm_dev_register()` at some point; the DRM core
+                            // guarantees this for ioctl dispatch callbacks.
+                            //
                             // FIXME: Currently there is nothing enforcing that the types of the
                             // dev/file match the current driver these ioctls are being declared
                             // for, and it's not clear how to enforce this within the type system.
-                            let dev: &$crate::drm::device::Device<_, $crate::drm::Normal> =
+                            let dev: &$crate::drm::device::Device<_, $crate::drm::Ioctl> =
                                 $crate::drm::device::Device::from_raw(raw_dev);
+                            // Cast to Registered preserving the driver type parameter.
+                            let __ptr = $crate::drm::ioctl::internal::__dev_ctx_cast(
+                                ::core::ptr::from_ref(dev),
+                            );
+
+                            // Type-inference anchor: the closure is never called but ties `dev`'s
+                            // type to `$func`'s first parameter, which the compiler cannot infer
+                            // through method resolution and associated-type projections alone.
+                            #[allow(unreachable_code)]
+                            let _ = || {
+                                $func(
+                                    // SAFETY: This closure is never executed; the dereference
+                                    // exists purely to unify the type parameter with `$func`.
+                                    // The pointer is valid regardless.
+                                    unsafe { &*__ptr },
+                                    unreachable!(),
+                                    unreachable!(),
+                                )
+                            };
+
+                            let Some(guard) = dev.registration_guard() else {
+                                return $crate::error::code::ENODEV.to_errno();
+                            };
                             let __anchor = ();
 
                             // SAFETY:
@@ -180,7 +219,7 @@ macro_rules! declare_drm_ioctls {
                             // - `raw_file` is a valid `struct drm_file` pointer provided by the
                             //   DRM core.
                             match unsafe { $crate::drm::ioctl::internal::__call_ioctl(
-                                &__anchor, dev, raw_data, raw_file, $func,
+                                &__anchor, &*guard, raw_data, raw_file, $func,
                             ) } {
                                 Err(e) => e.to_errno(),
                                 Ok(i) => i.try_into()

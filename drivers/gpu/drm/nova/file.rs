@@ -4,7 +4,11 @@ use crate::driver::{NovaDevice, NovaDriver};
 use crate::gem::NovaObject;
 use kernel::{
     alloc::flags::*,
-    drm::{self, gem::BaseObject},
+    drm::{
+        self,
+        gem::BaseObject,
+        Registered, //
+    },
     pci,
     prelude::*,
     uapi,
@@ -23,7 +27,7 @@ impl drm::file::DriverFile for File {
 impl File {
     /// IOCTL: get_param: Query GPU / driver metadata.
     pub(crate) fn get_param(
-        dev: &NovaDevice,
+        dev: &NovaDevice<Registered>,
         getparam: &mut uapi::drm_nova_getparam,
         _file: &drm::File<File>,
     ) -> Result<u32> {
@@ -43,7 +47,7 @@ impl File {
 
     /// IOCTL: gem_create: Create a new DRM GEM object.
     pub(crate) fn gem_create(
-        dev: &NovaDevice,
+        dev: &NovaDevice<Registered>,
         req: &mut uapi::drm_nova_gem_create,
         file: &drm::File<File>,
     ) -> Result<u32> {
@@ -56,7 +60,7 @@ impl File {
 
     /// IOCTL: gem_info: Query GEM metadata.
     pub(crate) fn gem_info(
-        _dev: &NovaDevice,
+        _dev: &NovaDevice<Registered>,
         req: &mut uapi::drm_nova_gem_info,
         file: &drm::File<File>,
     ) -> Result<u32> {
