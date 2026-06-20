@@ -74,35 +74,21 @@ macro_rules! drm_legacy_fields {
 
 /// A trait implemented by all possible contexts a [`Device`] can be used in.
 ///
-/// Setting up a new [`Device`] is a multi-stage process. Each step of the process that a user
-/// interacts with in Rust has a respective [`DeviceContext`] typestate. For example,
-/// `Device<T, Registered>` would be a [`Device`] that reached the [`Registered`] [`DeviceContext`].
+/// A [`Device`] can be in one of two contexts:
 ///
-/// Each stage of this process is described below:
-///
-/// ```text
-///        1                     2                         3
-/// +--------------+   +------------------+   +-----------------------+
-/// |Device created| → |Device initialized| → |Registered w/ userspace|
-/// +--------------+   +------------------+   +-----------------------+
-///    (Uninit)                                      (Registered)
-/// ```
-///
-/// 1. The [`Device`] is in the [`Uninit`] context and is not guaranteed to be initialized or
-///    registered with userspace. Only a limited subset of DRM core functionality is available.
-/// 2. The [`Device`] is guaranteed to be fully initialized, but is not guaranteed to be registered
-///    with userspace. All DRM core functionality which doesn't interact with userspace is
-///    available. We currently don't have a context for representing this.
-/// 3. The [`Device`] is guaranteed to be fully initialized, and is guaranteed to have been
-///    registered with userspace at some point - thus putting it in the [`Registered`] context.
-///
-/// An important caveat of [`DeviceContext`] which must be kept in mind: when used as a typestate
-/// for a reference type, it can only guarantee that a [`Device`] reached a particular stage in the
-/// initialization process _at the time the reference was taken_. No guarantee is made in regards to
-/// what stage of the process the [`Device`] is currently in. This means for instance that a
-/// `&Device<T, Uninit>` may actually be registered with userspace, it just wasn't known to be
-/// registered at the time the reference was taken.
+/// - [`Normal`]: The general-purpose, reference-counted context. A [`Device`] in this context may
+///   or may not be registered with userspace.
+/// - [`Registered`]: The device has been registered with userspace at some point.
 pub trait DeviceContext: Sealed + Send + Sync {}
+
+/// The general-purpose, reference-counted [`DeviceContext`].
+///
+/// A [`Device`] in this context may or may not be registered with userspace. This context is used
+/// for reference-counted device handles and during device setup via [`UnregisteredDevice`].
+pub struct Normal;
+
+impl Sealed for Normal {}
+impl DeviceContext for Normal {}
 
 /// The [`DeviceContext`] of a [`Device`] that was registered with userspace at some point.
 ///
@@ -121,20 +107,6 @@ pub struct Registered;
 impl Sealed for Registered {}
 impl DeviceContext for Registered {}
 
-/// The [`DeviceContext`] of a [`Device`] that may be unregistered and partly uninitialized.
-///
-/// A [`Device`] in this context is only guaranteed to be partly initialized, and may or may not
-/// be registered with userspace. Thus operations which depend on the [`Device`] being fully
-/// initialized, or which depend on the [`Device`] being registered with userspace are not
-/// available through this [`DeviceContext`].
-///
-/// A [`Device`] in this context can be used to create a
-/// [`Registration`](drm::driver::Registration).
-pub struct Uninit;
-
-impl Sealed for Uninit {}
-impl DeviceContext for Uninit {}
-
 /// A [`Device`] which is known at compile-time to be unregistered with userspace.
 ///
 /// This type allows performing operations which are only safe to do before userspace registration,
@@ -147,10 +119,10 @@ impl DeviceContext for Uninit {}
 ///
 /// The device in `self.0` is guaranteed to be a newly created [`Device`] that has not yet been
 /// registered with userspace until this type is dropped.
-pub struct UnregisteredDevice<T: drm::Driver>(ARef<Device<T, Uninit>>, NotThreadSafe);
+pub struct UnregisteredDevice<T: drm::Driver>(ARef<Device<T, Normal>>, NotThreadSafe);
 
 impl<T: drm::Driver> Deref for UnregisteredDevice<T> {
-    type Target = Device<T, Uninit>;
+    type Target = Device<T, Normal>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -178,15 +150,13 @@ impl<T: drm::Driver> UnregisteredDevice<T> {
         master_drop: None,
         debugfs_init: None,
 
-        // Ignore the Uninit DeviceContext below. It is only provided because it is required by the
-        // compiler, and it is not actually used by these functions.
-        gem_create_object: T::Object::<Uninit>::ALLOC_OPS.gem_create_object,
-        prime_handle_to_fd: T::Object::<Uninit>::ALLOC_OPS.prime_handle_to_fd,
-        prime_fd_to_handle: T::Object::<Uninit>::ALLOC_OPS.prime_fd_to_handle,
-        gem_prime_import: T::Object::<Uninit>::ALLOC_OPS.gem_prime_import,
-        gem_prime_import_sg_table: T::Object::<Uninit>::ALLOC_OPS.gem_prime_import_sg_table,
-        dumb_create: T::Object::<Uninit>::ALLOC_OPS.dumb_create,
-        dumb_map_offset: T::Object::<Uninit>::ALLOC_OPS.dumb_map_offset,
+        gem_create_object: T::Object::<Normal>::ALLOC_OPS.gem_create_object,
+        prime_handle_to_fd: T::Object::<Normal>::ALLOC_OPS.prime_handle_to_fd,
+        prime_fd_to_handle: T::Object::<Normal>::ALLOC_OPS.prime_fd_to_handle,
+        gem_prime_import: T::Object::<Normal>::ALLOC_OPS.gem_prime_import,
+        gem_prime_import_sg_table: T::Object::<Normal>::ALLOC_OPS.gem_prime_import_sg_table,
+        dumb_create: T::Object::<Normal>::ALLOC_OPS.dumb_create,
+        dumb_map_offset: T::Object::<Normal>::ALLOC_OPS.dumb_map_offset,
 
         show_fdinfo: None,
         fbdev_probe: None,
@@ -211,7 +181,7 @@ impl<T: drm::Driver> UnregisteredDevice<T> {
     pub fn new(dev: &device::Device, data: impl PinInit<T::Data, Error>) -> Result<Self> {
         // `__drm_dev_alloc` uses `kmalloc()` to allocate memory, hence ensure a `kmalloc()`
         // compatible `Layout`.
-        let layout = Kmalloc::aligned_layout(Layout::new::<Device<T, Uninit>>());
+        let layout = Kmalloc::aligned_layout(Layout::new::<Device<T, Normal>>());
 
         // Use a temporary vtable without a `release` callback until `data` is initialized, so
         // init failure can release the DRM device without dropping uninitialized fields.
@@ -223,12 +193,12 @@ impl<T: drm::Driver> UnregisteredDevice<T> {
         // SAFETY:
         // - `alloc_vtable` reference remains valid until no longer used,
         // - `dev` is valid by its type invarants,
-        let raw_drm: *mut Device<T, Uninit> = unsafe {
+        let raw_drm: *mut Device<T, Normal> = unsafe {
             bindings::__drm_dev_alloc(
                 dev.as_raw(),
                 &alloc_vtable,
                 layout.size(),
-                mem::offset_of!(Device<T, Uninit>, dev),
+                mem::offset_of!(Device<T, Normal>, dev),
             )
         }
         .cast();
@@ -264,16 +234,8 @@ impl<T: drm::Driver> UnregisteredDevice<T> {
 
 /// A typed DRM device with a specific [`drm::Driver`] implementation and [`DeviceContext`].
 ///
-/// Since DRM devices can be used before being fully initialized and registered with userspace, `C`
-/// represents the furthest [`DeviceContext`] we can guarantee that this [`Device`] has reached.
-///
-/// Keep in mind: this means that an unregistered device can still have the registration state
-/// [`Registered`] as long as it was registered with userspace once in the past, and that the
-/// behavior of such a device is still well-defined. Additionally, a device with the registration
-/// state [`Uninit`] simply does not have a guaranteed registration state at compile time, and could
-/// be either registered or unregistered. Since there is no way to guarantee a long-lived reference
-/// to an unregistered device would remain unregistered, we do not provide a [`DeviceContext`] for
-/// this.
+/// A device in the [`Registered`] context is guaranteed to have been registered with userspace
+/// at some point. The [`Normal`] context is the general-purpose, reference-counted context.
 ///
 /// # Invariants
 ///
