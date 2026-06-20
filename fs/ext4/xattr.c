@@ -1079,6 +1079,13 @@ static int ext4_xattr_inode_inc_ref(handle_t *handle, struct inode *ea_inode)
 	return ext4_xattr_inode_update_ref(handle, ea_inode, 1);
 }
 
+/*
+ * Decrement on-disk reference count of an EA inode.  If refcount reaches 0,
+ * i_nlink is cleared and the inode is added to the orphan list.  Callers
+ * must use ext4_put_ea_inode() (not iput) to release the VFS reference
+ * afterwards, since iput on a nlink=0 inode triggers eviction which may
+ * deadlock if called under xattr_sem or an active jbd2 handle.
+ */
 static int ext4_xattr_inode_dec_ref(handle_t *handle, struct inode *ea_inode)
 {
 	return ext4_xattr_inode_update_ref(handle, ea_inode, -1);
@@ -1106,10 +1113,10 @@ static int ext4_xattr_inode_inc_ref_all(handle_t *handle, struct inode *parent,
 		err = ext4_xattr_inode_inc_ref(handle, ea_inode);
 		if (err) {
 			ext4_warning_inode(ea_inode, "inc ref error %d", err);
-			iput(ea_inode);
+			ext4_put_ea_inode(parent->i_sb, ea_inode);
 			goto cleanup;
 		}
-		iput(ea_inode);
+		ext4_put_ea_inode(parent->i_sb, ea_inode);
 	}
 	return 0;
 
@@ -1135,7 +1142,8 @@ cleanup:
 		if (err)
 			ext4_warning_inode(ea_inode, "cleanup dec ref error %d",
 					   err);
-		iput(ea_inode);
+		/* i_nlink may remain 1 if shared; defer for !SB_ACTIVE safety */
+		ext4_put_ea_inode(parent->i_sb, ea_inode);
 	}
 	return saved_err;
 }
@@ -1203,7 +1211,8 @@ ext4_xattr_inode_dec_ref_all(handle_t *handle, struct inode *parent,
 		if (err) {
 			ext4_warning_inode(ea_inode,
 					   "Expand inode array err=%d", err);
-			iput(ea_inode);
+			/* i_nlink=1 (dec_ref not yet called); handle active */
+			ext4_put_ea_inode(parent->i_sb, ea_inode);
 			continue;
 		}
 
@@ -1507,7 +1516,7 @@ static struct inode *ext4_xattr_inode_create(handle_t *handle,
 			if (ext4_xattr_inode_dec_ref(handle, ea_inode))
 				ext4_warning_inode(ea_inode,
 					"cleanup dec ref error %d", err);
-			iput(ea_inode);
+			ext4_put_ea_inode(inode->i_sb, ea_inode);
 			return ERR_PTR(err);
 		}
 
@@ -1617,7 +1626,8 @@ static struct inode *ext4_xattr_inode_lookup_create(handle_t *handle,
 				      ea_inode->i_ino, true /* reusable */);
 	return ea_inode;
 out_err:
-	iput(ea_inode);
+	/* May be cache-found inode with i_nlink=1 (inc_ref failed) */
+	ext4_put_ea_inode(inode->i_sb, ea_inode);
 	ext4_xattr_inode_free_quota(inode, NULL, value_len);
 	return ERR_PTR(err);
 }
@@ -1850,7 +1860,8 @@ update_hash:
 
 	ret = 0;
 out:
-	iput(old_ea_inode);
+	/* old_ea_inode had dec_ref; may still have i_nlink=1 if shared */
+	ext4_put_ea_inode(inode->i_sb, old_ea_inode);
 	return ret;
 }
 
@@ -2152,7 +2163,8 @@ getblk_failed:
 					ext4_warning_inode(ea_inode,
 							   "dec ref error=%d",
 							   error);
-				iput(ea_inode);
+				/* i_nlink stays 1 (inc_ref_all added a ref) */
+				ext4_put_ea_inode(inode->i_sb, ea_inode);
 				ea_inode = NULL;
 			}
 
@@ -2206,7 +2218,8 @@ cleanup:
 			ext4_xattr_inode_free_quota(inode, ea_inode,
 						    i_size_read(ea_inode));
 		}
-		iput(ea_inode);
+		/* success: i_nlink=1; error+dec_ref: may still be 1 if shared */
+		ext4_put_ea_inode(inode->i_sb, ea_inode);
 	}
 	if (ce)
 		mb_cache_entry_put(ea_block_cache, ce);
@@ -2288,7 +2301,8 @@ int ext4_xattr_ibody_set(handle_t *handle, struct inode *inode,
 
 			ext4_xattr_inode_free_quota(inode, ea_inode,
 						    i_size_read(ea_inode));
-			iput(ea_inode);
+			/* cache-found ea_inode may retain i_nlink=1 */
+			ext4_put_ea_inode(inode->i_sb, ea_inode);
 		}
 		return error;
 	}
@@ -2300,7 +2314,8 @@ int ext4_xattr_ibody_set(handle_t *handle, struct inode *inode,
 		header->h_magic = cpu_to_le32(0);
 		ext4_clear_inode_state(inode, EXT4_STATE_XATTR);
 	}
-	iput(ea_inode);
+	/* ea_inode has i_nlink=1 (new ref just stored in xattr entry) */
+	ext4_put_ea_inode(inode->i_sb, ea_inode);
 	return 0;
 }
 
@@ -2989,7 +3004,8 @@ int ext4_xattr_delete_inode(handle_t *handle, struct inode *inode,
 					continue;
 				ext4_xattr_inode_free_quota(inode, ea_inode,
 					      le32_to_cpu(entry->e_value_size));
-				iput(ea_inode);
+				/* no dec_ref yet but i_nlink=1; handle is active */
+				ext4_put_ea_inode(inode->i_sb, ea_inode);
 			}
 
 		}
