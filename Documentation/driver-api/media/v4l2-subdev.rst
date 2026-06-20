@@ -77,7 +77,7 @@ It looks like this:
 		const struct v4l2_subdev_tuner_ops *tuner;
 		const struct v4l2_subdev_audio_ops *audio;
 		const struct v4l2_subdev_video_ops *video;
-		const struct v4l2_subdev_pad_ops *video;
+		const struct v4l2_subdev_pad_ops *pad;
 	};
 
 The core ops are common to all subdevs, the other categories are implemented
@@ -300,31 +300,31 @@ directly:
 
 .. code-block:: c
 
-	err = sd->ops->core->g_std(sd, &norm);
+	err = sd->ops->video->g_std(sd, &norm);
 
 but it is better and easier to use this macro:
 
 .. code-block:: c
 
-	err = v4l2_subdev_call(sd, core, g_std, &norm);
+	err = v4l2_subdev_call(sd, video, g_std, &norm);
 
 The macro will do the right ``NULL`` pointer checks and returns ``-ENODEV``
 if :c:type:`sd <v4l2_subdev>` is ``NULL``, ``-ENOIOCTLCMD`` if either
-:c:type:`sd <v4l2_subdev>`->core or :c:type:`sd <v4l2_subdev>`->core->g_std is ``NULL``, or the actual result of the
-:c:type:`sd <v4l2_subdev>`->ops->core->g_std ops.
+:c:type:`sd <v4l2_subdev>`->video or :c:type:`sd <v4l2_subdev>`->video->g_std is ``NULL``, or the actual result of the
+:c:type:`sd <v4l2_subdev>`->ops->video->g_std ops.
 
 It is also possible to call all or a subset of the sub-devices:
 
 .. code-block:: c
 
-	v4l2_device_call_all(v4l2_dev, 0, core, g_std, &norm);
+	v4l2_device_call_all(v4l2_dev, 0, video, g_std, &norm);
 
 Any subdev that does not support this ops is skipped and error results are
 ignored. If you want to check for errors use this:
 
 .. code-block:: c
 
-	err = v4l2_device_call_until_err(v4l2_dev, 0, core, g_std, &norm);
+	err = v4l2_device_call_until_err(v4l2_dev, 0, video, g_std, &norm);
 
 Any error except ``-ENOIOCTLCMD`` will exit the loop with that error. If no
 errors (except ``-ENOIOCTLCMD``) occurred, then 0 is returned.
