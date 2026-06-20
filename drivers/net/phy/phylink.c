@@ -3917,13 +3917,30 @@ static void phylink_sfp_link_up(void *upstream)
 	phylink_enable_and_run_resolve(pl, PHYLINK_DISABLE_LINK);
 }
 
+static u32 phylink_get_phy_id(struct phy_device *phy)
+{
+	if (phy->is_c45) {
+		const int num_ids = ARRAY_SIZE(phy->c45_ids.device_ids);
+		int i;
+
+		for (i = 1; i < num_ids; i++) {
+			if (phy->c45_ids.mmds_present & BIT(i))
+				return (phy->c45_ids.device_ids[i]);
+		}
+
+		return 0;
+	} else {
+		return phy->phy_id;
+	}
+}
+
 static int phylink_sfp_connect_phy(void *upstream, struct phy_device *phy)
 {
 	struct phylink *pl = upstream;
 
 	if (!phy->drv) {
-		phylink_err(pl, "PHY %s (id 0x%.8lx) has no driver loaded\n",
-			    phydev_name(phy), (unsigned long)phy->phy_id);
+		phylink_err(pl, "PHY %s (id 0x%.8x) has no driver loaded\n",
+			    phydev_name(phy), phylink_get_phy_id(phy));
 		phylink_err(pl, "Drivers which handle known common cases: CONFIG_BCM84881_PHY, CONFIG_MARVELL_PHY\n");
 		return -EINVAL;
 	}
