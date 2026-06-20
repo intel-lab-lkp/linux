@@ -478,6 +478,11 @@ static int __init damon_reclaim_init(void)
 out:
 	if (err && enabled)
 		enabled = false;
+
+	if (err && ctx) {
+		damon_destroy_ctx(ctx);
+		ctx = NULL;
+	}
 	return err;
 }
 
