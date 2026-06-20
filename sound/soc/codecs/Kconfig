@@ -1888,7 +1888,7 @@ config SND_SOC_RT5670
 	depends on I2C
 
 config SND_SOC_RT5677
-	tristate
+	tristate "Realtek RT5677 Codec"
 	depends on I2C
 	select REGMAP_I2C
 	select REGMAP_IRQ
