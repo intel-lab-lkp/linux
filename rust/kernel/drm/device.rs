@@ -246,7 +246,7 @@ impl<T: drm::Driver> UnregisteredDevice<T> {
 /// * The data layout of `Self` remains the same across all implementations of `C`.
 /// * Any invariants for `C` also apply.
 #[repr(C)]
-pub struct Device<T: drm::Driver, C: DeviceContext = Registered> {
+pub struct Device<T: drm::Driver, C: DeviceContext = Normal> {
     dev: Opaque<bindings::drm_device>,
     data: T::Data,
     _ctx: PhantomData<C>,

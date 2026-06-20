@@ -10,6 +10,7 @@ use crate::{
         self,
         device::{
             DeviceContext,
+            Normal,
             Registered, //
         },
         driver::{
@@ -183,7 +184,7 @@ pub trait BaseObject: IntoGEMObject {
     fn create_handle<D, F>(&self, file: &drm::File<F>) -> Result<u32>
     where
         Self: AllocImpl<Driver = D>,
-        D: drm::Driver<Object<Registered> = Self, File = F>,
+        D: drm::Driver<Object<Normal> = Self, File = F>,
         F: drm::file::DriverFile<Driver = D>,
     {
         let mut handle: u32 = 0;
@@ -198,7 +199,7 @@ pub trait BaseObject: IntoGEMObject {
     fn lookup_handle<D, F>(file: &drm::File<F>, handle: u32) -> Result<ARef<Self>>
     where
         Self: AllocImpl<Driver = D>,
-        D: drm::Driver<Object<Registered> = Self, File = F>,
+        D: drm::Driver<Object<Normal> = Self, File = F>,
         F: drm::file::DriverFile<Driver = D>,
     {
         // SAFETY: The arguments are all valid per the type invariants.
@@ -254,7 +255,7 @@ impl<T: IntoGEMObject> BaseObjectPrivate for T {}
 /// * Any type invariants of `Ctx` apply to the parent DRM device for this GEM object.
 #[repr(C)]
 #[pin_data]
-pub struct Object<T: DriverObject + Send + Sync, Ctx: DeviceContext = Registered> {
+pub struct Object<T: DriverObject + Send + Sync, Ctx: DeviceContext = Normal> {
     obj: Opaque<bindings::drm_gem_object>,
     #[pin]
     data: T,

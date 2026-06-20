@@ -47,7 +47,7 @@ pub(crate) type IoMem<'a> = kernel::io::mem::IoMem<'a, SZ_2M>;
 pub(crate) struct TyrDrmDriver;
 
 /// Convenience type alias for the DRM device type for this driver.
-pub(crate) type TyrDrmDevice<Ctx = drm::Registered> = drm::Device<TyrDrmDriver, Ctx>;
+pub(crate) type TyrDrmDevice<Ctx = drm::Normal> = drm::Device<TyrDrmDriver, Ctx>;
 
 pub(crate) struct TyrPlatformDriver;
 

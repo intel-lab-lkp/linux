@@ -26,7 +26,7 @@ pub(crate) struct Nova {
 }
 
 /// Convienence type alias for the DRM device type for this driver
-pub(crate) type NovaDevice<Ctx = drm::Registered> = drm::Device<NovaDriver, Ctx>;
+pub(crate) type NovaDevice<Ctx = drm::Normal> = drm::Device<NovaDriver, Ctx>;
 
 #[pin_data]
 pub(crate) struct NovaData {
