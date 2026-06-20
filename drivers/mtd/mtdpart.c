@@ -267,6 +267,11 @@ int mtd_add_partition(struct mtd_info *parent, const char *name,
 	if (length <= 0)
 		return -EINVAL;
 
+	if (offset < 0 || offset >= (long long)parent_size)
+		return -EINVAL;
+
+	if ((u64)offset + (u64)length > parent_size)
+		return -EINVAL;
 	memset(&part, 0, sizeof(part));
 	part.name = name;
 	part.size = length;
