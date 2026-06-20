@@ -1185,6 +1185,25 @@ static void apply_ch7218_pcon_caps_quirk(struct dc_link *link)
 	link->dpcd_caps.dongle_caps.extendedCapValid = true;
 }
 
+static void apply_ch7218_dsc_caps_quirk(struct dc_link *link)
+{
+	struct dpcd_dsc_capabilities *dsc_caps = &link->dpcd_caps.dsc_caps;
+
+	if (!is_ch7218_pcon(link) ||
+	    dsc_caps->dsc_basic_caps.fields.dsc_support.DSC_SUPPORT ||
+	    (!dsc_caps->dsc_basic_caps.raw[DP_DSC_REV - DP_DSC_SUPPORT] &&
+	     !dsc_caps->dsc_basic_caps.raw[DP_DSC_SLICE_CAP_1 - DP_DSC_SUPPORT] &&
+	     !dsc_caps->dsc_basic_caps.raw[DP_DSC_MAX_BITS_PER_PIXEL_LOW - DP_DSC_SUPPORT]))
+		return;
+
+	/*
+	 * Some CH7218 firmware clears DP_DSC_SUPPORT while returning a populated
+	 * DSC decoder capability block. Do not infer DSC support for other
+	 * devices and do not enable DSC passthrough here.
+	 */
+	dsc_caps->dsc_basic_caps.fields.dsc_support.DSC_SUPPORT = true;
+}
+
 static void get_active_converter_info(
 	uint8_t data, struct dc_link *link)
 {
@@ -2070,6 +2089,7 @@ static bool retrieve_link_cap(struct dc_link *link)
 				link->dpcd_caps.dsc_caps.dsc_basic_caps.raw,
 				sizeof(link->dpcd_caps.dsc_caps.dsc_basic_caps.raw));
 		if (status == DC_OK) {
+			apply_ch7218_dsc_caps_quirk(link);
 			is_fec_supported = link->dpcd_caps.fec_cap.bits.FEC_CAPABLE;
 			is_dsc_basic_supported = link->dpcd_caps.dsc_caps.dsc_basic_caps.fields.dsc_support.DSC_SUPPORT;
 			is_dsc_passthrough_supported = link->dpcd_caps.dsc_caps.dsc_basic_caps.fields.dsc_support.DSC_PASSTHROUGH_SUPPORT;
