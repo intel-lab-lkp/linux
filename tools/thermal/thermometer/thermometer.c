@@ -266,6 +266,7 @@ static int thermometer_add_tz(const char *path, const char *name, int polling,
 	fd = open(tz_path, O_RDONLY);
 	if (fd < 0) {
 		ERROR("Failed to open '%s': %m\n", tz_path);
+		close(fd);
 		return -1;
 	}
 
