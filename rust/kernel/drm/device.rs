@@ -74,14 +74,16 @@ macro_rules! drm_legacy_fields {
 
 /// A trait implemented by all possible contexts a [`Device`] can be used in.
 ///
-/// A [`Device`] can be in one of two contexts:
+/// A [`Device`] can be in one of the following contexts:
 ///
 /// - [`Normal`]: The general-purpose, reference-counted context. A [`Device`] in this context may
 ///   or may not be registered with userspace.
+/// - [`Ioctl`]: The device has been registered with userspace at some point; used in ioctl
+///   dispatch context.
 /// - [`Registered`]: The device has been registered with userspace at some point.
 ///
-/// `Device<T, Registered>` dereferences to `Device<T>` ([`Normal`]), so any method available on a
-/// [`Normal`] device is also available on a [`Registered`] one.
+/// Both `Device<T, Ioctl>` and `Device<T, Registered>` dereference to `Device<T>` ([`Normal`]),
+/// so any method available on a [`Normal`] device is also available in the other contexts.
 pub trait DeviceContext: Sealed + Send + Sync {}
 
 /// The general-purpose, reference-counted [`DeviceContext`].
@@ -112,6 +114,21 @@ pub struct Registered;
 
 impl Sealed for Registered {}
 impl DeviceContext for Registered {}
+
+/// The [`DeviceContext`] of a [`Device`] that has been registered with userspace previously.
+///
+/// A [`Device`] in this context has been registered at some point, but may be concurrently
+/// unregistering or already unregistered. `drm_dev_enter()` can guard against this, ensuring the
+/// device remains registered for the duration of the critical section.
+///
+/// # Invariants
+///
+/// A [`Device`] in this context has been registered with userspace via `drm_dev_register()` at
+/// some point.
+pub struct Ioctl;
+
+impl Sealed for Ioctl {}
+impl DeviceContext for Ioctl {}
 
 /// A [`Device`] which is known at compile-time to be unregistered with userspace.
 ///
@@ -337,6 +354,17 @@ impl<T: drm::Driver> Deref for Device<T, Registered> {
     #[inline]
     fn deref(&self) -> &Self::Target {
         // SAFETY: The caller holds a `Device<T, Registered>`, which guarantees all invariants
+        // of the weaker `Normal` context.
+        unsafe { self.assume_ctx() }
+    }
+}
+
+impl<T: drm::Driver> Deref for Device<T, Ioctl> {
+    type Target = Device<T>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: The caller holds a `Device<T, Ioctl>`, which guarantees all invariants
         // of the weaker `Normal` context.
         unsafe { self.assume_ctx() }
     }
