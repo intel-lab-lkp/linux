@@ -10,8 +10,7 @@ use crate::{
         self,
         device::{
             DeviceContext,
-            Normal,
-            Registered, //
+            Normal, //
         },
         driver::{
             AllocImpl,
@@ -82,8 +81,7 @@ pub type DriverFile<T> = drm::File<<<T as DriverObject>::Driver as drm::Driver>:
 /// A type alias for retrieving the current [`AllocImpl`] for a given [`DriverObject`].
 ///
 /// [`Driver`]: drm::Driver
-pub type DriverAllocImpl<T, Ctx = Registered> =
-    <<T as DriverObject>::Driver as drm::Driver>::Object<Ctx>;
+pub type DriverAllocImpl<T> = <<T as DriverObject>::Driver as drm::Driver>::Object;
 
 /// GEM object functions, which must be implemented by drivers.
 pub trait DriverObject: Sync + Send + Sized {
@@ -94,8 +92,8 @@ pub trait DriverObject: Sync + Send + Sized {
     type Args;
 
     /// Create a new driver data object for a GEM object of a given size.
-    fn new<Ctx: DeviceContext>(
-        dev: &drm::Device<Self::Driver, Ctx>,
+    fn new(
+        dev: &drm::Device<Self::Driver>,
         size: usize,
         args: Self::Args,
     ) -> impl PinInit<Self, Error>;
@@ -110,7 +108,7 @@ pub trait DriverObject: Sync + Send + Sized {
 }
 
 /// Trait that represents a GEM object subtype
-pub trait IntoGEMObject: Sized + super::private::Sealed + AlwaysRefCounted {
+pub trait IntoGEMObject: Sized + super::private::Sealed {
     /// Returns a reference to the raw `drm_gem_object` structure, which must be valid as long as
     /// this owning object is valid.
     fn as_raw(&self) -> *mut bindings::drm_gem_object;
@@ -184,7 +182,7 @@ pub trait BaseObject: IntoGEMObject {
     fn create_handle<D, F>(&self, file: &drm::File<F>) -> Result<u32>
     where
         Self: AllocImpl<Driver = D>,
-        D: drm::Driver<Object<Normal> = Self, File = F>,
+        D: drm::Driver<Object = Self, File = F>,
         F: drm::file::DriverFile<Driver = D>,
     {
         let mut handle: u32 = 0;
@@ -198,8 +196,8 @@ pub trait BaseObject: IntoGEMObject {
     /// Looks up an object by its handle for a given `File`.
     fn lookup_handle<D, F>(file: &drm::File<F>, handle: u32) -> Result<ARef<Self>>
     where
-        Self: AllocImpl<Driver = D>,
-        D: drm::Driver<Object<Normal> = Self, File = F>,
+        Self: AllocImpl<Driver = D> + AlwaysRefCounted,
+        D: drm::Driver<Object = Self, File = F>,
         F: drm::file::DriverFile<Driver = D>,
     {
         // SAFETY: The arguments are all valid per the type invariants.
@@ -281,12 +279,43 @@ impl<T: DriverObject, Ctx: DeviceContext> Object<T, Ctx> {
         rss: None,
     };
 
+    /// Returns the `Device` that owns this GEM object.
+    pub fn dev(&self) -> &drm::Device<T::Driver, Ctx> {
+        // SAFETY:
+        // - `struct drm_gem_object.dev` is initialized and valid for as long as the GEM
+        //   object lives.
+        // - The device we used for creating the gem object is passed as &drm::Device<T::Driver> to
+        //   Object::<T>::new(), so we know that `T::Driver` is the right generic parameter to use
+        //   here.
+        // - Any type invariants of `Ctx` are upheld by using the same `Ctx` for the `Device` we
+        //   return.
+        unsafe { drm::Device::from_raw((*self.as_raw()).dev) }
+    }
+
+    fn as_raw(&self) -> *mut bindings::drm_gem_object {
+        self.obj.get()
+    }
+
+    extern "C" fn free_callback(obj: *mut bindings::drm_gem_object) {
+        let ptr: *mut Opaque<bindings::drm_gem_object> = obj.cast();
+
+        // SAFETY: All of our objects are of type `Object<T>`.
+        let this = unsafe { crate::container_of!(ptr, Self, obj) };
+
+        // SAFETY: The C code only ever calls this callback with a valid pointer to a `struct
+        // drm_gem_object`.
+        unsafe { bindings::drm_gem_object_release(obj) };
+
+        // SAFETY: All of our objects are allocated via `KBox`, and we're in the
+        // free callback which guarantees this object has zero remaining references,
+        // so we can drop it.
+        let _ = unsafe { KBox::from_raw(this) };
+    }
+}
+
+impl<T: DriverObject> Object<T> {
     /// Create a new GEM object.
-    pub fn new(
-        dev: &drm::Device<T::Driver, Ctx>,
-        size: usize,
-        args: T::Args,
-    ) -> Result<ARef<Self>> {
+    pub fn new(dev: &drm::Device<T::Driver>, size: usize, args: T::Args) -> Result<ARef<Self>> {
         let obj: Pin<KBox<Self>> = KBox::pin_init(
             try_pin_init!(Self {
                 obj: Opaque::new(bindings::drm_gem_object::default()),
@@ -322,46 +351,12 @@ impl<T: DriverObject, Ctx: DeviceContext> Object<T, Ctx> {
         // SAFETY: We take over the initial reference count from `drm_gem_object_init()`.
         Ok(unsafe { ARef::from_raw(ptr) })
     }
-
-    /// Returns the `Device` that owns this GEM object.
-    pub fn dev(&self) -> &drm::Device<T::Driver, Ctx> {
-        // SAFETY:
-        // - `struct drm_gem_object.dev` is initialized and valid for as long as the GEM
-        //   object lives.
-        // - The device we used for creating the gem object is passed as &drm::Device<T::Driver> to
-        //   Object::<T>::new(), so we know that `T::Driver` is the right generic parameter to use
-        //   here.
-        // - Any type invariants of `Ctx` are upheld by using the same `Ctx` for the `Device` we
-        //   return.
-        unsafe { drm::Device::from_raw((*self.as_raw()).dev) }
-    }
-
-    fn as_raw(&self) -> *mut bindings::drm_gem_object {
-        self.obj.get()
-    }
-
-    extern "C" fn free_callback(obj: *mut bindings::drm_gem_object) {
-        let ptr: *mut Opaque<bindings::drm_gem_object> = obj.cast();
-
-        // SAFETY: All of our objects are of type `Object<T>`.
-        let this = unsafe { crate::container_of!(ptr, Self, obj) };
-
-        // SAFETY: The C code only ever calls this callback with a valid pointer to a `struct
-        // drm_gem_object`.
-        unsafe { bindings::drm_gem_object_release(obj) };
-
-        // SAFETY: All of our objects are allocated via `KBox`, and we're in the
-        // free callback which guarantees this object has zero remaining references,
-        // so we can drop it.
-        let _ = unsafe { KBox::from_raw(this) };
-    }
 }
 
 impl_aref_for_gem_obj! {
-    impl<T, C> for Object<T, C>
+    impl<T> for Object<T>
     where
-        T: DriverObject,
-        C: DeviceContext
+        T: DriverObject
 }
 
 impl<T: DriverObject, Ctx: DeviceContext> super::private::Sealed for Object<T, Ctx> {}
