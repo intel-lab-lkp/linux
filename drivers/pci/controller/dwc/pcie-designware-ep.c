@@ -878,6 +878,26 @@ static int dw_pcie_ep_check_edma_ll_regions(struct dw_edma_region *region,
 	return 0;
 }
 
+static int dw_pcie_ep_check_edma_func(u8 func_no, u8 vfunc_no)
+{
+	/*
+	 * The DWC endpoint databook says it is not possible to assign the
+	 * DMA/HDMA registers to any Virtual Function.
+	 */
+	if (vfunc_no)
+		return -EOPNOTSUPP;
+
+	/*
+	 * To-Do: Supporting PF1+ needs dw-edma core support to carry the
+	 * endpoint function number into channel setup and program the eDMA/HDMA
+	 * requester-ID registers.
+	 */
+	if (func_no)
+		return -EOPNOTSUPP;
+
+	return 0;
+}
+
 static int
 dw_pcie_ep_get_aux_resources_count(struct pci_epc *epc, u8 func_no,
 				   u8 vfunc_no)
@@ -891,12 +911,9 @@ dw_pcie_ep_get_aux_resources_count(struct pci_epc *epc, u8 func_no,
 	if (!pci->edma_reg_size || !edma->dw)
 		return 0;
 
-	/*
-	 * DWC eDMA/HDMA register windows exposed to the Root Complex are
-	 * assigned to a PF BAR and cannot be assigned to a VF BAR.
-	 */
-	if (vfunc_no)
-		return -EOPNOTSUPP;
+	ret = dw_pcie_ep_check_edma_func(func_no, vfunc_no);
+	if (ret)
+		return ret;
 
 	ret = dw_pcie_ep_check_edma_ll_regions(edma->ll_region_wr,
 					       edma->ll_wr_cnt);
@@ -1043,6 +1060,59 @@ dw_pcie_ep_get_aux_resources(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	return 0;
 }
 
+static int dw_pcie_ep_delegate_dma_chan(struct pci_epc *epc, u8 func_no,
+					u8 vfunc_no,
+					enum pci_epc_aux_dma_dir dir, u16 hw_ch,
+					void **data)
+{
+	struct dw_pcie_ep *ep = epc_get_drvdata(epc);
+	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
+	struct dw_edma_chip *edma = &pci->edma;
+	struct dma_chan *chan;
+	int ret;
+	bool write;
+
+	if (!data)
+		return -EINVAL;
+	*data = NULL;
+
+	ret = dw_pcie_ep_check_edma_func(func_no, vfunc_no);
+	if (ret)
+		return ret;
+
+	if (!edma->dw)
+		return -ENODEV;
+
+	switch (dir) {
+	case PCI_EPC_AUX_DMA_EP_TO_RC:
+		if (hw_ch >= edma->ll_wr_cnt)
+			return -EINVAL;
+		write = true;
+		break;
+	case PCI_EPC_AUX_DMA_RC_TO_EP:
+		if (hw_ch >= edma->ll_rd_cnt)
+			return -EINVAL;
+		write = false;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	chan = dw_edma_request_delegated_chan(edma->dev, write, hw_ch);
+	if (!chan)
+		return -EBUSY;
+
+	*data = chan;
+
+	return 0;
+}
+
+static void dw_pcie_ep_reclaim_dma_chan(struct pci_epc *epc, u8 func_no,
+					u8 vfunc_no, void *data, bool quiesce)
+{
+	dw_edma_release_delegated_chan(data, quiesce);
+}
+
 static const struct pci_epc_ops epc_ops = {
 	.write_header		= dw_pcie_ep_write_header,
 	.set_bar		= dw_pcie_ep_set_bar,
@@ -1060,6 +1130,8 @@ static const struct pci_epc_ops epc_ops = {
 	.get_features		= dw_pcie_ep_get_features,
 	.get_aux_resources_count	= dw_pcie_ep_get_aux_resources_count,
 	.get_aux_resources	= dw_pcie_ep_get_aux_resources,
+	.delegate_dma_chan	= dw_pcie_ep_delegate_dma_chan,
+	.reclaim_dma_chan	= dw_pcie_ep_reclaim_dma_chan,
 };
 
 /**
