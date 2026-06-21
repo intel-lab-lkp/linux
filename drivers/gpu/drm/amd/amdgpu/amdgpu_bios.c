@@ -26,6 +26,7 @@
  *          Jerome Glisse
  */
 
+#include <linux/firmware.h>
 #include "amdgpu.h"
 #include "atom.h"
 
@@ -455,6 +456,24 @@ static bool amdgpu_get_bios_apu(struct amdgpu_device *adev)
 	if (amdgpu_read_platform_bios(adev)) {
 		dev_info(adev->dev, "Fetched VBIOS from platform\n");
 		goto success;
+	}
+
+	{
+		const struct firmware *fw;
+		char fw_name[32];
+
+		snprintf(fw_name, sizeof(fw_name), "amdgpu/%04x_%04x.bin",
+			 adev->pdev->vendor, adev->pdev->device);
+		if (request_firmware(&fw, fw_name, adev->dev) == 0) {
+			adev->bios = kmemdup(fw->data, fw->size, GFP_KERNEL);
+			adev->bios_size = fw->size;
+			release_firmware(fw);
+			if (adev->bios) {
+				dev_info(adev->dev, "Fetched VBIOS from firmware file %s\n",
+					 fw_name);
+				goto success;
+			}
+		}
 	}
 
 	dev_err(adev->dev, "Unable to locate a BIOS ROM\n");
