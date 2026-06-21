@@ -25,6 +25,8 @@ static int init_vq(struct virtio_pmem *vpmem)
 
 	spin_lock_init(&vpmem->pmem_lock);
 	INIT_LIST_HEAD(&vpmem->req_list);
+	vpmem->req_inflight = NULL;
+	WRITE_ONCE(vpmem->broken, false);
 
 	return 0;
 };
@@ -138,10 +140,21 @@ out_err:
 static void virtio_pmem_remove(struct virtio_device *vdev)
 {
 	struct nvdimm_bus *nvdimm_bus = dev_get_drvdata(&vdev->dev);
+	struct virtio_pmem *vpmem = vdev->priv;
+	unsigned long flags;
+
+	spin_lock_irqsave(&vpmem->pmem_lock, flags);
+	virtio_pmem_mark_broken(vpmem);
+	spin_unlock_irqrestore(&vpmem->pmem_lock, flags);
+
+	virtio_reset_device(vdev);
+
+	spin_lock_irqsave(&vpmem->pmem_lock, flags);
+	virtio_pmem_drain(vpmem);
+	spin_unlock_irqrestore(&vpmem->pmem_lock, flags);
 
 	nvdimm_bus_unregister(nvdimm_bus);
 	vdev->config->del_vqs(vdev);
-	virtio_reset_device(vdev);
 }
 
 static int virtio_pmem_freeze(struct virtio_device *vdev)
