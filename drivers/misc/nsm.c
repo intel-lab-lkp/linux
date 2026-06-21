@@ -9,6 +9,7 @@
  * space can use to issue these commands.
  */
 
+#include <linux/capability.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/interrupt.h>
@@ -360,6 +361,9 @@ static long nsm_dev_ioctl(struct file *file, unsigned int cmd,
 
 	if (cmd != NSM_IOCTL_RAW)
 		return -EINVAL;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 
 	if (_IOC_SIZE(cmd) != sizeof(raw))
 		return -EINVAL;
