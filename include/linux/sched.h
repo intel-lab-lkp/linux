@@ -1038,6 +1038,9 @@ struct task_struct {
 	/* Used by page_owner=on to detect recursion in page tracking. */
 	unsigned			in_page_owner:1;
 #endif
+#ifdef CONFIG_DETECT_HUNG_TASK
+	unsigned			hung_task_reported:1;
+#endif
 #ifdef CONFIG_EVENTFD
 	/* Recursion prevention for eventfd_signal() */
 	unsigned			in_eventfd:1;
