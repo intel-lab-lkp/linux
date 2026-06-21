@@ -68,7 +68,7 @@ MODULE_DEVICE_TABLE(usb, lpvo_table);
  *	(about twice the log volume of [1])
  * To switch debug level:
  *         At module loading:  modprobe lpvo_usb_gpib debug={0,1,2}
- *         On the fly: echo {0,1,2} > /sys/modules/lpvo_usb_gpib/parameters/debug
+ *         On the fly: echo {0,1,2} > /sys/module/lpvo_usb_gpib/parameters/debug
  */
 
 static int debug;
