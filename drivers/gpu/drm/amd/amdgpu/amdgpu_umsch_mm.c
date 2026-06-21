@@ -300,6 +300,10 @@ static int umsch_mm_init(struct amdgpu_device *adev)
 				    &adev->umsch_mm.log_cpu_addr);
 	if (r) {
 		dev_err(adev->dev, "(%d) failed to allocate umsch debug bo\n", r);
+		amdgpu_bo_free_kernel(&adev->umsch_mm.cmd_buf_obj,
+			      &adev->umsch_mm.cmd_buf_gpu_addr,
+			      (void **)&adev->umsch_mm.cmd_buf_ptr);
+		amdgpu_device_wb_free(adev, adev->umsch_mm.wb_index);
 		return r;
 	}
 
