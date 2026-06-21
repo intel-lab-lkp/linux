@@ -455,6 +455,7 @@ struct traceprobe_parse_context {
 	int nested_level;
 };
 
+/* Each typecast consumes nested level. So the max number of typecast is 3. */
 #define TRACEPROBE_MAX_NESTED_LEVEL 3
 
 extern int traceprobe_parse_probe_arg(struct trace_probe *tp, int i,
