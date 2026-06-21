@@ -311,6 +311,11 @@ static int dib0700_i2c_xfer_legacy(struct i2c_adapter *adap,
 			st->buf[0] = REQUEST_I2C_READ;
 			st->buf[1] |= 1;
 
+			if (msg[i + 1].len == 0) {
+				result = -EINVAL;
+				goto unlock;
+			}
+
 			/* special thing in the current firmware: when length is zero the read-failed */
 			len = dib0700_ctrl_rd(d, st->buf, msg[i].len + 2,
 					      st->buf, msg[i + 1].len);
