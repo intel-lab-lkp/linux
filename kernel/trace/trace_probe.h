@@ -101,6 +101,7 @@ typedef int (*print_type_func_t)(struct trace_seq *, void *, void *);
 	/* Stage 2 (dereference) ops */					\
 	FETCH_OP(DEREF, offset)		/* Dereference: .offset */	\
 	FETCH_OP(UDEREF, offset)	/* User-space dereference: .offset */\
+	FETCH_OP(CPU_PTR, none)		/* Per-CPU pointer: .offset */	\
 	/* Stage 3 (store) ops */					\
 	FETCH_OP(ST_RAW, store)		/* Raw value: .size */		\
 	FETCH_OP(ST_MEM, store)		/* Memory: .offset, .size */	\
