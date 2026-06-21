@@ -48,6 +48,7 @@ enum {
 enum board_ids {
 	/* board IDs by feature in alphabetical order */
 	board_ahci,
+	board_ahci_32bit_dma,
 	board_ahci_43bit_dma,
 	board_ahci_ign_iferr,
 	board_ahci_no_debounce_delay,
@@ -127,6 +128,13 @@ static struct ata_port_operations ahci_avn_ops = {
 static const struct ata_port_info ahci_port_info[] = {
 	/* by features */
 	[board_ahci] = {
+		.flags		= AHCI_FLAG_COMMON,
+		.pio_mask	= ATA_PIO4,
+		.udma_mask	= ATA_UDMA6,
+		.port_ops	= &ahci_ops,
+	},
+	[board_ahci_32bit_dma] = {
+		AHCI_HFLAGS	(AHCI_HFLAG_32BIT_ONLY),
 		.flags		= AHCI_FLAG_COMMON,
 		.pio_mask	= ATA_PIO4,
 		.udma_mask	= ATA_UDMA6,
@@ -1559,7 +1567,7 @@ static const struct pci_device_id ahci_pci_tbl[] = {
 	}, {
 		/* ASM1166 */
 		PCI_VDEVICE(ASMEDIA, 0x1166),
-		.driver_data = board_ahci,
+		.driver_data = board_ahci_32bit_dma,
 	}, {
 		/*
 		 * Samsung SSDs found on some macbooks.  NCQ times out if MSI is
