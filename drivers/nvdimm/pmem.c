@@ -242,7 +242,7 @@ static void pmem_submit_bio(struct bio *bio)
 	}
 
 	if ((bio->bi_opf & REQ_FUA) && !bio->bi_status)
-		ret = nvdimm_flush(nd_region, bio);
+		ret = nvdimm_flush(nd_region, NULL);
 
 	if (ret)
 		bio->bi_status = errno_to_blk_status(ret);
