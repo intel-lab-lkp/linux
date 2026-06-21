@@ -111,7 +111,7 @@ static struct ieee80211_supported_band *rtw_spt_band_alloc(
 {
 	struct ieee80211_supported_band *spt_band = NULL;
 	int n_channels, n_bitrates;
-	size_t alloc_sz;
+	size_t alloc_sz, channels_sz;
 
 	if (band == NL80211_BAND_2GHZ) {
 		n_channels = RTW_2G_CHANNELS_NUM;
@@ -120,15 +120,16 @@ static struct ieee80211_supported_band *rtw_spt_band_alloc(
 		goto exit;
 	}
 
+	channels_sz = array_size(n_channels, sizeof(struct ieee80211_channel));
 	alloc_sz = sizeof(*spt_band);
-	alloc_sz = size_add(alloc_sz, array_size(n_channels, sizeof(struct ieee80211_channel)));
+	alloc_sz = size_add(alloc_sz, channels_sz);
 	alloc_sz = size_add(alloc_sz, array_size(n_bitrates, sizeof(struct ieee80211_rate)));
 	spt_band = kzalloc(alloc_sz, GFP_KERNEL);
 	if (!spt_band)
 		goto exit;
 
 	spt_band->channels = (struct ieee80211_channel *)(((u8 *)spt_band) + sizeof(struct ieee80211_supported_band));
-	spt_band->bitrates = (struct ieee80211_rate *)(((u8 *)spt_band->channels) + sizeof(struct ieee80211_channel) * n_channels);
+	spt_band->bitrates = (struct ieee80211_rate *)(((u8 *)spt_band->channels) + channels_sz);
 	spt_band->band = band;
 	spt_band->n_channels = n_channels;
 	spt_band->n_bitrates = n_bitrates;
