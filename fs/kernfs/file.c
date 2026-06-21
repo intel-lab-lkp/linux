@@ -593,6 +593,14 @@ static void kernfs_unlink_open_file(struct kernfs_node *kn,
 	}
 
 	if (list_empty(&on->files)) {
+		/*
+		 * @on->poll is embedded in @on and is about to be freed.  Tell
+		 * epoll users to detach their wait entries through the POLLFREE
+		 * callback path before the waitqueue disappears.  This path is
+		 * serialized by the waitqueue lock and doesn't require taking
+		 * eventpoll's ep->mtx from kernfs teardown.
+		 */
+		wake_up_pollfree(&on->poll);
 		rcu_assign_pointer(kn->attr.open, NULL);
 		kfree_rcu(on, rcu_head);
 	}
