@@ -116,9 +116,10 @@ tcpmss_mangle_packet(struct sk_buff *skb,
 	opt = (u_int8_t *)tcph;
 	for (i = sizeof(struct tcphdr); i <= tcp_hdrlen - TCPOLEN_MSS; i += optlen(opt, i)) {
 		if (opt[i] == TCPOPT_MSS && opt[i+1] == TCPOLEN_MSS) {
+			__be16 csum_oldmss, csum_newmss;
 			u_int16_t oldmss;
 
-			oldmss = (opt[i+2] << 8) | opt[i+3];
+			oldmss = get_unaligned_be16(&opt[i + 2]);
 
 			/* Never increase MSS, even when setting it, as
 			 * doing so results in problems for hosts that rely
@@ -130,8 +131,25 @@ tcpmss_mangle_packet(struct sk_buff *skb,
 			opt[i+2] = (newmss & 0xff00) >> 8;
 			opt[i+3] = newmss & 0x00ff;
 
+			csum_oldmss = htons(oldmss);
+			csum_newmss = htons(newmss);
+
+			if (((char *)&opt[i + 2] - (char *)tcph) & 0x1) {
+				/* MSS option is unaligned: the modified bytes
+				 * straddle two checksum words. Byteswapping
+				 * the operands lets a single incremental
+				 * update produce the correct checksum delta
+				 * (see commit message for the derivation).
+				 */
+				csum_oldmss = htons(swab16(oldmss));
+				csum_newmss = htons(swab16(newmss));
+			} else {
+				csum_oldmss = htons(oldmss);
+				csum_newmss = htons(newmss);
+			}
+
 			inet_proto_csum_replace2(&tcph->check, skb,
-						 htons(oldmss), htons(newmss),
+						 csum_oldmss, csum_newmss,
 						 false);
 			return 0;
 		}
