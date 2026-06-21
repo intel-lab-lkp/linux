@@ -43,9 +43,6 @@ bool video_is_primary_device(struct device *dev)
 	if (!pci_is_display(pdev))
 		return false;
 
-	if (pdev == vga_default_device())
-		return true;
-
 #ifdef CONFIG_SCREEN_INFO
 	numres = screen_info_resources(si, res, ARRAY_SIZE(res));
 	for (i = 0; i < numres; ++i) {
