@@ -30,6 +30,7 @@
 #include <linux/pid_namespace.h>
 #include <linux/refcount.h>
 #include <linux/user_namespace.h>
+#include <linux/hashtable.h>
 
 /** Default max number of pages that can be used in a single read request */
 #define FUSE_DEFAULT_MAX_PAGES_PER_REQ 32
@@ -94,6 +95,10 @@ struct fuse_backing {
 	/* refcount */
 	refcount_t count;
 	struct rcu_head rcu;
+
+	/* ID Allocation */
+	int id;
+	struct hlist_node node;
 };
 
 /**
@@ -406,6 +411,12 @@ struct fuse_sync_bucket {
 	wait_queue_head_t waitq;
 	struct rcu_head rcu;
 };
+
+#ifdef CONFIG_FUSE_PASSTHROUGH
+struct fuse_backing_htable {
+	DECLARE_HASHTABLE(backing_files_ht, 8);
+};
+#endif
 
 /**
  * struct fuse_conn - A Fuse connection.
@@ -759,8 +770,14 @@ struct fuse_conn {
 	struct fuse_sync_bucket __rcu *curr_bucket;
 
 #ifdef CONFIG_FUSE_PASSTHROUGH
-	/** @backing_files_map: IDR for backing files ids */
-	struct idr backing_files_map;
+	/** @backing_files_map: IDA for backing files ids */
+	struct ida backing_files_map;
+
+	/** @backing_files_next_id: Cursor for cyclic allocation */
+	unsigned int backing_files_next_id;
+
+	/** @backing_htable: Pointer to external hashtable */
+	struct fuse_backing_htable *backing_htable;
 #endif
 };
 
@@ -1259,6 +1276,7 @@ void fuse_file_release(struct inode *inode, struct fuse_file *ff,
 struct fuse_backing *fuse_backing_get(struct fuse_backing *fb);
 void fuse_backing_put(struct fuse_backing *fb);
 struct fuse_backing *fuse_backing_lookup(struct fuse_conn *fc, int backing_id);
+int fuse_backing_htable_alloc(struct fuse_conn *fc);
 #else
 
 static inline struct fuse_backing *fuse_backing_get(struct fuse_backing *fb)
@@ -1273,6 +1291,11 @@ static inline struct fuse_backing *fuse_backing_lookup(struct fuse_conn *fc,
 						       int backing_id)
 {
 	return NULL;
+}
+
+static inline int fuse_backing_htable_alloc(struct fuse_conn *fc)
+{
+	return -EOPNOTSUPP;
 }
 #endif
 

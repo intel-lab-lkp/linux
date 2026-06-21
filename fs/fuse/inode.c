@@ -1389,9 +1389,11 @@ static void process_init_reply(struct fuse_args *args, int error)
 			    arg->max_stack_depth > 0 &&
 			    arg->max_stack_depth <= FILESYSTEM_MAX_STACK_DEPTH &&
 			    !(flags & FUSE_WRITEBACK_CACHE))  {
-				fc->passthrough = 1;
-				fc->max_stack_depth = arg->max_stack_depth;
-				fm->sb->s_stack_depth = arg->max_stack_depth;
+				if (!fuse_backing_htable_alloc(fc)) {
+					fc->passthrough = 1;
+					fc->max_stack_depth = arg->max_stack_depth;
+					fm->sb->s_stack_depth = arg->max_stack_depth;
+				}
 			}
 			if (flags & FUSE_NO_EXPORT_SUPPORT)
 				fm->sb->s_export_op = &fuse_export_fid_operations;
