@@ -93,6 +93,9 @@ void virtio_pmem_drain(struct virtio_pmem *vpmem)
 	struct virtio_pmem_request *req;
 	unsigned int len;
 
+	if (!vpmem->req_vq)
+		return;
+
 	while ((req = virtqueue_get_buf(vpmem->req_vq, &len)) != NULL) {
 		virtio_pmem_clear_inflight(vpmem, req);
 		virtio_pmem_complete_err(req);
