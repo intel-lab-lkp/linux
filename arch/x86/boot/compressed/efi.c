@@ -61,7 +61,6 @@ unsigned long efi_get_system_table(struct boot_params *bp)
 {
 	unsigned long sys_tbl_pa;
 	struct efi_info *ei;
-	enum efi_type et;
 
 	/* Get systab from boot params. */
 	ei = &bp->efi_info;
@@ -70,10 +69,8 @@ unsigned long efi_get_system_table(struct boot_params *bp)
 #else
 	sys_tbl_pa = ei->efi_systab;
 #endif
-	if (!sys_tbl_pa) {
+	if (!sys_tbl_pa)
 		debug_putstr("EFI system table not found.");
-		return 0;
-	}
 
 	return sys_tbl_pa;
 }
@@ -84,11 +81,10 @@ unsigned long efi_get_system_table(struct boot_params *bp)
  * the initial physical address via a struct setup_data entry, which is
  * checked for here, along with some sanity checks.
  */
-static struct efi_setup_data *get_kexec_setup_data(struct boot_params *bp,
-						   enum efi_type et)
+static struct efi_setup_data *get_kexec_setup_data(struct boot_params *bp)
 {
-#ifdef CONFIG_X86_64
 	struct efi_setup_data *esd = NULL;
+#ifdef CONFIG_X86_64
 	struct setup_data *data;
 	u64 pa_data;
 
@@ -112,10 +108,8 @@ static struct efi_setup_data *get_kexec_setup_data(struct boot_params *bp,
 		debug_putstr("kexec EFI environment missing valid configuration table.\n");
 		return NULL;
 	}
-
-	return esd;
 #endif
-	return NULL;
+	return esd;
 }
 
 /**
@@ -133,7 +127,6 @@ int efi_get_conf_table(struct boot_params *bp, unsigned long *cfg_tbl_pa,
 {
 	unsigned long sys_tbl_pa;
 	enum efi_type et;
-	int ret;
 
 	if (!cfg_tbl_pa || !cfg_tbl_len)
 		return -EINVAL;
@@ -149,7 +142,7 @@ int efi_get_conf_table(struct boot_params *bp, unsigned long *cfg_tbl_pa,
 		struct efi_setup_data *esd;
 
 		/* kexec provides an alternative EFI conf table, check for it. */
-		esd = get_kexec_setup_data(bp, et);
+		esd = get_kexec_setup_data(bp);
 
 		*cfg_tbl_pa = esd ? esd->tables : stbl->tables;
 		*cfg_tbl_len = stbl->nr_tables;
