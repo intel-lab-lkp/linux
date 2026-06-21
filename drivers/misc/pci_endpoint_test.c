@@ -13,6 +13,7 @@
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/kref.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -136,6 +137,7 @@ enum pci_barno {
 };
 
 struct pci_endpoint_test {
+	struct kref	kref;
 	struct pci_dev	*pdev;
 	void __iomem	*base;
 	void __iomem	*bar[PCI_STD_NUM_BARS];
@@ -143,7 +145,7 @@ struct pci_endpoint_test {
 	int		last_irq;
 	int		num_irqs;
 	int		irq_type;
-	/* mutex to protect the ioctls */
+	/* mutex to serialize ioctls and removal */
 	struct mutex	mutex;
 	struct miscdevice miscdev;
 	enum pci_barno test_reg_bar;
@@ -156,6 +158,15 @@ struct pci_endpoint_test_data {
 	enum pci_barno test_reg_bar;
 	size_t alignment;
 };
+
+static void pci_endpoint_test_free(struct kref *kref)
+{
+	struct pci_endpoint_test *test = container_of(kref,
+						     struct pci_endpoint_test,
+						     kref);
+
+	kfree(test);
+}
 
 static inline u32 pci_endpoint_test_readl(struct pci_endpoint_test *test,
 					  u32 offset)
@@ -1145,10 +1156,15 @@ static long pci_endpoint_test_ioctl(struct file *file, unsigned int cmd,
 {
 	int ret = -EINVAL;
 	enum pci_barno bar;
-	struct pci_endpoint_test *test = to_endpoint_test(file->private_data);
-	struct pci_dev *pdev = test->pdev;
+	struct pci_endpoint_test *test = file->private_data;
+	struct pci_dev *pdev;
 
 	mutex_lock(&test->mutex);
+	pdev = test->pdev;
+	if (!pdev) {
+		ret = -ENODEV;
+		goto ret;
+	}
 
 	reinit_completion(&test->irq_raised);
 	test->last_irq = -ENODATA;
@@ -1210,9 +1226,30 @@ ret:
 	return ret;
 }
 
+static int pci_endpoint_test_open(struct inode *inode, struct file *file)
+{
+	struct miscdevice *miscdev = file->private_data;
+	struct pci_endpoint_test *test = to_endpoint_test(miscdev);
+
+	kref_get(&test->kref);
+	file->private_data = test;
+
+	return 0;
+}
+
+static int pci_endpoint_test_release(struct inode *inode, struct file *file)
+{
+	struct pci_endpoint_test *test = file->private_data;
+
+	kref_put(&test->kref, pci_endpoint_test_free);
+	return 0;
+}
+
 static const struct file_operations pci_endpoint_test_fops = {
 	.owner = THIS_MODULE,
+	.open = pci_endpoint_test_open,
 	.unlocked_ioctl = pci_endpoint_test_ioctl,
+	.release = pci_endpoint_test_release,
 };
 
 static void pci_endpoint_test_get_capabilities(struct pci_endpoint_test *test)
@@ -1245,10 +1282,11 @@ static int pci_endpoint_test_probe(struct pci_dev *pdev,
 	if (pci_is_bridge(pdev))
 		return -ENODEV;
 
-	test = devm_kzalloc(dev, sizeof(*test), GFP_KERNEL);
+	test = kzalloc_obj(*test);
 	if (!test)
 		return -ENOMEM;
 
+	kref_init(&test->kref);
 	test->pdev = pdev;
 	test->irq_type = PCITEST_IRQ_TYPE_UNDEFINED;
 
@@ -1267,7 +1305,7 @@ static int pci_endpoint_test_probe(struct pci_dev *pdev,
 	ret = pci_enable_device(pdev);
 	if (ret) {
 		dev_err(dev, "Cannot enable PCI device\n");
-		return ret;
+		goto err_kfree_test;
 	}
 
 	ret = pci_request_regions(pdev, DRV_MODULE_NAME);
@@ -1353,6 +1391,9 @@ err_iounmap:
 err_disable_pdev:
 	pci_disable_device(pdev);
 
+err_kfree_test:
+	kfree(test);
+
 	return ret;
 }
 
@@ -1368,10 +1409,13 @@ static void pci_endpoint_test_remove(struct pci_dev *pdev)
 	if (id < 0)
 		return;
 
+	misc_deregister(&test->miscdev);
+
+	mutex_lock(&test->mutex);
+
 	pci_endpoint_test_release_irq(test);
 	pci_endpoint_test_free_irq_vectors(test);
 
-	misc_deregister(&test->miscdev);
 	kfree(misc_device->name);
 	kfree(test->name);
 	ida_free(&pci_endpoint_test_ida, id);
@@ -1382,6 +1426,11 @@ static void pci_endpoint_test_remove(struct pci_dev *pdev)
 
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
+	pci_set_drvdata(pdev, NULL);
+	test->pdev = NULL;
+	mutex_unlock(&test->mutex);
+
+	kref_put(&test->kref, pci_endpoint_test_free);
 }
 
 static const struct pci_endpoint_test_data default_data = {
