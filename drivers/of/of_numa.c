@@ -42,7 +42,8 @@ static int __init of_numa_parse_memory_nodes(void)
 	struct device_node *np = NULL;
 	struct resource rsrc;
 	u32 nid;
-	int i, r = -EINVAL;
+	int i, r;
+	bool found = false;
 
 	for_each_node_by_type(np, "memory") {
 		r = of_property_read_u32(np, "numa-node-id", &nid);
@@ -53,26 +54,32 @@ static int __init of_numa_parse_memory_nodes(void)
 			 * "numa-node-id" property
 			 */
 			continue;
+		if (r)
+			goto err;
 
 		if (nid >= MAX_NUMNODES) {
 			pr_warn("Node id %u exceeds maximum value\n", nid);
-			r = -EINVAL;
+			goto err;
 		}
 
-		for (i = 0; !r && !of_address_to_resource(np, i, &rsrc); i++) {
+		for (i = 0; !of_address_to_resource(np, i, &rsrc); i++) {
 			r = numa_add_memblk(nid, rsrc.start, rsrc.end + 1);
-			if (!r)
-				node_set(nid, numa_nodes_parsed);
+			if (r)
+				goto err;
+			node_set(nid, numa_nodes_parsed);
 		}
+		if (!i)
+			goto err;
 
-		if (!i || r) {
-			of_node_put(np);
-			pr_err("bad property in memory node\n");
-			return r ? : -EINVAL;
-		}
+		found = true;
 	}
 
-	return r;
+	return found ? 0 : -EINVAL;
+
+err:
+	of_node_put(np);
+	pr_err("bad property in memory node\n");
+	return r ?: -EINVAL;
 }
 
 static int __init of_numa_parse_distance_map_v1(struct device_node *map)
