@@ -99,6 +99,14 @@
 #define KVM_PFN_ERR_RO_FAULT	(KVM_PFN_ERR_MASK + 2)
 #define KVM_PFN_ERR_SIGPENDING	(KVM_PFN_ERR_MASK + 3)
 #define KVM_PFN_ERR_NEEDS_IO	(KVM_PFN_ERR_MASK + 4)
+/*
+ * Faulting in a VM_IO/VM_PFNMAP mapping failed because the owner's fault
+ * handler declined to install a PTE, e.g. a passed-through PCI BAR whose
+ * device memory is currently disabled (the guest cleared PCI_COMMAND.MEM).
+ * The memslot is valid; the access should be treated as MMIO rather than a
+ * fatal -EFAULT.
+ */
+#define KVM_PFN_ERR_PFNMAP	(KVM_PFN_ERR_MASK + 5)
 
 /*
  * error pfns indicate that the gfn is in slot but faild to

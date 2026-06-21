@@ -4772,8 +4772,22 @@ static int kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 	if (ret != RET_PF_CONTINUE)
 		return ret;
 
-	if (unlikely(is_error_pfn(fault->pfn)))
+	if (unlikely(is_error_pfn(fault->pfn))) {
+		/*
+		 * A passed-through PCI BAR is backed by a VM_IO/VM_PFNMAP
+		 * mapping whose fault handler refuses to install a PTE while the
+		 * device's memory space is disabled (e.g. the guest cleared
+		 * PCI_COMMAND.MEM). The fault then fails even though the memslot
+		 * is still valid. Treat such an access as MMIO and emulate it so
+		 * the guest observes Unsupported Request semantics, matching
+		 * bare metal, instead of killing the VM with -EFAULT. Genuine,
+		 * non-pfnmap errors still take the fatal path.
+		 */
+		if (fault->pfn == KVM_PFN_ERR_PFNMAP)
+			return kvm_handle_noslot_fault(vcpu, fault, access);
+
 		return kvm_handle_error_pfn(vcpu, fault);
+	}
 
 	if (WARN_ON_ONCE(!fault->slot || is_noslot_pfn(fault->pfn)))
 		return kvm_handle_noslot_fault(vcpu, fault, access);
