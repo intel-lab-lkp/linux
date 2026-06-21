@@ -840,6 +840,11 @@ ifdef CONFIG_FUNCTION_TRACER
   CC_FLAGS_FTRACE := -pg
 endif
 
+ifdef CONFIG_TRACE_PRINTK_DEBUGGING
+  # Allow trace_printk() to be used anywhere without including the header.
+  LINUXINCLUDE += -include $(srctree)/include/linux/trace_printk.h
+endif
+
 ifdef CONFIG_TRACEPOINTS
 # To check for unused tracepoints (tracepoints that are defined but never
 # called), run with:

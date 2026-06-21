@@ -52,7 +52,7 @@ For the full documentation see :doc:`/core-api/printk-basics`
 Trace_printk
 ~~~~~~~~~~~~
 
-Prerequisite: ``CONFIG_DYNAMIC_FTRACE`` & ``#include <linux/ftrace.h>``
+Prerequisite: ``CONFIG_TRACE_PRINTK_DEBUGGING``
 
 It is a tiny bit less comfortable to use than printk(), because you will have
 to read the messages from the trace file (See: :ref:`read_ftrace_log`
