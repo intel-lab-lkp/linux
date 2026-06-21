@@ -513,7 +513,7 @@ do {										\
 } while (0)
 
 /*
- * Flipped on enable per sch->is_cid_type. Declared in ext_internal.h so
+ * Flipped on enable per sch->is_cid_type. Declared in internal.h so
  * subsystem inlines can read it.
  */
 DEFINE_STATIC_KEY_FALSE(__scx_is_cid_type);
