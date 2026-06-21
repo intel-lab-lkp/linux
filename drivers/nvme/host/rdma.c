@@ -116,6 +116,7 @@ struct nvme_rdma_ctrl {
 
 	struct blk_mq_tag_set	admin_tag_set;
 	struct nvme_rdma_device	*device;
+	struct ib_device	*ib_device;
 
 	u32			max_fr_pages;
 
@@ -788,6 +789,7 @@ static int nvme_rdma_configure_admin_queue(struct nvme_rdma_ctrl *ctrl,
 		return error;
 
 	ctrl->device = ctrl->queues[0].device;
+	WRITE_ONCE(ctrl->ib_device, ctrl->device->dev);
 	ctrl->ctrl.numa_node = ibdev_to_node(ctrl->device->dev);
 
 	/* T10-PI support */
@@ -2372,31 +2374,20 @@ static struct nvmf_transport_ops nvme_rdma_transport = {
 static void nvme_rdma_remove_one(struct ib_device *ib_device, void *client_data)
 {
 	struct nvme_rdma_ctrl *ctrl;
-	struct nvme_rdma_device *ndev;
 	bool found = false;
-
-	mutex_lock(&device_list_mutex);
-	list_for_each_entry(ndev, &device_list, entry) {
-		if (ndev->dev == ib_device) {
-			found = true;
-			break;
-		}
-	}
-	mutex_unlock(&device_list_mutex);
-
-	if (!found)
-		return;
 
 	/* Delete all controllers using this device */
 	mutex_lock(&nvme_rdma_ctrl_mutex);
 	list_for_each_entry(ctrl, &nvme_rdma_ctrl_list, list) {
-		if (ctrl->device->dev != ib_device)
+		if (READ_ONCE(ctrl->ib_device) != ib_device)
 			continue;
+		found = true;
 		nvme_delete_ctrl(&ctrl->ctrl);
 	}
 	mutex_unlock(&nvme_rdma_ctrl_mutex);
 
-	flush_workqueue(nvme_delete_wq);
+	if (found)
+		flush_workqueue(nvme_delete_wq);
 }
 
 static struct ib_client nvme_rdma_ib_client = {
