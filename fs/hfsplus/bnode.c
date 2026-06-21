@@ -626,12 +626,18 @@ struct hfs_bnode *hfs_bnode_create(struct hfs_btree *tree, u32 num)
 	struct page **pagep;
 	int i;
 
+	if (num >= tree->node_count) {
+		pr_err("hfsplus: attempted to create invalid bnode %u (max %u)\n",
+		       num, tree->node_count);
+		return ERR_PTR(-EINVAL);
+	}
+
 	spin_lock(&tree->hash_lock);
 	node = hfs_bnode_findhash(tree, num);
 	spin_unlock(&tree->hash_lock);
 	if (node) {
-		pr_crit("new node %u already hashed?\n", num);
-		WARN_ON(1);
+		pr_err("hfsplus: attempted to create already hashed bnode %u\n",
+		       num);
 		return ERR_PTR(-EEXIST);
 	}
 	node = __hfs_bnode_create(tree, num);
