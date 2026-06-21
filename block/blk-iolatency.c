@@ -639,6 +639,11 @@ static void blkcg_iolatency_exit(struct rq_qos *rqos)
 	timer_shutdown_sync(&blkiolat->timer);
 	flush_work(&blkiolat->enable_work);
 	blkcg_deactivate_policy(rqos->disk, &blkcg_policy_iolatency);
+	/*
+	 * blkcg_deactivate_policy() invokes iolatency_pd_offline(), which may
+	 * queue enable_work again when it clears the last latency target.
+	 */
+	flush_work(&blkiolat->enable_work);
 	kfree(blkiolat);
 }
 
