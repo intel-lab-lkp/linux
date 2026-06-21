@@ -210,6 +210,16 @@ menuconfig FTRACE
 
 if FTRACE
 
+config TRACE_PRINTK_DEBUGGING
+	bool "Debug with trace_printk()"
+	help
+	  If you need to debug with trace_printk(), instead of adding
+	  include <linux/trace_printk.h> to every file you add a trace_printk
+	  to, select this option and it will add trace_printk.h to all code
+	  to allow tracing with trace_printk() with.
+
+	  If in doubt, select N
+
 config TRACEFS_AUTOMOUNT_DEPRECATED
 	bool "Automount tracefs on debugfs [DEPRECATED]"
 	depends on TRACING
