@@ -50,3 +50,9 @@ impl Drop for Guard {
 pub fn read_lock() -> Guard {
     Guard::new()
 }
+
+/// Wait for all pending [`bindings::call_rcu()`] callbacks, if there are any.
+pub fn rcu_barrier() {
+    // SAFETY: `rcu_barrier()` is always safe to be called. It just might wait for a grace period.
+    unsafe { bindings::rcu_barrier() };
+}
