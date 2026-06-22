@@ -159,7 +159,7 @@ struct drm_gem_shmem_object *drm_gem_shmem_create(struct drm_device *dev, size_t
 EXPORT_SYMBOL_GPL(drm_gem_shmem_create);
 
 /**
- * __drm_gem_shmem_release_sgt_locked - Unpin and DMA unmap pages, and release the
+ * __drm_gem_shmem_free_sgt_locked - Unpin and DMA unmap pages, and release the
  * cached scatter/gather table for an shmem GEM object.
  * @shmem: shmem GEM object
  *
