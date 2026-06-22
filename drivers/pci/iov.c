@@ -905,6 +905,8 @@ found:
 	return 0;
 
 fail_max_buses:
+	if (iov->dev != dev)
+		pci_dev_put(iov->dev);
 	dev->sriov = NULL;
 	dev->is_physfn = 0;
 failed:
