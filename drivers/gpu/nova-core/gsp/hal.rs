@@ -24,7 +24,6 @@ use crate::{
         Chipset, //
     },
     gsp::{
-        boot::BootUnloadGuard,
         Gsp,
         GspBootContext,
         GspFwWprMeta, //
@@ -51,15 +50,22 @@ pub(super) trait UnloadBundle: Send {
 pub(super) trait GspHal: Send {
     /// Performs the GSP boot process, loading and running the required firmwares as needed.
     ///
-    /// Upon success, returns a guard that runs the GSP unload sequence if GSP boot does not
-    /// complete.
-    fn boot<'a>(
+    /// Returns two things:
+    ///
+    /// - The `Result` of the boot process itself,
+    /// - The `UnloadBundle` to use with [`Gsp::unload`], or `None` if the bundle could not be
+    ///   created.
+    ///
+    /// Note that the two returned values are independent: it is possible for the boot process to
+    /// succeed while the unload bundle couldn't be created. In this case, the GSP won't be able to
+    /// unload properly and a full GPU reset is required before the GSP can be booted again.
+    fn boot(
         &self,
-        gsp: &'a Gsp,
-        ctx: &GspBootContext<'a>,
+        gsp: &Gsp,
+        ctx: &GspBootContext<'_>,
         fb_layout: &FbLayout,
         wpr_meta: &Coherent<GspFwWprMeta>,
-    ) -> Result<BootUnloadGuard<'a>>;
+    ) -> (Result, Option<crate::gsp::UnloadBundle>);
 
     /// Performs HAL-specific post-GSP boot tasks.
     ///

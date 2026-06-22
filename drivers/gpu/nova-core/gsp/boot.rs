@@ -7,8 +7,7 @@ use kernel::{
     dma::Coherent,
     io::poll::read_poll_timeout,
     prelude::*,
-    time::Delta,
-    types::ScopeGuard, //
+    time::Delta, //
 };
 
 use crate::{
@@ -29,66 +28,6 @@ use crate::{
         GspFwWprMeta, //
     },
 };
-
-/// Arguments required to call [`Gsp::unload`](super::Gsp::unload).
-///
-/// Stored as their own type to avoid repeating a long and tedious list in [`BootUnloadGuard`].
-pub(super) struct BootUnloadArgs<'a> {
-    gsp: &'a super::Gsp,
-    dev: &'a device::Device<device::Bound>,
-    bar: Bar0<'a>,
-    gsp_falcon: &'a Falcon<Gsp>,
-    sec2_falcon: &'a Falcon<Sec2>,
-    unload_bundle: Option<super::UnloadBundle>,
-}
-
-/// Guard that calls [`Gsp::unload`](super::Gsp::unload) with a
-/// [`UnloadBundle`](super::UnloadBundle) when dropped.
-///
-/// Used to ensure the `UnloadBundle` is run during failure paths.
-pub(super) struct BootUnloadGuard<'a> {
-    guard: ScopeGuard<BootUnloadArgs<'a>, fn(BootUnloadArgs<'a>)>,
-}
-
-impl<'a> BootUnloadGuard<'a> {
-    /// Wraps `unload_bundle` into a guard that executes it when dropped.
-    pub(super) fn new(
-        gsp: &'a super::Gsp,
-        dev: &'a device::Device<device::Bound>,
-        bar: Bar0<'a>,
-        gsp_falcon: &'a Falcon<Gsp>,
-        sec2_falcon: &'a Falcon<Sec2>,
-        unload_bundle: Option<super::UnloadBundle>,
-    ) -> Self {
-        Self {
-            guard: ScopeGuard::new_with_data(
-                BootUnloadArgs {
-                    gsp,
-                    dev,
-                    bar,
-                    gsp_falcon,
-                    sec2_falcon,
-                    unload_bundle,
-                },
-                |args| {
-                    let _ = super::Gsp::unload(
-                        args.gsp,
-                        args.dev,
-                        args.bar,
-                        args.gsp_falcon,
-                        args.sec2_falcon,
-                        args.unload_bundle,
-                    );
-                },
-            ),
-        }
-    }
-
-    /// Disarms the guard and returns the [`UnloadBundle`](super::UnloadBundle) it contains.
-    pub(super) fn dismiss(self) -> Option<super::UnloadBundle> {
-        self.guard.dismiss().unload_bundle
-    }
-}
 
 impl super::Gsp {
     /// Attempt to boot the GSP.
@@ -118,10 +57,11 @@ impl super::Gsp {
         let wpr_meta = Coherent::init(dev, GFP_KERNEL, GspFwWprMeta::new(&gsp_fw, &fb_layout))?;
 
         // Perform the chipset-specific boot sequence, and retrieve the unload bundle.
-        let unload_guard = hal.boot(&self, &ctx, &fb_layout, &wpr_meta)?;
+        let (res, unload_bundle) = hal.boot(&self, &ctx, &fb_layout, &wpr_meta);
+
         // Run from a closure so we can retrieve the result, and run the unload sequence of the GSP
         // in case of error.
-        let res = (|| {
+        let res = res.and_then(|()| {
             gsp_falcon.write_os_version(bar, gsp_fw.bootloader.app_version);
 
             // Poll for RISC-V to become active before continuing.
@@ -143,11 +83,18 @@ impl super::Gsp {
 
             // Wait until GSP is fully initialized.
             commands::wait_gsp_init_done(&self.cmdq)
-        })();
+        });
 
         match res {
-            Err(e) => Err(e),
-            Ok(()) => Ok(unload_guard.dismiss()),
+            Err(e) => {
+                dev_err!(dev, "GSP boot failed with error {:?}\n", e);
+
+                // Ignore errors during unload; we will return the error that happened during boot.
+                let _ = self.unload(dev, bar, gsp_falcon, ctx.sec2_falcon, unload_bundle);
+
+                Err(e)
+            }
+            Ok(()) => Ok(unload_bundle),
         }
     }
 

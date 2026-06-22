@@ -23,7 +23,6 @@ use crate::{
         Fsp, //
     },
     gsp::{
-        boot::BootUnloadGuard,
         hal::{
             GspHal,
             UnloadBundle, //
@@ -145,27 +144,24 @@ impl GspHal for Gh100 {
     ///
     /// This path uses FSP to establish a chain of trust and boot GSP-FMC. FSP handles
     /// the GSP boot internally - no manual GSP reset/boot is needed.
-    fn boot<'a>(
+    fn boot(
         &self,
-        gsp: &'a Gsp,
-        ctx: &GspBootContext<'a>,
+        gsp: &Gsp,
+        ctx: &GspBootContext<'_>,
         fb_layout: &FbLayout,
         wpr_meta: &Coherent<GspFwWprMeta>,
-    ) -> Result<BootUnloadGuard<'a>> {
+    ) -> (Result, Option<crate::gsp::UnloadBundle>) {
         let dev = ctx.dev();
         let bar = ctx.bar;
         let chipset = ctx.chipset;
         let gsp_falcon = ctx.gsp_falcon;
-        let sec2_falcon = ctx.sec2_falcon;
+
+        let mut unload_bundle = None;
 
         let res = (|| {
-            let unload_bundle = crate::gsp::UnloadBundle(
-                KBox::new(FspUnloadBundle, GFP_KERNEL)? as KBox<dyn UnloadBundle>
-            );
-
-            // Wrap the unload bundle into a drop guard so it is automatically run upon failure.
-            let unload_guard =
-                BootUnloadGuard::new(gsp, dev, bar, gsp_falcon, sec2_falcon, Some(unload_bundle));
+            unload_bundle = Some(crate::gsp::UnloadBundle(
+                KBox::new(FspUnloadBundle, GFP_KERNEL)? as KBox<dyn UnloadBundle>,
+            ));
 
             let mut fsp = Fsp::wait_secure_boot(dev, bar, chipset)?;
 
@@ -179,12 +175,10 @@ impl GspHal for Gh100 {
 
             fsp.boot_fmc(dev, bar, fb_layout, &args)?;
 
-            wait_for_gsp_lockdown_release(dev, bar, gsp_falcon, args.boot_params_dma_handle())?;
-
-            Ok(unload_guard)
+            wait_for_gsp_lockdown_release(dev, bar, gsp_falcon, args.boot_params_dma_handle())
         })();
 
-        res
+        (res, unload_bundle)
     }
 }
 

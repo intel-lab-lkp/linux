@@ -32,7 +32,6 @@ use crate::{
     },
     gpu::Chipset,
     gsp::{
-        boot::BootUnloadGuard,
         hal::{
             GspHal,
             UnloadBundle, //
@@ -264,18 +263,20 @@ fn run_fwsec_frts(
 struct Tu102;
 
 impl GspHal for Tu102 {
-    fn boot<'a>(
+    fn boot(
         &self,
-        gsp: &'a Gsp,
-        ctx: &GspBootContext<'a>,
+        gsp: &Gsp,
+        ctx: &GspBootContext<'_>,
         fb_layout: &FbLayout,
         wpr_meta: &Coherent<GspFwWprMeta>,
-    ) -> Result<BootUnloadGuard<'a>> {
+    ) -> (Result, Option<crate::gsp::UnloadBundle>) {
         let dev = ctx.dev();
         let bar = ctx.bar;
         let chipset = ctx.chipset;
         let gsp_falcon = ctx.gsp_falcon;
         let sec2_falcon = ctx.sec2_falcon;
+
+        let mut unload_bundle = None;
 
         let res = (|| {
             let bios = Vbios::new(dev, bar)?;
@@ -284,7 +285,7 @@ impl GspHal for Tu102 {
             //
             // If the unload bundle creation fails, the GPU will need to be reset before the driver
             // can be probed again.
-            let unload_bundle =
+            unload_bundle =
                 Sec2UnloadBundle::build(dev, bar, chipset, &bios, gsp_falcon, sec2_falcon)
                     .inspect_err(|e| {
                         dev_warn!(dev, "Failed to prepare unload firmware: {:?}\n", e);
@@ -296,10 +297,6 @@ impl GspHal for Tu102 {
                     })
                     .ok()
                     .map(crate::gsp::UnloadBundle);
-
-            // Wrap the unload bundle into a drop guard so it is automatically run upon failure.
-            let unload_guard =
-                BootUnloadGuard::new(gsp, dev, bar, gsp_falcon, sec2_falcon, unload_bundle);
 
             // FWSEC-FRTS is not executed on chips where the FRTS region size is 0 (e.g. GA100).
             if !fb_layout.frts.is_empty() {
@@ -328,12 +325,10 @@ impl GspHal for Tu102 {
                 sec2_falcon,
                 bar,
             )?
-            .run(dev, bar, sec2_falcon, wpr_meta)?;
-
-            Ok(unload_guard)
+            .run(dev, bar, sec2_falcon, wpr_meta)
         })();
 
-        res
+        (res, unload_bundle)
     }
 
     fn post_boot(&self, gsp: &Gsp, ctx: &GspBootContext<'_>, gsp_fw: &GspFirmware) -> Result {
