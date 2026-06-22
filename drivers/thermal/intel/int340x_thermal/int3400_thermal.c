@@ -356,8 +356,10 @@ static void cleanup_odvp(struct int3400_thermal_priv *priv)
 			kfree(priv->odvp_attrs[i].attr.attr.name);
 		}
 		kfree(priv->odvp_attrs);
+		priv->odvp_attrs = NULL;
 	}
 	kfree(priv->odvp);
+	priv->odvp = NULL;
 	priv->odvp_count = 0;
 }
 
@@ -615,8 +617,11 @@ static int int3400_thermal_probe(struct platform_device *pdev)
 
 	if (!ZERO_OR_NULL_PTR(priv->data_vault)) {
 		result = device_create_bin_file(&pdev->dev, &bin_attr_data_vault);
-		if (result)
+		if (result) {
+			kfree(priv->data_vault);
+			priv->data_vault = NULL;
 			goto free_uuid;
+		}
 	}
 
 	result = acpi_install_notify_handler(
@@ -639,6 +644,7 @@ free_sysfs:
 	if (!ZERO_OR_NULL_PTR(priv->data_vault)) {
 		device_remove_bin_file(&pdev->dev, &bin_attr_data_vault);
 		kfree(priv->data_vault);
+		priv->data_vault = NULL;
 	}
 free_uuid:
 	sysfs_remove_group(&pdev->dev.kobj, &uuid_attribute_group);
@@ -648,6 +654,7 @@ free_rel_misc:
 	if (!priv->rel_misc_dev_res)
 		acpi_thermal_rel_misc_device_remove(priv->adev->handle);
 	thermal_zone_device_unregister(priv->thermal);
+	cleanup_odvp(priv);
 free_art_trt:
 	kfree(priv->trts);
 	kfree(priv->arts);
