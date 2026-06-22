@@ -867,13 +867,9 @@ static const struct ctl_table hugetlb_vmemmap_sysctls[] = {
 	},
 };
 
-static int __init hugetlb_vmemmap_init(void)
+void __init hugetlb_vmemmap_init_tails(void)
 {
-	const struct hstate *h;
 	struct zone *zone;
-
-	/* HUGETLB_VMEMMAP_RESERVE_SIZE should cover all used struct pages */
-	BUILD_BUG_ON(__NR_USED_SUBPAGE > HUGETLB_VMEMMAP_RESERVE_PAGES);
 
 	for_each_zone(zone) {
 		for (int i = 0; i < NR_VMEMMAP_TAILS; i++) {
@@ -890,6 +886,14 @@ static int __init hugetlb_vmemmap_init(void)
 				init_compound_tail(p + j, NULL, order, zone);
 		}
 	}
+}
+
+static int __init hugetlb_vmemmap_init(void)
+{
+	const struct hstate *h;
+
+	/* HUGETLB_VMEMMAP_RESERVE_SIZE should cover all used struct pages */
+	BUILD_BUG_ON(__NR_USED_SUBPAGE > HUGETLB_VMEMMAP_RESERVE_PAGES);
 
 	for_each_hstate(h) {
 		if (hugetlb_vmemmap_optimizable(h)) {

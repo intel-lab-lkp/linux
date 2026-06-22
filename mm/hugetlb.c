@@ -4127,6 +4127,7 @@ static int __init hugetlb_init(void)
 	}
 
 	hugetlb_init_hstates();
+	hugetlb_vmemmap_init_tails();
 	gather_bootmem_prealloc();
 	report_hugepages();
 
