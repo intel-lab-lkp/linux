@@ -1076,6 +1076,14 @@ config MEM_ALLOC_PROFILING_DEBUG
 	  Adds warnings with helpful error messages for memory allocation
 	  profiling.
 
+config SOFTWARE_WATCHPOINT
+	bool "Softwre watchpoint to watch memory corruption"
+	depends on  DEBUG_KERNEL
+	help
+	  Using periodc timer checking specific physical DRAM/MMIO address
+	  to capture memory corruption triggered by kernel, hardware devices,
+	  BIOS runtime code or silicon.
+
 source "lib/Kconfig.kasan"
 source "lib/Kconfig.kfence"
 source "lib/Kconfig.kmsan"
