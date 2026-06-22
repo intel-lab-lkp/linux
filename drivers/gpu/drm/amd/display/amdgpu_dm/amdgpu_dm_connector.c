@@ -1240,6 +1240,9 @@ static void apply_dsc_policy_for_stream(struct amdgpu_dm_connector *aconnector,
 		drm_connector->display_info.max_dsc_bpp;
 	struct dc_dsc_config_options dsc_options = {0};
 
+	if (!aconnector->dc_link)
+		return;
+
 	dc_dsc_get_default_config_option(dc, &dsc_options);
 	dsc_options.max_target_bpp_limit_override_x16 = max_dsc_target_bpp_limit_override * 16;
 
@@ -1301,7 +1304,7 @@ static void apply_dsc_policy_for_stream(struct amdgpu_dm_connector *aconnector,
 							(dsc_caps->is_frl == 1) ? "HDMI FRL RX" : "DP-HDMI PCON");
 				}
 		}
-	} else if (aconnector->dc_link && sink->sink_signal == SIGNAL_TYPE_HDMI_FRL) {
+	} else if (sink->sink_signal == SIGNAL_TYPE_HDMI_FRL) {
 		struct dc_dsc_policy dsc_policy = {0};
 
 		frl_verified_link_cap = dc_link_get_frl_link_cap(stream->link);
