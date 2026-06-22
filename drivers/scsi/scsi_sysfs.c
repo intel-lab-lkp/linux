@@ -1427,7 +1427,7 @@ int scsi_sysfs_add_sdev(struct scsi_device *sdev)
 	if (error) {
 		sdev_printk(KERN_INFO, sdev,
 				"failed to add device: %d\n", error);
-		return error;
+		goto out_autopm_put;
 	}
 
 	device_enable_async_suspend(&sdev->sdev_dev);
@@ -1436,7 +1436,7 @@ int scsi_sysfs_add_sdev(struct scsi_device *sdev)
 		sdev_printk(KERN_INFO, sdev,
 				"failed to add class device: %d\n", error);
 		device_del(&sdev->sdev_gendev);
-		return error;
+		goto out_autopm_put;
 	}
 	transport_add_device(&sdev->sdev_gendev);
 	sdev->is_visible = 1;
@@ -1452,6 +1452,7 @@ int scsi_sysfs_add_sdev(struct scsi_device *sdev)
 		}
 	}
 
+out_autopm_put:
 	scsi_autopm_put_device(sdev);
 	return error;
 }
