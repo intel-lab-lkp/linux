@@ -59,7 +59,7 @@ struct host1x_syncpt *host1x_syncpt_alloc(struct host1x *host,
 					  unsigned long flags,
 					  const char *name)
 {
-	struct host1x_syncpt *sp = host->syncpt;
+	struct host1x_syncpt *sp = host->syncpt + host->syncpt_base;
 	char *full_name;
 	unsigned int i;
 
@@ -68,10 +68,10 @@ struct host1x_syncpt *host1x_syncpt_alloc(struct host1x *host,
 
 	mutex_lock(&host->syncpt_mutex);
 
-	for (i = 0; i < host->info->nb_pts && kref_read(&sp->ref); i++, sp++)
+	for (i = host->syncpt_base; i < host->syncpt_end && kref_read(&sp->ref); i++, sp++)
 		;
 
-	if (i >= host->info->nb_pts)
+	if (i >= host->syncpt_end)
 		goto unlock;
 
 	if (flags & HOST1X_SYNCPT_HAS_BASE) {
@@ -138,7 +138,7 @@ void host1x_syncpt_restore(struct host1x *host)
 	struct host1x_syncpt *sp_base = host->syncpt;
 	unsigned int i;
 
-	for (i = 0; i < host1x_syncpt_nb_pts(host); i++) {
+	for (i = host->syncpt_base; i < host->syncpt_end; i++) {
 		/*
 		 * Unassign syncpt from channels for purposes of Tegra186
 		 * syncpoint protection. This prevents any channel from
@@ -296,6 +296,9 @@ int host1x_syncpt_init(struct host1x *host)
 	for (i = 0; i < host->info->nb_pts; i++) {
 		syncpt[i].id = i;
 		syncpt[i].host = host;
+
+		/* Default to client managed for syncpoints not owned by us */
+		syncpt[i].client_managed = true;
 	}
 
 	for (i = 0; i < host->info->nb_bases; i++)
@@ -305,10 +308,12 @@ int host1x_syncpt_init(struct host1x *host)
 	host->syncpt = syncpt;
 	host->bases = bases;
 
-	/* Allocate sync point to use for clearing waits for expired fences */
-	host->nop_sp = host1x_syncpt_alloc(host, 0, "reserved-nop");
-	if (!host->nop_sp)
-		return -ENOMEM;
+	/* Prevent syncpoint 0 from being allocated by users */
+	if (host->syncpt_base == 0) {
+		host->nop_sp = host1x_syncpt_alloc(host, 0, "reserved-nop");
+		if (!host->nop_sp)
+			return -ENOMEM;
+	}
 
 	if (host->info->reserve_vblank_syncpts) {
 		kref_init(&host->syncpt[26].ref);
