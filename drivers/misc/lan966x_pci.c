@@ -177,8 +177,10 @@ static int lan966x_pci_probe(struct pci_dev *pdev, const struct pci_device_id *i
 	pci_set_master(pdev);
 
 	ret = of_platform_default_populate(dev_of_node(dev), NULL, dev);
-	if (ret)
+	if (ret) {
+		of_platform_depopulate(dev);
 		goto err_unload_overlay;
+	}
 
 	return 0;
 
