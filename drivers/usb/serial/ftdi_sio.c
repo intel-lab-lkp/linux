@@ -41,11 +41,24 @@
 #include <linux/serial.h>
 #include <linux/gpio/driver.h>
 #include <linux/usb/serial.h>
+#include <linux/hrtimer.h>
+#include <linux/ktime.h>
 #include "ftdi_sio.h"
 #include "ftdi_sio_ids.h"
 
 #define DRIVER_AUTHOR "Greg Kroah-Hartman <greg@kroah.com>, Bill Ryder <bryder@sgi.com>, Kuba Ober <kuba@mareimbrium.org>, Andreas Mohr, Johan Hovold <jhovold@gmail.com>"
 #define DRIVER_DESC "USB FTDI Serial Converters Driver"
+
+/*
+ * Configurable inter-batch defer on read-URB resubmission. Useful on
+ * host controllers that do not enforce DMA-channel fairness between
+ * devices (the BCM2835 DWC_OTG on the Raspberry Pi Compute Module 3
+ * is one example), where an unbounded read-URB rate from a single
+ * high-throughput device can occupy every DMA channel and prevent
+ * progress on the control endpoint and unrelated devices on the same
+ * bus. Bounded to 100 ms; disabled by default.
+ */
+#define FTDI_URB_DEFER_MAX_NS	(100 * 1000000)
 
 enum ftdi_chip_type {
 	SIO,
@@ -89,6 +102,13 @@ struct ftdi_private {
 	unsigned int latency;		/* latency setting in use */
 	unsigned short max_packet_size;
 	struct mutex cfg_lock; /* Avoid mess by parallel calls of config ioctl() and change_speed() */
+
+	/* Inter-batch defer state (see FTDI_URB_DEFER_MAX_NS). */
+	spinlock_t		urb_defer_lock;	/* guards tty and timer_active */
+	ktime_t			urb_defer_ktime;
+	struct hrtimer		urb_defer_timer;
+	struct tty_struct	*urb_defer_tty;
+	bool			urb_defer_timer_active;
 #ifdef CONFIG_GPIOLIB
 	struct gpio_chip gc;
 	struct mutex gpio_lock;	/* protects GPIO state */
@@ -2167,6 +2187,95 @@ static void ftdi_gpio_remove(struct usb_serial_port *port) { }
  * ***************************************************************************
  */
 
+/*
+ * Module parameter: inter-batch defer between read-URB resubmissions,
+ * in nanoseconds.
+ *
+ * Default 0 -- defer disabled, behaviour identical to prior versions
+ * of this driver. Set to a non-zero value (typically 30000000 = 30 ms;
+ * clamped to FTDI_URB_DEFER_MAX_NS = 100 ms) to bound the read-URB
+ * resubmission rate on hosts whose USB controller does not enforce
+ * DMA-channel fairness. Settable at module load time
+ * (modprobe ftdi_sio urb_defer_timer_ns=30000000) or at runtime via
+ * /sys/module/ftdi_sio/parameters/urb_defer_timer_ns; the new value
+ * takes effect on ports probed after the change.
+ */
+static unsigned long urb_defer_timer_ns;
+
+/*
+ * hrtimer callback that fires after the configured defer interval and
+ * un-throttles the port so the generic submit-read-urbs path can run
+ * again. The timer is armed with HRTIMER_MODE_REL, so this runs in
+ * atomic (hard-irq) context and must not sleep.
+ */
+/*
+ * Resubmit the port's free read URBs from atomic context.
+ *
+ * usb_serial_generic_submit_read_urbs() accepts a gfp_t and looks
+ * usable from atomic context, but its error-recovery path calls
+ * usb_kill_urb(), which sleeps waiting for the URB to be reaped.  If
+ * an individual usb_submit_urb() fails -- which can happen under bus
+ * pressure -- calling that helper from a completion handler or hrtimer
+ * callback would sleep in atomic context.  Submit each free URB inline
+ * instead; usb_submit_urb() does not sleep under GFP_ATOMIC.  On
+ * failure the URB is returned to the free list and the next completion
+ * re-drives submission.
+ */
+static void ftdi_atomic_submit_read_urbs(struct usb_serial_port *port)
+{
+	int i;
+	int res;
+
+	for (i = 0; i < ARRAY_SIZE(port->read_urbs); ++i) {
+		if (!test_and_clear_bit(i, &port->read_urbs_free))
+			continue;
+
+		res = usb_submit_urb(port->read_urbs[i], GFP_ATOMIC);
+		if (res) {
+			dev_dbg(&port->dev, "%s - submit failed: %d\n",
+				__func__, res);
+			set_bit(i, &port->read_urbs_free);
+		}
+	}
+}
+
+static enum hrtimer_restart ftdi_urb_defer_timer_callback(struct hrtimer *timer)
+{
+	struct ftdi_private *priv = container_of(timer, struct ftdi_private,
+						 urb_defer_timer);
+	struct tty_struct *tty;
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->urb_defer_lock, flags);
+	priv->urb_defer_timer_active = false;
+	tty = priv->urb_defer_tty;
+	if (tty)
+		tty_kref_get(tty);
+	spin_unlock_irqrestore(&priv->urb_defer_lock, flags);
+
+	if (tty) {
+		struct usb_serial_port *port = tty->driver_data;
+
+		/*
+		 * This is the body of usb_serial_generic_unthrottle(), but
+		 * that helper resubmits with GFP_KERNEL and may sleep; we are
+		 * in the hrtimer's atomic context, so clear the throttle bit
+		 * and resubmit with GFP_ATOMIC instead.
+		 */
+		clear_bit(USB_SERIAL_THROTTLED, &port->flags);
+		/*
+		 * Order the throttle-bit clear before the resubmit, pairing
+		 * with the barrier that guards the read_urbs_free update in
+		 * ftdi_read_bulk_callback().
+		 */
+		smp_mb__after_atomic();
+		ftdi_atomic_submit_read_urbs(port);
+		tty_kref_put(tty);
+	}
+
+	return HRTIMER_NORESTART;
+}
+
 static int ftdi_probe(struct usb_serial *serial, const struct usb_device_id *id)
 {
 	const struct ftdi_quirk *quirk = (struct ftdi_quirk *)id->driver_info;
@@ -2186,6 +2295,7 @@ static int ftdi_port_probe(struct usb_serial_port *port)
 {
 	const struct ftdi_quirk *quirk = usb_get_serial_data(port->serial);
 	struct ftdi_private *priv;
+	unsigned long defer_ns;
 	int result;
 
 	priv = kzalloc_obj(struct ftdi_private);
@@ -2193,6 +2303,20 @@ static int ftdi_port_probe(struct usb_serial_port *port)
 		return -ENOMEM;
 
 	mutex_init(&priv->cfg_lock);
+	spin_lock_init(&priv->urb_defer_lock);
+
+	/*
+	 * urb_defer_timer_ns == 0 leaves the inter-batch defer disabled
+	 * for this port; ftdi_read_bulk_callback() short-circuits to the
+	 * generic callback below. Otherwise clamp out-of-range values to
+	 * the documented maximum.
+	 */
+	defer_ns = urb_defer_timer_ns;
+	if (defer_ns > FTDI_URB_DEFER_MAX_NS)
+		defer_ns = FTDI_URB_DEFER_MAX_NS;
+	priv->urb_defer_ktime = ns_to_ktime(defer_ns);
+	hrtimer_setup(&priv->urb_defer_timer, &ftdi_urb_defer_timer_callback,
+		      CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 
 	if (quirk && quirk->port_probe)
 		quirk->port_probe(priv);
@@ -2307,6 +2431,8 @@ static void ftdi_port_remove(struct usb_serial_port *port)
 {
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
 
+	hrtimer_cancel(&priv->urb_defer_timer);
+
 	ftdi_gpio_remove(port);
 
 	kfree(priv);
@@ -2316,6 +2442,7 @@ static int ftdi_open(struct tty_struct *tty, struct usb_serial_port *port)
 {
 	struct usb_device *dev = port->serial->dev;
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
+	unsigned long flags;
 
 	/* No error checking for this (will get errors later anyway) */
 	/* See ftdi_sio.h for description of what is reset */
@@ -2329,10 +2456,44 @@ static int ftdi_open(struct tty_struct *tty, struct usb_serial_port *port)
 	   This is same behaviour as serial.c/rs_open() - Kuba */
 
 	/* ftdi_set_termios  will send usb control messages */
-	if (tty)
+	if (tty) {
 		ftdi_set_termios(tty, port, NULL);
+		spin_lock_irqsave(&priv->urb_defer_lock, flags);
+		priv->urb_defer_tty = tty_kref_get(tty);
+		priv->urb_defer_timer_active = false;
+		spin_unlock_irqrestore(&priv->urb_defer_lock, flags);
+	}
 
 	return usb_serial_generic_open(tty, port);
+}
+
+static void ftdi_close(struct usb_serial_port *port)
+{
+	struct ftdi_private *priv = usb_get_serial_port_data(port);
+	struct tty_struct *tty;
+	unsigned long flags;
+
+	/*
+	 * Stop the defer machinery before tearing down the read URBs.
+	 * Clearing urb_defer_tty first means the timer callback (and a
+	 * racing read completion) sees no tty and will not resubmit;
+	 * cancelling the hrtimer then guarantees it cannot fire after
+	 * usb_serial_generic_close() has killed the read URBs. Doing this
+	 * after the close, as before, left a window where the timer could
+	 * resubmit URBs behind a closing port.
+	 */
+	spin_lock_irqsave(&priv->urb_defer_lock, flags);
+	tty = priv->urb_defer_tty;
+	priv->urb_defer_tty = NULL;
+	priv->urb_defer_timer_active = false;
+	spin_unlock_irqrestore(&priv->urb_defer_lock, flags);
+
+	hrtimer_cancel(&priv->urb_defer_timer);
+
+	usb_serial_generic_close(port);
+
+	if (tty)
+		tty_kref_put(tty);
 }
 
 static void ftdi_dtr_rts(struct usb_serial_port *port, int on)
@@ -2517,6 +2678,111 @@ static void ftdi_process_read_urb(struct urb *urb)
 
 	if (count)
 		tty_flip_buffer_push(&port->port);
+}
+
+/*
+ * Read bulk completion handler with URB-defer throttling.
+ *
+ * Behaves like usb_serial_generic_read_bulk_callback() except that,
+ * after processing the URB and marking it free, it throttles the
+ * port and arms urb_defer_timer so the next batch of read URBs is
+ * submitted at most once per urb_defer_timer_ns. This caps the
+ * controller-side DMA pressure created by this device.
+ */
+static void ftdi_read_bulk_callback(struct urb *urb)
+{
+	struct usb_serial_port *port = urb->context;
+	struct ftdi_private *priv = usb_get_serial_port_data(port);
+	unsigned char *data = urb->transfer_buffer;
+	struct tty_struct *tty;
+	bool stopped = false;
+	bool start_timer = false;
+	int status = urb->status;
+	unsigned long flags;
+	int i;
+
+	/*
+	 * Inter-batch defer disabled for this port (urb_defer_timer_ns
+	 * was 0 at probe). Use the generic callback directly so this
+	 * port behaves bit-for-bit like upstream ftdi_sio without this
+	 * patch series applied.
+	 */
+	if (ktime_to_ns(priv->urb_defer_ktime) == 0) {
+		usb_serial_generic_read_bulk_callback(urb);
+		return;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(port->read_urbs); ++i) {
+		if (urb == port->read_urbs[i])
+			break;
+	}
+
+	dev_dbg(&port->dev, "%s - urb %d, len %d\n", __func__, i,
+		urb->actual_length);
+	switch (status) {
+	case 0:
+		usb_serial_debug_data(&port->dev, __func__,
+				      urb->actual_length, data);
+		port->serial->type->process_read_urb(urb);
+		break;
+	case -ENOENT:
+	case -ECONNRESET:
+	case -ESHUTDOWN:
+		dev_dbg(&port->dev, "%s - urb stopped: %d\n",
+			__func__, status);
+		stopped = true;
+		break;
+	case -EPIPE:
+		dev_err(&port->dev, "%s - urb stopped: %d\n",
+			__func__, status);
+		stopped = true;
+		break;
+	default:
+		dev_dbg(&port->dev, "%s - nonzero urb status: %d\n",
+			__func__, status);
+		break;
+	}
+
+	/* Ensure URB processing is observed before we mark the URB free. */
+	smp_mb__before_atomic();
+	set_bit(i, &port->read_urbs_free);
+	/* Ensure the free bit is observed before we read THROTTLED below. */
+	smp_mb__after_atomic();
+
+	if (stopped)
+		return;
+
+	if (test_bit(USB_SERIAL_THROTTLED, &port->flags))
+		return;
+
+	spin_lock_irqsave(&priv->urb_defer_lock, flags);
+	tty = priv->urb_defer_tty;
+	if (tty) {
+		tty_kref_get(tty);
+		if (!priv->urb_defer_timer_active) {
+			priv->urb_defer_timer_active = true;
+			start_timer = true;
+		}
+	}
+	spin_unlock_irqrestore(&priv->urb_defer_lock, flags);
+
+	if (tty) {
+		usb_serial_generic_throttle(tty);
+		if (start_timer)
+			hrtimer_start(&priv->urb_defer_timer,
+				      priv->urb_defer_ktime,
+				      HRTIMER_MODE_REL);
+		tty_kref_put(tty);
+	} else {
+		/*
+		 * No tty is bound to this port (e.g. it was opened as a
+		 * console). The inter-batch defer needs a tty to throttle,
+		 * so resubmit the read URBs immediately rather than stalling
+		 * the read stream.  We are in completion (atomic) context, so
+		 * use the atomic-safe helper.
+		 */
+		ftdi_atomic_submit_read_urbs(port);
+	}
 }
 
 static int ftdi_break_ctl(struct tty_struct *tty, int break_state)
@@ -2850,10 +3116,12 @@ static struct usb_serial_driver ftdi_device = {
 	.port_probe =		ftdi_port_probe,
 	.port_remove =		ftdi_port_remove,
 	.open =			ftdi_open,
+	.close =		ftdi_close,
 	.dtr_rts =		ftdi_dtr_rts,
 	.throttle =		usb_serial_generic_throttle,
 	.unthrottle =		usb_serial_generic_unthrottle,
 	.process_read_urb =	ftdi_process_read_urb,
+	.read_bulk_callback =	ftdi_read_bulk_callback,
 	.prepare_write_buffer =	ftdi_prepare_write_buffer,
 	.tiocmget =		ftdi_tiocmget,
 	.tiocmset =		ftdi_tiocmset,
@@ -2871,6 +3139,10 @@ static struct usb_serial_driver * const serial_drivers[] = {
 	&ftdi_device, NULL
 };
 module_usb_serial_driver(serial_drivers, id_table_combined);
+
+module_param(urb_defer_timer_ns, ulong, 0644);
+MODULE_PARM_DESC(urb_defer_timer_ns,
+		 "Inter-batch defer between read-URB resubmissions, in nanoseconds. 0 (default) disables the defer. Max 100000000 = 100 ms.");
 
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);
