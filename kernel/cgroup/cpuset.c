@@ -2647,6 +2647,10 @@ void cpuset_update_tasks_nodemask(struct cpuset *cs)
 
 		cpuset_change_task_nodemask(task, &newmems);
 
+		/* Rebind and migrate mm only for task group leader */
+		if (task != task->group_leader)
+			continue;
+
 		mm = get_task_mm(task);
 		if (!mm)
 			continue;
