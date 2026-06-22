@@ -167,8 +167,9 @@ static void __init dir_add(const char *name, size_t nlen, time64_t mtime)
 
 static void __init dir_utime(void)
 {
-	struct dir_entry *de, *tmp;
-	list_for_each_entry_safe(de, tmp, &dir_list, list) {
+	struct dir_entry *de;
+
+	list_for_each_entry_mutable(de, &dir_list, list) {
 		list_del(&de->list);
 		do_utime(de->name, de->mtime);
 		kfree(de);
