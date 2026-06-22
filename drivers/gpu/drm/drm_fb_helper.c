@@ -225,16 +225,85 @@ static void drm_fb_helper_resume_worker(struct work_struct *work)
 	console_unlock();
 }
 
+static int find_crtc_index_atomic(struct drm_fb_helper *helper)
+{
+	struct drm_device *dev = helper->dev;
+	struct drm_plane *plane;
+
+	drm_for_each_plane(plane, dev) {
+		const struct drm_plane_state *plane_state;
+		const struct drm_crtc *crtc;
+
+		if (plane->type != DRM_PLANE_TYPE_PRIMARY)
+			continue;
+
+		plane_state = plane->state;
+		if (plane_state->fb != helper->fb || !plane_state->crtc)
+			continue; /* plane doesn't display fbdev emulation */
+
+		crtc = plane_state->crtc;
+		if (!crtc->state->active)
+			continue;
+		if (drm_WARN_ON_ONCE(dev, crtc->index > INT_MAX))
+			continue; /* driver bug */
+
+		return crtc->index;
+	}
+
+	return -EINVAL;
+}
+
+static int find_crtc_index_legacy(struct drm_fb_helper *helper)
+{
+	struct drm_device *dev = helper->dev;
+	struct drm_crtc *crtc;
+
+	drm_for_each_crtc(crtc, dev) {
+		struct drm_plane *plane = crtc->primary;
+
+		if (!crtc->enabled)
+			continue;
+		if (!plane || plane->fb != helper->fb)
+			continue; /* CRTC doesn't display fbdev emulation */
+		if (drm_WARN_ON_ONCE(dev, crtc->index > INT_MAX))
+			continue; /* driver bug */
+
+		return crtc->index;
+	}
+
+	return -EINVAL;
+}
+
+static int drm_fb_helper_find_crtc_index(struct drm_fb_helper *helper)
+{
+	struct drm_device *dev = helper->dev;
+	int crtc_index;
+
+	mutex_lock(&dev->mode_config.mutex);
+
+	if (drm_drv_uses_atomic_modeset(dev))
+		crtc_index = find_crtc_index_atomic(helper);
+	else
+		crtc_index = find_crtc_index_legacy(helper);
+
+	mutex_unlock(&dev->mode_config.mutex);
+
+	return crtc_index;
+}
+
 static void drm_fb_helper_fb_dirty(struct drm_fb_helper *helper)
 {
 	struct drm_device *dev = helper->dev;
 	struct drm_clip_rect *clip = &helper->damage_clip;
 	struct drm_clip_rect clip_copy;
+	int crtc_index;
 	unsigned long flags;
 	int ret;
 
 	mutex_lock(&helper->lock);
-	drm_client_modeset_wait_for_vblank(&helper->client, 0);
+	crtc_index = drm_fb_helper_find_crtc_index(helper);
+	if (crtc_index >= 0)
+		drm_client_modeset_wait_for_vblank(&helper->client, crtc_index);
 	mutex_unlock(&helper->lock);
 
 	if (drm_WARN_ON_ONCE(dev, !helper->funcs->fb_dirty))
