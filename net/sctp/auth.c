@@ -753,7 +753,7 @@ int sctp_auth_set_key(struct sctp_endpoint *ep,
 	/* Create a new key data based on the info passed in */
 	key = sctp_auth_create_key(auth_key->sca_keylength, GFP_KERNEL);
 	if (!key) {
-		kfree(cur_key);
+		sctp_auth_shkey_release(cur_key);
 		return -ENOMEM;
 	}
 
