@@ -186,6 +186,7 @@ static int __init init_gfs2_fs(void)
 fail_fs2:
 	unregister_filesystem(&gfs2_fs_type);
 fail_fs1:
+	gfs2_unregister_debugfs();
 	mempool_destroy(gfs2_page_pool);
 fail_mempool:
 	destroy_workqueue(gfs2_freeze_wq);
