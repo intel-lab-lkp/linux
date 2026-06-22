@@ -791,7 +791,7 @@ int rtw_drv_register_netdev(struct adapter *if1)
 
 static int _netdev_open(struct net_device *pnetdev)
 {
-	uint status;
+	unsigned int status;
 	struct adapter *padapter = rtw_netdev_priv(pnetdev);
 	struct pwrctrl_priv *pwrctrlpriv = adapter_to_pwrctl(padapter);
 
