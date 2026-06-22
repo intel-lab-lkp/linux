@@ -277,59 +277,63 @@ impl GspHal for Tu102 {
         let gsp_falcon = ctx.gsp_falcon;
         let sec2_falcon = ctx.sec2_falcon;
 
-        let bios = Vbios::new(dev, bar)?;
+        let res = (|| {
+            let bios = Vbios::new(dev, bar)?;
 
-        // Try and prepare the unload bundle.
-        //
-        // If the unload bundle creation fails, the GPU will need to be reset before the driver can
-        // be probed again.
-        let unload_bundle =
-            Sec2UnloadBundle::build(dev, bar, chipset, &bios, gsp_falcon, sec2_falcon)
-                .inspect_err(|e| {
-                    dev_warn!(dev, "Failed to prepare unload firmware: {:?}\n", e);
-                    dev_warn!(dev, "The GSP won't be able to unload properly on unbind.\n");
-                    dev_warn!(
-                        dev,
-                        "The GPU will need to be reset before the driver can bind again.\n"
-                    );
-                })
-                .ok()
-                .map(crate::gsp::UnloadBundle);
+            // Try and prepare the unload bundle.
+            //
+            // If the unload bundle creation fails, the GPU will need to be reset before the driver
+            // can be probed again.
+            let unload_bundle =
+                Sec2UnloadBundle::build(dev, bar, chipset, &bios, gsp_falcon, sec2_falcon)
+                    .inspect_err(|e| {
+                        dev_warn!(dev, "Failed to prepare unload firmware: {:?}\n", e);
+                        dev_warn!(dev, "The GSP won't be able to unload properly on unbind.\n");
+                        dev_warn!(
+                            dev,
+                            "The GPU will need to be reset before the driver can bind again.\n"
+                        );
+                    })
+                    .ok()
+                    .map(crate::gsp::UnloadBundle);
 
-        // Wrap the unload bundle into a drop guard so it is automatically run upon failure.
-        let unload_guard =
-            BootUnloadGuard::new(gsp, dev, bar, gsp_falcon, sec2_falcon, unload_bundle);
+            // Wrap the unload bundle into a drop guard so it is automatically run upon failure.
+            let unload_guard =
+                BootUnloadGuard::new(gsp, dev, bar, gsp_falcon, sec2_falcon, unload_bundle);
 
-        // FWSEC-FRTS is not executed on chips where the FRTS region size is 0 (e.g. GA100).
-        if !fb_layout.frts.is_empty() {
-            run_fwsec_frts(dev, chipset, gsp_falcon, bar, &bios, fb_layout)?;
-        }
+            // FWSEC-FRTS is not executed on chips where the FRTS region size is 0 (e.g. GA100).
+            if !fb_layout.frts.is_empty() {
+                run_fwsec_frts(dev, chipset, gsp_falcon, bar, &bios, fb_layout)?;
+            }
 
-        gsp_falcon.reset(bar)?;
-        let libos_handle = gsp.libos.dma_handle();
-        let (mbox0, mbox1) = gsp_falcon.boot(
-            bar,
-            Some(libos_handle as u32),
-            Some((libos_handle >> 32) as u32),
-        )?;
-        dev_dbg!(dev, "GSP MBOX0: {:#x}, MBOX1: {:#x}\n", mbox0, mbox1);
+            gsp_falcon.reset(bar)?;
+            let libos_handle = gsp.libos.dma_handle();
+            let (mbox0, mbox1) = gsp_falcon.boot(
+                bar,
+                Some(libos_handle as u32),
+                Some((libos_handle >> 32) as u32),
+            )?;
+            dev_dbg!(dev, "GSP MBOX0: {:#x}, MBOX1: {:#x}\n", mbox0, mbox1);
 
-        dev_dbg!(
-            dev,
-            "Using SEC2 to load and run the booter_load firmware...\n"
-        );
+            dev_dbg!(
+                dev,
+                "Using SEC2 to load and run the booter_load firmware...\n"
+            );
 
-        BooterFirmware::new(
-            dev,
-            BooterKind::Loader,
-            chipset,
-            FIRMWARE_VERSION,
-            sec2_falcon,
-            bar,
-        )?
-        .run(dev, bar, sec2_falcon, wpr_meta)?;
+            BooterFirmware::new(
+                dev,
+                BooterKind::Loader,
+                chipset,
+                FIRMWARE_VERSION,
+                sec2_falcon,
+                bar,
+            )?
+            .run(dev, bar, sec2_falcon, wpr_meta)?;
 
-        Ok(unload_guard)
+            Ok(unload_guard)
+        })();
+
+        res
     }
 
     fn post_boot(&self, gsp: &Gsp, ctx: &GspBootContext<'_>, gsp_fw: &GspFirmware) -> Result {

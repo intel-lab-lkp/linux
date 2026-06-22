@@ -119,30 +119,36 @@ impl super::Gsp {
 
         // Perform the chipset-specific boot sequence, and retrieve the unload bundle.
         let unload_guard = hal.boot(&self, &ctx, &fb_layout, &wpr_meta)?;
+        // Run from a closure so we can retrieve the result, and run the unload sequence of the GSP
+        // in case of error.
+        let res = (|| {
+            gsp_falcon.write_os_version(bar, gsp_fw.bootloader.app_version);
 
-        gsp_falcon.write_os_version(bar, gsp_fw.bootloader.app_version);
+            // Poll for RISC-V to become active before continuing.
+            read_poll_timeout(
+                || Ok(gsp_falcon.is_riscv_active(bar)),
+                |val: &bool| *val,
+                Delta::from_millis(10),
+                Delta::from_secs(5),
+            )?;
 
-        // Poll for RISC-V to become active before continuing.
-        read_poll_timeout(
-            || Ok(gsp_falcon.is_riscv_active(bar)),
-            |val: &bool| *val,
-            Delta::from_millis(10),
-            Delta::from_secs(5),
-        )?;
+            dev_dbg!(pdev, "RISC-V active? {}\n", gsp_falcon.is_riscv_active(bar),);
 
-        dev_dbg!(pdev, "RISC-V active? {}\n", gsp_falcon.is_riscv_active(bar),);
+            self.cmdq
+                .send_command_no_wait(bar, commands::SetSystemInfo::new(pdev, chipset))?;
+            self.cmdq
+                .send_command_no_wait(bar, commands::SetRegistry::new())?;
 
-        self.cmdq
-            .send_command_no_wait(bar, commands::SetSystemInfo::new(pdev, chipset))?;
-        self.cmdq
-            .send_command_no_wait(bar, commands::SetRegistry::new())?;
+            hal.post_boot(&self, &ctx, &gsp_fw)?;
 
-        hal.post_boot(&self, &ctx, &gsp_fw)?;
+            // Wait until GSP is fully initialized.
+            commands::wait_gsp_init_done(&self.cmdq)
+        })();
 
-        // Wait until GSP is fully initialized.
-        commands::wait_gsp_init_done(&self.cmdq)?;
-
-        Ok(unload_guard.dismiss())
+        match res {
+            Err(e) => Err(e),
+            Ok(()) => Ok(unload_guard.dismiss()),
+        }
     }
 
     /// Shut down the GSP and wait until it is offline.

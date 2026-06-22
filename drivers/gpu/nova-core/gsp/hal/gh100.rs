@@ -158,29 +158,33 @@ impl GspHal for Gh100 {
         let gsp_falcon = ctx.gsp_falcon;
         let sec2_falcon = ctx.sec2_falcon;
 
-        let unload_bundle = crate::gsp::UnloadBundle(
-            KBox::new(FspUnloadBundle, GFP_KERNEL)? as KBox<dyn UnloadBundle>
-        );
+        let res = (|| {
+            let unload_bundle = crate::gsp::UnloadBundle(
+                KBox::new(FspUnloadBundle, GFP_KERNEL)? as KBox<dyn UnloadBundle>
+            );
 
-        // Wrap the unload bundle into a drop guard so it is automatically run upon failure.
-        let unload_guard =
-            BootUnloadGuard::new(gsp, dev, bar, gsp_falcon, sec2_falcon, Some(unload_bundle));
+            // Wrap the unload bundle into a drop guard so it is automatically run upon failure.
+            let unload_guard =
+                BootUnloadGuard::new(gsp, dev, bar, gsp_falcon, sec2_falcon, Some(unload_bundle));
 
-        let mut fsp = Fsp::wait_secure_boot(dev, bar, chipset)?;
+            let mut fsp = Fsp::wait_secure_boot(dev, bar, chipset)?;
 
-        let args = FmcBootArgs::new(
-            dev,
-            chipset,
-            wpr_meta.dma_handle(),
-            gsp.libos.dma_handle(),
-            false,
-        )?;
+            let args = FmcBootArgs::new(
+                dev,
+                chipset,
+                wpr_meta.dma_handle(),
+                gsp.libos.dma_handle(),
+                false,
+            )?;
 
-        fsp.boot_fmc(dev, bar, fb_layout, &args)?;
+            fsp.boot_fmc(dev, bar, fb_layout, &args)?;
 
-        wait_for_gsp_lockdown_release(dev, bar, gsp_falcon, args.boot_params_dma_handle())?;
+            wait_for_gsp_lockdown_release(dev, bar, gsp_falcon, args.boot_params_dma_handle())?;
 
-        Ok(unload_guard)
+            Ok(unload_guard)
+        })();
+
+        res
     }
 }
 
