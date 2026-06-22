@@ -2024,6 +2024,48 @@ static int __init init_fs_exec_sysctls(void)
 fs_initcall(init_fs_exec_sysctls);
 #endif /* CONFIG_SYSCTL */
 
+char *resolve_elf_interpreter(struct linux_binprm *bprm, const char *elf_interpreter)
+{
+	char *pathbuf, *path, *slash, *resolved;
+
+	if (strncmp(elf_interpreter, "$ORIGIN", 7) != 0) {
+		char *ret = kstrdup(elf_interpreter, GFP_KERNEL);
+
+		return ret ? ret : ERR_PTR(-ENOMEM);
+	}
+
+	pathbuf = kmalloc(PATH_MAX, GFP_KERNEL);
+	if (!pathbuf)
+		return ERR_PTR(-ENOMEM);
+
+	path = file_path(bprm->file, pathbuf, PATH_MAX);
+	if (IS_ERR(path)) {
+		kfree(pathbuf);
+		return (char *)path;
+	}
+
+	slash = strrchr(path, '/');
+	if (slash) {
+		if (slash == path)
+			*(slash + 1) = '\0';
+		else
+			*slash = '\0';
+	} else {
+		kfree(pathbuf);
+		char *ret = kstrdup(elf_interpreter, GFP_KERNEL);
+
+		return ret ? ret : ERR_PTR(-ENOMEM);
+	}
+
+	resolved = kasprintf(GFP_KERNEL, "%s%s", path, elf_interpreter + 7);
+	kfree(pathbuf);
+	if (!resolved)
+		return ERR_PTR(-ENOMEM);
+
+	return resolved;
+}
+EXPORT_SYMBOL(resolve_elf_interpreter);
+
 #ifdef CONFIG_EXEC_KUNIT_TEST
 #include "tests/exec_kunit.c"
 #endif

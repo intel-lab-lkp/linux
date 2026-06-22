@@ -872,7 +872,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 
 	elf_ppnt = elf_phdata;
 	for (i = 0; i < elf_ex->e_phnum; i++, elf_ppnt++) {
-		char *elf_interpreter;
+		char *elf_interpreter, *resolved_interp;
 
 		if (elf_ppnt->p_type == PT_GNU_PROPERTY) {
 			elf_property_phdata = elf_ppnt;
@@ -904,8 +904,15 @@ static int load_elf_binary(struct linux_binprm *bprm)
 		if (elf_interpreter[elf_ppnt->p_filesz - 1] != '\0')
 			goto out_free_interp;
 
-		interpreter = open_exec(elf_interpreter);
+		resolved_interp = resolve_elf_interpreter(bprm, elf_interpreter);
 		kfree(elf_interpreter);
+		if (IS_ERR(resolved_interp)) {
+			retval = PTR_ERR(resolved_interp);
+			goto out_free_ph;
+		}
+
+		interpreter = open_exec(resolved_interp);
+		kfree(resolved_interp);
 		retval = PTR_ERR(interpreter);
 		if (IS_ERR(interpreter))
 			goto out_free_ph;

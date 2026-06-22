@@ -230,7 +230,9 @@ static int load_elf_fdpic_binary(struct linux_binprm *bprm)
 
 	for (i = 0; i < exec_params.hdr.e_phnum; i++, phdr++) {
 		switch (phdr->p_type) {
-		case PT_INTERP:
+		case PT_INTERP: {
+			char *resolved_interp;
+
 			retval = -ENOMEM;
 			if (phdr->p_filesz > PATH_MAX)
 				goto error;
@@ -259,7 +261,15 @@ static int load_elf_fdpic_binary(struct linux_binprm *bprm)
 			kdebug("Using ELF interpreter %s", interpreter_name);
 
 			/* replace the program with the interpreter */
-			interpreter = open_exec(interpreter_name);
+			resolved_interp = resolve_elf_interpreter(bprm, interpreter_name);
+			kfree(interpreter_name);
+			if (IS_ERR(resolved_interp)) {
+				retval = PTR_ERR(resolved_interp);
+				goto error;
+			}
+
+			interpreter = open_exec(resolved_interp);
+			kfree(resolved_interp);
 			retval = PTR_ERR(interpreter);
 			if (IS_ERR(interpreter)) {
 				interpreter = NULL;
@@ -284,6 +294,7 @@ static int load_elf_fdpic_binary(struct linux_binprm *bprm)
 
 			interp_params.hdr = *((struct elfhdr *) bprm->buf);
 			break;
+		}
 
 		case PT_LOAD:
 #ifdef CONFIG_MMU

@@ -150,4 +150,6 @@ extern ssize_t read_code(struct file *, unsigned long, loff_t, size_t);
 int kernel_execve(const char *filename,
 		  const char *const *argv, const char *const *envp);
 
+char *resolve_elf_interpreter(struct linux_binprm *bprm, const char *elf_interpreter);
+
 #endif /* _LINUX_BINFMTS_H */
