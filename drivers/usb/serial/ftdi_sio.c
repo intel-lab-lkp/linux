@@ -1703,6 +1703,23 @@ static ssize_t latency_timer_store(struct device *dev,
 	if (kstrtou8(valbuf, 10, &v))
 		return -EINVAL;
 
+	/*
+	 * An explicit sysfs write wins over the legacy ASYNC_LOW_LATENCY
+	 * tty-flag override.  Without this, if any userspace tool
+	 * (setserial(8), libftdi, certain tcsetattr paths) had set
+	 * ASYNC_LOW_LATENCY via TIOCSSERIAL, write_latency_timer() would
+	 * silently clamp the chip register to 1 regardless of what was
+	 * written to sysfs.  Clearing the flag here makes sysfs the
+	 * authoritative source so the next chip-side write uses exactly
+	 * the value the caller asked for.
+	 */
+	if (priv->flags & ASYNC_LOW_LATENCY) {
+		dev_info(&port->dev,
+			 "explicit latency_timer=%u clears ASYNC_LOW_LATENCY flag\n",
+			 v);
+		priv->flags &= ~ASYNC_LOW_LATENCY;
+	}
+
 	priv->latency = v;
 	rv = write_latency_timer(port);
 	if (rv < 0)
