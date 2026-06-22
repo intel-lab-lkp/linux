@@ -1368,6 +1368,68 @@ xfs_falloc_force_zero(
 	return XFS_TEST_ERROR(ip->i_mount, XFS_ERRTAG_FORCE_ZERO_RANGE);
 }
 
+static int
+xfs_falloc_write_zeroes(
+	struct file		*file,
+	int			mode,
+	loff_t			offset,
+	loff_t			len,
+	struct xfs_zone_alloc_ctx *ac)
+{
+	struct inode		*inode = file_inode(file);
+	struct xfs_inode	*ip = XFS_I(inode);
+	loff_t			new_size = 0;
+	unsigned int		blksize = i_blocksize(inode);
+	xfs_off_t		offset_aligned = round_up(offset, blksize);
+	xfs_off_t		end_aligned = round_down(offset + len, blksize);
+	xfs_off_t		len_aligned = end_aligned - offset_aligned;
+	int			error;
+
+	if (xfs_is_always_cow_inode(ip) ||
+	    !bdev_write_zeroes_unmap_sectors(xfs_inode_buftarg(ip)->bt_bdev))
+		return -EOPNOTSUPP;
+
+	error = xfs_falloc_newsize(file, mode, offset, len, &new_size);
+	if (error)
+		return error;
+
+	/*
+	 *
+	 *    |----------|----------|----------|----------|----------|
+	 *    ^     ^    ^                     ^     ^    ^
+	 *    |     |    |                     |     |    |
+	 *    |   offset |                     |    end   |
+	 *    |          |                     |          |
+	 * offset_rd   offset_ru              end_rd    end_ru
+	 *
+	 * xfs_free_file_space() punches inside from offset_ru -> end_rd. It also
+	 * zeroes offset -> offset_ru and end_rd -> end.
+	 * Only pass offset_ru -> end_rd to be zeroed via xfs_alloc_file_space().
+	 */
+	error = xfs_free_file_space(ip, offset, len, ac);
+	if (error)
+		return error;
+
+	/*
+	 * Publish the new size while the punched range is still a hole, then
+	 * fill it with written zeroes.  Like the other fallocate modes we use
+	 * xfs_falloc_setsize(), but it must run *before* we convert the range
+	 * to written extents: xfs_setattr_size() zeroes [old EOF, new size) via
+	 * xfs_zero_range(), which skips holes, so there is nothing to re-zero.
+	 * It will also writeback partial EOF block before the on-disk size is
+	 * logged.
+	 */
+	error = xfs_falloc_setsize(file, new_size);
+	if (error)
+		return error;
+
+	if (len_aligned > 0)
+		error = xfs_alloc_file_space(ip, offset_aligned, len_aligned,
+				XFS_ALLOC_FILE_SPACE_WRITE_ZEROES);
+
+	return error;
+}
+
 /*
  * Punch a hole and prealloc the range.  We use a hole punch rather than
  * unwritten extent conversion for two reasons:
@@ -1473,7 +1535,7 @@ xfs_falloc_allocate_range(
 		(FALLOC_FL_ALLOCATE_RANGE | FALLOC_FL_KEEP_SIZE |	\
 		 FALLOC_FL_PUNCH_HOLE |	FALLOC_FL_COLLAPSE_RANGE |	\
 		 FALLOC_FL_ZERO_RANGE |	FALLOC_FL_INSERT_RANGE |	\
-		 FALLOC_FL_UNSHARE_RANGE)
+		 FALLOC_FL_UNSHARE_RANGE | FALLOC_FL_WRITE_ZEROES)
 
 STATIC long
 __xfs_file_fallocate(
@@ -1524,6 +1586,9 @@ __xfs_file_fallocate(
 		break;
 	case FALLOC_FL_ALLOCATE_RANGE:
 		error = xfs_falloc_allocate_range(file, mode, offset, len);
+		break;
+	case FALLOC_FL_WRITE_ZEROES:
+		error = xfs_falloc_write_zeroes(file, mode, offset, len, ac);
 		break;
 	default:
 		error = -EOPNOTSUPP;
