@@ -110,6 +110,15 @@ struct ftdi_private {
 	struct hrtimer		urb_defer_timer;
 	struct tty_struct	*urb_defer_tty;
 	bool			urb_defer_timer_active;
+	/*
+	 * Per-port opt-out of the inter-batch defer.  When true, set via
+	 * /sys/bus/usb-serial/devices/ttyUSBx/low_latency, the read-bulk
+	 * callback short-circuits to the generic upstream callback and
+	 * skips the hrtimer-based throttle.  Defaults to false: the
+	 * defer applies to every port unless this port is explicitly
+	 * opted out (and the defer is globally enabled to begin with).
+	 */
+	bool			low_latency;
 #ifdef CONFIG_GPIOLIB
 	struct gpio_chip gc;
 	struct mutex gpio_lock;	/* protects GPIO state */
@@ -1728,6 +1737,51 @@ static ssize_t latency_timer_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(latency_timer);
 
+/*
+ * /sys/bus/usb-serial/devices/ttyUSBx/low_latency
+ *   0 (default): inter-batch defer applies to this port (only
+ *                meaningful when the defer is globally enabled
+ *                via urb_defer_timer_ns).
+ *   1          : defer bypassed on this port; the upstream
+ *                read-bulk callback handles URB completions with
+ *                no throttle / hrtimer interaction.
+ * Typically written by a udev rule on the latency-critical port at
+ * device-add. Writing 1 also cancels any in-flight defer timer so
+ * the next URB submits immediately.
+ */
+static ssize_t low_latency_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct usb_serial_port *port = to_usb_serial_port(dev);
+	struct ftdi_private *priv = usb_get_serial_port_data(port);
+
+	return sprintf(buf, "%u\n", priv->low_latency ? 1 : 0);
+}
+
+static ssize_t low_latency_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *valbuf, size_t count)
+{
+	struct usb_serial_port *port = to_usb_serial_port(dev);
+	struct ftdi_private *priv = usb_get_serial_port_data(port);
+	unsigned long flags;
+	u8 v;
+
+	if (kstrtou8(valbuf, 10, &v))
+		return -EINVAL;
+
+	priv->low_latency = !!v;
+
+	if (priv->low_latency) {
+		hrtimer_cancel(&priv->urb_defer_timer);
+		spin_lock_irqsave(&priv->urb_defer_lock, flags);
+		priv->urb_defer_timer_active = false;
+		spin_unlock_irqrestore(&priv->urb_defer_lock, flags);
+	}
+	return count;
+}
+static DEVICE_ATTR_RW(low_latency);
+
 /* Write an event character directly to the FTDI register.  The ASCII
    value is in the low 8 bits, with the enable bit in the 9th bit. */
 static ssize_t event_char_store(struct device *dev,
@@ -1762,6 +1816,7 @@ static DEVICE_ATTR_WO(event_char);
 static struct attribute *ftdi_attrs[] = {
 	&dev_attr_event_char.attr,
 	&dev_attr_latency_timer.attr,
+	&dev_attr_low_latency.attr,
 	NULL
 };
 
@@ -2759,6 +2814,17 @@ static void ftdi_read_bulk_callback(struct urb *urb)
 	 * patch series applied.
 	 */
 	if (ktime_to_ns(priv->urb_defer_ktime) == 0) {
+		usb_serial_generic_read_bulk_callback(urb);
+		return;
+	}
+
+	/*
+	 * Latency-critical ports opt out of the inter-batch defer via
+	 * /sys/.../low_latency. Delegate straight to the generic
+	 * callback so the data stream sees no added latency on this
+	 * port even when the defer is globally enabled.
+	 */
+	if (priv->low_latency) {
 		usb_serial_generic_read_bulk_callback(urb);
 		return;
 	}
