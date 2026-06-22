@@ -73,6 +73,19 @@ properties:
       device design and can interact with other characteristics such as
       settling time.
 
+  reference-source:
+    $ref: /schemas/types.yaml#/definitions/string-array
+    maxItems: 2
+    minItems: 1
+    description:
+      Indicates the voltage reference source or sources for this channel. Some
+      ADCs usually allow choosing between internal reference sources or a pair
+      of external pins.
+
+      If a single value is provided, it represents a single voltage reference
+      source. If two values are provided, the first one corresponds to the
+      positive source and the second to the negative source.
+
 anyOf:
   - oneOf:
       - required:
