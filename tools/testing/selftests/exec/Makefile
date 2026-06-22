@@ -10,9 +10,9 @@ ALIGN_PIES        := $(patsubst %,load_address.%,$(ALIGNS))
 ALIGN_STATIC_PIES := $(patsubst %,load_address.static.%,$(ALIGNS))
 ALIGNMENT_TESTS   := $(ALIGN_PIES) $(ALIGN_STATIC_PIES)
 
-TEST_PROGS := binfmt_script.py check-exec-tests.sh
-TEST_GEN_PROGS := execveat non-regular $(ALIGNMENT_TESTS)
-TEST_GEN_PROGS_EXTENDED := false inc set-exec script-exec.inc script-noexec.inc
+TEST_PROGS := binfmt_script.py check-exec-tests.sh origin_interp.sh
+TEST_GEN_PROGS := execveat non-regular $(ALIGNMENT_TESTS) test_prog
+TEST_GEN_PROGS_EXTENDED := false inc set-exec script-exec.inc script-noexec.inc mock_interp
 TEST_GEN_FILES := execveat.symlink execveat.denatured script subdir
 # Makefile is a run-time dependency, since it's accessed by the execveat test
 TEST_FILES := Makefile
@@ -55,3 +55,9 @@ $(OUTPUT)/script-exec.inc: $(CHECK_EXEC_SAMPLES)/script-exec.inc
 	cp $< $@
 $(OUTPUT)/script-noexec.inc: $(CHECK_EXEC_SAMPLES)/script-noexec.inc
 	cp $< $@
+
+$(OUTPUT)/mock_interp: mock_interp.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -static -nostdlib -include ../../../include/nolibc/nolibc.h $< -o $@
+
+$(OUTPUT)/test_prog: test_prog.c $(OUTPUT)/mock_interp
+	$(CC) $(CFLAGS) $(LDFLAGS) -Wl,-dynamic-linker,'$$ORIGIN/mock_interp' $< -o $@

@@ -119,8 +119,34 @@ static void exec_test_bprm_stack_limits(struct kunit *test)
 	}
 }
 
+static void exec_test_resolve_elf_interpreter(struct kunit *test)
+{
+	struct linux_binprm bprm = { .file = NULL };
+	struct file *f;
+	char *resolved;
+
+	// Test 1: Non-$ORIGIN interpreter path should just be duplicated
+	resolved = resolve_elf_interpreter(&bprm, "/lib64/ld-linux-x86-64.so.2");
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, resolved);
+	KUNIT_EXPECT_STREQ(test, resolved, "/lib64/ld-linux-x86-64.so.2");
+	kfree(resolved);
+
+	// Test 2: $ORIGIN interpreter path
+	f = filp_open("/", O_RDONLY, 0);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, f);
+	bprm.file = f;
+
+	resolved = resolve_elf_interpreter(&bprm, "$ORIGIN/../lib/ld.so");
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, resolved);
+	KUNIT_EXPECT_STREQ(test, resolved, "//../lib/ld.so");
+	kfree(resolved);
+
+	filp_close(f, NULL);
+}
+
 static struct kunit_case exec_test_cases[] = {
 	KUNIT_CASE(exec_test_bprm_stack_limits),
+	KUNIT_CASE(exec_test_resolve_elf_interpreter),
 	{},
 };
 
