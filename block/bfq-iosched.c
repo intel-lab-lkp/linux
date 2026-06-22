@@ -1209,9 +1209,8 @@ static int bfqq_process_refs(struct bfq_queue *bfqq)
 static void bfq_reset_burst_list(struct bfq_data *bfqd, struct bfq_queue *bfqq)
 {
 	struct bfq_queue *item;
-	struct hlist_node *n;
 
-	hlist_for_each_entry_safe(item, n, &bfqd->burst_list, burst_list_node)
+	hlist_for_each_entry_mutable(item, &bfqd->burst_list, burst_list_node)
 		hlist_del_init(&item->burst_list_node);
 
 	/*
@@ -1236,7 +1235,6 @@ static void bfq_add_to_burst(struct bfq_data *bfqd, struct bfq_queue *bfqq)
 
 	if (bfqd->burst_size == bfqd->bfq_large_burst_thresh) {
 		struct bfq_queue *pos, *bfqq_item;
-		struct hlist_node *n;
 
 		/*
 		 * Enough queues have been activated shortly after each
@@ -1260,8 +1258,8 @@ static void bfq_add_to_burst(struct bfq_data *bfqd, struct bfq_queue *bfqq)
 		 * belonging to a large burst. So the burst list is not
 		 * needed any more. Remove it.
 		 */
-		hlist_for_each_entry_safe(pos, n, &bfqd->burst_list,
-					  burst_list_node)
+		hlist_for_each_entry_mutable(pos, &bfqd->burst_list,
+					     burst_list_node)
 			hlist_del_init(&pos->burst_list_node);
 	} else /*
 		* Burst not yet large: add bfqq to the burst list. Do
@@ -5330,7 +5328,6 @@ static struct request *bfq_dispatch_request(struct blk_mq_hw_ctx *hctx)
 void bfq_put_queue(struct bfq_queue *bfqq)
 {
 	struct bfq_queue *item;
-	struct hlist_node *n;
 	struct bfq_group *bfqg = bfqq_group(bfqq);
 
 	bfq_log_bfqq(bfqq->bfqd, bfqq, "put_queue: %p %d", bfqq, bfqq->ref);
@@ -5391,8 +5388,8 @@ void bfq_put_queue(struct bfq_queue *bfqq)
 		hlist_del_init(&bfqq->woken_list_node);
 
 	/* reset waker for all queues in woken list */
-	hlist_for_each_entry_safe(item, n, &bfqq->woken_list,
-				  woken_list_node) {
+	hlist_for_each_entry_mutable(item, &bfqq->woken_list,
+				     woken_list_node) {
 		item->waker_bfqq = NULL;
 		hlist_del_init(&item->woken_list_node);
 	}
@@ -7141,13 +7138,13 @@ static void bfq_depth_updated(struct request_queue *q)
 static void bfq_exit_queue(struct elevator_queue *e)
 {
 	struct bfq_data *bfqd = e->elevator_data;
-	struct bfq_queue *bfqq, *n;
+	struct bfq_queue *bfqq;
 	unsigned int actuator;
 
 	hrtimer_cancel(&bfqd->idle_slice_timer);
 
 	spin_lock_irq(&bfqd->lock);
-	list_for_each_entry_safe(bfqq, n, &bfqd->idle_list, bfqq_list)
+	list_for_each_entry_mutable(bfqq, &bfqd->idle_list, bfqq_list)
 		bfq_deactivate_bfqq(bfqd, bfqq, false, false);
 	spin_unlock_irq(&bfqd->lock);
 

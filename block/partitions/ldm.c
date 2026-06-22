@@ -1285,11 +1285,11 @@ found:
  */
 static void ldm_frag_free (struct list_head *list)
 {
-	struct list_head *item, *tmp;
+	struct list_head *item;
 
 	BUG_ON (!list);
 
-	list_for_each_safe (item, tmp, list)
+	list_for_each_mutable(item, list)
 		kfree (list_entry (item, struct frag, list));
 }
 
@@ -1400,11 +1400,11 @@ out:
  */
 static void ldm_free_vblks (struct list_head *lh)
 {
-	struct list_head *item, *tmp;
+	struct list_head *item;
 
 	BUG_ON (!lh);
 
-	list_for_each_safe (item, tmp, lh)
+	list_for_each_mutable(item, lh)
 		kfree (list_entry (item, struct vblk, list));
 }
 

@@ -1718,7 +1718,7 @@ static void iocg_flush_stat_leaf(struct ioc_gq *iocg, struct ioc_now *now)
 static void iocg_flush_stat(struct list_head *target_iocgs, struct ioc_now *now)
 {
 	LIST_HEAD(inner_walk);
-	struct ioc_gq *iocg, *tiocg;
+	struct ioc_gq *iocg;
 
 	/* flush leaves and build inner node walk list */
 	list_for_each_entry(iocg, target_iocgs, active_list) {
@@ -1727,7 +1727,7 @@ static void iocg_flush_stat(struct list_head *target_iocgs, struct ioc_now *now)
 	}
 
 	/* keep flushing upwards by walking the inner list backwards */
-	list_for_each_entry_safe_reverse(iocg, tiocg, &inner_walk, walk_list) {
+	list_for_each_entry_mutable_reverse(iocg, &inner_walk, walk_list) {
 		iocg_flush_stat_upward(iocg);
 		list_del_init(&iocg->walk_list);
 	}
@@ -1848,7 +1848,7 @@ static void transfer_surpluses(struct list_head *surpluses, struct ioc_now *now)
 {
 	LIST_HEAD(over_hwa);
 	LIST_HEAD(inner_walk);
-	struct ioc_gq *iocg, *tiocg, *root_iocg;
+	struct ioc_gq *iocg, *root_iocg;
 	u32 after_sum, over_sum, over_target, gamma;
 
 	/*
@@ -1884,7 +1884,7 @@ static void transfer_surpluses(struct list_head *surpluses, struct ioc_now *now)
 		over_target = 0;
 	}
 
-	list_for_each_entry_safe(iocg, tiocg, &over_hwa, walk_list) {
+	list_for_each_entry_mutable(iocg, &over_hwa, walk_list) {
 		if (over_target)
 			iocg->hweight_after_donation =
 				div_u64((u64)iocg->hweight_after_donation *
@@ -2055,7 +2055,7 @@ static void transfer_surpluses(struct list_head *surpluses, struct ioc_now *now)
 	}
 
 	/* walk list should be dissolved after use */
-	list_for_each_entry_safe(iocg, tiocg, &inner_walk, walk_list)
+	list_for_each_entry_mutable(iocg, &inner_walk, walk_list)
 		list_del_init(&iocg->walk_list);
 }
 
@@ -2166,9 +2166,9 @@ static void ioc_forgive_debts(struct ioc *ioc, u64 usage_us_sum, int nr_debtors,
 static int ioc_check_iocgs(struct ioc *ioc, struct ioc_now *now)
 {
 	int nr_debtors = 0;
-	struct ioc_gq *iocg, *tiocg;
+	struct ioc_gq *iocg;
 
-	list_for_each_entry_safe(iocg, tiocg, &ioc->active_iocgs, active_list) {
+	list_for_each_entry_mutable(iocg, &ioc->active_iocgs, active_list) {
 		if (!waitqueue_active(&iocg->waitq) && !iocg->abs_vdebt &&
 		    !iocg->delay && !iocg_is_idle(iocg))
 			continue;
@@ -2234,7 +2234,7 @@ static int ioc_check_iocgs(struct ioc *ioc, struct ioc_now *now)
 static void ioc_timer_fn(struct timer_list *timer)
 {
 	struct ioc *ioc = container_of(timer, struct ioc, timer);
-	struct ioc_gq *iocg, *tiocg;
+	struct ioc_gq *iocg;
 	struct ioc_now now;
 	LIST_HEAD(surpluses);
 	int nr_debtors, nr_shortages = 0, nr_lagging = 0;
@@ -2378,7 +2378,7 @@ static void ioc_timer_fn(struct timer_list *timer)
 	commit_weights(ioc);
 
 	/* surplus list should be dissolved after use */
-	list_for_each_entry_safe(iocg, tiocg, &surpluses, surplus_list)
+	list_for_each_entry_mutable(iocg, &surpluses, surplus_list)
 		list_del_init(&iocg->surplus_list);
 
 	/*

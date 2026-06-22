@@ -997,7 +997,7 @@ static void __blkcg_rstat_flush(struct blkcg *blkcg, int cpu)
 {
 	struct llist_head *lhead = per_cpu_ptr(blkcg->lhead, cpu);
 	struct llist_node *lnode;
-	struct blkg_iostat_set *bisc, *next_bisc;
+	struct blkg_iostat_set *bisc;
 	unsigned long flags;
 
 	rcu_read_lock();
@@ -1017,17 +1017,17 @@ static void __blkcg_rstat_flush(struct blkcg *blkcg, int cpu)
 	/*
 	 * Iterate only the iostat_cpu's queued in the lockless list.
 	 */
-	llist_for_each_entry_safe(bisc, next_bisc, lnode, lnode) {
+	llist_for_each_entry_mutable(bisc, lnode, lnode) {
 		struct blkcg_gq *blkg = bisc->blkg;
 		struct blkcg_gq *parent = blkg->parent;
 		struct blkg_iostat cur;
 		unsigned int seq;
 
 		/*
-		 * Order assignment of `next_bisc` from `bisc->lnode.next` in
-		 * llist_for_each_entry_safe and clearing `bisc->lqueued` for
-		 * avoiding to assign `next_bisc` with new next pointer added
-		 * in blk_cgroup_bio_start() in case of re-ordering.
+		 * Order the iterator's internal `bisc->lnode.next` load before
+		 * clearing `bisc->lqueued`, so the iterator can't pick up a new
+		 * next pointer added in blk_cgroup_bio_start() in case of
+		 * re-ordering.
 		 *
 		 * The pair barrier is implied in llist_add() in blk_cgroup_bio_start().
 		 */

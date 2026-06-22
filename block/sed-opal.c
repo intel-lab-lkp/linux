@@ -2573,10 +2573,10 @@ static int check_opal_support(struct opal_dev *dev)
 static void clean_opal_dev(struct opal_dev *dev)
 {
 
-	struct opal_suspend_data *suspend, *next;
+	struct opal_suspend_data *suspend;
 
 	mutex_lock(&dev->dev_lock);
-	list_for_each_entry_safe(suspend, next, &dev->unlk_lst, node) {
+	list_for_each_entry_mutable(suspend, &dev->unlk_lst, node) {
 		list_del(&suspend->node);
 		kfree(suspend);
 	}

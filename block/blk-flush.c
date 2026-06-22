@@ -204,7 +204,7 @@ static enum rq_end_io_ret flush_end_io(struct request *flush_rq,
 {
 	struct request_queue *q = flush_rq->q;
 	struct list_head *running;
-	struct request *rq, *n;
+	struct request *rq;
 	unsigned long flags = 0;
 	struct blk_flush_queue *fq = blk_get_flush_queue(flush_rq->mq_ctx);
 
@@ -243,7 +243,7 @@ static enum rq_end_io_ret flush_end_io(struct request *flush_rq,
 	fq->flush_running_idx ^= 1;
 
 	/* and push the waiting requests to the next stage */
-	list_for_each_entry_safe(rq, n, running, queuelist) {
+	list_for_each_entry_mutable(rq, running, queuelist) {
 		unsigned int seq = blk_flush_cur_seq(rq);
 
 		BUG_ON(seq != REQ_FSEQ_PREFLUSH && seq != REQ_FSEQ_POSTFLUSH);

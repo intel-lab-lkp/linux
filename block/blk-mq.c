@@ -1216,9 +1216,9 @@ EXPORT_SYMBOL_GPL(blk_mq_end_request_batch);
 static void blk_complete_reqs(struct llist_head *list)
 {
 	struct llist_node *entry = llist_reverse_order(llist_del_all(list));
-	struct request *rq, *next;
+	struct request *rq;
 
-	llist_for_each_entry_safe(rq, next, entry, ipi_list)
+	llist_for_each_entry_mutable(rq, entry, ipi_list)
 		rq->q->mq_ops->complete(rq);
 }
 
@@ -4383,14 +4383,14 @@ static int blk_mq_alloc_ctxs(struct request_queue *q)
  */
 void blk_mq_release(struct request_queue *q)
 {
-	struct blk_mq_hw_ctx *hctx, *next;
+	struct blk_mq_hw_ctx *hctx;
 	unsigned long i;
 
 	queue_for_each_hw_ctx(q, hctx, i)
 		WARN_ON_ONCE(hctx && list_empty(&hctx->hctx_list));
 
 	/* all hctx are in .unused_hctx_list now */
-	list_for_each_entry_safe(hctx, next, &q->unused_hctx_list, hctx_list) {
+	list_for_each_entry_mutable(hctx, &q->unused_hctx_list, hctx_list) {
 		list_del_init(&hctx->hctx_list);
 		kobject_put(&hctx->kobj);
 	}

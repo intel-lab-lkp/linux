@@ -578,9 +578,9 @@ static void kyber_insert_requests(struct blk_mq_hw_ctx *hctx,
 				  blk_insert_t flags)
 {
 	struct kyber_hctx_data *khd = hctx->sched_data;
-	struct request *rq, *next;
+	struct request *rq;
 
-	list_for_each_entry_safe(rq, next, rq_list, queuelist) {
+	list_for_each_entry_mutable(rq, rq_list, queuelist) {
 		unsigned int sched_domain = kyber_sched_domain(rq->cmd_flags);
 		struct kyber_ctx_queue *kcq = &khd->kcqs[rq->mq_ctx->index_hw[hctx->type]];
 		struct list_head *head = &kcq->rq_list[sched_domain];

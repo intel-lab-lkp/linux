@@ -1686,10 +1686,10 @@ static void tg_cancel_writeback_bios(struct throtl_grp *tg,
 	tg->flags |= THROTL_TG_CANCELING;
 
 	for (rw = READ; rw <= WRITE; rw++) {
-		struct throtl_qnode *qn, *tmp;
+		struct throtl_qnode *qn;
 		unsigned int nr_bios = 0;
 
-		list_for_each_entry_safe(qn, tmp, &sq->queued[rw], node) {
+		list_for_each_entry_mutable(qn, &sq->queued[rw], node) {
 			struct bio *bio;
 
 			while ((bio = bio_list_pop(&qn->bios_iops))) {
