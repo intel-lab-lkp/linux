@@ -20,7 +20,9 @@ description: |
 properties:
   compatible:
     items:
-      - const: qcom,glymur-tcsr
+      - enum:
+          - qcom,glymur-tcsr
+          - qcom,mahua-tcsr
       - const: syscon
 
   clocks:
@@ -41,9 +43,11 @@ properties:
   vdda-qrefrpt2-0p9-supply: true
   vdda-qrefrpt3-0p9-supply: true
   vdda-qrefrpt4-0p9-supply: true
+  vdda-qrefrpt5-0p9-supply: true
   vdda-qrefrx0-0p9-supply: true
   vdda-qrefrx1-0p9-supply: true
   vdda-qrefrx2-0p9-supply: true
+  vdda-qrefrx3-0p9-supply: true
   vdda-qrefrx4-0p9-supply: true
   vdda-qrefrx5-0p9-supply: true
   vdda-qreftx0-0p9-supply: true
@@ -54,26 +58,54 @@ properties:
   vdda-refgen4-0p9-supply: true
   vdda-refgen4-1p2-supply: true
 
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: qcom,glymur-tcsr
+    then:
+      required:
+        - vdda-qrefrpt0-0p9-supply
+        - vdda-qrefrpt1-0p9-supply
+        - vdda-qrefrpt2-0p9-supply
+        - vdda-qrefrpt3-0p9-supply
+        - vdda-qrefrpt4-0p9-supply
+        - vdda-qrefrx0-0p9-supply
+        - vdda-qrefrx1-0p9-supply
+        - vdda-qrefrx2-0p9-supply
+        - vdda-qrefrx4-0p9-supply
+        - vdda-qrefrx5-0p9-supply
+        - vdda-qreftx0-0p9-supply
+        - vdda-qreftx0-1p2-supply
+        - vdda-qreftx1-0p9-supply
+        - vdda-refgen3-0p9-supply
+        - vdda-refgen3-1p2-supply
+        - vdda-refgen4-0p9-supply
+        - vdda-refgen4-1p2-supply
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: qcom,mahua-tcsr
+    then:
+      required:
+        - vdda-qrefrpt0-0p9-supply
+        - vdda-qrefrpt1-0p9-supply
+        - vdda-qrefrpt2-0p9-supply
+        - vdda-qrefrpt3-0p9-supply
+        - vdda-qrefrpt4-0p9-supply
+        - vdda-qrefrpt5-0p9-supply
+        - vdda-qrefrx1-0p9-supply
+        - vdda-qrefrx2-0p9-supply
+        - vdda-qrefrx3-0p9-supply
+        - vdda-qreftx1-0p9-supply
+        - vdda-refgen3-0p9-supply
+        - vdda-refgen3-1p2-supply
+
 required:
   - compatible
   - clocks
-  - vdda-qrefrpt0-0p9-supply
-  - vdda-qrefrpt1-0p9-supply
-  - vdda-qrefrpt2-0p9-supply
-  - vdda-qrefrpt3-0p9-supply
-  - vdda-qrefrpt4-0p9-supply
-  - vdda-qrefrx0-0p9-supply
-  - vdda-qrefrx1-0p9-supply
-  - vdda-qrefrx2-0p9-supply
-  - vdda-qrefrx4-0p9-supply
-  - vdda-qrefrx5-0p9-supply
-  - vdda-qreftx0-0p9-supply
-  - vdda-qreftx0-1p2-supply
-  - vdda-qreftx1-0p9-supply
-  - vdda-refgen3-0p9-supply
-  - vdda-refgen3-1p2-supply
-  - vdda-refgen4-0p9-supply
-  - vdda-refgen4-1p2-supply
 
 additionalProperties: false
 
