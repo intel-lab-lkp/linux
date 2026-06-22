@@ -2832,6 +2832,18 @@ static void ata_dev_config_cpr(struct ata_device *dev)
 	if (!nr_cpr)
 		goto out;
 
+	/*
+	 * The count is reported independently of the log size and is also
+	 * emitted into the fixed 2048-byte VPD B9h buffer, which holds at most
+	 * (2048 - 64) / 32 = 62 descriptors. Reject a count that exceeds that
+	 * or does not fit the log the device returned.
+	 */
+	if (nr_cpr > 62 || buf_len < 64 + (size_t)nr_cpr * 32) {
+		ata_dev_warn(dev,
+			     "Invalid number of concurrent positioning ranges\n");
+		goto out;
+	}
+
 	cpr_log = kzalloc_flex(*cpr_log, cpr, nr_cpr);
 	if (!cpr_log)
 		goto out;
