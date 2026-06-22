@@ -2372,31 +2372,32 @@ static struct nvmf_transport_ops nvme_rdma_transport = {
 static void nvme_rdma_remove_one(struct ib_device *ib_device, void *client_data)
 {
 	struct nvme_rdma_ctrl *ctrl;
-	struct nvme_rdma_device *ndev;
-	bool found = false;
+	struct nvme_rdma_device *ndev = NULL;
+	struct nvme_rdma_device *tmp;
 
 	mutex_lock(&device_list_mutex);
-	list_for_each_entry(ndev, &device_list, entry) {
-		if (ndev->dev == ib_device) {
-			found = true;
+	list_for_each_entry(tmp, &device_list, entry) {
+		if (tmp->dev == ib_device && nvme_rdma_dev_get(tmp)) {
+			ndev = tmp;
 			break;
 		}
 	}
 	mutex_unlock(&device_list_mutex);
 
-	if (!found)
+	if (!ndev)
 		return;
 
 	/* Delete all controllers using this device */
 	mutex_lock(&nvme_rdma_ctrl_mutex);
 	list_for_each_entry(ctrl, &nvme_rdma_ctrl_list, list) {
-		if (ctrl->device->dev != ib_device)
+		if (ctrl->device != ndev)
 			continue;
 		nvme_delete_ctrl(&ctrl->ctrl);
 	}
 	mutex_unlock(&nvme_rdma_ctrl_mutex);
 
 	flush_workqueue(nvme_delete_wq);
+	nvme_rdma_dev_put(ndev);
 }
 
 static struct ib_client nvme_rdma_ib_client = {
