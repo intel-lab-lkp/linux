@@ -56,3 +56,7 @@ $(obj)/nova-core/nova_core_exports.o: private cmd_gensymtypes_c = \
 		$(if $(KBUILD_SYMTYPES), --symtypes $(@:.o=.symtypes),) \
 		$(obj)/nova-core/nova_core.o
 endif
+
+# Output nova-core's crate metadata for use by nova-drm at compile time.
+RUSTFLAGS_nova-core/nova_core.o += \
+	--emit=metadata=$(objtree)/$(obj)/nova-core/libnova_core.rmeta
