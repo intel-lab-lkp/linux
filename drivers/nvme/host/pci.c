@@ -2448,6 +2448,9 @@ static u64 nvme_cmb_size_unit(struct nvme_dev *dev)
 {
 	u8 szu = (dev->cmbsz >> NVME_CMBSZ_SZU_SHIFT) & NVME_CMBSZ_SZU_MASK;
 
+	if (szu > 6)
+		return 0;
+
 	return 1ULL << (12 + 4 * szu);
 }
 
@@ -2472,9 +2475,12 @@ static void nvme_map_cmb(struct nvme_dev *dev)
 	dev->cmbsz = readl(dev->bar + NVME_REG_CMBSZ);
 	if (!dev->cmbsz)
 		return;
+	if (!nvme_cmb_size(dev))
+		return;
 	dev->cmbloc = readl(dev->bar + NVME_REG_CMBLOC);
 
-	size = nvme_cmb_size_unit(dev) * nvme_cmb_size(dev);
+	if (check_mul_overflow(nvme_cmb_size_unit(dev), nvme_cmb_size(dev), &size))
+		return;
 	offset = nvme_cmb_size_unit(dev) * NVME_CMB_OFST(dev->cmbloc);
 	bar = NVME_CMB_BIR(dev->cmbloc);
 	bar_size = pci_resource_len(pdev, bar);
