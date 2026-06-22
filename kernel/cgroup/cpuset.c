@@ -3780,6 +3780,14 @@ retry:
 	compute_effective_cpumask(&new_cpus, cs, parent);
 	nodes_and(new_mems, cs->mems_allowed, parent->effective_mems);
 
+	if (is_in_v2_mode()) {
+		/* Inherit parent's effective_cpus/mems if empty */
+		if (cpumask_empty(&new_cpus))
+			cpumask_copy(&new_cpus, parent->effective_cpus);
+		if (nodes_empty(new_mems))
+			new_mems = parent->effective_mems;
+	}
+
 	if (!tmp || !cs->partition_root_state)
 		goto update_tasks;
 
