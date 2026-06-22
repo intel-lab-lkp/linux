@@ -154,7 +154,13 @@ static ssize_t name##_store(struct device *dev,			\
 	struct usb_interface *intf = to_usb_interface(dev);	\
 	struct usb_sevsegdev *mydev = usb_get_intfdata(intf);	\
 								\
-	mydev->name = simple_strtoul(buf, NULL, 10);		\
+	unsigned int val;						\
+	int ret;							\
+								\
+	ret = kstrtouint(buf, 10, &val);			\
+	if (ret < 0)						\
+		return ret;						\
+	mydev->name = val;						\
 	update_fcn(mydev); 					\
 								\
 	return count;						\
