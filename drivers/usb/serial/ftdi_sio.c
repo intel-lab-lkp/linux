@@ -1764,20 +1764,54 @@ static ssize_t low_latency_store(struct device *dev,
 {
 	struct usb_serial_port *port = to_usb_serial_port(dev);
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
+	struct tty_struct *tty;
 	unsigned long flags;
 	u8 v;
 
 	if (kstrtou8(valbuf, 10, &v))
 		return -EINVAL;
 
+	/*
+	 * Toggling low_latency while the port is actively reading or
+	 * writing is racy unless we serialise carefully.  Between the
+	 * moment ftdi_read_bulk_callback() passes its top-of-function
+	 * low_latency check and the moment it sets USB_SERIAL_THROTTLED
+	 * + starts the hrtimer, this store may set low_latency = true.
+	 * If we then merely cancelled the timer (without clearing
+	 * USB_SERIAL_THROTTLED), every subsequent URB completion would
+	 * take the generic callback path, mark the URB free, observe
+	 * the throttled bit, refuse to resubmit, and silently stall
+	 * the data stream -- only an application restart would recover.
+	 *
+	 * Three things, in order, close the race:
+	 *   1. Publish low_latency under urb_defer_lock so the
+	 *      callback's re-check (in the throttle block below)
+	 *      observes the new value with proper ordering.
+	 *   2. Cancel the defer hrtimer synchronously so no late
+	 *      timer callback can race the unthrottle.
+	 *   3. Force-unthrottle the port and resubmit any free URBs.
+	 *      Done in both directions of the toggle -- when nothing is
+	 *      parked this is a cheap no-op submit; it eliminates the
+	 *      wedge case either way.
+	 */
+	spin_lock_irqsave(&priv->urb_defer_lock, flags);
 	priv->low_latency = !!v;
+	tty = priv->urb_defer_tty;
+	if (tty)
+		tty_kref_get(tty);
+	spin_unlock_irqrestore(&priv->urb_defer_lock, flags);
 
-	if (priv->low_latency) {
-		hrtimer_cancel(&priv->urb_defer_timer);
-		spin_lock_irqsave(&priv->urb_defer_lock, flags);
-		priv->urb_defer_timer_active = false;
-		spin_unlock_irqrestore(&priv->urb_defer_lock, flags);
+	hrtimer_cancel(&priv->urb_defer_timer);
+
+	spin_lock_irqsave(&priv->urb_defer_lock, flags);
+	priv->urb_defer_timer_active = false;
+	spin_unlock_irqrestore(&priv->urb_defer_lock, flags);
+
+	if (tty) {
+		usb_serial_generic_unthrottle(tty);
+		tty_kref_put(tty);
 	}
+
 	return count;
 }
 static DEVICE_ATTR_RW(low_latency);
@@ -2873,6 +2907,19 @@ static void ftdi_read_bulk_callback(struct urb *urb)
 		return;
 
 	spin_lock_irqsave(&priv->urb_defer_lock, flags);
+	/*
+	 * Re-check low_latency under the lock.  Pairs with the locked
+	 * publish in low_latency_store().  If the toggle landed
+	 * between the top-of-function fast-path check and here, do
+	 * not throttle or arm the timer; resubmit the URB ourselves
+	 * so the data stream does not stall in the narrow window
+	 * before the store's unthrottle runs.
+	 */
+	if (priv->low_latency) {
+		spin_unlock_irqrestore(&priv->urb_defer_lock, flags);
+		ftdi_atomic_submit_read_urbs(port);
+		return;
+	}
 	tty = priv->urb_defer_tty;
 	if (tty) {
 		tty_kref_get(tty);
