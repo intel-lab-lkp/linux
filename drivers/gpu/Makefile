@@ -60,3 +60,7 @@ endif
 # Output nova-core's crate metadata for use by nova-drm at compile time.
 RUSTFLAGS_nova-core/nova_core.o += \
 	--emit=metadata=$(objtree)/$(obj)/nova-core/libnova_core.rmeta
+
+# Allow nova-drm to import nova-core's types.
+$(obj)/drm/nova/nova.o: $(obj)/nova-core/nova_core.o
+RUSTFLAGS_drm/nova/nova.o := -L $(objtree)/$(obj)/nova-core --extern nova_core
