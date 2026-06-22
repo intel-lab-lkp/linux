@@ -1430,6 +1430,71 @@ int typec_cable_is_active(struct typec_cable *cable)
 EXPORT_SYMBOL_GPL(typec_cable_is_active);
 
 /**
+ * typec_cable_altmode_unsupported - Check if a cable restricts altmode
+ * @alt: The Alternate Mode to evaluate
+ *
+ * Returns true if the connected cable is incapable of handling the altmode.
+ */
+bool typec_cable_altmode_unsupported(struct typec_altmode *alt)
+{
+	struct typec_altmode *plug;
+	struct typec_cable *cable;
+	bool unsupported = false;
+
+	/*
+	 * Check if the cable has an e-marker, supports modal operation, and the
+	 * SOP' altmode nodes are created. If yes, then altmode is supported.
+	 */
+	plug = typec_altmode_get_plug(alt, TYPEC_PLUG_SOP_P);
+	if (plug) {
+		typec_altmode_put_plug(plug);
+		return false;
+	}
+
+	/*
+	 * Check if the cable is registered and its identity is specified.
+	 * If not, the cable altmode restriction cannot be checked.
+	 */
+	cable = typec_cable_get(typec_altmode2port(alt));
+	if (cable && cable->identity) {
+		const u32 id_header = cable->identity->id_header;
+		const u32 speed = VDO_TYPEC_CABLE_SPEED(cable->identity->vdo[0]);
+
+		/*
+		 * A cable lacking an ID Header indicates a non-e-marked cable,
+		 * can only be guaranteed to have a USB 2.0 data path (D+ and D-).
+		 */
+		if (!id_header) {
+			unsupported = true;
+		} else {
+			switch (PD_IDH_PTYPE(id_header)) {
+			/*
+			 * If the speed field explicitly declares it is a
+			 * USB 2.0-only cable, altmode is unsupported.
+			 */
+			case IDH_PTYPE_PCABLE:
+				unsupported = (speed == CABLE_USB2_ONLY);
+				break;
+			/*
+			 * Active cables must establish an SOP' communication
+			 * node. Since that check failed at the beginning of
+			 * this function, this active cable does not support
+			 * this specific altmode.
+			 */
+			case IDH_PTYPE_ACABLE:
+				unsupported = true;
+				break;
+			}
+		}
+	}
+	if (cable)
+		typec_cable_put(cable);
+
+	return unsupported;
+}
+EXPORT_SYMBOL_GPL(typec_cable_altmode_unsupported);
+
+/**
  * typec_cable_set_identity - Report result from Discover Identity command
  * @cable: The cable updated identity values
  *
