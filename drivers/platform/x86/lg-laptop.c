@@ -10,6 +10,8 @@
 #include <linux/acpi.h>
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/compiler_attributes.h>
+#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/dev_printk.h>
 #include <linux/dmi.h>
@@ -21,6 +23,7 @@
 #include <linux/platform_device.h>
 #include <linux/string_choices.h>
 #include <linux/types.h>
+#include <linux/unaligned.h>
 
 #include <acpi/battery.h>
 
@@ -87,6 +90,11 @@ MODULE_PARM_DESC(fw_debug, "Enable printing of firmware debug messages");
 #define FAN_MODE_UPPER GENMASK(5, 4)
 
 #define PLATFORM_NAME   "lg-laptop"
+
+struct lg_wmab_buffer_result {
+	__le32 value;
+	__le32 status;
+} __packed;
 
 static struct platform_device *pf_device;
 
@@ -195,30 +203,97 @@ static int ggov(u32 arg0)
 	return res;
 }
 
-static union acpi_object *lg_wmab(struct device *dev, u32 method, u32 arg1, u32 arg2)
+static int lg_wmab_get(struct device *dev, u32 method, u32 *result)
 {
-	union acpi_object args[3];
-	acpi_status status;
-	struct acpi_object_list arg;
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
+	union acpi_object in[] = {
+		{
+			.integer = {
+				.type = ACPI_TYPE_INTEGER,
+				.value = method,
+			},
+		},
+		{
+			.integer = {
+				.type = ACPI_TYPE_INTEGER,
+				.value = WM_GET,
+			},
+		},
+		{
+			.integer = {
+				.type = ACPI_TYPE_INTEGER,
+				.value = 0,
+			},
+		},
+	};
+	struct lg_wmab_buffer_result *buffer_result;
+	struct acpi_object_list input = {
+		.count = ARRAY_SIZE(in),
+		.pointer = in,
+	};
+	acpi_status status;
 
-	args[0].type = ACPI_TYPE_INTEGER;
-	args[0].integer.value = method;
-	args[1].type = ACPI_TYPE_INTEGER;
-	args[1].integer.value = arg1;
-	args[2].type = ACPI_TYPE_INTEGER;
-	args[2].integer.value = arg2;
+	status = acpi_evaluate_object(ACPI_HANDLE(dev), "WMAB", &input, &buffer);
+	if (ACPI_FAILURE(status))
+		return -EIO;
 
-	arg.count = 3;
-	arg.pointer = args;
+	union acpi_object *obj __free(kfree) = buffer.pointer;
 
-	status = acpi_evaluate_object(ACPI_HANDLE(dev), "WMAB", &arg, &buffer);
-	if (ACPI_FAILURE(status)) {
-		dev_err(dev, "WMAB: call failed.\n");
-		return NULL;
+	if (!obj)
+		return -ENODATA;
+
+	switch (obj->type) {
+	case ACPI_TYPE_INTEGER:
+		*result = obj->integer.value;
+		return 0;
+	case ACPI_TYPE_BUFFER:
+		if (obj->buffer.length != sizeof(*buffer_result))
+			return -EPROTO;
+
+		buffer_result = (struct lg_wmab_buffer_result *)obj->buffer.pointer;
+		if (get_unaligned_le32(&buffer_result->status))
+			return -EIO;
+
+		*result = get_unaligned_le32(&buffer_result->value);
+		return 0;
+	default:
+		return -EPROTO;
 	}
+}
 
-	return buffer.pointer;
+static int lg_wmab_set(struct device *dev, u32 method, u32 arg)
+{
+	union acpi_object in[] = {
+		{
+			.integer = {
+				.type = ACPI_TYPE_INTEGER,
+				.value = method,
+			},
+		},
+		{
+			.integer = {
+				.type = ACPI_TYPE_INTEGER,
+				.value = WM_SET,
+			},
+		},
+		{
+			.integer = {
+				.type = ACPI_TYPE_INTEGER,
+				.value = arg,
+			},
+		},
+	};
+	struct acpi_object_list input = {
+		.count = ARRAY_SIZE(in),
+		.pointer = in,
+	};
+	acpi_status status;
+
+	status = acpi_evaluate_object(ACPI_HANDLE(dev), "WMAB", &input, NULL);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	return 0;
 }
 
 static union acpi_object *lg_wmbb(struct device *dev, u32 method_id, u32 arg1, u32 arg2)
@@ -257,7 +332,6 @@ static ssize_t fan_mode_store(struct device *dev,
 			      const char *buffer, size_t count)
 {
 	unsigned long value;
-	union acpi_object *r;
 	int ret;
 
 	ret = kstrtoul(buffer, 10, &value);
@@ -266,10 +340,10 @@ static ssize_t fan_mode_store(struct device *dev,
 	if (value >= 3)
 		return -EINVAL;
 
-	r = lg_wmab(dev, WM_FAN_MODE, WM_SET,
-		FIELD_PREP(FAN_MODE_LOWER, value) |
-		FIELD_PREP(FAN_MODE_UPPER, value));
-	kfree(r);
+	ret = lg_wmab_set(dev, WM_FAN_MODE, FIELD_PREP(FAN_MODE_LOWER, value) |
+			  FIELD_PREP(FAN_MODE_UPPER, value));
+	if (ret < 0)
+		return ret;
 
 	return count;
 }
@@ -277,22 +351,14 @@ static ssize_t fan_mode_store(struct device *dev,
 static ssize_t fan_mode_show(struct device *dev,
 			     struct device_attribute *attr, char *buffer)
 {
-	unsigned int mode;
-	union acpi_object *r;
+	u32 mode;
+	int ret;
 
-	r = lg_wmab(dev, WM_FAN_MODE, WM_GET, 0);
-	if (!r)
-		return -EIO;
+	ret = lg_wmab_get(dev, WM_FAN_MODE, &mode);
+	if (ret < 0)
+		return ret;
 
-	if (r->type != ACPI_TYPE_INTEGER) {
-		kfree(r);
-		return -EIO;
-	}
-
-	mode = FIELD_GET(FAN_MODE_LOWER, r->integer.value);
-	kfree(r);
-
-	return sysfs_emit(buffer, "%d\n", mode);
+	return sysfs_emit(buffer, "%lu\n", FIELD_GET(FAN_MODE_LOWER, mode));
 }
 
 static ssize_t usb_charge_store(struct device *dev,
@@ -342,41 +408,30 @@ static ssize_t reader_mode_store(struct device *dev,
 				 const char *buffer, size_t count)
 {
 	bool value;
-	union acpi_object *r;
 	int ret;
 
 	ret = kstrtobool(buffer, &value);
 	if (ret)
 		return ret;
 
-	r = lg_wmab(dev, WM_READER_MODE, WM_SET, value);
-	if (!r)
-		return -EIO;
+	ret = lg_wmab_set(dev, WM_READER_MODE, value);
+	if (ret < 0)
+		return ret;
 
-	kfree(r);
 	return count;
 }
 
 static ssize_t reader_mode_show(struct device *dev,
 				struct device_attribute *attr, char *buffer)
 {
-	unsigned int status;
-	union acpi_object *r;
+	u32 status;
+	int ret;
 
-	r = lg_wmab(dev, WM_READER_MODE, WM_GET, 0);
-	if (!r)
-		return -EIO;
+	ret = lg_wmab_get(dev, WM_READER_MODE, &status);
+	if (ret < 0)
+		return ret;
 
-	if (r->type != ACPI_TYPE_INTEGER) {
-		kfree(r);
-		return -EIO;
-	}
-
-	status = !!r->integer.value;
-
-	kfree(r);
-
-	return sysfs_emit(buffer, "%d\n", status);
+	return sysfs_emit(buffer, "%d\n", !!status);
 }
 
 static ssize_t fn_lock_store(struct device *dev,
@@ -384,40 +439,30 @@ static ssize_t fn_lock_store(struct device *dev,
 			     const char *buffer, size_t count)
 {
 	bool value;
-	union acpi_object *r;
 	int ret;
 
 	ret = kstrtobool(buffer, &value);
 	if (ret)
 		return ret;
 
-	r = lg_wmab(dev, WM_FN_LOCK, WM_SET, value);
-	if (!r)
-		return -EIO;
+	ret = lg_wmab_set(dev, WM_FN_LOCK, value);
+	if (ret < 0)
+		return ret;
 
-	kfree(r);
 	return count;
 }
 
 static ssize_t fn_lock_show(struct device *dev,
 			    struct device_attribute *attr, char *buffer)
 {
-	unsigned int status;
-	union acpi_object *r;
+	u32 status;
+	int ret;
 
-	r = lg_wmab(dev, WM_FN_LOCK, WM_GET, 0);
-	if (!r)
-		return -EIO;
+	ret = lg_wmab_get(dev, WM_FN_LOCK, &status);
+	if (ret < 0)
+		return ret;
 
-	if (r->type != ACPI_TYPE_BUFFER) {
-		kfree(r);
-		return -EIO;
-	}
-
-	status = !!r->buffer.pointer[0];
-	kfree(r);
-
-	return sysfs_emit(buffer, "%d\n", status);
+	return sysfs_emit(buffer, "%d\n", !!status);
 }
 
 static ssize_t charge_control_end_threshold_store(struct device *dev,
@@ -434,14 +479,18 @@ static ssize_t charge_control_end_threshold_store(struct device *dev,
 	if (value == 100 || value == 80) {
 		union acpi_object *r;
 
-		if (battery_limit_use_wmbb)
+		if (battery_limit_use_wmbb) {
 			r = lg_wmbb(&pf_device->dev, WMBB_BATT_LIMIT, WM_SET, value);
-		else
-			r = lg_wmab(&pf_device->dev, WM_BATT_LIMIT, WM_SET, value);
-		if (!r)
-			return -EIO;
+			if (!r)
+				return -EIO;
 
-		kfree(r);
+			kfree(r);
+		} else {
+			ret = lg_wmab_set(&pf_device->dev, WM_BATT_LIMIT, value);
+			if (ret < 0)
+				return ret;
+		}
+
 		return count;
 	}
 
@@ -452,8 +501,9 @@ static ssize_t charge_control_end_threshold_show(struct device *device,
 						 struct device_attribute *attr,
 						 char *buf)
 {
-	unsigned int status;
 	union acpi_object *r;
+	u32 status;
+	int ret;
 
 	if (battery_limit_use_wmbb) {
 		r = lg_wmbb(&pf_device->dev, WMBB_BATT_LIMIT, WM_GET, 0);
@@ -466,19 +516,13 @@ static ssize_t charge_control_end_threshold_show(struct device *device,
 		}
 
 		status = r->buffer.pointer[0x10];
+		kfree(r);
 	} else {
-		r = lg_wmab(&pf_device->dev, WM_BATT_LIMIT, WM_GET, 0);
-		if (!r)
-			return -EIO;
-
-		if (r->type != ACPI_TYPE_INTEGER) {
-			kfree(r);
-			return -EIO;
-		}
-
-		status = r->integer.value;
+		ret = lg_wmab_get(&pf_device->dev, WM_BATT_LIMIT, &status);
+		if (ret < 0)
+			return ret;
 	}
-	kfree(r);
+
 	if (status != 80 && status != 100)
 		status = 0;
 
@@ -544,10 +588,7 @@ static const struct attribute_group dev_attribute_group = {
 static void tpad_led_set(struct led_classdev *cdev,
 			 enum led_brightness brightness)
 {
-	union acpi_object *r;
-
-	r = lg_wmab(cdev->dev->parent, WM_TLED, WM_SET, brightness > LED_OFF);
-	kfree(r);
+	lg_wmab_set(cdev->dev->parent, WM_TLED, brightness > LED_OFF);
 }
 
 static enum led_brightness tpad_led_get(struct led_classdev *cdev)
@@ -561,46 +602,36 @@ static void kbd_backlight_set(struct led_classdev *cdev,
 			      enum led_brightness brightness)
 {
 	u32 val;
-	union acpi_object *r;
 
 	val = 0x22;
 	if (brightness <= LED_OFF)
 		val = 0;
 	if (brightness >= LED_FULL)
 		val = 0x24;
-	r = lg_wmab(cdev->dev->parent, WM_KEY_LIGHT, WM_SET, val);
-	kfree(r);
+
+	lg_wmab_set(cdev->dev->parent, WM_KEY_LIGHT, val);
 }
 
 static enum led_brightness get_kbd_backlight_level(struct device *dev)
 {
-	union acpi_object *r;
-	int val;
+	u32 value;
+	int ret;
 
-	r = lg_wmab(dev, WM_KEY_LIGHT, WM_GET, 0);
-
-	if (!r)
+	ret = lg_wmab_get(dev, WM_KEY_LIGHT, &value);
+	if (ret < 0)
 		return LED_OFF;
 
-	if (r->type != ACPI_TYPE_BUFFER || r->buffer.pointer[1] != 0x05) {
-		kfree(r);
+	if ((value & 0xFF00) != 0x0500)
 		return LED_OFF;
-	}
 
-	switch (r->buffer.pointer[0] & 0x27) {
+	switch (value & 0x27) {
 	case 0x24:
-		val = LED_FULL;
-		break;
+		return LED_FULL;
 	case 0x22:
-		val = LED_HALF;
-		break;
+		return LED_HALF;
 	default:
-		val = LED_OFF;
+		return LED_OFF;
 	}
-
-	kfree(r);
-
-	return val;
 }
 
 static enum led_brightness kbd_backlight_get(struct led_classdev *cdev)
