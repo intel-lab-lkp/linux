@@ -18,6 +18,7 @@ struct intel_display;
 struct intel_cdclk_config {
 	unsigned int cdclk, vco, ref, bypass;
 	u8 voltage_level;
+	bool sanitized;
 	/* This field is only valid for Xe2LPD and above. */
 	bool joined_mbus;
 };

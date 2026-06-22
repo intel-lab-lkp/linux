@@ -1280,6 +1280,8 @@ sanitize:
 	display->cdclk.hw.cdclk = 0;
 	/* force full PLL disable + enable */
 	display->cdclk.hw.vco = ~0;
+	/* modesetting may require another cdclk programming */
+	display->cdclk.hw.sanitized = true;
 }
 
 static void skl_cdclk_init_hw(struct intel_display *display)
@@ -2392,9 +2394,10 @@ sanitize:
 
 	/* force cdclk programming */
 	display->cdclk.hw.cdclk = 0;
-
 	/* force full PLL disable + enable */
 	display->cdclk.hw.vco = ~0;
+	/* modesetting may require another cdclk programming */
+	display->cdclk.hw.sanitized = true;
 }
 
 static void bxt_cdclk_init_hw(struct intel_display *display)
@@ -3623,9 +3626,10 @@ static int intel_modeset_calc_cdclk(struct intel_atomic_state *state)
 
 int intel_cdclk_atomic_check(struct intel_atomic_state *state)
 {
+	struct intel_display *display = to_intel_display(state);
 	const struct intel_cdclk_state *old_cdclk_state;
 	struct intel_cdclk_state *new_cdclk_state;
-	bool need_cdclk_calc = false;
+	bool need_cdclk_calc = display->cdclk.hw.sanitized;
 	int ret;
 
 	ret = intel_cdclk_modeset_checks(state, &need_cdclk_calc);
@@ -3656,6 +3660,8 @@ int intel_cdclk_atomic_check(struct intel_atomic_state *state)
 		ret = intel_modeset_calc_cdclk(state);
 		if (ret)
 			return ret;
+
+		display->cdclk.hw.sanitized = false;
 	}
 
 	return 0;
