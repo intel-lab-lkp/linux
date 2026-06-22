@@ -2,6 +2,7 @@
 TEST_BOTH_AF := bench-lookups
 TEST_BOTH_AF += connect
 TEST_BOTH_AF += connect-deny
+TEST_BOTH_AF += shadowing
 TEST_BOTH_AF += icmps-accept icmps-discard
 TEST_BOTH_AF += key-management
 TEST_BOTH_AF += restore
