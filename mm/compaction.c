@@ -94,9 +94,9 @@ static unsigned long release_free_list(struct list_head *freepages)
 	unsigned long high_pfn = 0;
 
 	for (order = 0; order < NR_PAGE_ORDERS; order++) {
-		struct page *page, *next;
+		struct page *page;
 
-		list_for_each_entry_safe(page, next, &freepages[order], lru) {
+		list_for_each_entry_mutable(page, &freepages[order], lru) {
 			unsigned long pfn = page_to_pfn(page);
 
 			list_del(&page->lru);

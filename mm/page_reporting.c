@@ -180,7 +180,7 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 	budget = DIV_ROUND_UP(area->nr_free, PAGE_REPORTING_CAPACITY * 16);
 
 	/* loop through free list adding unreported pages to sg list */
-	list_for_each_entry_safe(page, next, list, lru) {
+	list_for_each_entry_mutable(page, next, list, lru) {
 		/* We are going to skip over the reported pages. */
 		if (PageReported(page))
 			continue;

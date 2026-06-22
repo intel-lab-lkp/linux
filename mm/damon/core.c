@@ -3394,7 +3394,7 @@ static void damon_verify_ctx(struct damon_ctx *c)
  */
 static void kdamond_call(struct damon_ctx *ctx, bool cancel)
 {
-	struct damon_call_control *control, *next;
+	struct damon_call_control *control;
 	LIST_HEAD(controls);
 
 	damon_verify_ctx(ctx);
@@ -3403,7 +3403,7 @@ static void kdamond_call(struct damon_ctx *ctx, bool cancel)
 	list_splice_tail_init(&ctx->call_controls, &controls);
 	mutex_unlock(&ctx->call_controls_lock);
 
-	list_for_each_entry_safe(control, next, &controls, list) {
+	list_for_each_entry_mutable(control, &controls, list) {
 		if (!control->repeat || cancel)
 			list_del(&control->list);
 

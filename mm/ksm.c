@@ -1145,7 +1145,6 @@ static int remove_stable_node_chain(struct ksm_stable_node *stable_node,
 				    struct rb_root *root)
 {
 	struct ksm_stable_node *dup;
-	struct hlist_node *hlist_safe;
 
 	if (!is_stable_node_chain(stable_node)) {
 		VM_BUG_ON(is_stable_node_dup(stable_node));
@@ -1155,8 +1154,7 @@ static int remove_stable_node_chain(struct ksm_stable_node *stable_node,
 			return false;
 	}
 
-	hlist_for_each_entry_safe(dup, hlist_safe,
-				  &stable_node->hlist, hlist_dup) {
+	hlist_for_each_entry_mutable(dup, &stable_node->hlist, hlist_dup) {
 		VM_BUG_ON(!is_stable_node_dup(dup));
 		if (remove_stable_node(dup))
 			return true;
@@ -1168,7 +1166,7 @@ static int remove_stable_node_chain(struct ksm_stable_node *stable_node,
 
 static int remove_all_stable_nodes(void)
 {
-	struct ksm_stable_node *stable_node, *next;
+	struct ksm_stable_node *stable_node;
 	int nid;
 	int err = 0;
 
@@ -1184,7 +1182,7 @@ static int remove_all_stable_nodes(void)
 			cond_resched();
 		}
 	}
-	list_for_each_entry_safe(stable_node, next, &migrate_nodes, list) {
+	list_for_each_entry_mutable(stable_node, &migrate_nodes, list) {
 		if (remove_stable_node(stable_node))
 			err = -EBUSY;
 		cond_resched();
@@ -1665,7 +1663,6 @@ static struct folio *stable_node_dup(struct ksm_stable_node **_stable_node_dup,
 				     bool prune_stale_stable_nodes)
 {
 	struct ksm_stable_node *dup, *found = NULL, *stable_node = *_stable_node;
-	struct hlist_node *hlist_safe;
 	struct folio *folio, *tree_folio = NULL;
 	int found_rmap_hlist_len;
 
@@ -1677,8 +1674,7 @@ static struct folio *stable_node_dup(struct ksm_stable_node **_stable_node_dup,
 	else
 		stable_node->chain_prune_time = jiffies;
 
-	hlist_for_each_entry_safe(dup, hlist_safe,
-				  &stable_node->hlist, hlist_dup) {
+	hlist_for_each_entry_mutable(dup, &stable_node->hlist, hlist_dup) {
 		cond_resched();
 		/*
 		 * We must walk all stable_node_dup to prune the stale
@@ -2611,11 +2607,10 @@ static struct ksm_rmap_item *scan_get_next_rmap_item(struct page **page)
 		 * so prune them once before each full scan.
 		 */
 		if (!ksm_merge_across_nodes) {
-			struct ksm_stable_node *stable_node, *next;
+			struct ksm_stable_node *stable_node;
 			struct folio *folio;
 
-			list_for_each_entry_safe(stable_node, next,
-						 &migrate_nodes, list) {
+			list_for_each_entry_mutable(stable_node, &migrate_nodes, list) {
 				folio = ksm_get_folio(stable_node,
 						      KSM_GET_FOLIO_NOLOCK);
 				if (folio)
@@ -3323,7 +3318,6 @@ static bool stable_node_chain_remove_range(struct ksm_stable_node *stable_node,
 					   struct rb_root *root)
 {
 	struct ksm_stable_node *dup;
-	struct hlist_node *hlist_safe;
 
 	if (!is_stable_node_chain(stable_node)) {
 		VM_BUG_ON(is_stable_node_dup(stable_node));
@@ -3331,8 +3325,7 @@ static bool stable_node_chain_remove_range(struct ksm_stable_node *stable_node,
 						    end_pfn);
 	}
 
-	hlist_for_each_entry_safe(dup, hlist_safe,
-				  &stable_node->hlist, hlist_dup) {
+	hlist_for_each_entry_mutable(dup, &stable_node->hlist, hlist_dup) {
 		VM_BUG_ON(!is_stable_node_dup(dup));
 		stable_node_dup_remove_range(dup, start_pfn, end_pfn);
 	}
@@ -3346,7 +3339,7 @@ static bool stable_node_chain_remove_range(struct ksm_stable_node *stable_node,
 static void ksm_check_stable_tree(unsigned long start_pfn,
 				  unsigned long end_pfn)
 {
-	struct ksm_stable_node *stable_node, *next;
+	struct ksm_stable_node *stable_node;
 	struct rb_node *node;
 	int nid;
 
@@ -3364,7 +3357,7 @@ static void ksm_check_stable_tree(unsigned long start_pfn,
 			cond_resched();
 		}
 	}
-	list_for_each_entry_safe(stable_node, next, &migrate_nodes, list) {
+	list_for_each_entry_mutable(stable_node, &migrate_nodes, list) {
 		if (stable_node->kpfn >= start_pfn &&
 		    stable_node->kpfn < end_pfn)
 			remove_node_from_stable_tree(stable_node);

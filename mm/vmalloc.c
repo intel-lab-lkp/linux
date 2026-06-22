@@ -2202,13 +2202,13 @@ static void purge_fragmented_blocks_allcpus(void);
 static void
 reclaim_list_global(struct list_head *head)
 {
-	struct vmap_area *va, *n;
+	struct vmap_area *va;
 
 	if (list_empty(head))
 		return;
 
 	spin_lock(&free_vmap_area_lock);
-	list_for_each_entry_safe(va, n, head, list)
+	list_for_each_entry_mutable(va, head, list)
 		merge_or_add_vmap_area_augment(va,
 			&free_vmap_area_root, &free_vmap_area_list);
 	spin_unlock(&free_vmap_area_lock);
@@ -2219,7 +2219,7 @@ decay_va_pool_node(struct vmap_node *vn, bool full_decay)
 {
 	LIST_HEAD(decay_list);
 	struct rb_root decay_root = RB_ROOT;
-	struct vmap_area *va, *nva;
+	struct vmap_area *va;
 	unsigned long n_decay, pool_len;
 	int i;
 
@@ -2242,7 +2242,7 @@ decay_va_pool_node(struct vmap_node *vn, bool full_decay)
 			n_decay >>= 2;
 		pool_len -= n_decay;
 
-		list_for_each_entry_safe(va, nva, &tmp_list, list) {
+		list_for_each_entry_mutable(va, &tmp_list, list) {
 			if (!n_decay--)
 				break;
 
@@ -2299,7 +2299,7 @@ static void purge_vmap_node(struct work_struct *work)
 	struct vmap_node *vn = container_of(work,
 		struct vmap_node, purge_work);
 	unsigned long nr_purged_pages = 0;
-	struct vmap_area *va, *n_va;
+	struct vmap_area *va;
 	LIST_HEAD(local_list);
 
 	if (IS_ENABLED(CONFIG_KASAN_VMALLOC))
@@ -2307,7 +2307,7 @@ static void purge_vmap_node(struct work_struct *work)
 
 	vn->nr_purged = 0;
 
-	list_for_each_entry_safe(va, n_va, &vn->purge_list, list) {
+	list_for_each_entry_mutable(va, &vn->purge_list, list) {
 		unsigned long nr = va_size(va) >> PAGE_SHIFT;
 		unsigned int vn_id = decode_vn_id(va->flags);
 
@@ -2803,9 +2803,9 @@ static bool purge_fragmented_block(struct vmap_block *vb,
 
 static void free_purged_blocks(struct list_head *purge_list)
 {
-	struct vmap_block *vb, *n_vb;
+	struct vmap_block *vb;
 
-	list_for_each_entry_safe(vb, n_vb, purge_list, purge) {
+	list_for_each_entry_mutable(vb, purge_list, purge) {
 		list_del(&vb->purge);
 		free_vmap_block(vb);
 	}
@@ -3386,9 +3386,9 @@ static void vm_reset_perms(struct vm_struct *area)
 static void delayed_vfree_work(struct work_struct *w)
 {
 	struct vfree_deferred *p = container_of(w, struct vfree_deferred, wq);
-	struct llist_node *t, *llnode;
+	struct llist_node *llnode;
 
-	llist_for_each_safe(llnode, t, llist_del_all(&p->list))
+	llist_for_each_mutable(llnode, llist_del_all(&p->list))
 		vfree(llnode);
 }
 
@@ -3775,14 +3775,14 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 static LLIST_HEAD(pending_vm_area_cleanup);
 static void cleanup_vm_area_work(struct work_struct *work)
 {
-	struct vm_struct *area, *tmp;
+	struct vm_struct *area;
 	struct llist_node *head;
 
 	head = llist_del_all(&pending_vm_area_cleanup);
 	if (!head)
 		return;
 
-	llist_for_each_entry_safe(area, tmp, head, llnode) {
+	llist_for_each_entry_mutable(area, head, llnode) {
 		if (!area->pages)
 			free_vm_area(area);
 		else

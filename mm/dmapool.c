@@ -362,7 +362,7 @@ static struct dma_page *pool_alloc_page(struct dma_pool *pool, gfp_t mem_flags)
  */
 void dma_pool_destroy(struct dma_pool *pool)
 {
-	struct dma_page *page, *tmp;
+	struct dma_page *page;
 	bool empty, busy = false;
 
 	if (unlikely(!pool))
@@ -382,7 +382,7 @@ void dma_pool_destroy(struct dma_pool *pool)
 		busy = true;
 	}
 
-	list_for_each_entry_safe(page, tmp, &pool->page_list, page_list) {
+	list_for_each_entry_mutable(page, &pool->page_list, page_list) {
 		if (!busy)
 			dma_free_coherent(pool->dev, pool->allocation,
 					  page->vaddr, page->dma);

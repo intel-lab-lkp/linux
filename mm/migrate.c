@@ -257,9 +257,8 @@ static int migrate_movable_ops_page(struct page *dst, struct page *src,
 void putback_movable_pages(struct list_head *l)
 {
 	struct folio *folio;
-	struct folio *folio2;
 
-	list_for_each_entry_safe(folio, folio2, l, lru) {
+	list_for_each_entry_mutable(folio, l, lru) {
 		if (unlikely(folio_test_hugetlb(folio))) {
 			folio_putback_hugetlb(folio);
 			continue;
@@ -336,7 +335,7 @@ static bool try_to_map_unused_to_zeropage(struct page_vma_mapped_walk *pvmw,
 }
 
 struct rmap_walk_arg {
-	struct folio *folio;
+	struct folio *folio, *folio2;
 	bool map_unused_to_zeropage;
 };
 
@@ -1634,14 +1633,14 @@ static int migrate_hugetlbs(struct list_head *from, new_folio_t get_new_folio,
 	int nr_failed = 0;
 	int nr_retry_pages = 0;
 	int pass = 0;
-	struct folio *folio, *folio2;
+	struct folio *folio;
 	int rc, nr_pages;
 
 	for (pass = 0; pass < NR_MAX_MIGRATE_PAGES_RETRY && retry; pass++) {
 		retry = 0;
 		nr_retry_pages = 0;
 
-		list_for_each_entry_safe(folio, folio2, from, lru) {
+		list_for_each_entry_mutable(folio, from, lru) {
 			if (!folio_test_hugetlb(folio))
 				continue;
 
@@ -1722,14 +1721,14 @@ static void migrate_folios_move(struct list_head *src_folios,
 		int *retry, int *thp_retry, int *nr_failed,
 		int *nr_retry_pages)
 {
-	struct folio *folio, *folio2, *dst, *dst2;
+	struct folio *folio, *dst, *dst2;
 	bool is_thp;
 	int nr_pages;
 	int rc;
 
 	dst = list_first_entry(dst_folios, struct folio, lru);
 	dst2 = list_next_entry(dst, lru);
-	list_for_each_entry_safe(folio, folio2, src_folios, lru) {
+	list_for_each_entry_mutable(folio, src_folios, lru) {
 		is_thp = folio_test_large(folio) && folio_test_pmd_mappable(folio);
 		nr_pages = folio_nr_pages(folio);
 
@@ -1770,11 +1769,11 @@ static void migrate_folios_undo(struct list_head *src_folios,
 		free_folio_t put_new_folio, unsigned long private,
 		struct list_head *ret_folios)
 {
-	struct folio *folio, *folio2, *dst, *dst2;
+	struct folio *folio, *dst, *dst2;
 
 	dst = list_first_entry(dst_folios, struct folio, lru);
 	dst2 = list_next_entry(dst, lru);
-	list_for_each_entry_safe(folio, folio2, src_folios, lru) {
+	list_for_each_entry_mutable(folio, src_folios, lru) {
 		int old_folio_state = 0;
 		struct anon_vma *anon_vma = NULL;
 
@@ -1810,7 +1809,7 @@ static int migrate_pages_batch(struct list_head *from,
 	int pass = 0;
 	bool is_thp = false;
 	bool is_large = false;
-	struct folio *folio, *folio2, *dst = NULL;
+	struct folio *folio, *dst = NULL;
 	int rc, rc_saved = 0, nr_pages;
 	LIST_HEAD(unmap_folios);
 	LIST_HEAD(dst_folios);
@@ -1824,7 +1823,7 @@ static int migrate_pages_batch(struct list_head *from,
 		thp_retry = 0;
 		nr_retry_pages = 0;
 
-		list_for_each_entry_safe(folio, folio2, from, lru) {
+		list_for_each_entry_mutable(folio, from, lru) {
 			is_large = folio_test_large(folio);
 			is_thp = folio_test_pmd_mappable(folio);
 			nr_pages = folio_nr_pages(folio);
@@ -2109,7 +2108,7 @@ int migrate_pages(struct list_head *from, new_folio_t get_new_folio,
 
 again:
 	nr_pages = 0;
-	list_for_each_entry_safe(folio, folio2, from, lru) {
+	list_for_each_entry_mutable(folio, folio2, from, lru) {
 		/* Retried hugetlb folios will be kept in list  */
 		if (folio_test_hugetlb(folio)) {
 			list_move_tail(&folio->lru, &ret_folios);

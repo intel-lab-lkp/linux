@@ -932,10 +932,10 @@ static void cleanup_offline_cgwbs_workfn(struct work_struct *work)
 void wb_memcg_offline(struct mem_cgroup *memcg)
 {
 	struct list_head *memcg_cgwb_list = &memcg->cgwb_list;
-	struct bdi_writeback *wb, *next;
+	struct bdi_writeback *wb;
 
 	spin_lock_irq(&cgwb_lock);
-	list_for_each_entry_safe(wb, next, memcg_cgwb_list, memcg_node)
+	list_for_each_entry_mutable(wb, memcg_cgwb_list, memcg_node)
 		cgwb_kill(wb);
 	memcg_cgwb_list->next = NULL;	/* prevent new wb's */
 	spin_unlock_irq(&cgwb_lock);
@@ -951,11 +951,11 @@ void wb_memcg_offline(struct mem_cgroup *memcg)
  */
 void wb_blkcg_offline(struct cgroup_subsys_state *css)
 {
-	struct bdi_writeback *wb, *next;
+	struct bdi_writeback *wb;
 	struct list_head *list = blkcg_get_cgwb_list(css);
 
 	spin_lock_irq(&cgwb_lock);
-	list_for_each_entry_safe(wb, next, list, blkcg_node)
+	list_for_each_entry_mutable(wb, list, blkcg_node)
 		cgwb_kill(wb);
 	list->next = NULL;	/* prevent new wb's */
 	spin_unlock_irq(&cgwb_lock);

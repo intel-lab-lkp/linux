@@ -423,9 +423,9 @@ static void add_to_kill_anon_file(struct task_struct *tsk, const struct page *p,
 static bool task_in_to_kill_list(struct list_head *to_kill,
 				 struct task_struct *tsk)
 {
-	struct to_kill *tk, *next;
+	struct to_kill *tk;
 
-	list_for_each_entry_safe(tk, next, to_kill, nd) {
+	list_for_each_entry_mutable(tk, to_kill, nd) {
 		if (tk->tsk == tsk)
 			return true;
 	}
@@ -450,9 +450,9 @@ void add_to_kill_ksm(struct task_struct *tsk, const struct page *p,
 static void kill_procs(struct list_head *to_kill, bool forcekill,
 		unsigned long pfn, int flags)
 {
-	struct to_kill *tk, *next;
+	struct to_kill *tk;
 
-	list_for_each_entry_safe(tk, next, to_kill, nd) {
+	list_for_each_entry_mutable(tk, to_kill, nd) {
 		if (forcekill) {
 			if (tk->addr == -EFAULT) {
 				pr_err("%#lx: forcibly killing %s:%d because of failure to unmap corrupted page\n",
@@ -1860,11 +1860,11 @@ bool is_raw_hwpoison_page_in_hugepage(struct page *page)
 static unsigned long __folio_free_raw_hwp(struct folio *folio, bool move_flag)
 {
 	struct llist_node *head;
-	struct raw_hwp_page *p, *next;
+	struct raw_hwp_page *p;
 	unsigned long count = 0;
 
 	head = llist_del_all(raw_hwp_list_head(folio));
-	llist_for_each_entry_safe(p, next, head, node) {
+	llist_for_each_entry_mutable(p, head, node) {
 		if (move_flag)
 			SetPageHWPoison(p->page);
 		else

@@ -1598,11 +1598,11 @@ unsigned int reclaim_clean_pages_from_list(struct zone *zone,
 	};
 	struct reclaim_stat stat;
 	unsigned int nr_reclaimed;
-	struct folio *folio, *next;
+	struct folio *folio;
 	LIST_HEAD(clean_folios);
 	unsigned int noreclaim_flag;
 
-	list_for_each_entry_safe(folio, next, folio_list, lru) {
+	list_for_each_entry_mutable(folio, folio_list, lru) {
 		/* TODO: these pages should not even appear in this list. */
 		if (page_has_movable_ops(&folio->page))
 			continue;
@@ -4805,7 +4805,6 @@ static int evict_folios(unsigned long nr_to_scan, struct lruvec *lruvec,
 	LIST_HEAD(list);
 	LIST_HEAD(clean);
 	struct folio *folio;
-	struct folio *next;
 	enum node_stat_item item;
 	struct reclaim_stat stat;
 	struct lru_gen_mm_walk *walk;
@@ -4841,7 +4840,7 @@ retry:
 			type_scanned, reclaimed, &stat, sc->priority,
 			type ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON);
 
-	list_for_each_entry_safe_reverse(folio, next, &list, lru) {
+	list_for_each_entry_mutable_reverse(folio, &list, lru) {
 		DEFINE_MIN_SEQ(lruvec);
 
 		if (!folio_evictable(folio)) {

@@ -924,9 +924,9 @@ delete_obj:
 
 static void __init hugepage_exit_sysfs(struct kobject *hugepage_kobj)
 {
-	struct thpsize *thpsize, *tmp;
+	struct thpsize *thpsize;
 
-	list_for_each_entry_safe(thpsize, tmp, &thpsize_list, node) {
+	list_for_each_entry_mutable(thpsize, &thpsize_list, node) {
 		list_del(&thpsize->node);
 		kobject_put(&thpsize->kobj);
 	}
@@ -4462,14 +4462,14 @@ static unsigned long deferred_split_scan(struct shrinker *shrink,
 		struct shrink_control *sc)
 {
 	LIST_HEAD(dispose);
-	struct folio *folio, *next;
+	struct folio *folio;
 	int split = 0;
 	unsigned long isolated;
 
 	isolated = list_lru_shrink_walk_irq(&deferred_split_lru, sc,
 					    deferred_split_isolate, &dispose);
 
-	list_for_each_entry_safe(folio, next, &dispose, _deferred_list) {
+	list_for_each_entry_mutable(folio, &dispose, _deferred_list) {
 		bool did_split = false;
 		bool underused = false;
 

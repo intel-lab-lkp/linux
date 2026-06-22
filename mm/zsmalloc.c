@@ -1806,7 +1806,7 @@ static void async_free_zspage(struct work_struct *work)
 {
 	int i;
 	struct size_class *class;
-	struct zspage *zspage, *tmp;
+	struct zspage *zspage;
 	LIST_HEAD(free_pages);
 	struct zs_pool *pool = container_of(work, struct zs_pool,
 					free_work);
@@ -1822,7 +1822,7 @@ static void async_free_zspage(struct work_struct *work)
 		spin_unlock(&class->lock);
 	}
 
-	list_for_each_entry_safe(zspage, tmp, &free_pages, list) {
+	list_for_each_entry_mutable(zspage, &free_pages, list) {
 		list_del(&zspage->list);
 		lock_zspage(zspage);
 

@@ -426,7 +426,7 @@ static struct {
 
 static void kernel_pgtable_work_func(struct work_struct *work)
 {
-	struct ptdesc *pt, *next;
+	struct ptdesc *pt;
 	LIST_HEAD(page_list);
 
 	spin_lock(&kernel_pgtable_work.lock);
@@ -434,7 +434,7 @@ static void kernel_pgtable_work_func(struct work_struct *work)
 	spin_unlock(&kernel_pgtable_work.lock);
 
 	iommu_sva_invalidate_kva_range(PAGE_OFFSET, TLB_FLUSH_ALL);
-	list_for_each_entry_safe(pt, next, &page_list, pt_list)
+	list_for_each_entry_mutable(pt, &page_list, pt_list)
 		__pagetable_free(pt);
 }
 

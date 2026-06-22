@@ -340,7 +340,7 @@ __list_lru_walk_one(struct list_lru *lru, int nid, struct mem_cgroup *memcg,
 {
 	struct list_lru_node *nlru = &lru->node[nid];
 	struct list_lru_one *l = NULL;
-	struct list_head *item, *n;
+	struct list_head *item;
 	unsigned long isolated = 0;
 
 restart:
@@ -348,7 +348,7 @@ restart:
 				   /*irq_flags=*/NULL, /*skip_empty=*/true);
 	if (!l)
 		return isolated;
-	list_for_each_safe(item, n, &l->list) {
+	list_for_each_mutable(item, &l->list) {
 		enum lru_status ret;
 
 		/*

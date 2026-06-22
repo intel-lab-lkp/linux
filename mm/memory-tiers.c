@@ -690,9 +690,9 @@ EXPORT_SYMBOL_GPL(mt_find_alloc_memory_type);
 
 void mt_put_memory_types(struct list_head *memory_types)
 {
-	struct memory_dev_type *mtype, *mtn;
+	struct memory_dev_type *mtype;
 
-	list_for_each_entry_safe(mtype, mtn, memory_types, list) {
+	list_for_each_entry_mutable(mtype, memory_types, list) {
 		list_del(&mtype->list);
 		put_memory_type(mtype);
 	}

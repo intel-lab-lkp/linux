@@ -1559,10 +1559,10 @@ static void free_one_page(struct zone *zone, struct page *page,
 	llhead = &zone->trylock_free_pages;
 	if (unlikely(!llist_empty(llhead) && !(fpi_flags & FPI_TRYLOCK))) {
 		struct llist_node *llnode;
-		struct page *p, *tmp;
+		struct page *p;
 
 		llnode = llist_del_all(llhead);
-		llist_for_each_entry_safe(p, tmp, llnode, pcp_llist) {
+		llist_for_each_entry_mutable(p, llnode, pcp_llist) {
 			unsigned int p_order = p->private;
 
 			split_large_buddy(zone, p, page_to_pfn(p), p_order, fpi_flags);
@@ -7022,10 +7022,10 @@ static void split_free_frozen_pages(struct list_head *list, gfp_t gfp_mask)
 	int order;
 
 	for (order = 0; order < NR_PAGE_ORDERS; order++) {
-		struct page *page, *next;
+		struct page *page;
 		int nr_pages = 1 << order;
 
-		list_for_each_entry_safe(page, next, &list[order], lru) {
+		list_for_each_entry_mutable(page, &list[order], lru) {
 			int i;
 
 			post_alloc_hook(page, order, gfp_mask);

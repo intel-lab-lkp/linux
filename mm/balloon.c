@@ -75,12 +75,12 @@ static void balloon_page_enqueue_one(struct balloon_dev_info *b_dev_info,
 size_t balloon_page_list_enqueue(struct balloon_dev_info *b_dev_info,
 				 struct list_head *pages)
 {
-	struct page *page, *tmp;
+	struct page *page;
 	unsigned long flags;
 	size_t n_pages = 0;
 
 	spin_lock_irqsave(&balloon_pages_lock, flags);
-	list_for_each_entry_safe(page, tmp, pages, lru) {
+	list_for_each_entry_mutable(page, pages, lru) {
 		list_del(&page->lru);
 		balloon_page_enqueue_one(b_dev_info, page);
 		n_pages++;
@@ -111,12 +111,12 @@ EXPORT_SYMBOL_GPL(balloon_page_list_enqueue);
 size_t balloon_page_list_dequeue(struct balloon_dev_info *b_dev_info,
 				 struct list_head *pages, size_t n_req_pages)
 {
-	struct page *page, *tmp;
+	struct page *page;
 	unsigned long flags;
 	size_t n_pages = 0;
 
 	spin_lock_irqsave(&balloon_pages_lock, flags);
-	list_for_each_entry_safe(page, tmp, &b_dev_info->pages, lru) {
+	list_for_each_entry_mutable(page, &b_dev_info->pages, lru) {
 		if (n_pages == n_req_pages)
 			break;
 		list_del(&page->lru);

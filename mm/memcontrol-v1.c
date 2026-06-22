@@ -986,11 +986,11 @@ static int mem_cgroup_oom_register_event(struct mem_cgroup *memcg,
 static void mem_cgroup_oom_unregister_event(struct mem_cgroup *memcg,
 	struct eventfd_ctx *eventfd)
 {
-	struct mem_cgroup_eventfd_list *ev, *tmp;
+	struct mem_cgroup_eventfd_list *ev;
 
 	spin_lock(&memcg_oom_lock);
 
-	list_for_each_entry_safe(ev, tmp, &memcg->oom_notify, list) {
+	list_for_each_entry_mutable(ev, &memcg->oom_notify, list) {
 		if (ev->eventfd == eventfd) {
 			list_del(&ev->list);
 			kfree(ev);
@@ -1242,7 +1242,7 @@ void memcg1_memcg_init(struct mem_cgroup *memcg)
 
 void memcg1_css_offline(struct mem_cgroup *memcg)
 {
-	struct mem_cgroup_event *event, *tmp;
+	struct mem_cgroup_event *event;
 
 	/*
 	 * Unregister events and notify userspace.
@@ -1250,7 +1250,7 @@ void memcg1_css_offline(struct mem_cgroup *memcg)
 	 * directory to avoid race between userspace and kernelspace.
 	 */
 	spin_lock_irq(&memcg->event_list_lock);
-	list_for_each_entry_safe(event, tmp, &memcg->event_list, list) {
+	list_for_each_entry_mutable(event, &memcg->event_list, list) {
 		list_del_init(&event->list);
 		schedule_work(&event->remove);
 	}

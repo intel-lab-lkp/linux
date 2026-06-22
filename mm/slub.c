@@ -3253,7 +3253,7 @@ static void barn_shrink(struct kmem_cache *s, struct node_barn *barn)
 {
 	LIST_HEAD(empty_list);
 	LIST_HEAD(full_list);
-	struct slab_sheaf *sheaf, *sheaf2;
+	struct slab_sheaf *sheaf;
 	unsigned long flags;
 
 	spin_lock_irqsave(&barn->lock, flags);
@@ -3265,12 +3265,12 @@ static void barn_shrink(struct kmem_cache *s, struct node_barn *barn)
 
 	spin_unlock_irqrestore(&barn->lock, flags);
 
-	list_for_each_entry_safe(sheaf, sheaf2, &full_list, barn_list) {
+	list_for_each_entry_mutable(sheaf, &full_list, barn_list) {
 		sheaf_flush_unused(s, sheaf);
 		free_empty_sheaf(s, sheaf);
 	}
 
-	list_for_each_entry_safe(sheaf, sheaf2, &empty_list, barn_list)
+	list_for_each_entry_mutable(sheaf, &empty_list, barn_list)
 		free_empty_sheaf(s, sheaf);
 }
 
@@ -3757,7 +3757,7 @@ static bool get_partial_node_bulk(struct kmem_cache *s,
 				  struct partial_bulk_context *pc,
 				  bool allow_spin)
 {
-	struct slab *slab, *slab2;
+	struct slab *slab;
 	struct slab *first = NULL, *last = NULL;
 	unsigned int total_free = 0;
 	unsigned long flags;
@@ -3773,7 +3773,7 @@ static bool get_partial_node_bulk(struct kmem_cache *s,
 	else if (!spin_trylock_irqsave(&n->list_lock, flags))
 		return false;
 
-	list_for_each_entry_safe(slab, slab2, &n->partial, slab_list) {
+	list_for_each_entry_mutable(slab, &n->partial, slab_list) {
 		struct freelist_counters flc;
 		unsigned int slab_free;
 
@@ -3828,7 +3828,7 @@ static void *get_from_partial_node(struct kmem_cache *s,
 				   gfp_t gfp_flags,
 				   const struct slab_alloc_context *ac)
 {
-	struct slab *slab, *slab2;
+	struct slab *slab;
 	unsigned long flags;
 	void *object = NULL;
 
@@ -3845,7 +3845,7 @@ static void *get_from_partial_node(struct kmem_cache *s,
 		spin_lock_irqsave(&n->list_lock, flags);
 	else if (!spin_trylock_irqsave(&n->list_lock, flags))
 		return NULL;
-	list_for_each_entry_safe(slab, slab2, &n->partial, slab_list) {
+	list_for_each_entry_mutable(slab, &n->partial, slab_list) {
 
 		struct freelist_counters old, new;
 
@@ -6345,13 +6345,13 @@ static void free_deferred_objects(struct irq_work *work)
 {
 	struct defer_free *df = container_of(work, struct defer_free, work);
 	struct llist_head *objs = &df->objects;
-	struct llist_node *llnode, *pos, *t;
+	struct llist_node *llnode, *pos;
 
 	if (llist_empty(objs))
 		return;
 
 	llnode = llist_del_all(objs);
-	llist_for_each_safe(pos, t, llnode) {
+	llist_for_each_mutable(pos, llnode) {
 		struct kmem_cache *s;
 		struct slab *slab;
 		void *x = pos;
@@ -7185,7 +7185,7 @@ __refill_objects_node(struct kmem_cache *s, void **p, gfp_t gfp, unsigned int mi
 		      bool allow_spin)
 {
 	struct partial_bulk_context pc;
-	struct slab *slab, *slab2;
+	struct slab *slab;
 	unsigned int refilled = 0;
 	unsigned long flags;
 	void *object;
@@ -7197,7 +7197,7 @@ __refill_objects_node(struct kmem_cache *s, void **p, gfp_t gfp, unsigned int mi
 	if (!get_partial_node_bulk(s, n, &pc, allow_spin))
 		return 0;
 
-	list_for_each_entry_safe(slab, slab2, &pc.slabs, slab_list) {
+	list_for_each_entry_mutable(slab, &pc.slabs, slab_list) {
 
 		unsigned int count;
 
@@ -8031,11 +8031,11 @@ static void list_slab_objects(struct kmem_cache *s, struct slab *slab)
 static void free_partial(struct kmem_cache *s, struct kmem_cache_node *n)
 {
 	LIST_HEAD(discard);
-	struct slab *slab, *h;
+	struct slab *slab;
 
 	BUG_ON(irqs_disabled());
 	spin_lock_irq(&n->list_lock);
-	list_for_each_entry_safe(slab, h, &n->partial, slab_list) {
+	list_for_each_entry_mutable(slab, &n->partial, slab_list) {
 		if (!slab->inuse) {
 			remove_partial(n, slab);
 			list_add(&slab->slab_list, &discard);
@@ -8045,7 +8045,7 @@ static void free_partial(struct kmem_cache *s, struct kmem_cache_node *n)
 	}
 	spin_unlock_irq(&n->list_lock);
 
-	list_for_each_entry_safe(slab, h, &discard, slab_list)
+	list_for_each_entry_mutable(slab, &discard, slab_list)
 		discard_slab(s, slab);
 }
 
@@ -8286,7 +8286,6 @@ static int __kmem_cache_do_shrink(struct kmem_cache *s)
 	int i;
 	struct kmem_cache_node *n;
 	struct slab *slab;
-	struct slab *t;
 	struct list_head discard;
 	struct list_head promote[SHRINK_PROMOTE_MAX];
 	unsigned long flags;
@@ -8312,7 +8311,7 @@ static int __kmem_cache_do_shrink(struct kmem_cache *s)
 		 * Note that concurrent frees may occur while we hold the
 		 * list_lock. slab->inuse here is the upper limit.
 		 */
-		list_for_each_entry_safe(slab, t, &n->partial, slab_list) {
+		list_for_each_entry_mutable(slab, &n->partial, slab_list) {
 			int free = slab->objects - slab->inuse;
 
 			/* Do not reread slab->inuse */
@@ -8339,7 +8338,7 @@ static int __kmem_cache_do_shrink(struct kmem_cache *s)
 		spin_unlock_irqrestore(&n->list_lock, flags);
 
 		/* Release empty slabs */
-		list_for_each_entry_safe(slab, t, &discard, slab_list)
+		list_for_each_entry_mutable(slab, &discard, slab_list)
 			free_slab(s, slab);
 
 		if (node_nr_slabs(n))

@@ -727,7 +727,8 @@ static const char *shmem_format_huge(int huge)
 static unsigned long shmem_unused_huge_shrink(struct shmem_sb_info *sbinfo,
 		struct shrink_control *sc, unsigned long nr_to_free)
 {
-	LIST_HEAD(list), *pos, *next;
+	LIST_HEAD(list);
+	struct list_head *pos;
 	struct inode *inode;
 	struct shmem_inode_info *info;
 	struct folio *folio;
@@ -738,7 +739,7 @@ static unsigned long shmem_unused_huge_shrink(struct shmem_sb_info *sbinfo,
 		return SHRINK_STOP;
 
 	spin_lock(&sbinfo->shrinklist_lock);
-	list_for_each_safe(pos, next, &sbinfo->shrinklist) {
+	list_for_each_mutable(pos, &sbinfo->shrinklist) {
 		info = list_entry(pos, struct shmem_inode_info, shrinklist);
 
 		/* pin the inode */
@@ -758,7 +759,7 @@ next:
 	}
 	spin_unlock(&sbinfo->shrinklist_lock);
 
-	list_for_each_safe(pos, next, &list) {
+	list_for_each_mutable(pos, &list) {
 		pgoff_t next, end;
 		loff_t i_size;
 		int ret;
@@ -1547,7 +1548,7 @@ int shmem_unuse(unsigned int type)
 
 	spin_lock(&shmem_swaplist_lock);
 start_over:
-	list_for_each_entry_safe(info, next, &shmem_swaplist, swaplist) {
+	list_for_each_entry_mutable(info, next, &shmem_swaplist, swaplist) {
 		if (!info->swapped) {
 			list_del_init(&info->swaplist);
 			continue;

@@ -193,9 +193,9 @@ static inline void free_vmemmap_page(struct page *page)
 /* Free a list of the vmemmap pages */
 static void free_vmemmap_page_list(struct list_head *list)
 {
-	struct page *page, *next;
+	struct page *page;
 
-	list_for_each_entry_safe(page, next, list, lru)
+	list_for_each_entry_mutable(page, list, lru)
 		free_vmemmap_page(page);
 }
 
@@ -339,7 +339,7 @@ static int alloc_vmemmap_page_list(unsigned long start, unsigned long end,
 	gfp_t gfp_mask = GFP_KERNEL | __GFP_RETRY_MAYFAIL;
 	unsigned long nr_pages = (end - start) >> PAGE_SHIFT;
 	int nid = page_to_nid((struct page *)start);
-	struct page *page, *next;
+	struct page *page;
 	int i;
 
 	for (i = 0; i < nr_pages; i++) {
@@ -352,7 +352,7 @@ static int alloc_vmemmap_page_list(unsigned long start, unsigned long end,
 
 	return 0;
 out:
-	list_for_each_entry_safe(page, next, list, lru)
+	list_for_each_entry_mutable(page, list, lru)
 		__free_page(page);
 	return -ENOMEM;
 }
@@ -454,12 +454,12 @@ long hugetlb_vmemmap_restore_folios(const struct hstate *h,
 					struct list_head *folio_list,
 					struct list_head *non_hvo_folios)
 {
-	struct folio *folio, *t_folio;
+	struct folio *folio;
 	long restored = 0;
 	long ret = 0;
 	unsigned long flags = VMEMMAP_REMAP_NO_TLB_FLUSH;
 
-	list_for_each_entry_safe(folio, t_folio, folio_list, lru) {
+	list_for_each_entry_mutable(folio, folio_list, lru) {
 		if (folio_test_hugetlb_vmemmap_optimized(folio)) {
 			ret = __hugetlb_vmemmap_restore_folio(h, folio, flags);
 			if (ret)
@@ -800,7 +800,7 @@ static struct zone *pfn_to_zone(unsigned nid, unsigned long pfn)
 
 void __init hugetlb_vmemmap_init_late(int nid)
 {
-	struct huge_bootmem_page *m, *tm;
+	struct huge_bootmem_page *m;
 	unsigned long phys, nr_pages, start, end;
 	unsigned long pfn, nr_mmap;
 	struct zone *zone = NULL;
@@ -810,7 +810,7 @@ void __init hugetlb_vmemmap_init_late(int nid)
 	if (!READ_ONCE(vmemmap_optimize_enabled))
 		return;
 
-	list_for_each_entry_safe(m, tm, &huge_boot_pages[nid], list) {
+	list_for_each_entry_mutable(m, &huge_boot_pages[nid], list) {
 		if (!(m->flags & HUGE_BOOTMEM_HVO))
 			continue;
 

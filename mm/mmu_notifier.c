@@ -131,7 +131,6 @@ mn_itree_inv_next(struct mmu_interval_notifier *interval_sub,
 static void mn_itree_inv_end(struct mmu_notifier_subscriptions *subscriptions)
 {
 	struct mmu_interval_notifier *interval_sub;
-	struct hlist_node *next;
 
 	spin_lock(&subscriptions->lock);
 	if (--subscriptions->active_invalidate_ranges ||
@@ -149,9 +148,7 @@ static void mn_itree_inv_end(struct mmu_notifier_subscriptions *subscriptions)
 	 * they are progressed. This arrangement for tree updates is used to
 	 * avoid using a blocking lock during invalidate_range_start.
 	 */
-	hlist_for_each_entry_safe(interval_sub, next,
-				  &subscriptions->deferred_list,
-				  deferred_item) {
+	hlist_for_each_entry_mutable(interval_sub, &subscriptions->deferred_list, deferred_item) {
 		if (RB_EMPTY_NODE(&interval_sub->interval_tree.rb))
 			interval_tree_insert(&interval_sub->interval_tree,
 					     &subscriptions->itree);
@@ -263,9 +260,9 @@ EXPORT_SYMBOL_GPL(mmu_interval_read_begin);
 static void mn_itree_finish_pass(struct llist_head *finish_passes)
 {
 	struct llist_node *first = llist_reverse_order(__llist_del_all(finish_passes));
-	struct mmu_interval_notifier_finish *f, *next;
+	struct mmu_interval_notifier_finish *f;
 
-	llist_for_each_entry_safe(f, next, first, link)
+	llist_for_each_entry_mutable(f, first, link)
 		f->notifier->ops->invalidate_finish(f);
 }
 

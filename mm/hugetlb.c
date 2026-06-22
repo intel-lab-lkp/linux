@@ -598,7 +598,7 @@ static long add_reservation_in_range(struct resv_map *resv, long f, long t,
 	long add = 0;
 	struct list_head *head = &resv->regions;
 	long last_accounted_offset = f;
-	struct file_region *iter, *trg = NULL;
+	struct file_region *iter;
 	struct list_head *rg = NULL;
 
 	if (regions_needed)
@@ -608,7 +608,7 @@ static long add_reservation_in_range(struct resv_map *resv, long f, long t,
 	 * [last_accounted_offset, iter->from), at every iteration, with some
 	 * bounds checking.
 	 */
-	list_for_each_entry_safe(iter, trg, head, link) {
+	list_for_each_entry_mutable(iter, head, link) {
 		/* Skip irrelevant regions that start before our range. */
 		if (iter->from < f) {
 			/* If this region ends after the last accounted offset,
@@ -700,7 +700,7 @@ static int allocate_file_region_entries(struct resv_map *resv,
 	return 0;
 
 out_of_memory:
-	list_for_each_entry_safe(rg, trg, &allocated_regions, link) {
+	list_for_each_entry_mutable(rg, &allocated_regions, link) {
 		list_del(&rg->link);
 		kfree(rg);
 	}
@@ -853,13 +853,13 @@ static void region_abort(struct resv_map *resv, long f, long t,
 static long region_del(struct resv_map *resv, long f, long t)
 {
 	struct list_head *head = &resv->regions;
-	struct file_region *rg, *trg;
+	struct file_region *rg;
 	struct file_region *nrg = NULL;
 	long del = 0;
 
 retry:
 	spin_lock(&resv->lock);
-	list_for_each_entry_safe(rg, trg, head, link) {
+	list_for_each_entry_mutable(rg, head, link) {
 		/*
 		 * Skip regions before the range to be deleted.  file_region
 		 * ranges are normally of the form [from, to).  However, there
@@ -1109,13 +1109,13 @@ void resv_map_release(struct kref *ref)
 {
 	struct resv_map *resv_map = container_of(ref, struct resv_map, refs);
 	struct list_head *head = &resv_map->region_cache;
-	struct file_region *rg, *trg;
+	struct file_region *rg;
 
 	/* Clear out any active regions before we release the map. */
 	region_del(resv_map, 0, LONG_MAX);
 
 	/* ... and any entries left in the cache */
-	list_for_each_entry_safe(rg, trg, head, link) {
+	list_for_each_entry_mutable(rg, head, link) {
 		list_del(&rg->link);
 		kfree(rg);
 	}
@@ -1582,7 +1582,7 @@ static void bulk_vmemmap_restore_error(struct hstate *h,
 					struct list_head *folio_list,
 					struct list_head *non_hvo_folios)
 {
-	struct folio *folio, *t_folio;
+	struct folio *folio;
 
 	if (!list_empty(non_hvo_folios)) {
 		/*
@@ -1592,7 +1592,7 @@ static void bulk_vmemmap_restore_error(struct hstate *h,
 		 * hugetlb pages with vmemmap we will free up memory so that we
 		 * can allocate vmemmap for more hugetlb pages.
 		 */
-		list_for_each_entry_safe(folio, t_folio, non_hvo_folios, lru) {
+		list_for_each_entry_mutable(folio, non_hvo_folios, lru) {
 			list_del(&folio->lru);
 			spin_lock_irq(&hugetlb_lock);
 			__folio_clear_hugetlb(folio);
@@ -1611,7 +1611,7 @@ static void bulk_vmemmap_restore_error(struct hstate *h,
 		 * If are able to restore vmemmap and free one hugetlb page, we
 		 * quit processing the list to retry the bulk operation.
 		 */
-		list_for_each_entry_safe(folio, t_folio, folio_list, lru)
+		list_for_each_entry_mutable(folio, folio_list, lru)
 			if (hugetlb_vmemmap_restore_folio(h, folio)) {
 				list_del(&folio->lru);
 				spin_lock_irq(&hugetlb_lock);
@@ -1633,7 +1633,7 @@ static void update_and_free_pages_bulk(struct hstate *h,
 						struct list_head *folio_list)
 {
 	long ret;
-	struct folio *folio, *t_folio;
+	struct folio *folio;
 	LIST_HEAD(non_hvo_folios);
 
 	/*
@@ -1664,7 +1664,7 @@ retry:
 		spin_unlock_irq(&hugetlb_lock);
 	}
 
-	list_for_each_entry_safe(folio, t_folio, &non_hvo_folios, lru) {
+	list_for_each_entry_mutable(folio, &non_hvo_folios, lru) {
 		update_and_free_hugetlb_folio(h, folio, false);
 		cond_resched();
 	}
@@ -1875,14 +1875,14 @@ void prep_and_add_allocated_folios(struct hstate *h,
 				   struct list_head *folio_list)
 {
 	unsigned long flags;
-	struct folio *folio, *tmp_f;
+	struct folio *folio;
 
 	/* Send list for bulk vmemmap optimization processing */
 	hugetlb_vmemmap_optimize_folios(h, folio_list);
 
 	/* Add all new pool pages to free lists in one lock cycle */
 	spin_lock_irqsave(&hugetlb_lock, flags);
-	list_for_each_entry_safe(folio, tmp_f, folio_list, lru) {
+	list_for_each_entry_mutable(folio, folio_list, lru) {
 		account_new_hugetlb_folio(h, folio);
 		enqueue_hugetlb_folio(h, folio);
 	}
@@ -2246,7 +2246,7 @@ static int gather_surplus_pages(struct hstate *h, long delta)
 	__must_hold(&hugetlb_lock)
 {
 	LIST_HEAD(surplus_list);
-	struct folio *folio, *tmp;
+	struct folio *folio;
 	int ret;
 	long i;
 	long needed, allocated;
@@ -2319,7 +2319,7 @@ retry:
 	ret = 0;
 
 	/* Free the needed pages to the hugetlb pool */
-	list_for_each_entry_safe(folio, tmp, &surplus_list, lru) {
+	list_for_each_entry_mutable(folio, &surplus_list, lru) {
 		if ((--needed) < 0)
 			break;
 		/* Add the page to the hugetlb allocator */
@@ -2332,7 +2332,7 @@ free:
 	 * Free unnecessary surplus pages to the buddy allocator.
 	 * Pages have no ref count, call free_huge_folio directly.
 	 */
-	list_for_each_entry_safe(folio, tmp, &surplus_list, lru)
+	list_for_each_entry_mutable(folio, &surplus_list, lru)
 		free_huge_folio(folio);
 	spin_lock_irq(&hugetlb_lock);
 
@@ -3197,12 +3197,12 @@ static void __init prep_and_add_bootmem_folios(struct hstate *h,
 					struct list_head *folio_list)
 {
 	unsigned long flags;
-	struct folio *folio, *tmp_f;
+	struct folio *folio;
 
 	/* Send list for bulk vmemmap optimization processing */
 	hugetlb_vmemmap_optimize_bootmem_folios(h, folio_list);
 
-	list_for_each_entry_safe(folio, tmp_f, folio_list, lru) {
+	list_for_each_entry_mutable(folio, folio_list, lru) {
 		if (!folio_test_hugetlb_vmemmap_optimized(folio)) {
 			/*
 			 * If HVO fails, initialize all tail struct pages
@@ -3281,10 +3281,10 @@ static void __init hugetlb_bootmem_free_invalid_page(int nid, struct page *page,
 static void __init gather_bootmem_prealloc_node(unsigned long nid)
 {
 	LIST_HEAD(folio_list);
-	struct huge_bootmem_page *m, *tm;
+	struct huge_bootmem_page *m;
 	struct hstate *h = NULL, *prev_h = NULL;
 
-	list_for_each_entry_safe(m, tm, &huge_boot_pages[nid], list) {
+	list_for_each_entry_mutable(m, &huge_boot_pages[nid], list) {
 		struct page *page = virt_to_page(m);
 		struct folio *folio = (void *)page;
 
@@ -3669,9 +3669,9 @@ static void try_to_free_low(struct hstate *h, unsigned long count,
 	 * Collect pages to be freed on a list, and free after dropping lock
 	 */
 	for_each_node_mask(i, *nodes_allowed) {
-		struct folio *folio, *next;
+		struct folio *folio;
 		struct list_head *freel = &h->hugepage_freelists[i];
-		list_for_each_entry_safe(folio, next, freel, lru) {
+		list_for_each_entry_mutable(folio, freel, lru) {
 			if (count >= h->nr_huge_pages)
 				goto out;
 			if (folio_test_highmem(folio))
@@ -3920,7 +3920,7 @@ static long demote_free_hugetlb_folios(struct hstate *src, struct hstate *dst,
 				       struct list_head *src_list)
 {
 	long rc;
-	struct folio *folio, *next;
+	struct folio *folio;
 	LIST_HEAD(dst_list);
 	LIST_HEAD(ret_list);
 
@@ -3937,7 +3937,7 @@ static long demote_free_hugetlb_folios(struct hstate *src, struct hstate *dst,
 	 */
 	mutex_lock(&dst->resize_lock);
 
-	list_for_each_entry_safe(folio, next, src_list, lru) {
+	list_for_each_entry_mutable(folio, src_list, lru) {
 		int i;
 		bool cma;
 
@@ -3995,9 +3995,9 @@ long demote_pool_huge_page(struct hstate *src, nodemask_t *nodes_allowed,
 
 	for_each_node_mask_to_free(src, nr_nodes, node, nodes_allowed) {
 		LIST_HEAD(list);
-		struct folio *folio, *next;
+		struct folio *folio;
 
-		list_for_each_entry_safe(folio, next, &src->hugepage_freelists[node], lru) {
+		list_for_each_entry_mutable(folio, &src->hugepage_freelists[node], lru) {
 			if (folio_test_hwpoison(folio))
 				continue;
 
@@ -4014,7 +4014,7 @@ long demote_pool_huge_page(struct hstate *src, nodemask_t *nodes_allowed,
 
 		spin_lock_irq(&hugetlb_lock);
 
-		list_for_each_entry_safe(folio, next, &list, lru) {
+		list_for_each_entry_mutable(folio, &list, lru) {
 			list_del(&folio->lru);
 			add_hugetlb_folio(src, folio, false);
 

@@ -539,7 +539,7 @@ int __init cma_declare_contiguous_multi(phys_addr_t total_size,
 	struct cma_memrange *cmrp;
 	LIST_HEAD(ranges);
 	LIST_HEAD(final_ranges);
-	struct list_head *mp, *next;
+	struct list_head *mp;
 	int ret, nr = 1;
 	u64 i;
 	struct cma *cma;
@@ -648,7 +648,7 @@ int __init cma_declare_contiguous_multi(phys_addr_t total_size,
 	 * want to mimic a bottom-up memblock allocation.
 	 */
 	sizesum = 0;
-	list_for_each_safe(mp, next, &ranges) {
+	list_for_each_mutable(mp, &ranges) {
 		mlp = list_entry(mp, struct cma_init_memrange, list);
 		list_del(mp);
 		list_insert_sorted(&final_ranges, mlp, basecmp);

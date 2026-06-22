@@ -1465,7 +1465,7 @@ static int
 drain_page_cache(struct kfree_rcu_cpu *krcp)
 {
 	unsigned long flags;
-	struct llist_node *page_list, *pos, *n;
+	struct llist_node *page_list, *pos;
 	int freed = 0;
 
 	if (!rcu_min_cached_objs)
@@ -1476,7 +1476,7 @@ drain_page_cache(struct kfree_rcu_cpu *krcp)
 	WRITE_ONCE(krcp->nr_bkv_objs, 0);
 	raw_spin_unlock_irqrestore(&krcp->lock, flags);
 
-	llist_for_each_safe(pos, n, page_list) {
+	llist_for_each_mutable(pos, page_list) {
 		free_page((unsigned long)pos);
 		freed++;
 	}
@@ -1550,7 +1550,7 @@ kvfree_rcu_list(struct rcu_head *head)
 static void kfree_rcu_work(struct work_struct *work)
 {
 	unsigned long flags;
-	struct kvfree_rcu_bulk_data *bnode, *n;
+	struct kvfree_rcu_bulk_data *bnode;
 	struct list_head bulk_head[FREE_N_CHANNELS];
 	struct rcu_head *head;
 	struct kfree_rcu_cpu *krcp;
@@ -1576,7 +1576,7 @@ static void kfree_rcu_work(struct work_struct *work)
 	// Handle the first two channels.
 	for (i = 0; i < FREE_N_CHANNELS; i++) {
 		// Start from the tail page, so a GP is likely passed for it.
-		list_for_each_entry_safe(bnode, n, &bulk_head[i], list)
+		list_for_each_entry_mutable(bnode, &bulk_head[i], list)
 			kvfree_rcu_bulk(krcp, bnode, i);
 	}
 
@@ -1674,7 +1674,7 @@ static void
 kvfree_rcu_drain_ready(struct kfree_rcu_cpu *krcp)
 {
 	struct list_head bulk_ready[FREE_N_CHANNELS];
-	struct kvfree_rcu_bulk_data *bnode, *n;
+	struct kvfree_rcu_bulk_data *bnode;
 	struct rcu_head *head_ready = NULL;
 	unsigned long flags;
 	int i;
@@ -1683,7 +1683,7 @@ kvfree_rcu_drain_ready(struct kfree_rcu_cpu *krcp)
 	for (i = 0; i < FREE_N_CHANNELS; i++) {
 		INIT_LIST_HEAD(&bulk_ready[i]);
 
-		list_for_each_entry_safe_reverse(bnode, n, &krcp->bulk_head[i], list) {
+		list_for_each_entry_mutable_reverse(bnode, &krcp->bulk_head[i], list) {
 			if (!poll_state_synchronize_rcu_full(&bnode->gp_snap))
 				break;
 
@@ -1700,7 +1700,7 @@ kvfree_rcu_drain_ready(struct kfree_rcu_cpu *krcp)
 	raw_spin_unlock_irqrestore(&krcp->lock, flags);
 
 	for (i = 0; i < FREE_N_CHANNELS; i++) {
-		list_for_each_entry_safe(bnode, n, &bulk_ready[i], list)
+		list_for_each_entry_mutable(bnode, &bulk_ready[i], list)
 			kvfree_rcu_bulk(krcp, bnode, i);
 	}
 

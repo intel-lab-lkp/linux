@@ -451,9 +451,9 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
  */
 static void cleanup_partial_anon_vmas(struct vm_area_struct *vma)
 {
-	struct anon_vma_chain *avc, *next;
+	struct anon_vma_chain *avc;
 
-	list_for_each_entry_safe(avc, next, &vma->anon_vma_chain, same_vma) {
+	list_for_each_entry_mutable(avc, &vma->anon_vma_chain, same_vma) {
 		list_del(&avc->same_vma);
 		anon_vma_chain_free(avc);
 	}
@@ -478,7 +478,7 @@ static void cleanup_partial_anon_vmas(struct vm_area_struct *vma)
  */
 void unlink_anon_vmas(struct vm_area_struct *vma)
 {
-	struct anon_vma_chain *avc, *next;
+	struct anon_vma_chain *avc;
 	struct anon_vma *active_anon_vma = vma->anon_vma;
 
 	/* Always hold mmap lock, read-lock on unmap possibly. */
@@ -496,7 +496,7 @@ void unlink_anon_vmas(struct vm_area_struct *vma)
 	 * Unlink each anon_vma chained to the VMA.  This list is ordered
 	 * from newest to oldest, ensuring the root anon_vma gets freed last.
 	 */
-	list_for_each_entry_safe(avc, next, &vma->anon_vma_chain, same_vma) {
+	list_for_each_entry_mutable(avc, &vma->anon_vma_chain, same_vma) {
 		struct anon_vma *anon_vma = avc->anon_vma;
 
 		anon_vma_interval_tree_remove(avc, &anon_vma->rb_root);
@@ -528,7 +528,7 @@ void unlink_anon_vmas(struct vm_area_struct *vma)
 	 * anon_vmas, destroy them. Could not do before due to __put_anon_vma()
 	 * needing to write-acquire the anon_vma->root->rwsem.
 	 */
-	list_for_each_entry_safe(avc, next, &vma->anon_vma_chain, same_vma) {
+	list_for_each_entry_mutable(avc, &vma->anon_vma_chain, same_vma) {
 		struct anon_vma *anon_vma = avc->anon_vma;
 
 		VM_WARN_ON(anon_vma->num_children);

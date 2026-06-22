@@ -329,9 +329,9 @@ static ssize_t total_bytes_show(struct kobject *kobj,
 static void damon_sysfs_scheme_regions_rm_dirs(
 		struct damon_sysfs_scheme_regions *regions)
 {
-	struct damon_sysfs_scheme_region *r, *next;
+	struct damon_sysfs_scheme_region *r;
 
-	list_for_each_entry_safe(r, next, &regions->regions_list, list) {
+	list_for_each_entry_mutable(r, &regions->regions_list, list) {
 		damos_sysfs_region_rm_dirs(r);
 		list_del(&r->list);
 		kobject_put(&r->kobj);

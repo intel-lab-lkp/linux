@@ -537,7 +537,6 @@ static void mem_pool_free(struct kmemleak_object *object)
  */
 static void free_object_rcu(struct rcu_head *rcu)
 {
-	struct hlist_node *tmp;
 	struct kmemleak_scan_area *area;
 	struct kmemleak_object *object =
 		container_of(rcu, struct kmemleak_object, rcu);
@@ -546,7 +545,7 @@ static void free_object_rcu(struct rcu_head *rcu)
 	 * Once use_count is 0 (guaranteed by put_object), there is no other
 	 * code accessing this object, hence no need for locking.
 	 */
-	hlist_for_each_entry_safe(area, tmp, &object->area_list, node) {
+	hlist_for_each_entry_mutable(area, &object->area_list, node) {
 		hlist_del(&area->node);
 		kmem_cache_free(scan_area_cache, area);
 	}
@@ -2324,14 +2323,14 @@ static const struct file_operations kmemleak_fops = {
 
 static void __kmemleak_do_cleanup(void)
 {
-	struct kmemleak_object *object, *tmp;
+	struct kmemleak_object *object;
 	unsigned int cnt = 0;
 
 	/*
 	 * Kmemleak has already been disabled, no need for RCU list traversal
 	 * or kmemleak_lock held.
 	 */
-	list_for_each_entry_safe(object, tmp, &object_list, object_list) {
+	list_for_each_entry_mutable(object, &object_list, object_list) {
 		__remove_object(object);
 		__delete_object(object);
 

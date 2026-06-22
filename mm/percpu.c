@@ -1741,7 +1741,7 @@ void __percpu *pcpu_alloc_noprof(size_t size, size_t align, bool reserved,
 	bool do_warn;
 	struct obj_cgroup *objcg = NULL;
 	static atomic_t warn_limit = ATOMIC_INIT(10);
-	struct pcpu_chunk *chunk, *next;
+	struct pcpu_chunk *chunk;
 	const char *err;
 	int slot, off, cpu, ret;
 	unsigned long flags;
@@ -1814,8 +1814,7 @@ void __percpu *pcpu_alloc_noprof(size_t size, size_t align, bool reserved,
 restart:
 	/* search through normal chunks */
 	for (slot = pcpu_size_to_slot(size); slot <= pcpu_free_slot; slot++) {
-		list_for_each_entry_safe(chunk, next, &pcpu_chunk_lists[slot],
-					 list) {
+		list_for_each_entry_mutable(chunk, &pcpu_chunk_lists[slot], list) {
 			off = pcpu_find_block_fit(chunk, bits, bit_align,
 						  is_atomic);
 			if (off < 0) {
@@ -1952,7 +1951,7 @@ static void pcpu_balance_free(bool empty_only)
 {
 	LIST_HEAD(to_free);
 	struct list_head *free_head = &pcpu_chunk_lists[pcpu_free_slot];
-	struct pcpu_chunk *chunk, *next;
+	struct pcpu_chunk *chunk;
 
 	lockdep_assert_held(&pcpu_lock);
 
@@ -1960,7 +1959,7 @@ static void pcpu_balance_free(bool empty_only)
 	 * There's no reason to keep around multiple unused chunks and VM
 	 * areas can be scarce.  Destroy all free chunks except for one.
 	 */
-	list_for_each_entry_safe(chunk, next, free_head, list) {
+	list_for_each_entry_mutable(chunk, free_head, list) {
 		WARN_ON(chunk->immutable);
 
 		/* spare the first one */
@@ -1975,7 +1974,7 @@ static void pcpu_balance_free(bool empty_only)
 		return;
 
 	spin_unlock_irq(&pcpu_lock);
-	list_for_each_entry_safe(chunk, next, &to_free, list) {
+	list_for_each_entry_mutable(chunk, &to_free, list) {
 		unsigned int rs, re;
 
 		for_each_set_bitrange(rs, re, chunk->populated, chunk->nr_pages) {

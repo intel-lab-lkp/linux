@@ -640,7 +640,7 @@ static void release_pte_folio(struct folio *folio)
 static void release_pte_pages(pte_t *pte, pte_t *_pte,
 		struct list_head *compound_pagelist)
 {
-	struct folio *folio, *tmp;
+	struct folio *folio;
 
 	while (--_pte >= pte) {
 		pte_t pteval = ptep_get(_pte);
@@ -658,7 +658,7 @@ static void release_pte_pages(pte_t *pte, pte_t *_pte,
 		release_pte_folio(folio);
 	}
 
-	list_for_each_entry_safe(folio, tmp, compound_pagelist, lru) {
+	list_for_each_entry_mutable(folio, compound_pagelist, lru) {
 		list_del(&folio->lru);
 		release_pte_folio(folio);
 	}
@@ -835,7 +835,7 @@ static void __collapse_huge_page_copy_succeeded(pte_t *pte,
 {
 	const unsigned long nr_pages = 1UL << order;
 	unsigned long end = address + (PAGE_SIZE * nr_pages);
-	struct folio *src, *tmp;
+	struct folio *src;
 	pte_t pteval;
 	pte_t *_pte;
 	unsigned int nr_ptes;
@@ -882,7 +882,7 @@ static void __collapse_huge_page_copy_succeeded(pte_t *pte,
 		}
 	}
 
-	list_for_each_entry_safe(src, tmp, compound_pagelist, lru) {
+	list_for_each_entry_mutable(src, compound_pagelist, lru) {
 		list_del(&src->lru);
 		node_stat_sub_folio(src, NR_ISOLATED_ANON +
 				folio_is_file_lru(src));
@@ -2244,7 +2244,7 @@ static enum scan_result collapse_file(struct mm_struct *mm, unsigned long addr,
 {
 	struct address_space *mapping = file->f_mapping;
 	struct page *dst;
-	struct folio *folio, *tmp, *new_folio;
+	struct folio *folio, *new_folio;
 	pgoff_t index = 0, end = start + HPAGE_PMD_NR;
 	LIST_HEAD(pagelist);
 	XA_STATE_ORDER(xas, &mapping->i_pages, start, HPAGE_PMD_ORDER);
@@ -2629,7 +2629,7 @@ immap_locked:
 	/*
 	 * The collapse has succeeded, so free the old folios.
 	 */
-	list_for_each_entry_safe(folio, tmp, &pagelist, lru) {
+	list_for_each_entry_mutable(folio, &pagelist, lru) {
 		list_del(&folio->lru);
 		lruvec_stat_mod_folio(folio, NR_FILE_PAGES,
 				      -folio_nr_pages(folio));
@@ -2654,7 +2654,7 @@ rollback:
 		shmem_uncharge(mapping->host, nr_none);
 	}
 
-	list_for_each_entry_safe(folio, tmp, &pagelist, lru) {
+	list_for_each_entry_mutable(folio, &pagelist, lru) {
 		list_del(&folio->lru);
 		folio_unlock(folio);
 		folio_putback_lru(folio);
