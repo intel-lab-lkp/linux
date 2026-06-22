@@ -1388,7 +1388,6 @@ static int vd56g3_detect(struct vd56g3 *sensor)
 
 static int vd56g3_subdev_init(struct vd56g3 *sensor)
 {
-	struct v4l2_subdev_state *state;
 	int ret;
 
 	/* Init remaining sub device ops */
@@ -1421,15 +1420,6 @@ static int vd56g3_subdev_init(struct vd56g3 *sensor)
 		goto err_ctrls;
 	}
 
-	/* Update controls according to the resolution set */
-	state = v4l2_subdev_lock_and_get_active_state(&sensor->sd);
-	ret = vd56g3_update_controls(sensor);
-	v4l2_subdev_unlock_state(state);
-	if (ret) {
-		dev_err(sensor->dev, "Controls update failed: %d\n", ret);
-		goto err_ctrls;
-	}
-
 	return 0;
 
 err_ctrls:
@@ -1452,6 +1442,7 @@ static void vd56g3_subdev_cleanup(struct vd56g3 *sensor)
 static int vd56g3_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
+	struct v4l2_subdev_state *state;
 	struct vd56g3 *sensor;
 	int ret;
 
@@ -1515,6 +1506,15 @@ static int vd56g3_probe(struct i2c_client *client)
 	if (ret) {
 		dev_err(dev, "V4l2 init failed: %d\n", ret);
 		goto err_power_off;
+	}
+
+	/* Update controls according to the resolution set */
+	state = v4l2_subdev_lock_and_get_active_state(&sensor->sd);
+	ret = vd56g3_update_controls(sensor);
+	v4l2_subdev_unlock_state(state);
+	if (ret) {
+		dev_err(sensor->dev, "Controls update failed: %d\n", ret);
+		goto err_subdev;
 	}
 
 	ret = v4l2_async_register_subdev(&sensor->sd);
