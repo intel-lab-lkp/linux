@@ -14,6 +14,10 @@
 #include <linux/stm.h>
 #include <uapi/linux/stm.h>
 
+#ifdef DEBUG
+#include <linux/trace_printk.h>
+#endif
+
 static ssize_t notrace
 dummy_stm_packet(struct stm_data *stm_data, unsigned int master,
 		 unsigned int channel, unsigned int packet, unsigned int flags,
