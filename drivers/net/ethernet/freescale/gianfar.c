@@ -502,17 +502,19 @@ static int gfar_parse_group(struct device_node *np,
 			    struct gfar_private *priv, const char *model)
 {
 	struct gfar_priv_grp *grp = &priv->gfargrp[priv->num_grps];
-	int i;
+	int err = -ENOMEM;
+	int i, allocated = 0;
 
 	for (i = 0; i < GFAR_NUM_IRQS; i++) {
 		grp->irqinfo[i] = kzalloc_obj(struct gfar_irqinfo);
 		if (!grp->irqinfo[i])
-			return -ENOMEM;
+			goto err_out;
+		allocated++;
 	}
 
 	grp->regs = of_iomap(np, 0);
 	if (!grp->regs)
-		return -ENOMEM;
+		goto err_out;
 
 	gfar_irq(grp, TX)->irq = irq_of_parse_and_map(np, 0);
 
@@ -522,8 +524,10 @@ static int gfar_parse_group(struct device_node *np,
 		gfar_irq(grp, ER)->irq = irq_of_parse_and_map(np, 2);
 		if (!gfar_irq(grp, TX)->irq ||
 		    !gfar_irq(grp, RX)->irq ||
-		    !gfar_irq(grp, ER)->irq)
-			return -EINVAL;
+		    !gfar_irq(grp, ER)->irq) {
+			err = -EINVAL;
+			goto err_out;
+		}
 	}
 
 	grp->priv = priv;
@@ -567,6 +571,13 @@ static int gfar_parse_group(struct device_node *np,
 	priv->num_grps++;
 
 	return 0;
+
+err_out:
+	for (i = 0; i < allocated; i++)
+		kfree(grp->irqinfo[i]);
+	if (grp->regs)
+		iounmap(grp->regs);
+	return err;
 }
 
 /* Reads the controller's registers to determine what interface
