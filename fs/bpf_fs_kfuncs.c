@@ -360,18 +360,18 @@ __bpf_kfunc int bpf_cgroup_read_xattr(struct cgroup *cgroup, const char *name__s
 #endif /* CONFIG_CGROUPS */
 
 /**
- * bpf_real_inode - get the real inode backing a dentry
- * @dentry: dentry to resolve
+ * bpf_real_inode - get the real inode backing a file
+ * @file: file to resolve
  *
- * If the dentry is on a union/overlay filesystem, return the underlying, real
+ * If the file is on a union/overlay filesystem, return the underlying, real
  * inode that hosts the data.  Otherwise return the inode attached to the
- * dentry itself.
+ * file itself.
  *
- * Return: The real inode backing the dentry, or NULL for a negative dentry.
+ * Return: The real inode backing the file, or NULL.
  */
-__bpf_kfunc struct inode *bpf_real_inode(struct dentry *dentry)
+__bpf_kfunc struct inode *bpf_real_inode(struct file *file)
 {
-	return d_real_inode(dentry);
+	return d_real_inode(file_dentry(file));
 }
 
 __bpf_kfunc_end_defs();
