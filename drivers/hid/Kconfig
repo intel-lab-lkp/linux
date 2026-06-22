@@ -1215,6 +1215,17 @@ config HID_HYPERV_MOUSE
 	help
 	Select this option to enable the Hyper-V mouse driver.
 
+config HID_HYPERX_HEADSET
+	tristate "HyperX headset devices"
+	depends on USB_HID
+	select POWER_SUPPLY
+	help
+	Support for HyperX headset devices.
+
+	Say Y here if you would like to enable support for HyperX headset devices.
+	To compile this driver as a module, choose M here: the module will be called
+	hid-hyperx-headset.
+
 config HID_SMARTJOYPLUS
 	tristate "SmartJoy PLUS PS2/USB adapter support"
 	help
