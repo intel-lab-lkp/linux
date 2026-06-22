@@ -741,6 +741,7 @@ static bool vga_arbiter_add_pci_device(struct pci_dev *pdev)
 	unsigned long flags;
 	struct pci_bus *bus;
 	struct pci_dev *bridge;
+	bool legacy_vga = pci_is_vga(pdev);
 	u16 cmd;
 
 	/* Allocate structure */
@@ -762,21 +763,23 @@ static bool vga_arbiter_add_pci_device(struct pci_dev *pdev)
 	}
 	vgadev->pdev = pdev;
 
-	/* By default, assume we decode everything */
-	vgadev->decodes = VGA_RSRC_LEGACY_IO | VGA_RSRC_LEGACY_MEM |
-			  VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
+	/* By default, assume VGA devices decode everything */
+	vgadev->decodes = VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
+	if (legacy_vga)
+		vgadev->decodes |= VGA_RSRC_LEGACY_IO | VGA_RSRC_LEGACY_MEM;
 
-	/* By default, mark it as decoding */
-	vga_decode_count++;
+	/* By default, mark legacy VGA devices as decoding */
+	if (vgadev->decodes & VGA_RSRC_LEGACY_MASK)
+		vga_decode_count++;
 
 	/*
 	 * Mark that we "own" resources based on our enables, we will
 	 * clear that below if the bridge isn't forwarding.
 	 */
 	pci_read_config_word(pdev, PCI_COMMAND, &cmd);
-	if (cmd & PCI_COMMAND_IO)
+	if (legacy_vga && (cmd & PCI_COMMAND_IO))
 		vgadev->owns |= VGA_RSRC_LEGACY_IO;
-	if (cmd & PCI_COMMAND_MEMORY)
+	if (legacy_vga && (cmd & PCI_COMMAND_MEMORY))
 		vgadev->owns |= VGA_RSRC_LEGACY_MEM;
 
 	/* Check if VGA cycles can get down to us */
@@ -796,7 +799,7 @@ static bool vga_arbiter_add_pci_device(struct pci_dev *pdev)
 	}
 
 	if (vga_is_boot_device(vgadev)) {
-		vgaarb_info(&pdev->dev, "setting as boot VGA device%s\n",
+		vgaarb_info(&pdev->dev, "setting as boot display device%s\n",
 			    vga_default_device() ?
 			    " (overriding previous)" : "");
 		vga_set_default_device(pdev);
@@ -1483,8 +1486,8 @@ static int pci_notify(struct notifier_block *nb, unsigned long action,
 
 	vgaarb_dbg(dev, "%s\n", __func__);
 
-	/* Only deal with VGA class devices */
-	if (!pci_is_vga(pdev))
+	/* Only deal with legacy VGA and other display controller devices */
+	if (!pci_is_vga_or_other_display(pdev))
 		return 0;
 
 	/*
@@ -1530,12 +1533,12 @@ static int __init vga_arb_device_init(void)
 
 	bus_register_notifier(&pci_bus_type, &pci_notifier);
 
-	/* Add all VGA class PCI devices by default */
+	/* Add legacy VGA and other display controller PCI devices by default */
 	pdev = NULL;
 	while ((pdev =
 		pci_get_subsys(PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID,
 			       PCI_ANY_ID, pdev)) != NULL) {
-		if (pci_is_vga(pdev))
+		if (pci_is_vga_or_other_display(pdev))
 			vga_arbiter_add_pci_device(pdev);
 	}
 

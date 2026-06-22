@@ -794,6 +794,20 @@ static inline bool pci_is_vga(struct pci_dev *pdev)
 }
 
 /**
+ * pci_is_vga_or_other_display - check if the PCI device is VGA or 0x0380
+ * @pdev: PCI device
+ *
+ * Return true for legacy VGA-compatible devices and for "other display
+ * controller" devices.  Some firmware-selected boot display devices expose
+ * class 0x0380 instead of PCI_CLASS_DISPLAY_VGA.
+ */
+static inline bool pci_is_vga_or_other_display(struct pci_dev *pdev)
+{
+	return pci_is_vga(pdev) ||
+		(pdev->class >> 8) == PCI_CLASS_DISPLAY_OTHER;
+}
+
+/**
  * pci_is_display - check if the PCI device is a display controller
  * @pdev: PCI device
  *
