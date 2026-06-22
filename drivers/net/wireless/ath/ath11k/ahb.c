@@ -536,8 +536,10 @@ static int ath11k_ahb_config_ext_irq(struct ath11k_base *ab)
 		irq_grp->grp_id = i;
 
 		irq_grp->napi_ndev = alloc_netdev_dummy(0);
-		if (!irq_grp->napi_ndev)
-			return -ENOMEM;
+		if (!irq_grp->napi_ndev) {
+			irq_grp->num_irq = 0;
+			goto err_request_irq;
+		}
 
 		netif_napi_add(irq_grp->napi_ndev, &irq_grp->napi,
 			       ath11k_ahb_ext_grp_napi_poll);
@@ -600,11 +602,25 @@ static int ath11k_ahb_config_ext_irq(struct ath11k_base *ab)
 			if (ret) {
 				ath11k_err(ab, "failed request_irq for %d\n",
 					   irq);
+				irq_grp->num_irq = j;
+				goto err_request_irq;
 			}
 		}
 	}
 
 	return 0;
+
+err_request_irq:
+	for ( ; i >= 0; i--) {
+		irq_grp = &ab->ext_irq_grp[i];
+		for (j = irq_grp->num_irq - 1; j >= 0; j--)
+			free_irq(ab->irq_num[irq_grp->irqs[j]], irq_grp);
+		if (irq_grp->napi_ndev) {
+			netif_napi_del(&irq_grp->napi);
+			free_netdev(irq_grp->napi_ndev);
+		}
+	}
+	return ret;
 }
 
 static int ath11k_ahb_config_irq(struct ath11k_base *ab)
@@ -629,8 +645,16 @@ static int ath11k_ahb_config_irq(struct ath11k_base *ab)
 		ret = request_irq(irq, ath11k_ahb_ce_interrupt_handler,
 				  IRQF_TRIGGER_RISING, irq_name[irq_idx],
 				  ce_pipe);
-		if (ret)
+		if (ret) {
+			ath11k_err(ab, "failed request_irq for %d\n", irq);
+			for (i--; i >= 0; i--) {
+				if (ath11k_ce_get_attr_flags(ab, i) & CE_ATTR_DIS_INTR)
+					continue;
+				free_irq(ab->irq_num[ATH11K_IRQ_CE0_OFFSET + i],
+					 &ab->ce.ce_pipe[i]);
+			}
 			return ret;
+		}
 
 		ab->irq_num[irq_idx] = irq;
 	}
