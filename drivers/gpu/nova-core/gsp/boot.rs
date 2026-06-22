@@ -38,7 +38,7 @@ impl super::Gsp {
     /// [`Self::unload`]) returned.
     pub(crate) fn boot(
         self: Pin<&mut Self>,
-        ctx: super::GspBootContext<'_>,
+        mut ctx: super::GspBootContext<'_>,
     ) -> Result<Option<super::UnloadBundle>> {
         let pdev = ctx.pdev;
         let bar = ctx.bar;
@@ -55,7 +55,7 @@ impl super::Gsp {
         let wpr_meta = Coherent::init(dev, GFP_KERNEL, GspFwWprMeta::new(&gsp_fw, &fb_layout))?;
 
         // Perform the chipset-specific boot sequence, and retrieve the unload bundle.
-        let (res, unload_bundle) = hal.boot(&self, &ctx, &fb_layout, &wpr_meta);
+        let (res, unload_bundle) = hal.boot(&self, &mut ctx, &fb_layout, &wpr_meta);
 
         // Display error for unload bundle if any, and convert to `Option`.
         let unload_bundle = unload_bundle
@@ -89,7 +89,7 @@ impl super::Gsp {
             self.cmdq
                 .send_command_no_wait(bar, commands::SetRegistry::new())?;
 
-            hal.post_boot(&self, &ctx, &gsp_fw)?;
+            hal.post_boot(&self, &mut ctx, &gsp_fw)?;
 
             // Wait until GSP is fully initialized.
             commands::wait_gsp_init_done(&self.cmdq)
