@@ -57,13 +57,18 @@ MODULE_PARM_DESC(fw_debug, "Enable printing of firmware debug messages");
 #define LG_ADDRESS_SPACE_DEBUG_MSG_START_ADR	0x3E8
 #define LG_ADDRESS_SPACE_DEBUG_MSG_END_ADR	0x5E8
 
-#define WMI_EVENT_GUID0	"E4FB94F9-7F2B-4173-AD1A-CD1D95086248"
-#define WMI_EVENT_GUID1	"023B133E-49D1-4E10-B313-698220140DC2"
-#define WMI_EVENT_GUID2	"37BE1AC0-C3F2-4B1F-BFBE-8FDEAF2814D6"
-#define WMI_EVENT_GUID3	"911BAD44-7DF8-4FBB-9319-BABA1C4B293B"
-#define WMI_METHOD_WMAB "C3A72B38-D3EF-42D3-8CBB-D5A57049F66D"
-#define WMI_METHOD_WMBB "2B4F501A-BD3C-4394-8DCF-00A7D2BC8210"
-#define WMI_EVENT_GUID  WMI_EVENT_GUID0
+#define LG_NOTIFY_TABLET_MODE_OFF	0x50
+#define LG_NOTIFY_TABLET_MODE_ON	0x51
+#define LG_NOTIFY_HOTKEY		0x80
+#define LG_NOTIFY_THERMAL		0x81
+#define LG_NOTIFY_MISC			0x82
+
+#define LG_OREP_READ_EC			0
+#define LG_OREP_WRITE_EC		1
+#define LG_OREP_DEBUG			2
+#define LG_OREP_UPDATE_SYSTEM_STATE	3
+#define LG_OREP_INTERCEPT_WMI_EVENTS	4
+#define LG_OREP_WAKE_ON_LAN		6
 
 #define SB_GGOV_METHOD  "\\_SB.GGOV"
 #define GOV_TLED        0x2020008
@@ -83,21 +88,7 @@ MODULE_PARM_DESC(fw_debug, "Enable printing of firmware debug messages");
 
 #define PLATFORM_NAME   "lg-laptop"
 
-MODULE_ALIAS("wmi:" WMI_EVENT_GUID0);
-MODULE_ALIAS("wmi:" WMI_EVENT_GUID1);
-MODULE_ALIAS("wmi:" WMI_EVENT_GUID2);
-MODULE_ALIAS("wmi:" WMI_EVENT_GUID3);
-MODULE_ALIAS("wmi:" WMI_METHOD_WMAB);
-MODULE_ALIAS("wmi:" WMI_METHOD_WMBB);
-
 static struct platform_device *pf_device;
-static struct input_dev *wmi_input_dev;
-
-static u32 inited;
-#define INIT_INPUT_WMI_0        0x01
-#define INIT_INPUT_WMI_2        0x02
-#define INIT_INPUT_ACPI         0x04
-#define INIT_SPARSE_KEYMAP      0x80
 
 static int battery_limit_use_wmbb;
 static bool kbd_backlight_available;
@@ -114,6 +105,36 @@ static const struct key_entry wmi_keymap[] = {
 					  */
 	{KE_END, 0}
 };
+
+static int lg_laptop_execute_orep(acpi_handle handle, u64 command, u64 value,
+				  unsigned long long *result)
+{
+	union acpi_object objs[] = {
+		{
+			.integer = {
+				.type = ACPI_TYPE_INTEGER,
+				.value = command,
+			},
+		},
+		{
+			.integer = {
+				.type = ACPI_TYPE_INTEGER,
+				.value = value,
+			},
+		}
+	};
+	struct acpi_object_list args = {
+		.count = ARRAY_SIZE(objs),
+		.pointer = objs,
+	};
+	acpi_status status;
+
+	status = acpi_evaluate_integer(handle, "OREP", &args, result);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	return 0;
+}
 
 static int ggov(u32 arg0)
 {
@@ -210,70 +231,6 @@ static union acpi_object *lg_wmbb(struct device *dev, u32 method_id, u32 arg1, u
 	}
 
 	return (union acpi_object *)buffer.pointer;
-}
-
-static void wmi_notify(union acpi_object *obj, void *context)
-{
-	long data = (long)context;
-	unsigned int brightness;
-
-	pr_debug("event guid %li\n", data);
-	if (!obj)
-		return;
-
-	if (obj->type == ACPI_TYPE_INTEGER) {
-		int eventcode = obj->integer.value;
-		struct key_entry *key;
-
-		if (eventcode == 0x10000000) {
-			if (kbd_backlight_available) {
-				brightness = get_kbd_backlight_level(kbd_backlight.dev->parent);
-				led_classdev_notify_brightness_hw_changed(&kbd_backlight,
-									  brightness);
-			}
-		} else {
-			key = sparse_keymap_entry_from_scancode(
-				wmi_input_dev, eventcode);
-			if (key && key->type == KE_KEY)
-				sparse_keymap_report_entry(wmi_input_dev,
-							   key, 1, true);
-		}
-	}
-
-	pr_debug("Type: %i    Eventcode: 0x%llx\n", obj->type,
-		 obj->integer.value);
-}
-
-static void wmi_input_setup(void)
-{
-	acpi_status status;
-
-	wmi_input_dev = input_allocate_device();
-	if (wmi_input_dev) {
-		wmi_input_dev->name = "LG WMI hotkeys";
-		wmi_input_dev->phys = "wmi/input0";
-		wmi_input_dev->id.bustype = BUS_HOST;
-
-		if (sparse_keymap_setup(wmi_input_dev, wmi_keymap, NULL) ||
-		    input_register_device(wmi_input_dev)) {
-			pr_info("Cannot initialize input device");
-			input_free_device(wmi_input_dev);
-			return;
-		}
-
-		inited |= INIT_SPARSE_KEYMAP;
-		status = wmi_install_notify_handler(WMI_EVENT_GUID0, wmi_notify,
-						    (void *)0);
-		if (ACPI_SUCCESS(status))
-			inited |= INIT_INPUT_WMI_0;
-
-		status = wmi_install_notify_handler(WMI_EVENT_GUID2, wmi_notify,
-						    (void *)2);
-		if (ACPI_SUCCESS(status))
-			inited |= INIT_INPUT_WMI_2;
-	} else {
-		pr_info("Cannot allocate input device");
-	}
 }
 
 static ssize_t fan_mode_store(struct device *dev,
@@ -634,25 +591,163 @@ static enum led_brightness kbd_backlight_get(struct led_classdev *cdev)
 
 static LED_DEVICE(kbd_backlight, 255, LED_BRIGHT_HW_CHANGED);
 
-static void wmi_input_destroy(void)
-{
-	if (inited & INIT_INPUT_WMI_2)
-		wmi_remove_notify_handler(WMI_EVENT_GUID2);
-
-	if (inited & INIT_INPUT_WMI_0)
-		wmi_remove_notify_handler(WMI_EVENT_GUID0);
-
-	if (inited & INIT_SPARSE_KEYMAP)
-		input_unregister_device(wmi_input_dev);
-
-	inited &= ~(INIT_INPUT_WMI_0 | INIT_INPUT_WMI_2 | INIT_SPARSE_KEYMAP);
-}
-
 static struct platform_driver pf_driver = {
 	.driver = {
 		   .name = PLATFORM_NAME,
 	}
 };
+
+static int lg_laptop_get_event_data(acpi_handle handle, u32 value, u32 *data)
+{
+	union acpi_object objs[] = {
+		{
+			.integer = {
+				.type = ACPI_TYPE_INTEGER,
+				.value = value,
+			},
+		}
+	};
+	struct acpi_object_list args = {
+		.count = ARRAY_SIZE(objs),
+		.pointer = objs,
+	};
+	unsigned long long result;
+	acpi_status status;
+
+	status = acpi_evaluate_integer(handle, "_WED", &args, &result);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	if (result > U32_MAX)
+		return -EPROTO;
+
+	*data = result;
+
+	return 0;
+}
+
+static void lg_laptop_handle_input_event(struct input_dev *input_dev, u32 value, u32 data)
+{
+	unsigned int kbd_brightness;
+
+	switch (value) {
+	case LG_NOTIFY_HOTKEY:
+		sparse_keymap_report_event(input_dev, data, 1, true);
+		break;
+	case LG_NOTIFY_THERMAL:
+		/* Currently not supported */
+		break;
+	case LG_NOTIFY_MISC:
+		switch (data) {
+		case 0x10000000:
+			if (!kbd_backlight_available)
+				break;
+
+			kbd_brightness = get_kbd_backlight_level(kbd_backlight.dev->parent);
+			led_classdev_notify_brightness_hw_changed(&kbd_backlight, kbd_brightness);
+			break;
+		default:
+			sparse_keymap_report_event(input_dev, data, 1, true);
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+static void lg_laptop_notify_handler(acpi_handle handle, u32 value, void *context)
+{
+	struct input_dev *input_dev = context;
+	u32 data;
+	int ret;
+
+	switch (value) {
+	case LG_NOTIFY_TABLET_MODE_OFF:
+	case LG_NOTIFY_TABLET_MODE_ON:
+		/* Already handled by intel-hid */
+		return;
+	case LG_NOTIFY_HOTKEY:
+	case LG_NOTIFY_THERMAL:
+	case LG_NOTIFY_MISC:
+		ret = lg_laptop_get_event_data(handle, value, &data);
+		if (ret < 0) {
+			dev_notice(input_dev->dev.parent, "Failed to get event data: %d\n", ret);
+			return;
+		}
+
+		dev_dbg(input_dev->dev.parent, "Received event %u (%u)\n", value, data);
+
+		lg_laptop_handle_input_event(input_dev, value, data);
+		return;
+	default:
+		dev_notice(input_dev->dev.parent, "Received unknown event %u\n", value);
+	}
+};
+
+static void lg_laptop_remove_notify_handler(void *context)
+{
+	acpi_handle handle = context;
+
+	acpi_remove_notify_handler(handle, ACPI_ALL_NOTIFY, lg_laptop_notify_handler);
+}
+
+static void lg_laptop_reenable_wmi_events(void *context)
+{
+	acpi_handle handle = context;
+	unsigned long long dummy;
+
+	lg_laptop_execute_orep(handle, LG_OREP_INTERCEPT_WMI_EVENTS, 0, &dummy);
+}
+
+static int lg_laptop_input_init(struct device *dev, acpi_handle handle)
+{
+	struct input_dev *input_dev;
+	unsigned long long result;
+	acpi_status status;
+	int ret;
+
+	if (!acpi_has_method(handle, "_WED"))
+		return 0;
+
+	input_dev = devm_input_allocate_device(dev);
+	if (!input_dev)
+		return -ENOMEM;
+
+	input_dev->name = "LG WMI hotkeys";
+	input_dev->phys = "wmi/input0";
+	input_dev->id.bustype = BUS_HOST;
+	ret = sparse_keymap_setup(input_dev, wmi_keymap, NULL);
+	if (ret < 0)
+		return ret;
+
+	ret = input_register_device(input_dev);
+	if (ret < 0)
+		return ret;
+
+	status = acpi_install_notify_handler(handle, ACPI_ALL_NOTIFY, lg_laptop_notify_handler,
+					     input_dev);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	ret = devm_add_action_or_reset(dev, lg_laptop_remove_notify_handler, handle);
+	if (ret < 0)
+		return ret;
+
+	if (acpi_has_method(handle, "OREP")) {
+		ret = lg_laptop_execute_orep(handle, LG_OREP_INTERCEPT_WMI_EVENTS, 1, &result);
+		if (ret < 0)
+			return ret;
+
+		if (result)
+			return -EIO;
+
+		ret = devm_add_action_or_reset(dev, lg_laptop_reenable_wmi_events, handle);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
 
 static acpi_status lg_laptop_address_space_write(struct device *dev, acpi_physical_address address,
 						 size_t size, u64 value)
@@ -865,10 +960,6 @@ static int acpi_probe(struct platform_device *pdev)
 	if (year >= 2019)
 		battery_limit_use_wmbb = 1;
 
-	ret = sysfs_create_group(&pf_device->dev.kobj, &dev_attribute_group);
-	if (ret)
-		goto out_platform_device;
-
 	/* LEDs are optional */
 	ret = devm_led_classdev_register(&pdev->dev, &kbd_backlight);
 	if (ret < 0)
@@ -878,7 +969,14 @@ static int acpi_probe(struct platform_device *pdev)
 
 	devm_led_classdev_register(&pdev->dev, &tpad_led);
 
-	wmi_input_setup();
+	ret = lg_laptop_input_init(&pdev->dev, device->handle);
+	if (ret < 0)
+		goto out_platform_device;
+
+	ret = sysfs_create_group(&pf_device->dev.kobj, &dev_attribute_group);
+	if (ret)
+		goto out_platform_device;
+
 	battery_hook_register(&battery_hook);
 
 	return 0;
@@ -895,7 +993,6 @@ static void acpi_remove(struct platform_device *pdev)
 	sysfs_remove_group(&pf_device->dev.kobj, &dev_attribute_group);
 
 	battery_hook_unregister(&battery_hook);
-	wmi_input_destroy();
 	platform_device_unregister(pf_device);
 	pf_device = NULL;
 	platform_driver_unregister(&pf_driver);
