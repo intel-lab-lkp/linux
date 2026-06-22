@@ -188,6 +188,12 @@ void f2fs_update_read_folio_count(struct f2fs_sb_info *sbi, struct folio *folio)
 	unsigned int order = folio_order(folio);
 	unsigned long flags;
 
+	/*
+	 * The f2fs_iostat tracepoint emits a fixed number of read folio order
+	 * buckets. Make sure every order fits so none is silently dropped.
+	 */
+	BUILD_BUG_ON(NR_PAGE_ORDERS > F2FS_IOSTAT_RD_FOLIO_ORDERS);
+
 	if (!sbi->iostat_enable)
 		return;
 
