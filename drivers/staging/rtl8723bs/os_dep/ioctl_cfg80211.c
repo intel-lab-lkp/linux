@@ -1152,7 +1152,7 @@ void rtw_cfg80211_surveydone_event_callback(struct adapter *padapter)
 static int rtw_cfg80211_set_probe_req_wpsp2pie(struct adapter *padapter, char *buf, int len)
 {
 	int ret = 0;
-	uint wps_ielen = 0;
+	unsigned int wps_ielen = 0;
 	u8 *wps_ie;
 	struct mlme_priv *pmlmepriv = &(padapter->mlmepriv);
 
@@ -1515,12 +1515,12 @@ static int rtw_cfg80211_set_wpa_ie(struct adapter *padapter, u8 *pie, size_t iel
 	}
 
 	{/* handle wps_ie */
-		uint wps_ielen;
+		unsigned int wps_ielen;
 		u8 *wps_ie;
 
 		wps_ie = rtw_get_wps_ie(buf, ielen, NULL, &wps_ielen);
 		if (wps_ie && wps_ielen > 0) {
-			padapter->securitypriv.wps_ie_len = min_t(uint, wps_ielen, MAX_WPS_IE_LEN);
+			padapter->securitypriv.wps_ie_len = min_t(unsigned int, wps_ielen, MAX_WPS_IE_LEN);
 			memcpy(padapter->securitypriv.wps_ie, wps_ie, padapter->securitypriv.wps_ie_len);
 			set_fwstate(&padapter->mlmepriv, WIFI_UNDER_WPS);
 		} else {
@@ -1911,7 +1911,7 @@ static int cfg80211_rtw_flush_pmksa(struct wiphy *wiphy,
 	return 0;
 }
 
-void rtw_cfg80211_indicate_sta_assoc(struct adapter *padapter, u8 *pmgmt_frame, uint frame_len)
+void rtw_cfg80211_indicate_sta_assoc(struct adapter *padapter, u8 *pmgmt_frame, unsigned int frame_len)
 {
 	struct wireless_dev *wdev = padapter->rtw_wdev;
 
@@ -2247,7 +2247,7 @@ static int rtw_add_beacon(struct adapter *adapter, const u8 *head, size_t head_l
 {
 	int ret = 0;
 	u8 *pbuf = NULL;
-	uint len, wps_ielen = 0;
+	unsigned int len, wps_ielen = 0;
 	struct mlme_priv *pmlmepriv = &(adapter->mlmepriv);
 
 	if (!check_fwstate(pmlmepriv, WIFI_AP_STATE))
@@ -2442,7 +2442,7 @@ exit:
 	return ret;
 }
 
-void rtw_cfg80211_rx_action(struct adapter *adapter, u8 *frame, uint frame_len, const char *msg)
+void rtw_cfg80211_rx_action(struct adapter *adapter, u8 *frame, unsigned int frame_len, const char *msg)
 {
 	s32 freq;
 	int channel;
