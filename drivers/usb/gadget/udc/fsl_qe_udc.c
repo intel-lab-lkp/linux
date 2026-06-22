@@ -2463,7 +2463,9 @@ static void qe_udc_release(struct device *dev)
 	struct qe_udc *udc = container_of(dev, struct qe_udc, gadget.dev);
 	int i;
 
-	complete(udc->done);
+	if (udc->done)
+		complete(udc->done);
+
 	cpm_muram_free(cpm_muram_offset(udc->ep_param[0]));
 	for (i = 0; i < USB_MAX_ENDPOINTS; i++)
 		udc->ep_param[i] = NULL;
@@ -2492,6 +2494,9 @@ static int qe_udc_probe(struct platform_device *ofdev)
 		dev_err(&ofdev->dev, "failed to initialize\n");
 		return -ENOMEM;
 	}
+
+	usb_initialize_gadget(&ofdev->dev, &udc->gadget,
+						qe_udc_release);
 
 	udc->soc_type = (unsigned long)device_get_match_data(&ofdev->dev);
 	udc->usb_regs = of_iomap(np, 0);
@@ -2579,8 +2584,7 @@ static int qe_udc_probe(struct platform_device *ofdev)
 		goto err4;
 	}
 
-	ret = usb_add_gadget_udc_release(&ofdev->dev, &udc->gadget,
-			qe_udc_release);
+	ret = usb_add_gadget(&udc->gadget);
 	if (ret)
 		goto err5;
 
@@ -2614,7 +2618,7 @@ err3:
 err2:
 	iounmap(udc->usb_regs);
 err1:
-	kfree(udc);
+	usb_put_gadget(&udc->gadget);
 	return ret;
 }
 
@@ -2637,9 +2641,8 @@ static void qe_udc_remove(struct platform_device *ofdev)
 	unsigned int size;
 	DECLARE_COMPLETION_ONSTACK(done);
 
-	usb_del_gadget_udc(&udc->gadget);
+	usb_del_gadget(&udc->gadget);
 
-	udc->done = &done;
 	tasklet_disable(&udc->rx_tasklet);
 
 	if (udc->nullmap) {
@@ -2679,6 +2682,8 @@ static void qe_udc_remove(struct platform_device *ofdev)
 
 	iounmap(udc->usb_regs);
 
+	udc->done = &done;
+	usb_put_gadget(&udc->gadget);
 	/* wait for release() of gadget.dev to free udc */
 	wait_for_completion(&done);
 }
