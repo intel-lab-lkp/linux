@@ -7,7 +7,7 @@
 #include <drv_types.h>
 
 
-uint rtw_remainder_len(struct pkt_file *pfile)
+unsigned int rtw_remainder_len(struct pkt_file *pfile)
 {
 	return (pfile->buf_len - ((SIZE_PTR)(pfile->cur_addr) - (SIZE_PTR)(pfile->buf_start)));
 }
