@@ -204,6 +204,15 @@ r535_gsp_msgq_get_entry(struct nvkm_gsp *gsp)
  *   The user is responsible for freeing the memory allocated for the GSP
  *   message pages after they have been processed.
  */
+/**
+ * r535_gsp_msgq_peek - Peek at next message in GSP command queue
+ * @gsp: GSP device
+ * @gsp_rpc_len: Expected RPC length
+ * @retries: Retry counter
+ *
+ * Return: Pointer to RPC message on success, or ERR_PTR() on error.
+ *         Never returns NULL.
+ */
 static void *
 r535_gsp_msgq_peek(struct nvkm_gsp *gsp, u32 gsp_rpc_len, int *retries)
 {
@@ -229,6 +238,14 @@ struct r535_gsp_msg_info {
 static void
 r535_gsp_msg_dump(struct nvkm_gsp *gsp, struct nvfw_gsp_rpc *msg, int lvl);
 
+/**
+ * r535_gsp_msgq_recv_one_elem - Receive one message element from GSP queue
+ * @gsp: GSP device
+ * @info: Message queue information
+ *
+ * Return: Pointer to received buffer on success, or ERR_PTR() on error.
+ *         Never returns NULL.
+ */
 static void *
 r535_gsp_msgq_recv_one_elem(struct nvkm_gsp *gsp,
 			    struct r535_gsp_msg_info *info)
@@ -283,6 +300,15 @@ r535_gsp_msgq_recv_one_elem(struct nvkm_gsp *gsp,
 	return buf;
 }
 
+/**
+ * r535_gsp_msgq_recv - Receive RPC message(s) from GSP queue
+ * @gsp: GSP device
+ * @gsp_rpc_len: Expected RPC length
+ * @retries: Retry counter
+ *
+ * Return: Pointer to received buffer on success, ERR_PTR() on error,
+ *         or NULL if RPC length is invalid.
+ */
 static void *
 r535_gsp_msgq_recv(struct nvkm_gsp *gsp, u32 gsp_rpc_len, int *retries)
 {
@@ -450,6 +476,20 @@ r535_gsp_msg_dump(struct nvkm_gsp *gsp, struct nvfw_gsp_rpc *msg, int lvl)
 	}
 }
 
+/**
+ * r535_gsp_msg_recv - Receive RPC message from GSP message queue
+ * @gsp: GSP device
+ * @fn: Expected RPC function number (0 to accept any)
+ * @gsp_rpc_len: Expected RPC length (0 for POLL mode)
+ *
+ * Return: Pointer to RPC message on success, ERR_PTR() on error.
+ *         When fn!=0: retries until timeout, returns ERR_PTR(-ETIMEDOUT)
+ *                    if no match found (never returns NULL for timeout).
+ *                    When fn!=0 and gsp_rpc_len==0 (POLL mode): returns
+ *                    NULL on successful message processing.
+ *         When fn==0: returns NULL if queue is drained or no matching
+ *                    message found without retrying.
+ */
 struct nvfw_gsp_rpc *
 r535_gsp_msg_recv(struct nvkm_gsp *gsp, int fn, u32 gsp_rpc_len)
 {
@@ -547,6 +587,17 @@ r535_gsp_rpc_poll(struct nvkm_gsp *gsp, u32 fn)
 	return 0;
 }
 
+/**
+ * r535_gsp_rpc_handle_reply - Handle RPC reply based on policy
+ * @gsp: GSP device
+ * @fn: RPC function number
+ * @policy: Reply policy (NOWAIT, NOSEQ, RECV, or POLL)
+ * @gsp_rpc_len: Expected RPC length
+ *
+ * Return: NULL when policy is NOWAIT or NOSEQ (no reply expected),
+ *         pointer to reply data on success, ERR_PTR() on error.
+ *         When policy is POLL: NULL on successful message processing.
+ */
 static void *
 r535_gsp_rpc_handle_reply(struct nvkm_gsp *gsp, u32 fn,
 			  enum nvkm_gsp_rpc_reply_policy policy,
@@ -574,6 +625,16 @@ r535_gsp_rpc_handle_reply(struct nvkm_gsp *gsp, u32 fn,
 	return repv;
 }
 
+/**
+ * r535_gsp_rpc_send - Send RPC message and handle reply
+ * @gsp: GSP device
+ * @payload: RPC payload to send
+ * @policy: Reply policy (NOWAIT, NOSEQ, RECV, or POLL)
+ * @gsp_rpc_len: Expected RPC length for reply
+ *
+ * Return: NULL if policy is NOWAIT/NOSEQ (no reply expected),
+ *         pointer to reply data on success, or ERR_PTR() on error.
+ */
 static void *
 r535_gsp_rpc_send(struct nvkm_gsp *gsp, void *payload,
 		  enum nvkm_gsp_rpc_reply_policy policy, u32 gsp_rpc_len)
@@ -601,6 +662,11 @@ r535_gsp_rpc_send(struct nvkm_gsp *gsp, void *payload,
 	return r535_gsp_rpc_handle_reply(gsp, fn, policy, gsp_rpc_len);
 }
 
+/**
+ * r535_gsp_rpc_done - Free an RPC message
+ * @gsp: GSP device
+ * @repv: Pointer to RPC payload data returned by r535_gsp_rpc_get() 
+ */
 static void
 r535_gsp_rpc_done(struct nvkm_gsp *gsp, void *repv)
 {
@@ -609,6 +675,15 @@ r535_gsp_rpc_done(struct nvkm_gsp *gsp, void *repv)
 	r535_gsp_msg_done(gsp, rpc);
 }
 
+/**
+ * r535_gsp_rpc_get - Allocate and initialize an RPC message
+ * @gsp: GSP device
+ * @fn: RPC function number
+ * @payload_size: Size of the payload
+ *
+ * Return: Pointer to RPC payload data on success, or ERR_PTR() on error.
+ *     Never returns NULL. 
+ */
 static void *
 r535_gsp_rpc_get(struct nvkm_gsp *gsp, u32 fn, u32 payload_size)
 {
@@ -628,6 +703,16 @@ r535_gsp_rpc_get(struct nvkm_gsp *gsp, u32 fn, u32 payload_size)
 	return rpc->data;
 }
 
+/**
+ * r535_gsp_rpc_push - Push RPC message to GSP and wait for reply
+ * @gsp: GSP device
+ * @payload: RPC payload to send
+ * @policy: Reply policy (NOWAIT, NOSEQ, RECV, or POLL)
+ * @gsp_rpc_len: Expected RPC length in the reply
+ *
+ * Return: NULL when policy is NOWAIT/NOSEQ (no reply expected),
+ *         pointer to reply data on success, or ERR_PTR() on error.
+ */
 static void *
 r535_gsp_rpc_push(struct nvkm_gsp *gsp, void *payload,
 		  enum nvkm_gsp_rpc_reply_policy policy, u32 gsp_rpc_len)
