@@ -107,12 +107,15 @@ static unsigned long default_nareas;
  * This is a single area with a single lock.
  *
  * @used:	The number of used IO TLB block.
+ * @used_hiwater: Per-area high-water mark of used slots. Updated under
+ *		@lock; read locklessly for approximate debugfs reporting.
  * @index:	The slot index to start searching in this area for next round.
  * @lock:	The lock to protect the above data structures in the map and
  *		unmap calls.
  */
 struct io_tlb_area {
 	unsigned long used;
+	unsigned long used_hiwater;
 	unsigned int index;
 	spinlock_t lock;
 };
@@ -959,40 +962,6 @@ static unsigned int wrap_area_index(struct io_tlb_pool *mem, unsigned int index)
 	return index;
 }
 
-/*
- * Track the total used slots with a global atomic value in order to have
- * correct information to determine the high water mark. The mem_used()
- * function gives imprecise results because there's no locking across
- * multiple areas.
- */
-#ifdef CONFIG_DEBUG_FS
-static void inc_used_and_hiwater(struct io_tlb_mem *mem, unsigned int nslots)
-{
-	unsigned long old_hiwater, new_used;
-
-	new_used = atomic_long_add_return(nslots, &mem->total_used);
-	old_hiwater = atomic_long_read(&mem->used_hiwater);
-	do {
-		if (new_used <= old_hiwater)
-			break;
-	} while (!atomic_long_try_cmpxchg(&mem->used_hiwater,
-					  &old_hiwater, new_used));
-}
-
-static void dec_used(struct io_tlb_mem *mem, unsigned int nslots)
-{
-	atomic_long_sub(nslots, &mem->total_used);
-}
-
-#else /* !CONFIG_DEBUG_FS */
-static void inc_used_and_hiwater(struct io_tlb_mem *mem, unsigned int nslots)
-{
-}
-static void dec_used(struct io_tlb_mem *mem, unsigned int nslots)
-{
-}
-#endif /* CONFIG_DEBUG_FS */
-
 #ifdef CONFIG_SWIOTLB_DYNAMIC
 #ifdef CONFIG_DEBUG_FS
 static void inc_transient_used(struct io_tlb_mem *mem, unsigned int nslots)
@@ -1132,9 +1101,10 @@ found:
 	 */
 	area->index = wrap_area_index(pool, index + nslots);
 	area->used += nslots;
+	if (area->used > area->used_hiwater)
+		area->used_hiwater = area->used;
 	spin_unlock_irqrestore(&area->lock, flags);
 
-	inc_used_and_hiwater(dev->dma_io_tlb_mem, nslots);
 	return slot_index;
 }
 
@@ -1295,29 +1265,12 @@ static int swiotlb_find_slots(struct device *dev, phys_addr_t orig_addr,
 
 #endif /* CONFIG_SWIOTLB_DYNAMIC */
 
-#ifdef CONFIG_DEBUG_FS
-
-/**
- * mem_used() - get number of used slots in an allocator
- * @mem:	Software IO TLB allocator.
- *
- * The result is accurate in this version of the function, because an atomic
- * counter is available if CONFIG_DEBUG_FS is set.
- *
- * Return: Number of used slots.
- */
-static unsigned long mem_used(struct io_tlb_mem *mem)
-{
-	return atomic_long_read(&mem->total_used);
-}
-
-#else /* !CONFIG_DEBUG_FS */
-
 /**
  * mem_pool_used() - get number of used slots in a memory pool
  * @pool:	Software IO TLB memory pool.
  *
- * The result is not accurate, see mem_used().
+ * Returns the sum of per-area used slot counts. The result is approximate
+ * since there is no locking across areas.
  *
  * Return: Approximate number of used slots.
  */
@@ -1327,7 +1280,7 @@ static unsigned long mem_pool_used(struct io_tlb_pool *pool)
 	unsigned long used = 0;
 
 	for (i = 0; i < pool->nareas; i++)
-		used += pool->areas[i].used;
+		used += READ_ONCE(pool->areas[i].used);
 	return used;
 }
 
@@ -1335,8 +1288,8 @@ static unsigned long mem_pool_used(struct io_tlb_pool *pool)
  * mem_used() - get number of used slots in an allocator
  * @mem:	Software IO TLB allocator.
  *
- * The result is not accurate, because there is no locking of individual
- * areas.
+ * Returns the sum of per-area used slot counts across all pools. The result
+ * is approximate since there is no locking across areas.
  *
  * Return: Approximate number of used slots.
  */
@@ -1356,8 +1309,6 @@ static unsigned long mem_used(struct io_tlb_mem *mem)
 	return mem_pool_used(&mem->defpool);
 #endif
 }
-
-#endif /* CONFIG_DEBUG_FS */
 
 /**
  * swiotlb_tbl_map_single() - bounce buffer map a single contiguous physical area
@@ -1508,8 +1459,6 @@ static void swiotlb_release_slots(struct device *dev, phys_addr_t tlb_addr,
 		mem->slots[i].list = ++count;
 	area->used -= nslots;
 	spin_unlock_irqrestore(&area->lock, flags);
-
-	dec_used(dev->dma_io_tlb_mem, nslots);
 }
 
 #ifdef CONFIG_SWIOTLB_DYNAMIC
@@ -1531,7 +1480,6 @@ static bool swiotlb_del_transient(struct device *dev, phys_addr_t tlb_addr,
 	if (!pool->transient)
 		return false;
 
-	dec_used(dev->dma_io_tlb_mem, pool->nslabs);
 	swiotlb_del_pool(dev, pool);
 	dec_transient_used(dev->dma_io_tlb_mem, pool->nslabs);
 	return true;
@@ -1710,20 +1658,53 @@ static int io_tlb_used_get(void *data, u64 *val)
 static int io_tlb_hiwater_get(void *data, u64 *val)
 {
 	struct io_tlb_mem *mem = data;
+	unsigned long hiwater = 0;
+	struct io_tlb_pool *pool;
+	int i;
 
-	*val = atomic_long_read(&mem->used_hiwater);
+#ifdef CONFIG_SWIOTLB_DYNAMIC
+	rcu_read_lock();
+	list_for_each_entry_rcu(pool, &mem->pools, node)
+		for (i = 0; i < pool->nareas; i++)
+			hiwater += READ_ONCE(pool->areas[i].used_hiwater);
+	rcu_read_unlock();
+#else
+	pool = &mem->defpool;
+	for (i = 0; i < pool->nareas; i++)
+		hiwater += READ_ONCE(pool->areas[i].used_hiwater);
+#endif
+	*val = hiwater;
 	return 0;
 }
 
 static int io_tlb_hiwater_set(void *data, u64 val)
 {
 	struct io_tlb_mem *mem = data;
+	struct io_tlb_pool *pool;
+	unsigned long flags;
+	int i;
 
 	/* Only allow setting to zero */
 	if (val != 0)
 		return -EINVAL;
 
-	atomic_long_set(&mem->used_hiwater, val);
+#ifdef CONFIG_SWIOTLB_DYNAMIC
+	rcu_read_lock();
+	list_for_each_entry_rcu(pool, &mem->pools, node)
+		for (i = 0; i < pool->nareas; i++) {
+			spin_lock_irqsave(&pool->areas[i].lock, flags);
+			pool->areas[i].used_hiwater = 0;
+			spin_unlock_irqrestore(&pool->areas[i].lock, flags);
+		}
+	rcu_read_unlock();
+#else
+	pool = &mem->defpool;
+	for (i = 0; i < pool->nareas; i++) {
+		spin_lock_irqsave(&pool->areas[i].lock, flags);
+		pool->areas[i].used_hiwater = 0;
+		spin_unlock_irqrestore(&pool->areas[i].lock, flags);
+	}
+#endif
 	return 0;
 }
 
