@@ -1246,7 +1246,8 @@ ssize_t bcm_vk_write(struct file *p_file,
 				&vk->to_v_msg_chan,
 				q_num,
 				get_msg_id(&entry->to_v_msg[0]));
-		goto write_free_ent;
+		bcm_vk_free_wkent(dev, entry);
+		return rc;
 	}
 
 	return count;
