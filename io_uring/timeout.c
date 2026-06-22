@@ -164,14 +164,14 @@ static void io_kill_timeout(struct io_kiocb *req, struct list_head *list)
 
 __cold void io_flush_timeouts(struct io_ring_ctx *ctx)
 {
-	struct io_timeout *timeout, *tmp;
+	struct io_timeout *timeout;
 	LIST_HEAD(list);
 	u32 seq;
 
 	raw_spin_lock_irq(&ctx->timeout_lock);
 	seq = READ_ONCE(ctx->cached_cq_tail) - atomic_read(&ctx->cq_timeouts);
 
-	list_for_each_entry_safe(timeout, tmp, &ctx->timeout_list, list) {
+	list_for_each_entry_mutable(timeout, &ctx->timeout_list, list) {
 		struct io_kiocb *req = cmd_to_io_kiocb(timeout);
 		u32 events_needed, events_got;
 
@@ -733,7 +733,7 @@ static bool io_match_task(struct io_kiocb *head, struct io_uring_task *tctx,
 __cold bool io_kill_timeouts(struct io_ring_ctx *ctx, struct io_uring_task *tctx,
 			     bool cancel_all)
 {
-	struct io_timeout *timeout, *tmp;
+	struct io_timeout *timeout;
 	LIST_HEAD(list);
 
 	/*
@@ -742,7 +742,7 @@ __cold bool io_kill_timeouts(struct io_ring_ctx *ctx, struct io_uring_task *tctx
 	 */
 	spin_lock(&ctx->completion_lock);
 	raw_spin_lock_irq(&ctx->timeout_lock);
-	list_for_each_entry_safe(timeout, tmp, &ctx->timeout_list, list) {
+	list_for_each_entry_mutable(timeout, &ctx->timeout_list, list) {
 		struct io_kiocb *req = cmd_to_io_kiocb(timeout);
 
 		if (io_match_task(req, tctx, cancel_all))

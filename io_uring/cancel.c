@@ -358,13 +358,12 @@ bool io_cancel_remove_all(struct io_ring_ctx *ctx, struct io_uring_task *tctx,
 			  struct hlist_head *list, bool cancel_all,
 			  bool (*cancel)(struct io_kiocb *))
 {
-	struct hlist_node *tmp;
 	struct io_kiocb *req;
 	bool found = false;
 
 	lockdep_assert_held(&ctx->uring_lock);
 
-	hlist_for_each_entry_safe(req, tmp, list, hash_node) {
+	hlist_for_each_entry_mutable(req, list, hash_node) {
 		if (!io_match_task_safe(req, tctx, cancel_all))
 			continue;
 		hlist_del_init(&req->hash_node);
@@ -379,12 +378,11 @@ int io_cancel_remove(struct io_ring_ctx *ctx, struct io_cancel_data *cd,
 		     unsigned int issue_flags, struct hlist_head *list,
 		     bool (*cancel)(struct io_kiocb *))
 {
-	struct hlist_node *tmp;
 	struct io_kiocb *req;
 	int nr = 0;
 
 	io_ring_submit_lock(ctx, issue_flags);
-	hlist_for_each_entry_safe(req, tmp, list, hash_node) {
+	hlist_for_each_entry_mutable(req, list, hash_node) {
 		if (!io_cancel_req_match(req, cd))
 			continue;
 		if (cancel(req))

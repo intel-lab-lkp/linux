@@ -734,7 +734,6 @@ __cold bool io_poll_remove_all(struct io_ring_ctx *ctx, struct io_uring_task *tc
 			       bool cancel_all)
 {
 	unsigned nr_buckets = 1U << ctx->cancel_table.hash_bits;
-	struct hlist_node *tmp;
 	struct io_kiocb *req;
 	bool found = false;
 	int i;
@@ -744,7 +743,7 @@ __cold bool io_poll_remove_all(struct io_ring_ctx *ctx, struct io_uring_task *tc
 	for (i = 0; i < nr_buckets; i++) {
 		struct io_hash_bucket *hb = &ctx->cancel_table.hbs[i];
 
-		hlist_for_each_entry_safe(req, tmp, &hb->list, hash_node) {
+		hlist_for_each_entry_mutable(req, &hb->list, hash_node) {
 			if (io_match_task_safe(req, tctx, cancel_all)) {
 				hlist_del_init(&req->hash_node);
 				io_poll_cancel_req(req);

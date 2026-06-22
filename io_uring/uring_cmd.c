@@ -49,13 +49,12 @@ void io_uring_cmd_cleanup(struct io_kiocb *req)
 bool io_uring_try_cancel_uring_cmd(struct io_ring_ctx *ctx,
 				   struct io_uring_task *tctx, bool cancel_all)
 {
-	struct hlist_node *tmp;
 	struct io_kiocb *req;
 	bool ret = false;
 
 	lockdep_assert_held(&ctx->uring_lock);
 
-	hlist_for_each_entry_safe(req, tmp, &ctx->cancelable_uring_cmd,
+	hlist_for_each_entry_mutable(req, &ctx->cancelable_uring_cmd,
 			hash_node) {
 		struct io_uring_cmd *cmd = io_kiocb_to_cmd(req,
 				struct io_uring_cmd);

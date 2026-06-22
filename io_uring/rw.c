@@ -1326,7 +1326,7 @@ int io_do_iopoll(struct io_ring_ctx *ctx, bool force_nonspin)
 {
 	unsigned int poll_flags = 0;
 	DEFINE_IO_COMP_BATCH(iob);
-	struct io_kiocb *req, *tmp;
+	struct io_kiocb *req;
 	int nr_events = 0;
 
 	/*
@@ -1372,7 +1372,7 @@ int io_do_iopoll(struct io_ring_ctx *ctx, bool force_nonspin)
 	if (!rq_list_empty(&iob.req_list))
 		iob.complete(&iob);
 
-	list_for_each_entry_safe(req, tmp, &ctx->iopoll_list, iopoll_node) {
+	list_for_each_entry_mutable(req, &ctx->iopoll_list, iopoll_node) {
 		/* order with io_complete_rw_iopoll(), e.g. ->result updates */
 		if (!smp_load_acquire(&req->iopoll_completed))
 			continue;
