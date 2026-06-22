@@ -4903,8 +4903,16 @@ static int decode_pnfs_layout_types(struct xdr_stream *xdr,
 	if (fsinfo->nlayouttypes == 0)
 		return 0;
 
+	/* Reject counts that would overflow the u32 multiplication below.
+	 * array_size() is not sufficient here: xdr_inline_decode() passes
+	 * nbytes through XDR_QUADLEN(((l)+3)>>2), which wraps SIZE_MAX to
+	 * a zero-word reservation rather than failing.
+	 */
+	if (fsinfo->nlayouttypes > U32_MAX / sizeof(__be32))
+		return -EIO;
+
 	/* Decode and set first layout type, move xdr->p past unused types */
-	p = xdr_inline_decode(xdr, fsinfo->nlayouttypes * 4);
+	p = xdr_inline_decode(xdr, fsinfo->nlayouttypes * sizeof(__be32));
 	if (unlikely(!p))
 		return -EIO;
 
