@@ -85,7 +85,9 @@ static ssize_t brightness_store(struct device *dev, struct device_attribute *att
 	if (!buffer)
 		return 0;
 
-	cytherm->brightness = simple_strtoul(buf, NULL, 10);
+	retval = kstrtoint(buf, 10, &cytherm->brightness);
+	if (retval < 0)
+		return retval;
    
 	if (cytherm->brightness > 0xFF)
 		cytherm->brightness = 0xFF;
@@ -217,7 +219,9 @@ static ssize_t port0_store(struct device *dev, struct device_attribute *attr, co
 	if (!buffer)
 		return 0;
 
-	tmp = simple_strtoul(buf, NULL, 10);
+	retval = kstrtoint(buf, 10, &tmp);
+	if (retval < 0)
+		return retval;
    
 	if (tmp > 0xFF)
 		tmp = 0xFF;
@@ -272,7 +276,9 @@ static ssize_t port1_store(struct device *dev, struct device_attribute *attr, co
 	if (!buffer)
 		return 0;
 
-	tmp = simple_strtoul(buf, NULL, 10);
+	retval = kstrtoint(buf, 10, &tmp);
+	if (retval < 0)
+		return retval;
    
 	if (tmp > 0xFF)
 		tmp = 0xFF;
