@@ -3,6 +3,7 @@
 #define _XE_I2C_H_
 
 #include <linux/bits.h>
+#include <linux/errno.h>
 #include <linux/notifier.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
@@ -12,6 +13,7 @@ struct fwnode_handle;
 struct i2c_adapter;
 struct i2c_client;
 struct irq_domain;
+struct regmap;
 struct platform_device;
 struct xe_device;
 struct xe_mmio;
@@ -40,6 +42,8 @@ struct xe_i2c {
 
 	struct irq_domain *irqdomain;
 	int adapter_irq;
+	struct i2c_client *smbus_alert;
+	struct regmap *regmap;
 
 	struct xe_i2c_endpoint ep;
 	struct device *drm_dev;
@@ -63,6 +67,17 @@ static inline void xe_i2c_irq_postinstall(struct xe_device *xe) { }
 static inline void xe_i2c_irq_reset(struct xe_device *xe) { }
 static inline void xe_i2c_pm_suspend(struct xe_device *xe) { }
 static inline void xe_i2c_pm_resume(struct xe_device *xe, bool d3cold) { }
+#endif
+
+#if IS_ENABLED(CONFIG_I2C_SMBUS)
+void xe_i2c_handle_smbus_alert(struct xe_i2c *i2c);
+int xe_i2c_register_smbus_alert(struct xe_i2c *i2c);
+#else
+static inline void xe_i2c_handle_smbus_alert(struct xe_i2c *i2c) { }
+static inline int xe_i2c_register_smbus_alert(struct xe_i2c *i2c)
+{
+	return -EOPNOTSUPP;
+}
 #endif
 
 #endif

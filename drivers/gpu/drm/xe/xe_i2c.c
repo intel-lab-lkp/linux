@@ -30,6 +30,7 @@
 #include "xe_device.h"
 #include "xe_i2c.h"
 #include "xe_mmio.h"
+#include "xe_platform_types.h"
 #include "xe_sriov.h"
 #include "xe_survivability_mode.h"
 
@@ -166,7 +167,7 @@ bool xe_i2c_present(struct xe_device *xe)
 
 static bool xe_i2c_irq_present(struct xe_device *xe)
 {
-	return xe->i2c && xe->i2c->adapter_irq;
+	return xe->i2c && (xe->i2c->adapter_irq || xe->i2c->smbus_alert);
 }
 
 /**
@@ -185,7 +186,10 @@ void xe_i2c_irq_handler(struct xe_device *xe, u32 master_ctl)
 		return;
 
 	/* Forward interrupt to I2C adapter */
-	generic_handle_irq_safe(xe->i2c->adapter_irq);
+	if (xe->i2c->smbus_alert)
+		xe_i2c_handle_smbus_alert(xe->i2c);
+	else
+		generic_handle_irq_safe(xe->i2c->adapter_irq);
 
 	/* Deassert after I2C adapter clears the interrupt */
 	xe_mmio_rmw32(mmio, I2C_CONFIG_CMD, 0, PCI_COMMAND_INTX_DISABLE);
@@ -235,6 +239,9 @@ static int xe_i2c_create_irq(struct xe_device *xe)
 	    xe_survivability_mode_is_boot_enabled(xe))
 		return 0;
 
+	if (xe->info.platform == XE_CRESCENTISLAND)
+		return xe_i2c_register_smbus_alert(i2c);
+
 	domain = irq_domain_create_linear(dev_fwnode(i2c->drm_dev), 1, &xe_i2c_irq_ops, NULL);
 	if (!domain)
 		return -ENOMEM;
@@ -247,6 +254,9 @@ static int xe_i2c_create_irq(struct xe_device *xe)
 
 static void xe_i2c_remove_irq(struct xe_i2c *i2c)
 {
+	if (i2c->smbus_alert)
+		i2c_unregister_device(i2c->smbus_alert);
+
 	if (!i2c->irqdomain)
 		return;
 
@@ -330,7 +340,6 @@ int xe_i2c_probe(struct xe_device *xe)
 {
 	struct device *drm_dev = xe->drm.dev;
 	struct xe_i2c_endpoint ep;
-	struct regmap *regmap;
 	struct xe_i2c *i2c;
 	int ret;
 
@@ -354,9 +363,9 @@ int xe_i2c_probe(struct xe_device *xe)
 	/* PCI PM isn't aware of this device, bring it up and match it with SGUnit state. */
 	xe_i2c_pm_resume(xe, true);
 
-	regmap = devm_regmap_init(drm_dev, NULL, i2c, &i2c_regmap_config);
-	if (IS_ERR(regmap))
-		return PTR_ERR(regmap);
+	i2c->regmap = devm_regmap_init(drm_dev, NULL, i2c, &i2c_regmap_config);
+	if (IS_ERR(i2c->regmap))
+		return PTR_ERR(i2c->regmap);
 
 	i2c->bus_notifier.notifier_call = xe_i2c_notifier;
 	ret = bus_register_notifier(&i2c_bus_type, &i2c->bus_notifier);
