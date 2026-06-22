@@ -17,10 +17,7 @@ use crate::{
         Falcon, //
     },
     fb::FbLayout,
-    fsp::{
-        FmcBootArgs,
-        Fsp, //
-    },
+    fsp::FmcBootArgs,
     gsp::{
         hal::{
             GspHal,
@@ -152,11 +149,11 @@ impl GspHal for Gh100 {
         let mut unload_bundle = Err(EAGAIN);
 
         let res = (|| {
+            let fsp = ctx.fsp.as_mut().ok_or(ENODEV)?;
+
             unload_bundle = Ok(crate::gsp::UnloadBundle(
                 KBox::new(FspUnloadBundle, GFP_KERNEL)? as KBox<dyn UnloadBundle>,
             ));
-
-            let mut fsp = Fsp::wait_secure_boot(dev, bar, chipset)?;
 
             let args = FmcBootArgs::new(
                 dev,
