@@ -407,10 +407,13 @@ static int __init hpfb_init(void)
 	err = copy_from_kernel_nofault(&i, (unsigned char *)INTFBVADDR + DIO_IDOFF, 1);
 
 	if (!err && (i == DIO_ID_FBUFFER) && topcat_sid_ok(sid = DIO_SECID(INTFBVADDR))) {
-		if (!request_mem_region(INTFBPADDR, DIO_DEVSIZE, "Internal Topcat"))
+		if (!request_mem_region(INTFBPADDR, DIO_DEVSIZE, "Internal Topcat")) {
+			dio_unregister_driver(&hpfb_driver);
 			return -EBUSY;
+		}
 		printk(KERN_INFO "Internal Topcat found (secondary id %02x)\n", sid);
 		if (hpfb_init_one(INTFBPADDR, INTFBVADDR)) {
+			dio_unregister_driver(&hpfb_driver);
 			return -ENOMEM;
 		}
 	}
