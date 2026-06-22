@@ -2196,7 +2196,14 @@ __latent_entropy struct task_struct *copy_process(
 	retval = -EAGAIN;
 #endif
 
-	p->default_timer_slack_ns = current->timer_slack_ns;
+	/*
+	 * RT/DL tasks run with timer_slack_ns forced to zero, but their
+	 * default_timer_slack_ns still carries the value to restore when
+	 * returning to a normal policy. Preserve that default across fork so
+	 * SCHED_RESET_ON_FORK children can restore a real slack value.
+	 */
+	p->default_timer_slack_ns = current->timer_slack_ns ?:
+				    current->default_timer_slack_ns;
 
 #ifdef CONFIG_PSI
 	p->psi_flags = 0;
