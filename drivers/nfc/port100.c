@@ -1618,6 +1618,8 @@ static void port100_disconnect(struct usb_interface *interface)
 	usb_kill_urb(dev->in_urb);
 	usb_kill_urb(dev->out_urb);
 
+	cancel_work_sync(&dev->cmd_complete_work);
+
 	usb_free_urb(dev->in_urb);
 	usb_free_urb(dev->out_urb);
 
