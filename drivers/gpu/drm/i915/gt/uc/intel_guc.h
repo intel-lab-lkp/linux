@@ -252,7 +252,7 @@ struct intel_guc {
 		 * @timestamp.lock: Lock protecting the below fields and
 		 * the engine stats.
 		 */
-		spinlock_t lock;
+		raw_spinlock_t lock;
 
 		/**
 		 * @timestamp.gt_stamp: 64-bit extended value of the GT

@@ -1330,7 +1330,7 @@ static ktime_t guc_engine_busyness(struct intel_engine_cs *engine, ktime_t *now)
 	bool in_reset;
 	intel_wakeref_t wakeref;
 
-	spin_lock_irqsave(&guc->timestamp.lock, flags);
+	raw_spin_lock_irqsave(&guc->timestamp.lock, flags);
 
 	/*
 	 * If a reset happened, we risk reading partially updated engine
@@ -1378,7 +1378,7 @@ static ktime_t guc_engine_busyness(struct intel_engine_cs *engine, ktime_t *now)
 	if (total > stats->total)
 		stats->total = total;
 
-	spin_unlock_irqrestore(&guc->timestamp.lock, flags);
+	raw_spin_unlock_irqrestore(&guc->timestamp.lock, flags);
 
 	return ns_to_ktime(stats->total);
 }
@@ -1442,7 +1442,7 @@ static void __reset_guc_busyness_stats(struct intel_guc *guc)
 	unsigned long flags;
 	ktime_t unused;
 
-	spin_lock_irqsave(&guc->timestamp.lock, flags);
+	raw_spin_lock_irqsave(&guc->timestamp.lock, flags);
 
 	guc_update_pm_timestamp(guc, &unused);
 	for_each_engine(engine, gt, id) {
@@ -1463,7 +1463,7 @@ static void __reset_guc_busyness_stats(struct intel_guc *guc)
 		stats->running = 0;
 	}
 
-	spin_unlock_irqrestore(&guc->timestamp.lock, flags);
+	raw_spin_unlock_irqrestore(&guc->timestamp.lock, flags);
 }
 
 static void __update_guc_busyness_running_state(struct intel_guc *guc)
@@ -1473,10 +1473,10 @@ static void __update_guc_busyness_running_state(struct intel_guc *guc)
 	enum intel_engine_id id;
 	unsigned long flags;
 
-	spin_lock_irqsave(&guc->timestamp.lock, flags);
+	raw_spin_lock_irqsave(&guc->timestamp.lock, flags);
 	for_each_engine(engine, gt, id)
 		engine->stats.guc.running = false;
-	spin_unlock_irqrestore(&guc->timestamp.lock, flags);
+	raw_spin_unlock_irqrestore(&guc->timestamp.lock, flags);
 }
 
 static void __update_guc_busyness_stats(struct intel_guc *guc)
@@ -1489,13 +1489,13 @@ static void __update_guc_busyness_stats(struct intel_guc *guc)
 
 	guc->timestamp.last_stat_jiffies = jiffies;
 
-	spin_lock_irqsave(&guc->timestamp.lock, flags);
+	raw_spin_lock_irqsave(&guc->timestamp.lock, flags);
 
 	guc_update_pm_timestamp(guc, &unused);
 	for_each_engine(engine, gt, id)
 		guc_update_engine_gt_clks(engine);
 
-	spin_unlock_irqrestore(&guc->timestamp.lock, flags);
+	raw_spin_unlock_irqrestore(&guc->timestamp.lock, flags);
 }
 
 static void __guc_context_update_stats(struct intel_context *ce)
@@ -1503,9 +1503,9 @@ static void __guc_context_update_stats(struct intel_context *ce)
 	struct intel_guc *guc = ce_to_guc(ce);
 	unsigned long flags;
 
-	spin_lock_irqsave(&guc->timestamp.lock, flags);
+	raw_spin_lock_irqsave(&guc->timestamp.lock, flags);
 	lrc_update_runtime(ce);
-	spin_unlock_irqrestore(&guc->timestamp.lock, flags);
+	raw_spin_unlock_irqrestore(&guc->timestamp.lock, flags);
 }
 
 static void guc_context_update_stats(struct intel_context *ce)
@@ -1661,9 +1661,9 @@ void intel_guc_busyness_unpark(struct intel_gt *gt)
 	if (!guc_submission_initialized(guc))
 		return;
 
-	spin_lock_irqsave(&guc->timestamp.lock, flags);
+	raw_spin_lock_irqsave(&guc->timestamp.lock, flags);
 	guc_update_pm_timestamp(guc, &unused);
-	spin_unlock_irqrestore(&guc->timestamp.lock, flags);
+	raw_spin_unlock_irqrestore(&guc->timestamp.lock, flags);
 	guc_enable_busyness_worker(guc);
 }
 
@@ -4865,7 +4865,7 @@ void intel_guc_submission_init_early(struct intel_guc *guc)
 	INIT_WORK(&guc->submission_state.reset_fail_worker,
 		  reset_fail_worker_func);
 
-	spin_lock_init(&guc->timestamp.lock);
+	raw_spin_lock_init(&guc->timestamp.lock);
 	INIT_DELAYED_WORK(&guc->timestamp.work, guc_timestamp_ping);
 
 	guc->submission_state.sched_disable_delay_ms = SCHED_DISABLE_DELAY_MS;
