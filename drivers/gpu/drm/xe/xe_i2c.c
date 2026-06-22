@@ -8,6 +8,7 @@
 #include <drm/drm_print.h>
 #include <linux/array_size.h>
 #include <linux/container_of.h>
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/i2c.h>
@@ -264,11 +265,49 @@ static void xe_i2c_remove_irq(struct xe_i2c *i2c)
 	irq_domain_remove(i2c->irqdomain);
 }
 
+#define IC_CON				0x00
+#define IC_TAR				0x04
+#define IC_SAR				0x08
+#define IC_ENABLE			0x6c
+#define IC_ENABLE_STATUS		0x9c
+
+/* See "Disabling DW_apb_i2c" in the DesignWare DW_abp_i2c databook. */
+static int xe_i2c_disable(struct xe_i2c *i2c)
+{
+	int timeout = 100;
+	u32 status;
+
+	do {
+		/* Disable.*/
+		xe_mmio_rmw32(i2c->mmio, XE_REG(IC_ENABLE + I2C_MEM_SPACE_OFFSET), 1, 0);
+
+		/* Verify. */
+		status = xe_mmio_read32(i2c->mmio, XE_REG(IC_ENABLE_STATUS + I2C_MEM_SPACE_OFFSET));
+		if (!(status & 1))
+			return 0;
+
+		/* Repeat. */
+		usleep_range(25, 250);
+	} while (timeout--);
+
+	return -ETIMEDOUT;
+}
+
 static int xe_i2c_read(void *context, unsigned int reg, unsigned int *val)
 {
 	struct xe_i2c *i2c = context;
 
-	*val = xe_mmio_read32(i2c->mmio, XE_REG(reg + I2C_MEM_SPACE_OFFSET));
+	switch (reg) {
+	case IC_ENABLE:
+		*val = i2c->ic_enable;
+		break;
+	case IC_ENABLE_STATUS:
+		*val = i2c->ic_enable & 1; /* NOTE: Checking only the enable bit */
+		break;
+	default:
+		*val = xe_mmio_read32(i2c->mmio, XE_REG(reg + I2C_MEM_SPACE_OFFSET));
+		break;
+	}
 
 	return 0;
 }
@@ -276,8 +315,30 @@ static int xe_i2c_read(void *context, unsigned int reg, unsigned int *val)
 static int xe_i2c_write(void *context, unsigned int reg, unsigned int val)
 {
 	struct xe_i2c *i2c = context;
+	int ret;
 
-	xe_mmio_write32(i2c->mmio, XE_REG(reg + I2C_MEM_SPACE_OFFSET), val);
+	switch (reg) {
+	case IC_CON:
+	case IC_TAR:
+	case IC_SAR:
+		/* Disable the controller. */
+		ret = xe_i2c_disable(i2c);
+		if (ret)
+			return ret;
+
+		/* Write the register. */
+		xe_mmio_write32(i2c->mmio, XE_REG(reg + I2C_MEM_SPACE_OFFSET), val);
+
+		/* Enable the controller. */
+		xe_mmio_rmw32(i2c->mmio, XE_REG(IC_ENABLE + I2C_MEM_SPACE_OFFSET), 0, 1);
+		break;
+	case IC_ENABLE:
+		i2c->ic_enable = val;
+		break;
+	default:
+		xe_mmio_write32(i2c->mmio, XE_REG(reg + I2C_MEM_SPACE_OFFSET), val);
+		break;
+	}
 
 	return 0;
 }
