@@ -1851,6 +1851,8 @@ static void nfs_commit_release_pages(struct nfs_commit_data *data)
 		/* Latency breaker */
 		cond_resched();
 	}
+	if (status >= 0)
+		nfs_set_cache_invalid(data->inode, NFS_INO_INVALID_BLOCKS);
 
 	nfs_init_cinfo(&cinfo, data->inode, data->dreq);
 	nfs_commit_end(cinfo.mds);
