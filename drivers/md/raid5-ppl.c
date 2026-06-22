@@ -145,7 +145,7 @@ struct ppl_io_unit {
 
 	struct list_head stripe_list;	/* stripes added to the io_unit */
 	atomic_t pending_stripes;	/* how many stripes not written to raid */
-	atomic_t pending_flushes;	/* how many disk flushes are in progress */
+	refcount_t pending_flushes;	/* how many disk flushes are in progress */
 
 	bool submitted;			/* true if write to log started */
 
@@ -249,7 +249,7 @@ static struct ppl_io_unit *ppl_new_iounit(struct ppl_log *log,
 	INIT_LIST_HEAD(&io->log_sibling);
 	INIT_LIST_HEAD(&io->stripe_list);
 	atomic_set(&io->pending_stripes, 0);
-	atomic_set(&io->pending_flushes, 0);
+	refcount_set(&io->pending_flushes, 1);
 	bio_init(&io->bio, log->rdev->bdev, io->biovec, PPL_IO_INLINE_BVECS,
 		 REQ_OP_WRITE | REQ_FUA);
 
@@ -599,7 +599,7 @@ static void ppl_flush_endio(struct bio *bio)
 
 	bio_put(bio);
 
-	if (atomic_dec_and_test(&io->pending_flushes)) {
+	if (refcount_dec_and_test(&io->pending_flushes)) {
 		ppl_io_unit_finished(io);
 		md_wakeup_thread(conf->mddev->thread);
 	}
@@ -611,10 +611,7 @@ static void ppl_do_flush(struct ppl_io_unit *io)
 	struct ppl_conf *ppl_conf = log->ppl_conf;
 	struct r5conf *conf = ppl_conf->mddev->private;
 	int raid_disks = conf->raid_disks;
-	int flushed_disks = 0;
 	int i;
-
-	atomic_set(&io->pending_flushes, raid_disks);
 
 	for_each_set_bit(i, &log->disk_flush_bitmap, raid_disks) {
 		struct md_rdev *rdev;
@@ -632,20 +629,18 @@ static void ppl_do_flush(struct ppl_io_unit *io)
 					       GFP_NOIO, &ppl_conf->flush_bs);
 			bio->bi_private = io;
 			bio->bi_end_io = ppl_flush_endio;
+			refcount_inc(&io->pending_flushes);
 
 			pr_debug("%s: dev: %ps\n", __func__, bio->bi_bdev);
 
 			submit_bio(bio);
-			flushed_disks++;
 		}
 	}
 
 	log->disk_flush_bitmap = 0;
 
-	for (i = flushed_disks ; i < raid_disks; i++) {
-		if (atomic_dec_and_test(&io->pending_flushes))
-			ppl_io_unit_finished(io);
-	}
+	if (refcount_dec_and_test(&io->pending_flushes))
+		ppl_io_unit_finished(io);
 }
 
 static inline bool ppl_no_io_unit_submitted(struct r5conf *conf,
