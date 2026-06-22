@@ -1268,6 +1268,7 @@ static int wmi_create_device(struct device *wmi_bus_dev,
 static int wmi_add_device(struct platform_device *pdev, struct wmi_device *wdev)
 {
 	struct device_link *link;
+	int ret;
 
 	/*
 	 * Many aggregate WMI drivers do not use -EPROBE_DEFER when they
@@ -1282,7 +1283,11 @@ static int wmi_add_device(struct platform_device *pdev, struct wmi_device *wdev)
 	if (!link)
 		return -EINVAL;
 
-	return device_add(&wdev->dev);
+	ret = device_add(&wdev->dev);
+
+	if (ret)
+		device_link_del(link);
+	return ret;
 }
 
 /*
