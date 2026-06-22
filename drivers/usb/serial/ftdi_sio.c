@@ -2343,6 +2343,26 @@ static void ftdi_gpio_remove(struct usb_serial_port *port) { }
 static unsigned long urb_defer_timer_ns;
 
 /*
+ * Optional small inter-batch defer applied to low_latency ports, in
+ * nanoseconds.
+ *
+ * Default 0 keeps low_latency ports fully bypassed (immediate read-URB
+ * resubmit, lowest latency), which pins a host-controller DMA channel
+ * almost continuously.  On a controller that does not enforce
+ * DMA-channel fairness only about two such ports can run at high baud
+ * before control transfers and other devices on the bus are starved.
+ *
+ * A small non-zero value (e.g. 2000000 = 2 ms) instead paces each
+ * low_latency port with that interval, roughly halving its
+ * DMA-channel occupancy so more low_latency ports can coexist, at the
+ * cost of a bounded read latency (~the value, still well under the
+ * urb_defer_timer_ns default).  Read live, so runtime changes apply
+ * immediately to every low_latency port; clamped to
+ * FTDI_URB_DEFER_MAX_NS.
+ */
+static unsigned long low_latency_defer_ns;
+
+/*
  * hrtimer callback that fires after the configured defer interval and
  * un-throttles the port so the generic submit-read-urbs path can run
  * again. The timer is armed with HRTIMER_MODE_REL, so this runs in
@@ -2854,11 +2874,13 @@ static void ftdi_read_bulk_callback(struct urb *urb)
 
 	/*
 	 * Latency-critical ports opt out of the inter-batch defer via
-	 * /sys/.../low_latency. Delegate straight to the generic
-	 * callback so the data stream sees no added latency on this
-	 * port even when the defer is globally enabled.
+	 * /sys/.../low_latency.  With low_latency_defer_ns == 0 (default),
+	 * delegate straight to the generic callback so the data stream
+	 * sees no added latency on this port.  A non-zero
+	 * low_latency_defer_ns instead paces this port with that (small)
+	 * interval to bound its DMA-channel occupancy.
 	 */
-	if (priv->low_latency) {
+	if (priv->low_latency && !low_latency_defer_ns) {
 		usb_serial_generic_read_bulk_callback(urb);
 		return;
 	}
@@ -2915,7 +2937,7 @@ static void ftdi_read_bulk_callback(struct urb *urb)
 	 * so the data stream does not stall in the narrow window
 	 * before the store's unthrottle runs.
 	 */
-	if (priv->low_latency) {
+	if (priv->low_latency && !low_latency_defer_ns) {
 		spin_unlock_irqrestore(&priv->urb_defer_lock, flags);
 		ftdi_atomic_submit_read_urbs(port);
 		return;
@@ -2931,10 +2953,21 @@ static void ftdi_read_bulk_callback(struct urb *urb)
 	spin_unlock_irqrestore(&priv->urb_defer_lock, flags);
 
 	if (tty) {
+		ktime_t defer_kt = priv->urb_defer_ktime;
+
+		/*
+		 * A low_latency port that is being paced (low_latency_defer_ns
+		 * != 0) uses that small per-port interval instead of the
+		 * global inter-batch defer.
+		 */
+		if (priv->low_latency)
+			defer_kt = ns_to_ktime(min_t(unsigned long,
+						     low_latency_defer_ns,
+						     FTDI_URB_DEFER_MAX_NS));
+
 		usb_serial_generic_throttle(tty);
 		if (start_timer)
-			hrtimer_start(&priv->urb_defer_timer,
-				      priv->urb_defer_ktime,
+			hrtimer_start(&priv->urb_defer_timer, defer_kt,
 				      HRTIMER_MODE_REL);
 		tty_kref_put(tty);
 	} else {
@@ -3307,6 +3340,9 @@ module_usb_serial_driver(serial_drivers, id_table_combined);
 module_param(urb_defer_timer_ns, ulong, 0644);
 MODULE_PARM_DESC(urb_defer_timer_ns,
 		 "Inter-batch defer between read-URB resubmissions, in nanoseconds. 0 (default) disables the defer. Max 100000000 = 100 ms.");
+module_param(low_latency_defer_ns, ulong, 0644);
+MODULE_PARM_DESC(low_latency_defer_ns,
+		 "Inter-batch defer applied to low_latency ports, in nanoseconds. 0 (default) bypasses the defer entirely on low_latency ports; a small value (e.g. 2000000 = 2 ms) paces them so more can run without starving control transfers. Max 100000000 = 100 ms.");
 
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);
