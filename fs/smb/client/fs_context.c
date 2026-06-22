@@ -1496,11 +1496,11 @@ static int smb3_fs_context_parse_param(struct fs_context *fc,
 		ctx->acdirmax = ctx->acregmax = HZ * result.uint_32;
 		break;
 	case Opt_closetimeo:
-		if (result.uint_32 > SMB3_MAX_DCLOSETIMEO / HZ) {
-			cifs_errorf(fc, "closetimeo too large\n");
+		if (result.uint_32 != 0) {
+			cifs_errorf(fc, "closetimeo must be 0, deferred close is disabled\n");
 			goto cifs_parse_mount_err;
 		}
-		ctx->closetimeo = HZ * result.uint_32;
+		ctx->closetimeo = 0;
 		break;
 	case Opt_echo_interval:
 		if (result.uint_32 < SMB_ECHO_INTERVAL_MIN ||
@@ -2014,7 +2014,7 @@ int smb3_init_fs_context(struct fs_context *fc)
 
 	ctx->acregmax = CIFS_DEF_ACTIMEO;
 	ctx->acdirmax = CIFS_DEF_ACTIMEO;
-	ctx->closetimeo = SMB3_DEF_DCLOSETIMEO;
+	ctx->closetimeo = 0;
 	ctx->max_cached_dirs = MAX_CACHED_FIDS;
 	/* Most clients set timeout to 0, allows server to use its default */
 	ctx->handle_timeout = 0; /* See MS-SMB2 spec section 2.2.14.2.12 */
