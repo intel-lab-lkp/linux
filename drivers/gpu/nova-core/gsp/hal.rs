@@ -13,13 +13,11 @@ use kernel::{
 use crate::{
     fb::FbLayout,
     firmware::gsp::GspFirmware,
-    gpu::{
-        Architecture,
-        Chipset, //
-    },
+    gpu::Chipset,
     gsp::{
         Gsp,
         GspBootContext,
+        GspBootMethod,
         GspFwWprMeta, //
     },
 };
@@ -66,12 +64,14 @@ pub(super) trait GspHal: Send {
 
 /// Returns the GSP HAL to be used for `chipset`.
 pub(super) fn gsp_hal(chipset: Chipset) -> &'static dyn GspHal {
-    match chipset.arch() {
-        Architecture::Turing => tu102::TU102_HAL,
-        Architecture::Ampere if matches!(chipset, Chipset::GA100) => tu102::TU102_HAL,
-        Architecture::Ampere | Architecture::Ada => ga102::GA102_HAL,
-        Architecture::Hopper | Architecture::BlackwellGB10x | Architecture::BlackwellGB20x => {
-            gh100::GH100_HAL
-        }
+    // The GSP HAL is entirely determined by the boot method.
+    match chipset.gsp_boot_method() {
+        GspBootMethod::Sec2 {
+            needs_fwsec_bootloader: true,
+        } => tu102::TU102_HAL,
+        GspBootMethod::Sec2 {
+            needs_fwsec_bootloader: false,
+        } => ga102::GA102_HAL,
+        GspBootMethod::Fsp => gh100::GH100_HAL,
     }
 }

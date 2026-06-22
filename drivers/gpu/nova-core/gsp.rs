@@ -38,7 +38,10 @@ use crate::{
         sec2::Sec2 as Sec2Falcon,
         Falcon, //
     },
-    gpu::Chipset,
+    gpu::{
+        Architecture,
+        Chipset, //
+    },
     gsp::{
         cmdq::Cmdq,
         fw::{
@@ -214,6 +217,43 @@ impl Gsp {
     /// Query the GSP for the static GPU information.
     pub(crate) fn get_static_info(&self, bar: Bar0<'_>) -> Result<commands::GetGspStaticInfoReply> {
         self.cmdq.send_command(bar, commands::GetGspStaticInfo)
+    }
+}
+
+/// Method used to boot the GSP.
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub(crate) enum GspBootMethod {
+    /// GSP is booted by running FWSEC-FRTS on the GSP falcon, followed by the Booter loader on the
+    /// SEC2 falcon.
+    ///
+    /// `needs_fwsec_bootloader` indicates whether the chipset requires the PIO-loaded bootloader in
+    /// order to boot FWSEC.
+    Sec2 { needs_fwsec_bootloader: bool },
+    /// GSP is booted via FSP Chain-of-Trust.
+    Fsp,
+}
+
+impl Chipset {
+    /// Returns the method used to boot the GSP on this chipset.
+    pub(crate) const fn gsp_boot_method(self) -> GspBootMethod {
+        match self.arch() {
+            // All Turing chipsets require the FWSEC bootloader.
+            Architecture::Turing => GspBootMethod::Sec2 {
+                needs_fwsec_bootloader: true,
+            },
+            // GA100 also requires the FWSEC bootloader.
+            Architecture::Ampere if matches!(self, Self::GA100) => GspBootMethod::Sec2 {
+                needs_fwsec_bootloader: true,
+            },
+            // Other Ampere chipsets, as well as Ada chipsets, do not require the FWSEC bootloader.
+            Architecture::Ampere | Architecture::Ada => GspBootMethod::Sec2 {
+                needs_fwsec_bootloader: false,
+            },
+            // Hopper and more recent use the FSP Chain-of-Trust boot method.
+            Architecture::Hopper | Architecture::BlackwellGB10x | Architecture::BlackwellGB20x => {
+                GspBootMethod::Fsp
+            }
+        }
     }
 }
 

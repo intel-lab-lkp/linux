@@ -21,6 +21,7 @@ use crate::{
         FalconFirmware, //
     },
     gpu,
+    gsp::GspBootMethod,
     num::{
         FromSafeCast,
         IntoSafeCast, //
@@ -432,17 +433,21 @@ impl<const N: usize> ModInfoBuilder<N> {
 
         // FSP-based chipsets (Hopper, Blackwell and later) boot the GSP via the FMC image loaded by
         // FSP. Older chipsets use the SEC2 booter instead.
-        let this = if chipset.uses_fsp() {
-            this.make_entry_file(name, "fmc")
-        } else {
-            this.make_entry_file(name, "booter_load")
-                .make_entry_file(name, "booter_unload")
-        };
+        match chipset.gsp_boot_method() {
+            GspBootMethod::Sec2 {
+                needs_fwsec_bootloader,
+            } => {
+                let mut this = this
+                    .make_entry_file(name, "booter_load")
+                    .make_entry_file(name, "booter_unload");
 
-        if chipset.needs_fwsec_bootloader() {
-            this.make_entry_file(name, "gen_bootloader")
-        } else {
-            this
+                if needs_fwsec_bootloader {
+                    this = this.make_entry_file(name, "gen_bootloader")
+                }
+
+                this
+            }
+            GspBootMethod::Fsp => this.make_entry_file(name, "fmc"),
         }
     }
 
