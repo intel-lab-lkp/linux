@@ -329,7 +329,7 @@ void intel_cmtg_set_vrr_ctl(const struct intel_crtc_state *crtc_state)
 	if (crtc_state->cmrr.enable)
 		vrr_ctl |= VRR_CTL_CMRR_ENABLE;
 
-	intel_de_write(display, TRANS_VRR_CTL(display, cmtg_transcoder), vrr_ctl);
+	intel_de_write_fw(display, TRANS_VRR_CTL(display, cmtg_transcoder), vrr_ctl);
 }
 
 void intel_cmtg_set_m_n(const struct intel_crtc_state *crtc_state)
@@ -341,8 +341,8 @@ void intel_cmtg_set_m_n(const struct intel_crtc_state *crtc_state)
 	if (!intel_cmtg_is_allowed(crtc_state))
 		return;
 
-	intel_de_write(display, PIPE_LINK_M1(display, cmtg_transcoder), m_n->link_m);
-	intel_de_write(display, PIPE_LINK_N1(display, cmtg_transcoder), m_n->link_n);
+	intel_de_write_fw(display, PIPE_LINK_M1(display, cmtg_transcoder), m_n->link_m);
+	intel_de_write_fw(display, PIPE_LINK_N1(display, cmtg_transcoder), m_n->link_n);
 }
 
 static void intel_cmtg_enable_sync(const struct intel_crtc_state *crtc_state)
