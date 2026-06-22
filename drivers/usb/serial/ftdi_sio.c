@@ -30,6 +30,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
+#include <linux/delay.h>
 #include <linux/tty.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
@@ -1383,10 +1384,46 @@ static int change_speed(struct tty_struct *tty, struct usb_serial_port *port)
 	return rv;
 }
 
+/*
+ * Send a chip-side control request, retrying transient bus errors.
+ *
+ * On a healthy device, usb_control_msg() can still return -ETIMEDOUT,
+ * -EPIPE or -EPROTO when the host controller is under heavy load --
+ * for example multiple high-baud FTDI channels sharing a host
+ * controller with limited DMA-channel fairness. Failing a single
+ * one-shot configuration (e.g. a sysfs latency_timer write) to the
+ * caller as -EIO in that situation is unhelpful: the next attempt
+ * usually succeeds.  Retry a small number of times before giving up.
+ */
+#define FTDI_CONTROL_RETRIES		3
+#define FTDI_CONTROL_RETRY_DELAY_MS	2
+
+static int ftdi_send_request(struct usb_serial_port *port, u8 request,
+			     u8 requesttype, u16 value, u16 index)
+{
+	struct usb_device *udev = port->serial->dev;
+	int attempts;
+	int rv = -EIO;
+
+	for (attempts = 0; attempts < FTDI_CONTROL_RETRIES; ++attempts) {
+		rv = usb_control_msg(udev, usb_sndctrlpipe(udev, 0),
+				     request, requesttype, value, index,
+				     NULL, 0, WDR_TIMEOUT);
+		if (rv >= 0)
+			return rv;
+		if (rv != -ETIMEDOUT && rv != -EPIPE && rv != -EPROTO)
+			return rv;
+		dev_warn(&port->dev,
+			 "control msg req 0x%02x attempt %d returned %d, retrying\n",
+			 request, attempts + 1, rv);
+		msleep(FTDI_CONTROL_RETRY_DELAY_MS);
+	}
+	return rv;
+}
+
 static int write_latency_timer(struct usb_serial_port *port)
 {
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
-	struct usb_device *udev = port->serial->dev;
 	int rv;
 	int l = priv->latency;
 
@@ -1398,12 +1435,9 @@ static int write_latency_timer(struct usb_serial_port *port)
 
 	dev_dbg(&port->dev, "%s: setting latency timer = %i\n", __func__, l);
 
-	rv = usb_control_msg(udev,
-			     usb_sndctrlpipe(udev, 0),
-			     FTDI_SIO_SET_LATENCY_TIMER_REQUEST,
-			     FTDI_SIO_SET_LATENCY_TIMER_REQUEST_TYPE,
-			     l, priv->channel,
-			     NULL, 0, WDR_TIMEOUT);
+	rv = ftdi_send_request(port, FTDI_SIO_SET_LATENCY_TIMER_REQUEST,
+			       FTDI_SIO_SET_LATENCY_TIMER_REQUEST_TYPE,
+			       l, priv->channel);
 	if (rv < 0)
 		dev_err(&port->dev, "Unable to write latency timer: %i\n", rv);
 	return rv;
