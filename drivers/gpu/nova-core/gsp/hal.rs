@@ -53,7 +53,7 @@ pub(super) trait GspHal: Send {
     /// Returns two things:
     ///
     /// - The `Result` of the boot process itself,
-    /// - The `UnloadBundle` to use with [`Gsp::unload`], or `None` if the bundle could not be
+    /// - The `UnloadBundle` to use with [`Gsp::unload`], or `Err` if the bundle could not be
     ///   created.
     ///
     /// Note that the two returned values are independent: it is possible for the boot process to
@@ -65,7 +65,7 @@ pub(super) trait GspHal: Send {
         ctx: &GspBootContext<'_>,
         fb_layout: &FbLayout,
         wpr_meta: &Coherent<GspFwWprMeta>,
-    ) -> (Result, Option<crate::gsp::UnloadBundle>);
+    ) -> (Result, Result<crate::gsp::UnloadBundle>);
 
     /// Performs HAL-specific post-GSP boot tasks.
     ///

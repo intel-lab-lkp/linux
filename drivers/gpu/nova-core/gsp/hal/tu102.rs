@@ -269,14 +269,14 @@ impl GspHal for Tu102 {
         ctx: &GspBootContext<'_>,
         fb_layout: &FbLayout,
         wpr_meta: &Coherent<GspFwWprMeta>,
-    ) -> (Result, Option<crate::gsp::UnloadBundle>) {
+    ) -> (Result, Result<crate::gsp::UnloadBundle>) {
         let dev = ctx.dev();
         let bar = ctx.bar;
         let chipset = ctx.chipset;
         let gsp_falcon = ctx.gsp_falcon;
         let sec2_falcon = ctx.sec2_falcon;
 
-        let mut unload_bundle = None;
+        let mut unload_bundle = Err(EAGAIN);
 
         let res = (|| {
             let bios = Vbios::new(dev, bar)?;
@@ -287,15 +287,6 @@ impl GspHal for Tu102 {
             // can be probed again.
             unload_bundle =
                 Sec2UnloadBundle::build(dev, bar, chipset, &bios, gsp_falcon, sec2_falcon)
-                    .inspect_err(|e| {
-                        dev_warn!(dev, "Failed to prepare unload firmware: {:?}\n", e);
-                        dev_warn!(dev, "The GSP won't be able to unload properly on unbind.\n");
-                        dev_warn!(
-                            dev,
-                            "The GPU will need to be reset before the driver can bind again.\n"
-                        );
-                    })
-                    .ok()
                     .map(crate::gsp::UnloadBundle);
 
             // FWSEC-FRTS is not executed on chips where the FRTS region size is 0 (e.g. GA100).

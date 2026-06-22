@@ -150,16 +150,16 @@ impl GspHal for Gh100 {
         ctx: &GspBootContext<'_>,
         fb_layout: &FbLayout,
         wpr_meta: &Coherent<GspFwWprMeta>,
-    ) -> (Result, Option<crate::gsp::UnloadBundle>) {
+    ) -> (Result, Result<crate::gsp::UnloadBundle>) {
         let dev = ctx.dev();
         let bar = ctx.bar;
         let chipset = ctx.chipset;
         let gsp_falcon = ctx.gsp_falcon;
 
-        let mut unload_bundle = None;
+        let mut unload_bundle = Err(EAGAIN);
 
         let res = (|| {
-            unload_bundle = Some(crate::gsp::UnloadBundle(
+            unload_bundle = Ok(crate::gsp::UnloadBundle(
                 KBox::new(FspUnloadBundle, GFP_KERNEL)? as KBox<dyn UnloadBundle>,
             ));
 

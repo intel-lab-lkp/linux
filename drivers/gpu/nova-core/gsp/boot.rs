@@ -59,6 +59,18 @@ impl super::Gsp {
         // Perform the chipset-specific boot sequence, and retrieve the unload bundle.
         let (res, unload_bundle) = hal.boot(&self, &ctx, &fb_layout, &wpr_meta);
 
+        // Display error for unload bundle if any, and convert to `Option`.
+        let unload_bundle = unload_bundle
+            .inspect_err(|e| {
+                dev_warn!(dev, "Failed to prepare unload firmware: {:?}\n", e);
+                dev_warn!(dev, "The GSP won't be able to unload properly on unbind.\n");
+                dev_warn!(
+                    dev,
+                    "The GPU will need to be reset before the driver can bind again.\n"
+                );
+            })
+            .ok();
+
         // Run from a closure so we can retrieve the result, and run the unload sequence of the GSP
         // in case of error.
         let res = res.and_then(|()| {
