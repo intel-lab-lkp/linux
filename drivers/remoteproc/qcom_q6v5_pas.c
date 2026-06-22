@@ -357,8 +357,11 @@ release_pas_metadata:
 		qcom_scm_pas_metadata_release(pas->dtb_pas_ctx);
 
 unmap_dtb_carveout:
-	if (pas->dtb_pas_id)
+	if (pas->dtb_pas_id) {
 		qcom_pas_unmap_carveout(rproc, pas->dtb_mem_phys, pas->dtb_mem_size);
+		release_firmware(pas->dtb_firmware);
+		pas->dtb_firmware = NULL;
+	}
 disable_px_supply:
 	if (pas->px_supply)
 		regulator_disable(pas->px_supply);
@@ -416,6 +419,8 @@ static int qcom_pas_stop(struct rproc *rproc)
 			dev_err(pas->dev, "failed to shutdown dtb: %d\n", ret);
 
 		qcom_pas_unmap_carveout(rproc, pas->dtb_mem_phys, pas->dtb_mem_size);
+		release_firmware(pas->dtb_firmware);
+		pas->dtb_firmware = NULL;
 	}
 
 	qcom_pas_unmap_carveout(rproc, pas->mem_phys, pas->mem_size);
