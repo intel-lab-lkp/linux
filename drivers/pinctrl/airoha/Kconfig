@@ -20,6 +20,11 @@ config PINCTRL_AIROHA
 	  Say yes here to support pin controller and gpio driver
 	  on Airoha SoC.
 
+config PINCTRL_AIROHA_AN7563
+	tristate "AN7563 pinctrl"
+	depends on ARM64 || COMPILE_TEST
+	depends on PINCTRL_AIROHA
+
 config PINCTRL_AIROHA_AN7581
 	tristate "AN7581 pinctrl"
 	depends on ARM64 || COMPILE_TEST
