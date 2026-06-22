@@ -326,6 +326,12 @@ static int mlx5e_dbcnl_validate_ets(struct net_device *netdev,
 
 	/* Validate Non ETS BW */
 	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++) {
+		if (ets->tc_tsa[i] == IEEE_8021QAZ_TSA_CB_SHAPER) {
+			netdev_err(netdev,
+				   "Failed to validate ETS: CB Shaper is not supported\n");
+			return -EOPNOTSUPP;
+		}
+
 		if (ets->tc_tsa[i] != IEEE_8021QAZ_TSA_ETS &&
 		    ets->tc_tx_bw[i]) {
 			netdev_err(netdev,
