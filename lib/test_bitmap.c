@@ -267,8 +267,8 @@ test_bitmap_find_next_zero_area_off(void)
 		bitmap_find_next_zero_area_off(bmap, 192, 0, 10, 0, 0));
 	expect_eq_uint(160,
 		bitmap_find_next_zero_area_off(bmap, 192, 0, 32, 0, 0));
-	expect_eq_uint(1,
-		bitmap_find_next_zero_area_off(bmap, 192, 0, 33, 0, 0) > 192);
+	expect_eq_uint(192,
+		bitmap_find_next_zero_area_off(bmap, 192, 0, 33, 0, 0));
 }
 
 static void __init test_fill_set(void)
