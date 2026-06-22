@@ -4659,7 +4659,8 @@ static void arm_smmu_setup_unique_irqs(struct arm_smmu_device *smmu)
 				dev_warn(smmu->dev,
 					 "failed to enable priq irq\n");
 		} else {
-			dev_warn(smmu->dev, "no priq irq - PRI will be broken\n");
+			dev_warn(smmu->dev, "no priq irq - disabling PRI\n");
+			smmu->features &= ~ARM_SMMU_FEAT_PRI;
 		}
 	}
 }
