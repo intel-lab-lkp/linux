@@ -184,6 +184,7 @@ enum flow_action_id {
 	FLOW_ACTION_VLAN_PUSH_ETH,
 	FLOW_ACTION_VLAN_POP_ETH,
 	FLOW_ACTION_CONTINUE,
+	FLOW_ACTION_FRER,
 	NUM_FLOW_ACTIONS,
 };
 
@@ -329,6 +330,16 @@ struct flow_action_entry {
 		struct {				/* FLOW_ACTION_PPPOE_PUSH */
 			u16		sid;
 		} pppoe;
+		struct {                                /* FLOW_ACTION_FRER */
+			u8		func;
+			u8		tag_type;
+			bool		individual;
+			u8		rcvy_alg;
+			u8		rcvy_history_len;
+			u32		rcvy_reset_msec;
+			bool		tag_pop;
+			bool		take_no_seq;
+		} frer;
 	};
 	struct flow_action_cookie *user_cookie; /* user defined action cookie */
 };
