@@ -1441,6 +1441,9 @@ static void usbhsh_pipe_init_for_host(struct usbhs_priv *priv)
 						 dir_in);
 		}
 
+		if (!pipe)
+			return;
+
 		pipe->mod_private = NULL;
 	}
 }
