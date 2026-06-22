@@ -9,6 +9,8 @@
 #include <linux/types.h>
 #include <linux/unaligned.h>
 
+#define PTR_ALIGNED_LONG(__ptr) IS_ALIGNED((__force unsigned long)__ptr, sizeof(long))
+
 #ifndef memset_io
 /**
  * memset_io() - Set a range of I/O memory to a constant value
@@ -24,7 +26,7 @@ void memset_io(volatile void __iomem *addr, int val, size_t count)
 
 	qc *= ~0UL / 0xff;
 
-	while (count && !IS_ALIGNED((long)addr, sizeof(long))) {
+	while (count && !PTR_ALIGNED_LONG(addr)) {
 		__raw_writeb(val, addr);
 		addr++;
 		count--;
@@ -61,7 +63,7 @@ EXPORT_SYMBOL(memset_io);
  */
 void memcpy_fromio(void *dst, const volatile void __iomem *src, size_t count)
 {
-	while (count && !IS_ALIGNED((long)src, sizeof(long))) {
+	while (count && !PTR_ALIGNED_LONG(src)) {
 		*(u8 *)dst = __raw_readb(src);
 		src++;
 		dst++;
@@ -103,7 +105,7 @@ EXPORT_SYMBOL(memcpy_fromio);
  */
 void memcpy_toio(volatile void __iomem *dst, const void *src, size_t count)
 {
-	while (count && !IS_ALIGNED((long)dst, sizeof(long))) {
+	while (count && !PTR_ALIGNED_LONG(dst)) {
 		__raw_writeb(*(u8 *)src, dst);
 		src++;
 		dst++;
