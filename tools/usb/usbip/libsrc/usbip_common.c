@@ -29,6 +29,8 @@ static const struct speed_string speed_strings[] = {
 	{ USB_SPEED_HIGH, "480", "High Speed(480Mbps)" },
 	{ USB_SPEED_WIRELESS, "53.3-480", "Wireless"},
 	{ USB_SPEED_SUPER, "5000", "Super Speed(5000Mbps)" },
+	{ USB_SPEED_SUPER_PLUS, "10000", "SuperSpeed Plus" },
+	{ USB_SPEED_SUPER_PLUS, "20000", "SuperSpeed Plus" },
 	{ 0, NULL, NULL }
 };
 
