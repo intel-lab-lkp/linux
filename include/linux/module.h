@@ -756,6 +756,8 @@ void *dereference_module_function_descriptor(struct module *mod, void *ptr);
 int register_module_notifier(struct notifier_block *nb);
 int unregister_module_notifier(struct notifier_block *nb);
 
+extern bool module_is_blacklisted(const char *module_name);
+
 extern void print_modules(void);
 
 static inline bool module_requested_async_probing(struct module *module)

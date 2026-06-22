@@ -957,6 +957,12 @@
 #define CON_INITCALL							\
 	BOUNDED_SECTION_POST_LABEL(.con_initcall.init, __con_initcall, _start, _end)
 
+#define INITCALL_MODNAMES						\
+	. = ALIGN(8);							\
+	__start_initcall_modnames = .;					\
+	KEEP(*(.initcall.modnames))					\
+	__stop_initcall_modnames = .;
+
 #define NAMED_SECTION(name) \
 	. = ALIGN(8); \
 	name : AT(ADDR(name) - LOAD_OFFSET) \
@@ -1166,6 +1172,7 @@
 		INIT_SETUP(initsetup_align)				\
 		INIT_CALLS						\
 		CON_INITCALL						\
+		INITCALL_MODNAMES					\
 		INIT_RAM_FS						\
 	}
 

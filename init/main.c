@@ -1334,11 +1334,38 @@ static inline void do_trace_initcall_level(const char *level)
 }
 #endif /* !TRACEPOINTS_ENABLED */
 
+extern struct initcall_modname __start_initcall_modnames[];
+extern struct initcall_modname __stop_initcall_modnames[];
+
+static const char *initcall_get_modname(initcall_t fn)
+{
+	struct initcall_modname *p;
+
+	for (p = __start_initcall_modnames; p < __stop_initcall_modnames; p++) {
+		if (initcall_from_entry(&p->initcall_fn) == fn) {
+#ifdef CONFIG_HAVE_ARCH_PREL32_RELOCATIONS
+			return (const char *)offset_to_ptr(&p->modname_offset);
+#else
+			return p->modname;
+#endif
+		}
+	}
+	return NULL;
+}
+
 int __init_or_module do_one_initcall(initcall_t fn)
 {
 	int count = preempt_count();
 	char msgbuf[64];
+	const char *modname;
 	int ret;
+
+	modname = initcall_get_modname(fn);
+	if (modname && module_is_blacklisted(modname)) {
+		pr_info("Skipping initcall for blacklisted built-in module %s\n",
+			modname);
+		return 0;
+	}
 
 	if (initcall_blacklisted(fn))
 		return -EPERM;

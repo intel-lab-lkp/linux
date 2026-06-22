@@ -125,6 +125,16 @@ static inline initcall_t initcall_from_entry(initcall_entry_t *entry)
 }
 #endif
 
+struct initcall_modname {
+#ifdef CONFIG_HAVE_ARCH_PREL32_RELOCATIONS
+	initcall_entry_t initcall_fn;
+	int modname_offset;
+#else
+	initcall_t initcall_fn;
+	const char *modname;
+#endif
+};
+
 extern initcall_entry_t __con_initcall_start[], __con_initcall_end[];
 
 /* Used for constructor calls. */
@@ -270,9 +280,26 @@ extern struct module __this_module;
 		__initcall_stub(fn, __iid, id),			\
 		__initcall_name(initcall, __iid, id),		\
 		__initcall_section(__sec, __iid))
-
+#ifdef CONFIG_HAVE_ARCH_PREL32_RELOCATIONS
+#define ___define_initcall(fn, id, __sec)				\
+	__unique_initcall(fn, id, __sec, __initcall_id(fn));		\
+	asm(".pushsection \".initcall.modnames\", \"a\"\n"		\
+	    ".balign 4\n"						\
+	    ".long " #fn " - .\n"					\
+	    ".long __initcall_modstr_" #fn #id " - .\n"			\
+	    ".popsection\n"						\
+	    ".pushsection .init.rodata, \"a\"\n"			\
+	    "__initcall_modstr_" #fn #id ": .string \"" KBUILD_MODNAME "\"\n" \
+	    ".popsection\n");
+#else
 #define ___define_initcall(fn, id, __sec)			\
-	__unique_initcall(fn, id, __sec, __initcall_id(fn))
+	__unique_initcall(fn, id, __sec, __initcall_id(fn));	\
+	static struct initcall_modname __initcall_modname_##fn##id __used \
+		__section(".initcall.modnames") = {		\
+			.initcall_fn = fn,				\
+			.modname = KBUILD_MODNAME	\
+		};
+#endif
 
 #define __define_initcall(fn, id) ___define_initcall(fn, id, .initcall##id)
 
