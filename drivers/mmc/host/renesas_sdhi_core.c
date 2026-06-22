@@ -185,7 +185,7 @@ static unsigned int renesas_sdhi_clk_update(struct tmio_mmc_host *host,
 	clk_set_rate(ref_clk, best_freq);
 
 	if (priv->clkh)
-		clk_set_rate(priv->clk, best_freq >> clkh_shift);
+		clk_set_rate(priv->clk, (best_freq >> clkh_shift) * priv->divider);
 
 	return clk_get_rate(priv->clk);
 }
@@ -1230,6 +1230,12 @@ int renesas_sdhi_probe(struct platform_device *pdev,
 	mmc_data->flags |= TMIO_MMC_USE_BUSY_TIMEOUT;
 
 	dev_pm_domain_start(&pdev->dev);
+
+	if ((host->pdata->flags & TMIO_MMC_INTERNAL_DIVIDER) &&
+	    !device_property_read_bool(dev, "mmc-hs400-1_8v"))
+		priv->divider = 2;
+	else
+		priv->divider = 1;
 
 	ret = renesas_sdhi_clk_enable(host);
 	if (ret)
