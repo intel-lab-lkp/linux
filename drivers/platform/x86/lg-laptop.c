@@ -96,13 +96,32 @@ static struct led_classdev kbd_backlight;
 static enum led_brightness get_kbd_backlight_level(struct device *dev);
 
 static const struct key_entry wmi_keymap[] = {
-	{KE_KEY, 0x70, {KEY_F15} },	 /* LG control panel (F1) */
-	{KE_KEY, 0x74, {KEY_F21} },	 /* Touchpad toggle (F5) */
-	{KE_KEY, 0xf020000, {KEY_F14} }, /* Read mode (F9) */
-	{KE_KEY, 0x10000000, {KEY_F16} },/* Keyboard backlight (F8) - pressing
-					  * this key both sends an event and
-					  * changes backlight level.
-					  */
+	/* Placeholder value send by multiple hotkeys handled by ACPI */
+	{ KE_IGNORE,	0x0,		{ KEY_UNKNOWN }},
+	/* LG control panel */
+	{ KE_KEY,	0x70,		{ KEY_F15 }},
+	/* Touchpad toggle */
+	{ KE_KEY,	0x74,		{ KEY_F21 }},
+	/* Mute Audio, already handled by ACPI */
+	{ KE_IGNORE,	0x78,		{ KEY_MUTE }},
+	/* Read mode */
+	{ KE_KEY,	0xf020000,	{ KEY_F14 }},
+	/* Open settings */
+	{ KE_KEY,	0xf070002,	{ KEY_CONFIG }},
+	/* Keyboard backlight - pressing this key both sends an event and changes backlight level */
+	{ KE_KEY,	0x10000000,	{ KEY_F16 }},
+	/* Hotkey combination pressed */
+	{ KE_IGNORE,	0x30010000,	{ KEY_UNKNOWN }},
+	/* Hotkey combination released */
+	{ KE_IGNORE,	0x30010001,	{ KEY_UNKNOWN }},
+	/* Change fan mode */
+	{ KE_KEY,	0x30010051,	{ KEY_PERFORMANCE }},
+	/* Disable camera */
+	{ KE_KEY,	0x40020000,	{ KEY_CAMERA_ACCESS_TOGGLE }},
+	/* Mute microphone */
+	{ KE_KEY,	0x40020001,	{ KEY_MICMUTE }},
+	/* Fn-Lock */
+	{ KE_KEY,	0x40030001,	{ KEY_FN_ESC }},
 	{KE_END, 0}
 };
 
