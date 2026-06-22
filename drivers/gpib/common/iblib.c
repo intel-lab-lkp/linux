@@ -256,9 +256,23 @@ int iboffline(struct gpib_board *board)
 		board->autospoll_task = NULL;
 	}
 
+	/*
+	 * Acquire big_gpib_mutex before calling detach() to prevent a
+	 * use-after-free race. I/O callbacks (read/write/command) hold
+	 * big_gpib_mutex while caching board->private_data on their stack.
+	 * Without this lock, iboffline() can kfree(board->private_data)
+	 * inside detach() while an I/O callback is still running and holds
+	 * a stale pointer to the freed memory.
+	 *
+	 * Affected board drivers: cb7210, ines_gpib, tnt4882 (all delegate
+	 * to nec7210_read/pio_read which blocks in wait_event_interruptible
+	 * for up to board->usec_timeout microseconds while holding priv).
+	 */
+	mutex_lock(&board->big_gpib_mutex);
 	board->interface->detach(board);
 	gpib_deallocate_board(board);
 	board->online = 0;
+	mutex_unlock(&board->big_gpib_mutex);
 	dev_dbg(board->gpib_dev, "board offline\n");
 
 	return 0;
