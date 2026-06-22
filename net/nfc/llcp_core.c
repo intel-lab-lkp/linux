@@ -853,10 +853,16 @@ static const u8 *nfc_llcp_connect_sn(const struct sk_buff *skb, size_t *sn_len)
 	size_t tlv_array_len = skb->len - LLCP_HEADER_SIZE, offset = 0;
 
 	while (offset < tlv_array_len) {
+		if (tlv_array_len - offset < 2)
+			break;
+
 		type = tlv[0];
 		length = tlv[1];
 
 		pr_debug("type 0x%x length %d\n", type, length);
+
+		if (tlv_array_len - offset < length + 2U)
+			break;
 
 		if (type == LLCP_TLV_SN) {
 			*sn_len = length;
