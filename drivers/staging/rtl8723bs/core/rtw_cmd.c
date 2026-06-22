@@ -1801,7 +1801,9 @@ void rtw_survey_cmd_callback(struct adapter *padapter,  struct cmd_obj *pcmd)
 	struct	mlme_priv *pmlmepriv = &padapter->mlmepriv;
 
 	if (pcmd->res != H2C_SUCCESS) {
-		/* TODO: cancel timer and do timeout handler directly... */
+		/* Ensure timer is safely rescheduled */
+		if (timer_pending(&pmlmepriv->scan_to_timer))
+			timer_delete_sync(&pmlmepriv->scan_to_timer);
 		_set_timer(&pmlmepriv->scan_to_timer, 1);
 	}
 
@@ -1829,7 +1831,9 @@ void rtw_joinbss_cmd_callback(struct adapter *padapter,  struct cmd_obj *pcmd)
 	struct	mlme_priv *pmlmepriv = &padapter->mlmepriv;
 
 	if (pcmd->res != H2C_SUCCESS) {
-		/* TODO: cancel timer and do timeout handler directly... */
+		/* Ensure timer is safely rescheduled */
+		if (timer_pending(&pmlmepriv->assoc_timer))
+			timer_delete_sync(&pmlmepriv->assoc_timer);
 		_set_timer(&pmlmepriv->assoc_timer, 1);
 	}
 
