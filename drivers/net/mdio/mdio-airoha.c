@@ -246,15 +246,17 @@ static int airoha_mdio_probe(struct platform_device *pdev)
 
 	ret = clk_set_rate(priv->clk, freq);
 	if (ret)
-		return ret;
+		goto err_reset_assert;
 
 	ret = devm_of_mdiobus_register(dev, bus, dev->of_node);
-	if (ret) {
-		reset_control_assert(priv->reset);
-		return ret;
-	}
+	if (ret)
+		goto err_reset_assert;
 
 	return 0;
+
+err_reset_assert:
+	reset_control_assert(priv->reset);
+	return ret;
 }
 
 static const struct of_device_id airoha_mdio_dt_ids[] = {
