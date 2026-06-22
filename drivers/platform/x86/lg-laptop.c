@@ -86,6 +86,18 @@ MODULE_PARM_DESC(fw_debug, "Enable printing of firmware debug messages");
 #define WMBB_USB_CHARGE 0x10B
 #define WMBB_BATT_LIMIT 0x10C
 
+#define KBD_LED_BRIGHTNESS_MASK GENMASK(4, 0)
+#define KBD_LED_BRIGHTNESS_OFF	0x0
+#define KBD_LED_BRIGHTNESS_HALF 0x2
+#define KBD_LED_BRIGHTNESS_FULL 0x4
+#define KBD_LED_MODE_MASK	GENMASK(6, 5)
+#define KBD_LED_MODE_OFF	0x0
+#define KBD_LED_MODE_ON		0x1
+#define KBD_LED_STATUS		BIT(7)
+#define KBD_LED_MAGIC_MASK	GENMASK(15, 8)
+/* Exact purpose is unknown, maybe some sort of brightness limit? */
+#define KBD_LED_MAGIC		0x05
+
 #define FAN_MODE_LOWER GENMASK(1, 0)
 #define FAN_MODE_UPPER GENMASK(5, 4)
 
@@ -601,15 +613,25 @@ static LED_DEVICE(tpad_led, 1, 0);
 static void kbd_backlight_set(struct led_classdev *cdev,
 			      enum led_brightness brightness)
 {
-	u32 val;
+	/* Must always be written */
+	u32 value = KBD_LED_STATUS;
+	u32 mode, bright;
 
-	val = 0x22;
-	if (brightness <= LED_OFF)
-		val = 0;
-	if (brightness >= LED_FULL)
-		val = 0x24;
+	if (brightness <= LED_OFF) {
+		mode = KBD_LED_MODE_OFF;
+		bright = KBD_LED_BRIGHTNESS_OFF;
+	} else {
+		mode = KBD_LED_MODE_ON;
+		if (brightness >= LED_FULL)
+			bright = KBD_LED_BRIGHTNESS_FULL;
+		else
+			bright = KBD_LED_BRIGHTNESS_HALF;
+	}
 
-	lg_wmab_set(cdev->dev->parent, WM_KEY_LIGHT, val);
+	value |= FIELD_PREP(KBD_LED_BRIGHTNESS_MASK, bright);
+	value |= FIELD_PREP(KBD_LED_MODE_MASK, mode);
+
+	lg_wmab_set(cdev->dev->parent, WM_KEY_LIGHT, value);
 }
 
 static enum led_brightness get_kbd_backlight_level(struct device *dev)
@@ -621,13 +643,16 @@ static enum led_brightness get_kbd_backlight_level(struct device *dev)
 	if (ret < 0)
 		return LED_OFF;
 
-	if ((value & 0xFF00) != 0x0500)
+	if (FIELD_GET(KBD_LED_MAGIC_MASK, value) != KBD_LED_MAGIC)
 		return LED_OFF;
 
-	switch (value & 0x27) {
-	case 0x24:
+	if (FIELD_GET(KBD_LED_MODE_MASK, value) == KBD_LED_MODE_OFF)
+		return LED_OFF;
+
+	switch (FIELD_GET(KBD_LED_BRIGHTNESS_MASK, value)) {
+	case KBD_LED_BRIGHTNESS_FULL:
 		return LED_FULL;
-	case 0x22:
+	case KBD_LED_BRIGHTNESS_HALF:
 		return LED_HALF;
 	default:
 		return LED_OFF;
