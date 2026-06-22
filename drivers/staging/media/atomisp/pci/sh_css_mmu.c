@@ -19,7 +19,7 @@ ia_css_mmu_invalidate_cache(void)
 	unsigned int HIVE_ADDR_ia_css_dmaproxy_sp_invalidate_tlb;
 
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,
-			    "ia_css_mmu_invalidate_cache() enter\n");
+			    "%s() enter\n", __func__);
 
 	/* if the SP is not running we should not access its dmem */
 	if (sh_css_sp_is_running()) {
@@ -32,7 +32,7 @@ ia_css_mmu_invalidate_cache(void)
 				     true);
 	}
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,
-			    "ia_css_mmu_invalidate_cache() leave\n");
+			    "%s() leave\n", __func__);
 }
 
 void
