@@ -341,9 +341,34 @@ static struct tcp_ao_info *tcp_ao_alloc_info(gfp_t flags)
 	return ao;
 }
 
+static bool tcp_ao_key_is_more_specific(const struct tcp_ao_key *a,
+					const struct tcp_ao_key *b)
+{
+	bool a_vrf = !!(a->keyflags & TCP_AO_KEYF_IFINDEX);
+	bool b_vrf = !!(b->keyflags & TCP_AO_KEYF_IFINDEX);
+
+	if (a_vrf != b_vrf)
+		return a_vrf; /* VRF-bound is more specific */
+
+	return a->prefixlen > b->prefixlen; /* Longer prefix is more specific */
+}
+
 static void tcp_ao_link_mkt(struct tcp_ao_info *ao, struct tcp_ao_key *mkt)
 {
-	hlist_add_head_rcu(&mkt->node, &ao->head);
+	struct tcp_ao_key *pos;
+	struct hlist_node *last = NULL;
+
+	hlist_for_each_entry(pos, &ao->head, node) {
+		if (tcp_ao_key_is_more_specific(mkt, pos)) {
+			hlist_add_before_rcu(&mkt->node, &pos->node);
+			return;
+		}
+		last = &pos->node;
+	}
+	if (last)
+		hlist_add_behind_rcu(&mkt->node, last);
+	else
+		hlist_add_head_rcu(&mkt->node, &ao->head);
 }
 
 static struct tcp_ao_key *tcp_ao_copy_key(struct sock *sk,
