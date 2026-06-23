@@ -123,11 +123,10 @@ void configfs_put_super_info(struct configfs_super_info *info)
 
 static int configfs_fill_super(struct super_block *sb, struct fs_context *fc)
 {
-	struct configfs_super_info *info = configfs_get_super_info(&init_net);
+	struct configfs_super_info *info = sb->s_fs_info;
 	struct inode *inode;
 	struct dentry *root;
 
-	sb->s_fs_info = info;
 	sb->s_blocksize = PAGE_SIZE;
 	sb->s_blocksize_bits = PAGE_SHIFT;
 	sb->s_magic = CONFIGFS_MAGIC;
@@ -138,7 +137,6 @@ static int configfs_fill_super(struct super_block *sb, struct fs_context *fc)
 				   &info->root, sb);
 	if (IS_ERR(inode)) {
 		pr_debug("could not get root inode\n");
-		configfs_put_super_info(info);
 		return PTR_ERR(inode);
 	}
 	inode->i_op = &configfs_root_inode_operations;
@@ -149,7 +147,6 @@ static int configfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	root = d_make_root(inode);
 	if (!root) {
 		pr_debug("%s: could not get root dentry!\n",__func__);
-		configfs_put_super_info(info);
 		return -ENOMEM;
 	}
 	info->group.cg_item.ci_dentry = root;
@@ -165,15 +162,38 @@ static int configfs_fill_super(struct super_block *sb, struct fs_context *fc)
 
 static int configfs_get_tree(struct fs_context *fc)
 {
-	return get_tree_single(fc, configfs_fill_super);
+	struct net *net_ns = fc->fs_private;
+	struct configfs_super_info *info;
+	int err;
+
+	info = configfs_get_super_info(net_ns);
+	if (IS_ERR(info))
+		return PTR_ERR(info);
+
+	err = get_tree_keyed(fc, configfs_fill_super, info);
+	if (err && fc->s_fs_info)
+		configfs_put_super_info(info);
+	return err;
+}
+
+static void configfs_fs_context_free(struct fs_context *fc)
+{
+	struct net *net_ns = fc->fs_private;
+
+	fc->fs_private = NULL;
+	put_net(net_ns);
 }
 
 static const struct fs_context_operations configfs_context_ops = {
 	.get_tree	= configfs_get_tree,
+	.free		= configfs_fs_context_free,
 };
 
 static int configfs_init_fs_context(struct fs_context *fc)
 {
+	struct net *net_ns = get_net(current->nsproxy->net_ns);
+
+	fc->fs_private = net_ns;
 	fc->ops = &configfs_context_ops;
 	return 0;
 }
@@ -193,6 +213,7 @@ static struct file_system_type configfs_fs_type = {
 	.name		= "configfs",
 	.init_fs_context = configfs_init_fs_context,
 	.kill_sb	= configfs_kill_sb,
+	.fs_flags	= FS_USERNS_MOUNT,
 };
 MODULE_ALIAS_FS("configfs");
 
