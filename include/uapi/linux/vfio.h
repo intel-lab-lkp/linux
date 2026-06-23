@@ -1534,6 +1534,13 @@ struct vfio_device_feature_dma_buf {
  */
 #define VFIO_DEVICE_FEATURE_MIG_PRECOPY_INFOv2  12
 
+/*
+ * Device-level opt-in for TPH (Transaction Processing Hints) support.
+ * When set, allows access to TPH_CPU_ST and TPH_ST_CONFIG features.
+ * Requires global enable_unsafe_tph module parameter to be enabled.
+ */
+#define VFIO_DEVICE_FEATURE_TPH_ENABLE	13
+
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**
