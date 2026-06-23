@@ -37,7 +37,7 @@ struct steelseries_device {
 };
 
 #if IS_BUILTIN(CONFIG_LEDS_CLASS) || \
-    (IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
+	(IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
 #define SRWS1_NUMBER_LEDS 15
 struct steelseries_srws1_data {
 	__u16 led_state;
@@ -54,80 +54,80 @@ struct steelseries_srws1_data {
  */
 
 static const __u8 steelseries_srws1_rdesc_fixed[] = {
-0x05, 0x01,         /*  Usage Page (Desktop)                */
-0x09, 0x08,         /*  Usage (MultiAxis), Changed          */
-0xA1, 0x01,         /*  Collection (Application),           */
-0xA1, 0x02,         /*      Collection (Logical),           */
-0x95, 0x01,         /*          Report Count (1),           */
-0x05, 0x01,         /* Changed  Usage Page (Desktop),       */
-0x09, 0x30,         /* Changed  Usage (X),                  */
-0x16, 0xF8, 0xF8,   /*          Logical Minimum (-1800),    */
-0x26, 0x08, 0x07,   /*          Logical Maximum (1800),     */
-0x65, 0x14,         /*          Unit (Degrees),             */
-0x55, 0x0F,         /*          Unit Exponent (15),         */
-0x75, 0x10,         /*          Report Size (16),           */
-0x81, 0x02,         /*          Input (Variable),           */
-0x09, 0x31,         /* Changed  Usage (Y),                  */
-0x15, 0x00,         /*          Logical Minimum (0),        */
-0x26, 0xFF, 0x03,   /*          Logical Maximum (1023),     */
-0x75, 0x0C,         /*          Report Size (12),           */
-0x81, 0x02,         /*          Input (Variable),           */
-0x09, 0x32,         /* Changed  Usage (Z),                  */
-0x15, 0x00,         /*          Logical Minimum (0),        */
-0x26, 0xFF, 0x03,   /*          Logical Maximum (1023),     */
-0x75, 0x0C,         /*          Report Size (12),           */
-0x81, 0x02,         /*          Input (Variable),           */
-0x05, 0x01,         /*          Usage Page (Desktop),       */
-0x09, 0x39,         /*          Usage (Hat Switch),         */
-0x25, 0x07,         /*          Logical Maximum (7),        */
-0x35, 0x00,         /*          Physical Minimum (0),       */
-0x46, 0x3B, 0x01,   /*          Physical Maximum (315),     */
-0x65, 0x14,         /*          Unit (Degrees),             */
-0x75, 0x04,         /*          Report Size (4),            */
-0x95, 0x01,         /*          Report Count (1),           */
-0x81, 0x02,         /*          Input (Variable),           */
-0x25, 0x01,         /*          Logical Maximum (1),        */
-0x45, 0x01,         /*          Physical Maximum (1),       */
-0x65, 0x00,         /*          Unit,                       */
-0x75, 0x01,         /*          Report Size (1),            */
-0x95, 0x03,         /*          Report Count (3),           */
-0x81, 0x01,         /*          Input (Constant),           */
-0x05, 0x09,         /*          Usage Page (Button),        */
-0x19, 0x01,         /*          Usage Minimum (01h),        */
-0x29, 0x11,         /*          Usage Maximum (11h),        */
-0x95, 0x11,         /*          Report Count (17),          */
-0x81, 0x02,         /*          Input (Variable),           */
-                    /*   ---- Dial patch starts here ----   */
-0x05, 0x01,         /*          Usage Page (Desktop),       */
-0x09, 0x33,         /*          Usage (RX),                 */
-0x75, 0x04,         /*          Report Size (4),            */
-0x95, 0x02,         /*          Report Count (2),           */
-0x15, 0x00,         /*          Logical Minimum (0),        */
-0x25, 0x0b,         /*          Logical Maximum (b),        */
-0x81, 0x02,         /*          Input (Variable),           */
-0x09, 0x35,         /*          Usage (RZ),                 */
-0x75, 0x04,         /*          Report Size (4),            */
-0x95, 0x01,         /*          Report Count (1),           */
-0x25, 0x03,         /*          Logical Maximum (3),        */
-0x81, 0x02,         /*          Input (Variable),           */
-                    /*    ---- Dial patch ends here ----    */
-0x06, 0x00, 0xFF,   /*          Usage Page (FF00h),         */
-0x09, 0x01,         /*          Usage (01h),                */
-0x75, 0x04,         /* Changed  Report Size (4),            */
-0x95, 0x0D,         /* Changed  Report Count (13),          */
-0x81, 0x02,         /*          Input (Variable),           */
-0xC0,               /*      End Collection,                 */
-0xA1, 0x02,         /*      Collection (Logical),           */
-0x09, 0x02,         /*          Usage (02h),                */
-0x75, 0x08,         /*          Report Size (8),            */
-0x95, 0x10,         /*          Report Count (16),          */
-0x91, 0x02,         /*          Output (Variable),          */
-0xC0,               /*      End Collection,                 */
-0xC0                /*  End Collection                      */
+0x05, 0x01,					/*  Usage Page (Desktop)                */
+0x09, 0x08,					/*  Usage (MultiAxis), Changed          */
+0xA1, 0x01,					/*  Collection (Application),           */
+0xA1, 0x02,					/*      Collection (Logical),           */
+0x95, 0x01,					/*          Report Count (1),           */
+0x05, 0x01,				/* Changed  Usage Page (Desktop),       */
+0x09, 0x30,				/* Changed  Usage (X),                  */
+0x16, 0xF8, 0xF8,	/*          Logical Minimum (-1800),    */
+0x26, 0x08, 0x07,	/*          Logical Maximum (1800),     */
+0x65, 0x14,				/*          Unit (Degrees),             */
+0x55, 0x0F,				/*          Unit Exponent (15),         */
+0x75, 0x10,				/*          Report Size (16),           */
+0x81, 0x02,				/*          Input (Variable),           */
+0x09, 0x31,				/* Changed  Usage (Y),                  */
+0x15, 0x00,				/*          Logical Minimum (0),        */
+0x26, 0xFF, 0x03,	/*          Logical Maximum (1023),     */
+0x75, 0x0C,				/*          Report Size (12),           */
+0x81, 0x02,				/*          Input (Variable),           */
+0x09, 0x32,				/* Changed  Usage (Z),                  */
+0x15, 0x00,				/*          Logical Minimum (0),        */
+0x26, 0xFF, 0x03,	/*          Logical Maximum (1023),     */
+0x75, 0x0C,				/*          Report Size (12),           */
+0x81, 0x02,				/*          Input (Variable),           */
+0x05, 0x01,				/*          Usage Page (Desktop),       */
+0x09, 0x39,				/*          Usage (Hat Switch),         */
+0x25, 0x07,				/*          Logical Maximum (7),        */
+0x35, 0x00,				/*          Physical Minimum (0),       */
+0x46, 0x3B, 0x01,	/*          Physical Maximum (315),     */
+0x65, 0x14,				/*          Unit (Degrees),             */
+0x75, 0x04,				/*          Report Size (4),            */
+0x95, 0x01,				/*          Report Count (1),           */
+0x81, 0x02,				/*          Input (Variable),           */
+0x25, 0x01,				/*          Logical Maximum (1),        */
+0x45, 0x01,				/*          Physical Maximum (1),       */
+0x65, 0x00,				/*          Unit,                       */
+0x75, 0x01,				/*          Report Size (1),            */
+0x95, 0x03,				/*          Report Count (3),           */
+0x81, 0x01,				/*          Input (Constant),           */
+0x05, 0x09,				/*          Usage Page (Button),        */
+0x19, 0x01,				/*          Usage Minimum (01h),        */
+0x29, 0x11,				/*          Usage Maximum (11h),        */
+0x95, 0x11,				/*          Report Count (17),          */
+0x81, 0x02,				/*          Input (Variable),           */
+									/*   ---- Dial patch starts here ----   */
+0x05, 0x01,				/*          Usage Page (Desktop),       */
+0x09, 0x33,				/*          Usage (RX),                 */
+0x75, 0x04,				/*          Report Size (4),            */
+0x95, 0x02,				/*          Report Count (2),           */
+0x15, 0x00,				/*          Logical Minimum (0),        */
+0x25, 0x0b,				/*          Logical Maximum (b),        */
+0x81, 0x02,				/*          Input (Variable),           */
+0x09, 0x35,				/*          Usage (RZ),                 */
+0x75, 0x04,				/*          Report Size (4),            */
+0x95, 0x01,				/*          Report Count (1),           */
+0x25, 0x03,				/*          Logical Maximum (3),        */
+0x81, 0x02,				/*          Input (Variable),           */
+									/*    ---- Dial patch ends here ----    */
+0x06, 0x00, 0xFF,	/*          Usage Page (FF00h),         */
+0x09, 0x01,				/*          Usage (01h),                */
+0x75, 0x04,				/* Changed  Report Size (4),            */
+0x95, 0x0D,				/* Changed  Report Count (13),          */
+0x81, 0x02,				/*          Input (Variable),           */
+0xC0,							/*      End Collection,                 */
+0xA1, 0x02,				/*      Collection (Logical),           */
+0x09, 0x02,				/*          Usage (02h),                */
+0x75, 0x08,				/*          Report Size (8),            */
+0x95, 0x10,				/*          Report Count (16),          */
+0x91, 0x02,				/*          Output (Variable),          */
+0xC0,							/*      End Collection,                 */
+0xC0							/*  End Collection                      */
 };
 
 #if IS_BUILTIN(CONFIG_LEDS_CLASS) || \
-    (IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
+	(IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
 static void steelseries_srws1_set_leds(struct hid_device *hdev, __u16 leds)
 {
 	struct list_head *report_list = &hdev->report_enum[HID_OUTPUT_REPORT].report_list;
@@ -489,7 +489,7 @@ static int steelseries_headset_battery_register(struct steelseries_device *sd)
 	sd->battery_desc.use_for_apm = 0;
 	n = atomic_inc_return(&battery_no) - 1;
 	sd->battery_desc.name = devm_kasprintf(&sd->hdev->dev, GFP_KERNEL,
-						    "steelseries_headset_battery_%ld", n);
+							"steelseries_headset_battery_%ld", n);
 	if (!sd->battery_desc.name)
 		return -ENOMEM;
 
@@ -535,7 +535,7 @@ static int steelseries_probe(struct hid_device *hdev, const struct hid_device_id
 
 	if (hdev->product == USB_DEVICE_ID_STEELSERIES_SRWS1) {
 #if IS_BUILTIN(CONFIG_LEDS_CLASS) || \
-    (IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
+	(IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
 		return steelseries_srws1_probe(hdev, id);
 #else
 		return -ENODEV;
@@ -581,7 +581,7 @@ static void steelseries_remove(struct hid_device *hdev)
 
 	if (hdev->product == USB_DEVICE_ID_STEELSERIES_SRWS1) {
 #if IS_BUILTIN(CONFIG_LEDS_CLASS) || \
-    (IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
+	(IS_MODULE(CONFIG_LEDS_CLASS) && IS_MODULE(CONFIG_HID_STEELSERIES))
 		hid_hw_stop(hdev);
 #endif
 		return;
@@ -603,7 +603,7 @@ static const __u8 *steelseries_srws1_report_fixup(struct hid_device *hdev,
 		__u8 *rdesc, unsigned int *rsize)
 {
 	if (hdev->vendor != USB_VENDOR_ID_STEELSERIES ||
-	    hdev->product != USB_DEVICE_ID_STEELSERIES_SRWS1)
+		hdev->product != USB_DEVICE_ID_STEELSERIES_SRWS1)
 		return rdesc;
 
 	if (*rsize >= 115 && rdesc[11] == 0x02 && rdesc[13] == 0xc8
@@ -642,7 +642,7 @@ static int steelseries_headset_raw_event(struct hid_device *hdev,
 		hid_dbg(sd->hdev,
 			"Parsing raw event for Arctis 1 headset (%*ph)\n", size, read_buf);
 		if (size < ARCTIS_1_BATTERY_RESPONSE_LEN ||
-		    memcmp(read_buf, arctis_1_battery_request, sizeof(arctis_1_battery_request))) {
+			memcmp(read_buf, arctis_1_battery_request, sizeof(arctis_1_battery_request))) {
 			if (!delayed_work_pending(&sd->battery_work))
 				goto request_battery;
 			return 0;
@@ -722,15 +722,15 @@ request_battery:
 
 static const struct hid_device_id steelseries_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_STEELSERIES, USB_DEVICE_ID_STEELSERIES_SRWS1),
-	  .driver_data = STEELSERIES_SRWS1 },
+		.driver_data = STEELSERIES_SRWS1 },
 
 	{ /* SteelSeries Arctis 1 Wireless for XBox */
-	  HID_USB_DEVICE(USB_VENDOR_ID_STEELSERIES, USB_DEVICE_ID_STEELSERIES_ARCTIS_1_X),
-	  .driver_data = STEELSERIES_ARCTIS_1_X },
+		HID_USB_DEVICE(USB_VENDOR_ID_STEELSERIES, USB_DEVICE_ID_STEELSERIES_ARCTIS_1_X),
+		.driver_data = STEELSERIES_ARCTIS_1_X },
 
 	{ /* SteelSeries Arctis 9 Wireless for XBox */
-	  HID_USB_DEVICE(USB_VENDOR_ID_STEELSERIES, USB_DEVICE_ID_STEELSERIES_ARCTIS_9),
-	  .driver_data = STEELSERIES_ARCTIS_9 },
+		HID_USB_DEVICE(USB_VENDOR_ID_STEELSERIES, USB_DEVICE_ID_STEELSERIES_ARCTIS_9),
+		.driver_data = STEELSERIES_ARCTIS_9 },
 
 	{ }
 };
