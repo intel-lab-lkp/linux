@@ -4060,8 +4060,8 @@ static int sd_probe(struct scsi_device *sdp)
 	error = device_add(&sdkp->disk_dev);
 	if (error) {
 		put_device(&sdkp->disk_dev);
-		put_disk(gd);
-		goto out;
+		sdkp = NULL;
+		goto out_put;
 	}
 
 	dev_set_drvdata(dev, sdkp);
@@ -4090,8 +4090,8 @@ static int sd_probe(struct scsi_device *sdp)
 		if (sd_large_pool_create()) {
 			error = -ENOMEM;
 			device_unregister(&sdkp->disk_dev);
-			put_disk(gd);
-			goto out;
+			sdkp = NULL;
+			goto out_put;
 		}
 	}
 
@@ -4109,11 +4109,11 @@ static int sd_probe(struct scsi_device *sdp)
 
 	error = device_add_disk(dev, gd, NULL);
 	if (error) {
-		device_unregister(&sdkp->disk_dev);
-		put_disk(gd);
 		if (sdp->sector_size > PAGE_SIZE)
 			sd_large_pool_destroy();
-		goto out;
+		device_unregister(&sdkp->disk_dev);
+		sdkp = NULL;
+		goto out_put;
 	}
 
 	if (sdkp->security) {
