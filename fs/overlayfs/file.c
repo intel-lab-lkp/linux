@@ -518,6 +518,21 @@ static int ovl_fadvise(struct file *file, loff_t offset, loff_t len, int advice)
 		return vfs_fadvise(realfile, offset, len, advice);
 }
 
+#ifdef CONFIG_CACHESTAT_SYSCALL
+static int ovl_cachestat(struct file *file, struct cachestat_range *csr,
+			 struct cachestat *cs)
+{
+	struct file *realfile;
+
+	realfile = ovl_real_file(file);
+	if (IS_ERR(realfile))
+		return PTR_ERR(realfile);
+
+	with_ovl_creds(file_inode(file)->i_sb)
+		return vfs_cachestat(realfile, csr, cs);
+}
+#endif
+
 enum ovl_copyop {
 	OVL_COPY,
 	OVL_CLONE,
@@ -656,6 +671,9 @@ const struct file_operations ovl_file_operations = {
 	.mmap		= ovl_mmap,
 	.fallocate	= ovl_fallocate,
 	.fadvise	= ovl_fadvise,
+#ifdef CONFIG_CACHESTAT_SYSCALL
+	.cachestat	= ovl_cachestat,
+#endif
 	.flush		= ovl_flush,
 	.splice_read    = ovl_splice_read,
 	.splice_write   = ovl_splice_write,
