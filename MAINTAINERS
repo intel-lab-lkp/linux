@@ -24668,6 +24668,7 @@ S:	Maintained
 F:	Documentation/admin-guide/mm/shrinker_debugfs.rst
 F:	include/linux/list_lru.h
 F:	include/linux/shrinker.h
+F:	rust/helpers/list_lru.c
 F:	mm/list_lru.c
 F:	mm/shrinker.c
 F:	mm/shrinker_debug.c
