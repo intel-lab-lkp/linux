@@ -83,8 +83,7 @@ i915-y += \
 	i915_fb_pin.o \
 	i915_hdcp_gsc.o \
 	i915_initial_plane.o \
-	i915_overlay.o \
-	i915_panic.o
+	i915_overlay.o
 
 # "Graphics Technology" (aka we talk to the gpu)
 gt-y += \
@@ -167,6 +166,7 @@ gem-y += \
 	gem/i915_gem_object.o \
 	gem/i915_gem_object_frontbuffer.o \
 	gem/i915_gem_pages.o \
+	gem/i915_gem_panic.o \
 	gem/i915_gem_phys.o \
 	gem/i915_gem_pm.o \
 	gem/i915_gem_region.o \
