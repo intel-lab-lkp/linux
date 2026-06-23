@@ -86,11 +86,16 @@ static const struct gmbus_pin gmbus_pins[] = {
 	[GMBUS_PIN_DPD] = { "dpd", GPIO_5 },
 };
 
-static const struct gmbus_pin gmbus_pins_lpt[] = {
+static const struct gmbus_pin gmbus_pins_lpt_h[] = {
 	[GMBUS_PIN_VGADDC] = { "vga", GPIO_0 },
 	[GMBUS_PIN_DPC] = { "dpc", GPIO_3 },
 	[GMBUS_PIN_DPB] = { "dpb", GPIO_4 },
 	[GMBUS_PIN_DPD] = { "dpd", GPIO_5 },
+};
+
+static const struct gmbus_pin gmbus_pins_lpt_lp[] = {
+	[GMBUS_PIN_DPC] = { "dpc", GPIO_3 },
+	[GMBUS_PIN_DPB] = { "dpb", GPIO_4 },
 };
 
 static const struct gmbus_pin gmbus_pins_skl[] = {
@@ -178,9 +183,12 @@ static const struct gmbus_pin *get_gmbus_pin(struct intel_display *display,
 	} else if (DISPLAY_VER(display) == 9) {
 		pins = gmbus_pins_skl;
 		size = ARRAY_SIZE(gmbus_pins_skl);
+	} else if (HAS_PCH_LPT_LP(display)) {
+		pins = gmbus_pins_lpt_lp;
+		size = ARRAY_SIZE(gmbus_pins_lpt_lp);
 	} else if (HAS_PCH_LPT(display)) {
-		pins = gmbus_pins_lpt;
-		size = ARRAY_SIZE(gmbus_pins_lpt);
+		pins = gmbus_pins_lpt_h;
+		size = ARRAY_SIZE(gmbus_pins_lpt_h);
 	} else {
 		pins = gmbus_pins;
 		size = ARRAY_SIZE(gmbus_pins);
