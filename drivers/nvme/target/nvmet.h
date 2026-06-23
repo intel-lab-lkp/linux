@@ -210,6 +210,7 @@ struct nvmet_port {
 	struct nvmet_ana_group		ana_default_group;
 	enum nvme_ana_state		*ana_state;
 	struct key			*keyring;
+	struct net			*net_ns;
 	void				*priv;
 	bool				enabled;
 	int				inline_data_size;
@@ -629,7 +630,7 @@ ssize_t nvmet_ctrl_host_traddr(struct nvmet_ctrl *ctrl,
 		char *traddr, size_t traddr_len);
 
 struct nvmet_subsys *nvmet_subsys_alloc(const char *subsysnqn,
-		enum nvme_subsys_type type);
+		enum nvme_subsys_type type, struct net *net_ns);
 void nvmet_subsys_put(struct nvmet_subsys *subsys);
 void nvmet_subsys_del_ctrls(struct nvmet_subsys *subsys);
 

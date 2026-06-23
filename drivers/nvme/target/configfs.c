@@ -71,7 +71,7 @@ struct list_head *nvmet_get_port_list(struct net *net_ns)
 
 static int nvmet_add_port_list(struct nvmet_port *p)
 {
-	u64 ns_id = nvmet_get_ns_id(&init_net);
+	u64 ns_id = nvmet_get_ns_id(p->net_ns);
 	struct list_head *port_list;
 	int err = 0;
 
@@ -100,7 +100,7 @@ out_unlock:
 static void nvmet_del_port_list(struct nvmet_port *p)
 {
 	struct list_head *port_list;
-	u64 ns_id = nvmet_get_ns_id(&init_net);
+	u64 ns_id = nvmet_get_ns_id(p->net_ns);
 
 	xa_lock(&nvmet_ports_xa);
 	port_list = xa_load(&nvmet_ports_xa, ns_id);
@@ -1799,13 +1799,14 @@ static struct config_group *nvmet_subsys_make(struct config_group *group,
 		const char *name)
 {
 	struct nvmet_subsys *subsys, *disc_subsys;
+	struct net *net_ns = configfs_ns_from_group(group);
 
 	if (sysfs_streq(name, NVME_DISC_SUBSYS_NAME)) {
 		pr_err("can't create discovery subsystem through configfs\n");
 		return ERR_PTR(-EINVAL);
 	}
 
-	disc_subsys = nvmet_get_disc_subsys(&init_net);
+	disc_subsys = nvmet_get_disc_subsys(net_ns);
 	if (!disc_subsys)
 		return ERR_PTR(-ENOENT);
 	if (sysfs_streq(name, disc_subsys->subsysnqn)) {
@@ -1813,7 +1814,7 @@ static struct config_group *nvmet_subsys_make(struct config_group *group,
 		return ERR_PTR(-EINVAL);
 	}
 
-	subsys = nvmet_subsys_alloc(name, NVME_NQN_NVME);
+	subsys = nvmet_subsys_alloc(name, NVME_NQN_NVME, net_ns);
 	if (IS_ERR(subsys))
 		return ERR_CAST(subsys);
 
@@ -2125,6 +2126,10 @@ static struct config_group *nvmet_ports_make(struct config_group *group,
 		return ERR_PTR(-ENOMEM);
 	}
 
+	port->net_ns = configfs_ns_from_group(group);
+	if (!port->net_ns)
+		port->net_ns = get_net(&init_net);
+
 	if (IS_ENABLED(CONFIG_NVME_TARGET_TCP_TLS) && nvme_keyring_id()) {
 		port->keyring = key_lookup(nvme_keyring_id());
 		if (IS_ERR(port->keyring)) {
@@ -2371,7 +2376,8 @@ static const struct config_item_type nvmet_hosts_type = {
 static ssize_t nvmet_root_discovery_nqn_show(struct config_item *item,
 					     char *page)
 {
-	struct nvmet_subsys *disc_subsys = nvmet_get_disc_subsys(&init_net);
+	struct net *net_ns = configfs_ns_from_group(to_config_group(item));
+	struct nvmet_subsys *disc_subsys = nvmet_get_disc_subsys(net_ns);
 
 	if (!disc_subsys)
 		return -ENOENT;
@@ -2383,6 +2389,7 @@ static ssize_t nvmet_root_discovery_nqn_store(struct config_item *item,
 {
 	struct config_item *subsystems_item;
 	struct config_group *subsystems_group;
+	struct net *net_ns = configfs_ns_from_group(to_config_group(item));
 	struct nvmet_subsys *disc_subsys;
 	struct list_head *entry;
 	char *old_nqn = NULL, *new_nqn;
@@ -2415,7 +2422,7 @@ static ssize_t nvmet_root_discovery_nqn_store(struct config_item *item,
 			return -EINVAL;
 		}
 	}
-	disc_subsys = nvmet_get_disc_subsys(&init_net);
+	disc_subsys = nvmet_get_disc_subsys(net_ns);
 	if (disc_subsys) {
 		old_nqn = disc_subsys->subsysnqn;
 		disc_subsys->subsysnqn = new_nqn;

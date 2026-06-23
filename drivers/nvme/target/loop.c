@@ -9,6 +9,7 @@
 #include <linux/nvme.h>
 #include <linux/module.h>
 #include <linux/parser.h>
+#include <linux/nsproxy.h>
 #include "nvmet.h"
 #include "../host/nvme.h"
 #include "../host/fabrics.h"
@@ -538,6 +539,9 @@ static struct nvmet_port *nvme_loop_find_port(struct nvme_ctrl *ctrl)
 
 	mutex_lock(&nvme_loop_ports_mutex);
 	list_for_each_entry(p, &nvme_loop_ports, entry) {
+		/* Skip ports from non-matching namespaces */
+		if (p->net_ns != current->nsproxy->net_ns)
+			continue;
 		/* if no transport address is specified use the first port */
 		if ((ctrl->opts->mask & NVMF_OPT_TRADDR) &&
 		    strcmp(ctrl->opts->traddr, p->disc_addr.traddr))

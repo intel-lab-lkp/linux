@@ -26,7 +26,7 @@ int nvmet_add_disc_subsys(struct net *net_ns)
 	int err;
 
 	disc_subsys = nvmet_subsys_alloc(NVME_DISC_SUBSYS_NAME,
-					 NVME_NQN_CURR);
+					 NVME_NQN_CURR, net_ns);
 	if (IS_ERR(disc_subsys))
 		return PTR_ERR(disc_subsys);
 	err = xa_insert(&nvmet_disc_xa, ns_id,
@@ -67,7 +67,7 @@ void nvmet_port_disc_changed(struct nvmet_port *port,
 	struct nvmet_subsys *disc_subsys;
 
 	lockdep_assert_held(&nvmet_config_sem);
-	disc_subsys = nvmet_get_disc_subsys(&init_net);
+	disc_subsys = nvmet_get_disc_subsys(port->net_ns);
 	if (WARN_ON(!disc_subsys))
 		return;
 	disc_subsys->genctr++;
@@ -93,7 +93,7 @@ static void __nvmet_subsys_disc_changed(struct nvmet_port *port,
 	struct nvmet_ctrl *ctrl;
 	struct nvmet_subsys *disc_subsys;
 
-	disc_subsys = nvmet_get_disc_subsys(&init_net);
+	disc_subsys = nvmet_get_disc_subsys(port->net_ns);
 	if (WARN_ON(!disc_subsys))
 		return;
 	mutex_lock(&disc_subsys->lock);
@@ -113,14 +113,15 @@ void nvmet_subsys_disc_changed(struct nvmet_subsys *subsys,
 	struct nvmet_subsys_link *s;
 	struct list_head *port_list;
 	struct nvmet_subsys *disc_subsys;
+	struct net *net_ns = configfs_ns_from_group(&subsys->group);
 
 	lockdep_assert_held(&nvmet_config_sem);
-	disc_subsys = nvmet_get_disc_subsys(&init_net);
+	disc_subsys = nvmet_get_disc_subsys(net_ns);
 	if (WARN_ON(!disc_subsys))
 		return;
 	disc_subsys->genctr++;
 
-	port_list = nvmet_get_port_list(&init_net);
+	port_list = nvmet_get_port_list(net_ns);
 	list_for_each_entry(port, port_list, global_entry)
 		list_for_each_entry(s, &port->subsystems, entry) {
 			if (s->subsys != subsys)
@@ -257,7 +258,7 @@ static void nvmet_execute_disc_get_log_page(struct nvmet_req *req)
 	}
 	hdr = buffer;
 
-	disc_subsys = nvmet_get_disc_subsys(&init_net);
+	disc_subsys = nvmet_get_disc_subsys(req->port->net_ns);
 
 	nvmet_set_disc_traddr(req, req->port, traddr);
 

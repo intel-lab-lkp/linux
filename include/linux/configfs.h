@@ -258,6 +258,8 @@ configfs_register_default_group(struct config_group *parent_group,
 				const struct config_item_type *item_type);
 void configfs_unregister_default_group(struct config_group *group);
 
+struct net *configfs_ns_from_group(struct config_group *group);
+
 /* These functions can sleep and can alloc with GFP_KERNEL */
 /* WARNING: These cannot be called underneath configfs callbacks!! */
 int configfs_depend_item(struct configfs_subsystem *subsys,

@@ -276,6 +276,22 @@ void configfs_release_fs(struct super_block *sb)
 	mntput(mnt);
 }
 
+struct net *configfs_ns_from_group(struct config_group *group)
+{
+	struct configfs_super_info *info = configfs_root;
+	struct net *net_ns = NULL;
+
+	if (group) {
+		struct dentry *dentry = group->cg_item.ci_dentry;
+
+		info = dentry->d_sb->s_fs_info;
+		if (info)
+			net_ns = info->net_ns;
+	}
+	return net_ns;
+}
+EXPORT_SYMBOL_GPL(configfs_ns_from_group);
+
 static int __init configfs_init(void)
 {
 	int err = -ENOMEM;

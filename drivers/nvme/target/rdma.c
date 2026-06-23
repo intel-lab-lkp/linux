@@ -1870,8 +1870,8 @@ static int nvmet_rdma_enable_port(struct nvmet_rdma_port *port)
 	struct rdma_cm_id *cm_id;
 	int ret;
 
-	cm_id = rdma_create_id(&init_net, nvmet_rdma_cm_handler, port,
-			RDMA_PS_TCP, IB_QPT_RC);
+	cm_id = rdma_create_id(port->nport->net_ns, nvmet_rdma_cm_handler,
+			port, RDMA_PS_TCP, IB_QPT_RC);
 	if (IS_ERR(cm_id)) {
 		pr_err("CM ID creation failed\n");
 		return PTR_ERR(cm_id);
@@ -1964,7 +1964,7 @@ static int nvmet_rdma_add_port(struct nvmet_port *nport)
 		nport->max_queue_size = NVME_RDMA_MAX_QUEUE_SIZE;
 	}
 
-	ret = inet_pton_with_scope(&init_net, af, nport->disc_addr.traddr,
+	ret = inet_pton_with_scope(nport->net_ns, af, nport->disc_addr.traddr,
 			nport->disc_addr.trsvcid, &port->addr);
 	if (ret) {
 		pr_err("malformed ip/port passed: %s:%s\n",
