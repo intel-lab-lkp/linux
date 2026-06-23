@@ -872,6 +872,10 @@ ieee80211_rx_mgmt_spectrum_mgmt(struct ieee80211_sub_if_data *sdata,
 	if (mgmt->u.action.action_code != WLAN_ACTION_SPCT_CHL_SWITCH)
 		return;
 
+	/* only act on channel switch frames coming from our own IBSS */
+	if (!ether_addr_equal(mgmt->bssid, sdata->u.ibss.bssid))
+		return;
+
 	if (!sdata->vif.bss_conf.csa_active)
 		ieee80211_ibss_process_chanswitch(sdata, elems, false);
 }
@@ -1088,14 +1092,21 @@ static void ieee80211_rx_bss_info(struct ieee80211_sub_if_data *sdata,
 				sdata->u.ibss.ssid_len))
 		goto put_bss;
 
-	/* process channel switch */
-	if (sdata->vif.bss_conf.csa_active ||
-	    ieee80211_ibss_process_chanswitch(sdata, elems, true))
+	/* don't process beacons while a channel switch is in progress */
+	if (sdata->vif.bss_conf.csa_active)
 		goto put_bss;
 
 	/* same BSSID */
-	if (ether_addr_equal(cbss->bssid, sdata->u.ibss.bssid))
+	if (ether_addr_equal(cbss->bssid, sdata->u.ibss.bssid)) {
+		/*
+		 * Only act on a channel switch announcement that comes from
+		 * our own IBSS (i.e. matching BSSID). Acting on a CSA from a
+		 * foreign BSSID that merely shares our SSID would let any
+		 * station force us off-channel or tear the cell down.
+		 */
+		ieee80211_ibss_process_chanswitch(sdata, elems, true);
 		goto put_bss;
+	}
 
 	/* we use a fixed BSSID */
 	if (sdata->u.ibss.fixed_bssid)
