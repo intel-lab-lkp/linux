@@ -521,8 +521,7 @@ static bool rcu_preempt_has_tasks_ndqs(struct rcu_node *rnp)
  *
  * Returns true if futex-based deboosting is required.
  */
-static bool rcu_dequeue_predeboost_locked(struct task_struct *t, struct rcu_node *rnp,
-					  struct list_head **npp, bool nodefer)
+static bool rcu_dequeue_predeboost_locked(struct task_struct *t, struct rcu_node *rnp, bool nodefer)
 {
 	bool drop_boost_mutex = false;
 	struct list_head *np;
@@ -554,8 +553,19 @@ static bool rcu_dequeue_predeboost_locked(struct task_struct *t, struct rcu_node
 		list_add_tail(&t->rcu_node_entry, &rnp->dqs_blkd_tasks);
 		t->rcu_node_entry_dqs = 1;
 	}
-	*npp = np;
 	return drop_boost_mutex;
+}
+
+/*
+ * Deboost the RCU reader that was boosted by the rcub kthread associated
+ * with the specified rcu_node structure.
+ */
+static void rcu_deboost(struct task_struct *t, struct rcu_node *rnp)
+{
+	if (IS_ENABLED(CONFIG_RCU_BOOST)) {
+		if (!WARN_ON_ONCE(rt_mutex_owner(&rnp->boost_mtx.rtmutex) != t))
+			rt_mutex_futex_unlock(&rnp->boost_mtx.rtmutex);
+	}
 }
 
 /*
@@ -569,7 +579,6 @@ rcu_preempt_deferred_qs_irqrestore(struct task_struct *t, unsigned long flags)
 	bool empty_exp;
 	bool empty_norm;
 	bool empty_exp_now;
-	struct list_head *np;
 	bool drop_boost_mutex = false;
 	struct rcu_data *rdp;
 	struct rcu_node *rnp;
@@ -624,7 +633,8 @@ rcu_preempt_deferred_qs_irqrestore(struct task_struct *t, unsigned long flags)
 		WARN_ON_ONCE(rnp->completedqs == rnp->gp_seq &&
 			     (!empty_norm || rnp->qsmask));
 		empty_exp = sync_rcu_exp_done(rnp);
-		drop_boost_mutex = rcu_dequeue_predeboost_locked(t, rnp, &np, true);
+		if (t->rcu_node_entry_dqs == 0)
+			drop_boost_mutex = rcu_dequeue_predeboost_locked(t, rnp, true);
 		trace_rcu_unlock_preempted_task(TPS("rcu_preempt"), rnp->gp_seq, t->pid);
 
 		/*
@@ -655,8 +665,8 @@ rcu_preempt_deferred_qs_irqrestore(struct task_struct *t, unsigned long flags)
 			rcu_report_exp_rnp(rnp, true);
 
 		/* Unboost if we were boosted. */
-		if (IS_ENABLED(CONFIG_RCU_BOOST) && drop_boost_mutex)
-			rt_mutex_futex_unlock(&rnp->boost_mtx.rtmutex);
+		if (drop_boost_mutex)
+			rcu_deboost(t, rnp);
 	} else {
 		local_irq_restore(flags);
 	}
