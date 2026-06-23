@@ -51,6 +51,7 @@
 #include <termios.h>
 #include <semaphore.h>
 #include <signal.h>
+#include <stdlib.h>
 #include <math.h>
 #include <perf/mmap.h>
 
@@ -2014,9 +2015,11 @@ static int __cmd_record(const char *file_name, int argc, const char **argv)
 
 	BUG_ON(i + 2 != rec_argc);
 
-	ret = kvm_add_default_arch_event(EM_HOST, &i, rec_argv);
-	if (ret)
-		goto EXIT;
+	if (kvm_need_default_arch_event(EM_HOST, argc, argv)) {
+		ret = kvm_add_default_arch_event(EM_HOST, &i, rec_argv);
+		if (ret)
+			goto EXIT;
+	}
 
 	ret = cmd_record(i, rec_argv);
 
@@ -2101,9 +2104,11 @@ static int __cmd_top(int argc, const char **argv)
 
 	BUG_ON(i != argc);
 
-	ret = kvm_add_default_arch_event(EM_HOST, &i, rec_argv);
-	if (ret)
-		goto EXIT;
+	if (kvm_need_default_arch_event(EM_HOST, argc, argv)) {
+		ret = kvm_add_default_arch_event(EM_HOST, &i, rec_argv);
+		if (ret)
+			goto EXIT;
+	}
 
 	ret = cmd_top(i, rec_argv);
 

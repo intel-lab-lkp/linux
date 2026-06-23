@@ -174,11 +174,19 @@ const char * const *__kvm_skip_events_riscv(void);
 const char * const *__kvm_skip_events_s390(void);
 const char * const *__kvm_skip_events_x86(void);
 
+bool kvm_need_default_arch_event(uint16_t e_machine, int argc, const char **argv);
 int kvm_add_default_arch_event(uint16_t e_machine, int *argc, const char **argv);
 int __kvm_add_default_arch_event_powerpc(int *argc, const char **argv);
 int __kvm_add_default_arch_event_x86(int *argc, const char **argv);
 
 #else /* !HAVE_LIBTRACEEVENT */
+
+static inline bool kvm_need_default_arch_event(uint16_t e_machine __maybe_unused,
+					       int argc __maybe_unused,
+					       const char **argv __maybe_unused)
+{
+	return false;
+}
 
 static inline int kvm_add_default_arch_event(uint16_t e_machine __maybe_unused,
 					     int *argc __maybe_unused,
