@@ -37,8 +37,14 @@ static ssize_t edac_device_ctl_log_ue_store(struct edac_device_ctl_info
 					*ctl_info, const char *data,
 					size_t count)
 {
+	unsigned long val;
+	int ret;
+
 	/* if parameter is zero, turn off flag, if non-zero turn on flag */
-	ctl_info->log_ue = (simple_strtoul(data, NULL, 0) != 0);
+	ret = kstrtoul(data, 0, &val);
+	if (ret < 0)
+		return ret;
+	ctl_info->log_ue = !!val;
 
 	return count;
 }
@@ -54,8 +60,14 @@ static ssize_t edac_device_ctl_log_ce_store(struct edac_device_ctl_info
 					*ctl_info, const char *data,
 					size_t count)
 {
+	unsigned long val;
+	int ret;
+
 	/* if parameter is zero, turn off flag, if non-zero turn on flag */
-	ctl_info->log_ce = (simple_strtoul(data, NULL, 0) != 0);
+	ret = kstrtoul(data, 0, &val);
+	if (ret < 0)
+		return ret;
+	ctl_info->log_ce = !!val;
 
 	return count;
 }
@@ -71,8 +83,14 @@ static ssize_t edac_device_ctl_panic_on_ue_store(struct edac_device_ctl_info
 						 *ctl_info, const char *data,
 						 size_t count)
 {
+	unsigned long val;
+	int ret;
+
 	/* if parameter is zero, turn off flag, if non-zero turn on flag */
-	ctl_info->panic_on_ue = (simple_strtoul(data, NULL, 0) != 0);
+	ret = kstrtoul(data, 0, &val);
+	if (ret < 0)
+		return ret;
+	ctl_info->panic_on_ue = !!val;
 
 	return count;
 }
@@ -89,13 +107,16 @@ static ssize_t edac_device_ctl_poll_msec_store(struct edac_device_ctl_info
 					size_t count)
 {
 	unsigned long value;
+	int ret;
 
 	/* get the value and enforce that it is non-zero, must be at least
 	 * one millisecond for the delay period, between scans
 	 * Then cancel last outstanding delay for the work request
 	 * and set a new one.
 	 */
-	value = simple_strtoul(data, NULL, 0);
+	ret = kstrtoul(data, 0, &value);
+	if (ret < 0)
+		return ret;
 	edac_device_reset_delay_period(ctl_info, value);
 
 	return count;
