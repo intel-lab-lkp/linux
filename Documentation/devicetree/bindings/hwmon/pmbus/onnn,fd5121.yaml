@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwmon/pmbus/onnn,fd5121.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: onsemi's multi-phase digital controllers
+
+maintainers:
+  - Selvamani Rajagopal <selvamani.rajagopal@onsemi.com>
+
+description:
+  onsemi multi-phase digital controllers with PMBus.
+
+properties:
+  compatible:
+    enum:
+      - onnn,fd5121
+      - onnn,fd5123
+      - onnn,fd5125
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      fd5121@50 {
+        compatible = "onnn,fd5121";
+        reg = <0x50>;
+      };
+    };
