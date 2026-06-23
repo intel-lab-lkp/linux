@@ -909,9 +909,11 @@ static struct domain_device *sas_ex_discover_expander(
 		return NULL;
 
 	phy->port = sas_port_alloc(&parent->rphy->dev, phy_id);
-	/* FIXME: better error handling */
-	BUG_ON(sas_port_add(phy->port) != 0);
-
+	if (!phy->port)
+		goto out_free_child;
+	res = sas_port_add(phy->port);
+	if (res)
+		goto out_free_port;
 
 	switch (phy->attached_dev_type) {
 	case SAS_EDGE_EXPANDER_DEVICE:
@@ -926,6 +928,9 @@ static struct domain_device *sas_ex_discover_expander(
 		rphy = NULL;	/* shut gcc up */
 		BUG();
 	}
+	if (!rphy)
+		goto out_delete_port;
+
 	port = parent->port;
 	child->rphy = rphy;
 	get_device(&rphy->dev);
@@ -963,6 +968,19 @@ static struct domain_device *sas_ex_discover_expander(
 	}
 	list_add_tail(&child->siblings, &parent->ex_dev.children);
 	return child;
+
+out_delete_port:
+	sas_port_delete(phy->port);
+	phy->port = NULL;
+	kfree(child);
+	return NULL;
+
+out_free_port:
+	sas_port_free(phy->port);
+	phy->port = NULL;
+out_free_child:
+	kfree(child);
+	return NULL;
 }
 
 static int sas_ex_discover_dev(struct domain_device *dev, int phy_id)
