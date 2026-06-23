@@ -12,7 +12,7 @@ ENTRY(memcmp)
 	cmplti	r2, 4
 	bt	.L_compare_by_byte
 
-	andi	r13, r0, 3
+	andi	r13, r3, 3
 	movi	r19, 4
 
 	/* Test if s1 is not 4 bytes aligned.  */
