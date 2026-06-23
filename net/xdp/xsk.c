@@ -499,6 +499,18 @@ void __xsk_map_flush(struct list_head *flush_list)
 
 void xsk_tx_completed(struct xsk_buff_pool *pool, u32 nb_entries)
 {
+	if (unlikely(pool->reclaim_descs)) {
+		if (nb_entries < pool->tx_zc_pending_descs) {
+			pool->tx_zc_pending_descs -= nb_entries;
+			xskq_prod_submit_n(pool->cq, nb_entries);
+			return;
+		}
+
+		pool->tx_zc_pending_descs = 0;
+		nb_entries += pool->reclaim_descs;
+		pool->reclaim_descs = 0;
+	}
+
 	xskq_prod_submit_n(pool->cq, nb_entries);
 }
 EXPORT_SYMBOL(xsk_tx_completed);
@@ -576,9 +588,20 @@ static u32 xsk_tx_peek_release_fallback(struct xsk_buff_pool *pool, u32 max_entr
 
 u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 nb_pkts)
 {
+	struct xsk_tx_batch batch = {};
 	struct xdp_sock *xs;
+	u32 cq_cached_prod;
 
 	rcu_read_lock();
+
+	/* Pairs with the release stores in xp_prepare_xsk_tx_share() and
+	 * xp_finish_xsk_tx_share(). If bind is converting a singular Tx pool
+	 * to shared, do not enter the singular batched path.
+	 */
+	if (smp_load_acquire(&pool->tx_share_pending))
+		goto out;
+	if (unlikely(pool->reclaim_descs))
+		goto out;
 	if (!list_is_singular(&pool->xsk_tx_list)) {
 		/* Fallback to the non-batched version */
 		rcu_read_unlock();
@@ -586,10 +609,8 @@ u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 nb_pkts)
 	}
 
 	xs = list_first_or_null_rcu(&pool->xsk_tx_list, struct xdp_sock, tx_list);
-	if (!xs) {
-		nb_pkts = 0;
+	if (!xs)
 		goto out;
-	}
 
 	nb_pkts = xskq_cons_nb_entries(xs->tx, nb_pkts);
 
@@ -603,19 +624,38 @@ u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 nb_pkts)
 	if (!nb_pkts)
 		goto out;
 
-	nb_pkts = xskq_cons_read_desc_batch(xs->tx, pool, nb_pkts);
+	batch = xskq_cons_read_desc_batch(xs, pool, nb_pkts);
+	nb_pkts = xsk_tx_batch_cq_descs(&batch);
 	if (!nb_pkts) {
 		xs->tx->queue_empty_descs++;
 		goto out;
 	}
 
 	__xskq_cons_release(xs->tx);
+	cq_cached_prod = pool->cq->cached_prod;
+
 	xskq_prod_write_addr_batch(pool->cq, pool->tx_descs, nb_pkts);
+
+	if (unlikely(batch.reclaim_descs)) {
+		u32 cq_pending_descs;
+
+		/* CQ is positional. Descriptors already written but not
+		 * submitted must complete before any reclaim-only descriptors
+		 * appended below.
+		 */
+		cq_pending_descs = cq_cached_prod - xskq_get_prod(pool->cq);
+
+		pool->tx_zc_pending_descs = batch.tx_descs + cq_pending_descs;
+		pool->reclaim_descs = batch.reclaim_descs;
+		if (unlikely(!pool->tx_zc_pending_descs))
+			xsk_tx_completed(pool, 0);
+	}
+
 	xs->sk.sk_write_space(&xs->sk);
 
 out:
 	rcu_read_unlock();
-	return nb_pkts;
+	return batch.tx_descs;
 }
 EXPORT_SYMBOL(xsk_tx_peek_release_desc_batch);
 
@@ -1442,6 +1482,7 @@ static int xsk_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr
 	struct sockaddr_xdp *sxdp = (struct sockaddr_xdp *)addr;
 	struct sock *sk = sock->sk;
 	struct xdp_sock *xs = xdp_sk(sk);
+	bool tx_share_pending = false;
 	struct net_device *dev;
 	int bound_dev_if;
 	u32 flags, qid;
@@ -1549,6 +1590,13 @@ static int xsk_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr
 				goto out_unlock;
 			}
 
+			err = xp_prepare_xsk_tx_share(umem_xs->pool, xs,
+						      &tx_share_pending);
+			if (err) {
+				sockfd_put(sock);
+				goto out_unlock;
+			}
+
 			xp_get_pool(umem_xs->pool);
 			xs->pool = umem_xs->pool;
 
@@ -1559,6 +1607,8 @@ static int xsk_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr
 			if (xs->tx && !xs->pool->tx_descs) {
 				err = xp_alloc_tx_descs(xs->pool, xs);
 				if (err) {
+					if (tx_share_pending)
+						xp_finish_xsk_tx_share(xs->pool);
 					xp_put_pool(xs->pool);
 					xs->pool = NULL;
 					sockfd_put(sock);
@@ -1598,6 +1648,8 @@ static int xsk_bind(struct socket *sock, struct sockaddr_unsized *addr, int addr
 	xs->sg = !!(xs->umem->flags & XDP_UMEM_SG_FLAG);
 	xs->queue_id = qid;
 	xp_add_xsk(xs->pool, xs);
+	if (tx_share_pending)
+		xp_finish_xsk_tx_share(xs->pool);
 
 	if (qid < dev->real_num_rx_queues) {
 		struct netdev_rx_queue *rxq;

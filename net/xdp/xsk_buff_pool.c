@@ -22,6 +22,72 @@ void xp_add_xsk(struct xsk_buff_pool *pool, struct xdp_sock *xs)
 	spin_unlock(&pool->xsk_tx_list_lock);
 }
 
+int xp_prepare_xsk_tx_share(struct xsk_buff_pool *pool, struct xdp_sock *xs,
+			    bool *pending)
+{
+	struct xdp_sock *tmp;
+	int err = 0;
+
+	*pending = false;
+	if (!xs->tx)
+		return 0;
+
+	spin_lock(&pool->xsk_tx_list_lock);
+	if (!list_is_singular(&pool->xsk_tx_list)) {
+		spin_unlock(&pool->xsk_tx_list_lock);
+		return 0;
+	}
+
+	if (pool->tx_share_pending) {
+		spin_unlock(&pool->xsk_tx_list_lock);
+		return -EAGAIN;
+	}
+
+	/* Pairs with the acquire load in xsk_tx_peek_release_desc_batch().
+	 * Stop new singular batched Tx readers before synchronize_net()
+	 * waits for readers that may already have observed a singular list.
+	 */
+	smp_store_release(&pool->tx_share_pending, true);
+	*pending = true;
+	spin_unlock(&pool->xsk_tx_list_lock);
+
+	/* A batch that observed a singular Tx socket list before the gate was
+	 * armed may set drain_cont. Wait for all such readers before checking
+	 * whether the pool can safely become shared.
+	 */
+	synchronize_net();
+
+	spin_lock(&pool->xsk_tx_list_lock);
+	list_for_each_entry(tmp, &pool->xsk_tx_list, tx_list) {
+		if (READ_ONCE(tmp->drain_cont)) {
+			err = -EAGAIN;
+			break;
+		}
+	}
+
+	if (err) {
+		/* Pairs with the acquire load in xsk_tx_peek_release_desc_batch().
+		 * No socket was added; clear the gate so Tx can resume.
+		 */
+		smp_store_release(&pool->tx_share_pending, false);
+		*pending = false;
+	}
+	spin_unlock(&pool->xsk_tx_list_lock);
+
+	return err;
+}
+
+void xp_finish_xsk_tx_share(struct xsk_buff_pool *pool)
+{
+	spin_lock(&pool->xsk_tx_list_lock);
+	/* Pairs with the acquire load in xsk_tx_peek_release_desc_batch().
+	 * Publish the preceding xp_add_xsk() list update before allowing Tx
+	 * to observe that the share transition has finished.
+	 */
+	smp_store_release(&pool->tx_share_pending, false);
+	spin_unlock(&pool->xsk_tx_list_lock);
+}
+
 void xp_del_xsk(struct xsk_buff_pool *pool, struct xdp_sock *xs)
 {
 	if (!xs->tx)

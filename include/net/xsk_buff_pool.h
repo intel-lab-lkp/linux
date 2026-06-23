@@ -78,9 +78,12 @@ struct xsk_buff_pool {
 	u32 chunk_size;
 	u32 chunk_shift;
 	u32 frame_len;
+	u32 reclaim_descs;
+	u32 tx_zc_pending_descs;
 	u32 xdp_zc_max_segs;
 	u8 tx_metadata_len; /* inherited from umem */
 	u8 cached_need_wakeup;
+	bool tx_share_pending;
 	bool uses_need_wakeup;
 	bool unaligned;
 	bool tx_sw_csum;
@@ -113,6 +116,9 @@ void xp_get_pool(struct xsk_buff_pool *pool);
 bool xp_put_pool(struct xsk_buff_pool *pool);
 void xp_clear_dev(struct xsk_buff_pool *pool);
 void xp_add_xsk(struct xsk_buff_pool *pool, struct xdp_sock *xs);
+int xp_prepare_xsk_tx_share(struct xsk_buff_pool *pool, struct xdp_sock *xs,
+			    bool *pending);
+void xp_finish_xsk_tx_share(struct xsk_buff_pool *pool);
 void xp_del_xsk(struct xsk_buff_pool *pool, struct xdp_sock *xs);
 
 /* AF_XDP, and XDP core. */
