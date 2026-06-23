@@ -1996,13 +1996,14 @@ static int __cmd_record(const char *file_name, int argc, const char **argv)
 {
 	int rec_argc, i = 0, j, ret;
 	const char **rec_argv;
+	int need_arch_event = !!kvm_need_default_arch_event(EM_HOST, argc, argv);
 
 	/*
 	 * Besides the 2 more options "-o" and "filename",
 	 * kvm_add_default_arch_event() may add 2 extra options,
-	 * so allocate 4 more items.
+	 * so allocate more items conditionally.
 	 */
-	rec_argc = argc + 2 + 2;
+	rec_argc = argc + 2 + (2 * need_arch_event);
 	rec_argv = calloc(rec_argc + 1, sizeof(char *));
 	if (!rec_argv)
 		return -ENOMEM;
@@ -2010,22 +2011,22 @@ static int __cmd_record(const char *file_name, int argc, const char **argv)
 	rec_argv[i++] = STRDUP_FAIL_EXIT("record");
 	rec_argv[i++] = STRDUP_FAIL_EXIT("-o");
 	rec_argv[i++] = STRDUP_FAIL_EXIT(file_name);
-	for (j = 1; j < argc; j++, i++)
-		rec_argv[i] = STRDUP_FAIL_EXIT(argv[j]);
-
-	BUG_ON(i + 2 != rec_argc);
-
-	if (kvm_need_default_arch_event(EM_HOST, argc, argv)) {
+	if (need_arch_event) {
 		ret = kvm_add_default_arch_event(EM_HOST, &i, rec_argv);
 		if (ret)
 			goto EXIT;
 	}
 
+	for (j = 1; j < argc; j++, i++)
+		rec_argv[i] = STRDUP_FAIL_EXIT(argv[j]);
+
+	BUG_ON(i != rec_argc);
+
 	ret = cmd_record(i, rec_argv);
 
 EXIT:
-	for (i = 0; i < rec_argc; i++)
-		free((void *)rec_argv[i]);
+	for (j = 0; j < i; j++)
+		free((void *)rec_argv[j]);
 	free(rec_argv);
 	return ret;
 }
