@@ -146,7 +146,7 @@ static void steelseries_arctis_9_parse_status(struct steelseries_device *sd,
 	if (data[0] == 0xaa) {
 		sd->headset_connected = (data[1] == 0x01);
 		sd->battery_charging = (data[4] == 0x01);
-		sd->battery_capacity = steelseries_map_capacity(data[3], 0x68, 0x9d);
+		sd->battery_capacity = steelseries_map_capacity(data[3], 0x64, 0x9a);
 	}
 }
 
