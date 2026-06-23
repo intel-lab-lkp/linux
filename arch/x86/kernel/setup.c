@@ -6,6 +6,7 @@
  * parts of early kernel initialization.
  */
 #include <linux/acpi.h>
+#include <linux/bootconfig.h>
 #include <linux/console.h>
 #include <linux/cpu.h>
 #include <linux/crash_dump.h>
@@ -881,6 +882,37 @@ static void __init x86_report_nx(void)
  * Note: On x86_64, fixmaps are ready for use even before this is called.
  */
 
+#ifdef CONFIG_CMDLINE_FROM_BOOTCONFIG
+static int __init bootconfig_optin(char *param, char *val,
+				   const char *unused, void *arg)
+{
+	if (!strcmp(param, "bootconfig"))
+		*(bool *)arg = true;
+	return 0;
+}
+
+/*
+ * Did the user opt in to bootconfig on the kernel command line? Use
+ * parse_args() so this matches setup_boot_config() exactly, including
+ * stopping at the "--" that separates init arguments.
+ */
+static bool __init bootconfig_cmdline_requested(void)
+{
+	static char tmp_cmdline[COMMAND_LINE_SIZE] __initdata;
+	bool found = false;
+
+	if (IS_ENABLED(CONFIG_BOOT_CONFIG_FORCE))
+		return true;
+
+	strscpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
+	if (IS_ERR(parse_args("bootconfig", tmp_cmdline, NULL, 0, 0, 0,
+			      &found, bootconfig_optin)))
+		return false;
+
+	return found;
+}
+#endif
+
 void __init setup_arch(char **cmdline_p)
 {
 #ifdef CONFIG_X86_32
@@ -922,6 +954,17 @@ void __init setup_arch(char **cmdline_p)
 	}
 #endif
 	builtin_cmdline_added = true;
+#endif
+
+#ifdef CONFIG_CMDLINE_FROM_BOOTCONFIG
+	/*
+	 * Prepend the build-time-rendered embedded "kernel" keys here so
+	 * parse_early_param() below sees them, gating on the same opt-in
+	 * as the runtime parser (see bootconfig_cmdline_requested()).
+	 */
+	if (bootconfig_cmdline_requested())
+		xbc_prepend_embedded_cmdline(boot_command_line,
+					     COMMAND_LINE_SIZE);
 #endif
 
 	strscpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
