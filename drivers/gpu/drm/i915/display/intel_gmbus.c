@@ -105,55 +105,55 @@ static const struct gmbus_pin gmbus_pins_spt[] = {
 };
 
 static const struct gmbus_pin gmbus_pins_bxt[] = {
-	[GMBUS_PIN_1_BXT] = { "dpb", GPIO_1 },
-	[GMBUS_PIN_2_BXT] = { "dpc", GPIO_2 },
-	[GMBUS_PIN_3_BXT] = { "misc", GPIO_3 },
+	[GMBUS_PIN_1] = { "dpb", GPIO_1 },
+	[GMBUS_PIN_2] = { "dpc", GPIO_2 },
+	[GMBUS_PIN_3] = { "misc", GPIO_3 },
 };
 
 static const struct gmbus_pin gmbus_pins_cnp[] = {
-	[GMBUS_PIN_1_BXT] = { "dpb", GPIO_1 },
-	[GMBUS_PIN_2_BXT] = { "dpc", GPIO_2 },
-	[GMBUS_PIN_3_BXT] = { "misc", GPIO_3 },
-	[GMBUS_PIN_4_CNP] = { "dpd", GPIO_4 },
+	[GMBUS_PIN_1] = { "dpb", GPIO_1 },
+	[GMBUS_PIN_2] = { "dpc", GPIO_2 },
+	[GMBUS_PIN_3] = { "misc", GPIO_3 },
+	[GMBUS_PIN_4] = { "dpd", GPIO_4 },
 };
 
 static const struct gmbus_pin gmbus_pins_icp[] = {
-	[GMBUS_PIN_1_BXT] = { "dpa", GPIO_1 },
-	[GMBUS_PIN_2_BXT] = { "dpb", GPIO_2 },
-	[GMBUS_PIN_3_BXT] = { "dpc", GPIO_3 },
-	[GMBUS_PIN_9_TC1_ICP] = { "tc1", GPIO_9 },
-	[GMBUS_PIN_10_TC2_ICP] = { "tc2", GPIO_10 },
-	[GMBUS_PIN_11_TC3_ICP] = { "tc3", GPIO_11 },
-	[GMBUS_PIN_12_TC4_ICP] = { "tc4", GPIO_12 },
-	[GMBUS_PIN_13_TC5_TGP] = { "tc5", GPIO_13 },
-	[GMBUS_PIN_14_TC6_TGP] = { "tc6", GPIO_14 },
+	[GMBUS_PIN_1] = { "dpa", GPIO_1 },
+	[GMBUS_PIN_2] = { "dpb", GPIO_2 },
+	[GMBUS_PIN_3] = { "dpc", GPIO_3 },
+	[GMBUS_PIN_9_TC1] = { "tc1", GPIO_9 },
+	[GMBUS_PIN_10_TC2] = { "tc2", GPIO_10 },
+	[GMBUS_PIN_11_TC3] = { "tc3", GPIO_11 },
+	[GMBUS_PIN_12_TC4] = { "tc4", GPIO_12 },
+	[GMBUS_PIN_13_TC5] = { "tc5", GPIO_13 },
+	[GMBUS_PIN_14_TC6] = { "tc6", GPIO_14 },
 };
 
 static const struct gmbus_pin gmbus_pins_dg1[] = {
-	[GMBUS_PIN_1_BXT] = { "dpa", GPIO_1 },
-	[GMBUS_PIN_2_BXT] = { "dpb", GPIO_2 },
-	[GMBUS_PIN_3_BXT] = { "dpc", GPIO_3 },
-	[GMBUS_PIN_4_CNP] = { "dpd", GPIO_4 },
+	[GMBUS_PIN_1] = { "dpa", GPIO_1 },
+	[GMBUS_PIN_2] = { "dpb", GPIO_2 },
+	[GMBUS_PIN_3] = { "dpc", GPIO_3 },
+	[GMBUS_PIN_4] = { "dpd", GPIO_4 },
 };
 
 static const struct gmbus_pin gmbus_pins_dg2[] = {
-	[GMBUS_PIN_1_BXT] = { "dpa", GPIO_1 },
-	[GMBUS_PIN_2_BXT] = { "dpb", GPIO_2 },
-	[GMBUS_PIN_3_BXT] = { "dpc", GPIO_3 },
-	[GMBUS_PIN_4_CNP] = { "dpd", GPIO_4 },
-	[GMBUS_PIN_9_TC1_ICP] = { "tc1", GPIO_9 },
+	[GMBUS_PIN_1] = { "dpa", GPIO_1 },
+	[GMBUS_PIN_2] = { "dpb", GPIO_2 },
+	[GMBUS_PIN_3] = { "dpc", GPIO_3 },
+	[GMBUS_PIN_4] = { "dpd", GPIO_4 },
+	[GMBUS_PIN_9_TC1] = { "tc1", GPIO_9 },
 };
 
 static const struct gmbus_pin gmbus_pins_mtp[] = {
-	[GMBUS_PIN_1_BXT] = { "dpa", GPIO_1 },
-	[GMBUS_PIN_2_BXT] = { "dpb", GPIO_2 },
-	[GMBUS_PIN_3_BXT] = { "dpc", GPIO_3 },
-	[GMBUS_PIN_4_CNP] = { "dpd", GPIO_4 },
-	[GMBUS_PIN_5_MTP] = { "dpe", GPIO_5 },
-	[GMBUS_PIN_9_TC1_ICP] = { "tc1", GPIO_9 },
-	[GMBUS_PIN_10_TC2_ICP] = { "tc2", GPIO_10 },
-	[GMBUS_PIN_11_TC3_ICP] = { "tc3", GPIO_11 },
-	[GMBUS_PIN_12_TC4_ICP] = { "tc4", GPIO_12 },
+	[GMBUS_PIN_1] = { "dpa", GPIO_1 },
+	[GMBUS_PIN_2] = { "dpb", GPIO_2 },
+	[GMBUS_PIN_3] = { "dpc", GPIO_3 },
+	[GMBUS_PIN_4] = { "dpd", GPIO_4 },
+	[GMBUS_PIN_5] = { "dpe", GPIO_5 },
+	[GMBUS_PIN_9_TC1] = { "tc1", GPIO_9 },
+	[GMBUS_PIN_10_TC2] = { "tc2", GPIO_10 },
+	[GMBUS_PIN_11_TC3] = { "tc3", GPIO_11 },
+	[GMBUS_PIN_12_TC4] = { "tc4", GPIO_12 },
 };
 
 static const struct gmbus_pin *get_gmbus_pin(struct intel_display *display,
