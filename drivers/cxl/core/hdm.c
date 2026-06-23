@@ -91,11 +91,9 @@ static void clear_hdm_info(void *data)
 	WRITE_ONCE(pdev->hdm, NULL);
 }
 
-static int devm_cxl_pci_setup_hdm_info(struct cxl_hdm *cxlhdm)
+static struct pci_dev *cxl_hdm_to_pci_dev(struct cxl_hdm *cxlhdm)
 {
 	struct cxl_port *port = cxlhdm->port;
-	struct cxl_hdm_info *info;
-	struct pci_dev *pdev;
 	struct device *uport;
 
 	if (is_cxl_endpoint(port)) {
@@ -107,9 +105,27 @@ static int devm_cxl_pci_setup_hdm_info(struct cxl_hdm *cxlhdm)
 	}
 
 	if (!dev_is_pci(uport))
+		return NULL;
+
+	return to_pci_dev(uport);
+}
+
+static int devm_cxl_pci_setup_hdm_info(struct cxl_hdm *cxlhdm)
+{
+	struct cxl_hdm_info *info;
+	struct pci_dev *pdev;
+
+	pdev = cxl_hdm_to_pci_dev(cxlhdm);
+	if (!pdev)
 		return 0;
 
-	pdev = to_pci_dev(uport);
+	info = READ_ONCE(pdev->hdm);
+	if (info) {
+		if (info->decoder_count != cxlhdm->decoder_count)
+			return -ENXIO;
+		return 0;
+	}
+
 	info = devm_kzalloc(&pdev->dev,
 			    struct_size(info, settings, cxlhdm->decoder_count),
 			    GFP_KERNEL);
@@ -125,23 +141,13 @@ static int devm_cxl_pci_setup_hdm_info(struct cxl_hdm *cxlhdm)
 static void cxl_hdm_info_set_decoder(struct cxl_hdm *cxlhdm,
 				     struct cxl_decoder *cxld)
 {
-	struct cxl_port *port = cxlhdm->port;
 	struct cxl_hdm_info *info;
 	struct pci_dev *pdev;
-	struct device *uport;
 
-	if (is_cxl_endpoint(port)) {
-		struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
-
-		uport = cxlmd->dev.parent;
-	} else {
-		uport = port->uport_dev;
-	}
-
-	if (!dev_is_pci(uport))
+	pdev = cxl_hdm_to_pci_dev(cxlhdm);
+	if (!pdev)
 		return;
 
-	pdev = to_pci_dev(uport);
 	info = READ_ONCE(pdev->hdm);
 	if (!info || cxld->id >= info->decoder_count)
 		return;
@@ -202,6 +208,7 @@ static struct cxl_hdm *devm_cxl_setup_hdm(struct cxl_port *port,
 	struct cxl_register_map *reg_map = &port->reg_map;
 	struct device *dev = &port->dev;
 	struct cxl_hdm *cxlhdm;
+	struct pci_dev *pdev;
 	int rc;
 
 	cxlhdm = devm_kzalloc(dev, sizeof(*cxlhdm), GFP_KERNEL);
@@ -227,11 +234,21 @@ static struct cxl_hdm *devm_cxl_setup_hdm(struct cxl_port *port,
 		return ERR_PTR(-ENODEV);
 	}
 
-	rc = cxl_map_component_regs(reg_map, &cxlhdm->regs,
-				    BIT(CXL_CM_CAP_CAP_ID_HDM));
-	if (rc) {
-		dev_err(dev, "Failed to map HDM capability.\n");
-		return ERR_PTR(rc);
+	pdev = cxl_hdm_to_pci_dev(cxlhdm);
+	if (pdev) {
+		struct cxl_hdm_info *info = READ_ONCE(pdev->hdm);
+
+		if (info && info->regs.hdm_decoder)
+			cxlhdm->regs = info->regs;
+	}
+
+	if (!cxlhdm->regs.hdm_decoder) {
+		rc = cxl_map_component_regs(reg_map, &cxlhdm->regs,
+					    BIT(CXL_CM_CAP_CAP_ID_HDM));
+		if (rc) {
+			dev_err(dev, "Failed to map HDM capability.\n");
+			return ERR_PTR(rc);
+		}
 	}
 
 	parse_hdm_decoder_caps(cxlhdm);

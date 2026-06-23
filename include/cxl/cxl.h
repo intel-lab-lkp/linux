@@ -26,6 +26,7 @@ enum cxl_devtype {
 };
 
 struct cxl_region;
+struct pci_dev;
 
 enum cxl_decoder_type {
 	CXL_DECODER_DEVMEM = 2,
@@ -134,6 +135,14 @@ struct cxl_hdm_info {
 };
 
 int cxl_commit(struct cxl_decoder_settings *settings, void __iomem *hdm);
+#ifdef CONFIG_CXL_HDM
+int pci_cxl_hdm_init(struct pci_dev *pdev);
+#else
+static inline int pci_cxl_hdm_init(struct pci_dev *pdev)
+{
+	return -ENOTTY;
+}
+#endif
 
 struct cxl_reg_map {
 	bool valid;
