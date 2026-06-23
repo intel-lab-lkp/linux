@@ -7,6 +7,10 @@ CFLAGS_REMOVE_time.o = -pg
 CFLAGS_REMOVE_irq.o = -pg
 endif
 
+KASAN_SANITIZE_enlighten_pvh.o := n
+KASAN_SANITIZE_enlighten.o := n
+KASAN_SANITIZE_efi.o := n
+
 # Make sure early boot has no stackprotector
 CFLAGS_enlighten_pv.o		:= -fno-stack-protector
 CFLAGS_mmu_pv.o			:= -fno-stack-protector
