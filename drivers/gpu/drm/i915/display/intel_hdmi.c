@@ -2853,9 +2853,6 @@ static u8 cnp_encoder_to_ddc_pin(struct intel_encoder *encoder)
 	case PORT_D:
 		ddc_pin = GMBUS_PIN_4;
 		break;
-	case PORT_F:
-		ddc_pin = GMBUS_PIN_3;
-		break;
 	default:
 		MISSING_CASE(port);
 		ddc_pin = GMBUS_PIN_1;
