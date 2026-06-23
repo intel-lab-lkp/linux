@@ -942,27 +942,11 @@ static int digi_write(struct tty_struct *tty, struct usb_serial_port *port,
 static void digi_write_bulk_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
-	struct usb_serial *serial;
-	struct digi_port *priv;
-	struct digi_serial *serial_priv;
-	int status = urb->status;
+	struct digi_serial *serial_priv = usb_get_serial_data(port->serial);
+	struct digi_port *priv = usb_get_serial_port_data(port);
 	unsigned long flags;
 	bool wakeup;
 	int ret = 0;
-
-	/* port and serial sanity check */
-	if (port == NULL || (priv = usb_get_serial_port_data(port)) == NULL) {
-		pr_err("%s: port or port->private is NULL, status=%d\n",
-			__func__, status);
-		return;
-	}
-	serial = port->serial;
-	if (serial == NULL || (serial_priv = usb_get_serial_data(serial)) == NULL) {
-		dev_err(&port->dev,
-			"%s: serial or serial->private is NULL, status=%d\n",
-			__func__, status);
-		return;
-	}
 
 	/* handle oob callback */
 	if (priv->dp_port_num == serial_priv->ds_oob_port_num) {
@@ -1292,26 +1276,10 @@ static void digi_port_remove(struct usb_serial_port *port)
 static void digi_read_bulk_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
-	struct digi_port *priv;
-	struct digi_serial *serial_priv;
+	struct digi_serial *serial_priv = usb_get_serial_data(port->serial);
+	struct digi_port *priv = usb_get_serial_port_data(port);
 	int status = urb->status;
 	int ret;
-
-	/* port sanity check, do not resubmit if port is not valid */
-	if (port == NULL)
-		return;
-	priv = usb_get_serial_port_data(port);
-	if (priv == NULL) {
-		dev_err(&port->dev, "%s: port->private is NULL, status=%d\n",
-			__func__, status);
-		return;
-	}
-	if (port->serial == NULL ||
-		(serial_priv = usb_get_serial_data(port->serial)) == NULL) {
-		dev_err(&port->dev, "%s: serial is bad or serial->private "
-			"is NULL, status=%d\n", __func__, status);
-		return;
-	}
 
 	/* do not resubmit urb if it has any status error */
 	if (status) {
