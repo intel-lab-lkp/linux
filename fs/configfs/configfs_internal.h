@@ -63,7 +63,7 @@ extern spinlock_t configfs_dirent_lock;
 
 extern struct kmem_cache *configfs_dir_cachep;
 
-extern int configfs_is_root(struct config_item *item);
+extern bool configfs_is_root(struct config_item *item);
 
 extern struct inode * configfs_new_inode(umode_t mode, struct configfs_dirent *, struct super_block *);
 extern struct inode *configfs_create(struct dentry *, umode_t mode);
