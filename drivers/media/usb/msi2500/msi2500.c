@@ -572,6 +572,7 @@ static void msi2500_disconnect(struct usb_interface *intf)
 	mutex_lock(&dev->vb_queue_lock);
 	mutex_lock(&dev->v4l2_lock);
 	/* No need to keep the urbs around after disconnection */
+	msi2500_isoc_cleanup(dev);
 	dev->udev = NULL;
 	v4l2_device_disconnect(&dev->v4l2_dev);
 	video_unregister_device(&dev->vdev);
