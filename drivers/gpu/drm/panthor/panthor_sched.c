@@ -255,7 +255,20 @@ struct panthor_scheduler {
 	} groups;
 
 	/**
+	 * @events_lock: Lock taken when processing events.
+	 *
+	 * This also needs to be taken when csg_slots are updated, to make sure
+	 * the event processing logic doesn't touch groups that have left the CSG
+	 * slot.
+	 */
+	spinlock_t events_lock;
+
+	/**
 	 * @csg_slots: FW command stream group slots.
+	 *
+	 * Updates to these slots must happen with both panthor_scheduler::lock and
+	 * panthor_scheduler::events_lock held. As a result, reads can happen with
+	 * either of these locks held.
 	 */
 	struct panthor_csg_slot csg_slots[MAX_CSGS];
 
@@ -999,7 +1012,6 @@ static int
 group_bind_locked(struct panthor_group *group, u32 csg_id)
 {
 	struct panthor_device *ptdev = group->ptdev;
-	struct panthor_csg_slot *csg_slot;
 	int ret;
 
 	lockdep_assert_held(&ptdev->scheduler->lock);
@@ -1012,9 +1024,7 @@ group_bind_locked(struct panthor_group *group, u32 csg_id)
 	if (ret)
 		return ret;
 
-	csg_slot = &ptdev->scheduler->csg_slots[csg_id];
 	group_get(group);
-	group->csg_id = csg_id;
 
 	/* Dummy doorbell allocation: doorbell is assigned to the group and
 	 * all queues use the same doorbell.
@@ -1026,7 +1036,10 @@ group_bind_locked(struct panthor_group *group, u32 csg_id)
 	for (u32 i = 0; i < group->queue_count; i++)
 		group->queues[i]->doorbell_id = csg_id + 1;
 
-	csg_slot->group = group;
+	scoped_guard(spinlock, &ptdev->scheduler->events_lock) {
+		ptdev->scheduler->csg_slots[csg_id].group = group;
+		group->csg_id = csg_id;
+	}
 
 	return 0;
 }
@@ -1041,7 +1054,6 @@ static int
 group_unbind_locked(struct panthor_group *group)
 {
 	struct panthor_device *ptdev = group->ptdev;
-	struct panthor_csg_slot *slot;
 
 	lockdep_assert_held(&ptdev->scheduler->lock);
 
@@ -1051,9 +1063,12 @@ group_unbind_locked(struct panthor_group *group)
 	if (drm_WARN_ON(&ptdev->base, group->state == PANTHOR_CS_GROUP_ACTIVE))
 		return -EINVAL;
 
-	slot = &ptdev->scheduler->csg_slots[group->csg_id];
+	scoped_guard(spinlock, &ptdev->scheduler->events_lock) {
+		ptdev->scheduler->csg_slots[group->csg_id].group = NULL;
+		group->csg_id = -1;
+	}
+
 	panthor_vm_idle(group->vm);
-	group->csg_id = -1;
 
 	/* Tiler OOM events will be re-issued next time the group is scheduled. */
 	atomic_set(&group->tiler_oom, 0);
@@ -1061,8 +1076,6 @@ group_unbind_locked(struct panthor_group *group)
 
 	for (u32 i = 0; i < group->queue_count; i++)
 		group->queues[i]->doorbell_id = -1;
-
-	slot->group = NULL;
 
 	group_put(group);
 	return 0;
@@ -1484,7 +1497,7 @@ cs_slot_process_fatal_event_locked(struct panthor_device *ptdev,
 	u32 fatal;
 	u64 info;
 
-	lockdep_assert_held(&sched->lock);
+	lockdep_assert_held(&sched->events_lock);
 
 	cs_iface = panthor_fw_get_cs_iface(ptdev, csg_id, cs_id);
 	fatal = cs_iface->output->fatal;
@@ -1532,7 +1545,7 @@ cs_slot_process_fault_event_locked(struct panthor_device *ptdev,
 	u32 fault;
 	u64 info;
 
-	lockdep_assert_held(&sched->lock);
+	lockdep_assert_held(&sched->events_lock);
 
 	cs_iface = panthor_fw_get_cs_iface(ptdev, csg_id, cs_id);
 	fault = cs_iface->output->fault;
@@ -1682,7 +1695,7 @@ cs_slot_process_tiler_oom_event_locked(struct panthor_device *ptdev,
 	struct panthor_csg_slot *csg_slot = &sched->csg_slots[csg_id];
 	struct panthor_group *group = csg_slot->group;
 
-	lockdep_assert_held(&sched->lock);
+	lockdep_assert_held(&sched->events_lock);
 
 	if (drm_WARN_ON(&ptdev->base, !group))
 		return;
@@ -1703,7 +1716,7 @@ static bool cs_slot_process_irq_locked(struct panthor_device *ptdev,
 	struct panthor_fw_cs_iface *cs_iface;
 	u32 req, ack, events;
 
-	lockdep_assert_held(&ptdev->scheduler->lock);
+	lockdep_assert_held(&ptdev->scheduler->events_lock);
 
 	cs_iface = panthor_fw_get_cs_iface(ptdev, csg_id, cs_id);
 	req = cs_iface->input->req;
@@ -1731,7 +1744,7 @@ static void csg_slot_process_idle_event_locked(struct panthor_device *ptdev, u32
 {
 	struct panthor_scheduler *sched = ptdev->scheduler;
 
-	lockdep_assert_held(&sched->lock);
+	lockdep_assert_held(&sched->events_lock);
 
 	sched->might_have_idle_groups = true;
 
@@ -1748,7 +1761,7 @@ static void csg_slot_sync_update_locked(struct panthor_device *ptdev,
 	struct panthor_csg_slot *csg_slot = &ptdev->scheduler->csg_slots[csg_id];
 	struct panthor_group *group = csg_slot->group;
 
-	lockdep_assert_held(&ptdev->scheduler->lock);
+	lockdep_assert_held(&ptdev->scheduler->events_lock);
 
 	if (group)
 		group_queue_work(group, sync_upd);
@@ -1763,7 +1776,7 @@ csg_slot_process_progress_timer_event_locked(struct panthor_device *ptdev, u32 c
 	struct panthor_csg_slot *csg_slot = &sched->csg_slots[csg_id];
 	struct panthor_group *group = csg_slot->group;
 
-	lockdep_assert_held(&sched->lock);
+	lockdep_assert_held(&sched->events_lock);
 
 	group = csg_slot->group;
 	if (!drm_WARN_ON(&ptdev->base, !group)) {
@@ -1784,7 +1797,7 @@ static void sched_process_csg_irq_locked(struct panthor_device *ptdev, u32 csg_i
 	struct panthor_fw_csg_iface *csg_iface;
 	u32 ring_cs_db_mask = 0;
 
-	lockdep_assert_held(&ptdev->scheduler->lock);
+	lockdep_assert_held(&ptdev->scheduler->events_lock);
 
 	if (drm_WARN_ON(&ptdev->base, csg_id >= ptdev->scheduler->csg_slot_count))
 		return;
@@ -1842,7 +1855,7 @@ static void sched_process_idle_event_locked(struct panthor_device *ptdev)
 {
 	struct panthor_fw_global_iface *glb_iface = panthor_fw_get_glb_iface(ptdev);
 
-	lockdep_assert_held(&ptdev->scheduler->lock);
+	lockdep_assert_held(&ptdev->scheduler->events_lock);
 
 	/* Acknowledge the idle event and schedule a tick. */
 	panthor_fw_update_reqs(glb_iface, req, glb_iface->output->ack, GLB_IDLE);
@@ -1858,7 +1871,7 @@ static void sched_process_global_irq_locked(struct panthor_device *ptdev)
 	struct panthor_fw_global_iface *glb_iface = panthor_fw_get_glb_iface(ptdev);
 	u32 req, ack, evts;
 
-	lockdep_assert_held(&ptdev->scheduler->lock);
+	lockdep_assert_held(&ptdev->scheduler->events_lock);
 
 	req = READ_ONCE(glb_iface->input->req);
 	ack = READ_ONCE(glb_iface->output->ack);
@@ -1875,7 +1888,7 @@ static void process_fw_events_work(struct work_struct *work)
 	u32 events = atomic_xchg(&sched->fw_events, 0);
 	struct panthor_device *ptdev = sched->ptdev;
 
-	mutex_lock(&sched->lock);
+	guard(spinlock)(&sched->events_lock);
 
 	if (events & JOB_INT_GLOBAL_IF) {
 		sched_process_global_irq_locked(ptdev);
@@ -1888,8 +1901,6 @@ static void process_fw_events_work(struct work_struct *work)
 		sched_process_csg_irq_locked(ptdev, csg_id);
 		events &= ~BIT(csg_id);
 	}
-
-	mutex_unlock(&sched->lock);
 }
 
 /**
@@ -2136,7 +2147,8 @@ tick_ctx_init(struct panthor_scheduler *sched,
 		 * CSG IRQs, so we can flag the faulty queue.
 		 */
 		if (panthor_vm_has_unhandled_faults(group->vm)) {
-			sched_process_csg_irq_locked(ptdev, i);
+			scoped_guard(spinlock, &sched->events_lock)
+				sched_process_csg_irq_locked(ptdev, i);
 
 			/* No fatal fault reported, flag all queues as faulty. */
 			if (!group->fatal_queues)
@@ -2336,8 +2348,10 @@ tick_ctx_apply(struct panthor_scheduler *sched, struct panthor_sched_tick_ctx *c
 			 * any pending interrupts before we start the new
 			 * group.
 			 */
-			if (group->csg_id >= 0)
+			if (group->csg_id >= 0) {
+				guard(spinlock)(&sched->events_lock);
 				sched_process_csg_irq_locked(ptdev, group->csg_id);
+			}
 
 			group_unbind_locked(group);
 		}
@@ -2902,10 +2916,12 @@ void panthor_sched_suspend(struct panthor_device *ptdev)
 			u32 csg_id = ffs(slot_mask) - 1;
 			struct panthor_csg_slot *csg_slot = &sched->csg_slots[csg_id];
 
-			if (flush_caches_failed)
+			if (flush_caches_failed) {
 				csg_slot->group->state = PANTHOR_CS_GROUP_TERMINATED;
-			else
+			} else {
+				guard(spinlock)(&sched->events_lock);
 				csg_slot_sync_update_locked(ptdev, csg_id);
+			}
 
 			slot_mask &= ~BIT(csg_id);
 		}
@@ -2920,8 +2936,10 @@ void panthor_sched_suspend(struct panthor_device *ptdev)
 
 		group_get(group);
 
-		if (group->csg_id >= 0)
+		if (group->csg_id >= 0) {
+			guard(spinlock)(&sched->events_lock);
 			sched_process_csg_irq_locked(ptdev, group->csg_id);
+		}
 
 		group_unbind_locked(group);
 
@@ -4140,6 +4158,8 @@ int panthor_sched_init(struct panthor_device *ptdev)
 	INIT_DELAYED_WORK(&sched->tick_work, tick_work);
 	INIT_WORK(&sched->sync_upd_work, sync_upd_work);
 	INIT_WORK(&sched->fw_events_work, process_fw_events_work);
+
+	spin_lock_init(&sched->events_lock);
 
 	ret = drmm_mutex_init(&ptdev->base, &sched->lock);
 	if (ret)
