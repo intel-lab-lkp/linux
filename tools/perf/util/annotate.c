@@ -2597,19 +2597,23 @@ int annotate_get_insn_location(const struct arch *arch, struct disasm_line *dl,
 		op_loc->reg2 = -1;
 
 		if (insn_str == NULL) {
-			if (!arch__is_powerpc(arch))
+			if (!arch__is_powerpc(arch) && !arch__is_arm64(arch))
 				continue;
 		}
 
 		/*
-		 * For powerpc, call get_powerpc_regs function which extracts the
-		 * required fields for op_loc, ie reg1, reg2, offset from the
-		 * raw instruction.
+		 * For powerpc and arm64, call arch-specific functions to
+		 * extract the required fields for op_loc (reg1, reg2, offset)
+		 * from the raw instruction.
 		 */
 		if (arch__is_powerpc(arch)) {
 			op_loc->mem_ref = mem_ref;
 			op_loc->multi_regs = multi_regs;
 			get_powerpc_regs(dl->raw.raw_insn, !i, op_loc);
+		} else if (arch__is_arm64(arch)) {
+			op_loc->mem_ref = mem_ref;
+			op_loc->multi_regs = multi_regs;
+			get_arm64_regs(dl->raw.raw_insn, !i, op_loc);
 		} else if (strchr(insn_str, arch->objdump.memory_ref_char)) {
 			op_loc->mem_ref = true;
 			op_loc->multi_regs = multi_regs;
