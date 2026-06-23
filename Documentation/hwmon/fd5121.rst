@@ -1,0 +1,93 @@
+.. SPDX-License-Identifier: GPL-2.0-only
+
+Kernel driver fd5121
+=====================
+
+Supported chips:
+
+  * onsemi FD5121
+
+    Prefix: 'fd5121'
+
+    Datasheet: Datasheet is not publicly available.
+
+  * onsemi FD5123
+
+    Prefix: 'fd5121'
+
+    Datasheet: Datasheet is not publicly available.
+
+  * onsemi FD5125
+
+    Prefix: 'fd5121'
+
+    Datasheet: Datasheet is not publicly available.
+
+Author: Selva Rajagopal <selvamani.rajagopal@onsemi.com>
+
+Description
+-----------
+
+FD5121, FD5123, FD5125 are dual-rail, multi-phase controllers
+and compliant to
+
+  - AVS and AMD proprietary SVI3 protocol.
+  - PMBus rev 1.4.1 interface.
+
+Used as multi-phase voltage regulators for CPUs, high performance
+ASICs, SoCs or graphic cores.
+
+Gives full telemetry options including input/output voltage
+and current, as well as fault handling and identifications.
+
+Usage Notes
+-----------
+
+This driver does not probe for PMBus devices. You will have
+to instantiate devices explicitly.
+
+Example: the following commands will load the driver for the
+controller at address 0x50 on I2C bus #1::
+
+    # modprobe fd5121
+    # echo fd5121 0x50 > /sys/bus/i2c/devices/i2c-1/new_device
+
+It can also be instantiated by declaring in device tree
+
+Sysfs attributes
+----------------
+
+The following attributes are supported:
+
+======================  ====================================
+curr[1-2]_label		"iin[1-2]"
+curr[3-4]_label		"iout[1-2]"
+curr[1-2]_input		Measured input current.
+curr[3-4]_input		Measured output current.
+curr[1-4]_crit_alarm	Output current critical high alarm.
+curr[1-4]_max_alarm	Output current high alarm.
+
+in[1-2]_label		"vin[1-2]"
+in[3-4]_label		"vout[1-2]"
+in[1-4]_lcrit_alarm	Input voltage critical low alarm.
+in[1-4]_crit_alarm	Input voltage critical high alarm.
+in[1-2]_max_alarm	Input voltage high alarm.
+in[1-2]_input           Measured input voltage.
+in[3-4]_input           Measured output voltage.
+
+power[1-2]_label	"pin[1-2]"
+power[3-4]_label	"pout[1-2]"
+power[3-4]_crit_alarm	Output power critical high alarm.
+power[1-2]_max_alarm	Output power high alarm.
+power[1-4]_max          Power limit.
+power[1-4]_input        Measured input power.
+power[3-4]_crit         Critical maximum output power.
+
+temp[1-2]_crit_alarm	Chip temperature critical high alarm.
+temp[1-2]_max_alarm	Chip temperature high alarm.
+temp[1-2]_input         Measured temperature.
+temp[1-2]_max           Maximum temperature.
+temp[1-2]_crit          Critical high temperature.
+
+======================  ====================================
+
