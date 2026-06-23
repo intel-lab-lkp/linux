@@ -258,6 +258,20 @@ static void *cramfs_blkdev_read(struct super_block *sb, unsigned int offset,
 }
 
 /*
+ * Return true if the byte range [offset, offset + len) lies within the
+ * mapped linear image.  Offsets and lengths used on the direct-mapping
+ * paths come from the (untrusted) on-disk inode, so every direct
+ * dereference of the image must pass this bound first.  The arguments are
+ * u64 so the page-count arithmetic in the callers cannot overflow, and the
+ * len check guards the size - len subtraction against underflow.
+ */
+static inline bool cramfs_range_in_image(struct cramfs_sb_info *sbi,
+					 u64 offset, u64 len)
+{
+	return len <= sbi->size && offset <= sbi->size - len;
+}
+
+/*
  * Return a pointer to the linearly addressed cramfs image in memory.
  */
 static void *cramfs_direct_read(struct super_block *sb, unsigned int offset,
@@ -267,7 +281,7 @@ static void *cramfs_direct_read(struct super_block *sb, unsigned int offset,
 
 	if (!len)
 		return NULL;
-	if (len > sbi->size || offset > sbi->size - len)
+	if (!cramfs_range_in_image(sbi, offset, len))
 		return page_address(ZERO_PAGE(0));
 	return sbi->linear_virt_addr + offset;
 }
@@ -298,13 +312,22 @@ static u32 cramfs_get_block_range(struct inode *inode, u32 pgoff, u32 *pages)
 {
 	struct cramfs_sb_info *sbi = CRAMFS_SB(inode->i_sb);
 	int i;
-	u32 *blockptrs, first_block_addr;
+	u32 *blockptrs, first_block_addr, data_addr;
 
 	/*
 	 * We can dereference memory directly here as this code may be
 	 * reached only when there is a direct filesystem image mapping
 	 * available in memory.
+	 *
+	 * The block pointer array lives at OFFSET(inode) inside the image,
+	 * and both OFFSET() and the block pointers come from the (untrusted)
+	 * on-disk inode, so bound every access to the image before
+	 * dereferencing it.
 	 */
+	if (!cramfs_range_in_image(sbi, OFFSET(inode),
+				   ((u64)pgoff + *pages) * 4))
+		return 0;
+
 	blockptrs = (u32 *)(sbi->linear_virt_addr + OFFSET(inode) + pgoff * 4);
 	first_block_addr = blockptrs[0] & ~CRAMFS_BLK_FLAGS;
 	i = 0;
@@ -324,7 +347,13 @@ static u32 cramfs_get_block_range(struct inode *inode, u32 pgoff, u32 *pages)
 	} while (++i < *pages);
 
 	*pages = i;
-	return first_block_addr << CRAMFS_BLK_DIRECT_PTR_SHIFT;
+
+	/* The mapped data range must also lie within the image. */
+	data_addr = first_block_addr << CRAMFS_BLK_DIRECT_PTR_SHIFT;
+	if (!cramfs_range_in_image(sbi, data_addr, (u64)*pages * PAGE_SIZE))
+		return 0;
+
+	return data_addr;
 }
 
 #ifdef CONFIG_MMU
@@ -345,9 +374,21 @@ static bool cramfs_last_page_is_shared(struct inode *inode)
 	if (!partial)
 		return false;
 	last_page = inode->i_size >> PAGE_SHIFT;
+
+	/*
+	 * The block pointer and the tail data are read directly from the
+	 * image at offsets derived from the untrusted on-disk inode; bound
+	 * both accesses.  Treat the last page as shared on any overflow so
+	 * the caller falls back to the bounded paging path.
+	 */
+	if (!cramfs_range_in_image(sbi, OFFSET(inode),
+				   ((u64)last_page + 1) * 4))
+		return true;
 	blockptrs = (u32 *)(sbi->linear_virt_addr + OFFSET(inode));
 	blockaddr = blockptrs[last_page] & ~CRAMFS_BLK_FLAGS;
 	blockaddr <<= CRAMFS_BLK_DIRECT_PTR_SHIFT;
+	if (!cramfs_range_in_image(sbi, blockaddr, PAGE_SIZE))
+		return true;
 	tail_data = sbi->linear_virt_addr + blockaddr + partial;
 	return memchr_inv(tail_data, 0, PAGE_SIZE - partial) ? true : false;
 }
