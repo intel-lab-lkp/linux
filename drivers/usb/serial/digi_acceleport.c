@@ -453,11 +453,10 @@ static int digi_write_inb_command(struct usb_serial_port *port,
 		if (priv->dp_out_buf_len > 0) {
 			data[0] = DIGI_CMD_SEND_DATA;
 			data[1] = priv->dp_out_buf_len;
-			memcpy(data + 2, priv->dp_out_buf,
-				priv->dp_out_buf_len);
+			memcpy(data + 2, priv->dp_out_buf, priv->dp_out_buf_len);
 			memcpy(data + 2 + priv->dp_out_buf_len, buf, len);
-			port->write_urb->transfer_buffer_length
-				= priv->dp_out_buf_len + 2 + len;
+			port->write_urb->transfer_buffer_length =
+					priv->dp_out_buf_len + 2 + len;
 		} else {
 			memcpy(data, buf, len);
 			port->write_urb->transfer_buffer_length = len;
