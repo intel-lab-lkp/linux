@@ -41,7 +41,7 @@
  */
 #define TB_ASYM_THRESHOLD	45000
 
-#define MAX_GROUPS		7	/* max Group_ID is 7 */
+#define MAX_GROUPS		(7 + 1) /* Group ID 0 is reserved */
 
 static unsigned int asym_threshold = TB_ASYM_THRESHOLD;
 module_param_named(asym_threshold, asym_threshold, uint, 0444);
@@ -66,7 +66,7 @@ struct tb_cm {
 	struct list_head dp_resources;
 	bool hotplug_active;
 	struct delayed_work remove_work;
-	struct tb_bandwidth_group groups[MAX_GROUPS];
+	struct tb_bandwidth_group groups[MAX_GROUPS - 1];
 };
 
 static inline struct tb *tcm_to_tb(struct tb_cm *tcm)
