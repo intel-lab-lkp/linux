@@ -54,12 +54,13 @@ static void __clk_hfpll_init_once(struct clk_hw *hw)
 	h->init_done = true;
 }
 
-static void __clk_hfpll_enable(struct clk_hw *hw)
+static int __clk_hfpll_enable(struct clk_hw *hw)
 {
 	struct clk_hfpll *h = to_clk_hfpll(hw);
 	struct hfpll_data const *hd = h->d;
 	struct regmap *regmap = h->clkr.regmap;
 	u32 val;
+	int ret;
 
 	__clk_hfpll_init_once(hw);
 
@@ -76,19 +77,23 @@ static void __clk_hfpll_enable(struct clk_hw *hw)
 	regmap_update_bits(regmap, hd->mode_reg, PLL_RESET_N, PLL_RESET_N);
 
 	/* Wait for PLL to lock. */
-	if (hd->status_reg)
+	if (hd->status_reg) {
 		/*
 		 * Busy wait. Should never timeout, we add a timeout to
 		 * prevent any sort of stall.
 		 */
-		regmap_read_poll_timeout(regmap, hd->status_reg, val,
-					 !(val & BIT(hd->lock_bit)), 0,
-					 100 * USEC_PER_MSEC);
-	else
+		ret = regmap_read_poll_timeout(regmap, hd->status_reg, val,
+					       val & BIT(hd->lock_bit), 0,
+					       100 * USEC_PER_MSEC);
+		if (ret)
+			return ret;
+	} else {
 		udelay(60);
+	}
 
 	/* Enable PLL output. */
 	regmap_update_bits(regmap, hd->mode_reg, PLL_OUTCTRL, PLL_OUTCTRL);
+	return 0;
 }
 
 /* Enable an already-configured HFPLL. */
@@ -99,14 +104,15 @@ static int clk_hfpll_enable(struct clk_hw *hw)
 	struct hfpll_data const *hd = h->d;
 	struct regmap *regmap = h->clkr.regmap;
 	u32 mode;
+	int ret = 0;
 
 	spin_lock_irqsave(&h->lock, flags);
 	regmap_read(regmap, hd->mode_reg, &mode);
 	if (!(mode & (PLL_BYPASSNL | PLL_RESET_N | PLL_OUTCTRL)))
-		__clk_hfpll_enable(hw);
+		ret = __clk_hfpll_enable(hw);
 	spin_unlock_irqrestore(&h->lock, flags);
 
-	return 0;
+	return ret;
 }
 
 static void __clk_hfpll_disable(struct clk_hfpll *h)
@@ -161,6 +167,7 @@ static int clk_hfpll_set_rate(struct clk_hw *hw, unsigned long rate,
 	unsigned long flags;
 	u32 l_val, val;
 	bool enabled;
+	int ret = 0;
 
 	l_val = rate / parent_rate;
 
@@ -183,11 +190,11 @@ static int clk_hfpll_set_rate(struct clk_hw *hw, unsigned long rate,
 	regmap_write(regmap, hd->l_reg, l_val);
 
 	if (enabled)
-		__clk_hfpll_enable(hw);
+		ret = __clk_hfpll_enable(hw);
 
 	spin_unlock_irqrestore(&h->lock, flags);
 
-	return 0;
+	return ret;
 }
 
 static unsigned long clk_hfpll_recalc_rate(struct clk_hw *hw,
