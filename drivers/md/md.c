@@ -6832,7 +6832,7 @@ int md_run(struct mddev *mddev)
 		set_bit(MD_RECOVERY_RECOVER, &mddev->recovery);
 	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 
-	if (mddev->sb_flags)
+	if (READ_ONCE(mddev->sb_flags))
 		md_update_sb(mddev, 0);
 
 	if (IS_ENABLED(CONFIG_MD_BITMAP) && !mddev->bitmap_info.file &&
@@ -10296,7 +10296,7 @@ static bool md_should_do_recovery(struct mddev *mddev)
 	 * active, and no action is needed for now.
 	 * All other MD_SB_* flags require to update the superblock.
 	 */
-	if (mddev->sb_flags & ~ (1<<MD_SB_CHANGE_PENDING))
+	if (READ_ONCE(mddev->sb_flags) & ~ (1<<MD_SB_CHANGE_PENDING))
 		return true;
 
 	/*
@@ -10425,7 +10425,7 @@ void md_check_recovery(struct mddev *mddev)
 			spin_unlock(&mddev->lock);
 		}
 
-		if (mddev->sb_flags)
+		if (READ_ONCE(mddev->sb_flags))
 			md_update_sb(mddev, 0);
 
 		/*
