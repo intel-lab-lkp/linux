@@ -513,6 +513,52 @@ static bool rcu_preempt_has_tasks_ndqs(struct rcu_node *rnp)
 }
 
 /*
+ * Do outermost rcu_read_unlock()-time task-list and state manipulations.
+ * This does not include the actual futex-based deboosting.  The caller must
+ * acquire and release the leaf rcu_node structure's ->lock.  The nodefer
+ * argument is true if there are no deferred quiescent states, that is,
+ * if the caller is ending a (possibly segmented) RCU reader.
+ *
+ * Returns true if futex-based deboosting is required.
+ */
+static bool rcu_dequeue_predeboost_locked(struct task_struct *t, struct rcu_node *rnp,
+					  struct list_head **npp, bool nodefer)
+{
+	bool drop_boost_mutex = false;
+	struct list_head *np;
+
+	raw_lockdep_assert_held_rcu_node(rnp);
+	WARN_ON_ONCE(rnp != t->rcu_blocked_node);
+	WARN_ON_ONCE(!rcu_is_leaf_node(rnp));
+	np = rcu_next_node_entry(t, rnp);
+	list_del_init(&t->rcu_node_entry);
+	if (&t->rcu_node_entry == rnp->gp_tasks) {
+		WARN_ON_ONCE(t->rcu_node_entry_dqs);
+		WRITE_ONCE(rnp->gp_tasks, np);
+	}
+	if (&t->rcu_node_entry == rnp->exp_tasks) {
+		WARN_ON_ONCE(t->rcu_node_entry_dqs);
+		WRITE_ONCE(rnp->exp_tasks, np);
+	}
+	if (IS_ENABLED(CONFIG_RCU_BOOST)) {
+		/* Snapshot ->boost_mtx ownership w/rnp->lock held. */
+		drop_boost_mutex = rt_mutex_owner(&rnp->boost_mtx.rtmutex) == t;
+		WARN_ON_ONCE(drop_boost_mutex && t->rcu_node_entry_dqs);
+		if (&t->rcu_node_entry == rnp->boost_tasks)
+			WRITE_ONCE(rnp->boost_tasks, np);
+	}
+	if (nodefer) {
+		t->rcu_blocked_node = NULL;
+		t->rcu_node_entry_dqs = -1;
+	} else {
+		list_add_tail(&t->rcu_node_entry, &rnp->dqs_blkd_tasks);
+		t->rcu_node_entry_dqs = 1;
+	}
+	*npp = np;
+	return drop_boost_mutex;
+}
+
+/*
  * Report deferred quiescent states.  The deferral time can
  * be quite short, for example, in the case of the call from
  * rcu_read_unlock_special().
@@ -574,33 +620,12 @@ rcu_preempt_deferred_qs_irqrestore(struct task_struct *t, unsigned long flags)
 		 */
 		rnp = t->rcu_blocked_node;
 		raw_spin_lock_rcu_node(rnp); /* irqs already disabled. */
-		WARN_ON_ONCE(rnp != t->rcu_blocked_node);
-		WARN_ON_ONCE(!rcu_is_leaf_node(rnp));
 		empty_norm = !rcu_preempt_blocked_readers_cgp(rnp);
 		WARN_ON_ONCE(rnp->completedqs == rnp->gp_seq &&
 			     (!empty_norm || rnp->qsmask));
 		empty_exp = sync_rcu_exp_done(rnp);
-		np = rcu_next_node_entry(t, rnp);
-		list_del_init(&t->rcu_node_entry);
-		t->rcu_blocked_node = NULL;
-		trace_rcu_unlock_preempted_task(TPS("rcu_preempt"),
-						rnp->gp_seq, t->pid);
-		if (&t->rcu_node_entry == rnp->gp_tasks) {
-			WARN_ON_ONCE(t->rcu_node_entry_dqs);
-			WRITE_ONCE(rnp->gp_tasks, np);
-		}
-		if (&t->rcu_node_entry == rnp->exp_tasks) {
-			WARN_ON_ONCE(t->rcu_node_entry_dqs);
-			WRITE_ONCE(rnp->exp_tasks, np);
-		}
-		if (IS_ENABLED(CONFIG_RCU_BOOST)) {
-			/* Snapshot ->boost_mtx ownership w/rnp->lock held. */
-			drop_boost_mutex = rt_mutex_owner(&rnp->boost_mtx.rtmutex) == t;
-			WARN_ON_ONCE(drop_boost_mutex && t->rcu_node_entry_dqs);
-			if (&t->rcu_node_entry == rnp->boost_tasks)
-				WRITE_ONCE(rnp->boost_tasks, np);
-		}
-		t->rcu_node_entry_dqs = -1;
+		drop_boost_mutex = rcu_dequeue_predeboost_locked(t, rnp, &np, true);
+		trace_rcu_unlock_preempted_task(TPS("rcu_preempt"), rnp->gp_seq, t->pid);
 
 		/*
 		 * If this was the last task on the current list, and if
