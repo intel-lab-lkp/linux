@@ -1523,6 +1523,20 @@ static struct inode *ext4_xattr_inode_create(handle_t *handle,
 	return ea_inode;
 }
 
+static int ext4_xattr_inode_match(struct inode *inode, u64 ino, void *data)
+{
+	if (inode->i_ino != ino)
+		return 0;
+	spin_lock(&inode->i_lock);
+	if (inode_state_read(inode) & (I_FREEING | I_WILL_FREE)) {
+		spin_unlock(&inode->i_lock);
+		return 0;
+	}
+	__iget(inode);
+	spin_unlock(&inode->i_lock);
+	return 1;
+}
+
 static struct inode *
 ext4_xattr_inode_cache_find(struct inode *inode, const void *value,
 			    size_t value_len, u32 hash)
@@ -1549,10 +1563,12 @@ ext4_xattr_inode_cache_find(struct inode *inode, const void *value,
 	}
 
 	while (ce) {
-		ea_inode = ext4_iget(inode->i_sb, ce->e_value,
-				     EXT4_IGET_EA_INODE);
-		if (IS_ERR(ea_inode))
+		ea_inode = find_inode_nowait(inode->i_sb, ce->e_value,
+					     ext4_xattr_inode_match, NULL);
+		if (!ea_inode)
 			goto next_entry;
+		if (inode_state_read(ea_inode) & I_NEW)
+			wait_on_new_inode(ea_inode);
 		ext4_xattr_inode_set_class(ea_inode);
 		if (i_size_read(ea_inode) == value_len &&
 		    !ext4_xattr_inode_read(ea_inode, ea_data, value_len) &&
