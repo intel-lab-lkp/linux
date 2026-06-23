@@ -324,6 +324,15 @@ struct cxl_endpoint_decoder {
 	int pos;
 };
 
+/*
+ * Some BIOS use locked empty decoders to preclude HDM decode aliasing
+ * for TSP operation. Use cxled_empty() to handle that common case.
+ */
+static inline bool cxled_empty(struct cxl_endpoint_decoder *cxled)
+{
+	return !cxled->dpa_res || !resource_size(cxled->dpa_res);
+}
+
 /**
  * struct cxl_switch_decoder - Switch specific CXL HDM Decoder
  * @cxld: base cxl_decoder object
