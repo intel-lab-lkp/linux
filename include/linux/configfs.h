@@ -24,6 +24,7 @@
 #include <linux/list.h>   /* struct list_head */
 #include <linux/kref.h>   /* struct kref */
 #include <linux/mutex.h>  /* struct mutex */
+#include <net/net_namespace.h> /* struct net */
 
 #define CONFIGFS_ITEM_NAME_LEN	20
 
