@@ -252,7 +252,7 @@ static int kvm_s390_pci_aif_enable(struct zpci_dev *zdev, struct zpci_fib *fib,
 	srcu_read_unlock(&kvm->srcu, idx);
 	if (npages < 1) {
 		rc = -EIO;
-		goto out;
+		goto out_unregister_gisc;
 	}
 	aibv_page = pages[0];
 	pcount++;
@@ -327,6 +327,8 @@ unpin2:
 		unpin_user_page(aisb_page);
 unpin1:
 	unpin_user_page(aibv_page);
+out_unregister_gisc:
+	kvm_s390_gisc_unregister(kvm, fib->fmt0.isc);
 out:
 	return rc;
 }
