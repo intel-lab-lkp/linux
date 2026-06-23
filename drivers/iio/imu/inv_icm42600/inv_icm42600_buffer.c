@@ -5,6 +5,7 @@
 
 #include <linux/kernel.h>
 #include <linux/device.h>
+#include <linux/gcd.h>
 #include <linux/minmax.h>
 #include <linux/mutex.h>
 #include <linux/pm_runtime.h>
@@ -182,25 +183,18 @@ static unsigned int inv_icm42600_wm_truncate(unsigned int watermark,
  *
  * FIFO watermark threshold is computed based on the required watermark values
  * set for gyro and accel sensors. Since watermark is all about acceptable data
- * latency, use the smallest setting between the 2. It means choosing the
- * smallest latency but this is not as simple as choosing the smallest watermark
- * value. Latency depends on watermark and ODR. It requires several steps:
- * 1) compute gyro and accel latencies and choose the smallest value.
- * 2) adapt the choosen latency so that it is a multiple of both gyro and accel
- *    ones. Otherwise it is possible that you don't meet a requirement. (for
- *    example with gyro @100Hz wm 4 and accel @100Hz with wm 6, choosing the
- *    value of 4 will not meet accel latency requirement because 6 is not a
- *    multiple of 4. You need to use the value 2.)
- * 3) Since all periods are multiple of each others, watermark is computed by
- *    dividing this computed latency by the smallest period, which corresponds
- *    to the FIFO frequency. Beware that this is only true because we are not
- *    using 500Hz frequency which is not a multiple of the others.
+ * latency, we need to use the biggest latency that is able to cope with accel
+ * gyro latencies. Using the shortest period and computing the gcd of the 2
+ * latencies will give the working result.
+ *
+ * Beware this is only working because we are not using the 500Hz frequency,
+ * resulting in FIFO having a fixed period.
  */
 int inv_icm42600_buffer_update_watermark(struct inv_icm42600_state *st)
 {
 	size_t packet_size, wm_size;
-	unsigned int wm_gyro, wm_accel, watermark;
-	u32 period_gyro, period_accel;
+	unsigned int wm_gyro, wm_accel;
+	u32 period_gyro, period_accel, period;
 	u32 latency_gyro, latency_accel, latency;
 	bool restore;
 	__le16 raw_wm;
@@ -222,32 +216,26 @@ int inv_icm42600_buffer_update_watermark(struct inv_icm42600_state *st)
 		return 0;
 
 	if (latency_gyro == 0) {
-		watermark = wm_accel;
-		st->fifo.watermark.eff_accel = wm_accel;
+		period = period_accel;
+		latency = latency_accel;
 	} else if (latency_accel == 0) {
-		watermark = wm_gyro;
-		st->fifo.watermark.eff_gyro = wm_gyro;
+		period = period_gyro;
+		latency = latency_gyro;
 	} else {
-		/* compute the smallest latency that is a multiple of both */
-		if (latency_gyro <= latency_accel)
-			latency = latency_gyro - (latency_accel % latency_gyro);
-		else
-			latency = latency_accel - (latency_gyro % latency_accel);
-		/* all this works because periods are multiple of each others */
-		watermark = latency / min(period_gyro, period_accel);
-		if (watermark < 1)
-			watermark = 1;
-		/* update effective watermark */
-		st->fifo.watermark.eff_gyro = latency / period_gyro;
-		if (st->fifo.watermark.eff_gyro < 1)
-			st->fifo.watermark.eff_gyro = 1;
-		st->fifo.watermark.eff_accel = latency / period_accel;
-		if (st->fifo.watermark.eff_accel < 1)
-			st->fifo.watermark.eff_accel = 1;
+		/* use the shortest period and the gcd of the latencies */
+		period = min(period_gyro, period_accel);
+		latency = gcd(latency_gyro, latency_accel);
 	}
 
+	/* update effective watemarks */
+	st->fifo.watermark.value = max(latency / period, 1);
+	if (wm_gyro)
+		st->fifo.watermark.eff_gyro = max(latency / period_gyro, 1);
+	if (wm_accel)
+		st->fifo.watermark.eff_accel = max(latency / period_accel, 1);
+
 	/* compute watermark value in bytes */
-	wm_size = watermark * packet_size;
+	wm_size = st->fifo.watermark.value * packet_size;
 
 	/* changing FIFO watermark requires to turn off watermark interrupt */
 	ret = regmap_update_bits_check(st->map, INV_ICM42600_REG_INT_SOURCE0,
@@ -454,11 +442,10 @@ int inv_icm42600_buffer_fifo_read(struct inv_icm42600_state *st,
 	st->fifo.nb.accel = 0;
 	st->fifo.nb.total = 0;
 
-	/* compute maximum FIFO read size */
+	/* compute maximum FIFO read size (watermark for max = 0 interrupt case) */
 	if (max == 0)
-		max_count = sizeof(st->fifo.data);
-	else
-		max_count = max * inv_icm42600_get_packet_size(st->fifo.en);
+		max = st->fifo.watermark.value;
+	max_count = max * inv_icm42600_get_packet_size(st->fifo.en);
 
 	/* read FIFO count value */
 	raw_fifo_count = (__be16 *)st->buffer;
@@ -574,6 +561,7 @@ int inv_icm42600_buffer_init(struct inv_icm42600_state *st)
 
 	st->fifo.watermark.eff_gyro = 1;
 	st->fifo.watermark.eff_accel = 1;
+	st->fifo.watermark.value = 1;
 
 	/*
 	 * Default FIFO configuration (bits 7 to 5)
