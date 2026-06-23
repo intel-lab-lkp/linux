@@ -8,6 +8,7 @@
 #include <linux/page_counter.h>
 #include <linux/atomic.h>
 #include <linux/kernel.h>
+#include <linux/percpu.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/bug.h>
@@ -289,6 +290,47 @@ int page_counter_memparse(const char *buf, const char *max,
 	return 0;
 }
 
+void page_counter_drain_stock(struct page_counter *counter, unsigned int cpu)
+{
+	struct page_counter_stock *stock;
+	int nr_pages;
+
+	if (!counter->stock)
+		return;
+
+	stock = per_cpu_ptr(counter->stock, cpu);
+	nr_pages = atomic_xchg(&stock->nr_pages, 0);
+	if (nr_pages)
+		page_counter_uncharge(counter, nr_pages);
+}
+
+int page_counter_alloc_stock(struct page_counter *counter, unsigned int batch)
+{
+	struct page_counter_stock __percpu *stock;
+
+	stock = alloc_percpu(struct page_counter_stock);
+	if (!stock)
+		return -ENOMEM;
+
+	counter->stock = stock;
+	counter->batch = batch;
+
+	return 0;
+}
+
+void page_counter_free_stock(struct page_counter *counter)
+{
+	int cpu;
+
+	if (!counter->stock)
+		return;
+
+	for_each_possible_cpu(cpu)
+		page_counter_drain_stock(counter, cpu);
+
+	free_percpu(counter->stock);
+	counter->stock = NULL;
+}
 
 #if IS_ENABLED(CONFIG_MEMCG) || IS_ENABLED(CONFIG_CGROUP_DMEM)
 /*

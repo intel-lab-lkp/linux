@@ -5,7 +5,16 @@
 #include <linux/atomic.h>
 #include <linux/cache.h>
 #include <linux/limits.h>
+#include <linux/percpu.h>
 #include <asm/page.h>
+
+struct page_counter_stock {
+	/*
+	 * Consumption/refills can only come from the owning cpu via
+	 * atomic_cmpxchg. Remote access only happens on drain via atomic_xchg.
+	 */
+	atomic_t nr_pages;
+};
 
 struct page_counter {
 	/*
@@ -41,6 +50,8 @@ struct page_counter {
 	unsigned long high;
 	unsigned long max;
 	struct page_counter *parent;
+	struct page_counter_stock __percpu *stock;
+	unsigned int batch;
 } ____cacheline_internodealigned_in_smp;
 
 #if BITS_PER_LONG == 32
@@ -98,6 +109,10 @@ static inline void page_counter_reset_watermark(struct page_counter *counter)
 	counter->local_watermark = usage;
 	counter->watermark = usage;
 }
+
+void page_counter_drain_stock(struct page_counter *counter, unsigned int cpu);
+int page_counter_alloc_stock(struct page_counter *counter, unsigned int batch);
+void page_counter_free_stock(struct page_counter *counter);
 
 #if IS_ENABLED(CONFIG_MEMCG) || IS_ENABLED(CONFIG_CGROUP_DMEM)
 void page_counter_calculate_protection(struct page_counter *root,
