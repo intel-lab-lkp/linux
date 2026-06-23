@@ -702,3 +702,27 @@ Description:
 		When present and the tsm/ attribute directory is present, the
 		authenticated attribute is an alias for the device 'connect'
 		state. See the 'tsm/connect' attribute for more details.
+
+What:		/sys/bus/pci/devices/<root-port-bdf>/tph_cpu_st
+Contact:	linux-pci@vger.kernel.org
+Description:
+		Read-only binary attribute only exposed on PCIe Root Ports that
+		support TPH Completer capability and implement the ACPI DSM
+		method for CPU-to-ST mapping. File permission is root-only
+		(0400).
+
+		The blob is a sequence of fixed-size 8-byte entries defined by
+		struct pci_tph_cpu_st in uapi/linux/pci.h:
+		  __u8 vm_st;
+		  __u8 pm_st;
+		  __u16 vm_xst;
+		  __u16 pm_xst;
+		  __u16 reserved;
+
+		Each entry corresponds to a logical CPU index. Seek offset =
+		cpu_id * PCI_TPH_CPU_ST_ENTRY_SZ. Arbitrary unaligned partial
+		reads are supported; no alignment restriction enforced.
+
+		For CPUs outside cpu_possible_mask or offline CPUs, the entry
+		is filled with all zeros to avoid breaking sequential dump tools
+		like cat/hexdump on sparse CPU topologies.

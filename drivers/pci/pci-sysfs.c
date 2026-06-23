@@ -1912,5 +1912,8 @@ const struct attribute_group *pci_dev_attr_groups[] = {
 	&pci_tsm_auth_attr_group,
 	&pci_tsm_attr_group,
 #endif
+#ifdef CONFIG_PCIE_TPH
+	&pcie_tph_cpu_st_attr_group,
+#endif
 	NULL,
 };

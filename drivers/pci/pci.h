@@ -1366,6 +1366,10 @@ static inline pci_power_t acpi_pci_choose_state(struct pci_dev *pdev)
 extern const struct attribute_group aspm_ctrl_attr_group;
 #endif
 
+#ifdef CONFIG_PCIE_TPH
+extern const struct attribute_group pcie_tph_cpu_st_attr_group;
+#endif
+
 #ifdef CONFIG_X86_INTEL_MID
 bool pci_use_mid_pm(void);
 int mid_pci_set_power_state(struct pci_dev *pdev, pci_power_t state);
