@@ -92,7 +92,7 @@ static int cxl_ras_unmask(struct cxl_port *port)
 
 	rc = pcie_capability_read_word(pdev, PCI_EXP_DEVCTL, &cap);
 	if (rc)
-		return rc;
+		return pcibios_err_to_errno(rc);
 
 	if (cap & PCI_EXP_DEVCTL_URRE) {
 		addr = port->regs.ras + CXL_RAS_UNCORRECTABLE_MASK_OFFSET;
