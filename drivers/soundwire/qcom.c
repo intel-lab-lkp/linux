@@ -1704,6 +1704,7 @@ static void qcom_swrm_remove(struct platform_device *pdev)
 static int __maybe_unused swrm_runtime_resume(struct device *dev)
 {
 	struct qcom_swrm_ctrl *ctrl = dev_get_drvdata(dev);
+	unsigned long time_left;
 	int ret;
 
 	if (ctrl->wake_irq > 0) {
@@ -1725,8 +1726,15 @@ static int __maybe_unused swrm_runtime_resume(struct device *dev)
 			dev_err(ctrl->dev, "link failed to connect\n");
 
 		/* wait for hw enumeration to complete */
-		wait_for_completion_timeout(&ctrl->enumeration,
-					    msecs_to_jiffies(TIMEOUT_MS));
+		time_left = wait_for_completion_timeout(&ctrl->enumeration,
+							msecs_to_jiffies(TIMEOUT_MS));
+		if (!time_left) {
+			clk_disable_unprepare(ctrl->hclk);
+			if (ctrl->wake_irq > 0 &&
+			    irqd_irq_disabled(irq_get_irq_data(ctrl->wake_irq)))
+				enable_irq(ctrl->wake_irq);
+			return -ETIMEDOUT;
+		}
 		qcom_swrm_get_device_status(ctrl);
 		sdw_handle_slave_status(&ctrl->bus, ctrl->status);
 	} else {
