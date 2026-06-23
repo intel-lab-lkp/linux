@@ -131,6 +131,14 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num);
 /* Unlocked flavor */
 int __i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num);
 
+/* Transfer with detailed transfer reporting.
+ */
+int i2c_transfer_v2(struct i2c_adapter *adap, struct i2c_msg *msgs, int num,
+		    struct i2c_transfer_report *report);
+/* Unlocked flavor */
+int __i2c_transfer_v2(struct i2c_adapter *adap, struct i2c_msg *msgs, int num,
+		      struct i2c_transfer_report *report);
+
 /* This is the very generalized SMBus access routine. You probably do not
    want to use this, though; one of the functions below may be much easier,
    and probably just as fast.
@@ -566,6 +574,10 @@ struct i2c_algorithm {
 	int (*smbus_xfer_atomic)(struct i2c_adapter *adap, u16 addr,
 				 unsigned short flags, char read_write,
 				 u8 command, int size, union i2c_smbus_data *data);
+
+	/* Same as xfer with detailed reporting */
+	int (*xfer_v2)(struct i2c_adapter *adap, struct i2c_msg *msgs,
+		       int num, struct i2c_transfer_report *report);
 
 	/* To determine what the adapter supports */
 	u32 (*functionality)(struct i2c_adapter *adap);

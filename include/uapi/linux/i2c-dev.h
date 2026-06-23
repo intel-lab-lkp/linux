@@ -11,11 +11,13 @@
 
 #include <linux/types.h>
 #include <linux/compiler.h>
+#include <linux/i2c.h>
 
 /* /dev/i2c-X ioctl commands.  The ioctl's parameter is always an
  * unsigned long, except for:
  *	- I2C_FUNCS, takes pointer to an unsigned long
  *	- I2C_RDWR, takes pointer to struct i2c_rdwr_ioctl_data
+ *	- I2C_RDWR_V2, takes pointer to struct i2c_rdwr_v2_ioctl_data
  *	- I2C_SMBUS, takes pointer to struct i2c_smbus_ioctl_data
  */
 #define I2C_RETRIES	0x0701	/* number of times a device address should
@@ -33,6 +35,7 @@
 #define I2C_FUNCS	0x0705	/* Get the adapter functionality mask */
 
 #define I2C_RDWR	0x0707	/* Combined R/W transfer (one STOP only) */
+#define I2C_RDWR_V2	0x0709  /* I2C_RDWR with detailed fault reporting */
 
 #define I2C_PEC		0x0708	/* != 0 to use PEC with SMBus */
 #define I2C_SMBUS	0x0720	/* SMBus transfer */
@@ -50,6 +53,12 @@ struct i2c_smbus_ioctl_data {
 struct i2c_rdwr_ioctl_data {
 	struct i2c_msg __user *msgs;	/* pointers to i2c_msgs */
 	__u32 nmsgs;			/* number of i2c_msgs */
+};
+
+/* This is the structure as used in the I2C_RDWR_V2 ioctl call */
+struct i2c_rdwr_v2_ioctl_data {
+	struct i2c_rdwr_ioctl_data rdwr_data;
+	struct i2c_transfer_report report;
 };
 
 #define  I2C_RDWR_IOCTL_MAX_MSGS	42

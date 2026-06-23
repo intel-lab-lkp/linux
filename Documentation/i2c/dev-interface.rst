@@ -140,6 +140,52 @@ The following IOCTLs are defined:
   The slave address and whether to use ten bit address mode has to be
   set in each message, overriding the values set with the above ioctl's.
 
+``ioctl(file, I2C_RDWR_V2, struct i2c_rdwr_v2_ioctl_data *msgset)``
+  Does the same combined read/write transaction as I2C_RDWR, but also
+  provides detailed fault report. The argument is a pointer to a::
+
+    struct i2c_rdwr_v2_ioctl_data {
+	    struct i2c_rdwr_ioctl_data rdwr_data;
+	    struct i2c_transfer_report report;
+    };
+
+  The rdwr_data is the same structure as the argument for I2C_RDWR ioctl.
+  The report is the structure that the transfer report is written to::
+
+    struct i2c_transfer_report {
+      __s32 fault_msg_idx;
+      __s32 msgs_cplt;
+      __s32 bytes_cplt;
+    };
+
+  msgs_cplt is the number of messages that has been sent or received
+  successfully. If there are read messages within this range, the returned
+  data is guaranteed to be valid. If a message has been read from the
+  device but the read data is lost (for example, FIFO is flushed before
+  CPU read it), this message must not be counted.  If the controller cannot
+  determine the number of completed messages, the value is -EOPNOTSUPP.
+
+  fault_msg_idx is the number of message that caused a fault. In case of a
+  fault, it is not necessary equal to msgs_cplt. For example, if the driver
+  validates the whole batch before starting transmission, detects that it
+  cannot send it, it returns -EOPNOTSUPP error immediately, so msgs_cplt is 0,
+  while fault_msg_idx points to the message that cannot be sent. Another
+  example when these two value may be different is I2C controller that
+  flushes RX FIFO when an error is detected before CPU reads data from it.
+
+  If there is no fault, the fault_msg_idx value is equal to msgs_cplt.
+
+  bytes_cplt indicates the number of bytes sent/received in the message at
+  index msgs_cplt. If this is a read message, it is guaranteed that these
+  bytes in the message data buffer are valid. If the controller cannot
+  determine the byte number, the value should be -EOPNOTSUPP. If there was
+  no fault, the value should be 0.
+
+  To discover if the device supports detailed fault reporting, use I2C_RDWR_V2
+  ioctl with nmsgs = 0. If the driver supports it, the return value shall be 0.
+  If the driver supports only legacy I2C_RDWR, the return value shall be
+  -EOPNOTSUPP. In any case, nothing is done on the bus.
+
 ``ioctl(file, I2C_SMBUS, struct i2c_smbus_ioctl_data *args)``
   If possible, use the provided ``i2c_smbus_*`` methods described below instead
   of issuing direct ioctls.

@@ -88,8 +88,8 @@ TRACE_EVENT_FN(i2c_read,
  */
 TRACE_EVENT_FN(i2c_reply,
 	       TP_PROTO(const struct i2c_adapter *adap, const struct i2c_msg *msg,
-			int num),
-	       TP_ARGS(adap, msg, num),
+			int data_len, int num),
+	       TP_ARGS(adap, msg, data_len, num),
 	       TP_STRUCT__entry(
 		       __field(int,	adapter_nr		)
 		       __field(__u16,	msg_nr			)
@@ -102,7 +102,7 @@ TRACE_EVENT_FN(i2c_reply,
 		       __entry->msg_nr = num;
 		       __entry->addr = msg->addr;
 		       __entry->flags = msg->flags;
-		       __entry->len = msg->len;
+		       __entry->len = data_len;
 		       memcpy(__get_dynamic_array(buf), msg->buf, msg->len);
 			      ),
 	       TP_printk("i2c-%d #%u a=%03x f=%04x l=%u [%*phD]",

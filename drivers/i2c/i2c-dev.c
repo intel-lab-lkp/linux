@@ -240,11 +240,17 @@ static int i2cdev_check_addr(struct i2c_adapter *adapter, unsigned int addr)
 	return result;
 }
 
-static noinline int i2cdev_ioctl_rdwr(struct i2c_client *client,
-		unsigned nmsgs, struct i2c_msg *msgs)
+static noinline int i2cdev_ioctl_rdwr_v2(struct i2c_client *client,
+				      unsigned int nmsgs, struct i2c_msg *msgs,
+				      struct i2c_transfer_report __user *user_report)
 {
+	struct i2c_transfer_report report;
 	u8 __user **data_ptrs;
 	int i, res;
+
+	report.msgs_cplt = -EOPNOTSUPP;
+	report.fault_msg_idx = -EOPNOTSUPP;
+	report.bytes_cplt = -EOPNOTSUPP;
 
 	/* Adapter must support I2C transfers */
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
@@ -259,6 +265,7 @@ static noinline int i2cdev_ioctl_rdwr(struct i2c_client *client,
 		/* Limit the size of the message to a sane amount */
 		if (msgs[i].len > 8192) {
 			res = -EINVAL;
+			report.fault_msg_idx = i;
 			break;
 		}
 
@@ -266,6 +273,7 @@ static noinline int i2cdev_ioctl_rdwr(struct i2c_client *client,
 		msgs[i].buf = memdup_user(data_ptrs[i], msgs[i].len);
 		if (IS_ERR(msgs[i].buf)) {
 			res = PTR_ERR(msgs[i].buf);
+			report.fault_msg_idx = i;
 			break;
 		}
 		/* memdup_user allocates with GFP_KERNEL, so DMA is ok */
@@ -289,6 +297,7 @@ static noinline int i2cdev_ioctl_rdwr(struct i2c_client *client,
 					     I2C_SMBUS_BLOCK_MAX) {
 				i++;
 				res = -EINVAL;
+				report.fault_msg_idx = i;
 				break;
 			}
 
@@ -303,9 +312,34 @@ static noinline int i2cdev_ioctl_rdwr(struct i2c_client *client,
 		return res;
 	}
 
-	res = i2c_transfer(client->adapter, msgs, nmsgs);
+	if (user_report) {
+		res = i2c_transfer_v2(client->adapter, msgs, nmsgs, &report);
+		i = report.msgs_cplt;
+	} else {
+		res = i2c_transfer(client->adapter, msgs, nmsgs);
+		if (res < 0)
+			i = 0;
+		else
+			i = nmsgs;
+	}
+
+	if (user_report && copy_to_user(user_report, &report, sizeof(report)))
+		res = -EFAULT;
+
+	/* Number of messages transferred completely or partially */
+	if (report.bytes_cplt > 0) {
+		i++;
+		msgs[i].len = report.bytes_cplt;
+	}
+
+	if (i > (int)nmsgs) {
+		pr_err("Bad i2c_transfer_report: msgs_cplt = %i, bytes_cplt = %i, nmsgs = %i\n",
+		       report.msgs_cplt, report.bytes_cplt, nmsgs);
+		i = nmsgs;
+	}
+
 	while (i-- > 0) {
-		if (res >= 0 && (msgs[i].flags & I2C_M_RD)) {
+		if (msgs[i].flags & I2C_M_RD) {
 			if (copy_to_user(data_ptrs[i], msgs[i].buf,
 					 msgs[i].len))
 				res = -EFAULT;
@@ -439,18 +473,39 @@ static long i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		funcs = i2c_get_functionality(client->adapter);
 		return put_user(funcs, (unsigned long __user *)arg);
 
-	case I2C_RDWR: {
+	case I2C_RDWR:
+	case I2C_RDWR_V2:
+	{
+		struct i2c_rdwr_ioctl_data __user *user_arg;
+		struct i2c_transfer_report __user *user_rep;
 		struct i2c_rdwr_ioctl_data rdwr_arg;
 		struct i2c_msg *rdwr_pa;
 		int res;
 
-		if (copy_from_user(&rdwr_arg,
-				   (struct i2c_rdwr_ioctl_data __user *)arg,
-				   sizeof(rdwr_arg)))
+		if (cmd == I2C_RDWR_V2) {
+			user_arg = &((struct i2c_rdwr_v2_ioctl_data __user *)arg)->rdwr_data;
+			user_rep = &((struct i2c_rdwr_v2_ioctl_data __user *)arg)->report;
+		} else {
+			user_arg = (struct i2c_rdwr_ioctl_data __user *)arg;
+			user_rep = NULL;
+		}
+
+		if (copy_from_user(&rdwr_arg, user_arg, sizeof(rdwr_arg)))
 			return -EFAULT;
 
-		if (!rdwr_arg.msgs || rdwr_arg.nmsgs == 0)
-			return -EINVAL;
+		if (!rdwr_arg.msgs || rdwr_arg.nmsgs == 0) {
+			/*
+			 * I2C_RDWR_V2 ioctl with nmsgs == 0 is used for
+			 * discovering of the controller capability to return
+			 * detailed fault reports.
+			 */
+			if (cmd == I2C_RDWR)
+				return -EINVAL;
+			if (client->adapter->algo->xfer_v2)
+				return 0;
+			else
+				return -EOPNOTSUPP;
+		}
 
 		/*
 		 * Put an arbitrary limit on the number of messages that can
@@ -464,7 +519,7 @@ static long i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (IS_ERR(rdwr_pa))
 			return PTR_ERR(rdwr_pa);
 
-		res = i2cdev_ioctl_rdwr(client, rdwr_arg.nmsgs, rdwr_pa);
+		res = i2cdev_ioctl_rdwr_v2(client, rdwr_arg.nmsgs, rdwr_pa, user_rep);
 		kfree(rdwr_pa);
 		return res;
 	}
@@ -572,7 +627,7 @@ static long compat_i2cdev_ioctl(struct file *file, unsigned int cmd, unsigned lo
 			};
 		}
 
-		res = i2cdev_ioctl_rdwr(client, rdwr_arg.nmsgs, rdwr_pa);
+		res = i2cdev_ioctl_rdwr_v2(client, rdwr_arg.nmsgs, rdwr_pa, NULL);
 		kfree(rdwr_pa);
 		return res;
 	}

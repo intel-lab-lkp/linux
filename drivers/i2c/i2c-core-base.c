@@ -2170,15 +2170,17 @@ module_exit(i2c_exit);
 /* Check if val is exceeding the quirk IFF quirk is non 0 */
 #define i2c_quirk_exceeded(val, quirk) ((quirk) && ((val) > (quirk)))
 
-static int i2c_quirk_error(struct i2c_adapter *adap, struct i2c_msg *msg, char *err_msg)
+static struct i2c_msg *i2c_quirk_error(struct i2c_adapter *adap,
+				       struct i2c_msg *msg, char *err_msg)
 {
 	dev_err_ratelimited(&adap->dev, "adapter quirk: %s (addr 0x%04x, size %u, %s)\n",
 			    err_msg, msg->addr, msg->len,
 			    str_read_write(msg->flags & I2C_M_RD));
-	return -EOPNOTSUPP;
+	return msg;
 }
 
-static int i2c_check_for_quirks(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
+static struct i2c_msg *i2c_check_for_quirks(struct i2c_adapter *adap,
+					    struct i2c_msg *msgs, int num)
 {
 	const struct i2c_adapter_quirks *q = adap->quirks;
 	int max_num = q->max_num_msgs, i;
@@ -2229,30 +2231,50 @@ static int i2c_check_for_quirks(struct i2c_adapter *adap, struct i2c_msg *msgs, 
 		}
 	}
 
-	return 0;
+	return NULL;
 }
 
 /**
- * __i2c_transfer - unlocked flavor of i2c_transfer
+ * __i2c_transfer_v2 - unlocked flavor of i2c_transfer_v2
  * @adap: Handle to I2C bus
  * @msgs: One or more messages to execute before STOP is issued to
  *	terminate the operation; each message begins with a START.
  * @num: Number of messages to be executed.
+ * @report: The buffer for detailed transfer report (may be NULL if not required)
  *
  * Returns negative errno, else the number of messages executed.
+ * Writes the detailed transfer report to the structure pointed by 'report'.
  *
  * Adapter lock must be held when calling this function. No debug logging
  * takes place.
  */
-int __i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
+int __i2c_transfer_v2(struct i2c_adapter *adap, struct i2c_msg *msgs, int num,
+		   struct i2c_transfer_report *report)
 {
+	struct i2c_transfer_report dummy_report;
 	unsigned long orig_jiffies;
 	int ret, try;
 
-	if (!adap->algo->master_xfer) {
+	if (report) {
+		report->msgs_cplt = -EOPNOTSUPP;
+		report->bytes_cplt = -EOPNOTSUPP;
+		report->fault_msg_idx = -EOPNOTSUPP;
+
+		if (!adap->algo->xfer_v2)
+			return -EOPNOTSUPP;
+	}
+
+	if (!adap->algo->master_xfer && !adap->algo->xfer_v2) {
 		dev_dbg(&adap->dev, "I2C level transfers not supported\n");
 		return -EOPNOTSUPP;
 	}
+
+	/*
+	 * If the controller only supports "v2" callback and the report is not requested,
+	 * provide pointer to a dummy report.
+	 */
+	if (!(adap->algo->master_xfer) && (!report))
+		report = &dummy_report;
 
 	if (WARN_ON(!msgs || num < 1))
 		return -EINVAL;
@@ -2261,8 +2283,18 @@ int __i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 	if (ret)
 		return ret;
 
-	if (adap->quirks && i2c_check_for_quirks(adap, msgs, num))
-		return -EOPNOTSUPP;
+	if (adap->quirks) {
+		struct i2c_msg *bad_msg = i2c_check_for_quirks(adap, msgs, num);
+
+		if (bad_msg) {
+			if (report) {
+				report->msgs_cplt = 0;
+				report->bytes_cplt = 0;
+				report->fault_msg_idx = bad_msg - msgs;
+			}
+			return -EOPNOTSUPP;
+		}
+	}
 
 	/*
 	 * i2c_trace_msg_key gets enabled when tracepoint i2c_transfer gets
@@ -2283,8 +2315,12 @@ int __i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 	for (ret = 0, try = 0; try <= adap->retries; try++) {
 		if (i2c_in_atomic_xfer_mode() && adap->algo->master_xfer_atomic)
 			ret = adap->algo->master_xfer_atomic(adap, msgs, num);
-		else
-			ret = adap->algo->master_xfer(adap, msgs, num);
+		else {
+			if (report)
+				ret = adap->algo->xfer_v2(adap, msgs, num, report);
+			else
+				ret = adap->algo->master_xfer(adap, msgs, num);
+		}
 
 		if (ret != -EAGAIN)
 			break;
@@ -2293,57 +2329,62 @@ int __i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 	}
 
 	if (static_branch_unlikely(&i2c_trace_msg_key)) {
-		int i;
-		for (i = 0; i < ret; i++)
+		int n;
+
+		if (report)
+			n = report->msgs_cplt;
+		else
+			n = ret;
+		for (int i = 0; i < n; i++)
 			if (msgs[i].flags & I2C_M_RD)
-				trace_i2c_reply(adap, &msgs[i], i);
+				trace_i2c_reply(adap, &msgs[i], msgs[i].len, i);
+		if (report && report->bytes_cplt > 0 && msgs[n].flags & I2C_M_RD)
+			trace_i2c_reply(adap, &msgs[n], report->bytes_cplt, n);
 		trace_i2c_result(adap, num, ret);
 	}
 
 	return ret;
 }
+EXPORT_SYMBOL(__i2c_transfer_v2);
+
+int __i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
+{
+	return __i2c_transfer_v2(adap, msgs, num, NULL);
+}
 EXPORT_SYMBOL(__i2c_transfer);
 
 /**
- * i2c_transfer - execute a single or combined I2C message
+ * i2c_transfer_v2 - execute a single or combined I2C message
  * @adap: Handle to I2C bus
  * @msgs: One or more messages to execute before STOP is issued to
  *	terminate the operation; each message begins with a START.
  * @num: Number of messages to be executed.
+ * @report: Pointer for transmission fault report.
  *
  * Returns negative errno, else the number of messages executed.
  *
  * Note that there is no requirement that each message be sent to
  * the same slave address, although that is the most common model.
  */
-int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
+int i2c_transfer_v2(struct i2c_adapter *adap, struct i2c_msg *msgs, int num,
+		 struct i2c_transfer_report *report)
 {
 	int ret;
 
-	/* REVISIT the fault reporting model here is weak:
-	 *
-	 *  - When we get an error after receiving N bytes from a slave,
-	 *    there is no way to report "N".
-	 *
-	 *  - When we get a NAK after transmitting N bytes to a slave,
-	 *    there is no way to report "N" ... or to let the master
-	 *    continue executing the rest of this combined message, if
-	 *    that's the appropriate response.
-	 *
-	 *  - When for example "num" is two and we successfully complete
-	 *    the first message but get an error part way through the
-	 *    second, it's unclear whether that should be reported as
-	 *    one (discarding status on the second message) or errno
-	 *    (discarding status on the first one).
-	 */
 	ret = __i2c_lock_bus_helper(adap);
 	if (ret)
 		return ret;
 
-	ret = __i2c_transfer(adap, msgs, num);
+	ret = __i2c_transfer_v2(adap, msgs, num, report);
 	i2c_unlock_bus(adap, I2C_LOCK_SEGMENT);
 
 	return ret;
+}
+EXPORT_SYMBOL(i2c_transfer_v2);
+
+int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
+{
+	return i2c_transfer_v2(adap, msgs, num, NULL);
 }
 EXPORT_SYMBOL(i2c_transfer);
 
