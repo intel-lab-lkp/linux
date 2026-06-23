@@ -352,11 +352,11 @@ static int alvium_write_hshake(struct alvium_dev *alvium, u32 reg, u64 val)
 	}
 
 	/* poll handshake bit since bit0 = 1 */
-	read_poll_timeout(alvium_read, hshake_bit,
-			  ((hshake_bit & BCRM_HANDSHAKE_W_DONE_EN_BIT) == 1),
-			  15000, 45000, true,
-			  alvium, REG_BCRM_WRITE_HANDSHAKE_RW,
-			  &hshake_bit, &ret);
+	ret = read_poll_timeout(alvium_read, hshake_bit,
+				((hshake_bit & BCRM_HANDSHAKE_W_DONE_EN_BIT) == 1),
+				15000, 45000, true,
+				alvium, REG_BCRM_WRITE_HANDSHAKE_RW,
+				&hshake_bit, &ret);
 	if (ret) {
 		dev_err(dev, "poll bit[0] = 1, hshake reg fail\n");
 		return ret;
@@ -370,11 +370,11 @@ static int alvium_write_hshake(struct alvium_dev *alvium, u32 reg, u64 val)
 	}
 
 	/* poll handshake bit since bit0 = 0 */
-	read_poll_timeout(alvium_read, hshake_bit,
-			  ((hshake_bit & BCRM_HANDSHAKE_W_DONE_EN_BIT) == 0),
-			  15000, 45000, true,
-			  alvium, REG_BCRM_WRITE_HANDSHAKE_RW,
-			  &hshake_bit, &ret);
+	ret = read_poll_timeout(alvium_read, hshake_bit,
+				((hshake_bit & BCRM_HANDSHAKE_W_DONE_EN_BIT) == 0),
+				15000, 45000, true,
+				alvium, REG_BCRM_WRITE_HANDSHAKE_RW,
+				&hshake_bit, &ret);
 	if (ret) {
 		dev_err(dev, "poll bit[0] = 0, hshake reg fail\n");
 		return ret;
