@@ -843,11 +843,11 @@ static int cxld_registry_restore(struct cxl_decoder *cxld,
 		dbg_cxld(port, "restore", &td->cxled.cxld);
 		cxld_copy(cxld, &td->cxled.cxld);
 		cxled->state = td->cxled.state;
-		cxled->skip = td->cxled.skip;
+		cxld->skip = td->cxled.cxld.skip;
 		if (range_len(&td->dpa_range)) {
 			rc = devm_cxl_dpa_reserve(cxled, td->dpa_range.start,
 						  range_len(&td->dpa_range),
-						  td->cxled.skip);
+						  td->cxled.cxld.skip);
 			if (rc) {
 				init_disabled_mock_decoder(cxld);
 				return rc;
@@ -885,7 +885,7 @@ static void __cxld_registry_save(struct cxl_test_decoder *td,
 
 		cxld_copy(&td->cxled.cxld, cxld);
 		td->cxled.state = cxled->state;
-		td->cxled.skip = cxled->skip;
+		td->cxled.cxld.skip = cxled->cxld.skip;
 
 		if (!(cxld->flags & CXL_DECODER_F_ENABLE)) {
 			td->dpa_range.start = 0;
@@ -973,7 +973,7 @@ static void mock_decoder_reset(struct cxl_decoder *cxld)
 			to_cxl_endpoint_decoder(&cxld->dev);
 
 		cxled->state = CXL_DECODER_STATE_MANUAL;
-		cxled->skip = 0;
+		cxled->cxld.skip = 0;
 	}
 	if (decoder_reset_preserve_registry)
 		dev_dbg(port->uport_dev, "decoder%d: skip registry update\n",
@@ -1024,7 +1024,7 @@ static void init_disabled_mock_decoder(struct cxl_decoder *cxld)
 			to_cxl_endpoint_decoder(&cxld->dev);
 
 		cxled->state = CXL_DECODER_STATE_MANUAL;
-		cxled->skip = 0;
+		cxled->cxld.skip = 0;
 	}
 }
 
