@@ -350,6 +350,13 @@ __releases(lock)
 	return timeout;
 }
 
+static struct usb_serial_port *digi_get_oob_port(struct usb_serial *serial)
+{
+	struct digi_serial *serial_priv = usb_get_serial_data(serial);
+
+	return serial_priv->ds_oob_port;
+}
+
 /*
  *  Digi Write OOB Command
  *
@@ -366,7 +373,7 @@ static int digi_write_oob_command(struct usb_serial_port *port,
 {
 	int ret = 0;
 	int len;
-	struct usb_serial_port *oob_port = (struct usb_serial_port *)((struct digi_serial *)(usb_get_serial_data(port->serial)))->ds_oob_port;
+	struct usb_serial_port *oob_port = digi_get_oob_port(port->serial);
 	struct digi_port *oob_priv = usb_get_serial_port_data(oob_port);
 	unsigned long flags;
 
@@ -504,7 +511,7 @@ static int digi_set_modem_signals(struct usb_serial_port *port,
 
 	int ret;
 	struct digi_port *port_priv = usb_get_serial_port_data(port);
-	struct usb_serial_port *oob_port = (struct usb_serial_port *) ((struct digi_serial *)(usb_get_serial_data(port->serial)))->ds_oob_port;
+	struct usb_serial_port *oob_port = digi_get_oob_port(port->serial);
 	struct digi_port *oob_priv = usb_get_serial_port_data(oob_port);
 	unsigned char *data = oob_port->write_urb->transfer_buffer;
 	unsigned long flags;
