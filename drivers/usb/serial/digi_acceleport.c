@@ -176,10 +176,10 @@
 /* Structures */
 
 struct digi_serial {
-	spinlock_t ds_serial_lock;
+	struct mutex open_mutex;
 	struct usb_serial_port *ds_oob_port;	/* out-of-band port */
 	int ds_oob_port_num;			/* index of out-of-band port */
-	int ds_device_started;
+	int open_count;
 };
 
 struct digi_port {
@@ -226,9 +226,7 @@ static unsigned int digi_chars_in_buffer(struct tty_struct *tty);
 static int digi_open(struct tty_struct *tty, struct usb_serial_port *port);
 static void digi_close(struct usb_serial_port *port);
 static void digi_dtr_rts(struct usb_serial_port *port, int on);
-static int digi_startup_device(struct usb_serial *serial);
 static int digi_startup(struct usb_serial *serial);
-static void digi_disconnect(struct usb_serial *serial);
 static void digi_release(struct usb_serial *serial);
 static int digi_port_probe(struct usb_serial_port *port);
 static void digi_port_remove(struct usb_serial_port *port);
@@ -281,7 +279,6 @@ static struct usb_serial_driver digi_acceleport_2_device = {
 	.tiocmget =			digi_tiocmget,
 	.tiocmset =			digi_tiocmset,
 	.attach =			digi_startup,
-	.disconnect =			digi_disconnect,
 	.release =			digi_release,
 	.port_probe =			digi_port_probe,
 	.port_remove =			digi_port_remove,
@@ -310,7 +307,6 @@ static struct usb_serial_driver digi_acceleport_4_device = {
 	.tiocmget =			digi_tiocmget,
 	.tiocmset =			digi_tiocmset,
 	.attach =			digi_startup,
-	.disconnect =			digi_disconnect,
 	.release =			digi_release,
 	.port_probe =			digi_port_probe,
 	.port_remove =			digi_port_remove,
@@ -1034,6 +1030,43 @@ static void digi_dtr_rts(struct usb_serial_port *port, int on)
 	digi_set_modem_signals(port, on * (TIOCM_DTR | TIOCM_RTS), 1);
 }
 
+static int digi_open_oob_port(struct usb_serial *serial)
+{
+	struct digi_serial *serial_priv = usb_get_serial_data(serial);
+	struct usb_serial_port *oob_port = serial_priv->ds_oob_port;
+	int ret = 0;
+
+	mutex_lock(&serial_priv->open_mutex);
+
+	if (serial_priv->open_count++ == 0) {
+		ret = usb_submit_urb(oob_port->read_urb, GFP_KERNEL);
+		if (ret) {
+			dev_err(&serial->interface->dev, "failed to submit OOB read urb: %d\n",
+					ret);
+			serial_priv->open_count--;
+		}
+	}
+
+	mutex_unlock(&serial_priv->open_mutex);
+
+	return ret;
+}
+
+static void digi_close_oob_port(struct usb_serial *serial)
+{
+	struct digi_serial *serial_priv = usb_get_serial_data(serial);
+	struct usb_serial_port *oob_port = serial_priv->ds_oob_port;
+
+	mutex_lock(&serial_priv->open_mutex);
+
+	if (serial_priv->open_count-- == 1) {
+		usb_kill_urb(oob_port->read_urb);
+		usb_kill_urb(oob_port->write_urb);
+	}
+
+	mutex_unlock(&serial_priv->open_mutex);
+}
+
 static int digi_open(struct tty_struct *tty, struct usb_serial_port *port)
 {
 	struct digi_port *priv = usb_get_serial_port_data(port);
@@ -1041,9 +1074,9 @@ static int digi_open(struct tty_struct *tty, struct usb_serial_port *port)
 	unsigned char buf[32];
 	int ret;
 
-	/* be sure the device is started up */
-	if (digi_startup_device(port->serial) != 0)
-		return -ENXIO;
+	ret = digi_open_oob_port(port->serial);
+	if (ret)
+		return ret;
 
 	/* read modem signals automatically whenever they change */
 	buf[0] = DIGI_CMD_READ_INPUT_SIGNALS;
@@ -1076,10 +1109,15 @@ static int digi_open(struct tty_struct *tty, struct usb_serial_port *port)
 	ret = usb_submit_urb(port->read_urb, GFP_KERNEL);
 	if (ret) {
 		dev_err(&port->dev, "failed to submit read urb: %d\n", ret);
-		return ret;
+		goto err_close_oob;
 	}
 
 	return 0;
+
+err_close_oob:
+	digi_close_oob_port(port->serial);
+
+	return ret;
 }
 
 static void digi_close(struct usb_serial_port *port)
@@ -1142,36 +1180,8 @@ exit:
 
 	/* shutdown any outstanding bulk writes */
 	usb_kill_urb(port->write_urb);
-}
 
-/*
- *  Digi Startup Device
- *
- *  Starts read on the OOB port.  Must be called AFTER startup, with
- *  urbs initialized.  Returns 0 if successful, non-zero error otherwise.
- */
-static int digi_startup_device(struct usb_serial *serial)
-{
-	struct digi_serial *serial_priv = usb_get_serial_data(serial);
-	struct usb_serial_port *oob_port = serial_priv->ds_oob_port;
-	int ret;
-
-	/* be sure this happens exactly once */
-	spin_lock(&serial_priv->ds_serial_lock);
-	if (serial_priv->ds_device_started) {
-		spin_unlock(&serial_priv->ds_serial_lock);
-		return 0;
-	}
-	serial_priv->ds_device_started = 1;
-	spin_unlock(&serial_priv->ds_serial_lock);
-
-	ret = usb_submit_urb(oob_port->read_urb, GFP_KERNEL);
-	if (ret) {
-		dev_err(&serial->interface->dev, "failed to submit OOB read urb: %d\n", ret);
-		return ret;
-	}
-
-	return 0;
+	digi_close_oob_port(port->serial);
 }
 
 static int digi_port_init(struct usb_serial_port *port, unsigned port_num)
@@ -1222,7 +1232,8 @@ static int digi_startup(struct usb_serial *serial)
 	if (!serial_priv)
 		return -ENOMEM;
 
-	spin_lock_init(&serial_priv->ds_serial_lock);
+	mutex_init(&serial_priv->open_mutex);
+
 	serial_priv->ds_oob_port_num = oob_port_num;
 	serial_priv->ds_oob_port = serial->port[oob_port_num];
 
@@ -1236,15 +1247,6 @@ static int digi_startup(struct usb_serial *serial)
 	usb_set_serial_data(serial, serial_priv);
 
 	return 0;
-}
-
-static void digi_disconnect(struct usb_serial *serial)
-{
-	struct digi_serial *serial_priv = usb_get_serial_data(serial);
-	struct usb_serial_port *oob_port = serial_priv->ds_oob_port;
-
-	usb_kill_urb(oob_port->read_urb);
-	usb_kill_urb(oob_port->write_urb);
 }
 
 static void digi_release(struct usb_serial *serial)
