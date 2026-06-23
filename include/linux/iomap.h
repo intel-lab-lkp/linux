@@ -528,7 +528,7 @@ struct iomap_read_ops {
 	 * This is optional.
 	 */
 	void (*submit_read)(const struct iomap_iter *iter,
-			struct iomap_read_folio_ctx *ctx);
+			struct iomap_read_folio_ctx *ctx, bool force);
 
 	/*
 	 * Optional, allows filesystem to specify own bio_set, so new bio's
@@ -623,7 +623,8 @@ extern struct bio_set iomap_ioend_bioset;
 int iomap_bio_read_folio_range(const struct iomap_iter *iter,
 		struct iomap_read_folio_ctx *ctx, size_t plen);
 void iomap_bio_submit_read_endio(const struct iomap_iter *iter,
-		struct iomap_read_folio_ctx *ctx, bio_end_io_t end_io);
+		struct iomap_read_folio_ctx *ctx, bool force,
+		bio_end_io_t end_io);
 
 extern const struct iomap_read_ops iomap_bio_read_ops;
 

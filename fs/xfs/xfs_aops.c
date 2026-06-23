@@ -758,13 +758,14 @@ xfs_vm_bmap(
 static void
 xfs_bio_submit_read(
 	const struct iomap_iter		*iter,
-	struct iomap_read_folio_ctx	*ctx)
+	struct iomap_read_folio_ctx	*ctx,
+	bool				force)
 {
 	struct bio			*bio = ctx->read_ctx;
 
 	/* defer read completions to the ioend workqueue */
 	iomap_init_ioend(iter->inode, bio, ctx->read_ctx_file_offset, 0);
-	iomap_bio_submit_read_endio(iter, ctx, xfs_end_bio);
+	iomap_bio_submit_read_endio(iter, ctx, force, xfs_end_bio);
 }
 
 static const struct iomap_read_ops xfs_iomap_read_ops = {

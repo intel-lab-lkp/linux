@@ -79,7 +79,8 @@ u32 iomap_finish_ioend_buffered_read(struct iomap_ioend *ioend)
 }
 
 void iomap_bio_submit_read_endio(const struct iomap_iter *iter,
-		struct iomap_read_folio_ctx *ctx, bio_end_io_t end_io)
+		struct iomap_read_folio_ctx *ctx, bool force,
+		bio_end_io_t end_io)
 {
 	struct bio *bio = ctx->read_ctx;
 
@@ -87,13 +88,15 @@ void iomap_bio_submit_read_endio(const struct iomap_iter *iter,
 	if (iter->iomap.flags & IOMAP_F_INTEGRITY)
 		fs_bio_integrity_alloc(bio);
 	submit_bio(bio);
+
+	ctx->read_ctx = NULL;
 }
 EXPORT_SYMBOL_GPL(iomap_bio_submit_read_endio);
 
 static void iomap_bio_submit_read(const struct iomap_iter *iter,
-		struct iomap_read_folio_ctx *ctx)
+		struct iomap_read_folio_ctx *ctx, bool force)
 {
-	return iomap_bio_submit_read_endio(iter, ctx, iomap_read_end_io);
+	return iomap_bio_submit_read_endio(iter, ctx, force, iomap_read_end_io);
 }
 
 static struct bio_set *iomap_read_bio_set(struct iomap_read_folio_ctx *ctx)
@@ -116,7 +119,7 @@ static void iomap_read_alloc_bio(const struct iomap_iter *iter,
 
 	/* Submit the existing range if there was one. */
 	if (ctx->read_ctx)
-		ctx->ops->submit_read(iter, ctx);
+		ctx->ops->submit_read(iter, ctx, true);
 
 	/* Same as readahead_gfp_mask: */
 	if (ctx->rac)

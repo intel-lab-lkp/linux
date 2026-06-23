@@ -251,9 +251,9 @@ static void exfat_iomap_read_end_io(struct bio *bio)
 }
 
 static void exfat_iomap_bio_submit_read(const struct iomap_iter *iter,
-		struct iomap_read_folio_ctx *ctx)
+		struct iomap_read_folio_ctx *ctx, bool force)
 {
-	iomap_bio_submit_read_endio(iter, ctx, exfat_iomap_read_end_io);
+	iomap_bio_submit_read_endio(iter, ctx, force, exfat_iomap_read_end_io);
 }
 
 const struct iomap_read_ops exfat_iomap_bio_read_ops = {
