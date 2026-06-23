@@ -229,14 +229,4 @@ static inline struct kvm_info *kvm_info__new(void)
 	return ki;
 }
 
-#define STRDUP_FAIL_EXIT(s)		\
-	({	char *_p;		\
-		_p = strdup(s);		\
-		if (!_p) {		\
-			ret = -ENOMEM;	\
-			goto EXIT;	\
-		}			\
-		_p;			\
-	})
-
 #endif /* __PERF_KVM_STAT_H */

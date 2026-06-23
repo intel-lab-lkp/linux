@@ -181,8 +181,8 @@ int __kvm_add_default_arch_event_powerpc(int *argc, const char **argv)
 	if (!perf_pmus__have_event("trace_imc", "trace_cycles"))
 		return -EINVAL;
 
-	argv[j++] = strdup("-e");
-	argv[j++] = strdup("trace_imc/trace_cycles/");
+	argv[j++] = "-e";
+	argv[j++] = "trace_imc/trace_cycles/";
 	*argc += 2;
 
 	return 0;

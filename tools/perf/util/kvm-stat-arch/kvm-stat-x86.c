@@ -210,16 +210,13 @@ int __cpu_isa_init_x86(struct perf_kvm_stat *kvm, const char *cpuid)
  */
 int __kvm_add_default_arch_event_x86(int *argc, const char **argv)
 {
-	int ret = 0, j = *argc;
+	int j = *argc;
 
-	argv[j++] = STRDUP_FAIL_EXIT("-e");
-	argv[j++] = STRDUP_FAIL_EXIT("cycles");
+	argv[j++] = "-e";
+	argv[j++] = "cycles";
 	*argc += 2;
 
 	return 0;
-
-EXIT:
-	return ret;
 }
 
 const char * const *__kvm_events_tp_x86(void)
