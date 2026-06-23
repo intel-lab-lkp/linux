@@ -51,6 +51,16 @@ static const struct nvmet_type_name_map nvmet_addr_family[] = {
 	{ NVMF_ADDR_FAMILY_LOOP,	"loop" },
 };
 
+u64 nvmet_get_ns_id(struct net *net_ns)
+{
+	struct ns_common *ns;
+
+	if (!net_ns)
+		return 0;
+	ns = to_ns_common(net_ns);
+	return net_ns == &init_net ? 0 : ns->ns_id;
+}
+
 static bool nvmet_is_port_enabled(struct nvmet_port *p, const char *caller)
 {
 	if (p->enabled)
@@ -1734,14 +1744,17 @@ static const struct config_item_type nvmet_subsys_type = {
 static struct config_group *nvmet_subsys_make(struct config_group *group,
 		const char *name)
 {
-	struct nvmet_subsys *subsys;
+	struct nvmet_subsys *subsys, *disc_subsys;
 
 	if (sysfs_streq(name, NVME_DISC_SUBSYS_NAME)) {
 		pr_err("can't create discovery subsystem through configfs\n");
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (sysfs_streq(name, nvmet_disc_subsys->subsysnqn)) {
+	disc_subsys = nvmet_get_disc_subsys(&init_net);
+	if (!disc_subsys)
+		return ERR_PTR(-ENOENT);
+	if (sysfs_streq(name, disc_subsys->subsysnqn)) {
 		pr_err("can't create subsystem using unique discovery NQN\n");
 		return ERR_PTR(-EINVAL);
 	}
@@ -2308,12 +2321,17 @@ static struct config_group nvmet_hosts_group;
 static ssize_t nvmet_root_discovery_nqn_show(struct config_item *item,
 					     char *page)
 {
-	return snprintf(page, PAGE_SIZE, "%s\n", nvmet_disc_subsys->subsysnqn);
+	struct nvmet_subsys *disc_subsys = nvmet_get_disc_subsys(&init_net);
+
+	if (!disc_subsys)
+		return -ENOENT;
+	return snprintf(page, PAGE_SIZE, "%s\n", disc_subsys->subsysnqn);
 }
 
 static ssize_t nvmet_root_discovery_nqn_store(struct config_item *item,
 		const char *page, size_t count)
 {
+	struct nvmet_subsys *disc_subsys;
 	struct list_head *entry;
 	char *old_nqn, *new_nqn;
 	size_t len;
@@ -2338,12 +2356,15 @@ static ssize_t nvmet_root_discovery_nqn_store(struct config_item *item,
 			return -EINVAL;
 		}
 	}
-	old_nqn = nvmet_disc_subsys->subsysnqn;
-	nvmet_disc_subsys->subsysnqn = new_nqn;
+	disc_subsys = nvmet_get_disc_subsys(&init_net);
+	if (disc_subsys) {
+		old_nqn = disc_subsys->subsysnqn;
+		disc_subsys->subsysnqn = new_nqn;
+	}
 	up_write(&nvmet_config_sem);
 
 	kfree(old_nqn);
-	return len;
+	return disc_subsys ? len : -ENOENT;
 }
 
 CONFIGFS_ATTR(nvmet_root_, discovery_nqn);

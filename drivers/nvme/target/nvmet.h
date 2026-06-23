@@ -325,6 +325,9 @@ struct nvmet_subsys {
 	u16			cntlid_min;
 	u16			cntlid_max;
 
+	/* For discovery subsystems */
+	u64 genctr;
+
 	struct list_head	ctrls;
 
 	struct list_head	hosts;
@@ -696,11 +699,13 @@ void nvmet_add_async_event(struct nvmet_ctrl *ctrl, u8 event_type,
 
 int __init nvmet_init_configfs(void);
 void __exit nvmet_exit_configfs(void);
+extern struct list_head *nvmet_get_port_list(struct net *net_ns);
 
-int __init nvmet_init_discovery(void);
-void nvmet_exit_discovery(void);
+extern u64 nvmet_get_ns_id(struct net *net_ns);
+extern int nvmet_add_disc_subsys(struct net *net_ns);
+extern void nvmet_del_disc_subsys(struct net *net_ns);
+extern struct nvmet_subsys *nvmet_get_disc_subsys(struct net *net_ns);
 
-extern struct nvmet_subsys *nvmet_disc_subsys;
 extern struct rw_semaphore nvmet_config_sem;
 
 extern u32 nvmet_ana_group_enabled[NVMET_MAX_ANAGRPS + 1];

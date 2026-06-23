@@ -1798,22 +1798,27 @@ static struct nvmet_subsys *nvmet_find_get_subsys(struct nvmet_port *port,
 		const char *subsysnqn)
 {
 	struct nvmet_subsys_link *p;
+	struct nvmet_subsys *disc_subsys;
 
 	if (!port)
 		return NULL;
 
+	disc_subsys = nvmet_get_disc_subsys(&init_net);
+	if (!disc_subsys)
+		return NULL;
+
 	if (!strcmp(NVME_DISC_SUBSYS_NAME, subsysnqn)) {
-		if (!kref_get_unless_zero(&nvmet_disc_subsys->ref))
+		if (!kref_get_unless_zero(&disc_subsys->ref))
 			return NULL;
-		return nvmet_disc_subsys;
+		return disc_subsys;
 	}
 
 	down_read(&nvmet_config_sem);
-	if (!strncmp(nvmet_disc_subsys->subsysnqn, subsysnqn,
+	if (!strncmp(disc_subsys->subsysnqn, subsysnqn,
 				NVMF_NQN_SIZE)) {
-		if (kref_get_unless_zero(&nvmet_disc_subsys->ref)) {
+		if (kref_get_unless_zero(&disc_subsys->ref)) {
 			up_read(&nvmet_config_sem);
-			return nvmet_disc_subsys;
+			return disc_subsys;
 		}
 	}
 	list_for_each_entry(p, &port->subsystems, entry) {
@@ -1888,14 +1893,8 @@ struct nvmet_subsys *nvmet_subsys_alloc(const char *subsysnqn,
 	INIT_LIST_HEAD(&subsys->ctrls);
 	INIT_LIST_HEAD(&subsys->hosts);
 
-	ret = nvmet_debugfs_subsys_setup(subsys);
-	if (ret)
-		goto free_subsysnqn;
-
 	return subsys;
 
-free_subsysnqn:
-	kfree(subsys->subsysnqn);
 free_fr:
 	kfree(subsys->firmware_rev);
 free_mn:
@@ -1976,18 +1975,12 @@ static int __init nvmet_init(void)
 	if (error)
 		goto out_free_nvmet_aen_work_queue;
 
-	error = nvmet_init_discovery();
+	error = nvmet_init_configfs();
 	if (error)
 		goto out_exit_debugfs;
 
-	error = nvmet_init_configfs();
-	if (error)
-		goto out_exit_discovery;
-
 	return 0;
 
-out_exit_discovery:
-	nvmet_exit_discovery();
 out_exit_debugfs:
 	nvmet_exit_debugfs();
 out_free_nvmet_aen_work_queue:
@@ -2006,7 +1999,6 @@ out_destroy_bvec_cache:
 static void __exit nvmet_exit(void)
 {
 	nvmet_exit_configfs();
-	nvmet_exit_discovery();
 	nvmet_exit_debugfs();
 	ida_destroy(&cntlid_ida);
 	destroy_workqueue(nvmet_aen_wq);

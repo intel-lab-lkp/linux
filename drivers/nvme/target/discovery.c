@@ -8,9 +8,44 @@
 #include <generated/utsrelease.h>
 #include "nvmet.h"
 
-struct nvmet_subsys *nvmet_disc_subsys;
+static DEFINE_XARRAY(nvmet_disc_xa);
 
-static u64 nvmet_genctr;
+struct nvmet_subsys *nvmet_get_disc_subsys(struct net *net_ns)
+{
+	struct nvmet_subsys *subsys;
+	u64 ns_id = nvmet_get_ns_id(net_ns);
+
+	subsys = xa_load(&nvmet_disc_xa, ns_id);
+	return subsys;
+}
+
+int nvmet_add_disc_subsys(struct net *net_ns)
+{
+	struct nvmet_subsys *disc_subsys;
+	u64 ns_id = nvmet_get_ns_id(net_ns);
+	int err;
+
+	disc_subsys = nvmet_subsys_alloc(NVME_DISC_SUBSYS_NAME,
+					 NVME_NQN_CURR);
+	if (IS_ERR(disc_subsys))
+		return PTR_ERR(disc_subsys);
+	err = xa_insert(&nvmet_disc_xa, ns_id,
+			disc_subsys, GFP_KERNEL);
+	if (err < 0)
+		nvmet_subsys_put(disc_subsys);
+
+	return err;
+}
+
+void nvmet_del_disc_subsys(struct net *net_ns)
+{
+	struct nvmet_subsys *disc_subsys;
+	u64 ns_id = nvmet_get_ns_id(net_ns);
+
+	disc_subsys = xa_erase(&nvmet_disc_xa, ns_id);
+	if (disc_subsys)
+		nvmet_subsys_put(disc_subsys);
+}
 
 static void __nvmet_disc_changed(struct nvmet_port *port,
 				 struct nvmet_ctrl *ctrl)
@@ -29,18 +64,22 @@ void nvmet_port_disc_changed(struct nvmet_port *port,
 			     struct nvmet_subsys *subsys)
 {
 	struct nvmet_ctrl *ctrl;
+	struct nvmet_subsys *disc_subsys;
 
 	lockdep_assert_held(&nvmet_config_sem);
-	nvmet_genctr++;
+	disc_subsys = nvmet_get_disc_subsys(&init_net);
+	if (WARN_ON(!disc_subsys))
+		return;
+	disc_subsys->genctr++;
 
-	mutex_lock(&nvmet_disc_subsys->lock);
-	list_for_each_entry(ctrl, &nvmet_disc_subsys->ctrls, subsys_entry) {
+	mutex_lock(&disc_subsys->lock);
+	list_for_each_entry(ctrl, &disc_subsys->ctrls, subsys_entry) {
 		if (subsys && !nvmet_host_allowed(subsys, ctrl->hostnqn))
 			continue;
 
 		__nvmet_disc_changed(port, ctrl);
 	}
-	mutex_unlock(&nvmet_disc_subsys->lock);
+	mutex_unlock(&disc_subsys->lock);
 
 	/* If transport can signal change, notify transport */
 	if (port->tr_ops && port->tr_ops->discovery_chg)
@@ -52,15 +91,19 @@ static void __nvmet_subsys_disc_changed(struct nvmet_port *port,
 					struct nvmet_host *host)
 {
 	struct nvmet_ctrl *ctrl;
+	struct nvmet_subsys *disc_subsys;
 
-	mutex_lock(&nvmet_disc_subsys->lock);
-	list_for_each_entry(ctrl, &nvmet_disc_subsys->ctrls, subsys_entry) {
+	disc_subsys = nvmet_get_disc_subsys(&init_net);
+	if (WARN_ON(!disc_subsys))
+		return;
+	mutex_lock(&disc_subsys->lock);
+	list_for_each_entry(ctrl, &disc_subsys->ctrls, subsys_entry) {
 		if (host && strcmp(nvmet_host_name(host), ctrl->hostnqn))
 			continue;
 
 		__nvmet_disc_changed(port, ctrl);
 	}
-	mutex_unlock(&nvmet_disc_subsys->lock);
+	mutex_unlock(&disc_subsys->lock);
 }
 
 void nvmet_subsys_disc_changed(struct nvmet_subsys *subsys,
@@ -68,9 +111,13 @@ void nvmet_subsys_disc_changed(struct nvmet_subsys *subsys,
 {
 	struct nvmet_port *port;
 	struct nvmet_subsys_link *s;
+	struct nvmet_subsys *disc_subsys;
 
 	lockdep_assert_held(&nvmet_config_sem);
-	nvmet_genctr++;
+	disc_subsys = nvmet_get_disc_subsys(&init_net);
+	if (WARN_ON(!disc_subsys))
+		return;
+	disc_subsys->genctr++;
 
 	list_for_each_entry(port, nvmet_ports, global_entry)
 		list_for_each_entry(s, &port->subsystems, entry) {
@@ -173,6 +220,7 @@ static void nvmet_execute_disc_get_log_page(struct nvmet_req *req)
 	u16 status = 0;
 	void *buffer;
 	char traddr[NVMF_TRADDR_SIZE];
+	struct nvmet_subsys *disc_subsys;
 
 	if (!nvmet_check_transfer_len(req, data_len))
 		return;
@@ -207,10 +255,12 @@ static void nvmet_execute_disc_get_log_page(struct nvmet_req *req)
 	}
 	hdr = buffer;
 
+	disc_subsys = nvmet_get_disc_subsys(&init_net);
+
 	nvmet_set_disc_traddr(req, req->port, traddr);
 
 	nvmet_format_discovery_entry(hdr, req->port,
-				     nvmet_disc_subsys->subsysnqn,
+				     disc_subsys->subsysnqn,
 				     traddr, NVME_NQN_CURR, numrec);
 	numrec++;
 
@@ -235,7 +285,7 @@ static void nvmet_execute_disc_get_log_page(struct nvmet_req *req)
 		numrec++;
 	}
 
-	hdr->genctr = cpu_to_le64(nvmet_genctr);
+	hdr->genctr = cpu_to_le64(disc_subsys->genctr);
 	hdr->numrec = cpu_to_le64(numrec);
 	hdr->recfmt = cpu_to_le16(0);
 
@@ -427,16 +477,4 @@ u16 nvmet_parse_discovery_cmd(struct nvmet_req *req)
 		return NVME_SC_INVALID_OPCODE | NVME_STATUS_DNR;
 	}
 
-}
-
-int __init nvmet_init_discovery(void)
-{
-	nvmet_disc_subsys =
-		nvmet_subsys_alloc(NVME_DISC_SUBSYS_NAME, NVME_NQN_CURR);
-	return PTR_ERR_OR_ZERO(nvmet_disc_subsys);
-}
-
-void nvmet_exit_discovery(void)
-{
-	nvmet_subsys_put(nvmet_disc_subsys);
 }
