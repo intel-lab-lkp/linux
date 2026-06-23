@@ -63,13 +63,7 @@ test_kvm_record_report() {
 	echo "Recording kvm profile for pid ${qemu_pid}..."
 	# Use --host to avoid needing guest symbols/mounts for this simple test
 	# We just want to verify the command runs and produces data
-	# We run in background and kill it because 'perf kvm record' appends options
-	# after the command, which breaks 'sleep' (e.g. it gets '-e cycles').
-	perf kvm --host record -p "${qemu_pid}" -o "${perfdata}" &
-	rec_pid=$!
-	sleep 1
-	kill -INT "${rec_pid}"
-	wait "${rec_pid}" || true
+	perf kvm --host record -p "${qemu_pid}" -o "${perfdata}" sleep 1
 
 	echo "Reporting kvm profile..."
 	# Check for some standard output from report
