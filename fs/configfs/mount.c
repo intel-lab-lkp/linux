@@ -25,6 +25,7 @@
 struct kmem_cache *configfs_dir_cachep;
 static DEFINE_XARRAY(configfs_super_xa);
 static struct configfs_super_info *configfs_root;
+static DEFINE_SPINLOCK(configfs_pin_lock);
 
 static u64 configfs_ns_id(struct net *net_ns)
 {
@@ -219,21 +220,60 @@ MODULE_ALIAS_FS("configfs");
 
 struct dentry *configfs_pin_fs(struct super_block *sb)
 {
-	struct configfs_super_info *info = configfs_root;
-	int err;
+	struct configfs_super_info *info;
 
-	err = simple_pin_fs(&configfs_fs_type, &info->mnt, &info->mnt_count);
-	if (err)
-		return ERR_PTR(err);
+	spin_lock(&configfs_pin_lock);
+	if (sb) {
+		struct configfs_super_info *root = configfs_root;
+		struct dentry *dentry = sb->s_root;
 
+		info = sb->s_fs_info;
+		if (!info->mnt) {
+			struct vfsmount *mnt;
+
+			spin_unlock(&configfs_pin_lock);
+			mnt = mnt_clone_direct(root->mnt, dentry);
+			if (IS_ERR(mnt))
+				return ERR_CAST(mnt);
+			spin_lock(&configfs_pin_lock);
+			info->mnt = mnt;
+		} else {
+			mntget(info->mnt);
+		}
+	} else {
+		info = configfs_root;
+		if (!info->mnt) {
+			struct vfsmount *mnt;
+
+			spin_unlock(&configfs_pin_lock);
+			mnt = vfs_kern_mount(&configfs_fs_type, SB_KERNMOUNT,
+					     configfs_fs_type.name, NULL);
+			if (IS_ERR(mnt))
+				return ERR_CAST(mnt);
+			spin_lock(&configfs_pin_lock);
+			info->mnt = mnt;
+		} else {
+			mntget(info->mnt);
+		}
+	}
+	info->mnt_count++;
+	spin_unlock(&configfs_pin_lock);
 	return info->mnt->mnt_root;
 }
 
 void configfs_release_fs(struct super_block *sb)
 {
 	struct configfs_super_info *info = configfs_root;
+	struct vfsmount *mnt;
 
-	simple_release_fs(&info->mnt, &info->mnt_count);
+	spin_lock(&configfs_pin_lock);
+	if (sb)
+		info = sb->s_fs_info;
+	mnt = info->mnt;
+	if (--info->mnt_count)
+		info->mnt = NULL;
+	spin_unlock(&configfs_pin_lock);
+	mntput(mnt);
 }
 
 static int __init configfs_init(void)
