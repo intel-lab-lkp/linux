@@ -3363,6 +3363,9 @@ static int setup_nic_devices(struct octeon_device *octeon_dev)
 		sc = (struct octeon_soft_command *)
 			octeon_alloc_soft_command(octeon_dev, data_size,
 						  resp_size, 0);
+		if (!sc)
+			return -ENOMEM;
+
 		resp = (struct liquidio_if_cfg_resp *)sc->virtrptr;
 		vdata = (struct lio_version *)sc->virtdptr;
 
