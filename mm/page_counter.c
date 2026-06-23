@@ -172,6 +172,54 @@ failed:
 	return false;
 }
 
+bool page_counter_try_charge_stock(struct page_counter *counter,
+				   unsigned long nr_pages,
+				   struct page_counter **fail,
+				   unsigned long *nr_charged)
+{
+	struct page_counter_stock *stock;
+	unsigned long charge = 0;
+	int old;
+
+	if (!counter->stock)
+		goto charge_exact;
+
+	preempt_disable();
+	stock = this_cpu_ptr(counter->stock);
+	old = atomic_read(&stock->nr_pages);
+	while ((unsigned long)old >= nr_pages) {
+		if (atomic_try_cmpxchg(&stock->nr_pages, &old,
+				       old - (int)nr_pages)) {
+			preempt_enable();
+			goto out_success;
+		}
+	}
+	preempt_enable();
+
+	charge = max_t(unsigned long, READ_ONCE(counter->batch), nr_pages);
+	if (charge <= nr_pages)
+		goto charge_exact;
+
+	if (page_counter_try_charge(counter, charge, fail)) {
+		preempt_disable();
+		stock = this_cpu_ptr(counter->stock);
+		atomic_add((int)(charge - nr_pages), &stock->nr_pages);
+		preempt_enable();
+		goto out_success;
+	}
+
+charge_exact:
+	/* stock is not enabled, no need for surplus, or greedy charge failed */
+	charge = nr_pages;
+	if (!page_counter_try_charge(counter, charge, fail))
+		return false;
+
+out_success:
+	if (nr_charged)
+		*nr_charged = charge;
+	return true;
+}
+
 /**
  * page_counter_uncharge - hierarchically uncharge pages
  * @counter: counter
