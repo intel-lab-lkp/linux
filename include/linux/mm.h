@@ -2296,7 +2296,14 @@ static inline int memdesc_nid(memdesc_flags_t mdf)
 
 static inline int page_to_nid(const struct page *page)
 {
-	return memdesc_nid(PF_POISONED_CHECK(page)->flags);
+	/*
+	 * The node id occupies a fixed high bit-range of page->flags
+	 * that is set once at page init and never changed afterwards.
+	 * It cannot overlap with the low PG_locked/PG_waiters bits
+	 * that folio_lock()/folio_unlock() concurrently update, so
+	 * this data race is benign.
+	 */
+	return memdesc_nid(data_race(PF_POISONED_CHECK(page)->flags));
 }
 
 static inline int folio_nid(const struct folio *folio)
