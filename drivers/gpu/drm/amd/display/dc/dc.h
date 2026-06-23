@@ -3012,6 +3012,8 @@ void dc_resume(struct dc *dc);
 
 void dc_power_down_on_boot(struct dc *dc);
 
+void dc_disable_dangling_timing_generators(struct dc *dc);
+
 /*
  * HDCP Interfaces
  */
