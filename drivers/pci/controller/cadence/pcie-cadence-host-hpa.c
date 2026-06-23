@@ -303,6 +303,9 @@ int cdns_pcie_hpa_host_link_setup(struct cdns_pcie_rc *rc)
 		return ret;
 	}
 
+	if (rc->link_down_no_hotplug)
+		return 0;
+
 	ret = cdns_pcie_host_wait_for_link(pcie, cdns_pcie_hpa_link_up);
 	if (ret)
 		dev_dbg(dev, "PCIe link never came up\n");
