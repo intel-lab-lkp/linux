@@ -344,10 +344,17 @@ static const u32 cxl_reset_timeout_ms[] = {
 #define CXL_RESET_FUNCTION_MAP_REGS (CXL_RESET_MAX_FUNCTIONS / 32)
 #define CXL_RESET_SIBLINGS_INIT 8
 
+struct cxl_reset_sibling {
+	struct pci_dev *pdev;
+	bool has_mem;
+};
+
 struct cxl_reset_context {
 	struct pci_dev *target;
-	struct pci_dev **siblings;
+	struct cxl_reset_sibling *siblings;
 	int nr_siblings;
+	int nr_siblings_locked;
+	int nr_siblings_prepared;
 	int sibling_capacity;
 };
 
@@ -380,7 +387,7 @@ static void cxl_reset_context_init(struct cxl_reset_context *ctx,
 static void cxl_reset_context_destroy(struct cxl_reset_context *ctx)
 {
 	for (int i = 0; i < ctx->nr_siblings; i++)
-		pci_dev_put(ctx->siblings[i]);
+		pci_dev_put(ctx->siblings[i].pdev);
 	kfree(ctx->siblings);
 }
 
@@ -426,35 +433,49 @@ static int cxl_reset_func_map_bit(struct pci_dev *sibling, bool ari)
 	return PCI_FUNC(sibling->devfn) * 32 + PCI_SLOT(sibling->devfn);
 }
 
-static int cxl_reset_has_cache_or_mem(struct pci_dev *pdev)
+static int cxl_reset_read_cxl_cap(struct pci_dev *pdev, u16 *cap)
 {
 	int dvsec, rc;
-	u16 cap;
 
 	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
 					  PCI_DVSEC_CXL_DEVICE);
 	if (!dvsec)
-		return 0;
+		return -ENODEV;
 
-	rc = pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_CAP, &cap);
+	rc = pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_CAP, cap);
 	if (rc) {
 		rc = pcibios_err_to_errno(rc);
-		pci_warn(pdev,
-			 "failed to read CXL capability; cannot determine reset scope: %d\n",
-			 rc);
+		pci_warn(pdev, "failed to read CXL capability: %d\n", rc);
 		return rc;
 	}
 
+	return 0;
+}
+
+static int cxl_reset_has_cache_or_mem(struct pci_dev *pdev, bool *has_mem)
+{
+	u16 cap;
+	int rc;
+
+	*has_mem = false;
+
+	rc = cxl_reset_read_cxl_cap(pdev, &cap);
+	if (rc == -ENODEV)
+		return 0;
+	if (rc)
+		return rc;
+
+	*has_mem = cap & PCI_DVSEC_CXL_MEM_CAPABLE;
 	return !!(cap & (PCI_DVSEC_CXL_CACHE_CAPABLE |
 			 PCI_DVSEC_CXL_MEM_CAPABLE));
 }
 
 static int cxl_reset_add_sibling(struct cxl_reset_context *ctx,
-				 struct pci_dev *sibling)
+				 struct pci_dev *sibling, bool has_mem)
 {
 	if (ctx->nr_siblings >= ctx->sibling_capacity) {
 		int capacity = ctx->sibling_capacity ?: CXL_RESET_SIBLINGS_INIT;
-		struct pci_dev **siblings;
+		struct cxl_reset_sibling *siblings;
 
 		if (capacity > INT_MAX / 2)
 			return -ENOMEM;
@@ -470,7 +491,11 @@ static int cxl_reset_add_sibling(struct cxl_reset_context *ctx,
 		ctx->sibling_capacity = capacity;
 	}
 
-	ctx->siblings[ctx->nr_siblings++] = pci_dev_get(sibling);
+	ctx->siblings[ctx->nr_siblings] = (struct cxl_reset_sibling) {
+		.pdev = pci_dev_get(sibling),
+		.has_mem = has_mem,
+	};
+	ctx->nr_siblings++;
 	return 0;
 }
 
@@ -479,6 +504,7 @@ static int cxl_reset_collect_sibling(struct pci_dev *sibling, void *data)
 	struct cxl_reset_walk_context *wctx = data;
 	struct cxl_reset_context *ctx = wctx->ctx;
 	struct pci_dev *pdev = ctx->target;
+	bool has_mem;
 	int fn, rc;
 
 	if (sibling == pdev)
@@ -494,7 +520,7 @@ static int cxl_reset_collect_sibling(struct pci_dev *sibling, void *data)
 	if (test_bit(fn, wctx->non_cxl_func_map))
 		return 0;
 
-	rc = cxl_reset_has_cache_or_mem(sibling);
+	rc = cxl_reset_has_cache_or_mem(sibling, &has_mem);
 	if (rc < 0) {
 		wctx->rc = rc;
 		return rc;
@@ -502,7 +528,7 @@ static int cxl_reset_collect_sibling(struct pci_dev *sibling, void *data)
 	if (!rc)
 		return 0;
 
-	wctx->rc = cxl_reset_add_sibling(ctx, sibling);
+	wctx->rc = cxl_reset_add_sibling(ctx, sibling, has_mem);
 	return wctx->rc;
 }
 
@@ -518,6 +544,69 @@ static int cxl_reset_collect_siblings(struct cxl_reset_context *ctx)
 	pci_walk_bus(pdev->bus, cxl_reset_collect_sibling, &wctx);
 
 	return wctx.rc;
+}
+
+static void cxl_pci_functions_unlock(struct cxl_reset_context *ctx)
+{
+	while (ctx->nr_siblings_locked) {
+		struct pci_dev *sibling;
+
+		sibling = ctx->siblings[--ctx->nr_siblings_locked].pdev;
+		pci_dev_unlock(sibling);
+	}
+}
+
+static int cxl_pci_functions_lock(struct cxl_reset_context *ctx)
+{
+	for (int i = 0; i < ctx->nr_siblings; i++) {
+		struct pci_dev *sibling = ctx->siblings[i].pdev;
+
+		if (!pci_dev_trylock(sibling)) {
+			cxl_pci_functions_unlock(ctx);
+			return -EAGAIN;
+		}
+
+		ctx->nr_siblings_locked++;
+	}
+
+	return 0;
+}
+
+static void cxl_pci_functions_reset_done(struct cxl_reset_context *ctx)
+{
+	while (ctx->nr_siblings_prepared) {
+		struct pci_dev *sibling;
+
+		sibling = ctx->siblings[--ctx->nr_siblings_prepared].pdev;
+		pci_dev_reset_iommu_done(sibling);
+		pci_dev_restore(sibling);
+	}
+}
+
+static int cxl_pci_functions_reset_prepare(struct cxl_reset_context *ctx)
+{
+	for (int i = 0; i < ctx->nr_siblings_locked; i++) {
+		struct pci_dev *sibling = ctx->siblings[i].pdev;
+		int rc;
+
+		pci_dev_save_and_disable(sibling);
+		if (!pci_wait_for_pending_transaction(sibling))
+			pci_err(sibling,
+				"timed out waiting for pending transactions\n");
+
+		rc = pci_dev_reset_iommu_prepare(sibling);
+		if (rc) {
+			pci_err(sibling,
+				"failed to stop IOMMU for CXL reset: %d\n",
+				rc);
+			pci_dev_restore(sibling);
+			return rc;
+		}
+
+		ctx->nr_siblings_prepared++;
+	}
+
+	return 0;
 }
 
 static void cxl_hdm_range_context_init(struct cxl_hdm_range_context *ctx)
@@ -716,8 +805,9 @@ static int cxl_hdm_ranges_flush_cpu_caches(struct cxl_hdm_range_context *ctx,
 }
 
 static int cxl_hdm_ranges_prepare(struct cxl_hdm_range_context *ctx,
-				  struct pci_dev *pdev)
+				  struct cxl_reset_context *reset_ctx)
 {
+	struct pci_dev *pdev = reset_ctx->target;
 	int rc;
 
 	lockdep_assert_held_write(&cxl_rwsem.region);
@@ -725,6 +815,17 @@ static int cxl_hdm_ranges_prepare(struct cxl_hdm_range_context *ctx,
 	rc = cxl_hdm_ranges_collect(ctx, pdev);
 	if (rc)
 		return rc;
+
+	for (int i = 0; i < reset_ctx->nr_siblings; i++) {
+		struct cxl_reset_sibling *sibling = &reset_ctx->siblings[i];
+
+		if (!sibling->has_mem)
+			continue;
+
+		rc = cxl_hdm_ranges_collect(ctx, sibling->pdev);
+		if (rc)
+			return rc;
+	}
 
 	rc = cxl_hdm_ranges_request(ctx);
 	if (rc)
@@ -944,11 +1045,24 @@ int cxl_reset_function(struct pci_dev *pdev, bool probe)
 	if (rc)
 		goto out;
 
+	rc = cxl_pci_functions_lock(&ctx);
+	if (rc)
+		goto out_unlock;
+
+	rc = cxl_pci_functions_reset_prepare(&ctx);
+	if (rc)
+		goto out_functions_done;
+
 	scoped_guard(rwsem_write, &cxl_rwsem.region) {
-		rc = cxl_hdm_ranges_prepare(&range_ctx, pdev);
+		rc = cxl_hdm_ranges_prepare(&range_ctx, &ctx);
 		if (!rc)
 			rc = cxl_reset_execute(pdev, dvsec);
 	}
+
+out_functions_done:
+	cxl_pci_functions_reset_done(&ctx);
+out_unlock:
+	cxl_pci_functions_unlock(&ctx);
 out:
 	cxl_hdm_range_context_destroy(&range_ctx);
 	cxl_reset_context_destroy(&ctx);
