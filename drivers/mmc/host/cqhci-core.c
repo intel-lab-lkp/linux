@@ -372,14 +372,14 @@ static u32 cqhci_read_ctl(struct cqhci_host *cq_host)
 	return cqhci_readl(cq_host, CQHCI_CTL);
 }
 
-static void cqhci_off(struct mmc_host *mmc)
+static bool cqhci_off(struct mmc_host *mmc)
 {
 	struct cqhci_host *cq_host = mmc->cqe_private;
 	u32 reg;
 	int err;
 
 	if (!cq_host->enabled || !mmc->cqe_on || cq_host->recovery_halt)
-		return;
+		return true;
 
 	if (cq_host->ops->disable)
 		cq_host->ops->disable(mmc, false);
@@ -388,15 +388,19 @@ static void cqhci_off(struct mmc_host *mmc)
 
 	err = readx_poll_timeout(cqhci_read_ctl, cq_host, reg,
 				 reg & CQHCI_HALT, 0, CQHCI_OFF_TIMEOUT);
-	if (err < 0)
+	if (err < 0) {
 		pr_err("%s: cqhci: CQE stuck on\n", mmc_hostname(mmc));
-	else
-		pr_debug("%s: cqhci: CQE off\n", mmc_hostname(mmc));
+		return false;
+	}
+
+	pr_debug("%s: cqhci: CQE off\n", mmc_hostname(mmc));
 
 	if (cq_host->ops->post_disable)
 		cq_host->ops->post_disable(mmc);
 
 	mmc->cqe_on = false;
+
+	return true;
 }
 
 static void cqhci_disable(struct mmc_host *mmc)
@@ -406,7 +410,8 @@ static void cqhci_disable(struct mmc_host *mmc)
 	if (!cq_host->enabled)
 		return;
 
-	cqhci_off(mmc);
+	if (!cqhci_off(mmc))
+		return;
 
 	__cqhci_disable(cq_host);
 
