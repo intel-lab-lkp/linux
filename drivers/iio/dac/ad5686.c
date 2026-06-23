@@ -15,6 +15,7 @@
 #include <linux/kstrtox.h>
 #include <linux/module.h>
 #include <linux/regulator/consumer.h>
+#include <linux/reset.h>
 #include <linux/sysfs.h>
 #include <linux/wordpart.h>
 
@@ -472,6 +473,7 @@ int ad5686_probe(struct device *dev,
 		 const struct ad5686_chip_info *chip_info,
 		 const char *name, const struct ad5686_bus_ops *ops)
 {
+	struct reset_control *rstc;
 	struct ad5686_state *st;
 	struct iio_dev *indio_dev;
 	int ret, i;
@@ -485,6 +487,11 @@ int ad5686_probe(struct device *dev,
 	st->dev = dev;
 	st->ops = ops;
 	st->chip_info = chip_info;
+
+	rstc = devm_reset_control_get_optional_exclusive(dev, NULL);
+	if (IS_ERR(rstc))
+		return dev_err_probe(dev, PTR_ERR(rstc),
+				     "Failed to get reset control\n");
 
 	ret = devm_regulator_get_enable(dev, "vdd");
 	if (ret)
@@ -508,6 +515,11 @@ int ad5686_probe(struct device *dev,
 
 	/* 4.5us power-up time: Datasheet Table 4: Timing Characteristics */
 	fsleep(5);
+
+	/* 1us >> 30ns reset pulse activation time: Datasheet Table 4 */
+	reset_control_assert(rstc);
+	fsleep(1);
+	reset_control_deassert(rstc);
 
 	/* Initialize masks to all ones */
 	st->pwr_down_mask = ~0;
