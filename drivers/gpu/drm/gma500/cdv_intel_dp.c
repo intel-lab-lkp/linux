@@ -33,9 +33,9 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_edid.h>
+#include <drm/drm_encoder.h>
 #include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_print.h>
-#include <drm/drm_simple_kms_helper.h>
 
 #include "gma_display.h"
 #include "psb_drv.h"
@@ -1872,6 +1872,10 @@ cdv_intel_dp_destroy(struct drm_connector *connector)
 	kfree(gma_connector);
 }
 
+static const struct drm_encoder_funcs cdv_intel_dp_funcs = {
+	.destroy = drm_encoder_cleanup,
+};
+
 static const struct drm_encoder_helper_funcs cdv_intel_dp_helper_funcs = {
 	.dpms = cdv_intel_dp_dpms,
 	.mode_fixup = cdv_intel_dp_mode_fixup,
@@ -1970,7 +1974,8 @@ cdv_intel_dp_init(struct drm_device *dev, struct psb_intel_mode_device *mode_dev
 	encoder = &gma_encoder->base;
 
 	drm_connector_init(dev, connector, &cdv_intel_dp_connector_funcs, type);
-	drm_simple_encoder_init(dev, encoder, DRM_MODE_ENCODER_TMDS);
+	drm_encoder_init(dev, encoder, &cdv_intel_dp_funcs,
+			 DRM_MODE_ENCODER_TMDS, NULL);
 
 	gma_connector_attach_encoder(gma_connector, gma_encoder);
 
