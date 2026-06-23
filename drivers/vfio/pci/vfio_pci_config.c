@@ -1783,7 +1783,6 @@ int vfio_config_init(struct vfio_pci_core_device *vdev)
 		goto out;
 
 	vdev->bardirty = true;
-	vdev->tph_permit = false;
 
 	/*
 	 * XXX can we just pci_load_saved_state/pci_restore_state?
