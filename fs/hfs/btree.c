@@ -155,6 +155,14 @@ struct hfs_btree *hfs_btree_open(struct super_block *sb, u32 id, btree_keycmp ke
 	kunmap_local(head);
 	folio_unlock(folio);
 	folio_put(folio);
+
+	if (!hfs_bmap_test_bit(tree, 0)) {
+		pr_warn("(%s): %s (cnid 0x%x) map record invalid or bitmap corruption detected, forcing read-only.\n",
+			sb->s_id, id == HFS_EXT_CNID ? "extents" : "catalog", id);
+		pr_warn("Run fsck.hfs to repair.\n");
+		sb->s_flags |= SB_RDONLY;
+	}
+
 	return tree;
 
 fail_folio:
@@ -354,6 +362,50 @@ struct hfs_bnode *hfs_bmap_alloc(struct hfs_btree *tree)
 		data = kmap_local_page(*pagep);
 		off &= ~PAGE_MASK;
 	}
+}
+
+bool hfs_bmap_test_bit(struct hfs_btree *tree, u32 nidx)
+{
+	struct hfs_bnode *node;
+	struct page *page;
+	u16 off, len;
+	u8 *data, byte, m;
+	bool res = false;
+
+	node = hfs_bnode_find(tree, 0);
+	if (IS_ERR(node))
+		return false;
+
+	len = hfs_brec_lenoff(node, 2, &off);
+	while (nidx >= len * 8) {
+		u32 i;
+
+		nidx -= len * 8;
+		i = node->next;
+		if (!i) {
+			hfs_bnode_put(node);
+			return false;
+		}
+		hfs_bnode_put(node);
+		node = hfs_bnode_find(tree, i);
+		if (IS_ERR(node))
+			return false;
+		if (node->type != HFS_NODE_MAP) {
+			hfs_bnode_put(node);
+			return false;
+		}
+		len = hfs_brec_lenoff(node, 0, &off);
+	}
+	off += node->page_offset + nidx / 8;
+	page = node->page[off >> PAGE_SHIFT];
+	data = kmap_local_page(page);
+	off &= ~PAGE_MASK;
+	m = 1 << (~nidx & 7);
+	byte = data[off];
+	res = (byte & m) != 0;
+	kunmap_local(data);
+	hfs_bnode_put(node);
+	return res;
 }
 
 void hfs_bmap_free(struct hfs_bnode *node)
