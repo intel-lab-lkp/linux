@@ -822,7 +822,7 @@ ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
 	 *   update_nr_hwq_lock -> kn->active (via del_gendisk -> kobject_del)
 	 *   kn->active -> update_nr_hwq_lock (via this sysfs write path)
 	 */
-	if (!down_read_trylock(&set->update_nr_hwq_lock)) {
+	if (!down_write_trylock(&set->update_nr_hwq_lock)) {
 		ret = -EBUSY;
 		goto out;
 	}
@@ -833,7 +833,7 @@ ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
 	} else {
 		ret = -ENOENT;
 	}
-	up_read(&set->update_nr_hwq_lock);
+	up_write(&set->update_nr_hwq_lock);
 
 out:
 	if (ctx.type)
