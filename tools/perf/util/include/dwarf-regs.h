@@ -129,6 +129,7 @@ int get_dwarf_regnum_for_perf_regnum(int perf_regnum, unsigned int machine, unsi
 				     bool only_libdw_supported);
 
 void get_powerpc_regs(u32 raw_insn, int is_source, struct annotated_op_loc *op_loc);
+void get_arm64_regs(u32 raw_insn, int is_source, struct annotated_op_loc *op_loc);
 
 #else /* HAVE_LIBDW_SUPPORT */
 
@@ -140,6 +141,12 @@ static inline int get_dwarf_regnum(const char *name __maybe_unused,
 }
 
 static inline void get_powerpc_regs(u32 raw_insn __maybe_unused, int is_source __maybe_unused,
+		struct annotated_op_loc *op_loc __maybe_unused)
+{
+	return;
+}
+
+static inline void get_arm64_regs(u32 raw_insn __maybe_unused, int is_source __maybe_unused,
 		struct annotated_op_loc *op_loc __maybe_unused)
 {
 	return;
