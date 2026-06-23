@@ -5087,8 +5087,11 @@ check_folio:
 	 * Remove the swap entry and conditionally try to free up the swapcache.
 	 * Do it after mapping, so raced page faults will likely see the folio
 	 * in swap cache and wait on the folio lock.
+	 * Assume non-LRU folios may be queued in the LRU cache, which contributes
+	 * an additional reference to the folio.
 	 */
-	if (should_try_to_free_swap(si, folio, vma, nr_pages, vmf->flags))
+	if (should_try_to_free_swap(si, folio, vma, nr_pages +
+			!folio_test_lru(folio), vmf->flags))
 		folio_free_swap(folio);
 
 	folio_unlock(folio);
