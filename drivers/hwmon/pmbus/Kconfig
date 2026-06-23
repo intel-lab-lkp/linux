@@ -179,6 +179,15 @@ config SENSORS_E50SN12051
 	  This driver can also be built as a module. If so, the module will
 	  be called e50sn12051.
 
+config SENSORS_FD5121
+	tristate "FD5121/FD5123/FD5125 controllers from onsemi"
+	help
+	  If you say yes here, you get support for onsemi
+	  controllers FD5121, FD5123, FD5125.
+
+	  This driver can also be built as a module. If so, the module will
+	  be called fd5121.
+
 config SENSORS_INA233
 	tristate "Texas Instruments INA233 and compatibles"
 	help

@@ -20135,6 +20135,14 @@ L:	linux-mips@vger.kernel.org
 S:	Maintained
 F:	arch/mips/boot/dts/ralink/omega2p.dts
 
+ONSEMI HARDWARE MONITOR DRIVER
+M:	Selva Rajagopal <selvamani.rajagopal@onsemi.com>
+L:	linux-hwmon@vger.kernel.org
+S:	Supported
+W:	https://www.onsemi.com
+F:	Documentation/devicetree/bindings/hwmon/pmbus/onnn,fd5121.yaml
+F:	drivers/hwmon/pmbus/fd5121.c
+
 ONSEMI ETHERNET PHY DRIVERS
 M:	Piergiorgio Beruto <piergiorgio.beruto@gmail.com>
 L:	netdev@vger.kernel.org
