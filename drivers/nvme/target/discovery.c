@@ -111,6 +111,7 @@ void nvmet_subsys_disc_changed(struct nvmet_subsys *subsys,
 {
 	struct nvmet_port *port;
 	struct nvmet_subsys_link *s;
+	struct list_head *port_list;
 	struct nvmet_subsys *disc_subsys;
 
 	lockdep_assert_held(&nvmet_config_sem);
@@ -119,7 +120,8 @@ void nvmet_subsys_disc_changed(struct nvmet_subsys *subsys,
 		return;
 	disc_subsys->genctr++;
 
-	list_for_each_entry(port, nvmet_ports, global_entry)
+	port_list = nvmet_get_port_list(&init_net);
+	list_for_each_entry(port, port_list, global_entry)
 		list_for_each_entry(s, &port->subsystems, entry) {
 			if (s->subsys != subsys)
 				continue;

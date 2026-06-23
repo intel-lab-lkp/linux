@@ -25,8 +25,7 @@
 static const struct config_item_type nvmet_host_type;
 static const struct config_item_type nvmet_subsys_type;
 
-static LIST_HEAD(nvmet_ports_list);
-struct list_head *nvmet_ports = &nvmet_ports_list;
+static DEFINE_XARRAY(nvmet_ports_xa);
 
 struct nvmet_type_name_map {
 	u8		type;
@@ -59,6 +58,60 @@ u64 nvmet_get_ns_id(struct net *net_ns)
 		return 0;
 	ns = to_ns_common(net_ns);
 	return net_ns == &init_net ? 0 : ns->ns_id;
+}
+
+struct list_head *nvmet_get_port_list(struct net *net_ns)
+{
+	struct list_head *port_list;
+	u64 ns_id = nvmet_get_ns_id(net_ns);
+
+	port_list = xa_load(&nvmet_ports_xa, ns_id);
+	return port_list;
+}
+
+static int nvmet_add_port_list(struct nvmet_port *p)
+{
+	u64 ns_id = nvmet_get_ns_id(&init_net);
+	struct list_head *port_list;
+	int err = 0;
+
+	xa_lock(&nvmet_ports_xa);
+	port_list = xa_load(&nvmet_ports_xa, ns_id);
+	if (!port_list) {
+		port_list = kzalloc_obj(*port_list);
+		if (!port_list) {
+			err = -ENOMEM;
+			goto out_unlock;
+		}
+		INIT_LIST_HEAD(port_list);
+		err = __xa_insert(&nvmet_ports_xa, ns_id,
+				  port_list, GFP_KERNEL);
+		if (err < 0) {
+			kfree(port_list);
+			goto out_unlock;
+		}
+	}
+	list_add(&p->global_entry, port_list);
+out_unlock:
+	xa_unlock(&nvmet_ports_xa);
+	return err;
+}
+
+static void nvmet_del_port_list(struct nvmet_port *p)
+{
+	struct list_head *port_list;
+	u64 ns_id = nvmet_get_ns_id(&init_net);
+
+	xa_lock(&nvmet_ports_xa);
+	port_list = xa_load(&nvmet_ports_xa, ns_id);
+	if (!WARN_ON(!port_list)) {
+		list_del_init(&p->global_entry);
+		if (list_empty(port_list)) {
+			__xa_erase(&nvmet_ports_xa, ns_id);
+			kfree(port_list);
+		}
+	}
+	xa_unlock(&nvmet_ports_xa);
 }
 
 static bool nvmet_is_port_enabled(struct nvmet_port *p, const char *caller)
@@ -2017,7 +2070,7 @@ static void nvmet_port_release(struct config_item *item)
 
 	/* Let inflight controllers teardown complete */
 	flush_workqueue(nvmet_wq);
-	list_del(&port->global_entry);
+	nvmet_del_port_list(port);
 
 	key_put(port->keyring);
 	kfree(port->ana_state);
@@ -2085,7 +2138,7 @@ static struct config_group *nvmet_ports_make(struct config_group *group,
 			port->ana_state[i] = NVME_ANA_INACCESSIBLE;
 	}
 
-	list_add(&port->global_entry, &nvmet_ports_list);
+	nvmet_add_port_list(port);
 
 	INIT_LIST_HEAD(&port->entry);
 	INIT_LIST_HEAD(&port->subsystems);
