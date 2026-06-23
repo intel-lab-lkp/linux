@@ -347,6 +347,7 @@ static int agp_efficeon_probe(struct pci_dev *pdev,
 	struct agp_bridge_data *bridge;
 	u8 cap_ptr;
 	struct resource *r;
+	int err;
 
 	cap_ptr = pci_find_capability(pdev, PCI_CAP_ID_AGP);
 	if (!cap_ptr)
@@ -389,8 +390,8 @@ static int agp_efficeon_probe(struct pci_dev *pdev,
 	if (!r->start && r->end) {
 		if (pci_assign_resource(pdev, 0)) {
 			printk(KERN_ERR PFX "could not assign resource 0\n");
-			agp_put_bridge(bridge);
-			return -ENODEV;
+			err = -ENODEV;
+			goto err_put_bridge;
 		}
 	}
 
@@ -402,7 +403,17 @@ static int agp_efficeon_probe(struct pci_dev *pdev,
 	}
 
 	pci_set_drvdata(pdev, bridge);
-	return agp_add_bridge(bridge);
+	err = agp_add_bridge(bridge);
+	if (err)
+		goto err_disable_device;
+
+	return 0;
+
+err_put_bridge:
+	agp_put_bridge(bridge);
+err_disable_device:
+	pci_disable_device(pdev);
+	return err;
 }
 
 static void agp_efficeon_remove(struct pci_dev *pdev)
@@ -411,6 +422,7 @@ static void agp_efficeon_remove(struct pci_dev *pdev)
 
 	agp_remove_bridge(bridge);
 	agp_put_bridge(bridge);
+	pci_disable_device(pdev);
 }
 
 static int agp_efficeon_resume(struct device *dev)
