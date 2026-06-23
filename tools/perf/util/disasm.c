@@ -52,6 +52,7 @@ const struct ins_ops arithmetic_ops;
 static void ins__sort(struct arch *arch);
 static int disasm_line__parse(char *line, const char **namep, char **rawp);
 static int disasm_line__parse_powerpc(struct disasm_line *dl, struct annotate_args *args);
+static int disasm_line__parse_arm64(struct disasm_line *dl, struct annotate_args *args);
 
 static __attribute__((constructor)) void symbol__init_regexpr(void)
 {
@@ -201,6 +202,11 @@ bool arch__is_x86(const struct arch *arch)
 bool arch__is_powerpc(const struct arch *arch)
 {
 	return arch->id.e_machine == EM_PPC || arch->id.e_machine == EM_PPC64;
+}
+
+bool arch__is_arm64(const struct arch *arch)
+{
+	return arch->id.e_machine == EM_AARCH64;
 }
 
 static void ins_ops__delete(struct ins_operands *ops)
@@ -777,6 +783,14 @@ static const struct ins_ops *__ins__find(const struct arch *arch, const char *na
 			return ops;
 	}
 
+	if (arch__is_arm64(arch)) {
+		const struct ins_ops *ops;
+
+		ops = check_arm64_insn(dl);
+		if (ops)
+			return ops;
+	}
+
 	if (!arch->sorted_instructions) {
 		ins__sort((struct arch *)arch);
 		((struct arch *)arch)->sorted_instructions = true;
@@ -902,6 +916,53 @@ static int disasm_line__parse_powerpc(struct disasm_line *dl, struct annotate_ar
 	return ret;
 }
 
+/*
+ * Parses ARM64 disassembly output which includes raw instruction bytes.
+ * ARM64 objdump format:
+ *   a9bf7bfd 	stp	x29, x30, [sp, #-16]!
+ *
+ * The raw instruction is a hex word (typically 8 chars) followed by whitespace.
+ */
+static int disasm_line__parse_arm64(struct disasm_line *dl, struct annotate_args *args)
+{
+	char *line = dl->al.line;
+	const char **namep = &dl->ins.name;
+	char **rawp = &dl->ops.raw;
+	char *name_raw_insn = skip_spaces(line);
+	char *end_raw, *name, *tmp_raw_insn;
+	int ret = 0;
+
+	if (name_raw_insn[0] == '\0')
+		return -1;
+
+	/* Find end of raw instruction hex by looking for whitespace */
+	end_raw = name_raw_insn;
+	while (*end_raw && !isspace(*end_raw))
+		end_raw++;
+
+	name = skip_spaces(end_raw);
+
+	if (args->options->disassembler_used)
+		ret = disasm_line__parse(name, namep, rawp);
+	else
+		*namep = "";
+
+	tmp_raw_insn = strndup(name_raw_insn, end_raw - name_raw_insn);
+	if (tmp_raw_insn == NULL) {
+		if (args->options->disassembler_used)
+			zfree(namep);
+		return -1;
+	}
+
+	remove_spaces(tmp_raw_insn);
+
+	if (sscanf(tmp_raw_insn, "%x", &dl->raw.raw_insn) != 1)
+		dl->raw.raw_insn = 0;
+	free(tmp_raw_insn);
+
+	return ret;
+}
+
 static void annotation_line__init(struct annotation_line *al,
 				  struct annotate_args *args,
 				  int nr)
@@ -957,6 +1018,9 @@ struct disasm_line *disasm_line__new(struct annotate_args *args)
 	if (args->offset != -1) {
 		if (arch__is_powerpc(args->arch)) {
 			if (disasm_line__parse_powerpc(dl, args) < 0)
+				goto out_free_line;
+		} else if (arch__is_arm64(args->arch)) {
+			if (disasm_line__parse_arm64(dl, args) < 0)
 				goto out_free_line;
 		} else if (disasm_line__parse(dl->al.line, &dl->ins.name, &dl->ops.raw) < 0)
 			goto out_free_line;

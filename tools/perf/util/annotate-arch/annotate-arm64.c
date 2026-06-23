@@ -104,6 +104,7 @@ const struct arch *arch__new_arm64(const struct e_machine_and_e_flags *id,
 	arch->objdump.comment_char	  = '/';
 	arch->objdump.skip_functions_char = '+';
 	arch->associate_instruction_ops   = arm64__associate_instruction_ops;
+	annotate_opts.show_asm_raw = true;
 
 	/* bl, blr */
 	err = regcomp(&arm->call_insn, "^blr?$", REG_EXTENDED);

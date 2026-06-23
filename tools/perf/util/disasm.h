@@ -111,6 +111,7 @@ struct annotate_args {
 const struct arch *arch__find(uint16_t e_machine, uint32_t e_flags, const char *cpuid);
 bool arch__is_x86(const struct arch *arch);
 bool arch__is_powerpc(const struct arch *arch);
+bool arch__is_arm64(const struct arch *arch);
 
 extern const struct ins_ops call_ops;
 extern const struct ins_ops dec_ops;
@@ -143,6 +144,7 @@ bool ins__is_ret(const struct ins *ins);
 bool ins__is_lock(const struct ins *ins);
 
 const struct ins_ops *check_ppc_insn(struct disasm_line *dl);
+const struct ins_ops *check_arm64_insn(struct disasm_line *dl);
 
 struct disasm_line *disasm_line__new(struct annotate_args *args);
 void disasm_line__free(struct disasm_line *dl);
