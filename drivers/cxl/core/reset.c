@@ -1035,6 +1035,34 @@ static int cxl_reset_dvsec(struct pci_dev *pdev)
 	return dvsec;
 }
 
+static bool cxl_reset_hdm_available(struct pci_dev *pdev)
+{
+	struct cxl_hdm_info *info = READ_ONCE(pdev->hdm);
+
+	/*
+	 * pdev->hdm is allocated with PCI-device devres. Reset requests
+	 * operate on a live pci_dev, so the devres allocation remains valid
+	 * for this check.
+	 */
+	return info && info->regs.hdm_decoder;
+}
+
+static bool cxl_reset_scope_hdm_available(struct cxl_reset_context *ctx)
+{
+	if (!cxl_reset_hdm_available(ctx->target))
+		return false;
+
+	for (int i = 0; i < ctx->nr_siblings; i++) {
+		struct cxl_reset_sibling *sibling = &ctx->siblings[i];
+
+		if (sibling->has_mem &&
+		    !cxl_reset_hdm_available(sibling->pdev))
+			return false;
+	}
+
+	return true;
+}
+
 static int cxl_reset_update_ctrl2(struct pci_dev *pdev, int dvsec, u16 set,
 				  u16 clear)
 {
@@ -1210,6 +1238,11 @@ int cxl_reset_function(struct pci_dev *pdev, bool probe)
 	rc = cxl_reset_collect_siblings(&ctx);
 	if (rc)
 		goto out;
+
+	if (!cxl_reset_scope_hdm_available(&ctx)) {
+		rc = -ENOTTY;
+		goto out;
+	}
 
 	rc = cxl_pci_functions_lock(&ctx);
 	if (rc)
