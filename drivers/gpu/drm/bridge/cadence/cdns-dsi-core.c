@@ -631,13 +631,14 @@ static void cdns_dsi_bridge_atomic_post_disable(struct drm_bridge *bridge,
 	pm_runtime_put(dsi->base.dev);
 }
 
-static void cdns_dsi_hs_init(struct cdns_dsi *dsi)
+static int cdns_dsi_hs_init(struct cdns_dsi *dsi)
 {
 	struct cdns_dsi_output *output = &dsi->output;
 	u32 status;
+	int ret;
 
 	if (dsi->phy_initialized)
-		return;
+		return 0;
 	/*
 	 * Power all internal DPHY blocks down and maintain their reset line
 	 * asserted before changing the DPHY config.
@@ -646,22 +647,45 @@ static void cdns_dsi_hs_init(struct cdns_dsi *dsi)
 	       DPHY_CMN_PDN | DPHY_PLL_PDN,
 	       dsi->regs + MCTL_DPHY_CFG0);
 
-	phy_init(dsi->dphy);
-	phy_set_mode(dsi->dphy, PHY_MODE_MIPI_DPHY);
-	phy_configure(dsi->dphy, &output->phy_opts);
-	phy_power_on(dsi->dphy);
+	ret = phy_init(dsi->dphy);
+	if (ret)
+		return ret;
+
+	ret = phy_set_mode(dsi->dphy, PHY_MODE_MIPI_DPHY);
+	if (ret)
+		goto err_phy_exit;
+
+	ret = phy_configure(dsi->dphy, &output->phy_opts);
+	if (ret)
+		goto err_phy_exit;
+
+	ret = phy_power_on(dsi->dphy);
+	if (ret)
+		goto err_phy_exit;
 
 	/* Activate the PLL and wait until it's locked. */
 	writel(PLL_LOCKED, dsi->regs + MCTL_MAIN_STS_CLR);
 	writel(DPHY_CMN_PSO | DPHY_ALL_D_PDN | DPHY_C_PDN | DPHY_CMN_PDN,
 	       dsi->regs + MCTL_DPHY_CFG0);
-	WARN_ON_ONCE(readl_poll_timeout(dsi->regs + MCTL_MAIN_STS, status,
-					status & PLL_LOCKED, 100, 100));
+	ret = readl_poll_timeout(dsi->regs + MCTL_MAIN_STS, status,
+				 status & PLL_LOCKED, 100, 100);
+	if (ret)
+		goto err_phy_power_off;
+
 	/* De-assert data and clock reset lines. */
 	writel(DPHY_CMN_PSO | DPHY_ALL_D_PDN | DPHY_C_PDN | DPHY_CMN_PDN |
 	       DPHY_D_RSTB(output->dev->lanes) | DPHY_C_RSTB,
 	       dsi->regs + MCTL_DPHY_CFG0);
 	dsi->phy_initialized = true;
+
+	return 0;
+
+err_phy_power_off:
+	phy_power_off(dsi->dphy);
+err_phy_exit:
+	phy_exit(dsi->dphy);
+
+	return ret;
 }
 
 static void cdns_dsi_init_link(struct cdns_dsi *dsi)
@@ -716,7 +740,7 @@ static void cdns_dsi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	unsigned long tx_byte_period;
 	struct cdns_dsi_cfg dsi_cfg;
 	u32 tmp, reg_wakeup, div, status;
-	int nlanes;
+	int nlanes, ret;
 
 	/*
 	 * The cdns-dsi controller needs to be enabled before it's DPI source
@@ -753,7 +777,12 @@ static void cdns_dsi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	nlanes = output->dev->lanes;
 
 	cdns_dsi_init_link(dsi);
-	cdns_dsi_hs_init(dsi);
+	ret = cdns_dsi_hs_init(dsi);
+	if (ret) {
+		dev_err(dsi->base.dev, "failed to initialize DSI PHY: %d\n",
+			ret);
+		goto err_disable;
+	}
 
 	/*
 	 * Now that the DSI Link and DSI Phy are initialized,
@@ -763,10 +792,13 @@ static void cdns_dsi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	for (int i = 0; i < nlanes; i++)
 		tmp |= DATA_LANE_RDY(i);
 
-	if (readl_poll_timeout(dsi->regs + MCTL_MAIN_STS, status,
-			       (tmp == (status & tmp)), 100, 500000))
+	ret = readl_poll_timeout(dsi->regs + MCTL_MAIN_STS, status,
+				 (tmp == (status & tmp)), 100, 500000);
+	if (ret) {
 		dev_err(dsi->base.dev,
 			"Timed Out: DSI-DPhy Clock and Data Lanes not ready.\n");
+		goto err_disable;
+	}
 
 	writel(HBP_LEN(dsi_cfg.hbp) | HSA_LEN(dsi_cfg.hsa),
 	       dsi->regs + VID_HSIZE1);
@@ -886,6 +918,19 @@ static void cdns_dsi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 
 	tmp = readl(dsi->regs + MCTL_MAIN_EN) | IF_EN(input->id);
 	writel(tmp, dsi->regs + MCTL_MAIN_EN);
+
+	return;
+
+err_disable:
+	if (dsi->phy_initialized) {
+		dsi->phy_initialized = false;
+		phy_power_off(dsi->dphy);
+		phy_exit(dsi->dphy);
+	}
+	dsi->link_initialized = false;
+	if (dsi->platform_ops && dsi->platform_ops->disable)
+		dsi->platform_ops->disable(dsi);
+	pm_runtime_put(dsi->base.dev);
 }
 
 static u32 *cdns_dsi_bridge_get_input_bus_fmts(struct drm_bridge *bridge,
