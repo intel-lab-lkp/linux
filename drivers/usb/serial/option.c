@@ -2473,6 +2473,24 @@ static const struct usb_device_id option_ids[] = {
 	{ USB_DEVICE_AND_INTERFACE_INFO(0x2dee, 0x4d64, 0xff, 0xff, 0x30) },	/* MeiG SRM813Q (Diag) */
 	{ USB_DEVICE_AND_INTERFACE_INFO(0x2dee, 0x4d64, 0xff, 0xff, 0x40) },	/* MeiG SRM813Q (AT) */
 	{ USB_DEVICE_AND_INTERFACE_INFO(0x2dee, 0x4d64, 0xff, 0xff, 0x60) },	/* MeiG SRM813Q (NMEA) */
+	{ USB_DEVICE(0x2dee, 0x4d23),						/* MeiG SLM868x*/
+	.driver_info = RSVD(4) | RSVD(5) | RDVD(6) },
+	{ USB_DEVICE(0x2dee, 0x4d62),						/* MeiG SLM820x*/
+	.driver_info = RSVD(4) },
+	{ USB_DEVICE(0x2dee, 0x4d30),						/* MeiG SRM813Q*/
+	.driver_info = RSVD(0) | RSVD(1) },
+	{ USB_DEVICE(0x2dee, 0x4d50),						/* MeiG SRM811x*/
+	.driver_info = RSVD(0) | RSVD(1) | RSVD(6) },
+	{ USB_DEVICE(0x2dee, 0x4d51),						/* MeiG SRM821x*/
+	.driver_info = RSVD(0) | RSVD(1) | RSVD(6) },
+	{ USB_DEVICE(0x2dee, 0x4d52),						/* MeiG SRM810x*/
+	.driver_info = RSVD(0) | RSVD(1) | RSVD(6) },
+	{ USB_DEVICE(0x2dee, 0x4d57),						/* MeiG SLM770A*/
+	.driver_info = RSVD(0) | RSVD(1) },
+	{ USB_DEVICE(0x2dee, 0x4d58),						/* MeiG SLM828A*/
+	.driver_info = RSVD(0) | RSVD(1) },
+	{ USB_DEVICE(0x05c6, 0xf601),						/* MeiG SLM750x*/
+	.driver_info = RSVD(5) },
 
 	{ USB_DEVICE_INTERFACE_CLASS(0x2df3, 0x9d03, 0xff) },			/* LongSung M5710 */
 	{ USB_DEVICE_INTERFACE_CLASS(0x305a, 0x1404, 0xff) },			/* GosunCn GM500 RNDIS */
