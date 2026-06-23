@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (C) 2026, Altera Corporation
+ */
+#include "socfpga_agilex7_gen2.dtsi"
+
+/ {
+	model = "Altera SoCFPGA Agilex7 Gen2 SoCDK";
+	compatible = "intel,socfpga-agilex7-gen2-socdk", "intel,socfpga-agilex7-gen2";
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x80000000>;
+	};
+};
