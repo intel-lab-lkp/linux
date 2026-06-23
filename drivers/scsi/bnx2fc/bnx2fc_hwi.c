@@ -655,8 +655,8 @@ static void bnx2fc_process_unsol_compl(struct bnx2fc_rport *tgt, u16 wqe)
 		if (rq_data) {
 			buf = rq_data;
 		} else {
-			buf1 = buf = kmalloc((num_rq * BNX2FC_RQ_BUF_SZ),
-					      GFP_ATOMIC);
+			buf1 = buf = kmalloc_array(num_rq, BNX2FC_RQ_BUF_SZ,
+						   GFP_ATOMIC);
 
 			if (!buf1) {
 				BNX2FC_TGT_DBG(tgt, "Memory alloc failure\n");
@@ -1904,8 +1904,8 @@ int bnx2fc_setup_task_ctx(struct bnx2fc_hba *hba)
 	/*
 	 * Allocate task_ctx_dma which is an array of dma addresses
 	 */
-	hba->task_ctx_dma = kmalloc((task_ctx_arr_sz *
-					sizeof(dma_addr_t)), GFP_KERNEL);
+	hba->task_ctx_dma = kmalloc_array(task_ctx_arr_sz,
+					  sizeof(dma_addr_t), GFP_KERNEL);
 	if (!hba->task_ctx_dma) {
 		printk(KERN_ERR PFX "unable to alloc context mapping array\n");
 		rc = -1;
