@@ -670,6 +670,10 @@ static const struct of_device_id ipa_match[] = {
 		.data		= &ipa_data_v5_0,
 	},
 	{
+		.compatible	= "qcom,sm8450-ipa",
+		.data		= &ipa_data_v5_1,
+	},
+	{
 		.compatible	= "qcom,milos-ipa",
 		.data		= &ipa_data_v5_2,
 	},
