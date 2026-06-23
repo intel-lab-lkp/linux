@@ -4,21 +4,25 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <linux/kernel.h>
 #include <linux/magic.h>
 #include <linux/mman.h>
 #include <sys/mman.h>
+#include <sys/mount.h>
 #include <sys/shm.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/vfs.h>
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <limits.h>
 
 #include "kselftest.h"
 
-#define NR_TESTS	9
+#define NR_TESTS	11
 
 static const char * const dev_files[] = {
 	"/dev/zero", "/dev/null", "/dev/urandom",
@@ -294,6 +298,62 @@ out:
 	return ret;
 }
 
+/*
+ * Set up an overlayfs mount and run cachestat on a freshly created file in the
+ * merged directory. Overlayfs forwards data I/O to the underlying (upper)
+ * inode, so the page cache lives there and not in the overlay inode's mapping.
+ * This is a regression test for cachestat returning all zeroes on overlayfs.
+ */
+static int run_cachestat_overlayfs_test(void)
+{
+	char tmpl[] = "/tmp/cachestat_ovl.XXXXXX";
+	char lower[PATH_MAX], upper[PATH_MAX], work[PATH_MAX];
+	char merged[PATH_MAX], opts[4 * PATH_MAX], file[PATH_MAX];
+	char *base;
+	int ret;
+
+	base = mkdtemp(tmpl);
+	if (!base) {
+		ksft_print_msg("Unable to create overlayfs base dir: %s\n",
+			       strerror(errno));
+		return KSFT_FAIL;
+	}
+
+	snprintf(lower, sizeof(lower), "%s/lower", base);
+	snprintf(upper, sizeof(upper), "%s/upper", base);
+	snprintf(work, sizeof(work), "%s/work", base);
+	snprintf(merged, sizeof(merged), "%s/merged", base);
+
+	if (mkdir(lower, 0755) || mkdir(upper, 0755) ||
+	    mkdir(work, 0755) || mkdir(merged, 0755)) {
+		ksft_print_msg("Unable to create overlayfs dirs: %s\n",
+			       strerror(errno));
+		ret = KSFT_FAIL;
+		goto cleanup;
+	}
+
+	snprintf(opts, sizeof(opts), "lowerdir=%s,upperdir=%s,workdir=%s",
+		 lower, upper, work);
+
+	if (mount("overlay", merged, "overlay", 0, opts)) {
+		ksft_print_msg("Unable to mount overlayfs (need root?): %s\n",
+			       strerror(errno));
+		ret = KSFT_SKIP;
+		goto cleanup;
+	}
+
+	snprintf(file, sizeof(file), "%s/merged/cachestat", base);
+	ret = test_cachestat(file, true, true, false, 4, O_CREAT | O_RDWR, 0600);
+
+	umount(merged);
+cleanup:
+	/* Best-effort recursive cleanup of the temporary tree. */
+	snprintf(opts, sizeof(opts), "rm -rf %s", base);
+	if (system(opts))
+		ksft_print_msg("Unable to clean up %s\n", base);
+	return ret;
+}
+
 int main(void)
 {
 	int ret;
@@ -360,6 +420,19 @@ int main(void)
 	else {
 		ksft_test_result_fail("cachestat fails with a mmap file\n");
 		ret = 1;
+	}
+
+	switch (run_cachestat_overlayfs_test()) {
+	case KSFT_FAIL:
+		ksft_test_result_fail("cachestat fails with an overlayfs file\n");
+		ret = 1;
+		break;
+	case KSFT_PASS:
+		ksft_test_result_pass("cachestat works with an overlayfs file\n");
+		break;
+	case KSFT_SKIP:
+		ksft_test_result_skip("overlayfs not available\n");
+		break;
 	}
 	return ret;
 }
