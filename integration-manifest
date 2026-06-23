@@ -1,0 +1,36 @@
+drm drm-fixes 8cd9520d35a6c38db6567e97dd93b1f11f185dc6
+	Linux 7.1
+drm-misc drm-misc-fixes 9206b22fb959f4a9cf1921f34aed0df1dcb1ab04
+	drm/sysfb: Avoid truncating maximum stride
+drm-rust drm-rust-fixes 0a69ac25bd596d50823d530d0a2004336668c0df
+	rust: drm: fix unsound initialization in drm::Device::new
+drm-intel drm-intel-fixes 8cd9520d35a6c38db6567e97dd93b1f11f185dc6
+	Linux 7.1
+drm-xe drm-xe-fixes 347ccc0453fca2c669e8dc8a72000e76ca4adf10
+	drm/xe: fix job timeout recovery for unstarted jobs and kernel queues
+drm drm-next 0e8233409d4f6def051dd42a432c6815bb780d78
+	Merge tag 'amd-drm-fixes-7.2-2026-06-19' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 52d4ab1ca790a668cc8f2c27017138b1c467168c
+	Merge tag 'drm-misc-next-fixes-2026-06-11' of https://gitlab.freedesktop.org/drm/misc/kernel into drm-next
+drm-rust drm-rust-next-fixes 99676aed1fec109d62822e21a06760eb098dc5f4
+	gpu: nova-core: move lifetime to `Bar0`
+drm-intel drm-intel-next-fixes 914a76a9f08366434bf595700f62026b7a19a9cc
+	drm/i915/gem: Add missing nospec on parallel submit slot
+drm-xe drm-xe-next-fixes 0b5ed2756d45b04669502a1f13b1657ec7664571
+	drm/xe: Add compact-PT and addr mask handling for page reclaim
+drm-misc drm-misc-next 55ef41aa92ae9aea398f25423621db75eba9dfe7
+	drm/todo: clarify drm_syncobj error TODOs
+drm-rust drm-rust-next 9102e655ea7285c1bc329669865ba8a38cdb69e6
+	gpu: nova-core: fb: Move PDISP register definition
+drm-intel drm-intel-next 53f12a266c3244b4895f7a3619ca1dd2ad54cffc
+	drm/{i915, xe}/panic: drop dependency on struct intel_framebuffer
+drm-intel drm-intel-gt-next 15b9353deff3cf72331c387780de3cf9c316b643
+	drm/i915/gem: Add missing nospec on parallel submit slot
+drm-xe drm-xe-next 692689c97bbb99f191926ec596c9193d95189702
+	drm/xe/mmio: Prefer tile-based WARN message
+drm-intel topic/core-for-CI 42f6438f1d344694656e7eca76e2d02b109697b6
+	Revert "lockdep: Enable PROVE_RAW_LOCK_NESTING with PROVE_LOCKING."
+drm-xe topic/xe-for-CI 1cf7dc778fc0682a29c228939df45bb7be27a433
+	topic/xe-for-CI: Define GuC firmware for NVL-P
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
