@@ -396,7 +396,7 @@ static const struct drm_driver regular_driver = {
 	    XE_DISPLAY_DRIVER_FEATURES |
 	    DRIVER_GEM |
 	    DRIVER_RENDER | DRIVER_SYNCOBJ |
-	    DRIVER_SYNCOBJ_TIMELINE | DRIVER_GEM_GPUVA,
+	    DRIVER_SYNCOBJ_TIMELINE,
 	.open = xe_file_open,
 	.postclose = xe_file_close,
 
@@ -427,7 +427,7 @@ static const struct drm_ioctl_desc xe_ioctls_admin_only[] = {
 static const struct drm_driver admin_only_driver = {
 	.driver_features =
 	    XE_DISPLAY_DRIVER_FEATURES |
-	    DRIVER_GEM | DRIVER_RENDER | DRIVER_GEM_GPUVA,
+	    DRIVER_GEM | DRIVER_RENDER,
 	.open = xe_file_open,
 	.postclose = xe_file_close,
 	.ioctls = xe_ioctls_admin_only,
