@@ -368,7 +368,7 @@ static void __sched_core_flip(bool enabled)
 		for_each_cpu(t, smt_mask)
 			cpu_rq(t)->core_enabled = enabled;
 
-		cpu_rq(cpu)->core->core_forceidle_start = 0;
+		cpu_rq(cpu)->core->core_sibling_idle_start = 0;
 
 		sched_core_unlock(cpu, &flags);
 
@@ -6127,18 +6127,19 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 
 	/* reset state */
 	rq->core->core_cookie = 0UL;
-	if (rq->core->core_forceidle_count) {
+	if (rq->core->core_sibling_idle_occupation) {
 		if (!core_clock_updated) {
 			update_rq_clock(rq->core);
 			core_clock_updated = true;
 		}
-		sched_core_account_forceidle(rq);
-		/* reset after accounting force idle */
-		rq->core->core_forceidle_start = 0;
+		sched_core_account_idle(rq);
+		rq->core->core_sibling_idle_start = 0;
+		rq->core->core_sibling_idle_occupation = 0;
+		if (rq->core->core_forceidle_count) {
+			need_sync = true;
+			fi_before = true;
+		}
 		rq->core->core_forceidle_count = 0;
-		rq->core->core_forceidle_occupation = 0;
-		need_sync = true;
-		fi_before = true;
 	}
 
 	/*
@@ -6224,9 +6225,9 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		}
 	}
 
-	if (schedstat_enabled() && rq->core->core_forceidle_count) {
-		rq->core->core_forceidle_start = rq_clock(rq->core);
-		rq->core->core_forceidle_occupation = occ;
+	if (schedstat_enabled() && occ < cpumask_weight(smt_mask)) {
+		rq->core->core_sibling_idle_start = rq_clock(rq->core);
+		rq->core->core_sibling_idle_occupation = occ;
 	}
 
 	rq->core->core_pick_seq = rq->core->core_task_seq;
@@ -6486,14 +6487,14 @@ static void sched_core_cpu_deactivate(unsigned int cpu)
 	core_rq->core_cookie               = rq->core_cookie;
 	core_rq->core_forceidle_count      = rq->core_forceidle_count;
 	core_rq->core_forceidle_seq        = rq->core_forceidle_seq;
-	core_rq->core_forceidle_occupation = rq->core_forceidle_occupation;
 
 	/*
-	 * Accounting edge for forced idle is handled in pick_next_task().
+	 * Accounting edge for sibling idle is handled in pick_next_task().
 	 * Don't need another one here, since the hotplug thread shouldn't
 	 * have a cookie.
 	 */
-	core_rq->core_forceidle_start = 0;
+	core_rq->core_sibling_idle_occupation = rq->core_sibling_idle_occupation;
+	core_rq->core_sibling_idle_start = 0;
 
 	/* install new leader */
 	for_each_cpu(t, smt_mask) {
@@ -10051,8 +10052,8 @@ void __init sched_init(void)
 		rq->core_enabled = 0;
 		rq->core_tree = RB_ROOT;
 		rq->core_forceidle_count = 0;
-		rq->core_forceidle_occupation = 0;
-		rq->core_forceidle_start = 0;
+		rq->core_sibling_idle_occupation = 0;
+		rq->core_sibling_idle_start = 0;
 
 		rq->core_cookie = 0UL;
 #endif

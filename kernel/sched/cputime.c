@@ -243,6 +243,18 @@ void __account_forceidle_time(struct task_struct *p, u64 delta)
 
 	task_group_account_field(p, CPUTIME_FORCEIDLE, delta);
 }
+
+/*
+ * Account for sibling idle time due to core scheduling.
+ *
+ * REQUIRES: schedstat is enabled.
+ */
+void __account_sibling_idle_time(struct task_struct *p, u64 delta)
+{
+	__schedstat_add(p->stats.core_sibling_idle_sum, delta);
+
+	task_group_account_field(p, CPUTIME_SIBLING_IDLE, delta);
+}
 #endif
 
 /*

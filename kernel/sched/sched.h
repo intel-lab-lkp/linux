@@ -1144,8 +1144,13 @@ struct rq {
 	unsigned long		core_cookie;
 	unsigned int		core_forceidle_count;
 	unsigned int		core_forceidle_seq;
-	unsigned int		core_forceidle_occupation;
-	u64			core_forceidle_start;
+	/*
+	 * Shared start timestamp and occupation for both forceidle and
+	 * sibling_idle accounting.  Set whenever occupation < SMT width
+	 * (any sibling is idle), not just when core_forceidle_count > 0.
+	 */
+	unsigned int		core_sibling_idle_occupation;
+	u64			core_sibling_idle_start;
 #endif
 
 	/* Scratch cpumask to be temporarily used under rq_lock */
@@ -1909,12 +1914,12 @@ static inline const struct cpumask *task_user_cpus(struct task_struct *p)
 
 #if defined(CONFIG_SCHED_CORE) && defined(CONFIG_SCHEDSTATS)
 
-extern void __sched_core_account_forceidle(struct rq *rq);
+extern void __sched_core_account_idle(struct rq *rq);
 
-static inline void sched_core_account_forceidle(struct rq *rq)
+static inline void sched_core_account_idle(struct rq *rq)
 {
 	if (schedstat_enabled())
-		__sched_core_account_forceidle(rq);
+		__sched_core_account_idle(rq);
 }
 
 extern void __sched_core_tick(struct rq *rq);
@@ -1927,7 +1932,7 @@ static inline void sched_core_tick(struct rq *rq)
 
 #else
 
-static inline void sched_core_account_forceidle(struct rq *rq) {}
+static inline void sched_core_account_idle(struct rq *rq) {}
 
 static inline void sched_core_tick(struct rq *rq) {}
 

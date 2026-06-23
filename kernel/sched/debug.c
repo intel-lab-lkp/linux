@@ -1062,6 +1062,7 @@ void proc_sched_show_task(struct task_struct *p, struct pid_namespace *ns,
 
 #ifdef CONFIG_SCHED_CORE
 		PN_SCHEDSTAT(core_forceidle_sum);
+		PN_SCHEDSTAT(core_sibling_idle_sum);
 #endif
 	}
 
