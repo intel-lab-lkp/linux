@@ -779,6 +779,17 @@ config PROBE_EVENTS_BTF_ARGS
 	  kernel function entry or a tracepoint.
 	  This is available only if BTF (BPF Type Format) support is enabled.
 
+config PROBE_EVENTS_DUMP_FETCHARG
+	depends on PROBE_EVENTS
+	bool "Dump of dynamic probe event fetch-arguments"
+	default n
+	help
+	  This shows the dump of fetch-arguments of dynamic probe events
+	  alongside their event definitions in the dynamic_events file
+	  as comment lines. This is useful to debug the probe events.
+
+	  If unsure, say N.
+
 config KPROBE_EVENTS
 	depends on KPROBES
 	depends on HAVE_REGS_AND_STACK_ACCESS_API
