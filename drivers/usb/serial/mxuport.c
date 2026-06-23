@@ -43,9 +43,22 @@
 #define DOWN_BLOCK_SIZE		64
 
 /* Definitions for firmware info */
-#define VER_ADDR_1		0x20
-#define VER_ADDR_2		0x24
-#define VER_ADDR_3		0x28
+#define MX_FW_VER_BYTE1_OFF		0x20
+#define MX_FW_VER_BYTE2_OFF		0x24
+#define MX_FW_VER_BYTE3_OFF		0x28
+
+struct mxuport_fw_version {
+	u8 major;
+	u8 minor;
+	u8 build;
+	u32 value;
+};
+
+static const u16 mxuport_fw_ver_offsets[] = {
+	MX_FW_VER_BYTE1_OFF,
+	MX_FW_VER_BYTE2_OFF,
+	MX_FW_VER_BYTE3_OFF,
+};
 
 /* Definitions for USB vendor request */
 #define RQ_VENDOR_NONE			0x00
@@ -82,7 +95,6 @@
 
 #define RQ_VENDOR_RESET_DEVICE		0x23 /* Try to reset the device */
 #define RQ_VENDOR_QUERY_FW_CONFIG	0x24
-
 #define RQ_VENDOR_GET_VERSION		0x81 /* Get firmware version */
 #define RQ_VENDOR_GET_PAGE		0x82 /* Read flash page */
 #define RQ_VENDOR_GET_ROM_PROC		0x83 /* Get ROM process state */
@@ -970,8 +982,32 @@ static int mxuport_calc_num_ports(struct usb_serial *serial,
 	return num_ports;
 }
 
+static void mxuport_set_fw_version(struct mxuport_fw_version *version,
+				   u8 major, u8 minor, u8 build)
+{
+	version->major = major;
+	version->minor = minor;
+	version->build = build;
+	version->value = (major << 16) | (minor << 8) | build;
+}
+
+static int mxuport_parse_fw_version(const struct firmware *fw,
+				    const u16 *offsets,
+				    struct mxuport_fw_version *version)
+{
+	if (fw->size <= offsets[0] || fw->size <= offsets[1] ||
+	    fw->size <= offsets[2])
+		return -EINVAL;
+
+	mxuport_set_fw_version(version, fw->data[offsets[0]],
+			       fw->data[offsets[1]], fw->data[offsets[2]]);
+
+	return 0;
+}
+
 /* Get the version of the firmware currently running. */
-static int mxuport_get_fw_version(struct usb_serial *serial, u32 *version)
+static int mxuport_get_fw_version(struct usb_serial *serial,
+				  struct mxuport_fw_version *version)
 {
 	u8 *ver_buf;
 	int err;
@@ -988,7 +1024,7 @@ static int mxuport_get_fw_version(struct usb_serial *serial, u32 *version)
 		goto out;
 	}
 
-	*version = (ver_buf[0] << 16) | (ver_buf[1] << 8) | ver_buf[2];
+	mxuport_set_fw_version(version, ver_buf[0], ver_buf[1], ver_buf[2]);
 	err = 0;
 out:
 	kfree(ver_buf);
@@ -1049,8 +1085,7 @@ static int mxuport_probe(struct usb_serial *serial,
 {
 	u16 productid = le16_to_cpu(serial->dev->descriptor.idProduct);
 	const struct firmware *fw_p = NULL;
-	u32 version;
-	int local_ver;
+	struct mxuport_fw_version version, local_ver;
 	char buf[32];
 	int err;
 
@@ -1065,10 +1100,8 @@ static int mxuport_probe(struct usb_serial *serial,
 	if (err < 0)
 		return err;
 
-	dev_dbg(&serial->interface->dev, "Device firmware version v%x.%x.%x\n",
-		(version & 0xff0000) >> 16,
-		(version & 0xff00) >> 8,
-		(version & 0xff));
+	dev_dbg(&serial->interface->dev, "Device firmware version v%u.%u.%u\n",
+		version.major, version.minor, version.build);
 
 	snprintf(buf, sizeof(buf) - 1, "moxa/moxa-%04x.fw", productid);
 
@@ -1080,28 +1113,28 @@ static int mxuport_probe(struct usb_serial *serial,
 		/* Use the firmware already in the device */
 		err = 0;
 	} else {
-		local_ver = ((fw_p->data[VER_ADDR_1] << 16) |
-			     (fw_p->data[VER_ADDR_2] << 8) |
-			     fw_p->data[VER_ADDR_3]);
+		err = mxuport_parse_fw_version(fw_p, mxuport_fw_ver_offsets,
+					       &local_ver);
+		if (err)
+			goto out;
+
 		dev_dbg(&serial->interface->dev,
-			"Available firmware version v%x.%x.%x\n",
-			fw_p->data[VER_ADDR_1], fw_p->data[VER_ADDR_2],
-			fw_p->data[VER_ADDR_3]);
-		if (local_ver > version) {
+			"Available firmware version v%u.%u.%u\n",
+			local_ver.major, local_ver.minor, local_ver.build);
+
+		if (local_ver.value > version.value) {
 			err = mxuport_download_fw(serial, fw_p);
 			if (err)
 				goto out;
-			err  = mxuport_get_fw_version(serial, &version);
+			err = mxuport_get_fw_version(serial, &version);
 			if (err < 0)
 				goto out;
 		}
 	}
 
 	dev_info(&serial->interface->dev,
-		 "Using device firmware version v%x.%x.%x\n",
-		 (version & 0xff0000) >> 16,
-		 (version & 0xff00) >> 8,
-		 (version & 0xff));
+		 "Using device firmware version v%u.%u.%u\n",
+		 version.major, version.minor, version.build);
 
 	/*
 	 * Contains the features of this hardware. Store away for
