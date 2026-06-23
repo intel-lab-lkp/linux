@@ -1237,7 +1237,7 @@ again:
 			if (bad < 0) {
 				set_bit(BlockedBadBlocks, &rdev->flags);
 				if (!conf->mddev->external &&
-				    conf->mddev->sb_flags) {
+				    READ_ONCE(conf->mddev->sb_flags)) {
 					/* It is very unlikely, but we might
 					 * still need to write out the
 					 * bad block log - better give it
@@ -6433,7 +6433,7 @@ static sector_t reshape_request(struct mddev *mddev, sector_t sector_nr, int *sk
 		conf->reshape_checkpoint = jiffies;
 		set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
 		md_wakeup_thread(mddev->thread);
-		wait_event(mddev->sb_wait, mddev->sb_flags == 0 ||
+		wait_event(mddev->sb_wait, READ_ONCE(mddev->sb_flags) == 0 ||
 			   test_bit(MD_RECOVERY_INTR, &mddev->recovery));
 		if (test_bit(MD_RECOVERY_INTR, &mddev->recovery))
 			return 0;
@@ -6875,7 +6875,8 @@ static void raid5d(struct md_thread *thread)
 			break;
 		handled += batch_size;
 
-		if (mddev->sb_flags & ~(1 << MD_SB_CHANGE_PENDING)) {
+		if (READ_ONCE(mddev->sb_flags) &
+		    ~(1 << MD_SB_CHANGE_PENDING)) {
 			spin_unlock_irq(&conf->device_lock);
 			md_check_recovery(mddev);
 			spin_lock_irq(&conf->device_lock);

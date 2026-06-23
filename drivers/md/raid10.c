@@ -3044,7 +3044,7 @@ static void raid10d(struct md_thread *thread)
 			WARN_ON_ONCE(1);
 
 		cond_resched();
-		if (mddev->sb_flags & ~(1<<MD_SB_CHANGE_PENDING))
+		if (READ_ONCE(mddev->sb_flags) & ~(1 << MD_SB_CHANGE_PENDING))
 			md_check_recovery(mddev);
 	}
 	blk_finish_plug(&plug);
@@ -4712,7 +4712,7 @@ static sector_t reshape_request(struct mddev *mddev, sector_t sector_nr,
 		conf->reshape_checkpoint = jiffies;
 		set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
 		md_wakeup_thread(mddev->thread);
-		wait_event(mddev->sb_wait, mddev->sb_flags == 0 ||
+		wait_event(mddev->sb_wait, READ_ONCE(mddev->sb_flags) == 0 ||
 			   test_bit(MD_RECOVERY_INTR, &mddev->recovery));
 		if (test_bit(MD_RECOVERY_INTR, &mddev->recovery)) {
 			allow_barrier(conf);

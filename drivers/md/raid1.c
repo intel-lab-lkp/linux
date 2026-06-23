@@ -2754,7 +2754,7 @@ static void raid1d(struct md_thread *thread)
 			WARN_ON_ONCE(1);
 
 		cond_resched();
-		if (mddev->sb_flags & ~(1<<MD_SB_CHANGE_PENDING))
+		if (READ_ONCE(mddev->sb_flags) & ~(1 << MD_SB_CHANGE_PENDING))
 			md_check_recovery(mddev);
 	}
 	blk_finish_plug(&plug);
