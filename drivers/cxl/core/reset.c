@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2026 NVIDIA Corporation. All rights reserved. */
+#include <linux/bitmap.h>
 #include <linux/delay.h>
 #include <linux/bug.h>
 #include <linux/bitfield.h>
@@ -338,6 +339,25 @@ static const u32 cxl_reset_timeout_ms[] = {
 #define CXL_CACHE_WBI_TIMEOUT_US 100000
 #define CXL_CACHE_WBI_POLL_US 100
 
+/* CXL r4.0 sec 8.1.4 defines 256 bits of Non-CXL Function Map. */
+#define CXL_RESET_MAX_FUNCTIONS 256
+#define CXL_RESET_FUNCTION_MAP_REGS (CXL_RESET_MAX_FUNCTIONS / 32)
+#define CXL_RESET_SIBLINGS_INIT 8
+
+struct cxl_reset_context {
+	struct pci_dev *target;
+	struct pci_dev **siblings;
+	int nr_siblings;
+	int sibling_capacity;
+};
+
+struct cxl_reset_walk_context {
+	struct cxl_reset_context *ctx;
+	DECLARE_BITMAP(non_cxl_func_map, CXL_RESET_MAX_FUNCTIONS);
+	bool ari;
+	int rc;
+};
+
 struct cxl_hdm_range {
 	struct list_head list;
 	struct pci_dev *pdev;
@@ -348,6 +368,157 @@ struct cxl_hdm_range {
 struct cxl_hdm_range_context {
 	struct list_head ranges;
 };
+
+static void cxl_reset_context_init(struct cxl_reset_context *ctx,
+				   struct pci_dev *pdev)
+{
+	*ctx = (struct cxl_reset_context) {
+		.target = pdev,
+	};
+}
+
+static void cxl_reset_context_destroy(struct cxl_reset_context *ctx)
+{
+	for (int i = 0; i < ctx->nr_siblings; i++)
+		pci_dev_put(ctx->siblings[i]);
+	kfree(ctx->siblings);
+}
+
+static void cxl_reset_read_non_cxl_func_map(struct pci_dev *pdev,
+					    unsigned long *map)
+{
+	u32 words[CXL_RESET_FUNCTION_MAP_REGS];
+	int dvsec, reg;
+
+	bitmap_zero(map, CXL_RESET_MAX_FUNCTIONS);
+
+	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+					  PCI_DVSEC_CXL_FUNCTION_MAP);
+	if (!dvsec)
+		return;
+
+	for (reg = 0; reg < CXL_RESET_FUNCTION_MAP_REGS; reg++) {
+		int rc;
+
+		rc = pci_read_config_dword(pdev,
+					   dvsec + PCI_DVSEC_CXL_FUNCTION_MAP_REG +
+					   reg * sizeof(u32), &words[reg]);
+		if (rc) {
+			pci_warn(pdev,
+				 "failed to read Non-CXL Function Map; treating all siblings as CXL\n");
+			bitmap_zero(map, CXL_RESET_MAX_FUNCTIONS);
+			return;
+		}
+	}
+
+	bitmap_from_arr32(map, words, CXL_RESET_MAX_FUNCTIONS);
+}
+
+static int cxl_reset_func_map_bit(struct pci_dev *sibling, bool ari)
+{
+	if (ari)
+		return sibling->devfn;
+
+	/*
+	 * Without ARI, the Function Map is organized as 32 device slots per
+	 * conventional 3-bit function number.
+	 */
+	return PCI_FUNC(sibling->devfn) * 32 + PCI_SLOT(sibling->devfn);
+}
+
+static int cxl_reset_has_cache_or_mem(struct pci_dev *pdev)
+{
+	int dvsec, rc;
+	u16 cap;
+
+	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+					  PCI_DVSEC_CXL_DEVICE);
+	if (!dvsec)
+		return 0;
+
+	rc = pci_read_config_word(pdev, dvsec + PCI_DVSEC_CXL_CAP, &cap);
+	if (rc) {
+		rc = pcibios_err_to_errno(rc);
+		pci_warn(pdev,
+			 "failed to read CXL capability; cannot determine reset scope: %d\n",
+			 rc);
+		return rc;
+	}
+
+	return !!(cap & (PCI_DVSEC_CXL_CACHE_CAPABLE |
+			 PCI_DVSEC_CXL_MEM_CAPABLE));
+}
+
+static int cxl_reset_add_sibling(struct cxl_reset_context *ctx,
+				 struct pci_dev *sibling)
+{
+	if (ctx->nr_siblings >= ctx->sibling_capacity) {
+		int capacity = ctx->sibling_capacity ?: CXL_RESET_SIBLINGS_INIT;
+		struct pci_dev **siblings;
+
+		if (capacity > INT_MAX / 2)
+			return -ENOMEM;
+		if (ctx->sibling_capacity)
+			capacity *= 2;
+
+		siblings = krealloc_array(ctx->siblings, capacity,
+					  sizeof(*siblings), GFP_KERNEL);
+		if (!siblings)
+			return -ENOMEM;
+
+		ctx->siblings = siblings;
+		ctx->sibling_capacity = capacity;
+	}
+
+	ctx->siblings[ctx->nr_siblings++] = pci_dev_get(sibling);
+	return 0;
+}
+
+static int cxl_reset_collect_sibling(struct pci_dev *sibling, void *data)
+{
+	struct cxl_reset_walk_context *wctx = data;
+	struct cxl_reset_context *ctx = wctx->ctx;
+	struct pci_dev *pdev = ctx->target;
+	int fn, rc;
+
+	if (sibling == pdev)
+		return 0;
+
+	if (sibling->bus != pdev->bus)
+		return 0;
+
+	if (!wctx->ari && PCI_SLOT(sibling->devfn) != PCI_SLOT(pdev->devfn))
+		return 0;
+
+	fn = cxl_reset_func_map_bit(sibling, wctx->ari);
+	if (test_bit(fn, wctx->non_cxl_func_map))
+		return 0;
+
+	rc = cxl_reset_has_cache_or_mem(sibling);
+	if (rc < 0) {
+		wctx->rc = rc;
+		return rc;
+	}
+	if (!rc)
+		return 0;
+
+	wctx->rc = cxl_reset_add_sibling(ctx, sibling);
+	return wctx->rc;
+}
+
+static int cxl_reset_collect_siblings(struct cxl_reset_context *ctx)
+{
+	struct pci_dev *pdev = ctx->target;
+	struct cxl_reset_walk_context wctx = {
+		.ctx = ctx,
+		.ari = pci_ari_enabled(pdev->bus),
+	};
+
+	cxl_reset_read_non_cxl_func_map(pdev, wctx.non_cxl_func_map);
+	pci_walk_bus(pdev->bus, cxl_reset_collect_sibling, &wctx);
+
+	return wctx.rc;
+}
 
 static void cxl_hdm_range_context_init(struct cxl_hdm_range_context *ctx)
 {
@@ -755,6 +926,7 @@ out:
 int cxl_reset_function(struct pci_dev *pdev, bool probe)
 {
 	struct cxl_hdm_range_context range_ctx;
+	struct cxl_reset_context ctx;
 	int dvsec;
 	int rc;
 
@@ -765,14 +937,20 @@ int cxl_reset_function(struct pci_dev *pdev, bool probe)
 	if (probe)
 		return 0;
 
+	cxl_reset_context_init(&ctx, pdev);
 	cxl_hdm_range_context_init(&range_ctx);
+
+	rc = cxl_reset_collect_siblings(&ctx);
+	if (rc)
+		goto out;
 
 	scoped_guard(rwsem_write, &cxl_rwsem.region) {
 		rc = cxl_hdm_ranges_prepare(&range_ctx, pdev);
 		if (!rc)
 			rc = cxl_reset_execute(pdev, dvsec);
 	}
-
+out:
 	cxl_hdm_range_context_destroy(&range_ctx);
+	cxl_reset_context_destroy(&ctx);
 	return rc;
 }
