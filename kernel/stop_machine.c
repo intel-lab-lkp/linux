@@ -47,7 +47,7 @@ struct cpu_stopper {
 };
 
 static DEFINE_PER_CPU(struct cpu_stopper, cpu_stopper);
-static bool stop_machine_initialized = false;
+static bool stop_machine_initialized;
 
 void print_stop_info(const char *log_lvl, struct task_struct *task)
 {
