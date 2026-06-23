@@ -936,6 +936,7 @@ static void digi_write_bulk_callback(struct urb *urb)
 	struct usb_serial_port *port = urb->context;
 	struct digi_serial *serial_priv = usb_get_serial_data(port->serial);
 	struct digi_port *priv = usb_get_serial_port_data(port);
+	unsigned char *data = urb->transfer_buffer;
 	unsigned long flags;
 	bool wakeup;
 	int ret = 0;
@@ -955,15 +956,13 @@ static void digi_write_bulk_callback(struct urb *urb)
 	spin_lock_irqsave(&priv->dp_port_lock, flags);
 	priv->dp_write_urb_in_use = 0;
 	if (priv->dp_out_buf_len > 0) {
-		*((unsigned char *)(port->write_urb->transfer_buffer))
-			= (unsigned char)DIGI_CMD_SEND_DATA;
-		*((unsigned char *)(port->write_urb->transfer_buffer) + 1)
-			= (unsigned char)priv->dp_out_buf_len;
-		port->write_urb->transfer_buffer_length =
-						priv->dp_out_buf_len + 2;
-		memcpy(port->write_urb->transfer_buffer + 2, priv->dp_out_buf,
-			priv->dp_out_buf_len);
-		ret = usb_submit_urb(port->write_urb, GFP_ATOMIC);
+		data[0] = DIGI_CMD_SEND_DATA;
+		data[1] = priv->dp_out_buf_len;
+		memcpy(data + 2, priv->dp_out_buf, priv->dp_out_buf_len);
+
+		urb->transfer_buffer_length = priv->dp_out_buf_len + 2;
+
+		ret = usb_submit_urb(urb, GFP_ATOMIC);
 		if (ret == 0) {
 			priv->dp_write_urb_in_use = 1;
 			priv->dp_out_buf_len = 0;
