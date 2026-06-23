@@ -10,6 +10,7 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
+#include <linux/kref.h>
 #include <linux/sched.h>
 #include <linux/tty.h>
 #include <linux/serial.h>
@@ -24,6 +25,8 @@
 #define IP_OCTAL_NB_BLOCKS          4
 
 static const struct tty_operations ipoctal_fops;
+
+static void ipoctal_release(struct kref *kref);
 
 struct ipoctal_channel {
 	struct ipoctal_stats		stats;
@@ -49,6 +52,7 @@ struct ipoctal {
 	struct tty_driver		*tty_drv;
 	u8 __iomem			*mem8_space;
 	u8 __iomem			*int_space;
+	struct kref			kref;
 };
 
 static inline struct ipoctal *chan_to_ipoctal(struct ipoctal_channel *chan,
@@ -95,6 +99,7 @@ static int ipoctal_install(struct tty_driver *driver, struct tty_struct *tty)
 	if (res)
 		goto err_put_carrier;
 
+	kref_get(&ipoctal->kref);
 	tty->driver_data = channel;
 
 	return 0;
@@ -666,6 +671,7 @@ static void ipoctal_cleanup(struct tty_struct *tty)
 
 	/* release the carrier driver */
 	ipack_put_carrier(ipoctal->dev);
+	kref_put(&ipoctal->kref, ipoctal_release);
 }
 
 static const struct tty_operations ipoctal_fops = {
@@ -683,6 +689,13 @@ static const struct tty_operations ipoctal_fops = {
 	.cleanup =              ipoctal_cleanup,
 };
 
+static void ipoctal_release(struct kref *kref)
+{
+	struct ipoctal *ipoctal = container_of(kref, struct ipoctal, kref);
+
+	kfree(ipoctal);
+}
+
 static int ipoctal_probe(struct ipack_device *dev)
 {
 	int res;
@@ -691,6 +704,8 @@ static int ipoctal_probe(struct ipack_device *dev)
 	ipoctal = kzalloc_obj(struct ipoctal);
 	if (ipoctal == NULL)
 		return -ENOMEM;
+
+	kref_init(&ipoctal->kref);
 
 	ipoctal->dev = dev;
 	res = ipoctal_inst_slot(ipoctal, dev->bus->bus_nr, dev->slot);
@@ -701,7 +716,7 @@ static int ipoctal_probe(struct ipack_device *dev)
 	return 0;
 
 out_uninst:
-	kfree(ipoctal);
+	kref_put(&ipoctal->kref, ipoctal_release);
 	return res;
 }
 
@@ -725,7 +740,7 @@ static void __ipoctal_remove(struct ipoctal *ipoctal)
 	tty_unregister_driver(ipoctal->tty_drv);
 	kfree(ipoctal->tty_drv->name);
 	tty_driver_kref_put(ipoctal->tty_drv);
-	kfree(ipoctal);
+	kref_put(&ipoctal->kref, ipoctal_release);
 }
 
 static void ipoctal_remove(struct ipack_device *idev)
