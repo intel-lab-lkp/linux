@@ -2698,6 +2698,28 @@ static int mpage_prepare_extent_to_map(struct mpage_da_data *mpd)
 			    (folio_test_writeback(folio) &&
 			     (mpd->wbc->sync_mode == WB_SYNC_NONE)) ||
 			    unlikely(folio->mapping != mapping)) {
+				/*
+				 * A clean folio (PG_dirty = 0) can still carry
+				 * stale xarray tags: PAGECACHE_TAG_DIRTY /
+				 * PAGECACHE_TAG_TOWRITE.
+				 * In data=journal mode, the data may have been
+				 * checkpointed to its final location by jbd2
+				 * but these tags are only cleared by
+				 * __folio_start_writeback() later.
+				 * These tags keep the inode on the writeback
+				 * list and make the writeback thread calls
+				 * ext4_journal_start on a read-only sb during
+				 * remounting fs to read-only, and return
+				 * -EROFS from ext4_journal_check_start.
+				 * Cycle the clean folio through writeback to
+				 * drop the stale xarray tags.
+				 */
+				if (folio->mapping == mapping &&
+				    !folio_test_dirty(folio) &&
+				    !folio_test_writeback(folio)) {
+					__folio_start_writeback(folio, false);
+					folio_end_writeback(folio);
+				}
 				folio_unlock(folio);
 				continue;
 			}
