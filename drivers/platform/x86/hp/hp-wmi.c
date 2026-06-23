@@ -2011,19 +2011,42 @@ static int hp_wmi_platform_profile_probe(void *drvdata, unsigned long *choices)
 {
 	if (is_omen_thermal_profile()) {
 		set_bit(PLATFORM_PROFILE_COOL, choices);
-	} else if (is_victus_thermal_profile()) {
-		set_bit(PLATFORM_PROFILE_QUIET, choices);
-	} else if (is_victus_s_thermal_profile()) {
-		/* Adding an equivalent to HP Omen software ECO mode: */
-		set_bit(PLATFORM_PROFILE_LOW_POWER, choices);
-	} else {
-		set_bit(PLATFORM_PROFILE_QUIET, choices);
-		set_bit(PLATFORM_PROFILE_COOL, choices);
+		set_bit(PLATFORM_PROFILE_BALANCED, choices);
+		set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
+		return 0;
 	}
 
-	set_bit(PLATFORM_PROFILE_BALANCED, choices);
-	set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
+	if (is_victus_thermal_profile()) {
+		set_bit(PLATFORM_PROFILE_QUIET, choices);
+		set_bit(PLATFORM_PROFILE_BALANCED, choices);
+		set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
+		return 0;
+	}
 
+	if (is_victus_s_thermal_profile()) {
+		/* Adding an equivalent to HP Omen software ECO mode: */
+		set_bit(PLATFORM_PROFILE_LOW_POWER, choices);
+		set_bit(PLATFORM_PROFILE_BALANCED, choices);
+		set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
+		return 0;
+	}
+
+	/* Generic HP laptops supported by hp-wmi: probe dynamically */
+	int current_tp = thermal_profile_get();
+	if (current_tp < 0)
+		return current_tp;
+
+	if (thermal_profile_set(HP_THERMAL_PROFILE_QUIET) == 0)
+		set_bit(PLATFORM_PROFILE_QUIET, choices);
+	if (thermal_profile_set(HP_THERMAL_PROFILE_COOL) == 0)
+		set_bit(PLATFORM_PROFILE_COOL, choices);
+	if (thermal_profile_set(HP_THERMAL_PROFILE_DEFAULT) == 0)
+		set_bit(PLATFORM_PROFILE_BALANCED, choices);
+	if (thermal_profile_set(HP_THERMAL_PROFILE_PERFORMANCE) == 0)
+		set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
+
+	/* Restore original thermal profile */
+	thermal_profile_set(current_tp);
 	return 0;
 }
 
