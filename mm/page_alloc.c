@@ -3785,6 +3785,32 @@ static inline unsigned int gfp_to_alloc_flags_cma(gfp_t gfp_mask,
 }
 
 /*
+ * Check if the current CPU's PCP list has pages for the given order and
+ * migratetype. This is useful when watermark checks fail but PCP may
+ * still have cached pages that can satisfy the allocation directly.
+ */
+static bool pcp_has_pages(struct zone *zone, unsigned int order,
+			  int migratetype)
+{
+	struct per_cpu_pages *pcp;
+	bool has_pages;
+	int pindex;
+
+	if (!pcp_allowed_order(order))
+		return false;
+
+	pcp = pcp_spin_trylock(zone->per_cpu_pageset);
+	if (!pcp)
+		return false;
+
+	pindex = order_to_pindex(migratetype, order);
+	has_pages = !list_empty(&pcp->lists[pindex]);
+	pcp_spin_unlock(pcp);
+
+	return has_pages;
+}
+
+/*
  * get_page_from_freelist goes through the zonelist trying to allocate
  * a page.
  */
@@ -3912,6 +3938,16 @@ check_alloc_wmark:
 				if (_deferred_grow_zone(zone, order))
 					goto try_this_zone;
 			}
+
+			/*
+			 * NR_FREE_PAGES does not account for PCP pages.
+			 * If PCP has cached pages for this order and
+			 * migratetype, skip watermark and let rmqueue
+			 * allocate directly from PCP.
+			 */
+			if (pcp_has_pages(zone, order, ac->migratetype))
+				goto try_this_zone;
+
 			/* Checked here to keep the fast path fast */
 			BUILD_BUG_ON(ALLOC_NO_WATERMARKS < NR_WMARK);
 			if (alloc_flags & ALLOC_NO_WATERMARKS)
