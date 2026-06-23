@@ -147,6 +147,8 @@ static const u16 mxuport_mux50u_fw_ver_offsets[] = {
 #define UPORT_EVENT_LSR			4 /* Line status */
 #define UPORT_EVENT_MCR			5 /* Modem control */
 
+#define UPORT_REQUEST_SEND_NEXT		0x80
+
 /* Definitions for serial event type */
 #define SERIAL_EV_CTS			0x0008	/* CTS changed state */
 #define SERIAL_EV_DSR			0x0010	/* DSR changed state */
@@ -193,6 +195,8 @@ static const u16 mxuport_mux50u_fw_ver_offsets[] = {
 
 /* This structure holds all of the local port information */
 struct mxuport_port {
+	u32 sent_payload;
+	u8 hold_reason;
 	u8 mcr_state;		/* Last MCR state */
 	u8 msr_state;		/* Last MSR state */
 	struct mutex mutex;	/* Protects mcr_state */
@@ -276,20 +280,146 @@ MODULE_DEVICE_TABLE(usb, mxuport_idtable);
 static int mxuport_prepare_write_buffer(struct usb_serial_port *port,
 					void *dest, size_t size)
 {
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
 	u8 *buf = dest;
+	unsigned long flags;
+	bool request_send_next;
 	int count;
 
-	count = kfifo_out_locked(&port->write_fifo, buf + HEADER_SIZE,
-				 size - HEADER_SIZE,
-				 &port->lock);
+	spin_lock_irqsave(&port->lock, flags);
+	count = kfifo_out(&port->write_fifo, buf + HEADER_SIZE,
+			  size - HEADER_SIZE);
+	mxport->sent_payload += count;
+	request_send_next = mxport->sent_payload >= port->bulk_out_size;
+	if (request_send_next)
+		mxport->hold_reason |= MX_WAIT_FOR_SEND_NEXT;
+	spin_unlock_irqrestore(&port->lock, flags);
 
 	put_unaligned_be16(port->port_number, buf);
 	put_unaligned_be16(count, buf + 2);
+
+	if (request_send_next)
+		buf[0] |= UPORT_REQUEST_SEND_NEXT;
 
 	dev_dbg(&port->dev, "%s - size %zd count %d\n", __func__,
 		size, count);
 
 	return count + HEADER_SIZE;
+}
+
+static int mxuport_write_start(struct usb_serial_port *port, gfp_t mem_flags)
+{
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
+	struct urb *urb;
+	unsigned long flags;
+	int i;
+	int count;
+	int result;
+
+	if (test_and_set_bit_lock(USB_SERIAL_WRITE_BUSY, &port->flags))
+		return 0;
+retry:
+	spin_lock_irqsave(&port->lock, flags);
+	if ((mxport->hold_reason & MX_WAIT_FOR_SEND_NEXT) ||
+	    !port->write_urbs_free || !kfifo_len(&port->write_fifo)) {
+		clear_bit_unlock(USB_SERIAL_WRITE_BUSY, &port->flags);
+		spin_unlock_irqrestore(&port->lock, flags);
+		return 0;
+	}
+
+	i = (int)find_first_bit(&port->write_urbs_free,
+				ARRAY_SIZE(port->write_urbs));
+	spin_unlock_irqrestore(&port->lock, flags);
+
+	urb = port->write_urbs[i];
+	count = mxuport_prepare_write_buffer(port, urb->transfer_buffer,
+					     port->bulk_out_size);
+	urb->transfer_buffer_length = count;
+	usb_serial_debug_data(&port->dev, __func__, count,
+			      urb->transfer_buffer);
+
+	spin_lock_irqsave(&port->lock, flags);
+	port->tx_bytes += count;
+	spin_unlock_irqrestore(&port->lock, flags);
+
+	clear_bit(i, &port->write_urbs_free);
+	result = usb_submit_urb(urb, mem_flags);
+	if (result) {
+		dev_err_console(port, "%s - error submitting urb: %d\n",
+				__func__, result);
+		set_bit(i, &port->write_urbs_free);
+		spin_lock_irqsave(&port->lock, flags);
+		port->tx_bytes -= count;
+		if (mxport->hold_reason & MX_WAIT_FOR_SEND_NEXT) {
+			mxport->hold_reason &= ~MX_WAIT_FOR_SEND_NEXT;
+			mxport->sent_payload = 0;
+		}
+		spin_unlock_irqrestore(&port->lock, flags);
+
+		clear_bit_unlock(USB_SERIAL_WRITE_BUSY, &port->flags);
+		return result;
+	}
+
+	goto retry;
+}
+
+static int mxuport_write(struct tty_struct *tty, struct usb_serial_port *port,
+			 const unsigned char *buf, int count)
+{
+	int result;
+
+	if (!port->bulk_out_size)
+		return -ENODEV;
+
+	if (!count)
+		return 0;
+
+	count = kfifo_in_locked(&port->write_fifo, buf, count, &port->lock);
+	result = mxuport_write_start(port, GFP_ATOMIC);
+	if (result)
+		return result;
+
+	return count;
+}
+
+static void mxuport_write_bulk_callback(struct urb *urb)
+{
+	struct usb_serial_port *port = urb->context;
+	unsigned long flags;
+	int status = urb->status;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(port->write_urbs); ++i) {
+		if (port->write_urbs[i] == urb)
+			break;
+	}
+
+	spin_lock_irqsave(&port->lock, flags);
+	port->tx_bytes -= urb->transfer_buffer_length;
+	set_bit(i, &port->write_urbs_free);
+	spin_unlock_irqrestore(&port->lock, flags);
+
+	switch (status) {
+	case 0:
+		break;
+	case -ENOENT:
+	case -ECONNRESET:
+	case -ESHUTDOWN:
+		dev_dbg(&port->dev, "%s - urb stopped: %d\n", __func__,
+			status);
+		return;
+	case -EPIPE:
+		dev_err_console(port, "%s - urb stopped: %d\n", __func__,
+				status);
+		return;
+	default:
+		dev_err_console(port, "%s - nonzero urb status: %d\n",
+				__func__, status);
+		break;
+	}
+
+	mxuport_write_start(port, GFP_ATOMIC);
+	usb_serial_port_softint(port);
 }
 
 /* Read the given buffer in from the control pipe. */
@@ -510,14 +640,24 @@ static void mxuport_lsr_event(struct usb_serial_port *port, u8 buf[4])
 static void mxuport_process_read_urb_event(struct usb_serial_port *port,
 					   u8 buf[4], u32 event)
 {
+	struct mxuport_port *mxport = usb_get_serial_port_data(port);
+	unsigned long flags;
+	bool resume_tx = false;
+
 	dev_dbg(&port->dev, "%s - receive event : %04x\n", __func__, event);
 
 	switch (event) {
 	case UPORT_EVENT_SEND_NEXT:
-		/*
-		 * Sent as part of the flow control on device buffers.
-		 * Not currently used.
-		 */
+		spin_lock_irqsave(&port->lock, flags);
+		if (mxport->hold_reason & MX_WAIT_FOR_SEND_NEXT) {
+			mxport->hold_reason &= ~MX_WAIT_FOR_SEND_NEXT;
+			mxport->sent_payload = 0;
+			resume_tx = true;
+		}
+		spin_unlock_irqrestore(&port->lock, flags);
+
+		if (resume_tx)
+			mxuport_write_start(port, GFP_ATOMIC);
 		break;
 	case UPORT_EVENT_MSR:
 		mxuport_msr_event(port, buf);
@@ -1372,6 +1512,7 @@ static int mxuport_open(struct tty_struct *tty, struct usb_serial_port *port)
 {
 	struct mxuport_port *mxport = usb_get_serial_port_data(port);
 	struct usb_serial *serial = port->serial;
+	unsigned long flags;
 	int err;
 
 	/* Set receive host (enable) */
@@ -1396,6 +1537,11 @@ static int mxuport_open(struct tty_struct *tty, struct usb_serial_port *port)
 	 * TODO: use RQ_VENDOR_GET_MSR, once we know what it
 	 * returns.
 	 */
+	spin_lock_irqsave(&port->lock, flags);
+	mxport->sent_payload = 0;
+	mxport->hold_reason &= ~MX_WAIT_FOR_SEND_NEXT;
+	spin_unlock_irqrestore(&port->lock, flags);
+
 	mxport->msr_state = 0;
 
 	return err;
@@ -1451,7 +1597,7 @@ static int mxuport_resume(struct usb_serial *serial)
 		if (!tty_port_initialized(&port->port))
 			continue;
 
-		r = usb_serial_generic_write_start(port, GFP_NOIO);
+		r = mxuport_write_start(port, GFP_NOIO);
 		if (r < 0)
 			c++;
 	}
@@ -1477,6 +1623,8 @@ static struct usb_serial_driver mxuport_device = {
 	.set_termios		= mxuport_set_termios,
 	.break_ctl		= mxuport_break_ctl,
 	.tx_empty		= mxuport_tx_empty,
+	.write			= mxuport_write,
+	.write_bulk_callback	= mxuport_write_bulk_callback,
 	.tiocmiwait		= usb_serial_generic_tiocmiwait,
 	.get_icount		= usb_serial_generic_get_icount,
 	.throttle		= mxuport_throttle,
@@ -1485,7 +1633,6 @@ static struct usb_serial_driver mxuport_device = {
 	.tiocmset		= mxuport_tiocmset,
 	.dtr_rts		= mxuport_dtr_rts,
 	.process_read_urb	= mxuport_process_read_urb,
-	.prepare_write_buffer	= mxuport_prepare_write_buffer,
 	.resume			= mxuport_resume,
 };
 
