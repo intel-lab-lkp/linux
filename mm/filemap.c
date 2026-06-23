@@ -4715,6 +4715,37 @@ static inline bool can_do_cachestat(struct file *f)
 	return file_permission(f, MAY_WRITE) == 0;
 }
 
+/**
+ * vfs_cachestat() - query page cache statistics of a file
+ * @file:	file to query
+ * @csr:	byte range to query
+ * @cs:		output statistics
+ *
+ * Compute the page cache statistics for the given byte range of @file.
+ *
+ * Stackable filesystems (e.g. overlayfs) keep the data pages in the
+ * mapping of an underlying file rather than in @file->f_mapping. Such
+ * filesystems provide a ->cachestat() file operation that forwards the
+ * query to the file that actually owns the page cache; otherwise the
+ * statistics are computed from @file->f_mapping directly.
+ */
+int vfs_cachestat(struct file *file, struct cachestat_range *csr,
+		  struct cachestat *cs)
+{
+	pgoff_t first_index, last_index;
+
+	if (file->f_op->cachestat)
+		return file->f_op->cachestat(file, csr, cs);
+
+	first_index = csr->off >> PAGE_SHIFT;
+	last_index =
+		csr->len == 0 ? ULONG_MAX : (csr->off + csr->len - 1) >> PAGE_SHIFT;
+	memset(cs, 0, sizeof(struct cachestat));
+	filemap_cachestat(file->f_mapping, first_index, last_index, cs);
+	return 0;
+}
+EXPORT_SYMBOL(vfs_cachestat);
+
 /*
  * The cachestat(2) system call.
  *
@@ -4754,10 +4785,9 @@ SYSCALL_DEFINE4(cachestat, unsigned int, fd,
 		struct cachestat __user *, cstat, unsigned int, flags)
 {
 	CLASS(fd, f)(fd);
-	struct address_space *mapping;
 	struct cachestat_range csr;
 	struct cachestat cs;
-	pgoff_t first_index, last_index;
+	int ret;
 
 	if (fd_empty(f))
 		return -EBADF;
@@ -4776,12 +4806,9 @@ SYSCALL_DEFINE4(cachestat, unsigned int, fd,
 	if (flags != 0)
 		return -EINVAL;
 
-	first_index = csr.off >> PAGE_SHIFT;
-	last_index =
-		csr.len == 0 ? ULONG_MAX : (csr.off + csr.len - 1) >> PAGE_SHIFT;
-	memset(&cs, 0, sizeof(struct cachestat));
-	mapping = fd_file(f)->f_mapping;
-	filemap_cachestat(mapping, first_index, last_index, &cs);
+	ret = vfs_cachestat(fd_file(f), &csr, &cs);
+	if (ret)
+		return ret;
 
 	if (copy_to_user(cstat, &cs, sizeof(struct cachestat)))
 		return -EFAULT;

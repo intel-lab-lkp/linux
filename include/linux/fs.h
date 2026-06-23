@@ -53,6 +53,8 @@
 
 struct bdi_writeback;
 struct bio;
+struct cachestat_range;
+struct cachestat;
 struct io_comp_batch;
 struct fiemap_extent_info;
 struct kiocb;
@@ -1957,6 +1959,8 @@ struct file_operations {
 				   struct file *file_out, loff_t pos_out,
 				   loff_t len, unsigned int remap_flags);
 	int (*fadvise)(struct file *, loff_t, loff_t, int);
+	int (*cachestat)(struct file *file, struct cachestat_range *csr,
+			 struct cachestat *cs);
 	int (*uring_cmd)(struct io_uring_cmd *ioucmd, unsigned int issue_flags);
 	int (*uring_cmd_iopoll)(struct io_uring_cmd *, struct io_comp_batch *,
 				unsigned int poll_flags);
@@ -3638,6 +3642,12 @@ extern int vfs_fadvise(struct file *file, loff_t offset, loff_t len,
 		       int advice);
 extern int generic_fadvise(struct file *file, loff_t offset, loff_t len,
 			   int advice);
+
+/* mm/filemap.c */
+#ifdef CONFIG_CACHESTAT_SYSCALL
+int vfs_cachestat(struct file *file, struct cachestat_range *csr,
+		  struct cachestat *cs);
+#endif
 
 static inline bool vfs_empty_path(int dfd, const char __user *path)
 {
