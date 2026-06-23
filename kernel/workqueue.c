@@ -447,7 +447,7 @@ static unsigned int wq_cache_shard_size = 8;
 module_param_named(cache_shard_size, wq_cache_shard_size, uint, 0444);
 
 static bool wq_online;			/* can kworkers be created yet? */
-static bool wq_topo_initialized __read_mostly = false;
+static bool wq_topo_initialized __read_mostly;
 
 static struct kmem_cache *pwq_cache;
 
@@ -492,7 +492,7 @@ static DEFINE_PER_CPU(int, wq_rr_cpu_last);
 #ifdef CONFIG_DEBUG_WQ_FORCE_RR_CPU
 static bool wq_debug_force_rr_cpu = true;
 #else
-static bool wq_debug_force_rr_cpu = false;
+static bool wq_debug_force_rr_cpu;
 #endif
 module_param_named(debug_force_rr_cpu, wq_debug_force_rr_cpu, bool, 0644);
 
