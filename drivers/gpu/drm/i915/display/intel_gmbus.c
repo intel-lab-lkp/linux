@@ -86,7 +86,7 @@ static const struct gmbus_pin gmbus_pins[] = {
 	[GMBUS_PIN_DPD] = { "dpd", GPIO_5 },
 };
 
-static const struct gmbus_pin gmbus_pins_bdw[] = {
+static const struct gmbus_pin gmbus_pins_lpt[] = {
 	[GMBUS_PIN_VGADDC] = { "vga", GPIO_0 },
 	[GMBUS_PIN_DPC] = { "dpc", GPIO_3 },
 	[GMBUS_PIN_DPB] = { "dpb", GPIO_4 },
@@ -178,9 +178,9 @@ static const struct gmbus_pin *get_gmbus_pin(struct intel_display *display,
 	} else if (DISPLAY_VER(display) == 9) {
 		pins = gmbus_pins_skl;
 		size = ARRAY_SIZE(gmbus_pins_skl);
-	} else if (display->platform.broadwell) {
-		pins = gmbus_pins_bdw;
-		size = ARRAY_SIZE(gmbus_pins_bdw);
+	} else if (HAS_PCH_LPT(display)) {
+		pins = gmbus_pins_lpt;
+		size = ARRAY_SIZE(gmbus_pins_lpt);
 	} else {
 		pins = gmbus_pins;
 		size = ARRAY_SIZE(gmbus_pins);
