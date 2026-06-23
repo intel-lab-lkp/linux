@@ -68,6 +68,7 @@ properties:
 
       - items:
           - enum:
+              - asus,zenbook-a14-ux3407na
               - qcom,glymur-crd
           - const: qcom,glymur
 
