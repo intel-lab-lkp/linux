@@ -684,6 +684,9 @@ static void pci_dma_bus_setup_pSeries(struct pci_bus *bus)
 	pci->phb->dma_window_base_cur = 0x8000000ul;
 
 	pci->table_group = iommu_pseries_alloc_group(pci->phb->node);
+	if (!pci->table_group)
+		return;
+
 	tbl = pci->table_group->tables[0];
 
 	iommu_table_setparms(pci->phb, dn, tbl);
@@ -873,6 +876,9 @@ static void pci_dma_bus_setup_pSeriesLP(struct pci_bus *bus)
 
 	if (!ppci->table_group) {
 		ppci->table_group = iommu_pseries_alloc_group(ppci->phb->node);
+		if (!ppci->table_group)
+			return;
+
 		tbl = ppci->table_group->tables[0];
 
 		iommu_table_setparms_common(tbl, ppci->phb->bus->number,
@@ -910,6 +916,9 @@ static void pci_dma_dev_setup_pSeries(struct pci_dev *dev)
 
 		pr_debug(" --> first child, no bridge. Allocating iommu table.\n");
 		PCI_DN(dn)->table_group = iommu_pseries_alloc_group(phb->node);
+		if (!PCI_DN(dn)->table_group)
+			return;
+
 		tbl = PCI_DN(dn)->table_group->tables[0];
 		iommu_table_setparms(phb, dn, tbl);
 
@@ -1876,6 +1885,9 @@ static void pci_dma_dev_setup_pSeriesLP(struct pci_dev *dev)
 	pci = PCI_DN(pdn);
 	if (!pci->table_group) {
 		pci->table_group = iommu_pseries_alloc_group(pci->phb->node);
+		if (!pci->table_group)
+			return;
+
 		tbl = pci->table_group->tables[0];
 
 		iommu_table_setparms_common(tbl, pci->phb->bus->number,
