@@ -7922,6 +7922,9 @@ int user_proactive_reclaim(char *buf,
 		if (memcg) {
 			unsigned int reclaim_options;
 
+			if (memcg_is_dying(memcg))
+				break;
+
 			reclaim_options = MEMCG_RECLAIM_MAY_SWAP |
 					  MEMCG_RECLAIM_PROACTIVE;
 			reclaimed = try_to_free_mem_cgroup_pages(memcg,
