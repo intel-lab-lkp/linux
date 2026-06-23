@@ -265,8 +265,11 @@ static int palmas_clks_probe(struct platform_device *pdev)
 	}
 
 	ret = of_clk_add_hw_provider(node, of_clk_hw_simple_get, &cinfo->hw);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(&pdev->dev, "Fail to add clock driver, %d\n", ret);
+		if (cinfo->ext_control_pin)
+			clk_unprepare(cinfo->hw.clk);
+	}
 	return ret;
 }
 
