@@ -549,8 +549,8 @@ static int set_property_legacy(struct drm_mode_object *obj,
 						  prop, prop_value);
 		break;
 	}
-	drm_property_change_valid_put(prop, ref);
 	DRM_MODESET_LOCK_ALL_END(dev, ctx, ret);
+	drm_property_change_valid_put(prop, ref);
 
 	return ret;
 }
