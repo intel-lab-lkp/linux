@@ -464,13 +464,35 @@ err_busy:
 static irqreturn_t riscv_iommu_cmdq_process(int irq, void *data)
 {
 	const struct riscv_iommu_queue *queue = (struct riscv_iommu_queue *)data;
-	unsigned int ctrl;
+	struct riscv_iommu_command cmd;
+	unsigned int ctrl, head;
 
 	/* Clear MF/CQ errors, complete error recovery to be implemented. */
 	ctrl = riscv_iommu_readl(queue->iommu, queue->qcr);
 	if (ctrl & (RISCV_IOMMU_CQCSR_CQMF | RISCV_IOMMU_CQCSR_CMD_TO |
 		    RISCV_IOMMU_CQCSR_CMD_ILL | RISCV_IOMMU_CQCSR_FENCE_W_IP)) {
+		/*
+		 * The head pointer is not updated by the hardware, it
+		 * still points to the index of illegal command
+		 */
+		riscv_iommu_readl_timeout(queue->iommu, Q_HEAD(queue), head,
+					  !(head & ~queue->mask), 0,
+					  RISCV_IOMMU_QUEUE_TIMEOUT);
+
+		if (ctrl & RISCV_IOMMU_CQCSR_CMD_ILL) {
+			/*
+			 * Use a dummy IOFENCE instead of the illegal command
+			 * to prevent hardware lockup
+			 */
+			memset(&cmd, 0, sizeof(cmd));
+			cmd.dword0 = FIELD_PREP(RISCV_IOMMU_CMD0_OPCODE,
+						RISCV_IOMMU_CMD_IOFENCE_OPCODE);
+			memcpy(queue->base + head * sizeof(cmd), &cmd, sizeof(cmd));
+			dma_wmb();
+		}
+
 		riscv_iommu_writel(queue->iommu, queue->qcr, ctrl);
+
 		dev_warn(queue->iommu->dev,
 			 "Queue #%u error; fault:%d timeout:%d illegal:%d fence_w_ip:%d\n",
 			 queue->qid,
