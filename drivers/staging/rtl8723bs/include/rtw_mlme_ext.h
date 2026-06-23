@@ -483,11 +483,11 @@ int is_IBSS_empty(struct adapter *padapter);
 unsigned char check_assoc_AP(u8 *pframe, uint len);
 
 int WMM_param_handler(struct adapter *padapter, struct ndis_80211_var_ie *pIE);
-void WMMOnAssocRsp(struct adapter *padapter);
+void WMM_on_assoc_rsp(struct adapter *padapter);
 
 void HT_caps_handler(struct adapter *padapter, struct ndis_80211_var_ie *pIE);
 void HT_info_handler(struct adapter *padapter, struct ndis_80211_var_ie *pIE);
-void HTOnAssocRsp(struct adapter *padapter);
+void HT_on_assoc_rsp(struct adapter *padapter);
 
 void ERP_IE_handler(struct adapter *padapter, struct ndis_80211_var_ie *pIE);
 void VCS_update(struct adapter *padapter, struct sta_info *psta);
@@ -558,8 +558,8 @@ void start_clnt_auth(struct adapter *padapter);
 void start_clnt_join(struct adapter *padapter);
 void start_create_ibss(struct adapter *padapter);
 
-unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame);
-unsigned int OnAssocRsp(struct adapter *padapter, union recv_frame *precv_frame);
+unsigned int on_assoc_req(struct adapter *padapter, union recv_frame *precv_frame);
+unsigned int on_assoc_rsp(struct adapter *padapter, union recv_frame *precv_frame);
 unsigned int OnProbeReq(struct adapter *padapter, union recv_frame *precv_frame);
 unsigned int OnProbeRsp(struct adapter *padapter, union recv_frame *precv_frame);
 unsigned int DoReserved(struct adapter *padapter, union recv_frame *precv_frame);

@@ -701,7 +701,7 @@ static void sort_wmm_ac_params(u32 *inx, u32 *edca)
 	}
 }
 
-void WMMOnAssocRsp(struct adapter *padapter)
+void WMM_on_assoc_rsp(struct adapter *padapter)
 {
 	u8 ACI, ACM, AIFS, ECWMin, ECWMax, aSifsTime;
 	u8 acm_mask;
@@ -977,7 +977,7 @@ void HT_info_handler(struct adapter *padapter, struct ndis_80211_var_ie *pIE)
 	memcpy(&(pmlmeinfo->HT_info), pIE->data, pIE->length);
 }
 
-void HTOnAssocRsp(struct adapter *padapter)
+void HT_on_assoc_rsp(struct adapter *padapter)
 {
 	unsigned char max_AMPDU_len;
 	unsigned char min_MPDU_spacing;

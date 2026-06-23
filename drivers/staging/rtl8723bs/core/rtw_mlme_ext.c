@@ -12,10 +12,10 @@
 #include <linux/unaligned.h>
 
 static struct mlme_handler mlme_sta_tbl[] = {
-	{WIFI_ASSOCREQ,		"OnAssocReq",	&OnAssocReq},
-	{WIFI_ASSOCRSP,		"OnAssocRsp",	&OnAssocRsp},
-	{WIFI_REASSOCREQ,	"OnReAssocReq",	&OnAssocReq},
-	{WIFI_REASSOCRSP,	"OnReAssocRsp",	&OnAssocRsp},
+	{WIFI_ASSOCREQ,		"on_assoc_req",	&on_assoc_req},
+	{WIFI_ASSOCRSP,		"on_assoc_rsp",	&on_assoc_rsp},
+	{WIFI_REASSOCREQ,	"OnReAssocReq",	&on_assoc_req},
+	{WIFI_REASSOCRSP,	"OnReAssocRsp",	&on_assoc_rsp},
 	{WIFI_PROBEREQ,		"OnProbeReq",	&OnProbeReq},
 	{WIFI_PROBERSP,		"OnProbeRsp",		&OnProbeRsp},
 
@@ -908,7 +908,7 @@ authclnt_fail:
 	return _FAIL;
 }
 
-unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
+unsigned int on_assoc_req(struct adapter *padapter, union recv_frame *precv_frame)
 {
 	u16 capab_info;
 	struct rtw_ieee802_11_elems elems;
@@ -974,7 +974,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 	if (rtw_ieee802_11_parse_elems(pos, left, &elems, 1) == PARSE_FAILED ||
 	    !elems.ssid) {
 		status = WLAN_STATUS_CHALLENGE_FAIL;
-		goto OnAssocReqFail;
+		goto on_assoc_req_fail;
 	}
 
 	/*  now we should check all the fields... */
@@ -985,7 +985,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 	if (!p || ie_len == 0) {
 		/*  broadcast ssid, however it is not allowed in assocreq */
 		status = WLAN_STATUS_CHALLENGE_FAIL;
-		goto OnAssocReqFail;
+		goto on_assoc_req_fail;
 	} else {
 		/*  check if ssid match */
 		if (memcmp(p+2, cur->ssid.ssid, cur->ssid.ssid_length))
@@ -996,7 +996,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 	}
 
 	if (status != WLAN_STATUS_SUCCESS)
-		goto OnAssocReqFail;
+		goto on_assoc_req_fail;
 
 	/*  check if the supported rate is ok */
 	p = rtw_get_ie(pframe + WLAN_HDR_A3_LEN + ie_offset, WLAN_EID_SUPP_RATES, &ie_len, pkt_len - WLAN_HDR_A3_LEN - ie_offset);
@@ -1006,7 +1006,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 		/* support_rate_num = AP_BSSRATE_LEN; */
 
 		status = WLAN_STATUS_CHALLENGE_FAIL;
-		goto OnAssocReqFail;
+		goto on_assoc_req_fail;
 	} else {
 		if (ie_len > sizeof(supportRate))
 			ie_len = sizeof(supportRate);
@@ -1091,7 +1091,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 	}
 
 	if (status != WLAN_STATUS_SUCCESS)
-		goto OnAssocReqFail;
+		goto on_assoc_req_fail;
 
 	pstat->flags &= ~(WLAN_STA_WPS | WLAN_STA_MAYBE_WPS);
 	if (!wpa_ie) {
@@ -1112,7 +1112,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 				if (!selected_registrar) {
 					status = WLAN_STATUS_AP_UNABLE_TO_HANDLE_NEW_STA;
 
-					goto OnAssocReqFail;
+					goto on_assoc_req_fail;
 				}
 			}
 		}
@@ -1123,7 +1123,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 		if (psecuritypriv->wpa_psk == 0) {
 			status = WLAN_STATUS_INVALID_IE;
 
-			goto OnAssocReqFail;
+			goto on_assoc_req_fail;
 		}
 
 		if (elems.wps_ie) {
@@ -1210,14 +1210,14 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 
 	if (!pmlmepriv->htpriv.ht_option && (pstat->flags&WLAN_STA_HT)) {
 		status = WLAN_STATUS_CHALLENGE_FAIL;
-		goto OnAssocReqFail;
+		goto on_assoc_req_fail;
 	}
 
 	if ((pstat->flags & WLAN_STA_HT) &&
 		    ((pstat->wpa2_pairwise_cipher&WPA_CIPHER_TKIP) ||
 		      (pstat->wpa_pairwise_cipher&WPA_CIPHER_TKIP))) {
 		/* status = WLAN_STATUS_CIPHER_SUITE_REJECTED; */
-		/* goto OnAssocReqFail; */
+		/* goto on_assoc_req_fail; */
 	}
 	pstat->flags |= WLAN_STA_NONERP;
 	for (i = 0; i < pstat->bssratelen; i++) {
@@ -1250,7 +1250,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 
 			status = WLAN_STATUS_AP_UNABLE_TO_HANDLE_NEW_STA;
 
-			goto OnAssocReqFail;
+			goto on_assoc_req_fail;
 
 		} else {
 			pstapriv->sta_aid[pstat->aid - 1] = pstat;
@@ -1308,7 +1308,7 @@ asoc_class2_error:
 
 	return _FAIL;
 
-OnAssocReqFail:
+on_assoc_req_fail:
 
 	pstat->aid = 0;
 	if (frame_type == WIFI_ASSOCREQ)
@@ -1319,7 +1319,7 @@ OnAssocReqFail:
 	return _FAIL;
 }
 
-unsigned int OnAssocRsp(struct adapter *padapter, union recv_frame *precv_frame)
+unsigned int on_assoc_rsp(struct adapter *padapter, union recv_frame *precv_frame)
 {
 	uint i;
 	int res;
@@ -4672,10 +4672,10 @@ void mlmeext_joinbss_event_callback(struct adapter *padapter, int join_res)
 	update_capinfo(padapter, pmlmeinfo->capability);
 
 	/* WMM, Update EDCA param */
-	WMMOnAssocRsp(padapter);
+	WMM_on_assoc_rsp(padapter);
 
 	/* HT */
-	HTOnAssocRsp(padapter);
+	HT_on_assoc_rsp(padapter);
 
 	/* Set cur_channel&cur_bwmode&cur_ch_offset */
 	set_channel_bwmode(padapter, pmlmeext->cur_channel, pmlmeext->cur_ch_offset, pmlmeext->cur_bwmode);

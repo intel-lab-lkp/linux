@@ -1496,7 +1496,7 @@ void rtw_cpwm_event_callback(struct adapter *padapter, u8 *pbuf)
 
 void rtw_wmm_event_callback(struct adapter *padapter, u8 *pbuf)
 {
-	WMMOnAssocRsp(padapter);
+	WMM_on_assoc_rsp(padapter);
 }
 
 /*
