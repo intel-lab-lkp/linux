@@ -1086,6 +1086,118 @@ static int __init init_pci_ext_cap_pwr_perm(struct perm_bits *perm)
 	return 0;
 }
 
+/* Permissions for TPH extended capability */
+static int __init init_pci_ext_cap_tph_perm(struct perm_bits *perm)
+{
+	int i;
+
+	if (alloc_perm_bits(perm, pci_ext_cap_length[PCI_EXT_CAP_ID_TPH]))
+		return -ENOMEM;
+
+	p_setd(perm, 0, ALL_VIRT, NO_WRITE);
+	p_setd(perm, PCI_TPH_CAP, ALL_VIRT, NO_WRITE);
+
+	p_setd(perm, PCI_TPH_CTRL, ALL_VIRT, ALL_WRITE);
+
+	/* Per PCI specification: There is an upper limit of 64 entries
+	 * when the ST table is located in the TPH Requester Extended
+	 * Capability structure.
+	 * And the pci_ext_cap_length[PCI_EXT_CAP_ID_TPH] is 0xFF, so the
+	 * following operation is fine.
+	 */
+	for (i = 0; i < 64; i++)
+		p_setw(perm, PCI_TPH_BASE_SIZEOF + i * sizeof(u16),
+		       (u16)ALL_VIRT, (u16)ALL_WRITE);
+
+	return 0;
+}
+
+static void vfio_tph_mask_ext_tph_bit(struct vfio_pci_core_device *vdev,
+				      int pos)
+{
+	__le32 *vptr = (__le32 *)&vdev->vconfig[pos + PCI_TPH_CAP];
+	struct pci_dev *pdev = vdev->pdev;
+	u32 val;
+
+	if (!pcie_tph_supported(pdev, true)) {
+		val = le32_to_cpu(*vptr);
+		val &= ~PCI_TPH_CAP_EXT_TPH;
+		*vptr = cpu_to_le32(val);
+	}
+}
+
+static int vfio_find_cap_start(struct vfio_pci_core_device *vdev, int pos);
+static int vfio_tph_config_write(struct vfio_pci_core_device *vdev, int pos,
+				 int count, struct perm_bits *perm,
+				 int offset, __le32 val)
+{
+	int req_en_byte = PCI_TPH_CTRL + 1;
+	struct pci_dev *pdev = vdev->pdev;
+	__le32 org_val = 0;
+	bool extended;
+	u8 mode, req;
+	int i, ret;
+	u16 start;
+	u32 data;
+
+	if (!vdev->tph_permit)
+		return count;
+
+	down_write(&vdev->memory_lock);
+
+	/* Back up the original values in order rollback when fail */
+	if (offset <= req_en_byte && offset + count > req_en_byte)
+		vfio_default_config_read(vdev, pos, count, perm, offset,
+					 &org_val);
+
+	ret = vfio_default_config_write(vdev, pos, count, perm, offset, val);
+	if (ret != count) {
+		up_write(&vdev->memory_lock);
+		return ret;
+	}
+
+	/* Skip if write range does not cover Requester Enable byte */
+	if (offset > req_en_byte || offset + count <= req_en_byte) {
+		up_write(&vdev->memory_lock);
+		return count;
+	}
+
+	ret = vfio_pci_set_power_state(vdev, PCI_D0);
+	if (ret) {
+		vfio_default_config_write(vdev, pos, count, perm, offset,
+					  org_val);
+		up_write(&vdev->memory_lock);
+		return count;
+	}
+
+	start = vfio_find_cap_start(vdev, pos);
+	data = le32_to_cpu(*(__le32 *)&vdev->vconfig[start + PCI_TPH_CTRL]);
+	mode = FIELD_GET(PCI_TPH_CTRL_MODE_SEL_MASK, data);
+	req = FIELD_GET(PCI_TPH_CTRL_REQ_EN_MASK, data);
+
+	if (req == PCI_TPH_REQ_TPH_ONLY || req == PCI_TPH_REQ_EXT_TPH) {
+		extended = !!(req == PCI_TPH_REQ_EXT_TPH);
+		ret = pcie_enable_tph_explicit(pdev, mode, extended);
+		if (!ret && vdev->tph_st_shadow) {
+			for (i = 0; i < vdev->tph_st_entries; i++)
+				pcie_tph_set_st_entry(pdev, i,
+						      vdev->tph_st_shadow[i]);
+		}
+		if (ret)
+			vfio_default_config_write(vdev, pos, count, perm,
+						  offset, org_val);
+	} else if (req == PCI_TPH_REQ_DISABLE) {
+		pcie_disable_tph(vdev->pdev);
+	} else {
+		vfio_default_config_write(vdev, pos, count, perm, offset,
+					  org_val);
+	}
+
+	up_write(&vdev->memory_lock);
+
+	return count;
+}
+
 /*
  * Initialize the shared permission tables
  */
@@ -1101,6 +1213,7 @@ void vfio_pci_uninit_perm_bits(void)
 
 	free_perm_bits(&ecap_perms[PCI_EXT_CAP_ID_ERR]);
 	free_perm_bits(&ecap_perms[PCI_EXT_CAP_ID_PWR]);
+	free_perm_bits(&ecap_perms[PCI_EXT_CAP_ID_TPH]);
 }
 
 int __init vfio_pci_init_perm_bits(void)
@@ -1121,6 +1234,8 @@ int __init vfio_pci_init_perm_bits(void)
 	/* Extended capabilities */
 	ret |= init_pci_ext_cap_err_perm(&ecap_perms[PCI_EXT_CAP_ID_ERR]);
 	ret |= init_pci_ext_cap_pwr_perm(&ecap_perms[PCI_EXT_CAP_ID_PWR]);
+	ret |= init_pci_ext_cap_tph_perm(&ecap_perms[PCI_EXT_CAP_ID_TPH]);
+	ecap_perms[PCI_EXT_CAP_ID_TPH].writefn = vfio_tph_config_write;
 	ecap_perms[PCI_EXT_CAP_ID_VNDR].writefn = vfio_raw_config_write;
 	ecap_perms[PCI_EXT_CAP_ID_DVSEC].writefn = vfio_raw_config_write;
 
@@ -1704,6 +1819,8 @@ static int vfio_ecap_init(struct vfio_pci_core_device *vdev)
 		ret = vfio_fill_vconfig_bytes(vdev, epos, len);
 		if (ret)
 			return ret;
+		if (ecap == PCI_EXT_CAP_ID_TPH && !hidden)
+			vfio_tph_mask_ext_tph_bit(vdev, epos);
 
 		/*
 		 * If we're just using this capability to anchor the list,
