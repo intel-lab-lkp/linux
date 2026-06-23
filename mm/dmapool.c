@@ -35,10 +35,23 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/wait.h>
+#include <linux/static_key.h>
+#include <linux/init.h>
 
-#ifdef CONFIG_SLUB_DEBUG_ON
-#define DMAPOOL_DEBUG 1
-#endif
+/*
+ * Debugging support for dmapool using static key.
+ *
+ * This allows enabling dmapool debug at boot time via:
+ *   dmapool_debug
+ */
+static DEFINE_STATIC_KEY_FALSE(dmapool_debug_enabled);
+
+static int __init dmapool_debug_setup(char *str)
+{
+	static_branch_enable(&dmapool_debug_enabled);
+	return 1;
+}
+__setup("dmapool_debug", dmapool_debug_setup);
 
 struct dma_block {
 	struct dma_block *next_block;
@@ -92,7 +105,6 @@ static ssize_t pools_show(struct device *dev, struct device_attribute *attr, cha
 
 static DEVICE_ATTR_RO(pools);
 
-#ifdef DMAPOOL_DEBUG
 static void pool_check_block(struct dma_pool *pool, struct dma_block *block,
 			     gfp_t mem_flags)
 {
@@ -161,23 +173,6 @@ static void pool_init_page(struct dma_pool *pool, struct dma_page *page)
 {
 	memset(page->vaddr, POOL_POISON_FREED, pool->allocation);
 }
-#else
-static void pool_check_block(struct dma_pool *pool, struct dma_block *block,
-			     gfp_t mem_flags)
-{
-}
-
-static bool pool_block_err(struct dma_pool *pool, void *vaddr, dma_addr_t dma)
-{
-	if (want_init_on_free())
-		memset(vaddr, 0, pool->size);
-	return false;
-}
-
-static void pool_init_page(struct dma_pool *pool, struct dma_page *page)
-{
-}
-#endif
 
 static struct dma_block *pool_block_pop(struct dma_pool *pool)
 {
@@ -305,7 +300,9 @@ static void pool_initialise_page(struct dma_pool *pool, struct dma_page *page)
 	unsigned int next_boundary = pool->boundary, offset = 0;
 	struct dma_block *block, *first = NULL, *last = NULL;
 
-	pool_init_page(pool, page);
+	if (static_branch_unlikely(&dmapool_debug_enabled))
+		pool_init_page(pool, page);
+
 	while (offset + pool->size <= pool->allocation) {
 		if (offset + pool->size > next_boundary) {
 			offset = next_boundary;
@@ -433,7 +430,10 @@ void *dma_pool_alloc(struct dma_pool *pool, gfp_t mem_flags,
 	spin_unlock_irqrestore(&pool->lock, flags);
 
 	*handle = block->dma;
-	pool_check_block(pool, block, mem_flags);
+
+	if (static_branch_unlikely(&dmapool_debug_enabled))
+		pool_check_block(pool, block, mem_flags);
+
 	if (want_init_on_alloc(mem_flags))
 		memset(block, 0, pool->size);
 
@@ -454,9 +454,18 @@ void dma_pool_free(struct dma_pool *pool, void *vaddr, dma_addr_t dma)
 {
 	struct dma_block *block = vaddr;
 	unsigned long flags;
+	bool err = false;
 
 	spin_lock_irqsave(&pool->lock, flags);
-	if (!pool_block_err(pool, vaddr, dma)) {
+
+	if (static_branch_unlikely(&dmapool_debug_enabled))
+		err = pool_block_err(pool, vaddr, dma);
+	else {
+		if (want_init_on_free())
+			memset(vaddr, 0, pool->size);
+	}
+
+	if (!err) {
 		pool_block_push(pool, block, dma);
 		pool->nr_active--;
 	}
