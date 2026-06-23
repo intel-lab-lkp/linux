@@ -497,6 +497,10 @@ static int iptfs_skb_add_frags(struct sk_buff *skb,
 		walk->past += frag->len;	/* careful, use src bv_len */
 		walk->fragi++;
 	}
+
+	if (skb_shinfo(skb)->nr_frags)
+		skb_shinfo(skb)->flags |= SKBFL_SHARED_FRAG;
+
 	return len;
 }
 
