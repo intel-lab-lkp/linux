@@ -48,6 +48,7 @@ static int rmobile_pd_power_down(struct generic_pm_domain *genpd)
 	struct rmobile_pm_domain *rmobile_pd = to_rmobile_pd(genpd);
 	unsigned int mask = BIT(rmobile_pd->bit_shift);
 	u32 val;
+	int ret;
 
 	if (rmobile_pd->suspend) {
 		int ret = rmobile_pd->suspend();
@@ -59,8 +60,11 @@ static int rmobile_pd_power_down(struct generic_pm_domain *genpd)
 	if (readl(rmobile_pd->base + PSTR) & mask) {
 		writel(mask, rmobile_pd->base + SPDCR);
 
-		readl_poll_timeout_atomic(rmobile_pd->base + SPDCR, val,
-					  !(val & mask), 0, PSTR_RETRIES);
+		ret = readl_poll_timeout_atomic(rmobile_pd->base + SPDCR, val,
+						!(val & mask), 0,
+						PSTR_RETRIES);
+		if (ret)
+			return ret;
 	}
 
 	pr_debug("%s: Power off, 0x%08x -> PSTR = 0x%08x\n", genpd->name, mask,
