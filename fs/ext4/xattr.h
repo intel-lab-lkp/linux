@@ -190,6 +190,20 @@ extern int ext4_xattr_delete_inode(handle_t *handle, struct inode *inode,
 				   struct ext4_xattr_inode_array **array,
 				   int extra_credits);
 extern void ext4_xattr_inode_array_free(struct ext4_xattr_inode_array *array);
+extern void ext4_init_ea_inode_work(struct ext4_sb_info *sbi);
+extern void ext4_put_ea_inode(struct super_block *sb, struct inode *inode);
+
+/*
+ * Drain all pending deferred EA inode iputs.  Must be called before
+ * freeing resources that eviction depends on (quota, block allocator).
+ * Loops because worker iput may trigger eviction that re-queues.
+ */
+static inline void ext4_drain_ea_inode_work(struct ext4_sb_info *sbi)
+{
+	while (flush_delayed_work(&sbi->s_ea_inode_work) ||
+	       !llist_empty(&sbi->s_ea_inode_to_free))
+		;
+}
 
 extern int ext4_expand_extra_isize_ea(struct inode *inode, int new_extra_isize,
 			    struct ext4_inode *raw_inode, handle_t *handle);
