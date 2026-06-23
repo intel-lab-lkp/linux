@@ -157,6 +157,9 @@ static int configfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_root = root;
 	set_default_d_op(sb, &configfs_dentry_ops); /* the rest get that */
 	sb->s_d_flags |= DCACHE_DONTCACHE;
+
+	configfs_link_subsystems(sb, info);
+
 	return 0;
 }
 
@@ -179,6 +182,7 @@ static void configfs_kill_sb(struct super_block *sb)
 {
 	struct configfs_super_info *info = sb->s_fs_info;
 
+	configfs_unlink_subsystems(sb, info);
 	kill_anon_super(sb);
 	configfs_put_super_info(info);
 	sb->s_fs_info = NULL;
