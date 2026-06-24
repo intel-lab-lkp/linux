@@ -665,6 +665,15 @@ static void fastrpc_get_buff_overlaps(struct fastrpc_invoke_ctx *ctx)
 	sort(ctx->olaps, ctx->nbufs, sizeof(*ctx->olaps), olaps_cmp, NULL);
 
 	for (i = 0; i < ctx->nbufs; ++i) {
+		int raix = ctx->olaps[i].raix;
+
+		if (ctx->args[raix].fd != 0 && ctx->args[raix].fd != -1) {
+			ctx->olaps[i].mstart = 0;
+			ctx->olaps[i].mend = 0;
+			ctx->olaps[i].offset = 0;
+			continue;
+		}
+
 		/* Falling inside previous range */
 		if (ctx->olaps[i].start < max_end) {
 			ctx->olaps[i].mstart = max_end;
