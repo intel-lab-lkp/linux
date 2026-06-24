@@ -171,7 +171,7 @@ static inline void raid1_prepare_flush_writes(struct mddev *mddev)
  * We halve the read error count for every hour that has elapsed
  * since the last recorded read error.
  */
-static inline void check_decay_read_errors(struct mddev *mddev, struct md_rdev *rdev)
+static inline void check_decay_read_errors(struct md_rdev *rdev)
 {
 	long cur_time_mon;
 	unsigned long hours_since_last;
@@ -206,7 +206,7 @@ static inline bool exceed_read_errors(struct mddev *mddev, struct md_rdev *rdev)
 	int max_read_errors = atomic_read(&mddev->max_corr_read_errors);
 	int read_errors;
 
-	check_decay_read_errors(mddev, rdev);
+	check_decay_read_errors(rdev);
 	read_errors =  atomic_inc_return(&rdev->read_errors);
 	if (read_errors > max_read_errors) {
 		pr_notice("md/"RAID_1_10_NAME":%s: %pg: Raid device exceeded read_error threshold [cur %d:max %d]\n",
