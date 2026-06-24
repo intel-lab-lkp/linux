@@ -280,6 +280,8 @@ static int imx_mu_generic_tx(struct imx_mu_priv *priv,
 						     cp->type, ++count);
 			}
 		}
+		if (ret)
+			return ret;
 		break;
 	default:
 		dev_warn_ratelimited(priv->dev, "Send data on wrong channel type: %d\n", cp->type);
