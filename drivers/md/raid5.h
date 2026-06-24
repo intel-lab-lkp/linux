@@ -498,12 +498,14 @@ struct disk_info {
 #define HASH_MASK		(NR_HASH - 1)
 #define MAX_STRIPE_BATCH	8
 
-/* NOTE NR_STRIPE_HASH_LOCKS must remain below 64.
- * This is because we sometimes take all the spinlocks
- * and creating that much locking depth can cause
- * problems.
+/* NR_STRIPE_HASH_LOCKS must be a power of two, since
+ * STRIPE_HASH_LOCKS_MASK masks with (NR_STRIPE_HASH_LOCKS - 1).
+ * It must also be small enough that taking all of them at once in
+ * lock_all_device_hash_locks_irq(), plus device_lock, keeps the held
+ * lock count below MAX_LOCK_DEPTH (48) with lockdep enabled.  32 is the
+ * largest power of two that satisfies both constraints.
  */
-#define NR_STRIPE_HASH_LOCKS 8
+#define NR_STRIPE_HASH_LOCKS 32
 #define STRIPE_HASH_LOCKS_MASK (NR_STRIPE_HASH_LOCKS - 1)
 
 struct r5worker {
