@@ -188,6 +188,7 @@ EXPORT_SYMBOL_GPL(wm8350_reg_unlock);
 int wm8350_read_auxadc(struct wm8350 *wm8350, int channel, int scale, int vref)
 {
 	u16 reg, result = 0;
+	int ret = 0;
 
 	if (channel < WM8350_AUXADC_AUX1 || channel > WM8350_AUXADC_TEMP)
 		return -EINVAL;
@@ -221,11 +222,13 @@ int wm8350_read_auxadc(struct wm8350 *wm8350, int channel, int scale, int vref)
 	wait_for_completion_timeout(&wm8350->auxadc_done, msecs_to_jiffies(5));
 
 	reg = wm8350_reg_read(wm8350, WM8350_DIGITISER_CONTROL_1);
-	if (reg & WM8350_AUXADC_POLL)
+	if (reg & WM8350_AUXADC_POLL) {
 		dev_err(wm8350->dev, "adc chn %d read timeout\n", channel);
-	else
+		ret = -ETIMEDOUT;
+	} else {
 		result = wm8350_reg_read(wm8350,
 					 WM8350_AUX1_READBACK + channel);
+	}
 
 	/* Turn off the ADC */
 	reg = wm8350_reg_read(wm8350, WM8350_POWER_MGMT_5);
@@ -233,6 +236,9 @@ int wm8350_read_auxadc(struct wm8350 *wm8350, int channel, int scale, int vref)
 			 reg & ~WM8350_AUXADC_ENA);
 
 	mutex_unlock(&wm8350->auxadc_mutex);
+
+	if (ret)
+		return ret;
 
 	return result & WM8350_AUXADC_DATA1_MASK;
 }
