@@ -154,8 +154,13 @@ static int nxp_nci_fw_send(struct nxp_nci_info *info)
 		if (fw_info->fw)
 			schedule_work(&fw_info->work);
 	} else {
+		mutex_unlock(&info->info_lock);
+
 		completion_rc = wait_for_completion_interruptible_timeout(
 			&fw_info->cmd_completion, NXP_NCI_FW_ANSWER_TIMEOUT);
+
+		mutex_lock(&info->info_lock);
+
 		if (completion_rc == 0)
 			return -ETIMEDOUT;
 	}
