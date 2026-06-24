@@ -249,6 +249,14 @@ struct drm_file {
 	bool supports_virtualized_cursor_plane;
 
 	/**
+	 * @supports_luminance_control:
+	 *
+	 * This client is capable of setting the luminance for connectors.
+	 *
+	 */
+	bool supports_luminance_control;
+
+	/**
 	 * @master:
 	 *
 	 * Master this node is currently associated with. Protected by struct

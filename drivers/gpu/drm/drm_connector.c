@@ -1512,6 +1512,57 @@ EXPORT_SYMBOL(drm_hdmi_connector_get_output_format_name);
  * 	Summarizing: Only set "DPMS" when the connector is known to be enabled,
  * 	assume that a successful SETCONFIG call also sets "DPMS" to on, and
  * 	never read back the value of "DPMS" because it can be incorrect.
+ * LUMINANCE:
+ * 	Atomic property for controlling the backlight brightness level of the
+ * 	connector's display. This property provides unified access to the display
+ * 	backlight, replacing the legacy sysfs interface for brightness control.
+ *
+ * 	The property value is an unsigned integer representing the brightness level.
+ * 	The valid range is dynamically determined by the capabilities of the
+ * 	connected backlight hardware and is exposed through the property's minimum
+ * 	and maximum values:
+ *
+ * 	- Range 0-0: No backlight device is available for this connector.
+ * 	- Range 1-N: Normal operation. Values from 1 to N (max_brightness) are
+ * 	  valid brightness levels, where 1 is the minimum visible brightness and
+ * 	  N is the maximum brightness the hardware supports.
+ * 	- Value 0: Special value to turn off the display backlight completely.
+ * 	  This value is accepted even when the normal range starts at 1.
+ *
+ * 	The range may change during runtime if a new backlight device is linked
+ * 	or unlinked. The kernel will send a change uevent when this occurs.
+ *
+ * 	Setting LUMINANCE to 0 turns off the backlight, which may turn off the
+ * 	display completely depending on the hardware. Setting it to any value
+ * 	from 1 to N adjusts the brightness accordingly. Reading this property
+ * 	returns the current brightness level that was last set (or the hardware's
+ * 	current state for drivers that support reading actual brightness).
+ *
+ * 	For atomic drivers, the luminance value is stored in
+ * 	&drm_connector_state.luminance. The actual hardware update only occurs
+ * 	when the connector is active (DPMS is ON). When DPMS transitions to OFF,
+ * 	the kernel automatically sets luminance to 0 to turn off the backlight.
+ * 	When DPMS transitions back to ON, the kernel restores the previously
+ * 	set luminance value.
+ *
+ * 	This property is only available on connectors that have an associated
+ * 	backlight device.  The property is created by calling drm_backlight_alloc()
+ * 	during connector initialization.
+ *
+ * 	Client Capability:
+ * 		User-space must set the DRM_CLIENT_CAP_LUMINANCE client capability
+ * 		to 1 before using this property. When this capability is enabled,
+ * 		the legacy sysfs backlight interface is inhibited to prevent
+ * 		conflicts between multiple clients trying to control the same
+ * 		backlight. This ensures that only luminance-aware clients control
+ * 		the backlight through the DRM atomic interface.
+ *
+ * 		Legacy clients that do not set this capability will not see the
+ * 		LUMINANCE property and should continue using the sysfs interface
+ * 		(if available).
+ *
+ * 	Note: This property can be set through MODE_ATOMIC ioctl as part of the
+ * 	atomic state.
  * panel_type:
  * 	Immutable enum property to indicate the type of connected panel.
  * 	Possible values are "unknown" (default) and "OLED".

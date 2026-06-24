@@ -952,6 +952,12 @@ bool drm_property_change_valid_get(struct drm_property *property,
 	*ref = NULL;
 
 	if (drm_property_type_is(property, DRM_MODE_PROP_RANGE)) {
+		/* Special case for luminance property: allow 0 to turn off display
+		 * even when the normal range starts at 1.
+		 */
+		if (property == property->dev->mode_config.luminance_property &&
+		    value == 0 && property->values[1] > 0)
+			return true;
 		if (value < property->values[0] || value > property->values[1])
 			return false;
 		return true;

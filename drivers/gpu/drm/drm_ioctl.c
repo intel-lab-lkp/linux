@@ -28,12 +28,14 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include "drm/drm.h"
 #include <linux/export.h>
 #include <linux/nospec.h>
 #include <linux/pci.h>
 #include <linux/uaccess.h>
 
 #include <drm/drm_auth.h>
+#include <drm/drm_backlight.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_file.h>
@@ -379,6 +381,19 @@ drm_setclientcap(struct drm_device *dev, void *data, struct drm_file *file_priv)
 		if (req->value > 1)
 			return -EINVAL;
 		file_priv->plane_color_pipeline = req->value;
+		break;
+	case DRM_CLIENT_CAP_LUMINANCE:
+		if (!file_priv->atomic)
+			return -EINVAL;
+		if (req->value > 1)
+			return -EINVAL;
+		if (req->value == file_priv->supports_luminance_control)
+			break;
+		if (req->value)
+			drm_backlight_inhibit_legacy_all(dev);
+		else
+			drm_backlight_uninhibit_legacy_all(dev);
+		file_priv->supports_luminance_control = req->value;
 		break;
 	default:
 		return -EINVAL;

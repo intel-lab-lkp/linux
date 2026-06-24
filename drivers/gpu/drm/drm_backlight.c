@@ -71,6 +71,7 @@ static bool __drm_backlight_is_registered(struct drm_backlight *b)
 /* caller must hold @drm_backlight_lock */
 static void __drm_backlight_real_changed(struct drm_backlight *b, uint64_t v)
 {
+	struct drm_connector *connector = b->connector;
 	unsigned int max, set;
 
 	lockdep_assert_held(&drm_backlight_lock);
@@ -85,6 +86,15 @@ static void __drm_backlight_real_changed(struct drm_backlight *b, uint64_t v)
 	set = v;
 	if (set >= max)
 		set = max;
+
+	/* Update the atomic state directly.
+	 * For atomic drivers, the luminance value is stored in
+	 * connector->state->luminance, not in the legacy property array.
+	 * We update it unconditionally to reflect the hardware state,
+	 * regardless of DPMS.
+	 */
+	if (connector->state)
+		connector->state->luminance = set;
 }
 
 /**
@@ -100,18 +110,22 @@ static void __drm_backlight_update_prop_range(struct drm_backlight *b)
 	struct drm_device *dev = b->connector->dev;
 	struct drm_property *prop = dev->mode_config.luminance_property;
 	unsigned int max = 0;
+	bool can_disable = false;
 
 	lockdep_assert_held(&drm_backlight_lock);
 
-	if (b->link && b->link->props.max_brightness > 0)
+	if (b->link && b->link->props.max_brightness > 0) {
 		max = b->link->props.max_brightness;
+		can_disable = b->link->props.can_disable;
+	}
 
 	/* Update property range to match hardware capabilities.
 	 * Range of 0-0 indicates no backing device.
-	 * Range of 1-max for normal operation (0 reserved for display off).
+	 * Range of 1-max for normal operation.
+	 * Range of 0-max means that the display would turn off at 0
 	 */
 	if (prop->values[1] != max) {
-		prop->values[0] = max ? 1 : 0;
+		prop->values[0] = max ? (can_disable ? 0 : 1) : 0;
 		prop->values[1] = max;
 	}
 }
@@ -122,6 +136,16 @@ static bool __drm_backlight_link(struct drm_backlight *b,
 {
 	if (bd == b->link)
 		return false;
+
+	/* Transfer any DRM legacy-sysfs takeover from the old link to the
+	 * new one so the inhibit follows the active backlight_device.
+	 */
+	if (b->luminance_clients) {
+		if (b->link)
+			atomic_sub(b->luminance_clients, &b->link->drm_takeover);
+		if (bd)
+			atomic_add(b->luminance_clients, &bd->drm_takeover);
+	}
 
 	backlight_device_unref(b->link);
 	b->link = bd;
@@ -177,6 +201,7 @@ void drm_backlight_free(struct drm_connector *connector)
 
 	WARN_ON(__drm_backlight_is_registered(b));
 	WARN_ON(b->link);
+	WARN_ON(b->luminance_clients);
 
 	kfree(b);
 	connector->backlight = NULL;
@@ -228,11 +253,18 @@ EXPORT_SYMBOL(drm_backlight_unregister);
  */
 void drm_backlight_link(struct drm_backlight *b, struct backlight_device *bd)
 {
+	static const char * const ep[] = { "BACKLIGHT=1", NULL };
+	bool send_uevent = false;
+
 	if (!b)
 		return;
 
 	guard(spinlock)(&drm_backlight_lock);
-	__drm_backlight_link(b, bd);
+	send_uevent = __drm_backlight_link(b, bd);
+
+	if (send_uevent)
+		kobject_uevent_env(&b->connector->kdev->kobj, KOBJ_CHANGE,
+				   (char **)ep);
 }
 EXPORT_SYMBOL(drm_backlight_link);
 
@@ -269,6 +301,11 @@ void drm_backlight_inhibit_legacy(struct drm_backlight *b)
 {
 	if (!b)
 		return;
+
+	guard(spinlock)(&drm_backlight_lock);
+	b->luminance_clients++;
+	if (b->link)
+		atomic_inc(&b->link->drm_takeover);
 }
 EXPORT_SYMBOL(drm_backlight_inhibit_legacy);
 
@@ -283,6 +320,13 @@ void drm_backlight_uninhibit_legacy(struct drm_backlight *b)
 {
 	if (!b)
 		return;
+
+	guard(spinlock)(&drm_backlight_lock);
+	if (WARN_ON(b->luminance_clients == 0))
+		return;
+	b->luminance_clients--;
+	if (b->link)
+		atomic_dec(&b->link->drm_takeover);
 }
 EXPORT_SYMBOL(drm_backlight_uninhibit_legacy);
 
@@ -324,8 +368,38 @@ EXPORT_SYMBOL(drm_backlight_uninhibit_legacy_all);
 
 void drm_backlight_set_luminance(struct drm_backlight *b, unsigned int value)
 {
-	guard(spinlock)(&drm_backlight_lock);
-	__drm_backlight_real_changed(b, value);
+	struct backlight_device *bd = NULL;
+	unsigned int set = 0;
+	unsigned long flags;
+	unsigned int max = 0;
+
+	spin_lock_irqsave(&drm_backlight_lock, flags);
+	if (b && b->link) {
+		struct backlight_device *link = b->link;
+
+		max = b->link->props.max_brightness;
+
+		if (max == 0)
+			goto out;
+
+		set = min(value, max);
+		if (set == link->props.brightness)
+			goto out;
+
+		bd = link;
+		backlight_device_ref(bd);
+	}
+out:
+	spin_unlock_irqrestore(&drm_backlight_lock, flags);
+
+	if (bd) {
+		int rc = backlight_set_brightness(bd, set, BACKLIGHT_UPDATE_DRM);
+
+		WARN_ON(rc);
+		if (rc)
+			backlight_set_brightness(bd, max, BACKLIGHT_UPDATE_DRM);
+		backlight_device_unref(bd);
+	}
 }
 EXPORT_SYMBOL(drm_backlight_set_luminance);
 

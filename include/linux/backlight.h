@@ -198,6 +198,13 @@ struct backlight_properties {
 	int brightness;
 
 	/**
+	 * @can_disable: Minimum brightness would turn off the panel.
+	 *
+	 * Setting minimum brightness turns off the panel.
+	 */
+	bool can_disable;
+
+	/**
 	 * @max_brightness: The maximum brightness value.
 	 *
 	 * This value must be set in the backlight_properties passed to
@@ -314,6 +321,14 @@ struct backlight_device {
 	 * @use_count: The number of unblanked displays.
 	 */
 	int use_count;
+
+	/**
+	 * @drm_takeover: Number of luminance-aware DRM clients that have
+	 * taken over brightness control of this device. When non-zero,
+	 * writes to the legacy sysfs ``brightness`` attribute return
+	 * ``-EBUSY``. Managed by the DRM backlight helpers.
+	 */
+	atomic_t drm_takeover;
 };
 
 /* Forward declaration for backlight_update_status */
