@@ -12,10 +12,6 @@ use kernel::{
         Device, //
     },
     dma::Coherent,
-    io::{
-        register::WithBase, //
-        Io,
-    },
     prelude::*,
     ptr::{
         Alignable,
@@ -29,15 +25,12 @@ use kernel::{
 };
 
 use crate::{
-    driver::Bar0,
     falcon::{
         self,
         gsp::Gsp,
         Falcon,
         FalconBromParams,
         FalconDmaLoadable,
-        FalconFbifMemType,
-        FalconFbifTarget,
         FalconFirmware,
         FalconPioDmemLoadTarget,
         FalconPioImemLoadTarget,
@@ -50,8 +43,7 @@ use crate::{
         FIRMWARE_VERSION, //
     },
     gpu::Chipset,
-    num::FromSafeCast,
-    regs,
+    num::FromSafeCast, //
 };
 
 /// Descriptor used by RM to figure out the requirements of the boot loader.
@@ -275,33 +267,20 @@ impl FwsecFirmwareWithBl {
     ///
     /// The bootloader will load the FWSEC firmware and then execute it. This function returns
     /// after FWSEC has reached completion.
-    pub(crate) fn run(
-        &self,
-        dev: &Device<device::Bound>,
-        falcon: &Falcon<Gsp>,
-        bar: Bar0<'_>,
-    ) -> Result<()> {
+    pub(crate) fn run(&self, dev: &Device<device::Bound>, falcon: &Falcon<'_, Gsp>) -> Result<()> {
         // Reset falcon, load the firmware, and run it.
         falcon
-            .reset(bar)
+            .reset()
             .inspect_err(|e| dev_err!(dev, "Failed to reset GSP falcon: {:?}\n", e))?;
         falcon
-            .pio_load(bar, self)
+            .pio_load(self)
             .inspect_err(|e| dev_err!(dev, "Failed to load FWSEC firmware: {:?}\n", e))?;
 
         // Configure DMA index for the bootloader to fetch the FWSEC firmware from system memory.
-        bar.update(
-            regs::NV_PFALCON_FBIF_TRANSCFG::of::<Gsp>()
-                .try_at(usize::from_safe_cast(self.dmem_desc.ctx_dma))
-                .ok_or(EINVAL)?,
-            |v| {
-                v.with_target(FalconFbifTarget::CoherentSysmem)
-                    .with_mem_type(FalconFbifMemType::Physical)
-            },
-        );
+        falcon.set_fbif_transcfg_phys_sysmem(self.dmem_desc.ctx_dma)?;
 
         let (mbox0, _) = falcon
-            .boot(bar, Some(0), None)
+            .boot(Some(0), None)
             .inspect_err(|e| dev_err!(dev, "Failed to boot FWSEC firmware: {:?}\n", e))?;
         if mbox0 != 0 {
             dev_err!(dev, "FWSEC firmware returned error {}\n", mbox0);

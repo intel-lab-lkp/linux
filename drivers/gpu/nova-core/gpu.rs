@@ -273,9 +273,9 @@ struct GspResources<'gpu> {
     /// MMIO mapping of PCI BAR 0.
     bar: Bar0<'gpu>,
     /// GSP falcon instance, used for GSP boot up and cleanup.
-    gsp_falcon: Falcon<GspFalcon>,
+    gsp_falcon: Falcon<'gpu, GspFalcon>,
     /// SEC2 falcon instance, used for GSP boot up and cleanup.
-    sec2_falcon: Falcon<Sec2Falcon>,
+    sec2_falcon: Falcon<'gpu, Sec2Falcon>,
     /// GSP runtime data.
     #[pin]
     gsp: Gsp,
@@ -351,10 +351,11 @@ impl<'gpu> Gpu<'gpu> {
                 gsp_falcon: Falcon::new(
                     pdev.as_ref(),
                     spec.chipset,
+                    bar
                 )
-                .inspect(|falcon| falcon.clear_swgen0_intr(bar))?,
+                .inspect(|falcon| falcon.clear_swgen0_intr())?,
 
-                sec2_falcon: Falcon::new(pdev.as_ref(), spec.chipset)?,
+                sec2_falcon: Falcon::new(pdev.as_ref(), spec.chipset, bar)?,
 
                 gsp <- Gsp::new(pdev),
 

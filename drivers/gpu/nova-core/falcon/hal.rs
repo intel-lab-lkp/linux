@@ -34,7 +34,7 @@ pub(crate) enum LoadMethod {
 /// registers.
 pub(crate) trait FalconHal<E: FalconEngine>: Send + Sync {
     /// Activates the Falcon core if the engine is a risvc/falcon dual engine.
-    fn select_core(&self, _falcon: &Falcon<E>, _bar: Bar0<'_>) -> Result {
+    fn select_core(&self, _falcon: &Falcon<'_, E>, _bar: Bar0<'_>) -> Result {
         Ok(())
     }
 
@@ -42,14 +42,14 @@ pub(crate) trait FalconHal<E: FalconEngine>: Send + Sync {
     /// falcon instance. `engine_id_mask` and `ucode_id` are obtained from the firmware header.
     fn signature_reg_fuse_version(
         &self,
-        falcon: &Falcon<E>,
+        falcon: &Falcon<'_, E>,
         bar: Bar0<'_>,
         engine_id_mask: u16,
         ucode_id: u8,
     ) -> Result<u32>;
 
     /// Program the boot ROM registers prior to starting a secure firmware.
-    fn program_brom(&self, falcon: &Falcon<E>, bar: Bar0<'_>, params: &FalconBromParams);
+    fn program_brom(&self, falcon: &Falcon<'_, E>, bar: Bar0<'_>, params: &FalconBromParams);
 
     /// Check if the RISC-V core is active.
     /// Returns `true` if the RISC-V core is active, `false` otherwise.
