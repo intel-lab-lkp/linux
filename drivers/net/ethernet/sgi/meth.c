@@ -228,6 +228,9 @@ static int meth_init_rx_ring(struct meth_private *priv)
 
 	for (i = 0; i < RX_RING_ENTRIES; i++) {
 		priv->rx_skbs[i] = alloc_skb(METH_RX_BUFF_SIZE, 0);
+		if (!priv->rx_skbs[i])
+			goto err_free_skbs;
+
 		/* 8byte status vector + 3quad padding + 2byte padding,
 		 * to put data on 64bit aligned boundary */
 		skb_reserve(priv->rx_skbs[i],METH_RX_HEAD);
@@ -240,6 +243,17 @@ static int meth_init_rx_ring(struct meth_private *priv)
 	}
         priv->rx_write = 0;
 	return 0;
+
+err_free_skbs:
+	while (i--) {
+		dma_unmap_single(&priv->pdev->dev, priv->rx_ring_dmas[i],
+				 METH_RX_BUFF_SIZE, DMA_FROM_DEVICE);
+		priv->rx_ring[i] = 0;
+		priv->rx_ring_dmas[i] = 0;
+		kfree_skb(priv->rx_skbs[i]);
+		priv->rx_skbs[i] = NULL;
+	}
+	return -ENOMEM;
 }
 static void meth_free_tx_ring(struct meth_private *priv)
 {
