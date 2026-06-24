@@ -784,7 +784,6 @@
 			pinmux = <PINMUX_GPIO12__FUNC_SDA2>,
 				 <PINMUX_GPIO13__FUNC_SCL2>;
 			bias-pull-up = <1000>;
-			drive-strength = <6>;
 			drive-strength-microamp = <1000>;
 		};
 	};
