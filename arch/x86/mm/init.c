@@ -530,6 +530,8 @@ bool pfn_range_is_mapped(unsigned long start_pfn, unsigned long end_pfn)
  * Setup the direct mapping of the physical memory at PAGE_OFFSET.
  * This runs before bootmem is initialized and gets pages directly from
  * the physical memory. To access them they are temporarily mapped.
+ *
+ * Call this function at most once for any given range.
  */
 void __ref init_memory_mapping(unsigned long start,
 			       unsigned long end, pgprot_t prot)
@@ -545,10 +547,10 @@ void __ref init_memory_mapping(unsigned long start,
 	nr_range = split_mem_range(mr, 0, start, end);
 
 	for (i = 0; i < nr_range; i++)
-		paddr_last = kernel_physical_mapping_init(mr[i].start, mr[i].end,
-							  mr[i].page_size_mask,
-							  prot);
+		kernel_physical_mapping_init(mr[i].start, mr[i].end,
+					     mr[i].page_size_mask, prot);
 
+	paddr_last = mr[nr_range - 1].end;
 	add_pfn_range_mapped(start >> PAGE_SHIFT, paddr_last >> PAGE_SHIFT);
 }
 
