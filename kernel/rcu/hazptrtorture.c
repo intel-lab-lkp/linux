@@ -37,12 +37,10 @@ torture_param(int, irq_release, -1,
 	      "Release hazard pointers from irq handlers once per specified #, zero to disable");
 torture_param(int, kthread_do_pending_ms, -1,
 	      "Delay between cleanups for deferred hazard pointers (ms), zero to disable");
-// @@@ torture_param(int, leakpointer, 0, "Leak pointer dereferences from readers");
 torture_param(int, nreaders, -1, "Number of hazard-pointer reader threads");
 torture_param(int, nwriters, 1, "Number of hazard-pointer writer threads, 0 or 1");
 torture_param(int, onoff_holdoff, 0, "Time after boot before CPU hotplugs (s)");
 torture_param(int, onoff_interval, 0, "Time between CPU hotplugs (jiffies), 0=disable");
-// @@@ Move the rcu_torture_preempt() function and friends to kernel/torture.c.
 torture_param(int, preempt_duration, 0, "Preemption duration (ms), zero to disable");
 torture_param(int, preempt_interval, MSEC_PER_SEC, "Interval between preemptions (ms)");
 torture_param(int, reader_sleep_us, 0, "Reader sleep duration (us)");
@@ -73,7 +71,7 @@ struct hazptr_torture {
 };
 
 static LIST_HEAD(hazptr_torture_freelist);
-static struct hazptr_torture /* __hazptr @@@ */ *hazptr_torture_current;
+static struct hazptr_torture *hazptr_torture_current;
 static unsigned long hazptr_torture_current_version;
 static struct hazptr_torture hazptr_tortures[10 * HAZPTR_TORTURE_PIPE_LEN];
 static DEFINE_SPINLOCK(hazptr_torture_lock);
@@ -99,7 +97,7 @@ struct hazptr_pending {
 };
 static DEFINE_PER_CPU(struct llist_head, hazptr_pending);
 
-/* @@@ */ static int hazptr_torture_writer_state;
+static int hazptr_torture_writer_state;
 #define HTWS_FIXED_DELAY	0
 #define HTWS_DELAY		1
 #define HTWS_REPLACE		2
@@ -204,11 +202,7 @@ struct hazptr_torture_ops {
 	struct hazptr_torture *((*readlock)(struct hazptr_ctx *hcpp));
 	void (*read_delay)(struct torture_random_state *rrsp);
 	void (*readunlock)(struct hazptr_ctx *hcp, struct hazptr_torture *htp);
-	// @@@ int (*readlock_held)(void);   // lockdep.
-	// @@@ int (*readlock_nesting)(void); // actual nesting, if available, -1 if not.
-	// @@@ void (*deferred_free)(struct rcu_torture *p); @@@ call_hazptr()
 	void (*sync)(void *htp);
-	// @@@ void (*stats)(void); If statistics must be extracted from hazptr.c.
 	int irq_capable;
 	int onstack_ctx;
 	const char *name;
