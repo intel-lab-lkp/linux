@@ -890,6 +890,40 @@ void iova_cache_put(void)
 }
 EXPORT_SYMBOL_GPL(iova_cache_put);
 
+#if IS_ENABLED(CONFIG_IOMMU_IOVA_KUNIT_TEST)
+bool iova_domain_verify_invariants(struct iova_domain *iovad)
+{
+	struct iova *iova, *prev = NULL;
+	unsigned long flags;
+	bool ok = true;
+	MA_STATE(mas, &iovad->mtree, 0, 0);
+
+	spin_lock_irqsave(&iovad->iova_lock, flags);
+	mas_for_each(&mas, iova, ULONG_MAX) {
+		if (mas.index != iova->pfn_lo || mas.last != iova->pfn_hi) {
+			pr_err("iova_verify: maple index [%lu,%lu] != iova [%lu,%lu]\n",
+			       mas.index, mas.last, iova->pfn_lo, iova->pfn_hi);
+			ok = false;
+		}
+		if (iova->pfn_lo > iova->pfn_hi) {
+			pr_err("iova_verify: pfn_lo=%lu > pfn_hi=%lu\n",
+			       iova->pfn_lo, iova->pfn_hi);
+			ok = false;
+		}
+		if (prev && prev->pfn_hi >= iova->pfn_lo) {
+			pr_err("iova_verify: overlap prev=[%lu,%lu] curr=[%lu,%lu]\n",
+			       prev->pfn_lo, prev->pfn_hi,
+			       iova->pfn_lo, iova->pfn_hi);
+			ok = false;
+		}
+		prev = iova;
+	}
+	spin_unlock_irqrestore(&iovad->iova_lock, flags);
+	return ok;
+}
+EXPORT_SYMBOL_GPL(iova_domain_verify_invariants);
+#endif /* CONFIG_IOMMU_IOVA_KUNIT_TEST */
+
 MODULE_AUTHOR("Anil S Keshavamurthy <anil.s.keshavamurthy@intel.com>");
 MODULE_DESCRIPTION("IOMMU I/O Virtual Address management");
 MODULE_LICENSE("GPL");
