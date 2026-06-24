@@ -1602,7 +1602,7 @@ found:
 
 	((u32 *)buf)[0] = i; /* report an updated number of entries */
 	((u32 *)buf)[1] = info[1]; /* put back an mport ID */
-	if (copy_to_user(arg, buf, sizeof(u32) * (info[0] + 2)))
+	if (copy_to_user(arg, buf, sizeof(u32) * (i + 2)))
 		ret = -EFAULT;
 
 	kfree(buf);
@@ -1619,7 +1619,7 @@ static int cm_mport_get_list(void __user *arg)
 	void *buf;
 	struct cm_dev *cm;
 	u32 *entry_ptr;
-	int count = 0;
+	int copied = 0, count = 0;
 
 	if (copy_from_user(&entries, arg, sizeof(entries)))
 		return -EFAULT;
@@ -1637,12 +1637,13 @@ static int cm_mport_get_list(void __user *arg)
 			*entry_ptr = (cm->mport->id << 16) |
 				      cm->mport->host_deviceid;
 			entry_ptr++;
+			copied++;
 		}
 	}
 	up_read(&rdev_sem);
 
 	*((u32 *)buf) = count; /* report a real number of entries */
-	if (copy_to_user(arg, buf, sizeof(u32) * (count + 1)))
+	if (copy_to_user(arg, buf, sizeof(u32) * (copied + 1)))
 		ret = -EFAULT;
 
 	kfree(buf);
