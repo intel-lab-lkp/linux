@@ -503,11 +503,18 @@ static int loop_validate_file(struct file *file, struct block_device *bdev)
 
 static void loop_assign_backing_file(struct loop_device *lo, struct file *file)
 {
+	/*
+	 * Serialize the pointer update with sysfs backing_file show, which
+	 * formats the file path under lo_lock without taking a file reference.
+	 */
+	spin_lock_irq(&lo->lo_lock);
 	lo->lo_backing_file = file;
+	spin_unlock_irq(&lo->lo_lock);
+
 	lo->old_gfp_mask = mapping_gfp_mask(file->f_mapping);
 	mapping_set_gfp_mask(file->f_mapping,
 			lo->old_gfp_mask & ~(__GFP_IO | __GFP_FS));
-	if (lo->lo_backing_file->f_flags & O_DIRECT)
+	if (file->f_flags & O_DIRECT)
 		lo->lo_flags |= LO_FLAGS_DIRECT_IO;
 	lo->lo_min_dio_size = loop_query_min_dio_size(lo);
 }
