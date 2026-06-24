@@ -32,6 +32,9 @@ select:
   required:
     - compatible
 
+allOf:
+  - $ref: /schemas/arm/primecell.yaml#
+
 properties:
   $nodename:
     pattern: "^tn(@[0-9a-f]+)$"
@@ -78,7 +81,7 @@ required:
   - in-ports
   - out-ports
 
-additionalProperties: false
+additionalProperties: true
 
 examples:
   - |
