@@ -514,15 +514,15 @@ static int gfar_parse_group(struct device_node *np,
 	if (!grp->regs)
 		return -ENOMEM;
 
-	gfar_irq(grp, TX)->irq = irq_of_parse_and_map(np, 0);
+	gfar_irq(grp, TX)->irq = of_irq_get(np, 0);
 
 	/* If we aren't the FEC we have multiple interrupts */
 	if (model && strcasecmp(model, "FEC")) {
-		gfar_irq(grp, RX)->irq = irq_of_parse_and_map(np, 1);
-		gfar_irq(grp, ER)->irq = irq_of_parse_and_map(np, 2);
-		if (!gfar_irq(grp, TX)->irq ||
-		    !gfar_irq(grp, RX)->irq ||
-		    !gfar_irq(grp, ER)->irq)
+		gfar_irq(grp, RX)->irq = of_irq_get(np, 1);
+		gfar_irq(grp, ER)->irq = of_irq_get(np, 2);
+		if (gfar_irq(grp, TX)->irq < 0 ||
+		    gfar_irq(grp, RX)->irq < 0 ||
+		    gfar_irq(grp, ER)->irq < 0)
 			return -EINVAL;
 	}
 

@@ -1074,7 +1074,7 @@ enum gfar_irqinfo_id {
 };
 
 struct gfar_irqinfo {
-	unsigned int irq;
+	int irq;
 	char name[GFAR_INT_NAME_MAX];
 };
 
