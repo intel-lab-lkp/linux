@@ -387,8 +387,6 @@ static int rcu_preempt_blocked_readers_cgp(struct rcu_node *rnp)
 	return READ_ONCE(rnp->gp_tasks) != NULL || !list_empty(&rnp->dqs_blkd_tasks);
 }
 
-#ifdef CONFIG_RCU_BOOST
-
 /*
  * Check for preempted RCU readers blocking the current grace period
  * for the specified rcu_node structure, but excluding any tasks that are
@@ -406,8 +404,6 @@ static int rcu_preempt_blocked_readers_cgp_ndqs(struct rcu_node *rnp)
 {
 	return READ_ONCE(rnp->gp_tasks) != NULL;
 }
-
-#endif // #ifdef CONFIG_RCU_BOOST
 
 /* limit value for ->rcu_read_lock_nesting. */
 #define RCU_NEST_PMAX (INT_MAX / 2)
