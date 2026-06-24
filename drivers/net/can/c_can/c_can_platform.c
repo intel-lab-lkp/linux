@@ -263,9 +263,17 @@ static int c_can_plat_probe(struct platform_device *pdev)
 	int irq;
 	struct clk *clk;
 	const struct c_can_driver_data *drvdata;
+	const struct platform_device_id *id;
 	struct device_node *np = pdev->dev.of_node;
 
 	drvdata = device_get_match_data(&pdev->dev);
+	if (!drvdata) {
+		id = platform_get_device_id(pdev);
+		if (!id)
+			return -ENODEV;
+
+		drvdata = (const struct c_can_driver_data *)id->driver_data;
+	}
 
 	/* get the appropriate clk */
 	clk = devm_clk_get(&pdev->dev, NULL);
