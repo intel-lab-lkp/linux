@@ -494,40 +494,6 @@ dma_fence_test_signaled_flag(struct dma_fence *fence)
 }
 
 /**
- * dma_fence_is_signaled_locked - Return an indication if the fence
- *                                is signaled yet.
- * @fence: the fence to check
- *
- * Returns true if the fence was already signaled, false if not. Since this
- * function doesn't enable signaling, it is not guaranteed to ever return
- * true if dma_fence_add_callback(), dma_fence_wait() or
- * dma_fence_enable_sw_signaling() haven't been called before.
- *
- * This function requires &dma_fence.lock to be held.
- *
- * See also dma_fence_is_signaled().
- */
-static inline bool
-dma_fence_is_signaled_locked(struct dma_fence *fence)
-{
-	const struct dma_fence_ops *ops;
-
-	if (dma_fence_test_signaled_flag(fence))
-		return true;
-
-	rcu_read_lock();
-	ops = rcu_dereference(fence->ops);
-	if (ops && ops->signaled && ops->signaled(fence)) {
-		rcu_read_unlock();
-		dma_fence_signal_locked(fence);
-		return true;
-	}
-	rcu_read_unlock();
-
-	return false;
-}
-
-/**
  * dma_fence_is_signaled - Return an indication if the fence is signaled yet.
  * @fence: the fence to check
  *
@@ -540,8 +506,6 @@ dma_fence_is_signaled_locked(struct dma_fence *fence)
  * operation is complete, it makes it possible to prevent issues from
  * wraparound between time of issue and time of use by checking the return
  * value of this function before calling hardware-specific wait instructions.
- *
- * See also dma_fence_is_signaled_locked().
  */
 static inline bool
 dma_fence_is_signaled(struct dma_fence *fence)
