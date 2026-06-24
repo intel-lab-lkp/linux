@@ -234,6 +234,17 @@ static inline struct xarray *swap_zswap_tree(swp_entry_t swp)
 		>> ZSWAP_ADDRESS_SPACE_SHIFT];
 }
 
+/**
+ * zswap_present_test - check if a swap entry is currently backed by zswap
+ * @swp: the swap entry to test
+ *
+ * Return: true if @swp has a zswap entry, false otherwise.
+ */
+bool zswap_present_test(swp_entry_t swp)
+{
+	return xa_load(swap_zswap_tree(swp), swp_offset(swp));
+}
+
 #define zswap_pool_debug(msg, p)			\
 	pr_debug("%s pool %s\n", msg, (p)->tfm_name)
 

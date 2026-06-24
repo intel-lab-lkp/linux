@@ -35,6 +35,7 @@ void zswap_lruvec_state_init(struct lruvec *lruvec);
 void zswap_folio_swapin(struct folio *folio);
 bool zswap_is_enabled(void);
 bool zswap_never_enabled(void);
+bool zswap_present_test(swp_entry_t swp);
 #else
 
 struct zswap_lruvec_state {};
@@ -67,6 +68,11 @@ static inline bool zswap_is_enabled(void)
 static inline bool zswap_never_enabled(void)
 {
 	return true;
+}
+
+static inline bool zswap_present_test(swp_entry_t swp)
+{
+	return false;
 }
 
 #endif
