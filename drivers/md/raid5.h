@@ -479,6 +479,12 @@ struct disk_info {
  */
 
 #define NR_STRIPES		256
+/* Maximum user-settable stripe cache size, in stripes.  Stripe cache memory is
+ * roughly max_nr_stripes * num_disks * stripe_size (stripe_size = 4KB), so the
+ * old cap of 32768 limited a 12-disk array to ~1.5GB.  Raise to 262144 to allow
+ * larger caches on big-RAM systems; the default (NR_STRIPES) is unchanged.
+ */
+#define RAID5_MAX_NR_STRIPES	262144U
 
 #if PAGE_SIZE == DEFAULT_STRIPE_SIZE
 #define STRIPE_SIZE		PAGE_SIZE

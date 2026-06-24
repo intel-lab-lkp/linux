@@ -6923,7 +6923,7 @@ raid5_set_cache_size(struct mddev *mddev, int size)
 	int result = 0;
 	struct r5conf *conf = mddev->private;
 
-	if (size <= 16 || size > 32768)
+	if (size <= 16 || size > RAID5_MAX_NR_STRIPES)
 		return -EINVAL;
 
 	WRITE_ONCE(conf->min_nr_stripes, size);
@@ -7505,8 +7505,8 @@ static unsigned long raid5_cache_count(struct shrinker *shrink,
 				       struct shrink_control *sc)
 {
 	struct r5conf *conf = shrink->private_data;
-	int max_stripes = READ_ONCE(conf->max_nr_stripes);
-	int min_stripes = READ_ONCE(conf->min_nr_stripes);
+	unsigned int max_stripes = READ_ONCE(conf->max_nr_stripes);
+	unsigned int min_stripes = READ_ONCE(conf->min_nr_stripes);
 
 	if (max_stripes < min_stripes)
 		/* unlikely, but not impossible */
