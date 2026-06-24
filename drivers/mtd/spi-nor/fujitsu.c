@@ -15,6 +15,12 @@ static const struct flash_info fujitsu_nor_parts[] = {
 		.size = SZ_128K,
 		.sector_size = SZ_128K,
 		.flags = SPI_NOR_NO_ERASE,
+	}, {
+		.id = SNOR_ID(0x04, 0x7f, 0x49),
+		.name = "mb85rs4mty",
+		.size = SZ_512K,
+		.sector_size = SZ_512K,
+		.flags = SPI_NOR_NO_ERASE
 	}
 };
 
