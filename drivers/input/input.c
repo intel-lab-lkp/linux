@@ -1780,6 +1780,7 @@ static int input_inhibit_device(struct input_dev *dev)
 
 static int input_uninhibit_device(struct input_dev *dev)
 {
+	struct input_handle *handle;
 	int error;
 
 	guard(mutex)(&dev->mutex);
@@ -1802,6 +1803,11 @@ static int input_uninhibit_device(struct input_dev *dev)
 
 	if (dev->users && dev->poller)
 		input_dev_poller_start(dev->poller);
+
+	list_for_each_entry(handle, &dev->h_list, d_node) {
+		if (handle->open && handle->handler->start)
+			handle->handler->start(handle);
+	}
 
 	return 0;
 }
