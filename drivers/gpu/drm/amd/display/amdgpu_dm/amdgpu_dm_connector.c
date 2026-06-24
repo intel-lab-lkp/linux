@@ -1796,7 +1796,7 @@ STATIC_IFN_KUNIT void amdgpu_dm_connector_unregister(struct drm_connector *conne
 }
 EXPORT_IF_KUNIT(amdgpu_dm_connector_unregister);
 
-static void amdgpu_dm_connector_destroy(struct drm_connector *connector)
+STATIC_IFN_KUNIT void amdgpu_dm_connector_destroy(struct drm_connector *connector)
 {
 	struct amdgpu_dm_connector *aconnector = to_amdgpu_dm_connector(connector);
 	struct amdgpu_device *adev = drm_to_adev(connector->dev);
@@ -1837,6 +1837,7 @@ static void amdgpu_dm_connector_destroy(struct drm_connector *connector)
 
 	kfree(connector);
 }
+EXPORT_IF_KUNIT(amdgpu_dm_connector_destroy);
 
 void amdgpu_dm_connector_funcs_reset(struct drm_connector *connector)
 {
