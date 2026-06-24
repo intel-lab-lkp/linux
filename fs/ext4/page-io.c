@@ -555,11 +555,21 @@ int ext4_bio_write_folio(struct ext4_io_submit *io, struct folio *folio,
 	 * block which might be needed.  This may cause some unneeded blocks
 	 * (e.g. holes) to be unnecessarily encrypted, but this is rare and
 	 * can't happen in the common case of blocksize == PAGE_SIZE.
+	 *
+	 * Zero out any non-uptodate buffers that are not being written out,
+	 * to prevent uninitialized memory from being fed into the crypto
+	 * engine.
 	 */
 	if (fscrypt_inode_uses_fs_layer_crypto(inode)) {
 		gfp_t gfp_flags = GFP_NOFS;
 		unsigned int enc_bytes = round_up(len, i_blocksize(inode));
 		struct page *bounce_page;
+
+		do {
+			if (!buffer_async_write(bh) && !buffer_uptodate(bh))
+				folio_zero_range(folio, bh_offset(bh),
+						 bh->b_size);
+		} while ((bh = bh->b_this_page) != head);
 
 		/*
 		 * Since bounce page allocation uses a mempool, we can only use
