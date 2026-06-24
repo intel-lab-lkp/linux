@@ -1147,7 +1147,11 @@ static int mshv_vtl_hvcall_call(struct mshv_vtl_hvcall_fd *fd,
 	 * TODO: Take care of this when CVM support is added.
 	 */
 	in = (void *)__get_free_page(GFP_KERNEL);
-	out = (void *)__get_free_page(GFP_KERNEL);
+	out = (void *)__get_free_page(GFP_KERNEL | __GFP_ZERO);
+	if (!in || !out) {
+		ret = -ENOMEM;
+		goto free_pages;
+	}
 
 	if (copy_from_user(in, (void __user *)hvcall.input_ptr, hvcall.input_size)) {
 		ret = -EFAULT;
@@ -1162,8 +1166,10 @@ static int mshv_vtl_hvcall_call(struct mshv_vtl_hvcall_fd *fd,
 	}
 	ret = put_user(hvcall.status, &hvcall_user->status);
 free_pages:
-	free_page((unsigned long)in);
-	free_page((unsigned long)out);
+	if (in)
+		free_page((unsigned long)in);
+	if (out)
+		free_page((unsigned long)out);
 
 	return ret;
 }
