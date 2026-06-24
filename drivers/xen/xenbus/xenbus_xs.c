@@ -426,13 +426,13 @@ static char **split_strings(char *strings, unsigned int len, unsigned int *num)
 	/* Count the strings. */
 	*num = count_strings(strings, len);
 
-	/* Transfer to one big alloc for easy freeing. */
-	ret = kmalloc(*num * sizeof(char *) + len, GFP_NOIO | __GFP_HIGH);
+	/* Transfer to one big alloc for easy freeing. Keep the extra NUL. */
+	ret = kmalloc(*num * sizeof(char *) + len + 1, GFP_NOIO | __GFP_HIGH);
 	if (!ret) {
 		kfree(strings);
 		return ERR_PTR(-ENOMEM);
 	}
-	memcpy(&ret[*num], strings, len);
+	memcpy(&ret[*num], strings, len + 1);
 	kfree(strings);
 
 	strings = (char *)&ret[*num];
