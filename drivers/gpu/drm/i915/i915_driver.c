@@ -1523,6 +1523,8 @@ static int i915_pm_runtime_suspend(struct device *kdev)
 		drm_err(&dev_priv->drm,
 			"Runtime suspend failed, disabling it (%d)\n", ret);
 
+		intel_display_power_runtime_resume(display);
+
 		for_each_gt(gt, dev_priv, i)
 			intel_uncore_runtime_resume(gt->uncore);
 
