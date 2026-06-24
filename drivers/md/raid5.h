@@ -499,6 +499,7 @@ struct disk_info {
 #define MAX_STRIPE_BATCH	32	/* stripes per handle_active_stripes pass */
 #define STRIPE_BATCH_WORKERS	8	/* stripes-per-worker threshold for spawning */
 #define RAID5_SYNC_WINDOW	32	/* stripes to pre-submit per sync_request call */
+#define RAID5_SYNC_HWMARK	2	/* rebuild uses at most 1/N of stripe cache */
 
 /* NR_STRIPE_HASH_LOCKS must be a power of two, since
  * STRIPE_HASH_LOCKS_MASK masks with (NR_STRIPE_HASH_LOCKS - 1).
