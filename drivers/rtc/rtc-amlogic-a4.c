@@ -379,6 +379,7 @@ static int aml_rtc_probe(struct platform_device *pdev)
 	rtc->rtc_dev->ops = &aml_rtc_ops;
 	rtc->rtc_dev->range_min = 0;
 	rtc->rtc_dev->range_max = U32_MAX;
+	clear_bit(RTC_FEATURE_UPDATE_INTERRUPT, rtc->rtc_dev->features);
 
 	return devm_rtc_register_device(rtc->rtc_dev);
 }
