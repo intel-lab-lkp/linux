@@ -1565,7 +1565,7 @@ EXPORT_IF_KUNIT(create_stream_for_sink);
  *
  * Return: The probed connector status (connected/disconnected/unknown).
  */
-static enum drm_connector_status
+STATIC_IFN_KUNIT enum drm_connector_status
 amdgpu_dm_connector_poll(struct amdgpu_dm_connector *aconnector, bool force)
 {
 	struct drm_connector *connector = &aconnector->base;
@@ -1617,6 +1617,7 @@ amdgpu_dm_connector_poll(struct amdgpu_dm_connector *aconnector, bool force)
 	mutex_unlock(&aconnector->hpd_lock);
 	return status;
 }
+EXPORT_IF_KUNIT(amdgpu_dm_connector_poll);
 
 /**
  * amdgpu_dm_connector_detect() - Detect whether a DRM connector is connected to a display
@@ -1640,7 +1641,7 @@ amdgpu_dm_connector_poll(struct amdgpu_dm_connector *aconnector, bool force)
  * Return: The connector status (connected, disconnected, or unknown).
  *
  */
-static enum drm_connector_status
+STATIC_IFN_KUNIT enum drm_connector_status
 amdgpu_dm_connector_detect(struct drm_connector *connector, bool force)
 {
 	struct amdgpu_dm_connector *aconnector = to_amdgpu_dm_connector(connector);
@@ -1664,6 +1665,7 @@ amdgpu_dm_connector_detect(struct drm_connector *connector, bool force)
 	return (aconnector->dc_sink ? connector_status_connected :
 			connector_status_disconnected);
 }
+EXPORT_IF_KUNIT(amdgpu_dm_connector_detect);
 
 int amdgpu_dm_connector_atomic_set_property(struct drm_connector *connector,
 					    struct drm_connector_state *connector_state,
