@@ -413,6 +413,74 @@ static void test_fragmented_32bit_search(struct kunit *test)
 		__free_iova(&ctx->iovad, iova);
 }
 
+/*
+ * Exercise the deferred-erase path: remove_iova() failing to erase under
+ * GFP_ATOMIC leaves an IOVA_DEFERRED marker in the tree and frees the struct
+ * iova immediately. iova_kunit_defer_erase makes that failure deterministic.
+ * Verify that while marked the range looks free to lookups yet stays reserved,
+ * that invariants hold, and that the next allocation drains the marker and
+ * reuses the space.
+ */
+static void test_deferred_erase(struct kunit *test)
+{
+	struct iova_test_ctx *ctx = test->priv;
+	struct iova *a, *b;
+	unsigned long pfn;
+
+	a = alloc_iova(&ctx->iovad, 1, TEST_LIMIT_32BIT, false);
+	KUNIT_ASSERT_NOT_NULL(test, a);
+	pfn = a->pfn_lo;
+
+	/* Free 'a', forcing the erase to be deferred (marker left behind). */
+	iova_kunit_defer_erase = true;
+	__free_iova(&ctx->iovad, a);
+	iova_kunit_defer_erase = false;
+
+	/*
+	 * The erase was deferred, not performed: a marker now occupies the slot,
+	 * so the backlog records the deferral and the pfn looks absent to lookups,
+	 * while the tree stays consistent with the marker present.
+	 */
+	KUNIT_EXPECT_TRUE(test, iova_domain_has_deferred(&ctx->iovad));
+	KUNIT_EXPECT_NULL(test, find_iova(&ctx->iovad, pfn));
+	KUNIT_EXPECT_TRUE(test, iova_domain_verify_invariants(&ctx->iovad));
+
+	/*
+	 * The next allocation drains deferred markers before searching, so the
+	 * backlog clears and the marked range is reclaimed; a top-down size-1
+	 * alloc reuses exactly the pfn that was freed.
+	 */
+	b = alloc_iova(&ctx->iovad, 1, TEST_LIMIT_32BIT, false);
+	KUNIT_ASSERT_NOT_NULL(test, b);
+	KUNIT_EXPECT_FALSE(test, iova_domain_has_deferred(&ctx->iovad));
+	KUNIT_EXPECT_EQ(test, b->pfn_lo, pfn);
+	KUNIT_EXPECT_TRUE(test, iova_domain_verify_invariants(&ctx->iovad));
+
+	__free_iova(&ctx->iovad, b);
+	KUNIT_EXPECT_TRUE(test, iova_domain_verify_invariants(&ctx->iovad));
+}
+
+/*
+ * Tearing down a domain that still holds an undrained IOVA_DEFERRED marker must
+ * skip the marker (it is static storage, not a heap iova) and not crash or
+ * double-free. Leave a marker live for iova_test_exit()'s put_iova_domain().
+ */
+static void test_deferred_erase_teardown(struct kunit *test)
+{
+	struct iova_test_ctx *ctx = test->priv;
+	struct iova *a;
+
+	a = alloc_iova(&ctx->iovad, 4, TEST_LIMIT_32BIT, false);
+	KUNIT_ASSERT_NOT_NULL(test, a);
+
+	iova_kunit_defer_erase = true;
+	__free_iova(&ctx->iovad, a);
+	iova_kunit_defer_erase = false;
+
+	/* Marker left live; the suite's exit -> put_iova_domain must cope. */
+	KUNIT_EXPECT_TRUE(test, iova_domain_verify_invariants(&ctx->iovad));
+}
+
 static struct kunit_case iova_test_cases[] = {
 	KUNIT_CASE(test_size_aligned),
 	KUNIT_CASE(test_top_down_preference),
@@ -424,6 +492,8 @@ static struct kunit_case iova_test_cases[] = {
 	KUNIT_CASE(test_stress_random),
 	KUNIT_CASE(test_full_space_search_time),
 	KUNIT_CASE(test_fragmented_32bit_search),
+	KUNIT_CASE(test_deferred_erase),
+	KUNIT_CASE(test_deferred_erase_teardown),
 	{}
 };
 

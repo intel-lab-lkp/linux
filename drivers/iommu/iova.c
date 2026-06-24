@@ -26,6 +26,24 @@ static unsigned long iova_rcache_get(struct iova_domain *iovad,
 static void free_iova_rcaches(struct iova_domain *iovad);
 static void free_cpu_cached_iovas(unsigned int cpu, struct iova_domain *iovad);
 static void free_global_cached_iovas(struct iova_domain *iovad);
+static void iova_drain_deferred(struct iova_domain *iovad);
+
+/*
+ * Placed in a maple-tree slot when an erase had to be deferred because a node
+ * allocation failed under GFP_ATOMIC (see remove_iova()). Overwriting a slot in
+ * place needs no allocation, so this marker can be stored even when the erase
+ * itself could not. It is a non-NULL, 8-byte-aligned (hence non-internal to the
+ * maple tree) pointer, so the allocator's gap search keeps the range reserved,
+ * while lookups, teardown and the invariant checker recognise and skip it.
+ * iova_drain_deferred() erases it once a node allocation succeeds.
+ */
+static const unsigned long iova_deferred_marker;
+#define IOVA_DEFERRED		((struct iova *)&iova_deferred_marker)
+
+static inline bool iova_has_deferred(const struct iova_domain *iovad)
+{
+	return iovad->deferred_lo <= iovad->deferred_hi;
+}
 
 void
 init_iova_domain(struct iova_domain *iovad, unsigned long granule,
@@ -52,6 +70,8 @@ init_iova_domain(struct iova_domain *iovad, unsigned long granule,
 	iovad->start_pfn = start_pfn;
 	iovad->dma_32bit_pfn = 1UL << (32 - iova_shift(iovad));
 	iovad->max32_alloc_size = iovad->dma_32bit_pfn;
+	iovad->deferred_lo = ULONG_MAX;
+	iovad->deferred_hi = 0;
 }
 EXPORT_SYMBOL_GPL(init_iova_domain);
 
@@ -73,6 +93,9 @@ static int __alloc_and_insert_iova_range(struct iova_domain *iovad,
 	}
 
 	spin_lock_irqsave(&iovad->iova_lock, flags);
+	/* Reclaim any deferred frees so their address space becomes available. */
+	if (unlikely(iova_has_deferred(iovad)))
+		iova_drain_deferred(iovad);
 	/*
 	 * Fast-fail a 32-bit request once one of the same-or-larger size has
 	 * already failed, without searching. The hint is read under the lock
@@ -175,21 +198,117 @@ static struct iova *
 private_find_iova(struct iova_domain *iovad, unsigned long pfn)
 {
 	MA_STATE(mas, &iovad->mtree, pfn, pfn);
+	struct iova *iova;
 
 	assert_spin_locked(&iovad->iova_lock);
-	return mas_walk(&mas);
+	iova = mas_walk(&mas);
+	/* A deferred-erase marker is not a live iova; treat it as absent. */
+	if (iova == IOVA_DEFERRED)
+		return NULL;
+	return iova;
 }
 
-static void remove_iova(struct iova_domain *iovad, struct iova *iova)
+/*
+ * Erase the deferred-removal markers left by remove_iova() when a GFP_ATOMIC
+ * node allocation was unavailable. The markers lie within the bounding range
+ * [deferred_lo, deferred_hi]; walk it erasing each one. A failed erase means no
+ * atomic memory is available right now, and no reclaim can happen under the
+ * lock, so the remaining erases would fail too: stop and keep everything from
+ * that point up still deferred, to be retried by a later allocation or free.
+ *
+ * Caller must hold iova_lock.
+ */
+static void iova_drain_deferred(struct iova_domain *iovad)
 {
-	MA_STATE(mas, &iovad->mtree, iova->pfn_lo, iova->pfn_hi);
+	unsigned long hi = iovad->deferred_hi;
+	void *entry;
+
+	MA_STATE(mas, &iovad->mtree, iovad->deferred_lo, hi);
 
 	assert_spin_locked(&iovad->iova_lock);
 
-	if (iova->pfn_lo < iovad->dma_32bit_pfn)
+	while ((entry = mas_find(&mas, hi)) != NULL) {
+		unsigned long lo = mas.index, last = mas.last;
+
+		if (entry == IOVA_DEFERRED) {
+			mas_set_range(&mas, lo, last);
+			if (mas_store_gfp(&mas, NULL, GFP_ATOMIC)) {
+				/*
+				 * No atomic memory now; further erases under
+				 * this lock would fail too (no reclaim happens
+				 * here). Everything from here up is still
+				 * deferred; retry on a later allocation or free.
+				 */
+				iovad->deferred_lo = lo;
+				iovad->deferred_hi = hi;
+				return;
+			}
+			/* The store may move the iterator; re-anchor past it. */
+			mas_set(&mas, last + 1);
+		}
+
+		if (last >= hi)
+			break;
+	}
+
+	/* All markers erased: the backlog is empty. */
+	iovad->deferred_lo = ULONG_MAX;
+	iovad->deferred_hi = 0;
+}
+
+#if IS_ENABLED(CONFIG_IOMMU_IOVA_KUNIT_TEST)
+/*
+ * Test hook: when set, force remove_iova() down the deferred-erase path as if
+ * the GFP_ATOMIC node allocation for the erase had failed. Lets the KUnit suite
+ * exercise the IOVA_DEFERRED marker and iova_drain_deferred() deterministically.
+ */
+bool iova_kunit_defer_erase;
+EXPORT_SYMBOL_GPL(iova_kunit_defer_erase);
+#else
+#define iova_kunit_defer_erase false
+#endif
+
+/*
+ * Remove an IOVA entry from the maple tree and free it.
+ *
+ * This runs in atomic context (DMA map/unmap can be called from hardirq,
+ * softirq, or with spinlocks held) and must not fail. Erasing an entry can
+ * require a maple tree node for rebalancing, and mas_store_gfp(NULL,
+ * GFP_ATOMIC) can fail under memory pressure. When it does, overwrite the slot
+ * in place with IOVA_DEFERRED -- an in-place store needs no node allocation and
+ * so cannot fail -- which keeps the address range reserved (the allocator's gap
+ * search treats the non-NULL slot as occupied) and lets the struct iova be
+ * freed now. The marker is erased later by iova_drain_deferred().
+ */
+static void remove_iova(struct iova_domain *iovad, struct iova *iova)
+{
+	unsigned long pfn_lo = iova->pfn_lo, pfn_hi = iova->pfn_hi;
+
+	MA_STATE(mas, &iovad->mtree, pfn_lo, pfn_hi);
+
+	assert_spin_locked(&iovad->iova_lock);
+
+	if (pfn_lo < iovad->dma_32bit_pfn)
 		iovad->max32_alloc_size = iovad->dma_32bit_pfn;
 
-	mas_store_gfp(&mas, NULL, GFP_ATOMIC);
+	if (iova_kunit_defer_erase || mas_store_gfp(&mas, NULL, GFP_ATOMIC)) {
+		/* Erase failed: mark the slot in place and defer removal. */
+		mas_set_range(&mas, pfn_lo, pfn_hi);
+		if (WARN_ON_ONCE(mas_store_gfp(&mas, IOVA_DEFERRED, GFP_ATOMIC)))
+			return;	/* in-place store cannot fail; entry stays put */
+		if (pfn_lo < iovad->deferred_lo)
+			iovad->deferred_lo = pfn_lo;
+		if (pfn_hi > iovad->deferred_hi)
+			iovad->deferred_hi = pfn_hi;
+		free_iova_mem(iova);
+		return;
+	}
+
+	free_iova_mem(iova);
+
+	/* A successful erase means memory is available; clear any backlog. */
+	if (unlikely(iova_has_deferred(iovad)))
+		iova_drain_deferred(iovad);
 }
 
 /**
@@ -225,7 +344,6 @@ __free_iova(struct iova_domain *iovad, struct iova *iova)
 	spin_lock_irqsave(&iovad->iova_lock, flags);
 	remove_iova(iovad, iova);
 	spin_unlock_irqrestore(&iovad->iova_lock, flags);
-	free_iova_mem(iova);
 }
 EXPORT_SYMBOL_GPL(__free_iova);
 
@@ -244,13 +362,9 @@ free_iova(struct iova_domain *iovad, unsigned long pfn)
 
 	spin_lock_irqsave(&iovad->iova_lock, flags);
 	iova = private_find_iova(iovad, pfn);
-	if (!iova) {
-		spin_unlock_irqrestore(&iovad->iova_lock, flags);
-		return;
-	}
-	remove_iova(iovad, iova);
+	if (iova)
+		remove_iova(iovad, iova);
 	spin_unlock_irqrestore(&iovad->iova_lock, flags);
-	free_iova_mem(iova);
 }
 EXPORT_SYMBOL_GPL(free_iova);
 
@@ -342,8 +456,14 @@ void put_iova_domain(struct iova_domain *iovad)
 	if (iovad->rcaches)
 		iova_domain_free_rcaches(iovad);
 
+	/*
+	 * Free the iovas. We can skip the IOVA_DEFERRED markers, because
+	 * __mt_destroy() will tear down the maple tree nodes without regard
+	 * for special leaf node values.
+	 */
 	mas_for_each(&mas, iova, ULONG_MAX)
-		free_iova_mem(iova);
+		if (iova != IOVA_DEFERRED)
+			free_iova_mem(iova);
 	__mt_destroy(&iovad->mtree);
 }
 EXPORT_SYMBOL_GPL(put_iova_domain);
@@ -391,12 +511,22 @@ reserve_iova(struct iova_domain *iovad,
 
 	spin_lock_irqsave(&iovad->iova_lock, flags);
 
+	/* Resolve any deferred erases so the walk below sees only live iovas. */
+	if (unlikely(iova_has_deferred(iovad)))
+		iova_drain_deferred(iovad);
+
 	/*
 	 * Compute the range covering all overlaps, but do not free the
 	 * overlapping iovas yet: the merged store below can fail, and freeing
 	 * before a failed store would leave dangling pointers in the tree.
 	 */
 	mas_for_each(&mas, overlap, pfn_hi) {
+		/*
+		 * A deferred-erase marker isn't a real iova; the merged-range
+		 * store below spans and overwrites it, so skip it here.
+		 */
+		if (overlap == IOVA_DEFERRED)
+			continue;
 		/* Fully covered by an existing reservation: hand it back. */
 		if (pfn_lo >= overlap->pfn_lo && pfn_hi <= overlap->pfn_hi) {
 			iova = overlap;
@@ -425,7 +555,8 @@ reserve_iova(struct iova_domain *iovad,
 
 	mas_set_range(&fmas, merged_lo, merged_hi);
 	mas_for_each(&fmas, overlap, merged_hi)
-		free_iova_mem(overlap);
+		if (overlap != IOVA_DEFERRED)
+			free_iova_mem(overlap);
 
 	mas_store_prealloc(&mas, iova);
 out:
@@ -515,7 +646,6 @@ iova_magazine_free_pfns(struct iova_magazine *mag, struct iova_domain *iovad)
 			continue;
 
 		remove_iova(iovad, iova);
-		free_iova_mem(iova);
 	}
 
 	spin_unlock_irqrestore(&iovad->iova_lock, flags);
@@ -900,6 +1030,9 @@ bool iova_domain_verify_invariants(struct iova_domain *iovad)
 
 	spin_lock_irqsave(&iovad->iova_lock, flags);
 	mas_for_each(&mas, iova, ULONG_MAX) {
+		/* Deferred-erase markers occupy a slot but aren't real iovas. */
+		if (iova == IOVA_DEFERRED)
+			continue;
 		if (mas.index != iova->pfn_lo || mas.last != iova->pfn_hi) {
 			pr_err("iova_verify: maple index [%lu,%lu] != iova [%lu,%lu]\n",
 			       mas.index, mas.last, iova->pfn_lo, iova->pfn_hi);
@@ -922,6 +1055,13 @@ bool iova_domain_verify_invariants(struct iova_domain *iovad)
 	return ok;
 }
 EXPORT_SYMBOL_GPL(iova_domain_verify_invariants);
+
+/* Test accessor: is there an outstanding deferred-erase backlog? */
+bool iova_domain_has_deferred(struct iova_domain *iovad)
+{
+	return iova_has_deferred(iovad);
+}
+EXPORT_SYMBOL_GPL(iova_domain_has_deferred);
 #endif /* CONFIG_IOMMU_IOVA_KUNIT_TEST */
 
 MODULE_AUTHOR("Anil S Keshavamurthy <anil.s.keshavamurthy@intel.com>");
