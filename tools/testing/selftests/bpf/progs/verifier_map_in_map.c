@@ -18,6 +18,20 @@ struct {
 	});
 } map_in_map SEC(".maps");
 
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY_OF_MAPS);
+	__uint(max_entries, 1);
+	__type(key, int);
+	__type(value, int);
+	__array(values, struct {
+		__uint(type, BPF_MAP_TYPE_ARRAY);
+		__uint(max_entries, 8);
+		__uint(map_flags, BPF_F_INNER_MAP);
+		__type(key, int);
+		__type(value, int);
+	});
+} map_in_map_inner_array SEC(".maps");
+
 SEC("socket")
 __description("map in map access")
 __success __success_unpriv __retval(0)
@@ -136,6 +150,36 @@ __naked void on_the_inner_map_pointer(void)
 "	:
 	: __imm(bpf_map_lookup_elem),
 	  __imm_addr(map_in_map)
+	: __clobber_all);
+}
+
+SEC("socket")
+__description("inner array lookup requires null check")
+__failure __msg("invalid mem access 'map_value_or_null'")
+__failure_unpriv
+__naked void inner_array_lookup_requires_null_check(void)
+{
+	asm volatile ("					\
+	r1 = 0;						\
+	*(u32*)(r10 - 4) = r1;				\
+	r2 = r10;					\
+	r2 += -4;					\
+	r1 = %[map_in_map_inner_array] ll;		\
+	call %[bpf_map_lookup_elem];			\
+	if r0 == 0 goto l0_%=;				\
+	r1 = 6;						\
+	*(u32*)(r10 - 4) = r1;				\
+	r2 = r10;					\
+	r2 += -4;					\
+	r1 = r0;					\
+	call %[bpf_map_lookup_elem];			\
+	r0 = *(u32*)(r0 + 0);				\
+	exit;						\
+l0_%=:	r0 = 0;						\
+	exit;						\
+"	:
+	: __imm(bpf_map_lookup_elem),
+	  __imm_addr(map_in_map_inner_array)
 	: __clobber_all);
 }
 
