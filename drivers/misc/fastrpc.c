@@ -2654,30 +2654,31 @@ err_free_data:
 	return err;
 }
 
-static void fastrpc_notify_users(struct fastrpc_user *user)
+static int fastrpc_notify_context(int id, void *ptr, void *data)
 {
-	struct fastrpc_invoke_ctx *ctx;
+	struct fastrpc_invoke_ctx *ctx = ptr;
 
-	spin_lock(&user->lock);
-	list_for_each_entry(ctx, &user->pending, node) {
-		ctx->retval = -EPIPE;
-		complete(&ctx->work);
+	if (ctx->sent && !ctx->completed) {
+		ctx->completed = true;
+		schedule_work(&ctx->put_work);
 	}
-	spin_unlock(&user->lock);
+
+	ctx->retval = -EPIPE;
+	complete(&ctx->work);
+
+	return 0;
 }
 
 static void fastrpc_rpmsg_remove(struct rpmsg_device *rpdev)
 {
 	struct fastrpc_channel_ctx *cctx = dev_get_drvdata(&rpdev->dev);
 	struct fastrpc_buf *buf, *b;
-	struct fastrpc_user *user;
 	unsigned long flags;
 
 	/* No invocations past this point */
 	spin_lock_irqsave(&cctx->lock, flags);
 	cctx->rpdev = NULL;
-	list_for_each_entry(user, &cctx->users, user)
-		fastrpc_notify_users(user);
+	idr_for_each(&cctx->ctx_idr, fastrpc_notify_context, NULL);
 	spin_unlock_irqrestore(&cctx->lock, flags);
 
 	if (cctx->fdevice)
