@@ -224,27 +224,27 @@ impl FmcBootArgs {
 /// An `Fsp` is produced by [`Fsp::wait_secure_boot`], which only returns once FSP secure boot
 /// has completed. It owns the FSP falcon and the FMC firmware, which are used for the subsequent
 /// Chain of Trust boot.
-pub(crate) struct Fsp {
-    falcon: Falcon<FspEngine>,
+pub(crate) struct Fsp<'a> {
+    falcon: Falcon<'a, FspEngine>,
     fsp_fw: FspFirmware,
 }
 
-impl Fsp {
+impl<'a> Fsp<'a> {
     /// Waits for FSP secure boot completion, then returns the [`Fsp`] interface.
     ///
     /// Polls the thermal scratch register until FSP signals boot completion or the timeout
     /// elapses. Returning an [`Fsp`] only on success guarantees, at the API level, that the
     /// interface is not used before secure boot has completed.
     pub(crate) fn wait_secure_boot(
-        dev: &device::Device<device::Bound>,
-        bar: Bar0<'_>,
+        dev: &'a device::Device<device::Bound>,
+        bar: Bar0<'a>,
         chipset: Chipset,
-    ) -> Result<Fsp> {
+    ) -> Result<Fsp<'a>> {
         /// FSP secure boot completion timeout in milliseconds.
         const FSP_SECURE_BOOT_TIMEOUT_MS: i64 = 5000;
 
         let hal = hal::fsp_hal(chipset).ok_or(ENOTSUPP)?;
-        let falcon = Falcon::<FspEngine>::new(dev, chipset)?;
+        let falcon = Falcon::<FspEngine>::new(dev, chipset, bar)?;
         let fsp_fw = FspFirmware::new(dev, chipset, FIRMWARE_VERSION)?;
 
         read_poll_timeout(
@@ -262,13 +262,13 @@ impl Fsp {
 
     /// Sends a message to FSP and waits for the response.
     /// Returns the full response buffer on success.
-    fn send_sync_fsp<M>(&mut self, dev: &device::Device, bar: Bar0<'_>, msg: &M) -> Result<KVec<u8>>
+    fn send_sync_fsp<M>(&mut self, dev: &device::Device, msg: &M) -> Result<KVec<u8>>
     where
         M: MessageToFsp,
     {
-        self.falcon.send_msg(bar, msg.as_bytes())?;
+        self.falcon.send_msg(msg.as_bytes())?;
 
-        let response_buf = self.falcon.recv_msg(bar).inspect_err(|e| {
+        let response_buf = self.falcon.recv_msg().inspect_err(|e| {
             dev_err!(dev, "FSP response error: {:?}\n", e);
         })?;
 
@@ -330,7 +330,6 @@ impl Fsp {
     pub(crate) fn boot_fmc(
         &mut self,
         dev: &device::Device<device::Bound>,
-        bar: Bar0<'_>,
         fb_layout: &FbLayout,
         args: &FmcBootArgs,
     ) -> Result {
@@ -341,7 +340,7 @@ impl Fsp {
             GFP_KERNEL,
         )?;
 
-        let _response_buf = self.send_sync_fsp(dev, bar, &*msg)?;
+        let _response_buf = self.send_sync_fsp(dev, &*msg)?;
 
         dev_dbg!(dev, "FSP Chain of Trust completed successfully\n");
         Ok(())

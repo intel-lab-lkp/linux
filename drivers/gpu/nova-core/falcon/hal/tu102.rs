@@ -34,13 +34,13 @@ impl<E: FalconEngine> Tu102<E> {
 }
 
 impl<E: FalconEngine> FalconHal<E> for Tu102<E> {
-    fn select_core(&self, _falcon: &Falcon<E>, _bar: Bar0<'_>) -> Result {
+    fn select_core(&self, _falcon: &Falcon<'_, E>, _bar: Bar0<'_>) -> Result {
         Ok(())
     }
 
     fn signature_reg_fuse_version(
         &self,
-        _falcon: &Falcon<E>,
+        _falcon: &Falcon<'_, E>,
         _bar: Bar0<'_>,
         _engine_id_mask: u16,
         _ucode_id: u8,
@@ -48,7 +48,7 @@ impl<E: FalconEngine> FalconHal<E> for Tu102<E> {
         Ok(0)
     }
 
-    fn program_brom(&self, _falcon: &Falcon<E>, _bar: Bar0<'_>, _params: &FalconBromParams) {}
+    fn program_brom(&self, _falcon: &Falcon<'_, E>, _bar: Bar0<'_>, _params: &FalconBromParams) {}
 
     fn is_riscv_active(&self, bar: Bar0<'_>) -> bool {
         bar.read(regs::NV_PRISCV_RISCV_CORE_SWITCH_RISCV_STATUS::of::<E>())

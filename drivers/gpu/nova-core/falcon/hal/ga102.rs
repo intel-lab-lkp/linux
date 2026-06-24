@@ -115,21 +115,21 @@ impl<E: FalconEngine> Ga102<E> {
 }
 
 impl<E: FalconEngine> FalconHal<E> for Ga102<E> {
-    fn select_core(&self, _falcon: &Falcon<E>, bar: Bar0<'_>) -> Result {
+    fn select_core(&self, _falcon: &Falcon<'_, E>, bar: Bar0<'_>) -> Result {
         select_core_ga102::<E>(bar)
     }
 
     fn signature_reg_fuse_version(
         &self,
-        falcon: &Falcon<E>,
+        falcon: &Falcon<'_, E>,
         bar: Bar0<'_>,
         engine_id_mask: u16,
         ucode_id: u8,
     ) -> Result<u32> {
-        signature_reg_fuse_version_ga102(&falcon.dev, bar, engine_id_mask, ucode_id)
+        signature_reg_fuse_version_ga102(falcon.dev, bar, engine_id_mask, ucode_id)
     }
 
-    fn program_brom(&self, _falcon: &Falcon<E>, bar: Bar0<'_>, params: &FalconBromParams) {
+    fn program_brom(&self, _falcon: &Falcon<'_, E>, bar: Bar0<'_>, params: &FalconBromParams) {
         program_brom_ga102::<E>(bar, params);
     }
 
