@@ -14,7 +14,7 @@ backing dev. For more info on drgn, visit https://github.com/osandov/drgn.
 
   dirtied(kB)       Amount of pages have been dirtied.
 
-  wrttien(kB)       Amount of dirty pages have been written back to disk.
+  written(kB)       Amount of dirty pages have been written back to disk.
 
   avg_wb(kBps)      Smoothly estimated write bandwidth of writing dirty pages
                     back to disk.
@@ -24,9 +24,6 @@ import signal
 import re
 import time
 import json
-
-import drgn
-from drgn.helpers.linux.list import list_for_each_entry
 
 import argparse
 parser = argparse.ArgumentParser(description=desc,
@@ -40,6 +37,9 @@ parser.add_argument('-j', '--json', action='store_true',
 parser.add_argument('-c', '--cgroup', action='store_true',
                     help='show writeback of bdi in cgroup')
 args = parser.parse_args()
+
+import drgn
+from drgn.helpers.linux.list import list_for_each_entry
 
 bdi_list                = prog['bdi_list']
 
