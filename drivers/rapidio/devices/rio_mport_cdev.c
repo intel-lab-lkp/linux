@@ -252,7 +252,8 @@ static int rio_mport_maint_rd(struct mport_cdev_priv *priv, void __user *arg,
 
 	if ((maint_io.offset % 4) ||
 	    (maint_io.length == 0) || (maint_io.length % 4) ||
-	    (maint_io.length + maint_io.offset) > RIO_MAINT_SPACE_SZ)
+	    maint_io.offset >= RIO_MAINT_SPACE_SZ ||
+	    maint_io.length > RIO_MAINT_SPACE_SZ - maint_io.offset)
 		return -EINVAL;
 
 	buffer = vmalloc(maint_io.length);
@@ -297,7 +298,8 @@ static int rio_mport_maint_wr(struct mport_cdev_priv *priv, void __user *arg,
 
 	if ((maint_io.offset % 4) ||
 	    (maint_io.length == 0) || (maint_io.length % 4) ||
-	    (maint_io.length + maint_io.offset) > RIO_MAINT_SPACE_SZ)
+	    maint_io.offset >= RIO_MAINT_SPACE_SZ ||
+	    maint_io.length > RIO_MAINT_SPACE_SZ - maint_io.offset)
 		return -EINVAL;
 
 	buffer = vmalloc(maint_io.length);
@@ -833,7 +835,15 @@ rio_dma_transfer(struct file *filp, u32 transfer_mode,
 		long pinned;
 
 		offset = lower_32_bits(offset_in_page(xfer->loc_addr));
+		if (xfer->length > ULONG_MAX - offset) {
+			ret = -EINVAL;
+			goto err_req;
+		}
 		nr_pages = PAGE_ALIGN(xfer->length + offset) >> PAGE_SHIFT;
+		if (nr_pages > INT_MAX) {
+			ret = -EINVAL;
+			goto err_req;
+		}
 
 		page_list = kmalloc_objs(*page_list, nr_pages);
 		if (page_list == NULL) {
@@ -883,7 +893,7 @@ rio_dma_transfer(struct file *filp, u32 transfer_mode,
 		mutex_lock(&md->buf_mutex);
 		list_for_each_entry(map, &md->mappings, node) {
 			if (baddr >= map->phys_addr &&
-			    baddr < (map->phys_addr + map->size)) {
+			    baddr - map->phys_addr < map->size) {
 				kref_get(&map->ref);
 				req->map = map;
 				break;
@@ -896,7 +906,8 @@ rio_dma_transfer(struct file *filp, u32 transfer_mode,
 			goto err_req;
 		}
 
-		if (xfer->length + xfer->offset > req->map->size) {
+		if (xfer->offset > req->map->size ||
+		    xfer->length > req->map->size - xfer->offset) {
 			ret = -EINVAL;
 			goto err_req;
 		}
@@ -2194,7 +2205,7 @@ static int mport_cdev_mmap(struct file *filp, struct vm_area_struct *vma)
 	mutex_lock(&md->buf_mutex);
 	list_for_each_entry(map, &md->mappings, node) {
 		if (baddr >= map->phys_addr &&
-		    baddr < (map->phys_addr + map->size)) {
+		    baddr - map->phys_addr < map->size) {
 			found = 1;
 			break;
 		}
@@ -2206,7 +2217,7 @@ static int mport_cdev_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	offset = baddr - map->phys_addr;
 
-	if (size + offset > map->size)
+	if (offset > map->size || size > map->size - offset)
 		return -EINVAL;
 
 	vma->vm_pgoff = offset >> PAGE_SHIFT;
