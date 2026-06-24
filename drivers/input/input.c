@@ -1793,14 +1793,15 @@ static int input_uninhibit_device(struct input_dev *dev)
 			if (error)
 				return error;
 		}
-		if (dev->poller)
-			input_dev_poller_start(dev->poller);
 	}
 
 	dev->inhibited = false;
 
 	scoped_guard(spinlock_irq, &dev->event_lock)
 		input_dev_toggle(dev, true);
+
+	if (dev->users && dev->poller)
+		input_dev_poller_start(dev->poller);
 
 	return 0;
 }
