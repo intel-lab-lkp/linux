@@ -2346,11 +2346,12 @@ static int tc_probe_dpi_bridge_endpoint(struct tc_data *tc)
 static int tc_probe_edp_bridge_endpoint(struct tc_data *tc)
 {
 	struct device *dev = tc->dev;
+	struct drm_bridge *bridge;
 	struct drm_panel *panel;
 	int ret;
 
 	/* port@2 is the output port */
-	ret = drm_of_find_panel_or_bridge(dev->of_node, 2, 0, &panel, NULL);
+	ret = drm_of_find_panel_or_bridge(dev->of_node, 2, 0, &panel, &bridge);
 	if (ret && ret != -ENODEV)
 		return dev_err_probe(dev, ret,
 				     "Could not find DSI panel or bridge\n");
