@@ -4428,7 +4428,13 @@ static unsigned int ata_scsi_security_inout_xlat(struct ata_queued_cmd *qc)
 		}
 
 		/* convert to the sector-based ATA addressing */
-		len = (len + 511) / 512;
+		if (len) {
+			len = len / ATA_SECT_SIZE;
+			if (!len) {
+				ata_scsi_set_invalid_field(qc->dev, scmd, 6, 0);
+				return 1;
+			}
+		}
 	}
 
 	tf->protocol = dma ? ATA_PROT_DMA : ATA_PROT_PIO;
