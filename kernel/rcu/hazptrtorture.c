@@ -272,7 +272,6 @@ static struct hazptr_torture_ops hazptr_ops = {
 	.readunlock		= hazptr_torture_read_unlock,
 	.sync			= hazptr_synchronize,
 	.irq_capable		= 1,
-	.onstack_ctx		= 1,
 	.name			= "hazptr"
 };
 
@@ -288,6 +287,7 @@ static struct hazptr_torture_ops hazptr_stack_ops = {
 	.readunlock		= hazptr_torture_read_unlock,
 	.sync			= hazptr_synchronize,
 	.irq_capable		= 1,
+	.onstack_ctx		= 1,
 	.name			= "hazptr-stack"
 };
 
