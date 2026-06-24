@@ -749,6 +749,10 @@ static int map__process_kallsym_symbol(void *arg, const char *name,
 	if (name[0] == '$')
 		return 0;
 
+	/* Ignore livepatch symbols */
+	if (strstarts(name, ".klp.sym."))
+		return 0;
+
 	/*
 	 * module symbols are not sorted so we add all
 	 * symbols, setting length to 0, and rely on
