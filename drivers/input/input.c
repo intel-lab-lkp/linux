@@ -568,6 +568,28 @@ void input_release_device(struct input_handle *handle)
 }
 EXPORT_SYMBOL(input_release_device);
 
+static int input_start_device(struct input_dev *dev)
+{
+	int error;
+
+	lockdep_assert_held(&dev->mutex);
+
+	if (dev->users++ == 0 && !dev->inhibited) {
+		if (dev->open) {
+			error = dev->open(dev);
+			if (error) {
+				dev->users--;
+				return error;
+			}
+		}
+
+		if (dev->poller)
+			input_dev_poller_start(dev->poller);
+	}
+
+	return 0;
+}
+
 /**
  * input_open_device - open input device
  * @handle: handle through which device is being accessed
@@ -586,21 +608,9 @@ int input_open_device(struct input_handle *handle)
 
 		handle->open++;
 
-		if (handle->handler->passive_observer)
-			return 0;
-
-		if (dev->users++ || dev->inhibited) {
-			/*
-			 * Device is already opened and/or inhibited,
-			 * so we can exit immediately and report success.
-			 */
-			return 0;
-		}
-
-		if (dev->open) {
-			error = dev->open(dev);
+		if (!handle->handler->passive_observer) {
+			error = input_start_device(dev);
 			if (error) {
-				dev->users--;
 				handle->open--;
 				/*
 				 * Make sure we are not delivering any more
@@ -611,8 +621,8 @@ int input_open_device(struct input_handle *handle)
 			}
 		}
 
-		if (dev->poller)
-			input_dev_poller_start(dev->poller);
+		if (handle->open == 1 && handle->handler->start)
+			handle->handler->start(handle);
 	}
 
 	return 0;
@@ -2661,9 +2671,6 @@ int input_register_handle(struct input_handle *handle)
 	 * and so separate lock is not needed here.
 	 */
 	list_add_tail_rcu(&handle->h_node, &handler->h_list);
-
-	if (handler->start)
-		handler->start(handle);
 
 	return 0;
 }
