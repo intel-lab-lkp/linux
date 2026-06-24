@@ -41,7 +41,7 @@
  */
 #define TB_ASYM_THRESHOLD	45000
 
-#define MAX_GROUPS		7	/* max Group_ID is 7 */
+#define MAX_GROUPS		(7 + 1)	/* Group_ID 0 is reserved */
 
 static unsigned int asym_threshold = TB_ASYM_THRESHOLD;
 module_param_named(asym_threshold, asym_threshold, uint, 0444);
@@ -1585,7 +1585,7 @@ static void tb_init_bandwidth_groups(struct tb_cm *tcm)
 		struct tb_bandwidth_group *group = &tcm->groups[i];
 
 		group->tb = tcm_to_tb(tcm);
-		group->index = i + 1;
+		group->index = i;
 		INIT_LIST_HEAD(&group->ports);
 		INIT_DELAYED_WORK(&group->release_work,
 				  tb_bandwidth_group_release_work);
@@ -1608,7 +1608,7 @@ static struct tb_bandwidth_group *tb_find_free_bandwidth_group(struct tb_cm *tcm
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(tcm->groups); i++) {
+	for (i = 1; i < ARRAY_SIZE(tcm->groups); i++) {
 		struct tb_bandwidth_group *group = &tcm->groups[i];
 
 		if (list_empty(&group->ports))
@@ -1662,7 +1662,7 @@ static void tb_discover_bandwidth_group(struct tb_cm *tcm, struct tb_port *in,
 		int index, i;
 
 		index = usb4_dp_port_group_id(in);
-		for (i = 0; i < ARRAY_SIZE(tcm->groups); i++) {
+		for (i = 1; i < ARRAY_SIZE(tcm->groups); i++) {
 			if (tcm->groups[i].index == index) {
 				tb_bandwidth_group_attach_port(&tcm->groups[i], in);
 				return;
