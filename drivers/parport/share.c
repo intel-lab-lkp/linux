@@ -1025,8 +1025,8 @@ int parport_claim(struct pardevice *dev)
 	/* If it's a daisy chain device, select it. */
 	if (dev->daisy >= 0) {
 		/* This could be lazier. */
-		if (!parport_daisy_select(port, dev->daisy,
-					   IEEE1284_MODE_COMPAT))
+		if (parport_daisy_select(port, dev->daisy,
+					 IEEE1284_MODE_COMPAT))
 			port->daisy = dev->daisy;
 	}
 #endif /* IEEE1284.3 support */
