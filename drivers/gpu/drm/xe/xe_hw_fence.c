@@ -16,6 +16,8 @@
 
 static struct kmem_cache *xe_hw_fence_slab;
 
+static struct xe_hw_fence *to_xe_hw_fence(struct dma_fence *fence);
+
 int __init xe_hw_fence_module_init(void)
 {
 	xe_hw_fence_slab = kmem_cache_create("xe_hw_fence",
@@ -47,6 +49,16 @@ static void fence_free(struct rcu_head *rcu)
 		kmem_cache_free(xe_hw_fence_slab, fence);
 }
 
+static bool xe_hw_fence_signaled(struct dma_fence *dma_fence)
+{
+	struct xe_hw_fence *fence = to_xe_hw_fence(dma_fence);
+	struct xe_device *xe = fence->xe;
+	u32 seqno = xe_map_rd(xe, &fence->seqno_map, 0, u32);
+
+	return dma_fence->error ||
+		!__dma_fence_is_later(dma_fence, dma_fence->seqno, seqno);
+}
+
 static void hw_fence_irq_run_cb(struct irq_work *work)
 {
 	struct xe_hw_fence_irq *irq = container_of(work, typeof(*irq), work);
@@ -60,7 +72,9 @@ static void hw_fence_irq_run_cb(struct irq_work *work)
 			struct dma_fence *dma_fence = &fence->dma;
 
 			trace_xe_hw_fence_try_signal(fence);
-			if (dma_fence_is_signaled_locked(dma_fence)) {
+			if (dma_fence_test_signaled_flag(dma_fence) ||
+			    xe_hw_fence_signaled(dma_fence)) {
+				dma_fence_signal_locked(dma_fence);
 				trace_xe_hw_fence_signal(fence);
 				list_del_init(&fence->irq_link);
 				dma_fence_put(dma_fence);
@@ -120,8 +134,6 @@ void xe_hw_fence_ctx_finish(struct xe_hw_fence_ctx *ctx)
 {
 }
 
-static struct xe_hw_fence *to_xe_hw_fence(struct dma_fence *fence);
-
 static struct xe_hw_fence_irq *xe_hw_fence_irq(struct xe_hw_fence *fence)
 {
 	return container_of(fence->dma.extern_lock, struct xe_hw_fence_irq,
@@ -140,16 +152,6 @@ static const char *xe_hw_fence_get_timeline_name(struct dma_fence *dma_fence)
 	struct xe_hw_fence *fence = to_xe_hw_fence(dma_fence);
 
 	return fence->name;
-}
-
-static bool xe_hw_fence_signaled(struct dma_fence *dma_fence)
-{
-	struct xe_hw_fence *fence = to_xe_hw_fence(dma_fence);
-	struct xe_device *xe = fence->xe;
-	u32 seqno = xe_map_rd(xe, &fence->seqno_map, 0, u32);
-
-	return dma_fence->error ||
-		!__dma_fence_is_later(dma_fence, dma_fence->seqno, seqno);
 }
 
 static bool xe_hw_fence_enable_signaling(struct dma_fence *dma_fence)
