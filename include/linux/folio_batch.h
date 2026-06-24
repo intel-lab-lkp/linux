@@ -53,7 +53,7 @@ static inline void folio_batch_reinit(struct folio_batch *fbatch)
 
 static inline unsigned int folio_batch_count(const struct folio_batch *fbatch)
 {
-	return fbatch->nr;
+	return READ_ONCE(fbatch->nr);
 }
 
 static inline unsigned int folio_batch_space(const struct folio_batch *fbatch)
