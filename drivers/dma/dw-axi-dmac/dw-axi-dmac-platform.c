@@ -1336,12 +1336,17 @@ static int axi_dma_resume(struct axi_dma_chip *chip)
 
 	ret = clk_prepare_enable(chip->core_clk);
 	if (ret < 0)
-		return ret;
+		goto err_disable_cfgr_clk;
 
 	axi_dma_enable(chip);
 	axi_dma_irq_enable(chip);
 
 	return 0;
+
+err_disable_cfgr_clk:
+	clk_disable_unprepare(chip->cfgr_clk);
+
+	return ret;
 }
 
 static int __maybe_unused axi_dma_runtime_suspend(struct device *dev)
