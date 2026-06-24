@@ -10,7 +10,9 @@
  */
 
 #include <linux/io.h>
+#include <linux/limits.h>
 #include <linux/mm.h>
+#include <linux/overflow.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 
@@ -161,6 +163,8 @@ int acrn_vm_ram_map(struct acrn_vm *vm, struct acrn_vm_memmap *memmap)
 	struct vm_memory_region_op *vm_region;
 	struct page **pages = NULL, *page;
 	void *remap_vaddr;
+	unsigned long vma_base, vma_end;
+	u64 nr_pages64;
 	int ret, pinned;
 	u64 user_vm_pa;
 	struct vm_area_struct *vma;
@@ -168,18 +172,27 @@ int acrn_vm_ram_map(struct acrn_vm *vm, struct acrn_vm_memmap *memmap)
 	if (!vm || !memmap)
 		return -EINVAL;
 
-	/* Get the page number of the map region */
-	nr_pages = memmap->len >> PAGE_SHIFT;
-	if (!nr_pages)
+	if (memmap->vma_base > ULONG_MAX || memmap->len > ULONG_MAX)
+		return -EINVAL;
+	vma_base = memmap->vma_base;
+	if (!PAGE_ALIGNED(vma_base) || !PAGE_ALIGNED(memmap->user_vm_pa) ||
+	    !PAGE_ALIGNED(memmap->len) ||
+	    check_add_overflow(vma_base, (unsigned long)memmap->len, &vma_end))
 		return -EINVAL;
 
+	/* Get the page number of the map region */
+	nr_pages64 = memmap->len >> PAGE_SHIFT;
+	if (!nr_pages64 || nr_pages64 > INT_MAX)
+		return -EINVAL;
+	nr_pages = nr_pages64;
+
 	mmap_read_lock(current->mm);
-	vma = vma_lookup(current->mm, memmap->vma_base);
+	vma = vma_lookup(current->mm, vma_base);
 	if (vma && ((vma->vm_flags & VM_PFNMAP) != 0)) {
 		unsigned long start_pfn, cur_pfn;
 		bool writable;
 
-		if ((memmap->vma_base + memmap->len) > vma->vm_end) {
+		if (vma_end > vma->vm_end) {
 			mmap_read_unlock(current->mm);
 			return -EINVAL;
 		}
@@ -187,7 +200,7 @@ int acrn_vm_ram_map(struct acrn_vm *vm, struct acrn_vm_memmap *memmap)
 		for (i = 0; i < nr_pages; i++) {
 			struct follow_pfnmap_args args = {
 				.vma = vma,
-				.address = memmap->vma_base + i * PAGE_SIZE,
+				.address = vma_base + i * PAGE_SIZE,
 			};
 
 			ret = follow_pfnmap_start(&args);
@@ -239,7 +252,7 @@ int acrn_vm_ram_map(struct acrn_vm *vm, struct acrn_vm_memmap *memmap)
 		return -ENOMEM;
 
 	/* Lock the pages of user memory map region */
-	pinned = pin_user_pages_fast(memmap->vma_base,
+	pinned = pin_user_pages_fast(vma_base,
 				     nr_pages, FOLL_WRITE | FOLL_LONGTERM,
 				     pages);
 	if (pinned < 0) {
