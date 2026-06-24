@@ -472,8 +472,7 @@ int perf_data__switch(struct perf_data *data,
 		pr_warning("Failed to rename %s to %s\n", data->path, *new_filepath);
 
 	if (!at_exit) {
-		perf_data_file__close(&data->file);
-		data->open = false;
+		perf_data__close(data);
 		ret = perf_data__open(data);
 		if (ret < 0)
 			goto out;
