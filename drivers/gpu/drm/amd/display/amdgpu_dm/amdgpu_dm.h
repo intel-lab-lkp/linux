@@ -646,19 +646,6 @@ struct amdgpu_display_manager {
 	struct workqueue_struct *delayed_hpd_wq;
 
 	/**
-	 * @brightness:
-	 *
-	 * cached backlight values.
-	 */
-	u32 brightness[AMDGPU_DM_MAX_NUM_EDP];
-	/**
-	 * @actual_brightness:
-	 *
-	 * last successfully applied backlight values.
-	 */
-	u32 actual_brightness[AMDGPU_DM_MAX_NUM_EDP];
-
-	/**
 	 * @aux_hpd_discon_quirk:
 	 *
 	 * quirk for hpd discon while aux is on-going.
