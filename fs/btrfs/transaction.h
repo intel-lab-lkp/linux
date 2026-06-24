@@ -12,7 +12,6 @@
 #include <linux/time64.h>
 #include <linux/mutex.h>
 #include <linux/wait.h>
-#include <linux/xarray.h>
 #include "btrfs_inode.h"
 #include "delayed-ref.h"
 
@@ -23,6 +22,7 @@ struct btrfs_fs_info;
 struct btrfs_root_item;
 struct btrfs_root;
 struct btrfs_path;
+struct extent_buffer;
 
 /*
  * Signal that a direct IO write is in progress, to avoid deadlock for sync
@@ -136,6 +136,12 @@ enum {
 
 #define TRANS_EXTWRITERS	(__TRANS_START | __TRANS_ATTACH)
 
+/*
+ * Must stay <= 32: the CLOCK reference bits pack into the u32
+ * inhibited_ebs_referenced.
+ */
+#define BTRFS_INHIBITED_EBS_SLOTS	8
+
 struct btrfs_trans_handle {
 	u64 transid;
 	u64 bytes_reserved;
@@ -163,8 +169,11 @@ struct btrfs_trans_handle {
 	struct btrfs_fs_info *fs_info;
 	struct list_head new_bgs;
 	struct btrfs_block_rsv delayed_rsv;
-	/* Extent buffers with writeback inhibited by this handle. */
-	struct xarray writeback_inhibited_ebs;
+	/* Extent buffers this handle has inhibited writeback on. */
+	struct extent_buffer *inhibited_ebs[BTRFS_INHIBITED_EBS_SLOTS];
+	u32 inhibited_ebs_referenced;	/* CLOCK reference bit per slot */
+	u32 nr_inhibited_ebs;
+	u8 inhibited_ebs_hand;		/* CLOCK hand */
 };
 
 /*
