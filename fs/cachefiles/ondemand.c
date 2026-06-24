@@ -196,6 +196,17 @@ int cachefiles_ondemand_copen(struct cachefiles_cache *cache, char *args)
 		xa_unlock(&cache->reqs);
 		return -EINVAL;
 	}
+
+	/*
+	 * The OPEN request must not be completed by copen until the
+	 * daemon_read side has successfully delivered the OPEN message and
+	 * installed the anonymous fd.  Otherwise a daemon can use a partially
+	 * copied message from a failed read to complete the request.
+	 */
+	if (!READ_ONCE(req->open_msg_delivered)) {
+		xa_unlock(&cache->reqs);
+		return -EAGAIN;
+	}
 	xas_store(&xas, NULL);
 	xa_unlock(&cache->reqs);
 
@@ -469,6 +480,7 @@ ssize_t cachefiles_ondemand_daemon_read(struct cachefiles_cache *cache,
 			goto out;
 		}
 		fd_install(anon_file.fd, anon_file.file);
+		WRITE_ONCE(req->open_msg_delivered, true);
 	}
 out:
 	cachefiles_put_object(req->object, cachefiles_obj_put_read_req);

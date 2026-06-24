@@ -143,6 +143,7 @@ struct cachefiles_req {
 	struct completion done;
 	refcount_t ref;
 	int error;
+	bool open_msg_delivered;
 	struct cachefiles_msg msg;
 };
 
