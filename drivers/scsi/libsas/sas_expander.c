@@ -345,13 +345,16 @@ static void sas_set_ex_phy(struct domain_device *dev, int phy_id,
 		 SAS_ADDR(phy->attached_sas_addr), type);
 }
 
-/* check if we have an existing attached ata device on this expander phy */
-struct domain_device *sas_ex_to_ata(struct domain_device *ex_dev, int phy_id)
+/* return the domain device attached to an expander phy */
+struct domain_device *sas_ex_to_dev(struct domain_device *ex_dev, int phy_id)
 {
-	struct ex_phy *ex_phy = &ex_dev->ex_dev.ex_phy[phy_id];
-	struct domain_device *dev;
+	struct ex_phy *ex_phy;
 	struct sas_rphy *rphy;
 
+	if (!ex_dev)
+		return NULL;
+
+	ex_phy = &ex_dev->ex_dev.ex_phy[phy_id];
 	if (!ex_phy->port)
 		return NULL;
 
@@ -359,7 +362,13 @@ struct domain_device *sas_ex_to_ata(struct domain_device *ex_dev, int phy_id)
 	if (!rphy)
 		return NULL;
 
-	dev = sas_find_dev_by_rphy(rphy);
+	return sas_find_dev_by_rphy(rphy);
+}
+
+/* check if we have an existing attached ata device on this expander phy */
+struct domain_device *sas_ex_to_ata(struct domain_device *ex_dev, int phy_id)
+{
+	struct domain_device *dev = sas_ex_to_dev(ex_dev, phy_id);
 
 	if (dev && dev_is_sata(dev))
 		return dev;
