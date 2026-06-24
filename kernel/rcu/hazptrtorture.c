@@ -83,6 +83,12 @@ static atomic_t n_hazptr_torture_alloc;
 static atomic_t n_hazptr_torture_alloc_fail;
 static atomic_t n_hazptr_torture_free;
 static atomic_t n_hazptr_torture_error;
+static DEFINE_PER_CPU(atomic_long_t, hazptr_torture_acquires);
+static DEFINE_PER_CPU(atomic_long_t, hazptr_torture_releases);
+static DEFINE_PER_CPU(atomic_long_t, hazptr_torture_acquires_irq);
+static DEFINE_PER_CPU(atomic_long_t, hazptr_torture_releases_irq);
+static DEFINE_PER_CPU(atomic_long_t, hazptr_torture_releases_defer);
+static DEFINE_PER_CPU(atomic_long_t, hazptr_torture_releases_undefer);
 static struct list_head hazptr_torture_removed;
 
 // State for a deferred (AKA pending) hazard pointer
@@ -370,6 +376,7 @@ static void hazptr_torture_acquire(void *hppp_in)
 	struct hazptr_pending *hppp = hppp_in;
 
 	hppp->hpp_htp = cur_ops->readlock(&hppp->hpp_hc);
+	atomic_long_inc(per_cpu_ptr(&hazptr_torture_acquires_irq, raw_smp_processor_id()));
 }
 
 /*
@@ -380,6 +387,7 @@ static void hazptr_torture_release(void *hppp_in)
 	struct hazptr_pending *hppp = hppp_in;
 
 	cur_ops->readunlock(&hppp->hpp_hc, hppp->hpp_htp);
+	atomic_long_inc(per_cpu_ptr(&hazptr_torture_releases_irq, raw_smp_processor_id()));
 }
 
 /*
@@ -413,6 +421,7 @@ hazptr_torture_reader_tail(struct hazptr_pending *hppp, struct torture_random_st
 		smp_call_function_single(cpu, hazptr_torture_release, hppp, 1);
 	} else {
 		cur_ops->readunlock(hcp, htp);
+		atomic_long_inc(per_cpu_ptr(&hazptr_torture_releases, raw_smp_processor_id()));
 	}
 }
 
@@ -461,12 +470,17 @@ static int hazptr_torture_reader(void *arg)
 		if (irq_acquire && !(torture_random(&rand) % irq_acquire)) {
 			guard(preempt)();
 			cpu = cpumask_next_wrap(cpu, cpu_online_mask);
-			if (cpu != smp_processor_id())
+			if (cpu != smp_processor_id()) {
 				smp_call_function_single(cpu, hazptr_torture_acquire, hppp, 1);
-			else
+			} else {
 				hppp->hpp_htp = cur_ops->readlock(&hppp->hpp_hc);
+				atomic_long_inc(per_cpu_ptr(&hazptr_torture_acquires,
+							    raw_smp_processor_id()));
+			}
 		} else {
 			hppp->hpp_htp = cur_ops->readlock(&hppp->hpp_hc);
+			atomic_long_inc(per_cpu_ptr(&hazptr_torture_acquires,
+						    raw_smp_processor_id()));
 		}
 		if (!hppp->hpp_htp) {
 			// Still starting up, so get out of the way.
@@ -508,6 +522,8 @@ static void hazptr_torture_do_one_pending(int cpu, struct torture_random_state *
 		return;
 	llist_for_each_entry_safe(hppp, hppp1, llnp, hpp_node) {
 		hazptr_torture_reader_tail(hppp, trsp);
+		atomic_long_inc(per_cpu_ptr(&hazptr_torture_releases_undefer,
+					    raw_smp_processor_id()));
 		kfree(hppp);
 	}
 }
@@ -616,6 +632,13 @@ hazptr_torture_stats_print(void)
 		atomic_read(&n_hazptr_torture_alloc_fail),
 		atomic_read(&n_hazptr_torture_free));
 	torture_onoff_stats();
+	pr_cont("acq: %lld rel: %lld acqirq: %lld relirq: %lld reldefer: %lld relundefer %lld\n",
+		torture_sum_pcpu_atomic_long(&hazptr_torture_acquires),
+		torture_sum_pcpu_atomic_long(&hazptr_torture_releases),
+		torture_sum_pcpu_atomic_long(&hazptr_torture_acquires_irq),
+		torture_sum_pcpu_atomic_long(&hazptr_torture_releases_irq),
+		torture_sum_pcpu_atomic_long(&hazptr_torture_releases_defer),
+		torture_sum_pcpu_atomic_long(&hazptr_torture_releases_undefer));
 
 	pr_alert("%s%s ", torture_type, TORTURE_FLAG);
 	if (i > 1) {
