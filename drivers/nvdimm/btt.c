@@ -341,8 +341,9 @@ static int btt_log_read(struct arena_info *arena, u32 lane,
 	if (old_ent < 0 || old_ent > 1) {
 		dev_err(to_dev(arena),
 				"log corruption (%d): lane %d seq [%d, %d]\n",
-				old_ent, lane, log.ent[arena->log_index[0]].seq,
-				log.ent[arena->log_index[1]].seq);
+				old_ent, lane,
+				le32_to_cpu(log.ent[arena->log_index[0]].seq),
+				le32_to_cpu(log.ent[arena->log_index[1]].seq));
 		/* TODO set error state? */
 		return -EIO;
 	}
