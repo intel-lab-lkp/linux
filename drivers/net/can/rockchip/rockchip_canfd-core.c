@@ -102,13 +102,23 @@ static const struct can_bittiming_const rkcanfd_data_bittiming_const = {
 	.brp_inc = 2,	/* value from data sheet x2 */
 };
 
-static void rkcanfd_chip_set_reset_mode(const struct rkcanfd_priv *priv)
+static int rkcanfd_chip_set_reset_mode(const struct rkcanfd_priv *priv)
 {
-	reset_control_assert(priv->reset);
+	int err;
+
+	err = reset_control_assert(priv->reset);
+	if (err)
+		return err;
+
 	udelay(2);
-	reset_control_deassert(priv->reset);
+
+	err = reset_control_deassert(priv->reset);
+	if (err)
+		return err;
 
 	rkcanfd_write(priv, RKCANFD_REG_MODE, 0x0);
+
+	return 0;
 }
 
 static void rkcanfd_chip_set_work_mode(const struct rkcanfd_priv *priv)
@@ -246,11 +256,14 @@ static void rkcanfd_chip_fifo_setup(struct rkcanfd_priv *priv)
 	netdev_reset_queue(priv->ndev);
 }
 
-static void rkcanfd_chip_start(struct rkcanfd_priv *priv)
+static int rkcanfd_chip_start(struct rkcanfd_priv *priv)
 {
 	u32 reg;
+	int err;
 
-	rkcanfd_chip_set_reset_mode(priv);
+	err = rkcanfd_chip_set_reset_mode(priv);
+	if (err)
+		return err;
 
 	/* Receiving Filter: accept all */
 	rkcanfd_write(priv, RKCANFD_REG_IDCODE, 0x0);
@@ -309,13 +322,16 @@ static void rkcanfd_chip_start(struct rkcanfd_priv *priv)
 
 	netdev_dbg(priv->ndev, "%s: reg_mode=0x%08x\n", __func__,
 		   rkcanfd_read(priv, RKCANFD_REG_MODE));
+
+	return 0;
 }
 
 static void __rkcanfd_chip_stop(struct rkcanfd_priv *priv, const enum can_state state)
 {
 	priv->can.state = state;
 
-	rkcanfd_chip_set_reset_mode(priv);
+	if (rkcanfd_chip_set_reset_mode(priv))
+		netdev_err(priv->ndev, "Failed to reset CAN-FD controller\n");
 	rkcanfd_chip_interrupts_disable(priv);
 }
 
@@ -339,10 +355,14 @@ static int rkcanfd_set_mode(struct net_device *ndev,
 			    enum can_mode mode)
 {
 	struct rkcanfd_priv *priv = netdev_priv(ndev);
+	int err;
 
 	switch (mode) {
 	case CAN_MODE_START:
-		rkcanfd_chip_start(priv);
+		err = rkcanfd_chip_start(priv);
+		if (err)
+			return err;
+
 		rkcanfd_chip_interrupts_enable(priv);
 		netif_wake_queue(ndev);
 		break;
@@ -719,7 +739,10 @@ static int rkcanfd_open(struct net_device *ndev)
 	if (err)
 		goto out_close_candev;
 
-	rkcanfd_chip_start(priv);
+	err = rkcanfd_chip_start(priv);
+	if (err)
+		goto out_runtime_put;
+
 	can_rx_offload_enable(&priv->offload);
 
 	err = request_irq(ndev->irq, rkcanfd_irq, IRQF_SHARED, ndev->name, priv);
@@ -734,6 +757,7 @@ static int rkcanfd_open(struct net_device *ndev)
 
 out_rkcanfd_chip_stop:
 	rkcanfd_chip_stop_sync(priv, CAN_STATE_STOPPED);
+out_runtime_put:
 	pm_runtime_put(ndev->dev.parent);
 out_close_candev:
 	close_candev(ndev);
