@@ -106,7 +106,7 @@ static unsigned long __sgx_sanitize_pages(struct list_head *dirty_page_list)
 			left_dirty++;
 		}
 
-		cond_resched();
+		cond_resched_tasks_rcu_qs();
 	}
 
 	list_splice(&dirty, dirty_page_list);
