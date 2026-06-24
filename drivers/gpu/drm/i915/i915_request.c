@@ -95,8 +95,12 @@ static void i915_fence_signaled(struct dma_fence *fence)
 
 static void i915_fence_enable_signaling(struct dma_fence *fence)
 {
+	unsigned long flags;
+
+	dma_fence_lock_irqsave(fence, flags);
 	if (!i915_request_enable_breadcrumb(to_request(fence)))
 		dma_fence_signal_locked(fence);
+	dma_fence_unlock_irqrestore(fence, flags);
 }
 
 static signed long i915_fence_wait(struct dma_fence *fence,

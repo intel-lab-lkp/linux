@@ -121,27 +121,27 @@ static const char *amdkfd_fence_get_timeline_name(struct dma_fence *f)
 static void amdkfd_fence_enable_signaling(struct dma_fence *f)
 {
 	struct amdgpu_amdkfd_fence *fence = to_amdgpu_amdkfd_fence(f);
+	unsigned long flags;
 
-	if (!fence) {
-		dma_fence_signal_locked(f);
-		return;
-	}
-
-	if (dma_fence_is_signaled(f))
-		return;
+	dma_fence_lock_irqsave(f, flags);
 
 	/* if fence->svm_bo is NULL, means this fence is created through
 	 * init_kfd_vm() or amdgpu_amdkfd_gpuvm_restore_process_bos().
 	 * Therefore, this fence is amdgpu_amdkfd_fence->eviction_fence.
 	 */
 	if (!fence->svm_bo) {
-		if (!kgd2kfd_schedule_evict_and_restore_process(fence->mm, fence->context_id, f))
+		if (!kgd2kfd_schedule_evict_and_restore_process(fence->mm, fence->context_id, f)) {
+			dma_fence_unlock_irqrestore(f, flags);
 			return;
+		}
 	} else {
-		if (!svm_range_schedule_evict_svm_bo(fence))
+		if (!svm_range_schedule_evict_svm_bo(fence)) {
+			dma_fence_unlock_irqrestore(f, flags);
 			return;
+		}
 	}
 	dma_fence_signal_locked(f);
+	dma_fence_unlock_irqrestore(f, flags);
 }
 
 /**

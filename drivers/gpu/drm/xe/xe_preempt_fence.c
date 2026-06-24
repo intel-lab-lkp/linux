@@ -72,9 +72,12 @@ static void preempt_fence_enable_signaling(struct dma_fence *fence)
 	struct xe_preempt_fence *pfence =
 		container_of(fence, typeof(*pfence), base);
 	struct xe_exec_queue *q = pfence->q;
+	unsigned long flags;
 
+	dma_fence_lock_irqsave(fence, flags);
 	pfence->error = q->ops->suspend(q);
 	queue_work(q->vm->xe->preempt_fence_wq, &pfence->preempt_work);
+	dma_fence_unlock_irqrestore(fence, flags);
 }
 
 static const struct dma_fence_ops preempt_fence_ops = {

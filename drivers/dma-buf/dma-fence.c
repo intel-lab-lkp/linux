@@ -626,12 +626,18 @@ void dma_fence_free(struct dma_fence *fence)
 }
 EXPORT_SYMBOL(dma_fence_free);
 
-static void __dma_fence_enable_signaling(struct dma_fence *fence)
+/**
+ * dma_fence_enable_signaling - enable signaling on fence
+ * @fence: the fence to enable
+ *
+ * This will request for sw signaling to be enabled, to make the fence
+ * complete as soon as possible. This calls &dma_fence_ops.enable_signaling
+ * internally.
+ */
+void dma_fence_enable_signaling(struct dma_fence *fence)
 {
 	const struct dma_fence_ops *ops;
 	bool was_set;
-
-	dma_fence_assert_held(fence);
 
 	was_set = test_and_set_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT,
 				   &fence->flags);
@@ -646,23 +652,6 @@ static void __dma_fence_enable_signaling(struct dma_fence *fence)
 		ops->enable_signaling(fence);
 	}
 	rcu_read_unlock();
-}
-
-/**
- * dma_fence_enable_signaling - enable signaling on fence
- * @fence: the fence to enable
- *
- * This will request for sw signaling to be enabled, to make the fence
- * complete as soon as possible. This calls &dma_fence_ops.enable_signaling
- * internally.
- */
-void dma_fence_enable_signaling(struct dma_fence *fence)
-{
-	unsigned long flags;
-
-	dma_fence_lock_irqsave(fence, flags);
-	__dma_fence_enable_signaling(fence);
-	dma_fence_unlock_irqrestore(fence, flags);
 }
 EXPORT_SYMBOL(dma_fence_enable_signaling);
 
@@ -702,8 +691,9 @@ int dma_fence_add_callback(struct dma_fence *fence, struct dma_fence_cb *cb,
 		return -ENOENT;
 	}
 
+	dma_fence_enable_signaling(fence);
+
 	dma_fence_lock_irqsave(fence, flags);
-	__dma_fence_enable_signaling(fence);
 	if (!dma_fence_test_signaled_flag(fence)) {
 		cb->func = func;
 		list_add_tail(&cb->node, &fence->cb_list);

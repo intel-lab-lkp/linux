@@ -100,9 +100,11 @@ static void vmw_fence_enable_signaling(struct dma_fence *f)
 	u32 seqno;
 	struct vmw_fence_obj *fence =
 		container_of(f, struct vmw_fence_obj, base);
-
 	struct vmw_fence_manager *fman = fman_from_fence(fence);
 	struct vmw_private *dev_priv = fman->dev_priv;
+	unsigned long flags;
+
+	dma_fence_lock_irqsave(f, flags);
 check_for_race:
 	seqno = vmw_fence_read(dev_priv);
 	if (seqno - fence->base.seqno < VMW_FENCE_WRAP) {
@@ -111,12 +113,14 @@ check_for_race:
 			fence->waiter_added = false;
 		}
 		dma_fence_signal_locked(f);
+		dma_fence_unlock_irqrestore(f, flags);
 		return;
 	} else if (!fence->waiter_added) {
 		fence->waiter_added = true;
 		if (vmw_seqno_waiter_add(dev_priv))
 			goto check_for_race;
 	}
+	dma_fence_unlock_irqrestore(f, flags);
 }
 
 static u32 __vmw_fences_update(struct vmw_fence_manager *fman);

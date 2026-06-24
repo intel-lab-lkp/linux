@@ -33,9 +33,13 @@ static struct host1x_syncpt_fence *to_host1x_fence(struct dma_fence *f)
 static void host1x_syncpt_fence_enable_signaling(struct dma_fence *f)
 {
 	struct host1x_syncpt_fence *sf = to_host1x_fence(f);
+	unsigned long flags;
+
+	dma_fence_lock_irqsave(f, flags);
 
 	if (host1x_syncpt_is_expired(sf->sp, sf->threshold)) {
 		dma_fence_signal_locked(f);
+		dma_fence_unlock_irqrestore(f, flags);
 		return;
 	}
 
@@ -64,6 +68,8 @@ static void host1x_syncpt_fence_enable_signaling(struct dma_fence *f)
 	 * so we need to initialize all state used by signalling
 	 * before it.
 	 */
+
+	dma_fence_unlock_irqrestore(f, flags);
 }
 
 static const struct dma_fence_ops host1x_syncpt_fence_ops = {

@@ -472,7 +472,7 @@ static void nouveau_fence_is_signaled(struct dma_fence *f)
 		dma_fence_signal(f);
 }
 
-static void nouveau_fence_no_signaling(struct dma_fence *f)
+static void __nouveau_fence_no_signaling(struct dma_fence *f)
 {
 	struct nouveau_fence *fence = to_nouveau_fence(f);
 
@@ -494,6 +494,15 @@ static void nouveau_fence_no_signaling(struct dma_fence *f)
 		dma_fence_put(&fence->base);
 		dma_fence_signal_locked(f);
 	}
+}
+
+static void nouveau_fence_no_signaling(struct dma_fence *f)
+{
+	unsigned long flags;
+
+	dma_fence_lock_irqsave(f, flags);
+	__nouveau_fence_no_signaling(f);
+	dma_fence_unlock_irqrestore(f, flags);
 }
 
 static void nouveau_fence_release(struct dma_fence *f)
@@ -518,15 +527,18 @@ static void nouveau_fence_enable_signaling(struct dma_fence *f)
 {
 	struct nouveau_fence *fence = to_nouveau_fence(f);
 	struct nouveau_fence_chan *fctx = nouveau_fctx(fence);
+	unsigned long flags;
 
 	if (!fctx->notify_ref++)
 		nvif_event_allow(&fctx->event);
 
-	nouveau_fence_no_signaling(f);
+	dma_fence_lock_irqsave(f, flags);
+	__nouveau_fence_no_signaling(f);
 	if (!dma_fence_test_signaled_flag(f))
 		set_bit(DMA_FENCE_FLAG_USER_BITS, &fence->base.flags);
 	else if (!--fctx->notify_ref)
 		nvif_event_block(&fctx->event);
+	dma_fence_unlock_irqrestore(f, flags);
 }
 
 static const struct dma_fence_ops nouveau_fence_ops_uevent = {

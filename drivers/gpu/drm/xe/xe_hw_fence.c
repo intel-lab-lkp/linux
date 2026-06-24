@@ -158,7 +158,9 @@ static void xe_hw_fence_enable_signaling(struct dma_fence *dma_fence)
 {
 	struct xe_hw_fence *fence = to_xe_hw_fence(dma_fence);
 	struct xe_hw_fence_irq *irq = xe_hw_fence_irq(fence);
+	unsigned long flags;
 
+	dma_fence_lock_irqsave(dma_fence, flags);
 	dma_fence_get(dma_fence);
 	list_add_tail(&fence->irq_link, &irq->pending);
 
@@ -166,6 +168,7 @@ static void xe_hw_fence_enable_signaling(struct dma_fence *dma_fence)
 	xe_hw_fence_signaled(dma_fence);
 	if (dma_fence_test_signaled_flag(dma_fence))
 		xe_hw_fence_irq_run(irq);
+	dma_fence_unlock_irqrestore(dma_fence, flags);
 }
 
 static void xe_hw_fence_release(struct dma_fence *dma_fence)

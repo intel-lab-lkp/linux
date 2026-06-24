@@ -122,14 +122,11 @@ static const char *dma_fence_chain_get_timeline_name(struct dma_fence *fence)
 static void dma_fence_chain_irq_work(struct irq_work *work)
 {
 	struct dma_fence_chain *chain;
-	unsigned long flags;
 
 	chain = container_of(work, typeof(*chain), work);
 
 	/* Try to rearm the callback */
-	dma_fence_lock_irqsave(&chain->base, flags);
 	dma_fence_chain_enable_signaling(&chain->base);
-	dma_fence_unlock_irqrestore(&chain->base, flags);
 	dma_fence_put(&chain->base);
 }
 
@@ -159,8 +156,9 @@ static void dma_fence_chain_enable_signaling(struct dma_fence *fence)
 		dma_fence_put(f);
 	}
 	dma_fence_put(&head->base);
+
 	/* Ok, we are done. No more unsignaled fences left */
-	dma_fence_signal_locked(&head->base);
+	dma_fence_signal(&head->base);
 }
 
 static void dma_fence_chain_signaled(struct dma_fence *fence)
@@ -246,7 +244,6 @@ void dma_fence_chain_init(struct dma_fence_chain *chain,
 			  struct dma_fence *fence,
 			  uint64_t seqno)
 {
-	static struct lock_class_key dma_fence_chain_lock_key;
 	struct dma_fence_chain *prev_chain = to_dma_fence_chain(prev);
 	uint64_t context;
 
@@ -267,18 +264,6 @@ void dma_fence_chain_init(struct dma_fence_chain *chain,
 
 	dma_fence_init64(&chain->base, &dma_fence_chain_ops, NULL,
 			 context, seqno);
-
-	/*
-	 * dma_fence_chain_enable_signaling() is invoked while holding
-	 * chain->base.inline_lock and may call dma_fence_add_callback()
-	 * on the underlying fences, which takes their inline_lock.
-	 *
-	 * Since both locks share the same lockdep class, this legitimate
-	 * nesting confuses lockdep and triggers a recursive locking
-	 * warning. Assign a separate lockdep class to the chain lock
-	 * to model this hierarchy correctly.
-	 */
-	lockdep_set_class(&chain->base.inline_lock, &dma_fence_chain_lock_key);
 
 	/*
 	 * Chaining dma_fence_chain container together is only allowed through

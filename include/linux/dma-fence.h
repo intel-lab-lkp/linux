@@ -171,12 +171,16 @@ struct dma_fence_ops {
 	 * implementation know that there is another driver waiting on the
 	 * signal (ie. hw->sw case).
 	 *
-	 * This is called with irq's disabled, so only spinlocks which disable
-	 * IRQ's can be used in the code outside of this callback.
+	 * The callback is responsible for acquiring the fence lock if needed
+	 * using dma_fence_lock_irqsave(). This gives drivers control over their
+	 * locking strategy and allows them to minimize the critical section if
+	 * they have complex logic.
 	 *
 	 * If the fence has already passed or if some failure occurred that
 	 * makes it impossible to enable signaling, the implementation must
-	 * call dma_fence_signal_locked() before returning.
+	 * call dma_fence_signal_locked() before returning. Note that
+	 * dma_fence_signal_locked() requires the fence lock to be held, so
+	 * implementations calling it MUST acquire the lock first.
 	 *
 	 * &dma_fence.error may be set in enable_signaling before calling
 	 * dma_fence_signal_locked().

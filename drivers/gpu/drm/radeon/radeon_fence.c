@@ -373,9 +373,13 @@ static void radeon_fence_enable_signaling(struct dma_fence *f)
 {
 	struct radeon_fence *fence = to_radeon_fence(f);
 	struct radeon_device *rdev = fence->rdev;
+	unsigned long flags;
+
+	dma_fence_lock_irqsave(f, flags);
 
 	if (atomic64_read(&rdev->fence_drv[fence->ring].last_seq) >= fence->seq) {
 		dma_fence_signal_locked(f);
+		dma_fence_unlock_irqrestore(f, flags);
 		return;
 	}
 
@@ -390,6 +394,7 @@ static void radeon_fence_enable_signaling(struct dma_fence *f)
 			radeon_irq_kms_sw_irq_put(rdev, fence->ring);
 			up_read(&rdev->exclusive_lock);
 			dma_fence_signal_locked(f);
+			dma_fence_unlock_irqrestore(f, flags);
 			return;
 		}
 
@@ -406,6 +411,7 @@ static void radeon_fence_enable_signaling(struct dma_fence *f)
 	fence->fence_wake.func = radeon_fence_check_signaled;
 	__add_wait_queue(&rdev->fence_queue, &fence->fence_wake);
 	dma_fence_get(f);
+	dma_fence_unlock_irqrestore(f, flags);
 }
 
 /**
