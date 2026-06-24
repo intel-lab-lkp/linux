@@ -1794,6 +1794,9 @@ err_fm_soc_specific:
 err_fm_drv:
 	kfree(fman->state);
 err_fm_state:
+	if (fman->dts_params.err_irq != 0)
+		devm_free_irq(fman->dev, fman->dts_params.err_irq, fman);
+	devm_free_irq(fman->dev, fman->dts_params.irq, fman);
 	kfree(fman);
 	return -EINVAL;
 }
@@ -2718,6 +2721,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 	if (err < 0)
 		goto fman_node_put;
 	irq = err;
+	fman->dts_params.irq = irq;
 
 	/* Get the FM error interrupt */
 	err = platform_get_irq(of_dev, 1);
@@ -2788,7 +2792,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 		if (err < 0) {
 			dev_err(&of_dev->dev, "%s: irq %d allocation failed (error = %d)\n",
 				__func__, fman->dts_params.err_irq, err);
-			goto fman_free;
+			goto free_main_irq;
 		}
 	}
 
@@ -2796,7 +2800,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 	if (IS_ERR(base_addr)) {
 		err = PTR_ERR(base_addr);
 		dev_err(&of_dev->dev, "%s: devm_ioremap() failed\n", __func__);
-		goto fman_free;
+		goto free_irqs;
 	}
 
 	fman->dts_params.base_addr = base_addr;
@@ -2808,7 +2812,7 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 	if (err) {
 		dev_err(&of_dev->dev, "%s: of_platform_populate() failed\n",
 			__func__);
-		goto fman_free;
+		goto free_irqs;
 	}
 
 #ifdef CONFIG_DPAA_ERRATUM_A050385
@@ -2817,6 +2821,13 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 #endif
 
 	return fman;
+
+free_irqs:
+	if (fman->dts_params.err_irq != 0)
+		devm_free_irq(&of_dev->dev, fman->dts_params.err_irq, fman);
+free_main_irq:
+	devm_free_irq(&of_dev->dev, irq, fman);
+	goto fman_free;
 
 fman_node_put:
 	of_node_put(fm_node);
