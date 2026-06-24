@@ -2299,6 +2299,7 @@ static void __queue_work(int cpu, struct workqueue_struct *wq,
 {
 	struct pool_workqueue *pwq;
 	struct worker_pool *last_pool, *pool;
+	DEFINE_WAKE_Q(wakeq);
 	unsigned int work_flags;
 	unsigned int req_cpu = cpu;
 
@@ -2421,7 +2422,7 @@ retry:
 
 		trace_workqueue_activate_work(work);
 		insert_work(pwq, work, &pool->worklist, work_flags);
-		kick_pool(pool);
+		kick_pool_pick(pool, &wakeq);
 	} else {
 		work_flags |= WORK_STRUCT_INACTIVE;
 		insert_work(pwq, work, &pwq->inactive_works, work_flags);
@@ -2429,6 +2430,7 @@ retry:
 
 out:
 	raw_spin_unlock(&pool->lock);
+	wake_up_q(&wakeq);
 	rcu_read_unlock();
 }
 
