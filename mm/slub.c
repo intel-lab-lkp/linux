@@ -6411,7 +6411,11 @@ void defer_free_barrier(void)
 {
 	int cpu;
 
-	for_each_possible_cpu(cpu)
+	/* irq_work_sync() may use rcuwait that requires serialization */
+	lockdep_assert_held(&slab_mutex);
+	lockdep_assert_cpus_held();
+
+	for_each_online_cpu(cpu)
 		irq_work_sync(&per_cpu_ptr(&defer_free_objects, cpu)->work);
 }
 
