@@ -9219,7 +9219,7 @@ static bool is_rdev_holder_idle(struct md_rdev *rdev, bool init)
  *
  * Noted this checking rely on IO accounting is enabled.
  */
-static bool is_mddev_idle(struct mddev *mddev, int init)
+static bool is_mddev_idle(struct mddev *mddev, bool init)
 {
 	unsigned long last_events = mddev->normal_io_events;
 	struct gendisk *disk;
@@ -9771,7 +9771,7 @@ void md_do_sync(struct md_thread *thread)
 	pr_debug("md: using maximum available idle IO bandwidth (but not more than %d KB/sec) for %s.\n",
 		 speed_max(mddev), desc);
 
-	is_mddev_idle(mddev, 1); /* this initializes IO event counters */
+	is_mddev_idle(mddev, true); /* this initializes IO event counters */
 
 	io_sectors = 0;
 	for (m = 0; m < SYNC_MARKS; m++) {
@@ -9920,7 +9920,7 @@ update:
 				goto repeat;
 			}
 			if (!sync_io_within_limit(mddev) &&
-			    !is_mddev_idle(mddev, 0)) {
+			    !is_mddev_idle(mddev, false)) {
 				/*
 				 * Give other IO more of a chance.
 				 * The faster the devices, the less we wait.
