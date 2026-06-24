@@ -691,6 +691,7 @@ static struct fastrpc_invoke_ctx *fastrpc_context_alloc(
 	ctx->cctx = cctx;
 	init_completion(&ctx->work);
 	INIT_WORK(&ctx->put_work, fastrpc_context_put_wq);
+	kref_init(&ctx->refcount);
 
 	spin_lock(&user->lock);
 	list_add_tail(&ctx->node, &user->pending);
@@ -705,8 +706,6 @@ static struct fastrpc_invoke_ctx *fastrpc_context_alloc(
 	}
 	ctx->ctxid = ret << 4;
 	spin_unlock_irqrestore(&cctx->lock, flags);
-
-	kref_init(&ctx->refcount);
 
 	return ctx;
 err_idr:
