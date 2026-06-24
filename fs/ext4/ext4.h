@@ -4097,6 +4097,7 @@ static inline bool ext4_dir_entry_is_tail(struct ext4_dir_entry_2 *de)
 /*
  * ext4_dirent_get_data_len() - Compute the total dirdata length for an entry.
  * @de: directory entry
+ * @rec_len: the record length of the directory entry (decoded)
  *
  * Computes the length of optional data stored after the filename (and its
  * implicit NUL terminator).  Each extension is indicated by a bit in the
@@ -4105,27 +4106,71 @@ static inline bool ext4_dir_entry_is_tail(struct ext4_dir_entry_2 *de)
  *
  * Returns 0 for tail entries and for entries with no dirdata.
  */
-static inline int ext4_dirent_get_data_len(struct ext4_dir_entry_2 *de)
+static inline int ext4_dirent_get_data_len(struct ext4_dir_entry_2 *de,
+					   unsigned int rec_len)
 {
 	__u8 extra_data_flags;
 	struct ext4_dirent_data_header *ddh;
 	int dlen = 0;
+	unsigned int offset;
 
 	if (ext4_dir_entry_is_tail(de))
 		return 0;
 
 	extra_data_flags = (de->file_type & ~EXT4_FT_MASK) >> 4;
-	ddh = (struct ext4_dirent_data_header *)(de->name + de->name_len +
-						 1 /* NUL terminator */);
+	/* offset from start of entry to after filename + NUL */
+	offset = EXT4_BASE_DIR_LEN + de->name_len + 1;
 
+	/* bounds check: ensure we start reading within the entry */
+	if (offset >= rec_len)
+		return 0;
+
+	ddh = (struct ext4_dirent_data_header *)((char *)de + offset);
+ 
 	while (extra_data_flags) {
 		if (extra_data_flags & 1) {
+			/* bounds check before reading ddh_length */
+			if (offset + sizeof(*ddh) >
+			    rec_len)
+				return dlen;
+
+			/* validate ddh_length is reasonable */
+			if (ddh->ddh_length == 0 || ddh->ddh_length >
+			    rec_len - offset)
+				return dlen;
+
 			dlen += ddh->ddh_length + (dlen == 0);
+			offset += ddh->ddh_length;
 			ddh = ext4_dirdata_next(ddh);
 		}
 		extra_data_flags >>= 1;
 	}
 	return dlen;
+}
+
+/*
+ * ext4_dir_entry_len() - Compute the required rec_len for a directory entry.
+ * @de:        directory entry (used to read name_len and any dirdata length)
+ * @blocksize: size of the buffer @de lives in (the real directory block
+ *             size, or the smaller inline-data buffer size for inline
+ *             directories) -- used only to decode @de->rec_len's "0/65535
+ *             means rest of buffer" sentinel correctly.
+ * @dir:       directory inode (may be NULL for '.' and '..' entries, which
+ *             never carry the casefold+fscrypt hash regardless of the
+ *             directory's feature flags)
+ *
+ * Returns the minimum record length needed to hold @de, rounded up to the
+ * directory alignment and including room for the casefold+fscrypt hash if
+ * the directory requires it.
+ */
+static inline unsigned int ext4_dir_entry_len(struct ext4_dir_entry_2 *de,
+					      unsigned int blocksize,
+					      const struct inode *dir)
+{
+	unsigned int rec_len = ext4_rec_len_from_disk(de->rec_len, blocksize);
+	unsigned int dirdata = ext4_dirent_get_data_len(de, rec_len);
+
+	return ext4_dir_rec_len(de->name_len + dirdata, dir);
 }
 
 extern const struct iomap_ops ext4_iomap_ops;
