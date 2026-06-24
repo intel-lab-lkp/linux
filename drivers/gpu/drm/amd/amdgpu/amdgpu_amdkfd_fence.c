@@ -118,15 +118,17 @@ static const char *amdkfd_fence_get_timeline_name(struct dma_fence *f)
  *
  *  @f: dma_fence
  */
-static bool amdkfd_fence_enable_signaling(struct dma_fence *f)
+static void amdkfd_fence_enable_signaling(struct dma_fence *f)
 {
 	struct amdgpu_amdkfd_fence *fence = to_amdgpu_amdkfd_fence(f);
 
-	if (!fence)
-		return false;
+	if (!fence) {
+		dma_fence_signal_locked(f);
+		return;
+	}
 
 	if (dma_fence_is_signaled(f))
-		return true;
+		return;
 
 	/* if fence->svm_bo is NULL, means this fence is created through
 	 * init_kfd_vm() or amdgpu_amdkfd_gpuvm_restore_process_bos().
@@ -134,12 +136,12 @@ static bool amdkfd_fence_enable_signaling(struct dma_fence *f)
 	 */
 	if (!fence->svm_bo) {
 		if (!kgd2kfd_schedule_evict_and_restore_process(fence->mm, fence->context_id, f))
-			return true;
+			return;
 	} else {
 		if (!svm_range_schedule_evict_svm_bo(fence))
-			return true;
+			return;
 	}
-	return false;
+	dma_fence_signal_locked(f);
 }
 
 /**

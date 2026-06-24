@@ -174,12 +174,12 @@ struct dma_fence_ops {
 	 * This is called with irq's disabled, so only spinlocks which disable
 	 * IRQ's can be used in the code outside of this callback.
 	 *
-	 * A return value of false indicates the fence already passed,
-	 * or some failure occurred that made it impossible to enable
-	 * signaling. True indicates successful enabling.
+	 * If the fence has already passed or if some failure occurred that
+	 * makes it impossible to enable signaling, the implementation must
+	 * call dma_fence_signal_locked() before returning.
 	 *
-	 * &dma_fence.error may be set in enable_signaling, but only when false
-	 * is returned.
+	 * &dma_fence.error may be set in enable_signaling before calling
+	 * dma_fence_signal_locked().
 	 *
 	 * Since many implementations can call dma_fence_signal() even when before
 	 * @enable_signaling has been called there's a race window, where the
@@ -192,7 +192,7 @@ struct dma_fence_ops {
 	 * This callback is optional. If this callback is not present, then the
 	 * driver must always have signaling enabled.
 	 */
-	bool (*enable_signaling)(struct dma_fence *fence);
+	void (*enable_signaling)(struct dma_fence *fence);
 
 	/**
 	 * @check_signaled:

@@ -369,13 +369,15 @@ static void radeon_fence_is_signaled(struct dma_fence *f)
  * to fence_queue that checks if this fence is signaled, and if so it
  * signals the fence and removes itself.
  */
-static bool radeon_fence_enable_signaling(struct dma_fence *f)
+static void radeon_fence_enable_signaling(struct dma_fence *f)
 {
 	struct radeon_fence *fence = to_radeon_fence(f);
 	struct radeon_device *rdev = fence->rdev;
 
-	if (atomic64_read(&rdev->fence_drv[fence->ring].last_seq) >= fence->seq)
-		return false;
+	if (atomic64_read(&rdev->fence_drv[fence->ring].last_seq) >= fence->seq) {
+		dma_fence_signal_locked(f);
+		return;
+	}
 
 	if (down_read_trylock(&rdev->exclusive_lock)) {
 		radeon_irq_kms_sw_irq_get(rdev, fence->ring);
@@ -387,7 +389,8 @@ static bool radeon_fence_enable_signaling(struct dma_fence *f)
 		if (atomic64_read(&rdev->fence_drv[fence->ring].last_seq) >= fence->seq) {
 			radeon_irq_kms_sw_irq_put(rdev, fence->ring);
 			up_read(&rdev->exclusive_lock);
-			return false;
+			dma_fence_signal_locked(f);
+			return;
 		}
 
 		up_read(&rdev->exclusive_lock);
@@ -403,7 +406,6 @@ static bool radeon_fence_enable_signaling(struct dma_fence *f)
 	fence->fence_wake.func = radeon_fence_check_signaled;
 	__add_wait_queue(&rdev->fence_queue, &fence->fence_wake);
 	dma_fence_get(f);
-	return true;
 }
 
 /**

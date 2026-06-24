@@ -9,7 +9,7 @@
 
 #include <linux/dma-fence-chain.h>
 
-static bool dma_fence_chain_enable_signaling(struct dma_fence *fence);
+static void dma_fence_chain_enable_signaling(struct dma_fence *fence);
 
 /**
  * dma_fence_chain_get_prev - use RCU to get a reference to the previous fence
@@ -122,13 +122,14 @@ static const char *dma_fence_chain_get_timeline_name(struct dma_fence *fence)
 static void dma_fence_chain_irq_work(struct irq_work *work)
 {
 	struct dma_fence_chain *chain;
+	unsigned long flags;
 
 	chain = container_of(work, typeof(*chain), work);
 
 	/* Try to rearm the callback */
-	if (!dma_fence_chain_enable_signaling(&chain->base))
-		/* Ok, we are done. No more unsignaled fences left */
-		dma_fence_signal(&chain->base);
+	dma_fence_lock_irqsave(&chain->base, flags);
+	dma_fence_chain_enable_signaling(&chain->base);
+	dma_fence_unlock_irqrestore(&chain->base, flags);
 	dma_fence_put(&chain->base);
 }
 
@@ -142,7 +143,7 @@ static void dma_fence_chain_cb(struct dma_fence *f, struct dma_fence_cb *cb)
 	dma_fence_put(f);
 }
 
-static bool dma_fence_chain_enable_signaling(struct dma_fence *fence)
+static void dma_fence_chain_enable_signaling(struct dma_fence *fence)
 {
 	struct dma_fence_chain *head = to_dma_fence_chain(fence);
 
@@ -153,12 +154,13 @@ static bool dma_fence_chain_enable_signaling(struct dma_fence *fence)
 		dma_fence_get(f);
 		if (!dma_fence_add_callback(f, &head->cb, dma_fence_chain_cb)) {
 			dma_fence_put(fence);
-			return true;
+			return;
 		}
 		dma_fence_put(f);
 	}
 	dma_fence_put(&head->base);
-	return false;
+	/* Ok, we are done. No more unsignaled fences left */
+	dma_fence_signal_locked(&head->base);
 }
 
 static void dma_fence_chain_signaled(struct dma_fence *fence)

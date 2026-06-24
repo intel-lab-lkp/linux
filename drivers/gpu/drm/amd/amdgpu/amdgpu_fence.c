@@ -833,12 +833,10 @@ static const char *amdgpu_fence_get_timeline_name(struct dma_fence *f)
  * to fence_queue that checks if this fence is signaled, and if so it
  * signals the fence and removes itself.
  */
-static bool amdgpu_fence_enable_signaling(struct dma_fence *f)
+static void amdgpu_fence_enable_signaling(struct dma_fence *f)
 {
 	if (!timer_pending(&to_amdgpu_fence(f)->ring->fence_drv.fallback_timer))
 		amdgpu_fence_schedule_fallback(to_amdgpu_fence(f)->ring);
-
-	return true;
 }
 
 /**

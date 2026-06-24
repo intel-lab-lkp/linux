@@ -30,12 +30,14 @@ static struct host1x_syncpt_fence *to_host1x_fence(struct dma_fence *f)
 	return container_of(f, struct host1x_syncpt_fence, base);
 }
 
-static bool host1x_syncpt_fence_enable_signaling(struct dma_fence *f)
+static void host1x_syncpt_fence_enable_signaling(struct dma_fence *f)
 {
 	struct host1x_syncpt_fence *sf = to_host1x_fence(f);
 
-	if (host1x_syncpt_is_expired(sf->sp, sf->threshold))
-		return false;
+	if (host1x_syncpt_is_expired(sf->sp, sf->threshold)) {
+		dma_fence_signal_locked(f);
+		return;
+	}
 
 	/* Reference for interrupt path. */
 	dma_fence_get(f);
@@ -62,8 +64,6 @@ static bool host1x_syncpt_fence_enable_signaling(struct dma_fence *f)
 	 * so we need to initialize all state used by signalling
 	 * before it.
 	 */
-
-	return true;
 }
 
 static const struct dma_fence_ops host1x_syncpt_fence_ops = {

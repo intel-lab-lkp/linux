@@ -95,7 +95,7 @@ static const char *vmw_fence_get_timeline_name(struct dma_fence *f)
  * enabled. If interrupts were already enabled we just increment the number of
  * seqno waiters.
  */
-static bool vmw_fence_enable_signaling(struct dma_fence *f)
+static void vmw_fence_enable_signaling(struct dma_fence *f)
 {
 	u32 seqno;
 	struct vmw_fence_obj *fence =
@@ -110,13 +110,13 @@ check_for_race:
 			vmw_seqno_waiter_remove(dev_priv);
 			fence->waiter_added = false;
 		}
-		return false;
+		dma_fence_signal_locked(f);
+		return;
 	} else if (!fence->waiter_added) {
 		fence->waiter_added = true;
 		if (vmw_seqno_waiter_add(dev_priv))
 			goto check_for_race;
 	}
-	return true;
 }
 
 static u32 __vmw_fences_update(struct vmw_fence_manager *fman);

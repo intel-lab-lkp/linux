@@ -40,12 +40,11 @@ amdgpu_eviction_fence_get_timeline_name(struct dma_fence *f)
 	return ef->timeline_name;
 }
 
-static bool amdgpu_eviction_fence_enable_signaling(struct dma_fence *f)
+static void amdgpu_eviction_fence_enable_signaling(struct dma_fence *f)
 {
 	struct amdgpu_eviction_fence *ev_fence = to_ev_fence(f);
 
 	schedule_work(&ev_fence->evf_mgr->suspend_work);
-	return true;
 }
 
 static const struct dma_fence_ops amdgpu_eviction_fence_ops = {

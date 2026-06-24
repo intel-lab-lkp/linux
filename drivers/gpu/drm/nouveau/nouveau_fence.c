@@ -472,7 +472,7 @@ static void nouveau_fence_is_signaled(struct dma_fence *f)
 		dma_fence_signal(f);
 }
 
-static bool nouveau_fence_no_signaling(struct dma_fence *f)
+static void nouveau_fence_no_signaling(struct dma_fence *f)
 {
 	struct nouveau_fence *fence = to_nouveau_fence(f);
 
@@ -492,10 +492,8 @@ static bool nouveau_fence_no_signaling(struct dma_fence *f)
 		list_del(&fence->head);
 
 		dma_fence_put(&fence->base);
-		return false;
+		dma_fence_signal_locked(f);
 	}
-
-	return true;
 }
 
 static void nouveau_fence_release(struct dma_fence *f)
@@ -516,22 +514,19 @@ static const struct dma_fence_ops nouveau_fence_ops_legacy = {
 	.release = nouveau_fence_release
 };
 
-static bool nouveau_fence_enable_signaling(struct dma_fence *f)
+static void nouveau_fence_enable_signaling(struct dma_fence *f)
 {
 	struct nouveau_fence *fence = to_nouveau_fence(f);
 	struct nouveau_fence_chan *fctx = nouveau_fctx(fence);
-	bool ret;
 
 	if (!fctx->notify_ref++)
 		nvif_event_allow(&fctx->event);
 
-	ret = nouveau_fence_no_signaling(f);
-	if (ret)
+	nouveau_fence_no_signaling(f);
+	if (!dma_fence_test_signaled_flag(f))
 		set_bit(DMA_FENCE_FLAG_USER_BITS, &fence->base.flags);
 	else if (!--fctx->notify_ref)
 		nvif_event_block(&fctx->event);
-
-	return ret;
 }
 
 static const struct dma_fence_ops nouveau_fence_ops_uevent = {

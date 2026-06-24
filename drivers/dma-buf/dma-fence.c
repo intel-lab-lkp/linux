@@ -626,7 +626,7 @@ void dma_fence_free(struct dma_fence *fence)
 }
 EXPORT_SYMBOL(dma_fence_free);
 
-static bool __dma_fence_enable_signaling(struct dma_fence *fence)
+static void __dma_fence_enable_signaling(struct dma_fence *fence)
 {
 	const struct dma_fence_ops *ops;
 	bool was_set;
@@ -637,22 +637,15 @@ static bool __dma_fence_enable_signaling(struct dma_fence *fence)
 				   &fence->flags);
 
 	if (dma_fence_test_signaled_flag(fence))
-		return false;
+		return;
 
 	rcu_read_lock();
 	ops = rcu_dereference(fence->ops);
 	if (!was_set && ops && ops->enable_signaling) {
 		trace_dma_fence_enable_signal(fence);
-
-		if (!ops->enable_signaling(fence)) {
-			rcu_read_unlock();
-			dma_fence_signal_locked(fence);
-			return false;
-		}
+		ops->enable_signaling(fence);
 	}
 	rcu_read_unlock();
-
-	return true;
 }
 
 /**
@@ -710,7 +703,8 @@ int dma_fence_add_callback(struct dma_fence *fence, struct dma_fence_cb *cb,
 	}
 
 	dma_fence_lock_irqsave(fence, flags);
-	if (__dma_fence_enable_signaling(fence)) {
+	__dma_fence_enable_signaling(fence);
+	if (!dma_fence_test_signaled_flag(fence)) {
 		cb->func = func;
 		list_add_tail(&cb->node, &fence->cb_list);
 	} else {
