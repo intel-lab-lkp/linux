@@ -400,7 +400,7 @@ static int rcu_preempt_blocked_readers_cgp(struct rcu_node *rnp)
  * If the caller needs a reliable answer, it must hold the rcu_node's
  * ->lock.
  */
-static int rcu_preempt_blocked_readers_cgp_ndqs(struct rcu_node *rnp)
+static int __maybe_unused rcu_preempt_blocked_readers_cgp_ndqs(struct rcu_node *rnp)
 {
 	return READ_ONCE(rnp->gp_tasks) != NULL;
 }
