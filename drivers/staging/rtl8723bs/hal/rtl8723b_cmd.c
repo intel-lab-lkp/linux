@@ -74,7 +74,7 @@ s32 FillH2CCmd8723B(struct adapter *padapter, u8 ElementID, u32 CmdLen, u8 *pCmd
 		else {
 			memcpy((u8 *)(&h2c_cmd)+1, pCmdBuffer, 3);
 			memcpy((u8 *)(&h2c_cmd_ex), pCmdBuffer+3, CmdLen-3);
-/* 			*(u8 *)(&h2c_cmd) |= BIT(7); */
+			/* *(u8 *)(&h2c_cmd) |= BIT(7); */
 		}
 
 		*(u8 *)(&h2c_cmd) |= ElementID;
@@ -416,13 +416,14 @@ void rtl8723b_set_FwPwrMode_cmd(struct adapter *padapter, u8 psmode)
 
 		}
 
-/* offload to FW if fw version > v15.10
-		pmlmeext->DrvBcnEarly = 0;
-		pmlmeext->DrvBcnTimeOut =7;
+		/* offload to FW if fw version > v15.10 */
+		/* pmlmeext->DrvBcnEarly = 0; */
+		/* pmlmeext->DrvBcnTimeOut =7; */
 
-		if ((pmlmeext->DrvBcnEarly!= 0Xff) && (pmlmeext->DrvBcnTimeOut!= 0xff))
-			u1H2CPwrModeParm[H2C_PWRMODE_LEN-1] = BIT(0) | ((pmlmeext->DrvBcnEarly<<1)&0x0E) |((pmlmeext->DrvBcnTimeOut<<4)&0xf0) ;
-*/
+		/* if ((pmlmeext->DrvBcnEarly!= 0Xff) && (pmlmeext->DrvBcnTimeOut!= 0xff)) */
+		/*	u1H2CPwrModeParm[H2C_PWRMODE_LEN-1] = */
+		/*	    BIT(0) | ((pmlmeext->DrvBcnEarly<<1)&0x0E) | */
+		/*	    ((pmlmeext->DrvBcnTimeOut<<4)&0xf0) ; */
 
 	}
 
@@ -657,9 +658,15 @@ void rtl8723b_download_rsvd_page(struct adapter *padapter, u8 mstatus)
 				/*  check rsvd page download OK. */
 				rtw_hal_get_hwreg(padapter, HW_VAR_BCN_VALID, (u8 *)(&bcn_valid));
 				poll++;
-			} while (!bcn_valid && (poll%10) != 0 && !padapter->bSurpriseRemoved && !padapter->bDriverStopped);
+			} while (!bcn_valid &&
+				 (poll % 10) != 0 &&
+				 !padapter->bSurpriseRemoved &&
+				 !padapter->bDriverStopped);
 
-		} while (!bcn_valid && DLBcnCount <= 100 && !padapter->bSurpriseRemoved && !padapter->bDriverStopped);
+		} while (!bcn_valid &&
+			 DLBcnCount <= 100 &&
+			 !padapter->bSurpriseRemoved &&
+			 !padapter->bDriverStopped);
 
 		if (padapter->bSurpriseRemoved || padapter->bDriverStopped) {
 		} else {
@@ -919,12 +926,18 @@ void rtl8723b_download_BTCoex_AP_mode_rsvd_page(struct adapter *padapter)
 		DLBcnCount++;
 		do {
 			yield();
-/* 			mdelay(10); */
-			/*  check rsvd page download OK. */
+			/* mdelay(10); */
+			/* check rsvd page download OK. */
 			rtw_hal_get_hwreg(padapter, HW_VAR_BCN_VALID, &bcn_valid);
 			poll++;
-		} while (!bcn_valid && (poll%10) != 0 && !padapter->bSurpriseRemoved && !padapter->bDriverStopped);
-	} while (!bcn_valid && (DLBcnCount <= 100) && !padapter->bSurpriseRemoved && !padapter->bDriverStopped);
+		} while (!bcn_valid &&
+			 (poll % 10) != 0 &&
+			 !padapter->bSurpriseRemoved &&
+			 !padapter->bDriverStopped);
+	} while (!bcn_valid &&
+		 (DLBcnCount <= 100) &&
+		 !padapter->bSurpriseRemoved &&
+		 !padapter->bDriverStopped);
 
 	if (bcn_valid) {
 		struct pwrctrl_priv *pwrctl = adapter_to_pwrctl(padapter);
