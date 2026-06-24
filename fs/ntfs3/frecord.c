@@ -755,7 +755,7 @@ int ni_create_attr_list(struct ntfs_inode *ni)
 	u32 lsize;
 	struct ATTRIB *attr;
 	struct ATTRIB *arr_move[7];
-	struct ATTR_LIST_ENTRY *le, *le_b[7];
+	struct ATTR_LIST_ENTRY *le, *le_b[7], *le_end;
 	struct MFT_REC *rec;
 	bool is_mft;
 	CLST rno = 0;
@@ -775,6 +775,8 @@ int ni_create_attr_list(struct ntfs_inode *ni)
 	if (!le)
 		return -ENOMEM;
 
+	le_end = Add2Ptr(le, al_aligned(rs));
+
 	mi_get_ref(&ni->mi, &le->ref);
 	ni->attr_list.le = le;
 
@@ -785,6 +787,13 @@ int ni_create_attr_list(struct ntfs_inode *ni)
 
 	for (; (attr = mi_enum_attr(ni, &ni->mi, attr)); le = Add2Ptr(le, sz)) {
 		sz = le_size(attr->name_len);
+
+		/* A corrupted record can pack more attributes than fit. */
+		if (Add2Ptr(le, sz) > (void *)le_end) {
+			err = -EINVAL;
+			goto out;
+		}
+
 		le->type = attr->type;
 		le->size = cpu_to_le16(sz);
 		le->name_len = attr->name_len;
