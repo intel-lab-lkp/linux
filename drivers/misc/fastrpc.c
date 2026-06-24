@@ -1019,7 +1019,8 @@ static int fastrpc_get_meta_size(struct fastrpc_invoke_ctx *ctx)
 	return size;
 }
 
-static u64 fastrpc_get_payload_size(struct fastrpc_invoke_ctx *ctx, int metalen)
+static int fastrpc_get_payload_size(struct fastrpc_invoke_ctx *ctx, int metalen,
+				    u64 *out_size)
 {
 	u64 size = 0;
 	int oix;
@@ -1029,15 +1030,22 @@ static u64 fastrpc_get_payload_size(struct fastrpc_invoke_ctx *ctx, int metalen)
 		int i = ctx->olaps[oix].raix;
 
 		if (ctx->args[i].fd == 0 || ctx->args[i].fd == -1) {
+			u64 len = ctx->olaps[oix].mend -
+				  ctx->olaps[oix].mstart;
 
 			if (ctx->olaps[oix].offset == 0)
 				size = ALIGN(size, FASTRPC_ALIGN);
 
-			size += (ctx->olaps[oix].mend - ctx->olaps[oix].mstart);
+			if (check_add_overflow(size, len, &size))
+				return -EOVERFLOW;
 		}
 	}
 
-	return size;
+	if (size > SIZE_MAX)
+		return -EOVERFLOW;
+
+	*out_size = size;
+	return 0;
 }
 
 static int fastrpc_create_maps(struct fastrpc_invoke_ctx *ctx)
@@ -1090,7 +1098,9 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
 
 	inbufs = REMOTE_SCALARS_INBUFS(ctx->sc);
 	metalen = fastrpc_get_meta_size(ctx);
-	pkt_size = fastrpc_get_payload_size(ctx, metalen);
+	err = fastrpc_get_payload_size(ctx, metalen, &pkt_size);
+	if (err)
+		return err;
 
 	err = fastrpc_create_maps(ctx);
 	if (err)
