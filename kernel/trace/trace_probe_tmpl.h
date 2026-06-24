@@ -109,7 +109,7 @@ process_common_fetch_insn(struct fetch_insn *code, unsigned long *val)
 	case FETCH_OP_COMM:
 		*val = (unsigned long)current->comm;
 		break;
-	case FETCH_OP_DATA:
+	case FETCH_OP_IMMSTR:
 		*val = (unsigned long)code->data;
 		break;
 	default:

@@ -1309,7 +1309,7 @@ parse_probe_arg(char *arg, const struct fetch_type *type,
 				break;
 			ctx->offset = cur_offs;
 			if (code->op == FETCH_OP_COMM ||
-			    code->op == FETCH_OP_DATA) {
+			    code->op == FETCH_OP_IMMSTR) {
 				trace_probe_log_err(ctx->offset, COMM_CANT_DEREF);
 				return -EINVAL;
 			}
@@ -1330,7 +1330,7 @@ parse_probe_arg(char *arg, const struct fetch_type *type,
 			ret = __parse_imm_string(arg + 2, &tmp, ctx->offset + 2);
 			if (ret)
 				break;
-			code->op = FETCH_OP_DATA;
+			code->op = FETCH_OP_IMMSTR;
 			code->data = tmp;
 		} else {
 			ret = str_to_immediate(arg + 1, &code->immediate);
@@ -1485,7 +1485,7 @@ static int finalize_fetch_insn(struct fetch_insn *code,
 		} else {
 			if (code->op != FETCH_OP_DEREF && code->op != FETCH_OP_UDEREF &&
 			    code->op != FETCH_OP_IMM && code->op != FETCH_OP_COMM &&
-			    code->op != FETCH_OP_DATA && code->op != FETCH_OP_TP_ARG) {
+			    code->op != FETCH_OP_IMMSTR && code->op != FETCH_OP_TP_ARG) {
 				trace_probe_log_err(ctx->offset + type_offset,
 						    BAD_STRING);
 				return -EINVAL;
@@ -1494,7 +1494,7 @@ static int finalize_fetch_insn(struct fetch_insn *code,
 
 		if (!strcmp(parg->type->name, "symstr") ||
 		    (code->op == FETCH_OP_IMM || code->op == FETCH_OP_COMM ||
-		     code->op == FETCH_OP_DATA) || code->op == FETCH_OP_TP_ARG ||
+		     code->op == FETCH_OP_IMMSTR) || code->op == FETCH_OP_TP_ARG ||
 		     parg->count) {
 			/*
 			 * IMM, DATA and COMM is pointing actual address, those
@@ -1670,7 +1670,7 @@ fail:
 	if (ret < 0) {
 		for (code = tmp; code < tmp + FETCH_INSN_MAX; code++)
 			if (code->op == FETCH_NOP_SYMBOL ||
-			    code->op == FETCH_OP_DATA)
+			    code->op == FETCH_OP_IMMSTR)
 				kfree(code->data);
 	}
 	kfree(tmp);
@@ -1769,7 +1769,7 @@ void traceprobe_free_probe_arg(struct probe_arg *arg)
 
 	while (code && code->op != FETCH_OP_END) {
 		if (code->op == FETCH_NOP_SYMBOL ||
-		    code->op == FETCH_OP_DATA)
+		    code->op == FETCH_OP_IMMSTR)
 			kfree(code->data);
 		code++;
 	}
