@@ -126,6 +126,7 @@ EXPORT_SYMBOL_GPL(rtc_read_time);
 int rtc_set_time(struct rtc_device *rtc, struct rtc_time *tm)
 {
 	int err, uie;
+	struct rtc_time new_tm;
 
 	err = rtc_valid_tm(tm);
 	if (err != 0)
@@ -158,6 +159,17 @@ int rtc_set_time(struct rtc_device *rtc, struct rtc_time *tm)
 		err = rtc->ops->set_time(rtc->dev.parent, tm);
 	else
 		err = -EINVAL;
+
+	if (rtc && rtc->ops && rtc->ops->read_time) {
+		if (!rtc->ops->read_time(rtc->dev.parent, &new_tm)) {
+			pr_debug("new rtc time secs %d mins %d hours %d mday %d mon %d year %d way %d yday %d dst %d\n",
+					new_tm.tm_sec, new_tm.tm_min,
+					new_tm.tm_hour, new_tm.tm_mday,
+					new_tm.tm_mon, new_tm.tm_year,
+					new_tm.tm_wday, new_tm.tm_yday,
+					new_tm.tm_isdst);
+		}
+	}
 
 	pm_stay_awake(rtc->dev.parent);
 	mutex_unlock(&rtc->ops_lock);
@@ -999,7 +1011,7 @@ again:
 		trace_rtc_timer_fired(timer);
 		/* Re-add/fwd periodic timers */
 		if (ktime_to_ns(timer->period)) {
-			timer->node.expires = ktime_add(timer->node.expires,
+			timer->node.expires = ktime_add(now,
 							timer->period);
 			timer->enabled = 1;
 			timerqueue_add(&rtc->timerqueue, &timer->node);
