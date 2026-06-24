@@ -8916,17 +8916,11 @@ static int status_resync(struct seq_file *seq, struct mddev *mddev)
 	 * db: blocks written from mark until now
 	 * rt: remaining time
 	 *
-	 * rt is a sector_t, which is always 64bit now. We are keeping
-	 * the original algorithm, but it is not really necessary.
-	 *
-	 * Original algorithm:
-	 *   So we divide before multiply in case it is 32bit and close
-	 *   to the limit.
-	 *   We scale the divisor (db) by 32 to avoid losing precision
-	 *   near the end of resync when the number of remaining sectors
-	 *   is close to 'db'.
-	 *   We then divide rt by 32 after multiplying by db to compensate.
-	 *   The '+1' avoids division by zero if db is very small.
+	 * rt is computed as (remaining sectors) * dt / db.  To keep precision
+	 * near the end of resync, when the remaining count is close to db, the
+	 * divisor db is scaled up by 32 before the divide and rt is scaled back
+	 * down by 32 afterwards.  The '+1' avoids division by zero when db is
+	 * very small.
 	 */
 	dt = ((jiffies - mddev->resync_mark) / HZ);
 	if (!dt) dt++;
