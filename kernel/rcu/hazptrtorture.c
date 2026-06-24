@@ -560,9 +560,10 @@ static int hazptr_torture_do_pending(void *arg)
 static int hazptr_torture_do_pending_init(void)
 {
 	if (kthread_do_pending_ms == -1)
-		kthread_do_pending_ms = cur_ops->onstack_ctx ? 0 : 3;
+		kthread_do_pending_ms = (cur_ops->onstack_ctx || defer_modulus <= 0) ? 0 : 3;
 	if (defer_modulus == -1)
-		defer_modulus = cur_ops->onstack_ctx ? 0 : 1000 * nr_cpu_ids;
+		defer_modulus = (cur_ops->onstack_ctx ||
+				 kthread_do_pending_ms <= 0) ? 0 : 1000 * nr_cpu_ids;
 	if (kthread_do_pending_ms < 0) {
 		pr_alert("Cannot have negative kthread_do_pending_ms, disabling deferral.\n");
 		goto err_out;
