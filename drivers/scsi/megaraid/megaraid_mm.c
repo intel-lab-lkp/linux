@@ -480,12 +480,14 @@ mimd_to_kioc(mimd_t __user *umimd, mraid_mmadp_t *adp, uioc_t *kioc)
 		return (-EFAULT);
 	}
 
+	if (pthru32->dataxferlen > kioc->xferlen)
+		return -EINVAL;
+	kioc->user_data_len = pthru32->dataxferlen;
+
 	pthru32->dataxferaddr	= kioc->buf_paddr;
 	if (kioc->data_dir & UIOC_WR) {
-		if (pthru32->dataxferlen > kioc->xferlen)
-			return -EINVAL;
 		if (copy_from_user(kioc->buf_vaddr, kioc->user_data,
-						pthru32->dataxferlen)) {
+							pthru32->dataxferlen)) {
 			return (-EFAULT);
 		}
 	}
