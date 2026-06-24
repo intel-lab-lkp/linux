@@ -226,7 +226,7 @@ static void mfc3_save_state(struct parport *p, struct parport_state *s)
 	pia(p)->crb |= PIA_DDR;
 	s->u.amiga.status = pia(p)->ppra;
 	pia(p)->cra &= ~PIA_DDR;
-	s->u.amiga.statusdir = pia(p)->pddrb;
+	s->u.amiga.statusdir = pia(p)->pddra;
 	pia(p)->cra |= PIA_DDR;
 }
 
@@ -238,7 +238,7 @@ static void mfc3_restore_state(struct parport *p, struct parport_state *s)
 	pia(p)->crb |= PIA_DDR;
 	pia(p)->ppra = s->u.amiga.status;
 	pia(p)->cra &= ~PIA_DDR;
-	pia(p)->pddrb = s->u.amiga.statusdir;
+	pia(p)->pddra = s->u.amiga.statusdir;
 	pia(p)->cra |= PIA_DDR;
 }
 
