@@ -2062,6 +2062,8 @@ static int null_add_dev(struct nullb_device *dev)
 out_ida_free:
 	ida_free(&nullb_indexes, nullb->index);
 out_cleanup_disk:
+	if (test_bit(NULLB_DEV_FL_THROTTLED, &dev->flags))
+		hrtimer_cancel(&nullb->bw_timer);
 	put_disk(nullb->disk);
 out_cleanup_zone:
 	null_free_zoned_dev(dev);
