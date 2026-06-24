@@ -26,6 +26,7 @@
 #include <linux/fs.h>
 #include <linux/highmem.h>
 #include <linux/iommu.h>
+#include <linux/log2.h>
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/kthread.h>
@@ -2949,6 +2950,9 @@ static int vfio_iommu_type1_unmap_dma(struct vfio_iommu *iommu,
 		if (!access_ok((void __user *)bitmap.data, bitmap.size))
 			return -EINVAL;
 
+		if (!is_power_of_2(bitmap.pgsize))
+			return -EINVAL;
+
 		pgshift = __ffs(bitmap.pgsize);
 		ret = verify_bitmap_size(unmap.size >> pgshift,
 					 bitmap.size);
@@ -3037,6 +3041,9 @@ static int vfio_iommu_type1_dirty_pages(struct vfio_iommu *iommu,
 
 		if (!access_ok((void __user *)range.bitmap.data,
 			       range.bitmap.size))
+			return -EINVAL;
+
+		if (!is_power_of_2(range.bitmap.pgsize))
 			return -EINVAL;
 
 		pgshift = __ffs(range.bitmap.pgsize);
