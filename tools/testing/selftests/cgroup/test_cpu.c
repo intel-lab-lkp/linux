@@ -640,20 +640,50 @@ test_cpucg_nested_weight_underprovisioned(const char *root)
 }
 
 /*
+ * Best effort attempt to get the kernel's HZ value from the config.
+ * Return the HZ value if found otherwise return -1 to indicate failure.
+ */
+static long
+_get_config_hz(void)
+{
+	long hz = -1;
+	FILE *f;
+	char cmd[256] = "zcat /proc/config.gz 2>/dev/null | grep '^CONFIG_HZ='";
+
+	f = popen(cmd, "r");
+
+	if (!f)
+		return hz;
+
+	if (fscanf(f, "CONFIG_HZ=%ld", &hz) == EOF)
+		goto out;
+
+out:
+	pclose(f);
+	return hz;
+}
+
+/*
  * This test creates a cgroup with some maximum value within a period, and
  * verifies that a process in the cgroup is not overscheduled.
  */
 static int test_cpucg_max(const char *root)
 {
 	int ret = KSFT_FAIL;
+	long hz = _get_config_hz();
 	long quota_usec = 1000;
 	long default_period_usec = 100000; /* cpu.max's default period */
-	long duration_seconds = 1;
+	long duration_seconds;
 
-	long duration_usec = duration_seconds * USEC_PER_SEC;
+	long duration_usec;
 	long usage_usec, n_periods, remainder_usec, expected_usage_usec;
 	char *cpucg;
 	char quota_buf[32];
+
+	if (hz == -1)
+		hz = 1000;
+	duration_seconds = 1000 / hz;
+	duration_usec = duration_seconds * USEC_PER_SEC;
 
 	snprintf(quota_buf, sizeof(quota_buf), "%ld", quota_usec);
 
@@ -710,14 +740,20 @@ cleanup:
 static int test_cpucg_max_nested(const char *root)
 {
 	int ret = KSFT_FAIL;
+	long hz = _get_config_hz();
 	long quota_usec = 1000;
 	long default_period_usec = 100000; /* cpu.max's default period */
-	long duration_seconds = 1;
+	long duration_seconds;
 
-	long duration_usec = duration_seconds * USEC_PER_SEC;
+	long duration_usec;
 	long usage_usec, n_periods, remainder_usec, expected_usage_usec;
 	char *parent, *child;
 	char quota_buf[32];
+
+	if (hz == -1)
+		hz = 1000;
+	duration_seconds = 1000 / hz;
+	duration_usec = duration_seconds * USEC_PER_SEC;
 
 	snprintf(quota_buf, sizeof(quota_buf), "%ld", quota_usec);
 
