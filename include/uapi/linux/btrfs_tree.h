@@ -504,7 +504,11 @@ struct btrfs_header {
 
 /*
  * This is a very generous portion of the super block, giving us room to
- * translate 14 chunks with 3 stripes each.
+ * translate 12 chunks with 3 stripes each.
+ *
+ * Each entry takes sizeof(btrfs_disk_key) + btrfs_chunk_item_size(n),
+ * which for a 3-stripe chunk is 17 + 80 + 32 * (3 - 1) = 161 bytes.
+ * 2048 / 161 ≈ 12.7, so at most 12 entries fit.
  */
 #define BTRFS_SYSTEM_CHUNK_ARRAY_SIZE 2048
 
