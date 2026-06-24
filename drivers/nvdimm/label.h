@@ -28,6 +28,13 @@ enum {
 	ND_LABEL_MIN_SIZE = 256 * 4, /* see sizeof_namespace_index() */
 	ND_LABEL_ID_SIZE = 50,
 	ND_NSINDEX_INIT = 0x1,
+	/*
+	 * A sane ceiling on the on-media slot count.  The largest legitimate
+	 * value is config_size / label_size -- about 1K on a real ~128K label
+	 * area.  A count this large cannot describe a real device; it would
+	 * only drive a large allocation in nd_label_data_init(), so reject it.
+	 */
+	NSINDEX_NSLOT_MAX = 64 * 1024,
 };
 
 /**
