@@ -2488,7 +2488,7 @@ bool memcg_slab_post_alloc_hook(struct kmem_cache *s, gfp_t flags,
 
 static __fastpath_inline
 void memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab, void **p,
-			  int objects)
+			  int objects, bool allow_spin)
 {
 	unsigned long obj_exts;
 
@@ -2500,7 +2500,7 @@ void memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab, void **p,
 		return;
 
 	get_slab_obj_exts(obj_exts);
-	__memcg_slab_free_hook(s, slab, p, objects, obj_exts);
+	__memcg_slab_free_hook(s, slab, p, objects, obj_exts, allow_spin);
 	put_slab_obj_exts(obj_exts);
 }
 
@@ -2575,7 +2575,7 @@ static inline bool memcg_slab_post_alloc_hook(struct kmem_cache *s,
 }
 
 static inline void memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab,
-					void **p, int objects)
+					void **p, int objects, bool allow_spin)
 {
 }
 
@@ -2946,11 +2946,12 @@ static bool __rcu_free_sheaf_prepare(struct kmem_cache *s,
 	void **p = &sheaf->objects[0];
 	unsigned int i = 0;
 	bool pfmemalloc = false;
+	bool allow_spin = true;
 
 	while (i < sheaf->size) {
 		struct slab *slab = virt_to_slab(p[i]);
 
-		memcg_slab_free_hook(s, slab, p + i, 1);
+		memcg_slab_free_hook(s, slab, p + i, 1, allow_spin);
 		alloc_tagging_slab_free_hook(s, slab, p + i, 1);
 
 		if (unlikely(!slab_free_hook(s, p[i], init, true))) {
@@ -6215,12 +6216,13 @@ static void free_to_pcs_bulk(struct kmem_cache *s, size_t size, void **p)
 	struct node_barn *barn;
 	void *remote_objects[PCS_BATCH_MAX];
 	unsigned int remote_nr = 0;
+	bool allow_spin = true;
 
 next_remote_batch:
 	while (i < size) {
 		struct slab *slab = virt_to_slab(p[i]);
 
-		memcg_slab_free_hook(s, slab, p + i, 1);
+		memcg_slab_free_hook(s, slab, p + i, 1, allow_spin);
 		alloc_tagging_slab_free_hook(s, slab, p + i, 1);
 
 		if (unlikely(!slab_free_hook(s, p[i], init, false))) {
@@ -6398,13 +6400,16 @@ static __fastpath_inline
 void slab_free(struct kmem_cache *s, struct slab *slab, void *object,
 	       unsigned long addr)
 {
-	memcg_slab_free_hook(s, slab, &object, 1);
+	bool allow_spin = true;
+
+	memcg_slab_free_hook(s, slab, &object, 1, allow_spin);
 	alloc_tagging_slab_free_hook(s, slab, &object, 1);
 
 	if (unlikely(!slab_free_hook(s, object, slab_want_init_on_free(s), false)))
 		return;
 
-	if (likely(can_free_to_pcs(slab)) && likely(free_to_pcs(s, object, true)))
+	if (likely(can_free_to_pcs(slab)) &&
+			likely(free_to_pcs(s, object, allow_spin)))
 		return;
 
 	__slab_free(s, slab, object, object, 1, addr);
@@ -6429,7 +6434,9 @@ static __fastpath_inline
 void slab_free_bulk(struct kmem_cache *s, struct slab *slab, void *head,
 		    void *tail, void **p, int cnt, unsigned long addr)
 {
-	memcg_slab_free_hook(s, slab, p, cnt);
+	bool allow_spin = true;
+
+	memcg_slab_free_hook(s, slab, p, cnt, allow_spin);
 	alloc_tagging_slab_free_hook(s, slab, p, cnt);
 	/*
 	 * With KASAN enabled slab_free_freelist_hook modifies the freelist
@@ -6734,6 +6741,7 @@ void kfree_nolock(const void *object)
 	struct slab *slab;
 	struct kmem_cache *s;
 	void *x = (void *)object;
+	bool allow_spin = false;
 
 	if (unlikely(ZERO_OR_NULL_PTR(object)))
 		return;
@@ -6746,7 +6754,7 @@ void kfree_nolock(const void *object)
 
 	s = slab->slab_cache;
 
-	memcg_slab_free_hook(s, slab, &x, 1);
+	memcg_slab_free_hook(s, slab, &x, 1, allow_spin);
 	alloc_tagging_slab_free_hook(s, slab, &x, 1);
 	/*
 	 * Unlike slab_free() do NOT call the following:
@@ -6776,7 +6784,8 @@ void kfree_nolock(const void *object)
 	 */
 	kasan_slab_free(s, x, false, false, /* skip quarantine */true);
 
-	if (likely(can_free_to_pcs(slab)) && likely(free_to_pcs(s, x, false)))
+	if (likely(can_free_to_pcs(slab)) &&
+			likely(free_to_pcs(s, x, allow_spin)))
 		return;
 
 	/*

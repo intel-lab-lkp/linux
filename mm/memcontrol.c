@@ -3316,18 +3316,19 @@ static bool obj_stock_flush_required(struct obj_stock_pcp *stock,
 static void __refill_obj_stock(struct obj_cgroup *objcg,
 			       struct obj_stock_pcp *stock,
 			       unsigned int nr_bytes,
-			       bool allow_uncharge)
+			       bool allow_uncharge,
+			       bool allow_spin)
 {
 	unsigned int nr_pages = 0;
 
-	if (!stock) {
-		nr_pages = nr_bytes >> PAGE_SHIFT;
-		nr_bytes = nr_bytes & (PAGE_SIZE - 1);
-		atomic_add(nr_bytes, &objcg->nr_charged_bytes);
-		goto out;
-	}
+	if (!stock)
+		goto fallback;
 
 	if (READ_ONCE(stock->cached_objcg) != objcg) { /* reset if necessary */
+		/* Not safe to drain since objcg release acquires spinlock */
+		if (unlikely(!allow_spin))
+			goto fallback;
+
 		drain_obj_stock(stock);
 		obj_cgroup_get(objcg);
 		stock->nr_bytes = atomic_read(&objcg->nr_charged_bytes)
@@ -3346,6 +3347,13 @@ static void __refill_obj_stock(struct obj_cgroup *objcg,
 out:
 	if (nr_pages)
 		obj_cgroup_uncharge_pages(objcg, nr_pages);
+	return;
+
+fallback:
+	nr_pages = nr_bytes >> PAGE_SHIFT;
+	nr_bytes = nr_bytes & (PAGE_SIZE - 1);
+	atomic_add(nr_bytes, &objcg->nr_charged_bytes);
+	goto out;
 }
 
 static void refill_obj_stock(struct obj_cgroup *objcg,
@@ -3353,7 +3361,8 @@ static void refill_obj_stock(struct obj_cgroup *objcg,
 			     bool allow_uncharge)
 {
 	struct obj_stock_pcp *stock = trylock_stock();
-	__refill_obj_stock(objcg, stock, nr_bytes, allow_uncharge);
+	__refill_obj_stock(objcg, stock, nr_bytes, allow_uncharge,
+			   /* allow_spin = */ true);
 	unlock_stock(stock);
 }
 
@@ -3428,6 +3437,7 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 				  size_t size, void **p)
 {
 	size_t obj_size = obj_full_size(s);
+	bool allow_spin = alloc_flags_allow_spinning(slab_alloc_flags);
 	struct obj_cgroup *objcg;
 	struct slab *slab;
 	unsigned long off;
@@ -3497,7 +3507,8 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 				return false;
 			stock = trylock_stock();
 			if (remainder)
-				__refill_obj_stock(objcg, stock, remainder, false);
+				__refill_obj_stock(objcg, stock, remainder, false,
+						   allow_spin);
 		}
 		__account_obj_stock(objcg, stock, obj_size,
 				    slab_pgdat(slab), cache_vmstat_idx(s));
@@ -3516,7 +3527,8 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 }
 
 void __memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab,
-			    void **p, int objects, unsigned long obj_exts)
+			    void **p, int objects, unsigned long obj_exts,
+			    bool allow_spin)
 {
 	size_t obj_size = obj_full_size(s);
 
@@ -3535,7 +3547,7 @@ void __memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab,
 		obj_ext->objcg = NULL;
 
 		stock = trylock_stock();
-		__refill_obj_stock(objcg, stock, obj_size, true);
+		__refill_obj_stock(objcg, stock, obj_size, true, allow_spin);
 		__account_obj_stock(objcg, stock, -obj_size,
 				    slab_pgdat(slab), cache_vmstat_idx(s));
 		unlock_stock(stock);

@@ -660,7 +660,8 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 				  gfp_t flags, unsigned int slab_alloc_flags,
 				  size_t size, void **p);
 void __memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab,
-			    void **p, int objects, unsigned long obj_exts);
+			    void **p, int objects, unsigned long obj_exts,
+			    bool allow_spin);
 #endif
 
 void kvfree_rcu_cb(struct rcu_head *head);
