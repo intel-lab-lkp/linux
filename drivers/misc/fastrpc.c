@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/of.h>
+#include <linux/overflow.h>
 #include <linux/platform_device.h>
 #include <linux/sort.h>
 #include <linux/of_platform.h>
@@ -651,14 +652,17 @@ static int olaps_cmp(const void *a, const void *b)
 	return st == 0 ? ed : st;
 }
 
-static void fastrpc_get_buff_overlaps(struct fastrpc_invoke_ctx *ctx)
+static int fastrpc_get_buff_overlaps(struct fastrpc_invoke_ctx *ctx)
 {
 	u64 max_end = 0;
 	int i;
 
 	for (i = 0; i < ctx->nbufs; ++i) {
 		ctx->olaps[i].start = ctx->args[i].ptr;
-		ctx->olaps[i].end = ctx->olaps[i].start + ctx->args[i].length;
+		if (check_add_overflow(ctx->olaps[i].start,
+				       ctx->args[i].length,
+				       &ctx->olaps[i].end))
+			return -EOVERFLOW;
 		ctx->olaps[i].raix = i;
 	}
 
@@ -685,6 +689,8 @@ static void fastrpc_get_buff_overlaps(struct fastrpc_invoke_ctx *ctx)
 			max_end = ctx->olaps[i].end;
 		}
 	}
+
+	return 0;
 }
 
 static struct fastrpc_invoke_ctx *fastrpc_context_alloc(
@@ -719,7 +725,13 @@ static struct fastrpc_invoke_ctx *fastrpc_context_alloc(
 			return ERR_PTR(-ENOMEM);
 		}
 		ctx->args = args;
-		fastrpc_get_buff_overlaps(ctx);
+		ret = fastrpc_get_buff_overlaps(ctx);
+		if (ret) {
+			kfree(ctx->olaps);
+			kfree(ctx->maps);
+			kfree(ctx);
+			return ERR_PTR(ret);
+		}
 	}
 
 	/* Released in fastrpc_context_put() */
