@@ -1118,7 +1118,7 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
 	ctx->rpra = rpra;
 
 	for (oix = 0; oix < ctx->nbufs; ++oix) {
-		int mlen;
+		u64 mlen;
 
 		i = ctx->olaps[oix].raix;
 		len = ctx->args[i].length;
@@ -1158,8 +1158,10 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
 
 			mlen = ctx->olaps[oix].mend - ctx->olaps[oix].mstart;
 
-			if (rlen < mlen)
+			if (rlen < mlen) {
+				err = -EOVERFLOW;
 				goto bail;
+			}
 
 			rpra[i].buf.pv = args - ctx->olaps[oix].offset;
 			pages[i].addr = ctx->buf->dma_addr -
