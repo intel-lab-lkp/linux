@@ -4663,6 +4663,13 @@ rescale_entity(struct sched_entity *se, unsigned long weight, bool rel_vprot)
 		se->vprot = div64_long(se->vprot * old_weight, weight);
 }
 
+static inline void update_load_avg_after_reweight(struct sched_entity *se)
+{
+	u32 divider = get_pelt_divider(&se->avg);
+
+	se->avg.load_avg = div_u64(se_weight(se) * se->avg.load_sum, divider);
+}
+
 static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 			    unsigned long weight)
 {
@@ -4692,11 +4699,7 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 	rescale_entity(se, weight, rel_vprot);
 
 	update_load_set(&se->load, weight);
-
-	do {
-		u32 divider = get_pelt_divider(&se->avg);
-		se->avg.load_avg = div_u64(se_weight(se) * se->avg.load_sum, divider);
-	} while (0);
+	update_load_avg_after_reweight(se);
 
 	enqueue_load_avg(cfs_rq, se);
 	if (se->on_rq) {
@@ -15005,6 +15008,7 @@ static void switching_to_fair(struct rq *rq, struct task_struct *p)
 	 * Rebuild it before the task is enqueued.
 	 */
 	set_load_weight(p, false);
+	update_load_avg_after_reweight(&p->se);
 }
 
 static void switched_from_fair(struct rq *rq, struct task_struct *p)
