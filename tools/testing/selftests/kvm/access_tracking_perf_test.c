@@ -409,7 +409,7 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	int nr_vcpus = params->nr_vcpus;
 
 	vm = memstress_create_vm(mode, nr_vcpus, params->vcpu_memory_bytes, 1,
-				 params->backing_src, !overlap_memory_access);
+				 params->backing_src, !overlap_memory_access, 0);
 
 	/*
 	 * If guest_page_size is larger than the host's page size, the
