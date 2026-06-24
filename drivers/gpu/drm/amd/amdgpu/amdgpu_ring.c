@@ -460,7 +460,7 @@ bool amdgpu_ring_soft_recovery(struct amdgpu_ring *ring, unsigned int vmid,
 		return false;
 
 	dma_fence_lock_irqsave(fence, flags);
-	if (!dma_fence_is_signaled_locked(fence))
+	if (!dma_fence_test_signaled_flag(fence))
 		dma_fence_set_error(fence, -ENODATA);
 	dma_fence_unlock_irqrestore(fence, flags);
 

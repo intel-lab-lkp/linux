@@ -426,7 +426,7 @@ amdgpu_userq_fence_driver_set_error(struct amdgpu_userq_fence *fence,
 
 	f = rcu_dereference_protected(&fence->base,
 				      lockdep_is_held(&fence_drv->fence_list_lock));
-	if (f && !dma_fence_is_signaled_locked(f))
+	if (f && !dma_fence_test_signaled_flag(f))
 		dma_fence_set_error(f, error);
 	spin_unlock_irqrestore(&fence_drv->fence_list_lock, flags);
 }

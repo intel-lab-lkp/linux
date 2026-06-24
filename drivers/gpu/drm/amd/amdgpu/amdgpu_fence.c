@@ -652,7 +652,7 @@ void amdgpu_fence_driver_set_error(struct amdgpu_ring *ring, int error)
 
 		fence = rcu_dereference_protected(drv->fences[i],
 						  lockdep_is_held(&drv->lock));
-		if (fence && !dma_fence_is_signaled_locked(fence))
+		if (fence && !dma_fence_test_signaled_flag(fence))
 			dma_fence_set_error(fence, error);
 	}
 	spin_unlock_irqrestore(&drv->lock, flags);
@@ -677,7 +677,7 @@ void amdgpu_fence_driver_force_completion(struct amdgpu_ring *ring,
 
 		fence = rcu_dereference_protected(drv->fences[i],
 						  lockdep_is_held(&drv->lock));
-		if (fence && !dma_fence_is_signaled_locked(fence)) {
+		if (fence && !dma_fence_test_signaled_flag(fence)) {
 			if (fence == timedout_fence)
 				dma_fence_set_error(fence, -ETIME);
 			else
@@ -738,7 +738,7 @@ void amdgpu_ring_set_fence_errors_and_reemit(struct amdgpu_ring *ring,
 		rcu_read_lock();
 		unprocessed = rcu_dereference(*ptr);
 
-		if (unprocessed && !dma_fence_is_signaled_locked(unprocessed)) {
+		if (unprocessed && !dma_fence_test_signaled_flag(unprocessed)) {
 			fence = container_of(unprocessed, struct amdgpu_fence, base);
 			is_guilty_fence = fence == guilty_fence;
 			is_guilty_context = fence->context == guilty_fence->context;
@@ -802,7 +802,7 @@ void amdgpu_ring_backup_unprocessed_commands(struct amdgpu_ring *ring,
 		rcu_read_lock();
 		unprocessed = rcu_dereference(*ptr);
 
-		if (unprocessed && !dma_fence_is_signaled(unprocessed)) {
+		if (unprocessed && !dma_fence_test_signaled_flag(unprocessed)) {
 			fence = container_of(unprocessed, struct amdgpu_fence, base);
 
 			amdgpu_ring_backup_unprocessed_command(ring, fence);
