@@ -496,7 +496,8 @@ struct disk_info {
 #define BYPASS_THRESHOLD	1
 #define NR_HASH			(PAGE_SIZE / sizeof(struct hlist_head))
 #define HASH_MASK		(NR_HASH - 1)
-#define MAX_STRIPE_BATCH	8
+#define MAX_STRIPE_BATCH	32	/* stripes per handle_active_stripes pass */
+#define STRIPE_BATCH_WORKERS	8	/* stripes-per-worker threshold for spawning */
 #define RAID5_SYNC_WINDOW	32	/* stripes to pre-submit per sync_request call */
 
 /* NR_STRIPE_HASH_LOCKS must be a power of two, since

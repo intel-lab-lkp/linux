@@ -210,7 +210,7 @@ static void raid5_wakeup_stripe_thread(struct stripe_head *sh)
 	/* at least one worker should run to avoid race */
 	queue_work_on(sh->cpu, raid5_wq, &group->workers[0].work);
 
-	thread_cnt = group->stripes_cnt / MAX_STRIPE_BATCH - 1;
+	thread_cnt = group->stripes_cnt / STRIPE_BATCH_WORKERS - 1;
 	/* wakeup more workers */
 	for (i = 1; i < conf->worker_cnt_per_group && thread_cnt > 0; i++) {
 		if (group->workers[i].working == false) {
