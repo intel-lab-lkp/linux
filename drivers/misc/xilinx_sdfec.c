@@ -456,10 +456,23 @@ static int xsdfec_get_turbo(struct xsdfec_dev *xsdfec, void __user *arg)
 	return err;
 }
 
+static int xsdfec_ldpc_reg_addr(struct xsdfec_dev *xsdfec, u32 base, u32 high,
+				u32 offset, u32 *addr)
+{
+	if (offset > (high - base) / XSDFEC_LDPC_REG_JUMP) {
+		dev_dbg(xsdfec->dev, "Writing outside of LDPC register space");
+		return -EINVAL;
+	}
+
+	*addr = base + offset * XSDFEC_LDPC_REG_JUMP;
+	return 0;
+}
+
 static int xsdfec_reg0_write(struct xsdfec_dev *xsdfec, u32 n, u32 k, u32 psize,
 			     u32 offset)
 {
 	u32 wdata;
+	u32 addr;
 
 	if (n < XSDFEC_REG0_N_MIN || n > XSDFEC_REG0_N_MAX || psize == 0 ||
 	    (n > XSDFEC_REG0_N_MUL_P * psize) || n <= k || ((n % psize) != 0)) {
@@ -476,17 +489,11 @@ static int xsdfec_reg0_write(struct xsdfec_dev *xsdfec, u32 n, u32 k, u32 psize,
 	k = k << XSDFEC_REG0_K_LSB;
 	wdata = k | n;
 
-	if (XSDFEC_LDPC_CODE_REG0_ADDR_BASE + (offset * XSDFEC_LDPC_REG_JUMP) >
-	    XSDFEC_LDPC_CODE_REG0_ADDR_HIGH) {
-		dev_dbg(xsdfec->dev, "Writing outside of LDPC reg0 space 0x%x",
-			XSDFEC_LDPC_CODE_REG0_ADDR_BASE +
-				(offset * XSDFEC_LDPC_REG_JUMP));
+	if (xsdfec_ldpc_reg_addr(xsdfec, XSDFEC_LDPC_CODE_REG0_ADDR_BASE,
+				 XSDFEC_LDPC_CODE_REG0_ADDR_HIGH, offset,
+				 &addr))
 		return -EINVAL;
-	}
-	xsdfec_regwrite(xsdfec,
-			XSDFEC_LDPC_CODE_REG0_ADDR_BASE +
-				(offset * XSDFEC_LDPC_REG_JUMP),
-			wdata);
+	xsdfec_regwrite(xsdfec, addr, wdata);
 	return 0;
 }
 
@@ -494,6 +501,7 @@ static int xsdfec_reg1_write(struct xsdfec_dev *xsdfec, u32 psize,
 			     u32 no_packing, u32 nm, u32 offset)
 {
 	u32 wdata;
+	u32 addr;
 
 	if (psize < XSDFEC_REG1_PSIZE_MIN || psize > XSDFEC_REG1_PSIZE_MAX) {
 		dev_dbg(xsdfec->dev, "Psize is not in range");
@@ -510,17 +518,11 @@ static int xsdfec_reg1_write(struct xsdfec_dev *xsdfec, u32 psize,
 	nm = (nm << XSDFEC_REG1_NM_LSB) & XSDFEC_REG1_NM_MASK;
 
 	wdata = nm | no_packing | psize;
-	if (XSDFEC_LDPC_CODE_REG1_ADDR_BASE + (offset * XSDFEC_LDPC_REG_JUMP) >
-	    XSDFEC_LDPC_CODE_REG1_ADDR_HIGH) {
-		dev_dbg(xsdfec->dev, "Writing outside of LDPC reg1 space 0x%x",
-			XSDFEC_LDPC_CODE_REG1_ADDR_BASE +
-				(offset * XSDFEC_LDPC_REG_JUMP));
+	if (xsdfec_ldpc_reg_addr(xsdfec, XSDFEC_LDPC_CODE_REG1_ADDR_BASE,
+				 XSDFEC_LDPC_CODE_REG1_ADDR_HIGH, offset,
+				 &addr))
 		return -EINVAL;
-	}
-	xsdfec_regwrite(xsdfec,
-			XSDFEC_LDPC_CODE_REG1_ADDR_BASE +
-				(offset * XSDFEC_LDPC_REG_JUMP),
-			wdata);
+	xsdfec_regwrite(xsdfec, addr, wdata);
 	return 0;
 }
 
@@ -529,6 +531,7 @@ static int xsdfec_reg2_write(struct xsdfec_dev *xsdfec, u32 nlayers, u32 nmqc,
 			     u32 max_schedule, u32 offset)
 {
 	u32 wdata;
+	u32 addr;
 
 	if (nlayers < XSDFEC_REG2_NLAYERS_MIN ||
 	    nlayers > XSDFEC_REG2_NLAYERS_MAX) {
@@ -563,17 +566,11 @@ static int xsdfec_reg2_write(struct xsdfec_dev *xsdfec, u32 nlayers, u32 nmqc,
 	wdata = (max_schedule | no_final_parity | special_qc | norm_type |
 		 nmqc | nlayers);
 
-	if (XSDFEC_LDPC_CODE_REG2_ADDR_BASE + (offset * XSDFEC_LDPC_REG_JUMP) >
-	    XSDFEC_LDPC_CODE_REG2_ADDR_HIGH) {
-		dev_dbg(xsdfec->dev, "Writing outside of LDPC reg2 space 0x%x",
-			XSDFEC_LDPC_CODE_REG2_ADDR_BASE +
-				(offset * XSDFEC_LDPC_REG_JUMP));
+	if (xsdfec_ldpc_reg_addr(xsdfec, XSDFEC_LDPC_CODE_REG2_ADDR_BASE,
+				 XSDFEC_LDPC_CODE_REG2_ADDR_HIGH, offset,
+				 &addr))
 		return -EINVAL;
-	}
-	xsdfec_regwrite(xsdfec,
-			XSDFEC_LDPC_CODE_REG2_ADDR_BASE +
-				(offset * XSDFEC_LDPC_REG_JUMP),
-			wdata);
+	xsdfec_regwrite(xsdfec, addr, wdata);
 	return 0;
 }
 
@@ -581,20 +578,15 @@ static int xsdfec_reg3_write(struct xsdfec_dev *xsdfec, u8 sc_off, u8 la_off,
 			     u16 qc_off, u32 offset)
 {
 	u32 wdata;
+	u32 addr;
 
 	wdata = ((qc_off << XSDFEC_REG3_QC_OFF_LSB) |
 		 (la_off << XSDFEC_REG3_LA_OFF_LSB) | sc_off);
-	if (XSDFEC_LDPC_CODE_REG3_ADDR_BASE + (offset * XSDFEC_LDPC_REG_JUMP) >
-	    XSDFEC_LDPC_CODE_REG3_ADDR_HIGH) {
-		dev_dbg(xsdfec->dev, "Writing outside of LDPC reg3 space 0x%x",
-			XSDFEC_LDPC_CODE_REG3_ADDR_BASE +
-				(offset * XSDFEC_LDPC_REG_JUMP));
+	if (xsdfec_ldpc_reg_addr(xsdfec, XSDFEC_LDPC_CODE_REG3_ADDR_BASE,
+				 XSDFEC_LDPC_CODE_REG3_ADDR_HIGH, offset,
+				 &addr))
 		return -EINVAL;
-	}
-	xsdfec_regwrite(xsdfec,
-			XSDFEC_LDPC_CODE_REG3_ADDR_BASE +
-				(offset * XSDFEC_LDPC_REG_JUMP),
-			wdata);
+	xsdfec_regwrite(xsdfec, addr, wdata);
 	return 0;
 }
 
