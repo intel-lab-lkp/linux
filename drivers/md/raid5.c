@@ -6563,7 +6563,8 @@ static inline sector_t raid5_sync_request(struct mddev *mddev, sector_t sector_n
 	struct stripe_head *sh;
 	sector_t sync_blocks;
 	bool still_degraded = false;
-	int i;
+	int i, submitted;
+	sector_t win_sector;
 
 	if (sector_nr >= max_sector) {
 		/* just being told to finish up .. nothing much to do */
@@ -6620,16 +6621,7 @@ static inline sector_t raid5_sync_request(struct mddev *mddev, sector_t sector_n
 	if (md_bitmap_enabled(mddev, false))
 		mddev->bitmap_ops->cond_end_sync(mddev, sector_nr, false);
 
-	sh = raid5_get_active_stripe(conf, NULL, sector_nr,
-				     R5_GAS_NOBLOCK);
-	if (sh == NULL) {
-		sh = raid5_get_active_stripe(conf, NULL, sector_nr, 0);
-		/* make sure we don't swamp the stripe cache if someone else
-		 * is trying to get access
-		 */
-		schedule_timeout_uninterruptible(1);
-	}
-	/* Need to check if array will still be degraded after recovery/resync
+	/* Check once whether array will still be degraded after recovery/resync.
 	 * Note in case of > 1 drive failures it's possible we're rebuilding
 	 * one drive while leaving another faulty drive in array.
 	 */
@@ -6640,13 +6632,42 @@ static inline sector_t raid5_sync_request(struct mddev *mddev, sector_t sector_n
 			still_degraded = true;
 	}
 
+	/* First stripe: block if stripe cache is full, then throttle. */
+	sh = raid5_get_active_stripe(conf, NULL, sector_nr, R5_GAS_NOBLOCK);
+	if (sh == NULL) {
+		sh = raid5_get_active_stripe(conf, NULL, sector_nr, 0);
+		/* make sure we don't swamp the stripe cache if someone else
+		 * is trying to get access
+		 */
+		schedule_timeout_uninterruptible(1);
+	}
 	md_bitmap_start_sync(mddev, sector_nr, &sync_blocks, still_degraded);
 	set_bit(STRIPE_SYNC_REQUESTED, &sh->state);
 	set_bit(STRIPE_HANDLE, &sh->state);
-
 	raid5_release_stripe(sh);
 
-	return RAID5_STRIPE_SECTORS(conf);
+	/* Submit remaining stripes in the window non-blocking.  Stop early
+	 * if the stripe cache is full: the disk queue is already saturated.
+	 * Bound by resync_max so a user- or cluster-imposed sync ceiling is
+	 * not overshot.
+	 */
+	win_sector = sector_nr + RAID5_STRIPE_SECTORS(conf);
+	for (submitted = 1;
+	     submitted < RAID5_SYNC_WINDOW && win_sector < max_sector &&
+	     win_sector < mddev->resync_max;
+	     submitted++, win_sector += RAID5_STRIPE_SECTORS(conf)) {
+		sh = raid5_get_active_stripe(conf, NULL, win_sector,
+					     R5_GAS_NOBLOCK);
+		if (!sh)
+			break;
+		md_bitmap_start_sync(mddev, win_sector, &sync_blocks,
+				     still_degraded);
+		set_bit(STRIPE_SYNC_REQUESTED, &sh->state);
+		set_bit(STRIPE_HANDLE, &sh->state);
+		raid5_release_stripe(sh);
+	}
+
+	return submitted * RAID5_STRIPE_SECTORS(conf);
 }
 
 static int  retry_aligned_read(struct r5conf *conf, struct bio *raid_bio,
