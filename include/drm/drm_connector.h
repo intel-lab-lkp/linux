@@ -2410,6 +2410,9 @@ struct drm_connector {
 	 * @cec: CEC-related data.
 	 */
 	struct drm_connector_cec cec;
+
+	/* backlight link */
+	struct drm_backlight *backlight;
 };
 
 #define obj_to_connector(x) container_of(x, struct drm_connector, base)

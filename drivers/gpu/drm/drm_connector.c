@@ -21,6 +21,7 @@
  */
 
 #include <drm/drm_auth.h>
+#include <drm/drm_backlight.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_edid.h>
@@ -760,6 +761,7 @@ void drm_connector_cleanup(struct drm_connector *connector)
 	struct drm_device *dev = connector->dev;
 	struct drm_display_mode *mode, *t;
 
+	drm_backlight_free(connector);
 	/* The connector should have been removed from userspace long before
 	 * it is finally destroyed.
 	 */
@@ -844,6 +846,8 @@ int drm_connector_register(struct drm_connector *connector)
 	mutex_lock(&connector->mutex);
 	if (connector->registration_state != DRM_CONNECTOR_INITIALIZING)
 		goto unlock;
+
+	drm_backlight_register(connector->backlight);
 
 	ret = drm_sysfs_connector_add(connector);
 	if (ret)
@@ -931,6 +935,8 @@ EXPORT_SYMBOL(drm_connector_dynamic_register);
 void drm_connector_unregister(struct drm_connector *connector)
 {
 	mutex_lock(&connector->mutex);
+	drm_backlight_unregister(connector->backlight);
+
 	if (connector->registration_state != DRM_CONNECTOR_REGISTERED) {
 		mutex_unlock(&connector->mutex);
 		return;
@@ -3252,10 +3258,16 @@ int drm_connector_set_obj_prop(struct drm_mode_object *obj,
 {
 	int ret = -EINVAL;
 	struct drm_connector *connector = obj_to_connector(obj);
+	struct drm_mode_config *config = &connector->dev->mode_config;
 
 	/* Do DPMS ourselves */
 	if (property == connector->dev->mode_config.dpms_property) {
 		ret = (*connector->funcs->dpms)(connector, (int)value);
+	} else if (property == config->luminance_property) {
+		if (connector->backlight && connector->dpms == DRM_MODE_DPMS_ON)
+			drm_backlight_set_luminance(connector->backlight,
+						    value);
+		ret = 0;
 	} else if (connector->funcs->set_property)
 		ret = connector->funcs->set_property(connector, property, value);
 

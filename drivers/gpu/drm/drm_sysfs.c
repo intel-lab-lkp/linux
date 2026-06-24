@@ -11,6 +11,7 @@
  */
 
 #include <linux/acpi.h>
+#include <linux/backlight.h>
 #include <linux/component.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -27,6 +28,7 @@
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>
 #include <drm/drm_modes.h>
+#include <drm/drm_backlight.h>
 #include <drm/drm_print.h>
 #include <drm/drm_property.h>
 #include <drm/drm_sysfs.h>
@@ -391,15 +393,35 @@ err_free:
 
 int drm_sysfs_connector_add_late(struct drm_connector *connector)
 {
-	if (connector->ddc)
-		return sysfs_create_link(&connector->kdev->kobj,
-					 &connector->ddc->dev.kobj, "ddc");
+	if (connector->ddc) {
+		int ret = sysfs_create_link(&connector->kdev->kobj,
+					    &connector->ddc->dev.kobj, "ddc");
+		if (ret)
+			return ret;
+	}
+
+	if (connector->backlight) {
+		struct backlight_device *bd = drm_backlight_get_device(connector->backlight);
+
+		if (bd) {
+			int ret = sysfs_create_link(&connector->kdev->kobj,
+						    &bd->dev.kobj, "backlight");
+			if (ret) {
+				if (connector->ddc)
+					sysfs_remove_link(&connector->kdev->kobj, "ddc");
+				return ret;
+			}
+		}
+	}
 
 	return 0;
 }
 
 void drm_sysfs_connector_remove_early(struct drm_connector *connector)
 {
+	if (connector->backlight && drm_backlight_get_device(connector->backlight))
+		sysfs_remove_link(&connector->kdev->kobj, "backlight");
+
 	if (connector->ddc)
 		sysfs_remove_link(&connector->kdev->kobj, "ddc");
 }

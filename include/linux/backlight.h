@@ -29,6 +29,7 @@ enum backlight_update_reason {
 	 * @BACKLIGHT_UPDATE_SYSFS: The backlight was updated using sysfs.
 	 */
 	BACKLIGHT_UPDATE_SYSFS,
+	BACKLIGHT_UPDATE_DRM,
 };
 
 /**
@@ -80,6 +81,11 @@ enum backlight_notification {
 	 * @BACKLIGHT_UNREGISTERED: The backlight revice is unregistered.
 	 */
 	BACKLIGHT_UNREGISTERED,
+
+	/**
+	 * @BACKLIGHT_BRIGHTNESS_CHANGED: The backlight brightness has changed.
+	 */
+	BACKLIGHT_BRIGHTNESS_CHANGED,
 };
 
 /** enum backlight_scale - the type of scale used for brightness values
@@ -310,6 +316,9 @@ struct backlight_device {
 	int use_count;
 };
 
+/* Forward declaration for backlight_update_status */
+void backlight_notify_brightness(struct backlight_device *bd);
+
 /**
  * backlight_update_status - force an update of the backlight device status
  * @bd: the backlight device
@@ -322,6 +331,10 @@ static inline int backlight_update_status(struct backlight_device *bd)
 	if (bd->ops && bd->ops->update_status)
 		ret = bd->ops->update_status(bd);
 	mutex_unlock(&bd->update_lock);
+
+	/* Notify DRM and other listeners that brightness changed */
+	if (ret == 0)
+		backlight_notify_brightness(bd);
 
 	return ret;
 }
