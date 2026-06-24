@@ -908,6 +908,12 @@ static long tw_chrdev_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		goto out;
 	}
 
+	if (cmd == TW_OP_AEN_LISTEN &&
+	    data_buffer_length < sizeof(tw_aen_code)) {
+		retval = -EINVAL;
+		goto out;
+	}
+
 	/* Hardware can only do multiple of 512 byte transfers */
 	data_buffer_length_adjusted = (data_buffer_length + 511) & ~511;
 
@@ -2427,4 +2433,3 @@ static void __exit tw_exit(void)
 
 module_init(tw_init);
 module_exit(tw_exit);
-
