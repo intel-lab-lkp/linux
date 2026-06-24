@@ -398,12 +398,13 @@ static const char *page_size_string(struct map_range *mr)
 	return str_4k;
 }
 
-static int __meminit split_mem_range(struct map_range *mr, int nr_range,
+static int __meminit split_mem_range(struct map_range *mr,
 				     unsigned long start,
 				     unsigned long end)
 {
 	unsigned long start_pfn, end_pfn, limit_pfn;
 	unsigned long pfn;
+	int nr_range = 0;
 	int i;
 
 	limit_pfn = PFN_DOWN(end);
@@ -544,7 +545,7 @@ void __ref init_memory_mapping(unsigned long start,
 	       start, end - 1);
 
 	memset(mr, 0, sizeof(mr));
-	nr_range = split_mem_range(mr, 0, start, end);
+	nr_range = split_mem_range(mr, start, end);
 
 	for (i = 0; i < nr_range; i++)
 		kernel_physical_mapping_init(mr[i].start, mr[i].end,
