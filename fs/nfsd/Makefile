@@ -37,9 +37,12 @@ nfsd-$(CONFIG_DEBUG_FS) += debugfs.o
 #
 .PHONY: xdrgen
 
-xdrgen: ../../include/linux/sunrpc/xdrgen/nfs4_1.h nfs4xdr_gen.h nfs4xdr_gen.c
+xdrgen: ../../include/linux/sunrpc/xdrgen/nfs4_1.h ../../include/linux/sunrpc/xdrgen/nfs4_2.h nfs4xdr_gen.h nfs4xdr_gen.c
 
 ../../include/linux/sunrpc/xdrgen/nfs4_1.h: ../../Documentation/sunrpc/xdr/nfs4_1.x
+	../../tools/net/sunrpc/xdrgen/xdrgen definitions $< > $@
+
+../../include/linux/sunrpc/xdrgen/nfs4_2.h: ../../Documentation/sunrpc/xdr/nfs4_2.x
 	../../tools/net/sunrpc/xdrgen/xdrgen definitions $< > $@
 
 nfs4xdr_gen.h: ../../Documentation/sunrpc/xdr/nfs4_1.x
