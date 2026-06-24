@@ -8816,8 +8816,8 @@ static int status_resync(struct seq_file *seq, struct mddev *mddev)
 {
 	sector_t max_sectors, resync, res;
 	unsigned long dt, db = 0;
-	sector_t rt, curr_mark_cnt, resync_mark_cnt;
-	int scale, recovery_active;
+	sector_t rt, curr_mark_cnt, resync_mark_cnt, recovery_active;
+	int scale;
 	unsigned int per_milli;
 
 	if (test_bit(MD_RECOVERY_SYNC, &mddev->recovery) ||
