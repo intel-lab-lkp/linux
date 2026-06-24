@@ -811,6 +811,11 @@ static void amdgpu_discovery_read_harvest_bit_per_ip(struct amdgpu_device *adev,
 	/* scan harvest bit of all IP data structures */
 	for (i = 0; i < num_dies; i++) {
 		die_offset = le16_to_cpu(ihdr->die_info[i].die_offset);
+		if (die_offset + sizeof(*dhdr) > adev->discovery.size) {
+			dev_err(adev->dev, "invalid die_offset %u in harvest table\n",
+				die_offset);
+			return;
+		}
 		dhdr = (struct die_header *)(discovery_bin + die_offset);
 		num_ips = le16_to_cpu(dhdr->num_ips);
 		ip_offset = die_offset + sizeof(*dhdr);
@@ -1343,6 +1348,11 @@ static int amdgpu_discovery_sysfs_recurse(struct amdgpu_device *adev,
 		struct ip_die_entry *ip_die_entry;
 
 		die_offset = le16_to_cpu(ihdr->die_info[ii].die_offset);
+		if (die_offset + sizeof(*dhdr) > adev->discovery.size) {
+			dev_err(adev->dev, "invalid die_offset %u in sysfs init\n",
+				die_offset);
+			return -EINVAL;
+		}
 		dhdr = (struct die_header *)(discovery_bin + die_offset);
 		num_ips = le16_to_cpu(dhdr->num_ips);
 		ip_offset = die_offset + sizeof(*dhdr);
@@ -1747,6 +1757,11 @@ static int amdgpu_discovery_reg_base_init(struct amdgpu_device *adev)
 
 	for (i = 0; i < num_dies; i++) {
 		die_offset = le16_to_cpu(ihdr->die_info[i].die_offset);
+		if (die_offset + sizeof(*dhdr) > adev->discovery.size) {
+			dev_err(adev->dev, "invalid die_offset %u in reg base init\n",
+				die_offset);
+			return -EINVAL;
+		}
 		dhdr = (struct die_header *)(discovery_bin + die_offset);
 		num_ips = le16_to_cpu(dhdr->num_ips);
 		ip_offset = die_offset + sizeof(*dhdr);
