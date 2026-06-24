@@ -792,6 +792,8 @@ xfs_setattr_nonsize(
 	kgid_t			gid = GLOBAL_ROOT_GID;
 	struct xfs_dquot	*udqp = NULL, *gdqp = NULL;
 	struct xfs_dquot	*old_udqp = NULL, *old_gdqp = NULL;
+	bool			force = ns_capable_noaudit(&init_user_ns,
+							   CAP_FOWNER);
 
 	ASSERT((mask & ATTR_SIZE) == 0);
 
@@ -835,7 +837,7 @@ xfs_setattr_nonsize(
 	}
 
 	error = xfs_trans_alloc_ichange(ip, udqp, gdqp, NULL,
-			has_capability_noaudit(current, CAP_FOWNER), &tp);
+			force, &tp);
 	if (error)
 		goto out_dqrele;
 
