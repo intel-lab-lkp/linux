@@ -44,6 +44,7 @@
 #include <drm/display/drm_dsc_helper.h>
 #include <drm/display/drm_hdmi_helper.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_backlight.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_fixed.h>
@@ -7420,6 +7421,13 @@ intel_dp_init_connector(struct intel_digital_port *dig_port,
 	drm_connector_init_with_ddc(dev, &connector->base, &intel_dp_connector_funcs,
 				    type, &intel_dp->aux.ddc);
 	drm_connector_helper_add(&connector->base, &intel_dp_connector_helper_funcs);
+
+	if (type == DRM_MODE_CONNECTOR_eDP) {
+		int r = drm_backlight_alloc(&connector->base);
+
+		if (r)
+			drm_err(display->drm, "Failed to allocate backlight: %d\n", r);
+	}
 
 	if (!HAS_GMCH(display) && DISPLAY_VER(display) < 12)
 		connector->base.interlace_allowed = true;
