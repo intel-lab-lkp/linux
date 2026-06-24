@@ -407,7 +407,8 @@ static void fastrpc_free_map(struct kref *ref)
 
 	if (map->fl) {
 		spin_lock(&map->fl->lock);
-		list_del(&map->node);
+		if (!list_empty(&map->node))
+			list_del_init(&map->node);
 		spin_unlock(&map->fl->lock);
 		map->fl = NULL;
 	}
@@ -2181,6 +2182,7 @@ static int fastrpc_req_mem_unmap_impl(struct fastrpc_user *fl, struct fastrpc_me
 	list_for_each_entry_safe(iter, m, &fl->maps, node) {
 		if ((req->fd < 0 || iter->fd == req->fd) && (iter->raddr == req->vaddr)) {
 			map = iter;
+			list_del_init(&map->node);
 			break;
 		}
 	}
@@ -2205,6 +2207,9 @@ static int fastrpc_req_mem_unmap_impl(struct fastrpc_user *fl, struct fastrpc_me
 				      &args[0]);
 	if (err) {
 		dev_err(dev, "unmmap\tpt fd = %d, 0x%09llx error\n",  map->fd, map->raddr);
+		spin_lock(&fl->lock);
+		list_add_tail(&map->node, &fl->maps);
+		spin_unlock(&fl->lock);
 		return err;
 	}
 	fastrpc_map_put(map);
