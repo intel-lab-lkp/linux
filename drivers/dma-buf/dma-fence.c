@@ -534,7 +534,7 @@ dma_fence_wait_timeout(struct dma_fence *fence, bool intr, signed long timeout)
 
 	__dma_fence_might_wait();
 
-	dma_fence_enable_sw_signaling(fence);
+	dma_fence_enable_signaling(fence);
 
 	rcu_read_lock();
 	ops = rcu_dereference(fence->ops);
@@ -656,14 +656,14 @@ static bool __dma_fence_enable_signaling(struct dma_fence *fence)
 }
 
 /**
- * dma_fence_enable_sw_signaling - enable signaling on fence
+ * dma_fence_enable_signaling - enable signaling on fence
  * @fence: the fence to enable
  *
  * This will request for sw signaling to be enabled, to make the fence
  * complete as soon as possible. This calls &dma_fence_ops.enable_signaling
  * internally.
  */
-void dma_fence_enable_sw_signaling(struct dma_fence *fence)
+void dma_fence_enable_signaling(struct dma_fence *fence)
 {
 	unsigned long flags;
 
@@ -671,7 +671,7 @@ void dma_fence_enable_sw_signaling(struct dma_fence *fence)
 	__dma_fence_enable_signaling(fence);
 	dma_fence_unlock_irqrestore(fence, flags);
 }
-EXPORT_SYMBOL(dma_fence_enable_sw_signaling);
+EXPORT_SYMBOL(dma_fence_enable_signaling);
 
 /**
  * dma_fence_add_callback - add a callback to be called when the fence
