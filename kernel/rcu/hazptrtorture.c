@@ -448,7 +448,7 @@ static void hazptr_torture_defer(struct hazptr_pending *hppp, struct torture_ran
  */
 static int hazptr_torture_reader(void *arg)
 {
-	bool can_defer = cur_ops->onstack_ctx && kthread_do_pending_ms && defer_modulus;
+	bool can_defer = !cur_ops->onstack_ctx && kthread_do_pending_ms && defer_modulus;
 	int cpu = 0;
 	struct hazptr_pending hpp;
 	struct hazptr_pending *hppp = cur_ops->onstack_ctx ? &hpp : NULL;
