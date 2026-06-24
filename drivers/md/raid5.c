@@ -741,9 +741,7 @@ int raid5_calc_degraded(struct r5conf *conf)
 			if (conf->raid_disks <= conf->previous_raid_disks)
 				degraded2++;
 	}
-	if (degraded2 > degraded)
-		return degraded2;
-	return degraded;
+	return max(degraded, degraded2);
 }
 
 static bool has_failed(struct r5conf *conf)
