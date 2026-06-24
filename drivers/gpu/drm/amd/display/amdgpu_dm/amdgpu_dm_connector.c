@@ -1934,7 +1934,7 @@ amdgpu_dm_connector_late_register(struct drm_connector *connector)
 }
 EXPORT_IF_KUNIT(amdgpu_dm_connector_late_register);
 
-static void amdgpu_dm_connector_funcs_force(struct drm_connector *connector)
+STATIC_IFN_KUNIT void amdgpu_dm_connector_funcs_force(struct drm_connector *connector)
 {
 	struct amdgpu_dm_connector *aconnector = to_amdgpu_dm_connector(connector);
 	struct dc_link *dc_link = aconnector->dc_link;
@@ -1970,6 +1970,7 @@ static void amdgpu_dm_connector_funcs_force(struct drm_connector *connector)
 			&dc_em_sink->edid_caps);
 	}
 }
+EXPORT_IF_KUNIT(amdgpu_dm_connector_funcs_force);
 
 static const struct drm_connector_funcs amdgpu_dm_connector_funcs = {
 	.reset = amdgpu_dm_connector_funcs_reset,
@@ -2054,7 +2055,7 @@ STATIC_IFN_KUNIT void handle_edid_mgmt(struct amdgpu_dm_connector *aconnector)
 }
 EXPORT_IF_KUNIT(handle_edid_mgmt);
 
-static enum dc_status dm_validate_stream_and_context(struct dc *dc,
+STATIC_IFN_KUNIT enum dc_status dm_validate_stream_and_context(struct dc *dc,
 						struct dc_stream_state *stream)
 {
 	enum dc_status dc_result = DC_ERROR_UNEXPECTED;
@@ -2116,6 +2117,7 @@ cleanup:
 
 	return dc_result;
 }
+EXPORT_IF_KUNIT(dm_validate_stream_and_context);
 
 struct dc_stream_state *
 amdgpu_dm_create_validate_stream_for_sink(struct drm_connector *connector,
@@ -2486,7 +2488,7 @@ STATIC_IFN_KUNIT int to_drm_connector_type(enum signal_type st, uint32_t connect
 }
 EXPORT_IF_KUNIT(to_drm_connector_type);
 
-static struct drm_encoder *amdgpu_dm_connector_to_encoder(struct drm_connector *connector)
+STATIC_IFN_KUNIT struct drm_encoder *amdgpu_dm_connector_to_encoder(struct drm_connector *connector)
 {
 	struct drm_encoder *encoder;
 
@@ -2496,8 +2498,9 @@ static struct drm_encoder *amdgpu_dm_connector_to_encoder(struct drm_connector *
 
 	return NULL;
 }
+EXPORT_IF_KUNIT(amdgpu_dm_connector_to_encoder);
 
-static void amdgpu_dm_get_native_mode(struct drm_connector *connector)
+STATIC_IFN_KUNIT void amdgpu_dm_get_native_mode(struct drm_connector *connector)
 {
 	struct drm_encoder *encoder;
 	struct amdgpu_encoder *amdgpu_encoder;
@@ -2525,8 +2528,9 @@ static void amdgpu_dm_get_native_mode(struct drm_connector *connector)
 
 	}
 }
+EXPORT_IF_KUNIT(amdgpu_dm_get_native_mode);
 
-static struct drm_display_mode *
+STATIC_IFN_KUNIT struct drm_display_mode *
 amdgpu_dm_create_common_mode(struct drm_encoder *encoder,
 			     const char *name,
 			     int hdisplay, int vdisplay)
@@ -2549,6 +2553,7 @@ amdgpu_dm_create_common_mode(struct drm_encoder *encoder,
 	return mode;
 
 }
+EXPORT_IF_KUNIT(amdgpu_dm_create_common_mode);
 
 static const struct amdgpu_dm_mode_size {
 	char name[DRM_DISPLAY_MODE_LEN];
@@ -2568,7 +2573,7 @@ static const struct amdgpu_dm_mode_size {
 	{"1920x1200", 1920, 1200}
 };
 
-static void amdgpu_dm_connector_add_common_modes(struct drm_encoder *encoder,
+STATIC_IFN_KUNIT void amdgpu_dm_connector_add_common_modes(struct drm_encoder *encoder,
 						 struct drm_connector *connector)
 {
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
@@ -2616,6 +2621,7 @@ static void amdgpu_dm_connector_add_common_modes(struct drm_encoder *encoder,
 		amdgpu_dm_connector->num_modes++;
 	}
 }
+EXPORT_IF_KUNIT(amdgpu_dm_connector_add_common_modes);
 
 void amdgpu_set_panel_orientation(struct drm_connector *connector)
 {
@@ -2647,7 +2653,7 @@ void amdgpu_set_panel_orientation(struct drm_connector *connector)
 						       native_mode->vdisplay);
 }
 
-static void amdgpu_dm_connector_ddc_get_modes(struct drm_connector *connector,
+STATIC_IFN_KUNIT void amdgpu_dm_connector_ddc_get_modes(struct drm_connector *connector,
 					      const struct drm_edid *drm_edid)
 {
 	struct amdgpu_dm_connector *amdgpu_dm_connector =
@@ -2679,6 +2685,7 @@ static void amdgpu_dm_connector_ddc_get_modes(struct drm_connector *connector,
 		amdgpu_dm_connector->num_modes = 0;
 	}
 }
+EXPORT_IF_KUNIT(amdgpu_dm_connector_ddc_get_modes);
 
 STATIC_IFN_KUNIT bool is_duplicate_mode(struct amdgpu_dm_connector *aconnector,
 			      struct drm_display_mode *mode)
@@ -2694,7 +2701,7 @@ STATIC_IFN_KUNIT bool is_duplicate_mode(struct amdgpu_dm_connector *aconnector,
 }
 EXPORT_IF_KUNIT(is_duplicate_mode);
 
-static uint add_fs_modes(struct amdgpu_dm_connector *aconnector)
+STATIC_IFN_KUNIT uint add_fs_modes(struct amdgpu_dm_connector *aconnector)
 {
 	const struct drm_display_mode *m;
 	struct drm_display_mode *new_mode;
@@ -2769,8 +2776,9 @@ static uint add_fs_modes(struct amdgpu_dm_connector *aconnector)
  out:
 	return new_modes_count;
 }
+EXPORT_IF_KUNIT(add_fs_modes);
 
-static void amdgpu_dm_connector_add_freesync_modes(struct drm_connector *connector,
+STATIC_IFN_KUNIT void amdgpu_dm_connector_add_freesync_modes(struct drm_connector *connector,
 						   const struct drm_edid *drm_edid)
 {
 	struct amdgpu_dm_connector *amdgpu_dm_connector =
@@ -2793,6 +2801,7 @@ static void amdgpu_dm_connector_add_freesync_modes(struct drm_connector *connect
 		amdgpu_dm_connector->num_modes +=
 			add_fs_modes(amdgpu_dm_connector);
 }
+EXPORT_IF_KUNIT(amdgpu_dm_connector_add_freesync_modes);
 
 static int amdgpu_dm_connector_get_modes(struct drm_connector *connector)
 {
