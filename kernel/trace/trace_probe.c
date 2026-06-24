@@ -1230,7 +1230,7 @@ parse_probe_arg(char *arg, const struct fetch_type *type,
 			code->op = FETCH_OP_IMM;
 			code->immediate = param;
 		} else if (arg[1] == '+') {
-			/* kprobes don't support file offsets */
+			/* Kernel probes do not support file offsets */
 			if (ctx->flags & TPARG_FL_KERNEL) {
 				trace_probe_log_err(ctx->offset, FILE_ON_KPROBE);
 				return -EINVAL;
