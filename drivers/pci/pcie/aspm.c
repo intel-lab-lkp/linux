@@ -27,6 +27,8 @@
 
 #include "../pci.h"
 
+static void pcie_config_aspm_l1ss(struct pcie_link_state *link, u32 state);
+
 void pci_save_ltr_state(struct pci_dev *dev)
 {
 	int ltr;
@@ -799,6 +801,13 @@ static void aspm_l1ss_init(struct pcie_link_state *link)
 
 #define FLAG(x, y, d)	(((x) & (PCIE_LINK_STATE_##y)) ? d : "")
 
+static bool pcie_link_has_aspm_override(const struct pcie_link_state *link,
+					const char *aspm)
+{
+	return (device_property_present(&link->pdev->dev, aspm) ||
+		device_property_present(&link->downstream->dev, aspm));
+}
+
 static void pcie_aspm_override_default_link_state(struct pcie_link_state *link)
 {
 	struct pci_dev *pdev = link->downstream;
@@ -806,6 +815,24 @@ static void pcie_aspm_override_default_link_state(struct pcie_link_state *link)
 
 	/* For devicetree platforms, enable L0s and L1 by default */
 	if (of_have_populated_dt()) {
+		if (pcie_link_has_aspm_override(link, "aspm-no-l0s"))
+			link->aspm_support &= ~PCIE_LINK_STATE_L0S;
+
+		if (pcie_link_has_aspm_override(link, "aspm-no-l1"))
+			link->aspm_support &= ~(PCIE_LINK_STATE_L1 | PCIE_LINK_STATE_L1SS);
+
+		if (pcie_link_has_aspm_override(link, "aspm-no-l1ss")) {
+			/*
+			 * Clear L1SS in hardware before updating aspm_support. Once
+			 * aspm_capable is derived from aspm_support, pcie_config_aspm_link()
+			 * skips pcie_config_aspm_l1ss() entirely via the aspm_capable guard,
+			 * leaving firmware-enabled L1SS substates active in hardware.
+			 */
+			if (link->aspm_enabled & PCIE_LINK_STATE_L1SS)
+				pcie_config_aspm_l1ss(link, 0);
+			link->aspm_support &= ~PCIE_LINK_STATE_L1SS;
+		}
+
 		if (link->aspm_support & PCIE_LINK_STATE_L0S)
 			link->aspm_default |= PCIE_LINK_STATE_L0S;
 		if (link->aspm_support & PCIE_LINK_STATE_L1)
