@@ -533,9 +533,13 @@ static int adp_drm_bind(struct device *dev)
 
 	err = drm_dev_register(&adp->drm, 0);
 	if (err)
-		return err;
+		goto err_free_irq;
 
 	return 0;
+
+err_free_irq:
+	free_irq(adp->fe_irq, adp);
+	return err;
 }
 
 static void adp_drm_unbind(struct device *dev)
