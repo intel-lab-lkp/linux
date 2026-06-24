@@ -224,7 +224,7 @@ mock_sched_timedout_job(struct drm_sched_job *sched_job)
 	}
 
 	spin_lock_irqsave(&sched->lock, flags);
-	if (!dma_fence_is_signaled_locked(&job->hw_fence)) {
+	if (!dma_fence_test_signaled_flag(&job->hw_fence)) {
 		list_del(&job->link);
 		job->flags |= DRM_MOCK_SCHED_JOB_TIMEDOUT;
 		dma_fence_set_error(&job->hw_fence, -ETIMEDOUT);
@@ -258,7 +258,7 @@ static void mock_sched_cancel_job(struct drm_sched_job *sched_job)
 	hrtimer_cancel(&job->timer);
 
 	spin_lock_irqsave(&sched->lock, flags);
-	if (!dma_fence_is_signaled_locked(&job->hw_fence)) {
+	if (!dma_fence_test_signaled_flag(&job->hw_fence)) {
 		list_del(&job->link);
 		dma_fence_set_error(&job->hw_fence, -ECANCELED);
 		dma_fence_signal_locked(&job->hw_fence);
