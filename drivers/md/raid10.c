@@ -1911,6 +1911,12 @@ static bool raid10_make_request(struct mddev *mddev, struct bio *bio)
 		sectors = chunk_sects -
 			(bio->bi_iter.bi_sector &
 			 (chunk_sects - 1));
+
+	bio = mddev_bio_split_at_reshape_offset(mddev, bio, &sectors,
+						&conf->bio_split);
+	if (!bio)
+		return true;
+
 	if (!__make_request(mddev, bio, sectors))
 		md_write_end(mddev);
 
