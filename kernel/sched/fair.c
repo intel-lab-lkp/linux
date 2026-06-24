@@ -9816,18 +9816,13 @@ static void wakeup_preempt_fair(struct rq *rq, struct task_struct *p, int wake_f
 	cse_is_idle = se_is_idle(se);
 	pse_is_idle = se_is_idle(pse);
 
+	nse = se;
 	/*
 	 * Preempt an idle entity in favor of a non-idle entity (and don't preempt
 	 * in the inverse case).
 	 */
-	if (cse_is_idle && !pse_is_idle) {
-		/*
-		 * When non-idle entity preempt an idle entity,
-		 * don't give idle entity slice protection.
-		 */
-		preempt_action = PREEMPT_WAKEUP_SHORT;
+	if (cse_is_idle && !pse_is_idle)
 		goto preempt;
-	}
 
 	if (cse_is_idle != pse_is_idle)
 		return;
@@ -9896,16 +9891,23 @@ pick:
 	if (!nse && cfs_rq->nr_queued)
 		goto pick;
 
+	/*
+	 * If @p is eligible but not the next task to run then cancel protection
+	 * to prevent large scheduling latency
+	 */
+	if (preempt_action == PREEMPT_WAKEUP_SHORT && entity_eligible(cfs_rq, pse))
+		goto preempt;
+
 	if (sched_feat(RUN_TO_PARITY))
 		update_protect_slice(cfs_rq, se);
 
 	return;
 
 preempt:
-	if (preempt_action == PREEMPT_WAKEUP_SHORT) {
-		cancel_protect_slice(se);
+	cancel_protect_slice(se);
+
+	if (preempt_action == PREEMPT_WAKEUP_SHORT && nse == pse)
 		set_next_buddy(&p->se);
-	}
 
 	resched_curr_lazy(rq);
 }
