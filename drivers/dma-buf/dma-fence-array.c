@@ -100,7 +100,7 @@ static bool dma_fence_array_enable_signaling(struct dma_fence *fence)
 	return true;
 }
 
-static bool dma_fence_array_signaled(struct dma_fence *fence)
+static void dma_fence_array_signaled(struct dma_fence *fence)
 {
 	struct dma_fence_array *array = to_dma_fence_array(fence);
 	int num_pending;
@@ -123,18 +123,18 @@ static bool dma_fence_array_signaled(struct dma_fence *fence)
 	if (test_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT, &array->base.flags)) {
 		if (num_pending <= 0)
 			goto signal;
-		return false;
+		return;
 	}
 
 	for (i = 0; i < array->num_fences; ++i) {
 		if (dma_fence_is_signaled(array->fences[i]) && !--num_pending)
 			goto signal;
 	}
-	return false;
+	return;
 
 signal:
 	dma_fence_array_clear_pending_error(array);
-	return true;
+	dma_fence_signal(fence);
 }
 
 static void dma_fence_array_release(struct dma_fence *fence)
@@ -163,7 +163,7 @@ const struct dma_fence_ops dma_fence_array_ops = {
 	.get_driver_name = dma_fence_array_get_driver_name,
 	.get_timeline_name = dma_fence_array_get_timeline_name,
 	.enable_signaling = dma_fence_array_enable_signaling,
-	.signaled = dma_fence_array_signaled,
+	.check_signaled = dma_fence_array_signaled,
 	.release = dma_fence_array_release,
 	.set_deadline = dma_fence_array_set_deadline,
 };

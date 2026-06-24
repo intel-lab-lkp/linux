@@ -195,21 +195,22 @@ struct dma_fence_ops {
 	bool (*enable_signaling)(struct dma_fence *fence);
 
 	/**
-	 * @signaled:
+	 * @check_signaled:
 	 *
 	 * Peek whether the fence is signaled, as a fastpath optimization for
-	 * e.g. dma_fence_wait() or dma_fence_add_callback(). Note that this
+	 * e.g. dma_fence_wait() or dma_fence_add_callback(). If the fence is
+	 * signaled, the implementation must call dma_fence_signal(). This
 	 * callback does not need to make any guarantees beyond that a fence
-	 * once indicates as signalled must always return true from this
-	 * callback. This callback may return false even if the fence has
-	 * completed already, in this case information hasn't propogated throug
-	 * the system yet. See also dma_fence_is_signaled().
+	 * that is signaled will have dma_fence_signal() called. The callback
+	 * may be called even if the fence has already been signaled, in which
+	 * case the dma_fence_signal() call will be a no-op. See also
+	 * dma_fence_is_signaled().
 	 *
-	 * May set &dma_fence.error if returning true.
+	 * May set &dma_fence.error before calling dma_fence_signal().
 	 *
 	 * This callback is optional.
 	 */
-	bool (*signaled)(struct dma_fence *fence);
+	void (*check_signaled)(struct dma_fence *fence);
 
 	/**
 	 * @wait:
@@ -517,14 +518,11 @@ dma_fence_is_signaled(struct dma_fence *fence)
 
 	rcu_read_lock();
 	ops = rcu_dereference(fence->ops);
-	if (ops && ops->signaled && ops->signaled(fence)) {
-		rcu_read_unlock();
-		dma_fence_signal(fence);
-		return true;
-	}
+	if (ops && ops->check_signaled)
+		ops->check_signaled(fence);
 	rcu_read_unlock();
 
-	return false;
+	return dma_fence_test_signaled_flag(fence);
 }
 
 /**

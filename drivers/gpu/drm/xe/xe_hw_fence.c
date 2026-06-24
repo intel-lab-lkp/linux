@@ -49,14 +49,15 @@ static void fence_free(struct rcu_head *rcu)
 		kmem_cache_free(xe_hw_fence_slab, fence);
 }
 
-static bool xe_hw_fence_signaled(struct dma_fence *dma_fence)
+static void xe_hw_fence_signaled(struct dma_fence *dma_fence)
 {
 	struct xe_hw_fence *fence = to_xe_hw_fence(dma_fence);
 	struct xe_device *xe = fence->xe;
 	u32 seqno = xe_map_rd(xe, &fence->seqno_map, 0, u32);
 
-	return dma_fence->error ||
-		!__dma_fence_is_later(dma_fence, dma_fence->seqno, seqno);
+	if (dma_fence->error ||
+	    !__dma_fence_is_later(dma_fence, dma_fence->seqno, seqno))
+		dma_fence_signal(dma_fence);
 }
 
 static void hw_fence_irq_run_cb(struct irq_work *work)
@@ -72,9 +73,8 @@ static void hw_fence_irq_run_cb(struct irq_work *work)
 			struct dma_fence *dma_fence = &fence->dma;
 
 			trace_xe_hw_fence_try_signal(fence);
-			if (dma_fence_test_signaled_flag(dma_fence) ||
-			    xe_hw_fence_signaled(dma_fence)) {
-				dma_fence_signal_locked(dma_fence);
+			xe_hw_fence_signaled(dma_fence);
+			if (dma_fence_test_signaled_flag(dma_fence)) {
 				trace_xe_hw_fence_signal(fence);
 				list_del_init(&fence->irq_link);
 				dma_fence_put(dma_fence);
@@ -163,7 +163,8 @@ static bool xe_hw_fence_enable_signaling(struct dma_fence *dma_fence)
 	list_add_tail(&fence->irq_link, &irq->pending);
 
 	/* SW completed (no HW IRQ) so kick handler to signal fence */
-	if (xe_hw_fence_signaled(dma_fence))
+	xe_hw_fence_signaled(dma_fence);
+	if (dma_fence_test_signaled_flag(dma_fence))
 		xe_hw_fence_irq_run(irq);
 
 	return true;
@@ -181,7 +182,7 @@ static const struct dma_fence_ops xe_hw_fence_ops = {
 	.get_driver_name = xe_hw_fence_get_driver_name,
 	.get_timeline_name = xe_hw_fence_get_timeline_name,
 	.enable_signaling = xe_hw_fence_enable_signaling,
-	.signaled = xe_hw_fence_signaled,
+	.check_signaled = xe_hw_fence_signaled,
 	.release = xe_hw_fence_release,
 };
 

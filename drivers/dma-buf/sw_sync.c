@@ -167,11 +167,12 @@ static void timeline_fence_release(struct dma_fence *fence)
 	dma_fence_free(fence);
 }
 
-static bool timeline_fence_signaled(struct dma_fence *fence)
+static void timeline_fence_signaled(struct dma_fence *fence)
 {
 	struct sync_timeline *parent = dma_fence_parent(fence);
 
-	return !__dma_fence_is_later(fence, fence->seqno, parent->value);
+	if (!__dma_fence_is_later(fence, fence->seqno, parent->value))
+		dma_fence_signal(fence);
 }
 
 static void timeline_fence_set_deadline(struct dma_fence *fence, ktime_t deadline)
@@ -193,7 +194,7 @@ static void timeline_fence_set_deadline(struct dma_fence *fence, ktime_t deadlin
 static const struct dma_fence_ops timeline_fence_ops = {
 	.get_driver_name = timeline_fence_get_driver_name,
 	.get_timeline_name = timeline_fence_get_timeline_name,
-	.signaled = timeline_fence_signaled,
+	.check_signaled = timeline_fence_signaled,
 	.release = timeline_fence_release,
 	.set_deadline = timeline_fence_set_deadline,
 };
@@ -218,7 +219,7 @@ static void sync_timeline_signal(struct sync_timeline *obj, unsigned int inc)
 	obj->value += inc;
 
 	list_for_each_entry_safe(pt, next, &obj->pt_list, link) {
-		if (!timeline_fence_signaled(&pt->base))
+		if (__dma_fence_is_later(&pt->base, pt->base.seqno, obj->value))
 			break;
 
 		dma_fence_get(&pt->base);

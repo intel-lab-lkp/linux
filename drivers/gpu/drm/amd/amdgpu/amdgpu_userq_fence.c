@@ -311,7 +311,7 @@ static const char *amdgpu_userq_fence_get_timeline_name(struct dma_fence *f)
 	return fence->fence_drv->timeline_name;
 }
 
-static bool amdgpu_userq_fence_signaled(struct dma_fence *f)
+static void amdgpu_userq_fence_signaled(struct dma_fence *f)
 {
 	struct amdgpu_userq_fence *fence = to_amdgpu_userq_fence(f);
 	struct amdgpu_userq_fence_driver *fence_drv = fence->fence_drv;
@@ -321,9 +321,7 @@ static bool amdgpu_userq_fence_signaled(struct dma_fence *f)
 	wptr = fence->base.seqno;
 
 	if (rptr >= wptr)
-		return true;
-
-	return false;
+		dma_fence_signal(f);
 }
 
 static void amdgpu_userq_fence_free(struct rcu_head *rcu)
@@ -347,7 +345,7 @@ static void amdgpu_userq_fence_release(struct dma_fence *f)
 static const struct dma_fence_ops amdgpu_userq_fence_ops = {
 	.get_driver_name = amdgpu_userq_fence_get_driver_name,
 	.get_timeline_name = amdgpu_userq_fence_get_timeline_name,
-	.signaled = amdgpu_userq_fence_signaled,
+	.check_signaled = amdgpu_userq_fence_signaled,
 	.release = amdgpu_userq_fence_release,
 };
 

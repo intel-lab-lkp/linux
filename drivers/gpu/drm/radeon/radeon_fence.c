@@ -350,7 +350,7 @@ static bool radeon_fence_seq_signaled(struct radeon_device *rdev,
 	return false;
 }
 
-static bool radeon_fence_is_signaled(struct dma_fence *f)
+static void radeon_fence_is_signaled(struct dma_fence *f)
 {
 	struct radeon_fence *fence = to_radeon_fence(f);
 	struct radeon_device *rdev = fence->rdev;
@@ -358,9 +358,7 @@ static bool radeon_fence_is_signaled(struct dma_fence *f)
 	u64 seq = fence->seq;
 
 	if (atomic64_read(&rdev->fence_drv[ring].last_seq) >= seq)
-		return true;
-
-	return false;
+		dma_fence_signal(f);
 }
 
 /**
@@ -1046,7 +1044,7 @@ const struct dma_fence_ops radeon_fence_ops = {
 	.get_driver_name = radeon_fence_get_driver_name,
 	.get_timeline_name = radeon_fence_get_timeline_name,
 	.enable_signaling = radeon_fence_enable_signaling,
-	.signaled = radeon_fence_is_signaled,
+	.check_signaled = radeon_fence_is_signaled,
 	.wait = radeon_fence_default_wait,
 	.release = NULL,
 };

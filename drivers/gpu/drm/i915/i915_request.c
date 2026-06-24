@@ -87,9 +87,10 @@ static const char *i915_fence_get_timeline_name(struct dma_fence *fence)
 	return ctx->name;
 }
 
-static bool i915_fence_signaled(struct dma_fence *fence)
+static void i915_fence_signaled(struct dma_fence *fence)
 {
-	return i915_request_completed(to_request(fence));
+	if (i915_request_completed(to_request(fence)))
+		dma_fence_signal(fence);
 }
 
 static bool i915_fence_enable_signaling(struct dma_fence *fence)
@@ -176,7 +177,7 @@ const struct dma_fence_ops i915_fence_ops = {
 	.get_driver_name = i915_fence_get_driver_name,
 	.get_timeline_name = i915_fence_get_timeline_name,
 	.enable_signaling = i915_fence_enable_signaling,
-	.signaled = i915_fence_signaled,
+	.check_signaled = i915_fence_signaled,
 	.wait = i915_fence_wait,
 	.release = i915_fence_release,
 };

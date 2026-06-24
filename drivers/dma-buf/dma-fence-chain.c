@@ -161,18 +161,20 @@ static bool dma_fence_chain_enable_signaling(struct dma_fence *fence)
 	return false;
 }
 
-static bool dma_fence_chain_signaled(struct dma_fence *fence)
+static void dma_fence_chain_signaled(struct dma_fence *fence)
 {
-	dma_fence_chain_for_each(fence, fence) {
-		struct dma_fence *f = dma_fence_chain_contained(fence);
+	struct dma_fence *iter = fence;
+
+	dma_fence_chain_for_each(iter, iter) {
+		struct dma_fence *f = dma_fence_chain_contained(iter);
 
 		if (!dma_fence_is_signaled(f)) {
-			dma_fence_put(fence);
-			return false;
+			dma_fence_put(iter);
+			return;
 		}
 	}
 
-	return true;
+	dma_fence_signal(fence);
 }
 
 static void dma_fence_chain_release(struct dma_fence *fence)
@@ -221,7 +223,7 @@ const struct dma_fence_ops dma_fence_chain_ops = {
 	.get_driver_name = dma_fence_chain_get_driver_name,
 	.get_timeline_name = dma_fence_chain_get_timeline_name,
 	.enable_signaling = dma_fence_chain_enable_signaling,
-	.signaled = dma_fence_chain_signaled,
+	.check_signaled = dma_fence_chain_signaled,
 	.release = dma_fence_chain_release,
 	.set_deadline = dma_fence_chain_set_deadline,
 };

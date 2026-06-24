@@ -40,19 +40,18 @@ static const char *virtio_gpu_get_timeline_name(struct dma_fence *f)
 	return "controlq";
 }
 
-static bool virtio_gpu_fence_signaled(struct dma_fence *f)
+static void virtio_gpu_fence_signaled(struct dma_fence *f)
 {
 	/* leaked fence outside driver before completing
 	 * initialization with virtio_gpu_fence_emit.
 	 */
 	WARN_ON_ONCE(f->seqno == 0);
-	return false;
 }
 
 static const struct dma_fence_ops virtio_gpu_fence_ops = {
 	.get_driver_name     = virtio_gpu_get_driver_name,
 	.get_timeline_name   = virtio_gpu_get_timeline_name,
-	.signaled            = virtio_gpu_fence_signaled,
+	.check_signaled      = virtio_gpu_fence_signaled,
 };
 
 struct virtio_gpu_fence *virtio_gpu_fence_alloc(struct virtio_gpu_device *vgdev,

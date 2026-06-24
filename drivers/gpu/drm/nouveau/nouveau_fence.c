@@ -455,7 +455,7 @@ static const char *nouveau_fence_get_timeline_name(struct dma_fence *f)
  * result. The drm node should still be there, so we can derive the index from
  * the fence context.
  */
-static bool nouveau_fence_is_signaled(struct dma_fence *f)
+static void nouveau_fence_is_signaled(struct dma_fence *f)
 {
 	struct nouveau_fence *fence = to_nouveau_fence(f);
 	struct nouveau_fence_chan *fctx = nouveau_fctx(fence);
@@ -468,7 +468,8 @@ static bool nouveau_fence_is_signaled(struct dma_fence *f)
 		ret = (int)(fctx->read(chan) - fence->base.seqno) >= 0;
 	rcu_read_unlock();
 
-	return ret;
+	if (ret)
+		dma_fence_signal(f);
 }
 
 static bool nouveau_fence_no_signaling(struct dma_fence *f)
@@ -486,7 +487,8 @@ static bool nouveau_fence_no_signaling(struct dma_fence *f)
 	 * being able to enable signaling. It will still get signaled eventually,
 	 * just not right away.
 	 */
-	if (nouveau_fence_is_signaled(f)) {
+	nouveau_fence_is_signaled(f);
+	if (dma_fence_test_signaled_flag(f)) {
 		list_del(&fence->head);
 
 		dma_fence_put(&fence->base);
@@ -509,7 +511,7 @@ static const struct dma_fence_ops nouveau_fence_ops_legacy = {
 	.get_driver_name = nouveau_fence_get_get_driver_name,
 	.get_timeline_name = nouveau_fence_get_timeline_name,
 	.enable_signaling = nouveau_fence_no_signaling,
-	.signaled = nouveau_fence_is_signaled,
+	.check_signaled = nouveau_fence_is_signaled,
 	.wait = nouveau_fence_wait_legacy,
 	.release = nouveau_fence_release
 };
@@ -536,6 +538,6 @@ static const struct dma_fence_ops nouveau_fence_ops_uevent = {
 	.get_driver_name = nouveau_fence_get_get_driver_name,
 	.get_timeline_name = nouveau_fence_get_timeline_name,
 	.enable_signaling = nouveau_fence_enable_signaling,
-	.signaled = nouveau_fence_is_signaled,
+	.check_signaled = nouveau_fence_is_signaled,
 	.release = nouveau_fence_release
 };

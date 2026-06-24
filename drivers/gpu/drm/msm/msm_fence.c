@@ -123,10 +123,12 @@ static const char *msm_fence_get_timeline_name(struct dma_fence *fence)
 	return f->fctx->name;
 }
 
-static bool msm_fence_signaled(struct dma_fence *fence)
+static void msm_fence_signaled(struct dma_fence *fence)
 {
 	struct msm_fence *f = to_msm_fence(fence);
-	return msm_fence_completed(f->fctx, f->base.seqno);
+
+	if (msm_fence_completed(f->fctx, f->base.seqno))
+		dma_fence_signal(fence);
 }
 
 static void msm_fence_set_deadline(struct dma_fence *fence, ktime_t deadline)
@@ -167,7 +169,7 @@ static void msm_fence_set_deadline(struct dma_fence *fence, ktime_t deadline)
 static const struct dma_fence_ops msm_fence_ops = {
 	.get_driver_name = msm_fence_get_driver_name,
 	.get_timeline_name = msm_fence_get_timeline_name,
-	.signaled = msm_fence_signaled,
+	.check_signaled = msm_fence_signaled,
 	.set_deadline = msm_fence_set_deadline,
 };
 
