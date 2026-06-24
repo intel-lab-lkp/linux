@@ -653,6 +653,7 @@ static long twa_chrdev_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	ktime_t current_time;
 	TW_Device_Extension *tw_dev = twa_device_extension_list[iminor(inode)];
 	int retval = TW_IOCTL_ERROR_OS_EFAULT;
+	unsigned int min_data_length = 0;
 	void __user *argp = (void __user *)arg;
 
 	mutex_lock(&twa_chrdev_mutex);
@@ -669,6 +670,26 @@ static long twa_chrdev_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
 	/* Check data buffer size */
 	if (driver_command.buffer_length > TW_MAX_SECTORS * 2048) {
+		retval = TW_IOCTL_ERROR_OS_EINVAL;
+		goto out2;
+	}
+
+	switch (cmd) {
+	case TW_IOCTL_GET_COMPATIBILITY_INFO:
+		min_data_length = sizeof(TW_Compatibility_Info);
+		break;
+	case TW_IOCTL_GET_LAST_EVENT:
+	case TW_IOCTL_GET_FIRST_EVENT:
+	case TW_IOCTL_GET_NEXT_EVENT:
+	case TW_IOCTL_GET_PREVIOUS_EVENT:
+		min_data_length = sizeof(TW_Event);
+		break;
+	case TW_IOCTL_GET_LOCK:
+		min_data_length = sizeof(TW_Lock);
+		break;
+	}
+
+	if (driver_command.buffer_length < min_data_length) {
 		retval = TW_IOCTL_ERROR_OS_EINVAL;
 		goto out2;
 	}
@@ -2302,4 +2323,3 @@ static void __exit twa_exit(void)
 
 module_init(twa_init);
 module_exit(twa_exit);
-
