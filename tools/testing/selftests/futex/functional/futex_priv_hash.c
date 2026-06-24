@@ -145,6 +145,8 @@ TEST(priv_hash)
 	}
 	/* First thread, expect to be 0, not yet initialized */
 	ret = futex_hash_slots_get();
+	if (ret < 0 && errno == EINVAL)
+		ksft_exit_skip("PR_FUTEX_HASH not supported by kernel\n");
 	if (ret != 0)
 		ksft_exit_fail_msg("futex_hash_slots_get() failed: %d, %m\n", ret);
 

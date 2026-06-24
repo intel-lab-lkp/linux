@@ -103,6 +103,8 @@ static void __test_futex(void *futex_ptr, int err_value, unsigned int futex_flag
 			break;
 		}
 		if (ret < 0) {
+			if (errno == ENOSYS || (errno == EINVAL && (futex_flags & FUTEX2_NUMA)))
+				ksft_exit_skip("futex2 or FUTEX2_NUMA not supported by kernel\n");
 			ksft_exit_fail_msg("Failed futex2_wake(%d, 0x%x): %m\n",
 					   to_wake, futex_flags);
 		}
