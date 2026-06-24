@@ -531,11 +531,11 @@ bool pfn_range_is_mapped(unsigned long start_pfn, unsigned long end_pfn)
  * This runs before bootmem is initialized and gets pages directly from
  * the physical memory. To access them they are temporarily mapped.
  */
-unsigned long __ref init_memory_mapping(unsigned long start,
-					unsigned long end, pgprot_t prot)
+void __ref init_memory_mapping(unsigned long start,
+			       unsigned long end, pgprot_t prot)
 {
 	struct map_range mr[NR_RANGE_MR];
-	unsigned long ret = 0;
+	unsigned long paddr_last = 0;
 	int nr_range, i;
 
 	pr_debug("init_memory_mapping: [mem %#010lx-%#010lx]\n",
@@ -545,13 +545,11 @@ unsigned long __ref init_memory_mapping(unsigned long start,
 	nr_range = split_mem_range(mr, 0, start, end);
 
 	for (i = 0; i < nr_range; i++)
-		ret = kernel_physical_mapping_init(mr[i].start, mr[i].end,
-						   mr[i].page_size_mask,
-						   prot);
+		paddr_last = kernel_physical_mapping_init(mr[i].start, mr[i].end,
+							  mr[i].page_size_mask,
+							  prot);
 
-	add_pfn_range_mapped(start >> PAGE_SHIFT, ret >> PAGE_SHIFT);
-
-	return ret >> PAGE_SHIFT;
+	add_pfn_range_mapped(start >> PAGE_SHIFT, paddr_last >> PAGE_SHIFT);
 }
 
 /*
