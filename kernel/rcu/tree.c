@@ -2220,7 +2220,7 @@ static noinline void rcu_gp_cleanup(void)
 	rcu_seq_end(&new_gp_seq);
 	rcu_for_each_node_breadth_first(rnp) {
 		raw_spin_lock_irq_rcu_node(rnp);
-		if (WARN_ON_ONCE(rcu_preempt_blocked_readers_cgp(rnp)))
+		if (WARN_ON_ONCE(rcu_preempt_blocked_readers_cgp_ndqs(rnp)))
 			dump_blkd_tasks(rnp, 10);
 		WARN_ON_ONCE(rnp->qsmask);
 		WRITE_ONCE(rnp->gp_seq, new_gp_seq);

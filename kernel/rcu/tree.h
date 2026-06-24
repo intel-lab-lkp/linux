@@ -495,6 +495,7 @@ static const char *tp_rcu_varname __used __tracepoint_string = rcu_name;
 static void rcu_bootup_announce(void);
 static void rcu_qs(void);
 static int rcu_preempt_blocked_readers_cgp(struct rcu_node *rnp);
+static int rcu_preempt_blocked_readers_cgp_ndqs(struct rcu_node *rnp);
 static int rcu_print_task_exp_stall(struct rcu_node *rnp);
 static void rcu_preempt_check_blocked_tasks(struct rcu_node *rnp);
 static void rcu_flavor_sched_clock_irq(int user);
