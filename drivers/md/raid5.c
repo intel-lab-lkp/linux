@@ -7297,8 +7297,12 @@ raid5_store_group_thread_cnt(struct mddev *mddev, const char *page, size_t len)
 			conf->worker_groups = new_groups;
 			spin_unlock_irq(&conf->device_lock);
 
-			if (old_groups)
-				kfree(old_groups[0].workers);
+			if (old_groups) {
+				int node;
+
+				for (node = 0; node < num_possible_nodes(); node++)
+					kfree(old_groups[node].workers);
+			}
 			kfree(old_groups);
 		}
 	}
@@ -7336,7 +7340,6 @@ static int alloc_thread_groups(struct r5conf *conf, int cnt, int *group_cnt,
 {
 	int i, j, k;
 	ssize_t size;
-	struct r5worker *workers;
 
 	if (cnt == 0) {
 		*group_cnt = 0;
@@ -7344,24 +7347,24 @@ static int alloc_thread_groups(struct r5conf *conf, int cnt, int *group_cnt,
 		return 0;
 	}
 	*group_cnt = num_possible_nodes();
-	size = sizeof(struct r5worker) * cnt;
-	workers = kcalloc(size, *group_cnt, GFP_NOIO);
 	*worker_groups = kzalloc_objs(struct r5worker_group, *group_cnt,
 				      GFP_NOIO);
-	if (!*worker_groups || !workers) {
-		kfree(workers);
-		kfree(*worker_groups);
+	if (!*worker_groups)
 		return -ENOMEM;
-	}
 
+	size = sizeof(struct r5worker) * cnt;
 	for (i = 0; i < *group_cnt; i++) {
-		struct r5worker_group *group;
+		struct r5worker_group *group = &(*worker_groups)[i];
+		struct r5worker *workers;
 
-		group = &(*worker_groups)[i];
+		workers = kzalloc_node(size, GFP_NOIO, i);
+		if (!workers)
+			goto out_free;
+
 		INIT_LIST_HEAD(&group->handle_list);
 		INIT_LIST_HEAD(&group->loprio_list);
 		group->conf = conf;
-		group->workers = workers + i * cnt;
+		group->workers = workers;
 
 		for (j = 0; j < cnt; j++) {
 			struct r5worker *worker = group->workers + j;
@@ -7374,12 +7377,22 @@ static int alloc_thread_groups(struct r5conf *conf, int cnt, int *group_cnt,
 	}
 
 	return 0;
+
+out_free:
+	while (--i >= 0)
+		kfree((*worker_groups)[i].workers);
+	kfree(*worker_groups);
+	*worker_groups = NULL;
+	return -ENOMEM;
 }
 
 static void free_thread_groups(struct r5conf *conf)
 {
+	int i;
+
 	if (conf->worker_groups)
-		kfree(conf->worker_groups[0].workers);
+		for (i = 0; i < conf->group_cnt; i++)
+			kfree(conf->worker_groups[i].workers);
 	kfree(conf->worker_groups);
 	conf->worker_groups = NULL;
 }
