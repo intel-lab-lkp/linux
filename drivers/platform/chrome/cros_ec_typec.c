@@ -1164,6 +1164,12 @@ static void cros_typec_handle_status(struct cros_typec_data *typec, int port_num
 		return;
 	}
 
+	if (resp.source_cap_count > PDO_MAX_OBJECTS ||
+	    resp.sink_cap_count > PDO_MAX_OBJECTS) {
+		dev_warn(typec->dev, "Invalid PDO count from EC, port: %d\n", port_num);
+		return;
+	}
+
 	/* If we got a hard reset, unregister everything and return. */
 	if (resp.events & PD_STATUS_EVENT_HARD_RESET) {
 		cros_typec_remove_partner(typec, port_num);
