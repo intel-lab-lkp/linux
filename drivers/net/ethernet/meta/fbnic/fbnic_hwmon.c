@@ -33,10 +33,17 @@ static int fbnic_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 {
 	struct fbnic_dev *fbd = dev_get_drvdata(dev);
 	const struct fbnic_mac *mac = fbd->mac;
-	int id;
+	int id, err;
 
 	id = fbnic_hwmon_sensor_id(type);
-	return id < 0 ? id : mac->get_sensor(fbd, id, val);
+	if (id < 0)
+		return id;
+
+	mutex_lock(&fbd->hwmon_mutex);
+	err = mac->get_sensor(fbd, id, val);
+	mutex_unlock(&fbd->hwmon_mutex);
+
+	return err;
 }
 
 static const struct hwmon_ops fbnic_hwmon_ops = {
@@ -60,6 +67,8 @@ void fbnic_hwmon_register(struct fbnic_dev *fbd)
 	if (!IS_REACHABLE(CONFIG_HWMON))
 		return;
 
+	mutex_init(&fbd->hwmon_mutex);
+
 	fbd->hwmon = hwmon_device_register_with_info(fbd->dev, "fbnic",
 						     fbd, &fbnic_chip_info,
 						     NULL);
@@ -68,6 +77,7 @@ void fbnic_hwmon_register(struct fbnic_dev *fbd)
 			   "Failed to register hwmon device %pe\n",
 			   fbd->hwmon);
 		fbd->hwmon = NULL;
+		mutex_destroy(&fbd->hwmon_mutex);
 	}
 }
 
@@ -78,4 +88,5 @@ void fbnic_hwmon_unregister(struct fbnic_dev *fbd)
 
 	hwmon_device_unregister(fbd->hwmon);
 	fbd->hwmon = NULL;
+	mutex_destroy(&fbd->hwmon_mutex);
 }
