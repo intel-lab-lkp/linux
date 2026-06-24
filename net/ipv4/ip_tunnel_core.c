@@ -134,6 +134,7 @@ int __iptunnel_pull_header(struct sk_buff *skb, int hdr_len,
 	__vlan_hwaccel_clear_tag(skb);
 	skb_set_queue_mapping(skb, 0);
 	skb_scrub_packet(skb, xnet);
+	skb_unset_transport_header(skb);
 
 	return iptunnel_pull_offloads(skb);
 }
