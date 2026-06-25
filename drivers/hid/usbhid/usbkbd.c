@@ -302,7 +302,7 @@ static int usb_kbd_probe(struct usb_interface *iface,
 
 	if (dev->product) {
 		if (dev->manufacturer)
-			seq_buf_puts(&kbd_name, " ");
+			seq_buf_putc(&kbd_name, ' ');
 		seq_buf_puts(&kbd_name, dev->product);
 	}
 

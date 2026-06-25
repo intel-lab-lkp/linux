@@ -1412,7 +1412,7 @@ static int usbhid_probe(struct usb_interface *intf, const struct usb_device_id *
 
 	if (dev->product) {
 		if (dev->manufacturer)
-			seq_buf_puts(&hid_name, " ");
+			seq_buf_putc(&hid_name, ' ');
 		seq_buf_puts(&hid_name, dev->product);
 	}
 

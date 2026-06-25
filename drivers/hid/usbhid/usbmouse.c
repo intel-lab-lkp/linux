@@ -150,7 +150,7 @@ static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_i
 
 	if (dev->product) {
 		if (dev->manufacturer)
-			seq_buf_puts(&mouse_name, " ");
+			seq_buf_putc(&mouse_name, ' ');
 		seq_buf_puts(&mouse_name, dev->product);
 	}
 
