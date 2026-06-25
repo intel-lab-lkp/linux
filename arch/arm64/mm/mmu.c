@@ -746,8 +746,10 @@ static int split_kernel_leaf_mapping_locked(unsigned long addr)
 	if (!pmd_present(pmd))
 		goto out;
 	if (pmd_leaf(pmd)) {
-		if (pmd_cont(pmd))
+		if (pmd_cont(pmd)) {
 			split_contpmd(pmdp);
+			pmd = pmdp_get(pmdp);
+		}
 		/*
 		 * PMD: If addr is PMD aligned then addr already describes a
 		 * leaf boundary. Otherwise, split to contpte.
@@ -891,8 +893,10 @@ static int split_to_ptes_pmd_entry(pmd_t *pmdp, unsigned long addr,
 	int ret = 0;
 
 	if (pmd_leaf(pmd)) {
-		if (pmd_cont(pmd))
+		if (pmd_cont(pmd)) {
 			split_contpmd(pmdp);
+			pmd = pmdp_get(pmdp);
+		}
 		ret = split_pmd(pmdp, pmd, gfp, false);
 
 		/*
