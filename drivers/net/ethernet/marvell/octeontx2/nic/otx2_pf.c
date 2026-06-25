@@ -2546,6 +2546,8 @@ out:
 static int otx2_set_vf_mac(struct net_device *netdev, int vf, u8 *mac)
 {
 	struct otx2_nic *pf = netdev_priv(netdev);
+	struct npc_get_field_status_req *req;
+	struct npc_get_field_status_rsp *rsp;
 	struct pci_dev *pdev = pf->pdev;
 	struct otx2_vf_config *config;
 	int ret;
@@ -2558,6 +2560,38 @@ static int otx2_set_vf_mac(struct net_device *netdev, int vf, u8 *mac)
 
 	if (!is_valid_ether_addr(mac))
 		return -EINVAL;
+
+	/* Skip installing the DMAC filter if the hardware parser profile
+	 * does not support DMAC extraction.
+	 */
+	mutex_lock(&pf->mbox.lock);
+	req = otx2_mbox_alloc_msg_npc_get_field_status(&pf->mbox);
+	if (!req) {
+		mutex_unlock(&pf->mbox.lock);
+		return -ENOMEM;
+	}
+
+	req->field = NPC_DMAC;
+	if (otx2_sync_mbox_msg(&pf->mbox)) {
+		mutex_unlock(&pf->mbox.lock);
+		return -EINVAL;
+	}
+
+	rsp = (struct npc_get_field_status_rsp *)otx2_mbox_get_rsp
+	       (&pf->mbox.mbox, 0, &req->hdr);
+	if (IS_ERR(rsp)) {
+		mutex_unlock(&pf->mbox.lock);
+		return PTR_ERR(rsp);
+	}
+
+	if (!rsp->enable) {
+		mutex_unlock(&pf->mbox.lock);
+		netdev_warn(netdev, "VF %d MAC filter not installed: DMAC extraction not supported by parser profile\n",
+			    vf);
+		return 0;
+	}
+
+	mutex_unlock(&pf->mbox.lock);
 
 	config = &pf->vf_configs[vf];
 	ether_addr_copy(config->mac, mac);
