@@ -1480,7 +1480,13 @@ _drbd_set_state(struct drbd_device *device, union drbd_state ns,
 		drbd_queue_work(&connection->sender_work,
 				&ascw->w);
 	} else {
-		drbd_err(device, "Could not kmalloc an ascw\n");
+		if ((os.disk != D_FAILED && ns.disk == D_FAILED) ||
+		    (os.disk != D_DISKLESS && ns.disk == D_DISKLESS))
+			put_ldev(device);
+
+		forget_state_change(state_change);
+		drbd_err(device, "Could not kmalloc an ascw, state change %p -> %p leaked\n",
+			 &os, &ns);
 	}
 
 	return rv;
