@@ -1001,6 +1001,16 @@ config LTC2497
 	  To compile this driver as a module, choose M here: the module will be
 	  called ltc2497.
 
+config MA35D1_EADC
+	tristate "MA35D1 EADC driver"
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	help
+	  Say yes here to build support for MA35D1 EADC.
+
+	  To compile this driver as a module, choose M here: the module will be
+	  called ma35d1.
+
 config MAX1027
 	tristate "Maxim max1027 ADC driver"
 	depends on SPI
