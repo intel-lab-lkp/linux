@@ -9,7 +9,9 @@
 #include <linux/debugfs.h>
 #include <linux/nmi.h>
 #include <linux/log2.h>
+#include <linux/sched/clock.h>
 #include "sched.h"
+#include <linux/sched/debug.h>
 
 /*
  * This allows printing both to /sys/kernel/debug/sched/debug and
@@ -1389,7 +1391,6 @@ void print_numa_stats(struct seq_file *m, int node, unsigned long tsf,
 }
 #endif
 
-
 static void sched_show_numa(struct task_struct *p, struct seq_file *m)
 {
 #ifdef CONFIG_NUMA_BALANCING
@@ -1403,6 +1404,28 @@ static void sched_show_numa(struct task_struct *p, struct seq_file *m)
 			task_node(p), task_numa_group_id(p));
 	show_numa_stats(p, m);
 #endif /* CONFIG_NUMA_BALANCING */
+}
+
+static void sched_show_cache(struct task_struct *p, struct seq_file *m)
+{
+#ifdef CONFIG_SCHED_CACHE
+	struct mm_struct *mm = p->mm;
+	int sc_cpu, sc_llc, sc_node, pref_llc, pref_node;
+
+	if (!mm)
+		return;
+
+	sc_cpu = READ_ONCE(mm->sc_stat.cpu);
+	sc_llc  = (sc_cpu >= 0) ? per_cpu(sd_llc_id, sc_cpu) : -1;
+	sc_node = (sc_cpu >= 0) ? cpu_to_node(sc_cpu) : -1;
+	pref_llc  = READ_ONCE(p->preferred_llc);
+	pref_node = (pref_llc >= 0) ? llc_to_node(pref_llc) : -1;
+
+	SEQ_printf(m, "sc_stat_cpu=%d, sc_llc=%d, sc_node=%d\n",
+		   sc_cpu, sc_llc, sc_node);
+	SEQ_printf(m, "preferred_llc=%d, preferred_llc_node=%d\n",
+		   pref_llc, pref_node);
+#endif /* CONFIG_SCHED_CACHE */
 }
 
 void proc_sched_show_task(struct task_struct *p, struct pid_namespace *ns,
@@ -1521,6 +1544,7 @@ void proc_sched_show_task(struct task_struct *p, struct pid_namespace *ns,
 	}
 
 	sched_show_numa(p, m);
+	sched_show_cache(p, m);
 }
 
 void proc_sched_set_task(struct task_struct *p)
