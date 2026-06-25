@@ -39,22 +39,7 @@ static inline void iomap_iter_done(struct iomap_iter *iter)
 		trace_iomap_iter_srcmap(iter->inode, &iter->srcmap);
 }
 
-/**
- * iomap_iter - iterate over a ranges in a file
- * @iter: iteration structue
- * @ops: iomap ops provided by the file system
- *
- * Iterate over filesystem-provided space mappings for the provided file range.
- *
- * This function handles cleanup of resources acquired for iteration when the
- * filesystem indicates there are no more space mappings, which means that this
- * function must be called in a loop that continues as long it returns a
- * positive value.  If 0 or a negative value is returned, the caller must not
- * return to the loop body.  Within a loop body, there are two ways to break out
- * of the loop body:  leave @iter.status unchanged, or set it to a negative
- * errno.
- */
-int iomap_iter(struct iomap_iter *iter, const struct iomap_ops *ops)
+static int iomap_iter_legacy(struct iomap_iter *iter, const struct iomap_ops *ops)
 {
 	bool stale = iter->iomap.flags & IOMAP_F_STALE;
 	ssize_t advanced;
@@ -114,3 +99,82 @@ begin:
 	iomap_iter_done(iter);
 	return 1;
 }
+
+static int iomap_iter_next(struct iomap_iter *iter, const struct iomap_ops *ops)
+{
+	int ret;
+
+	trace_iomap_iter(iter, ops, _RET_IP_);
+
+	ret = ops->iomap_next(iter, &iter->iomap, &iter->srcmap);
+	if (ret > 0) {
+		iter->status = 0;
+		iomap_iter_done(iter);
+	}
+
+	return ret;
+}
+
+/**
+ * iomap_iter - iterate over a ranges in a file
+ * @iter: iteration structue
+ * @ops: iomap ops provided by the file system
+ *
+ * Iterate over filesystem-provided space mappings for the provided file range.
+ *
+ * This function handles cleanup of resources acquired for iteration when the
+ * filesystem indicates there are no more space mappings, which means that this
+ * function must be called in a loop that continues as long it returns a
+ * positive value.  If 0 or a negative value is returned, the caller must not
+ * return to the loop body.  Within a loop body, there are two ways to break out
+ * of the loop body:  leave @iter.status unchanged, or set it to a negative
+ * errno.
+ */
+int iomap_iter(struct iomap_iter *iter, const struct iomap_ops *ops)
+{
+	if (ops->iomap_next)
+		return iomap_iter_next(iter, ops);
+
+	return iomap_iter_legacy(iter, ops);
+}
+
+int iomap_iter_continue(const struct iomap_iter *iter, struct iomap *iomap,
+		struct iomap *srcmap, int ret)
+{
+	bool stale = iter->iomap.flags & IOMAP_F_STALE;
+	ssize_t advanced = iter->pos - iter->iter_start_pos;
+
+	if (!iomap->length)
+		return 1;
+
+	/*
+	 * Use iter->len to determine whether to continue onto the next mapping.
+	 * Explicitly terminate on error status or if the current iter has not
+	 * advanced at all (i.e. no work was done for some reason) unless the
+	 * mapping has been marked stale and needs to be reprocessed.
+	 */
+	if (ret < 0 && !advanced)
+		return ret;
+
+	if (iter->status < 0)
+		ret = iter->status;
+	else if (iter->len == 0 || (!advanced && !stale))
+		ret = 0;
+	else
+		ret = 1;
+
+	if (iomap->flags & IOMAP_F_FOLIO_BATCH) {
+		folio_batch_release(iter->fbatch);
+		folio_batch_reinit(iter->fbatch);
+		iomap->flags &= ~IOMAP_F_FOLIO_BATCH;
+	}
+
+	if (ret <= 0)
+		return ret;
+
+	memset(iomap, 0, sizeof(*iomap));
+	memset(srcmap, 0, sizeof(*srcmap));
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iomap_iter_continue);

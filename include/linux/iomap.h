@@ -212,15 +212,19 @@ struct iomap_write_ops {
 #define IOMAP_ATOMIC		(1 << 9) /* torn-write protection */
 #define IOMAP_DONTCACHE		(1 << 10)
 
+typedef int (*iomap_begin_fn)(struct inode *inode, loff_t pos, loff_t length,
+		unsigned flags, struct iomap *iomap, struct iomap *srcmap);
+
+typedef int (*iomap_end_fn)(struct inode *inode, loff_t pos, loff_t length,
+		ssize_t written, unsigned flags, struct iomap *iomap);
+
 struct iomap_ops {
 	/*
 	 * Return the existing mapping at pos, or reserve space starting at
 	 * pos for up to length, as long as we can do it as a single mapping.
 	 * The actual length is returned in iomap->length.
 	 */
-	int (*iomap_begin)(struct inode *inode, loff_t pos, loff_t length,
-			unsigned flags, struct iomap *iomap,
-			struct iomap *srcmap);
+	iomap_begin_fn iomap_begin;
 
 	/*
 	 * Commit and/or unreserve space previous allocated using iomap_begin.
@@ -228,8 +232,15 @@ struct iomap_ops {
 	 * needs to be commited, while the rest needs to be unreserved.
 	 * Written might be zero if no data was written.
 	 */
-	int (*iomap_end)(struct inode *inode, loff_t pos, loff_t length,
-			ssize_t written, unsigned flags, struct iomap *iomap);
+	iomap_end_fn iomap_end;
+
+	/*
+	 * Produce the next mapping (finishing the previous one if needed).
+	 * Return 1 to continue iterating, 0 if the range is fully consumed,
+	 * or a negative error on failure.
+	 */
+	int (*iomap_next)(const struct iomap_iter *iter, struct iomap *iomap,
+			struct iomap *srcmap);
 };
 
 /**
@@ -316,6 +327,9 @@ static inline const struct iomap *iomap_iter_srcmap(const struct iomap_iter *i)
 		return &i->srcmap;
 	return &i->iomap;
 }
+
+int iomap_iter_continue(const struct iomap_iter *iter, struct iomap *iomap,
+		struct iomap *srcmap, int ret);
 
 /*
  * Return the file offset for the first unchanged block after a short write.
@@ -647,5 +661,32 @@ static inline void iomap_bio_readahead(struct readahead_control *rac,
 	iomap_readahead(ops, &ctx, NULL);
 }
 #endif /* CONFIG_BLOCK */
+
+static __always_inline int iomap_process(const struct iomap_iter *iter,
+		struct iomap *iomap, struct iomap *srcmap,
+		iomap_begin_fn begin, iomap_end_fn end)
+{
+	int ret = 0;
+
+	if (iomap->length && end) {
+		ssize_t advanced = iter->pos - iter->iter_start_pos;
+		loff_t len;
+
+		len = iomap_length_trim(iter, iter->iter_start_pos,
+				iter->len + advanced);
+
+		ret = end(iter->inode, iter->iter_start_pos, len, advanced,
+				iter->flags, iomap);
+	}
+
+	ret = iomap_iter_continue(iter, iomap, srcmap, ret);
+	if (ret <= 0)
+		return ret;
+
+	ret = begin(iter->inode, iter->pos, iter->len, iter->flags, iomap,
+			srcmap);
+
+	return ret < 0 ? ret : 1;
+}
 
 #endif /* LINUX_IOMAP_H */
