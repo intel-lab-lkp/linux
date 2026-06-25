@@ -200,6 +200,7 @@ static long do_sys_vm86(struct vm86plus_struct __user *user_vm86, bool plus)
 {
 	struct task_struct *tsk = current;
 	struct vm86 *vm86 = tsk->thread.vm86;
+	struct vm86 *old_vm86 = vm86;
 	struct kernel_vm86_regs vm86regs;
 	struct pt_regs *regs = current_pt_regs();
 	unsigned long err = 0;
@@ -240,15 +241,18 @@ static long do_sys_vm86(struct vm86plus_struct __user *user_vm86, bool plus)
 		return -EPERM;
 
 	if (copy_from_user(&v, user_vm86,
-			offsetof(struct vm86_struct, int_revectored)))
-		return -EFAULT;
+			offsetof(struct vm86_struct, int_revectored))) {
+		err = -EFAULT;
+		goto cleanup;
+	}
 
 
 	/* VM86_SCREEN_BITMAP had numerous bugs and appears to have no users. */
 	if (v.flags & VM86_SCREEN_BITMAP) {
 		pr_info_once("vm86: '%s' uses VM86_SCREEN_BITMAP, which is no longer supported\n",
 			     current->comm);
-		return -EINVAL;
+		err = -EINVAL;
+		goto cleanup;
 	}
 
 	memset(&vm86regs, 0, sizeof(vm86regs));
@@ -275,16 +279,22 @@ static long do_sys_vm86(struct vm86plus_struct __user *user_vm86, bool plus)
 
 	if (copy_from_user(&vm86->int_revectored,
 			   &user_vm86->int_revectored,
-			   sizeof(struct revectored_struct)))
-		return -EFAULT;
+			   sizeof(struct revectored_struct))) {
+		err = -EFAULT;
+		goto cleanup;
+	}
 	if (copy_from_user(&vm86->int21_revectored,
 			   &user_vm86->int21_revectored,
-			   sizeof(struct revectored_struct)))
-		return -EFAULT;
+			   sizeof(struct revectored_struct))) {
+		err = -EFAULT;
+		goto cleanup;
+	}
 	if (plus) {
 		if (copy_from_user(&vm86->vm86plus, &user_vm86->vm86plus,
-				   sizeof(struct vm86plus_info_struct)))
-			return -EFAULT;
+				   sizeof(struct vm86plus_info_struct))) {
+			err = -EFAULT;
+			goto cleanup;
+		}
 		vm86->vm86plus.is_vm86pus = 1;
 	} else
 		memset(&vm86->vm86plus, 0,
@@ -340,6 +350,13 @@ static long do_sys_vm86(struct vm86plus_struct __user *user_vm86, bool plus)
 
 	memcpy((struct kernel_vm86_regs *)regs, &vm86regs, sizeof(vm86regs));
 	return regs->ax;
+
+cleanup:
+	if (vm86 != old_vm86) {
+		kfree(vm86);
+		tsk->thread.vm86 = old_vm86;
+	}
+	return err;
 }
 
 static inline void set_IF(struct kernel_vm86_regs *regs)
