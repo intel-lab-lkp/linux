@@ -14,6 +14,7 @@
 #include <linux/device.h>
 #include <linux/hwmon.h>
 #include <linux/kconfig.h>
+#include <linux/kref.h>
 #include <linux/miscdevice.h>
 #include <linux/mutex.h>
 #include <linux/pci.h>
@@ -57,7 +58,8 @@ struct hsmp_plat_device {
 	struct hsmp_socket *sock;
 	u32 proto_ver;
 	u16 num_sockets;
-	bool is_probed;
+	struct kref acpi_sock_kref;
+	bool acpi_sock_kref_started;
 };
 
 int hsmp_cache_proto_ver(u16 sock_ind);

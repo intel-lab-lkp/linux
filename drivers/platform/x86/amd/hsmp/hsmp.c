@@ -546,6 +546,12 @@ EXPORT_SYMBOL_NS_GPL(hsmp_misc_register, "AMD_HSMP");
 void hsmp_misc_deregister(void)
 {
 	misc_deregister(&hsmp_pdev.mdev);
+	/*
+	 * misc_deregister() leaves mdev.this_device pointing at the now
+	 * destroyed device.  Clear it so a subsequent re-probe does not skip
+	 * registration on a stale pointer.
+	 */
+	hsmp_pdev.mdev.this_device = NULL;
 }
 EXPORT_SYMBOL_NS_GPL(hsmp_misc_deregister, "AMD_HSMP");
 

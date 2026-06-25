@@ -610,6 +610,72 @@ static const struct acpi_device_id amd_hsmp_acpi_ids[] = {
 };
 MODULE_DEVICE_TABLE(acpi, amd_hsmp_acpi_ids);
 
+static void hsmp_acpi_sock_release(struct kref *kref)
+{
+	struct hsmp_plat_device *pdev = container_of(kref, struct hsmp_plat_device,
+						     acpi_sock_kref);
+
+	/*
+	 * The caller (hsmp_acpi_remove()) drops the last reference while
+	 * holding hsmp_acpi_probe_mutex, so the get/put and the teardown done
+	 * here are fully serialized against a concurrent probe.  It also holds
+	 * the write side of the data-plane rwsem (hsmp_sock_teardown_lock()),
+	 * which has drained any in-flight hsmp_send_message() and keeps new
+	 * ones out, so unmapping the mailbox and freeing the socket array here
+	 * cannot race the lock-free data plane.
+	 */
+	lockdep_assert_held(&hsmp_acpi_probe_mutex);
+
+	if (!IS_ERR_OR_NULL(pdev->mdev.this_device))
+		hsmp_misc_deregister();
+	hsmp_destroy_metric_read_locks(pdev, pdev->num_sockets);
+	kfree(pdev->sock);
+	pdev->sock = NULL;
+	pdev->num_sockets = 0;
+	pdev->proto_ver = 0;
+	pdev->acpi_sock_kref_started = false;
+}
+
+/**
+ * hsmp_acpi_probe_failure_cleanup() - Undo a failed ACPI socket probe.
+ * @dev: ACPI companion device whose probe failed.
+ *
+ * Runs the whole cleanup under the teardown rwsem so it is serialized against
+ * the lock-free data plane (init_acpi() runs hsmp_test() and a previously
+ * probed socket may already have exposed /dev/hsmp).
+ *
+ * Always clears this socket's dev: on a probe failure for a socket other than
+ * the first, the socket array stays alive (owned by an already-probed socket)
+ * and remove() is never called for this device, yet devres unmaps its mailbox
+ * once probe() returns.  Without clearing dev, a later message to this index
+ * would pass every gate in hsmp_send_message() and reach the unmapped mailbox.
+ *
+ * When no ACPI socket reference has been handed out via kref yet (the first
+ * socket's failure), it also frees the array and destroys the per-socket
+ * mutexes; hsmp_destroy_metric_read_locks() additionally unmaps any metric
+ * table DRAM that init_acpi() may have ioremap()ed, so there is no leak.
+ */
+static void hsmp_acpi_probe_failure_cleanup(struct device *dev)
+{
+	struct hsmp_socket *sock = dev_get_drvdata(dev);
+
+	lockdep_assert_held(&hsmp_acpi_probe_mutex);
+
+	hsmp_sock_teardown_lock();
+
+	if (sock)
+		sock->dev = NULL;
+
+	if (!hsmp_pdev->acpi_sock_kref_started && hsmp_pdev->sock) {
+		hsmp_destroy_metric_read_locks(hsmp_pdev, hsmp_pdev->num_sockets);
+		kfree(hsmp_pdev->sock);
+		hsmp_pdev->sock = NULL;
+		hsmp_pdev->num_sockets = 0;
+	}
+
+	hsmp_sock_teardown_unlock();
+}
+
 static int hsmp_acpi_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -620,34 +686,44 @@ static int hsmp_acpi_probe(struct platform_device *pdev)
 
 	guard(mutex)(&hsmp_acpi_probe_mutex);
 
-	if (!hsmp_pdev->is_probed) {
+	if (!hsmp_pdev->sock) {
 		hsmp_pdev->num_sockets = topology_max_packages();
 		if (!hsmp_pdev->num_sockets) {
 			dev_err(&pdev->dev, "No CPU sockets detected\n");
 			return -ENODEV;
 		}
 
-		hsmp_pdev->sock = devm_kcalloc(&pdev->dev, hsmp_pdev->num_sockets,
-					       sizeof(*hsmp_pdev->sock),
-					       GFP_KERNEL);
+		hsmp_pdev->sock = kcalloc(hsmp_pdev->num_sockets,
+					  sizeof(*hsmp_pdev->sock),
+					  GFP_KERNEL);
 		if (!hsmp_pdev->sock)
 			return -ENOMEM;
+
+		hsmp_init_metric_read_locks(hsmp_pdev, hsmp_pdev->num_sockets);
 	}
 
 	ret = init_acpi(&pdev->dev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to initialize HSMP interface.\n");
+		hsmp_acpi_probe_failure_cleanup(&pdev->dev);
 		return ret;
 	}
 
-	if (!hsmp_pdev->is_probed) {
+	if (IS_ERR_OR_NULL(hsmp_pdev->mdev.this_device)) {
 		ret = hsmp_misc_register(&pdev->dev);
 		if (ret) {
 			dev_err(&pdev->dev, "Failed to register misc device\n");
+			hsmp_acpi_probe_failure_cleanup(&pdev->dev);
 			return ret;
 		}
-		hsmp_pdev->is_probed = true;
-		dev_dbg(&pdev->dev, "AMD HSMP ACPI is probed successfully\n");
+		dev_dbg(&pdev->dev, "AMD HSMP ACPI misc device registered\n");
+	}
+
+	if (!hsmp_pdev->acpi_sock_kref_started) {
+		kref_init(&hsmp_pdev->acpi_sock_kref);
+		hsmp_pdev->acpi_sock_kref_started = true;
+	} else {
+		kref_get(&hsmp_pdev->acpi_sock_kref);
 	}
 
 	return 0;
@@ -655,16 +731,34 @@ static int hsmp_acpi_probe(struct platform_device *pdev)
 
 static void hsmp_acpi_remove(struct platform_device *pdev)
 {
-	mutex_lock(&hsmp_acpi_probe_mutex);
+	struct hsmp_socket *sock = dev_get_drvdata(&pdev->dev);
+
 	/*
-	 * We register only one misc_device even on multi-socket system.
-	 * So, deregister should happen only once.
+	 * Serialize the final put (and the teardown it triggers) against a
+	 * concurrent probe so the refcount cannot be revived from zero.
 	 */
-	if (hsmp_pdev->is_probed) {
-		hsmp_misc_deregister();
-		hsmp_pdev->is_probed = false;
-	}
-	mutex_unlock(&hsmp_acpi_probe_mutex);
+	guard(mutex)(&hsmp_acpi_probe_mutex);
+
+	/*
+	 * Drain the lock-free data plane and keep it out for the duration of
+	 * the teardown.  This covers both the per-socket unbind (this socket's
+	 * mailbox is unmapped by devres once we return) and the final put that
+	 * frees the socket array in hsmp_acpi_sock_release().
+	 */
+	hsmp_sock_teardown_lock();
+
+	/*
+	 * Clear this socket's dev so hsmp_send_message() rejects it before
+	 * touching the mailbox that devres is about to unmap.  On a non-final
+	 * unbind the socket array stays alive, so without this a later message
+	 * to this index would reach an unmapped iomem region.
+	 */
+	if (sock)
+		sock->dev = NULL;
+
+	kref_put(&hsmp_pdev->acpi_sock_kref, hsmp_acpi_sock_release);
+
+	hsmp_sock_teardown_unlock();
 }
 
 static struct platform_driver amd_hsmp_driver = {
