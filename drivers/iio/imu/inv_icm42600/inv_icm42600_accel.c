@@ -3,25 +3,26 @@
  * Copyright (C) 2020 Invensense, Inc.
  */
 
-#include <linux/kernel.h>
+#include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/kernel.h>
+#include <linux/math64.h>
+#include <linux/minmax.h>
 #include <linux/mutex.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
-#include <linux/delay.h>
-#include <linux/math64.h>
-#include <linux/minmax.h>
 #include <linux/units.h>
 
 #include <linux/iio/buffer.h>
-#include <linux/iio/common/inv_sensors_timestamp.h>
 #include <linux/iio/events.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/kfifo_buf.h>
 
+#include <linux/iio/common/inv_sensors_timestamp.h>
+
 #include "inv_icm42600.h"
-#include "inv_icm42600_temp.h"
 #include "inv_icm42600_buffer.h"
+#include "inv_icm42600_temp.h"
 
 #define INV_ICM42600_ACCEL_CHAN(_modifier, _index, _ext_info)		\
 	{								\
