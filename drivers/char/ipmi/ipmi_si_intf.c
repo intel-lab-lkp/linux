@@ -39,6 +39,7 @@
 #include <linux/rcupdate.h>
 #include <linux/ipmi.h>
 #include <linux/ipmi_smi.h>
+#include <linux/async.h>
 #include "ipmi_si.h"
 #include "ipmi_si_sm.h"
 #include <linux/string.h>
@@ -2174,24 +2175,9 @@ static bool __init ipmi_smi_info_same(struct smi_info *e1, struct smi_info *e2)
 		e1->io.addr_data == e2->io.addr_data);
 }
 
-static int __init init_ipmi_si(void)
+static int __init smi_init_scan(void)
 {
 	struct smi_info *e, *e2;
-
-	if (initialized)
-		return 0;
-
-	ipmi_hardcode_init();
-
-	pr_info("IPMI System Interface driver\n");
-
-	ipmi_si_platform_init();
-
-	ipmi_si_pci_init();
-
-	ipmi_si_ls2k_init();
-
-	ipmi_si_parisc_init();
 
 	mutex_lock(&smi_infos_lock);
 
@@ -2270,6 +2256,36 @@ static int __init init_ipmi_si(void)
 		mutex_unlock(&smi_infos_lock);
 		return 0;
 	}
+}
+
+static void __init async_smi_init(void *data, async_cookie_t cookie)
+{
+	smi_init_scan();
+}
+
+static int __init init_ipmi_si(void)
+{
+	if (initialized)
+		return 0;
+
+	ipmi_hardcode_init();
+
+	pr_info("IPMI System Interface driver\n");
+
+	ipmi_si_platform_init();
+
+	ipmi_si_pci_init();
+
+	ipmi_si_ls2k_init();
+
+	ipmi_si_parisc_init();
+
+	if (IS_ENABLED(CONFIG_IPMI_SI_ASYNC_INIT)) {
+		async_schedule(async_smi_init, NULL);
+		return 0;
+	}
+
+	return smi_init_scan();
 }
 module_init(init_ipmi_si);
 

@@ -67,6 +67,14 @@ config IPMI_SI
 	  Currently, only KCS and SMIC are supported.  If
 	  you are using IPMI, you should probably say "y" here.
 
+config IPMI_SI_ASYNC_INIT
+	bool 'Asynchronous initialization of IPMI System Interface'
+	depends on IPMI_SI
+	default n
+	help
+	  Enables asynchronous init of the IPMI System Interface.
+	  It speeds up the boot time.
+
 config IPMI_SSIF
 	tristate 'IPMI SMBus handler (SSIF)'
 	depends on I2C
