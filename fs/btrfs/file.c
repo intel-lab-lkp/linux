@@ -879,7 +879,6 @@ again:
  *
  * Return:
  * 1 - the extent is locked
- * 0 - the extent is not locked, and everything is OK
  * -EAGAIN - need to prepare the folios again
  */
 static noinline int
@@ -889,6 +888,7 @@ lock_and_cleanup_extent_if_need(struct btrfs_inode *inode, struct folio *folio,
 				struct extent_state **cached_state)
 {
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
+	struct btrfs_ordered_extent *ordered;
 	u64 start_pos;
 	u64 last_pos;
 	int ret = 0;
@@ -896,41 +896,37 @@ lock_and_cleanup_extent_if_need(struct btrfs_inode *inode, struct folio *folio,
 	start_pos = round_down(pos, fs_info->sectorsize);
 	last_pos = round_up(pos + write_bytes, fs_info->sectorsize) - 1;
 
-	if (start_pos < inode->vfs_inode.i_size) {
-		struct btrfs_ordered_extent *ordered;
-
-		if (nowait) {
-			if (!btrfs_try_lock_extent(&inode->io_tree, start_pos,
-						   last_pos, cached_state)) {
-				folio_unlock(folio);
-				folio_put(folio);
-				return -EAGAIN;
-			}
-		} else {
-			btrfs_lock_extent(&inode->io_tree, start_pos, last_pos,
-					  cached_state);
-		}
-
-		ordered = btrfs_lookup_ordered_range(inode, start_pos,
-						     last_pos - start_pos + 1);
-		if (ordered &&
-		    ordered->file_offset + ordered->num_bytes > start_pos &&
-		    ordered->file_offset <= last_pos) {
-			btrfs_unlock_extent(&inode->io_tree, start_pos, last_pos,
-					    cached_state);
+	if (nowait) {
+		if (!btrfs_try_lock_extent(&inode->io_tree, start_pos,
+					   last_pos, cached_state)) {
 			folio_unlock(folio);
 			folio_put(folio);
-			btrfs_start_ordered_extent(ordered);
-			btrfs_put_ordered_extent(ordered);
 			return -EAGAIN;
 		}
-		if (ordered)
-			btrfs_put_ordered_extent(ordered);
-
-		*lockstart = start_pos;
-		*lockend = last_pos;
-		ret = 1;
+	} else {
+		btrfs_lock_extent(&inode->io_tree, start_pos, last_pos,
+				  cached_state);
 	}
+
+	ordered = btrfs_lookup_ordered_range(inode, start_pos,
+					     last_pos - start_pos + 1);
+	if (ordered &&
+	    ordered->file_offset + ordered->num_bytes > start_pos &&
+	    ordered->file_offset <= last_pos) {
+		btrfs_unlock_extent(&inode->io_tree, start_pos, last_pos,
+				    cached_state);
+		folio_unlock(folio);
+		folio_put(folio);
+		btrfs_start_ordered_extent(ordered);
+		btrfs_put_ordered_extent(ordered);
+		return -EAGAIN;
+	}
+	if (ordered)
+		btrfs_put_ordered_extent(ordered);
+
+	*lockstart = start_pos;
+	*lockend = last_pos;
+	ret = 1;
 
 	/*
 	 * We should be called after prepare_one_folio() which should have locked
@@ -1288,11 +1284,8 @@ again:
 
 		/* No copied bytes, unlock, release reserved space and exit. */
 		if (copied == 0) {
-			if (extents_locked)
-				btrfs_unlock_extent(&inode->io_tree, lockstart, lockend,
-						    &cached_state);
-			else
-				btrfs_free_extent_state(cached_state);
+			btrfs_unlock_extent(&inode->io_tree, lockstart, lockend,
+					    &cached_state);
 			btrfs_delalloc_release_extents(inode, reserved_len);
 			release_space(inode, *data_reserved, reserved_start, reserved_len,
 				      only_release_metadata);
@@ -1311,17 +1304,7 @@ again:
 
 	ret = btrfs_dirty_folio(inode, folio, start, copied, &cached_state,
 				only_release_metadata);
-	/*
-	 * If we have not locked the extent range, because the range's start
-	 * offset is >= i_size, we might still have a non-NULL cached extent
-	 * state, acquired while marking the extent range as delalloc through
-	 * btrfs_dirty_page(). Therefore free any possible cached extent state
-	 * to avoid a memory leak.
-	 */
-	if (extents_locked)
-		btrfs_unlock_extent(&inode->io_tree, lockstart, lockend, &cached_state);
-	else
-		btrfs_free_extent_state(cached_state);
+	btrfs_unlock_extent(&inode->io_tree, lockstart, lockend, &cached_state);
 
 	btrfs_delalloc_release_extents(inode, reserved_len);
 	if (ret) {
