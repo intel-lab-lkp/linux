@@ -30,9 +30,7 @@ struct udp_tunnel_nic_table_entry {
  * @work:	async work for talking to hardware from process context
  * @dev:	netdev pointer
  * @lock:	protects all fields
- * @need_sync:	at least one port start changed
- * @need_replay: space was freed, we need a replay of all ports
- * @work_pending: @work is currently scheduled
+ * @flags:	sync, replay, pending flags
  * @n_tables:	number of tables under @entries
  * @missed:	bitmap of tables which overflown
  * @entries:	table of tables of ports currently offloaded
@@ -44,9 +42,10 @@ struct udp_tunnel_nic {
 
 	struct mutex lock;
 
-	u8 need_sync:1;
-	u8 need_replay:1;
-	u8 work_pending:1;
+	unsigned long flags;
+#define UDP_TUNNEL_NIC_NEED_SYNC	0
+#define UDP_TUNNEL_NIC_NEED_REPLAY	1
+#define UDP_TUNNEL_NIC_WORK_PENDING	2
 
 	unsigned int n_tables;
 	unsigned long missed;
@@ -116,7 +115,7 @@ udp_tunnel_nic_entry_queue(struct udp_tunnel_nic *utn,
 			   unsigned int flag)
 {
 	entry->flags |= flag;
-	utn->need_sync = 1;
+	set_bit(UDP_TUNNEL_NIC_NEED_SYNC, &utn->flags);
 }
 
 static void
@@ -283,7 +282,7 @@ udp_tunnel_nic_device_sync_by_table(struct net_device *dev,
 static void
 __udp_tunnel_nic_device_sync(struct net_device *dev, struct udp_tunnel_nic *utn)
 {
-	if (!utn->need_sync)
+	if (!test_bit(UDP_TUNNEL_NIC_NEED_SYNC, &utn->flags))
 		return;
 
 	if (dev->udp_tunnel_nic_info->sync_table)
@@ -291,21 +290,27 @@ __udp_tunnel_nic_device_sync(struct net_device *dev, struct udp_tunnel_nic *utn)
 	else
 		udp_tunnel_nic_device_sync_by_port(dev, utn);
 
-	utn->need_sync = 0;
+	clear_bit(UDP_TUNNEL_NIC_NEED_SYNC, &utn->flags);
 	/* Can't replay directly here, in case we come from the tunnel driver's
 	 * notification - trying to replay may deadlock inside tunnel driver.
 	 */
-	utn->need_replay = udp_tunnel_nic_should_replay(dev, utn);
+	if (udp_tunnel_nic_should_replay(dev, utn))
+		set_bit(UDP_TUNNEL_NIC_NEED_REPLAY, &utn->flags);
+	else
+		clear_bit(UDP_TUNNEL_NIC_NEED_REPLAY, &utn->flags);
 }
 
 static void
 udp_tunnel_nic_device_sync(struct net_device *dev, struct udp_tunnel_nic *utn)
 {
-	if (!utn->need_sync || utn->work_pending)
+	if (!test_bit(UDP_TUNNEL_NIC_NEED_SYNC, &utn->flags))
+		return;
+
+	if (test_bit(UDP_TUNNEL_NIC_WORK_PENDING, &utn->flags))
 		return;
 
 	queue_work(udp_tunnel_nic_workqueue, &utn->work);
-	utn->work_pending = 1;
+	set_bit(UDP_TUNNEL_NIC_WORK_PENDING, &utn->flags);
 }
 
 static bool
@@ -552,7 +557,7 @@ static void __udp_tunnel_nic_reset_ntf(struct net_device *dev)
 
 	mutex_lock(&utn->lock);
 
-	utn->need_sync = false;
+	clear_bit(UDP_TUNNEL_NIC_NEED_SYNC, &utn->flags);
 	for (i = 0; i < utn->n_tables; i++)
 		for (j = 0; j < info->tables[i].n_entries; j++) {
 			struct udp_tunnel_nic_table_entry *entry;
@@ -696,8 +701,8 @@ udp_tunnel_nic_flush(struct net_device *dev, struct udp_tunnel_nic *utn)
 	for (i = 0; i < utn->n_tables; i++)
 		memset(utn->entries[i], 0, array_size(info->tables[i].n_entries,
 						      sizeof(**utn->entries)));
-	WARN_ON(utn->need_sync);
-	utn->need_replay = 0;
+	WARN_ON(test_bit(UDP_TUNNEL_NIC_NEED_SYNC, &utn->flags));
+	clear_bit(UDP_TUNNEL_NIC_NEED_REPLAY, &utn->flags);
 }
 
 static void
@@ -714,7 +719,7 @@ udp_tunnel_nic_replay(struct net_device *dev, struct udp_tunnel_nic *utn)
 		for (j = 0; j < info->tables[i].n_entries; j++)
 			udp_tunnel_nic_entry_freeze_used(&utn->entries[i][j]);
 	utn->missed = 0;
-	utn->need_replay = 0;
+	clear_bit(UDP_TUNNEL_NIC_NEED_REPLAY, &utn->flags);
 
 	if (!info->shared) {
 		udp_tunnel_get_rx_info(dev);
@@ -736,10 +741,10 @@ static void udp_tunnel_nic_device_sync_work(struct work_struct *work)
 	rtnl_lock();
 	mutex_lock(&utn->lock);
 
-	utn->work_pending = 0;
+	clear_bit(UDP_TUNNEL_NIC_WORK_PENDING, &utn->flags);
 	__udp_tunnel_nic_device_sync(utn->dev, utn);
 
-	if (utn->need_replay)
+	if (test_bit(UDP_TUNNEL_NIC_NEED_REPLAY, &utn->flags))
 		udp_tunnel_nic_replay(utn->dev, utn);
 
 	mutex_unlock(&utn->lock);
@@ -904,7 +909,7 @@ udp_tunnel_nic_unregister(struct net_device *dev, struct udp_tunnel_nic *utn)
 	/* Wait for the work to be done using the state, netdev core will
 	 * retry unregister until we give up our reference on this device.
 	 */
-	if (utn->work_pending)
+	if (test_bit(UDP_TUNNEL_NIC_WORK_PENDING, &utn->flags))
 		return;
 
 	udp_tunnel_nic_free(utn);
