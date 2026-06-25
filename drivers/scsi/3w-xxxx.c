@@ -919,6 +919,7 @@ static long tw_chrdev_ioctl(struct file *file, unsigned int cmd, unsigned long a
 	}
 
 	tw_ioctl = (TW_New_Ioctl *)cpu_addr;
+	memset(tw_ioctl, 0, data_buffer_length_adjusted + sizeof(TW_New_Ioctl));
 
 	/* Now copy down the entire ioctl */
 	if (copy_from_user(tw_ioctl, argp, data_buffer_length + sizeof(TW_New_Ioctl)))
@@ -966,17 +967,31 @@ static long tw_chrdev_ioctl(struct file *file, unsigned int cmd, unsigned long a
 			/* Load the sg list */
 			switch (TW_SGL_OUT(tw_ioctl->firmware_command.opcode__sgloffset)) {
 			case 2:
+				memset(tw_ioctl->firmware_command.byte8.param.sgl, 0,
+				       sizeof(tw_ioctl->firmware_command.byte8.param.sgl));
+				tw_ioctl->firmware_command.size = 4;
 				tw_ioctl->firmware_command.byte8.param.sgl[0].address = dma_handle + sizeof(TW_New_Ioctl);
 				tw_ioctl->firmware_command.byte8.param.sgl[0].length = data_buffer_length_adjusted;
 				break;
 			case 3:
+				memset(tw_ioctl->firmware_command.byte8.io.sgl, 0,
+				       sizeof(tw_ioctl->firmware_command.byte8.io.sgl));
+				tw_ioctl->firmware_command.size = 5;
 				tw_ioctl->firmware_command.byte8.io.sgl[0].address = dma_handle + sizeof(TW_New_Ioctl);
 				tw_ioctl->firmware_command.byte8.io.sgl[0].length = data_buffer_length_adjusted;
 				break;
 			case 5:
+				memset(passthru->sg_list, 0, sizeof(passthru->sg_list));
+				passthru->size = 7;
 				passthru->sg_list[0].address = dma_handle + sizeof(TW_New_Ioctl);
 				passthru->sg_list[0].length = data_buffer_length_adjusted;
 				break;
+			default:
+				retval = -EINVAL;
+				tw_dev->chrdev_request_id = TW_IOCTL_CHRDEV_FREE;
+				tw_state_request_finish(tw_dev, request_id);
+				spin_unlock_irqrestore(tw_dev->host->host_lock, flags);
+				goto out2;
 			}
 
 			memcpy(tw_dev->command_packet_virtual_address[request_id], &(tw_ioctl->firmware_command), sizeof(TW_Command));
