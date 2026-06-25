@@ -988,78 +988,98 @@ static int query_regdb(const char *alpha2)
 	return -ENODATA;
 }
 
-static void regdb_fw_cb(const struct firmware *fw, void *context)
+MODULE_FIRMWARE("regulatory.db");
+
+/* Validate and store firmware image as regdb. Used by all load paths. */
+static int regdb_load(const struct firmware *fw)
 {
-	int set_error = 0;
-	bool restore = true;
 	void *db;
 
-	if (!fw) {
-		pr_info("failed to load regulatory.db\n");
-		set_error = -ENODATA;
-	} else if (!valid_regdb(fw->data, fw->size)) {
+	ASSERT_RTNL();
+
+	if (!valid_regdb(fw->data, fw->size)) {
 		pr_info("loaded regulatory.db is malformed or signature is missing/invalid\n");
-		set_error = -EINVAL;
+		return -EINVAL;
 	}
+
+	db = kmemdup(fw->data, fw->size, GFP_KERNEL);
+	if (!db)
+		return -ENOMEM;
+
+	regdb = db;
+	return 0;
+}
+
+static void regdb_fw_cb_restore(const struct firmware *fw, void *context)
+{
+	int err;
 
 	rtnl_lock();
-	if (regdb && !IS_ERR(regdb)) {
-		/* negative case - a bug
-		 * positive case - can happen due to race in case of multiple cb's in
-		 * queue, due to usage of asynchronous callback
-		 *
-		 * Either case, just restore and free new db.
-		 */
-	} else if (set_error) {
-		regdb = ERR_PTR(set_error);
-	} else if (fw) {
-		db = kmemdup(fw->data, fw->size, GFP_KERNEL);
-		if (db) {
-			regdb = db;
-			restore = context && query_regdb(context);
-		} else {
-			restore = true;
-		}
+
+	/* Skip if a concurrent wiphy registration already loaded the db. */
+	if (regdb && !IS_ERR(regdb))
+		goto out_unlock;
+
+	/*
+	 * Replay all pending regulatory hints that arrived while the
+	 * database was not yet available, regardless of load outcome.
+	 */
+	if (!fw) {
+		pr_info("failed to load regulatory.db\n");
+		regdb = ERR_PTR(-ENODATA);
+		restore_regulatory_settings(true, false);
+		goto out_unlock;
 	}
 
-	if (restore)
-		restore_regulatory_settings(true, false);
+	err = regdb_load(fw);
+	if (err)
+		regdb = ERR_PTR(err);
 
+	restore_regulatory_settings(true, false);
+
+out_unlock:
 	rtnl_unlock();
-
-	kfree(context);
-
 	release_firmware(fw);
 }
 
-MODULE_FIRMWARE("regulatory.db");
-
 static int query_regdb_file(const char *alpha2)
 {
+	const struct firmware *fw;
 	int err;
 
 	ASSERT_RTNL();
 
-	if (regdb)
+	if (regdb && !IS_ERR(regdb))
 		return query_regdb(alpha2);
 
-	alpha2 = kmemdup(alpha2, 2, GFP_KERNEL);
-	if (!alpha2)
-		return -ENOMEM;
+	/*
+	 * Load failed or async udev load in progress. If -EINPROGRESS,
+	 * hints are preserved and replayed once the udev load completes.
+	 */
+	if (IS_ERR(regdb) && PTR_ERR(regdb) != -EINPROGRESS)
+		return PTR_ERR(regdb);
 
-	err = request_firmware_nowait(THIS_MODULE, true, "regulatory.db",
-				      &reg_fdev->dev, GFP_KERNEL,
-				      (void *)alpha2, regdb_fw_cb);
+	/*
+	 * Preserve the hint if the file is not found on direct paths;
+	 * an async udev load will be triggered on wiphy registration
+	 * and will replay all pending hints on completion.
+	 */
+	err = request_firmware_direct(&fw, "regulatory.db", &reg_fdev->dev);
 	if (err)
-		kfree(alpha2);
+		return 0;
+	err = regdb_load(fw);
+	release_firmware(fw);
+	if (err) {
+		regdb = ERR_PTR(err);
+		return err;
+	}
 
-	return err;
+	return query_regdb(alpha2);
 }
 
 int reg_reload_regdb(void)
 {
 	const struct firmware *fw;
-	void *db;
 	int err;
 	const struct ieee80211_regdomain *current_regdomain;
 	struct regulatory_request *request;
@@ -1068,21 +1088,14 @@ int reg_reload_regdb(void)
 	if (err)
 		return err;
 
-	if (!valid_regdb(fw->data, fw->size)) {
-		err = -ENODATA;
-		goto out;
-	}
-
-	db = kmemdup(fw->data, fw->size, GFP_KERNEL);
-	if (!db) {
-		err = -ENOMEM;
-		goto out;
-	}
-
 	rtnl_lock();
 	if (!IS_ERR_OR_NULL(regdb))
 		kfree(regdb);
-	regdb = db;
+	err = regdb_load(fw);
+	if (err) {
+		regdb = ERR_PTR(err);
+		goto out_unlock;
+	}
 
 	/* reset regulatory domain */
 	current_regdomain = get_cfg80211_regdom();
@@ -1103,7 +1116,6 @@ int reg_reload_regdb(void)
 
 out_unlock:
 	rtnl_unlock();
- out:
 	release_firmware(fw);
 	return err;
 }
@@ -4085,6 +4097,8 @@ void wiphy_regulatory_register(struct wiphy *wiphy)
 {
 	struct regulatory_request *lr = get_last_request();
 
+	ASSERT_RTNL();
+
 	/* self-managed devices ignore beacon hints and country IE */
 	if (wiphy->regulatory_flags & REGULATORY_WIPHY_SELF_MANAGED) {
 		wiphy->regulatory_flags |= REGULATORY_DISABLE_BEACON_HINTS |
@@ -4097,6 +4111,16 @@ void wiphy_regulatory_register(struct wiphy *wiphy)
 		 */
 		if (lr->initiator == NL80211_REGDOM_SET_BY_USER)
 			reg_call_notifier(wiphy, lr);
+	} else if (!regdb) {
+		/*
+		 * regulatory.db not yet loaded; trigger an async udev
+		 * request to load it when the first wiphy registers.
+		 */
+		if (!firmware_request_nowait_nowarn(THIS_MODULE,
+						    "regulatory.db",
+						    &reg_fdev->dev, GFP_KERNEL,
+						    NULL, regdb_fw_cb_restore))
+			regdb = ERR_PTR(-EINPROGRESS);
 	}
 
 	if (!reg_dev_ignore_cell_hint(wiphy))
