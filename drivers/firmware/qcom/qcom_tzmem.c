@@ -518,6 +518,13 @@ int qcom_tzmem_enable(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_enable);
 
+void qcom_tzmem_disable(struct device *dev)
+{
+	qcom_tzmem_using_shm_bridge = false;
+	qcom_tzmem_dev = NULL;
+}
+EXPORT_SYMBOL_GPL(qcom_tzmem_disable);
+
 MODULE_DESCRIPTION("TrustZone memory allocator for Qualcomm firmware drivers");
 MODULE_AUTHOR("Bartosz Golaszewski <bartosz.golaszewski@linaro.org>");
 MODULE_LICENSE("GPL");

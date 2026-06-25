@@ -9,5 +9,6 @@
 struct device;
 
 int qcom_tzmem_enable(struct device *dev);
+void qcom_tzmem_disable(struct device *dev);
 
 #endif /* __QCOM_TZMEM_PRIV_H */

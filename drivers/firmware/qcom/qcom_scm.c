@@ -2787,9 +2787,11 @@ static int qcom_scm_probe(struct platform_device *pdev)
 				     "Failed to setup the reserved memory region for TZ mem\n");
 
 	ret = qcom_tzmem_enable(scm->dev);
-	if (ret)
-		return dev_err_probe(scm->dev, ret,
-				     "Failed to enable the TrustZone memory allocator\n");
+	if (ret) {
+		ret = dev_err_probe(scm->dev, ret,
+				    "Failed to enable the TrustZone memory allocator\n");
+		goto err_rmem;
+	}
 
 	memset(&pool_config, 0, sizeof(pool_config));
 	pool_config.initial_size = 0;
@@ -2797,16 +2799,20 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	pool_config.max_size = SZ_256K;
 
 	scm->mempool = devm_qcom_tzmem_pool_new(scm->dev, &pool_config);
-	if (IS_ERR(scm->mempool))
-		return dev_err_probe(scm->dev, PTR_ERR(scm->mempool),
-				     "Failed to create the SCM memory pool\n");
+	if (IS_ERR(scm->mempool)) {
+		ret = dev_err_probe(scm->dev, PTR_ERR(scm->mempool),
+				    "Failed to create the SCM memory pool\n");
+		goto err_tzmem;
+	}
 
 	ret = qcom_scm_query_waitq_count(scm);
 	scm->wq_cnt = ret < 0 ? QCOM_SCM_DEFAULT_WAITQ_COUNT : ret;
 	scm->waitq_comps = devm_kcalloc(&pdev->dev, scm->wq_cnt, sizeof(*scm->waitq_comps),
 					GFP_KERNEL);
-	if (!scm->waitq_comps)
-		return -ENOMEM;
+	if (!scm->waitq_comps) {
+		ret = -ENOMEM;
+		goto err_tzmem;
+	}
 
 	for (i = 0; i < scm->wq_cnt; i++)
 		init_completion(&scm->waitq_comps[i]);
@@ -2816,14 +2822,18 @@ static int qcom_scm_probe(struct platform_device *pdev)
 		irq = platform_get_irq_optional(pdev, 0);
 
 	if (irq < 0) {
-		if (irq != -ENXIO)
-			return irq;
+		if (irq != -ENXIO) {
+			ret = irq;
+			goto err_tzmem;
+		}
 	} else {
 		ret = devm_request_threaded_irq(scm->dev, irq, NULL, qcom_scm_irq_handler,
 						IRQF_ONESHOT, "qcom-scm", scm);
-		if (ret < 0)
-			return dev_err_probe(scm->dev, ret,
-					     "Failed to request qcom-scm irq\n");
+		if (ret < 0) {
+			ret = dev_err_probe(scm->dev, ret,
+					    "Failed to request qcom-scm irq\n");
+			goto err_tzmem;
+		}
 	}
 
 	/*
@@ -2870,6 +2880,12 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	qcom_scm_gunyah_wdt_init(scm);
 
 	return 0;
+
+err_tzmem:
+	qcom_tzmem_disable(scm->dev);
+err_rmem:
+	of_reserved_mem_device_release(scm->dev);
+	return ret;
 }
 
 static void qcom_scm_shutdown(struct platform_device *pdev)
