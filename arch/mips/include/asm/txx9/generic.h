@@ -83,11 +83,6 @@ void txx9_iocled_init(unsigned long baseaddr,
 		      int basenum, unsigned int num, int lowactive,
 		      const char *color, char **deftriggers);
 
-/* 7SEG LED */
-void txx9_7segled_init(unsigned int num,
-		       void (*putc)(unsigned int pos, unsigned char val));
-int txx9_7segled_putc(unsigned int pos, char c);
-
 void __init txx9_aclc_init(unsigned long baseaddr, int irq,
 			   unsigned int dmac_id,
 			   unsigned int dma_chan_out,
