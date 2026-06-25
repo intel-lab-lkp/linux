@@ -35,6 +35,8 @@ MODULE_PARM_DESC(debug, "turn on debugging (default: 0)");
 #define CONFIG_BAND_CBAND
 #define CONFIG_BAND_VHF
 #define CONFIG_BAND_UHF
+#define CONFIG_BAND_LBAND
+#define CONFIG_BAND_SBAND
 #define CONFIG_DIB0090_USE_PWM_AGC
 
 #define EN_LNA0      0x8000
