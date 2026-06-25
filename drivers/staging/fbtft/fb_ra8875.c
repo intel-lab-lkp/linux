@@ -10,6 +10,7 @@
 #include <linux/delay.h>
 
 #include <linux/gpio/consumer.h>
+#include <linux/unaligned.h>
 #include "fbtft.h"
 
 #define DRVNAME "fb_ra8875"
@@ -250,7 +251,14 @@ static int write_vmem16_bus8(struct fbtft_par *par, size_t offset, size_t len)
 
 	remain = len / 2;
 	vmem16 = (u16 *)(par->info->screen_buffer + offset);
+
+	if (!par->txbuf.buf)
+		return par->fbtftops.write(par, vmem16, len);
+
 	tx_array_size = par->txbuf.len / 2;
+	if (tx_array_size <= 2)
+		return par->fbtftops.write(par, vmem16, len);
+
 	txbuf16 = par->txbuf.buf + 1;
 	tx_array_size -= 2;
 	*(u8 *)(par->txbuf.buf) = 0x00;
@@ -262,7 +270,7 @@ static int write_vmem16_bus8(struct fbtft_par *par, size_t offset, size_t len)
 			to_copy, remain - to_copy);
 
 		for (i = 0; i < to_copy; i++)
-			txbuf16[i] = cpu_to_be16(vmem16[i]);
+			put_unaligned(cpu_to_be16(vmem16[i]), &txbuf16[i]);
 
 		vmem16 = vmem16 + to_copy;
 		ret = par->fbtftops.write(par, par->txbuf.buf,
