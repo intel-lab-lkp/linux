@@ -341,23 +341,6 @@ void txx9_wdt_now(unsigned long base)
 		     &tmrptr->tcr);
 }
 
-/* SPI support */
-void __init txx9_spi_init(int busid, unsigned long base, int irq)
-{
-	struct resource res[] = {
-		{
-			.start	= base,
-			.end	= base + 0x20 - 1,
-			.flags	= IORESOURCE_MEM,
-		}, {
-			.start	= irq,
-			.flags	= IORESOURCE_IRQ,
-		},
-	};
-	platform_device_register_simple("spi_txx9", busid,
-					res, ARRAY_SIZE(res));
-}
-
 void __init txx9_ethaddr_init(unsigned int id, unsigned char *ethaddr)
 {
 	struct platform_device *pdev =
