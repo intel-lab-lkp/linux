@@ -265,11 +265,19 @@ int virtio_gpu_init(struct virtio_device *vdev, struct drm_device *dev)
 			virtio_gpu_cmd_get_edids(vgdev);
 		virtio_gpu_cmd_get_display_info(vgdev);
 		virtio_gpu_notify(vgdev);
-		wait_event_timeout(vgdev->resp_wq, !vgdev->display_info_pending,
-				   5 * HZ);
+		if (!wait_event_timeout(vgdev->resp_wq,
+					!vgdev->display_info_pending,
+					5 * HZ)) {
+			DRM_ERROR("timed out waiting for display info\n");
+			ret = -ETIMEDOUT;
+			goto err_ready;
+		}
 	}
 	return 0;
 
+err_ready:
+	virtio_reset_device(vgdev->vdev);
+	virtio_gpu_modeset_fini(vgdev);
 err_scanouts:
 	virtio_gpu_free_vbufs(vgdev);
 err_vbufs:
