@@ -1103,6 +1103,11 @@ static int rcu_preempt_blocked_readers_cgp(struct rcu_node *rnp)
 	return 0;
 }
 
+static int __maybe_unused rcu_preempt_blocked_readers_cgp_ndqs(struct rcu_node *rnp)
+{
+	return 0;
+}
+
 /*
  * Because there is no preemptible RCU, there can be no readers blocked.
  */
