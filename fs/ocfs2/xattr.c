@@ -396,6 +396,13 @@ static int ocfs2_init_xattr_bucket(struct ocfs2_xattr_bucket *bucket,
 	return rc;
 }
 
+static int ocfs2_validate_xattr_entries(struct super_block *sb, u64 blkno,
+					struct ocfs2_xattr_header *xh,
+					enum ocfs2_xattr_entry_type type,
+					size_t storage_size);
+static int ocfs2_validate_xattr_bucket(struct ocfs2_xattr_bucket *bucket,
+				       u64 blkno);
+
 /* Read the xattr bucket at xb_blkno */
 static int ocfs2_read_xattr_bucket(struct ocfs2_xattr_bucket *bucket,
 				   u64 xb_blkno)
@@ -414,6 +421,8 @@ static int ocfs2_read_xattr_bucket(struct ocfs2_xattr_bucket *bucket,
 		spin_unlock(&OCFS2_SB(bucket->bu_inode->i_sb)->osb_xattr_lock);
 		if (rc)
 			mlog_errno(rc);
+		else
+			rc = ocfs2_validate_xattr_bucket(bucket, xb_blkno);
 	}
 
 	if (rc)
@@ -514,6 +523,11 @@ static int ocfs2_validate_xattr_block(struct super_block *sb,
 				   (unsigned long long)bh->b_blocknr,
 				   le32_to_cpu(xb->xb_fs_generation));
 	}
+
+	if (!(le16_to_cpu(xb->xb_flags) & OCFS2_XATTR_INDEXED))
+		return ocfs2_validate_xattr_entries(sb, bh->b_blocknr,
+						    &xb->xb_attrs.xb_header,
+						    OCFS2_XATTR_BLOCK, 0);
 
 	return 0;
 }
@@ -1117,6 +1131,17 @@ int ocfs2_validate_inode_xattr(struct super_block *sb, u64 blkno,
 
 	return ocfs2_validate_xattr_entries(sb, blkno, xh, OCFS2_XATTR_IBODY,
 					    inline_size);
+}
+
+static int ocfs2_validate_xattr_bucket(struct ocfs2_xattr_bucket *bucket,
+				       u64 blkno)
+{
+	struct super_block *sb = bucket->bu_inode->i_sb;
+
+	return ocfs2_validate_xattr_entries(sb, blkno, bucket_xh(bucket),
+					    OCFS2_XATTR_BUCKET,
+					    sb->s_blocksize *
+					    bucket->bu_blocks);
 }
 
 static int ocfs2_xattr_ibody_lookup_header(struct inode *inode,
