@@ -223,6 +223,15 @@ int hsmp_send_message(struct hsmp_message *msg)
 	sock_ind = array_index_nospec(msg->sock_ind, hsmp_pdev.num_sockets);
 	sock = &hsmp_pdev.sock[sock_ind];
 
+	/*
+	 * A slot exists for every possible socket, but its state (including
+	 * hsmp_sem) is only initialized once that socket has actually been
+	 * probed.  Reject messages aimed at a socket that was never brought
+	 * up so we never operate on a zero-initialized semaphore.
+	 */
+	if (!sock->dev)
+		return -ENODEV;
+
 	ret = down_interruptible(&sock->hsmp_sem);
 	if (ret < 0)
 		return ret;

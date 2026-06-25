@@ -18,8 +18,11 @@
 #include <linux/device.h>
 #include <linux/dev_printk.h>
 #include <linux/ioport.h>
+#include <linux/cleanup.h>
+#include <linux/lockdep.h>
 #include <linux/kstrtox.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/sysfs.h>
 #include <linux/topology.h>
@@ -37,6 +40,8 @@
 #define MSG_RESPOFF_STR		"MsgRspOffset"
 
 static struct hsmp_plat_device *hsmp_pdev;
+
+static DEFINE_MUTEX(hsmp_acpi_probe_mutex);
 
 struct hsmp_sys_attr {
 	struct device_attribute dattr;
@@ -459,10 +464,16 @@ static ssize_t hsmp_freq_limit_source_show(struct device *dev, struct device_att
 	return len;
 }
 
+/**
+ * init_acpi() - Parse ACPI mailbox resources for one socket and validate HSMP.
+ * @dev: ACPI companion device for this socket.
+ */
 static int init_acpi(struct device *dev)
 {
 	u16 sock_ind;
 	int ret;
+
+	lockdep_assert_held(&hsmp_acpi_probe_mutex);
 
 	ret = hsmp_get_uid(dev, &sock_ind);
 	if (ret)
@@ -584,6 +595,8 @@ static int hsmp_acpi_probe(struct platform_device *pdev)
 	if (!hsmp_pdev)
 		return -ENOMEM;
 
+	guard(mutex)(&hsmp_acpi_probe_mutex);
+
 	if (!hsmp_pdev->is_probed) {
 		hsmp_pdev->num_sockets = topology_max_packages();
 		if (!hsmp_pdev->num_sockets) {
@@ -619,6 +632,7 @@ static int hsmp_acpi_probe(struct platform_device *pdev)
 
 static void hsmp_acpi_remove(struct platform_device *pdev)
 {
+	mutex_lock(&hsmp_acpi_probe_mutex);
 	/*
 	 * We register only one misc_device even on multi-socket system.
 	 * So, deregister should happen only once.
@@ -627,6 +641,7 @@ static void hsmp_acpi_remove(struct platform_device *pdev)
 		hsmp_misc_deregister();
 		hsmp_pdev->is_probed = false;
 	}
+	mutex_unlock(&hsmp_acpi_probe_mutex);
 }
 
 static struct platform_driver amd_hsmp_driver = {
