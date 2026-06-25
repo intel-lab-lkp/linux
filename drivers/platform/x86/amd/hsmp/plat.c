@@ -211,25 +211,37 @@ static int hsmp_pltdrv_probe(struct platform_device *pdev)
 	if (!hsmp_pdev->sock)
 		return -ENOMEM;
 
+	hsmp_init_metric_read_locks(hsmp_pdev, hsmp_pdev->num_sockets);
+
 	ret = init_platform_device(&pdev->dev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to init HSMP mailbox\n");
-		return ret;
+		goto err_destroy_locks;
 	}
 
 	ret = hsmp_misc_register(&pdev->dev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register misc device\n");
-		return ret;
+		goto err_destroy_locks;
 	}
 
 	dev_dbg(&pdev->dev, "AMD HSMP is probed successfully\n");
 	return 0;
+
+err_destroy_locks:
+	/*
+	 * init_platform_device() may have ioremap()ed metric tables before
+	 * failing.  hsmp_destroy_metric_read_locks() unmaps them and tears
+	 * down the per-socket mutexes; the socket array itself is devm-managed.
+	 */
+	hsmp_destroy_metric_read_locks(hsmp_pdev, hsmp_pdev->num_sockets);
+	return ret;
 }
 
 static void hsmp_pltdrv_remove(struct platform_device *pdev)
 {
 	hsmp_misc_deregister();
+	hsmp_destroy_metric_read_locks(hsmp_pdev, hsmp_pdev->num_sockets);
 }
 
 static struct platform_driver amd_hsmp_driver = {
