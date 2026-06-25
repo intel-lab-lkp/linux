@@ -19,6 +19,30 @@ struct snd_ctl_elem_list32 {
 	unsigned char reserved[50];
 } /* don't set packed attribute here */;
 
+struct snd_ctl_card_bytes32 {
+	u32 type;
+	u32 data_allocated;
+	u32 data_len;
+	u32 data;
+};
+
+static int snd_ctl_card_bytes_compat(struct snd_card *card,
+				     struct snd_ctl_card_bytes32 __user *data32)
+{
+	struct snd_ctl_card_bytes data = {};
+	compat_caddr_t ptr;
+
+	/* type, data_allocated, data_len */
+	if (copy_from_user(&data, data32, 3 * sizeof(u32)))
+		return -EFAULT;
+	/* data */
+	if (get_user(ptr, &data32->data))
+		return -EFAULT;
+	data.data = compat_ptr(ptr);
+
+	return snd_ctl_card_bytes(card, &data, &data32->data_len);
+}
+
 static int snd_ctl_elem_list_compat(struct snd_card *card,
 				    struct snd_ctl_elem_list32 __user *data32)
 {
@@ -426,6 +450,7 @@ enum {
 	SNDRV_CTL_IOCTL_ELEM_WRITE32 = _IOWR('U', 0x13, struct snd_ctl_elem_value32),
 	SNDRV_CTL_IOCTL_ELEM_ADD32 = _IOWR('U', 0x17, struct snd_ctl_elem_info32),
 	SNDRV_CTL_IOCTL_ELEM_REPLACE32 = _IOWR('U', 0x18, struct snd_ctl_elem_info32),
+	SNDRV_CTL_IOCTL_CARD_BYTES32 = _IOWR('U', 0x02, struct snd_ctl_card_bytes32),
 #ifdef CONFIG_X86_X32_ABI
 	SNDRV_CTL_IOCTL_ELEM_READ_X32 = _IOWR('U', 0x12, struct snd_ctl_elem_value_x32),
 	SNDRV_CTL_IOCTL_ELEM_WRITE_X32 = _IOWR('U', 0x13, struct snd_ctl_elem_value_x32),
@@ -456,6 +481,8 @@ static inline long snd_ctl_ioctl_compat(struct file *file, unsigned int cmd, uns
 	case SNDRV_CTL_IOCTL_TLV_WRITE:
 	case SNDRV_CTL_IOCTL_TLV_COMMAND:
 		return snd_ctl_ioctl(file, cmd, (unsigned long)argp);
+	case SNDRV_CTL_IOCTL_CARD_BYTES32:
+		return snd_ctl_card_bytes_compat(ctl->card, argp);
 	case SNDRV_CTL_IOCTL_ELEM_LIST32:
 		return snd_ctl_elem_list_compat(ctl->card, argp);
 	case SNDRV_CTL_IOCTL_ELEM_INFO32:
