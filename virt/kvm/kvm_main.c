@@ -607,8 +607,13 @@ static __always_inline kvm_mn_ret_t kvm_handle_hva_range(struct kvm *kvm,
 			/*
 			 * HVA-based notifications aren't relevant to private
 			 * mappings as they don't have a userspace mapping.
+			 *
+			 * Memslots where guest_memfd is the only memory
+			 * provider can also safely ignore changes to the
+			 * userspace mapping.
 			 */
-			gfn_range.attr_filter = KVM_FILTER_SHARED;
+			gfn_range.attr_filter = KVM_FILTER_SHARED |
+						KVM_FILTER_USERSPACE_MAPPINGS;
 
 			/*
 			 * {gfn(page) | page intersects with [hva_start, hva_end)} =
@@ -715,6 +720,21 @@ void kvm_mmu_invalidate_range_add(struct kvm *kvm, gfn_t start, gfn_t end)
 bool kvm_mmu_unmap_gfn_range(struct kvm *kvm, struct kvm_gfn_range *range)
 {
 	kvm_mmu_invalidate_range_add(kvm, range->start, range->end);
+
+	/*
+	 * When reacting to changes in userspace mappings, don't unmap memslots
+	 * that are guest_memfd-only, in which case KVM's MMU mappings are
+	 * pulled directly from guest_memfd, i.e. don't depend on the userspace
+	 * mappings.
+	 *
+	 * TODO: Skip gmem-only memslots on mmu_notifier events entirely, once
+	 * gfn_to_pfn_cache is also wired up to directly pull from guest_memfd.
+	 */
+	if (range->attr_filter & KVM_FILTER_USERSPACE_MAPPINGS &&
+	    kvm_slot_has_gmem(range->slot) &&
+	    kvm_memslot_is_gmem_only(range->slot))
+		return false;
+
 	return kvm_unmap_gfn_range(kvm, range);
 }
 
@@ -825,12 +845,23 @@ static void kvm_mmu_notifier_invalidate_range_end(struct mmu_notifier *mn,
 		rcuwait_wake_up(&kvm->mn_memslots_update_rcuwait);
 }
 
+static bool kvm_mmu_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
+{
+	/* See comment in kvm_mmu_unmap_gfn_range() */
+	if (range->attr_filter & KVM_FILTER_USERSPACE_MAPPINGS &&
+	    kvm_slot_has_gmem(range->slot) &&
+	    kvm_memslot_is_gmem_only(range->slot))
+		return false;
+
+	return kvm_age_gfn(kvm, range);
+}
+
 static bool kvm_mmu_notifier_clear_flush_young(struct mmu_notifier *mn,
 		struct mm_struct *mm, unsigned long start, unsigned long end)
 {
 	trace_kvm_age_hva(start, end);
 
-	return kvm_age_hva_range(mn, start, end, kvm_age_gfn,
+	return kvm_age_hva_range(mn, start, end, kvm_mmu_age_gfn,
 				 !IS_ENABLED(CONFIG_KVM_ELIDE_TLB_FLUSH_IF_YOUNG));
 }
 
@@ -852,7 +883,18 @@ static bool kvm_mmu_notifier_clear_young(struct mmu_notifier *mn,
 	 * cadence. If we find this inaccurate, we might come up with a
 	 * more sophisticated heuristic later.
 	 */
-	return kvm_age_hva_range_no_flush(mn, start, end, kvm_age_gfn);
+	return kvm_age_hva_range_no_flush(mn, start, end, kvm_mmu_age_gfn);
+}
+
+static bool kvm_mmu_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
+{
+	/* See comment in kvm_mmu_unmap_gfn_range() */
+	if (range->attr_filter & KVM_FILTER_USERSPACE_MAPPINGS &&
+	    kvm_slot_has_gmem(range->slot) &&
+	    kvm_memslot_is_gmem_only(range->slot))
+		return false;
+
+	return kvm_test_age_gfn(kvm, range);
 }
 
 static bool kvm_mmu_notifier_test_young(struct mmu_notifier *mn,
@@ -861,7 +903,7 @@ static bool kvm_mmu_notifier_test_young(struct mmu_notifier *mn,
 	trace_kvm_test_age_hva(address);
 
 	return kvm_age_hva_range_no_flush(mn, address, address + 1,
-					  kvm_test_age_gfn);
+					  kvm_mmu_test_age_gfn);
 }
 
 static void kvm_mmu_notifier_release(struct mmu_notifier *mn,
