@@ -84,6 +84,7 @@
 #define AM65_CPSW_SGMII_CONTROL_REG		0x010
 #define AM65_CPSW_SGMII_MR_ADV_ABILITY_REG	0x018
 #define AM65_CPSW_SGMII_CONTROL_MR_AN_ENABLE	BIT(0)
+#define AM65_CPSW_SGMII_CONTROL_MASTER          BIT(5)
 
 #define AM65_CPSW_CTL_VLAN_AWARE		BIT(1)
 #define AM65_CPSW_CTL_P0_ENABLE			BIT(2)
@@ -2061,8 +2062,10 @@ static void am65_cpsw_nuss_mac_config(struct phylink_config *config, unsigned in
 
 	if (common->pdata.extra_modes & BIT(state->interface)) {
 		if (state->interface == PHY_INTERFACE_MODE_SGMII) {
-			writel(ADVERTISE_SGMII,
-			       port->sgmii_base + AM65_CPSW_SGMII_MR_ADV_ABILITY_REG);
+			writel(ADVERTISE_SGMII | LPA_SGMII_1000FULL | LPA_SGMII_LINK,
+				port->sgmii_base + AM65_CPSW_SGMII_MR_ADV_ABILITY_REG);
+			writel(AM65_CPSW_SGMII_CONTROL_MR_AN_ENABLE,
+				port->sgmii_base + AM65_CPSW_SGMII_CONTROL_REG);
 			cpsw_sl_ctl_set(port->slave.mac_sl, CPSW_SL_CTL_EXT_EN);
 		} else {
 			cpsw_sl_ctl_clr(port->slave.mac_sl, CPSW_SL_CTL_EXT_EN);
@@ -2076,8 +2079,6 @@ static void am65_cpsw_nuss_mac_config(struct phylink_config *config, unsigned in
 					CPSW_SL_CTL_XGIG | CPSW_SL_CTL_XGMII_EN);
 		}
 
-		writel(AM65_CPSW_SGMII_CONTROL_MR_AN_ENABLE,
-		       port->sgmii_base + AM65_CPSW_SGMII_CONTROL_REG);
 	}
 }
 
