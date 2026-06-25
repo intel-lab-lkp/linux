@@ -669,8 +669,12 @@ static int sunxi_rsb_hw_init(struct sunxi_rsb *rsb)
 
 	/* reset the controller */
 	writel(RSB_CTRL_SOFT_RST, rsb->regs + RSB_CTRL);
-	readl_poll_timeout(rsb->regs + RSB_CTRL, reg,
-			   !(reg & RSB_CTRL_SOFT_RST), 1000, 100000);
+	ret = readl_poll_timeout(rsb->regs + RSB_CTRL, reg,
+				 !(reg & RSB_CTRL_SOFT_RST), 1000, 100000);
+	if (ret) {
+		dev_err(dev, "soft reset timed out\n");
+		goto err_reset_assert;
+	}
 
 	/*
 	 * Clock frequency and delay calculation code is from
@@ -696,6 +700,8 @@ static int sunxi_rsb_hw_init(struct sunxi_rsb *rsb)
 
 	return 0;
 
+err_reset_assert:
+	reset_control_assert(rsb->rstc);
 err_clk_disable:
 	clk_disable_unprepare(rsb->clk);
 
