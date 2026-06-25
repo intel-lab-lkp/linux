@@ -914,7 +914,7 @@ static ssize_t f_uac1_opts_##name##_store(struct config_item *item,	\
 		goto end;						\
 									\
 	tmp = kstrndup(page, len, GFP_KERNEL);				\
-	if (tmp) {							\
+	if (!tmp) {							\
 		ret = -ENOMEM;						\
 		goto end;						\
 	}								\
