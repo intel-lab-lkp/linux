@@ -433,15 +433,18 @@ static void renesas_i3c_enqueue_xfer(struct renesas_i3c *i3c, struct renesas_i3c
 	}
 }
 
-static void renesas_i3c_wait_xfer(struct renesas_i3c *i3c, struct renesas_i3c_xfer *xfer)
+static int renesas_i3c_wait_xfer(struct renesas_i3c *i3c, struct renesas_i3c_xfer *xfer)
 {
 	unsigned long time_left;
 
+	xfer->ret = -ETIMEDOUT;
 	renesas_i3c_enqueue_xfer(i3c, xfer);
 
 	time_left = wait_for_completion_timeout(&xfer->comp, msecs_to_jiffies(1000));
 	if (!time_left)
 		renesas_i3c_dequeue_xfer(i3c, xfer);
+
+	return xfer->ret;
 }
 
 static void renesas_i3c_set_prts(struct renesas_i3c *i3c, u32 val)
@@ -687,7 +690,9 @@ static int renesas_i3c_daa(struct i3c_master_controller *m)
 		    NCMDQP_CMD(I3C_CCC_ENTDAA) | NCMDQP_DEV_INDEX(ret) |
 		    NCMDQP_DEV_COUNT(i3c->maxdevs - ret) | NCMDQP_TOC;
 
-	renesas_i3c_wait_xfer(i3c, xfer);
+	ret = renesas_i3c_wait_xfer(i3c, xfer);
+	if (ret)
+		return ret;
 
 	newdevs = GENMASK(i3c->maxdevs - cmd->rx_count - 1, 0);
 	newdevs &= ~olddevs;
@@ -800,9 +805,7 @@ static int renesas_i3c_send_ccc_cmd(struct i3c_master_controller *m,
 		}
 	}
 
-	renesas_i3c_wait_xfer(i3c, xfer);
-
-	ret = xfer->ret;
+	ret = renesas_i3c_wait_xfer(i3c, xfer);
 	if (ret)
 		ccc->err = I3C_ERROR_M2;
 
@@ -815,7 +818,7 @@ static int renesas_i3c_i3c_xfers(struct i3c_dev_desc *dev, struct i3c_xfer *i3c_
 	struct i3c_master_controller *m = i3c_dev_get_master(dev);
 	struct renesas_i3c *i3c = to_renesas_i3c(m);
 	struct renesas_i3c_i2c_dev_data *data = i3c_dev_get_master_data(dev);
-	int i;
+	int i, ret;
 
 	/* Enable I3C bus. */
 	renesas_i3c_bus_enable(m, true);
@@ -854,7 +857,9 @@ static int renesas_i3c_i3c_xfers(struct i3c_dev_desc *dev, struct i3c_xfer *i3c_
 				renesas_set_bit(i3c->regs, NTIE, NTIE_TDBEIE0);
 		}
 
-		renesas_i3c_wait_xfer(i3c, xfer);
+		ret = renesas_i3c_wait_xfer(i3c, xfer);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
