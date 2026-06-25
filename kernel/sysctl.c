@@ -650,6 +650,7 @@ out: \
 }
 
 do_proc_dotypevec(int)
+do_proc_dotypevec(ulong)
 
 static int do_proc_douintvec_w(const struct ctl_table *table, void *buffer,
 			       size_t *lenp, loff_t *ppos,
@@ -971,87 +972,128 @@ int proc_dou8vec_minmax(const struct ctl_table *table, int dir,
 }
 EXPORT_SYMBOL_GPL(proc_dou8vec_minmax);
 
-static int do_proc_doulongvec_minmax(const struct ctl_table *table, int dir,
-				     void *buffer, size_t *lenp, loff_t *ppos,
-				     unsigned long convmul,
-				     unsigned long convdiv)
+/**
+ * proc_ulong_conv - Change user or kernel pointer based on direction
+ *
+ * @u_ptr: pointer to user variable
+ * @k_ptr: pointer to kernel variable
+ * @dir: %TRUE if this is a write to the sysctl file
+ * @tbl: the sysctl table
+ * @k_ptr_range_check: Check range for k_ptr when %TRUE
+ * @user_to_kern: Callback used to assign value from user to kernel var
+ * @kern_to_user: Callback used to assign value from kernel to user var
+ *
+ * When direction is kernel to user, then the u_ptr is modified.
+ * When direction is user to kernel, then the k_ptr is modified.
+ *
+ * Returns: 0 on success
+ */
+int proc_ulong_conv(ulong *u_ptr, ulong *k_ptr, int dir,
+		    const struct ctl_table *tbl, bool k_ptr_range_check,
+		    int (*user_to_kern)(const ulong *u_ptr, ulong *k_ptr),
+		    int (*kern_to_user)(ulong *u_ptr, const ulong *k_ptr))
 {
-	unsigned long *i, *min, *max;
-	int vleft, first = 1, err = 0;
-	size_t left;
-	char *p;
+	if (SYSCTL_KERN_TO_USER(dir))
+		return kern_to_user(u_ptr, k_ptr);
 
-	if (!table->data || !table->maxlen || !*lenp ||
-	    (*ppos && SYSCTL_KERN_TO_USER(dir))) {
-		*lenp = 0;
-		return 0;
-	}
+	if (k_ptr_range_check) {
+		ulong tmp_k;
+		int ret;
 
-	i = table->data;
-	min = table->extra1;
-	max = table->extra2;
-	vleft = table->maxlen / sizeof(unsigned long);
-	left = *lenp;
-
-	if (SYSCTL_USER_TO_KERN(dir)) {
-		if (proc_first_pos_non_zero_ignore(ppos, table))
-			goto out;
-
-		if (left > PAGE_SIZE - 1)
-			left = PAGE_SIZE - 1;
-		p = buffer;
-	}
-
-	for (; left && vleft--; i++, first = 0) {
-		unsigned long val;
-
-		if (SYSCTL_USER_TO_KERN(dir)) {
-			bool neg;
-
-			proc_skip_spaces(&p, &left);
-			if (!left)
-				break;
-
-			err = proc_get_long(&p, &left, &val, &neg,
-					     proc_wspace_sep,
-					     sizeof(proc_wspace_sep), NULL);
-			if (err || neg) {
-				err = -EINVAL;
-				break;
-			}
-
-			val = convmul * val / convdiv;
-			if ((min && val < *min) || (max && val > *max)) {
-				err = -EINVAL;
-				break;
-			}
-			WRITE_ONCE(*i, val);
-		} else {
-			val = convdiv * READ_ONCE(*i) / convmul;
-			if (!first)
-				proc_put_char(&buffer, &left, '\t');
-			proc_put_long(&buffer, &left, val, false);
-		}
-	}
-
-	if (SYSCTL_KERN_TO_USER(dir) && !first && left && !err)
-		proc_put_char(&buffer, &left, '\n');
-	if (SYSCTL_USER_TO_KERN(dir) && !err)
-		proc_skip_spaces(&p, &left);
-	if (SYSCTL_USER_TO_KERN(dir) && first)
-		return err ? : -EINVAL;
-	*lenp -= left;
-out:
-	*ppos += *lenp;
-	return err;
+		if (!tbl)
+			return -EINVAL;
+		ret = user_to_kern(u_ptr, &tmp_k);
+		if (ret)
+			return ret;
+		if ((tbl->extra1 && *(ulong *)tbl->extra1 > tmp_k) ||
+		    (tbl->extra2 && *(ulong *)tbl->extra2 < tmp_k))
+			return -ERANGE;
+		WRITE_ONCE(*k_ptr, tmp_k);
+	} else
+		return user_to_kern(u_ptr, k_ptr);
+	return 0;
 }
 
+/**
+ * proc_ulong_u2k_conv_uop - Assign user value to a kernel pointer
+ *
+ * @u_ptr: pointer to user space variable
+ * @k_ptr: pointer to kernel variable
+ * @u_ptr_op: execute this function before assigning to k_ptr
+ *
+ * Uses WRITE_ONCE to assign value to k_ptr. Executes u_ptr_op if
+ * not NULL.
+ *
+ * returns: 0 on success.
+ */
+int proc_ulong_u2k_conv_uop(const ulong *u_ptr, ulong *k_ptr,
+			    ulong (*u_ptr_op)(const ulong))
+{
+	ulong u = u_ptr_op ? u_ptr_op(*u_ptr) : *u_ptr;
+
+	WRITE_ONCE(*k_ptr, u);
+	return 0;
+}
+
+static int proc_ulong_u2k_conv(const ulong *u_ptr, ulong *k_ptr)
+{
+	return proc_ulong_u2k_conv_uop(u_ptr, k_ptr, NULL);
+}
+
+/**
+ * proc_ulong_k2u_conv_kop - Assign kernel value to a user space pointer
+ *
+ * @u_ptr: pointer to user space variable
+ * @k_ptr: pointer to kernel variable
+ * @k_ptr_op: Operation applied to k_ptr before assignment
+ *
+ * Uses READ_ONCE to assign value to u_ptr. Executes k_ptr_op if
+ * not NULL.
+ *
+ * returns: 0 on success.
+ */
+int proc_ulong_k2u_conv_kop(ulong *u_ptr, const ulong *k_ptr,
+			    ulong (*k_ptr_op)(const ulong))
+{
+	ulong val = k_ptr_op ? k_ptr_op(READ_ONCE(*k_ptr)) : READ_ONCE(*k_ptr);
+	*u_ptr = (ulong)val;
+	return 0;
+}
+
+static int proc_ulong_k2u_conv(ulong *u_ptr, const ulong *k_ptr)
+{
+	return proc_ulong_k2u_conv_kop(u_ptr, k_ptr, NULL);
+}
+
+static int do_proc_ulong_conv(bool *negp, ulong *u_ptr, ulong *k_ptr, int dir,
+			      const struct ctl_table *tbl)
+{
+	return proc_ulong_conv(u_ptr, k_ptr, dir, tbl, true,
+			       proc_ulong_u2k_conv, proc_ulong_k2u_conv);
+}
+
+/**
+ * proc_doulongvec_minmax_conv - read a vector of unsigned longs with a custom converter
+ *
+ * @table: the sysctl table
+ * @dir: %TRUE if this is a write to the sysctl file
+ * @buffer: the user buffer
+ * @lenp: the size of the user buffer
+ * @ppos: file position
+ * @conv: Custom converter call back
+ *
+ * Reads/writes up to table->maxlen/sizeof(unsigned long) unsigned long
+ * values from/to the user buffer, treated as an ASCII string. Negative
+ * strings are not allowed.
+ *
+ * Returns: 0 on success
+ */
 int proc_doulongvec_minmax_conv(const struct ctl_table *table, int dir,
 				void *buffer, size_t *lenp, loff_t *ppos,
-				unsigned long convmul, unsigned long convdiv)
+				int (*conv)(bool *negp, ulong *u_ptr, ulong *k_ptr,
+					    int dir, const struct ctl_table *table))
 {
-	return do_proc_doulongvec_minmax(table, dir, buffer, lenp, ppos,
-					 convmul, convdiv);
+	return do_proc_doulongvec(table, dir, buffer, lenp, ppos, conv);
 }
 
 /**
@@ -1073,7 +1115,8 @@ int proc_doulongvec_minmax_conv(const struct ctl_table *table, int dir,
 int proc_doulongvec_minmax(const struct ctl_table *table, int dir,
 			   void *buffer, size_t *lenp, loff_t *ppos)
 {
-	return proc_doulongvec_minmax_conv(table, dir, buffer, lenp, ppos, 1l, 1l);
+	return do_proc_doulongvec(table, dir, buffer, lenp, ppos,
+				  do_proc_ulong_conv);
 }
 
 /**
@@ -1328,7 +1371,8 @@ int proc_doulongvec_minmax(const struct ctl_table *table, int dir,
 
 int proc_doulongvec_minmax_conv(const struct ctl_table *table, int dir,
 				void *buffer, size_t *lenp, loff_t *ppos,
-				unsigned long convmul, unsigned long convdiv)
+				int (*conv)(bool *negp, ulong *u_ptr, ulong *k_ptr,
+					    int dir, const struct ctl_table *table))
 {
 	return -ENOSYS;
 }
