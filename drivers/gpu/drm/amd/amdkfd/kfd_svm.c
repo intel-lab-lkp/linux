@@ -22,6 +22,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/mm.h>
 #include <linux/sched/task.h>
 #include <linux/dynamic_debug.h>
 #include <drm/ttm/ttm_tt.h>
@@ -81,6 +82,26 @@ static const struct mmu_interval_notifier_ops svm_range_mn_ops = {
 	.invalidate = svm_range_cpu_invalidate_pagetables,
 };
 
+static unsigned int
+svm_range_mn_flags(struct svm_range *prange)
+{
+	struct kfd_process *p = container_of(prange->svms, struct kfd_process,
+					     svms);
+
+	if (!p->xnack_enabled ||
+	    (prange->flags & KFD_IOCTL_SVM_FLAG_GPU_ALWAYS_MAPPED))
+		return MMU_INTERVAL_NOTIFIER_BLOCK_THP;
+
+	return 0;
+}
+
+static int
+svm_range_update_mn_flags_locked(struct svm_range *prange)
+{
+	return mmu_interval_notifier_set_flags_locked(&prange->notifier,
+						      svm_range_mn_flags(prange));
+}
+
 /**
  * svm_range_unlink - unlink svm_range from lists and interval tree
  * @prange: svm range structure to be removed
@@ -112,10 +133,11 @@ svm_range_add_notifier_locked(struct mm_struct *mm, struct svm_range *prange)
 	pr_debug("svms 0x%p prange 0x%p [0x%lx 0x%lx]\n", prange->svms,
 		 prange, prange->start, prange->last);
 
-	mmu_interval_notifier_insert_locked(&prange->notifier, mm,
-				     prange->start << PAGE_SHIFT,
-				     prange->npages << PAGE_SHIFT,
-				     &svm_range_mn_ops);
+	mmu_interval_notifier_insert_locked_flags(&prange->notifier, mm,
+						  prange->start << PAGE_SHIFT,
+						  prange->npages << PAGE_SHIFT,
+						  &svm_range_mn_ops,
+						  svm_range_mn_flags(prange));
 }
 
 /**
@@ -3763,6 +3785,12 @@ svm_range_set_attr(struct kfd_process *p, struct mm_struct *mm,
 	}
 	list_for_each_entry(prange, &update_list, update_list) {
 		svm_range_apply_attrs(p, prange, nattr, attrs, &update_mapping);
+		r = svm_range_update_mn_flags_locked(prange);
+		if (r) {
+			mutex_unlock(&svms->lock);
+			mmap_write_unlock(mm);
+			goto out;
+		}
 		/* TODO: unmap ranges from GPU that lost access */
 	}
 	update_mapping |= !p->xnack_enabled && !list_empty(&remap_list);
