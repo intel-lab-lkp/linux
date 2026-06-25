@@ -233,15 +233,38 @@ err_destroy_locks:
 	 * init_platform_device() may have ioremap()ed metric tables before
 	 * failing.  hsmp_destroy_metric_read_locks() unmaps them and tears
 	 * down the per-socket mutexes; the socket array itself is devm-managed.
+	 *
+	 * init_platform_device() also runs the data plane (hsmp_test()), so
+	 * drain it via the teardown rwsem and drop the global socket pointer
+	 * before devres frees the array.  num_sockets is left intact: it is
+	 * only computed once in __init (amd_num_nodes()) and is needed to
+	 * re-create the array on a later rebind.
 	 */
+	hsmp_sock_teardown_lock();
 	hsmp_destroy_metric_read_locks(hsmp_pdev, hsmp_pdev->num_sockets);
+	hsmp_pdev->sock = NULL;
+	hsmp_sock_teardown_unlock();
 	return ret;
 }
 
 static void hsmp_pltdrv_remove(struct platform_device *pdev)
 {
+	/*
+	 * Drain the lock-free data plane and keep it out while the sockets are
+	 * torn down.  misc_deregister() does not drain already-open /dev/hsmp
+	 * fds and the driver permits sysfs unbind, so without this an in-flight
+	 * hsmp_send_message() could touch the devres-freed socket array or an
+	 * iounmap()ed metric table.  Dropping the global socket pointer makes
+	 * later messages bail out at the first check.  num_sockets is left
+	 * intact so an unbind/rebind cycle can re-create the array; it is only
+	 * computed once in __init (amd_num_nodes()) and is never recomputed on
+	 * probe.
+	 */
+	hsmp_sock_teardown_lock();
 	hsmp_misc_deregister();
 	hsmp_destroy_metric_read_locks(hsmp_pdev, hsmp_pdev->num_sockets);
+	hsmp_pdev->sock = NULL;
+	hsmp_sock_teardown_unlock();
 }
 
 static struct platform_driver amd_hsmp_driver = {

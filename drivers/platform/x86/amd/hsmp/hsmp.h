@@ -70,6 +70,8 @@ void hsmp_init_metric_read_locks(struct hsmp_plat_device *pdev, u16 num_sockets)
 ssize_t hsmp_metric_tbl_read(struct hsmp_socket *sock, char *buf, size_t size);
 void hsmp_destroy_metric_read_locks(struct hsmp_plat_device *pdev, u16 num_sockets);
 struct hsmp_plat_device *get_hsmp_pdev(void);
+void hsmp_sock_teardown_lock(void);
+void hsmp_sock_teardown_unlock(void);
 #if IS_ENABLED(CONFIG_HWMON)
 int hsmp_create_sensor(struct device *dev, u16 sock_ind);
 #else

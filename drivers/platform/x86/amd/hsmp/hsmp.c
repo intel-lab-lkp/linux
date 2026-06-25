@@ -15,6 +15,7 @@
 #include <linux/io.h>
 #include <linux/mutex.h>
 #include <linux/nospec.h>
+#include <linux/rwsem.h>
 #include <linux/semaphore.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
@@ -43,6 +44,16 @@
 #define CHECK_GET_BIT		BIT(31)
 
 static struct hsmp_plat_device hsmp_pdev;
+
+/*
+ * Serializes the lock-free data plane (hsmp_send_message() and the per-socket
+ * MMIO access it performs) against socket teardown.  Callers of the data plane
+ * hold it for read so multiple sockets can be driven concurrently; ACPI
+ * removal holds it for write while it clears sock->dev, frees the socket array
+ * and unmaps the mailbox, so a reader can never observe a half-torn-down or
+ * freed socket.
+ */
+static DECLARE_RWSEM(hsmp_sock_rwsem);
 
 /*
  * Send a message to the HSMP port via PCI-e config space registers
@@ -215,8 +226,19 @@ int hsmp_send_message(struct hsmp_message *msg)
 	if (ret)
 		return ret;
 
-	if (!hsmp_pdev.sock || msg->sock_ind >= hsmp_pdev.num_sockets)
-		return -ENODEV;
+	/*
+	 * Hold the teardown rwsem for read across the whole MMIO access.  ACPI
+	 * removal takes it for write before clearing sock->dev, freeing the
+	 * socket array and unmapping the mailbox, so the lock-free data plane
+	 * (open /dev/hsmp fds and hwmon sysfs reads) can never dereference a
+	 * freed socket or touch an unmapped mailbox.
+	 */
+	down_read(&hsmp_sock_rwsem);
+
+	if (!hsmp_pdev.sock || msg->sock_ind >= hsmp_pdev.num_sockets) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
 
 	/*
 	 * Sanitize sock_ind after the bounds check.  A mispredicted branch can
@@ -235,18 +257,22 @@ int hsmp_send_message(struct hsmp_message *msg)
 	 * semaphore or an unmapped mailbox.  A non-NULL dev also guarantees
 	 * virt_base_addr, the mailbox offsets and the semaphore are visible.
 	 */
-	/* Pairs with smp_store_release(&sock->dev) in hsmp_parse_acpi_table(). */
-	if (!smp_load_acquire(&sock->dev))
-		return -ENODEV;
+	/* Held under hsmp_sock_rwsem; pairs with smp_store_release(&sock->dev). */
+	if (!smp_load_acquire(&sock->dev)) {
+		ret = -ENODEV;
+		goto out_unlock;
+	}
 
 	ret = down_interruptible(&sock->hsmp_sem);
 	if (ret < 0)
-		return ret;
+		goto out_unlock;
 
 	ret = __hsmp_send_message(sock, msg);
 
 	up(&sock->hsmp_sem);
 
+out_unlock:
+	up_read(&hsmp_sock_rwsem);
 	return ret;
 }
 EXPORT_SYMBOL_NS_GPL(hsmp_send_message, "AMD_HSMP");
@@ -528,6 +554,23 @@ struct hsmp_plat_device *get_hsmp_pdev(void)
 	return &hsmp_pdev;
 }
 EXPORT_SYMBOL_NS_GPL(get_hsmp_pdev, "AMD_HSMP");
+
+/*
+ * Take the write side of the data-plane rwsem.  A caller tearing a socket down
+ * uses this to drain any in-flight hsmp_send_message() and to keep new ones out
+ * while it clears sock->dev, frees the socket array or unmaps the mailbox.
+ */
+void hsmp_sock_teardown_lock(void)
+{
+	down_write(&hsmp_sock_rwsem);
+}
+EXPORT_SYMBOL_NS_GPL(hsmp_sock_teardown_lock, "AMD_HSMP");
+
+void hsmp_sock_teardown_unlock(void)
+{
+	up_write(&hsmp_sock_rwsem);
+}
+EXPORT_SYMBOL_NS_GPL(hsmp_sock_teardown_unlock, "AMD_HSMP");
 
 MODULE_DESCRIPTION("AMD HSMP Common driver");
 MODULE_VERSION(DRIVER_VERSION);
