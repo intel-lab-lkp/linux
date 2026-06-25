@@ -646,6 +646,13 @@ static int vhost_vsock_start(struct vhost_vsock *vsock)
 	 */
 	vhost_vq_work_queue(&vsock->vqs[VSOCK_VQ_RX], &vsock->send_pkt_work);
 
+	/*
+	 * Some packets might've also been queued in TX VQ.  That is the case
+	 * during the brief device pause caused by VHOST_RESET_OWNER.  Re-scan
+	 * the TX VQ here, mirroring the RX send-worker kick above.
+	 */
+	vhost_poll_queue(&vsock->vqs[VSOCK_VQ_TX].poll);
+
 	mutex_unlock(&vsock->dev.mutex);
 	return 0;
 
