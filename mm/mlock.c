@@ -232,7 +232,7 @@ void mlock_drain_remote(int cpu)
 
 bool need_mlock_drain(int cpu)
 {
-	return folio_batch_count(&per_cpu(mlock_fbatch.fbatch, cpu));
+	return data_race(folio_batch_count(&per_cpu(mlock_fbatch.fbatch, cpu)));
 }
 
 /**
