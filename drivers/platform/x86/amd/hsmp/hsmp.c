@@ -498,6 +498,17 @@ int hsmp_get_tbl_dram_base(u16 sock_ind)
 		dev_err(sock->dev, "Invalid DRAM address for metric table\n");
 		return -ENOMEM;
 	}
+	/*
+	 * The ACPI socket array now persists across a non-final unbind, so a
+	 * stale mapping from a previous bind can still be recorded here.  Drop
+	 * it before remapping to avoid leaking one metric-table mapping per
+	 * unbind/rebind cycle.  This runs during (re)probe before the metric
+	 * sysfs attribute is exposed, so no reader can be using it.
+	 */
+	if (sock->metric_tbl_addr) {
+		iounmap(sock->metric_tbl_addr);
+		sock->metric_tbl_addr = NULL;
+	}
 	sock->metric_tbl_addr = ioremap(dram_addr, sizeof(struct hsmp_metric_table));
 	if (!sock->metric_tbl_addr) {
 		dev_err(sock->dev, "Failed to ioremap metric table addr\n");
