@@ -2485,6 +2485,7 @@ xfrm_tmpl_resolve_one(struct xfrm_policy *policy, const struct flowi *fl,
 	int i, error;
 	xfrm_address_t *daddr = xfrm_flowi_daddr(fl, family);
 	xfrm_address_t *saddr = xfrm_flowi_saddr(fl, family);
+	unsigned short cur_family = family;
 	xfrm_address_t tmp;
 
 	for (nx = 0, i = 0; i < policy->xfrm_nr; i++) {
@@ -2511,6 +2512,11 @@ xfrm_tmpl_resolve_one(struct xfrm_policy *policy, const struct flowi *fl,
 					goto fail;
 				local = &tmp;
 			}
+		} else {
+			if (tmpl->encap_family != cur_family) {
+				error = -EINVAL;
+				goto fail;
+			}
 		}
 
 		x = xfrm_state_find(remote, local, fl, tmpl, policy, &error,
@@ -2526,6 +2532,11 @@ xfrm_tmpl_resolve_one(struct xfrm_policy *policy, const struct flowi *fl,
 			xfrm[nx++] = x;
 			daddr = remote;
 			saddr = local;
+			if (tmpl->mode == XFRM_MODE_TUNNEL ||
+			    tmpl->mode == XFRM_MODE_IPTFS ||
+			    tmpl->mode == XFRM_MODE_BEET) {
+				cur_family = tmpl->encap_family;
+			}
 			continue;
 		}
 		if (x) {
