@@ -43,7 +43,7 @@ static inline unsigned long __untagged_addr_remote(struct mm_struct *mm,
 						   unsigned long addr)
 {
 	mmap_assert_locked(mm);
-	return addr & (mm)->context.untag_mask;
+	return addr & READ_ONCE((mm)->context.untag_mask);
 }
 
 #define untagged_addr_remote(mm, addr)	({				\
