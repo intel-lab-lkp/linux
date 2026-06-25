@@ -101,6 +101,11 @@ void panthor_device_unplug(struct panthor_device *ptdev)
 	panthor_gpu_unplug(ptdev);
 	panthor_pwr_unplug(ptdev);
 
+	/* Make sure works queued to panthor_cleanup_wq are executed
+	 * before the device is destroyed.
+	 */
+	drain_workqueue(panthor_cleanup_wq);
+
 	pm_runtime_dont_use_autosuspend(ptdev->base.dev);
 	pm_runtime_put_sync_suspend(ptdev->base.dev);
 
