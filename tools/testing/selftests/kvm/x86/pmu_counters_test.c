@@ -146,7 +146,7 @@ static u8 guest_get_pmu_version(void)
 
 /*
  * If an architectural event is supported and guaranteed to generate at least
- * one "hit, assert that its count is non-zero.  If an event isn't supported or
+ * one hit, assert that its count is non-zero.  If an event isn't supported or
  * the test can't guarantee the associated action will occur, then all bets are
  * off regarding the count, i.e. no checks can be done.
  *
@@ -598,7 +598,7 @@ static void test_intel_counters(void)
 	 * To keep the total runtime reasonable, test only a handful of select,
 	 * semi-arbitrary values for the mask of unavailable PMU events.  Test
 	 * 0 (all events available) and all ones (no events available) as well
-	 * as alternating bit sequencues, e.g. to detect if KVM is checking the
+	 * as alternating bit sequences, e.g. to detect if KVM is checking the
 	 * wrong bit(s).
 	 */
 	const u32 unavailable_masks[] = {
