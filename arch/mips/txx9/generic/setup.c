@@ -19,6 +19,7 @@
 #include <linux/clkdev.h>
 #include <linux/err.h>
 #include <linux/gpio/driver.h>
+#include <linux/gpio/machine.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/txx9/ndfmc.h>
 #include <linux/serial_core.h>
@@ -615,6 +616,15 @@ static int txx9_iocled_dir_out(struct gpio_chip *chip, unsigned int offset,
 	return 0;
 }
 
+static struct gpiod_lookup_table txx9_iocled_table = {
+	.table = {
+		GPIO_LOOKUP_IDX("iocled", 0, NULL, 0, GPIO_ACTIVE_LOW),
+		GPIO_LOOKUP_IDX("iocled", 1, NULL, 1, GPIO_ACTIVE_LOW),
+		GPIO_LOOKUP_IDX("iocled", 2, NULL, 2, GPIO_ACTIVE_LOW),
+		{ },
+	},
+};
+
 void __init txx9_iocled_init(unsigned long baseaddr,
 			     int basenum, unsigned int num, int lowactive,
 			     const char *color, char **deftriggers)
@@ -659,14 +669,14 @@ void __init txx9_iocled_init(unsigned long baseaddr,
 		snprintf(iocled->names[i], sizeof(iocled->names[i]),
 			 "iocled:%s:%u", color, i);
 		led->name = iocled->names[i];
-		led->gpio = basenum + i;
-		led->active_low = lowactive;
 		if (deftriggers && *deftriggers)
 			led->default_trigger = *deftriggers++;
 	}
 	pdev->dev.platform_data = &iocled->pdata;
 	if (platform_device_add(pdev))
 		goto out_pdev;
+	txx9_iocled_table.dev_id = dev_name(&pdev->dev);
+	gpiod_add_lookup_table(&txx9_iocled_table);
 	return;
 
 out_pdev:
