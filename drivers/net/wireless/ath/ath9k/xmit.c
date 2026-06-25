@@ -665,6 +665,15 @@ static void ath_tx_complete_aggr(struct ath_softc *sc, struct ath_txq *txq,
 			 * queue to retain ordering
 			 */
 			__skb_queue_tail(&bf_pending, skb);
+
+			if (!list_empty(&bf_head)) {
+				dma_unmap_single(sc->dev, bf->bf_buf_addr,
+						 skb->len, DMA_TO_DEVICE);
+				bf->bf_buf_addr = 0;
+				bf->bf_mpdu = NULL;
+				list_del(&bf->list);
+				ath_tx_return_buffer(sc, bf);
+			}
 		}
 
 		bf = bf_next;
