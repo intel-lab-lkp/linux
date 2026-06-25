@@ -12569,10 +12569,13 @@ F:	drivers/media/rc/img-ir/
 IMGTEC POWERVR DRM DRIVER
 M:	Frank Binns <frank.binns@imgtec.com>
 M:	Matt Coster <matt.coster@imgtec.com>
+L:	imagination@lists.freedesktop.org
 S:	Supported
+Q:	https://patchwork.freedesktop.org/project/imagination/list/
+B:	https://gitlab.freedesktop.org/imagination/linux/-/issues
+C:	irc://irc.oftc.net/powervr
 T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
-F:	Documentation/devicetree/bindings/gpu/img,powervr-rogue.yaml
-F:	Documentation/devicetree/bindings/gpu/img,powervr-sgx.yaml
+F:	Documentation/devicetree/bindings/gpu/img,powervr-*.yaml
 F:	Documentation/gpu/imagination/
 F:	drivers/gpu/drm/ci/xfails/powervr*
 F:	drivers/gpu/drm/imagination/
