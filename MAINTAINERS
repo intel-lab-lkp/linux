@@ -18461,8 +18461,8 @@ F:	include/linux/mmc/
 F:	include/uapi/linux/mmc/
 
 MULTIPLEXER SUBSYSTEM
-M:	Peter Rosin <peda@lysator.liu.se>
-S:	Odd Fixes
+M:	Lad Prabhakar <prabhakar.mahadev-lad.rj@bp.renesas.com>
+S:	Maintained
 F:	Documentation/ABI/testing/sysfs-class-mux*
 F:	Documentation/devicetree/bindings/mux/
 F:	drivers/mux/

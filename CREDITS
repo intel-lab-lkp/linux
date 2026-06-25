@@ -3509,6 +3509,10 @@ S: R. Anhanguera, 1487 - Ipiranga
 S: 79080-740 - Campo Grande - Mato Grosso do Sul
 S: Brazil
 
+N: Peter Rosin
+E: peda@lysator.liu.se
+D: Multiplexer subsystem founder and former maintainer
+
 N: Stephen Rothwell
 E: sfr@canb.auug.org.au
 W: http://www.canb.auug.org.au/~sfr
