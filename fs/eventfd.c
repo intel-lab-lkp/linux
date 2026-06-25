@@ -376,6 +376,40 @@ struct eventfd_ctx *eventfd_ctx_fileget(struct file *file)
 }
 EXPORT_SYMBOL_GPL(eventfd_ctx_fileget);
 
+/**
+ * eventfd_luo_get_state - Get eventfd state (count and flags) for LUO
+ * @file: Eventfd file
+ * @count: Output parameter for count value
+ * @flags: Output parameter for flags value
+ *
+ * This function is exported for use by LUO to safely read eventfd state.
+ * Since struct eventfd_ctx is defined in this file, we can access its
+ * members directly here. The function uses the wait queue lock to ensure
+ * atomic access to count.
+ *
+ * Returns 0 on success, negative error code on failure.
+ */
+int eventfd_luo_get_state(struct file *file, __u64 *count, unsigned int *flags)
+{
+	struct eventfd_ctx *ctx;
+	unsigned long irq_flags;
+
+	ctx = eventfd_ctx_fileget(file);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
+
+	/* Read count with lock (flags don't need lock) */
+	spin_lock_irqsave(&ctx->wqh.lock, irq_flags);
+	*count = ctx->count;
+	spin_unlock_irqrestore(&ctx->wqh.lock, irq_flags);
+
+	*flags = ctx->flags;
+
+	eventfd_ctx_put(ctx);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(eventfd_luo_get_state);
+
 static int do_eventfd(unsigned int count, int flags)
 {
 	struct eventfd_ctx *ctx __free(kfree) = NULL;
@@ -410,6 +444,12 @@ static int do_eventfd(unsigned int count, int flags)
 	retain_and_null_ptr(ctx);
 	return fd_publish(fdf);
 }
+
+int eventfd_create(__u64 count, unsigned int flags)
+{
+	return do_eventfd(count, flags);
+}
+EXPORT_SYMBOL_GPL(eventfd_create);
 
 SYSCALL_DEFINE2(eventfd2, unsigned int, count, int, flags)
 {

@@ -86,4 +86,20 @@ config LIVEUPDATE_MEMFD
 
 	  If unsure, say N.
 
+config LIVEUPDATE_EVENTFD
+	bool "Eventfd Live Update Orchestrator support"
+	depends on EVENTFD
+	depends on LIVEUPDATE
+	help
+	  Enable Live Update Orchestrator support for eventfd file descriptors.
+	  This allows eventfd files to be preserved and restored across kexec
+	  operations, maintaining their counter values and flags.
+
+	  Eventfd files are commonly used for event notification between
+	  userspace processes or between userspace and kernel. With this
+	  option enabled, eventfd state can be handed over to a new kernel
+	  during live update operations.
+
+	  If unsure, say N.
+
 endmenu
