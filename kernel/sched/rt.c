@@ -2859,9 +2859,12 @@ static int sched_rt_global_validate(void)
 #ifdef CONFIG_RT_GROUP_SCHED
 	if (!rt_group_sched_enabled())
 		return 0;
+	
+	u64 period = global_rt_period();
+	u64 runtime = global_rt_runtime();
 
 	scoped_guard(mutex, &rt_constraints_mutex)
-		return __rt_schedulable(NULL, 0, 0);
+		return __rt_schedulable(&root_task_group, period, runtime);
 #endif
 	return 0;
 }
