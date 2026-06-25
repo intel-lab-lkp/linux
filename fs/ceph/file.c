@@ -251,6 +251,13 @@ static int ceph_init_file_info(struct inode *inode, struct file *file,
 		file->private_data = fi;
 	}
 
+	/* If lazyio mount option is set, enable lazyio for all regular files */
+	if (!isdir && (opt->flags & CEPH_MOUNT_OPT_LAZYIO)) {
+		fmode |= CEPH_FILE_MODE_LAZY;
+		doutc(cl, "%p %llx.%llx force_lazyio: added LAZY to fmode\n",
+		      inode, ceph_vinop(inode));
+	}
+
 	ceph_get_fmode(ci, fmode, 1);
 	fi->fmode = fmode;
 

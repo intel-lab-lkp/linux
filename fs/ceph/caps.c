@@ -999,6 +999,31 @@ int __ceph_caps_used(struct ceph_inode_info *ci)
 	return used;
 }
 
+/*
+ * Substitute LAZYIO for CACHE/BUFFER when they are not issued.
+ * If we have LAZYIO but not CACHE/BUFFER, report LAZYIO as used instead
+ * so the MDS knows we're fine with the weaker consistency guarantee.
+ */
+static inline int ceph_adjust_caps_used_for_lazyio(int used, int issued,
+					int implemented)
+{
+	if (!(used & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER)))
+		return used;
+	if (!(implemented & CEPH_CAP_FILE_LAZYIO))
+		return used;
+	if (issued & CEPH_CAP_FILE_LAZYIO) {
+		if (!(issued & CEPH_CAP_FILE_CACHE)) {
+			used &= ~CEPH_CAP_FILE_CACHE;
+			used |= CEPH_CAP_FILE_LAZYIO;
+		}
+		if (!(issued & CEPH_CAP_FILE_BUFFER)) {
+			used &= ~CEPH_CAP_FILE_BUFFER;
+			used |= CEPH_CAP_FILE_LAZYIO;
+		}
+	}
+	return used;
+}
+
 #define FMODE_WAIT_BIAS 1000
 
 /*
@@ -2049,6 +2074,10 @@ retry:
 	 * usually because they have outstanding references).
 	 */
 	issued = __ceph_caps_issued(ci, &implemented);
+
+	/* substitute LAZYIO for CACHE/BUFFER when they are not issued */
+	used = ceph_adjust_caps_used_for_lazyio(used, issued, implemented);
+
 	revoking = implemented & ~issued;
 
 	want = file_wanted;
@@ -2905,9 +2934,22 @@ again:
 				}
 				snap_rwsem_locked = true;
 			}
-			if ((have & want) == want)
+			/*
+			 * Allow LAZYIO to act as a substitute for CACHE
+			 * or BUFFER when those caps are not issued.
+			 */
+			if ((have & want) == want ||
+			    ((have & CEPH_CAP_FILE_LAZYIO) &&
+			     !(exclude & CEPH_CAP_FILE_LAZYIO) &&
+			     ((have & want) ==
+			      (want & ~(CEPH_CAP_FILE_CACHE |
+					CEPH_CAP_FILE_BUFFER))))) {
 				*got = need | (want & ~exclude);
-			else
+				if ((*got & CEPH_CAP_FILE_CACHE) &&
+				    !(have & CEPH_CAP_FILE_CACHE) &&
+				    (have & CEPH_CAP_FILE_LAZYIO))
+					*got |= CEPH_CAP_FILE_LAZYIO;
+			} else
 				*got = need;
 			ceph_take_cap_refs(ci, *got, true);
 			ret = 1;
@@ -3525,13 +3567,20 @@ static void handle_cap_grant(struct inode *inode,
 
 
 	/*
-	 * If CACHE is being revoked, and we have no dirty buffers,
-	 * try to invalidate (once).  (If there are dirty buffers, we
-	 * will invalidate _after_ writeback.)
+	 * Check the revocation of *both* CACHE and LAZYIO, because
+	 * CACHE may have been revoked earlier and cap->issued no
+	 * longer contains it -- at that point only LAZYIO was
+	 * covering us.  If LAZYIO is now also being revoked and no
+	 * cache cap remains, we must invalidate the page cache.
+	 * Without this, a CACHE-revoked-then-LAZYIO-revoked sequence
+	 * leaves stale pages in memory until the next periodic
+	 * check_caps (up to 60s).  Also invalidate when we have no
+	 * dirty buffers (if dirty, invalidate after writeback).
 	 */
 	if (S_ISREG(inode->i_mode) && /* don't invalidate readdir cache */
-	    ((cap->issued & ~newcaps) & CEPH_CAP_FILE_CACHE) &&
-	    (newcaps & CEPH_CAP_FILE_LAZYIO) == 0 &&
+	    ((cap->issued & ~newcaps) &
+	     (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO)) &&
+	    !(newcaps & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO)) &&
 	    !(ci->i_wrbuffer_ref || ci->i_wb_ref)) {
 		if (try_nonblocking_invalidate(inode)) {
 			/* there were locked pages.. invalidate later
@@ -3675,6 +3724,7 @@ static void handle_cap_grant(struct inode *inode,
 	/* check cap bits */
 	wanted = __ceph_caps_wanted(ci);
 	used = __ceph_caps_used(ci);
+	used = ceph_adjust_caps_used_for_lazyio(used, cap->issued, cap->implemented);
 	dirty = __ceph_caps_dirty(ci);
 	doutc(cl, " my wanted = %s, used = %s, dirty %s\n",
 	      ceph_cap_string(wanted), ceph_cap_string(used),
@@ -3702,13 +3752,18 @@ static void handle_cap_grant(struct inode *inode,
 		doutc(cl, "revocation: %s -> %s (revoking %s)\n",
 		      ceph_cap_string(cap->issued), ceph_cap_string(newcaps),
 		      ceph_cap_string(revoking));
+		/*
+		 * If BUFFER or LAZYIO is being revoked and we have
+		 * dirty data, trigger writeback before acking.
+		 */
 		if (S_ISREG(inode->i_mode) &&
-		    (revoking & used & CEPH_CAP_FILE_BUFFER)) {
+		    (revoking & used &
+		     (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO))) {
 			writeback = true;  /* initiate writeback; will delay ack */
 			revoke_wait = true;
 		} else if (queue_invalidate &&
-			 revoking == CEPH_CAP_FILE_CACHE &&
-			 (newcaps & CEPH_CAP_FILE_LAZYIO) == 0) {
+			 (revoking & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO)) &&
+			 !(newcaps & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO))) {
 			revoke_wait = true; /* do nothing yet, invalidation will be queued */
 		} else if (cap == ci->i_auth_cap) {
 			check_caps = 1; /* check auth cap only */
