@@ -2124,15 +2124,14 @@ static inline void init_slab_obj_exts(struct slab *slab)
 }
 
 /*
- * Calculate the allocation size for slabobj_ext array.
+ * Size of the slabobj_ext array for @slab.
  *
- * When memory allocation profiling is enabled, the obj_exts array
- * could be allocated from the same slab cache it's being allocated for.
- * This would prevent the slab from ever being freed because it would
- * always contain at least one allocated object (its own obj_exts array).
- *
- * To avoid this, increase the allocation size when we detect the array
- * may come from the same cache, forcing it to use a different cache.
+ * The array is itself kmalloc()'d. If it came from the same or a smaller
+ * kmalloc cache than @s, the "slab holds another slab's array" relation could
+ * form a cycle (self, or e.g. kmalloc-512 <-> kmalloc-1k) that pins the slabs
+ * forever and recurses via free_slab_obj_exts() -> kfree() -> discard_slab()
+ * at teardown. Force it into a strictly larger cache to keep that relation a
+ * DAG (acyclic).
  */
 static inline size_t obj_exts_alloc_size(struct kmem_cache *s,
 					 struct slab *slab, gfp_t gfp)
@@ -2147,14 +2146,9 @@ static inline size_t obj_exts_alloc_size(struct kmem_cache *s,
 		return sz;
 
 	obj_exts_cache = kmalloc_slab(sz, NULL, gfp, __kmalloc_token(0));
-	/*
-	 * We can't simply compare s with obj_exts_cache, because partitioned kmalloc
-	 * caches have multiple caches per size, selected by caller address or type.
-	 * Since caller address or type may differ between kmalloc_slab() and actual
-	 * allocation, bump size when sizes are equal.
-	 */
-	if (s->object_size == obj_exts_cache->object_size)
-		return obj_exts_cache->object_size + 1;
+	/* compare object_size, not the cache pointer (partitioned kmalloc caches) */
+	if (obj_exts_cache->object_size <= s->object_size)
+		return s->object_size + 1;
 
 	return sz;
 }
