@@ -199,6 +199,8 @@ dtb-$(CONFIG_ARCH_K3) += k3-j784s4-evm-pcie0-pcie1-ep.dtbo
 dtb-$(CONFIG_ARCH_K3) += k3-j784s4-evm-quad-port-eth-exp1.dtbo
 dtb-$(CONFIG_ARCH_K3) += k3-j784s4-evm-usxgmii-exp1-exp2.dtbo
 dtb-$(CONFIG_ARCH_K3) += k3-j784s4-j742s2-evm-usb0-type-a.dtbo
+dtb-$(CONFIG_ARCH_K3) += k3-j784s4-evm-sgmii-usxgmii-exp1-exp2_board1.dtbo
+dtb-$(CONFIG_ARCH_K3) += k3-j784s4-evm-usxgmii-sgmii-exp1-exp2_board2.dtbo
 
 # Boards with J742S2 SoC
 dtb-$(CONFIG_ARCH_K3) += k3-j742s2-evm.dtb
@@ -338,6 +340,10 @@ k3-j784s4-evm-usb0-type-a-dtbs := k3-j784s4-evm.dtb \
 	k3-j784s4-j742s2-evm-usb0-type-a.dtbo
 k3-j784s4-evm-usxgmii-exp1-exp2-dtbs := k3-j784s4-evm.dtb \
 	k3-j784s4-evm-usxgmii-exp1-exp2.dtbo
+k3-j784s4-evm-sgmii-usxgmii-exp1-exp2_board1-dtbs := k3-j784s4-evm.dtb \
+       k3-j784s4-evm-sgmii-usxgmii-exp1-exp2_board1.dtbo
+k3-j784s4-evm-usxgmii-sgmii-exp1-exp2_board2-dtbs := k3-j784s4-evm.dtb \
+       k3-j784s4-evm-usxgmii-sgmii-exp1-exp2_board2.dtbo
 dtb- += k3-am625-beagleplay-csi2-ov5640.dtb \
 	k3-am625-beagleplay-csi2-tevi-ov5640.dtb \
 	k3-am625-phyboard-lyra-disable-eth-phy.dtb \
@@ -404,7 +410,8 @@ dtb- += k3-am625-beagleplay-csi2-ov5640.dtb \
 	k3-j784s4-evm-pcie0-pcie1-ep.dtb \
 	k3-j784s4-evm-quad-port-eth-exp1.dtb \
 	k3-j784s4-evm-usb0-type-a.dtb \
-	k3-j784s4-evm-usxgmii-exp1-exp2.dtb
-
+	k3-j784s4-evm-usxgmii-exp1-exp2.dtb \
+	k3-j784s4-evm-usxgmii-sgmii-exp1-exp2_board2.dtb \
+	k3-j784s4-evm-sgmii-usxgmii-exp1-exp2_board1.dtb \
 # Enable support for device-tree overlays
 DTC_FLAGS := -@
