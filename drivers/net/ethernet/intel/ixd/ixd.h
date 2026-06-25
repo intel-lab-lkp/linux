@@ -23,6 +23,7 @@ struct ixd_adapter {
 		struct delayed_work init_work;
 		u8 reset_retries;
 		u8 vc_retries;
+		bool success;
 	} init_task;
 	struct delayed_work mbx_task;
 	struct libie_ctlq_xn_manager *xnm;
