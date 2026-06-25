@@ -758,6 +758,8 @@ static __init int sched_init_debug(void)
 			   &llc_overaggr_pct);
 	debugfs_create_u32("imb_pct", 0644, llc,
 			   &llc_imb_pct);
+	debugfs_create_bool("override_numa_balance", 0644, llc,
+			    &llc_override_numa_balance);
 #endif
 
 	debugfs_create_file("debug", 0444, debugfs_sched, NULL, &sched_debug_fops);

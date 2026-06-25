@@ -1446,6 +1446,12 @@ __read_mostly unsigned int llc_epoch_period	= EPOCH_PERIOD;
 __read_mostly unsigned int llc_epoch_affinity_timeout = EPOCH_LLC_AFFINITY_TIMEOUT;
 __read_mostly unsigned int llc_imb_pct		= 20;
 __read_mostly unsigned int llc_overaggr_pct	= 50;
+bool llc_override_numa_balance			= true;
+
+static inline bool sched_cache_override_numa(void)
+{
+	return sched_cache_enabled() && llc_override_numa_balance;
+}
 
 static int llc_id(int cpu)
 {
@@ -1709,7 +1715,8 @@ static int get_pref_llc(struct task_struct *p, struct mm_struct *mm)
 		 * than sched_setnuma() at least -- and thus the
 		 * conflict only exists for a short period of time.
 		 */
-		if (static_branch_likely(&sched_numa_balancing) &&
+		if (!sched_cache_override_numa() &&
+		    static_branch_likely(&sched_numa_balancing) &&
 		    p->numa_preferred_nid >= 0 &&
 		    cpu_to_node(mm_sched_cpu) != p->numa_preferred_nid)
 			mm_sched_llc = -1;
@@ -3988,6 +3995,13 @@ void task_numa_fault(int last_cpupid, int mem_node, int pages, int flags)
 	int priv;
 
 	if (!static_branch_likely(&sched_numa_balancing))
+		return;
+
+	/*
+	 * We just want to migrate page other than migrate task
+	 * once sched cache override numa balance is enabled.
+	 */
+	if (sched_cache_override_numa())
 		return;
 
 	/* for example, ksmd faulting in a user's mm */
