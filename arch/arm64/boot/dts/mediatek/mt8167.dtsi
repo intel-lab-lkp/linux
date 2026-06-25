@@ -95,17 +95,6 @@
 			};
 		};
 
-		pio: pinctrl@1000b000 {
-			compatible = "mediatek,mt8167-pinctrl";
-			reg = <0 0x1000b000 0 0x1000>;
-			mediatek,pctl-regmap = <&syscfg_pctl>;
-			gpio-controller;
-			#gpio-cells = <2>;
-			interrupt-controller;
-			#interrupt-cells = <2>;
-			interrupts = <GIC_SPI 134 IRQ_TYPE_LEVEL_HIGH>;
-		};
-
 		apmixedsys: apmixedsys@10018000 {
 			compatible = "mediatek,mt8167-apmixedsys", "syscon";
 			reg = <0 0x10018000 0 0x710>;
@@ -177,4 +166,8 @@
 			power-domains = <&spm MT8167_POWER_DOMAIN_VDEC>;
 		};
 	};
+};
+
+&pio {
+	compatible = "mediatek,mt8167-pinctrl";
 };
