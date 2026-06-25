@@ -318,7 +318,14 @@ vhost_transport_send_pkt(struct sk_buff *skb, struct net *net)
 		atomic_inc(&vsock->queued_replies);
 
 	virtio_vsock_skb_queue_tail(&vsock->send_pkt_queue, skb);
-	vhost_vq_work_queue(&vsock->vqs[VSOCK_VQ_RX], &vsock->send_pkt_work);
+
+	/* Skip the kick once the backend is gone (stop/RESET_OWNER); the skb
+	 * stays queued and vhost_vsock_start() drains it. Pairs with the
+	 * synchronize_rcu() in vhost_vsock_reset_owner().
+	 */
+	if (data_race(vhost_vq_get_backend(&vsock->vqs[VSOCK_VQ_RX])))
+		vhost_vq_work_queue(&vsock->vqs[VSOCK_VQ_RX],
+				    &vsock->send_pkt_work);
 
 	rcu_read_unlock();
 	return len;
@@ -346,7 +353,15 @@ vhost_transport_cancel_pkt(struct vsock_sock *vsk)
 		int new_cnt;
 
 		new_cnt = atomic_sub_return(cnt, &vsock->queued_replies);
-		if (new_cnt + cnt >= tx_vq->num && new_cnt < tx_vq->num)
+
+		/* Skip the kick once the backend is gone (stop/RESET_OWNER):
+		 * vhost_poll_queue() would touch the worker which is being freed
+		 * by teardown, e.g. on RESET_OWNER.  Pairs with the
+		 * synchronize_rcu() in vhost_vsock_reset_owner().  The TX VQ is
+		 * re-kicked by vhost_vsock_start().
+		 */
+		if (data_race(vhost_vq_get_backend(tx_vq)) &&
+		    new_cnt + cnt >= tx_vq->num && new_cnt < tx_vq->num)
 			vhost_poll_queue(&tx_vq->poll);
 	}
 
@@ -903,6 +918,36 @@ err:
 	return -EFAULT;
 }
 
+static int vhost_vsock_reset_owner(struct vhost_vsock *vsock)
+{
+	struct vhost_iotlb *umem;
+	long err;
+
+	mutex_lock(&vsock->dev.mutex);
+	err = vhost_dev_check_owner(&vsock->dev);
+	if (err)
+		goto done;
+	umem = vhost_dev_reset_owner_prepare();
+	if (!umem) {
+		err = -ENOMEM;
+		goto done;
+	}
+	vhost_vsock_drop_backends(vsock);
+
+	/* Let in-flight send_pkt() callers stop touching the worker before the
+	 * flush + free below. Pairs with the backend check in
+	 * vhost_transport_send_pkt().
+	 */
+	synchronize_rcu();
+
+	vhost_vsock_flush(vsock);
+	vhost_dev_stop(&vsock->dev);
+	vhost_dev_reset_owner(&vsock->dev, umem);
+done:
+	mutex_unlock(&vsock->dev.mutex);
+	return err;
+}
+
 static long vhost_vsock_dev_ioctl(struct file *f, unsigned int ioctl,
 				  unsigned long arg)
 {
@@ -946,6 +991,8 @@ static long vhost_vsock_dev_ioctl(struct file *f, unsigned int ioctl,
 			return -EOPNOTSUPP;
 		vhost_set_backend_features(&vsock->dev, features);
 		return 0;
+	case VHOST_RESET_OWNER:
+		return vhost_vsock_reset_owner(vsock);
 	default:
 		mutex_lock(&vsock->dev.mutex);
 		r = vhost_dev_ioctl(&vsock->dev, ioctl, argp);
