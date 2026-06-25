@@ -138,7 +138,10 @@ int shmem_sg_alloc_table(struct drm_i915_private *i915, struct sg_table *st,
 {
 	unsigned int pages_left; /* restricted by sg_alloc_table */
 	unsigned long next_pfn = 0; /* suppress gcc warning */
+	unsigned long folio_start = 0;
 	unsigned long pages_done = 0;
+	unsigned long folio_end = 0;
+	struct folio *folio = NULL;
 	struct scatterlist *sg;
 	gfp_t noreclaim;
 	int ret;
@@ -166,37 +169,53 @@ int shmem_sg_alloc_table(struct drm_i915_private *i915, struct sg_table *st,
 	sg = st->sgl;
 
 	while (pages_left) {
+		unsigned long folio_pages_done = 0;
 		unsigned long nr_pages;
 		gfp_t gfp = noreclaim;
-		struct folio *folio;
 
-		folio = shmem_shrink_get_folio(mapping, pages_done, gfp,
-					       pages_left, i915);
-		if (IS_ERR(folio)) {
-			ret = PTR_ERR(folio);
+		/* Grab the next folio if we exhausted the current one. */
+		if (!pages_done || pages_done > folio_end) {
+			folio = shmem_shrink_get_folio(mapping, pages_done, gfp,
+						       pages_left, i915);
+			if (IS_ERR(folio)) {
+				ret = PTR_ERR(folio);
+				goto err_sg;
+			}
+
+			folio_start = folio_pgoff(folio);
+			folio_end = folio_start + folio_nr_pages(folio) - 1;
+		}
+
+		folio_pages_done = pages_done - folio_start;
+		if (WARN_ON_ONCE(folio_pages_done >= folio_nr_pages(folio))) {
+			ret = -EINVAL;
+			folio_put(folio);
 			goto err_sg;
 		}
 
 		nr_pages = min_array(((unsigned long[]){
-					     folio_nr_pages(folio),
+					     folio_nr_pages(folio) - folio_pages_done,
 					     pages_left,
-					     max_segment / PAGE_SIZE,
+					     max_t(unsigned int, 1, max_segment / PAGE_SIZE),
 				     }), 3);
 		if (!st->nents) {
 			st->nents++;
-			sg_set_folio(sg, folio, nr_pages * PAGE_SIZE, 0);
+			sg_set_page(sg, folio_page(folio, 0), nr_pages * PAGE_SIZE, 0);
 		} else if (sg->length >= max_segment ||
-			   folio_pfn(folio) != next_pfn) {
+			   folio_pfn(folio) + folio_pages_done != next_pfn) {
 			sg = sg_next(sg);
 			st->nents++;
-			sg_set_folio(sg, folio, nr_pages * PAGE_SIZE, 0);
+			sg_set_page(sg, folio_page(folio, folio_pages_done),
+				    nr_pages * PAGE_SIZE, 0);
 		} else {
 			nr_pages = min_t(unsigned long, nr_pages,
-					 (max_segment - sg->length) / PAGE_SIZE);
+						max_t(unsigned long, 1,
+						      (max_segment - sg->length) / PAGE_SIZE));
 
 			sg->length += nr_pages * PAGE_SIZE;
 		}
-		next_pfn = folio_pfn(folio) + nr_pages;
+
+		next_pfn = folio_pfn(folio) + folio_pages_done + nr_pages;
 		pages_done += nr_pages;
 		pages_left -= nr_pages;
 
