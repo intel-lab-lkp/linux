@@ -1302,6 +1302,7 @@ static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector,
 	struct dc *dc = aconnector->dc_link->ctx->dc;
 	bool ret = false;
 	bool debounce_required = false;
+	unsigned int debounce_delay_ms = 0;
 
 	if (adev->dm.disable_hpd_irq)
 		return;
@@ -1325,10 +1326,16 @@ static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector,
 		drm_err(adev_to_drm(adev), "KMS: Failed to detect connector\n");
 
 	/*
-	 * Check for HDMI disconnect with debounce enabled.
+	 * Check for an HDMI or DisplayPort SST disconnect with debounce
+	 * enabled. eDP and MST are intentionally excluded.
 	 */
-	debounce_required = (aconnector->hdmi_hpd_debounce_delay_ms > 0 &&
-			      dc_is_hdmi_signal(aconnector->dc_link->connector_signal) &&
+	if (dc_is_hdmi_signal(aconnector->dc_link->connector_signal))
+		debounce_delay_ms = aconnector->hdmi_hpd_debounce_delay_ms;
+	else if (aconnector->dc_link->connector_signal == SIGNAL_TYPE_DISPLAY_PORT &&
+		 aconnector->dc_link->type != dc_connection_mst_branch)
+		debounce_delay_ms = aconnector->dp_hpd_debounce_delay_ms;
+
+	debounce_required = (debounce_delay_ms > 0 &&
 			      new_connection_type == dc_connection_none &&
 			      aconnector->dc_link->local_sink != NULL);
 
@@ -1344,12 +1351,12 @@ static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector,
 			drm_kms_helper_connector_hotplug_event(connector);
 	} else if (debounce_required) {
 		/*
-		 * HDMI disconnect detected - schedule delayed work instead of
+		 * Disconnect detected - schedule delayed work instead of
 		 * processing immediately. This allows us to coalesce spurious
-		 * HDMI signals from physical unplugs.
+		 * HDMI/DP HPD signals from physical unplugs.
 		 */
-		drm_dbg_kms(dev, "HDMI HPD: Disconnect detected, scheduling debounce work (%u ms)\n",
-			    aconnector->hdmi_hpd_debounce_delay_ms);
+		drm_dbg_kms(dev, "HPD: Disconnect detected, scheduling debounce work (%u ms)\n",
+			    debounce_delay_ms);
 
 		/* Cache the current sink for later comparison */
 		if (aconnector->hdmi_prev_sink)
@@ -1361,8 +1368,8 @@ static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector,
 		/* Schedule delayed detection. */
 		if (mod_delayed_work(system_percpu_wq,
 				 &aconnector->hdmi_hpd_debounce_work,
-				 msecs_to_jiffies(aconnector->hdmi_hpd_debounce_delay_ms)))
-			drm_dbg_kms(dev, "HDMI HPD: Re-scheduled debounce work\n");
+				 msecs_to_jiffies(debounce_delay_ms)))
+			drm_dbg_kms(dev, "HPD: Re-scheduled debounce work\n");
 
 	} else {
 

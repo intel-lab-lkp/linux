@@ -64,6 +64,11 @@ enum amd_vsdb_panel_type {
  * Maximum HDMI HPD debounce delay in milliseconds
  */
 #define AMDGPU_DM_MAX_HDMI_HPD_DEBOUNCE_MS 5000
+
+/*
+ * Maximum DisplayPort SST HPD debounce delay in milliseconds
+ */
+#define AMDGPU_DM_MAX_DP_HPD_DEBOUNCE_MS 5000
 /*
 #include "include/amdgpu_dal_power_if.h"
 #include "amdgpu_dm_irq.h"
@@ -875,6 +880,7 @@ struct amdgpu_dm_connector {
 
 	/* HDMI HPD debounce support */
 	unsigned int hdmi_hpd_debounce_delay_ms;
+	unsigned int dp_hpd_debounce_delay_ms;
 	struct delayed_work hdmi_hpd_debounce_work;
 	struct dc_sink *hdmi_prev_sink;
 

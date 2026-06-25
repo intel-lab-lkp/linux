@@ -1773,8 +1773,8 @@ static void amdgpu_dm_connector_destroy(struct drm_connector *connector)
 	if (aconnector->mst_mgr.dev)
 		drm_dp_mst_topology_mgr_destroy(&aconnector->mst_mgr);
 
-	/* Cancel and flush any pending HDMI HPD debounce work */
-	if (aconnector->hdmi_hpd_debounce_delay_ms) {
+	/* Cancel and flush any pending HPD debounce work */
+	if (aconnector->hdmi_hpd_debounce_delay_ms || aconnector->dp_hpd_debounce_delay_ms) {
 		cancel_delayed_work_sync(&aconnector->hdmi_hpd_debounce_work);
 		if (aconnector->hdmi_prev_sink) {
 			dc_sink_release(aconnector->hdmi_prev_sink);
@@ -2903,16 +2903,18 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 	mutex_init(&aconnector->handle_mst_msg_ready);
 
 	/*
-	 * If HDMI HPD debounce delay is set, use the minimum between selected
-	 * value and AMDGPU_DM_MAX_HDMI_HPD_DEBOUNCE_MS
+	 * If an HPD debounce delay is set, clamp each signal's delay to its
+	 * maximum. The debounce work and cached sink are shared by both the
+	 * HDMI and DisplayPort SST paths.
 	 */
-	if (amdgpu_hdmi_hpd_debounce_delay_ms) {
-		aconnector->hdmi_hpd_debounce_delay_ms = min(amdgpu_hdmi_hpd_debounce_delay_ms,
-							     AMDGPU_DM_MAX_HDMI_HPD_DEBOUNCE_MS);
+	aconnector->hdmi_hpd_debounce_delay_ms = amdgpu_hdmi_hpd_debounce_delay_ms ?
+		min(amdgpu_hdmi_hpd_debounce_delay_ms, AMDGPU_DM_MAX_HDMI_HPD_DEBOUNCE_MS) : 0;
+	aconnector->dp_hpd_debounce_delay_ms = amdgpu_dp_hpd_debounce_delay_ms ?
+		min(amdgpu_dp_hpd_debounce_delay_ms, AMDGPU_DM_MAX_DP_HPD_DEBOUNCE_MS) : 0;
+
+	if (aconnector->hdmi_hpd_debounce_delay_ms || aconnector->dp_hpd_debounce_delay_ms) {
 		INIT_DELAYED_WORK(&aconnector->hdmi_hpd_debounce_work, amdgpu_dm_hdmi_hpd_debounce_work);
 		aconnector->hdmi_prev_sink = NULL;
-	} else {
-		aconnector->hdmi_hpd_debounce_delay_ms = 0;
 	}
 
 	dm->hdmi_frl_status_polling_delay_ms = 200;

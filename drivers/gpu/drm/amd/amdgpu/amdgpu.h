@@ -272,6 +272,7 @@ extern int amdgpu_user_queue;
 extern int amdgpu_ptl;
 
 extern uint amdgpu_hdmi_hpd_debounce_delay_ms;
+extern uint amdgpu_dp_hpd_debounce_delay_ms;
 
 #define AMDGPU_SG_THRESHOLD			(256*1024*1024)
 #define AMDGPU_WAIT_IDLE_TIMEOUT_IN_MS	        3000
