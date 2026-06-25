@@ -744,14 +744,20 @@ static void ath9k_adjust_pdadc_values(struct ath_hw *ah,
 	 */
 	if (AR_SREV_9280_20_OR_LATER(ah)) {
 		if (AR5416_PWR_TABLE_OFFSET_DB != pwr_table_offset) {
-			/* shift the table to start at the new offset */
-			for (k = 0; k < (u16)NUM_PDADC(diff); k++ ) {
-				pdadcValues[k] = pdadcValues[k + diff];
-			}
+			if (diff < 0 || diff >= AR5416_NUM_PDADC_VALUES) {
+				ath_warn(ath9k_hw_common(ah),
+					 "ignoring invalid PDADC offset %d\n",
+					 diff);
+			} else {
+				/* shift the table to start at the new offset */
+				for (k = 0; k < (u16)NUM_PDADC(diff); k++ ) {
+					pdadcValues[k] = pdadcValues[k + diff];
+				}
 
-			/* fill the back of the table */
-			for (k = (u16)NUM_PDADC(diff); k < NUM_PDADC(0); k++) {
-				pdadcValues[k] = pdadcValues[NUM_PDADC(diff)];
+				/* fill the back of the table */
+				for (k = (u16)NUM_PDADC(diff); k < NUM_PDADC(0); k++) {
+					pdadcValues[k] = pdadcValues[NUM_PDADC(diff)];
+				}
 			}
 		}
 	}
@@ -769,7 +775,7 @@ static void ath9k_hw_set_def_power_cal_table(struct ath_hw *ah,
 	struct cal_data_per_freq *pRawDataset;
 	u8 *pCalBChans = NULL;
 	u16 pdGainOverlap_t2;
-	static u8 pdadcValues[AR5416_NUM_PDADC_VALUES];
+	u8 pdadcValues[AR5416_NUM_PDADC_VALUES];
 	u16 gainBoundaries[AR5416_PD_GAINS_IN_MASK];
 	u16 numPiers, i, j;
 	int16_t diff = 0;

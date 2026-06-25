@@ -463,13 +463,19 @@ static void ath9k_hw_set_ar9287_power_cal_table(struct ath_hw *ah,
 					     (int32_t)AR9287_PWR_TABLE_OFFSET_DB);
 				diff *= 2;
 
-				for (j = 0; j < ((u16)AR5416_NUM_PDADC_VALUES-diff); j++)
-					pdadcValues[j] = pdadcValues[j+diff];
+				if (diff >= 0 && diff < AR5416_NUM_PDADC_VALUES) {
+					for (j = 0; j < ((u16)AR5416_NUM_PDADC_VALUES - diff); j++)
+						pdadcValues[j] = pdadcValues[j + diff];
 
-				for (j = (u16)(AR5416_NUM_PDADC_VALUES-diff);
-				     j < AR5416_NUM_PDADC_VALUES; j++)
-					pdadcValues[j] =
-					  pdadcValues[AR5416_NUM_PDADC_VALUES-diff];
+					for (j = (u16)(AR5416_NUM_PDADC_VALUES - diff);
+					     j < AR5416_NUM_PDADC_VALUES; j++)
+						pdadcValues[j] =
+							pdadcValues[AR5416_NUM_PDADC_VALUES - diff];
+				} else {
+					ath_warn(ath9k_hw_common(ah),
+						 "ignoring invalid PDADC offset %d\n",
+						 diff);
+				}
 			}
 
 			if (!ath9k_hw_ar9287_get_eeprom(ah, EEP_OL_PWRCTRL)) {
