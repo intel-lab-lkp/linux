@@ -569,7 +569,7 @@ void __init txx9_ndfmc_init(unsigned long baseaddr,
 #if IS_ENABLED(CONFIG_LEDS_GPIO)
 static DEFINE_SPINLOCK(txx9_iocled_lock);
 
-#define TXX9_IOCLED_MAXLEDS 8
+#define TXX9_IOCLED_MAXLEDS 3	/* rbtx4927 */
 
 struct txx9_iocled_data {
 	struct gpio_chip chip;
