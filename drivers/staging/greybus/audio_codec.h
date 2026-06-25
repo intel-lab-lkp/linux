@@ -70,7 +70,15 @@ struct gbaudio_codec_info {
 	struct list_head module_list;
 	/* to maintain runtime stream params for each DAI */
 	struct list_head dai_list;
+	/*
+	 * held during DAI stream ops and module_list/dai_list
+	 * access (gbaudio_module_update, gbcodec DAI ops)
+	 */
 	struct mutex lock;
+	/*
+	 * held during module register/unregister including
+	 * DAPM controls, widgets and routes
+	 */
 	struct mutex register_mutex;
 };
 
