@@ -588,14 +588,15 @@ static inline void panthor_ ## __name ## _irq_resume(struct panthor_irq *pirq)		
 												\
 static int panthor_request_ ## __name ## _irq(struct panthor_device *ptdev,			\
 					      struct panthor_irq *pirq,				\
-					      int irq, u32 mask, void __iomem *iomem)		\
+					      int irq, void __iomem *iomem)			\
 {												\
 	pirq->ptdev = ptdev;									\
 	pirq->irq = irq;									\
-	pirq->mask = mask;									\
+	pirq->mask = 0;										\
 	pirq->iomem = iomem;									\
 	spin_lock_init(&pirq->mask_lock);							\
-	panthor_ ## __name ## _irq_resume(pirq);						\
+	atomic_set(&pirq->state, PANTHOR_IRQ_STATE_SUSPENDED);					\
+	gpu_write(pirq->iomem, INT_MASK, 0);							\
 												\
 	return devm_request_threaded_irq(ptdev->base.dev, irq,					\
 					 panthor_ ## __name ## _irq_raw_handler,		\
