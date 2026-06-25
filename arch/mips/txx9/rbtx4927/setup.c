@@ -49,6 +49,7 @@
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/gpio.h>
+#include <linux/gpio/machine.h>
 #include <linux/leds.h>
 #include <asm/io.h>
 #include <asm/reboot.h>
@@ -157,11 +158,20 @@ static inline void tx4927_pci_setup(void) {}
 static inline void tx4937_pci_setup(void) {}
 #endif /* CONFIG_PCI */
 
+/* TX4927-SIO DTR on (PIO[15]) */
+GPIO_LOOKUP_SINGLE(sio_gpio_table, NULL, "TXx9", 15, "sio-dtr",
+		   GPIO_ACTIVE_HIGH);
+
 static void __init rbtx4927_gpio_init(void)
 {
-	/* TX4927-SIO DTR on (PIO[15]) */
-	gpio_request(15, "sio-dtr");
-	gpio_direction_output(15, 1);
+	struct gpio_desc *d;
+
+	gpiod_add_lookup_table(&sio_gpio_table);
+	d = gpiod_get(NULL, "sio-dtr", GPIOD_OUT_HIGH);
+	if (IS_ERR(d))
+		pr_err("Unable to get sio-dtr GPIO descriptor\n");
+	else
+		gpiod_put(d);
 
 	tx4927_sio_init(0, 0);
 }
