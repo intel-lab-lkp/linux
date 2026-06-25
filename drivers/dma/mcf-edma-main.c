@@ -66,7 +66,7 @@ static irqreturn_t mcf_edma_err_handler(int irq, void *dev_id)
 static int mcf_edma_irq_init(struct platform_device *pdev,
 				struct fsl_edma_engine *mcf_edma)
 {
-	int ret = 0, i;
+	int ret, i, chan = 0;
 	struct resource *res;
 
 	res = platform_get_resource_byname(pdev,
@@ -74,67 +74,52 @@ static int mcf_edma_irq_init(struct platform_device *pdev,
 	if (!res)
 		return -1;
 
-	for (ret = 0, i = res->start; i <= res->end; ++i)
-		ret |= request_irq(i, mcf_edma_tx_handler, 0, "eDMA", mcf_edma);
-	if (ret)
-		return ret;
+	for (i = res->start; i <= res->end; ++i) {
+		char *irq_name;
+
+		irq_name = devm_kasprintf(&pdev->dev, GFP_KERNEL, "eDMA-%d", chan++);
+		if (!irq_name)
+			return -ENOMEM;
+		ret = devm_request_irq(&pdev->dev, i, mcf_edma_tx_handler, 0,
+				       irq_name, mcf_edma);
+		if (ret)
+			return ret;
+	}
 
 	res = platform_get_resource_byname(pdev,
 			IORESOURCE_IRQ, "edma-tx-16-55");
 	if (!res)
 		return -1;
 
-	for (ret = 0, i = res->start; i <= res->end; ++i)
-		ret |= request_irq(i, mcf_edma_tx_handler, 0, "eDMA", mcf_edma);
-	if (ret)
-		return ret;
+	for (i = res->start; i <= res->end; ++i) {
+		char *irq_name;
+
+		irq_name = devm_kasprintf(&pdev->dev, GFP_KERNEL, "eDMA-%d", chan++);
+		if (!irq_name)
+			return -ENOMEM;
+		ret = devm_request_irq(&pdev->dev, i, mcf_edma_tx_handler, 0,
+				       irq_name, mcf_edma);
+		if (ret)
+			return ret;
+	}
 
 	ret = platform_get_irq_byname(pdev, "edma-tx-56-63");
 	if (ret != -ENXIO) {
-		ret = request_irq(ret, mcf_edma_tx_handler,
-				  0, "eDMA", mcf_edma);
+		ret = devm_request_irq(&pdev->dev, ret, mcf_edma_tx_handler, 0,
+				       "eDMA-tx-56-63", mcf_edma);
 		if (ret)
 			return ret;
 	}
 
 	ret = platform_get_irq_byname(pdev, "edma-err");
 	if (ret != -ENXIO) {
-		ret = request_irq(ret, mcf_edma_err_handler,
-				  0, "eDMA", mcf_edma);
+		ret = devm_request_irq(&pdev->dev, ret, mcf_edma_err_handler, 0,
+				       "eDMA-err", mcf_edma);
 		if (ret)
 			return ret;
 	}
 
 	return 0;
-}
-
-static void mcf_edma_irq_free(struct platform_device *pdev,
-				struct fsl_edma_engine *mcf_edma)
-{
-	int irq;
-	struct resource *res;
-
-	res = platform_get_resource_byname(pdev,
-			IORESOURCE_IRQ, "edma-tx-00-15");
-	if (res) {
-		for (irq = res->start; irq <= res->end; irq++)
-			free_irq(irq, mcf_edma);
-	}
-
-	res = platform_get_resource_byname(pdev,
-			IORESOURCE_IRQ, "edma-tx-16-55");
-	if (res) {
-		for (irq = res->start; irq <= res->end; irq++)
-			free_irq(irq, mcf_edma);
-	}
-
-	irq = platform_get_irq_byname(pdev, "edma-tx-56-63");
-	if (irq != -ENXIO)
-		free_irq(irq, mcf_edma);
-
-	irq = platform_get_irq_byname(pdev, "edma-err");
-	if (irq != -ENXIO)
-		free_irq(irq, mcf_edma);
 }
 
 static struct fsl_edma_drvdata mcf_data = {
@@ -249,8 +234,21 @@ static int mcf_edma_probe(struct platform_device *pdev)
 static void mcf_edma_remove(struct platform_device *pdev)
 {
 	struct fsl_edma_engine *mcf_edma = platform_get_drvdata(pdev);
+	struct edma_regs *regs = &mcf_edma->regs;
+	int i;
 
-	mcf_edma_irq_free(pdev, mcf_edma);
+	/*
+	 * The per-channel interrupts are requested with devm and are only
+	 * freed after this function returns.  Quiesce the controller first so
+	 * that no interrupt can fire while the virtual channels are torn down:
+	 * disable every channel's request and acknowledge any pending
+	 * interrupt.
+	 */
+	for (i = 0; i < mcf_edma->n_chans; i++)
+		fsl_edma_disable_request(&mcf_edma->chans[i]);
+	iowrite32(~0, regs->inth);
+	iowrite32(~0, regs->intl);
+
 	fsl_edma_cleanup_vchan(&mcf_edma->dma_dev);
 	dma_async_device_unregister(&mcf_edma->dma_dev);
 }
