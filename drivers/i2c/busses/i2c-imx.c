@@ -775,8 +775,10 @@ static void i2c_imx_enable_bus_idle(struct imx_i2c_struct *i2c_imx)
 static void i2c_imx_slave_event(struct imx_i2c_struct *i2c_imx,
 				enum i2c_slave_event event, u8 *val)
 {
-	i2c_slave_event(i2c_imx->slave, event, val);
-	i2c_imx->last_slave_event = event;
+	if (i2c_imx->slave) {
+		i2c_slave_event(i2c_imx->slave, event, val);
+		i2c_imx->last_slave_event = event;
+	}
 }
 
 static void i2c_imx_slave_finish_op(struct imx_i2c_struct *i2c_imx)
@@ -936,6 +938,7 @@ static int i2c_imx_reg_slave(struct i2c_client *client)
 	/* Resume */
 	ret = pm_runtime_resume_and_get(i2c_imx->adapter.dev.parent);
 	if (ret < 0) {
+		i2c_imx->slave = NULL;
 		dev_err(&i2c_imx->adapter.dev, "failed to resume i2c controller");
 		return ret;
 	}
