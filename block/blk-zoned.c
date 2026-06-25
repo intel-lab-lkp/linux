@@ -1918,8 +1918,10 @@ static int disk_alloc_zone_resources(struct gendisk *disk,
 	for (i = 0; i < disk_zone_wplugs_hash_size(disk); i++)
 		INIT_HLIST_HEAD(&disk->zone_wplugs_hash[i]);
 
-	disk->zone_wplugs_pool = mempool_create_kmalloc_pool(pool_size,
-						sizeof(struct blk_zone_wplug));
+	disk->zone_wplugs_pool = mempool_create_kmalloc_resizable_pool(
+					pool_size,
+					BLK_ZONE_WPLUG_DEFAULT_POOL_SIZE,
+					sizeof(struct blk_zone_wplug));
 	if (!disk->zone_wplugs_pool)
 		goto free_hash;
 

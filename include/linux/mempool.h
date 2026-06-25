@@ -18,6 +18,7 @@ typedef void (mempool_free_t)(void *element, void *pool_data);
 typedef struct mempool {
 	spinlock_t lock;
 	int min_nr;		/* nr of elements at *elements */
+	int max_nr;		/* max nr of elements at *elements */
 	int curr_nr;		/* Current nr of elements at *elements */
 	void **elements;
 
@@ -38,7 +39,7 @@ static inline bool mempool_is_saturated(struct mempool *pool)
 }
 
 void mempool_exit(struct mempool *pool);
-int mempool_init_node(struct mempool *pool, int min_nr,
+int mempool_init_node(struct mempool *pool, int min_nr, int max_nr,
 		mempool_alloc_t *alloc_fn, mempool_free_t *free_fn,
 		void *pool_data, gfp_t gfp_mask, int node_id);
 int mempool_init_noprof(struct mempool *pool, int min_nr,
@@ -49,15 +50,15 @@ int mempool_init_noprof(struct mempool *pool, int min_nr,
 
 struct mempool *mempool_create(int min_nr, mempool_alloc_t *alloc_fn,
 		mempool_free_t *free_fn, void *pool_data);
-struct mempool *mempool_create_node_noprof(int min_nr,
+struct mempool *mempool_create_node_noprof(int min_nr, int max_nr,
 		mempool_alloc_t *alloc_fn, mempool_free_t *free_fn,
 		void *pool_data, gfp_t gfp_mask, int nid);
 #define mempool_create_node(...)					\
 	alloc_hooks(mempool_create_node_noprof(__VA_ARGS__))
 
-#define mempool_create(_min_nr, _alloc_fn, _free_fn, _pool_data)	\
-	mempool_create_node(_min_nr, _alloc_fn, _free_fn, _pool_data,	\
-			    GFP_KERNEL, NUMA_NO_NODE)
+#define mempool_create(_min_nr, _alloc_fn, _free_fn, _data)	\
+	mempool_create_node(_min_nr, (_min_nr)*2, _alloc_fn, _free_fn,	\
+			    _data, GFP_KERNEL, NUMA_NO_NODE)
 
 int mempool_resize(struct mempool *pool, int new_min_nr);
 void mempool_destroy(struct mempool *pool);
@@ -101,6 +102,13 @@ void mempool_kfree(void *element, void *pool_data);
 #define mempool_create_kmalloc_pool(_min_nr, _size)			\
 	mempool_create((_min_nr), mempool_kmalloc, mempool_kfree,	\
 		       (void *)(unsigned long)(_size))
+
+#define mempool_init_kmalloc_resizable_pool(_pool, _min_nr, _max_nr, _size)		\
+	mempool_init_node(_pool, _min_nr, _max_nr, mempool_kmalloc, mempool_kfree,	\
+		     (void *)(unsigned long)(_size), GFP_KERNEL, NUMA_NO_NODE)
+#define mempool_create_kmalloc_resizable_pool(_min_nr, _max_nr, _size)			\
+	mempool_create_node(_min_nr, _max_nr, mempool_kmalloc, mempool_kfree,		\
+		       (void *)(unsigned long)(_size), GFP_KERNEL, NUMA_NO_NODE)
 
 /*
  * A mempool_alloc_t and mempool_free_t for a simple page allocator that

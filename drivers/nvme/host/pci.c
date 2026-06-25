@@ -3355,7 +3355,7 @@ static int nvme_pci_alloc_iod_mempool(struct nvme_dev *dev)
 {
 	size_t alloc_size = sizeof(struct nvme_dma_vec) * NVME_MAX_SEGS;
 
-	dev->dmavec_mempool = mempool_create_node(1,
+	dev->dmavec_mempool = mempool_create_node(1, 2,
 			mempool_kmalloc, mempool_kfree,
 			(void *)alloc_size, GFP_KERNEL,
 			dev_to_node(dev->dev));
