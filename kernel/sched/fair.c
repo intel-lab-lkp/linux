@@ -10626,54 +10626,6 @@ enum llc_mig {
 };
 
 /*
- * Check if task can be moved from the source LLC to the
- * destination LLC without breaking cache aware preferrence.
- * src_cpu and dst_cpu are arbitrary CPUs within the source
- * and destination LLCs, respectively.
- */
-static enum llc_mig can_migrate_llc(int src_cpu, int dst_cpu,
-				    unsigned long tsk_util,
-				    bool to_pref)
-{
-	unsigned long src_util, dst_util, src_cap, dst_cap;
-
-	if (!get_llc_stats(src_cpu, &src_util, &src_cap) ||
-	    !get_llc_stats(dst_cpu, &dst_util, &dst_cap))
-		return mig_unrestricted;
-
-	src_util = src_util < tsk_util ? 0 : src_util - tsk_util;
-	dst_util = dst_util + tsk_util;
-
-	if (!fits_llc_capacity(dst_util, dst_cap) &&
-	    !fits_llc_capacity(src_util, src_cap))
-		return mig_unrestricted;
-
-	if (to_pref) {
-		/*
-		 * Don't migrate if we will get preferred LLC too
-		 * heavily loaded and if the dest is much busier
-		 * than the src, in which case migration will
-		 * increase the imbalance too much.
-		 */
-		if (!fits_llc_capacity(dst_util, dst_cap) &&
-		    util_greater(dst_util, src_util))
-			return mig_forbid;
-	} else {
-		/*
-		 * Don't migrate if we will leave preferred LLC
-		 * too idle, or if this migration leads to the
-		 * non-preferred LLC falls within sysctl_aggr_imb percent
-		 * of preferred LLC, leading to migration again
-		 * back to preferred LLC.
-		 */
-		if (fits_llc_capacity(src_util, src_cap) ||
-		    !util_greater(src_util, dst_util))
-			return mig_forbid;
-	}
-	return mig_llc;
-}
-
-/*
  * Like get_llc_stats but for sched domain that above LLC level.
  * Based on get_llc_stats, we can accumulate utility and cap for
  * sched domain in the granularity of LLC.
@@ -10774,6 +10726,26 @@ static enum llc_mig can_migrate_node(int src_cpu, int dst_cpu,
 	return mig_unrestricted;
 }
 
+/* Decide if the migration improve the affinity */
+static bool if_to_prefer(int src_cpu, int dst_cpu, int pref_llc)
+{
+	int src_dist, dst_dist;
+	bool to_pref = false;
+
+	src_dist = llc_distance(llc_id(src_cpu), pref_llc);
+	dst_dist = llc_distance(llc_id(dst_cpu), pref_llc);
+
+	if (src_dist < 0 || dst_dist < 0)
+		return false;
+
+	if (src_dist > dst_dist)
+		to_pref = true;
+	else if (src_dist == dst_dist && llc_id(dst_cpu) == pref_llc)
+		to_pref = true;
+
+	return to_pref;
+}
+
 /*
  * Check if task p can migrate from source LLC to
  * destination LLC in terms of cache aware load balance.
@@ -10801,15 +10773,10 @@ static enum llc_mig can_migrate_llc_task(int src_cpu, int dst_cpu,
 		return mig_unrestricted;
 	}
 
-	if (cpus_share_cache(dst_cpu, cpu))
-		to_pref = true;
-	else if (cpus_share_cache(src_cpu, cpu))
-		to_pref = false;
-	else
-		return mig_unrestricted;
+	to_pref = if_to_prefer(src_cpu, dst_cpu, llc_id(cpu));
 
-	return can_migrate_llc(src_cpu, dst_cpu,
-			       task_util(p), to_pref);
+	return can_migrate_node(src_cpu, dst_cpu,
+			       p, to_pref);
 }
 
 /*
@@ -10823,33 +10790,35 @@ static enum llc_mig can_migrate_llc_task(int src_cpu, int dst_cpu,
 static inline bool
 alb_break_llc(struct lb_env *env)
 {
+	int pref_llc = -1;
+	bool to_pref = false;
+
 	if (!sched_cache_enabled())
 		return false;
 
 	if (cpus_share_cache(env->src_cpu, env->dst_cpu))
 		return false;
 	/*
-	 * All tasks prefer to stay on their current CPU.
-	 * Do not pull a task from its preferred CPU if:
-	 * 1. It is the only task running and does not exceed
-	 *    imbalance allowance; OR
-	 * 2. Migrating it away from its preferred LLC would violate
-	 *    the cache-aware scheduling policy.
+	 * We need the preferred LLC to decide whether we can perform migration.
+	 * Therefore, we need to obtain task_struct, which is only meaningful
+	 * in the case that only one task on the rq.
+	 * For cases with more than one task on the rq, we need to check
+	 * this in can_migrate_task().
 	 */
-	if (env->src_rq->nr_pref_llc_running &&
-	    env->src_rq->nr_pref_llc_running == env->src_rq->cfs.h_nr_runnable) {
-		unsigned long util = 0;
+	if (env->src_rq->nr_running == 1) {
 		struct task_struct *cur;
 
-		if (env->src_rq->nr_running <= 1)
-			return true;
-
 		cur = rcu_dereference_all(env->src_rq->curr);
-		if (cur && cur->sched_class == &fair_sched_class)
-			util = task_util(cur);
+		if (!cur || !cur->mm)
+			return false;
 
-		if (can_migrate_llc(env->src_cpu, env->dst_cpu,
-				    util, false) == mig_forbid)
+		if (cur->sched_class == &fair_sched_class)
+			pref_llc = llc_id(cur->mm->sc_stat.cpu);
+
+		to_pref = if_to_prefer(env->src_cpu, env->dst_cpu, pref_llc);
+
+		if (can_migrate_node(env->src_cpu, env->dst_cpu,
+				    cur, to_pref) == mig_forbid)
 			return true;
 	}
 
@@ -11001,14 +10970,11 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 
 	/*
 	 * Aggressive migration if:
-	 * 1) active balance
-	 * 2) destination numa is preferred
+	 * 1) destination numa is preferred
+	 * 2) active balance
 	 * 3) task is cache cold, or
 	 * 4) too many balance attempts have failed.
 	 */
-	if (env->flags & LBF_ACTIVE_LB)
-		return 1;
-
 	degrades = migrate_degrades_locality(p, env);
 	if (!degrades) {
 		/*
@@ -11033,6 +10999,9 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 	} else {
 		hot = degrades > 0;
 	}
+
+	if (env->flags & LBF_ACTIVE_LB)
+		return 1;
 
 	if (!hot || env->sd->nr_balance_failed > env->sd->cache_nice_tries) {
 		if (hot)
