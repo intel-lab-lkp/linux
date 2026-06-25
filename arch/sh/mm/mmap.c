@@ -170,9 +170,11 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
  */
 int valid_phys_addr_range(phys_addr_t addr, size_t count)
 {
+	phys_addr_t end = __pa(high_memory);
+
 	if (addr < __MEMORY_START)
 		return 0;
-	if (addr + count > __pa(high_memory))
+	if (addr > end || count > end - addr)
 		return 0;
 
 	return 1;

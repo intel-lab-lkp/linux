@@ -150,9 +150,11 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
  */
 int valid_phys_addr_range(phys_addr_t addr, size_t size)
 {
+	phys_addr_t end = __pa(high_memory - 1) + 1;
+
 	if (addr < PHYS_OFFSET)
 		return 0;
-	if (addr + size > __pa(high_memory - 1) + 1)
+	if (addr > end || size > end - addr)
 		return 0;
 
 	return 1;
@@ -163,5 +165,8 @@ int valid_phys_addr_range(phys_addr_t addr, size_t size)
  */
 int valid_mmap_phys_addr_range(unsigned long pfn, size_t size)
 {
-	return (pfn + (size >> PAGE_SHIFT)) <= (1 + (PHYS_MASK >> PAGE_SHIFT));
+	unsigned long max_pfn = 1 + (PHYS_MASK >> PAGE_SHIFT);
+	unsigned long pages = size >> PAGE_SHIFT;
+
+	return pfn <= max_pfn && pages <= max_pfn - pfn;
 }
