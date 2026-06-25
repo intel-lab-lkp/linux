@@ -137,7 +137,9 @@ static int twa_initconnection(TW_Device_Extension *tw_dev, int message_credits,
 			      unsigned short *fw_on_ctlr_branch,
 			      unsigned short *fw_on_ctlr_build,
 			      u32 *init_connect_result);
-static void twa_load_sgl(TW_Device_Extension *tw_dev, TW_Command_Full *full_command_packet, int request_id, dma_addr_t dma_handle, int length);
+static int twa_load_sgl(TW_Device_Extension *tw_dev,
+			TW_Command_Full *full_command_packet, int request_id,
+			dma_addr_t dma_handle, int length);
 static int twa_poll_response(TW_Device_Extension *tw_dev, int request_id, int seconds);
 static int twa_poll_status_gone(TW_Device_Extension *tw_dev, u32 flag, int seconds);
 static int twa_post_command_packet(TW_Device_Extension *tw_dev, int request_id, char internal);
@@ -686,6 +688,8 @@ static long twa_chrdev_ioctl(struct file *file, unsigned int cmd, unsigned long 
 	}
 
 	tw_ioctl = (TW_Ioctl_Buf_Apache *)cpu_addr;
+	memset(tw_ioctl, 0, sizeof(TW_Ioctl_Buf_Apache) +
+	       data_buffer_length_adjusted);
 
 	/* Now copy down the entire ioctl */
 	if (copy_from_user(tw_ioctl, argp, sizeof(TW_Ioctl_Buf_Apache) + driver_command.buffer_length))
@@ -706,7 +710,14 @@ static long twa_chrdev_ioctl(struct file *file, unsigned int cmd, unsigned long 
 		full_command_packet = &tw_ioctl->firmware_command;
 
 		/* Load request id and sglist for both command types */
-		twa_load_sgl(tw_dev, full_command_packet, request_id, dma_handle, data_buffer_length_adjusted);
+		retval = twa_load_sgl(tw_dev, full_command_packet, request_id,
+				      dma_handle, data_buffer_length_adjusted);
+		if (retval) {
+			tw_dev->chrdev_request_id = TW_IOCTL_CHRDEV_FREE;
+			twa_free_request_id(tw_dev, request_id);
+			spin_unlock_irqrestore(tw_dev->host->host_lock, flags);
+			goto out3;
+		}
 
 		memcpy(tw_dev->command_packet_virt[request_id], &(tw_ioctl->firmware_command), sizeof(TW_Command_Full));
 
@@ -1377,11 +1388,14 @@ twa_interrupt_bail:
 } /* End twa_interrupt() */
 
 /* This function will load the request id and various sgls for ioctls */
-static void twa_load_sgl(TW_Device_Extension *tw_dev, TW_Command_Full *full_command_packet, int request_id, dma_addr_t dma_handle, int length)
+static int twa_load_sgl(TW_Device_Extension *tw_dev,
+			TW_Command_Full *full_command_packet, int request_id,
+			dma_addr_t dma_handle, int length)
 {
 	TW_Command *oldcommand;
 	TW_Command_Apache *newcommand;
 	TW_SG_Entry *sgl;
+	unsigned int sgl_offset, sgl_words, max_words;
 	unsigned int pae = 0;
 
 	if ((sizeof(long) < 8) && (sizeof(dma_addr_t) > 4))
@@ -1391,6 +1405,8 @@ static void twa_load_sgl(TW_Device_Extension *tw_dev, TW_Command_Full *full_comm
 		newcommand = &full_command_packet->command.newcommand;
 		newcommand->request_id__lunl =
 			TW_REQ_LUN_IN(TW_LUN_OUT(newcommand->request_id__lunl), request_id);
+		newcommand->sgl_offset = 16;
+		memset(newcommand->sg_list, 0, sizeof(newcommand->sg_list));
 		if (length) {
 			newcommand->sg_list[0].address = TW_CPU_TO_SGL(dma_handle + sizeof(TW_Ioctl_Buf_Apache));
 			newcommand->sg_list[0].length = cpu_to_le32(length);
@@ -1400,19 +1416,31 @@ static void twa_load_sgl(TW_Device_Extension *tw_dev, TW_Command_Full *full_comm
 	} else {
 		oldcommand = &full_command_packet->command.oldcommand;
 		oldcommand->request_id = request_id;
+		sgl_offset = TW_SGL_OUT(oldcommand->opcode__sgloffset);
+		if (!sgl_offset)
+			return length ? -EINVAL : 0;
 
-		if (TW_SGL_OUT(oldcommand->opcode__sgloffset)) {
-			/* Load the sg list */
-			if (tw_dev->tw_pci_dev->device == PCI_DEVICE_ID_3WARE_9690SA)
-				sgl = (TW_SG_Entry *)((u32 *)oldcommand+oldcommand->size - (sizeof(TW_SG_Entry)/4) + pae);
-			else
-				sgl = (TW_SG_Entry *)((u32 *)oldcommand+TW_SGL_OUT(oldcommand->opcode__sgloffset));
-			sgl->address = TW_CPU_TO_SGL(dma_handle + sizeof(TW_Ioctl_Buf_Apache));
-			sgl->length = cpu_to_le32(length);
+		sgl_words = sizeof(*sgl) / sizeof(u32);
+		max_words = sizeof(*oldcommand) / sizeof(u32);
 
-			oldcommand->size += pae;
+		if (tw_dev->tw_pci_dev->device == PCI_DEVICE_ID_3WARE_9690SA) {
+			if (oldcommand->size < sgl_words - pae)
+				return -EINVAL;
+			if (oldcommand->size - sgl_words + pae != sgl_offset)
+				return -EINVAL;
 		}
+
+		if (sgl_offset > max_words || sgl_words > max_words - sgl_offset)
+			return -EINVAL;
+
+		sgl = (TW_SG_Entry *)((u32 *)oldcommand + sgl_offset);
+		memset(sgl, 0, sizeof(*oldcommand) - sgl_offset * sizeof(u32));
+		sgl->address = TW_CPU_TO_SGL(dma_handle + sizeof(TW_Ioctl_Buf_Apache));
+		sgl->length = cpu_to_le32(length);
+		oldcommand->size = sgl_offset + sgl_words;
 	}
+
+	return 0;
 } /* End twa_load_sgl() */
 
 /* This function will poll for a response interrupt of a request */
