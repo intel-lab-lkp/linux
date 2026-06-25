@@ -16,8 +16,14 @@ use crate::{
     ffi::{c_char, c_ulong},
     prelude::*,
     str::CString,
-    sync::aref::{ARef, AlwaysRefCounted},
-    types::Opaque,
+    sync::aref::{
+        ARef,
+        RefCounted, //
+    },
+    types::{
+        AlwaysRefCounted,
+        Opaque, //
+    }, //
 };
 
 #[cfg(CONFIG_CPU_FREQ)]
@@ -1041,7 +1047,7 @@ unsafe impl Send for OPP {}
 unsafe impl Sync for OPP {}
 
 /// SAFETY: The type invariants guarantee that [`OPP`] is always refcounted.
-unsafe impl AlwaysRefCounted for OPP {
+unsafe impl RefCounted for OPP {
     #[inline]
     fn inc_ref(&self) {
         // SAFETY: The existence of a shared reference means that the refcount is nonzero.
@@ -1054,6 +1060,10 @@ unsafe impl AlwaysRefCounted for OPP {
         unsafe { bindings::dev_pm_opp_put(obj.cast().as_ptr()) }
     }
 }
+
+// SAFETY: We do not implement `Ownable`, thus it is okay to obtain an `ARef<OPP>` from an
+// `&OPP`.
+unsafe impl AlwaysRefCounted for OPP {}
 
 impl OPP {
     /// Creates an owned reference to a [`OPP`] from a valid pointer.
