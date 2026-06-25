@@ -625,8 +625,7 @@ static struct gpiod_lookup_table txx9_iocled_table = {
 	},
 };
 
-void __init txx9_iocled_init(unsigned long baseaddr,
-			     int basenum, unsigned int num, int lowactive,
+void __init txx9_iocled_init(unsigned long baseaddr, unsigned int num,
 			     const char *color, char **deftriggers)
 {
 	struct txx9_iocled_data *iocled;
@@ -652,14 +651,12 @@ void __init txx9_iocled_init(unsigned long baseaddr,
 	iocled->chip.direction_input = txx9_iocled_dir_in;
 	iocled->chip.direction_output = txx9_iocled_dir_out;
 	iocled->chip.label = "iocled";
-	iocled->chip.base = basenum;
+	iocled->chip.base = -1;
 	iocled->chip.ngpio = num;
 	if (gpiochip_add_data(&iocled->chip, iocled))
 		goto out_unmap;
-	if (basenum < 0)
-		basenum = iocled->chip.base;
 
-	pdev = platform_device_alloc("leds-gpio", basenum);
+	pdev = platform_device_alloc("leds-gpio", iocled->chip.base);
 	if (!pdev)
 		goto out_gpio;
 	iocled->pdata.num_leds = num;
@@ -689,8 +686,7 @@ out_free:
 	kfree(iocled);
 }
 #else /* CONFIG_LEDS_GPIO */
-void __init txx9_iocled_init(unsigned long baseaddr,
-			     int basenum, unsigned int num, int lowactive,
+void __init txx9_iocled_init(unsigned long baseaddr, unsigned int num,
 			     const char *color, char **deftriggers)
 {
 }
