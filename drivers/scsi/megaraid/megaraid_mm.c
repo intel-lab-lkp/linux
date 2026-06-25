@@ -542,6 +542,7 @@ mraid_mm_attach_buf(mraid_mmadp_t *adp, uioc_t *kioc, int xferlen)
 			kioc->buf_paddr		= pool->paddr;
 
 			spin_unlock_irqrestore(&pool->lock, flags);
+			memset(kioc->buf_vaddr, 0, xferlen);
 			return 0;
 		}
 		else {
@@ -572,6 +573,8 @@ mraid_mm_attach_buf(mraid_mmadp_t *adp, uioc_t *kioc, int xferlen)
 
 	if (!kioc->buf_vaddr)
 		return -ENOMEM;
+
+	memset(kioc->buf_vaddr, 0, xferlen);
 
 	return 0;
 }
