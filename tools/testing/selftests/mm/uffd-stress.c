@@ -56,8 +56,10 @@ static uffd_global_test_opts_t *gopts;
 static char *zeropage;
 pthread_attr_t attr;
 
+#ifndef swap
 #define swap(a, b) \
 	do { __auto_type __tmp = (a); (a) = (b); (b) = __tmp; } while (0)
+#endif
 
 const char *examples =
 	"# Run anonymous memory test on 100MiB region with 99999 bounces:\n"
