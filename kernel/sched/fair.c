@@ -11899,6 +11899,7 @@ sched_reduced_capacity(struct rq *rq, struct sched_domain *sd)
 }
 
 #ifdef CONFIG_SCHED_CACHE
+extern int max_lid;
 /*
  * Record the statistics for this scheduler group for later
  * use. These values guide load balancing on aggregating tasks
@@ -11976,6 +11977,82 @@ static bool update_llc_busiest(struct lb_env *env,
 	 * There are more tasks that want to run on dst_cpu's LLC.
 	 */
 	return sgs->nr_pref_dst_llc > busiest->nr_pref_dst_llc;
+}
+
+/*
+ * Get all LLCs that are closer to the destination LLC than to the
+ * source LLC.
+ * @affi_llcs: array to store LLCs satisfying the above condition
+ * @dist: array to store Di for each LLC in affi_llcs, computed as:
+ *
+ * Di = llc_distance(src_llc, LLCi) - llc_distance(dst_llc, LLCi)   (1)
+ * where i is the index of affi_llcs.
+ */
+static int get_affi_llcs(int src_llc, int dst_llc, int *affi_llcs, int *dist)
+{
+	int j = 0, dis1, dis2;
+
+	if (src_llc == dst_llc)
+		return 0;
+
+	if (llc_to_node(src_llc) == llc_to_node(dst_llc)) {
+		affi_llcs[0] = dst_llc;
+		dist[0] = 2;
+		return 1;
+	}
+	for (int i = 0; i <= max_lid; i++) {
+		dis1 = llc_distance(src_llc, i);
+		dis2 = llc_distance(dst_llc, i);
+		if (dis1 < 0 || dis2 < 0)
+			continue;
+		if (dis1 > dis2) {
+			dist[j] = clamp(dis1 - dis2, 4, 1024);
+			affi_llcs[j++] = i;
+		}
+	}
+
+	return j;
+}
+
+/*
+ * To find a src sched group/rq during load balancing, we need a method to
+ * calculate the benefit of each rq. For sched cache, we focus more  on
+ * affinity improvement.
+ *
+ * This provides a way to quantify the affinity improvement for each rq
+ * by assigning an affinity score to each rq.
+ *
+ * Calculate the affinity score for a rq given src llc and dst llc.
+ * It is computed as:
+ * Di = llc_distance(src_llc, LLCi) - llc_distance(dst_llc, LLCi)   (1)
+ * W_i = Rt_i * 1024 / Di              (2)
+ * p = sum_i(W_i)                         (3)
+ *
+ * where i is the index of an LLC, Di is obtained from get_affi_llcs, and
+ * Rt_i is the number of tasks on the rq with LLCi as their preferred LLC,
+ * obtainable from rq->sd->pf.
+ */
+static int __maybe_unused cal_affinity_score(struct rq *rq, int src_cpu, int dst_llc,
+			int *affi_llcs, int *dist, int *last_llc, int *num)
+{
+	struct sched_domain *sd_tmp = rcu_dereference(rq->sd);
+	int wt = 0, src_llc;
+
+	if (!affi_llcs || !dist || !last_llc || !num)
+		return 0;
+
+	src_llc = llc_id(src_cpu);
+	if (*last_llc != src_llc) {
+		*last_llc = src_llc;
+		memset(affi_llcs, 0, (max_lid + 1) * sizeof(int));
+		memset(dist, 0, (max_lid + 1) * sizeof(int));
+		*num = get_affi_llcs(llc_id(src_cpu), dst_llc, affi_llcs, dist);
+	}
+
+	for (int i = 0; i < *num; i++)
+		wt += (sd_tmp->llc_counts[affi_llcs[i]] << 10) / dist[i];
+
+	return wt;
 }
 #else
 static inline void record_sg_llc_stats(struct lb_env *env, struct sg_lb_stats *sgs,
