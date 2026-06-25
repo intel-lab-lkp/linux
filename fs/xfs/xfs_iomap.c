@@ -2168,9 +2168,19 @@ xfs_buffered_write_iomap_end(
 	return 0;
 }
 
+static int
+xfs_buffered_write_iomap_next(
+	const struct iomap_iter *iter,
+	struct iomap		*iomap,
+	struct iomap		*srcmap)
+{
+	return iomap_process(iter, iomap, srcmap,
+			xfs_buffered_write_iomap_begin,
+			xfs_buffered_write_iomap_end);
+}
+
 const struct iomap_ops xfs_buffered_write_iomap_ops = {
-	.iomap_begin		= xfs_buffered_write_iomap_begin,
-	.iomap_end		= xfs_buffered_write_iomap_end,
+	.iomap_next		= xfs_buffered_write_iomap_next,
 };
 
 static int
@@ -2214,8 +2224,17 @@ xfs_read_iomap_begin(
 				 shared ? IOMAP_F_SHARED : 0, seq);
 }
 
+static int
+xfs_read_iomap_next(
+	const struct iomap_iter *iter,
+	struct iomap		*iomap,
+	struct iomap		*srcmap)
+{
+	return iomap_process(iter, iomap, srcmap, xfs_read_iomap_begin, NULL);
+}
+
 const struct iomap_ops xfs_read_iomap_ops = {
-	.iomap_begin		= xfs_read_iomap_begin,
+	.iomap_next		= xfs_read_iomap_next,
 };
 
 static int
