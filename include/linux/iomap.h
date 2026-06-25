@@ -367,6 +367,8 @@ static inline bool iomap_want_unshare_iter(const struct iomap_iter *iter)
 ssize_t iomap_file_buffered_write(struct kiocb *iocb, struct iov_iter *from,
 		const struct iomap_ops *ops,
 		const struct iomap_write_ops *write_ops, void *private);
+int iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i,
+		const struct iomap_write_ops *write_ops);
 int iomap_fsverity_write(struct file *file, loff_t pos, size_t length,
 		const void *buf, const struct iomap_ops *ops,
 		const struct iomap_write_ops *write_ops);
@@ -687,6 +689,51 @@ static __always_inline int iomap_process(const struct iomap_iter *iter,
 			srcmap);
 
 	return ret < 0 ? ret : 1;
+}
+
+void iomap_iter_done(struct iomap_iter *iter);
+
+/*
+ * Inline version of the ->iomap_next call for performance-critical callers.
+ * When inlined at a call site that passes constant begin / end function
+ * pointers, the begin and end calls are called directly and avoid the indirect
+ * call through struct iomap_ops.
+ */
+static __always_inline int iomap_iter_inline(struct iomap_iter *iter,
+		iomap_begin_fn begin, iomap_end_fn end)
+{
+	int ret = iomap_process(iter, &iter->iomap, &iter->srcmap, begin, end);
+
+	if (ret > 0) {
+		iter->status = 0;
+		iomap_iter_done(iter);
+	}
+	return ret;
+}
+
+/*
+ * Inline buffered write loop for callers that can supply constant begin and end
+ * callbacks. This lets the compiler devirtualize the mapping calls and drop the
+ * indirect call through struct iomap_ops. The passed-in iter should be
+ * initialized by the caller. This will advance the iter by the number of bytes
+ * that get successfully written.
+ *
+ * This returns the number of bytes written or a negative error.
+ */
+static __always_inline ssize_t iomap_buffered_write_inline(
+		struct iomap_iter *iter, struct iov_iter *i,
+		iomap_begin_fn begin, iomap_end_fn end,
+		const struct iomap_write_ops *write_ops)
+{
+	loff_t start_pos = iter->pos;
+	ssize_t ret;
+
+	while ((ret = iomap_iter_inline(iter, begin, end)) > 0)
+		iter->status = iomap_write_iter(iter, i, write_ops);
+
+	if (iter->pos == start_pos)
+		return ret;
+	return iter->pos - start_pos;
 }
 
 #endif /* LINUX_IOMAP_H */

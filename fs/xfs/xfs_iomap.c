@@ -1773,7 +1773,7 @@ out_unlock:
 	return error;
 }
 
-static int
+int
 xfs_buffered_write_iomap_begin(
 	struct inode		*inode,
 	loff_t			offset,
@@ -2124,7 +2124,7 @@ xfs_buffered_write_delalloc_punch(
 			offset, offset + length, iter->private);
 }
 
-static int
+int
 xfs_buffered_write_iomap_end(
 	struct inode		*inode,
 	loff_t			offset,

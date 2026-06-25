@@ -1038,6 +1038,7 @@ xfs_file_buffered_write(
 {
 	struct inode		*inode = iocb->ki_filp->f_mapping->host;
 	struct xfs_inode	*ip = XFS_I(inode);
+	struct iomap_iter	iter;
 	ssize_t			ret;
 	bool			cleared_space = false;
 	unsigned int		iolock;
@@ -1053,9 +1054,28 @@ write_retry:
 		goto out;
 
 	trace_xfs_file_buffered_write(iocb, from);
-	ret = iomap_file_buffered_write(iocb, from,
-			&xfs_buffered_write_iomap_ops, &xfs_iomap_write_ops,
-			NULL);
+
+	/*
+	 * Call inlined iomap buffered write and pass constant begin/end
+	 * function pointers so the compiler can devirtualize them and avoid the
+	 * indirect call through struct iomap_ops.
+	 */
+	iter = (struct iomap_iter){
+		.inode		= inode,
+		.pos		= iocb->ki_pos,
+		.len		= iov_iter_count(from),
+		.flags		= IOMAP_WRITE,
+	};
+	if (iocb->ki_flags & IOCB_NOWAIT)
+		iter.flags |= IOMAP_NOWAIT;
+	if (iocb->ki_flags & IOCB_DONTCACHE)
+		iter.flags |= IOMAP_DONTCACHE;
+
+	ret = iomap_buffered_write_inline(&iter, from,
+			xfs_buffered_write_iomap_begin,
+			xfs_buffered_write_iomap_end, &xfs_iomap_write_ops);
+	if (ret > 0)
+		iocb->ki_pos = iter.pos;
 
 	/*
 	 * If we hit a space limit, try to free up some lingering preallocated

@@ -1153,7 +1153,7 @@ static bool iomap_write_end(struct iomap_iter *iter, size_t len, size_t copied,
 	return __iomap_write_end(iter->inode, pos, len, copied, folio);
 }
 
-static int iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i,
+int iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i,
 		const struct iomap_write_ops *write_ops)
 {
 	ssize_t total_written = 0;
@@ -1259,6 +1259,7 @@ retry:
 
 	return total_written ? 0 : status;
 }
+EXPORT_SYMBOL_GPL(iomap_write_iter);
 
 ssize_t
 iomap_file_buffered_write(struct kiocb *iocb, struct iov_iter *i,

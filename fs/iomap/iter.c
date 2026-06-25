@@ -25,7 +25,7 @@ int iomap_iter_advance(struct iomap_iter *iter, u64 count)
 	return 0;
 }
 
-static inline void iomap_iter_done(struct iomap_iter *iter)
+void iomap_iter_done(struct iomap_iter *iter)
 {
 	WARN_ON_ONCE(iter->iomap.offset > iter->pos);
 	WARN_ON_ONCE(iter->iomap.length == 0);
@@ -38,6 +38,7 @@ static inline void iomap_iter_done(struct iomap_iter *iter)
 	if (iter->srcmap.type != IOMAP_HOLE)
 		trace_iomap_iter_srcmap(iter->inode, &iter->srcmap);
 }
+EXPORT_SYMBOL_GPL(iomap_iter_done);
 
 static int iomap_iter_legacy(struct iomap_iter *iter, const struct iomap_ops *ops)
 {

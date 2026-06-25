@@ -19,6 +19,13 @@ int xfs_iomap_write_unwritten(struct xfs_inode *, xfs_off_t, xfs_off_t, bool);
 xfs_fileoff_t xfs_iomap_eof_align_last_fsb(struct xfs_inode *ip,
 		xfs_fileoff_t end_fsb);
 
+int xfs_buffered_write_iomap_begin(struct inode *inode, loff_t offset,
+		loff_t count, unsigned flags, struct iomap *iomap,
+		struct iomap *srcmap);
+int xfs_buffered_write_iomap_end(struct inode *inode, loff_t offset,
+		loff_t length, ssize_t written, unsigned flags,
+		struct iomap *iomap);
+
 u64 xfs_iomap_inode_sequence(struct xfs_inode *ip, u16 iomap_flags);
 int xfs_bmbt_to_iomap(struct xfs_inode *ip, struct iomap *iomap,
 		struct xfs_bmbt_irec *imap, unsigned int mapping_flags,
