@@ -1307,20 +1307,21 @@ static void update_bcn_erpinfo_ie(struct adapter *padapter)
 		       &len,
 		       (pnetwork->ie_length - _BEACON_IE_OFFSET_));
 	if (p && len > 0) {
-		struct ndis_80211_var_ie *ie = (struct ndis_80211_var_ie *)p;
+		struct ndis_80211_var_ie *erp_ie = (struct ndis_80211_var_ie *)p;
 
 		if (pmlmepriv->num_sta_non_erp == 1)
-			ie->data[0] |= RTW_ERP_INFO_NON_ERP_PRESENT | RTW_ERP_INFO_USE_PROTECTION;
+			erp_ie->data[0] |= RTW_ERP_INFO_NON_ERP_PRESENT |
+					    RTW_ERP_INFO_USE_PROTECTION;
 		else
-			ie->data[0] &= ~(RTW_ERP_INFO_NON_ERP_PRESENT |
-					  RTW_ERP_INFO_USE_PROTECTION);
+			erp_ie->data[0] &= ~(RTW_ERP_INFO_NON_ERP_PRESENT |
+					      RTW_ERP_INFO_USE_PROTECTION);
 
 		if (pmlmepriv->num_sta_no_short_preamble > 0)
-			ie->data[0] |= RTW_ERP_INFO_BARKER_PREAMBLE_MODE;
+			erp_ie->data[0] |= RTW_ERP_INFO_BARKER_PREAMBLE_MODE;
 		else
-			ie->data[0] &= ~(RTW_ERP_INFO_BARKER_PREAMBLE_MODE);
+			erp_ie->data[0] &= ~(RTW_ERP_INFO_BARKER_PREAMBLE_MODE);
 
-		ERP_IE_handler(padapter, ie);
+		ERP_IE_handler(padapter, erp_ie);
 	}
 }
 
