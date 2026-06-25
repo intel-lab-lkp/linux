@@ -1279,17 +1279,27 @@ void siw_rq_flush(struct siw_qp *qp)
 	}
 }
 
+int siw_qp_reserve_qpn(struct siw_device *sdev, struct siw_qp *qp)
+{
+	qp->sdev = sdev;
+
+	return xa_alloc(&sdev->qp_xa, &qp->base_qp.qp_num, NULL,
+			xa_limit_32b, GFP_KERNEL);
+}
+
 int siw_qp_add(struct siw_device *sdev, struct siw_qp *qp)
 {
-	int rv = xa_alloc(&sdev->qp_xa, &qp->base_qp.qp_num, qp, xa_limit_32b,
-			  GFP_KERNEL);
+	void *old;
 
-	if (!rv) {
-		kref_init(&qp->ref);
-		qp->sdev = sdev;
-		siw_dbg_qp(qp, "new QP\n");
-	}
-	return rv;
+	kref_init(&qp->ref);
+
+	old = xa_store(&sdev->qp_xa, qp_id(qp), qp, GFP_KERNEL);
+	if (xa_is_err(old))
+		return xa_err(old);
+
+	siw_dbg_qp(qp, "new QP\n");
+
+	return 0;
 }
 
 void siw_free_qp(struct kref *ref)

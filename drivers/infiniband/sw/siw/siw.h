@@ -511,6 +511,7 @@ void siw_send_terminate(struct siw_qp *qp);
 
 void siw_qp_get_ref(struct ib_qp *qp);
 void siw_qp_put_ref(struct ib_qp *qp);
+int siw_qp_reserve_qpn(struct siw_device *sdev, struct siw_qp *qp);
 int siw_qp_add(struct siw_device *sdev, struct siw_qp *qp);
 void siw_free_qp(struct kref *ref);
 

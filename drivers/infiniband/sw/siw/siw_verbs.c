@@ -369,7 +369,7 @@ int siw_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attrs,
 	spin_lock_init(&qp->rq_lock);
 	spin_lock_init(&qp->orq_lock);
 
-	rv = siw_qp_add(sdev, qp);
+	rv = siw_qp_reserve_qpn(sdev, qp);
 	if (rv)
 		goto err_atomic;
 
@@ -482,14 +482,24 @@ int siw_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attrs,
 		goto err_out_xa;
 	}
 	INIT_LIST_HEAD(&qp->devq);
+	init_completion(&qp->qp_free);
+
 	spin_lock_irqsave(&sdev->lock, flags);
 	list_add_tail(&qp->devq, &sdev->qp_list);
 	spin_unlock_irqrestore(&sdev->lock, flags);
 
-	init_completion(&qp->qp_free);
+	rv = siw_qp_add(sdev, qp);
+	if (rv)
+		goto err_out_list;
 
 	return 0;
 
+err_out_list:
+	spin_lock_irqsave(&sdev->lock, flags);
+	list_del(&qp->devq);
+	spin_unlock_irqrestore(&sdev->lock, flags);
+
+	siw_put_tx_cpu(qp->tx_cpu);
 err_out_xa:
 	xa_erase(&sdev->qp_xa, qp_id(qp));
 	if (uctx) {
