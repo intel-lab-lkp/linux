@@ -786,6 +786,21 @@ int nfc_targets_found(struct nfc_dev *dev,
 
 	dev->targets_generation++;
 
+	if (dev->active_target && dev->targets) {
+		for (i = 0; i < dev->n_targets; i++) {
+			if (dev->active_target != &dev->targets[i])
+				continue;
+
+			if (dev->ops->check_presence)
+				timer_delete_sync(&dev->check_pres_timer);
+
+			dev->active_target = NULL;
+			dev->dep_link_up = false;
+			dev->rf_mode = NFC_RF_NONE;
+			break;
+		}
+	}
+
 	kfree(dev->targets);
 	dev->targets = NULL;
 
