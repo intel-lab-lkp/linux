@@ -35,12 +35,16 @@
 extern asmlinkage void handle_exception(void);
 extern unsigned long ret_from_exception_end;
 
-static inline int fp_is_valid(unsigned long fp, unsigned long sp)
+#ifdef CONFIG_IRQ_STACKS
+DECLARE_PER_CPU(ulong *, irq_stack_ptr);
+#endif
+
+static inline int fp_is_valid(unsigned long fp, unsigned long sp,
+			      unsigned long high)
 {
-	unsigned long low, high;
+	unsigned long low;
 
 	low = sp + sizeof(struct stackframe);
-	high = ALIGN(sp, THREAD_SIZE);
 
 	return !(fp < low || fp > high || fp & 0x07);
 }
@@ -48,7 +52,7 @@ static inline int fp_is_valid(unsigned long fp, unsigned long sp)
 void notrace walk_stackframe(struct task_struct *task, struct pt_regs *regs,
 			     bool (*fn)(void *, unsigned long), void *arg)
 {
-	unsigned long fp, sp, pc;
+	unsigned long fp, sp, pc, high;
 	int graph_idx = 0;
 	int level = 0;
 
@@ -68,19 +72,32 @@ void notrace walk_stackframe(struct task_struct *task, struct pt_regs *regs,
 		pc = task->thread.ra;
 	}
 
+	if (!task)
+		task = current;
+
+	if (sp >= (unsigned long)task_stack_page(task) &&
+	    sp < (unsigned long)task_stack_page(task) + THREAD_SIZE) {
+		high = (unsigned long)task_pt_regs(task);
+	} else if (IS_ENABLED(CONFIG_IRQ_STACKS)) {
+		high = (unsigned long)this_cpu_read(irq_stack_ptr) +
+		       IRQ_STACK_SIZE;
+	} else {
+		high = (unsigned long)task_pt_regs(task);
+	}
+
 	for (;;) {
 		struct stackframe *frame;
 
 		if (unlikely(!__kernel_text_address(pc) || (level++ >= 0 && !fn(arg, pc))))
 			break;
 
-		if (unlikely(!fp_is_valid(fp, sp)))
+		if (unlikely(!fp_is_valid(fp, sp, high)))
 			break;
 
 		/* Unwind stack frame */
 		frame = (struct stackframe *)fp - 1;
 		sp = fp;
-		if (regs && (regs->epc == pc) && fp_is_valid(frame->ra, sp)) {
+		if (regs && (regs->epc == pc) && fp_is_valid(frame->ra, sp, high)) {
 			/* We hit function where ra is not saved on the stack */
 			fp = frame->ra;
 			pc = regs->ra;
