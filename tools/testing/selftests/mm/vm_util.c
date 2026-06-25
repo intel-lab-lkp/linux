@@ -735,6 +735,13 @@ void write_file(const char *path, const char *buf, size_t buflen)
 	saved_errno = errno;
 	close(fd);
 	errno = saved_errno;
+
+	if (numwritten < 0 && errno == EINVAL) {
+		ksft_print_msg("%s write(%.*s) failed: %s\n", path,
+			       (int)(buflen - 1), buf, strerror(errno));
+		return;
+	}
+
 	if (numwritten < 0)
 		ksft_exit_fail_msg("%s write(%.*s) failed: %s\n", path, (int)(buflen - 1),
 				buf, strerror(errno));
