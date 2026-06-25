@@ -81,6 +81,13 @@ properties:
       ADCs usually allow choosing between internal reference sources or a pair
       of external pins.
 
+  input-channel-rotation:
+    type: boolean
+    description:
+      If set, the positive and negative input channels are allowed to be swapped
+      on every other conversion to reduce offset errors. This is also referred
+      to as "chop" in some datasheets.
+
   excitation-channels:
     $ref: /schemas/types.yaml#/definitions/uint32-array
     description:
