@@ -797,9 +797,9 @@ static int __intel_gt_reset(struct intel_gt *gt, intel_engine_mask_t engine_mask
 bool intel_has_gpu_reset(const struct intel_gt *gt)
 {
 	if (!gt->i915->params.reset)
-		return NULL;
+		return false;
 
-	return intel_get_gpu_reset(gt);
+	return !!intel_get_gpu_reset(gt);
 }
 
 bool intel_has_reset_engine(const struct intel_gt *gt)
