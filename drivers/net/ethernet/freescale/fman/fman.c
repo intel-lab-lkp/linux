@@ -924,7 +924,7 @@ static void hwp_init(struct fman_hwp_regs __iomem *hwp_rg)
 	iowrite32be(HWP_RPIMAC_PEN, &hwp_rg->fmprrpimac);
 }
 
-static int enable(struct fman *fman, struct fman_cfg *cfg)
+static void enable(struct fman *fman, struct fman_cfg *cfg)
 {
 	u32 cfg_reg = 0;
 
@@ -941,8 +941,6 @@ static int enable(struct fman *fman, struct fman_cfg *cfg)
 	iowrite32be(BMI_INIT_START, &fman->bmi_regs->fmbm_init);
 	iowrite32be(cfg_reg | QMI_CFG_ENQ_EN | QMI_CFG_DEQ_EN,
 		    &fman->qmi_regs->fmqm_gc);
-
-	return 0;
 }
 
 static int set_exception(struct fman *fman,
@@ -1998,9 +1996,7 @@ static int fman_init(struct fman *fman)
 	if (!fman->keygen)
 		return -EINVAL;
 
-	err = enable(fman, cfg);
-	if (err != 0)
-		return err;
+	enable(fman, cfg);
 
 	enable_time_stamp(fman);
 
