@@ -255,7 +255,7 @@ static inline u8 nfi_readb(struct mtk_nfc *nfc, u32 reg)
 	return readb_relaxed(nfc->regs + reg);
 }
 
-static void mtk_nfc_hw_reset(struct mtk_nfc *nfc)
+static int mtk_nfc_hw_reset(struct mtk_nfc *nfc)
 {
 	struct device *dev = nfc->dev;
 	u32 val;
@@ -269,12 +269,14 @@ static void mtk_nfc_hw_reset(struct mtk_nfc *nfc)
 				 !(val & MASTER_STA_MASK), 50,
 				 MTK_RESET_TIMEOUT);
 	if (ret)
-		dev_warn(dev, "master active in reset [0x%x] = 0x%x\n",
-			 NFI_MASTER_STA, val);
+		dev_err(dev, "master active in reset [0x%x] = 0x%x\n",
+			NFI_MASTER_STA, val);
 
 	/* ensure any status register affected by the NFI master is reset */
 	nfi_writel(nfc, CON_FIFO_FLUSH | CON_NFI_RST, NFI_CON);
 	nfi_writew(nfc, STAR_DE, NFI_STRDATA);
+
+	return ret;
 }
 
 static int mtk_nfc_send_command(struct mtk_nfc *nfc, u8 command)
@@ -517,7 +519,10 @@ static int mtk_nfc_exec_op(struct nand_chip *chip,
 	if (check_only)
 		return 0;
 
-	mtk_nfc_hw_reset(nfc);
+	ret = mtk_nfc_hw_reset(nfc);
+	if (ret)
+		return ret;
+
 	nfi_writew(nfc, CNFG_OP_CUST, NFI_CNFG);
 	mtk_nfc_select_target(chip, op->cs);
 
@@ -1084,8 +1089,10 @@ static int mtk_nfc_read_oob_std(struct nand_chip *chip, int page)
 	return mtk_nfc_read_page_raw(chip, NULL, 1, page);
 }
 
-static inline void mtk_nfc_hw_init(struct mtk_nfc *nfc)
+static int mtk_nfc_hw_init(struct mtk_nfc *nfc)
 {
+	int ret;
+
 	/*
 	 * CNRNB: nand ready/busy register
 	 * -------------------------------
@@ -1095,10 +1102,14 @@ static inline void mtk_nfc_hw_init(struct mtk_nfc *nfc)
 	nfi_writew(nfc, 0xf1, NFI_CNRNB);
 	nfi_writel(nfc, PAGEFMT_8K_16K, NFI_PAGEFMT);
 
-	mtk_nfc_hw_reset(nfc);
+	ret = mtk_nfc_hw_reset(nfc);
+	if (ret)
+		return ret;
 
 	nfi_readl(nfc, NFI_INTR_STA);
 	nfi_writel(nfc, 0, NFI_INTR_EN);
+
+	return 0;
 }
 
 static irqreturn_t mtk_nfc_irq(int irq, void *id)
@@ -1411,7 +1422,9 @@ static int mtk_nfc_nand_chip_init(struct device *dev, struct mtk_nfc *nfc,
 	mtd->name = MTK_NAME;
 	mtd_set_ooblayout(mtd, &mtk_nfc_ooblayout_ops);
 
-	mtk_nfc_hw_init(nfc);
+	ret = mtk_nfc_hw_init(nfc);
+	if (ret)
+		return ret;
 
 	ret = nand_scan(nand, nsels);
 	if (ret)
