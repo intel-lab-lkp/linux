@@ -131,6 +131,10 @@ static void power_supply_update_status_leds(struct power_supply *psy)
 			LED_OFF);
 		break;
 	}
+
+	led_trigger_event(psy->not_charging_trig,
+			  status.intval == POWER_SUPPLY_STATUS_NOT_CHARGING ?
+			  LED_FULL : LED_OFF);
 }
 
 static int power_supply_create_status_triggers(struct power_supply *psy)
@@ -150,6 +154,8 @@ static int power_supply_create_status_triggers(struct power_supply *psy)
 					  &psy->charging_blink_full_solid_trig, &err);
 	power_supply_register_led_trigger(psy, "%s-charging-orange-full-green",
 					  &psy->charging_orange_full_green_trig, &err);
+	power_supply_register_led_trigger(psy, "%s-not-charging",
+					  &psy->not_charging_trig, &err);
 
 	return err;
 }
@@ -209,6 +215,7 @@ void power_supply_remove_triggers(struct power_supply *psy)
 	power_supply_unregister_led_trigger(psy->online_trig);
 	power_supply_unregister_led_trigger(psy->charging_or_full_trig);
 	power_supply_unregister_led_trigger(psy->charging_trig);
+	power_supply_unregister_led_trigger(psy->not_charging_trig);
 	power_supply_unregister_led_trigger(psy->full_trig);
 	power_supply_unregister_led_trigger(psy->charging_blink_full_solid_trig);
 	power_supply_unregister_led_trigger(psy->charging_orange_full_green_trig);
