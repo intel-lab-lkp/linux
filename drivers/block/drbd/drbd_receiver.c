@@ -3792,7 +3792,6 @@ static int receive_SyncParam(struct drbd_connection *connection, struct packet_i
 				new_plan = fifo_alloc(fifo_size);
 				if (!new_plan) {
 					drbd_err(device, "kmalloc of fifo_buffer failed");
-					put_ldev(device);
 					goto disconnect;
 				}
 			}
