@@ -2296,11 +2296,15 @@ static inline int memdesc_nid(memdesc_flags_t mdf)
 
 static inline int page_to_nid(const struct page *page)
 {
+	ASSERT_EXCLUSIVE_BITS(PF_POISONED_CHECK(page)->flags,
+			      NODES_MASK << NODES_PGSHIFT);
 	return memdesc_nid(PF_POISONED_CHECK(page)->flags);
 }
 
 static inline int folio_nid(const struct folio *folio)
 {
+	ASSERT_EXCLUSIVE_BITS(folio->flags,
+			      NODES_MASK << NODES_PGSHIFT);
 	return memdesc_nid(folio->flags);
 }
 
