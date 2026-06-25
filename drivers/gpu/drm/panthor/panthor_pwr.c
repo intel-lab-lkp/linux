@@ -484,12 +484,13 @@ int panthor_pwr_init(struct panthor_device *ptdev)
 	if (irq < 0)
 		return irq;
 
-	err = panthor_request_pwr_irq(
-		ptdev, &pwr->irq, irq, PWR_INTERRUPTS_MASK,
-		pwr->iomem + PWR_INT_BASE);
+	err = panthor_request_pwr_irq(ptdev, &pwr->irq, irq,
+				      pwr->iomem + PWR_INT_BASE);
 	if (err)
 		return err;
 
+	panthor_pwr_irq_enable_events(&pwr->irq, PWR_INTERRUPTS_MASK);
+	panthor_pwr_irq_resume(&pwr->irq);
 	return 0;
 }
 
