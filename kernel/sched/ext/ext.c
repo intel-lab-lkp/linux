@@ -4916,6 +4916,8 @@ static void scx_sched_free_rcu_work(struct work_struct *work)
 		cgroup_put(sch_cgroup(sch));
 	if (sch->sub_kset)
 		kobject_put(&sch->sub_kset->kobj);
+	if (scx_parent(sch))
+		kobject_put(&scx_parent(sch)->kobj);
 #endif	/* CONFIG_EXT_SUB_SCHED */
 
 	for_each_possible_cpu(cpu) {
@@ -6863,12 +6865,19 @@ static struct scx_sched *scx_alloc_and_add_sched(struct scx_enable_cmd *cmd,
 	INIT_LIST_HEAD(&sch->children);
 	INIT_LIST_HEAD(&sch->sibling);
 
-	if (parent)
+	if (parent) {
+		/*
+		 * Pin @parent for @sch's lifetime. The kobject hierarchy pins
+		 * it only via @parent->sub_kset, which is dropped during
+		 * disable. Released in scx_sched_free_rcu_work().
+		 */
+		kobject_get(&parent->kobj);
 		ret = kobject_init_and_add(&sch->kobj, &scx_ktype,
 					   &parent->sub_kset->kobj,
 					   "sub-%llu", cgroup_id(cgrp));
-	else
+	} else {
 		ret = kobject_init_and_add(&sch->kobj, &scx_ktype, NULL, "root");
+	}
 
 	if (ret < 0) {
 		RCU_INIT_POINTER(ops->priv, NULL);
