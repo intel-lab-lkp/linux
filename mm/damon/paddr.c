@@ -212,15 +212,12 @@ static bool damos_pa_filter_out(struct damos *scheme, struct folio *folio)
 	return scheme->ops_filters_default_reject;
 }
 
-static bool damon_pa_invalid_damos_folio(struct folio *folio, struct damos *s)
+static inline bool damon_pa_invalid_damos_folio(struct folio *folio,
+		struct damos *s)
 {
 	if (!folio)
 		return true;
-	if (folio == s->last_applied) {
-		folio_put(folio);
-		return true;
-	}
-	return false;
+	return folio == s->last_applied;
 }
 
 static unsigned long damon_pa_pageout(struct damon_region *r,
@@ -252,6 +249,8 @@ static unsigned long damon_pa_pageout(struct damon_region *r,
 	while (addr < damon_pa_phys_addr(r->ar.end, addr_unit)) {
 		folio = damon_get_folio(PHYS_PFN(addr));
 		if (damon_pa_invalid_damos_folio(folio, s)) {
+			if (folio)
+				folio_put(folio);
 			addr += PAGE_SIZE;
 			continue;
 		}
@@ -293,6 +292,8 @@ static inline unsigned long damon_pa_de_activate(
 	while (addr < damon_pa_phys_addr(r->ar.end, addr_unit)) {
 		folio = damon_get_folio(PHYS_PFN(addr));
 		if (damon_pa_invalid_damos_folio(folio, s)) {
+			if (folio)
+				folio_put(folio);
 			addr += PAGE_SIZE;
 			continue;
 		}
@@ -341,6 +342,8 @@ static unsigned long damon_pa_migrate(struct damon_region *r,
 	while (addr < damon_pa_phys_addr(r->ar.end, addr_unit)) {
 		folio = damon_get_folio(PHYS_PFN(addr));
 		if (damon_pa_invalid_damos_folio(folio, s)) {
+			if (folio)
+				folio_put(folio);
 			addr += PAGE_SIZE;
 			continue;
 		}
@@ -377,6 +380,8 @@ static unsigned long damon_pa_stat(struct damon_region *r,
 	while (addr < damon_pa_phys_addr(r->ar.end, addr_unit)) {
 		folio = damon_get_folio(PHYS_PFN(addr));
 		if (damon_pa_invalid_damos_folio(folio, s)) {
+			if (folio)
+				folio_put(folio);
 			addr += PAGE_SIZE;
 			continue;
 		}
