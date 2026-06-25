@@ -28,6 +28,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_modeset_helper.h>
 #include <drm/drm_modeset_helper_vtables.h>
+#include <drm/drm_of.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 
@@ -623,6 +624,7 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 	int width, height, stride;
 	u16 width_mm = 0, height_mm = 0;
 	struct device_node *panel_node;
+	enum drm_panel_orientation orientation = DRM_MODE_PANEL_ORIENTATION_UNKNOWN;
 	const struct drm_format_info *format;
 	u64 size;
 	struct resource *res, *mem = NULL;
@@ -698,6 +700,12 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 			ret = simplefb_get_panel_height_mm_of(dev, panel_node);
 			if (ret > 0)
 				height_mm = ret;
+			/*
+			 * Ignore errors from parsing the panel orientation. With
+			 * the orientation initialized to UNKNOWN, the connector
+			 * helpers will do the right thing.
+			 */
+			drm_of_get_panel_orientation(panel_node, &orientation);
 			of_node_put(panel_node);
 		}
 	} else {
@@ -861,8 +869,7 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 	if (ret)
 		return ERR_PTR(ret);
 	drm_connector_helper_add(connector, &simpledrm_connector_helper_funcs);
-	drm_connector_set_panel_orientation_with_quirk(connector,
-						       DRM_MODE_PANEL_ORIENTATION_UNKNOWN,
+	drm_connector_set_panel_orientation_with_quirk(connector, orientation,
 						       width, height);
 
 	ret = drm_connector_attach_encoder(connector, encoder);
