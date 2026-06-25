@@ -581,6 +581,49 @@ int __mmu_notifier_invalidate_range_start(struct mmu_notifier_range *range)
 	return 0;
 }
 
+/**
+ * mmu_interval_notifier_range_block_thp - check if a range must not use THP
+ * @mm: mm_struct to check
+ * @start: start address
+ * @end: end address
+ *
+ * Return true if an active interval notifier covering the range requested
+ * MMU_INTERVAL_NOTIFIER_BLOCK_THP.
+ */
+bool mmu_interval_notifier_range_block_thp(struct mm_struct *mm,
+					   unsigned long start,
+					   unsigned long end)
+{
+	struct mmu_notifier_subscriptions *subscriptions;
+	struct mmu_interval_notifier *interval_sub;
+	struct interval_tree_node *node;
+	bool block_thp = false;
+
+	if (start >= end)
+		return false;
+
+	/* Pairs with the store in mmu_notifier_register(). */
+	subscriptions = smp_load_acquire(&mm->notifier_subscriptions);
+	if (!subscriptions || !subscriptions->has_itree)
+		return false;
+
+	spin_lock(&subscriptions->lock);
+	for (node = interval_tree_iter_first(&subscriptions->itree, start,
+					     end - 1);
+	     node;
+	     node = interval_tree_iter_next(node, start, end - 1)) {
+		interval_sub = container_of(node, struct mmu_interval_notifier,
+					    interval_tree);
+		if (interval_sub->flags & MMU_INTERVAL_NOTIFIER_BLOCK_THP) {
+			block_thp = true;
+			break;
+		}
+	}
+	spin_unlock(&subscriptions->lock);
+
+	return block_thp;
+}
+
 static void
 mn_hlist_invalidate_end(struct mmu_notifier_subscriptions *subscriptions,
 			struct mmu_notifier_range *range)
@@ -933,13 +976,69 @@ out_unlock:
 }
 EXPORT_SYMBOL_GPL(mmu_notifier_put);
 
+#define MMU_INTERVAL_NOTIFIER_KNOWN_FLAGS \
+	(MMU_INTERVAL_NOTIFIER_BLOCK_THP)
+
+static int mmu_interval_notifier_check_flags(unsigned int flags)
+{
+	if (flags & ~MMU_INTERVAL_NOTIFIER_KNOWN_FLAGS)
+		return -EINVAL;
+	return 0;
+}
+
+static int
+mmu_interval_notifier_block_thp_locked(struct mm_struct *mm,
+				       unsigned long start,
+				       unsigned long end)
+{
+	struct vm_area_struct *vma, *prev;
+	struct vma_iterator vmi;
+
+	mmap_assert_write_locked(mm);
+
+	vma_iter_init(&vmi, mm, start);
+	vma = vma_iter_load(&vmi);
+	prev = vma_prev(&vmi);
+	if (vma && start > vma->vm_start)
+		prev = vma;
+
+	for_each_vma_range(vmi, vma, end) {
+		const unsigned long curr_start = max(vma->vm_start, start);
+		const unsigned long curr_end = min(vma->vm_end, end);
+		vma_flags_t new_flags;
+
+		if (vma->vm_flags & VM_NO_KHUGEPAGED)
+			goto next;
+
+		new_flags = vma->flags;
+		vma_flags_set(&new_flags, VMA_NOHUGEPAGE_BIT);
+		vma_flags_clear(&new_flags, VMA_HUGEPAGE_BIT);
+		if (vma_flags_same_pair(&new_flags, &vma->flags))
+			goto next;
+
+		vma = vma_modify_flags(&vmi, prev, vma, curr_start,
+				       curr_end, &new_flags);
+		if (IS_ERR(vma))
+			return PTR_ERR(vma);
+
+		vma_start_write(vma);
+		vma->flags = new_flags;
+next:
+		prev = vma;
+	}
+
+	return 0;
+}
+
 static int __mmu_interval_notifier_insert(
 	struct mmu_interval_notifier *interval_sub, struct mm_struct *mm,
 	struct mmu_notifier_subscriptions *subscriptions, unsigned long start,
-	unsigned long length, const struct mmu_interval_notifier_ops *ops)
+	unsigned long length, const struct mmu_interval_notifier_ops *ops,
+	unsigned int flags)
 {
 	interval_sub->mm = mm;
 	interval_sub->ops = ops;
+	interval_sub->flags = flags;
 	RB_CLEAR_NODE(&interval_sub->interval_tree.rb);
 	interval_sub->interval_tree.start = start;
 	/*
@@ -1034,20 +1133,46 @@ int mmu_interval_notifier_insert(struct mmu_interval_notifier *interval_sub,
 		subscriptions = mm->notifier_subscriptions;
 	}
 	return __mmu_interval_notifier_insert(interval_sub, mm, subscriptions,
-					      start, length, ops);
+					      start, length, ops, 0);
 }
 EXPORT_SYMBOL_GPL(mmu_interval_notifier_insert);
 
-int mmu_interval_notifier_insert_locked(
-	struct mmu_interval_notifier *interval_sub, struct mm_struct *mm,
-	unsigned long start, unsigned long length,
-	const struct mmu_interval_notifier_ops *ops)
+/**
+ * mmu_interval_notifier_insert_locked_flags - Insert an interval notifier
+ * @interval_sub: Interval subscription to register
+ * @mm: mm_struct to attach to
+ * @start: Starting virtual address to monitor
+ * @length: Length of the range to monitor
+ * @ops: Interval notifier operations to be called on matching events
+ * @flags: MMU_INTERVAL_NOTIFIER_* flags
+ *
+ * Like mmu_interval_notifier_insert_locked(), but lets callers request
+ * additional MM-owned policy for the interval while holding mmap_lock for
+ * write.
+ */
+int
+mmu_interval_notifier_insert_locked_flags(struct mmu_interval_notifier *interval_sub,
+					  struct mm_struct *mm,
+					  unsigned long start,
+					  unsigned long length,
+					  const struct mmu_interval_notifier_ops *ops,
+					  unsigned int flags)
 {
 	struct mmu_notifier_subscriptions *subscriptions =
 		mm->notifier_subscriptions;
+	unsigned long end;
 	int ret;
 
 	mmap_assert_write_locked(mm);
+
+	ret = mmu_interval_notifier_check_flags(flags);
+	if (ret)
+		return ret;
+
+	if (flags & MMU_INTERVAL_NOTIFIER_BLOCK_THP) {
+		if (length == 0 || check_add_overflow(start, length, &end))
+			return -EOVERFLOW;
+	}
 
 	if (!subscriptions || !subscriptions->has_itree) {
 		ret = __mmu_notifier_register(NULL, mm);
@@ -1055,10 +1180,75 @@ int mmu_interval_notifier_insert_locked(
 			return ret;
 		subscriptions = mm->notifier_subscriptions;
 	}
+
+	if (flags & MMU_INTERVAL_NOTIFIER_BLOCK_THP) {
+		ret = mmu_interval_notifier_block_thp_locked(mm, start, end);
+		if (ret)
+			return ret;
+	}
+
 	return __mmu_interval_notifier_insert(interval_sub, mm, subscriptions,
-					      start, length, ops);
+					      start, length, ops, flags);
+}
+EXPORT_SYMBOL_GPL(mmu_interval_notifier_insert_locked_flags);
+
+int mmu_interval_notifier_insert_locked(struct mmu_interval_notifier *interval_sub,
+					struct mm_struct *mm,
+					unsigned long start,
+					unsigned long length,
+					const struct mmu_interval_notifier_ops *ops)
+{
+	return mmu_interval_notifier_insert_locked_flags(interval_sub, mm,
+							 start, length,
+							 ops, 0);
 }
 EXPORT_SYMBOL_GPL(mmu_interval_notifier_insert_locked);
+
+/**
+ * mmu_interval_notifier_set_flags_locked - update an interval notifier's flags
+ * @interval_sub: Interval subscription to update
+ * @flags: MMU_INTERVAL_NOTIFIER_* flags
+ *
+ * Update MMU interval notifier flags while holding mmap_lock for write. When
+ * enabling MMU_INTERVAL_NOTIFIER_BLOCK_THP, the MM core first updates the VMA
+ * THP policy for the notifier's address range.
+ */
+int
+mmu_interval_notifier_set_flags_locked(struct mmu_interval_notifier *interval_sub,
+				       unsigned int flags)
+{
+	struct mm_struct *mm = interval_sub->mm;
+	unsigned long start = interval_sub->interval_tree.start;
+	unsigned long end;
+	int ret;
+
+	ret = mmu_interval_notifier_check_flags(flags);
+	if (ret)
+		return ret;
+
+	if (WARN_ON_ONCE(!mm))
+		return -EINVAL;
+
+	mmap_assert_write_locked(mm);
+
+	if ((flags & MMU_INTERVAL_NOTIFIER_BLOCK_THP) &&
+	    !(interval_sub->flags & MMU_INTERVAL_NOTIFIER_BLOCK_THP)) {
+		if (interval_sub->interval_tree.last == ULONG_MAX)
+			return -EOVERFLOW;
+		end = interval_sub->interval_tree.last + 1;
+
+		ret = mmu_interval_notifier_block_thp_locked(mm, start, end);
+		if (ret)
+			return ret;
+	}
+
+	spin_lock(&mm->notifier_subscriptions->lock);
+	interval_sub->flags = flags;
+	spin_unlock(&mm->notifier_subscriptions->lock);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mmu_interval_notifier_set_flags_locked);
 
 static bool
 mmu_interval_seq_released(struct mmu_notifier_subscriptions *subscriptions,

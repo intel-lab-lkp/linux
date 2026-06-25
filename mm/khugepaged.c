@@ -445,11 +445,16 @@ static unsigned int collapse_max_ptes_swap(struct collapse_control *cc,
 	return khugepaged_max_ptes_swap;
 }
 
-int hugepage_madvise(struct vm_area_struct *vma,
-		     vm_flags_t *vm_flags, int advice)
+int hugepage_madvise(struct vm_area_struct *vma, unsigned long start,
+		     unsigned long end, vm_flags_t *vm_flags, int advice)
 {
 	switch (advice) {
 	case MADV_HUGEPAGE:
+		if ((*vm_flags & VM_NOHUGEPAGE) &&
+		    mmu_interval_notifier_range_block_thp(vma->vm_mm,
+							  start, end))
+			return 0;
+
 		*vm_flags &= ~VM_NOHUGEPAGE;
 		*vm_flags |= VM_HUGEPAGE;
 		/*

@@ -293,7 +293,15 @@ struct mmu_interval_notifier {
 	struct mm_struct *mm;
 	struct hlist_node deferred_item;
 	unsigned long invalidate_seq;
+	unsigned int flags;
 };
+
+/*
+ * The interval range cannot safely be backed by transparent huge pages while
+ * the notifier is active. The MM core owns the VMA policy change so drivers
+ * do not have to manipulate VM_HUGEPAGE/VM_NOHUGEPAGE directly.
+ */
+#define MMU_INTERVAL_NOTIFIER_BLOCK_THP BIT(0)
 
 #ifdef CONFIG_MMU_NOTIFIER
 
@@ -347,7 +355,20 @@ int mmu_interval_notifier_insert_locked(
 	struct mmu_interval_notifier *interval_sub, struct mm_struct *mm,
 	unsigned long start, unsigned long length,
 	const struct mmu_interval_notifier_ops *ops);
+int
+mmu_interval_notifier_insert_locked_flags(struct mmu_interval_notifier *interval_sub,
+					  struct mm_struct *mm,
+					  unsigned long start,
+					  unsigned long length,
+					  const struct mmu_interval_notifier_ops *ops,
+					  unsigned int flags);
+int
+mmu_interval_notifier_set_flags_locked(struct mmu_interval_notifier *interval_sub,
+				       unsigned int flags);
 void mmu_interval_notifier_remove(struct mmu_interval_notifier *interval_sub);
+bool mmu_interval_notifier_range_block_thp(struct mm_struct *mm,
+					   unsigned long start,
+					   unsigned long end);
 
 /**
  * mmu_interval_set_seq - Save the invalidation sequence
@@ -635,6 +656,13 @@ static inline void mmu_notifier_subscriptions_init(struct mm_struct *mm)
 
 static inline void mmu_notifier_subscriptions_destroy(struct mm_struct *mm)
 {
+}
+
+static inline bool mmu_interval_notifier_range_block_thp(struct mm_struct *mm,
+							 unsigned long start,
+							 unsigned long end)
+{
+	return false;
 }
 
 #define mmu_notifier_range_update_to_read_only(r) false

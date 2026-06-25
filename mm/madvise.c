@@ -1416,7 +1416,8 @@ static int madvise_vma_behavior(struct madvise_behavior *madv_behavior)
 		break;
 	case MADV_HUGEPAGE:
 	case MADV_NOHUGEPAGE:
-		error = hugepage_madvise(vma, &new_flags, behavior);
+		error = hugepage_madvise(vma, range->start, range->end,
+					 &new_flags, behavior);
 		if (error)
 			goto out;
 		break;
