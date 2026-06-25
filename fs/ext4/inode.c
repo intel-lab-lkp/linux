@@ -5270,6 +5270,24 @@ void ext4_set_inode_mapping_order(struct inode *inode)
 	mapping_set_folio_order_range(inode->i_mapping, min_order, max_order);
 }
 
+static int ext4_iget_match(struct inode *inode, u64 ino, void *data)
+{
+	bool *is_freeing = data;
+
+	if (inode->i_ino != ino)
+		return 0;
+	spin_lock(&inode->i_lock);
+	if (inode_state_read(inode) & (I_FREEING | I_WILL_FREE | I_CREATING)) {
+		if (is_freeing)
+			*is_freeing = true;
+		spin_unlock(&inode->i_lock);
+		return -1;
+	}
+	__iget(inode);
+	spin_unlock(&inode->i_lock);
+	return 1;
+}
+
 struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 			  ext4_iget_flags flags, const char *function,
 			  unsigned int line)
@@ -5298,9 +5316,31 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 		return ERR_PTR(-EFSCORRUPTED);
 	}
 
-	inode = iget_locked(sb, ino);
-	if (!inode)
-		return ERR_PTR(-ENOMEM);
+	if (flags & EXT4_IGET_NOWAIT) {
+		bool is_freeing = false;
+
+		inode = find_inode_nowait(sb, ino, ext4_iget_match, &is_freeing);
+		if (is_freeing)
+			return ERR_PTR(-ESTALE);
+		if (!inode) {
+			inode = iget_locked(sb, ino);
+			if (!inode)
+				return ERR_PTR(-ENOMEM);
+		} else {
+			if (inode_state_read_once(inode) & I_NEW) {
+				wait_on_new_inode(inode);
+				if (unlikely(inode_unhashed(inode))) {
+					iput(inode);
+					return ERR_PTR(-ESTALE);
+				}
+			}
+		}
+	} else {
+		inode = iget_locked(sb, ino);
+		if (!inode)
+			return ERR_PTR(-ENOMEM);
+	}
+
 	if (!(inode_state_read_once(inode) & I_NEW)) {
 		ret = check_igot_inode(inode, flags, function, line);
 		if (ret) {
