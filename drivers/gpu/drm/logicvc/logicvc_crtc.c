@@ -243,6 +243,11 @@ void logicvc_crtc_vblank_handler(struct logicvc_drm *logicvc)
 	}
 }
 
+static void logicvc_crtc_of_node_put(void *data)
+{
+	of_node_put(data);
+}
+
 int logicvc_crtc_init(struct logicvc_drm *logicvc)
 {
 	struct drm_device *drm_dev = &logicvc->drm_dev;
@@ -273,6 +278,10 @@ int logicvc_crtc_init(struct logicvc_drm *logicvc)
 	drm_crtc_helper_add(&crtc->drm_crtc, &logicvc_crtc_helper_funcs);
 
 	crtc->drm_crtc.port = of_graph_get_port_by_id(of_node, 1);
+
+	ret = devm_add_action_or_reset(dev, logicvc_crtc_of_node_put, crtc->drm_crtc.port);
+	if (ret)
+		return ret;
 
 	logicvc->crtc = crtc;
 
