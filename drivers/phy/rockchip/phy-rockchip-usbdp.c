@@ -1329,11 +1329,12 @@ static int rk_udphy_typec_mux_set(struct typec_mux_dev *mux,
 	struct rk_udphy *udphy = typec_mux_get_drvdata(mux);
 
 	/*
-	 * Ignore mux events not involving DP AltMode, because
-	 * the mode field is being reused, e.g. state->mode == 4
-	 * could be either TYPEC_MODE_USB4 or TYPEC_DP_STATE_C.
+	 * Ignore mux events not involving Safe State, USB State or DP AltMode,
+	 * because the mode field is being reused, e.g. state->mode == 4 could
+	 * be either TYPEC_MODE_USB4 or TYPEC_DP_STATE_C.
 	 */
-	if (!state->alt || state->alt->svid != USB_TYPEC_DP_SID)
+	if (state->mode >= TYPEC_STATE_MODAL || !state->alt ||
+	    state->alt->svid != USB_TYPEC_DP_SID)
 		return 0;
 
 	mutex_lock(&udphy->mutex);
