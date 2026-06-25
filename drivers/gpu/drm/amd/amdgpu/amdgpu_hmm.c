@@ -44,6 +44,7 @@
  */
 
 #include <linux/firmware.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 #include <drm/drm.h>
 
@@ -130,16 +131,24 @@ static const struct mmu_interval_notifier_ops amdgpu_hmm_hsa_ops = {
  */
 int amdgpu_hmm_register(struct amdgpu_bo *bo, unsigned long addr)
 {
+	struct mm_struct *mm = current->mm;
+	unsigned long size = amdgpu_bo_size(bo);
 	int r;
 
-	if (bo->kfd_bo)
-		r = mmu_interval_notifier_insert(&bo->notifier, current->mm,
-						    addr, amdgpu_bo_size(bo),
-						    &amdgpu_hmm_hsa_ops);
-	else
-		r = mmu_interval_notifier_insert(&bo->notifier, current->mm, addr,
-							amdgpu_bo_size(bo),
-							&amdgpu_hmm_gfx_ops);
+	if (unlikely(!mm))
+		return -ESRCH;
+
+	if (bo->kfd_bo) {
+		mmap_write_lock(mm);
+		r = mmu_interval_notifier_insert_locked_flags(&bo->notifier, mm,
+							      addr, size,
+							      &amdgpu_hmm_hsa_ops,
+							      MMU_INTERVAL_NOTIFIER_BLOCK_THP);
+		mmap_write_unlock(mm);
+	} else {
+		r = mmu_interval_notifier_insert(&bo->notifier, mm, addr, size,
+						 &amdgpu_hmm_gfx_ops);
+	}
 	if (r)
 		/*
 		 * Make sure amdgpu_hmm_unregister() doesn't call
