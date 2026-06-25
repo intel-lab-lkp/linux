@@ -1952,7 +1952,8 @@ static const struct blk_mq_ops nbd_mq_ops = {
 	.timeout	= nbd_xmit_timeout,
 };
 
-static struct nbd_device *nbd_dev_add(int index, unsigned int refs)
+static struct nbd_device *nbd_dev_add(int index, unsigned int refs,
+				       int nr_hw_queues)
 {
 	struct queue_limits lim = {
 		.max_hw_sectors		= 65536,
@@ -1969,7 +1970,7 @@ static struct nbd_device *nbd_dev_add(int index, unsigned int refs)
 		goto out;
 
 	nbd->tag_set.ops = &nbd_mq_ops;
-	nbd->tag_set.nr_hw_queues = 1;
+	nbd->tag_set.nr_hw_queues = nr_hw_queues;
 	nbd->tag_set.queue_depth = 128;
 	nbd->tag_set.numa_node = NUMA_NO_NODE;
 	nbd->tag_set.cmd_size = sizeof(struct nbd_cmd);
@@ -2092,6 +2093,35 @@ static const struct nla_policy nbd_sock_policy[NBD_SOCK_MAX + 1] = {
 	[NBD_SOCK_FD]			=	{ .type = NLA_U32 },
 };
 
+/*
+ * Count the number of socket FDs in the NBD_ATTR_SOCKETS netlink attribute.
+ * This is used to determine the correct nr_hw_queues before creating the
+ * nbd device, so that blk_mq_update_nr_hw_queues (and its RCU grace period
+ * overhead) can be avoided entirely.
+ */
+static int nbd_genl_count_sockets(struct genl_info *info)
+{
+	struct nlattr *attr;
+	int rem, count = 0;
+
+	if (!info->attrs[NBD_ATTR_SOCKETS])
+		return 0;
+
+	nla_for_each_nested(attr, info->attrs[NBD_ATTR_SOCKETS], rem) {
+		struct nlattr *socks[NBD_SOCK_MAX + 1];
+
+		if (nla_type(attr) != NBD_SOCK_ITEM)
+			continue;
+		if (nla_parse_nested_deprecated(socks, NBD_SOCK_MAX,
+						  attr, nbd_sock_policy,
+						  info->extack) != 0)
+			continue;
+		if (socks[NBD_SOCK_FD])
+			count++;
+	}
+	return count;
+}
+
 /* We don't use this right now since we don't parse the incoming list, but we
  * still want it here so userspace knows what to expect.
  */
@@ -2123,6 +2153,7 @@ static int nbd_genl_connect(struct sk_buff *skb, struct genl_info *info)
 	struct nbd_device *nbd;
 	struct nbd_config *config;
 	int index = -1;
+	int num_connections = nbd_genl_count_sockets(info);
 	int ret;
 	bool put_dev = false;
 
@@ -2170,7 +2201,7 @@ again:
 	mutex_unlock(&nbd_index_mutex);
 
 	if (!nbd) {
-		nbd = nbd_dev_add(index, 2);
+		nbd = nbd_dev_add(index, 2, num_connections);
 		if (IS_ERR(nbd)) {
 			pr_err("failed to add new device\n");
 			return PTR_ERR(nbd);
@@ -2737,7 +2768,7 @@ static int __init nbd_init(void)
 	nbd_dbg_init();
 
 	for (i = 0; i < nbds_max; i++)
-		nbd_dev_add(i, 1);
+		nbd_dev_add(i, 1, 1);
 	return 0;
 }
 
