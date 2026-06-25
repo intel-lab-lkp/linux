@@ -150,6 +150,13 @@ typedef int __bitwise folio_walk_flags_t;
 
 /* Walk shared zeropages (small + huge) as well. */
 #define FW_ZEROPAGE			((__force folio_walk_flags_t)BIT(0))
+/*
+ * The caller holds the per-VMA lock instead of the mmap lock, with interrupts
+ * disabled across the walk (until folio_walk_end()) to serialize against page
+ * table freeing, the same way gup_fast does. Only valid with RCU-freed page
+ * tables (CONFIG_MMU_GATHER_RCU_TABLE_FREE) and not for hugetlb.
+ */
+#define FW_VMA_LOCKED			((__force folio_walk_flags_t)BIT(1))
 
 enum folio_walk_level {
 	FW_LEVEL_PTE,

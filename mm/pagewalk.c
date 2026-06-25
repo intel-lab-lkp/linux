@@ -890,7 +890,10 @@ int walk_page_mapping(struct address_space *mapping, pgoff_t first_index,
  * huge_ptep_set_*, ...). Note that the page table entry stored in @fw might
  * not correspond to the first physical entry of a logical hugetlb entry.
  *
- * The mmap lock must be held in read mode.
+ * The mmap lock must be held in read mode. Alternatively, if @FW_VMA_LOCKED is
+ * passed, the VMA's per-VMA lock must be held and interrupts must be disabled
+ * across the walk and until folio_walk_end() (only supported with RCU-freed page
+ * tables, i.e. CONFIG_MMU_GATHER_RCU_TABLE_FREE, and not for hugetlb).
  *
  * Return: folio pointer on success, otherwise NULL.
  */
@@ -908,7 +911,29 @@ struct folio *folio_walk_start(struct folio_walk *fw,
 	pgd_t *pgdp;
 	p4d_t *p4dp;
 
-	mmap_assert_locked(vma->vm_mm);
+	if (flags & FW_VMA_LOCKED) {
+		/*
+		 * Lockless walk under the per-VMA lock instead of the mmap
+		 * lock. The VMA lock keeps the VMA stable, but the page tables
+		 * walked below it can still be freed concurrently: a munmap() or
+		 * THP collapse of an adjacent region in the same mm can free a
+		 * shared upper-level table, and collapse_huge_page() ->
+		 * retract_page_tables() frees page tables of VMAs whose lock it
+		 * does not hold. Page table freeing serializes against lockless
+		 * walkers via tlb_remove_table_sync_one(), which IPIs and waits
+		 * for every CPU to enable interrupts; an RCU read-side critical
+		 * section does not block that IPI, so the caller must keep
+		 * interrupts disabled across the whole walk, like gup_fast.
+		 * Hugetlb (PMD sharing) maps page tables not covered by this
+		 * VMA's lock and is not supported.
+		 */
+		VM_WARN_ON_ONCE(!IS_ENABLED(CONFIG_MMU_GATHER_RCU_TABLE_FREE));
+		VM_WARN_ON_ONCE(is_vm_hugetlb_page(vma));
+		lockdep_assert_irqs_disabled();
+		vma_assert_locked(vma);
+	} else {
+		mmap_assert_locked(vma->vm_mm);
+	}
 	vma_pgtable_walk_begin(vma);
 
 	if (WARN_ON_ONCE(addr < vma->vm_start || addr >= vma->vm_end))
