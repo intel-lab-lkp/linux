@@ -685,6 +685,11 @@ DEFINE_PER_CPU(struct sched_domain __rcu *, sd_asym_cpucapacity);
 DEFINE_STATIC_KEY_FALSE(sched_asym_cpucapacity);
 DEFINE_STATIC_KEY_FALSE(sched_cluster_active);
 
+#ifdef CONFIG_SCHED_CACHE
+static int __rcu *llc_to_node_map;
+static void rebuild_llc_node_map(int size);
+#endif
+
 static void update_top_cache_domain(int cpu)
 {
 	struct sched_domain_shared *sds = NULL;
@@ -856,6 +861,58 @@ DEFINE_STATIC_KEY_FALSE(sched_cache_active);
 /* user wants cache aware scheduling [0 or 1] */
 int sysctl_sched_cache_user = 1;
 
+int llc_to_node(int llc)
+{
+	int node = -1;
+	int *map = NULL;
+
+	rcu_read_lock();
+	map = rcu_dereference(llc_to_node_map);
+	if (map && llc >= 0 && llc <= max_lid)
+		node = map[llc];
+	rcu_read_unlock();
+
+	return node;
+}
+
+int llc_distance(int llc1, int llc2)
+{
+	int numa1, numa2;
+
+	numa1 = llc_to_node(llc1);
+	numa2 = llc_to_node(llc2);
+	if (numa1 < 0 || numa2 < 0)
+		return -1;
+
+	return node_distance(numa1, numa2);
+}
+
+static void rebuild_llc_node_map(int size)
+{
+	int *new_map, *old_map;
+	int cpu, llc = -1;
+
+	new_map = kcalloc(size, sizeof(int), GFP_KERNEL);
+	if (!new_map)
+		return;
+
+	for_each_possible_cpu(cpu) {
+		int tmp = per_cpu(sd_llc_id, cpu);
+
+		if (tmp == llc)
+			continue;
+
+		llc = tmp;
+		if (llc >= 0 && llc < size)
+			new_map[llc] = cpu_to_node(cpu);
+	}
+
+	old_map = rcu_dereference_protected(llc_to_node_map, true);
+	rcu_assign_pointer(llc_to_node_map, new_map);
+	synchronize_rcu();
+	kfree(old_map);
+}
+
 /*
  * Get the effective LLC size in bytes that @cpu's bottom sched_domain
  * can use. A CPU within a cpuset partition can only use a proportion
@@ -925,6 +982,7 @@ static bool alloc_sd_llc(const struct cpumask *cpu_map,
 		}
 	}
 
+	rebuild_llc_node_map(max_lid + 1);
 	return true;
 err:
 	for_each_cpu(i, cpu_map) {

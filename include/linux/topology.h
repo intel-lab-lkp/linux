@@ -177,6 +177,11 @@ static inline int cpu_to_mem(int cpu)
 
 #endif	/* [!]CONFIG_HAVE_MEMORYLESS_NODES */
 
+#ifdef CONFIG_SCHED_CACHE
+int llc_to_node(int llc);
+int llc_distance(int llc1, int llc2);
+#endif
+
 #if defined(topology_die_id) && defined(topology_die_cpumask)
 #define TOPOLOGY_DIE_SYSFS
 #endif
