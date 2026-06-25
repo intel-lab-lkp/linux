@@ -2294,15 +2294,36 @@ static inline int memdesc_nid(memdesc_flags_t mdf)
 }
 #endif
 
+#ifdef CONFIG_NUMA
 static inline int page_to_nid(const struct page *page)
 {
-	return memdesc_nid(PF_POISONED_CHECK(page)->flags);
+	const struct page *p = PF_POISONED_CHECK(page);
+
+#ifndef NODE_NOT_IN_PAGE_FLAGS
+	ASSERT_EXCLUSIVE_BITS(p->flags, NODES_MASK << NODES_PGSHIFT);
+#endif
+	return memdesc_nid(p->flags);
 }
 
 static inline int folio_nid(const struct folio *folio)
 {
+#ifndef NODE_NOT_IN_PAGE_FLAGS
+	ASSERT_EXCLUSIVE_BITS(folio->flags,
+			      NODES_MASK << NODES_PGSHIFT);
+#endif
 	return memdesc_nid(folio->flags);
 }
+#else
+static inline int page_to_nid(const struct page *page)
+{
+	return 0;
+}
+
+static inline int folio_nid(const struct folio *folio)
+{
+	return 0;
+}
+#endif
 
 #ifdef CONFIG_NUMA_BALANCING
 /* page access time bits needs to hold at least 4 seconds */
