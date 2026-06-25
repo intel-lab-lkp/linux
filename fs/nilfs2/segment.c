@@ -741,6 +741,8 @@ static size_t nilfs_lookup_dirty_data_buffers(struct inode *inode,
 		do {
 			if (!buffer_dirty(bh) || buffer_async_write(bh))
 				continue;
+			if (!list_empty(&bh->b_assoc_buffers))
+				continue;
 			get_bh(bh);
 			list_add_tail(&bh->b_assoc_buffers, listp);
 			ndirties++;
@@ -779,7 +781,8 @@ static void nilfs_lookup_dirty_node_buffers(struct inode *inode,
 			bh = head = folio_buffers(fbatch.folios[i]);
 			do {
 				if (buffer_dirty(bh) &&
-						!buffer_async_write(bh)) {
+						!buffer_async_write(bh) &&
+						list_empty(&bh->b_assoc_buffers)) {
 					get_bh(bh);
 					list_add_tail(&bh->b_assoc_buffers,
 						      listp);
