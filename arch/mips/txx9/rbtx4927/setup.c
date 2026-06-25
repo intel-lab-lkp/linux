@@ -178,7 +178,7 @@ static void __init rbtx4927_gpio_init(void)
 
 static void __init rbtx4927_arch_init(void)
 {
-	txx9_gpio_init(TX4927_PIO_REG & 0xfffffffffULL, 0, TX4927_NUM_PIO);
+	txx9_gpio_init(TX4927_PIO_REG & 0xfffffffffULL, TX4927_NUM_PIO);
 
 	rbtx4927_gpio_init();
 
@@ -187,7 +187,7 @@ static void __init rbtx4927_arch_init(void)
 
 static void __init rbtx4937_arch_init(void)
 {
-	txx9_gpio_init(TX4938_PIO_REG & 0xfffffffffULL, 0, TX4938_NUM_PIO);
+	txx9_gpio_init(TX4938_PIO_REG & 0xfffffffffULL, TX4938_NUM_PIO);
 
 	rbtx4927_gpio_init();
 
