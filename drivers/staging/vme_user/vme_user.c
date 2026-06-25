@@ -175,11 +175,22 @@ static ssize_t buffer_from_user(unsigned int minor, const char __user *buf,
 	return count;
 }
 
+static size_t vme_user_get_image_size(unsigned int minor)
+{
+	size_t image_size = vme_get_size(image[minor].resource);
+
+	if (type[minor] == SLAVE_MINOR)
+		image_size = min_t(size_t, image_size, image[minor].size_buf);
+
+	return image_size;
+}
+
 static ssize_t vme_user_read(struct file *file, char __user *buf, size_t count,
 			     loff_t *ppos)
 {
 	unsigned int minor = iminor(file_inode(file));
 	ssize_t retval;
+	size_t offset;
 	size_t image_size;
 
 	if (minor == CONTROL_MINOR)
@@ -188,17 +199,19 @@ static ssize_t vme_user_read(struct file *file, char __user *buf, size_t count,
 	mutex_lock(&image[minor].mutex);
 
 	/* XXX Do we *really* want this helper - we can use vme_*_get ? */
-	image_size = vme_get_size(image[minor].resource);
+	image_size = vme_user_get_image_size(minor);
 
 	/* Ensure we are starting at a valid location */
-	if ((*ppos < 0) || (*ppos > (image_size - 1))) {
+	if ((*ppos < 0) || ((u64)*ppos >= image_size)) {
 		mutex_unlock(&image[minor].mutex);
 		return 0;
 	}
 
+	offset = *ppos;
+
 	/* Ensure not reading past end of the image */
-	if (*ppos + count > image_size)
-		count = image_size - *ppos;
+	if (count > image_size - offset)
+		count = image_size - offset;
 
 	switch (type[minor]) {
 	case MASTER_MINOR:
@@ -223,6 +236,7 @@ static ssize_t vme_user_write(struct file *file, const char __user *buf,
 {
 	unsigned int minor = iminor(file_inode(file));
 	ssize_t retval;
+	size_t offset;
 	size_t image_size;
 
 	if (minor == CONTROL_MINOR)
@@ -230,17 +244,19 @@ static ssize_t vme_user_write(struct file *file, const char __user *buf,
 
 	mutex_lock(&image[minor].mutex);
 
-	image_size = vme_get_size(image[minor].resource);
+	image_size = vme_user_get_image_size(minor);
 
 	/* Ensure we are starting at a valid location */
-	if ((*ppos < 0) || (*ppos > (image_size - 1))) {
+	if ((*ppos < 0) || ((u64)*ppos >= image_size)) {
 		mutex_unlock(&image[minor].mutex);
 		return 0;
 	}
 
+	offset = *ppos;
+
 	/* Ensure not reading past end of the image */
-	if (*ppos + count > image_size)
-		count = image_size - *ppos;
+	if (count > image_size - offset)
+		count = image_size - offset;
 
 	switch (type[minor]) {
 	case MASTER_MINOR:
@@ -271,7 +287,7 @@ static loff_t vme_user_llseek(struct file *file, loff_t off, int whence)
 	case MASTER_MINOR:
 	case SLAVE_MINOR:
 		mutex_lock(&image[minor].mutex);
-		image_size = vme_get_size(image[minor].resource);
+		image_size = vme_user_get_image_size(minor);
 		res = fixed_size_llseek(file, off, whence, image_size);
 		mutex_unlock(&image[minor].mutex);
 		return res;
@@ -393,6 +409,10 @@ static int vme_user_ioctl(struct inode *inode, struct file *file,
 				pr_warn("Partial copy from userspace\n");
 				return -EFAULT;
 			}
+
+			if (slave.enable &&
+			    (!slave.size || slave.size > image[minor].size_buf))
+				return -EINVAL;
 
 			/* XXX	We do not want to push aspace, cycle and width
 			 *	to userspace as they are
