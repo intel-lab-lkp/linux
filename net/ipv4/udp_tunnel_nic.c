@@ -147,7 +147,7 @@ udp_tunnel_nic_should_replay(struct net_device *dev, struct udp_tunnel_nic *utn)
 	const struct udp_tunnel_nic_table_info *table;
 	unsigned int i, j;
 
-	if (!utn->missed)
+	if (!READ_ONCE(utn->missed))
 		return false;
 
 	for (i = 0; i < utn->n_tables; i++) {
@@ -353,7 +353,7 @@ udp_tunnel_nic_has_collision(struct net_device *dev, struct udp_tunnel_nic *utn,
 			if (!udp_tunnel_nic_entry_is_free(entry) &&
 			    entry->port == ti->port &&
 			    entry->type != ti->type) {
-				__set_bit(i, &utn->missed);
+				set_bit(i, &utn->missed);
 				return true;
 			}
 		}
@@ -488,7 +488,7 @@ udp_tunnel_nic_add_new(struct net_device *dev, struct udp_tunnel_nic *utn,
 		 * are no devices currently which have multiple tables accepting
 		 * the same tunnel type, and false positives are okay.
 		 */
-		__set_bit(i, &utn->missed);
+		set_bit(i, &utn->missed);
 	}
 
 	return false;
@@ -718,7 +718,7 @@ udp_tunnel_nic_replay(struct net_device *dev, struct udp_tunnel_nic *utn)
 	for (i = 0; i < utn->n_tables; i++)
 		for (j = 0; j < info->tables[i].n_entries; j++)
 			udp_tunnel_nic_entry_freeze_used(&utn->entries[i][j]);
-	utn->missed = 0;
+	WRITE_ONCE(utn->missed, 0);
 	clear_bit(UDP_TUNNEL_NIC_NEED_REPLAY, &utn->flags);
 
 	if (!info->shared) {
