@@ -878,6 +878,7 @@ ssize_t btrfs_direct_write(struct kiocb *iocb, struct iov_iter *from)
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file_inode(file);
 	struct btrfs_fs_info *fs_info = inode_to_fs_info(inode);
+	struct btrfs_ordered_extent *ordered;
 	loff_t pos;
 	ssize_t written = 0;
 	ssize_t written_buffered;
@@ -1031,6 +1032,29 @@ buffered:
 	}
 
 	pos = iocb->ki_pos;
+
+	/*
+	 * The DIO path may have created ordered extent(s) that are still being
+	 * processed asynchronously in a work queue.  We must wait for them to
+	 * be fully completed and removed from the rb-tree before doing a
+	 * buffered write to the same or overlapping range; otherwise the
+	 * buffered writeback path (run_delalloc_nocow -> fallback_to_cow ->
+	 * cow_file_range) may try to insert a new ordered extent that conflicts
+	 * with the still-pending DIO one, triggering a BUG_ON in
+	 * insert_ordered_extent().
+	 *
+	 * This happens when DIO creates an ordered extent but has a short write
+	 * (submitted < length in btrfs_dio_iomap_end()), which truncates and
+	 * finishes the ordered extent asynchronously while we fall back to
+	 * buffered IO for the same range.
+	 */
+	while ((ordered = btrfs_lookup_ordered_range(BTRFS_I(inode),
+				(u64)(pos - written),
+				(u64)written + iov_iter_count(from))) != NULL) {
+		btrfs_start_ordered_extent(ordered);
+		btrfs_put_ordered_extent(ordered);
+	}
+
 	written_buffered = btrfs_buffered_write(iocb, from);
 	if (written_buffered < 0) {
 		ret = written_buffered;
