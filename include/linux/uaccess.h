@@ -34,6 +34,17 @@
 })
 #endif
 
+/*
+ * Like untagged_addr_remote(), but for callers that stabilize @mm by other
+ * means (e.g. a per-VMA lock) and must not assert the mmap lock.
+ */
+#ifndef untagged_addr_remote_unlocked
+#define untagged_addr_remote_unlocked(mm, addr)	({	\
+	(void)(mm);					\
+	untagged_addr(addr);				\
+})
+#endif
+
 #ifdef masked_user_access_begin
  #define can_do_masked_user_access() 1
 # ifndef masked_user_write_access_begin

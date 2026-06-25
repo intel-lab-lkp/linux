@@ -42,6 +42,8 @@
 #include <linux/kernel_stat.h>
 #include <linux/mm.h>
 #include <linux/mm_inline.h>
+#include <linux/secretmem.h>
+#include <linux/pagewalk.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/numa_balancing.h>
 #include <linux/sched/task.h>
@@ -7015,6 +7017,180 @@ EXPORT_SYMBOL_GPL(generic_access_phys);
 #endif
 
 /*
+ * The fast path uses folio_walk_start(FW_VMA_LOCKED), which needs the per-VMA
+ * lock and RCU-freed page tables to walk page tables without the mmap lock.
+ */
+#if defined(CONFIG_PER_VMA_LOCK) && defined(CONFIG_MMU_GATHER_RCU_TABLE_FREE)
+/*
+ * Read-side VMA checks for the lockless fast path, mirroring the read side of
+ * check_vma_flags(): reject what FW_VMA_LOCKED cannot handle (hugetlb), what
+ * needs the ->access() handler (VM_IO/VM_PFNMAP), or what has no struct page to
+ * copy (secretmem); enforce the FOLL_ANON restriction that
+ * /proc/PID/{cmdline,environ} rely on (CVE-2018-1120); and require read access
+ * (honoring FOLL_FORCE).  Anything not positively allowed falls back to the slow
+ * path, which re-validates everything.
+ */
+static bool vma_permits_fast_access(struct vm_area_struct *vma,
+				    unsigned int gup_flags)
+{
+	if (vma->vm_flags & (VM_IO | VM_PFNMAP))
+		return false;
+	if (is_vm_hugetlb_page(vma) || vma_is_secretmem(vma))
+		return false;
+	if ((gup_flags & FOLL_ANON) && !vma_is_anonymous(vma))
+		return false;
+	if (!(vma->vm_flags & VM_READ) &&
+	    (!(gup_flags & FOLL_FORCE) || !(vma->vm_flags & VM_MAYREAD)))
+		return false;
+	return true;
+}
+
+/* Size of the single mapping entry folio_walk_start() landed on. */
+static unsigned long fw_entry_size(enum folio_walk_level level)
+{
+	switch (level) {
+	case FW_LEVEL_PUD:
+		return PUD_SIZE;
+	case FW_LEVEL_PMD:
+		return PMD_SIZE;
+	default:
+		return PAGE_SIZE;
+	}
+}
+
+/*
+ * Copy @len bytes of the pinned @folio out to @buf, starting at byte offset
+ * @folio_off within the folio (the position of @addr).  Maps and copies one
+ * page at a time -- kmap_local_folio() for HIGHMEM, copy_from_user_page() for
+ * the per-page flush on aliasing caches -- without re-walking page tables.
+ * Each page borrows the caller's single folio reference, so the mapping is
+ * dropped with kunmap_local() rather than folio_release_kmap().
+ */
+static void copy_folio_pages(struct vm_area_struct *vma, struct folio *folio,
+			     unsigned long folio_off, unsigned long addr,
+			     void *buf, unsigned long len)
+{
+	unsigned long done = 0;
+
+	while (done < len) {
+		unsigned long pos = folio_off + done;
+		unsigned long page_idx = pos >> PAGE_SHIFT;
+		unsigned int page_off = pos & ~PAGE_MASK;
+		unsigned int chunk = min_t(unsigned long, len - done,
+					   PAGE_SIZE - page_off);
+		void *kaddr = kmap_local_folio(folio, page_idx << PAGE_SHIFT);
+
+		copy_from_user_page(vma, folio_page(folio, page_idx),
+				    addr + done, buf + done, kaddr + page_off,
+				    chunk);
+		kunmap_local(kaddr);
+		done += chunk;
+	}
+}
+
+/*
+ * Opportunistic lockless fast path for __access_remote_vm() reads.
+ *
+ * Memory already resident in @mm can be read without taking the frequently
+ * contended mmap_lock: a per-VMA lock stabilizes the VMA, and folio_walk_start()
+ * with FW_VMA_LOCKED grabs a short-lived reference to a present page from a page
+ * table walk run with interrupts disabled, which serializes against concurrent
+ * page table freeing the same way gup_fast does (relying on
+ * MMU_GATHER_RCU_TABLE_FREE).
+ *
+ * Only a request that lies entirely within a single VMA is handled here,
+ * which should not be an issue in practice since every caller has a
+ * buffer of PAGE_SIZE or smaller. Loop iteration inside this function
+ * should be rare, too.
+ *
+ * Returns the number of bytes transferred via the fast path.
+ */
+static int access_remote_vm_fast(struct mm_struct *mm, unsigned long addr,
+				 void *buf, int len, unsigned int gup_flags)
+{
+	void *old_buf = buf;
+	struct vm_area_struct *vma;
+
+	addr = untagged_addr_remote_unlocked(mm, addr);
+
+	vma = lock_vma_under_rcu(mm, addr);
+	if (!vma)
+		return 0;
+
+	/* Only handle a request contained entirely within this one VMA. */
+	if (len > vma->vm_end - addr)
+		goto out_unlock;
+
+	if (!vma_permits_fast_access(vma, gup_flags))
+		goto out_unlock;
+
+	while (len) {
+		struct folio_walk fw;
+		struct folio *folio;
+		struct page *page;
+		unsigned long entry_size, folio_off, span, irq_flags;
+
+		/*
+		 * The lockless page table walk must run with interrupts
+		 * disabled: page table freeing (munmap or THP collapse, which
+		 * IPI via tlb_remove_table_sync_one() and wait) then cannot free
+		 * a table mid-walk -- the same contract gup_fast relies on.  IRQs
+		 * are restored once the folio is pinned; the copy below holds only
+		 * the folio reference.
+		 */
+		local_irq_save(irq_flags);
+		folio = folio_walk_start(&fw, vma, addr, FW_VMA_LOCKED);
+		if (!folio) {
+			local_irq_restore(irq_flags);
+			goto out_unlock;	/* not present: let the slow path fault it in */
+		}
+		page = fw.page;
+		if (!page) {
+			/* No struct page to copy (e.g. a special PTE). */
+			folio_walk_end(&fw, vma);
+			local_irq_restore(irq_flags);
+			goto out_unlock;
+		}
+		entry_size = fw_entry_size(fw.level);
+		folio_get(folio);
+		folio_walk_end(&fw, vma);
+		local_irq_restore(irq_flags);
+
+		/*
+		 * folio_walk_start() validated one present mapping entry
+		 * (PAGE/PMD/PUD_SIZE).  Copy to the end of that entry, bounded by
+		 * the folio and the remaining length (already within the VMA), so
+		 * a huge mapping is handled in a single walk.
+		 */
+		folio_off = (folio_page_idx(folio, page) << PAGE_SHIFT) +
+			    offset_in_page(addr);
+		span = min3((unsigned long)len,
+			    entry_size - (addr & (entry_size - 1)),
+			    (folio_nr_pages(folio) << PAGE_SHIFT) - folio_off);
+
+		copy_folio_pages(vma, folio, folio_off, addr, buf, span);
+
+		/* Match the FOLL_TOUCH behaviour of the slow (GUP) path. */
+		folio_mark_accessed(folio);
+		folio_put(folio);
+		len -= span;
+		buf += span;
+		addr += span;
+	}
+
+out_unlock:
+	vma_end_read(vma);
+	return buf - old_buf;
+}
+#else
+static int access_remote_vm_fast(struct mm_struct *mm, unsigned long addr,
+				 void *buf, int len, unsigned int gup_flags)
+{
+	return 0;
+}
+#endif /* CONFIG_PER_VMA_LOCK && CONFIG_MMU_GATHER_RCU_TABLE_FREE */
+
+/*
  * Access another process' address space as given in mm.
  */
 static int __access_remote_vm(struct mm_struct *mm, unsigned long addr,
@@ -7023,15 +7199,30 @@ static int __access_remote_vm(struct mm_struct *mm, unsigned long addr,
 	void *old_buf = buf;
 	int write = gup_flags & FOLL_WRITE;
 
+	/*
+	 * Try the lockless fast path for reads first; it transfers what it can
+	 * from resident memory without taking mmap_lock, and leaves the
+	 * remainder (if any) to the slow path below.
+	 */
+	if (!write) {
+		int done = access_remote_vm_fast(mm, addr, buf, len, gup_flags);
+
+		addr += done;
+		buf += done;
+		len -= done;
+		if (!len)
+			return buf - old_buf;
+	}
+
 	if (mmap_read_lock_killable(mm))
-		return 0;
+		return buf - old_buf;
 
 	/* Untag the address before looking up the VMA */
 	addr = untagged_addr_remote(mm, addr);
 
 	/* Avoid triggering the temporary warning in __get_user_pages */
 	if (!vma_lookup(mm, addr) && !expand_stack(mm, addr))
-		return 0;
+		return buf - old_buf;
 
 	/* ignore errors, just check how much was successfully transferred */
 	while (len) {

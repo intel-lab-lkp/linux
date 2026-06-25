@@ -39,11 +39,23 @@ static inline unsigned long __untagged_addr(unsigned long addr)
 	(__force __typeof__(addr))__untagged_addr(__addr);		\
 })
 
+/* Strip the tag bits from a remote mm's address; usable without the mmap lock. */
+static inline unsigned long __untagged_addr_remote_unlocked(struct mm_struct *mm,
+							    unsigned long addr)
+{
+	return addr & READ_ONCE(mm->context.untag_mask);
+}
+
+#define untagged_addr_remote_unlocked(mm, addr)	({			\
+	unsigned long __addr = (__force unsigned long)(addr);		\
+	(__force __typeof__(addr))__untagged_addr_remote_unlocked(mm, __addr); \
+})
+
 static inline unsigned long __untagged_addr_remote(struct mm_struct *mm,
 						   unsigned long addr)
 {
 	mmap_assert_locked(mm);
-	return addr & READ_ONCE((mm)->context.untag_mask);
+	return __untagged_addr_remote_unlocked(mm, addr);
 }
 
 #define untagged_addr_remote(mm, addr)	({				\
