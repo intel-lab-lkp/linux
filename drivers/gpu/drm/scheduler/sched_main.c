@@ -637,7 +637,6 @@ void drm_sched_job_arm(struct drm_sched_job *job)
 	struct drm_gpu_scheduler *sched;
 	struct drm_sched_entity *entity = job->entity;
 
-	BUG_ON(!entity);
 	drm_sched_entity_select_rq(entity);
 	sched = container_of(entity->rq, typeof(*sched), rq);
 
