@@ -5136,8 +5136,10 @@ int sev_gmem_prepare(struct kvm *kvm, kvm_pfn_t pfn, gfn_t gfn, int max_order)
 	return 0;
 }
 
-void sev_gmem_invalidate(kvm_pfn_t start, kvm_pfn_t end)
+void sev_gmem_free_folio(struct folio *folio)
 {
+	kvm_pfn_t start = page_to_pfn(folio_page(folio, 0));
+	kvm_pfn_t end = start + (1ul << folio_order(folio));
 	kvm_pfn_t pfn;
 
 	if (!cc_platform_has(CC_ATTR_HOST_SEV_SNP))
