@@ -27,6 +27,7 @@
 #include <linux/sched.h>
 #include <linux/sched/debug.h>
 #include <linux/nmi.h>
+#include <linux/hrtimer.h>
 #include <linux/atomic.h>
 #include <linux/bitops.h>
 #include <linux/export.h>
