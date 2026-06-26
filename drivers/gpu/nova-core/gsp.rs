@@ -57,8 +57,8 @@ pub(crate) struct GspBootContext<'a> {
     pub(crate) pdev: &'a pci::Device<device::Bound>,
     pub(crate) bar: Bar0<'a>,
     pub(crate) chipset: Chipset,
-    pub(crate) gsp_falcon: &'a Falcon<GspFalcon>,
-    pub(crate) sec2_falcon: &'a Falcon<Sec2Falcon>,
+    pub(crate) gsp_falcon: &'a Falcon<'a, GspFalcon>,
+    pub(crate) sec2_falcon: &'a Falcon<'a, Sec2Falcon>,
 }
 
 impl<'a> GspBootContext<'a> {

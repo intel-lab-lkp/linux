@@ -62,12 +62,11 @@ impl FwsecUnloadFirmware {
     /// Loads the FWSEC SB firmware, as well as its bootloader if `chipset` requires it.
     fn new(
         dev: &device::Device<device::Bound>,
-        bar: Bar0<'_>,
         chipset: Chipset,
         bios: &Vbios,
-        gsp_falcon: &Falcon<GspEngine>,
+        gsp_falcon: &Falcon<'_, GspEngine>,
     ) -> Result<Self> {
-        let fwsec_sb = FwsecFirmware::new(dev, gsp_falcon, bar, bios, FwsecCommand::Sb)?;
+        let fwsec_sb = FwsecFirmware::new(dev, gsp_falcon, bios, FwsecCommand::Sb)?;
 
         Ok(if chipset.needs_fwsec_bootloader() {
             Self::WithBl(FwsecFirmwareWithBl::new(fwsec_sb, dev, chipset)?)
@@ -81,10 +80,10 @@ impl FwsecUnloadFirmware {
         &self,
         dev: &device::Device<device::Bound>,
         bar: Bar0<'_>,
-        gsp_falcon: &Falcon<GspEngine>,
+        gsp_falcon: &Falcon<'_, GspEngine>,
     ) -> Result {
         match self {
-            Self::WithoutBl(fw) => fw.run(dev, gsp_falcon, bar),
+            Self::WithoutBl(fw) => fw.run(dev, gsp_falcon),
             Self::WithBl(fw) => fw.run(dev, gsp_falcon, bar),
         }
     }
@@ -101,22 +100,20 @@ impl Sec2UnloadBundle {
     /// Load and prepare the resources required to properly reset the GSP after it has been stopped.
     fn build(
         dev: &device::Device<device::Bound>,
-        bar: Bar0<'_>,
         chipset: Chipset,
         bios: &Vbios,
-        gsp_falcon: &Falcon<GspEngine>,
-        sec2_falcon: &Falcon<Sec2>,
+        gsp_falcon: &Falcon<'_, GspEngine>,
+        sec2_falcon: &Falcon<'_, Sec2>,
     ) -> Result<KBox<dyn UnloadBundle>> {
         KBox::new(
             Self {
-                fwsec_sb: FwsecUnloadFirmware::new(dev, bar, chipset, bios, gsp_falcon)?,
+                fwsec_sb: FwsecUnloadFirmware::new(dev, chipset, bios, gsp_falcon)?,
                 booter_unloader: BooterFirmware::new(
                     dev,
                     BooterKind::Unloader,
                     chipset,
                     FIRMWARE_VERSION,
                     sec2_falcon,
-                    bar,
                 )?,
             },
             GFP_KERNEL,
@@ -131,8 +128,8 @@ impl UnloadBundle for Sec2UnloadBundle {
         &self,
         dev: &device::Device<device::Bound>,
         bar: Bar0<'_>,
-        gsp_falcon: &Falcon<GspEngine>,
-        sec2_falcon: &Falcon<Sec2>,
+        gsp_falcon: &Falcon<'_, GspEngine>,
+        sec2_falcon: &Falcon<'_, Sec2>,
     ) -> Result {
         // Run FWSEC-SB to reset the GSP falcon to its pre-libos state.
         // Log errors but keep going if it fails.
@@ -148,13 +145,12 @@ impl UnloadBundle for Sec2UnloadBundle {
                 return Ok(());
             }
 
-            sec2_falcon.reset(bar)?;
-            sec2_falcon.load(dev, bar, &self.booter_unloader)?;
+            sec2_falcon.reset()?;
+            sec2_falcon.load(&self.booter_unloader)?;
 
             // Sentinel value to confirm that Booter Unloader has run.
             const MAILBOX_SENTINEL: u32 = 0xff;
-            let (mbox0, _) =
-                sec2_falcon.boot(bar, Some(MAILBOX_SENTINEL), Some(MAILBOX_SENTINEL))?;
+            let (mbox0, _) = sec2_falcon.boot(Some(MAILBOX_SENTINEL), Some(MAILBOX_SENTINEL))?;
             if mbox0 != 0 {
                 dev_err!(dev, "Booter Unloader returned error 0x{:x}\n", mbox0);
                 return Err(EINVAL);
@@ -183,7 +179,7 @@ impl UnloadBundle for Sec2UnloadBundle {
 fn run_fwsec_frts(
     dev: &device::Device<device::Bound>,
     chipset: Chipset,
-    falcon: &Falcon<GspEngine>,
+    falcon: &Falcon<'_, GspEngine>,
     bar: Bar0<'_>,
     bios: &Vbios,
     fb_layout: &FbLayout,
@@ -202,7 +198,6 @@ fn run_fwsec_frts(
     let fwsec_frts = FwsecFirmware::new(
         dev,
         falcon,
-        bar,
         bios,
         FwsecCommand::Frts {
             frts_addr: fb_layout.frts.start,
@@ -216,7 +211,7 @@ fn run_fwsec_frts(
         fwsec_frts_bl.run(dev, falcon, bar)?;
     } else {
         // Load and run FWSEC-FRTS directly.
-        fwsec_frts.run(dev, falcon, bar)?;
+        fwsec_frts.run(dev, falcon)?;
     }
 
     // SCRATCH_E contains the error code for FWSEC-FRTS.
@@ -286,18 +281,17 @@ impl GspHal for Tu102 {
         //
         // If the unload bundle creation fails, the GPU will need to be reset before the driver can
         // be probed again.
-        let unload_bundle =
-            Sec2UnloadBundle::build(dev, bar, chipset, &bios, gsp_falcon, sec2_falcon)
-                .inspect_err(|e| {
-                    dev_warn!(dev, "Failed to prepare unload firmware: {:?}\n", e);
-                    dev_warn!(dev, "The GSP won't be able to unload properly on unbind.\n");
-                    dev_warn!(
-                        dev,
-                        "The GPU will need to be reset before the driver can bind again.\n"
-                    );
-                })
-                .ok()
-                .map(crate::gsp::UnloadBundle);
+        let unload_bundle = Sec2UnloadBundle::build(dev, chipset, &bios, gsp_falcon, sec2_falcon)
+            .inspect_err(|e| {
+                dev_warn!(dev, "Failed to prepare unload firmware: {:?}\n", e);
+                dev_warn!(dev, "The GSP won't be able to unload properly on unbind.\n");
+                dev_warn!(
+                    dev,
+                    "The GPU will need to be reset before the driver can bind again.\n"
+                );
+            })
+            .ok()
+            .map(crate::gsp::UnloadBundle);
 
         // Wrap the unload bundle into a drop guard so it is automatically run upon failure.
         let unload_guard =
@@ -308,13 +302,10 @@ impl GspHal for Tu102 {
             run_fwsec_frts(dev, chipset, gsp_falcon, bar, &bios, fb_layout)?;
         }
 
-        gsp_falcon.reset(bar)?;
+        gsp_falcon.reset()?;
         let libos_handle = gsp.libos.dma_handle();
-        let (mbox0, mbox1) = gsp_falcon.boot(
-            bar,
-            Some(libos_handle as u32),
-            Some((libos_handle >> 32) as u32),
-        )?;
+        let (mbox0, mbox1) =
+            gsp_falcon.boot(Some(libos_handle as u32), Some((libos_handle >> 32) as u32))?;
         dev_dbg!(dev, "GSP MBOX0: {:#x}, MBOX1: {:#x}\n", mbox0, mbox1);
 
         dev_dbg!(
@@ -328,9 +319,8 @@ impl GspHal for Tu102 {
             chipset,
             FIRMWARE_VERSION,
             sec2_falcon,
-            bar,
         )?
-        .run(dev, bar, sec2_falcon, wpr_meta)?;
+        .run(dev, sec2_falcon, wpr_meta)?;
 
         Ok(unload_guard)
     }

@@ -42,8 +42,8 @@ pub(super) trait UnloadBundle: Send {
         &self,
         dev: &device::Device<device::Bound>,
         bar: Bar0<'_>,
-        gsp_falcon: &Falcon<GspEngine>,
-        sec2_falcon: &Falcon<Sec2>,
+        gsp_falcon: &Falcon<'_, GspEngine>,
+        sec2_falcon: &Falcon<'_, Sec2>,
     ) -> Result;
 }
 
