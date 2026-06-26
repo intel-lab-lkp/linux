@@ -163,6 +163,22 @@ bool __kprobes simulate_c_j(u32 opcode, unsigned long addr, struct pt_regs *regs
 	return true;
 }
 
+bool __kprobes simulate_c_jal(u32 opcode, unsigned long addr, struct pt_regs *regs)
+{
+	bool ret;
+	s32 imm;
+
+	ret = rv_insn_reg_set_val(regs, 1, addr + 2);
+	if (!ret)
+		return ret;
+
+	imm = RVC_EXTRACT_JTYPE_IMM(opcode);
+
+	instruction_pointer_set(regs, addr + imm);
+
+	return ret;
+}
+
 static bool __kprobes simulate_c_jr_jalr(u32 opcode, unsigned long addr, struct pt_regs *regs,
 					 bool is_jalr)
 {
