@@ -113,8 +113,10 @@ nvkm_ucgrp_new(struct nvkm_fifo *fifo, const struct nvkm_oclass *oclass, void *a
 	*pobject = &ucgrp->object;
 
 	ret = nvkm_cgrp_new(runl, args->v0.name, vmm, true, &ucgrp->cgrp);
-	if (ret)
+	if (ret) {
+		nvkm_object_del(pobject);
 		goto done;
+	}
 
 	/* Return channel group info to caller. */
 	args->v0.cgid = ucgrp->cgrp->id;
