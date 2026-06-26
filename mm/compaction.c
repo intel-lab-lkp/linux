@@ -2791,7 +2791,7 @@ out:
 static enum compact_result compact_zone_order(struct zone *zone, int order,
 		gfp_t gfp_mask, enum compact_priority prio,
 		unsigned int alloc_flags, int highest_zoneidx,
-		struct page **capture)
+		struct capture_control *capc)
 {
 	enum compact_result ret;
 	struct compact_control cc = {
@@ -2808,35 +2808,22 @@ static enum compact_result compact_zone_order(struct zone *zone, int order,
 		.ignore_skip_hint = (prio == MIN_COMPACT_PRIORITY),
 		.ignore_block_suitable = (prio == MIN_COMPACT_PRIORITY)
 	};
-	struct capture_control capc = {
-		.cc = &cc,
-		.page = NULL,
-	};
 
-	/*
-	 * Make sure the structs are really initialized before we expose the
-	 * capture control, in case we are interrupted and the interrupt handler
-	 * frees a page.
-	 */
+	/* See the comment in __alloc_pages_direct_compact() */
 	barrier();
-	WRITE_ONCE(current->capture_control, &capc);
+	WRITE_ONCE(capc->cc, &cc);
 
-	ret = compact_zone(&cc, &capc);
+	ret = compact_zone(&cc, capc);
 
-	/*
-	 * Make sure we hide capture control first before we read the captured
-	 * page pointer, otherwise an interrupt could free and capture a page
-	 * and we would leak it.
-	 */
-	WRITE_ONCE(current->capture_control, NULL);
-	*capture = READ_ONCE(capc.page);
+	WRITE_ONCE(capc->cc, NULL);
+
 	/*
 	 * Technically, it is also possible that compaction is skipped but
 	 * the page is still captured out of luck(IRQ came and freed the page).
 	 * Returning COMPACT_SUCCESS in such cases helps in properly accounting
 	 * the COMPACT[STALL|FAIL] when compaction is skipped.
 	 */
-	if (*capture)
+	if (capc->page)
 		ret = COMPACT_SUCCESS;
 
 	return ret;
@@ -2849,13 +2836,13 @@ static enum compact_result compact_zone_order(struct zone *zone, int order,
  * @alloc_flags: The allocation flags of the current allocation
  * @ac: The context of current allocation
  * @prio: Determines how hard direct compaction should try to succeed
- * @capture: Pointer to free page created by compaction will be stored here
+ * @capc: The context for capturing pages during freeing
  *
  * This is the main entry point for direct page compaction.
  */
 enum compact_result try_to_compact_pages(gfp_t gfp_mask, unsigned int order,
 		unsigned int alloc_flags, const struct alloc_context *ac,
-		enum compact_priority prio, struct page **capture)
+		enum compact_priority prio, struct capture_control *capc)
 {
 	struct zoneref *z;
 	struct zone *zone;
@@ -2883,7 +2870,7 @@ enum compact_result try_to_compact_pages(gfp_t gfp_mask, unsigned int order,
 		}
 
 		status = compact_zone_order(zone, order, gfp_mask, prio,
-				alloc_flags, ac->highest_zoneidx, capture);
+				alloc_flags, ac->highest_zoneidx, capc);
 		rc = max(status, rc);
 
 		/* The allocation should succeed, stop compacting */

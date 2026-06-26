@@ -718,7 +718,7 @@ static inline struct capture_control *task_capc(struct zone *zone)
 {
 	struct capture_control *capc = current->capture_control;
 
-	return unlikely(capc) &&
+	return unlikely(capc && capc->cc) &&
 		!(current->flags & PF_KTHREAD) &&
 		!capc->page &&
 		capc->cc->zone == zone ? capc : NULL;
@@ -4146,9 +4146,20 @@ __alloc_pages_direct_compact(gfp_t gfp_mask, unsigned int order,
 	struct page *page = NULL;
 	unsigned long pflags;
 	unsigned int noreclaim_flag;
+	struct capture_control capc = {
+		.page = NULL,
+	};
 
 	if (!order)
 		return NULL;
+
+	/*
+	 * Make sure the structs are really initialized before we expose the
+	 * capture control, in case we are interrupted and the interrupt handler
+	 * frees a page.
+	 */
+	barrier();
+	WRITE_ONCE(current->capture_control, &capc);
 
 	psi_memstall_enter(&pflags);
 	delayacct_compact_start();
@@ -4156,12 +4167,20 @@ __alloc_pages_direct_compact(gfp_t gfp_mask, unsigned int order,
 	noreclaim_flag = memalloc_noreclaim_save();
 
 	*compact_result = try_to_compact_pages(gfp_mask, order, alloc_flags, ac,
-								prio, &page);
+					       prio, &capc);
 
 	memalloc_noreclaim_restore(noreclaim_flag);
 	fs_reclaim_release(gfp_mask);
 	psi_memstall_leave(&pflags);
 	delayacct_compact_end();
+
+	/*
+	 * Make sure we hide capture control first before we read the captured
+	 * page pointer, otherwise an interrupt could free and capture a page
+	 * and we would leak it.
+	 */
+	WRITE_ONCE(current->capture_control, NULL);
+	page = READ_ONCE(capc.page);
 
 	if (*compact_result == COMPACT_SKIPPED ||
 	    *compact_result == COMPACT_DEFERRED)
