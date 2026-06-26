@@ -1627,7 +1627,10 @@ static void wakeup_preempt_rt(struct rq *rq, struct task_struct *p, int flags)
 	struct task_struct *donor = rq->donor;
 
 	/*
-	 * XXX If we're preempted by DL, queue a push?
+	 * If the incoming task belongs to a higher-priority class (e.g. DL),
+	 * we only handle same-class RT preemption here.  The DL case is
+	 * handled in put_prev_task_rt() once the current task has been
+	 * added to pushable_tasks.
 	 */
 	if (p->sched_class != &rt_sched_class)
 		return;
@@ -1736,14 +1739,25 @@ static void put_prev_task_rt(struct rq *rq, struct task_struct *p, struct task_s
 
 	update_rt_rq_load_avg(rq_clock_pelt(rq), rq, 1);
 
-	if (task_is_blocked(p))
-		return;
 	/*
 	 * The previous task needs to be made eligible for pushing
-	 * if it is still active
+	 * if it is still active and migratable.
 	 */
-	if (on_rt_rq(&p->rt) && p->nr_cpus_allowed > 1)
+	if (!task_is_blocked(p) && on_rt_rq(&p->rt) && p->nr_cpus_allowed > 1)
 		enqueue_pushable_task(rq, p);
+
+	/*
+	 * When a deadline task takes over this CPU, try to push any queued
+	 * RT tasks to CPUs running lower-priority work. This is independent
+	 * of whether p itself is pushable: even if p is pinned or blocked,
+	 * there may be other migratable RT tasks already in pushable_tasks.
+	 *
+	 * next is NULL when called from put_prev_task() (e.g. sched_change_begin);
+	 * guard accordingly.  rt_queue_push_tasks() checks has_pushable_tasks()
+	 * internally, so this is a no-op if nothing is queued.
+	 */
+	if (next && dl_task(next))
+		rt_queue_push_tasks(rq);
 }
 
 /* Only try algorithms three times */
