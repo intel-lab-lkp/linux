@@ -1748,7 +1748,6 @@ static int bpf_fd_pass(const struct file *file, u32 sid);
 
 static int __file_has_perm(const struct cred *cred, const struct file *file,
 			   u32 av, bool bf_user_file)
-
 {
 	struct common_audit_data ad;
 	struct inode *inode;
