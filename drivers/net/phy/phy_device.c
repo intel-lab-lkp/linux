@@ -1726,6 +1726,11 @@ static int phy_sfp_probe(struct phy_device *phydev)
 	if (!ret && phydev->sfp_bus)
 		ret = phy_setup_sfp_port(phydev);
 
+	if (ret && phydev->sfp_bus) {
+		sfp_bus_del_upstream(phydev->sfp_bus);
+		phydev->sfp_bus = NULL;
+	}
+
 	return ret;
 }
 
