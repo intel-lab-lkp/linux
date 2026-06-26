@@ -66,12 +66,9 @@ __nf_conntrack_helper_find(const char *name, u16 l3num, u8 protonum)
 	hlist_for_each_entry_rcu(h, &nf_ct_helper_hash[i], hnode) {
 		if (strcmp(h->name, name))
 			continue;
-
-		if (h->tuple.src.l3num != NFPROTO_UNSPEC &&
-		    h->tuple.src.l3num != l3num)
+		if (h->nfproto != NFPROTO_UNSPEC && h->nfproto != l3num)
 			continue;
-
-		if (h->tuple.dst.protonum == protonum)
+		if (h->l4proto == protonum)
 			return h;
 	}
 	return NULL;
@@ -388,13 +385,13 @@ int __nf_conntrack_helper_register(struct nf_conntrack_helper *me)
 			return -EINVAL;
 	}
 
-	h = helper_hash(me->name, me->tuple.dst.protonum);
+	h = helper_hash(me->name, me->l4proto);
 	mutex_lock(&nf_ct_helper_mutex);
 	hlist_for_each_entry(cur, &nf_ct_helper_hash[h], hnode) {
 		if (!strcmp(cur->name, me->name) &&
-		    (cur->tuple.src.l3num == NFPROTO_UNSPEC ||
-		     cur->tuple.src.l3num == me->tuple.src.l3num) &&
-		    cur->tuple.dst.protonum == me->tuple.dst.protonum) {
+		    (cur->nfproto == NFPROTO_UNSPEC ||
+		     cur->nfproto == me->nfproto) &&
+		    cur->l4proto == me->l4proto) {
 			ret = -EBUSY;
 			goto out;
 		}
@@ -474,7 +471,7 @@ void nf_conntrack_helper_unregister(struct nf_conntrack_helper *me)
 EXPORT_SYMBOL_GPL(nf_conntrack_helper_unregister);
 
 void nf_ct_helper_init(struct nf_conntrack_helper *helper,
-		       u16 l3num, u16 protonum, const char *name,
+		       u8 l3num, u16 protonum, const char *name,
 		       u16 default_port, u16 spec_port, u32 id,
 		       const struct nf_conntrack_expect_policy *exp_pol,
 		       u32 expect_class_max,
@@ -487,9 +484,8 @@ void nf_ct_helper_init(struct nf_conntrack_helper *helper,
 {
 	memset(helper, 0, sizeof(*helper));
 
-	helper->tuple.src.l3num = l3num;
-	helper->tuple.dst.protonum = protonum;
-	helper->tuple.src.u.all = htons(spec_port);
+	helper->nfproto = l3num;
+	helper->l4proto = protonum;
 
 	rcu_assign_pointer(helper->help, help);
 	helper->from_nlattr = from_nlattr;
