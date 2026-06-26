@@ -177,14 +177,16 @@ static const struct pci_device_id pci_device_id_any = {
  * pci_match_device - See if a device matches a driver's list of IDs
  * @drv: the PCI driver to match against
  * @dev: the PCI device structure to match against
+ * @id: Matched pci_device_id
  *
  * Used by a driver to check whether a PCI device is in its list of
  * supported devices or in the dynids list, which may have been augmented
- * via the sysfs "new_id" file.  Returns the matching pci_device_id
- * structure or %NULL if there is no match.
+ * via the sysfs "new_id" file.  Returns true if there is a match, the matched
+ * ID is stored in @id.
  */
-static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
-						    struct pci_dev *dev)
+static bool pci_match_device(struct pci_driver *drv,
+			     struct pci_dev *dev,
+			     struct pci_device_id *id)
 {
 	struct pci_dynid *dynid;
 	const struct pci_device_id *found_id = NULL, *ids;
@@ -194,21 +196,19 @@ static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
 	/* When driver_override is set, only bind to the matching driver */
 	ret = device_match_driver_override(&dev->dev, &drv->driver);
 	if (ret == 0)
-		return NULL;
+		return false;
 
 	dev_id = pci_id_from_device(dev);
 	/* Look at the dynamic ids first, before the static ones */
-	spin_lock(&drv->dynids.lock);
-	list_for_each_entry(dynid, &drv->dynids.list, node) {
-		if (pci_match_one_id(&dynid->id, &dev_id)) {
-			found_id = &dynid->id;
-			break;
+	{
+		guard(spinlock)(&drv->dynids.lock);
+		list_for_each_entry(dynid, &drv->dynids.list, node) {
+			if (pci_match_one_id(&dynid->id, &dev_id)) {
+				*id = dynid->id;
+				return true;
+			}
 		}
 	}
-	spin_unlock(&drv->dynids.lock);
-
-	if (found_id)
-		return found_id;
 
 	for (ids = drv->id_table; (found_id = do_pci_match_id(ids, &dev_id));
 	     ids = found_id + 1) {
@@ -217,18 +217,19 @@ static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
 		 * In case override_only was set, enforce driver_override
 		 * matching.
 		 */
-		if (found_id->override_only) {
-			if (ret > 0)
-				return found_id;
-		} else {
-			return found_id;
+		if (!found_id->override_only || ret > 0) {
+			*id = *found_id;
+			return true;
 		}
 	}
 
 	/* driver_override will always match, send a dummy id */
-	if (ret > 0)
-		return &pci_device_id_any;
-	return NULL;
+	if (ret > 0) {
+		*id = pci_device_id_any;
+		return true;
+	}
+
+	return false;
 }
 
 /**
@@ -474,15 +475,14 @@ void pci_probe_flush_workqueue(void)
  */
 static int __pci_device_probe(struct pci_driver *drv, struct pci_dev *pci_dev)
 {
-	const struct pci_device_id *id;
+	struct pci_device_id id;
 	int error = 0;
 
 	if (drv->probe) {
 		error = -ENODEV;
 
-		id = pci_match_device(drv, pci_dev);
-		if (id)
-			error = pci_call_probe(drv, pci_dev, id);
+		if (pci_match_device(drv, pci_dev, &id))
+			error = pci_call_probe(drv, pci_dev, &id);
 	}
 	return error;
 }
@@ -1567,17 +1567,13 @@ static int pci_bus_match(struct device *dev, const struct device_driver *drv)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	struct pci_driver *pci_drv;
-	const struct pci_device_id *found_id;
+	struct pci_device_id id;
 
 	if (pci_dev_binding_disallowed(pci_dev))
 		return 0;
 
 	pci_drv = (struct pci_driver *)to_pci_driver(drv);
-	found_id = pci_match_device(pci_drv, pci_dev);
-	if (found_id)
-		return 1;
-
-	return 0;
+	return pci_match_device(pci_drv, pci_dev, &id);
 }
 
 /**
