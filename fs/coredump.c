@@ -514,6 +514,8 @@ static int zap_threads(struct task_struct *tsk,
 		tsk->flags |= PF_DUMPCORE;
 		atomic_set(&core_state->nr_threads, nr);
 	}
+	if (nr <= 0)
+		complete(&core_state->startup);
 	spin_unlock_irq(&tsk->sighand->siglock);
 	return nr;
 }
@@ -544,28 +546,26 @@ void coredump_join(struct core_state *core_state)
 static int coredump_wait(int exit_code, struct core_state *core_state)
 {
 	struct task_struct *tsk = current;
-	int core_waiters = -EBUSY;
+	struct core_thread *ptr;
+	int core_waiters;
 
 	init_completion(&core_state->startup);
 	core_state->dumper.task = tsk;
 	core_state->dumper.next = NULL;
 
 	core_waiters = zap_threads(tsk, core_state, exit_code);
-	if (core_waiters > 0) {
-		struct core_thread *ptr;
 
-		wait_for_completion_state(&core_state->startup,
-					  TASK_UNINTERRUPTIBLE|TASK_FREEZABLE);
-		/*
-		 * Wait for all the threads to become inactive, so that
-		 * all the thread context (extended register state, like
-		 * fpu etc) gets copied to the memory.
-		 */
-		ptr = core_state->dumper.next;
-		while (ptr != NULL) {
-			wait_task_inactive(ptr->task, TASK_ANY);
-			ptr = ptr->next;
-		}
+	wait_for_completion_state(&core_state->startup,
+				  TASK_UNINTERRUPTIBLE|TASK_FREEZABLE);
+	/*
+	 * Wait for all the threads to become inactive, so that
+	 * all the thread context (extended register state, like
+	 * fpu etc) gets copied to the memory.
+	 */
+	ptr = core_state->dumper.next;
+	while (ptr != NULL) {
+		wait_task_inactive(ptr->task, TASK_ANY);
+		ptr = ptr->next;
 	}
 
 	return core_waiters;
