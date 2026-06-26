@@ -9,9 +9,13 @@
 #include "core.h"
 
 static const struct flash_info fujitsu_nor_parts[] = {
-	/* Fujitsu */
-	{ "mb85rs1mt", INFO(0x047f27, 0, 128 * 1024, 1)
-		FLAGS(SPI_NOR_NO_ERASE) },
+	{
+		.id = SNOR_ID(0x04, 0x7f, 0x27),
+		.name = "mb85rs1mt",
+		.size = SZ_128K,
+		.sector_size = SZ_128K,
+		.flags = SPI_NOR_NO_ERASE,
+	}
 };
 
 const struct spi_nor_manufacturer spi_nor_fujitsu = {
