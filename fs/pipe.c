@@ -111,13 +111,6 @@ void pipe_double_lock(struct pipe_inode_info *pipe1,
 	pipe_lock(pipe2);
 }
 
-#define PIPE_PREALLOC_MAX 8
-
-struct anon_pipe_prealloc {
-	struct page *pages[PIPE_PREALLOC_MAX];
-	unsigned int count;
-};
-
 /*
  * Pre-allocate pages outside pipe->mutex for multi-page writes.
  * alloc_page() with GFP_HIGHUSER can sleep in reclaim and runs memcg
