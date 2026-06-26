@@ -1438,7 +1438,24 @@ static bool zswap_store_page(struct page *page,
 	 */
 	zswap_pool_get(pool);
 	if (objcg) {
-		obj_cgroup_get(objcg);
+		struct obj_cgroup *nid_objcg;
+		int nid = zs_handle_to_nid(pool->zs_pool, entry->handle);
+
+		/*
+		 * obj_cgroup_nid() returns a borrowed RCU pointer (no
+		 * reference), so the returned per-node objcg may be freed
+		 * (kfree_rcu) before we use it. Pin it with a tryget inside a
+		 * single rcu section; if it is already dying, fall back to the
+		 * folio objcg (held by the caller) so the charge still lands on
+		 * the right memcg, just without per-node attribution.
+		 */
+		rcu_read_lock();
+		nid_objcg = obj_cgroup_nid(objcg, nid);
+		if (nid_objcg && obj_cgroup_tryget(nid_objcg))
+			objcg = nid_objcg;
+		else
+			obj_cgroup_get(objcg);
+		rcu_read_unlock();
 		obj_cgroup_charge_zswap(objcg, entry->length);
 	}
 	atomic_long_inc(&zswap_stored_pages);
