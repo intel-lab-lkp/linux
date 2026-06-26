@@ -176,8 +176,10 @@ impl<'a> Prover<'a> {
     }
 }
 
-pub(crate) fn covariant_for_lt(input: HigherRankedType) -> TokenStream {
-    let (ty, lifetime) = match input {
+/// Resolve the higher-ranked type into a concrete `(ty, lifetime)` pair, expanding elided
+/// lifetimes as needed. Shared by both `for_lt` and `covariant_for_lt`.
+fn resolve_hrt(input: HigherRankedType) -> (Type, Lifetime) {
+    match input {
         HigherRankedType::Explicit { lifetime, ty, .. } => (ty, lifetime),
         HigherRankedType::Implicit { ty } => {
             // If there's no explicit `for<'a>` binder, inject a synthetic `'__elided` lifetime
@@ -188,14 +190,33 @@ pub(crate) fn covariant_for_lt(input: HigherRankedType) -> TokenStream {
             };
             (ty.expand_elided_lifetime(&lifetime), lifetime)
         }
-    };
+    }
+}
+
+/// Produce the `'static`-substituted type for the WF check. Shared by both macros.
+fn ty_static(ty: &Type, lifetime: &Lifetime) -> Type {
+    ty.replace_lifetime(
+        lifetime,
+        &Lifetime {
+            apostrophe: Span::mixed_site(),
+            ident: format_ident!("static"),
+        },
+    )
+}
+
+/// Shared implementation for both `ForLt!` and `CovariantForLt!`.
+///
+/// Both macros run the prover and emit `ProveWf` structs to check well-formedness for all lifetime
+/// instances (workaround for <https://github.com/rust-lang/rust/issues/152489>). `CovariantForLt!`
+/// additionally emits covariance proof functions and sets `N = 1`.
+fn for_lt_inner(input: HigherRankedType, prove_covariance: bool) -> TokenStream {
+    let (ty, lifetime) = resolve_hrt(input);
 
     let mut prover = Prover(&lifetime, Vec::new());
     prover.prove(&ty);
 
     let mut proof = Vec::new();
 
-    // Emit proofs for every type that requires additional compiler help in proving covariance.
     for (idx, required_proof) in prover.1.into_iter().enumerate() {
         // Insert a proof that the type is well-formed.
         //
@@ -210,15 +231,16 @@ pub(crate) fn covariant_for_lt(input: HigherRankedType) -> TokenStream {
             );
         ));
 
-        // Insert a proof that the type is covariant.
-        let cov_proof_name = format_ident!("prove_covariant_{idx}");
-        proof.push(quote!(
-            fn #cov_proof_name<'__short, '__long: '__short>(
-                long: #wf_proof_name<'__long>
-            ) -> #wf_proof_name<'__short> {
-                long
-            }
-        ));
+        if prove_covariance {
+            let cov_proof_name = format_ident!("prove_covariant_{idx}");
+            proof.push(quote!(
+                fn #cov_proof_name<'__short, '__long: '__short>(
+                    long: #wf_proof_name<'__long>
+                ) -> #wf_proof_name<'__short> {
+                    long
+                }
+            ));
+        }
     }
 
     // Make sure that the type is wellformed when substituting lifetime with `'static`.
@@ -226,13 +248,9 @@ pub(crate) fn covariant_for_lt(input: HigherRankedType) -> TokenStream {
     // Currently the Rust compiler doesn't check this, see the above `ProveWf` documentation.
     //
     // We prefer to use this way of proving WF-ness as it can work when generics are involved.
-    let ty_static = ty.replace_lifetime(
-        &lifetime,
-        &Lifetime {
-            apostrophe: Span::mixed_site(),
-            ident: format_ident!("static"),
-        },
-    );
+    let ty_static = ty_static(&ty, &lifetime);
+
+    let n: usize = prove_covariance.into();
 
     quote!(
         ::kernel::types::for_lt::UnsafeForLtImpl::<
@@ -241,8 +259,16 @@ pub(crate) fn covariant_for_lt(input: HigherRankedType) -> TokenStream {
             {
                 #(#proof)*
 
-                0
+                #n
             }
         >
     )
+}
+
+pub(crate) fn for_lt(input: HigherRankedType) -> TokenStream {
+    for_lt_inner(input, false)
+}
+
+pub(crate) fn covariant_for_lt(input: HigherRankedType) -> TokenStream {
+    for_lt_inner(input, true)
 }
