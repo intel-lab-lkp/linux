@@ -74,6 +74,7 @@ enum hrtimer_base_type {
  * @softirq_next_timer:		Pointer to the first expiring softirq based timer
  * @deferred_expires_next:	Cached expires next value for deferred rearm
  * @clock_base:			Array of clock bases for this cpu
+ * @csd:			Remotely call retrigger_next_event() on this base's cpu
  *
  * Note: next_timer is just an optimization for __remove_hrtimer().
  *	 Do not dereference the pointer because it is not reliable on
