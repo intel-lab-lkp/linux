@@ -154,8 +154,8 @@ impl<'a> Prover<'a> {
             // Note that if we encounter `&'other_lt T`, then we still need to make sure the type
             // is wellformed if `T` involves `&'lt`, so we defer to the compiler.
             //
-            // This is to block cases like `ForLt!(for<'a> &'static &'a u32)`, as the presence of
-            // the type implies `'a: 'static` but this is unsound.
+            // This is to block cases like `CovariantForLt!(for<'a> &'static &'a u32)`, as the
+            // presence of the type implies `'a: 'static` but this is unsound.
             Type::Reference(ty)
                 if ty.mutability.is_none() && ty.lifetime.as_ref() == Some(self.0) =>
             {
@@ -176,7 +176,7 @@ impl<'a> Prover<'a> {
     }
 }
 
-pub(crate) fn for_lt(input: HigherRankedType) -> TokenStream {
+pub(crate) fn covariant_for_lt(input: HigherRankedType) -> TokenStream {
     let (ty, lifetime) = match input {
         HigherRankedType::Explicit { lifetime, ty, .. } => (ty, lifetime),
         HigherRankedType::Implicit { ty } => {
