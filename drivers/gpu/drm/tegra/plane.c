@@ -161,6 +161,7 @@ static int tegra_dc_pin(struct tegra_dc *dc, struct tegra_plane_state *state)
 			 */
 			if (map->chunks > 1) {
 				err = -EINVAL;
+				host1x_bo_unpin(map);
 				goto unpin;
 			}
 
