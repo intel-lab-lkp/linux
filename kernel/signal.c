@@ -1034,24 +1034,21 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 	    (sig == SIGKILL || !p->ptrace)) {
 		/*
 		 * This signal will be fatal to the whole group.
+		 *
+		 * Start a group exit and wake everybody up.
+		 * This way we don't have other threads
+		 * running and doing things after a slower
+		 * thread has the fatal signal pending.
 		 */
-		if (!sig_kernel_coredump(sig)) {
-			/*
-			 * Start a group exit and wake everybody up.
-			 * This way we don't have other threads
-			 * running and doing things after a slower
-			 * thread has the fatal signal pending.
-			 */
-			signal->flags = SIGNAL_GROUP_EXIT | SIGNAL_EXIT_DEQUEUE;
-			signal->group_exit_code = sig;
-			signal->group_stop_count = 0;
-			__for_each_thread(signal, t) {
-				task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
-				sigaddset(&t->pending.signal, SIGKILL);
-				signal_wake_up(t, 1);
-			}
-			return;
+		signal->flags = SIGNAL_GROUP_EXIT | SIGNAL_EXIT_DEQUEUE;
+		signal->group_exit_code = sig;
+		signal->group_stop_count = 0;
+		__for_each_thread(signal, t) {
+			task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
+			sigaddset(&t->pending.signal, SIGKILL);
+			signal_wake_up(t, 1);
 		}
+		return;
 	}
 
 	/*
