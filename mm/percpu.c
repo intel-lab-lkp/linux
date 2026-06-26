@@ -1672,6 +1672,23 @@ static void pcpu_memcg_accumulate_pages(struct pcpu_chunk *chunk, int off,
 	}
 }
 
+static void pcpu_memcg_accumulate_obj_exts(struct pcpu_chunk *chunk, int off,
+				      size_t size, unsigned int *node_bytes)
+{
+	size_t ext_bytes = size / PCPU_MIN_ALLOC_SIZE * sizeof(struct pcpuobj_ext);
+	unsigned long ext_start = (unsigned long)&chunk->obj_exts[off >> PCPU_MIN_ALLOC_SHIFT];
+	unsigned long ext_end = ext_start + ext_bytes;
+	unsigned long addr;
+
+	for (addr = ext_start; addr < ext_end; addr = ALIGN(addr + 1, PAGE_SIZE)) {
+		struct page *page = vmalloc_to_page((void *)addr);
+		size_t page_sz = min_t(size_t, ext_end - addr,
+				       PAGE_SIZE - offset_in_page(addr));
+
+		node_bytes[page_to_nid(page)] += page_sz;
+	}
+}
+
 static void pcpu_memcg_post_alloc_hook(struct obj_cgroup *objcg,
 				       struct pcpu_chunk *chunk, int off,
 				       size_t size)
@@ -1689,6 +1706,7 @@ static void pcpu_memcg_post_alloc_hook(struct obj_cgroup *objcg,
 		chunk->obj_exts[off >> PCPU_MIN_ALLOC_SHIFT].cgroup = objcg;
 
 		pcpu_memcg_accumulate_pages(chunk, off, size, node_bytes);
+		pcpu_memcg_accumulate_obj_exts(chunk, off, size, node_bytes);
 
 		rcu_read_lock();
 		mod_memcg_state(obj_cgroup_memcg(objcg), MEMCG_PERCPU_B,
@@ -1731,6 +1749,7 @@ static void pcpu_memcg_free_hook(struct pcpu_chunk *chunk, int off, size_t size)
 	chunk->obj_exts[off >> PCPU_MIN_ALLOC_SHIFT].cgroup = NULL;
 
 	pcpu_memcg_accumulate_pages(chunk, off, size, node_bytes);
+	pcpu_memcg_accumulate_obj_exts(chunk, off, size, node_bytes);
 
 	rcu_read_lock();
 	mod_memcg_state(obj_cgroup_memcg(objcg), MEMCG_PERCPU_B,
