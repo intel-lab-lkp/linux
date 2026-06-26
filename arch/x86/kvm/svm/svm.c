@@ -5445,6 +5445,7 @@ struct kvm_x86_ops svm_x86_ops __initdata = {
 	.mem_enc_register_region = sev_mem_enc_register_region,
 	.mem_enc_unregister_region = sev_mem_enc_unregister_region,
 	.guest_memory_reclaimed = sev_guest_memory_reclaimed,
+	.reload_vmsa = sev_snp_reload_vmsa,
 
 	.vm_copy_enc_context_from = sev_vm_copy_enc_context_from,
 	.vm_move_enc_context_from = sev_vm_move_enc_context_from,
@@ -5462,6 +5463,7 @@ struct kvm_x86_ops svm_x86_ops __initdata = {
 
 #ifdef CONFIG_KVM_AMD_SEV
 	.gmem_prepare = sev_gmem_prepare,
+	.gmem_invalidate_range = sev_gmem_invalidate_range,
 	.gmem_free_folio = sev_gmem_free_folio,
 	.gmem_max_mapping_level = sev_gmem_max_mapping_level,
 #endif
