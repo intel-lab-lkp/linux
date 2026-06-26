@@ -11,6 +11,7 @@
 #include <asm/insn-def.h>
 #include <asm/kvm_mmu.h>
 #include <asm/kvm_nacl.h>
+#include "trace.h"
 
 static int gstage_page_fault(struct kvm_vcpu *vcpu, struct kvm_run *run,
 			     struct kvm_cpu_trap *trap)
@@ -23,6 +24,9 @@ static int gstage_page_fault(struct kvm_vcpu *vcpu, struct kvm_run *run,
 	int ret;
 
 	fault_addr = (trap->htval << 2) | (trap->stval & 0x3);
+	trace_kvm_guest_fault(vcpu->vcpu_id, vcpu->arch.guest_context.sepc,
+			      trap->scause, trap->stval, trap->htval,
+			      trap->htinst, fault_addr);
 	gfn = fault_addr >> PAGE_SHIFT;
 	memslot = gfn_to_memslot(vcpu->kvm, gfn);
 	hva = gfn_to_hva_memslot_prot(memslot, gfn, &writable);

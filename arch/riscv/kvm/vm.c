@@ -12,6 +12,7 @@
 #include <linux/uaccess.h>
 #include <linux/kvm_host.h>
 #include <asm/kvm_mmu.h>
+#include "trace.h"
 
 const struct kvm_stats_desc kvm_vm_stats_desc[] = {
 	KVM_GENERIC_VM_STATS()
@@ -61,6 +62,8 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irql,
 {
 	if (!irqchip_in_kernel(kvm))
 		return -ENXIO;
+
+	trace_kvm_irq_line(-1, irql->irq, irql->level);
 
 	return kvm_riscv_aia_inject_irq(kvm, irql->irq, irql->level);
 }

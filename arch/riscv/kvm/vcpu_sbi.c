@@ -11,6 +11,7 @@
 #include <linux/kvm_host.h>
 #include <asm/sbi.h>
 #include <asm/kvm_vcpu_sbi.h>
+#include "trace.h"
 
 #ifndef CONFIG_RISCV_SBI_V01
 static const struct kvm_vcpu_sbi_extension vcpu_sbi_ext_v01 = {
@@ -597,6 +598,8 @@ int kvm_riscv_vcpu_sbi_ecall(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		.utrap = &utrap,
 	};
 	bool ext_is_v01 = false;
+
+	trace_kvm_sbi_ecall(vcpu->vcpu_id, cp->sepc, cp->a7, cp->a6, cp->a0);
 
 	sbi_ext = kvm_vcpu_sbi_find_ext(vcpu, cp->a7);
 	if (sbi_ext && sbi_ext->handler) {

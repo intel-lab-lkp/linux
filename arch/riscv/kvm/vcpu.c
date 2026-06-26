@@ -254,6 +254,9 @@ long kvm_arch_vcpu_unlocked_ioctl(struct file *filp, unsigned int ioctl,
 		if (copy_from_user(&irq, argp, sizeof(irq)))
 			return -EFAULT;
 
+		trace_kvm_irq_line(vcpu->vcpu_id, IRQ_VS_EXT,
+				   irq.irq == KVM_INTERRUPT_SET);
+
 		if (irq.irq == KVM_INTERRUPT_SET)
 			return kvm_riscv_vcpu_set_interrupt(vcpu, IRQ_VS_EXT);
 		else

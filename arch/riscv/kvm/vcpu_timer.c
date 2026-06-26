@@ -15,10 +15,21 @@
 #include <asm/kvm_isa.h>
 #include <asm/kvm_nacl.h>
 #include <asm/kvm_vcpu_timer.h>
+#include "trace.h"
 
 static u64 kvm_riscv_current_cycles(struct kvm_guest_timer *gt)
 {
 	return get_cycles64() + gt->time_delta;
+}
+
+static void kvm_riscv_vcpu_timer_update_irq(struct kvm_vcpu *vcpu, bool level)
+{
+	trace_kvm_timer_update_irq(vcpu->vcpu_id, IRQ_VS_TIMER, level);
+
+	if (level)
+		kvm_riscv_vcpu_set_interrupt(vcpu, IRQ_VS_TIMER);
+	else
+		kvm_riscv_vcpu_unset_interrupt(vcpu, IRQ_VS_TIMER);
 }
 
 static u64 kvm_riscv_delta_cycles2ns(u64 cycles,
@@ -54,7 +65,7 @@ static enum hrtimer_restart kvm_riscv_vcpu_hrtimer_expired(struct hrtimer *h)
 	}
 
 	t->next_set = false;
-	kvm_riscv_vcpu_set_interrupt(vcpu, IRQ_VS_TIMER);
+	kvm_riscv_vcpu_timer_update_irq(vcpu, true);
 
 	return HRTIMER_NORESTART;
 }
@@ -91,7 +102,7 @@ static int kvm_riscv_vcpu_update_hrtimer(struct kvm_vcpu *vcpu, u64 ncycles)
 	if (!t->init_done)
 		return -EINVAL;
 
-	kvm_riscv_vcpu_unset_interrupt(vcpu, IRQ_VS_TIMER);
+	kvm_riscv_vcpu_timer_update_irq(vcpu, false);
 
 	delta_ns = kvm_riscv_delta_cycles2ns(ncycles, gt, t);
 	t->next_cycles = ncycles;
