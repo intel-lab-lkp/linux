@@ -80,6 +80,7 @@ struct core_thread {
 
 struct core_state {
 	atomic_t nr_threads;
+	unsigned long mm_flags;
 	struct core_thread dumper;
 	struct completion startup;
 };

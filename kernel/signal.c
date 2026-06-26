@@ -2859,8 +2859,8 @@ relock:
 	}
 
 	for (;;) {
-		bool group_exit_needed = false;
-		struct core_state *core_state;
+		struct core_state local_core_state, *core_state;
+		struct task_struct *t;
 		struct k_sigaction *ka;
 		enum pid_type type;
 		int exit_code = 0;
@@ -3003,22 +3003,20 @@ relock:
 		 * Anything else is fatal, maybe with a core dump.
 		 */
 		exit_code = signr;
-		if (sig_kernel_coredump(signr))
-			group_exit_needed = true;
-		else {
-			struct task_struct *t;
-			signal->flags = SIGNAL_GROUP_EXIT;
-			signal->group_exit_code = signr;
-			signal->group_stop_count = 0;
-			__for_each_thread(signal, t) {
-				task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
-				if (t != current) {
-					sigaddset(&t->pending.signal, SIGKILL);
-					signal_wake_up(t, 1);
-				}
+		signal->flags = SIGNAL_GROUP_EXIT;
+		signal->group_exit_code = exit_code;
+		signal->group_stop_count = 0;
+		__for_each_thread(signal, t) {
+			task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
+			if (t != current) {
+				sigaddset(&t->pending.signal, SIGKILL);
+				signal_wake_up(t, 1);
 			}
 		}
 	fatal:
+		/* Setup to collect a coredump */
+		if (sig_kernel_coredump(signr))
+			coredump_begin(&local_core_state);
 		core_state = signal->core_state;
 		spin_unlock_irq(&sighand->siglock);
 		if (unlikely(cgroup_task_frozen(current)))
@@ -3031,14 +3029,7 @@ relock:
 				print_fatal_signal(signr);
 			proc_coredump_connector(current);
 			audit_core_dumps(ksig->info.si_signo);
-			/*
-			 * If it was able to dump core, this kills all
-			 * other threads in the group and synchronizes with
-			 * their demise.  If we lost the race with another
-			 * thread getting here, it set group_exit_code
-			 * first and our do_group_exit call below will use
-			 * that value and ignore the one we pass it.
-			 */
+			/* If dumping write out the coredump */
 			vfs_coredump(&ksig->info);
 		} else if (core_state) {
 			/* Wait for the coredump to happen */
@@ -3055,12 +3046,9 @@ relock:
 			goto out;
 
 		/*
-		 * Death signals, no core dump.
+		 * Death signals.
 		 */
-		if (group_exit_needed)
-			do_group_exit(exit_code);
-		else
-			do_exit(exit_code);
+		do_exit(exit_code);
 		/* NOTREACHED */
 	}
 	spin_unlock_irq(&sighand->siglock);
