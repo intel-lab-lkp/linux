@@ -75,14 +75,22 @@
  *
  * @fpfn:	first valid page frame number to put the object
  * @lpfn:	last valid page frame number to put the object
+ * @drvparam:	generic driver/backend placement parameters; the
+ *		interpretation is defined by the backend resource manager.
+ *		drvparam[0] and drvparam[1] alias @fpfn and @lpfn.
  * @mem_type:	One of TTM_PL_* where the resource should be allocated from.
  * @flags:	memory domain and caching flags for the object
  *
  * Structure indicating a possible place to put an object.
  */
 struct ttm_place {
-	uint64_t	fpfn;
-	uint64_t	lpfn;
+	union {
+		struct {
+			uint64_t	fpfn;
+			uint64_t	lpfn;
+		};
+		uint64_t	drvparam[2];
+	};
 	uint32_t	mem_type;
 	uint32_t	flags;
 };
