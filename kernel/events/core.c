@@ -2605,6 +2605,26 @@ __perf_remove_from_context(struct perf_event *event,
 		perf_child_detach(event);
 	list_del_event(event, ctx);
 
+	if ((flags & DETACH_GROUP) && event->group_leader != event) {
+		/*
+		 * list_del_event() needed the old group_leader to tell a real
+		 * leader from a sibling. That's done now, so make the detached
+		 * sibling self-contained.
+		 */
+		event->group_leader = event;
+		event->group_caps = event->event_caps;
+
+		/*
+		 * PERF_EV_CAP_SIBLING event requires being part of a group, so move
+		 * the event to ERROR state if it is still alive.
+		 */
+		if ((event->event_caps & PERF_EV_CAP_SIBLING) &&
+		    event->state > PERF_EVENT_STATE_ERROR)
+			perf_event_set_state(event, PERF_EVENT_STATE_ERROR);
+
+		perf_event__header_size(event);
+	}
+
 	if (!pmu_ctx->nr_events) {
 		pmu_ctx->rotate_necessary = 0;
 
