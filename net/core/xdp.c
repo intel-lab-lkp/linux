@@ -698,8 +698,8 @@ static noinline bool xdp_copy_frags_from_zc(struct sk_buff *skb,
 
 	for (u32 i = 0; i < nr_frags; i++) {
 		const skb_frag_t *frag = &xinfo->frags[i];
-		u32 len = skb_frag_size(frag);
-		u32 offset, truesize = len;
+		u32 offset, len = skb_frag_size(frag);
+		u32 truesize = LARGEST_ALIGN(len);
 		struct page *page;
 
 		page = page_pool_dev_alloc(pp, &offset, &truesize);
@@ -738,9 +738,10 @@ static noinline bool xdp_copy_frags_from_zc(struct sk_buff *skb,
  */
 struct sk_buff *xdp_build_skb_from_zc(struct xdp_buff *xdp)
 {
+	u32 headroom = xdp->data_meta - xdp->data_hard_start;
 	const struct xdp_rxq_info *rxq = xdp->rxq;
 	u32 len = xdp->data_end - xdp->data_meta;
-	u32 truesize = xdp->frame_sz;
+	u32 truesize = SKB_HEAD_ALIGN(headroom + len);
 	struct sk_buff *skb = NULL;
 	struct page_pool *pp;
 	int metalen;
@@ -762,7 +763,7 @@ struct sk_buff *xdp_build_skb_from_zc(struct xdp_buff *xdp)
 	}
 
 	skb_mark_for_recycle(skb);
-	skb_reserve(skb, xdp->data_meta - xdp->data_hard_start);
+	skb_reserve(skb, headroom);
 
 	memcpy(__skb_put(skb, len), xdp->data_meta, LARGEST_ALIGN(len));
 
