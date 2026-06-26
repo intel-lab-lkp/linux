@@ -1064,34 +1064,33 @@ long ttm_pool_backup(struct ttm_pool *pool, struct ttm_tt *tt,
 	    ttm_pool_uses_dma_alloc(pool) || ttm_tt_is_backed_up(tt))
 		return -EBUSY;
 
+	for (i = 0; i < tt->num_pages; i += num_pages) {
+		unsigned int order;
+
+		page = tt->pages[i];
+		if (unlikely(!page)) {
+			num_pages = 1;
+			continue;
+		}
+
+		order = ttm_pool_page_order(pool, page);
+		num_pages = 1UL << order;
+
 #ifdef CONFIG_X86
-	/* Anything returned to the system needs to be cached. */
-	if (tt->caching != ttm_cached)
-		set_pages_array_wb(tt->pages, tt->num_pages);
+		/* Anything returned to the system needs to be cached. */
+		if (tt->caching != ttm_cached)
+			set_pages_wb(page, 1 << order);
 #endif
 
-	if (tt->dma_address || flags->purge) {
-		for (i = 0; i < tt->num_pages; i += num_pages) {
-			unsigned int order;
-
-			page = tt->pages[i];
-			if (unlikely(!page)) {
-				num_pages = 1;
-				continue;
-			}
-
-			order = ttm_pool_page_order(pool, page);
-			num_pages = 1UL << order;
-			if (tt->dma_address)
-				ttm_pool_unmap(pool, tt->dma_address[i],
-					       num_pages);
-			if (flags->purge) {
-				shrunken += num_pages;
-				page->private = 0;
-				__free_pages_gpu_account(page, order, false);
-				memset(tt->pages + i, 0,
-				       num_pages * sizeof(*tt->pages));
-			}
+		if (tt->dma_address)
+			ttm_pool_unmap(pool, tt->dma_address[i],
+				       num_pages);
+		if (flags->purge) {
+			shrunken += num_pages;
+			page->private = 0;
+			__free_pages_gpu_account(page, order, false);
+			memset(tt->pages + i, 0,
+			       num_pages * sizeof(*tt->pages));
 		}
 	}
 
