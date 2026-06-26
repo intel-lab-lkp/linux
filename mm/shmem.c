@@ -3634,7 +3634,7 @@ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
 		inode->i_private = &shmem_falloc;
 		spin_unlock(&inode->i_lock);
 
-		if ((u64)unmap_end > (u64)unmap_start)
+		if (unmap_end > unmap_start)
 			unmap_mapping_range(mapping, unmap_start,
 					    1 + unmap_end - unmap_start, 0);
 		shmem_truncate_range(inode, offset, offset + len - 1);
