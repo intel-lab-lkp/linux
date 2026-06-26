@@ -16,7 +16,6 @@ gb-raw-y		:= raw.o
 gb-vibrator-y		:= vibrator.o
 
 obj-$(CONFIG_GREYBUS_BOOTROM)	+= gb-bootrom.o
-obj-$(CONFIG_GREYBUS_CAMERA)	+= gb-camera.o
 obj-$(CONFIG_GREYBUS_FIRMWARE)	+= gb-firmware.o gb-spilib.o
 obj-$(CONFIG_GREYBUS_HID)	+= gb-hid.o
 obj-$(CONFIG_GREYBUS_LIGHT)	+= gb-light.o
