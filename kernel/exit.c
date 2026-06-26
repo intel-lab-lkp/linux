@@ -1090,8 +1090,6 @@ do_group_exit(int exit_code)
 
 	if (sig->flags & SIGNAL_GROUP_EXIT)
 		exit_code = sig->group_exit_code;
-	else if (sig->group_exec_task)
-		;
 	else {
 		struct sighand_struct *const sighand = current->sighand;
 
@@ -1099,8 +1097,6 @@ do_group_exit(int exit_code)
 		if (sig->flags & SIGNAL_GROUP_EXIT)
 			/* Another thread got here before we took the lock.  */
 			exit_code = sig->group_exit_code;
-		else if (sig->group_exec_task)
-			;
 		else {
 			sig->group_exit_code = exit_code;
 			sig->flags = SIGNAL_GROUP_EXIT;
