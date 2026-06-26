@@ -1387,13 +1387,13 @@ static int rswitch_mii_register(struct rswitch_device *rdev)
 	err = of_mdiobus_register(mii_bus, mdio_np);
 	if (err < 0) {
 		mdiobus_free(mii_bus);
-		goto out;
+		of_node_put(mdio_np);
+		return err;
 	}
 
 	rdev->etha->mii = mii_bus;
 
-out:
-	of_node_put(mdio_np);
+	return 0;
 
 	return err;
 }
