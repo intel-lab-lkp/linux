@@ -252,6 +252,10 @@ static unsigned short load_gs(void)
 			NULL, sizeof(desc),
 			PROT_READ | PROT_WRITE,
 			MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
+
+		if (low_desc == MAP_FAILED)
+			err(1, "mmap");
+
 		memcpy(low_desc, &desc, sizeof(desc));
 
 		low_desc->entry_number = set_thread_area_entry_number;
@@ -572,6 +576,8 @@ int main()
 
 	shared_scratch = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
 			      MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+	if (shared_scratch == MAP_FAILED)
+		err(1, "mmap");
 
 	/* Do these tests before we have an LDT. */
 	test_ptrace_write_gs_read_base();
