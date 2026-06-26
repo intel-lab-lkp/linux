@@ -759,8 +759,9 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 			BUG();
 		}
 
+		/* Skip blocking operations and jump to extent validation. */
 		if (flags & EXT4_GET_BLOCKS_CACHED_NOWAIT)
-			return retval;
+			goto found;
 #ifdef ES_AGGRESSIVE_TEST
 		ext4_map_blocks_es_recheck(handle, inode, map,
 					   &orig_map, flags);
@@ -776,7 +777,7 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 	 * cannot find extent in the cache.
 	 */
 	if (flags & EXT4_GET_BLOCKS_CACHED_NOWAIT)
-		return 0;
+		return -EAGAIN;
 
 	/*
 	 * Try to see if we can get the block without requesting a new
@@ -796,6 +797,9 @@ found:
 	/* If it is only a block(s) look up */
 	if ((flags & EXT4_GET_BLOCKS_CREATE) == 0)
 		return retval;
+
+	/* EXT4_GET_BLOCKS_CREATE cannot operate in NOWAIT mode */
+	WARN_ON_ONCE(flags & EXT4_GET_BLOCKS_CACHED_NOWAIT);
 
 	/*
 	 * Returns if the blocks have already allocated
