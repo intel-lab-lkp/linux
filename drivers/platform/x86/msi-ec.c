@@ -23,6 +23,7 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mod_device_id/dmi.h>
 #include <linux/platform_device.h>
 #include <linux/seq_file.h>
 #include <linux/string.h>
