@@ -553,7 +553,7 @@ int cpsw_init_common(struct cpsw_common *cpsw, void __iomem *ss_regs,
 
 	cpts_node = of_get_child_by_name(cpsw->dev->of_node, "cpts");
 	if (!cpts_node)
-		cpts_node = cpsw->dev->of_node;
+		cpts_node = of_node_get(cpsw->dev->of_node);
 
 	cpsw->cpts = cpts_create(cpsw->dev, cpts_regs, cpts_node,
 				 CPTS_N_ETX_TS);
