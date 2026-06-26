@@ -1170,6 +1170,9 @@ err_out_unregister_bus:
 	mdiobus_unregister(bp->mii_bus);
 err_out_free_mdiobus:
 	mdiobus_free(bp->mii_bus);
+	of_node_put(mdio_np);
+	return err;
+
 err_out:
 	of_node_put(mdio_np);
 
