@@ -74,6 +74,7 @@ struct clk_si5341 {
 	struct clk_si5341_output clk[SI5341_MAX_NUM_OUTPUTS];
 	struct clk *input_clk[SI5341_NUM_INPUTS];
 	const char *input_clk_name[SI5341_NUM_INPUTS];
+	int prepared_input;
 	const u16 *reg_output_offset;
 	const u16 *reg_rdiv_offset;
 	u64 freq_vco; /* 13500–14256 MHz */
@@ -1463,7 +1464,18 @@ static int si5341_clk_select_active_input(struct clk_si5341 *data)
 	if (err < 0)
 		return err;
 
+	data->prepared_input = res;
+
 	return res;
+}
+
+static void si5341_clk_disable_active_input(struct clk_si5341 *data)
+{
+	if (data->prepared_input < 0)
+		return;
+
+	clk_disable_unprepare(data->input_clk[data->prepared_input]);
+	data->prepared_input = -1;
 }
 
 static ssize_t input_present_show(struct device *dev,
@@ -1571,6 +1583,7 @@ static int si5341_probe(struct i2c_client *client)
 	if (!data)
 		return -ENOMEM;
 
+	data->prepared_input = -1;
 	data->i2c_client = client;
 
 	/* Must be done before otherwise touching hardware */
@@ -1803,6 +1816,7 @@ free_clk_names:
 
 cleanup:
 	if (err) {
+		si5341_clk_disable_active_input(data);
 		for (i = 0; i < SI5341_MAX_NUM_OUTPUTS; ++i) {
 			if (data->clk[i].vddo_reg)
 				regulator_disable(data->clk[i].vddo_reg);
@@ -1817,6 +1831,8 @@ static void si5341_remove(struct i2c_client *client)
 	int i;
 
 	sysfs_remove_files(&client->dev.kobj, si5341_attributes);
+
+	si5341_clk_disable_active_input(data);
 
 	for (i = 0; i < SI5341_MAX_NUM_OUTPUTS; ++i) {
 		if (data->clk[i].vddo_reg)
