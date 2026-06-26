@@ -426,7 +426,6 @@ void pci_iov_remove_virtfn(struct pci_dev *dev, int id)
 
 	/* balance pci_get_domain_bus_and_slot() */
 	pci_dev_put(virtfn);
-	pci_dev_put(dev);
 }
 
 static ssize_t sriov_totalvfs_show(struct device *dev,
