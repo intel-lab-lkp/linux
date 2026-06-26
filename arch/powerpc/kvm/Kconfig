@@ -81,6 +81,7 @@ config KVM_BOOK3S_64_HV
 	depends on KVM_BOOK3S_64 && PPC_POWERNV
 	select KVM_BOOK3S_HV_POSSIBLE
 	select KVM_BOOK3S_HV_PMU
+	select VIRT_XFER_TO_GUEST_WORK
 	select CMA
 	help
 	  Support running unmodified book3s_64 guest kernels in
