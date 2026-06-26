@@ -54,12 +54,25 @@ out:
 	return ret;
 }
 
+static int tegra124_cpu_disable_dfll(struct tegra124_cpufreq_priv *priv)
+{
+	int ret;
+
+	ret = clk_set_parent(priv->cpu_clk, priv->pllp_clk);
+	if (ret)
+		return ret;
+
+	clk_disable_unprepare(priv->dfll_clk);
+
+	return 0;
+}
+
 static int tegra124_cpufreq_probe(struct platform_device *pdev)
 {
 	struct device_node *np __free(device_node) = of_cpu_device_node_get(0);
 	struct tegra124_cpufreq_priv *priv;
 	struct device *cpu_dev;
-	int ret;
+	int err, ret;
 
 	if (!np)
 		return -ENODEV;
@@ -101,13 +114,17 @@ static int tegra124_cpufreq_probe(struct platform_device *pdev)
 	priv->cpufreq_dt_pdev = cpufreq_dt_pdev_register(&pdev->dev);
 	if (IS_ERR(priv->cpufreq_dt_pdev)) {
 		ret = PTR_ERR(priv->cpufreq_dt_pdev);
-		goto out_put_pllp_clk;
+		goto out_disable_dfll;
 	}
 
 	platform_set_drvdata(pdev, priv);
 
 	return 0;
 
+out_disable_dfll:
+	err = tegra124_cpu_disable_dfll(priv);
+	if (err)
+		dev_err(&pdev->dev, "failed to disable DFLL clock: %d\n", err);
 out_put_pllp_clk:
 	clk_put(priv->pllp_clk);
 out_put_pllx_clk:
@@ -175,11 +192,16 @@ disable_cpufreq:
 static void tegra124_cpufreq_remove(struct platform_device *pdev)
 {
 	struct tegra124_cpufreq_priv *priv = dev_get_drvdata(&pdev->dev);
+	int err;
 
 	if (!IS_ERR(priv->cpufreq_dt_pdev)) {
 		platform_device_unregister(priv->cpufreq_dt_pdev);
 		priv->cpufreq_dt_pdev = ERR_PTR(-ENODEV);
 	}
+
+	err = tegra124_cpu_disable_dfll(priv);
+	if (err)
+		dev_err(&pdev->dev, "failed to disable DFLL clock: %d\n", err);
 
 	clk_put(priv->pllp_clk);
 	clk_put(priv->pllx_clk);
