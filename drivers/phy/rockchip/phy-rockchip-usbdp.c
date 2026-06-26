@@ -926,6 +926,7 @@ static int rk_udphy_parse_lane_mux_data(struct rk_udphy *udphy)
 
 static int rk_udphy_get_initial_status(struct rk_udphy *udphy)
 {
+	const struct rk_udphy_cfg *cfg = udphy->cfgs;
 	int ret;
 	u32 value;
 
@@ -938,10 +939,12 @@ static int rk_udphy_get_initial_status(struct rk_udphy *udphy)
 	rk_udphy_reset_deassert_all(udphy);
 
 	regmap_read(udphy->pma_regmap, CMN_LANE_MUX_AND_EN_OFFSET, &value);
-	if (FIELD_GET(CMN_DP_LANE_MUX_ALL, value) && FIELD_GET(CMN_DP_LANE_EN_ALL, value))
-		udphy->status = UDPHY_MODE_DP;
-	else
-		rk_udphy_disable(udphy);
+	if (FIELD_GET(CMN_DP_LANE_MUX_ALL, value) && FIELD_GET(CMN_DP_LANE_EN_ALL, value)) {
+		dev_info(udphy->dev, "Started with DP PHY pre-enabled; seamless takeover unsupported\n");
+		rk_udphy_grfreg_write(udphy->vogrf, &cfg->vogrfcfg[udphy->id].hpd_trigger, false);
+	}
+
+	rk_udphy_disable(udphy);
 
 	return 0;
 }
