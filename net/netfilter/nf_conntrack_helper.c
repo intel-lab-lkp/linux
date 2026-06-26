@@ -40,12 +40,16 @@ static unsigned int nf_ct_helper_count __read_mostly;
 static DEFINE_MUTEX(nf_ct_nat_helpers_mutex);
 static struct list_head nf_ct_nat_helpers __read_mostly;
 
-/* Stupid hash, but collision free for the default registrations of the
- * helpers currently in the kernel. */
-static unsigned int helper_hash(const struct nf_conntrack_tuple *tuple)
+static unsigned int helper_hash(const char *name, u8 protonum)
 {
-	return (((tuple->src.l3num << 8) | tuple->dst.protonum) ^
-		(__force __u16)tuple->src.u.all) % nf_ct_helper_hsize;
+	static u32 seed;
+	u32 initval;
+
+	get_random_once(&seed, sizeof(seed));
+
+	initval = seed ^ protonum;
+
+	return jhash(name, strlen(name), initval) % nf_ct_helper_hsize;
 }
 
 struct nf_conntrack_helper *
@@ -54,18 +58,21 @@ __nf_conntrack_helper_find(const char *name, u16 l3num, u8 protonum)
 	struct nf_conntrack_helper *h;
 	unsigned int i;
 
-	for (i = 0; i < nf_ct_helper_hsize; i++) {
-		hlist_for_each_entry_rcu(h, &nf_ct_helper_hash[i], hnode) {
-			if (strcmp(h->name, name))
-				continue;
+	if (!nf_ct_helper_hash)
+		return NULL;
 
-			if (h->tuple.src.l3num != NFPROTO_UNSPEC &&
-			    h->tuple.src.l3num != l3num)
-				continue;
+	i = helper_hash(name, protonum);
 
-			if (h->tuple.dst.protonum == protonum)
-				return h;
-		}
+	hlist_for_each_entry_rcu(h, &nf_ct_helper_hash[i], hnode) {
+		if (strcmp(h->name, name))
+			continue;
+
+		if (h->tuple.src.l3num != NFPROTO_UNSPEC &&
+		    h->tuple.src.l3num != l3num)
+			continue;
+
+		if (h->tuple.dst.protonum == protonum)
+			return h;
 	}
 	return NULL;
 }
@@ -363,9 +370,8 @@ EXPORT_SYMBOL_GPL(nf_ct_helper_log);
 
 int __nf_conntrack_helper_register(struct nf_conntrack_helper *me)
 {
-	struct nf_conntrack_tuple_mask mask = { .src.u.all = htons(0xFFFF) };
-	unsigned int h = helper_hash(&me->tuple);
 	struct nf_conntrack_helper *cur;
+	unsigned int h;
 	int ret = 0, i;
 
 	BUG_ON(me->expect_class_max >= NF_CT_MAX_EXPECT_CLASSES);
@@ -382,29 +388,18 @@ int __nf_conntrack_helper_register(struct nf_conntrack_helper *me)
 			return -EINVAL;
 	}
 
+	h = helper_hash(me->name, me->tuple.dst.protonum);
 	mutex_lock(&nf_ct_helper_mutex);
-	for (i = 0; i < nf_ct_helper_hsize; i++) {
-		hlist_for_each_entry(cur, &nf_ct_helper_hash[i], hnode) {
-			if (!strcmp(cur->name, me->name) &&
-			    (cur->tuple.src.l3num == NFPROTO_UNSPEC ||
-			     cur->tuple.src.l3num == me->tuple.src.l3num) &&
-			    cur->tuple.dst.protonum == me->tuple.dst.protonum) {
-				ret = -EBUSY;
-				goto out;
-			}
+	hlist_for_each_entry(cur, &nf_ct_helper_hash[h], hnode) {
+		if (!strcmp(cur->name, me->name) &&
+		    (cur->tuple.src.l3num == NFPROTO_UNSPEC ||
+		     cur->tuple.src.l3num == me->tuple.src.l3num) &&
+		    cur->tuple.dst.protonum == me->tuple.dst.protonum) {
+			ret = -EBUSY;
+			goto out;
 		}
 	}
 
-	/* avoid unpredictable behaviour for auto_assign_helper */
-	if (!(me->flags & NF_CT_HELPER_F_USERSPACE)) {
-		hlist_for_each_entry(cur, &nf_ct_helper_hash[h], hnode) {
-			if (nf_ct_tuple_src_mask_cmp(&cur->tuple, &me->tuple,
-						     &mask)) {
-				ret = -EBUSY;
-				goto out;
-			}
-		}
-	}
 	refcount_set(&me->ct_refcnt, 1);
 	hlist_add_head_rcu(&me->hnode, &nf_ct_helper_hash[h]);
 	nf_ct_helper_count++;
