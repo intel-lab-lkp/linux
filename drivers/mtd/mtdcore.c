@@ -1108,6 +1108,7 @@ int mtd_device_parse_register(struct mtd_info *mtd, const char * const *types,
 			      int nr_parts)
 {
 	int ret, err;
+	bool registered = false;
 
 	mtd_set_dev_defaults(mtd);
 
@@ -1119,6 +1120,7 @@ int mtd_device_parse_register(struct mtd_info *mtd, const char * const *types,
 		ret = add_mtd_device(mtd);
 		if (ret)
 			goto out;
+		registered = true;
 	}
 
 	if (IS_REACHABLE(CONFIG_MTD_VIRT_CONCAT)) {
@@ -1136,9 +1138,11 @@ int mtd_device_parse_register(struct mtd_info *mtd, const char * const *types,
 		ret = 0;
 	else if (nr_parts)
 		ret = add_mtd_partitions(mtd, parts, nr_parts);
-	else if (!device_is_registered(&mtd->dev))
+	else if (!device_is_registered(&mtd->dev)) {
 		ret = add_mtd_device(mtd);
-	else
+		if (!ret)
+			registered = true;
+	} else
 		ret = 0;
 
 	if (ret)
@@ -1170,7 +1174,7 @@ out:
 		nvmem_unregister(mtd->otp_factory_nvmem);
 	}
 
-	if (ret && device_is_registered(&mtd->dev)) {
+	if (ret && registered) {
 		err = del_mtd_device(mtd);
 		if (err)
 			pr_err("Error when deleting MTD device (%d)\n", err);
