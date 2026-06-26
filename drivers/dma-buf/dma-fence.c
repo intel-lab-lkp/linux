@@ -363,6 +363,18 @@ void dma_fence_signal_timestamp_locked(struct dma_fence *fence,
 				      &fence->flags)))
 		return;
 
+	/*
+	 * Fully order setting of the bit above with setting of the ops pointer
+	 * to NULL below, so that all parties can use the signaled flag to
+	 * detect that the fence decoupled from its ops in a safe manner.
+	 *
+	 * The counter parts of this barrier are in dma_fence_timeline_name()
+	 * and dma_fence_driver_name(). All other future parties that rely on
+	 * the signaled flag for valid access to the ops pointer will need a
+	 * memory barrier.
+	 */
+	smp_wmb();
+
 	trace_dma_fence_signaled(fence);
 
 	/*
@@ -1170,6 +1182,12 @@ const char __rcu *dma_fence_driver_name(struct dma_fence *fence)
 
 	/* RCU protection is required for safe access to returned string */
 	ops = rcu_dereference(fence->ops);
+	/*
+	 * Fully order the dereference above with the flag check. Otherwise,
+	 * ops could be dereferenced as a NULL pointer. The barrier's
+	 * counterpart is in dma_fence_signal_timestamp_locked().
+	 */
+	smp_rmb();
 	if (!dma_fence_test_signaled_flag(fence))
 		return (const char __rcu *)ops->get_driver_name(fence);
 	else
@@ -1203,6 +1221,12 @@ const char __rcu *dma_fence_timeline_name(struct dma_fence *fence)
 
 	/* RCU protection is required for safe access to returned string */
 	ops = rcu_dereference(fence->ops);
+	/*
+	 * Fully order the dereference above with the flag check. Otherwise,
+	 * ops could be dereferenced as a NULL pointer. The barrier's
+	 * counterpart is in dma_fence_signal_timestamp_locked().
+	 */
+	smp_rmb();
 	if (!dma_fence_test_signaled_flag(fence))
 		return (const char __rcu *)ops->get_driver_name(fence);
 	else
