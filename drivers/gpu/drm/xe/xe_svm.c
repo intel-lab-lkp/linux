@@ -233,6 +233,7 @@ static void xe_svm_invalidate(struct drm_gpusvm *gpusvm,
 	ktime_t start = xe_gt_stats_ktime_get();
 	u64 adj_start = mmu_range->start, adj_end = mmu_range->end;
 	u8 tile_mask = 0, id;
+	bool needs_inval = false;
 	long err;
 
 	xe_svm_assert_in_notifier(vm);
@@ -258,11 +259,22 @@ static void xe_svm_invalidate(struct drm_gpusvm *gpusvm,
 	if (xe_vm_is_closed(vm))
 		goto range_notifier_event_end;
 
-	/*
-	 * XXX: Less than ideal to always wait on VM's resv slots if an
-	 * invalidation is not required. Could walk range list twice to figure
-	 * out if an invalidations is need, but also not ideal.
-	 */
+	/* Pre-scan: skip fence wait if no range has active GPU bindings. */
+
+	r = first;
+	drm_gpusvm_for_each_range(r, notifier, adj_start, adj_end) {
+		struct xe_svm_range *range = to_xe_range(r);
+
+		if (!range->base.pages.flags.unmapped && range->tile_present) {
+			needs_inval = true;
+			break;
+		}
+
+	}
+	if (!needs_inval)
+		goto range_notifier_event_end;
+
+
 	err = dma_resv_wait_timeout(xe_vm_resv(vm),
 				    DMA_RESV_USAGE_BOOKKEEP,
 				    false, MAX_SCHEDULE_TIMEOUT);
