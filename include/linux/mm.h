@@ -2288,21 +2288,42 @@ static inline int page_zone_id(struct page *page)
 #ifdef NODE_NOT_IN_PAGE_FLAGS
 int memdesc_nid(memdesc_flags_t mdf);
 #else
+#ifdef CONFIG_NUMA
+#define memdesc_nid(mdf)						\
+({									\
+	ASSERT_EXCLUSIVE_BITS(mdf.f, NODES_MASK << NODES_PGSHIFT);	\
+	(int)((mdf.f >> NODES_PGSHIFT) & NODES_MASK);			\
+})
+#else
 static inline int memdesc_nid(memdesc_flags_t mdf)
 {
-	return (mdf.f >> NODES_PGSHIFT) & NODES_MASK;
+	return 0;
 }
 #endif
 
+#ifdef CONFIG_NUMA
 static inline int page_to_nid(const struct page *page)
 {
-	return memdesc_nid(PF_POISONED_CHECK(page)->flags);
+	const struct page *p = PF_POISONED_CHECK(page);
+
+	return memdesc_nid(p->flags);
 }
 
 static inline int folio_nid(const struct folio *folio)
 {
 	return memdesc_nid(folio->flags);
 }
+#else
+static inline int page_to_nid(const struct page *page)
+{
+	return 0;
+}
+
+static inline int folio_nid(const struct folio *folio)
+{
+	return 0;
+}
+#endif
 
 #ifdef CONFIG_NUMA_BALANCING
 /* page access time bits needs to hold at least 4 seconds */
