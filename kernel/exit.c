@@ -421,32 +421,6 @@ kill_orphaned_pgrp(struct task_struct *tsk, struct task_struct *parent)
 	}
 }
 
-static void coredump_task_exit(struct task_struct *tsk,
-			       struct core_state *core_state)
-{
-	struct core_thread self;
-
-	self.task = tsk;
-	if (self.task->flags & PF_SIGNALED)
-		self.next = xchg(&core_state->dumper.next, &self);
-	else
-		self.task = NULL;
-	/*
-	 * Implies mb(), the result of xchg() must be visible
-	 * to core_state->dumper.
-	 */
-	if (atomic_dec_and_test(&core_state->nr_threads))
-		complete(&core_state->startup);
-
-	for (;;) {
-		set_current_state(TASK_IDLE|TASK_FREEZABLE);
-		if (!self.task) /* see coredump_finish() */
-			break;
-		schedule();
-	}
-	__set_current_state(TASK_RUNNING);
-}
-
 #ifdef CONFIG_MEMCG
 /* drops tasklist_lock if succeeds */
 static bool __try_to_set_owner(struct task_struct *tsk, struct mm_struct *mm)
@@ -889,8 +863,13 @@ static void synchronize_group_exit(struct task_struct *tsk, long code)
 	core_state = signal->core_state;
 	spin_unlock_irq(&sighand->siglock);
 
-	if (unlikely(core_state))
-		coredump_task_exit(tsk, core_state);
+	/*
+	 * Decrement ->nr_threads and possibly complete
+	 * core_state->startup to politely skip participating in any
+	 * pending coredumps.
+	 */
+	if (unlikely(core_state) && atomic_dec_and_test(&core_state->nr_threads))
+		complete(&core_state->startup);
 }
 
 void __noreturn do_exit(long code)

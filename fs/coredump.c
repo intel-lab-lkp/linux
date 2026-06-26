@@ -518,6 +518,29 @@ static int zap_threads(struct task_struct *tsk,
 	return nr;
 }
 
+void coredump_join(struct core_state *core_state)
+{
+	/* Stop and join the in-progress coredump */
+	struct core_thread self;
+
+	self.task = current;
+	self.next = xchg(&core_state->dumper.next, &self);
+	/*
+	 * Implies mb(), the result of xchg() must be visible
+	 * to core_state->dumper.
+	 */
+	if (atomic_dec_and_test(&core_state->nr_threads))
+		complete(&core_state->startup);
+
+	for (;;) {
+		set_current_state(TASK_IDLE|TASK_FREEZABLE);
+		if (!self.task) /* see coredump_finish() */
+			break;
+		schedule();
+	}
+	__set_current_state(TASK_RUNNING);
+}
+
 static int coredump_wait(int exit_code, struct core_state *core_state)
 {
 	struct task_struct *tsk = current;
@@ -564,7 +587,7 @@ static void coredump_finish(bool core_dumped)
 		next = curr->next;
 		task = curr->task;
 		/*
-		 * see coredump_task_exit(), curr->task must not see
+		 * see coredump_join(), curr->task must not see
 		 * ->task == NULL before we read ->next.
 		 */
 		smp_mb();

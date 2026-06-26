@@ -2860,6 +2860,7 @@ relock:
 
 	for (;;) {
 		bool group_exit_needed = false;
+		struct core_state *core_state;
 		struct k_sigaction *ka;
 		enum pid_type type;
 		int exit_code = 0;
@@ -3018,6 +3019,7 @@ relock:
 			}
 		}
 	fatal:
+		core_state = signal->core_state;
 		spin_unlock_irq(&sighand->siglock);
 		if (unlikely(cgroup_task_frozen(current)))
 			cgroup_leave_frozen(true);
@@ -3037,6 +3039,9 @@ relock:
 			 * that value and ignore the one we pass it.
 			 */
 			vfs_coredump(&ksig->info);
+		} else if (core_state) {
+			/* Wait for the coredump to happen */
+			coredump_join(core_state);
 		}
 
 		/*
