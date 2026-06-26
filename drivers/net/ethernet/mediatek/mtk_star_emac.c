@@ -1446,7 +1446,10 @@ static int mtk_star_mdio_init(struct net_device *ndev)
 	priv->mii->priv = priv;
 
 	ret = devm_of_mdiobus_register(dev, priv->mii, mdio_node);
+	if (ret)
+		of_node_put(mdio_node);
 
+	return ret;
 out_put_node:
 	of_node_put(mdio_node);
 	return ret;
