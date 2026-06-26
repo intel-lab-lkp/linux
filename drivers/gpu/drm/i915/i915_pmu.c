@@ -1156,6 +1156,16 @@ void i915_pmu_register(struct drm_i915_private *i915)
 	};
 	int ret = -ENOMEM;
 
+	/*
+	 * PREEMPT_RT has problems with forcewake. Forcewake is used by the
+	 * engine 'busy' event when guc submission is enabled, and to measure
+	 * rc6 residency.
+	 *
+	 * Disable pmu events on PREEMPT_RT entirely to prevent deadlocks.
+	 */
+	if (IS_ENABLED(CONFIG_PREEMPT_RT))
+		reeturn;
+
 	spin_lock_init(&pmu->lock);
 	hrtimer_setup(&pmu->timer, i915_sample, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	init_rc6(pmu);
