@@ -356,28 +356,17 @@ static char * __init xbc_make_cmdline(const char *key)
 	return new_cmdline;
 }
 
-static int __init bootconfig_params(char *param, char *val,
-				    const char *unused, void *arg)
-{
-	if (strcmp(param, "bootconfig") == 0) {
-		bootconfig_found = true;
-	}
-	return 0;
-}
-
 static int __init warn_bootconfig(char *str)
 {
-	/* The 'bootconfig' has been handled by bootconfig_params(). */
+	/* The 'bootconfig' option is handled by setup_boot_config(). */
 	return 0;
 }
 
 static void __init setup_boot_config(void)
 {
-	static char tmp_cmdline[COMMAND_LINE_SIZE] __initdata;
 	const char *msg, *data;
-	int pos, ret;
+	int pos, ret, offs;
 	size_t size;
-	char *err;
 	bool from_embedded = false;
 
 	/* Cut out the bootconfig data even if we have no bootconfig option */
@@ -388,16 +377,12 @@ static void __init setup_boot_config(void)
 		from_embedded = true;
 	}
 
-	strscpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
-	err = parse_args("bootconfig", tmp_cmdline, NULL, 0, 0, 0, NULL,
-			 bootconfig_params);
-
-	if (IS_ERR(err) || !(bootconfig_found || IS_ENABLED(CONFIG_BOOT_CONFIG_FORCE)))
+	bootconfig_found = bootconfig_cmdline_requested(boot_command_line, &offs);
+	if (!(bootconfig_found || IS_ENABLED(CONFIG_BOOT_CONFIG_FORCE)))
 		return;
 
-	/* parse_args() stops at the next param of '--' and returns an address */
-	if (err)
-		initargs_offs = err - tmp_cmdline;
+	/* Offset of the init arguments after a "--", located by the helper. */
+	initargs_offs = offs;
 
 	if (!data) {
 		/* If user intended to use bootconfig, show an error level message */
