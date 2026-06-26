@@ -2907,10 +2907,9 @@ struct mem_cgroup *mem_cgroup_from_virt(void *p)
 	return folio_memcg_check(virt_to_folio(p));
 }
 
-static struct obj_cgroup *__get_obj_cgroup_from_memcg(struct mem_cgroup *memcg)
+static struct obj_cgroup *__get_obj_cgroup_from_memcg(struct mem_cgroup *memcg,
+						      int nid)
 {
-	int nid = numa_node_id();
-
 	for (; memcg; memcg = parent_mem_cgroup(memcg)) {
 		struct obj_cgroup *objcg = rcu_dereference(memcg->nodeinfo[nid]->objcg);
 
@@ -2926,67 +2925,73 @@ static inline struct obj_cgroup *get_obj_cgroup_from_memcg(struct mem_cgroup *me
 	struct obj_cgroup *objcg;
 
 	rcu_read_lock();
-	objcg = __get_obj_cgroup_from_memcg(memcg);
+	objcg = __get_obj_cgroup_from_memcg(memcg, numa_node_id());
 	rcu_read_unlock();
 
 	return objcg;
 }
 
-static struct obj_cgroup *current_objcg_update(void)
+static struct obj_cgroup **current_objcg_update(void)
 {
 	struct mem_cgroup *memcg;
-	struct obj_cgroup *old, *objcg = NULL;
+	struct obj_cgroup **objcgs;
+	unsigned long old_tagged;
+	int nid;
 
 	do {
-		/* Atomically drop the update bit. */
-		old = xchg(&current->objcg, NULL);
-		if (old) {
-			old = (struct obj_cgroup *)
-				((unsigned long)old & ~CURRENT_OBJCG_UPDATE_FLAG);
-			obj_cgroup_put(old);
+		old_tagged = (unsigned long)READ_ONCE(current->objcgs);
+		objcgs = (struct obj_cgroup **)
+			(old_tagged & ~CURRENT_OBJCG_UPDATE_FLAG);
 
-			old = NULL;
+		/*
+		 * If there is no per-node cache (kthread or fork-time
+		 * allocation failure), there is nothing to refresh. The
+		 * cmpxchg below still clears the update bit so we do not
+		 * keep re-entering this slow path.
+		 */
+		if (objcgs) {
+			if (!current->mm || (current->flags & PF_KTHREAD)) {
+				/*
+				 * The task lost its mm: drop the cached
+				 * per-node references; future allocations will
+				 * fall back to root_mem_cgroup.
+				 */
+				for_each_node(nid)
+					obj_cgroup_put(xchg(&objcgs[nid], NULL));
+			} else {
+				/*
+				 * Re-read the memcg under rcu since the task
+				 * may have been asynchronously moved and the
+				 * previous memcg can be offlined.
+				 */
+				rcu_read_lock();
+				memcg = mem_cgroup_from_task(current);
+				for_each_node(nid) {
+					struct obj_cgroup *fresh, *stale;
+
+					fresh = __get_obj_cgroup_from_memcg(memcg, nid);
+					stale = xchg(&objcgs[nid], fresh);
+					obj_cgroup_put(stale);
+				}
+				rcu_read_unlock();
+			}
 		}
 
-		/* If new objcg is NULL, no reason for the second atomic update. */
-		if (!current->mm || (current->flags & PF_KTHREAD))
-			return NULL;
-
 		/*
-		 * Release the objcg pointer from the previous iteration,
-		 * if try_cmpxcg() below fails.
+		 * Publish the cleared-flag pointer. If kmem_attach raced and
+		 * re-set the update bit, retry the whole refresh.
 		 */
-		if (unlikely(objcg)) {
-			obj_cgroup_put(objcg);
-			objcg = NULL;
-		}
+	} while (!try_cmpxchg((unsigned long *)&current->objcgs,
+			      &old_tagged, (unsigned long)objcgs));
 
-		/*
-		 * Obtain the new objcg pointer. The current task can be
-		 * asynchronously moved to another memcg and the previous
-		 * memcg can be offlined. So let's get the memcg pointer
-		 * and try get a reference to objcg under a rcu read lock.
-		 */
-
-		rcu_read_lock();
-		memcg = mem_cgroup_from_task(current);
-		objcg = __get_obj_cgroup_from_memcg(memcg);
-		rcu_read_unlock();
-
-		/*
-		 * Try set up a new objcg pointer atomically. If it
-		 * fails, it means the update flag was set concurrently, so
-		 * the whole procedure should be repeated.
-		 */
-	} while (!try_cmpxchg(&current->objcg, &old, objcg));
-
-	return objcg;
+	return objcgs;
 }
 
 __always_inline struct obj_cgroup *current_obj_cgroup(void)
 {
 	struct mem_cgroup *memcg;
 	struct obj_cgroup *objcg;
+	struct obj_cgroup **objcgs;
 	int nid = numa_node_id();
 
 	if (IS_ENABLED(CONFIG_MEMCG_NMI_UNSAFE) && in_nmi())
@@ -2997,14 +3002,16 @@ __always_inline struct obj_cgroup *current_obj_cgroup(void)
 		if (unlikely(memcg))
 			goto from_memcg;
 
-		objcg = READ_ONCE(current->objcg);
-		if (unlikely((unsigned long)objcg & CURRENT_OBJCG_UPDATE_FLAG))
-			objcg = current_objcg_update();
+		objcgs = READ_ONCE(current->objcgs);
+		if (unlikely((unsigned long)objcgs & CURRENT_OBJCG_UPDATE_FLAG))
+			objcgs = current_objcg_update();
 		/*
-		 * Objcg reference is kept by the task, so it's safe
-		 * to use the objcg by the current task.
+		 * Per-node objcg references are kept by the task, so it's
+		 * safe to use them by the current task.
 		 */
-		return objcg ? : rcu_dereference_check(root_mem_cgroup->nodeinfo[nid]->objcg, 1);
+		if (objcgs && (objcg = objcgs[nid]))
+			return objcg;
+		return rcu_dereference_check(root_mem_cgroup->nodeinfo[nid]->objcg, 1);
 	}
 
 	memcg = this_cpu_read(int_active_memcg);
@@ -4545,22 +4552,47 @@ static void mem_cgroup_css_rstat_flush(struct cgroup_subsys_state *css, int cpu)
 
 static void mem_cgroup_fork(struct task_struct *task)
 {
+	struct obj_cgroup **objcgs;
+
 	/*
-	 * Set the update flag to cause task->objcg to be initialized lazily
-	 * on the first allocation. It can be done without any synchronization
-	 * because it's always performed on the current task, so does
-	 * current_objcg_update().
+	 * Kthreads do not need a per-node cache; their kmem allocations fall
+	 * back to root_mem_cgroup via current_obj_cgroup().
 	 */
-	task->objcg = (struct obj_cgroup *)CURRENT_OBJCG_UPDATE_FLAG;
+	if (task->flags & PF_KTHREAD) {
+		task->objcgs = NULL;
+		return;
+	}
+
+	/*
+	 * Eagerly allocate the per-node cache so that current_objcg_update()
+	 * never has to allocate from potentially-atomic kmem allocation
+	 * paths. On allocation failure this task will use root_mem_cgroup
+	 * for kmem accounting.
+	 *
+	 * Tag with the update flag so the first kmem allocation populates
+	 * the entries via current_objcg_update().
+	 */
+	objcgs = kcalloc(nr_node_ids, sizeof(*objcgs), GFP_KERNEL);
+	if (objcgs)
+		task->objcgs = (struct obj_cgroup **)
+			((unsigned long)objcgs | CURRENT_OBJCG_UPDATE_FLAG);
+	else
+		task->objcgs = NULL;
 }
 
 static void mem_cgroup_exit(struct task_struct *task)
 {
-	struct obj_cgroup *objcg = task->objcg;
+	struct obj_cgroup **objcgs;
+	int nid;
 
-	objcg = (struct obj_cgroup *)
-		((unsigned long)objcg & ~CURRENT_OBJCG_UPDATE_FLAG);
-	obj_cgroup_put(objcg);
+	objcgs = (struct obj_cgroup **)
+		((unsigned long)task->objcgs & ~CURRENT_OBJCG_UPDATE_FLAG);
+
+	if (objcgs) {
+		for_each_node(nid)
+			obj_cgroup_put(objcgs[nid]);
+		kfree(objcgs);
+	}
 
 	/*
 	 * Some kernel allocations can happen after this point,
@@ -4568,7 +4600,7 @@ static void mem_cgroup_exit(struct task_struct *task)
 	 * because it's always performed on the current task, so does
 	 * current_objcg_update().
 	 */
-	task->objcg = NULL;
+	task->objcgs = NULL;
 }
 
 #ifdef CONFIG_LRU_GEN
@@ -4600,7 +4632,7 @@ static void mem_cgroup_kmem_attach(struct cgroup_taskset *tset)
 
 	cgroup_taskset_for_each(task, css, tset) {
 		/* atomically set the update bit */
-		set_bit(CURRENT_OBJCG_UPDATE_BIT, (unsigned long *)&task->objcg);
+		set_bit(CURRENT_OBJCG_UPDATE_BIT, (unsigned long *)&task->objcgs);
 	}
 }
 
