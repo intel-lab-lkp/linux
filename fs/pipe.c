@@ -155,6 +155,72 @@ static struct page *anon_pipe_prealloc_pop(struct anon_pipe_prealloc *prealloc)
 	return prealloc->pages[prealloc->count];
 }
 
+/* Push a page to the prealloc pool. Returns true if added, false if full. */
+static bool anon_pipe_prealloc_push(struct anon_pipe_prealloc *prealloc,
+				    struct page *page)
+{
+	if (prealloc->count >= PIPE_PREALLOC_MAX)
+		return false;
+	prealloc->pages[prealloc->count++] = page;
+	return true;
+}
+
+/*
+ * Top up the pipe's own pool before taking pipe->mutex, allocating only the
+ * shortfall outside the lock, then briefly take the lock to push the pages in.
+ * anon_pipe_get_page() then drains the pool instead of allocating under the lock.
+ */
+static void __maybe_unused anon_pipe_prefill(struct pipe_inode_info *pipe,
+					     size_t total_len)
+{
+	struct page *pages[PIPE_PREALLOC_MAX];
+	unsigned int want, have, need, n = 0;
+
+	want = min_t(unsigned int, DIV_ROUND_UP(total_len, PAGE_SIZE),
+		     PIPE_PREALLOC_MAX);
+	have = min_t(unsigned int, pipe->prealloc.count, want);
+	need = want - have;
+
+	if (!need)
+		return;
+
+	while (n < need) {
+		struct page *page = alloc_page(GFP_HIGHUSER | __GFP_ACCOUNT);
+
+		if (!page)
+			break;
+		pages[n++] = page;
+	}
+	if (!n)
+		return;
+
+	mutex_lock(&pipe->mutex);
+	while (n && anon_pipe_prealloc_push(&pipe->prealloc, pages[n - 1]))
+		n--;
+	mutex_unlock(&pipe->mutex);
+
+	while (n)
+		put_page(pages[--n]);
+}
+
+/* Trim the pool down to PIPE_PREALLOC_KEEP, freeing the excess unlocked. */
+static void __maybe_unused anon_pipe_trim_pool(struct pipe_inode_info *pipe)
+{
+	struct page *excess[PIPE_PREALLOC_MAX];
+	unsigned int nexcess = 0;
+
+	if (pipe->prealloc.count <= PIPE_PREALLOC_KEEP)
+		return;
+
+	mutex_lock(&pipe->mutex);
+	while (pipe->prealloc.count > PIPE_PREALLOC_KEEP)
+		excess[nexcess++] = anon_pipe_prealloc_pop(&pipe->prealloc);
+	mutex_unlock(&pipe->mutex);
+
+	while (nexcess)
+		put_page(excess[--nexcess]);
+}
+
 static struct page *anon_pipe_get_page(struct pipe_inode_info *pipe,
 				       struct anon_pipe_prealloc *prealloc)
 {
