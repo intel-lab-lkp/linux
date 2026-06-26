@@ -1873,6 +1873,12 @@ const struct intel_ddi_buf_trans *intel_ddi_buf_trans_get(struct intel_encoder *
 			buf_trans = intel_bios_get_c10_vspeo(devdata, has_dp, port_clock, has_edp);
 		else
 			buf_trans = intel_bios_get_c20_vspeo(devdata, has_dp, is_uhbr);
+	} else if (DISPLAY_VER(display) == 11) {
+		if (display->platform.jasperlake)
+			buf_trans = intel_bios_get_jsl_combo_vspeo(devdata, has_dp, port_clock,
+								   has_edp && use_edp_low_vswing(encoder));
+		else if (display->platform.elkhartlake)
+			buf_trans = intel_bios_get_ehl_combo_vspeo(devdata, has_dp, port_clock, has_edp);
 	}
 
 	if (buf_trans)
