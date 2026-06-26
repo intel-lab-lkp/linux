@@ -229,7 +229,7 @@ config PINCTRL_MT8173
 	select PINCTRL_MTK
 
 config PINCTRL_MT8183
-	bool "MediaTek MT8183 pin control"
+	tristate "MediaTek MT8183 pin control"
 	depends on OF
 	depends on ARM64 || COMPILE_TEST
 	default ARM64 && ARCH_MEDIATEK
