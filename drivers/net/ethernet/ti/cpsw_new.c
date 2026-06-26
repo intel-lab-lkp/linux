@@ -1337,6 +1337,7 @@ static int cpsw_probe_dt(struct cpsw_common *cpsw)
 		if (ret) {
 			dev_err(dev, "%pOF read phy-mode err %d\n",
 				port_np, ret);
+			of_node_put(slave_data->phy_node);
 			goto err_node_put;
 		}
 
@@ -1344,8 +1345,10 @@ static int cpsw_probe_dt(struct cpsw_common *cpsw)
 		if (ret) {
 			ret = ti_cm_get_macid(dev, port_id - 1,
 					      slave_data->mac_addr);
-			if (ret)
+			if (ret) {
+				of_node_put(slave_data->phy_node);
 				goto err_node_put;
+			}
 		}
 
 		if (of_property_read_u32(port_np, "ti,dual-emac-pvid",
