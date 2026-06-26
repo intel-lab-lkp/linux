@@ -1613,6 +1613,22 @@ static struct pcpu_chunk *pcpu_chunk_addr_search(void *addr)
 }
 
 #ifdef CONFIG_MEMCG
+static unsigned int pcpu_memcg_nr_precharge_pages(size_t size)
+{
+	size_t total = pcpu_obj_full_size(size);
+	unsigned int ceil = PAGE_ALIGN(total) >> PAGE_SHIFT;
+
+	/*
+	 * pcpu_memcg_post_alloc_hook() charges ceil(bytes_on_node / PAGE_SIZE)
+	 * pages per node. Summed over the K <= num_possible_nodes() nodes the
+	 * allocation touches that is at most ceil + (K - 1): each node rounds
+	 * its share up by strictly less than a page. Precharge
+	 * ceil + num_possible_nodes(), which covers that worst case with a
+	 * page of headroom, so the per-node credit never runs short.
+	 */
+	return ceil + num_possible_nodes();
+}
+
 static bool pcpu_memcg_pre_alloc_hook(size_t size, gfp_t gfp,
 				      struct obj_cgroup **objcgp)
 {
@@ -1625,12 +1641,35 @@ static bool pcpu_memcg_pre_alloc_hook(size_t size, gfp_t gfp,
 	if (!objcg || obj_cgroup_is_root(objcg))
 		return true;
 
-	if (obj_cgroup_precharge(objcg, gfp,
-				 PAGE_ALIGN(pcpu_obj_full_size(size)) >> PAGE_SHIFT))
+	if (obj_cgroup_precharge(objcg, gfp, pcpu_memcg_nr_precharge_pages(size)))
 		return false;
 
 	*objcgp = objcg;
 	return true;
+}
+
+/*
+ * Accumulate the per-cpu payload bytes of this allocation onto the node that
+ * actually backs each page. pcpu_alloc_pages() only places a CPU's backing
+ * page on cpu_to_node() as a best effort, so the page may have fallen back to
+ * another node; use the page's real node. node_bytes[nid] accumulates the
+ * bytes seen on each node, to be charged in one batch per node by the caller.
+ */
+static void pcpu_memcg_accumulate_pages(struct pcpu_chunk *chunk, int off,
+				   size_t size, unsigned int *node_bytes)
+{
+	unsigned int nr_pages = PAGE_ALIGN(size) >> PAGE_SHIFT;
+	unsigned int cpu, i;
+
+	for_each_possible_cpu(cpu) {
+		for (i = 0; i < nr_pages; i++) {
+			void *addr = (void *)pcpu_chunk_addr(chunk, cpu, PFN_DOWN(off) + i);
+			size_t page_sz = i < nr_pages - 1 ?
+				PAGE_SIZE : size - (nr_pages - 1) * PAGE_SIZE;
+
+			node_bytes[page_to_nid(pcpu_addr_to_page(addr))] += page_sz;
+		}
+	}
 }
 
 static void pcpu_memcg_post_alloc_hook(struct obj_cgroup *objcg,
@@ -1641,29 +1680,47 @@ static void pcpu_memcg_post_alloc_hook(struct obj_cgroup *objcg,
 		return;
 
 	if (likely(chunk && chunk->obj_exts)) {
-		size_t total = pcpu_obj_full_size(size);
-		size_t remainder = PAGE_ALIGN(total) - total;
+		unsigned int precharge_pages = pcpu_memcg_nr_precharge_pages(size);
+		unsigned int node_bytes[MAX_NUMNODES] = { 0 };
+		unsigned int pages_used = 0;
+		int nid;
 
 		obj_cgroup_get(objcg);
 		chunk->obj_exts[off >> PCPU_MIN_ALLOC_SHIFT].cgroup = objcg;
 
+		pcpu_memcg_accumulate_pages(chunk, off, size, node_bytes);
+
 		rcu_read_lock();
 		mod_memcg_state(obj_cgroup_memcg(objcg), MEMCG_PERCPU_B,
-				total);
-		rcu_read_unlock();
+				pcpu_obj_full_size(size));
 
-		obj_cgroup_account_kmem(objcg, PAGE_ALIGN(total) >> PAGE_SHIFT);
-		if (remainder)
-			obj_cgroup_uncharge(objcg, remainder);
+		for_each_online_node(nid) {
+			unsigned int pages;
+
+			if (!node_bytes[nid])
+				continue;
+			pages = DIV_ROUND_UP(node_bytes[nid], PAGE_SIZE);
+			obj_cgroup_account_kmem(obj_cgroup_nid(objcg, nid), pages);
+			pages_used += pages;
+			if (pages * PAGE_SIZE > node_bytes[nid])
+				obj_cgroup_uncharge(obj_cgroup_nid(objcg, nid),
+						    pages * PAGE_SIZE - node_bytes[nid]);
+		}
+
+		/* Return the precharged pages we did not use. */
+		if (pages_used < precharge_pages)
+			obj_cgroup_unprecharge(objcg, precharge_pages - pages_used);
+		rcu_read_unlock();
 	} else {
-		obj_cgroup_unprecharge(objcg,
-				       PAGE_ALIGN(pcpu_obj_full_size(size)) >> PAGE_SHIFT);
+		obj_cgroup_unprecharge(objcg, pcpu_memcg_nr_precharge_pages(size));
 	}
 }
 
 static void pcpu_memcg_free_hook(struct pcpu_chunk *chunk, int off, size_t size)
 {
+	unsigned int node_bytes[MAX_NUMNODES] = { 0 };
 	struct obj_cgroup *objcg;
+	int nid;
 
 	if (unlikely(!chunk->obj_exts))
 		return;
@@ -1673,11 +1730,18 @@ static void pcpu_memcg_free_hook(struct pcpu_chunk *chunk, int off, size_t size)
 		return;
 	chunk->obj_exts[off >> PCPU_MIN_ALLOC_SHIFT].cgroup = NULL;
 
-	obj_cgroup_uncharge(objcg, pcpu_obj_full_size(size));
+	pcpu_memcg_accumulate_pages(chunk, off, size, node_bytes);
 
 	rcu_read_lock();
 	mod_memcg_state(obj_cgroup_memcg(objcg), MEMCG_PERCPU_B,
 			-pcpu_obj_full_size(size));
+
+	/* Uncharge each node the exact bytes it was charged at alloc. */
+	for_each_online_node(nid) {
+		if (node_bytes[nid])
+			obj_cgroup_uncharge(obj_cgroup_nid(objcg, nid),
+					    node_bytes[nid]);
+	}
 	rcu_read_unlock();
 
 	obj_cgroup_put(objcg);
