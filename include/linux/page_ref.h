@@ -64,7 +64,7 @@ static inline void __page_ref_unfreeze(struct page *page, int v)
 
 static inline bool __page_count_is_frozen(int count)
 {
-	return count == 0;
+	return count & PAGEREF_FROZEN_BIT;
 }
 
 static inline bool __page_is_frozen(const struct page *page)
@@ -74,7 +74,12 @@ static inline bool __page_is_frozen(const struct page *page)
 
 static inline int page_ref_count(const struct page *page)
 {
-	return atomic_read(&page->_refcount);
+	int val = atomic_read(&page->_refcount);
+
+	if (unlikely(val & PAGEREF_FROZEN_BIT))
+		return 0;
+
+	return val;
 }
 
 /**
@@ -145,7 +150,7 @@ static inline void init_page_count(struct page *page)
 
 static inline void set_page_count_frozen(struct page *page)
 {
-	set_page_count(page, 0);
+	set_page_count(page, PAGEREF_FROZEN_BIT);
 }
 
 static inline void page_ref_add(struct page *page, int nr)
@@ -215,6 +220,9 @@ static inline int page_ref_sub_and_test(struct page *page, int nr)
 	int ret = atomic_sub_and_test(nr, &page->_refcount);
 	VM_WARN_ON_ONCE_PAGE(__page_count_is_frozen(ret + nr), page);
 
+	if (ret)
+		ret = !atomic_cmpxchg_relaxed(&page->_refcount, 0, PAGEREF_FROZEN_BIT);
+
 	if (page_ref_tracepoint_active(page_ref_mod_and_test))
 		__page_ref_mod_and_test(page, -nr, ret);
 	return ret;
@@ -245,6 +253,9 @@ static inline int page_ref_dec_and_test(struct page *page)
 	int ret = atomic_dec_and_test(&page->_refcount);
 	VM_WARN_ON_ONCE_PAGE(__page_count_is_frozen(ret + 1), page);
 
+	if (ret)
+		ret = !atomic_cmpxchg_relaxed(&page->_refcount, 0, PAGEREF_FROZEN_BIT);
+
 	if (page_ref_tracepoint_active(page_ref_mod_and_test))
 		__page_ref_mod_and_test(page, -1, ret);
 	return ret;
@@ -270,9 +281,20 @@ static inline int folio_ref_dec_return(struct folio *folio)
 	return page_ref_dec_return(&folio->page);
 }
 
+#define _PAGEREF_FROZEN_LIMIT	((1 << 30) | PAGEREF_FROZEN_BIT)
+
 static inline bool page_ref_add_unless_frozen(struct page *page, int nr)
 {
-	bool ret = atomic_add_unless(&page->_refcount, nr, 0);
+	bool ret = false;
+	int val = atomic_add_return(nr, &page->_refcount);
+	// See PAGEREF_FROZEN_BIT declaration in page-flags.h for details
+	ret = !(val & PAGEREF_FROZEN_BIT);
+
+	/* Undo atomic_add() if counter is locked and scary big */
+	while (unlikely((unsigned int)val >= _PAGEREF_FROZEN_LIMIT)) {
+		if (atomic_try_cmpxchg_relaxed(&page->_refcount, &val, PAGEREF_FROZEN_BIT))
+			break;
+	}
 
 	if (page_ref_tracepoint_active(page_ref_mod_unless))
 		__page_ref_mod_unless(page, nr, ret);
@@ -307,7 +329,7 @@ static inline bool folio_ref_try_add(struct folio *folio, int count)
 
 static inline int page_ref_freeze(struct page *page, int count)
 {
-	int ret = likely(atomic_cmpxchg(&page->_refcount, count, 0) == count);
+	int ret = likely(atomic_cmpxchg(&page->_refcount, count, PAGEREF_FROZEN_BIT) == count);
 
 	if (page_ref_tracepoint_active(page_ref_freeze))
 		__page_ref_freeze(page, count, ret);
