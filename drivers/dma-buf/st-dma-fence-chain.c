@@ -147,7 +147,10 @@ static int fence_chains_init(struct fence_chains *fc, unsigned int count,
 
 unwind:
 	for (i = 0; i < count; i++) {
-		dma_fence_put(fc->fences[i]);
+		if (fc->fences[i]) {
+			dma_fence_signal(fc->fences[i]);
+			dma_fence_put(fc->fences[i]);
+		}
 		dma_fence_put(fc->chains[i]);
 	}
 	kvfree(fc->fences);
