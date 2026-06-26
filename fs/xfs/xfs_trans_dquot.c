@@ -832,8 +832,10 @@ xfs_trans_dqresv(
 		qlim = &defq->rtb;
 	}
 
-	if ((flags & XFS_QMOPT_FORCE_RES) == 0 && dqp->q_id &&
-	    xfs_dquot_is_enforced(dqp)) {
+	if ((flags & XFS_QMOPT_FORCE_RES) == 0 &&
+	    dqp->q_id &&
+	    xfs_dquot_is_enforced(dqp) &&
+	    !ns_capable_noaudit(&init_user_ns, CAP_SYS_RESOURCE)) {
 		int		quota_nl;
 		bool		fatal;
 

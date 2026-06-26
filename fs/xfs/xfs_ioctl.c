@@ -646,8 +646,7 @@ xfs_ioctl_setattr_get_trans(
 	if (xfs_is_shutdown(mp))
 		goto out_error;
 
-	error = xfs_trans_alloc_ichange(ip, NULL, NULL, pdqp,
-			ns_capable_noaudit(&init_user_ns, CAP_FOWNER), &tp);
+	error = xfs_trans_alloc_ichange(ip, NULL, NULL, pdqp, false, &tp);
 	if (error)
 		goto out_error;
 
