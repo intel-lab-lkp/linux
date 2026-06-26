@@ -37,8 +37,8 @@ pub(super) struct BootUnloadArgs<'a> {
     gsp: &'a super::Gsp,
     dev: &'a device::Device<device::Bound>,
     bar: Bar0<'a>,
-    gsp_falcon: &'a Falcon<Gsp>,
-    sec2_falcon: &'a Falcon<Sec2>,
+    gsp_falcon: &'a Falcon<'a, Gsp>,
+    sec2_falcon: &'a Falcon<'a, Sec2>,
     unload_bundle: Option<super::UnloadBundle>,
 }
 
@@ -56,8 +56,8 @@ impl<'a> BootUnloadGuard<'a> {
         gsp: &'a super::Gsp,
         dev: &'a device::Device<device::Bound>,
         bar: Bar0<'a>,
-        gsp_falcon: &'a Falcon<Gsp>,
-        sec2_falcon: &'a Falcon<Sec2>,
+        gsp_falcon: &'a Falcon<'a, Gsp>,
+        sec2_falcon: &'a Falcon<'a, Sec2>,
         unload_bundle: Option<super::UnloadBundle>,
     ) -> Self {
         Self {
@@ -120,17 +120,17 @@ impl super::Gsp {
         // Perform the chipset-specific boot sequence, and retrieve the unload bundle.
         let unload_guard = hal.boot(&self, &ctx, &fb_layout, &wpr_meta)?;
 
-        gsp_falcon.write_os_version(bar, gsp_fw.bootloader.app_version);
+        gsp_falcon.write_os_version(gsp_fw.bootloader.app_version);
 
         // Poll for RISC-V to become active before continuing.
         read_poll_timeout(
-            || Ok(gsp_falcon.is_riscv_active(bar)),
+            || Ok(gsp_falcon.is_riscv_active()),
             |val: &bool| *val,
             Delta::from_millis(10),
             Delta::from_secs(5),
         )?;
 
-        dev_dbg!(pdev, "RISC-V active? {}\n", gsp_falcon.is_riscv_active(bar),);
+        dev_dbg!(pdev, "RISC-V active? {}\n", gsp_falcon.is_riscv_active(),);
 
         self.cmdq
             .send_command_no_wait(bar, commands::SetSystemInfo::new(pdev, chipset))?;
@@ -149,7 +149,7 @@ impl super::Gsp {
     fn shutdown_gsp(
         cmdq: &Cmdq,
         bar: Bar0<'_>,
-        gsp_falcon: &Falcon<Gsp>,
+        gsp_falcon: &Falcon<'_, Gsp>,
         mode: commands::PowerStateLevel,
     ) -> Result {
         // Command to shut the GSP down.
@@ -158,7 +158,7 @@ impl super::Gsp {
         // Wait until GSP signals it is suspended.
         const LIBOS_INTERRUPT_PROCESSOR_SUSPENDED: u32 = bits::bit_u32(31);
         read_poll_timeout(
-            || Ok(gsp_falcon.read_mailbox0(bar)),
+            || Ok(gsp_falcon.read_mailbox0()),
             |&mb0| mb0 & LIBOS_INTERRUPT_PROCESSOR_SUSPENDED != 0,
             Delta::from_millis(10),
             Delta::from_secs(5),
@@ -173,8 +173,8 @@ impl super::Gsp {
         &self,
         dev: &device::Device<device::Bound>,
         bar: Bar0<'_>,
-        gsp_falcon: &Falcon<Gsp>,
-        sec2_falcon: &Falcon<Sec2>,
+        gsp_falcon: &Falcon<'_, Gsp>,
+        sec2_falcon: &Falcon<'_, Sec2>,
         unload_bundle: Option<super::UnloadBundle>,
     ) -> Result {
         // Shut down the GSP. Keep going even in case of error.
