@@ -300,7 +300,6 @@ static void report_lost_node(struct fw_card *card,
 			     struct fw_node *node, struct fw_node *parent)
 {
 	fw_node_event(card, node, FW_NODE_DESTROYED);
-	fw_node_put(node);
 
 	/* Topology has changed - reset bus manager retry counter */
 	card->bm_retries = 0;
