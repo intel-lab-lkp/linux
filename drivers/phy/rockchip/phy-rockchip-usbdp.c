@@ -179,6 +179,7 @@ struct rk_udphy {
 
 	/* utilized for USB */
 	bool hs; /* flag for high-speed */
+	bool usb_in_use;
 
 	/* utilized for DP */
 	struct gpio_desc *sbu1_dc_gpio;
@@ -1025,6 +1026,10 @@ static int rk_udphy_power_on(struct rk_udphy *udphy, u8 mode)
 		ret = rk_udphy_init(udphy);
 		if (ret)
 			return ret;
+
+		if (udphy->mode & UDPHY_MODE_USB)
+			rk_udphy_u3_port_disable(udphy, false);
+
 		udphy->phy_needs_reinit = false;
 	}
 
@@ -1288,16 +1293,24 @@ static const struct phy_ops rk_udphy_dp_phy_ops = {
 static int rk_udphy_usb3_phy_init(struct phy *phy)
 {
 	struct rk_udphy *udphy = phy_get_drvdata(phy);
+	int ret;
 
 	guard(mutex)(&udphy->mutex);
 
 	/* DP only or high-speed, disable U3 port */
 	if (!(udphy->mode & UDPHY_MODE_USB) || udphy->hs) {
 		rk_udphy_u3_port_disable(udphy, true);
+		udphy->usb_in_use = true;
 		return 0;
 	}
 
-	return rk_udphy_power_on(udphy, UDPHY_MODE_USB);
+	ret = rk_udphy_power_on(udphy, UDPHY_MODE_USB);
+	if (ret)
+		return ret;
+
+	udphy->usb_in_use = true;
+
+	return 0;
 }
 
 static int rk_udphy_usb3_phy_exit(struct phy *phy)
@@ -1305,6 +1318,8 @@ static int rk_udphy_usb3_phy_exit(struct phy *phy)
 	struct rk_udphy *udphy = phy_get_drvdata(phy);
 
 	guard(mutex)(&udphy->mutex);
+
+	udphy->usb_in_use = false;
 
 	/* DP only or high-speed */
 	if (!(udphy->mode & UDPHY_MODE_USB) || udphy->hs)
@@ -1346,6 +1361,17 @@ static int rk_udphy_typec_mux_set(struct typec_mux_dev *mux,
 	guard(mutex)(&udphy->mutex);
 
 	rk_udphy_set_typec_state(udphy, state->mode);
+
+	/*
+	 * If the new mode includes USB, but it has not yet been powered
+	 * (because the previous mode was DP-only) and the USB PHY was
+	 * already initialized by the USB controller, we need to power on
+	 * the USB side now since no subsequent phy_init call will come
+	 * from the controller.
+	 */
+	if ((udphy->mode & UDPHY_MODE_USB) && !(udphy->status & UDPHY_MODE_USB) &&
+	    udphy->usb_in_use && !udphy->hs)
+		return rk_udphy_power_on(udphy, UDPHY_MODE_USB);
 
 	return 0;
 }
