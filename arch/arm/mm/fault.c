@@ -181,7 +181,9 @@ __do_user_fault(unsigned long addr, unsigned int fsr, unsigned int sig,
 		pr_err("8<--- cut here ---\n");
 		pr_err("%s: unhandled page fault (%d) at 0x%08lx, code 0x%03x\n",
 		       tsk->comm, sig, addr, fsr);
+		mmap_read_lock(tsk->mm);
 		show_pte(KERN_ERR, tsk->mm, addr);
+		mmap_read_unlock(tsk->mm);
 		show_regs(regs);
 	}
 #endif
