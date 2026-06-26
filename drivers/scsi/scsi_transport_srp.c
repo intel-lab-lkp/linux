@@ -535,6 +535,7 @@ int srp_reconnect_rport(struct srp_rport *rport)
 	struct srp_internal *i = to_srp_internal(shost->transportt);
 	struct scsi_device *sdev;
 	int res;
+	bool blocked = false;
 
 	pr_debug("SCSI host %s\n", dev_name(&shost->shost_gendev));
 
@@ -549,6 +550,7 @@ int srp_reconnect_rport(struct srp_rport *rport)
 		 * treats SDEV_TRANSPORT_OFFLINE like SDEV_BLOCK.
 		 */
 		scsi_block_targets(shost, &shost->shost_gendev);
+		blocked = true;
 	res = rport->state != SRP_RPORT_LOST ? i->f->reconnect(rport) : -ENODEV;
 	pr_debug("%s (state %d): transport.reconnect() returned %d\n",
 		 dev_name(&shost->shost_gendev), rport->state, res);
@@ -558,7 +560,8 @@ int srp_reconnect_rport(struct srp_rport *rport)
 
 		rport->failed_reconnects = 0;
 		srp_rport_set_state(rport, SRP_RPORT_RUNNING);
-		scsi_target_unblock(&shost->shost_gendev, SDEV_RUNNING);
+		if (blocked)
+			scsi_target_unblock(&shost->shost_gendev, SDEV_RUNNING);
 		/*
 		 * If the SCSI error handler has offlined one or more devices,
 		 * invoking scsi_target_unblock() won't change the state of
@@ -579,7 +582,8 @@ int srp_reconnect_rport(struct srp_rport *rport)
 		__rport_fail_io_fast(rport);
 		__srp_start_tl_fail_timers(rport);
 	} else if (rport->state != SRP_RPORT_BLOCKED) {
-		scsi_target_unblock(&shost->shost_gendev,
+		if (blocked)
+			scsi_target_unblock(&shost->shost_gendev,
 				    SDEV_TRANSPORT_OFFLINE);
 	}
 	mutex_unlock(&rport->mutex);
