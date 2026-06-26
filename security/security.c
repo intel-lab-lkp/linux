@@ -2468,11 +2468,8 @@ int security_backing_file_alloc(struct file *backing_file,
 	rc = lsm_backing_file_alloc(backing_file);
 	if (rc)
 		return rc;
-	rc = call_int_hook(backing_file_alloc, backing_file, user_file);
-	if (unlikely(rc))
-		security_backing_file_free(backing_file);
 
-	return rc;
+	return call_int_hook(backing_file_alloc, backing_file, user_file);
 }
 
 /**
