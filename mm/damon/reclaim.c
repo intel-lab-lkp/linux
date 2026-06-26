@@ -159,6 +159,17 @@ static unsigned long addr_unit __read_mostly = 1;
 static bool skip_anon __read_mostly;
 module_param(skip_anon, bool, 0600);
 
+/*
+ * Watermarks metric options.
+ *
+ * If this parameter is set as ``free``, DAMON_RECLAIM calculates the watermark
+ * metric based on the system's free memory rate. If set as ``available``, it
+ * calculates the metric based on the system's available memory rate.
+ *
+ * Default is ``free``.
+ */
+static enum damos_wmark_metric memrate_type = DAMOS_WMARK_FREE_MEM_RATE;
+
 static struct damos_stat damon_reclaim_stat;
 DEFINE_DAMON_MODULES_DAMOS_STATS_PARAMS(damon_reclaim_stat,
 		reclaim_tried_regions, reclaimed_regions, quota_exceeds);
@@ -219,6 +230,8 @@ static int damon_reclaim_apply_parameters(void)
 		err = -EINVAL;
 		goto out;
 	}
+
+	damon_reclaim_wmarks.metric = memrate_type;
 
 	attrs = damon_reclaim_mon_attrs;
 	if (autotune_monitoring_intervals) {
@@ -375,6 +388,49 @@ static const struct kernel_param_ops addr_unit_param_ops = {
 module_param_cb(addr_unit, &addr_unit_param_ops, &addr_unit, 0600);
 MODULE_PARM_DESC(addr_unit,
 	"Scale factor for DAMON_RECLAIM to ops address conversion (default: 1)");
+
+static int damon_reclaim_memrate_type_store(const char *val,
+					    const struct kernel_param *kp)
+{
+	if (sysfs_streq(val, "free"))
+		memrate_type = DAMOS_WMARK_FREE_MEM_RATE;
+	else if (sysfs_streq(val, "available"))
+		memrate_type = DAMOS_WMARK_AVAILABLE_MEM_RATE;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
+static int damon_reclaim_memrate_type_load(char *buffer,
+					   const struct kernel_param *kp)
+{
+	int type = READ_ONCE(memrate_type);
+	int len = 0;
+
+	if (type == DAMOS_WMARK_FREE_MEM_RATE)
+		len += sysfs_emit_at(buffer, len, "[free] ");
+	else
+		len += sysfs_emit_at(buffer, len, "free ");
+
+	if (type == DAMOS_WMARK_AVAILABLE_MEM_RATE)
+		len += sysfs_emit_at(buffer, len, "[available] ");
+	else
+		len += sysfs_emit_at(buffer, len, "available ");
+
+	len += sysfs_emit_at(buffer, len, "\n");
+
+	return len;
+}
+
+static const struct kernel_param_ops memrate_type_param_ops = {
+	.set = damon_reclaim_memrate_type_store,
+	.get = damon_reclaim_memrate_type_load,
+};
+module_param_cb(memrate_type, &memrate_type_param_ops, &memrate_type, 0600);
+MODULE_PARM_DESC(memrate_type,
+		 "Memory rate type for watermarks metric "
+		 "(free or available, default: free)");
 
 static bool damon_reclaim_enabled(void)
 {

@@ -3300,10 +3300,16 @@ static bool kdamond_need_stop(struct damon_ctx *ctx)
 static int damos_get_wmark_metric_value(enum damos_wmark_metric metric,
 					unsigned long *metric_value)
 {
+	long available_pages;
+
 	switch (metric) {
 	case DAMOS_WMARK_FREE_MEM_RATE:
 		*metric_value = global_zone_page_state(NR_FREE_PAGES) * 1000 /
 		       totalram_pages();
+		return 0;
+	case DAMOS_WMARK_AVAILABLE_MEM_RATE:
+		available_pages = si_mem_available();
+		*metric_value = available_pages * 1000 / totalram_pages();
 		return 0;
 	default:
 		break;

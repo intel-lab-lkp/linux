@@ -1056,6 +1056,10 @@ damos_sysfs_wmark_metric_names[] = {
 		.metric = DAMOS_WMARK_FREE_MEM_RATE,
 		.name = "free_mem_rate",
 	},
+	{
+		.metric = DAMOS_WMARK_AVAILABLE_MEM_RATE,
+		.name = "available_mem_rate",
+	},
 };
 
 static ssize_t metric_show(struct kobject *kobj, struct kobj_attribute *attr,

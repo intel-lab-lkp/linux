@@ -314,13 +314,16 @@ struct damos_quota {
 /**
  * enum damos_wmark_metric - Represents the watermark metric.
  *
- * @DAMOS_WMARK_NONE:		Ignore the watermarks of the given scheme.
- * @DAMOS_WMARK_FREE_MEM_RATE:	Free memory rate of the system in [0,1000].
- * @NR_DAMOS_WMARK_METRICS:	Total number of DAMOS watermark metrics
+ * @DAMOS_WMARK_NONE:		    Ignore the watermarks of the given scheme.
+ * @DAMOS_WMARK_FREE_MEM_RATE:	    Free memory rate of the system in [0,1000].
+ * @DAMOS_WMARK_AVAILABLE_MEM_RATE: Available memory rate of the system in
+ *				    [0,1000].
+ * @NR_DAMOS_WMARK_METRICS:	    Total number of DAMOS watermark metrics
  */
 enum damos_wmark_metric {
 	DAMOS_WMARK_NONE,
 	DAMOS_WMARK_FREE_MEM_RATE,
+	DAMOS_WMARK_AVAILABLE_MEM_RATE,
 	NR_DAMOS_WMARK_METRICS,
 };
 
