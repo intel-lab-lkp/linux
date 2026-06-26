@@ -338,11 +338,18 @@ static int orion_mdio_probe(struct platform_device *pdev)
 			clk_prepare_enable(dev->clk[i]);
 		}
 
-		if (!IS_ERR(of_clk_get(pdev->dev.of_node,
-				       ARRAY_SIZE(dev->clk))))
-			dev_warn(&pdev->dev,
-				 "unsupported number of clocks, limiting to the first "
-				 __stringify(ARRAY_SIZE(dev->clk)) "\n");
+		{
+			struct clk *extra_clk;
+
+			extra_clk = of_clk_get(pdev->dev.of_node,
+					       ARRAY_SIZE(dev->clk));
+			if (!IS_ERR(extra_clk)) {
+				dev_warn(&pdev->dev,
+					 "unsupported number of clocks, limiting to the first "
+					 __stringify(ARRAY_SIZE(dev->clk)) "\n");
+				clk_put(extra_clk);
+			}
+		}
 
 		if (type == BUS_TYPE_XSMI)
 			orion_mdio_xsmi_set_mdc_freq(bus);
