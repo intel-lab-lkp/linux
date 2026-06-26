@@ -851,6 +851,7 @@ ret_check_tsync:
 	return likely(atomic_read(&pthr->perf->tsync) > 0) ? 0 : -EINTR;
 
 err_free_resource:
+	dmaengine_desc_put(tx);
 	dmaengine_unmap_put(unmap);
 
 	return ret;
