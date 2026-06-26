@@ -140,16 +140,22 @@ xe_shrinker_count(struct shrinker *shrink, struct shrink_control *sc)
 {
 	struct xe_shrinker *shrinker = to_xe_shrinker(shrink);
 	unsigned long num_pages;
+	long uma_reclaimable_pages;
 	bool can_backup = !!(sc->gfp_mask & __GFP_FS);
+	bool is_uma = !IS_DGFX(shrinker->xe);
 
 	num_pages = ttm_backup_bytes_avail() >> PAGE_SHIFT;
 	read_lock(&shrinker->lock);
 
+	uma_reclaimable_pages = is_uma ? shrinker->shrinkable_pages : 0;
+
 	if (can_backup)
-		num_pages = min_t(unsigned long, num_pages, shrinker->shrinkable_pages);
+		num_pages = min_t(unsigned long, num_pages,
+				  shrinker->shrinkable_pages - uma_reclaimable_pages);
 	else
 		num_pages = 0;
 
+	num_pages += uma_reclaimable_pages;
 	num_pages += shrinker->purgeable_pages;
 	read_unlock(&shrinker->lock);
 
