@@ -244,7 +244,7 @@ static int veml6075_get_uvi_micro(struct veml6075_data *data, int uva_comp,
 	case VEML6075_IT_200_MS:
 	case VEML6075_IT_400_MS:
 	case VEML6075_IT_800_MS:
-		return (uvia_micro + uvib_micro) / (2 << int_index);
+		return (uvia_micro + uvib_micro) / (1 << int_index);
 	default:
 		return -EINVAL;
 	}
