@@ -38,6 +38,46 @@
 #include <trace/events/netfs.h>
 
 static int cifs_reopen_file(struct cifsFileInfo *cfile, bool can_flush);
+static void __cifs_issue_write(struct netfs_io_subrequest *subreq);
+
+struct cifs_issue_write_work {
+	struct work_struct work;
+	struct netfs_io_subrequest *subreq;
+};
+
+static bool cifs_write_is_mchan(struct cifs_ses *ses)
+{
+	bool is_mchan;
+
+	spin_lock(&ses->chan_lock);
+	is_mchan = ses->chan_count > 1;
+	spin_unlock(&ses->chan_lock);
+
+	return is_mchan;
+}
+
+static void cifs_issue_write_work_fn(struct work_struct *work)
+{
+	struct cifs_issue_write_work *w = container_of(work, struct cifs_issue_write_work, work);
+
+	__cifs_issue_write(w->subreq);
+	kfree(w);
+}
+
+static int cifs_issue_parallel_write(struct cifs_ses *ses,
+				      struct netfs_io_subrequest *subreq)
+{
+	struct cifs_issue_write_work *w = kmalloc_obj(*w, GFP_NOFS);
+
+	if (!w)
+		return -ENOMEM;
+
+	w->subreq = subreq;
+	INIT_WORK(&w->work, cifs_issue_write_work_fn);
+	queue_work(cifs_write_issue_wq, &w->work);
+
+	return 0;
+}
 
 /*
  * Prepare a subrequest to upload to the server.  We need to allocate credits
@@ -108,7 +148,7 @@ retry:
 /*
  * Issue a subrequest to upload to the server.
  */
-static void cifs_issue_write(struct netfs_io_subrequest *subreq)
+static void __cifs_issue_write(struct netfs_io_subrequest *subreq)
 {
 	struct cifs_io_subrequest *wdata =
 		container_of(subreq, struct cifs_io_subrequest, subreq);
@@ -140,6 +180,21 @@ fail:
 	add_credits_and_wake_if(wdata->server, &wdata->credits, 0);
 	cifs_write_subrequest_terminated(wdata, rc);
 	goto out;
+}
+
+static void cifs_issue_write(struct netfs_io_subrequest *subreq)
+{
+	struct cifs_io_subrequest *wdata = container_of(subreq, struct cifs_io_subrequest, subreq);
+	struct cifs_ses *ses = tlink_tcon(wdata->req->cfile->tlink)->ses;
+
+	if (cifs_write_is_mchan(ses)) {
+		int err = cifs_issue_parallel_write(ses, subreq);
+
+		if (!err)
+			return;
+	}
+
+	__cifs_issue_write(subreq);
 }
 
 static void cifs_netfs_invalidate_cache(struct netfs_io_request *wreq)

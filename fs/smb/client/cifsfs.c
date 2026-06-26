@@ -165,6 +165,7 @@ struct workqueue_struct	*cifsoplockd_wq;
 struct workqueue_struct	*deferredclose_wq;
 struct workqueue_struct	*serverclose_wq;
 struct workqueue_struct	*cfid_put_wq;
+struct workqueue_struct	*cifs_write_issue_wq;
 __u32 cifs_lock_secret;
 
 /*
@@ -2090,9 +2091,17 @@ init_cifs(void)
 		goto out_destroy_serverclose_wq;
 	}
 
+	cifs_write_issue_wq = alloc_workqueue("cifs_write_issue",
+					      WQ_UNBOUND | WQ_MEM_RECLAIM,
+					      0);
+	if (!cifs_write_issue_wq) {
+		rc = -ENOMEM;
+		goto out_destroy_cfid_put_wq;
+	}
+
 	rc = cifs_init_inodecache();
 	if (rc)
-		goto out_destroy_cfid_put_wq;
+		goto out_destroy_write_issue_wq;
 
 	rc = cifs_init_netfs();
 	if (rc)
@@ -2160,6 +2169,8 @@ out_destroy_netfs:
 	cifs_destroy_netfs();
 out_destroy_inodecache:
 	cifs_destroy_inodecache();
+out_destroy_write_issue_wq:
+	destroy_workqueue(cifs_write_issue_wq);
 out_destroy_cfid_put_wq:
 	destroy_workqueue(cfid_put_wq);
 out_destroy_serverclose_wq:
@@ -2200,6 +2211,7 @@ exit_cifs(void)
 	destroy_mids();
 	cifs_destroy_netfs();
 	cifs_destroy_inodecache();
+	destroy_workqueue(cifs_write_issue_wq);
 	destroy_workqueue(deferredclose_wq);
 	destroy_workqueue(cifsoplockd_wq);
 	destroy_workqueue(decrypt_wq);

@@ -60,6 +60,7 @@ int init_cifs_idmap(void);
 void exit_cifs_idmap(void);
 int init_cifs_spnego(void);
 void exit_cifs_spnego(void);
+int cifs_init_write_issue_wq(void);
 const char *build_path_from_dentry(struct dentry *direntry, void *page);
 char *__build_path_from_dentry_optional_prefix(struct dentry *direntry,
 					       void *page, const char *tree,
