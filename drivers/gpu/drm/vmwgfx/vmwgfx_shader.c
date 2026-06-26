@@ -724,6 +724,7 @@ static int vmw_user_shader_alloc(struct vmw_private *dev_priv,
 
 	if (unlikely(ret != 0)) {
 		vmw_resource_unreference(&tmp);
+		ttm_base_object_unref(&ushader->base);
 		goto out_err;
 	}
 
