@@ -456,8 +456,16 @@ int of_phy_register_fixed_link(struct device_node *np)
 
 	return -ENODEV;
 
-register_phy:
-	return PTR_ERR_OR_ZERO(fixed_phy_register(&status, np));
+register_phy: {
+	struct phy_device *phydev;
+
+	phydev = fixed_phy_register(&status, np);
+	if (IS_ERR(phydev))
+		return PTR_ERR(phydev);
+
+	phydev->mdio.dev.fwnode = of_fwnode_handle(np);
+	return 0;
+}
 }
 EXPORT_SYMBOL(of_phy_register_fixed_link);
 
