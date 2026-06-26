@@ -237,38 +237,59 @@ out:
 #ifdef CONFIG_SCHEDSTATS
 
 /* REQUIRES: rq->core's clock recently updated. */
-void __sched_core_account_forceidle(struct rq *rq)
+/*
+ * Account core scheduling idle cost.  Both forceidle (idle sibling has
+ * waiting tasks) and sibling_idle (any idle sibling) are derived from
+ * the same time delta and scaled by their respective idle counts.
+ * A single loop charges both metrics to each running cookied task.
+ */
+void __sched_core_account_idle(struct rq *rq)
 {
 	const struct cpumask *smt_mask = cpu_smt_mask(cpu_of(rq));
+	unsigned int occ = rq->core->core_sibling_idle_occupation;
+	unsigned int fi_count = rq->core->core_forceidle_count;
+	unsigned int smt_width, idle_count;
 	u64 delta, now = rq_clock(rq->core);
+	u64 fi_delta = 0, si_delta = 0;
 	struct rq *rq_i;
 	struct task_struct *p;
 	int i;
 
 	lockdep_assert_rq_held(rq);
 
-	WARN_ON_ONCE(!rq->core->core_forceidle_count);
-
-	if (rq->core->core_forceidle_start == 0)
+	if (rq->core->core_sibling_idle_start == 0)
 		return;
 
-	delta = now - rq->core->core_forceidle_start;
+	delta = now - rq->core->core_sibling_idle_start;
 	if (unlikely((s64)delta <= 0))
 		return;
 
-	rq->core->core_forceidle_start = now;
+	if (WARN_ON_ONCE(!occ))
+		return;
 
-	if (WARN_ON_ONCE(!rq->core->core_forceidle_occupation)) {
-		/* can't be forced idle without a running task */
-	} else if (rq->core->core_forceidle_count > 1 ||
-		   rq->core->core_forceidle_occupation > 1) {
-		/*
-		 * For larger SMT configurations, we need to scale the charged
-		 * forced idle amount since there can be more than one forced
-		 * idle sibling and more than one running cookied task.
-		 */
-		delta *= rq->core->core_forceidle_count;
-		delta = div_u64(delta, rq->core->core_forceidle_occupation);
+	smt_width = cpumask_weight(smt_mask);
+	idle_count = smt_width - occ;
+	if (!idle_count)
+		return;
+
+	rq->core->core_sibling_idle_start = now;
+
+	/*
+	 * For SMT-2 with one idle sibling (the common case), both
+	 * idle_count and occ are 1, so si_delta == fi_delta == delta
+	 * with no division needed.  For larger SMT configurations, we
+	 * scale by the respective idle count / occupation since there
+	 * can be more than one idle sibling and more than one running
+	 * cookied task.
+	 */
+	si_delta = delta;
+	if (idle_count > 1 || occ > 1)
+		si_delta = div_u64(delta * idle_count, occ);
+
+	if (fi_count) {
+		fi_delta = delta;
+		if (fi_count > 1 || occ > 1)
+			fi_delta = div_u64(delta * fi_count, occ);
 	}
 
 	for_each_cpu(i, smt_mask) {
@@ -279,22 +300,24 @@ void __sched_core_account_forceidle(struct rq *rq)
 			continue;
 
 		/*
-		 * Note: this will account forceidle to the current cpu, even
-		 * if it comes from our SMT sibling.
+		 * Note: this will account idle time to the current cpu,
+		 * even if it comes from our SMT sibling.
 		 */
-		__account_forceidle_time(p, delta);
+		__account_sibling_idle_time(p, si_delta);
+		if (fi_delta)
+			__account_forceidle_time(p, fi_delta);
 	}
 }
 
 void __sched_core_tick(struct rq *rq)
 {
-	if (!rq->core->core_forceidle_count)
+	if (!rq->core->core_sibling_idle_occupation)
 		return;
 
 	if (rq != rq->core)
 		update_rq_clock(rq->core);
 
-	__sched_core_account_forceidle(rq);
+	__sched_core_account_idle(rq);
 }
 
 #endif /* CONFIG_SCHEDSTATS */
