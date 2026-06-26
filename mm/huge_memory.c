@@ -1398,7 +1398,7 @@ vm_fault_t do_huge_pmd_device_private(struct vm_fault *vmf)
 
 	if (vmf->flags & FAULT_FLAG_VMA_LOCK) {
 		vma_end_read(vma);
-		return VM_FAULT_RETRY;
+		return VM_FAULT_RETRY | VM_FAULT_RETRY_HARD;
 	}
 
 	ptl = pmd_lock(vma->vm_mm, vmf->pmd);
