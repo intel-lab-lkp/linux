@@ -124,8 +124,8 @@ void pipe_double_lock(struct pipe_inode_info *pipe1,
  * pipe->mutex hold-time being shrunk. Any shortfall is covered by the
  * in-lock alloc_page() fallback in anon_pipe_get_page().
  */
-static void anon_pipe_get_page_prealloc(struct anon_pipe_prealloc *prealloc,
-					size_t total_len)
+static void __maybe_unused anon_pipe_get_page_prealloc(struct anon_pipe_prealloc *prealloc,
+						       size_t total_len)
 {
 	unsigned int want, i;
 	struct page *page;
@@ -170,8 +170,7 @@ static bool anon_pipe_prealloc_push(struct anon_pipe_prealloc *prealloc,
  * shortfall outside the lock, then briefly take the lock to push the pages in.
  * anon_pipe_get_page() then drains the pool instead of allocating under the lock.
  */
-static void __maybe_unused anon_pipe_prefill(struct pipe_inode_info *pipe,
-					     size_t total_len)
+static void anon_pipe_prefill(struct pipe_inode_info *pipe, size_t total_len)
 {
 	struct page *pages[PIPE_PREALLOC_MAX];
 	unsigned int want, have, need, n = 0;
@@ -204,7 +203,7 @@ static void __maybe_unused anon_pipe_prefill(struct pipe_inode_info *pipe,
 }
 
 /* Trim the pool down to PIPE_PREALLOC_KEEP, freeing the excess unlocked. */
-static void __maybe_unused anon_pipe_trim_pool(struct pipe_inode_info *pipe)
+static void anon_pipe_trim_pool(struct pipe_inode_info *pipe)
 {
 	struct page *excess[PIPE_PREALLOC_MAX];
 	unsigned int nexcess = 0;
@@ -221,39 +220,24 @@ static void __maybe_unused anon_pipe_trim_pool(struct pipe_inode_info *pipe)
 		put_page(excess[--nexcess]);
 }
 
-static struct page *anon_pipe_get_page(struct pipe_inode_info *pipe,
-				       struct anon_pipe_prealloc *prealloc)
+static struct page *anon_pipe_get_page(struct pipe_inode_info *pipe)
 {
 	struct page *page;
 
-	/* Drain prealloc first to keep tmp_page[] hot for later small writes. */
-	page = anon_pipe_prealloc_pop(prealloc);
+	/* Drain the prealloc pool before allocating. Called with mutex held. */
+	page = anon_pipe_prealloc_pop(&pipe->prealloc);
 	if (page)
 		return page;
 
-	for (int i = 0; i < ARRAY_SIZE(pipe->tmp_page); i++) {
-		if (pipe->tmp_page[i]) {
-			page = pipe->tmp_page[i];
-			pipe->tmp_page[i] = NULL;
-			return page;
-		}
-	}
-
-	/* FWIW: This is called with pipe->mutex held */
 	return alloc_page(GFP_HIGHUSER | __GFP_ACCOUNT);
 }
 
 static void anon_pipe_put_page(struct pipe_inode_info *pipe,
 			       struct page *page)
 {
-	if (page_count(page) == 1) {
-		for (int i = 0; i < ARRAY_SIZE(pipe->tmp_page); i++) {
-			if (!pipe->tmp_page[i]) {
-				pipe->tmp_page[i] = page;
-				return;
-			}
-		}
-	}
+	if (page_count(page) == 1 &&
+	    anon_pipe_prealloc_push(&pipe->prealloc, page))
+		return;
 
 	put_page(page);
 }
@@ -262,8 +246,8 @@ static void anon_pipe_put_page(struct pipe_inode_info *pipe,
  * Stash leftover prealloc pages in tmp_page[] so the next write to this
  * pipe gets a hot page without entering the allocator.
  */
-static void anon_pipe_refill_tmp_pages(struct pipe_inode_info *pipe,
-				       struct anon_pipe_prealloc *prealloc)
+static void __maybe_unused anon_pipe_refill_tmp_pages(struct pipe_inode_info *pipe,
+						      struct anon_pipe_prealloc *prealloc)
 {
 	int i, idx;
 
@@ -282,7 +266,7 @@ static void anon_pipe_refill_tmp_pages(struct pipe_inode_info *pipe,
 }
 
 /* Runs after mutex_unlock() to keep put_page() out of the critical section. */
-static void anon_pipe_free_pages(struct anon_pipe_prealloc *prealloc)
+static void __maybe_unused anon_pipe_free_pages(struct anon_pipe_prealloc *prealloc)
 {
 	while (prealloc->count) {
 		prealloc->count--;
@@ -583,7 +567,6 @@ anon_pipe_write(struct kiocb *iocb, struct iov_iter *from)
 {
 	struct file *filp = iocb->ki_filp;
 	struct pipe_inode_info *pipe = filp->private_data;
-	struct anon_pipe_prealloc prealloc;
 	unsigned int head;
 	ssize_t ret = 0;
 	size_t total_len = iov_iter_count(from);
@@ -607,8 +590,7 @@ anon_pipe_write(struct kiocb *iocb, struct iov_iter *from)
 	if (unlikely(total_len == 0))
 		return 0;
 
-	anon_pipe_get_page_prealloc(&prealloc, total_len);
-
+	anon_pipe_prefill(pipe, total_len);
 	mutex_lock(&pipe->mutex);
 
 	if (!pipe->readers) {
@@ -666,7 +648,7 @@ anon_pipe_write(struct kiocb *iocb, struct iov_iter *from)
 			struct page *page;
 			int copied;
 
-			page = anon_pipe_get_page(pipe, &prealloc);
+			page = anon_pipe_get_page(pipe);
 			if (unlikely(!page)) {
 				if (!ret)
 					ret = -ENOMEM;
@@ -730,11 +712,10 @@ anon_pipe_write(struct kiocb *iocb, struct iov_iter *from)
 		wake_next_writer = true;
 	}
 out:
-	anon_pipe_refill_tmp_pages(pipe, &prealloc);
 	if (pipe_is_full(pipe))
 		wake_next_writer = false;
 	mutex_unlock(&pipe->mutex);
-	anon_pipe_free_pages(&prealloc);
+	anon_pipe_trim_pool(pipe);
 
 	/*
 	 * If we do do a wakeup event, we do a 'sync' wakeup, because we
@@ -1015,10 +996,8 @@ void free_pipe_info(struct pipe_inode_info *pipe)
 	if (pipe->watch_queue)
 		put_watch_queue(pipe->watch_queue);
 #endif
-	for (i = 0; i < ARRAY_SIZE(pipe->tmp_page); i++) {
-		if (pipe->tmp_page[i])
-			__free_page(pipe->tmp_page[i]);
-	}
+	for (i = 0; i < pipe->prealloc.count; i++)
+		__free_page(pipe->prealloc.pages[i]);
 	kfree(pipe->bufs);
 	kfree(pipe);
 }
