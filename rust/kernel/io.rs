@@ -1446,6 +1446,143 @@ impl<'a, T: ?Sized + KnownSize> IoBase<'a> for SysMem<'a, T> {
     }
 }
 
+/// I/O Backend for [`IoSysMap`].
+pub struct IoSysMapBackend;
+
+/// Either [`Mmio`] or [`SysMem`].
+///
+/// This can be used when a piece of logic may wish to handle both MMIO or system memory but does
+/// not want or cannot be generic over I/O backends. This serves a similar purpose to
+/// [`include/linux/iosys-map.h`] in C.
+///
+/// This type can be used like any other types that implements [`Io`]; this also include
+/// [`io_project!`], [`io_read!`], [`io_write!`].
+///
+/// [`include/linux/iosys-map.h`](srctree/include/linux/iosys-map.h)
+pub enum IoSysMap<'a, T: ?Sized> {
+    /// The view is I/O memory.
+    Io(Mmio<'a, T>),
+    /// The view is system memory.
+    Sys(SysMem<'a, T>),
+}
+
+impl<T: ?Sized> Copy for IoSysMap<'_, T> {}
+impl<T: ?Sized> Clone for IoSysMap<'_, T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T: ?Sized> From<Mmio<'a, T>> for IoSysMap<'a, T> {
+    #[inline]
+    fn from(value: Mmio<'a, T>) -> Self {
+        IoSysMap::Io(value)
+    }
+}
+
+impl<'a, T: ?Sized> From<SysMem<'a, T>> for IoSysMap<'a, T> {
+    #[inline]
+    fn from(value: SysMem<'a, T>) -> Self {
+        IoSysMap::Sys(value)
+    }
+}
+
+impl IoBackend for IoSysMapBackend {
+    type View<'a, T: ?Sized + KnownSize> = IoSysMap<'a, T>;
+
+    #[inline]
+    fn as_ptr<'a, T: ?Sized + KnownSize>(view: Self::View<'a, T>) -> *mut T {
+        match view {
+            IoSysMap::Io(l) => MmioBackend::as_ptr(l),
+            IoSysMap::Sys(r) => SysMemBackend::as_ptr(r),
+        }
+    }
+
+    #[inline]
+    unsafe fn project_view<'a, T: ?Sized + KnownSize, U: ?Sized + KnownSize>(
+        view: Self::View<'a, T>,
+        ptr: *mut U,
+    ) -> Self::View<'a, U> {
+        match view {
+            // SAFETY: Per safety requirement.
+            IoSysMap::Io(l) => IoSysMap::Io(unsafe { MmioBackend::project_view(l, ptr) }),
+            // SAFETY: Per safety requirement.
+            IoSysMap::Sys(r) => IoSysMap::Sys(unsafe { SysMemBackend::project_view(r, ptr) }),
+        }
+    }
+}
+
+impl<T> IoCapable<T> for IoSysMapBackend
+where
+    MmioBackend: IoCapable<T>,
+    SysMemBackend: IoCapable<T>,
+{
+    #[inline]
+    fn io_read(view: Self::View<'_, T>) -> T {
+        match view {
+            IoSysMap::Io(l) => MmioBackend::io_read(l),
+            IoSysMap::Sys(r) => SysMemBackend::io_read(r),
+        }
+    }
+
+    #[inline]
+    fn io_write<'a>(view: Self::View<'a, T>, value: T) {
+        match view {
+            IoSysMap::Io(l) => MmioBackend::io_write(l, value),
+            IoSysMap::Sys(r) => SysMemBackend::io_write(r, value),
+        }
+    }
+}
+
+impl IoCopyable for IoSysMapBackend {
+    #[inline]
+    unsafe fn copy_from_io(view: Self::View<'_, [u8]>, buffer: *mut u8) {
+        match view {
+            // SAFETY: Per safety requirement.
+            IoSysMap::Io(l) => unsafe { MmioBackend::copy_from_io(l, buffer) },
+            // SAFETY: Per safety requirement.
+            IoSysMap::Sys(r) => unsafe { SysMemBackend::copy_from_io(r, buffer) },
+        }
+    }
+
+    #[inline]
+    unsafe fn copy_to_io(view: Self::View<'_, [u8]>, buffer: *const u8) {
+        match view {
+            // SAFETY: Per safety requirement.
+            IoSysMap::Io(l) => unsafe { MmioBackend::copy_to_io(l, buffer) },
+            // SAFETY: Per safety requirement.
+            IoSysMap::Sys(r) => unsafe { SysMemBackend::copy_to_io(r, buffer) },
+        }
+    }
+
+    #[inline]
+    fn copy_read<T: FromBytes>(view: Self::View<'_, T>) -> T {
+        match view {
+            IoSysMap::Io(l) => MmioBackend::copy_read(l),
+            IoSysMap::Sys(r) => SysMemBackend::copy_read(r),
+        }
+    }
+
+    #[inline]
+    fn copy_write<T: IntoBytes>(view: Self::View<'_, T>, value: T) {
+        match view {
+            IoSysMap::Io(l) => MmioBackend::copy_write(l, value),
+            IoSysMap::Sys(r) => SysMemBackend::copy_write(r, value),
+        }
+    }
+}
+
+impl<'a, T: ?Sized + KnownSize> IoBase<'a> for IoSysMap<'a, T> {
+    type Backend = IoSysMapBackend;
+    type Target = T;
+
+    #[inline]
+    fn as_view(self) -> IoSysMap<'a, T> {
+        self
+    }
+}
+
 // This helper turns associated functions to methods so it can be invoked in macro.
 // Used by `io_project!()` only.
 #[doc(hidden)]
