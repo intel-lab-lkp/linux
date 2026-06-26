@@ -82,4 +82,5 @@ static inline bool amd_iommu_sev_tio_supported(void) { return false; }
 #define AMD_IOMMU_FLAG_POSTED_INTR_SHIFT 1
 #define AMD_IOMMU_FLAG_POSTED_INTR  BIT(1)
 
+extern bool amd_iommu_gappi;
 #endif /* _ASM_X86_AMD_IOMMU_H */
