@@ -813,6 +813,7 @@ static int init_overlay_changeset(struct overlay_changeset *ovcs,
 			of_node_put(fragment->overlay);
 			ret = -EINVAL;
 			of_node_put(node);
+			ovcs->count = cnt;
 			goto err_out;
 		}
 
@@ -834,6 +835,7 @@ static int init_overlay_changeset(struct overlay_changeset *ovcs,
 			pr_err("symbols in overlay, but not in live tree\n");
 			ret = -EINVAL;
 			of_node_put(node);
+			ovcs->count = cnt;
 			goto err_out;
 		}
 
@@ -933,8 +935,10 @@ static int of_overlay_apply(struct overlay_changeset *ovcs,
 		goto out;
 
 	ret = init_overlay_changeset(ovcs, base);
-	if (ret)
+	if (ret) {
+		free_overlay_changeset(ovcs);
 		goto out;
+	}
 
 	ret = overlay_notify(ovcs, OF_OVERLAY_PRE_APPLY);
 	if (ret)
