@@ -1125,6 +1125,36 @@ EXPORT_SYMBOL_GPL(opal_flash_read);
 EXPORT_SYMBOL_GPL(opal_flash_write);
 EXPORT_SYMBOL_GPL(opal_flash_erase);
 EXPORT_SYMBOL_GPL(opal_prd_msg);
+
+/**
+ * opal_check_token - Check if an OPAL call token is supported
+ * @token: OPAL token number to check
+ *
+ * Returns 1 if supported, 0 if not.
+ */
+int64_t opal_check_token(uint64_t token)
+{
+	static u8 token_cache[OPAL_LAST];
+	enum {
+		SUPP_UNKNOWN = 0,
+		PRESENT,
+		ABSENT
+	};
+
+	if (token > OPAL_LAST)
+		return 0;
+
+	if (token_cache[token] == SUPP_UNKNOWN) {
+		/* Do the actual opal_call here */
+		if (opal_check_token_call(token)) {
+			token_cache[token] = PRESENT;
+		} else {
+			token_cache[token] = ABSENT;
+		}
+	}
+
+	return (token_cache[token] == PRESENT);
+}
 EXPORT_SYMBOL_GPL(opal_check_token);
 
 /* Convert a region of vmalloc memory to an opal sg list */
