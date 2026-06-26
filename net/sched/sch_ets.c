@@ -40,7 +40,7 @@ struct ets_class {
 	struct list_head alist; /* In struct ets_sched.active. */
 	struct Qdisc *qdisc;
 	u32 quantum;
-	u32 deficit;
+	u64 deficit;
 	struct gnet_stats_basic_sync bstats;
 	struct gnet_stats_queue qstats;
 };
@@ -463,6 +463,8 @@ ets_qdisc_dequeue_skb(struct Qdisc *sch, struct sk_buff *skb)
 static struct sk_buff *ets_qdisc_dequeue(struct Qdisc *sch)
 {
 	struct ets_sched *q = qdisc_priv(sch);
+	unsigned int max_loops = READ_ONCE(q->nbands) * 2;
+	unsigned int loops = 0;
 	struct ets_class *cl;
 	struct sk_buff *skb;
 	unsigned int band;
@@ -499,6 +501,8 @@ static struct sk_buff *ets_qdisc_dequeue(struct Qdisc *sch)
 
 		cl->deficit += READ_ONCE(cl->quantum);
 		list_move_tail(&cl->alist, &q->active);
+		if (++loops > max_loops)
+			goto out;
 	}
 out:
 	return NULL;
