@@ -3002,7 +3002,21 @@ relock:
 		 * Anything else is fatal, maybe with a core dump.
 		 */
 		exit_code = signr;
-		group_exit_needed = true;
+		if (sig_kernel_coredump(signr))
+			group_exit_needed = true;
+		else {
+			struct task_struct *t;
+			signal->flags = SIGNAL_GROUP_EXIT;
+			signal->group_exit_code = signr;
+			signal->group_stop_count = 0;
+			__for_each_thread(signal, t) {
+				task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
+				if (t != current) {
+					sigaddset(&t->pending.signal, SIGKILL);
+					signal_wake_up(t, 1);
+				}
+			}
+		}
 	fatal:
 		spin_unlock_irq(&sighand->siglock);
 		if (unlikely(cgroup_task_frozen(current)))
