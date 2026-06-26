@@ -323,13 +323,16 @@ inet_csk_find_open_port(const struct sock *sk, struct inet_bind_bucket **tb_ret,
 	struct inet_bind2_bucket *tb2;
 	struct inet_bind_bucket *tb;
 	u32 remaining, offset;
+	bool local_ports;
 	bool relax = false;
+	int step;
 
 	l3mdev = inet_sk_bound_l3mdev(sk);
 ports_exhausted:
 	attempt_half = (sk->sk_reuse == SK_CAN_REUSE) ? 1 : 0;
 other_half_scan:
-	inet_sk_get_local_port_range(sk, &low, &high);
+	local_ports = inet_sk_get_local_port_range(sk, &low, &high);
+	step = local_ports ? 1 : 2;
 	high++; /* [32768, 60999] -> [32768, 61000[ */
 	if (high - low < 4)
 		attempt_half = 0;
@@ -342,18 +345,19 @@ other_half_scan:
 			low = half;
 	}
 	remaining = high - low;
-	if (likely(remaining > 1))
+	if (!local_ports && remaining > 1)
 		remaining &= ~1U;
 
 	offset = get_random_u32_below(remaining);
 	/* __inet_hash_connect() favors ports having @low parity
 	 * We do the opposite to not pollute connect() users.
 	 */
-	offset |= 1U;
+	if (!local_ports)
+		offset |= 1U;
 
 other_parity_scan:
 	port = low + offset;
-	for (i = 0; i < remaining; i += 2, port += 2) {
+	for (i = 0; i < remaining; i += step, port += step) {
 		if (unlikely(port >= high))
 			port -= remaining;
 		if (inet_is_local_reserved_port(net, port))
@@ -384,9 +388,11 @@ next_port:
 		cond_resched();
 	}
 
-	offset--;
-	if (!(offset & 1))
-		goto other_parity_scan;
+	if (!local_ports) {
+		offset--;
+		if (!(offset & 1))
+			goto other_parity_scan;
+	}
 
 	if (attempt_half == 1) {
 		/* OK we now try the upper half of the range */
