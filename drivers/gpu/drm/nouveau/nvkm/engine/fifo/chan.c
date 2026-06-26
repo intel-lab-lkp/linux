@@ -410,18 +410,18 @@ nvkm_chan_new_(const struct nvkm_chan_func *func, struct nvkm_runl *runl, int ru
 			      &chan->inst);
 	if (ret) {
 		RUNL_DEBUG(runl, "inst %d", ret);
-		return ret;
+		goto done;
 	}
 
 	/* Initialise virtual address-space. */
 	if (func->inst->vmm) {
 		if (WARN_ON(vmm->mmu != device->mmu))
-			return -EINVAL;
+			goto done;
 
 		ret = nvkm_vmm_join(vmm, chan->inst->memory);
 		if (ret) {
 			RUNL_DEBUG(runl, "vmm %d", ret);
-			return ret;
+			goto done;
 		}
 
 		chan->vmm = nvkm_vmm_ref(vmm);
@@ -432,7 +432,7 @@ nvkm_chan_new_(const struct nvkm_chan_func *func, struct nvkm_runl *runl, int ru
 		ret = nvkm_object_bind(&dmaobj->object, chan->inst, -16, &chan->push);
 		if (ret) {
 			RUNL_DEBUG(runl, "bind %d", ret);
-			return ret;
+			goto done;
 		}
 	}
 
@@ -443,13 +443,13 @@ nvkm_chan_new_(const struct nvkm_chan_func *func, struct nvkm_runl *runl, int ru
 			if (ouserd + chan->func->userd->size >=
 				nvkm_memory_size(userd)) {
 				RUNL_DEBUG(runl, "ouserd %llx", ouserd);
-				return -EINVAL;
+				goto done;
 			}
 
 			ret = nvkm_memory_kmap(userd, &chan->userd.mem);
 			if (ret) {
 				RUNL_DEBUG(runl, "userd %d", ret);
-				return ret;
+				goto done;
 			}
 
 			chan->userd.base = ouserd;
@@ -461,7 +461,7 @@ nvkm_chan_new_(const struct nvkm_chan_func *func, struct nvkm_runl *runl, int ru
 
 	if (chan->id < 0) {
 		RUNL_ERROR(runl, "!chids");
-		return -ENOSPC;
+		goto done;
 	}
 
 	if (cgrp->id < 0)
@@ -475,8 +475,17 @@ nvkm_chan_new_(const struct nvkm_chan_func *func, struct nvkm_runl *runl, int ru
 	ret = chan->func->ramfc->write(chan, offset, length, devm, priv);
 	if (ret) {
 		RUNL_DEBUG(runl, "ramfc %d", ret);
-		return ret;
+		goto done;
 	}
 
 	return 0;
+
+done:
+	if (chan->id >= 0)
+		nvkm_chid_put(runl->chid, chan->id, &chan->cgrp->lock);
+	nvkm_memory_unref(&chan->userd.mem);
+	nvkm_vmm_unref(&chan->vmm);
+	nvkm_cgrp_unref(&chan->cgrp);
+	*pchan = NULL;
+	return ret;
 }
