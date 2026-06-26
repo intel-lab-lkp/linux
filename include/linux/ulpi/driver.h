@@ -2,7 +2,7 @@
 #ifndef __LINUX_ULPI_DRIVER_H
 #define __LINUX_ULPI_DRIVER_H
 
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/ulpi.h>
 
 #include <linux/device.h>
 

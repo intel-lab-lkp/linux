@@ -19,7 +19,7 @@
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/timer.h>
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/input.h>
 
 struct input_dev_poller;
 

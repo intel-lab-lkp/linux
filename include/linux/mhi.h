@@ -14,6 +14,7 @@
 #include <linux/spinlock.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
+#include <linux/mod_device_id/mhi.h>
 
 #define MHI_MAX_OEM_PK_HASH_SEGMENTS 16
 

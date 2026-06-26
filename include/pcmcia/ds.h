@@ -14,7 +14,7 @@
 #define _LINUX_DS_H
 
 #ifdef __KERNEL__
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/pcmcia.h>
 #endif
 
 #include <pcmcia/device_id.h>

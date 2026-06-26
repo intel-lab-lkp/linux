@@ -8,7 +8,7 @@
 
 #include <linux/types.h>
 #include <linux/err.h>
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/of.h>
 
 struct device;
 struct device_node;

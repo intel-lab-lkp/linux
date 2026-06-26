@@ -12,7 +12,7 @@
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
 #include <linux/lockdep_types.h>
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/sdw.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
 #include <sound/sdca.h>

@@ -11,7 +11,7 @@
 #include <linux/compiler_attributes.h>
 #include <linux/device.h>
 #include <linux/acpi.h>
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/wmi.h>
 #include <linux/types.h>
 
 /**

@@ -7,7 +7,7 @@
 
 #include <linux/device.h>
 #include <linux/uuid.h>
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/mei_cl.h>
 
 struct mei_cl_device;
 struct mei_device;

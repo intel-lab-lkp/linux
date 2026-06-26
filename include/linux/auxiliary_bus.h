@@ -9,7 +9,7 @@
 #define _AUXILIARY_BUS_H_
 
 #include <linux/device.h>
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/auxiliary.h>
 
 /**
  * DOC: DEVICE_LIFESPAN
