@@ -756,6 +756,9 @@ static void anx6345_i2c_remove(struct i2c_client *client)
 {
 	struct anx6345 *anx6345 = i2c_get_clientdata(client);
 
+	if (anx6345->panel)
+		drm_panel_put(anx6345->panel);
+
 	drm_bridge_remove(&anx6345->bridge);
 
 	unregister_i2c_dummy_clients(anx6345);

@@ -195,6 +195,9 @@ put_i2c:
 
 void tegra_output_remove(struct tegra_output *output)
 {
+	if (output->panel)
+		drm_panel_put(output->panel);
+
 	if (output->hpd_gpio)
 		free_irq(output->hpd_irq, output);
 
