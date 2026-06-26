@@ -702,7 +702,32 @@ notrace void rcu_preempt_deferred_qs(struct task_struct *t)
 }
 
 /*
- * Minimal handler to give the scheduler a chance to re-evaluate.
+ * Report a deferred quiescent state but only from a safe context.
+ *
+ * Both callers (the irq_work handler and the bounded-delay rescue hrtimer)
+ * run in hardirq context, so preempt_count() always has the HARDIRQ bit set;
+ * the compound-section check below deliberately inspects only the
+ * PREEMPT_MASK | SOFTIRQ_MASK bits, which reflect the INTERRUPTED caller's
+ * state, not ours.
+ */
+static bool rcu_preempt_deferred_qs_try_report(struct task_struct *t)
+{
+	unsigned long flags;
+
+	if (rcu_preempt_depth() > 0 ||
+	    (preempt_count() & (PREEMPT_MASK | SOFTIRQ_MASK)))
+		return false;
+
+	if (rcu_preempt_need_deferred_qs(t)) {
+		local_irq_save(flags);
+		rcu_preempt_deferred_qs_irqrestore(t, flags);
+	}
+	return true;
+}
+
+/*
+ * Minimal handler to give the scheduler a chance to re-evaluate, and to
+ * report the deferred QS directly when the handler lands in a clean context.
  */
 static void rcu_preempt_deferred_qs_handler(struct irq_work *iwp)
 {
@@ -712,19 +737,14 @@ static void rcu_preempt_deferred_qs_handler(struct irq_work *iwp)
 	rdp = container_of(iwp, struct rcu_data, defer_qs_iw);
 
 	/*
-	 * If the IRQ work handler happens to run in the middle of RCU read-side
-	 * critical section, it could be ineffective in getting the scheduler's
-	 * attention to report a deferred quiescent state (the whole point of the
-	 * IRQ work). For this reason, requeue the IRQ work.
-	 *
-	 * Basically, we want to avoid following situation:
-	 * 1. rcu_read_unlock() queues IRQ work (state -> DEFER_QS_PENDING)
-	 * 2. CPU enters new rcu_read_lock()
-	 * 3. IRQ work runs but cannot report QS due to rcu_preempt_depth() > 0
-	 * 4. rcu_read_unlock() does not re-queue work (state still PENDING)
-	 * 5. Deferred QS reporting does not happen.
+	 * If the handler fired in a clean context, report the deferred QS
+	 * directly.  This makes the irq_work robust under preempt=none /
+	 * voluntary, where the set_need_resched() nudge would not enter
+	 * __schedule() at IRQ exit.  Otherwise we are still inside a reader /
+	 * compound section: just clear defer_qs_pending so the next
+	 * rcu_read_unlock() can rearm.
 	 */
-	if (rcu_preempt_depth() > 0)
+	if (!rcu_preempt_deferred_qs_try_report(current))
 		rcu_defer_qs_clear(rdp);
 }
 
