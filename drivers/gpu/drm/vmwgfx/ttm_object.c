@@ -204,7 +204,7 @@ int ttm_base_object_init(struct ttm_object_file *tfile,
 	spin_unlock(&tdev->object_lock);
 	idr_preload_end();
 	if (ret < 0)
-		return ret;
+		goto err_unref_tfile;
 
 	base->handle = ret;
 	ret = ttm_ref_object_add(tfile, base, NULL, false);
@@ -218,6 +218,10 @@ out_err1:
 	spin_lock(&tdev->object_lock);
 	idr_remove(&tdev->idr, base->handle);
 	spin_unlock(&tdev->object_lock);
+	ttm_object_file_unref(&base->tfile);
+	return ret;
+err_unref_tfile:
+	ttm_object_file_unref(&base->tfile);
 	return ret;
 }
 
