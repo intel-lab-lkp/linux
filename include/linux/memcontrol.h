@@ -36,7 +36,6 @@ enum memcg_stat_item {
 	MEMCG_SWAP = NR_VM_NODE_STAT_ITEMS,
 	MEMCG_SOCK,
 	MEMCG_PERCPU_B,
-	MEMCG_KMEM,
 	MEMCG_ZSWAP_B,
 	MEMCG_ZSWAPPED,
 	MEMCG_ZSWAP_INCOMP,
@@ -127,9 +126,10 @@ struct mem_cgroup_per_node {
 	struct list_head objcg_list;
 
 #ifdef CONFIG_MEMCG_NMI_SAFETY_REQUIRES_ATOMIC
-	/* slab stats for nmi context */
+	/* slab and kmem stats for nmi context */
 	atomic_t		slab_reclaimable;
 	atomic_t		slab_unreclaimable;
+	atomic_t		kmem;
 #endif
 };
 
@@ -191,6 +191,7 @@ struct obj_cgroup {
 		struct rcu_head rcu;
 	};
 	bool is_root;
+	int nid;
 };
 
 /*
@@ -255,10 +256,6 @@ struct mem_cgroup {
 	atomic_long_t		memory_events[MEMCG_NR_MEMORY_EVENTS];
 	atomic_long_t		memory_events_local[MEMCG_NR_MEMORY_EVENTS];
 
-#ifdef CONFIG_MEMCG_NMI_SAFETY_REQUIRES_ATOMIC
-	/* MEMCG_KMEM for nmi context */
-	atomic_t		kmem_stat;
-#endif
 	/*
 	 * Hint of reclaim pressure for socket memroy management. Note
 	 * that this indicator should NOT be used in legacy cgroup mode
@@ -771,6 +768,16 @@ static inline void obj_cgroup_put(struct obj_cgroup *objcg)
 {
 	if (objcg && !obj_cgroup_is_root(objcg))
 		percpu_ref_put(&objcg->refcnt);
+}
+
+static inline struct obj_cgroup *obj_cgroup_nid(struct obj_cgroup *objcg,
+						int nid)
+{
+	struct mem_cgroup *memcg = obj_cgroup_memcg(objcg);
+
+	/* Borrowed RCU lookup: takes no reference, caller must hold RCU. */
+	WARN_ON_ONCE(!rcu_read_lock_held());
+	return rcu_dereference(memcg->nodeinfo[nid]->objcg);
 }
 
 static inline bool mem_cgroup_tryget(struct mem_cgroup *memcg)
