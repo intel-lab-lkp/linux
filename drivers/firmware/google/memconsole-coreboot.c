@@ -10,7 +10,7 @@
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/coreboot.h>
 #include <linux/module.h>
 
 #include "memconsole.h"

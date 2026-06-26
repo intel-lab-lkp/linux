@@ -6,7 +6,7 @@
  */
 
 #include <linux/mfd/core.h>
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/of.h>
 #include <linux/module.h>
 #include <linux/property.h>
 #include <linux/resource.h>

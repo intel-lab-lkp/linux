@@ -6,7 +6,7 @@
 #include <linux/arm-smccc.h>
 #include <linux/cc_platform.h>
 #include <linux/kernel.h>
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/platform.h>
 #include <linux/module.h>
 #include <linux/smp.h>
 #include <linux/tsm.h>

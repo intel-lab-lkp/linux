@@ -12,7 +12,7 @@
 #include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/coreboot.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/platform_data/simplefb.h>

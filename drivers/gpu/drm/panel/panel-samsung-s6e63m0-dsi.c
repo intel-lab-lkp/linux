@@ -6,7 +6,7 @@
 
 #include <linux/module.h>
 #include <linux/delay.h>
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/of.h>
 
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_print.h>

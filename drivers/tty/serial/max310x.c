@@ -16,7 +16,6 @@
 #include <linux/gpio/driver.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/serial_core.h>

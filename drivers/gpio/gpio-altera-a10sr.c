@@ -9,7 +9,7 @@
 
 #include <linux/gpio/driver.h>
 #include <linux/mfd/altera-a10sr.h>
-#include <linux/mod_devicetable.h>
+#include <linux/mod_device_id/of.h>
 #include <linux/module.h>
 #include <linux/property.h>
 
