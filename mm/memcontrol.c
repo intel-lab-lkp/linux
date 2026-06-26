@@ -2987,12 +2987,11 @@ static struct obj_cgroup **current_objcg_update(void)
 	return objcgs;
 }
 
-__always_inline struct obj_cgroup *current_obj_cgroup(void)
+__always_inline static struct obj_cgroup *__current_obj_cgroup(int nid)
 {
 	struct mem_cgroup *memcg;
 	struct obj_cgroup *objcg;
 	struct obj_cgroup **objcgs;
-	int nid = numa_node_id();
 
 	if (IS_ENABLED(CONFIG_MEMCG_NMI_UNSAFE) && in_nmi())
 		return NULL;
@@ -3034,6 +3033,11 @@ from_memcg:
 	}
 
 	return rcu_dereference_check(root_mem_cgroup->nodeinfo[nid]->objcg, 1);
+}
+
+__always_inline struct obj_cgroup *current_obj_cgroup(void)
+{
+	return __current_obj_cgroup(numa_node_id());
 }
 
 struct obj_cgroup *get_obj_cgroup_from_folio(struct folio *folio)
@@ -3143,7 +3147,7 @@ int __memcg_kmem_charge_page(struct page *page, gfp_t gfp, int order)
 	struct obj_cgroup *objcg;
 	int ret = 0;
 
-	objcg = current_obj_cgroup();
+	objcg = __current_obj_cgroup(page_to_nid(page));
 	if (objcg && !obj_cgroup_is_root(objcg)) {
 		ret = obj_cgroup_charge_pages(objcg, gfp, 1 << order);
 		if (!ret) {
@@ -3536,7 +3540,9 @@ static inline size_t obj_full_size(struct kmem_cache *s)
 {
 	/*
 	 * For each accounted object there is an extra space which is used
-	 * to store obj_cgroup membership. Charge it too.
+	 * to store obj_cgroup membership. Charge it too. In addition, we
+	 * allocate obj_exts array on the same node as slab_nid(), so per-node
+	 * kmem accounting is fine.
 	 */
 	return s->size + sizeof(struct obj_cgroup *);
 }
@@ -3596,6 +3602,16 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 		}
 
 		/*
+		 * Charge against the per-node objcg matching the slab's node
+		 * so the stock's per-objcg vmstat batch (keyed by objcg->nid)
+		 * aligns with the physical slab. May transiently fall back to
+		 * root if the per-node entry is being drained.
+		 */
+		objcg = __current_obj_cgroup(slab_nid(slab));
+		if (!objcg || obj_cgroup_is_root(objcg))
+			continue;
+
+		/*
 		 * if we fail and size is 1, memcg_alloc_abort_single() will
 		 * just free the object, which is ok as we have not assigned
 		 * objcg to its obj_ext yet
@@ -3603,7 +3619,7 @@ bool __memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 		 * for larger sizes, kmem_cache_free_bulk() will uncharge
 		 * any objects that were already charged and obj_ext assigned
 		 *
-		 * TODO: we could batch this until slab_pgdat(slab) changes
+		 * TODO: we could batch this until slab_nid(slab) changes
 		 * between iterations, with a more complicated undo
 		 */
 		stock = trylock_stock();
