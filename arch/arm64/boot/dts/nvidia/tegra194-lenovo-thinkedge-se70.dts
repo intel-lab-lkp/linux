@@ -1,0 +1,167 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+
+#include "tegra194-p3668-0001.dtsi"
+#include "tegra194-p3509-0000.dtsi"
+
+/ {
+	model = "Lenovo ThinkEdge SE70";
+	compatible = "lenovo,thinkedge-se70", "nvidia,p3509-0000+p3668-0001", "nvidia,tegra194";
+
+	chosen {
+		bootargs = "console=ttyTCU0,115200";
+	};
+
+	/* Fixed 2.3V regulator for external SD card slot */
+	fixed-regulators {
+		ap2306gn_3v3_sd: ap2306gn_3v3_sd {
+			compatible = "regulator-fixed";
+			regulator-name = "ap2306gn-3v3-sd";
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			gpio = <&gpio TEGRA194_MAIN_GPIO(Q, 5) GPIO_ACTIVE_HIGH>;
+			enable-active-high;
+			status = "okay";
+		};
+	};
+
+	/* Custom pinmux configurations for 40-pin expansion header */
+	pinmux@c302000 {
+		status = "okay";
+		touch_clk_pcc4 {
+			nvidia,pins = "touch_clk_pcc4";
+			nvidia,function = "rsvd2";
+			nvidia,pull = <TEGRA_PIN_PULL_UP>;
+			nvidia,tristate = <TEGRA_PIN_ENABLE>;
+			nvidia,enable-input = <TEGRA_PIN_ENABLE>;
+			nvidia,lpdr = <TEGRA_PIN_DISABLE>;
+		};
+	};
+
+	pinmux@2430028 {
+		status = "okay";
+		soc_gpio41_pq5 {
+			nvidia,pins = "soc_gpio41_pq5";
+			nvidia,function = "rsvd2";
+			nvidia,pull = <TEGRA_PIN_PULL_NONE>;
+			nvidia,tristate = <TEGRA_PIN_DISABLE>;
+			nvidia,enable-input = <TEGRA_PIN_DISABLE>;
+			nvidia,lpdr = <TEGRA_PIN_DISABLE>;
+			nvidia,io-high-voltage = <TEGRA_PIN_DISABLE>;
+		};
+	};
+
+	pinmux@2430000 {
+		status = "okay";
+		pinctrl-names = "default";
+		pinctrl-0 = <&hdr40_pinmux>;
+
+		hdr40_pinmux: header-40pin-pinmux {
+			pin7 {
+				nvidia,pins = "aud_mclk_ps4";
+				nvidia,function = "aud";
+				nvidia,pull = <TEGRA_PIN_PULL_NONE>;
+				nvidia,tristate = <TEGRA_PIN_DISABLE>;
+				nvidia,enable-input = <TEGRA_PIN_DISABLE>;
+			};
+			pin11 {
+				nvidia,pins = "uart1_rts_pr4";
+				nvidia,function = "uarta";
+				nvidia,pull = <TEGRA_PIN_PULL_NONE>;
+				nvidia,tristate = <TEGRA_PIN_DISABLE>;
+				nvidia,enable-input = <TEGRA_PIN_DISABLE>;
+				nvidia,lpdr = <0x0>;
+			};
+			pin12 {
+				nvidia,pins = "dap5_sclk_pt5";
+				nvidia,function = "i2s5";
+				nvidia,pull = <TEGRA_PIN_PULL_DOWN>;
+				nvidia,tristate = <TEGRA_PIN_DISABLE>;
+				nvidia,enable-input = <TEGRA_PIN_ENABLE>;
+			};
+			pin35 {
+				nvidia,pins = "dap5_fs_pu0";
+				nvidia,function = "i2s5";
+				nvidia,pull = <TEGRA_PIN_PULL_DOWN>;
+				nvidia,tristate = <TEGRA_PIN_DISABLE>;
+				nvidia,enable-input = <TEGRA_PIN_ENABLE>;
+			};
+			pin36 {
+				nvidia,pins = "uart1_cts_pr5";
+				nvidia,function = "uarta";
+				nvidia,pull = <TEGRA_PIN_PULL_UP>;
+				nvidia,tristate = <TEGRA_PIN_ENABLE>;
+				nvidia,enable-input = <TEGRA_PIN_ENABLE>;
+				nvidia,lpdr = <0x0>;
+			};
+			pin38 {
+				nvidia,pins = "dap5_din_pt7";
+				nvidia,function = "i2s5";
+				nvidia,pull = <TEGRA_PIN_PULL_DOWN>;
+				nvidia,tristate = <TEGRA_PIN_ENABLE>;
+				nvidia,enable-input = <TEGRA_PIN_ENABLE>;
+			};
+			pin40 {
+				nvidia,pins = "dap5_dout_pt6";
+				nvidia,function = "i2s5";
+				nvidia,pull = <TEGRA_PIN_PULL_DOWN>;
+				nvidia,tristate = <TEGRA_PIN_DISABLE>;
+				nvidia,enable-input = <TEGRA_PIN_DISABLE>;
+			};
+		};
+	};
+
+	/* Configure i2c bus clock to 400kHz for carrier board peripherals */
+	i2c@3160000 {
+		clock-frequency = <400000>;
+		status = "okay";
+	};
+
+	/* SDMMC3 for external user SD card slot with dedicated 3.3V power */
+	sdhci@3440000 {
+		uhs-mask = <0x78>;
+		mmc-ocr-mask = <0x0>;
+		cd-inverted;
+		cd-gpios = <&gpio_aon TEGRA194_AON_GPIO(CC, 4) GPIO_ACTIVE_LOW>;
+		nvidia,cd-wakeup-capable;
+		vmmc-supply = <&ap2306gn_3v3_sd>;
+		status = "okay";
+	};
+
+	/* Disable fan and tachometer hardware not populated on SE70 carrier board */
+	pwm-fan {
+		status = "disabled";
+	};
+	thermal-fan-est {
+		status = "disabled";
+	};
+	tachometer@39c0000 {
+		status = "disabled";
+	};
+	pwm@c340000 {
+		status = "disabled";
+	};
+	pwm@3280000 {
+		status = "disabled";
+	};
+	pwm@32c0000 {
+		status = "disabled";
+	};
+	pwm@32d0000 {
+		status = "disabled";
+	};
+	pwm@32f0000 {
+		status = "disabled";
+	};
+	generic_pwm_tachometer {
+		status = "disabled";
+	};
+
+	/* Disable unused SPI interfaces on 40-pin header */
+	spi@3210000 {
+		status = "disabled";
+	};
+	spi@3230000 {
+		status = "disabled";
+	};
+};
