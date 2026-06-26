@@ -118,3 +118,18 @@ config HAVE_KVM_ARCH_GMEM_INVALIDATE
 config HAVE_KVM_ARCH_GMEM_POPULATE
        bool
        depends on KVM_GUEST_MEMFD
+
+
+config RUST_KVM_EVENTFD
+	bool "Rust implementation of KVM eventfd support"
+	depends on RUST && HAVE_KVM_EVENTFD
+	help
+	  Use a Rust reimplementation of virt/kvm/eventfd.c, providing the
+	  irqfd (interrupt injection via eventfd) and ioeventfd (MMIO/PIO
+	  write to eventfd signal) subsystems with RAII-based lock and
+	  resource management.
+
+	  This is functionally equivalent to the C implementation and
+	  maintains full ABI compatibility.
+
+	  If unsure, say N.

@@ -97,3 +97,10 @@
 #include "wait.c"
 #include "workqueue.c"
 #include "xarray.c"
+
+#ifdef CONFIG_RUST_KVM_EVENTFD
+#include "kvm.c"
+#include "eventfd.c"
+#include "seqcount.c"
+#endif
+

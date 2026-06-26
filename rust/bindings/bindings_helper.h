@@ -65,8 +65,12 @@
 #include <linux/io-pgtable.h>
 #include <linux/ioport.h>
 #include <linux/iosys-map.h>
+#include <linux/irqbypass.h>
 #include <linux/jiffies.h>
 #include <linux/jump_label.h>
+#include <kvm/iodev.h>
+#include <linux/kvm_host.h>
+#include <linux/kvm_irqfd.h>
 #include <linux/mdio.h>
 #include <linux/mm.h>
 #include <linux/miscdevice.h>
@@ -93,6 +97,20 @@
 #include <linux/workqueue.h>
 #include <linux/xarray.h>
 #include <trace/events/rust_sample.h>
+
+#ifdef CONFIG_RUST_KVM_EVENTFD
+/* Custom helpers for eventfd.rs */
+unsigned long rust_helper_spin_lock_irqsave(spinlock_t *lock);
+void rust_helper_spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags);
+void rust_helper_hlist_add_head_rcu(struct hlist_node *n, struct hlist_head *h);
+void rust_helper_hlist_del_init_rcu(struct hlist_node *n);
+struct workqueue_struct *rust_helper_alloc_workqueue(const char *fmt,
+						     unsigned int flags,
+						     int max_active);
+void rust_helper_trace_kvm_ack_irq(unsigned int irqchip, unsigned int pin);
+void rust_helper_kvm_irqfds_spin_release(struct kvm *kvm);
+void rust_helper_kvm_irqfds_spin_acquire(struct kvm *kvm);
+#endif
 
 /*
  * The driver-core Rust code needs to know about some C driver-core private

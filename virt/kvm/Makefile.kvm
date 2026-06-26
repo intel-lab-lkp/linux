@@ -5,7 +5,12 @@
 
 KVM ?= ../../../virt/kvm
 
-kvm-y := $(KVM)/kvm_main.o $(KVM)/eventfd.o $(KVM)/binary_stats.o
+kvm-y := $(KVM)/kvm_main.o $(KVM)/binary_stats.o
+ifeq ($(CONFIG_RUST_KVM_EVENTFD),y)
+kvm-y += $(KVM)/eventfd_shim.o
+else
+kvm-y += $(KVM)/eventfd.o
+endif
 kvm-$(CONFIG_KVM_VFIO) += $(KVM)/vfio.o
 kvm-$(CONFIG_KVM_MMIO) += $(KVM)/coalesced_mmio.o
 kvm-$(CONFIG_KVM_ASYNC_PF) += $(KVM)/async_pf.o
