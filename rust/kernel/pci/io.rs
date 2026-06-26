@@ -11,15 +11,13 @@ use crate::{
         Io,
         IoBackend,
         IoCapable,
-        MmioOwned,
+        Mmio,
+        MmioBackend,
         MmioRaw,
         Region, //
     },
     prelude::*,
     ptr::KnownSize, //
-};
-use core::{
-    ops::Deref, //
 };
 
 /// Represents the size of a PCI configuration space.
@@ -269,12 +267,14 @@ impl<const SIZE: usize> Drop for Bar<'_, SIZE> {
     }
 }
 
-impl<const SIZE: usize> Deref for Bar<'_, SIZE> {
-    type Target = MmioOwned<SIZE>;
+impl<'a, const SIZE: usize> Io<'a> for &'a Bar<'_, SIZE> {
+    type Backend = MmioBackend;
+    type Target = crate::io::Region<SIZE>;
 
-    fn deref(&self) -> &Self::Target {
+    #[inline]
+    fn as_view(self) -> Mmio<'a, Self::Target> {
         // SAFETY: By the type invariant of `Self`, the MMIO range in `self.io` is properly mapped.
-        unsafe { MmioOwned::from_raw(&self.io) }
+        unsafe { Mmio::from_raw(self.io) }
     }
 }
 
