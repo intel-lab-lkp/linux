@@ -133,11 +133,14 @@ properties:
     required:
       - compatible
 
+allOf:
+  - $ref: /schemas/power/reset/reboot-mode.yaml#
+
 required:
   - compatible
   - mboxes
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
