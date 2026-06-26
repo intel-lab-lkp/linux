@@ -46,6 +46,7 @@
 #include <linux/kdev_t.h>
 #include <linux/module.h>
 #include <linux/utsname.h>
+#include <linux/pid_namespace.h>
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/msg_prot.h>
 #include <linux/sunrpc/gss_api.h>
@@ -71,12 +72,8 @@ static void encode_layoutget(struct xdr_stream *xdr,
 static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
 			     struct nfs4_layoutget_res *res);
 
-/* NFSv4 COMPOUND tags are only wanted for debugging purposes */
-#ifdef DEBUG
+/* Enable compound tags to include namespace information */
 #define NFS4_MAXTAGLEN		20
-#else
-#define NFS4_MAXTAGLEN		0
-#endif
 
 /* lock,open owner id:
  * we currently use size 2 (u64) out of (NFS4_OPAQUE_LIMIT  >> 2)
@@ -1033,6 +1030,23 @@ static void encode_compound_hdr(struct xdr_stream *xdr,
 				struct compound_hdr *hdr)
 {
 	__be32 *p;
+
+	/* Inject namespace info into compound tag if not already set */
+	if (hdr->taglen == 0 && req->rq_task != NULL) {
+		/* Use namespace info captured at task creation time */
+		struct rpc_task *task = req->rq_task;
+
+		if (taks->tk_ns_inum != 0) {
+			char ns_tag[NFS4_MAXTAGLEN + 1];
+
+			hdr->taglen = snprintf(ns_tag, sizeof(ns_tag), "ns:%u", taks->tk_ns_inum);
+			if (hdr->taglen > NFS4_MAXTAGLEN) {
+				hdr->taglen = NFS4_MAXTAGLEN;
+				ns_tag[NFS4_MAXTAGLEN] = '\0';
+			}
+			hdr->tag = ns_tag;
+		}
+	}
 
 	/* initialize running count of expected bytes in reply.
 	 * NOTE: the replied tag SHOULD be the same is the one sent,

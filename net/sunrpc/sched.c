@@ -21,6 +21,7 @@
 #include <linux/mutex.h>
 #include <linux/freezer.h>
 #include <linux/sched/mm.h>
+#include <linux/pid_namespace.h>
 
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/metrics.h>
@@ -1109,6 +1110,11 @@ static void rpc_init_task(struct rpc_task *task, const struct rpc_task_setup *ta
 
 	task->tk_priority = task_setup_data->priority - RPC_PRIORITY_LOW;
 	task->tk_owner = current->tgid;
+
+	struct pid_namespace *pid_ns = task_active_pid_ns(current);
+	/* Keep track on namespace id */
+	if (pid_ns != &init_pid_ns)
+		task->tk_ns_inum = pid_ns->ns.inum;
 
 	/* Initialize workqueue for async tasks */
 	task->tk_workqueue = task_setup_data->workqueue;

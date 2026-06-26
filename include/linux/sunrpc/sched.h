@@ -92,6 +92,8 @@ struct rpc_task {
 
 	pid_t			tk_owner;	/* Process id for batching tasks */
 
+	unsigned int		tk_ns_inum;	/* PID namespace inum for namespace tracking */
+
 	int			tk_rpc_status;	/* Result of last RPC operation */
 	unsigned short		tk_flags;	/* misc flags */
 	unsigned short		tk_timeouts;	/* maj timeouts */
