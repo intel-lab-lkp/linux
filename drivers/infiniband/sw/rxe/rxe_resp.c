@@ -537,7 +537,12 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 		if (mw->access & IB_ZERO_BASED)
 			qp->resp.offset = mw->addr;
 
-		rxe_get(mr);
+		if (!rxe_get(mr)) {
+			rxe_put(mw);
+			mw = NULL;
+			state = get_rkey_violation_state(pkt);
+			goto err;
+		}
 		rxe_put(mw);
 		mw = NULL;
 	} else {
