@@ -148,6 +148,7 @@ static struct syscon *of_syscon_register(struct device_node *np, bool check_res)
 
 	syscon->regmap = regmap;
 	syscon->np = np;
+	syscon->reset = reset;
 
 	list_add_tail(&syscon->list, &syscon_list);
 
