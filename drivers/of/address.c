@@ -277,6 +277,7 @@ int of_range_to_resource(struct device_node *np, int index, struct resource *res
 }
 EXPORT_SYMBOL(of_range_to_resource);
 
+#ifdef CONFIG_ISA
 /*
  * ISA bus specific translator
  */
@@ -316,6 +317,7 @@ static unsigned int of_bus_isa_get_flags(const __be32 *addr)
 		flags |= IORESOURCE_MEM;
 	return flags;
 }
+#endif
 
 static int of_bus_default_flags_match(struct device_node *np)
 {
@@ -349,6 +351,7 @@ static const struct of_bus of_busses[] = {
 		.get_flags = of_bus_pci_get_flags,
 	},
 #endif /* CONFIG_PCI */
+#ifdef CONFIG_ISA
 	/* ISA */
 	{
 		.name = "isa",
@@ -360,6 +363,7 @@ static const struct of_bus of_busses[] = {
 		.flag_cells = 1,
 		.get_flags = of_bus_isa_get_flags,
 	},
+#endif /* CONFIG_ISA */
 	/* Default with flags cell */
 	{
 		.name = "default-flags",
