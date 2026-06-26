@@ -35,49 +35,99 @@ void fuse_backing_put(struct fuse_backing *fb)
 
 void fuse_backing_files_init(struct fuse_conn *fc)
 {
-	idr_init(&fc->backing_files_map);
+	fc->backing_ids_count = 0;
+	fc->backing_files_next_id = 1;
+	fc->backing_htable = NULL;
 }
 
 static int fuse_backing_id_alloc(struct fuse_conn *fc, struct fuse_backing *fb)
 {
 	int id;
+	struct fuse_backing *iterator;
 
-	idr_preload(GFP_KERNEL);
 	spin_lock(&fc->lock);
-	/* FIXME: xarray might be space inefficient */
-	id = idr_alloc_cyclic(&fc->backing_files_map, fb, 1, 0, GFP_ATOMIC);
-	spin_unlock(&fc->lock);
-	idr_preload_end();
 
-	WARN_ON_ONCE(id == 0);
+	if (fc->backing_ids_count == INT_MAX) {
+		id = -ENOSPC;
+		goto out;
+	}
+
+retry:
+	id = fc->backing_files_next_id;
+	fc->backing_files_next_id = (id == INT_MAX) ? 1 : id + 1;
+
+	hash_for_each_possible(fc->backing_htable->backing_files_ht,
+			       iterator, node, id) {
+		if (iterator->id == id)
+			goto retry;
+	}
+
+	fb->id = id;
+	hash_add_rcu(fc->backing_htable->backing_files_ht, &fb->node, id);
+	fc->backing_ids_count++;
+
+out:
+	spin_unlock(&fc->lock);
+
 	return id;
+}
+
+int fuse_backing_htable_alloc(struct fuse_conn *fc)
+{
+	struct fuse_backing_htable *ht;
+
+	ht = kzalloc_obj(struct fuse_backing_htable);
+	if (!ht)
+		return -ENOMEM;
+
+	hash_init(ht->backing_files_ht);
+	fc->backing_htable = ht;
+
+	return 0;
 }
 
 static struct fuse_backing *fuse_backing_id_remove(struct fuse_conn *fc,
 						   int id)
 {
-	struct fuse_backing *fb;
+	struct fuse_backing *iterator;
+	struct fuse_backing *fb = NULL;
 
 	spin_lock(&fc->lock);
-	fb = idr_remove(&fc->backing_files_map, id);
+	hash_for_each_possible(fc->backing_htable->backing_files_ht,
+			       iterator, node, id) {
+		if (iterator->id == id) {
+			hash_del_rcu(&iterator->node);
+			fb = iterator;
+			break;
+		}
+	}
+
+	if (fb)
+		fc->backing_ids_count--;
+
 	spin_unlock(&fc->lock);
 
 	return fb;
 }
 
-static int fuse_backing_id_free(int id, void *p, void *data)
-{
-	struct fuse_backing *fb = p;
-
-	WARN_ON_ONCE(refcount_read(&fb->count) != 1);
-	fuse_backing_free(fb);
-	return 0;
-}
-
 void fuse_backing_files_free(struct fuse_conn *fc)
 {
-	idr_for_each(&fc->backing_files_map, fuse_backing_id_free, NULL);
-	idr_destroy(&fc->backing_files_map);
+	struct fuse_backing *fb;
+	struct hlist_node *tmp;
+	int bkt;
+
+	if (!fc->backing_htable)
+		return;
+
+	hash_for_each_safe(fc->backing_htable->backing_files_ht,
+			   bkt, tmp, fb, node) {
+		hash_del_rcu(&fb->node);
+		WARN_ON_ONCE(refcount_read(&fb->count) != 1);
+		fuse_backing_free(fb);
+	}
+
+	kfree(fc->backing_htable);
+	fc->backing_htable = NULL;
 }
 
 int fuse_backing_open(struct fuse_conn *fc, struct fuse_backing_map *map)
@@ -169,10 +219,18 @@ out:
 
 struct fuse_backing *fuse_backing_lookup(struct fuse_conn *fc, int backing_id)
 {
-	struct fuse_backing *fb;
+	struct fuse_backing *iterator;
+	struct fuse_backing *fb = NULL;
 
 	rcu_read_lock();
-	fb = idr_find(&fc->backing_files_map, backing_id);
+	hash_for_each_possible_rcu(fc->backing_htable->backing_files_ht,
+				   iterator, node, backing_id) {
+		if (iterator->id == backing_id) {
+			fb = iterator;
+			break;
+		}
+	}
+
 	fb = fuse_backing_get(fb);
 	rcu_read_unlock();
 
