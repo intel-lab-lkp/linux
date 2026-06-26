@@ -1200,8 +1200,6 @@ void vfs_coredump(const kernel_siginfo_t *siginfo)
 		.cpu = raw_smp_processor_id(),
 	};
 
-	audit_core_dumps(siginfo->si_signo);
-
 	if (coredump_skip(&cprm, binfmt))
 		return;
 

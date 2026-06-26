@@ -3030,6 +3030,7 @@ relock:
 			if (print_fatal_signals)
 				print_fatal_signal(signr);
 			proc_coredump_connector(current);
+			audit_core_dumps(ksig->info.si_signo);
 			/*
 			 * If it was able to dump core, this kills all
 			 * other threads in the group and synchronizes with
