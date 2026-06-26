@@ -884,7 +884,7 @@ static int __migrate_folio(struct address_space *mapping, struct folio *dst,
  * @mapping: The address_space containing the folio.
  * @dst: The folio to migrate the data to.
  * @src: The folio containing the current data.
- * @mode: How to migrate the page.
+ * @mode: How to migrate the folio.
  *
  * Common logic to directly migrate a single LRU folio suitable for
  * folios that do not have private data.
@@ -1157,13 +1157,10 @@ static void __migrate_folio_extract(struct folio *dst,
 }
 
 /* Restore the source folio to the original state upon failure */
-static void migrate_folio_undo_src(struct folio *src,
-				   int page_was_mapped,
-				   struct anon_vma *anon_vma,
-				   bool locked,
-				   struct list_head *ret)
+static void migrate_folio_undo_src(struct folio *src, int folio_was_mapped,
+		struct anon_vma *anon_vma, bool locked, struct list_head *ret)
 {
-	if (page_was_mapped)
+	if (folio_was_mapped)
 		remove_migration_ptes(src, src, 0);
 	/* Drop an anon_vma reference if we took one */
 	if (anon_vma)
