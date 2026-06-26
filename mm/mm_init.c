@@ -1043,7 +1043,7 @@ static void __ref __init_zone_device_page(struct page *page, unsigned long pfn,
 	case MEMORY_DEVICE_PRIVATE:
 	case MEMORY_DEVICE_COHERENT:
 	case MEMORY_DEVICE_PCI_P2PDMA:
-		set_page_count(page, 0);
+		set_page_count_frozen(page);
 		break;
 
 	case MEMORY_DEVICE_GENERIC:
@@ -1096,7 +1096,7 @@ static void __ref memmap_init_compound(struct page *head,
 
 		__init_zone_device_page(page, pfn, zone_idx, nid, pgmap);
 		prep_compound_tail(page, head, order);
-		set_page_count(page, 0);
+		set_page_count_frozen(page);
 	}
 	prep_compound_head(head, order);
 }
@@ -2227,7 +2227,7 @@ void __init init_cma_reserved_pageblock(struct page *page)
 
 	do {
 		__ClearPageReserved(p);
-		set_page_count(p, 0);
+		set_page_count_frozen(p);
 	} while (++p, --i);
 
 	init_pageblock_migratetype(page, MIGRATE_CMA, false);

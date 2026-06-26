@@ -1293,7 +1293,7 @@ static void virtio_mem_fake_offline_cancel_offline(unsigned long pfn,
 	 * when going offline.
 	 */
 	for (i = 0; i < nr_pages; i++)
-		page_ref_inc(pfn_to_page(pfn + i));
+		init_page_count(pfn_to_page(pfn + i));
 }
 
 static void virtio_mem_online_page(struct virtio_mem *vm,
