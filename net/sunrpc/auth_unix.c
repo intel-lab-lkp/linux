@@ -15,6 +15,7 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/auth.h>
 #include <linux/user_namespace.h>
+#include <linux/pid_namespace.h>
 
 
 #if IS_ENABLED(CONFIG_SUNRPC_DEBUG)
@@ -117,6 +118,28 @@ unx_marshal(struct rpc_task *task, struct xdr_stream *xdr)
 	struct group_info *gi = cred->cr_cred->group_info;
 	struct user_namespace *userns = clnt->cl_cred ?
 		clnt->cl_cred->user_ns : &init_user_ns;
+	char ns_aware_nodename[UNX_MAXNODENAME + 1];
+	int ns_aware_nodename_len;
+
+	struct pid_namespace *pid_ns = task_active_pid_ns(current);
+
+	/* the process runs in a dedicated namespace */
+	if (pid_ns != &init_pid_ns) {
+		/* Format as: <pid_ns_inum>@<current-hostname> */
+		int prefix_len = snprintf(ns_aware_nodename, sizeof(ns_aware_nodename),
+			"%u@", pid_ns->ns.inum);
+
+		if (prefix_len < sizeof(ns_aware_nodename))
+			strscpy(ns_aware_nodename + prefix_len, clnt->cl_nodename,
+				sizeof(ns_aware_nodename) - prefix_len);
+		else
+			strscpy(ns_aware_nodename, clnt->cl_nodename, sizeof(ns_aware_nodename));
+
+		ns_aware_nodename_len = strlen(ns_aware_nodename);
+	} else {
+		ns_aware_nodename_len = clnt->cl_nodelen;
+		strscpy(ns_aware_nodename, clnt->cl_nodename, sizeof(ns_aware_nodename));
+	}
 
 	/* Credential */
 
@@ -126,8 +149,8 @@ unx_marshal(struct rpc_task *task, struct xdr_stream *xdr)
 	*p++ = rpc_auth_unix;
 	cred_len = p++;
 	*p++ = xdr_zero;	/* stamp */
-	if (xdr_stream_encode_opaque(xdr, clnt->cl_nodename,
-				     clnt->cl_nodelen) < 0)
+	if (xdr_stream_encode_opaque(xdr, ns_aware_nodename,
+				     ns_aware_nodename_len) < 0)
 		goto marshal_failed;
 	p = xdr_reserve_space(xdr, 3 * sizeof(*p));
 	if (!p)
