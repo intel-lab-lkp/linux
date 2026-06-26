@@ -49,6 +49,18 @@ struct iov_iter;		/* in uio.h */
 #define IOREMAP_MAX_ORDER	(7 + PAGE_SHIFT)	/* 128 pages */
 #endif
 
+/*
+ * Number of unmapped guard pages appended to each guarded vmalloc
+ * allocation. The default is a single page; an architecture may override
+ * VMAP_GUARD_PAGES (via asm/vmalloc.h) when a wider guard is needed to
+ * contain a worst-case single-instruction stack pivot into an adjacent,
+ * attacker-controlled vmap allocation (see arch/x86 for the ENTER case).
+ */
+#ifndef VMAP_GUARD_PAGES
+#define VMAP_GUARD_PAGES	1
+#endif
+#define VMAP_GUARD_SIZE		(VMAP_GUARD_PAGES * PAGE_SIZE)
+
 struct vm_struct {
 	union {
 		struct vm_struct *next;	  /* Early registration of vm_areas. */
@@ -236,8 +248,8 @@ int vmap_pages_range(unsigned long addr, unsigned long end, pgprot_t prot,
 static inline size_t get_vm_area_size(const struct vm_struct *area)
 {
 	if (!(area->flags & VM_NO_GUARD))
-		/* return actual size without guard page */
-		return area->size - PAGE_SIZE;
+		/* return actual size without guard region */
+		return area->size - VMAP_GUARD_SIZE;
 	else
 		return area->size;
 
