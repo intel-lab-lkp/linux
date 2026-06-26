@@ -314,8 +314,7 @@ unsafe impl<T> Sync for AssertSync<T> {}
 #[no_mangle]
 #[used]
 pub static rust_binder_fops: AssertSync<kernel::bindings::file_operations> = {
-    // SAFETY: All zeroes is safe for the `file_operations` type.
-    let zeroed_ops = unsafe { core::mem::MaybeUninit::zeroed().assume_init() };
+    let zeroed_ops = pin_init::zeroed();
 
     let ops = kernel::bindings::file_operations {
         owner: THIS_MODULE.as_ptr(),
