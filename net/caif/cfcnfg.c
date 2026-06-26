@@ -135,7 +135,8 @@ static struct cfcnfg_phyinfo *cfcnfg_get_phyinfo_rcu(struct cfcnfg *cnfg,
 {
 	struct cfcnfg_phyinfo *phy;
 
-	list_for_each_entry_rcu(phy, &cnfg->phys, node)
+	list_for_each_entry_rcu(phy, &cnfg->phys, node,
+				lockdep_is_held(&cnfg->lock))
 		if (phy->id == phyid)
 			return phy;
 	return NULL;
