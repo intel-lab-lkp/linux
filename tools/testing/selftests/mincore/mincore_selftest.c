@@ -22,6 +22,27 @@
 #define MB (1UL << 20)
 #define FILE_SIZE (4 * MB)
 
+static unsigned long default_huge_page_size(void)
+{
+	FILE *f = fopen("/proc/meminfo", "r");
+	unsigned long hps = 0;
+	size_t linelen = 0;
+	char *line = NULL;
+
+	if (!f)
+		return 0;
+	while (getline(&line, &linelen, f) > 0) {
+		if (sscanf(line, "Hugepagesize:       %lu kB", &hps) == 1) {
+			hps <<= 10;
+			break;
+		}
+	}
+
+	free(line);
+	fclose(f);
+	return hps;
+}
+
 
 /*
  * Tests the user interface. This test triggers most of the documented
@@ -139,14 +160,18 @@ TEST(check_anonymous_locked_pages)
 TEST(check_huge_pages)
 {
 	unsigned char vec[1];
+	unsigned long hpage_size;
 	char *addr;
 	int retval;
 	int page_size;
 
 	page_size = sysconf(_SC_PAGESIZE);
+	hpage_size = default_huge_page_size();
+	if (!hpage_size)
+		hpage_size = page_size;
 
 	errno = 0;
-	addr = mmap(NULL, page_size, PROT_READ | PROT_WRITE,
+	addr = mmap(NULL, hpage_size, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
 		-1, 0);
 	if (addr == MAP_FAILED) {
@@ -170,7 +195,7 @@ TEST(check_huge_pages)
 	}
 
 	munlock(addr, page_size);
-	munmap(addr, page_size);
+	munmap(addr, hpage_size);
 }
 
 
