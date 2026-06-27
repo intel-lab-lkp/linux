@@ -23,6 +23,9 @@ Embedded Controller (EC) and exposed via ACPI.
 The driver implements a **Rate-Limited Lag (RLLag)** filter to handle
 the low-resolution and jittery sampling found in Lenovo EC firmware.
 
+The driver includes a WMI Coexistence Guard that automatically yields hardware
+register control to lenovo-wmi-other when modern gaming GUID blocks are active.
+
 Hardware Identification and Multiplier Logic
 --------------------------------------------
 
@@ -69,10 +72,11 @@ Usage
 
 The driver exposes standard hwmon sysfs attributes:
 
-===============   ============================
-Attribute         Description
-fanX_input        Filtered fan speed in RPM.
-===============   ============================
+===============  ======================================================
+Attribute        Description
+fanX_input       Filtered fan speed in RPM.
+fanX_max         Maximum design capability threshold limit in RPM.
+===============  ======================================================
 
 
 Note: If the hardware reports 0 RPM, the filter is bypassed and 0 is reported
@@ -99,7 +103,7 @@ immediately to ensure the user knows the fan has stopped.
  82XV / 83DV    | LOQ 15/16        | 0xFE/0xFF | \_SB.PCI0.LPC0.EC0.FANS /FA2S  | 16-bit | 1
  83AK           | ThinkBook G6     | 0x06      | \_SB.PCI0.LPC0.EC0.FAN0        |  8-bit | 100
  81X1           | Flex 5           | 0x06      | \_SB.PCI0.LPC0.EC0.FAN0        |  8-bit | 100
- *Legacy*       | Pre-2020 Models  | 0x06      | \_SB.PCI0.LPC.EC.FAN0          |  8-bit | 100
+ *Legacy* | Pre-2020 Models  | 0x06      | \_SB.PCI0.LPC.EC.FAN0          |  8-bit | 100
  ----------------------------------------------------------------------------------------------------
 
 METHODOLOGY & IDENTIFICATION:
@@ -122,17 +126,30 @@ References
 ----------
 
 1. **ACPI Specification (Field Objects):** Documentation on how 8-bit vs 16-bit
-   fields are accessed in OperationRegions.
+   [cite_start]fields are accessed in OperationRegions[cite: 57].
    https://uefi.org/specs/ACPI/6.5/05_ACPI_Software_Programming_Model.html#field-objects
 
 2. **NBFC Projects:** Community-driven reverse engineering
-   of Lenovo Legion/LOQ EC memory maps (16-bit raw registers).
+   [cite_start]of Lenovo Legion/LOQ EC memory maps (16-bit raw registers)[cite: 58].
    https://github.com/hirschmann/nbfc/tree/master/Configs
 
 3. **Linux Kernel Timekeeping API:** Documentation for ktime_get_boottime() and
-   handling deltas across suspend states.
+   [cite_start]handling deltas across suspend states[cite: 59].
    https://www.kernel.org/doc/html/latest/core-api/timekeeping.html
 
 4. **Lenovo IdeaPad Laptop Driver:** Reference for DMI-based hardware
-   feature gating in Lenovo laptops.
+   [cite_start]feature gating in Lenovo laptops[cite: 60].
    https://github.com/torvalds/linux/blob/master/drivers/platform/x86/lenovo/ideapad-laptop.c
+
+5. **Lenovo Product Specifications Reference (PSREF):** Official hardware layout index
+   [cite_start]and spec sheets for active and withdrawn Lenovo laptop models[cite: 68].
+   https://psref.lenovo.com/l/withdrawn/
+
+6. **Yogafan Master Quirk Database:** Master spreadsheet mapping Lenovo Product
+   [cite_start]Specifications Reference (PSREF) to explicit EC offsets, register widths, paths, and multipliers[cite: 68].
+   https://github.com/sergiomelas/lenovo-linux-drivers/blob/main/Lenovo_Drivers/Prototype/PSREF/yogafan_v3_quirks_database.ods
+
+7. **Yogafan ACPI DSDT Repository:** Central repository containing user-contributed raw
+   [cite_start]and decompiled ACPI DSDT firmware dumps used for path verification and hardware expansions[cite: 61].
+   https://github.com/sergiomelas/lenovo-linux-drivers/tree/main/Lenovo_Drivers/Prototype/DSDT
+
