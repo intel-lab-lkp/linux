@@ -3,6 +3,7 @@
 #include <linux/slab.h>
 #include <linux/string_choices.h>
 
+#include <drm/drm_blend.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_mode.h>
 #include <drm/drm_print.h>
@@ -393,6 +394,10 @@ static int vkms_config_show(struct seq_file *m, void *data)
 		seq_printf(m, "\tname=%s\n",
 			   vkms_config_plane_get_name(plane_cfg) ?
 			   vkms_config_plane_get_name(plane_cfg) : "(null)");
+		seq_printf(m, "\tsupported rotations=" DRM_ROTATION_FMT "\n",
+			   DRM_ROTATION_FMT_ARGS(vkms_config_plane_get_supported_rotations(plane_cfg)));
+		seq_printf(m, "\tdefault rotation=" DRM_ROTATION_FMT "\n",
+			   DRM_ROTATION_FMT_ARGS(vkms_config_plane_get_default_rotation(plane_cfg)));
 	}
 
 	vkms_config_for_each_crtc(vkmsdev->config, crtc_cfg) {
