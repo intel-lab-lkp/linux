@@ -154,6 +154,7 @@ static int cdnsp_pci_probe(struct pci_dev *pdev,
 	if (pci_dev_run_wake(pdev))
 		pm_runtime_put_noidle(&pdev->dev);
 
+	pci_dev_put(func);
 	return 0;
 
 free_cdnsp:
