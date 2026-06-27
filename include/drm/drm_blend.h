@@ -43,6 +43,23 @@ static inline bool drm_rotation_90_or_270(unsigned int rotation)
 
 #define DRM_BLEND_ALPHA_OPAQUE		0xffff
 
+const char *drm_get_rotation_name(unsigned int rotation);
+
+#define DRM_ROTATION_FMT "%s%s%s%s%s%s%s%s%s%s%s%s"
+#define DRM_ROTATION_FMT_ARGS(rot) \
+	(rot) & DRM_MODE_ROTATE_0  ? drm_get_rotation_name(0) : "", \
+	(rot) & DRM_MODE_ROTATE_0  ? " " : "", \
+	(rot) & DRM_MODE_ROTATE_90 ? drm_get_rotation_name(1) : "", \
+	(rot) & DRM_MODE_ROTATE_90 ? " " : "", \
+	(rot) & DRM_MODE_ROTATE_180 ? drm_get_rotation_name(2) : "", \
+	(rot) & DRM_MODE_ROTATE_180 ? " " : "", \
+	(rot) & DRM_MODE_ROTATE_270 ? drm_get_rotation_name(3) : "", \
+	(rot) & DRM_MODE_ROTATE_270 ? " " : "", \
+	(rot) & DRM_MODE_REFLECT_X ? drm_get_rotation_name(4) : "", \
+	(rot) & DRM_MODE_REFLECT_X ? " " : "", \
+	(rot) & DRM_MODE_REFLECT_Y ? drm_get_rotation_name(5) : "", \
+	(rot) & DRM_MODE_REFLECT_Y ? " " : ""
+
 int drm_plane_create_alpha_property(struct drm_plane *plane);
 int drm_plane_create_rotation_property(struct drm_plane *plane,
 				       unsigned int rotation,
