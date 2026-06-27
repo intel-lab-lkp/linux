@@ -203,6 +203,7 @@ static int snow_probe(struct platform_device *pdev)
 		}
 	}
 
+	of_node_get(link->cpus->of_node);
 	link->platforms->of_node = link->cpus->of_node;
 
 	/* Update card-name if provided through DT, else use default name */
@@ -211,9 +212,12 @@ static int snow_probe(struct platform_device *pdev)
 	snd_soc_card_set_drvdata(card, priv);
 
 	ret = devm_snd_soc_register_card(dev, card);
-	if (ret)
+	if (ret) {
+		snd_soc_of_put_dai_link_codecs(link);
+		of_node_put(link->cpus->of_node);
 		return dev_err_probe(&pdev->dev, ret,
 				     "snd_soc_register_card failed\n");
+	}
 
 	return 0;
 }
