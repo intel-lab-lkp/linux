@@ -31,6 +31,7 @@
 #include <linux/unaligned.h>
 #include <net/ip6_checksum.h>
 #include <net/netdev_queues.h>
+#include <net/page_pool/helpers.h>
 #include <net/phy/realtek_phy.h>
 
 #include "r8169.h"
@@ -729,6 +730,7 @@ enum rtl_dash_type {
 };
 
 struct rtl8169_private {
+	struct page_pool *rx_pool;
 	void __iomem *mmio_addr;	/* memory map physical address */
 	struct pci_dev *pci_dev;
 	struct net_device *dev;
@@ -4161,21 +4163,14 @@ static void rtl8169_mark_to_asic(struct RxDesc *desc)
 static struct page *rtl8169_alloc_rx_data(struct rtl8169_private *tp,
 					  struct RxDesc *desc)
 {
-	struct device *d = tp_to_dev(tp);
-	int node = dev_to_node(d);
 	dma_addr_t mapping;
 	struct page *data;
 
-	data = alloc_pages_node(node, GFP_KERNEL, get_order(R8169_RX_BUF_SIZE));
+	data = page_pool_dev_alloc_pages(tp->rx_pool);
 	if (!data)
 		return NULL;
 
-	mapping = dma_map_page(d, data, 0, R8169_RX_BUF_SIZE, DMA_FROM_DEVICE);
-	if (unlikely(dma_mapping_error(d, mapping))) {
-		netdev_err(tp->dev, "Failed to map RX DMA!\n");
-		__free_pages(data, get_order(R8169_RX_BUF_SIZE));
-		return NULL;
-	}
+	mapping = page_pool_get_dma_addr(data);
 
 	desc->addr = cpu_to_le64(mapping);
 	rtl8169_mark_to_asic(desc);
@@ -4188,13 +4183,15 @@ static void rtl8169_rx_clear(struct rtl8169_private *tp)
 	int i;
 
 	for (i = 0; i < NUM_RX_DESC && tp->Rx_databuff[i]; i++) {
-		dma_unmap_page(tp_to_dev(tp),
-			       le64_to_cpu(tp->RxDescArray[i].addr),
-			       R8169_RX_BUF_SIZE, DMA_FROM_DEVICE);
-		__free_pages(tp->Rx_databuff[i], get_order(R8169_RX_BUF_SIZE));
+		page_pool_put_full_page(tp->rx_pool, tp->Rx_databuff[i], false);
 		tp->Rx_databuff[i] = NULL;
 		tp->RxDescArray[i].addr = 0;
 		tp->RxDescArray[i].opts1 = 0;
+	}
+
+	if (tp->rx_pool) {
+		page_pool_destroy(tp->rx_pool);
+		tp->rx_pool = NULL;
 	}
 }
 
@@ -4221,7 +4218,25 @@ static int rtl8169_rx_fill(struct rtl8169_private *tp)
 
 static int rtl8169_init_ring(struct rtl8169_private *tp)
 {
+	struct page_pool_params params = {0};
+
 	rtl8169_init_ring_indexes(tp);
+
+	params.order = get_order(SZ_16K);
+	params.flags = PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV;
+	params.pool_size = NUM_RX_DESC;
+	params.dev = tp_to_dev(tp);
+	params.nid = dev_to_node(tp_to_dev(tp));
+	params.dma_dir = DMA_FROM_DEVICE;
+	params.offset = 0;
+	params.max_len = SZ_16K;
+	tp->rx_pool = page_pool_create(&params);
+	if (IS_ERR(tp->rx_pool)) {
+		int err = PTR_ERR(tp->rx_pool);
+
+		tp->rx_pool = NULL;
+		return err;
+	}
 
 	memset(tp->tx_skb, 0, sizeof(tp->tx_skb));
 	memset(tp->Rx_databuff, 0, sizeof(tp->Rx_databuff));
@@ -4777,6 +4792,7 @@ static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, int budget
 		unsigned int pkt_size, entry = tp->cur_rx % NUM_RX_DESC;
 		struct RxDesc *desc = tp->RxDescArray + entry;
 		struct sk_buff *skb;
+		struct page *new_page;
 		const void *rx_buf;
 		dma_addr_t addr;
 		u32 status;
@@ -4820,21 +4836,36 @@ static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, int budget
 			goto release_descriptor;
 		}
 
-		skb = napi_alloc_skb(&tp->napi, pkt_size);
-		if (unlikely(!skb)) {
-			dev->stats.rx_dropped++;
-			goto release_descriptor;
-		}
-
 		addr = le64_to_cpu(desc->addr);
 		rx_buf = page_address(tp->Rx_databuff[entry]);
 
 		dma_sync_single_for_cpu(d, addr, pkt_size, DMA_FROM_DEVICE);
 		prefetch(rx_buf);
-		skb_copy_to_linear_data(skb, rx_buf, pkt_size);
-		skb->tail += pkt_size;
-		skb->len = pkt_size;
-		dma_sync_single_for_device(d, addr, pkt_size, DMA_FROM_DEVICE);
+
+		new_page = page_pool_dev_alloc_pages(tp->rx_pool);
+		if (unlikely(!new_page)) {
+			skb = napi_alloc_skb(&tp->napi, pkt_size);
+			if (unlikely(!skb)) {
+				dev->stats.rx_dropped++;
+				goto release_descriptor;
+			}
+			skb_copy_to_linear_data(skb, rx_buf, pkt_size);
+			skb_put(skb, pkt_size);
+			dma_sync_single_for_device(d, addr, pkt_size, DMA_FROM_DEVICE);
+		} else {
+			skb = napi_build_skb(page_address(tp->Rx_databuff[entry]), SZ_16K);
+			if (unlikely(!skb)) {
+				page_pool_recycle_direct(tp->rx_pool, new_page);
+				dev->stats.rx_dropped++;
+				goto release_descriptor;
+			}
+
+			skb_put(skb, pkt_size);
+			skb_mark_for_recycle(skb);
+
+			tp->Rx_databuff[entry] = new_page;
+			desc->addr = cpu_to_le64(page_pool_get_dma_addr(new_page));
+		}
 
 		rtl8169_rx_csum(skb, status);
 		skb->protocol = eth_type_trans(skb, dev);
