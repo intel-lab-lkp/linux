@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
 if [ -z "$SRCARCH" ]; then
-	echo 'sync-check.sh: error: missing $SRCARCH environment variable' >&2
+	echo "$0: error: missing \$SRCARCH environment variable" >&2
 	exit 1
 fi
 
