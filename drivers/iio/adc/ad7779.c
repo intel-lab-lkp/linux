@@ -837,6 +837,8 @@ static int ad7779_setup_without_backend(struct ad7779_state *st, struct iio_dev 
 	st->trig->ops = &ad7779_trigger_ops;
 
 	iio_trigger_set_drvdata(st->trig, st);
+	init_completion(&st->completion);
+
 
 	ret = devm_request_irq(dev, st->spi->irq, iio_trigger_generic_data_rdy_poll,
 			       IRQF_NO_THREAD | IRQF_NO_AUTOEN, indio_dev->name,
@@ -850,8 +852,6 @@ static int ad7779_setup_without_backend(struct ad7779_state *st, struct iio_dev 
 		return ret;
 
 	indio_dev->trig = iio_trigger_get(st->trig);
-
-	init_completion(&st->completion);
 
 	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
 					      &iio_pollfunc_store_time,
