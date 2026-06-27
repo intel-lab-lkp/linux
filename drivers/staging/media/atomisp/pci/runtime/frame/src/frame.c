@@ -6,6 +6,7 @@
 
 #include <linux/bitops.h>
 #include <linux/math.h>
+#include <linux/overflow.h>
 
 #include "assert_support.h"
 #include "atomisp_internal.h"
@@ -106,8 +107,28 @@ int ia_css_frame_allocate(struct ia_css_frame **frame,
 				      unsigned int raw_bit_depth)
 {
 	int err = 0;
+	u32 bytes;
 
 	if (!frame || width == 0 || height == 0)
+		return -EINVAL;
+
+	/*
+	 * The frame_init_*_planes() helpers compute frame->data_bytes (a u32)
+	 * as width/padded_width * height * bytes-per-pixel * plane-count using
+	 * unmodulated unsigned arithmetic, with no overflow check, and the
+	 * result is then handed to hmm_alloc(). width, height and padded_width
+	 * are user-controlled (e.g. via the v4l2_framebuffer ioctl path in
+	 * atomisp_v4l2_framebuffer_to_css_frame()). A large width/height pair
+	 * makes the size calculation wrap, producing an undersized hmm buffer
+	 * that a subsequent copy then overflows.
+	 *
+	 * Reject up front any dimensions whose worst-case byte count cannot be
+	 * represented in the u32 data_bytes field. The factor 16 conservatively
+	 * bounds the largest per-pixel multiplier across all supported formats
+	 * (up to 6 planes / 3x RGB planes with up to 4 bytes per element).
+	 */
+	if (check_mul_overflow(max(width, padded_width), height, &bytes) ||
+	    check_mul_overflow(bytes, 16u, &bytes))
 		return -EINVAL;
 
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,
