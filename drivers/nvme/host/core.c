@@ -58,6 +58,21 @@ module_param_named(io_timeout, nvme_io_timeout, uint, 0644);
 MODULE_PARM_DESC(io_timeout, "timeout in seconds for I/O");
 EXPORT_SYMBOL_GPL(nvme_io_timeout);
 
+#define NVME_FW_ACT_POLL_INTERVAL_MIN_MS	10
+#define NVME_FW_ACT_POLL_INTERVAL_MAX_MS	100
+static int fw_act_poll_interval_ms_set(const char *val,
+				       const struct kernel_param *kp);
+static const struct kernel_param_ops fw_act_poll_interval_ms_ops = {
+	.set = fw_act_poll_interval_ms_set,
+	.get = param_get_uint,
+};
+
+static unsigned int fw_act_poll_interval_ms = 100;
+module_param_cb(fw_act_poll_interval_ms, &fw_act_poll_interval_ms_ops,
+		&fw_act_poll_interval_ms, 0644);
+MODULE_PARM_DESC(fw_act_poll_interval_ms,
+		 "firmware activation polling interval in ms (10-100)");
+
 static unsigned char shutdown_timeout = 5;
 module_param(shutdown_timeout, byte, 0644);
 MODULE_PARM_DESC(shutdown_timeout, "timeout in seconds for controller shutdown");
@@ -105,6 +120,13 @@ static bool disable_pi_offsets = false;
 module_param(disable_pi_offsets, bool, 0444);
 MODULE_PARM_DESC(disable_pi_offsets,
 	"disable protection information if it has an offset");
+
+static int fw_act_poll_interval_ms_set(const char *val,
+				       const struct kernel_param *kp)
+{
+	return param_set_uint_minmax(val, kp, NVME_FW_ACT_POLL_INTERVAL_MIN_MS,
+				     NVME_FW_ACT_POLL_INTERVAL_MAX_MS);
+}
 
 /*
  * nvme_wq - hosts nvme related works that are not reset or delete
@@ -4813,7 +4835,7 @@ static void nvme_fw_act_work(struct work_struct *work)
 			nvme_try_sched_reset(ctrl);
 			return;
 		}
-		msleep(100);
+		msleep(READ_ONCE(fw_act_poll_interval_ms));
 	}
 
 	if (!nvme_change_ctrl_state(ctrl, NVME_CTRL_CONNECTING) ||
