@@ -1590,14 +1590,14 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Validate some global module parameters */
 	ret = hfi1_validate_rcvhdrcnt(dd, rcvhdrcnt);
 	if (ret)
-		goto bail;
+		goto free_dd;
 
 	/* use the encoding function as a sanitization check */
 	if (!encode_rcv_header_entry_size(hfi1_hdrq_entsize)) {
 		dd_dev_err(dd, "Invalid HdrQ Entry size %u\n",
 			   hfi1_hdrq_entsize);
 		ret = -EINVAL;
-		goto bail;
+		goto free_dd;
 	}
 
 	/* The receive eager buffer size must be set before the receive
@@ -1622,7 +1622,7 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	} else {
 		dd_dev_err(dd, "Invalid Eager buffer size of 0\n");
 		ret = -EINVAL;
-		goto bail;
+		goto free_dd;
 	}
 
 	/* restrict value of hfi1_rcvarr_split */
@@ -1630,7 +1630,7 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	ret = hfi1_pcie_init(dd);
 	if (ret)
-		goto bail;
+		goto free_dd;
 
 	/*
 	 * Do device-specific initialization, function table setup, dd
@@ -1642,7 +1642,7 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	ret = create_workqueues(dd);
 	if (ret)
-		goto clean_bail;
+		goto postinit_bail;
 
 	/* do the generic initialization */
 	initfail = hfi1_init(dd, 0);
@@ -1685,6 +1685,7 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 			hfi1_device_remove(dd);
 		if (!ret)
 			hfi1_unregister_ib_device(dd);
+		hfi1_free_rx(dd);
 		postinit_cleanup(dd);
 		if (initfail)
 			ret = initfail;
@@ -1695,8 +1696,18 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	return 0;
 
+postinit_bail:
+	msix_clean_up_interrupts(dd);
+	hfi1_free_rx(dd);
+	postinit_cleanup(dd);
+	goto bail;
+
 clean_bail:
 	hfi1_pcie_cleanup(pdev);
+	goto bail;
+
+free_dd:
+	hfi1_free_devdata(dd);
 bail:
 	return ret;
 }
