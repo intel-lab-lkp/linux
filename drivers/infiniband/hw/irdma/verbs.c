@@ -638,12 +638,9 @@ static int irdma_setup_umode_qp(struct ib_udata *udata,
 	unsigned long flags;
 	int ret;
 
-	ret = ib_copy_from_udata(&req, udata,
-				 min(sizeof(req), udata->inlen));
-	if (ret) {
-		ibdev_dbg(&iwdev->ibdev, "VERBS: ib_copy_from_data fail\n");
+	ret = ib_copy_validate_udata_in(udata, req, user_compl_ctx);
+	if (ret)
 		return ret;
-	}
 
 	iwqp->ctx_info.qp_compl_ctx = req.user_compl_ctx;
 	iwqp->user_mode = 1;
@@ -961,7 +958,6 @@ static int irdma_create_qp(struct ib_qp *ibqp,
 			   struct ib_qp_init_attr *init_attr,
 			   struct ib_udata *udata)
 {
-#define IRDMA_CREATE_QP_MIN_REQ_LEN offsetofend(struct irdma_create_qp_req, user_compl_ctx)
 #define IRDMA_CREATE_QP_MIN_RESP_LEN offsetofend(struct irdma_create_qp_resp, rsvd)
 	struct ib_pd *ibpd = ibqp->pd;
 	struct irdma_pd *iwpd = to_iwpd(ibpd);
@@ -993,8 +989,7 @@ static int irdma_create_qp(struct ib_qp *ibqp,
 	if (err_code)
 		return err_code;
 
-	if (udata && (udata->inlen < IRDMA_CREATE_QP_MIN_REQ_LEN ||
-		      udata->outlen < IRDMA_CREATE_QP_MIN_RESP_LEN))
+	if (udata && udata->outlen < IRDMA_CREATE_QP_MIN_RESP_LEN)
 		return -EINVAL;
 
 	init_info.vsi = &iwdev->vsi;
