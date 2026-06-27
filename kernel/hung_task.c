@@ -25,6 +25,7 @@
 #include <linux/hung_task.h>
 #include <linux/rwsem.h>
 #include <linux/sys_info.h>
+#include <linux/hash.h>
 
 #include <trace/events/sched.h>
 
@@ -125,6 +126,7 @@ static bool task_is_hung(struct task_struct *t, unsigned long timeout)
 	if (switch_count != t->last_switch_count) {
 		t->last_switch_count = switch_count;
 		t->last_switch_time = jiffies;
+		t->hung_task_reported = 0;
 		return false;
 	}
 	if (time_is_after_jiffies(t->last_switch_time + timeout * HZ))
@@ -228,12 +230,14 @@ static inline void debug_show_blocker(struct task_struct *task, unsigned long ti
  * @t: Pointer to the detected hung task.
  * @timeout: Timeout threshold for detecting hung tasks
  * @this_round_count: Count of hung tasks detected in the current iteration
+ * @skip_show_task: Indicating if stack trace should be skipped
  *
  * Print structured information about the specified hung task, if warnings
  * are enabled or if the panic batch threshold is exceeded.
  */
 static void hung_task_info(struct task_struct *t, unsigned long timeout,
-			   unsigned long this_round_count)
+			   unsigned long this_round_count,
+			   unsigned int skip_show_task)
 {
 	trace_sched_process_hang(t);
 
@@ -248,7 +252,11 @@ static void hung_task_info(struct task_struct *t, unsigned long timeout,
 	 * accordingly
 	 */
 	if (sysctl_hung_task_warnings || hung_task_call_panic) {
-		if (sysctl_hung_task_warnings > 0)
+		/*
+		 * Do not exhaust the global warning budget for duplicates;
+		 * only decrement if a full stack trace is being printed.
+		 */
+		if (!skip_show_task && sysctl_hung_task_warnings > 0)
 			sysctl_hung_task_warnings--;
 		pr_err("INFO: task %s:%d blocked%s for more than %ld seconds.\n",
 		       t->comm, t->pid, t->in_iowait ? " in I/O wait" : "",
@@ -261,8 +269,12 @@ static void hung_task_info(struct task_struct *t, unsigned long timeout,
 			pr_err("      Blocked by coredump.\n");
 		pr_err("\"echo 0 > /proc/sys/kernel/hung_task_timeout_secs\""
 			" disables this message.\n");
-		sched_show_task(t);
-		debug_show_blocker(t, timeout);
+		if (!skip_show_task) {
+			sched_show_task(t);
+			debug_show_blocker(t, timeout);
+		} else {
+			pr_err("      Stack trace suppressed. Already reported or duplicate\n");
+		}
 
 		if (!sysctl_hung_task_warnings)
 			pr_info("Future hung task reports are suppressed, see sysctl kernel.hung_task_warnings\n");
@@ -306,6 +318,11 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 	unsigned long this_round_count;
 	int need_warning = sysctl_hung_task_warnings;
 	unsigned long si_mask = hung_task_si_mask;
+	unsigned int skip_show_task;
+#ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
+	unsigned long blocker, blocker_hash[1 << BLOCKER_HASH_BITS] = { 0 };
+	unsigned int hash;
+#endif
 
 	/*
 	 * If the system crashed already then all bets are off,
@@ -326,6 +343,7 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 		}
 
 		if (task_is_hung(t, timeout)) {
+			skip_show_task = t->hung_task_reported;
 			/*
 			 * Increment the global counter so that userspace could
 			 * start migrating tasks ASAP. But count the current
@@ -334,7 +352,22 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 			 */
 			atomic_long_inc(&sysctl_hung_task_detect_count);
 			this_round_count++;
-			hung_task_info(t, timeout, this_round_count);
+
+#ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
+			blocker = READ_ONCE(t->blocker);
+			if (blocker) {
+				blocker &= ~BLOCKER_TYPE_MASK;
+				hash = hash_long(blocker, BLOCKER_HASH_BITS);
+				if (blocker_hash[hash] == blocker)
+					skip_show_task = 1;
+				else
+					blocker_hash[hash] = blocker;
+			}
+#endif
+
+			hung_task_info(t, timeout, this_round_count,
+				       skip_show_task);
+			t->hung_task_reported = 1;
 		}
 	}
  unlock:
