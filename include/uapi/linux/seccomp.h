@@ -137,6 +137,50 @@ struct seccomp_notif_addfd {
 	__u32 newfd_flags;
 };
 
+/**
+ * struct seccomp_notif_pin_install - have the kernel install a sealed
+ * MAP_SHARED mapping of @memfd into the trapped task's mm at @target_addr.
+ *
+ * The supervisor owns @memfd. The kernel installs the mapping into
+ * the trapped task's address space without target-side cooperation
+ * (the target need not mmap or mseal anything itself). The mapping
+ * is marked VM_SEALED at install time, so the target and any
+ * CLONE_VM peer cannot munmap, mremap, mprotect, or MAP_FIXED-stomp
+ * it. The mapping is read-only. The supervisor retains access via its
+ * own mapping of the same memfd in its own mm.
+ *
+ * @memfd must be write-sealed (F_SEAL_WRITE or F_SEAL_FUTURE_WRITE),
+ * otherwise the ioctl fails with -EINVAL. This guarantees the pin's bytes
+ * cannot be rewritten through any other reference to the same memfd (for
+ * example one the target reopened via the supervisor's /proc/<pid>/fd),
+ * not just through the read-only pin itself. F_SEAL_FUTURE_WRITE still
+ * lets the supervisor update the bytes through its own pre-seal mapping.
+ *
+ * @offset lets one memfd back several disjoint read-only pins.
+ *
+ * @id: The ID of an active seccomp notification on this listener,
+ *      identifying the trapped task whose mm receives the pin.
+ * @flags: Reserved, must be 0.
+ * @memfd: Supervisor-side fd for the backing memfd. Must be write-sealed.
+ * @target_addr: Address in the trapped task's mm to install at. Must be
+ *               page-aligned. If non-zero, MAP_FIXED semantics apply, no
+ *               other mapping may exist in [@target_addr, @target_addr +
+ *               @size). If zero, the kernel chooses a free area in the
+ *               target mm. On success the actual mapped address is written
+ *               back here.
+ * @size: Size of the pin in bytes. Must be page-aligned.
+ * @offset: Page-aligned byte offset into @memfd to map from. Zero maps
+ *          from the start of the memfd.
+ */
+struct seccomp_notif_pin_install {
+	__u64 id;
+	__u32 flags;
+	__u32 memfd;
+	__u64 target_addr;
+	__u64 size;
+	__u64 offset;
+};
+
 #define SECCOMP_IOC_MAGIC		'!'
 #define SECCOMP_IO(nr)			_IO(SECCOMP_IOC_MAGIC, nr)
 #define SECCOMP_IOR(nr, type)		_IOR(SECCOMP_IOC_MAGIC, nr, type)
@@ -153,5 +197,15 @@ struct seccomp_notif_addfd {
 						struct seccomp_notif_addfd)
 
 #define SECCOMP_IOCTL_NOTIF_SET_FLAGS	SECCOMP_IOW(4, __u64)
+
+/*
+ * Install a sealed memfd-backed pin in the trapped task's mm without
+ * target-side cooperation. The supervisor owns the backing memfd;
+ * the kernel installs the mapping and marks it VM_SEALED. The actual
+ * mapped address is written back to @target_addr (relevant when it was
+ * passed as 0 to let the kernel choose).
+ */
+#define SECCOMP_IOCTL_NOTIF_PIN_INSTALL	SECCOMP_IOWR(5, \
+						struct seccomp_notif_pin_install)
 
 #endif /* _UAPI_LINUX_SECCOMP_H */
