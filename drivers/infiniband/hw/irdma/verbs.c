@@ -457,7 +457,7 @@ static int irdma_dealloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 
 	irdma_free_rsrc(iwdev->rf, iwdev->rf->allocated_pds, iwpd->sc_pd.pd_id);
 
-	return 0;
+	return ib_respond_empty_udata(udata);
 }
 
 /**
@@ -585,7 +585,7 @@ static int irdma_destroy_qp(struct ib_qp *ibqp, struct ib_udata *udata)
 		iwdev->rf->hwqp1_rsvd = false;
 	irdma_free_qp_rsrc(iwqp);
 
-	return 0;
+	return ib_respond_empty_udata(udata);
 }
 
 /**
@@ -1983,7 +1983,7 @@ static int irdma_destroy_srq(struct ib_srq *ibsrq, struct ib_udata *udata)
 
 	irdma_srq_wq_destroy(iwdev->rf, srq);
 	irdma_srq_free_rsrc(iwdev->rf, iwsrq);
-	return 0;
+	return ib_respond_empty_udata(udata);
 }
 
 /**
@@ -2023,7 +2023,7 @@ static int irdma_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 	spin_unlock_irqrestore(&iwceq->ce_lock, flags);
 	irdma_cq_free_rsrc(iwdev->rf, iwcq);
 
-	return 0;
+	return ib_respond_empty_udata(udata);
 }
 
 /**
@@ -2255,7 +2255,7 @@ static int irdma_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 
 	iwsrq->sc_srq.srq_limit = info->srq_limit;
 
-	return 0;
+	return ib_respond_empty_udata(udata);
 }
 
 static int irdma_setup_umode_srq(struct irdma_device *iwdev,
@@ -3075,7 +3075,7 @@ static int irdma_alloc_mw(struct ib_mw *ibmw, struct ib_udata *udata)
 		return err_code;
 	}
 
-	return 0;
+	return ib_respond_empty_udata(udata);
 }
 
 /**
@@ -4049,7 +4049,7 @@ done:
 
 	kfree(iwmr);
 
-	return 0;
+	return ib_respond_empty_udata(udata);
 }
 
 /**
