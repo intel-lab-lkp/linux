@@ -5076,7 +5076,7 @@ static enum sync_action md_get_active_sync_action(struct mddev *mddev)
 
 enum sync_action md_sync_action(struct mddev *mddev)
 {
-	unsigned long recovery = mddev->recovery;
+	unsigned long recovery = READ_ONCE(mddev->recovery);
 	enum sync_action active_action;
 
 	/*
