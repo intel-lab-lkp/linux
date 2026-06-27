@@ -25,6 +25,12 @@
 #define SECCOMP_FILTER_FLAG_TSYNC_ESRCH		(1UL << 4)
 /* Received notifications wait in killable state (only respond to fatal signals) */
 #define SECCOMP_FILTER_FLAG_WAIT_KILLABLE_RECV	(1UL << 5)
+/*
+ * Declares that this listener's notifier may issue
+ * SECCOMP_IOCTL_NOTIF_PIN_INSTALL / SECCOMP_IOCTL_NOTIF_SEND_REDIRECT. At most
+ * one such filter may exist in a task's filter chain. Requires NEW_LISTENER.
+ */
+#define SECCOMP_FILTER_FLAG_REDIRECT		(1UL << 6)
 
 /*
  * All BPF programs must return a 32-bit value.
@@ -139,7 +145,9 @@ struct seccomp_notif_addfd {
 
 /**
  * struct seccomp_notif_pin_install - have the kernel install a sealed
- * MAP_SHARED mapping of @memfd into the trapped task's mm at @target_addr.
+ * MAP_SHARED mapping of @memfd into the trapped task's mm at @target_addr,
+ * which SECCOMP_IOCTL_NOTIF_SEND_REDIRECT can then use as a target for
+ * substituted pointer arguments.
  *
  * The supervisor owns @memfd. The kernel installs the mapping into
  * the trapped task's address space without target-side cooperation
@@ -198,6 +206,61 @@ struct seccomp_notif_pin_install {
 
 #define SECCOMP_IOCTL_NOTIF_SET_FLAGS	SECCOMP_IOW(4, __u64)
 
+/* Valid flags for struct seccomp_notif_resp_redirect. */
+#define SECCOMP_REDIRECT_FLAG_CONTINUE (1UL << 0)
+
+/*
+ * Number of syscall argument registers a redirect response may
+ * substitute (matches struct seccomp_data::args[]).
+ */
+#define SECCOMP_REDIRECT_ARGS 6
+
+/**
+ * struct seccomp_notif_resp_redirect - resume the trapped syscall with
+ * substituted arg-register values, optionally pointing into previously
+ * installed pinned-memfd regions.
+ *
+ * Like SECCOMP_USER_NOTIF_FLAG_CONTINUE the syscall actually runs, but the
+ * kernel first rewrites the arg registers selected by @args_mask. Each
+ * pointer substitution (@ptr_mask) is validated against the trapped task's
+ * current address space: the whole access [args[i], args[i] + ptr_len[i])
+ * must lie inside a single VM_SEALED, read-only mapping of @memfd. No per-pin
+ * bookkeeping is kept; authorization is re-derived from the live mapping, so
+ * a target that has exited or execve()d (its mapping gone) simply fails
+ * validation. Original registers are saved and restored at syscall exit for
+ * ABI compliance - except after a successful execve, whose new register file
+ * is left untouched (the redirect still applies, as execve copies the
+ * pathname from the immutable pin before the old mm is gone, closing that
+ * TOCTOU too).
+ *
+ * @id: The ID of the seccomp notification this response consumes.
+ * @flags: SECCOMP_REDIRECT_FLAG_*. CONTINUE must be set.
+ * @args_mask: Bit i set means args[i] replaces the trapped task's
+ *             corresponding arg register before the syscall runs.
+ * @ptr_mask: Subset of @args_mask. Bit i set means args[i] is a pointer and
+ *            the access [args[i], args[i] + ptr_len[i]) is validated to lie
+ *            entirely inside a single VM_SEALED, read-only mapping of @memfd.
+ *            Scalar replacements (in @args_mask but not @ptr_mask) are
+ *            written verbatim.
+ * @memfd: Supervisor-side fd for the backing memfd whose sealed mapping the
+ *         pointer substitutions must fall within. Consulted only when
+ *         @ptr_mask is non-zero.
+ * @args: Replacement values for the arg registers.
+ * @ptr_len: For each bit set in @ptr_mask, ptr_len[i] is the byte length of
+ *           the access starting at args[i]; it must be non-zero and args[i] +
+ *           ptr_len[i] must not overflow. For every i whose bit is clear in
+ *           @ptr_mask it must be 0.
+ */
+struct seccomp_notif_resp_redirect {
+	__u64 id;
+	__u32 flags;
+	__u32 args_mask;
+	__u32 ptr_mask;
+	__u32 memfd;
+	__u64 args[SECCOMP_REDIRECT_ARGS];
+	__u64 ptr_len[SECCOMP_REDIRECT_ARGS];
+};
+
 /*
  * Install a sealed memfd-backed pin in the trapped task's mm without
  * target-side cooperation. The supervisor owns the backing memfd;
@@ -207,5 +270,14 @@ struct seccomp_notif_pin_install {
  */
 #define SECCOMP_IOCTL_NOTIF_PIN_INSTALL	SECCOMP_IOWR(5, \
 						struct seccomp_notif_pin_install)
+
+/*
+ * Resume the trapped syscall with substituted arg-register values
+ * pointing into an installed pin. The kernel saves and restores the
+ * original registers at syscall exit so the caller observes ABI-
+ * correct register preservation.
+ */
+#define SECCOMP_IOCTL_NOTIF_SEND_REDIRECT	SECCOMP_IOW(6, \
+						struct seccomp_notif_resp_redirect)
 
 #endif /* _UAPI_LINUX_SECCOMP_H */
