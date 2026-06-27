@@ -583,7 +583,11 @@ static inline int ip_vs_dest_totalconns(struct ip_vs_dest *dest)
 static inline void
 ip_vs_bind_dest(struct ip_vs_conn *cp, struct ip_vs_dest *dest)
 {
+	const unsigned int hash_flags = IP_VS_CONN_F_FWD_MASK |
+					IP_VS_CONN_F_NOOUTPUT |
+					IP_VS_CONN_F_ONE_PACKET;
 	unsigned int conn_flags;
+	__u32 old_flags;
 	__u32 flags;
 
 	/* if dest is NULL, then return directly */
@@ -596,7 +600,8 @@ ip_vs_bind_dest(struct ip_vs_conn *cp, struct ip_vs_dest *dest)
 	conn_flags = atomic_read(&dest->conn_flags);
 	if (cp->protocol != IPPROTO_UDP)
 		conn_flags &= ~IP_VS_CONN_F_ONE_PACKET;
-	flags = cp->flags;
+	old_flags = cp->flags;
+	flags = old_flags;
 	/* Bind with the destination and its corresponding transmitter */
 	if (flags & IP_VS_CONN_F_SYNC) {
 		/* if the connection is not template and is created
@@ -608,6 +613,13 @@ ip_vs_bind_dest(struct ip_vs_conn *cp, struct ip_vs_dest *dest)
 		flags &= ~(IP_VS_CONN_F_FWD_MASK | IP_VS_CONN_F_NOOUTPUT);
 	}
 	flags |= conn_flags;
+
+	/* Preserve conn_tab hashing invariants after late binding. */
+	if (old_flags & IP_VS_CONN_F_HASHED) {
+		flags &= ~hash_flags;
+		flags |= old_flags & hash_flags;
+	}
+
 	cp->flags = flags;
 	cp->dest = dest;
 
