@@ -237,17 +237,13 @@ static int veml6075_get_uvi_micro(struct veml6075_data *data, int uva_comp,
 	if (int_index < 0)
 		return int_index;
 
-	switch (int_index) {
-	case VEML6075_IT_50_MS:
-		return uvia_micro + uvib_micro;
-	case VEML6075_IT_100_MS:
-	case VEML6075_IT_200_MS:
-	case VEML6075_IT_400_MS:
-	case VEML6075_IT_800_MS:
-		return (uvia_micro + uvib_micro) / (2 << int_index);
-	default:
-		return -EINVAL;
-	}
+	/*
+	 * The raw counts scale linearly with the integration time, which
+	 * doubles at each step (50, 100, 200, 400, 800 ms == 50 << int_index
+	 * ms; int_index is bounded to 0..4 above). Normalise to the 50 ms
+	 * base by dividing by 2^int_index; (1 << 0) == 1 leaves 50 ms as-is.
+	 */
+	return (uvia_micro + uvib_micro) / (1 << int_index);
 }
 
 static int veml6075_read_uvi(struct veml6075_data *data, int *val, int *val2)
