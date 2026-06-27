@@ -33,6 +33,7 @@
 #include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/ioport.h>
+#include <linux/overflow.h>
 #include <uapi/linux/qemu_fw_cfg.h>
 #include <linux/delay.h>
 #include <linux/crash_dump.h>
@@ -641,7 +642,8 @@ static int fw_cfg_register_dir_entries(void)
 		return ret;
 
 	count = be32_to_cpu(files_count);
-	dir_size = count * sizeof(struct fw_cfg_file);
+	if (check_mul_overflow((size_t)count, sizeof(*dir), &dir_size))
+		return -EOVERFLOW;
 
 	dir = kmalloc(dir_size, GFP_KERNEL);
 	if (!dir)
