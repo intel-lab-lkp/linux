@@ -146,5 +146,8 @@ const struct zcomp_ops backend_lz4 = {
 	.destroy_ctx	= lz4_destroy,
 	.setup_params	= lz4_setup_params,
 	.release_params	= lz4_release_params,
+	.caps		= ZCOMP_CAP_DICT | ZCOMP_CAP_LEVEL,
+	.level_min	= LZ4_ACCELERATION_DEFAULT,
+	.level_max	= 65535,
 	.name		= "lz4",
 };

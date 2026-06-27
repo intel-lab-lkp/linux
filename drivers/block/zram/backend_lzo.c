@@ -55,5 +55,6 @@ const struct zcomp_ops backend_lzo = {
 	.destroy_ctx	= lzo_destroy,
 	.setup_params	= lzo_setup_params,
 	.release_params	= lzo_release_params,
+	.caps		= 0,
 	.name		= "lzo",
 };

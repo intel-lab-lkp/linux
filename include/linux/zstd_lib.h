@@ -1241,6 +1241,7 @@ ZSTDLIB_API size_t ZSTD_sizeof_DDict(const ZSTD_DDict* ddict);
 #define ZSTD_SEARCHLOG_MIN        1
 #define ZSTD_MINMATCH_MAX         7   /* only for ZSTD_fast, other strategies are limited to 6 */
 #define ZSTD_MINMATCH_MIN         3   /* only for ZSTD_btopt+, faster strategies are limited to 4 */
+#define ZSTD_MAX_CLEVEL		22
 #define ZSTD_TARGETLENGTH_MAX    ZSTD_BLOCKSIZE_MAX
 #define ZSTD_TARGETLENGTH_MIN     0   /* note : comparing this constant to an unsigned results in a tautological test */
 #define ZSTD_STRATEGY_MIN        ZSTD_fast

@@ -9,6 +9,9 @@
 #include <linux/cpuhotplug.h>
 #include <linux/vmalloc.h>
 #include <linux/sysfs.h>
+#include <linux/lz4.h>
+#include <linux/zlib.h>
+#include <linux/zstd.h>
 
 #include "zcomp.h"
 
@@ -92,6 +95,26 @@ const char *zcomp_lookup_backend_name(const char *comp)
 		return backend->name;
 
 	return NULL;
+}
+
+unsigned int zcomp_get_caps(const char *comp)
+{
+	const struct zcomp_ops *backend = lookup_backend_ops(comp);
+
+	return backend ? backend->caps : 0;
+}
+
+int zcomp_validate_level(const char *comp, s32 level)
+{
+	const struct zcomp_ops *backend = lookup_backend_ops(comp);
+
+	if (!backend)
+		return -EINVAL;
+	if (!(backend->caps & ZCOMP_CAP_LEVEL))
+		return -EOPNOTSUPP;
+	if (level < backend->level_min || level > backend->level_max)
+		return -EINVAL;
+	return 0;
 }
 
 /* show available compressors */
