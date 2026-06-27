@@ -1956,9 +1956,17 @@ void ncsi_unregister_dev(struct ncsi_dev *nd)
 {
 	struct ncsi_dev_priv *ndp = TO_NCSI_DEV_PRIV(nd);
 	struct ncsi_package *np, *tmp;
+	struct ncsi_channel *nc, *ntmp;
 	unsigned long flags;
 
 	dev_remove_pack(&ndp->ptype);
+
+	disable_work_sync(&ndp->work);
+
+	spin_lock_irqsave(&ndp->lock, flags);
+	list_for_each_entry_safe(nc, ntmp, &ndp->channel_queue, link)
+		list_del_init(&nc->link);
+	spin_unlock_irqrestore(&ndp->lock, flags);
 
 	list_for_each_entry_safe(np, tmp, &ndp->packages, node)
 		ncsi_remove_package(np);
@@ -1967,7 +1975,6 @@ void ncsi_unregister_dev(struct ncsi_dev *nd)
 	list_del_rcu(&ndp->node);
 	spin_unlock_irqrestore(&ncsi_dev_lock, flags);
 
-	disable_work_sync(&ndp->work);
 
 	kfree(ndp);
 }
