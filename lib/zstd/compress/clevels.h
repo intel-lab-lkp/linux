@@ -17,7 +17,6 @@
 
 /*-=====  Pre-defined compression levels  =====-*/
 
-#define ZSTD_MAX_CLEVEL     22
 
 __attribute__((__unused__))
 

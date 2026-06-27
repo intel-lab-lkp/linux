@@ -1699,21 +1699,24 @@ static int comp_params_store(struct zram *zram, u32 prio, s32 level,
 			     const char *dict_path,
 			     struct deflate_params *deflate_params)
 {
+	void *new_dict = NULL;
 	ssize_t sz = 0;
 
-	comp_params_reset(zram, prio);
-
 	if (dict_path) {
-		sz = kernel_read_file_from_path(dict_path, 0,
-						&zram->params[prio].dict,
-						INT_MAX,
-						NULL,
-						READING_POLICY);
-		if (sz < 0)
+		sz = kernel_read_file_from_path(dict_path, 0, &new_dict,
+						INT_MAX, NULL, READING_POLICY);
+		if (sz < 0) {
+			vfree(new_dict);
+			return sz;
+		} else if (sz == 0) {
+			vfree(new_dict);
 			return -EINVAL;
+		}
 	}
 
+	comp_params_reset(zram, prio);
 	zram->params[prio].dict_sz = sz;
+	zram->params[prio].dict = new_dict;
 	zram->params[prio].level = level;
 	zram->params[prio].deflate.winbits = deflate_params->winbits;
 	return 0;
@@ -1792,6 +1795,19 @@ static ssize_t algorithm_params_store(struct device *dev,
 		prio = lookup_algo_priority(zram, algo, ZRAM_PRIMARY_COMP);
 		if (prio < 0)
 			return -EINVAL;
+	}
+
+	if (zram->comp_algs[prio]) {
+		unsigned int caps = zcomp_get_caps(zram->comp_algs[prio]);
+
+		if (dict_path && !(caps & ZCOMP_CAP_DICT))
+			return -EOPNOTSUPP;
+
+		if (level != ZCOMP_PARAM_NOT_SET) {
+			ret = zcomp_validate_level(zram->comp_algs[prio], level);
+			if (ret)
+				return ret;
+		}
 	}
 
 	ret = comp_params_store(zram, prio, level, dict_path, &deflate_params);

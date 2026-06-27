@@ -124,5 +124,8 @@ const struct zcomp_ops backend_lz4hc = {
 	.destroy_ctx	= lz4hc_destroy,
 	.setup_params	= lz4hc_setup_params,
 	.release_params	= lz4hc_release_params,
+	.caps		= ZCOMP_CAP_DICT | ZCOMP_CAP_LEVEL,
+	.level_min	= LZ4HC_MIN_CLEVEL,
+	.level_max	= LZ4HC_MAX_CLEVEL,
 	.name		= "lz4hc",
 };
