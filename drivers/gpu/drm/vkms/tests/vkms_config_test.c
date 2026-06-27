@@ -396,7 +396,7 @@ static void vkms_config_test_get_connectors(struct kunit *test)
 	KUNIT_ASSERT_EQ(test, n_connectors, 2);
 	n_connectors = 0;
 
-	vkms_config_destroy_connector(connector_cfg2);
+	vkms_config_destroy_connector(config, connector_cfg2);
 	vkms_config_for_each_connector(config, connector_cfg) {
 		n_connectors++;
 		if (connector_cfg != connector_cfg1)
@@ -845,7 +845,7 @@ static void vkms_config_test_invalid_connector_number(struct kunit *test)
 
 	/* Invalid: No connectors */
 	connector_cfg = get_first_connector(config);
-	vkms_config_destroy_connector(connector_cfg);
+	vkms_config_destroy_connector(config, connector_cfg);
 	KUNIT_EXPECT_FALSE(test, vkms_config_is_valid(config));
 
 	/* Invalid: Too many connectors */
@@ -1233,6 +1233,267 @@ static void vkms_config_test_connector_status(struct kunit *test)
 	vkms_config_destroy(config);
 }
 
+static void vkms_config_test_connector_dynamic_status(struct kunit *test)
+{
+	struct vkms_config *config;
+	struct vkms_config_connector *connector_cfg;
+	struct vkms_config_encoder *encoder_cfg;
+	struct vkms_config_crtc *crtc_cfg;
+	struct vkms_config_plane *plane_cfg;
+	enum drm_connector_status status;
+	int err;
+
+	config = vkms_config_create("test");
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
+
+	/* Create a complete pipeline */
+	crtc_cfg = vkms_config_create_crtc(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, crtc_cfg);
+
+	encoder_cfg = vkms_config_create_encoder(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, encoder_cfg);
+
+	connector_cfg = vkms_config_create_connector(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, connector_cfg);
+
+	plane_cfg = vkms_config_create_plane(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, plane_cfg);
+
+	vkms_config_plane_set_type(plane_cfg, DRM_PLANE_TYPE_PRIMARY);
+	err = vkms_config_plane_attach_crtc(plane_cfg, crtc_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+
+	err = vkms_config_encoder_attach_crtc(encoder_cfg, crtc_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+
+	err = vkms_config_connector_attach_encoder(connector_cfg, encoder_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+
+	/* Test dynamic status changes */
+	status = vkms_config_connector_get_status(connector_cfg);
+	KUNIT_EXPECT_EQ(test, status, connector_status_connected);
+
+	vkms_config_connector_set_status(connector_cfg, connector_status_disconnected);
+	status = vkms_config_connector_get_status(connector_cfg);
+	KUNIT_EXPECT_EQ(test, status, connector_status_disconnected);
+
+	/* Configuration should still be valid regardless of connector status */
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	vkms_config_connector_set_status(connector_cfg, connector_status_connected);
+	status = vkms_config_connector_get_status(connector_cfg);
+	KUNIT_EXPECT_EQ(test, status, connector_status_connected);
+
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	/* Test with unknown status */
+	vkms_config_connector_set_status(connector_cfg, connector_status_unknown);
+	status = vkms_config_connector_get_status(connector_cfg);
+	KUNIT_EXPECT_EQ(test, status, connector_status_unknown);
+
+	/* Configuration should still be valid */
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	vkms_config_destroy(config);
+}
+
+static void vkms_config_test_dynamic_connector_validity(struct kunit *test)
+{
+	struct vkms_config *config;
+	struct vkms_config_connector *connector_cfg1, *connector_cfg2;
+	struct vkms_config_encoder *encoder_cfg;
+	struct vkms_config_crtc *crtc_cfg;
+	struct vkms_config_plane *plane_cfg;
+	int err;
+
+	config = vkms_config_create("test");
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
+
+	/* Create a complete pipeline */
+	crtc_cfg = vkms_config_create_crtc(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, crtc_cfg);
+
+	encoder_cfg = vkms_config_create_encoder(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, encoder_cfg);
+
+	connector_cfg1 = vkms_config_create_connector(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, connector_cfg1);
+
+	plane_cfg = vkms_config_create_plane(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, plane_cfg);
+
+	vkms_config_plane_set_type(plane_cfg, DRM_PLANE_TYPE_PRIMARY);
+	err = vkms_config_plane_attach_crtc(plane_cfg, crtc_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+
+	err = vkms_config_encoder_attach_crtc(encoder_cfg, crtc_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+
+	err = vkms_config_connector_attach_encoder(connector_cfg1, encoder_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+
+	/* Valid: Non-dynamic connector */
+	vkms_config_connector_set_dynamic(connector_cfg1, false);
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	/* Valid: Dynamic connector */
+	vkms_config_connector_set_dynamic(connector_cfg1, true);
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	/* Valid: Multiple dynamic connectors */
+	connector_cfg2 = vkms_config_create_connector(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, connector_cfg2);
+	vkms_config_connector_set_dynamic(connector_cfg2, true);
+	err = vkms_config_connector_attach_encoder(connector_cfg2, encoder_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	vkms_config_destroy(config);
+}
+
+static void vkms_config_test_dynamic_connector_parent_validity(struct kunit *test)
+{
+	struct vkms_config *config;
+	struct vkms_config_connector *connector_cfg1, *connector_cfg2, *connector_cfg3;
+	struct vkms_config_encoder *encoder_cfg;
+	struct vkms_config_crtc *crtc_cfg;
+	struct vkms_config_plane *plane_cfg;
+	int err;
+
+	config = vkms_config_create("test");
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
+
+	/* Create a complete pipeline */
+	crtc_cfg = vkms_config_create_crtc(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, crtc_cfg);
+
+	encoder_cfg = vkms_config_create_encoder(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, encoder_cfg);
+
+	connector_cfg1 = vkms_config_create_connector(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, connector_cfg1);
+
+	plane_cfg = vkms_config_create_plane(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, plane_cfg);
+
+	vkms_config_plane_set_type(plane_cfg, DRM_PLANE_TYPE_PRIMARY);
+	err = vkms_config_plane_attach_crtc(plane_cfg, crtc_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+
+	err = vkms_config_encoder_attach_crtc(encoder_cfg, crtc_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+
+	err = vkms_config_connector_attach_encoder(connector_cfg1, encoder_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+
+	/* Valid: Non-dynamic connector with no parent */
+	vkms_config_connector_set_dynamic(connector_cfg1, false);
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	/* Valid: Dynamic connector with no parent */
+	vkms_config_connector_set_dynamic(connector_cfg1, true);
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	/* Valid: Dynamic connector with dynamic parent */
+	connector_cfg2 = vkms_config_create_connector(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, connector_cfg2);
+	vkms_config_connector_set_dynamic(connector_cfg2, true);
+	err = vkms_config_connector_attach_encoder(connector_cfg2, encoder_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+	vkms_config_connector_attach_parent(connector_cfg2, connector_cfg1);
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	/* Valid: Dynamic connector with non-dynamic parent */
+	vkms_config_connector_set_dynamic(connector_cfg1, false);
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	/* Valid: Non-dynamic connector with no parent */
+	vkms_config_connector_attach_parent(connector_cfg2, NULL);
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	/* Valid: Multiple levels of dynamic parent-child relationships */
+	vkms_config_connector_set_dynamic(connector_cfg1, true);
+	vkms_config_connector_attach_parent(connector_cfg2, connector_cfg1);
+	connector_cfg3 = vkms_config_create_connector(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, connector_cfg3);
+	vkms_config_connector_set_dynamic(connector_cfg3, true);
+	err = vkms_config_connector_attach_encoder(connector_cfg3, encoder_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+	vkms_config_connector_attach_parent(connector_cfg3, connector_cfg2);
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	vkms_config_destroy(config);
+}
+
+static void vkms_config_test_dynamic_connector_parent_loop(struct kunit *test)
+{
+	struct vkms_config *config;
+	struct vkms_config_connector *connector_cfg1, *connector_cfg2, *connector_cfg3;
+	struct vkms_config_encoder *encoder_cfg;
+	struct vkms_config_crtc *crtc_cfg;
+	struct vkms_config_plane *plane_cfg;
+	int err;
+
+	config = vkms_config_create("test");
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, config);
+
+	/* Create a complete pipeline */
+	crtc_cfg = vkms_config_create_crtc(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, crtc_cfg);
+
+	encoder_cfg = vkms_config_create_encoder(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, encoder_cfg);
+
+	connector_cfg1 = vkms_config_create_connector(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, connector_cfg1);
+
+	plane_cfg = vkms_config_create_plane(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, plane_cfg);
+
+	vkms_config_plane_set_type(plane_cfg, DRM_PLANE_TYPE_PRIMARY);
+	err = vkms_config_plane_attach_crtc(plane_cfg, crtc_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+
+	err = vkms_config_encoder_attach_crtc(encoder_cfg, crtc_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+
+	err = vkms_config_connector_attach_encoder(connector_cfg1, encoder_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+
+	/* Valid: Single dynamic connector with no parent */
+	vkms_config_connector_set_dynamic(connector_cfg1, true);
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	/* Valid: Two dynamic connectors in a chain */
+	connector_cfg2 = vkms_config_create_connector(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, connector_cfg2);
+	vkms_config_connector_set_dynamic(connector_cfg2, true);
+	err = vkms_config_connector_attach_encoder(connector_cfg2, encoder_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+	vkms_config_connector_attach_parent(connector_cfg2, connector_cfg1);
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	/* Invalid: Create a loop - connector2 -> connector1 -> connector2 */
+	vkms_config_connector_attach_parent(connector_cfg1, connector_cfg2);
+	KUNIT_EXPECT_FALSE(test, vkms_config_is_valid(config));
+
+	/* Fix the loop */
+	vkms_config_connector_attach_parent(connector_cfg1, NULL);
+	KUNIT_EXPECT_TRUE(test, vkms_config_is_valid(config));
+
+	/* Invalid: Create a longer loop - connector1 -> connector2 -> connector3 -> connector1 */
+	connector_cfg3 = vkms_config_create_connector(config);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, connector_cfg3);
+	vkms_config_connector_set_dynamic(connector_cfg3, true);
+	err = vkms_config_connector_attach_encoder(connector_cfg3, encoder_cfg);
+	KUNIT_EXPECT_EQ(test, err, 0);
+	vkms_config_connector_attach_parent(connector_cfg3, connector_cfg2);
+	vkms_config_connector_attach_parent(connector_cfg1, connector_cfg3);
+	KUNIT_EXPECT_FALSE(test, vkms_config_is_valid(config));
+
+	vkms_config_destroy(config);
+}
+
 static struct kunit_case vkms_config_test_cases[] = {
 	KUNIT_CASE(vkms_config_test_empty_config),
 	KUNIT_CASE_PARAM(vkms_config_test_default_config,
@@ -1259,6 +1520,10 @@ static struct kunit_case vkms_config_test_cases[] = {
 	KUNIT_CASE(vkms_config_test_encoder_get_possible_crtcs),
 	KUNIT_CASE(vkms_config_test_connector_get_possible_encoders),
 	KUNIT_CASE(vkms_config_test_connector_status),
+	KUNIT_CASE(vkms_config_test_connector_dynamic_status),
+	KUNIT_CASE(vkms_config_test_dynamic_connector_validity),
+	KUNIT_CASE(vkms_config_test_dynamic_connector_parent_validity),
+	KUNIT_CASE(vkms_config_test_dynamic_connector_parent_loop),
 	{}
 };
 

@@ -126,5 +126,7 @@ int vkms_output_init(struct vkms_device *vkmsdev)
 		}
 	}
 
+	vkms_connector_update_path_properties(vkmsdev);
+
 	return 0;
 }

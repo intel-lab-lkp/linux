@@ -67,4 +67,13 @@ int vkms_connector_hot_attach_encoder(struct vkms_device *vkmsdev,
 				      struct vkms_connector *connector,
 				      struct drm_encoder *encoder);
 
+/**
+ * vkms_connector_update_path_properties() - Update PATH properties for all connectors
+ * @vkmsdev: VKMS device
+ *
+ * This should be called after all connectors are created to ensure parent connectors
+ * have valid DRM object IDs.
+ */
+void vkms_connector_update_path_properties(struct vkms_device *vkmsdev);
+
 #endif /* _VKMS_CONNECTOR_H_ */
