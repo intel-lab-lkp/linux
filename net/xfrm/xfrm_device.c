@@ -321,6 +321,7 @@ int xfrm_dev_state_add(struct net *net, struct xfrm_state *x,
 	}
 
 	xso->dev = dev;
+	xso->ifindex = dev->ifindex;
 	netdev_tracker_alloc(dev, &xso->dev_tracker, GFP_ATOMIC);
 
 	if (xuo->flags & XFRM_OFFLOAD_INBOUND)
