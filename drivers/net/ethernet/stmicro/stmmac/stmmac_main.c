@@ -1647,7 +1647,7 @@ static int stmmac_init_rx_buffers(struct stmmac_priv *priv,
 {
 	struct stmmac_rx_queue *rx_q = &dma_conf->rx_queue[queue];
 	struct stmmac_rx_buffer *buf = &rx_q->buf_pool[i];
-	gfp_t gfp = (GFP_ATOMIC | __GFP_NOWARN);
+	gfp_t gfp = flags;
 
 	if (priv->dma_cap.host_dma_width <= 32)
 		gfp |= GFP_DMA32;
@@ -1676,6 +1676,148 @@ static int stmmac_init_rx_buffers(struct stmmac_priv *priv,
 	stmmac_set_desc_addr(priv, p, buf->addr);
 	if (dma_conf->dma_buf_sz == BUF_SIZE_16KiB)
 		stmmac_init_desc3(priv, p);
+
+	return 0;
+}
+
+/**
+ * stmmac_reinit_rx_descriptors - re-program RX descriptor buffer addresses
+ *				   after stmmac_clear_descriptors()
+ * @priv: driver private structure
+ * @dma_conf: structure holding the dma data
+ * @queue: RX queue index
+ *
+ * Description: Called in the resume path after stmmac_clear_descriptors()
+ * has re-armed the OWN bit on every descriptor.  Walk buf_pool[] and
+ * re-program the buffer-address fields of every RX descriptor from the
+ * buffers that are already attached to the queue.  Slots whose page was
+ * never allocated (GFP_ATOMIC failure before suspend) are re-allocated
+ * here with GFP_KERNEL; the resume path is in process context.
+ *
+ * Between suspend and resume the hardware may have written back status/
+ * length information into the descriptor address fields (RDESx are reused
+ * for status on completion for GMAC4/XGMAC), so the address fields must be
+ * repopulated before the DMA is restarted.
+ *
+ * For XSK slots that have no xdp buffer at suspend time (TX-only socket,
+ * empty fill ring for Rx), xsk_buff_alloc() is attempted but does not
+ * return an error on failure because we can't identify a real TX-only
+ * socket from an alloc error (same as stmmac_alloc_rx_buffers_zc() in
+ * __init_dma_rx_desc_rings); on failure the descriptor is zeroed so the DMA
+ * engine skips the slot safely.
+ *
+ * To avoid the DMA stall after resume in non-XSK mode, this function
+ * re-allocates pages for NULL slots using GFP_KERNEL (the resume path runs
+ * in process context). If allocation fails, -%ENOMEM is returned immediately
+ * and the resume is aborted; the caller should report the error.
+ *
+ * This helper must be called after stmmac_clear_descriptors() and before
+ * stmmac_hw_setup() in stmmac_resume() because we need to wipe the OWN bit
+ * set in stmmac_clear_descriptors() for NULL slots in XSK mode.
+ *
+ * Returns: 0 on success, or a negative errno on allocation failure in
+ * non-XSK mode (e.g. -%ENOMEM).
+ */
+static int stmmac_reinit_rx_descriptors(struct stmmac_priv *priv,
+					struct stmmac_dma_conf *dma_conf,
+					u32 queue)
+{
+	struct stmmac_rx_queue *rx_q = &dma_conf->rx_queue[queue];
+	struct stmmac_rx_buffer *buf;
+	struct dma_desc *p;
+	int i;
+
+	if (rx_q->xsk_pool) {
+		for (i = 0; i < dma_conf->dma_rx_size; i++) {
+			buf = &rx_q->buf_pool[i];
+			p = stmmac_get_rx_desc(priv, rx_q, i);
+
+			/* The XSK pool may not be fully populated (e.g.
+			 * xdpsock TX-only, empty fill ring).  Try to refill
+			 * from the pool; on failure zero the descriptor so the
+			 * DMA engine skips this slot safely.
+			 */
+			if (!buf->xdp) {
+				buf->xdp = xsk_buff_alloc(rx_q->xsk_pool);
+				if (!buf->xdp) {
+					stmmac_clear_desc(priv, p);
+					continue;
+				}
+			}
+
+			stmmac_set_desc_addr(priv, p,
+					     xsk_buff_xdp_get_dma(buf->xdp));
+			stmmac_set_desc_sec_addr(priv, p, 0, false);
+		}
+	} else {
+		for (i = 0; i < dma_conf->dma_rx_size; i++) {
+			buf = &rx_q->buf_pool[i];
+			p = stmmac_get_rx_desc(priv, rx_q, i);
+
+			/* buf->page can be NULL when stmmac_rx_refill() hit a
+			 * GFP_ATOMIC failure before suspend and left the slot
+			 * without a buffer. The resume path runs in process
+			 * context, so re-allocate with GFP_KERNEL. Allocation
+			 * failure aborts the resume.
+			 */
+			if (!buf->page) {
+				int err;
+
+				err = stmmac_init_rx_buffers(priv, dma_conf, p,
+							     i, GFP_KERNEL,
+							     queue);
+				if (err)
+					return err;
+				/* stmmac_init_rx_buffers() already programmed
+				 * the descriptor; skip the reprogramming below.
+				 */
+				continue;
+			}
+
+			stmmac_set_desc_addr(priv, p, buf->addr);
+			stmmac_set_desc_sec_addr(priv, p, buf->sec_addr,
+						 priv->sph_active &&
+						 buf->sec_page);
+
+			if (dma_conf->dma_buf_sz == BUF_SIZE_16KiB)
+				stmmac_init_desc3(priv, p);
+		}
+	}
+
+	/* Chain mode: re-link descriptor 'next' pointers. This is
+	 * allocation-free; it just rewrites the per-descriptor next
+	 * field which may have been clobbered by HW writeback.
+	 */
+	if (priv->descriptor_mode == STMMAC_CHAIN_MODE) {
+		void *des = priv->extend_desc ? (void *)rx_q->dma_erx
+					      : (void *)rx_q->dma_rx;
+
+		stmmac_mode_init(priv, des, rx_q->dma_rx_phy,
+				 dma_conf->dma_rx_size, priv->extend_desc);
+	}
+
+	/* Re-arm OWN=1 on every valid slot.
+	 *
+	 * Two address-programming helpers write des3 unconditionally and
+	 * therefore clear the OWN bit that stmmac_clear_descriptors() set:
+	 *
+	 *  - stmmac_desc_ops.set_sec_addr (called by stmmac_set_desc_sec_addr()):
+	 *    writes des3 with upper_32_bits(addr).
+	 *
+	 *  - stmmac_mode_ops.init() (called by stmmac_mode_init() above): writes
+	 *    des3 with the next-descriptor physical address.
+	 *
+	 * A single pass over valid slots restores OWN=1 after all descriptor
+	 * fields have been written.  NULL slots are left with OWN=0 for XSK mode
+	 * so the Rx DMA engine stalls safely.
+	 */
+	for (i = 0; i < dma_conf->dma_rx_size; i++) {
+		buf = &rx_q->buf_pool[i];
+		p = stmmac_get_rx_desc(priv, rx_q, i);
+
+		if (rx_q->xsk_pool ? !!buf->xdp : !!buf->page)
+			stmmac_set_rx_owner(priv, p, false);
+	}
 
 	return 0;
 }
@@ -8254,6 +8396,7 @@ int stmmac_resume(struct device *dev)
 {
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct stmmac_priv *priv = netdev_priv(ndev);
+	u32 queue;
 	int ret;
 
 	if (priv->plat->resume) {
@@ -8302,6 +8445,25 @@ int stmmac_resume(struct device *dev)
 
 	stmmac_free_tx_skbufs(priv);
 	stmmac_clear_descriptors(priv, &priv->dma_conf);
+
+	/* Re-program the RX descriptor buffer-address fields.  Slots that
+	 * had no page at suspend time (GFP_ATOMIC failure) are re-allocated
+	 * here with GFP_KERNEL; XSK slots without an xdp buffer are refilled
+	 * from the pool if possible.  Any unrecoverable allocation failure
+	 * is reported so the resume can be aborted cleanly.
+	 */
+	for (queue = 0; queue < priv->plat->rx_queues_to_use; queue++) {
+		ret = stmmac_reinit_rx_descriptors(priv, &priv->dma_conf,
+						   queue);
+		if (ret) {
+			netdev_err(priv->dev,
+				   "%s: rx desc reinit failed on queue %u\n",
+				   __func__, queue);
+			mutex_unlock(&priv->lock);
+			rtnl_unlock();
+			return ret;
+		}
+	}
 
 	ret = stmmac_hw_setup(ndev);
 	if (ret < 0) {
