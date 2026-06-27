@@ -665,6 +665,9 @@ static void ath_tx_complete_aggr(struct ath_softc *sc, struct ath_txq *txq,
 			 * queue to retain ordering
 			 */
 			__skb_queue_tail(&bf_pending, skb);
+
+			if (!list_empty(&bf_head))
+				list_del_init(&bf->list);
 		}
 
 		bf = bf_next;
