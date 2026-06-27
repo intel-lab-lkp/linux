@@ -394,11 +394,31 @@ static void pn533_build_cmd_frame(struct pn533 *dev, u8 cmd_code,
 	ops->tx_frame_finish(skb->data);
 }
 
+static void pn533_set_current_cmd(struct pn533 *dev, struct pn533_cmd *cmd)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&dev->cmd_state_lock, flags);
+	dev->cmd = cmd;
+	spin_unlock_irqrestore(&dev->cmd_state_lock, flags);
+}
+
 static int pn533_send_async_complete(struct pn533 *dev)
 {
-	struct pn533_cmd *cmd = dev->cmd;
+	struct pn533_cmd *cmd;
 	struct sk_buff *resp;
+	unsigned long flags;
 	int status, rc = 0;
+
+	/*
+	 * Detach the current command before freeing it, so a concurrent
+	 * pn533_recv_frame() either observes a valid command under the lock
+	 * or a NULL dev->cmd and stops touching the freed object.
+	 */
+	spin_lock_irqsave(&dev->cmd_state_lock, flags);
+	cmd = dev->cmd;
+	dev->cmd = NULL;
+	spin_unlock_irqrestore(&dev->cmd_state_lock, flags);
 
 	if (!cmd) {
 		dev_dbg(dev->dev, "%s: cmd not set\n", __func__);
@@ -430,7 +450,6 @@ static int pn533_send_async_complete(struct pn533 *dev)
 
 done:
 	kfree(cmd);
-	dev->cmd = NULL;
 	return rc;
 }
 
@@ -458,10 +477,10 @@ static int __pn533_send_async(struct pn533 *dev, u8 cmd_code,
 	mutex_lock(&dev->cmd_lock);
 
 	if (!dev->cmd_pending) {
-		dev->cmd = cmd;
+		pn533_set_current_cmd(dev, cmd);
 		rc = dev->phy_ops->send_frame(dev, req);
 		if (rc) {
-			dev->cmd = NULL;
+			pn533_set_current_cmd(dev, NULL);
 			goto error;
 		}
 
@@ -529,10 +548,10 @@ static int pn533_send_cmd_direct_async(struct pn533 *dev, u8 cmd_code,
 
 	pn533_build_cmd_frame(dev, cmd_code, req);
 
-	dev->cmd = cmd;
+	pn533_set_current_cmd(dev, cmd);
 	rc = dev->phy_ops->send_frame(dev, req);
 	if (rc < 0) {
-		dev->cmd = NULL;
+		pn533_set_current_cmd(dev, NULL);
 		kfree(cmd);
 	}
 
@@ -569,10 +588,10 @@ static void pn533_wq_cmd(struct work_struct *work)
 
 	mutex_unlock(&dev->cmd_lock);
 
-	dev->cmd = cmd;
+	pn533_set_current_cmd(dev, cmd);
 	rc = dev->phy_ops->send_frame(dev, cmd->req);
 	if (rc < 0) {
-		dev->cmd = NULL;
+		pn533_set_current_cmd(dev, NULL);
 		dev_kfree_skb(cmd->req);
 		kfree(cmd);
 		return;
@@ -2165,6 +2184,15 @@ _error:
  */
 void pn533_recv_frame(struct pn533 *dev, struct sk_buff *skb, int status)
 {
+	unsigned long flags;
+
+	/*
+	 * Hold cmd_state_lock across the whole receive path so the current
+	 * command cannot be freed by pn533_send_async_complete() between the
+	 * dev->cmd check and the stores into it.
+	 */
+	spin_lock_irqsave(&dev->cmd_state_lock, flags);
+
 	if (!dev->cmd)
 		goto sched_wq;
 
@@ -2182,6 +2210,7 @@ void pn533_recv_frame(struct pn533 *dev, struct sk_buff *skb, int status)
 
 	if (pn533_rx_frame_is_ack(skb->data)) {
 		dev_dbg(dev->dev, "%s: Received ACK frame\n", __func__);
+		spin_unlock_irqrestore(&dev->cmd_state_lock, flags);
 		dev_kfree_skb(skb);
 		return;
 	}
@@ -2200,6 +2229,7 @@ void pn533_recv_frame(struct pn533 *dev, struct sk_buff *skb, int status)
 	dev->cmd->resp = skb;
 
 sched_wq:
+	spin_unlock_irqrestore(&dev->cmd_state_lock, flags);
 	queue_work(dev->wq, &dev->cmd_complete_work);
 }
 EXPORT_SYMBOL(pn533_recv_frame);
@@ -2760,6 +2790,7 @@ struct pn533 *pn53x_common_init(u32 device_type,
 	priv->device_type = device_type;
 
 	mutex_init(&priv->cmd_lock);
+	spin_lock_init(&priv->cmd_state_lock);
 
 	INIT_WORK(&priv->cmd_work, pn533_wq_cmd);
 	INIT_WORK(&priv->cmd_complete_work, pn533_wq_cmd_complete);

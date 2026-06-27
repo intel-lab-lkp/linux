@@ -153,6 +153,7 @@ struct pn533 {
 	struct pn533_cmd *cmd;
 	u8 cmd_pending;
 	struct mutex cmd_lock;  /* protects cmd queue */
+	spinlock_t cmd_state_lock;  /* protects dev->cmd lifetime */
 
 	void *cmd_complete_mi_arg;
 	void *cmd_complete_dep_arg;
