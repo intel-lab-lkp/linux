@@ -154,12 +154,14 @@ static void poll_napi(struct net_device *dev)
 	struct napi_struct *napi;
 	int cpu = smp_processor_id();
 
+	rcu_read_lock();
 	list_for_each_entry_rcu(napi, &dev->napi_list, dev_list) {
 		if (cmpxchg(&napi->poll_owner, -1, cpu) == -1) {
 			poll_one_napi(napi);
 			smp_store_release(&napi->poll_owner, -1);
 		}
 	}
+	rcu_read_unlock();
 }
 
 void netpoll_poll_dev(struct net_device *dev)
