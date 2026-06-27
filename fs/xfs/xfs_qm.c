@@ -1663,8 +1663,9 @@ xfs_qm_mount_quotas(
 
  write_changes:
 	/*
-	 * We actually don't have to acquire the m_sb_lock at all.
-	 * This can only be called from mount, and that's single threaded. XXX
+	 * Mount is single-threaded, so this does not need m_sb_lock for
+	 * serialization. Take it anyway to keep sb_qflags updates consistent
+	 * with the runtime quota update paths.
 	 */
 	spin_lock(&mp->m_sb_lock);
 	sbf = mp->m_sb.sb_qflags;
