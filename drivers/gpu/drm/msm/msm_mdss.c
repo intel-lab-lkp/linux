@@ -284,8 +284,12 @@ static int msm_mdss_disable(struct msm_mdss *msm_mdss)
 
 	clk_bulk_disable_unprepare(msm_mdss->num_clocks, msm_mdss->clocks);
 
-	for (i = 0; i < msm_mdss->num_mdp_paths; i++)
-		icc_set_bw(msm_mdss->mdp_path[i], 0, 0);
+	for (i = 0; i < msm_mdss->num_mdp_paths; i++) {
+		if (of_device_is_compatible(msm_mdss->dev->of_node, "qcom,sdm845-mdss") && i == 1)
+			icc_set_bw(msm_mdss->mdp_path[i], 0, 1);
+		else
+			icc_set_bw(msm_mdss->mdp_path[i], 0, 0);
+	}
 
 	if (msm_mdss->reg_bus_path)
 		icc_set_bw(msm_mdss->reg_bus_path, 0, 0);
