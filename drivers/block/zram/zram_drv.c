@@ -57,6 +57,7 @@ static size_t huge_class_size;
 static const struct block_device_operations zram_devops;
 
 static void slot_free(struct zram *zram, u32 index);
+static void comp_params_reset(struct zram *zram, u32 prio);
 #define slot_dep_map(zram, index) (&(zram)->table[(index)].dep_map)
 
 static void slot_lock_init(struct zram *zram, u32 index)
@@ -1681,6 +1682,7 @@ static int __comp_algorithm_store(struct zram *zram, u32 prio, const char *buf)
 	}
 
 	comp_algorithm_set(zram, prio, alg);
+	comp_params_reset(zram, prio);
 	return 0;
 }
 
