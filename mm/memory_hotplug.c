@@ -2208,8 +2208,11 @@ void try_offline_node(int nid)
 
 	/*
 	 * all memory/cpu of this node are removed, we can offline this
-	 * node now.
+	 * node now.  Fold any pending per-cpu vmstat diffs into the global
+	 * counters first: once the node leaves the online set the periodic
+	 * fold skips it, orphaning the residual on a later online.
 	 */
+	sync_vm_stats();
 	node_set_offline(nid);
 	unregister_node(nid);
 }

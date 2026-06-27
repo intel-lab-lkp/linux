@@ -293,6 +293,7 @@ extern void __dec_node_state(struct pglist_data *, enum node_stat_item);
 
 void quiet_vmstat(void);
 void cpu_vm_stats_fold(int cpu);
+void sync_vm_stats(void);
 void refresh_zone_stat_thresholds(void);
 
 void drain_zonestat(struct zone *zone, struct per_cpu_zonestat *);
@@ -397,6 +398,7 @@ static inline void __dec_node_page_state(struct page *page,
 
 static inline void refresh_zone_stat_thresholds(void) { }
 static inline void cpu_vm_stats_fold(int cpu) { }
+static inline void sync_vm_stats(void) { }
 static inline void quiet_vmstat(void) { }
 static inline void vmstat_flush_workqueue(void) { }
 

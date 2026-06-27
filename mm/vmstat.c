@@ -941,6 +941,16 @@ void cpu_vm_stats_fold(int cpu)
 	fold_diff(global_zone_diff, global_node_diff);
 }
 
+static void vmstat_fold_work(struct work_struct *w)
+{
+	refresh_cpu_vm_stats(false);
+}
+
+void sync_vm_stats(void)
+{
+	schedule_on_each_cpu(vmstat_fold_work);
+}
+
 /*
  * this is only called if !populated_zone(zone), which implies no other users of
  * pset->vm_stat_diff[] exist.
