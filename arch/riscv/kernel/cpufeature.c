@@ -322,6 +322,16 @@ static const unsigned int riscv_a_exts[] = {
 	RISCV_ISA_EXT_ZALRSC,
 };
 
+static const unsigned int riscv_g_bundled_exts[] = {
+	RISCV_ISA_EXT_i,
+	RISCV_ISA_EXT_m,
+	RISCV_ISA_EXT_a,
+	RISCV_ISA_EXT_f,
+	RISCV_ISA_EXT_d,
+	RISCV_ISA_EXT_ZICSR,
+	RISCV_ISA_EXT_ZIFENCEI
+};
+
 #define RISCV_ISA_EXT_ZKN	\
 	RISCV_ISA_EXT_ZBKB,	\
 	RISCV_ISA_EXT_ZBKC,	\
@@ -495,6 +505,7 @@ const struct riscv_isa_ext_data riscv_isa_ext[] = {
 	__RISCV_ISA_EXT_SUPERSET(a, RISCV_ISA_EXT_a, riscv_a_exts),
 	__RISCV_ISA_EXT_DATA_VALIDATE(f, RISCV_ISA_EXT_f, riscv_ext_f_validate),
 	__RISCV_ISA_EXT_DATA_VALIDATE(d, RISCV_ISA_EXT_d, riscv_ext_d_validate),
+	__RISCV_ISA_EXT_BUNDLE(g, riscv_g_bundled_exts),
 	__RISCV_ISA_EXT_DATA(q, RISCV_ISA_EXT_q),
 	__RISCV_ISA_EXT_SUPERSET(c, RISCV_ISA_EXT_c, riscv_c_exts),
 	__RISCV_ISA_EXT_SUPERSET_VALIDATE(v, RISCV_ISA_EXT_v, riscv_v_exts, riscv_ext_vector_float_validate),
