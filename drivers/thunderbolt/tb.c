@@ -2313,6 +2313,7 @@ static int tb_tunnel_pci(struct tb *tb, struct tb_switch *sw)
 		tb_sw_warn(sw, "failed to connect xHCI\n");
 
 	list_add_tail(&tunnel->list, &tcm->tunnel_list);
+	tb_tunnel_put(tunnel);
 	return 0;
 }
 
