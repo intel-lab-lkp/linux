@@ -381,6 +381,13 @@ static int net1080_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 	skb_trim(skb, skb->len - sizeof *trailer);
 
 	if ((packet_len & 0x01) == 0) {
+		if (packet_len >= skb->len) {
+			dev->net->stats.rx_frame_errors++;
+			netdev_dbg(dev->net, "bad packet len %d (expected %d)\n",
+				   skb->len, packet_len);
+			nc_ensure_sync(dev);
+			return 0;
+		}
 		if (skb->data [packet_len] != PAD_BYTE) {
 			dev->net->stats.rx_frame_errors++;
 			netdev_dbg(dev->net, "bad pad\n");
