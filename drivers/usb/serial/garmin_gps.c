@@ -1026,11 +1026,9 @@ static int garmin_write_bulk(struct usb_serial_port *port,
 		count = status;
 		usb_unanchor_urb(urb);
 		kfree(buffer);
+		usb_free_urb(urb);
+		return count;
 	}
-
-	/* we are done with this urb, so let the host driver
-	 * really free it when it is finished with it */
-	usb_free_urb(urb);
 
 	return count;
 }
