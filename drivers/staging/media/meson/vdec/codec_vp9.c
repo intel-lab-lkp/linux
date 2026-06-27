@@ -1238,6 +1238,8 @@ static void codec_vp9_show_existing_frame(struct codec_vp9 *vp9)
 	pr_debug("showing frame %u\n", param->p.frame_to_show_idx);
 }
 
+static bool codec_vp9_is_ref(struct codec_vp9 *vp9, struct vp9_frame *frame);
+
 static void codec_vp9_rm_noshow_frame(struct amvdec_session *sess)
 {
 	struct codec_vp9 *vp9 = sess->priv;
@@ -1245,6 +1247,18 @@ static void codec_vp9_rm_noshow_frame(struct amvdec_session *sess)
 
 	list_for_each_entry(tmp, &vp9->ref_frames_list, list) {
 		if (tmp->show)
+			continue;
+
+		/*
+		 * Mirror codec_vp9_show_frame(): never free an active
+		 * reference frame, the previously decoded frame, or the
+		 * current frame here. prev_frame is still dereferenced by the
+		 * MV predictor in codec_vp9_set_mpred_mv(), and freeing an
+		 * in-use altref/reference also desyncs codec_vp9_sync_ref();
+		 * either is a use-after-free of an in-use frame.
+		 */
+		if (codec_vp9_is_ref(vp9, tmp) || tmp == vp9->prev_frame ||
+		    tmp == vp9->cur_frame)
 			continue;
 
 		pr_debug("rm noshow: %u\n", tmp->index);
