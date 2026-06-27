@@ -277,7 +277,7 @@ static inline bool file_mmap_ok(struct file *file, struct inode *inode,
 }
 
 /**
- * do_mmap() - Perform a userland memory mapping into the current process
+ * __do_mmap() - Perform a userland memory mapping into @mm's
  * address space of length @len with protection bits @prot, mmap flags @flags
  * (from which VMA flags will be inferred), and any additional VMA flags to
  * apply @vm_flags. If this is a file-backed mapping then the file is specified
@@ -307,8 +307,11 @@ static inline bool file_mmap_ok(struct file *file, struct inode *inode,
  * start of a VMA, rather only the start of a valid mapped range of length
  * @len bytes, rounded down to the nearest page size.
  *
- * The caller must write-lock current->mm->mmap_lock.
+ * The caller must write-lock @mm->mmap_lock. do_mmap() is the common
+ * wrapper that targets current->mm.
  *
+ * @mm: The mm_struct to install the mapping into. The caller must hold a
+ * reference and write-lock its mmap_lock.
  * @file: An optional struct file pointer describing the file which is to be
  * mapped, if a file-backed mapping.
  * @addr: If non-zero, hints at (or if @flags has MAP_FIXED set, specifies) the
@@ -333,13 +336,12 @@ static inline bool file_mmap_ok(struct file *file, struct inode *inode,
  * Returns: Either an error, or the address at which the requested mapping has
  * been performed.
  */
-unsigned long do_mmap(struct file *file, unsigned long addr,
-			unsigned long len, unsigned long prot,
-			unsigned long flags, vm_flags_t vm_flags,
-			unsigned long pgoff, unsigned long *populate,
-			struct list_head *uf)
+unsigned long __do_mmap(struct mm_struct *mm, struct file *file,
+			unsigned long addr, unsigned long len,
+			unsigned long prot, unsigned long flags,
+			vm_flags_t vm_flags, unsigned long pgoff,
+			unsigned long *populate, struct list_head *uf)
 {
-	struct mm_struct *mm = current->mm;
 	int pkey = 0;
 
 	*populate = 0;
@@ -557,12 +559,21 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			vm_flags |= VM_NORESERVE;
 	}
 
-	addr = mmap_region(file, addr, len, vm_flags, pgoff, uf);
+	addr = mmap_region(mm, file, addr, len, vm_flags, pgoff, uf);
 	if (!IS_ERR_VALUE(addr) &&
 	    ((vm_flags & VM_LOCKED) ||
 	     (flags & (MAP_POPULATE | MAP_NONBLOCK)) == MAP_POPULATE))
 		*populate = len;
 	return addr;
+}
+
+unsigned long do_mmap(struct file *file, unsigned long addr, unsigned long len,
+		      unsigned long prot, unsigned long flags,
+		      vm_flags_t vm_flags, unsigned long pgoff,
+		      unsigned long *populate, struct list_head *uf)
+{
+	return __do_mmap(current->mm, file, addr, len, prot, flags,
+			     vm_flags, pgoff, populate, uf);
 }
 
 unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
@@ -807,6 +818,40 @@ unsigned long mm_get_unmapped_area_vmflags(struct file *filp, unsigned long addr
 		return arch_get_unmapped_area_topdown(filp, addr, len, pgoff,
 						      flags, vm_flags);
 	return arch_get_unmapped_area(filp, addr, len, pgoff, flags, vm_flags);
+}
+
+/*
+ * Find a free @len-byte area in @mm, honoring @mm's mmap layout direction.
+ * Unlike the arch_get_unmapped_area() family, the search runs against @mm
+ * rather than current->mm, so a supervisor can place a mapping in a remote
+ * task's address space (see vm_mmap_seal_remote()). The caller must hold
+ * mmap_write_lock(@mm). Returns a page-aligned address or -ENOMEM.
+ */
+unsigned long mm_get_unmapped_area_remote(struct mm_struct *mm, unsigned long len)
+{
+	struct vm_unmapped_area_info info = {
+		.length = len,
+		.mm = mm,
+	};
+	unsigned long addr;
+
+	if (mm_flags_test(MMF_TOPDOWN, mm)) {
+		info.flags = VM_UNMAPPED_AREA_TOPDOWN;
+		info.low_limit = PAGE_SIZE;
+		info.high_limit = arch_get_mmap_base(0, mm->mmap_base);
+		addr = vm_unmapped_area(&info);
+		if (!offset_in_page(addr))
+			return addr;
+		/* Topdown exhausted (e.g. huge stack rlimit); retry bottom-up. */
+		info.flags = 0;
+		info.low_limit = TASK_UNMAPPED_BASE;
+		info.high_limit = arch_get_mmap_end(0, len, 0);
+		return vm_unmapped_area(&info);
+	}
+
+	info.low_limit = mm->mmap_base;
+	info.high_limit = arch_get_mmap_end(0, len, 0);
+	return vm_unmapped_area(&info);
 }
 
 unsigned long

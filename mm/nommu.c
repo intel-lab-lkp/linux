@@ -1009,7 +1009,8 @@ enomem:
 /*
  * handle mapping creation for uClinux
  */
-unsigned long do_mmap(struct file *file,
+unsigned long __do_mmap(struct mm_struct *mm,
+			struct file *file,
 			unsigned long addr,
 			unsigned long len,
 			unsigned long prot,
@@ -1244,6 +1245,15 @@ error_getting_region:
 			len, current->pid);
 	show_mem();
 	return -ENOMEM;
+}
+
+unsigned long do_mmap(struct file *file, unsigned long addr, unsigned long len,
+		      unsigned long prot, unsigned long flags,
+		      vm_flags_t vm_flags, unsigned long pgoff,
+		      unsigned long *populate, struct list_head *uf)
+{
+	return __do_mmap(current->mm, file, addr, len, prot, flags,
+			     vm_flags, pgoff, populate, uf);
 }
 
 unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,

@@ -588,6 +588,68 @@ unsigned long vm_mmap_pgoff(struct file *file, unsigned long addr,
 	return ret;
 }
 
+/**
+ * vm_mmap_seal_remote - install a sealed MAP_SHARED file mapping into @mm,
+ * without target-side cooperation.
+ * @mm: Target mm; caller holds a reference (e.g. get_task_mm()).
+ * @file: Backing file.
+ * @addr: Page-aligned address. If non-zero, MAP_FIXED_NOREPLACE is used
+ *        (-EEXIST if occupied); if zero, the kernel chooses a free area in
+ *        @mm and returns it.
+ * @len: Length in bytes (page-aligned).
+ * @pgoff: Page offset into @file.
+ *
+ * The mapping is read-only. The VMA is created VM_SEALED, so it is immediately
+ * immutable against the target mm's owner and its CLONE_VM peers. LSM/fsnotify
+ * hooks run against %current; cross-task authorization is the caller's
+ * responsibility (no ptrace_may_access check).
+ *
+ * Returns the mapped address on success, or a negative errno.
+ */
+unsigned long vm_mmap_seal_remote(struct mm_struct *mm, struct file *file,
+	unsigned long addr, unsigned long len, unsigned long pgoff)
+{
+	const unsigned long prot = PROT_READ;
+	const unsigned long flags = MAP_SHARED | MAP_FIXED_NOREPLACE;
+	loff_t off = (loff_t)pgoff << PAGE_SHIFT;
+	unsigned long ret;
+	unsigned long populate;
+	LIST_HEAD(uf);
+
+	if (WARN_ON_ONCE(!mm))
+		return -EINVAL;
+	if (!VM_SEALED)		/* sealing unavailable (e.g. !CONFIG_64BIT) */
+		return -EOPNOTSUPP;
+
+	ret = security_mmap_file(file, prot, flags);
+	if (!ret)
+		ret = fsnotify_mmap_perm(file, prot, off, len);
+	if (ret)
+		return ret;
+
+	if (mmap_write_lock_killable(mm))
+		return -EINTR;
+
+	if (!addr) {
+		addr = mm_get_unmapped_area_remote(mm, PAGE_ALIGN(len));
+		if (IS_ERR_VALUE(addr)) {
+			ret = addr;
+			goto unlock;
+		}
+	}
+	ret = __do_mmap(mm, file, addr, len, prot, flags, VM_SEALED,
+			pgoff, &populate, &uf);
+	/*
+	 * Do not mm_populate() against a foreign mm; the target task will
+	 * fault pages in on first access.
+	 */
+unlock:
+	mmap_write_unlock(mm);
+	userfaultfd_unmap_complete(mm, &uf);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(vm_mmap_seal_remote);
+
 /*
  * Perform a userland memory mapping into the current process address space. See
  * the comment for do_mmap() for more details on this operation in general.

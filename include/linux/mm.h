@@ -4152,6 +4152,8 @@ extern unsigned long do_mmap(struct file *file, unsigned long addr,
 	unsigned long len, unsigned long prot, unsigned long flags,
 	vm_flags_t vm_flags, unsigned long pgoff, unsigned long *populate,
 	struct list_head *uf);
+unsigned long vm_mmap_seal_remote(struct mm_struct *mm, struct file *file,
+	unsigned long addr, unsigned long len, unsigned long pgoff);
 extern int do_vmi_munmap(struct vma_iterator *vmi, struct mm_struct *mm,
 			 unsigned long start, size_t len, struct list_head *uf,
 			 bool unlock);
@@ -4192,6 +4194,7 @@ struct vm_unmapped_area_info {
 	unsigned long align_mask;
 	unsigned long align_offset;
 	unsigned long start_gap;
+	struct mm_struct *mm;	/* mm to search; NULL means current->mm */
 };
 
 extern unsigned long vm_unmapped_area(struct vm_unmapped_area_info *info);
