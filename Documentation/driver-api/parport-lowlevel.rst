@@ -341,7 +341,6 @@ EXAMPLE
 			/* Try to detect a device on the port... */
 			...
 		}
-		}
 
 		...
 	}
