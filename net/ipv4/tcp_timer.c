@@ -458,6 +458,7 @@ static void tcp_fastopen_synack_timer(struct sock *sk, struct request_sock *req)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
+	struct net *net = sock_net(sk);
 	int max_retries;
 
 	tcp_syn_ack_timeout(req);
@@ -465,8 +466,12 @@ static void tcp_fastopen_synack_timer(struct sock *sk, struct request_sock *req)
 	/* Add one more retry for fastopen.
 	 * Paired with WRITE_ONCE() in tcp_sock_set_syncnt()
 	 */
-	max_retries = READ_ONCE(icsk->icsk_syn_retries) ? :
-		READ_ONCE(sock_net(sk)->ipv4.sysctl_tcp_synack_retries) + 1;
+	max_retries = READ_ONCE(icsk->icsk_syn_retries);
+	if (!max_retries) {
+		max_retries = READ_ONCE(net->ipv4.sysctl_tcp_synack_retries);
+		max_retries++;
+	}
+	max_retries = min_t(int, max_retries, MAX_TCP_SYNACK_RETRIES);
 
 	if (req->num_timeout >= max_retries) {
 		tcp_write_err(sk);
@@ -488,7 +493,7 @@ static void tcp_fastopen_synack_timer(struct sock *sk, struct request_sock *req)
 	if (!tp->retrans_stamp)
 		tp->retrans_stamp = tcp_time_stamp_ts(tp);
 	tcp_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
-			  req->timeout << req->num_timeout, false);
+			     tcp_reqsk_timeout_sk(sk, req), false);
 }
 
 static bool tcp_rtx_probe0_timed_out(const struct sock *sk,
