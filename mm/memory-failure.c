@@ -76,6 +76,44 @@ static int sysctl_enable_soft_offline __read_mostly = 1;
 
 atomic_long_t num_poisoned_pages __read_mostly = ATOMIC_LONG_INIT(0);
 
+/*
+ * Drain any in-flight non-atomic page flag operations that could
+ * clobber a concurrently set HWPoison bit.  Retries until the bit sticks.
+ */
+static void set_hwpoison_drain_rcu(struct page *p)
+{
+	do {
+		synchronize_rcu();
+	} while (!TestSetPageHWPoison(p));
+}
+
+/*
+ * Drain any in-flight non-atomic page flag operations that could
+ * restore the HWPoison bit from stale data.  Retries until it stays clear.
+ */
+static void clear_hwpoison_drain_rcu(struct page *p)
+{
+	do {
+		synchronize_rcu();
+	} while (TestClearPageHWPoison(p));
+}
+
+static bool test_and_set_hwpoison_drain_rcu(struct page *p)
+{
+	bool was_set = TestSetPageHWPoison(p);
+
+	set_hwpoison_drain_rcu(p);
+	return was_set;
+}
+
+static bool test_and_clear_hwpoison_drain_rcu(struct page *p)
+{
+	bool was_set = TestClearPageHWPoison(p);
+
+	clear_hwpoison_drain_rcu(p);
+	return was_set;
+}
+
 static bool hw_memory_failure __read_mostly = false;
 
 static DEFINE_MUTEX(mf_mutex);
@@ -211,7 +249,7 @@ static bool page_handle_poison(struct page *page, bool hugepage_or_freepage, boo
 			return false;
 	}
 
-	SetPageHWPoison(page);
+	set_hwpoison_drain_rcu(page);
 	if (release)
 		put_page(page);
 	page_ref_inc(page);
@@ -1756,7 +1794,7 @@ static int mf_generic_kill_procs(unsigned long long pfn, int flags,
 	 * Use this flag as an indication that the dax page has been
 	 * remapped UC to prevent speculative consumption of poison.
 	 */
-	SetPageHWPoison(&folio->page);
+	set_hwpoison_drain_rcu(&folio->page);
 
 	/*
 	 * Unlike System-RAM there is no possibility to swap in a
@@ -1801,7 +1839,7 @@ int mf_dax_kill_procs(struct address_space *mapping, pgoff_t index,
 			goto unlock;
 
 		if (!pre_remove)
-			SetPageHWPoison(page);
+			set_hwpoison_drain_rcu(page);
 
 		/*
 		 * The pre_remove case is revoking access, the memory is still
@@ -1878,7 +1916,7 @@ static unsigned long __folio_free_raw_hwp(struct folio *folio, bool move_flag)
 	head = llist_del_all(raw_hwp_list_head(folio));
 	llist_for_each_entry_safe(p, next, head, node) {
 		if (move_flag)
-			SetPageHWPoison(p->page);
+			set_hwpoison_drain_rcu(p->page);
 		else
 			num_poisoned_pages_sub(page_to_pfn(p->page), 1);
 		kfree(p);
@@ -2390,7 +2428,7 @@ try_again:
 	if (hugetlb)
 		goto unlock_mutex;
 
-	if (TestSetPageHWPoison(p)) {
+	if (test_and_set_hwpoison_drain_rcu(p)) {
 		res = -EHWPOISON;
 		if (flags & MF_ACTION_REQUIRED)
 			res = kill_accessing_process(current, pfn, flags);
@@ -2420,7 +2458,7 @@ try_again:
 			} else {
 				/* We lost the race, try again */
 				if (retry) {
-					ClearPageHWPoison(p);
+					clear_hwpoison_drain_rcu(p);
 					retry = false;
 					goto try_again;
 				}
@@ -2441,7 +2479,7 @@ try_again:
 	/* filter pages that are protected from hwpoison test by users */
 	folio_lock(folio);
 	if (hwpoison_filter(p)) {
-		ClearPageHWPoison(p);
+		clear_hwpoison_drain_rcu(p);
 		folio_unlock(folio);
 		folio_put(folio);
 		res = -EOPNOTSUPP;
@@ -2761,7 +2799,7 @@ int unpoison_memory(unsigned long pfn)
 		}
 
 		folio_put(folio);
-		if (TestClearPageHWPoison(p)) {
+		if (test_and_clear_hwpoison_drain_rcu(p)) {
 			folio_put(folio);
 			ret = 0;
 		}
