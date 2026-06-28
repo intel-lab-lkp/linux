@@ -109,9 +109,9 @@ get_peer(struct wg_peer *peer, struct sk_buff *skb, struct dump_ctx *ctx)
 			    sizeof(last_handshake), &last_handshake) ||
 		    nla_put_u16(skb, WGPEER_A_PERSISTENT_KEEPALIVE_INTERVAL,
 				peer->persistent_keepalive_interval) ||
-		    nla_put_u64_64bit(skb, WGPEER_A_TX_BYTES, peer->tx_bytes,
+		    nla_put_u64_64bit(skb, WGPEER_A_TX_BYTES, atomic64_read(&peer->tx_bytes),
 				      WGPEER_A_UNSPEC) ||
-		    nla_put_u64_64bit(skb, WGPEER_A_RX_BYTES, peer->rx_bytes,
+		    nla_put_u64_64bit(skb, WGPEER_A_RX_BYTES, atomic64_read(&peer->rx_bytes),
 				      WGPEER_A_UNSPEC) ||
 		    nla_put_u32(skb, WGPEER_A_PROTOCOL_VERSION, 1))
 			goto err;

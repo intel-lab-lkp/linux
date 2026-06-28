@@ -20,7 +20,7 @@
 static void update_rx_stats(struct wg_peer *peer, size_t len)
 {
 	dev_sw_netstats_rx_add(peer->device->dev, len);
-	peer->rx_bytes += len;
+	atomic64_add(len, &peer->rx_bytes);
 }
 
 #define SKB_TYPE_LE32(skb) (((struct message_header *)(skb)->data)->type)
