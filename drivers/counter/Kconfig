@@ -68,6 +68,23 @@ config INTEL_QEP
 	  To compile this driver as a module, choose M here: the module
 	  will be called intel-qep.
 
+config GPIO_COUNTER
+	tristate "GPIO-based counter driver"
+	depends on GPIOLIB
+	help
+	  Select this option to enable the GPIO-based counter driver.  It
+	  reads A/B and an optional index signal via edge-triggered GPIO
+	  interrupts and decodes them according to the selected mode:
+	  Quadrature X1/X2/X4 (rotary or linear encoders), pulse-direction,
+	  and pure increase / decrease pulse counters.
+
+	  This is useful on SoCs that lack a dedicated hardware quadrature
+	  decoder or pulse counter, or where the signals are wired to
+	  generic GPIO pins rather than to a dedicated peripheral.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called gpio-counter.
+
 config INTERRUPT_CNT
 	tristate "Interrupt counter driver"
 	depends on GPIOLIB
