@@ -129,6 +129,9 @@ static int zc_raw_event(struct hid_device *hdev, struct hid_report *report,
 		switch (report->id) {
 		case 0x02:
 		case 0x03:
+			if (size < 2)
+				break;
+
 			switch (data[1]) {
 			case 0x10:
 				key = KEY_MODE;
