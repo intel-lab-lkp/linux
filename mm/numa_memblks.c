@@ -135,13 +135,16 @@ EXPORT_SYMBOL(__node_distance);
 static int __init numa_add_memblk_to(int nid, u64 start, u64 end,
 				     struct numa_meminfo *mi)
 {
-	/* ignore zero length blks */
-	if (start == end)
-		return 0;
-
 	/* whine about and ignore invalid blks */
-	if (start > end || nid < 0 || nid >= MAX_NUMNODES) {
+	if (nid < 0 || nid >= MAX_NUMNODES) {
 		pr_warn("Warning: invalid memblk node %d [mem %#010Lx-%#010Lx]\n",
+			nid, start, end - 1);
+		return -EINVAL;
+	}
+
+	/* ignore zero length or invalid blks */
+	if (start >= end) {
+		pr_warn("Warning: invalid memblk node size %d [mem %#010Lx-%#010Lx]\n",
 			nid, start, end - 1);
 		return 0;
 	}
@@ -193,13 +196,20 @@ static void __init numa_move_tail_memblk(struct numa_meminfo *dst, int idx,
  * @end: End address of the new memblk
  *
  * Add a new memblk to the default numa_meminfo.
+ * On success @nid is also set in numa_nodes_parsed.
  *
  * RETURNS:
  * 0 on success, -errno on failure.
  */
 int __init numa_add_memblk(int nid, u64 start, u64 end)
 {
-	return numa_add_memblk_to(nid, start, end, &numa_meminfo);
+	int ret;
+
+	ret = numa_add_memblk_to(nid, start, end, &numa_meminfo);
+	if (!ret)
+		node_set(nid, numa_nodes_parsed);
+
+	return ret;
 }
 
 /**
