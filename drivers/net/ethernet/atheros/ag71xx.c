@@ -1720,6 +1720,7 @@ oom:
 
 	mod_timer(&ag->oom_timer, jiffies + AG71XX_OOM_REFILL);
 	napi_complete(napi);
+	ag71xx_int_enable(ag, AG71XX_INT_TX);
 	return 0;
 }
 
