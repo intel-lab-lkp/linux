@@ -559,6 +559,8 @@ static int quickspi_alloc_report_buf(struct quickspi_device *qsdev)
 	if (!qsdev->report_buf)
 		return -ENOMEM;
 
+	qsdev->report_buf_size = max_report_len;
+
 	return 0;
 }
 
