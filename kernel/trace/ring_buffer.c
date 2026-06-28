@@ -6948,6 +6948,8 @@ ring_buffer_alloc_read_page(struct trace_buffer *buffer, int cpu)
 	if (!cpumask_test_cpu(cpu, buffer->cpumask))
 		return ERR_PTR(-ENODEV);
 
+	guard(mutex)(&buffer->mutex);
+
 	bpage = kzalloc_obj(*bpage);
 	if (!bpage)
 		return ERR_PTR(-ENOMEM);
@@ -6997,6 +6999,8 @@ void ring_buffer_free_read_page(struct trace_buffer *buffer, int cpu,
 
 	if (!buffer || !buffer->buffers || !buffer->buffers[cpu])
 		return;
+
+	guard(mutex)(&buffer->mutex);
 
 	cpu_buffer = buffer->buffers[cpu];
 
@@ -7089,14 +7093,13 @@ int ring_buffer_read_page(struct trace_buffer *buffer,
 	if (!data_page || !data_page->data)
 		return -1;
 
-	if (data_page->order != buffer->subbuf_order)
-		return -1;
-
 	dpage = data_page->data;
 	if (!dpage)
 		return -1;
 
 	guard(raw_spinlock_irqsave)(&cpu_buffer->reader_lock);
+	if (data_page->order != buffer->subbuf_order)
+		return -1;
 
 	reader = rb_get_reader_page(cpu_buffer);
 	if (!reader)
