@@ -9,6 +9,7 @@
 #include <linux/devcoredump.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/overflow.h>
 #include <linux/remoteproc.h>
 #include "remoteproc_internal.h"
 #include "remoteproc_elf_helpers.h"
@@ -256,14 +257,23 @@ void rproc_coredump(struct rproc *rproc)
 
 	data_size = elf_size_of_hdr(class);
 	list_for_each_entry(segment, &rproc->dump_segments, node) {
+		if (phnum >= PN_XNUM - 1) {
+			dev_err(&rproc->dev, "too many segments for coredump\n");
+			return;
+		}
+
 		/*
 		 * For default configuration buffer includes headers & segments.
 		 * For inline dump buffer just includes headers as segments are
 		 * directly read from device memory.
 		 */
-		data_size += elf_size_of_phdr(class);
-		if (dump_conf == RPROC_COREDUMP_ENABLED)
-			data_size += segment->size;
+		if (check_add_overflow(data_size, elf_size_of_phdr(class),
+				       &data_size) ||
+		    (dump_conf == RPROC_COREDUMP_ENABLED &&
+		     check_add_overflow(data_size, segment->size, &data_size))) {
+			dev_err(&rproc->dev, "coredump size overflow\n");
+			return;
+		}
 
 		phnum++;
 	}
@@ -379,14 +389,27 @@ void rproc_coredump_using_sections(struct rproc *rproc)
 	strtbl_size += strlen(str_tbl) + 2;
 
 	list_for_each_entry(segment, &rproc->dump_segments, node) {
-		data_size += elf_size_of_shdr(class);
-		strtbl_size += strlen(segment->priv) + 1;
-		if (dump_conf == RPROC_COREDUMP_ENABLED)
-			data_size += segment->size;
+		if (shnum >= SHN_LORESERVE - 1) {
+			dev_err(&rproc->dev, "too many sections for coredump\n");
+			return;
+		}
+
+		if (check_add_overflow(data_size, elf_size_of_shdr(class),
+				       &data_size) ||
+		    check_add_overflow(strtbl_size, strlen(segment->priv) + 1,
+				       &strtbl_size) ||
+		    (dump_conf == RPROC_COREDUMP_ENABLED &&
+		     check_add_overflow(data_size, segment->size, &data_size))) {
+			dev_err(&rproc->dev, "coredump size overflow\n");
+			return;
+		}
 		shnum++;
 	}
 
-	data_size += strtbl_size;
+	if (check_add_overflow(data_size, strtbl_size, &data_size)) {
+		dev_err(&rproc->dev, "coredump size overflow\n");
+		return;
+	}
 
 	data = vmalloc(data_size);
 	if (!data)
