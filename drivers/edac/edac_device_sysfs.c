@@ -652,6 +652,7 @@ static int edac_device_create_instance(struct edac_device_ctl_info *edac_dev,
 
 	/* error unwind stack */
 err_release_instance_kobj:
+	kobject_put(main_kobj);
 	kobject_put(&instance->kobj);
 
 err_out:
