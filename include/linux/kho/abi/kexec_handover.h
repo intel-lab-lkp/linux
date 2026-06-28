@@ -139,6 +139,17 @@
 		(typeof((s).ptr))((s).phys ? phys_to_virt((s).phys) : NULL); \
 	})
 
+#define KHOSER_COPY_PTR(dest, src)							  \
+	({										  \
+		static_assert(								  \
+			__builtin_types_compatible_p(typeof(dest.ptr), typeof(src.ptr)) ||\
+			__builtin_types_compatible_p(typeof(dest.ptr), void *) ||	  \
+			__builtin_types_compatible_p(typeof(src.ptr), void *),		  \
+			"pointer type mismatch in KHOSER_COPY_PTR"			  \
+		);									  \
+		(dest).phys = (src).phys;						  \
+	})
+
 /*
  * This header is embedded at the beginning of each `kho_vmalloc_chunk`
  * and contains a pointer to the next chunk in the linked list,
