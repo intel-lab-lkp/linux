@@ -1505,10 +1505,13 @@ ppp_net_siocdevprivate(struct net_device *dev, struct ifreq *ifr,
 
 	case SIOCGPPPCSTATS:
 		memset(&cstats, 0, sizeof(cstats));
+		/* protect against PPPIOCSCOMPRESS/ppp_ccp_closed() freeing the state */
+		ppp_lock(ppp);
 		if (ppp->xc_state)
 			ppp->xcomp->comp_stat(ppp->xc_state, &cstats.c);
 		if (ppp->rc_state)
 			ppp->rcomp->decomp_stat(ppp->rc_state, &cstats.d);
+		ppp_unlock(ppp);
 		if (copy_to_user(addr, &cstats, sizeof(cstats)))
 			break;
 		err = 0;
@@ -3303,7 +3306,7 @@ find_compressor(int type)
 static void
 ppp_get_stats(struct ppp *ppp, struct ppp_stats *st)
 {
-	struct slcompress *vj = ppp->vj;
+	struct slcompress *vj;
 	int cpu;
 
 	memset(st, 0, sizeof(*st));
@@ -3323,8 +3326,14 @@ ppp_get_stats(struct ppp *ppp, struct ppp_stats *st)
 	}
 	st->p.ppp_ierrors = ppp->dev->stats.rx_errors;
 	st->p.ppp_oerrors = ppp->dev->stats.tx_errors;
-	if (!vj)
+
+	/* protect against PPPIOCSMAXCID freeing ppp->vj */
+	ppp_recv_lock(ppp);
+	vj = ppp->vj;
+	if (!vj) {
+		ppp_recv_unlock(ppp);
 		return;
+	}
 	st->vj.vjs_packets = vj->sls_o_compressed + vj->sls_o_uncompressed;
 	st->vj.vjs_compressed = vj->sls_o_compressed;
 	st->vj.vjs_searches = vj->sls_o_searches;
@@ -3333,6 +3342,7 @@ ppp_get_stats(struct ppp *ppp, struct ppp_stats *st)
 	st->vj.vjs_tossed = vj->sls_i_tossed;
 	st->vj.vjs_uncompressedin = vj->sls_i_uncompressed;
 	st->vj.vjs_compressedin = vj->sls_i_compressed;
+	ppp_recv_unlock(ppp);
 }
 
 /*
