@@ -152,12 +152,13 @@ static void savu_remove(struct hid_device *hdev)
 }
 
 static void savu_report_to_chrdev(struct roccat_common2_device const *savu,
-		u8 const *data)
+		u8 const *data, int size)
 {
 	struct savu_roccat_report roccat_report;
 	struct savu_mouse_report_special const *special_report;
 
-	if (data[0] != SAVU_MOUSE_REPORT_NUMBER_SPECIAL)
+	if (data[0] != SAVU_MOUSE_REPORT_NUMBER_SPECIAL ||
+	    size < sizeof(*special_report))
 		return;
 
 	special_report = (struct savu_mouse_report_special const *)data;
@@ -183,7 +184,7 @@ static int savu_raw_event(struct hid_device *hdev,
 		return 0;
 
 	if (savu->roccat_claimed)
-		savu_report_to_chrdev(savu, data);
+		savu_report_to_chrdev(savu, data, size);
 
 	return 0;
 }
