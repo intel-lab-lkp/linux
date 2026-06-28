@@ -398,6 +398,8 @@ xfs_broot_realloc(
 	struct xfs_ifork	*ifp,
 	size_t			new_size)
 {
+	size_t			old_size = ifp->if_broot_bytes;
+
 	/* No size change?  No action needed. */
 	if (new_size == ifp->if_broot_bytes)
 		return ifp->if_broot;
@@ -430,6 +432,7 @@ xfs_broot_realloc(
 	 */
 	ifp->if_broot = krealloc(ifp->if_broot, new_size,
 			GFP_KERNEL | __GFP_NOFAIL);
+	memset((char *)ifp->if_broot + old_size, 0, new_size - old_size);
 	ifp->if_broot_bytes = new_size;
 	return ifp->if_broot;
 }
