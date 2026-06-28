@@ -2934,6 +2934,7 @@ static int dvb_frontend_release(struct inode *inode, struct file *file)
 		mb();
 	}
 
+	dvb_device_get(dvbdev);
 	ret = dvb_generic_release(inode, file);
 
 	if (dvbdev->users == -1) {
@@ -2955,6 +2956,7 @@ static int dvb_frontend_release(struct inode *inode, struct file *file)
 	}
 
 	dvb_frontend_put(fe);
+	dvb_device_put(dvbdev);
 
 	return ret;
 }
