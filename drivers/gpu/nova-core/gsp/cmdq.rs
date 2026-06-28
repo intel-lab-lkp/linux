@@ -152,7 +152,7 @@ pub(crate) const MSGQ_NUM_PAGES: u32 = 0x3f;
 /// This area of memory is to be shared between the driver and the GSP to exchange commands or
 /// messages.
 #[repr(C, align(0x1000))]
-#[derive(Debug)]
+#[derive(Debug, FromBytes, IntoBytes, Immutable)]
 struct MsgqData {
     data: [[u8; GSP_PAGE_SIZE]; num::u32_as_usize(MSGQ_NUM_PAGES)],
 }
@@ -169,6 +169,7 @@ static_assert!(align_of::<MsgqData>() == GSP_PAGE_SIZE);
 /// read pointer of `rx` actually refers to the `Msgq` owned by the other side.
 /// This design ensures that only the driver or GSP ever writes to a given instance of this struct.
 #[repr(C)]
+#[derive(FromBytes, IntoBytes, Immutable)]
 // There is no struct defined for this in the open-gpu-kernel-source headers.
 // Instead it is defined by code in `GspMsgQueuesInit()`.
 // TODO: Revert to private once `IoView` projections replace the `gsp_mem` module.
@@ -177,12 +178,16 @@ pub(super) struct Msgq {
     pub(super) tx: MsgqTxHeader,
     /// Header for receiving messages, including the read pointer.
     pub(super) rx: MsgqRxHeader,
+    _pad: [u8; GSP_PAGE_SIZE - size_of::<MsgqTxHeader>() - size_of::<MsgqRxHeader>()],
     /// The message queue proper.
     msgq: MsgqData,
 }
 
+static_assert!(size_of::<MsgqTxHeader>() + size_of::<MsgqRxHeader>() <= GSP_PAGE_SIZE);
+
 /// Structure shared between the driver and the GSP and containing the command and message queues.
 #[repr(C)]
+#[derive(FromBytes, IntoBytes, Immutable)]
 // TODO: Revert to private once `IoView` projections replace the `gsp_mem` module.
 pub(super) struct GspMem {
     /// Self-mapping page table entries.
@@ -205,13 +210,7 @@ impl GspMem {
     const PTE_ARRAY_SIZE: usize = GSP_PAGE_SIZE / size_of::<u64>();
 }
 
-// SAFETY: These structs don't meet the no-padding requirements of AsBytes but
-// that is not a problem because they are not used outside the kernel.
-unsafe impl AsBytes for GspMem {}
-
-// SAFETY: These structs don't meet the no-padding requirements of FromBytes but
-// that is not a problem because they are not used outside the kernel.
-unsafe impl FromBytes for GspMem {}
+kernel::impl_transmute_via_zerocopy!(GspMem);
 
 /// Wrapper around [`GspMem`] to share it with the GPU using a [`Coherent`].
 ///
