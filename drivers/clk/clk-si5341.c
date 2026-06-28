@@ -1426,6 +1426,11 @@ static int si5341_initialize_pll(struct clk_si5341 *data)
 			SI5341_PLL_M_NUM, m_num, m_den);
 }
 
+static void si5341_clk_disable_unprepare(void *clk)
+{
+	clk_disable_unprepare(clk);
+}
+
 static int si5341_clk_select_active_input(struct clk_si5341 *data)
 {
 	int res;
@@ -1460,6 +1465,12 @@ static int si5341_clk_select_active_input(struct clk_si5341 *data)
 		return err;
 
 	err = clk_prepare_enable(data->input_clk[res]);
+	if (err < 0)
+		return err;
+
+	err = devm_add_action_or_reset(&data->i2c_client->dev,
+				       si5341_clk_disable_unprepare,
+				       data->input_clk[res]);
 	if (err < 0)
 		return err;
 
