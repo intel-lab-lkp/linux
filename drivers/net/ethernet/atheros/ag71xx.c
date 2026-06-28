@@ -397,11 +397,13 @@ static bool ag71xx_is(struct ag71xx *ag, enum ag71xx_type type)
 	return ag->dcfg->type == type;
 }
 
+/* ath79 on-chip MMIO bus is non-posted - iowrite32/iowrite32be completes
+ * before the next instruction executes. No read-back drain is needed.
+ */
+
 static void ag71xx_wr(struct ag71xx *ag, unsigned int reg, u32 value)
 {
 	iowrite32(value, ag->mac_base + reg);
-	/* flush write */
-	(void)ioread32(ag->mac_base + reg);
 }
 
 static u32 ag71xx_rr(struct ag71xx *ag, unsigned int reg)
@@ -411,22 +413,16 @@ static u32 ag71xx_rr(struct ag71xx *ag, unsigned int reg)
 
 static void ag71xx_sb(struct ag71xx *ag, unsigned int reg, u32 mask)
 {
-	void __iomem *r;
+	void __iomem *r = ag->mac_base + reg;
 
-	r = ag->mac_base + reg;
 	iowrite32(ioread32(r) | mask, r);
-	/* flush write */
-	(void)ioread32(r);
 }
 
 static void ag71xx_cb(struct ag71xx *ag, unsigned int reg, u32 mask)
 {
-	void __iomem *r;
+	void __iomem *r = ag->mac_base + reg;
 
-	r = ag->mac_base + reg;
 	iowrite32(ioread32(r) & ~mask, r);
-	/* flush write */
-	(void)ioread32(r);
 }
 
 static void ag71xx_int_enable(struct ag71xx *ag, u32 ints)
