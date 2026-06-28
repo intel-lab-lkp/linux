@@ -1123,18 +1123,16 @@ static bool regular_request_wait(struct mddev *mddev, struct r10conf *conf,
 				 struct bio *bio, sector_t sectors)
 {
 	/* Bail out if REQ_NOWAIT is set for the bio */
-	if (!wait_barrier(conf, bio->bi_opf & REQ_NOWAIT)) {
-		bio_wouldblock_error(bio);
+	if (!wait_barrier(conf, bio->bi_opf & REQ_NOWAIT))
 		return false;
-	}
+
 	while (test_bit(MD_RECOVERY_RESHAPE, &mddev->recovery) &&
 	    bio->bi_iter.bi_sector < conf->reshape_progress &&
 	    bio->bi_iter.bi_sector + sectors > conf->reshape_progress) {
 		allow_barrier(conf);
-		if (bio->bi_opf & REQ_NOWAIT) {
-			bio_wouldblock_error(bio);
+		if (bio->bi_opf & REQ_NOWAIT)
 			return false;
-		}
+
 		mddev_add_trace_msg(conf->mddev, "raid10 wait reshape");
 		wait_event(conf->wait_barrier,
 			   conf->reshape_progress <= bio->bi_iter.bi_sector ||
@@ -1192,6 +1190,7 @@ static void raid10_read_request(struct mddev *mddev, struct bio *bio,
 	}
 
 	if (!regular_request_wait(mddev, conf, bio, r10_bio->sectors)) {
+		bio_wouldblock_error(bio);
 		free_r10bio(r10_bio);
 		return;
 	}
@@ -1354,8 +1353,8 @@ static bool raid10_write_request(struct mddev *mddev, struct bio *bio,
 {
 	struct r10conf *conf = mddev->private;
 	int i, k;
-	sector_t sectors;
-	int max_sectors;
+	int max_sectors = r10_bio->sectors;
+	bool nowait = bio->bi_opf & REQ_NOWAIT;
 	bool atomic = bio->bi_opf & REQ_ATOMIC;
 
 	if ((mddev_is_clustered(mddev) &&
@@ -1363,9 +1362,8 @@ static bool raid10_write_request(struct mddev *mddev, struct bio *bio,
 						bio->bi_iter.bi_sector,
 						bio_end_sector(bio)))) {
 		/* Bail out if REQ_NOWAIT is set for the bio */
-		if (bio->bi_opf & REQ_NOWAIT) {
+		if (nowait) {
 			bio_wouldblock_error(bio);
-			free_r10bio(r10_bio);
 			return false;
 		}
 
@@ -1375,28 +1373,25 @@ static bool raid10_write_request(struct mddev *mddev, struct bio *bio,
 								    bio_end_sector(bio)));
 	}
 
-	sectors = r10_bio->sectors;
-	if (!regular_request_wait(mddev, conf, bio, sectors)) {
-		free_r10bio(r10_bio);
+	if (!regular_request_wait(mddev, conf, bio, max_sectors)) {
+		bio_wouldblock_error(bio);
 		return false;
 	}
 
 	if (test_bit(MD_RECOVERY_RESHAPE, &mddev->recovery) &&
 	    (mddev->reshape_backwards
 	     ? (bio->bi_iter.bi_sector < conf->reshape_safe &&
-		bio->bi_iter.bi_sector + sectors > conf->reshape_progress)
-	     : (bio->bi_iter.bi_sector + sectors > conf->reshape_safe &&
+		bio->bi_iter.bi_sector + max_sectors > conf->reshape_progress)
+	     : (bio->bi_iter.bi_sector + max_sectors > conf->reshape_safe &&
 		bio->bi_iter.bi_sector < conf->reshape_progress))) {
 		/* Need to update reshape_position in metadata */
 		mddev->reshape_position = conf->reshape_progress;
 		set_mask_bits(&mddev->sb_flags, 0,
 			      BIT(MD_SB_CHANGE_DEVS) | BIT(MD_SB_CHANGE_PENDING));
 		md_wakeup_thread(mddev->thread);
-		if (bio->bi_opf & REQ_NOWAIT) {
-			allow_barrier(conf);
+		if (nowait) {
 			bio_wouldblock_error(bio);
-			free_r10bio(r10_bio);
-			return false;
+			goto err_allow_barrier;
 		}
 		mddev_add_trace_msg(conf->mddev,
 			"raid10 wait reshape metadata");
@@ -1420,8 +1415,6 @@ static bool raid10_write_request(struct mddev *mddev, struct bio *bio,
 	raid10_find_phys(conf, r10_bio);
 
 	wait_blocked_dev(mddev, r10_bio);
-
-	max_sectors = r10_bio->sectors;
 
 	for (i = 0;  i < conf->copies; i++) {
 		int d = r10_bio->devs[i].devnum;
@@ -1479,15 +1472,15 @@ static bool raid10_write_request(struct mddev *mddev, struct bio *bio,
 		r10_bio->sectors = max_sectors;
 
 	if (r10_bio->sectors < bio_sectors(bio)) {
-		if (atomic)
-			goto err_handle;
+		if (atomic) {
+			bio_io_error(bio);
+			goto err_dec_pending;
+		}
 
 		bio = bio_submit_split_bioset(bio, r10_bio->sectors,
 					      &conf->bio_split);
-		if (!bio) {
-			set_bit(R10BIO_Returned, &r10_bio->state);
-			goto err_handle;
-		}
+		if (!bio)
+			goto err_dec_pending;
 
 		r10_bio->master_bio = bio;
 	}
@@ -1505,7 +1498,7 @@ static bool raid10_write_request(struct mddev *mddev, struct bio *bio,
 	one_write_done(r10_bio);
 	return true;
 
-err_handle:
+err_dec_pending:
 	for (k = 0;  k < i; k++) {
 		int d = r10_bio->devs[k].devnum;
 		struct md_rdev *rdev = conf->mirrors[d].rdev;
@@ -1521,7 +1514,9 @@ err_handle:
 		}
 	}
 
-	raid_end_bio_io(r10_bio);
+err_allow_barrier:
+	allow_barrier(conf);
+
 	return false;
 }
 
@@ -1546,8 +1541,11 @@ static bool __make_request(struct mddev *mddev, struct bio *bio, int sectors)
 	ret = true;
 	if (bio_data_dir(bio) == READ)
 		raid10_read_request(mddev, bio, r10_bio);
-	else
+	else {
 		ret = raid10_write_request(mddev, bio, r10_bio);
+		if (!ret)
+			free_r10bio(r10_bio);
+	}
 
 	return ret;
 }
