@@ -227,3 +227,38 @@ impl_asbytes! {
     {<T: AsBytes>} [T],
     {<T: AsBytes, const N: usize>} [T; N],
 }
+
+/// Implements the kernel's `FromBytes` and `AsBytes` byte-safety traits for a type
+/// that already derives the equivalent `zerocopy` traits.
+///
+/// This lets a `zerocopy`-derived type satisfy the bounds required by the
+/// DMA-coherent allocation APIs (`CoherentAllocation`, `Coherent`, `dma::Pool`)
+/// without a hand-audited `unsafe`: the macro fails to compile unless `$t`
+/// implements `zerocopy::FromBytes`, `zerocopy::IntoBytes` and `zerocopy::Immutable`,
+/// which together subsume the safety contracts of [`FromBytes`] and [`AsBytes`].
+#[macro_export]
+macro_rules! impl_transmute_via_zerocopy {
+    ($t:ty) => {
+        const _: () = {
+            // Compile-time proof: fails to build unless `$t` carries the `zerocopy`
+            // byte-safety proofs.
+            fn assert_zerocopy<
+                T: ::zerocopy::FromBytes + ::zerocopy::IntoBytes + ::zerocopy::Immutable,
+            >() {
+            }
+            fn check() {
+                assert_zerocopy::<$t>();
+            }
+        };
+
+        // SAFETY: `$t: zerocopy::FromBytes` guarantees that all bit patterns are valid
+        // and `zerocopy::Immutable` that it has no interior mutability, which is exactly
+        // the contract of `FromBytes`.
+        unsafe impl $crate::transmute::FromBytes for $t {}
+
+        // SAFETY: `$t: zerocopy::IntoBytes` guarantees that it has no uninitialized
+        // (padding) bytes and `zerocopy::Immutable` that it has no interior mutability,
+        // which is exactly the contract of `AsBytes`.
+        unsafe impl $crate::transmute::AsBytes for $t {}
+    };
+}
