@@ -251,8 +251,7 @@ int __init numa_cleanup_meminfo(struct numa_meminfo *mi)
 
 		/* preserve info for non-RAM areas above 'max_pfn': */
 		if (bi->end > high) {
-			numa_add_memblk_to(bi->nid, high, bi->end,
-					   &numa_reserved_meminfo);
+			numa_add_reserved_memblk(bi->nid, high, bi->end);
 			bi->end = high;
 		}
 
