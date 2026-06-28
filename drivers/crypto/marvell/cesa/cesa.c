@@ -511,7 +511,7 @@ static int mv_cesa_probe(struct platform_device *pdev)
 		writel(engine->sram_dma & CESA_SA_SRAM_MSK,
 		       engine->regs + CESA_SA_DESC_P0);
 
-		ret = devm_request_threaded_irq(dev, irq, NULL, mv_cesa_int,
+		ret = request_threaded_irq(irq, NULL, mv_cesa_int,
 						IRQF_ONESHOT,
 						dev_name(&pdev->dev),
 						engine);
@@ -540,6 +540,10 @@ static int mv_cesa_probe(struct platform_device *pdev)
 	return 0;
 
 err_cleanup:
+	while (i--) {
+		irq_set_affinity_hint(cesa->engines[i].irq, NULL);
+		free_irq(cesa->engines[i].irq, &cesa->engines[i]);
+	}
 	for (i = 0; i < caps->nengines; i++)
 		mv_cesa_put_sram(pdev, i);
 
@@ -553,8 +557,13 @@ static void mv_cesa_remove(struct platform_device *pdev)
 
 	mv_cesa_remove_algs(cesa);
 
-	for (i = 0; i < cesa->caps->nengines; i++)
+	for (i = 0; i < cesa->caps->nengines; i++) {
+		struct mv_cesa_engine *engine = &cesa->engines[i];
+
+		irq_set_affinity_hint(engine->irq, NULL);
+		free_irq(engine->irq, engine);
 		mv_cesa_put_sram(pdev, i);
+	}
 }
 
 static const struct platform_device_id mv_cesa_plat_id_table[] = {
