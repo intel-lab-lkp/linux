@@ -23,6 +23,8 @@
 )]
 use kernel::ffi;
 use pin_init::MaybeZeroable;
+// Hand-added for the demo; canonically emitted by bindgen --with-derive-custom-struct.
+use kernel::prelude::{FromBytes, Immutable, IntoBytes};
 
 include!("r570_144/bindings.rs");
 

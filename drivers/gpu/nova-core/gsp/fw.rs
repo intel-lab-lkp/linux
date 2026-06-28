@@ -696,6 +696,7 @@ impl LibosMemoryRegionInitArgument {
 
 /// TX header for setting up a message queue with the GSP.
 #[repr(transparent)]
+#[derive(FromBytes, IntoBytes, Immutable)]
 pub(crate) struct MsgqTxHeader(bindings::msgqTxHeader);
 
 impl MsgqTxHeader {
@@ -722,11 +723,11 @@ impl MsgqTxHeader {
     }
 }
 
-// SAFETY: Padding is explicit and does not contain uninitialized data.
-unsafe impl AsBytes for MsgqTxHeader {}
+kernel::impl_transmute_via_zerocopy!(MsgqTxHeader);
 
 /// RX header for setting up a message queue with the GSP.
 #[repr(transparent)]
+#[derive(FromBytes, IntoBytes, Immutable)]
 pub(crate) struct MsgqRxHeader(bindings::msgqRxHeader);
 
 /// Header for the message RX queue.
@@ -737,8 +738,7 @@ impl MsgqRxHeader {
     }
 }
 
-// SAFETY: Padding is explicit and does not contain uninitialized data.
-unsafe impl AsBytes for MsgqRxHeader {}
+kernel::impl_transmute_via_zerocopy!(MsgqRxHeader);
 
 bitfield! {
     struct MsgHeaderVersion(u32) {

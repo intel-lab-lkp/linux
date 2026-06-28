@@ -846,7 +846,7 @@ pub struct PACKED_REGISTRY_TABLE {
     pub entries: __IncompleteArrayField<PACKED_REGISTRY_ENTRY>,
 }
 #[repr(C)]
-#[derive(Debug, Default, Copy, Clone, MaybeZeroable)]
+#[derive(Debug, Default, Copy, Clone, MaybeZeroable, FromBytes, IntoBytes, Immutable)]
 pub struct msgqTxHeader {
     pub version: u32_,
     pub size: u32_,
@@ -858,7 +858,7 @@ pub struct msgqTxHeader {
     pub entryOff: u32_,
 }
 #[repr(C)]
-#[derive(Debug, Default, Copy, Clone, MaybeZeroable)]
+#[derive(Debug, Default, Copy, Clone, MaybeZeroable, FromBytes, IntoBytes, Immutable)]
 pub struct msgqRxHeader {
     pub readPtr: u32_,
 }
