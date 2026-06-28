@@ -283,7 +283,6 @@ static int __init dummy_numa_init(void)
 		pr_err("NUMA init failed\n");
 		return ret;
 	}
-	node_set(0, numa_nodes_parsed);
 
 	numa_off = true;
 	return 0;
