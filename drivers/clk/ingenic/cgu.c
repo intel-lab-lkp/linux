@@ -774,8 +774,10 @@ static int ingenic_register_clock(struct ingenic_cgu *cgu, unsigned idx)
 	}
 
 	err = clk_register_clkdev(clk, clk_info->name, NULL);
-	if (err)
+	if (err) {
+		clk_unregister(clk);
 		goto out;
+	}
 
 	cgu->clocks.clks[idx] = clk;
 out:
