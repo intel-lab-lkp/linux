@@ -9,6 +9,7 @@
 #include <linux/sysctl.h>
 #include <linux/seqlock.h>
 #include <linux/init.h>
+#include <linux/capability.h>
 #include <linux/slab.h>
 #include <net/icmp.h>
 #include <net/ip.h>
@@ -413,6 +414,16 @@ static int proc_tcp_ehash_entries(const struct ctl_table *table, int write,
 	tbl.maxlen = sizeof(int);
 
 	return proc_dointvec(&tbl, write, buffer, lenp, ppos);
+}
+
+static int proc_tcp_child_ehash_entries(const struct ctl_table *table, int write,
+					void *buffer, size_t *lenp,
+					loff_t *ppos)
+{
+	if (write && !capable(CAP_NET_ADMIN))
+		return -EPERM;
+
+	return proc_douintvec_minmax(table, write, buffer, lenp, ppos);
 }
 
 static int proc_udp_hash_entries(const struct ctl_table *table, int write,
@@ -1524,7 +1535,7 @@ static struct ctl_table ipv4_net_table[] = {
 		.data		= &init_net.ipv4.sysctl_tcp_child_ehash_entries,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
-		.proc_handler	= proc_douintvec_minmax,
+		.proc_handler	= proc_tcp_child_ehash_entries,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &tcp_child_ehash_entries_max,
 	},
