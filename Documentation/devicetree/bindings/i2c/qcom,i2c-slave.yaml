@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/i2c/qcom,i2c-slave.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm I2C Slave Controller
+
+maintainers:
+  - Mukesh Kumar Savaliya <mukesh.savaliya@oss.qualcomm.com>
+  - Viken Dadhaniya <viken.dadhaniya@oss.qualcomm.com>
+
+description:
+  The Qualcomm I2C slave controller is a dedicated hardware IP found on
+  Qualcomm SoCs that operates exclusively as an I2C slave device on the bus.
+  It supports FIFO (PIO) mode for data transfer and does not function as an
+  I2C master.
+
+properties:
+  compatible:
+    const: qcom,i2c-slave
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    items:
+      - description: XO clock for I2C slave
+      - description: AHB clock for I2C slave
+
+  clock-names:
+    items:
+      - const: sm_bus_xo_clk
+      - const: sm_bus_ahb_clk
+
+  qcom,slave-addr:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      The 7-bit I2C slave address programmed into the controller's device
+      address register. This controller operates exclusively as an I2C slave
+      and has no child nodes, so the standard 'reg' property cannot be used
+      to convey the I2C address (it is already used for the MMIO register
+      range). The address is configurable at runtime via a hardware register.
+    minimum: 0x08
+    maximum: 0x77
+
+  interconnects:
+    maxItems: 1
+
+  interconnect-names:
+    const: i2c-slave-config
+
+  pinctrl-0: true
+  pinctrl-1: true
+
+  pinctrl-names:
+    minItems: 1
+    items:
+      - const: default
+      - const: sleep
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - clock-names
+  - qcom,slave-addr
+  - interconnects
+  - interconnect-names
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/clock/qcom,qdu1000-gcc.h>
+    #include <dt-bindings/interconnect/qcom,qdu1000-rpmh.h>
+
+    i2c-slave@88ca000 {
+        compatible = "qcom,i2c-slave";
+        reg = <0x88ca000 0x64>;
+        clocks = <&gcc GCC_SM_BUS_XO_CLK>, <&gcc GCC_SM_BUS_AHB_CLK>;
+        clock-names = "sm_bus_xo_clk", "sm_bus_ahb_clk";
+        interrupts = <GIC_SPI 358 IRQ_TYPE_LEVEL_HIGH>;
+        qcom,slave-addr = <0x30>;
+
+        interconnect-names = "i2c-slave-config";
+        interconnects = <&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_SMBUS_CFG 0>;
+    };
+...
