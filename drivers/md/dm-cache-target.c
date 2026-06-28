@@ -16,6 +16,7 @@
 #include <linux/dm-kcopyd.h>
 #include <linux/jiffies.h>
 #include <linux/init.h>
+#include <linux/kstrtox.h>
 #include <linux/mempool.h>
 #include <linux/module.h>
 #include <linux/rwsem.h>
@@ -3311,6 +3312,26 @@ struct cblock_range {
 	dm_cblock_t end;
 };
 
+static int parse_cblock(const char *str, size_t len, uint64_t *result)
+{
+	char *buf;
+	int r;
+
+	if (!len)
+		return -EINVAL;
+
+	buf = kstrndup(str, len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	r = kstrtoull(buf, 10, result);
+	kfree(buf);
+	if (r)
+		return r;
+
+	return *result > U32_MAX ? -EINVAL : 0;
+}
+
 /*
  * A cache block range can take two forms:
  *
@@ -3320,31 +3341,34 @@ struct cblock_range {
 static int parse_cblock_range(struct cache *cache, const char *str,
 			      struct cblock_range *result)
 {
-	char dummy;
+	const char *dash = strchr(str, '-');
 	uint64_t b, e;
 	int r;
 
-	/*
-	 * Try and parse form (ii) first.
-	 */
-	r = sscanf(str, "%llu-%llu%c", &b, &e, &dummy);
+	if (dash) {
+		r = parse_cblock(str, dash - str, &b);
+		if (r)
+			goto bad;
 
-	if (r == 2) {
+		r = parse_cblock(dash + 1, strlen(dash + 1), &e);
+		if (r)
+			goto bad;
+
 		result->begin = to_cblock(b);
 		result->end = to_cblock(e);
 		return 0;
 	}
 
-	/*
-	 * That didn't work, try form (i).
-	 */
-	r = sscanf(str, "%llu%c", &b, &dummy);
-
-	if (r == 1) {
+	r = parse_cblock(str, strlen(str), &b);
+	if (!r) {
 		result->begin = to_cblock(b);
 		result->end = to_cblock(from_cblock(result->begin) + 1u);
 		return 0;
 	}
+
+bad:
+	if (r == -ENOMEM)
+		return r;
 
 	DMERR("%s: invalid cblock range '%s'", cache_device_name(cache), str);
 	return -EINVAL;
