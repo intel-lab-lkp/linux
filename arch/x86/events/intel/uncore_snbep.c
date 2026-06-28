@@ -5482,6 +5482,7 @@ static int discover_upi_topology(struct intel_uncore_type *type, int ubox_did, i
 		for (idx = 0; idx < type->num_boxes; idx++) {
 			upi = &type->topology[lgc_pkg][idx];
 			devfn = PCI_DEVFN(dev_link0 + idx, ICX_UPI_REGS_ADDR_FUNCTION);
+			pci_dev_put(dev);
 			dev = pci_get_domain_bus_and_slot(pci_domain_nr(ubox->bus),
 							  ubox->bus->number,
 							  devfn);
