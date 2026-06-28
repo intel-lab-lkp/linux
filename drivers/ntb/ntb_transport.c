@@ -1574,7 +1574,7 @@ static int ntb_async_rx_submit(struct ntb_queue_entry *entry, void *offset)
 	return 0;
 
 err_set_unmap:
-	dmaengine_unmap_put(unmap);
+	dmaengine_desc_put(txd);
 err_get_unmap:
 	dmaengine_unmap_put(unmap);
 err:
@@ -1898,7 +1898,7 @@ static int ntb_async_tx_submit(struct ntb_transport_qp *qp,
 
 	return 0;
 err_set_unmap:
-	dmaengine_unmap_put(unmap);
+	dmaengine_desc_put(txd);
 err_get_unmap:
 	dmaengine_unmap_put(unmap);
 err:
