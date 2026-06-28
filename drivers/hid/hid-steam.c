@@ -454,8 +454,17 @@ static int steam_get_serial(struct steam_device *steam)
 	ret = steam_recv_report(steam, reply, sizeof(reply));
 	if (ret < 0)
 		goto out;
+	/* hid_hw_raw_request() counts the stripped report ID byte. */
+	if (ret < 4) {
+		ret = -EIO;
+		goto out;
+	}
 	if (reply[0] != ID_GET_STRING_ATTRIBUTE || reply[1] < 1 ||
 	    reply[1] > sizeof(steam->serial_no) || reply[2] != ATTRIB_STR_UNIT_SERIAL) {
+		ret = -EIO;
+		goto out;
+	}
+	if (ret - 1 < 3 + reply[1]) {
 		ret = -EIO;
 		goto out;
 	}
