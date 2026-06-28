@@ -89,7 +89,7 @@ static int elo_raw_event(struct hid_device *hdev, struct hid_report *report,
 
 	switch (report->id) {
 	case 0:
-		if (data[0] == 'T') {	/* Mandatory ELO packet marker */
+		if (size >= 8 && data[0] == 'T') { /* Mandatory ELO packet marker */
 			elo_process_data(hidinput->input, data, size);
 			return 1;
 		}
