@@ -61,6 +61,9 @@ __rmnet_map_ingress_handler(struct sk_buff *skb,
 	u16 len, pad;
 	u8 mux_id;
 
+	if (!pskb_may_pull(skb, sizeof(*map_header)))
+		goto free_skb;
+
 	if (map_header->flags & MAP_CMD_FLAG) {
 		/* Packet contains a MAP command (not data) */
 		if (port->data_format & RMNET_FLAGS_INGRESS_MAP_COMMANDS)
@@ -84,11 +87,19 @@ __rmnet_map_ingress_handler(struct sk_buff *skb,
 
 	if ((port->data_format & RMNET_FLAGS_INGRESS_MAP_CKSUMV5) &&
 	    (map_header->flags & MAP_NEXT_HEADER_FLAG)) {
+		if (!pskb_may_pull(skb, sizeof(*map_header) +
+				   sizeof(struct rmnet_map_v5_csum_header)))
+			goto free_skb;
 		if (rmnet_map_process_next_hdr_packet(skb, len))
 			goto free_skb;
 		skb_pull(skb, sizeof(*map_header));
 		rmnet_set_skb_proto(skb);
 	} else {
+		if (port->data_format & RMNET_FLAGS_INGRESS_MAP_CKSUMV4 &&
+		    !pskb_may_pull(skb, sizeof(*map_header) +
+				   ntohs(map_header->pkt_len) +
+				   sizeof(struct rmnet_map_dl_csum_trailer)))
+			goto free_skb;
 		/* Subtract MAP header */
 		skb_pull(skb, sizeof(*map_header));
 		rmnet_set_skb_proto(skb);
