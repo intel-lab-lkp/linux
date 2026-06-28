@@ -63,12 +63,14 @@ pub use pin_init::{
 #[doc(no_inline)]
 pub use zerocopy::{
     FromBytes,
+    Immutable,
     IntoBytes, //
 };
 
 #[doc(no_inline)]
 pub use zerocopy_derive::{
     FromBytes,
+    Immutable,
     IntoBytes, //
 };
 
