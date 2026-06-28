@@ -2341,6 +2341,7 @@ static inline int folio_last_cpupid(struct folio *folio)
 
 int folio_xchg_last_cpupid(struct folio *folio, int cpupid);
 
+/* Caller must hold hwpoison_rcu_lock() */
 static inline void page_cpupid_reset_last(struct page *page)
 {
 	page->flags.f |= LAST_CPUPID_MASK << LAST_CPUPID_PGSHIFT;
@@ -2503,8 +2504,10 @@ static inline struct zone *folio_zone(const struct folio *folio)
 #ifdef SECTION_IN_PAGE_FLAGS
 static inline void set_page_section(struct page *page, unsigned long section)
 {
+	hwpoison_rcu_lock_flags(&page->flags.f);
 	page->flags.f &= ~(SECTIONS_MASK << SECTIONS_PGSHIFT);
 	page->flags.f |= (section & SECTIONS_MASK) << SECTIONS_PGSHIFT;
+	hwpoison_rcu_unlock_flags(&page->flags.f);
 }
 
 static inline unsigned long memdesc_section(memdesc_flags_t mdf)
@@ -2719,14 +2722,18 @@ static inline bool folio_is_longterm_pinnable(struct folio *folio)
 
 static inline void set_page_zone(struct page *page, enum zone_type zone)
 {
+	hwpoison_rcu_lock_flags(&page->flags.f);
 	page->flags.f &= ~(ZONES_MASK << ZONES_PGSHIFT);
 	page->flags.f |= (zone & ZONES_MASK) << ZONES_PGSHIFT;
+	hwpoison_rcu_unlock_flags(&page->flags.f);
 }
 
 static inline void set_page_node(struct page *page, unsigned long node)
 {
+	hwpoison_rcu_lock_flags(&page->flags.f);
 	page->flags.f &= ~(NODES_MASK << NODES_PGSHIFT);
 	page->flags.f |= (node & NODES_MASK) << NODES_PGSHIFT;
+	hwpoison_rcu_unlock_flags(&page->flags.f);
 }
 
 static inline void set_page_links(struct page *page, enum zone_type zone,

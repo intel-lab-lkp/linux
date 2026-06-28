@@ -596,7 +596,9 @@ void __meminit __init_single_page(struct page *page, unsigned long pfn,
 	set_page_links(page, zone, nid, pfn);
 	init_page_count(page);
 	atomic_set(&page->_mapcount, -1);
+	hwpoison_rcu_lock_flags(&page->flags.f);
 	page_cpupid_reset_last(page);
+	hwpoison_rcu_unlock_flags(&page->flags.f);
 	page_kasan_tag_reset(page);
 
 	INIT_LIST_HEAD(&page->lru);

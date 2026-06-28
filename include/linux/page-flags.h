@@ -9,6 +9,7 @@
 #include <linux/types.h>
 #include <linux/bug.h>
 #include <linux/mmdebug.h>
+#include <linux/rcupdate.h>
 #ifndef __GENERATING_BOUNDS_H
 #include <linux/mm_types.h>
 #include <generated/bounds.h>
@@ -405,6 +406,68 @@ static unsigned long *folio_flags(struct folio *folio, unsigned n)
 #define FOLIO_SECOND_PAGE	1
 
 /*
+ * Non-atomic page flag operations (__set_bit, __clear_bit, flags &= ~mask)
+ * can race with atomic TestSetPageHWPoison() in memory_failure().
+ * Wrap non-atomic ops in rcu_read_lock/rcu_read_unlock so that
+ * synchronize_rcu() in memory_failure() drains in-flight callers.
+ */
+#ifdef CONFIG_MEMORY_FAILURE
+static __always_inline void
+hwpoison_safe_set_bit(unsigned long nr, unsigned long *addr)
+{
+	rcu_read_lock();
+	__set_bit(nr, addr);
+	rcu_read_unlock();
+}
+
+static __always_inline void
+hwpoison_safe_clear_bit(unsigned long nr, unsigned long *addr)
+{
+	rcu_read_lock();
+	__clear_bit(nr, addr);
+	rcu_read_unlock();
+}
+
+static __always_inline void hwpoison_rcu_lock_flags(unsigned long *addr)
+{
+	rcu_read_lock();
+}
+
+static __always_inline void hwpoison_rcu_unlock_flags(unsigned long *addr)
+{
+	rcu_read_unlock();
+}
+
+static __always_inline void hwpoison_rcu_lock(void)
+{
+	rcu_read_lock();
+}
+
+static __always_inline void hwpoison_rcu_unlock(void)
+{
+	rcu_read_unlock();
+}
+
+#else /* !CONFIG_MEMORY_FAILURE */
+static inline void
+hwpoison_safe_set_bit(unsigned long nr, unsigned long *addr)
+{
+	__set_bit(nr, addr);
+}
+
+static inline void
+hwpoison_safe_clear_bit(unsigned long nr, unsigned long *addr)
+{
+	__clear_bit(nr, addr);
+}
+
+static inline void hwpoison_rcu_lock_flags(unsigned long *addr) { }
+static inline void hwpoison_rcu_unlock_flags(unsigned long *addr) { }
+static inline void hwpoison_rcu_lock(void) { }
+static inline void hwpoison_rcu_unlock(void) { }
+#endif
+
+/*
  * Macros to create function definitions for page flags
  */
 #define FOLIO_TEST_FLAG(name, page)					\
@@ -421,11 +484,11 @@ static __always_inline void folio_clear_##name(struct folio *folio)	\
 
 #define __FOLIO_SET_FLAG(name, page)					\
 static __always_inline void __folio_set_##name(struct folio *folio)	\
-{ __set_bit(PG_##name, folio_flags(folio, page)); }
+{ hwpoison_safe_set_bit(PG_##name, folio_flags(folio, page)); }
 
 #define __FOLIO_CLEAR_FLAG(name, page)					\
 static __always_inline void __folio_clear_##name(struct folio *folio)	\
-{ __clear_bit(PG_##name, folio_flags(folio, page)); }
+{ hwpoison_safe_clear_bit(PG_##name, folio_flags(folio, page)); }
 
 #define FOLIO_TEST_SET_FLAG(name, page)					\
 static __always_inline bool folio_test_set_##name(struct folio *folio)	\
@@ -458,12 +521,12 @@ static __always_inline void ClearPage##uname(struct page *page)		\
 #define __SETPAGEFLAG(uname, lname, policy)				\
 __FOLIO_SET_FLAG(lname, FOLIO_##policy)					\
 static __always_inline void __SetPage##uname(struct page *page)		\
-{ __set_bit(PG_##lname, &policy(page, 1)->flags.f); }
+{ hwpoison_safe_set_bit(PG_##lname, &policy(page, 1)->flags.f); }
 
 #define __CLEARPAGEFLAG(uname, lname, policy)				\
 __FOLIO_CLEAR_FLAG(lname, FOLIO_##policy)				\
 static __always_inline void __ClearPage##uname(struct page *page)	\
-{ __clear_bit(PG_##lname, &policy(page, 1)->flags.f); }
+{ hwpoison_safe_clear_bit(PG_##lname, &policy(page, 1)->flags.f); }
 
 #define TESTSETFLAG(uname, lname, policy)				\
 FOLIO_TEST_SET_FLAG(lname, FOLIO_##policy)				\
@@ -806,7 +869,7 @@ static inline bool PageUptodate(const struct page *page)
 static __always_inline void __folio_mark_uptodate(struct folio *folio)
 {
 	smp_wmb();
-	__set_bit(PG_uptodate, folio_flags(folio, 0));
+	hwpoison_safe_set_bit(PG_uptodate, folio_flags(folio, 0));
 }
 
 static __always_inline void folio_mark_uptodate(struct folio *folio)
@@ -1166,6 +1229,14 @@ static __always_inline void ClearPageAnonExclusive(struct page *page)
 }
 
 static __always_inline void __ClearPageAnonExclusive(struct page *page)
+{
+	VM_BUG_ON_PGFLAGS(!PageAnon(page), page);
+	VM_BUG_ON_PGFLAGS(PageHuge(page) && !PageHead(page), page);
+	hwpoison_safe_clear_bit(PG_anon_exclusive, &PF_ANY(page, 1)->flags.f);
+}
+
+/* Caller must hold hwpoison_rcu_lock() */
+static __always_inline void ___ClearPageAnonExclusive(struct page *page)
 {
 	VM_BUG_ON_PGFLAGS(!PageAnon(page), page);
 	VM_BUG_ON_PGFLAGS(PageHuge(page) && !PageHead(page), page);

@@ -425,8 +425,10 @@ void free_zone_device_folio(struct folio *folio)
 	mem_cgroup_uncharge(folio);
 
 	if (folio_test_anon(folio)) {
+		hwpoison_rcu_lock();
 		for (i = 0; i < nr; i++)
-			__ClearPageAnonExclusive(folio_page(folio, i));
+			___ClearPageAnonExclusive(folio_page(folio, i));
+		hwpoison_rcu_unlock();
 	}
 
 	/*
@@ -494,7 +496,9 @@ void zone_device_page_init(struct page *page, struct dev_pagemap *pgmap,
 		 * blindly clear bits which could have set my order field here,
 		 * including page head.
 		 */
+		hwpoison_rcu_lock_flags(&new_page->flags.f);
 		new_page->flags.f &= ~0xffUL;	/* Clear possible order, page head */
+		hwpoison_rcu_unlock_flags(&new_page->flags.f);
 
 #ifdef NR_PAGES_IN_LARGE_FOLIO
 		/*
