@@ -810,6 +810,8 @@ static int dvbdmx_allocate_ts_feed(struct dmx_demux *dmx,
 	feed->pid = 0xffff;
 	feed->peslen = 0xfffa;
 	feed->buffer_flags = 0;
+	feed->ts_type = 0;
+	feed->pes_type = DMX_PES_OTHER;
 
 	(*ts_feed) = &feed->feed.ts;
 	(*ts_feed)->parent = dmx;
