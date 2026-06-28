@@ -33,6 +33,7 @@
 #include <linux/mman.h>
 #include <linux/file.h>
 #include <linux/pm_runtime.h>
+#include <drm/ttm/ttm_bo.h>
 #include "amdgpu_amdkfd.h"
 #include "amdgpu.h"
 #include "amdgpu_reset.h"
@@ -745,6 +746,22 @@ static void kfd_process_free_gpuvm(struct kgd_mem *mem,
 					       NULL);
 }
 
+static void kfd_process_free_gpuvm_map(struct kgd_mem *mem,
+				       struct kfd_process_device *pdd,
+				       struct iosys_map *map)
+{
+	struct kfd_node *dev = pdd->dev;
+
+	if (map && !iosys_map_is_null(map)) {
+		amdgpu_amdkfd_gpuvm_unmap_bo_from_kernel(mem);
+		iosys_map_clear(map);
+	}
+
+	amdgpu_amdkfd_gpuvm_unmap_memory_from_gpu(dev->adev, mem, pdd->drm_priv);
+	amdgpu_amdkfd_gpuvm_free_memory_of_gpu(dev->adev, mem, pdd->drm_priv,
+					       NULL);
+}
+
 /* kfd_process_alloc_gpuvm - Allocate GPU VM for the KFD process
  *	This function should be only called right after the process
  *	is created and when kfd_processes_mutex is still being held
@@ -1186,9 +1203,9 @@ static void kfd_process_destroy_pdds(struct kfd_process *p)
 		if (pdd->drm_file)
 			fput(pdd->drm_file);
 
-		if (pdd->qpd.cwsr_kaddr && !pdd->qpd.cwsr_base)
-			free_pages((unsigned long)pdd->qpd.cwsr_kaddr,
-				get_order(KFD_CWSR_TBA_TMA_SIZE));
+		if (!iosys_map_is_null(&pdd->qpd.cwsr_map) && !pdd->qpd.cwsr_base)
+			free_pages((unsigned long)pdd->qpd.cwsr_map.vaddr,
+				   get_order(KFD_CWSR_TBA_TMA_SIZE));
 
 		idr_destroy(&pdd->alloc_idr);
 
@@ -1495,7 +1512,7 @@ static int kfd_process_device_init_cwsr_dgpu(struct kfd_process_device *pdd)
 	void *kaddr;
 	int ret;
 
-	if (!dev->kfd->cwsr_enabled || qpd->cwsr_kaddr || !qpd->cwsr_base)
+	if (!dev->kfd->cwsr_enabled || !iosys_map_is_null(&qpd->cwsr_map) || !qpd->cwsr_base)
 		return 0;
 
 	if (KFD_GC_VERSION(dev) >= IP_VERSION(9, 4, 2) && !dev->adev->apu_prefer_gtt)
@@ -1510,17 +1527,28 @@ static int kfd_process_device_init_cwsr_dgpu(struct kfd_process_device *pdd)
 		return ret;
 
 	qpd->cwsr_mem = mem;
-	qpd->cwsr_kaddr = kaddr;
+
+	/* Set up iosys_map based on whether memory is MMIO or system memory */
+	if (mem->bo->kmap.bo_kmap_type & TTM_BO_MAP_IOMEM_MASK)
+		iosys_map_set_vaddr_iomem(&qpd->cwsr_map, kaddr);
+	else
+		iosys_map_set_vaddr(&qpd->cwsr_map, kaddr);
+
 	qpd->tba_addr = qpd->cwsr_base;
 
-	memcpy(qpd->cwsr_kaddr, dev->kfd->cwsr_isa, dev->kfd->cwsr_isa_size);
+	/* Copy CWSR ISA to buffer using appropriate accessor */
+	iosys_map_memcpy_to(&qpd->cwsr_map, 0, dev->kfd->cwsr_isa,
+			    dev->kfd->cwsr_isa_size);
 
 	kfd_process_set_trap_debug_flag(&pdd->qpd,
 					pdd->process->debug_trap_enabled);
 
 	qpd->tma_addr = qpd->tba_addr + KFD_CWSR_TMA_OFFSET;
-	pr_debug("set tba :0x%llx, tma:0x%llx, cwsr_kaddr:%p for pqm.\n",
-		 qpd->tba_addr, qpd->tma_addr, qpd->cwsr_kaddr);
+	pr_debug("set tba :0x%llx, tma:0x%llx, cwsr_map:%s at %p for pqm.\n",
+		 qpd->tba_addr, qpd->tma_addr,
+		 qpd->cwsr_map.is_iomem ? "iomem" : "system",
+		 qpd->cwsr_map.is_iomem ? (void *)qpd->cwsr_map.vaddr_iomem :
+					  qpd->cwsr_map.vaddr);
 
 	return 0;
 }
@@ -1530,24 +1558,24 @@ static void kfd_process_device_destroy_cwsr_dgpu(struct kfd_process_device *pdd)
 	struct kfd_node *dev = pdd->dev;
 	struct qcm_process_device *qpd = &pdd->qpd;
 
-	if (!dev->kfd->cwsr_enabled || !qpd->cwsr_kaddr || !qpd->cwsr_base)
+	if (!dev->kfd->cwsr_enabled || iosys_map_is_null(&qpd->cwsr_map) || !qpd->cwsr_base)
 		return;
 
-	kfd_process_free_gpuvm(qpd->cwsr_mem, pdd, &qpd->cwsr_kaddr);
+	kfd_process_free_gpuvm_map(qpd->cwsr_mem, pdd, &qpd->cwsr_map);
 }
 
 void kfd_process_set_trap_handler(struct qcm_process_device *qpd,
 				  uint64_t tba_addr,
 				  uint64_t tma_addr)
 {
-	if (qpd->cwsr_kaddr) {
+	if (!iosys_map_is_null(&qpd->cwsr_map)) {
 		/* KFD trap handler is bound, record as second-level TBA/TMA
 		 * in first-level TMA. First-level trap will jump to second.
 		 */
-		uint64_t *tma =
-			(uint64_t *)(qpd->cwsr_kaddr + KFD_CWSR_TMA_OFFSET);
-		tma[0] = tba_addr;
-		tma[1] = tma_addr;
+		iosys_map_wr(&qpd->cwsr_map, KFD_CWSR_TMA_OFFSET,
+			     uint64_t, tba_addr);
+		iosys_map_wr(&qpd->cwsr_map, KFD_CWSR_TMA_OFFSET + sizeof(uint64_t),
+			     uint64_t, tma_addr);
 	} else {
 		/* No trap handler bound, bind as first-level TBA/TMA. */
 		qpd->tba_addr = tba_addr;
@@ -1613,10 +1641,10 @@ bool kfd_process_xnack_mode(struct kfd_process *p, bool supported)
 void kfd_process_set_trap_debug_flag(struct qcm_process_device *qpd,
 				     bool enabled)
 {
-	if (qpd->cwsr_kaddr) {
-		uint64_t *tma =
-			(uint64_t *)(qpd->cwsr_kaddr + KFD_CWSR_TMA_OFFSET);
-		tma[2] = enabled;
+	if (!iosys_map_is_null(&qpd->cwsr_map)) {
+		iosys_map_wr(&qpd->cwsr_map,
+			     KFD_CWSR_TMA_OFFSET + 2 * sizeof(uint64_t),
+			     uint64_t, enabled);
 	}
 }
 
