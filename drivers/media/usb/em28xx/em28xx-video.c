@@ -2289,6 +2289,31 @@ static void em28xx_free_v4l2(struct kref *ref)
 	kfree(v4l2);
 }
 
+static void em28xx_vdev_release(struct video_device *vdev)
+{
+	struct em28xx_v4l2 *v4l2;
+	struct em28xx *dev;
+
+	switch (vdev->vfl_type) {
+	case VFL_TYPE_VIDEO:
+		v4l2 = container_of(vdev, struct em28xx_v4l2, vdev);
+		break;
+	case VFL_TYPE_VBI:
+		v4l2 = container_of(vdev, struct em28xx_v4l2, vbi_dev);
+		break;
+	case VFL_TYPE_RADIO:
+		v4l2 = container_of(vdev, struct em28xx_v4l2, radio_dev);
+		break;
+	default:
+		WARN_ON_ONCE(1);
+		return;
+	}
+
+	dev = v4l2->dev;
+	kref_put(&v4l2->ref, em28xx_free_v4l2);
+	kref_put(&dev->ref, em28xx_free_device);
+}
+
 /*
  * em28xx_v4l2_open()
  * inits the device and starts isoc transfer
@@ -2554,7 +2579,7 @@ static const struct v4l2_ioctl_ops video_ioctl_ops = {
 static const struct video_device em28xx_video_template = {
 	.fops		= &em28xx_v4l_fops,
 	.ioctl_ops	= &video_ioctl_ops,
-	.release	= video_device_release_empty,
+	.release	= em28xx_vdev_release,
 	.tvnorms	= V4L2_STD_ALL,
 };
 
@@ -2583,7 +2608,7 @@ static const struct v4l2_ioctl_ops radio_ioctl_ops = {
 static struct video_device em28xx_radio_template = {
 	.fops		= &radio_fops,
 	.ioctl_ops	= &radio_ioctl_ops,
-	.release	= video_device_release_empty,
+	.release	= em28xx_vdev_release,
 };
 
 /* I2C possible address to saa7115, tvp5150, msp3400, tvaudio */
@@ -2965,6 +2990,8 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 			"unable to register video device (error=%i).\n", ret);
 		goto unregister_dev;
 	}
+	kref_get(&v4l2->ref);
+	kref_get(&dev->ref);
 
 	/* Allocate and fill vbi video_device struct */
 	if (em28xx_vbi_supported(dev) == 1) {
@@ -2999,6 +3026,8 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 				"unable to register vbi device\n");
 			goto unregister_dev;
 		}
+		kref_get(&v4l2->ref);
+		kref_get(&dev->ref);
 	}
 
 	if (em28xx_boards[dev->model].radio.type == EM28XX_RADIO) {
@@ -3012,6 +3041,8 @@ static int em28xx_v4l2_init(struct em28xx *dev)
 				"can't register radio device\n");
 			goto unregister_dev;
 		}
+		kref_get(&v4l2->ref);
+		kref_get(&dev->ref);
 		dev_info(&dev->intf->dev,
 			 "Registered radio device as %s\n",
 			 video_device_node_name(&v4l2->radio_dev));
