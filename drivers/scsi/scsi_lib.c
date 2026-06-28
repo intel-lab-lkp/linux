@@ -1187,6 +1187,20 @@ blk_status_t scsi_alloc_sgtables(struct scsi_cmnd *cmd)
 	if (blk_rq_bytes(rq) & rq->q->limits.dma_pad_mask) {
 		unsigned int pad_len =
 			(rq->q->limits.dma_pad_mask & ~blk_rq_bytes(rq)) + 1;
+		unsigned long pad_off = last_sg->offset + last_sg->length;
+		unsigned int pg_off = offset_in_page(pad_off);
+		unsigned int chunk = min_t(unsigned int, PAGE_SIZE - pg_off,
+					   pad_len);
+		struct page *pad_page =
+			pfn_to_page(page_to_pfn(sg_page(last_sg)) +
+				    (pad_off >> PAGE_SHIFT));
+
+		/* dma_pad_mask is expected to be smaller than PAGE_SIZE */
+		memzero_page(pad_page, pg_off, chunk);
+		if (chunk < pad_len)
+			/* Pages within an sg entry are physically contiguous. */
+			memzero_page(pfn_to_page(page_to_pfn(pad_page) + 1),
+				     0, pad_len - chunk);
 
 		last_sg->length += pad_len;
 		cmd->extra_len += pad_len;
