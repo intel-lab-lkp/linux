@@ -1212,6 +1212,17 @@ void ttm_pool_fini(struct ttm_pool *pool)
 	 * that no shrinker is concurrently freeing pages from the pool.
 	 */
 	ttm_pool_synchronize_shrinkers();
+
+	for (i = 0; i < TTM_NUM_CACHING_TYPES; ++i) {
+		for (j = 0; j < NR_PAGE_ORDERS; ++j) {
+			struct ttm_pool_type *pt;
+
+			pt = ttm_pool_select_type(pool, i, j);
+			if (pt != &pool->caching[i].orders[j])
+				continue;
+			list_lru_destroy(&pt->pages);
+		}
+	}
 }
 EXPORT_SYMBOL(ttm_pool_fini);
 
@@ -1407,6 +1418,7 @@ static inline u64 ttm_get_node_memory_size(int nid)
 int ttm_pool_mgr_init(unsigned long num_pages)
 {
 	unsigned int i;
+	int ret = 0;
 
 	int nid;
 	for_each_node(nid) {
@@ -1444,8 +1456,10 @@ int ttm_pool_mgr_init(unsigned long num_pages)
 #endif
 
 	mm_shrinker = shrinker_alloc(SHRINKER_NUMA_AWARE, "drm-ttm_pool");
-	if (!mm_shrinker)
-		return -ENOMEM;
+	if (!mm_shrinker) {
+		ret = -ENOMEM;
+		goto err_shrinker;
+	}
 
 	mm_shrinker->count_objects = ttm_pool_shrinker_count;
 	mm_shrinker->scan_objects = ttm_pool_shrinker_scan;
@@ -1455,6 +1469,10 @@ int ttm_pool_mgr_init(unsigned long num_pages)
 	shrinker_register(mm_shrinker);
 
 	return 0;
+
+err_shrinker:
+	ttm_pool_type_fini_and_list_lru_destroy();
+	return ret;
 }
 
 /**
@@ -1464,16 +1482,23 @@ int ttm_pool_mgr_init(unsigned long num_pages)
  */
 void ttm_pool_mgr_fini(void)
 {
+	shrinker_free(mm_shrinker);
+	ttm_pool_type_fini_and_list_lru_destroy();
+	WARN_ON(!list_empty(&shrinker_list));
+}
+
+void ttm_pool_type_fini_and_list_lru_destroy(void)
+{
 	unsigned int i;
 
 	for (i = 0; i < NR_PAGE_ORDERS; ++i) {
 		ttm_pool_type_fini(&global_write_combined[i]);
+		list_lru_destroy(&global_write_combined[i].pages);
 		ttm_pool_type_fini(&global_uncached[i]);
-
+		list_lru_destroy(&global_uncached[i].pages);
 		ttm_pool_type_fini(&global_dma32_write_combined[i]);
+		list_lru_destroy(&global_dma32_write_combined[i].pages);
 		ttm_pool_type_fini(&global_dma32_uncached[i]);
+		list_lru_destroy(&global_dma32_uncached[i].pages);
 	}
-
-	shrinker_free(mm_shrinker);
-	WARN_ON(!list_empty(&shrinker_list));
 }
