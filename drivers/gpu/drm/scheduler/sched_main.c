@@ -1198,9 +1198,13 @@ void drm_sched_increase_karma(struct drm_sched_job *bad)
 EXPORT_SYMBOL(drm_sched_increase_karma);
 
 /**
- * drm_sched_wqueue_ready - Is the scheduler ready for submission
+ * drm_sched_wqueue_ready - Is the scheduler ready for submission (DEPRECATED)
  *
  * @sched: scheduler instance
+ *
+ * Deprecated, don't use it in new code. This function was added to have the
+ * scheduler represent the hardware ring's state, which must be represented by
+ * the driver's respective data structures.
  *
  * Returns true if submission is ready
  */
