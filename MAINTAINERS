@@ -22106,6 +22106,7 @@ QUALCOMM CAMERA SUBSYSTEM DRIVER
 M:	Bryan O'Donoghue <bryan.odonoghue@linaro.org>
 R:	Vladimir Zapolskiy <vladimir.zapolskiy@linaro.org>
 R:	Loic Poulain <loic.poulain@oss.qualcomm.com>
+R:	Frank Li <Frank.Li@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 F:	Documentation/admin-guide/media/qcom_camss.rst
