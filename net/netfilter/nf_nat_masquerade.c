@@ -6,8 +6,11 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
 #include <linux/netfilter_ipv6.h>
+#include <linux/tcp.h>
 
+#include <net/tcp.h>
 #include <net/netfilter/nf_nat_masquerade.h>
+#include <net/secure_seq.h>
 
 struct masq_dev_work {
 	struct work_struct work;
@@ -24,6 +27,76 @@ static DEFINE_MUTEX(masq_mutex);
 static unsigned int masq_refcnt __read_mostly;
 static atomic_t masq_worker_count __read_mostly;
 
+static __be32 *tcp_ts_option_ptr(const struct sk_buff *skb)
+{
+	const struct tcphdr *th;
+	unsigned char *ptr;
+	unsigned char opsize;
+	unsigned int optlen, offset;
+
+	th = tcp_hdr(skb);
+	optlen = (th->doff - 5) * 4;
+	ptr = (unsigned char *)(th + 1);
+	offset = 0;
+
+	while (offset < optlen) {
+		unsigned char opcode = ptr[offset];
+
+		if (opcode == TCPOPT_EOL)
+			break;
+		if (opcode == TCPOPT_NOP) {
+			offset++;
+			continue;
+		}
+
+		if (offset + 1 >= optlen)
+			break;
+
+		opsize = ptr[offset + 1];
+		if (opsize < 2 || offset + opsize > optlen)
+			break;
+
+		if (opcode == TCPOPT_TIMESTAMP && opsize == TCPOLEN_TIMESTAMP)
+			return (__be32 *)(ptr + offset + 2);
+
+		offset += opsize;
+	}
+
+	return NULL;
+}
+
+static void masquerade_update_tcp_ts_offset(struct nf_conn *ct, struct sk_buff *skb)
+{
+	__be32 *tsptr;
+	struct net *net;
+	struct tcphdr *th;
+	struct tcp_sock *tp;
+	union tcp_seq_and_ts_off st;
+	struct nf_conntrack_tuple *tuple;
+
+	th = tcp_hdr(skb);
+	net = nf_ct_net(ct);
+	tuple = &ct->tuplehash[IP_CT_DIR_REPLY].tuple;
+
+	if (th && th->syn && !th->ack && skb->sk &&
+	    READ_ONCE(net->ipv4.sysctl_tcp_timestamps) == 1) {
+		tp = tcp_sk(skb->sk);
+		tsptr = tcp_ts_option_ptr(skb);
+		if (!tsptr)
+			return;
+
+		if (nf_ct_l3num(ct) == NFPROTO_IPV4)
+			st = secure_tcp_seq_and_ts_off(net, tuple->src.u3.ip, tuple->dst.u3.ip,
+				tuple->src.u.tcp.port, tuple->dst.u.tcp.port);
+		else
+			st = secure_tcpv6_seq_and_ts_off(net, tuple->src.u3.ip6,
+				tuple->dst.u3.ip6, tuple->src.u.tcp.port, tuple->dst.u.tcp.port);
+
+		*tsptr = htonl(tcp_skb_timestamp_ts(tp->tcp_usec_ts, skb) + st.ts_off);
+		WRITE_ONCE(tp->tsoffset, st.ts_off);
+	}
+}
+
 unsigned int
 nf_nat_masquerade_ipv4(struct sk_buff *skb, unsigned int hooknum,
 		       const struct nf_nat_range2 *range,
@@ -35,6 +108,7 @@ nf_nat_masquerade_ipv4(struct sk_buff *skb, unsigned int hooknum,
 	struct nf_nat_range2 newrange;
 	const struct rtable *rt;
 	__be32 newsrc, nh;
+	unsigned int ret;
 
 	WARN_ON(hooknum != NF_INET_POST_ROUTING);
 
@@ -71,7 +145,13 @@ nf_nat_masquerade_ipv4(struct sk_buff *skb, unsigned int hooknum,
 	newrange.max_proto   = range->max_proto;
 
 	/* Hand modified range to generic setup. */
-	return nf_nat_setup_info(ct, &newrange, NF_NAT_MANIP_SRC);
+	ret = nf_nat_setup_info(ct, &newrange, NF_NAT_MANIP_SRC);
+
+	if (ret == NF_ACCEPT && nf_ct_protonum(ct) == IPPROTO_TCP &&
+	    (range->flags & NF_NAT_RANGE_PROTO_RANDOM_ALL))
+		masquerade_update_tcp_ts_offset(ct, skb);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(nf_nat_masquerade_ipv4);
 
@@ -229,6 +309,7 @@ nf_nat_masquerade_ipv6(struct sk_buff *skb, const struct nf_nat_range2 *range,
 	struct in6_addr src;
 	struct nf_conn *ct;
 	struct nf_nat_range2 newrange;
+	unsigned int ret;
 
 	ct = nf_ct_get(skb, &ctinfo);
 	WARN_ON(!(ct && (ctinfo == IP_CT_NEW || ctinfo == IP_CT_RELATED ||
@@ -248,7 +329,13 @@ nf_nat_masquerade_ipv6(struct sk_buff *skb, const struct nf_nat_range2 *range,
 	newrange.min_proto	= range->min_proto;
 	newrange.max_proto	= range->max_proto;
 
-	return nf_nat_setup_info(ct, &newrange, NF_NAT_MANIP_SRC);
+	ret = nf_nat_setup_info(ct, &newrange, NF_NAT_MANIP_SRC);
+
+	if (ret == NF_ACCEPT && nf_ct_protonum(ct) == IPPROTO_TCP &&
+	    (range->flags & NF_NAT_RANGE_PROTO_RANDOM_ALL))
+		masquerade_update_tcp_ts_offset(ct, skb);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(nf_nat_masquerade_ipv6);
 
