@@ -1860,44 +1860,12 @@ int dpaa2_switch_port_vlans_add(struct net_device *netdev,
 					  vlan->changed);
 }
 
-static int dpaa2_switch_port_lookup_address(struct net_device *netdev, int is_uc,
-					    const unsigned char *addr)
-{
-	struct netdev_hw_addr_list *list = (is_uc) ? &netdev->uc : &netdev->mc;
-	struct netdev_hw_addr *ha;
-
-	netif_addr_lock_bh(netdev);
-	list_for_each_entry(ha, &list->list, list) {
-		if (ether_addr_equal(ha->addr, addr)) {
-			netif_addr_unlock_bh(netdev);
-			return 1;
-		}
-	}
-	netif_addr_unlock_bh(netdev);
-	return 0;
-}
-
 static int dpaa2_switch_port_mdb_add(struct net_device *netdev,
 				     const struct switchdev_obj_port_mdb *mdb)
 {
 	struct ethsw_port_priv *port_priv = netdev_priv(netdev);
-	int err;
 
-	/* Check if address is already set on this port */
-	if (dpaa2_switch_port_lookup_address(netdev, 0, mdb->addr))
-		return -EEXIST;
-
-	err = dpaa2_switch_port_fdb_add_mc(port_priv, mdb->addr);
-	if (err)
-		return err;
-
-	err = dev_mc_add(netdev, mdb->addr);
-	if (err) {
-		netdev_err(netdev, "dev_mc_add err %d\n", err);
-		dpaa2_switch_port_fdb_del_mc(port_priv, mdb->addr);
-	}
-
-	return err;
+	return dpaa2_switch_port_fdb_add_mc(port_priv, mdb->addr);
 }
 
 static int dpaa2_switch_port_obj_add(struct net_device *netdev,
@@ -2000,22 +1968,8 @@ static int dpaa2_switch_port_mdb_del(struct net_device *netdev,
 				     const struct switchdev_obj_port_mdb *mdb)
 {
 	struct ethsw_port_priv *port_priv = netdev_priv(netdev);
-	int err;
 
-	if (!dpaa2_switch_port_lookup_address(netdev, 0, mdb->addr))
-		return -ENOENT;
-
-	err = dpaa2_switch_port_fdb_del_mc(port_priv, mdb->addr);
-	if (err)
-		return err;
-
-	err = dev_mc_del(netdev, mdb->addr);
-	if (err) {
-		netdev_err(netdev, "dev_mc_del err %d\n", err);
-		return err;
-	}
-
-	return err;
+	return dpaa2_switch_port_fdb_del_mc(port_priv, mdb->addr);
 }
 
 static int dpaa2_switch_port_obj_del(struct net_device *netdev,
