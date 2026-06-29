@@ -851,7 +851,8 @@ enum yt921x_fdb_entry_status {
 #define YT921X_UDF_NUM		8
 
 /* 8 internal + 2 external + 1 mcu */
-#define YT921X_PORT_NUM			11
+#define YT921X_PORT_NUM		11
+#define YT921X_PORT_MCU		10
 
 #define yt921x_port_is_internal(port) ((port) < 8)
 #define yt921x_port_is_external(port) (8 <= (port) && (port) < 9)
@@ -929,6 +930,7 @@ struct yt921x_acl_blk {
 };
 
 struct yt921x_port {
+	struct yt921x_priv *priv;
 	unsigned char index;
 
 	bool hairpin;
@@ -964,7 +966,7 @@ struct yt921x_priv {
 	struct mii_bus *mbus_int;
 	struct mii_bus *mbus_ext;
 
-	struct yt921x_port ports[YT921X_PORT_NUM];
+	struct yt921x_port *ports[YT921X_PORT_NUM];
 
 	u16 eee_ports_mask;
 
