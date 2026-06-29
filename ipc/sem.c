@@ -86,6 +86,7 @@
 #include <linux/ipc_namespace.h>
 #include <linux/sched/wake_q.h>
 #include <linux/nospec.h>
+#include <linux/overflow.h>
 #include <linux/rhashtable.h>
 
 #include <linux/uaccess.h>
@@ -2225,6 +2226,7 @@ static long do_semtimedop(int semid, struct sembuf __user *tsops,
 	struct sembuf fast_sops[SEMOPM_FAST];
 	struct sembuf *sops = fast_sops;
 	struct ipc_namespace *ns;
+	size_t sops_bytes;
 	int ret;
 
 	ns = current->nsproxy->ipc_ns;
@@ -2232,6 +2234,8 @@ static long do_semtimedop(int semid, struct sembuf __user *tsops,
 		return -E2BIG;
 	if (nsops < 1)
 		return -EINVAL;
+	if (check_mul_overflow(nsops, sizeof(*sops), &sops_bytes))
+		return -E2BIG;
 
 	if (nsops > SEMOPM_FAST) {
 		sops = kvmalloc_objs(*sops, nsops);
@@ -2239,7 +2243,7 @@ static long do_semtimedop(int semid, struct sembuf __user *tsops,
 			return -ENOMEM;
 	}
 
-	if (copy_from_user(sops, tsops, nsops * sizeof(*tsops))) {
+	if (copy_from_user(sops, tsops, sops_bytes)) {
 		ret =  -EFAULT;
 		goto out_free;
 	}
