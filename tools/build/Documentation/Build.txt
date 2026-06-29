@@ -102,7 +102,7 @@ Makefile.include
 ----------------
 
 The tools/build/Makefile.include makefile could be included
-via user makefiles to get usefull definitions.
+via user makefiles to get useful definitions.
 
 It defines following interface:
 
