@@ -8729,6 +8729,7 @@ static int scarlett2_init_notify(struct usb_mixer_interface *mixer)
 	struct scarlett2_data *private = mixer->private_data;
 	unsigned int pipe = usb_rcvintpipe(dev, private->bEndpointAddress);
 	void *transfer_buffer;
+	int err;
 
 	if (mixer->urb) {
 		usb_audio_err(mixer->chip,
@@ -8744,8 +8745,11 @@ static int scarlett2_init_notify(struct usb_mixer_interface *mixer)
 		return -ENOMEM;
 
 	transfer_buffer = kmalloc(private->wMaxPacketSize, GFP_KERNEL);
-	if (!transfer_buffer)
+	if (!transfer_buffer) {
+		usb_free_urb(mixer->urb);
+		mixer->urb = NULL;
 		return -ENOMEM;
+	}
 
 	usb_fill_int_urb(mixer->urb, dev, pipe,
 			 transfer_buffer, private->wMaxPacketSize,
@@ -8753,7 +8757,17 @@ static int scarlett2_init_notify(struct usb_mixer_interface *mixer)
 
 	init_completion(&private->cmd_done);
 
-	return usb_submit_urb(mixer->urb, GFP_KERNEL);
+	err = usb_submit_urb(mixer->urb, GFP_KERNEL);
+	if (err) {
+		usb_audio_err(mixer->chip,
+			      "%s: usb_submit_urb failed: %d\n",
+			      __func__, err);
+		kfree(transfer_buffer);
+		usb_free_urb(mixer->urb);
+		mixer->urb = NULL;
+	}
+
+	return err;
 }
 
 /* Cargo cult proprietary initialisation sequence */
