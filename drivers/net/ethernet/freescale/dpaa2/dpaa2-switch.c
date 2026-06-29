@@ -2069,7 +2069,15 @@ static int dpaa2_switch_port_restore_rxvlan(struct net_device *vdev, int vid, vo
 
 static void dpaa2_switch_port_pre_bridge_leave(struct net_device *netdev)
 {
+	struct ethsw_port_priv *port_priv = netdev_priv(netdev);
+	struct ethsw_core *ethsw = port_priv->ethsw_data;
+
 	switchdev_bridge_port_unoffload(netdev, NULL, NULL, NULL);
+
+	/* Make sure that any FDB add/del operations are completed before the
+	 * bridge layout changes
+	 */
+	flush_workqueue(ethsw->workqueue);
 }
 
 static int dpaa2_switch_port_bridge_leave(struct net_device *netdev)
@@ -2281,7 +2289,6 @@ static void dpaa2_switch_event_work(struct work_struct *work)
 	struct switchdev_notifier_fdb_info *fdb_info;
 	int err;
 
-	rtnl_lock();
 	fdb_info = &switchdev_work->fdb_info;
 
 	switch (switchdev_work->event) {
@@ -2310,7 +2317,6 @@ static void dpaa2_switch_event_work(struct work_struct *work)
 		break;
 	}
 
-	rtnl_unlock();
 	kfree(switchdev_work->fdb_info.addr);
 	kfree(switchdev_work);
 	dev_put(dev);
