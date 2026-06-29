@@ -159,6 +159,19 @@ static inline int tcf_classify(struct sk_buff *skb,
 
 #endif
 
+static inline int tcf_classify_qdisc(struct sk_buff *skb,
+				     const struct tcf_proto *tp,
+				     struct tcf_result *res, bool compat_mode)
+{
+	int ret = tcf_classify(skb, NULL, tp, res, compat_mode);
+
+	if (unlikely(ret == TC_ACT_REDIRECT)) {
+		pr_warn_once("TC_ACT_REDIRECT from qdisc filter chains is not supported; use eBPF with clsact or mirred redirect instead\n");
+		ret = TC_ACT_SHOT;
+	}
+	return ret;
+}
+
 static inline unsigned long
 __cls_set_class(unsigned long *clp, unsigned long cl)
 {
