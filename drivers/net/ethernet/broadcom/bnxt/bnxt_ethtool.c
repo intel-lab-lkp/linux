@@ -37,6 +37,7 @@
 #include "bnxt_nvm_defs.h"	/* NVRAM content constant and structure defs */
 #include "bnxt_fw_hdr.h"	/* Firmware hdr constant and structure defs */
 #include "bnxt_coredump.h"
+#include "bnxt_mpc.h"
 
 #define BNXT_NVM_ERR_MSG(dev, extack, msg)			\
 	do {							\
@@ -1050,6 +1051,8 @@ static int bnxt_set_channels(struct net_device *dev,
 		bp->tx_nr_rings = bp->tx_nr_rings_per_tc * tcs + tx_xdp;
 
 	bnxt_set_cp_rings(bp, sh);
+
+	bnxt_set_dflt_mpc_rings(bp);
 
 	/* After changing number of rx channels, update NTUPLE feature. */
 	netdev_update_features(dev);
