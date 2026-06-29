@@ -4450,8 +4450,7 @@ void __init hugetlb_bootmem_set_nodes(void)
 		return;
 
 	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, &nid) {
-		if (end_pfn > start_pfn)
-			node_set(nid, hugetlb_bootmem_nodes);
+		node_set(nid, hugetlb_bootmem_nodes);
 	}
 }
 
