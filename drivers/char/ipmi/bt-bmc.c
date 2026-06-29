@@ -64,9 +64,8 @@ struct bt_bmc {
 	wait_queue_head_t	queue;
 	struct timer_list	poll_timer;
 	struct mutex		mutex;
+	atomic_t		open_count;
 };
-
-static atomic_t open_count = ATOMIC_INIT(0);
 
 static u8 bt_inb(struct bt_bmc *bt_bmc, int reg)
 {
@@ -152,12 +151,12 @@ static int bt_bmc_open(struct inode *inode, struct file *file)
 {
 	struct bt_bmc *bt_bmc = file_bt_bmc(file);
 
-	if (atomic_inc_return(&open_count) == 1) {
+	if (atomic_inc_return(&bt_bmc->open_count) == 1) {
 		clr_b_busy(bt_bmc);
 		return 0;
 	}
 
-	atomic_dec(&open_count);
+	atomic_dec(&bt_bmc->open_count);
 	return -EBUSY;
 }
 
@@ -313,7 +312,7 @@ static int bt_bmc_release(struct inode *inode, struct file *file)
 {
 	struct bt_bmc *bt_bmc = file_bt_bmc(file);
 
-	atomic_dec(&open_count);
+	atomic_dec(&bt_bmc->open_count);
 	set_b_busy(bt_bmc);
 	return 0;
 }
@@ -424,6 +423,8 @@ static int bt_bmc_probe(struct platform_device *pdev)
 	bt_bmc->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(bt_bmc->base))
 		return PTR_ERR(bt_bmc->base);
+
+	atomic_set(&bt_bmc->open_count, 0);
 
 	mutex_init(&bt_bmc->mutex);
 	init_waitqueue_head(&bt_bmc->queue);
