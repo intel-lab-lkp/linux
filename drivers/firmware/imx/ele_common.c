@@ -6,6 +6,23 @@
 #include "ele_base_msg.h"
 #include "ele_common.h"
 
+int se_chk_tx_msg_hdr(struct se_if_priv *priv, struct se_msg_hdr *header)
+{
+	if (!header->size || header->size > MAX_WORD_SIZE)
+		return -EINVAL;
+
+	if (header->tag != priv->if_defs->cmd_tag &&
+	    header->tag != priv->if_defs->rsp_tag)
+		return -EINVAL;
+
+	if (header->ver == priv->if_defs->base_api_ver)
+		return ele_uapi_allowed_base_cmd(priv, header);
+	else if (header->ver == priv->if_defs->fw_api_ver)
+		return 0;
+
+	return -EINVAL;
+}
+
 /*
  * se_get_msg_chksum() - to calculate checksum word by word.
  *
@@ -42,15 +59,36 @@ u32 se_get_msg_chksum(u32 *msg, u32 msg_len)
 	return chksum;
 }
 
+void set_se_rcv_msg_timeout(struct se_if_priv *priv, u32 timeout_ms)
+{
+	priv->se_rcv_msg_timeout_ms = timeout_ms;
+}
+
 int ele_msg_rcv(struct se_if_device_ctx *dev_ctx, struct se_clbk_handle *se_clbk_hdl)
 {
+	bool is_rsp_wait_with_timeout = false;
 	bool wait_uninterruptible = false;
 	unsigned long remaining_jiffies;
+	unsigned long deadline_jiffies;
+	unsigned long timeout_jiffies;
 	unsigned long flags;
 	int ret;
 
 	remaining_jiffies = MAX_SCHEDULE_TIMEOUT;
+	if (dev_ctx->priv->cmd_receiver_clbk_hdl.dev_ctx != dev_ctx) {
+		is_rsp_wait_with_timeout = true;
+		timeout_jiffies = msecs_to_jiffies(dev_ctx->priv->se_rcv_msg_timeout_ms);
+		deadline_jiffies = jiffies + timeout_jiffies;
+	}
 	do {
+		if (is_rsp_wait_with_timeout) {
+			if (time_after_eq(jiffies, deadline_jiffies)) {
+				ret = -ETIMEDOUT;
+				break;
+			}
+			remaining_jiffies = deadline_jiffies - jiffies;
+		}
+
 		if (wait_uninterruptible)
 			ret = wait_for_completion_timeout(&se_clbk_hdl->done,
 							  remaining_jiffies);
