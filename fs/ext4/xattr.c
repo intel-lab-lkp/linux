@@ -475,12 +475,16 @@ void ext4_evict_ea_inode(struct inode *inode)
 
 	if (!EA_INODE_CACHE(inode))
 		return;
-	/* Wait for entry to get unused so that we can remove it */
-	while ((oe = mb_cache_entry_delete_or_get(EA_INODE_CACHE(inode),
-			ext4_xattr_inode_get_hash(inode), inode->i_ino))) {
-		mb_cache_entry_wait_unused(oe);
+	/*
+	 * Try to delete the cache entry.  If it's currently in use by
+	 * another thread (e.g. ext4_xattr_inode_cache_find), just leave
+	 * it -- the stale entry is harmless.  Waiting here would deadlock
+	 * if the other thread's iget is blocked on this inode's I_FREEING.
+	 */
+	oe = mb_cache_entry_delete_or_get(EA_INODE_CACHE(inode),
+			ext4_xattr_inode_get_hash(inode), inode->i_ino);
+	if (oe)
 		mb_cache_entry_put(EA_INODE_CACHE(inode), oe);
-	}
 }
 
 static int
