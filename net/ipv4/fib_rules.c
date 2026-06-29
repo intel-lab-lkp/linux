@@ -349,7 +349,7 @@ errout:
 	return err;
 }
 
-static int fib4_rule_delete(struct fib_rule *rule)
+static void fib4_rule_delete(struct fib_rule *rule)
 {
 	struct net *net = rule->fr_net;
 
@@ -361,8 +361,6 @@ static int fib4_rule_delete(struct fib_rule *rule)
 	if (net->ipv4.fib_rules_require_fldissect &&
 	    fib_rule_requires_fldissect(rule))
 		net->ipv4.fib_rules_require_fldissect--;
-
-	return 0;
 }
 
 static int fib4_rule_compare(struct fib_rule *rule, struct fib_rule_hdr *frh,

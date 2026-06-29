@@ -1055,11 +1055,8 @@ int fib_delrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto errout_free;
 	}
 
-	if (ops->delete) {
-		err = ops->delete(rule);
-		if (err)
-			goto errout_free;
-	}
+	if (ops->delete)
+		ops->delete(rule);
 
 	if (rule->tun_id)
 		ip_tunnel_unneed_metadata();
