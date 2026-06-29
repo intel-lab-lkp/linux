@@ -1,0 +1,113 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/connector/fsl,aud-io-slot.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP AUD-IO Slot
+
+maintainers:
+  - Frank Li <Frank.li@nxp.com>
+  - Chancel Liu <chancel.liu@nxp.com>
+
+description:
+  The NXP AUD-IO slot represents a physically present I/O connector on
+  the base board. It acts as a nexus that exposes a constrained set of
+  I/O resources, such as GPIOs, clocks and interrupts, through fixed
+  electrical wiring. All actual hardware providers reside on the base
+  board. The connector node only defines index-based mappings to those
+  providers. This connector type is present on i.MX95 19x19 EVK and
+  i.MX952 EVK, where it is used to attach the IMX-AUD-IO expansion card.
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - enum:
+              - fsl,imx952-evk-aud-io
+          - const: fsl,imx95-19x19-evk-aud-io
+      - const: fsl,imx95-19x19-evk-aud-io
+
+  gpio-controller: true
+
+  '#gpio-cells':
+    const: 2
+
+  gpio-map:
+    minItems: 1
+    maxItems: 32
+
+  gpio-map-mask:
+    items:
+      - const: 0xffff
+      - const: 0x0
+
+  gpio-map-pass-thru:
+    items:
+      - const: 0x0
+      - const: 0x1
+
+  '#clock-cells':
+    const: 1
+
+  clock-map:
+    minItems: 1
+    maxItems: 16
+
+  clock-map-mask:
+    items:
+      - const: 0xff
+
+  clock-map-pass-thru: true
+
+  '#address-cells':
+    const: 0
+
+  interrupt-controller: true
+
+  '#interrupt-cells':
+    const: 2
+
+  interrupt-map:
+    minItems: 1
+    maxItems: 32
+
+  interrupt-map-mask:
+    items:
+      - const: 0xffff
+      - const: 0x0
+
+allOf:
+  - $ref: /schemas/gpio/gpio-nexus-node.yaml#
+  - $ref: /schemas/clock/clock-nexus-node.yaml#
+
+required:
+  - compatible
+  - gpio-controller
+  - '#gpio-cells'
+  - gpio-map
+  - gpio-map-mask
+  - gpio-map-pass-thru
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    connector {
+      compatible = "fsl,imx95-19x19-evk-aud-io";
+      gpio-controller;
+      #gpio-cells = <2>;
+      gpio-map = <0 0 &gpio1 8 1>;
+      gpio-map-mask = <0xffff 0x0>;
+      gpio-map-pass-thru = <0x0 0x1>;
+      #clock-cells = <1>;
+      clock-map = <0 &clk 1>;
+      clock-map-mask = <0xff>;
+      #address-cells = <0>;
+      interrupt-controller;
+      #interrupt-cells = <2>;
+      interrupt-map-mask = <0xffff 0x0>;
+      interrupt-map = <0 0 &gpio2 27 IRQ_TYPE_LEVEL_LOW>;
+    };
