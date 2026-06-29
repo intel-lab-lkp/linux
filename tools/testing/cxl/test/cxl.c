@@ -1587,8 +1587,10 @@ static __init int cxl_rch_topo_init(void)
 		struct platform_device *pdev;
 
 		pdev = platform_device_alloc("cxl_host_bridge", idx);
-		if (!pdev)
+		if (!pdev) {
+			rc = -ENOMEM;
 			goto err_bridge;
+		}
 
 		mock_companion(adev, &pdev->dev);
 		rc = cxl_mock_platform_device_add(pdev, &cxl_rch[i]);
@@ -1642,8 +1644,10 @@ static __init int cxl_single_topo_init(void)
 
 		pdev = platform_device_alloc("cxl_host_bridge",
 					     NR_CXL_HOST_BRIDGES + i);
-		if (!pdev)
+		if (!pdev) {
+			rc = -ENOMEM;
 			goto err_bridge;
+		}
 
 		mock_companion(adev, &pdev->dev);
 		rc = cxl_mock_platform_device_add(pdev, &cxl_hb_single[i]);
@@ -1664,8 +1668,10 @@ static __init int cxl_single_topo_init(void)
 
 		pdev = platform_device_alloc("cxl_root_port",
 					     NR_MULTI_ROOT + i);
-		if (!pdev)
+		if (!pdev) {
+			rc = -ENOMEM;
 			goto err_port;
+		}
 		pdev->dev.parent = &bridge->dev;
 
 		rc = cxl_mock_platform_device_add(pdev, &cxl_root_single[i]);
@@ -1679,8 +1685,10 @@ static __init int cxl_single_topo_init(void)
 
 		pdev = platform_device_alloc("cxl_switch_uport",
 					     NR_MULTI_ROOT + i);
-		if (!pdev)
+		if (!pdev) {
+			rc = -ENOMEM;
 			goto err_uport;
+		}
 		pdev->dev.parent = &root_port->dev;
 
 		rc = cxl_mock_platform_device_add(pdev, &cxl_swu_single[i]);
@@ -1695,8 +1703,10 @@ static __init int cxl_single_topo_init(void)
 
 		pdev = platform_device_alloc("cxl_switch_dport",
 					     i + NR_MEM_MULTI);
-		if (!pdev)
+		if (!pdev) {
+			rc = -ENOMEM;
 			goto err_dport;
+		}
 		pdev->dev.parent = &uport->dev;
 
 		rc = cxl_mock_platform_device_add(pdev, &cxl_swd_single[i]);
@@ -2290,8 +2300,10 @@ static __init int cxl_test_init(void)
 		goto err_populate;
 
 	cxl_acpi = platform_device_alloc("cxl_acpi", 0);
-	if (!cxl_acpi)
+	if (!cxl_acpi) {
+		rc = -ENOMEM;
 		goto err_topo;
+	}
 
 	mock_companion(&acpi0017_mock, &cxl_acpi->dev);
 	acpi0017_mock.dev.bus = &platform_bus_type;
