@@ -2212,7 +2212,7 @@ static int drm_state_info(struct seq_file *m, void *data)
 
 /* any use in debugfs files to dump individual planes/crtc/etc? */
 static const struct drm_debugfs_info drm_atomic_debugfs_list[] = {
-	{"state", drm_state_info, 0},
+	{"state", drm_state_info, 0, NULL},
 };
 
 void drm_atomic_debugfs_init(struct drm_device *dev)
