@@ -214,6 +214,27 @@ static unsigned int sysctl_sched_energy_aware = 1;
 static DEFINE_MUTEX(sched_energy_mutex);
 static bool sched_energy_update;
 
+/*
+ * An artificial EM (see EM_PERF_DOMAIN_ARTIFICIAL) only encodes a cost
+ * ranking between CPUs and does not claim to predict energy use at any
+ * particular OPP.  Unlike a real power-based EM, its conclusions do not
+ * rely on the active governor tracking utilization when selecting
+ * frequencies, so the schedutil requirement below does not apply to it.
+ */
+static bool perf_domains_are_artificial(const struct cpumask *cpu_mask)
+{
+	int i;
+
+	for_each_cpu(i, cpu_mask) {
+		struct em_perf_domain *pd = em_cpu_get(i);
+
+		if (!pd || !em_is_artificial(pd))
+			return false;
+	}
+
+	return true;
+}
+
 static bool sched_is_eas_possible(const struct cpumask *cpu_mask)
 {
 	bool any_asym_capacity = false;
@@ -251,7 +272,8 @@ static bool sched_is_eas_possible(const struct cpumask *cpu_mask)
 		return false;
 	}
 
-	if (!cpufreq_ready_for_eas(cpu_mask)) {
+	if (!cpufreq_ready_for_eas(cpu_mask) &&
+	    !perf_domains_are_artificial(cpu_mask)) {
 		if (sched_debug()) {
 			pr_info("rd %*pbl: Checking EAS: cpufreq is not ready\n",
 				cpumask_pr_args(cpu_mask));
@@ -405,7 +427,9 @@ static void sched_energy_set(bool has_eas)
  *    1. an Energy Model (EM) is available;
  *    2. the SD_ASYM_CPUCAPACITY flag is set in the sched_domain hierarchy.
  *    3. no SMT is detected.
- *    4. schedutil is driving the frequency of all CPUs of the rd;
+ *    4. schedutil is driving the frequency of all CPUs of the rd, or the EM
+ *       of all of them is artificial (i.e. a cost ranking rather than a
+ *       real power table, see EM_PERF_DOMAIN_ARTIFICIAL);
  *    5. frequency invariance support is present;
  */
 static bool build_perf_domains(const struct cpumask *cpu_map)

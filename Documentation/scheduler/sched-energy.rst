@@ -379,7 +379,12 @@ Consequently, the only sane governor to use together with EAS is schedutil,
 because it is the only one providing some degree of consistency between
 frequency requests and energy predictions.
 
-Using EAS with any other governor than schedutil is not supported.
+Using EAS with any other governor than schedutil is not supported, unless the
+EM in use is artificial (see EM_PERF_DOMAIN_ARTIFICIAL).  An artificial EM only
+encodes a cost ranking between CPUs/OPPs instead of a real power table, so it
+does not make any claim about energy use at a specific OPP and its conclusions
+do not depend on the governor actually tracking utilization when requesting
+frequencies.
 
 
 6.5 Scale-invariant utilization signals

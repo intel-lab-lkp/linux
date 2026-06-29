@@ -409,13 +409,16 @@ Energy-Aware Scheduling Support
 If ``CONFIG_ENERGY_MODEL`` has been set during kernel configuration and
 ``intel_pstate`` runs on a hybrid processor without SMT, in addition to enabling
 :ref:`CAS` it registers an Energy Model for the processor.  This allows the
-Energy-Aware Scheduling (EAS) support to be enabled in the CPU scheduler if
-``schedutil`` is used as the  ``CPUFreq`` governor which requires ``intel_pstate``
-to operate in the :ref:`passive mode <passive_mode>`.
+Energy-Aware Scheduling (EAS) support to be enabled in the CPU scheduler.
 
 The Energy Model registered by ``intel_pstate`` is artificial (that is, it is
 based on abstract cost values and it does not include any real power numbers)
 and it is relatively simple to avoid unnecessary computations in the scheduler.
+Because of that, EAS does not require ``schedutil`` to be used as the
+``CPUFreq`` governor in this case: the cost ranking it relies on does not
+depend on the governor tracking utilization when requesting frequencies, so
+EAS works the same way regardless of whether ``intel_pstate`` operates in the
+active or in the :ref:`passive mode <passive_mode>`.
 There is a performance domain in it for every CPU in the system and the cost
 values for these performance domains have been chosen so that running a task on
 a less performant (small) CPU appears to be always cheaper than running that
