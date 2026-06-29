@@ -3251,7 +3251,7 @@ int __init pcpu_page_first_chunk(size_t reserved_size, pcpu_fc_cpu_to_node_fn_t 
 	}
 
 	/* allocate vm area, map the pages and copy static data */
-	vm.flags = VM_ALLOC;
+	vm.flags = VM_ALLOC | VM_NO_GUARD;
 	vm.size = num_possible_cpus() * ai->unit_size;
 	vm_area_register_early(&vm, PAGE_SIZE);
 

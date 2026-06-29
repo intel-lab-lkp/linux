@@ -3248,7 +3248,7 @@ struct vm_struct *__get_vm_area_node(unsigned long size,
 		return NULL;
 
 	if (!(flags & VM_NO_GUARD))
-		size += PAGE_SIZE;
+		size += VMAP_GUARD_SIZE;
 
 	area->flags = flags;
 	area->caller = caller;
@@ -5261,7 +5261,7 @@ retry:
 
 		spin_lock(&vn->busy.lock);
 		insert_vmap_area(vas[area], &vn->busy.root, &vn->busy.head);
-		setup_vmalloc_vm(vms[area], vas[area], VM_ALLOC,
+		setup_vmalloc_vm(vms[area], vas[area], VM_ALLOC | VM_NO_GUARD,
 				 pcpu_get_vm_areas);
 		spin_unlock(&vn->busy.lock);
 	}
