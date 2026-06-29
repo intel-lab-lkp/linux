@@ -1479,6 +1479,8 @@ static int __init dynamic_debug_init(void)
 	 * slightly noisy if verbose, but harmless.
 	 */
 	cmdline = kstrdup(saved_command_line, GFP_KERNEL);
+	if (!cmdline)
+		return 0; /* prevents a boot-time NULL deref */
 	parse_args("dyndbg params", cmdline, NULL,
 		   0, 0, 0, NULL, &ddebug_dyndbg_boot_param_cb);
 	kfree(cmdline);
