@@ -1449,6 +1449,7 @@ struct acpi_madt_generic_interrupt {
 	u16 trbe_interrupt;	/* ACPI 6.5 */
 	u16 iaffid;		/* ACPI 6.7 */
 	u32 irs_id;
+	u32 hacdbsirq_gsi;	/* ACPI 6.X */
 };
 
 /* Masks for Flags field above */
