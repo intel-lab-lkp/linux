@@ -63,6 +63,7 @@ allOf:
           contains:
             enum:
               - qcom,eliza-inline-crypto-engine
+              - qcom,hawi-inline-crypto-engine
               - qcom,maili-inline-crypto-engine
               - qcom,milos-inline-crypto-engine
 
