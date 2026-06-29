@@ -1365,6 +1365,14 @@ static int nbd_reconnect_socket(struct nbd_device *nbd, unsigned long arg)
 		return -ENOMEM;
 	}
 
+	/* Setup new socket properties before taking tx_lock to avoid
+	 * circular dependency: tx_lock -> cpu_hotplug_lock (via
+	 * sk_set_memalloc -> static_branch_inc).
+	 */
+	sk_set_memalloc(sock->sk);
+	if (nbd->tag_set.timeout)
+		sock->sk->sk_sndtimeo = nbd->tag_set.timeout;
+
 	for (i = 0; i < config->num_connections; i++) {
 		struct nbd_sock *nsock = config->socks[i];
 
@@ -1376,9 +1384,6 @@ static int nbd_reconnect_socket(struct nbd_device *nbd, unsigned long arg)
 			mutex_unlock(&nsock->tx_lock);
 			continue;
 		}
-		sk_set_memalloc(sock->sk);
-		if (nbd->tag_set.timeout)
-			sock->sk->sk_sndtimeo = nbd->tag_set.timeout;
 		atomic_inc(&config->recv_threads);
 		refcount_inc(&nbd->config_refs);
 		old = nsock->sock;
@@ -1404,6 +1409,7 @@ static int nbd_reconnect_socket(struct nbd_device *nbd, unsigned long arg)
 		wake_up(&config->conn_wait);
 		return 0;
 	}
+	sk_clear_memalloc(sock->sk);
 	sockfd_put(sock);
 	kfree(args);
 	return -ENOSPC;
