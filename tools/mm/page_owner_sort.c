@@ -391,17 +391,14 @@ static char *get_comm(char *buf)
 {
 	char *comm_str = malloc(TASK_COMM_LEN);
 
-	if (!comm_str)
+	if (!comm_str) {
+		fprintf(stderr, "Out of memory\n");
 		return NULL;
+	}
 
 	memset(comm_str, 0, TASK_COMM_LEN);
 
 	if (search_pattern(&comm_pattern, comm_str, TASK_COMM_LEN, buf) < 0) {
-		free(comm_str);
-		return NULL;
-	}
-	errno = 0;
-	if (errno != 0) {
 		if (debug_on)
 			fprintf(stderr, "wrong comm in follow buf:\n%s\n", buf);
 		free(comm_str);
@@ -514,19 +511,15 @@ static bool add_list(char *buf, int len, char *ext_buf)
 		return false;
 	}
 	filter_result = filter_record(buf);
-	if (filter_result == FILTER_ERROR) {
-		fprintf(stderr, "Out of memory\n");
+	if (filter_result == FILTER_ERROR)
 		return false;
-	}
 	if (filter_result == FILTER_SKIP)
 		return true;
 	list[list_size].pid = get_pid(buf);
 	list[list_size].tgid = get_tgid(buf);
 	list[list_size].comm = get_comm(buf);
-	if (!list[list_size].comm) {
-		fprintf(stderr, "Out of memory\n");
+	if (!list[list_size].comm)
 		return false;
-	}
 	list[list_size].txt = malloc(len + 1);
 	if (!list[list_size].txt) {
 		fprintf(stderr, "Out of memory\n");
