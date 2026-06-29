@@ -11,6 +11,7 @@
 #include "hws_reg.h"
 #include "hws_video.h"
 #include "hws.h"
+#include "hws_audio.h"
 
 #define MAX_INT_LOOPS 100
 
@@ -313,6 +314,36 @@ static bool hws_irq_queue_video(struct hws_pcie_dev *pdx, u32 int_state)
 	return wake_thread;
 }
 
+static void hws_irq_handle_audio(struct hws_pcie_dev *pdx, u32 int_state)
+{
+	unsigned int ch;
+
+	for (ch = 0; ch < pdx->cur_max_audio_ch; ++ch) {
+		u32 abit = HWS_INT_ADONE_BIT(ch);
+		u8 cur_toggle;
+
+		if (!(int_state & abit))
+			continue;
+
+		/* Only service running streams */
+		if (!READ_ONCE(pdx->audio[ch].cap_active) ||
+		    !READ_ONCE(pdx->audio[ch].stream_running) ||
+		    READ_ONCE(pdx->audio[ch].stop_requested))
+			continue;
+
+		/*
+		 * Baseline read ABUF_TOGGLE for every ADONE interrupt.
+		 * The register reports the half the device is filling now, so
+		 * the completed packet is the opposite half. Read it in the
+		 * hard handler so the deferred audio work receives the edge's
+		 * toggle value, not a later one.
+		 */
+		cur_toggle = readl_relaxed(pdx->bar0_base +
+					   HWS_REG_ABUF_TOGGLE(ch)) & 0x01;
+		hws_audio_queue_interrupt(pdx, ch, cur_toggle);
+	}
+}
+
 irqreturn_t hws_irq_handler(int irq, void *info)
 {
 	struct hws_pcie_dev *pdx = info;
@@ -350,6 +381,7 @@ irqreturn_t hws_irq_handler(int irq, void *info)
 	dev_dbg(&pdx->pdev->dev, "irq: entry INT_STATUS=0x%08x\n", int_state);
 
 	wake_thread = hws_irq_queue_video(pdx, int_state);
+	hws_irq_handle_audio(pdx, int_state);
 	hws_irq_ack_status(pdx, int_state);
 
 	return wake_thread ? IRQ_WAKE_THREAD : IRQ_HANDLED;

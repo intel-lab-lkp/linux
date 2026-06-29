@@ -33,9 +33,10 @@
 #define PCI_E_BAR_ADD_MASK 0xE0000000
 #define PCI_E_BAR_ADD_LOWMASK 0x1FFFFFFF
 
+#define MAX_DMA_AUDIO_PK_SIZE      (128U * 16U * 2U)
 /*
  * The legacy driver reserved a 10 KiB hardware capture window per audio
- * channel even though the delivered packet size is smaller. Keep that headroom
+ * channel even though the delivered packet size is 4 KiB. Keep that headroom
  * for the split-buffer DMA engine.
  */
 #define MAX_AUDIO_CAP_SIZE         (10U * 1024U)
@@ -88,6 +89,7 @@
 /* Capture enable switches. */
 /* bit0-3: CH0-CH3 video enable */
 #define HWS_REG_VCAP_ENABLE           (CVBS_IN_BASE +  2 * PCIE_BARADDROFSIZE)
+#define HWS_REG_ACAP_ENABLE           (CVBS_IN_BASE +  3 * PCIE_BARADDROFSIZE)
 /* bits0-3: signal present, bits8-11: interlace */
 #define HWS_REG_ACTIVE_STATUS          (CVBS_IN_BASE +  5  * PCIE_BARADDROFSIZE)
 /* bits0-3: HDCP detected */
@@ -95,11 +97,27 @@
 #define HWS_REG_DMA_MAX_SIZE   (CVBS_IN_BASE +  9 * PCIE_BARADDROFSIZE)
 
 /*
- * Video DMA setup uses one BAR remap-table slot per capture channel. The
- * remap-table slot supplies the host DMA page, while CVBS_IN_BUF_BASE +
- * ch * 4 supplies the device-side buffer offset within that page.
+ * Buffer base registers follow the vendor/baseline layout:
+ *
+ *   video base: CVBS_IN_BUF_BASE + ch * 4
+ *   audio base: CVBS_IN_BUF_BASE + (8 + ch) * 4
+ *
+ * Do not add a video doorbell at CVBS_IN_BASE + (26 + ch) * 4.  Those
+ * offsets alias the audio base bank for low video channel numbers.
  */
+/* Per-channel audio DMA address window. */
+#define HWS_REG_AUD_DMA_ADDR(ch)      (CVBS_IN_BUF_BASE + ((8 + (ch)) * PCIE_BARADDROFSIZE))
+
 #define HWS_VIDEO_REMAP_SLOT_OFF(ch)  (0x208 + ((ch) * 8))
+
+/*
+ * BAR remap slots are selected by the high bits of the programmed device-side
+ * base address.  Both video and audio program (ch + 1) * PCIEBAR_AXI_BASE, so
+ * audio shares the same remap slot as video for that channel.  The audio base
+ * registers live at CVBS_IN_BUF_BASE + (8 + ch) * 4, but that is a register
+ * bank offset, not a second remap-table bank.
+ */
+#define HWS_AUDIO_REMAP_SLOT_OFF(ch)  HWS_VIDEO_REMAP_SLOT_OFF(ch)
 
 /* Per-channel live buffer toggles (read-only). */
 #define HWS_REG_VBUF_TOGGLE(ch)       (CVBS_IN_BASE + (32 + (ch)) * PCIE_BARADDROFSIZE)
@@ -108,10 +126,18 @@
  * currently filling for channel *ch* (0-3).
  */
 
-/* Per-interrupt bits (video 0-3). */
-#define HWS_INT_VDONE_BIT(ch)     BIT(ch)         /* 0x01,0x02,0x04,0x08  */
+#define HWS_REG_ABUF_TOGGLE(ch)       (CVBS_IN_BASE + (40 + (ch)) * PCIE_BARADDROFSIZE)
+/*
+ * Returns 0 or 1 = which half of the audio ring the DMA engine is
+ * currently filling for channel *ch* (0-3).
+ */
 
-#define HWS_REG_INT_ACK           (CVBS_IN_BASE + 0x4000 + 1 * PCIE_BARADDROFSIZE)
+/* Per-interrupt bits (video 0-3, audio 0-3). */
+#define HWS_INT_VDONE_BIT(ch)     BIT(ch)         /* 0x01,0x02,0x04,0x08  */
+#define HWS_INT_ADONE_BIT(ch)     BIT(8 + (ch))   /* 0x100 .. 0x800 */
+
+/* Legacy hardware clears interrupt bits by W1C on INT_STATUS. */
+#define HWS_REG_INT_ACK           HWS_REG_INT_STATUS
 
 /* 16-bit W | 16-bit H. */
 #define HWS_REG_IN_RES(ch)             (CVBS_IN_BASE + (90  + (ch) * 2) * PCIE_BARADDROFSIZE)
@@ -141,4 +167,8 @@
 #define HWS_REG_VBUF_TOGGLE_CH2       HWS_REG_VBUF_TOGGLE(2)
 #define HWS_REG_VBUF_TOGGLE_CH3       HWS_REG_VBUF_TOGGLE(3)
 
+#define HWS_REG_ABUF_TOGGLE_CH0       HWS_REG_ABUF_TOGGLE(0)
+#define HWS_REG_ABUF_TOGGLE_CH1       HWS_REG_ABUF_TOGGLE(1)
+#define HWS_REG_ABUF_TOGGLE_CH2       HWS_REG_ABUF_TOGGLE(2)
+#define HWS_REG_ABUF_TOGGLE_CH3       HWS_REG_ABUF_TOGGLE(3)
 #endif /* _HWS_PCIE_REG_H */
