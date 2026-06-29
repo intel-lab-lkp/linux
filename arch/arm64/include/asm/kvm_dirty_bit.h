@@ -33,6 +33,9 @@ int __kvm_arch_dirty_log_clear(struct kvm *kvm,
 			       unsigned long *bitmap,
 			       bool *flush);
 
+int __kvm_arch_dirty_ring_clear(struct kvm *kvm, struct kvm_dirty_ring *ring,
+				int *nr_entries_reset);
+
 static inline bool kvm_arch_dirty_clear_enabled(struct kvm *kvm)
 {
 	return this_cpu_read(hacdbs_pcp.status) == HACDBS_IDLE &&
@@ -49,6 +52,16 @@ static inline int kvm_arch_dirty_log_clear(struct kvm *kvm,
 		return -EPERM;
 
 	return __kvm_arch_dirty_log_clear(kvm, memslot, log, bitmap, flush);
+}
+
+static inline int kvm_arch_dirty_ring_clear(struct kvm *kvm,
+					    struct kvm_dirty_ring *ring,
+					    int *nr_entries_reset)
+{
+	if (!kvm_arch_dirty_clear_enabled(kvm))
+		return -EPERM;
+
+	return __kvm_arch_dirty_ring_clear(kvm, ring, nr_entries_reset);
 }
 
 #endif /* __ARM64_KVM_DIRTY_BIT_H__ */
