@@ -153,3 +153,7 @@ struct fs_struct init_fs = {
 	.seq		= __SEQLOCK_UNLOCKED(init_fs.seq),
 	.umask		= 0022,
 };
+
+#ifdef CONFIG_NULL_ROOT_CWD_KUNIT_TEST
+#include "tests/null_root_cwd_kunit.c"
+#endif

@@ -18,6 +18,17 @@ config VALIDATE_FS_PARSER
 config FS_IOMAP
 	bool
 
+config NULL_ROOT_CWD_KUNIT_TEST
+	bool "KUnit tests for tasks with a null root or cwd" if !KUNIT_ALL_TESTS
+	depends on KUNIT=y
+	default KUNIT_ALL_TESTS
+	help
+	  Build KUnit tests that exercise path resolution for tasks whose
+	  fs->root and/or fs->pwd is the NULL path (no root directory and/or
+	  no current working directory).
+
+	  If unsure, say N.
+
 # Stackable filesystems
 config FS_STACK
 	bool
