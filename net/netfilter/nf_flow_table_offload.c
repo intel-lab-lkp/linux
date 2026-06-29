@@ -1101,11 +1101,22 @@ nf_flow_offload_work_alloc(struct nf_flowtable *flowtable,
 	return offload;
 }
 
+static bool nf_flow_offload_unsupported(struct flow_offload *flow)
+{
+	if (flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].tuple.tun_num ||
+	    flow->tuplehash[FLOW_OFFLOAD_DIR_REPLY].tuple.tun_num)
+		return true;
+
+	return false;
+}
 
 void nf_flow_offload_add(struct nf_flowtable *flowtable,
 			 struct flow_offload *flow)
 {
 	struct flow_offload_work *offload;
+
+	if (nf_flow_offload_unsupported(flow))
+		return;
 
 	offload = nf_flow_offload_work_alloc(flowtable, flow, FLOW_CLS_REPLACE);
 	if (!offload)
@@ -1118,6 +1129,9 @@ void nf_flow_offload_del(struct nf_flowtable *flowtable,
 			 struct flow_offload *flow)
 {
 	struct flow_offload_work *offload;
+
+	if (nf_flow_offload_unsupported(flow))
+		return;
 
 	offload = nf_flow_offload_work_alloc(flowtable, flow, FLOW_CLS_DESTROY);
 	if (!offload)
@@ -1132,6 +1146,9 @@ void nf_flow_offload_stats(struct nf_flowtable *flowtable,
 {
 	struct flow_offload_work *offload;
 	__s32 delta;
+
+	if (nf_flow_offload_unsupported(flow))
+		return;
 
 	delta = nf_flow_timeout_delta(flow->timeout);
 	if ((delta >= (9 * flow_offload_get_timeout(flow)) / 10))
