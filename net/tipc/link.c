@@ -2863,10 +2863,12 @@ void tipc_link_set_tolerance(struct tipc_link *l, u32 tol,
 			     struct sk_buff_head *xmitq)
 {
 	l->tolerance = tol;
-	if (l->bc_rcvlink)
+	if (l->bc_rcvlink) {
 		l->bc_rcvlink->tolerance = tol;
-	if (tipc_link_is_up(l))
-		tipc_link_build_proto_msg(l, STATE_MSG, 0, 0, 0, tol, 0, xmitq);
+		if (tipc_link_is_up(l))
+			tipc_link_build_proto_msg(l, STATE_MSG,
+						  0, 0, 0, tol, 0, xmitq);
+	}
 }
 
 void tipc_link_set_prio(struct tipc_link *l, u32 prio,
