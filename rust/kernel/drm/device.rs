@@ -41,33 +41,36 @@ use core::{
     },
 };
 
-#[cfg(CONFIG_DRM_LEGACY)]
-macro_rules! drm_legacy_fields {
-    ( $($field:ident: $val:expr),* $(,)? ) => {
-        bindings::drm_driver {
-            $( $field: $val ),*,
-            firstopen: None,
-            preclose: None,
-            dma_ioctl: None,
-            dma_quiescent: None,
-            context_dtor: None,
-            irq_handler: None,
-            irq_preinstall: None,
-            irq_postinstall: None,
-            irq_uninstall: None,
-            get_vblank_counter: None,
-            enable_vblank: None,
-            disable_vblank: None,
-            dev_priv_size: 0,
+cfg_select! {
+    CONFIG_DRM_LEGACY => {
+        macro_rules! drm_legacy_fields {
+            ( $($field:ident: $val:expr),* $(,)? ) => {
+                bindings::drm_driver {
+                    $( $field: $val ),*,
+                    firstopen: None,
+                    preclose: None,
+                    dma_ioctl: None,
+                    dma_quiescent: None,
+                    context_dtor: None,
+                    irq_handler: None,
+                    irq_preinstall: None,
+                    irq_postinstall: None,
+                    irq_uninstall: None,
+                    get_vblank_counter: None,
+                    enable_vblank: None,
+                    disable_vblank: None,
+                    dev_priv_size: 0,
+                }
+            }
         }
     }
-}
-
-#[cfg(not(CONFIG_DRM_LEGACY))]
-macro_rules! drm_legacy_fields {
-    ( $($field:ident: $val:expr),* $(,)? ) => {
-        bindings::drm_driver {
-            $( $field: $val ),*
+    _ => {
+        macro_rules! drm_legacy_fields {
+            ( $($field:ident: $val:expr),* $(,)? ) => {
+                bindings::drm_driver {
+                    $( $field: $val ),*
+                }
+            }
         }
     }
 }

@@ -12,7 +12,7 @@
 //! C header: [`include/linux/mm.h`](srctree/include/linux/mm.h)
 
 use crate::{
-    bindings,
+    bindings, cfg_select,
     sync::aref::{ARef, AlwaysRefCounted},
     types::{NotThreadSafe, Opaque},
 };
@@ -174,24 +174,26 @@ impl MmWithUser {
     /// When per-vma locks are disabled, this always returns `None`.
     #[inline]
     pub fn lock_vma_under_rcu(&self, vma_addr: usize) -> Option<VmaReadGuard<'_>> {
-        #[cfg(CONFIG_PER_VMA_LOCK)]
-        {
-            // SAFETY: Calling `bindings::lock_vma_under_rcu` is always okay given an mm where
-            // `mm_users` is non-zero.
-            let vma = unsafe { bindings::lock_vma_under_rcu(self.as_raw(), vma_addr) };
-            if !vma.is_null() {
-                return Some(VmaReadGuard {
-                    // SAFETY: If `lock_vma_under_rcu` returns a non-null ptr, then it points at a
-                    // valid vma. The vma is stable for as long as the vma read lock is held.
-                    vma: unsafe { VmaRef::from_raw(vma) },
-                    _nts: NotThreadSafe,
-                });
+        cfg_select! {
+            CONFIG_PER_VMA_LOCK => {
+                // SAFETY: Calling `bindings::lock_vma_under_rcu` is always okay given an mm where
+                // `mm_users` is non-zero.
+                let vma = unsafe { bindings::lock_vma_under_rcu(self.as_raw(), vma_addr) };
+                if !vma.is_null() {
+                    return Some(VmaReadGuard {
+                        // SAFETY: If `lock_vma_under_rcu` returns a non-null ptr, then it
+                        // points at a valid vma. The vma is stable for as long as the vma
+                        // read lock is held.
+                        vma: unsafe { VmaRef::from_raw(vma) },
+                        _nts: NotThreadSafe,
+                    });
+                }
+            }
+            _ => {
+                // Silence warnings about unused variables.
+                let _ = vma_addr;
             }
         }
-
-        // Silence warnings about unused variables.
-        #[cfg(not(CONFIG_PER_VMA_LOCK))]
-        let _ = vma_addr;
 
         None
     }

@@ -76,23 +76,24 @@ unsafe impl super::AtomicAdd<i64> for i64 {
 // Defines an internal type that always maps to the integer type which has the same size alignment
 // as `isize` and `usize`, and `isize` and `usize` are always bi-directional transmutable to
 // `isize_atomic_repr`, which also always implements `AtomicImpl`.
-#[allow(non_camel_case_types)]
-#[cfg(not(testlib))]
-#[cfg(not(CONFIG_64BIT))]
-type isize_atomic_repr = i32;
-#[allow(non_camel_case_types)]
-#[cfg(not(testlib))]
-#[cfg(CONFIG_64BIT)]
-type isize_atomic_repr = i64;
-
-#[allow(non_camel_case_types)]
-#[cfg(testlib)]
-#[cfg(target_pointer_width = "32")]
-type isize_atomic_repr = i32;
-#[allow(non_camel_case_types)]
-#[cfg(testlib)]
-#[cfg(target_pointer_width = "64")]
-type isize_atomic_repr = i64;
+cfg_select! {
+    all(not(testlib), not(CONFIG_64BIT)) => {
+        #[allow(non_camel_case_types)]
+        type isize_atomic_repr = i32;
+    }
+    all(not(testlib), CONFIG_64BIT) => {
+        #[allow(non_camel_case_types)]
+        type isize_atomic_repr = i64;
+    }
+    all(testlib, target_pointer_width = "32") => {
+        #[allow(non_camel_case_types)]
+        type isize_atomic_repr = i32;
+    }
+    all(testlib, target_pointer_width = "64") => {
+        #[allow(non_camel_case_types)]
+        type isize_atomic_repr = i64;
+    }
+}
 
 // Ensure size and alignment requirements are checked.
 static_assert!(size_of::<isize>() == size_of::<isize_atomic_repr>());

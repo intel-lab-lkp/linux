@@ -307,28 +307,34 @@ impl CpumaskVar {
 impl Deref for CpumaskVar {
     type Target = Cpumask;
 
-    #[cfg(CONFIG_CPUMASK_OFFSTACK)]
-    fn deref(&self) -> &Self::Target {
-        // SAFETY: The caller owns CpumaskVar, so it is safe to deref the cpumask.
-        unsafe { &*self.ptr.as_ptr() }
-    }
-
-    #[cfg(not(CONFIG_CPUMASK_OFFSTACK))]
-    fn deref(&self) -> &Self::Target {
-        &self.mask
+    cfg_select! {
+        CONFIG_CPUMASK_OFFSTACK => {
+            fn deref(&self) -> &Self::Target {
+                // SAFETY: The caller owns CpumaskVar, so it is safe to deref the cpumask.
+                unsafe { &*self.ptr.as_ptr() }
+            }
+        }
+        _ => {
+            fn deref(&self) -> &Self::Target {
+                &self.mask
+            }
+        }
     }
 }
 
 impl DerefMut for CpumaskVar {
-    #[cfg(CONFIG_CPUMASK_OFFSTACK)]
-    fn deref_mut(&mut self) -> &mut Cpumask {
-        // SAFETY: The caller owns CpumaskVar, so it is safe to deref the cpumask.
-        unsafe { self.ptr.as_mut() }
-    }
-
-    #[cfg(not(CONFIG_CPUMASK_OFFSTACK))]
-    fn deref_mut(&mut self) -> &mut Cpumask {
-        &mut self.mask
+    cfg_select! {
+        CONFIG_CPUMASK_OFFSTACK => {
+            fn deref_mut(&mut self) -> &mut Cpumask {
+                // SAFETY: The caller owns CpumaskVar, so it is safe to deref the cpumask.
+                unsafe { self.ptr.as_mut() }
+            }
+        }
+        _ => {
+            fn deref_mut(&mut self) -> &mut Cpumask {
+                &mut self.mask
+            }
+        }
     }
 }
 

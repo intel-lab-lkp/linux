@@ -26,6 +26,7 @@ pub use ordering::{Acquire, Full, Relaxed, Release};
 pub(crate) use internal::{AtomicArithmeticOps, AtomicBasicOps, AtomicExchangeOps};
 
 use crate::build_error;
+use crate::cfg_select;
 use internal::AtomicRepr;
 use ordering::OrderingType;
 
@@ -620,25 +621,28 @@ where
     }
 }
 
-#[cfg(any(CONFIG_X86_64, CONFIG_UML, CONFIG_ARM, CONFIG_ARM64))]
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct Flag {
-    bool_field: bool,
-}
-
-/// # Invariants
-///
-/// `padding` must be all zeroes.
-#[cfg(not(any(CONFIG_X86_64, CONFIG_UML, CONFIG_ARM, CONFIG_ARM64)))]
-#[repr(C, align(4))]
-#[derive(Clone, Copy)]
-struct Flag {
-    #[cfg(target_endian = "big")]
-    padding: [u8; 3],
-    bool_field: bool,
-    #[cfg(target_endian = "little")]
-    padding: [u8; 3],
+cfg_select! {
+    any(CONFIG_X86_64, CONFIG_UML, CONFIG_ARM, CONFIG_ARM64) => {
+        #[repr(C)]
+        #[derive(Clone, Copy)]
+        struct Flag {
+            bool_field: bool,
+        }
+    }
+    _ => {
+        /// # Invariants
+        ///
+        /// `padding` must be all zeroes.
+        #[repr(C, align(4))]
+        #[derive(Clone, Copy)]
+        struct Flag {
+            #[cfg(target_endian = "big")]
+            padding: [u8; 3],
+            bool_field: bool,
+            #[cfg(target_endian = "little")]
+            padding: [u8; 3],
+        }
+    }
 }
 
 impl Flag {
@@ -656,10 +660,14 @@ impl Flag {
 // SAFETY: `Flag` and `Repr` have the same size and alignment, and `Flag` is round-trip
 // transmutable to the selected representation (`i8` or `i32`).
 unsafe impl AtomicType for Flag {
-    #[cfg(any(CONFIG_X86_64, CONFIG_UML, CONFIG_ARM, CONFIG_ARM64))]
-    type Repr = i8;
-    #[cfg(not(any(CONFIG_X86_64, CONFIG_UML, CONFIG_ARM, CONFIG_ARM64)))]
-    type Repr = i32;
+    cfg_select! {
+        any(CONFIG_X86_64, CONFIG_UML, CONFIG_ARM, CONFIG_ARM64) => {
+            type Repr = i8;
+        }
+        _ => {
+            type Repr = i32;
+        }
+    }
 }
 
 /// An atomic flag type intended to be backed by performance-optimal integer type.

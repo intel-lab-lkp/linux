@@ -75,22 +75,22 @@ pub struct Dir(#[cfg(CONFIG_DEBUG_FS)] Option<Arc<Entry<'static>>>);
 impl Dir {
     /// Create a new directory in DebugFS. If `parent` is [`None`], it will be created at the root.
     fn create(name: &CStr, parent: Option<&Dir>) -> Self {
-        #[cfg(CONFIG_DEBUG_FS)]
-        {
-            let parent_entry = match parent {
-                // If the parent couldn't be allocated, just early-return
-                Some(Dir(None)) => return Self(None),
-                Some(Dir(Some(entry))) => Some(entry.clone()),
-                None => None,
-            };
-            Self(
-                // If Arc creation fails, the `Entry` will be dropped, so the directory will be
-                // cleaned up.
-                Arc::new(Entry::dynamic_dir(name, parent_entry), GFP_KERNEL).ok(),
-            )
+        cfg_select! {
+            CONFIG_DEBUG_FS => {
+                let parent_entry = match parent {
+                    // If the parent couldn't be allocated, just early-return
+                    Some(Dir(None)) => return Self(None),
+                    Some(Dir(Some(entry))) => Some(entry.clone()),
+                    None => None,
+                };
+                Self(
+                    // If Arc creation fails, the `Entry` will be dropped, so the directory will be
+                    // cleaned up.
+                    Arc::new(Entry::dynamic_dir(name, parent_entry), GFP_KERNEL).ok(),
+                )
+            }
+            _ => { Self() }
         }
-        #[cfg(not(CONFIG_DEBUG_FS))]
-        Self()
     }
 
     /// Creates a DebugFS file which will own the data produced by the initializer provided in
@@ -360,19 +360,19 @@ impl Dir {
     // Unless you also extract the `entry` later and schedule it for `Drop` at the appropriate
     // time, a `ScopedDir` with a `Dir` parent will never be deleted.
     fn scoped_dir<'data>(&self, name: &CStr) -> ScopedDir<'data, 'static> {
-        #[cfg(CONFIG_DEBUG_FS)]
-        {
-            let parent_entry = match &self.0 {
-                None => return ScopedDir::empty(),
-                Some(entry) => entry.clone(),
-            };
-            ScopedDir {
-                entry: ManuallyDrop::new(Entry::dynamic_dir(name, Some(parent_entry))),
-                _phantom: PhantomData,
+        cfg_select! {
+            CONFIG_DEBUG_FS => {
+                let parent_entry = match &self.0 {
+                    None => return ScopedDir::empty(),
+                    Some(entry) => entry.clone(),
+                };
+                ScopedDir {
+                    entry: ManuallyDrop::new(Entry::dynamic_dir(name, Some(parent_entry))),
+                    _phantom: PhantomData,
+                }
             }
+            _ => { ScopedDir::empty() }
         }
-        #[cfg(not(CONFIG_DEBUG_FS))]
-        ScopedDir::empty()
     }
 
     /// Creates a new scope, which is a directory associated with some data `T`.
@@ -430,47 +430,50 @@ pub struct File<T> {
     scope: Scope<T>,
 }
 
-#[cfg(not(CONFIG_DEBUG_FS))]
-impl<'b, T: 'b> Scope<T> {
-    fn new<E: 'b, F>(data: impl PinInit<T, E> + 'b, init: F) -> impl PinInit<Self, E> + 'b
-    where
-        F: for<'a> FnOnce(&'a T) + 'b,
-    {
-        try_pin_init! {
-            Self {
-                data <- data,
-                _pin: PhantomPinned
-            } ? E
-        }
-        .pin_chain(|scope| {
-            init(&scope.data);
-            Ok(())
-        })
-    }
-}
+cfg_select! {
+    CONFIG_DEBUG_FS => {
+        impl<'b, T: 'b> Scope<T> {
+            fn entry_mut(self: Pin<&mut Self>) -> &mut Entry<'static> {
+                // SAFETY: _entry is not structurally pinned.
+                unsafe { &mut Pin::into_inner_unchecked(self)._entry }
+            }
 
-#[cfg(CONFIG_DEBUG_FS)]
-impl<'b, T: 'b> Scope<T> {
-    fn entry_mut(self: Pin<&mut Self>) -> &mut Entry<'static> {
-        // SAFETY: _entry is not structurally pinned.
-        unsafe { &mut Pin::into_inner_unchecked(self)._entry }
-    }
-
-    fn new<E: 'b, F>(data: impl PinInit<T, E> + 'b, init: F) -> impl PinInit<Self, E> + 'b
-    where
-        F: for<'a> FnOnce(&'a T) -> Entry<'static> + 'b,
-    {
-        try_pin_init! {
-            Self {
-                _entry: Entry::empty(),
-                data <- data,
-                _pin: PhantomPinned
-            } ? E
+            fn new<E: 'b, F>(data: impl PinInit<T, E> + 'b, init: F) -> impl PinInit<Self, E> + 'b
+            where
+                F: for<'a> FnOnce(&'a T) -> Entry<'static> + 'b,
+            {
+                try_pin_init! {
+                    Self {
+                        _entry: Entry::empty(),
+                        data <- data,
+                        _pin: PhantomPinned
+                    } ? E
+                }
+                .pin_chain(|scope| {
+                    *scope.entry_mut() = init(&scope.data);
+                    Ok(())
+                })
+            }
         }
-        .pin_chain(|scope| {
-            *scope.entry_mut() = init(&scope.data);
-            Ok(())
-        })
+    }
+    _ => {
+        impl<'b, T: 'b> Scope<T> {
+            fn new<E: 'b, F>(data: impl PinInit<T, E> + 'b, init: F) -> impl PinInit<Self, E> + 'b
+            where
+                F: for<'a> FnOnce(&'a T) + 'b,
+            {
+                try_pin_init! {
+                    Self {
+                        data <- data,
+                        _pin: PhantomPinned
+                    } ? E
+                }
+                .pin_chain(|scope| {
+                    init(&scope.data);
+                    Ok(())
+                })
+            }
+        }
     }
 }
 
@@ -702,12 +705,16 @@ impl<'data, 'dir> ScopedDir<'data, 'dir> {
             _phantom: PhantomData,
         }
     }
-    #[cfg(CONFIG_DEBUG_FS)]
-    fn into_entry(self) -> Entry<'dir> {
-        ManuallyDrop::into_inner(self.entry)
+    cfg_select! {
+        CONFIG_DEBUG_FS => {
+            fn into_entry(self) -> Entry<'dir> {
+                ManuallyDrop::into_inner(self.entry)
+            }
+        }
+        _ => {
+            fn into_entry(self) {}
+        }
     }
-    #[cfg(not(CONFIG_DEBUG_FS))]
-    fn into_entry(self) {}
 }
 
 impl<'data> ScopedDir<'data, 'static> {

@@ -328,29 +328,31 @@ pub trait Adapter {
     ///
     /// If this returns `None`, it means there is no match with an entry in the [`acpi::IdTable`].
     fn acpi_id_info(dev: &device::Device) -> Option<&'static Self::IdInfo> {
-        #[cfg(not(CONFIG_ACPI))]
-        {
-            let _ = dev;
-            None
-        }
+        cfg_select! {
+            CONFIG_ACPI => {
+                let table = Self::acpi_id_table()?;
 
-        #[cfg(CONFIG_ACPI)]
-        {
-            let table = Self::acpi_id_table()?;
+                // SAFETY:
+                // - `table` has static lifetime, hence it's valid for read,
+                // - `dev` is guaranteed to be valid while it's alive, and so is `dev.as_raw()`.
+                let raw_id = unsafe { bindings::acpi_match_device(table.as_ptr(), dev.as_raw()) };
 
-            // SAFETY:
-            // - `table` has static lifetime, hence it's valid for read,
-            // - `dev` is guaranteed to be valid while it's alive, and so is `dev.as_raw()`.
-            let raw_id = unsafe { bindings::acpi_match_device(table.as_ptr(), dev.as_raw()) };
+                if raw_id.is_null() {
+                    None
+                } else {
+                    // SAFETY: `DeviceId` is a `#[repr(transparent)]` wrapper of
+                    // `struct acpi_device_id` and does not add additional invariants, so
+                    // it's safe to transmute.
+                    let id = unsafe { &*raw_id.cast::<acpi::DeviceId>() };
 
-            if raw_id.is_null() {
+                    Some(table.info(
+                        <acpi::DeviceId as crate::device_id::RawDeviceIdIndex>::index(id),
+                    ))
+                }
+            }
+            _ => {
+                let _ = dev;
                 None
-            } else {
-                // SAFETY: `DeviceId` is a `#[repr(transparent)]` wrapper of `struct acpi_device_id`
-                // and does not add additional invariants, so it's safe to transmute.
-                let id = unsafe { &*raw_id.cast::<acpi::DeviceId>() };
-
-                Some(table.info(<acpi::DeviceId as crate::device_id::RawDeviceIdIndex>::index(id)))
             }
         }
     }

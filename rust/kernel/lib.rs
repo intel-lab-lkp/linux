@@ -276,30 +276,34 @@ macro_rules! concat_literals {
     };
 }
 
-/// Wrapper around `asm!` configured for use in the kernel.
-///
-/// Uses a semicolon to avoid parsing ambiguities, even though this does not match native `asm!`
-/// syntax.
-// For x86, `asm!` uses intel syntax by default, but we want to use at&t syntax in the kernel.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[macro_export]
-macro_rules! asm {
-    ($($asm:expr),* ; $($rest:tt)*) => {
-        ::core::arch::asm!( $($asm)*, options(att_syntax), $($rest)* )
-    };
-}
-
-/// Wrapper around `asm!` configured for use in the kernel.
-///
-/// Uses a semicolon to avoid parsing ambiguities, even though this does not match native `asm!`
-/// syntax.
-// For non-x86 arches we just pass through to `asm!`.
-#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
-#[macro_export]
-macro_rules! asm {
-    ($($asm:expr),* ; $($rest:tt)*) => {
-        ::core::arch::asm!( $($asm)*, $($rest)* )
-    };
+cfg_select! {
+    any(target_arch = "x86", target_arch = "x86_64") => {
+        /// Wrapper around `asm!` configured for use in the kernel.
+        ///
+        /// Uses a semicolon to avoid parsing ambiguities, even though this does
+        /// not match native `asm!` syntax.
+        // For x86, `asm!` uses intel syntax by default, but we want to use at&t
+        // syntax in the kernel.
+        #[macro_export]
+        macro_rules! asm {
+            ($($asm:expr),* ; $($rest:tt)*) => {
+                ::core::arch::asm!( $($asm)*, options(att_syntax), $($rest)* )
+            };
+        }
+    }
+    _ => {
+        /// Wrapper around `asm!` configured for use in the kernel.
+        ///
+        /// Uses a semicolon to avoid parsing ambiguities, even though this does
+        /// not match native `asm!` syntax.
+        // For non-x86 arches we just pass through to `asm!`.
+        #[macro_export]
+        macro_rules! asm {
+            ($($asm:expr),* ; $($rest:tt)*) => {
+                ::core::arch::asm!( $($asm)*, $($rest)* )
+            };
+        }
+    }
 }
 
 /// Gets the C string file name of a [`Location`].
@@ -334,19 +338,16 @@ macro_rules! asm {
 /// ```
 #[inline]
 pub fn file_from_location<'a>(loc: &'a core::panic::Location<'a>) -> &'a core::ffi::CStr {
-    #[cfg(CONFIG_RUSTC_HAS_FILE_AS_C_STR)]
-    {
-        loc.file_as_c_str()
-    }
-
-    #[cfg(all(CONFIG_RUSTC_HAS_FILE_WITH_NUL, not(CONFIG_RUSTC_HAS_FILE_AS_C_STR)))]
-    {
-        loc.file_with_nul()
-    }
-
-    #[cfg(not(CONFIG_RUSTC_HAS_FILE_WITH_NUL))]
-    {
-        let _ = loc;
-        c"<Location::file_as_c_str() not supported>"
+    cfg_select! {
+        CONFIG_RUSTC_HAS_FILE_AS_C_STR => {
+            loc.file_as_c_str()
+        }
+        all(CONFIG_RUSTC_HAS_FILE_WITH_NUL, not(CONFIG_RUSTC_HAS_FILE_AS_C_STR)) => {
+            loc.file_with_nul()
+        }
+        not(CONFIG_RUSTC_HAS_FILE_WITH_NUL) => {
+            let _ = loc;
+            c"<Location::file_as_c_str() not supported>"
+        }
     }
 }

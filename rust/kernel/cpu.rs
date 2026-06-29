@@ -4,20 +4,21 @@
 //!
 //! C header: [`include/linux/cpu.h`](srctree/include/linux/cpu.h)
 
-use crate::{bindings, device::Device, error::Result, prelude::ENODEV};
+use crate::{bindings, cfg_select, device::Device, error::Result, prelude::ENODEV};
 
 /// Returns the maximum number of possible CPUs in the current system configuration.
 #[inline]
 pub fn nr_cpu_ids() -> u32 {
-    #[cfg(any(NR_CPUS_1, CONFIG_FORCE_NR_CPUS))]
-    {
-        bindings::NR_CPUS
-    }
-
-    #[cfg(not(any(NR_CPUS_1, CONFIG_FORCE_NR_CPUS)))]
-    // SAFETY: `nr_cpu_ids` is a valid global provided by the kernel.
-    unsafe {
-        bindings::nr_cpu_ids
+    cfg_select! {
+        any(NR_CPUS_1, CONFIG_FORCE_NR_CPUS) => {
+            bindings::NR_CPUS
+        }
+        _ => {
+            // SAFETY: `nr_cpu_ids` is a valid global provided by the kernel.
+            unsafe {
+                bindings::nr_cpu_ids
+            }
+        }
     }
 }
 

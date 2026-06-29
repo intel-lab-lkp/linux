@@ -8,7 +8,7 @@
 
 use crate::{
     alloc::{layout::LayoutError, AllocError},
-    fmt,
+    cfg_select, fmt,
     str::CStr,
 };
 
@@ -173,29 +173,32 @@ impl Error {
         unsafe { bindings::ERR_PTR(self.0.get() as crate::ffi::c_long).cast() }
     }
 
-    /// Returns a string representing the error, if one exists.
-    #[cfg(not(testlib))]
-    pub fn name(&self) -> Option<&'static CStr> {
-        // SAFETY: Just an FFI call, there are no extra safety requirements.
-        let ptr = unsafe { bindings::errname(-self.0.get()) };
-        if ptr.is_null() {
-            None
-        } else {
-            use crate::str::CStrExt as _;
-
-            // SAFETY: The string returned by `errname` is static and `NUL`-terminated.
-            Some(unsafe { CStr::from_char_ptr(ptr) })
+    cfg_select! {
+        testlib => {
+            /// Returns a string representing the error, if one exists.
+            ///
+            /// When `testlib` is configured, this always returns `None` to avoid
+            /// the dependency on a kernel function so that tests that use this
+            /// (e.g., by calling [`Result::unwrap`]) can still run in userspace.
+            pub fn name(&self) -> Option<&'static CStr> {
+                None
+            }
         }
-    }
+        _ => {
+            /// Returns a string representing the error, if one exists.
+            pub fn name(&self) -> Option<&'static CStr> {
+                // SAFETY: Just an FFI call, there are no extra safety requirements.
+                let ptr = unsafe { bindings::errname(-self.0.get()) };
+                if ptr.is_null() {
+                    None
+                } else {
+                    use crate::str::CStrExt as _;
 
-    /// Returns a string representing the error, if one exists.
-    ///
-    /// When `testlib` is configured, this always returns `None` to avoid the dependency on a
-    /// kernel function so that tests that use this (e.g., by calling [`Result::unwrap`]) can still
-    /// run in userspace.
-    #[cfg(testlib)]
-    pub fn name(&self) -> Option<&'static CStr> {
-        None
+                    // SAFETY: The string returned by `errname` is static and `NUL`-terminated.
+                    Some(unsafe { CStr::from_char_ptr(ptr) })
+                }
+            }
+        }
     }
 }
 
