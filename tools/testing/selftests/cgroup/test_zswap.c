@@ -60,7 +60,12 @@ static int get_zswap_stored_pages(size_t *value)
 
 static long get_cg_wb_count(const char *cg)
 {
-	return cg_read_key_long(cg, "memory.stat", "zswpwb");
+	return cg_read_key_long(cg, "memory.stat", "zswpwb ");
+}
+
+static long get_cg_pwb_bytes(const char *cg)
+{
+	return cg_read_key_long(cg, "memory.stat", "zswpwb_proactive_b ");
 }
 
 static long get_zswpout(const char *cgroup)
@@ -355,10 +360,17 @@ out:
 static int test_zswap_writeback_one(const char *cgroup, bool wb)
 {
 	long zswpwb_before, zswpwb_after;
+	long pwb_bytes;
 
 	zswpwb_before = get_cg_wb_count(cgroup);
 	if (zswpwb_before != 0) {
 		ksft_print_msg("zswpwb_before = %ld instead of 0\n", zswpwb_before);
+		return -1;
+	}
+
+	pwb_bytes = get_cg_pwb_bytes(cgroup);
+	if (pwb_bytes > 0) {
+		ksft_print_msg("zswpwb_proactive_b_before = %ld instead of 0\n", pwb_bytes);
 		return -1;
 	}
 
@@ -376,6 +388,17 @@ static int test_zswap_writeback_one(const char *cgroup, bool wb)
 	if (wb != !!zswpwb_after) {
 		ksft_print_msg("zswpwb_after is %ld while wb is %s\n",
 				zswpwb_after, wb ? "enabled" : "disabled");
+		return -1;
+	}
+
+	/*
+	 * attempt_writeback() does not use the proactive writeback path, so
+	 * zswpwb_proactive_b must stay at zero regardless of whether
+	 * writeback was enabled.
+	 */
+	pwb_bytes = get_cg_pwb_bytes(cgroup);
+	if (pwb_bytes > 0) {
+		ksft_print_msg("zswpwb_proactive_b_after is %ld, expected 0\n", pwb_bytes);
 		return -1;
 	}
 
@@ -770,6 +793,141 @@ out:
 	return ret;
 }
 
+/*
+ * Trigger proactive zswap writeback with the following steps:
+ * 1. Allocate memory.
+ * 2. Push allocated memory into zswap.
+ * 3. Proactively write back zswap pages to swap
+ *    using "source=zswap".
+ */
+static int proactive_writeback_workload(const char *cgroup, void *arg)
+{
+	long pagesize = sysconf(_SC_PAGESIZE);
+	size_t memsize = pagesize * 1024;
+	char reclaim_cmd[64];
+	char buf[pagesize];
+	long zswap_usage;
+	int ret = -1;
+	int rc;
+	char *mem;
+
+	mem = (char *)malloc(memsize);
+	if (!mem)
+		return ret;
+
+	for (int i = 0; i < pagesize; i++)
+		buf[i] = i < pagesize / 2 ? (char)i : 0;
+	for (int i = 0; i < memsize; i += pagesize)
+		memcpy(&mem[i], buf, pagesize);
+
+	/* Evict allocated memory into zswap. */
+	if (cg_write_numeric(cgroup, "memory.reclaim", memsize)) {
+		ksft_print_msg("Failed to push pages into zswap\n");
+		goto out;
+	}
+
+	zswap_usage = cg_read_long(cgroup, "memory.zswap.current");
+	if (zswap_usage <= 0) {
+		ksft_print_msg("no zswap pool to write back\n");
+		goto out;
+	}
+
+	/* Trigger proactive zswap writeback. */
+	snprintf(reclaim_cmd, sizeof(reclaim_cmd), "%ld source=zswap", zswap_usage);
+	rc = cg_write(cgroup, "memory.reclaim", reclaim_cmd);
+	if (rc && rc != -EAGAIN) {
+		ksft_print_msg("proactive zswap writeback failed: %d\n", rc);
+		goto out;
+	}
+
+	ret = 0;
+out:
+	free(mem);
+	return ret;
+}
+
+static int check_writeback_invalid_inputs(const char *cgroup)
+{
+	static char * const bad_inputs[] = {
+		"source=zswap",
+		"1M source=zswap swappiness=60",
+		"1M swappiness=60 source=zswap",
+		"1M source=zswap swappiness=max",
+		"1M swappiness=max source=zswap",
+	};
+	int i, rc;
+
+	for (i = 0; i < ARRAY_SIZE(bad_inputs); i++) {
+		rc = cg_write(cgroup, "memory.reclaim", bad_inputs[i]);
+		if (rc != -EINVAL) {
+			ksft_print_msg("memory.reclaim '%s': returned %d, expected %d\n",
+				       bad_inputs[i], rc, -EINVAL);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+static int test_zswap_proactive_writeback(const char *root)
+{
+	long wb_before, wb_after;
+	long pwb_b_before, pwb_b_after;
+	long wb_delta, pwb_b_delta;
+	int ret = KSFT_FAIL;
+	char *test_group;
+
+	if (cg_read_strcmp(root, "memory.zswap.writeback", "1"))
+		return KSFT_SKIP;
+
+	test_group = cg_name(root, "zswap_proactive_test");
+	if (!test_group)
+		return KSFT_FAIL;
+	if (cg_create(test_group))
+		goto out;
+	/*
+	 * A missing zswpwb_proactive_b stat means the kernel lacks proactive
+	 * writeback support, so skip rather than fail.
+	 */
+	if (get_cg_pwb_bytes(test_group) < 0) {
+		ret = KSFT_SKIP;
+		goto out;
+	}
+	if (check_writeback_invalid_inputs(test_group))
+		goto out;
+
+	pwb_b_before = get_cg_pwb_bytes(test_group);
+	wb_before = get_cg_wb_count(test_group);
+	if (pwb_b_before < 0 || wb_before < 0)
+		goto out;
+
+	if (cg_run(test_group, proactive_writeback_workload, NULL))
+		goto out;
+
+	pwb_b_after = get_cg_pwb_bytes(test_group);
+	wb_after = get_cg_wb_count(test_group);
+	if (pwb_b_after < 0 || wb_after < 0)
+		goto out;
+
+	pwb_b_delta = pwb_b_after - pwb_b_before;
+	wb_delta = wb_after - wb_before;
+
+	if (pwb_b_delta <= 0) {
+		ksft_print_msg("zswpwb_proactive_b did not increase: delta=%ld\n",
+			       pwb_b_delta);
+		goto out;
+	}
+	if (wb_delta <= 0) {
+		ksft_print_msg("zswpwb did not increase: delta=%ld\n", wb_delta);
+		goto out;
+	}
+
+	ret = KSFT_PASS;
+out:
+	cg_destroy(test_group);
+	free(test_group);
+	return ret;
+}
+
 #define T(x) { x, #x }
 struct zswap_test {
 	int (*fn)(const char *root);
@@ -783,6 +941,7 @@ struct zswap_test {
 	T(test_no_kmem_bypass),
 	T(test_no_invasive_cgroup_shrink),
 	T(test_zswap_incompressible),
+	T(test_zswap_proactive_writeback),
 };
 #undef T
 
