@@ -1061,9 +1061,9 @@ static netdev_tx_t ioc3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		d1 = dma_map_single(ip->dma_dev, skb->data, s1, DMA_TO_DEVICE);
 		if (dma_mapping_error(ip->dma_dev, d1))
 			goto drop_packet;
-		d2 = dma_map_single(ip->dma_dev, (void *)b2, s1, DMA_TO_DEVICE);
+		d2 = dma_map_single(ip->dma_dev, (void *)b2, s2, DMA_TO_DEVICE);
 		if (dma_mapping_error(ip->dma_dev, d2)) {
-			dma_unmap_single(ip->dma_dev, d1, len, DMA_TO_DEVICE);
+			dma_unmap_single(ip->dma_dev, d1, s1, DMA_TO_DEVICE);
 			goto drop_packet;
 		}
 		desc->p1     = cpu_to_be64(ioc3_map(d1, PCI64_ATTR_PREF));
