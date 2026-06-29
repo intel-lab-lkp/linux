@@ -2789,11 +2789,16 @@ static void rtl_hw_reset(struct rtl8169_private *tp)
 	rtl_loop_wait_low(tp, &rtl_chipcmd_cond, 100, 100);
 }
 
-static void rtl8169_init_rss(struct rtl8169_private *tp)
+static void rtl8169_set_rss_indir_tbl(struct rtl8169_private *tp,
+				      unsigned int num_rx_rings)
 {
 	for (int i = 0; i < tp->rss_data->hw_supp_indir_tbl_entries; i++)
-		tp->rss_data->rss_indir_tbl[i] = ethtool_rxfh_indir_default(i, tp->num_rx_rings);
+		tp->rss_data->rss_indir_tbl[i] = ethtool_rxfh_indir_default(i, num_rx_rings);
+}
 
+static void rtl8169_init_rss(struct rtl8169_private *tp)
+{
+	rtl8169_set_rss_indir_tbl(tp, tp->num_rx_rings);
 	netdev_rss_key_fill(tp->rss_data->rss_key, RTL_RSS_KEY_SIZE);
 }
 
@@ -4432,7 +4437,9 @@ static struct page *rtl8169_alloc_rx_data(struct rtl8169_private *tp,
 	return data;
 }
 
-static void rtl8169_rx_clear(struct rtl8169_private *tp, struct rtl8169_rx_ring *ring)
+static void rtl8169_rx_clear(struct rtl8169_private *tp,
+			     struct rtl8169_rx_ring *ring,
+			     enum rx_desc_type desc_type)
 {
 	int i;
 
@@ -4443,7 +4450,7 @@ static void rtl8169_rx_clear(struct rtl8169_private *tp, struct rtl8169_rx_ring 
 		__free_pages(ring->rx_databuff[i], get_order(R8169_RX_BUF_SIZE));
 		ring->rx_databuff[i] = NULL;
 		ring->rx_desc_phy_addr[i] = 0;
-		if (tp->init_rx_desc_type == RX_DESC_TYPE_RSS) {
+		if (desc_type == RX_DESC_TYPE_RSS) {
 			ring->rx_desc_array[i].rss_addr = 0;
 			ring->rx_desc_array[i].rss_opts1 = 0;
 		} else {
@@ -4474,7 +4481,7 @@ static int rtl8169_rx_fill(struct rtl8169_private *tp, struct rtl8169_rx_ring *r
 
 		data = rtl8169_alloc_rx_data(tp, ring, i);
 		if (!data) {
-			rtl8169_rx_clear(tp, ring);
+			rtl8169_rx_clear(tp, ring, tp->init_rx_desc_type);
 			return -ENOMEM;
 		}
 		ring->rx_databuff[i] = data;
@@ -4541,7 +4548,7 @@ static int rtl8169_init_ring(struct rtl8169_private *tp)
 
 err_clear:
 	while (--i >= 0)
-		rtl8169_rx_clear(tp, &tp->rx_ring[i]);
+		rtl8169_rx_clear(tp, &tp->rx_ring[i], tp->init_rx_desc_type);
 	return ret;
 }
 
@@ -5545,7 +5552,7 @@ static int rtl8169_close(struct net_device *dev)
 	netif_stop_queue(dev);
 	rtl8169_down(tp);
 	for (int i = 0; i < tp->num_rx_rings; i++)
-		rtl8169_rx_clear(tp, &tp->rx_ring[i]);
+		rtl8169_rx_clear(tp, &tp->rx_ring[i], tp->init_rx_desc_type);
 
 	rtl8169_free_irq(tp);
 
@@ -5624,7 +5631,7 @@ err_free_irq:
 err_release_fw_2:
 	rtl_release_firmware(tp);
 	for (int i = 0; i < tp->num_rx_rings; i++)
-		rtl8169_rx_clear(tp, &tp->rx_ring[i]);
+		rtl8169_rx_clear(tp, &tp->rx_ring[i], tp->init_rx_desc_type);
 err_free_rx_1:
 	rtl8169_free_rx_desc(tp);
 	dma_free_coherent(&pdev->dev, R8169_TX_RING_BYTES, tp->TxDescArray,
@@ -6215,6 +6222,142 @@ static void r8169_init_napi(struct rtl8169_private *tp)
 	}
 }
 
+static void rtl8169_get_channels(struct net_device *dev,
+				 struct ethtool_channels *ch)
+{
+	struct rtl8169_private *tp = netdev_priv(dev);
+
+	ch->max_rx = tp->hw_supp_num_rx_queues;
+	ch->max_tx = 1;
+
+	ch->rx_count = tp->num_rx_rings;
+	ch->tx_count = 1;
+}
+
+static int rtl8169_realloc_rx(struct rtl8169_private *tp,
+			      struct rtl8169_rx_ring *new_rx,
+			      int new_count)
+{
+	int i, ret;
+
+	for (i = 0; i < new_count; i++) {
+		struct rtl8169_rx_ring *ring = &new_rx[i];
+
+		ring->rx_desc_array = dma_alloc_coherent(&tp->pci_dev->dev,
+							 R8169_RX_RING_BYTES,
+							 &ring->rx_phy_addr,
+							 GFP_KERNEL);
+		if (!ring->rx_desc_array) {
+			ret = -ENOMEM;
+			goto err_free;
+		}
+
+		memset(ring->rx_databuff, 0, sizeof(ring->rx_databuff));
+		ret = rtl8169_rx_fill(tp, ring);
+		if (ret) {
+			dma_free_coherent(&tp->pci_dev->dev, R8169_RX_RING_BYTES,
+					  ring->rx_desc_array, ring->rx_phy_addr);
+			goto err_free;
+		}
+	}
+	return 0;
+
+err_free:
+	while (--i >= 0) {
+		rtl8169_rx_clear(tp, &new_rx[i], tp->init_rx_desc_type);
+		dma_free_coherent(&tp->pci_dev->dev, R8169_RX_RING_BYTES,
+				  new_rx[i].rx_desc_array, new_rx[i].rx_phy_addr);
+	}
+	return ret;
+}
+
+static int rtl8169_set_channels(struct net_device *dev,
+				struct ethtool_channels *ch)
+{
+	struct rtl8169_private *tp = netdev_priv(dev);
+	bool if_running = netif_running(dev);
+	enum rx_desc_type old_rx_desc_type;
+	enum rx_desc_type new_desc_type;
+	struct rtl8169_rx_ring *new_rx;
+	int i, ret;
+
+	if (ch->rx_count == tp->num_rx_rings)
+		return 0;
+
+	old_rx_desc_type = tp->init_rx_desc_type;
+
+	if (!rtl_hw_support_rss(tp)) {
+		netdev_warn(dev, "This chip does not support multiple channels/RSS.\n");
+		return -EOPNOTSUPP;
+	}
+
+	if (ch->rx_count > tp->hw_supp_num_rx_queues || !is_power_of_2(ch->rx_count) ||
+	    tp->irq_nvecs < get_min_irq_nvecs(tp))
+		return -EINVAL;
+
+	new_desc_type = ch->rx_count > 1 ? RX_DESC_TYPE_RSS : RX_DESC_TYPE_DEFAULT;
+
+	if (!if_running) {
+		ret = netif_set_real_num_rx_queues(dev, ch->rx_count);
+		if (ret)
+			return ret;
+
+		tp->num_rx_rings = ch->rx_count;
+		tp->init_rx_desc_type = new_desc_type;
+
+		rtl8169_set_rss_indir_tbl(tp, tp->num_rx_rings);
+		rtl_set_irq_mask(tp);
+		return 0;
+	}
+
+	new_rx = kzalloc_objs(*new_rx, R8169_MAX_RX_QUEUES);
+	if (!new_rx)
+		return -ENOMEM;
+
+	netif_stop_queue(dev);
+	rtl8169_down(tp);
+
+	ret = netif_set_real_num_rx_queues(dev, ch->rx_count);
+	if (ret)
+		goto err_up;
+
+	tp->init_rx_desc_type = new_desc_type;
+
+	ret = rtl8169_realloc_rx(tp, new_rx, ch->rx_count);
+	if (ret)
+		goto err_reset;
+
+	for (i = 0; i < tp->num_rx_rings; i++)
+		rtl8169_rx_clear(tp, &tp->rx_ring[i], old_rx_desc_type);
+	rtl8169_free_rx_desc(tp);
+
+	tp->num_rx_rings = ch->rx_count;
+
+	memset(tp->rx_ring, 0, sizeof(tp->rx_ring));
+	memcpy(tp->rx_ring, new_rx, sizeof(*new_rx) * ch->rx_count);
+
+	rtl8169_set_rss_indir_tbl(tp, tp->num_rx_rings);
+	rtl_set_irq_mask(tp);
+
+	rtl8169_up(tp);
+	netif_start_queue(dev);
+
+	kfree(new_rx);
+
+	return 0;
+
+err_reset:
+	if (netif_set_real_num_rx_queues(dev, tp->num_rx_rings))
+		netdev_err(dev, "Failed to revert rx_queues, state might be inconsistent!\n");
+	tp->init_rx_desc_type = old_rx_desc_type;
+err_up:
+	rtl8169_up(tp);
+	netif_start_queue(dev);
+	kfree(new_rx);
+
+	return ret;
+}
+
 static const struct ethtool_ops rtl8169_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
 				     ETHTOOL_COALESCE_MAX_FRAMES,
@@ -6233,6 +6376,8 @@ static const struct ethtool_ops rtl8169_ethtool_ops = {
 	.nway_reset		= phy_ethtool_nway_reset,
 	.get_eee		= rtl8169_get_eee,
 	.set_eee		= rtl8169_set_eee,
+	.get_channels		= rtl8169_get_channels,
+	.set_channels		= rtl8169_set_channels,
 	.get_link_ksettings	= phy_ethtool_get_link_ksettings,
 	.set_link_ksettings	= rtl8169_set_link_ksettings,
 	.get_ringparam		= rtl8169_get_ringparam,
