@@ -24,6 +24,7 @@
 #include "hws.h"
 #include "hws_reg.h"
 #include "hws_video.h"
+#include "hws_audio.h"
 #include "hws_irq.h"
 #include "hws_v4l2_ioctl.h"
 
@@ -781,12 +782,14 @@ void hws_init_video_sys(struct hws_pcie_dev *hws, bool enable)
 	/* 1) reset the decoder mode register to 0 */
 	writel(0x00000000, hws->bar0_base + HWS_REG_DEC_MODE);
 	hws_seed_dma_windows(hws);
+	hws_audio_seed_channels(hws);
 
 	/* 3) on a full reset, clear all per-channel status and indices */
 	if (!enable) {
 		for (i = 0; i < hws->max_channels; i++) {
 			/* helpers to arm/disable capture engines */
 			hws_enable_video_capture(hws, i, false);
+			hws_enable_audio_capture(hws, i, false);
 		}
 	}
 
