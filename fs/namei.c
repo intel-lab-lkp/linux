@@ -4535,6 +4535,11 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 						    dentry, mode, create_dir);
 		else
 			create_error = -EROFS;
+		/* Refuse to create a directory through a dangling (trailing)
+		 * symlink. For regular files this has been allowed historically
+		 * on O_CREAT without O_EXCL. */
+		if (unlikely(nd->depth) && create_dir && !create_error)
+			create_error = -ELOOP;
 	}
 	if (create_error)
 		open_flag &= ~O_CREAT;
