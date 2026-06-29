@@ -237,23 +237,29 @@ static void iomap_dio_done(struct iomap_dio *dio)
 	iomap_dio_complete_work(&dio->aio.work);
 }
 
-static void __iomap_dio_bio_end_io(struct bio *bio, bool inline_completion)
+static inline void iomap_dio_bio_release_pages(struct bio *bio,
+		unsigned int dio_flags, bool error)
 {
-	struct iomap_dio *dio = bio->bi_private;
-
 	if (bio_integrity(bio))
 		fs_bio_integrity_free(bio);
 
-	if (dio->flags & IOMAP_DIO_BOUNCE) {
-		bio_iov_iter_unbounce(bio, !!dio->error,
-				dio->flags & IOMAP_DIO_USER_BACKED);
+	if (dio_flags & IOMAP_DIO_BOUNCE) {
+		bio_iov_iter_unbounce(bio, error,
+				dio_flags & IOMAP_DIO_USER_BACKED);
 		bio_put(bio);
-	} else if (dio->flags & IOMAP_DIO_USER_BACKED) {
+	} else if (dio_flags & IOMAP_DIO_USER_BACKED) {
 		bio_check_pages_dirty(bio);
 	} else {
 		bio_release_pages(bio, false);
 		bio_put(bio);
 	}
+}
+
+static void __iomap_dio_bio_end_io(struct bio *bio, bool inline_completion)
+{
+	struct iomap_dio *dio = bio->bi_private;
+
+	iomap_dio_bio_release_pages(bio, dio->flags, !!dio->error);
 
 	/* Do not touch bio below, we just gave up our reference. */
 
