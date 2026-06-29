@@ -38,7 +38,6 @@ TC_INDIRECT_SCOPE int tcf_skbmod_act(struct sk_buff *skb,
 	if (unlikely(p->action == TC_ACT_SHOT))
 		goto drop;
 
-	max_edit_len = skb_mac_header_len(skb);
 	flags = p->flags;
 
 	/* tcf_skbmod_init() guarantees "flags" to be one of the following:
@@ -49,6 +48,8 @@ TC_INDIRECT_SCOPE int tcf_skbmod_act(struct sk_buff *skb,
 	 * packets.
 	 */
 	if (flags == SKBMOD_F_ECN) {
+		max_edit_len = skb_mac_header_len(skb);
+
 		switch (skb_protocol(skb, true)) {
 		case cpu_to_be16(ETH_P_IP):
 		case cpu_to_be16(ETH_P_IPV6):
@@ -57,8 +58,12 @@ TC_INDIRECT_SCOPE int tcf_skbmod_act(struct sk_buff *skb,
 		default:
 			goto out;
 		}
-	} else if (!skb->dev || skb->dev->type != ARPHRD_ETHER) {
+	} else if (!skb->dev || skb->dev->type != ARPHRD_ETHER ||
+		   !skb_mac_header_was_set(skb) ||
+		   skb_mac_header_len(skb) < ETH_HLEN) {
 		goto out;
+	} else {
+		max_edit_len = ETH_HLEN;
 	}
 
 	err = skb_ensure_writable(skb, max_edit_len);
