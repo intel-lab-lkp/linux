@@ -44,24 +44,31 @@ enum ia_css_buffer_type {
  *  independent buffer queues and access functions.
  */
 struct ia_css_buffer {
-	enum ia_css_buffer_type type; /** Buffer type. */
+	enum ia_css_buffer_type type;	/* Buffer type. */
+	/*
+	 * exposure id for this buffer; 0 = not available
+	 * see ia_css_event_public.h for more detail.
+	 */
 	unsigned int exp_id;
-	/** exposure id for this buffer; 0 = not available
-	     see ia_css_event_public.h for more detail. */
 	union {
-		struct ia_css_isp_3a_statistics
-			*stats_3a;    /** 3A statistics & optionally RGBY statistics. */
-		struct ia_css_isp_dvs_statistics *stats_dvs;   /** DVS statistics. */
-		struct ia_css_isp_skc_dvs_statistics *stats_skc_dvs;  /** SKC DVS statistics. */
-		struct ia_css_frame              *frame;       /** Frame buffer. */
-		struct ia_css_acc_param          *custom_data; /** Custom buffer. */
-		struct ia_css_metadata           *metadata;    /** Sensor metadata. */
-	} data; /** Buffer data pointer. */
-	u64 driver_cookie; /** cookie for the driver */
-	struct ia_css_time_meas
-		timing_data; /** timing data (readings from the timer) */
-	struct ia_css_clock_tick
-		isys_eof_clock_tick; /** ISYS's end of frame timer tick*/
+		/* 3A statistics & optionally RGBY statistics. */
+		struct ia_css_isp_3a_statistics *stats_3a;
+		/* DVS statistics. */
+		struct ia_css_isp_dvs_statistics *stats_dvs;
+		/* SKC DVS statistics. */
+		struct ia_css_isp_skc_dvs_statistics *stats_skc_dvs;
+		/* Frame buffer. */
+		struct ia_css_frame              *frame;
+		/* Custom buffer. */
+		struct ia_css_acc_param          *custom_data;
+		/* Sensor metadata. */
+		struct ia_css_metadata           *metadata;
+	} data;				/* Buffer data pointer. */
+	u64 driver_cookie;		/* cookie for the driver */
+	/* timing data (readings from the timer) */
+	struct ia_css_time_meas timing_data;
+	/* ISYS's end of frame timer tick */
+	struct ia_css_clock_tick isys_eof_clock_tick;
 };
 
 /* @brief Dequeue param buffers from sp2host_queue

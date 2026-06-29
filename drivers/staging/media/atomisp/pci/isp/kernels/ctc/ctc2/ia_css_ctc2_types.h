@@ -15,9 +15,10 @@
 *  ISP261: CTC2 (CTC by Fast Approximate Distance)
 */
 struct ia_css_ctc2_config {
-	/** Gains by Y(Luma) at Y =0.0,Y_X1, Y_X2, Y_X3, Y_X4 and Y_X5
-	*   --default/ineffective value: 4096(0.5f)
-	*/
+	/*
+	 * Gains by Y(Luma) at Y =0.0,Y_X1, Y_X2, Y_X3, Y_X4 and Y_X5
+	 * --default/ineffective value: 4096(0.5f)
+	 */
 	s32 y_y0;
 	s32 y_y1;
 	s32 y_y2;

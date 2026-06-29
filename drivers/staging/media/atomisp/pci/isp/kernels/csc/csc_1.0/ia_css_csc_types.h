@@ -60,11 +60,17 @@
  *	4096	-3430	-666
  */
 struct ia_css_cc_config {
-	u32 fraction_bits;/** Fractional bits of matrix.
-					u8.0, [0,13] */
-	s32 matrix[3 * 3]; /** Conversion matrix.
-					s[13-fraction_bits].[fraction_bits],
-					[-8192,8191] */
+	/*
+	 * Fractional bits of matrix.
+	 * u8.0, [0,13]
+	 */
+	u32 fraction_bits;
+	/*
+	 * Conversion matrix.
+	 * s[13-fraction_bits].[fraction_bits],
+	 * [-8192,8191]
+	 */
+	s32 matrix[3 * 3];
 };
 
 #endif /* __IA_CSS_CSC_TYPES_H */

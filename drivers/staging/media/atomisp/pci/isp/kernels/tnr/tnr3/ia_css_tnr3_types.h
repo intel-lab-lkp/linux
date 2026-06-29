@@ -36,21 +36,24 @@ Copyright (c) 2010 - 2015, Intel Corporation.
  * 4. Selection of the reference frame buffer to be used for noise reduction.
  */
 struct ia_css_tnr3_kernel_config {
-	unsigned int maxfb_y;                        /** Maximum Feedback Gain for Y */
-	unsigned int maxfb_u;                        /** Maximum Feedback Gain for U */
-	unsigned int maxfb_v;                        /** Maximum Feedback Gain for V */
-	unsigned int round_adj_y;                    /** Rounding Adjust for Y */
-	unsigned int round_adj_u;                    /** Rounding Adjust for U */
-	unsigned int round_adj_v;                    /** Rounding Adjust for V */
-	unsigned int knee_y[TNR3_NUM_SEGMENTS - 1];  /** Knee points */
-	unsigned int sigma_y[TNR3_NUM_SEGMENTS +
-					       1]; /** Standard deviation for Y at points Y0, Y1, Y2, Y3 */
-	unsigned int sigma_u[TNR3_NUM_SEGMENTS +
-					       1]; /** Standard deviation for U at points U0, U1, U2, U3 */
-	unsigned int sigma_v[TNR3_NUM_SEGMENTS +
-					       1]; /** Standard deviation for V at points V0, V1, V2, V3 */
-	unsigned int
-	ref_buf_select;                 /** Selection of the reference buffer */
+	/* Maximum Feedback Gain for Y */
+	unsigned int maxfb_y;
+	/* Maximum Feedback Gain for U */
+	unsigned int maxfb_u;
+	/* Maximum Feedback Gain for V */
+	unsigned int maxfb_v;
+	unsigned int round_adj_y;                    /* Rounding Adjust for Y */
+	unsigned int round_adj_u;                    /* Rounding Adjust for U */
+	unsigned int round_adj_v;                    /* Rounding Adjust for V */
+	unsigned int knee_y[TNR3_NUM_SEGMENTS - 1];  /* Knee points */
+	/* Standard deviation for Y at points Y0, Y1, Y2, Y3 */
+	unsigned int sigma_y[TNR3_NUM_SEGMENTS + 1];
+	/* Standard deviation for U at points U0, U1, U2, U3 */
+	unsigned int sigma_u[TNR3_NUM_SEGMENTS + 1];
+	/* Standard deviation for V at points V0, V1, V2, V3 */
+	unsigned int sigma_v[TNR3_NUM_SEGMENTS + 1];
+	/* Selection of the reference buffer */
+	unsigned int ref_buf_select;
 };
 
 #endif

@@ -16,8 +16,11 @@
 
 struct ia_css_properties {
 	int  gdc_coord_one;
-	bool l1_base_is_index; /** Indicate whether the L1 page base
-				    is a page index or a byte address. */
+	/*
+	 * Indicate whether the L1 page base
+	 * is a page index or a byte address.
+	 */
+	bool l1_base_is_index;
 	enum ia_css_vamem_type vamem_type;
 };
 

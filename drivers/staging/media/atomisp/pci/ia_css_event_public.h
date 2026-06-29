@@ -27,39 +27,41 @@
  * 4) "enum ia_css_event_type convert_event_sp_to_host_domain"	(sh_css.c)
  */
 enum ia_css_event_type {
+	/* Output frame ready. */
 	IA_CSS_EVENT_TYPE_OUTPUT_FRAME_DONE		= BIT(0),
-	/** Output frame ready. */
+	/* Second output frame ready. */
 	IA_CSS_EVENT_TYPE_SECOND_OUTPUT_FRAME_DONE	= BIT(1),
-	/** Second output frame ready. */
+	/* Viewfinder Output frame ready. */
 	IA_CSS_EVENT_TYPE_VF_OUTPUT_FRAME_DONE		= BIT(2),
-	/** Viewfinder Output frame ready. */
+	/* Second viewfinder Output frame ready. */
 	IA_CSS_EVENT_TYPE_SECOND_VF_OUTPUT_FRAME_DONE	= BIT(3),
-	/** Second viewfinder Output frame ready. */
+	/* Indication that 3A statistics are available. */
 	IA_CSS_EVENT_TYPE_3A_STATISTICS_DONE		= BIT(4),
-	/** Indication that 3A statistics are available. */
+	/* Indication that DIS statistics are available. */
 	IA_CSS_EVENT_TYPE_DIS_STATISTICS_DONE		= BIT(5),
-	/** Indication that DIS statistics are available. */
+	/* Pipeline Done event, sent after last pipeline stage. */
 	IA_CSS_EVENT_TYPE_PIPELINE_DONE			= BIT(6),
-	/** Pipeline Done event, sent after last pipeline stage. */
+	/* Frame tagged. */
 	IA_CSS_EVENT_TYPE_FRAME_TAGGED			= BIT(7),
-	/** Frame tagged. */
+	/* Input frame ready. */
 	IA_CSS_EVENT_TYPE_INPUT_FRAME_DONE		= BIT(8),
-	/** Input frame ready. */
+	/* Metadata ready. */
 	IA_CSS_EVENT_TYPE_METADATA_DONE			= BIT(9),
-	/** Metadata ready. */
+	/* Indication that LACE statistics are available. */
 	IA_CSS_EVENT_TYPE_LACE_STATISTICS_DONE		= BIT(10),
-	/** Indication that LACE statistics are available. */
+	/* Extension stage complete. */
 	IA_CSS_EVENT_TYPE_ACC_STAGE_COMPLETE		= BIT(11),
-	/** Extension stage complete. */
+	/*
+	 * Timer event for measuring the SP side latencies. It contains the
+	 * 32-bit timer value from the SP
+	 */
 	IA_CSS_EVENT_TYPE_TIMER				= BIT(12),
-	/** Timer event for measuring the SP side latencies. It contains the
-	     32-bit timer value from the SP */
+	/* End Of Frame event, sent when in buffered sensor mode. */
 	IA_CSS_EVENT_TYPE_PORT_EOF			= BIT(13),
-	/** End Of Frame event, sent when in buffered sensor mode. */
+	/* Performance warning encounter by FW */
 	IA_CSS_EVENT_TYPE_FW_WARNING			= BIT(14),
-	/** Performance warning encounter by FW */
+	/* Assertion hit by FW */
 	IA_CSS_EVENT_TYPE_FW_ASSERT			= BIT(15),
-	/** Assertion hit by FW */
 };
 
 #define IA_CSS_EVENT_TYPE_NONE 0
@@ -89,47 +91,62 @@ enum ia_css_event_type {
  * filled.
  */
 struct ia_css_event {
+	/*
+	 * Pipe handle on which event happened, NULL for non pipe related
+	 * events.
+	 */
 	struct ia_css_pipe    *pipe;
-	/** Pipe handle on which event happened, NULL for non pipe related
-	     events. */
+	/* Type of Event, always valid/filled. */
 	enum ia_css_event_type type;
-	/** Type of Event, always valid/filled. */
+	/* Port number for EOF event (not valid for other events). */
 	u8                port;
-	/** Port number for EOF event (not valid for other events). */
+	/*
+	 * Exposure id for EOF/FRAME_TAGGED/FW_WARNING event (not valid for
+	 * other events) The exposure ID is unique only within a logical stream
+	 * and it is only generated on systems that have an input system (such
+	 * as 2400 and 2401). Most outputs produced by the CSS are tagged with
+	 * an exposure ID. This allows users of the CSS API to keep track of
+	 * which buffer was generated from which sensor output frame. This
+	 * includes: EOF event, output frames, 3A statistics, DVS statistics and
+	 * sensor metadata. Exposure IDs start at IA_CSS_MIN_EXPOSURE_ID,
+	 * increment by one until IA_CSS_MAX_EXPOSURE_ID is reached, after that
+	 * they wrap around to IA_CSS_MIN_EXPOSURE_ID again. Note that in case
+	 * frames are dropped, this will not be reflected in the exposure IDs.
+	 * Therefor applications should not use this to detect frame drops.
+	 */
 	u8                exp_id;
-	/** Exposure id for EOF/FRAME_TAGGED/FW_WARNING event (not valid for other events)
-	     The exposure ID is unique only within a logical stream and it is
-	     only generated on systems that have an input system (such as 2400
-	     and 2401).
-	     Most outputs produced by the CSS are tagged with an exposure ID.
-	     This allows users of the CSS API to keep track of which buffer
-	     was generated from which sensor output frame. This includes:
-	     EOF event, output frames, 3A statistics, DVS statistics and
-	     sensor metadata.
-	     Exposure IDs start at IA_CSS_MIN_EXPOSURE_ID, increment by one
-	     until IA_CSS_MAX_EXPOSURE_ID is reached, after that they wrap
-	     around to IA_CSS_MIN_EXPOSURE_ID again.
-	     Note that in case frames are dropped, this will not be reflected
-	     in the exposure IDs. Therefor applications should not use this
-	     to detect frame drops. */
+	/*
+	 * Firmware Handle for ACC_STAGE_COMPLETE event (not valid for other
+	 * events).
+	 */
 	u32               fw_handle;
-	/** Firmware Handle for ACC_STAGE_COMPLETE event (not valid for other
-	     events). */
+	/* Firmware warning code, only for WARNING events. */
 	enum ia_css_fw_warning fw_warning;
-	/** Firmware warning code, only for WARNING events. */
+	/*
+	 * Firmware module id, only for ASSERT events, should be logged by
+	 * driver.
+	 */
 	u8                fw_assert_module_id;
-	/** Firmware module id, only for ASSERT events, should be logged by driver. */
+	/*
+	 * Firmware line number, only for ASSERT events, should be logged by
+	 * driver.
+	 */
 	u16               fw_assert_line_no;
-	/** Firmware line number, only for ASSERT events, should be logged by driver. */
+	/*
+	 * For storing the full 32-bit of the timer value. Valid only for TIMER
+	 * event
+	 */
 	clock_value_t	       timer_data;
-	/** For storing the full 32-bit of the timer value. Valid only for TIMER
-	     event */
+	/*
+	 * For storing the code of the TIMER event. Valid only for
+	 * TIMER event
+	 */
 	u8                timer_code;
-	/** For storing the code of the TIMER event. Valid only for
-	     TIMER event */
+	/*
+	 * For storing the subcode of the TIMER event. Valid only
+	 * for TIMER event
+	 */
 	u8                timer_subcode;
-	/** For storing the subcode of the TIMER event. Valid only
-	     for TIMER event */
 };
 
 /* @brief Dequeue a PSYS event from the CSS system.

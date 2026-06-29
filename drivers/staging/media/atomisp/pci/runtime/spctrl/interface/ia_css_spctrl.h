@@ -12,17 +12,18 @@
 #include "ia_css_spctrl_comm.h"
 
 typedef struct {
-	u32        ddr_data_offset;       /**  posistion of data in DDR */
-	u32        dmem_data_addr;        /** data segment address in dmem */
-	u32        dmem_bss_addr;         /** bss segment address in dmem  */
-	u32        data_size;             /** data segment size            */
-	u32        bss_size;              /** bss segment size             */
+	u32        ddr_data_offset;       /*  posistion of data in DDR */
+	u32        dmem_data_addr;        /* data segment address in dmem */
+	u32        dmem_bss_addr;         /* bss segment address in dmem  */
+	u32        data_size;             /* data segment size            */
+	u32        bss_size;              /* bss segment size             */
 	u32        spctrl_config_dmem_addr; /* <location of dmem_cfg  in SP dmem */
 	u32        spctrl_state_dmem_addr;  /* < location of state  in SP dmem */
 	unsigned int    sp_entry;                /* < entry function ptr on SP */
-	const void      *code;                   /** location of firmware */
+	const void      *code;                   /* location of firmware */
 	u32         code_size;
-	char      *program_name;    /** not used on hardware, only for simulation */
+	/* not used on hardware, only for simulation */
+	char      *program_name;
 } ia_css_spctrl_cfg;
 
 /* Get the code addr in DDR of SP */

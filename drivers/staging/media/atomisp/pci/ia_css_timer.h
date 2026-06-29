@@ -19,27 +19,27 @@ typedef u32 clock_value_t;
 
 /* @brief 32 bit clock tick,(timestamp based on timer-value of CSS-internal timer)*/
 struct ia_css_clock_tick {
-	clock_value_t ticks; /** measured time in ticks.*/
+	clock_value_t ticks; /* measured time in ticks.*/
 };
 
 /* @brief TIMER event codes */
 enum ia_css_tm_event {
+	/* Timer Event after Initialization */
 	IA_CSS_TM_EVENT_AFTER_INIT,
-	/** Timer Event after Initialization */
+	/* Timer Event after end of Main */
 	IA_CSS_TM_EVENT_MAIN_END,
-	/** Timer Event after end of Main */
+	/* Timer Event after thread start */
 	IA_CSS_TM_EVENT_THREAD_START,
-	/** Timer Event after thread start */
+	/* Timer Event after Frame Process Start */
 	IA_CSS_TM_EVENT_FRAME_PROC_START,
-	/** Timer Event after Frame Process Start */
+	/* Timer Event after Frame Process End */
 	IA_CSS_TM_EVENT_FRAME_PROC_END
-	/** Timer Event after Frame Process End */
 };
 
 /* @brief code measurement common struct */
 struct ia_css_time_meas {
-	clock_value_t	start_timer_value;	/** measured time in ticks */
-	clock_value_t	end_timer_value;	/** measured time in ticks */
+	clock_value_t	start_timer_value;	/* measured time in ticks */
+	clock_value_t	end_timer_value;	/* measured time in ticks */
 };
 
 /*

@@ -43,13 +43,20 @@ struct ia_css_isp_3a_statistics {
 	struct {
 		ia_css_ptr rgby_tbl;
 	} data_hmem;
-	u32 exp_id;     /** exposure id, to match statistics to a frame,
-				  see ia_css_event_public.h for more detail. */
-	u32 isp_config_id;/** Unique ID to track which config was actually applied to a particular frame */
-	ia_css_ptr data_ptr; /** pointer to base of all data */
-	u32   size;     /** total size of all data */
+	/*
+	 * exposure id, to match statistics to a frame,
+	 * see ia_css_event_public.h for more detail.
+	 */
+	u32 exp_id;
+	/*
+	 * Unique ID to track which config was actually applied to a particular
+	 * frame
+	 */
+	u32 isp_config_id;
+	ia_css_ptr data_ptr;	/* pointer to base of all data */
+	u32   size;		/* total size of all data */
 	u32   dmem_size;
-	u32   vmem_size; /** both lo and hi have this size */
+	u32   vmem_size;	/* both lo and hi have this size */
 	u32   hmem_size;
 };
 
@@ -83,14 +90,17 @@ static_assert(sizeof(struct ia_css_isp_3a_statistics) == SIZE_OF_IA_CSS_ISP_3A_S
  * point into this one block of data.
  */
 struct ia_css_isp_3a_statistics_map {
-	void                    *data_ptr; /** Pointer to start of memory */
+	void                    *data_ptr; /* Pointer to start of memory */
 	struct ia_css_3a_output *dmem_stats;
 	u16                *vmem_stats_hi;
 	u16                *vmem_stats_lo;
 	struct ia_css_bh_table  *hmem_stats;
-	u32                 size; /** total size in bytes of data_ptr */
-	u32                 data_allocated; /** indicate whether data_ptr
-						    was allocated or not. */
+	u32                 size; /* total size in bytes of data_ptr */
+	/*
+	 * indicate whether data_ptr
+	 * was allocated or not.
+	 */
+	u32                 data_allocated;
 };
 
 /* @brief Copy and translate 3A statistics from an ISP buffer to a host buffer

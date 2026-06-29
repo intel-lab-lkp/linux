@@ -54,7 +54,7 @@ struct ia_css_isp_param_isp_segments {
 
 /* Memory offsets in binary info */
 struct ia_css_isp_param_memory_offsets {
-	u32 offsets[IA_CSS_NUM_PARAM_CLASSES];  /** offset wrt hdr in bytes */
+	u32 offsets[IA_CSS_NUM_PARAM_CLASSES];	/* offset wrt hdr in bytes */
 };
 
 /* Offsets for ISP kernel parameters per isp memory.

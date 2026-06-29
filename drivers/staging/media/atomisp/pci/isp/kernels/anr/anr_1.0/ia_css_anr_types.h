@@ -21,7 +21,7 @@
  *  This is also known as Low-Light.
  */
 struct ia_css_anr_config {
-	s32 threshold; /** Threshold */
+	s32 threshold;	/* Threshold */
 	s32 thresholds[4 * 4 * 4];
 	s32 factors[3];
 };

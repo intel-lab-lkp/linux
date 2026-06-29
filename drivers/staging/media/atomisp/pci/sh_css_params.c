@@ -3960,7 +3960,7 @@ sh_css_update_uds_and_crop_info(
 		bool upscale_y = in_frame_info->res.height < out_frame_info->res.height;
 
 		if (info->enable.uds && !info->enable.ds) {
-			/**
+			/*
 			 * we calculate with the envelope that we can actually
 			 * use, the min dvs envelope is for the filter
 			 * initialization.
@@ -3971,7 +3971,7 @@ sh_css_update_uds_and_crop_info(
 				     SH_CSS_MIN_DVS_ENVELOPE;
 			half_env_x = env_width / 2;
 			half_env_y = env_height / 2;
-			/**
+			/*
 			 * for digital zoom, we use the dvs envelope and make
 			 * sure that we don't include the 8 leftmost pixels or
 			 * 8 topmost rows.

@@ -55,9 +55,12 @@ struct ia_css_hdr_exclusion_params {
  * the CSS API. Currently, only test parameters are defined.
  */
 struct ia_css_hdr_config {
-	struct ia_css_hdr_irradiance_params irradiance; /** HDR irradiance parameters */
-	struct ia_css_hdr_deghost_params    deghost;    /** HDR deghosting parameters */
-	struct ia_css_hdr_exclusion_params  exclusion; /** HDR exclusion parameters */
+	/* HDR irradiance parameters */
+	struct ia_css_hdr_irradiance_params irradiance;
+	/* HDR deghosting parameters */
+	struct ia_css_hdr_deghost_params    deghost;
+	/* HDR exclusion parameters */
+	struct ia_css_hdr_exclusion_params  exclusion;
 };
 
 #endif /* __IA_CSS_HDR_TYPES_H */

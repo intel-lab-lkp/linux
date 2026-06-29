@@ -102,21 +102,21 @@ enum ia_sh_css_modes {
 	sh_css_mode_resume
 };
 
-/**
+/*
  * struct sh_css_stream_seed - a stream seed, to save and restore the
  * stream data.
  *
- * @orig_stream:	pointer to restore the original handle
- * @stream:		handle, used as ID too.
- * @stream_config:	stream config struct
- * @num_pipes:		number of pipes
- * @pipes:		pipe handles
- * @orig_pipes:		pointer to restore original handle
- * @pipe_config:	pipe config structs
+ * @orig_stream:        pointer to restore the original handle
+ * @stream:             handle, used as ID too.
+ * @stream_config:      stream config struct
+ * @num_pipes:          number of pipes
+ * @pipes:              pipe handles
+ * @orig_pipes:         pointer to restore original handle
+ * @pipe_config:        pipe config structs
  *
  * the stream seed contains all the data required to "grow" the seed again
  * after it was closed.
-*/
+ */
 struct sh_css_stream_seed {
 	struct ia_css_stream		**orig_stream;
 	struct ia_css_stream		*stream;

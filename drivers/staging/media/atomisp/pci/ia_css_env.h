@@ -32,45 +32,63 @@ enum ia_css_mem_attr {
  *  This is never expected to allocate more than one page of memory (4K bytes).
  */
 struct ia_css_cpu_mem_env {
+	/* Flush function to flush the cache for given accelerator. */
 	void (*flush)(struct ia_css_acc_fw *fw);
-	/** Flush function to flush the cache for given accelerator. */
 };
 
 /* Environment with function pointers to access the CSS hardware. This includes
  *  registers and local memories.
  */
 struct ia_css_hw_access_env {
+	/*
+	 * Store an 8 bit value into an address in the CSS HW address space.
+	 * The address must be an 8 bit aligned address.
+	 */
 	void (*store_8)(hrt_address addr, uint8_t data);
-	/** Store an 8 bit value into an address in the CSS HW address space.
-	     The address must be an 8 bit aligned address. */
+	/*
+	 * Store a 16 bit value into an address in the CSS HW address space.
+	 * The address must be a 16 bit aligned address.
+	 */
 	void (*store_16)(hrt_address addr, uint16_t data);
-	/** Store a 16 bit value into an address in the CSS HW address space.
-	     The address must be a 16 bit aligned address. */
+	/*
+	 * Store a 32 bit value into an address in the CSS HW address space.
+	 * The address must be a 32 bit aligned address.
+	 */
 	void (*store_32)(hrt_address addr, uint32_t data);
-	/** Store a 32 bit value into an address in the CSS HW address space.
-	     The address must be a 32 bit aligned address. */
+	/*
+	 * Load an 8 bit value from an address in the CSS HW address
+	 * space. The address must be an 8 bit aligned address.
+	 */
 	uint8_t (*load_8)(hrt_address addr);
-	/** Load an 8 bit value from an address in the CSS HW address
-	     space. The address must be an 8 bit aligned address. */
+	/*
+	 * Load a 16 bit value from an address in the CSS HW address
+	 * space. The address must be a 16 bit aligned address.
+	 */
 	uint16_t (*load_16)(hrt_address addr);
-	/** Load a 16 bit value from an address in the CSS HW address
-	     space. The address must be a 16 bit aligned address. */
+	/*
+	 * Load a 32 bit value from an address in the CSS HW address
+	 * space. The address must be a 32 bit aligned address.
+	 */
 	uint32_t (*load_32)(hrt_address addr);
-	/** Load a 32 bit value from an address in the CSS HW address
-	     space. The address must be a 32 bit aligned address. */
+	/*
+	 * Store a number of bytes into a byte-aligned address in the CSS HW
+	 * address space.
+	 */
 	void (*store)(hrt_address addr, const void *data, uint32_t bytes);
-	/** Store a number of bytes into a byte-aligned address in the CSS HW address space. */
+	/*
+	 * Load a number of bytes from a byte-aligned address in the CSS HW
+	 * address space.
+	 */
 	void (*load)(hrt_address addr, void *data, uint32_t bytes);
-	/** Load a number of bytes from a byte-aligned address in the CSS HW address space. */
 };
 
 /* Environment with function pointers to print error and debug messages.
  */
 struct ia_css_print_env {
+	/* Print a debug message. */
 	int  __printf(1, 0) (*debug_print)(const char *fmt, va_list args);
-	/** Print a debug message. */
+	/* Print an error message. */
 	int  __printf(1, 0) (*error_print)(const char *fmt, va_list args);
-	/** Print an error message.*/
 };
 
 /* Environment structure. This includes function pointers to access several
@@ -79,9 +97,9 @@ struct ia_css_print_env {
  *  Windows and several simulation environments.
  */
 struct ia_css_env {
-	struct ia_css_cpu_mem_env   cpu_mem_env;   /** local flush. */
-	struct ia_css_hw_access_env hw_access_env; /** CSS HW access functions */
-	struct ia_css_print_env     print_env;     /** Message printing env. */
+	struct ia_css_cpu_mem_env   cpu_mem_env;   /* local flush. */
+	struct ia_css_hw_access_env hw_access_env; /* CSS HW access functions */
+	struct ia_css_print_env     print_env;     /* Message printing env. */
 };
 
 #endif /* __IA_CSS_ENV_H */

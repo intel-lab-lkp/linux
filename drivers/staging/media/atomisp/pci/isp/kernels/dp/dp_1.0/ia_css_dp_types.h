@@ -19,22 +19,28 @@
  *  ISP2: DPC2 is used.
  */
 struct ia_css_dp_config {
-	ia_css_u0_16 threshold; /** The threshold of defect pixel correction,
-			      representing the permissible difference of
-			      intensity between one pixel and its
-			      surrounding pixels. Smaller values result
-				in more frequent pixel corrections.
-				u0.16, [0,65535],
-				default 8192, ineffective 65535 */
-	ia_css_u8_8 gain;	 /** The sensitivity of mis-correction. ISP will
-			      miss a lot of defects if the value is set
-				too large.
-				u8.8, [0,65535],
-				default 4096, ineffective 65535 */
-	u32 gr;	/* unsigned <integer_bits>.<16-integer_bits> */
-	u32 r;	/* unsigned <integer_bits>.<16-integer_bits> */
-	u32 b;	/* unsigned <integer_bits>.<16-integer_bits> */
-	u32 gb;	/* unsigned <integer_bits>.<16-integer_bits> */
+	/*
+	 * The threshold of defect pixel correction,
+	 * representing the permissible difference of
+	 * intensity between one pixel and its
+	 * surrounding pixels. Smaller values result
+	 *   in more frequent pixel corrections.
+	 *   u0.16, [0,65535],
+	 *   default 8192, ineffective 65535
+	 */
+	ia_css_u0_16 threshold;
+	/*
+	 * The sensitivity of mis-correction. ISP will
+	 * miss a lot of defects if the value is set
+	 *   too large.
+	 *   u8.8, [0,65535],
+	 *   default 4096, ineffective 65535
+	 */
+	ia_css_u8_8 gain;
+	u32 gr;		/* unsigned <integer_bits>.<16-integer_bits> */
+	u32 r;		/* unsigned <integer_bits>.<16-integer_bits> */
+	u32 b;		/* unsigned <integer_bits>.<16-integer_bits> */
+	u32 gb;		/* unsigned <integer_bits>.<16-integer_bits> */
 };
 
 #endif /* __IA_CSS_DP_TYPES_H */

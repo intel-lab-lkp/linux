@@ -17,7 +17,7 @@
 
 /* Viewfinder decimation */
 struct sh_css_isp_vf_isp_config {
-	u32 vf_downscale_bits; /** Log VF downscale value */
+	u32 vf_downscale_bits;	/* Log VF downscale value */
 	u32 enable;
 	struct ia_css_frame_sp_info info;
 	struct {

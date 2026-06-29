@@ -25,23 +25,32 @@
  * Note that not all ISP modes support all input modes.
  */
 enum ia_css_input_mode {
-	IA_CSS_INPUT_MODE_SENSOR, /** data from sensor */
-	IA_CSS_INPUT_MODE_FIFO,   /** data from input-fifo */
-	IA_CSS_INPUT_MODE_TPG,    /** data from test-pattern generator */
-	IA_CSS_INPUT_MODE_PRBS,   /** data from pseudo-random bit stream */
-	IA_CSS_INPUT_MODE_MEMORY, /** data from a frame in memory */
-	IA_CSS_INPUT_MODE_BUFFERED_SENSOR /** data is sent through mipi buffer */
+	IA_CSS_INPUT_MODE_SENSOR, /* data from sensor */
+	IA_CSS_INPUT_MODE_FIFO,   /* data from input-fifo */
+	IA_CSS_INPUT_MODE_TPG,    /* data from test-pattern generator */
+	IA_CSS_INPUT_MODE_PRBS,   /* data from pseudo-random bit stream */
+	IA_CSS_INPUT_MODE_MEMORY, /* data from a frame in memory */
+	IA_CSS_INPUT_MODE_BUFFERED_SENSOR /* data is sent through mipi buffer */
 };
 
 /* Structure of the MIPI buffer configuration
  */
 struct ia_css_mipi_buffer_config {
-	unsigned int size_mem_words; /** The frame size in the system memory
-					  words (32B) */
-	bool contiguous;	     /** Allocated memory physically
-					  contiguously or not. \deprecated{Will be false always.}*/
-	unsigned int nof_mipi_buffers; /** The number of MIPI buffers required for this
-					stream */
+	/*
+	 * The frame size in the system memory
+	 * words (32B)
+	 */
+	unsigned int size_mem_words;
+	/*
+	 * Allocated memory physically
+	 * contiguously or not. \deprecated{Will be false always.}
+	 */
+	bool contiguous;
+	/*
+	 * The number of MIPI buffers required for this
+	 * stream
+	 */
+	unsigned int nof_mipi_buffers;
 };
 
 enum {
@@ -55,41 +64,56 @@ enum {
  *  multiple of this in one virtual channel.
  */
 struct ia_css_stream_isys_stream_config {
-	struct ia_css_resolution  input_res; /** Resolution of input data */
-	enum atomisp_input_format format; /** Format of input stream. This data
-					       format will be mapped to MIPI data
-					       type internally. */
-	int linked_isys_stream_id; /** default value is -1, other value means
-							current isys_stream shares the same buffer with
-							indicated isys_stream*/
-	bool valid; /** indicate whether other fields have valid value */
+	struct ia_css_resolution  input_res; /* Resolution of input data */
+	/*
+	 * Format of input stream. This data
+	 * format will be mapped to MIPI data
+	 * type internally.
+	 */
+	enum atomisp_input_format format;
+	/*
+	 * default value is -1, other value means
+	 * current isys_stream shares the same buffer with
+	 * indicated isys_stream
+	 */
+	int linked_isys_stream_id;
+	bool valid; /* indicate whether other fields have valid value */
 };
 
 struct ia_css_stream_input_config {
-	struct ia_css_resolution  input_res; /** Resolution of input data */
-	struct ia_css_resolution  effective_res; /** Resolution of input data.
-							Used for CSS 2400/1 System and deprecated for other
-							systems (replaced by input_effective_res in
-							ia_css_pipe_config) */
-	enum atomisp_input_format format; /** Format of input stream. This data
-					       format will be mapped to MIPI data
-					       type internally. */
-	enum ia_css_bayer_order bayer_order; /** Bayer order for RAW streams */
+	struct ia_css_resolution  input_res; /* Resolution of input data */
+	/*
+	 * Resolution of input data.
+	 * Used for CSS 2400/1 System and deprecated for other
+	 * systems (replaced by input_effective_res in
+	 * ia_css_pipe_config)
+	 */
+	struct ia_css_resolution  effective_res;
+	/*
+	 * Format of input stream. This data
+	 * format will be mapped to MIPI data
+	 * type internally.
+	 */
+	enum atomisp_input_format format;
+	enum ia_css_bayer_order bayer_order; /* Bayer order for RAW streams */
 };
 
 /* Input stream description. This describes how input will flow into the
  *  CSS. This is used to program the CSS hardware.
  */
 struct ia_css_stream_config {
-	enum ia_css_input_mode    mode; /** Input mode */
+	enum ia_css_input_mode    mode; /* Input mode */
 	union {
-		struct ia_css_input_port  port; /** Port, for sensor only. */
-		struct ia_css_prbs_config prbs; /** PRBS configuration */
-	} source; /** Source of input data */
-	unsigned int	      channel_id; /** Channel on which input data
-						   will arrive. Use this field
-						   to specify virtual channel id.
-						   Valid values are: 0, 1, 2, 3 */
+		struct ia_css_input_port  port; /* Port, for sensor only. */
+		struct ia_css_prbs_config prbs; /* PRBS configuration */
+	} source; /* Source of input data */
+	/*
+	 * Channel on which input data
+	 * will arrive. Use this field
+	 * to specify virtual channel id.
+	 * Valid values are: 0, 1, 2, 3
+	 */
+	unsigned int	      channel_id;
 	struct ia_css_stream_isys_stream_config
 		isys_config[IA_CSS_STREAM_MAX_ISYS_STREAM_PER_CH];
 	struct ia_css_stream_input_config input_config;
@@ -100,34 +124,61 @@ struct ia_css_stream_config {
 	 * in the form 2^N * 2^N
 	 */
 	/* ISP2401 */
-	unsigned int sensor_binning_factor; /** Binning factor used by sensor
-						 to produce image data. This is
-						 used for shading correction. */
-	unsigned int pixels_per_clock; /** Number of pixels per clock, which can be
-					    1, 2 or 4. */
-	bool online; /** offline will activate RAW copy on SP, use this for
-			  continuous capture. */
+	/*
+	 * Binning factor used by sensor
+	 * to produce image data. This is
+	 * used for shading correction.
+	 */
+	unsigned int sensor_binning_factor;
+	/*
+	 * Number of pixels per clock, which can be
+	 * 1, 2 or 4.
+	 */
+	unsigned int pixels_per_clock;
+	/*
+	 * offline will activate RAW copy on SP, use this for
+	 * continuous capture.
+	 */
+	bool online;
 	/* ISYS2401 usage: ISP receives data directly from sensor, no copy. */
-	unsigned int init_num_cont_raw_buf; /** initial number of raw buffers to
-					     allocate */
-	unsigned int target_num_cont_raw_buf; /** total number of raw buffers to
-					     allocate */
-	bool pack_raw_pixels; /** Pack pixels in the raw buffers */
-	bool continuous; /** Use SP copy feature to continuously capture frames
-			      to system memory and run pipes in offline mode */
-	bool disable_cont_viewfinder; /** disable continuous viewfinder for ZSL use case */
-	s32 flash_gpio_pin; /** pin on which the flash is connected, -1 for no flash */
-	int left_padding; /** The number of input-formatter left-paddings, -1 for default from binary.*/
-	struct ia_css_mipi_buffer_config
-		mipi_buffer_config; /** mipi buffer configuration */
-	struct ia_css_metadata_config
-		metadata_config;     /** Metadata configuration. */
-	bool ia_css_enable_raw_buffer_locking; /** Enable Raw Buffer Locking for HALv3 Support */
+	/*
+	 * initial number of raw buffers to
+	 * allocate
+	 */
+	unsigned int init_num_cont_raw_buf;
+	/*
+	 * total number of raw buffers to
+	 * allocate
+	 */
+	unsigned int target_num_cont_raw_buf;
+	bool pack_raw_pixels; /* Pack pixels in the raw buffers */
+	/*
+	 * Use SP copy feature to continuously capture frames
+	 * to system memory and run pipes in offline mode
+	 */
+	bool continuous;
+	/* disable continuous viewfinder for ZSL use case */
+	bool disable_cont_viewfinder;
+	/* pin on which the flash is connected, -1 for no flash */
+	s32 flash_gpio_pin;
+	/*
+	 * The number of input-formatter left-paddings, -1 for default from
+	 * binary.
+	 */
+	int left_padding;
+	/* mipi buffer configuration */
+	struct ia_css_mipi_buffer_config mipi_buffer_config;
+	/* Metadata configuration. */
+	struct ia_css_metadata_config metadata_config;
+	/* Enable Raw Buffer Locking for HALv3 Support */
+	bool ia_css_enable_raw_buffer_locking;
+	/*
+	 * Lock all RAW buffers (true) or lock only buffers processed by
+	 * video or preview pipe (false).
+	 * This setting needs to be enabled to allow raw buffer locking
+	 * without continuous viewfinder.
+	 */
 	bool lock_all;
-	/** Lock all RAW buffers (true) or lock only buffers processed by
-	     video or preview pipe (false).
-	     This setting needs to be enabled to allow raw buffer locking
-	     without continuous viewfinder. */
 };
 
 struct ia_css_stream;
@@ -136,8 +187,8 @@ struct ia_css_stream;
  *  created.
  */
 struct ia_css_stream_info {
+	/* Info about the metadata layout, this contains the stride. */
 	struct ia_css_metadata_info metadata_info;
-	/** Info about the metadata layout, this contains the stride. */
 };
 
 /* @brief Load default stream configuration

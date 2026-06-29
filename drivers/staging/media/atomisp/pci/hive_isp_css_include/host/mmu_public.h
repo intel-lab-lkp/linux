@@ -11,43 +11,43 @@
 #include "device_access.h"
 #include "assert_support.h"
 
-/**
+/*
  * mmu_set_page_table_base_index() - Set the page table base index of MMU[ID]
- * @ID:				MMU identifier
- * @base_index:			page table base index
+ * @ID:                         MMU identifier
+ * @base_index:                 page table base index
  *
  * Return: none, MMU[ID].page_table_base_index = base_index
  */
 void mmu_set_page_table_base_index(const mmu_ID_t ID, const hrt_data base_index);
 
-/**
+/*
  * mmu_get_page_table_base_index() - Get the page table base index of MMU[ID]
- * @ID:				MMU identifier
+ * @ID:                         MMU identifier
  *
  * Return: MMU[ID].page_table_base_index
  */
 hrt_data mmu_get_page_table_base_index(const mmu_ID_t ID);
 
-/**
+/*
  * mmu_invalidate_cache() - nvalidate the page table cache of MMU[ID]
- * @ID:				MMU identifier
+ * @ID:                         MMU identifier
  *
  * Return: none
  */
 void mmu_invalidate_cache(const mmu_ID_t ID);
 
-/**
+/*
  * mmu_invalidate_cache_all() - Invalidate the page table cache of all MMUs
  *
  * Return: none
  */
 void mmu_invalidate_cache_all(void);
 
-/**
+/*
  * mmu_reg_store() - Write to a control register of MMU[ID]
- * @ID:				MMU identifier
- * @reg:			register index
- * @value:			The data to be written
+ * @ID:                         MMU identifier
+ * @reg:                        register index
+ * @value:                      The data to be written
  *
  * Return: none, MMU[ID].ctrl[reg] = value
  */
@@ -58,10 +58,10 @@ static inline void mmu_reg_store(const mmu_ID_t ID, const unsigned int reg, cons
 	ia_css_device_store_uint32(MMU_BASE[ID] + reg * sizeof(hrt_data), value);
 }
 
-/**
+/*
  * mmu_reg_load() - Read from a control register of MMU[ID]
- * @ID:				MMU identifier
- * @reg:			register index
+ * @ID:                         MMU identifier
+ * @reg:                        register index
  *
  * Return: MMU[ID].ctrl[reg]
  */

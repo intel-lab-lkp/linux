@@ -42,14 +42,16 @@
  */
 
 struct ia_css_macc_table {
+	/*
+	 * 16 of 2x2 matix
+	 * MACC1: s2.13, [-65536,65535]
+	 *   default/ineffective:
+	 *       16 of "identity 2x2 matix" {8192,0,0,8192}
+	 * MACC2: s[macc_config.exp].[13-macc_config.exp], [-8192,8191]
+	 *   default/ineffective: (s1.12)
+	 *       16 of "identity 2x2 matix" {4096,0,0,4096}
+	 */
 	s16 data[IA_CSS_MACC_NUM_COEFS * IA_CSS_MACC_NUM_AXES];
-	/** 16 of 2x2 matix
-	  MACC1: s2.13, [-65536,65535]
-	    default/ineffective:
-		16 of "identity 2x2 matix" {8192,0,0,8192}
-	  MACC2: s[macc_config.exp].[13-macc_config.exp], [-8192,8191]
-	    default/ineffective: (s1.12)
-		16 of "identity 2x2 matix" {4096,0,0,4096} */
 };
 
 #endif /* __IA_CSS_MACC_TYPES_H */

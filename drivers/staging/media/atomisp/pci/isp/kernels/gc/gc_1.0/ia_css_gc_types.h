@@ -30,13 +30,15 @@
  *  ISP1: GC1 is used.
  * (ISP2: GC2(sRGB Gamma Correction) is used.)
  */
-/** IA_CSS_VAMEM_TYPE_1(ISP2300) or
-     IA_CSS_VAMEM_TYPE_2(ISP2400) */
+/*
+ * IA_CSS_VAMEM_TYPE_1(ISP2300) or
+ * IA_CSS_VAMEM_TYPE_2(ISP2400)
+ */
 union ia_css_gc_data {
+	/* Y(Luma) Gamma table on vamem type 1. u0.8, [0,255] */
 	u16 vamem_1[IA_CSS_VAMEM_1_GAMMA_TABLE_SIZE];
-	/** Y(Luma) Gamma table on vamem type 1. u0.8, [0,255] */
+	/* Y(Luma) Gamma table on vamem type 2. u0.8, [0,255] */
 	u16 vamem_2[IA_CSS_VAMEM_2_GAMMA_TABLE_SIZE];
-	/** Y(Luma) Gamma table on vamem type 2. u0.8, [0,255] */
 };
 
 struct ia_css_gamma_table {
@@ -51,12 +53,18 @@ struct ia_css_gamma_table {
  * (ISP2: GC2 (sRGB Gamma Correction) is used.)
   */
 struct ia_css_gc_config {
-	u16 gain_k1; /** Gain to adjust U after YUV Gamma Correction.
-				u0.16, [0,65535],
-				default/ineffective 19000(0.29) */
-	u16 gain_k2; /** Gain to adjust V after YUV Gamma Correction.
-				u0.16, [0,65535],
-				default/ineffective 19000(0.29) */
+	/*
+	 * Gain to adjust U after YUV Gamma Correction.
+	 * u0.16, [0,65535],
+	 * default/ineffective 19000(0.29)
+	 */
+	u16 gain_k1;
+	/*
+	 * Gain to adjust V after YUV Gamma Correction.
+	 * u0.16, [0,65535],
+	 * default/ineffective 19000(0.29)
+	 */
+	u16 gain_k2;
 };
 
 /* Chroma Enhancement configuration.
@@ -69,10 +77,16 @@ struct ia_css_gc_config {
  * (ISP2: CE1 is not used.)
  */
 struct ia_css_ce_config {
-	u8 uv_level_min; /** Minimum of chroma output level.
-				u0.8, [0,255], default/ineffective 0 */
-	u8 uv_level_max; /** Maximum of chroma output level.
-				u0.8, [0,255], default/ineffective 255 */
+	/*
+	 * Minimum of chroma output level.
+	 * u0.8, [0,255], default/ineffective 0
+	 */
+	u8 uv_level_min;
+	/*
+	 * Maximum of chroma output level.
+	 * u0.8, [0,255], default/ineffective 255
+	 */
+	u8 uv_level_max;
 };
 
 /* Multi-Axes Color Correction (MACC) configuration.
@@ -82,8 +96,11 @@ struct ia_css_ce_config {
  *  ISP2: MACC2 is used.
  */
 struct ia_css_macc_config {
-	u8 exp;	/** Common exponent of ia_css_macc_table.
-				u8.0, [0,13], default 1, ineffective 1 */
+	/*
+	 * Common exponent of ia_css_macc_table.
+	 * u8.0, [0,13], default 1, ineffective 1
+	 */
+	u8 exp;
 };
 
 #endif /* __IA_CSS_GC_TYPES_H */

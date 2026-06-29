@@ -48,39 +48,72 @@ enum ia_css_vamem_type {
  *  ISP2: CTC2 is used.
  */
 struct ia_css_ctc_config {
-	u16 y0;	/** 1st kneepoint gain.
-				u[ce_gain_exp].[13-ce_gain_exp], [0,8191],
-				default/ineffective 4096(0.5) */
-	u16 y1;	/** 2nd kneepoint gain.
-				u[ce_gain_exp].[13-ce_gain_exp], [0,8191],
-				default/ineffective 4096(0.5) */
-	u16 y2;	/** 3rd kneepoint gain.
-				u[ce_gain_exp].[13-ce_gain_exp], [0,8191],
-				default/ineffective 4096(0.5) */
-	u16 y3;	/** 4th kneepoint gain.
-				u[ce_gain_exp].[13-ce_gain_exp], [0,8191],
-				default/ineffective 4096(0.5) */
-	u16 y4;	/** 5th kneepoint gain.
-				u[ce_gain_exp].[13-ce_gain_exp], [0,8191],
-				default/ineffective 4096(0.5) */
-	u16 y5;	/** 6th kneepoint gain.
-				u[ce_gain_exp].[13-ce_gain_exp], [0,8191],
-				default/ineffective 4096(0.5) */
-	u16 ce_gain_exp;	/** Common exponent of y-axis gain.
-				u8.0, [0,13],
-				default/ineffective 1 */
-	u16 x1;	/** 2nd kneepoint luma.
-				u0.13, [0,8191], constraints: 0<x1<x2,
-				default/ineffective 1024 */
-	u16 x2;	/** 3rd kneepoint luma.
-				u0.13, [0,8191], constraints: x1<x2<x3,
-				default/ineffective 2048 */
-	u16 x3;	/** 4th kneepoint luma.
-				u0.13, [0,8191], constraints: x2<x3<x4,
-				default/ineffective 6144 */
-	u16 x4;	/** 5tn kneepoint luma.
-				u0.13, [0,8191], constraints: x3<x4<8191,
-				default/ineffective 7168 */
+	/*
+	 * 1st kneepoint gain.
+	 * u[ce_gain_exp].[13-ce_gain_exp], [0,8191],
+	 * default/ineffective 4096(0.5)
+	 */
+	u16 y0;
+	/*
+	 * 2nd kneepoint gain.
+	 * u[ce_gain_exp].[13-ce_gain_exp], [0,8191],
+	 * default/ineffective 4096(0.5)
+	 */
+	u16 y1;
+	/*
+	 * 3rd kneepoint gain.
+	 * u[ce_gain_exp].[13-ce_gain_exp], [0,8191],
+	 * default/ineffective 4096(0.5)
+	 */
+	u16 y2;
+	/*
+	 * 4th kneepoint gain.
+	 * u[ce_gain_exp].[13-ce_gain_exp], [0,8191],
+	 * default/ineffective 4096(0.5)
+	 */
+	u16 y3;
+	/*
+	 * 5th kneepoint gain.
+	 * u[ce_gain_exp].[13-ce_gain_exp], [0,8191],
+	 * default/ineffective 4096(0.5)
+	 */
+	u16 y4;
+	/*
+	 * 6th kneepoint gain.
+	 * u[ce_gain_exp].[13-ce_gain_exp], [0,8191],
+	 * default/ineffective 4096(0.5)
+	 */
+	u16 y5;
+	/*
+	 * Common exponent of y-axis gain.
+	 * u8.0, [0,13],
+	 * default/ineffective 1
+	 */
+	u16 ce_gain_exp;
+	/*
+	 * 2nd kneepoint luma.
+	 * u0.13, [0,8191], constraints: 0<x1<x2,
+	 * default/ineffective 1024
+	 */
+	u16 x1;
+	/*
+	 * 3rd kneepoint luma.
+	 * u0.13, [0,8191], constraints: x1<x2<x3,
+	 * default/ineffective 2048
+	 */
+	u16 x2;
+	/*
+	 * 4th kneepoint luma.
+	 * u0.13, [0,8191], constraints: x2<x3<x4,
+	 * default/ineffective 6144
+	 */
+	u16 x3;
+	/*
+	 * 5tn kneepoint luma.
+	 * u0.13, [0,8191], constraints: x3<x4<8191,
+	 * default/ineffective 7168
+	 */
+	u16 x4;
 };
 
 union ia_css_ctc_data {

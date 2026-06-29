@@ -18,8 +18,8 @@
 /* CSS firmware package structure.
  */
 struct ia_css_fw {
-	void	    *data;  /** pointer to the firmware data */
-	unsigned int bytes; /** length in bytes of firmware data */
+	void	    *data;	/* pointer to the firmware data */
+	unsigned int bytes;	/* length in bytes of firmware data */
 };
 
 struct device;

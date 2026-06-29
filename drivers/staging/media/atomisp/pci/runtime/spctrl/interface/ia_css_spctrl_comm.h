@@ -23,12 +23,12 @@ typedef enum {
  * initialization of SP DMEM using the SP itself
  */
 struct ia_css_sp_init_dmem_cfg {
-	ia_css_ptr      ddr_data_addr;  /** data segment address in ddr  */
-	u32        dmem_data_addr; /** data segment address in dmem */
-	u32        dmem_bss_addr;  /** bss segment address in dmem  */
-	u32        data_size;      /** data segment size            */
-	u32        bss_size;       /** bss segment size             */
-	sp_ID_t         sp_id;          /* <sp Id */
+	ia_css_ptr      ddr_data_addr;	/* data segment address in ddr  */
+	u32        dmem_data_addr;	/* data segment address in dmem */
+	u32        dmem_bss_addr;	/* bss segment address in dmem  */
+	u32        data_size;		/* data segment size            */
+	u32        bss_size;		/* bss segment size             */
+	sp_ID_t         sp_id;		/* <sp Id */
 };
 
 #define SIZE_OF_IA_CSS_SP_INIT_DMEM_CFG_STRUCT	\

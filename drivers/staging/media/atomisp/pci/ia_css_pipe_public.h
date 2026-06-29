@@ -33,12 +33,19 @@ enum {
  *  create a continuous capture stream.
  */
 enum ia_css_pipe_mode {
-	IA_CSS_PIPE_MODE_PREVIEW,	/** Preview pipe */
-	IA_CSS_PIPE_MODE_VIDEO,		/** Video pipe */
-	IA_CSS_PIPE_MODE_CAPTURE,	/** Still capture pipe */
-	IA_CSS_PIPE_MODE_COPY,		/** Copy pipe, only used for embedded/image data copying */
-	IA_CSS_PIPE_MODE_YUVPP,		/** YUV post processing pipe, used for all use cases with YUV input,
-									for SoC sensor and external ISP */
+	/* Preview pipe */
+	IA_CSS_PIPE_MODE_PREVIEW,
+	/* Video pipe */
+	IA_CSS_PIPE_MODE_VIDEO,
+	/* Still capture pipe */
+	IA_CSS_PIPE_MODE_CAPTURE,
+	/* Copy pipe, only used for embedded/image data copying */
+	IA_CSS_PIPE_MODE_COPY,
+	/*
+	 * YUV post processing pipe, used for all use cases with YUV
+	 * input, for SoC sensor and external ISP
+	 */
+	IA_CSS_PIPE_MODE_YUVPP,
 };
 
 /* Temporary define  */
@@ -49,10 +56,10 @@ enum ia_css_pipe_mode {
  * the order should match with definition in sh_css_defs.h
  */
 enum ia_css_pipe_version {
-	IA_CSS_PIPE_VERSION_1 = 1,		/** ISP1.0 pipe */
-	IA_CSS_PIPE_VERSION_2_2 = 2,		/** ISP2.2 pipe */
-	IA_CSS_PIPE_VERSION_2_6_1 = 3,		/** ISP2.6.1 pipe */
-	IA_CSS_PIPE_VERSION_2_7 = 4		/** ISP2.7 pipe */
+	IA_CSS_PIPE_VERSION_1 = 1,		/* ISP1.0 pipe */
+	IA_CSS_PIPE_VERSION_2_2 = 2,		/* ISP2.2 pipe */
+	IA_CSS_PIPE_VERSION_2_6_1 = 3,		/* ISP2.6.1 pipe */
+	IA_CSS_PIPE_VERSION_2_7 = 4		/* ISP2.7 pipe */
 };
 
 /*
@@ -61,66 +68,90 @@ enum ia_css_pipe_version {
  * set by AIC
  */
 struct ia_css_pipe_config {
+	/* mode, indicates which mode the pipe should use. */
 	enum ia_css_pipe_mode mode;
-	/** mode, indicates which mode the pipe should use. */
+	/*
+	 * Pipe version, indicates which imaging pipeline the pipe
+	 * should use.
+	 */
 	enum ia_css_pipe_version isp_pipe_version;
-	/** pipe version, indicates which imaging pipeline the pipe should use. */
+	/* input effective resolution */
 	struct ia_css_resolution input_effective_res;
-	/** input effective resolution */
+	/* bayer down scaling */
 	struct ia_css_resolution bayer_ds_out_res;
-	/** bayer down scaling */
+	/* capture post processing input resolution */
 	struct ia_css_resolution capt_pp_in_res;
-	/** capture post processing input resolution */
+	/* ISP2401: view finder post processing input resolution */
 	struct ia_css_resolution vf_pp_in_res;
 
-	/** ISP2401: view finder post processing input resolution */
+	/*
+	 * For IPU3 only: use output_system_in_res to specify what input
+	 * resolution will OSYS receive, this resolution is equal to the
+	 * output resolution of GDC if not determined CSS will set
+	 * output_system_in_res with main osys output pin resolution All
+	 * other IPUs may ignore this property
+	 */
 	struct ia_css_resolution output_system_in_res;
-	/** For IPU3 only: use output_system_in_res to specify what input resolution
-	     will OSYS receive, this resolution is equal to the output resolution of GDC
-	     if not determined CSS will set output_system_in_res with main osys output pin resolution
-	     All other IPUs may ignore this property */
+	/* dvs crop, video only, not in use yet. Use dvs_envelope below. */
 	struct ia_css_resolution dvs_crop_out_res;
-	/** dvs crop, video only, not in use yet. Use dvs_envelope below. */
+	/* output of YUV scaling */
 	struct ia_css_frame_info output_info[IA_CSS_PIPE_MAX_OUTPUT_STAGE];
-	/** output of YUV scaling */
+	/* output of VF YUV scaling */
 	struct ia_css_frame_info vf_output_info[IA_CSS_PIPE_MAX_OUTPUT_STAGE];
-	/** output of VF YUV scaling */
+	/* Default capture config for initial capture pipe configuration. */
 	struct ia_css_capture_config default_capture_config;
-	/** Default capture config for initial capture pipe configuration. */
-	struct ia_css_resolution dvs_envelope; /** temporary */
+	/* temporary */
+	struct ia_css_resolution dvs_envelope;
+	/* indicates the DVS loop delay in frame periods */
 	enum ia_css_frame_delay dvs_frame_delay;
-	/** indicates the DVS loop delay in frame periods */
+	/*
+	 * Disabling digital zoom for a pipeline, if this is set to
+	 * false, then setting a zoom factor will have no effect. In
+	 * some use cases this provides better performance.
+	 */
 	bool enable_dz;
-	/** Disabling digital zoom for a pipeline, if this is set to false,
-	     then setting a zoom factor will have no effect.
-	     In some use cases this provides better performance. */
+	/*
+	 * Disabling "Defect Pixel Correction" for a pipeline, if this
+	 * is set to false. In some use cases this provides better
+	 * performance.
+	 */
 	bool enable_dpc;
-	/** Disabling "Defect Pixel Correction" for a pipeline, if this is set
-	     to false. In some use cases this provides better performance. */
+	/*
+	 * Enabling BCI mode will cause yuv_scale binary to be picked up
+	 * instead of vf_pp. This only applies to viewfinder post
+	 * processing stages.
+	 */
 	bool enable_vfpp_bci;
-	/** Enabling BCI mode will cause yuv_scale binary to be picked up
-	     instead of vf_pp. This only applies to viewfinder post
-	     processing stages. */
 
 /* ISP2401 */
+	/*
+	 * Enabling of TNR (temporal noise reduction). This is only
+	 * applicable to video pipes. Non video-pipes should always set
+	 * this parameter to false.
+	 */
 	bool enable_tnr;
-	/** Enabling of TNR (temporal noise reduction). This is only applicable to video
-	     pipes. Non video-pipes should always set this parameter to false. */
 
+	/* Pointer to ISP configuration */
 	struct ia_css_isp_config *p_isp_config;
-	/** Pointer to ISP configuration */
+	/* GDC in buffer resolution. */
 	struct ia_css_resolution gdc_in_buffer_res;
-	/** GDC in buffer resolution. */
+	/*
+	 * GDC in buffer offset - indicates the pixel coordinates of the
+	 * first valid pixel inside the buffer
+	 */
 	struct ia_css_point gdc_in_buffer_offset;
-	/** GDC in buffer offset - indicates the pixel coordinates of the first valid pixel inside the buffer */
 
 /* ISP2401 */
+	/*
+	 * Origin of internal frame positioned on shading table at
+	 * shading correction in ISP.
+	 * NOTE: Shading table is larger than or equal to internal
+	 *       frame. Shading table has shading gains and internal
+	 *       frame has bayer data. The origin of internal frame is
+	 *       used in shading correction in ISP to retrieve shading
+	 *       gains which correspond to bayer data.
+	 */
 	struct ia_css_coordinate internal_frame_origin_bqs_on_sctbl;
-	/** Origin of internal frame positioned on shading table at shading correction in ISP.
-	     NOTE: Shading table is larger than or equal to internal frame.
-		   Shading table has shading gains and internal frame has bayer data.
-		   The origin of internal frame is used in shading correction in ISP
-		   to retrieve shading gains which correspond to bayer data. */
 };
 
 /*
@@ -141,38 +172,55 @@ struct ia_css_pipe_config {
  *           - On the Behalf of CSS-API Committee.
  */
 struct ia_css_pipe_info {
+	/*
+	 * Info about output resolution. This contains the stride which
+	 * should be used for memory allocation.
+	 */
 	struct ia_css_frame_info output_info[IA_CSS_PIPE_MAX_OUTPUT_STAGE];
-	/** Info about output resolution. This contains the stride which
-	     should be used for memory allocation. */
+	/*
+	 * Info about viewfinder output resolution (optional). This
+	 * contains the stride that should be used for memory
+	 * allocation.
+	 */
 	struct ia_css_frame_info vf_output_info[IA_CSS_PIPE_MAX_OUTPUT_STAGE];
-	/** Info about viewfinder output resolution (optional). This contains
-	     the stride that should be used for memory allocation. */
+	/*
+	 * Raw output resolution. This indicates the resolution of the
+	 * RAW bayer output for pipes that support this. Currently, only
+	 * the still capture pipes support this feature. When this
+	 * resolution is smaller than the input resolution, cropping
+	 * will be performed by the ISP. The first cropping that will be
+	 * performed is on the upper left corner where we crop 8 lines
+	 * and 8 columns to remove the pixels normally used to
+	 * initialize the ISP filters. This is why the raw output
+	 * resolution should normally be set to the input resolution -
+	 * 8x8.
+	 */
 	struct ia_css_frame_info raw_output_info;
-	/** Raw output resolution. This indicates the resolution of the
-	     RAW bayer output for pipes that support this. Currently, only the
-	     still capture pipes support this feature. When this resolution is
-	     smaller than the input resolution, cropping will be performed by
-	     the ISP. The first cropping that will be performed is on the upper
-	     left corner where we crop 8 lines and 8 columns to remove the
-	     pixels normally used to initialize the ISP filters.
-	     This is why the raw output resolution should normally be set to
-	     the input resolution - 8x8. */
 	/* ISP2401 */
+	/*
+	 * For IPU3 only. Info about output system in resolution which
+	 * is considered as gdc out resolution.
+	 */
 	struct ia_css_resolution output_system_in_res_info;
-	/** For IPU3 only. Info about output system in resolution which is considered
-	     as gdc out resolution. */
+	/*
+	 * After an image pipe is created, this field will contain the
+	 * info for the shading correction.
+	 */
 	struct ia_css_shading_info shading_info;
-	/** After an image pipe is created, this field will contain the info
-	     for the shading correction. */
+	/*
+	 * After an image pipe is created, this field will contain the
+	 * grid info for 3A and DVS.
+	 */
 	struct ia_css_grid_info  grid_info;
-	/** After an image pipe is created, this field will contain the grid
-	     info for 3A and DVS. */
+	/*
+	 * The very first frames in a started stream do not contain
+	 * valid data. In this field, the CSS-firmware communicates to
+	 * the host-driver how many initial frames will contain invalid
+	 * data; this allows the host-driver to discard those initial
+	 * invalid frames and start it's output at the first valid
+	 * frame.
+	 */
 	int num_invalid_frames;
-	/** The very first frames in a started stream do not contain valid data.
-	     In this field, the CSS-firmware communicates to the host-driver how
-	     many initial frames will contain invalid data; this allows the
-	     host-driver to discard those initial invalid frames and start it's
-	     output at the first valid frame. */
 };
 
 /*

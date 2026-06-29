@@ -21,24 +21,27 @@
  *  to process sensor metadata.
  */
 struct ia_css_metadata_config {
-	enum atomisp_input_format data_type; /** Data type of CSI-2 embedded
-			data. The default value is ATOMISP_INPUT_FORMAT_EMBEDDED. For
-			certain sensors, user can choose non-default data type for embedded
-			data. */
-	struct ia_css_resolution  resolution; /** Resolution */
+	/*
+	 * Data type of CSI-2 embedded
+	 * data. The default value is ATOMISP_INPUT_FORMAT_EMBEDDED. For
+	 * certain sensors, user can choose non-default data type for embedded
+	 * data.
+	 */
+	enum atomisp_input_format data_type;
+	struct ia_css_resolution  resolution;	/* Resolution */
 };
 
 struct ia_css_metadata_info {
-	struct ia_css_resolution resolution; /** Resolution */
-	u32                 stride;     /** Stride in bytes */
-	u32                 size;       /** Total size in bytes */
+	struct ia_css_resolution resolution;	/* Resolution */
+	u32                 stride;		/* Stride in bytes */
+	u32                 size;		/* Total size in bytes */
 };
 
 struct ia_css_metadata {
-	struct ia_css_metadata_info info;    /** Layout info */
-	ia_css_ptr		    address; /** CSS virtual address */
+	struct ia_css_metadata_info info;	/* Layout info */
+	ia_css_ptr		    address;	/* CSS virtual address */
+	/* Exposure ID, see ia_css_event_public.h for more detail */
 	u32		    exp_id;
-	/** Exposure ID, see ia_css_event_public.h for more detail */
 };
 
 #define SIZE_OF_IA_CSS_METADATA_STRUCT sizeof(struct ia_css_metadata)

@@ -224,13 +224,18 @@ struct sh_css_ddr_address_map_compound {
 };
 
 struct ia_css_isp_parameter_set_info {
-	struct sh_css_ddr_address_map
-		mem_map;/** pointers to Parameters in ISP format IMPT:
-						    This should be first member of this struct */
-	u32
-	isp_parameters_id;/** Unique ID to track which config was actually applied to a particular frame */
-	ia_css_ptr
-	output_frame_ptr;/** Output frame to which this config has to be applied (optional) */
+	/*
+	 * pointers to Parameters in ISP format IMPT: This should be
+	 * first member of this struct
+	 */
+	struct sh_css_ddr_address_map mem_map;
+	/*
+	 * Unique ID to track which config was actually applied to a
+	 * particular frame
+	 */
+	u32 isp_parameters_id;
+	/* Output frame to which this config has to be applied (optional) */
+	ia_css_ptr output_frame_ptr;
 };
 
 /* this struct contains all arguments that can be passed to
@@ -344,13 +349,17 @@ struct sh_css_sp_input_formatter_set {
  * Do NOT change this struct's layout or remove seemingly unused fields!
  */
 struct sh_css_sp_config {
-	u8			no_isp_sync; /* Signal host immediately after start */
-	u8			enable_raw_pool_locking; /** Enable Raw Buffer Locking for HALv3 Support */
+	/* Signal host immediately after start */
+	u8			no_isp_sync;
+	/* Enable Raw Buffer Locking for HALv3 Support */
+	u8			enable_raw_pool_locking;
+	/*
+	 * If raw buffer locking is enabled, this flag indicates whether
+	 * raw frames are locked when their EOF event is successfully
+	 * sent to the host (true) or when they are passed to the
+	 * preview/video pipe (false).
+	 */
 	u8			lock_all;
-	/** If raw buffer locking is enabled, this flag indicates whether raw
-	     frames are locked when their EOF event is successfully sent to the
-	     host (true) or when they are passed to the preview/video pipe
-	     (false). */
 
 	 /*
 	  * Note the fields below are only used on the ISP2400 not on the ISP2401,
@@ -360,8 +369,9 @@ struct sh_css_sp_config {
 		u8					a_changed;
 		u8					b_changed;
 		u8					isp_2ppc;
+		/* CSI-2 port is used as index. */
 		struct sh_css_sp_input_formatter_set
-			set[SH_CSS_MAX_IF_CONFIGS]; /* CSI-2 port is used as index. */
+			set[SH_CSS_MAX_IF_CONFIGS];
 	} input_formatter;
 
 	sync_generator_cfg_t	sync_gen;
@@ -414,8 +424,8 @@ struct sh_css_sp_pipeline_io {
  * Only when all streams are configured, the CSI RX is started for that port.
  */
 struct sh_css_sp_pipeline_io_status {
-	u32	active[N_INPUT_SYSTEM_CSI_PORT];	/** registered streams */
-	u32	running[N_INPUT_SYSTEM_CSI_PORT];	/** configured streams */
+	u32	active[N_INPUT_SYSTEM_CSI_PORT];	/* registered streams */
+	u32	running[N_INPUT_SYSTEM_CSI_PORT];	/* configured streams */
 };
 
 enum sh_css_port_dir {
@@ -673,8 +683,11 @@ struct sh_css_hmm_buffer {
 			ia_css_ptr	frame_data;
 			u32	flashed;
 			u32	exp_id;
-			u32	isp_parameters_id; /** Unique ID to track which config was
-								actually applied to a particular frame */
+			/*
+			 * Unique ID to track which config was actually
+			 * applied to a particular frame
+			 */
+			u32	isp_parameters_id;
 		} frame;
 		ia_css_ptr ddr_ptrs;
 	} payload;

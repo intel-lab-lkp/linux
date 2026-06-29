@@ -19,18 +19,30 @@
 #include "ia_css_frac.h"
 
 struct ia_css_ob2_config {
-	ia_css_u0_16 level_gr;    /** Black level for GR pixels.
-					u0.16, [0,65535],
-					default/ineffective 0 */
-	ia_css_u0_16  level_r;     /** Black level for R pixels.
-					u0.16, [0,65535],
-					default/ineffective 0 */
-	ia_css_u0_16  level_b;     /** Black level for B pixels.
-					u0.16, [0,65535],
-					default/ineffective 0 */
-	ia_css_u0_16  level_gb;    /** Black level for GB pixels.
-					u0.16, [0,65535],
-					default/ineffective 0 */
+	/*
+	 * Black level for GR pixels.
+	 * u0.16, [0,65535],
+	 * default/ineffective 0
+	 */
+	ia_css_u0_16 level_gr;
+	/*
+	 * Black level for R pixels.
+	 * u0.16, [0,65535],
+	 * default/ineffective 0
+	 */
+	ia_css_u0_16  level_r;
+	/*
+	 * Black level for B pixels.
+	 * u0.16, [0,65535],
+	 * default/ineffective 0
+	 */
+	ia_css_u0_16  level_b;
+	/*
+	 * Black level for GB pixels.
+	 * u0.16, [0,65535],
+	 * default/ineffective 0
+	 */
+	ia_css_u0_16  level_gb;
 };
 
 #endif /* __IA_CSS_OB2_TYPES_H */

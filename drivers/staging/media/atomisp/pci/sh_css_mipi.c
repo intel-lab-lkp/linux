@@ -219,7 +219,7 @@ static int calculate_mipi_buff_size(struct ia_css_stream_config *stream_cfg,
 	unsigned int mem_words_per_buff = 0;
 	int err = 0;
 
-	/**
+	/*
 	 * zhengjie.lu@intel.com
 	 *
 	 * NOTE
@@ -236,7 +236,7 @@ static int calculate_mipi_buff_size(struct ia_css_stream_config *stream_cfg,
 	pack_raw_pixels = stream_cfg->pack_raw_pixels;
 	/* end of NOTE */
 
-	/**
+	/*
 	 * zhengjie.lu@intel.com
 	 *
 	 * NOTE

@@ -204,7 +204,7 @@ enum ov2722_tok_type {
 	OV2722_TOK_MASK = 0xfff0
 };
 
-/**
+/*
  * struct ov2722_reg - MI sensor  register format
  * @type: type of the register
  * @reg: 16-bit offset to register
