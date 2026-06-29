@@ -71,9 +71,9 @@ static struct dpaa2_switch_fdb *
 dpaa2_switch_fdb_for_join(struct ethsw_port_priv *port_priv,
 			  struct net_device *upper_dev)
 {
-	struct ethsw_port_priv *other_port_priv;
-	struct net_device *other_dev;
-	struct list_head *iter;
+	struct ethsw_port_priv *other_port_priv = NULL;
+	struct net_device *other_dev, *other_dev2;
+	struct list_head *iter, *iter2;
 
 	/* The below call to netdev_for_each_lower_dev() demands the RTNL lock
 	 * being held. Assert on it so that it's easier to catch new code
@@ -82,17 +82,32 @@ dpaa2_switch_fdb_for_join(struct ethsw_port_priv *port_priv,
 	ASSERT_RTNL();
 
 	/* If part of a bridge, use the FDB of the first dpaa2 switch interface
-	 * to be present in that bridge
+	 * to be present in that bridge. The search descends one level through
+	 * a bridged bond's lowers as well.
 	 */
 	netdev_for_each_lower_dev(upper_dev, other_dev, iter) {
-		if (!dpaa2_switch_port_dev_check(other_dev))
-			continue;
+		if (netif_is_lag_master(other_dev)) {
+			netdev_for_each_lower_dev(other_dev, other_dev2, iter2) {
+				if (!dpaa2_switch_port_dev_check(other_dev2))
+					continue;
 
-		if (other_dev == port_priv->netdev)
-			continue;
+				if (other_dev2 == port_priv->netdev)
+					continue;
 
-		other_port_priv = netdev_priv(other_dev);
-		return other_port_priv->fdb;
+				other_port_priv = netdev_priv(other_dev2);
+				break;
+			}
+		} else {
+			if (!dpaa2_switch_port_dev_check(other_dev))
+				continue;
+
+			if (other_dev == port_priv->netdev)
+				continue;
+
+			other_port_priv = netdev_priv(other_dev);
+		}
+		if (other_port_priv)
+			return other_port_priv->fdb;
 	}
 
 	return port_priv->fdb;
