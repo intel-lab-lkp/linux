@@ -80,6 +80,8 @@ for DEVNAME in $supplies; do
 
 	test_sysfs_prop_optional_list scope "Unknown","System","Device"
 
+    test_sysfs_prop_optional_list load_switch "Unknown","On","Off","Standby","Ship"
+
 	test_sysfs_prop_optional input_current_limit "uA"
 	test_sysfs_prop_optional input_voltage_limit "uV"
 
