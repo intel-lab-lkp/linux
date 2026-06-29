@@ -521,7 +521,7 @@ typedef struct
     } profilerArgs;
 } GSP_ARGUMENTS_CACHED;
 
-#define NV2080_CTRL_GPU_SET_POWER_STATE_GPU_LEVEL_3            (0x00000003U)
+#define NV2080_CTRL_GPU_SET_POWER_STATE_GPU_LEVEL_4            (0x00000004U)
 
 typedef struct
 {
