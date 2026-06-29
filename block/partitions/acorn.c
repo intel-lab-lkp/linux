@@ -290,7 +290,7 @@ int adfspart_check_ADFS(struct parsed_partitions *state)
 			break;
 		}
 	}
-	seq_buf_puts(&state->pp_buf, "\n");
+	seq_buf_putc(&state->pp_buf, '\n');
 	return 1;
 }
 #endif
@@ -397,7 +397,7 @@ int adfspart_check_ICS(struct parsed_partitions *state)
 	}
 
 	put_dev_sector(sect);
-	seq_buf_puts(&state->pp_buf, "\n");
+	seq_buf_putc(&state->pp_buf, '\n');
 	return 1;
 }
 #endif
@@ -468,7 +468,7 @@ int adfspart_check_POWERTEC(struct parsed_partitions *state)
 	}
 
 	put_dev_sector(sect);
-	seq_buf_puts(&state->pp_buf, "\n");
+	seq_buf_putc(&state->pp_buf, '\n');
 	return 1;
 }
 #endif
@@ -539,7 +539,7 @@ int adfspart_check_EESOX(struct parsed_partitions *state)
 
 		size = get_capacity(state->disk);
 		put_partition(state, slot++, start, size - start);
-		seq_buf_puts(&state->pp_buf, "\n");
+		seq_buf_putc(&state->pp_buf, '\n');
 	}
 
 	return i ? 1 : 0;

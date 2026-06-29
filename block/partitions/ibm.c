@@ -217,7 +217,7 @@ static int find_vol1_partitions(struct parsed_partitions *state,
 		blk++;
 		data = read_part_sector(state, blk * secperblk, &sect);
 	}
-	seq_buf_puts(&state->pp_buf, "\n");
+	seq_buf_putc(&state->pp_buf, '\n');
 
 	if (!data)
 		return -1;
@@ -254,7 +254,7 @@ static int find_lnx1_partitions(struct parsed_partitions *state,
 		size = nr_sectors;
 		if (size != geo_size) {
 			if (!info) {
-				seq_buf_puts(&state->pp_buf, "\n");
+				seq_buf_putc(&state->pp_buf, '\n');
 				return 1;
 			}
 			if (!strcmp(info->type, "ECKD"))
@@ -266,7 +266,7 @@ static int find_lnx1_partitions(struct parsed_partitions *state,
 	/* first and only partition starts in the first block after the label */
 	offset = labelsect + secperblk;
 	put_partition(state, 1, offset, size - offset);
-	seq_buf_puts(&state->pp_buf, "\n");
+	seq_buf_putc(&state->pp_buf, '\n');
 	return 1;
 }
 
@@ -307,7 +307,7 @@ static int find_cms1_partitions(struct parsed_partitions *state,
 	}
 
 	put_partition(state, 1, offset, size-offset);
-	seq_buf_puts(&state->pp_buf, "\n");
+	seq_buf_putc(&state->pp_buf, '\n');
 	return 1;
 }
 
@@ -388,7 +388,7 @@ int ibm_partition(struct parsed_partitions *state)
 			size = nr_sectors;
 			offset = (info->label_block + 1) * (blocksize >> 9);
 			put_partition(state, 1, offset, size-offset);
-			seq_buf_puts(&state->pp_buf, "\n");
+			seq_buf_putc(&state->pp_buf, '\n');
 		}
 	} else
 		res = 0;

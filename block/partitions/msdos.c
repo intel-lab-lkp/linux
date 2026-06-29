@@ -608,7 +608,7 @@ int msdos_partition(struct parsed_partitions *state)
 			fb = (struct fat_boot_sector *) data;
 			if (slot == 1 && fb->reserved && fb->fats
 				&& fat_valid_media(fb->media)) {
-				seq_buf_puts(&state->pp_buf, "\n");
+				seq_buf_putc(&state->pp_buf, '\n');
 				put_dev_sector(sect);
 				return 1;
 			} else {
@@ -672,7 +672,7 @@ int msdos_partition(struct parsed_partitions *state)
 			seq_buf_puts(&state->pp_buf, "[EZD]");
 	}
 
-	seq_buf_puts(&state->pp_buf, "\n");
+	seq_buf_putc(&state->pp_buf, '\n');
 
 	/* second pass - output for each on a separate line */
 	p = (struct msdos_partition *) (0x1be + data);

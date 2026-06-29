@@ -104,7 +104,7 @@ int of_partition(struct parsed_partitions *state)
 		slot++;
 	}
 
-	seq_buf_puts(&state->pp_buf, "\n");
+	seq_buf_putc(&state->pp_buf, '\n');
 
 	of_node_put(partitions_np);
 	return 1;

@@ -377,7 +377,7 @@ int cmdline_partition(struct parsed_partitions *state)
 	cmdline_parts_set(parts, disk_size, state);
 	cmdline_parts_verifier(1, state);
 
-	seq_buf_puts(&state->pp_buf, "\n");
+	seq_buf_putc(&state->pp_buf, '\n');
 
 	return 1;
 }

@@ -751,6 +751,6 @@ int efi_partition(struct parsed_partitions *state)
 	}
 	kfree(ptes);
 	kfree(gpt);
-	seq_buf_puts(&state->pp_buf, "\n");
+	seq_buf_putc(&state->pp_buf, '\n');
 	return 1;
 }

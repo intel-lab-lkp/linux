@@ -597,7 +597,7 @@ static bool ldm_create_data_partitions (struct parsed_partitions *pp,
 		part_num++;
 	}
 
-	seq_buf_puts(&pp->pp_buf, "\n");
+	seq_buf_putc(&pp->pp_buf, '\n');
 	return true;
 }
 
