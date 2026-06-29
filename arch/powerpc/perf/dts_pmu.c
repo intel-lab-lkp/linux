@@ -10,10 +10,14 @@
 #include <linux/string.h>
 #include <asm/reg.h>
 #include <asm/dts_pmu.h>
-
+#include "isa207-common.h"
 
 extern void unregister_power_pmu(struct power_pmu *pmu);
 static u32 pmu_dts_nr_pmc;
+struct dts_field_map pmcsel_map;
+struct dts_field_map pmc_map;
+struct dts_field_map field_maps[MAX_FIELDS];
+int field_count;
 
 u32 mmcr_regs_sprs[MAX_MMCR];
 int mmcr_count;
@@ -84,10 +88,55 @@ static const struct attribute_group *pmu_dts_attr_groups[] = {
 	NULL,
 };
 
+static int dts_compute_mmcr(u64 event[], int n_ev,
+					unsigned int hwc[], struct mmcr_regs *mmcr,
+					struct perf_event *pevents[], u32 flags)
+{
+	int ret;
+
+	ret = compute_mmcr_dts(event, n_ev, hwc, mmcr, pevents, flags);
+	if (!ret)
+		mmcr->mmcr0 |= MMCR0_C56RUN;
+	return ret;
+}
+
+static const unsigned int dts_event_alternatives[][MAX_ALT] = {
+	{ 0x600f4, 0x1001e },
+};
+
+static int dts_get_alternatives(u64 event, unsigned int flags, u64 alt[])
+{
+	int num_alt = 0;
+
+	num_alt = isa207_get_alternatives(event, alt,
+					  ARRAY_SIZE(dts_event_alternatives), flags,
+					  dts_event_alternatives);
+
+	return num_alt;
+}
+
 static struct power_pmu dts_pmu = {
-	.name           = "cpu_dts",
-	.n_counter      = MAX_PMU_COUNTERS,
-	.attr_groups    = pmu_dts_attr_groups,
+	.name                   = "cpu_dts",
+	.n_counter              = MAX_PMU_COUNTERS,
+	.attr_groups            = pmu_dts_attr_groups,
+	.add_fields             = ISA207_ADD_FIELDS,
+	.test_adder             = ISA207_TEST_ADDER,
+	.group_constraint_mask  = CNST_CACHE_PMC4_MASK,
+	.group_constraint_val   = CNST_CACHE_PMC4_VAL,
+	.compute_mmcr           = dts_compute_mmcr,
+	// .config_bhrb         = power10_config_bhrb,
+	// .bhrb_filter_map     = power10_bhrb_filte-r_map,
+	.get_alternatives       = dts_get_alternatives,
+	.get_mem_data_src       = isa207_get_mem_data_src,
+	.get_mem_weight         = isa207_get_mem_weight,
+	.disable_pmc            = isa207_disable_pmc,
+	.flags                  = PPMU_HAS_SIER | PPMU_ARCH_207S |
+					PPMU_ARCH_31 | PPMU_HAS_ATTR_CONFIG1 |
+					PPMU_P10,
+	.attr_groups            = pmu_dts_attr_groups,
+	//.bhrb_nr              = 32,
+	.capabilities           = PERF_PMU_CAP_EXTENDED_REGS,
+	//.check_attr_config    = power10_check_attr_config,
 };
 
 /* Device Tree match */
@@ -108,6 +157,8 @@ static int pmu_dts_probe(struct platform_device *pdev)
 	u32 code64[2];
 	u32 code128[4];
 	int cells;
+	struct device_node *fmt_np, *field_np;
+	u32 bits[2], pgm[2];
 	const char *str;
 
 	pr_info("PMU DTS probe node = %s\n", np->full_name);
@@ -170,6 +221,65 @@ static int pmu_dts_probe(struct platform_device *pdev)
 	}
 
 	/* Parse events */
+	fmt_np = of_get_child_by_name(np, "evt_code_format");
+	if (!fmt_np) {
+		pr_err("pmu_dts: no evt_code_format node\n");
+		return -EINVAL;
+	}
+
+	field_count = 0;
+	for_each_child_of_node(fmt_np, field_np) {
+
+		struct dts_field_map *f = &field_maps[field_count];
+
+		printk("field_np->name is %s\n", field_np->name);
+		snprintf(f->name, sizeof(f->name), "%s", field_np->name);
+		f->is_pmc = false;
+		f->use_target_field_shift = false;
+
+		/* Identify PMC field */
+		if (!strcmp(field_np->name, "PMCx"))
+			f->is_pmc = true;
+
+		if (of_property_read_u32_array(field_np, "bits", bits, 2))
+			continue;
+
+		f->bits_start = bits[0];
+		f->bits_end   = bits[1];
+
+		if (of_property_read_u32(field_np, "mmcr", &f->mmcr))
+			continue;
+
+	/* Check target_field_shift-based mapping */
+		if (!f->is_pmc && f->mmcr != 4) {
+			if (!of_property_read_u32(field_np, "target_field_base",
+					&f->target_field_base)) {
+				of_property_read_u32(field_np, "target_field_shift",
+					&f->target_field_shift);
+				f->use_target_field_shift = true;
+
+			} else {
+				if (!of_property_read_u32_array(field_np, "target_fields", pgm, 2))
+					f->pgm_start = pgm[0];
+				else
+					f->pgm_start = 0;
+			}
+
+		} else {
+			/* MMCRA or PMC field → no target_field_shift */
+			if (!of_property_read_u32_array(field_np, "target_fields", pgm, 2))
+				f->pgm_start = pgm[0];
+			else
+				f->pgm_start = 0;
+
+			f->use_target_field_shift = false;
+		}
+
+		field_count++;
+		if (field_count >= MAX_FIELDS)
+			break;
+	}
+
 	events_np = of_get_child_by_name(np, "events");
 	if (!events_np) {
 		pr_err("pmu_dts: no events node found\n");

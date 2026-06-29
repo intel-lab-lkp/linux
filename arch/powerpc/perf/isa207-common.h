@@ -281,6 +281,8 @@ int isa207_get_constraint(u64 event, unsigned long *maskp, unsigned long *valp, 
 int isa207_compute_mmcr(u64 event[], int n_ev,
 				unsigned int hwc[], struct mmcr_regs *mmcr,
 				struct perf_event *pevents[], u32 flags);
+int compute_mmcr_dts(u64 event[], int n_ev, unsigned int hwc[], struct mmcr_regs *mmcr,
+				struct perf_event *pevents[], u32 flags);
 void isa207_disable_pmc(unsigned int pmc, struct mmcr_regs *mmcr);
 int isa207_get_alternatives(u64 event, u64 alt[], int size, unsigned int flags,
 					const unsigned int ev_alt[][MAX_ALT]);

@@ -80,6 +80,11 @@ static unsigned long sdar_mod_val(u64 event)
 	return p9_SDAR_MODE(event);
 }
 
+static u64 extract_bits(u64 val, int start, int end)
+{
+	return (val >> start) & ((1ULL << (end - start + 1)) - 1);
+}
+
 static void mmcra_sdar_mode(u64 event, unsigned long *mmcra)
 {
 	/*
@@ -740,6 +745,121 @@ int isa207_compute_mmcr(u64 event[], int n_ev,
 	mmcr->mmcr2 = mmcr2;
 	mmcr->mmcr3 = mmcr3;
 
+	return 0;
+}
+
+int compute_mmcr_dts(u64 event[], int n_ev,
+			unsigned int hwc[], struct mmcr_regs *mmcr,
+			struct perf_event *pevents[], u32 flags)
+{
+	u64 mmcr_val[MAX_MMCR] = {0};
+	u32 pmc = 0, pmc_inuse = 0;
+	int i, ev;
+	u32 pmc_arr[MAX_HWEVENTS] = {0};
+
+	for (ev = 0; ev < n_ev; ev++) {
+		pmc = (event[ev] >> EVENT_PMC_SHIFT) & EVENT_PMC_MASK;
+		pmc_arr[ev] = pmc;
+		if (pmc)
+			pmc_inuse |= 1 << pmc;
+
+		hwc[ev] = pmc - 1;
+	}
+
+	/*
+	 * Disable bhrb unless explicitly requested
+	 * by setting MMCRA (BHRBRD) bit.
+	 */
+	if (cpu_has_feature(CPU_FTR_ARCH_31))
+		mmcr->mmcra |= MMCRA_BHRB_DISABLE;
+
+	if (!pmc) {
+		for (pmc = 1; pmc <= 4; ++pmc) {
+			if (!(pmc_inuse & (1 << pmc)))
+				break;
+		}
+
+		pmc_inuse |= 1 << pmc;
+	}
+
+	/* Extract PMC from DTS field */
+	for (i = 0; i < field_count; i++) {
+		struct dts_field_map *f = &field_maps[i];
+
+		if (f->is_pmc) {
+			pmc = extract_bits(event[0], f->bits_start, f->bits_end);
+			break;
+		}
+	}
+	for (ev = 0; ev < n_ev; ev++) {
+		pmc = pmc_arr[ev];
+
+		for (i = 0; i < field_count; i++) {
+			struct dts_field_map *f = &field_maps[i];
+			u64 val, shift;
+
+			val = extract_bits(event[ev], f->bits_start, f->bits_end);
+			if (f->is_pmc)
+				continue;
+
+			if (pmc == 5 || pmc == 6)
+				continue;
+
+			if (f->use_target_field_shift)
+				shift = f->target_field_base - (pmc * f->target_field_shift);
+			else
+				shift = f->pgm_start;
+
+			mmcr_val[f->mmcr] |= (val << shift);
+		}
+
+		/* MMCR2 privilege filtering */
+		if (pmc <= 6 && pevents && pevents[ev]) {
+
+			if (pevents[ev]->attr.exclude_user)
+				mmcr_val[2] |= MMCR2_FCP(pmc);
+
+			if (pevents[ev]->attr.exclude_hv)
+				mmcr_val[2] |= MMCR2_FCH(pmc);
+
+			if (pevents[ev]->attr.exclude_kernel) {
+				if (cpu_has_feature(CPU_FTR_HVMODE))
+					mmcr_val[2] |= MMCR2_FCH(pmc);
+				else
+					mmcr_val[2] |= MMCR2_FCS(pmc);
+			}
+		}
+	}
+
+	mmcr->mmcr0 = 0;
+
+	/* pmc_inuse is 1-based */
+	if (pmc_inuse & 2)
+		mmcr->mmcr0 = MMCR0_PMC1CE;
+
+	if (pmc_inuse & 0x7c)
+		mmcr->mmcr0 |= MMCR0_PMCjCE;
+
+	/* If we're not using PMC 5 or 6, freeze them */
+	if (!(pmc_inuse & 0x60))
+		mmcr->mmcr0 |= MMCR0_FC56;
+
+	/*
+	 * Set mmcr0 (PMCCEXT) for p10 which
+	 * will restrict access to group B registers
+	 * when MMCR0 PMCC=0b00.
+	 */
+	if (cpu_has_feature(CPU_FTR_ARCH_31))
+		mmcr->mmcr0 |= MMCR0_PMCCEXT;
+
+	/*
+	 * Many places in core-book3s uses cpuhw->mmcr for enabling events
+	 * Till we move away completely to DTS, maintain values in cpu->mmcr
+	 */
+	mmcr->mmcr1 = mmcr_val[1];
+	mmcr->mmcra = mmcr_val[4];
+	mmcr->mmcr2 = mmcr_val[2];
+	mmcr->mmcr3 = mmcr_val[3];
 	return 0;
 }
 
