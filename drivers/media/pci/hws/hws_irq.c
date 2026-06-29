@@ -60,7 +60,7 @@ static int hws_arm_next(struct hws_pcie_dev *hws, u32 ch)
 	dev_dbg(&hws->pdev->dev, "arm_next(ch=%u): picked buffer %p\n", ch,
 		buf);
 
-	/* Publish descriptor(s) before doorbell/MMIO kicks. */
+	/* Publish descriptor(s) before MMIO capture updates. */
 	wmb();
 
 	/* Avoid MMIO during suspend */
@@ -79,13 +79,11 @@ static int hws_arm_next(struct hws_pcie_dev *hws, u32 ch)
 		return -EBUSY;
 	}
 
-	/* Also program the DMA address register directly */
+	/* Program the video DMA window for the selected buffer. */
 	{
 		dma_addr_t dma_addr =
 		    vb2_dma_contig_plane_dma_addr(&buf->vb.vb2_buf, 0);
 		hws_program_dma_for_addr(hws, ch, dma_addr);
-		iowrite32(lower_32_bits(dma_addr),
-			  hws->bar0_base + HWS_REG_DMA_ADDR(ch));
 	}
 
 	dev_dbg(&hws->pdev->dev, "arm_next(ch=%u): programmed buffer %p\n", ch,
