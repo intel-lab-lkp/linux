@@ -2098,6 +2098,8 @@ static void f2fs_put_super(struct super_block *sb)
 	/* flush s_error_work before sbi destroy */
 	flush_work(&sbi->s_error_work);
 
+	f2fs_wait_on_decompress_io(sbi);
+
 	f2fs_destroy_wq(sbi);
 
 	kvfree(sbi->ckpt);
