@@ -148,6 +148,14 @@ static const char * const POWER_SUPPLY_CHARGE_BEHAVIOUR_TEXT[] = {
 	[POWER_SUPPLY_CHARGE_BEHAVIOUR_FORCE_DISCHARGE]		= "force-discharge",
 };
 
+static const char *const POWER_SUPPLY_LOAD_SWITCH_TEXT[] = {
+	[POWER_SUPPLY_LOAD_SWITCH_UNKNOWN] = "Unknown",
+	[POWER_SUPPLY_LOAD_SWITCH_ON]	   = "On",
+	[POWER_SUPPLY_LOAD_SWITCH_OFF]	   = "Off",
+	[POWER_SUPPLY_LOAD_SWITCH_STANDBY] = "Standby",
+	[POWER_SUPPLY_LOAD_SWITCH_SHIP]	   = "Ship",
+};
+
 static struct power_supply_attr power_supply_attrs[] __ro_after_init = {
 	/* Properties of type `int' */
 	POWER_SUPPLY_ENUM_ATTR(STATUS),
@@ -227,6 +235,7 @@ static struct power_supply_attr power_supply_attrs[] __ro_after_init = {
 	POWER_SUPPLY_ATTR(MANUFACTURE_DAY),
 	POWER_SUPPLY_ATTR(INTERNAL_RESISTANCE),
 	POWER_SUPPLY_ATTR(STATE_OF_HEALTH),
+	POWER_SUPPLY_ENUM_ATTR(LOAD_SWITCH),
 	/* Properties of type `const char *' */
 	POWER_SUPPLY_ATTR(MODEL_NAME),
 	POWER_SUPPLY_ATTR(MANUFACTURER),
