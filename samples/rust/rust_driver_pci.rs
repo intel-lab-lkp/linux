@@ -75,10 +75,9 @@ struct SampleDriver;
 kernel::pci_device_table!(
     PCI_TABLE,
     <SampleDriver as pci::Driver>::IdInfo,
-    [(
-        pci::DeviceId::from_id(pci::Vendor::REDHAT, 0x5),
-        TestIndex::NO_EVENTFD
-    )]
+    {
+        pci::DeviceId::from_id(pci::Vendor::REDHAT, 0x5) => TestIndex::NO_EVENTFD,
+    }
 );
 
 impl SampleDriverData<'_> {
