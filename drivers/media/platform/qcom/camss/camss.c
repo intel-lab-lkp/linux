@@ -16,6 +16,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/of_graph.h>
+#include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_domain.h>
 #include <linux/slab.h>
@@ -5460,6 +5461,8 @@ static int camss_probe(struct platform_device *pdev)
 		goto err_media_device_unregister;
 	}
 
+	of_platform_populate(dev->of_node, NULL, NULL, dev);
+
 	return 0;
 
 err_media_device_unregister:
@@ -5497,6 +5500,7 @@ static void camss_remove(struct platform_device *pdev)
 {
 	struct camss *camss = platform_get_drvdata(pdev);
 
+	of_platform_depopulate(&pdev->dev);
 	v4l2_async_nf_unregister(&camss->notifier);
 	v4l2_async_nf_cleanup(&camss->notifier);
 	camss_unregister_entities(camss);
