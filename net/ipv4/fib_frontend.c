@@ -126,24 +126,28 @@ struct fib_table *fib_new_table(struct net *net, u32 id)
 }
 EXPORT_SYMBOL_GPL(fib_new_table);
 
-/* caller must hold either rtnl or rcu read lock */
 struct fib_table *fib_get_table(struct net *net, u32 id)
 {
-	struct fib_table *tb;
+	struct fib_table *tb = NULL;
 	struct hlist_head *head;
 	unsigned int h;
 
 	if (id == 0)
 		id = RT_TABLE_MAIN;
 	h = id & (FIB_TABLE_HASHSZ - 1);
-
 	head = &net->ipv4.fib_table_hash[h];
-	hlist_for_each_entry_rcu(tb, head, tb_hlist,
-				 lockdep_rtnl_is_held()) {
+
+	/* fib_table is not destroyed until ip_fib_net_exit()
+	 * except for the merged main/local table.
+	 * fib_unmerge() is called under RTNL, so other readers
+	 * under RTNL (e.g. fib_flush(), fib_info_notify_update())
+	 * can safely traverse the list with rcu_dereference_raw().
+	 */
+	hlist_for_each_entry_rcu(tb, head, tb_hlist, true)
 		if (tb->tb_id == id)
-			return tb;
-	}
-	return NULL;
+			break;
+
+	return tb;
 }
 #endif /* CONFIG_IP_MULTIPLE_TABLES */
 
@@ -206,10 +210,9 @@ void fib_flush(struct net *net)
 
 	for (h = 0; h < FIB_TABLE_HASHSZ; h++) {
 		struct hlist_head *head = &net->ipv4.fib_table_hash[h];
-		struct hlist_node *tmp;
 		struct fib_table *tb;
 
-		hlist_for_each_entry_safe(tb, tmp, head, tb_hlist)
+		hlist_for_each_entry_rcu(tb, head, tb_hlist, true)
 			flushed += fib_table_flush(net, tb, false);
 	}
 
