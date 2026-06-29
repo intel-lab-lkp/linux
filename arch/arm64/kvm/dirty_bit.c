@@ -160,6 +160,7 @@ int __kvm_arch_dirty_log_clear(struct kvm *kvm,
 	u64 ttwl;
 	u64 start, end;
 	gfn_t base_gfn;
+	gpa_t split_end = 0;
 
 	hw_entries = kmalloc_objs(u64, entries_sz, GFP_KERNEL);
 	if (!hw_entries)
@@ -204,10 +205,14 @@ int __kvm_arch_dirty_log_clear(struct kvm *kvm,
 
 		offset = base_gfn + i * BITS_PER_LONG;
 
-		if (kvm_dirty_log_manual_protect_and_init_set(kvm))
-			kvm_mmu_split_huge_pages(kvm,
-						 gfn_to_gpa(offset + __ffs(mask)),
-						 gfn_to_gpa(offset + __fls(mask) + 1));
+		if (kvm_dirty_log_manual_protect_and_init_set(kvm) &&
+		    (offset + BITS_PER_LONG > split_end)) {
+			gpa_t start = gfn_to_gpa(offset + __ffs(mask));
+			gpa_t end = gfn_to_gpa(offset + __fls(mask) + 1);
+
+			kvm_mmu_split_huge_pages(kvm, start, end);
+			split_end = gpa_to_gfn(ALIGN_DOWN(end, PMD_SIZE) + PMD_SIZE - 1);
+		}
 
 		do {
 			idx = mask_to_hdbss(&mask, hw_entries, offset, ttwl, idx, entries_sz);
