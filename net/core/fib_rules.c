@@ -172,6 +172,7 @@ fib_rules_register(const struct fib_rules_ops *tmpl, struct net *net)
 		return ERR_PTR(-ENOMEM);
 
 	INIT_LIST_HEAD(&ops->rules_list);
+	mutex_init(&ops->lock);
 	ops->fro_net = net;
 
 	err = __fib_rules_register(ops);
@@ -392,6 +393,7 @@ static int call_fib_rule_notifiers(struct net *net,
 	};
 
 	ASSERT_RTNL_NET(net);
+	lockdep_assert_held(&ops->lock);
 
 	/* Paired with READ_ONCE() in fib_rules_seq() */
 	WRITE_ONCE(ops->fib_rules_seq, ops->fib_rules_seq + 1);
@@ -910,6 +912,7 @@ int fib_newrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	if (!rtnl_held)
 		rtnl_net_lock(net);
+	mutex_lock(&ops->lock);
 
 	err = fib_nl2rule_rtnl(rule, ops, tb, extack);
 	if (err)
@@ -978,6 +981,7 @@ int fib_newrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	fib_rule_get(rule);
 
+	mutex_unlock(&ops->lock);
 	if (!rtnl_held)
 		rtnl_net_unlock(net);
 
@@ -988,6 +992,7 @@ int fib_newrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 	return 0;
 
 errout_free:
+	mutex_unlock(&ops->lock);
 	if (!rtnl_held)
 		rtnl_net_unlock(net);
 	kfree(rule);
@@ -1039,6 +1044,7 @@ int fib_delrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	if (!rtnl_held)
 		rtnl_net_lock(net);
+	mutex_lock(&ops->lock);
 
 	err = fib_nl2rule_rtnl(nlrule, ops, tb, extack);
 	if (err)
@@ -1093,6 +1099,7 @@ int fib_delrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	call_fib_rule_notifiers(net, FIB_EVENT_RULE_DEL, rule, ops, NULL);
 
+	mutex_unlock(&ops->lock);
 	if (!rtnl_held)
 		rtnl_net_unlock(net);
 
@@ -1104,6 +1111,7 @@ int fib_delrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 	return 0;
 
 errout_free:
+	mutex_unlock(&ops->lock);
 	if (!rtnl_held)
 		rtnl_net_unlock(net);
 	kfree(nlrule);
@@ -1403,20 +1411,28 @@ static int fib_rules_event(struct notifier_block *this, unsigned long event,
 
 	switch (event) {
 	case NETDEV_REGISTER:
-		list_for_each_entry(ops, &net->rules_ops, list)
+		list_for_each_entry(ops, &net->rules_ops, list) {
+			mutex_lock(&ops->lock);
 			attach_rules(&ops->rules_list, dev);
+			mutex_unlock(&ops->lock);
+		}
 		break;
 
 	case NETDEV_CHANGENAME:
 		list_for_each_entry(ops, &net->rules_ops, list) {
+			mutex_lock(&ops->lock);
 			detach_rules(&ops->rules_list, dev);
 			attach_rules(&ops->rules_list, dev);
+			mutex_unlock(&ops->lock);
 		}
 		break;
 
 	case NETDEV_UNREGISTER:
-		list_for_each_entry(ops, &net->rules_ops, list)
+		list_for_each_entry(ops, &net->rules_ops, list) {
+			mutex_lock(&ops->lock);
 			detach_rules(&ops->rules_list, dev);
+			mutex_unlock(&ops->lock);
+		}
 		break;
 	}
 
