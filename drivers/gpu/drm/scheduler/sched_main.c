@@ -929,7 +929,7 @@ drm_sched_pick_best(struct drm_gpu_scheduler **sched_list,
 	for (i = 0; i < num_sched_list; ++i) {
 		sched = sched_list[i];
 
-		if (!sched->ready) {
+		if (!READ_ONCE(sched->ready)) {
 			DRM_WARN("scheduler %s is not ready, skipping",
 				 sched->name);
 			continue;
@@ -1143,7 +1143,18 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 
 	if (sched->own_submit_wq)
 		destroy_workqueue(sched->submit_wq);
-	sched->ready = false;
+
+	/* The 'ready' flag only exists in drm_sched because amdgpu uses it to
+	 * represent the state of its hardware rings. This problem is related to
+	 * the fundamental issue of drm_sched not having a solid, consistent
+	 * locking design.
+	 *
+	 * Obviously, it does not make sense at all to set this flag to false
+	 * here, but since it's unclear whether it can ever be removed from
+	 * amdgpu's point of view, we guard it here with WRITE_ONCE() to make it
+	 * slightly less broken.
+	 */
+	WRITE_ONCE(sched->ready, false);
 
 	if (!list_empty(&sched->pending_list))
 		dev_warn(sched->dev, "Tearing down scheduler while jobs are pending!\n");
@@ -1195,7 +1206,7 @@ EXPORT_SYMBOL(drm_sched_increase_karma);
  */
 bool drm_sched_wqueue_ready(struct drm_gpu_scheduler *sched)
 {
-	return sched->ready;
+	return READ_ONCE(sched->ready);
 }
 EXPORT_SYMBOL(drm_sched_wqueue_ready);
 
