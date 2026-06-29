@@ -5290,6 +5290,32 @@ static ssize_t f2fs_write_checks(struct kiocb *iocb, struct iov_iter *from)
 	return count;
 }
 
+static bool f2fs_prealloc_mapped_overwrite(struct inode *inode,
+					   loff_t pos, size_t count,
+					   const struct f2fs_map_blocks *map)
+{
+	struct extent_info ei = {};
+	loff_t size = i_size_read(inode);
+	pgoff_t start = map->m_lblk;
+	pgoff_t end = start + map->m_len;
+	pgoff_t ei_end;
+
+	if (pos >= size || count > size - pos)
+		return false;
+	if (f2fs_has_inline_data(inode) || f2fs_compressed_file(inode) ||
+	    f2fs_is_atomic_file(inode) || IS_DEVICE_ALIASING(inode))
+		return false;
+	if (end < start)
+		return false;
+	if (!f2fs_lookup_read_extent_cache(inode, start, &ei))
+		return false;
+	if (!__is_valid_data_blkaddr(ei.blk))
+		return false;
+
+	ei_end = (pgoff_t)ei.fofs + ei.len;
+	return start >= ei.fofs && end <= ei_end;
+}
+
 /*
  * Preallocate blocks for a write request, if it is possible and helpful to do
  * so.  Returns a positive number if blocks may have been preallocated, 0 if no
@@ -5342,6 +5368,9 @@ static int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *iter,
 	if (map.m_len > map.m_lblk)
 		map.m_len -= map.m_lblk;
 	else
+		return 0;
+
+	if (!dio && f2fs_prealloc_mapped_overwrite(inode, pos, count, &map))
 		return 0;
 
 	if (!IS_DEVICE_ALIASING(inode))
