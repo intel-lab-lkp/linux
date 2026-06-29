@@ -535,8 +535,15 @@ int iommufd_hwpt_invalidate(struct iommufd_ucmd *ucmd)
 			rc = -EOPNOTSUPP;
 			goto out_put_pt;
 		}
-		rc = hwpt->domain->ops->cache_invalidate_user(hwpt->domain,
-							      &data_array);
+		do {
+			rc = hwpt->domain->ops->cache_invalidate_user(
+				hwpt->domain, &data_array);
+
+			done_num += data_array.entry_num;
+			data_array.uptr +=
+				data_array.entry_num * cmd->entry_len;
+			data_array.entry_num = cmd->entry_num - done_num;
+		} while (!rc && done_num != cmd->entry_num);
 	} else if (pt_obj->type == IOMMUFD_OBJ_VIOMMU) {
 		struct iommufd_viommu *viommu =
 			container_of(pt_obj, struct iommufd_viommu, obj);
@@ -545,13 +552,18 @@ int iommufd_hwpt_invalidate(struct iommufd_ucmd *ucmd)
 			rc = -EOPNOTSUPP;
 			goto out_put_pt;
 		}
-		rc = viommu->ops->cache_invalidate(viommu, &data_array);
+		do {
+			rc = viommu->ops->cache_invalidate(viommu, &data_array);
+
+			done_num += data_array.entry_num;
+			data_array.uptr +=
+				data_array.entry_num * cmd->entry_len;
+			data_array.entry_num = cmd->entry_num - done_num;
+		} while (!rc && done_num != cmd->entry_num);
 	} else {
 		rc = -EINVAL;
 		goto out_put_pt;
 	}
-
-	done_num = data_array.entry_num;
 
 out_put_pt:
 	iommufd_put_object(ucmd->ictx, pt_obj);
