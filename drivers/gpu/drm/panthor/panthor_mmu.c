@@ -1416,24 +1416,24 @@ err_cleanup:
 
 static int panthor_vm_prepare_unmap_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 					   struct panthor_vm *vm,
-					   u64 va, u64 size)
+					   const struct drm_panthor_vm_bind_op *op)
 {
 	u32 pt_count = 0;
 	int ret;
 
 	memset(op_ctx, 0, sizeof(*op_ctx));
-	op_ctx->va.range = size;
-	op_ctx->va.addr = va;
+	op_ctx->va.range = op->size;
+	op_ctx->va.addr = op->va;
 	op_ctx->flags = DRM_PANTHOR_VM_BIND_OP_TYPE_UNMAP;
 
 	/* Pre-allocate L3 page tables to account for the split-2M-block
 	 * situation on unmap.
 	 */
-	if (va != ALIGN(va, SZ_2M))
+	if (op->va != ALIGN(op->va, SZ_2M))
 		pt_count++;
 
-	if (va + size != ALIGN(va + size, SZ_2M) &&
-	    ALIGN(va + size, SZ_2M) != ALIGN(va, SZ_2M))
+	if (op->va + op->size != ALIGN(op->va + op->size, SZ_2M) &&
+	    ALIGN(op->va + op->size, SZ_2M) != ALIGN(op->va, SZ_2M))
 		pt_count++;
 
 	ret = panthor_vm_op_ctx_prealloc_vmas(op_ctx);
@@ -3012,7 +3012,7 @@ panthor_vm_bind_prepare_op_ctx(struct drm_file *file,
 		if (op->bo_handle || op->bo_offset)
 			return -EINVAL;
 
-		return panthor_vm_prepare_unmap_op_ctx(op_ctx, vm, op->va, op->size);
+		return panthor_vm_prepare_unmap_op_ctx(op_ctx, vm, op);
 
 	case DRM_PANTHOR_VM_BIND_OP_TYPE_SYNC_ONLY:
 		if (op->flags & ~DRM_PANTHOR_VM_BIND_OP_TYPE_MASK)
@@ -3232,10 +3232,14 @@ int panthor_vm_map_bo_range(struct panthor_vm *vm, struct panthor_gem_object *bo
  */
 int panthor_vm_unmap_range(struct panthor_vm *vm, u64 va, u64 size)
 {
+	struct drm_panthor_vm_bind_op op = {
+		.size = size,
+		.va = va,
+	};
 	struct panthor_vm_op_ctx op_ctx;
 	int ret;
 
-	ret = panthor_vm_prepare_unmap_op_ctx(&op_ctx, vm, va, size);
+	ret = panthor_vm_prepare_unmap_op_ctx(&op_ctx, vm, &op);
 	if (ret)
 		return ret;
 
