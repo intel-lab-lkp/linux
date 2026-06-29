@@ -42,6 +42,17 @@
 
 #include <dt-bindings/leds/common.h>
 
+/* EC keyboard LED control (IdeaPad EC PS/2 emulation).
+ * Validated on Lenovo IdeaPad 83RR (Wildcat Lake):
+ *   EC offset 0xA1 bit4=NUML, bit5=CAPL
+ *   _QDF syncs EC state to GPIO -> physical LED
+ * ec_read/ec_write declared in <linux/acpi.h>
+ */
+#define IDEAPAD_EC_KBD_LED_OFFSET	0xA1
+#define IDEAPAD_EC_KBD_LED_NUML_BIT	BIT(4)
+#define IDEAPAD_EC_KBD_LED_CAPL_BIT	BIT(5)
+#define IDEAPAD_ACPI_EC0_QDF_PATH	"\\_SB.PC00.LPCB.EC0._QDF"
+
 #define IDEAPAD_RFKILL_DEV_NUM	3
 
 enum {
@@ -198,6 +209,7 @@ struct ideapad_private {
 		bool ctrl_ps2_aux_port    : 1;
 		bool usb_charging         : 1;
 		bool ymc_ec_trigger       : 1;
+		bool kbd_leds             : 1;
 	} features;
 	struct {
 		bool initialized;
@@ -210,6 +222,11 @@ struct ideapad_private {
 		struct led_classdev led;
 		unsigned int last_brightness;
 	} fn_lock;
+	struct {
+		bool initialized;
+		struct led_classdev capslock;
+		struct led_classdev numlock;
+	} kbd_leds;
 };
 
 static bool no_bt_rfkill;
@@ -1587,6 +1604,99 @@ static void ideapad_backlight_notify_brightness(struct ideapad_private *priv)
 /*
  * keyboard backlight
  */
+static int ideapad_kbd_led_ec_set(u8 bit, bool on)
+{
+	u8 val;
+	int err;
+
+	err = ec_read(IDEAPAD_EC_KBD_LED_OFFSET, &val);
+	if (err)
+		return err;
+	if (on)
+		val |= bit;
+	else
+		val &= ~bit;
+	err = ec_write(IDEAPAD_EC_KBD_LED_OFFSET, val);
+	if (err)
+		return err;
+	acpi_evaluate_object(NULL, IDEAPAD_ACPI_EC0_QDF_PATH, NULL, NULL);
+	return 0;
+}
+
+static void ideapad_capslock_led_set(struct led_classdev *led_cdev,
+				     enum led_brightness brightness)
+{
+	ideapad_kbd_led_ec_set(IDEAPAD_EC_KBD_LED_CAPL_BIT, brightness != LED_OFF);
+}
+
+static enum led_brightness ideapad_capslock_led_get(struct led_classdev *led_cdev)
+{
+	u8 val;
+
+	if (ec_read(IDEAPAD_EC_KBD_LED_OFFSET, &val))
+		return LED_OFF;
+	return (val & IDEAPAD_EC_KBD_LED_CAPL_BIT) ? LED_ON : LED_OFF;
+}
+
+static void ideapad_numlock_led_set(struct led_classdev *led_cdev,
+				    enum led_brightness brightness)
+{
+	ideapad_kbd_led_ec_set(IDEAPAD_EC_KBD_LED_NUML_BIT, brightness != LED_OFF);
+}
+
+static enum led_brightness ideapad_numlock_led_get(struct led_classdev *led_cdev)
+{
+	u8 val;
+
+	if (ec_read(IDEAPAD_EC_KBD_LED_OFFSET, &val))
+		return LED_OFF;
+	return (val & IDEAPAD_EC_KBD_LED_NUML_BIT) ? LED_ON : LED_OFF;
+}
+
+static int ideapad_kbd_leds_init(struct ideapad_private *priv)
+{
+	int err;
+
+	if (WARN_ON(priv->kbd_leds.initialized))
+		return -EEXIST;
+
+	priv->kbd_leds.capslock.name           = "input::capslock";
+	priv->kbd_leds.capslock.max_brightness = 1;
+	priv->kbd_leds.capslock.brightness_set = ideapad_capslock_led_set;
+	priv->kbd_leds.capslock.brightness_get = ideapad_capslock_led_get;
+	priv->kbd_leds.capslock.flags          = LED_RETAIN_AT_SHUTDOWN;
+
+	err = led_classdev_register(&priv->platform_device->dev,
+				    &priv->kbd_leds.capslock);
+	if (err)
+		return err;
+
+	priv->kbd_leds.numlock.name            = "input::numlock";
+	priv->kbd_leds.numlock.max_brightness  = 1;
+	priv->kbd_leds.numlock.brightness_set  = ideapad_numlock_led_set;
+	priv->kbd_leds.numlock.brightness_get  = ideapad_numlock_led_get;
+	priv->kbd_leds.numlock.flags           = LED_RETAIN_AT_SHUTDOWN;
+
+	err = led_classdev_register(&priv->platform_device->dev,
+				    &priv->kbd_leds.numlock);
+	if (err) {
+		led_classdev_unregister(&priv->kbd_leds.capslock);
+		return err;
+	}
+
+	priv->kbd_leds.initialized = true;
+	return 0;
+}
+
+static void ideapad_kbd_leds_exit(struct ideapad_private *priv)
+{
+	if (!priv->kbd_leds.initialized)
+		return;
+	priv->kbd_leds.initialized = false;
+	led_classdev_unregister(&priv->kbd_leds.numlock);
+	led_classdev_unregister(&priv->kbd_leds.capslock);
+}
+
 static int ideapad_kbd_bl_check_tristate(int type)
 {
 	return (type == KBD_BL_TRISTATE) || (type == KBD_BL_TRISTATE_AUTO);
@@ -1831,6 +1941,29 @@ static void ideapad_sync_touchpad_state(struct ideapad_private *priv, bool send_
 
 	priv->r_touchpad_val = value;
 }
+
+static const struct dmi_system_id ideapad_kbd_leds_dmi_table[] = {
+	{
+		/*
+		 * Lenovo IdeaPad 83RR (Wildcat Lake) - EC PS/2 emulation
+		 * controls CapsLock/NumLock LEDs via EC offset 0xA1 + _QDF.
+		 * CAPL=bit5 (0x20), NUML=bit4 (0x10).
+		 * _QDF drives GPIO via SGOV() to physical LED pins.
+		 */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83RR"),
+		},
+	},
+	{
+		/* Lenovo IdeaPad 83SR (83RR Brazil regional variant) */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83SR"),
+		},
+	},
+	{ }
+};
 
 static const struct dmi_system_id ymc_ec_trigger_quirk_dmi_table[] = {
 	{
@@ -2178,6 +2311,8 @@ static int ideapad_check_features(struct ideapad_private *priv)
 	priv->features.touchpad_ctrl_via_ec = touchpad_ctrl_via_ec;
 	priv->features.ymc_ec_trigger =
 		ymc_ec_trigger || dmi_check_system(ymc_ec_trigger_quirk_dmi_table);
+	priv->features.kbd_leds =
+		dmi_check_system(ideapad_kbd_leds_dmi_table);
 
 	if (!read_ec_data(handle, VPCCMD_R_FAN, &val))
 		priv->features.fan_mode = true;
@@ -2418,6 +2553,12 @@ static int ideapad_acpi_add(struct platform_device *pdev)
 			dev_info(&pdev->dev, "FnLock control not available\n");
 	}
 
+	if (priv->features.kbd_leds) {
+		err = ideapad_kbd_leds_init(priv);
+		if (err)
+			dev_warn(&pdev->dev, "Could not set up kbd LEDs: %d\n", err);
+	}
+
 	/*
 	 * On some models without a hw-switch (the yoga 2 13 at least)
 	 * VPCCMD_W_RF must be explicitly set to 1 for the wifi to work.
@@ -2477,6 +2618,7 @@ backlight_failed:
 		ideapad_unregister_rfkill(priv, i);
 
 	ideapad_fn_lock_led_exit(priv);
+	ideapad_kbd_leds_exit(priv);
 	ideapad_kbd_bl_exit(priv);
 	ideapad_input_exit(priv);
 
@@ -2506,6 +2648,7 @@ static void ideapad_acpi_remove(struct platform_device *pdev)
 		ideapad_unregister_rfkill(priv, i);
 
 	ideapad_fn_lock_led_exit(priv);
+	ideapad_kbd_leds_exit(priv);
 	ideapad_kbd_bl_exit(priv);
 	ideapad_input_exit(priv);
 	ideapad_debugfs_exit(priv);
