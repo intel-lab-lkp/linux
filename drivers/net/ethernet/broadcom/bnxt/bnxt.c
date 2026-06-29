@@ -78,6 +78,7 @@
 #include <net/tso.h>
 #include "bnxt_mpc.h"
 #include "bnxt_crypto.h"
+#include "bnxt_ktls.h"
 
 #define BNXT_TX_TIMEOUT		(5 * HZ)
 #define BNXT_DEF_MSG_ENABLE	(NETIF_MSG_DRV | NETIF_MSG_HW | \
@@ -13326,6 +13327,7 @@ static int __bnxt_open_nic(struct bnxt *bp, bool irq_re_init, bool link_re_init)
 		static_branch_disable(&bnxt_xdp_locking_key);
 	}
 	set_bit(BNXT_STATE_OPEN, &bp->state);
+	bnxt_ktls_wake(bp);
 	bnxt_enable_int(bp);
 	/* Enable TX queues */
 	bnxt_tx_enable(bp);
@@ -13467,7 +13469,8 @@ static int bnxt_open(struct net_device *dev)
 static bool bnxt_drv_busy(struct bnxt *bp)
 {
 	return (test_bit(BNXT_STATE_IN_SP_TASK, &bp->state) ||
-		test_bit(BNXT_STATE_READ_STATS, &bp->state));
+		test_bit(BNXT_STATE_READ_STATS, &bp->state) ||
+		bnxt_ktls_busy(bp));
 }
 
 static void bnxt_get_ring_stats(struct bnxt *bp,
@@ -13485,8 +13488,19 @@ static void __bnxt_close_nic(struct bnxt *bp, bool irq_re_init,
 
 	clear_bit(BNXT_STATE_OPEN, &bp->state);
 	smp_mb__after_atomic();
+	/* Wake any kTLS delete waiting on a reconfig so it re-evaluates and
+	 * either keeps waiting for the reopen or aborts (ifdown / FW reset).
+	 */
+	bnxt_ktls_wake(bp);
 	while (bnxt_drv_busy(bp))
 		msleep(20);
+
+	/* Delete all crypto connections and KIDs only on ifdown and FW reset,
+	 * not ethtool config changes.
+	 */
+	if (!netif_running(bp->dev) ||
+	    test_bit(BNXT_STATE_IN_FW_RESET, &bp->state))
+		bnxt_crypto_del_all(bp);
 
 	if (BNXT_SUPPORTS_MULTI_RSS_CTX(bp))
 		bnxt_clear_rss_ctxs(bp);
