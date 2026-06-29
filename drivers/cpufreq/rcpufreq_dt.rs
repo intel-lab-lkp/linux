@@ -6,7 +6,10 @@ use kernel::{
     clk::Clk,
     cpu, cpufreq,
     cpumask::CpumaskVar,
-    device::{Core, Device},
+    device::{
+        Core,
+        Device, //
+    },
     error::code::*,
     macros::vtable,
     module_platform_driver, of, opp, platform,
