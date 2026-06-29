@@ -1374,15 +1374,21 @@ static __always_inline bool __free_pages_prepare(struct page *page,
 #endif
 		}
 		for (i = 1; i < (1 << order); i++) {
+			struct page *subpage = page + i;
+
 			if (compound)
-				bad += free_tail_page_prepare(page, page + i);
+				bad += free_tail_page_prepare(page, subpage);
 			if (is_check_pages_enabled()) {
-				if (free_page_is_bad(page + i)) {
+				if (free_page_is_bad(subpage)) {
 					bad++;
 					continue;
 				}
 			}
-			(page + i)->flags.f &= ~PAGE_FLAGS_CHECK_AT_PREP;
+			subpage->flags.f &= ~PAGE_FLAGS_CHECK_AT_PREP;
+			if (subpage->private) {
+				bad_page(subpage, "nonzero private");
+				return false;
+			}
 		}
 	}
 	if (folio_test_anon(folio)) {
