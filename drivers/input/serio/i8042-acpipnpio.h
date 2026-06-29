@@ -79,6 +79,9 @@ static inline void i8042_write_command(int val)
 #define SERIO_QUIRK_DIRECT		BIT(8)
 #define SERIO_QUIRK_DUMBKBD		BIT(9)
 #define SERIO_QUIRK_NOLOOP		BIT(10)
+/* SERIO_QUIRK_DUMBKBD_LEDS handled via atkbd DMI quirk table.
+ * serio->id.extra is __u8 (8 bits only), cannot carry this flag.
+ */
 #define SERIO_QUIRK_NOTIMEOUT		BIT(11)
 #define SERIO_QUIRK_KBDRESET		BIT(12)
 #define SERIO_QUIRK_DRITEK		BIT(13)

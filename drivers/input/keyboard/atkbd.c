@@ -212,6 +212,7 @@ struct atkbd {
 	bool softrepeat;
 	bool softraw;
 	bool scroll;
+	bool softleds;		/* suppress 0xED, register EV_LED in software */
 	bool enabled;
 
 	/* Accessed only from interrupt */
@@ -245,6 +246,7 @@ static unsigned int (*atkbd_platform_scancode_fixup)(struct atkbd *, unsigned in
  * to many commands until full reset (ATKBD_CMD_RESET_BAT) is performed.
  */
 static bool atkbd_skip_deactivate;
+static bool atkbd_softleds;
 
 static ssize_t atkbd_attr_show_helper(struct device *dev, char *buf,
 				      ssize_t (*handler)(struct atkbd *, char *));
@@ -599,6 +601,14 @@ static int atkbd_set_leds(struct atkbd *atkbd)
 {
 	struct input_dev *dev = atkbd->dev;
 	u8 param[2];
+
+	/*
+	 * softleds: EC PS/2 emulation does not support AT commands
+	 * after initialization. Accept LED state from userspace but
+	 * never send SETLEDS (0xED) to avoid scancode corruption.
+	 */
+	if (atkbd->softleds)
+		return 0;
 
 	param[0] = (test_bit(LED_SCROLLL, dev->led) ? 1 : 0)
 		 | (test_bit(LED_NUML,    dev->led) ? 2 : 0)
@@ -1193,7 +1203,7 @@ static void atkbd_set_device_attrs(struct atkbd *atkbd)
 	input_dev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_REP) |
 		BIT_MASK(EV_MSC);
 
-	if (atkbd->write) {
+	if (atkbd->write || atkbd->softleds) {
 		input_dev->evbit[0] |= BIT_MASK(EV_LED);
 		input_dev->ledbit[0] = BIT_MASK(LED_NUML) |
 			BIT_MASK(LED_CAPSL) | BIT_MASK(LED_SCROLLL);
@@ -1290,6 +1300,12 @@ static int atkbd_connect(struct serio *serio, struct serio_driver *drv)
 
 	if (atkbd->softrepeat)
 		atkbd->softraw = true;
+
+	if (atkbd_softleds) {
+		serio->write = NULL;
+		atkbd->write = false;
+		atkbd->softleds = true;
+	}
 
 	serio_set_drvdata(serio, atkbd);
 
@@ -1767,6 +1783,12 @@ static int __init atkbd_deactivate_fixup(const struct dmi_system_id *id)
 	return 1;
 }
 
+static int __init atkbd_setup_softleds(const struct dmi_system_id *id)
+{
+	atkbd_softleds = true;
+	return 1;
+}
+
 /*
  * NOTE: do not add any more "force release" quirks to this table.  The
  * task of adjusting list of keys that should be "released" automatically
@@ -1937,6 +1959,28 @@ static const struct dmi_system_id atkbd_dmi_quirk_table[] __initconst = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "BCC-N"),
 		},
 		.callback = atkbd_deactivate_fixup,
+	},
+	{
+		/*
+		 * Lenovo IdeaPad 83RR (Wildcat Lake) - EC PS/2 emulation
+		 * returns corrupted scancodes ('**' in i8042.debug) when
+		 * receiving AT SETLEDS (0xED) after keyboard initialization.
+		 * Enable softleds mode: suppress 0xED to hardware while
+		 * keeping CapsLock/NumLock/ScrollLock visible to userspace.
+		 */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83RR"),
+		},
+		.callback = atkbd_setup_softleds,
+	},
+	{
+		/* Lenovo IdeaPad 83SR (83RR Brazil regional variant) */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "83SR"),
+		},
+		.callback = atkbd_setup_softleds,
 	},
 	{ }
 };
