@@ -1152,6 +1152,25 @@ static int ext4_xattr_restart_fn(handle_t *handle, struct inode *inode,
 	return 0;
 }
 
+/* Track an EA inode number in the dedup array, expanding if needed. */
+static void ea_ino_array_add(unsigned int **ea_inos, unsigned int *nr,
+			     unsigned int *size, unsigned int *inline_arr,
+			     unsigned int ino)
+{
+	if (*nr == *size) {
+		unsigned int new_size = *size * 2;
+		unsigned int *p;
+
+		p = kmalloc_array(new_size, sizeof(*p), GFP_NOFS | __GFP_NOFAIL);
+		memcpy(p, *ea_inos, *nr * sizeof(*p));
+		if (*ea_inos != inline_arr)
+			kfree(*ea_inos);
+		*ea_inos = p;
+		*size = new_size;
+	}
+	(*ea_inos)[(*nr)++] = ino;
+}
+
 static void
 ext4_xattr_inode_dec_ref_all(handle_t *handle, struct inode *parent,
 			     struct buffer_head *bh,
@@ -1166,6 +1185,10 @@ ext4_xattr_inode_dec_ref_all(handle_t *handle, struct inode *parent,
 	int err;
 	int credits;
 	void *end;
+	unsigned int ea_inos_inline[32];
+	unsigned int *ea_inos = ea_inos_inline;
+	unsigned int nr_ea_inos = 0;
+	unsigned int ea_inos_size = ARRAY_SIZE(ea_inos_inline);
 
 	if (block_csum)
 		end = (void *)bh->b_data + bh->b_size;
@@ -1183,9 +1206,24 @@ ext4_xattr_inode_dec_ref_all(handle_t *handle, struct inode *parent,
 
 	for (entry = first; (void *)entry < end && !IS_LAST_ENTRY(entry);
 	     entry = EXT4_XATTR_NEXT(entry)) {
+		unsigned int i;
+
 		if (!entry->e_value_inum)
 			continue;
 		ea_ino = le32_to_cpu(entry->e_value_inum);
+
+		/*
+		 * Skip EA inodes we already processed.  On a corrupted fs,
+		 * duplicate entries may point to the same EA inode; without
+		 * this check, the second iget could deadlock on I_FREEING
+		 * if the deferred worker already started evicting it.
+		 */
+		for (i = 0; i < nr_ea_inos; i++)
+			if (ea_inos[i] == ea_ino)
+				break;
+		if (i < nr_ea_inos)
+			continue;
+
 		err = ext4_xattr_inode_iget(parent, ea_ino,
 					    le32_to_cpu(entry->e_hash),
 					    &ea_inode);
@@ -1218,6 +1256,11 @@ ext4_xattr_inode_dec_ref_all(handle_t *handle, struct inode *parent,
 		if (err) {
 			ext4_warning_inode(ea_inode, "ea_inode dec ref err=%d",
 					   err);
+			/* Track if nlink==0 to skip duplicates (eviction risk) */
+			if (!ea_inode->i_nlink)
+				ea_ino_array_add(&ea_inos, &nr_ea_inos,
+						 &ea_inos_size, ea_inos_inline, ea_ino);
+
 			ext4_put_ea_inode(parent->i_sb, ea_inode);
 			continue;
 		}
@@ -1235,9 +1278,21 @@ ext4_xattr_inode_dec_ref_all(handle_t *handle, struct inode *parent,
 		entry->e_value_inum = 0;
 		entry->e_value_size = 0;
 
+		/*
+		 * Track nlink==0 EA inodes to skip duplicates later --
+		 * they risk I_FREEING deadlock on re-iget.
+		 * Check nlink before put since put releases our reference.
+		 */
+		if (!ea_inode->i_nlink)
+			ea_ino_array_add(&ea_inos, &nr_ea_inos,
+					 &ea_inos_size, ea_inos_inline, ea_ino);
+
 		ext4_put_ea_inode(parent->i_sb, ea_inode);
 		dirty = true;
 	}
+
+	if (ea_inos != ea_inos_inline)
+		kfree(ea_inos);
 
 	if (dirty) {
 		/*
