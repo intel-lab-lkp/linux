@@ -188,22 +188,20 @@ int __init bcma_host_soc_register(struct bcma_soc *soc)
 
 int __init bcma_host_soc_init(struct bcma_soc *soc)
 {
-	struct bcma_bus *bus = &soc->bus;
-	int err;
-
-	/* Scan bus and initialize it */
-	err = bcma_bus_early_register(bus);
-	if (err)
-		iounmap(bus->mmio);
-
-	return err;
+	return bcma_bus_early_register(&soc->bus);
 }
 
 #ifdef CONFIG_OF
+static void bcma_host_soc_unregister(void *data)
+{
+	struct bcma_bus *bus = data;
+
+	bcma_bus_unregister(bus);
+}
+
 static int bcma_host_soc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct device_node *np = dev->of_node;
 	struct bcma_bus *bus;
 	int err;
 
@@ -215,9 +213,9 @@ static int bcma_host_soc_probe(struct platform_device *pdev)
 	bus->dev = dev;
 
 	/* Map MMIO */
-	bus->mmio = of_iomap(np, 0);
-	if (!bus->mmio)
-		return -ENOMEM;
+	bus->mmio = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(bus->mmio))
+		return PTR_ERR(bus->mmio);
 
 	/* Host specific */
 	bus->hosttype = BCMA_HOSTTYPE_SOC;
@@ -229,24 +227,9 @@ static int bcma_host_soc_probe(struct platform_device *pdev)
 	/* Register */
 	err = bcma_bus_register(bus);
 	if (err)
-		goto err_unmap_mmio;
+		return err;
 
-	platform_set_drvdata(pdev, bus);
-
-	return err;
-
-err_unmap_mmio:
-	iounmap(bus->mmio);
-	return err;
-}
-
-static void bcma_host_soc_remove(struct platform_device *pdev)
-{
-	struct bcma_bus *bus = platform_get_drvdata(pdev);
-
-	bcma_bus_unregister(bus);
-	iounmap(bus->mmio);
-	platform_set_drvdata(pdev, NULL);
+	return devm_add_action_or_reset(dev, bcma_host_soc_unregister, bus);
 }
 
 static const struct of_device_id bcma_host_soc_of_match[] = {
@@ -261,7 +244,6 @@ static struct platform_driver bcma_host_soc_driver = {
 		.of_match_table = bcma_host_soc_of_match,
 	},
 	.probe		= bcma_host_soc_probe,
-	.remove		= bcma_host_soc_remove,
 };
 
 int __init bcma_host_soc_register_driver(void)
