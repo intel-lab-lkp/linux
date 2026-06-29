@@ -290,6 +290,23 @@ struct vmx_msr_entry {
 	u64 value;
 } __attribute__ ((aligned(16)));
 
+#define VMX_SWITCH_GPRS_ASM \
+	GUEST_SWITCH_GPR_ASM(rax, GUEST_REGS_RAX) \
+	GUEST_SWITCH_GPR_ASM(rbx, GUEST_REGS_RBX) \
+	GUEST_SWITCH_GPR_ASM(rcx, GUEST_REGS_RCX) \
+	GUEST_SWITCH_GPR_ASM(rdx, GUEST_REGS_RDX) \
+	GUEST_SWITCH_GPR_ASM(rbp, GUEST_REGS_RBP) \
+	GUEST_SWITCH_GPR_ASM(rsi, GUEST_REGS_RSI) \
+	GUEST_SWITCH_GPR_ASM(rdi, GUEST_REGS_RDI) \
+	GUEST_SWITCH_GPR_ASM(r8,  GUEST_REGS_R8)  \
+	GUEST_SWITCH_GPR_ASM(r9,  GUEST_REGS_R9)  \
+	GUEST_SWITCH_GPR_ASM(r10, GUEST_REGS_R10) \
+	GUEST_SWITCH_GPR_ASM(r11, GUEST_REGS_R11) \
+	GUEST_SWITCH_GPR_ASM(r12, GUEST_REGS_R12) \
+	GUEST_SWITCH_GPR_ASM(r13, GUEST_REGS_R13) \
+	GUEST_SWITCH_GPR_ASM(r14, GUEST_REGS_R14) \
+	GUEST_SWITCH_GPR_ASM(r15, GUEST_REGS_R15)
+
 #include "evmcs.h"
 
 static inline int vmxon(u64 phys)
@@ -363,9 +380,6 @@ static inline u64 vmptrstz(void)
 	return value;
 }
 
-/*
- * No guest state (e.g. GPRs) is established by this vmlaunch.
- */
 static inline int vmlaunch(void)
 {
 	int ret;
@@ -373,34 +387,23 @@ static inline int vmlaunch(void)
 	if (enable_evmcs)
 		return evmcs_vmlaunch();
 
-	__asm__ __volatile__("push %%rbp;"
-			     "push %%rcx;"
-			     "push %%rdx;"
-			     "push %%rsi;"
-			     "push %%rdi;"
-			     "push $0;"
+	__asm__ __volatile__("push $0;"
 			     "vmwrite %%rsp, %[host_rsp];"
 			     "lea 1f(%%rip), %%rax;"
 			     "vmwrite %%rax, %[host_rip];"
+			     VMX_SWITCH_GPRS_ASM
 			     "vmlaunch;"
 			     "incq (%%rsp);"
-			     "1: pop %%rax;"
-			     "pop %%rdi;"
-			     "pop %%rsi;"
-			     "pop %%rdx;"
-			     "pop %%rcx;"
-			     "pop %%rbp;"
+			     "1: ;"
+			     VMX_SWITCH_GPRS_ASM
+			     "pop %%rax;"
 			     : [ret]"=&a"(ret)
 			     : [host_rsp]"r"((u64)HOST_RSP),
 			       [host_rip]"r"((u64)HOST_RIP)
-			     : "memory", "cc", "rbx", "r8", "r9", "r10",
-			       "r11", "r12", "r13", "r14", "r15");
+			     : "memory", "cc");
 	return ret;
 }
 
-/*
- * No guest state (e.g. GPRs) is established by this vmresume.
- */
 static inline int vmresume(void)
 {
 	int ret;
@@ -408,28 +411,20 @@ static inline int vmresume(void)
 	if (enable_evmcs)
 		return evmcs_vmresume();
 
-	__asm__ __volatile__("push %%rbp;"
-			     "push %%rcx;"
-			     "push %%rdx;"
-			     "push %%rsi;"
-			     "push %%rdi;"
-			     "push $0;"
+	__asm__ __volatile__("push $0;"
 			     "vmwrite %%rsp, %[host_rsp];"
 			     "lea 1f(%%rip), %%rax;"
 			     "vmwrite %%rax, %[host_rip];"
+			     VMX_SWITCH_GPRS_ASM
 			     "vmresume;"
 			     "incq (%%rsp);"
-			     "1: pop %%rax;"
-			     "pop %%rdi;"
-			     "pop %%rsi;"
-			     "pop %%rdx;"
-			     "pop %%rcx;"
-			     "pop %%rbp;"
+			     "1: ;"
+			     VMX_SWITCH_GPRS_ASM
+			     "pop %%rax;"
 			     : [ret]"=&a"(ret)
 			     : [host_rsp]"r"((u64)HOST_RSP),
 			       [host_rip]"r"((u64)HOST_RIP)
-			     : "memory", "cc", "rbx", "r8", "r9", "r10",
-			       "r11", "r12", "r13", "r14", "r15");
+			     : "memory", "cc");
 	return ret;
 }
 
