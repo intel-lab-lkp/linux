@@ -315,12 +315,11 @@ static void hws_seed_channel(struct hws_pcie_dev *hws, int ch)
 
 	lo &= PCI_E_BAR_ADD_MASK;
 
-	/* Program 64-bit BAR remap entry for this channel (table @ 0x208 + ch * 8) */
-	writel_relaxed(hi, hws->bar0_base +
-			    PCI_ADDR_TABLE_BASE + 0x208 + ch * 8);
-	writel_relaxed(lo, hws->bar0_base +
-			    PCI_ADDR_TABLE_BASE + 0x208 + ch * 8 +
-			    PCIE_BARADDROFSIZE);
+	/* Program 64-bit BAR remap entry for this channel. */
+	writel_relaxed(hi, hws->bar0_base + PCI_ADDR_TABLE_BASE +
+		       HWS_VIDEO_REMAP_SLOT_OFF(ch));
+	writel_relaxed(lo, hws->bar0_base + PCI_ADDR_TABLE_BASE +
+		       HWS_VIDEO_REMAP_SLOT_OFF(ch) + PCIE_BARADDROFSIZE);
 
 	/* Program capture engine per-channel base/half */
 	writel_relaxed((ch + 1) * PCIEBAR_AXI_BASE + pci_addr,
