@@ -8,6 +8,7 @@
 #include <linux/kthread.h>
 #include <linux/pci.h>
 #include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/sizes.h>
 #include <linux/atomic.h>
@@ -51,6 +52,8 @@ struct hwsvideo_buffer {
 	struct list_head list;
 	int slot;
 };
+
+#define HWS_VIDEO_BOUNCE_SLOTS 2
 
 struct hws_video {
 	/* Linkage */
@@ -104,6 +107,7 @@ struct hws_video {
 	u32 last_dma_page;
 	u32 last_pci_addr;
 	u32 last_half16;
+	u8 next_bounce_slot;
 
 	/* Misc counters */
 	int signal_loss_cnt;
@@ -130,6 +134,7 @@ struct hws_scratch_dma {
 	void *cpu;
 	dma_addr_t dma;
 	size_t size;
+	bool owned;
 };
 
 struct hws_pcie_dev {
@@ -152,6 +157,7 @@ struct hws_pcie_dev {
 	u32 max_hw_video_buf_sz;
 	u8 max_channels;
 	u8 cur_max_video_ch;
+	u8 cur_max_audio_ch;
 	bool start_run;
 
 	bool buf_allocated;
@@ -161,7 +167,10 @@ struct hws_pcie_dev {
 
 	/* Kernel thread */
 	struct task_struct *main_task;
+	struct mutex scratch_lock; /* protects scratch DMA arenas and user refs */
+	unsigned int scratch_users[MAX_VID_CHANNELS];
 	struct hws_scratch_dma scratch_vid[MAX_VID_CHANNELS];
+	struct hws_scratch_dma scratch_aud[MAX_VID_CHANNELS];
 
 	bool suspended;
 	int irq;
@@ -169,5 +178,24 @@ struct hws_pcie_dev {
 	/* Error flags */
 	int pci_lost;
 };
+
+static inline bool hws_dma_fits_remap_window(dma_addr_t dma, size_t size)
+{
+	dma_addr_t end;
+
+	if (!size)
+		return false;
+
+	end = dma + size - 1;
+	if (end < dma)
+		return false;
+
+	return upper_32_bits(dma) == upper_32_bits(end) &&
+	       (lower_32_bits(dma) & PCI_E_BAR_ADD_MASK) ==
+	       (lower_32_bits(end) & PCI_E_BAR_ADD_MASK);
+}
+
+int hws_alloc_channel_scratch(struct hws_pcie_dev *hws, unsigned int ch);
+void hws_release_channel_scratch(struct hws_pcie_dev *hws, unsigned int ch);
 
 #endif
