@@ -43,6 +43,8 @@ struct bnxt_ktls_offload_ctx_tx {
 	u32		next_tcp_seq_no;/* staged tcp seq no */
 	u32		kid;
 	u32		pending_bytes;	/* staged payload bytes */
+	u32		pending_fwd:1;
+	u32		pending_ooo:1;
 };
 
 struct bnxt_ktls_tx_driver_state {
