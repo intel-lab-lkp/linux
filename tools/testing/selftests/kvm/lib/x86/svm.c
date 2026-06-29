@@ -13,7 +13,7 @@
 
 #define SEV_DEV_PATH "/dev/sev"
 
-struct gpr64_regs guest_regs;
+u64 guest_regs[NR_GUEST_REGS];
 u64 rflags;
 
 /* Allocate memory regions for nested SVM tests.
@@ -125,7 +125,7 @@ void generic_svm_setup(struct svm_test_data *svm, void *guest_rip)
 
 	vmcb->save.rip = (u64)guest_rip;
 	vmcb->save.rsp = (u64)svm->stack;
-	guest_regs.rdi = (u64)svm;
+	guest_regs[GUEST_REGS_RDI] = (u64)svm;
 
 	if (svm->ncr3_gpa) {
 		ctrl->misc_ctl |= SVM_MISC_ENABLE_NP;
@@ -133,31 +133,32 @@ void generic_svm_setup(struct svm_test_data *svm, void *guest_rip)
 	}
 }
 
+#define GUEST_SWITCH_GPR_ASM(reg, idx) \
+	"xchg %%" #reg ", guest_regs + 8 *" XSTR(idx) "\n\t"
+
 /*
  * save/restore 64-bit general registers except rax, rip, rsp
  * which are directly handed through the VMCB guest processor state
  */
-#define SAVE_GPR_C				\
-	"xchg %%rbx, guest_regs+0x20\n\t"	\
-	"xchg %%rcx, guest_regs+0x10\n\t"	\
-	"xchg %%rdx, guest_regs+0x18\n\t"	\
-	"xchg %%rbp, guest_regs+0x30\n\t"	\
-	"xchg %%rsi, guest_regs+0x38\n\t"	\
-	"xchg %%rdi, guest_regs+0x40\n\t"	\
-	"xchg %%r8,  guest_regs+0x48\n\t"	\
-	"xchg %%r9,  guest_regs+0x50\n\t"	\
-	"xchg %%r10, guest_regs+0x58\n\t"	\
-	"xchg %%r11, guest_regs+0x60\n\t"	\
-	"xchg %%r12, guest_regs+0x68\n\t"	\
-	"xchg %%r13, guest_regs+0x70\n\t"	\
-	"xchg %%r14, guest_regs+0x78\n\t"	\
-	"xchg %%r15, guest_regs+0x80\n\t"
-
-#define LOAD_GPR_C      SAVE_GPR_C
+#define SVM_SWITCH_GPRS_ASM \
+	GUEST_SWITCH_GPR_ASM(rbx, GUEST_REGS_RBX) \
+	GUEST_SWITCH_GPR_ASM(rcx, GUEST_REGS_RCX) \
+	GUEST_SWITCH_GPR_ASM(rdx, GUEST_REGS_RDX) \
+	GUEST_SWITCH_GPR_ASM(rbp, GUEST_REGS_RBP) \
+	GUEST_SWITCH_GPR_ASM(rsi, GUEST_REGS_RSI) \
+	GUEST_SWITCH_GPR_ASM(rdi, GUEST_REGS_RDI) \
+	GUEST_SWITCH_GPR_ASM(r8,  GUEST_REGS_R8)  \
+	GUEST_SWITCH_GPR_ASM(r9,  GUEST_REGS_R9)  \
+	GUEST_SWITCH_GPR_ASM(r10, GUEST_REGS_R10) \
+	GUEST_SWITCH_GPR_ASM(r11, GUEST_REGS_R11) \
+	GUEST_SWITCH_GPR_ASM(r12, GUEST_REGS_R12) \
+	GUEST_SWITCH_GPR_ASM(r13, GUEST_REGS_R13) \
+	GUEST_SWITCH_GPR_ASM(r14, GUEST_REGS_R14) \
+	GUEST_SWITCH_GPR_ASM(r15, GUEST_REGS_R15)
 
 /*
  * selftests do not use interrupts so we dropped clgi/sti/cli/stgi
- * for now. registers involved in LOAD/SAVE_GPR_C are eventually
+ * for now. Registers involved in SVM_SWITCH_GPRS_ASM are eventually
  * unmodified so they do not need to be in the clobber list.
  */
 void run_guest(struct vmcb *vmcb, u64 vmcb_gpa)
@@ -168,9 +169,9 @@ void run_guest(struct vmcb *vmcb, u64 vmcb_gpa)
 		"mov %%r15, %[vmcb_rflags]\n\t"
 		"mov %[guest_regs_rax], %%r15\n\t"
 		"mov %%r15, %[vmcb_rax]\n\t"
-		LOAD_GPR_C
+		SVM_SWITCH_GPRS_ASM
 		"vmrun %[vmcb_gpa]\n\t"
-		SAVE_GPR_C
+		SVM_SWITCH_GPRS_ASM
 		"mov %[vmcb_rflags], %%r15\n\t"
 		"mov %%r15, rflags\n\t"
 		"mov %[vmcb_rax], %%r15\n\t"	// rax
@@ -178,7 +179,7 @@ void run_guest(struct vmcb *vmcb, u64 vmcb_gpa)
 		"vmsave %[vmcb_gpa]\n\t"
 		: [vmcb_rflags] "+m" (vmcb->save.rflags),
 		  [vmcb_rax] "+m" (vmcb->save.rax),
-		  [guest_regs_rax] "+rm" (guest_regs.rax)
+		  [guest_regs_rax] "+rm" (guest_regs[GUEST_REGS_RAX])
 		: [vmcb_gpa] "a" (vmcb_gpa)
 		: "r15", "memory");
 }

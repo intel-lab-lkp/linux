@@ -396,25 +396,23 @@ static inline unsigned int x86_model(unsigned int eax)
 #define PTE_GET_PA(pte)		((pte) & PHYSICAL_PAGE_MASK)
 #define PTE_GET_PFN(pte)        (PTE_GET_PA(pte) >> PAGE_SHIFT)
 
-/* General Registers in 64-Bit Mode */
-struct gpr64_regs {
-	u64 rax;
-	u64 rcx;
-	u64 rdx;
-	u64 rbx;
-	u64 rsp;
-	u64 rbp;
-	u64 rsi;
-	u64 rdi;
-	u64 r8;
-	u64 r9;
-	u64 r10;
-	u64 r11;
-	u64 r12;
-	u64 r13;
-	u64 r14;
-	u64 r15;
-};
+#define GUEST_REGS_RAX	0
+#define GUEST_REGS_RCX	1
+#define GUEST_REGS_RDX	2
+#define GUEST_REGS_RBX	3
+#define GUEST_REGS_RSP	4
+#define GUEST_REGS_RBP	5
+#define GUEST_REGS_RSI	6
+#define GUEST_REGS_RDI	7
+#define GUEST_REGS_R8	8
+#define GUEST_REGS_R9	9
+#define GUEST_REGS_R10	10
+#define GUEST_REGS_R11	11
+#define GUEST_REGS_R12	12
+#define GUEST_REGS_R13	13
+#define GUEST_REGS_R14	14
+#define GUEST_REGS_R15	15
+#define NR_GUEST_REGS	(GUEST_REGS_R15 + 1)
 
 struct desc64 {
 	u16 limit0;
