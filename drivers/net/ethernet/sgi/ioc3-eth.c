@@ -967,11 +967,12 @@ static void ioc3eth_remove(struct platform_device *pdev)
 	struct net_device *dev = platform_get_drvdata(pdev);
 	struct ioc3_private *ip = netdev_priv(dev);
 
+	unregister_netdev(dev);
+	timer_delete_sync(&ip->ioc3_timer);
+
 	dma_free_coherent(ip->dma_dev, RX_RING_SIZE, ip->rxr, ip->rxr_dma);
 	dma_free_coherent(ip->dma_dev, TX_RING_SIZE + SZ_16K - 1, ip->tx_ring, ip->txr_dma);
 
-	unregister_netdev(dev);
-	timer_delete_sync(&ip->ioc3_timer);
 	free_netdev(dev);
 }
 
