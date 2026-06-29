@@ -58,8 +58,10 @@ struct devlink {
 	struct mutex lock;
 	struct lock_class_key lock_key;
 	u8 reload_failed:1;
+	u8 default_esw_mode_apply_pending:1;
 	refcount_t refcount;
 	struct rcu_work rwork;
+	struct delayed_work default_esw_mode_apply_dw;
 	struct devlink_rel *rel;
 	struct xarray nested_rels;
 	char priv[] __aligned(NETDEV_ALIGN);
@@ -71,6 +73,9 @@ extern struct genl_family devlink_nl_family;
 struct devlink *__devlink_alloc(const struct devlink_ops *ops, size_t priv_size,
 				struct net *net, struct device *dev,
 				const struct device_driver *dev_driver);
+void devlink_default_esw_mode_apply(struct devlink *devlink);
+void devlink_default_esw_mode_apply_schedule(struct devlink *devlink);
+void devlink_default_esw_mode_apply_disable(struct devlink *devlink);
 
 #define devl_warn(devlink, format, args...)				\
 	do {								\

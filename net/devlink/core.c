@@ -5,6 +5,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/jiffies.h>
 #include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -22,8 +23,12 @@ DEFINE_XARRAY_FLAGS(devlinks, XA_FLAGS_ALLOC);
 
 static char *devlink_default_esw_mode_param;
 static bool devlink_default_esw_mode_match_all;
+static bool devlink_default_esw_mode_enabled;
 static enum devlink_eswitch_mode devlink_default_esw_mode;
 static LIST_HEAD(devlink_default_esw_mode_nodes);
+static struct workqueue_struct *devlink_default_esw_mode_wq;
+
+#define DEVLINK_DEFAULT_ESW_MODE_APPLY_DELAY msecs_to_jiffies(100)
 
 struct devlink_default_esw_mode_node {
 	struct list_head list;
@@ -166,6 +171,7 @@ static void __init devlink_default_esw_mode_nodes_clear(void)
 	}
 
 	devlink_default_esw_mode_match_all = false;
+	devlink_default_esw_mode_enabled = false;
 }
 
 static int __init devlink_default_esw_mode_parse(char *str)
@@ -192,12 +198,111 @@ static int __init devlink_default_esw_mode_parse(char *str)
 		return err;
 
 	err = devlink_default_esw_mode_handles_parse(handles);
-	if (err)
+	if (err) {
 		devlink_default_esw_mode_nodes_clear();
-	else
+	} else {
 		devlink_default_esw_mode = esw_mode;
+		devlink_default_esw_mode_enabled = true;
+	}
 
 	return err;
+}
+
+static bool devlink_default_esw_mode_match(struct devlink *devlink)
+{
+	const char *bus_name = devlink_bus_name(devlink);
+	const char *dev_name = devlink_dev_name(devlink);
+	struct devlink_default_esw_mode_node *node;
+
+	if (devlink_default_esw_mode_match_all)
+		return true;
+
+	node = devlink_default_esw_mode_node_find(bus_name, dev_name);
+	return !!node;
+}
+
+void devlink_default_esw_mode_apply(struct devlink *devlink)
+{
+	const struct devlink_ops *ops = devlink->ops;
+	int err;
+
+	devl_assert_locked(devlink);
+
+	if (!devlink_default_esw_mode_match(devlink))
+		return;
+
+	if (!ops->eswitch_mode_set) {
+		if (!devlink_default_esw_mode_match_all)
+			devl_warn(devlink,
+				  "devlink_eswitch_mode= selected this device but eswitch mode setting is not supported\n");
+		return;
+	}
+
+	err = devlink_eswitch_mode_set(devlink, devlink_default_esw_mode, NULL);
+	if (err)
+		devl_warn(devlink,
+			  "Couldn't apply default eswitch mode, err %d\n",
+			  err);
+}
+
+static void
+devlink_default_esw_mode_apply_queue(struct devlink *devlink,
+				     unsigned long delay)
+{
+	if (!devlink_default_esw_mode_enabled || !devlink_default_esw_mode_wq)
+		return;
+	if (!devlink_try_get(devlink))
+		return;
+	if (!queue_delayed_work(devlink_default_esw_mode_wq,
+				&devlink->default_esw_mode_apply_dw,
+				delay))
+		devlink_put(devlink);
+}
+
+static void devlink_default_esw_mode_apply_work(struct work_struct *work)
+{
+	unsigned long delay = DEVLINK_DEFAULT_ESW_MODE_APPLY_DELAY;
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct devlink *devlink;
+
+	devlink = container_of(dwork, struct devlink,
+			       default_esw_mode_apply_dw);
+	if (!devl_trylock(devlink)) {
+		if (__devl_is_registered(devlink))
+			devlink_default_esw_mode_apply_queue(devlink, delay);
+		devlink_put(devlink);
+		return;
+	}
+
+	if (devl_is_registered(devlink) &&
+	    devlink->default_esw_mode_apply_pending) {
+		devlink_default_esw_mode_apply(devlink);
+		devlink->default_esw_mode_apply_pending = false;
+	}
+
+	devl_unlock(devlink);
+	devlink_put(devlink);
+}
+
+void devlink_default_esw_mode_apply_schedule(struct devlink *devlink)
+{
+	devl_assert_locked(devlink);
+
+	devlink->default_esw_mode_apply_pending = true;
+	devlink_default_esw_mode_apply_queue(devlink, 0);
+}
+
+void devlink_default_esw_mode_apply_disable(struct devlink *devlink)
+{
+	devl_assert_locked(devlink);
+
+	devlink->default_esw_mode_apply_pending = false;
+}
+
+static void devlink_default_esw_mode_apply_cancel(struct devlink *devlink)
+{
+	if (cancel_delayed_work_sync(&devlink->default_esw_mode_apply_dw))
+		devlink_put(devlink);
 }
 
 static int __init devlink_default_esw_mode_setup(char *str)
@@ -577,6 +682,12 @@ struct devlink *devlinks_xa_lookup_get(struct net *net, unsigned long index)
  * Make @devlink visible to userspace. Drivers must call this only after the
  * instance is fully initialized and its devlink operations can be called.
  *
+ * If a matching devlink_eswitch_mode= default was provided on the kernel
+ * command line, devlink core schedules async work to apply it after
+ * registration. Drivers implementing eswitch_mode_set() must therefore be
+ * ready to perform the same work as a userspace eswitch mode set request from
+ * this point, including creation of representors and other eswitch state.
+ *
  * Context: Caller must hold the devlink instance lock. Use devlink_register()
  * when the lock is not already held.
  *
@@ -590,6 +701,7 @@ int devl_register(struct devlink *devlink)
 	xa_set_mark(&devlinks, devlink->index, DEVLINK_REGISTERED);
 	devlink_notify_register(devlink);
 	devlink_rel_nested_in_notify(devlink);
+	devlink_default_esw_mode_apply_schedule(devlink);
 
 	return 0;
 }
@@ -612,6 +724,7 @@ void devl_unregister(struct devlink *devlink)
 	ASSERT_DEVLINK_REGISTERED(devlink);
 	devl_assert_locked(devlink);
 
+	devlink_default_esw_mode_apply_disable(devlink);
 	devlink_notify_unregister(devlink);
 	xa_clear_mark(&devlinks, devlink->index, DEVLINK_REGISTERED);
 	devlink_rel_put(devlink);
@@ -673,6 +786,9 @@ struct devlink *__devlink_alloc(const struct devlink_ops *ops, size_t priv_size,
 	INIT_LIST_HEAD(&devlink->trap_group_list);
 	INIT_LIST_HEAD(&devlink->trap_policer_list);
 	INIT_RCU_WORK(&devlink->rwork, devlink_release);
+	INIT_DELAYED_WORK(&devlink->default_esw_mode_apply_dw,
+			  devlink_default_esw_mode_apply_work);
+	devlink->default_esw_mode_apply_pending = true;
 	lockdep_register_key(&devlink->lock_key);
 	mutex_init(&devlink->lock);
 	lockdep_set_class(&devlink->lock, &devlink->lock_key);
@@ -716,6 +832,7 @@ EXPORT_SYMBOL_GPL(devlink_alloc_ns);
 void devlink_free(struct devlink *devlink)
 {
 	ASSERT_DEVLINK_NOT_REGISTERED(devlink);
+	devlink_default_esw_mode_apply_cancel(devlink);
 
 	devlink_rel_put(devlink);
 
@@ -775,34 +892,58 @@ static struct notifier_block devlink_port_netdevice_nb = {
 	.notifier_call = devlink_port_netdevice_event,
 };
 
+static int __init devlink_default_esw_mode_init(void)
+{
+	char *def;
+	int err;
+
+	if (!devlink_default_esw_mode_param)
+		return 0;
+
+	def = kstrdup(devlink_default_esw_mode_param, GFP_KERNEL);
+	if (!def) {
+		devlink_default_esw_mode_param = NULL;
+		pr_warn("devlink: devlink_eswitch_mode parameter ignored, failed to allocate memory\n");
+		return 0;
+	}
+
+	err = devlink_default_esw_mode_parse(def);
+	kfree(def);
+	if (err == -EEXIST) {
+		devlink_default_esw_mode_param = NULL;
+		pr_warn("devlink: duplicate eswitch mode handles ignored\n");
+		return 0;
+	} else if (err == -EINVAL) {
+		devlink_default_esw_mode_param = NULL;
+		pr_warn("devlink: invalid devlink_eswitch_mode parameter ignored\n");
+		return 0;
+	} else if (err == -ENOMEM) {
+		devlink_default_esw_mode_param = NULL;
+		pr_warn("devlink: devlink_eswitch_mode parameter ignored, failed to allocate memory\n");
+		return 0;
+	} else if (err) {
+		return err;
+	}
+
+	devlink_default_esw_mode_wq = alloc_workqueue("devlink_default_esw_mode",
+						      WQ_UNBOUND | WQ_MEM_RECLAIM,
+						      0);
+	if (!devlink_default_esw_mode_wq) {
+		devlink_default_esw_mode_param = NULL;
+		devlink_default_esw_mode_nodes_clear();
+		pr_warn("devlink: devlink_eswitch_mode parameter ignored, failed to allocate workqueue\n");
+	}
+
+	return 0;
+}
+
 static int __init devlink_init(void)
 {
 	int err;
 
-	if (devlink_default_esw_mode_param) {
-		char *def;
-
-		def = kstrdup(devlink_default_esw_mode_param, GFP_KERNEL);
-		if (!def) {
-			devlink_default_esw_mode_param = NULL;
-			pr_warn("devlink: devlink_eswitch_mode parameter ignored, failed to allocate memory\n");
-		} else {
-			err = devlink_default_esw_mode_parse(def);
-			kfree(def);
-			if (err == -EEXIST) {
-				devlink_default_esw_mode_param = NULL;
-				pr_warn("devlink: duplicate eswitch mode handles ignored\n");
-			} else if (err == -EINVAL) {
-				devlink_default_esw_mode_param = NULL;
-				pr_warn("devlink: invalid devlink_eswitch_mode parameter ignored\n");
-			} else if (err == -ENOMEM) {
-				devlink_default_esw_mode_param = NULL;
-				pr_warn("devlink: devlink_eswitch_mode parameter ignored, failed to allocate memory\n");
-			} else if (err) {
-				goto out;
-			}
-		}
-	}
+	err = devlink_default_esw_mode_init();
+	if (err)
+		goto out;
 
 	err = register_pernet_subsys(&devlink_pernet_ops);
 	if (err)
@@ -819,8 +960,11 @@ static int __init devlink_init(void)
 out_unreg_pernet_subsys:
 	unregister_pernet_subsys(&devlink_pernet_ops);
 out:
-	if (err)
+	if (err) {
+		if (devlink_default_esw_mode_wq)
+			destroy_workqueue(devlink_default_esw_mode_wq);
 		devlink_default_esw_mode_nodes_clear();
+	}
 	WARN_ON(err);
 
 	return err;
