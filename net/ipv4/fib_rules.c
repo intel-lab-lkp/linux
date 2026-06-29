@@ -301,10 +301,12 @@ static int fib4_rule_configure(struct fib_rule *rule, struct sk_buff *skb,
 	    fib4_nl2rule_dscp_mask(tb[FRA_DSCP_MASK], rule4, extack) < 0)
 		goto errout;
 
-	/* split local/main if they are not already split */
-	err = fib_unmerge(net);
-	if (err)
-		goto errout;
+	if (!net->ipv4.fib_has_custom_rules) {
+		/* split local/main if they are not already split */
+		err = fib_unmerge(net);
+		if (err)
+			goto errout;
+	}
 
 	if (rule->table == RT_TABLE_UNSPEC && !rule->l3mdev) {
 		if (rule->action == FR_ACT_TO_TBL) {
