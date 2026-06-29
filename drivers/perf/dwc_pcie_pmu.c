@@ -10,6 +10,7 @@
 #include <linux/cpuhotplug.h>
 #include <linux/cpumask.h>
 #include <linux/device.h>
+#include <linux/device/faux.h>
 #include <linux/errno.h>
 #include <linux/hrtimer.h>
 #include <linux/kernel.h>
@@ -17,7 +18,6 @@
 #include <linux/pcie-dwc.h>
 #include <linux/perf_event.h>
 #include <linux/pci.h>
-#include <linux/platform_device.h>
 #include <linux/smp.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
@@ -110,9 +110,10 @@ static struct list_head dwc_pcie_dev_info_head =
 static bool notify;
 
 struct dwc_pcie_dev_info {
-	struct platform_device *plat_dev;
+	struct faux_device *fdev;
 	struct pci_dev *pdev;
 	struct list_head dev_node;
+	char *name;
 };
 
 static ssize_t cpumask_show(struct device *dev,
@@ -658,6 +659,12 @@ static void dwc_pcie_unregister_pmu(void *data)
 	perf_pmu_unregister(&pcie_pmu->pmu);
 }
 
+static int dwc_pcie_pmu_probe(struct faux_device *fdev);
+
+static struct faux_device_ops dwc_pcie_faux_ops = {
+	.probe = dwc_pcie_pmu_probe,
+};
+
 static u16 dwc_pcie_des_cap(struct pci_dev *pdev)
 {
 	const struct dwc_pcie_vsec_id *vid;
@@ -684,31 +691,41 @@ static u16 dwc_pcie_des_cap(struct pci_dev *pdev)
 
 static void dwc_pcie_unregister_dev(struct dwc_pcie_dev_info *dev_info)
 {
-	platform_device_unregister(dev_info->plat_dev);
+	faux_device_destroy(dev_info->fdev);
 	list_del(&dev_info->dev_node);
+	kfree(dev_info->name);
 	kfree(dev_info);
 }
 
 static int dwc_pcie_register_dev(struct pci_dev *pdev)
 {
-	struct platform_device *plat_dev;
 	struct dwc_pcie_dev_info *dev_info;
+	struct faux_device *fdev;
+	char *name;
 	u32 sbdf;
 
 	sbdf = (pci_domain_nr(pdev->bus) << 16) | PCI_DEVID(pdev->bus->number, pdev->devfn);
-	plat_dev = platform_device_register_simple("dwc_pcie_pmu", sbdf, NULL, 0);
-	if (IS_ERR(plat_dev))
-		return PTR_ERR(plat_dev);
+	name = kasprintf(GFP_KERNEL, "dwc_pcie_pmu_%x", sbdf);
+	if (!name)
+		return -ENOMEM;
+
+	fdev = faux_device_create(name, &pdev->dev, &dwc_pcie_faux_ops);
+	if (!fdev) {
+		kfree(name);
+		return -ENODEV;
+	}
 
 	dev_info = kzalloc_obj(*dev_info);
 	if (!dev_info) {
-		platform_device_unregister(plat_dev);
+		faux_device_destroy(fdev);
+		kfree(name);
 		return -ENOMEM;
 	}
 
-	/* Cache platform device to handle pci device hotplug */
-	dev_info->plat_dev = plat_dev;
+	/* Cache faux device to handle pci device hotplug */
+	dev_info->fdev = fdev;
 	dev_info->pdev = pdev;
+	dev_info->name = name;
 	list_add(&dev_info->dev_node, &dwc_pcie_dev_info_head);
 
 	return 0;
@@ -743,33 +760,25 @@ static struct notifier_block dwc_pcie_pmu_nb = {
 	.notifier_call = dwc_pcie_pmu_notifier,
 };
 
-static int dwc_pcie_pmu_probe(struct platform_device *plat_dev)
+static int dwc_pcie_pmu_probe(struct faux_device *fdev)
 {
-	struct pci_dev *pdev;
+	struct pci_dev *pdev = to_pci_dev(fdev->dev.parent);
 	struct dwc_pcie_pmu *pcie_pmu;
 	char *name;
 	u32 sbdf;
 	u16 vsec;
 	int ret;
 
-	sbdf = plat_dev->id;
-	pdev = pci_get_domain_bus_and_slot(sbdf >> 16, PCI_BUS_NUM(sbdf & 0xffff),
-					   sbdf & 0xff);
-	if (!pdev) {
-		pr_err("No pdev found for the sbdf 0x%x\n", sbdf);
-		return -ENODEV;
-	}
+	sbdf = (pci_domain_nr(pdev->bus) << 16) | PCI_DEVID(pdev->bus->number, pdev->devfn);
+	name = devm_kasprintf(&fdev->dev, GFP_KERNEL, "dwc_rootport_%x", sbdf);
+	if (!name)
+		return -ENOMEM;
 
 	vsec = dwc_pcie_des_cap(pdev);
 	if (!vsec)
 		return -ENODEV;
 
-	pci_dev_put(pdev);
-	name = devm_kasprintf(&plat_dev->dev, GFP_KERNEL, "dwc_rootport_%x", sbdf);
-	if (!name)
-		return -ENOMEM;
-
-	pcie_pmu = devm_kzalloc(&plat_dev->dev, sizeof(*pcie_pmu), GFP_KERNEL);
+	pcie_pmu = devm_kzalloc(&fdev->dev, sizeof(*pcie_pmu), GFP_KERNEL);
 	if (!pcie_pmu)
 		return -ENOMEM;
 
@@ -789,7 +798,7 @@ static int dwc_pcie_pmu_probe(struct platform_device *plat_dev)
 
 	pcie_pmu->pmu = (struct pmu){
 		.name		= name,
-		.parent		= &plat_dev->dev,
+		.parent		= &fdev->dev,
 		.module		= THIS_MODULE,
 		.attr_groups	= dwc_pcie_attr_groups,
 		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
@@ -811,7 +820,7 @@ static int dwc_pcie_pmu_probe(struct platform_device *plat_dev)
 	}
 
 	/* Unwind when platform driver removes */
-	ret = devm_add_action_or_reset(&plat_dev->dev,
+	ret = devm_add_action_or_reset(&fdev->dev,
 				       dwc_pcie_pmu_remove_cpuhp_instance,
 				       &pcie_pmu->cpuhp_node);
 	if (ret)
@@ -822,7 +831,7 @@ static int dwc_pcie_pmu_probe(struct platform_device *plat_dev)
 		pci_err(pdev, "Error %d registering PMU @%x\n", ret, sbdf);
 		return ret;
 	}
-	ret = devm_add_action_or_reset(&plat_dev->dev, dwc_pcie_unregister_pmu,
+	ret = devm_add_action_or_reset(&fdev->dev, dwc_pcie_unregister_pmu,
 				       pcie_pmu);
 	if (ret)
 		return ret;
@@ -874,11 +883,6 @@ static int dwc_pcie_pmu_offline_cpu(unsigned int cpu, struct hlist_node *cpuhp_n
 	return 0;
 }
 
-static struct platform_driver dwc_pcie_pmu_driver = {
-	.probe = dwc_pcie_pmu_probe,
-	.driver = {.name = "dwc_pcie_pmu",},
-};
-
 static void dwc_pcie_cleanup_devices(void)
 {
 	struct dwc_pcie_dev_info *dev_info, *tmp;
@@ -893,6 +897,15 @@ static int __init dwc_pcie_pmu_init(void)
 	struct pci_dev *pdev = NULL;
 	int ret;
 
+	ret = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN,
+				      "perf/dwc_pcie_pmu:online",
+				      dwc_pcie_pmu_online_cpu,
+				      dwc_pcie_pmu_offline_cpu);
+	if (ret < 0)
+		return ret;
+
+	dwc_pcie_pmu_hp_state = ret;
+
 	for_each_pci_dev(pdev) {
 		if (!dwc_pcie_des_cap(pdev))
 			continue;
@@ -904,32 +917,15 @@ static int __init dwc_pcie_pmu_init(void)
 		}
 	}
 
-	ret = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN,
-				      "perf/dwc_pcie_pmu:online",
-				      dwc_pcie_pmu_online_cpu,
-				      dwc_pcie_pmu_offline_cpu);
-	if (ret < 0)
-		goto err_cleanup;
-
-	dwc_pcie_pmu_hp_state = ret;
-
-	ret = platform_driver_register(&dwc_pcie_pmu_driver);
-	if (ret)
-		goto err_remove_cpuhp;
-
 	ret = bus_register_notifier(&pci_bus_type, &dwc_pcie_pmu_nb);
 	if (ret)
-		goto err_unregister_driver;
+		goto err_cleanup;
 	notify = true;
 
 	return 0;
-
-err_unregister_driver:
-	platform_driver_unregister(&dwc_pcie_pmu_driver);
-err_remove_cpuhp:
-	cpuhp_remove_multi_state(dwc_pcie_pmu_hp_state);
 err_cleanup:
 	dwc_pcie_cleanup_devices();
+	cpuhp_remove_multi_state(dwc_pcie_pmu_hp_state);
 	return ret;
 }
 
@@ -938,7 +934,6 @@ static void __exit dwc_pcie_pmu_exit(void)
 	if (notify)
 		bus_unregister_notifier(&pci_bus_type, &dwc_pcie_pmu_nb);
 	dwc_pcie_cleanup_devices();
-	platform_driver_unregister(&dwc_pcie_pmu_driver);
 	cpuhp_remove_multi_state(dwc_pcie_pmu_hp_state);
 }
 
