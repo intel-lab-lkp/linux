@@ -306,6 +306,7 @@ int hws_video_init_channel(struct hws_pcie_dev *pdev, int ch)
 
 	vid->queued_count = 0;
 	vid->window_valid = false;
+	vid->next_bounce_slot = 0;
 
 	/* Default format. */
 	vid->pix.width = 1920;
@@ -556,17 +557,18 @@ static void hws_seed_dma_windows(struct hws_pcie_dev *hws)
 				       hws->bar0_base + CVBS_IN_BUF_BASE +
 				       ch * PCIE_BARADDROFSIZE);
 
-			/* Half-frame length in /16 units.
-			 * Prefer the current channel's computed half_size if available.
-			 * Fall back to half of the probe-owned scratch buffer.
+			/*
+			 * Half-frame length in /16 units. Prefer the current
+			 * format and fall back to the video bounce window,
+			 * not the full per-channel arena that also contains audio.
 			 */
 			{
 				u32 half_bytes = hws->video[ch].pix.half_size ?
-				    hws->video[ch].pix.half_size :
-				    (u32)(hws->scratch_vid[ch].size / 2);
+					hws->video[ch].pix.half_size :
+					(u32)(MAX_VIDEO_SCALER_SIZE / 2);
+
 				writel_relaxed(half_bytes / 16,
-					       hws->bar0_base +
-					       CVBS_IN_BUF_BASE2 +
+					       hws->bar0_base + CVBS_IN_BUF_BASE2 +
 					       ch * PCIE_BARADDROFSIZE);
 			}
 		}
@@ -1166,6 +1168,7 @@ static int hws_start_streaming(struct vb2_queue *q, unsigned int count)
 		}
 		return ret;
 	}
+
 	(void)hws_read_active_state(hws, v->channel_index,
 				       &v->pix.interlaced);
 
