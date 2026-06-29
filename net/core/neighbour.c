@@ -1757,6 +1757,14 @@ static inline struct neigh_parms *lookup_neigh_parms(struct neigh_table *tbl,
 	return NULL;
 }
 
+/* Caller must hold rcu_read_lock()*/
+
+struct neigh_parms *neigh_parms_lookup_dev(struct neigh_table *tbl, struct net_device *dev)
+{
+	return lookup_neigh_parms(tbl, dev_net(dev), dev->ifindex);
+}
+EXPORT_SYMBOL(neigh_parms_lookup_dev);
+
 struct neigh_parms *neigh_parms_alloc(struct net_device *dev,
 				      struct neigh_table *tbl)
 {
