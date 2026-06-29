@@ -484,6 +484,8 @@ struct uvc_streaming {
 		struct uvc_video_queue queue;
 		u32 format;
 		u32 buffersize;
+		bool in_flight;
+		spinlock_t irqlock; /* Protects in_flight. */
 	} meta;
 
 	/* Context data used by the bulk completion handler. */
