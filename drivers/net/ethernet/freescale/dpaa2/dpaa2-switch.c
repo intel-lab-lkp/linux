@@ -51,6 +51,17 @@ dpaa2_switch_filter_block_get_unused(struct ethsw_core *ethsw)
 	return NULL;
 }
 
+static struct dpaa2_switch_lag *
+dpaa2_switch_lag_get_unused(struct ethsw_core *ethsw)
+{
+	int i;
+
+	for (i = 0; i < ethsw->sw_attr.num_ifs; i++)
+		if (!ethsw->lags[i].in_use)
+			return &ethsw->lags[i];
+	return NULL;
+}
+
 static bool dpaa2_switch_fdb_in_use_by_others(struct ethsw_core *ethsw,
 					      struct dpaa2_switch_fdb *fdb,
 					      struct ethsw_port_priv *except)
@@ -2042,8 +2053,14 @@ static int dpaa2_switch_port_attr_set_event(struct net_device *netdev,
 static struct net_device *
 dpaa2_switch_port_to_bridge_port(struct ethsw_port_priv *port_priv)
 {
+	struct dpaa2_switch_lag *lag;
+
 	if (!port_priv->fdb->bridge_dev)
 		return NULL;
+
+	lag = rtnl_dereference(port_priv->lag);
+	if (lag)
+		return lag->bond_dev;
 
 	return port_priv->netdev;
 }
@@ -2193,19 +2210,42 @@ static int dpaa2_switch_port_bridge_leave(struct net_device *netdev)
 					  false);
 }
 
+static int
+dpaa2_switch_have_vlan_upper(struct net_device *upper_dev,
+			     __always_unused struct netdev_nested_priv *priv)
+{
+	return is_vlan_dev(upper_dev);
+}
+
 static int dpaa2_switch_prevent_bridging_with_8021q_upper(struct net_device *netdev)
 {
-	struct net_device *upper_dev;
-	struct list_head *iter;
+	struct netdev_nested_priv priv = {};
 
 	/* RCU read lock not necessary because we have write-side protection
-	 * (rtnl_mutex), however a non-rcu iterator does not exist.
+	 * (rtnl_mutex), however a non-rcu iterator does not exist. Walk the
+	 * entire upper chain so that a VLAN device stacked on a intermediate
+	 * bond is caught too.
 	 */
-	netdev_for_each_upper_dev_rcu(netdev, upper_dev, iter)
-		if (is_vlan_dev(upper_dev))
-			return -EOPNOTSUPP;
+	if (netdev_walk_all_upper_dev_rcu(netdev, dpaa2_switch_have_vlan_upper,
+					  &priv))
+		return -EOPNOTSUPP;
 
 	return 0;
+}
+
+static int dpaa2_switch_check_dpsw_instance(struct net_device *dev,
+					    struct netdev_nested_priv *priv)
+{
+	struct ethsw_port_priv *port_priv = (struct ethsw_port_priv *)priv->data;
+	struct ethsw_port_priv *other_priv = netdev_priv(dev);
+
+	if (!dpaa2_switch_port_dev_check(dev))
+		return 0;
+
+	if (other_priv->ethsw_data == port_priv->ethsw_data)
+		return 0;
+
+	return 1;
 }
 
 static int
@@ -2214,9 +2254,9 @@ dpaa2_switch_prechangeupper_sanity_checks(struct net_device *netdev,
 					  struct netlink_ext_ack *extack)
 {
 	struct ethsw_port_priv *port_priv = netdev_priv(netdev);
-	struct ethsw_port_priv *other_port_priv;
-	struct net_device *other_dev;
-	struct list_head *iter;
+	struct netdev_nested_priv data = {
+		.data = (void *)port_priv,
+	};
 	int err;
 
 	if (!br_vlan_enabled(upper_dev)) {
@@ -2231,6 +2271,70 @@ dpaa2_switch_prechangeupper_sanity_checks(struct net_device *netdev,
 		return err;
 	}
 
+	err = netdev_walk_all_lower_dev(upper_dev,
+					dpaa2_switch_check_dpsw_instance,
+					&data);
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Interface from a different DPSW is in the bridge already");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int dpaa2_switch_pre_lag_join(struct net_device *netdev,
+				     struct net_device *upper_dev,
+				     struct netdev_lag_upper_info *info,
+				     struct netlink_ext_ack *extack)
+{
+	struct ethsw_port_priv *port_priv = netdev_priv(netdev);
+	struct ethsw_core *ethsw = port_priv->ethsw_data;
+	struct ethsw_port_priv *other_port_priv;
+	struct dpaa2_switch_lag *lag = NULL;
+	struct dpsw_lag_cfg cfg = {0};
+	struct net_device *other_dev;
+	int i, num_ifs = 0, err;
+	struct list_head *iter;
+
+	if (!(ethsw->features & ETHSW_FEATURE_LAG_OFFLOAD)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "LAG offload is supported only for DPSW >= v8.13");
+		return -EOPNOTSUPP;
+	}
+
+	if (info->tx_type != NETDEV_LAG_TX_TYPE_HASH) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Can only offload LAG using hash TX type");
+		return -EOPNOTSUPP;
+	}
+
+	if (info->hash_type != NETDEV_LAG_HASH_L23) {
+		NL_SET_ERR_MSG_MOD(extack, "Can only offload L2+L3 Tx hash");
+		return -EOPNOTSUPP;
+	}
+
+	if (!dpaa2_switch_port_has_mac(port_priv)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Only switch interfaces connected to MACs can be under a LAG");
+		return -EINVAL;
+	}
+
+	if (vlan_uses_dev(upper_dev)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Cannot join a LAG upper that has a VLAN");
+		return -EOPNOTSUPP;
+	}
+
+	for (i = 0; i < ethsw->sw_attr.num_ifs; i++) {
+		if (!ethsw->lags[i].in_use)
+			continue;
+		if (ethsw->lags[i].bond_dev != upper_dev)
+			continue;
+		lag = &ethsw->lags[i];
+		break;
+	}
+
 	netdev_for_each_lower_dev(upper_dev, other_dev, iter) {
 		if (!dpaa2_switch_port_dev_check(other_dev))
 			continue;
@@ -2238,9 +2342,227 @@ dpaa2_switch_prechangeupper_sanity_checks(struct net_device *netdev,
 		other_port_priv = netdev_priv(other_dev);
 		if (other_port_priv->ethsw_data != port_priv->ethsw_data) {
 			NL_SET_ERR_MSG_MOD(extack,
-					   "Interface from a different DPSW is in the bridge already");
+					   "Interface from a different DPSW is in the bond already");
 			return -EINVAL;
 		}
+
+		cfg.if_id[num_ifs++] = other_port_priv->idx;
+
+		if (num_ifs >= DPSW_MAX_LAG_IFS) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Cannot add more than 8 DPAA2 switch ports under the same bond");
+			return -EINVAL;
+		}
+	}
+
+	if (lag) {
+		cfg.group_id = lag->id;
+		cfg.if_id[num_ifs++] = port_priv->idx;
+		cfg.num_ifs = num_ifs;
+		cfg.phase = DPSW_LAG_SET_PHASE_CHECK;
+
+		err = dpsw_lag_set(ethsw->mc_io, 0, ethsw->dpsw_handle, &cfg);
+		if (err) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Cannot offload LAG configuration");
+			return -EOPNOTSUPP;
+		}
+	}
+
+	return 0;
+}
+
+static void dpaa2_switch_port_set_lag_group(struct ethsw_port_priv *port_priv,
+					    struct net_device *bond_dev)
+{
+	struct ethsw_core *ethsw = port_priv->ethsw_data;
+	struct ethsw_port_priv *other_port_priv = NULL;
+	struct dpaa2_switch_lag *lag = NULL;
+	struct dpaa2_switch_lag *other_lag;
+	struct net_device *other_dev;
+	struct list_head *iter;
+
+	netdev_for_each_lower_dev(bond_dev, other_dev, iter) {
+		if (!dpaa2_switch_port_dev_check(other_dev))
+			continue;
+
+		other_port_priv = netdev_priv(other_dev);
+		other_lag = rtnl_dereference(other_port_priv->lag);
+		if (!other_lag)
+			continue;
+
+		if (other_lag->bond_dev == bond_dev) {
+			rcu_assign_pointer(port_priv->lag, other_lag);
+			return;
+		}
+	}
+
+	/* This is the first interface to be added under a bond device. Find an
+	 * unused LAG group. No need to check for NULL since there are the same
+	 * amount of DPSW ports as LAG groups, meaning that each port can have
+	 * its own LAG group.
+	 */
+	lag = dpaa2_switch_lag_get_unused(ethsw);
+	lag->in_use = true;
+	lag->bond_dev = bond_dev;
+	lag->primary = port_priv;
+	rcu_assign_pointer(port_priv->lag, lag);
+}
+
+static bool dpaa2_switch_port_in_lag(struct ethsw_port_priv *port_priv,
+				     struct net_device *bond_dev)
+{
+	struct dpaa2_switch_lag *lag;
+
+	if (!port_priv)
+		return false;
+
+	lag = rtnl_dereference(port_priv->lag);
+	return lag && lag->bond_dev == bond_dev;
+}
+
+static int dpaa2_switch_set_lag_cfg(struct net_device *bond_dev, u8 lag_id,
+				    struct ethsw_core *ethsw)
+{
+	struct dpaa2_switch_lag *lag = &ethsw->lags[lag_id - 1];
+	struct ethsw_port_priv *primary, *new_primary = NULL;
+	struct ethsw_port_priv *port_priv = NULL;
+	struct dpsw_lag_cfg cfg = {0};
+	u8 num_ifs = 0;
+	int err, i;
+
+	cfg.group_id = lag_id;
+
+	/* Determine the primary port. The caller clears ->lag on the port that
+	 * is leaving, so a NULL ->lag on the current primary means it is the
+	 * one leaving: elect the first remaining member as the new primary.
+	 * Otherwise keep the current primary.
+	 */
+	if (rtnl_dereference(lag->primary->lag)) {
+		primary = lag->primary;
+	} else {
+		primary = NULL;
+		for (i = 0; i < ethsw->sw_attr.num_ifs; i++) {
+			if (dpaa2_switch_port_in_lag(ethsw->ports[i], bond_dev)) {
+				new_primary = ethsw->ports[i];
+				primary = new_primary;
+				break;
+			}
+		}
+	}
+
+	/* Build the interface list, always placing the primary first */
+	if (primary)
+		cfg.if_id[num_ifs++] = primary->idx;
+
+	for (i = 0; i < ethsw->sw_attr.num_ifs; i++) {
+		port_priv = ethsw->ports[i];
+		if (port_priv == primary)
+			continue;
+		if (!dpaa2_switch_port_in_lag(port_priv, bond_dev))
+			continue;
+
+		cfg.if_id[num_ifs++] = port_priv->idx;
+	}
+	cfg.num_ifs = num_ifs;
+
+	/* No more interfaces under this LAG group, mark it as not in use. Wait
+	 * for a grace period so that any readers of the lag structure finished.
+	 */
+	if (!num_ifs) {
+		synchronize_net();
+
+		lag->bond_dev = NULL;
+		lag->primary = NULL;
+		lag->in_use = false;
+	}
+
+	err = dpsw_lag_set(ethsw->mc_io, 0, ethsw->dpsw_handle, &cfg);
+	if (err)
+		return err;
+
+	if (new_primary) {
+		synchronize_net();
+		lag->primary = new_primary;
+	}
+
+	return 0;
+}
+
+static int dpaa2_switch_port_bond_join(struct net_device *netdev,
+				       struct net_device *bond_dev,
+				       struct netdev_lag_upper_info *info,
+				       struct netlink_ext_ack *extack)
+{
+	struct ethsw_port_priv *port_priv = netdev_priv(netdev);
+	struct ethsw_core *ethsw = port_priv->ethsw_data;
+	struct net_device *bridge_dev;
+	struct dpaa2_switch_lag *lag;
+	int err = 0;
+	u8 lag_id;
+
+	/* Setup the port_priv->lag pointer for this switch port */
+	dpaa2_switch_port_set_lag_group(port_priv, bond_dev);
+
+	/* Create the LAG configuration and apply it in MC */
+	lag = rtnl_dereference(port_priv->lag);
+	lag_id = lag->id;
+	err = dpaa2_switch_set_lag_cfg(bond_dev, lag_id, ethsw);
+	if (err)
+		goto err_lag_cfg;
+
+	/* If the bond device is a switch port, join the bridge as well */
+	bridge_dev = netdev_master_upper_dev_get(bond_dev);
+	if (!bridge_dev || !netif_is_bridge_master(bridge_dev))
+		return 0;
+
+	err = dpaa2_switch_port_bridge_join(netdev, bridge_dev, extack);
+	if (err)
+		goto err_lag_cfg;
+
+	return err;
+
+err_lag_cfg:
+	rcu_assign_pointer(port_priv->lag, NULL);
+	dpaa2_switch_set_lag_cfg(bond_dev, lag_id, ethsw);
+
+	return err;
+}
+
+static int dpaa2_switch_port_bond_leave(struct net_device *netdev,
+					struct net_device *bond_dev)
+{
+	struct net_device *bridge_dev = netdev_master_upper_dev_get(bond_dev);
+	struct ethsw_port_priv *port_priv = netdev_priv(netdev);
+	struct dpaa2_switch_lag *lag = rtnl_dereference(port_priv->lag);
+	struct ethsw_core *ethsw = port_priv->ethsw_data;
+	struct net_device *brpdev;
+	bool learn_ena;
+	int err;
+
+	if (!lag)
+		return 0;
+
+	/* Recreate the LAG configuration for the LAG group that we left. */
+	rcu_assign_pointer(port_priv->lag, NULL);
+	dpaa2_switch_set_lag_cfg(bond_dev, lag->id, ethsw);
+
+	if (bridge_dev && netif_is_bridge_master(bridge_dev)) {
+		/* Make sure that the new primary inherits the learning state */
+		if (lag->primary) {
+			brpdev = dpaa2_switch_port_to_bridge_port(lag->primary);
+			learn_ena = br_port_flag_is_set(brpdev, BR_LEARNING);
+			err = dpaa2_switch_port_set_learning(lag->primary,
+							     learn_ena);
+			if (err)
+				return err;
+			lag->primary->learn_ena = learn_ena;
+		}
+
+		/* In case the bond is a bridge port, leave the upper bridge as
+		 * well.
+		 */
+		return dpaa2_switch_port_bridge_leave(netdev);
 	}
 
 	return 0;
@@ -2250,8 +2572,8 @@ static int dpaa2_switch_port_prechangeupper(struct net_device *netdev,
 					    struct netdev_notifier_changeupper_info *info)
 {
 	struct ethsw_port_priv *port_priv;
+	struct net_device *upper_dev, *br;
 	struct netlink_ext_ack *extack;
-	struct net_device *upper_dev;
 	int err;
 
 	if (!dpaa2_switch_port_dev_check(netdev))
@@ -2268,6 +2590,24 @@ static int dpaa2_switch_port_prechangeupper(struct net_device *netdev,
 
 		if (!info->linking)
 			dpaa2_switch_port_pre_bridge_leave(netdev);
+	} else if (netif_is_lag_master(upper_dev)) {
+		if (!info->linking) {
+			if (netif_is_bridge_port(upper_dev))
+				dpaa2_switch_port_pre_bridge_leave(netdev);
+			return 0;
+		}
+
+		if (netif_is_bridge_port(upper_dev)) {
+			br = netdev_master_upper_dev_get(upper_dev);
+			err = dpaa2_switch_prechangeupper_sanity_checks(netdev,
+									br,
+									extack);
+			if (err)
+				return err;
+		}
+
+		return dpaa2_switch_pre_lag_join(netdev, upper_dev,
+						 info->upper_info, extack);
 	} else if (is_vlan_dev(upper_dev)) {
 		port_priv = netdev_priv(netdev);
 		if (port_priv->fdb->bridge_dev) {
@@ -2299,6 +2639,80 @@ static int dpaa2_switch_port_changeupper(struct net_device *netdev,
 							     extack);
 		else
 			return dpaa2_switch_port_bridge_leave(netdev);
+	} else if (netif_is_lag_master(upper_dev)) {
+		if (info->linking)
+			return dpaa2_switch_port_bond_join(netdev, upper_dev,
+							   info->upper_info,
+							   extack);
+		else
+			return dpaa2_switch_port_bond_leave(netdev, upper_dev);
+	}
+
+	return 0;
+}
+
+static int
+dpaa2_switch_lag_prechangeupper(struct net_device *netdev,
+				struct netdev_notifier_changeupper_info *info)
+{
+	struct net_device *lower;
+	struct list_head *iter;
+	int err = 0;
+
+	if (!netif_is_lag_master(netdev))
+		return 0;
+
+	netdev_for_each_lower_dev(netdev, lower, iter) {
+		if (!dpaa2_switch_port_dev_check(lower))
+			continue;
+
+		err = dpaa2_switch_port_prechangeupper(lower, info);
+		if (err)
+			return err;
+	}
+
+	return err;
+}
+
+static int
+dpaa2_switch_lag_changeupper(struct net_device *netdev,
+			     struct netdev_notifier_changeupper_info *info)
+{
+	struct net_device *lower;
+	struct list_head *iter;
+	int err = 0;
+
+	if (!netif_is_lag_master(netdev))
+		return 0;
+
+	netdev_for_each_lower_dev(netdev, lower, iter) {
+		if (!dpaa2_switch_port_dev_check(lower))
+			continue;
+
+		err = dpaa2_switch_port_changeupper(lower, info);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+static int
+dpaa2_switch_port_changelowerstate(struct net_device *netdev,
+				   struct netdev_lag_lower_state_info *linfo)
+{
+	struct ethsw_port_priv *port_priv = netdev_priv(netdev);
+	struct ethsw_core *ethsw = port_priv->ethsw_data;
+	int err;
+
+	if (!rtnl_dereference(port_priv->lag))
+		return 0;
+
+	err = dpsw_if_set_lag_state(ethsw->mc_io, 0, ethsw->dpsw_handle,
+				    port_priv->idx, linfo->tx_enabled ? 1 : 0);
+	if (err) {
+		netdev_err(netdev, "dpsw_if_set_lag_state() = %d\n", err);
+		return err;
 	}
 
 	return 0;
@@ -2308,11 +2722,16 @@ static int dpaa2_switch_port_netdevice_event(struct notifier_block *nb,
 					     unsigned long event, void *ptr)
 {
 	struct net_device *netdev = netdev_notifier_info_to_dev(ptr);
+	struct netdev_notifier_changelowerstate_info *info;
 	int err = 0;
 
 	switch (event) {
 	case NETDEV_PRECHANGEUPPER:
 		err = dpaa2_switch_port_prechangeupper(netdev, ptr);
+		if (err)
+			return notifier_from_errno(err);
+
+		err = dpaa2_switch_lag_prechangeupper(netdev, ptr);
 		if (err)
 			return notifier_from_errno(err);
 
@@ -2322,7 +2741,19 @@ static int dpaa2_switch_port_netdevice_event(struct notifier_block *nb,
 		if (err)
 			return notifier_from_errno(err);
 
+		err = dpaa2_switch_lag_changeupper(netdev, ptr);
+		if (err)
+			return notifier_from_errno(err);
+
 		break;
+	case NETDEV_CHANGELOWERSTATE:
+		info = ptr;
+		if (!dpaa2_switch_port_dev_check(netdev))
+			break;
+
+		err = dpaa2_switch_port_changelowerstate(netdev,
+							 info->lower_state_info);
+		return notifier_from_errno(err);
 	}
 
 	return NOTIFY_DONE;
@@ -2581,6 +3012,9 @@ static void dpaa2_switch_detect_features(struct ethsw_core *ethsw)
 
 	if (ethsw->major > 8 || (ethsw->major == 8 && ethsw->minor >= 6))
 		ethsw->features |= ETHSW_FEATURE_MAC_ADDR;
+
+	if (ethsw->major > 8 || (ethsw->major == 8 && ethsw->minor >= 13))
+		ethsw->features |= ETHSW_FEATURE_LAG_OFFLOAD;
 }
 
 static int dpaa2_switch_setup_fqs(struct ethsw_core *ethsw)
@@ -3370,6 +3804,7 @@ static void dpaa2_switch_remove(struct fsl_mc_device *sw_dev)
 	kfree(ethsw->fdbs);
 	kfree(ethsw->filter_blocks);
 	kfree(ethsw->ports);
+	kfree(ethsw->lags);
 
 	dpaa2_switch_teardown(sw_dev);
 
@@ -3397,6 +3832,7 @@ static int dpaa2_switch_probe_port(struct ethsw_core *ethsw,
 	port_priv = netdev_priv(port_netdev);
 	port_priv->netdev = port_netdev;
 	port_priv->ethsw_data = ethsw;
+	rcu_assign_pointer(port_priv->lag, NULL);
 
 	mutex_init(&port_priv->mac_lock);
 
@@ -3504,6 +3940,19 @@ static int dpaa2_switch_probe(struct fsl_mc_device *sw_dev)
 		goto err_free_fdbs;
 	}
 
+	ethsw->lags = kcalloc(ethsw->sw_attr.num_ifs, sizeof(*ethsw->lags),
+			      GFP_KERNEL);
+	if (!ethsw->lags) {
+		err = -ENOMEM;
+		goto err_free_filter;
+	}
+	for (i = 0; i < ethsw->sw_attr.num_ifs; i++) {
+		ethsw->lags[i].bond_dev = NULL;
+		ethsw->lags[i].ethsw = ethsw;
+		ethsw->lags[i].id = i + 1;
+		ethsw->lags[i].in_use = 0;
+	}
+
 	for (i = 0; i < ethsw->sw_attr.num_ifs; i++) {
 		err = dpaa2_switch_probe_port(ethsw, i);
 		if (err)
@@ -3550,6 +3999,8 @@ err_stop:
 err_free_netdev:
 	for (i--; i >= 0; i--)
 		dpaa2_switch_remove_port(ethsw, i);
+	kfree(ethsw->lags);
+err_free_filter:
 	kfree(ethsw->filter_blocks);
 err_free_fdbs:
 	kfree(ethsw->fdbs);
