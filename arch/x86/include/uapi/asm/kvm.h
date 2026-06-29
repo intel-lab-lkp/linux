@@ -598,6 +598,7 @@ struct kvm_x86_mce {
 #define KVM_XEN_HVM_CONFIG_RUNSTATE_UPDATE_FLAG	(1 << 6)
 #define KVM_XEN_HVM_CONFIG_PVCLOCK_TSC_UNSTABLE	(1 << 7)
 #define KVM_XEN_HVM_CONFIG_SHARED_INFO_HVA	(1 << 8)
+#define KVM_XEN_HVM_CONFIG_WRITE_HYPERCALL_PAGE	(1 << 9)
 
 #define KVM_XEN_MSR_MIN_INDEX			0x40000000u
 #define KVM_XEN_MSR_MAX_INDEX			0x4fffffffu
@@ -706,6 +707,8 @@ struct kvm_xen_vcpu_attr {
 #define KVM_XEN_VCPU_ATTR_TYPE_UPCALL_VECTOR	0x8
 /* Available with KVM_CAP_XEN_HVM / KVM_XEN_HVM_CONFIG_SHARED_INFO_HVA */
 #define KVM_XEN_VCPU_ATTR_TYPE_VCPU_INFO_HVA	0x9
+/* Available with KVM_CAP_XEN_HVM / KVM_XEN_HVM_CONFIG_WRITE_HYPERCALL_PAGE */
+#define KVM_XEN_VCPU_ATTR_TYPE_WRITE_HYPERCALL_PAGE 0xa
 
 /* Secure Encrypted Virtualization command */
 enum sev_cmd_id {

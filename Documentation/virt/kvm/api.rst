@@ -5812,6 +5812,19 @@ KVM_XEN_VCPU_ATTR_TYPE_UPCALL_VECTOR
   vector configured with HVM_PARAM_CALLBACK_IRQ. It is disabled by
   setting the vector to zero.
 
+KVM_XEN_VCPU_ATTR_TYPE_WRITE_HYPERCALL_PAGE
+  This attribute is available when the KVM_CAP_XEN_HVM ioctl indicates
+  support for KVM_XEN_HVM_CONFIG_WRITE_HYPERCALL_PAGE. It triggers
+  population of the Xen hypercall page at the guest physical address
+  specified in ``gpa``, just as if the guest had written to the
+  hypercall MSR. This is intended for VMMs that intercept the guest's
+  MSR write (e.g. to track an epoch for kexec/crash recovery) and need
+  to replay the write from host context. Direct host-initiated writes
+  via KVM_SET_MSRS are blocked for safety; this attribute provides the
+  correct alternative. As with a non-intercepted guest write to the
+  hypercall MSR, it also latches the 'long mode' for the VM, which
+  determines the layout of the shared data structures.
+
 
 4.129 KVM_XEN_VCPU_GET_ATTR
 ---------------------------

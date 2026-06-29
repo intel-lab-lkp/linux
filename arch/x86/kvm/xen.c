@@ -32,6 +32,7 @@
 static int kvm_xen_set_evtchn(struct kvm_xen_evtchn *xe, struct kvm *kvm);
 static int kvm_xen_setattr_evtchn(struct kvm *kvm, struct kvm_xen_hvm_attr *data);
 static bool kvm_xen_hcall_evtchn_send(struct kvm_vcpu *vcpu, u64 param, u64 *r);
+static int __kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data);
 
 DEFINE_STATIC_KEY_DEFERRED_FALSE(kvm_xen_enabled, HZ);
 
@@ -1138,6 +1139,10 @@ int kvm_xen_vcpu_set_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 		}
 		break;
 
+	case KVM_XEN_VCPU_ATTR_TYPE_WRITE_HYPERCALL_PAGE:
+		r = __kvm_xen_write_hypercall_page(vcpu, data->u.gpa);
+		break;
+
 	default:
 		break;
 	}
@@ -1273,7 +1278,7 @@ int kvm_xen_vcpu_get_attr(struct kvm_vcpu *vcpu, struct kvm_xen_vcpu_attr *data)
 	return r;
 }
 
-int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
+static int __kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 {
 	struct kvm *kvm = vcpu->kvm;
 	u32 page_num = data & ~PAGE_MASK;
@@ -1281,7 +1286,6 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 	bool lm = is_long_mode(vcpu);
 	int r = 0;
 
-	mutex_lock(&kvm->arch.xen.xen_lock);
 	if (kvm->arch.xen.long_mode != lm) {
 		kvm->arch.xen.long_mode = lm;
 
@@ -1289,11 +1293,9 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 		 * Re-initialize shared_info to put the wallclock in the
 		 * correct place.
 		 */
-		if (kvm->arch.xen.shinfo_cache.active &&
-		    kvm_xen_shared_info_init(kvm))
-			r = 1;
+		if (kvm->arch.xen.shinfo_cache.active)
+			r = kvm_xen_shared_info_init(kvm);
 	}
-	mutex_unlock(&kvm->arch.xen.xen_lock);
 
 	if (r)
 		return r;
@@ -1309,7 +1311,7 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 		int i;
 
 		if (page_num)
-			return 1;
+			return -EINVAL;
 
 		/* mov imm32, %eax */
 		instructions[0] = 0xb8;
@@ -1325,10 +1327,11 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 
 		for (i = 0; i < PAGE_SIZE / sizeof(instructions); i++) {
 			*(u32 *)&instructions[1] = i;
-			if (kvm_vcpu_write_guest(vcpu,
+			r = kvm_vcpu_write_guest(vcpu,
 						 page_addr + (i * sizeof(instructions)),
-						 instructions, sizeof(instructions)))
-				return 1;
+						 instructions, sizeof(instructions));
+			if (r)
+				return r;
 		}
 	} else {
 		/*
@@ -1340,10 +1343,9 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 		u8 blob_size = lm ? kvm->arch.xen.hvm_config.blob_size_64
 				  : kvm->arch.xen.hvm_config.blob_size_32;
 		u8 *page;
-		int ret;
 
 		if (page_num >= blob_size)
-			return 1;
+			return -EINVAL;
 
 		blob_addr += page_num * PAGE_SIZE;
 
@@ -1351,12 +1353,25 @@ int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
 		if (IS_ERR(page))
 			return PTR_ERR(page);
 
-		ret = kvm_vcpu_write_guest(vcpu, page_addr, page, PAGE_SIZE);
+		r = kvm_vcpu_write_guest(vcpu, page_addr, page, PAGE_SIZE);
 		kfree(page);
-		if (ret)
-			return 1;
+		if (r)
+			return r;
 	}
 	return 0;
+}
+
+int kvm_xen_write_hypercall_page(struct kvm_vcpu *vcpu, u64 data)
+{
+	guard(mutex)(&vcpu->kvm->arch.xen.xen_lock);
+
+	/*
+	 * The MSR write path expects a 0/1 return; convert the errno from
+	 * the shared helper accordingly. Callers that want the real error
+	 * (e.g. the KVM_XEN_VCPU_ATTR_TYPE_WRITE_HYPERCALL_PAGE attribute)
+	 * invoke __kvm_xen_write_hypercall_page() directly.
+	 */
+	return __kvm_xen_write_hypercall_page(vcpu, data) ? 1 : 0;
 }
 
 int kvm_xen_hvm_config(struct kvm *kvm, struct kvm_xen_hvm_config *xhc)
