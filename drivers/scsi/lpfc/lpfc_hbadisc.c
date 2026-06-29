@@ -168,6 +168,22 @@ lpfc_dev_loss_tmo_callbk(struct fc_rport *rport)
 		return;
 
 	vport = ndlp->vport;
+	if (!vport) {
+		/*
+		 * Vport is NULL - this can happen during teardown when the
+		 * vport has been destroyed but the rport final delete is
+		 * still processing. Clear the association and return.
+		 */
+		pr_err("lpfc: Null vport on ndlp %p, DID x%06x rport %p\n",
+		       ndlp, ndlp->nlp_DID, rport);
+
+		spin_lock_irqsave(&ndlp->lock, iflags);
+		((struct lpfc_rport_data *)rport->dd_data)->pnode = NULL;
+		ndlp->rport = NULL;
+		spin_unlock_irqrestore(&ndlp->lock, iflags);
+		return;
+	}
+
 	phba  = vport->phba;
 
 	lpfc_debugfs_disc_trc(vport, LPFC_DISC_TRC_RPORT,
