@@ -716,7 +716,6 @@ static int ct_send(struct intel_guc_ct *ct,
 	struct intel_guc_ct_buffer *ctb = &ct->ctbs.send;
 	struct ct_request request;
 	unsigned long flags;
-	unsigned int sleep_period_ms = 1;
 	bool send_again;
 	u32 fence;
 	int err;
@@ -736,22 +735,18 @@ resend:
 	 * rare. Reserving the maximum size in the G2H credits as we don't know
 	 * how big the response is going to be.
 	 */
-retry:
 	spin_lock_irqsave(&ctb->lock, flags);
-	if (unlikely(!h2g_has_room(ct, len + GUC_CTB_HDR_LEN) ||
-		     !g2h_has_room(ct, GUC_CTB_HXG_MSG_MAX_LEN))) {
+	err = poll_timeout_us(err = 0,
+			      !h2g_has_room(ct, len + GUC_CTB_HDR_LEN) ||
+			      !g2h_has_room(ct, GUC_CTB_HXG_MSG_MAX_LEN),
+			      USEC_PER_MSEC, 600 * USEC_PER_SEC, false);
+
+	if (err) {
 		if (ct->stall_time == KTIME_MAX)
 			ct->stall_time = ktime_get();
 		spin_unlock_irqrestore(&ctb->lock, flags);
 
-		if (unlikely(ct_deadlocked(ct)))
-			return -EPIPE;
-
-		if (msleep_interruptible(sleep_period_ms))
-			return -EINTR;
-		sleep_period_ms = sleep_period_ms << 1;
-
-		goto retry;
+		return unlikely(ct_deadlocked(ct)) ? -EPIPE : err;
 	}
 
 	ct->stall_time = KTIME_MAX;
