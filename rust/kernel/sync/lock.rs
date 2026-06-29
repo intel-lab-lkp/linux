@@ -234,7 +234,10 @@ impl<'a, T: ?Sized, B: Backend> Guard<'a, T, B> {
     /// // `g` originates from `l`.
     /// assert_held(&g, &l);
     /// ```
-    pub fn lock_ref(&self) -> &'a Lock<T, B> {
+    pub fn lock_ref(&self) -> &'a Lock<T, B>
+    where
+        Lock<T, B>: Sync,
+    {
         self.lock
     }
 
