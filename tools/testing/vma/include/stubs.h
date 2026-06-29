@@ -257,13 +257,13 @@ static inline void vm_acct_memory(long pages)
 {
 }
 
-static inline void vma_interval_tree_insert(struct vm_area_struct *vma,
-					    struct address_space *mapping)
+static inline void mapping_interval_tree_insert(struct vm_area_struct *vma,
+						struct address_space *mapping)
 {
 }
 
-static inline void vma_interval_tree_remove(struct vm_area_struct *vma,
-					    struct address_space *mapping)
+static inline void mapping_interval_tree_remove(struct vm_area_struct *vma,
+						struct address_space *mapping)
 {
 }
 
