@@ -486,6 +486,7 @@ struct uvc_streaming {
 		u32 buffersize;
 		bool in_flight;
 		spinlock_t irqlock; /* Protects in_flight. */
+		wait_queue_head_t wq;
 	} meta;
 
 	/* Context data used by the bulk completion handler. */

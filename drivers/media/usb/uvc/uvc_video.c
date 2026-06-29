@@ -1802,6 +1802,7 @@ static void uvc_video_complete(struct urb *urb)
 		scoped_guard(spinlock_irqsave, &stream->meta.irqlock) {
 			stream->meta.in_flight = false;
 		}
+		wake_up(&stream->meta.wq);
 	}
 
 	/* If no async work is needed, resubmit the URB immediately. */
@@ -2357,6 +2358,7 @@ int uvc_video_init(struct uvc_streaming *stream)
 		INIT_WORK(&uvc_urb->work, uvc_video_copy_data_work);
 
 	spin_lock_init(&stream->meta.irqlock);
+	init_waitqueue_head(&stream->meta.wq);
 
 	return 0;
 }

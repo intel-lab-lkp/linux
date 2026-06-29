@@ -214,11 +214,8 @@ static void uvc_stop_streaming_meta(struct vb2_queue *vq)
 	lockdep_assert_irqs_enabled();
 
 	spin_lock_irq(&stream->meta.irqlock);
-	while (stream->meta.in_flight) {
-		spin_unlock_irq(&stream->meta.irqlock);
-		schedule();
-		spin_lock_irq(&stream->meta.irqlock);
-	}
+	wait_event_lock_irq(stream->meta.wq, !stream->meta.in_flight,
+			    stream->meta.irqlock);
 	stream->meta.in_flight = true;
 	spin_unlock_irq(&stream->meta.irqlock);
 
