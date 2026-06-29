@@ -1747,8 +1747,10 @@ int zswap_proactive_writeback(struct mem_cgroup *memcg, u64 bytes_to_writeback)
 		} while (iter && !mem_cgroup_tryget_online(iter));
 
 		shrunk = zswap_shrink_one_memcg(iter, &s);
-		if (shrunk > 0)
+		if (shrunk > 0) {
 			bytes_written += shrunk;
+			mod_memcg_state(iter, MEMCG_ZSWPWB_PROACTIVE_B, shrunk);
+		}
 
 		/* drop the extra reference taken by mem_cgroup_tryget_online() */
 		mem_cgroup_put(iter);
