@@ -2512,6 +2512,8 @@ static irqreturn_t fman_err_irq(int irq, void *handle)
 	struct fman_fpm_regs __iomem *fpm_rg;
 	irqreturn_t single_ret, ret = IRQ_NONE;
 
+	if (!READ_ONCE(fman->irq_ready))
+		return IRQ_NONE;
 	if (!is_init_done(fman->cfg))
 		return IRQ_NONE;
 
@@ -2610,6 +2612,8 @@ static irqreturn_t fman_irq(int irq, void *handle)
 	struct fman_fpm_regs __iomem *fpm_rg;
 	irqreturn_t single_ret, ret = IRQ_NONE;
 
+	if (!READ_ONCE(fman->irq_ready))
+		return IRQ_NONE;
 	if (!is_init_done(fman->cfg))
 		return IRQ_NONE;
 
@@ -2847,6 +2851,7 @@ static int fman_probe(struct platform_device *of_dev)
 		dev_err(dev, "%s: FMan init failed\n", __func__);
 		return -EINVAL;
 	}
+	WRITE_ONCE(fman->irq_ready, true);
 
 	if (fman->dts_params.err_irq == 0) {
 		fman_set_exception(fman, FMAN_EX_DMA_BUS_ERROR, false);

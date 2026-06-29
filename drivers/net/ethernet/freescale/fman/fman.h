@@ -314,6 +314,7 @@ struct fman {
 	struct fman_state_struct *state;
 
 	struct fman_cfg *cfg;
+	bool irq_ready;                  /* true after fman_init() completes */
 	struct muram_info *muram;
 	struct fman_keygen *keygen;
 	/* cam section in muram */
