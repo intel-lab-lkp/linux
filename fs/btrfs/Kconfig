@@ -14,7 +14,9 @@ config BTRFS_FS
 	select ZSTD_DECOMPRESS
 	select FS_IOMAP
 	select RAID6_PQ
-	select XOR_BLOCKS
+	select ASYNC_RAID6_RECOV
+	select ASYNC_MEMCPY
+	select ASYNC_XOR
 	select XXHASH
 	depends on PAGE_SIZE_LESS_THAN_256KB
 

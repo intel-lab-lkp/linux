@@ -209,9 +209,6 @@ struct btrfs_raid_bio {
 	/* Each set bit means the corresponding sector in stripe_sectors[] is uptodate. */
 	unsigned long *stripe_uptodate_bitmap;
 
-	/* Allocated with real_stripes-many pointers for finish_*() calls */
-	void **finish_pointers;
-
 	/*
 	 * The bitmap recording where IO errors happened.
 	 * Each bit is corresponding to one sector in either bio_sectors[] or
