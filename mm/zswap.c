@@ -1351,12 +1351,70 @@ static long shrink_memcg(struct mem_cgroup *memcg, unsigned long nr_to_scan)
 	return walk_arg.bytes_written;
 }
 
+/* Track progress of a memcg-tree writeback walk. */
+struct zswap_shrink_state {
+	int scans;
+	int failures;
+};
+
+/*
+ * Take one step of a memcg-tree writeback walk driven by the caller's
+ * iterator, and fold the result into @s, the retry bookkeeping shared
+ * across steps. @memcg is the iterator's current memcg, or NULL once
+ * it has wrapped around after a full pass over the tree.
+ *
+ * The function returns -EBUSY to signal the caller to abort the walk after
+ * encountering either of the following MAX_RECLAIM_RETRIES times:
+ * - No writeback-candidate memcgs were found in a memcg tree walk.
+ * - Shrinking a writeback-candidate memcg failed.
+ *
+ * Return: The number of compressed bytes written back (>= 0), or -EBUSY
+ * when the caller should abort the walk.
+ */
+static long zswap_shrink_one_memcg(struct mem_cgroup *memcg,
+				   struct zswap_shrink_state *s)
+{
+	long shrunk;
+
+	/*
+	 * Reaching a NULL memcg means a full hierarchy pass completed.
+	 * Exclude the memcg-disabled case, where it is always NULL, and
+	 * fall through to shrink the root LRU directly.
+	 */
+	if (!memcg && !mem_cgroup_disabled()) {
+		/*
+		 * Continue shrinking without incrementing failures if we found
+		 * candidate memcgs in the last tree walk.
+		 */
+		if (!s->scans && ++s->failures == MAX_RECLAIM_RETRIES)
+			return -EBUSY;
+		s->scans = 0;
+		return 0;
+	}
+
+	shrunk = shrink_memcg(memcg, NR_ZSWAP_WB_BATCH);
+
+	/*
+	 * There are no writeback-candidate pages in the memcg. With memcg
+	 * enabled this is not an issue as long as we can find another memcg
+	 * with pages in zswap, so skip without counting it as a candidate.
+	 * With memcg disabled the root LRU is the only target, so we should
+	 * abort if it has no writeback-candidate pages.
+	 */
+	if (shrunk == -ENOENT)
+		return mem_cgroup_disabled() ? -EBUSY : 0;
+	s->scans++;
+
+	if (shrunk <= 0 && ++s->failures == MAX_RECLAIM_RETRIES)
+		return -EBUSY;
+
+	return shrunk;
+}
+
 static void shrink_worker(struct work_struct *w)
 {
-	struct mem_cgroup *memcg;
-	int failures = 0, attempts = 0;
+	struct zswap_shrink_state s = {};
 	unsigned long thr;
-	long ret;
 
 	/* Reclaim down to the accept threshold */
 	thr = zswap_accept_thr_pages();
@@ -1366,11 +1424,6 @@ static void shrink_worker(struct work_struct *w)
 	 * online memcgs, but memcgs that have no pages in zswap and
 	 * writeback-disabled memcgs (memory.zswap.writeback=0) are not
 	 * candidates for shrinking.
-	 *
-	 * Shrinking will be aborted if we encounter the following
-	 * MAX_RECLAIM_RETRIES times:
-	 * - No writeback-candidate memcgs found in a memcg tree walk.
-	 * - Shrinking a writeback-candidate memcg failed.
 	 *
 	 * We save iteration cursor memcg into zswap_next_shrink,
 	 * which can be modified by the offline memcg cleaner
@@ -1386,7 +1439,11 @@ static void shrink_worker(struct work_struct *w)
 	 * offline memcg left in zswap_next_shrink will hold the reference
 	 * until the next run of shrink_worker().
 	 */
-	do {
+	while (zswap_total_pages() > thr) {
+		struct mem_cgroup *memcg;
+		long ret;
+
+		cond_resched();
 		/*
 		 * Start shrinking from the next memcg after zswap_next_shrink.
 		 * When the offline cleaner has already advanced the cursor,
@@ -1405,49 +1462,12 @@ static void shrink_worker(struct work_struct *w)
 		} while (memcg && !mem_cgroup_tryget_online(memcg));
 		spin_unlock(&zswap_shrink_lock);
 
-		/*
-		 * Reaching a NULL memcg means a full hierarchy pass completed.
-		 * Exclude the memcg-disabled case, where it is always NULL, and
-		 * fall through to shrink the root LRU directly.
-		 */
-		if (!memcg && !mem_cgroup_disabled()) {
-			/*
-			 * Continue shrinking without incrementing failures if
-			 * we found candidate memcgs in the last tree walk.
-			 */
-			if (!attempts && ++failures == MAX_RECLAIM_RETRIES)
-				break;
-
-			attempts = 0;
-			goto resched;
-		}
-
-		ret = shrink_memcg(memcg, NR_ZSWAP_WB_BATCH);
+		ret = zswap_shrink_one_memcg(memcg, &s);
 		/* drop the extra reference */
 		mem_cgroup_put(memcg);
-
-		/*
-		 * There are no writeback-candidate pages in the memcg.
-		 * This is not an issue as long as we can find another memcg
-		 * with pages in zswap. Skip this without incrementing attempts
-		 * and failures.
-		 */
-		if (ret == -ENOENT) {
-			/*
-			 * With memcg disabled the root LRU is the only target, so
-			 * we should abort if it has no writeback-candidate pages.
-			 */
-			if (mem_cgroup_disabled())
-				break;
-			continue;
-		}
-		++attempts;
-
-		if (ret <= 0 && ++failures == MAX_RECLAIM_RETRIES)
+		if (ret == -EBUSY)
 			break;
-resched:
-		cond_resched();
-	} while (zswap_total_pages() > thr);
+	}
 }
 
 /*********************************
