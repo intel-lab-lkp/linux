@@ -38,6 +38,7 @@ use crate::{
         sec2::Sec2 as Sec2Falcon,
         Falcon, //
     },
+    fsp::Fsp,
     gpu::{
         Architecture,
         Chipset, //
@@ -62,6 +63,7 @@ pub(crate) struct GspBootContext<'a> {
     pub(crate) chipset: Chipset,
     pub(crate) gsp_falcon: &'a Falcon<GspFalcon>,
     pub(crate) sec2_falcon: &'a Falcon<Sec2Falcon>,
+    pub(crate) fsp: Option<&'a mut Fsp>,
 }
 
 impl<'a> GspBootContext<'a> {
