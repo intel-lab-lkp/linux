@@ -387,7 +387,6 @@ static int call_fib_rule_notifiers(struct net *net,
 		.rule = rule,
 	};
 
-	ASSERT_RTNL_NET(net);
 	lockdep_assert_held(&ops->lock);
 
 	/* Paired with READ_ONCE() in fib_rules_seq() */
@@ -955,7 +954,7 @@ int fib_newrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 		list_for_each_entry(r, &ops->rules_list, list) {
 			if (r->action == FR_ACT_GOTO &&
 			    r->target == rule->pref &&
-			    rtnl_dereference(r->ctarget) == NULL) {
+			    !rcu_access_pointer(r->ctarget)) {
 				rcu_assign_pointer(r->ctarget, rule);
 				if (--ops->unresolved_rules == 0)
 					break;
@@ -1064,7 +1063,7 @@ int fib_delrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	if (rule->action == FR_ACT_GOTO) {
 		ops->nr_goto_rules--;
-		if (rtnl_dereference(rule->ctarget) == NULL)
+		if (!rcu_access_pointer(rule->ctarget))
 			ops->unresolved_rules--;
 	}
 
@@ -1082,7 +1081,7 @@ int fib_delrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 		if (&n->list == &ops->rules_list || n->pref != rule->pref)
 			n = NULL;
 		list_for_each_entry(r, &ops->rules_list, list) {
-			if (rtnl_dereference(r->ctarget) != rule)
+			if (rcu_access_pointer(r->ctarget) != rule)
 				continue;
 			rcu_assign_pointer(r->ctarget, n);
 			if (!n)
@@ -1399,8 +1398,6 @@ static int fib_rules_event(struct notifier_block *this, unsigned long event,
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 	struct net *net = dev_net(dev);
 	struct fib_rules_ops *ops;
-
-	ASSERT_RTNL();
 
 	switch (event) {
 	case NETDEV_REGISTER:
