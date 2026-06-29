@@ -3120,19 +3120,22 @@ static void dpaa2_switch_rx(struct dpaa2_switch_fq *fq,
 	dma_addr_t addr = dpaa2_fd_get_addr(fd);
 	struct ethsw_core *ethsw = fq->ethsw;
 	struct ethsw_port_priv *port_priv;
+	struct dpaa2_switch_lag *lag;
 	struct net_device *netdev;
 	struct vlan_ethhdr *hdr;
 	struct sk_buff *skb;
 	u16 vlan_tci, vid;
 	int if_id, err;
 	void *vaddr;
+	u64 flc;
 
 	vaddr = dpaa2_iova_to_virt(ethsw->iommu_domain, addr);
 	dma_unmap_page(ethsw->dev, addr, DPAA2_SWITCH_RX_BUF_SIZE,
 		       DMA_FROM_DEVICE);
 
 	/* get switch ingress interface ID */
-	if_id = upper_32_bits(dpaa2_fd_get_flc(fd)) & 0x0000FFFF;
+	flc = dpaa2_fd_get_flc(fd);
+	if_id = DPAA2_ETHSW_FLC_IF_ID(flc);
 	if (if_id >= ethsw->sw_attr.num_ifs) {
 		dev_err(ethsw->dev, "Frame received from unknown interface!\n");
 		goto err_free_fd;
@@ -3171,11 +3174,19 @@ static void dpaa2_switch_rx(struct dpaa2_switch_fq *fq,
 		}
 	}
 
-	skb->dev = netdev;
+	rcu_read_lock();
+
+	lag = rcu_dereference(port_priv->lag);
+	if (DPAA2_ETHSW_FLC_IMPRECISE_IF_ID(flc) && lag)
+		skb->dev = lag->bond_dev;
+	else
+		skb->dev = netdev;
 	skb->protocol = eth_type_trans(skb, skb->dev);
 
 	/* Setup the offload_fwd_mark only if the port is under a bridge */
 	skb->offload_fwd_mark = !!(port_priv->fdb->bridge_dev);
+
+	rcu_read_unlock();
 
 	netif_receive_skb(skb);
 
