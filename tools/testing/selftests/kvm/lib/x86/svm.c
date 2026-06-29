@@ -13,7 +13,6 @@
 
 #define SEV_DEV_PATH "/dev/sev"
 
-u64 guest_regs[NR_GUEST_REGS];
 u64 rflags;
 
 /* Allocate memory regions for nested SVM tests.
@@ -132,9 +131,6 @@ void generic_svm_setup(struct svm_test_data *svm, void *guest_rip)
 		ctrl->nested_cr3 = svm->ncr3_gpa;
 	}
 }
-
-#define GUEST_SWITCH_GPR_ASM(reg, idx) \
-	"xchg %%" #reg ", guest_regs + 8 *" XSTR(idx) "\n\t"
 
 /*
  * save/restore 64-bit general registers except rax, rip, rsp

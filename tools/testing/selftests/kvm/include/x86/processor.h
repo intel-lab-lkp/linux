@@ -414,6 +414,11 @@ static inline unsigned int x86_model(unsigned int eax)
 #define GUEST_REGS_R15	15
 #define NR_GUEST_REGS	(GUEST_REGS_R15 + 1)
 
+extern u64 guest_regs[NR_GUEST_REGS];
+
+#define GUEST_SWITCH_GPR_ASM(reg, idx) \
+	"xchg %%" #reg ", guest_regs + 8 *" XSTR(idx) "\n\t"
+
 struct desc64 {
 	u16 limit0;
 	u16 base0;
