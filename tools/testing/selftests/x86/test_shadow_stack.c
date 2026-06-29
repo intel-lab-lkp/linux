@@ -706,6 +706,9 @@ int test_32bit(void)
 	/* Create sigaction in 32 bit address range */
 	sa32 = mmap(0, 4096, PROT_READ | PROT_WRITE,
 		    MAP_32BIT | MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+	if (sa32 == MAP_FAILED)
+		return 1;
+
 	sa32->sa_flags = SA_SIGINFO;
 
 	sa.sa_sigaction = segv_gp_handler;
