@@ -30,7 +30,7 @@ region, etc.  Unique region_ids enable multiple userspace programs to
 request and process statistics for the same DM device without stepping
 on each other's data.
 
-The creation of DM statistics will allocate memory via kmalloc or
+The creation of DM statistics will allocate memory via kmalloc_objs() or
 fallback to using vmalloc space.  At most, 1/4 of the overall system
 memory may be allocated by DM statistics.  The admin can see how much
 memory is used by reading:
