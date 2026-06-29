@@ -58,6 +58,7 @@ struct nbd_sock {
 	struct socket *sock;
 	struct mutex tx_lock;
 	struct request *pending;
+	struct socket *shutdown_sock;
 	int sent;
 	bool dead;
 	int fallback_index;
@@ -315,7 +316,14 @@ static void nbd_mark_nsock_dead(struct nbd_device *nbd, struct nbd_sock *nsock,
 		}
 	}
 	if (!nsock->dead) {
-		kernel_sock_shutdown(nsock->sock, SHUT_RDWR);
+		/*
+		 * Defer shutdown to after tx_lock is released to avoid
+		 * circular lock dependency (tx_lock -> sk_lock).
+		 * Hold an extra file reference so the socket remains
+		 * valid until the deferred shutdown completes.
+		 */
+		nsock->shutdown_sock = nsock->sock;
+		get_file(nsock->sock->file);
 		if (atomic_dec_return(&nbd->config->live_connections) == 0) {
 			if (test_and_clear_bit(NBD_RT_DISCONNECT_REQUESTED,
 					       &nbd->config->runtime_flags)) {
@@ -329,6 +337,20 @@ static void nbd_mark_nsock_dead(struct nbd_device *nbd, struct nbd_sock *nsock,
 	nsock->dead = true;
 	nsock->pending = NULL;
 	nsock->sent = 0;
+}
+
+/*
+ * Perform deferred socket shutdown outside of tx_lock.
+ * Uses xchg to guarantee only one caller performs the shutdown.
+ */
+static void nbd_nsock_deferred_shutdown(struct nbd_sock *nsock)
+{
+	struct socket *sock = xchg(&nsock->shutdown_sock, NULL);
+
+	if (sock) {
+		kernel_sock_shutdown(sock, SHUT_RDWR);
+		sockfd_put(sock);
+	}
 }
 
 static int nbd_set_size(struct nbd_device *nbd, loff_t bytesize, loff_t blksize)
@@ -410,6 +432,7 @@ static void sock_shutdown(struct nbd_device *nbd)
 		mutex_lock(&nsock->tx_lock);
 		nbd_mark_nsock_dead(nbd, nsock, 0);
 		mutex_unlock(&nsock->tx_lock);
+		nbd_nsock_deferred_shutdown(nsock);
 	}
 	dev_warn(disk_to_dev(nbd->disk), "shutting down sockets\n");
 }
@@ -502,6 +525,7 @@ static enum blk_eh_timer_return nbd_xmit_timeout(struct request *req)
 				if (cmd->cookie == nsock->cookie)
 					nbd_mark_nsock_dead(nbd, nsock, 1);
 				mutex_unlock(&nsock->tx_lock);
+				nbd_nsock_deferred_shutdown(nsock);
 			}
 			nbd_requeue_cmd(cmd);
 			mutex_unlock(&cmd->lock);
@@ -836,6 +860,7 @@ static void nbd_pending_cmd_work(struct work_struct *work)
 		wait_ms *= 2;
 	}
 	mutex_unlock(&nsock->tx_lock);
+	nbd_nsock_deferred_shutdown(nsock);
 	clear_bit(NBD_CMD_PARTIAL_SEND, &cmd->flags);
 out:
 	mutex_unlock(&cmd->lock);
@@ -1020,6 +1045,7 @@ static void recv_work(struct work_struct *work)
 	mutex_lock(&nsock->tx_lock);
 	nbd_mark_nsock_dead(nbd, nsock, 1);
 	mutex_unlock(&nsock->tx_lock);
+	nbd_nsock_deferred_shutdown(nsock);
 
 	atomic_dec(&config->recv_threads);
 	wake_up(&config->recv_wq);
@@ -1177,6 +1203,7 @@ again:
 	ret = nbd_send_cmd(nbd, cmd, index);
 out:
 	mutex_unlock(&nsock->tx_lock);
+	nbd_nsock_deferred_shutdown(nsock);
 	nbd_config_put(nbd);
 	return ret;
 }
@@ -1391,6 +1418,8 @@ static int nbd_reconnect_socket(struct nbd_device *nbd, unsigned long arg)
 		args->nsock = nsock;
 		nsock->cookie++;
 		mutex_unlock(&nsock->tx_lock);
+		/* Complete any pending shutdown of the old socket */
+		nbd_nsock_deferred_shutdown(nsock);
 		sockfd_put(old);
 
 		clear_bit(NBD_RT_DISCONNECTED, &config->runtime_flags);
