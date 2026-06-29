@@ -782,6 +782,9 @@ static int really_probe_debug(struct device *dev, const struct device_driver *dr
 	ktime_t calltime, rettime;
 	int ret;
 
+	/* Don't change this to pr_debug() - see comment below. */
+	printk(KERN_DEBUG "probing %s with driver %s\n", dev_name(dev), drv->name);
+
 	calltime = ktime_get();
 	ret = really_probe(dev, drv);
 	rettime = ktime_get();
