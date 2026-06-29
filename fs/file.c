@@ -1367,6 +1367,25 @@ out_unlock:
 	return err;
 }
 
+static int __receive_fd(struct file *file, int __user *ufd, unsigned int o_flags)
+{
+	int error;
+
+	FD_PREPARE(fdf, o_flags, file);
+	if (fdf.err)
+		return fdf.err;
+	get_file(file);
+
+	if (ufd) {
+		error = put_user(fd_prepare_fd(fdf), ufd);
+		if (error)
+			return error;
+	}
+
+	__receive_sock(fd_prepare_file(fdf));
+	return fd_publish(fdf);
+}
+
 /**
  * receive_fd() - Install received file into file descriptor table
  * @file: struct file that was received from another process
@@ -1384,27 +1403,24 @@ out_unlock:
  */
 int receive_fd(struct file *file, int __user *ufd, unsigned int o_flags)
 {
-	int error;
-
-	error = security_file_receive(file);
+	int error = security_file_receive(file);
 	if (error)
 		return error;
-
-	FD_PREPARE(fdf, o_flags, file);
-	if (fdf.err)
-		return fdf.err;
-	get_file(file);
-
-	if (ufd) {
-		error = put_user(fd_prepare_fd(fdf), ufd);
-		if (error)
-			return error;
-	}
-
-	__receive_sock(fd_prepare_file(fdf));
-	return fd_publish(fdf);
+	return __receive_fd(file, ufd, o_flags);
 }
 EXPORT_SYMBOL_GPL(receive_fd);
+
+int receive_fd_filtered(struct file *file, int __user *ufd, unsigned int o_flags,
+		bool *filtered)
+{
+	int error = security_file_receive(file);
+	if (error) {
+		*filtered = true;
+		return error;
+	}
+	*filtered = false;
+	return __receive_fd(file, ufd, o_flags);
+}
 
 int receive_fd_replace(int new_fd, struct file *file, unsigned int o_flags)
 {
