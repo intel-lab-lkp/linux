@@ -51,7 +51,6 @@ bool fib_rule_matchall(const struct fib_rule *rule)
 		return false;
 	return true;
 }
-EXPORT_SYMBOL_GPL(fib_rule_matchall);
 
 int fib_default_rule_add(struct fib_rules_ops *ops,
 			 u32 pref, u32 table)
@@ -78,7 +77,6 @@ int fib_default_rule_add(struct fib_rules_ops *ops,
 	list_add_tail(&r->list, &ops->rules_list);
 	return 0;
 }
-EXPORT_SYMBOL(fib_default_rule_add);
 
 static u32 fib_default_rule_pref(struct fib_rules_ops *ops)
 {
@@ -183,7 +181,6 @@ fib_rules_register(const struct fib_rules_ops *tmpl, struct net *net)
 
 	return ops;
 }
-EXPORT_SYMBOL_GPL(fib_rules_register);
 
 static void fib_rules_cleanup_ops(struct fib_rules_ops *ops)
 {
@@ -208,7 +205,6 @@ void fib_rules_unregister(struct fib_rules_ops *ops)
 	fib_rules_cleanup_ops(ops);
 	kfree_rcu(ops, rcu);
 }
-EXPORT_SYMBOL_GPL(fib_rules_unregister);
 
 static int uid_range_set(struct fib_kuid_range *range)
 {
@@ -364,7 +360,6 @@ out:
 
 	return err;
 }
-EXPORT_SYMBOL_GPL(fib_rules_lookup);
 
 static int call_fib_rule_notifier(struct notifier_block *nb,
 				  enum fib_event_type event_type,
@@ -425,7 +420,6 @@ int fib_rules_dump(struct net *net, struct notifier_block *nb, int family,
 
 	return err;
 }
-EXPORT_SYMBOL_GPL(fib_rules_dump);
 
 unsigned int fib_rules_seq_read(const struct net *net, int family)
 {
@@ -441,7 +435,6 @@ unsigned int fib_rules_seq_read(const struct net *net, int family)
 
 	return fib_rules_seq;
 }
-EXPORT_SYMBOL_GPL(fib_rules_seq_read);
 
 static struct fib_rule *rule_find(struct fib_rules_ops *ops,
 				  struct fib_rule_hdr *frh,
