@@ -910,8 +910,10 @@ static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 		return -ENODEV;
 	}
 
-	vmd_copy_host_bridge_flags(pci_find_host_bridge(vmd->dev->bus),
-				   to_pci_host_bridge(vmd->bus->bridge));
+	/* Don't copy _OSC control flags in VM, it disables features.*/
+	if (!offset[0] || !offset[1])
+		vmd_copy_host_bridge_flags(pci_find_host_bridge(vmd->dev->bus),
+					 to_pci_host_bridge(vmd->bus->bridge));
 
 	vmd_attach_resources(vmd);
 	if (vmd->irq_domain)
