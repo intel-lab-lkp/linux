@@ -5,6 +5,8 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <time.h>
+#include <pthread.h>
+#include <signal.h>
 #include <unistd.h>
 
 #include "test_util.h"
@@ -94,15 +96,41 @@ static void guest_access_memory(void *arg)
 		/* Clear the present bit again so it faults next time */
 		*guest_get_pte(vaddr) &= ~pte_present_mask;
 		invlpg(vaddr);
-
-		GUEST_SYNC(guest_faults);
 	}
+}
+
+static void *sigusr_thread_fn(void *arg)
+{
+	pthread_t vcpu_thread = (pthread_t)arg;
+
+	for (;;) {
+		pthread_testcancel();
+		pthread_kill(vcpu_thread, SIGUSR1);
+		usleep(msecs_to_usecs(1));
+	}
+	return NULL;
+}
+
+static void dummy_signal_handler(int signo) {}
+static struct sigaction sa;
+
+static void vcpu_sigusr_listen(void)
+{
+	sa.sa_handler = dummy_signal_handler;
+	sigaction(SIGUSR1, &sa, NULL);
+}
+
+static void vcpu_sigusr_ignore(void)
+{
+	sa.sa_handler = SIG_IGN;
+	sigaction(SIGUSR1, &sa, NULL);
 }
 
 int main(int argc, char *argv[])
 {
 	struct kvm_x86_state *state;
 	int r, i, level, count = 0;
+	pthread_t sigusr_thread;
 	gpa_t gpa, pgtable_gpa;
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
@@ -151,18 +179,30 @@ int main(int argc, char *argv[])
 		pgtable_gpa = PTE_GET_PA(pte);
 	}
 
-	while (count++ < NR_ITERATIONS) {
-		r = __vcpu_run(vcpu);
-		TEST_ASSERT(!r, "vcpu_run failed");
-		TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
+	/* Initialize the thread sending SIGUSR and install the handler */
+	vcpu_sigusr_ignore();
+	r = pthread_create(&sigusr_thread, NULL, sigusr_thread_fn,
+			   (void *)pthread_self());
+	TEST_ASSERT(!r, "pthread_create() failed: %d", r);
 
-		get_ucall(vcpu, &uc);
-		if (uc.cmd == UCALL_ABORT) {
+	while (count++ < NR_ITERATIONS) {
+		/*
+		 * Only handle SIGUSR while the vCPU is running, otherwise
+		 * ignore it to avoid interrupting other ioctls/syscalls.
+		 */
+		vcpu_sigusr_listen();
+		r = __vcpu_run(vcpu);
+		if (r == -1)
+			TEST_ASSERT_EQ(errno, EINTR);
+		vcpu_sigusr_ignore();
+
+		/* The guest only exits due to a signal or failed assertion */
+		if (!r) {
+			TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
+			TEST_ASSERT_EQ(get_ucall(vcpu, &uc), UCALL_ABORT);
 			REPORT_GUEST_ASSERT(uc);
 			break;
 		}
-		TEST_ASSERT_EQ(uc.cmd, UCALL_SYNC);
-		TEST_ASSERT_EQ(uc.args[1], count);
 
 		state = vcpu_save_state(vcpu);
 
@@ -175,8 +215,11 @@ int main(int argc, char *argv[])
 	}
 
 	sync_global_from_guest(vm, guest_faults);
+	TEST_ASSERT(guest_faults > 0, "No guest page faults triggered");
 	pr_info("Guest page faults: %lu\n", guest_faults);
 
+	pthread_cancel(sigusr_thread);
+	pthread_join(sigusr_thread, NULL);
 	kvm_vm_free(vm);
 	return 0;
 }
