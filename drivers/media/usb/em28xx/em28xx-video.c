@@ -2332,9 +2332,8 @@ static int em28xx_v4l2_open(struct file *filp)
 		return -ENODEV;
 	}
 
-	em28xx_videodbg("open dev=%s type=%s users=%d\n",
-			video_device_node_name(vdev), v4l2_type_names[fh_type],
-			v4l2->users);
+	em28xx_videodbg("open dev=%s type=%s\n",
+			video_device_node_name(vdev), v4l2_type_names[fh_type]);
 
 	ret = v4l2_fh_open(filp);
 	if (ret) {
@@ -2345,7 +2344,7 @@ static int em28xx_v4l2_open(struct file *filp)
 		return ret;
 	}
 
-	if (v4l2->users == 0) {
+	if (v4l2_fh_is_singular_file(filp)) {
 		em28xx_set_mode(dev, EM28XX_ANALOG_MODE);
 
 		if (vdev->vfl_type != VFL_TYPE_RADIO)
@@ -2362,8 +2361,6 @@ static int em28xx_v4l2_open(struct file *filp)
 		em28xx_videodbg("video_open: setting radio device\n");
 		v4l2_device_call_all(&v4l2->v4l2_dev, 0, tuner, s_radio);
 	}
-
-	v4l2->users++;
 
 	mutex_unlock(&dev->lock);
 
@@ -2467,13 +2464,13 @@ static int em28xx_v4l2_close(struct file *filp)
 	struct em28xx_v4l2    *v4l2 = dev->v4l2;
 	struct usb_device *udev = interface_to_usbdev(dev->intf);
 	int              err;
+	bool last_user;
 
-	em28xx_videodbg("users=%d\n", v4l2->users);
-
-	vb2_fop_release(filp);
 	mutex_lock(&dev->lock);
+	last_user = v4l2_fh_is_singular_file(filp);
+	_vb2_fop_release(filp, NULL);
 
-	if (v4l2->users == 1) {
+	if (last_user) {
 		/* No sense to try to write to the device */
 		if (dev->disconnected)
 			goto exit;
@@ -2496,7 +2493,6 @@ static int em28xx_v4l2_close(struct file *filp)
 	}
 
 exit:
-	v4l2->users--;
 	mutex_unlock(&dev->lock);
 
 	return 0;
