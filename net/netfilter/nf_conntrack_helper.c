@@ -472,7 +472,6 @@ EXPORT_SYMBOL_GPL(nf_conntrack_helper_unregister);
 
 void nf_ct_helper_init(struct nf_conntrack_helper *helper,
 		       u8 l3num, u16 protonum, const char *name,
-		       u16 default_port, u16 spec_port, u32 id,
 		       const struct nf_conntrack_expect_policy *exp_pol,
 		       u32 expect_class_max,
 		       int (*help)(struct sk_buff *skb, unsigned int protoff,
@@ -493,10 +492,7 @@ void nf_ct_helper_init(struct nf_conntrack_helper *helper,
 	snprintf(helper->nat_mod_name, sizeof(helper->nat_mod_name),
 		 NF_NAT_HELPER_PREFIX "%s", name);
 
-	if (spec_port == default_port)
-		snprintf(helper->name, sizeof(helper->name), "%s", name);
-	else
-		snprintf(helper->name, sizeof(helper->name), "%s-%u", name, id);
+	snprintf(helper->name, sizeof(helper->name), "%s", name);
 
 	if (WARN_ON_ONCE(expect_class_max >= NF_CT_MAX_EXPECT_CLASSES))
 		return;

@@ -94,7 +94,6 @@ void nf_conntrack_helper_put(struct nf_conntrack_helper *helper);
 
 void nf_ct_helper_init(struct nf_conntrack_helper *helper,
 		       u8 l3num, u16 protonum, const char *name,
-		       u16 default_port, u16 spec_port, u32 id,
 		       const struct nf_conntrack_expect_policy *exp_pol,
 		       u32 expect_class_max,
 		       int (*help)(struct sk_buff *skb, unsigned int protoff,

@@ -199,10 +199,10 @@ static int __init nf_conntrack_amanda_init(void)
 	}
 
 	nf_ct_helper_init(&amanda_helper[0], AF_INET, IPPROTO_UDP,
-			  HELPER_NAME, 10080, 10080, 10080,
+			  HELPER_NAME,
 			  &amanda_exp_policy, 0, amanda_help, NULL, THIS_MODULE);
 	nf_ct_helper_init(&amanda_helper[1], AF_INET6, IPPROTO_UDP,
-			  HELPER_NAME, 10080, 10080, 10080,
+			  HELPER_NAME,
 			  &amanda_exp_policy, 0, amanda_help, NULL, THIS_MODULE);
 
 	ret = nf_conntrack_helpers_register(amanda_helper,
