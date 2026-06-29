@@ -1713,6 +1713,56 @@ int zswap_load(struct folio *folio)
 	return 0;
 }
 
+int zswap_proactive_writeback(struct mem_cgroup *memcg, u64 bytes_to_writeback)
+{
+	struct zswap_shrink_state s = {};
+	struct mem_cgroup *iter = NULL;
+	u64 bytes_written = 0;
+	int ret = 0;
+
+	if (!memcg)
+		return -EINVAL;
+	if (!mem_cgroup_zswap_writeback_enabled(memcg))
+		return -EINVAL;
+	if (!bytes_to_writeback)
+		return 0;
+
+	while (bytes_written < bytes_to_writeback) {
+		long shrunk;
+
+		cond_resched();
+
+		if (signal_pending(current)) {
+			ret = -EINTR;
+			break;
+		}
+
+		/*
+		 * Use a local iterator to walk the memcg and its online descendants
+		 * in a round-robin manner. Upon exiting the loop, mem_cgroup_iter_break()
+		 * must be called to drop the iterator reference.
+		 */
+		do {
+			iter = mem_cgroup_iter(memcg, iter, NULL);
+		} while (iter && !mem_cgroup_tryget_online(iter));
+
+		shrunk = zswap_shrink_one_memcg(iter, &s);
+		if (shrunk > 0)
+			bytes_written += shrunk;
+
+		/* drop the extra reference taken by mem_cgroup_tryget_online() */
+		mem_cgroup_put(iter);
+
+		if (shrunk == -EBUSY) {
+			ret = -EAGAIN;
+			break;
+		}
+	}
+
+	mem_cgroup_iter_break(memcg, iter);
+	return ret;
+}
+
 void zswap_invalidate(swp_entry_t swp)
 {
 	pgoff_t offset = swp_offset(swp);
