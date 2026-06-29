@@ -6,5 +6,6 @@
 #include "hws.h"
 
 irqreturn_t hws_irq_handler(int irq, void *info);
+irqreturn_t hws_irq_thread(int irq, void *info);
 
 #endif /* HWS_INTERRUPT_H */

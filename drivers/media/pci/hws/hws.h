@@ -53,6 +53,7 @@ struct hwsvideo_buffer {
 	int slot;
 };
 
+#define HWS_VIDEO_DIRECT_SLOT (-1)
 #define HWS_VIDEO_BOUNCE_SLOTS 2
 
 struct hws_video {
@@ -174,6 +175,8 @@ struct hws_pcie_dev {
 
 	bool suspended;
 	int irq;
+	spinlock_t irq_thread_lock; /* protects threaded video IRQ counters */
+	unsigned int irq_pending_vdone[MAX_VID_CHANNELS];
 
 	/* Error flags */
 	int pci_lost;
