@@ -56,16 +56,21 @@ pub(crate) const GSP_PAGE_SHIFT: usize = 12;
 pub(crate) const GSP_PAGE_SIZE: usize = 1 << GSP_PAGE_SHIFT;
 
 /// Common context for the GSP boot process.
-pub(crate) struct GspBootContext<'a> {
-    pub(crate) pdev: &'a pci::Device<device::Bound>,
-    pub(crate) bar: Bar0<'a>,
+///
+/// It carries two distinct lifetimes:
+///
+/// - `'gpu` is the lifetime of the bound GPU device, as captured by the GPU subdevices.
+/// - `'ctx` is a shorter lifetime during which this context borrows those subdevices.
+pub(crate) struct GspBootContext<'ctx, 'gpu> {
+    pub(crate) pdev: &'gpu pci::Device<device::Bound>,
+    pub(crate) bar: Bar0<'gpu>,
     pub(crate) chipset: Chipset,
-    pub(crate) gsp_falcon: &'a Falcon<'a, GspFalcon>,
-    pub(crate) sec2_falcon: &'a Falcon<'a, Sec2Falcon>,
+    pub(crate) gsp_falcon: &'ctx Falcon<'gpu, GspFalcon>,
+    pub(crate) sec2_falcon: &'ctx Falcon<'gpu, Sec2Falcon>,
 }
 
-impl<'a> GspBootContext<'a> {
-    pub(crate) fn dev(&self) -> &'a device::Device<device::Bound> {
+impl<'ctx, 'gpu> GspBootContext<'ctx, 'gpu> {
+    pub(crate) fn dev(&self) -> &'gpu device::Device<device::Bound> {
         self.pdev.as_ref()
     }
 }
