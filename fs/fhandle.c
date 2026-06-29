@@ -180,6 +180,9 @@ static int get_path_anchor(int fd, struct path *root)
 
 	if (fd == AT_FDCWD) {
 		get_fs_pwd(current->fs, root);
+		/* A task may have no cwd. */
+		if (!root->mnt)
+			return -ENOENT;
 		return 0;
 	}
 

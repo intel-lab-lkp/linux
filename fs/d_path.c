@@ -422,7 +422,11 @@ SYSCALL_DEFINE2(getcwd, char __user *, buf, unsigned long, size)
 	rcu_read_lock();
 	get_fs_root_and_pwd_rcu(current->fs, &root, &pwd);
 
-	if (unlikely(d_unlinked(pwd.dentry))) {
+	/* A task may have no cwd. */
+	if (unlikely(!pwd.mnt)) {
+		rcu_read_unlock();
+		error = -ENOENT;
+	} else if (unlikely(d_unlinked(pwd.dentry))) {
 		rcu_read_unlock();
 		error = -ENOENT;
 	} else {

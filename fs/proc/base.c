@@ -213,7 +213,9 @@ static int get_task_root(struct task_struct *task, struct path *root)
 	task_lock(task);
 	if (task->fs) {
 		get_fs_root(task->fs, root);
-		result = 0;
+		/* A task may have no root. */
+		if (root->mnt)
+			result = 0;
 	}
 	task_unlock(task);
 	return result;
@@ -227,7 +229,9 @@ static int proc_cwd_link(struct dentry *dentry, struct path *path,
 	task_lock(task);
 	if (task->fs) {
 		get_fs_pwd(task->fs, path);
-		result = 0;
+		/* A task may have no cwd. */
+		if (path->mnt)
+			result = 0;
 	}
 	task_unlock(task);
 	return result;

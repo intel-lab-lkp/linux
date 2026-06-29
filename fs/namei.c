@@ -1120,11 +1120,20 @@ static int set_root(struct nameidata *nd)
 		do {
 			seq = read_seqbegin(&fs->seq);
 			nd->root = fs->root;
-			nd->root_seq = __read_seqcount_begin(&nd->root.dentry->d_seq);
+			/*
+			 * A task may have no root. Leave nd->root as the NULL
+			 * path and skip the d_seq read: absolute lookups turn
+			 * the absence into -ENOENT in nd_jump_root(), while ".."
+			 * treats a NULL root as "no boundary" and climbs to its
+			 * mount root.
+			 */
+			if (likely(nd->root.mnt))
+				nd->root_seq = __read_seqcount_begin(&nd->root.dentry->d_seq);
 		} while (read_seqretry(&fs->seq, seq));
 	} else {
 		get_fs_root(fs, &nd->root);
-		nd->state |= ND_ROOT_GRABBED;
+		if (likely(nd->root.mnt))
+			nd->state |= ND_ROOT_GRABBED;
 	}
 	return 0;
 }
@@ -1143,6 +1152,9 @@ static int nd_jump_root(struct nameidata *nd)
 		if (unlikely(error))
 			return error;
 	}
+	/* Absolute paths need a root to jump to; a task may have none. */
+	if (unlikely(!nd->root.mnt))
+		return -ENOENT;
 	if (nd->flags & LOOKUP_RCU) {
 		struct dentry *d;
 		nd->path = nd->root;
@@ -2732,11 +2744,17 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			do {
 				seq = read_seqbegin(&fs->seq);
 				nd->path = fs->pwd;
+				/* A task may have no cwd. */
+				if (unlikely(!nd->path.mnt))
+					return ERR_PTR(-ENOENT);
 				nd->inode = nd->path.dentry->d_inode;
 				nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
 			} while (read_seqretry(&fs->seq, seq));
 		} else {
 			get_fs_pwd(current->fs, &nd->path);
+			/* A task may have no cwd. */
+			if (unlikely(!nd->path.mnt))
+				return ERR_PTR(-ENOENT);
 			nd->inode = nd->path.dentry->d_inode;
 		}
 	} else {

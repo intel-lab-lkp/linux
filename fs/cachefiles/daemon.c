@@ -652,7 +652,8 @@ static int cachefiles_daemon_cull(struct cachefiles_cache *cache, char *args)
 
 	get_fs_pwd(current->fs, &path);
 
-	if (!d_can_lookup(path.dentry))
+	/* A task may have no cwd. */
+	if (!path.mnt || !d_can_lookup(path.dentry))
 		goto notdir;
 
 	cachefiles_begin_secure(cache, &saved_cred);
@@ -723,7 +724,8 @@ static int cachefiles_daemon_inuse(struct cachefiles_cache *cache, char *args)
 
 	get_fs_pwd(current->fs, &path);
 
-	if (!d_can_lookup(path.dentry))
+	/* A task may have no cwd. */
+	if (!path.mnt || !d_can_lookup(path.dentry))
 		goto notdir;
 
 	cachefiles_begin_secure(cache, &saved_cred);

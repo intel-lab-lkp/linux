@@ -14,17 +14,30 @@ struct fs_struct {
 	int in_exec;
 
 	/*
+	 * Note that these paths are explicitly intended to be nullable.
+	 * Since they are inline structs and not pointers, we use `.mnt
+	 * == NULL` to indicate nullability of the path as a whole.
+	 */
+
+	/*
 	 * The root directory for the task(s) that points to this
 	 * `fs_struct`. The root directory also controls how `..`
 	 * resolve; path traversal is not allowed to resolve upwards
 	 * beyond the root directory. (It is for this latter reason that
 	 * `chroot` is a privileged operation.)
+	 *
+	 * If null (as described above), absolute paths will not
+	 * resolve. In addition `..` will be unbounded, until one
+	 * reaches the top of the mount tree.
 	 */
 	struct path root;
 
 	/*
 	 * The current working directory for the task(s) that points to
 	 * this `fs_struct`.
+	 *
+	 * If null (as described above), relative paths with `AT_FDCWD`
+	 * will not resolve.
 	 */
 	struct path pwd;
 } __randomize_layout;
