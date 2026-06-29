@@ -85,6 +85,8 @@ int loongson_se_send_engine_cmd(struct loongson_se_engine *engine)
 	if (err)
 		return err;
 
+	reinit_completion(&engine->completion);
+
 	return wait_for_completion_interruptible(&engine->completion);
 }
 EXPORT_SYMBOL_GPL(loongson_se_send_engine_cmd);
@@ -150,7 +152,8 @@ static irqreturn_t se_irq_handler(int irq, void *dev_id)
 	/* For engines */
 	while (int_status) {
 		id = __ffs(int_status);
-		complete(&se->engines[id].completion);
+		if (id < SE_ENGINE_MAX)
+			complete(&se->engines[id].completion);
 		int_status &= ~BIT(id);
 		writel(BIT(id), se->base + SE_S2LINT_CL);
 	}
@@ -162,7 +165,7 @@ static irqreturn_t se_irq_handler(int irq, void *dev_id)
 
 static int loongson_se_init(struct loongson_se *se, dma_addr_t addr, int size)
 {
-	struct loongson_se_controller_cmd cmd;
+	struct loongson_se_controller_cmd cmd = {0};
 	int err;
 
 	cmd.command_id = SE_CMD_START;
@@ -190,7 +193,7 @@ static int loongson_se_probe(struct platform_device *pdev)
 	int nr_irq, irq, err, i;
 	dma_addr_t paddr;
 
-	se = devm_kmalloc(dev, sizeof(*se), GFP_KERNEL);
+	se = devm_kzalloc(dev, sizeof(*se), GFP_KERNEL);
 	if (!se)
 		return -ENOMEM;
 
@@ -220,8 +223,10 @@ static int loongson_se_probe(struct platform_device *pdev)
 	for (i = 0; i < nr_irq; i++) {
 		irq = platform_get_irq(pdev, i);
 		err = devm_request_irq(dev, irq, se_irq_handler, 0, "loongson-se", se);
-		if (err)
+		if (err) {
 			dev_err(dev, "failed to request IRQ: %d\n", irq);
+			return err;
+		}
 	}
 
 	err = loongson_se_init(se, paddr, se->dmam_size);
@@ -232,6 +237,15 @@ static int loongson_se_probe(struct platform_device *pdev)
 				    ARRAY_SIZE(engines), NULL, 0, NULL);
 }
 
+static void loongson_se_remove(struct platform_device *pdev)
+{
+	struct loongson_se *se = dev_get_drvdata(&pdev->dev);
+	struct loongson_se_controller_cmd cmd = {0};
+
+	cmd.command_id = SE_CMD_STOP;
+	loongson_se_send_controller_cmd(se, &cmd);
+}
+
 static const struct acpi_device_id loongson_se_acpi_match[] = {
 	{ "LOON0011", 0 },
 	{ }
@@ -240,6 +254,7 @@ MODULE_DEVICE_TABLE(acpi, loongson_se_acpi_match);
 
 static struct platform_driver loongson_se_driver = {
 	.probe   = loongson_se_probe,
+	.remove  = loongson_se_remove,
 	.driver  = {
 		.name  = "loongson-se",
 		.acpi_match_table = loongson_se_acpi_match,
