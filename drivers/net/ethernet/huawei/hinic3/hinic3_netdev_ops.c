@@ -356,9 +356,7 @@ static int hinic3_maybe_set_port_state(struct net_device *netdev, bool enable)
 	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
 	int err;
 
-	mutex_lock(&nic_dev->state_lock);
 	err = hinic3_set_port_enable(nic_dev->hwdev, enable);
-	mutex_unlock(&nic_dev->state_lock);
 
 	return err;
 }
