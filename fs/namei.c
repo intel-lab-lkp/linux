@@ -4551,16 +4551,10 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 		goto out_dput;
 	}
 
-	error = try_break_deleg(dir_inode, LEASE_BREAK_DIR_CREATE, delegated_inode);
+	error = vfs_create_no_perm(idmap, dentry, mode, delegated_inode);
 	if (error)
 		goto out_dput;
 
-	error = dir_inode->i_op->create(idmap, dir_inode, dentry,
-					mode, open_flag & O_EXCL);
-	if (error)
-		goto out_dput;
-
-	fsnotify_create(dir_inode, dentry);
 	file->f_mode |= FMODE_CREATED;
 
 	return dentry;
