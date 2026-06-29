@@ -378,7 +378,7 @@ static void exynos4_mct_tick_start(unsigned long cycles,
 
 	exynos4_mct_tick_stop(mevt);
 
-	tmp = (1 << 31) | cycles;	/* MCT_L_UPDATE_ICNTB */
+	tmp = (1UL << 31) | cycles;	/* MCT_L_UPDATE_ICNTB */
 
 	/* update interrupt count buffer */
 	exynos4_mct_write(tmp, mevt->base + MCT_L_ICNTB_OFFSET);
