@@ -12,7 +12,21 @@ struct fs_struct {
 	seqlock_t seq;
 	int umask;
 	int in_exec;
-	struct path root, pwd;
+
+	/*
+	 * The root directory for the task(s) that points to this
+	 * `fs_struct`. The root directory also controls how `..`
+	 * resolve; path traversal is not allowed to resolve upwards
+	 * beyond the root directory. (It is for this latter reason that
+	 * `chroot` is a privileged operation.)
+	 */
+	struct path root;
+
+	/*
+	 * The current working directory for the task(s) that points to
+	 * this `fs_struct`.
+	 */
+	struct path pwd;
 } __randomize_layout;
 
 extern struct kmem_cache *fs_cachep;
