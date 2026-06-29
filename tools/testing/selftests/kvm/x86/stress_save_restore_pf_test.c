@@ -1,0 +1,182 @@
+// SPDX-License-Identifier: GPL-2.0-only
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
+
+#include "test_util.h"
+#include "kvm_util.h"
+#include "processor.h"
+
+#define NR_ITERATIONS		500
+
+#define GOTO_PREV_LINE		"\033[A\r"
+#define PRINT_ITER(s, x)					\
+do {								\
+	if (x == 1)						\
+		printf(s "%d\n", x);                            \
+	else							\
+		printf(GOTO_PREV_LINE s "%d\n", x);		\
+	fflush(stdout);						\
+} while (0)
+
+#define PTRS_PER_PTE		512
+#define PXD_INDEX(vaddr, level)	(((vaddr) >> PG_LEVEL_SHIFT(level)) & (PTRS_PER_PTE - 1))
+
+#define TEST_MEM_BASE_GVA	0xc0000000ULL
+#define TEST_PGTABLE_GVA_OFFSET	0xd0000000ULL
+#define NR_TEST_ADDRS		PTRS_PER_PTE
+#define PATTERN			0xabcdefabcdefabcdULL
+
+static u64 pte_present_mask;
+static u64 pte_huge_mask;
+
+static u64 expected_vaddr;
+static u64 guest_faults;
+
+static u64 *guest_get_pte(u64 vaddr)
+{
+	u64 pgtable_pa, pte;
+	u64 *pgtable;
+	int level;
+	bool la57;
+
+	la57 = !!(get_cr4() & X86_CR4_LA57);
+	level = la57 ? PG_LEVEL_256T : PG_LEVEL_512G;
+
+	pgtable_pa = get_cr3() & PHYSICAL_PAGE_MASK;
+	for (; level > PG_LEVEL_4K; level--) {
+		pgtable = (u64 *)(pgtable_pa + TEST_PGTABLE_GVA_OFFSET);
+		pte = pgtable[PXD_INDEX(vaddr, level)];
+		GUEST_ASSERT(pte & pte_present_mask);
+		GUEST_ASSERT(!(pte & pte_huge_mask));
+		pgtable_pa = PTE_GET_PA(pte);
+	}
+
+	pgtable = (u64 *)(pgtable_pa + TEST_PGTABLE_GVA_OFFSET);
+	return &pgtable[PXD_INDEX(vaddr, PG_LEVEL_4K)];
+}
+
+static void guest_pf_handler(struct ex_regs *regs)
+{
+	u64 fault_addr;
+	u64 *ptep;
+
+	fault_addr = get_cr2();
+	GUEST_ASSERT_EQ(fault_addr, READ_ONCE(expected_vaddr));
+
+	ptep = guest_get_pte(fault_addr);
+	GUEST_ASSERT(ptep);
+	GUEST_ASSERT(!(*ptep & pte_present_mask));
+
+	*ptep |= pte_present_mask;
+	invlpg(fault_addr);
+
+	guest_faults++;
+}
+
+static void guest_access_memory(void *arg)
+{
+	u64 vaddr, val;
+	int i = 0;
+
+	for (;; i++) {
+		vaddr = TEST_MEM_BASE_GVA + (i % NR_TEST_ADDRS) * PAGE_SIZE;
+		WRITE_ONCE(expected_vaddr, vaddr);
+
+		/* Read to trigger #PF */
+		val = READ_ONCE(*(u64 *)vaddr);
+		GUEST_ASSERT_EQ(val, PATTERN);
+
+		/* Clear the present bit again so it faults next time */
+		*guest_get_pte(vaddr) &= ~pte_present_mask;
+		invlpg(vaddr);
+
+		GUEST_SYNC(guest_faults);
+	}
+}
+
+int main(int argc, char *argv[])
+{
+	struct kvm_x86_state *state;
+	int r, i, level, count = 0;
+	gpa_t gpa, pgtable_gpa;
+	struct kvm_vcpu *vcpu;
+	struct kvm_vm *vm;
+	struct ucall uc;
+	u64 *pgtable;
+	gva_t gva;
+	u64 pte;
+
+	vm = vm_create_with_one_vcpu(&vcpu, guest_access_memory);
+	vm_install_exception_handler(vm, PF_VECTOR, guest_pf_handler);
+
+	pte_present_mask = PTE_PRESENT_MASK(&vm->mmu);
+	pte_huge_mask = PTE_HUGE_MASK(&vm->mmu);
+	sync_global_to_guest(vm, pte_present_mask);
+	sync_global_to_guest(vm, pte_huge_mask);
+
+	/* Allocate a page and write the pattern to it */
+	gva = vm_alloc_page(vm);
+	*(u64 *)addr_gva2hva(vm, gva) = PATTERN;
+	gpa = addr_gva2gpa(vm, gva);
+
+	/*
+	 * Map all virtual addresses to the pattern page and clear the present
+	 * bit such that guest accesses will cause a #PF.
+	 */
+	for (i = 0; i < NR_TEST_ADDRS; i++) {
+		gva = TEST_MEM_BASE_GVA + i * getpagesize();
+		virt_pg_map(vm, gva, gpa);
+		*vm_get_pte(vm, gva) &= ~pte_present_mask;
+	}
+
+	/*
+	 * Now create mappings for the page tables created above so that the
+	 * guest #PF handler can walk them. All PTEs for test virtual addresses
+	 * should lie on the same PTE page, so one page is mapped for each page
+	 * table level.
+	 *
+	 * Use an offset for the GVA instead of creating identity mappings to
+	 * avoid collision with existing mappings at low GVAs (e.g. ELF).
+	 */
+	pgtable_gpa = vm->mmu.pgd;
+	for (level = vm->mmu.pgtable_levels; level >= PG_LEVEL_4K; level--) {
+		virt_map(vm, pgtable_gpa + TEST_PGTABLE_GVA_OFFSET, pgtable_gpa, 1);
+		pgtable = addr_gpa2hva(vm, pgtable_gpa);
+		pte = pgtable[PXD_INDEX(TEST_MEM_BASE_GVA, level)];
+		pgtable_gpa = PTE_GET_PA(pte);
+	}
+
+	while (count++ < NR_ITERATIONS) {
+		r = __vcpu_run(vcpu);
+		TEST_ASSERT(!r, "vcpu_run failed");
+		TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
+
+		get_ucall(vcpu, &uc);
+		if (uc.cmd == UCALL_ABORT) {
+			REPORT_GUEST_ASSERT(uc);
+			break;
+		}
+		TEST_ASSERT_EQ(uc.cmd, UCALL_SYNC);
+		TEST_ASSERT_EQ(uc.args[1], count);
+
+		state = vcpu_save_state(vcpu);
+
+		kvm_vm_release(vm);
+		vcpu = vm_recreate_with_one_vcpu(vm);
+		vcpu_load_state(vcpu, state);
+		kvm_x86_state_cleanup(state);
+
+		PRINT_ITER("Save+restore iterations: ", count);
+	}
+
+	sync_global_from_guest(vm, guest_faults);
+	pr_info("Guest page faults: %lu\n", guest_faults);
+
+	kvm_vm_free(vm);
+	return 0;
+}
