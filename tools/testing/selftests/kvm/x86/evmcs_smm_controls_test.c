@@ -22,9 +22,6 @@
 
 #define SYNC_PORT	0xe
 
-#define STR(x) #x
-#define XSTR(s) STR(s)
-
 /*
  * SMI handler: runs in real-address mode.
  * Reports SMRAM_STAGE via port IO, then does RSM.
