@@ -51,6 +51,7 @@ pub mod bits;
 pub mod block;
 pub mod bug;
 pub mod build_assert;
+pub mod cfg;
 pub mod clk;
 #[cfg(CONFIG_CONFIGFS_FS)]
 pub mod configfs;
