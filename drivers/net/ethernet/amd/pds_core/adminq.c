@@ -77,6 +77,7 @@ void pdsc_process_adminq(struct pdsc_qcq *qcq)
 	unsigned long irqflags;
 	int nq_work = 0;
 	int aq_work = 0;
+	int intx;
 
 	/* Don't process AdminQ when it's not up */
 	if (!pdsc_adminq_inc_if_up(pdsc)) {
@@ -121,10 +122,16 @@ void pdsc_process_adminq(struct pdsc_qcq *qcq)
 	qcq->accum_work += aq_work;
 
 credits:
-	/* Return the interrupt credits, one for each completion */
-	pds_core_intr_credits(&pdsc->intr_ctrl[qcq->intx],
-			      nq_work + aq_work,
-			      PDS_CORE_INTR_CRED_REARM);
+	/* Return the interrupt credits, one for each completion.
+	 * Use READ_ONCE to get a single consistent copy of intx since it can
+	 * be set to PDS_CORE_INTR_INDEX_NOT_ASSIGNED concurrently during
+	 * teardown, and skip the credits if so.
+	 */
+	intx = READ_ONCE(qcq->intx);
+	if (intx != PDS_CORE_INTR_INDEX_NOT_ASSIGNED)
+		pds_core_intr_credits(&pdsc->intr_ctrl[intx],
+				      nq_work + aq_work,
+				      PDS_CORE_INTR_CRED_REARM);
 	refcount_dec(&pdsc->adminq_refcnt);
 }
 
