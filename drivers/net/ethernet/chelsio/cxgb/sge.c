@@ -1743,7 +1743,6 @@ use_sched:
 			spin_unlock(&q->lock);
 			return NETDEV_TX_OK;
 		}
-		pidx = q->pidx;
 		count = 1 + skb_shinfo(skb)->nr_frags;
 		count += compute_large_page_tx_descs(skb);
 	}
