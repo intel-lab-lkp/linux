@@ -2704,11 +2704,16 @@ static int get_channel_from_ecc_syndrome(struct mem_ctl_info *mci, u16 syndrome)
 	return map_err_sym_to_channel(err_sym, pvt->ecc_sym_sz);
 }
 
+#define MSG_SIZE 512
+
 static void __log_ecc_error(struct mem_ctl_info *mci, struct err_info *err,
 			    u8 ecc_type)
 {
 	enum hw_event_mc_err_type err_type;
 	const char *string;
+	char s[MSG_SIZE];
+
+	memset(s, 0, sizeof(s));
 
 	if (ecc_type == 2)
 		err_type = HW_EVENT_ERR_CORRECTED;
@@ -2719,6 +2724,23 @@ static void __log_ecc_error(struct mem_ctl_info *mci, struct err_info *err,
 	else {
 		WARN(1, "Something is rotten in the state of Denmark.\n");
 		return;
+	}
+
+	if (err->dram_addr) {
+		struct atl_dram_addr *da = err->dram_addr;
+		char *p = s, *end = p + sizeof(s);
+
+		/* Include a version prefix in case the format needs to change later. */
+		p += scnprintf(p, end - p, " [AMDv1]");
+		p += scnprintf(p, end - p, " %s:0x%x", "SocketId",	err->socketid);
+		p += scnprintf(p, end - p, " %s:0x%llx", "IPID",	err->ipid);
+		p += scnprintf(p, end - p, " %s:0x%x", "ChipSelect",	da->chip_select);
+		p += scnprintf(p, end - p, " %s:0x%x", "Row",		da->row_addr);
+		p += scnprintf(p, end - p, " %s:0x%x", "Column",	da->col_addr);
+		p += scnprintf(p, end - p, " %s:0x%x", "Bank",		da->bank_addr);
+		p += scnprintf(p, end - p, " %s:0x%x", "BankGroup",	da->bank_group);
+		p += scnprintf(p, end - p, " %s:0x%x", "RankMul",	da->rank_mul);
+		p += scnprintf(p, end - p, " %s:0x%x", "SubChannel",	da->sub_ch);
 	}
 
 	switch (err->err_code) {
@@ -2748,7 +2770,7 @@ static void __log_ecc_error(struct mem_ctl_info *mci, struct err_info *err,
 	edac_mc_handle_error(err_type, mci, 1,
 			     err->page, err->offset, err->syndrome,
 			     err->csrow, err->channel, -1,
-			     string, "");
+			     string, s);
 }
 
 static inline void decode_bus_error(int node_id, struct mce *m)
@@ -2808,6 +2830,7 @@ static void umc_get_err_info(struct mce *m, struct err_info *err)
 static void decode_umc_error(int node_id, struct mce *m)
 {
 	u8 ecc_type = (m->status >> 45) & 0x3;
+	struct atl_dram_addr dram_addr;
 	struct mem_ctl_info *mci;
 	unsigned long sys_addr;
 	struct amd64_pvt *pvt;
@@ -2822,7 +2845,11 @@ static void decode_umc_error(int node_id, struct mce *m)
 
 	pvt = mci->pvt_info;
 
+	memset(&dram_addr, 0, sizeof(dram_addr));
 	memset(&err, 0, sizeof(err));
+
+	err.socketid = m->socketid;
+	err.ipid     = m->ipid;
 
 	if (m->status & MCI_STATUS_DEFERRED)
 		ecc_type = 3;
@@ -2852,6 +2879,9 @@ static void decode_umc_error(int node_id, struct mce *m)
 		err.err_code = ERR_NORM_ADDR;
 		goto log_error;
 	}
+
+	if (!amd_convert_umc_mca_addr_to_dram_addr(&a_err, &dram_addr))
+		err.dram_addr = &dram_addr;
 
 	error_address_to_page_and_offset(sys_addr, &err);
 
