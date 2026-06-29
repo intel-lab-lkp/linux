@@ -143,7 +143,7 @@ void iommufd_vdevice_destroy(struct iommufd_object *obj)
 int iommufd_vdevice_alloc_ioctl(struct iommufd_ucmd *ucmd)
 {
 	struct iommu_vdevice_alloc *cmd = ucmd->cmd;
-	struct iommufd_vdevice *vdev, *curr;
+	struct iommufd_vdevice *vdev;
 	size_t vdev_size = sizeof(*vdev);
 	struct iommufd_viommu *viommu;
 	struct iommufd_device *idev;
@@ -218,17 +218,20 @@ int iommufd_vdevice_alloc_ioctl(struct iommufd_ucmd *ucmd)
 	 */
 	idev->vdev = vdev;
 
-	curr = xa_cmpxchg(&viommu->vdevs, virt_id, NULL, vdev, GFP_KERNEL);
-	if (curr) {
-		rc = xa_err(curr) ?: -EEXIST;
+	rc = xa_insert(&viommu->vdevs, virt_id, NULL, GFP_KERNEL);
+	if (rc) {
+		if (rc == -EBUSY)
+			rc = -EEXIST;
 		goto out_abort;
 	}
 
 	if (viommu->ops && viommu->ops->vdevice_init) {
 		rc = viommu->ops->vdevice_init(vdev);
 		if (rc)
-			goto out_abort;
+			goto out_release;
 	}
+
+	xa_store(&viommu->vdevs, virt_id, vdev, GFP_KERNEL);
 
 	cmd->out_vdevice_id = vdev->obj.id;
 	rc = iommufd_ucmd_respond(ucmd, sizeof(*cmd));
@@ -237,6 +240,8 @@ int iommufd_vdevice_alloc_ioctl(struct iommufd_ucmd *ucmd)
 	iommufd_object_finalize(ucmd->ictx, &vdev->obj);
 	goto out_unlock_igroup;
 
+out_release:
+	xa_release(&viommu->vdevs, virt_id);
 out_abort:
 	iommufd_object_abort_and_destroy(ucmd->ictx, &vdev->obj);
 out_unlock_igroup:
