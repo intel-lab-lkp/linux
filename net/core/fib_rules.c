@@ -881,6 +881,7 @@ int fib_newrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct nlattr *tb[FRA_MAX + 1];
 	bool user_priority = false;
 	struct fib_rule_hdr *frh;
+	bool unlock_rtnl = false;
 
 	frh = nlmsg_payload(nlh, sizeof(*frh));
 	if (!frh) {
@@ -906,8 +907,10 @@ int fib_newrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (err)
 		goto errout;
 
-	if (!rtnl_held)
+	if (!rtnl_held && ops->need_rtnl && ops->need_rtnl(net)) {
+		unlock_rtnl = true;
 		rtnl_net_lock(net);
+	}
 	mutex_lock(&ops->lock);
 
 	err = fib_nl2rule_locked(rule, ops, tb, extack);
@@ -978,7 +981,7 @@ int fib_newrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 	fib_rule_get(rule);
 
 	mutex_unlock(&ops->lock);
-	if (!rtnl_held)
+	if (unlock_rtnl)
 		rtnl_net_unlock(net);
 
 	notify_rule_change(RTM_NEWRULE, rule, ops, nlh, NETLINK_CB(skb).portid);
@@ -989,7 +992,7 @@ int fib_newrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 
 errout_free:
 	mutex_unlock(&ops->lock);
-	if (!rtnl_held)
+	if (unlock_rtnl)
 		rtnl_net_unlock(net);
 	kfree(rule);
 errout:
@@ -1038,8 +1041,6 @@ int fib_delrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (err)
 		goto errout;
 
-	if (!rtnl_held)
-		rtnl_net_lock(net);
 	mutex_lock(&ops->lock);
 
 	err = fib_nl2rule_locked(nlrule, ops, tb, extack);
@@ -1096,8 +1097,6 @@ int fib_delrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 	call_fib_rule_notifiers(net, FIB_EVENT_RULE_DEL, rule, ops, NULL);
 
 	mutex_unlock(&ops->lock);
-	if (!rtnl_held)
-		rtnl_net_unlock(net);
 
 	notify_rule_change(RTM_DELRULE, rule, ops, nlh, NETLINK_CB(skb).portid);
 	fib_rule_put(rule);
@@ -1108,8 +1107,6 @@ int fib_delrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 
 errout_free:
 	mutex_unlock(&ops->lock);
-	if (!rtnl_held)
-		rtnl_net_unlock(net);
 	kfree(nlrule);
 errout:
 	rules_ops_put(ops);
