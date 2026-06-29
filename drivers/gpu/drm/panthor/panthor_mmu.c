@@ -1328,6 +1328,7 @@ static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 	struct drm_gpuvm_bo *preallocated_vm_bo;
 	struct sg_table *sgt = NULL;
 	int ret;
+	u64 end;
 
 	if (!bo)
 		return -EINVAL;
@@ -1351,6 +1352,10 @@ static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 	 * is the dummy BO attached to the VM pool.
 	 */
 	if (is_sparse && (op->bo_handle || op->bo_offset))
+		return -EINVAL;
+
+	/* Protect against sparse VA range overflow */
+	if (is_sparse && check_add_overflow(op->va, op->size, &end))
 		return -EINVAL;
 
 	/* If the BO has an exclusive VM attached, it can't be mapped to other VMs. */
@@ -1418,7 +1423,9 @@ static int panthor_vm_prepare_unmap_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 					   struct panthor_vm *vm,
 					   const struct drm_panthor_vm_bind_op *op)
 {
+	bool is_sparse = op->flags & DRM_PANTHOR_VM_BIND_OP_MAP_SPARSE;
 	u32 pt_count = 0;
+	u64 end;
 	int ret;
 
 	memset(op_ctx, 0, sizeof(*op_ctx));
@@ -1431,6 +1438,10 @@ static int panthor_vm_prepare_unmap_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 	 */
 	if (op->va != ALIGN(op->va, SZ_2M))
 		pt_count++;
+
+	/* Protect against sparse VA range overflow */
+	if (is_sparse && check_add_overflow(op->va, op->size, &end))
+		return -EINVAL;
 
 	if (op->va + op->size != ALIGN(op->va + op->size, SZ_2M) &&
 	    ALIGN(op->va + op->size, SZ_2M) != ALIGN(op->va, SZ_2M))
