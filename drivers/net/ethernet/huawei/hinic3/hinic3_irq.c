@@ -101,10 +101,14 @@ static int hinic3_request_irq(struct hinic3_irq_cfg *irq_cfg, u16 q_id)
 
 	info.msix_index = irq_cfg->msix_entry_idx;
 	info.interrupt_coalesc_set = 1;
+
+	mutex_lock(&nic_dev->state_lock);
 	info.pending_limit = nic_dev->intr_coalesce[q_id].pending_limit;
 	info.coalesc_timer_cfg =
 		nic_dev->intr_coalesce[q_id].coalesce_timer_cfg;
 	info.resend_timer_cfg = nic_dev->intr_coalesce[q_id].resend_timer_cfg;
+	mutex_unlock(&nic_dev->state_lock);
+
 	err = hinic3_set_interrupt_cfg(nic_dev->hwdev, info);
 	if (err) {
 		netdev_err(netdev, "Failed to set RX interrupt coalescing attribute.\n");
@@ -169,17 +173,22 @@ out:
 static void hinic3_update_queue_coal(struct net_device *netdev, u16 q_id,
 				     u16 coal_timer, u16 coal_pkts)
 {
+	u8 coalesc_timer_cfg, pending_limit, limit_low, limit_high;
 	struct hinic3_intr_coal_info *q_coal;
-	u8 coalesc_timer_cfg, pending_limit;
 	struct hinic3_nic_dev *nic_dev;
 
 	nic_dev = netdev_priv(netdev);
 
 	q_coal = &nic_dev->intr_coalesce[q_id];
 	coalesc_timer_cfg = (u8)coal_timer;
+
+	mutex_lock(&nic_dev->state_lock);
+	limit_low = q_coal->rx_pending_limit_low;
+	limit_high = q_coal->rx_pending_limit_high;
+	mutex_unlock(&nic_dev->state_lock);
+
 	pending_limit = clamp_t(u8, coal_pkts >> HINIC3_COAL_PKT_SHIFT,
-				q_coal->rx_pending_limit_low,
-				q_coal->rx_pending_limit_high);
+				limit_low, limit_high);
 
 	hinic3_set_interrupt_moder(nic_dev->netdev, q_id,
 				   coalesc_timer_cfg, pending_limit);
