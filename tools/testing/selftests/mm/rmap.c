@@ -430,4 +430,111 @@ TEST_F(migrate, ksm)
 	propagate_children(_metadata, data);
 }
 
+/*
+ * Check if All PFNs of the region are the same to the input pfn.
+ *
+ * @pagemap_fd: file descriptor of /proc/pid/pagemap.
+ * @region: the start address of the associated region.
+ * @nr_pages: the number of pages that the region contains.
+ * @pfn: the referenced PFN.
+ */
+static bool merged_to_pfn(int pagemap_fd, void *region, int nr_pages,
+		unsigned long pfn)
+{
+	int i;
+
+	for (i = 0; i < nr_pages; i++)
+		if (pagemap_get_pfn(pagemap_fd, region + i * getpagesize()) != pfn)
+			return false;
+
+	return true;
+}
+
+static int mremap_merge_and_migrate(struct global_data *data)
+{
+	int ret, pagemap_fd;
+	void *old_region;
+	void *new_region;
+	int nr_pages = 32;
+	unsigned long old_pfn;
+
+	/* Allocate exactly pages for the test */
+	data->mapsize = nr_pages * getpagesize();
+	data->region = mmap(NULL, data->mapsize, PROT_READ | PROT_WRITE,
+			    MAP_PRIVATE | MAP_ANON, -1, 0);
+	if (data->region == MAP_FAILED)
+		ksft_exit_fail_perror("mmap failed");
+	memset(data->region, 0x77, data->mapsize);
+
+	/*
+	 * Mremap the second half region to the first half location (FIXED).
+	 */
+	old_region = data->region;
+	new_region = mremap(old_region + data->mapsize / 2, data->mapsize / 2,
+			    data->mapsize / 2, MREMAP_MAYMOVE | MREMAP_FIXED,
+			    old_region);
+	if (new_region == MAP_FAILED) {
+		ksft_print_msg("mremap failed: %s\n", strerror(errno));
+		return FAIL_ON_CHECK;
+	}
+	data->region = new_region;
+	data->mapsize /= 2;
+
+	/* madvise MADV_MERGABLE and merge these pages */
+	madvise(data->region, data->mapsize, MADV_MERGEABLE);
+	if (ksm_start() < 0)
+		return FAIL_ON_WORK;
+
+	pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
+	if (pagemap_fd == -1)
+		return FAIL_ON_CHECK;
+
+	*data->expected_pfn = pagemap_get_pfn(pagemap_fd, data->region);
+	if (*data->expected_pfn == -1ul)
+		return FAIL_ON_CHECK;
+	old_pfn = *data->expected_pfn;
+
+	/* Before migrating, check if All pages's PFN are the same */
+	if (!merged_to_pfn(pagemap_fd, data->region, nr_pages / 2,
+		 *data->expected_pfn)) {
+		ksft_print_msg("After KSM merging, PFNs are not the same\n");
+		return FAIL_ON_CHECK;
+	}
+
+	/* Attempt to migrate the merged KSM page */
+	ret = try_to_move_page(data->region);
+	if (ret) {
+		ksft_print_msg("migration of KSM page after mremap failed\n");
+		return FAIL_ON_CHECK;
+	}
+
+	/* After migrating, check if all PFN aren't the old */
+	*data->expected_pfn = pagemap_get_pfn(pagemap_fd, data->region);
+	if (*data->expected_pfn == -1ul || *data->expected_pfn == old_pfn)
+		return FAIL_ON_CHECK;
+
+	if (*data->expected_pfn == old_pfn ||
+		!merged_to_pfn(pagemap_fd, data->region, nr_pages / 2,
+		*data->expected_pfn)) {
+		ksft_print_msg("Bug migration: still old PFN or PFNs are not expected\n");
+		return FAIL_ON_CHECK;
+	}
+
+	return 0;
+}
+
+
+TEST_F(migrate, ksm_and_mremap)
+{
+	struct global_data *data = &self->data;
+
+	/* Skip if KSM is not available */
+	if (ksm_stop() < 0)
+		SKIP(return, "accessing \"/sys/kernel/mm/ksm/run\" failed");
+	if (ksm_get_full_scans() < 0)
+		SKIP(return, "accessing \"/sys/kernel/mm/ksm/full_scan\" failed");
+
+	ASSERT_EQ(mremap_merge_and_migrate(data), 0);
+}
+
 TEST_HARNESS_MAIN
