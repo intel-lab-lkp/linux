@@ -451,7 +451,8 @@ int uvc_probe_video(struct uvc_streaming *stream,
 		if (ret < 0)
 			goto done;
 
-		probe->wCompQuality = probe_max.wCompQuality;
+		if (!(stream->dev->quirks & UVC_QUIRK_NO_FORCE_QUALITY))
+			probe->wCompQuality = probe_max.wCompQuality;
 	}
 
 	for (i = 0; i < 2; ++i) {
