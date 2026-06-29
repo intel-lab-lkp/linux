@@ -2346,7 +2346,7 @@ recycle_func(void *v)
 	struct vchiq_shared_state *local = state->local;
 	u32 *found;
 	size_t length;
-	int ret;
+	int ret = 0;
 
 	length = sizeof(*found) * BITSET_SIZE(VCHIQ_MAX_SERVICES);
 
@@ -2358,11 +2358,12 @@ recycle_func(void *v)
 	while (!kthread_should_stop()) {
 		ret = remote_event_wait(&state->recycle_event, &local->recycle);
 		if (ret)
-			return ret;
+			break;
 
 		process_free_queue(state, found, length);
 	}
-	return 0;
+	kfree(found);
+	return ret;
 }
 
 /* Called by the sync thread */
