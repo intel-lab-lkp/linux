@@ -13,6 +13,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <linux/bitmap.h>
+#include <asm/barrier.h>
 
 #include "kvm_util.h"
 #include "test_util.h"
@@ -29,9 +30,41 @@ static bool run_vcpus_while_disabling_dirty_logging;
 
 /* Host variables */
 static u64 dirty_log_manual_caps;
+static u32 dirty_ring_size;
 static bool host_quit;
 static int iteration;
 static int vcpu_last_completed_iteration[KVM_MAX_VCPUS];
+static struct timespec vcpu_dirty_ring_collect[KVM_MAX_VCPUS];
+
+static void dirty_ring_collect(struct kvm_vcpu *vcpu, u32 *ring_idx,
+				struct timespec *ts)
+{
+	struct timespec start;
+	struct kvm_dirty_gfn *dirty_gfns = vcpu_map_dirty_ring(vcpu);
+	u32 ret, idx = *ring_idx;
+	u32 ring_size = vcpu->vm->dirty_ring_size / sizeof(struct kvm_dirty_gfn);
+
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
+	while (true) {
+		struct kvm_dirty_gfn *cur;
+
+		cur = &dirty_gfns[idx % ring_size];
+		if (smp_load_acquire(&cur->flags) != KVM_DIRTY_GFN_F_DIRTY)
+			break;
+
+		smp_store_release(&cur->flags, KVM_DIRTY_GFN_F_RESET);
+		idx++;
+	}
+
+	*ring_idx = idx;
+
+	ret = kvm_vm_reset_dirty_ring(vcpu->vm);
+
+	TEST_ASSERT(ret >= 0, "Error (%d) found when cleaning dirty-ring\n", ret);
+
+	*ts = timespec_add(*ts, timespec_elapsed(start));
+}
 
 static void vcpu_worker(struct memstress_vcpu_args *vcpu_args)
 {
@@ -43,16 +76,32 @@ static void vcpu_worker(struct memstress_vcpu_args *vcpu_args)
 	struct timespec ts_diff;
 	struct timespec total = (struct timespec){0};
 	struct timespec avg;
+	bool use_dirty_ring = !!vcpu->vm->dirty_ring_size;
+	u32 ring_idx = 0;
 	int ret;
 
 	run = vcpu->run;
 
 	while (!READ_ONCE(host_quit)) {
 		int current_iteration = READ_ONCE(iteration);
+		struct timespec collect = (struct timespec){0};
 
 		clock_gettime(CLOCK_MONOTONIC, &start);
-		ret = _vcpu_run(vcpu);
+
+		do {
+			ret = _vcpu_run(vcpu);
+			if (!use_dirty_ring)
+				break;
+
+			dirty_ring_collect(vcpu, &ring_idx, &collect);
+		} while (run->exit_reason == KVM_EXIT_DIRTY_RING_FULL);
+
 		ts_diff = timespec_elapsed(start);
+
+		if (use_dirty_ring) {
+			ts_diff = timespec_sub(ts_diff, collect);
+			vcpu_dirty_ring_collect[vcpu_idx] = collect;
+		}
 
 		TEST_ASSERT(ret == 0, "vcpu_run failed: %d", ret);
 		TEST_ASSERT(get_ucall(vcpu, NULL) == UCALL_SYNC,
@@ -119,7 +168,8 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 
 	vm = memstress_create_vm(mode, nr_vcpus, guest_percpu_mem_size,
 				 p->slots, p->backing_src,
-				 p->partition_vcpu_memory_access, 0);
+				 p->partition_vcpu_memory_access,
+				 dirty_ring_size);
 
 	memstress_set_write_percent(vm, p->write_percent);
 
@@ -139,8 +189,10 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	host_quit = false;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
-	for (i = 0; i < nr_vcpus; i++)
+	for (i = 0; i < nr_vcpus; i++) {
 		vcpu_last_completed_iteration[i] = -1;
+		vcpu_dirty_ring_collect[i] = (struct timespec){0};
+	}
 
 	/*
 	 * Use 100% writes during the population phase to ensure all
@@ -195,6 +247,21 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 		pr_info("Iteration %d dirty memory time: %ld.%.9lds\n",
 			iteration, ts_diff.tv_sec, ts_diff.tv_nsec);
 
+		if (dirty_ring_size) {
+			struct timespec iteration_sum = (struct timespec){0};
+
+			for (i = 0; i < nr_vcpus; i++)
+				iteration_sum = timespec_add(iteration_sum,
+							     vcpu_dirty_ring_collect[i]);
+
+			pr_info("Iteration %d clear dirty ring time: %ld.%.9lds\n",
+				iteration, iteration_sum.tv_sec, iteration_sum.tv_nsec);
+
+			clear_dirty_log_total = timespec_add(clear_dirty_log_total,
+							     iteration_sum);
+			continue;
+		}
+
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		memstress_get_dirty_log(vm, bitmaps, p->slots);
 		ts_diff = timespec_elapsed(start);
@@ -238,12 +305,14 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	host_quit = true;
 	memstress_join_vcpu_threads(nr_vcpus);
 
-	avg = timespec_div(get_dirty_log_total, p->iterations);
-	pr_info("Get dirty log over %lu iterations took %ld.%.9lds. (Avg %ld.%.9lds/iteration)\n",
-		p->iterations, get_dirty_log_total.tv_sec,
-		get_dirty_log_total.tv_nsec, avg.tv_sec, avg.tv_nsec);
+	if (!dirty_ring_size) {
+		avg = timespec_div(get_dirty_log_total, p->iterations);
+		pr_info("Get dirty log over %lu iterations took %ld.%.9lds. (Avg %ld.%.9lds/iteration)\n",
+			p->iterations, get_dirty_log_total.tv_sec,
+			get_dirty_log_total.tv_nsec, avg.tv_sec, avg.tv_nsec);
+	}
 
-	if (dirty_log_manual_caps) {
+	if (dirty_log_manual_caps || dirty_ring_size) {
 		avg = timespec_div(clear_dirty_log_total, p->iterations);
 		pr_info("Clear dirty log over %lu iterations took %ld.%.9lds. (Avg %ld.%.9lds/iteration)\n",
 			p->iterations, clear_dirty_log_total.tv_sec,
@@ -264,6 +333,9 @@ static void help(char *name)
 	printf(" -a: access memory randomly rather than in order.\n");
 	printf(" -i: specify iteration counts (default: %"PRIu64")\n",
 	       TEST_HOST_LOOP_N);
+	printf(" -d: specify the size of dirty-ring for tracking dirty pages.\n"
+	       "     If non-zero, will cause dirty-ring to be used instead of\n"
+	       "     dirty-bitmap. Must be a power of two.\n");
 	printf(" -g: Do not enable KVM_CAP_MANUAL_DIRTY_LOG_PROTECT2. This\n"
 	       "     makes KVM_GET_DIRTY_LOG clear the dirty log (i.e.\n"
 	       "     KVM_DIRTY_LOG_MANUAL_PROTECT_ENABLE is not enabled)\n"
@@ -320,7 +392,7 @@ int main(int argc, char *argv[])
 
 	guest_modes_append_default();
 
-	while ((opt = getopt(argc, argv, "ab:c:eghi:m:nop:r:s:v:x:w:")) != -1) {
+	while ((opt = getopt(argc, argv, "ab:c:d:eghi:m:nop:r:s:v:x:w:")) != -1) {
 		switch (opt) {
 		case 'a':
 			p.random_access = true;
@@ -330,6 +402,11 @@ int main(int argc, char *argv[])
 			break;
 		case 'c':
 			pcpu_list = optarg;
+			break;
+		case 'd':
+			dirty_ring_size = parse_size(optarg);
+			dirty_ring_size *= sizeof(struct kvm_dirty_gfn);
+			dirty_log_manual_caps = 0;
 			break;
 		case 'e':
 			/* 'e' is for evil. */
