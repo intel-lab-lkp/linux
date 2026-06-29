@@ -850,9 +850,13 @@ enum yt921x_fdb_entry_status {
 #define YT921X_ACL_NUM		(YT921X_ACL_BLK_NUM * YT921X_ACL_ENT_PER_BLK)
 #define YT921X_UDF_NUM		8
 
+#define YT921X_LED_GROUP_NUM	3
+
 /* 8 internal + 2 external + 1 mcu */
 #define YT921X_PORT_NUM		11
 #define YT921X_PORT_MCU		10
+
+#define YT921X_NAME	"yt921x"
 
 #define yt921x_port_is_internal(port) ((port) < 8)
 #define yt921x_port_is_external(port) (8 <= (port) && (port) < 9)
@@ -929,6 +933,14 @@ struct yt921x_acl_blk {
 	struct yt921x_acl_rule *rules[YT921X_ACL_ENT_PER_BLK];
 };
 
+struct yt921x_led {
+	struct led_classdev cdev;
+	unsigned char group;
+
+	bool use_cycle;
+	bool use_duty;
+};
+
 struct yt921x_port {
 	struct yt921x_priv *priv;
 	unsigned char index;
@@ -940,6 +952,12 @@ struct yt921x_port {
 	struct yt921x_mib mib;
 	u64 rx_frames;
 	u64 tx_frames;
+
+#if IS_ENABLED(CONFIG_NET_DSA_YT921X_LEDS)
+	struct yt921x_led leds[YT921X_LED_GROUP_NUM];
+	unsigned short led_cycle;
+	unsigned short led_duty;
+#endif
 };
 
 struct yt921x_reg_ops {

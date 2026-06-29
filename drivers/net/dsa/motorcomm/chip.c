@@ -26,6 +26,7 @@
 #include <net/pkt_cls.h>
 
 #include "chip.h"
+#include "leds.h"
 #include "smi.h"
 
 struct yt921x_mib_desc {
@@ -150,8 +151,6 @@ static const struct yt921x_info yt921x_infos[] = {
 	},
 	{}
 };
-
-#define YT921X_NAME	"yt921x"
 
 #define YT921X_VID_UNWARE	4095
 
@@ -4540,6 +4539,7 @@ static int __maybe_unused yt921x_chip_setup_qos(struct yt921x_priv *priv)
 
 static int yt921x_chip_setup(struct yt921x_priv *priv)
 {
+	struct device *dev = to_device(priv);
 	u32 ctrl;
 	int res;
 
@@ -4576,6 +4576,10 @@ static int yt921x_chip_setup(struct yt921x_priv *priv)
 	res = yt921x_reg_set_bits(priv, YT921X_SENSOR, YT921X_SENSOR_TEMP);
 	if (res)
 		return res;
+
+	res = yt921x_leds_setup(priv);
+	if (res)
+		dev_warn(dev, "Failed to setup LEDs: %d\n", res);
 
 	return 0;
 }
