@@ -315,9 +315,63 @@ struct arm_vsmmu_invalidation_cmd {
 static int arm_vsmmu_convert_user_cmd(struct arm_vsmmu *vsmmu,
 				      struct arm_vsmmu_invalidation_cmd *cmd)
 {
+	u64 allowed[2] = { CMDQ_0_OP };
+
 	/* Commands are le64 stored in u64 */
 	cmd->cmd.data[0] = le64_to_cpu(cmd->ucmd.cmd[0]);
 	cmd->cmd.data[1] = le64_to_cpu(cmd->ucmd.cmd[1]);
+
+	/* Collect the fields userspace is allowed to set for each opcode */
+	switch (cmd->cmd.data[0] & CMDQ_0_OP) {
+	case CMDQ_OP_TLBI_NH_VA:
+		allowed[0] |= CMDQ_TLBI_0_ASID;
+		fallthrough;
+	case CMDQ_OP_TLBI_NH_VAA:
+		allowed[0] |= CMDQ_TLBI_0_VMID;
+		allowed[1] |= CMDQ_TLBI_1_LEAF | CMDQ_TLBI_1_TTL |
+			      CMDQ_TLBI_1_VA_MASK;
+		/* NUM/SCALE/TG are range fields gated on FEAT_RANGE_INV */
+		if (vsmmu->smmu->features & ARM_SMMU_FEAT_RANGE_INV) {
+			allowed[0] |= CMDQ_TLBI_0_NUM | CMDQ_TLBI_0_SCALE;
+			allowed[1] |= CMDQ_TLBI_1_TG;
+		}
+		break;
+	case CMDQ_OP_TLBI_NH_ASID:
+		allowed[0] |= CMDQ_TLBI_0_ASID;
+		fallthrough;
+	case CMDQ_OP_TLBI_NH_ALL:
+		allowed[0] |= CMDQ_TLBI_0_VMID;
+		break;
+	case CMDQ_OP_ATC_INV:
+		/*
+		 * Exclude the Global bit: it makes the SMMU ignore the SID and
+		 * invalidate the ATC of every device, not just the guest's.
+		 */
+		allowed[0] |= CMDQ_ATC_0_SID;
+		allowed[1] |= CMDQ_ATC_1_SIZE | CMDQ_ATC_1_ADDR_MASK;
+		/* SSV/SSID require substream support */
+		if (vsmmu->smmu->ssid_bits)
+			allowed[0] |= CMDQ_0_SSV | CMDQ_ATC_0_SSID;
+		break;
+	case CMDQ_OP_CFGI_CD:
+		allowed[1] |= CMDQ_CFGI_1_LEAF;
+		/* No SSV for CFGI_CD; SSID requires substream support */
+		if (vsmmu->smmu->ssid_bits)
+			allowed[0] |= CMDQ_CFGI_0_SSID;
+		fallthrough;
+	case CMDQ_OP_CFGI_CD_ALL:
+		allowed[0] |= CMDQ_CFGI_0_SID;
+		break;
+	}
+
+	/*
+	 * Reject any other bit, e.g. a RES0 bit or a Secure bit, before the
+	 * command reaches the trusted main cmdq, so a guest cannot wedge the
+	 * shared queue for every device with a CERROR_ILL.
+	 */
+	if ((cmd->cmd.data[0] & ~allowed[0]) ||
+	    (cmd->cmd.data[1] & ~allowed[1]))
+		return -EIO;
 
 	switch (cmd->cmd.data[0] & CMDQ_0_OP) {
 	case CMDQ_OP_TLBI_NSNH_ALL:
@@ -334,6 +388,10 @@ static int arm_vsmmu_convert_user_cmd(struct arm_vsmmu *vsmmu,
 		cmd->cmd.data[0] |= FIELD_PREP(CMDQ_TLBI_0_VMID, vsmmu->vmid);
 		break;
 	case CMDQ_OP_ATC_INV:
+		/* ATC_INV is illegal unless the SMMU implements ATS */
+		if (!(vsmmu->smmu->features & ARM_SMMU_FEAT_ATS))
+			return -EIO;
+		fallthrough;
 	case CMDQ_OP_CFGI_CD:
 	case CMDQ_OP_CFGI_CD_ALL: {
 		u32 sid, vsid = FIELD_GET(CMDQ_CFGI_0_SID, cmd->cmd.data[0]);
