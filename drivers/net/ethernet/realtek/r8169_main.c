@@ -21,6 +21,8 @@
 #include <linux/in.h>
 #include <linux/io.h>
 #include <linux/ip.h>
+#include <linux/irq.h>
+#include <linux/irqdomain.h>
 #include <linux/tcp.h>
 #include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
@@ -775,6 +777,7 @@ struct rtl8169_private {
 	struct r8169_led_classdev *leds;
 
 	u32 ocp_base;
+	struct irq_domain *phy_irq_domain;
 };
 
 typedef void (*rtl_generic_fct)(struct rtl8169_private *tp);
@@ -4870,7 +4873,7 @@ static irqreturn_t rtl8169_interrupt(int irq, void *dev_instance)
 	}
 
 	if (status & LinkChg)
-		phy_mac_interrupt(tp->phydev);
+		generic_handle_domain_irq(tp->phy_irq_domain, 0);
 
 	rtl_irq_disable(tp);
 	napi_schedule(&tp->napi);
@@ -5424,11 +5427,39 @@ static int r8169_mdio_write_reg_c45(struct mii_bus *mii_bus, int addr,
 	return 0;
 }
 
+static int rtl_phy_irq_map(struct irq_domain *d, unsigned int irq,
+			   irq_hw_number_t hwirq)
+{
+	irq_set_chip_and_handler(irq, &dummy_irq_chip, handle_simple_irq);
+	irq_set_chip_data(irq, d->host_data);
+
+	return 0;
+}
+
+static const struct irq_domain_ops rtl_phy_irq_domain_ops = {
+	.map = rtl_phy_irq_map,
+};
+
+static void rtl_phy_irq_cleanup(void *data)
+{
+	struct rtl8169_private *tp = data;
+	int virq;
+
+	if (tp->phy_irq_domain) {
+		virq = irq_find_mapping(tp->phy_irq_domain, 0);
+		if (virq)
+			irq_dispose_mapping(virq);
+
+		irq_domain_remove(tp->phy_irq_domain);
+		tp->phy_irq_domain = NULL;
+	}
+}
+
 static int r8169_mdio_register(struct rtl8169_private *tp)
 {
 	struct pci_dev *pdev = tp->pci_dev;
 	struct mii_bus *new_bus;
-	int ret;
+	int ret, virq;
 
 	/* On some boards with this chip version the BIOS is buggy and misses
 	 * to reset the PHY page selector. This results in the PHY ID read
@@ -5446,7 +5477,6 @@ static int r8169_mdio_register(struct rtl8169_private *tp)
 	new_bus->name = "r8169";
 	new_bus->priv = tp;
 	new_bus->parent = &pdev->dev;
-	new_bus->irq[0] = PHY_MAC_INTERRUPT;
 	new_bus->phy_mask = GENMASK(31, 1);
 	snprintf(new_bus->id, MII_BUS_ID_SIZE, "r8169-%x-%x",
 		 pci_domain_nr(pdev->bus), pci_dev_id(pdev));
@@ -5458,6 +5488,21 @@ static int r8169_mdio_register(struct rtl8169_private *tp)
 		new_bus->read_c45 = r8169_mdio_read_reg_c45;
 		new_bus->write_c45 = r8169_mdio_write_reg_c45;
 	}
+
+	tp->phy_irq_domain = irq_domain_add_linear(NULL, 1,
+						   &rtl_phy_irq_domain_ops, tp);
+	if (!tp->phy_irq_domain)
+		return -ENOMEM;
+
+	ret = devm_add_action_or_reset(&pdev->dev, rtl_phy_irq_cleanup, tp);
+	if (ret)
+		return ret;
+
+	virq = irq_create_mapping(tp->phy_irq_domain, 0);
+	if (!virq)
+		return -EINVAL;
+
+	new_bus->irq[0] = virq;
 
 	ret = devm_mdiobus_register(&pdev->dev, new_bus);
 	if (ret)
