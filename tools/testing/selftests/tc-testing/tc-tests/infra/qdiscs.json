@@ -1540,5 +1540,37 @@
             "$TC qdisc del dev $DUMMY root",
             "$IP addr del 10.10.10.10/24 dev $DUMMY || true"
         ]
+    },
+    {
+        "id": "fb8d",
+        "name": "Verify bpf redirect on RED block with preceding clsact (egress) classifier",
+        "category": [
+            "qdisc",
+            "red",
+            "qevent",
+            "clsact"
+        ],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$IP addr add 10.10.10.1/24 dev $DUMMY",
+            "$IP neigh add 10.10.10.2 lladdr 02:00:00:00:00:01 dev $DUMMY nud permanent",
+            "$TC qdisc add dev $DUMMY handle 1: root tbf rate 1Mbit burst 10K limit 1M",
+            "$TC qdisc add dev $DUMMY parent 1:1 handle 11: red limit 1M avpkt 1400 probability 1 burst 38 harddrop min 30000 max 30001 qevent early_drop block 10",
+            "$TC qdisc add dev $DUMMY clsact",
+            "$TC filter add dev $DUMMY egress protocol ip prio 1 matchall action gact pass",
+            "$TC filter add block 10 protocol ip prio 1 matchall action bpf obj $EBPFDIR/action-ebpf sec action-redirect"
+        ],
+        "cmdUnderTest": "bash -c 'data=$(head -c 1400 /dev/zero | tr \"\\0\" \"x\"); exec 3>/dev/udp/10.10.10.2/12345; for i in $(seq 1 8000); do printf \"%s\" \"$data\" >&3; done; exit 0'",
+        "expExitCode": "0",
+        "verifyCmd": "$TC -s filter show block 10",
+        "matchPattern": "Sent [1-9][0-9]* bytes [1-9][0-9]* pkt",
+        "matchCount": "1",
+        "teardown": [
+            "$TC qdisc del dev $DUMMY clsact",
+            "$TC qdisc del dev $DUMMY handle 1: root",
+            "$IP addr del 10.10.10.1/24 dev $DUMMY"
+        ]
     }
 ]

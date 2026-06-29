@@ -20,4 +20,9 @@ __attribute__((section("action-ko"),used)) int action_ko(struct __sk_buff *s)
 	return TC_ACT_OK;
 }
 
+__attribute__((section("action-redirect"), used)) int action_redirect(struct __sk_buff *s)
+{
+	return TC_ACT_REDIRECT;
+}
+
 char _license[] __attribute__((section("license"),used)) = "GPL";
