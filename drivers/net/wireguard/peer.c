@@ -36,6 +36,10 @@ struct wg_peer *wg_peer_create(struct wg_device *wg,
 	if (unlikely(dst_cache_init(&peer->endpoint_cache, GFP_KERNEL)))
 		goto err;
 
+	peer->pcpu_stats = alloc_percpu(struct wg_peer_stats);
+	if (unlikely(!peer->pcpu_stats))
+		goto err;
+
 	peer->device = wg;
 	wg_noise_handshake_init(&peer->handshake, &wg->static_identity,
 				public_key, preshared_key, peer);
@@ -190,6 +194,7 @@ static void rcu_release(struct rcu_head *rcu)
 	dst_cache_destroy(&peer->endpoint_cache);
 	WARN_ON(wg_prev_queue_peek(&peer->tx_queue) || wg_prev_queue_peek(&peer->rx_queue));
 
+	free_percpu(peer->pcpu_stats);
 	/* The final zeroing takes care of clearing any remaining handshake key
 	 * material and other potentially sensitive information.
 	 */

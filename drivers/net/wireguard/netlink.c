@@ -105,13 +105,31 @@ get_peer(struct wg_peer *peer, struct sk_buff *skb, struct dump_ctx *ctx)
 		if (fail)
 			goto err;
 
+		// read per-cpu counters for peer rx/tx_bytes
+		u64 total_rx_bytes = 0, total_tx_bytes = 0;
+		u64 rx_bytes = 0, tx_bytes = 0;
+		struct wg_peer_stats *pcpu_ptr;
+		unsigned int cpu, start;
+
+		for_each_possible_cpu(cpu) {
+			pcpu_ptr = per_cpu_ptr(peer->pcpu_stats, cpu);
+			do {
+				start = u64_stats_fetch_begin(&pcpu_ptr->syncp);
+				rx_bytes = u64_stats_read(&pcpu_ptr->rx_bytes);
+				tx_bytes = u64_stats_read(&pcpu_ptr->tx_bytes);
+			} while (u64_stats_fetch_retry(&pcpu_ptr->syncp, start));
+
+			total_rx_bytes += rx_bytes;
+			total_tx_bytes += tx_bytes;
+		}
+
 		if (nla_put(skb, WGPEER_A_LAST_HANDSHAKE_TIME,
 			    sizeof(last_handshake), &last_handshake) ||
 		    nla_put_u16(skb, WGPEER_A_PERSISTENT_KEEPALIVE_INTERVAL,
 				peer->persistent_keepalive_interval) ||
-		    nla_put_u64_64bit(skb, WGPEER_A_TX_BYTES, peer->tx_bytes,
+		    nla_put_u64_64bit(skb, WGPEER_A_TX_BYTES, total_tx_bytes,
 				      WGPEER_A_UNSPEC) ||
-		    nla_put_u64_64bit(skb, WGPEER_A_RX_BYTES, peer->rx_bytes,
+		    nla_put_u64_64bit(skb, WGPEER_A_RX_BYTES, total_rx_bytes,
 				      WGPEER_A_UNSPEC) ||
 		    nla_put_u32(skb, WGPEER_A_PROTOCOL_VERSION, 1))
 			goto err;

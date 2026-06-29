@@ -34,6 +34,11 @@ struct endpoint {
 	};
 };
 
+struct wg_peer_stats {
+	u64_stats_t rx_bytes, tx_bytes;
+	struct u64_stats_sync syncp;
+};
+
 struct wg_peer {
 	struct wg_device *device;
 	struct prev_queue tx_queue, rx_queue;
@@ -49,7 +54,7 @@ struct wg_peer {
 	struct work_struct transmit_handshake_work, clear_peer_work, transmit_packet_work;
 	struct cookie latest_cookie;
 	struct hlist_node pubkey_hash;
-	u64 rx_bytes, tx_bytes;
+	struct wg_peer_stats __percpu *pcpu_stats;
 	struct timer_list timer_retransmit_handshake, timer_send_keepalive;
 	struct timer_list timer_new_handshake, timer_zero_key_material;
 	struct timer_list timer_persistent_keepalive;

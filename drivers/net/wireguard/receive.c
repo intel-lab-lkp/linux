@@ -19,8 +19,15 @@
 /* Must be called with bh disabled. */
 static void update_rx_stats(struct wg_peer *peer, size_t len)
 {
+	struct wg_peer_stats *pcpu_ptr;
+
 	dev_sw_netstats_rx_add(peer->device->dev, len);
-	peer->rx_bytes += len;
+
+	pcpu_ptr = this_cpu_ptr(peer->pcpu_stats);
+
+	u64_stats_update_begin(&pcpu_ptr->syncp);
+	u64_stats_add(&pcpu_ptr->rx_bytes, len);
+	u64_stats_update_end(&pcpu_ptr->syncp);
 }
 
 #define SKB_TYPE_LE32(skb) (((struct message_header *)(skb)->data)->type)

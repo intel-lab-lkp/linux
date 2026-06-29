@@ -166,6 +166,7 @@ out:
 
 int wg_socket_send_skb_to_peer(struct wg_peer *peer, struct sk_buff *skb, u8 ds)
 {
+	struct wg_peer_stats *pcpu_ptr;
 	size_t skb_len = skb->len;
 	int ret = -EAFNOSUPPORT;
 
@@ -178,8 +179,12 @@ int wg_socket_send_skb_to_peer(struct wg_peer *peer, struct sk_buff *skb, u8 ds)
 			    &peer->endpoint_cache);
 	else
 		dev_kfree_skb(skb);
-	if (likely(!ret))
-		peer->tx_bytes += skb_len;
+	if (likely(!ret)) {
+		pcpu_ptr = this_cpu_ptr(peer->pcpu_stats);
+		u64_stats_update_begin(&pcpu_ptr->syncp);
+		u64_stats_add(&pcpu_ptr->tx_bytes, skb_len);
+		u64_stats_update_end(&pcpu_ptr->syncp);
+	}
 	read_unlock_bh(&peer->endpoint_lock);
 
 	return ret;
