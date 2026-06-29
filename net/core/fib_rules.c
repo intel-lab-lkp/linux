@@ -734,10 +734,10 @@ errout:
 	return err;
 }
 
-static int fib_nl2rule_rtnl(struct fib_rule *nlrule,
-			    struct fib_rules_ops *ops,
-			    struct nlattr *tb[],
-			    struct netlink_ext_ack *extack)
+static int fib_nl2rule_locked(struct fib_rule *nlrule,
+			      struct fib_rules_ops *ops,
+			      struct nlattr *tb[],
+			      struct netlink_ext_ack *extack)
 {
 	if (!tb[FRA_PRIORITY])
 		nlrule->pref = fib_default_rule_pref(ops);
@@ -748,12 +748,14 @@ static int fib_nl2rule_rtnl(struct fib_rule *nlrule,
 		return -EINVAL;
 	}
 
+	rcu_read_lock();
+
 	if (tb[FRA_IIFNAME]) {
 		struct net_device *dev;
 
-		dev = __dev_get_by_name(nlrule->fr_net, nlrule->iifname);
+		dev = dev_get_by_name_rcu(nlrule->fr_net, nlrule->iifname);
 		if (dev) {
-			nlrule->iifindex = dev->ifindex;
+			nlrule->iifindex = READ_ONCE(dev->ifindex);
 			nlrule->iif_is_l3_master = netif_is_l3_master(dev);
 		}
 	}
@@ -761,12 +763,14 @@ static int fib_nl2rule_rtnl(struct fib_rule *nlrule,
 	if (tb[FRA_OIFNAME]) {
 		struct net_device *dev;
 
-		dev = __dev_get_by_name(nlrule->fr_net, nlrule->oifname);
+		dev = dev_get_by_name_rcu(nlrule->fr_net, nlrule->oifname);
 		if (dev) {
-			nlrule->oifindex = dev->ifindex;
+			nlrule->oifindex = READ_ONCE(dev->ifindex);
 			nlrule->oif_is_l3_master = netif_is_l3_master(dev);
 		}
 	}
+
+	rcu_read_unlock();
 
 	return 0;
 }
@@ -906,7 +910,7 @@ int fib_newrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 		rtnl_net_lock(net);
 	mutex_lock(&ops->lock);
 
-	err = fib_nl2rule_rtnl(rule, ops, tb, extack);
+	err = fib_nl2rule_locked(rule, ops, tb, extack);
 	if (err)
 		goto errout_free;
 
@@ -1038,7 +1042,7 @@ int fib_delrule(struct net *net, struct sk_buff *skb, struct nlmsghdr *nlh,
 		rtnl_net_lock(net);
 	mutex_lock(&ops->lock);
 
-	err = fib_nl2rule_rtnl(nlrule, ops, tb, extack);
+	err = fib_nl2rule_locked(nlrule, ops, tb, extack);
 	if (err)
 		goto errout_free;
 
