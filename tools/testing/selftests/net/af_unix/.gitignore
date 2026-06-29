@@ -3,6 +3,9 @@ msg_oob
 scm_inq
 scm_pidfd
 scm_rights
+scm_rights_denial
+scm_rights_denial_receiver
+scm_rights_denial_sender
 so_peek_off
 unix_connect
 unix_connreset

@@ -11,9 +11,13 @@ TEST_GEN_PROGS := \
 	scm_inq \
 	scm_pidfd \
 	scm_rights \
+	scm_rights_denial \
 	so_peek_off \
 	unix_connect \
 	unix_connreset \
 # end of TEST_GEN_PROGS
+
+TEST_GEN_FILES := scm_rights_denial_sender scm_rights_denial_receiver
+TEST_FILES := scm_rights_denial.sh
 
 include ../../lib.mk
