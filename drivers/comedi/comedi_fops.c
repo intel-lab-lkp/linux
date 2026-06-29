@@ -25,6 +25,7 @@
 #include <linux/fs.h>
 #include <linux/comedi/comedidev.h>
 #include <linux/cdev.h>
+#include <linux/pagemap.h>
 
 #include <linux/io.h>
 #include <linux/uaccess.h>
@@ -2462,7 +2463,7 @@ static int comedi_vm_access(struct vm_area_struct *vma, unsigned long addr,
 {
 	struct comedi_buf_map *bm = vma->vm_private_data;
 	unsigned long offset =
-	    addr - vma->vm_start + (vma->vm_pgoff << PAGE_SHIFT);
+	    addr - vma->vm_start + (vma_start_pgoff(vma) << PAGE_SHIFT);
 
 	if (len < 0)
 		return -EINVAL;
