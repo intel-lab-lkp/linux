@@ -117,6 +117,7 @@ enum x86_topology_domains {
 enum x86_topology_cpu_type {
 	TOPO_CPU_TYPE_PERFORMANCE,
 	TOPO_CPU_TYPE_EFFICIENCY,
+	TOPO_CPU_TYPE_LOW_POWER,
 	TOPO_CPU_TYPE_UNKNOWN,
 };
 
