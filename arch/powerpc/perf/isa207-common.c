@@ -7,6 +7,7 @@
  * Copyright 2016 Madhavan Srinivasan, IBM Corporation.
  */
 #include "isa207-common.h"
+#include <asm/dts_pmu.h>
 
 PMU_FORMAT_ATTR(event,		"config:0-49");
 PMU_FORMAT_ATTR(pmcxsel,	"config:0-7");

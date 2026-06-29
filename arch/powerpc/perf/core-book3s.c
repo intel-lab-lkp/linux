@@ -2571,12 +2571,19 @@ int __init register_power_pmu(struct power_pmu *pmu)
 		freeze_events_kernel = MMCR0_FCHV;
 #endif /* CONFIG_PPC64 */
 
-	perf_pmu_register(&power_pmu, "cpu", PERF_TYPE_RAW);
+	perf_pmu_register(&power_pmu, pmu->name, PERF_TYPE_RAW);
 	cpuhp_setup_state(CPUHP_PERF_POWER, "perf/powerpc:prepare",
 			  power_pmu_prepare_cpu, NULL);
 	return 0;
 }
 
+void unregister_power_pmu(struct power_pmu *pmu)
+{
+	if (!ppmu)
+		return;
+
+	perf_pmu_unregister(&power_pmu);
+}
 #ifdef CONFIG_PPC64
 static bool pmu_override = false;
 static unsigned long pmu_override_val;
@@ -2590,6 +2597,9 @@ static void do_pmu_override(void *data)
 
 static int __init init_ppc64_pmu(void)
 {
+	/* Disable registering PMU from here and enable picking from device tree */
+	return 0;
+
 	if (cpu_has_feature(CPU_FTR_HVMODE) && pmu_override) {
 		pr_warn("disabling perf due to pmu_override= command line option.\n");
 		on_each_cpu(do_pmu_override, NULL, 1);

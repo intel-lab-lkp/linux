@@ -2,6 +2,7 @@
 //
 // Copyright 2019 Madhavan Srinivasan, IBM Corporation.
 
+void unregister_power_pmu(struct power_pmu *pmu);
 int __init init_ppc970_pmu(void);
 int __init init_power5_pmu(void);
 int __init init_power5p_pmu(void);

@@ -947,6 +947,18 @@ static void __init opal_imc_init_dev(void)
 
 	of_node_put(np);
 }
+#define PMU_DTB "ibm,power-pmu"
+
+static void __init opal_pmus_init_dev(void)
+{
+	struct device_node *np;
+
+	np = of_find_compatible_node(NULL, NULL, PMU_DTB);
+	if (np)
+		of_platform_device_create(np, NULL, NULL);
+
+	of_node_put(np);
+}
 
 static int kopald(void *unused)
 {
@@ -1031,6 +1043,9 @@ static int __init opal_init(void)
 
 	/* Detect In-Memory Collection counters and create devices*/
 	opal_imc_init_dev();
+
+    /*Detect PMU node and create device*/
+	opal_pmus_init_dev();
 
 	/* Create leds platform devices */
 	leds = of_find_node_by_path("/ibm,opal/leds");
