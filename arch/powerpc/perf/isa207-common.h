@@ -278,6 +278,8 @@
 #define REM				P(REMOTE, REMOTE)
 
 int isa207_get_constraint(u64 event, unsigned long *maskp, unsigned long *valp, u64 event_config1);
+int isa207_get_constraint_dts(u64 event, unsigned long *maskp,
+				unsigned long *valp, u64 event_config1);
 int isa207_compute_mmcr(u64 event[], int n_ev,
 				unsigned int hwc[], struct mmcr_regs *mmcr,
 				struct perf_event *pevents[], u32 flags);

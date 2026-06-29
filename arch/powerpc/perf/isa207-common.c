@@ -748,6 +748,147 @@ int isa207_compute_mmcr(u64 event[], int n_ev,
 	return 0;
 }
 
+static void apply_constraint(u64 event,
+			struct dts_constraint_field *field,
+			unsigned long *mask,
+			unsigned long *value)
+{
+	u64 extracted;
+
+	extracted = (event >> field->event_shift) & field->event_mask;
+	*mask |= field->constraint_mask;
+	*value |= (extracted << field->constraint_shift);
+}
+
+static bool constraint_enabled(struct dts_constraint_map *m, u64 event)
+{
+	switch (m->field.condition) {
+
+	case DTS_COND_ALWAYS:
+		return true;
+
+	case DTS_COND_MARKED:
+		return is_event_marked(event);
+
+	case DTS_COND_THRESHOLD:
+		return event_is_threshold(event);
+
+	case DTS_COND_L1:
+		return (event & EVENT_IS_L1);
+
+	case DTS_COND_BHRB:
+		return (event & EVENT_WANTS_BHRB);
+
+	case DTS_COND_RADIX:
+		return cpu_has_feature(CPU_FTR_ARCH_31);
+
+	default:
+		return false;
+	}
+	return false;
+}
+
+int isa207_get_constraint_dts(u64 event,
+			      unsigned long *maskp,
+			      unsigned long *valp,
+			      u64 event_config1)
+{
+	unsigned int pmc, unit, cache, ebb;
+	unsigned long mask = 0;
+	unsigned long value = 0;
+	u64 base_event;
+	int i, valid = 0;
+
+	pmc = (event >> EVENT_PMC_SHIFT) & EVENT_PMC_MASK;
+	unit = (event >> EVENT_UNIT_SHIFT) & EVENT_UNIT_MASK;
+	cache = (event >> EVENT_CACHE_SEL_SHIFT) & EVENT_CACHE_SEL_MASK;
+	ebb = (event >> EVENT_EBB_SHIFT) & EVENT_EBB_MASK;
+	base_event = event & ~EVENT_LINUX_MASK;
+
+	/* max counter */
+	if (pmc > dts_constraints.max_counter)
+		return -1;
+
+	/* restricted counters */
+	if (pmc >= 5) {
+		valid = 0;
+
+		for (i = 0;
+			i < dts_constraints.num_restricted;
+			i++) {
+
+			if (dts_constraints.restricted[i].pmc == pmc &&
+					dts_constraints.restricted[i].event == base_event) {
+				valid = 1;
+				break;
+			}
+		}
+
+		if (!valid)
+			return -1;
+	}
+
+	/* cache selector */
+	if (dts_constraints.require_cache_selector_zero &&
+			(cache & dts_constraints.cache_selector_mask))
+		return -1;
+
+	/* EBB */
+	if (dts_constraints.require_pmc_for_ebb && !pmc && ebb)
+		return -1;
+
+	/* BHRB */
+	if ((event & EVENT_WANTS_BHRB) &&
+	    dts_constraints.bhrb_requires_ebb && !ebb)
+		return -1;
+
+	/* PMC */
+	if (pmc) {
+		mask |= CNST_PMC_MASK(pmc);
+		value |= CNST_PMC_VAL(pmc);
+
+		if (pmc >= 5)
+			goto post_general_constraints;
+	}
+
+	/* NC */
+	if (pmc <= 4) {
+		mask |= dts_constraints.nc.mask;
+
+		value |=
+			(dts_constraints.nc.increment << dts_constraints.nc.shift);
+	}
+
+	/* cache / l2l3 */
+	if (unit >= 6 && unit <= 9) {
+		if (cpu_has_feature(CPU_FTR_ARCH_31)) {
+			apply_constraint (event, &dts_constraints.l2l3_group,
+				&mask, &value);
+		} else {
+			apply_constraint (event, &dts_constraints.cache_group,
+				&mask, &value);
+
+			if (pmc == 4)
+				mask |= dts_constraints.cache_pmc4.constraint_mask;
+		}
+	}
+
+post_general_constraints:
+
+	for (i = 0; i < constraint_map_count; i++) {
+		if (!constraint_enabled(&constraint_maps[i], event))
+			continue;
+
+		apply_constraint(event, &constraint_maps[i].field,
+				&mask, &value);
+	}
+
+	*maskp = mask;
+	*valp = value;
+
+	return 0;
+}
+
 int compute_mmcr_dts(u64 event[], int n_ev,
 			unsigned int hwc[], struct mmcr_regs *mmcr,
 			struct perf_event *pevents[], u32 flags)

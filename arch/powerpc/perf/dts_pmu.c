@@ -14,10 +14,13 @@
 
 extern void unregister_power_pmu(struct power_pmu *pmu);
 static u32 pmu_dts_nr_pmc;
+struct dts_pmu_constraints dts_constraints;
 struct dts_field_map pmcsel_map;
 struct dts_field_map pmc_map;
 struct dts_field_map field_maps[MAX_FIELDS];
 int field_count;
+struct dts_constraint_map *constraint_maps;
+int constraint_map_count;
 
 u32 mmcr_regs_sprs[MAX_MMCR];
 int mmcr_count;
@@ -31,6 +34,172 @@ struct pmu_dts_event {
 static struct pmu_dts_event *dts_events[MAX_DTS_EVENTS];
 static struct attribute *pmu_dts_events_attrs[MAX_DTS_EVENTS + 1];
 static int dts_event_count;
+
+/* Constraints Structure */
+static void parse_constraint_field(struct device_node *np,
+				struct dts_constraint_field *field)
+{
+	u32 val32[2] = {0};
+
+	if (!np)
+		return;
+
+	/* initialize */
+	field->event_mask = 0;
+	field->event_shift = 0;
+	field->constraint_mask = 0;
+	field->constraint_shift = 0;
+
+	/* event-mask */
+	if (!of_property_read_u32(np, "event-mask", &val32[0]))
+		field->event_mask = val32[0];
+
+	/* event-shift */
+	of_property_read_u32(np, "event-shift", &field->event_shift);
+
+	/* constraint-mask */
+	if (!of_property_read_u32_array(np, "constraint-mask", val32, 2))
+		field->constraint_mask = ((u64)val32[0] << 32) | val32[1];
+	else if (!of_property_read_u32(np, "constraint-mask", &val32[0]))
+		field->constraint_mask = val32[0];
+
+	/* constraint-shift */
+	of_property_read_u32(np, "constraint-shift", &field->constraint_shift);
+
+	of_property_read_u32(np, "condition", &field->condition);
+
+	if (constraint_maps && constraint_map_count < 16) {
+		memcpy(&constraint_maps[constraint_map_count].field,
+					field, sizeof(*field));
+		constraint_map_count++;
+	}
+}
+
+static void parse_constraints(struct device_node *pmu_np)
+{
+	struct device_node *np;
+	struct device_node *child;
+	int i = 0;
+
+	constraint_maps = kcalloc(16, sizeof(*constraint_maps), GFP_KERNEL);
+
+	constraint_map_count = 0;
+
+	np = of_get_child_by_name(pmu_np, "constraints");
+	if (!np)
+		return;
+
+	/* PMC constraints */
+	child = of_get_child_by_name(np, "pmc-constraints");
+
+	if (child) {
+		of_property_read_u32(child,
+					"max-counter", &dts_constraints.max_counter);
+
+		for_each_child_of_node(child, child) {
+			of_property_read_u32(child, "pmc",
+					&dts_constraints.restricted[i].pmc);
+
+			of_property_read_u64(child, "valid-events",
+					&dts_constraints.restricted[i].event);
+			i++;
+		}
+
+		dts_constraints.restricted[0].event = 0x500fa;
+		dts_constraints.restricted[1].event = 0x600f4;
+		dts_constraints.num_restricted = i;
+	}
+
+	/* sample */
+	child = of_get_child_by_name(np, "sample");
+
+	if (child)
+		parse_constraint_field(child, &dts_constraints.sample);
+
+	/* threshold */
+	child = of_get_child_by_name(np, "threshold");
+
+	if (child) {
+		dts_constraints.threshold.supported =
+				of_property_read_bool(child, "supported");
+
+		parse_constraint_field(of_get_child_by_name(child, "thresh-sel"),
+					&dts_constraints.threshold.thresh_sel);
+
+		parse_constraint_field(of_get_child_by_name(child, "thresh-cmp"),
+					&dts_constraints.threshold.thresh_cmp);
+
+		parse_constraint_field(of_get_child_by_name(child, "thresh-ctl"),
+					&dts_constraints.threshold.thresh_ctl);
+	}
+
+	/* cache */
+	child = of_get_child_by_name(np, "cache");
+
+	if (child) {
+		of_property_read_u32(child, "cache-selector-mask",
+					&dts_constraints.cache_selector_mask);
+
+		dts_constraints.require_cache_selector_zero =
+					of_property_read_bool(child, "require-cache-selector-zero");
+
+		/* cache-group */
+		parse_constraint_field(of_get_child_by_name(child, "cache-group"),
+					&dts_constraints.cache_group);
+
+		/* cache-pmc4 */
+		parse_constraint_field(of_get_child_by_name(child, "cache-pmc4"),
+					&dts_constraints.cache_pmc4);
+
+		/* l2l3-group */
+		parse_constraint_field(of_get_child_by_name(child, "l2l3-group"),
+					&dts_constraints.l2l3_group);
+	}
+
+	/* ebb */
+	child = of_get_child_by_name(np, "ebb");
+
+	if (child) {
+		parse_constraint_field(child, &dts_constraints.ebb);
+
+		dts_constraints.require_pmc_for_ebb =
+					of_property_read_bool(child, "require-pmc");
+	}
+
+	/* bhrb */
+	child = of_get_child_by_name(np, "bhrb");
+
+	if (child) {
+		parse_constraint_field(child, &dts_constraints.bhrb);
+
+		dts_constraints.bhrb_requires_ebb =
+					of_property_read_bool(child, "requires-ebb");
+	}
+
+	/* others */
+	parse_constraint_field(of_get_child_by_name(np, "l1-qualifier"),
+					&dts_constraints.l1_qualifier);
+
+	parse_constraint_field(of_get_child_by_name(np, "fab-match"),
+					&dts_constraints.fab_match);
+
+	parse_constraint_field(of_get_child_by_name(np, "radix-scope"),
+					&dts_constraints.radix_scope);
+
+	/* NC */
+	child = of_get_child_by_name(np, "nc");
+
+	if (child) {
+		of_property_read_u64(child, "mask",
+					&dts_constraints.nc.mask);
+
+		of_property_read_u32(child, "shift",
+					&dts_constraints.nc.shift);
+
+		of_property_read_u32(child, "increment",
+					&dts_constraints.nc.increment);
+	}
+}
 
 static ssize_t pmu_dts_event_show(struct device *dev,
 				struct device_attribute *attr,
@@ -124,8 +293,7 @@ static struct power_pmu dts_pmu = {
 	.group_constraint_mask  = CNST_CACHE_PMC4_MASK,
 	.group_constraint_val   = CNST_CACHE_PMC4_VAL,
 	.compute_mmcr           = dts_compute_mmcr,
-	// .config_bhrb         = power10_config_bhrb,
-	// .bhrb_filter_map     = power10_bhrb_filte-r_map,
+	.get_constraint         = isa207_get_constraint_dts,
 	.get_alternatives       = dts_get_alternatives,
 	.get_mem_data_src       = isa207_get_mem_data_src,
 	.get_mem_weight         = isa207_get_mem_weight,
@@ -134,9 +302,7 @@ static struct power_pmu dts_pmu = {
 					PPMU_ARCH_31 | PPMU_HAS_ATTR_CONFIG1 |
 					PPMU_P10,
 	.attr_groups            = pmu_dts_attr_groups,
-	//.bhrb_nr              = 32,
 	.capabilities           = PERF_PMU_CAP_EXTENDED_REGS,
-	//.check_attr_config    = power10_check_attr_config,
 };
 
 /* Device Tree match */
@@ -174,6 +340,9 @@ static int pmu_dts_probe(struct platform_device *pdev)
 			}
 		}
 	}
+
+	/* For format parsing */
+	parse_constraints(np);
 
 	if (of_property_read_u32(np, "nr_pmc", &pmu_dts_nr_pmc)) {
 		pr_err("pmu_dts: nr_pmc not found in %s\n", np->full_name);
