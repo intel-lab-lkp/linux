@@ -178,7 +178,7 @@ static int hinic3_sw_init(struct net_device *netdev)
 	u8 mac_addr[ETH_ALEN];
 	int err;
 
-	mutex_init(&nic_dev->port_state_mutex);
+	mutex_init(&nic_dev->state_lock);
 
 	nic_dev->q_params.sq_depth = HINIC3_SQ_DEPTH;
 	nic_dev->q_params.rq_depth = HINIC3_RQ_DEPTH;
@@ -315,21 +315,28 @@ static void hinic3_link_status_change(struct net_device *netdev,
 {
 	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
 
+	if (!mutex_trylock(&nic_dev->state_lock))
+		return;
+
 	if (link_status_up) {
 		if (netif_carrier_ok(netdev))
-			return;
+			goto err_unlock;
 
 		nic_dev->link_status_up = true;
 		netif_carrier_on(netdev);
 		netdev_dbg(netdev, "Link is up\n");
 	} else {
 		if (!netif_carrier_ok(netdev))
-			return;
+			goto err_unlock;
 
 		nic_dev->link_status_up = false;
 		netif_carrier_off(netdev);
 		netdev_dbg(netdev, "Link is down\n");
 	}
+
+err_unlock:
+	mutex_unlock(&nic_dev->state_lock);
+	return;
 }
 
 static void hinic3_port_module_event_handler(struct net_device *netdev,

@@ -135,10 +135,13 @@ static int hinic3_set_interrupt_moder(struct net_device *netdev, u16 q_id,
 {
 	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
 	struct hinic3_interrupt_info info = {};
-	int err;
+	int err = 0;
+
+	if (!mutex_trylock(&nic_dev->state_lock))
+		goto out;
 
 	if (q_id >= nic_dev->q_params.num_qps)
-		return 0;
+		goto err_unlock;
 
 	info.interrupt_coalesc_set = 1;
 	info.coalesc_timer_cfg = coalesc_timer_cfg;
@@ -156,6 +159,10 @@ static int hinic3_set_interrupt_moder(struct net_device *netdev, u16 q_id,
 		nic_dev->rxqs[q_id].last_pending_limit = pending_limit;
 	}
 
+err_unlock:
+	mutex_unlock(&nic_dev->state_lock);
+
+out:
 	return err;
 }
 
