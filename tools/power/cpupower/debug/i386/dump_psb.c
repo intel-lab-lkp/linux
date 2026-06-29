@@ -181,6 +181,11 @@ main(int argc, char *argv[])
 
 	mem = mmap(mem, 0x100000 - 0xc0000, PROT_READ, MAP_SHARED, fd, 0xc0000);
 	close(fd);
+	
+	if (mem == MAP_FAILED) {
+		printf ("Couldn't mmap /dev/mem\n");
+		exit(1);
+	}
 
 	for (p = mem; p - mem < LEN; p+=16) {
 		if (memcmp(p, "AMDK7PNOW!", 10) == 0) {
