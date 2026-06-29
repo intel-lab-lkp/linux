@@ -299,6 +299,28 @@ void devlink_default_esw_mode_apply_disable(struct devlink *devlink)
 	devlink->default_esw_mode_apply_pending = false;
 }
 
+/**
+ * devl_apply_default_esw_mode - Apply devlink eswitch mode boot default
+ * @devlink: devlink
+ *
+ * Apply a matching devlink_eswitch_mode= boot default immediately. Drivers may
+ * use this helper when the device is ready for an eswitch mode change and the
+ * caller already holds the devlink instance lock.
+ *
+ * Any pending asynchronous default apply is cleared before applying the
+ * default, so work queued by devl_register() will not apply it again.
+ *
+ * Context: Caller must hold the devlink instance lock.
+ */
+void devl_apply_default_esw_mode(struct devlink *devlink)
+{
+	devl_assert_locked(devlink);
+
+	devlink->default_esw_mode_apply_pending = false;
+	devlink_default_esw_mode_apply(devlink);
+}
+EXPORT_SYMBOL_GPL(devl_apply_default_esw_mode);
+
 static void devlink_default_esw_mode_apply_cancel(struct devlink *devlink)
 {
 	if (cancel_delayed_work_sync(&devlink->default_esw_mode_apply_dw))

@@ -1652,6 +1652,7 @@ static inline struct devlink *devlink_alloc(const struct devlink_ops *ops,
 
 int devl_register(struct devlink *devlink);
 void devl_unregister(struct devlink *devlink);
+void devl_apply_default_esw_mode(struct devlink *devlink);
 void devlink_register(struct devlink *devlink);
 void devlink_unregister(struct devlink *devlink);
 void devlink_free(struct devlink *devlink);
