@@ -137,7 +137,7 @@ static u32 intel_cpuid_vfm(void)
 
 u32 intel_get_platform_id(void)
 {
-	unsigned int val[2];
+	u64 val;
 
 	if (x86_hypervisor_present)
 		return 0;
@@ -152,9 +152,9 @@ u32 intel_get_platform_id(void)
 		return 0;
 
 	/* get processor flags from MSR 0x17 */
-	native_rdmsr(MSR_IA32_PLATFORM_ID, val[0], val[1]);
+	val = native_rdmsrq(MSR_IA32_PLATFORM_ID);
 
-	return (val[1] >> 18) & 7;
+	return (val >> 50) & 7;
 }
 
 void intel_collect_cpu_info(struct cpu_signature *sig)
