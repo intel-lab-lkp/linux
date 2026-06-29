@@ -1166,7 +1166,13 @@ static long btrfs_scan_inode(struct btrfs_inode *inode, struct btrfs_em_shrink_c
 		em = rb_entry(node, struct extent_map, rb_node);
 		ctx->scanned++;
 
-		if (em->flags & EXTENT_FLAG_PINNED)
+		/*
+		 * Skip extent maps that are pinned or are being logged. The
+		 * i_mmap_lock should prevent this from seeing LOGGING on extent_maps
+		 * directly associated with inode, but em may be associated with
+		 * other, dependent inodes and their locks are not held.
+		 */
+		if (em->flags & (EXTENT_FLAG_PINNED | EXTENT_FLAG_LOGGING))
 			goto next;
 
 		/*
