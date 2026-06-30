@@ -215,6 +215,8 @@ static int steelseries_battery_get_property(struct power_supply *psy,
 			val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
 		else if (sd->battery_charging)
 			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+		else if (sd->battery_capacity >= 100)
+			val->intval = POWER_SUPPLY_STATUS_FULL;
 		else
 			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
 		break;
