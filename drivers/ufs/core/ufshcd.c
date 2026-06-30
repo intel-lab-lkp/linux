@@ -11235,9 +11235,17 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	 */
 	ufshcd_readl(hba, REG_INTERRUPT_ENABLE);
 
-	/* IRQ registration */
+	/* IRQ registration
+	 * In the case of PREMMP_RT, directly use the threaded
+	 * interrupt to avoid using a spinlock (which could sleep)
+	 * in the hard IRQ handler.
+	 */
+#ifdef CONFIG_PREEMPT_RT
+	err = devm_request_irq(dev, irq, ufshcd_threaded_intr, IRQF_SHARED, UFSHCD, hba);
+#else
 	err = devm_request_threaded_irq(dev, irq, ufshcd_intr, ufshcd_threaded_intr,
 					IRQF_ONESHOT | IRQF_SHARED, UFSHCD, hba);
+#endif
 	if (err) {
 		dev_err(hba->dev, "request irq failed\n");
 		goto out_disable;
