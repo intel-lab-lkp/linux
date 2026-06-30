@@ -154,6 +154,14 @@ struct rvtrace_platform_data {
 	struct rvtrace_connection **outconns;
 };
 
+/**
+ * struct rvtrace_driver_data - Driver-specific data for RISC-V trace components
+ * @get_impl: Optional callback to retrieve pre-ratified implementation register information.
+ */
+struct rvtrace_driver_data {
+	u32 (*get_impl)(struct rvtrace_platform_data *pdata);
+};
+
 static inline u32 rvtrace_read32(struct rvtrace_platform_data *pdata, u32 offset)
 {
 	if (likely(pdata->io_mem))

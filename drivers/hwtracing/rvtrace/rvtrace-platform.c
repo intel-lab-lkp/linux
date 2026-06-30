@@ -11,6 +11,7 @@
 #include <linux/property.h>
 #include <linux/rvtrace.h>
 #include <linux/types.h>
+#include "rvtrace-v0.h"
 
 static int rvtrace_of_parse_outconns(struct rvtrace_platform_data *pdata)
 {
@@ -114,6 +115,7 @@ static int rvtrace_of_parse_inconns(struct rvtrace_platform_data *pdata)
 
 static int rvtrace_platform_probe(struct platform_device *pdev)
 {
+	const struct rvtrace_driver_data *driver_data;
 	struct rvtrace_platform_data *pdata;
 	struct device *dev = &pdev->dev;
 	struct rvtrace_component *comp;
@@ -162,7 +164,14 @@ static int rvtrace_platform_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to reset component\n");
 
-	impl = rvtrace_read32(pdata, RVTRACE_COMPONENT_IMPL_OFFSET);
+	driver_data = device_get_match_data(pdata->dev);
+	if (driver_data) {
+		if (driver_data->get_impl)
+			impl = driver_data->get_impl(pdata);
+	} else {
+		impl = rvtrace_read32(pdata, RVTRACE_COMPONENT_IMPL_OFFSET);
+	}
+
 	type = (impl >> RVTRACE_COMPONENT_IMPL_TYPE_SHIFT) &
 		RVTRACE_COMPONENT_IMPL_TYPE_MASK;
 	major = (impl >> RVTRACE_COMPONENT_IMPL_VERMAJOR_SHIFT) &
@@ -194,8 +203,18 @@ static void rvtrace_platform_remove(struct platform_device *pdev)
 	rvtrace_unregister_component(comp);
 }
 
+static const struct rvtrace_driver_data rvtrace_v0_encoder_data = {
+	.get_impl = rvtrace_v0_get_encoder_impl,
+};
+
+static const struct rvtrace_driver_data rvtrace_v0_funnel_data = {
+	.get_impl = rvtrace_v0_get_funnel_impl,
+};
+
 static const struct of_device_id rvtrace_platform_match[] = {
 	{ .compatible = "riscv,trace-component" },
+	{ .compatible = "sifive,trace-encoder0", .data = &rvtrace_v0_encoder_data},
+	{ .compatible = "sifive,trace-funnel0", .data = &rvtrace_v0_funnel_data},
 	{}
 };
 

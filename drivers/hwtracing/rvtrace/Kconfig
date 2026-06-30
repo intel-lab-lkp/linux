@@ -31,3 +31,12 @@ config RVTRACE_RAMSINK
 	help
 	  This driver provides support for Risc-V E-Trace Ramsink
 	  component.
+
+config RVTRACE_V0
+	tristate "RISC-V Trace Pre-ratified driver"
+	depends on RVTRACE
+	select RVTRACE_ENCODER
+	select RVTRACE_RAMSINK
+	default y
+	help
+	  This provides the RISC-V pre-ratified version trace hardware support.
