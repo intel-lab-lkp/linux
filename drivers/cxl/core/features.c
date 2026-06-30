@@ -237,6 +237,9 @@ size_t cxl_get_feature(struct cxl_mailbox *cxl_mbox, const uuid_t *feat_uuid,
 	if (!feat_out || !feat_out_size)
 		return 0;
 
+	if (offset + feat_out_size > U16_MAX)
+		return 0;
+
 	size_out = min(feat_out_size, cxl_mbox->payload_size);
 	uuid_copy(&pi.uuid, feat_uuid);
 	pi.selection = selection;
@@ -286,6 +289,9 @@ int cxl_set_feature(struct cxl_mailbox *cxl_mbox,
 
 	if (return_code)
 		*return_code = CXL_MBOX_CMD_RC_INPUT;
+
+	if (offset + feat_data_size > U16_MAX)
+		return -EINVAL;
 
 	struct cxl_mbox_set_feat_in *pi __free(kfree) =
 			kzalloc(cxl_mbox->payload_size, GFP_KERNEL);
