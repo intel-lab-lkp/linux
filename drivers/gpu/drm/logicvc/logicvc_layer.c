@@ -10,6 +10,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_blend.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_fb_dma_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
@@ -87,25 +88,32 @@ static int logicvc_plane_atomic_check(struct drm_plane *drm_plane,
 	struct drm_device *drm_dev = drm_plane->dev;
 	struct logicvc_layer *layer = logicvc_layer(drm_plane);
 	struct logicvc_drm *logicvc = logicvc_drm(drm_dev);
-	struct drm_plane_state *new_state =
-		drm_atomic_get_new_plane_state(state, drm_plane);
+	struct drm_plane_state *new_state;
 	struct drm_crtc_state *crtc_state;
 	int min_scale, max_scale;
 	bool can_position;
-	int ret;
+	int idx, ret = 0;
+
+	if (!drm_dev_enter(drm_dev, &idx))
+		return -ENODEV;
+
+	new_state = drm_atomic_get_new_plane_state(state, drm_plane);
 
 	if (!new_state->crtc)
-		return 0;
+		goto out_exit;
 
 	crtc_state = drm_atomic_get_new_crtc_state(new_state->state,
 						   new_state->crtc);
-	if (WARN_ON(!crtc_state))
-		return -EINVAL;
+	if (WARN_ON(!crtc_state)) {
+		ret = -EINVAL;
+		goto out_exit;
+	}
 
 	if (new_state->crtc_x < 0 || new_state->crtc_y < 0) {
 		drm_err(drm_dev,
 			"Negative on-CRTC positions are not supported.\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out_exit;
 	}
 
 	if (!logicvc->caps->layer_address) {
@@ -113,7 +121,7 @@ static int logicvc_plane_atomic_check(struct drm_plane *drm_plane,
 						      NULL);
 		if (ret) {
 			drm_err(drm_dev, "No viable setup for buffer found.\n");
-			return ret;
+			goto out_exit;
 		}
 	}
 
@@ -127,12 +135,12 @@ static int logicvc_plane_atomic_check(struct drm_plane *drm_plane,
 	ret = drm_atomic_helper_check_plane_state(new_state, crtc_state,
 						  min_scale, max_scale,
 						  can_position, true);
-	if (ret) {
+	if (ret)
 		drm_err(drm_dev, "Invalid plane state\n\n");
-		return ret;
-	}
 
-	return 0;
+out_exit:
+	drm_dev_exit(idx);
+	return ret;
 }
 
 static void logicvc_plane_atomic_update(struct drm_plane *drm_plane,
@@ -141,14 +149,20 @@ static void logicvc_plane_atomic_update(struct drm_plane *drm_plane,
 	struct logicvc_layer *layer = logicvc_layer(drm_plane);
 	struct logicvc_drm *logicvc = logicvc_drm(drm_plane->dev);
 	struct drm_device *drm_dev = &logicvc->drm_dev;
-	struct drm_plane_state *new_state =
-		drm_atomic_get_new_plane_state(state, drm_plane);
 	struct drm_crtc *drm_crtc = &logicvc->crtc->drm_crtc;
 	struct drm_display_mode *mode = &drm_crtc->state->adjusted_mode;
-	struct drm_framebuffer *fb = new_state->fb;
 	struct logicvc_layer_buffer_setup setup = {};
+	struct drm_plane_state *new_state;
+	struct drm_framebuffer *fb;
 	u32 index = layer->index;
+	int idx;
 	u32 reg;
+
+	if (!drm_dev_enter(drm_dev, &idx))
+		return;
+
+	new_state = drm_atomic_get_new_plane_state(state, drm_plane);
+	fb = new_state->fb;
 
 	/* Layer dimensions */
 
@@ -230,6 +244,8 @@ static void logicvc_plane_atomic_update(struct drm_plane *drm_plane,
 	reg |= LOGICVC_LAYER_CTRL_COLOR_KEY_DISABLE;
 
 	regmap_write(logicvc->regmap, LOGICVC_LAYER_CTRL_REG(index), reg);
+
+	drm_dev_exit(idx);
 }
 
 static void logicvc_plane_atomic_disable(struct drm_plane *drm_plane,
@@ -238,6 +254,8 @@ static void logicvc_plane_atomic_disable(struct drm_plane *drm_plane,
 	struct logicvc_layer *layer = logicvc_layer(drm_plane);
 	struct logicvc_drm *logicvc = logicvc_drm(drm_plane->dev);
 	u32 index = layer->index;
+
+	/* No need for drm_dev_enter() here. The regmap outlives the DRM device. */
 
 	regmap_write(logicvc->regmap, LOGICVC_LAYER_CTRL_REG(index), 0);
 }

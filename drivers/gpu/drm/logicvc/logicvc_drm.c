@@ -71,6 +71,7 @@ static irqreturn_t logicvc_drm_irq_handler(int irq, void *data)
 	struct logicvc_drm *logicvc = data;
 	irqreturn_t ret = IRQ_NONE;
 	u32 stat = 0;
+	int idx;
 
 	/* Get pending interrupt sources. */
 	regmap_read(logicvc->regmap, LOGICVC_INT_STAT_REG, &stat);
@@ -79,8 +80,14 @@ static irqreturn_t logicvc_drm_irq_handler(int irq, void *data)
 	regmap_write(logicvc->regmap, LOGICVC_INT_STAT_REG, stat);
 
 	if (stat & LOGICVC_INT_STAT_V_SYNC) {
+		/* DRM device could be unplugged. */
+		if (!drm_dev_enter(&logicvc->drm_dev, &idx))
+			return ret;
+
 		logicvc_crtc_vblank_handler(logicvc);
 		ret = IRQ_HANDLED;
+
+		drm_dev_exit(idx);
 	}
 
 	return ret;
@@ -463,7 +470,7 @@ static void logicvc_drm_remove(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct drm_device *drm_dev = &logicvc->drm_dev;
 
-	drm_dev_unregister(drm_dev);
+	drm_dev_unplug(drm_dev);
 	drm_atomic_helper_shutdown(drm_dev);
 
 	logicvc_mode_fini(logicvc);

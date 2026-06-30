@@ -40,10 +40,15 @@ static void logicvc_crtc_atomic_begin(struct drm_crtc *drm_crtc,
 				      struct drm_atomic_state *state)
 {
 	struct logicvc_crtc *crtc = logicvc_crtc(drm_crtc);
-	struct drm_crtc_state *old_state =
-		drm_atomic_get_old_crtc_state(state, drm_crtc);
 	struct drm_device *drm_dev = drm_crtc->dev;
+	struct drm_crtc_state *old_state;
 	unsigned long flags;
+	int idx;
+
+	if (!drm_dev_enter(drm_dev, &idx))
+		return;
+
+	old_state = drm_atomic_get_old_crtc_state(state, drm_crtc);
 
 	/*
 	 * We need to grab the pending event here if vblank was already enabled
@@ -58,6 +63,8 @@ static void logicvc_crtc_atomic_begin(struct drm_crtc *drm_crtc,
 
 		spin_unlock_irqrestore(&drm_dev->event_lock, flags);
 	}
+
+	drm_dev_exit(idx);
 }
 
 static void logicvc_crtc_atomic_enable(struct drm_crtc *drm_crtc,
@@ -65,17 +72,23 @@ static void logicvc_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 {
 	struct logicvc_crtc *crtc = logicvc_crtc(drm_crtc);
 	struct logicvc_drm *logicvc = logicvc_drm(drm_crtc->dev);
-	struct drm_crtc_state *old_state =
-		drm_atomic_get_old_crtc_state(state, drm_crtc);
-	struct drm_crtc_state *new_state =
-		drm_atomic_get_new_crtc_state(state, drm_crtc);
-	struct drm_display_mode *mode = &new_state->adjusted_mode;
 
 	struct drm_device *drm_dev = drm_crtc->dev;
+	struct drm_crtc_state *old_state;
+	struct drm_crtc_state *new_state;
 	unsigned int hact, hfp, hsl, hbp;
 	unsigned int vact, vfp, vsl, vbp;
+	struct drm_display_mode *mode;
 	unsigned long flags;
 	u32 ctrl;
+	int idx;
+
+	if (!drm_dev_enter(drm_dev, &idx))
+		return;
+
+	old_state = drm_atomic_get_old_crtc_state(state, drm_crtc);
+	new_state = drm_atomic_get_new_crtc_state(state, drm_crtc);
+	mode = &new_state->adjusted_mode;
 
 	/* Timings */
 
@@ -148,6 +161,8 @@ static void logicvc_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 		drm_crtc->state->event = NULL;
 		spin_unlock_irqrestore(&drm_dev->event_lock, flags);
 	}
+
+	drm_dev_exit(idx);
 }
 
 static void logicvc_crtc_atomic_disable(struct drm_crtc *drm_crtc,
@@ -155,6 +170,10 @@ static void logicvc_crtc_atomic_disable(struct drm_crtc *drm_crtc,
 {
 	struct logicvc_drm *logicvc = logicvc_drm(drm_crtc->dev);
 	struct drm_device *drm_dev = drm_crtc->dev;
+	int idx;
+
+	if (!drm_dev_enter(drm_dev, &idx))
+		return;
 
 	drm_crtc_vblank_off(drm_crtc);
 
@@ -180,6 +199,8 @@ static void logicvc_crtc_atomic_disable(struct drm_crtc *drm_crtc,
 		drm_crtc->state->event = NULL;
 		spin_unlock_irq(&drm_dev->event_lock);
 	}
+
+	drm_dev_exit(idx);
 }
 
 static const struct drm_crtc_helper_funcs logicvc_crtc_helper_funcs = {
