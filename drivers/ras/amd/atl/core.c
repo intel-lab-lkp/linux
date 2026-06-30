@@ -192,6 +192,12 @@ static const struct x86_cpu_id amd_atl_cpuids[] = {
 };
 MODULE_DEVICE_TABLE(x86cpu, amd_atl_cpuids);
 
+unsigned long amd_convert_umc_addr_to_sys_addr(struct atl_err *err)
+{
+	return convert_umc_mca_addr_to_sys_addr(err);
+}
+EXPORT_SYMBOL_GPL(amd_convert_umc_addr_to_sys_addr);
+
 static int __init amd_atl_init(void)
 {
 	int ret;
@@ -210,23 +216,12 @@ static int __init amd_atl_init(void)
 
 	/* Increment this module's recount so that it can't be easily unloaded. */
 	__module_get(THIS_MODULE);
-	amd_atl_register_decoder(convert_umc_mca_addr_to_sys_addr);
 
 	pr_info("AMD Address Translation Library initialized\n");
 	return 0;
 }
 
-/*
- * Exit function is only needed for testing and debug. Module unload must be
- * forced to override refcount check.
- */
-static void __exit amd_atl_exit(void)
-{
-	amd_atl_unregister_decoder();
-}
-
 module_init(amd_atl_init);
-module_exit(amd_atl_exit);
 
 MODULE_DESCRIPTION("AMD Address Translation Library");
 MODULE_LICENSE("GPL");

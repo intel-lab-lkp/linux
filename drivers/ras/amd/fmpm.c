@@ -334,7 +334,7 @@ static void save_spa(struct fru_rec *rec, unsigned int entry,
 	a_err.ipid = id;
 	a_err.cpu  = cpu;
 
-	spa = amd_convert_umc_mca_addr_to_sys_addr(&a_err);
+	spa = amd_convert_umc_addr_to_sys_addr(&a_err);
 	if (IS_ERR_VALUE(spa)) {
 		pr_debug("Failed to get system address\n");
 		return;
