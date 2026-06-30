@@ -519,7 +519,7 @@ static int mal_probe(struct platform_device *ofdev)
 	int err = 0, i, bd_size;
 	int index = mal_count++;
 	unsigned int dcr_base;
-	const u32 *prop;
+	u32 val;
 	u32 cfg;
 	unsigned long irqflags;
 	irq_handler_t hdlr_serr, hdlr_txde, hdlr_rxde;
@@ -535,23 +535,23 @@ static int mal_probe(struct platform_device *ofdev)
 
 	MAL_DBG(mal, "probe" NL);
 
-	prop = of_get_property(ofdev->dev.of_node, "num-tx-chans", NULL);
-	if (prop == NULL) {
+	err = of_property_read_u32(ofdev->dev.of_node, "num-tx-chans", &val);
+	if (err) {
 		printk(KERN_ERR
 		       "mal%d: can't find MAL num-tx-chans property!\n",
 		       index);
 		return -ENODEV;
 	}
-	mal->num_tx_chans = prop[0];
+	mal->num_tx_chans = val;
 
-	prop = of_get_property(ofdev->dev.of_node, "num-rx-chans", NULL);
-	if (prop == NULL) {
+	err = of_property_read_u32(ofdev->dev.of_node, "num-rx-chans", &val);
+	if (err) {
 		printk(KERN_ERR
 		       "mal%d: can't find MAL num-rx-chans property!\n",
 		       index);
 		return -ENODEV;
 	}
-	mal->num_rx_chans = prop[0];
+	mal->num_rx_chans = val;
 
 	dcr_base = dcr_resource_start(ofdev->dev.of_node, 0);
 	if (dcr_base == 0) {
