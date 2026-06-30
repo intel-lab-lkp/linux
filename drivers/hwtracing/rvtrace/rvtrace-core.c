@@ -70,7 +70,7 @@ const struct rvtrace_component_id *rvtrace_match_id(struct rvtrace_component *co
 	u32 comp_maj, comp_min, id_maj, id_min;
 	const struct rvtrace_component_id *id;
 
-	for (id = ids; id->version && id->type; id++) {
+	for (id = ids; id->type; id++) {
 		if (comp->id.type != id->type)
 			return NULL;
 
@@ -81,13 +81,21 @@ const struct rvtrace_component_id *rvtrace_match_id(struct rvtrace_component *co
 		if (comp_maj > id_maj)
 			continue;
 
-		/* Refer to Ch. 5 'Versioning of components of the Trace Control spec. */
-		if (comp_maj < id_maj)
-			dev_warn(&comp->dev, "Older component with major version %d\n", comp_maj);
-		if (comp_min == 15)
-			dev_warn(&comp->dev, "Experimental component\n");
-		else if (comp_min > id_min)
-			dev_warn(&comp->dev, "Newer component with minor version %d\n", comp_min);
+		if (comp_maj == 0) {
+			if (id_maj > 0)
+				continue;
+		} else {
+			/* Refer to Ch. 5 'Versioning of components of the Trace Control spec. */
+			if (comp_maj < id_maj)
+				dev_warn(&comp->dev, "Older component with major version %d\n",
+					 comp_maj);
+			if (comp_min == 15)
+				dev_warn(&comp->dev, "Experimental component\n");
+			else if (comp_min > id_min)
+				dev_warn(&comp->dev, "Newer component with minor version %d\n",
+					 comp_min);
+		}
+
 
 		return id;
 	}

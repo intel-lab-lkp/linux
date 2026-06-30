@@ -98,6 +98,8 @@ static void rvtrace_encoder_remove(struct rvtrace_component *comp)
 static struct rvtrace_component_id rvtrace_encoder_ids[] = {
 	{ .type = RVTRACE_COMPONENT_TYPE_ENCODER,
 	  .version = rvtrace_component_mkversion(1, 0), },
+	{ .type = RVTRACE_COMPONENT_TYPE_ENCODER,
+	  .version = rvtrace_component_mkversion(0, 0), },
 	{},
 };
 
