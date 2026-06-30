@@ -6,6 +6,41 @@
 #include <linux/rvtrace.h>
 #include "rvtrace-v0.h"
 
+int rvtrace_v0_sink_config(struct rvtrace_path_node *node)
+{
+	struct rvtrace_component *comp = node->comp;
+	struct rvtrace_path_node *next_node = NULL;
+	struct rvtrace_v0_comp_features	*data = NULL;
+	u32 val;
+
+	data = (struct rvtrace_v0_comp_features *)comp->id.data;
+	if (!data)
+		return -EINVAL;
+
+	val = rvtrace_read32(comp->pdata, RVTRACE_COMPONENT_CTRL_OFFSET);
+	val &= ~RVTRACE_V0_CTRL_SINK_MASK;
+
+	/* last node in list */
+	if (!node->conn) {
+		if (data->has_sba_sink) {
+			val |= TE_SINK_SBA << RVTRACE_V0_CTRL_SINK_SHIFT;
+		} else {
+			dev_warn(&comp->dev,
+				 "Component is last node but doesn't support SBA sink\n");
+		}
+	} else {
+		next_node = list_next_entry(node, head);
+		if (next_node && next_node->comp->id.type == RVTRACE_COMPONENT_TYPE_FUNNEL &&
+		    data->has_funnel_sink) {
+			val |= TE_SINK_FUNNEL << RVTRACE_V0_CTRL_SINK_SHIFT;
+		}
+	}
+
+	rvtrace_write32(comp->pdata, val, RVTRACE_COMPONENT_CTRL_OFFSET);
+
+	return 0;
+}
+
 void *rvtrace_v0_get_comp_data(struct rvtrace_platform_data *pdata)
 {
 	struct rvtrace_v0_comp_features	*data;

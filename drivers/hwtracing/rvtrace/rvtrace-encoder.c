@@ -6,6 +6,7 @@
 #include <linux/device.h>
 #include <linux/rvtrace.h>
 #include <linux/types.h>
+#include "rvtrace-v0.h"
 
 #define RVTRACE_COMPONENT_CTRL_ITRACE_SHIFT	2
 #define RVTRACE_COMPONENT_CTRL_INSTMODE_SHIFT	4
@@ -15,14 +16,19 @@ static int rvtrace_encoder_start(struct rvtrace_path_node *node)
 {
 	struct rvtrace_component *comp = node->comp;
 	int ret;
-	u32 val;
+	u32 val, comp_maj;
 
-	val = rvtrace_read32(comp->pdata, RVTRACE_COMPONENT_CTRL_OFFSET);
-	val |= BIT(RVTRACE_COMPONENT_CTRL_ENABLE_SHIFT);
-	rvtrace_write32(comp->pdata, val, RVTRACE_COMPONENT_CTRL_OFFSET);
-	ret = rvtrace_poll_bit(comp->pdata, RVTRACE_COMPONENT_CTRL_OFFSET,
-			       RVTRACE_COMPONENT_CTRL_ENABLE_SHIFT, 1,
-			       comp->pdata->control_poll_timeout_usecs);
+	/* Set pre-ratified comp's next sink */
+	comp_maj = rvtrace_component_version_major(comp->id.version);
+	if (comp_maj == 0) {
+		ret = rvtrace_v0_sink_config(node);
+		if (ret) {
+			dev_err(&comp->dev, "failed to set next sink.\n");
+			return ret;
+		}
+	}
+
+	ret = rvtrace_enable_component(comp->pdata);
 	if (ret) {
 		dev_err(&comp->dev, "failed to enable encoder.\n");
 		return ret;
@@ -61,12 +67,7 @@ static int rvtrace_encoder_stop(struct rvtrace_component *comp)
 		return ret;
 	}
 
-	val = rvtrace_read32(comp->pdata, RVTRACE_COMPONENT_CTRL_OFFSET);
-	val &= ~BIT(RVTRACE_COMPONENT_CTRL_ENABLE_SHIFT);
-	rvtrace_write32(comp->pdata, val, RVTRACE_COMPONENT_CTRL_OFFSET);
-	ret = rvtrace_poll_bit(comp->pdata, RVTRACE_COMPONENT_CTRL_OFFSET,
-			       RVTRACE_COMPONENT_CTRL_ENABLE_SHIFT, 0,
-			       comp->pdata->control_poll_timeout_usecs);
+	ret = rvtrace_disable_component(comp->pdata);
 	if (ret) {
 		dev_err(&comp->dev, "failed to disable encoder.\n");
 		return ret;
