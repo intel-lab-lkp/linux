@@ -746,6 +746,20 @@ config CRYPTO_XTS
 	  implementation currently can't handle a sectorsize which is not a
 	  multiple of 16 bytes.
 
+config CRYPTO_DUN
+	tristate "Data-unit-number (DUN) dispatch template"
+	select CRYPTO_SKCIPHER
+	select CRYPTO_MANAGER
+	help
+	  dun(...) wraps an skcipher whose IV is a wide data-unit-number
+	  counter (e.g. xts(aes)) and lets a caller submit several data units
+	  sharing one starting IV in a single request, via
+	  skcipher_request::data_unit_size.  The counter endianness is the
+	  second parameter: dun(xts(aes),le) or dun(xts(aes),be).  The template
+	  splits the request into one inner call per data unit; a hardware
+	  driver may register a higher-priority dun(...) that handles the whole
+	  request in one pass.  The first user is dm-crypt.
+
 endmenu
 
 menu "AEAD (authenticated encryption with associated data) ciphers"
