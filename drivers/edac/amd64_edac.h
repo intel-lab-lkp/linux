@@ -400,6 +400,9 @@ struct err_info {
 	u16 syndrome;
 	u32 page;
 	u32 offset;
+	struct atl_dram_addr *dram_addr;
+	u32 socketid;
+	u64 ipid;
 };
 
 static inline u32 get_umc_base(u8 channel)
