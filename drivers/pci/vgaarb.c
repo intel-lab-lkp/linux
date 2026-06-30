@@ -1044,6 +1044,58 @@ struct vga_arb_private {
 	spinlock_t lock;
 };
 
+/*
+ * Each non-NULL priv->cards[i].pdev owns one pci_dev reference.
+ * priv->target is only an alias of one of priv->cards[] and does not
+ * own an extra reference.
+ *
+ * On success, this consumes the caller's @pdev reference.  If the device
+ * is already tracked, the temporary reference is dropped; otherwise it is
+ * stored in a new cards[] entry.  On failure, the caller still owns @pdev.
+ */
+static int vga_arb_set_target(struct vga_arb_private *priv,
+			      struct pci_dev *pdev)
+{
+	unsigned long flags;
+	int i, ret = -ENOMEM;
+
+	spin_lock_irqsave(&priv->lock, flags);
+	for (i = 0; i < MAX_USER_CARDS; i++) {
+		if (priv->cards[i].pdev == pdev) {
+			priv->target = priv->cards[i].pdev;
+			ret = 0;
+			break;
+		}
+		if (!priv->cards[i].pdev) {
+			priv->cards[i].pdev = pdev;
+			priv->cards[i].io_cnt = 0;
+			priv->cards[i].mem_cnt = 0;
+			priv->target = priv->cards[i].pdev;
+			pdev = NULL;
+			ret = 0;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&priv->lock, flags);
+
+	if (!ret)
+		pci_dev_put(pdev);
+
+	return ret;
+}
+
+static struct pci_dev *vga_arb_get_default_pdev(void)
+{
+	struct pci_dev *pdev;
+	unsigned long flags;
+
+	spin_lock_irqsave(&vga_lock, flags);
+	pdev = pci_dev_get(vga_default_device());
+	spin_unlock_irqrestore(&vga_lock, flags);
+
+	return pdev;
+}
+
 static LIST_HEAD(vga_user_list);
 static DEFINE_SPINLOCK(vga_user_lock);
 
@@ -1294,13 +1346,14 @@ static ssize_t vga_arb_write(struct file *file, const char __user *buf,
 	} else if (strncmp(curr_pos, "target ", 7) == 0) {
 		unsigned int domain, bus, devfn;
 		struct vga_device *vgadev;
+		unsigned long flags;
 
 		curr_pos += 7;
 		remaining -= 7;
 		pr_debug("client 0x%p called 'target'\n", priv);
 		/* If target is default */
 		if (!strncmp(curr_pos, "default", 7))
-			pdev = pci_dev_get(vga_default_device());
+			pdev = vga_arb_get_default_pdev();
 		else {
 			if (!vga_pci_str_to_vars(curr_pos, remaining,
 						 &domain, &bus, &devfn)) {
@@ -1321,7 +1374,9 @@ static ssize_t vga_arb_write(struct file *file, const char __user *buf,
 				pdev);
 		}
 
+		spin_lock_irqsave(&vga_lock, flags);
 		vgadev = vgadev_find(pdev);
+		spin_unlock_irqrestore(&vga_lock, flags);
 		pr_debug("vgadev %p\n", vgadev);
 		if (vgadev == NULL) {
 			if (pdev) {
@@ -1333,18 +1388,8 @@ static ssize_t vga_arb_write(struct file *file, const char __user *buf,
 			goto done;
 		}
 
-		priv->target = pdev;
-		for (i = 0; i < MAX_USER_CARDS; i++) {
-			if (priv->cards[i].pdev == pdev)
-				break;
-			if (priv->cards[i].pdev == NULL) {
-				priv->cards[i].pdev = pdev;
-				priv->cards[i].io_cnt = 0;
-				priv->cards[i].mem_cnt = 0;
-				break;
-			}
-		}
-		if (i == MAX_USER_CARDS) {
+		ret_val = vga_arb_set_target(priv, pdev);
+		if (ret_val) {
 			vgaarb_dbg(&pdev->dev, "maximum user cards (%d) number reached, ignoring this one!\n",
 				MAX_USER_CARDS);
 			pci_dev_put(pdev);
@@ -1354,7 +1399,6 @@ static ssize_t vga_arb_write(struct file *file, const char __user *buf,
 		}
 
 		ret_val = count;
-		pci_dev_put(pdev);
 		goto done;
 
 
@@ -1394,6 +1438,7 @@ static __poll_t vga_arb_fpoll(struct file *file, poll_table *wait)
 
 static int vga_arb_open(struct inode *inode, struct file *file)
 {
+	struct pci_dev *pdev;
 	struct vga_arb_private *priv;
 	unsigned long flags;
 
@@ -1410,8 +1455,9 @@ static int vga_arb_open(struct inode *inode, struct file *file)
 	spin_unlock_irqrestore(&vga_user_lock, flags);
 
 	/* Set the client's lists of locks */
-	priv->target = vga_default_device(); /* Maybe this is still null! */
-	priv->cards[0].pdev = priv->target;
+	pdev = vga_arb_get_default_pdev(); /* Maybe this is still null! */
+	priv->cards[0].pdev = pdev;
+	priv->target = pdev;
 	priv->cards[0].io_cnt = 0;
 	priv->cards[0].mem_cnt = 0;
 
@@ -1422,8 +1468,9 @@ static int vga_arb_release(struct inode *inode, struct file *file)
 {
 	struct vga_arb_private *priv = file->private_data;
 	struct vga_arb_user_card *uc;
+	struct pci_dev *pdevs[MAX_USER_CARDS];
 	unsigned long flags;
-	int i;
+	int i, nr_pdevs = 0;
 
 	pr_debug("%s\n", __func__);
 
@@ -1439,8 +1486,14 @@ static int vga_arb_release(struct inode *inode, struct file *file)
 			vga_put(uc->pdev, VGA_RSRC_LEGACY_IO);
 		while (uc->mem_cnt--)
 			vga_put(uc->pdev, VGA_RSRC_LEGACY_MEM);
+		pdevs[nr_pdevs++] = uc->pdev;
+		uc->pdev = NULL;
 	}
+	priv->target = NULL;
 	spin_unlock_irqrestore(&vga_user_lock, flags);
+
+	for (i = 0; i < nr_pdevs; i++)
+		pci_dev_put(pdevs[i]);
 
 	kfree(priv);
 
