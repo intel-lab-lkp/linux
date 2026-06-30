@@ -39,6 +39,11 @@ properties:
     description:
       Optional 2.5V to 5.5V LDO input supply.
 
+  enable-gpios:
+    description:
+      GPIO connected to the EN (enable) pin.
+    maxItems: 1
+
   pwr-good-gpios:
     description:
       GPIO connected to the power-good status output pin.
