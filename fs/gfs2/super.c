@@ -565,7 +565,6 @@ void gfs2_make_fs_ro(struct gfs2_sbd *sdp)
 				   HZ * 5);
 		gfs2_assert_warn(sdp, gfs2_log_is_empty(sdp));
 	}
-	gfs2_quota_cleanup(sdp);
 }
 
 /**
@@ -604,8 +603,6 @@ restart:
 	else {
 		if (gfs2_withdrawn(sdp))
 			gfs2_destroy_threads(sdp);
-
-		gfs2_quota_cleanup(sdp);
 	}
 
 	/*  At this point, we're through modifying the disk  */
@@ -637,6 +634,8 @@ restart:
 	gfs2_glock_dq_uninit(&sdp->sd_live_gh);
 	gfs2_clear_rgrpd(sdp);
 	gfs2_jindex_free(sdp);
+
+	gfs2_quota_cleanup(sdp);
 	/*  Take apart glock structures and buffer lists  */
 	gfs2_gl_hash_clear(sdp);
 	iput(sdp->sd_inode);

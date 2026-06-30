@@ -1592,6 +1592,7 @@ static int gfs2_reconfigure(struct fs_context *fc)
 	if ((sb->s_flags ^ fc->sb_flags) & SB_RDONLY) {
 		if (fc->sb_flags & SB_RDONLY) {
 			gfs2_make_fs_ro(sdp);
+			gfs2_quota_cleanup(sdp);
 		} else {
 			error = gfs2_make_fs_rw(sdp);
 			if (error)
