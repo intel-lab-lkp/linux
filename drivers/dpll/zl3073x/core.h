@@ -101,7 +101,7 @@ void zl3073x_dev_stop(struct zl3073x_dev *zldev);
 
 static inline u8 zl3073x_dev_phase_avg_factor_get(struct zl3073x_dev *zldev)
 {
-	return zldev->phase_avg_factor;
+	return READ_ONCE(zldev->phase_avg_factor);
 }
 
 int zl3073x_dev_phase_avg_factor_set(struct zl3073x_dev *zldev, u8 factor);

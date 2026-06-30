@@ -567,19 +567,7 @@ zl3073x_dev_ref_states_update(struct zl3073x_dev *zldev)
 	}
 }
 
-static void
-zl3073x_dev_chan_states_update(struct zl3073x_dev *zldev)
-{
-	int i, rc;
 
-	for (i = 0; i < zldev->info->num_channels; i++) {
-		rc = zl3073x_chan_state_update(zldev, i);
-		if (rc)
-			dev_warn(zldev->dev,
-				 "Failed to get DPLL%u state: %pe\n", i,
-				 ERR_PTR(rc));
-	}
-}
 
 /**
  * zl3073x_ref_phase_offsets_update - update reference phase offsets
@@ -720,9 +708,6 @@ zl3073x_dev_periodic_work(struct kthread_work *work)
 	/* Update input references' states */
 	zl3073x_dev_ref_states_update(zldev);
 
-	/* Update DPLL channels' states */
-	zl3073x_dev_chan_states_update(zldev);
-
 	/* Update DPLL-to-connected-ref phase offsets registers */
 	rc = zl3073x_ref_phase_offsets_update(zldev, -1);
 	if (rc)
@@ -732,7 +717,7 @@ zl3073x_dev_periodic_work(struct kthread_work *work)
 	/* Update measured input reference frequencies if frequency
 	 * monitoring is enabled.
 	 */
-	if (zldev->freq_monitor) {
+	if (READ_ONCE(zldev->freq_monitor)) {
 		rc = zl3073x_ref_freq_meas_update(zldev);
 		if (rc)
 			dev_warn(zldev->dev,
@@ -768,7 +753,7 @@ int zl3073x_dev_phase_avg_factor_set(struct zl3073x_dev *zldev, u8 factor)
 		return rc;
 
 	/* Save the new factor */
-	zldev->phase_avg_factor = factor;
+	WRITE_ONCE(zldev->phase_avg_factor, factor);
 
 	return 0;
 }
