@@ -427,6 +427,14 @@ running under the lock:
 The following notifiers are running without the lock:
 * ``NETDEV_UNREGISTER``
 
+Many ``NETDEV_UNREGISTER`` handlers release their lowers with
+``dev_close()``, which takes the instance lock itself. Holding
+the lock across UNREGISTER would deadlock.
+
+Moving UNREGISTER under the lock is mechanical: switch those
+callers to the ``netif_*()`` lock-held variants. Deferred to
+limit churn.
+
 There are no clear expectations for the remaining notifiers. Notifiers not on
 the list may run with or without the instance lock, potentially even invoking
 the same notifier type with and without the lock from different code paths.
