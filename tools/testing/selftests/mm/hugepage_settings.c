@@ -422,6 +422,36 @@ static void hugetlb_sysfs_path(char *buf, size_t buflen,
 		 size / 1024, attr);
 }
 
+void hugetlb_write_num(const char *path, unsigned long num)
+{
+	int fd, saved_errno;
+	ssize_t numwritten;
+	char buf[21];
+
+	sprintf(buf, "%lu", num);
+
+	fd = open(path, O_WRONLY);
+	if (fd == -1)
+		ksft_exit_fail_msg("%s open failed: %s\n", path, strerror(errno));
+
+	numwritten = write(fd, buf, strlen(buf));
+	saved_errno = errno;
+	close(fd);
+	errno = saved_errno;
+
+	/* Treat EINVAL as a skipped configuration (e.g., unsupported gigantic pages) */
+	if (numwritten < 0 && errno == EINVAL) {
+		ksft_print_msg("%s write(%s) failed: %s\n", path, buf, strerror(errno));
+		return;
+	}
+
+	if (numwritten < 0)
+		ksft_exit_fail_msg("%s write(%s) failed: %s\n", path, buf, strerror(errno));
+	if (numwritten != strlen(buf))
+		ksft_exit_fail_msg("%s write(%s) is truncated, expected %zu bytes, got %zd bytes\n",
+				   path, buf, strlen(buf), numwritten);
+}
+
 unsigned long hugetlb_nr_pages(unsigned long size)
 {
 	char path[PATH_MAX];
@@ -437,7 +467,7 @@ void hugetlb_set_nr_pages(unsigned long size, unsigned long nr)
 
 	hugetlb_sysfs_path(path, sizeof(path), size, "nr_hugepages");
 
-	write_num(path, nr);
+	hugetlb_write_num(path, nr);
 }
 
 unsigned long hugetlb_free_pages(unsigned long size)
