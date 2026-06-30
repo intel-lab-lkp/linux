@@ -2085,7 +2085,8 @@ static bool retrieve_link_cap(struct dc_link *link)
 	if (!dpcd_read_sink_ext_caps(link))
 		link->dpcd_sink_ext_caps.raw = 0;
 
-	if (link->dpcd_caps.channel_coding_cap.bits.DP_128b_132b_SUPPORTED) {
+	if (link->dpcd_caps.channel_coding_cap.bits.DP_128b_132b_SUPPORTED &&
+			link->dpcd_caps.dp_128b_132b_supported_link_rates.raw) {
 		DC_LOG_DP2("128b/132b encoding is supported at link %d", link->link_index);
 
 		/* Read 128b/132b suppoerted link rates */
