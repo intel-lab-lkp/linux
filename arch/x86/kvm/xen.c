@@ -1607,11 +1607,14 @@ static bool kvm_xen_hcall_vcpu_op(struct kvm_vcpu *vcpu, bool longmode, int cmd,
 	struct vcpu_set_singleshot_timer oneshot;
 	struct x86_exception e;
 
+	if (cmd != VCPUOP_set_singleshot_timer &&
+	    cmd != VCPUOP_stop_singleshot_timer)
+		return false;
+
 	if (!kvm_xen_timer_enabled(vcpu))
 		return false;
 
-	switch (cmd) {
-	case VCPUOP_set_singleshot_timer:
+	if (cmd == VCPUOP_set_singleshot_timer) {
 		if (vcpu->arch.xen.vcpu_id != vcpu_id) {
 			*r = -EINVAL;
 			return true;
@@ -1640,20 +1643,16 @@ static bool kvm_xen_hcall_vcpu_op(struct kvm_vcpu *vcpu, bool longmode, int cmd,
 		}
 
 		kvm_xen_start_timer(vcpu, oneshot.timeout_abs_ns, false);
-		*r = 0;
-		return true;
-
-	case VCPUOP_stop_singleshot_timer:
+	} else {
 		if (vcpu->arch.xen.vcpu_id != vcpu_id) {
 			*r = -EINVAL;
 			return true;
 		}
 		kvm_xen_stop_timer(vcpu);
-		*r = 0;
-		return true;
 	}
 
-	return false;
+	*r = 0;
+	return true;
 }
 
 static bool kvm_xen_hcall_set_timer_op(struct kvm_vcpu *vcpu, uint64_t timeout,
