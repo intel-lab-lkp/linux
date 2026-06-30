@@ -37,9 +37,9 @@ struct mctp_usb {
 	struct delayed_work rx_retry_work;
 
 	struct mctp_usblib_tx tx;
-	/* protects tx_urb */
+	/* protects tx_anchor across submission / completion / cancellation */
 	spinlock_t tx_lock;
-	struct urb *tx_urb;
+	struct usb_anchor tx_anchor;
 };
 
 static void mctp_usb_out_complete(struct urb *urb)
@@ -52,7 +52,7 @@ static void mctp_usb_out_complete(struct urb *urb)
 	mctp_usblib_tx_send_complete(tx_ctx, netdev, urb->status == 0);
 
 	spin_lock_irqsave(&mctp_usb->tx_lock, flags);
-	mctp_usb->tx_urb = NULL;
+	usb_unanchor_urb(urb);
 	spin_unlock_irqrestore(&mctp_usb->tx_lock, flags);
 
 	usb_free_urb(urb);
@@ -81,7 +81,7 @@ static int mctp_usb_tx_send(struct mctp_usblib_tx_ctx *tx_ctx,
 	spin_lock_irqsave(&mctp_usb->tx_lock, flags);
 	rc = usb_submit_urb(urb, GFP_ATOMIC);
 	if (!rc)
-		mctp_usb->tx_urb = urb;
+		usb_anchor_urb(urb, &mctp_usb->tx_anchor);
 	spin_unlock_irqrestore(&mctp_usb->tx_lock, flags);
 
 	if (rc) {
@@ -212,10 +212,10 @@ static int mctp_usb_stop(struct net_device *dev)
 	flush_delayed_work(&mctp_usb->rx_retry_work);
 
 	usb_kill_urb(mctp_usb->rx_urb);
-
-	spin_lock_irqsave(&mctp_usb->tx_lock, flags);
-	usb_kill_urb(mctp_usb->tx_urb);
-	spin_unlock_irqrestore(&mctp_usb->tx_lock, flags);
+	/* we have stopped queues, the anchor's own lock will serialise
+	 * access from the urb completion.
+	 */
+	usb_kill_anchored_urbs(&mctp_usb->tx_anchor);
 
 	mctp_usblib_tx_cancel(&mctp_usb->tx, dev);
 
@@ -277,6 +277,7 @@ static int mctp_usb_probe(struct usb_interface *intf,
 
 	mctp_usblib_rx_init(&dev->rx);
 	mctp_usblib_tx_init(&dev->tx, &tx_ops, dev);
+	init_usb_anchor(&dev->tx_anchor);
 
 	dev->ep_in = ep_in->bEndpointAddress;
 	dev->ep_out = ep_out->bEndpointAddress;
