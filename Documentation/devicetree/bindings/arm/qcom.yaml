@@ -1172,6 +1172,7 @@ properties:
 
       - items:
           - enum:
+              - qcom,hamoa-iot-come
               - qcom,hamoa-iot-evk
           - const: qcom,hamoa-iot-som
           - const: qcom,x1e80100
