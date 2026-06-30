@@ -2295,13 +2295,22 @@ static void nbd_disconnect_and_put(struct nbd_device *nbd)
 	sock_shutdown(nbd);
 	wake_up(&nbd->config->conn_wait);
 	/*
+	 * Clear NBD_RT_BOUND before releasing config_lock so that
+	 * nbd_genl_reconfigure() won't queue new recv_work between
+	 * here and flush_workqueue().
+	 */
+	nbd->task_setup = NULL;
+	clear_bit(NBD_RT_BOUND, &nbd->config->runtime_flags);
+	mutex_unlock(&nbd->config_lock);
+
+	/*
 	 * Make sure recv thread has finished, we can safely call nbd_clear_que()
 	 * to cancel the inflight I/Os.
 	 */
 	flush_workqueue(nbd->recv_workq);
+
+	mutex_lock(&nbd->config_lock);
 	nbd_clear_que(nbd);
-	nbd->task_setup = NULL;
-	clear_bit(NBD_RT_BOUND, &nbd->config->runtime_flags);
 	mutex_unlock(&nbd->config_lock);
 
 	if (test_and_clear_bit(NBD_RT_HAS_CONFIG_REF,
