@@ -374,6 +374,8 @@ drm_setclientcap(struct drm_device *dev, void *data, struct drm_file *file_priv)
 		file_priv->supports_virtualized_cursor_plane = req->value;
 		break;
 	case DRM_CLIENT_CAP_PLANE_COLOR_PIPELINE:
+		if (!drm_core_check_feature(dev, DRIVER_PLANE_COLOR_PIPELINE))
+			return -EOPNOTSUPP;
 		if (!file_priv->atomic)
 			return -EINVAL;
 		if (req->value > 1)
