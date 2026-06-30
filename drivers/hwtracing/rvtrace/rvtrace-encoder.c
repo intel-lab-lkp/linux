@@ -79,6 +79,7 @@ static int rvtrace_encoder_stop(struct rvtrace_component *comp)
 
 static int rvtrace_encoder_probe(struct rvtrace_component *comp)
 {
+	struct fwnode_handle *fwnode = dev_fwnode(comp->pdata->dev);
 	struct rvtrace_v0_comp_features *data;
 	struct rvtrace_driver *rtdrv;
 	int ret;
@@ -102,6 +103,8 @@ static int rvtrace_encoder_probe(struct rvtrace_component *comp)
 	ret = rvtrace_enable_component(comp->pdata);
 	if (ret)
 		return dev_err_probe(&comp->dev, ret, "failed to enable encoder.\n");
+
+	dev_info(&comp->dev, "%s is available\n", fwnode_get_name(fwnode));
 
 	return 0;
 }
