@@ -12,6 +12,7 @@
 #include <linux/stacktrace.h>
 #include <linux/ftrace.h>
 
+#include <asm/irq_stack.h>
 #include <asm/stacktrace.h>
 
 #ifdef CONFIG_FRAME_POINTER
@@ -35,12 +36,12 @@
 extern asmlinkage void handle_exception(void);
 extern unsigned long ret_from_exception_end;
 
-static inline int fp_is_valid(unsigned long fp, unsigned long sp)
+static inline int fp_is_valid(unsigned long fp, unsigned long sp,
+			       unsigned long high)
 {
-	unsigned long low, high;
+	unsigned long low;
 
 	low = sp + sizeof(struct stackframe);
-	high = ALIGN(sp, THREAD_SIZE);
 
 	return !(fp < low || fp > high || fp & 0x07);
 }
@@ -48,7 +49,7 @@ static inline int fp_is_valid(unsigned long fp, unsigned long sp)
 void notrace walk_stackframe(struct task_struct *task, struct pt_regs *regs,
 			     bool (*fn)(void *, unsigned long), void *arg)
 {
-	unsigned long fp, sp, pc;
+	unsigned long fp, sp, pc, high = 0;
 	int graph_idx = 0;
 	int level = 0;
 
@@ -68,19 +69,52 @@ void notrace walk_stackframe(struct task_struct *task, struct pt_regs *regs,
 		pc = task->thread.ra;
 	}
 
+	if (!task)
+		task = current;
+
+	if (sp >= (unsigned long)task_stack_page(task) &&
+	    sp < (unsigned long)task_stack_page(task) + THREAD_SIZE) {
+		high = (unsigned long)task_pt_regs(task);
+	} else if (task != current) {
+		pr_warn("%s: sp (%lx) is not in task stack of %s\n",
+			__func__, sp, task->comm);
+		return;
+	}
+#ifdef CONFIG_VMAP_STACK
+	else {
+		unsigned long ovf_base =
+			(unsigned long)this_cpu_ptr(overflow_stack);
+
+		if (sp >= ovf_base && sp < ovf_base + OVERFLOW_STACK_SIZE)
+			high = ovf_base + OVERFLOW_STACK_SIZE;
+	}
+#endif
+	if (IS_ENABLED(CONFIG_IRQ_STACKS) && !high) {
+		unsigned long irq_base =
+			(unsigned long)this_cpu_read(irq_stack_ptr);
+
+		if (sp >= irq_base && sp < irq_base + IRQ_STACK_SIZE)
+			high = irq_base + IRQ_STACK_SIZE;
+	}
+	if (!high) {
+		pr_warn("%s: sp (%lx) is not on any known stack\n",
+			__func__, sp);
+		return;
+	}
+
 	for (;;) {
 		struct stackframe *frame;
 
 		if (unlikely(!__kernel_text_address(pc) || (level++ >= 0 && !fn(arg, pc))))
 			break;
 
-		if (unlikely(!fp_is_valid(fp, sp)))
+		if (unlikely(!fp_is_valid(fp, sp, high)))
 			break;
 
 		/* Unwind stack frame */
 		frame = (struct stackframe *)fp - 1;
 		sp = fp;
-		if (regs && (regs->epc == pc) && fp_is_valid(frame->ra, sp)) {
+		if (regs && (regs->epc == pc) && fp_is_valid(frame->ra, sp, high)) {
 			/* We hit function where ra is not saved on the stack */
 			fp = frame->ra;
 			pc = regs->ra;
