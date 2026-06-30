@@ -751,6 +751,7 @@ static void emac_full_tx_reset(struct emac_instance *dev)
 	mal_disable_tx_channel(dev->mal, dev->mal_tx_chan);
 	emac_clean_tx_ring(dev);
 	dev->tx_cnt = dev->tx_slot = dev->ack_slot = 0;
+	netdev_reset_queue(dev->ndev);
 
 	emac_configure(dev);
 
@@ -1428,6 +1429,7 @@ static int emac_close(struct net_device *ndev)
 	emac_clean_tx_ring(dev);
 	emac_clean_rx_ring(dev);
 
+	netdev_reset_queue(ndev);
 	netif_carrier_off(ndev);
 
 	return 0;
@@ -1448,6 +1450,9 @@ static inline netdev_tx_t emac_xmit_finish(struct emac_instance *dev, int len)
 {
 	struct emac_regs __iomem *p = dev->emacp;
 	struct net_device *ndev = dev->ndev;
+	struct netdev_queue *txq = netdev_get_tx_queue(ndev, 0);
+
+	netdev_tx_sent_queue(txq, len);
 
 	/* Send the packet out. If the if makes a significant perf
 	 * difference, then we can store the TMR0 value in "dev"
@@ -1666,6 +1671,7 @@ static void emac_parse_tx_error(struct emac_instance *dev, u16 ctrl)
 static void emac_poll_tx(void *param)
 {
 	struct emac_instance *dev = param;
+	struct netdev_queue *txq = netdev_get_tx_queue(dev->ndev, 0);
 	u32 bad_mask;
 
 	DBG2(dev, "poll_tx, %d %d" NL, dev->tx_cnt, dev->ack_slot);
@@ -1679,6 +1685,7 @@ static void emac_poll_tx(void *param)
 	if (dev->tx_cnt) {
 		u16 ctrl;
 		int slot = dev->ack_slot, n = 0;
+		unsigned int bytes = 0;
 	again:
 		ctrl = dev->tx_desc[slot].ctrl;
 		if (!(ctrl & MAL_TX_CTRL_READY)) {
@@ -1686,6 +1693,7 @@ static void emac_poll_tx(void *param)
 			++n;
 
 			if (skb) {
+				bytes += skb->len;
 				dev_kfree_skb(skb);
 				dev->tx_skb[slot] = NULL;
 			}
@@ -1699,6 +1707,7 @@ static void emac_poll_tx(void *param)
 		}
 		if (n) {
 			dev->ack_slot = slot;
+			netdev_tx_completed_queue(txq, n, bytes);
 			if (netif_queue_stopped(dev->ndev) &&
 			    dev->tx_cnt < EMAC_TX_WAKEUP_THRESH)
 				netif_wake_queue(dev->ndev);
