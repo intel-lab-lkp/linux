@@ -1614,12 +1614,18 @@ static bool kvm_xen_hcall_vcpu_op(struct kvm_vcpu *vcpu, bool longmode, int cmd,
 	if (!kvm_xen_timer_enabled(vcpu))
 		return false;
 
-	if (cmd == VCPUOP_set_singleshot_timer) {
-		if (vcpu->arch.xen.vcpu_id != vcpu_id) {
-			*r = -EINVAL;
-			return true;
-		}
+	/*
+	 * Reject the hypercall if the guest is trying to start/stop the timer
+	 * for a different vCPU.  Xen per-vCPU hypercalls take a target vCPU as
+	 * a common parameter, as all per-vCPU hypercalls *except* single-shot
+	 * timer updates can be cross-vCPU.
+	 */
+	if (vcpu->arch.xen.vcpu_id != vcpu_id) {
+		*r = -EINVAL;
+		return true;
+	}
 
+	if (cmd == VCPUOP_set_singleshot_timer) {
 		/*
 		 * The only difference for 32-bit compat is the 4 bytes of
 		 * padding after the interesting part of the structure. So
@@ -1644,10 +1650,6 @@ static bool kvm_xen_hcall_vcpu_op(struct kvm_vcpu *vcpu, bool longmode, int cmd,
 
 		kvm_xen_start_timer(vcpu, oneshot.timeout_abs_ns, false);
 	} else {
-		if (vcpu->arch.xen.vcpu_id != vcpu_id) {
-			*r = -EINVAL;
-			return true;
-		}
 		kvm_xen_stop_timer(vcpu);
 	}
 
