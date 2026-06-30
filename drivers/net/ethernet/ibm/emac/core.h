@@ -399,17 +399,13 @@ static inline int emac_has_feature(struct emac_instance *dev,
 static inline u32 __iomem *emac_xaht_base(struct emac_instance *dev)
 {
 	struct emac_regs __iomem *p = dev->emacp;
-	int offset;
 
 	/* The first IAHT entry always is the base of the block of
 	 * IAHT and GAHT registers.
 	 */
 	if (emac_has_feature(dev, EMAC_FTR_EMAC4SYNC))
-		offset = offsetof(struct emac_regs, u1.emac4sync.iaht1);
-	else
-		offset = offsetof(struct emac_regs, u0.emac4.iaht1);
-
-	return (u32 __iomem *)((__force ptrdiff_t)p + offset);
+		return &p->u1.emac4sync.iaht1;
+	return &p->u0.emac4.iaht1;
 }
 
 static inline u32 __iomem *emac_gaht_base(struct emac_instance *dev)
