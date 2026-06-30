@@ -420,14 +420,6 @@ static inline u32 __iomem *emac_gaht_base(struct emac_instance *dev)
 	return emac_xaht_base(dev) + EMAC_XAHT_REGS(dev);
 }
 
-static inline u32 *emac_iaht_base(struct emac_instance *dev)
-{
-	/* IAHT registers always come before an identical number of
-	 * GAHT registers.
-	 */
-	return emac_xaht_base(dev);
-}
-
 /* Ethtool get_regs complex data.
  * We want to get not just EMAC registers, but also MAL, ZMII, RGMII, TAH
  * when available.
