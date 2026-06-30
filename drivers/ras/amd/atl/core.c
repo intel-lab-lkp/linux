@@ -198,6 +198,12 @@ unsigned long amd_convert_umc_addr_to_sys_addr(struct atl_err *err)
 }
 EXPORT_SYMBOL_GPL(amd_convert_umc_addr_to_sys_addr);
 
+int amd_convert_umc_addr_to_dram_addr(struct atl_err *err, struct atl_dram_addr *dram_addr)
+{
+	return convert_umc_mca_addr_to_dram_addr(err, dram_addr);
+}
+EXPORT_SYMBOL_GPL(amd_convert_umc_addr_to_dram_addr);
+
 static int __init amd_atl_init(void)
 {
 	int ret;
