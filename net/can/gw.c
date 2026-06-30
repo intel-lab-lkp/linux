@@ -318,6 +318,19 @@ static inline int calc_idx(int idx, int rx_len)
 		return idx;
 }
 
+static bool cgw_csum_idx_valid(const struct canfd_frame *cf, int idx)
+{
+	return idx >= 0 && idx < cf->len;
+}
+
+static bool cgw_csum_range_valid(const struct canfd_frame *cf,
+				 int from, int to, int res)
+{
+	return cgw_csum_idx_valid(cf, from) &&
+	       cgw_csum_idx_valid(cf, to) &&
+	       cgw_csum_idx_valid(cf, res);
+}
+
 static void cgw_csum_xor_rel(struct canfd_frame *cf, struct cgw_csum_xor *xor)
 {
 	int from = calc_idx(xor->from_idx, cf->len);
@@ -326,7 +339,7 @@ static void cgw_csum_xor_rel(struct canfd_frame *cf, struct cgw_csum_xor *xor)
 	u8 val = xor->init_xor_val;
 	int i;
 
-	if (from < 0 || to < 0 || res < 0)
+	if (!cgw_csum_range_valid(cf, from, to, res))
 		return;
 
 	if (from <= to) {
@@ -345,6 +358,10 @@ static void cgw_csum_xor_pos(struct canfd_frame *cf, struct cgw_csum_xor *xor)
 	u8 val = xor->init_xor_val;
 	int i;
 
+	if (!cgw_csum_range_valid(cf, xor->from_idx, xor->to_idx,
+				  xor->result_idx))
+		return;
+
 	for (i = xor->from_idx; i <= xor->to_idx; i++)
 		val ^= cf->data[i];
 
@@ -355,6 +372,10 @@ static void cgw_csum_xor_neg(struct canfd_frame *cf, struct cgw_csum_xor *xor)
 {
 	u8 val = xor->init_xor_val;
 	int i;
+
+	if (!cgw_csum_range_valid(cf, xor->from_idx, xor->to_idx,
+				  xor->result_idx))
+		return;
 
 	for (i = xor->from_idx; i >= xor->to_idx; i--)
 		val ^= cf->data[i];
@@ -371,7 +392,10 @@ static void cgw_csum_crc8_rel(struct canfd_frame *cf,
 	u8 crc = crc8->init_crc_val;
 	int i;
 
-	if (from < 0 || to < 0 || res < 0)
+	if (!cgw_csum_range_valid(cf, from, to, res))
+		return;
+
+	if (crc8->profile == CGW_CRC8PRF_16U8 && cf->len < 2)
 		return;
 
 	if (from <= to) {
@@ -406,6 +430,13 @@ static void cgw_csum_crc8_pos(struct canfd_frame *cf,
 	u8 crc = crc8->init_crc_val;
 	int i;
 
+	if (!cgw_csum_range_valid(cf, crc8->from_idx, crc8->to_idx,
+				  crc8->result_idx))
+		return;
+
+	if (crc8->profile == CGW_CRC8PRF_16U8 && cf->len < 2)
+		return;
+
 	for (i = crc8->from_idx; i <= crc8->to_idx; i++)
 		crc = crc8->crctab[crc ^ cf->data[i]];
 
@@ -432,6 +463,13 @@ static void cgw_csum_crc8_neg(struct canfd_frame *cf,
 {
 	u8 crc = crc8->init_crc_val;
 	int i;
+
+	if (!cgw_csum_range_valid(cf, crc8->from_idx, crc8->to_idx,
+				  crc8->result_idx))
+		return;
+
+	if (crc8->profile == CGW_CRC8PRF_16U8 && cf->len < 2)
+		return;
 
 	for (i = crc8->from_idx; i >= crc8->to_idx; i--)
 		crc = crc8->crctab[crc ^ cf->data[i]];
