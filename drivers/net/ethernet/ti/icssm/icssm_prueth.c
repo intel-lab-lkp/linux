@@ -36,12 +36,14 @@
 #include "../icssg/icss_iep.h"
 
 #define OCMC_RAM_SIZE		(SZ_64K)
+#define PRUETH_ETHER_TYPE_OFFSET	12
 
 #define TX_START_DELAY		0x40
 #define TX_CLK_DELAY_100M	0x6
 #define HR_TIMER_TX_DELAY_US	100
 
 #define NETIF_PRUETH_LRE_OFFLOAD_FEATURES       (NETIF_F_HW_HSR_FWD | \
+						 NETIF_F_HW_HSR_DUP | \
 						 NETIF_F_HW_HSR_TAG_RM)
 
 /* ICSSM (v2.1) - supports 64-bit IEP counter.
@@ -79,6 +81,32 @@ static void icssm_prueth_set_fw_offsets(struct prueth *prueth)
 	}
 }
 
+/* Queue Descriptors initialization for HSR PRP */
+const struct prueth_queue_desc hsr_prp_txopt_queue_descs[][NUM_QUEUES] = {
+	[PRUETH_PORT_QUEUE_HOST] = {
+		{ .rd_ptr = P0_Q1_BD_OFFSET, .wr_ptr = P0_Q1_BD_OFFSET, },
+		{ .rd_ptr = P0_Q2_BD_OFFSET, .wr_ptr = P0_Q2_BD_OFFSET, },
+		{ .rd_ptr = P0_Q3_BD_OFFSET, .wr_ptr = P0_Q3_BD_OFFSET, },
+		{ .rd_ptr = P0_Q4_BD_OFFSET, .wr_ptr = P0_Q4_BD_OFFSET, },
+	},
+	[PRUETH_PORT_QUEUE_MII0] = {
+		{ .rd_ptr = P0_Q3_BD_OFFSET, .wr_ptr = P0_Q3_BD_OFFSET, },
+		{ .rd_ptr = P0_Q4_BD_OFFSET, .wr_ptr = P0_Q4_BD_OFFSET, },
+		{ .rd_ptr = P1_Q3_TXOPT_BD_OFFSET,
+			.wr_ptr = P1_Q3_TXOPT_BD_OFFSET, },
+		{ .rd_ptr = P2_Q1_TXOPT_BD_OFFSET,
+			.wr_ptr = P2_Q1_TXOPT_BD_OFFSET, },
+	},
+	[PRUETH_PORT_QUEUE_MII1] = {
+		{ .rd_ptr = P0_Q1_BD_OFFSET, .wr_ptr = P0_Q1_BD_OFFSET, },
+		{ .rd_ptr = P0_Q2_BD_OFFSET, .wr_ptr = P0_Q2_BD_OFFSET, },
+		{ .rd_ptr = P1_Q3_TXOPT_BD_OFFSET,
+			.wr_ptr = P1_Q3_TXOPT_BD_OFFSET, },
+		{ .rd_ptr = P2_Q1_TXOPT_BD_OFFSET,
+			.wr_ptr = P2_Q1_TXOPT_BD_OFFSET, },
+	}
+};
+
 static void icssm_prueth_write_reg(struct prueth *prueth,
 				   enum prueth_mem region,
 				   unsigned int reg, u32 val)
@@ -96,6 +124,17 @@ static void icssm_prueth_write_reg(struct prueth *prueth,
 /* ensure that order of PRUSS mem regions is same as enum prueth_mem */
 static enum pruss_mem pruss_mem_ids[] = { PRUSS_MEM_DRAM0, PRUSS_MEM_DRAM1,
 					  PRUSS_MEM_SHRD_RAM2 };
+
+struct prp_txopt_rct {
+	__be16 sequence_nr;
+	__be16 lan_id_and_lsdu_size;
+	__be16 prp_suffix;
+};
+
+struct hsr_txopt_ethhdr {
+	struct ethhdr ethhdr;
+	struct hsr_tag hsr_tag;
+};
 
 static const struct prueth_queue_info queue_infos[][NUM_QUEUES] = {
 	[PRUETH_PORT_QUEUE_HOST] = {
@@ -549,15 +588,24 @@ static int icssm_prueth_tx_enqueue(struct prueth_emac *emac,
 				   struct sk_buff *skb,
 				   enum prueth_queue_id queue_id)
 {
+	struct prueth_queue_desc __iomem *queue_desc_other_port = NULL;
 	struct prueth_queue_desc __iomem *queue_desc;
 	const struct prueth_queue_info *txqueue;
-	struct net_device *ndev = emac->ndev;
 	struct prueth *prueth = emac->prueth;
+	struct hsr_txopt_ethhdr *hsr_ethhdr;
 	unsigned int buffer_desc_count;
+	struct prueth_emac *other_emac;
 	int free_blocks, update_block;
+	struct vlan_ethhdr *vlan_hdr;
 	bool buffer_wrapped = false;
 	int write_block, read_block;
+	int free_blocks_other_port;
+	int read_block_other_port;
 	void *src_addr, *dst_addr;
+	u16 bd_rd_ptr_other_port;
+	struct ethhdr *ethhdr;
+	bool is_vlan = false;
+	bool link_up = false;
 	int pkt_block_size;
 	void __iomem *sram;
 	void __iomem *dram;
@@ -565,16 +613,19 @@ static int icssm_prueth_tx_enqueue(struct prueth_emac *emac,
 	u16 update_wr_ptr;
 	u32 wr_buf_desc;
 	void *ocmc_ram;
+	__be16 proto;
+	u8 *hdr;
+
+	other_emac = emac->prueth->emac[(emac->port_id == PRUETH_PORT_MII0) ?
+				PRUETH_PORT_MII1 - 1 : PRUETH_PORT_MII0 - 1];
+
+	if (prueth_is_lre(prueth) && (emac->link || other_emac->link))
+		link_up = true;
 
 	if (!PRUETH_IS_EMAC(prueth))
 		dram = prueth->mem[PRUETH_MEM_DRAM1].va;
 	else
 		dram = emac->prueth->mem[emac->dram].va;
-	if (eth_skb_pad(skb)) {
-		if (netif_msg_tx_err(emac) && net_ratelimit())
-			netdev_err(ndev, "packet pad failed\n");
-		return -ENOMEM;
-	}
 
 	/* which port to tx: MII0 or MII1 */
 	txport = emac->tx_port_queue;
@@ -582,7 +633,10 @@ static int icssm_prueth_tx_enqueue(struct prueth_emac *emac,
 	pktlen = skb->len;
 	/* Get the tx queue */
 	queue_desc = emac->tx_queue_descs + queue_id;
-	if (!PRUETH_IS_EMAC(prueth))
+	/* Tx queue context */
+	if (prueth_is_lre(prueth))
+		txqueue = &lre_queue_infos[txport][queue_id];
+	else if (PRUETH_IS_SWITCH(prueth))
 		txqueue = &sw_queue_infos[txport][queue_id];
 	else
 		txqueue = &queue_infos[txport][queue_id];
@@ -605,6 +659,29 @@ static int icssm_prueth_tx_enqueue(struct prueth_emac *emac,
 		free_blocks = buffer_desc_count;
 	}
 
+	/* Fetch queue state for the second LRE port */
+	if (prueth_is_lre(prueth) && link_up) {
+		queue_desc_other_port = emac->tx_queue_descs_other_port +
+					queue_id;
+		bd_rd_ptr_other_port = readw(&queue_desc_other_port->rd_ptr);
+
+		read_block_other_port = (bd_rd_ptr_other_port -
+					 txqueue->buffer_desc_offset) / BD_SIZE;
+
+		if (write_block > read_block_other_port) {
+			free_blocks_other_port = buffer_desc_count -
+						 write_block;
+			free_blocks_other_port += read_block_other_port;
+		} else if (write_block < read_block_other_port) {
+			free_blocks_other_port = read_block_other_port -
+						 write_block;
+		} else {
+			free_blocks_other_port = buffer_desc_count;
+		}
+
+		if (free_blocks_other_port < free_blocks)
+			free_blocks = free_blocks_other_port;
+	}
 	pkt_block_size = DIV_ROUND_UP(pktlen, ICSS_BLOCK_SIZE);
 	if (pkt_block_size >= free_blocks) /* out of queue space */
 		return -ENOBUFS;
@@ -654,6 +731,57 @@ static int icssm_prueth_tx_enqueue(struct prueth_emac *emac,
 	if (PRUETH_IS_HSR(prueth))
 		wr_buf_desc |= BIT(PRUETH_BD_HSR_FRAME_SHIFT);
 
+	if (prueth_is_lre(prueth)) {
+		ethhdr = (struct ethhdr *)skb_mac_header(skb);
+		proto = ethhdr->h_proto;
+
+		if (proto == htons(ETH_P_8021Q)) {
+			vlan_hdr = (struct vlan_ethhdr *)ethhdr;
+			proto = vlan_hdr->h_vlan_encapsulated_proto;
+			is_vlan = true;
+		}
+
+		/* Extract HSR sequence number and LAN ID
+		 * from the tag for the Buffer Descriptor
+		 */
+		if (proto == htons(ETH_P_HSR)) {
+			hdr = skb_mac_header(skb);
+
+			if (is_vlan) {
+				hsr_ethhdr =
+					(struct hsr_txopt_ethhdr *)(hdr +
+								    VLAN_HLEN);
+			} else {
+				hsr_ethhdr = (struct hsr_txopt_ethhdr *)hdr;
+			}
+
+			/* PTP frames (ETH_P_1588) carry no LAN ID
+			 * in the HSR tag
+			 */
+			if (hsr_ethhdr->hsr_tag.encap_proto !=
+			    htons(ETH_P_1588)) {
+				wr_buf_desc |= PRUETH_BD_LAN_INFO_MASK;
+			} else {
+				wr_buf_desc |= (txport <<
+						PRUETH_BD_LAN_A_SHIFT);
+			}
+			wr_buf_desc |= PRUETH_BD_RED_PKT_MASK;
+		} else {
+			/* Read PRP RCT to extract sequence number and LAN ID */
+			struct prp_txopt_rct *rct =
+				(struct prp_txopt_rct *)(skb_tail_pointer(skb) -
+							 ICSSM_LRE_TAG_SIZE);
+
+			if (rct->prp_suffix == htons(ETH_P_PRP)) {
+				wr_buf_desc |= PRUETH_BD_LAN_INFO_MASK;
+				wr_buf_desc |= PRUETH_BD_RED_PKT_MASK;
+			} else {
+				wr_buf_desc |= (txport <<
+						PRUETH_BD_LAN_A_SHIFT);
+			}
+		}
+	}
+
 	sram = prueth->mem[PRUETH_MEM_SHARED_RAM].va;
 	if (!PRUETH_IS_EMAC(prueth))
 		writel(wr_buf_desc, sram + readw(&queue_desc->wr_ptr));
@@ -665,6 +793,10 @@ static int icssm_prueth_tx_enqueue(struct prueth_emac *emac,
 	 */
 	update_wr_ptr = txqueue->buffer_desc_offset + (update_block * BD_SIZE);
 	writew(update_wr_ptr, &queue_desc->wr_ptr);
+
+	/* update the write pointer in queue descriptor of other port */
+	if (prueth_is_lre(prueth) && link_up)
+		writew(update_wr_ptr, &queue_desc_other_port->wr_ptr);
 
 	return 0;
 }
@@ -678,8 +810,10 @@ void icssm_parse_packet_info(struct prueth *prueth, u32 buffer_descriptor,
 	else
 		pkt_info->start_offset = false;
 
-	pkt_info->port = (buffer_descriptor & PRUETH_BD_PORT_MASK) >>
-			 PRUETH_BD_PORT_SHIFT;
+	/* Flag from BD to indicate packet is valid for HOST or not. */
+	pkt_info->host_recv_flag = !!(buffer_descriptor &
+				      PRUETH_BD_HOST_RECV_MASK);
+
 	pkt_info->length = (buffer_descriptor & PRUETH_BD_LENGTH_MASK) >>
 			   PRUETH_BD_LENGTH_SHIFT;
 	pkt_info->broadcast = !!(buffer_descriptor & PRUETH_BD_BROADCAST_MASK);
@@ -711,11 +845,13 @@ int icssm_emac_rx_packet(struct prueth_emac *emac, u16 *bd_rd_ptr,
 	int read_block, update_block;
 	unsigned int actual_pkt_len;
 	bool buffer_wrapped = false;
+	int adjust_for_hsr_tag = 0;
 	void *src_addr, *dst_addr;
 	u16 start_offset = 0;
 	struct sk_buff *skb;
 	int pkt_block_size;
 	void *ocmc_ram;
+	u16 type;
 
 	if (PRUETH_IS_HSR(emac->prueth))
 		start_offset = (pkt_info->start_offset ?
@@ -742,8 +878,18 @@ int icssm_emac_rx_packet(struct prueth_emac *emac, u16 *bd_rd_ptr,
 	/* calculate new pointer in ram */
 	*bd_rd_ptr = rxqueue->buffer_desc_offset + (update_block * BD_SIZE);
 
+	if (PRUETH_IS_HSR(emac->prueth)) {
+		if (!pkt_info->host_recv_flag)
+			return 0;
+	}
+
 	/* Exclude the HSR tag bytes already stripped by firmware, if any. */
 	actual_pkt_len = pkt_info->length - start_offset;
+
+	if (PRUETH_IS_HSR(emac->prueth)) {
+		if (!start_offset && !pkt_info->timestamp)
+			actual_pkt_len -= ICSSM_LRE_TAG_SIZE;
+	}
 
 	/* Allocate a socket buffer for this packet */
 	skb = netdev_alloc_skb_ip_align(ndev, actual_pkt_len);
@@ -765,6 +911,29 @@ int icssm_emac_rx_packet(struct prueth_emac *emac, u16 *bd_rd_ptr,
 		   (read_block * ICSS_BLOCK_SIZE);
 	src_addr += start_offset;
 
+	/* Copy destination and source MAC address */
+	memcpy(dst_addr, src_addr, PRUETH_ETHER_TYPE_OFFSET);
+	src_addr += PRUETH_ETHER_TYPE_OFFSET;
+	dst_addr += PRUETH_ETHER_TYPE_OFFSET;
+
+	adjust_for_hsr_tag += PRUETH_ETHER_TYPE_OFFSET;
+
+	/* Check for VLAN tag */
+	type = get_unaligned_be16(src_addr);
+
+	if (type == ETH_P_8021Q) {
+		memcpy(dst_addr, src_addr, VLAN_HLEN);
+		src_addr += VLAN_HLEN;
+		dst_addr += VLAN_HLEN;
+		adjust_for_hsr_tag += VLAN_HLEN;
+	}
+
+	/* HSR tag removal handling */
+	if (PRUETH_IS_HSR(emac->prueth)) {
+		if (!start_offset && !pkt_info->timestamp)
+			src_addr += ICSSM_LRE_TAG_SIZE;
+	}
+
 	/* Copy the data from PRU buffers(OCMC) to socket buffer(DRAM) */
 	if (buffer_wrapped) { /* wrapped around buffer */
 		int bytes = (buffer_desc_count - read_block) * ICSS_BLOCK_SIZE;
@@ -780,19 +949,25 @@ int icssm_emac_rx_packet(struct prueth_emac *emac, u16 *bd_rd_ptr,
 		/* If applicable, account for the HSR tag removed */
 		bytes -= start_offset;
 
+		if (PRUETH_IS_HSR(emac->prueth)) {
+			if (!start_offset && !pkt_info->timestamp)
+				bytes -= ICSSM_LRE_TAG_SIZE;
+		}
+
 		/* copy non-wrapped part */
-		memcpy(dst_addr, src_addr, bytes);
+		memcpy(dst_addr, src_addr, bytes - adjust_for_hsr_tag);
 
 		/* copy wrapped part */
-		dst_addr += bytes;
+		dst_addr += (bytes - adjust_for_hsr_tag);
 		remaining = actual_pkt_len - bytes;
 
 		src_addr = ocmc_ram + rxqueue->buffer_offset;
 		memcpy(dst_addr, src_addr, remaining);
 		src_addr += remaining;
 	} else {
-		memcpy(dst_addr, src_addr, actual_pkt_len);
-		src_addr += actual_pkt_len;
+		memcpy(dst_addr, src_addr, actual_pkt_len -
+		       adjust_for_hsr_tag);
+		src_addr += actual_pkt_len - adjust_for_hsr_tag;
 	}
 
 	if (PRUETH_IS_SWITCH(emac->prueth)) {
@@ -1341,17 +1516,29 @@ static enum netdev_tx icssm_emac_ndo_start_xmit(struct sk_buff *skb,
 						struct net_device *ndev)
 {
 	struct prueth_emac *emac = netdev_priv(ndev);
+	raw_spinlock_t *lock_queue;
 	int ret;
 	u16 qid;
 
 	qid = icssm_prueth_get_tx_queue_id(emac->prueth, skb);
-	ret = icssm_prueth_tx_enqueue(emac, skb, qid);
-	if (ret) {
-		if (ret != -ENOBUFS && netif_msg_tx_err(emac) &&
-		    net_ratelimit())
-			netdev_err(ndev, "packet queue failed: %d\n", ret);
+	/* Select the TX queue spin lock for this queue ID */
+	if (prueth_is_lre(emac->prueth))
+		lock_queue = &emac->prueth->lre_host_queue_lock[qid - 2];
+	else
+		lock_queue = &emac->host_queue_lock[qid - 2];
+
+	if (eth_skb_pad(skb)) {
+		if (netif_msg_tx_err(emac) && net_ratelimit())
+			netdev_err(ndev, "packet pad failed\n");
+		ret = -ENOMEM;
 		goto fail_tx;
 	}
+
+	raw_spin_lock(lock_queue);
+	ret = icssm_prueth_tx_enqueue(emac, skb, qid);
+	raw_spin_unlock(lock_queue);
+	if (ret)
+		goto fail_tx;
 
 	emac->stats.tx_packets++;
 	emac->stats.tx_bytes += skb->len;
@@ -1772,6 +1959,9 @@ static int icssm_prueth_netdev_init(struct prueth *prueth,
 
 	spin_lock_init(&emac->lock);
 	spin_lock_init(&emac->addr_lock);
+
+	raw_spin_lock_init(&emac->host_queue_lock[0]);
+	raw_spin_lock_init(&emac->host_queue_lock[1]);
 
 	/* get mac address from DT and set private and netdev addr */
 	ret = of_get_ethdev_address(eth_node, ndev);
@@ -2365,6 +2555,8 @@ static int icssm_prueth_probe(struct platform_device *pdev)
 
 	prueth->support_lre = has_lre;
 	spin_lock_init(&prueth->addr_lock);
+	raw_spin_lock_init(&prueth->lre_host_queue_lock[0]);
+	raw_spin_lock_init(&prueth->lre_host_queue_lock[1]);
 	/* setup netdev interfaces */
 	if (eth0_node) {
 		ret = icssm_prueth_netdev_init(prueth, eth0_node);
