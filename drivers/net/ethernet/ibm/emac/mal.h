@@ -19,6 +19,8 @@
 #ifndef __IBM_NEWEMAC_MAL_H
 #define __IBM_NEWEMAC_MAL_H
 
+#include <linux/wait.h>
+
 /*
  * There are some variations on the MAL, we express them in this driver as
  * MAL Version 1 and 2 though that doesn't match any IBM terminology.
@@ -172,6 +174,7 @@ struct mal_commac {
 	void			*dev;
 	struct list_head	poll_list;
 	long       		flags;
+	wait_queue_head_t	poll_wait;
 #define MAL_COMMAC_RX_STOPPED		0
 #define MAL_COMMAC_POLL_DISABLED	1
 	u32			tx_chan_mask;
