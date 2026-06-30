@@ -1525,7 +1525,14 @@ static void lan78xx_set_multicast(struct net_device *netdev)
 	if (dev->net->flags & IFF_PROMISC) {
 		netif_dbg(dev, drv, dev->net, "promiscuous mode enabled");
 		pdata->rfe_ctl |= RFE_CTL_MCAST_EN_ | RFE_CTL_UCAST_EN_;
+		/* bypass VLAN filter so all tagged frames are captured */
+		pdata->rfe_ctl &= ~RFE_CTL_VLAN_FILTER_;
 	} else {
+		if (dev->net->features & NETIF_F_HW_VLAN_CTAG_FILTER)
+			pdata->rfe_ctl |= RFE_CTL_VLAN_FILTER_;
+		else
+			pdata->rfe_ctl &= ~RFE_CTL_VLAN_FILTER_;
+
 		if (dev->net->flags & IFF_ALLMULTI) {
 			netif_dbg(dev, drv, dev->net,
 				  "receive all multicast enabled");
@@ -3074,7 +3081,9 @@ static int lan78xx_set_features(struct net_device *netdev,
 	else
 		pdata->rfe_ctl &= ~RFE_CTL_VLAN_STRIP_;
 
-	if (features & NETIF_F_HW_VLAN_CTAG_FILTER)
+	/* keep VLAN filter off while promiscuous */
+	if ((features & NETIF_F_HW_VLAN_CTAG_FILTER) &&
+	    !(netdev->flags & IFF_PROMISC))
 		pdata->rfe_ctl |= RFE_CTL_VLAN_FILTER_;
 	else
 		pdata->rfe_ctl &= ~RFE_CTL_VLAN_FILTER_;
