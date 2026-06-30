@@ -3238,6 +3238,8 @@ loff_t mapping_seek_hole_data(struct address_space *mapping, loff_t start,
 
 		seek_size = seek_folio_size(&xas, folio);
 		pos = round_up((u64)pos + 1, seek_size);
+		if (pos > end)
+			pos = end;
 		start = folio_seek_hole_data(&xas, mapping, folio, start, pos,
 				seek_data);
 		if (start < pos)
